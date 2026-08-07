@@ -2,9 +2,10 @@
 
 import React from "react";
 import { Calendar, ClipboardList, Clock, CheckCircle2 } from "lucide-react";
-import { useAppStore, isScheduleActive } from "@/store/useAppStore";
+import { useAppStore } from "@/store/useAppStore";
 import { getSemesterWeek } from "@/lib/semester";
 import { parseLocalDDL } from "@/lib/ddl";
+import { isScheduleActive } from "@/lib/schedule";
 import { format, isSameWeek, isSameDay } from "date-fns";
 
 export function StatCards() {

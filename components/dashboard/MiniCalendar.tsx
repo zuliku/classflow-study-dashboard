@@ -11,9 +11,10 @@ import {
   Award,
   Plus,
 } from "lucide-react";
-import { useAppStore, isScheduleActive } from "@/store/useAppStore";
+import { useAppStore } from "@/store/useAppStore";
 import { getSemesterWeek } from "@/lib/semester";
 import { getLocalDDLDate } from "@/lib/ddl";
+import { isScheduleActive } from "@/lib/schedule";
 import {
   format,
   addMonths,

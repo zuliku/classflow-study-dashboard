@@ -1,24 +1,11 @@
 import { Course, CourseSchedule } from "@/types";
+import { timeToMinutes, isValidTimeRange } from "@/lib/schedule";
 
 export interface ParsedImportResult {
   courses: Course[];
   schedules: CourseSchedule[];
   warnings: string[];
   errors: string[];
-}
-
-const TIME_RE = /^([01]\d|2[0-3]):([0-5]\d)$/;
-
-function timeToMinutes(timeStr: string): number | null {
-  const m = TIME_RE.exec(timeStr);
-  if (!m) return null;
-  return Number(m[1]) * 60 + Number(m[2]);
-}
-
-function isValidTimeRange(startTime: string, endTime: string): boolean {
-  const s = timeToMinutes(startTime);
-  const e = timeToMinutes(endTime);
-  return s !== null && e !== null && e > s;
 }
 
 // ---------- iCal (.ics) ----------

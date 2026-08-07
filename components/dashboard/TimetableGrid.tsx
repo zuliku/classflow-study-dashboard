@@ -2,11 +2,12 @@
 
 import React from "react";
 import { ExternalLink, AlertTriangle, ChevronLeft, ChevronRight, MapPin, User } from "lucide-react";
-import { useAppStore, isScheduleActive } from "@/store/useAppStore";
+import { useAppStore } from "@/store/useAppStore";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import { getWeekDateRange, formatWeekDateRange } from "@/lib/semester";
 import { findScheduleConflicts } from "@/lib/conflicts";
+import { isScheduleActive, timeToMinutes } from "@/lib/schedule";
 
 const TIME_SLOTS = [
   "08:00",
@@ -50,10 +51,7 @@ export function TimetableGrid() {
     };
   });
 
-  const timeToMinutes = (timeStr: string) => {
-    const [h, m] = timeStr.split(":").map(Number);
-    return h * 60 + m;
-  };
+  const timeToMinutesSafe = (timeStr: string) => timeToMinutes(timeStr) ?? 0;
 
   const dayStartMinutes = 8 * 60;   // 08:00
   const dayEndMinutes = 21 * 60;     // 21:00 (Includes evening classes)
@@ -194,8 +192,8 @@ export function TimetableGrid() {
                       (c) => c.scheduleA.id === sched.id || c.scheduleB.id === sched.id
                     );
 
-                    const startM = timeToMinutes(sched.startTime);
-                    const endM = timeToMinutes(sched.endTime);
+                    const startM = timeToMinutesSafe(sched.startTime);
+                    const endM = timeToMinutesSafe(sched.endTime);
                     const topPct =
                       ((startM - dayStartMinutes) / totalMinutes) * 100;
                     const heightPct =

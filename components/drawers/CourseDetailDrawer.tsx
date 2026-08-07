@@ -17,8 +17,42 @@ import {
   FileUp,
 } from "lucide-react";
 import { useAppStore } from "@/store/useAppStore";
-import { Material } from "@/types";
+import { Material, CourseSchedule, ScheduleConflict } from "@/types";
 import { saveFileBlob, createStorageKey } from "@/lib/fileStorage";
+import { WEEK_RANGE_PRESETS, isValidTimeRange } from "@/lib/schedule";
+import { findScheduleConflicts } from "@/lib/conflicts";
+
+const DAY_LABELS = ["一", "二", "三", "四", "五", "六", "日"];
+
+/** 周次选择：预设下拉 + 自定义输入（自定义状态由 value 是否命中预设推导） */
+function WeeksSelect({ value, onChange }: { value: string; onChange: (weeks: string) => void }) {
+  const isCustom = !WEEK_RANGE_PRESETS.some((p) => p.value === value);
+  return (
+    <div className="space-y-1.5">
+      <select
+        value={isCustom ? "__custom__" : value}
+        onChange={(e) => onChange(e.target.value === "__custom__" ? value : e.target.value)}
+        className="w-full p-1.5 bg-white border border-[#E0D7C6] rounded-lg focus:outline-none text-[11px]"
+      >
+        {WEEK_RANGE_PRESETS.map((preset) => (
+          <option key={preset.value} value={preset.value}>
+            {preset.label}
+          </option>
+        ))}
+        <option value="__custom__">自定义…</option>
+      </select>
+      {isCustom && (
+        <input
+          type="text"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder="如 1-8周 / 单周 / 5-5周"
+          className="w-full p-1.5 bg-white border border-[#E0D7C6] rounded-lg focus:outline-none text-[11px]"
+        />
+      )}
+    </div>
+  );
+}
 
 export function CourseDetailDrawer() {
   const {
@@ -29,6 +63,7 @@ export function CourseDetailDrawer() {
     updateCourse,
     deleteCourse,
     addScheduleSlot,
+    updateSchedule,
     deleteSchedule,
     addCourseMaterial,
     deleteCourseMaterial,
@@ -48,6 +83,19 @@ export function CourseDetailDrawer() {
   const [newStart, setNewStart] = useState("08:00");
   const [newEnd, setNewEnd] = useState("09:40");
   const [newLocation, setNewLocation] = useState("");
+  const [newWeeks, setNewWeeks] = useState("1-16周");
+
+  // Form State for editing a schedule slot (inline)
+  const [editingSlotId, setEditingSlotId] = useState<string | null>(null);
+  const [slotForm, setSlotForm] = useState({
+    dayOfWeek: 1,
+    startTime: "08:00",
+    endTime: "09:40",
+    location: "",
+    weeks: "1-16周",
+  });
+  const [slotError, setSlotError] = useState<string | null>(null);
+  const [slotConflict, setSlotConflict] = useState<string | null>(null);
 
   const course = courses.find((c) => c.id === selectedCourseId);
   const courseSchedules = schedules.filter((s) => s.courseId === selectedCourseId);
@@ -75,17 +123,130 @@ export function CourseDetailDrawer() {
     setIsEditing(false);
   };
 
+  // ---- Schedule 表单验证与冲突检测（新增/编辑共用，全站一致） ----
+  const validateSlot = (form: {
+    dayOfWeek: number;
+    startTime: string;
+    endTime: string;
+    weeks: string;
+  }): string | null => {
+    if (!Number.isInteger(form.dayOfWeek) || form.dayOfWeek < 1 || form.dayOfWeek > 7) {
+      return "星期必须为 1-7";
+    }
+    if (!isValidTimeRange(form.startTime, form.endTime)) {
+      return "时间格式非法或结束时间需晚于开始时间";
+    }
+    if (!form.weeks.trim()) {
+      return "周次不能为空";
+    }
+    return null;
+  };
+
+  /** 候选时段 vs 其他时段：找出涉及候选时段的冲突 */
+  const findCandidateConflicts = (
+    candidate: CourseSchedule,
+    excludeId?: string
+  ): ScheduleConflict[] => {
+    const others = schedules.filter((s) => s.id !== excludeId);
+    return findScheduleConflicts([...others, candidate]).filter(
+      (c) => c.scheduleA.id === candidate.id || c.scheduleB.id === candidate.id
+    );
+  };
+
+  const formatConflictMessage = (conflicts: ScheduleConflict[], candidateId: string): string => {
+    const c = conflicts[0];
+    const other = c.scheduleA.id === candidateId ? c.scheduleB : c.scheduleA;
+    const otherCourse = courses.find((x) => x.id === other.courseId);
+    return `与《${otherCourse?.name || "未知课程"}》周${DAY_LABELS[other.dayOfWeek - 1]} ${other.startTime}–${other.endTime} 存在时间冲突`;
+  };
+
+  // ---- 新增时段 ----
   const handleAddSlot = (e: React.FormEvent) => {
     e.preventDefault();
+
+    const error = validateSlot({ dayOfWeek: newDay, startTime: newStart, endTime: newEnd, weeks: newWeeks });
+    if (error) {
+      setSlotError(error);
+      setSlotConflict(null);
+      return;
+    }
+
+    const candidate: CourseSchedule = {
+      id: "__candidate__",
+      courseId: course.id,
+      dayOfWeek: newDay,
+      startTime: newStart,
+      endTime: newEnd,
+      location: newLocation || course.classroom,
+      weeks: newWeeks,
+    };
+    const conflicts = findCandidateConflicts(candidate);
+    if (conflicts.length > 0) {
+      setSlotError(null);
+      setSlotConflict(formatConflictMessage(conflicts, candidate.id));
+      return;
+    }
+
     addScheduleSlot({
       courseId: course.id,
       dayOfWeek: newDay,
       startTime: newStart,
       endTime: newEnd,
       location: newLocation || course.classroom,
-      weeks: "1-16周",
+      weeks: newWeeks,
     });
     setNewLocation("");
+    setNewWeeks("1-16周");
+    setSlotError(null);
+    setSlotConflict(null);
+  };
+
+  // ---- 编辑时段 ----
+  const handleStartEditSlot = (sched: CourseSchedule) => {
+    setSlotForm({
+      dayOfWeek: sched.dayOfWeek,
+      startTime: sched.startTime,
+      endTime: sched.endTime,
+      location: sched.location,
+      weeks: sched.weeks,
+    });
+    setSlotError(null);
+    setSlotConflict(null);
+    setEditingSlotId(sched.id);
+  };
+
+  const handleCancelEditSlot = () => {
+    setEditingSlotId(null);
+    setSlotError(null);
+    setSlotConflict(null);
+  };
+
+  const handleSaveSlotEdit = (sched: CourseSchedule) => {
+    const error = validateSlot(slotForm);
+    if (error) {
+      setSlotError(error);
+      setSlotConflict(null);
+      return;
+    }
+
+    // 保留 id / courseId / excludedWeeks，只更新可编辑字段
+    const candidate: CourseSchedule = {
+      ...sched,
+      dayOfWeek: slotForm.dayOfWeek,
+      startTime: slotForm.startTime,
+      endTime: slotForm.endTime,
+      location: slotForm.location.trim() || sched.location,
+      weeks: slotForm.weeks,
+    };
+    const conflicts = findCandidateConflicts(candidate, sched.id);
+    if (conflicts.length > 0) {
+      setSlotError(null);
+      setSlotConflict(formatConflictMessage(conflicts, candidate.id));
+      return;
+    }
+
+    updateSchedule(candidate);
+    handleCancelEditSlot();
   };
 
   // Real File Upload Handler: File → IndexedDB 保存 Blob → 生成 storageKey → Zustand 只存 metadata
@@ -258,34 +419,152 @@ export function CourseDetailDrawer() {
 
             {/* List of slots */}
             <div className="space-y-2">
-              {courseSchedules.map((sched) => (
-                <div
-                  key={sched.id}
-                  className="p-3 bg-[#F7F5F5] border border-[#E7E3DD] rounded-xl flex items-center justify-between text-xs"
-                >
-                  <div className="space-y-0.5">
-                    <div className="font-bold text-charcoal">
-                      周{["一", "二", "三", "四", "五", "六", "日"][sched.dayOfWeek - 1]} {sched.startTime} - {sched.endTime}
+              {courseSchedules.map((sched) => {
+                const isEditing = editingSlotId === sched.id;
+                if (isEditing) {
+                  return (
+                    <div
+                      key={sched.id}
+                      className="p-3 bg-white border border-[#CDB9AB] rounded-xl space-y-2 text-xs"
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-bold text-[#8C827A]">编辑时段</span>
+                        <button
+                          onClick={handleCancelEditSlot}
+                          className="p-0.5 text-[#8C827A] hover:text-charcoal rounded transition-colors"
+                          title="取消编辑"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="text-[10px] text-[#8C827A]">星期</label>
+                          <select
+                            value={slotForm.dayOfWeek}
+                            onChange={(e) =>
+                              setSlotForm({ ...slotForm, dayOfWeek: Number(e.target.value) })
+                            }
+                            className="w-full p-1.5 bg-[#F7F5F5] border border-[#E7E3DD] rounded-lg focus:outline-none text-[11px]"
+                          >
+                            {["周一", "周二", "周三", "周四", "周五", "周六", "周日"].map((label, i) => (
+                              <option key={i} value={i + 1}>
+                                {label}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        <div>
+                          <label className="text-[10px] text-[#8C827A]">周次</label>
+                          <WeeksSelect
+                            value={slotForm.weeks}
+                            onChange={(weeks) => setSlotForm({ ...slotForm, weeks })}
+                          />
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-3 gap-2">
+                        <div>
+                          <label className="text-[10px] text-[#8C827A]">开始</label>
+                          <input
+                            type="time"
+                            value={slotForm.startTime}
+                            onChange={(e) => setSlotForm({ ...slotForm, startTime: e.target.value })}
+                            className="w-full p-1.5 bg-[#F7F5F5] border border-[#E7E3DD] rounded-lg font-mono text-[11px] focus:outline-none"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[10px] text-[#8C827A]">结束</label>
+                          <input
+                            type="time"
+                            value={slotForm.endTime}
+                            onChange={(e) => setSlotForm({ ...slotForm, endTime: e.target.value })}
+                            className="w-full p-1.5 bg-[#F7F5F5] border border-[#E7E3DD] rounded-lg font-mono text-[11px] focus:outline-none"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[10px] text-[#8C827A]">教室</label>
+                          <input
+                            type="text"
+                            value={slotForm.location}
+                            onChange={(e) => setSlotForm({ ...slotForm, location: e.target.value })}
+                            placeholder={sched.location}
+                            className="w-full p-1.5 bg-[#F7F5F5] border border-[#E7E3DD] rounded-lg text-[11px] focus:outline-none"
+                          />
+                        </div>
+                      </div>
+
+                      {slotError && (
+                        <p className="text-[10px] text-[#D94F4F] font-bold">{slotError}</p>
+                      )}
+                      {slotConflict && (
+                        <p className="text-[10px] text-[#D94F4F] font-bold">
+                          {slotConflict}，已阻止保存。可取消编辑后调整时间或周次。
+                        </p>
+                      )}
+
+                      <div className="flex justify-end space-x-2 pt-1">
+                        <button
+                          onClick={handleCancelEditSlot}
+                          className="px-3 py-1 text-[11px] font-medium text-[#676268] bg-[#F7F5F5] border border-[#E7E3DD] rounded-lg hover:bg-[#E0D7C6]"
+                        >
+                          取消
+                        </button>
+                        <button
+                          onClick={() => handleSaveSlotEdit(sched)}
+                          className="px-3 py-1 text-[11px] font-bold text-white bg-charcoal hover:bg-black rounded-lg"
+                        >
+                          保存时段
+                        </button>
+                      </div>
                     </div>
-                    <div className="text-[10px] text-[#8C827A]">
-                      📍 {sched.location} · {sched.weeks}
+                  );
+                }
+
+                return (
+                  <div
+                    key={sched.id}
+                    className="p-3 bg-[#F7F5F5] border border-[#E7E3DD] rounded-xl flex items-center justify-between text-xs"
+                  >
+                    <div className="space-y-0.5">
+                      <div className="font-bold text-charcoal">
+                        周{DAY_LABELS[sched.dayOfWeek - 1]} {sched.startTime} - {sched.endTime}
+                      </div>
+                      <div className="text-[10px] text-[#8C827A]">
+                        📍 {sched.location} · {sched.weeks}
+                        {sched.excludedWeeks && sched.excludedWeeks.length > 0 && (
+                          <span className="text-[#D97706]">
+                            {" "}· 停课周 {sched.excludedWeeks.join(",")}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex items-center space-x-1 shrink-0">
+                      <button
+                        onClick={() => handleStartEditSlot(sched)}
+                        className="p-1 text-[#8C827A] hover:bg-[#E0D7C6] rounded-lg transition-colors"
+                        title="编辑此排课时段"
+                      >
+                        <Edit className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        onClick={() => deleteSchedule(sched.id)}
+                        className="p-1 text-[#D94F4F] hover:bg-[#FDF0F0] rounded-lg transition-colors"
+                        title="删除此排课时段"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
                     </div>
                   </div>
-                  <button
-                    onClick={() => deleteSchedule(sched.id)}
-                    className="p-1 text-[#D94F4F] hover:bg-[#FDF0F0] rounded-lg transition-colors"
-                    title="删除此排课时段"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              ))}
+                );
+              })}
             </div>
 
             {/* Form to add slot */}
             <form onSubmit={handleAddSlot} className="p-3 bg-[#F0EBE1]/60 border border-[#E0D7C6] rounded-xl space-y-2">
               <span className="font-bold text-charcoal text-[11px]">添加上课时段</span>
-              <div className="grid grid-cols-3 gap-2">
+              <div className="grid grid-cols-2 gap-2">
                 <select
                   value={newDay}
                   onChange={(e) => setNewDay(Number(e.target.value))}
@@ -297,6 +576,9 @@ export function CourseDetailDrawer() {
                     </option>
                   ))}
                 </select>
+                <WeeksSelect value={newWeeks} onChange={setNewWeeks} />
+              </div>
+              <div className="grid grid-cols-3 gap-2">
                 <input
                   type="time"
                   value={newStart}
@@ -309,7 +591,22 @@ export function CourseDetailDrawer() {
                   onChange={(e) => setNewEnd(e.target.value)}
                   className="p-1.5 bg-white border border-[#E0D7C6] rounded-lg text-xs font-mono"
                 />
+                <input
+                  type="text"
+                  value={newLocation}
+                  onChange={(e) => setNewLocation(e.target.value)}
+                  placeholder={course.classroom}
+                  className="p-1.5 bg-white border border-[#E0D7C6] rounded-lg text-xs"
+                />
               </div>
+              {slotError && (
+                <p className="text-[10px] text-[#D94F4F] font-bold">{slotError}</p>
+              )}
+              {slotConflict && (
+                <p className="text-[10px] text-[#D94F4F] font-bold">
+                  {slotConflict}，已阻止添加。
+                </p>
+              )}
               <button
                 type="submit"
                 className="w-full py-1.5 bg-charcoal hover:bg-black text-white font-bold rounded-lg text-xs transition-colors"

@@ -1,28 +1,7 @@
 import { CourseSchedule, ScheduleConflict } from "@/types";
-import { isScheduleActive } from "@/store/useAppStore";
+import { isScheduleActive, hasTimeOverlap } from "@/lib/schedule";
 
 const WEEK_DEFAULT_MAX = 16;
-
-function timeToMinutes(timeStr: string): number | null {
-  const m = /^([01]\d|2[0-3]):([0-5]\d)$/.exec(timeStr);
-  if (!m) return null;
-  return Number(m[1]) * 60 + Number(m[2]);
-}
-
-/** 时间区间是否重叠：[aStart, aEnd) 与 [bStart, bEnd) 有交集 */
-export function hasTimeOverlap(
-  aStart: string,
-  aEnd: string,
-  bStart: string,
-  bEnd: string
-): boolean {
-  const as = timeToMinutes(aStart);
-  const ae = timeToMinutes(aEnd);
-  const bs = timeToMinutes(bStart);
-  const be = timeToMinutes(bEnd);
-  if (as === null || ae === null || bs === null || be === null) return false;
-  return as < be && bs < ae;
-}
 
 function getMaxWeek(schedule: CourseSchedule): number {
   const m = /(\d+)\s*-\s*(\d+)/.exec(schedule.weeks || "");

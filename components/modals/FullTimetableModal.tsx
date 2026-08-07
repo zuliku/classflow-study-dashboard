@@ -2,7 +2,8 @@
 
 import React from "react";
 import { X, CalendarDays, Printer, BookOpen, ChevronLeft, ChevronRight } from "lucide-react";
-import { useAppStore, isScheduleActive } from "@/store/useAppStore";
+import { useAppStore } from "@/store/useAppStore";
+import { isScheduleActive } from "@/lib/schedule";
 import { TimetableGrid } from "@/components/dashboard/TimetableGrid";
 
 export function FullTimetableModal() {

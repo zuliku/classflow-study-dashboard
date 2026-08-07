@@ -26,30 +26,6 @@ import { createDefaultSemester, getSemesterWeek } from "@/lib/semester";
 import { getLocalDDLDate } from "@/lib/ddl";
 import { deleteFileBlob, clearAllFileBlobs } from "@/lib/fileStorage";
 
-export function isScheduleActive(schedule: CourseSchedule, week: number): boolean {
-  if (schedule.excludedWeeks && schedule.excludedWeeks.includes(week)) {
-    return false;
-  }
-
-  const weeksStr = schedule.weeks || "1-16周";
-
-  if (weeksStr.includes("单周")) {
-    return week % 2 !== 0;
-  }
-  if (weeksStr.includes("双周")) {
-    return week % 2 === 0;
-  }
-
-  const match = weeksStr.match(/(\d+)-(\d+)/);
-  if (match) {
-    const start = parseInt(match[1], 10);
-    const end = parseInt(match[2], 10);
-    return week >= start && week <= end;
-  }
-
-  return true;
-}
-
 interface AppState {
   // Navigation & UI State
   activeTab: NavTab;

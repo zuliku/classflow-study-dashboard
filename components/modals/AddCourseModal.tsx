@@ -3,6 +3,8 @@
 import React, { useState } from "react";
 import { X, BookOpen, Clock, Calendar, Plus, Trash2 } from "lucide-react";
 import { useAppStore } from "@/store/useAppStore";
+import { WEEK_RANGE_PRESETS, isValidTimeRange } from "@/lib/schedule";
+import { findScheduleConflicts } from "@/lib/conflicts";
 
 const COLOR_OPTIONS = [
   { name: "薄荷灰绿", bgHex: "#E3E6E0", borderHex: "#D0D5CC", textHex: "#313032" },
@@ -10,14 +12,6 @@ const COLOR_OPTIONS = [
   { name: "灰米暖调", bgHex: "#CCCBC4", borderHex: "#B8B7B0", textHex: "#313032" },
   { name: "石褐沙土", bgHex: "#CDB9AB", borderHex: "#BBA494", textHex: "#313032" },
   { name: "深砂棕", bgHex: "#A48F82", borderHex: "#8D786B", textHex: "#FFFFFF" },
-];
-
-const WEEK_RANGE_PRESETS = [
-  { label: "1-16周 (全学期)", value: "1-16周" },
-  { label: "1-8周 (前半学期)", value: "1-8周" },
-  { label: "9-16周 (后半学期)", value: "9-16周" },
-  { label: "单周 (1,3,5,7,9...)", value: "单周" },
-  { label: "双周 (2,4,6,8,10...)", value: "双周" },
 ];
 
 interface SlotInput {
@@ -29,7 +23,7 @@ interface SlotInput {
 }
 
 export function AddCourseModal() {
-  const { isAddCourseModalOpen, setAddCourseModalOpen, addCourseWithSchedule } = useAppStore();
+  const { isAddCourseModalOpen, setAddCourseModalOpen, addCourseWithSchedule, schedules, courses } = useAppStore();
 
   const [name, setName] = useState("");
   const [code, setCode] = useState("");
@@ -38,6 +32,7 @@ export function AddCourseModal() {
   const [credit, setCredit] = useState(3);
   const [description, setDescription] = useState("");
   const [colorIndex, setColorIndex] = useState(0);
+  const [formError, setFormError] = useState<string | null>(null);
 
   // Multi-slot schedule state (支持一门课多个上课时间)
   const [scheduleSlots, setScheduleSlots] = useState<SlotInput[]>([
@@ -47,6 +42,7 @@ export function AddCourseModal() {
   if (!isAddCourseModalOpen) return null;
 
   const handleAddSlot = () => {
+    setFormError(null);
     setScheduleSlots([
       ...scheduleSlots,
       { dayOfWeek: 3, startTime: "10:00", endTime: "11:40", location: classroom, weeks: "1-16周" },
@@ -55,6 +51,7 @@ export function AddCourseModal() {
 
   const handleRemoveSlot = (index: number) => {
     if (scheduleSlots.length === 1) return;
+    setFormError(null);
     setScheduleSlots(scheduleSlots.filter((_, i) => i !== index));
   };
 
@@ -68,10 +65,27 @@ export function AddCourseModal() {
     e.preventDefault();
     if (!name.trim()) return;
 
+    // 槽位基础校验（星期/时间/周次），错误不写入 Store
+    for (let i = 0; i < scheduleSlots.length; i++) {
+      const s = scheduleSlots[i];
+      if (!Number.isInteger(s.dayOfWeek) || s.dayOfWeek < 1 || s.dayOfWeek > 7) {
+        setFormError(`时段 #${i + 1}：星期必须为 1-7`);
+        return;
+      }
+      if (!isValidTimeRange(s.startTime, s.endTime)) {
+        setFormError(`时段 #${i + 1}：时间格式非法或结束时间需晚于开始时间`);
+        return;
+      }
+      if (!s.weeks.trim()) {
+        setFormError(`时段 #${i + 1}：周次不能为空`);
+        return;
+      }
+    }
+
     const color = COLOR_OPTIONS[colorIndex];
     const defaultLocation = classroom || "教二 201";
 
-    const formattedSlots = scheduleSlots.map((s) => ({
+    const formattedSlots: SlotInput[] = scheduleSlots.map((s) => ({
       dayOfWeek: Number(s.dayOfWeek),
       startTime: s.startTime,
       endTime: s.endTime,
@@ -79,6 +93,31 @@ export function AddCourseModal() {
       weeks: s.weeks,
     }));
 
+    // 冲突检测：新时段 vs 现有课表（与 CourseDetailDrawer 同一套 findScheduleConflicts）
+    const candidates = formattedSlots.map((s, idx) => ({
+      id: `__candidate_${idx}`,
+      courseId: "__new_course__",
+      dayOfWeek: s.dayOfWeek,
+      startTime: s.startTime,
+      endTime: s.endTime,
+      location: s.location,
+      weeks: s.weeks,
+    }));
+    const candidateIds = new Set(candidates.map((c) => c.id));
+    const conflict = findScheduleConflicts([...schedules, ...candidates]).find(
+      (c) => candidateIds.has(c.scheduleA.id) || candidateIds.has(c.scheduleB.id)
+    );
+    if (conflict) {
+      const other = candidateIds.has(conflict.scheduleA.id) ? conflict.scheduleB : conflict.scheduleA;
+      const otherCourse = courses.find((x) => x.id === other.courseId);
+      const dayLabel = ["一", "二", "三", "四", "五", "六", "日"][other.dayOfWeek - 1];
+      setFormError(
+        `与现有课程《${otherCourse?.name || "未知课程"}》周${dayLabel} ${other.startTime}–${other.endTime} 存在时间冲突，已阻止添加`
+      );
+      return;
+    }
+
+    setFormError(null);
     addCourseWithSchedule(
       {
         name,
@@ -317,6 +356,11 @@ export function AddCourseModal() {
           </div>
 
           {/* Actions */}
+          {formError && (
+            <p className="text-[11px] text-[#D94F4F] font-bold p-2.5 bg-[#FDF0F0] border border-[#F8D7D7] rounded-xl">
+              {formError}
+            </p>
+          )}
           <div className="flex justify-end space-x-2 pt-2 border-t border-[#F0EBE1]">
             <button
               type="button"

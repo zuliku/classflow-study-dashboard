@@ -1,7 +1,7 @@
 import { CourseSchedule } from "@/types";
 import { Semester } from "@/types";
 import { getSemesterWeek } from "@/lib/semester";
-import { isScheduleActive } from "@/store/useAppStore";
+import { isScheduleActive } from "@/lib/schedule";
 
 const DAY_LABELS = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"];
 
