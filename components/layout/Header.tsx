@@ -4,9 +4,10 @@ import React, { useState, useEffect } from "react";
 import { Search, Calendar as CalendarIcon } from "lucide-react";
 import { useAppStore } from "@/store/useAppStore";
 import { ViewMode } from "@/types";
-import { format, addWeeks, subWeeks, startOfWeek, endOfWeek } from "date-fns";
+import { format } from "date-fns";
 import { zhCN } from "date-fns/locale";
 import { cn } from "@/lib/utils";
+import { getWeekDateRange, getSemesterWeek } from "@/lib/semester";
 
 export function Header() {
   const {
@@ -14,8 +15,8 @@ export function Header() {
     viewMode,
     setViewMode,
     setSearchModalOpen,
-    weekOffset,
-    setWeekOffset,
+    semester,
+    currentSemesterWeek,
     resetToCurrentWeek,
   } = useAppStore();
 
@@ -32,16 +33,19 @@ export function Header() {
     }
   }, []);
 
-  const baseDate = new Date();
-  const targetDate = weekOffset === 0 ? baseDate : addWeeks(baseDate, weekOffset);
-  const weekStart = startOfWeek(targetDate, { weekStartsOn: 1 });
-  const weekEnd = endOfWeek(targetDate, { weekStartsOn: 1 });
-
-  const dateRangeString = `${format(weekStart, "yyyy年M月d日", { locale: zhCN })} - ${format(
-    weekEnd,
+  // 日期范围完全由学期模型推导，与课表表头保持同一数据源
+  const weekDays = getWeekDateRange(semester, currentSemesterWeek);
+  const dateRangeString = `${format(weekDays[0], "yyyy年M月d日", { locale: zhCN })} - ${format(
+    weekDays[6],
     "M月d日",
     { locale: zhCN }
   )}`;
+
+  const realCurrentWeek = Math.min(
+    Math.max(getSemesterWeek(new Date(), semester), 1),
+    semester.totalWeeks
+  );
+  const isCurrentWeek = currentSemesterWeek === realCurrentWeek;
 
   return (
     <header className="bg-[#F7F5F5] border-b border-[#E7E3DD] px-6 py-3.5 flex flex-col md:flex-row md:items-center justify-between gap-4 sticky top-0 z-10">
@@ -74,7 +78,7 @@ export function Header() {
             onClick={resetToCurrentWeek}
             className={cn(
               "text-[10px] ml-1 px-1.5 py-0.5 rounded transition-colors",
-              weekOffset === 0
+              isCurrentWeek
                 ? "bg-[#E3E6E0] text-charcoal"
                 : "bg-[#F0EBE1] text-[#8C827A] hover:text-charcoal"
             )}

@@ -11,6 +11,7 @@ import {
   Plus,
 } from "lucide-react";
 import { useAppStore, isScheduleActive } from "@/store/useAppStore";
+import { getSemesterWeek } from "@/lib/semester";
 import {
   format,
   addMonths,
@@ -33,7 +34,7 @@ export function MiniCalendar() {
     assignments,
     calendarMarks,
     courses,
-    currentSemesterWeek,
+    semester,
     setSelectedCourseId,
     setSelectedAssignmentId,
   } = useAppStore();
@@ -60,10 +61,17 @@ export function MiniCalendar() {
   const selectedDateStr = format(selectedDate, "yyyy-MM-dd");
   const dayOfWeekNumber = getDay(selectedDate) === 0 ? 7 : getDay(selectedDate);
 
-  // Active courses on selected date
-  const daySchedules = schedules.filter(
-    (s) => s.dayOfWeek === dayOfWeekNumber && isScheduleActive(s, currentSemesterWeek)
-  );
+  // 选中日期的真实学期周次（超出学期范围则无课程）
+  const selectedWeek = getSemesterWeek(selectedDate, semester);
+  const isSelectedInSemester =
+    selectedWeek >= 1 && selectedWeek <= semester.totalWeeks;
+
+  // Active courses on selected date (per-date semester week, not global week)
+  const daySchedules = isSelectedInSemester
+    ? schedules.filter(
+        (s) => s.dayOfWeek === dayOfWeekNumber && isScheduleActive(s, selectedWeek)
+      )
+    : [];
 
   // DDL assignments on selected date
   const dayAssignments = assignments.filter(
@@ -124,11 +132,16 @@ export function MiniCalendar() {
           const isTodayDate = isToday(day);
 
           const dayOfWeekNum = getDay(day) === 0 ? 7 : getDay(day);
+          const daySemesterWeek = getSemesterWeek(day, semester);
+          const inSemester =
+            daySemesterWeek >= 1 && daySemesterWeek <= semester.totalWeeks;
 
-          // Check event types
-          const hasCourse = schedules.some(
-            (s) => s.dayOfWeek === dayOfWeekNum && isScheduleActive(s, currentSemesterWeek)
-          );
+          // Check event types (course activity judged by that date's real semester week)
+          const hasCourse =
+            inSemester &&
+            schedules.some(
+              (s) => s.dayOfWeek === dayOfWeekNum && isScheduleActive(s, daySemesterWeek)
+            );
           const hasDDL = assignments.some((a) => a.ddl.split("T")[0] === dateStr);
           const hasExam = calendarMarks.some((m) => m.date === dateStr);
 
@@ -181,6 +194,9 @@ export function MiniCalendar() {
       <div className="pt-2 border-t border-[#F0EBE1] space-y-2">
         <div className="flex justify-between items-center text-xs">
           <span className="font-bold text-charcoal">
+            {isSelectedInSemester
+              ? `第 ${selectedWeek} 周 · `
+              : ""}
             {format(selectedDate, "M月d日 EEEE", { locale: zhCN })} 当日日程
           </span>
           <span className="text-[10px] text-[#8C827A]">

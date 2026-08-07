@@ -2,22 +2,26 @@
 
 import React from "react";
 import { Calendar, ClipboardList, Clock, CheckCircle2 } from "lucide-react";
-import { useAppStore } from "@/store/useAppStore";
+import { useAppStore, isScheduleActive } from "@/store/useAppStore";
+import { getSemesterWeek } from "@/lib/semester";
 import { format, parseISO, isSameWeek, isSameDay } from "date-fns";
 
 export function StatCards() {
-  const { schedules, assignments, currentSemesterWeek } = useAppStore();
+  const { schedules, assignments, semester } = useAppStore();
 
   const today = new Date();
   // dayOfWeek: 1 (Mon) - 7 (Sun)
   const currentDayOfWeek = today.getDay() === 0 ? 7 : today.getDay();
+  // "今日课程"以今天的真实学期周次为准（isScheduleActive 是唯一周次判断入口）
+  const currentWeek = Math.min(
+    Math.max(getSemesterWeek(today, semester), 1),
+    semester.totalWeeks
+  );
 
   // 1. Today's Courses Count
-  const todaySchedules = schedules.filter((s) => {
-    if (s.dayOfWeek !== currentDayOfWeek) return false;
-    if (s.excludedWeeks?.includes(currentSemesterWeek)) return false;
-    return true;
-  });
+  const todaySchedules = schedules.filter(
+    (s) => s.dayOfWeek === currentDayOfWeek && isScheduleActive(s, currentWeek)
+  );
   const todayCourseCount = todaySchedules.length;
 
   // 2. This Week Assignments Count

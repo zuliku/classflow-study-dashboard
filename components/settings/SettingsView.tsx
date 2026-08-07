@@ -27,6 +27,8 @@ export function SettingsView() {
     assignments,
     calendarMarks,
     groupProjects,
+    semester,
+    setSemester,
     importSchedules,
   } = useAppStore();
 
@@ -39,10 +41,9 @@ export function SettingsView() {
   const [totalCredits, setTotalCredits] = useState(userProfile.totalCredits);
 
   // Semester Settings state
-  const [academicYear, setAcademicYear] = useState("2024-2025学年");
-  const [semesterName, setSemesterName] = useState("第二学期 (春季学期)");
-  const [semesterStartDate, setSemesterStartDate] = useState("2026-02-23");
-  const [totalWeeks, setTotalWeeks] = useState(16);
+  const [semesterName, setSemesterName] = useState(semester.name);
+  const [semesterStartDate, setSemesterStartDate] = useState(semester.startDate);
+  const [totalWeeks, setTotalWeeks] = useState(semester.totalWeeks);
 
   const [savedSuccess, setSavedSuccess] = useState(false);
   const [importStatus, setImportStatus] = useState<string | null>(null);
@@ -62,10 +63,24 @@ export function SettingsView() {
     setTimeout(() => setSavedSuccess(false), 2000);
   };
 
+  const handleSaveSemester = (e: React.FormEvent) => {
+    e.preventDefault();
+    setSemester({
+      ...semester,
+      name: semesterName,
+      startDate: semesterStartDate,
+      totalWeeks: Number(totalWeeks),
+    });
+
+    setSavedSuccess(true);
+    setTimeout(() => setSavedSuccess(false), 2000);
+  };
+
   const handleExportData = () => {
     const backupData = {
       exportTime: new Date().toISOString(),
       userProfile,
+      semester,
       courses,
       schedules,
       assignments,
@@ -93,6 +108,9 @@ export function SettingsView() {
         if (raw.courses && raw.schedules) {
           importSchedules(raw.courses, raw.schedules);
           if (raw.userProfile) updateUserProfile(raw.userProfile);
+          if (raw.semester && raw.semester.startDate && raw.semester.totalWeeks) {
+            setSemester(raw.semester);
+          }
           setImportStatus(`成功从备份中恢复 ${raw.courses.length} 门课程与数据！`);
           setTimeout(() => setImportStatus(null), 3000);
         } else {
@@ -237,7 +255,10 @@ export function SettingsView() {
           </form>
 
           {/* Card 2: 学期信息设置 */}
-          <div className="bg-white border border-[#E7E3DD] rounded-2xl p-6 shadow-subtle space-y-4">
+          <form
+            onSubmit={handleSaveSemester}
+            className="bg-white border border-[#E7E3DD] rounded-2xl p-6 shadow-subtle space-y-4"
+          >
             <h3 className="text-sm font-bold text-charcoal flex items-center gap-2 pb-2 border-b border-[#F0EBE1]">
               <Calendar className="w-4 h-4 text-[#A48F82]" />
               学期信息与校历配置
@@ -245,22 +266,13 @@ export function SettingsView() {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
               <div className="space-y-1">
-                <label className="font-bold text-[#8C827A]">当前学年</label>
-                <input
-                  type="text"
-                  value={academicYear}
-                  onChange={(e) => setAcademicYear(e.target.value)}
-                  className="w-full p-2.5 bg-[#F7F5F5] border border-[#E7E3DD] rounded-xl text-charcoal font-semibold focus:outline-none"
-                />
-              </div>
-
-              <div className="space-y-1">
                 <label className="font-bold text-[#8C827A]">学期名称</label>
                 <input
                   type="text"
                   value={semesterName}
                   onChange={(e) => setSemesterName(e.target.value)}
                   className="w-full p-2.5 bg-[#F7F5F5] border border-[#E7E3DD] rounded-xl text-charcoal font-semibold focus:outline-none"
+                  required
                 />
               </div>
 
@@ -271,7 +283,9 @@ export function SettingsView() {
                   value={semesterStartDate}
                   onChange={(e) => setSemesterStartDate(e.target.value)}
                   className="w-full p-2.5 bg-[#F7F5F5] border border-[#E7E3DD] rounded-xl text-charcoal font-mono focus:outline-none"
+                  required
                 />
+                <p className="text-[10px] text-[#8C827A]">周一为学期第 1 周起始日</p>
               </div>
 
               <div className="space-y-1">
@@ -288,7 +302,17 @@ export function SettingsView() {
                 </select>
               </div>
             </div>
-          </div>
+
+            <div className="flex justify-end pt-2">
+              <button
+                type="submit"
+                className="flex items-center space-x-1.5 px-4 py-2 bg-charcoal hover:bg-black text-white text-xs font-bold rounded-xl transition-colors shadow-subtle"
+              >
+                <Save className="w-3.5 h-3.5" />
+                <span>保存学期设置</span>
+              </button>
+            </div>
+          </form>
         </div>
 
         {/* Right Column (1/3 Width) */}

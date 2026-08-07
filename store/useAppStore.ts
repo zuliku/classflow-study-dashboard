@@ -10,6 +10,7 @@ import {
   NavTab,
   ViewMode,
   ScheduleConflict,
+  Semester,
 } from "@/types";
 import {
   initialUserProfile,
@@ -19,6 +20,7 @@ import {
   initialCalendarMarks,
   initialGroupProjects,
 } from "@/lib/mockData";
+import { createDefaultSemester, getSemesterWeek } from "@/lib/semester";
 
 export function isScheduleActive(schedule: CourseSchedule, week: number): boolean {
   if (schedule.excludedWeeks && schedule.excludedWeeks.includes(week)) {
@@ -50,11 +52,11 @@ interface AppState {
   setActiveTab: (tab: NavTab) => void;
   viewMode: ViewMode;
   setViewMode: (mode: ViewMode) => void;
-  weekOffset: number;
-  setWeekOffset: (offset: number) => void;
-  resetToCurrentWeek: () => void;
+  semester: Semester;
+  setSemester: (semester: Semester) => void;
   currentSemesterWeek: number;
   setCurrentSemesterWeek: (week: number) => void;
+  resetToCurrentWeek: () => void;
 
   // Selected Entities for Drawers & Modals
   selectedCourseId: string | null;
@@ -135,11 +137,30 @@ export const useAppStore = create<AppState>()(
       setActiveTab: (tab) => set({ activeTab: tab }),
       viewMode: "week",
       setViewMode: (mode) => set({ viewMode: mode }),
-      weekOffset: 0,
-      setWeekOffset: (offset) => set({ weekOffset: offset }),
-      resetToCurrentWeek: () => set({ weekOffset: 0 }),
+      semester: createDefaultSemester(),
+      setSemester: (semester) =>
+        set((state) => ({
+          semester,
+          currentSemesterWeek: Math.min(
+            Math.max(state.currentSemesterWeek, 1),
+            semester.totalWeeks
+          ),
+        })),
       currentSemesterWeek: 1,
-      setCurrentSemesterWeek: (week) => set({ currentSemesterWeek: week }),
+      setCurrentSemesterWeek: (week) =>
+        set((state) => ({
+          currentSemesterWeek: Math.min(
+            Math.max(week, 1),
+            state.semester.totalWeeks
+          ),
+        })),
+      resetToCurrentWeek: () =>
+        set((state) => ({
+          currentSemesterWeek: Math.min(
+            Math.max(getSemesterWeek(new Date(), state.semester), 1),
+            state.semester.totalWeeks
+          ),
+        })),
 
       selectedCourseId: null,
       setSelectedCourseId: (id) => set({ selectedCourseId: id }),
@@ -179,6 +200,8 @@ export const useAppStore = create<AppState>()(
           assignments: initialAssignments,
           calendarMarks: initialCalendarMarks,
           groupProjects: initialGroupProjects,
+          semester: createDefaultSemester(),
+          currentSemesterWeek: 1,
         }),
 
       addCourseWithSchedule: (courseData, scheduleSlots) => {

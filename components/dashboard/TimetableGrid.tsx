@@ -5,7 +5,8 @@ import { ExternalLink, AlertTriangle, ChevronLeft, ChevronRight, MapPin, User } 
 import { useAppStore, isScheduleActive } from "@/store/useAppStore";
 import { ScheduleConflict } from "@/types";
 import { cn } from "@/lib/utils";
-import { addWeeks, startOfWeek, addDays, format } from "date-fns";
+import { format } from "date-fns";
+import { getWeekDateRange, formatWeekDateRange } from "@/lib/semester";
 
 const TIME_SLOTS = [
   "08:00",
@@ -28,6 +29,7 @@ export function TimetableGrid() {
   const {
     courses,
     schedules,
+    semester,
     currentSemesterWeek,
     setCurrentSemesterWeek,
     setSelectedCourseId,
@@ -35,19 +37,16 @@ export function TimetableGrid() {
     setSelectedConflict,
     setActiveTab,
     setFullTimetableModalOpen,
-    weekOffset,
   } = useAppStore();
 
-  const baseDate = new Date();
-  const targetDate = weekOffset === 0 ? baseDate : addWeeks(baseDate, weekOffset);
-  const weekStart = startOfWeek(targetDate, { weekStartsOn: 1 });
+  // 周一至周日表头完全由 semester.startDate + currentSemesterWeek 推导
+  const weekDays = getWeekDateRange(semester, currentSemesterWeek);
 
   const weekdays = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"].map((label, idx) => {
-    const dayDate = addDays(weekStart, idx);
     return {
       dayOfWeek: idx + 1,
       label,
-      dateStr: format(dayDate, "M/d"),
+      dateStr: format(weekDays[idx], "M/d"),
     };
   });
 
@@ -104,14 +103,16 @@ export function TimetableGrid() {
           {/* Semester Week Picker */}
           <div className="flex items-center space-x-1 bg-[#F0EBE1] border border-[#E0D7C6] rounded-lg px-2 py-0.5 text-xs font-semibold text-charcoal">
             <button
-              onClick={() => setCurrentSemesterWeek(Math.max(1, currentSemesterWeek - 1))}
+              onClick={() => setCurrentSemesterWeek(currentSemesterWeek - 1)}
               className="hover:text-black transition-colors"
             >
               <ChevronLeft className="w-3 h-3" />
             </button>
-            <span>第 {currentSemesterWeek} 周 (学期周次)</span>
+            <span>
+              第 {currentSemesterWeek} 周 · {formatWeekDateRange(semester, currentSemesterWeek)}
+            </span>
             <button
-              onClick={() => setCurrentSemesterWeek(Math.min(16, currentSemesterWeek + 1))}
+              onClick={() => setCurrentSemesterWeek(currentSemesterWeek + 1)}
               className="hover:text-black transition-colors"
             >
               <ChevronRight className="w-3 h-3" />

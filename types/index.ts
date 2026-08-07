@@ -26,6 +26,13 @@ export interface UserProfile {
   totalCredits: number;
 }
 
+export interface Semester {
+  id: string;
+  name: string;
+  startDate: string; // "YYYY-MM-DD"，开学日期（周一，学期第 1 周起始日）
+  totalWeeks: number;
+}
+
 export interface Material {
   id: string;
   title: string;

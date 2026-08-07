@@ -48,6 +48,7 @@ export default function Home() {
     courses,
     assignments,
     userProfile,
+    semester,
     setSelectedCourseId,
     setAddCourseModalOpen,
     setImportScheduleModalOpen,
@@ -123,7 +124,7 @@ export default function Home() {
                     学期课表
                   </h2>
                   <p className="text-xs text-[#8C827A]">
-                    2024-2025学年第二学期 · 经济与管理学院
+                    {semester.name} · {userProfile.college}
                   </p>
                 </div>
                 <div className="flex items-center space-x-2 shrink-0">
