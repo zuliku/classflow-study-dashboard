@@ -84,7 +84,7 @@ export function AssignmentTable() {
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
           <div className="flex items-center space-x-2">
             <h3 className="text-sm font-bold text-charcoal">
-              作业与 DDL 管理中心
+              作业与 DDL 管理
             </h3>
             <span className="text-[10px] font-semibold text-[#8C827A] bg-[#F7F5F5] px-1.5 py-0.5 rounded border border-[#E7E3DD]">
               {filteredAssignments.length} 项任务
@@ -125,22 +125,22 @@ export function AssignmentTable() {
             </select>
           </div>
 
-          {/* Time Slice Pills */}
+          {/* Clean Time Slice Pills (Emojis removed as requested) */}
           <div className="flex flex-wrap items-center gap-1 bg-[#F0EBE1] p-0.5 rounded-xl border border-[#E0D7C6] text-[11px] font-medium">
             {[
               { id: "all", label: "全部" },
-              { id: "overdue", label: "⚠️ 逾期" },
-              { id: "today", label: "🔥 今日" },
-              { id: "3days", label: "⏳ 3天内" },
-              { id: "7days", label: "📅 7天内" },
-              { id: "completed", label: "📦 已完成归档" },
+              { id: "overdue", label: "已逾期" },
+              { id: "today", label: "今日截止" },
+              { id: "3days", label: "3天内截止" },
+              { id: "7days", label: "7天内截止" },
+              { id: "completed", label: "已完成归档" },
             ].map((slice) => {
               const isActive = timeSlice === slice.id;
               return (
                 <button
                   key={slice.id}
                   onClick={() => setTimeSlice(slice.id as TimeSliceFilter)}
-                  className={`px-2 py-0.5 rounded-lg transition-all ${
+                  className={`px-2.5 py-0.5 rounded-lg transition-all ${
                     isActive
                       ? "bg-white text-charcoal font-bold shadow-subtle"
                       : "text-[#676268] hover:text-charcoal"

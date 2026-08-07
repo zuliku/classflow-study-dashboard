@@ -171,10 +171,10 @@ export function AddAssignmentModal() {
                 onChange={(e) => setPriority(e.target.value as Priority)}
                 className="w-full p-2.5 bg-[#F7F5F5] border border-[#E7E3DD] rounded-xl focus:outline-none text-xs font-bold"
               >
-                <option value="urgent">🔥 紧急 (Urgent)</option>
-                <option value="high">⚠️ 高优先 (High)</option>
-                <option value="medium">📌 中优先 (Medium)</option>
-                <option value="low">🌱 低优先 (Low)</option>
+                <option value="urgent">紧急</option>
+                <option value="high">高优先级</option>
+                <option value="medium">中优先级</option>
+                <option value="low">低优先级</option>
               </select>
             </div>
           </div>

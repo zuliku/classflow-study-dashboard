@@ -132,10 +132,10 @@ export function AssignmentDrawer() {
                 }
                 className="w-full text-xs font-medium bg-[#F7F5F5] border border-[#E7E3DD] rounded-xl p-2.5 text-charcoal focus:outline-none cursor-pointer"
               >
-                <option value="urgent">🔴 紧急 (Urgent)</option>
-                <option value="high">🟠 高优先 (High)</option>
-                <option value="medium">🟡 中优先 (Medium)</option>
-                <option value="low">🟢 低优先 (Low)</option>
+                <option value="urgent">紧急 (Urgent)</option>
+                <option value="high">高优先 (High)</option>
+                <option value="medium">中优先 (Medium)</option>
+                <option value="low">低优先 (Low)</option>
               </select>
             </div>
           </div>
