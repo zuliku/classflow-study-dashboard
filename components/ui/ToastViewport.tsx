@@ -80,7 +80,7 @@ export function ToastViewport() {
                   toast.onAction?.();
                   dismiss(toast.id);
                 }}
-                className="shrink-0 text-[11px] font-bold text-charcoal hover:text-black underline-offset-2 hover:underline transition-colors"
+                className="shrink-0 px-1.5 py-0.5 -m-0.5 rounded-lg text-[11px] font-bold text-charcoal hover:bg-[#F0EBE1] transition-colors duration-[var(--motion-fast)]"
               >
                 {toast.actionLabel}
               </button>

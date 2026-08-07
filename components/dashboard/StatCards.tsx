@@ -8,6 +8,18 @@ import { parseLocalDDL } from "@/lib/ddl";
 import { isScheduleActive } from "@/lib/schedule";
 import { format, isSameWeek, isSameDay } from "date-fns";
 
+/** 指标值变化：仅 2px 上移淡入（不做 count-up 数字滚动） */
+function AnimatedMetric({ value }: { value: string }) {
+  return (
+    <div
+      key={value}
+      className="ux-metric text-xl font-extrabold text-charcoal tracking-tight"
+    >
+      {value}
+    </div>
+  );
+}
+
 export function StatCards() {
   const {
     schedules,
@@ -131,9 +143,7 @@ export function StatCards() {
               <span className="text-xs font-semibold text-[#8C827A]">
                 {stat.title}
               </span>
-              <div className="text-xl font-extrabold text-charcoal tracking-tight">
-                {stat.value}
-              </div>
+              <AnimatedMetric value={stat.value} />
               <p
                 className={`text-[11px] ${
                   stat.subtextColor || "text-[#8C827A]"

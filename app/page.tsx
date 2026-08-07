@@ -22,6 +22,7 @@ import { AddAssignmentModal } from "@/components/modals/AddAssignmentModal";
 import { FilePreviewModal } from "@/components/modals/FilePreviewModal";
 import { ToastViewport } from "@/components/ui/ToastViewport";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import { PageTransition } from "@/components/ui/PageTransition";
 import { useAppStore } from "@/store/useAppStore";
 import { computeWeekCourseLoad } from "@/lib/studyLoad";
 import { openAssignmentEditor } from "@/lib/uiEvents";
@@ -99,6 +100,7 @@ export default function Home() {
 
         {/* Dynamic Page Views */}
         <main className="flex-1 p-5 space-y-4 overflow-y-auto">
+          <PageTransition tab={activeTab}>
           {activeTab === "overview" && (
             <>
               {/* Row 1: Top 4 Stat Summary Cards */}
@@ -208,7 +210,7 @@ export default function Home() {
                   <div
                     key={course.id}
                     onClick={() => setSelectedCourseId(course.id)}
-                    className="group p-4 rounded-2xl border transition-all duration-200 cursor-pointer shadow-subtle hover:shadow-card hover:-translate-y-px flex flex-col justify-between"
+                    className="group p-4 rounded-2xl border transition-all duration-200 cursor-pointer shadow-subtle hover:shadow-card hover:border-[#CDB9AB] hover:-translate-y-px flex flex-col justify-between"
                     style={{
                       backgroundColor: `${course.bgHex}50`,
                       borderColor: course.borderHex,
@@ -321,6 +323,8 @@ export default function Home() {
                           outerRadius={85}
                           paddingAngle={4}
                           dataKey="value"
+                          animationDuration={450}
+                          animationEasing="ease-out"
                         >
                           {statusPieData.map((entry, index) => (
                             <Cell key={`cell-${index}`} fill={entry.color} />
@@ -369,7 +373,7 @@ export default function Home() {
                             fontSize: "11px",
                           }}
                         />
-                        <Bar dataKey="value" radius={[6, 6, 0, 0]}>
+                        <Bar dataKey="value" radius={[6, 6, 0, 0]} animationDuration={450} animationEasing="ease-out">
                           {priorityPieData.map((entry, index) => (
                             <Cell key={`cell-${index}`} fill={entry.color} />
                           ))}
@@ -391,6 +395,7 @@ export default function Home() {
           )}
 
           {activeTab === "settings" && <SettingsView />}
+          </PageTransition>
         </main>
       </div>
 

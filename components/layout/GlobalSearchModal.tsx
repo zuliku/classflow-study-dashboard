@@ -123,7 +123,7 @@ export function GlobalSearchModal() {
                       <div className="flex items-center space-x-3">
                         <BookOpen className="w-4 h-4 text-[#A48F82]" />
                         <div>
-                          <span className="font-semibold text-charcoal group-hover:underline">
+                          <span className="font-semibold text-charcoal ">
                             {c.name}
                           </span>
                           <span className="text-[10px] text-[#8C827A] ml-2 font-mono">
@@ -131,7 +131,7 @@ export function GlobalSearchModal() {
                           </span>
                         </div>
                       </div>
-                      <ArrowRight className="w-3.5 h-3.5 text-[#8C827A] group-hover:translate-x-0.5 transition-transform" />
+                      <ArrowRight className="w-3.5 h-3.5 text-[#8C827A] transition-transform duration-[var(--motion-fast)] group-hover:translate-x-px" />
                     </div>
                   ))}
                 </div>
@@ -155,7 +155,7 @@ export function GlobalSearchModal() {
                       <div className="flex items-center space-x-3">
                         <ClipboardList className="w-4 h-4 text-[#A48F82]" />
                         <div>
-                          <span className="font-semibold text-charcoal group-hover:underline">
+                          <span className="font-semibold text-charcoal ">
                             {a.title}
                           </span>
                           <span className="text-[10px] text-[#8C827A] ml-2">
@@ -163,7 +163,7 @@ export function GlobalSearchModal() {
                           </span>
                         </div>
                       </div>
-                      <ArrowRight className="w-3.5 h-3.5 text-[#8C827A] group-hover:translate-x-0.5 transition-transform" />
+                      <ArrowRight className="w-3.5 h-3.5 text-[#8C827A] transition-transform duration-[var(--motion-fast)] group-hover:translate-x-px" />
                     </div>
                   ))}
                 </div>

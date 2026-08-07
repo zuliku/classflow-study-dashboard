@@ -16,6 +16,8 @@ import { useAppStore } from "@/store/useAppStore";
 import { useToastStore } from "@/store/useToastStore";
 import { TimeSliceFilter } from "@/types";
 import { openAssignmentEditor } from "@/lib/uiEvents";
+import { useEnterOnAdd } from "@/lib/useEnterOnAdd";
+import { cn } from "@/lib/utils";
 import { getPriorityMeta } from "@/lib/utils";
 import { isToday, differenceInDays } from "date-fns";
 import { parseLocalDDL, getLocalDDLDate } from "@/lib/ddl";
@@ -35,6 +37,7 @@ export function AssignmentTable() {
   const pushToast = useToastStore((s) => s.pushToast);
 
   const [courseFilter, setCourseFilter] = useState<string>("all");
+  const newTaskIds = useEnterOnAdd(assignments.map((a) => a.id));
 
   const today = new Date();
 
@@ -149,7 +152,7 @@ export function AssignmentTable() {
                 <button
                   key={slice.id}
                   onClick={() => setAssignmentTimeSlice(slice.id as TimeSliceFilter)}
-                  className={`px-2.5 py-0.5 rounded-lg transition-all ${
+                  className={`px-2.5 py-0.5 rounded-lg transition-colors duration-[var(--motion-fast)] ease-[var(--ease-standard)] ${
                     isActive
                       ? "bg-white text-charcoal font-bold shadow-subtle"
                       : "text-[#676268] hover:text-charcoal"
@@ -184,15 +187,17 @@ export function AssignmentTable() {
               differenceInDays(ddlDate, today) < 0 &&
               !isToday(ddlDate);
 
+            const isNew = newTaskIds.has(task.id);
+
             return (
               <div
                 key={task.id}
                 onClick={() => setSelectedAssignmentId(task.id)}
-                className={`p-3 rounded-xl transition-all duration-150 cursor-pointer flex items-center justify-between group ${
-                  isOverdueTask
-                    ? "bg-[#FDF0F0] border border-[#F8D7D7]"
-                    : "hover:bg-[#F7F5F5] bg-white border border-[#F5F2EE]"
-                }`}
+                className={cn(
+                  "p-3 rounded-xl transition-all duration-150 cursor-pointer flex items-center justify-between group",
+                  isNew && "animate-enter",
+                  isOverdueTask ? "bg-[#FDF0F0] border border-[#F8D7D7]" : "hover:bg-[#F7F5F5] bg-white border border-[#F5F2EE]"
+                )}
               >
                 {/* Left: Checkbox & Info */}
                 <div className="flex items-center space-x-3 min-w-0 flex-1">

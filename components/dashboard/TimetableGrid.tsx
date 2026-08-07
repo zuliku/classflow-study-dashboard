@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { ExternalLink, AlertTriangle, ChevronLeft, ChevronRight, MapPin, User } from "lucide-react";
 import { useAppStore } from "@/store/useAppStore";
 import { cn } from "@/lib/utils";
@@ -64,6 +64,16 @@ export function TimetableGrid() {
   const conflicts = findScheduleConflicts(activeSchedules);
   const firstConflict = conflicts[0];
 
+  // 周次切换方向：上一周 -6px 进入，下一周 +6px 进入（仅内容区，卡片本体不动）
+  const prevWeekRef = useRef(currentSemesterWeek);
+  const [weekDir, setWeekDir] = useState(0);
+  useEffect(() => {
+    if (prevWeekRef.current !== currentSemesterWeek) {
+      setWeekDir(currentSemesterWeek > prevWeekRef.current ? 1 : -1);
+      prevWeekRef.current = currentSemesterWeek;
+    }
+  }, [currentSemesterWeek]);
+
   const handleOpenFullTimetable = () => {
     setActiveTab("timetable");
     setFullTimetableModalOpen(true);
@@ -97,10 +107,10 @@ export function TimetableGrid() {
 
         <button
           onClick={handleOpenFullTimetable}
-          className="flex items-center space-x-1 text-xs text-[#8C827A] hover:text-charcoal transition-colors bg-[#F7F5F5] hover:bg-[#F0EBE1] px-2 py-1 rounded-lg border border-[#E7E3DD] self-start sm:self-auto font-medium"
+          className="group flex items-center space-x-1 text-xs text-[#8C827A] hover:text-charcoal transition-colors bg-[#F7F5F5] hover:bg-[#F0EBE1] px-2 py-1 rounded-lg border border-[#E7E3DD] self-start sm:self-auto font-medium"
         >
           <span>查看课表</span>
-          <ExternalLink className="w-3.5 h-3.5" />
+          <ExternalLink className="w-3.5 h-3.5 transition-transform duration-[var(--motion-fast)] group-hover:translate-x-px" />
         </button>
       </div>
 
@@ -126,8 +136,19 @@ export function TimetableGrid() {
         </div>
       )}
 
-      {/* Grid Container */}
-      <div className="mt-2 flex-1 flex flex-col min-h-0 select-none">
+      {/* Grid Container：周切换时仅此区域（表头 + 课程网格）做方向淡入 */}
+      <div
+        key={currentSemesterWeek}
+        className={cn(
+          "mt-2 flex-1 flex flex-col min-h-0 select-none",
+          weekDir !== 0 && "ux-week-enter"
+        )}
+        style={
+          weekDir !== 0
+            ? ({ "--enter-y": weekDir === 1 ? "6px" : "-6px" } as React.CSSProperties)
+            : undefined
+        }
+      >
         {/* Weekday Header Row */}
         <div className="grid grid-cols-8 border-b border-[#E7E3DD] pb-2 text-center text-xs shrink-0">
           <div className="text-[#8C827A] font-medium py-0.5 text-[11px]">时间</div>
@@ -222,7 +243,7 @@ export function TimetableGrid() {
                         <div className="space-y-0.5 min-w-0">
                           {/* 1. Course Title */}
                           <div className="flex items-start justify-between">
-                            <h4 className="font-extrabold text-[11px] sm:text-xs tracking-tight leading-tight text-charcoal group-hover:underline truncate">
+                            <h4 className="font-extrabold text-[11px] sm:text-xs tracking-tight leading-tight text-charcoal truncate">
                               {course.name}
                             </h4>
                             {hasConflict && (

@@ -257,7 +257,7 @@ export function GroupCollaborationView() {
               {/* Progress Bar */}
               <div className="w-full bg-[#F0EBE1] rounded-full h-2 overflow-hidden">
                 <div
-                  className="bg-[#4A7C59] h-2 rounded-full transition-all duration-500"
+                  className="bg-[#4A7C59] h-2 rounded-full transition-[width] duration-[var(--motion-data)] ease-[var(--ease-emphasized)]"
                   style={{ width: `${activeProject.progress}%` }}
                 />
               </div>

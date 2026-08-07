@@ -58,15 +58,24 @@ export function Sidebar() {
                 key={item.id}
                 onClick={() => setActiveTab(item.id)}
                 className={cn(
-                  "w-full flex items-center space-x-2.5 px-3 py-2 rounded-xl text-xs font-medium transition-all duration-200 group text-left",
+                  "relative w-full flex items-center space-x-2.5 px-3 py-2 rounded-xl text-xs font-medium transition-colors duration-[var(--motion-base)] ease-[var(--ease-standard)] group text-left",
                   isActive
                     ? "bg-[#E3E6E0] text-charcoal font-semibold shadow-subtle"
                     : "text-[#676268] hover:bg-[#F0EBE1] hover:text-charcoal"
                 )}
               >
+                {/* Active 指示条：opacity + scaleY 过渡 */}
+                <span
+                  className={cn(
+                    "absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-4 rounded-full bg-charcoal",
+                    "transition-all duration-[var(--motion-base)] ease-[var(--ease-standard)]",
+                    isActive ? "opacity-100 scale-y-100" : "opacity-0 scale-y-50"
+                  )}
+                  aria-hidden="true"
+                />
                 <Icon
                   className={cn(
-                    "w-4 h-4 transition-colors",
+                    "w-4 h-4 transition-colors duration-[var(--motion-base)]",
                     isActive
                       ? "text-charcoal"
                       : "text-[#8C827A] group-hover:text-charcoal"
@@ -114,7 +123,7 @@ export function Sidebar() {
             </div>
             <div className="w-full bg-[#E3E6E0] rounded-full h-1.5 overflow-hidden">
               <div
-                className="bg-sandrift h-1.5 rounded-full transition-all duration-500"
+                className="bg-sandrift h-1.5 rounded-full transition-[width] duration-[var(--motion-data)] ease-[var(--ease-emphasized)]"
                 style={{ width: `${creditPercentage}%` }}
               />
             </div>

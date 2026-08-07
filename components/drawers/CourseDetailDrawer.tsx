@@ -31,6 +31,7 @@ import { usePresence } from "@/lib/usePresence";
 import { cn } from "@/lib/utils";
 import { openAssignmentEditor, previewMaterial } from "@/lib/uiEvents";
 import { pushOverlay, popOverlay, isTopmostOverlay } from "@/lib/overlayStack";
+import { useEnterOnAdd } from "@/lib/useEnterOnAdd";
 
 const OVERLAY_ID = "course-detail-drawer";
 const DAY_LABELS = ["一", "二", "三", "四", "五", "六", "日"];
@@ -121,6 +122,9 @@ export function CourseDetailDrawer() {
   const course = courses.find((c) => c.id === selectedCourseId);
   const courseSchedules = schedules.filter((s) => s.courseId === selectedCourseId);
   const courseAssignments = assignments.filter((a) => a.courseId === selectedCourseId);
+
+  const newScheduleIds = useEnterOnAdd(courseSchedules.map((s) => s.id));
+  const newMaterialIds = useEnterOnAdd(course?.materials.map((m) => m.id) ?? []);
 
   const { mounted, visible } = usePresence(!!course, 260);
 
@@ -683,7 +687,10 @@ export function CourseDetailDrawer() {
                 return (
                   <div
                     key={sched.id}
-                    className="p-3 bg-[#F7F5F5] border border-[#E7E3DD] rounded-xl flex items-center justify-between text-xs"
+                    className={cn(
+                      "p-3 bg-[#F7F5F5] border border-[#E7E3DD] rounded-xl flex items-center justify-between text-xs",
+                      newScheduleIds.has(sched.id) && "animate-enter"
+                    )}
                   >
                     <div className="space-y-0.5">
                       <div className="font-bold text-charcoal">
@@ -805,7 +812,7 @@ export function CourseDetailDrawer() {
                     </span>
                     <span className="flex items-center shrink-0 ml-2 text-[10px] text-[#8C827A]">
                       {getLocalDDLDate(a.ddl)}
-                      <ChevronRight className="w-3 h-3 ml-0.5 group-hover:translate-x-0.5 transition-transform" />
+                      <ChevronRight className="w-3 h-3 ml-0.5 transition-transform duration-[var(--motion-fast)] group-hover:translate-x-px" />
                     </span>
                   </button>
                 ))}
@@ -859,12 +866,15 @@ export function CourseDetailDrawer() {
                   <div
                     key={mat.id}
                     onClick={() => handlePreviewMaterial(mat)}
-                    className="p-3 bg-[#F7F5F5] hover:bg-[#F0EBE1] border border-[#E7E3DD] rounded-xl flex items-center justify-between text-xs cursor-pointer transition-colors group"
+                    className={cn(
+                      "p-3 bg-[#F7F5F5] hover:bg-[#F0EBE1] border border-[#E7E3DD] rounded-xl flex items-center justify-between text-xs cursor-pointer transition-colors group",
+                      newMaterialIds.has(mat.id) && "animate-enter"
+                    )}
                   >
                     <div className="flex items-center space-x-2.5 min-w-0">
                       <FileText className="w-4 h-4 text-[#A48F82] shrink-0" />
                       <div className="min-w-0">
-                        <h4 className="font-bold text-charcoal group-hover:underline truncate">
+                        <h4 className="font-bold text-charcoal truncate">
                           {mat.title}
                         </h4>
                         <span className="text-[10px] text-[#8C827A]">

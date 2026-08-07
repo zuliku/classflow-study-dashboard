@@ -127,7 +127,7 @@ export function AssignmentDrawer() {
                 <span className="group-hover:text-charcoal group-hover:underline transition-colors">
                   {course.name}
                 </span>
-                <ChevronRight className="w-3 h-3 text-[#CDB9AB] group-hover:text-[#8C827A] transition-colors" />
+                <ChevronRight className="w-3 h-3 text-[#CDB9AB] transition-transform duration-[var(--motion-fast)] group-hover:translate-x-px group-hover:text-[#8C827A]" />
               </button>
             ) : (
               <span className="text-xs font-semibold text-[#8C827A] flex items-center">

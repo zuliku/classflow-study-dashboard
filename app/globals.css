@@ -15,7 +15,10 @@
   --motion-fast: 140ms;
   --motion-base: 190ms;
   --motion-panel: 260ms;
+  --motion-page: 220ms;
+  --motion-data: 320ms;
   --ease-standard: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ease-emphasized: cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 body {
@@ -98,6 +101,36 @@ button:active:not(:disabled) {
   .animate-enter {
     animation: ux-enter var(--motion-base) var(--ease-standard) both;
   }
+
+  /* 页面 Tab 切换：opacity + 4px 上移 */
+  .ux-page {
+    animation: ux-page-in var(--motion-page) var(--ease-standard) both;
+  }
+
+  /* 周次切换：方向由 --enter-y 控制（±6px） */
+  .ux-week-enter {
+    animation: ux-week-in 180ms var(--ease-standard) both;
+  }
+
+  /* 月份切换：方向由 --enter-x 控制（±6px） */
+  .ux-month-enter {
+    animation: ux-month-in 180ms var(--ease-standard) both;
+  }
+
+  /* Agenda 内容切换：3px 上移 */
+  .ux-agenda-enter {
+    animation: ux-agenda-in 160ms var(--ease-standard) both;
+  }
+
+  /* 指标值变化：2px 上移淡入，不做 count-up */
+  .ux-metric {
+    animation: ux-metric-in var(--motion-base) var(--ease-standard) both;
+  }
+
+  /* 简单淡入（月份标题等） */
+  .ux-fade {
+    animation: ux-fade var(--motion-fast) var(--ease-standard) both;
+  }
 }
 
 @keyframes ux-enter {
@@ -108,6 +141,70 @@ button:active:not(:disabled) {
   to {
     opacity: 1;
     transform: none;
+  }
+}
+
+@keyframes ux-page-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes ux-week-in {
+  from {
+    opacity: 0;
+    transform: translateY(var(--enter-y, 6px));
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes ux-month-in {
+  from {
+    opacity: 0;
+    transform: translateX(var(--enter-x, 6px));
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes ux-agenda-in {
+  from {
+    opacity: 0;
+    transform: translateY(3px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes ux-metric-in {
+  from {
+    opacity: 0;
+    transform: translateY(2px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes ux-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
   }
 }
 

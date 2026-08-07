@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   ChevronLeft,
   ChevronRight,
@@ -16,6 +16,7 @@ import { getSemesterWeek } from "@/lib/semester";
 import { getLocalDDLDate, getLocalDDLTime } from "@/lib/ddl";
 import { isScheduleActive } from "@/lib/schedule";
 import { openAssignmentEditor } from "@/lib/uiEvents";
+import { cn } from "@/lib/utils";
 import {
   format,
   addMonths,
@@ -52,6 +53,18 @@ export function MiniCalendar() {
   const endDate = endOfWeek(monthEnd, { weekStartsOn: 1 });
 
   const days = eachDayOfInterval({ start: startDate, end: endDate });
+
+  // 月份切换方向：上一月 -6px 进入，下一月 +6px 进入（仅网格，卡片不动）
+  const prevMonthRef = useRef(currentMonth);
+  const [monthDir, setMonthDir] = useState(0);
+  useEffect(() => {
+    if (prevMonthRef.current.getTime() !== currentMonth.getTime()) {
+      setMonthDir(currentMonth.getTime() > prevMonthRef.current.getTime() ? 1 : -1);
+      prevMonthRef.current = currentMonth;
+    }
+  }, [currentMonth]);
+
+  const monthKey = format(currentMonth, "yyyy-MM");
 
   const handlePrevMonth = () => setCurrentMonth(subMonths(currentMonth, 1));
   const handleNextMonth = () => setCurrentMonth(addMonths(currentMonth, 1));
@@ -179,7 +192,7 @@ export function MiniCalendar() {
       <div className="flex items-center justify-between pb-2 border-b border-[#F0EBE1]">
         <div className="flex items-center space-x-2">
           <CalendarIcon className="w-4 h-4 text-[#A48F82]" />
-          <h3 className="text-xs font-bold text-charcoal">
+          <h3 key={monthKey} className="ux-fade text-xs font-bold text-charcoal">
             {format(currentMonth, "yyyy年 M月", { locale: zhCN })}
           </h3>
         </div>
@@ -216,7 +229,18 @@ export function MiniCalendar() {
       </div>
 
       {/* Calendar Grid */}
-      <div className="grid grid-cols-7 gap-1 text-xs">
+      <div
+        key={monthKey}
+        className={cn(
+          "grid grid-cols-7 gap-1 text-xs",
+          monthDir !== 0 && "ux-month-enter"
+        )}
+        style={
+          monthDir !== 0
+            ? ({ "--enter-x": monthDir === 1 ? "6px" : "-6px" } as React.CSSProperties)
+            : undefined
+        }
+      >
         {days.map((day) => {
           const dateStr = format(day, "yyyy-MM-dd");
           const isSelected = isSameDay(day, selectedDate);
@@ -264,28 +288,28 @@ export function MiniCalendar() {
               <div className="flex items-center space-x-0.5 absolute bottom-1">
                 {hasCourse && (
                   <span
-                    className={`w-1 h-1 rounded-full ${
+                    className={`w-1 h-1 rounded-full transition-colors duration-[var(--motion-fast)] ${
                       isSelected ? "bg-white" : "bg-[#4A7C59]"
                     }`}
                   />
                 )}
                 {hasDDL && (
                   <span
-                    className={`w-1 h-1 rounded-full ${
+                    className={`w-1 h-1 rounded-full transition-colors duration-[var(--motion-fast)] ${
                       isSelected ? "bg-white" : "bg-[#D94F4F]"
                     }`}
                   />
                 )}
                 {hasExam && (
                   <span
-                    className={`w-1 h-1 rounded-full ${
+                    className={`w-1 h-1 rounded-full transition-colors duration-[var(--motion-fast)] ${
                       isSelected ? "bg-white" : "bg-[#E28743]"
                     }`}
                   />
                 )}
                 {hasActivity && (
                   <span
-                    className={`w-1 h-1 rounded-full ${
+                    className={`w-1 h-1 rounded-full transition-colors duration-[var(--motion-fast)] ${
                       isSelected ? "bg-white" : "bg-[#7A6FA8]"
                     }`}
                   />
@@ -311,8 +335,11 @@ export function MiniCalendar() {
           </span>
         </div>
 
-        {/* List of day's events */}
-        <div className="space-y-1.5 max-h-36 overflow-y-auto pr-1">
+        {/* List of day's events（选中日期切换时淡入，3px 上移） */}
+        <div
+          key={selectedDateStr}
+          className="ux-agenda-enter space-y-1.5 max-h-36 overflow-y-auto pr-1"
+        >
           {agendaItems.length === 0 ? (
             <div className="py-3 text-center space-y-2">
               <p className="text-[11px] text-[#8C827A]">暂无安排</p>

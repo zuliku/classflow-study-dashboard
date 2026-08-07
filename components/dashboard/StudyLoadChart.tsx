@@ -87,6 +87,8 @@ export function StudyLoadChart() {
               <Bar
                 dataKey="hours"
                 radius={[4, 4, 0, 0]}
+                animationDuration={450}
+                animationEasing="ease-out"
               >
                 {weekLoad.days.map((_, index) => (
                   <Cell
