@@ -10,6 +10,7 @@ import {
   Priority,
   GroupProject,
   CourseMaterial,
+  ScheduleConflict,
 } from "@/types";
 import {
   initialCourses,
@@ -33,6 +34,9 @@ interface AppState {
   setWeekOffset: (offset: number | ((prev: number) => number)) => void;
   resetToCurrentWeek: () => void;
 
+  currentSemesterWeek: number; // 1 - 16周
+  setCurrentSemesterWeek: (week: number) => void;
+
   viewMode: ViewMode;
   setViewMode: (mode: ViewMode) => void;
 
@@ -51,6 +55,11 @@ interface AppState {
 
   isImportScheduleModalOpen: boolean;
   setImportScheduleModalOpen: (open: boolean) => void;
+
+  isConflictModalOpen: boolean;
+  setConflictModalOpen: (open: boolean) => void;
+  selectedConflict: ScheduleConflict | null;
+  setSelectedConflict: (conflict: ScheduleConflict | null) => void;
 
   searchQuery: string;
   setSearchQuery: (query: string) => void;
@@ -78,10 +87,15 @@ interface AppState {
   // Course & Schedule Actions
   addCourseWithSchedule: (
     courseData: Omit<Course, "id" | "materials">,
-    schedulesData: { dayOfWeek: number; startTime: string; endTime: string }[]
+    schedulesData: { dayOfWeek: number; startTime: string; endTime: string; weeks?: string }[]
   ) => void;
   importScheduleBatch: (courses: Course[], schedules: CourseSchedule[]) => void;
   addCourseMaterial: (courseId: string, material: Omit<CourseMaterial, "id" | "uploadDate">) => void;
+
+  // Schedule Overrides & Conflict Actions
+  deleteSchedule: (scheduleId: string) => void;
+  excludeWeekFromSchedule: (scheduleId: string, weekNum: number) => void;
+  updateScheduleTime: (scheduleId: string, startTime: string, endTime: string, dayOfWeek: number) => void;
 
   // Group Collaboration Actions
   toggleGroupTask: (projectId: string, taskId: string) => void;
@@ -98,8 +112,16 @@ export const useAppStore = create<AppState>()(
       setWeekOffset: (offset) =>
         set((state) => ({
           weekOffset: typeof offset === "function" ? offset(state.weekOffset) : offset,
+          currentSemesterWeek: Math.max(1, Math.min(16, 5 + (typeof offset === "function" ? offset(state.weekOffset) : offset))),
         })),
-      resetToCurrentWeek: () => set({ weekOffset: 0 }),
+      resetToCurrentWeek: () => set({ weekOffset: 0, currentSemesterWeek: 5 }),
+
+      currentSemesterWeek: 5,
+      setCurrentSemesterWeek: (week) =>
+        set({
+          currentSemesterWeek: week,
+          weekOffset: week - 5,
+        }),
 
       viewMode: "week",
       setViewMode: (mode) => set({ viewMode: mode }),
@@ -118,6 +140,11 @@ export const useAppStore = create<AppState>()(
 
       isImportScheduleModalOpen: false,
       setImportScheduleModalOpen: (open) => set({ isImportScheduleModalOpen: open }),
+
+      isConflictModalOpen: false,
+      setConflictModalOpen: (open) => set({ isConflictModalOpen: open }),
+      selectedConflict: null,
+      setSelectedConflict: (conflict) => set({ selectedConflict: conflict }),
 
       searchQuery: "",
       setSearchQuery: (query) => set({ searchQuery: query }),
@@ -223,7 +250,8 @@ export const useAppStore = create<AppState>()(
           startTime: s.startTime,
           endTime: s.endTime,
           location: courseData.classroom,
-          weeks: "1-16周",
+          weeks: s.weeks || "1-16周",
+          excludedWeeks: [],
         }));
 
         set((state) => ({
@@ -251,6 +279,37 @@ export const useAppStore = create<AppState>()(
             c.id === courseId
               ? { ...c, materials: [newMaterial, ...c.materials] }
               : c
+          ),
+        }));
+      },
+
+      deleteSchedule: (scheduleId) => {
+        set((state) => ({
+          schedules: state.schedules.filter((s) => s.id !== scheduleId),
+        }));
+      },
+
+      excludeWeekFromSchedule: (scheduleId, weekNum) => {
+        set((state) => ({
+          schedules: state.schedules.map((s) => {
+            if (s.id === scheduleId) {
+              const currentExcluded = s.excludedWeeks || [];
+              return {
+                ...s,
+                excludedWeeks: currentExcluded.includes(weekNum)
+                  ? currentExcluded
+                  : [...currentExcluded, weekNum],
+              };
+            }
+            return s;
+          }),
+        }));
+      },
+
+      updateScheduleTime: (scheduleId, startTime, endTime, dayOfWeek) => {
+        set((state) => ({
+          schedules: state.schedules.map((s) =>
+            s.id === scheduleId ? { ...s, startTime, endTime, dayOfWeek } : s
           ),
         }));
       },
@@ -288,12 +347,13 @@ export const useAppStore = create<AppState>()(
       },
     }),
     {
-      name: "classflow-store-v2",
+      name: "classflow-store-v3",
       partialize: (state) => ({
         assignments: state.assignments,
         courses: state.courses,
         schedules: state.schedules,
         groupProjects: state.groupProjects,
+        currentSemesterWeek: state.currentSemesterWeek,
       }),
     }
   )

@@ -31,7 +31,9 @@ export interface CourseSchedule {
   startTime: string; // "08:00"
   endTime: string;   // "09:40"
   location: string;
-  weeks?: string;    // e.g., "1-16周"
+  weeks: string;     // e.g., "1-16周", "1-8周", "单周", "双周"
+  activeWeeks?: number[]; // list of active week numbers e.g. [1,2,3,4,5,6,7,8]
+  excludedWeeks?: number[]; // list of excluded week numbers (single week cancellation) e.g. [5]
 }
 
 export interface Subtask {
@@ -70,7 +72,6 @@ export interface UserProfile {
   totalCredits: number;
 }
 
-// Group Collaboration Types
 export interface GroupMember {
   id: string;
   name: string;
@@ -93,8 +94,15 @@ export interface GroupProject {
   courseId: string;
   title: string;
   description: string;
-  progress: number; // 0 - 100
+  progress: number;
   members: GroupMember[];
   tasks: GroupTask[];
   updatedAt: string;
+}
+
+export interface ScheduleConflict {
+  scheduleA: CourseSchedule;
+  scheduleB: CourseSchedule;
+  dayOfWeek: number;
+  timeRange: string;
 }

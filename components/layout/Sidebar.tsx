@@ -11,7 +11,6 @@ import {
   Settings,
   FileText,
   ChevronRight,
-  BookOpen,
 } from "lucide-react";
 import { useAppStore, NavTab } from "@/store/useAppStore";
 import { cn } from "@/lib/utils";
@@ -22,7 +21,7 @@ const NAV_ITEMS: { id: NavTab; label: string; icon: React.ElementType }[] = [
   { id: "assignments", label: "作业 DDL", icon: ClipboardCheck },
   { id: "courses", label: "课程资料", icon: FolderKanban },
   { id: "analytics", label: "学习统计", icon: BarChart3 },
-  { id: "group" as any, label: "小组协作", icon: Users2 },
+  { id: "group", label: "小组协作", icon: Users2 },
   { id: "settings", label: "设置", icon: Settings },
 ];
 
@@ -37,13 +36,19 @@ export function Sidebar() {
     <aside className="w-56 h-screen bg-[#F7F5F5] border-r border-[#E7E3DD] flex flex-col justify-between p-3.5 sticky top-0 select-none z-20 shrink-0">
       {/* Top Section */}
       <div className="space-y-4">
-        {/* Brand Logo */}
-        <div className="flex items-center space-x-2.5 px-2 py-1">
-          <div className="w-8 h-8 rounded-lg bg-charcoal flex items-center justify-center text-white shadow-subtle">
-            <BookOpen className="w-4 h-4" />
+        {/* Brand Logo matching reference image 1 logo style */}
+        <div className="flex items-center space-x-2.5 px-2 py-1 cursor-pointer" onClick={() => setActiveTab("overview")}>
+          {/* Custom Morandi Layered Book Icon matching image 1 */}
+          <div className="w-8 h-8 rounded-lg bg-[#E3E6E0] border border-[#D0D5CC] flex items-center justify-center text-charcoal shadow-subtle shrink-0">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M4 19.5C4 18.837 4.26339 18.2011 4.73223 17.7322C5.20107 17.2634 5.83696 17 6.5 17H20V4H6.5C5.83696 4 5.20107 4.26339 4.73223 4.73223C4.26339 5.20107 4 5.83696 4 6.5V19.5Z" stroke="#313032" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+              <path d="M6.5 17C5.83696 17 5.20107 17.2634 4.73223 17.7322C4.26339 18.2011 4 18.837 4 19.5V19.5C4 20.163 4.26339 20.7989 4.73223 21.2678C5.20107 21.7366 5.83696 22 6.5 22H20V17" stroke="#8C827A" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+              <line x1="8" y1="8" x2="16" y2="8" stroke="#A48F82" strokeWidth="1.5" strokeLinecap="round"/>
+              <line x1="8" y1="12" x2="14" y2="12" stroke="#A48F82" strokeWidth="1.5" strokeLinecap="round"/>
+            </svg>
           </div>
           <div>
-            <h1 className="font-bold text-base tracking-tight text-charcoal flex items-center leading-none">
+            <h1 className="font-serif font-bold text-lg tracking-tight text-charcoal flex items-center leading-none">
               ClassFlow
             </h1>
           </div>

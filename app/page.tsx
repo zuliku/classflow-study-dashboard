@@ -15,17 +15,15 @@ import { AssignmentDrawer } from "@/components/drawers/AssignmentDrawer";
 import { GlobalSearchModal } from "@/components/layout/GlobalSearchModal";
 import { AddCourseModal } from "@/components/modals/AddCourseModal";
 import { ImportScheduleModal } from "@/components/modals/ImportScheduleModal";
+import { ConflictResolutionModal } from "@/components/modals/ConflictResolutionModal";
 import { useAppStore } from "@/store/useAppStore";
 import {
   BookOpen,
   Plus,
   FileUp,
-  PieChart as PieChartIcon,
+  BarChart2,
   CheckCircle2,
   Clock,
-  AlertTriangle,
-  Award,
-  BarChart2,
   TrendingUp,
 } from "lucide-react";
 import {
@@ -69,12 +67,6 @@ export default function Home() {
     { name: "中优先 (Medium)", value: assignments.filter((a) => a.priority === "medium").length, color: "#D9A05B" },
     { name: "低优先 (Low)", value: assignments.filter((a) => a.priority === "low").length, color: "#4A7C59" },
   ];
-
-  const courseCreditData = courses.map((c) => ({
-    name: c.name,
-    credit: c.credit,
-    hours: c.credit * 1.5,
-  }));
 
   return (
     <div className="flex min-h-screen bg-[#F7F5F5] font-sans antialiased text-charcoal">
@@ -242,24 +234,19 @@ export default function Home() {
                   学习统计与多维分析大盘
                 </h2>
                 <p className="text-xs text-[#8C827A]">
-                  涵盖作业完成率、优先级分布、课程学分与每周打卡时长分析
+                  涵盖作业完成率、优先级结构分布及周打卡学习时长分析
                 </p>
               </div>
 
-              {/* Metric Overview Row */}
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-3.5">
+              {/* Metric Summary Cards (3 Cards layout after removing GPA) */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="p-4 bg-white border border-[#E7E3DD] rounded-2xl shadow-subtle space-y-1">
                   <span className="text-xs font-semibold text-[#8C827A]">任务按时完成率</span>
                   <div className="text-2xl font-extrabold text-[#4A7C59]">96.5%</div>
                   <p className="text-[10px] text-[#4A7C59] font-medium">较上月 +2.1% ↑</p>
                 </div>
                 <div className="p-4 bg-white border border-[#E7E3DD] rounded-2xl shadow-subtle space-y-1">
-                  <span className="text-xs font-semibold text-[#8C827A]">本学期平均 GPA</span>
-                  <div className="text-2xl font-extrabold text-charcoal">3.82</div>
-                  <p className="text-[10px] text-[#8C827A]">全院前 5%</p>
-                </div>
-                <div className="p-4 bg-white border border-[#E7E3DD] rounded-2xl shadow-subtle space-y-1">
-                  <span className="text-xs font-semibold text-[#8C827A]">修读课程数</span>
+                  <span className="text-xs font-semibold text-[#8C827A]">本学期修读课程</span>
                   <div className="text-2xl font-extrabold text-charcoal">{courses.length} 门</div>
                   <p className="text-[10px] text-[#8C827A]">共计 27 学分</p>
                 </div>
@@ -270,22 +257,22 @@ export default function Home() {
                 </div>
               </div>
 
-              {/* Detailed Visual Charts */}
+              {/* Visual Distribution Charts */}
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                 {/* 1. Assignment Status Distribution Pie */}
                 <div className="bg-white border border-[#E7E3DD] rounded-2xl p-4 shadow-subtle flex flex-col justify-between">
                   <h3 className="text-sm font-bold text-charcoal pb-2 border-b border-[#F0EBE1]">
                     作业任务完成状态分布
                   </h3>
-                  <div className="h-52 w-full flex items-center justify-center my-2">
+                  <div className="h-56 w-full flex items-center justify-center my-2">
                     <ResponsiveContainer width="100%" height="100%">
                       <PieChart>
                         <Pie
                           data={statusPieData}
                           cx="50%"
                           cy="50%"
-                          innerRadius={50}
-                          outerRadius={80}
+                          innerRadius={55}
+                          outerRadius={85}
                           paddingAngle={4}
                           dataKey="value"
                         >
@@ -323,7 +310,7 @@ export default function Home() {
                   <h3 className="text-sm font-bold text-charcoal pb-2 border-b border-[#F0EBE1]">
                     任务优先级结构分布
                   </h3>
-                  <div className="h-52 w-full flex items-center justify-center my-2">
+                  <div className="h-56 w-full flex items-center justify-center my-2">
                     <ResponsiveContainer width="100%" height="100%">
                       <BarChart data={priorityPieData} margin={{ top: 10, right: 10, left: -25, bottom: 0 }}>
                         <XAxis dataKey="name" tick={{ fontSize: 10, fill: "#8C827A" }} axisLine={false} tickLine={false} />
@@ -350,31 +337,9 @@ export default function Home() {
                 </div>
               </div>
 
-              {/* 3. Study Load Chart & Credit Progress */}
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              {/* 3. Study Load Bar Chart */}
+              <div className="w-full">
                 <StudyLoadChart />
-                <div className="bg-white border border-[#E7E3DD] rounded-2xl p-4 shadow-subtle flex flex-col justify-between">
-                  <h3 className="text-sm font-bold text-charcoal pb-2 border-b border-[#F0EBE1]">
-                    课程学分与每周参考课时分布
-                  </h3>
-                  <div className="h-44 w-full my-2">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={courseCreditData} margin={{ top: 10, right: 10, left: -25, bottom: 0 }}>
-                        <XAxis dataKey="name" tick={{ fontSize: 9, fill: "#8C827A" }} axisLine={false} tickLine={false} />
-                        <YAxis tick={{ fontSize: 9, fill: "#8C827A" }} axisLine={false} tickLine={false} unit="分" />
-                        <Tooltip
-                          contentStyle={{
-                            backgroundColor: "#313032",
-                            borderRadius: "10px",
-                            color: "#FFF",
-                            fontSize: "11px",
-                          }}
-                        />
-                        <Bar dataKey="credit" fill="#CDB9AB" radius={[4, 4, 0, 0]} />
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </div>
-                </div>
               </div>
             </div>
           )}
@@ -417,6 +382,7 @@ export default function Home() {
       <GlobalSearchModal />
       <AddCourseModal />
       <ImportScheduleModal />
+      <ConflictResolutionModal />
     </div>
   );
 }

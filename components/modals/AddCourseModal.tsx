@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
-import { X, Plus, BookOpen, Clock, MapPin, User, Layers } from "lucide-react";
+import { X, BookOpen, Clock, Calendar } from "lucide-react";
 import { useAppStore } from "@/store/useAppStore";
 
 const COLOR_OPTIONS = [
@@ -10,6 +10,16 @@ const COLOR_OPTIONS = [
   { name: "灰米暖调 (Ashy Beige)", bgHex: "#CCCBC4", borderHex: "#B8B7B0", textHex: "#313032" },
   { name: "石褐沙土 (Stone Beige)", bgHex: "#CDB9AB", borderHex: "#BBA494", textHex: "#313032" },
   { name: "深砂棕 (Sandrift)", bgHex: "#A48F82", borderHex: "#8D786B", textHex: "#FFFFFF" },
+];
+
+const WEEK_RANGE_PRESETS = [
+  { label: "1-16周 (全学期)", value: "1-16周" },
+  { label: "1-8周 (前半学期)", value: "1-8周" },
+  { label: "9-16周 (后半学期)", value: "9-16周" },
+  { label: "单周 (1,3,5,7,9...)", value: "单周" },
+  { label: "双周 (2,4,6,8,10...)", value: "双周" },
+  { label: "1-6周", value: "1-6周" },
+  { label: "10-14周", value: "10-14周" },
 ];
 
 export function AddCourseModal() {
@@ -26,6 +36,7 @@ export function AddCourseModal() {
   const [dayOfWeek, setDayOfWeek] = useState(1);
   const [startTime, setStartTime] = useState("08:00");
   const [endTime, setEndTime] = useState("09:40");
+  const [weeksRange, setWeeksRange] = useState("1-16周");
 
   if (!isAddCourseModalOpen) return null;
 
@@ -47,7 +58,7 @@ export function AddCourseModal() {
         textHex: color.textHex,
         description,
       },
-      [{ dayOfWeek: Number(dayOfWeek), startTime, endTime }]
+      [{ dayOfWeek: Number(dayOfWeek), startTime, endTime, weeks: weeksRange }]
     );
 
     setName("");
@@ -60,11 +71,11 @@ export function AddCourseModal() {
   return (
     <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
       <div className="w-full max-w-lg bg-white rounded-2xl shadow-drawer border border-[#E7E3DD] overflow-hidden flex flex-col max-h-[90vh]">
-        {/* Modal Header */}
+        {/* Header */}
         <div className="p-4 px-6 border-b border-[#F0EBE1] bg-[#F7F5F5] flex items-center justify-between">
           <div className="flex items-center space-x-2">
             <BookOpen className="w-4 h-4 text-[#A48F82]" />
-            <h3 className="text-base font-bold text-charcoal">添加新课程与时间段</h3>
+            <h3 className="text-base font-bold text-charcoal">添加新课程与排课周次</h3>
           </div>
           <button
             onClick={() => setAddCourseModalOpen(false)}
@@ -74,7 +85,7 @@ export function AddCourseModal() {
           </button>
         </div>
 
-        {/* Modal Form Body */}
+        {/* Form */}
         <form onSubmit={handleSubmit} className="p-6 space-y-4 overflow-y-auto text-xs">
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1">
@@ -134,11 +145,32 @@ export function AddCourseModal() {
             </div>
           </div>
 
-          {/* Schedule Time Slot */}
-          <div className="p-3 bg-[#F0EBE1]/60 border border-[#E0D7C6] rounded-xl space-y-3">
-            <h4 className="font-bold text-charcoal flex items-center">
-              <Clock className="w-3.5 h-3.5 mr-1 text-[#A48F82]" /> 上课时间段
+          {/* Schedule Time Slot & Week Range */}
+          <div className="p-3.5 bg-[#F0EBE1]/60 border border-[#E0D7C6] rounded-xl space-y-3">
+            <h4 className="font-bold text-charcoal flex items-center justify-between">
+              <span className="flex items-center">
+                <Clock className="w-3.5 h-3.5 mr-1 text-[#A48F82]" /> 上课时间与周次区间
+              </span>
             </h4>
+
+            {/* Week Range Selector */}
+            <div className="space-y-1">
+              <label className="text-[10px] font-bold text-[#8C827A] flex items-center">
+                <Calendar className="w-3 h-3 mr-1" /> 上课周次区间（支持单双周与非衔接区间）
+              </label>
+              <select
+                value={weeksRange}
+                onChange={(e) => setWeeksRange(e.target.value)}
+                className="w-full p-2 bg-white border border-[#E0D7C6] rounded-lg focus:outline-none font-semibold text-charcoal"
+              >
+                {WEEK_RANGE_PRESETS.map((preset) => (
+                  <option key={preset.value} value={preset.value}>
+                    {preset.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
             <div className="grid grid-cols-3 gap-2">
               <div>
                 <label className="text-[10px] text-[#8C827A]">星期</label>
@@ -177,7 +209,7 @@ export function AddCourseModal() {
             </div>
           </div>
 
-          {/* Color Theme Palette Selector */}
+          {/* Color Theme Selector */}
           <div className="space-y-1.5">
             <label className="font-bold text-[#8C827A]">卡片主题配色</label>
             <div className="flex space-x-2">

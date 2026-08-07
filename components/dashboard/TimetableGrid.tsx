@@ -1,8 +1,10 @@
 "use client";
 
 import React from "react";
-import { ExternalLink } from "lucide-react";
+import { ExternalLink, AlertTriangle, ChevronLeft, ChevronRight, CalendarX } from "lucide-react";
 import { useAppStore } from "@/store/useAppStore";
+import { CourseSchedule, ScheduleConflict } from "@/types";
+import { cn } from "@/lib/utils";
 
 const TIME_SLOTS = [
   "08:00",
@@ -29,7 +31,15 @@ const WEEKDAYS = [
 ];
 
 export function TimetableGrid() {
-  const { courses, schedules, setSelectedCourseId } = useAppStore();
+  const {
+    courses,
+    schedules,
+    currentSemesterWeek,
+    setCurrentSemesterWeek,
+    setSelectedCourseId,
+    setConflictModalOpen,
+    setSelectedConflict,
+  } = useAppStore();
 
   const timeToMinutes = (timeStr: string) => {
     const [h, m] = timeStr.split(":").map(Number);
@@ -38,23 +48,96 @@ export function TimetableGrid() {
 
   const dayStartMinutes = 8 * 60;  // 08:00
   const dayEndMinutes = 18 * 60;    // 18:00
-  const totalMinutes = dayEndMinutes - dayStartMinutes; // 600 minutes total
+  const totalMinutes = dayEndMinutes - dayStartMinutes;
+
+  // Filter schedules that are active in currentSemesterWeek and NOT in excludedWeeks
+  const activeSchedules = schedules.filter((s) => {
+    const isExcluded = s.excludedWeeks?.includes(currentSemesterWeek);
+    if (isExcluded) return false;
+    return true;
+  });
+
+  // Conflict Detection Algorithm
+  const conflicts: ScheduleConflict[] = [];
+  WEEKDAYS.forEach((wd) => {
+    const dayScheds = activeSchedules.filter((s) => s.dayOfWeek === wd.dayOfWeek);
+    for (let i = 0; i < dayScheds.length; i++) {
+      for (let j = i + 1; j < dayScheds.length; j++) {
+        const a = dayScheds[i];
+        const b = dayScheds[j];
+        const startA = timeToMinutes(a.startTime);
+        const endA = timeToMinutes(a.endTime);
+        const startB = timeToMinutes(b.startTime);
+        const endB = timeToMinutes(b.endTime);
+
+        if (startA < endB && startB < endA) {
+          conflicts.push({
+            scheduleA: a,
+            scheduleB: b,
+            dayOfWeek: wd.dayOfWeek,
+            timeRange: `${a.startTime}-${a.endTime}`,
+          });
+        }
+      }
+    }
+  });
+
+  const firstConflict = conflicts[0];
 
   return (
     <div className="bg-white border border-[#E7E3DD] rounded-2xl p-4 shadow-subtle flex flex-col justify-between h-full w-full">
-      {/* Header */}
-      <div className="flex items-center justify-between pb-2.5 border-b border-[#F0EBE1]">
-        <h2 className="text-sm font-bold text-charcoal flex items-center gap-1.5">
-          本周课表
-        </h2>
+      {/* Header with Semester Week Selector & Actions */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-2.5 border-b border-[#F0EBE1] gap-2">
+        <div className="flex items-center space-x-2">
+          <h2 className="text-sm font-bold text-charcoal">本周课表</h2>
+          {/* Semester Week Picker */}
+          <div className="flex items-center space-x-1 bg-[#F0EBE1] border border-[#E0D7C6] rounded-lg px-2 py-0.5 text-xs font-semibold text-charcoal">
+            <button
+              onClick={() => setCurrentSemesterWeek(Math.max(1, currentSemesterWeek - 1))}
+              className="hover:text-black transition-colors"
+            >
+              <ChevronLeft className="w-3 h-3" />
+            </button>
+            <span>第 {currentSemesterWeek} 周 (学期周次)</span>
+            <button
+              onClick={() => setCurrentSemesterWeek(Math.min(16, currentSemesterWeek + 1))}
+              className="hover:text-black transition-colors"
+            >
+              <ChevronRight className="w-3 h-3" />
+            </button>
+          </div>
+        </div>
+
         <button
           onClick={() => setSelectedCourseId(courses[0]?.id || null)}
-          className="flex items-center space-x-1 text-xs text-[#8C827A] hover:text-charcoal transition-colors bg-[#F7F5F5] px-2 py-1 rounded-lg border border-[#E7E3DD]"
+          className="flex items-center space-x-1 text-xs text-[#8C827A] hover:text-charcoal transition-colors bg-[#F7F5F5] px-2 py-1 rounded-lg border border-[#E7E3DD] self-start sm:self-auto"
         >
           <span>查看完整课表</span>
           <ExternalLink className="w-3.5 h-3.5" />
         </button>
       </div>
+
+      {/* Overlap Conflict Warning Banner */}
+      {conflicts.length > 0 && (
+        <div className="my-2 p-2.5 bg-[#FDF0F0] border border-[#F8D7D7] rounded-xl flex items-center justify-between text-xs text-[#D94F4F]">
+          <div className="flex items-center space-x-2">
+            <AlertTriangle className="w-4 h-4 shrink-0" />
+            <span>
+              <strong>课程冲突提醒：</strong>检测到 {conflicts.length} 处时间重叠
+              （例如 {["周一","周二","周三","周四","周五","周六","周日"][firstConflict.dayOfWeek - 1]} {firstConflict.timeRange}）
+            </span>
+          </div>
+          <button
+            onClick={() => {
+              setSelectedConflict(firstConflict);
+              setConflictModalOpen(true);
+            }}
+            className="px-2.5 py-1 bg-[#D94F4F] text-white rounded-lg font-bold text-[10px] hover:bg-[#c44343] transition-colors shrink-0"
+          >
+            解决冲突
+          </button>
+        </div>
+      )}
 
       {/* Grid Container */}
       <div className="mt-2 flex-1 flex flex-col overflow-x-auto select-none">
@@ -74,7 +157,7 @@ export function TimetableGrid() {
           ))}
         </div>
 
-        {/* Timetable Body Grid aligned precisely */}
+        {/* Timetable Body Grid */}
         <div className="relative grid grid-cols-8 mt-1 h-[430px]">
           {/* Time Labels Column */}
           <div className="flex flex-col justify-between text-[10px] text-[#8C827A] font-mono border-r border-[#F0EBE1] pr-1">
@@ -99,7 +182,7 @@ export function TimetableGrid() {
 
             {/* Render Course Blocks */}
             {WEEKDAYS.map((wd) => {
-              const daySchedules = schedules.filter(
+              const daySchedules = activeSchedules.filter(
                 (s) => s.dayOfWeek === wd.dayOfWeek
               );
 
@@ -112,6 +195,10 @@ export function TimetableGrid() {
                     const course = courses.find((c) => c.id === sched.courseId);
                     if (!course) return null;
 
+                    const hasConflict = conflicts.some(
+                      (c) => c.scheduleA.id === sched.id || c.scheduleB.id === sched.id
+                    );
+
                     const startM = timeToMinutes(sched.startTime);
                     const endM = timeToMinutes(sched.endTime);
                     const topPct =
@@ -122,19 +209,41 @@ export function TimetableGrid() {
                     return (
                       <div
                         key={sched.id}
-                        onClick={() => setSelectedCourseId(course.id)}
-                        className="absolute left-0.5 right-0.5 rounded-xl p-2 transition-all duration-200 cursor-pointer shadow-subtle hover:shadow-card hover:-translate-y-0.5 border flex flex-col justify-start space-y-0.5 overflow-hidden group"
+                        onClick={() => {
+                          if (hasConflict) {
+                            const foundConf = conflicts.find(
+                              (c) => c.scheduleA.id === sched.id || c.scheduleB.id === sched.id
+                            );
+                            if (foundConf) {
+                              setSelectedConflict(foundConf);
+                              setConflictModalOpen(true);
+                              return;
+                            }
+                          }
+                          setSelectedCourseId(course.id);
+                        }}
+                        className={cn(
+                          "absolute left-0.5 right-0.5 rounded-xl p-2 transition-all duration-200 cursor-pointer shadow-subtle hover:shadow-card hover:-translate-y-0.5 border flex flex-col justify-start space-y-0.5 overflow-hidden group",
+                          hasConflict && "ring-2 ring-[#D94F4F] animate-pulse z-10"
+                        )}
                         style={{
                           top: `${topPct}%`,
                           height: `${Math.max(heightPct - 0.5, 9)}%`,
-                          backgroundColor: course.bgHex,
-                          borderColor: course.borderHex,
-                          color: course.textHex,
+                          backgroundColor: hasConflict ? "#FDF0F0" : course.bgHex,
+                          borderColor: hasConflict ? "#F8D7D7" : course.borderHex,
+                          color: hasConflict ? "#D94F4F" : course.textHex,
                         }}
                       >
-                        <h4 className="font-bold text-[11px] leading-snug truncate group-hover:underline">
-                          {course.name}
-                        </h4>
+                        <div className="flex items-start justify-between">
+                          <h4 className="font-bold text-[11px] leading-snug truncate group-hover:underline">
+                            {course.name}
+                          </h4>
+                          {hasConflict && (
+                            <span className="text-[9px] bg-[#D94F4F] text-white px-1 rounded font-bold shrink-0">
+                              冲突
+                            </span>
+                          )}
+                        </div>
                         <p className="text-[9px] opacity-85 font-mono leading-none shrink-0">
                           {sched.startTime} - {sched.endTime}
                         </p>
