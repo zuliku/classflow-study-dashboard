@@ -180,7 +180,7 @@ export function TimetableGrid() {
               ))}
             </div>
 
-            {/* Render Exquisite Course Cards */}
+            {/* Render Refined Course Cards */}
             {WEEKDAYS.map((wd) => {
               const daySchedules = activeSchedules.filter(
                 (s) => s.dayOfWeek === wd.dayOfWeek
@@ -234,39 +234,37 @@ export function TimetableGrid() {
                           color: hasConflict ? "#D94F4F" : course.textHex,
                         }}
                       >
-                        {/* Top Header: Course Title + Teacher Badge */}
-                        <div>
-                          <div className="flex items-start justify-between gap-1">
-                            <h4 className="font-extrabold text-xs tracking-tight leading-tight truncate group-hover:underline">
+                        {/* Top Section */}
+                        <div className="space-y-1">
+                          {/* 1. Full Course Title (No truncation) */}
+                          <div className="flex items-start justify-between">
+                            <h4 className="font-extrabold text-xs tracking-tight leading-tight text-charcoal group-hover:underline">
                               {course.name}
                             </h4>
-                            {hasConflict ? (
-                              <span className="text-[9px] bg-[#D94F4F] text-white px-1 py-0.2 rounded font-bold shrink-0">
+                            {hasConflict && (
+                              <span className="text-[9px] bg-[#D94F4F] text-white px-1 py-0.2 rounded font-bold shrink-0 ml-1">
                                 冲突
-                              </span>
-                            ) : (
-                              <span className="text-[9px] font-medium opacity-75 bg-white/60 px-1.5 py-0.2 rounded border border-black/5 shrink-0">
-                                {course.teacher}
                               </span>
                             )}
                           </div>
 
-                          {/* Time Range Pill */}
-                          <div className="flex items-center text-[10px] font-mono opacity-80 mt-1 space-x-1">
+                          {/* 2. Time Range */}
+                          <div className="flex items-center text-[10px] font-mono opacity-80 space-x-1">
                             <Clock className="w-3 h-3 shrink-0 opacity-70" />
                             <span className="font-semibold">{sched.startTime} - {sched.endTime}</span>
                           </div>
+
+                          {/* 3. Teacher Info (Placed directly below time) */}
+                          <div className="flex items-center text-[10px] opacity-80 space-x-1 font-medium">
+                            <User className="w-3 h-3 shrink-0 opacity-70" />
+                            <span className="truncate">{course.teacher}</span>
+                          </div>
                         </div>
 
-                        {/* Bottom Row: Location Badge & Credit info */}
-                        <div className="flex items-center justify-between text-[10px] opacity-90 mt-1 pt-1 border-t border-black/5">
-                          <div className="flex items-center font-medium truncate">
-                            <MapPin className="w-3 h-3 mr-1 shrink-0 opacity-75" />
-                            <span className="truncate">{sched.location}</span>
-                          </div>
-                          <span className="text-[9px] opacity-70 font-mono hidden sm:inline">
-                            {course.credit}学分
-                          </span>
+                        {/* Bottom Row: Location Badge (No Credit info) */}
+                        <div className="flex items-center text-[10px] opacity-90 pt-1 border-t border-black/5 font-medium">
+                          <MapPin className="w-3 h-3 mr-1 shrink-0 opacity-75" />
+                          <span className="truncate">{sched.location}</span>
                         </div>
                       </div>
                     );
