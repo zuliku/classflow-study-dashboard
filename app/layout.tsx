@@ -3,7 +3,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "ClassFlow - 大学生课表与作业 DDL 学习管理系统",
-  description: "极简、高效的大学生课表与作业 DDL 学习管理 Dashboard",
+  description: "大学生课表与作业 DDL 学习管理工具",
 };
 
 export default function RootLayout({

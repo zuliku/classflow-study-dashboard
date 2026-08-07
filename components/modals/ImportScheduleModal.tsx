@@ -135,7 +135,7 @@ export function ImportScheduleModal() {
           <div className="flex items-center space-x-2">
             <FileUp className="w-4 h-4 text-[#A48F82]" />
             <h3 className="text-base font-bold text-charcoal">
-              {step === 1 ? "导入外部课表 (ICS / CSV / JSON)" : "课表预览与冲突校验"}
+              {step === 1 ? "导入课表" : "导入预览"}
             </h3>
           </div>
           <button
@@ -219,7 +219,7 @@ export function ImportScheduleModal() {
             {/* Or Paste Raw Text */}
             <div className="space-y-1.5">
               <label className="font-bold text-[#8C827A]">
-                或直接粘贴文本内容:
+                或粘贴文本内容
               </label>
               <textarea
                 rows={5}
@@ -239,7 +239,7 @@ export function ImportScheduleModal() {
             {/* Actions */}
             <div className="flex items-center justify-between pt-2 border-t border-[#F0EBE1]">
               <p className="text-[10px] text-[#8C827A]">
-                支持原生 iCal、CSV 规范或自定义 JSON 格式
+                支持 iCal、CSV 和 JSON 格式
               </p>
               <button
                 type="button"
@@ -247,7 +247,7 @@ export function ImportScheduleModal() {
                 disabled={!inputText.trim()}
                 className="px-4 py-2 text-xs font-bold text-white bg-charcoal rounded-xl hover:bg-black disabled:opacity-50 flex items-center space-x-1"
               >
-                <span>下一步：校验预览</span>
+                <span>预览并检查</span>
                 <ArrowRight className="w-3.5 h-3.5" />
               </button>
             </div>
@@ -262,7 +262,7 @@ export function ImportScheduleModal() {
               <div className="p-3 bg-[#FDF0F0] border border-[#F8D7D7] rounded-xl text-[#D94F4F] space-y-1">
                 <div className="flex items-center space-x-1 font-bold">
                   <AlertTriangle className="w-4 h-4" />
-                  <span>解析错误（已跳过 {parsedData.errors.length} 条，不会导入）</span>
+                  <span>{parsedData.errors.length} 条内容无法识别，已跳过</span>
                 </div>
                 {parsedData.errors.map((err, i) => (
                   <p key={i}>· {err}</p>
@@ -275,7 +275,7 @@ export function ImportScheduleModal() {
               <div className="p-3 bg-[#FFF6EE] border border-[#FDE6D2] rounded-xl text-[#D97706] space-y-1">
                 <div className="flex items-center space-x-1 font-bold">
                   <Info className="w-4 h-4" />
-                  <span>解析警告（{parsedData.warnings.length} 条，请确认后导入）</span>
+                  <span>以下内容需要确认</span>
                 </div>
                 {parsedData.warnings.map((w, i) => (
                   <p key={i}>· {w}</p>
@@ -285,16 +285,16 @@ export function ImportScheduleModal() {
 
             <div className="space-y-2">
               <h4 className="font-bold text-charcoal flex flex-wrap items-center justify-between gap-1">
-                <span>即将导入的课程 ({previewItems.length} 门)</span>
+                <span>将导入 {previewItems.length} 门课程</span>
                 <span className="text-xs text-[#4A7C59] font-semibold">
-                  已解析 {parsedData.schedules.length} 个上课时段
+                  已识别 {parsedData.schedules.length} 个上课时段
                   {skippedCount > 0 ? ` · 已跳过 ${skippedCount} 门` : ""}
                 </span>
               </h4>
 
               {conflictCount > 0 && (
                 <p className="text-[10px] text-[#D94F4F] bg-[#FDF0F0] border border-[#F8D7D7] rounded-lg px-2.5 py-1.5">
-                  检测到 {conflictCount} 门课程与现有课表存在时间冲突（星期相同、时间重叠且至少一个共同生效教学周）。取消勾选可跳过冲突课程后导入；1-8周 与 9-16周 等不重叠周次不会报冲突。
+                  {conflictCount} 门课程与现有课表时间冲突，取消勾选可跳过后再导入
                 </p>
               )}
 
@@ -363,7 +363,7 @@ export function ImportScheduleModal() {
                             </div>
                             {item.isDuplicate && item.duplicateReason && (
                               <p className="text-[10px] text-[#D97706] mt-1">
-                                与「{item.duplicateReason}」可能重复，请确认是否继续导入
+                                与「{item.duplicateReason}」可能重复
                               </p>
                             )}
                             {item.conflicts.map((conf, i) => {
@@ -401,7 +401,7 @@ export function ImportScheduleModal() {
                 onClick={() => setStep(1)}
                 className="px-4 py-2 text-xs font-medium text-[#676268] bg-[#F7F5F5] border border-[#E7E3DD] rounded-xl hover:bg-[#E0D7C6]"
               >
-                返回修改
+                返回
               </button>
               <div className="flex items-center space-x-2">
                 {duplicateCount > 0 && (
@@ -418,8 +418,8 @@ export function ImportScheduleModal() {
                   <CheckCircle className="w-4 h-4" />
                   <span>
                     {skippedCount > 0
-                      ? `确认导入（已跳过 ${skippedCount} 门）`
-                      : "确认导入到课表"}
+                      ? `导入（跳过 ${skippedCount} 门）`
+                      : "导入"}
                   </span>
                 </button>
               </div>

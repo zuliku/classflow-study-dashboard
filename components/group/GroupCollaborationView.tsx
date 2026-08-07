@@ -47,7 +47,7 @@ export function GroupCollaborationView() {
     addGroupProject({
       courseId: newCourseId,
       title: newTitle,
-      description: newDesc || "小组大作业分工与进度追踪",
+      description: newDesc || "小组大作业分工与进度",
       members: [
         {
           id: "m_user",
@@ -96,10 +96,10 @@ export function GroupCollaborationView() {
         <div>
           <h2 className="text-base font-bold text-charcoal mb-0.5 flex items-center gap-2">
             <Users2 className="w-4 h-4 text-[#A48F82]" />
-            小组大作业协作
+            小组协作
           </h2>
           <p className="text-xs text-[#8C827A]">
-            小组成员分工与任务进度
+            小组成员与任务进度
           </p>
         </div>
         <button
@@ -107,7 +107,7 @@ export function GroupCollaborationView() {
           className="flex items-center space-x-1.5 px-3 py-1.5 bg-charcoal hover:bg-black text-white text-xs font-medium rounded-xl transition-colors shrink-0"
         >
           <Plus className="w-3.5 h-3.5" />
-          <span>新建小组项目</span>
+          <span>新建项目</span>
         </button>
       </div>
 
@@ -116,7 +116,7 @@ export function GroupCollaborationView() {
         <form onSubmit={handleCreateProject} className="bg-white border border-[#CDB9AB] rounded-2xl p-4 shadow-subtle space-y-3">
           <h3 className="text-sm font-bold text-charcoal flex items-center gap-1.5">
             <FolderPlus className="w-4 h-4 text-[#A48F82]" />
-            创建大作业协同项目
+            项目信息
           </h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
             <input
@@ -141,7 +141,7 @@ export function GroupCollaborationView() {
           </div>
           <textarea
             rows={2}
-            placeholder="项目说明与组内要求..."
+            placeholder="项目说明"
             value={newDesc}
             onChange={(e) => setNewDesc(e.target.value)}
             className="w-full text-xs p-2.5 bg-[#F7F5F5] border border-[#E7E3DD] rounded-xl focus:outline-none resize-none"
@@ -265,7 +265,7 @@ export function GroupCollaborationView() {
               {/* Member Avatars & Roles */}
               <div className="space-y-2 pt-2">
                 <h4 className="text-xs font-bold text-[#8C827A] uppercase tracking-wider">
-                  小组成员与角色分工
+                  小组成员
                 </h4>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
                   {activeProject.members.map((m) => (
@@ -301,7 +301,7 @@ export function GroupCollaborationView() {
               <div className="flex items-center justify-between border-b border-[#F0EBE1] pb-2.5">
                 <h4 className="text-sm font-bold text-charcoal flex items-center gap-1.5">
                   <CheckSquare className="w-4 h-4 text-[#A48F82]" />
-                  分工任务清单 ({activeProject.tasks.filter((t) => t.completed).length} / {activeProject.tasks.length})
+                  任务清单 ({activeProject.tasks.filter((t) => t.completed).length} / {activeProject.tasks.length})
                 </h4>
               </div>
 

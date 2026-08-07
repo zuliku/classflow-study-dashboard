@@ -64,7 +64,7 @@ export function ConflictResolutionModal() {
         {/* Content */}
         <div className="p-6 space-y-4 text-xs">
           <p className="text-[#676268]">
-            在 <span className="font-bold text-charcoal">{dayName} {timeRange}</span> （第 {currentSemesterWeek} 周），以下两门课程时间重叠：
+            以下两门课程在第 {currentSemesterWeek} 周时间重叠（{dayName} {timeRange}）：
           </p>
 
           {/* Conflicting Courses Cards */}
@@ -84,14 +84,14 @@ export function ConflictResolutionModal() {
                 <button
                   onClick={handleResolveSkipA}
                   className="px-2 py-1 text-[10px] bg-white border border-[#E0D7C6] rounded-lg text-charcoal hover:bg-[#F0EBE1] font-medium"
-                  title="仅本周免课/停课"
+                  title="本周停课"
                 >
                   本周停课
                 </button>
                 <button
                   onClick={handleDeleteA}
                   className="p-1 text-[#D94F4F] hover:bg-[#FDF0F0] rounded-lg"
-                  title="彻底删除此门课排课"
+                  title="删除该排课"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
                 </button>
@@ -113,14 +113,14 @@ export function ConflictResolutionModal() {
                 <button
                   onClick={handleResolveSkipB}
                   className="px-2 py-1 text-[10px] bg-white border border-[#E0D7C6] rounded-lg text-charcoal hover:bg-[#F0EBE1] font-medium"
-                  title="仅本周免课/停课"
+                  title="本周停课"
                 >
                   本周停课
                 </button>
                 <button
                   onClick={handleDeleteB}
                   className="p-1 text-[#D94F4F] hover:bg-[#FDF0F0] rounded-lg"
-                  title="彻底删除此门课排课"
+                  title="删除该排课"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
                 </button>
@@ -129,8 +129,7 @@ export function ConflictResolutionModal() {
           </div>
 
           <div className="p-3 bg-[#F7F5F5] border border-[#E7E3DD] rounded-xl text-[11px] text-[#8C827A] space-y-1">
-            <p className="font-bold text-charcoal">提示：</p>
-            <p>选“本周停课”仅在本周隐藏，选删除图标将从课表中移除该排课。</p>
+            <p>「本周停课」仅跳过本周；删除将移除该排课。</p>
           </div>
 
           {/* Footer */}
@@ -139,7 +138,7 @@ export function ConflictResolutionModal() {
               onClick={() => setConflictModalOpen(false)}
               className="px-4 py-2 text-xs font-medium text-white bg-charcoal rounded-xl hover:bg-black"
             >
-              暂不处理
+              取消
             </button>
           </div>
         </div>

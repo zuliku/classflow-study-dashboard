@@ -81,7 +81,7 @@ export function UpcomingDDL() {
           onClick={() => setActiveTab("assignments")}
           className="text-[11px] font-semibold text-[#8C827A] hover:text-charcoal flex items-center transition-colors"
         >
-          <span>全部 DDL</span>
+          <span>全部任务</span>
           <ArrowUpRight className="w-3 h-3 ml-0.5" />
         </button>
       </div>
@@ -91,7 +91,7 @@ export function UpcomingDDL() {
         {upcomingAssignments.length === 0 ? (
           <div className="py-6 text-center text-xs text-[#8C827A] space-y-1">
             <CheckCircle2 className="w-6 h-6 mx-auto text-[#4A7C59]" />
-            <p>暂无临近截止作业</p>
+            <p>暂无临近 DDL</p>
           </div>
         ) : (
           upcomingAssignments.map((task) => {

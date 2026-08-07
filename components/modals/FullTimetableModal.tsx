@@ -38,7 +38,7 @@ export function FullTimetableModal() {
             </div>
             <div>
               <h2 className="text-base font-extrabold text-charcoal flex items-center gap-2">
-                {semester.name} · 全局完整课表
+                {semester.name} · 课表
               </h2>
               <p className="text-xs text-[#8C827A]">
                 {userProfile.college} · 在读课程 {courses.length} 门 ({totalCredits} 学分)
@@ -71,7 +71,7 @@ export function FullTimetableModal() {
               className="flex items-center space-x-1.5 px-3 py-1.5 bg-white hover:bg-[#F0EBE1] border border-[#E0D7C6] text-charcoal text-xs font-bold rounded-xl transition-colors shadow-subtle"
             >
               <Printer className="w-3.5 h-3.5" />
-              <span>打印/导出课表</span>
+              <span>打印课表</span>
             </button>
 
             {/* Close */}
@@ -89,8 +89,8 @@ export function FullTimetableModal() {
           {/* 16-Week Semester Matrix Bar */}
           <div className="bg-white border border-[#E7E3DD] rounded-2xl p-3 shadow-subtle space-y-2">
             <div className="flex items-center justify-between text-xs">
-              <span className="font-bold text-charcoal">学期 {semester.totalWeeks} 周次快捷索引</span>
-              <span className="text-[10px] text-[#8C827A]">点击数字快速切换指定周次课表</span>
+              <span className="font-bold text-charcoal">教学周索引</span>
+              <span className="text-[10px] text-[#8C827A]">点击切换周次</span>
             </div>
             <div
               className="grid gap-1.5"
@@ -130,7 +130,7 @@ export function FullTimetableModal() {
           <div className="bg-white border border-[#E7E3DD] rounded-2xl p-4 shadow-subtle space-y-3">
             <h3 className="text-sm font-bold text-charcoal flex items-center gap-2">
               <BookOpen className="w-4 h-4 text-[#A48F82]" />
-              本学期在读课程明细 ({courses.length} 门)
+              在读课程 ({courses.length} 门)
             </h3>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
               {courses.map((course) => {
@@ -164,7 +164,7 @@ export function FullTimetableModal() {
 
                     <div className="mt-2 pt-1.5 border-t border-black/5 text-[10px] text-[#8C827A] flex items-center justify-between">
                       <span>{courseScheds.length} 个上课时段</span>
-                      <span className="font-bold text-charcoal">详情 ↗</span>
+                      <span className="font-bold text-charcoal">详情</span>
                     </div>
                   </div>
                 );

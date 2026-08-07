@@ -99,7 +99,7 @@ export function TimetableGrid() {
           onClick={handleOpenFullTimetable}
           className="flex items-center space-x-1 text-xs text-[#8C827A] hover:text-charcoal transition-colors bg-[#F7F5F5] hover:bg-[#F0EBE1] px-2 py-1 rounded-lg border border-[#E7E3DD] self-start sm:self-auto font-medium"
         >
-          <span>查看完整课表</span>
+          <span>查看课表</span>
           <ExternalLink className="w-3.5 h-3.5" />
         </button>
       </div>
@@ -110,7 +110,7 @@ export function TimetableGrid() {
           <div className="flex items-center space-x-2">
             <AlertTriangle className="w-4 h-4 shrink-0" />
             <span>
-              <strong>课程冲突提醒：</strong>检测到 {conflicts.length} 处时间重叠
+              <strong>课程时间冲突：</strong>检测到 {conflicts.length} 处
               （例如 {["周一","周二","周三","周四","周五","周六","周日"][firstConflict.dayOfWeek - 1]} {firstConflict.timeRange}）
             </span>
           </div>
@@ -121,7 +121,7 @@ export function TimetableGrid() {
             }}
             className="px-2.5 py-1 bg-[#D94F4F] text-white rounded-lg font-bold text-[10px] hover:bg-[#c44343] transition-colors shrink-0"
           >
-            解决冲突
+            查看冲突
           </button>
         </div>
       )}

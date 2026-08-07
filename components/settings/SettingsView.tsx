@@ -170,7 +170,7 @@ export function SettingsView() {
       downloadAnchor.remove();
       URL.revokeObjectURL(url);
 
-      setImportStatus(`完整备份已导出：已打包 ${result.packedMaterials} 个课程附件`);
+      setImportStatus(`备份已导出，包含 ${result.packedMaterials} 个课程附件`);
       if (result.missingMaterials.length > 0) {
         setImportWarning(
           `${result.missingMaterials.length} 个资料文件本体缺失，仅保留元数据：` +
@@ -182,7 +182,7 @@ export function SettingsView() {
         setImportWarning(null);
       }, 6000);
     } catch {
-      alert("导出完整备份失败，请重试");
+      alert("备份导出失败，请重试");
     }
   };
 
@@ -242,9 +242,9 @@ export function SettingsView() {
             warnings.push(`「${key}」写入本地存储失败`);
           }
 
-          setImportStatus(
-            `已从完整备份恢复：${data.courses.length} 门课程、${data.schedules.length} 个上课时段、${data.assignments.length} 项作业；附件已恢复 ${materials.size} 个`
-          );
+      setImportStatus(
+        `备份已恢复：${data.courses.length} 门课程、${data.schedules.length} 个上课时段、${data.assignments.length} 项任务，附件 ${materials.size} 个`
+      );
           if (warnings.length > 0) {
             setImportWarning(`${warnings.length} 个资料存在问题：` + warnings.join("；"));
           }
@@ -277,12 +277,10 @@ export function SettingsView() {
       syncFormState(result.data);
 
       setImportStatus(
-        `已从 JSON 备份恢复：${result.data.courses.length} 门课程、${result.data.schedules.length} 个上课时段、${result.data.assignments.length} 项作业`
+        `备份已恢复：${result.data.courses.length} 门课程、${result.data.schedules.length} 个上课时段、${result.data.assignments.length} 项任务`
       );
       if (hasMaterialStorageKeys(result.data.courses)) {
-        setImportWarning(
-          "此 JSON 备份不包含本地课程附件文件，相关资料可能需要重新上传。"
-        );
+        setImportWarning("该备份不含课程附件，相关文件可能需要重新上传");
       }
       setTimeout(() => {
         setImportStatus(null);
@@ -294,7 +292,7 @@ export function SettingsView() {
   };
 
   const handleResetData = () => {
-    if (confirm("确定要重置所有数据恢复演示数据吗？现有的修改将被覆盖。")) {
+    if (confirm("确定重置所有数据？将恢复为演示数据，现有修改会丢失。")) {
       resetAllDataToDefault();
       window.location.reload();
     }
@@ -322,7 +320,7 @@ export function SettingsView() {
       {savedSuccess && (
         <div className="p-3 bg-[#E3E6E0] border border-[#D0D5CC] rounded-xl flex items-center space-x-2 text-[#4A7C59] font-bold text-xs animate-in fade-in">
           <CheckCircle className="w-4 h-4 shrink-0" />
-          <span>个人资料与学业配置保存成功！</span>
+          <span>设置已保存</span>
         </div>
       )}
 
@@ -344,14 +342,14 @@ export function SettingsView() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 items-start">
         {/* Left Column (2/3 Width) */}
         <div className="lg:col-span-2 space-y-5">
-          {/* Card 1: 个人学业信息设置 */}
+          {/* Card 1: 个人信息 */}
           <form
             onSubmit={handleSaveProfile}
             className="bg-white border border-[#E7E3DD] rounded-2xl p-6 shadow-subtle space-y-4"
           >
             <h3 className="text-sm font-bold text-charcoal flex items-center gap-2 pb-2 border-b border-[#F0EBE1]">
               <User className="w-4 h-4 text-[#A48F82]" />
-              个人学业信息设置
+              个人信息
             </h3>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
@@ -438,7 +436,7 @@ export function SettingsView() {
           >
             <h3 className="text-sm font-bold text-charcoal flex items-center gap-2 pb-2 border-b border-[#F0EBE1]">
               <Calendar className="w-4 h-4 text-[#A48F82]" />
-              学期信息与校历配置
+              学期设置
             </h3>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
@@ -536,9 +534,9 @@ export function SettingsView() {
               >
                 <div className="flex items-center space-x-2">
                   <Archive className="w-4 h-4" />
-                  <span>导出完整备份 ZIP</span>
+                  <span>导出备份 ZIP</span>
                 </div>
-                <span className="text-[10px] opacity-80 font-normal">含课程附件 ↗</span>
+                <span className="text-[10px] opacity-80 font-normal">含附件</span>
               </button>
 
               {/* 2. 导出仅数据 JSON（不含附件） */}
@@ -548,9 +546,9 @@ export function SettingsView() {
               >
                 <div className="flex items-center space-x-2">
                   <Download className="w-4 h-4 text-[#A48F82]" />
-                  <span>导出仅数据 JSON</span>
+                  <span>导出数据 JSON</span>
                 </div>
-                <span className="text-[10px] text-[#8C827A] font-normal">不含附件 ↗</span>
+                <span className="text-[10px] text-[#8C827A] font-normal">仅数据</span>
               </button>
 
               {/* 3. 导入备份（支持 .zip / .json） */}
@@ -569,7 +567,7 @@ export function SettingsView() {
                   <Upload className="w-4 h-4 text-[#A48F82]" />
                   <span>导入备份</span>
                 </div>
-                <span className="text-[10px] text-[#8C827A] font-normal">支持 .zip / .json ↗</span>
+                <span className="text-[10px] text-[#8C827A] font-normal">支持 .zip / .json</span>
               </label>
 
               {/* 4. 重置演示数据 */}
@@ -581,7 +579,7 @@ export function SettingsView() {
                   <RotateCcw className="w-4 h-4" />
                   <span>重置演示数据</span>
                 </div>
-                <span className="text-[10px] font-normal opacity-80">重置 ↗</span>
+                <span className="text-[10px] font-normal opacity-80">重置</span>
               </button>
             </div>
           </div>
@@ -627,7 +625,7 @@ export function SettingsView() {
               <span>关于 ClassFlow</span>
             </div>
             <p className="text-[11px] text-[#676268] leading-relaxed">
-              大学生课表与作业 DDL 学习管理系统 · 纯前端离线优先构建。
+              课表、任务与 DDL 管理工具，数据保存在本地浏览器。
             </p>
           </div>
         </div>

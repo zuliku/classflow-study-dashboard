@@ -109,7 +109,7 @@ export function FilePreviewModal() {
                 className="flex items-center space-x-1.5 px-3 py-1.5 bg-charcoal hover:bg-black text-white text-xs font-bold rounded-xl transition-colors shadow-subtle"
               >
                 <Download className="w-3.5 h-3.5" />
-                <span>下载原文件</span>
+                <span>下载</span>
               </a>
             )}
             <button
@@ -126,7 +126,7 @@ export function FilePreviewModal() {
           {isLoading ? (
             <div className="flex flex-col items-center space-y-2 text-white/80 text-xs">
               <Loader2 className="w-6 h-6 animate-spin" />
-              <span>正在从本地存储读取文件…</span>
+              <span>正在读取文件…</span>
             </div>
           ) : loadFailed ? (
             <div className="bg-white p-8 rounded-3xl max-w-md text-center space-y-3 shadow-2xl border border-[#E7E3DD]">
@@ -138,7 +138,7 @@ export function FilePreviewModal() {
                   文件读取失败
                 </h4>
                 <p className="text-xs text-[#8C827A]">
-                  本地存储中找不到该文件，可能已被删除。请返回课程资料重新上传。
+                  找不到该文件，可能已被删除，请重新上传。
                 </p>
               </div>
             </div>
@@ -164,7 +164,7 @@ export function FilePreviewModal() {
                   {material.title}
                 </h4>
                 <p className="text-xs text-[#8C827A]">
-                  此格式支持本地高清直接下载与阅读
+                  该格式支持下载后阅读
                 </p>
               </div>
               {displayUrl ? (
@@ -174,11 +174,11 @@ export function FilePreviewModal() {
                   className="inline-flex items-center space-x-2 px-5 py-2.5 bg-charcoal hover:bg-black text-white text-xs font-bold rounded-xl transition-colors shadow-card"
                 >
                   <Download className="w-4 h-4" />
-                  <span>立刻保存/下载原文件</span>
+                  <span>下载文件</span>
                 </a>
               ) : (
                 <div className="text-xs text-[#8C827A] p-3 bg-[#F7F5F5] rounded-xl border border-[#E7E3DD]">
-                  演示课件文件 ({material.size || "2.4 MB"}) · 真实上传文件后支持直接预览与下载
+                  本地示例资料 ({material.size || "2.4 MB"})，上传后可预览与下载
                 </div>
               )}
             </div>

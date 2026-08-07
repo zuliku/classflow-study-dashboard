@@ -138,21 +138,21 @@ export default function Home() {
                     className="flex items-center space-x-1.5 px-3 py-1.5 bg-white hover:bg-[#F0EBE1] text-charcoal border border-[#E0D7C6] text-xs font-bold rounded-xl transition-colors shadow-subtle"
                   >
                     <ExternalLink className="w-3.5 h-3.5" />
-                    <span>放大全屏视图</span>
+                    <span>全屏课表</span>
                   </button>
                   <button
                     onClick={() => setAddCourseModalOpen(true)}
                     className="flex items-center space-x-1.5 px-3 py-1.5 bg-[#E3E6E0] hover:bg-[#D0D5CC] text-charcoal text-xs font-bold rounded-xl transition-colors"
                   >
                     <Plus className="w-3.5 h-3.5" />
-                    <span>添加/编辑课程</span>
+                    <span>添加课程</span>
                   </button>
                   <button
                     onClick={() => setImportScheduleModalOpen(true)}
                     className="flex items-center space-x-1.5 px-3 py-1.5 bg-charcoal hover:bg-black text-white text-xs font-bold rounded-xl transition-colors"
                   >
                     <FileUp className="w-3.5 h-3.5" />
-                    <span>导入外部课表</span>
+                    <span>导入课表</span>
                   </button>
                 </div>
               </div>
@@ -169,10 +169,10 @@ export default function Home() {
               <div className="bg-white border border-[#E7E3DD] rounded-2xl p-4 shadow-subtle flex items-center justify-between">
                 <div>
                   <h2 className="text-base font-bold text-charcoal mb-0.5">
-                    作业与 DDL 清单
+                    任务清单
                   </h2>
                   <p className="text-xs text-[#8C827A]">
-                    所有课程作业与截止时间安排
+                    全部任务与截止时间
                   </p>
                 </div>
               </div>
@@ -188,7 +188,7 @@ export default function Home() {
                     本学期课程
                   </h2>
                   <p className="text-xs text-[#8C827A]">
-                    点击课程卡片查看讲义与课件资料
+                    点击课程卡片查看资料
                   </p>
                 </div>
                 <button
@@ -196,7 +196,7 @@ export default function Home() {
                   className="flex items-center space-x-1.5 px-3 py-1.5 bg-charcoal text-white text-xs font-medium rounded-xl hover:bg-black"
                 >
                   <Plus className="w-3.5 h-3.5" />
-                  <span>添加新课程</span>
+                  <span>添加课程</span>
                 </button>
               </div>
 
@@ -234,10 +234,10 @@ export default function Home() {
                     <div className="mt-3 pt-2.5 border-t border-[#E0D7C6]/60 flex items-center justify-between text-xs text-[#676268]">
                       <span className="flex items-center text-[11px]">
                         <BookOpen className="w-3.5 h-3.5 mr-1 text-[#A48F82]" />
-                        {course.materials.length} 份课件资料
+                        {course.materials.length} 份资料
                       </span>
                       <span className="font-semibold text-charcoal text-[11px]">
-                        查看/导入资料 ↗
+                        查看资料
                       </span>
                     </div>
                   </div>
@@ -257,7 +257,7 @@ export default function Home() {
                   学习统计
                 </h2>
                 <p className="text-xs text-[#8C827A]">
-                  作业完成进度与本周课程负荷
+                  任务完成进度与本周课程负荷
                 </p>
               </div>
 
@@ -267,7 +267,7 @@ export default function Home() {
                   <span className="text-xs font-semibold text-[#8C827A]">按时完成率</span>
                   <div className="text-2xl font-extrabold text-[#4A7C59]">{completionRate}%</div>
                   <p className="text-[10px] text-[#4A7C59] font-medium">
-                    已完成 {completedTasks} / {totalTasks} 项作业
+                    已完成 {completedTasks} / {totalTasks} 项任务
                   </p>
                 </div>
                 <div className="p-4 bg-white border border-[#E7E3DD] rounded-2xl shadow-subtle space-y-1">
@@ -293,7 +293,7 @@ export default function Home() {
                 {/* 1. Assignment Status Distribution Pie */}
                 <div className="bg-white border border-[#E7E3DD] rounded-2xl p-4 shadow-subtle flex flex-col justify-between">
                   <h3 className="text-sm font-bold text-charcoal pb-2 border-b border-[#F0EBE1]">
-                    作业任务状态
+                    任务状态
                   </h3>
                   <div className="h-56 w-full flex items-center justify-center my-2">
                     <ResponsiveContainer width="100%" height="100%">

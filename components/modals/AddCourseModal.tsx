@@ -147,7 +147,7 @@ export function AddCourseModal() {
         <div className="p-4 px-6 border-b border-[#F0EBE1] bg-[#F7F5F5] flex items-center justify-between">
           <div className="flex items-center space-x-2">
             <BookOpen className="w-4 h-4 text-[#A48F82]" />
-            <h3 className="text-base font-bold text-charcoal">添加新课程与排课</h3>
+            <h3 className="text-base font-bold text-charcoal">添加课程</h3>
           </div>
           <button
             onClick={() => setAddCourseModalOpen(false)}
@@ -164,7 +164,7 @@ export function AddCourseModal() {
               <label className="font-bold text-[#8C827A]">课程名称 *</label>
               <input
                 type="text"
-                placeholder="例如: 行为经济学"
+                placeholder="如：行为经济学"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 className="w-full p-2.5 bg-[#F7F5F5] border border-[#E7E3DD] rounded-xl focus:outline-none focus:border-charcoal text-charcoal"
@@ -175,7 +175,7 @@ export function AddCourseModal() {
               <label className="font-bold text-[#8C827A]">课程代码</label>
               <input
                 type="text"
-                placeholder="例如: ECON-305"
+                placeholder="如：ECON-305"
                 value={code}
                 onChange={(e) => setCode(e.target.value)}
                 className="w-full p-2.5 bg-[#F7F5F5] border border-[#E7E3DD] rounded-xl focus:outline-none focus:border-charcoal text-charcoal font-mono"
@@ -198,7 +198,7 @@ export function AddCourseModal() {
               <label className="font-bold text-[#8C827A]">默认教室</label>
               <input
                 type="text"
-                placeholder="例如: 教二 401"
+                placeholder="如：教二 401"
                 value={classroom}
                 onChange={(e) => setClassroom(e.target.value)}
                 className="w-full p-2.5 bg-[#F7F5F5] border border-[#E7E3DD] rounded-xl focus:outline-none"
@@ -348,7 +348,7 @@ export function AddCourseModal() {
             <label className="font-bold text-[#8C827A]">课程说明</label>
             <textarea
               rows={2}
-              placeholder="备注 / 课程说明..."
+              placeholder="课程说明"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               className="w-full p-2.5 bg-[#F7F5F5] border border-[#E7E3DD] rounded-xl focus:outline-none resize-none"
@@ -373,7 +373,7 @@ export function AddCourseModal() {
               type="submit"
               className="px-4 py-2 text-xs font-medium text-white bg-charcoal rounded-xl hover:bg-black font-bold"
             >
-              保存并创建
+               创建课程
             </button>
           </div>
         </form>

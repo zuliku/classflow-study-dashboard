@@ -64,7 +64,7 @@ export function Header() {
           className="flex items-center space-x-2 bg-white border border-[#E0D7C6] rounded-xl px-3 py-1.5 text-xs text-[#8C827A] cursor-pointer hover:border-charcoal hover:bg-[#FAF8F5] transition-all shadow-subtle min-w-[200px]"
         >
           <Search className="w-3.5 h-3.5 text-[#A48F82]" />
-          <span className="flex-1 font-medium">搜索课程、作业、资料...</span>
+          <span className="flex-1 font-medium">搜索课程、任务、资料</span>
           <kbd className="hidden sm:inline-block bg-[#F0EBE1] text-charcoal text-[10px] font-mono px-1.5 py-0.5 rounded border border-[#E0D7C6]">
             ⌘ K
           </kbd>

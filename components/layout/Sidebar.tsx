@@ -19,7 +19,7 @@ import { cn } from "@/lib/utils";
 const NAV_ITEMS: { id: NavTab; label: string; icon: React.ElementType }[] = [
   { id: "overview", label: "总览", icon: LayoutDashboard },
   { id: "timetable", label: "我的课表", icon: CalendarDays },
-  { id: "assignments", label: "作业 DDL", icon: ClipboardCheck },
+  { id: "assignments", label: "任务与 DDL", icon: ClipboardCheck },
   { id: "courses", label: "课程资料", icon: FolderKanban },
   { id: "analytics", label: "学习统计", icon: BarChart3 },
   { id: "group", label: "小组协作", icon: Users2 },

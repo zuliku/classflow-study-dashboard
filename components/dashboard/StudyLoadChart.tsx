@@ -48,7 +48,7 @@ export function StudyLoadChart() {
           </div>
           <p className="text-[11px] text-[#8C827A]">本周课程时长</p>
           <p className="text-[10px] font-semibold text-[#4A7C59]">
-            基于课表 endTime - startTime 实算
+            按课表统计
           </p>
         </div>
 

@@ -142,7 +142,7 @@ export function AddAssignmentModal() {
           <div className="flex items-center space-x-2">
             <ClipboardList className="w-4 h-4 text-[#A48F82]" />
             <h3 className="text-base font-bold text-charcoal">
-              {editingId ? "编辑作业 DDL 任务" : "新增作业 DDL 任务"}
+              {editingId ? "编辑任务" : "新建任务"}
             </h3>
           </div>
           <button
@@ -156,10 +156,10 @@ export function AddAssignmentModal() {
         {/* Form */}
         <form onSubmit={handleSubmit} className="p-6 space-y-4 overflow-y-auto text-xs">
           <div className="space-y-1">
-            <label className="font-bold text-[#8C827A]">作业名称 *</label>
+            <label className="font-bold text-[#8C827A]">任务名称 *</label>
             <input
               type="text"
-              placeholder="例如: 计量经济学第4章实证报告..."
+              placeholder="如：计量经济学实证报告"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               className="w-full p-2.5 bg-[#F7F5F5] border border-[#E7E3DD] rounded-xl focus:outline-none focus:border-charcoal text-charcoal text-xs font-semibold"
@@ -240,7 +240,7 @@ export function AddAssignmentModal() {
                 <div key={st.id || idx} className="flex items-center space-x-2">
                   <input
                     type="text"
-                    placeholder={`子步骤 #${idx + 1} (如: 收集案例数据)...`}
+                    placeholder={`子步骤 #${idx + 1}（如：收集案例数据）`}
                     value={st.title}
                     onChange={(e) => handleSubtaskChange(idx, e.target.value)}
                     className="flex-1 p-2 bg-[#F7F5F5] border border-[#E7E3DD] rounded-lg text-xs"
@@ -262,7 +262,7 @@ export function AddAssignmentModal() {
             <label className="font-bold text-[#8C827A]">标签 (逗号分隔)</label>
             <input
               type="text"
-              placeholder="如: 个人作业, 回归模型, PPT"
+              placeholder="如：个人作业、回归模型、PPT"
               value={tagsStr}
               onChange={(e) => setTagsStr(e.target.value)}
               className="w-full p-2.5 bg-[#F7F5F5] border border-[#E7E3DD] rounded-xl focus:outline-none text-xs"
@@ -271,10 +271,10 @@ export function AddAssignmentModal() {
 
           {/* Description */}
           <div className="space-y-1">
-            <label className="font-bold text-[#8C827A]">作业要求与详细说明</label>
+            <label className="font-bold text-[#8C827A]">任务要求与说明</label>
             <textarea
               rows={3}
-              placeholder="请输入作业详细要求、提交格式、字数限制等..."
+              placeholder="补充任务要求、提交格式等"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               className="w-full p-2.5 bg-[#F7F5F5] border border-[#E7E3DD] rounded-xl focus:outline-none resize-none text-xs leading-relaxed"
@@ -294,7 +294,7 @@ export function AddAssignmentModal() {
               type="submit"
               className="px-4 py-2 text-xs font-bold text-white bg-charcoal rounded-xl hover:bg-black"
             >
-              保存作业任务
+               保存
             </button>
           </div>
         </form>

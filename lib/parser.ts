@@ -101,7 +101,7 @@ export function parseICS(icsText: string): ParsedImportResult {
   }
 
   if (eventBlocks.length === 0) {
-    errors.push("未检测到有效的 VEVENT 日历事件结构");
+    errors.push("未找到有效的日历事件");
     return { courses, schedules, warnings, errors };
   }
 
@@ -122,28 +122,28 @@ export function parseICS(icsText: string): ParsedImportResult {
     if (rruleProp) {
       const rrule = parseRRULE(rruleProp.value);
       if (rrule.FREQ && rrule.FREQ !== "WEEKLY") {
-        warnings.push(`「${name}」: RRULE 频率为 ${rrule.FREQ}（非 WEEKLY），无法可靠表示，已按每周重复导入`);
+        warnings.push(`《${name}》：RRULE 频率为 ${rrule.FREQ}（非 WEEKLY），无法可靠表示，已按每周重复导入`);
       }
       if (rrule.BYDAY) {
         const days = rrule.BYDAY.split(",");
         if (days.length > 1) {
-          warnings.push(`「${name}」: RRULE BYDAY 包含多天 (${rrule.BYDAY})，当前模型仅支持单天，已按 ${days[0]} 导入`);
+          warnings.push(`《${name}》：RRULE BYDAY 包含多天 (${rrule.BYDAY})，当前模型仅支持单天，已按 ${days[0]} 导入`);
         }
         const mapped = ICS_BYDAY_MAP[days[0]];
         if (mapped) {
           dayOfWeek = mapped;
         } else {
-          warnings.push(`「${name}」: 无法识别的 BYDAY (${days[0]})，改用 DTSTART 日期推算星期`);
+          warnings.push(`《${name}》：无法识别的 BYDAY (${days[0]})，改用 DTSTART 日期推算星期`);
         }
       }
       if (rrule.INTERVAL && Number(rrule.INTERVAL) > 1) {
-        warnings.push(`「${name}」: RRULE 每 ${rrule.INTERVAL} 周重复 (INTERVAL) 暂不支持，已按每周例行课导入`);
+        warnings.push(`《${name}》：RRULE 每 ${rrule.INTERVAL} 周重复 (INTERVAL) 暂不支持，已按每周课程导入`);
       }
       if (rrule.UNTIL || rrule.COUNT) {
-        warnings.push(`「${name}」: RRULE 包含 UNTIL/COUNT 结束限制，未应用，已按每周例行课导入`);
+        warnings.push(`《${name}》：RRULE 包含 UNTIL/COUNT 结束限制，未应用，已按每周课程导入`);
       }
     } else {
-      warnings.push(`「${name}」: 未检测到 RRULE 重复规则，已按每周例行课程导入（如为单次事件请确认）`);
+      warnings.push(`《${name}》：未找到 RRULE 重复规则，已按每周课程导入（若为单次事件请确认）`);
     }
 
     const dtStartProp = getProperty(block, "DTSTART");
@@ -156,19 +156,19 @@ export function parseICS(icsText: string): ParsedImportResult {
         if (parsed.time) {
           startTime = parsed.time;
         } else {
-          warnings.push(`「${name}」: DTSTART 为全天日期 (VALUE=DATE)，无具体时间，开始时间按 08:00 处理`);
+          warnings.push(`《${name}》：DTSTART 为全天日期 (VALUE=DATE)，无具体时间，开始时间按 08:00 处理`);
         }
       } else {
-        warnings.push(`「${name}」: 无法解析 DTSTART (${dtStartProp.value})，星期按默认顺序推算`);
+        warnings.push(`《${name}》：无法解析 DTSTART (${dtStartProp.value})，星期暂按默认顺序推算`);
       }
     } else {
-      warnings.push(`「${name}」: 缺少 DTSTART，无法确定真实星期，按默认顺序推算`);
+      warnings.push(`《${name}》：缺少 DTSTART，无法确定星期，暂按默认顺序推算`);
     }
 
     // Fallback 仅用于确实无法识别的情况，且必须提示用户
     if (dayOfWeek === null) {
       dayOfWeek = (idx % 5) + 1;
-      warnings.push(`「${name}」: 无法从文件确定星期，已按周${"一二三四五六日"[dayOfWeek - 1]}（第 ${idx + 1} 个事件顺序）推算`);
+      warnings.push(`《${name}》：无法确定星期，暂按周${"一二三四五六日"[dayOfWeek - 1]}处理`);
     }
 
     // --- 结束时间 ---
@@ -179,16 +179,16 @@ export function parseICS(icsText: string): ParsedImportResult {
       if (parsed && parsed.time) {
         endTime = parsed.time;
       } else {
-        warnings.push(`「${name}」: 无法解析 DTEND，结束时间按开始时间 +1h40m 推算`);
+        warnings.push(`《${name}》：无法解析 DTEND，结束时间按开始时间 +1h40m 推算`);
       }
     } else {
-      warnings.push(`「${name}」: 缺少 DTEND，结束时间按开始时间 +1h40m 推算`);
+      warnings.push(`《${name}》：缺少 DTEND，结束时间按开始时间 +1h40m 推算`);
     }
     if (!endTime) endTime = addMinutes(startTime, 100);
 
     const exdateProp = getProperty(block, "EXDATE");
     if (exdateProp) {
-      warnings.push(`「${name}」: 检测到 EXDATE 停课日期，当前模型不支持排除，未应用`);
+      warnings.push(`《${name}》：检测到 EXDATE 停课日期，当前模型不支持排除，未应用`);
     }
 
     let course = courseMap.get(name);
@@ -305,7 +305,7 @@ export function parseCSVSchedule(csvText: string): ParsedImportResult {
     const startTime = (rawStart || "").trim();
     const endTime = (rawEnd || "").trim();
     if (!isValidTimeRange(startTime, endTime)) {
-      errors.push(`${lineLabel}: 时间格式非法或结束时间不晚于开始时间（${startTime} - ${endTime}），已跳过`);
+      errors.push(`${lineLabel}: 时间格式不正确或结束时间早于开始时间（${startTime} - ${endTime}），已跳过`);
       return;
     }
 
@@ -338,7 +338,7 @@ export function parseCSVSchedule(csvText: string): ParsedImportResult {
   });
 
   if (courses.length === 0 && errors.length > 0) {
-    warnings.push("没有成功解析到课程，请检查文件格式是否符合表格模板");
+    warnings.push("没有识别到课程，请检查文件格式");
   }
 
   return { courses, schedules, warnings, errors };
@@ -356,7 +356,7 @@ export function parseJSONSchedule(jsonText: string): ParsedImportResult {
   try {
     raw = JSON.parse(jsonText);
   } catch {
-    errors.push("JSON 语法错误，无法解析");
+    errors.push("JSON 格式不正确，无法解析");
     return { courses, schedules, warnings, errors };
   }
 
@@ -380,7 +380,7 @@ export function parseJSONSchedule(jsonText: string): ParsedImportResult {
     const startTime = String(item.startTime || "").trim();
     const endTime = String(item.endTime || "").trim();
     if (!isValidTimeRange(startTime, endTime)) {
-      errors.push(`${itemLabel}: 时间格式非法或结束时间不晚于开始时间（${startTime} - ${endTime}），已跳过`);
+      errors.push(`${itemLabel}: 时间格式不正确或结束时间早于开始时间（${startTime} - ${endTime}），已跳过`);
       return;
     }
 
@@ -396,7 +396,7 @@ export function parseJSONSchedule(jsonText: string): ParsedImportResult {
       bgHex: item.bgHex || "#F0EBE1",
       borderHex: item.borderHex || "#E0D7C6",
       textHex: "#313032",
-      description: String(item.description || "JSON 模版一键导入课程").trim(),
+      description: String(item.description || "从 JSON 文件导入的课程").trim(),
       materials: [],
     });
 
@@ -412,7 +412,7 @@ export function parseJSONSchedule(jsonText: string): ParsedImportResult {
   });
 
   if (courses.length === 0 && errors.length > 0) {
-    warnings.push("没有成功解析到课程，请检查 JSON 字段是否完整");
+    warnings.push("没有识别到课程，请检查 JSON 字段");
   }
 
   return { courses, schedules, warnings, errors };

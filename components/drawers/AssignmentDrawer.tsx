@@ -171,7 +171,7 @@ export function AssignmentDrawer() {
           {assignment.description && (
             <div className="space-y-1.5">
               <h4 className="text-xs font-bold text-[#8C827A] uppercase tracking-wider">
-                作业要求与说明
+                任务说明
               </h4>
               <p className="text-xs text-charcoal bg-[#F0EBE1]/40 border border-[#E0D7C6] rounded-xl p-3.5 leading-relaxed whitespace-pre-wrap">
                 {assignment.description}
@@ -218,7 +218,7 @@ export function AssignmentDrawer() {
             className="flex items-center space-x-1.5 text-xs text-[#D94F4F] hover:bg-[#FDF0F0] px-3 py-2 rounded-xl transition-colors"
           >
             <Trash2 className="w-4 h-4" />
-            <span>删除作业</span>
+            <span>删除任务</span>
           </button>
           <button
             onClick={() => setSelectedAssignmentId(null)}

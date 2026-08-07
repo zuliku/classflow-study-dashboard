@@ -59,7 +59,7 @@ export function GlobalSearchModal() {
           <Search className="w-4 h-4 text-[#A48F82] shrink-0 mr-3" />
           <input
             type="text"
-            placeholder="输入课程名称、代码、教师或作业关键词..."
+            placeholder="搜索课程、任务或 DDL"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="w-full text-sm bg-transparent border-none focus:outline-none text-charcoal placeholder-[#8C827A]"
@@ -77,7 +77,7 @@ export function GlobalSearchModal() {
         <div className="p-4 max-h-[400px] overflow-y-auto space-y-4">
           {!searchQuery.trim() ? (
             <div className="py-8 text-center text-xs text-[#8C827A]">
-              输入关键词，全量检索课程、讲师与作业 DDL
+              输入关键词搜索课程、任务与 DDL
             </div>
           ) : (
             <>
@@ -85,7 +85,7 @@ export function GlobalSearchModal() {
               {filteredCourses.length > 0 && (
                 <div className="space-y-2">
                   <h4 className="text-[11px] font-bold text-[#8C827A] uppercase tracking-wider">
-                    课程结果 ({filteredCourses.length})
+                    课程 ({filteredCourses.length})
                   </h4>
                   {filteredCourses.map((c) => (
                     <div
@@ -117,7 +117,7 @@ export function GlobalSearchModal() {
               {filteredAssignments.length > 0 && (
                 <div className="space-y-2">
                   <h4 className="text-[11px] font-bold text-[#8C827A] uppercase tracking-wider">
-                    作业结果 ({filteredAssignments.length})
+                    任务 ({filteredAssignments.length})
                   </h4>
                   {filteredAssignments.map((a) => (
                     <div
@@ -147,7 +147,7 @@ export function GlobalSearchModal() {
 
               {filteredCourses.length === 0 && filteredAssignments.length === 0 && (
                 <div className="py-8 text-center text-xs text-[#8C827A]">
-                  未搜寻到相关的课程或作业
+                  未找到相关课程或任务
                 </div>
               )}
             </>

@@ -259,7 +259,7 @@ export function CourseDetailDrawer() {
       try {
         await saveFileBlob(storageKey, file);
       } catch {
-        alert(`文件「${file.name}」保存到本地存储失败，已跳过`);
+        alert(`《${file.name}》保存失败，请重新上传`);
         continue;
       }
 
@@ -330,7 +330,7 @@ export function CourseDetailDrawer() {
 
             <button
               onClick={() => {
-                if (confirm(`确定要删除课程《${course.name}》及关联的所有课表时段吗？`)) {
+                if (confirm(`删除课程《${course.name}》及其所有排课时段？`)) {
                   deleteCourse(course.id);
                   setSelectedCourseId(null);
                 }
@@ -532,7 +532,7 @@ export function CourseDetailDrawer() {
                         周{DAY_LABELS[sched.dayOfWeek - 1]} {sched.startTime} - {sched.endTime}
                       </div>
                       <div className="text-[10px] text-[#8C827A]">
-                        📍 {sched.location} · {sched.weeks}
+                        {sched.location} · {sched.weeks}
                         {sched.excludedWeeks && sched.excludedWeeks.length > 0 && (
                           <span className="text-[#D97706]">
                             {" "}· 停课周 {sched.excludedWeeks.join(",")}
@@ -621,7 +621,7 @@ export function CourseDetailDrawer() {
             <div className="flex items-center justify-between">
               <h3 className="font-bold text-charcoal text-sm flex items-center gap-1.5">
                 <FileText className="w-4 h-4 text-[#A48F82]" />
-                课程讲义与课件资料 ({course.materials.length})
+                课程资料 ({course.materials.length})
               </h3>
 
               {/* Real File Input Button */}
@@ -637,16 +637,17 @@ export function CourseDetailDrawer() {
                 className="flex items-center space-x-1 px-2.5 py-1 bg-charcoal hover:bg-black text-white text-[11px] font-bold rounded-xl cursor-pointer transition-colors"
               >
                 <FileUp className="w-3 h-3" />
-                <span>上传真实文件</span>
+                <span>上传资料</span>
               </label>
             </div>
 
             {/* Materials List */}
             <div className="space-y-2">
               {course.materials.length === 0 ? (
-                <p className="text-[11px] text-[#8C827A] py-3 text-center bg-[#F7F5F5] rounded-xl">
-                  暂无课件资料，支持上传 PDF/PPT/Word/图片 格式
-                </p>
+                <div className="py-4 text-center bg-[#F7F5F5] rounded-xl space-y-0.5">
+                  <p className="text-[11px] text-[#8C827A] font-semibold">暂无课程资料</p>
+                  <p className="text-[10px] text-[#8C827A]">支持 PDF、PPT、Word 和图片</p>
+                </div>
               ) : (
                 course.materials.map((mat) => (
                   <div
@@ -668,12 +669,12 @@ export function CourseDetailDrawer() {
 
                     <div className="flex items-center space-x-2 shrink-0">
                       <span className="text-[10px] bg-white border border-[#E0D7C6] px-2 py-0.5 rounded font-bold text-charcoal group-hover:bg-charcoal group-hover:text-white transition-colors">
-                        查看/下载 ↗
+                        查看
                       </span>
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
-                          if (confirm(`确定要删除资料「${mat.title}」吗？删除后无法恢复。`)) {
+                          if (confirm(`删除资料「${mat.title}」？删除后无法恢复。`)) {
                             deleteCourseMaterial(course.id, mat.id);
                           }
                         }}

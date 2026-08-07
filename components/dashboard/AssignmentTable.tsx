@@ -87,7 +87,7 @@ export function AssignmentTable() {
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
           <div className="flex items-center space-x-2">
             <h3 className="text-sm font-bold text-charcoal">
-              作业与 DDL 管理
+              任务清单
             </h3>
             <span className="text-[10px] font-semibold text-[#8C827A] bg-[#F7F5F5] px-1.5 py-0.5 rounded border border-[#E7E3DD]">
               {filteredAssignments.length} 项任务
@@ -105,7 +105,7 @@ export function AssignmentTable() {
             className="flex items-center space-x-1 px-3 py-1.5 bg-charcoal hover:bg-black text-white text-xs font-bold rounded-xl transition-colors shadow-subtle shrink-0"
           >
             <Plus className="w-3.5 h-3.5" />
-            <span>新增作业任务</span>
+            <span>新增任务</span>
           </button>
         </div>
 
@@ -162,7 +162,7 @@ export function AssignmentTable() {
         {filteredAssignments.length === 0 ? (
           <div className="py-10 text-center text-xs text-[#8C827A] space-y-1">
             <CheckCircle2 className="w-8 h-8 mx-auto text-[#4A7C59]" />
-            <p>该筛选条件下暂无相关作业任务</p>
+            <p>该筛选条件下暂无任务</p>
           </div>
         ) : (
           filteredAssignments.map((task) => {
@@ -291,13 +291,13 @@ export function AssignmentTable() {
       {/* Footer */}
       <div className="pt-2 border-t border-[#F0EBE1] flex justify-between items-center text-xs">
         <span className="text-[11px] text-[#8C827A]">
-          点击整行可展开作业详情与子任务清单
+          点击任务查看详情与子任务
         </span>
         <button
           onClick={() => setActiveTab("assignments")}
           className="font-bold text-charcoal hover:underline"
         >
-          在“作业 DDL”查看全部 ↗
+          查看全部
         </button>
       </div>
     </div>
