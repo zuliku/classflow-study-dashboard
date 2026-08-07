@@ -26,6 +26,74 @@ import { createDefaultSemester, getSemesterWeek } from "@/lib/semester";
 import { getLocalDDLDate } from "@/lib/ddl";
 import { deleteFileBlob, clearAllFileBlobs } from "@/lib/fileStorage";
 
+/**
+ * 持久化白名单（localStorage，key 保持 classflow-storage-v2）：
+ * 仅业务数据与明确的稳定偏好。瞬时 UI 状态（选中项、Modal 开关等）
+ * 一律不入库 —— 未来新增 Modal state 时不会被自动写入。
+ */
+interface PersistedAppState {
+  userProfile: UserProfile;
+  semester: Semester;
+  courses: Course[];
+  schedules: CourseSchedule[];
+  assignments: Assignment[];
+  calendarMarks: CalendarMark[];
+  groupProjects: GroupProject[];
+  /** 任务列表时间筛选：用户偏好，保留并在缺失时回落 "all" */
+  assignmentTimeSlice?: TimeSliceFilter;
+}
+
+/** 旧版（无显式 version）持久化数据：可能混入瞬时 UI 状态，迁移时仅取白名单字段 */
+interface LegacyPersistedStateV0 {
+  userProfile?: unknown;
+  semester?: unknown;
+  courses?: unknown;
+  schedules?: unknown;
+  assignments?: unknown;
+  calendarMarks?: unknown;
+  groupProjects?: unknown;
+  assignmentTimeSlice?: unknown;
+}
+
+const TIME_SLICES: TimeSliceFilter[] = ["all", "overdue", "today", "3days", "7days", "completed"];
+
+function isValidSemester(v: unknown): v is Semester {
+  return (
+    !!v &&
+    typeof v === "object" &&
+    typeof (v as Semester).name === "string" &&
+    typeof (v as Semester).startDate === "string" &&
+    typeof (v as Semester).totalWeeks === "number"
+  );
+}
+
+/**
+ * 从任意历史/当前持久化载荷中提取白名单字段。
+ * 保守策略：业务数组缺失 → []；可选字段非法 → 默认值；UI 瞬时状态一律丢弃。
+ */
+function sanitizePersistedState(persisted: unknown): PersistedAppState {
+  const legacy = (persisted ?? {}) as LegacyPersistedStateV0;
+  return {
+    userProfile:
+      legacy.userProfile && typeof legacy.userProfile === "object"
+        ? (legacy.userProfile as UserProfile)
+        : initialUserProfile,
+    semester: isValidSemester(legacy.semester) ? legacy.semester : createDefaultSemester(),
+    courses: Array.isArray(legacy.courses) ? (legacy.courses as Course[]) : [],
+    schedules: Array.isArray(legacy.schedules) ? (legacy.schedules as CourseSchedule[]) : [],
+    assignments: Array.isArray(legacy.assignments) ? (legacy.assignments as Assignment[]) : [],
+    calendarMarks: Array.isArray(legacy.calendarMarks)
+      ? (legacy.calendarMarks as CalendarMark[])
+      : [],
+    groupProjects: Array.isArray(legacy.groupProjects)
+      ? (legacy.groupProjects as GroupProject[])
+      : [],
+    assignmentTimeSlice: TIME_SLICES.includes(legacy.assignmentTimeSlice as TimeSliceFilter)
+      ? (legacy.assignmentTimeSlice as TimeSliceFilter)
+      : "all",
+  };
+}
+
 interface AppState {
   // Navigation & UI State
   activeTab: NavTab;
@@ -545,7 +613,36 @@ export const useAppStore = create<AppState>()(
     }),
     {
       name: "classflow-storage-v2",
+      version: 1,
       storage: createJSONStorage(() => localStorage),
+      partialize: (state): PersistedAppState => ({
+        userProfile: state.userProfile,
+        semester: state.semester,
+        courses: state.courses,
+        schedules: state.schedules,
+        assignments: state.assignments,
+        calendarMarks: state.calendarMarks,
+        groupProjects: state.groupProjects,
+        assignmentTimeSlice: state.assignmentTimeSlice,
+      }),
+      migrate: (persistedState) => sanitizePersistedState(persistedState),
+      // 旧数据可能没有 version 键（zustand 不会触发 migrate），
+      // 用 merge 兜底：只合并白名单字段，历史 UI 瞬时状态绝不进入 state。
+      merge: (persistedState, currentState) => ({
+        ...currentState,
+        ...sanitizePersistedState(persistedState),
+      }),
     }
   )
 );
+
+// 启动校正：当前教学周不持久化（避免历史周次过期），
+// 每次打开按真实日期计算并 clamp 到 [1, semester.totalWeeks]。
+{
+  const state = useAppStore.getState();
+  const week = Math.min(
+    Math.max(getSemesterWeek(new Date(), state.semester), 1),
+    state.semester.totalWeeks
+  );
+  useAppStore.setState({ currentSemesterWeek: week });
+}
