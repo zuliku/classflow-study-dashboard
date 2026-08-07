@@ -16,6 +16,18 @@ import { useAppStore } from "@/store/useAppStore";
 import { formatDistanceToNow, parseISO } from "date-fns";
 import { zhCN } from "date-fns/locale";
 
+const parseDateSafely = (dateStr: string) => {
+  if (!dateStr) return new Date();
+  try {
+    const formatted = dateStr.includes(" ") ? dateStr.replace(" ", "T") : dateStr;
+    const parsed = parseISO(formatted);
+    if (!isNaN(parsed.getTime())) return parsed;
+    const fallback = new Date(dateStr);
+    if (!isNaN(fallback.getTime())) return fallback;
+  } catch (e) {}
+  return new Date();
+};
+
 export function GroupCollaborationView() {
   const { groupProjects, toggleGroupTask, addGroupProject, courses } = useAppStore();
   const [selectedProjectId, setSelectedProjectId] = useState<string>(
@@ -295,7 +307,7 @@ export function GroupCollaborationView() {
 
               <div className="space-y-2">
                 {activeProject.tasks.map((task) => {
-                  const ddlDate = parseISO(task.ddl);
+                  const ddlDate = parseDateSafely(task.ddl);
                   return (
                     <div
                       key={task.id}
