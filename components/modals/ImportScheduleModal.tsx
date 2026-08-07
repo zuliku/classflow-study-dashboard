@@ -1,18 +1,42 @@
 "use client";
 
 import React, { useState } from "react";
-import { X, FileUp, CheckCircle, Download, FileCode, Server, AlertTriangle, ArrowRight } from "lucide-react";
+import { X, FileUp, CheckCircle, Download, FileCode, Server, AlertTriangle, ArrowRight, Info } from "lucide-react";
 import { useAppStore } from "@/store/useAppStore";
 import { parseICS, parseJSONSchedule, parseCSVSchedule, ParsedImportResult } from "@/lib/parser";
+import { findScheduleConflicts } from "@/lib/conflicts";
+import { Course, CourseSchedule, ScheduleConflict } from "@/types";
+
+const DAY_LABELS = ["一", "二", "三", "四", "五", "六", "日"];
+const dayLabel = (d: number) => `周${DAY_LABELS[d - 1]}`;
+
+// ICS/JSON/CSV 自动生成的代码不可靠，不作为重复判断依据
+function isReliableCode(code: string): boolean {
+  return !/^(ICS|JSON|CSV)-\d+$/.test(code || "");
+}
+
+interface PreviewItem {
+  course: Course;
+  slots: CourseSchedule[];
+  isDuplicate: boolean;
+  duplicateReason?: string;
+  conflicts: ScheduleConflict[];
+}
 
 export function ImportScheduleModal() {
-  const { isImportScheduleModalOpen, setImportScheduleModalOpen, importSchedules, schedules } =
-    useAppStore();
+  const {
+    isImportScheduleModalOpen,
+    setImportScheduleModalOpen,
+    importSchedules,
+    schedules,
+    courses,
+  } = useAppStore();
 
   const [activeSource, setActiveSource] = useState<"ical" | "csv" | "json">("ical");
   const [inputText, setInputText] = useState("");
   const [step, setStep] = useState<1 | 2>(1);
   const [parsedData, setParsedData] = useState<ParsedImportResult | null>(null);
+  const [skippedCourseIds, setSkippedCourseIds] = useState<string[]>([]);
 
   if (!isImportScheduleModalOpen) return null;
 
@@ -41,22 +65,71 @@ export function ImportScheduleModal() {
     }
 
     setParsedData(res);
+    setSkippedCourseIds([]);
     setStep(2);
   };
 
-  const handleConfirmImport = () => {
-    if (!parsedData || parsedData.courses.length === 0) return;
+  // 按 courseId 聚合：一门课程可对应多个上课时段
+  const previewItems: PreviewItem[] = (parsedData?.courses || []).map((course) => {
+    const slots = (parsedData?.schedules || []).filter((s) => s.courseId === course.id);
 
-    importSchedules(parsedData.courses, parsedData.schedules);
+    // 可能重复：优先依据 code，无可信 code 时按 name + teacher
+    let duplicateReason: string | undefined;
+    const candidates = [
+      ...courses,
+      ...(parsedData?.courses || []).filter((c) => c.id !== course.id),
+    ];
+    if (isReliableCode(course.code)) {
+      const dup = candidates.find((c) => c.code === course.code);
+      if (dup) duplicateReason = `${dup.name} (${dup.code})`;
+    }
+    if (!duplicateReason) {
+      const dup = candidates.find(
+        (c) => c.name === course.name && c.teacher === course.teacher
+      );
+      if (dup) duplicateReason = `${dup.name} · ${dup.teacher}`;
+    }
+
+    // 与现有课表比较：星期相同 + 时间重叠 + 至少一个共同生效周
+    const conflicts = findScheduleConflicts([...schedules, ...slots]).filter(
+      (conf) => slots.some((s) => conf.scheduleA.id === s.id || conf.scheduleB.id === s.id)
+    );
+
+    return { course, slots, isDuplicate: !!duplicateReason, duplicateReason, conflicts };
+  });
+
+  const nameById = new Map<string, string>();
+  courses.forEach((c) => nameById.set(c.id, c.name));
+  (parsedData?.courses || []).forEach((c) => nameById.set(c.id, c.name));
+
+  const skippedCount = previewItems.filter((item) => skippedCourseIds.includes(item.course.id)).length;
+  const conflictCount = previewItems.filter((item) => item.conflicts.length > 0).length;
+  const duplicateCount = previewItems.filter((item) => item.isDuplicate).length;
+
+  const toggleSkip = (courseId: string) => {
+    setSkippedCourseIds((prev) =>
+      prev.includes(courseId) ? prev.filter((id) => id !== courseId) : [...prev, courseId]
+    );
+  };
+
+  const handleConfirmImport = () => {
+    if (!parsedData) return;
+    const selectedCourses = parsedData.courses.filter((c) => !skippedCourseIds.includes(c.id));
+    if (selectedCourses.length === 0) return;
+    const selectedCourseIds = new Set(selectedCourses.map((c) => c.id));
+    const selectedSchedules = parsedData.schedules.filter((s) => selectedCourseIds.has(s.courseId));
+
+    importSchedules(selectedCourses, selectedSchedules);
     setStep(1);
     setInputText("");
     setParsedData(null);
+    setSkippedCourseIds([]);
     setImportScheduleModalOpen(false);
   };
 
   return (
     <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
-      <div className="w-full max-w-xl bg-white rounded-2xl shadow-drawer border border-[#E7E3DD] overflow-hidden flex flex-col max-h-[85vh]">
+      <div className="w-full max-w-2xl bg-white rounded-2xl shadow-drawer border border-[#E7E3DD] overflow-hidden flex flex-col max-h-[85vh]">
         {/* Header */}
         <div className="p-4 px-6 border-b border-[#F0EBE1] bg-[#F7F5F5] flex items-center justify-between">
           <div className="flex items-center space-x-2">
@@ -152,10 +225,10 @@ export function ImportScheduleModal() {
                 rows={5}
                 placeholder={
                   activeSource === "ical"
-                    ? "BEGIN:VCALENDAR\nVERSION:2.0\nBEGIN:VEVENT\nSUMMARY:计量经济学..."
+                    ? "BEGIN:VCALENDAR\nVERSION:2.0\nBEGIN:VEVENT\nSUMMARY:计量经济学\nDTSTART;TZID=Asia/Shanghai:20260824T080000\nDTEND:20260824T094000\nRRULE:FREQ=WEEKLY;BYDAY=MO\nEND:VEVENT\nEND:VCALENDAR"
                     : activeSource === "json"
                     ? '[\n  { "name": "计量经济学", "code": "ECON-301", "dayOfWeek": 2, "startTime": "08:00", "endTime": "09:40" }\n]'
-                    : "课程名称,代码,教师,教室,学分,星期,开始时间,结束时间,周次\n计量经济学,ECON-301,张教授,教二201,3,2,08:00,09:40,1-16周"
+                    : '课程名称,代码,教师,教室,学分,星期,开始时间,结束时间,周次\n"国际贸易,专题研究",ECON301,张教授,教二201,3,2,08:00,09:40,1-16周'
                 }
                 value={inputText}
                 onChange={(e) => setInputText(e.target.value)}
@@ -181,49 +254,140 @@ export function ImportScheduleModal() {
           </div>
         )}
 
-        {/* Wizard Step 2: Live Preview & Confirmation */}
+        {/* Wizard Step 2: Live Preview & Conflict Check */}
         {step === 2 && parsedData && (
           <div className="p-6 space-y-4 text-xs overflow-y-auto">
+            {/* Parsing Errors (skipped rows) */}
             {parsedData.errors.length > 0 && (
               <div className="p-3 bg-[#FDF0F0] border border-[#F8D7D7] rounded-xl text-[#D94F4F] space-y-1">
                 <div className="flex items-center space-x-1 font-bold">
                   <AlertTriangle className="w-4 h-4" />
-                  <span>解析警告</span>
+                  <span>解析错误（已跳过 {parsedData.errors.length} 条，不会导入）</span>
                 </div>
                 {parsedData.errors.map((err, i) => (
-                  <p key={i}>{err}</p>
+                  <p key={i}>· {err}</p>
+                ))}
+              </div>
+            )}
+
+            {/* Parsing Warnings (fallbacks / complex rules) */}
+            {parsedData.warnings.length > 0 && (
+              <div className="p-3 bg-[#FFF6EE] border border-[#FDE6D2] rounded-xl text-[#D97706] space-y-1">
+                <div className="flex items-center space-x-1 font-bold">
+                  <Info className="w-4 h-4" />
+                  <span>解析警告（{parsedData.warnings.length} 条，请确认后导入）</span>
+                </div>
+                {parsedData.warnings.map((w, i) => (
+                  <p key={i}>· {w}</p>
                 ))}
               </div>
             )}
 
             <div className="space-y-2">
-              <h4 className="font-bold text-charcoal flex items-center justify-between">
-                <span>即将导入的课程 ({parsedData.courses.length} 门)</span>
+              <h4 className="font-bold text-charcoal flex flex-wrap items-center justify-between gap-1">
+                <span>即将导入的课程 ({previewItems.length} 门)</span>
                 <span className="text-xs text-[#4A7C59] font-semibold">
-                  已成功解析 {parsedData.schedules.length} 个上课时段
+                  已解析 {parsedData.schedules.length} 个上课时段
+                  {skippedCount > 0 ? ` · 已跳过 ${skippedCount} 门` : ""}
                 </span>
               </h4>
 
-              {/* Preview Table */}
-              <div className="border border-[#E7E3DD] rounded-xl overflow-hidden divide-y divide-[#F5F2EE]">
-                {parsedData.courses.map((c, i) => {
-                  const sched = parsedData.schedules[i];
+              {conflictCount > 0 && (
+                <p className="text-[10px] text-[#D94F4F] bg-[#FDF0F0] border border-[#F8D7D7] rounded-lg px-2.5 py-1.5">
+                  检测到 {conflictCount} 门课程与现有课表存在时间冲突（星期相同、时间重叠且至少一个共同生效教学周）。取消勾选可跳过冲突课程后导入；1-8周 与 9-16周 等不重叠周次不会报冲突。
+                </p>
+              )}
+
+              {/* Preview Cards (aggregated by course) */}
+              <div className="space-y-2">
+                {previewItems.map((item) => {
+                  const skipped = skippedCourseIds.includes(item.course.id);
                   return (
-                    <div key={c.id} className="p-3 bg-[#F7F5F5] flex items-center justify-between text-xs">
-                      <div>
-                        <div className="font-bold text-charcoal">{c.name} ({c.code})</div>
-                        <div className="text-[10px] text-[#8C827A] mt-0.5">
-                          教师: {c.teacher} · 教室: {c.classroom} · {c.credit} 学分
+                    <div
+                      key={item.course.id}
+                      className={`p-3 rounded-xl border text-xs transition-opacity ${
+                        skipped ? "opacity-50" : ""
+                      } ${
+                        item.conflicts.length > 0
+                          ? "bg-[#FDF0F0] border-[#F8D7D7]"
+                          : item.isDuplicate
+                          ? "bg-[#FFF6EE] border-[#FDE6D2]"
+                          : "bg-[#F7F5F5] border-[#E7E3DD]"
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex items-start space-x-2 min-w-0">
+                          <input
+                            type="checkbox"
+                            checked={!skipped}
+                            onChange={() => toggleSkip(item.course.id)}
+                            className="mt-0.5 w-4 h-4 accent-charcoal cursor-pointer shrink-0"
+                            title={skipped ? "已跳过，点击恢复导入" : "点击跳过此课程"}
+                          />
+                          <div className="min-w-0">
+                            <div className="font-bold text-charcoal flex flex-wrap items-center gap-1.5">
+                              <span className="truncate">{item.course.name}</span>
+                              <span className="text-[10px] font-mono text-[#8C827A] font-medium">
+                                ({item.course.code})
+                              </span>
+                              {item.conflicts.length > 0 && (
+                                <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-[#D94F4F] text-white">
+                                  存在冲突
+                                </span>
+                              )}
+                              {item.isDuplicate && (
+                                <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-[#E28743] text-white">
+                                  可能重复
+                                </span>
+                              )}
+                              {!item.isDuplicate && item.conflicts.length === 0 && (
+                                <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-[#4A7C59] text-white">
+                                  正常
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-[10px] text-[#8C827A] mt-0.5">
+                              教师: {item.course.teacher} · 教室: {item.course.classroom} ·{" "}
+                              {item.course.credit} 学分
+                            </div>
+                            <div className="mt-1 space-y-0.5">
+                              {item.slots.length === 0 && (
+                                <div className="text-[10px] text-[#D94F4F]">该课程没有任何上课时段</div>
+                              )}
+                              {item.slots.map((s) => (
+                                <div key={s.id} className="font-mono text-[10px] font-semibold text-charcoal">
+                                  {dayLabel(s.dayOfWeek)} {s.startTime}-{s.endTime} · {s.weeks} ·{" "}
+                                  {s.location}
+                                </div>
+                              ))}
+                            </div>
+                            {item.isDuplicate && item.duplicateReason && (
+                              <p className="text-[10px] text-[#D97706] mt-1">
+                                与「{item.duplicateReason}」可能重复，请确认是否继续导入
+                              </p>
+                            )}
+                            {item.conflicts.map((conf, i) => {
+                              const slotIds = new Set(item.slots.map((s) => s.id));
+                              const other = slotIds.has(conf.scheduleA.id)
+                                ? conf.scheduleB
+                                : conf.scheduleA;
+                              const isInternal = slotIds.has(other.id);
+                              return (
+                                <p key={i} className="text-[10px] text-[#D94F4F] mt-1">
+                                  {isInternal ? (
+                                    <>本课程内部时段冲突：{dayLabel(conf.dayOfWeek)} {conf.timeRange} 且存在共同生效周</>
+                                  ) : (
+                                    <>与现有课程「{nameById.get(other.courseId) || "未知课程"}」冲突：{dayLabel(conf.dayOfWeek)} {conf.timeRange} 且存在共同生效周</>
+                                  )}
+                                </p>
+                              );
+                            })}
+                          </div>
                         </div>
+                        {skipped && (
+                          <span className="text-[10px] font-bold text-[#8C827A] shrink-0">跳过</span>
+                        )}
                       </div>
-                      {sched && (
-                        <div className="text-right">
-                          <span className="font-mono text-xs font-semibold text-charcoal">
-                            周{["一","二","三","四","五","六","日"][sched.dayOfWeek - 1]} {sched.startTime}-{sched.endTime}
-                          </span>
-                          <div className="text-[10px] text-[#8C827A]">{sched.weeks}</div>
-                        </div>
-                      )}
                     </div>
                   );
                 })}
@@ -239,14 +403,26 @@ export function ImportScheduleModal() {
               >
                 返回修改
               </button>
-              <button
-                type="button"
-                onClick={handleConfirmImport}
-                className="px-5 py-2 text-xs font-bold text-white bg-[#4A7C59] hover:bg-[#3D6649] rounded-xl flex items-center space-x-1.5"
-              >
-                <CheckCircle className="w-4 h-4" />
-                <span>确认导入到课表</span>
-              </button>
+              <div className="flex items-center space-x-2">
+                {duplicateCount > 0 && (
+                  <span className="text-[10px] text-[#D97706] font-semibold">
+                    {duplicateCount} 门可能重复
+                  </span>
+                )}
+                <button
+                  type="button"
+                  onClick={handleConfirmImport}
+                  disabled={previewItems.length - skippedCount === 0}
+                  className="px-5 py-2 text-xs font-bold text-white bg-[#4A7C59] hover:bg-[#3D6649] rounded-xl flex items-center space-x-1.5 disabled:opacity-50"
+                >
+                  <CheckCircle className="w-4 h-4" />
+                  <span>
+                    {skippedCount > 0
+                      ? `确认导入（已跳过 ${skippedCount} 门）`
+                      : "确认导入到课表"}
+                  </span>
+                </button>
+              </div>
             </div>
           </div>
         )}

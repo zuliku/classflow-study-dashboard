@@ -3,10 +3,10 @@
 import React from "react";
 import { ExternalLink, AlertTriangle, ChevronLeft, ChevronRight, MapPin, User } from "lucide-react";
 import { useAppStore, isScheduleActive } from "@/store/useAppStore";
-import { ScheduleConflict } from "@/types";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import { getWeekDateRange, formatWeekDateRange } from "@/lib/semester";
+import { findScheduleConflicts } from "@/lib/conflicts";
 
 const TIME_SLOTS = [
   "08:00",
@@ -62,31 +62,8 @@ export function TimetableGrid() {
   // Filter schedules active in currentSemesterWeek using unified isScheduleActive logic
   const activeSchedules = schedules.filter((s) => isScheduleActive(s, currentSemesterWeek));
 
-  // Conflict Detection Algorithm
-  const conflicts: ScheduleConflict[] = [];
-  weekdays.forEach((wd) => {
-    const dayScheds = activeSchedules.filter((s) => s.dayOfWeek === wd.dayOfWeek);
-    for (let i = 0; i < dayScheds.length; i++) {
-      for (let j = i + 1; j < dayScheds.length; j++) {
-        const a = dayScheds[i];
-        const b = dayScheds[j];
-        const startA = timeToMinutes(a.startTime);
-        const endA = timeToMinutes(a.endTime);
-        const startB = timeToMinutes(b.startTime);
-        const endB = timeToMinutes(b.endTime);
-
-        if (startA < endB && startB < endA) {
-          conflicts.push({
-            scheduleA: a,
-            scheduleB: b,
-            dayOfWeek: wd.dayOfWeek,
-            timeRange: `${a.startTime}-${a.endTime}`,
-          });
-        }
-      }
-    }
-  });
-
+  // 统一冲突定义（与导入器一致）：星期相同 + 时间重叠 + 至少一个共同生效教学周
+  const conflicts = findScheduleConflicts(activeSchedules);
   const firstConflict = conflicts[0];
 
   const handleOpenFullTimetable = () => {
