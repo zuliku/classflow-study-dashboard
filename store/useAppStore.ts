@@ -69,6 +69,8 @@ interface AppState {
   setImportScheduleModalOpen: (open: boolean) => void;
   isConflictModalOpen: boolean;
   setConflictModalOpen: (open: boolean) => void;
+  isFullTimetableModalOpen: boolean;
+  setFullTimetableModalOpen: (open: boolean) => void;
   selectedConflict: ScheduleConflict | null;
   setSelectedConflict: (conflict: ScheduleConflict | null) => void;
 
@@ -150,6 +152,8 @@ export const useAppStore = create<AppState>()(
       setImportScheduleModalOpen: (open) => set({ isImportScheduleModalOpen: open }),
       isConflictModalOpen: false,
       setConflictModalOpen: (open) => set({ isConflictModalOpen: open }),
+      isFullTimetableModalOpen: false,
+      setFullTimetableModalOpen: (open) => set({ isFullTimetableModalOpen: open }),
       selectedConflict: null,
       setSelectedConflict: (conflict) => set({ selectedConflict: conflict }),
 

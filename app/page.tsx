@@ -16,6 +16,7 @@ import { GlobalSearchModal } from "@/components/layout/GlobalSearchModal";
 import { AddCourseModal } from "@/components/modals/AddCourseModal";
 import { ImportScheduleModal } from "@/components/modals/ImportScheduleModal";
 import { ConflictResolutionModal } from "@/components/modals/ConflictResolutionModal";
+import { FullTimetableModal } from "@/components/modals/FullTimetableModal";
 import { useAppStore } from "@/store/useAppStore";
 import {
   BookOpen,
@@ -24,6 +25,7 @@ import {
   BarChart2,
   CheckCircle2,
   Clock,
+  ExternalLink,
 } from "lucide-react";
 import {
   PieChart,
@@ -46,6 +48,7 @@ export default function Home() {
     setSelectedCourseId,
     setAddCourseModalOpen,
     setImportScheduleModalOpen,
+    setFullTimetableModalOpen,
   } = useAppStore();
 
   // Statistics derived dynamically 100% from Zustand store
@@ -121,6 +124,13 @@ export default function Home() {
                   </p>
                 </div>
                 <div className="flex items-center space-x-2 shrink-0">
+                  <button
+                    onClick={() => setFullTimetableModalOpen(true)}
+                    className="flex items-center space-x-1.5 px-3 py-1.5 bg-white hover:bg-[#F0EBE1] text-charcoal border border-[#E0D7C6] text-xs font-bold rounded-xl transition-colors shadow-subtle"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5" />
+                    <span>放大全屏视图</span>
+                  </button>
                   <button
                     onClick={() => setAddCourseModalOpen(true)}
                     className="flex items-center space-x-1.5 px-3 py-1.5 bg-[#E3E6E0] hover:bg-[#D0D5CC] text-charcoal text-xs font-bold rounded-xl transition-colors"
@@ -389,6 +399,7 @@ export default function Home() {
       <AddCourseModal />
       <ImportScheduleModal />
       <ConflictResolutionModal />
+      <FullTimetableModal />
     </div>
   );
 }

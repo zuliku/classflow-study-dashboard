@@ -33,6 +33,8 @@ export function TimetableGrid() {
     setSelectedCourseId,
     setConflictModalOpen,
     setSelectedConflict,
+    setActiveTab,
+    setFullTimetableModalOpen,
     weekOffset,
   } = useAppStore();
 
@@ -88,6 +90,11 @@ export function TimetableGrid() {
 
   const firstConflict = conflicts[0];
 
+  const handleOpenFullTimetable = () => {
+    setActiveTab("timetable");
+    setFullTimetableModalOpen(true);
+  };
+
   return (
     <div className="bg-white border border-[#E7E3DD] rounded-2xl p-4 shadow-subtle flex flex-col justify-between h-full w-full">
       {/* Header */}
@@ -113,8 +120,8 @@ export function TimetableGrid() {
         </div>
 
         <button
-          onClick={() => setSelectedCourseId(courses[0]?.id || null)}
-          className="flex items-center space-x-1 text-xs text-[#8C827A] hover:text-charcoal transition-colors bg-[#F7F5F5] px-2 py-1 rounded-lg border border-[#E7E3DD] self-start sm:self-auto"
+          onClick={handleOpenFullTimetable}
+          className="flex items-center space-x-1 text-xs text-[#8C827A] hover:text-charcoal transition-colors bg-[#F7F5F5] hover:bg-[#F0EBE1] px-2 py-1 rounded-lg border border-[#E7E3DD] self-start sm:self-auto font-medium"
         >
           <span>查看完整课表</span>
           <ExternalLink className="w-3.5 h-3.5" />
