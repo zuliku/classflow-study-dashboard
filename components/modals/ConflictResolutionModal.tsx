@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { AlertTriangle, X, Trash2, CalendarX, Edit3, CheckCircle2 } from "lucide-react";
+import { AlertTriangle, X, Trash2 } from "lucide-react";
 import { useAppStore } from "@/store/useAppStore";
 
 export function ConflictResolutionModal() {
@@ -51,7 +51,7 @@ export function ConflictResolutionModal() {
         <div className="p-4 px-6 border-b border-[#F8D7D7] bg-[#FDF0F0] flex items-center justify-between">
           <div className="flex items-center space-x-2 text-[#D94F4F]">
             <AlertTriangle className="w-5 h-5 shrink-0" />
-            <h3 className="text-base font-bold">检测到课程时间冲突</h3>
+            <h3 className="text-base font-bold">课程时间重叠</h3>
           </div>
           <button
             onClick={() => setConflictModalOpen(false)}
@@ -64,7 +64,7 @@ export function ConflictResolutionModal() {
         {/* Content */}
         <div className="p-6 space-y-4 text-xs">
           <p className="text-[#676268]">
-            在 <span className="font-bold text-charcoal">{dayName} {timeRange}</span> （第 {currentSemesterWeek} 周），以下两门课程发生了上课时间重叠：
+            在 <span className="font-bold text-charcoal">{dayName} {timeRange}</span> （第 {currentSemesterWeek} 周），以下两门课程时间重叠：
           </p>
 
           {/* Conflicting Courses Cards */}
@@ -129,9 +129,8 @@ export function ConflictResolutionModal() {
           </div>
 
           <div className="p-3 bg-[#F7F5F5] border border-[#E7E3DD] rounded-xl text-[11px] text-[#8C827A] space-y-1">
-            <p className="font-bold text-charcoal">💡 解决方案说明：</p>
-            <p>1. 点击“本周停课”：仅在第 {currentSemesterWeek} 周跳过显示，不影响后续其他周次。</p>
-            <p>2. 点击删除图标：彻底从课表中移除该排课时间。</p>
+            <p className="font-bold text-charcoal">提示：</p>
+            <p>选“本周停课”仅在本周隐藏，选删除图标将从课表中移除该排课。</p>
           </div>
 
           {/* Footer */}

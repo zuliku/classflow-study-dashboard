@@ -5,11 +5,11 @@ import { X, BookOpen, Clock, Calendar } from "lucide-react";
 import { useAppStore } from "@/store/useAppStore";
 
 const COLOR_OPTIONS = [
-  { name: "薄荷灰绿 (Pastel Mint)", bgHex: "#E3E6E0", borderHex: "#D0D5CC", textHex: "#313032" },
-  { name: "象牙浅米 (Alabaster)", bgHex: "#F0EBE1", borderHex: "#E0D7C6", textHex: "#313032" },
-  { name: "灰米暖调 (Ashy Beige)", bgHex: "#CCCBC4", borderHex: "#B8B7B0", textHex: "#313032" },
-  { name: "石褐沙土 (Stone Beige)", bgHex: "#CDB9AB", borderHex: "#BBA494", textHex: "#313032" },
-  { name: "深砂棕 (Sandrift)", bgHex: "#A48F82", borderHex: "#8D786B", textHex: "#FFFFFF" },
+  { name: "薄荷灰绿", bgHex: "#E3E6E0", borderHex: "#D0D5CC", textHex: "#313032" },
+  { name: "象牙浅米", bgHex: "#F0EBE1", borderHex: "#E0D7C6", textHex: "#313032" },
+  { name: "灰米暖调", bgHex: "#CCCBC4", borderHex: "#B8B7B0", textHex: "#313032" },
+  { name: "石褐沙土", bgHex: "#CDB9AB", borderHex: "#BBA494", textHex: "#313032" },
+  { name: "深砂棕", bgHex: "#A48F82", borderHex: "#8D786B", textHex: "#FFFFFF" },
 ];
 
 const WEEK_RANGE_PRESETS = [
@@ -75,7 +75,7 @@ export function AddCourseModal() {
         <div className="p-4 px-6 border-b border-[#F0EBE1] bg-[#F7F5F5] flex items-center justify-between">
           <div className="flex items-center space-x-2">
             <BookOpen className="w-4 h-4 text-[#A48F82]" />
-            <h3 className="text-base font-bold text-charcoal">添加新课程与排课周次</h3>
+            <h3 className="text-base font-bold text-charcoal">添加新课程</h3>
           </div>
           <button
             onClick={() => setAddCourseModalOpen(false)}
@@ -149,14 +149,14 @@ export function AddCourseModal() {
           <div className="p-3.5 bg-[#F0EBE1]/60 border border-[#E0D7C6] rounded-xl space-y-3">
             <h4 className="font-bold text-charcoal flex items-center justify-between">
               <span className="flex items-center">
-                <Clock className="w-3.5 h-3.5 mr-1 text-[#A48F82]" /> 上课时间与周次区间
+                <Clock className="w-3.5 h-3.5 mr-1 text-[#A48F82]" /> 上课时间与周次
               </span>
             </h4>
 
             {/* Week Range Selector */}
             <div className="space-y-1">
               <label className="text-[10px] font-bold text-[#8C827A] flex items-center">
-                <Calendar className="w-3 h-3 mr-1" /> 上课周次区间（支持单双周与非衔接区间）
+                <Calendar className="w-3 h-3 mr-1" /> 周次选择
               </label>
               <select
                 value={weeksRange}
@@ -232,10 +232,10 @@ export function AddCourseModal() {
 
           {/* Description */}
           <div className="space-y-1">
-            <label className="font-bold text-[#8C827A]">课程简介</label>
+            <label className="font-bold text-[#8C827A]">课程说明</label>
             <textarea
               rows={2}
-              placeholder="课程大纲与要求..."
+              placeholder="备注 / 课程说明..."
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               className="w-full p-2.5 bg-[#F7F5F5] border border-[#E7E3DD] rounded-xl focus:outline-none resize-none"

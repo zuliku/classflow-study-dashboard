@@ -24,7 +24,6 @@ import {
   BarChart2,
   CheckCircle2,
   Clock,
-  TrendingUp,
 } from "lucide-react";
 import {
   PieChart,
@@ -62,10 +61,10 @@ export default function Home() {
   ];
 
   const priorityPieData = [
-    { name: "紧急 (Urgent)", value: assignments.filter((a) => a.priority === "urgent").length, color: "#D94F4F" },
-    { name: "高优先 (High)", value: assignments.filter((a) => a.priority === "high").length, color: "#E28743" },
-    { name: "中优先 (Medium)", value: assignments.filter((a) => a.priority === "medium").length, color: "#D9A05B" },
-    { name: "低优先 (Low)", value: assignments.filter((a) => a.priority === "low").length, color: "#4A7C59" },
+    { name: "紧急", value: assignments.filter((a) => a.priority === "urgent").length, color: "#D94F4F" },
+    { name: "高优先", value: assignments.filter((a) => a.priority === "high").length, color: "#E28743" },
+    { name: "中优先", value: assignments.filter((a) => a.priority === "medium").length, color: "#D9A05B" },
+    { name: "低优先", value: assignments.filter((a) => a.priority === "low").length, color: "#4A7C59" },
   ];
 
   return (
@@ -110,7 +109,7 @@ export default function Home() {
               <div className="bg-white border border-[#E7E3DD] rounded-2xl p-4 shadow-subtle flex flex-col sm:flex-row sm:items-center justify-between gap-3 shrink-0">
                 <div>
                   <h2 className="text-base font-bold text-charcoal mb-0.5">
-                    我的学期完整课表
+                    学期课表
                   </h2>
                   <p className="text-xs text-[#8C827A]">
                     2024-2025学年第二学期 · 经济与管理学院
@@ -146,10 +145,10 @@ export default function Home() {
               <div className="bg-white border border-[#E7E3DD] rounded-2xl p-4 shadow-subtle flex items-center justify-between">
                 <div>
                   <h2 className="text-base font-bold text-charcoal mb-0.5">
-                    作业与 DDL 管理中心
+                    作业与 DDL 清单
                   </h2>
                   <p className="text-xs text-[#8C827A]">
-                    按截止时间自动排序，实时掌控任务紧急度与完成进度
+                    所有课程作业与截止时间安排
                   </p>
                 </div>
               </div>
@@ -162,10 +161,10 @@ export default function Home() {
               <div className="bg-white border border-[#E7E3DD] rounded-2xl p-4 shadow-subtle flex items-center justify-between">
                 <div>
                   <h2 className="text-base font-bold text-charcoal mb-0.5">
-                    修读课程与课件资料
+                    本学期课程
                   </h2>
                   <p className="text-xs text-[#8C827A]">
-                    点击课程卡片可查看详细大纲、授课教师及导入课件资料
+                    点击课程卡片查看讲义与课件资料
                   </p>
                 </div>
                 <button
@@ -231,28 +230,28 @@ export default function Home() {
               <div className="bg-white border border-[#E7E3DD] rounded-2xl p-4 shadow-subtle">
                 <h2 className="text-base font-bold text-charcoal mb-0.5 flex items-center gap-2">
                   <BarChart2 className="w-4 h-4 text-[#A48F82]" />
-                  学习统计与多维分析大盘
+                  学习统计
                 </h2>
                 <p className="text-xs text-[#8C827A]">
-                  涵盖作业完成率、优先级结构分布及周打卡学习时长分析
+                  作业完成进度与本周自习时长
                 </p>
               </div>
 
-              {/* Metric Summary Cards (3 Cards layout after removing GPA) */}
+              {/* Metric Summary Cards */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="p-4 bg-white border border-[#E7E3DD] rounded-2xl shadow-subtle space-y-1">
-                  <span className="text-xs font-semibold text-[#8C827A]">任务按时完成率</span>
+                  <span className="text-xs font-semibold text-[#8C827A]">按时完成率</span>
                   <div className="text-2xl font-extrabold text-[#4A7C59]">96.5%</div>
-                  <p className="text-[10px] text-[#4A7C59] font-medium">较上月 +2.1% ↑</p>
+                  <p className="text-[10px] text-[#4A7C59] font-medium">较上周 +2.1% ↑</p>
                 </div>
                 <div className="p-4 bg-white border border-[#E7E3DD] rounded-2xl shadow-subtle space-y-1">
-                  <span className="text-xs font-semibold text-[#8C827A]">本学期修读课程</span>
+                  <span className="text-xs font-semibold text-[#8C827A]">在读课程</span>
                   <div className="text-2xl font-extrabold text-charcoal">{courses.length} 门</div>
-                  <p className="text-[10px] text-[#8C827A]">共计 27 学分</p>
+                  <p className="text-[10px] text-[#8C827A]">共 27 学分</p>
                 </div>
                 <div className="p-4 bg-white border border-[#E7E3DD] rounded-2xl shadow-subtle space-y-1">
-                  <span className="text-xs font-semibold text-[#8C827A]">已累积学习时长</span>
-                  <div className="text-2xl font-extrabold text-charcoal">142.5 h</div>
+                  <span className="text-xs font-semibold text-[#8C827A]">本周自习时长</span>
+                  <div className="text-2xl font-extrabold text-charcoal">24.5 h</div>
                   <p className="text-[10px] text-[#4A7C59]">连续打卡 24 天</p>
                 </div>
               </div>
@@ -262,7 +261,7 @@ export default function Home() {
                 {/* 1. Assignment Status Distribution Pie */}
                 <div className="bg-white border border-[#E7E3DD] rounded-2xl p-4 shadow-subtle flex flex-col justify-between">
                   <h3 className="text-sm font-bold text-charcoal pb-2 border-b border-[#F0EBE1]">
-                    作业任务完成状态分布
+                    作业任务状态
                   </h3>
                   <div className="h-56 w-full flex items-center justify-center my-2">
                     <ResponsiveContainer width="100%" height="100%">
@@ -308,7 +307,7 @@ export default function Home() {
                 {/* 2. Assignment Priority Breakdown */}
                 <div className="bg-white border border-[#E7E3DD] rounded-2xl p-4 shadow-subtle flex flex-col justify-between">
                   <h3 className="text-sm font-bold text-charcoal pb-2 border-b border-[#F0EBE1]">
-                    任务优先级结构分布
+                    任务优先级分布
                   </h3>
                   <div className="h-56 w-full flex items-center justify-center my-2">
                     <ResponsiveContainer width="100%" height="100%">
@@ -332,7 +331,7 @@ export default function Home() {
                     </ResponsiveContainer>
                   </div>
                   <p className="text-[11px] text-[#8C827A] text-center pt-2 border-t border-[#F0EBE1]">
-                    建议优先清理“紧急”与“高优先”队列
+                    临近截止的紧急任务
                   </p>
                 </div>
               </div>
@@ -348,7 +347,7 @@ export default function Home() {
             <div className="space-y-4 max-w-3xl">
               <div className="bg-white border border-[#E7E3DD] rounded-2xl p-5 shadow-subtle">
                 <h2 className="text-base font-bold text-charcoal mb-3">
-                  个人设置与偏好
+                  个人信息
                 </h2>
                 <div className="space-y-3 text-xs">
                   <div className="flex items-center space-x-3.5 p-3.5 bg-[#F7F5F5] rounded-xl border border-[#E7E3DD]">
