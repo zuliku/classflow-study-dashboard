@@ -1,11 +1,14 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { X, FileUp, CheckCircle, Download, FileCode, Server, AlertTriangle, ArrowRight, Info } from "lucide-react";
 import { useAppStore } from "@/store/useAppStore";
+import { useToastStore } from "@/store/useToastStore";
 import { parseICS, parseJSONSchedule, parseCSVSchedule, ParsedImportResult } from "@/lib/parser";
 import { findScheduleConflicts } from "@/lib/conflicts";
 import { Course, CourseSchedule, ScheduleConflict } from "@/types";
+import { usePresence } from "@/lib/usePresence";
+import { cn } from "@/lib/utils";
 
 const DAY_LABELS = ["一", "二", "三", "四", "五", "六", "日"];
 const dayLabel = (d: number) => `周${DAY_LABELS[d - 1]}`;
@@ -31,6 +34,7 @@ export function ImportScheduleModal() {
     schedules,
     courses,
   } = useAppStore();
+  const pushToast = useToastStore((s) => s.pushToast);
 
   const [activeSource, setActiveSource] = useState<"ical" | "csv" | "json">("ical");
   const [inputText, setInputText] = useState("");
@@ -38,7 +42,22 @@ export function ImportScheduleModal() {
   const [parsedData, setParsedData] = useState<ParsedImportResult | null>(null);
   const [skippedCourseIds, setSkippedCourseIds] = useState<string[]>([]);
 
-  if (!isImportScheduleModalOpen) return null;
+  const { mounted, visible } = usePresence(isImportScheduleModalOpen, 220);
+
+  // Esc 关闭（与关闭按钮行为一致：回到第一步并关闭）
+  useEffect(() => {
+    if (!mounted) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setStep(1);
+        setImportScheduleModalOpen(false);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [mounted, setImportScheduleModalOpen]);
+
+  if (!mounted) return null;
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -125,11 +144,24 @@ export function ImportScheduleModal() {
     setParsedData(null);
     setSkippedCourseIds([]);
     setImportScheduleModalOpen(false);
+    pushToast({ message: `已导入 ${selectedCourses.length} 门课程` });
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
-      <div className="w-full max-w-2xl bg-white rounded-2xl shadow-drawer border border-[#E7E3DD] overflow-hidden flex flex-col max-h-[85vh]">
+    <div
+      className={cn(
+        "fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4",
+        "ux-overlay",
+        visible ? "opacity-100" : "opacity-0"
+      )}
+    >
+      <div
+        className={cn(
+          "w-full max-w-2xl bg-white rounded-2xl shadow-drawer border border-[#E7E3DD] overflow-hidden flex flex-col max-h-[85vh]",
+          "ux-modal-panel",
+          visible ? "opacity-100 scale-100 translate-y-0" : "opacity-0 scale-[0.985] translate-y-1"
+        )}
+      >
         {/* Header */}
         <div className="p-4 px-6 border-b border-[#F0EBE1] bg-[#F7F5F5] flex items-center justify-between">
           <div className="flex items-center space-x-2">

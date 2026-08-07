@@ -1,10 +1,12 @@
 "use client";
 
-import React from "react";
+import React, { useEffect } from "react";
 import { X, CalendarDays, Printer, BookOpen, ChevronLeft, ChevronRight } from "lucide-react";
 import { useAppStore } from "@/store/useAppStore";
 import { isScheduleActive } from "@/lib/schedule";
 import { TimetableGrid } from "@/components/dashboard/TimetableGrid";
+import { usePresence } from "@/lib/usePresence";
+import { cn } from "@/lib/utils";
 
 export function FullTimetableModal() {
   const {
@@ -19,7 +21,19 @@ export function FullTimetableModal() {
     setSelectedCourseId,
   } = useAppStore();
 
-  if (!isFullTimetableModalOpen) return null;
+  const { mounted, visible } = usePresence(isFullTimetableModalOpen, 220);
+
+  // Esc 关闭
+  useEffect(() => {
+    if (!mounted) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setFullTimetableModalOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [mounted, setFullTimetableModalOpen]);
+
+  if (!mounted) return null;
 
   const totalCredits = courses.reduce((sum, c) => sum + c.credit, 0);
 
@@ -28,8 +42,20 @@ export function FullTimetableModal() {
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 sm:p-6 animate-in fade-in">
-      <div className="w-full max-w-6xl bg-white rounded-3xl shadow-2xl border border-[#E7E3DD] flex flex-col h-[94vh] overflow-hidden">
+    <div
+      className={cn(
+        "fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 sm:p-6",
+        "ux-overlay",
+        visible ? "opacity-100" : "opacity-0"
+      )}
+    >
+      <div
+        className={cn(
+          "w-full max-w-6xl bg-white rounded-3xl shadow-2xl border border-[#E7E3DD] flex flex-col h-[94vh] overflow-hidden",
+          "ux-modal-panel",
+          visible ? "opacity-100 scale-100 translate-y-0" : "opacity-0 scale-[0.985] translate-y-1"
+        )}
+      >
         {/* Modal Header */}
         <div className="p-4 px-6 border-b border-[#F0EBE1] bg-[#F7F5F5] flex flex-col sm:flex-row sm:items-center justify-between gap-3 shrink-0">
           <div className="flex items-center space-x-3">

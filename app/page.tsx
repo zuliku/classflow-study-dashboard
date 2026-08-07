@@ -20,6 +20,8 @@ import { ConflictResolutionModal } from "@/components/modals/ConflictResolutionM
 import { FullTimetableModal } from "@/components/modals/FullTimetableModal";
 import { AddAssignmentModal } from "@/components/modals/AddAssignmentModal";
 import { FilePreviewModal } from "@/components/modals/FilePreviewModal";
+import { ToastViewport } from "@/components/ui/ToastViewport";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { useAppStore } from "@/store/useAppStore";
 import { computeWeekCourseLoad } from "@/lib/studyLoad";
 import {
@@ -389,6 +391,8 @@ export default function Home() {
       <FullTimetableModal />
       <AddAssignmentModal />
       <FilePreviewModal />
+      <ConfirmDialog />
+      <ToastViewport />
     </div>
   );
 }

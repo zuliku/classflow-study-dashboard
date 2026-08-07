@@ -79,7 +79,9 @@ interface AppState {
   deleteCourse: (courseId: string) => void;
   addScheduleSlot: (schedule: Omit<CourseSchedule, "id">) => void;
   updateSchedule: (schedule: CourseSchedule) => void;
-  deleteSchedule: (scheduleId: string) => void;
+  deleteSchedule: (scheduleId: string) => CourseSchedule | null;
+  /** 撤销删除：恢复原 Schedule（保留原 ID） */
+  restoreSchedule: (schedule: CourseSchedule) => void;
   excludeWeekFromSchedule: (scheduleId: string, week: number) => void;
   importSchedules: (
     newCourses: Course[],
@@ -91,8 +93,10 @@ interface AppState {
     courseId: string,
     material: { title: string; type: Material["type"]; size?: string; url?: string; storageKey?: string }
   ) => void;
-  /** 删除资料：同步移除 Zustand metadata 与 IndexedDB 中的 Blob */
-  deleteCourseMaterial: (courseId: string, materialId: string) => void;
+  /** 删除资料：仅移除 Zustand metadata；Blob 由调用方在撤销窗口结束后延迟删除 */
+  deleteCourseMaterial: (courseId: string, materialId: string) => Material | null;
+  /** 撤销删除：恢复资料 metadata（Blob 未被删除） */
+  restoreCourseMaterial: (courseId: string, material: Material) => void;
 
   // Assignment Actions
   addAssignment: (assignment: Omit<Assignment, "id">) => void;
@@ -107,7 +111,10 @@ interface AppState {
   ) => void;
   updateAssignmentProgress: (id: string, progress: number) => void;
   toggleSubtask: (assignmentId: string, subtaskId: string) => void;
-  deleteAssignment: (id: string) => void;
+  /** 删除任务：返回被删任务与对应的 DDL CalendarMark（含兼容匹配），供撤销恢复 */
+  deleteAssignment: (id: string) => { assignment: Assignment; marks: CalendarMark[] } | null;
+  /** 撤销删除：恢复任务及对应 CalendarMark（保留原始 ID 与全部字段） */
+  restoreAssignment: (assignment: Assignment, marks: CalendarMark[]) => void;
 
   // Group Project Actions
   addGroupProject: (project: Omit<GroupProject, "id" | "progress" | "updatedAt">) => void;
@@ -280,10 +287,15 @@ export const useAppStore = create<AppState>()(
           schedules: state.schedules.map((s) => (s.id === updatedSchedule.id ? updatedSchedule : s)),
         })),
 
-      deleteSchedule: (scheduleId) =>
-        set((state) => ({
-          schedules: state.schedules.filter((s) => s.id !== scheduleId),
-        })),
+      deleteSchedule: (scheduleId) => {
+        const current = get();
+        const target = current.schedules.find((s) => s.id === scheduleId) || null;
+        set({ schedules: current.schedules.filter((s) => s.id !== scheduleId) });
+        return target;
+      },
+
+      restoreSchedule: (schedule) =>
+        set((state) => ({ schedules: [...state.schedules, schedule] })),
 
       excludeWeekFromSchedule: (scheduleId, week) =>
         set((state) => ({
@@ -330,12 +342,10 @@ export const useAppStore = create<AppState>()(
         }),
 
       deleteCourseMaterial: (courseId, materialId) => {
-        // 先删除 IndexedDB 中的 Blob，再移除 metadata
-        const targetCourse = get().courses.find((c) => c.id === courseId);
-        const targetMaterial = targetCourse?.materials.find((m) => m.id === materialId);
-        if (targetMaterial?.storageKey) {
-          deleteFileBlob(targetMaterial.storageKey).catch(() => {});
-        }
+        // 仅移除 metadata；Blob 由调用方在撤销窗口结束后延迟删除
+        const current = get();
+        const targetCourse = current.courses.find((c) => c.id === courseId);
+        const targetMaterial = targetCourse?.materials.find((m) => m.id === materialId) || null;
 
         set((state) => ({
           courses: state.courses.map((c) =>
@@ -344,7 +354,18 @@ export const useAppStore = create<AppState>()(
               : c
           ),
         }));
+
+        return targetMaterial;
       },
+
+      restoreCourseMaterial: (courseId, material) =>
+        set((state) => ({
+          courses: state.courses.map((c) =>
+            c.id === courseId && !c.materials.some((m) => m.id === material.id)
+              ? { ...c, materials: [...c.materials, material] }
+              : c
+          ),
+        })),
 
       addAssignment: (assignmentData) => {
         const newId = `a_${Date.now()}`;
@@ -455,23 +476,45 @@ export const useAppStore = create<AppState>()(
           }),
         })),
 
-      deleteAssignment: (id) =>
-        set((state) => {
-          const target = state.assignments.find((a) => a.id === id);
-          const targetDate = target ? getLocalDDLDate(target.ddl) : "";
-          const targetTitle = target ? target.title : "";
+      deleteAssignment: (id) => {
+        const current = get();
+        const target = current.assignments.find((a) => a.id === id);
+        if (!target) return null;
 
-          return {
-            assignments: state.assignments.filter((a) => a.id !== id),
-            calendarMarks: state.calendarMarks.filter((m) => {
-              // Delete linked mark by sourceId OR fallback by legacy match
-              if (m.sourceId === id) return false;
-              if (!m.sourceId && m.type === "ddl" && (m.title === targetTitle || m.date === targetDate)) return false;
-              return true;
-            }),
-            selectedAssignmentId: state.selectedAssignmentId === id ? null : state.selectedAssignmentId,
-          };
-        }),
+        const targetDate = getLocalDDLDate(target.ddl);
+        const targetTitle = target.title;
+
+        // 记录被删除的 DDL CalendarMark（sourceId 精确匹配 + 无 sourceId 的兼容匹配），供撤销恢复
+        const removedMarks: CalendarMark[] = [];
+        const nextMarks = current.calendarMarks.filter((m) => {
+          if (m.sourceId === id) {
+            removedMarks.push(m);
+            return false;
+          }
+          if (!m.sourceId && m.type === "ddl" && (m.title === targetTitle || m.date === targetDate)) {
+            removedMarks.push(m);
+            return false;
+          }
+          return true;
+        });
+
+        set({
+          assignments: current.assignments.filter((a) => a.id !== id),
+          calendarMarks: nextMarks,
+          selectedAssignmentId: current.selectedAssignmentId === id ? null : current.selectedAssignmentId,
+        });
+
+        return { assignment: target, marks: removedMarks };
+      },
+
+      restoreAssignment: (assignment, marks) =>
+        set((state) => ({
+          assignments: [assignment, ...state.assignments],
+          calendarMarks: [
+            ...state.calendarMarks,
+            ...marks.filter((m) => !state.calendarMarks.some((x) => x.id === m.id)),
+          ],
+        })),
 
       addGroupProject: (projectData) => {
         const newProject: GroupProject = {

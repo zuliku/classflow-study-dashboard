@@ -17,8 +17,11 @@ import {
   Archive,
   RefreshCw,
   AlertTriangle,
+  Loader2,
 } from "lucide-react";
 import { useAppStore } from "@/store/useAppStore";
+import { useToastStore } from "@/store/useToastStore";
+import { useConfirmStore } from "@/store/useConfirmStore";
 import { parseBackupJSON, hasMaterialStorageKeys } from "@/lib/backup";
 import { ClassFlowBackup, ClassFlowBackupData } from "@/types";
 import {
@@ -50,6 +53,9 @@ export function SettingsView() {
     setSemester,
   } = useAppStore();
 
+  const pushToast = useToastStore((s) => s.pushToast);
+  const confirmRequest = useConfirmStore((s) => s.confirm);
+
   // Personal Profile state
   const [name, setName] = useState(userProfile.name);
   const [college, setCollege] = useState(userProfile.college);
@@ -63,11 +69,12 @@ export function SettingsView() {
   const [semesterStartDate, setSemesterStartDate] = useState(semester.startDate);
   const [totalWeeks, setTotalWeeks] = useState(semester.totalWeeks);
 
-  const [savedSuccess, setSavedSuccess] = useState(false);
   const [importStatus, setImportStatus] = useState<string | null>(null);
   const [importWarning, setImportWarning] = useState<string | null>(null);
   const [materialHealth, setMaterialHealth] = useState<MaterialAvailability | null>(null);
   const [isCheckingMaterials, setIsCheckingMaterials] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
+  const [isImporting, setIsImporting] = useState(false);
 
   // 进入设置页时做一次轻量课程资料可用性检查（非常驻扫描）
   useEffect(() => {
@@ -103,8 +110,7 @@ export function SettingsView() {
       totalCredits: Number(totalCredits),
     });
 
-    setSavedSuccess(true);
-    setTimeout(() => setSavedSuccess(false), 2000);
+    pushToast({ message: "设置已保存" });
   };
 
   const handleSaveSemester = (e: React.FormEvent) => {
@@ -116,8 +122,7 @@ export function SettingsView() {
       totalWeeks: Number(totalWeeks),
     });
 
-    setSavedSuccess(true);
-    setTimeout(() => setSavedSuccess(false), 2000);
+    pushToast({ message: "设置已保存" });
   };
 
   // 导出仅数据 JSON（不包含课程附件 Blob）
@@ -147,6 +152,8 @@ export function SettingsView() {
 
   // 导出完整备份 ZIP：data.json + materials/ 下的真实文件 Blob
   const handleExportFullBackup = async () => {
+    if (isExporting) return;
+    setIsExporting(true);
     setImportStatus(null);
     setImportWarning(null);
     try {
@@ -182,7 +189,9 @@ export function SettingsView() {
         setImportWarning(null);
       }, 6000);
     } catch {
-      alert("备份导出失败，请重试");
+      pushToast({ type: "error", message: "备份导出失败，请重试" });
+    } finally {
+      setIsExporting(false);
     }
   };
 
@@ -204,7 +213,11 @@ export function SettingsView() {
     const input = e.currentTarget;
     const isZip = file.name.toLowerCase().endsWith(".zip");
 
+    if (isImporting) return;
+    setIsImporting(true);
+
     const finish = () => {
+      setIsImporting(false);
       input.value = "";
     };
 
@@ -213,7 +226,7 @@ export function SettingsView() {
       parseFullBackupFile(file)
         .then(async (outcome) => {
           if (!outcome.ok) {
-            alert(outcome.error);
+            pushToast({ type: "error", message: outcome.error });
             return;
           }
           const { data, materials, missingMaterials } = outcome.parsed;
@@ -242,9 +255,9 @@ export function SettingsView() {
             warnings.push(`「${key}」写入本地存储失败`);
           }
 
-      setImportStatus(
-        `备份已恢复：${data.courses.length} 门课程、${data.schedules.length} 个上课时段、${data.assignments.length} 项任务，附件 ${materials.size} 个`
-      );
+          setImportStatus(
+            `备份已恢复：${data.courses.length} 门课程、${data.schedules.length} 个上课时段、${data.assignments.length} 项任务，附件 ${materials.size} 个`
+          );
           if (warnings.length > 0) {
             setImportWarning(`${warnings.length} 个资料存在问题：` + warnings.join("；"));
           }
@@ -254,7 +267,7 @@ export function SettingsView() {
           }, 7000);
         })
         .catch(() => {
-          alert("读取备份文件失败，请确认文件未损坏");
+          pushToast({ type: "error", message: "无法读取备份文件，请确认文件未损坏" });
         })
         .finally(finish);
       return;
@@ -267,7 +280,7 @@ export function SettingsView() {
 
       if (!result.ok) {
         // 校验失败：保持当前数据不变，仅提示错误
-        alert(result.error);
+        pushToast({ type: "error", message: result.error });
         finish();
         return;
       }
@@ -292,10 +305,16 @@ export function SettingsView() {
   };
 
   const handleResetData = () => {
-    if (confirm("确定重置所有数据？将恢复为演示数据，现有修改会丢失。")) {
-      resetAllDataToDefault();
-      window.location.reload();
-    }
+    confirmRequest({
+      title: "重置所有数据？",
+      description: "课程、任务、日历与本地资料都会恢复为演示数据，现有修改会丢失。",
+      confirmLabel: "重置数据",
+      danger: true,
+      onConfirm: () => {
+        resetAllDataToDefault();
+        window.location.reload();
+      },
+    });
   };
 
   return (
@@ -317,13 +336,6 @@ export function SettingsView() {
       </div>
 
       {/* Feedback Alerts */}
-      {savedSuccess && (
-        <div className="p-3 bg-[#E3E6E0] border border-[#D0D5CC] rounded-xl flex items-center space-x-2 text-[#4A7C59] font-bold text-xs animate-in fade-in">
-          <CheckCircle className="w-4 h-4 shrink-0" />
-          <span>设置已保存</span>
-        </div>
-      )}
-
       {importStatus && (
         <div className="p-3 bg-[#E3E6E0] border border-[#D0D5CC] rounded-xl flex items-center space-x-2 text-[#4A7C59] font-bold text-xs animate-in fade-in">
           <CheckCircle className="w-4 h-4 shrink-0" />
@@ -530,11 +542,16 @@ export function SettingsView() {
               {/* 1. 导出完整备份 ZIP（含课程附件） */}
               <button
                 onClick={handleExportFullBackup}
-                className="flex items-center justify-between w-full p-3 bg-charcoal hover:bg-black text-white font-bold rounded-xl transition-colors"
+                disabled={isExporting || isImporting}
+                className="flex items-center justify-between w-full p-3 bg-charcoal hover:bg-black text-white font-bold rounded-xl transition-colors disabled:opacity-60"
               >
                 <div className="flex items-center space-x-2">
-                  <Archive className="w-4 h-4" />
-                  <span>导出备份 ZIP</span>
+                  {isExporting ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Archive className="w-4 h-4" />
+                  )}
+                  <span>{isExporting ? "正在导出…" : "导出备份 ZIP"}</span>
                 </div>
                 <span className="text-[10px] opacity-80 font-normal">含附件</span>
               </button>
@@ -542,7 +559,8 @@ export function SettingsView() {
               {/* 2. 导出仅数据 JSON（不含附件） */}
               <button
                 onClick={handleExportDataJSON}
-                className="flex items-center justify-between w-full p-3 bg-[#F7F5F5] hover:bg-[#F0EBE1] border border-[#E7E3DD] text-charcoal font-bold rounded-xl transition-colors"
+                disabled={isExporting || isImporting}
+                className="flex items-center justify-between w-full p-3 bg-[#F7F5F5] hover:bg-[#F0EBE1] border border-[#E7E3DD] text-charcoal font-bold rounded-xl transition-colors disabled:opacity-60"
               >
                 <div className="flex items-center space-x-2">
                   <Download className="w-4 h-4 text-[#A48F82]" />
@@ -561,11 +579,19 @@ export function SettingsView() {
               />
               <label
                 htmlFor="backup-import-input"
-                className="flex items-center justify-between w-full p-3 bg-[#F7F5F5] hover:bg-[#F0EBE1] border border-[#E7E3DD] text-charcoal font-bold rounded-xl cursor-pointer transition-colors"
+                className={`flex items-center justify-between w-full p-3 border text-charcoal font-bold rounded-xl cursor-pointer transition-colors ${
+                  isImporting
+                    ? "bg-[#E3E6E0] border-[#D0D5CC] cursor-not-allowed"
+                    : "bg-[#F7F5F5] hover:bg-[#F0EBE1] border-[#E7E3DD]"
+                }`}
               >
                 <div className="flex items-center space-x-2">
-                  <Upload className="w-4 h-4 text-[#A48F82]" />
-                  <span>导入备份</span>
+                  {isImporting ? (
+                    <Loader2 className="w-4 h-4 animate-spin text-[#8C827A]" />
+                  ) : (
+                    <Upload className="w-4 h-4 text-[#A48F82]" />
+                  )}
+                  <span>{isImporting ? "正在导入…" : "导入备份"}</span>
                 </div>
                 <span className="text-[10px] text-[#8C827A] font-normal">支持 .zip / .json</span>
               </label>

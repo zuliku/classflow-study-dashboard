@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   X,
   Plus,
@@ -15,12 +15,17 @@ import {
   Download,
   Eye,
   FileUp,
+  Loader2,
 } from "lucide-react";
 import { useAppStore } from "@/store/useAppStore";
+import { useToastStore } from "@/store/useToastStore";
+import { useConfirmStore } from "@/store/useConfirmStore";
 import { Material, CourseSchedule, ScheduleConflict } from "@/types";
-import { saveFileBlob, createStorageKey } from "@/lib/fileStorage";
+import { saveFileBlob, createStorageKey, deleteFileBlob } from "@/lib/fileStorage";
 import { WEEK_RANGE_PRESETS, isValidTimeRange } from "@/lib/schedule";
 import { findScheduleConflicts } from "@/lib/conflicts";
+import { usePresence } from "@/lib/usePresence";
+import { cn } from "@/lib/utils";
 
 const DAY_LABELS = ["一", "二", "三", "四", "五", "六", "日"];
 
@@ -65,11 +70,16 @@ export function CourseDetailDrawer() {
     addScheduleSlot,
     updateSchedule,
     deleteSchedule,
+    restoreSchedule,
     addCourseMaterial,
     deleteCourseMaterial,
+    restoreCourseMaterial,
   } = useAppStore();
+  const pushToast = useToastStore((s) => s.pushToast);
+  const confirmRequest = useConfirmStore((s) => s.confirm);
 
   const [isEditing, setIsEditing] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
 
   // Form State for editing course
   const [name, setName] = useState("");
@@ -100,7 +110,19 @@ export function CourseDetailDrawer() {
   const course = courses.find((c) => c.id === selectedCourseId);
   const courseSchedules = schedules.filter((s) => s.courseId === selectedCourseId);
 
-  if (!course) return null;
+  const { mounted, visible } = usePresence(!!course, 260);
+
+  // Esc 关闭
+  useEffect(() => {
+    if (!mounted) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setSelectedCourseId(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [mounted, setSelectedCourseId]);
+
+  if (!mounted || !course) return null;
 
   const handleStartEdit = () => {
     setName(course.name);
@@ -121,6 +143,21 @@ export function CourseDetailDrawer() {
       description,
     });
     setIsEditing(false);
+    pushToast({ message: "课程已更新" });
+  };
+
+  const handleDeleteCourse = () => {
+    confirmRequest({
+      title: "删除课程？",
+      description: `课程《${course.name}》的排课、相关任务和本地资料也会一并删除，此操作无法撤销。`,
+      confirmLabel: "删除课程",
+      danger: true,
+      onConfirm: () => {
+        deleteCourse(course.id);
+        setSelectedCourseId(null);
+        pushToast({ message: "课程已删除" });
+      },
+    });
   };
 
   // ---- Schedule 表单验证与冲突检测（新增/编辑共用，全站一致） ----
@@ -254,31 +291,81 @@ export function CourseDetailDrawer() {
     const files = e.target.files;
     if (!files || files.length === 0) return;
 
-    for (const file of Array.from(files)) {
-      const storageKey = createStorageKey();
-      try {
-        await saveFileBlob(storageKey, file);
-      } catch {
-        alert(`《${file.name}》保存失败，请重新上传`);
-        continue;
+    setIsUploading(true);
+    let uploaded = 0;
+    let failed = 0;
+    try {
+      for (const file of Array.from(files)) {
+        const storageKey = createStorageKey();
+        try {
+          await saveFileBlob(storageKey, file);
+        } catch {
+          failed += 1;
+          pushToast({ type: "error", message: `《${file.name}》保存失败，请重试` });
+          continue;
+        }
+
+        const sizeStr = (file.size / (1024 * 1024)).toFixed(2) + " MB";
+        const ext = file.name.split(".").pop()?.toLowerCase() || "";
+
+        let type: Material["type"] = "doc";
+        if (ext === "pdf") type = "pdf";
+        else if (["ppt", "pptx"].includes(ext)) type = "ppt";
+        else if (["png", "jpg", "jpeg", "svg", "gif", "webp"].includes(ext)) type = "image";
+
+        addCourseMaterial(course.id, {
+          title: file.name,
+          type,
+          size: sizeStr,
+          storageKey,
+        });
+        uploaded += 1;
       }
+    } finally {
+      setIsUploading(false);
+      e.target.value = "";
+    }
 
-      const sizeStr = (file.size / (1024 * 1024)).toFixed(2) + " MB";
-      const ext = file.name.split(".").pop()?.toLowerCase() || "";
+    if (uploaded > 0) {
+      pushToast({ message: uploaded === 1 ? "资料已上传" : `${uploaded} 份资料已上传` });
+    }
+    if (failed > 0) {
+      pushToast({ type: "warning", message: `${failed} 份资料上传失败` });
+    }
+  };
 
-      let type: Material["type"] = "doc";
-      if (ext === "pdf") type = "pdf";
-      else if (["ppt", "pptx"].includes(ext)) type = "ppt";
-      else if (["png", "jpg", "jpeg", "svg", "gif", "webp"].includes(ext)) type = "image";
-
-      addCourseMaterial(course.id, {
-        title: file.name,
-        type,
-        size: sizeStr,
-        storageKey,
+  // 删除时段：立即删除 + Toast 撤销（保留原 Schedule ID）
+  const handleDeleteSlot = (sched: CourseSchedule) => {
+    const removed = deleteSchedule(sched.id);
+    if (removed) {
+      pushToast({
+        message: "上课时段已删除",
+        actionLabel: "撤销",
+        onAction: () => restoreSchedule(removed),
       });
     }
-    e.target.value = "";
+  };
+
+  // 删除资料：先移除 metadata，Blob 在撤销窗口结束后再删
+  const handleDeleteMaterial = (mat: Material) => {
+    const removed = deleteCourseMaterial(course.id, mat.id);
+    if (!removed) return;
+    let undone = false;
+    pushToast({
+      type: "info",
+      message: "资料已删除",
+      actionLabel: "撤销",
+      onAction: () => {
+        undone = true;
+        restoreCourseMaterial(course.id, removed);
+      },
+      onDismiss: () => {
+        if (!undone && removed.storageKey) {
+          deleteFileBlob(removed.storageKey).catch(() => {});
+        }
+      },
+      duration: 6000,
+    });
   };
 
   const handlePreviewMaterial = (mat: Material) => {
@@ -288,8 +375,20 @@ export function CourseDetailDrawer() {
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex justify-end animate-in fade-in">
-      <div className="w-full max-w-lg bg-white h-full shadow-drawer border-l border-[#E7E3DD] flex flex-col justify-between overflow-hidden">
+    <div
+      className={cn(
+        "fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex justify-end",
+        "ux-overlay",
+        visible ? "opacity-100" : "opacity-0"
+      )}
+    >
+      <div
+        className={cn(
+          "w-full max-w-lg bg-white h-full shadow-drawer border-l border-[#E7E3DD] flex flex-col justify-between overflow-hidden",
+          "ux-drawer-panel",
+          visible ? "translate-x-0 opacity-100" : "translate-x-8 opacity-0"
+        )}
+      >
         {/* Header */}
         <div
           className="p-6 border-b border-[#E0D7C6] flex items-center justify-between"
@@ -329,12 +428,7 @@ export function CourseDetailDrawer() {
             )}
 
             <button
-              onClick={() => {
-                if (confirm(`删除课程《${course.name}》及其所有排课时段？`)) {
-                  deleteCourse(course.id);
-                  setSelectedCourseId(null);
-                }
-              }}
+              onClick={handleDeleteCourse}
               className="p-2 rounded-xl text-[#D94F4F] hover:bg-[#FDF0F0] transition-colors border border-[#F8D7D7] bg-white/70"
               title="删除课程"
             >
@@ -549,7 +643,7 @@ export function CourseDetailDrawer() {
                         <Edit className="w-3.5 h-3.5" />
                       </button>
                       <button
-                        onClick={() => deleteSchedule(sched.id)}
+                        onClick={() => handleDeleteSlot(sched)}
                         className="p-1 text-[#D94F4F] hover:bg-[#FDF0F0] rounded-lg transition-colors"
                         title="删除此排课时段"
                       >
@@ -634,10 +728,18 @@ export function CourseDetailDrawer() {
               />
               <label
                 htmlFor="real-material-upload"
-                className="flex items-center space-x-1 px-2.5 py-1 bg-charcoal hover:bg-black text-white text-[11px] font-bold rounded-xl cursor-pointer transition-colors"
+                className={`flex items-center space-x-1 px-2.5 py-1 text-[11px] font-bold rounded-xl cursor-pointer transition-colors ${
+                  isUploading
+                    ? "bg-[#E3E6E0] text-[#8C827A] cursor-not-allowed"
+                    : "bg-charcoal hover:bg-black text-white"
+                }`}
               >
-                <FileUp className="w-3 h-3" />
-                <span>上传资料</span>
+                {isUploading ? (
+                  <Loader2 className="w-3 h-3 animate-spin" />
+                ) : (
+                  <FileUp className="w-3 h-3" />
+                )}
+                <span>{isUploading ? "正在上传…" : "上传资料"}</span>
               </label>
             </div>
 
@@ -674,9 +776,7 @@ export function CourseDetailDrawer() {
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
-                          if (confirm(`删除资料「${mat.title}」？删除后无法恢复。`)) {
-                            deleteCourseMaterial(course.id, mat.id);
-                          }
+                          handleDeleteMaterial(mat);
                         }}
                         className="p-1 text-[#D94F4F] hover:bg-[#FDF0F0] rounded-lg transition-colors opacity-0 group-hover:opacity-100"
                         title="删除此资料"

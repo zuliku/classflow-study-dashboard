@@ -1,8 +1,10 @@
 "use client";
 
-import React from "react";
+import React, { useEffect } from "react";
 import { AlertTriangle, X, Trash2 } from "lucide-react";
 import { useAppStore } from "@/store/useAppStore";
+import { usePresence } from "@/lib/usePresence";
+import { cn } from "@/lib/utils";
 
 export function ConflictResolutionModal() {
   const {
@@ -15,7 +17,19 @@ export function ConflictResolutionModal() {
     excludeWeekFromSchedule,
   } = useAppStore();
 
-  if (!isConflictModalOpen || !selectedConflict) return null;
+  const { mounted, visible } = usePresence(isConflictModalOpen, 220);
+
+  // Esc 关闭
+  useEffect(() => {
+    if (!mounted) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setConflictModalOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [mounted, setConflictModalOpen]);
+
+  if (!mounted || !selectedConflict) return null;
 
   const { scheduleA, scheduleB, dayOfWeek, timeRange } = selectedConflict;
   const courseA = courses.find((c) => c.id === scheduleA.courseId);
@@ -45,8 +59,20 @@ export function ConflictResolutionModal() {
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
-      <div className="w-full max-w-md bg-white rounded-2xl shadow-drawer border border-[#E7E3DD] overflow-hidden flex flex-col">
+    <div
+      className={cn(
+        "fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4",
+        "ux-overlay",
+        visible ? "opacity-100" : "opacity-0"
+      )}
+    >
+      <div
+        className={cn(
+          "w-full max-w-md bg-white rounded-2xl shadow-drawer border border-[#E7E3DD] overflow-hidden flex flex-col",
+          "ux-modal-panel",
+          visible ? "opacity-100 scale-100 translate-y-0" : "opacity-0 scale-[0.985] translate-y-1"
+        )}
+      >
         {/* Header */}
         <div className="p-4 px-6 border-b border-[#F8D7D7] bg-[#FDF0F0] flex items-center justify-between">
           <div className="flex items-center space-x-2 text-[#D94F4F]">

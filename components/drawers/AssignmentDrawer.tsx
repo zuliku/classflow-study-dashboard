@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useEffect } from "react";
 import {
   X,
   Clock,
@@ -12,11 +12,14 @@ import {
   BookOpen,
 } from "lucide-react";
 import { useAppStore } from "@/store/useAppStore";
+import { useToastStore } from "@/store/useToastStore";
 import { Priority, AssignmentStatus } from "@/types";
 import { getPriorityMeta, getStatusMeta, getDDLStatusText } from "@/lib/utils";
 import { format } from "date-fns";
 import { zhCN } from "date-fns/locale";
 import { parseLocalDDL } from "@/lib/ddl";
+import { usePresence } from "@/lib/usePresence";
+import { cn } from "@/lib/utils";
 
 export function AssignmentDrawer() {
   const {
@@ -29,12 +32,35 @@ export function AssignmentDrawer() {
     updateAssignmentPriority,
     toggleSubtask,
     deleteAssignment,
+    restoreAssignment,
   } = useAppStore();
-
-  if (!selectedAssignmentId) return null;
+  const pushToast = useToastStore((s) => s.pushToast);
 
   const assignment = assignments.find((a) => a.id === selectedAssignmentId);
-  if (!assignment) return null;
+  const { mounted, visible } = usePresence(!!assignment, 260);
+
+  // Esc 关闭
+  useEffect(() => {
+    if (!mounted) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setSelectedAssignmentId(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [mounted, setSelectedAssignmentId]);
+
+  if (!mounted || !assignment) return null;
+
+  const handleDelete = () => {
+    const removed = deleteAssignment(assignment.id);
+    if (removed) {
+      pushToast({
+        message: "任务已删除",
+        actionLabel: "撤销",
+        onAction: () => restoreAssignment(removed.assignment, removed.marks),
+      });
+    }
+  };
 
   const course = courses.find((c) => c.id === assignment.courseId);
   const priorityMeta = getPriorityMeta(assignment.priority);
@@ -52,8 +78,20 @@ export function AssignmentDrawer() {
   }
 
   return (
-    <div className="fixed inset-0 z-50 overflow-hidden bg-black/30 backdrop-blur-sm flex justify-end transition-opacity animate-in fade-in">
-      <div className="w-full max-w-lg bg-white h-full shadow-drawer flex flex-col border-l border-[#E7E3DD] overflow-y-auto">
+    <div
+      className={cn(
+        "fixed inset-0 z-50 overflow-hidden bg-black/30 backdrop-blur-sm flex justify-end",
+        "ux-overlay",
+        visible ? "opacity-100" : "opacity-0"
+      )}
+    >
+      <div
+        className={cn(
+          "w-full max-w-lg bg-white h-full shadow-drawer flex flex-col border-l border-[#E7E3DD] overflow-y-auto",
+          "ux-drawer-panel",
+          visible ? "translate-x-0 opacity-100" : "translate-x-8 opacity-0"
+        )}
+      >
         {/* Header */}
         <div className="p-6 border-b border-[#F0EBE1] bg-[#F7F5F5] flex items-center justify-between">
           <div className="space-y-1">
@@ -214,7 +252,7 @@ export function AssignmentDrawer() {
         {/* Footer Actions */}
         <div className="p-4 border-t border-[#F0EBE1] bg-[#F7F5F5] flex items-center justify-between">
           <button
-            onClick={() => deleteAssignment(assignment.id)}
+            onClick={handleDelete}
             className="flex items-center space-x-1.5 text-xs text-[#D94F4F] hover:bg-[#FDF0F0] px-3 py-2 rounded-xl transition-colors"
           >
             <Trash2 className="w-4 h-4" />

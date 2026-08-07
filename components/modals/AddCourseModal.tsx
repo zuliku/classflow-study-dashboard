@@ -1,10 +1,13 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { X, BookOpen, Clock, Calendar, Plus, Trash2 } from "lucide-react";
 import { useAppStore } from "@/store/useAppStore";
+import { useToastStore } from "@/store/useToastStore";
 import { WEEK_RANGE_PRESETS, isValidTimeRange } from "@/lib/schedule";
 import { findScheduleConflicts } from "@/lib/conflicts";
+import { usePresence } from "@/lib/usePresence";
+import { cn } from "@/lib/utils";
 
 const COLOR_OPTIONS = [
   { name: "薄荷灰绿", bgHex: "#E3E6E0", borderHex: "#D0D5CC", textHex: "#313032" },
@@ -24,6 +27,8 @@ interface SlotInput {
 
 export function AddCourseModal() {
   const { isAddCourseModalOpen, setAddCourseModalOpen, addCourseWithSchedule, schedules, courses } = useAppStore();
+  const pushToast = useToastStore((s) => s.pushToast);
+  const submittingRef = useRef(false);
 
   const [name, setName] = useState("");
   const [code, setCode] = useState("");
@@ -39,7 +44,19 @@ export function AddCourseModal() {
     { dayOfWeek: 1, startTime: "08:00", endTime: "09:40", location: "", weeks: "1-16周" },
   ]);
 
-  if (!isAddCourseModalOpen) return null;
+  const { mounted, visible } = usePresence(isAddCourseModalOpen, 220);
+
+  // Esc 关闭
+  useEffect(() => {
+    if (!mounted) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setAddCourseModalOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [mounted, setAddCourseModalOpen]);
+
+  if (!mounted) return null;
 
   const handleAddSlot = () => {
     setFormError(null);
@@ -63,7 +80,8 @@ export function AddCourseModal() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name.trim()) return;
+    if (!name.trim() || submittingRef.current) return;
+    submittingRef.current = true;
 
     // 槽位基础校验（星期/时间/周次），错误不写入 Store
     for (let i = 0; i < scheduleSlots.length; i++) {
@@ -138,11 +156,25 @@ export function AddCourseModal() {
     setTeacher("");
     setClassroom("");
     setAddCourseModalOpen(false);
+    submittingRef.current = false;
+    pushToast({ message: "课程已创建" });
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
-      <div className="w-full max-w-lg bg-white rounded-2xl shadow-drawer border border-[#E7E3DD] overflow-hidden flex flex-col max-h-[90vh]">
+    <div
+      className={cn(
+        "fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4",
+        "ux-overlay",
+        visible ? "opacity-100" : "opacity-0"
+      )}
+    >
+      <div
+        className={cn(
+          "w-full max-w-lg bg-white rounded-2xl shadow-drawer border border-[#E7E3DD] overflow-hidden flex flex-col max-h-[90vh]",
+          "ux-modal-panel",
+          visible ? "opacity-100 scale-100 translate-y-0" : "opacity-0 scale-[0.985] translate-y-1"
+        )}
+      >
         {/* Header */}
         <div className="p-4 px-6 border-b border-[#F0EBE1] bg-[#F7F5F5] flex items-center justify-between">
           <div className="flex items-center space-x-2">

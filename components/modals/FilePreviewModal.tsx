@@ -4,6 +4,8 @@ import React, { useState, useEffect, useRef } from "react";
 import { X, Download, FileText, Loader2 } from "lucide-react";
 import { Material } from "@/types";
 import { getFileBlob } from "@/lib/fileStorage";
+import { usePresence } from "@/lib/usePresence";
+import { cn } from "@/lib/utils";
 
 export function FilePreviewModal() {
   const [isOpen, setIsOpen] = useState(false);
@@ -13,6 +15,21 @@ export function FilePreviewModal() {
   const [loadFailed, setLoadFailed] = useState(false);
 
   const objectUrlRef = useRef<string | null>(null);
+  const { mounted, visible } = usePresence(isOpen, 220);
+
+  // Esc 关闭
+  useEffect(() => {
+    if (!mounted) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setIsOpen(false);
+        releaseObjectUrl();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mounted]);
 
   const releaseObjectUrl = () => {
     if (objectUrlRef.current) {
@@ -75,7 +92,7 @@ export function FilePreviewModal() {
     releaseObjectUrl();
   };
 
-  if (!isOpen || !material) return null;
+  if (!mounted || !material) return null;
 
   const isPdf = material.type === "pdf" || material.title.endsWith(".pdf");
   const isImage =
@@ -83,8 +100,20 @@ export function FilePreviewModal() {
   const displayUrl = previewUrl ?? material.url;
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 sm:p-6 animate-in fade-in">
-      <div className="w-full max-w-4xl bg-white rounded-3xl shadow-2xl border border-[#E7E3DD] flex flex-col h-[88vh] overflow-hidden">
+    <div
+      className={cn(
+        "fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 sm:p-6",
+        "ux-overlay",
+        visible ? "opacity-100" : "opacity-0"
+      )}
+    >
+      <div
+        className={cn(
+          "w-full max-w-4xl bg-white rounded-3xl shadow-2xl border border-[#E7E3DD] flex flex-col h-[88vh] overflow-hidden",
+          "ux-modal-panel",
+          visible ? "opacity-100 scale-100 translate-y-0" : "opacity-0 scale-[0.985] translate-y-1"
+        )}
+      >
         {/* Header */}
         <div className="p-4 px-6 border-b border-[#F0EBE1] bg-[#F7F5F5] flex items-center justify-between shrink-0">
           <div className="flex items-center space-x-3 min-w-0 flex-1">

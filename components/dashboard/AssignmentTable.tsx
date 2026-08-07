@@ -13,6 +13,7 @@ import {
   BookOpen,
 } from "lucide-react";
 import { useAppStore } from "@/store/useAppStore";
+import { useToastStore } from "@/store/useToastStore";
 import { TimeSliceFilter } from "@/types";
 import { getPriorityMeta } from "@/lib/utils";
 import { isToday, differenceInDays } from "date-fns";
@@ -25,8 +26,10 @@ export function AssignmentTable() {
     setSelectedAssignmentId,
     updateAssignmentStatus,
     deleteAssignment,
+    restoreAssignment,
     setActiveTab,
   } = useAppStore();
+  const pushToast = useToastStore((s) => s.pushToast);
 
   const [courseFilter, setCourseFilter] = useState<string>("all");
   const [timeSlice, setTimeSlice] = useState<TimeSliceFilter>("all");
@@ -262,7 +265,7 @@ export function AssignmentTable() {
                   <button
                     onClick={(e) => handleEditClick(e, task.id)}
                     className="p-1 rounded-lg text-[#8C827A] hover:bg-[#E0D7C6] hover:text-charcoal transition-colors"
-                    title="编辑作业"
+                    title="编辑任务"
                   >
                     <Edit2 className="w-3.5 h-3.5" />
                   </button>
@@ -270,12 +273,17 @@ export function AssignmentTable() {
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
-                      if (confirm(`确定要删除作业《${task.title}》吗？`)) {
-                        deleteAssignment(task.id);
+                      const removed = deleteAssignment(task.id);
+                      if (removed) {
+                        pushToast({
+                          message: "任务已删除",
+                          actionLabel: "撤销",
+                          onAction: () => restoreAssignment(removed.assignment, removed.marks),
+                        });
                       }
                     }}
                     className="p-1 rounded-lg text-[#D94F4F] hover:bg-[#FDF0F0] transition-colors"
-                    title="删除作业"
+                    title="删除任务"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
                   </button>

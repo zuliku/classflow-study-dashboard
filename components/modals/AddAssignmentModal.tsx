@@ -1,11 +1,14 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { X, ClipboardList, Clock, AlertCircle, Tag, Plus, Trash2 } from "lucide-react";
 import { useAppStore } from "@/store/useAppStore";
+import { useToastStore } from "@/store/useToastStore";
 import { Assignment, Priority, AssignmentStatus, Subtask } from "@/types";
 import { combineLocalDateTime, getLocalDDLDate, getLocalDDLTime } from "@/lib/ddl";
 import { format } from "date-fns";
+import { usePresence } from "@/lib/usePresence";
+import { cn } from "@/lib/utils";
 
 export function AddAssignmentModal() {
   const {
@@ -14,9 +17,23 @@ export function AddAssignmentModal() {
     updateAssignment,
     assignments,
   } = useAppStore();
+  const pushToast = useToastStore((s) => s.pushToast);
 
   const [isOpen, setIsOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const submittingRef = useRef(false);
+
+  const { mounted, visible } = usePresence(isOpen, 220);
+
+  // Esc 关闭（表单未保存时不阻止，输入内容保留在组件内，可再次打开查看）
+  useEffect(() => {
+    if (!mounted) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setIsOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [mounted]);
 
   const [title, setTitle] = useState("");
   const [courseId, setCourseId] = useState(courses[0]?.id || "");
@@ -71,7 +88,7 @@ export function AddAssignmentModal() {
     return () => window.removeEventListener("open-assignment-modal" as any, handleOpen);
   }, [assignments, courses]);
 
-  if (!isOpen) return null;
+  if (!mounted) return null;
 
   const handleAddSubtask = () => {
     setSubtasks([...subtasks, { id: `st_${Date.now()}`, title: "", completed: false }]);
@@ -89,7 +106,8 @@ export function AddAssignmentModal() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!title.trim()) return;
+    if (!title.trim() || submittingRef.current) return;
+    submittingRef.current = true;
 
     // 本地时间语义：不追加 Z，避免 UTC 解释导致日期偏移
     const fullDdl = combineLocalDateTime(ddlDate, ddlTime);
@@ -116,6 +134,7 @@ export function AddAssignmentModal() {
         tags,
         subtasks: validSubtasks,
       });
+      pushToast({ message: "修改已保存" });
     } else {
       // Create new assignment
       addAssignment({
@@ -129,14 +148,28 @@ export function AddAssignmentModal() {
         tags,
         subtasks: validSubtasks,
       });
+      pushToast({ message: "任务已创建" });
     }
 
     setIsOpen(false);
+    submittingRef.current = false;
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
-      <div className="w-full max-w-lg bg-white rounded-2xl shadow-drawer border border-[#E7E3DD] overflow-hidden flex flex-col max-h-[90vh]">
+    <div
+      className={cn(
+        "fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4",
+        "ux-overlay",
+        visible ? "opacity-100" : "opacity-0"
+      )}
+    >
+      <div
+        className={cn(
+          "w-full max-w-lg bg-white rounded-2xl shadow-drawer border border-[#E7E3DD] overflow-hidden flex flex-col max-h-[90vh]",
+          "ux-modal-panel",
+          visible ? "opacity-100 scale-100 translate-y-0" : "opacity-0 scale-[0.985] translate-y-1"
+        )}
+      >
         {/* Header */}
         <div className="p-4 px-6 border-b border-[#F0EBE1] bg-[#F7F5F5] flex items-center justify-between">
           <div className="flex items-center space-x-2">

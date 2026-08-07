@@ -10,6 +10,12 @@
   --pastel-mint: #E3E6E0;
   --ashy-beige: #CCCBC4;
   --sandrift: #A48F82;
+
+  /* Motion tokens */
+  --motion-fast: 140ms;
+  --motion-base: 190ms;
+  --motion-panel: 260ms;
+  --ease-standard: cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
 body {
@@ -37,4 +43,82 @@ body {
 
 ::-webkit-scrollbar-thumb:hover {
   background: #A48F82;
+}
+
+/* Keyboard focus: 可见焦点环，禁用状态下不显示 */
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+[role="button"]:focus-visible {
+  outline: 2px solid rgba(49, 48, 50, 0.55);
+  outline-offset: 2px;
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+/* 按下反馈：轻缩放，短促 */
+button:active:not(:disabled) {
+  transform: scale(0.98);
+}
+
+/* 统一过渡与动效工具类 */
+@layer utilities {
+  /* 遮罩：仅透明度过渡 */
+  .ux-overlay {
+    transition: opacity var(--motion-panel) var(--ease-standard);
+  }
+
+  /* Drawer 面板：右侧滑入 + 透明度 */
+  .ux-drawer-panel {
+    transition:
+      opacity var(--motion-panel) var(--ease-standard),
+      transform var(--motion-panel) var(--ease-standard);
+  }
+
+  /* Modal 面板：轻缩放 + 上移 + 透明度 */
+  .ux-modal-panel {
+    transition:
+      opacity var(--motion-base) var(--ease-standard),
+      transform var(--motion-base) var(--ease-standard);
+  }
+
+  /* 内联面板 / Dropdown：轻微位移 + 透明度 */
+  .ux-inline {
+    transition:
+      opacity var(--motion-fast) var(--ease-standard),
+      transform var(--motion-fast) var(--ease-standard);
+  }
+
+  /* 进入动画（列表新增等） */
+  .animate-enter {
+    animation: ux-enter var(--motion-base) var(--ease-standard) both;
+  }
+}
+
+@keyframes ux-enter {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* 尊重系统减弱动效偏好 */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
