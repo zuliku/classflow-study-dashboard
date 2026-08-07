@@ -198,7 +198,8 @@ interface AppState {
   restoreAssignment: (assignment: Assignment, marks: CalendarMark[]) => void;
 
   // Group Project Actions
-  addGroupProject: (project: { courseId: string; title: string; description?: string }) => void;
+  /** 创建空项目（当前用户为组长），返回新项目 id */
+  addGroupProject: (project: { courseId: string; title: string; description?: string }) => string;
   updateGroupProject: (
     projectId: string,
     patch: { title?: string; description?: string; courseId?: string }
@@ -653,6 +654,7 @@ export const useAppStore = create<AppState>()(
         set((state) => ({
           groupProjects: [newProject, ...state.groupProjects],
         }));
+        return newProject.id;
       },
 
       updateGroupProject: (projectId, patch) =>
