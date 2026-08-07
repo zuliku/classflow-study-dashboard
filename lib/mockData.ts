@@ -1,4 +1,4 @@
-import { Course, CourseSchedule, Assignment, CalendarMark, UserProfile } from "@/types";
+import { Course, CourseSchedule, Assignment, CalendarMark, UserProfile, GroupProject } from "@/types";
 
 export const initialUserProfile: UserProfile = {
   name: "张同学",
@@ -244,4 +244,43 @@ export const mockStudyLoadData = [
   { day: "周五", hours: 3.5, courseHours: 2.0, taskHours: 1.5 },
   { day: "周六", hours: 1.5, courseHours: 0.0, taskHours: 1.5 },
   { day: "周日", hours: 1.0, courseHours: 0.0, taskHours: 1.0 },
+];
+
+export const initialGroupProjects: GroupProject[] = [
+  {
+    id: "gp1",
+    courseId: "c7",
+    title: "DTC新兴品牌4P营销与社群路径分析",
+    description: "选择瑞幸咖啡与完美日记进行对比研究，撰写20页案例报告并制作15分钟汇报Slides。",
+    progress: 65,
+    updatedAt: "2025-05-18",
+    members: [
+      { id: "m1", name: "张同学", avatarUrl: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80", role: "leader", major: "经济学" },
+      { id: "m2", name: "李华", avatarUrl: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80", role: "member", major: "市场营销" },
+      { id: "m3", name: "王敏", avatarUrl: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150&auto=format&fit=crop&q=80", role: "member", major: "工商管理" },
+    ],
+    tasks: [
+      { id: "gt1", title: "收集两家品牌2024财报数据", assigneeName: "李华", assigneeAvatar: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80", ddl: "05-20", completed: true },
+      { id: "gt2", title: "绘制小红书与微信社群引流漏斗图", assigneeName: "王敏", assigneeAvatar: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150&auto=format&fit=crop&q=80", ddl: "05-21", completed: true },
+      { id: "gt3", title: "汇总定稿PPT并录制演练", assigneeName: "张同学", assigneeAvatar: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80", ddl: "05-22", completed: false },
+    ],
+  },
+  {
+    id: "gp2",
+    courseId: "c6",
+    title: "中国碳交易市场对企业创新的面板实证研究",
+    description: "利用 Stata 对 2015-2023 A股上市公司进行双重差分 (DID) 效应评估。",
+    progress: 40,
+    updatedAt: "2025-05-16",
+    members: [
+      { id: "m1", name: "张同学", avatarUrl: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80", role: "leader", major: "经济学" },
+      { id: "m4", name: "陈晨", avatarUrl: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150&auto=format&fit=crop&q=80", role: "member", major: "金融学" },
+      { id: "m5", name: "赵强", avatarUrl: "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150&auto=format&fit=crop&q=80", role: "member", major: "统计学" },
+    ],
+    tasks: [
+      { id: "gt4", title: "匹配国泰安数据库专利与碳试点数据", assigneeName: "赵强", assigneeAvatar: "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150&auto=format&fit=crop&q=80", ddl: "05-19", completed: true },
+      { id: "gt5", title: "平行趋势检验与稳健性回归", assigneeName: "张同学", assigneeAvatar: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80", ddl: "05-21", completed: false },
+      { id: "gt6", title: "撰写机制分析与政策建议段落", assigneeName: "陈晨", assigneeAvatar: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150&auto=format&fit=crop&q=80", ddl: "05-23", completed: false },
+    ],
+  },
 ];

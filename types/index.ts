@@ -17,7 +17,7 @@ export interface Course {
   teacher: string;
   classroom: string;
   credit: number;
-  bgHex: string;     // e.g. '#E3E6E0' (Pastel Mint) or '#F0EBE1' (Alabaster)
+  bgHex: string;     // e.g. '#E3E6E0' (Pastel Mint)
   borderHex: string; // e.g. '#CCCBC4'
   textHex: string;   // e.g. '#313032'
   description?: string;
@@ -68,4 +68,33 @@ export interface UserProfile {
   studentId: string;
   completedCredits: number;
   totalCredits: number;
+}
+
+// Group Collaboration Types
+export interface GroupMember {
+  id: string;
+  name: string;
+  avatarUrl: string;
+  role: 'leader' | 'member';
+  major: string;
+}
+
+export interface GroupTask {
+  id: string;
+  title: string;
+  assigneeName: string;
+  assigneeAvatar: string;
+  ddl: string;
+  completed: boolean;
+}
+
+export interface GroupProject {
+  id: string;
+  courseId: string;
+  title: string;
+  description: string;
+  progress: number; // 0 - 100
+  members: GroupMember[];
+  tasks: GroupTask[];
+  updatedAt: string;
 }

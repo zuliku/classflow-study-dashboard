@@ -10,8 +10,9 @@ import {
   FileText,
   Download,
   Plus,
-  Calendar,
   Layers,
+  Upload,
+  Link as LinkIcon,
 } from "lucide-react";
 import { useAppStore } from "@/store/useAppStore";
 import { getPriorityMeta, getStatusMeta } from "@/lib/utils";
@@ -25,12 +26,18 @@ export function CourseDetailDrawer() {
     setSelectedCourseId,
     setSelectedAssignmentId,
     addAssignment,
+    addCourseMaterial,
   } = useAppStore();
 
   const [isAddingTask, setIsAddingTask] = useState(false);
   const [newTitle, setNewTitle] = useState("");
-  const [newDDL, setNewDDL] = useState("2026-08-15T23:59");
+  const [newDDL, setNewDDL] = useState("2025-05-25T23:59");
   const [newPriority, setNewPriority] = useState<"urgent" | "high" | "medium" | "low">("medium");
+
+  const [isUploadingMaterial, setIsUploadingMaterial] = useState(false);
+  const [matTitle, setMatTitle] = useState("");
+  const [matType, setMatType] = useState<"pdf" | "ppt" | "doc" | "link">("pdf");
+  const [matSize, setMatSize] = useState("2.5 MB");
 
   if (!selectedCourseId) return null;
 
@@ -55,6 +62,20 @@ export function CourseDetailDrawer() {
 
     setNewTitle("");
     setIsAddingTask(false);
+  };
+
+  const handleUploadMaterial = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!matTitle.trim()) return;
+
+    addCourseMaterial(course.id, {
+      title: matTitle,
+      type: matType,
+      size: matSize,
+    });
+
+    setMatTitle("");
+    setIsUploadingMaterial(false);
   };
 
   return (
@@ -156,12 +177,70 @@ export function CourseDetailDrawer() {
             </div>
           </div>
 
-          {/* Course Materials */}
+          {/* Course Materials & Import Button */}
           <div className="space-y-2">
-            <h4 className="text-xs font-bold text-[#8C827A] uppercase tracking-wider flex items-center">
-              <BookOpen className="w-3.5 h-3.5 mr-1" />
-              课程资料与课件 ({course.materials?.length || 0})
-            </h4>
+            <div className="flex items-center justify-between">
+              <h4 className="text-xs font-bold text-[#8C827A] uppercase tracking-wider flex items-center">
+                <BookOpen className="w-3.5 h-3.5 mr-1" />
+                课程资料与课件 ({course.materials?.length || 0})
+              </h4>
+              <button
+                onClick={() => setIsUploadingMaterial(!isUploadingMaterial)}
+                className="flex items-center space-x-1 text-xs text-charcoal font-medium bg-[#E3E6E0] hover:bg-[#D5DCD0] px-2.5 py-1 rounded-lg transition-colors"
+              >
+                <Upload className="w-3.5 h-3.5" />
+                <span>导入资料</span>
+              </button>
+            </div>
+
+            {/* Form for uploading/importing materials */}
+            {isUploadingMaterial && (
+              <form onSubmit={handleUploadMaterial} className="p-3.5 bg-[#F0EBE1]/80 border border-[#CDB9AB] rounded-xl space-y-3">
+                <input
+                  type="text"
+                  placeholder="资料名称 (例如: 论文资料/讲义.pdf)..."
+                  value={matTitle}
+                  onChange={(e) => setMatTitle(e.target.value)}
+                  className="w-full text-xs p-2 bg-white border border-[#E0D7C6] rounded-lg focus:outline-none focus:border-charcoal"
+                  required
+                />
+                <div className="flex space-x-2">
+                  <select
+                    value={matType}
+                    onChange={(e) => setMatType(e.target.value as any)}
+                    className="text-xs p-2 bg-white border border-[#E0D7C6] rounded-lg focus:outline-none flex-1"
+                  >
+                    <option value="pdf">PDF 文档</option>
+                    <option value="ppt">PPT 幻灯片</option>
+                    <option value="doc">Word/Notes 文档</option>
+                    <option value="link">网页链接 Link</option>
+                  </select>
+                  <input
+                    type="text"
+                    placeholder="文件大小/大小标识"
+                    value={matSize}
+                    onChange={(e) => setMatSize(e.target.value)}
+                    className="text-xs p-2 bg-white border border-[#E0D7C6] rounded-lg focus:outline-none w-28"
+                  />
+                </div>
+                <div className="flex justify-end space-x-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => setIsUploadingMaterial(false)}
+                    className="px-3 py-1 text-xs text-[#676268] bg-white border border-[#E7E3DD] rounded-lg"
+                  >
+                    取消
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-3 py-1 text-xs text-white bg-charcoal rounded-lg font-medium"
+                  >
+                    确认导入
+                  </button>
+                </div>
+              </form>
+            )}
+
             <div className="space-y-2">
               {course.materials?.map((m) => (
                 <div

@@ -8,6 +8,8 @@ import {
   UserProfile,
   AssignmentStatus,
   Priority,
+  GroupProject,
+  CourseMaterial,
 } from "@/types";
 import {
   initialCourses,
@@ -15,9 +17,10 @@ import {
   initialAssignments,
   initialCalendarMarks,
   initialUserProfile,
+  initialGroupProjects,
 } from "@/lib/mockData";
 
-export type NavTab = "overview" | "timetable" | "assignments" | "courses" | "analytics" | "settings";
+export type NavTab = "overview" | "timetable" | "assignments" | "courses" | "analytics" | "group" | "settings";
 export type ViewMode = "day" | "week" | "month";
 export type TaskFilter = "all" | "doing" | "todo" | "completed";
 
@@ -43,6 +46,12 @@ interface AppState {
   isSearchModalOpen: boolean;
   setSearchModalOpen: (open: boolean) => void;
 
+  isAddCourseModalOpen: boolean;
+  setAddCourseModalOpen: (open: boolean) => void;
+
+  isImportScheduleModalOpen: boolean;
+  setImportScheduleModalOpen: (open: boolean) => void;
+
   searchQuery: string;
   setSearchQuery: (query: string) => void;
 
@@ -56,6 +65,7 @@ interface AppState {
   schedules: CourseSchedule[];
   assignments: Assignment[];
   calendarMarks: CalendarMark[];
+  groupProjects: GroupProject[];
 
   // Actions
   updateAssignmentStatus: (id: string, status: AssignmentStatus) => void;
@@ -64,11 +74,23 @@ interface AppState {
   toggleSubtask: (assignmentId: string, subtaskId: string) => void;
   addAssignment: (assignment: Omit<Assignment, "id">) => void;
   deleteAssignment: (id: string) => void;
+
+  // Course & Schedule Actions
+  addCourseWithSchedule: (
+    courseData: Omit<Course, "id" | "materials">,
+    schedulesData: { dayOfWeek: number; startTime: string; endTime: string }[]
+  ) => void;
+  importScheduleBatch: (courses: Course[], schedules: CourseSchedule[]) => void;
+  addCourseMaterial: (courseId: string, material: Omit<CourseMaterial, "id" | "uploadDate">) => void;
+
+  // Group Collaboration Actions
+  toggleGroupTask: (projectId: string, taskId: string) => void;
+  addGroupProject: (project: Omit<GroupProject, "id" | "progress" | "updatedAt">) => void;
 }
 
 export const useAppStore = create<AppState>()(
   persist(
-    (set, get) => ({
+    (set) => ({
       activeTab: "overview",
       setActiveTab: (tab) => set({ activeTab: tab }),
 
@@ -91,6 +113,12 @@ export const useAppStore = create<AppState>()(
       isSearchModalOpen: false,
       setSearchModalOpen: (open) => set({ isSearchModalOpen: open }),
 
+      isAddCourseModalOpen: false,
+      setAddCourseModalOpen: (open) => set({ isAddCourseModalOpen: open }),
+
+      isImportScheduleModalOpen: false,
+      setImportScheduleModalOpen: (open) => set({ isImportScheduleModalOpen: open }),
+
       searchQuery: "",
       setSearchQuery: (query) => set({ searchQuery: query }),
 
@@ -102,6 +130,7 @@ export const useAppStore = create<AppState>()(
       schedules: initialSchedules,
       assignments: initialAssignments,
       calendarMarks: initialCalendarMarks,
+      groupProjects: initialGroupProjects,
 
       updateAssignmentStatus: (id, status) => {
         set((state) => ({
@@ -178,13 +207,93 @@ export const useAppStore = create<AppState>()(
             state.selectedAssignmentId === id ? null : state.selectedAssignmentId,
         }));
       },
+
+      addCourseWithSchedule: (courseData, schedulesData) => {
+        const courseId = `c_${Date.now()}`;
+        const newCourse: Course = {
+          ...courseData,
+          id: courseId,
+          materials: [],
+        };
+
+        const newSchedules: CourseSchedule[] = schedulesData.map((s, i) => ({
+          id: `s_${Date.now()}_${i}`,
+          courseId,
+          dayOfWeek: s.dayOfWeek,
+          startTime: s.startTime,
+          endTime: s.endTime,
+          location: courseData.classroom,
+          weeks: "1-16周",
+        }));
+
+        set((state) => ({
+          courses: [...state.courses, newCourse],
+          schedules: [...state.schedules, ...newSchedules],
+        }));
+      },
+
+      importScheduleBatch: (newCourses, newSchedules) => {
+        set((state) => ({
+          courses: [...state.courses, ...newCourses],
+          schedules: [...state.schedules, ...newSchedules],
+        }));
+      },
+
+      addCourseMaterial: (courseId, materialData) => {
+        const newMaterial: CourseMaterial = {
+          ...materialData,
+          id: `m_${Date.now()}`,
+          uploadDate: new Date().toISOString().split("T")[0],
+        };
+
+        set((state) => ({
+          courses: state.courses.map((c) =>
+            c.id === courseId
+              ? { ...c, materials: [newMaterial, ...c.materials] }
+              : c
+          ),
+        }));
+      },
+
+      toggleGroupTask: (projectId, taskId) => {
+        set((state) => ({
+          groupProjects: state.groupProjects.map((p) => {
+            if (p.id === projectId) {
+              const updatedTasks = p.tasks.map((t) =>
+                t.id === taskId ? { ...t, completed: !t.completed } : t
+              );
+              const completedCount = updatedTasks.filter((t) => t.completed).length;
+              const calcProgress = Math.round((completedCount / updatedTasks.length) * 100);
+              return {
+                ...p,
+                tasks: updatedTasks,
+                progress: calcProgress,
+              };
+            }
+            return p;
+          }),
+        }));
+      },
+
+      addGroupProject: (projectData) => {
+        const newProject: GroupProject = {
+          ...projectData,
+          id: `gp_${Date.now()}`,
+          progress: 0,
+          updatedAt: new Date().toISOString().split("T")[0],
+        };
+        set((state) => ({
+          groupProjects: [newProject, ...state.groupProjects],
+        }));
+      },
     }),
     {
-      name: "classflow-store-v1",
+      name: "classflow-store-v2",
       partialize: (state) => ({
         assignments: state.assignments,
         courses: state.courses,
         schedules: state.schedules,
+        groupProjects: state.groupProjects,
       }),
     }
   )

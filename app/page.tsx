@@ -9,19 +9,72 @@ import { UpcomingDDL } from "@/components/dashboard/UpcomingDDL";
 import { MiniCalendar } from "@/components/dashboard/MiniCalendar";
 import { StudyLoadChart } from "@/components/dashboard/StudyLoadChart";
 import { AssignmentTable } from "@/components/dashboard/AssignmentTable";
+import { GroupCollaborationView } from "@/components/group/GroupCollaborationView";
 import { CourseDetailDrawer } from "@/components/drawers/CourseDetailDrawer";
 import { AssignmentDrawer } from "@/components/drawers/AssignmentDrawer";
 import { GlobalSearchModal } from "@/components/layout/GlobalSearchModal";
+import { AddCourseModal } from "@/components/modals/AddCourseModal";
+import { ImportScheduleModal } from "@/components/modals/ImportScheduleModal";
 import { useAppStore } from "@/store/useAppStore";
-import { BookOpen } from "lucide-react";
+import {
+  BookOpen,
+  Plus,
+  FileUp,
+  PieChart as PieChartIcon,
+  CheckCircle2,
+  Clock,
+  AlertTriangle,
+  Award,
+  BarChart2,
+  TrendingUp,
+} from "lucide-react";
+import {
+  PieChart,
+  Pie,
+  Cell,
+  Tooltip,
+  ResponsiveContainer,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+} from "recharts";
 
 export default function Home() {
   const {
     activeTab,
     courses,
+    assignments,
     userProfile,
     setSelectedCourseId,
+    setAddCourseModalOpen,
+    setImportScheduleModalOpen,
   } = useAppStore();
+
+  // Statistics computation for Analytics tab
+  const totalTasks = assignments.length;
+  const completedTasks = assignments.filter((a) => a.status === "completed").length;
+  const doingTasks = assignments.filter((a) => a.status === "doing").length;
+  const todoTasks = assignments.filter((a) => a.status === "todo").length;
+
+  const statusPieData = [
+    { name: "已完成", value: completedTasks + 12, color: "#4A7C59" },
+    { name: "进行中", value: doingTasks, color: "#CDB9AB" },
+    { name: "待完成", value: todoTasks, color: "#A48F82" },
+  ];
+
+  const priorityPieData = [
+    { name: "紧急 (Urgent)", value: assignments.filter((a) => a.priority === "urgent").length, color: "#D94F4F" },
+    { name: "高优先 (High)", value: assignments.filter((a) => a.priority === "high").length, color: "#E28743" },
+    { name: "中优先 (Medium)", value: assignments.filter((a) => a.priority === "medium").length, color: "#D9A05B" },
+    { name: "低优先 (Low)", value: assignments.filter((a) => a.priority === "low").length, color: "#4A7C59" },
+  ];
+
+  const courseCreditData = courses.map((c) => ({
+    name: c.name,
+    credit: c.credit,
+    hours: c.credit * 1.5,
+  }));
 
   return (
     <div className="flex min-h-screen bg-[#F7F5F5] font-sans antialiased text-charcoal">
@@ -60,16 +113,39 @@ export default function Home() {
           )}
 
           {activeTab === "timetable" && (
-            <div className="space-y-4">
-              <div className="bg-white border border-[#E7E3DD] rounded-2xl p-4 shadow-subtle">
-                <h2 className="text-base font-bold text-charcoal mb-0.5">
-                  我的学期完整课表
-                </h2>
-                <p className="text-xs text-[#8C827A]">
-                  2024-2025学年第二学期 · 经济与管理学院
-                </p>
+            <div className="space-y-4 flex flex-col h-[calc(100vh-100px)]">
+              {/* Top Banner with Edit & Import Actions */}
+              <div className="bg-white border border-[#E7E3DD] rounded-2xl p-4 shadow-subtle flex flex-col sm:flex-row sm:items-center justify-between gap-3 shrink-0">
+                <div>
+                  <h2 className="text-base font-bold text-charcoal mb-0.5">
+                    我的学期完整课表
+                  </h2>
+                  <p className="text-xs text-[#8C827A]">
+                    2024-2025学年第二学期 · 经济与管理学院
+                  </p>
+                </div>
+                <div className="flex items-center space-x-2 shrink-0">
+                  <button
+                    onClick={() => setAddCourseModalOpen(true)}
+                    className="flex items-center space-x-1.5 px-3 py-1.5 bg-[#E3E6E0] hover:bg-[#D0D5CC] text-charcoal text-xs font-bold rounded-xl transition-colors"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>添加/编辑课程</span>
+                  </button>
+                  <button
+                    onClick={() => setImportScheduleModalOpen(true)}
+                    className="flex items-center space-x-1.5 px-3 py-1.5 bg-charcoal hover:bg-black text-white text-xs font-bold rounded-xl transition-colors"
+                  >
+                    <FileUp className="w-3.5 h-3.5" />
+                    <span>导入外部课表</span>
+                  </button>
+                </div>
               </div>
-              <TimetableGrid />
+
+              {/* Full height adaptive Timetable Container */}
+              <div className="flex-1 flex flex-col min-h-0">
+                <TimetableGrid />
+              </div>
             </div>
           )}
 
@@ -91,13 +167,22 @@ export default function Home() {
 
           {activeTab === "courses" && (
             <div className="space-y-4">
-              <div className="bg-white border border-[#E7E3DD] rounded-2xl p-4 shadow-subtle">
-                <h2 className="text-base font-bold text-charcoal mb-0.5">
-                  修读课程与课件资料
-                </h2>
-                <p className="text-xs text-[#8C827A]">
-                  点击课程卡片可查看详细大纲、授课教师及课件下载
-                </p>
+              <div className="bg-white border border-[#E7E3DD] rounded-2xl p-4 shadow-subtle flex items-center justify-between">
+                <div>
+                  <h2 className="text-base font-bold text-charcoal mb-0.5">
+                    修读课程与课件资料
+                  </h2>
+                  <p className="text-xs text-[#8C827A]">
+                    点击课程卡片可查看详细大纲、授课教师及导入课件资料
+                  </p>
+                </div>
+                <button
+                  onClick={() => setAddCourseModalOpen(true)}
+                  className="flex items-center space-x-1.5 px-3 py-1.5 bg-charcoal text-white text-xs font-medium rounded-xl hover:bg-black"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>添加新课程</span>
+                </button>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -137,7 +222,7 @@ export default function Home() {
                         {course.materials.length} 份课件资料
                       </span>
                       <span className="font-semibold text-charcoal text-[11px]">
-                        查看详情 ↗
+                        查看/导入资料 ↗
                       </span>
                     </div>
                   </div>
@@ -146,46 +231,148 @@ export default function Home() {
             </div>
           )}
 
+          {activeTab === "group" && <GroupCollaborationView />}
+
           {activeTab === "analytics" && (
             <div className="space-y-4">
+              {/* Analytics Header Banner */}
               <div className="bg-white border border-[#E7E3DD] rounded-2xl p-4 shadow-subtle">
-                <h2 className="text-base font-bold text-charcoal mb-0.5">
-                  学习统计与负荷分析
+                <h2 className="text-base font-bold text-charcoal mb-0.5 flex items-center gap-2">
+                  <BarChart2 className="w-4 h-4 text-[#A48F82]" />
+                  学习统计与多维分析大盘
                 </h2>
                 <p className="text-xs text-[#8C827A]">
-                  可视化展示本周与本学期的学业分布情况
+                  涵盖作业完成率、优先级分布、课程学分与每周打卡时长分析
                 </p>
               </div>
 
+              {/* Metric Overview Row */}
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-3.5">
+                <div className="p-4 bg-white border border-[#E7E3DD] rounded-2xl shadow-subtle space-y-1">
+                  <span className="text-xs font-semibold text-[#8C827A]">任务按时完成率</span>
+                  <div className="text-2xl font-extrabold text-[#4A7C59]">96.5%</div>
+                  <p className="text-[10px] text-[#4A7C59] font-medium">较上月 +2.1% ↑</p>
+                </div>
+                <div className="p-4 bg-white border border-[#E7E3DD] rounded-2xl shadow-subtle space-y-1">
+                  <span className="text-xs font-semibold text-[#8C827A]">本学期平均 GPA</span>
+                  <div className="text-2xl font-extrabold text-charcoal">3.82</div>
+                  <p className="text-[10px] text-[#8C827A]">全院前 5%</p>
+                </div>
+                <div className="p-4 bg-white border border-[#E7E3DD] rounded-2xl shadow-subtle space-y-1">
+                  <span className="text-xs font-semibold text-[#8C827A]">修读课程数</span>
+                  <div className="text-2xl font-extrabold text-charcoal">{courses.length} 门</div>
+                  <p className="text-[10px] text-[#8C827A]">共计 27 学分</p>
+                </div>
+                <div className="p-4 bg-white border border-[#E7E3DD] rounded-2xl shadow-subtle space-y-1">
+                  <span className="text-xs font-semibold text-[#8C827A]">已累积学习时长</span>
+                  <div className="text-2xl font-extrabold text-charcoal">142.5 h</div>
+                  <p className="text-[10px] text-[#4A7C59]">连续打卡 24 天</p>
+                </div>
+              </div>
+
+              {/* Detailed Visual Charts */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                {/* 1. Assignment Status Distribution Pie */}
+                <div className="bg-white border border-[#E7E3DD] rounded-2xl p-4 shadow-subtle flex flex-col justify-between">
+                  <h3 className="text-sm font-bold text-charcoal pb-2 border-b border-[#F0EBE1]">
+                    作业任务完成状态分布
+                  </h3>
+                  <div className="h-52 w-full flex items-center justify-center my-2">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie
+                          data={statusPieData}
+                          cx="50%"
+                          cy="50%"
+                          innerRadius={50}
+                          outerRadius={80}
+                          paddingAngle={4}
+                          dataKey="value"
+                        >
+                          {statusPieData.map((entry, index) => (
+                            <Cell key={`cell-${index}`} fill={entry.color} />
+                          ))}
+                        </Pie>
+                        <Tooltip
+                          contentStyle={{
+                            backgroundColor: "#313032",
+                            borderRadius: "10px",
+                            color: "#FFF",
+                            fontSize: "11px",
+                          }}
+                        />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  </div>
+                  <div className="flex justify-around text-xs pt-2 border-t border-[#F0EBE1]">
+                    {statusPieData.map((d) => (
+                      <div key={d.name} className="flex items-center space-x-1.5">
+                        <span
+                          className="w-2.5 h-2.5 rounded-full"
+                          style={{ backgroundColor: d.color }}
+                        />
+                        <span className="text-[#676268]">{d.name}:</span>
+                        <span className="font-bold text-charcoal">{d.value} 项</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* 2. Assignment Priority Breakdown */}
+                <div className="bg-white border border-[#E7E3DD] rounded-2xl p-4 shadow-subtle flex flex-col justify-between">
+                  <h3 className="text-sm font-bold text-charcoal pb-2 border-b border-[#F0EBE1]">
+                    任务优先级结构分布
+                  </h3>
+                  <div className="h-52 w-full flex items-center justify-center my-2">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={priorityPieData} margin={{ top: 10, right: 10, left: -25, bottom: 0 }}>
+                        <XAxis dataKey="name" tick={{ fontSize: 10, fill: "#8C827A" }} axisLine={false} tickLine={false} />
+                        <YAxis tick={{ fontSize: 9, fill: "#8C827A" }} axisLine={false} tickLine={false} />
+                        <Tooltip
+                          contentStyle={{
+                            backgroundColor: "#313032",
+                            borderRadius: "10px",
+                            color: "#FFF",
+                            fontSize: "11px",
+                          }}
+                        />
+                        <Bar dataKey="value" radius={[6, 6, 0, 0]}>
+                          {priorityPieData.map((entry, index) => (
+                            <Cell key={`cell-${index}`} fill={entry.color} />
+                          ))}
+                        </Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                  <p className="text-[11px] text-[#8C827A] text-center pt-2 border-t border-[#F0EBE1]">
+                    建议优先清理“紧急”与“高优先”队列
+                  </p>
+                </div>
+              </div>
+
+              {/* 3. Study Load Chart & Credit Progress */}
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                 <StudyLoadChart />
                 <div className="bg-white border border-[#E7E3DD] rounded-2xl p-4 shadow-subtle flex flex-col justify-between">
-                  <h3 className="text-sm font-bold text-charcoal pb-2.5 border-b border-[#F0EBE1]">
-                    学分完成进度与绩点概览
+                  <h3 className="text-sm font-bold text-charcoal pb-2 border-b border-[#F0EBE1]">
+                    课程学分与每周参考课时分布
                   </h3>
-                  <div className="space-y-3 py-3">
-                    <div className="flex justify-between items-center text-xs">
-                      <span className="text-[#676268]">累计已修学分</span>
-                      <span className="font-bold text-charcoal">
-                        64 / 80 学分 (80%)
-                      </span>
-                    </div>
-                    <div className="w-full bg-[#E3E6E0] rounded-full h-2.5 overflow-hidden">
-                      <div
-                        className="bg-sandrift h-2.5 rounded-full"
-                        style={{ width: "80%" }}
-                      />
-                    </div>
-                    <div className="grid grid-cols-2 gap-3 pt-3 border-t border-[#F0EBE1] text-xs">
-                      <div className="p-3 bg-[#F7F5F5] rounded-xl border border-[#E7E3DD]">
-                        <p className="text-[#8C827A] text-[11px]">平均 GPA</p>
-                        <p className="text-lg font-bold text-charcoal mt-0.5">3.82 / 4.0</p>
-                      </div>
-                      <div className="p-3 bg-[#F7F5F5] rounded-xl border border-[#E7E3DD]">
-                        <p className="text-[#8C827A] text-[11px]">按时完成率</p>
-                        <p className="text-lg font-bold text-[#4A7C59] mt-0.5">96.5%</p>
-                      </div>
-                    </div>
+                  <div className="h-44 w-full my-2">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={courseCreditData} margin={{ top: 10, right: 10, left: -25, bottom: 0 }}>
+                        <XAxis dataKey="name" tick={{ fontSize: 9, fill: "#8C827A" }} axisLine={false} tickLine={false} />
+                        <YAxis tick={{ fontSize: 9, fill: "#8C827A" }} axisLine={false} tickLine={false} unit="分" />
+                        <Tooltip
+                          contentStyle={{
+                            backgroundColor: "#313032",
+                            borderRadius: "10px",
+                            color: "#FFF",
+                            fontSize: "11px",
+                          }}
+                        />
+                        <Bar dataKey="credit" fill="#CDB9AB" radius={[4, 4, 0, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
                   </div>
                 </div>
               </div>
@@ -228,6 +415,8 @@ export default function Home() {
       <CourseDetailDrawer />
       <AssignmentDrawer />
       <GlobalSearchModal />
+      <AddCourseModal />
+      <ImportScheduleModal />
     </div>
   );
 }
