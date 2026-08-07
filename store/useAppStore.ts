@@ -12,6 +12,7 @@ import {
   ScheduleConflict,
   Semester,
   ClassFlowBackupData,
+  Material,
 } from "@/types";
 import {
   initialUserProfile,
@@ -23,6 +24,7 @@ import {
 } from "@/lib/mockData";
 import { createDefaultSemester, getSemesterWeek } from "@/lib/semester";
 import { getLocalDDLDate } from "@/lib/ddl";
+import { deleteFileBlob, clearAllFileBlobs } from "@/lib/fileStorage";
 
 export function isScheduleActive(schedule: CourseSchedule, week: number): boolean {
   if (schedule.excludedWeeks && schedule.excludedWeeks.includes(week)) {
@@ -111,8 +113,10 @@ interface AppState {
   // Material Actions
   addCourseMaterial: (
     courseId: string,
-    material: { title: string; type: "pdf" | "ppt" | "doc" | "link"; size?: string; url?: string }
+    material: { title: string; type: Material["type"]; size?: string; url?: string; storageKey?: string }
   ) => void;
+  /** 删除资料：同步移除 Zustand metadata 与 IndexedDB 中的 Blob */
+  deleteCourseMaterial: (courseId: string, materialId: string) => void;
 
   // Assignment Actions
   addAssignment: (assignment: Omit<Assignment, "id">) => void;
@@ -136,7 +140,7 @@ interface AppState {
 
 export const useAppStore = create<AppState>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       activeTab: "overview",
       setActiveTab: (tab) => set({ activeTab: tab }),
       viewMode: "week",
@@ -196,7 +200,10 @@ export const useAppStore = create<AppState>()(
           userProfile: { ...state.userProfile, ...profile },
         })),
 
-      resetAllDataToDefault: () =>
+      resetAllDataToDefault: () => {
+        // 同步清空 IndexedDB 中保存的文件 Blob（fire-and-forget）
+        clearAllFileBlobs().catch(() => {});
+
         set({
           userProfile: initialUserProfile,
           courses: initialCourses,
@@ -206,7 +213,8 @@ export const useAppStore = create<AppState>()(
           groupProjects: initialGroupProjects,
           semester: createDefaultSemester(),
           currentSemesterWeek: 1,
-        }),
+        });
+      },
 
       restoreAppData: (data) =>
         set((state) => ({
@@ -248,14 +256,21 @@ export const useAppStore = create<AppState>()(
           courses: state.courses.map((c) => (c.id === updatedCourse.id ? updatedCourse : c)),
         })),
 
-      deleteCourse: (courseId) =>
+      deleteCourse: (courseId) => {
+        // 同步清理该课程关联资料的 Blob（fire-and-forget，失败不阻塞）
+        const targetCourse = get().courses.find((c) => c.id === courseId);
+        targetCourse?.materials.forEach((m) => {
+          if (m.storageKey) deleteFileBlob(m.storageKey).catch(() => {});
+        });
+
         set((state) => ({
           courses: state.courses.filter((c) => c.id !== courseId),
           schedules: state.schedules.filter((s) => s.courseId !== courseId),
           assignments: state.assignments.filter((a) => a.courseId !== courseId),
           groupProjects: state.groupProjects.filter((gp) => gp.courseId !== courseId),
           selectedCourseId: state.selectedCourseId === courseId ? null : state.selectedCourseId,
-        })),
+        }));
+      },
 
       addScheduleSlot: (scheduleData) => {
         const newSchedule: CourseSchedule = {
@@ -292,25 +307,49 @@ export const useAppStore = create<AppState>()(
         })),
 
       addCourseMaterial: (courseId, materialData) =>
+        set((state) => {
+          const today = new Date();
+          const pad2 = (n: number) => String(n).padStart(2, "0");
+          const uploadDate = `${today.getFullYear()}-${pad2(today.getMonth() + 1)}-${pad2(today.getDate())}`;
+
+          return {
+            courses: state.courses.map((c) => {
+              if (c.id !== courseId) return c;
+              return {
+                ...c,
+                materials: [
+                  ...c.materials,
+                  {
+                    id: `m_${Date.now()}`,
+                    title: materialData.title,
+                    type: materialData.type,
+                    size: materialData.size || "1.5 MB",
+                    uploadDate,
+                    storageKey: materialData.storageKey,
+                    url: materialData.url,
+                  },
+                ],
+              };
+            }),
+          };
+        }),
+
+      deleteCourseMaterial: (courseId, materialId) => {
+        // 先删除 IndexedDB 中的 Blob，再移除 metadata
+        const targetCourse = get().courses.find((c) => c.id === courseId);
+        const targetMaterial = targetCourse?.materials.find((m) => m.id === materialId);
+        if (targetMaterial?.storageKey) {
+          deleteFileBlob(targetMaterial.storageKey).catch(() => {});
+        }
+
         set((state) => ({
-          courses: state.courses.map((c) => {
-            if (c.id !== courseId) return c;
-            return {
-              ...c,
-              materials: [
-                ...c.materials,
-                {
-                  id: `m_${Date.now()}`,
-                  title: materialData.title,
-                  type: materialData.type,
-                  size: materialData.size || "1.5 MB",
-                  uploadDate: new Date().toISOString().split("T")[0],
-                  url: materialData.url,
-                },
-              ],
-            };
-          }),
-        })),
+          courses: state.courses.map((c) =>
+            c.id === courseId
+              ? { ...c, materials: c.materials.filter((m) => m.id !== materialId) }
+              : c
+          ),
+        }));
+      },
 
       addAssignment: (assignmentData) => {
         const newId = `a_${Date.now()}`;

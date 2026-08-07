@@ -36,9 +36,12 @@ export interface Semester {
 export interface Material {
   id: string;
   title: string;
-  type: "pdf" | "ppt" | "doc" | "link";
+  type: "pdf" | "ppt" | "doc" | "link" | "image";
   size?: string;
   uploadDate: string;
+  /** IndexedDB 中的文件 Blob 键；新上传的真实文件优先使用 storageKey 持久化 */
+  storageKey?: string;
+  /** 兼容旧演示数据或外部链接；新上传文件优先使用 storageKey */
   url?: string; // Blob URL, Data URL, or external link for downloading & previewing
 }
 

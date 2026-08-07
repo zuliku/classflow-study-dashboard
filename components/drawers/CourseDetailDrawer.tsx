@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { useAppStore } from "@/store/useAppStore";
 import { Material } from "@/types";
+import { saveFileBlob, createStorageKey } from "@/lib/fileStorage";
 
 export function CourseDetailDrawer() {
   const {
@@ -30,6 +31,7 @@ export function CourseDetailDrawer() {
     addScheduleSlot,
     deleteSchedule,
     addCourseMaterial,
+    deleteCourseMaterial,
   } = useAppStore();
 
   const [isEditing, setIsEditing] = useState(false);
@@ -86,28 +88,36 @@ export function CourseDetailDrawer() {
     setNewLocation("");
   };
 
-  // Real File Upload Handler
-  const handleRealFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Real File Upload Handler: File → IndexedDB 保存 Blob → 生成 storageKey → Zustand 只存 metadata
+  const handleRealFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
 
-    Array.from(files).forEach((file) => {
+    for (const file of Array.from(files)) {
+      const storageKey = createStorageKey();
+      try {
+        await saveFileBlob(storageKey, file);
+      } catch {
+        alert(`文件「${file.name}」保存到本地存储失败，已跳过`);
+        continue;
+      }
+
       const sizeStr = (file.size / (1024 * 1024)).toFixed(2) + " MB";
-      const blobUrl = URL.createObjectURL(file);
       const ext = file.name.split(".").pop()?.toLowerCase() || "";
 
       let type: Material["type"] = "doc";
       if (ext === "pdf") type = "pdf";
       else if (["ppt", "pptx"].includes(ext)) type = "ppt";
-      else if (["png", "jpg", "jpeg", "svg"].includes(ext)) type = "link";
+      else if (["png", "jpg", "jpeg", "svg", "gif", "webp"].includes(ext)) type = "image";
 
       addCourseMaterial(course.id, {
         title: file.name,
         type,
         size: sizeStr,
-        url: blobUrl,
+        storageKey,
       });
-    });
+    }
+    e.target.value = "";
   };
 
   const handlePreviewMaterial = (mat: Material) => {
@@ -363,6 +373,18 @@ export function CourseDetailDrawer() {
                       <span className="text-[10px] bg-white border border-[#E0D7C6] px-2 py-0.5 rounded font-bold text-charcoal group-hover:bg-charcoal group-hover:text-white transition-colors">
                         查看/下载 ↗
                       </span>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (confirm(`确定要删除资料「${mat.title}」吗？删除后无法恢复。`)) {
+                            deleteCourseMaterial(course.id, mat.id);
+                          }
+                        }}
+                        className="p-1 text-[#D94F4F] hover:bg-[#FDF0F0] rounded-lg transition-colors opacity-0 group-hover:opacity-100"
+                        title="删除此资料"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
                     </div>
                   </div>
                 ))
