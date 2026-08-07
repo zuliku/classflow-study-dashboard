@@ -83,6 +83,7 @@ interface AppState {
   groupProjects: GroupProject[];
 
   // Actions
+  updateUserProfile: (profile: Partial<UserProfile>) => void;
   resetAllDataToDefault: () => void;
 
   // Course & Schedule Actions
@@ -163,6 +164,11 @@ export const useAppStore = create<AppState>()(
       assignments: initialAssignments,
       calendarMarks: initialCalendarMarks,
       groupProjects: initialGroupProjects,
+
+      updateUserProfile: (profile) =>
+        set((state) => ({
+          userProfile: { ...state.userProfile, ...profile },
+        })),
 
       resetAllDataToDefault: () =>
         set({

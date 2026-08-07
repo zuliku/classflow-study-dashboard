@@ -10,6 +10,7 @@ import { MiniCalendar } from "@/components/dashboard/MiniCalendar";
 import { StudyLoadChart } from "@/components/dashboard/StudyLoadChart";
 import { AssignmentTable } from "@/components/dashboard/AssignmentTable";
 import { GroupCollaborationView } from "@/components/group/GroupCollaborationView";
+import { SettingsView } from "@/components/settings/SettingsView";
 import { CourseDetailDrawer } from "@/components/drawers/CourseDetailDrawer";
 import { AssignmentDrawer } from "@/components/drawers/AssignmentDrawer";
 import { GlobalSearchModal } from "@/components/layout/GlobalSearchModal";
@@ -362,35 +363,7 @@ export default function Home() {
             </div>
           )}
 
-          {activeTab === "settings" && (
-            <div className="space-y-4 max-w-3xl">
-              <div className="bg-white border border-[#E7E3DD] rounded-2xl p-5 shadow-subtle">
-                <h2 className="text-base font-bold text-charcoal mb-3">
-                  个人信息
-                </h2>
-                <div className="space-y-3 text-xs">
-                  <div className="flex items-center space-x-3.5 p-3.5 bg-[#F7F5F5] rounded-xl border border-[#E7E3DD]">
-                    <img
-                      src={userProfile.avatarUrl}
-                      alt={userProfile.name}
-                      className="w-12 h-12 rounded-full object-cover border border-[#CDB9AB]"
-                    />
-                    <div>
-                      <h3 className="text-xs font-bold text-charcoal">
-                        {userProfile.name}
-                      </h3>
-                      <p className="text-[#676268] mt-0.5 text-[11px]">
-                        {userProfile.college} · {userProfile.grade}
-                      </p>
-                      <p className="text-[10px] text-[#8C827A] font-mono mt-0.5">
-                        学号: {userProfile.studentId}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
+          {activeTab === "settings" && <SettingsView />}
         </main>
       </div>
 
