@@ -18,6 +18,9 @@ const TIME_SLOTS = [
   "16:00",
   "17:00",
   "18:00",
+  "19:00",
+  "20:00",
+  "21:00",
 ];
 
 const WEEKDAYS = [
@@ -46,9 +49,9 @@ export function TimetableGrid() {
     return h * 60 + m;
   };
 
-  const dayStartMinutes = 8 * 60;  // 08:00
-  const dayEndMinutes = 18 * 60;    // 18:00
-  const totalMinutes = dayEndMinutes - dayStartMinutes; // 600 minutes total
+  const dayStartMinutes = 8 * 60;   // 08:00
+  const dayEndMinutes = 21 * 60;     // 21:00 (Includes evening classes up to 21:00)
+  const totalMinutes = dayEndMinutes - dayStartMinutes; // 780 minutes total
 
   // Filter schedules active in currentSemesterWeek
   const activeSchedules = schedules.filter((s) => {
@@ -157,12 +160,18 @@ export function TimetableGrid() {
           ))}
         </div>
 
-        {/* Timetable Body Grid */}
-        <div className="relative flex-1 grid grid-cols-8 mt-1 min-h-[460px]">
-          {/* Time Labels Column */}
-          <div className="flex flex-col justify-between text-[10px] text-[#8C827A] font-mono border-r border-[#F0EBE1] pr-1 py-0 h-full">
-            {TIME_SLOTS.map((time) => (
-              <div key={time} className="flex items-start -mt-1.5 leading-none">
+        {/* Timetable Body Grid (08:00 to 21:00 Evening Range) */}
+        <div className="relative flex-1 grid grid-cols-8 mt-1 min-h-[500px]">
+          {/* Time Labels Column - Fixed padding & top alignment so 08:00 never clips */}
+          <div className="flex flex-col justify-between text-[10px] text-[#8C827A] font-mono border-r border-[#F0EBE1] pr-1.5 py-0.5 h-full">
+            {TIME_SLOTS.map((time, idx) => (
+              <div
+                key={time}
+                className={cn(
+                  "flex items-center leading-none",
+                  idx === 0 ? "pt-0.5" : ""
+                )}
+              >
                 {time}
               </div>
             ))}
@@ -170,9 +179,9 @@ export function TimetableGrid() {
 
           {/* 7 Columns for Days */}
           <div className="col-span-7 grid grid-cols-7 relative border-l border-[#F0EBE1] h-full">
-            {/* Horizontal Grid lines */}
+            {/* Horizontal Grid lines (13 equal rows) */}
             <div className="absolute inset-0 flex flex-col justify-between pointer-events-none h-full">
-              {Array.from({ length: 10 }).map((_, i) => (
+              {Array.from({ length: 13 }).map((_, i) => (
                 <div
                   key={i}
                   className="flex-1 border-b border-[#F5F2EE] w-full"
@@ -228,17 +237,17 @@ export function TimetableGrid() {
                         )}
                         style={{
                           top: `${topPct}%`,
-                          height: `${Math.max(heightPct - 0.4, 9)}%`,
+                          height: `${Math.max(heightPct - 0.3, 7)}%`,
                           backgroundColor: hasConflict ? "#FDF0F0" : course.bgHex,
                           borderColor: hasConflict ? "#F8D7D7" : course.borderHex,
                           color: hasConflict ? "#D94F4F" : course.textHex,
                         }}
                       >
                         {/* Top Section */}
-                        <div className="space-y-1">
-                          {/* 1. Course Title (Slightly larger font size text-[13.5px]) */}
+                        <div className="space-y-0.5">
+                          {/* 1. Course Title */}
                           <div className="flex items-start justify-between">
-                            <h4 className="font-extrabold text-[13.5px] sm:text-sm tracking-tight leading-snug text-charcoal group-hover:underline">
+                            <h4 className="font-extrabold text-[13px] sm:text-sm tracking-tight leading-tight text-charcoal group-hover:underline">
                               {course.name}
                             </h4>
                             {hasConflict && (
@@ -262,7 +271,7 @@ export function TimetableGrid() {
                         </div>
 
                         {/* Bottom Row: Location Badge */}
-                        <div className="flex items-center text-[10px] opacity-90 pt-1 border-t border-black/5 font-medium">
+                        <div className="flex items-center text-[10px] opacity-90 pt-0.5 border-t border-black/5 font-medium">
                           <MapPin className="w-3 h-3 mr-1 shrink-0 opacity-75" />
                           <span className="truncate">{sched.location}</span>
                         </div>
