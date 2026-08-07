@@ -1,9 +1,8 @@
 "use client";
 
 import React from "react";
-import { ExternalLink, MapPin, Clock } from "lucide-react";
+import { ExternalLink } from "lucide-react";
 import { useAppStore } from "@/store/useAppStore";
-import { cn } from "@/lib/utils";
 
 const TIME_SLOTS = [
   "08:00",
@@ -42,9 +41,9 @@ export function TimetableGrid() {
   const totalMinutes = dayEndMinutes - dayStartMinutes; // 600 minutes total
 
   return (
-    <div className="bg-white border border-[#E7E3DD] rounded-2xl p-4 shadow-subtle flex flex-col w-full">
+    <div className="bg-white border border-[#E7E3DD] rounded-2xl p-4 shadow-subtle flex flex-col justify-between h-full w-full">
       {/* Header */}
-      <div className="flex items-center justify-between pb-3 border-b border-[#F0EBE1]">
+      <div className="flex items-center justify-between pb-2.5 border-b border-[#F0EBE1]">
         <h2 className="text-sm font-bold text-charcoal flex items-center gap-1.5">
           本周课表
         </h2>
@@ -58,9 +57,9 @@ export function TimetableGrid() {
       </div>
 
       {/* Grid Container */}
-      <div className="mt-2.5 flex-1 flex flex-col overflow-x-auto select-none">
+      <div className="mt-2 flex-1 flex flex-col overflow-x-auto select-none">
         {/* Weekday Header Row */}
-        <div className="grid grid-cols-8 border-b border-[#E7E3DD] pb-2 text-center text-xs">
+        <div className="grid grid-cols-8 border-b border-[#E7E3DD] pb-1.5 text-center text-xs">
           <div className="text-[#8C827A] font-medium py-0.5 text-[11px]">时间</div>
           {WEEKDAYS.map((wd) => (
             <div
@@ -75,12 +74,12 @@ export function TimetableGrid() {
           ))}
         </div>
 
-        {/* Timetable Body Grid with Explicit Height */}
-        <div className="relative grid grid-cols-8 mt-1 h-[520px]">
+        {/* Timetable Body Grid aligned precisely */}
+        <div className="relative grid grid-cols-8 mt-1 h-[430px]">
           {/* Time Labels Column */}
-          <div className="flex flex-col justify-between text-[11px] text-[#8C827A] font-mono border-r border-[#F0EBE1] pr-1">
+          <div className="flex flex-col justify-between text-[10px] text-[#8C827A] font-mono border-r border-[#F0EBE1] pr-1">
             {TIME_SLOTS.map((time) => (
-              <div key={time} className="h-12 flex items-start -mt-2">
+              <div key={time} className="h-[43px] flex items-start -mt-1.5">
                 {time}
               </div>
             ))}
@@ -93,7 +92,7 @@ export function TimetableGrid() {
               {TIME_SLOTS.map((_, i) => (
                 <div
                   key={i}
-                  className="border-b border-[#F5F2EE] w-full h-12"
+                  className="border-b border-[#F5F2EE] w-full h-[43px]"
                 />
               ))}
             </div>
@@ -124,22 +123,22 @@ export function TimetableGrid() {
                       <div
                         key={sched.id}
                         onClick={() => setSelectedCourseId(course.id)}
-                        className="absolute left-1 right-1 rounded-xl p-2.5 transition-all duration-200 cursor-pointer shadow-subtle hover:shadow-card hover:-translate-y-0.5 border flex flex-col justify-start space-y-1 overflow-hidden group"
+                        className="absolute left-0.5 right-0.5 rounded-xl p-2 transition-all duration-200 cursor-pointer shadow-subtle hover:shadow-card hover:-translate-y-0.5 border flex flex-col justify-start space-y-0.5 overflow-hidden group"
                         style={{
                           top: `${topPct}%`,
-                          height: `${Math.max(heightPct - 0.5, 8)}%`,
+                          height: `${Math.max(heightPct - 0.5, 9)}%`,
                           backgroundColor: course.bgHex,
                           borderColor: course.borderHex,
                           color: course.textHex,
                         }}
                       >
-                        <h4 className="font-bold text-xs leading-snug truncate group-hover:underline">
+                        <h4 className="font-bold text-[11px] leading-snug truncate group-hover:underline">
                           {course.name}
                         </h4>
-                        <p className="text-[10px] opacity-80 font-mono flex items-center shrink-0">
+                        <p className="text-[9px] opacity-85 font-mono leading-none shrink-0">
                           {sched.startTime} - {sched.endTime}
                         </p>
-                        <div className="text-[10px] opacity-85 truncate flex items-center font-medium shrink-0">
+                        <div className="text-[9px] opacity-90 truncate font-medium leading-none shrink-0">
                           {sched.location}
                         </div>
                       </div>
