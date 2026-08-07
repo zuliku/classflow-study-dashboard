@@ -8,6 +8,9 @@ import { WEEK_RANGE_PRESETS, isValidTimeRange } from "@/lib/schedule";
 import { findScheduleConflicts } from "@/lib/conflicts";
 import { usePresence } from "@/lib/usePresence";
 import { cn } from "@/lib/utils";
+import { pushOverlay, popOverlay, isTopmostOverlay } from "@/lib/overlayStack";
+
+const OVERLAY_ID = "add-course-modal";
 
 const COLOR_OPTIONS = [
   { name: "薄荷灰绿", bgHex: "#E3E6E0", borderHex: "#D0D5CC", textHex: "#313032" },
@@ -46,14 +49,18 @@ export function AddCourseModal() {
 
   const { mounted, visible } = usePresence(isAddCourseModalOpen, 220);
 
-  // Esc 关闭
+  // Esc 关闭（仅在 Overlay 栈最上层时）
   useEffect(() => {
     if (!mounted) return;
+    pushOverlay(OVERLAY_ID, 50);
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setAddCourseModalOpen(false);
+      if (e.key === "Escape" && isTopmostOverlay(OVERLAY_ID)) setAddCourseModalOpen(false);
     };
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    return () => {
+      popOverlay(OVERLAY_ID);
+      window.removeEventListener("keydown", onKey);
+    };
   }, [mounted, setAddCourseModalOpen]);
 
   if (!mounted) return null;

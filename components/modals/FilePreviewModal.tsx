@@ -6,6 +6,10 @@ import { Material } from "@/types";
 import { getFileBlob } from "@/lib/fileStorage";
 import { usePresence } from "@/lib/usePresence";
 import { cn } from "@/lib/utils";
+import { onPreviewMaterial } from "@/lib/uiEvents";
+import { pushOverlay, popOverlay, isTopmostOverlay } from "@/lib/overlayStack";
+
+const OVERLAY_ID = "file-preview-modal";
 
 export function FilePreviewModal() {
   const [isOpen, setIsOpen] = useState(false);
@@ -20,14 +24,18 @@ export function FilePreviewModal() {
   // Esc 关闭
   useEffect(() => {
     if (!mounted) return;
+    pushOverlay(OVERLAY_ID, 50);
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
+      if (e.key === "Escape" && isTopmostOverlay(OVERLAY_ID)) {
         setIsOpen(false);
         releaseObjectUrl();
       }
     };
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    return () => {
+      popOverlay(OVERLAY_ID);
+      window.removeEventListener("keydown", onKey);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mounted]);
 
@@ -40,17 +48,14 @@ export function FilePreviewModal() {
   };
 
   useEffect(() => {
-    const handlePreview = (e: CustomEvent) => {
-      if (e.detail?.material) {
-        releaseObjectUrl();
-        setMaterial(e.detail.material);
-        setLoadFailed(false);
-        setIsOpen(true);
-      }
+    const handlePreview = (material: Material) => {
+      releaseObjectUrl();
+      setMaterial(material);
+      setLoadFailed(false);
+      setIsOpen(true);
     };
 
-    window.addEventListener("preview-material" as any, handlePreview);
-    return () => window.removeEventListener("preview-material" as any, handlePreview);
+    return onPreviewMaterial(handlePreview);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

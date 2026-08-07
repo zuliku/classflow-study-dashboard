@@ -312,7 +312,21 @@ export function SettingsView() {
       danger: true,
       onConfirm: () => {
         resetAllDataToDefault();
-        window.location.reload();
+        // 保持 SPA 连续体验：同步表单状态与资料健康检查，无需整页刷新
+        const next = useAppStore.getState();
+        syncFormState({
+          userProfile: next.userProfile,
+          semester: next.semester,
+          courses: next.courses,
+          schedules: next.schedules,
+          assignments: next.assignments,
+          calendarMarks: next.calendarMarks,
+          groupProjects: next.groupProjects,
+        });
+        checkMaterialAvailability(next.courses)
+          .then((health) => setMaterialHealth(health))
+          .catch(() => {});
+        pushToast({ message: "已重置为演示数据" });
       },
     });
   };

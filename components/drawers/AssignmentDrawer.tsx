@@ -10,6 +10,8 @@ import {
   Calendar,
   AlertTriangle,
   BookOpen,
+  Edit3,
+  ChevronRight,
 } from "lucide-react";
 import { useAppStore } from "@/store/useAppStore";
 import { useToastStore } from "@/store/useToastStore";
@@ -20,6 +22,10 @@ import { zhCN } from "date-fns/locale";
 import { parseLocalDDL } from "@/lib/ddl";
 import { usePresence } from "@/lib/usePresence";
 import { cn } from "@/lib/utils";
+import { openAssignmentEditor } from "@/lib/uiEvents";
+import { pushOverlay, popOverlay, isTopmostOverlay } from "@/lib/overlayStack";
+
+const OVERLAY_ID = "assignment-drawer";
 
 export function AssignmentDrawer() {
   const {
@@ -27,6 +33,7 @@ export function AssignmentDrawer() {
     courses,
     selectedAssignmentId,
     setSelectedAssignmentId,
+    setSelectedCourseId,
     updateAssignmentStatus,
     updateAssignmentProgress,
     updateAssignmentPriority,
@@ -39,14 +46,18 @@ export function AssignmentDrawer() {
   const assignment = assignments.find((a) => a.id === selectedAssignmentId);
   const { mounted, visible } = usePresence(!!assignment, 260);
 
-  // Esc 关闭
+  // Overlay Stack：Drawer 层，Esc 只在最上层时关闭
   useEffect(() => {
     if (!mounted) return;
+    pushOverlay(OVERLAY_ID, 40);
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setSelectedAssignmentId(null);
+      if (e.key === "Escape" && isTopmostOverlay(OVERLAY_ID)) setSelectedAssignmentId(null);
     };
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    return () => {
+      popOverlay(OVERLAY_ID);
+      window.removeEventListener("keydown", onKey);
+    };
   }, [mounted, setSelectedAssignmentId]);
 
   if (!mounted || !assignment) return null;
@@ -60,6 +71,17 @@ export function AssignmentDrawer() {
         onAction: () => restoreAssignment(removed.assignment, removed.marks),
       });
     }
+  };
+
+  // 返回链路：任务 → 课程 Drawer
+  const handleOpenCourse = () => {
+    if (!course) return;
+    setSelectedAssignmentId(null);
+    setSelectedCourseId(course.id);
+  };
+
+  const handleEdit = () => {
+    openAssignmentEditor({ assignmentId: assignment.id });
   };
 
   const course = courses.find((c) => c.id === assignment.courseId);
@@ -80,7 +102,7 @@ export function AssignmentDrawer() {
   return (
     <div
       className={cn(
-        "fixed inset-0 z-50 overflow-hidden bg-black/30 backdrop-blur-sm flex justify-end",
+        "fixed inset-0 z-40 overflow-hidden bg-black/30 backdrop-blur-sm flex justify-end",
         "ux-overlay",
         visible ? "opacity-100" : "opacity-0"
       )}
@@ -95,10 +117,24 @@ export function AssignmentDrawer() {
         {/* Header */}
         <div className="p-6 border-b border-[#F0EBE1] bg-[#F7F5F5] flex items-center justify-between">
           <div className="space-y-1">
-            <span className="text-xs font-semibold text-[#8C827A] flex items-center">
-              <BookOpen className="w-3.5 h-3.5 mr-1 text-[#A48F82]" />
-              {course?.name || "常规任务"}
-            </span>
+            {course ? (
+              <button
+                onClick={handleOpenCourse}
+                className="text-xs font-semibold text-[#8C827A] flex items-center gap-1 group"
+                title="查看课程"
+              >
+                <BookOpen className="w-3.5 h-3.5 mr-1 text-[#A48F82]" />
+                <span className="group-hover:text-charcoal group-hover:underline transition-colors">
+                  {course.name}
+                </span>
+                <ChevronRight className="w-3 h-3 text-[#CDB9AB] group-hover:text-[#8C827A] transition-colors" />
+              </button>
+            ) : (
+              <span className="text-xs font-semibold text-[#8C827A] flex items-center">
+                <BookOpen className="w-3.5 h-3.5 mr-1 text-[#A48F82]" />
+                常规任务
+              </span>
+            )}
             <h2 className="text-lg font-bold text-charcoal leading-snug">
               {assignment.title}
             </h2>
@@ -251,13 +287,23 @@ export function AssignmentDrawer() {
 
         {/* Footer Actions */}
         <div className="p-4 border-t border-[#F0EBE1] bg-[#F7F5F5] flex items-center justify-between">
-          <button
-            onClick={handleDelete}
-            className="flex items-center space-x-1.5 text-xs text-[#D94F4F] hover:bg-[#FDF0F0] px-3 py-2 rounded-xl transition-colors"
-          >
-            <Trash2 className="w-4 h-4" />
-            <span>删除任务</span>
-          </button>
+          <div className="flex items-center space-x-1">
+            <button
+              onClick={handleDelete}
+              className="flex items-center space-x-1.5 text-xs text-[#D94F4F] hover:bg-[#FDF0F0] px-3 py-2 rounded-xl transition-colors"
+            >
+              <Trash2 className="w-4 h-4" />
+              <span>删除任务</span>
+            </button>
+            <button
+              onClick={handleEdit}
+              className="flex items-center space-x-1.5 text-xs text-[#676268] hover:bg-[#E0D7C6] px-3 py-2 rounded-xl transition-colors"
+              title="编辑任务"
+            >
+              <Edit3 className="w-4 h-4" />
+              <span>编辑</span>
+            </button>
+          </div>
           <button
             onClick={() => setSelectedAssignmentId(null)}
             className="px-4 py-2 bg-charcoal text-white text-xs font-medium rounded-xl hover:bg-black transition-colors"

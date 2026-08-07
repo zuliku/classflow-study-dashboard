@@ -15,6 +15,7 @@ import {
 import { useAppStore } from "@/store/useAppStore";
 import { useToastStore } from "@/store/useToastStore";
 import { TimeSliceFilter } from "@/types";
+import { openAssignmentEditor } from "@/lib/uiEvents";
 import { getPriorityMeta } from "@/lib/utils";
 import { isToday, differenceInDays } from "date-fns";
 import { parseLocalDDL, getLocalDDLDate } from "@/lib/ddl";
@@ -65,14 +66,15 @@ export function AssignmentTable() {
   });
 
   const handleAddAssignmentClick = () => {
-    window.dispatchEvent(new CustomEvent("open-assignment-modal"));
+    // 上下文继承：列表筛选了具体课程时，新任务自动预选该课程
+    openAssignmentEditor(
+      courseFilter !== "all" ? { courseId: courseFilter } : {}
+    );
   };
 
   const handleEditClick = (e: React.MouseEvent, assignmentId: string) => {
     e.stopPropagation();
-    window.dispatchEvent(
-      new CustomEvent("open-assignment-modal", { detail: { assignmentId } })
-    );
+    openAssignmentEditor({ assignmentId });
   };
 
   // Overdue count

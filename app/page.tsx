@@ -24,6 +24,7 @@ import { ToastViewport } from "@/components/ui/ToastViewport";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { useAppStore } from "@/store/useAppStore";
 import { computeWeekCourseLoad } from "@/lib/studyLoad";
+import { openAssignmentEditor } from "@/lib/uiEvents";
 import {
   BookOpen,
   Plus,
@@ -207,7 +208,7 @@ export default function Home() {
                   <div
                     key={course.id}
                     onClick={() => setSelectedCourseId(course.id)}
-                    className="p-4 rounded-2xl border transition-all duration-200 cursor-pointer shadow-subtle hover:shadow-card hover:-translate-y-1 flex flex-col justify-between"
+                    className="group p-4 rounded-2xl border transition-all duration-200 cursor-pointer shadow-subtle hover:shadow-card hover:-translate-y-1 flex flex-col justify-between"
                     style={{
                       backgroundColor: `${course.bgHex}50`,
                       borderColor: course.borderHex,
@@ -238,9 +239,21 @@ export default function Home() {
                         <BookOpen className="w-3.5 h-3.5 mr-1 text-[#A48F82]" />
                         {course.materials.length} 份资料
                       </span>
-                      <span className="font-semibold text-charcoal text-[11px]">
-                        查看资料
-                      </span>
+                      <div className="flex items-center space-x-2 shrink-0">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openAssignmentEditor({ courseId: course.id });
+                          }}
+                          className="px-2 py-0.5 rounded-lg text-[10px] font-bold text-charcoal bg-white/90 border border-[#E0D7C6] opacity-100 sm:opacity-0 sm:group-hover:opacity-100 hover:bg-[#F0EBE1] transition-all"
+                          title="添加任务"
+                        >
+                          + 任务
+                        </button>
+                        <span className="font-semibold text-charcoal text-[11px]">
+                          查看资料
+                        </span>
+                      </div>
                     </div>
                   </div>
                 ))}

@@ -9,6 +9,9 @@ import { findScheduleConflicts } from "@/lib/conflicts";
 import { Course, CourseSchedule, ScheduleConflict } from "@/types";
 import { usePresence } from "@/lib/usePresence";
 import { cn } from "@/lib/utils";
+import { pushOverlay, popOverlay, isTopmostOverlay } from "@/lib/overlayStack";
+
+const OVERLAY_ID = "import-schedule-modal";
 
 const DAY_LABELS = ["一", "二", "三", "四", "五", "六", "日"];
 const dayLabel = (d: number) => `周${DAY_LABELS[d - 1]}`;
@@ -44,17 +47,21 @@ export function ImportScheduleModal() {
 
   const { mounted, visible } = usePresence(isImportScheduleModalOpen, 220);
 
-  // Esc 关闭（与关闭按钮行为一致：回到第一步并关闭）
+  // Esc 关闭（与关闭按钮行为一致：回到第一步并关闭；仅在 Overlay 栈最上层时）
   useEffect(() => {
     if (!mounted) return;
+    pushOverlay(OVERLAY_ID, 50);
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
+      if (e.key === "Escape" && isTopmostOverlay(OVERLAY_ID)) {
         setStep(1);
         setImportScheduleModalOpen(false);
       }
     };
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    return () => {
+      popOverlay(OVERLAY_ID);
+      window.removeEventListener("keydown", onKey);
+    };
   }, [mounted, setImportScheduleModalOpen]);
 
   if (!mounted) return null;

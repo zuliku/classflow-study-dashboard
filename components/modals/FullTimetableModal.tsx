@@ -7,6 +7,9 @@ import { isScheduleActive } from "@/lib/schedule";
 import { TimetableGrid } from "@/components/dashboard/TimetableGrid";
 import { usePresence } from "@/lib/usePresence";
 import { cn } from "@/lib/utils";
+import { pushOverlay, popOverlay, isTopmostOverlay } from "@/lib/overlayStack";
+
+const OVERLAY_ID = "full-timetable-modal";
 
 export function FullTimetableModal() {
   const {
@@ -23,14 +26,18 @@ export function FullTimetableModal() {
 
   const { mounted, visible } = usePresence(isFullTimetableModalOpen, 220);
 
-  // Esc 关闭
+  // Esc 关闭（仅在 Overlay 栈最上层时）
   useEffect(() => {
     if (!mounted) return;
+    pushOverlay(OVERLAY_ID, 50);
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setFullTimetableModalOpen(false);
+      if (e.key === "Escape" && isTopmostOverlay(OVERLAY_ID)) setFullTimetableModalOpen(false);
     };
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    return () => {
+      popOverlay(OVERLAY_ID);
+      window.removeEventListener("keydown", onKey);
+    };
   }, [mounted, setFullTimetableModalOpen]);
 
   if (!mounted) return null;

@@ -5,6 +5,9 @@ import { AlertTriangle, X, Trash2 } from "lucide-react";
 import { useAppStore } from "@/store/useAppStore";
 import { usePresence } from "@/lib/usePresence";
 import { cn } from "@/lib/utils";
+import { pushOverlay, popOverlay, isTopmostOverlay } from "@/lib/overlayStack";
+
+const OVERLAY_ID = "conflict-modal";
 
 export function ConflictResolutionModal() {
   const {
@@ -19,14 +22,18 @@ export function ConflictResolutionModal() {
 
   const { mounted, visible } = usePresence(isConflictModalOpen, 220);
 
-  // Esc 关闭
+  // Esc 关闭（仅在 Overlay 栈最上层时）
   useEffect(() => {
     if (!mounted) return;
+    pushOverlay(OVERLAY_ID, 50);
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setConflictModalOpen(false);
+      if (e.key === "Escape" && isTopmostOverlay(OVERLAY_ID)) setConflictModalOpen(false);
     };
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    return () => {
+      popOverlay(OVERLAY_ID);
+      window.removeEventListener("keydown", onKey);
+    };
   }, [mounted, setConflictModalOpen]);
 
   if (!mounted || !selectedConflict) return null;

@@ -3,6 +3,11 @@
 import React, { useState, useEffect } from "react";
 import { Search, X, BookOpen, ClipboardList, ArrowRight } from "lucide-react";
 import { useAppStore } from "@/store/useAppStore";
+import { pushOverlay, popOverlay, isTopmostOverlay } from "@/lib/overlayStack";
+import { usePresence } from "@/lib/usePresence";
+import { cn } from "@/lib/utils";
+
+const OVERLAY_ID = "global-search";
 
 export function GlobalSearchModal() {
   const {
@@ -16,22 +21,29 @@ export function GlobalSearchModal() {
 
   const [searchQuery, setSearchQuery] = useState("");
 
-  // Keyboard shortcut listener (Cmd+K or Ctrl+K)
+  const { mounted, visible } = usePresence(isSearchModalOpen, 220);
+
+  // Keyboard shortcut listener (Cmd+K or Ctrl+K) + Overlay 栈注册
   useEffect(() => {
+    if (!mounted) return;
+    pushOverlay(OVERLAY_ID, 50);
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === "k") {
         e.preventDefault();
         setSearchModalOpen(!isSearchModalOpen);
       }
-      if (e.key === "Escape" && isSearchModalOpen) {
+      if (e.key === "Escape" && isSearchModalOpen && isTopmostOverlay(OVERLAY_ID)) {
         setSearchModalOpen(false);
       }
     };
     window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isSearchModalOpen, setSearchModalOpen]);
+    return () => {
+      popOverlay(OVERLAY_ID);
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [mounted, isSearchModalOpen, setSearchModalOpen]);
 
-  if (!isSearchModalOpen) return null;
+  if (!mounted) return null;
 
   const filteredCourses = searchQuery.trim()
     ? courses.filter(
@@ -52,8 +64,20 @@ export function GlobalSearchModal() {
     : [];
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-start justify-center pt-20 p-4 animate-in fade-in">
-      <div className="w-full max-w-xl bg-white rounded-2xl shadow-drawer border border-[#E7E3DD] overflow-hidden flex flex-col">
+    <div
+      className={cn(
+        "fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-start justify-center pt-20 p-4",
+        "ux-overlay",
+        visible ? "opacity-100" : "opacity-0"
+      )}
+    >
+      <div
+        className={cn(
+          "w-full max-w-xl bg-white rounded-2xl shadow-drawer border border-[#E7E3DD] overflow-hidden flex flex-col",
+          "ux-modal-panel",
+          visible ? "opacity-100 scale-100 translate-y-0" : "opacity-0 scale-[0.985] translate-y-1"
+        )}
+      >
         {/* Search Input Bar */}
         <div className="flex items-center px-4 py-3.5 border-b border-[#F0EBE1] bg-[#F7F5F5]">
           <Search className="w-4 h-4 text-[#A48F82] shrink-0 mr-3" />

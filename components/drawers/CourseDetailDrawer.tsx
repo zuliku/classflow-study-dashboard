@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   X,
   Plus,
@@ -16,17 +16,23 @@ import {
   Eye,
   FileUp,
   Loader2,
+  ClipboardList,
+  ChevronRight,
 } from "lucide-react";
 import { useAppStore } from "@/store/useAppStore";
 import { useToastStore } from "@/store/useToastStore";
 import { useConfirmStore } from "@/store/useConfirmStore";
 import { Material, CourseSchedule, ScheduleConflict } from "@/types";
 import { saveFileBlob, createStorageKey, deleteFileBlob } from "@/lib/fileStorage";
+import { getLocalDDLDate } from "@/lib/ddl";
 import { WEEK_RANGE_PRESETS, isValidTimeRange } from "@/lib/schedule";
 import { findScheduleConflicts } from "@/lib/conflicts";
 import { usePresence } from "@/lib/usePresence";
 import { cn } from "@/lib/utils";
+import { openAssignmentEditor, previewMaterial } from "@/lib/uiEvents";
+import { pushOverlay, popOverlay, isTopmostOverlay } from "@/lib/overlayStack";
 
+const OVERLAY_ID = "course-detail-drawer";
 const DAY_LABELS = ["一", "二", "三", "四", "五", "六", "日"];
 
 /** 周次选择：预设下拉 + 自定义输入（自定义状态由 value 是否命中预设推导） */
@@ -63,8 +69,10 @@ export function CourseDetailDrawer() {
   const {
     courses,
     schedules,
+    assignments,
     selectedCourseId,
     setSelectedCourseId,
+    setSelectedAssignmentId,
     updateCourse,
     deleteCourse,
     addScheduleSlot,
@@ -80,6 +88,9 @@ export function CourseDetailDrawer() {
 
   const [isEditing, setIsEditing] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+
+  const scheduleSectionRef = useRef<HTMLDivElement | null>(null);
+  const materialInputRef = useRef<HTMLInputElement | null>(null);
 
   // Form State for editing course
   const [name, setName] = useState("");
@@ -109,6 +120,7 @@ export function CourseDetailDrawer() {
 
   const course = courses.find((c) => c.id === selectedCourseId);
   const courseSchedules = schedules.filter((s) => s.courseId === selectedCourseId);
+  const courseAssignments = assignments.filter((a) => a.courseId === selectedCourseId);
 
   const { mounted, visible } = usePresence(!!course, 260);
 
@@ -116,10 +128,13 @@ export function CourseDetailDrawer() {
   useEffect(() => {
     if (!mounted) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setSelectedCourseId(null);
+      if (e.key === "Escape" && isTopmostOverlay(OVERLAY_ID)) setSelectedCourseId(null);
     };
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    return () => {
+      popOverlay(OVERLAY_ID);
+      window.removeEventListener("keydown", onKey);
+    };
   }, [mounted, setSelectedCourseId]);
 
   if (!mounted || !course) return null;
@@ -131,6 +146,32 @@ export function CourseDetailDrawer() {
     setCredit(course.credit);
     setDescription(course.description);
     setIsEditing(true);
+  };
+
+  // 快捷操作：添加任务（自动预选当前课程）
+  const handleQuickAddAssignment = () => {
+    openAssignmentEditor({ courseId: course.id });
+  };
+
+  // 快捷操作：滚动到排课时段编辑区
+  const handleQuickAddSlot = () => {
+    scheduleSectionRef.current?.scrollIntoView({
+      behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches
+        ? "auto"
+        : "smooth",
+      block: "center",
+    });
+  };
+
+  // 快捷操作：触发资料上传文件选择
+  const handleQuickUploadMaterial = () => {
+    materialInputRef.current?.click();
+  };
+
+  // 相关任务：直接打开 AssignmentDrawer（保持上下文，不跳 Tab）
+  const handleOpenAssignment = (assignmentId: string) => {
+    setSelectedCourseId(null);
+    setSelectedAssignmentId(assignmentId);
   };
 
   const handleSaveCourse = () => {
@@ -369,15 +410,13 @@ export function CourseDetailDrawer() {
   };
 
   const handlePreviewMaterial = (mat: Material) => {
-    window.dispatchEvent(
-      new CustomEvent("preview-material", { detail: { material: mat } })
-    );
+    previewMaterial(mat);
   };
 
   return (
     <div
       className={cn(
-        "fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex justify-end",
+        "fixed inset-0 z-40 bg-black/40 backdrop-blur-sm flex justify-end",
         "ux-overlay",
         visible ? "opacity-100" : "opacity-0"
       )}
@@ -444,6 +483,31 @@ export function CourseDetailDrawer() {
           </div>
         </div>
 
+        {/* 快捷操作：高频入口，保持克制 */}
+        <div className="px-6 py-2.5 border-b border-[#E0D7C6]/60 bg-[#FAF8F5]/80 flex items-center gap-1.5 shrink-0">
+          <button
+            onClick={handleQuickAddAssignment}
+            className="flex items-center space-x-1 px-2 py-1 rounded-lg text-[11px] font-semibold text-charcoal hover:bg-white border border-transparent hover:border-[#E0D7C6] transition-colors"
+          >
+            <ClipboardList className="w-3.5 h-3.5 text-[#A48F82]" />
+            <span>添加任务</span>
+          </button>
+          <button
+            onClick={handleQuickAddSlot}
+            className="flex items-center space-x-1 px-2 py-1 rounded-lg text-[11px] font-semibold text-charcoal hover:bg-white border border-transparent hover:border-[#E0D7C6] transition-colors"
+          >
+            <Plus className="w-3.5 h-3.5 text-[#A48F82]" />
+            <span>添加时段</span>
+          </button>
+          <button
+            onClick={handleQuickUploadMaterial}
+            className="flex items-center space-x-1 px-2 py-1 rounded-lg text-[11px] font-semibold text-charcoal hover:bg-white border border-transparent hover:border-[#E0D7C6] transition-colors"
+          >
+            <FileUp className="w-3.5 h-3.5 text-[#A48F82]" />
+            <span>上传资料</span>
+          </button>
+        </div>
+
         {/* Content Body */}
         <div className="p-6 overflow-y-auto space-y-6 flex-1 text-xs">
           {/* Edit Form or Readonly View */}
@@ -506,7 +570,7 @@ export function CourseDetailDrawer() {
           )}
 
           {/* Schedule Slots Section */}
-          <div className="space-y-3 pt-4 border-t border-[#F0EBE1]">
+          <div ref={scheduleSectionRef} className="space-y-3 pt-4 border-t border-[#F0EBE1] scroll-mt-4">
             <h3 className="font-bold text-charcoal text-sm flex items-center justify-between">
               <span>上课时间安排 ({courseSchedules.length} 个时段)</span>
             </h3>
@@ -710,6 +774,45 @@ export function CourseDetailDrawer() {
             </form>
           </div>
 
+          {/* 相关任务：直接进入 AssignmentDrawer，保持上下文 */}
+          <div className="space-y-2.5 pt-4 border-t border-[#F0EBE1]">
+            <div className="flex items-center justify-between">
+              <h3 className="font-bold text-charcoal text-sm flex items-center gap-1.5">
+                <ClipboardList className="w-4 h-4 text-[#A48F82]" />
+                相关任务 ({courseAssignments.length})
+              </h3>
+              <button
+                onClick={handleQuickAddAssignment}
+                className="text-[11px] font-semibold text-[#8C827A] hover:text-charcoal transition-colors"
+              >
+                + 添加任务
+              </button>
+            </div>
+            {courseAssignments.length === 0 ? (
+              <p className="text-[11px] text-[#8C827A] py-2 text-center bg-[#F7F5F5] rounded-xl">
+                暂无任务
+              </p>
+            ) : (
+              <div className="space-y-1.5">
+                {courseAssignments.map((a) => (
+                  <button
+                    key={a.id}
+                    onClick={() => handleOpenAssignment(a.id)}
+                    className="w-full flex items-center justify-between p-2.5 bg-[#F7F5F5] hover:bg-[#F0EBE1] border border-[#E7E3DD] rounded-xl text-left transition-colors group"
+                  >
+                    <span className="text-xs font-semibold text-charcoal truncate min-w-0">
+                      {a.title}
+                    </span>
+                    <span className="flex items-center shrink-0 ml-2 text-[10px] text-[#8C827A]">
+                      {getLocalDDLDate(a.ddl)}
+                      <ChevronRight className="w-3 h-3 ml-0.5 group-hover:translate-x-0.5 transition-transform" />
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
           {/* Real Course Materials & Storage Upload */}
           <div className="space-y-3 pt-4 border-t border-[#F0EBE1]">
             <div className="flex items-center justify-between">
@@ -720,6 +823,7 @@ export function CourseDetailDrawer() {
 
               {/* Real File Input Button */}
               <input
+                ref={materialInputRef}
                 type="file"
                 multiple
                 onChange={handleRealFileUpload}
@@ -778,7 +882,7 @@ export function CourseDetailDrawer() {
                           e.stopPropagation();
                           handleDeleteMaterial(mat);
                         }}
-                        className="p-1 text-[#D94F4F] hover:bg-[#FDF0F0] rounded-lg transition-colors opacity-0 group-hover:opacity-100"
+                        className="p-1 text-[#D94F4F] hover:bg-[#FDF0F0] rounded-lg transition-colors opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
                         title="删除此资料"
                       >
                         <Trash2 className="w-3.5 h-3.5" />

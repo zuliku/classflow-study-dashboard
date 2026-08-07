@@ -5,6 +5,9 @@ import { AlertTriangle, X } from "lucide-react";
 import { useConfirmStore } from "@/store/useConfirmStore";
 import { usePresence } from "@/lib/usePresence";
 import { cn } from "@/lib/utils";
+import { pushOverlay, popOverlay, isTopmostOverlay } from "@/lib/overlayStack";
+
+const OVERLAY_ID = "confirm-dialog";
 
 /** 统一危险操作确认对话框（仅用于删除课程、重置数据等高危操作） */
 export function ConfirmDialog() {
@@ -13,11 +16,15 @@ export function ConfirmDialog() {
 
   useEffect(() => {
     if (!mounted) return;
+    pushOverlay(OVERLAY_ID, 60);
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") close();
+      if (e.key === "Escape" && isTopmostOverlay(OVERLAY_ID)) close();
     };
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    return () => {
+      popOverlay(OVERLAY_ID);
+      window.removeEventListener("keydown", onKey);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mounted]);
 

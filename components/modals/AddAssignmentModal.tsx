@@ -9,6 +9,10 @@ import { combineLocalDateTime, getLocalDDLDate, getLocalDDLTime } from "@/lib/dd
 import { format } from "date-fns";
 import { usePresence } from "@/lib/usePresence";
 import { cn } from "@/lib/utils";
+import { onOpenAssignmentEditor } from "@/lib/uiEvents";
+import { pushOverlay, popOverlay, isTopmostOverlay } from "@/lib/overlayStack";
+
+const OVERLAY_ID = "add-assignment-modal";
 
 export function AddAssignmentModal() {
   const {
@@ -21,18 +25,23 @@ export function AddAssignmentModal() {
 
   const [isOpen, setIsOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [prefillSource, setPrefillSource] = useState<"course" | "calendar" | null>(null);
   const submittingRef = useRef(false);
 
   const { mounted, visible } = usePresence(isOpen, 220);
 
-  // Esc 关闭（表单未保存时不阻止，输入内容保留在组件内，可再次打开查看）
+  // Overlay Stack：Modal 层，Esc 只在最上层时关闭
   useEffect(() => {
     if (!mounted) return;
+    pushOverlay(OVERLAY_ID, 50);
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setIsOpen(false);
+      if (e.key === "Escape" && isTopmostOverlay(OVERLAY_ID)) setIsOpen(false);
     };
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    return () => {
+      popOverlay(OVERLAY_ID);
+      window.removeEventListener("keydown", onKey);
+    };
   }, [mounted]);
 
   const [title, setTitle] = useState("");
@@ -46,11 +55,11 @@ export function AddAssignmentModal() {
   const [description, setDescription] = useState("");
   const [subtasks, setSubtasks] = useState<{ id: string; title: string; completed: boolean }[]>([]);
 
-  // Listen to custom open events or window trigger
+  // 打开事件：assignmentId → 编辑模式；否则新增模式，支持 courseId / ddlDate 上下文预填
   useEffect(() => {
-    const handleOpen = (e: CustomEvent) => {
-      if (e.detail?.assignmentId) {
-        const target = assignments.find((a) => a.id === e.detail.assignmentId);
+    const handleOpen = (detail: { assignmentId?: string; courseId?: string; ddlDate?: string }) => {
+      if (detail.assignmentId) {
+        const target = assignments.find((a) => a.id === detail.assignmentId);
         if (target) {
           setEditingId(target.id);
           setTitle(target.title);
@@ -68,11 +77,15 @@ export function AddAssignmentModal() {
       } else {
         setEditingId(null);
         setTitle("");
-        setCourseId(courses[0]?.id || "");
+        setCourseId(
+          detail.courseId && courses.some((c) => c.id === detail.courseId)
+            ? detail.courseId
+            : courses[0]?.id || ""
+        );
         const tomorrow = new Date();
         tomorrow.setDate(tomorrow.getDate() + 1);
-        // 本地日期格式化（不用 toISOString，避免时区偏移导致日期错误）
-        setDdlDate(format(tomorrow, "yyyy-MM-dd"));
+        // 本地日期格式化（不用 toISOString，避免时区偏移导致日期错误）；日历发起时预填当天
+        setDdlDate(detail.ddlDate || format(tomorrow, "yyyy-MM-dd"));
         setDdlTime("23:59");
         setPriority("medium");
         setStatus("todo");
@@ -80,12 +93,12 @@ export function AddAssignmentModal() {
         setTagsStr("作业, 个人任务");
         setDescription("");
         setSubtasks([]);
+        setPrefillSource(detail.courseId ? "course" : detail.ddlDate ? "calendar" : null);
       }
       setIsOpen(true);
     };
 
-    window.addEventListener("open-assignment-modal" as any, handleOpen);
-    return () => window.removeEventListener("open-assignment-modal" as any, handleOpen);
+    return onOpenAssignmentEditor(handleOpen);
   }, [assignments, courses]);
 
   if (!mounted) return null;
@@ -148,7 +161,8 @@ export function AddAssignmentModal() {
         tags,
         subtasks: validSubtasks,
       });
-      pushToast({ message: "任务已创建" });
+      // 从课程/日历发起的任务创建，提示带上下文语义
+      pushToast({ message: prefillSource ? "任务已添加" : "任务已创建" });
     }
 
     setIsOpen(false);

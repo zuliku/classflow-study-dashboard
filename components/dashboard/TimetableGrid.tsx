@@ -203,16 +203,7 @@ export function TimetableGrid() {
                       <div
                         key={sched.id}
                         onClick={() => {
-                          if (hasConflict) {
-                            const foundConf = conflicts.find(
-                              (c) => c.scheduleA.id === sched.id || c.scheduleB.id === sched.id
-                            );
-                            if (foundConf) {
-                              setSelectedConflict(foundConf);
-                              setConflictModalOpen(true);
-                              return;
-                            }
-                          }
+                          // 课程卡始终打开 Course Drawer；冲突有独立入口（卡片角标 + 顶部横幅）
                           setSelectedCourseId(course.id);
                         }}
                         className={cn(
@@ -235,9 +226,22 @@ export function TimetableGrid() {
                               {course.name}
                             </h4>
                             {hasConflict && (
-                              <span className="text-[8px] bg-[#D94F4F] text-white px-1 py-0.2 rounded font-bold shrink-0 ml-1">
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  const foundConf = conflicts.find(
+                                    (c) => c.scheduleA.id === sched.id || c.scheduleB.id === sched.id
+                                  );
+                                  if (foundConf) {
+                                    setSelectedConflict(foundConf);
+                                    setConflictModalOpen(true);
+                                  }
+                                }}
+                                className="text-[8px] bg-[#D94F4F] text-white px-1 py-0.2 rounded font-bold shrink-0 ml-1 hover:bg-[#C44343] transition-colors"
+                                title="查看冲突"
+                              >
                                 冲突
-                              </span>
+                              </button>
                             )}
                           </div>
 

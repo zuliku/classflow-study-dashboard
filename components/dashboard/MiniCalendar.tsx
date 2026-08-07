@@ -13,8 +13,9 @@ import {
 } from "lucide-react";
 import { useAppStore } from "@/store/useAppStore";
 import { getSemesterWeek } from "@/lib/semester";
-import { getLocalDDLDate } from "@/lib/ddl";
+import { getLocalDDLDate, getLocalDDLTime } from "@/lib/ddl";
 import { isScheduleActive } from "@/lib/schedule";
+import { openAssignmentEditor } from "@/lib/uiEvents";
 import {
   format,
   addMonths,
@@ -89,6 +90,88 @@ export function MiniCalendar() {
     (m) => m.date === selectedDateStr && m.type === "activity"
   );
   const dayMarks = [...dayExams, ...dayActivities];
+
+  // 打开任务创建并预填选中日期
+  const handleQuickAddAssignment = () => {
+    openAssignmentEditor({ ddlDate: selectedDateStr });
+  };
+
+  // Agenda 按时间顺序排列：课程/DDL 按开始时间，考试/活动排在最后
+  type AgendaItem = { key: string; time: string; node: React.ReactNode };
+  const agendaItems: AgendaItem[] = [
+    ...daySchedules.map((s) => {
+      const c = courses.find((crs) => crs.id === s.courseId);
+      return {
+        key: `s_${s.id}`,
+        time: s.startTime,
+        node: (
+          <div
+            key={s.id}
+            onClick={() => c && setSelectedCourseId(c.id)}
+            className="p-1.5 rounded-lg border text-xs flex items-center justify-between cursor-pointer hover:opacity-90"
+            style={{ backgroundColor: `${c?.bgHex || "#F0EBE1"}70`, borderColor: c?.borderHex }}
+          >
+            <div className="flex items-center space-x-1.5 min-w-0">
+              <BookOpen className="w-3 h-3 text-[#A48F82] shrink-0" />
+              <span className="font-semibold text-charcoal truncate">{c?.name}</span>
+            </div>
+            <span className="text-[10px] font-mono text-[#8C827A] shrink-0">
+              {s.startTime} - {s.endTime}
+            </span>
+          </div>
+        ),
+      };
+    }),
+    ...dayAssignments.map((a) => ({
+      key: `a_${a.id}`,
+      time: getLocalDDLTime(a.ddl),
+      node: (
+        <div
+          key={a.id}
+          onClick={() => setSelectedAssignmentId(a.id)}
+          className="p-1.5 bg-[#FDF0F0] border border-[#F8D7D7] rounded-lg text-xs flex items-center justify-between cursor-pointer text-[#D94F4F]"
+        >
+          <div className="flex items-center space-x-1.5 min-w-0">
+            <ClipboardCheck className="w-3 h-3 shrink-0" />
+            <span className="font-bold truncate">{a.title}</span>
+          </div>
+          <span className="text-[10px] font-bold shrink-0">DDL {getLocalDDLTime(a.ddl)}</span>
+        </div>
+      ),
+    })),
+    ...dayExams.map((m) => ({
+      key: `e_${m.id}`,
+      time: "99:00",
+      node: (
+        <div
+          key={m.id}
+          className="p-1.5 bg-[#FFF6EE] border border-[#FDE6D2] rounded-lg text-xs flex items-center justify-between text-[#D97706]"
+        >
+          <div className="flex items-center space-x-1.5 min-w-0">
+            <Award className="w-3 h-3 shrink-0" />
+            <span className="font-bold truncate">{m.title}</span>
+          </div>
+          <span className="text-[10px] font-bold shrink-0">考试</span>
+        </div>
+      ),
+    })),
+    ...dayActivities.map((m) => ({
+      key: `ac_${m.id}`,
+      time: "99:00",
+      node: (
+        <div
+          key={m.id}
+          className="p-1.5 bg-[#F2F7F3] border border-[#D4E7D7] rounded-lg text-xs flex items-center justify-between text-[#4A7C59]"
+        >
+          <div className="flex items-center space-x-1.5 min-w-0">
+            <CalendarDays className="w-3 h-3 shrink-0" />
+            <span className="font-bold truncate">{m.title}</span>
+          </div>
+          <span className="text-[10px] font-bold shrink-0">活动</span>
+        </div>
+      ),
+    })),
+  ].sort((x, y) => x.time.localeCompare(y.time));
 
   return (
     <div className="bg-white border border-[#E7E3DD] rounded-2xl p-4 shadow-subtle space-y-3 flex flex-col justify-between">
@@ -230,78 +313,19 @@ export function MiniCalendar() {
 
         {/* List of day's events */}
         <div className="space-y-1.5 max-h-36 overflow-y-auto pr-1">
-          {daySchedules.length === 0 && dayAssignments.length === 0 && dayMarks.length === 0 ? (
-            <p className="text-[11px] text-[#8C827A] py-2 text-center">
-              本日无排课、DDL 或考试活动
-            </p>
+          {agendaItems.length === 0 ? (
+            <div className="py-3 text-center space-y-2">
+              <p className="text-[11px] text-[#8C827A]">暂无安排</p>
+              <button
+                onClick={handleQuickAddAssignment}
+                className="inline-flex items-center space-x-1 px-3 py-1.5 bg-charcoal hover:bg-black text-white text-[11px] font-bold rounded-xl transition-colors"
+              >
+                <Plus className="w-3 h-3" />
+                <span>添加任务</span>
+              </button>
+            </div>
           ) : (
-            <>
-              {/* Courses */}
-              {daySchedules.map((sched) => {
-                const c = courses.find((crs) => crs.id === sched.courseId);
-                return (
-                  <div
-                    key={sched.id}
-                    onClick={() => c && setSelectedCourseId(c.id)}
-                    className="p-1.5 rounded-lg border text-xs flex items-center justify-between cursor-pointer hover:opacity-90"
-                    style={{ backgroundColor: `${c?.bgHex || "#F0EBE1"}70`, borderColor: c?.borderHex }}
-                  >
-                    <div className="flex items-center space-x-1.5 min-w-0">
-                      <BookOpen className="w-3 h-3 text-[#A48F82] shrink-0" />
-                      <span className="font-semibold text-charcoal truncate">
-                        {c?.name}
-                      </span>
-                    </div>
-                    <span className="text-[10px] font-mono text-[#8C827A] shrink-0">
-                      {sched.startTime} - {sched.endTime}
-                    </span>
-                  </div>
-                );
-              })}
-
-              {/* DDLs */}
-              {dayAssignments.map((a) => (
-                <div
-                  key={a.id}
-                  onClick={() => setSelectedAssignmentId(a.id)}
-                  className="p-1.5 bg-[#FDF0F0] border border-[#F8D7D7] rounded-lg text-xs flex items-center justify-between cursor-pointer text-[#D94F4F]"
-                >
-                  <div className="flex items-center space-x-1.5 min-w-0">
-                    <ClipboardCheck className="w-3 h-3 shrink-0" />
-                    <span className="font-bold truncate">{a.title}</span>
-                  </div>
-                  <span className="text-[10px] font-bold shrink-0">DDL 截止</span>
-                </div>
-              ))}
-
-              {/* Exams (仅展示，不跳转详情) */}
-              {dayExams.map((m) => (
-                <div
-                  key={m.id}
-                  className="p-1.5 bg-[#FFF6EE] border border-[#FDE6D2] rounded-lg text-xs flex items-center justify-between text-[#D97706]"
-                >
-                  <div className="flex items-center space-x-1.5 min-w-0">
-                    <Award className="w-3 h-3 shrink-0" />
-                    <span className="font-bold truncate">{m.title}</span>
-                  </div>
-                  <span className="text-[10px] font-bold shrink-0">考试</span>
-                </div>
-              ))}
-
-              {/* Activities (仅展示，不跳转详情) */}
-              {dayActivities.map((m) => (
-                <div
-                  key={m.id}
-                  className="p-1.5 bg-[#F2F7F3] border border-[#D4E7D7] rounded-lg text-xs flex items-center justify-between text-[#4A7C59]"
-                >
-                  <div className="flex items-center space-x-1.5 min-w-0">
-                    <CalendarDays className="w-3 h-3 shrink-0" />
-                    <span className="font-bold truncate">{m.title}</span>
-                  </div>
-                  <span className="text-[10px] font-bold shrink-0">活动</span>
-                </div>
-              ))}
-            </>
+            agendaItems.map((item) => <div key={item.key}>{item.node}</div>)
           )}
         </div>
       </div>
