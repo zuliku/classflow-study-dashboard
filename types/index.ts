@@ -97,17 +97,19 @@ export interface Assignment {
 export interface GroupMember {
   id: string;
   name: string;
-  avatarUrl: string;
+  /** 可选：无头像时由 UI 使用姓名首字 fallback */
+  avatarUrl?: string;
   role: "leader" | "member";
-  major: string;
+  /** 可选：不再强制每个成员必须有专业 */
+  major?: string;
 }
 
 export interface GroupTask {
   id: string;
   title: string;
-  assigneeName: string;
-  assigneeAvatar: string;
-  ddl: string;
+  /** 关联项目成员；undefined = 未分配 */
+  assigneeId?: string;
+  ddl: string; // 本地时间 "YYYY-MM-DDTHH:mm:ss"（无 Z）
   completed: boolean;
 }
 

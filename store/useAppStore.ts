@@ -7,6 +7,8 @@ import {
   CalendarMark,
   UserProfile,
   GroupProject,
+  GroupMember,
+  GroupTask,
   NavTab,
   ScheduleConflict,
   Semester,
@@ -27,6 +29,7 @@ import { getLocalDDLDate } from "@/lib/ddl";
 import { deleteFileBlob, clearAllFileBlobs } from "@/lib/fileStorage";
 import { isDDLMarkForAssignment, isLegacyDDLMarkForAssignment, linkLegacyDDLMarks } from "@/lib/calendarMark";
 import { createId } from "@/lib/utils";
+import { calculateGroupProjectProgress, formatLocalDate, normalizeGroupProject } from "@/lib/groupProject";
 
 /**
  * 持久化白名单（localStorage，key 保持 classflow-storage-v2）：
@@ -81,6 +84,9 @@ function sanitizePersistedState(persisted: unknown): PersistedAppState {
   const marks = Array.isArray(legacy.calendarMarks)
     ? (legacy.calendarMarks as CalendarMark[])
     : [];
+  const groupProjects = Array.isArray(legacy.groupProjects)
+    ? (legacy.groupProjects as GroupProject[]).map(normalizeGroupProject)
+    : [];
   return {
     userProfile:
       legacy.userProfile && typeof legacy.userProfile === "object"
@@ -92,9 +98,8 @@ function sanitizePersistedState(persisted: unknown): PersistedAppState {
     assignments,
     // 安全位置自动修复：唯一可确定的 legacy mark 补 sourceId
     calendarMarks: linkLegacyDDLMarks(assignments, marks),
-    groupProjects: Array.isArray(legacy.groupProjects)
-      ? (legacy.groupProjects as GroupProject[])
-      : [],
+    // v1 → v2：legacy 任务按 assigneeName 唯一匹配补 assigneeId，DDL 归一本地格式
+    groupProjects,
     assignmentTimeSlice: TIME_SLICES.includes(legacy.assignmentTimeSlice as TimeSliceFilter)
       ? (legacy.assignmentTimeSlice as TimeSliceFilter)
       : "all",
@@ -193,7 +198,28 @@ interface AppState {
   restoreAssignment: (assignment: Assignment, marks: CalendarMark[]) => void;
 
   // Group Project Actions
-  addGroupProject: (project: Omit<GroupProject, "id" | "progress" | "updatedAt">) => void;
+  addGroupProject: (project: { courseId: string; title: string; description?: string }) => void;
+  updateGroupProject: (
+    projectId: string,
+    patch: { title?: string; description?: string; courseId?: string }
+  ) => void;
+  deleteGroupProject: (projectId: string) => void;
+  addGroupMember: (
+    projectId: string,
+    member: { name: string; role?: GroupMember["role"]; major?: string; avatarUrl?: string }
+  ) => void;
+  updateGroupMember: (projectId: string, member: GroupMember) => void;
+  /** 删除成员：最后一个 leader 会被阻止；被删成员的任务变为未分配 */
+  deleteGroupMember: (
+    projectId: string,
+    memberId: string
+  ) => { ok: boolean; reason?: string };
+  addGroupTask: (
+    projectId: string,
+    task: { title: string; assigneeId?: string; ddl: string }
+  ) => void;
+  updateGroupTask: (projectId: string, task: GroupTask) => void;
+  deleteGroupTask: (projectId: string, taskId: string) => void;
   toggleGroupTask: (projectId: string, taskId: string) => void;
 }
 
@@ -294,7 +320,8 @@ export const useAppStore = create<AppState>()(
           assignments: data.assignments,
           // 备份恢复为安全位置：唯一可确定的 legacy mark 自动补 sourceId
           calendarMarks: linkLegacyDDLMarks(data.assignments, data.calendarMarks),
-          groupProjects: data.groupProjects,
+          // 备份恢复同样归一 GroupProject（v1 备份 → v2 schema）
+          groupProjects: data.groupProjects.map(normalizeGroupProject),
           currentSemesterWeek: Math.min(
             Math.max(state.currentSemesterWeek, 1),
             data.semester.totalWeeks
@@ -599,34 +626,162 @@ export const useAppStore = create<AppState>()(
         })),
 
       addGroupProject: (projectData) => {
+        const current = get();
+        // 空项目：不注入任何假成员/假任务；仅把当前真实用户设为 leader
+        const members: GroupMember[] =
+          current.userProfile.name.trim().length > 0
+            ? [
+                {
+                  id: createId("gm"),
+                  name: current.userProfile.name,
+                  avatarUrl: current.userProfile.avatarUrl || undefined,
+                  role: "leader",
+                },
+              ]
+            : [];
+
         const newProject: GroupProject = {
-          ...projectData,
           id: createId("gp"),
+          courseId: projectData.courseId,
+          title: projectData.title,
+          description: projectData.description ?? "",
           progress: 0,
-          updatedAt: new Date().toISOString().split("T")[0],
+          updatedAt: formatLocalDate(),
+          members,
+          tasks: [],
         };
         set((state) => ({
           groupProjects: [newProject, ...state.groupProjects],
         }));
       },
 
+      updateGroupProject: (projectId, patch) =>
+        set((state) => ({
+          groupProjects: state.groupProjects.map((p) =>
+            p.id === projectId
+              ? { ...p, ...patch, updatedAt: formatLocalDate() }
+              : p
+          ),
+        })),
+
+      deleteGroupProject: (projectId) =>
+        set((state) => ({
+          groupProjects: state.groupProjects.filter((p) => p.id !== projectId),
+        })),
+
+      addGroupMember: (projectId, member) =>
+        set((state) => ({
+          groupProjects: state.groupProjects.map((p) =>
+            p.id === projectId
+              ? {
+                  ...p,
+                  members: [
+                    ...p.members,
+                    {
+                      id: createId("gm"),
+                      name: member.name,
+                      role: member.role ?? "member",
+                      major: member.major,
+                      avatarUrl: member.avatarUrl,
+                    },
+                  ],
+                  updatedAt: formatLocalDate(),
+                }
+              : p
+          ),
+        })),
+
+      updateGroupMember: (projectId, member) =>
+        set((state) => ({
+          groupProjects: state.groupProjects.map((p) =>
+            p.id === projectId
+              ? {
+                  ...p,
+                  members: p.members.map((m) => (m.id === member.id ? member : m)),
+                  updatedAt: formatLocalDate(),
+                }
+              : p
+          ),
+        })),
+
+      deleteGroupMember: (projectId, memberId) => {
+        const project = get().groupProjects.find((p) => p.id === projectId);
+        const target = project?.members.find((m) => m.id === memberId);
+        if (!project || !target) return { ok: false, reason: "not_found" };
+
+        // Leader 规则：阻止删除最后一个 leader，避免项目没有负责人
+        if (target.role === "leader" && project.members.filter((m) => m.role === "leader").length <= 1) {
+          return { ok: false, reason: "last_leader" };
+        }
+
+        set((state) => ({
+          groupProjects: state.groupProjects.map((p) => {
+            if (p.id !== projectId) return p;
+            return {
+              ...p,
+              members: p.members.filter((m) => m.id !== memberId),
+              // 被删成员负责的任务变为未分配，不删除任务
+              tasks: p.tasks.map((t) =>
+                t.assigneeId === memberId ? { ...t, assigneeId: undefined } : t
+              ),
+              updatedAt: formatLocalDate(),
+            };
+          }),
+        }));
+        return { ok: true };
+      },
+
+      addGroupTask: (projectId, task) =>
+        set((state) => ({
+          groupProjects: state.groupProjects.map((p) => {
+            if (p.id !== projectId) return p;
+            const tasks: GroupTask[] = [
+              ...p.tasks,
+              {
+                id: createId("gt"),
+                title: task.title,
+                assigneeId: task.assigneeId,
+                ddl: task.ddl,
+                completed: false,
+              },
+            ];
+            return { ...p, tasks, progress: calculateGroupProjectProgress(tasks), updatedAt: formatLocalDate() };
+          }),
+        })),
+
+      updateGroupTask: (projectId, task) =>
+        set((state) => ({
+          groupProjects: state.groupProjects.map((p) => {
+            if (p.id !== projectId) return p;
+            const tasks = p.tasks.map((t) => (t.id === task.id ? task : t));
+            return { ...p, tasks, progress: calculateGroupProjectProgress(tasks), updatedAt: formatLocalDate() };
+          }),
+        })),
+
+      deleteGroupTask: (projectId, taskId) =>
+        set((state) => ({
+          groupProjects: state.groupProjects.map((p) => {
+            if (p.id !== projectId) return p;
+            const tasks = p.tasks.filter((t) => t.id !== taskId);
+            return { ...p, tasks, progress: calculateGroupProjectProgress(tasks), updatedAt: formatLocalDate() };
+          }),
+        })),
+
       toggleGroupTask: (projectId, taskId) =>
         set((state) => ({
           groupProjects: state.groupProjects.map((p) => {
             if (p.id !== projectId) return p;
-            const updatedTasks = p.tasks.map((t) =>
+            const tasks = p.tasks.map((t) =>
               t.id === taskId ? { ...t, completed: !t.completed } : t
             );
-            const compCount = updatedTasks.filter((t) => t.completed).length;
-            const newProgress =
-              updatedTasks.length > 0 ? Math.round((compCount / updatedTasks.length) * 100) : 0;
-            return { ...p, tasks: updatedTasks, progress: newProgress };
+            return { ...p, tasks, progress: calculateGroupProjectProgress(tasks), updatedAt: formatLocalDate() };
           }),
         })),
     }),
     {
       name: "classflow-storage-v2",
-      version: 1,
+      // v1 → v2：GroupTask 从 assigneeName/assigneeAvatar 改为 assigneeId
+      version: 2,
       storage: createJSONStorage(() => localStorage),
       partialize: (state): PersistedAppState => ({
         userProfile: state.userProfile,

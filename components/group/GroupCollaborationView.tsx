@@ -8,29 +8,61 @@ import {
   Square,
   Clock,
   User,
-  Calendar,
   ChevronRight,
   FolderPlus,
+  Trash2,
+  Pencil,
+  Check,
+  X,
 } from "lucide-react";
 import { useAppStore } from "@/store/useAppStore";
-import { formatDistanceToNow, parseISO } from "date-fns";
+import { useToastStore } from "@/store/useToastStore";
+import { useConfirmStore } from "@/store/useConfirmStore";
+import { formatDistanceToNow } from "date-fns";
 import { cardKeyHandler } from "@/lib/utils";
+import { parseLocalDDL, combineLocalDateTime } from "@/lib/ddl";
+import { formatLocalDate } from "@/lib/groupProject";
 import { zhCN } from "date-fns/locale";
+import { GroupMember } from "@/types";
 
-const parseDateSafely = (dateStr: string) => {
-  if (!dateStr) return new Date();
-  try {
-    const formatted = dateStr.includes(" ") ? dateStr.replace(" ", "T") : dateStr;
-    const parsed = parseISO(formatted);
-    if (!isNaN(parsed.getTime())) return parsed;
-    const fallback = new Date(dateStr);
-    if (!isNaN(fallback.getTime())) return fallback;
-  } catch (e) {}
-  return new Date();
-};
+/** 头像 fallback：无头像时显示姓名首字 */
+function MemberAvatar({ member, size = "w-7 h-7", ring = false }: { member: GroupMember; size?: string; ring?: boolean }) {
+  if (member.avatarUrl) {
+    return (
+      <img
+        src={member.avatarUrl}
+        alt={member.name}
+        className={`${size} rounded-full object-cover ${ring ? "border border-stone-beige" : "border border-white"} shrink-0`}
+      />
+    );
+  }
+  return (
+    <div
+      className={`${size} rounded-full bg-pastel-mint text-charcoal flex items-center justify-center text-[10px] font-bold ${
+        ring ? "border border-stone-beige" : "border border-white"
+      } shrink-0`}
+    >
+      {(member.name || "?").slice(0, 1).toUpperCase()}
+    </div>
+  );
+}
 
 export function GroupCollaborationView() {
-  const { groupProjects, toggleGroupTask, addGroupProject, courses } = useAppStore();
+  const {
+    groupProjects,
+    courses,
+    addGroupProject,
+    updateGroupProject,
+    deleteGroupProject,
+    addGroupMember,
+    deleteGroupMember,
+    addGroupTask,
+    deleteGroupTask,
+    toggleGroupTask,
+  } = useAppStore();
+  const pushToast = useToastStore((s) => s.pushToast);
+  const confirmRequest = useConfirmStore((s) => s.confirm);
+
   const [selectedProjectId, setSelectedProjectId] = useState<string>(
     groupProjects[0]?.id || ""
   );
@@ -38,6 +70,18 @@ export function GroupCollaborationView() {
   const [newTitle, setNewTitle] = useState("");
   const [newCourseId, setNewCourseId] = useState(courses[0]?.id || "");
   const [newDesc, setNewDesc] = useState("");
+
+  // 编辑项目
+  const [isEditingProject, setIsEditingProject] = useState(false);
+  const [editTitle, setEditTitle] = useState("");
+  const [editDesc, setEditDesc] = useState("");
+
+  // 添加成员
+  const [memberName, setMemberName] = useState("");
+  // 添加任务
+  const [taskTitle, setTaskTitle] = useState("");
+  const [taskAssigneeId, setTaskAssigneeId] = useState("");
+  const [taskDdl, setTaskDdl] = useState("");
 
   const activeProject = groupProjects.find((p) => p.id === selectedProjectId) || groupProjects[0];
 
@@ -48,46 +92,74 @@ export function GroupCollaborationView() {
     addGroupProject({
       courseId: newCourseId,
       title: newTitle,
-      description: newDesc || "小组大作业分工与进度",
-      members: [
-        {
-          id: "m_user",
-          name: "张同学 (我)",
-          avatarUrl: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80",
-          role: "leader",
-          major: "金融学",
-        },
-        {
-          id: "m_2",
-          name: "李同学",
-          avatarUrl: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80",
-          role: "member",
-          major: "会计学",
-        },
-      ],
-      tasks: [
-        {
-          id: `gt_${Date.now()}_1`,
-          title: "查找文献与前期资料收集",
-          assigneeName: "李同学",
-          assigneeAvatar: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80",
-          ddl: new Date(Date.now() + 86400000 * 3).toISOString(),
-          completed: false,
-        },
-        {
-          id: `gt_${Date.now()}_2`,
-          title: "撰写项目报告第一章节与框架大纲",
-          assigneeName: "张同学 (我)",
-          assigneeAvatar: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80",
-          ddl: new Date(Date.now() + 86400000 * 5).toISOString(),
-          completed: false,
-        },
-      ],
+      description: newDesc,
     });
 
     setNewTitle("");
     setNewDesc("");
     setIsCreatingProject(false);
+    pushToast({ message: "项目已创建" });
+  };
+
+  const handleStartEditProject = () => {
+    if (!activeProject) return;
+    setEditTitle(activeProject.title);
+    setEditDesc(activeProject.description);
+    setIsEditingProject(true);
+  };
+
+  const handleSaveProject = () => {
+    if (!activeProject || !editTitle.trim()) return;
+    updateGroupProject(activeProject.id, { title: editTitle.trim(), description: editDesc });
+    setIsEditingProject(false);
+    pushToast({ message: "项目已更新" });
+  };
+
+  const handleDeleteProject = () => {
+    if (!activeProject) return;
+    confirmRequest({
+      title: "删除项目？",
+      description: `项目《${activeProject.title}》的成员与任务会一并删除，此操作无法撤销。`,
+      confirmLabel: "删除项目",
+      danger: true,
+      onConfirm: () => {
+        deleteGroupProject(activeProject.id);
+        setSelectedProjectId("");
+        pushToast({ message: "项目已删除" });
+      },
+    });
+  };
+
+  const handleAddMember = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!activeProject || !memberName.trim()) return;
+    addGroupMember(activeProject.id, { name: memberName.trim() });
+    setMemberName("");
+  };
+
+  const handleRemoveMember = (memberId: string) => {
+    if (!activeProject) return;
+    const result = deleteGroupMember(activeProject.id, memberId);
+    if (!result.ok) {
+      pushToast({
+        type: "warning",
+        message: result.reason === "last_leader" ? "项目至少需要一名组长" : "成员不存在",
+      });
+    }
+  };
+
+  const handleAddTask = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!activeProject || !taskTitle.trim()) return;
+    const date = taskDdl || formatLocalDate();
+    addGroupTask(activeProject.id, {
+      title: taskTitle.trim(),
+      assigneeId: taskAssigneeId || undefined,
+      ddl: combineLocalDateTime(date, "23:59"),
+    });
+    setTaskTitle("");
+    setTaskAssigneeId("");
+    setTaskDdl("");
   };
 
   return (
@@ -96,7 +168,7 @@ export function GroupCollaborationView() {
       <div className="bg-surface border border-line rounded-2xl p-4 shadow-subtle flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
           <h2 className="text-base font-bold text-charcoal mb-0.5 flex items-center gap-2">
-            <Users2 className="w-4 h-4 text-[#A48F82]" />
+            <Users2 className="w-4 h-4 text-sandrift" />
             小组协作
           </h2>
           <p className="text-xs text-sandrift">
@@ -114,24 +186,24 @@ export function GroupCollaborationView() {
 
       {/* New Project Form */}
       {isCreatingProject && (
-        <form onSubmit={handleCreateProject} className="bg-white border border-[#CDB9AB] rounded-2xl p-4 shadow-subtle space-y-3">
+        <form onSubmit={handleCreateProject} className="bg-surface border border-stone-beige rounded-2xl p-4 shadow-subtle space-y-3">
           <h3 className="text-sm font-bold text-charcoal flex items-center gap-1.5">
-            <FolderPlus className="w-4 h-4 text-[#A48F82]" />
+            <FolderPlus className="w-4 h-4 text-sandrift" />
             项目信息
           </h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
             <input
               type="text"
-              placeholder="项目/大作业名称 (例如: DTC品牌4P营销案例研讨)..."
+              placeholder="项目 / 大作业名称"
               value={newTitle}
               onChange={(e) => setNewTitle(e.target.value)}
-              className="p-2.5 bg-[#F7F5F5] border border-line rounded-xl focus:outline-none focus:border-charcoal"
+              className="p-2.5 bg-white border border-line-strong rounded-xl focus:outline-none focus:border-sandrift"
               required
             />
             <select
               value={newCourseId}
               onChange={(e) => setNewCourseId(e.target.value)}
-              className="p-2.5 bg-[#F7F5F5] border border-line rounded-xl focus:outline-none"
+              className="p-2.5 bg-white border border-line-strong rounded-xl focus:outline-none"
             >
               {courses.map((c) => (
                 <option key={c.id} value={c.id}>
@@ -145,13 +217,13 @@ export function GroupCollaborationView() {
             placeholder="项目说明"
             value={newDesc}
             onChange={(e) => setNewDesc(e.target.value)}
-            className="w-full text-xs p-2.5 bg-[#F7F5F5] border border-line rounded-xl focus:outline-none resize-none"
+            className="w-full text-xs p-2.5 bg-white border border-line-strong rounded-xl focus:outline-none resize-none"
           />
           <div className="flex justify-end space-x-2">
             <button
               type="button"
               onClick={() => setIsCreatingProject(false)}
-              className="px-3 py-1.5 text-xs text-satin-grey bg-[#F7F5F5] border border-line rounded-xl"
+              className="px-3 py-1.5 text-xs text-satin-grey bg-alabaster border border-line rounded-xl"
             >
               取消
             </button>
@@ -178,62 +250,49 @@ export function GroupCollaborationView() {
                 还没有小组项目
               </div>
             ) : (
-            groupProjects.map((p) => {
-              const isSelected = activeProject?.id === p.id;
-              const course = courses.find((c) => c.id === p.courseId);
-              return (
-                <div
-                  key={p.id}
-                  onClick={() => setSelectedProjectId(p.id)}
-                  role="button"
-                  tabIndex={0}
-                  onKeyDown={cardKeyHandler(() => setSelectedProjectId(p.id))}
-                  className={`p-4 rounded-2xl border transition-colors duration-[var(--motion-base)] ease-[var(--ease-standard)] cursor-pointer shadow-subtle flex flex-col justify-between ${
-                    isSelected
-                      ? "bg-pastel-mint/60 border-[#CDB9AB] ring-1 ring-[#CDB9AB]"
-                      : "bg-white border-line hover:bg-alabaster"
-                  }`}
-                >
-                  <div>
-                    <span className="text-[10px] font-mono px-2 py-0.5 bg-white border border-line-strong rounded text-sandrift">
-                      {course?.name || "通用课题"}
-                    </span>
-                    <h4 className="text-sm font-bold text-charcoal mt-2">
-                      {p.title}
-                    </h4>
-                    <p className="text-xs text-satin-grey mt-1 line-clamp-2 leading-relaxed">
-                      {p.description}
-                    </p>
-                  </div>
+              groupProjects.map((p) => {
+                const isSelected = activeProject?.id === p.id;
+                const course = courses.find((c) => c.id === p.courseId);
+                return (
+                  <div
+                    key={p.id}
+                    onClick={() => setSelectedProjectId(p.id)}
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={cardKeyHandler(() => setSelectedProjectId(p.id))}
+                    className={`p-4 rounded-2xl border transition-colors duration-[var(--motion-base)] ease-[var(--ease-standard)] cursor-pointer shadow-subtle flex flex-col justify-between ${
+                      isSelected
+                        ? "bg-pastel-mint/60 border-stone-beige ring-1 ring-stone-beige"
+                        : "bg-surface border-line hover:bg-alabaster"
+                    }`}
+                  >
+                    <div>
+                      <span className="text-[10px] font-mono px-2 py-0.5 bg-white border border-line-strong rounded text-sandrift">
+                        {course?.name || "通用课题"}
+                      </span>
+                      <h4 className="text-sm font-bold text-charcoal mt-2">{p.title}</h4>
+                      <p className="text-xs text-satin-grey mt-1 line-clamp-2 leading-relaxed">
+                        {p.description}
+                      </p>
+                    </div>
 
-                  <div className="mt-3 pt-2.5 border-t border-line-strong/60 flex items-center justify-between text-xs">
-                    <div className="flex items-center space-x-1.5">
-                      <div className="flex -space-x-1.5">
-                        {p.members.map((m) => (
-                          <img
-                            key={m.id}
-                            src={m.avatarUrl}
-                            alt={m.name}
-                            className="w-5 h-5 rounded-full border border-white object-cover"
-                            title={`${m.name} (${m.role === "leader" ? "组长" : "组员"})`}
-                          />
-                        ))}
+                    <div className="mt-3 pt-2.5 border-t border-line-strong/60 flex items-center justify-between text-xs">
+                      <div className="flex items-center space-x-1.5">
+                        <div className="flex -space-x-1.5">
+                          {p.members.map((m) => (
+                            <MemberAvatar key={m.id} member={m} size="w-5 h-5" />
+                          ))}
+                        </div>
+                        <span className="text-[10px] text-sandrift">{p.members.length} 人</span>
                       </div>
-                      <span className="text-[10px] text-sandrift">
-                        {p.members.length} 人
-                      </span>
-                    </div>
-
-                    <div className="flex items-center space-x-2">
-                      <span className="text-[10px] font-bold text-charcoal">
-                        {p.progress}%
-                      </span>
-                      <ChevronRight className="w-3.5 h-3.5 text-sandrift" />
+                      <div className="flex items-center space-x-2">
+                        <span className="text-[10px] font-bold text-charcoal">{p.progress}%</span>
+                        <ChevronRight className="w-3.5 h-3.5 text-sandrift" />
+                      </div>
                     </div>
                   </div>
-                </div>
-              );
-            })
+                );
+              })
             )}
           </div>
         </div>
@@ -243,26 +302,66 @@ export function GroupCollaborationView() {
           <div className="lg:col-span-2 space-y-4">
             {/* Project Overview Card */}
             <div className="bg-surface border border-line rounded-2xl p-4 shadow-subtle space-y-4">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-[#F0EBE1] pb-3">
-                <div>
-                  <span className="text-xs font-mono text-sandrift px-2 py-0.5 bg-[#F7F5F5] rounded border border-line">
-                    {courses.find((c) => c.id === activeProject.courseId)?.name}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-line-soft pb-3">
+                <div className="min-w-0">
+                  <span className="text-xs font-mono text-sandrift px-2 py-0.5 bg-white rounded border border-line-strong">
+                    {courses.find((c) => c.id === activeProject.courseId)?.name || "通用课题"}
                   </span>
-                  <h3 className="text-lg font-bold text-charcoal mt-1.5">
-                    {activeProject.title}
-                  </h3>
+                  {isEditingProject ? (
+                    <div className="mt-1.5 flex items-center space-x-2">
+                      <input
+                        value={editTitle}
+                        onChange={(e) => setEditTitle(e.target.value)}
+                        className="p-1.5 bg-white border border-line-strong rounded-lg text-sm font-bold"
+                      />
+                      <button onClick={handleSaveProject} title="保存" aria-label="保存">
+                        <Check className="w-4 h-4 text-success" />
+                      </button>
+                      <button onClick={() => setIsEditingProject(false)} title="取消" aria-label="取消">
+                        <X className="w-4 h-4 text-sandrift" />
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="flex items-center space-x-2 mt-1.5">
+                      <h3 className="text-lg font-bold text-charcoal">{activeProject.title}</h3>
+                      <button
+                        onClick={handleStartEditProject}
+                        className="p-1 text-sandrift hover:bg-alabaster rounded-lg"
+                        title="编辑项目"
+                        aria-label="编辑项目"
+                      >
+                        <Pencil className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        onClick={handleDeleteProject}
+                        className="p-1 text-danger hover:bg-danger-bg rounded-lg"
+                        title="删除项目"
+                        aria-label="删除项目"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  )}
                 </div>
                 <div className="text-right">
                   <span className="text-xs text-sandrift">团队总进度</span>
-                  <div className="text-2xl font-extrabold text-charcoal">
-                    {activeProject.progress}%
-                  </div>
+                  <div className="text-2xl font-extrabold text-charcoal">{activeProject.progress}%</div>
                 </div>
               </div>
 
-              <p className="text-xs text-satin-grey bg-[#F7F5F5] p-3 rounded-xl border border-line leading-relaxed">
-                {activeProject.description}
-              </p>
+              {isEditingProject ? (
+                <textarea
+                  rows={2}
+                  value={editDesc}
+                  onChange={(e) => setEditDesc(e.target.value)}
+                  className="w-full text-xs p-2.5 bg-white border border-line-strong rounded-xl focus:outline-none resize-none"
+                  placeholder="项目说明"
+                />
+              ) : (
+                <p className="text-xs text-satin-grey bg-white p-3 rounded-xl border border-line leading-relaxed">
+                  {activeProject.description || "暂无项目说明"}
+                </p>
+              )}
 
               {/* Progress Bar */}
               <div className="w-full bg-alabaster rounded-full h-2 overflow-hidden">
@@ -272,22 +371,18 @@ export function GroupCollaborationView() {
                 />
               </div>
 
-              {/* Member Avatars & Roles */}
+              {/* Members */}
               <div className="space-y-2 pt-2">
                 <h4 className="text-xs font-bold text-sandrift uppercase tracking-wider">
-                  小组成员
+                  小组成员 ({activeProject.members.length})
                 </h4>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
                   {activeProject.members.map((m) => (
                     <div
                       key={m.id}
-                      className="p-2.5 bg-[#F7F5F5] border border-line rounded-xl flex items-center space-x-2 text-xs"
+                      className="p-2.5 bg-white border border-line rounded-xl flex items-center space-x-2 text-xs group"
                     >
-                      <img
-                        src={m.avatarUrl}
-                        alt={m.name}
-                        className="w-7 h-7 rounded-full object-cover border border-[#CDB9AB]"
-                      />
+                      <MemberAvatar member={m} size="w-7 h-7" ring />
                       <div className="min-w-0 flex-1">
                         <p className="font-bold text-charcoal truncate">{m.name}</p>
                         <span
@@ -300,70 +395,157 @@ export function GroupCollaborationView() {
                           {m.role === "leader" ? "组长" : "成员"}
                         </span>
                       </div>
+                      <button
+                        onClick={() => handleRemoveMember(m.id)}
+                        className="p-1 text-sandrift hover:bg-danger-bg hover:text-danger rounded-lg opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
+                        title="移除成员"
+                        aria-label={`移除成员 ${m.name}`}
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
                     </div>
                   ))}
                 </div>
+
+                {/* Add Member */}
+                <form onSubmit={handleAddMember} className="flex items-center space-x-2 pt-1">
+                  <input
+                    type="text"
+                    placeholder="成员姓名"
+                    value={memberName}
+                    onChange={(e) => setMemberName(e.target.value)}
+                    className="flex-1 p-2 bg-white border border-line-strong rounded-lg text-xs focus:outline-none focus:border-sandrift"
+                  />
+                  <button
+                    type="submit"
+                    className="flex items-center space-x-1 px-2.5 py-2 bg-charcoal hover:bg-black text-white text-[11px] font-bold rounded-lg"
+                  >
+                    <Plus className="w-3 h-3" />
+                    <span>添加成员</span>
+                  </button>
+                </form>
               </div>
             </div>
 
-            {/* Task Breakdown Checklist */}
+            {/* Task Checklist */}
             <div className="bg-surface border border-line rounded-2xl p-4 shadow-subtle space-y-3">
-              <div className="flex items-center justify-between border-b border-[#F0EBE1] pb-2.5">
+              <div className="flex items-center justify-between border-b border-line-soft pb-2.5">
                 <h4 className="text-sm font-bold text-charcoal flex items-center gap-1.5">
-                  <CheckSquare className="w-4 h-4 text-[#A48F82]" />
+                  <CheckSquare className="w-4 h-4 text-sandrift" />
                   任务清单 ({activeProject.tasks.filter((t) => t.completed).length} / {activeProject.tasks.length})
                 </h4>
               </div>
 
               <div className="space-y-2">
+                {activeProject.tasks.length === 0 && (
+                  <p className="text-[11px] text-sandrift py-3 text-center bg-white border border-line rounded-xl">
+                    还没有任务
+                  </p>
+                )}
                 {activeProject.tasks.map((task) => {
-                  const ddlDate = parseDateSafely(task.ddl);
+                  const assignee = activeProject.members.find((m) => m.id === task.assigneeId);
+                  const ddlDate = parseLocalDDL(task.ddl);
                   return (
                     <div
                       key={task.id}
-                      onClick={() => toggleGroupTask(activeProject.id, task.id)}
-                      className={`p-3 rounded-xl border transition-all cursor-pointer flex items-center justify-between text-xs ${
+                      className={`p-3 rounded-xl border transition-all flex items-center justify-between text-xs ${
                         task.completed
-                          ? "bg-[#F7F5F5] border-line opacity-60 line-through"
+                          ? "bg-white border-line opacity-60"
                           : "bg-white border-line-strong hover:border-charcoal"
                       }`}
                     >
-                      <div className="flex items-center space-x-3">
-                        <button className="text-charcoal transition-colors">
+                      <div className="flex items-center space-x-3 min-w-0">
+                        <button
+                          onClick={() => toggleGroupTask(activeProject.id, task.id)}
+                          className="text-charcoal transition-colors shrink-0"
+                          title={task.completed ? "标记未完成" : "标记完成"}
+                          aria-label={task.completed ? "标记未完成" : "标记完成"}
+                        >
                           {task.completed ? (
                             <CheckSquare className="w-4 h-4 text-success" />
                           ) : (
                             <Square className="w-4 h-4 text-sandrift" />
                           )}
                         </button>
-                        <div>
-                          <span className="font-semibold text-charcoal">
+                        <div className="min-w-0">
+                          <span className={`font-semibold text-charcoal ${task.completed ? "line-through" : ""}`}>
                             {task.title}
                           </span>
                           <div className="flex items-center space-x-3 mt-1 text-[10px] text-sandrift">
                             <span className="flex items-center space-x-1">
                               <User className="w-3 h-3" />
-                              <span>负责人：{task.assigneeName}</span>
+                              <span>负责人：{assignee?.name ?? "未分配"}</span>
                             </span>
-                            <span className="flex items-center space-x-1">
-                              <Clock className="w-3 h-3" />
-                              <span>
-                                DDL: {formatDistanceToNow(ddlDate, { addSuffix: true, locale: zhCN })}
+                            {ddlDate && (
+                              <span className="flex items-center space-x-1">
+                                <Clock className="w-3 h-3" />
+                                <span>
+                                  DDL: {formatDistanceToNow(ddlDate, { addSuffix: true, locale: zhCN })}
+                                </span>
                               </span>
-                            </span>
+                            )}
                           </div>
                         </div>
                       </div>
 
-                      <img
-                        src={task.assigneeAvatar}
-                        alt={task.assigneeName}
-                        className="w-6 h-6 rounded-full border border-[#CDB9AB] shrink-0"
-                      />
+                      {assignee ? (
+                        <MemberAvatar member={assignee} size="w-6 h-6" ring />
+                      ) : (
+                        <span className="text-[10px] text-sandrift shrink-0">未分配</span>
+                      )}
+                      <button
+                        onClick={() => deleteGroupTask(activeProject.id, task.id)}
+                        className="p-1 ml-2 text-sandrift hover:bg-danger-bg hover:text-danger rounded-lg shrink-0"
+                        title="删除任务"
+                        aria-label={`删除任务 ${task.title}`}
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
                     </div>
                   );
                 })}
               </div>
+
+              {/* Add Task */}
+              <form onSubmit={handleAddTask} className="space-y-2 pt-1 border-t border-line-soft">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  <input
+                    type="text"
+                    placeholder="任务标题"
+                    value={taskTitle}
+                    onChange={(e) => setTaskTitle(e.target.value)}
+                    className="sm:col-span-1 p-2 bg-white border border-line-strong rounded-lg text-xs focus:outline-none focus:border-sandrift"
+                    required
+                  />
+                  <select
+                    value={taskAssigneeId}
+                    onChange={(e) => setTaskAssigneeId(e.target.value)}
+                    className="p-2 bg-white border border-line-strong rounded-lg text-xs focus:outline-none"
+                  >
+                    <option value="">未分配</option>
+                    {activeProject.members.map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {m.name}
+                      </option>
+                    ))}
+                  </select>
+                  <input
+                    type="date"
+                    value={taskDdl}
+                    onChange={(e) => setTaskDdl(e.target.value)}
+                    className="p-2 bg-white border border-line-strong rounded-lg text-xs font-mono focus:outline-none"
+                  />
+                </div>
+                <div className="flex justify-end">
+                  <button
+                    type="submit"
+                    className="flex items-center space-x-1 px-3 py-1.5 bg-charcoal hover:bg-black text-white text-[11px] font-bold rounded-lg"
+                  >
+                    <Plus className="w-3 h-3" />
+                    <span>添加任务</span>
+                  </button>
+                </div>
+              </form>
             </div>
           </div>
         )}
