@@ -45,7 +45,7 @@ export function Header() {
   const isCurrentWeek = currentSemesterWeek === realCurrentWeek;
 
   return (
-    <header className="bg-[#F7F5F5] border-b border-[#E7E3DD] px-6 py-3.5 flex flex-col md:flex-row md:items-center justify-between gap-4 sticky top-0 z-10">
+    <header className="bg-[#F7F5F5] border-b border-line px-6 py-3.5 flex flex-col md:flex-row md:items-center justify-between gap-4 sticky top-0 z-10">
       {/* Left: Clean Greeting */}
       <div>
         <h2 className="text-lg font-bold text-charcoal tracking-tight">
@@ -58,17 +58,17 @@ export function Header() {
         {/* Global Search Bar (Cmd+K) */}
         <div
           onClick={() => setSearchModalOpen(true)}
-          className="flex items-center space-x-2 bg-white border border-[#E0D7C6] rounded-xl px-3 py-1.5 text-xs text-[#8C827A] cursor-pointer hover:border-charcoal hover:bg-[#FAF8F5] transition-all shadow-subtle min-w-[200px]"
+          className="flex items-center space-x-2 bg-white border border-line-strong rounded-xl px-3 py-1.5 text-xs text-sandrift cursor-pointer hover:border-charcoal hover:bg-surface transition-all shadow-subtle min-w-[200px]"
         >
           <Search className="w-3.5 h-3.5 text-[#A48F82]" />
           <span className="flex-1 font-medium">搜索课程、任务、资料</span>
-          <kbd className="hidden sm:inline-block bg-[#F0EBE1] text-charcoal text-[10px] font-mono px-1.5 py-0.5 rounded border border-[#E0D7C6]">
+          <kbd className="hidden sm:inline-block bg-alabaster text-charcoal text-[10px] font-mono px-1.5 py-0.5 rounded border border-line-strong">
             ⌘ K
           </kbd>
         </div>
 
         {/* Date Range Picker Pill */}
-        <div className="flex items-center space-x-1.5 bg-white border border-[#E0D7C6] rounded-xl px-3 py-1.5 text-xs font-semibold text-charcoal shadow-subtle">
+        <div className="flex items-center space-x-1.5 bg-white border border-line-strong rounded-xl px-3 py-1.5 text-xs font-semibold text-charcoal shadow-subtle">
           <CalendarIcon className="w-3.5 h-3.5 text-[#A48F82]" />
           <span>{dateRangeString}</span>
           <button
@@ -76,8 +76,8 @@ export function Header() {
             className={cn(
               "text-[10px] ml-1 px-1.5 py-0.5 rounded transition-colors",
               isCurrentWeek
-                ? "bg-[#E3E6E0] text-charcoal"
-                : "bg-[#F0EBE1] text-[#8C827A] hover:text-charcoal"
+                ? "bg-pastel-mint text-charcoal"
+                : "bg-alabaster text-sandrift hover:text-charcoal"
             )}
           >
             本周

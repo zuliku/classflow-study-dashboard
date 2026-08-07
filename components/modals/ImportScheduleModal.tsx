@@ -166,7 +166,7 @@ export function ImportScheduleModal() {
     >
       <div
         className={cn(
-          "w-full max-w-2xl bg-white rounded-2xl shadow-drawer border border-[#E7E3DD] overflow-hidden flex flex-col max-h-[85vh]",
+          "w-full max-w-2xl bg-surface rounded-2xl shadow-drawer border border-line overflow-hidden flex flex-col max-h-[85vh]",
           "ux-modal-panel",
           visible ? "opacity-100 scale-100 translate-y-0" : "opacity-0 scale-[0.985] translate-y-1"
         )}
@@ -184,7 +184,7 @@ export function ImportScheduleModal() {
               setStep(1);
               setImportScheduleModalOpen(false);
             }}
-            className="p-1 rounded-lg text-[#8C827A] hover:bg-[#E0D7C6] transition-colors"
+            className="p-1 rounded-lg text-sandrift hover:bg-alba transition-colors"
             aria-label="关闭"
           >
             <X className="w-4 h-4" />
@@ -195,13 +195,13 @@ export function ImportScheduleModal() {
         {step === 1 && (
           <div className="p-6 space-y-4 text-xs overflow-y-auto">
             {/* Format Tabs */}
-            <div className="grid grid-cols-3 gap-2 p-1 bg-[#F0EBE1] rounded-xl border border-[#E0D7C6]">
+            <div className="grid grid-cols-3 gap-2 p-1 bg-alabaster rounded-xl border border-line-strong">
               <button
                 onClick={() => setActiveSource("ical")}
                 className={`flex items-center justify-center space-x-1 py-2 rounded-lg font-medium transition-all ${
                   activeSource === "ical"
                     ? "bg-white text-charcoal font-bold shadow-subtle"
-                    : "text-[#676268] hover:text-charcoal"
+                    : "text-satin-grey hover:text-charcoal"
                 }`}
               >
                 <Download className="w-3.5 h-3.5" />
@@ -212,7 +212,7 @@ export function ImportScheduleModal() {
                 className={`flex items-center justify-center space-x-1 py-2 rounded-lg font-medium transition-all ${
                   activeSource === "csv"
                     ? "bg-white text-charcoal font-bold shadow-subtle"
-                    : "text-[#676268] hover:text-charcoal"
+                    : "text-satin-grey hover:text-charcoal"
                 }`}
               >
                 <Server className="w-3.5 h-3.5" />
@@ -223,7 +223,7 @@ export function ImportScheduleModal() {
                 className={`flex items-center justify-center space-x-1 py-2 rounded-lg font-medium transition-all ${
                   activeSource === "json"
                     ? "bg-white text-charcoal font-bold shadow-subtle"
-                    : "text-[#676268] hover:text-charcoal"
+                    : "text-satin-grey hover:text-charcoal"
                 }`}
               >
                 <FileCode className="w-3.5 h-3.5" />
@@ -251,7 +251,7 @@ export function ImportScheduleModal() {
               />
               <label
                 htmlFor="file-upload-input"
-                className="inline-flex items-center space-x-1.5 px-3 py-1.5 bg-white border border-[#E0D7C6] rounded-lg text-xs font-bold text-charcoal cursor-pointer hover:bg-[#F0EBE1] transition-colors"
+                className="inline-flex items-center space-x-1.5 px-3 py-1.5 bg-white border border-line-strong rounded-lg text-xs font-bold text-charcoal cursor-pointer hover:bg-alabaster transition-colors"
               >
                 <FileUp className="w-3.5 h-3.5" />
                 <span>选择本地文件</span>
@@ -260,7 +260,7 @@ export function ImportScheduleModal() {
 
             {/* Or Paste Raw Text */}
             <div className="space-y-1.5">
-              <label className="font-bold text-[#8C827A]">
+              <label className="font-bold text-sandrift">
                 或粘贴文本内容
               </label>
               <textarea
@@ -274,13 +274,13 @@ export function ImportScheduleModal() {
                 }
                 value={inputText}
                 onChange={(e) => setInputText(e.target.value)}
-                className="w-full p-3 bg-[#F7F5F5] border border-[#E7E3DD] rounded-xl focus:outline-none focus:border-charcoal font-mono text-[11px] leading-relaxed resize-none"
+                className="w-full p-3 bg-[#F7F5F5] border border-line rounded-xl focus:outline-none focus:border-charcoal font-mono text-[11px] leading-relaxed resize-none"
               />
             </div>
 
             {/* Actions */}
             <div className="flex items-center justify-between pt-2 border-t border-[#F0EBE1]">
-              <p className="text-[10px] text-[#8C827A]">
+              <p className="text-[10px] text-sandrift">
                 支持 iCal、CSV 和 JSON 格式
               </p>
               <button
@@ -301,7 +301,7 @@ export function ImportScheduleModal() {
           <div className="p-6 space-y-4 text-xs overflow-y-auto">
             {/* Parsing Errors (skipped rows) */}
             {parsedData.errors.length > 0 && (
-              <div className="p-3 bg-[#FDF0F0] border border-[#F8D7D7] rounded-xl text-[#D94F4F] space-y-1">
+              <div className="p-3 bg-danger-bg border border-danger-border rounded-xl text-danger space-y-1">
                 <div className="flex items-center space-x-1 font-bold">
                   <AlertTriangle className="w-4 h-4" />
                   <span>{parsedData.errors.length} 条内容无法识别，已跳过</span>
@@ -314,7 +314,7 @@ export function ImportScheduleModal() {
 
             {/* Parsing Warnings (fallbacks / complex rules) */}
             {parsedData.warnings.length > 0 && (
-              <div className="p-3 bg-[#FFF6EE] border border-[#FDE6D2] rounded-xl text-[#D97706] space-y-1">
+              <div className="p-3 bg-warning-bg border border-warning-border rounded-xl text-warning space-y-1">
                 <div className="flex items-center space-x-1 font-bold">
                   <Info className="w-4 h-4" />
                   <span>以下内容需要确认</span>
@@ -328,14 +328,14 @@ export function ImportScheduleModal() {
             <div className="space-y-2">
               <h4 className="font-bold text-charcoal flex flex-wrap items-center justify-between gap-1">
                 <span>将导入 {previewItems.length} 门课程</span>
-                <span className="text-xs text-[#4A7C59] font-semibold">
+                <span className="text-xs text-success font-semibold">
                   已识别 {parsedData.schedules.length} 个上课时段
                   {skippedCount > 0 ? ` · 已跳过 ${skippedCount} 门` : ""}
                 </span>
               </h4>
 
               {conflictCount > 0 && (
-                <p className="text-[10px] text-[#D94F4F] bg-[#FDF0F0] border border-[#F8D7D7] rounded-lg px-2.5 py-1.5">
+                <p className="text-[10px] text-danger bg-danger-bg border border-danger-border rounded-lg px-2.5 py-1.5">
                   {conflictCount} 门课程与现有课表时间冲突，取消勾选可跳过后再导入
                 </p>
               )}
@@ -351,10 +351,10 @@ export function ImportScheduleModal() {
                         skipped ? "opacity-50" : ""
                       } ${
                         item.conflicts.length > 0
-                          ? "bg-[#FDF0F0] border-[#F8D7D7]"
+                          ? "bg-danger-bg border-danger-border"
                           : item.isDuplicate
-                          ? "bg-[#FFF6EE] border-[#FDE6D2]"
-                          : "bg-[#F7F5F5] border-[#E7E3DD]"
+                          ? "bg-warning-bg border-warning-border"
+                          : "bg-[#F7F5F5] border-line"
                       }`}
                     >
                       <div className="flex items-start justify-between gap-2">
@@ -369,32 +369,32 @@ export function ImportScheduleModal() {
                           <div className="min-w-0">
                             <div className="font-bold text-charcoal flex flex-wrap items-center gap-1.5">
                               <span className="truncate">{item.course.name}</span>
-                              <span className="text-[10px] font-mono text-[#8C827A] font-medium">
+                              <span className="text-[10px] font-mono text-sandrift font-medium">
                                 ({item.course.code})
                               </span>
                               {item.conflicts.length > 0 && (
-                                <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-[#D94F4F] text-white">
+                                <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-danger text-white">
                                   存在冲突
                                 </span>
                               )}
                               {item.isDuplicate && (
-                                <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-[#E28743] text-white">
+                                <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-warning text-white">
                                   可能重复
                                 </span>
                               )}
                               {!item.isDuplicate && item.conflicts.length === 0 && (
-                                <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-[#4A7C59] text-white">
+                                <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-success text-white">
                                   正常
                                 </span>
                               )}
                             </div>
-                            <div className="text-[10px] text-[#8C827A] mt-0.5">
+                            <div className="text-[10px] text-sandrift mt-0.5">
                               教师：{item.course.teacher} · 教室：{item.course.classroom} ·{" "}
                               {item.course.credit} 学分
                             </div>
                             <div className="mt-1 space-y-0.5">
                               {item.slots.length === 0 && (
-                                <div className="text-[10px] text-[#D94F4F]">该课程没有任何上课时段</div>
+                                <div className="text-[10px] text-danger">该课程没有任何上课时段</div>
                               )}
                               {item.slots.map((s) => (
                                 <div key={s.id} className="font-mono text-[10px] font-semibold text-charcoal">
@@ -404,7 +404,7 @@ export function ImportScheduleModal() {
                               ))}
                             </div>
                             {item.isDuplicate && item.duplicateReason && (
-                              <p className="text-[10px] text-[#D97706] mt-1">
+                              <p className="text-[10px] text-warning mt-1">
                                 与「{item.duplicateReason}」可能重复
                               </p>
                             )}
@@ -415,7 +415,7 @@ export function ImportScheduleModal() {
                                 : conf.scheduleA;
                               const isInternal = slotIds.has(other.id);
                               return (
-                                <p key={i} className="text-[10px] text-[#D94F4F] mt-1">
+                                <p key={i} className="text-[10px] text-danger mt-1">
                                   {isInternal ? (
                                     <>本课程内部时段冲突：{dayLabel(conf.dayOfWeek)} {conf.timeRange} 且存在共同生效周</>
                                   ) : (
@@ -427,7 +427,7 @@ export function ImportScheduleModal() {
                           </div>
                         </div>
                         {skipped && (
-                          <span className="text-[10px] font-bold text-[#8C827A] shrink-0">跳过</span>
+                          <span className="text-[10px] font-bold text-sandrift shrink-0">跳过</span>
                         )}
                       </div>
                     </div>
@@ -441,13 +441,13 @@ export function ImportScheduleModal() {
               <button
                 type="button"
                 onClick={() => setStep(1)}
-                className="px-4 py-2 text-xs font-medium text-[#676268] bg-[#F7F5F5] border border-[#E7E3DD] rounded-xl hover:bg-[#E0D7C6]"
+                className="px-4 py-2 text-xs font-medium text-satin-grey bg-[#F7F5F5] border border-line rounded-xl hover:bg-alba"
               >
                 返回
               </button>
               <div className="flex items-center space-x-2">
                 {duplicateCount > 0 && (
-                  <span className="text-[10px] text-[#D97706] font-semibold">
+                  <span className="text-[10px] text-warning font-semibold">
                     {duplicateCount} 门可能重复
                   </span>
                 )}
@@ -455,7 +455,7 @@ export function ImportScheduleModal() {
                   type="button"
                   onClick={handleConfirmImport}
                   disabled={previewItems.length - skippedCount === 0}
-                  className="px-5 py-2 text-xs font-bold text-white bg-[#4A7C59] hover:bg-[#3D6649] rounded-xl flex items-center space-x-1.5 disabled:opacity-50"
+                  className="px-5 py-2 text-xs font-bold text-white bg-success hover:bg-success/80 rounded-xl flex items-center space-x-1.5 disabled:opacity-50"
                 >
                   <CheckCircle className="w-4 h-4" />
                   <span>

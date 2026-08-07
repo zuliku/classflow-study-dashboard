@@ -60,7 +60,7 @@ export function FullTimetableModal() {
     >
       <div
         className={cn(
-          "w-full max-w-6xl bg-white rounded-3xl shadow-2xl border border-[#E7E3DD] flex flex-col h-[94vh] overflow-hidden",
+          "w-full max-w-6xl bg-surface rounded-3xl shadow-2xl border border-line flex flex-col h-[94vh] overflow-hidden",
           "ux-modal-panel",
           visible ? "opacity-100 scale-100 translate-y-0" : "opacity-0 scale-[0.985] translate-y-1"
         )}
@@ -68,14 +68,14 @@ export function FullTimetableModal() {
         {/* Modal Header */}
         <div className="p-4 px-6 border-b border-[#F0EBE1] bg-[#F7F5F5] flex flex-col sm:flex-row sm:items-center justify-between gap-3 shrink-0">
           <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 rounded-2xl bg-[#E3E6E0] border border-[#D0D5CC] flex items-center justify-center text-charcoal shadow-subtle">
+            <div className="w-10 h-10 rounded-2xl bg-pastel-mint border border-pastel-mint flex items-center justify-center text-charcoal shadow-subtle">
               <CalendarDays className="w-5 h-5" />
             </div>
             <div>
               <h2 className="text-base font-extrabold text-charcoal flex items-center gap-2">
                 {semester.name} · 课表
               </h2>
-              <p className="text-xs text-[#8C827A]">
+              <p className="text-xs text-sandrift">
                 {userProfile.college} · 在读课程 {courses.length} 门 ({totalCredits} 学分)
               </p>
             </div>
@@ -84,7 +84,7 @@ export function FullTimetableModal() {
           {/* Controls & Actions */}
           <div className="flex items-center space-x-3 shrink-0">
             {/* Semester Week Picker */}
-            <div className="flex items-center space-x-1.5 bg-white border border-[#E0D7C6] rounded-xl px-3 py-1.5 text-xs font-semibold text-charcoal shadow-subtle">
+            <div className="flex items-center space-x-1.5 bg-white border border-line-strong rounded-xl px-3 py-1.5 text-xs font-semibold text-charcoal shadow-subtle">
               <button
                 onClick={() => setCurrentSemesterWeek(currentSemesterWeek - 1)}
                 disabled={currentSemesterWeek <= 1}
@@ -109,7 +109,7 @@ export function FullTimetableModal() {
             {/* Print / Export */}
             <button
               onClick={handlePrint}
-              className="flex items-center space-x-1.5 px-3 py-1.5 bg-white hover:bg-[#F0EBE1] border border-[#E0D7C6] text-charcoal text-xs font-bold rounded-xl transition-colors shadow-subtle"
+              className="flex items-center space-x-1.5 px-3 py-1.5 bg-white hover:bg-alabaster border border-line-strong text-charcoal text-xs font-bold rounded-xl transition-colors shadow-subtle"
             >
               <Printer className="w-3.5 h-3.5" />
               <span>打印课表</span>
@@ -118,7 +118,7 @@ export function FullTimetableModal() {
             {/* Close */}
             <button
               onClick={() => setFullTimetableModalOpen(false)}
-              className="p-1.5 rounded-xl text-[#8C827A] hover:bg-[#E0D7C6] hover:text-charcoal transition-colors border border-[#E0D7C6] bg-white"
+              className="p-1.5 rounded-xl text-sandrift hover:bg-alba hover:text-charcoal transition-colors border border-line-strong bg-white"
               aria-label="关闭"
             >
               <X className="w-5 h-5" />
@@ -129,10 +129,10 @@ export function FullTimetableModal() {
         {/* Modal Main Content Container */}
         <div className="flex-1 p-5 overflow-y-auto space-y-4 bg-[#F7F5F5]">
           {/* 16-Week Semester Matrix Bar */}
-          <div className="bg-white border border-[#E7E3DD] rounded-2xl p-3 shadow-subtle space-y-2">
+          <div className="bg-surface border border-line rounded-2xl p-3 shadow-subtle space-y-2">
             <div className="flex items-center justify-between text-xs">
               <span className="font-bold text-charcoal">教学周索引</span>
-              <span className="text-[10px] text-[#8C827A]">点击切换周次</span>
+              <span className="text-[10px] text-sandrift">点击切换周次</span>
             </div>
             <div
               className="grid gap-1.5"
@@ -151,8 +151,8 @@ export function FullTimetableModal() {
                       isActiveWeek
                         ? "bg-charcoal text-white font-extrabold border-black shadow-subtle ring-2 ring-black/10"
                         : weekClassCount > 0
-                        ? "bg-[#E3E6E0] text-charcoal border-[#D0D5CC] hover:bg-[#D0D5CC]"
-                        : "bg-[#F7F5F5] text-[#8C827A] border-[#E7E3DD]"
+                        ? "bg-pastel-mint text-charcoal border-pastel-mint hover:bg-pastel-mint"
+                        : "bg-[#F7F5F5] text-sandrift border-line"
                     }`}
                   >
                     <div className="text-xs font-bold leading-none">{weekNum}</div>
@@ -164,12 +164,12 @@ export function FullTimetableModal() {
           </div>
 
           {/* Timetable Grid View with Spacious Vertical Room */}
-          <div className="bg-white rounded-2xl p-1 border border-[#E7E3DD] shadow-subtle min-h-[580px] flex flex-col">
+          <div className="bg-white rounded-2xl p-1 border border-line shadow-subtle min-h-[580px] flex flex-col">
             <TimetableGrid />
           </div>
 
           {/* Enrolled Courses Summary List */}
-          <div className="bg-white border border-[#E7E3DD] rounded-2xl p-4 shadow-subtle space-y-3">
+          <div className="bg-surface border border-line rounded-2xl p-4 shadow-subtle space-y-3">
             <h3 className="text-sm font-bold text-charcoal flex items-center gap-2">
               <BookOpen className="w-4 h-4 text-[#A48F82]" />
               在读课程 ({courses.length} 门)
@@ -189,7 +189,7 @@ export function FullTimetableModal() {
                   >
                     <div>
                       <div className="flex justify-between items-start">
-                        <span className="text-[10px] font-mono px-1.5 py-0.5 bg-white/90 rounded border border-[#E0D7C6] text-charcoal font-semibold">
+                        <span className="text-[10px] font-mono px-1.5 py-0.5 bg-white/90 rounded border border-line-strong text-charcoal font-semibold">
                           {course.code}
                         </span>
                         <span className="text-xs font-bold text-charcoal">
@@ -199,12 +199,12 @@ export function FullTimetableModal() {
                       <h4 className="text-xs font-extrabold text-charcoal mt-1.5">
                         {course.name}
                       </h4>
-                      <p className="text-[11px] text-[#676268] mt-0.5">
+                      <p className="text-[11px] text-satin-grey mt-0.5">
                         教师：{course.teacher} · 教室：{course.classroom}
                       </p>
                     </div>
 
-                    <div className="mt-2 pt-1.5 border-t border-black/5 text-[10px] text-[#8C827A] flex items-center justify-between">
+                    <div className="mt-2 pt-1.5 border-t border-black/5 text-[10px] text-sandrift flex items-center justify-between">
                       <span>{courseScheds.length} 个上课时段</span>
                       <span className="font-bold text-charcoal">详情</span>
                     </div>

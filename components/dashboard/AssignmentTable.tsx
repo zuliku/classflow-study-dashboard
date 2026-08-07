@@ -91,7 +91,7 @@ export function AssignmentTable() {
   }).length;
 
   return (
-    <div className="bg-white border border-[#E7E3DD] rounded-2xl p-4 shadow-subtle flex flex-col justify-between h-full space-y-3">
+    <div className="bg-surface border border-line rounded-2xl p-4 shadow-subtle flex flex-col justify-between h-full space-y-3">
       {/* Header & Controls */}
       <div className="space-y-3 border-b border-[#F0EBE1] pb-3">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
@@ -99,11 +99,11 @@ export function AssignmentTable() {
             <h3 className="text-sm font-bold text-charcoal">
               任务清单
             </h3>
-            <span className="text-[10px] font-semibold text-[#8C827A] bg-[#F7F5F5] px-1.5 py-0.5 rounded border border-[#E7E3DD]">
+            <span className="text-[10px] font-semibold text-sandrift bg-[#F7F5F5] px-1.5 py-0.5 rounded border border-line">
               {filteredAssignments.length} 项任务
             </span>
             {overdueCount > 0 && (
-              <span className="text-[10px] font-bold text-[#D94F4F] bg-[#FDF0F0] px-2 py-0.5 rounded-full border border-[#F8D7D7] flex items-center gap-1">
+              <span className="text-[10px] font-bold text-danger bg-danger-bg px-2 py-0.5 rounded-full border border-danger-border flex items-center gap-1">
                 <AlertTriangle className="w-3 h-3" />
                 {overdueCount} 项已逾期
               </span>
@@ -122,7 +122,7 @@ export function AssignmentTable() {
         {/* Filters Row: Course Filter Dropdown + Time Slice Pills */}
         <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
           {/* Course Selector Dropdown */}
-          <div className="flex items-center space-x-1.5 bg-[#F7F5F5] border border-[#E7E3DD] rounded-xl px-2.5 py-1">
+          <div className="flex items-center space-x-1.5 bg-[#F7F5F5] border border-line rounded-xl px-2.5 py-1">
             <BookOpen className="w-3.5 h-3.5 text-[#A48F82]" />
             <select
               value={courseFilter}
@@ -139,7 +139,7 @@ export function AssignmentTable() {
           </div>
 
           {/* Clean Time Slice Pills (Emojis removed as requested) */}
-          <div className="flex flex-wrap items-center gap-1 bg-[#F0EBE1] p-0.5 rounded-xl border border-[#E0D7C6] text-[11px] font-medium">
+          <div className="flex flex-wrap items-center gap-1 bg-alabaster p-0.5 rounded-xl border border-line-strong text-[11px] font-medium">
             {[
               { id: "all", label: "全部" },
               { id: "overdue", label: "已逾期" },
@@ -156,7 +156,7 @@ export function AssignmentTable() {
                   className={`px-2.5 py-0.5 rounded-lg transition-colors duration-[var(--motion-fast)] ease-[var(--ease-standard)] ${
                     isActive
                       ? "bg-white text-charcoal font-bold shadow-subtle"
-                      : "text-[#676268] hover:text-charcoal"
+                      : "text-satin-grey hover:text-charcoal"
                   }`}
                 >
                   {slice.label}
@@ -168,10 +168,10 @@ export function AssignmentTable() {
       </div>
 
       {/* Task List */}
-      <div className="divide-y divide-[#F5F2EE] mt-1 flex-1 overflow-y-auto max-h-[380px] space-y-1">
+      <div className="divide-y divide-line-soft mt-1 flex-1 overflow-y-auto max-h-[380px] space-y-1">
         {filteredAssignments.length === 0 ? (
-          <div className="py-10 text-center text-xs text-[#8C827A] space-y-1">
-            <CheckCircle2 className="w-8 h-8 mx-auto text-[#4A7C59]" />
+          <div className="py-10 text-center text-xs text-sandrift space-y-1">
+            <CheckCircle2 className="w-8 h-8 mx-auto text-success" />
             <p>该筛选条件下暂无任务</p>
           </div>
         ) : (
@@ -200,7 +200,7 @@ export function AssignmentTable() {
                 className={cn(
                   "p-3 rounded-xl transition-colors duration-[var(--motion-fast)] ease-[var(--ease-standard)] cursor-pointer flex items-center justify-between group",
                   isNew && "animate-enter",
-                  isOverdueTask ? "bg-[#FDF0F0] border border-[#F8D7D7]" : "hover:bg-[#F7F5F5] bg-white border border-[#F5F2EE]"
+                  isOverdueTask ? "bg-danger-bg border border-danger-border" : "hover:bg-alabaster bg-surface border border-line-soft"
                 )}
               >
                 {/* Left: Checkbox & Info */}
@@ -223,7 +223,7 @@ export function AssignmentTable() {
                       <h4
                         className={`text-xs font-bold truncate ${
                           isCompleted
-                            ? "line-through text-[#8C827A]"
+                            ? "line-through text-sandrift"
                             : "text-charcoal group-hover:text-black"
                         }`}
                       >
@@ -235,13 +235,13 @@ export function AssignmentTable() {
                         {priorityMeta.label}
                       </span>
                       {isOverdueTask && (
-                        <span className="text-[9px] bg-[#D94F4F] text-white px-1.5 py-0.2 rounded font-extrabold shrink-0">
+                        <span className="text-[9px] bg-danger text-white px-1.5 py-0.2 rounded font-extrabold shrink-0">
                           已逾期
                         </span>
                       )}
                     </div>
 
-                    <div className="flex items-center space-x-2 text-[10px] text-[#8C827A] mt-1">
+                    <div className="flex items-center space-x-2 text-[10px] text-sandrift mt-1">
                       <span className="truncate font-semibold">{course?.name || "通用"}</span>
                       <span>·</span>
                       <span>截止: {formattedDate}</span>
@@ -260,15 +260,15 @@ export function AssignmentTable() {
                 {/* Right: Progress & Action Buttons */}
                 <div className="flex items-center space-x-2 shrink-0 ml-2">
                   <div className="w-16 hidden sm:block">
-                    <div className="flex justify-between text-[9px] text-[#8C827A] mb-0.5">
+                    <div className="flex justify-between text-[9px] text-sandrift mb-0.5">
                       <span>进度</span>
                       <span className="font-bold text-charcoal">
                         {task.progress}%
                       </span>
                     </div>
-                    <div className="w-full bg-[#F0EBE1] rounded-full h-1 overflow-hidden">
+                    <div className="w-full bg-alabaster rounded-full h-1 overflow-hidden">
                       <div
-                        className="bg-[#4A7C59] h-1 rounded-full transition-[width] duration-[var(--motion-data)] ease-[var(--ease-emphasized)]"
+                        className="bg-success h-1 rounded-full transition-[width] duration-[var(--motion-data)] ease-[var(--ease-emphasized)]"
                         style={{ width: `${task.progress}%` }}
                       />
                     </div>
@@ -276,7 +276,7 @@ export function AssignmentTable() {
 
                   <button
                     onClick={(e) => handleEditClick(e, task.id)}
-                    className="p-1.5 rounded-lg text-[#8C827A] hover:bg-[#E0D7C6] hover:text-charcoal transition-colors"
+                    className="p-1.5 rounded-lg text-sandrift hover:bg-alba hover:text-charcoal transition-colors"
                     title="编辑任务"
                   >
                     <Edit2 className="w-3.5 h-3.5" />
@@ -294,13 +294,13 @@ export function AssignmentTable() {
                         });
                       }
                     }}
-                    className="p-1.5 rounded-lg text-[#D94F4F] hover:bg-[#FDF0F0] transition-colors"
+                    className="p-1.5 rounded-lg text-danger hover:bg-danger-bg transition-colors"
                     title="删除任务"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
                   </button>
 
-                  <ChevronRight className="w-3.5 h-3.5 text-[#8C827A] group-hover:text-charcoal transition-colors" />
+                  <ChevronRight className="w-3.5 h-3.5 text-sandrift group-hover:text-charcoal transition-colors" />
                 </div>
               </div>
             );
@@ -310,7 +310,7 @@ export function AssignmentTable() {
 
       {/* Footer */}
       <div className="pt-2 border-t border-[#F0EBE1] flex justify-between items-center text-xs">
-        <span className="text-[11px] text-[#8C827A]">
+        <span className="text-[11px] text-sandrift">
           点击任务查看详情与子任务
         </span>
         <button

@@ -334,31 +334,31 @@ export function SettingsView() {
   return (
     <div className="w-full space-y-5 pb-10">
       {/* Header Banner */}
-      <div className="bg-white border border-[#E7E3DD] rounded-2xl p-4 shadow-subtle flex items-center justify-between">
+      <div className="bg-surface border border-line rounded-2xl p-4 shadow-subtle flex items-center justify-between">
         <div>
           <h2 className="text-base font-bold text-charcoal mb-0.5 flex items-center gap-2">
             <Settings className="w-4 h-4 text-[#A48F82]" />
             系统设置
           </h2>
-          <p className="text-xs text-[#8C827A]">
+          <p className="text-xs text-sandrift">
             学业账户偏好、学期校历配置与本地数据备份管理
           </p>
         </div>
-        <span className="text-[11px] font-mono font-semibold px-2.5 py-1 bg-[#F0EBE1] border border-[#E0D7C6] rounded-xl text-charcoal">
+        <span className="text-[11px] font-mono font-semibold px-2.5 py-1 bg-alabaster border border-line-strong rounded-xl text-charcoal">
           ClassFlow v2.4.0
         </span>
       </div>
 
       {/* Feedback Alerts */}
       {importStatus && (
-        <div className="p-3 bg-[#E3E6E0] border border-[#D0D5CC] rounded-xl flex items-center space-x-2 text-[#4A7C59] font-bold text-xs animate-in fade-in">
+        <div className="p-3 bg-pastel-mint border border-pastel-mint rounded-xl flex items-center space-x-2 text-success font-bold text-xs animate-in fade-in">
           <CheckCircle className="w-4 h-4 shrink-0" />
           <span>{importStatus}</span>
         </div>
       )}
 
       {importWarning && (
-        <div className="p-3 bg-[#FFF6EE] border border-[#FDE6D2] rounded-xl flex items-start space-x-2 text-[#D97706] font-bold text-xs animate-in fade-in">
+        <div className="p-3 bg-warning-bg border border-warning-border rounded-xl flex items-start space-x-2 text-warning font-bold text-xs animate-in fade-in">
           <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
           <span>{importWarning}</span>
         </div>
@@ -371,7 +371,7 @@ export function SettingsView() {
           {/* Card 1: 个人信息 */}
           <form
             onSubmit={handleSaveProfile}
-            className="bg-white border border-[#E7E3DD] rounded-2xl p-6 shadow-subtle space-y-4"
+            className="bg-surface border border-line rounded-2xl p-6 shadow-subtle space-y-4"
           >
             <h3 className="text-sm font-bold text-charcoal flex items-center gap-2 pb-2 border-b border-[#F0EBE1]">
               <User className="w-4 h-4 text-[#A48F82]" />
@@ -380,66 +380,66 @@ export function SettingsView() {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
               <div className="space-y-1">
-                <label className="font-bold text-[#8C827A]">姓名</label>
+                <label className="font-bold text-sandrift">姓名</label>
                 <input
                   type="text"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  className="w-full p-2.5 bg-[#F7F5F5] border border-[#E7E3DD] rounded-xl text-charcoal font-semibold focus:outline-none"
+                  className="w-full p-2.5 bg-[#F7F5F5] border border-line rounded-xl text-charcoal font-semibold focus:outline-none"
                   required
                 />
               </div>
 
               <div className="space-y-1">
-                <label className="font-bold text-[#8C827A]">学号</label>
+                <label className="font-bold text-sandrift">学号</label>
                 <input
                   type="text"
                   value={studentId}
                   onChange={(e) => setStudentId(e.target.value)}
-                  className="w-full p-2.5 bg-[#F7F5F5] border border-[#E7E3DD] rounded-xl text-charcoal font-mono focus:outline-none"
+                  className="w-full p-2.5 bg-[#F7F5F5] border border-line rounded-xl text-charcoal font-mono focus:outline-none"
                   required
                 />
               </div>
 
               <div className="space-y-1">
-                <label className="font-bold text-[#8C827A]">学院专业</label>
+                <label className="font-bold text-sandrift">学院专业</label>
                 <input
                   type="text"
                   value={college}
                   onChange={(e) => setCollege(e.target.value)}
-                  className="w-full p-2.5 bg-[#F7F5F5] border border-[#E7E3DD] rounded-xl text-charcoal focus:outline-none"
+                  className="w-full p-2.5 bg-[#F7F5F5] border border-line rounded-xl text-charcoal focus:outline-none"
                   required
                 />
               </div>
 
               <div className="space-y-1">
-                <label className="font-bold text-[#8C827A]">年级</label>
+                <label className="font-bold text-sandrift">年级</label>
                 <input
                   type="text"
                   value={grade}
                   onChange={(e) => setGrade(e.target.value)}
-                  className="w-full p-2.5 bg-[#F7F5F5] border border-[#E7E3DD] rounded-xl text-charcoal focus:outline-none"
+                  className="w-full p-2.5 bg-[#F7F5F5] border border-line rounded-xl text-charcoal focus:outline-none"
                   required
                 />
               </div>
 
               <div className="space-y-1">
-                <label className="font-bold text-[#8C827A]">已修学分</label>
+                <label className="font-bold text-sandrift">已修学分</label>
                 <input
                   type="number"
                   value={completedCredits}
                   onChange={(e) => setCompletedCredits(Number(e.target.value))}
-                  className="w-full p-2.5 bg-[#F7F5F5] border border-[#E7E3DD] rounded-xl text-charcoal font-bold focus:outline-none"
+                  className="w-full p-2.5 bg-[#F7F5F5] border border-line rounded-xl text-charcoal font-bold focus:outline-none"
                 />
               </div>
 
               <div className="space-y-1">
-                <label className="font-bold text-[#8C827A]">本学期总学分</label>
+                <label className="font-bold text-sandrift">本学期总学分</label>
                 <input
                   type="number"
                   value={totalCredits}
                   onChange={(e) => setTotalCredits(Number(e.target.value))}
-                  className="w-full p-2.5 bg-[#F7F5F5] border border-[#E7E3DD] rounded-xl text-charcoal font-bold focus:outline-none"
+                  className="w-full p-2.5 bg-[#F7F5F5] border border-line rounded-xl text-charcoal font-bold focus:outline-none"
                 />
               </div>
             </div>
@@ -458,7 +458,7 @@ export function SettingsView() {
           {/* Card 2: 学期信息设置 */}
           <form
             onSubmit={handleSaveSemester}
-            className="bg-white border border-[#E7E3DD] rounded-2xl p-6 shadow-subtle space-y-4"
+            className="bg-surface border border-line rounded-2xl p-6 shadow-subtle space-y-4"
           >
             <h3 className="text-sm font-bold text-charcoal flex items-center gap-2 pb-2 border-b border-[#F0EBE1]">
               <Calendar className="w-4 h-4 text-[#A48F82]" />
@@ -467,34 +467,34 @@ export function SettingsView() {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
               <div className="space-y-1">
-                <label className="font-bold text-[#8C827A]">学期名称</label>
+                <label className="font-bold text-sandrift">学期名称</label>
                 <input
                   type="text"
                   value={semesterName}
                   onChange={(e) => setSemesterName(e.target.value)}
-                  className="w-full p-2.5 bg-[#F7F5F5] border border-[#E7E3DD] rounded-xl text-charcoal font-semibold focus:outline-none"
+                  className="w-full p-2.5 bg-[#F7F5F5] border border-line rounded-xl text-charcoal font-semibold focus:outline-none"
                   required
                 />
               </div>
 
               <div className="space-y-1">
-                <label className="font-bold text-[#8C827A]">开学日期</label>
+                <label className="font-bold text-sandrift">开学日期</label>
                 <input
                   type="date"
                   value={semesterStartDate}
                   onChange={(e) => setSemesterStartDate(e.target.value)}
-                  className="w-full p-2.5 bg-[#F7F5F5] border border-[#E7E3DD] rounded-xl text-charcoal font-mono focus:outline-none"
+                  className="w-full p-2.5 bg-[#F7F5F5] border border-line rounded-xl text-charcoal font-mono focus:outline-none"
                   required
                 />
-                <p className="text-[10px] text-[#8C827A]">周一为学期第 1 周起始日</p>
+                <p className="text-[10px] text-sandrift">周一为学期第 1 周起始日</p>
               </div>
 
               <div className="space-y-1">
-                <label className="font-bold text-[#8C827A]">总教学周数</label>
+                <label className="font-bold text-sandrift">总教学周数</label>
                 <select
                   value={totalWeeks}
                   onChange={(e) => setTotalWeeks(Number(e.target.value))}
-                  className="w-full p-2.5 bg-[#F7F5F5] border border-[#E7E3DD] rounded-xl text-charcoal font-bold focus:outline-none"
+                  className="w-full p-2.5 bg-[#F7F5F5] border border-line rounded-xl text-charcoal font-bold focus:outline-none"
                 >
                   <option value={16}>16 周 (标准学期)</option>
                   <option value={18}>18 周</option>
@@ -519,7 +519,7 @@ export function SettingsView() {
         {/* Right Column (1/3 Width) */}
         <div className="space-y-5">
           {/* Card 3: 数据管理 */}
-          <div className="bg-white border border-[#E7E3DD] rounded-2xl p-6 shadow-subtle space-y-4">
+          <div className="bg-surface border border-line rounded-2xl p-6 shadow-subtle space-y-4">
             <h3 className="text-sm font-bold text-charcoal flex items-center gap-2 pb-2 border-b border-[#F0EBE1]">
               <ShieldCheck className="w-4 h-4 text-[#A48F82]" />
               数据管理
@@ -527,29 +527,29 @@ export function SettingsView() {
 
             <div className="space-y-2.5 text-xs">
               {/* 课程资料可用性状态 */}
-              <div className="p-3 bg-[#F7F5F5] border border-[#E7E3DD] rounded-xl space-y-1">
+              <div className="p-3 bg-[#F7F5F5] border border-line rounded-xl space-y-1">
                 <div className="flex items-center justify-between">
                   <span className="font-bold text-charcoal">课程资料本地状态</span>
                   <button
                     onClick={handleRefreshMaterialHealth}
                     disabled={isCheckingMaterials}
-                    className="p-1 text-[#8C827A] hover:bg-[#E0D7C6] rounded-lg transition-colors disabled:opacity-50"
+                    className="p-1 text-sandrift hover:bg-alba rounded-lg transition-colors disabled:opacity-50"
                     title="重新检测"
                   >
                     <RefreshCw className={`w-3.5 h-3.5 ${isCheckingMaterials ? "animate-spin" : ""}`} />
                   </button>
                 </div>
                 {materialHealth ? (
-                  <p className="text-[10px] text-[#676268]">
+                  <p className="text-[10px] text-satin-grey">
                     课程资料：{materialHealth.total} 个 · 本地文件正常：{materialHealth.available} 个
                     {materialHealth.missing.length > 0 && (
-                      <span className="text-[#D94F4F] font-bold">
+                      <span className="text-danger font-bold">
                         {" "}· 缺失：{materialHealth.missing.length} 个
                       </span>
                     )}
                   </p>
                 ) : (
-                  <p className="text-[10px] text-[#8C827A]">检测中…</p>
+                  <p className="text-[10px] text-sandrift">检测中…</p>
                 )}
               </div>
 
@@ -574,13 +574,13 @@ export function SettingsView() {
               <button
                 onClick={handleExportDataJSON}
                 disabled={isExporting || isImporting}
-                className="flex items-center justify-between w-full p-3 bg-[#F7F5F5] hover:bg-[#F0EBE1] border border-[#E7E3DD] text-charcoal font-bold rounded-xl transition-colors disabled:opacity-60"
+                className="flex items-center justify-between w-full p-3 bg-[#F7F5F5] hover:bg-alabaster border border-line text-charcoal font-bold rounded-xl transition-colors disabled:opacity-60"
               >
                 <div className="flex items-center space-x-2">
                   <Download className="w-4 h-4 text-[#A48F82]" />
                   <span>导出数据 JSON</span>
                 </div>
-                <span className="text-[10px] text-[#8C827A] font-normal">仅数据</span>
+                <span className="text-[10px] text-sandrift font-normal">仅数据</span>
               </button>
 
               {/* 3. 导入备份（支持 .zip / .json） */}
@@ -595,25 +595,25 @@ export function SettingsView() {
                 htmlFor="backup-import-input"
                 className={`flex items-center justify-between w-full p-3 border text-charcoal font-bold rounded-xl cursor-pointer transition-colors ${
                   isImporting
-                    ? "bg-[#E3E6E0] border-[#D0D5CC] cursor-not-allowed"
-                    : "bg-[#F7F5F5] hover:bg-[#F0EBE1] border-[#E7E3DD]"
+                    ? "bg-pastel-mint border-pastel-mint cursor-not-allowed"
+                    : "bg-[#F7F5F5] hover:bg-alabaster border-line"
                 }`}
               >
                 <div className="flex items-center space-x-2">
                   {isImporting ? (
-                    <Loader2 className="w-4 h-4 animate-spin text-[#8C827A]" />
+                    <Loader2 className="w-4 h-4 animate-spin text-sandrift" />
                   ) : (
                     <Upload className="w-4 h-4 text-[#A48F82]" />
                   )}
                   <span>{isImporting ? "正在导入…" : "导入备份"}</span>
                 </div>
-                <span className="text-[10px] text-[#8C827A] font-normal">支持 .zip / .json</span>
+                <span className="text-[10px] text-sandrift font-normal">支持 .zip / .json</span>
               </label>
 
               {/* 4. 重置演示数据 */}
               <button
                 onClick={handleResetData}
-                className="flex items-center justify-between w-full p-3 bg-[#FDF0F0] hover:bg-[#F8D7D7] border border-[#F8D7D7] text-[#D94F4F] font-bold rounded-xl transition-colors"
+                className="flex items-center justify-between w-full p-3 bg-danger-bg hover:bg-danger-border border border-danger-border text-danger font-bold rounded-xl transition-colors"
               >
                 <div className="flex items-center space-x-2">
                   <RotateCcw className="w-4 h-4" />
@@ -625,17 +625,17 @@ export function SettingsView() {
           </div>
 
           {/* Card 4: 课表与显示偏好 */}
-          <div className="bg-white border border-[#E7E3DD] rounded-2xl p-6 shadow-subtle space-y-4">
+          <div className="bg-surface border border-line rounded-2xl p-6 shadow-subtle space-y-4">
             <h3 className="text-sm font-bold text-charcoal flex items-center gap-2 pb-2 border-b border-[#F0EBE1]">
               <Sliders className="w-4 h-4 text-[#A48F82]" />
               显示偏好
             </h3>
 
             <div className="space-y-3 text-xs">
-              <div className="flex items-center justify-between p-3 bg-[#F7F5F5] rounded-xl border border-[#E7E3DD]">
+              <div className="flex items-center justify-between p-3 bg-[#F7F5F5] rounded-xl border border-line">
                 <div>
                   <h4 className="font-bold text-charcoal">显示周末课表</h4>
-                  <p className="text-[10px] text-[#8C827A]">包含周六与周日排课</p>
+                  <p className="text-[10px] text-sandrift">包含周六与周日排课</p>
                 </div>
                 <input
                   type="checkbox"
@@ -644,10 +644,10 @@ export function SettingsView() {
                 />
               </div>
 
-              <div className="flex items-center justify-between p-3 bg-[#F7F5F5] rounded-xl border border-[#E7E3DD]">
+              <div className="flex items-center justify-between p-3 bg-[#F7F5F5] rounded-xl border border-line">
                 <div>
                   <h4 className="font-bold text-charcoal">临近 DDL 提醒</h4>
-                  <p className="text-[10px] text-[#8C827A]">3 天内作业高亮标红</p>
+                  <p className="text-[10px] text-sandrift">3 天内作业高亮标红</p>
                 </div>
                 <input
                   type="checkbox"
@@ -659,12 +659,12 @@ export function SettingsView() {
           </div>
 
           {/* Card 5: 关于 */}
-          <div className="bg-[#F0EBE1]/60 border border-[#E0D7C6] rounded-2xl p-4 space-y-2 text-xs">
+          <div className="bg-alabaster/60 border border-line-strong rounded-2xl p-4 space-y-2 text-xs">
             <div className="flex items-center space-x-2 font-bold text-charcoal">
               <Info className="w-4 h-4 text-[#A48F82]" />
               <span>关于 ClassFlow</span>
             </div>
-            <p className="text-[11px] text-[#676268] leading-relaxed">
+            <p className="text-[11px] text-satin-grey leading-relaxed">
               课表、任务与 DDL 管理工具，数据保存在本地浏览器。
             </p>
           </div>

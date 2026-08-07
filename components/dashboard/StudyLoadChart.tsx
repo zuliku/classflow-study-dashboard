@@ -23,13 +23,13 @@ export function StudyLoadChart() {
   const yAxisMax = Math.max(6, Math.ceil(maxDayHours + 1));
 
   return (
-    <div className="bg-white border border-[#E7E3DD] rounded-2xl p-4 shadow-subtle flex flex-col justify-between h-full">
+    <div className="bg-surface border border-line rounded-2xl p-4 shadow-subtle flex flex-col justify-between h-full">
       {/* Header */}
       <div className="flex items-center justify-between pb-2.5 border-b border-[#F0EBE1]">
         <h3 className="text-sm font-bold text-charcoal">
           本周课程负荷
         </h3>
-        <span className="text-[10px] font-semibold text-[#8C827A] bg-[#F7F5F5] px-2 py-1 rounded-lg border border-[#E7E3DD]">
+        <span className="text-[10px] font-semibold text-sandrift bg-[#F7F5F5] px-2 py-1 rounded-lg border border-line">
           {weekLoad.isInSemester
             ? `第 ${weekLoad.week} 周 · 按实际课表统计`
             : "本周不在教学周内"}
@@ -44,10 +44,10 @@ export function StudyLoadChart() {
             <span className="text-2xl font-bold text-charcoal tracking-tight">
               {weekLoad.totalHours}
             </span>
-            <span className="text-xs font-semibold text-[#676268]">小时</span>
+            <span className="text-xs font-semibold text-satin-grey">小时</span>
           </div>
-          <p className="text-[11px] text-[#8C827A]">本周课程时长</p>
-          <p className="text-[10px] font-semibold text-[#4A7C59]">
+          <p className="text-[11px] text-sandrift">本周课程时长</p>
+          <p className="text-[10px] font-semibold text-success">
             按课表统计
           </p>
         </div>
@@ -61,12 +61,12 @@ export function StudyLoadChart() {
             >
               <XAxis
                 dataKey="day"
-                tick={{ fontSize: 10, fill: "#8C827A" }}
+                tick={{ fontSize: 10, fill: "#A48F82" }}
                 axisLine={false}
                 tickLine={false}
               />
               <YAxis
-                tick={{ fontSize: 9, fill: "#8C827A" }}
+                tick={{ fontSize: 9, fill: "#A48F82" }}
                 axisLine={false}
                 tickLine={false}
                 unit="h"

@@ -116,7 +116,7 @@ export function FilePreviewModal() {
     >
       <div
         className={cn(
-          "w-full max-w-4xl bg-white rounded-2xl shadow-2xl border border-[#E7E3DD] flex flex-col h-[88vh] overflow-hidden",
+          "w-full max-w-4xl bg-surface rounded-2xl shadow-2xl border border-line flex flex-col h-[88vh] overflow-hidden",
           "ux-modal-panel",
           visible ? "opacity-100 scale-100 translate-y-0" : "opacity-0 scale-[0.985] translate-y-1"
         )}
@@ -124,14 +124,14 @@ export function FilePreviewModal() {
         {/* Header */}
         <div className="p-4 px-6 border-b border-[#F0EBE1] bg-[#F7F5F5] flex items-center justify-between shrink-0">
           <div className="flex items-center space-x-3 min-w-0 flex-1">
-            <div className="w-9 h-9 rounded-xl bg-[#E3E6E0] border border-[#D0D5CC] flex items-center justify-center text-charcoal shrink-0">
+            <div className="w-9 h-9 rounded-xl bg-pastel-mint border border-pastel-mint flex items-center justify-center text-charcoal shrink-0">
               <FileText className="w-4 h-4" />
             </div>
             <div className="min-w-0 flex-1">
               <h3 className="text-sm font-bold text-charcoal truncate">
                 {material.title}
               </h3>
-              <p className="text-[10px] text-[#8C827A]">
+              <p className="text-[10px] text-sandrift">
                 {material.size || "1.5 MB"} · 上传于 {material.uploadDate}
               </p>
             </div>
@@ -151,7 +151,7 @@ export function FilePreviewModal() {
             <button
               onClick={handleClose}
               aria-label="关闭"
-              className="p-1.5 rounded-xl text-[#8C827A] hover:bg-[#E0D7C6] hover:text-charcoal transition-colors border border-[#E0D7C6] bg-white"
+              className="p-1.5 rounded-xl text-sandrift hover:bg-alba hover:text-charcoal transition-colors border border-line-strong bg-white"
             >
               <X className="w-5 h-5" />
             </button>
@@ -159,22 +159,22 @@ export function FilePreviewModal() {
         </div>
 
         {/* Content Viewer Body */}
-        <div className="flex-1 p-4 bg-[#313032] flex items-center justify-center overflow-hidden relative">
+        <div className="flex-1 p-4 bg-charcoal flex items-center justify-center overflow-hidden relative">
           {isLoading ? (
             <div className="flex flex-col items-center space-y-2 text-white/80 text-xs">
               <Loader2 className="w-6 h-6 animate-spin" />
               <span>正在读取文件…</span>
             </div>
           ) : loadFailed ? (
-            <div className="bg-white p-8 rounded-2xl max-w-md text-center space-y-3 shadow-2xl border border-[#E7E3DD]">
-              <div className="w-14 h-14 rounded-2xl bg-[#FDF0F0] border border-[#F8D7D7] flex items-center justify-center mx-auto text-[#D94F4F]">
+            <div className="bg-surface p-8 rounded-2xl max-w-md text-center space-y-3 shadow-2xl border border-line">
+              <div className="w-14 h-14 rounded-2xl bg-danger-bg border border-danger-border flex items-center justify-center mx-auto text-danger">
                 <FileText className="w-7 h-7" />
               </div>
               <div className="space-y-1">
                 <h4 className="text-base font-bold text-charcoal">
                   文件读取失败
                 </h4>
-                <p className="text-xs text-[#8C827A]">
+                <p className="text-xs text-sandrift">
                   找不到该文件，可能已被删除，请重新上传。
                 </p>
               </div>
@@ -192,15 +192,15 @@ export function FilePreviewModal() {
               className="max-w-full max-h-full object-contain rounded-xl shadow-card"
             />
           ) : (
-            <div className="bg-white p-8 rounded-2xl max-w-md text-center space-y-4 shadow-2xl border border-[#E7E3DD]">
-              <div className="w-14 h-14 rounded-2xl bg-[#F0EBE1] border border-[#E0D7C6] flex items-center justify-center mx-auto text-charcoal">
+            <div className="bg-surface p-8 rounded-2xl max-w-md text-center space-y-4 shadow-2xl border border-line">
+              <div className="w-14 h-14 rounded-2xl bg-alabaster border border-line-strong flex items-center justify-center mx-auto text-charcoal">
                 <FileText className="w-7 h-7" />
               </div>
               <div className="space-y-1">
                 <h4 className="text-base font-bold text-charcoal">
                   {material.title}
                 </h4>
-                <p className="text-xs text-[#8C827A]">
+                <p className="text-xs text-sandrift">
                   该格式支持下载后阅读
                 </p>
               </div>
@@ -214,7 +214,7 @@ export function FilePreviewModal() {
                   <span>下载文件</span>
                 </a>
               ) : (
-                <div className="text-xs text-[#8C827A] p-3 bg-[#F7F5F5] rounded-xl border border-[#E7E3DD]">
+                <div className="text-xs text-sandrift p-3 bg-[#F7F5F5] rounded-xl border border-line">
                   本地示例资料 ({material.size || "2.4 MB"})，上传后可预览与下载
                 </div>
               )}

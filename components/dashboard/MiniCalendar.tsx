@@ -131,7 +131,7 @@ export function MiniCalendar() {
               <BookOpen className="w-3 h-3 text-[#A48F82] shrink-0" />
               <span className="font-semibold text-charcoal truncate">{c?.name}</span>
             </div>
-            <span className="text-[10px] font-mono text-[#8C827A] shrink-0">
+            <span className="text-[10px] font-mono text-sandrift shrink-0">
               {s.startTime} - {s.endTime}
             </span>
           </div>
@@ -148,7 +148,7 @@ export function MiniCalendar() {
           role="button"
           tabIndex={0}
           onKeyDown={cardKeyHandler(() => setSelectedAssignmentId(a.id))}
-          className="p-1.5 bg-[#FDF0F0] border border-[#F8D7D7] rounded-lg text-xs flex items-center justify-between cursor-pointer text-[#D94F4F]"
+          className="p-1.5 bg-danger-bg border border-danger-border rounded-lg text-xs flex items-center justify-between cursor-pointer text-danger"
         >
           <div className="flex items-center space-x-1.5 min-w-0">
             <ClipboardCheck className="w-3 h-3 shrink-0" />
@@ -164,7 +164,7 @@ export function MiniCalendar() {
       node: (
         <div
           key={m.id}
-          className="p-1.5 bg-[#FFF6EE] border border-[#FDE6D2] rounded-lg text-xs flex items-center justify-between text-[#D97706]"
+          className="p-1.5 bg-alabaster/60 border border-stone-beige rounded-lg text-xs flex items-center justify-between text-sandrift"
         >
           <div className="flex items-center space-x-1.5 min-w-0">
             <Award className="w-3 h-3 shrink-0" />
@@ -180,7 +180,7 @@ export function MiniCalendar() {
       node: (
         <div
           key={m.id}
-          className="p-1.5 bg-[#F2F7F3] border border-[#D4E7D7] rounded-lg text-xs flex items-center justify-between text-[#4A7C59]"
+          className="p-1.5 bg-pastel-mint/60 border border-ashy-beige rounded-lg text-xs flex items-center justify-between text-satin-grey"
         >
           <div className="flex items-center space-x-1.5 min-w-0">
             <CalendarDays className="w-3 h-3 shrink-0" />
@@ -193,7 +193,7 @@ export function MiniCalendar() {
   ].sort((x, y) => x.time.localeCompare(y.time));
 
   return (
-    <div className="bg-white border border-[#E7E3DD] rounded-2xl p-4 shadow-subtle space-y-3 flex flex-col justify-between">
+    <div className="bg-surface border border-line rounded-2xl p-4 shadow-subtle space-y-3 flex flex-col justify-between">
       {/* Header */}
       <div className="flex items-center justify-between pb-2 border-b border-[#F0EBE1]">
         <div className="flex items-center space-x-2">
@@ -206,13 +206,13 @@ export function MiniCalendar() {
         <div className="flex items-center space-x-1">
           <button
             onClick={handleResetToday}
-            className="text-[10px] bg-[#F0EBE1] hover:bg-[#E0D7C6] text-charcoal px-2 py-0.5 rounded-lg font-bold transition-colors mr-1"
+            className="text-[10px] bg-alabaster hover:bg-alba text-charcoal px-2 py-0.5 rounded-lg font-bold transition-colors mr-1"
           >
             回到今天
           </button>
           <button
             onClick={handlePrevMonth}
-            className="p-1.5 rounded-lg text-[#8C827A] hover:bg-[#F7F5F5] transition-colors"
+            className="p-1.5 rounded-lg text-sandrift hover:bg-alabaster transition-colors"
             title="上一月"
             aria-label="上一月"
           >
@@ -220,7 +220,7 @@ export function MiniCalendar() {
           </button>
           <button
             onClick={handleNextMonth}
-            className="p-1.5 rounded-lg text-[#8C827A] hover:bg-[#F7F5F5] transition-colors"
+            className="p-1.5 rounded-lg text-sandrift hover:bg-alabaster transition-colors"
             title="下一月"
             aria-label="下一月"
           >
@@ -230,7 +230,7 @@ export function MiniCalendar() {
       </div>
 
       {/* Weekday Row */}
-      <div className="grid grid-cols-7 text-center text-[10px] font-bold text-[#8C827A]">
+      <div className="grid grid-cols-7 text-center text-[10px] font-bold text-sandrift">
         {["一", "二", "三", "四", "五", "六", "日"].map((d) => (
           <div key={d} className="py-1">
             {d}
@@ -286,9 +286,9 @@ export function MiniCalendar() {
                 isSelected
                   ? "bg-charcoal text-white font-bold shadow-subtle ring-2 ring-black/10"
                   : isTodayDate
-                  ? "bg-[#E3E6E0] text-charcoal font-extrabold border border-[#CDB9AB]"
+                  ? "bg-pastel-mint text-charcoal font-extrabold border border-[#CDB9AB]"
                   : isCurrentMonth
-                  ? "text-charcoal hover:bg-[#F7F5F5]"
+                  ? "text-charcoal hover:bg-alabaster"
                   : "text-[#CDB9AB] opacity-40 hover:opacity-80"
               }`}
             >
@@ -299,28 +299,28 @@ export function MiniCalendar() {
                 {hasCourse && (
                   <span
                     className={`w-1 h-1 rounded-full transition-colors duration-[var(--motion-fast)] ${
-                      isSelected ? "bg-white" : "bg-[#4A7C59]"
+                      isSelected ? "bg-white" : "bg-success"
                     }`}
                   />
                 )}
                 {hasDDL && (
                   <span
                     className={`w-1 h-1 rounded-full transition-colors duration-[var(--motion-fast)] ${
-                      isSelected ? "bg-white" : "bg-[#D94F4F]"
+                      isSelected ? "bg-white" : "bg-danger"
                     }`}
                   />
                 )}
                 {hasExam && (
                   <span
                     className={`w-1 h-1 rounded-full transition-colors duration-[var(--motion-fast)] ${
-                      isSelected ? "bg-white" : "bg-[#E28743]"
+                      isSelected ? "bg-white" : "bg-sandrift"
                     }`}
                   />
                 )}
                 {hasActivity && (
                   <span
                     className={`w-1 h-1 rounded-full transition-colors duration-[var(--motion-fast)] ${
-                      isSelected ? "bg-white" : "bg-[#7A6FA8]"
+                      isSelected ? "bg-white" : "bg-satin-grey"
                     }`}
                   />
                 )}
@@ -339,7 +339,7 @@ export function MiniCalendar() {
               : ""}
             {format(selectedDate, "M月d日 EEEE", { locale: zhCN })} 当日日程
           </span>
-          <span className="text-[10px] text-[#8C827A]">
+          <span className="text-[10px] text-sandrift">
             {daySchedules.length} 门课 · {dayAssignments.length} 个 DDL
             {dayMarks.length > 0 ? ` · ${dayMarks.length} 项日程` : ""}
           </span>
@@ -352,7 +352,7 @@ export function MiniCalendar() {
         >
           {agendaItems.length === 0 ? (
             <div className="py-3 text-center space-y-2">
-              <p className="text-[11px] text-[#8C827A]">暂无安排</p>
+              <p className="text-[11px] text-sandrift">暂无安排</p>
               <button
                 onClick={handleQuickAddAssignment}
                 className="inline-flex items-center space-x-1 px-3 py-1.5 bg-charcoal hover:bg-black text-white text-[11px] font-bold rounded-xl transition-colors"

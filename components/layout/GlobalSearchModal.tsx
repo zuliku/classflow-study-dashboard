@@ -76,7 +76,7 @@ export function GlobalSearchModal() {
     >
       <div
         className={cn(
-          "w-full max-w-xl bg-white rounded-2xl shadow-drawer border border-[#E7E3DD] overflow-hidden flex flex-col",
+          "w-full max-w-xl bg-surface rounded-2xl shadow-drawer border border-line overflow-hidden flex flex-col",
           "ux-modal-panel",
           visible ? "opacity-100 scale-100 translate-y-0" : "opacity-0 scale-[0.985] translate-y-1"
         )}
@@ -89,12 +89,12 @@ export function GlobalSearchModal() {
             placeholder="搜索课程、任务或 DDL"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full text-sm bg-transparent border-none focus:outline-none text-charcoal placeholder-[#8C827A]"
+            className="w-full text-sm bg-transparent border-none focus:outline-none text-charcoal placeholder-sandrift"
             autoFocus
           />
           <button
             onClick={() => setSearchModalOpen(false)}
-            className="p-1.5 rounded-lg text-[#8C827A] hover:bg-[#E0D7C6] transition-colors"
+            className="p-1.5 rounded-lg text-sandrift hover:bg-alba transition-colors"
             aria-label="关闭"
           >
             <X className="w-4 h-4" />
@@ -104,7 +104,7 @@ export function GlobalSearchModal() {
         {/* Results Area */}
         <div className="p-4 max-h-[400px] overflow-y-auto space-y-4">
           {!searchQuery.trim() ? (
-            <div className="py-8 text-center text-xs text-[#8C827A]">
+            <div className="py-8 text-center text-xs text-sandrift">
               输入关键词搜索课程、任务与 DDL
             </div>
           ) : (
@@ -112,7 +112,7 @@ export function GlobalSearchModal() {
               {/* Courses Results */}
               {filteredCourses.length > 0 && (
                 <div className="space-y-2">
-                  <h4 className="text-[11px] font-bold text-[#8C827A] uppercase tracking-wider">
+                  <h4 className="text-[11px] font-bold text-sandrift uppercase tracking-wider">
                     课程 ({filteredCourses.length})
                   </h4>
                   {filteredCourses.map((c) => (
@@ -128,7 +128,7 @@ export function GlobalSearchModal() {
                         setSelectedCourseId(c.id);
                         setSearchModalOpen(false);
                       })}
-                      className="p-3 bg-[#F7F5F5] hover:bg-[#F0EBE1] border border-[#E7E3DD] rounded-xl flex items-center justify-between text-xs cursor-pointer transition-colors group"
+                      className="p-3 bg-[#F7F5F5] hover:bg-alabaster border border-line rounded-xl flex items-center justify-between text-xs cursor-pointer transition-colors group"
                     >
                       <div className="flex items-center space-x-3">
                         <BookOpen className="w-4 h-4 text-[#A48F82]" />
@@ -136,12 +136,12 @@ export function GlobalSearchModal() {
                           <span className="font-semibold text-charcoal ">
                             {c.name}
                           </span>
-                          <span className="text-[10px] text-[#8C827A] ml-2 font-mono">
+                          <span className="text-[10px] text-sandrift ml-2 font-mono">
                             {c.code} · {c.teacher}
                           </span>
                         </div>
                       </div>
-                      <ArrowRight className="w-3.5 h-3.5 text-[#8C827A] transition-transform duration-[var(--motion-fast)] group-hover:translate-x-px" />
+                      <ArrowRight className="w-3.5 h-3.5 text-sandrift transition-transform duration-[var(--motion-fast)] group-hover:translate-x-px" />
                     </div>
                   ))}
                 </div>
@@ -150,7 +150,7 @@ export function GlobalSearchModal() {
               {/* Assignments Results */}
               {filteredAssignments.length > 0 && (
                 <div className="space-y-2">
-                  <h4 className="text-[11px] font-bold text-[#8C827A] uppercase tracking-wider">
+                  <h4 className="text-[11px] font-bold text-sandrift uppercase tracking-wider">
                     任务 ({filteredAssignments.length})
                   </h4>
                   {filteredAssignments.map((a) => (
@@ -166,7 +166,7 @@ export function GlobalSearchModal() {
                         setSelectedAssignmentId(a.id);
                         setSearchModalOpen(false);
                       })}
-                      className="p-3 bg-[#F7F5F5] hover:bg-[#F0EBE1] border border-[#E7E3DD] rounded-xl flex items-center justify-between text-xs cursor-pointer transition-colors group"
+                      className="p-3 bg-[#F7F5F5] hover:bg-alabaster border border-line rounded-xl flex items-center justify-between text-xs cursor-pointer transition-colors group"
                     >
                       <div className="flex items-center space-x-3">
                         <ClipboardList className="w-4 h-4 text-[#A48F82]" />
@@ -174,19 +174,19 @@ export function GlobalSearchModal() {
                           <span className="font-semibold text-charcoal ">
                             {a.title}
                           </span>
-                          <span className="text-[10px] text-[#8C827A] ml-2">
+                          <span className="text-[10px] text-sandrift ml-2">
                             进度：{a.progress}%
                           </span>
                         </div>
                       </div>
-                      <ArrowRight className="w-3.5 h-3.5 text-[#8C827A] transition-transform duration-[var(--motion-fast)] group-hover:translate-x-px" />
+                      <ArrowRight className="w-3.5 h-3.5 text-sandrift transition-transform duration-[var(--motion-fast)] group-hover:translate-x-px" />
                     </div>
                   ))}
                 </div>
               )}
 
               {filteredCourses.length === 0 && filteredAssignments.length === 0 && (
-                <div className="py-8 text-center text-xs text-[#8C827A]">
+                <div className="py-8 text-center text-xs text-sandrift">
                   未找到相关课程或任务
                 </div>
               )}

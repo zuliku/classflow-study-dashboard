@@ -104,7 +104,7 @@ export function StatCards() {
       subtext: `本周有 ${thisWeekAssignmentsCount} 项任务截止`,
       icon: ClipboardList,
       bgHex: "#F0EBE1",
-      borderHex: "#E0D7C6",
+      borderHex: "#CDB9AB",
       iconColor: "text-charcoal",
     },
     {
@@ -112,11 +112,11 @@ export function StatCards() {
       title: "临近 DDL",
       value: `${urgentDDLCount} 项`,
       subtext: urgentDDLCount > 0 ? "需优先完成" : "暂无紧急任务",
-      subtextColor: urgentDDLCount > 0 ? "text-[#D94F4F] font-semibold" : "text-[#8C827A]",
+      subtextColor: urgentDDLCount > 0 ? "text-danger font-semibold" : "text-sandrift",
       icon: Clock,
-      bgHex: "#FDF0F0",
-      borderHex: "#F8D7D7",
-      iconColor: "text-[#D94F4F]",
+      bgHex: "#F2E8E6",
+      borderHex: "#D9BCB8",
+      iconColor: "text-danger",
     },
     {
       id: "completed-tasks",
@@ -126,7 +126,7 @@ export function StatCards() {
       icon: CheckCircle2,
       bgHex: "#E3E6E0",
       borderHex: "#D0D5CC",
-      iconColor: "text-[#4A7C59]",
+      iconColor: "text-success",
     },
   ];
 
@@ -141,16 +141,16 @@ export function StatCards() {
             role="button"
             tabIndex={0}
             onKeyDown={cardKeyHandler(() => handleCardClick(stat.id))}
-            className="bg-white border border-[#E7E3DD] rounded-2xl p-4 shadow-subtle flex items-center justify-between transition-all duration-[var(--motion-base)] ease-[var(--ease-standard)] hover:shadow-card hover:-translate-y-px cursor-pointer"
+            className="bg-surface border border-line rounded-2xl p-4 shadow-subtle flex items-center justify-between transition-all duration-[var(--motion-base)] ease-[var(--ease-standard)] hover:shadow-card hover:-translate-y-px cursor-pointer"
           >
             <div className="space-y-1">
-              <span className="text-xs font-semibold text-[#8C827A]">
+              <span className="text-xs font-semibold text-sandrift">
                 {stat.title}
               </span>
               <AnimatedMetric value={stat.value} />
               <p
                 className={`text-[11px] ${
-                  stat.subtextColor || "text-[#8C827A]"
+                  stat.subtextColor || "text-sandrift"
                 }`}
               >
                 {stat.subtext}

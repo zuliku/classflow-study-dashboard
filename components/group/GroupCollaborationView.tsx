@@ -93,13 +93,13 @@ export function GroupCollaborationView() {
   return (
     <div className="space-y-4">
       {/* Header Banner */}
-      <div className="bg-white border border-[#E7E3DD] rounded-2xl p-4 shadow-subtle flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+      <div className="bg-surface border border-line rounded-2xl p-4 shadow-subtle flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
           <h2 className="text-base font-bold text-charcoal mb-0.5 flex items-center gap-2">
             <Users2 className="w-4 h-4 text-[#A48F82]" />
             小组协作
           </h2>
-          <p className="text-xs text-[#8C827A]">
+          <p className="text-xs text-sandrift">
             小组成员与任务进度
           </p>
         </div>
@@ -125,13 +125,13 @@ export function GroupCollaborationView() {
               placeholder="项目/大作业名称 (例如: DTC品牌4P营销案例研讨)..."
               value={newTitle}
               onChange={(e) => setNewTitle(e.target.value)}
-              className="p-2.5 bg-[#F7F5F5] border border-[#E7E3DD] rounded-xl focus:outline-none focus:border-charcoal"
+              className="p-2.5 bg-[#F7F5F5] border border-line rounded-xl focus:outline-none focus:border-charcoal"
               required
             />
             <select
               value={newCourseId}
               onChange={(e) => setNewCourseId(e.target.value)}
-              className="p-2.5 bg-[#F7F5F5] border border-[#E7E3DD] rounded-xl focus:outline-none"
+              className="p-2.5 bg-[#F7F5F5] border border-line rounded-xl focus:outline-none"
             >
               {courses.map((c) => (
                 <option key={c.id} value={c.id}>
@@ -145,13 +145,13 @@ export function GroupCollaborationView() {
             placeholder="项目说明"
             value={newDesc}
             onChange={(e) => setNewDesc(e.target.value)}
-            className="w-full text-xs p-2.5 bg-[#F7F5F5] border border-[#E7E3DD] rounded-xl focus:outline-none resize-none"
+            className="w-full text-xs p-2.5 bg-[#F7F5F5] border border-line rounded-xl focus:outline-none resize-none"
           />
           <div className="flex justify-end space-x-2">
             <button
               type="button"
               onClick={() => setIsCreatingProject(false)}
-              className="px-3 py-1.5 text-xs text-[#676268] bg-[#F7F5F5] border border-[#E7E3DD] rounded-xl"
+              className="px-3 py-1.5 text-xs text-satin-grey bg-[#F7F5F5] border border-line rounded-xl"
             >
               取消
             </button>
@@ -169,12 +169,12 @@ export function GroupCollaborationView() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 items-start">
         {/* Left 1/3: Projects Selector List */}
         <div className="space-y-3">
-          <h3 className="text-xs font-bold text-[#8C827A] uppercase tracking-wider px-1">
+          <h3 className="text-xs font-bold text-sandrift uppercase tracking-wider px-1">
             参与的大作业项目 ({groupProjects.length})
           </h3>
           <div className="space-y-2">
             {groupProjects.length === 0 ? (
-              <div className="py-10 text-center text-xs text-[#8C827A] bg-white border border-[#E7E3DD] rounded-2xl">
+              <div className="py-10 text-center text-xs text-sandrift bg-surface border border-line rounded-2xl">
                 还没有小组项目
               </div>
             ) : (
@@ -190,23 +190,23 @@ export function GroupCollaborationView() {
                   onKeyDown={cardKeyHandler(() => setSelectedProjectId(p.id))}
                   className={`p-4 rounded-2xl border transition-colors duration-[var(--motion-base)] ease-[var(--ease-standard)] cursor-pointer shadow-subtle flex flex-col justify-between ${
                     isSelected
-                      ? "bg-[#E3E6E0]/60 border-[#CDB9AB] ring-1 ring-[#CDB9AB]"
-                      : "bg-white border-[#E7E3DD] hover:bg-[#F7F5F5]"
+                      ? "bg-pastel-mint/60 border-[#CDB9AB] ring-1 ring-[#CDB9AB]"
+                      : "bg-white border-line hover:bg-alabaster"
                   }`}
                 >
                   <div>
-                    <span className="text-[10px] font-mono px-2 py-0.5 bg-white border border-[#E0D7C6] rounded text-[#8C827A]">
+                    <span className="text-[10px] font-mono px-2 py-0.5 bg-white border border-line-strong rounded text-sandrift">
                       {course?.name || "通用课题"}
                     </span>
                     <h4 className="text-sm font-bold text-charcoal mt-2">
                       {p.title}
                     </h4>
-                    <p className="text-xs text-[#676268] mt-1 line-clamp-2 leading-relaxed">
+                    <p className="text-xs text-satin-grey mt-1 line-clamp-2 leading-relaxed">
                       {p.description}
                     </p>
                   </div>
 
-                  <div className="mt-3 pt-2.5 border-t border-[#E0D7C6]/60 flex items-center justify-between text-xs">
+                  <div className="mt-3 pt-2.5 border-t border-line-strong/60 flex items-center justify-between text-xs">
                     <div className="flex items-center space-x-1.5">
                       <div className="flex -space-x-1.5">
                         {p.members.map((m) => (
@@ -219,7 +219,7 @@ export function GroupCollaborationView() {
                           />
                         ))}
                       </div>
-                      <span className="text-[10px] text-[#8C827A]">
+                      <span className="text-[10px] text-sandrift">
                         {p.members.length} 人
                       </span>
                     </div>
@@ -228,7 +228,7 @@ export function GroupCollaborationView() {
                       <span className="text-[10px] font-bold text-charcoal">
                         {p.progress}%
                       </span>
-                      <ChevronRight className="w-3.5 h-3.5 text-[#8C827A]" />
+                      <ChevronRight className="w-3.5 h-3.5 text-sandrift" />
                     </div>
                   </div>
                 </div>
@@ -242,10 +242,10 @@ export function GroupCollaborationView() {
         {activeProject && (
           <div className="lg:col-span-2 space-y-4">
             {/* Project Overview Card */}
-            <div className="bg-white border border-[#E7E3DD] rounded-2xl p-4 shadow-subtle space-y-4">
+            <div className="bg-surface border border-line rounded-2xl p-4 shadow-subtle space-y-4">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-[#F0EBE1] pb-3">
                 <div>
-                  <span className="text-xs font-mono text-[#8C827A] px-2 py-0.5 bg-[#F7F5F5] rounded border border-[#E7E3DD]">
+                  <span className="text-xs font-mono text-sandrift px-2 py-0.5 bg-[#F7F5F5] rounded border border-line">
                     {courses.find((c) => c.id === activeProject.courseId)?.name}
                   </span>
                   <h3 className="text-lg font-bold text-charcoal mt-1.5">
@@ -253,35 +253,35 @@ export function GroupCollaborationView() {
                   </h3>
                 </div>
                 <div className="text-right">
-                  <span className="text-xs text-[#8C827A]">团队总进度</span>
+                  <span className="text-xs text-sandrift">团队总进度</span>
                   <div className="text-2xl font-extrabold text-charcoal">
                     {activeProject.progress}%
                   </div>
                 </div>
               </div>
 
-              <p className="text-xs text-[#676268] bg-[#F7F5F5] p-3 rounded-xl border border-[#E7E3DD] leading-relaxed">
+              <p className="text-xs text-satin-grey bg-[#F7F5F5] p-3 rounded-xl border border-line leading-relaxed">
                 {activeProject.description}
               </p>
 
               {/* Progress Bar */}
-              <div className="w-full bg-[#F0EBE1] rounded-full h-2 overflow-hidden">
+              <div className="w-full bg-alabaster rounded-full h-2 overflow-hidden">
                 <div
-                  className="bg-[#4A7C59] h-2 rounded-full transition-[width] duration-[var(--motion-data)] ease-[var(--ease-emphasized)]"
+                  className="bg-success h-2 rounded-full transition-[width] duration-[var(--motion-data)] ease-[var(--ease-emphasized)]"
                   style={{ width: `${activeProject.progress}%` }}
                 />
               </div>
 
               {/* Member Avatars & Roles */}
               <div className="space-y-2 pt-2">
-                <h4 className="text-xs font-bold text-[#8C827A] uppercase tracking-wider">
+                <h4 className="text-xs font-bold text-sandrift uppercase tracking-wider">
                   小组成员
                 </h4>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
                   {activeProject.members.map((m) => (
                     <div
                       key={m.id}
-                      className="p-2.5 bg-[#F7F5F5] border border-[#E7E3DD] rounded-xl flex items-center space-x-2 text-xs"
+                      className="p-2.5 bg-[#F7F5F5] border border-line rounded-xl flex items-center space-x-2 text-xs"
                     >
                       <img
                         src={m.avatarUrl}
@@ -293,8 +293,8 @@ export function GroupCollaborationView() {
                         <span
                           className={`text-[9px] px-1 rounded ${
                             m.role === "leader"
-                              ? "bg-[#CDB9AB] text-white"
-                              : "bg-[#E3E6E0] text-[#676268]"
+                              ? "bg-stone-beige text-white"
+                              : "bg-pastel-mint text-satin-grey"
                           }`}
                         >
                           {m.role === "leader" ? "组长" : "成员"}
@@ -307,7 +307,7 @@ export function GroupCollaborationView() {
             </div>
 
             {/* Task Breakdown Checklist */}
-            <div className="bg-white border border-[#E7E3DD] rounded-2xl p-4 shadow-subtle space-y-3">
+            <div className="bg-surface border border-line rounded-2xl p-4 shadow-subtle space-y-3">
               <div className="flex items-center justify-between border-b border-[#F0EBE1] pb-2.5">
                 <h4 className="text-sm font-bold text-charcoal flex items-center gap-1.5">
                   <CheckSquare className="w-4 h-4 text-[#A48F82]" />
@@ -324,23 +324,23 @@ export function GroupCollaborationView() {
                       onClick={() => toggleGroupTask(activeProject.id, task.id)}
                       className={`p-3 rounded-xl border transition-all cursor-pointer flex items-center justify-between text-xs ${
                         task.completed
-                          ? "bg-[#F7F5F5] border-[#E7E3DD] opacity-60 line-through"
-                          : "bg-white border-[#E0D7C6] hover:border-charcoal"
+                          ? "bg-[#F7F5F5] border-line opacity-60 line-through"
+                          : "bg-white border-line-strong hover:border-charcoal"
                       }`}
                     >
                       <div className="flex items-center space-x-3">
                         <button className="text-charcoal transition-colors">
                           {task.completed ? (
-                            <CheckSquare className="w-4 h-4 text-[#4A7C59]" />
+                            <CheckSquare className="w-4 h-4 text-success" />
                           ) : (
-                            <Square className="w-4 h-4 text-[#8C827A]" />
+                            <Square className="w-4 h-4 text-sandrift" />
                           )}
                         </button>
                         <div>
                           <span className="font-semibold text-charcoal">
                             {task.title}
                           </span>
-                          <div className="flex items-center space-x-3 mt-1 text-[10px] text-[#8C827A]">
+                          <div className="flex items-center space-x-3 mt-1 text-[10px] text-sandrift">
                             <span className="flex items-center space-x-1">
                               <User className="w-3 h-3" />
                               <span>负责人：{task.assigneeName}</span>

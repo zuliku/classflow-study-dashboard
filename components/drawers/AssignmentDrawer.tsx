@@ -111,7 +111,7 @@ export function AssignmentDrawer() {
     >
       <div
         className={cn(
-          "w-full max-w-lg bg-white h-full shadow-drawer flex flex-col border-l border-[#E7E3DD] overflow-y-auto",
+          "w-full max-w-lg bg-surface h-full shadow-drawer flex flex-col border-l border-line overflow-y-auto",
           "ux-drawer-panel",
           visible ? "translate-x-0 opacity-100" : "translate-x-8 opacity-0"
         )}
@@ -122,17 +122,17 @@ export function AssignmentDrawer() {
             {course ? (
               <button
                 onClick={handleOpenCourse}
-                className="text-xs font-semibold text-[#8C827A] flex items-center gap-1 group"
+                className="text-xs font-semibold text-sandrift flex items-center gap-1 group"
                 title="查看课程"
               >
                 <BookOpen className="w-3.5 h-3.5 mr-1 text-[#A48F82]" />
                 <span className="group-hover:text-charcoal group-hover:underline transition-colors">
                   {course.name}
                 </span>
-                <ChevronRight className="w-3 h-3 text-[#CDB9AB] transition-transform duration-[var(--motion-fast)] group-hover:translate-x-px group-hover:text-[#8C827A]" />
+                <ChevronRight className="w-3 h-3 text-[#CDB9AB] transition-transform duration-[var(--motion-fast)] group-hover:translate-x-px group-hover:text-sandrift" />
               </button>
             ) : (
-              <span className="text-xs font-semibold text-[#8C827A] flex items-center">
+              <span className="text-xs font-semibold text-sandrift flex items-center">
                 <BookOpen className="w-3.5 h-3.5 mr-1 text-[#A48F82]" />
                 常规任务
               </span>
@@ -143,7 +143,7 @@ export function AssignmentDrawer() {
           </div>
           <button
             onClick={() => setSelectedAssignmentId(null)}
-            className="p-2 rounded-xl bg-white hover:bg-[#F0EBE1] text-charcoal border border-[#E0D7C6] transition-colors"
+            className="p-2 rounded-xl bg-white hover:bg-alabaster text-charcoal border border-line-strong transition-colors"
             aria-label="关闭"
           >
             <X className="w-4 h-4" />
@@ -153,11 +153,11 @@ export function AssignmentDrawer() {
         {/* Body Content */}
         <div className="p-6 space-y-6 flex-1">
           {/* Status & DDL Banner */}
-          <div className="p-4 bg-[#F0EBE1]/60 border border-[#E0D7C6] rounded-2xl flex items-center justify-between">
+          <div className="p-4 bg-alabaster/60 border border-line-strong rounded-2xl flex items-center justify-between">
             <div className="flex items-center space-x-2">
               <Clock className="w-4 h-4 text-[#A48F82]" />
               <div>
-                <p className="text-[10px] text-[#8C827A]">截止时间</p>
+                <p className="text-[10px] text-sandrift">截止时间</p>
                 <p className="text-xs font-semibold text-charcoal font-mono">
                   {formattedDDL}
                 </p>
@@ -166,8 +166,8 @@ export function AssignmentDrawer() {
             <span
               className={`text-xs font-bold px-3 py-1 rounded-xl border ${
                 isUrgent
-                  ? "bg-[#FDF0F0] text-[#D94F4F] border-[#F8D7D7]"
-                  : "bg-white text-charcoal border-[#E0D7C6]"
+                  ? "bg-danger-bg text-danger border-danger-border"
+                  : "bg-white text-charcoal border-line-strong"
               }`}
             >
               {ddlText}
@@ -177,7 +177,7 @@ export function AssignmentDrawer() {
           {/* Status & Priority Selectors */}
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1.5">
-              <label className="text-xs font-bold text-[#8C827A] uppercase tracking-wider">
+              <label className="text-xs font-bold text-sandrift uppercase tracking-wider">
                 任务状态
               </label>
               <select
@@ -188,7 +188,7 @@ export function AssignmentDrawer() {
                     e.target.value as AssignmentStatus
                   )
                 }
-                className="w-full text-xs font-medium bg-[#F7F5F5] border border-[#E7E3DD] rounded-xl p-2.5 text-charcoal focus:outline-none cursor-pointer"
+                className="w-full text-xs font-medium bg-[#F7F5F5] border border-line rounded-xl p-2.5 text-charcoal focus:outline-none cursor-pointer"
               >
                 <option value="todo">待完成 (To Do)</option>
                 <option value="doing">进行中 (In Progress)</option>
@@ -198,7 +198,7 @@ export function AssignmentDrawer() {
             </div>
 
             <div className="space-y-1.5">
-              <label className="text-xs font-bold text-[#8C827A] uppercase tracking-wider">
+              <label className="text-xs font-bold text-sandrift uppercase tracking-wider">
                 优先级等级
               </label>
               <select
@@ -209,7 +209,7 @@ export function AssignmentDrawer() {
                     e.target.value as Priority
                   )
                 }
-                className="w-full text-xs font-medium bg-[#F7F5F5] border border-[#E7E3DD] rounded-xl p-2.5 text-charcoal focus:outline-none cursor-pointer"
+                className="w-full text-xs font-medium bg-[#F7F5F5] border border-line rounded-xl p-2.5 text-charcoal focus:outline-none cursor-pointer"
               >
                 <option value="urgent">紧急 (Urgent)</option>
                 <option value="high">高优先 (High)</option>
@@ -220,9 +220,9 @@ export function AssignmentDrawer() {
           </div>
 
           {/* Progress Slider */}
-          <div className="space-y-2 bg-[#F7F5F5] border border-[#E7E3DD] p-4 rounded-2xl">
+          <div className="space-y-2 bg-[#F7F5F5] border border-line p-4 rounded-2xl">
             <div className="flex justify-between items-center text-xs">
-              <span className="font-bold text-[#8C827A] uppercase tracking-wider">
+              <span className="font-bold text-sandrift uppercase tracking-wider">
                 完成进度
               </span>
               <span className="font-bold text-charcoal">
@@ -240,17 +240,17 @@ export function AssignmentDrawer() {
                   parseInt(e.target.value)
                 )
               }
-              className="w-full h-2 bg-[#E0D7C6] rounded-lg appearance-none cursor-pointer accent-[#313032]"
+              className="w-full h-2 bg-line-strong rounded-lg appearance-none cursor-pointer accent-charcoal"
             />
           </div>
 
           {/* Assignment Description */}
           {assignment.description && (
             <div className="space-y-1.5">
-              <h4 className="text-xs font-bold text-[#8C827A] uppercase tracking-wider">
+              <h4 className="text-xs font-bold text-sandrift uppercase tracking-wider">
                 任务说明
               </h4>
-              <p className="text-xs text-charcoal bg-[#F0EBE1]/40 border border-[#E0D7C6] rounded-xl p-3.5 leading-relaxed whitespace-pre-wrap">
+              <p className="text-xs text-charcoal bg-alabaster/40 border border-line-strong rounded-xl p-3.5 leading-relaxed whitespace-pre-wrap">
                 {assignment.description}
               </p>
             </div>
@@ -259,7 +259,7 @@ export function AssignmentDrawer() {
           {/* Subtasks Checklist */}
           {assignment.subtasks && assignment.subtasks.length > 0 && (
             <div className="space-y-2">
-              <h4 className="text-xs font-bold text-[#8C827A] uppercase tracking-wider">
+              <h4 className="text-xs font-bold text-sandrift uppercase tracking-wider">
                 子任务清单 ({assignment.subtasks.filter((st) => st.completed).length} / {assignment.subtasks.length})
               </h4>
               <div className="space-y-2">
@@ -267,16 +267,16 @@ export function AssignmentDrawer() {
                   <div
                     key={st.id}
                     onClick={() => toggleSubtask(assignment.id, st.id)}
-                    className="flex items-center space-x-2.5 p-3 bg-[#F7F5F5] hover:bg-[#F0EBE1]/60 border border-[#E7E3DD] rounded-xl text-xs cursor-pointer transition-colors"
+                    className="flex items-center space-x-2.5 p-3 bg-[#F7F5F5] hover:bg-alabaster/60 border border-line rounded-xl text-xs cursor-pointer transition-colors"
                   >
                     {st.completed ? (
-                      <CheckSquare className="w-4 h-4 text-[#065F46] shrink-0" />
+                      <CheckSquare className="w-4 h-4 text-success shrink-0" />
                     ) : (
                       <Square className="w-4 h-4 text-[#A48F82] shrink-0" />
                     )}
                     <span
                       className={`flex-1 text-charcoal ${
-                        st.completed ? "line-through text-[#8C827A]" : "font-medium"
+                        st.completed ? "line-through text-sandrift" : "font-medium"
                       }`}
                     >
                       {st.title}
@@ -293,14 +293,14 @@ export function AssignmentDrawer() {
           <div className="flex items-center space-x-1">
             <button
               onClick={handleDelete}
-              className="flex items-center space-x-1.5 text-xs text-[#D94F4F] hover:bg-[#FDF0F0] px-3 py-2 rounded-xl transition-colors"
+              className="flex items-center space-x-1.5 text-xs text-danger hover:bg-danger-bg px-3 py-2 rounded-xl transition-colors"
             >
               <Trash2 className="w-4 h-4" />
               <span>删除任务</span>
             </button>
             <button
               onClick={handleEdit}
-              className="flex items-center space-x-1.5 text-xs text-[#676268] hover:bg-[#E0D7C6] px-3 py-2 rounded-xl transition-colors"
+              className="flex items-center space-x-1.5 text-xs text-satin-grey hover:bg-alba px-3 py-2 rounded-xl transition-colors"
               title="编辑任务"
             >
               <Edit3 className="w-4 h-4" />

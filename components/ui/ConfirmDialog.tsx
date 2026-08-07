@@ -50,7 +50,7 @@ export function ConfirmDialog() {
     >
       <div
         className={cn(
-          "w-full max-w-sm bg-white rounded-2xl shadow-drawer border border-[#E7E3DD] overflow-hidden",
+          "w-full max-w-sm bg-surface rounded-2xl shadow-drawer border border-line overflow-hidden",
           "ux-modal-panel",
           visible ? "opacity-100 scale-100 translate-y-0" : "opacity-0 scale-[0.985] translate-y-1"
         )}
@@ -59,13 +59,13 @@ export function ConfirmDialog() {
           <div className="flex items-start justify-between gap-2">
             <div className="flex items-center gap-2">
               {request.danger && (
-                <AlertTriangle className="w-4 h-4 text-[#D94F4F] shrink-0" />
+                <AlertTriangle className="w-4 h-4 text-danger shrink-0" />
               )}
               <h3 className="text-sm font-bold text-charcoal">{request.title}</h3>
             </div>
             <button
               onClick={close}
-              className="p-1 rounded-lg text-[#8C827A] hover:bg-[#F0EBE1] hover:text-charcoal transition-colors"
+              className="p-1 rounded-lg text-sandrift hover:bg-alabaster hover:text-charcoal transition-colors"
               aria-label="关闭"
             >
               <X className="w-4 h-4" />
@@ -73,13 +73,13 @@ export function ConfirmDialog() {
           </div>
 
           {request.description && (
-            <p className="text-xs text-[#676268] leading-relaxed">{request.description}</p>
+            <p className="text-xs text-satin-grey leading-relaxed">{request.description}</p>
           )}
 
           <div className="flex justify-end space-x-2 pt-2 border-t border-[#F0EBE1]">
             <button
               onClick={close}
-              className="px-4 py-2 text-xs font-medium text-[#676268] bg-[#F7F5F5] border border-[#E7E3DD] rounded-xl hover:bg-[#E0D7C6] transition-colors"
+              className="px-4 py-2 text-xs font-medium text-satin-grey bg-alabaster border border-line rounded-xl hover:bg-alba transition-colors"
             >
               取消
             </button>
@@ -89,7 +89,7 @@ export function ConfirmDialog() {
               className={cn(
                 "px-4 py-2 text-xs font-bold rounded-xl transition-colors",
                 request.danger
-                  ? "bg-[#D94F4F] hover:bg-[#C44343] text-white"
+                  ? "bg-danger hover:bg-danger/85 text-white"
                   : "bg-charcoal hover:bg-black text-white"
               )}
             >

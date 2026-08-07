@@ -7,9 +7,29 @@
   --alabaster: #F0EBE1;
   --stone-beige: #CDB9AB;
   --dark-charcoal: #313032;
+  --mozzarella: #EFECEA;
+  --alba: #E3DDD2;
+  --sandrift: #A48F82;
   --pastel-mint: #E3E6E0;
   --ashy-beige: #CCCBC4;
-  --sandrift: #A48F82;
+  --satin-grey: #676266;
+
+  /* 语义层 */
+  --surface: #EFECEA;
+  --surface-soft: #F0EBE1;
+  --surface-muted: #E3E6E0;
+  --line: rgba(205, 185, 171, 0.45);
+  --line-soft: rgba(205, 185, 171, 0.22);
+  --line-strong: rgba(205, 185, 171, 0.72);
+  --danger: #9B5B57;
+  --danger-bg: #F2E8E6;
+  --danger-border: #D9BCB8;
+  --warning: #936E4C;
+  --warning-bg: #F1EAE1;
+  --warning-border: #DFD2C2;
+  --success: #627566;
+  --success-bg: #E7ECE6;
+  --success-border: #C8D3C7;
 
   /* Motion tokens */
   --motion-fast: 140ms;

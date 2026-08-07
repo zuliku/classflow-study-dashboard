@@ -41,33 +41,37 @@ export function getDDLStatusText(ddlISO: string): { text: string; isUrgent: bool
   return { text: `${diffDays}天后截止`, isUrgent: diffDays <= 3 };
 }
 
+/**
+ * 低饱和语义色体系：同一暖色系内以深浅/背景区分，不做彩虹化。
+ * danger=砖红 / warning=暖褐 / success=鼠尾草绿 / neutral=砂石米。
+ */
 export function getPriorityMeta(priority: Priority) {
   switch (priority) {
     case "urgent":
-      return { label: "紧急", bg: "bg-[#FDF0F0]", text: "text-[#D94F4F]", border: "border-[#F8D7D7]" };
+      return { label: "紧急", bg: "bg-danger-bg", text: "text-danger", border: "border-danger-border" };
     case "high":
-      return { label: "高优先", bg: "bg-[#FFF6EE]", text: "text-[#D97706]", border: "border-[#FDE6D2]" };
+      return { label: "高优先", bg: "bg-warning-bg", text: "text-warning", border: "border-warning-border" };
     case "medium":
-      return { label: "中优先", bg: "bg-[#FEF8F0]", text: "text-[#B45309]", border: "border-[#FEE6C9]" };
+      return { label: "中优先", bg: "bg-alabaster", text: "text-charcoal", border: "border-stone-beige" };
     case "low":
-      return { label: "低优先", bg: "bg-[#F2F7F3]", text: "text-[#4A7C59]", border: "border-[#D4E7D7]" };
+      return { label: "低优先", bg: "bg-pastel-mint", text: "text-satin-grey", border: "border-ashy-beige" };
     default:
-      return { label: "普通", bg: "bg-[#F7F5F5]", text: "text-[#313032]", border: "border-[#E7E3DD]" };
+      return { label: "普通", bg: "bg-surface", text: "text-charcoal", border: "border-line" };
   }
 }
 
 export function getStatusMeta(status: AssignmentStatus) {
   switch (status) {
     case "todo":
-      return { label: "待完成", bg: "bg-[#F0EBE1]", text: "text-[#8C7A6B]" };
+      return { label: "待完成", bg: "bg-alabaster", text: "text-satin-grey" };
     case "doing":
-      return { label: "进行中", bg: "bg-[#E3E6E0]", text: "text-[#3A5A40]" };
+      return { label: "进行中", bg: "bg-pastel-mint", text: "text-charcoal" };
     case "submitted":
-      return { label: "已提交", bg: "bg-[#E0E7FF]", text: "text-[#3730A3]" };
+      return { label: "已提交", bg: "bg-alba", text: "text-charcoal" };
     case "completed":
-      return { label: "已完成", bg: "bg-[#D1FAE5]", text: "text-[#065F46]" };
+      return { label: "已完成", bg: "bg-success-bg", text: "text-success" };
     default:
-      return { label: "未开始", bg: "bg-[#F7F5F5]", text: "text-[#313032]" };
+      return { label: "未开始", bg: "bg-surface", text: "text-charcoal" };
   }
 }
 

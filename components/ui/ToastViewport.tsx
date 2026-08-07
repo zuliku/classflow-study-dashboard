@@ -6,9 +6,9 @@ import { useToastStore, Toast, ToastType } from "@/store/useToastStore";
 import { cn } from "@/lib/utils";
 
 const TYPE_META: Record<ToastType, { icon: React.ElementType; accent: string }> = {
-  success: { icon: CheckCircle2, accent: "#4A7C59" },
-  warning: { icon: AlertTriangle, accent: "#D97706" },
-  error: { icon: XCircle, accent: "#D94F4F" },
+  success: { icon: CheckCircle2, accent: "#627566" },
+  warning: { icon: AlertTriangle, accent: "#936E4C" },
+  error: { icon: XCircle, accent: "#9B5B57" },
   info: { icon: Info, accent: "#A48F82" },
 };
 
@@ -64,7 +64,7 @@ export function ToastViewport() {
           <div
             key={toast.id}
             className={cn(
-              "pointer-events-auto w-full sm:w-auto sm:max-w-sm bg-[#FAF8F5] border border-[#E7E3DD] rounded-xl shadow-card p-3 flex items-start gap-2.5",
+              "pointer-events-auto w-full sm:w-auto sm:max-w-sm bg-surface border border-line rounded-xl shadow-card p-3 flex items-start gap-2.5",
               "ux-inline",
               isExiting ? "opacity-0 translate-y-1" : "opacity-100 translate-y-0"
             )}
@@ -87,7 +87,7 @@ export function ToastViewport() {
             )}
             <button
               onClick={() => dismiss(toast.id)}
-              className="shrink-0 p-0.5 text-[#8C827A] hover:text-charcoal rounded transition-colors"
+              className="shrink-0 p-0.5 text-sandrift hover:text-charcoal rounded transition-colors"
               aria-label="关闭提示"
             >
               <X className="w-3.5 h-3.5" />

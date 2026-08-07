@@ -181,7 +181,7 @@ export function AddAssignmentModal() {
     >
       <div
         className={cn(
-          "w-full max-w-lg bg-white rounded-2xl shadow-drawer border border-[#E7E3DD] overflow-hidden flex flex-col max-h-[90vh]",
+          "w-full max-w-lg bg-surface rounded-2xl shadow-drawer border border-line overflow-hidden flex flex-col max-h-[90vh]",
           "ux-modal-panel",
           visible ? "opacity-100 scale-100 translate-y-0" : "opacity-0 scale-[0.985] translate-y-1"
         )}
@@ -196,7 +196,7 @@ export function AddAssignmentModal() {
           </div>
           <button
             onClick={() => setIsOpen(false)}
-            className="p-1 rounded-lg text-[#8C827A] hover:bg-[#E0D7C6] hover:text-charcoal transition-colors"
+            className="p-1 rounded-lg text-sandrift hover:bg-alba hover:text-charcoal transition-colors"
             aria-label="关闭"
           >
             <X className="w-4 h-4" />
@@ -206,25 +206,25 @@ export function AddAssignmentModal() {
         {/* Form */}
         <form onSubmit={handleSubmit} className="p-6 space-y-4 overflow-y-auto text-xs">
           <div className="space-y-1">
-            <label className="font-bold text-[#8C827A]">任务名称 *</label>
+            <label className="font-bold text-sandrift">任务名称 *</label>
             <input
               type="text"
               placeholder="如：计量经济学实证报告"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               autoFocus
-              className="w-full p-2.5 bg-[#F7F5F5] border border-[#E7E3DD] rounded-xl focus:outline-none focus:border-charcoal text-charcoal text-xs font-semibold"
+              className="w-full p-2.5 bg-[#F7F5F5] border border-line rounded-xl focus:outline-none focus:border-charcoal text-charcoal text-xs font-semibold"
               required
             />
           </div>
 
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1">
-              <label className="font-bold text-[#8C827A]">关联课程</label>
+              <label className="font-bold text-sandrift">关联课程</label>
               <select
                 value={courseId}
                 onChange={(e) => setCourseId(e.target.value)}
-                className="w-full p-2.5 bg-[#F7F5F5] border border-[#E7E3DD] rounded-xl focus:outline-none text-xs font-medium"
+                className="w-full p-2.5 bg-[#F7F5F5] border border-line rounded-xl focus:outline-none text-xs font-medium"
               >
                 {courses.map((c) => (
                   <option key={c.id} value={c.id}>
@@ -235,11 +235,11 @@ export function AddAssignmentModal() {
             </div>
 
             <div className="space-y-1">
-              <label className="font-bold text-[#8C827A]">优先级</label>
+              <label className="font-bold text-sandrift">优先级</label>
               <select
                 value={priority}
                 onChange={(e) => setPriority(e.target.value as Priority)}
-                className="w-full p-2.5 bg-[#F7F5F5] border border-[#E7E3DD] rounded-xl focus:outline-none text-xs font-bold"
+                className="w-full p-2.5 bg-[#F7F5F5] border border-line rounded-xl focus:outline-none text-xs font-bold"
               >
                 <option value="urgent">紧急</option>
                 <option value="high">高优先级</option>
@@ -250,7 +250,7 @@ export function AddAssignmentModal() {
           </div>
 
           {/* DDL Date & Time Picker */}
-          <div className="p-3 bg-[#F0EBE1]/60 border border-[#E0D7C6] rounded-xl space-y-2">
+          <div className="p-3 bg-alabaster/60 border border-line-strong rounded-xl space-y-2">
             <label className="font-bold text-charcoal flex items-center">
               <Clock className="w-3.5 h-3.5 mr-1 text-[#A48F82]" /> 截止时间 (DDL)
             </label>
@@ -259,14 +259,14 @@ export function AddAssignmentModal() {
                 type="date"
                 value={ddlDate}
                 onChange={(e) => setDdlDate(e.target.value)}
-                className="w-full p-2 bg-white border border-[#E0D7C6] rounded-lg font-mono text-xs focus:outline-none"
+                className="w-full p-2 bg-white border border-line-strong rounded-lg font-mono text-xs focus:outline-none"
                 required
               />
               <input
                 type="time"
                 value={ddlTime}
                 onChange={(e) => setDdlTime(e.target.value)}
-                className="w-full p-2 bg-white border border-[#E0D7C6] rounded-lg font-mono text-xs focus:outline-none"
+                className="w-full p-2 bg-white border border-line-strong rounded-lg font-mono text-xs focus:outline-none"
                 required
               />
             </div>
@@ -275,11 +275,11 @@ export function AddAssignmentModal() {
           {/* Subtasks checklist */}
           <div className="space-y-2 pt-1">
             <div className="flex items-center justify-between">
-              <label className="font-bold text-[#8C827A]">子任务拆解 ({subtasks.length})</label>
+              <label className="font-bold text-sandrift">子任务拆解 ({subtasks.length})</label>
               <button
                 type="button"
                 onClick={handleAddSubtask}
-                className="flex items-center space-x-1 text-[11px] font-bold text-charcoal bg-[#E3E6E0] hover:bg-[#D0D5CC] px-2 py-0.5 rounded-lg transition-colors"
+                className="flex items-center space-x-1 text-[11px] font-bold text-charcoal bg-pastel-mint hover:bg-pastel-mint px-2 py-0.5 rounded-lg transition-colors"
               >
                 <Plus className="w-3 h-3" />
                 <span>添加子任务</span>
@@ -294,12 +294,12 @@ export function AddAssignmentModal() {
                     placeholder={`子步骤 #${idx + 1}（如：收集案例数据）`}
                     value={st.title}
                     onChange={(e) => handleSubtaskChange(idx, e.target.value)}
-                    className="flex-1 p-2 bg-[#F7F5F5] border border-[#E7E3DD] rounded-lg text-xs"
+                    className="flex-1 p-2 bg-[#F7F5F5] border border-line rounded-lg text-xs"
                   />
                   <button
                     type="button"
                     onClick={() => handleRemoveSubtask(idx)}
-                    className="p-1.5 text-[#D94F4F] hover:bg-[#FDF0F0] rounded-lg"
+                    className="p-1.5 text-danger hover:bg-danger-bg rounded-lg"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
                   </button>
@@ -310,25 +310,25 @@ export function AddAssignmentModal() {
 
           {/* Tags */}
           <div className="space-y-1">
-            <label className="font-bold text-[#8C827A]">标签 (逗号分隔)</label>
+            <label className="font-bold text-sandrift">标签 (逗号分隔)</label>
             <input
               type="text"
               placeholder="如：个人作业、回归模型、PPT"
               value={tagsStr}
               onChange={(e) => setTagsStr(e.target.value)}
-              className="w-full p-2.5 bg-[#F7F5F5] border border-[#E7E3DD] rounded-xl focus:outline-none text-xs"
+              className="w-full p-2.5 bg-[#F7F5F5] border border-line rounded-xl focus:outline-none text-xs"
             />
           </div>
 
           {/* Description */}
           <div className="space-y-1">
-            <label className="font-bold text-[#8C827A]">任务要求与说明</label>
+            <label className="font-bold text-sandrift">任务要求与说明</label>
             <textarea
               rows={3}
               placeholder="补充任务要求、提交格式等"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              className="w-full p-2.5 bg-[#F7F5F5] border border-[#E7E3DD] rounded-xl focus:outline-none resize-none text-xs leading-relaxed"
+              className="w-full p-2.5 bg-[#F7F5F5] border border-line rounded-xl focus:outline-none resize-none text-xs leading-relaxed"
             />
           </div>
 
@@ -337,7 +337,7 @@ export function AddAssignmentModal() {
             <button
               type="button"
               onClick={() => setIsOpen(false)}
-              className="px-4 py-2 text-xs font-medium text-[#676268] bg-[#F7F5F5] border border-[#E7E3DD] rounded-xl hover:bg-[#E0D7C6]"
+              className="px-4 py-2 text-xs font-medium text-satin-grey bg-[#F7F5F5] border border-line rounded-xl hover:bg-alba"
             >
               取消
             </button>

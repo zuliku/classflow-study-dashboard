@@ -34,7 +34,7 @@ export function Sidebar() {
       : 0;
 
   return (
-    <aside className="w-52 xl:w-56 h-screen bg-[#F7F5F5] border-r border-[#E7E3DD] flex flex-col justify-between p-3.5 sticky top-0 select-none z-20 shrink-0">
+    <aside className="w-52 xl:w-56 h-screen bg-[#F7F5F5] border-r border-line flex flex-col justify-between p-3.5 sticky top-0 select-none z-20 shrink-0">
       {/* Top Section */}
       <div className="space-y-3">
         {/* Brand Logo filling top-left area cleanly matching Figure 1 red box */}
@@ -61,8 +61,8 @@ export function Sidebar() {
                 className={cn(
                   "relative w-full flex items-center space-x-2.5 px-3 py-2 rounded-xl text-xs font-medium transition-colors duration-[var(--motion-base)] ease-[var(--ease-standard)] group text-left",
                   isActive
-                    ? "bg-[#E3E6E0] text-charcoal font-semibold shadow-subtle"
-                    : "text-[#676268] hover:bg-[#F0EBE1] hover:text-charcoal"
+                    ? "bg-pastel-mint text-charcoal font-semibold shadow-subtle"
+                    : "text-satin-grey hover:bg-alabaster hover:text-charcoal"
                 )}
               >
                 {/* Active 指示条：opacity + scaleY 过渡 */}
@@ -79,7 +79,7 @@ export function Sidebar() {
                     "w-4 h-4 transition-colors duration-[var(--motion-base)]",
                     isActive
                       ? "text-charcoal"
-                      : "text-[#8C827A] group-hover:text-charcoal"
+                      : "text-sandrift group-hover:text-charcoal"
                   )}
                 />
                 <span>{item.label}</span>
@@ -91,7 +91,7 @@ export function Sidebar() {
 
       {/* Bottom Profile Card */}
       <div className="space-y-2">
-        <div className="bg-[#F0EBE1]/70 border border-[#E0D7C6] rounded-2xl p-3 space-y-2.5 shadow-subtle">
+        <div className="bg-alabaster/70 border border-line-strong rounded-2xl p-3 space-y-2.5 shadow-subtle">
           <div className="flex items-center space-x-2.5">
             <img
               src={userProfile.avatarUrl}
@@ -103,26 +103,26 @@ export function Sidebar() {
                 <h4 className="text-xs font-semibold text-charcoal truncate">
                   {userProfile.name}
                 </h4>
-                <ChevronRight className="w-3.5 h-3.5 text-[#8C827A]" />
+                <ChevronRight className="w-3.5 h-3.5 text-sandrift" />
               </div>
-              <p className="text-[10px] text-[#676268] truncate">
+              <p className="text-[10px] text-satin-grey truncate">
                 {userProfile.college}
               </p>
-              <p className="text-[10px] text-[#8C827A] truncate">
+              <p className="text-[10px] text-sandrift truncate">
                 {userProfile.grade}
               </p>
             </div>
           </div>
 
           {/* Credit Progress */}
-          <div className="space-y-1 pt-1 border-t border-[#E0D7C6]/60">
+          <div className="space-y-1 pt-1 border-t border-line-strong/60">
             <div className="flex justify-between items-center text-[10px]">
-              <span className="text-[#676268]">本学期学分进度</span>
+              <span className="text-satin-grey">本学期学分进度</span>
               <span className="font-semibold text-charcoal">
                 {userProfile.completedCredits} / {userProfile.totalCredits} 学分
               </span>
             </div>
-            <div className="w-full bg-[#E3E6E0] rounded-full h-1.5 overflow-hidden">
+            <div className="w-full bg-pastel-mint rounded-full h-1.5 overflow-hidden">
               <div
                 className="bg-sandrift h-1.5 rounded-full transition-[width] duration-[var(--motion-data)] ease-[var(--ease-emphasized)]"
                 style={{ width: `${creditPercentage}%` }}

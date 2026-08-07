@@ -34,25 +34,25 @@ export function UpcomingDDL() {
     switch (priority) {
       case "urgent":
         return (
-          <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-[#FDF0F0] text-[#D94F4F] border border-[#F8D7D7]">
+          <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-danger-bg text-danger border border-danger-border">
             紧急
           </span>
         );
       case "high":
         return (
-          <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-[#FFF7ED] text-[#E28743] border border-[#FFEDD5]">
+          <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-warning-bg text-warning border border-warning-border">
             高优先
           </span>
         );
       case "medium":
         return (
-          <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-[#FEFCE8] text-[#D9A05B] border border-[#FEF08A]">
+          <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-alabaster text-charcoal border border-stone-beige">
             中优先
           </span>
         );
       default:
         return (
-          <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-[#E3E6E0] text-charcoal border border-[#D0D5CC]">
+          <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-pastel-mint text-charcoal border border-pastel-mint">
             普通
           </span>
         );
@@ -65,21 +65,21 @@ export function UpcomingDDL() {
   };
 
   return (
-    <div className="bg-white border border-[#E7E3DD] rounded-2xl p-4 shadow-subtle flex flex-col justify-between space-y-3">
+    <div className="bg-surface border border-line rounded-2xl p-4 shadow-subtle flex flex-col justify-between space-y-3">
       {/* Card Header */}
       <div className="flex items-center justify-between border-b border-[#F0EBE1] pb-2.5">
         <div className="flex items-center space-x-2">
-          <Clock className="w-4 h-4 text-[#D94F4F]" />
+          <Clock className="w-4 h-4 text-danger" />
           <h3 className="text-xs font-bold text-charcoal tracking-tight">
             临近 DDL
           </h3>
-          <span className="text-[10px] font-semibold text-[#8C827A] bg-[#F7F5F5] px-1.5 py-0.5 rounded border border-[#E7E3DD]">
+          <span className="text-[10px] font-semibold text-sandrift bg-[#F7F5F5] px-1.5 py-0.5 rounded border border-line">
             {upcomingAssignments.length} 项待办
           </span>
         </div>
         <button
           onClick={() => setActiveTab("assignments")}
-          className="text-[11px] font-semibold text-[#8C827A] hover:text-charcoal flex items-center transition-colors"
+          className="text-[11px] font-semibold text-sandrift hover:text-charcoal flex items-center transition-colors"
         >
           <span>全部任务</span>
           <ArrowUpRight className="w-3 h-3 ml-0.5" />
@@ -89,8 +89,8 @@ export function UpcomingDDL() {
       {/* DDL Task Items List */}
       <div className="space-y-2">
         {upcomingAssignments.length === 0 ? (
-          <div className="py-6 text-center text-xs text-[#8C827A] space-y-1">
-            <CheckCircle2 className="w-6 h-6 mx-auto text-[#4A7C59]" />
+          <div className="py-6 text-center text-xs text-sandrift space-y-1">
+            <CheckCircle2 className="w-6 h-6 mx-auto text-success" />
             <p>暂无临近 DDL</p>
           </div>
         ) : (
@@ -107,11 +107,11 @@ export function UpcomingDDL() {
               <div
                 key={task.id}
                 onClick={() => setSelectedAssignmentId(task.id)}
-                className="p-2.5 bg-[#F7F5F5] hover:bg-[#F0EBE1] border border-[#E7E3DD] hover:border-[#CDB9AB] rounded-xl transition-colors duration-[var(--motion-fast)] ease-[var(--ease-standard)] cursor-pointer flex items-center justify-between group"
+                className="p-2.5 bg-[#F7F5F5] hover:bg-alabaster border border-line hover:border-[#CDB9AB] rounded-xl transition-colors duration-[var(--motion-fast)] ease-[var(--ease-standard)] cursor-pointer flex items-center justify-between group"
               >
                 <div className="flex items-center space-x-2.5 min-w-0 flex-1">
-                  <div className="w-9 h-9 rounded-lg bg-white border border-[#E0D7C6] flex flex-col items-center justify-center shrink-0 text-center">
-                    <span className="text-[9px] font-bold text-[#8C827A] leading-none">
+                  <div className="w-9 h-9 rounded-lg bg-white border border-line-strong flex flex-col items-center justify-center shrink-0 text-center">
+                    <span className="text-[9px] font-bold text-sandrift leading-none">
                       {format(ddlDate, "M月")}
                     </span>
                     <span className="text-xs font-extrabold text-charcoal leading-none mt-0.5">
@@ -126,17 +126,17 @@ export function UpcomingDDL() {
                       </h4>
                       {getPriorityBadge(task.priority)}
                     </div>
-                    <p className="text-[10px] text-[#676268] truncate mt-0.5">
+                    <p className="text-[10px] text-satin-grey truncate mt-0.5">
                       {course?.name || "通用课题"}
                     </p>
                   </div>
                 </div>
 
                 <div className="text-right shrink-0 ml-2">
-                  <span className="text-[10px] font-bold text-[#D94F4F] block">
+                  <span className="text-[10px] font-bold text-danger block">
                     {relativeTime}
                   </span>
-                  <span className="text-[9px] text-[#8C827A] block mt-0.5">
+                  <span className="text-[9px] text-sandrift block mt-0.5">
                     {dateDisplay}
                   </span>
                 </div>

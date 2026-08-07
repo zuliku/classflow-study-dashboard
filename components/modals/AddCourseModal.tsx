@@ -15,9 +15,9 @@ const OVERLAY_ID = "add-course-modal";
 
 const COLOR_OPTIONS = [
   { name: "薄荷灰绿", bgHex: "#E3E6E0", borderHex: "#D0D5CC", textHex: "#313032" },
-  { name: "象牙浅米", bgHex: "#F0EBE1", borderHex: "#E0D7C6", textHex: "#313032" },
+  { name: "象牙浅米", bgHex: "#F0EBE1", borderHex: "#CDB9AB", textHex: "#313032" },
   { name: "灰米暖调", bgHex: "#CCCBC4", borderHex: "#B8B7B0", textHex: "#313032" },
-  { name: "石褐沙土", bgHex: "#CDB9AB", borderHex: "#BBA494", textHex: "#313032" },
+  { name: "石褐沙土", bgHex: "#CDB9AB", borderHex: "#A48F82", textHex: "#313032" },
   { name: "深砂棕", bgHex: "#A48F82", borderHex: "#8D786B", textHex: "#FFFFFF" },
 ];
 
@@ -179,7 +179,7 @@ export function AddCourseModal() {
     >
       <div
         className={cn(
-          "w-full max-w-lg bg-white rounded-2xl shadow-drawer border border-[#E7E3DD] overflow-hidden flex flex-col max-h-[90vh]",
+          "w-full max-w-lg bg-surface rounded-2xl shadow-drawer border border-line overflow-hidden flex flex-col max-h-[90vh]",
           "ux-modal-panel",
           visible ? "opacity-100 scale-100 translate-y-0" : "opacity-0 scale-[0.985] translate-y-1"
         )}
@@ -192,7 +192,7 @@ export function AddCourseModal() {
           </div>
           <button
             onClick={() => setAddCourseModalOpen(false)}
-            className="p-1 rounded-lg text-[#8C827A] hover:bg-[#E0D7C6] transition-colors"
+            className="p-1 rounded-lg text-sandrift hover:bg-alba transition-colors"
             aria-label="关闭"
           >
             <X className="w-4 h-4" />
@@ -203,59 +203,59 @@ export function AddCourseModal() {
         <form onSubmit={handleSubmit} className="p-6 space-y-4 overflow-y-auto text-xs">
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1">
-              <label className="font-bold text-[#8C827A]">课程名称 *</label>
+              <label className="font-bold text-sandrift">课程名称 *</label>
               <input
                 type="text"
                 placeholder="如：行为经济学"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                className="w-full p-2.5 bg-[#F7F5F5] border border-[#E7E3DD] rounded-xl focus:outline-none focus:border-charcoal text-charcoal"
+                className="w-full p-2.5 bg-[#F7F5F5] border border-line rounded-xl focus:outline-none focus:border-charcoal text-charcoal"
                 autoFocus
                 required
               />
             </div>
             <div className="space-y-1">
-              <label className="font-bold text-[#8C827A]">课程代码</label>
+              <label className="font-bold text-sandrift">课程代码</label>
               <input
                 type="text"
                 placeholder="如：ECON-305"
                 value={code}
                 onChange={(e) => setCode(e.target.value)}
-                className="w-full p-2.5 bg-[#F7F5F5] border border-[#E7E3DD] rounded-xl focus:outline-none focus:border-charcoal text-charcoal font-mono"
+                className="w-full p-2.5 bg-[#F7F5F5] border border-line rounded-xl focus:outline-none focus:border-charcoal text-charcoal font-mono"
               />
             </div>
           </div>
 
           <div className="grid grid-cols-3 gap-3">
             <div className="space-y-1">
-              <label className="font-bold text-[#8C827A]">授课教师</label>
+              <label className="font-bold text-sandrift">授课教师</label>
               <input
                 type="text"
                 placeholder="教师姓名"
                 value={teacher}
                 onChange={(e) => setTeacher(e.target.value)}
-                className="w-full p-2.5 bg-[#F7F5F5] border border-[#E7E3DD] rounded-xl focus:outline-none"
+                className="w-full p-2.5 bg-[#F7F5F5] border border-line rounded-xl focus:outline-none"
               />
             </div>
             <div className="space-y-1">
-              <label className="font-bold text-[#8C827A]">默认教室</label>
+              <label className="font-bold text-sandrift">默认教室</label>
               <input
                 type="text"
                 placeholder="如：教二 401"
                 value={classroom}
                 onChange={(e) => setClassroom(e.target.value)}
-                className="w-full p-2.5 bg-[#F7F5F5] border border-[#E7E3DD] rounded-xl focus:outline-none"
+                className="w-full p-2.5 bg-[#F7F5F5] border border-line rounded-xl focus:outline-none"
               />
             </div>
             <div className="space-y-1">
-              <label className="font-bold text-[#8C827A]">学分</label>
+              <label className="font-bold text-sandrift">学分</label>
               <input
                 type="number"
                 min="1"
                 max="10"
                 value={credit}
                 onChange={(e) => setCredit(Number(e.target.value))}
-                className="w-full p-2.5 bg-[#F7F5F5] border border-[#E7E3DD] rounded-xl focus:outline-none"
+                className="w-full p-2.5 bg-[#F7F5F5] border border-line rounded-xl focus:outline-none"
               />
             </div>
           </div>
@@ -269,7 +269,7 @@ export function AddCourseModal() {
               <button
                 type="button"
                 onClick={handleAddSlot}
-                className="flex items-center space-x-1 text-[11px] font-bold text-charcoal bg-[#E3E6E0] hover:bg-[#D0D5CC] px-2.5 py-1 rounded-lg transition-colors"
+                className="flex items-center space-x-1 text-[11px] font-bold text-charcoal bg-pastel-mint hover:bg-pastel-mint px-2.5 py-1 rounded-lg transition-colors"
               >
                 <Plus className="w-3 h-3" />
                 <span>添加上课时段</span>
@@ -280,15 +280,15 @@ export function AddCourseModal() {
               {scheduleSlots.map((slot, idx) => (
                 <div
                   key={idx}
-                  className="p-3 bg-[#F0EBE1]/60 border border-[#E0D7C6] rounded-xl space-y-2 relative"
+                  className="p-3 bg-alabaster/60 border border-line-strong rounded-xl space-y-2 relative"
                 >
-                  <div className="flex items-center justify-between border-b border-[#E0D7C6]/60 pb-1.5 text-[11px]">
-                    <span className="font-bold text-[#8C827A]">时段 #{idx + 1}</span>
+                  <div className="flex items-center justify-between border-b border-line-strong/60 pb-1.5 text-[11px]">
+                    <span className="font-bold text-sandrift">时段 #{idx + 1}</span>
                     {scheduleSlots.length > 1 && (
                       <button
                         type="button"
                         onClick={() => handleRemoveSlot(idx)}
-                        className="text-[#D94F4F] hover:bg-[#FDF0F0] p-0.5 rounded transition-colors"
+                        className="text-danger hover:bg-danger-bg p-0.5 rounded transition-colors"
                         title="删除此时段"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
@@ -298,11 +298,11 @@ export function AddCourseModal() {
 
                   <div className="grid grid-cols-2 gap-2">
                     <div>
-                      <label className="text-[10px] text-[#8C827A]">周次规则</label>
+                      <label className="text-[10px] text-sandrift">周次规则</label>
                       <select
                         value={slot.weeks}
                         onChange={(e) => handleSlotChange(idx, "weeks", e.target.value)}
-                        className="w-full p-1.5 bg-white border border-[#E0D7C6] rounded-lg focus:outline-none text-[11px]"
+                        className="w-full p-1.5 bg-white border border-line-strong rounded-lg focus:outline-none text-[11px]"
                       >
                         {WEEK_RANGE_PRESETS.map((preset) => (
                           <option key={preset.value} value={preset.value}>
@@ -313,11 +313,11 @@ export function AddCourseModal() {
                     </div>
 
                     <div>
-                      <label className="text-[10px] text-[#8C827A]">星期</label>
+                      <label className="text-[10px] text-sandrift">星期</label>
                       <select
                         value={slot.dayOfWeek}
                         onChange={(e) => handleSlotChange(idx, "dayOfWeek", Number(e.target.value))}
-                        className="w-full p-1.5 bg-white border border-[#E0D7C6] rounded-lg focus:outline-none text-[11px]"
+                        className="w-full p-1.5 bg-white border border-line-strong rounded-lg focus:outline-none text-[11px]"
                       >
                         <option value={1}>周一</option>
                         <option value={2}>周二</option>
@@ -332,31 +332,31 @@ export function AddCourseModal() {
 
                   <div className="grid grid-cols-3 gap-2">
                     <div>
-                      <label className="text-[10px] text-[#8C827A]">开始时间</label>
+                      <label className="text-[10px] text-sandrift">开始时间</label>
                       <input
                         type="time"
                         value={slot.startTime}
                         onChange={(e) => handleSlotChange(idx, "startTime", e.target.value)}
-                        className="w-full p-1.5 bg-white border border-[#E0D7C6] rounded-lg focus:outline-none font-mono text-[11px]"
+                        className="w-full p-1.5 bg-white border border-line-strong rounded-lg focus:outline-none font-mono text-[11px]"
                       />
                     </div>
                     <div>
-                      <label className="text-[10px] text-[#8C827A]">结束时间</label>
+                      <label className="text-[10px] text-sandrift">结束时间</label>
                       <input
                         type="time"
                         value={slot.endTime}
                         onChange={(e) => handleSlotChange(idx, "endTime", e.target.value)}
-                        className="w-full p-1.5 bg-white border border-[#E0D7C6] rounded-lg focus:outline-none font-mono text-[11px]"
+                        className="w-full p-1.5 bg-white border border-line-strong rounded-lg focus:outline-none font-mono text-[11px]"
                       />
                     </div>
                     <div>
-                      <label className="text-[10px] text-[#8C827A]">教室 (选填)</label>
+                      <label className="text-[10px] text-sandrift">教室 (选填)</label>
                       <input
                         type="text"
                         placeholder={classroom || "教室"}
                         value={slot.location}
                         onChange={(e) => handleSlotChange(idx, "location", e.target.value)}
-                        className="w-full p-1.5 bg-white border border-[#E0D7C6] rounded-lg focus:outline-none text-[11px]"
+                        className="w-full p-1.5 bg-white border border-line-strong rounded-lg focus:outline-none text-[11px]"
                       />
                     </div>
                   </div>
@@ -367,7 +367,7 @@ export function AddCourseModal() {
 
           {/* Color Theme Selector */}
           <div className="space-y-1.5 pt-1">
-            <label className="font-bold text-[#8C827A]">卡片主题配色</label>
+            <label className="font-bold text-sandrift">卡片主题配色</label>
             <div className="flex space-x-2">
               {COLOR_OPTIONS.map((c, i) => (
                 <button
@@ -388,19 +388,19 @@ export function AddCourseModal() {
 
           {/* Description */}
           <div className="space-y-1">
-            <label className="font-bold text-[#8C827A]">课程说明</label>
+            <label className="font-bold text-sandrift">课程说明</label>
             <textarea
               rows={2}
               placeholder="课程说明"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              className="w-full p-2.5 bg-[#F7F5F5] border border-[#E7E3DD] rounded-xl focus:outline-none resize-none"
+              className="w-full p-2.5 bg-[#F7F5F5] border border-line rounded-xl focus:outline-none resize-none"
             />
           </div>
 
           {/* Actions */}
           {formError && (
-            <p className="text-[11px] text-[#D94F4F] font-bold p-2.5 bg-[#FDF0F0] border border-[#F8D7D7] rounded-xl">
+            <p className="text-[11px] text-danger font-bold p-2.5 bg-danger-bg border border-danger-border rounded-xl">
               {formError}
             </p>
           )}
@@ -408,7 +408,7 @@ export function AddCourseModal() {
             <button
               type="button"
               onClick={() => setAddCourseModalOpen(false)}
-              className="px-4 py-2 text-xs font-medium text-[#676268] bg-[#F7F5F5] border border-[#E7E3DD] rounded-xl hover:bg-[#E0D7C6]"
+              className="px-4 py-2 text-xs font-medium text-satin-grey bg-[#F7F5F5] border border-line rounded-xl hover:bg-alba"
             >
               取消
             </button>

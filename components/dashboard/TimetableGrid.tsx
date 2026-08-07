@@ -80,19 +80,19 @@ export function TimetableGrid() {
   };
 
   return (
-    <div className="bg-white border border-[#E7E3DD] rounded-2xl p-4 shadow-subtle flex flex-col justify-between h-full w-full">
+    <div className="bg-surface border border-line rounded-2xl p-4 shadow-subtle flex flex-col justify-between h-full w-full">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-2.5 border-b border-[#F0EBE1] gap-2 shrink-0">
         <div className="flex items-center space-x-2">
           <h2 className="text-sm font-bold text-charcoal">本周课表</h2>
           {/* Semester Week Picker */}
-          <div className="flex items-center space-x-1 bg-[#F0EBE1] border border-[#E0D7C6] rounded-lg px-2 py-0.5 text-xs font-semibold text-charcoal">
+          <div className="flex items-center space-x-1 bg-alabaster border border-line-strong rounded-lg px-2 py-0.5 text-xs font-semibold text-charcoal">
             <button
               onClick={() => setCurrentSemesterWeek(currentSemesterWeek - 1)}
               disabled={currentSemesterWeek <= 1}
               title="上一周"
               aria-label="上一周"
-              className="hover:text-black transition-colors disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:text-[#313032]"
+              className="hover:text-black transition-colors disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:text-charcoal"
             >
               <ChevronLeft className="w-3 h-3" />
             </button>
@@ -104,7 +104,7 @@ export function TimetableGrid() {
               disabled={currentSemesterWeek >= semester.totalWeeks}
               title="下一周"
               aria-label="下一周"
-              className="hover:text-black transition-colors disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:text-[#313032]"
+              className="hover:text-black transition-colors disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:text-charcoal"
             >
               <ChevronRight className="w-3 h-3" />
             </button>
@@ -113,7 +113,7 @@ export function TimetableGrid() {
 
         <button
           onClick={handleOpenFullTimetable}
-          className="group flex items-center space-x-1 text-xs text-[#8C827A] hover:text-charcoal transition-colors bg-[#F7F5F5] hover:bg-[#F0EBE1] px-2 py-1 rounded-lg border border-[#E7E3DD] self-start sm:self-auto font-medium"
+          className="group flex items-center space-x-1 text-xs text-sandrift hover:text-charcoal transition-colors bg-[#F7F5F5] hover:bg-alabaster px-2 py-1 rounded-lg border border-line self-start sm:self-auto font-medium"
         >
           <span>查看课表</span>
           <ExternalLink className="w-3.5 h-3.5 transition-transform duration-[var(--motion-fast)] group-hover:translate-x-px" />
@@ -122,7 +122,7 @@ export function TimetableGrid() {
 
       {/* Conflict Warning Banner */}
       {conflicts.length > 0 && (
-        <div className="my-2 p-2.5 bg-[#FDF0F0] border border-[#F8D7D7] rounded-xl flex items-center justify-between text-xs text-[#D94F4F] shrink-0">
+        <div className="my-2 p-2.5 bg-danger-bg border border-danger-border rounded-xl flex items-center justify-between text-xs text-danger shrink-0">
           <div className="flex items-center space-x-2">
             <AlertTriangle className="w-4 h-4 shrink-0" />
             <span>
@@ -135,7 +135,7 @@ export function TimetableGrid() {
               setSelectedConflict(firstConflict);
               setConflictModalOpen(true);
             }}
-            className="px-2.5 py-1 bg-[#D94F4F] text-white rounded-lg font-bold text-[10px] hover:bg-[#c44343] transition-colors shrink-0"
+            className="px-2.5 py-1 bg-danger text-white rounded-lg font-bold text-[10px] hover:bg-danger/85 transition-colors shrink-0"
           >
             查看冲突
           </button>
@@ -158,15 +158,15 @@ export function TimetableGrid() {
         {/* 内容最小宽度：窄容器内课表整体横向滚动，避免把课程信息压到不可读 */}
         <div className="min-w-[640px] flex flex-col flex-1 min-h-0">
         {/* Weekday Header Row */}
-        <div className="grid grid-cols-8 border-b border-[#E7E3DD] pb-2 text-center text-xs shrink-0">
-          <div className="text-[#8C827A] font-medium py-0.5 text-[11px]">时间</div>
+        <div className="grid grid-cols-8 border-b border-line pb-2 text-center text-xs shrink-0">
+          <div className="text-sandrift font-medium py-0.5 text-[11px]">时间</div>
           {weekdays.map((wd) => (
             <div
               key={wd.dayOfWeek}
-              className="py-0.5 rounded-lg text-[#676268] font-medium"
+              className="py-0.5 rounded-lg text-satin-grey font-medium"
             >
               <span>{wd.label}</span>
-              <span className="text-[10px] text-[#8C827A] ml-1">
+              <span className="text-[10px] text-sandrift ml-1">
                 {wd.dateStr}
               </span>
             </div>
@@ -176,7 +176,7 @@ export function TimetableGrid() {
         {/* Timetable Body Grid (08:00 to 21:00 Evening Range) */}
         <div className="relative flex-1 grid grid-cols-8 mt-1 min-h-[520px]">
           {/* Time Labels Column */}
-          <div className="flex flex-col justify-between text-[10px] text-[#8C827A] font-mono border-r border-[#F0EBE1] pr-1.5 py-0.5 h-full">
+          <div className="flex flex-col justify-between text-[10px] text-sandrift font-mono border-r border-[#F0EBE1] pr-1.5 py-0.5 h-full">
             {TIME_SLOTS.map((time, idx) => (
               <div
                 key={time}
@@ -197,7 +197,7 @@ export function TimetableGrid() {
               {Array.from({ length: 13 }).map((_, i) => (
                 <div
                   key={i}
-                  className="flex-1 border-b border-[#F5F2EE] w-full"
+                  className="flex-1 border-b border-line-soft w-full"
                 />
               ))}
             </div>
@@ -211,7 +211,7 @@ export function TimetableGrid() {
               return (
                 <div
                   key={wd.dayOfWeek}
-                  className="relative border-r border-[#F5F2EE] h-full"
+                  className="relative border-r border-line-soft h-full"
                 >
                   {daySchedules.map((sched) => {
                     const course = courses.find((c) => c.id === sched.courseId);
@@ -237,14 +237,14 @@ export function TimetableGrid() {
                         }}
                         className={cn(
                           "absolute left-0.5 right-0.5 rounded-xl p-1.5 sm:p-2 transition-all duration-[var(--motion-base)] ease-[var(--ease-standard)] cursor-pointer shadow-subtle hover:shadow-card hover:-translate-y-px border flex flex-col justify-between overflow-hidden group select-none",
-                          hasConflict && "ring-2 ring-[#D94F4F] bg-[#FDF0F0] border-[#F8D7D7]"
+                          hasConflict && "ring-2 ring-danger bg-danger-bg border-danger-border"
                         )}
                         style={{
                           top: `${topPct}%`,
                           height: `${Math.max(heightPct - 0.3, 7.5)}%`,
-                          backgroundColor: hasConflict ? "#FDF0F0" : course.bgHex,
-                          borderColor: hasConflict ? "#F8D7D7" : course.borderHex,
-                          color: hasConflict ? "#D94F4F" : course.textHex,
+                          backgroundColor: hasConflict ? "#F2E8E6" : course.bgHex,
+                          borderColor: hasConflict ? "#D9BCB8" : course.borderHex,
+                          color: hasConflict ? "#9B5B57" : course.textHex,
                         }}
                       >
                         {/* Top Section */}
@@ -266,7 +266,7 @@ export function TimetableGrid() {
                                     setConflictModalOpen(true);
                                   }
                                 }}
-                                className="text-[8px] bg-[#D94F4F] text-white px-1 py-0.2 rounded font-bold shrink-0 ml-1 hover:bg-[#C44343] transition-colors"
+                                className="text-[8px] bg-danger text-white px-1 py-0.2 rounded font-bold shrink-0 ml-1 hover:bg-danger/85 transition-colors"
                                 title="查看冲突"
                               >
                                 冲突
