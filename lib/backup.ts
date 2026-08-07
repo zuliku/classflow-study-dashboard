@@ -151,3 +151,8 @@ export function parseBackupJSON(text: string): BackupValidationResult {
   }
   return validateBackup(raw);
 }
+
+/** 是否存在依赖 IndexedDB 文件（storageKey）的课程资料 */
+export function hasMaterialStorageKeys(courses: Course[]): boolean {
+  return courses.some((c) => c.materials.some((m) => !!m.storageKey));
+}

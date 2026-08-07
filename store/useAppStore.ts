@@ -257,19 +257,38 @@ export const useAppStore = create<AppState>()(
         })),
 
       deleteCourse: (courseId) => {
-        // 同步清理该课程关联资料的 Blob（fire-and-forget，失败不阻塞）
-        const targetCourse = get().courses.find((c) => c.id === courseId);
+        const current = get();
+        const targetCourse = current.courses.find((c) => c.id === courseId);
+
+        // 1. 同步清理该课程关联资料的 Blob（fire-and-forget，失败不阻塞）
         targetCourse?.materials.forEach((m) => {
           if (m.storageKey) deleteFileBlob(m.storageKey).catch(() => {});
         });
 
-        set((state) => ({
-          courses: state.courses.filter((c) => c.id !== courseId),
-          schedules: state.schedules.filter((s) => s.courseId !== courseId),
-          assignments: state.assignments.filter((a) => a.courseId !== courseId),
-          groupProjects: state.groupProjects.filter((gp) => gp.courseId !== courseId),
-          selectedCourseId: state.selectedCourseId === courseId ? null : state.selectedCourseId,
-        }));
+        // 2. 收集被删除课程的关联 Assignment，级联清理其 DDL CalendarMark
+        const deletedAssignments = current.assignments.filter((a) => a.courseId === courseId);
+        const deletedAssignmentIds = new Set(deletedAssignments.map((a) => a.id));
+
+        const isOrphanDDLMark = (mark: CalendarMark): boolean => {
+          if (mark.type !== "ddl") return false; // 严格限定 ddl，绝不误删 exam/activity
+          if (mark.sourceId && deletedAssignmentIds.has(mark.sourceId)) return true;
+          // 历史遗留无 sourceId 的 DDL 标记：按 title / DDL date 兼容匹配
+          if (!mark.sourceId) {
+            return deletedAssignments.some(
+              (a) => a.title === mark.title || getLocalDDLDate(a.ddl) === mark.date
+            );
+          }
+          return false;
+        };
+
+        set({
+          courses: current.courses.filter((c) => c.id !== courseId),
+          schedules: current.schedules.filter((s) => s.courseId !== courseId),
+          assignments: current.assignments.filter((a) => a.courseId !== courseId),
+          groupProjects: current.groupProjects.filter((gp) => gp.courseId !== courseId),
+          calendarMarks: current.calendarMarks.filter((m) => !isOrphanDDLMark(m)),
+          selectedCourseId: current.selectedCourseId === courseId ? null : current.selectedCourseId,
+        });
       },
 
       addScheduleSlot: (scheduleData) => {
