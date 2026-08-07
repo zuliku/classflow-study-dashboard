@@ -1,113 +1,145 @@
 "use client";
 
 import React from "react";
-import { ChevronRight } from "lucide-react";
+import { Clock, ArrowUpRight, CheckCircle2 } from "lucide-react";
 import { useAppStore } from "@/store/useAppStore";
-import { getPriorityMeta } from "@/lib/utils";
-
-const DDL_REFERENCE_DATA = [
-  {
-    id: "a1",
-    monthDay: "5月 21",
-    weekday: "周三",
-    title: "计量经济学作业",
-    subtitle: "计量经济学 · 作业",
-    priority: "urgent" as const,
-    countdown: "2天后截止",
-  },
-  {
-    id: "a2",
-    monthDay: "5月 22",
-    weekday: "周四",
-    title: "市场营销案例汇报",
-    subtitle: "市场营销学 · 小组作业",
-    priority: "high" as const,
-    countdown: "3天后截止",
-  },
-  {
-    id: "a3",
-    monthDay: "5月 23",
-    weekday: "周五",
-    title: "英语演讲PPT",
-    subtitle: "大学英语 · 个人作业",
-    priority: "medium" as const,
-    countdown: "4天后截止",
-  },
-  {
-    id: "a4",
-    monthDay: "5月 24",
-    weekday: "周六",
-    title: "数据库实验报告",
-    subtitle: "数据库系统 · 实验报告",
-    priority: "low" as const,
-    countdown: "5天后截止",
-  },
-];
+import { format, parseISO, formatDistanceToNow } from "date-fns";
+import { zhCN } from "date-fns/locale";
+import { cn } from "@/lib/utils";
 
 export function UpcomingDDL() {
-  const { setSelectedAssignmentId, setActiveTab } = useAppStore();
+  const { assignments, courses, setSelectedAssignmentId, setActiveTab } = useAppStore();
+
+  // Filter uncompleted tasks & sort by nearest DDL
+  const upcomingAssignments = [...assignments]
+    .filter((a) => a.status !== "completed")
+    .sort((a, b) => {
+      const timeA = new Date(a.ddl).getTime();
+      const timeB = new Date(b.ddl).getTime();
+      return timeA - timeB;
+    })
+    .slice(0, 4);
+
+  const getPriorityBadge = (priority: string) => {
+    switch (priority) {
+      case "urgent":
+        return (
+          <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-[#FDF0F0] text-[#D94F4F] border border-[#F8D7D7]">
+            紧急
+          </span>
+        );
+      case "high":
+        return (
+          <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-[#FFF7ED] text-[#E28743] border border-[#FFEDD5]">
+            高优先
+          </span>
+        );
+      case "medium":
+        return (
+          <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-[#FEFCE8] text-[#D9A05B] border border-[#FEF08A]">
+            中优先
+          </span>
+        );
+      default:
+        return (
+          <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-[#E3E6E0] text-charcoal border border-[#D0D5CC]">
+            普通
+          </span>
+        );
+    }
+  };
+
+  const parseDateSafely = (dateStr: string) => {
+    try {
+      const formatted = dateStr.includes(" ") ? dateStr.replace(" ", "T") : dateStr;
+      const parsed = parseISO(formatted);
+      if (!isNaN(parsed.getTime())) return parsed;
+      return new Date(dateStr);
+    } catch (e) {
+      return new Date();
+    }
+  };
 
   return (
-    <div className="bg-white border border-[#E7E3DD] rounded-2xl p-4 shadow-subtle flex flex-col">
-      {/* Header */}
-      <div className="flex items-center justify-between pb-3 border-b border-[#F0EBE1]">
-        <h3 className="text-sm font-bold text-charcoal">临近 DDL</h3>
+    <div className="bg-white border border-[#E7E3DD] rounded-2xl p-4 shadow-subtle flex flex-col justify-between space-y-3">
+      {/* Card Header */}
+      <div className="flex items-center justify-between border-b border-[#F0EBE1] pb-2.5">
+        <div className="flex items-center space-x-2">
+          <Clock className="w-4 h-4 text-[#D94F4F]" />
+          <h3 className="text-xs font-bold text-charcoal tracking-tight">
+            临近 DDL
+          </h3>
+          <span className="text-[10px] font-semibold text-[#8C827A] bg-[#F7F5F5] px-1.5 py-0.5 rounded border border-[#E7E3DD]">
+            {upcomingAssignments.length} 项待办
+          </span>
+        </div>
         <button
           onClick={() => setActiveTab("assignments")}
-          className="text-xs text-[#8C827A] hover:text-charcoal transition-colors flex items-center"
+          className="text-[11px] font-semibold text-[#8C827A] hover:text-charcoal flex items-center transition-colors"
         >
-          查看全部 <ChevronRight className="w-3.5 h-3.5 ml-0.5" />
+          <span>全部 DDL</span>
+          <ArrowUpRight className="w-3 h-3 ml-0.5" />
         </button>
       </div>
 
-      {/* List Items */}
-      <div className="mt-2.5 space-y-2">
-        {DDL_REFERENCE_DATA.map((item) => {
-          const priorityMeta = getPriorityMeta(item.priority);
+      {/* DDL Task Items List */}
+      <div className="space-y-2">
+        {upcomingAssignments.length === 0 ? (
+          <div className="py-6 text-center text-xs text-[#8C827A] space-y-1">
+            <CheckCircle2 className="w-6 h-6 mx-auto text-[#4A7C59]" />
+            <p>暂无临近截止作业</p>
+          </div>
+        ) : (
+          upcomingAssignments.map((task) => {
+            const course = courses.find((c) => c.id === task.courseId);
+            const ddlDate = parseDateSafely(task.ddl);
+            const dateDisplay = format(ddlDate, "M月d日 EEE", { locale: zhCN });
+            const relativeTime = formatDistanceToNow(ddlDate, {
+              addSuffix: true,
+              locale: zhCN,
+            });
 
-          return (
-            <div
-              key={item.id}
-              onClick={() => setSelectedAssignmentId(item.id)}
-              className="group p-2.5 bg-white hover:bg-[#F7F5F5] border border-[#E7E3DD] hover:border-[#D5CBC0] rounded-xl transition-all duration-200 cursor-pointer flex items-center justify-between shadow-subtle"
-            >
-              {/* Left Date Block + Info */}
-              <div className="flex items-center space-x-3 min-w-0">
-                <div className="flex flex-col items-center justify-center w-11 h-11 bg-[#F7F5F5] border border-[#E0D7C6] rounded-lg shrink-0">
-                  <span className="text-[9px] text-[#8C827A] font-medium leading-none">
-                    {item.monthDay}
-                  </span>
-                  <span className="text-xs font-bold text-charcoal leading-none mt-1">
-                    {item.weekday}
-                  </span>
-                </div>
-
-                <div className="min-w-0">
-                  <h4 className="text-xs font-bold text-charcoal truncate group-hover:text-black">
-                    {item.title}
-                  </h4>
-                  <div className="flex items-center space-x-2 mt-1">
-                    <span className="text-[10px] text-[#8C827A] truncate">
-                      {item.subtitle}
+            return (
+              <div
+                key={task.id}
+                onClick={() => setSelectedAssignmentId(task.id)}
+                className="p-2.5 bg-[#F7F5F5] hover:bg-[#F0EBE1] border border-[#E7E3DD] hover:border-[#CDB9AB] rounded-xl transition-all duration-200 cursor-pointer flex items-center justify-between group"
+              >
+                <div className="flex items-center space-x-2.5 min-w-0 flex-1">
+                  <div className="w-9 h-9 rounded-lg bg-white border border-[#E0D7C6] flex flex-col items-center justify-center shrink-0 text-center">
+                    <span className="text-[9px] font-bold text-[#8C827A] leading-none">
+                      {format(ddlDate, "M月")}
                     </span>
-                    <span
-                      className={`text-[9px] px-1.5 py-0.2 rounded border font-semibold ${priorityMeta.bg} ${priorityMeta.text} ${priorityMeta.border}`}
-                    >
-                      {priorityMeta.label}
+                    <span className="text-xs font-extrabold text-charcoal leading-none mt-0.5">
+                      {format(ddlDate, "d")}
                     </span>
                   </div>
+
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center space-x-1.5">
+                      <h4 className="text-xs font-bold text-charcoal truncate group-hover:text-black">
+                        {task.title}
+                      </h4>
+                      {getPriorityBadge(task.priority)}
+                    </div>
+                    <p className="text-[10px] text-[#676268] truncate mt-0.5">
+                      {course?.name || "通用课题"}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="text-right shrink-0 ml-2">
+                  <span className="text-[10px] font-bold text-[#D94F4F] block">
+                    {relativeTime}
+                  </span>
+                  <span className="text-[9px] text-[#8C827A] block mt-0.5">
+                    {dateDisplay}
+                  </span>
                 </div>
               </div>
-
-              {/* Right Countdown Tag */}
-              <div className="shrink-0 text-right pl-2">
-                <span className="text-[10px] font-medium text-[#8C827A]">
-                  {item.countdown}
-                </span>
-              </div>
-            </div>
-          );
-        })}
+            );
+          })
+        )}
       </div>
     </div>
   );

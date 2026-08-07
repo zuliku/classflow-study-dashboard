@@ -1,109 +1,124 @@
 "use client";
 
 import React from "react";
-import { Calendar, ClipboardList, Clock, CheckCircle2, ChevronRight, ArrowUpRight } from "lucide-react";
+import { Calendar, ClipboardList, Clock, CheckCircle2 } from "lucide-react";
 import { useAppStore } from "@/store/useAppStore";
+import { format, parseISO, isSameWeek, isSameDay } from "date-fns";
 
 export function StatCards() {
-  const { assignments, setActiveTab } = useAppStore();
+  const { schedules, assignments, currentSemesterWeek } = useAppStore();
 
-  const pendingAssignmentsCount = assignments.filter((a) => a.status !== "completed").length;
-  const completedAssignmentsCount = assignments.filter((a) => a.status === "completed").length;
-  const nearDDLCount = assignments.filter((a) => a.status !== "completed" && (a.priority === "urgent" || a.priority === "high")).length;
+  const today = new Date();
+  // dayOfWeek: 1 (Mon) - 7 (Sun)
+  const currentDayOfWeek = today.getDay() === 0 ? 7 : today.getDay();
+
+  // 1. Today's Courses Count
+  const todaySchedules = schedules.filter((s) => {
+    if (s.dayOfWeek !== currentDayOfWeek) return false;
+    if (s.excludedWeeks?.includes(currentSemesterWeek)) return false;
+    return true;
+  });
+  const todayCourseCount = todaySchedules.length;
+
+  // 2. This Week Assignments Count
+  const thisWeekAssignments = assignments.filter((a) => {
+    try {
+      const ddl = parseISO(a.ddl);
+      return isSameWeek(ddl, today, { weekStartsOn: 1 });
+    } catch (e) {
+      return false;
+    }
+  });
+  const thisWeekAssignmentsCount = thisWeekAssignments.length;
+
+  // 3. Urgent / High Priority Upcoming DDLs Count
+  const urgentDDLs = assignments.filter((a) => {
+    if (a.status === "completed") return false;
+    return a.priority === "urgent" || a.priority === "high";
+  });
+  const urgentDDLCount = urgentDDLs.length;
+
+  // 4. Completed Tasks Count
+  const completedTasksCount = assignments.filter((a) => a.status === "completed").length;
+
+  const STATS = [
+    {
+      id: "today-courses",
+      title: "今日课程",
+      value: `${todayCourseCount} 节`,
+      subtext: todayCourseCount > 0 ? `已有 ${todayCourseCount} 节课程安排` : "今日暂无课程安排",
+      icon: Calendar,
+      bgHex: "#E3E6E0",
+      borderHex: "#D0D5CC",
+      iconColor: "text-charcoal",
+    },
+    {
+      id: "week-assignments",
+      title: "本周作业",
+      value: `${thisWeekAssignmentsCount} 项`,
+      subtext: `本周需交付作业 ${thisWeekAssignmentsCount} 项`,
+      icon: ClipboardList,
+      bgHex: "#F0EBE1",
+      borderHex: "#E0D7C6",
+      iconColor: "text-charcoal",
+    },
+    {
+      id: "upcoming-ddl",
+      title: "临近 DDL",
+      value: `${urgentDDLCount} 项`,
+      subtext: urgentDDLCount > 0 ? "需优先完成" : "暂无紧急任务",
+      subtextColor: urgentDDLCount > 0 ? "text-[#D94F4F] font-semibold" : "text-[#8C827A]",
+      icon: Clock,
+      bgHex: "#FDF0F0",
+      borderHex: "#F8D7D7",
+      iconColor: "text-[#D94F4F]",
+    },
+    {
+      id: "completed-tasks",
+      title: "已完成任务",
+      value: `${completedTasksCount} 项`,
+      subtext: `累计完成 ${completedTasksCount} 项任务`,
+      icon: CheckCircle2,
+      bgHex: "#E3E6E0",
+      borderHex: "#D0D5CC",
+      iconColor: "text-[#4A7C59]",
+    },
+  ];
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3.5">
-      {/* Card 1: 今日课程 */}
-      <div
-        onClick={() => setActiveTab("timetable")}
-        className="bg-[#E3E6E0]/60 border border-[#D0D5CC] rounded-2xl p-3.5 flex items-center justify-between cursor-pointer hover:shadow-card hover:bg-[#E3E6E0]/80 transition-all duration-200 group"
-      >
-        <div className="flex items-center space-x-3">
-          <div className="w-10 h-10 rounded-xl bg-white border border-[#D0D5CC] flex items-center justify-center text-charcoal shadow-subtle group-hover:scale-105 transition-transform">
-            <Calendar className="w-4 h-4 text-charcoal" />
-          </div>
-          <div>
-            <span className="text-[11px] font-medium text-[#676268]">今日课程</span>
-            <div className="flex items-baseline space-x-1 mt-0.5">
-              <span className="text-xl font-bold text-charcoal tracking-tight">3</span>
-              <span className="text-xs font-medium text-[#676268]">节</span>
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      {STATS.map((stat) => {
+        const Icon = stat.icon;
+        return (
+          <div
+            key={stat.id}
+            className="bg-white border border-[#E7E3DD] rounded-2xl p-4 shadow-subtle flex items-center justify-between transition-all duration-200 hover:shadow-card hover:-translate-y-0.5 cursor-pointer"
+          >
+            <div className="space-y-1">
+              <span className="text-xs font-semibold text-[#8C827A]">
+                {stat.title}
+              </span>
+              <div className="text-xl font-extrabold text-charcoal tracking-tight">
+                {stat.value}
+              </div>
+              <p
+                className={`text-[11px] ${
+                  stat.subtextColor || "text-[#8C827A]"
+                }`}
+              >
+                {stat.subtext}
+              </p>
             </div>
-            <p className="text-[10px] text-[#676268] mt-0.5">
-              还有 1 节课即将开始
-            </p>
-          </div>
-        </div>
-        <ChevronRight className="w-3.5 h-3.5 text-[#8C827A] group-hover:translate-x-0.5 transition-transform" />
-      </div>
 
-      {/* Card 2: 本周作业 */}
-      <div
-        onClick={() => setActiveTab("assignments")}
-        className="bg-[#F0EBE1]/70 border border-[#E0D7C6] rounded-2xl p-3.5 flex items-center justify-between cursor-pointer hover:shadow-card hover:bg-[#F0EBE1] transition-all duration-200 group"
-      >
-        <div className="flex items-center space-x-3">
-          <div className="w-10 h-10 rounded-xl bg-white border border-[#E0D7C6] flex items-center justify-center text-charcoal shadow-subtle group-hover:scale-105 transition-transform">
-            <ClipboardList className="w-4 h-4 text-charcoal" />
-          </div>
-          <div>
-            <span className="text-[11px] font-medium text-[#676268]">本周作业</span>
-            <div className="flex items-baseline space-x-1 mt-0.5">
-              <span className="text-xl font-bold text-charcoal tracking-tight">6</span>
-              <span className="text-xs font-medium text-[#676268]">项</span>
+            <div
+              className={`w-11 h-11 rounded-2xl flex items-center justify-center border shadow-subtle ${stat.iconColor}`}
+              style={{ backgroundColor: stat.bgHex, borderColor: stat.borderHex }}
+            >
+              <Icon className="w-5 h-5" />
             </div>
-            <p className="text-[10px] text-[#4A7C59] font-medium mt-0.5 flex items-center">
-              较上周 +2 项 <ArrowUpRight className="w-3 h-3 ml-0.5" />
-            </p>
           </div>
-        </div>
-        <ChevronRight className="w-3.5 h-3.5 text-[#8C827A] group-hover:translate-x-0.5 transition-transform" />
-      </div>
-
-      {/* Card 3: 临近 DDL */}
-      <div
-        onClick={() => setActiveTab("assignments")}
-        className="bg-[#FDF0F0]/70 border border-[#F8D7D7] rounded-2xl p-3.5 flex items-center justify-between cursor-pointer hover:shadow-card hover:bg-[#FDF0F0] transition-all duration-200 group"
-      >
-        <div className="flex items-center space-x-3">
-          <div className="w-10 h-10 rounded-xl bg-white border border-[#F8D7D7] flex items-center justify-center text-[#D94F4F] shadow-subtle group-hover:scale-105 transition-transform">
-            <Clock className="w-4 h-4" />
-          </div>
-          <div>
-            <span className="text-[11px] font-medium text-[#8C4A4A]">临近 DDL</span>
-            <div className="flex items-baseline space-x-1 mt-0.5">
-              <span className="text-xl font-bold text-[#D94F4F] tracking-tight">4</span>
-              <span className="text-xs font-medium text-[#8C4A4A]">项</span>
-            </div>
-            <p className="text-[10px] text-[#D94F4F] font-semibold mt-0.5">
-              3 天内截止
-            </p>
-          </div>
-        </div>
-        <ChevronRight className="w-3.5 h-3.5 text-[#C48C8C] group-hover:translate-x-0.5 transition-transform" />
-      </div>
-
-      {/* Card 4: 已完成任务 */}
-      <div
-        onClick={() => setActiveTab("assignments")}
-        className="bg-[#CCCBC4]/40 border border-[#B8B7B0] rounded-2xl p-3.5 flex items-center justify-between cursor-pointer hover:shadow-card hover:bg-[#CCCBC4]/60 transition-all duration-200 group"
-      >
-        <div className="flex items-center space-x-3">
-          <div className="w-10 h-10 rounded-xl bg-white border border-[#B8B7B0] flex items-center justify-center text-charcoal shadow-subtle group-hover:scale-105 transition-transform">
-            <CheckCircle2 className="w-4 h-4 text-charcoal" />
-          </div>
-          <div>
-            <span className="text-[11px] font-medium text-[#676268]">已完成任务</span>
-            <div className="flex items-baseline space-x-1 mt-0.5">
-              <span className="text-xl font-bold text-charcoal tracking-tight">18</span>
-              <span className="text-xs font-medium text-[#676268]">项</span>
-            </div>
-            <p className="text-[10px] text-[#4A7C59] font-medium mt-0.5 flex items-center">
-              本周完成 +5 项 <ArrowUpRight className="w-3 h-3 ml-0.5" />
-            </p>
-          </div>
-        </div>
-        <ChevronRight className="w-3.5 h-3.5 text-[#8C827A] group-hover:translate-x-0.5 transition-transform" />
-      </div>
+        );
+      })}
     </div>
   );
 }

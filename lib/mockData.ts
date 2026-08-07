@@ -188,6 +188,17 @@ export const initialAssignments: Assignment[] = [
     progress: 0,
     tags: ["课后习题"],
   },
+  {
+    id: "a6",
+    courseId: "c_2",
+    title: "高等数学级数与重积分测试",
+    description: "复习教材第 8-9 章重积分与幂级数求和公式，完成线上测试。",
+    ddl: "2025-05-20T23:59:00.000Z",
+    priority: "high",
+    status: "completed",
+    progress: 100,
+    tags: ["线上测试"],
+  },
 ];
 
 export const mockStudyLoadData = [
@@ -303,9 +314,6 @@ export const initialGroupProjects: GroupProject[] = [
 ];
 
 export const initialCalendarMarks: CalendarMark[] = [
-  { id: "cm1", date: "2025-05-21", type: "ddl", title: "计量经济学作业 DDL" },
-  { id: "cm2", date: "2025-05-22", type: "ddl", title: "市场营销案例汇报 DDL" },
-  { id: "cm3", date: "2025-05-23", type: "ddl", title: "英语演讲 PPT DDL" },
-  { id: "cm4", date: "2025-05-24", type: "ddl", title: "数据库实验报告 DDL" },
-  { id: "cm5", date: "2025-05-28", type: "exam", title: "微观经济学期中考试" },
+  { id: "cm1", date: "2025-05-28", type: "exam", title: "微观经济学期中考试" },
+  { id: "cm2", date: "2025-05-30", type: "activity", title: "学术沙龙与毕业论文动员会" },
 ];

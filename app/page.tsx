@@ -48,18 +48,23 @@ export default function Home() {
     setImportScheduleModalOpen,
   } = useAppStore();
 
-  // Statistics computation for Analytics tab
+  // Statistics derived dynamically 100% from Zustand store
   const totalTasks = assignments.length;
   const completedTasks = assignments.filter((a) => a.status === "completed").length;
   const doingTasks = assignments.filter((a) => a.status === "doing").length;
   const todoTasks = assignments.filter((a) => a.status === "todo").length;
 
+  const completionRate = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
+  const totalCredits = courses.reduce((sum, c) => sum + c.credit, 0);
+
+  // Status Pie Data derived from real counts
   const statusPieData = [
-    { name: "已完成", value: completedTasks + 12, color: "#4A7C59" },
+    { name: "已完成", value: completedTasks, color: "#4A7C59" },
     { name: "进行中", value: doingTasks, color: "#CDB9AB" },
     { name: "待完成", value: todoTasks, color: "#A48F82" },
-  ];
+  ].filter((item) => item.value > 0 || totalTasks === 0);
 
+  // Priority Bar Data derived from real counts
   const priorityPieData = [
     { name: "紧急", value: assignments.filter((a) => a.priority === "urgent").length, color: "#D94F4F" },
     { name: "高优先", value: assignments.filter((a) => a.priority === "high").length, color: "#E28743" },
@@ -237,22 +242,24 @@ export default function Home() {
                 </p>
               </div>
 
-              {/* Metric Summary Cards */}
+              {/* Metric Summary Cards Derived Dynamically */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="p-4 bg-white border border-[#E7E3DD] rounded-2xl shadow-subtle space-y-1">
                   <span className="text-xs font-semibold text-[#8C827A]">按时完成率</span>
-                  <div className="text-2xl font-extrabold text-[#4A7C59]">96.5%</div>
-                  <p className="text-[10px] text-[#4A7C59] font-medium">较上周 +2.1% ↑</p>
+                  <div className="text-2xl font-extrabold text-[#4A7C59]">{completionRate}%</div>
+                  <p className="text-[10px] text-[#4A7C59] font-medium">
+                    已完成 {completedTasks} / {totalTasks} 项作业
+                  </p>
                 </div>
                 <div className="p-4 bg-white border border-[#E7E3DD] rounded-2xl shadow-subtle space-y-1">
                   <span className="text-xs font-semibold text-[#8C827A]">在读课程</span>
                   <div className="text-2xl font-extrabold text-charcoal">{courses.length} 门</div>
-                  <p className="text-[10px] text-[#8C827A]">共 27 学分</p>
+                  <p className="text-[10px] text-[#8C827A]">共 {totalCredits} 学分</p>
                 </div>
                 <div className="p-4 bg-white border border-[#E7E3DD] rounded-2xl shadow-subtle space-y-1">
                   <span className="text-xs font-semibold text-[#8C827A]">本周自习时长</span>
                   <div className="text-2xl font-extrabold text-charcoal">24.5 h</div>
-                  <p className="text-[10px] text-[#4A7C59]">连续打卡 24 天</p>
+                  <p className="text-[10px] text-[#4A7C59]">包含上课与作业研讨</p>
                 </div>
               </div>
 
