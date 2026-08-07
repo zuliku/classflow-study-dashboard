@@ -218,16 +218,6 @@ export const initialAssignments: Assignment[] = [
   },
 ];
 
-export const mockStudyLoadData = [
-  { day: "周一", courseHours: 4.5, taskHours: 2.0 },
-  { day: "周二", courseHours: 3.0, taskHours: 3.5 },
-  { day: "周三", courseHours: 5.0, taskHours: 2.5 },
-  { day: "周四", courseHours: 3.5, taskHours: 4.0 },
-  { day: "周五", courseHours: 4.0, taskHours: 1.5 },
-  { day: "周六", courseHours: 1.5, taskHours: 3.0 },
-  { day: "周日", courseHours: 1.0, taskHours: 2.0 },
-];
-
 export const initialGroupProjects: GroupProject[] = [
   {
     id: "gp_1",

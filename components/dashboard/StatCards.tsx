@@ -12,16 +12,18 @@ export function StatCards() {
   const today = new Date();
   // dayOfWeek: 1 (Mon) - 7 (Sun)
   const currentDayOfWeek = today.getDay() === 0 ? 7 : today.getDay();
-  // "今日课程"以今天的真实学期周次为准（isScheduleActive 是唯一周次判断入口）
-  const currentWeek = Math.min(
-    Math.max(getSemesterWeek(today, semester), 1),
-    semester.totalWeeks
-  );
+  // "今日课程"必须同时判断今天对应的真实教学周与 isScheduleActive；
+  // 学期范围外的日期不计入任何课程（如仅 1-8 周开设的课在第 12 周不能计入）
+  const realCurrentWeek = getSemesterWeek(today, semester);
+  const isInSemester =
+    realCurrentWeek >= 1 && realCurrentWeek <= semester.totalWeeks;
 
   // 1. Today's Courses Count
-  const todaySchedules = schedules.filter(
-    (s) => s.dayOfWeek === currentDayOfWeek && isScheduleActive(s, currentWeek)
-  );
+  const todaySchedules = isInSemester
+    ? schedules.filter(
+        (s) => s.dayOfWeek === currentDayOfWeek && isScheduleActive(s, realCurrentWeek)
+      )
+    : [];
   const todayCourseCount = todaySchedules.length;
 
   // 2. This Week Assignments Count

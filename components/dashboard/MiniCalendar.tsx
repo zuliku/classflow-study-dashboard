@@ -5,6 +5,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Calendar as CalendarIcon,
+  CalendarDays,
   BookOpen,
   ClipboardCheck,
   Award,
@@ -78,8 +79,14 @@ export function MiniCalendar() {
     (a) => a.ddl.split("T")[0] === selectedDateStr
   );
 
-  // Calendar marks (exams/activities) on selected date
-  const dayMarks = calendarMarks.filter((m) => m.date === selectedDateStr);
+  // Calendar marks: 严格按类型区分，考试只匹配 exam，活动只匹配 activity
+  const dayExams = calendarMarks.filter(
+    (m) => m.date === selectedDateStr && m.type === "exam"
+  );
+  const dayActivities = calendarMarks.filter(
+    (m) => m.date === selectedDateStr && m.type === "activity"
+  );
+  const dayMarks = [...dayExams, ...dayActivities];
 
   return (
     <div className="bg-white border border-[#E7E3DD] rounded-2xl p-4 shadow-subtle space-y-3 flex flex-col justify-between">
@@ -143,7 +150,12 @@ export function MiniCalendar() {
               (s) => s.dayOfWeek === dayOfWeekNum && isScheduleActive(s, daySemesterWeek)
             );
           const hasDDL = assignments.some((a) => a.ddl.split("T")[0] === dateStr);
-          const hasExam = calendarMarks.some((m) => m.date === dateStr);
+          const hasExam = calendarMarks.some(
+            (m) => m.date === dateStr && m.type === "exam"
+          );
+          const hasActivity = calendarMarks.some(
+            (m) => m.date === dateStr && m.type === "activity"
+          );
 
           return (
             <button
@@ -184,6 +196,13 @@ export function MiniCalendar() {
                     }`}
                   />
                 )}
+                {hasActivity && (
+                  <span
+                    className={`w-1 h-1 rounded-full ${
+                      isSelected ? "bg-white" : "bg-[#7A6FA8]"
+                    }`}
+                  />
+                )}
               </div>
             </button>
           );
@@ -201,6 +220,7 @@ export function MiniCalendar() {
           </span>
           <span className="text-[10px] text-[#8C827A]">
             {daySchedules.length} 门课 · {dayAssignments.length} 个 DDL
+            {dayMarks.length > 0 ? ` · ${dayMarks.length} 项日程` : ""}
           </span>
         </div>
 
@@ -208,7 +228,7 @@ export function MiniCalendar() {
         <div className="space-y-1.5 max-h-36 overflow-y-auto pr-1">
           {daySchedules.length === 0 && dayAssignments.length === 0 && dayMarks.length === 0 ? (
             <p className="text-[11px] text-[#8C827A] py-2 text-center">
-              本日无排课或作业 DDL
+              本日无排课、DDL 或考试活动
             </p>
           ) : (
             <>
@@ -247,6 +267,34 @@ export function MiniCalendar() {
                     <span className="font-bold truncate">{a.title}</span>
                   </div>
                   <span className="text-[10px] font-bold shrink-0">DDL 截止</span>
+                </div>
+              ))}
+
+              {/* Exams (仅展示，不跳转详情) */}
+              {dayExams.map((m) => (
+                <div
+                  key={m.id}
+                  className="p-1.5 bg-[#FFF6EE] border border-[#FDE6D2] rounded-lg text-xs flex items-center justify-between text-[#D97706]"
+                >
+                  <div className="flex items-center space-x-1.5 min-w-0">
+                    <Award className="w-3 h-3 shrink-0" />
+                    <span className="font-bold truncate">{m.title}</span>
+                  </div>
+                  <span className="text-[10px] font-bold shrink-0">考试</span>
+                </div>
+              ))}
+
+              {/* Activities (仅展示，不跳转详情) */}
+              {dayActivities.map((m) => (
+                <div
+                  key={m.id}
+                  className="p-1.5 bg-[#F2F7F3] border border-[#D4E7D7] rounded-lg text-xs flex items-center justify-between text-[#4A7C59]"
+                >
+                  <div className="flex items-center space-x-1.5 min-w-0">
+                    <CalendarDays className="w-3 h-3 shrink-0" />
+                    <span className="font-bold truncate">{m.title}</span>
+                  </div>
+                  <span className="text-[10px] font-bold shrink-0">活动</span>
                 </div>
               ))}
             </>

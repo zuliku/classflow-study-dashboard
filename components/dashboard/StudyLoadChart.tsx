@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React from "react";
 import {
   BarChart,
   Bar,
@@ -10,34 +10,30 @@ import {
   ResponsiveContainer,
   Cell,
 } from "recharts";
-import { ArrowUpRight, ChevronDown } from "lucide-react";
-import { mockStudyLoadData } from "@/lib/mockData";
+import { useAppStore } from "@/store/useAppStore";
+import { computeWeekCourseLoad } from "@/lib/studyLoad";
 
 export function StudyLoadChart() {
-  const [filterMode, setFilterMode] = useState<"course" | "task">("course");
+  const { schedules, semester } = useAppStore();
 
-  const totalHours = mockStudyLoadData
-    .reduce((sum, d) => sum + (filterMode === "course" ? d.courseHours : d.taskHours), 0)
-    .toFixed(1);
+  const today = new Date();
+  const weekLoad = computeWeekCourseLoad(schedules, semester);
+  const todayIndex = (today.getDay() + 6) % 7; // 周一=0 ... 周日=6
+  const maxDayHours = Math.max(...weekLoad.days.map((d) => d.hours), 0);
+  const yAxisMax = Math.max(6, Math.ceil(maxDayHours + 1));
 
   return (
     <div className="bg-white border border-[#E7E3DD] rounded-2xl p-4 shadow-subtle flex flex-col justify-between h-full">
       {/* Header */}
       <div className="flex items-center justify-between pb-2.5 border-b border-[#F0EBE1]">
         <h3 className="text-sm font-bold text-charcoal">
-          学习负荷（本周）
+          本周课程负荷
         </h3>
-        <div className="relative">
-          <select
-            value={filterMode}
-            onChange={(e) => setFilterMode(e.target.value as "course" | "task")}
-            className="appearance-none bg-[#F7F5F5] border border-[#E7E3DD] text-charcoal text-[11px] font-medium px-2.5 py-1 pr-6 rounded-lg focus:outline-none cursor-pointer"
-          >
-            <option value="course">按课程</option>
-            <option value="task">按任务</option>
-          </select>
-          <ChevronDown className="w-3 h-3 text-[#8C827A] absolute right-1.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-        </div>
+        <span className="text-[10px] font-semibold text-[#8C827A] bg-[#F7F5F5] px-2 py-1 rounded-lg border border-[#E7E3DD]">
+          {weekLoad.isInSemester
+            ? `第 ${weekLoad.week} 周 · 按实际课表统计`
+            : "本周不在教学周内"}
+        </span>
       </div>
 
       {/* Content Body */}
@@ -46,21 +42,21 @@ export function StudyLoadChart() {
         <div className="space-y-1">
           <div className="flex items-baseline space-x-1">
             <span className="text-2xl font-bold text-charcoal tracking-tight">
-              {totalHours}
+              {weekLoad.totalHours}
             </span>
             <span className="text-xs font-semibold text-[#676268]">小时</span>
           </div>
-          <p className="text-[11px] text-[#8C827A]">预计学习时长</p>
-          <div className="inline-flex items-center text-[10px] font-semibold text-[#D94F4F] mt-1">
-            较上周 +3.2 小时 <ArrowUpRight className="w-3 h-3 ml-0.5" />
-          </div>
+          <p className="text-[11px] text-[#8C827A]">本周课程时长</p>
+          <p className="text-[10px] font-semibold text-[#4A7C59]">
+            基于课表 endTime - startTime 实算
+          </p>
         </div>
 
         {/* Right Recharts Bar Chart */}
         <div className="md:col-span-2 h-36 w-full">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart
-              data={mockStudyLoadData}
+              data={weekLoad.days}
               margin={{ top: 10, right: 10, left: -25, bottom: 0 }}
             >
               <XAxis
@@ -74,8 +70,7 @@ export function StudyLoadChart() {
                 axisLine={false}
                 tickLine={false}
                 unit="h"
-                domain={[0, 6]}
-                ticks={[0, 2, 4, 6]}
+                domain={[0, yAxisMax]}
               />
               <Tooltip
                 cursor={{ fill: "rgba(240, 235, 225, 0.4)" }}
@@ -87,16 +82,16 @@ export function StudyLoadChart() {
                   fontSize: "11px",
                   padding: "6px 10px",
                 }}
-                formatter={(value: any) => [`${value} 小时`, "学习时长"]}
+                formatter={(value: any) => [`${value} 小时`, "课程时长"]}
               />
               <Bar
-                dataKey={filterMode === "course" ? "courseHours" : "taskHours"}
+                dataKey="hours"
                 radius={[4, 4, 0, 0]}
               >
-                {mockStudyLoadData.map((_, index) => (
+                {weekLoad.days.map((_, index) => (
                   <Cell
                     key={`cell-${index}`}
-                    fill={index === 2 ? "#A48F82" : "#CDB9AB"}
+                    fill={index === todayIndex ? "#A48F82" : "#CDB9AB"}
                   />
                 ))}
               </Bar>

@@ -21,6 +21,7 @@ import { FullTimetableModal } from "@/components/modals/FullTimetableModal";
 import { AddAssignmentModal } from "@/components/modals/AddAssignmentModal";
 import { FilePreviewModal } from "@/components/modals/FilePreviewModal";
 import { useAppStore } from "@/store/useAppStore";
+import { computeWeekCourseLoad } from "@/lib/studyLoad";
 import {
   BookOpen,
   Plus,
@@ -49,11 +50,15 @@ export default function Home() {
     assignments,
     userProfile,
     semester,
+    schedules,
     setSelectedCourseId,
     setAddCourseModalOpen,
     setImportScheduleModalOpen,
     setFullTimetableModalOpen,
   } = useAppStore();
+
+  // 本周课程时长：按当前教学周实际生效课表实算（endTime - startTime）
+  const weekCourseLoad = computeWeekCourseLoad(schedules, semester);
 
   // Statistics derived dynamically 100% from Zustand store
   const totalTasks = assignments.length;
@@ -252,7 +257,7 @@ export default function Home() {
                   学习统计
                 </h2>
                 <p className="text-xs text-[#8C827A]">
-                  作业完成进度与本周自习时长
+                  作业完成进度与本周课程负荷
                 </p>
               </div>
 
@@ -271,9 +276,15 @@ export default function Home() {
                   <p className="text-[10px] text-[#8C827A]">共 {totalCredits} 学分</p>
                 </div>
                 <div className="p-4 bg-white border border-[#E7E3DD] rounded-2xl shadow-subtle space-y-1">
-                  <span className="text-xs font-semibold text-[#8C827A]">本周自习时长</span>
-                  <div className="text-2xl font-extrabold text-charcoal">24.5 h</div>
-                  <p className="text-[10px] text-[#4A7C59]">包含上课与作业研讨</p>
+                  <span className="text-xs font-semibold text-[#8C827A]">本周课程时长</span>
+                  <div className="text-2xl font-extrabold text-charcoal">
+                    {weekCourseLoad.totalHours} h
+                  </div>
+                  <p className="text-[10px] text-[#4A7C59] font-medium">
+                    {weekCourseLoad.isInSemester
+                      ? `第 ${weekCourseLoad.week} 周 · 按实际课表统计`
+                      : "本周不在教学周内"}
+                  </p>
                 </div>
               </div>
 

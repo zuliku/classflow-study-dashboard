@@ -3,16 +3,24 @@
 import React from "react";
 import { Clock, ArrowUpRight, CheckCircle2 } from "lucide-react";
 import { useAppStore } from "@/store/useAppStore";
-import { format, parseISO, formatDistanceToNow } from "date-fns";
+import { format, parseISO, formatDistanceToNow, differenceInDays } from "date-fns";
 import { zhCN } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 
 export function UpcomingDDL() {
   const { assignments, courses, setSelectedAssignmentId, setActiveTab } = useAppStore();
 
-  // Filter uncompleted tasks & sort by nearest DDL
+  const today = new Date();
+
+  // "临近 DDL" = 尚未完成、未逾期、且在未来 7 天内截止；
+  // 已逾期任务保留在 AssignmentTable 的"已逾期"筛选，不占据此处顶部
   const upcomingAssignments = [...assignments]
-    .filter((a) => a.status !== "completed")
+    .filter((a) => {
+      if (a.status === "completed") return false;
+      const ddlDate = parseISO(a.ddl);
+      const diff = differenceInDays(ddlDate, today);
+      return diff >= 0 && diff <= 7;
+    })
     .sort((a, b) => {
       const timeA = new Date(a.ddl).getTime();
       const timeB = new Date(b.ddl).getTime();
