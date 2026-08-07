@@ -137,7 +137,7 @@ export function StatCards() {
           <div
             key={stat.id}
             onClick={() => handleCardClick(stat.id)}
-            className="bg-white border border-[#E7E3DD] rounded-2xl p-4 shadow-subtle flex items-center justify-between transition-all duration-200 hover:shadow-card hover:-translate-y-px cursor-pointer"
+            className="bg-white border border-[#E7E3DD] rounded-2xl p-4 shadow-subtle flex items-center justify-between transition-all duration-[var(--motion-base)] ease-[var(--ease-standard)] hover:shadow-card hover:-translate-y-px cursor-pointer"
           >
             <div className="space-y-1">
               <span className="text-xs font-semibold text-[#8C827A]">

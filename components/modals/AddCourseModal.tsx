@@ -370,8 +370,8 @@ export function AddCourseModal() {
                   key={i}
                   type="button"
                   onClick={() => setColorIndex(i)}
-                  className={`w-8 h-8 rounded-xl border flex items-center justify-center transition-all ${
-                    colorIndex === i ? "ring-2 ring-charcoal ring-offset-1 scale-105" : ""
+                  className={`w-8 h-8 rounded-xl border flex items-center justify-center transition-colors duration-[var(--motion-fast)] ease-[var(--ease-standard)] ${
+                    colorIndex === i ? "ring-2 ring-charcoal ring-offset-1" : ""
                   }`}
                   style={{ backgroundColor: c.bgHex, borderColor: c.borderHex }}
                   title={c.name}

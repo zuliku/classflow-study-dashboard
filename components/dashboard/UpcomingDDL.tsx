@@ -107,7 +107,7 @@ export function UpcomingDDL() {
               <div
                 key={task.id}
                 onClick={() => setSelectedAssignmentId(task.id)}
-                className="p-2.5 bg-[#F7F5F5] hover:bg-[#F0EBE1] border border-[#E7E3DD] hover:border-[#CDB9AB] rounded-xl transition-all duration-200 cursor-pointer flex items-center justify-between group"
+                className="p-2.5 bg-[#F7F5F5] hover:bg-[#F0EBE1] border border-[#E7E3DD] hover:border-[#CDB9AB] rounded-xl transition-colors duration-[var(--motion-fast)] ease-[var(--ease-standard)] cursor-pointer flex items-center justify-between group"
               >
                 <div className="flex items-center space-x-2.5 min-w-0 flex-1">
                   <div className="w-9 h-9 rounded-lg bg-white border border-[#E0D7C6] flex flex-col items-center justify-center shrink-0 text-center">

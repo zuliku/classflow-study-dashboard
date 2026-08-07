@@ -194,7 +194,7 @@ export function AssignmentTable() {
                 key={task.id}
                 onClick={() => setSelectedAssignmentId(task.id)}
                 className={cn(
-                  "p-3 rounded-xl transition-all duration-150 cursor-pointer flex items-center justify-between group",
+                  "p-3 rounded-xl transition-colors duration-[var(--motion-fast)] ease-[var(--ease-standard)] cursor-pointer flex items-center justify-between group",
                   isNew && "animate-enter",
                   isOverdueTask ? "bg-[#FDF0F0] border border-[#F8D7D7]" : "hover:bg-[#F7F5F5] bg-white border border-[#F5F2EE]"
                 )}
@@ -264,7 +264,7 @@ export function AssignmentTable() {
                     </div>
                     <div className="w-full bg-[#F0EBE1] rounded-full h-1 overflow-hidden">
                       <div
-                        className="bg-[#4A7C59] h-1 rounded-full transition-all duration-300"
+                        className="bg-[#4A7C59] h-1 rounded-full transition-[width] duration-[var(--motion-data)] ease-[var(--ease-emphasized)]"
                         style={{ width: `${task.progress}%` }}
                       />
                     </div>

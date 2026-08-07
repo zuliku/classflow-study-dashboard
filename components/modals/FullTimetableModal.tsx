@@ -138,9 +138,9 @@ export function FullTimetableModal() {
                   <button
                     key={weekNum}
                     onClick={() => setCurrentSemesterWeek(weekNum)}
-                    className={`py-1.5 rounded-xl border text-center transition-all ${
+                    className={`py-1.5 rounded-xl border text-center transition-colors duration-[var(--motion-fast)] ease-[var(--ease-standard)] ${
                       isActiveWeek
-                        ? "bg-charcoal text-white font-extrabold border-black shadow-subtle ring-2 ring-black/10 scale-105"
+                        ? "bg-charcoal text-white font-extrabold border-black shadow-subtle ring-2 ring-black/10"
                         : weekClassCount > 0
                         ? "bg-[#E3E6E0] text-charcoal border-[#D0D5CC] hover:bg-[#D0D5CC]"
                         : "bg-[#F7F5F5] text-[#8C827A] border-[#E7E3DD]"
