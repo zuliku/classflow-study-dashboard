@@ -11,6 +11,7 @@ import {
   ViewMode,
   ScheduleConflict,
   Semester,
+  ClassFlowBackupData,
 } from "@/types";
 import {
   initialUserProfile,
@@ -87,6 +88,8 @@ interface AppState {
   // Actions
   updateUserProfile: (profile: Partial<UserProfile>) => void;
   resetAllDataToDefault: () => void;
+  /** 从备份原子恢复全部业务数据（整体替换，而非追加） */
+  restoreAppData: (data: ClassFlowBackupData) => void;
 
   // Course & Schedule Actions
   addCourseWithSchedule: (
@@ -203,6 +206,21 @@ export const useAppStore = create<AppState>()(
           semester: createDefaultSemester(),
           currentSemesterWeek: 1,
         }),
+
+      restoreAppData: (data) =>
+        set((state) => ({
+          userProfile: data.userProfile,
+          semester: data.semester,
+          courses: data.courses,
+          schedules: data.schedules,
+          assignments: data.assignments,
+          calendarMarks: data.calendarMarks,
+          groupProjects: data.groupProjects,
+          currentSemesterWeek: Math.min(
+            Math.max(state.currentSemesterWeek, 1),
+            data.semester.totalWeeks
+          ),
+        })),
 
       addCourseWithSchedule: (courseData, scheduleSlots) => {
         const courseId = `c_${Date.now()}`;

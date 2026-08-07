@@ -16,12 +16,15 @@ import {
   Info,
 } from "lucide-react";
 import { useAppStore } from "@/store/useAppStore";
+import { parseBackupJSON } from "@/lib/backup";
+import { ClassFlowBackup } from "@/types";
 
 export function SettingsView() {
   const {
     userProfile,
     updateUserProfile,
     resetAllDataToDefault,
+    restoreAppData,
     courses,
     schedules,
     assignments,
@@ -29,7 +32,6 @@ export function SettingsView() {
     groupProjects,
     semester,
     setSemester,
-    importSchedules,
   } = useAppStore();
 
   // Personal Profile state
@@ -77,18 +79,21 @@ export function SettingsView() {
   };
 
   const handleExportData = () => {
-    const backupData = {
-      exportTime: new Date().toISOString(),
-      userProfile,
-      semester,
-      courses,
-      schedules,
-      assignments,
-      calendarMarks,
-      groupProjects,
+    const backup: ClassFlowBackup = {
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      data: {
+        userProfile,
+        semester,
+        courses,
+        schedules,
+        assignments,
+        calendarMarks,
+        groupProjects,
+      },
     };
 
-    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(backupData, null, 2));
+    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(backup, null, 2));
     const downloadAnchor = document.createElement("a");
     downloadAnchor.setAttribute("href", dataStr);
     downloadAnchor.setAttribute("download", `classflow_backup_${new Date().toISOString().split("T")[0]}.json`);
@@ -100,25 +105,38 @@ export function SettingsView() {
   const handleImportBackupJSON = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    const input = e.currentTarget;
 
     const reader = new FileReader();
     reader.onload = (evt) => {
-      try {
-        const raw = JSON.parse(evt.target?.result as string);
-        if (raw.courses && raw.schedules) {
-          importSchedules(raw.courses, raw.schedules);
-          if (raw.userProfile) updateUserProfile(raw.userProfile);
-          if (raw.semester && raw.semester.startDate && raw.semester.totalWeeks) {
-            setSemester(raw.semester);
-          }
-          setImportStatus(`成功从备份中恢复 ${raw.courses.length} 门课程与数据！`);
-          setTimeout(() => setImportStatus(null), 3000);
-        } else {
-          alert("无效的备份文件格式：未读取到课程与排课数据");
-        }
-      } catch {
-        alert("导入失败：备份 JSON 语法有误");
+      const result = parseBackupJSON(evt.target?.result as string);
+
+      if (!result.ok) {
+        // 校验失败：保持当前数据不变，仅提示错误
+        alert(result.error);
+        input.value = "";
+        return;
       }
+
+      // 原子恢复：整体替换现有业务数据，而非追加
+      restoreAppData(result.data);
+
+      // 同步设置页表单的本地状态，避免显示过期值
+      setName(result.data.userProfile.name);
+      setCollege(result.data.userProfile.college);
+      setGrade(result.data.userProfile.grade);
+      setStudentId(result.data.userProfile.studentId);
+      setCompletedCredits(result.data.userProfile.completedCredits);
+      setTotalCredits(result.data.userProfile.totalCredits);
+      setSemesterName(result.data.semester.name);
+      setSemesterStartDate(result.data.semester.startDate);
+      setTotalWeeks(result.data.semester.totalWeeks);
+
+      setImportStatus(
+        `已从备份完整恢复：${result.data.courses.length} 门课程、${result.data.schedules.length} 个上课时段、${result.data.assignments.length} 项作业、${result.data.calendarMarks.length} 个日历标记、${result.data.groupProjects.length} 个小组项目`
+      );
+      setTimeout(() => setImportStatus(null), 5000);
+      input.value = "";
     };
     reader.readAsText(file);
   };

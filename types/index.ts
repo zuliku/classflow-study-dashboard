@@ -128,3 +128,21 @@ export interface CalendarMark {
   title: string;
   sourceId?: string; // Links DDL CalendarMark directly to assignment.id
 }
+
+/** 备份中的完整业务数据快照 */
+export interface ClassFlowBackupData {
+  userProfile: UserProfile;
+  semester: Semester;
+  courses: Course[];
+  schedules: CourseSchedule[];
+  assignments: Assignment[];
+  calendarMarks: CalendarMark[];
+  groupProjects: GroupProject[];
+}
+
+/** 本地数据备份文件结构 (v1) */
+export interface ClassFlowBackup {
+  version: 1;
+  exportedAt: string;
+  data: ClassFlowBackupData;
+}
