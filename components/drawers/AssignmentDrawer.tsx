@@ -14,8 +14,9 @@ import {
 import { useAppStore } from "@/store/useAppStore";
 import { Priority, AssignmentStatus } from "@/types";
 import { getPriorityMeta, getStatusMeta, getDDLStatusText } from "@/lib/utils";
-import { format, parseISO } from "date-fns";
+import { format } from "date-fns";
 import { zhCN } from "date-fns/locale";
+import { parseLocalDDL } from "@/lib/ddl";
 
 export function AssignmentDrawer() {
   const {
@@ -41,11 +42,12 @@ export function AssignmentDrawer() {
   const { text: ddlText, isUrgent } = getDDLStatusText(assignment.ddl);
 
   let formattedDDL = "";
-  try {
-    formattedDDL = format(parseISO(assignment.ddl), "yyyy年MM月dd日 HH:mm", {
+  const parsedDDL = parseLocalDDL(assignment.ddl);
+  if (parsedDDL) {
+    formattedDDL = format(parsedDDL, "yyyy年MM月dd日 HH:mm", {
       locale: zhCN,
     });
-  } catch {
+  } else {
     formattedDDL = assignment.ddl;
   }
 

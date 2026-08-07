@@ -22,6 +22,7 @@ import {
   initialGroupProjects,
 } from "@/lib/mockData";
 import { createDefaultSemester, getSemesterWeek } from "@/lib/semester";
+import { getLocalDDLDate } from "@/lib/ddl";
 
 export function isScheduleActive(schedule: CourseSchedule, week: number): boolean {
   if (schedule.excludedWeeks && schedule.excludedWeeks.includes(week)) {
@@ -318,7 +319,7 @@ export const useAppStore = create<AppState>()(
           id: newId,
         };
 
-        const ddlDateStr = assignmentData.ddl.split("T")[0];
+        const ddlDateStr = getLocalDDLDate(assignmentData.ddl);
         const newMark: CalendarMark = {
           id: `cm_${Date.now()}`,
           date: ddlDateStr,
@@ -335,9 +336,9 @@ export const useAppStore = create<AppState>()(
 
       updateAssignment: (updatedAssignment) =>
         set((state) => {
-          const newDdlDate = updatedAssignment.ddl.split("T")[0];
+          const newDdlDate = getLocalDDLDate(updatedAssignment.ddl);
           const oldAssignment = state.assignments.find((a) => a.id === updatedAssignment.id);
-          const oldDdlDate = oldAssignment ? oldAssignment.ddl.split("T")[0] : "";
+          const oldDdlDate = oldAssignment ? getLocalDDLDate(oldAssignment.ddl) : "";
           const oldTitle = oldAssignment ? oldAssignment.title : "";
 
           // Update assignment object in place, preserving ID
@@ -423,7 +424,7 @@ export const useAppStore = create<AppState>()(
       deleteAssignment: (id) =>
         set((state) => {
           const target = state.assignments.find((a) => a.id === id);
-          const targetDate = target ? target.ddl.split("T")[0] : "";
+          const targetDate = target ? getLocalDDLDate(target.ddl) : "";
           const targetTitle = target ? target.title : "";
 
           return {

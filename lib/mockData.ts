@@ -1,11 +1,14 @@
 import { Course, CourseSchedule, Assignment, CalendarMark, UserProfile, GroupProject } from "@/types";
 
 // Helper functions to generate dynamic relative dates matching current local time
+const pad2 = (n: number) => String(n).padStart(2, "0");
+
+// 本地时间语义：产出无 Z 的本地 ISO 字符串（"YYYY-MM-DDTHH:mm:ss"）
 const getRelativeISO = (daysOffset: number, hour = 23, minute = 59) => {
   const d = new Date();
   d.setDate(d.getDate() + daysOffset);
   d.setHours(hour, minute, 0, 0);
-  return d.toISOString();
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}T${pad2(hour)}:${pad2(minute)}:00`;
 };
 
 const getRelativeDateStr = (daysOffset: number) => {

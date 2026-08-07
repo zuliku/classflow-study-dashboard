@@ -4,6 +4,8 @@ import React, { useState, useEffect } from "react";
 import { X, ClipboardList, Clock, AlertCircle, Tag, Plus, Trash2 } from "lucide-react";
 import { useAppStore } from "@/store/useAppStore";
 import { Assignment, Priority, AssignmentStatus, Subtask } from "@/types";
+import { combineLocalDateTime, getLocalDDLDate, getLocalDDLTime } from "@/lib/ddl";
+import { format } from "date-fns";
 
 export function AddAssignmentModal() {
   const {
@@ -36,9 +38,9 @@ export function AddAssignmentModal() {
           setEditingId(target.id);
           setTitle(target.title);
           setCourseId(target.courseId);
-          const [d, t] = target.ddl.split("T");
-          setDdlDate(d);
-          setDdlTime(t ? t.substring(0, 5) : "23:59");
+          // 统一本地时间语义回填（旧 Z 数据同样按本地墙钟读取）
+          setDdlDate(getLocalDDLDate(target.ddl));
+          setDdlTime(getLocalDDLTime(target.ddl));
           setPriority(target.priority);
           setStatus(target.status);
           setProgress(target.progress);
@@ -52,7 +54,8 @@ export function AddAssignmentModal() {
         setCourseId(courses[0]?.id || "");
         const tomorrow = new Date();
         tomorrow.setDate(tomorrow.getDate() + 1);
-        setDdlDate(tomorrow.toISOString().split("T")[0]);
+        // 本地日期格式化（不用 toISOString，避免时区偏移导致日期错误）
+        setDdlDate(format(tomorrow, "yyyy-MM-dd"));
         setDdlTime("23:59");
         setPriority("medium");
         setStatus("todo");
@@ -88,7 +91,8 @@ export function AddAssignmentModal() {
     e.preventDefault();
     if (!title.trim()) return;
 
-    const fullDdl = `${ddlDate}T${ddlTime}:00.000Z`;
+    // 本地时间语义：不追加 Z，避免 UTC 解释导致日期偏移
+    const fullDdl = combineLocalDateTime(ddlDate, ddlTime);
     const tags = tagsStr
       .split(/[,，]/)
       .map((t) => t.trim())

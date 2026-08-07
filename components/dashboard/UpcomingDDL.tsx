@@ -3,27 +3,29 @@
 import React from "react";
 import { Clock, ArrowUpRight, CheckCircle2 } from "lucide-react";
 import { useAppStore } from "@/store/useAppStore";
-import { format, parseISO, formatDistanceToNow, differenceInDays } from "date-fns";
+import { format, formatDistanceToNow, differenceInDays } from "date-fns";
 import { zhCN } from "date-fns/locale";
 import { cn } from "@/lib/utils";
+import { parseLocalDDL } from "@/lib/ddl";
 
 export function UpcomingDDL() {
   const { assignments, courses, setSelectedAssignmentId, setActiveTab } = useAppStore();
 
   const today = new Date();
 
-  // "临近 DDL" = 尚未完成、未逾期、且在未来 7 天内截止；
+  // "临近 DDL" = 尚未完成、未逾期、且在未来 7 天内截止（DDL 按本地时间语义）；
   // 已逾期任务保留在 AssignmentTable 的"已逾期"筛选，不占据此处顶部
   const upcomingAssignments = [...assignments]
     .filter((a) => {
       if (a.status === "completed") return false;
-      const ddlDate = parseISO(a.ddl);
+      const ddlDate = parseLocalDDL(a.ddl);
+      if (!ddlDate) return false;
       const diff = differenceInDays(ddlDate, today);
       return diff >= 0 && diff <= 7;
     })
     .sort((a, b) => {
-      const timeA = new Date(a.ddl).getTime();
-      const timeB = new Date(b.ddl).getTime();
+      const timeA = parseLocalDDL(a.ddl)?.getTime() ?? 0;
+      const timeB = parseLocalDDL(b.ddl)?.getTime() ?? 0;
       return timeA - timeB;
     })
     .slice(0, 4);
@@ -58,14 +60,8 @@ export function UpcomingDDL() {
   };
 
   const parseDateSafely = (dateStr: string) => {
-    try {
-      const formatted = dateStr.includes(" ") ? dateStr.replace(" ", "T") : dateStr;
-      const parsed = parseISO(formatted);
-      if (!isNaN(parsed.getTime())) return parsed;
-      return new Date(dateStr);
-    } catch (e) {
-      return new Date();
-    }
+    const parsed = parseLocalDDL(dateStr);
+    return parsed ?? new Date();
   };
 
   return (

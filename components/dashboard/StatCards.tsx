@@ -4,7 +4,8 @@ import React from "react";
 import { Calendar, ClipboardList, Clock, CheckCircle2 } from "lucide-react";
 import { useAppStore, isScheduleActive } from "@/store/useAppStore";
 import { getSemesterWeek } from "@/lib/semester";
-import { format, parseISO, isSameWeek, isSameDay } from "date-fns";
+import { parseLocalDDL } from "@/lib/ddl";
+import { format, isSameWeek, isSameDay } from "date-fns";
 
 export function StatCards() {
   const { schedules, assignments, semester } = useAppStore();
@@ -26,14 +27,11 @@ export function StatCards() {
     : [];
   const todayCourseCount = todaySchedules.length;
 
-  // 2. This Week Assignments Count
+  // 2. This Week Assignments Count (DDL 按本地时间语义)
   const thisWeekAssignments = assignments.filter((a) => {
-    try {
-      const ddl = parseISO(a.ddl);
-      return isSameWeek(ddl, today, { weekStartsOn: 1 });
-    } catch (e) {
-      return false;
-    }
+    const ddl = parseLocalDDL(a.ddl);
+    if (!ddl) return false;
+    return isSameWeek(ddl, today, { weekStartsOn: 1 });
   });
   const thisWeekAssignmentsCount = thisWeekAssignments.length;
 

@@ -3,6 +3,7 @@ import { twMerge } from "tailwind-merge";
 import { format, differenceInCalendarDays, parseISO, isToday, isTomorrow, isPast } from "date-fns";
 import { zhCN } from "date-fns/locale";
 import { Priority, AssignmentStatus } from "@/types";
+import { parseLocalDDL } from "@/lib/ddl";
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -10,32 +11,33 @@ export function cn(...inputs: ClassValue[]) {
 
 /**
  * Format ISO date string into human readable relative countdown
+ * DDL 按本地时间语义解析（旧 Z 数据兼容）
  */
 export function getDDLStatusText(ddlISO: string): { text: string; isUrgent: boolean } {
-  try {
-    const ddlDate = parseISO(ddlISO);
-    const today = new Date();
-
-    if (isToday(ddlDate)) {
-      return { text: "今天截止", isUrgent: true };
-    }
-    if (isTomorrow(ddlDate)) {
-      return { text: "明天截止", isUrgent: true };
-    }
-
-    const diffDays = differenceInCalendarDays(ddlDate, today);
-
-    if (diffDays < 0) {
-      return { text: `已超时 ${Math.abs(diffDays)} 天`, isUrgent: true };
-    }
-    if (diffDays === 0) {
-      return { text: "今天截止", isUrgent: true };
-    }
-
-    return { text: `${diffDays}天后截止`, isUrgent: diffDays <= 3 };
-  } catch (e) {
+  const ddlDate = parseLocalDDL(ddlISO);
+  if (!ddlDate) {
     return { text: "待定", isUrgent: false };
   }
+
+  const today = new Date();
+
+  if (isToday(ddlDate)) {
+    return { text: "今天截止", isUrgent: true };
+  }
+  if (isTomorrow(ddlDate)) {
+    return { text: "明天截止", isUrgent: true };
+  }
+
+  const diffDays = differenceInCalendarDays(ddlDate, today);
+
+  if (diffDays < 0) {
+    return { text: `已超时 ${Math.abs(diffDays)} 天`, isUrgent: true };
+  }
+  if (diffDays === 0) {
+    return { text: "今天截止", isUrgent: true };
+  }
+
+  return { text: `${diffDays}天后截止`, isUrgent: diffDays <= 3 };
 }
 
 export function getPriorityMeta(priority: Priority) {

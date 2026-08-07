@@ -15,7 +15,8 @@ import {
 import { useAppStore } from "@/store/useAppStore";
 import { TimeSliceFilter } from "@/types";
 import { getPriorityMeta } from "@/lib/utils";
-import { parseISO, isToday, differenceInDays } from "date-fns";
+import { isToday, differenceInDays } from "date-fns";
+import { parseLocalDDL, getLocalDDLDate } from "@/lib/ddl";
 
 export function AssignmentTable() {
   const {
@@ -39,8 +40,9 @@ export function AssignmentTable() {
       return false;
     }
 
-    // 2. Time Slice & Status Filter
-    const ddlDate = parseISO(item.ddl);
+    // 2. Time Slice & Status Filter (DDL 按本地时间语义)
+    const ddlDate = parseLocalDDL(item.ddl);
+    if (!ddlDate) return false;
     const diff = differenceInDays(ddlDate, today);
 
     switch (timeSlice) {
@@ -73,7 +75,8 @@ export function AssignmentTable() {
   // Overdue count
   const overdueCount = assignments.filter((a) => {
     if (a.status === "completed") return false;
-    const ddlDate = parseISO(a.ddl);
+    const ddlDate = parseLocalDDL(a.ddl);
+    if (!ddlDate) return false;
     return differenceInDays(ddlDate, today) < 0 && !isToday(ddlDate);
   }).length;
 
@@ -165,11 +168,15 @@ export function AssignmentTable() {
           filteredAssignments.map((task) => {
             const course = courses.find((c) => c.id === task.courseId);
             const priorityMeta = getPriorityMeta(task.priority);
-            const formattedDate = task.ddl.split("T")[0];
+            const formattedDate = getLocalDDLDate(task.ddl);
             const isCompleted = task.status === "completed";
 
-            const ddlDate = parseISO(task.ddl);
-            const isOverdueTask = !isCompleted && differenceInDays(ddlDate, today) < 0 && !isToday(ddlDate);
+            const ddlDate = parseLocalDDL(task.ddl);
+            const isOverdueTask =
+              !!ddlDate &&
+              !isCompleted &&
+              differenceInDays(ddlDate, today) < 0 &&
+              !isToday(ddlDate);
 
             return (
               <div

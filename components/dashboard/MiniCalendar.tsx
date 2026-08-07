@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { useAppStore, isScheduleActive } from "@/store/useAppStore";
 import { getSemesterWeek } from "@/lib/semester";
+import { getLocalDDLDate } from "@/lib/ddl";
 import {
   format,
   addMonths,
@@ -74,9 +75,9 @@ export function MiniCalendar() {
       )
     : [];
 
-  // DDL assignments on selected date
+  // DDL assignments on selected date (本地日期匹配)
   const dayAssignments = assignments.filter(
-    (a) => a.ddl.split("T")[0] === selectedDateStr
+    (a) => getLocalDDLDate(a.ddl) === selectedDateStr
   );
 
   // Calendar marks: 严格按类型区分，考试只匹配 exam，活动只匹配 activity
@@ -149,7 +150,9 @@ export function MiniCalendar() {
             schedules.some(
               (s) => s.dayOfWeek === dayOfWeekNum && isScheduleActive(s, daySemesterWeek)
             );
-          const hasDDL = assignments.some((a) => a.ddl.split("T")[0] === dateStr);
+          const hasDDL = assignments.some(
+            (a) => getLocalDDLDate(a.ddl) === dateStr
+          );
           const hasExam = calendarMarks.some(
             (m) => m.date === dateStr && m.type === "exam"
           );
