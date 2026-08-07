@@ -99,7 +99,7 @@ export default function Home() {
         <Header />
 
         {/* Dynamic Page Views */}
-        <main className="flex-1 p-5 space-y-4 overflow-y-auto">
+        <main className="flex-1 p-6 space-y-5 overflow-y-auto">
           <PageTransition tab={activeTab}>
           {activeTab === "overview" && (
             <>
@@ -107,18 +107,18 @@ export default function Home() {
               <StatCards />
 
               {/* Row 2: Middle TimetableGrid (2/3) + Upcoming DDL & Mini Calendar (1/3) */}
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 items-stretch">
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 items-stretch">
                 <div className="lg:col-span-2 flex flex-col">
                   <TimetableGrid />
                 </div>
-                <div className="space-y-4 flex flex-col justify-between">
+                <div className="space-y-5 flex flex-col justify-between">
                   <UpcomingDDL />
                   <MiniCalendar />
                 </div>
               </div>
 
               {/* Row 3: Bottom Study Load Chart (1/2) + Assignments Table (1/2) */}
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-stretch">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 items-stretch">
                 <StudyLoadChart />
                 <AssignmentTable />
               </div>
