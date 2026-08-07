@@ -172,7 +172,12 @@ export function GroupCollaborationView() {
             参与的大作业项目 ({groupProjects.length})
           </h3>
           <div className="space-y-2">
-            {groupProjects.map((p) => {
+            {groupProjects.length === 0 ? (
+              <div className="py-10 text-center text-xs text-[#8C827A] bg-white border border-[#E7E3DD] rounded-2xl">
+                还没有小组项目
+              </div>
+            ) : (
+            groupProjects.map((p) => {
               const isSelected = activeProject?.id === p.id;
               const course = courses.find((c) => c.id === p.courseId);
               return (
@@ -224,7 +229,8 @@ export function GroupCollaborationView() {
                   </div>
                 </div>
               );
-            })}
+            })
+            )}
           </div>
         </div>
 

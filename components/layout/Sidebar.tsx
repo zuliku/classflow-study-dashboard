@@ -28,12 +28,13 @@ const NAV_ITEMS: { id: NavTab; label: string; icon: React.ElementType }[] = [
 export function Sidebar() {
   const { activeTab, setActiveTab, userProfile } = useAppStore();
 
-  const creditPercentage = Math.round(
-    (userProfile.completedCredits / userProfile.totalCredits) * 100
-  );
+  const creditPercentage =
+    userProfile.totalCredits > 0
+      ? Math.round((userProfile.completedCredits / userProfile.totalCredits) * 100)
+      : 0;
 
   return (
-    <aside className="w-56 h-screen bg-[#F7F5F5] border-r border-[#E7E3DD] flex flex-col justify-between p-3.5 sticky top-0 select-none z-20 shrink-0">
+    <aside className="w-52 xl:w-56 h-screen bg-[#F7F5F5] border-r border-[#E7E3DD] flex flex-col justify-between p-3.5 sticky top-0 select-none z-20 shrink-0">
       {/* Top Section */}
       <div className="space-y-3">
         {/* Brand Logo filling top-left area cleanly matching Figure 1 red box */}

@@ -206,13 +206,13 @@ export function MiniCalendar() {
           </button>
           <button
             onClick={handlePrevMonth}
-            className="p-1 rounded-lg text-[#8C827A] hover:bg-[#F7F5F5] transition-colors"
+            className="p-1.5 rounded-lg text-[#8C827A] hover:bg-[#F7F5F5] transition-colors"
           >
             <ChevronLeft className="w-3.5 h-3.5" />
           </button>
           <button
             onClick={handleNextMonth}
-            className="p-1 rounded-lg text-[#8C827A] hover:bg-[#F7F5F5] transition-colors"
+            className="p-1.5 rounded-lg text-[#8C827A] hover:bg-[#F7F5F5] transition-colors"
           >
             <ChevronRight className="w-3.5 h-3.5" />
           </button>

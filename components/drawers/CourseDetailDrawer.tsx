@@ -708,14 +708,14 @@ export function CourseDetailDrawer() {
                     <div className="flex items-center space-x-1 shrink-0">
                       <button
                         onClick={() => handleStartEditSlot(sched)}
-                        className="p-1 text-[#8C827A] hover:bg-[#E0D7C6] rounded-lg transition-colors"
+                        className="p-1.5 text-[#8C827A] hover:bg-[#E0D7C6] rounded-lg transition-colors"
                         title="编辑此排课时段"
                       >
                         <Edit className="w-3.5 h-3.5" />
                       </button>
                       <button
                         onClick={() => handleDeleteSlot(sched)}
-                        className="p-1 text-[#D94F4F] hover:bg-[#FDF0F0] rounded-lg transition-colors"
+                        className="p-1.5 text-[#D94F4F] hover:bg-[#FDF0F0] rounded-lg transition-colors"
                         title="删除此排课时段"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
@@ -892,7 +892,7 @@ export function CourseDetailDrawer() {
                           e.stopPropagation();
                           handleDeleteMaterial(mat);
                         }}
-                        className="p-1 text-[#D94F4F] hover:bg-[#FDF0F0] rounded-lg transition-colors opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
+                        className="p-1.5 text-[#D94F4F] hover:bg-[#FDF0F0] rounded-lg transition-colors opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
                         title="删除此资料"
                       >
                         <Trash2 className="w-3.5 h-3.5" />

@@ -272,7 +272,7 @@ export function AssignmentTable() {
 
                   <button
                     onClick={(e) => handleEditClick(e, task.id)}
-                    className="p-1 rounded-lg text-[#8C827A] hover:bg-[#E0D7C6] hover:text-charcoal transition-colors"
+                    className="p-1.5 rounded-lg text-[#8C827A] hover:bg-[#E0D7C6] hover:text-charcoal transition-colors"
                     title="编辑任务"
                   >
                     <Edit2 className="w-3.5 h-3.5" />
@@ -290,7 +290,7 @@ export function AssignmentTable() {
                         });
                       }
                     }}
-                    className="p-1 rounded-lg text-[#D94F4F] hover:bg-[#FDF0F0] transition-colors"
+                    className="p-1.5 rounded-lg text-[#D94F4F] hover:bg-[#FDF0F0] transition-colors"
                     title="删除任务"
                   >
                     <Trash2 className="w-3.5 h-3.5" />

@@ -91,7 +91,7 @@ export function GlobalSearchModal() {
           />
           <button
             onClick={() => setSearchModalOpen(false)}
-            className="p-1 rounded-lg text-[#8C827A] hover:bg-[#E0D7C6] transition-colors"
+            className="p-1.5 rounded-lg text-[#8C827A] hover:bg-[#E0D7C6] transition-colors"
           >
             <X className="w-4 h-4" />
           </button>

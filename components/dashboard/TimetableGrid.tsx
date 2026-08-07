@@ -140,7 +140,7 @@ export function TimetableGrid() {
       <div
         key={currentSemesterWeek}
         className={cn(
-          "mt-2 flex-1 flex flex-col min-h-0 select-none",
+          "mt-2 flex-1 flex flex-col min-h-0 select-none overflow-x-auto",
           weekDir !== 0 && "ux-week-enter"
         )}
         style={
@@ -149,6 +149,8 @@ export function TimetableGrid() {
             : undefined
         }
       >
+        {/* 内容最小宽度：窄容器内课表整体横向滚动，避免把课程信息压到不可读 */}
+        <div className="min-w-[640px] flex flex-col flex-1 min-h-0">
         {/* Weekday Header Row */}
         <div className="grid grid-cols-8 border-b border-[#E7E3DD] pb-2 text-center text-xs shrink-0">
           <div className="text-[#8C827A] font-medium py-0.5 text-[11px]">时间</div>
@@ -285,6 +287,7 @@ export function TimetableGrid() {
               );
             })}
           </div>
+        </div>
         </div>
       </div>
     </div>

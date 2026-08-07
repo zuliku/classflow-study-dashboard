@@ -75,7 +75,7 @@ export function ConflictResolutionModal() {
     >
       <div
         className={cn(
-          "w-full max-w-md bg-white rounded-2xl shadow-drawer border border-[#E7E3DD] overflow-hidden flex flex-col",
+          "w-full max-w-md bg-white rounded-2xl shadow-drawer border border-[#E7E3DD] overflow-hidden flex flex-col max-h-[85vh]",
           "ux-modal-panel",
           visible ? "opacity-100 scale-100 translate-y-0" : "opacity-0 scale-[0.985] translate-y-1"
         )}
@@ -88,14 +88,14 @@ export function ConflictResolutionModal() {
           </div>
           <button
             onClick={() => setConflictModalOpen(false)}
-            className="p-1 rounded-lg text-[#8C4A4A] hover:bg-[#F8D7D7] transition-colors"
+            className="p-1.5 rounded-lg text-[#8C4A4A] hover:bg-[#F8D7D7] transition-colors"
           >
             <X className="w-4 h-4" />
           </button>
         </div>
 
         {/* Content */}
-        <div className="p-6 space-y-4 text-xs">
+        <div className="p-6 space-y-4 text-xs overflow-y-auto">
           <p className="text-[#676268]">
             以下两门课程在第 {currentSemesterWeek} 周时间重叠（{dayName} {timeRange}）：
           </p>
@@ -123,7 +123,7 @@ export function ConflictResolutionModal() {
                 </button>
                 <button
                   onClick={handleDeleteA}
-                  className="p-1 text-[#D94F4F] hover:bg-[#FDF0F0] rounded-lg"
+                  className="p-1.5 text-[#D94F4F] hover:bg-[#FDF0F0] rounded-lg"
                   title="删除该排课"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
@@ -152,7 +152,7 @@ export function ConflictResolutionModal() {
                 </button>
                 <button
                   onClick={handleDeleteB}
-                  className="p-1 text-[#D94F4F] hover:bg-[#FDF0F0] rounded-lg"
+                  className="p-1.5 text-[#D94F4F] hover:bg-[#FDF0F0] rounded-lg"
                   title="删除该排课"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
