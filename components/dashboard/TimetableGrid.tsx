@@ -207,7 +207,7 @@ export function TimetableGrid() {
                           setSelectedCourseId(course.id);
                         }}
                         className={cn(
-                          "absolute left-0.5 right-0.5 rounded-xl p-1.5 sm:p-2 transition-all duration-200 cursor-pointer shadow-subtle hover:shadow-card hover:-translate-y-0.5 border flex flex-col justify-between overflow-hidden group select-none",
+                          "absolute left-0.5 right-0.5 rounded-xl p-1.5 sm:p-2 transition-all duration-200 cursor-pointer shadow-subtle hover:shadow-card hover:-translate-y-px border flex flex-col justify-between overflow-hidden group select-none",
                           hasConflict && "ring-2 ring-[#D94F4F] bg-[#FDF0F0] border-[#F8D7D7]"
                         )}
                         style={{

@@ -248,9 +248,9 @@ export function MiniCalendar() {
             <button
               key={dateStr}
               onClick={() => setSelectedDate(day)}
-              className={`h-8 rounded-xl flex flex-col items-center justify-center relative transition-all ${
+              className={`h-8 rounded-xl flex flex-col items-center justify-center relative transition-colors duration-[var(--motion-fast)] ease-[var(--ease-standard)] ${
                 isSelected
-                  ? "bg-charcoal text-white font-bold shadow-subtle ring-2 ring-black/10 scale-105"
+                  ? "bg-charcoal text-white font-bold shadow-subtle ring-2 ring-black/10"
                   : isTodayDate
                   ? "bg-[#E3E6E0] text-charcoal font-extrabold border border-[#CDB9AB]"
                   : isCurrentMonth

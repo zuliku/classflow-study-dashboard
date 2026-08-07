@@ -8,11 +8,11 @@ import {
   UserProfile,
   GroupProject,
   NavTab,
-  ViewMode,
   ScheduleConflict,
   Semester,
   ClassFlowBackupData,
   Material,
+  TimeSliceFilter,
 } from "@/types";
 import {
   initialUserProfile,
@@ -30,8 +30,9 @@ interface AppState {
   // Navigation & UI State
   activeTab: NavTab;
   setActiveTab: (tab: NavTab) => void;
-  viewMode: ViewMode;
-  setViewMode: (mode: ViewMode) => void;
+  /** 任务列表时间筛选（全局共享，跨页保留） */
+  assignmentTimeSlice: TimeSliceFilter;
+  setAssignmentTimeSlice: (slice: TimeSliceFilter) => void;
   semester: Semester;
   setSemester: (semester: Semester) => void;
   currentSemesterWeek: number;
@@ -126,8 +127,8 @@ export const useAppStore = create<AppState>()(
     (set, get) => ({
       activeTab: "overview",
       setActiveTab: (tab) => set({ activeTab: tab }),
-      viewMode: "week",
-      setViewMode: (mode) => set({ viewMode: mode }),
+      assignmentTimeSlice: "all",
+      setAssignmentTimeSlice: (slice) => set({ assignmentTimeSlice: slice }),
       semester: createDefaultSemester(),
       setSemester: (semester) =>
         set((state) => ({

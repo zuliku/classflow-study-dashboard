@@ -9,7 +9,13 @@ import { isScheduleActive } from "@/lib/schedule";
 import { format, isSameWeek, isSameDay } from "date-fns";
 
 export function StatCards() {
-  const { schedules, assignments, semester } = useAppStore();
+  const {
+    schedules,
+    assignments,
+    semester,
+    setActiveTab,
+    setAssignmentTimeSlice,
+  } = useAppStore();
 
   const today = new Date();
   // dayOfWeek: 1 (Mon) - 7 (Sun)
@@ -45,6 +51,27 @@ export function StatCards() {
 
   // 4. Completed Tasks Count
   const completedTasksCount = assignments.filter((a) => a.status === "completed").length;
+
+  // 点击行为：卡片直接跳转到对应 Tab，并带上正确筛选
+  const handleCardClick = (id: string) => {
+    switch (id) {
+      case "today-courses":
+        setActiveTab("timetable");
+        break;
+      case "week-assignments":
+        setActiveTab("assignments");
+        setAssignmentTimeSlice("all");
+        break;
+      case "upcoming-ddl":
+        setActiveTab("assignments");
+        setAssignmentTimeSlice("7days");
+        break;
+      case "completed-tasks":
+        setActiveTab("assignments");
+        setAssignmentTimeSlice("completed");
+        break;
+    }
+  };
 
   const STATS = [
     {
@@ -97,7 +124,8 @@ export function StatCards() {
         return (
           <div
             key={stat.id}
-            className="bg-white border border-[#E7E3DD] rounded-2xl p-4 shadow-subtle flex items-center justify-between transition-all duration-200 hover:shadow-card hover:-translate-y-0.5 cursor-pointer"
+            onClick={() => handleCardClick(stat.id)}
+            className="bg-white border border-[#E7E3DD] rounded-2xl p-4 shadow-subtle flex items-center justify-between transition-all duration-200 hover:shadow-card hover:-translate-y-px cursor-pointer"
           >
             <div className="space-y-1">
               <span className="text-xs font-semibold text-[#8C827A]">

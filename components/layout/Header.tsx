@@ -3,7 +3,6 @@
 import React, { useState, useEffect } from "react";
 import { Search, Calendar as CalendarIcon } from "lucide-react";
 import { useAppStore } from "@/store/useAppStore";
-import { ViewMode } from "@/types";
 import { format } from "date-fns";
 import { zhCN } from "date-fns/locale";
 import { cn } from "@/lib/utils";
@@ -12,8 +11,6 @@ import { getWeekDateRange, getSemesterWeek } from "@/lib/semester";
 export function Header() {
   const {
     userProfile,
-    viewMode,
-    setViewMode,
     setSearchModalOpen,
     semester,
     currentSemesterWeek,
@@ -85,32 +82,6 @@ export function Header() {
           >
             本周
           </button>
-        </div>
-
-        {/* Day / Week / Month View Switcher */}
-        <div className="bg-[#F0EBE1] border border-[#E0D7C6] rounded-xl p-0.5 flex items-center text-xs font-medium">
-          {(["day", "week", "month"] as ViewMode[]).map((mode) => {
-            const labels: Record<ViewMode, string> = {
-              day: "日",
-              week: "周",
-              month: "月",
-            };
-            const isActive = viewMode === mode;
-            return (
-              <button
-                key={mode}
-                onClick={() => setViewMode(mode)}
-                className={cn(
-                  "px-2.5 py-1 rounded-lg transition-all",
-                  isActive
-                    ? "bg-charcoal text-white font-bold shadow-subtle"
-                    : "text-[#676268] hover:text-charcoal"
-                )}
-              >
-                {labels[mode]}
-              </button>
-            );
-          })}
         </div>
       </div>
     </header>

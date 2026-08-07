@@ -9,7 +9,6 @@ import {
   BarChart3,
   Users2,
   Settings,
-  FileText,
   ChevronRight,
 } from "lucide-react";
 import { useAppStore } from "@/store/useAppStore";
@@ -120,12 +119,6 @@ export function Sidebar() {
               />
             </div>
           </div>
-
-          {/* Cultivation Program Button */}
-          <button className="w-full flex items-center justify-center space-x-1 py-1.5 bg-white hover:bg-[#F7F5F5] text-[#313032] border border-[#D5CBC0] rounded-xl text-[11px] font-medium transition-colors">
-            <span>查看培养方案</span>
-            <FileText className="w-3 h-3 text-[#A48F82] ml-0.5" />
-          </button>
         </div>
       </div>
     </aside>

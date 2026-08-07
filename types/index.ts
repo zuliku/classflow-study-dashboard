@@ -7,8 +7,6 @@ export type NavTab =
   | "group"
   | "settings";
 
-export type ViewMode = "day" | "week" | "month";
-
 export type TaskFilter = "all" | "doing" | "todo" | "completed";
 
 export type TimeSliceFilter = "all" | "overdue" | "today" | "3days" | "7days" | "completed";

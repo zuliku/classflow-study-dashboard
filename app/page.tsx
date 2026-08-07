@@ -208,7 +208,7 @@ export default function Home() {
                   <div
                     key={course.id}
                     onClick={() => setSelectedCourseId(course.id)}
-                    className="group p-4 rounded-2xl border transition-all duration-200 cursor-pointer shadow-subtle hover:shadow-card hover:-translate-y-1 flex flex-col justify-between"
+                    className="group p-4 rounded-2xl border transition-all duration-200 cursor-pointer shadow-subtle hover:shadow-card hover:-translate-y-px flex flex-col justify-between"
                     style={{
                       backgroundColor: `${course.bgHex}50`,
                       borderColor: course.borderHex,

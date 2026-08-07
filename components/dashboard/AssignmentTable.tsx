@@ -29,11 +29,12 @@ export function AssignmentTable() {
     deleteAssignment,
     restoreAssignment,
     setActiveTab,
+    assignmentTimeSlice,
+    setAssignmentTimeSlice,
   } = useAppStore();
   const pushToast = useToastStore((s) => s.pushToast);
 
   const [courseFilter, setCourseFilter] = useState<string>("all");
-  const [timeSlice, setTimeSlice] = useState<TimeSliceFilter>("all");
 
   const today = new Date();
 
@@ -49,7 +50,7 @@ export function AssignmentTable() {
     if (!ddlDate) return false;
     const diff = differenceInDays(ddlDate, today);
 
-    switch (timeSlice) {
+    switch (assignmentTimeSlice) {
       case "overdue":
         return item.status !== "completed" && diff < 0 && !isToday(ddlDate);
       case "today":
@@ -143,11 +144,11 @@ export function AssignmentTable() {
               { id: "7days", label: "7天内截止" },
               { id: "completed", label: "已完成归档" },
             ].map((slice) => {
-              const isActive = timeSlice === slice.id;
+              const isActive = assignmentTimeSlice === slice.id;
               return (
                 <button
                   key={slice.id}
-                  onClick={() => setTimeSlice(slice.id as TimeSliceFilter)}
+                  onClick={() => setAssignmentTimeSlice(slice.id as TimeSliceFilter)}
                   className={`px-2.5 py-0.5 rounded-lg transition-all ${
                     isActive
                       ? "bg-white text-charcoal font-bold shadow-subtle"
