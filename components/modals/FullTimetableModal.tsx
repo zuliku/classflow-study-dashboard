@@ -191,7 +191,7 @@ export function FullTimetableModal() {
                         {course.name}
                       </h4>
                       <p className="text-[11px] text-[#676268] mt-0.5">
-                        教师: {course.teacher} · 教室: {course.classroom}
+                        教师：{course.teacher} · 教室：{course.classroom}
                       </p>
                     </div>
 

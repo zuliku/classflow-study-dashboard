@@ -232,7 +232,7 @@ export function GroupCollaborationView() {
         {activeProject && (
           <div className="lg:col-span-2 space-y-4">
             {/* Project Overview Card */}
-            <div className="bg-white border border-[#E7E3DD] rounded-2xl p-5 shadow-subtle space-y-4">
+            <div className="bg-white border border-[#E7E3DD] rounded-2xl p-4 shadow-subtle space-y-4">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-[#F0EBE1] pb-3">
                 <div>
                   <span className="text-xs font-mono text-[#8C827A] px-2 py-0.5 bg-[#F7F5F5] rounded border border-[#E7E3DD]">
@@ -297,7 +297,7 @@ export function GroupCollaborationView() {
             </div>
 
             {/* Task Breakdown Checklist */}
-            <div className="bg-white border border-[#E7E3DD] rounded-2xl p-5 shadow-subtle space-y-3">
+            <div className="bg-white border border-[#E7E3DD] rounded-2xl p-4 shadow-subtle space-y-3">
               <div className="flex items-center justify-between border-b border-[#F0EBE1] pb-2.5">
                 <h4 className="text-sm font-bold text-charcoal flex items-center gap-1.5">
                   <CheckSquare className="w-4 h-4 text-[#A48F82]" />
@@ -333,7 +333,7 @@ export function GroupCollaborationView() {
                           <div className="flex items-center space-x-3 mt-1 text-[10px] text-[#8C827A]">
                             <span className="flex items-center space-x-1">
                               <User className="w-3 h-3" />
-                              <span>负责人: {task.assigneeName}</span>
+                              <span>负责人：{task.assigneeName}</span>
                             </span>
                             <span className="flex items-center space-x-1">
                               <Clock className="w-3 h-3" />

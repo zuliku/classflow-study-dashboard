@@ -229,7 +229,7 @@ export default function Home() {
                         {course.name}
                       </h3>
                       <p className="text-xs text-[#676268] mt-1 font-medium">
-                        教师: {course.teacher} · 教室: {course.classroom}
+                        教师：{course.teacher} · 教室：{course.classroom}
                       </p>
                       <p className="text-xs text-[#8C827A] mt-1.5 line-clamp-2 leading-relaxed">
                         {course.description}

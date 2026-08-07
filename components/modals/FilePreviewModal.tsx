@@ -114,7 +114,7 @@ export function FilePreviewModal() {
     >
       <div
         className={cn(
-          "w-full max-w-4xl bg-white rounded-3xl shadow-2xl border border-[#E7E3DD] flex flex-col h-[88vh] overflow-hidden",
+          "w-full max-w-4xl bg-white rounded-2xl shadow-2xl border border-[#E7E3DD] flex flex-col h-[88vh] overflow-hidden",
           "ux-modal-panel",
           visible ? "opacity-100 scale-100 translate-y-0" : "opacity-0 scale-[0.985] translate-y-1"
         )}
@@ -163,7 +163,7 @@ export function FilePreviewModal() {
               <span>正在读取文件…</span>
             </div>
           ) : loadFailed ? (
-            <div className="bg-white p-8 rounded-3xl max-w-md text-center space-y-3 shadow-2xl border border-[#E7E3DD]">
+            <div className="bg-white p-8 rounded-2xl max-w-md text-center space-y-3 shadow-2xl border border-[#E7E3DD]">
               <div className="w-14 h-14 rounded-2xl bg-[#FDF0F0] border border-[#F8D7D7] flex items-center justify-center mx-auto text-[#D94F4F]">
                 <FileText className="w-7 h-7" />
               </div>
@@ -186,10 +186,10 @@ export function FilePreviewModal() {
             <img
               src={displayUrl}
               alt={material.title}
-              className="max-w-full max-h-full object-contain rounded-xl shadow-lg"
+              className="max-w-full max-h-full object-contain rounded-xl shadow-card"
             />
           ) : (
-            <div className="bg-white p-8 rounded-3xl max-w-md text-center space-y-4 shadow-2xl border border-[#E7E3DD]">
+            <div className="bg-white p-8 rounded-2xl max-w-md text-center space-y-4 shadow-2xl border border-[#E7E3DD]">
               <div className="w-14 h-14 rounded-2xl bg-[#F0EBE1] border border-[#E0D7C6] flex items-center justify-center mx-auto text-charcoal">
                 <FileText className="w-7 h-7" />
               </div>

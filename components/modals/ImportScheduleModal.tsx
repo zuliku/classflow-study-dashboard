@@ -386,7 +386,7 @@ export function ImportScheduleModal() {
                               )}
                             </div>
                             <div className="text-[10px] text-[#8C827A] mt-0.5">
-                              教师: {item.course.teacher} · 教室: {item.course.classroom} ·{" "}
+                              教师：{item.course.teacher} · 教室：{item.course.classroom} ·{" "}
                               {item.course.credit} 学分
                             </div>
                             <div className="mt-1 space-y-0.5">

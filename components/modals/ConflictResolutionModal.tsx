@@ -110,7 +110,7 @@ export function ConflictResolutionModal() {
               <div>
                 <span className="font-bold text-charcoal text-xs">{courseA?.name || "课程 A"}</span>
                 <p className="text-[10px] text-[#676268] mt-0.5">
-                  教室: {scheduleA.location} · 教师: {courseA?.teacher}
+                  教室：{scheduleA.location} · 教师：{courseA?.teacher}
                 </p>
               </div>
               <div className="flex space-x-1">
@@ -139,7 +139,7 @@ export function ConflictResolutionModal() {
               <div>
                 <span className="font-bold text-charcoal text-xs">{courseB?.name || "课程 B"}</span>
                 <p className="text-[10px] text-[#676268] mt-0.5">
-                  教室: {scheduleB.location} · 教师: {courseB?.teacher}
+                  教室：{scheduleB.location} · 教师：{courseB?.teacher}
                 </p>
               </div>
               <div className="flex space-x-1">

@@ -159,7 +159,7 @@ export function GlobalSearchModal() {
                             {a.title}
                           </span>
                           <span className="text-[10px] text-[#8C827A] ml-2">
-                            进度: {a.progress}%
+                            进度：{a.progress}%
                           </span>
                         </div>
                       </div>

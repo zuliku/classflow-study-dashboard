@@ -334,7 +334,7 @@ export function SettingsView() {
   return (
     <div className="w-full space-y-5 pb-10">
       {/* Header Banner */}
-      <div className="bg-white border border-[#E7E3DD] rounded-2xl p-5 shadow-subtle flex items-center justify-between">
+      <div className="bg-white border border-[#E7E3DD] rounded-2xl p-4 shadow-subtle flex items-center justify-between">
         <div>
           <h2 className="text-base font-bold text-charcoal mb-0.5 flex items-center gap-2">
             <Settings className="w-4 h-4 text-[#A48F82]" />
