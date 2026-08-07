@@ -236,9 +236,9 @@ export function TimetableGrid() {
                       >
                         {/* Top Section */}
                         <div className="space-y-1">
-                          {/* 1. Full Course Title (No truncation) */}
+                          {/* 1. Course Title (Slightly larger font size text-[13.5px]) */}
                           <div className="flex items-start justify-between">
-                            <h4 className="font-extrabold text-xs tracking-tight leading-tight text-charcoal group-hover:underline">
+                            <h4 className="font-extrabold text-[13.5px] sm:text-sm tracking-tight leading-snug text-charcoal group-hover:underline">
                               {course.name}
                             </h4>
                             {hasConflict && (
@@ -249,19 +249,19 @@ export function TimetableGrid() {
                           </div>
 
                           {/* 2. Time Range */}
-                          <div className="flex items-center text-[10px] font-mono opacity-80 space-x-1">
+                          <div className="flex items-center text-[10px] font-mono opacity-85 space-x-1">
                             <Clock className="w-3 h-3 shrink-0 opacity-70" />
                             <span className="font-semibold">{sched.startTime} - {sched.endTime}</span>
                           </div>
 
                           {/* 3. Teacher Info (Placed directly below time) */}
-                          <div className="flex items-center text-[10px] opacity-80 space-x-1 font-medium">
+                          <div className="flex items-center text-[10px] opacity-85 space-x-1 font-medium">
                             <User className="w-3 h-3 shrink-0 opacity-70" />
                             <span className="truncate">{course.teacher}</span>
                           </div>
                         </div>
 
-                        {/* Bottom Row: Location Badge (No Credit info) */}
+                        {/* Bottom Row: Location Badge */}
                         <div className="flex items-center text-[10px] opacity-90 pt-1 border-t border-black/5 font-medium">
                           <MapPin className="w-3 h-3 mr-1 shrink-0 opacity-75" />
                           <span className="truncate">{sched.location}</span>
