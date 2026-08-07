@@ -26,6 +26,7 @@ import { createDefaultSemester, getSemesterWeek } from "@/lib/semester";
 import { getLocalDDLDate } from "@/lib/ddl";
 import { deleteFileBlob, clearAllFileBlobs } from "@/lib/fileStorage";
 import { isDDLMarkForAssignment, isLegacyDDLMarkForAssignment, linkLegacyDDLMarks } from "@/lib/calendarMark";
+import { createId } from "@/lib/utils";
 
 /**
  * 持久化白名单（localStorage，key 保持 classflow-storage-v2）：
@@ -262,6 +263,7 @@ export const useAppStore = create<AppState>()(
         // 同步清空 IndexedDB 中保存的文件 Blob（fire-and-forget）
         clearAllFileBlobs().catch(() => {});
 
+        // 业务数据回演示默认；瞬时 UI 状态一并复位（选中项、全部 overlay、筛选偏好）
         set({
           userProfile: initialUserProfile,
           courses: initialCourses,
@@ -271,6 +273,15 @@ export const useAppStore = create<AppState>()(
           groupProjects: initialGroupProjects,
           semester: createDefaultSemester(),
           currentSemesterWeek: 1,
+          assignmentTimeSlice: "all",
+          selectedCourseId: null,
+          selectedAssignmentId: null,
+          selectedConflict: null,
+          isSearchModalOpen: false,
+          isAddCourseModalOpen: false,
+          isImportScheduleModalOpen: false,
+          isConflictModalOpen: false,
+          isFullTimetableModalOpen: false,
         });
       },
 
@@ -291,7 +302,7 @@ export const useAppStore = create<AppState>()(
         })),
 
       addCourseWithSchedule: (courseData, scheduleSlots) => {
-        const courseId = `c_${Date.now()}`;
+        const courseId = createId("c");
         const newCourse: Course = {
           ...courseData,
           id: courseId,
@@ -300,7 +311,7 @@ export const useAppStore = create<AppState>()(
 
         const newSchedules: CourseSchedule[] = scheduleSlots.map((slot, idx) => ({
           ...slot,
-          id: `s_${Date.now()}_${idx}`,
+          id: createId("s"),
           courseId,
         }));
 
@@ -351,7 +362,7 @@ export const useAppStore = create<AppState>()(
       addScheduleSlot: (scheduleData) => {
         const newSchedule: CourseSchedule = {
           ...scheduleData,
-          id: `s_${Date.now()}`,
+          id: createId("s"),
         };
         set((state) => ({ schedules: [...state.schedules, newSchedule] }));
       },
@@ -401,7 +412,7 @@ export const useAppStore = create<AppState>()(
                 materials: [
                   ...c.materials,
                   {
-                    id: `m_${Date.now()}`,
+                    id: createId("m"),
                     title: materialData.title,
                     type: materialData.type,
                     size: materialData.size || "1.5 MB",
@@ -442,7 +453,7 @@ export const useAppStore = create<AppState>()(
         })),
 
       addAssignment: (assignmentData) => {
-        const newId = `a_${Date.now()}`;
+        const newId = createId("a");
         const newAssignment: Assignment = {
           ...assignmentData,
           id: newId,
@@ -450,7 +461,7 @@ export const useAppStore = create<AppState>()(
 
         const ddlDateStr = getLocalDDLDate(assignmentData.ddl);
         const newMark: CalendarMark = {
-          id: `cm_${Date.now()}`,
+          id: createId("cm"),
           date: ddlDateStr,
           type: "ddl",
           title: assignmentData.title,
@@ -501,7 +512,7 @@ export const useAppStore = create<AppState>()(
           // If no mark existed, append a new linked mark
           if (!markUpdated) {
             newCalendarMarks.push({
-              id: `cm_${Date.now()}`,
+              id: createId("cm"),
               date: newDdlDate,
               type: "ddl",
               title: updatedAssignment.title,
@@ -590,7 +601,7 @@ export const useAppStore = create<AppState>()(
       addGroupProject: (projectData) => {
         const newProject: GroupProject = {
           ...projectData,
-          id: `gp_${Date.now()}`,
+          id: createId("gp"),
           progress: 0,
           updatedAt: new Date().toISOString().split("T")[0],
         };

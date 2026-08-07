@@ -126,4 +126,75 @@ describe("Zustand persist 边界与迁移", () => {
     expect(Array.isArray(s.courses)).toBe(true);
     expect(s.selectedCourseId).toBeNull();
   });
+
+  it("完整旧用户升级：activeTab/选中项/Modal/冲突全部复位到干净初始态", async () => {
+    seedV0({
+      state: {
+        ...v0Payload,
+        activeTab: "assignments",
+        selectedConflict: { scheduleA: { id: "s1" }, scheduleB: { id: "s2" }, dayOfWeek: 1, timeRange: "08:00-09:40" },
+      },
+    });
+
+    const store = await freshStore();
+    const s = store.getState();
+    // 业务数据完整
+    expect(s.assignments.map((a) => a.id)).toEqual(["a_keep_1"]);
+    expect(s.calendarMarks.map((m) => m.id)).toEqual(["cm_keep_1"]);
+    expect(s.semester.totalWeeks).toBe(16);
+    // 进入 overview，无选中实体，全部 overlay 关闭
+    expect(s.activeTab).toBe("overview");
+    expect(s.selectedCourseId).toBeNull();
+    expect(s.selectedAssignmentId).toBeNull();
+    expect(s.selectedConflict).toBeNull();
+    expect(s.isSearchModalOpen).toBe(false);
+    expect(s.isAddCourseModalOpen).toBe(false);
+    expect(s.isImportScheduleModalOpen).toBe(false);
+    expect(s.isConflictModalOpen).toBe(false);
+    expect(s.isFullTimetableModalOpen).toBe(false);
+  });
+
+  it("v1 round trip：业务数据一致，UI 状态重置", async () => {
+    seedV0({
+      version: 1,
+      state: {
+        userProfile: v0Payload.userProfile,
+        semester: v0Payload.semester,
+        courses: v0Payload.courses,
+        schedules: v0Payload.schedules,
+        assignments: v0Payload.assignments,
+        calendarMarks: [{ ...v0Payload.calendarMarks[0], sourceId: "a_keep_1" }],
+        groupProjects: v0Payload.groupProjects,
+        assignmentTimeSlice: "7days",
+      },
+    });
+
+    const store = await freshStore();
+    const s = store.getState();
+    expect(s.courses).toEqual(v0Payload.courses);
+    expect(s.schedules).toEqual(v0Payload.schedules);
+    expect(s.assignments).toEqual(v0Payload.assignments);
+    expect(s.calendarMarks).toEqual([{ ...v0Payload.calendarMarks[0], sourceId: "a_keep_1" }]);
+    expect(s.semester).toEqual(v0Payload.semester);
+    expect(s.userProfile).toEqual(v0Payload.userProfile);
+    expect(s.assignmentTimeSlice).toBe("7days");
+    // UI 状态重置
+    expect(s.selectedCourseId).toBeNull();
+    expect(s.isSearchModalOpen).toBe(false);
+  });
+
+  it("异常形状（state=null / state=字符串 / version=字符串）不崩溃，回落默认", async () => {
+    localStorage.setItem(KEY, JSON.stringify({ state: null, version: 0 }));
+    let store = await freshStore();
+    expect(Array.isArray(store.getState().courses)).toBe(true);
+
+    localStorage.setItem(KEY, JSON.stringify({ state: "garbage", version: 0 }));
+    store = await freshStore();
+    expect(store.getState().selectedCourseId).toBeNull();
+
+    localStorage.setItem(KEY, JSON.stringify({ state: { courses: v0Payload.courses }, version: "1" }));
+    store = await freshStore();
+    expect(store.getState().courses.map((c) => c.id)).toEqual(["c_keep_1"]);
+    expect(store.getState().selectedCourseId).toBeNull();
+  });
 });

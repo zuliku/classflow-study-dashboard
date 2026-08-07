@@ -96,3 +96,8 @@ export function cardKeyHandler(handler: () => void) {
     }
   };
 }
+
+/** 生成带随机后缀的实体 ID，避免同一毫秒批量创建时冲突 */
+export function createId(prefix: string): string {
+  return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+}
