@@ -11,6 +11,8 @@ export type ViewMode = "day" | "week" | "month";
 
 export type TaskFilter = "all" | "doing" | "todo" | "completed";
 
+export type TimeSliceFilter = "all" | "overdue" | "today" | "3days" | "7days" | "completed";
+
 export type Priority = "urgent" | "high" | "medium" | "low";
 export type AssignmentStatus = "todo" | "doing" | "submitted" | "completed";
 
@@ -30,7 +32,7 @@ export interface Material {
   type: "pdf" | "ppt" | "doc" | "link";
   size?: string;
   uploadDate: string;
-  url?: string;
+  url?: string; // Blob URL, Data URL, or external link for downloading & previewing
 }
 
 export interface Course {

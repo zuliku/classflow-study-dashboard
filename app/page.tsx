@@ -17,6 +17,8 @@ import { AddCourseModal } from "@/components/modals/AddCourseModal";
 import { ImportScheduleModal } from "@/components/modals/ImportScheduleModal";
 import { ConflictResolutionModal } from "@/components/modals/ConflictResolutionModal";
 import { FullTimetableModal } from "@/components/modals/FullTimetableModal";
+import { AddAssignmentModal } from "@/components/modals/AddAssignmentModal";
+import { FilePreviewModal } from "@/components/modals/FilePreviewModal";
 import { useAppStore } from "@/store/useAppStore";
 import {
   BookOpen,
@@ -400,6 +402,8 @@ export default function Home() {
       <ImportScheduleModal />
       <ConflictResolutionModal />
       <FullTimetableModal />
+      <AddAssignmentModal />
+      <FilePreviewModal />
     </div>
   );
 }

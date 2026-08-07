@@ -1,7 +1,16 @@
 "use client";
 
 import React, { useState } from "react";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import {
+  ChevronLeft,
+  ChevronRight,
+  Calendar as CalendarIcon,
+  BookOpen,
+  ClipboardCheck,
+  Award,
+  Plus,
+} from "lucide-react";
+import { useAppStore, isScheduleActive } from "@/store/useAppStore";
 import {
   format,
   addMonths,
@@ -14,89 +23,91 @@ import {
   isSameMonth,
   isSameDay,
   isToday,
-  parseISO,
+  getDay,
 } from "date-fns";
 import { zhCN } from "date-fns/locale";
-import { useAppStore } from "@/store/useAppStore";
-import { cn } from "@/lib/utils";
 
 export function MiniCalendar() {
+  const {
+    schedules,
+    assignments,
+    calendarMarks,
+    courses,
+    currentSemesterWeek,
+    setSelectedCourseId,
+    setSelectedAssignmentId,
+  } = useAppStore();
+
   const [currentMonth, setCurrentMonth] = useState(new Date());
-  const { assignments, schedules, calendarMarks, currentSemesterWeek } = useAppStore();
+  const [selectedDate, setSelectedDate] = useState(new Date());
 
   const monthStart = startOfMonth(currentMonth);
   const monthEnd = endOfMonth(monthStart);
   const startDate = startOfWeek(monthStart, { weekStartsOn: 1 });
   const endDate = endOfWeek(monthEnd, { weekStartsOn: 1 });
 
-  const calendarDays = eachDayOfInterval({ start: startDate, end: endDate });
+  const days = eachDayOfInterval({ start: startDate, end: endDate });
 
-  const getMarksForDay = (day: Date) => {
-    const marks: { type: "course" | "ddl" | "exam" | "activity"; label: string }[] = [];
-    const dateStr = format(day, "yyyy-MM-dd");
-
-    // 1. Check assignments DDL on this day
-    assignments.forEach((a) => {
-      try {
-        const ddlDate = parseISO(a.ddl);
-        if (isSameDay(ddlDate, day)) {
-          marks.push({ type: "ddl", label: a.title });
-        }
-      } catch (e) {}
-    });
-
-    // 2. Check schedules on this weekday
-    const dayOfWeek = day.getDay() === 0 ? 7 : day.getDay();
-    const activeSchedules = schedules.filter((s) => {
-      if (s.dayOfWeek !== dayOfWeek) return false;
-      if (s.excludedWeeks?.includes(currentSemesterWeek)) return false;
-      return true;
-    });
-    if (activeSchedules.length > 0) {
-      marks.push({ type: "course", label: `${activeSchedules.length} 节课` });
-    }
-
-    // 3. Check explicit calendarMarks from store
-    calendarMarks.forEach((m) => {
-      if (m.date === dateStr) {
-        marks.push({ type: m.type, label: m.title });
-      }
-    });
-
-    return marks;
+  const handlePrevMonth = () => setCurrentMonth(subMonths(currentMonth, 1));
+  const handleNextMonth = () => setCurrentMonth(addMonths(currentMonth, 1));
+  const handleResetToday = () => {
+    const now = new Date();
+    setCurrentMonth(now);
+    setSelectedDate(now);
   };
 
+  // Selected date agenda items
+  const selectedDateStr = format(selectedDate, "yyyy-MM-dd");
+  const dayOfWeekNumber = getDay(selectedDate) === 0 ? 7 : getDay(selectedDate);
+
+  // Active courses on selected date
+  const daySchedules = schedules.filter(
+    (s) => s.dayOfWeek === dayOfWeekNumber && isScheduleActive(s, currentSemesterWeek)
+  );
+
+  // DDL assignments on selected date
+  const dayAssignments = assignments.filter(
+    (a) => a.ddl.split("T")[0] === selectedDateStr
+  );
+
+  // Calendar marks (exams/activities) on selected date
+  const dayMarks = calendarMarks.filter((m) => m.date === selectedDateStr);
+
   return (
-    <div className="bg-white border border-[#E7E3DD] rounded-2xl p-4 shadow-subtle flex flex-col justify-between space-y-3">
-      {/* Month Navigation */}
-      <div className="flex items-center justify-between border-b border-[#F0EBE1] pb-2">
-        <h3 className="text-xs font-bold text-charcoal">
-          {format(currentMonth, "yyyy年 M月", { locale: zhCN })}
-        </h3>
+    <div className="bg-white border border-[#E7E3DD] rounded-2xl p-4 shadow-subtle space-y-3 flex flex-col justify-between">
+      {/* Header */}
+      <div className="flex items-center justify-between pb-2 border-b border-[#F0EBE1]">
+        <div className="flex items-center space-x-2">
+          <CalendarIcon className="w-4 h-4 text-[#A48F82]" />
+          <h3 className="text-xs font-bold text-charcoal">
+            {format(currentMonth, "yyyy年 M月", { locale: zhCN })}
+          </h3>
+        </div>
+
         <div className="flex items-center space-x-1">
           <button
-            onClick={() => setCurrentMonth(subMonths(currentMonth, 1))}
-            className="p-1 rounded-lg text-[#8C827A] hover:bg-[#F0EBE1] hover:text-charcoal transition-colors"
+            onClick={handleResetToday}
+            className="text-[10px] bg-[#F0EBE1] hover:bg-[#E0D7C6] text-charcoal px-2 py-0.5 rounded-lg font-bold transition-colors mr-1"
+          >
+            回到今天
+          </button>
+          <button
+            onClick={handlePrevMonth}
+            className="p-1 rounded-lg text-[#8C827A] hover:bg-[#F7F5F5] transition-colors"
           >
             <ChevronLeft className="w-3.5 h-3.5" />
           </button>
           <button
-            onClick={() => setCurrentMonth(new Date())}
-            className="text-[10px] font-semibold text-[#8C827A] px-1.5 py-0.5 rounded bg-[#F7F5F5] hover:bg-[#F0EBE1] hover:text-charcoal border border-[#E7E3DD]"
-          >
-            今天
-          </button>
-          <button
-            onClick={() => setCurrentMonth(addMonths(currentMonth, 1))}
-            className="p-1 rounded-lg text-[#8C827A] hover:bg-[#F0EBE1] hover:text-charcoal transition-colors"
+            onClick={handleNextMonth}
+            className="p-1 rounded-lg text-[#8C827A] hover:bg-[#F7F5F5] transition-colors"
           >
             <ChevronRight className="w-3.5 h-3.5" />
           </button>
         </div>
       </div>
 
-      {/* Weekday Header */}
-      <div className="grid grid-cols-7 gap-1 text-center text-[10px] font-semibold text-[#8C827A]">
+      {/* Weekday Row */}
+      <div className="grid grid-cols-7 text-center text-[10px] font-bold text-[#8C827A]">
         {["一", "二", "三", "四", "五", "六", "日"].map((d) => (
           <div key={d} className="py-1">
             {d}
@@ -104,54 +115,127 @@ export function MiniCalendar() {
         ))}
       </div>
 
-      {/* Days Grid */}
-      <div className="grid grid-cols-7 gap-1 text-center text-xs">
-        {calendarDays.map((day, idx) => {
-          const marks = getMarksForDay(day);
+      {/* Calendar Grid */}
+      <div className="grid grid-cols-7 gap-1 text-xs">
+        {days.map((day) => {
+          const dateStr = format(day, "yyyy-MM-dd");
+          const isSelected = isSameDay(day, selectedDate);
           const isCurrentMonth = isSameMonth(day, currentMonth);
-          const isCurrentDay = isToday(day);
+          const isTodayDate = isToday(day);
 
-          const hasDDL = marks.some((m) => m.type === "ddl");
-          const hasExam = marks.some((m) => m.type === "exam");
-          const hasCourse = marks.some((m) => m.type === "course");
+          const dayOfWeekNum = getDay(day) === 0 ? 7 : getDay(day);
+
+          // Check event types
+          const hasCourse = schedules.some(
+            (s) => s.dayOfWeek === dayOfWeekNum && isScheduleActive(s, currentSemesterWeek)
+          );
+          const hasDDL = assignments.some((a) => a.ddl.split("T")[0] === dateStr);
+          const hasExam = calendarMarks.some((m) => m.date === dateStr);
 
           return (
-            <div
-              key={idx}
-              className={cn(
-                "h-8 rounded-lg flex flex-col items-center justify-center relative transition-colors cursor-pointer group",
-                !isCurrentMonth && "text-[#CCCBC4]",
-                isCurrentMonth && "text-charcoal hover:bg-[#F0EBE1]",
-                isCurrentDay && "bg-charcoal text-white font-bold hover:bg-black"
-              )}
+            <button
+              key={dateStr}
+              onClick={() => setSelectedDate(day)}
+              className={`h-8 rounded-xl flex flex-col items-center justify-center relative transition-all ${
+                isSelected
+                  ? "bg-charcoal text-white font-bold shadow-subtle ring-2 ring-black/10 scale-105"
+                  : isTodayDate
+                  ? "bg-[#E3E6E0] text-charcoal font-extrabold border border-[#CDB9AB]"
+                  : isCurrentMonth
+                  ? "text-charcoal hover:bg-[#F7F5F5]"
+                  : "text-[#CDB9AB] opacity-40 hover:opacity-80"
+              }`}
             >
-              <span className="text-[11px] leading-none">{format(day, "d")}</span>
+              <span>{format(day, "d")}</span>
 
-              {/* Status Dots */}
-              <div className="flex items-center space-x-0.5 mt-0.5">
-                {hasDDL && <span className="w-1 h-1 rounded-full bg-[#D94F4F]" />}
-                {hasExam && <span className="w-1 h-1 rounded-full bg-[#E28743]" />}
-                {hasCourse && <span className="w-1 h-1 rounded-full bg-[#4A7C59]" />}
+              {/* Event Indicator Dots */}
+              <div className="flex items-center space-x-0.5 absolute bottom-1">
+                {hasCourse && (
+                  <span
+                    className={`w-1 h-1 rounded-full ${
+                      isSelected ? "bg-white" : "bg-[#4A7C59]"
+                    }`}
+                  />
+                )}
+                {hasDDL && (
+                  <span
+                    className={`w-1 h-1 rounded-full ${
+                      isSelected ? "bg-white" : "bg-[#D94F4F]"
+                    }`}
+                  />
+                )}
+                {hasExam && (
+                  <span
+                    className={`w-1 h-1 rounded-full ${
+                      isSelected ? "bg-white" : "bg-[#E28743]"
+                    }`}
+                  />
+                )}
               </div>
-            </div>
+            </button>
           );
         })}
       </div>
 
-      {/* Legend */}
-      <div className="flex items-center justify-around text-[10px] text-[#8C827A] pt-2 border-t border-[#F0EBE1]">
-        <span className="flex items-center space-x-1">
-          <span className="w-1.5 h-1.5 rounded-full bg-[#4A7C59]" />
-          <span>课程</span>
-        </span>
-        <span className="flex items-center space-x-1">
-          <span className="w-1.5 h-1.5 rounded-full bg-[#D94F4F]" />
-          <span>DDL</span>
-        </span>
-        <span className="flex items-center space-x-1">
-          <span className="w-1.5 h-1.5 rounded-full bg-[#E28743]" />
-          <span>考试</span>
-        </span>
+      {/* Selected Date Agenda Details */}
+      <div className="pt-2 border-t border-[#F0EBE1] space-y-2">
+        <div className="flex justify-between items-center text-xs">
+          <span className="font-bold text-charcoal">
+            {format(selectedDate, "M月d日 EEEE", { locale: zhCN })} 当日日程
+          </span>
+          <span className="text-[10px] text-[#8C827A]">
+            {daySchedules.length} 门课 · {dayAssignments.length} 个 DDL
+          </span>
+        </div>
+
+        {/* List of day's events */}
+        <div className="space-y-1.5 max-h-36 overflow-y-auto pr-1">
+          {daySchedules.length === 0 && dayAssignments.length === 0 && dayMarks.length === 0 ? (
+            <p className="text-[11px] text-[#8C827A] py-2 text-center">
+              本日无排课或作业 DDL
+            </p>
+          ) : (
+            <>
+              {/* Courses */}
+              {daySchedules.map((sched) => {
+                const c = courses.find((crs) => crs.id === sched.courseId);
+                return (
+                  <div
+                    key={sched.id}
+                    onClick={() => c && setSelectedCourseId(c.id)}
+                    className="p-1.5 rounded-lg border text-xs flex items-center justify-between cursor-pointer hover:opacity-90"
+                    style={{ backgroundColor: `${c?.bgHex || "#F0EBE1"}70`, borderColor: c?.borderHex }}
+                  >
+                    <div className="flex items-center space-x-1.5 min-w-0">
+                      <BookOpen className="w-3 h-3 text-[#A48F82] shrink-0" />
+                      <span className="font-semibold text-charcoal truncate">
+                        {c?.name}
+                      </span>
+                    </div>
+                    <span className="text-[10px] font-mono text-[#8C827A] shrink-0">
+                      {sched.startTime} - {sched.endTime}
+                    </span>
+                  </div>
+                );
+              })}
+
+              {/* DDLs */}
+              {dayAssignments.map((a) => (
+                <div
+                  key={a.id}
+                  onClick={() => setSelectedAssignmentId(a.id)}
+                  className="p-1.5 bg-[#FDF0F0] border border-[#F8D7D7] rounded-lg text-xs flex items-center justify-between cursor-pointer text-[#D94F4F]"
+                >
+                  <div className="flex items-center space-x-1.5 min-w-0">
+                    <ClipboardCheck className="w-3 h-3 shrink-0" />
+                    <span className="font-bold truncate">{a.title}</span>
+                  </div>
+                  <span className="text-[10px] font-bold shrink-0">DDL 截止</span>
+                </div>
+              ))}
+            </>
+          )}
+        </div>
       </div>
     </div>
   );
