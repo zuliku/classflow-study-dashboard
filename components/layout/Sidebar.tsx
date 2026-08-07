@@ -36,15 +36,15 @@ export function Sidebar() {
     <aside className="w-56 h-screen bg-[#F7F5F5] border-r border-[#E7E3DD] flex flex-col justify-between p-3.5 sticky top-0 select-none z-20 shrink-0">
       {/* Top Section */}
       <div className="space-y-3">
-        {/* Dedicated Brand Logo Container Card */}
+        {/* Brand Logo filling top-left area cleanly */}
         <div
-          className="w-full bg-white border border-[#E0D7C6] rounded-2xl p-3 flex items-center justify-center shadow-subtle cursor-pointer hover:shadow-card hover:bg-[#FAF8F5] transition-all"
+          className="w-full py-1.5 px-0.5 flex items-center justify-center cursor-pointer transition-opacity hover:opacity-90"
           onClick={() => setActiveTab("overview")}
         >
           <img
             src="/logo.png"
             alt="ClassFlow"
-            className="h-11 w-auto max-w-full object-contain mix-blend-multiply"
+            className="w-full h-14 object-contain mix-blend-multiply"
           />
         </div>
 
