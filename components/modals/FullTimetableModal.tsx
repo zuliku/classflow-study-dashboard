@@ -6,6 +6,7 @@ import { useAppStore } from "@/store/useAppStore";
 import { isScheduleActive } from "@/lib/schedule";
 import { TimetableGrid } from "@/components/dashboard/TimetableGrid";
 import { usePresence } from "@/lib/usePresence";
+import { useRestoreFocus } from "@/lib/useRestoreFocus";
 import { cn } from "@/lib/utils";
 import { pushOverlay, popOverlay, isTopmostOverlay } from "@/lib/overlayStack";
 
@@ -25,6 +26,7 @@ export function FullTimetableModal() {
   } = useAppStore();
 
   const { mounted, visible } = usePresence(isFullTimetableModalOpen, 220);
+  useRestoreFocus(isFullTimetableModalOpen);
 
   // Esc 关闭（仅在 Overlay 栈最上层时）
   useEffect(() => {
@@ -84,15 +86,21 @@ export function FullTimetableModal() {
             {/* Semester Week Picker */}
             <div className="flex items-center space-x-1.5 bg-white border border-[#E0D7C6] rounded-xl px-3 py-1.5 text-xs font-semibold text-charcoal shadow-subtle">
               <button
-                onClick={() => setCurrentSemesterWeek(Math.max(1, currentSemesterWeek - 1))}
-                className="hover:text-black p-0.5"
+                onClick={() => setCurrentSemesterWeek(currentSemesterWeek - 1)}
+                disabled={currentSemesterWeek <= 1}
+                title="上一周"
+                aria-label="上一周"
+                className="hover:text-black p-0.5 disabled:opacity-30 disabled:cursor-not-allowed"
               >
                 <ChevronLeft className="w-3.5 h-3.5" />
               </button>
               <span>第 {currentSemesterWeek} 周 / {semester.totalWeeks}周</span>
               <button
-                onClick={() => setCurrentSemesterWeek(Math.min(16, currentSemesterWeek + 1))}
-                className="hover:text-black p-0.5"
+                onClick={() => setCurrentSemesterWeek(currentSemesterWeek + 1)}
+                disabled={currentSemesterWeek >= semester.totalWeeks}
+                title="下一周"
+                aria-label="下一周"
+                className="hover:text-black p-0.5 disabled:opacity-30 disabled:cursor-not-allowed"
               >
                 <ChevronRight className="w-3.5 h-3.5" />
               </button>
@@ -111,6 +119,7 @@ export function FullTimetableModal() {
             <button
               onClick={() => setFullTimetableModalOpen(false)}
               className="p-1.5 rounded-xl text-[#8C827A] hover:bg-[#E0D7C6] hover:text-charcoal transition-colors border border-[#E0D7C6] bg-white"
+              aria-label="关闭"
             >
               <X className="w-5 h-5" />
             </button>

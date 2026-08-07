@@ -5,6 +5,7 @@ import { X, Download, FileText, Loader2 } from "lucide-react";
 import { Material } from "@/types";
 import { getFileBlob } from "@/lib/fileStorage";
 import { usePresence } from "@/lib/usePresence";
+import { useRestoreFocus } from "@/lib/useRestoreFocus";
 import { cn } from "@/lib/utils";
 import { onPreviewMaterial } from "@/lib/uiEvents";
 import { pushOverlay, popOverlay, isTopmostOverlay } from "@/lib/overlayStack";
@@ -20,6 +21,7 @@ export function FilePreviewModal() {
 
   const objectUrlRef = useRef<string | null>(null);
   const { mounted, visible } = usePresence(isOpen, 220);
+  useRestoreFocus(isOpen);
 
   // Esc 关闭
   useEffect(() => {
@@ -148,6 +150,7 @@ export function FilePreviewModal() {
             )}
             <button
               onClick={handleClose}
+              aria-label="关闭"
               className="p-1.5 rounded-xl text-[#8C827A] hover:bg-[#E0D7C6] hover:text-charcoal transition-colors border border-[#E0D7C6] bg-white"
             >
               <X className="w-5 h-5" />

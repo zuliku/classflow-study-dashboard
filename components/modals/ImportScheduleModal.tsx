@@ -8,6 +8,7 @@ import { parseICS, parseJSONSchedule, parseCSVSchedule, ParsedImportResult } fro
 import { findScheduleConflicts } from "@/lib/conflicts";
 import { Course, CourseSchedule, ScheduleConflict } from "@/types";
 import { usePresence } from "@/lib/usePresence";
+import { useRestoreFocus } from "@/lib/useRestoreFocus";
 import { cn } from "@/lib/utils";
 import { pushOverlay, popOverlay, isTopmostOverlay } from "@/lib/overlayStack";
 
@@ -46,6 +47,7 @@ export function ImportScheduleModal() {
   const [skippedCourseIds, setSkippedCourseIds] = useState<string[]>([]);
 
   const { mounted, visible } = usePresence(isImportScheduleModalOpen, 220);
+  useRestoreFocus(isImportScheduleModalOpen);
 
   // Esc 关闭（与关闭按钮行为一致：回到第一步并关闭；仅在 Overlay 栈最上层时）
   useEffect(() => {
@@ -183,6 +185,7 @@ export function ImportScheduleModal() {
               setImportScheduleModalOpen(false);
             }}
             className="p-1 rounded-lg text-[#8C827A] hover:bg-[#E0D7C6] transition-colors"
+            aria-label="关闭"
           >
             <X className="w-4 h-4" />
           </button>

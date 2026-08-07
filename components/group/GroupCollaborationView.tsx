@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { useAppStore } from "@/store/useAppStore";
 import { formatDistanceToNow, parseISO } from "date-fns";
+import { cardKeyHandler } from "@/lib/utils";
 import { zhCN } from "date-fns/locale";
 
 const parseDateSafely = (dateStr: string) => {
@@ -184,6 +185,9 @@ export function GroupCollaborationView() {
                 <div
                   key={p.id}
                   onClick={() => setSelectedProjectId(p.id)}
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={cardKeyHandler(() => setSelectedProjectId(p.id))}
                   className={`p-4 rounded-2xl border transition-colors duration-[var(--motion-base)] ease-[var(--ease-standard)] cursor-pointer shadow-subtle flex flex-col justify-between ${
                     isSelected
                       ? "bg-[#E3E6E0]/60 border-[#CDB9AB] ring-1 ring-[#CDB9AB]"

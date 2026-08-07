@@ -17,6 +17,7 @@ import { useToastStore } from "@/store/useToastStore";
 import { TimeSliceFilter } from "@/types";
 import { openAssignmentEditor } from "@/lib/uiEvents";
 import { useEnterOnAdd } from "@/lib/useEnterOnAdd";
+import { cardKeyHandler } from "@/lib/utils";
 import { cn } from "@/lib/utils";
 import { getPriorityMeta } from "@/lib/utils";
 import { isToday, differenceInDays } from "date-fns";
@@ -193,6 +194,9 @@ export function AssignmentTable() {
               <div
                 key={task.id}
                 onClick={() => setSelectedAssignmentId(task.id)}
+                role="button"
+                tabIndex={0}
+                onKeyDown={cardKeyHandler(() => setSelectedAssignmentId(task.id))}
                 className={cn(
                   "p-3 rounded-xl transition-colors duration-[var(--motion-fast)] ease-[var(--ease-standard)] cursor-pointer flex items-center justify-between group",
                   isNew && "animate-enter",

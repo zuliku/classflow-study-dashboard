@@ -89,7 +89,10 @@ export function TimetableGrid() {
           <div className="flex items-center space-x-1 bg-[#F0EBE1] border border-[#E0D7C6] rounded-lg px-2 py-0.5 text-xs font-semibold text-charcoal">
             <button
               onClick={() => setCurrentSemesterWeek(currentSemesterWeek - 1)}
-              className="hover:text-black transition-colors"
+              disabled={currentSemesterWeek <= 1}
+              title="上一周"
+              aria-label="上一周"
+              className="hover:text-black transition-colors disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:text-[#313032]"
             >
               <ChevronLeft className="w-3 h-3" />
             </button>
@@ -98,7 +101,10 @@ export function TimetableGrid() {
             </span>
             <button
               onClick={() => setCurrentSemesterWeek(currentSemesterWeek + 1)}
-              className="hover:text-black transition-colors"
+              disabled={currentSemesterWeek >= semester.totalWeeks}
+              title="下一周"
+              aria-label="下一周"
+              className="hover:text-black transition-colors disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:text-[#313032]"
             >
               <ChevronRight className="w-3 h-3" />
             </button>

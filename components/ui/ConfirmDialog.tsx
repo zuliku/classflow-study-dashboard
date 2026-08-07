@@ -4,6 +4,7 @@ import React, { useEffect } from "react";
 import { AlertTriangle, X } from "lucide-react";
 import { useConfirmStore } from "@/store/useConfirmStore";
 import { usePresence } from "@/lib/usePresence";
+import { useRestoreFocus } from "@/lib/useRestoreFocus";
 import { cn } from "@/lib/utils";
 import { pushOverlay, popOverlay, isTopmostOverlay } from "@/lib/overlayStack";
 
@@ -13,6 +14,7 @@ const OVERLAY_ID = "confirm-dialog";
 export function ConfirmDialog() {
   const { request, close } = useConfirmStore();
   const { mounted, visible } = usePresence(!!request, 220);
+  useRestoreFocus(!!request);
 
   useEffect(() => {
     if (!mounted) return;

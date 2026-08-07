@@ -3,8 +3,10 @@
 import React, { useState, useEffect } from "react";
 import { Search, X, BookOpen, ClipboardList, ArrowRight } from "lucide-react";
 import { useAppStore } from "@/store/useAppStore";
+import { cardKeyHandler } from "@/lib/utils";
 import { pushOverlay, popOverlay, isTopmostOverlay } from "@/lib/overlayStack";
 import { usePresence } from "@/lib/usePresence";
+import { useRestoreFocus } from "@/lib/useRestoreFocus";
 import { cn } from "@/lib/utils";
 
 const OVERLAY_ID = "global-search";
@@ -22,6 +24,7 @@ export function GlobalSearchModal() {
   const [searchQuery, setSearchQuery] = useState("");
 
   const { mounted, visible } = usePresence(isSearchModalOpen, 220);
+  useRestoreFocus(isSearchModalOpen);
 
   // Keyboard shortcut listener (Cmd+K or Ctrl+K) + Overlay 栈注册
   useEffect(() => {
@@ -92,6 +95,7 @@ export function GlobalSearchModal() {
           <button
             onClick={() => setSearchModalOpen(false)}
             className="p-1.5 rounded-lg text-[#8C827A] hover:bg-[#E0D7C6] transition-colors"
+            aria-label="关闭"
           >
             <X className="w-4 h-4" />
           </button>
@@ -118,6 +122,12 @@ export function GlobalSearchModal() {
                         setSelectedCourseId(c.id);
                         setSearchModalOpen(false);
                       }}
+                      role="button"
+                      tabIndex={0}
+                      onKeyDown={cardKeyHandler(() => {
+                        setSelectedCourseId(c.id);
+                        setSearchModalOpen(false);
+                      })}
                       className="p-3 bg-[#F7F5F5] hover:bg-[#F0EBE1] border border-[#E7E3DD] rounded-xl flex items-center justify-between text-xs cursor-pointer transition-colors group"
                     >
                       <div className="flex items-center space-x-3">
@@ -150,6 +160,12 @@ export function GlobalSearchModal() {
                         setSelectedAssignmentId(a.id);
                         setSearchModalOpen(false);
                       }}
+                      role="button"
+                      tabIndex={0}
+                      onKeyDown={cardKeyHandler(() => {
+                        setSelectedAssignmentId(a.id);
+                        setSearchModalOpen(false);
+                      })}
                       className="p-3 bg-[#F7F5F5] hover:bg-[#F0EBE1] border border-[#E7E3DD] rounded-xl flex items-center justify-between text-xs cursor-pointer transition-colors group"
                     >
                       <div className="flex items-center space-x-3">

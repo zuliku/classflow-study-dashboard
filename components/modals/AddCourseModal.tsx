@@ -7,6 +7,7 @@ import { useToastStore } from "@/store/useToastStore";
 import { WEEK_RANGE_PRESETS, isValidTimeRange } from "@/lib/schedule";
 import { findScheduleConflicts } from "@/lib/conflicts";
 import { usePresence } from "@/lib/usePresence";
+import { useRestoreFocus } from "@/lib/useRestoreFocus";
 import { cn } from "@/lib/utils";
 import { pushOverlay, popOverlay, isTopmostOverlay } from "@/lib/overlayStack";
 
@@ -48,6 +49,7 @@ export function AddCourseModal() {
   ]);
 
   const { mounted, visible } = usePresence(isAddCourseModalOpen, 220);
+  useRestoreFocus(isAddCourseModalOpen);
 
   // Esc 关闭（仅在 Overlay 栈最上层时）
   useEffect(() => {
@@ -191,6 +193,7 @@ export function AddCourseModal() {
           <button
             onClick={() => setAddCourseModalOpen(false)}
             className="p-1 rounded-lg text-[#8C827A] hover:bg-[#E0D7C6] transition-colors"
+            aria-label="关闭"
           >
             <X className="w-4 h-4" />
           </button>
@@ -207,6 +210,7 @@ export function AddCourseModal() {
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 className="w-full p-2.5 bg-[#F7F5F5] border border-[#E7E3DD] rounded-xl focus:outline-none focus:border-charcoal text-charcoal"
+                autoFocus
                 required
               />
             </div>

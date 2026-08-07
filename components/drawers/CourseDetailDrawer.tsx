@@ -28,6 +28,7 @@ import { getLocalDDLDate } from "@/lib/ddl";
 import { WEEK_RANGE_PRESETS, isValidTimeRange } from "@/lib/schedule";
 import { findScheduleConflicts } from "@/lib/conflicts";
 import { usePresence } from "@/lib/usePresence";
+import { useRestoreFocus } from "@/lib/useRestoreFocus";
 import { cn } from "@/lib/utils";
 import { openAssignmentEditor, previewMaterial } from "@/lib/uiEvents";
 import { pushOverlay, popOverlay, isTopmostOverlay } from "@/lib/overlayStack";
@@ -127,6 +128,7 @@ export function CourseDetailDrawer() {
   const newMaterialIds = useEnterOnAdd(course?.materials.map((m) => m.id) ?? []);
 
   const { mounted, visible } = usePresence(!!course, 260);
+  useRestoreFocus(!!course);
 
   // Esc 关闭
   useEffect(() => {
@@ -481,6 +483,7 @@ export function CourseDetailDrawer() {
             <button
               onClick={() => setSelectedCourseId(null)}
               className="p-2 rounded-xl text-[#8C827A] hover:bg-white hover:text-charcoal transition-colors border border-[#E0D7C6] bg-white/70"
+              aria-label="关闭"
             >
               <X className="w-5 h-5" />
             </button>
@@ -839,7 +842,7 @@ export function CourseDetailDrawer() {
               />
               <label
                 htmlFor="real-material-upload"
-                className={`flex items-center space-x-1 px-2.5 py-1 text-[11px] font-bold rounded-xl cursor-pointer transition-colors ${
+                className={`flex items-center justify-center space-x-1 min-w-[96px] px-2.5 py-1 text-[11px] font-bold rounded-xl cursor-pointer transition-colors ${
                   isUploading
                     ? "bg-[#E3E6E0] text-[#8C827A] cursor-not-allowed"
                     : "bg-charcoal hover:bg-black text-white"

@@ -21,6 +21,7 @@ import { format } from "date-fns";
 import { zhCN } from "date-fns/locale";
 import { parseLocalDDL } from "@/lib/ddl";
 import { usePresence } from "@/lib/usePresence";
+import { useRestoreFocus } from "@/lib/useRestoreFocus";
 import { cn } from "@/lib/utils";
 import { openAssignmentEditor } from "@/lib/uiEvents";
 import { pushOverlay, popOverlay, isTopmostOverlay } from "@/lib/overlayStack";
@@ -45,6 +46,7 @@ export function AssignmentDrawer() {
 
   const assignment = assignments.find((a) => a.id === selectedAssignmentId);
   const { mounted, visible } = usePresence(!!assignment, 260);
+  useRestoreFocus(!!assignment);
 
   // Overlay Stack：Drawer 层，Esc 只在最上层时关闭
   useEffect(() => {
@@ -142,6 +144,7 @@ export function AssignmentDrawer() {
           <button
             onClick={() => setSelectedAssignmentId(null)}
             className="p-2 rounded-xl bg-white hover:bg-[#F0EBE1] text-charcoal border border-[#E0D7C6] transition-colors"
+            aria-label="关闭"
           >
             <X className="w-4 h-4" />
           </button>

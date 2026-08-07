@@ -25,6 +25,7 @@ import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { PageTransition } from "@/components/ui/PageTransition";
 import { useAppStore } from "@/store/useAppStore";
 import { computeWeekCourseLoad } from "@/lib/studyLoad";
+import { cardKeyHandler } from "@/lib/utils";
 import { openAssignmentEditor } from "@/lib/uiEvents";
 import {
   BookOpen,
@@ -210,6 +211,9 @@ export default function Home() {
                   <div
                     key={course.id}
                     onClick={() => setSelectedCourseId(course.id)}
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={cardKeyHandler(() => setSelectedCourseId(course.id))}
                     className="group p-4 rounded-2xl border transition-all duration-[var(--motion-base)] ease-[var(--ease-standard)] cursor-pointer shadow-subtle hover:shadow-card hover:-translate-y-px flex flex-col justify-between"
                     style={{
                       backgroundColor: `${course.bgHex}50`,

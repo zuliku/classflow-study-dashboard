@@ -16,7 +16,7 @@ import { getSemesterWeek } from "@/lib/semester";
 import { getLocalDDLDate, getLocalDDLTime } from "@/lib/ddl";
 import { isScheduleActive } from "@/lib/schedule";
 import { openAssignmentEditor } from "@/lib/uiEvents";
-import { cn } from "@/lib/utils";
+import { cn, cardKeyHandler } from "@/lib/utils";
 import {
   format,
   addMonths,
@@ -121,6 +121,9 @@ export function MiniCalendar() {
           <div
             key={s.id}
             onClick={() => c && setSelectedCourseId(c.id)}
+            role="button"
+            tabIndex={0}
+            onKeyDown={cardKeyHandler(() => c && setSelectedCourseId(c.id))}
             className="p-1.5 rounded-lg border text-xs flex items-center justify-between cursor-pointer hover:opacity-90"
             style={{ backgroundColor: `${c?.bgHex || "#F0EBE1"}70`, borderColor: c?.borderHex }}
           >
@@ -142,6 +145,9 @@ export function MiniCalendar() {
         <div
           key={a.id}
           onClick={() => setSelectedAssignmentId(a.id)}
+          role="button"
+          tabIndex={0}
+          onKeyDown={cardKeyHandler(() => setSelectedAssignmentId(a.id))}
           className="p-1.5 bg-[#FDF0F0] border border-[#F8D7D7] rounded-lg text-xs flex items-center justify-between cursor-pointer text-[#D94F4F]"
         >
           <div className="flex items-center space-x-1.5 min-w-0">
@@ -207,12 +213,16 @@ export function MiniCalendar() {
           <button
             onClick={handlePrevMonth}
             className="p-1.5 rounded-lg text-[#8C827A] hover:bg-[#F7F5F5] transition-colors"
+            title="上一月"
+            aria-label="上一月"
           >
             <ChevronLeft className="w-3.5 h-3.5" />
           </button>
           <button
             onClick={handleNextMonth}
             className="p-1.5 rounded-lg text-[#8C827A] hover:bg-[#F7F5F5] transition-colors"
+            title="下一月"
+            aria-label="下一月"
           >
             <ChevronRight className="w-3.5 h-3.5" />
           </button>

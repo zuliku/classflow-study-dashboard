@@ -4,6 +4,7 @@ import React, { useEffect } from "react";
 import { AlertTriangle, X, Trash2 } from "lucide-react";
 import { useAppStore } from "@/store/useAppStore";
 import { usePresence } from "@/lib/usePresence";
+import { useRestoreFocus } from "@/lib/useRestoreFocus";
 import { cn } from "@/lib/utils";
 import { pushOverlay, popOverlay, isTopmostOverlay } from "@/lib/overlayStack";
 
@@ -21,6 +22,7 @@ export function ConflictResolutionModal() {
   } = useAppStore();
 
   const { mounted, visible } = usePresence(isConflictModalOpen, 220);
+  useRestoreFocus(isConflictModalOpen);
 
   // Esc 关闭（仅在 Overlay 栈最上层时）
   useEffect(() => {
@@ -89,6 +91,7 @@ export function ConflictResolutionModal() {
           <button
             onClick={() => setConflictModalOpen(false)}
             className="p-1.5 rounded-lg text-[#8C4A4A] hover:bg-[#F8D7D7] transition-colors"
+            aria-label="关闭"
           >
             <X className="w-4 h-4" />
           </button>

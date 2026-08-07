@@ -7,6 +7,7 @@ import { getSemesterWeek } from "@/lib/semester";
 import { parseLocalDDL } from "@/lib/ddl";
 import { isScheduleActive } from "@/lib/schedule";
 import { format, isSameWeek, isSameDay } from "date-fns";
+import { cardKeyHandler } from "@/lib/utils";
 
 /** 指标值变化：仅 2px 上移淡入（不做 count-up 数字滚动） */
 function AnimatedMetric({ value }: { value: string }) {
@@ -137,6 +138,9 @@ export function StatCards() {
           <div
             key={stat.id}
             onClick={() => handleCardClick(stat.id)}
+            role="button"
+            tabIndex={0}
+            onKeyDown={cardKeyHandler(() => handleCardClick(stat.id))}
             className="bg-white border border-[#E7E3DD] rounded-2xl p-4 shadow-subtle flex items-center justify-between transition-all duration-[var(--motion-base)] ease-[var(--ease-standard)] hover:shadow-card hover:-translate-y-px cursor-pointer"
           >
             <div className="space-y-1">

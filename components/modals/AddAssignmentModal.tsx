@@ -8,6 +8,7 @@ import { Assignment, Priority, AssignmentStatus, Subtask } from "@/types";
 import { combineLocalDateTime, getLocalDDLDate, getLocalDDLTime } from "@/lib/ddl";
 import { format } from "date-fns";
 import { usePresence } from "@/lib/usePresence";
+import { useRestoreFocus } from "@/lib/useRestoreFocus";
 import { cn } from "@/lib/utils";
 import { onOpenAssignmentEditor } from "@/lib/uiEvents";
 import { pushOverlay, popOverlay, isTopmostOverlay } from "@/lib/overlayStack";
@@ -29,6 +30,7 @@ export function AddAssignmentModal() {
   const submittingRef = useRef(false);
 
   const { mounted, visible } = usePresence(isOpen, 220);
+  useRestoreFocus(isOpen);
 
   // Overlay Stack：Modal 层，Esc 只在最上层时关闭
   useEffect(() => {
@@ -194,7 +196,8 @@ export function AddAssignmentModal() {
           </div>
           <button
             onClick={() => setIsOpen(false)}
-            className="p-1 rounded-lg text-[#8C827A] hover:bg-[#E0D7C6] transition-colors"
+            className="p-1 rounded-lg text-[#8C827A] hover:bg-[#E0D7C6] hover:text-charcoal transition-colors"
+            aria-label="关闭"
           >
             <X className="w-4 h-4" />
           </button>
@@ -209,6 +212,7 @@ export function AddAssignmentModal() {
               placeholder="如：计量经济学实证报告"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
+              autoFocus
               className="w-full p-2.5 bg-[#F7F5F5] border border-[#E7E3DD] rounded-xl focus:outline-none focus:border-charcoal text-charcoal text-xs font-semibold"
               required
             />

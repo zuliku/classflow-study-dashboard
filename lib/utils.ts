@@ -1,5 +1,6 @@
 import { type ClassValue, clsx } from "clsx";
 import { twMerge } from "tailwind-merge";
+import type { KeyboardEvent } from "react";
 import { format, differenceInCalendarDays, parseISO, isToday, isTomorrow, isPast } from "date-fns";
 import { zhCN } from "date-fns/locale";
 import { Priority, AssignmentStatus } from "@/types";
@@ -80,4 +81,14 @@ export function formatDateCN(dateStr: string): string {
   } catch {
     return dateStr;
   }
+}
+
+/** 可点击卡片（div onClick）的键盘等价处理：Enter / Space 触发 */
+export function cardKeyHandler(handler: () => void) {
+  return (e: KeyboardEvent) => {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      handler();
+    }
+  };
 }
