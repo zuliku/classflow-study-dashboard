@@ -12,7 +12,8 @@ import {
   FileText,
   ChevronRight,
 } from "lucide-react";
-import { useAppStore, NavTab } from "@/store/useAppStore";
+import { useAppStore } from "@/store/useAppStore";
+import { NavTab } from "@/types";
 import { cn } from "@/lib/utils";
 
 const NAV_ITEMS: { id: NavTab; label: string; icon: React.ElementType }[] = [

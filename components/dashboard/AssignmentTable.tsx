@@ -1,169 +1,161 @@
 "use client";
 
-import React from "react";
+import React, { useState } from "react";
 import { ChevronRight } from "lucide-react";
-import { useAppStore, TaskFilter } from "@/store/useAppStore";
+import { useAppStore } from "@/store/useAppStore";
+import { TaskFilter } from "@/types";
 import { getPriorityMeta } from "@/lib/utils";
 
-const TABLE_ITEMS = [
-  {
-    id: "a1",
-    course: "计量经济学",
-    task: "计量经济学作业（第3章）",
-    ddl: "2025-05-21 23:59",
-    priority: "urgent" as const,
-    status: "doing",
-    statusText: "进行中",
-  },
-  {
-    id: "a2",
-    course: "市场营销学",
-    task: "市场营销案例分析汇报",
-    ddl: "2025-05-22 23:59",
-    priority: "high" as const,
-    status: "doing",
-    statusText: "进行中",
-  },
-  {
-    id: "a3",
-    course: "大学英语",
-    task: "英语演讲PPT (Unit 6)",
-    ddl: "2025-05-23 18:00",
-    priority: "medium" as const,
-    status: "todo",
-    statusText: "待完成",
-  },
-  {
-    id: "a4",
-    course: "数据库系统",
-    task: "实验报告（实验四）",
-    ddl: "2025-05-24 23:59",
-    priority: "low" as const,
-    status: "todo",
-    statusText: "待完成",
-  },
-  {
-    id: "a5",
-    course: "微观经济学",
-    task: "课后习题（第5章）",
-    ddl: "2025-05-26 23:59",
-    priority: "medium" as const,
-    status: "todo",
-    statusText: "待完成",
-  },
-];
-
 export function AssignmentTable() {
-  const { taskFilter, setTaskFilter, setSelectedAssignmentId, setActiveTab } =
-    useAppStore();
+  const {
+    assignments,
+    courses,
+    setSelectedAssignmentId,
+    updateAssignmentStatus,
+    setActiveTab,
+  } = useAppStore();
 
-  const filteredItems = TABLE_ITEMS.filter((item) => {
-    if (taskFilter === "doing") return item.status === "doing";
-    if (taskFilter === "todo") return item.status === "todo";
-    if (taskFilter === "completed") return item.status === "completed";
-    return true;
+  const [filter, setFilter] = useState<TaskFilter>("all");
+
+  const filteredAssignments = assignments.filter((item) => {
+    if (filter === "all") return true;
+    return item.status === filter;
   });
 
   return (
     <div className="bg-white border border-[#E7E3DD] rounded-2xl p-4 shadow-subtle flex flex-col justify-between h-full">
-      {/* Header & Filter Tabs matching image 2 */}
-      <div className="flex items-center justify-between pb-2 border-b border-[#F0EBE1]">
-        <h3 className="text-sm font-bold text-charcoal shrink-0">
-          我的作业与任务
-        </h3>
+      {/* Table Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-[#F0EBE1] gap-2">
+        <div className="flex items-center space-x-2">
+          <h3 className="text-sm font-bold text-charcoal">
+            作业清单与状态
+          </h3>
+          <span className="text-[10px] font-semibold text-[#8C827A] bg-[#F7F5F5] px-1.5 py-0.5 rounded border border-[#E7E3DD]">
+            {filteredAssignments.length} 项
+          </span>
+        </div>
 
-        <div className="flex items-center space-x-3">
-          {/* Segmented Filter Tabs */}
-          <div className="flex bg-[#F0EBE1] border border-[#E0D7C6] p-0.5 rounded-lg text-xs">
-            {(
-              [
-                { id: "all", label: "全部" },
-                { id: "doing", label: "进行中" },
-                { id: "todo", label: "待完成" },
-                { id: "completed", label: "已完成" },
-              ] as { id: TaskFilter; label: string }[]
-            ).map((tab) => {
-              const isActive = taskFilter === tab.id;
-              return (
-                <button
-                  key={tab.id}
-                  onClick={() => setTaskFilter(tab.id)}
-                  className={`px-2.5 py-0.5 text-[11px] font-medium rounded-md transition-all ${
-                    isActive
-                      ? "bg-white text-charcoal shadow-subtle font-semibold"
-                      : "text-[#676268] hover:text-charcoal"
-                  }`}
-                >
-                  {tab.label}
-                </button>
-              );
-            })}
-          </div>
-
-          <button
-            onClick={() => setActiveTab("assignments")}
-            className="text-[11px] text-[#8C827A] hover:text-charcoal transition-colors flex items-center shrink-0"
-          >
-            查看全部任务 <ChevronRight className="w-3 h-3 ml-0.5" />
-          </button>
+        {/* Filter Pills */}
+        <div className="flex items-center space-x-1 bg-[#F0EBE1] p-0.5 rounded-xl border border-[#E0D7C6] text-[11px] font-medium self-start sm:self-auto">
+          {(["all", "doing", "todo", "completed"] as TaskFilter[]).map((f) => {
+            const labels: Record<TaskFilter, string> = {
+              all: "全部",
+              doing: "进行中",
+              todo: "待完成",
+              completed: "已完成",
+            };
+            const isActive = filter === f;
+            return (
+              <button
+                key={f}
+                onClick={() => setFilter(f)}
+                className={`px-2.5 py-0.5 rounded-lg transition-all ${
+                  isActive
+                    ? "bg-white text-charcoal font-bold shadow-subtle"
+                    : "text-[#676268] hover:text-charcoal"
+                }`}
+              >
+                {labels[f]}
+              </button>
+            );
+          })}
         </div>
       </div>
 
-      {/* Table Body matching image 2 columns and tags */}
-      <div className="mt-1.5 overflow-x-auto">
-        <table className="w-full text-left text-xs">
-          <thead>
-            <tr className="border-b border-[#F0EBE1] text-[#8C827A] font-medium text-[11px]">
-              <th className="py-2 px-2 font-medium">课程</th>
-              <th className="py-2 px-2 font-medium">任务</th>
-              <th className="py-2 px-2 font-medium">截止时间</th>
-              <th className="py-2 px-2 font-medium">优先级</th>
-              <th className="py-2 px-2 font-medium">状态</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-[#F5F2EE]">
-            {filteredItems.map((item) => {
-              const priorityMeta = getPriorityMeta(item.priority);
-              const isDoing = item.status === "doing";
+      {/* Table List */}
+      <div className="divide-y divide-[#F5F2EE] mt-1 flex-1 overflow-y-auto max-h-[360px]">
+        {filteredAssignments.length === 0 ? (
+          <div className="py-8 text-center text-xs text-[#8C827A]">
+            暂无相关作业任务
+          </div>
+        ) : (
+          filteredAssignments.map((task) => {
+            const course = courses.find((c) => c.id === task.courseId);
+            const priorityMeta = getPriorityMeta(task.priority);
+            const formattedDate = task.ddl.split("T")[0];
 
-              return (
-                <tr
-                  key={item.id}
-                  className="hover:bg-[#F7F5F5] transition-colors cursor-pointer group"
-                  onClick={() => setSelectedAssignmentId(item.id)}
-                >
-                  <td className="py-2 px-2 font-semibold text-charcoal truncate text-[11px] max-w-[110px]">
-                    {item.course}
-                  </td>
-                  <td className="py-2 px-2 text-charcoal text-[11px] truncate max-w-[180px]">
-                    <span className="group-hover:underline">{item.task}</span>
-                  </td>
-                  <td className="py-2 px-2 text-[#676268] font-mono text-[10px] whitespace-nowrap">
-                    {item.ddl}
-                  </td>
-                  <td className="py-2 px-2 whitespace-nowrap">
-                    <span
-                      className={`inline-block px-1.5 py-0.2 rounded text-[9px] font-semibold border ${priorityMeta.bg} ${priorityMeta.text} ${priorityMeta.border}`}
-                    >
-                      {priorityMeta.label}
-                    </span>
-                  </td>
-                  <td className="py-2 px-2 whitespace-nowrap">
-                    <span
-                      className={`inline-block px-2 py-0.5 rounded text-[10px] font-medium ${
-                        isDoing
-                          ? "bg-[#E3E6E0] text-[#3A5A40]"
-                          : "bg-[#F0EBE1] text-[#8C7A6B]"
-                      }`}
-                    >
-                      {item.statusText}
-                    </span>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+            return (
+              <div
+                key={task.id}
+                onClick={() => setSelectedAssignmentId(task.id)}
+                className="py-2.5 px-1 hover:bg-[#F7F5F5] rounded-xl transition-colors duration-150 cursor-pointer flex items-center justify-between group"
+              >
+                {/* Left: Task Title & Course info */}
+                <div className="flex items-center space-x-3 min-w-0 flex-1">
+                  {/* Status Checkbox */}
+                  <input
+                    type="checkbox"
+                    checked={task.status === "completed"}
+                    onChange={(e) => {
+                      e.stopPropagation();
+                      updateAssignmentStatus(
+                        task.id,
+                        e.target.checked ? "completed" : "doing"
+                      );
+                    }}
+                    className="w-4 h-4 rounded text-charcoal border-[#CDB9AB] focus:ring-0 cursor-pointer shrink-0"
+                  />
+
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center space-x-2">
+                      <h4
+                        className={`text-xs font-bold truncate ${
+                          task.status === "completed"
+                            ? "line-through text-[#8C827A]"
+                            : "text-charcoal group-hover:text-black"
+                        }`}
+                      >
+                        {task.title}
+                      </h4>
+                      {/* Priority Tag */}
+                      <span
+                        className={`text-[9px] px-1.5 py-0.2 rounded font-bold shrink-0 border ${priorityMeta.bg} ${priorityMeta.text} ${priorityMeta.border}`}
+                      >
+                        {priorityMeta.label}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center space-x-2 text-[10px] text-[#8C827A] mt-0.5">
+                      <span className="truncate">{course?.name || "通用"}</span>
+                      <span>·</span>
+                      <span>DDL: {formattedDate}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Right: Progress bar & Chevron */}
+                <div className="flex items-center space-x-3 shrink-0 ml-2">
+                  <div className="w-16 hidden sm:block">
+                    <div className="flex justify-between text-[9px] text-[#8C827A] mb-0.5">
+                      <span>进度</span>
+                      <span className="font-bold text-charcoal">
+                        {task.progress}%
+                      </span>
+                    </div>
+                    <div className="w-full bg-[#F0EBE1] rounded-full h-1 overflow-hidden">
+                      <div
+                        className="bg-[#4A7C59] h-1 rounded-full transition-all duration-300"
+                        style={{ width: `${task.progress}%` }}
+                      />
+                    </div>
+                  </div>
+
+                  <ChevronRight className="w-3.5 h-3.5 text-[#8C827A] group-hover:text-charcoal transition-colors" />
+                </div>
+              </div>
+            );
+          })
+        )}
+      </div>
+
+      {/* Footer Link */}
+      <div className="pt-2 border-t border-[#F0EBE1] flex justify-end">
+        <button
+          onClick={() => setActiveTab("assignments")}
+          className="text-[11px] font-bold text-charcoal hover:underline flex items-center"
+        >
+          在“作业 DDL”查看全部列表 ↗
+        </button>
       </div>
     </div>
   );

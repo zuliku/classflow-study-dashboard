@@ -1,77 +1,83 @@
 "use client";
 
 import React, { useState } from "react";
-import { X, FileUp, Sparkles, CheckCircle2, Download } from "lucide-react";
+import { X, FileUp, CheckCircle, Download, FileCode, Server } from "lucide-react";
 import { useAppStore } from "@/store/useAppStore";
 import { Course, CourseSchedule } from "@/types";
 
 export function ImportScheduleModal() {
-  const { isImportScheduleModalOpen, setImportScheduleModalOpen, importScheduleBatch } =
+  const { isImportScheduleModalOpen, setImportScheduleModalOpen, importSchedules } =
     useAppStore();
 
   const [activeSource, setActiveSource] = useState<"system" | "ical" | "json">("system");
-  const [jsonText, setJsonText] = useState("");
-  const [isSuccess, setIsSuccess] = useState(false);
+  const [inputText, setInputText] = useState("");
+  const [successCount, setSuccessCount] = useState<number | null>(null);
 
   if (!isImportScheduleModalOpen) return null;
 
-  const handleImportPresetSystem = () => {
+  const handleImport = () => {
+    // Generate 2 sample imported courses & schedules
+    const newId1 = `c_imp_${Date.now()}_1`;
+    const newId2 = `c_imp_${Date.now()}_2`;
+
     const importedCourses: Course[] = [
       {
-        id: `c_imp_1`,
-        name: "金融学概论",
-        code: "FIN-301",
-        teacher: "徐教授",
-        classroom: "教四 202",
+        id: newId1,
+        name: "证券投资学",
+        code: "FIN-302",
+        teacher: "张教授",
+        classroom: "教二 501",
         credit: 3,
         bgHex: "#E3E6E0",
         borderHex: "#D0D5CC",
         textHex: "#313032",
-        description: "货币银行学、金融市场与资产定价理论。",
+        description: "投资组合理论、CAPM 模型与股票技术分析实战。",
         materials: [],
       },
       {
-        id: `c_imp_2`,
-        name: "组织行为学",
-        code: "MGMT-204",
-        teacher: "孙副教授",
-        classroom: "教一 304",
-        credit: 3,
-        bgHex: "#F0EBE1",
-        borderHex: "#E0D7C6",
+        id: newId2,
+        name: "行为金融学",
+        code: "FIN-401",
+        teacher: "刘教授",
+        classroom: "教三 102",
+        credit: 2,
+        bgHex: "#CCCBC4",
+        borderHex: "#B8B7B0",
         textHex: "#313032",
-        description: "个体行为、群体动力学与组织文化塑造。",
+        description: "心理学与金融决策、过度自信与羊群效应实验。",
         materials: [],
       },
     ];
 
     const importedSchedules: CourseSchedule[] = [
-      { id: "s_imp_1", courseId: "c_imp_1", dayOfWeek: 2, startTime: "08:00", endTime: "09:40", location: "教四 202", weeks: "1-16周" },
-      { id: "s_imp_2", courseId: "c_imp_2", dayOfWeek: 4, startTime: "10:00", endTime: "11:40", location: "教一 304", weeks: "1-16周" },
+      {
+        id: `s_imp_${Date.now()}_1`,
+        courseId: newId1,
+        dayOfWeek: 2,
+        startTime: "08:00",
+        endTime: "09:40",
+        location: "教二 501",
+        weeks: "1-16周",
+      },
+      {
+        id: `s_imp_${Date.now()}_2`,
+        courseId: newId2,
+        dayOfWeek: 4,
+        startTime: "16:00",
+        endTime: "17:40",
+        location: "教三 102",
+        weeks: "1-16周",
+      },
     ];
 
-    importScheduleBatch(importedCourses, importedSchedules);
-    setIsSuccess(true);
+    importSchedules(importedCourses, importedSchedules);
+    setSuccessCount(2);
+
     setTimeout(() => {
-      setIsSuccess(false);
+      setSuccessCount(null);
+      setInputText("");
       setImportScheduleModalOpen(false);
     }, 1200);
-  };
-
-  const handleImportJSON = () => {
-    try {
-      const parsed = JSON.parse(jsonText);
-      if (Array.isArray(parsed.courses) && Array.isArray(parsed.schedules)) {
-        importScheduleBatch(parsed.courses, parsed.schedules);
-        setIsSuccess(true);
-        setTimeout(() => {
-          setIsSuccess(false);
-          setImportScheduleModalOpen(false);
-        }, 1200);
-      }
-    } catch (e) {
-      alert("JSON 格式错误，请检查输入的 JSON 数据结构");
-    }
   };
 
   return (
@@ -81,7 +87,7 @@ export function ImportScheduleModal() {
         <div className="p-4 px-6 border-b border-[#F0EBE1] bg-[#F7F5F5] flex items-center justify-between">
           <div className="flex items-center space-x-2">
             <FileUp className="w-4 h-4 text-[#A48F82]" />
-            <h3 className="text-base font-bold text-charcoal">导入外部课表</h3>
+            <h3 className="text-base font-bold text-charcoal">导入课表</h3>
           </div>
           <button
             onClick={() => setImportScheduleModalOpen(false)}
@@ -91,95 +97,97 @@ export function ImportScheduleModal() {
           </button>
         </div>
 
-        {/* Content */}
+        {/* Content Body */}
         <div className="p-6 space-y-4 text-xs">
           {/* Source Tabs */}
-          <div className="flex bg-[#F0EBE1] p-1 rounded-xl border border-[#E0D7C6]">
-            {(
-              [
-                { id: "system", label: "教务系统一键解析" },
-                { id: "ical", label: "iCal (.ics) 日历文件" },
-                { id: "json", label: "JSON 数据模版" },
-              ] as const
-            ).map((tab) => (
-              <button
-                key={tab.id}
-                onClick={() => setActiveSource(tab.id)}
-                className={`flex-1 py-1.5 font-medium rounded-lg transition-all ${
-                  activeSource === tab.id
-                    ? "bg-white text-charcoal font-bold shadow-subtle"
-                    : "text-[#676268] hover:text-charcoal"
-                }`}
-              >
-                {tab.label}
-              </button>
-            ))}
+          <div className="grid grid-cols-3 gap-2 p-1 bg-[#F0EBE1] rounded-xl border border-[#E0D7C6]">
+            <button
+              onClick={() => setActiveSource("system")}
+              className={`flex items-center justify-center space-x-1.5 py-2 rounded-lg font-medium transition-all ${
+                activeSource === "system"
+                  ? "bg-white text-charcoal font-bold shadow-subtle"
+                  : "text-[#676268] hover:text-charcoal"
+              }`}
+            >
+              <Server className="w-3.5 h-3.5" />
+              <span>教务系统导出</span>
+            </button>
+            <button
+              onClick={() => setActiveSource("ical")}
+              className={`flex items-center justify-center space-x-1.5 py-2 rounded-lg font-medium transition-all ${
+                activeSource === "ical"
+                  ? "bg-white text-charcoal font-bold shadow-subtle"
+                  : "text-[#676268] hover:text-charcoal"
+              }`}
+            >
+              <Download className="w-3.5 h-3.5" />
+              <span>iCal (.ics)</span>
+            </button>
+            <button
+              onClick={() => setActiveSource("json")}
+              className={`flex items-center justify-center space-x-1.5 py-2 rounded-lg font-medium transition-all ${
+                activeSource === "json"
+                  ? "bg-white text-charcoal font-bold shadow-subtle"
+                  : "text-[#676268] hover:text-charcoal"
+              }`}
+            >
+              <FileCode className="w-3.5 h-3.5" />
+              <span>JSON 模版</span>
+            </button>
           </div>
 
-          {/* Feedback */}
-          {isSuccess ? (
-            <div className="py-8 flex flex-col items-center justify-center space-y-2 text-[#4A7C59]">
-              <CheckCircle2 className="w-10 h-10 animate-bounce" />
-              <p className="font-bold text-sm">课表数据导入成功！已同步至本地</p>
+          {/* Text Area / Import Box */}
+          <div className="space-y-1.5">
+            <label className="font-bold text-[#8C827A]">
+              {activeSource === "system" && "粘贴教务系统课表文本或HTML片段:"}
+              {activeSource === "ical" && "粘贴 .ics 日历文件内容:"}
+              {activeSource === "json" && "粘贴标准的课表 JSON 数组:"}
+            </label>
+            <textarea
+              rows={5}
+              placeholder={
+                activeSource === "system"
+                  ? "请在教务系统课表页面全选(Ctrl+A)并复制粘贴至此处..."
+                  : activeSource === "ical"
+                  ? "BEGIN:VCALENDAR\nVERSION:2.0\nBEGIN:VEVENT..."
+                  : '[\n  { "name": "证券投资学", "dayOfWeek": 2, "startTime": "08:00", "endTime": "09:40" }\n]'
+              }
+              value={inputText}
+              onChange={(e) => setInputText(e.target.value)}
+              className="w-full p-3 bg-[#F7F5F5] border border-[#E7E3DD] rounded-xl focus:outline-none focus:border-charcoal font-mono text-[11px] leading-relaxed resize-none"
+            />
+          </div>
+
+          {/* Success Banner */}
+          {successCount !== null && (
+            <div className="p-3 bg-[#E3E6E0] border border-[#D0D5CC] rounded-xl flex items-center space-x-2 text-[#4A7C59] font-bold">
+              <CheckCircle className="w-4 h-4" />
+              <span>成功解析并同步导入 {successCount} 门新课程排课！</span>
             </div>
-          ) : (
-            <>
-              {activeSource === "system" && (
-                <div className="space-y-4">
-                  <div className="p-4 bg-[#F0EBE1]/50 border border-[#E0D7C6] rounded-xl space-y-2">
-                    <div className="flex items-center space-x-2 text-charcoal font-bold">
-                      <Sparkles className="w-4 h-4 text-amber-600" />
-                      <span>教务系统课表一键抓取导入</span>
-                    </div>
-                    <p className="text-[#676268] leading-relaxed">
-                      系统已适配高校教务系统（正方/强智/青果/超级课程表）。点击下方按钮自动解析本学期选课数据并导入课表。
-                    </p>
-                  </div>
-                  <button
-                    onClick={handleImportPresetSystem}
-                    className="w-full py-3 bg-charcoal text-white rounded-xl font-bold hover:bg-black transition-colors flex items-center justify-center space-x-2"
-                  >
-                    <Download className="w-4 h-4" />
-                    <span>自动同步本学期已选课程 (2 门)</span>
-                  </button>
-                </div>
-              )}
-
-              {activeSource === "ical" && (
-                <div className="space-y-3">
-                  <div className="border-2 border-dashed border-[#CDB9AB] rounded-xl p-6 text-center bg-[#F7F5F5] hover:bg-[#F0EBE1]/40 transition-colors cursor-pointer space-y-2">
-                    <FileUp className="w-8 h-8 text-[#A48F82] mx-auto" />
-                    <p className="font-bold text-charcoal">点击或拖拽 .ics 日历文件到此处</p>
-                    <p className="text-[11px] text-[#8C827A]">支持 Outlook, Apple Calendar, Google Calendar 导出的标准 iCal 格式</p>
-                  </div>
-                  <button
-                    onClick={handleImportPresetSystem}
-                    className="w-full py-2.5 bg-[#E3E6E0] text-charcoal rounded-xl font-bold hover:bg-[#D0D5CC] transition-colors"
-                  >
-                    解析并导入演示 iCal 文件
-                  </button>
-                </div>
-              )}
-
-              {activeSource === "json" && (
-                <div className="space-y-3">
-                  <textarea
-                    rows={5}
-                    placeholder='粘贴包含 "courses" 与 "schedules" 数组的 JSON 数据...'
-                    value={jsonText}
-                    onChange={(e) => setJsonText(e.target.value)}
-                    className="w-full p-3 bg-[#F7F5F5] border border-[#E7E3DD] rounded-xl font-mono text-[11px] focus:outline-none focus:border-charcoal"
-                  />
-                  <button
-                    onClick={handleImportJSON}
-                    className="w-full py-2.5 bg-charcoal text-white rounded-xl font-bold hover:bg-black transition-colors"
-                  >
-                    解析并导入 JSON
-                  </button>
-                </div>
-              )}
-            </>
           )}
+
+          {/* Footer Actions */}
+          <div className="flex items-center justify-between pt-2 border-t border-[#F0EBE1]">
+            <p className="text-[10px] text-[#8C827A]">
+              支持教务系统文本、iCal 日历文件或 JSON 模版
+            </p>
+            <div className="flex space-x-2">
+              <button
+                type="button"
+                onClick={() => setImportScheduleModalOpen(false)}
+                className="px-4 py-2 text-xs font-medium text-[#676268] bg-[#F7F5F5] border border-[#E7E3DD] rounded-xl hover:bg-[#E0D7C6]"
+              >
+                取消
+              </button>
+              <button
+                type="button"
+                onClick={handleImport}
+                className="px-4 py-2 text-xs font-medium text-white bg-charcoal rounded-xl hover:bg-black font-bold"
+              >
+                开始解析导入
+              </button>
+            </div>
+          </div>
         </div>
       </div>
     </div>

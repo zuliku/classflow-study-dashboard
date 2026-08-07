@@ -2,7 +2,7 @@
 
 import React from "react";
 import { ExternalLink, AlertTriangle, ChevronLeft, ChevronRight, MapPin, User } from "lucide-react";
-import { useAppStore } from "@/store/useAppStore";
+import { useAppStore, isScheduleActive } from "@/store/useAppStore";
 import { ScheduleConflict } from "@/types";
 import { cn } from "@/lib/utils";
 import { addWeeks, startOfWeek, addDays, format } from "date-fns";
@@ -58,12 +58,8 @@ export function TimetableGrid() {
   const dayEndMinutes = 21 * 60;     // 21:00 (Includes evening classes)
   const totalMinutes = dayEndMinutes - dayStartMinutes; // 780 minutes total
 
-  // Filter schedules active in currentSemesterWeek
-  const activeSchedules = schedules.filter((s) => {
-    const isExcluded = s.excludedWeeks?.includes(currentSemesterWeek);
-    if (isExcluded) return false;
-    return true;
-  });
+  // Filter schedules active in currentSemesterWeek using unified isScheduleActive logic
+  const activeSchedules = schedules.filter((s) => isScheduleActive(s, currentSemesterWeek));
 
   // Conflict Detection Algorithm
   const conflicts: ScheduleConflict[] = [];

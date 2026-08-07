@@ -1,13 +1,36 @@
-export type Priority = 'urgent' | 'high' | 'medium' | 'low';
-export type AssignmentStatus = 'todo' | 'doing' | 'submitted' | 'completed';
+export type NavTab =
+  | "overview"
+  | "timetable"
+  | "assignments"
+  | "courses"
+  | "analytics"
+  | "group"
+  | "settings";
 
-export interface CourseMaterial {
+export type ViewMode = "day" | "week" | "month";
+
+export type TaskFilter = "all" | "doing" | "todo" | "completed";
+
+export type Priority = "urgent" | "high" | "medium" | "low";
+export type AssignmentStatus = "todo" | "doing" | "submitted" | "completed";
+
+export interface UserProfile {
+  name: string;
+  avatarUrl: string;
+  college: string;
+  grade: string;
+  studentId: string;
+  completedCredits: number;
+  totalCredits: number;
+}
+
+export interface Material {
   id: string;
   title: string;
-  type: 'pdf' | 'ppt' | 'doc' | 'link';
+  type: "pdf" | "ppt" | "doc" | "link";
   size?: string;
-  url?: string;
   uploadDate: string;
+  url?: string;
 }
 
 export interface Course {
@@ -17,11 +40,11 @@ export interface Course {
   teacher: string;
   classroom: string;
   credit: number;
-  bgHex: string;     // e.g. '#E3E6E0' (Pastel Mint)
-  borderHex: string; // e.g. '#CCCBC4'
-  textHex: string;   // e.g. '#313032'
-  description?: string;
-  materials: CourseMaterial[];
+  bgHex: string;
+  borderHex: string;
+  textHex: string;
+  description: string;
+  materials: Material[];
 }
 
 export interface CourseSchedule {
@@ -31,9 +54,15 @@ export interface CourseSchedule {
   startTime: string; // "08:00"
   endTime: string;   // "09:40"
   location: string;
-  weeks: string;     // e.g., "1-16周", "1-8周", "单周", "双周"
-  activeWeeks?: number[]; // list of active week numbers e.g. [1,2,3,4,5,6,7,8]
-  excludedWeeks?: number[]; // list of excluded week numbers (single week cancellation) e.g. [5]
+  weeks: string;     // "1-16周", "1-8周", "单周", "双周", etc.
+  excludedWeeks?: number[]; // [5] means week 5 is excluded/canceled (调课/停课)
+}
+
+export interface ScheduleConflict {
+  scheduleA: CourseSchedule;
+  scheduleB: CourseSchedule;
+  dayOfWeek: number;
+  timeRange: string;
 }
 
 export interface Subtask {
@@ -46,37 +75,20 @@ export interface Assignment {
   id: string;
   courseId: string;
   title: string;
-  description?: string;
-  ddl: string; // ISO string format
+  description: string;
+  ddl: string; // ISO 8601 string, e.g., "2025-05-21T23:59:00.000Z"
   priority: Priority;
   status: AssignmentStatus;
-  progress: number; // 0-100
-  tags?: string[];
+  progress: number; // 0 - 100
+  tags: string[];
   subtasks?: Subtask[];
-}
-
-export interface CalendarMark {
-  id: string;
-  date: string; // "YYYY-MM-DD"
-  type: 'course' | 'ddl' | 'exam' | 'activity';
-  title: string;
-}
-
-export interface UserProfile {
-  name: string;
-  avatarUrl: string;
-  college: string;
-  grade: string;
-  studentId: string;
-  completedCredits: number;
-  totalCredits: number;
 }
 
 export interface GroupMember {
   id: string;
   name: string;
   avatarUrl: string;
-  role: 'leader' | 'member';
+  role: "leader" | "member";
   major: string;
 }
 
@@ -94,15 +106,15 @@ export interface GroupProject {
   courseId: string;
   title: string;
   description: string;
-  progress: number;
+  progress: number; // 0 - 100
+  updatedAt: string;
   members: GroupMember[];
   tasks: GroupTask[];
-  updatedAt: string;
 }
 
-export interface ScheduleConflict {
-  scheduleA: CourseSchedule;
-  scheduleB: CourseSchedule;
-  dayOfWeek: number;
-  timeRange: string;
+export interface CalendarMark {
+  id: string;
+  date: string; // "YYYY-MM-DD"
+  type: "course" | "ddl" | "exam" | "activity";
+  title: string;
 }

@@ -2,7 +2,8 @@
 
 import React, { useState, useEffect } from "react";
 import { Search, Calendar as CalendarIcon } from "lucide-react";
-import { useAppStore, ViewMode } from "@/store/useAppStore";
+import { useAppStore } from "@/store/useAppStore";
+import { ViewMode } from "@/types";
 import { format, addWeeks, subWeeks, startOfWeek, endOfWeek } from "date-fns";
 import { zhCN } from "date-fns/locale";
 import { cn } from "@/lib/utils";
@@ -44,7 +45,7 @@ export function Header() {
 
   return (
     <header className="bg-[#F7F5F5] border-b border-[#E7E3DD] px-6 py-3.5 flex flex-col md:flex-row md:items-center justify-between gap-4 sticky top-0 z-10">
-      {/* Left: Clean Greeting without emoji or subtitle */}
+      {/* Left: Clean Greeting */}
       <div>
         <h2 className="text-lg font-bold text-charcoal tracking-tight">
           {greeting}，{userProfile.name}

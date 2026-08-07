@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import { Search, X, BookOpen, ClipboardList, ArrowRight } from "lucide-react";
 import { useAppStore } from "@/store/useAppStore";
 
@@ -8,13 +8,13 @@ export function GlobalSearchModal() {
   const {
     isSearchModalOpen,
     setSearchModalOpen,
-    searchQuery,
-    setSearchQuery,
     courses,
     assignments,
     setSelectedCourseId,
     setSelectedAssignmentId,
   } = useAppStore();
+
+  const [searchQuery, setSearchQuery] = useState("");
 
   // Keyboard shortcut listener (Cmd+K or Ctrl+K)
   useEffect(() => {
