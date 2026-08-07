@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import {
   Users2,
   Plus,
@@ -85,7 +86,9 @@ function GroupModal({
 
   if (!mounted) return null;
 
-  return (
+  // Portal 到 body：避免被 main 滚动容器 / 页面过渡等祖先的
+  // transform、overflow、contain 约束，backdrop 保证全屏覆盖 Sidebar 与 Header
+  return createPortal(
     <div
       className={cn(
         "fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4",
@@ -115,7 +118,8 @@ function GroupModal({
           <div className="px-5 py-3 border-t border-line-soft flex justify-end space-x-2 shrink-0">{footer}</div>
         )}
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 
