@@ -119,4 +119,5 @@ export interface CalendarMark {
   date: string; // "YYYY-MM-DD"
   type: "course" | "ddl" | "exam" | "activity";
   title: string;
+  sourceId?: string; // Links DDL CalendarMark directly to assignment.id
 }

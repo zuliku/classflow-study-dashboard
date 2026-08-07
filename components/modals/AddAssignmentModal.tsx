@@ -9,10 +9,8 @@ export function AddAssignmentModal() {
   const {
     courses,
     addAssignment,
-    updateAssignmentProgress,
+    updateAssignment,
     assignments,
-    selectedAssignmentId,
-    setSelectedAssignmentId,
   } = useAppStore();
 
   const [isOpen, setIsOpen] = useState(false);
@@ -100,17 +98,34 @@ export function AddAssignmentModal() {
       .filter((st) => st.title.trim())
       .map((st) => ({ id: st.id, title: st.title.trim(), completed: st.completed }));
 
-    addAssignment({
-      courseId: courseId || courses[0]?.id || "c_1",
-      title,
-      description,
-      ddl: fullDdl,
-      priority,
-      status,
-      progress,
-      tags,
-      subtasks: validSubtasks,
-    });
+    if (editingId) {
+      // Update existing assignment in-place preserving original ID
+      updateAssignment({
+        id: editingId,
+        courseId: courseId || courses[0]?.id || "c_1",
+        title,
+        description,
+        ddl: fullDdl,
+        priority,
+        status,
+        progress,
+        tags,
+        subtasks: validSubtasks,
+      });
+    } else {
+      // Create new assignment
+      addAssignment({
+        courseId: courseId || courses[0]?.id || "c_1",
+        title,
+        description,
+        ddl: fullDdl,
+        priority,
+        status,
+        progress,
+        tags,
+        subtasks: validSubtasks,
+      });
+    }
 
     setIsOpen(false);
   };

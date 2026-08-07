@@ -110,6 +110,7 @@ interface AppState {
 
   // Assignment Actions
   addAssignment: (assignment: Omit<Assignment, "id">) => void;
+  updateAssignment: (updatedAssignment: Assignment) => void;
   updateAssignmentStatus: (
     id: string,
     status: Assignment["status"]
@@ -282,6 +283,7 @@ export const useAppStore = create<AppState>()(
           date: ddlDateStr,
           type: "ddl",
           title: assignmentData.title,
+          sourceId: newId,
         };
 
         set((state) => ({
@@ -289,6 +291,54 @@ export const useAppStore = create<AppState>()(
           calendarMarks: [...state.calendarMarks, newMark],
         }));
       },
+
+      updateAssignment: (updatedAssignment) =>
+        set((state) => {
+          const newDdlDate = updatedAssignment.ddl.split("T")[0];
+          const oldAssignment = state.assignments.find((a) => a.id === updatedAssignment.id);
+          const oldDdlDate = oldAssignment ? oldAssignment.ddl.split("T")[0] : "";
+          const oldTitle = oldAssignment ? oldAssignment.title : "";
+
+          // Update assignment object in place, preserving ID
+          const newAssignments = state.assignments.map((a) =>
+            a.id === updatedAssignment.id ? updatedAssignment : a
+          );
+
+          // Update linked CalendarMark cleanly with fallback for legacy marks
+          let markUpdated = false;
+          const newCalendarMarks = state.calendarMarks.map((m) => {
+            // Match by sourceId OR fallback by legacy match (type === ddl AND (title or date matched))
+            if (
+              m.sourceId === updatedAssignment.id ||
+              (!m.sourceId && m.type === "ddl" && (m.title === oldTitle || m.date === oldDdlDate))
+            ) {
+              markUpdated = true;
+              return {
+                ...m,
+                date: newDdlDate,
+                title: updatedAssignment.title,
+                sourceId: updatedAssignment.id,
+              };
+            }
+            return m;
+          });
+
+          // If no mark existed, append a new linked mark
+          if (!markUpdated) {
+            newCalendarMarks.push({
+              id: `cm_${Date.now()}`,
+              date: newDdlDate,
+              type: "ddl",
+              title: updatedAssignment.title,
+              sourceId: updatedAssignment.id,
+            });
+          }
+
+          return {
+            assignments: newAssignments,
+            calendarMarks: newCalendarMarks,
+          };
+        }),
 
       updateAssignmentStatus: (id, status) =>
         set((state) => ({
@@ -333,12 +383,16 @@ export const useAppStore = create<AppState>()(
         set((state) => {
           const target = state.assignments.find((a) => a.id === id);
           const targetDate = target ? target.ddl.split("T")[0] : "";
+          const targetTitle = target ? target.title : "";
 
           return {
             assignments: state.assignments.filter((a) => a.id !== id),
-            calendarMarks: state.calendarMarks.filter(
-              (m) => !(m.type === "ddl" && m.date === targetDate && m.title === target?.title)
-            ),
+            calendarMarks: state.calendarMarks.filter((m) => {
+              // Delete linked mark by sourceId OR fallback by legacy match
+              if (m.sourceId === id) return false;
+              if (!m.sourceId && m.type === "ddl" && (m.title === targetTitle || m.date === targetDate)) return false;
+              return true;
+            }),
             selectedAssignmentId: state.selectedAssignmentId === id ? null : state.selectedAssignmentId,
           };
         }),

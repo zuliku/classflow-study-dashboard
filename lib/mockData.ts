@@ -331,8 +331,8 @@ export const initialGroupProjects: GroupProject[] = [
 ];
 
 export const initialCalendarMarks: CalendarMark[] = [
-  { id: "cm1", date: getRelativeDateStr(1), type: "ddl", title: "计量经济学作业 DDL" },
-  { id: "cm2", date: getRelativeDateStr(2), type: "ddl", title: "市场营销案例汇报 DDL" },
+  { id: "cm1", date: getRelativeDateStr(1), type: "ddl", title: "计量经济学大作业（第3章）", sourceId: "a1" },
+  { id: "cm2", date: getRelativeDateStr(2), type: "ddl", title: "市场营销案例汇报", sourceId: "a2" },
   { id: "cm3", date: getRelativeDateStr(8), type: "exam", title: "微观经济学期中考试" },
   { id: "cm4", date: getRelativeDateStr(12), type: "activity", title: "学术沙龙与毕业论文动员会" },
 ];
