@@ -23,7 +23,7 @@ module.exports = {
 
         /* ===== 语义层 ===== */
         // 表面层级：page > surface(卡片) > surface-soft(hover/inset) > surface-muted(selected)
-        surface: "#EFECEA",
+        surface: "#F4F2EF",
         "surface-soft": "#F0EBE1",
         "surface-muted": "#E3E6E0",
         // 边框：stone-beige 透明度派生，不再为每张卡发明新 HEX
