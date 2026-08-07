@@ -151,9 +151,13 @@ export const initialSchedules: CourseSchedule[] = [
   { id: "s7", courseId: "c2", dayOfWeek: 3, startTime: "10:00", endTime: "11:40", location: "教三 305", weeks: "1-16周" },
   { id: "s8", courseId: "c4", dayOfWeek: 3, startTime: "14:00", endTime: "15:40", location: "信科 403", weeks: "1-16周" },
 
+  // Thursday
+  { id: "s9", courseId: "c7", dayOfWeek: 4, startTime: "09:00", endTime: "10:40", location: "商学院 302", weeks: "1-16周" },
+  { id: "s10", courseId: "c8", dayOfWeek: 4, startTime: "14:00", endTime: "15:40", location: "计算机楼 102", weeks: "1-16周" },
+
   // Friday
-  { id: "s9", courseId: "c3", dayOfWeek: 5, startTime: "10:00", endTime: "11:40", location: "外语楼 207", weeks: "1-16周" },
-  { id: "s10", courseId: "c5", dayOfWeek: 5, startTime: "16:00", endTime: "17:40", location: "教一 101", weeks: "1-16周" },
+  { id: "s11", courseId: "c3", dayOfWeek: 5, startTime: "10:00", endTime: "11:40", location: "外语楼 207", weeks: "1-16周" },
+  { id: "s12", courseId: "c5", dayOfWeek: 5, startTime: "16:00", endTime: "17:40", location: "教一 101", weeks: "1-16周" },
 ];
 
 export const initialAssignments: Assignment[] = [
