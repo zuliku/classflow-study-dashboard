@@ -169,7 +169,7 @@ export function TimetableGrid() {
         </div>
 
         {/* Timetable Body Grid (08:00 to 21:00 Evening Range) */}
-        <div className="relative flex-1 grid grid-cols-8 mt-1 min-h-[500px]">
+        <div className="relative flex-1 grid grid-cols-8 mt-1 min-h-[520px]">
           {/* Time Labels Column */}
           <div className="flex flex-col justify-between text-[10px] text-[#8C827A] font-mono border-r border-[#F0EBE1] pr-1.5 py-0.5 h-full">
             {TIME_SLOTS.map((time, idx) => (
@@ -240,7 +240,7 @@ export function TimetableGrid() {
                           setSelectedCourseId(course.id);
                         }}
                         className={cn(
-                          "absolute left-0.5 right-0.5 rounded-xl p-2.5 transition-all duration-200 cursor-pointer shadow-subtle hover:shadow-card hover:-translate-y-0.5 border flex flex-col justify-between overflow-hidden group select-none",
+                          "absolute left-0.5 right-0.5 rounded-xl p-1.5 sm:p-2 transition-all duration-200 cursor-pointer shadow-subtle hover:shadow-card hover:-translate-y-0.5 border flex flex-col justify-between overflow-hidden group select-none",
                           hasConflict && "ring-2 ring-[#D94F4F] bg-[#FDF0F0] border-[#F8D7D7]"
                         )}
                         style={{
@@ -252,29 +252,29 @@ export function TimetableGrid() {
                         }}
                       >
                         {/* Top Section */}
-                        <div className="space-y-1 min-w-0">
+                        <div className="space-y-0.5 min-w-0">
                           {/* 1. Course Title */}
                           <div className="flex items-start justify-between">
-                            <h4 className="font-extrabold text-[13px] sm:text-sm tracking-tight leading-tight text-charcoal group-hover:underline">
+                            <h4 className="font-extrabold text-[11px] sm:text-xs tracking-tight leading-tight text-charcoal group-hover:underline truncate">
                               {course.name}
                             </h4>
                             {hasConflict && (
-                              <span className="text-[9px] bg-[#D94F4F] text-white px-1 py-0.2 rounded font-bold shrink-0 ml-1">
+                              <span className="text-[8px] bg-[#D94F4F] text-white px-1 py-0.2 rounded font-bold shrink-0 ml-1">
                                 冲突
                               </span>
                             )}
                           </div>
 
                           {/* 2. Teacher Info */}
-                          <div className="flex items-center text-[10.5px] opacity-85 space-x-1 font-medium leading-none pt-0.5">
-                            <User className="w-3 h-3 shrink-0 opacity-70" />
+                          <div className="flex items-center text-[9.5px] sm:text-[10px] opacity-85 space-x-1 font-medium leading-none">
+                            <User className="w-2.5 h-2.5 shrink-0 opacity-70" />
                             <span className="truncate">{course.teacher}</span>
                           </div>
                         </div>
 
                         {/* Bottom Row: Location Badge */}
-                        <div className="flex items-center text-[10.5px] opacity-90 pt-1 border-t border-black/5 font-medium leading-none">
-                          <MapPin className="w-3 h-3 mr-1 shrink-0 opacity-75" />
+                        <div className="flex items-center text-[9.5px] sm:text-[10px] opacity-90 pt-0.5 border-t border-black/5 font-medium leading-none mt-0.5">
+                          <MapPin className="w-2.5 h-2.5 mr-1 shrink-0 opacity-75" />
                           <span className="truncate">{sched.location}</span>
                         </div>
                       </div>

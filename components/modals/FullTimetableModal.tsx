@@ -26,7 +26,7 @@ export function FullTimetableModal() {
 
   return (
     <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 sm:p-6 animate-in fade-in">
-      <div className="w-full max-w-6xl bg-white rounded-3xl shadow-2xl border border-[#E7E3DD] flex flex-col h-[92vh] overflow-hidden">
+      <div className="w-full max-w-6xl bg-white rounded-3xl shadow-2xl border border-[#E7E3DD] flex flex-col h-[94vh] overflow-hidden">
         {/* Modal Header */}
         <div className="p-4 px-6 border-b border-[#F0EBE1] bg-[#F7F5F5] flex flex-col sm:flex-row sm:items-center justify-between gap-3 shrink-0">
           <div className="flex items-center space-x-3">
@@ -115,8 +115,8 @@ export function FullTimetableModal() {
             </div>
           </div>
 
-          {/* Timetable Grid View */}
-          <div className="bg-white rounded-2xl p-1 border border-[#E7E3DD] shadow-subtle h-[520px] flex flex-col">
+          {/* Timetable Grid View with Spacious Vertical Room */}
+          <div className="bg-white rounded-2xl p-1 border border-[#E7E3DD] shadow-subtle min-h-[580px] flex flex-col">
             <TimetableGrid />
           </div>
 
