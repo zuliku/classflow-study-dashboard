@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { useAppStore } from "@/store/useAppStore";
 import { CourseSchedule, Material } from "@/types";
+import { getLocalDDLDate } from "@/lib/ddl";
 
 describe("删除撤销（Undo）", () => {
   beforeEach(() => {
@@ -13,11 +14,16 @@ describe("删除撤销（Undo）", () => {
     const cm1 = before.calendarMarks.find((m) => m.id === "cm1")!;
     expect(cm1.sourceId).toBe("a1");
 
-    // 删除（并额外注入一条无 sourceId 的兼容标记验证一并删除）
+    // 删除（并额外注入一条无 sourceId 的兼容标记：title AND date 同时匹配才删除）
     useAppStore.setState((s) => ({
       calendarMarks: [
         ...s.calendarMarks,
-        { id: "legacy_cm", date: "2026-05-20", type: "ddl" as const, title: a1.title },
+        {
+          id: "legacy_cm",
+          date: getLocalDDLDate(a1.ddl),
+          type: "ddl" as const,
+          title: a1.title,
+        },
       ],
     }));
     const removed = useAppStore.getState().deleteAssignment("a1");

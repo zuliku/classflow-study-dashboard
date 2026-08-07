@@ -32,23 +32,29 @@ describe("deleteCourse 级联清理", () => {
     expect(after.groupProjects.find((g) => g.id === "gp_1")).toBeTruthy(); // 其他小组项目保留
   });
 
-  it("无 sourceId 的历史遗留 DDL 标记按 title/date 兼容删除，但 exam/activity 绝不误删", () => {
+  it("无 sourceId 的历史遗留 DDL 标记：仅 title AND date 同时匹配才删除，exam/activity 绝不误删", () => {
     const a1 = useAppStore.getState().assignments.find((a) => a.id === "a1")!;
     useAppStore.setState((s) => ({
       calendarMarks: [
         ...s.calendarMarks,
-        { id: "legacy_title", date: "2026-05-20", type: "ddl" as const, title: a1.title },
-        { id: "legacy_date", date: getLocalDDLDate(a1.ddl), type: "ddl" as const, title: "完全不同的标题" },
-        { id: "legacy_exam", date: "2026-05-20", type: "exam" as const, title: a1.title },
-        { id: "legacy_activity", date: getLocalDDLDate(a1.ddl), type: "activity" as const, title: "完全不同的标题" },
+        // title AND date 同时匹配 → 删除
+        { id: "legacy_match", date: getLocalDDLDate(a1.ddl), type: "ddl" as const, title: a1.title },
+        // 仅 title 匹配（date 不同）→ 保留，避免误删同天其他任务
+        { id: "legacy_title_only", date: "2026-05-20", type: "ddl" as const, title: a1.title },
+        // 仅 date 匹配（title 不同）→ 保留
+        { id: "legacy_date_only", date: getLocalDDLDate(a1.ddl), type: "ddl" as const, title: "完全不同的标题" },
+        // exam/activity 即使 title+date 相同也绝不删除
+        { id: "legacy_exam", date: getLocalDDLDate(a1.ddl), type: "exam" as const, title: a1.title },
+        { id: "legacy_activity", date: getLocalDDLDate(a1.ddl), type: "activity" as const, title: a1.title },
       ],
     }));
 
     useAppStore.getState().deleteCourse("c_4");
 
     const after = useAppStore.getState();
-    expect(after.calendarMarks.find((m) => m.id === "legacy_title")).toBeUndefined(); // title 匹配删除
-    expect(after.calendarMarks.find((m) => m.id === "legacy_date")).toBeUndefined(); // date 匹配删除
+    expect(after.calendarMarks.find((m) => m.id === "legacy_match")).toBeUndefined(); // title+date 匹配删除
+    expect(after.calendarMarks.find((m) => m.id === "legacy_title_only")).toBeTruthy(); // 仅 title 保留
+    expect(after.calendarMarks.find((m) => m.id === "legacy_date_only")).toBeTruthy(); // 仅 date 保留
     expect(after.calendarMarks.find((m) => m.id === "legacy_exam")).toBeTruthy(); // exam 保留
     expect(after.calendarMarks.find((m) => m.id === "legacy_activity")).toBeTruthy(); // activity 保留
   });

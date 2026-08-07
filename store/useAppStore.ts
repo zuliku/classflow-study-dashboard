@@ -25,6 +25,7 @@ import {
 import { createDefaultSemester, getSemesterWeek } from "@/lib/semester";
 import { getLocalDDLDate } from "@/lib/ddl";
 import { deleteFileBlob, clearAllFileBlobs } from "@/lib/fileStorage";
+import { isDDLMarkForAssignment, isLegacyDDLMarkForAssignment, linkLegacyDDLMarks } from "@/lib/calendarMark";
 
 /**
  * 持久化白名单（localStorage，key 保持 classflow-storage-v2）：
@@ -73,6 +74,12 @@ function isValidSemester(v: unknown): v is Semester {
  */
 function sanitizePersistedState(persisted: unknown): PersistedAppState {
   const legacy = (persisted ?? {}) as LegacyPersistedStateV0;
+  const assignments = Array.isArray(legacy.assignments)
+    ? (legacy.assignments as Assignment[])
+    : [];
+  const marks = Array.isArray(legacy.calendarMarks)
+    ? (legacy.calendarMarks as CalendarMark[])
+    : [];
   return {
     userProfile:
       legacy.userProfile && typeof legacy.userProfile === "object"
@@ -81,10 +88,9 @@ function sanitizePersistedState(persisted: unknown): PersistedAppState {
     semester: isValidSemester(legacy.semester) ? legacy.semester : createDefaultSemester(),
     courses: Array.isArray(legacy.courses) ? (legacy.courses as Course[]) : [],
     schedules: Array.isArray(legacy.schedules) ? (legacy.schedules as CourseSchedule[]) : [],
-    assignments: Array.isArray(legacy.assignments) ? (legacy.assignments as Assignment[]) : [],
-    calendarMarks: Array.isArray(legacy.calendarMarks)
-      ? (legacy.calendarMarks as CalendarMark[])
-      : [],
+    assignments,
+    // 安全位置自动修复：唯一可确定的 legacy mark 补 sourceId
+    calendarMarks: linkLegacyDDLMarks(assignments, marks),
     groupProjects: Array.isArray(legacy.groupProjects)
       ? (legacy.groupProjects as GroupProject[])
       : [],
@@ -275,7 +281,8 @@ export const useAppStore = create<AppState>()(
           courses: data.courses,
           schedules: data.schedules,
           assignments: data.assignments,
-          calendarMarks: data.calendarMarks,
+          // 备份恢复为安全位置：唯一可确定的 legacy mark 自动补 sourceId
+          calendarMarks: linkLegacyDDLMarks(data.assignments, data.calendarMarks),
           groupProjects: data.groupProjects,
           currentSemesterWeek: Math.min(
             Math.max(state.currentSemesterWeek, 1),
@@ -324,11 +331,9 @@ export const useAppStore = create<AppState>()(
         const isOrphanDDLMark = (mark: CalendarMark): boolean => {
           if (mark.type !== "ddl") return false; // 严格限定 ddl，绝不误删 exam/activity
           if (mark.sourceId && deletedAssignmentIds.has(mark.sourceId)) return true;
-          // 历史遗留无 sourceId 的 DDL 标记：按 title / DDL date 兼容匹配
+          // 历史遗留无 sourceId 的 DDL 标记：仅允许 title AND date 同时匹配
           if (!mark.sourceId) {
-            return deletedAssignments.some(
-              (a) => a.title === mark.title || getLocalDDLDate(a.ddl) === mark.date
-            );
+            return deletedAssignments.some((a) => isLegacyDDLMarkForAssignment(mark, a));
           }
           return false;
         };
@@ -462,22 +467,26 @@ export const useAppStore = create<AppState>()(
         set((state) => {
           const newDdlDate = getLocalDDLDate(updatedAssignment.ddl);
           const oldAssignment = state.assignments.find((a) => a.id === updatedAssignment.id);
-          const oldDdlDate = oldAssignment ? getLocalDDLDate(oldAssignment.ddl) : "";
-          const oldTitle = oldAssignment ? oldAssignment.title : "";
 
           // Update assignment object in place, preserving ID
           const newAssignments = state.assignments.map((a) =>
             a.id === updatedAssignment.id ? updatedAssignment : a
           );
 
-          // Update linked CalendarMark cleanly with fallback for legacy marks
+          // 关联 mark：Level 1 sourceId 精确匹配；Level 2 旧数据按 title AND date 匹配。
+          // 一旦匹配到历史 mark，写入 sourceId 完成结构升级。
           let markUpdated = false;
           const newCalendarMarks = state.calendarMarks.map((m) => {
-            // Match by sourceId OR fallback by legacy match (type === ddl AND (title or date matched))
-            if (
-              m.sourceId === updatedAssignment.id ||
-              (!m.sourceId && m.type === "ddl" && (m.title === oldTitle || m.date === oldDdlDate))
-            ) {
+            if (m.sourceId === updatedAssignment.id) {
+              markUpdated = true;
+              return {
+                ...m,
+                date: newDdlDate,
+                title: updatedAssignment.title,
+                sourceId: updatedAssignment.id,
+              };
+            }
+            if (oldAssignment && isLegacyDDLMarkForAssignment(m, oldAssignment)) {
               markUpdated = true;
               return {
                 ...m,
@@ -550,17 +559,10 @@ export const useAppStore = create<AppState>()(
         const target = current.assignments.find((a) => a.id === id);
         if (!target) return null;
 
-        const targetDate = getLocalDDLDate(target.ddl);
-        const targetTitle = target.title;
-
-        // 记录被删除的 DDL CalendarMark（sourceId 精确匹配 + 无 sourceId 的兼容匹配），供撤销恢复
+        // 记录被删除的 DDL CalendarMark（sourceId 精确匹配 + legacy title AND date），供撤销恢复
         const removedMarks: CalendarMark[] = [];
         const nextMarks = current.calendarMarks.filter((m) => {
-          if (m.sourceId === id) {
-            removedMarks.push(m);
-            return false;
-          }
-          if (!m.sourceId && m.type === "ddl" && (m.title === targetTitle || m.date === targetDate)) {
+          if (isDDLMarkForAssignment(m, target)) {
             removedMarks.push(m);
             return false;
           }
