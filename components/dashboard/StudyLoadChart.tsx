@@ -16,6 +16,10 @@ import { mockStudyLoadData } from "@/lib/mockData";
 export function StudyLoadChart() {
   const [filterMode, setFilterMode] = useState<"course" | "task">("course");
 
+  const totalHours = mockStudyLoadData
+    .reduce((sum, d) => sum + (filterMode === "course" ? d.courseHours : d.taskHours), 0)
+    .toFixed(1);
+
   return (
     <div className="bg-white border border-[#E7E3DD] rounded-2xl p-4 shadow-subtle flex flex-col justify-between h-full">
       {/* Header */}
@@ -42,7 +46,7 @@ export function StudyLoadChart() {
         <div className="space-y-1">
           <div className="flex items-baseline space-x-1">
             <span className="text-2xl font-bold text-charcoal tracking-tight">
-              24.5
+              {totalHours}
             </span>
             <span className="text-xs font-semibold text-[#676268]">小时</span>
           </div>
@@ -52,7 +56,7 @@ export function StudyLoadChart() {
           </div>
         </div>
 
-        {/* Right Recharts Bar Chart matching reference image 2 */}
+        {/* Right Recharts Bar Chart */}
         <div className="md:col-span-2 h-36 w-full">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart
@@ -86,7 +90,7 @@ export function StudyLoadChart() {
                 formatter={(value: any) => [`${value} 小时`, "学习时长"]}
               />
               <Bar
-                dataKey={filterMode === "course" ? "hours" : "taskHours"}
+                dataKey={filterMode === "course" ? "courseHours" : "taskHours"}
                 radius={[4, 4, 0, 0]}
               >
                 {mockStudyLoadData.map((_, index) => (

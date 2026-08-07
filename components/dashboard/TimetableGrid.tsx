@@ -5,6 +5,7 @@ import { ExternalLink, AlertTriangle, ChevronLeft, ChevronRight, MapPin, User } 
 import { useAppStore } from "@/store/useAppStore";
 import { ScheduleConflict } from "@/types";
 import { cn } from "@/lib/utils";
+import { addWeeks, startOfWeek, addDays, format } from "date-fns";
 
 const TIME_SLOTS = [
   "08:00",
@@ -23,16 +24,6 @@ const TIME_SLOTS = [
   "21:00",
 ];
 
-const WEEKDAYS = [
-  { dayOfWeek: 1, label: "周一", dateStr: "5/19" },
-  { dayOfWeek: 2, label: "周二", dateStr: "5/20" },
-  { dayOfWeek: 3, label: "周三", dateStr: "5/21" },
-  { dayOfWeek: 4, label: "周四", dateStr: "5/22" },
-  { dayOfWeek: 5, label: "周五", dateStr: "5/23" },
-  { dayOfWeek: 6, label: "周六", dateStr: "5/24" },
-  { dayOfWeek: 7, label: "周日", dateStr: "5/25" },
-];
-
 export function TimetableGrid() {
   const {
     courses,
@@ -42,7 +33,21 @@ export function TimetableGrid() {
     setSelectedCourseId,
     setConflictModalOpen,
     setSelectedConflict,
+    weekOffset,
   } = useAppStore();
+
+  const baseDate = new Date();
+  const targetDate = weekOffset === 0 ? baseDate : addWeeks(baseDate, weekOffset);
+  const weekStart = startOfWeek(targetDate, { weekStartsOn: 1 });
+
+  const weekdays = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"].map((label, idx) => {
+    const dayDate = addDays(weekStart, idx);
+    return {
+      dayOfWeek: idx + 1,
+      label,
+      dateStr: format(dayDate, "M/d"),
+    };
+  });
 
   const timeToMinutes = (timeStr: string) => {
     const [h, m] = timeStr.split(":").map(Number);
@@ -62,7 +67,7 @@ export function TimetableGrid() {
 
   // Conflict Detection Algorithm
   const conflicts: ScheduleConflict[] = [];
-  WEEKDAYS.forEach((wd) => {
+  weekdays.forEach((wd) => {
     const dayScheds = activeSchedules.filter((s) => s.dayOfWeek === wd.dayOfWeek);
     for (let i = 0; i < dayScheds.length; i++) {
       for (let j = i + 1; j < dayScheds.length; j++) {
@@ -147,7 +152,7 @@ export function TimetableGrid() {
         {/* Weekday Header Row */}
         <div className="grid grid-cols-8 border-b border-[#E7E3DD] pb-2 text-center text-xs shrink-0">
           <div className="text-[#8C827A] font-medium py-0.5 text-[11px]">时间</div>
-          {WEEKDAYS.map((wd) => (
+          {weekdays.map((wd) => (
             <div
               key={wd.dayOfWeek}
               className="py-0.5 rounded-lg text-[#676268] font-medium"
@@ -189,8 +194,8 @@ export function TimetableGrid() {
               ))}
             </div>
 
-            {/* Render Overflow-proof Course Cards (No time string inside card as requested) */}
-            {WEEKDAYS.map((wd) => {
+            {/* Render Overflow-proof Course Cards */}
+            {weekdays.map((wd) => {
               const daySchedules = activeSchedules.filter(
                 (s) => s.dayOfWeek === wd.dayOfWeek
               );
@@ -264,7 +269,7 @@ export function TimetableGrid() {
                           </div>
                         </div>
 
-                        {/* Bottom Row: Location Badge (No time text as requested) */}
+                        {/* Bottom Row: Location Badge */}
                         <div className="flex items-center text-[10.5px] opacity-90 pt-1 border-t border-black/5 font-medium leading-none">
                           <MapPin className="w-3 h-3 mr-1 shrink-0 opacity-75" />
                           <span className="truncate">{sched.location}</span>
