@@ -35,16 +35,16 @@ export function Sidebar() {
   return (
     <aside className="w-56 h-screen bg-[#F7F5F5] border-r border-[#E7E3DD] flex flex-col justify-between p-3.5 sticky top-0 select-none z-20 shrink-0">
       {/* Top Section */}
-      <div className="space-y-4">
-        {/* Brand Logo replacing top-left with enlarged ClassFlow logo image */}
+      <div className="space-y-3">
+        {/* Dedicated Brand Logo Container Card */}
         <div
-          className="flex items-center px-1 py-1 cursor-pointer transition-opacity hover:opacity-90"
+          className="w-full bg-white border border-[#E0D7C6] rounded-2xl p-3 flex items-center justify-center shadow-subtle cursor-pointer hover:shadow-card hover:bg-[#FAF8F5] transition-all"
           onClick={() => setActiveTab("overview")}
         >
           <img
             src="/logo.png"
             alt="ClassFlow"
-            className="h-12 w-auto object-contain mix-blend-multiply"
+            className="h-11 w-auto max-w-full object-contain mix-blend-multiply"
           />
         </div>
 
