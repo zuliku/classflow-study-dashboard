@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { ExternalLink, AlertTriangle, ChevronLeft, ChevronRight } from "lucide-react";
+import { ExternalLink, AlertTriangle, ChevronLeft, ChevronRight, MapPin, Clock, User } from "lucide-react";
 import { useAppStore } from "@/store/useAppStore";
 import { ScheduleConflict } from "@/types";
 import { cn } from "@/lib/utils";
@@ -50,7 +50,7 @@ export function TimetableGrid() {
   const dayEndMinutes = 18 * 60;    // 18:00
   const totalMinutes = dayEndMinutes - dayStartMinutes; // 600 minutes total
 
-  // Filter schedules that are active in currentSemesterWeek and NOT in excludedWeeks
+  // Filter schedules active in currentSemesterWeek
   const activeSchedules = schedules.filter((s) => {
     const isExcluded = s.excludedWeeks?.includes(currentSemesterWeek);
     if (isExcluded) return false;
@@ -86,7 +86,7 @@ export function TimetableGrid() {
 
   return (
     <div className="bg-white border border-[#E7E3DD] rounded-2xl p-4 shadow-subtle flex flex-col justify-between h-full w-full">
-      {/* Header with Semester Week Selector & Actions */}
+      {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-2.5 border-b border-[#F0EBE1] gap-2 shrink-0">
         <div className="flex items-center space-x-2">
           <h2 className="text-sm font-bold text-charcoal">本周课表</h2>
@@ -117,7 +117,7 @@ export function TimetableGrid() {
         </button>
       </div>
 
-      {/* Overlap Conflict Warning Banner */}
+      {/* Conflict Warning Banner */}
       {conflicts.length > 0 && (
         <div className="my-2 p-2.5 bg-[#FDF0F0] border border-[#F8D7D7] rounded-xl flex items-center justify-between text-xs text-[#D94F4F] shrink-0">
           <div className="flex items-center space-x-2">
@@ -139,7 +139,7 @@ export function TimetableGrid() {
         </div>
       )}
 
-      {/* Grid Container (Stretches to fill 100% of card height) */}
+      {/* Grid Container */}
       <div className="mt-2 flex-1 flex flex-col min-h-0 select-none">
         {/* Weekday Header Row */}
         <div className="grid grid-cols-8 border-b border-[#E7E3DD] pb-2 text-center text-xs shrink-0">
@@ -157,7 +157,7 @@ export function TimetableGrid() {
           ))}
         </div>
 
-        {/* Timetable Body Grid - Fills 100% height dynamically */}
+        {/* Timetable Body Grid */}
         <div className="relative flex-1 grid grid-cols-8 mt-1 min-h-[460px]">
           {/* Time Labels Column */}
           <div className="flex flex-col justify-between text-[10px] text-[#8C827A] font-mono border-r border-[#F0EBE1] pr-1 py-0 h-full">
@@ -170,7 +170,7 @@ export function TimetableGrid() {
 
           {/* 7 Columns for Days */}
           <div className="col-span-7 grid grid-cols-7 relative border-l border-[#F0EBE1] h-full">
-            {/* Horizontal Grid lines (10 equal rows filling 100% height) */}
+            {/* Horizontal Grid lines */}
             <div className="absolute inset-0 flex flex-col justify-between pointer-events-none h-full">
               {Array.from({ length: 10 }).map((_, i) => (
                 <div
@@ -180,7 +180,7 @@ export function TimetableGrid() {
               ))}
             </div>
 
-            {/* Render Course Blocks */}
+            {/* Render Exquisite Course Cards */}
             {WEEKDAYS.map((wd) => {
               const daySchedules = activeSchedules.filter(
                 (s) => s.dayOfWeek === wd.dayOfWeek
@@ -223,8 +223,8 @@ export function TimetableGrid() {
                           setSelectedCourseId(course.id);
                         }}
                         className={cn(
-                          "absolute left-0.5 right-0.5 rounded-xl p-2.5 transition-all duration-200 cursor-pointer shadow-subtle hover:shadow-card hover:-translate-y-0.5 border flex flex-col justify-start space-y-1 overflow-hidden group",
-                          hasConflict && "ring-2 ring-[#D94F4F] animate-pulse z-10"
+                          "absolute left-0.5 right-0.5 rounded-xl p-2.5 transition-all duration-200 cursor-pointer shadow-subtle hover:shadow-card hover:-translate-y-0.5 border flex flex-col justify-between overflow-hidden group select-none",
+                          hasConflict && "ring-2 ring-[#D94F4F] bg-[#FDF0F0] border-[#F8D7D7]"
                         )}
                         style={{
                           top: `${topPct}%`,
@@ -234,21 +234,39 @@ export function TimetableGrid() {
                           color: hasConflict ? "#D94F4F" : course.textHex,
                         }}
                       >
-                        <div className="flex items-start justify-between">
-                          <h4 className="font-bold text-xs leading-snug truncate group-hover:underline">
-                            {course.name}
-                          </h4>
-                          {hasConflict && (
-                            <span className="text-[9px] bg-[#D94F4F] text-white px-1 rounded font-bold shrink-0">
-                              冲突
-                            </span>
-                          )}
+                        {/* Top Header: Course Title + Teacher Badge */}
+                        <div>
+                          <div className="flex items-start justify-between gap-1">
+                            <h4 className="font-extrabold text-xs tracking-tight leading-tight truncate group-hover:underline">
+                              {course.name}
+                            </h4>
+                            {hasConflict ? (
+                              <span className="text-[9px] bg-[#D94F4F] text-white px-1 py-0.2 rounded font-bold shrink-0">
+                                冲突
+                              </span>
+                            ) : (
+                              <span className="text-[9px] font-medium opacity-75 bg-white/60 px-1.5 py-0.2 rounded border border-black/5 shrink-0">
+                                {course.teacher}
+                              </span>
+                            )}
+                          </div>
+
+                          {/* Time Range Pill */}
+                          <div className="flex items-center text-[10px] font-mono opacity-80 mt-1 space-x-1">
+                            <Clock className="w-3 h-3 shrink-0 opacity-70" />
+                            <span className="font-semibold">{sched.startTime} - {sched.endTime}</span>
+                          </div>
                         </div>
-                        <p className="text-[10px] opacity-85 font-mono leading-none shrink-0">
-                          {sched.startTime} - {sched.endTime}
-                        </p>
-                        <div className="text-[10px] opacity-90 truncate font-medium leading-none shrink-0">
-                          {sched.location}
+
+                        {/* Bottom Row: Location Badge & Credit info */}
+                        <div className="flex items-center justify-between text-[10px] opacity-90 mt-1 pt-1 border-t border-black/5">
+                          <div className="flex items-center font-medium truncate">
+                            <MapPin className="w-3 h-3 mr-1 shrink-0 opacity-75" />
+                            <span className="truncate">{sched.location}</span>
+                          </div>
+                          <span className="text-[9px] opacity-70 font-mono hidden sm:inline">
+                            {course.credit}学分
+                          </span>
                         </div>
                       </div>
                     );
