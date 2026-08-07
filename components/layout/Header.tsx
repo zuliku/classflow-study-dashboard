@@ -1,74 +1,104 @@
 "use client";
 
-import React from "react";
-import { Search, ChevronDown, Calendar as CalendarIcon } from "lucide-react";
+import React, { useState, useEffect } from "react";
+import { Search, Calendar as CalendarIcon } from "lucide-react";
 import { useAppStore, ViewMode } from "@/store/useAppStore";
+import { format, addWeeks, subWeeks, startOfWeek, endOfWeek } from "date-fns";
+import { zhCN } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 
 export function Header() {
   const {
     userProfile,
-    weekOffset,
-    setWeekOffset,
-    resetToCurrentWeek,
     viewMode,
     setViewMode,
     setSearchModalOpen,
+    weekOffset,
+    setWeekOffset,
+    resetToCurrentWeek,
   } = useAppStore();
 
+  const [greeting, setGreeting] = useState("早上好");
+
+  useEffect(() => {
+    const hour = new Date().getHours();
+    if (hour >= 5 && hour < 12) {
+      setGreeting("早上好");
+    } else if (hour >= 12 && hour < 18) {
+      setGreeting("下午好");
+    } else {
+      setGreeting("晚上好");
+    }
+  }, []);
+
+  const baseDate = new Date();
+  const targetDate = weekOffset === 0 ? baseDate : addWeeks(baseDate, weekOffset);
+  const weekStart = startOfWeek(targetDate, { weekStartsOn: 1 });
+  const weekEnd = endOfWeek(targetDate, { weekStartsOn: 1 });
+
+  const dateRangeString = `${format(weekStart, "yyyy年M月d日", { locale: zhCN })} - ${format(
+    weekEnd,
+    "M月d日",
+    { locale: zhCN }
+  )}`;
+
   return (
-    <header className="w-full bg-[#F7F5F5] border-b border-[#E7E3DD] px-6 py-3.5 flex items-center justify-between sticky top-0 z-10 backdrop-blur-md bg-opacity-95">
-      {/* Left Greeting & Subtitle */}
+    <header className="bg-[#F7F5F5] border-b border-[#E7E3DD] px-6 py-3.5 flex flex-col md:flex-row md:items-center justify-between gap-4 sticky top-0 z-10">
+      {/* Left: Clean Greeting without emoji or subtitle */}
       <div>
-        <h1 className="text-base font-bold tracking-tight text-charcoal flex items-center gap-1.5">
-          早上好，{userProfile.name} <span className="text-amber-500 text-sm">☀️</span>
-        </h1>
-        <p className="text-[11px] text-[#8C827A] mt-0.5 font-normal">
-          专注学习，持续进步！
-        </p>
+        <h2 className="text-lg font-bold text-charcoal tracking-tight">
+          {greeting}，{userProfile.name}
+        </h2>
       </div>
 
-      {/* Center & Right Controls */}
-      <div className="flex items-center space-x-3">
-        {/* Global Search Trigger */}
-        <button
+      {/* Right: Global Search, Date Switcher, View Switcher */}
+      <div className="flex flex-wrap items-center gap-2.5">
+        {/* Global Search Bar (Cmd+K) */}
+        <div
           onClick={() => setSearchModalOpen(true)}
-          className="flex items-center space-x-2 px-3 py-1.5 bg-white border border-[#E0D7C6] rounded-xl text-xs text-[#8C827A] transition-all shadow-subtle hover:shadow-card w-56"
+          className="flex items-center space-x-2 bg-white border border-[#E0D7C6] rounded-xl px-3 py-1.5 text-xs text-[#8C827A] cursor-pointer hover:border-charcoal hover:bg-[#FAF8F5] transition-all shadow-subtle min-w-[200px]"
         >
           <Search className="w-3.5 h-3.5 text-[#A48F82]" />
-          <span className="flex-1 text-left truncate">搜索课程、作业、资料...</span>
-          <kbd className="hidden sm:inline-block px-1 py-0.5 text-[9px] font-mono text-[#8C827A] bg-[#F0EBE1] border border-[#D5CBC0] rounded">
+          <span className="flex-1 font-medium">搜索课程、作业、资料...</span>
+          <kbd className="hidden sm:inline-block bg-[#F0EBE1] text-charcoal text-[10px] font-mono px-1.5 py-0.5 rounded border border-[#E0D7C6]">
             ⌘ K
           </kbd>
-        </button>
-
-        {/* Date Range Selector Pill matching reference image */}
-        <div
-          onClick={resetToCurrentWeek}
-          className="flex items-center space-x-2 px-3 py-1.5 bg-white border border-[#E0D7C6] rounded-xl text-xs font-medium text-charcoal shadow-subtle cursor-pointer hover:bg-[#F0EBE1]/50 transition-colors"
-        >
-          <CalendarIcon className="w-3.5 h-3.5 text-[#8C827A]" />
-          <span>2025年5月19日 - 5月25日</span>
-          <ChevronDown className="w-3.5 h-3.5 text-[#8C827A]" />
         </div>
 
-        {/* View Mode Segmented Tab Control */}
-        <div className="flex bg-[#E7E3DD]/70 p-0.5 rounded-lg border border-[#D5CBC0]">
+        {/* Date Range Picker Pill */}
+        <div className="flex items-center space-x-1.5 bg-white border border-[#E0D7C6] rounded-xl px-3 py-1.5 text-xs font-semibold text-charcoal shadow-subtle">
+          <CalendarIcon className="w-3.5 h-3.5 text-[#A48F82]" />
+          <span>{dateRangeString}</span>
+          <button
+            onClick={resetToCurrentWeek}
+            className={cn(
+              "text-[10px] ml-1 px-1.5 py-0.5 rounded transition-colors",
+              weekOffset === 0
+                ? "bg-[#E3E6E0] text-charcoal"
+                : "bg-[#F0EBE1] text-[#8C827A] hover:text-charcoal"
+            )}
+          >
+            本周
+          </button>
+        </div>
+
+        {/* Day / Week / Month View Switcher */}
+        <div className="bg-[#F0EBE1] border border-[#E0D7C6] rounded-xl p-0.5 flex items-center text-xs font-medium">
           {(["day", "week", "month"] as ViewMode[]).map((mode) => {
             const labels: Record<ViewMode, string> = {
               day: "日",
               week: "周",
               month: "月",
             };
-            const isActive = viewMode === mode || (mode === "week" && viewMode === "week");
+            const isActive = viewMode === mode;
             return (
               <button
                 key={mode}
                 onClick={() => setViewMode(mode)}
                 className={cn(
-                  "px-2.5 py-1 text-xs font-medium rounded-md transition-all",
+                  "px-2.5 py-1 rounded-lg transition-all",
                   isActive
-                    ? "bg-charcoal text-white font-semibold shadow-subtle"
+                    ? "bg-charcoal text-white font-bold shadow-subtle"
                     : "text-[#676268] hover:text-charcoal"
                 )}
               >
