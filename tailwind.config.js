@@ -1,6 +1,5 @@
-import type { Config } from "tailwindcss";
-
-const config: Config = {
+/** @type {import('tailwindcss').Config} */
+module.exports = {
   content: [
     "./pages/**/*.{js,ts,jsx,tsx,mdx}",
     "./components/**/*.{js,ts,jsx,tsx,mdx}",
@@ -38,11 +37,10 @@ const config: Config = {
         drawer: "-4px 0 24px -4px rgba(49, 48, 50, 0.12)",
       },
       borderRadius: {
-        xl: "0.875rem", // 14px
-        "2xl": "1.125rem", // 18px
+        xl: "0.875rem",
+        "2xl": "1.125rem",
       },
     },
   },
   plugins: [],
 };
-export default config;
