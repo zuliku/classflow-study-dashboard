@@ -1,5 +1,22 @@
 import { Course, CourseSchedule, Assignment, CalendarMark, UserProfile, GroupProject } from "@/types";
 
+// Helper functions to generate dynamic relative dates matching current local time
+const getRelativeISO = (daysOffset: number, hour = 23, minute = 59) => {
+  const d = new Date();
+  d.setDate(d.getDate() + daysOffset);
+  d.setHours(hour, minute, 0, 0);
+  return d.toISOString();
+};
+
+const getRelativeDateStr = (daysOffset: number) => {
+  const d = new Date();
+  d.setDate(d.getDate() + daysOffset);
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+};
+
 export const initialUserProfile: UserProfile = {
   name: "张同学",
   avatarUrl: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80",
@@ -23,8 +40,8 @@ export const initialCourses: Course[] = [
     textHex: "#313032",
     description: "涵盖供求理论、消费者行为、生产成本分析与完全/不完全竞争市场结构分析。",
     materials: [
-      { id: "m1", title: "第一章 供求曲线与弹性分析.pdf", type: "pdf", size: "2.4 MB", uploadDate: "2025-05-10" },
-      { id: "m2", title: "消费者均衡与无差异曲线大纲.ppt", type: "ppt", size: "8.1 MB", uploadDate: "2025-05-14" },
+      { id: "m1", title: "第一章 供求曲线与弹性分析.pdf", type: "pdf", size: "2.4 MB", uploadDate: getRelativeDateStr(-5) },
+      { id: "m2", title: "消费者均衡与无差异曲线大纲.ppt", type: "ppt", size: "8.1 MB", uploadDate: getRelativeDateStr(-2) },
     ],
   },
   {
@@ -39,7 +56,7 @@ export const initialCourses: Course[] = [
     textHex: "#313032",
     description: "包含多元函数微积分、重积分、级数展开及常微分方程基础应用。",
     materials: [
-      { id: "m3", title: "二重积分极坐标转换技巧讲义.pdf", type: "pdf", size: "3.5 MB", uploadDate: "2025-05-12" },
+      { id: "m3", title: "二重积分极坐标转换技巧讲义.pdf", type: "pdf", size: "3.5 MB", uploadDate: getRelativeDateStr(-4) },
     ],
   },
   {
@@ -54,7 +71,7 @@ export const initialCourses: Course[] = [
     textHex: "#313032",
     description: "商务演讲表达、跨文化学术沟通与辩论技巧实战课程。",
     materials: [
-      { id: "m4", title: "Unit 4 Business Presentation Template.pptx", type: "ppt", size: "12.0 MB", uploadDate: "2025-05-15" },
+      { id: "m4", title: "Unit 4 Business Presentation Template.pptx", type: "ppt", size: "12.0 MB", uploadDate: getRelativeDateStr(-1) },
     ],
   },
   {
@@ -69,7 +86,7 @@ export const initialCourses: Course[] = [
     textHex: "#313032",
     description: "利用 Python/R 进行数据预处理、假设检验、线性回归模型构建与可视化。",
     materials: [
-      { id: "m5", title: "Lab 3 Pandas 数据清洗与回归拟合代码.ipynb", type: "doc", size: "1.2 MB", uploadDate: "2025-05-16" },
+      { id: "m5", title: "Lab 3 Pandas 数据清洗与回归拟合代码.ipynb", type: "doc", size: "1.2 MB", uploadDate: getRelativeDateStr(-3) },
     ],
   },
   {
@@ -84,7 +101,7 @@ export const initialCourses: Course[] = [
     textHex: "#313032",
     description: "计划、组织、领导与控制四大基本管理职能剖析及经典案例分析。",
     materials: [
-      { id: "m6", title: "组织行为与激励理论复习要点.pdf", type: "pdf", size: "4.1 MB", uploadDate: "2025-05-08" },
+      { id: "m6", title: "组织行为与激励理论复习要点.pdf", type: "pdf", size: "4.1 MB", uploadDate: getRelativeDateStr(-7) },
     ],
   },
   {
@@ -99,7 +116,7 @@ export const initialCourses: Course[] = [
     textHex: "#313032",
     description: "关系型数据库 ER 模型建模、SQL 复杂查询、事务 ACID 与索引优化。",
     materials: [
-      { id: "m7", title: "MySQL 复杂 Join 与索引优化实战.pdf", type: "pdf", size: "5.8 MB", uploadDate: "2025-05-17" },
+      { id: "m7", title: "MySQL 复杂 Join 与索引优化实战.pdf", type: "pdf", size: "5.8 MB", uploadDate: getRelativeDateStr(-2) },
     ],
   },
 ];
@@ -129,7 +146,7 @@ export const initialAssignments: Assignment[] = [
     courseId: "c_4",
     title: "计量经济学大作业（第3章）",
     description: "利用多元回归分析影响中国居民消费水平的核心因素，提交分析报告与 R/Python 代码文件。",
-    ddl: "2025-05-21T23:59:00.000Z",
+    ddl: getRelativeISO(1, 23, 59), // 明天 23:59 截止
     priority: "urgent",
     status: "doing",
     progress: 75,
@@ -145,7 +162,7 @@ export const initialAssignments: Assignment[] = [
     courseId: "c_5",
     title: "市场营销案例汇报",
     description: "分析 DTC 品牌（如新能源汽车或咖啡品类）的市场定位、SWOT 矩阵及社群传播路径。",
-    ddl: "2025-05-22T23:59:00.000Z",
+    ddl: getRelativeISO(2, 18, 0), // 2天后 18:00 截止
     priority: "high",
     status: "doing",
     progress: 40,
@@ -160,7 +177,7 @@ export const initialAssignments: Assignment[] = [
     courseId: "c_3",
     title: "英语演讲PPT (Unit 6)",
     description: "Prepare a 5-minute presentation about 'Sustainable Business Strategies in 2025'.",
-    ddl: "2025-05-23T18:00:00.000Z",
+    ddl: getRelativeISO(4, 21, 0), // 4天后 21:00 截止
     priority: "medium",
     status: "todo",
     progress: 0,
@@ -171,7 +188,7 @@ export const initialAssignments: Assignment[] = [
     courseId: "c_6",
     title: "数据库实验报告（实验四）",
     description: "设计高校选课系统的 ER 图、3NF 规范化关系表，并在 MySQL 中编写复杂嵌套 SQL 查询语句。",
-    ddl: "2025-05-24T23:59:00.000Z",
+    ddl: getRelativeISO(5, 23, 59), // 5天后 23:59 截止
     priority: "low",
     status: "todo",
     progress: 0,
@@ -182,7 +199,7 @@ export const initialAssignments: Assignment[] = [
     courseId: "c_1",
     title: "微观经济学课后习题（第5章）",
     description: "完成教材 P142 习题 1, 4, 7 题，涉及垄断竞争与寡头博弈模型计算。",
-    ddl: "2025-05-26T23:59:00.000Z",
+    ddl: getRelativeISO(7, 23, 59), // 7天后 23:59 截止
     priority: "medium",
     status: "todo",
     progress: 0,
@@ -193,7 +210,7 @@ export const initialAssignments: Assignment[] = [
     courseId: "c_2",
     title: "高等数学级数与重积分测试",
     description: "复习教材第 8-9 章重积分与幂级数求和公式，完成线上测试。",
-    ddl: "2025-05-20T23:59:00.000Z",
+    ddl: getRelativeISO(-2, 23, 59), // 2天前已完成
     priority: "high",
     status: "completed",
     progress: 100,
@@ -218,7 +235,7 @@ export const initialGroupProjects: GroupProject[] = [
     title: "DTC品牌营销与社群路径分析",
     description: "针对新兴品牌进行市场定位、价格策略及社群运营全链路剖析",
     progress: 65,
-    updatedAt: "2025-05-18",
+    updatedAt: getRelativeDateStr(-1),
     members: [
       {
         id: "m_1",
@@ -248,7 +265,7 @@ export const initialGroupProjects: GroupProject[] = [
         title: "收集品牌近三年财报与公开数据",
         assigneeName: "张同学 (我)",
         assigneeAvatar: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80",
-        ddl: "2025-05-22T23:59:00.000Z",
+        ddl: getRelativeISO(-1, 23, 59),
         completed: true,
       },
       {
@@ -256,15 +273,15 @@ export const initialGroupProjects: GroupProject[] = [
         title: "绘制 4P 营销与社群转化漏斗图",
         assigneeName: "李同学",
         assigneeAvatar: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80",
-        ddl: "2025-05-24T23:59:00.000Z",
-        completed: true,
+        ddl: getRelativeISO(2, 23, 59),
+        completed: false,
       },
       {
         id: "gt_3",
         title: "撰写第三章节 SWOT 矩阵与竞争分析",
         assigneeName: "王同学",
         assigneeAvatar: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150&auto=format&fit=crop&q=80",
-        ddl: "2025-05-26T18:00:00.000Z",
+        ddl: getRelativeISO(4, 18, 0),
         completed: false,
       },
     ],
@@ -275,7 +292,7 @@ export const initialGroupProjects: GroupProject[] = [
     title: "中国碳交易市场面板数据实证研究",
     description: "利用 2015-2024 年八大试点碳市场数据，分析碳价波动对高耗能企业 R&D 投入的双重差分 (DID) 效应",
     progress: 30,
-    updatedAt: "2025-05-19",
+    updatedAt: getRelativeDateStr(-2),
     members: [
       {
         id: "m_1",
@@ -298,7 +315,7 @@ export const initialGroupProjects: GroupProject[] = [
         title: "清洗 CSMAR/Wind 碳市场历史交易数据",
         assigneeName: "赵同学",
         assigneeAvatar: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150&auto=format&fit=crop&q=80",
-        ddl: "2025-05-23T23:59:00.000Z",
+        ddl: getRelativeISO(-2, 23, 59),
         completed: true,
       },
       {
@@ -306,7 +323,7 @@ export const initialGroupProjects: GroupProject[] = [
         title: "编写 Stata/R 双重差分 DID 基准回归脚本",
         assigneeName: "张同学 (我)",
         assigneeAvatar: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80",
-        ddl: "2025-05-27T23:59:00.000Z",
+        ddl: getRelativeISO(3, 23, 59),
         completed: false,
       },
     ],
@@ -314,6 +331,8 @@ export const initialGroupProjects: GroupProject[] = [
 ];
 
 export const initialCalendarMarks: CalendarMark[] = [
-  { id: "cm1", date: "2025-05-28", type: "exam", title: "微观经济学期中考试" },
-  { id: "cm2", date: "2025-05-30", type: "activity", title: "学术沙龙与毕业论文动员会" },
+  { id: "cm1", date: getRelativeDateStr(1), type: "ddl", title: "计量经济学作业 DDL" },
+  { id: "cm2", date: getRelativeDateStr(2), type: "ddl", title: "市场营销案例汇报 DDL" },
+  { id: "cm3", date: getRelativeDateStr(8), type: "exam", title: "微观经济学期中考试" },
+  { id: "cm4", date: getRelativeDateStr(12), type: "activity", title: "学术沙龙与毕业论文动员会" },
 ];
