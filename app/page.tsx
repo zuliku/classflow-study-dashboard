@@ -99,8 +99,8 @@ export default function Home() {
         <Header />
 
         {/* Dynamic Page Views */}
-        <main className="flex-1 p-6 space-y-5 overflow-y-auto">
-          <PageTransition tab={activeTab}>
+        <main className="flex-1 p-6 overflow-y-auto">
+          <PageTransition tab={activeTab} className="space-y-5">
           {activeTab === "overview" && (
             <>
               {/* Row 1: Top 4 Stat Summary Cards */}
