@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { getModelsForProvider, getDefaultModel, getActiveModelName } from "@/lib/ai/providers/registry";
+import { getModelsForProvider, getDefaultModel, getActiveModelName, getVendorForModelId, getActiveModelVendor } from "@/lib/ai/providers/registry";
+import { AI_PROVIDER_META, getVendorMeta } from "@/lib/ai/providers/vendors";
 import { normalizeBaseURL, KIRO_SYSTEM_PROMPT } from "@/lib/ai/config";
 import { validateCustomBaseURL } from "@/lib/ai/providers/customOpenAI";
 import { normalizeAIError, AIError } from "@/lib/ai/errors";
@@ -58,6 +59,60 @@ describe("Provider Registry", () => {
     for (const id of blacklisted) {
       expect(OPENCODE_CHAT_MODELS.some((m) => m.id === id)).toBe(false);
     }
+  });
+});
+
+describe("模型 → 厂商（Logo）映射", () => {
+  it("每个已知模型都有明确 vendor，且 vendor 在 AI_PROVIDER_META 中有 Logo", () => {
+    for (const def of [...DEEPSEEK_MODELS, ...OPENCODE_CHAT_MODELS]) {
+      expect(def.vendor, def.id).not.toBeNull();
+      expect(AI_PROVIDER_META[def.vendor!].logo, def.id).toBeTruthy();
+    }
+  });
+
+  it("模型 → 厂商映射正确（不靠名称猜测）", () => {
+    expect(getVendorForModelId("grok-4.5")).toBe("xai");
+    expect(getVendorForModelId("glm-5.2")).toBe("zai");
+    expect(getVendorForModelId("glm-5.1")).toBe("zai");
+    expect(getVendorForModelId("kimi-k3")).toBe("kimi");
+    expect(getVendorForModelId("kimi-k2.7-code")).toBe("kimi");
+    expect(getVendorForModelId("deepseek-v4-flash")).toBe("deepseek");
+    expect(getVendorForModelId("deepseek-v4-pro")).toBe("deepseek");
+    expect(getVendorForModelId("mimo-v2.5")).toBe("mimo");
+    expect(getVendorForModelId("hy3")).toBe("tencent");
+  });
+
+  it("未知模型 → null（UI 走 neutral fallback），不猜厂商", () => {
+    expect(getVendorForModelId("some-brand-new-model")).toBeNull();
+    expect(getVendorForModelId("")).toBeNull();
+    expect(getVendorForModelId("gpt-5.6-luna")).toBeNull(); // 非 openai-chat 支持范围，不猜
+  });
+
+  it("已知命名空间前缀兜底只覆盖明确厂商", () => {
+    expect(getVendorForModelId("deepseek-v4-flash-free")).toBe("deepseek");
+    expect(getVendorForModelId("kimi-k3-turbo")).toBe("kimi");
+    expect(getVendorForModelId("mimo-v3")).toBe("mimo");
+    expect(getVendorForModelId("mystery-model")).toBeNull();
+  });
+
+  it("getActiveModelVendor：当前选中模型 → vendor；custom → null", () => {
+    expect(getActiveModelVendor({ provider: "opencode-go", model: "hy3", customModel: "" })).toBe("tencent");
+    expect(getActiveModelVendor({ provider: "deepseek", model: "deepseek-v4-flash", customModel: "" })).toBe("deepseek");
+    expect(getActiveModelVendor({ provider: "custom-openai", model: "my-model", customModel: "my-model" })).toBeNull();
+  });
+
+  it("厂商元数据：所有 Logo 为本地静态资源（无外部 hotlink）", () => {
+    for (const meta of Object.values(AI_PROVIDER_META)) {
+      expect(meta.logo.startsWith("/ai-providers/")).toBe(true);
+    }
+    expect(AI_PROVIDER_META.deepseek.name).toBe("DeepSeek");
+    expect(AI_PROVIDER_META.tencent.name).toContain("Hunyuan");
+  });
+
+  it("getVendorMeta：未知 vendor 返回 fallback", () => {
+    const fb = getVendorMeta(null);
+    expect(fb.logo).toBe("");
+    expect(getVendorMeta("xai").logo).toBe("/ai-providers/xai.png");
   });
 });
 

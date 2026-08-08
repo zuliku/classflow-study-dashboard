@@ -3,6 +3,7 @@ import {
   AICustomConfig,
   AIProviderConfig,
   AIModelDefinition,
+  AIModelVendor,
 } from "@/lib/ai/providers/types";
 import { DEEPSEEK_MODELS, DEEPSEEK_DEFAULT_MODEL, getDeepSeekConfig } from "@/lib/ai/providers/deepSeek";
 import {
@@ -54,6 +55,36 @@ export function getActiveModelName(input: {
   return fallback ? fallback.name : "选择模型";
 }
 
+/**
+ * 模型 → 厂商（Logo）查找：UI 绝不根据模型名称猜厂商。
+ * 已知模型返回明确 vendor；未知模型（如远端新增）返回 null → UI 使用 neutral fallback。
+ */
+export function getVendorForModelId(modelId: string): AIModelVendor | null {
+  if (!modelId) return null;
+  for (const def of [...DEEPSEEK_MODELS, ...OPENCODE_CHAT_MODELS]) {
+    if (def.id === modelId) return def.vendor;
+  }
+  // 前缀兜底（仅覆盖已知厂商的命名空间，绝不猜厂商）
+  if (modelId.startsWith("deepseek-")) return "deepseek";
+  if (modelId.startsWith("kimi-")) return "kimi";
+  if (modelId.startsWith("glm-")) return "zai";
+  if (modelId.startsWith("grok-")) return "xai";
+  if (modelId.startsWith("mimo-")) return "mimo";
+  return null;
+}
+
+/** 当前选中模型的厂商（Composer 按钮 Logo） */
+export function getActiveModelVendor(input: {
+  provider: AIProviderId;
+  model: string;
+  customModel: string;
+}): AIModelVendor | null {
+  if (input.provider === "custom-openai") {
+    return input.customModel ? null : null;
+  }
+  return getVendorForModelId(input.model);
+}
+
 /** Server 侧：根据设置构造 Provider 连接配置 */
 export function getProviderConfig(input: {
   provider: AIProviderId;
@@ -74,4 +105,4 @@ export function getProviderConfig(input: {
 }
 
 export { DEEPSEEK_DEFAULT_MODEL, OPENCODE_DEFAULT_MODEL };
-export type { AIProviderId, AICustomConfig, AIProviderConfig, AIModelDefinition };
+export type { AIProviderId, AICustomConfig, AIProviderConfig, AIModelDefinition, AIModelVendor };

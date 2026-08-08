@@ -4,7 +4,7 @@ import React, { useMemo, useState } from "react";
 import { useAppStore } from "@/store/useAppStore";
 import { useAISettingsStore } from "@/store/useAISettingsStore";
 import { useKiroChat } from "@/hooks/useKiroChat";
-import { getModelsForProvider, getActiveModelName } from "@/lib/ai/providers/registry";
+import { getModelsForProvider, getActiveModelName, getActiveModelVendor } from "@/lib/ai/providers/registry";
 import { KiroHeader } from "@/components/kiro/KiroHeader";
 import { KiroEmptyState } from "@/components/kiro/KiroEmptyState";
 import { KiroConversation } from "@/components/kiro/KiroConversation";
@@ -33,13 +33,23 @@ export function KiroWorkspace() {
 
   const modelOptions = useMemo(() => {
     if (provider === "custom-openai") {
-      return custom.model ? [{ value: custom.model, label: custom.model }] : [];
+      return custom.model
+        ? [{ value: custom.model, label: custom.model, vendor: null }]
+        : [];
     }
-    return getModelsForProvider(provider).map((m) => ({ value: m.id, label: m.name }));
+    return getModelsForProvider(provider).map((m) => ({
+      value: m.id,
+      label: m.name,
+      vendor: m.vendor,
+    }));
   }, [provider, custom.model]);
 
   const activeModelName = useMemo(
     () => getActiveModelName({ provider, model, customModel: custom.model }),
+    [provider, model, custom.model]
+  );
+  const activeModelVendor = useMemo(
+    () => getActiveModelVendor({ provider, model, customModel: custom.model }),
     [provider, model, custom.model]
   );
 
@@ -92,6 +102,7 @@ export function KiroWorkspace() {
           modelOptions={modelOptions}
           activeModelName={activeModelName}
           selectedModelId={model}
+          activeModelVendor={activeModelVendor}
           onSelectModel={setModel}
           onOpenSettings={openKiroSettings}
         />

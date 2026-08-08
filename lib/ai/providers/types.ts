@@ -2,6 +2,24 @@
 
 export type AIProviderId = "opencode-go" | "deepseek" | "custom-openai";
 
+/** 模型厂商（Logo 与展示名来源；与「服务商」是不同维度） */
+export type AIModelVendor =
+  | "xai"
+  | "zai"
+  | "kimi"
+  | "deepseek"
+  | "mimo"
+  | "tencent";
+
+/** 厂商元数据（Logo 本地静态资源，唯一来源） */
+export interface AIModelVendorMeta {
+  id: AIModelVendor;
+  /** 展示名（alt/title 用） */
+  name: string;
+  /** 本地 Logo 路径 */
+  logo: string;
+}
+
 /** 传输协议：Task 1 真正实现 openai-chat；其余为后续扩展预留 */
 export type AITransport = "openai-chat" | "openai-responses" | "anthropic-messages";
 
@@ -10,6 +28,8 @@ export interface AIModelDefinition {
   /** 展示名（短名称，如 "V4 Flash"），不暴露 provider 全名 */
   name: string;
   provider: AIProviderId;
+  /** 模型厂商（决定 Logo）；未知厂商为 null → UI 使用 neutral fallback */
+  vendor: AIModelVendor | null;
   transport: AITransport;
   capabilities: {
     streaming: boolean;

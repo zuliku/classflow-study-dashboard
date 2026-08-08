@@ -11,9 +11,12 @@ import {
   Image as ImageIcon,
   ChevronDown,
   Settings,
+  Check,
 } from "lucide-react";
 import { KiroContextBar, KiroContextChip } from "@/components/kiro/KiroContextBar";
 import { KiroContextPicker } from "@/components/kiro/KiroContextPicker";
+import { ProviderLogo } from "@/components/kiro/ProviderLogo";
+import { AIModelVendor } from "@/lib/ai/providers/types";
 import { cn } from "@/lib/utils";
 
 /**
@@ -35,6 +38,7 @@ export function KiroComposer({
   modelOptions,
   activeModelName,
   selectedModelId,
+  activeModelVendor,
   onSelectModel,
   onOpenSettings,
 }: {
@@ -45,9 +49,10 @@ export function KiroComposer({
   streaming: boolean;
   onStop: () => void;
   configured: boolean;
-  modelOptions: { value: string; label: string }[];
+  modelOptions: { value: string; label: string; vendor: AIModelVendor | null }[];
   activeModelName: string;
   selectedModelId: string;
+  activeModelVendor: AIModelVendor | null;
   onSelectModel: (id: string) => void;
   onOpenSettings: () => void;
 }) {
@@ -153,11 +158,18 @@ export function KiroComposer({
               setModelOpen(false);
             }}
             className={cn(
-              "w-full flex items-center justify-between px-3 py-2 rounded-lg text-left text-xs font-semibold transition-colors",
+              "w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-left text-xs font-semibold transition-colors",
               m.value === selectedModelId ? "text-charcoal bg-pastel-mint" : "text-satin-grey hover:bg-alabaster"
             )}
           >
-            {m.label}
+            {/* 品牌 Logo 与文字左边界严格对齐；Logo 22px 容器，视觉约 18px */}
+            <ProviderLogo vendor={m.vendor} size="md" />
+            <span className="min-w-0 flex-1 truncate">{m.label}</span>
+            {m.value === selectedModelId && (
+              <span className="w-4 h-4 rounded-full bg-charcoal flex items-center justify-center shrink-0">
+                <Check className="w-2.5 h-2.5 text-white" />
+              </span>
+            )}
           </button>
         ))
       )}
@@ -246,13 +258,14 @@ export function KiroComposer({
                   aria-expanded={modelOpen}
                   aria-haspopup="menu"
                   title="选择模型"
-                  className="hidden sm:flex items-center gap-1 h-9 px-2.5 rounded-xl text-[11px] font-semibold text-sandrift hover:bg-alabaster hover:text-charcoal transition-colors"
+                  className="hidden sm:flex items-center gap-1.5 h-9 px-2.5 rounded-xl text-[11px] font-semibold text-sandrift hover:bg-alabaster hover:text-charcoal transition-colors"
                 >
-                  {activeModelName}
-                  <ChevronDown className="w-3 h-3" />
+                  <ProviderLogo vendor={activeModelVendor} size="sm" />
+                  <span className="truncate max-w-[140px]">{activeModelName}</span>
+                  <ChevronDown className="w-3 h-3 shrink-0" />
                 </button>
                 {modelOpen && (
-                  <div className="absolute bottom-full right-0 mb-1.5 w-56 bg-surface border border-line-strong rounded-2xl shadow-card z-40 ux-inline">
+                  <div className="absolute bottom-full right-0 mb-1.5 w-60 bg-surface border border-line-strong rounded-2xl shadow-card z-40 ux-inline">
                     {modelMenu}
                   </div>
                 )}

@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { getModelsForProvider, getDefaultModel } from "@/lib/ai/providers/registry";
+import { getModelsForProvider, getDefaultModel, getVendorForModelId } from "@/lib/ai/providers/registry";
 import { fetchOpenCodeGoModels, OPENCODE_CHAT_MODELS } from "@/lib/ai/providers/openCodeGo";
 import { AIProviderId, AIModelDefinition } from "@/lib/ai/providers/types";
 
@@ -8,6 +8,7 @@ export const runtime = "nodejs";
 /**
  * 模型列表：Settings / Composer 共用。
  * OpenCode Go：优先远端 /models（按 openai-chat transport 筛选），失败回落 registry。
+ * 远端模型 vendor 按 id 在 registry 中查找；未知厂商返回 null（UI fallback）。
  * DeepSeek：registry 固定列表。
  */
 export async function GET(req: NextRequest) {
@@ -28,6 +29,7 @@ export async function GET(req: NextRequest) {
         id: r.id,
         name: byId.get(r.id)?.name ?? r.id,
         provider: "opencode-go" as const,
+        vendor: getVendorForModelId(r.id),
         transport: "openai-chat" as const,
         capabilities: { streaming: true, tools: true, vision: false, fileParts: false },
       }));
@@ -36,7 +38,12 @@ export async function GET(req: NextRequest) {
   }
 
   return Response.json({
-    models: models.map((m) => ({ id: m.id, name: m.name, transport: m.transport })),
+    models: models.map((m) => ({
+      id: m.id,
+      name: m.name,
+      transport: m.transport,
+      vendor: m.vendor,
+    })),
     defaultModel: getDefaultModel(provider),
     source,
   });
