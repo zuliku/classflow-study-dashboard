@@ -20,6 +20,7 @@ import { cn, cardKeyHandler } from "@/lib/utils";
 import { Assignment } from "@/types";
 import { isValidDDL, moveAssignmentDDL, editAssignmentDDLTime } from "@/lib/ddlInteraction";
 import { useSlidingIndicator } from "@/lib/useSlidingIndicator";
+import { paginate } from "@/lib/pagination";
 import {
   format,
   addMonths,
@@ -325,109 +326,67 @@ export function MiniCalendar() {
     resetKey: monthKey,
   });
 
-  // Agenda 按时间顺序排列：课程/DDL 按开始时间，考试/活动排在最后
-  type AgendaItem = { key: string; time: string; node: React.ReactNode };
-  const agendaItems: AgendaItem[] = [
+  // ---- Compact Event Grid：当日日程横向 4 列（每页最多 4 个，只显示类型 + 图标） ----
+  type AgendaCellKind = "course" | "ddl" | "exam" | "activity";
+  interface AgendaCell {
+    key: string;
+    kind: AgendaCellKind;
+    label: string;
+    time: string; // 排序用
+    onClick?: () => void;
+    style?: React.CSSProperties;
+    assignmentId?: string;
+    draggableAssignment?: Assignment; // DDL cell 的拖拽源
+  }
+
+  const [agendaPage, setAgendaPage] = useState(1);
+  // 切换日期自动回到第 1 页
+  useEffect(() => {
+    setAgendaPage(1);
+  }, [selectedDateStr]);
+
+  const agendaCells: AgendaCell[] = [
     ...daySchedules.map((s) => {
       const c = courses.find((crs) => crs.id === s.courseId);
       return {
         key: `s_${s.id}`,
+        kind: "course" as const,
+        label: "课程",
         time: s.startTime,
-        node: (
-          <div
-            key={s.id}
-            onClick={() => c && setSelectedCourseId(c.id)}
-            role="button"
-            tabIndex={0}
-            onKeyDown={cardKeyHandler(() => c && setSelectedCourseId(c.id))}
-            className="p-1.5 rounded-lg border text-xs flex items-center justify-between cursor-pointer hover:opacity-90"
-            style={{ backgroundColor: `${c?.bgHex || "#F0EBE1"}70`, borderColor: c?.borderHex }}
-          >
-            <div className="flex items-center space-x-1.5 min-w-0">
-              <BookOpen className="w-3 h-3 text-[#A48F82] shrink-0" />
-              <span className="font-semibold text-charcoal truncate">{c?.name}</span>
-            </div>
-            <span className="text-[10px] font-mono text-sandrift shrink-0">
-              {s.startTime} - {s.endTime}
-            </span>
-          </div>
-        ),
+        onClick: () => c && setSelectedCourseId(c.id),
+        style: {
+          backgroundColor: `${c?.bgHex || "#F0EBE1"}60`,
+          borderColor: c?.borderHex,
+        },
       };
     }),
-    ...dayAssignments.map((a) => {
-      const draggable = ddlDragEnabled && isValidDDL(a.ddl);
-      const isDraggingThis = drag.type === "dragging" && drag.assignment.id === a.id;
-      return {
-        key: `a_${a.id}`,
-        time: getLocalDDLTime(a.ddl),
-        node: (
-          <div
-            key={a.id}
-            data-testid="agenda-ddl-item"
-            onClick={() => {
-              if (wasDraggedRef.current) {
-                wasDraggedRef.current = false;
-                return;
-              }
-              setSelectedAssignmentId(a.id);
-            }}
-            onPointerDown={(e) => handleDDLPointerDown(e, a)}
-            onPointerMove={handleDDLPointerMove}
-            onPointerUp={handleDDLPointerUp}
-            onPointerCancel={cancelDrag}
-            title={draggable ? "拖动调整截止日期" : undefined}
-            role="button"
-            tabIndex={0}
-            onKeyDown={cardKeyHandler(() => setSelectedAssignmentId(a.id))}
-            className={cn(
-              "p-1.5 bg-danger-bg border border-danger-border rounded-lg text-xs flex items-center justify-between text-danger",
-              draggable && "cursor-grab active:cursor-grabbing",
-              isDraggingThis && "opacity-50"
-            )}
-            style={{ touchAction: ddlDragEnabled ? "none" : "auto" }}
-          >
-            <div className="flex items-center space-x-1.5 min-w-0">
-              <ClipboardCheck className="w-3 h-3 shrink-0" />
-              <span className="font-bold truncate">{a.title}</span>
-            </div>
-            <span className="text-[10px] font-bold shrink-0">DDL {getLocalDDLTime(a.ddl)}</span>
-          </div>
-        ),
-      };
-    }),
+    ...dayAssignments.map((a) => ({
+      key: `a_${a.id}`,
+      kind: "ddl" as const,
+      label: "DDL",
+      time: getLocalDDLTime(a.ddl),
+      onClick: () => setSelectedAssignmentId(a.id),
+      assignmentId: a.id,
+      draggableAssignment: a,
+    })),
     ...dayExams.map((m) => ({
       key: `e_${m.id}`,
+      kind: "exam" as const,
+      label: "考试",
       time: "99:00",
-      node: (
-        <div
-          key={m.id}
-          className="p-1.5 bg-alabaster/60 border border-stone-beige rounded-lg text-xs flex items-center justify-between text-sandrift"
-        >
-          <div className="flex items-center space-x-1.5 min-w-0">
-            <Award className="w-3 h-3 shrink-0" />
-            <span className="font-bold truncate">{m.title}</span>
-          </div>
-          <span className="text-[10px] font-bold shrink-0">考试</span>
-        </div>
-      ),
     })),
     ...dayActivities.map((m) => ({
       key: `ac_${m.id}`,
+      kind: "activity" as const,
+      label: "活动",
       time: "99:00",
-      node: (
-        <div
-          key={m.id}
-          className="p-1.5 bg-pastel-mint/60 border border-ashy-beige rounded-lg text-xs flex items-center justify-between text-satin-grey"
-        >
-          <div className="flex items-center space-x-1.5 min-w-0">
-            <CalendarDays className="w-3 h-3 shrink-0" />
-            <span className="font-bold truncate">{m.title}</span>
-          </div>
-          <span className="text-[10px] font-bold shrink-0">活动</span>
-        </div>
-      ),
     })),
   ].sort((x, y) => x.time.localeCompare(y.time));
+
+  const agendaPaged = paginate(agendaCells, agendaPage, 4);
+  const pagedCells = agendaPaged.items;
+  const agendaSafePage = agendaPaged.currentPage;
+  const showAgendaPagination = agendaCells.length > 4;
 
   return (
     <div
@@ -612,8 +571,8 @@ export function MiniCalendar() {
         </div>
       )}
 
-      {/* Selected Date Agenda Details */}
-      <div className="pt-2 border-t border-[#F0EBE1] space-y-2">
+      {/* Selected Date Agenda：横向 Compact Event Grid（4 列/页，仅类型 + 图标；详情走 Drawer） */}
+      <div className="pt-2 border-t border-[#F0EBE1] shrink-0">
         <div className="flex justify-between items-center text-xs">
           <span className="font-bold text-charcoal">
             {isSelectedInSemester
@@ -621,30 +580,118 @@ export function MiniCalendar() {
               : ""}
             {format(selectedDate, "M月d日 EEEE", { locale: zhCN })} 当日日程
           </span>
-          <span className="text-[10px] text-sandrift">
-            {daySchedules.length} 门课 · {dayAssignments.length} 个 DDL
-            {dayMarks.length > 0 ? ` · ${dayMarks.length} 项日程` : ""}
+          <span className="flex items-center gap-2">
+            <span className="text-[10px] text-sandrift">
+              {agendaCells.length} 项
+            </span>
+            {/* 分页器：标题行右侧；仅 >4 项时出现 */}
+            {showAgendaPagination && (
+              <span className="inline-flex items-center gap-1">
+                <button
+                  onClick={() => setAgendaPage(agendaSafePage - 1)}
+                  disabled={agendaSafePage <= 1}
+                  aria-label="上一页"
+                  className="w-6 h-6 flex items-center justify-center rounded-lg text-sandrift hover:bg-alabaster hover:text-charcoal transition-colors disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-sandrift"
+                >
+                  <ChevronLeft className="w-3 h-3" />
+                </button>
+                <span className="min-w-[32px] text-center text-[10px] font-mono text-satin-grey">
+                  {agendaSafePage} / {agendaPaged.totalPages}
+                </span>
+                <button
+                  onClick={() => setAgendaPage(agendaSafePage + 1)}
+                  disabled={agendaSafePage >= agendaPaged.totalPages}
+                  aria-label="下一页"
+                  className="w-6 h-6 flex items-center justify-center rounded-lg text-sandrift hover:bg-alabaster hover:text-charcoal transition-colors disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-sandrift"
+                >
+                  <ChevronRight className="w-3 h-3" />
+                </button>
+              </span>
+            )}
           </span>
         </div>
 
-        {/* List of day's events（选中日期切换时淡入，3px 上移） */}
+        {/* Compact Event Grid：高度恒定（一行 h-14），不随数量变化 */}
         <div
           key={selectedDateStr}
-          className="ux-agenda-enter space-y-1.5 max-h-36 overflow-y-auto pr-1"
+          data-testid="agenda-grid"
+          className="ux-agenda-enter grid grid-cols-4 gap-1.5 mt-1.5 min-h-[56px]"
         >
-          {agendaItems.length === 0 ? (
-            <div className="py-3 text-center space-y-2">
-              <p className="text-[11px] text-sandrift">暂无安排</p>
+          {pagedCells.length === 0 ? (
+            <div className="col-span-4 h-14 flex items-center justify-center gap-2 text-[10px] text-sandrift">
+              <span>暂无安排</span>
               <button
                 onClick={handleQuickAddAssignment}
-                className="ux-press inline-flex items-center space-x-1 px-3 py-1.5 bg-charcoal hover:bg-black text-white text-[11px] font-bold rounded-xl transition-colors"
+                className="ux-press inline-flex items-center gap-1 px-2 py-1 bg-charcoal hover:bg-black text-white text-[10px] font-bold rounded-lg transition-colors"
               >
                 <Plus className="w-3 h-3" />
-                <span>添加任务</span>
+                添加任务
               </button>
             </div>
           ) : (
-            agendaItems.map((item) => <div key={item.key}>{item.node}</div>)
+            pagedCells.map((cell) => {
+              const Icon =
+                cell.kind === "course"
+                  ? BookOpen
+                  : cell.kind === "ddl"
+                  ? ClipboardCheck
+                  : cell.kind === "exam"
+                  ? Award
+                  : CalendarDays;
+              const isDraggingThis =
+                cell.kind === "ddl" &&
+                drag.type === "dragging" &&
+                drag.assignment.id === cell.assignmentId;
+              const draggable =
+                cell.kind === "ddl" &&
+                !!cell.draggableAssignment &&
+                ddlDragEnabled &&
+                isValidDDL(cell.draggableAssignment.ddl);
+              return (
+                <button
+                  key={cell.key}
+                  data-testid={cell.kind === "ddl" ? "agenda-ddl-item" : undefined}
+                  data-agenda-assignment={cell.assignmentId}
+                  onClick={() => {
+                    if (cell.kind === "ddl" && wasDraggedRef.current) {
+                      wasDraggedRef.current = false;
+                      return;
+                    }
+                    cell.onClick?.();
+                  }}
+                  onPointerDown={
+                    cell.kind === "ddl" && cell.draggableAssignment
+                      ? (e) => handleDDLPointerDown(e, cell.draggableAssignment!)
+                      : undefined
+                  }
+                  onPointerMove={cell.kind === "ddl" ? handleDDLPointerMove : undefined}
+                  onPointerUp={cell.kind === "ddl" ? handleDDLPointerUp : undefined}
+                  onPointerCancel={cell.kind === "ddl" ? cancelDrag : undefined}
+                  title={
+                    cell.kind === "ddl" && draggable ? "拖动调整截止日期" : undefined
+                  }
+                  className={cn(
+                    "h-14 rounded-lg border flex flex-col items-center justify-center gap-1 transition-colors duration-[var(--motion-fast)] ease-[var(--ease-standard)]",
+                    cell.kind === "course" && "cursor-pointer hover:opacity-90",
+                    cell.kind === "ddl" && [
+                      "bg-danger-bg border-danger-border text-danger cursor-pointer",
+                      draggable && "cursor-grab active:cursor-grabbing",
+                      isDraggingThis && "opacity-50",
+                    ],
+                    cell.kind === "exam" && "bg-alabaster/60 border-stone-beige text-sandrift",
+                    cell.kind === "activity" &&
+                      "bg-pastel-mint/60 border-ashy-beige text-satin-grey"
+                  )}
+                  style={{
+                    ...cell.style,
+                    touchAction: cell.kind === "ddl" && ddlDragEnabled ? "none" : "auto",
+                  }}
+                >
+                  <Icon className="w-4 h-4 shrink-0" />
+                  <span className="text-[9px] font-bold leading-none">{cell.label}</span>
+                </button>
+              );
+            })
           )}
         </div>
       </div>

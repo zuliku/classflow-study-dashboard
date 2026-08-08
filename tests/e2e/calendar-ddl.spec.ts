@@ -2,8 +2,8 @@ import { test, expect, Page } from "@playwright/test";
 
 /**
  * MiniCalendar DDL 直接拖动 E2E（Desktop 1440）。
- * 依赖演示数据（相对今天）：英语演讲PPT (Unit 6) = 今天+4天 21:00 截止。
- * 业务结果通过 agenda / feedback / 刷新持久化断言。
+ * 依赖演示数据（相对今天）：a3 英语演讲PPT (Unit 6) = 今天+4天 21:00 截止。
+ * Agenda 为横向 Compact Event Grid：DDL cell 用 data-agenda-assignment 定位（cell 不显示标题/时间）。
  */
 
 function fmt(d: Date): string {
@@ -36,6 +36,13 @@ async function selectDate(page: Page, dateStr: string) {
   await cell.click();
 }
 
+/** DDL cell：按 assignment id 定位 */
+function DDL_CELL(page: Page, assignmentId: string) {
+  return page.locator(
+    `[data-testid="agenda-ddl-item"][data-agenda-assignment="${assignmentId}"]`
+  );
+}
+
 async function dragToCell(
   page: Page,
   fromLocator: ReturnType<Page["locator"]>,
@@ -55,18 +62,15 @@ async function dragToCell(
   await page.mouse.up();
 }
 
-const DDL_ITEM = (page: Page, title: string) =>
-  page.locator(`[data-testid="agenda-ddl-item"]`).filter({ hasText: title });
-
-test("DDL Move：拖英语演讲PPT 到新日期，保留原时间 21:00，刷新后仍在", async ({ page }) => {
+test("DDL Move：拖 a3 到新日期，保留原时间 21:00，刷新后仍在", async ({ page }) => {
   await openOverview(page);
   const source = dPlus(4);
   const target = dPlus(6);
 
   await selectDate(page, source);
-  const item = DDL_ITEM(page, "英语演讲PPT");
+  const item = DDL_CELL(page, "a3");
   await expect(item).toBeVisible();
-  await expect(item).toContainText("DDL 21:00");
+  await expect(item).toContainText("DDL"); // cell 只显示类型
 
   await dragToCell(page, item, target);
 
@@ -75,21 +79,19 @@ test("DDL Move：拖英语演讲PPT 到新日期，保留原时间 21:00，刷�
   await expect(feedback).toBeVisible();
   await expect(feedback).toContainText(`已移动到 ${monthDayText(target)} · 21:00`);
 
-  // 新日期出现 DDL
+  // 新日期出现该 DDL cell
   await selectDate(page, target);
-  await expect(DDL_ITEM(page, "英语演讲PPT")).toBeVisible();
-  await expect(DDL_ITEM(page, "英语演讲PPT")).toContainText("DDL 21:00");
+  await expect(DDL_CELL(page, "a3")).toBeVisible();
 
   // 旧日期消失
   await selectDate(page, source);
-  await expect(DDL_ITEM(page, "英语演讲PPT")).toHaveCount(0);
+  await expect(DDL_CELL(page, "a3")).toHaveCount(0);
 
   // 刷新后结果仍在
   await page.reload();
   await expect(page.locator("[data-calendar-day]").first()).toBeVisible();
   await selectDate(page, target);
-  await expect(DDL_ITEM(page, "英语演讲PPT")).toBeVisible();
-  await expect(DDL_ITEM(page, "英语演讲PPT")).toContainText("DDL 21:00");
+  await expect(DDL_CELL(page, "a3")).toBeVisible();
 });
 
 test("Undo：拖 DDL 后点击撤销，日期恢复原样", async ({ page }) => {
@@ -98,7 +100,7 @@ test("Undo：拖 DDL 后点击撤销，日期恢复原样", async ({ page }) => 
   const target = dPlus(6);
 
   await selectDate(page, source);
-  await dragToCell(page, DDL_ITEM(page, "英语演讲PPT"), target);
+  await dragToCell(page, DDL_CELL(page, "a3"), target);
   await expect(page.getByTestId("ddl-move-feedback")).toBeVisible();
 
   await page.getByTestId("ddl-move-feedback").getByRole("button", { name: "撤销" }).click();
@@ -106,9 +108,9 @@ test("Undo：拖 DDL 后点击撤销，日期恢复原样", async ({ page }) => 
   // 反馈关闭，日期恢复
   await expect(page.getByTestId("ddl-move-feedback")).toHaveCount(0);
   await selectDate(page, source);
-  await expect(DDL_ITEM(page, "英语演讲PPT")).toBeVisible();
+  await expect(DDL_CELL(page, "a3")).toBeVisible();
   await selectDate(page, target);
-  await expect(DDL_ITEM(page, "英语演讲PPT")).toHaveCount(0);
+  await expect(DDL_CELL(page, "a3")).toHaveCount(0);
 });
 
 test("Quick Time Edit：拖到新日期后修改时间 21:00→21:30，保存后刷新仍正确", async ({ page }) => {
@@ -117,7 +119,7 @@ test("Quick Time Edit：拖到新日期后修改时间 21:00→21:30，保存后
   const target = dPlus(6);
 
   await selectDate(page, source);
-  await dragToCell(page, DDL_ITEM(page, "英语演讲PPT"), target);
+  await dragToCell(page, DDL_CELL(page, "a3"), target);
   await expect(page.getByTestId("ddl-move-feedback")).toBeVisible();
 
   await page.getByTestId("ddl-move-feedback").getByRole("button", { name: "修改时间" }).click();
@@ -126,26 +128,26 @@ test("Quick Time Edit：拖到新日期后修改时间 21:00→21:30，保存后
   await popover.fill("21:30");
   await page.getByTestId("ddl-move-feedback").getByRole("button", { name: "保存" }).click();
 
-  // 反馈更新时间，agenda 显示新时间
+  // 反馈更新时间
   await expect(page.getByTestId("ddl-move-feedback")).toContainText("· 21:30");
   await selectDate(page, target);
-  await expect(DDL_ITEM(page, "英语演讲PPT")).toContainText("DDL 21:30");
+  await expect(DDL_CELL(page, "a3")).toBeVisible();
 
-  // 刷新后仍然正确
+  // 刷新后仍然正确（cell 仍在目标日期）
   await page.reload();
   await expect(page.locator("[data-calendar-day]").first()).toBeVisible();
   await selectDate(page, target);
-  await expect(DDL_ITEM(page, "英语演讲PPT")).toContainText("DDL 21:30");
+  await expect(DDL_CELL(page, "a3")).toBeVisible();
 });
 
-test("Mobile 390：DDL 不进入拖动，点击仍打开详情，页面可滚动", async ({ page }) => {
+test("Mobile 390：DDL cell 不进入拖动，点击仍打开详情，页面可滚动", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/");
   await expect(page.locator("[data-calendar-day]").first()).toBeVisible();
 
-  // 选择有 DDL 的日期，点击 DDL 项 → Assignment Drawer 打开（无拖动、无反馈）
+  // 选择有 DDL 的日期，点击 DDL cell → Assignment Drawer 打开（无拖动、无反馈）
   await selectDate(page, dPlus(4));
-  await DDL_ITEM(page, "英语演讲PPT").click();
+  await DDL_CELL(page, "a3").click();
   await expect(page.getByRole("button", { name: "关闭" }).first()).toBeVisible();
   await expect(page.getByTestId("ddl-move-feedback")).toHaveCount(0);
   await expect(page.getByText("已移动到")).toHaveCount(0);
