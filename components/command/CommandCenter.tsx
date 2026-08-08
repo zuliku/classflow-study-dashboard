@@ -16,6 +16,9 @@ import {
   PaletteItem,
 } from "@/lib/commands";
 import { NavTab, TimeSliceFilter } from "@/types";
+import { createAssignmentActions } from "@/lib/assignmentActions";
+import { useToastStore } from "@/store/useToastStore";
+import { useConfirmStore } from "@/store/useConfirmStore";
 
 const OVERLAY_ID = "command-center";
 
@@ -33,6 +36,8 @@ export function CommandCenter() {
     activeTab,
     selectedCourseId,
     selectedAssignmentId,
+    highlightedAssignmentId,
+    assignmentSelection,
     setActiveTab,
     setSelectedCourseId,
     setSelectedAssignmentId,
@@ -54,6 +59,8 @@ export function CommandCenter() {
       activeTab: s.activeTab,
       selectedCourseId: s.selectedCourseId,
       selectedAssignmentId: s.selectedAssignmentId,
+      highlightedAssignmentId: s.highlightedAssignmentId,
+      assignmentSelection: s.assignmentSelection,
       setActiveTab: s.setActiveTab,
       setSelectedCourseId: s.setSelectedCourseId,
       setSelectedAssignmentId: s.setSelectedAssignmentId,
@@ -68,6 +75,24 @@ export function CommandCenter() {
   const [query, setQuery] = useState("");
   const [highlighted, setHighlighted] = useState(0);
   const inputRef = useRef<HTMLInputElement | null>(null);
+
+  const pushToast = useToastStore((s) => s.pushToast);
+  const confirmRequest = useConfirmStore((s) => s.confirm);
+
+  // 任务动作（与 Context Menu / Bulk Bar 同一工厂）
+  const assignmentActions = useMemo(
+    () =>
+      createAssignmentActions({
+        getAssignments: () => useAppStore.getState().assignments,
+        updateAssignment: (a) => useAppStore.getState().updateAssignment(a),
+        setSelectedAssignmentId: (id) => useAppStore.getState().setSelectedAssignmentId(id),
+        deleteAssignment: (id) => useAppStore.getState().deleteAssignment(id),
+        restoreAssignment: (a, marks) => useAppStore.getState().restoreAssignment(a, marks),
+        pushToast: (t) => pushToast(t),
+        confirm: (r) => confirmRequest(r),
+      }),
+    [pushToast, confirmRequest]
+  );
 
   const { mounted, visible } = usePresence(isSearchModalOpen, 220);
   useRestoreFocus(isSearchModalOpen);
@@ -106,6 +131,9 @@ export function CommandCenter() {
       assignments,
       semester,
       currentSemesterWeek,
+      highlightedAssignmentId,
+      assignmentSelection,
+      assignmentActions,
       setActiveTab: (t: NavTab) => setActiveTab(t),
       setSelectedCourseId: (id: string | null) => setSelectedCourseId(id),
       setSelectedAssignmentId: (id: string | null) => setSelectedAssignmentId(id),
@@ -116,24 +144,7 @@ export function CommandCenter() {
       resetToCurrentWeek: () => resetToCurrentWeek(),
       close: () => setSearchModalOpen(false),
     }),
-    [
-      activeTab,
-      selectedCourseId,
-      selectedAssignmentId,
-      courses,
-      assignments,
-      semester,
-      currentSemesterWeek,
-      setActiveTab,
-      setSelectedCourseId,
-      setSelectedAssignmentId,
-      setAddCourseModalOpen,
-      setImportScheduleModalOpen,
-      setFullTimetableModalOpen,
-      setAssignmentTimeSlice,
-      resetToCurrentWeek,
-      setSearchModalOpen,
-    ]
+    [activeTab, selectedCourseId, selectedAssignmentId, highlightedAssignmentId, assignmentSelection, courses, assignments, semester, currentSemesterWeek, assignmentActions, setActiveTab, setSelectedCourseId, setSelectedAssignmentId, setAddCourseModalOpen, setImportScheduleModalOpen, setFullTimetableModalOpen, setAssignmentTimeSlice, resetToCurrentWeek, setSearchModalOpen]
   );
 
   const items = useMemo(() => buildPalette(query, ctx), [query, ctx]);

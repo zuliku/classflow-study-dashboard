@@ -12,8 +12,13 @@ import {
   Settings,
   RotateCcw,
   CalendarRange,
+  CheckCircle2,
+  Play,
+  Flag,
+  Trash2,
 } from "lucide-react";
-import { NavTab, Course, Assignment, Semester, TimeSliceFilter } from "@/types";
+import { NavTab, Course, Assignment, Semester, TimeSliceFilter, Priority } from "@/types";
+import type { AssignmentActions } from "@/lib/assignmentActions";
 
 /**
  * Command Registry：Command Center / Context Menu / 键盘快捷键 共用的唯一动作源。
@@ -30,6 +35,10 @@ export interface CommandContext {
   assignments: Assignment[];
   semester: Semester;
   currentSemesterWeek: number;
+  // Assignment Workspace 选择上下文（Task 2）
+  highlightedAssignmentId: string | null;
+  assignmentSelection: string[];
+  assignmentActions: AssignmentActions;
   // 动作（由宿主注入，避免 lib 依赖 store）
   setActiveTab: (tab: NavTab) => void;
   setSelectedCourseId: (id: string | null) => void;
@@ -157,6 +166,62 @@ const GROUP_LABEL: Record<CommandGroup, string> = {
 
 export const GROUP_LABELS = GROUP_LABEL;
 
+/**
+ * 任务上下文命令（Task 2）：
+ * 当前任务 highlight / selection 存在时，Command Center 与 Context Menu 共用。
+ */
+export function getAssignmentContextCommands(
+  ctx: Pick<CommandContext, "assignmentActions" | "highlightedAssignmentId" | "close">,
+  ids: string[]
+): AppCommand[] {
+  if (ids.length === 0) return [];
+  const a = ctx.assignmentActions;
+  const n = ids.length;
+  const label = (base: string) => (n === 1 ? base : `${base}（${n} 项）`);
+  const single = n === 1;
+  const commands: AppCommand[] = [];
+
+  if (single && ctx.highlightedAssignmentId) {
+    const id = ctx.highlightedAssignmentId;
+    commands.push(
+      { id: "ctx-open", label: "打开任务", group: "action", icon: ClipboardCheck, run: (c) => { a.openDrawer(id); c.close(); } },
+      { id: "ctx-edit", label: "编辑任务", group: "action", icon: Plus, run: (c) => { a.editDrawer(id); c.close(); } }
+    );
+  }
+
+  commands.push(
+    { id: "ctx-complete", label: label("标记为完成"), group: "action", icon: CheckCircle2, run: (c) => { a.markCompleted(ids); c.close(); } },
+    { id: "ctx-doing", label: label("设为进行中"), group: "action", icon: Play, run: (c) => { a.markDoing(ids); c.close(); } }
+  );
+
+  const PRIORITIES: { p: Priority; label: string }[] = [
+    { p: "urgent", label: "紧急" },
+    { p: "high", label: "高" },
+    { p: "medium", label: "中" },
+    { p: "low", label: "低" },
+  ];
+  for (const { p, label: pLabel } of PRIORITIES) {
+    commands.push({
+      id: `ctx-priority-${p}`,
+      label: `优先级 → ${pLabel}`,
+      keywords: ["优先级", pLabel],
+      group: "action",
+      icon: Flag,
+      run: (c) => { a.setPriority(ids, p); c.close(); },
+    });
+  }
+
+  commands.push({
+    id: "ctx-delete",
+    label: label("删除任务"),
+    group: "action",
+    icon: Trash2,
+    run: (c) => { a.remove(ids); c.close(); },
+  });
+
+  return commands;
+}
+
 /** 查询结果分组顺序：导航优先（打字即导航），随后创建 / 操作 / 实体搜索 */
 const QUERY_GROUP_ORDER: CommandGroup[] = ["navigate", "create", "action", "search"];
 
@@ -169,6 +234,14 @@ export function buildPalette(query: string, ctx: CommandContext): PaletteItem[] 
   const q = normalizeQuery(query);
   const items: PaletteItem[] = [];
 
+  // 任务选择上下文：highlight / selection 存在时注入「当前任务」命令
+  const contextIds =
+    ctx.assignmentSelection.length > 0
+      ? ctx.assignmentSelection
+      : ctx.highlightedAssignmentId
+      ? [ctx.highlightedAssignmentId]
+      : [];
+
   if (!q) {
     const commands = getCommands();
     for (const cmd of commands) {
@@ -179,6 +252,17 @@ export function buildPalette(query: string, ctx: CommandContext): PaletteItem[] 
         group: cmd.group,
         label: cmd.label,
         shortcut: cmd.shortcut,
+        icon: cmd.icon,
+        run: () => cmd.run(ctx),
+      });
+    }
+    // 空查询也可浏览「当前任务」上下文命令
+    for (const cmd of getAssignmentContextCommands(ctx, contextIds)) {
+      items.push({
+        key: `ctx-${cmd.id}`,
+        kind: "command",
+        group: "action",
+        label: cmd.label,
         icon: cmd.icon,
         run: () => cmd.run(ctx),
       });

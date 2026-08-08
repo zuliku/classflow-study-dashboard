@@ -137,7 +137,7 @@ export default function Home() {
               {/* Tablet 起 2 列，Mobile 单列 */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-5 items-stretch">
                 <StudyLoadChart />
-                <AssignmentTable />
+                <AssignmentTable mode="compact" />
               </div>
             </>
           )}
@@ -198,7 +198,7 @@ export default function Home() {
                   </p>
                 </div>
               </div>
-              <AssignmentTable />
+              <AssignmentTable mode="workspace" />
             </div>
           )}
 
