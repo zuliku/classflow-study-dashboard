@@ -473,7 +473,7 @@ export function SettingsView() {
             <div className="flex justify-end pt-2">
               <button
                 type="submit"
-                className="flex items-center space-x-1.5 px-4 py-2 bg-charcoal hover:bg-black text-white text-xs font-bold rounded-xl transition-colors shadow-subtle"
+                className="ux-press flex items-center space-x-1.5 px-4 py-2 bg-charcoal hover:bg-black text-white text-xs font-bold rounded-xl transition-colors shadow-subtle"
               >
                 <Save className="w-3.5 h-3.5" />
                 <span>保存个人信息</span>
@@ -533,7 +533,7 @@ export function SettingsView() {
             <div className="flex justify-end pt-2">
               <button
                 type="submit"
-                className="flex items-center space-x-1.5 px-4 py-2 bg-charcoal hover:bg-black text-white text-xs font-bold rounded-xl transition-colors shadow-subtle"
+                className="ux-press flex items-center space-x-1.5 px-4 py-2 bg-charcoal hover:bg-black text-white text-xs font-bold rounded-xl transition-colors shadow-subtle"
               >
                 <Save className="w-3.5 h-3.5" />
                 <span>保存学期设置</span>

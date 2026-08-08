@@ -56,7 +56,7 @@ export function Sidebar() {
                 <span
                   className={cn(
                     "absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-4 rounded-full bg-charcoal",
-                    "transition-all duration-[var(--motion-base)] ease-[var(--ease-standard)]",
+                    "transition-[opacity,transform] duration-[var(--motion-base)] ease-[var(--ease-standard)]",
                     isActive ? "opacity-100 scale-y-100" : "opacity-0 scale-y-50"
                   )}
                   aria-hidden="true"

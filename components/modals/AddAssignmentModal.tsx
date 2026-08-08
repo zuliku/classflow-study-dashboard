@@ -343,7 +343,7 @@ export function AddAssignmentModal() {
             </button>
             <button
               type="submit"
-              className="px-4 py-2 text-xs font-bold text-white bg-charcoal rounded-xl hover:bg-black"
+              className="ux-press px-4 py-2 text-xs font-bold text-white bg-charcoal rounded-xl hover:bg-black"
             >
                保存
             </button>

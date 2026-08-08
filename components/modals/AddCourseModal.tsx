@@ -414,7 +414,7 @@ export function AddCourseModal() {
             </button>
             <button
               type="submit"
-              className="px-4 py-2 text-xs font-medium text-white bg-charcoal rounded-xl hover:bg-black font-bold"
+              className="ux-press px-4 py-2 text-xs font-medium text-white bg-charcoal rounded-xl hover:bg-black font-bold"
             >
                创建课程
             </button>

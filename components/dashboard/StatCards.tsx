@@ -141,7 +141,7 @@ export function StatCards() {
             role="button"
             tabIndex={0}
             onKeyDown={cardKeyHandler(() => handleCardClick(stat.id))}
-            className="bg-surface border border-line rounded-2xl p-4 shadow-subtle flex items-center justify-between transition-all duration-[var(--motion-base)] ease-[var(--ease-standard)] hover:shadow-card hover:-translate-y-px cursor-pointer"
+            className="bg-surface border border-line rounded-2xl p-4 shadow-subtle flex items-center justify-between transition-[transform,box-shadow] duration-[var(--motion-base)] ease-[var(--ease-standard)] hover:shadow-card hover:-translate-y-px cursor-pointer"
           >
             <div className="space-y-1">
               <span className="text-xs font-semibold text-sandrift">

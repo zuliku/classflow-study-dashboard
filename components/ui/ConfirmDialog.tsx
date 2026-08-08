@@ -87,7 +87,7 @@ export function ConfirmDialog() {
               onClick={handleConfirm}
               autoFocus
               className={cn(
-                "px-4 py-2 text-xs font-bold rounded-xl transition-colors",
+                "ux-press px-4 py-2 text-xs font-bold rounded-xl transition-colors",
                 request.danger
                   ? "bg-danger hover:bg-danger/85 text-white"
                   : "bg-charcoal hover:bg-black text-white"

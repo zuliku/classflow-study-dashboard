@@ -374,7 +374,7 @@ export function MiniCalendar() {
             className={cn(
               "p-1.5 bg-danger-bg border border-danger-border rounded-lg text-xs flex items-center justify-between text-danger",
               draggable && "cursor-grab active:cursor-grabbing",
-              isDraggingThis && "opacity-40"
+              isDraggingThis && "opacity-50"
             )}
             style={{ touchAction: ddlDragEnabled ? "none" : "auto" }}
           >
@@ -623,7 +623,7 @@ export function MiniCalendar() {
               <p className="text-[11px] text-sandrift">暂无安排</p>
               <button
                 onClick={handleQuickAddAssignment}
-                className="inline-flex items-center space-x-1 px-3 py-1.5 bg-charcoal hover:bg-black text-white text-[11px] font-bold rounded-xl transition-colors"
+                className="ux-press inline-flex items-center space-x-1 px-3 py-1.5 bg-charcoal hover:bg-black text-white text-[11px] font-bold rounded-xl transition-colors"
               >
                 <Plus className="w-3 h-3" />
                 <span>添加任务</span>

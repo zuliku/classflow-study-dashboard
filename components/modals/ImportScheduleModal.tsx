@@ -198,7 +198,7 @@ export function ImportScheduleModal() {
             <div className="grid grid-cols-3 gap-2 p-1 bg-alabaster rounded-xl border border-line-strong">
               <button
                 onClick={() => setActiveSource("ical")}
-                className={`flex items-center justify-center space-x-1 py-2 rounded-lg font-medium transition-all ${
+                className={`flex items-center justify-center space-x-1 py-2 rounded-lg font-medium transition-colors ${
                   activeSource === "ical"
                     ? "bg-white text-charcoal font-bold shadow-subtle"
                     : "text-satin-grey hover:text-charcoal"
@@ -209,7 +209,7 @@ export function ImportScheduleModal() {
               </button>
               <button
                 onClick={() => setActiveSource("csv")}
-                className={`flex items-center justify-center space-x-1 py-2 rounded-lg font-medium transition-all ${
+                className={`flex items-center justify-center space-x-1 py-2 rounded-lg font-medium transition-colors ${
                   activeSource === "csv"
                     ? "bg-white text-charcoal font-bold shadow-subtle"
                     : "text-satin-grey hover:text-charcoal"
@@ -220,7 +220,7 @@ export function ImportScheduleModal() {
               </button>
               <button
                 onClick={() => setActiveSource("json")}
-                className={`flex items-center justify-center space-x-1 py-2 rounded-lg font-medium transition-all ${
+                className={`flex items-center justify-center space-x-1 py-2 rounded-lg font-medium transition-colors ${
                   activeSource === "json"
                     ? "bg-white text-charcoal font-bold shadow-subtle"
                     : "text-satin-grey hover:text-charcoal"
@@ -455,7 +455,7 @@ export function ImportScheduleModal() {
                   type="button"
                   onClick={handleConfirmImport}
                   disabled={previewItems.length - skippedCount === 0}
-                  className="px-5 py-2 text-xs font-bold text-white bg-success hover:bg-success/80 rounded-xl flex items-center space-x-1.5 disabled:opacity-50"
+                  className="ux-press px-5 py-2 text-xs font-bold text-white bg-success hover:bg-success/80 rounded-xl flex items-center space-x-1.5 disabled:opacity-50"
                 >
                   <CheckCircle className="w-4 h-4" />
                   <span>

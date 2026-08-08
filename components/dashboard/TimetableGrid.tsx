@@ -134,6 +134,9 @@ export function TimetableGrid({ editable = false }: { editable?: boolean }) {
   const editingEnabled = editable && mediaState.wide && mediaState.fine;
 
   const [interaction, setInteraction] = useState<Interaction>({ type: "idle" });
+  // 成功落位后短暂 settle 的目标卡片（ux-settle 只作用于刚提交的卡）
+  const [settleId, setSettleId] = useState<string | null>(null);
+  const settleTimerRef = useRef<number | null>(null);
   // 同步镜像：pointer 事件比 React 渲染更密集，handler 必须读 ref 而非闭包，
   // 否则 pointerup 可能提交滞后的 candidate（例如 13:45 而非 14:00）。
   const interactionRef = useRef<Interaction>({ type: "idle" });
@@ -171,6 +174,7 @@ export function TimetableGrid({ editable = false }: { editable?: boolean }) {
     () => () => {
       pendingRef.current = null;
       wasDraggedRef.current = false;
+      if (settleTimerRef.current) window.clearTimeout(settleTimerRef.current);
     },
     []
   );
@@ -308,13 +312,17 @@ export function TimetableGrid({ editable = false }: { editable?: boolean }) {
     if (it.valid) {
       // 有效：立即写 Store，并给出可撤销 Toast（恢复 origin，同一 id，全部字段）
       updateSchedule(it.candidate);
+      // 落位 settle：只给刚提交的卡片一个极轻的 opacity 归位
+      setSettleId(it.candidate.id);
+      if (settleTimerRef.current) window.clearTimeout(settleTimerRef.current);
+      settleTimerRef.current = window.setTimeout(() => setSettleId(null), 260);
       pushToast({
         message: "课程时间已调整",
         actionLabel: "撤销",
         onAction: () => updateSchedule(it.origin),
       });
     } else {
-      // 冲突：不写 Store，回到 origin
+      // 冲突：不写 Store，回到 origin（opacity 由卡片自身过渡平滑恢复，不做 shake）
       pushToast({
         type: "error",
         message: `与《${conflictCourseName(it.conflict, it.candidate.id)}》时间冲突，未调整`,
@@ -498,10 +506,14 @@ export function TimetableGrid({ editable = false }: { editable?: boolean }) {
                         onPointerCancel={cancelInteraction}
                         title={editingEnabled ? "拖动调整上课时间" : undefined}
                         className={cn(
-                          "absolute left-0.5 right-0.5 rounded-xl p-1.5 sm:p-2 transition-all duration-[var(--motion-base)] ease-[var(--ease-standard)] shadow-subtle hover:shadow-card hover:-translate-y-px border flex flex-col justify-between overflow-hidden group select-none",
+                          "absolute left-0.5 right-0.5 rounded-xl p-1.5 sm:p-2 shadow-subtle hover:shadow-card hover:-translate-y-px border flex flex-col justify-between overflow-hidden group select-none",
+                          // 只过渡实际会变化的属性（位置/尺寸/透明度/阴影/边框），避免无关属性建立 transition
+                          "transition-[top,height,opacity,transform,box-shadow,border-color,background-color] duration-[var(--motion-base)] ease-[var(--ease-standard)]",
                           hasConflict && "ring-2 ring-danger bg-danger-bg border-danger-border",
                           editingEnabled && "cursor-grab active:cursor-grabbing",
-                          isOrigin && "opacity-40"
+                          // 拖动中：原卡轻微降存在感（0.5 左右），保持原位置，不 scale/rotate/blur
+                          isOrigin && "opacity-50",
+                          settleId === sched.id && "ux-settle"
                         )}
                         style={{
                           top: `${topPct}%`,
@@ -574,7 +586,15 @@ export function TimetableGrid({ editable = false }: { editable?: boolean }) {
                             )}
                             style={{ touchAction: "none" }}
                           >
-                            <span className="w-5 h-1 rounded-full bg-charcoal/30 group-hover:bg-charcoal/50" />
+                            <span
+                              className={cn(
+                                "w-5 h-1 rounded-full transition-colors duration-[var(--motion-fast)]",
+                                interaction.type === "resize" &&
+                                  interaction.scheduleId === sched.id
+                                  ? "bg-charcoal/60"
+                                  : "bg-charcoal/30 group-hover:bg-charcoal/50"
+                              )}
+                            />
                           </button>
                         )}
                       </div>
@@ -599,6 +619,8 @@ export function TimetableGrid({ editable = false }: { editable?: boolean }) {
                               aria-hidden="true"
                               className={cn(
                                 "absolute left-0.5 right-0.5 rounded-xl p-1.5 border-2 border-dashed pointer-events-none flex flex-col justify-between overflow-hidden z-10",
+                                // 15min 吸附 settle + valid/conflict 颜色过渡：短、可中断（100ms），跟手优先
+                                "transition-[top,height,background-color,border-color,opacity] duration-[var(--motion-snap)] ease-[var(--ease-standard)]",
                                 invalid
                                   ? "bg-danger-bg border-danger-border"
                                   : "bg-white/85 border-line-strong"

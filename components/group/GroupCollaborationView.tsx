@@ -22,6 +22,7 @@ import { useConfirmStore } from "@/store/useConfirmStore";
 import { format, formatDistanceToNow } from "date-fns";
 import { zhCN } from "date-fns/locale";
 import { cardKeyHandler } from "@/lib/utils";
+import { useEnterOnAdd } from "@/lib/useEnterOnAdd";
 import { parseLocalDDL, getLocalDDLDate, getLocalDDLTime, combineLocalDateTime } from "@/lib/ddl";
 import { formatLocalDate } from "@/lib/groupProject";
 import { usePresence } from "@/lib/usePresence";
@@ -158,6 +159,10 @@ export function GroupCollaborationView() {
   const [memberForm, setMemberForm] = useState<null | { mode: "create" } | { mode: "edit"; memberId: string }>(null);
   const [taskForm, setTaskForm] = useState<null | { mode: "create" } | { mode: "edit"; taskId: string }>(null);
   const [taskSearch, setTaskSearch] = useState("");
+
+  // 新增小组任务：仅新创建的 item 出场（页面初次渲染不 stagger）
+  const selectedProjectTasks = groupProjects.find((p) => p.id === selectedProjectId);
+  const newTaskIds = useEnterOnAdd(selectedProjectTasks?.tasks.map((t) => t.id) ?? []);
 
   // 表单字段
   const [pName, setPName] = useState("");
@@ -614,7 +619,8 @@ export function GroupCollaborationView() {
                       <div
                         key={task.id}
                         className={cn(
-                          "p-3 rounded-xl border transition-all flex items-center justify-between text-xs group",
+                          "p-3 rounded-xl border transition-colors flex items-center justify-between text-xs group",
+                          newTaskIds.has(task.id) && "animate-enter",
                           task.completed
                             ? "bg-white border-line"
                             : "bg-white border-line-strong hover:border-charcoal"
@@ -725,7 +731,7 @@ export function GroupCollaborationView() {
             <button
               type="submit"
               form="group-project-form"
-              className="px-4 py-2 text-xs font-bold text-white bg-charcoal rounded-xl hover:bg-black"
+              className="ux-press px-4 py-2 text-xs font-bold text-white bg-charcoal rounded-xl hover:bg-black"
             >
               {projectForm?.mode === "edit" ? "保存修改" : "创建项目"}
             </button>
@@ -768,7 +774,7 @@ export function GroupCollaborationView() {
             <button onClick={() => setMemberForm(null)} className="px-4 py-2 text-xs font-medium text-satin-grey bg-alabaster border border-line rounded-xl hover:bg-alba">
               取消
             </button>
-            <button type="submit" form="group-member-form" className="px-4 py-2 text-xs font-bold text-white bg-charcoal rounded-xl hover:bg-black">
+            <button type="submit" form="group-member-form" className="ux-press px-4 py-2 text-xs font-bold text-white bg-charcoal rounded-xl hover:bg-black">
               {memberForm?.mode === "edit" ? "保存修改" : "添加成员"}
             </button>
           </div>
@@ -816,7 +822,7 @@ export function GroupCollaborationView() {
             <button onClick={() => setTaskForm(null)} className="px-4 py-2 text-xs font-medium text-satin-grey bg-alabaster border border-line rounded-xl hover:bg-alba">
               取消
             </button>
-            <button type="submit" form="group-task-form" className="px-4 py-2 text-xs font-bold text-white bg-charcoal rounded-xl hover:bg-black">
+            <button type="submit" form="group-task-form" className="ux-press px-4 py-2 text-xs font-bold text-white bg-charcoal rounded-xl hover:bg-black">
               {taskForm?.mode === "edit" ? "保存修改" : "添加任务"}
             </button>
           </div>

@@ -111,8 +111,7 @@ export function AssignmentTable() {
           </div>
 
           <button
-            onClick={handleAddAssignmentClick}
-            className="flex items-center space-x-1 px-3 py-1.5 bg-charcoal hover:bg-black text-white text-xs font-bold rounded-xl transition-colors shadow-subtle shrink-0"
+            onClick={handleAddAssignmentClick} className="ux-press flex items-center space-x-1 px-3 py-1.5 bg-charcoal hover:bg-black text-white text-xs font-bold rounded-xl transition-colors shadow-subtle shrink-0"
           >
             <Plus className="w-3.5 h-3.5" />
             <span>新增任务</span>

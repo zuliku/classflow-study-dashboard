@@ -38,6 +38,7 @@
   --motion-page: 220ms;
   --motion-data: 320ms;
   --motion-select: 180ms;
+  --motion-snap: 100ms;
   --ease-standard: cubic-bezier(0.2, 0.8, 0.2, 1);
   --ease-emphasized: cubic-bezier(0.22, 1, 0.36, 1);
 }
@@ -85,8 +86,9 @@ button:disabled {
   opacity: 0.5;
 }
 
-/* 按下反馈：轻缩放，短促 */
-button:active:not(:disabled) {
+/* 按下反馈：只对显式 .ux-press 的独立操作按钮做轻缩放。
+   空间稳定型控件（日期格 / 导航 / 拖拽面 / Resize handle / 周月切换几何控件）一律不缩放。 */
+.ux-press:active:not(:disabled) {
   transform: scale(0.98);
 }
 
@@ -151,6 +153,11 @@ button:active:not(:disabled) {
   /* 简单淡入（月份标题等） */
   .ux-fade {
     animation: ux-fade var(--motion-fast) var(--ease-standard) both;
+  }
+
+  /* 直接操作成功落位：非常轻的 settle（不放大的动画，仅 opacity 归位） */
+  .ux-settle {
+    animation: ux-settle-in 200ms var(--ease-standard) both;
   }
 }
 
@@ -223,6 +230,15 @@ button:active:not(:disabled) {
 @keyframes ux-fade {
   from {
     opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes ux-settle-in {
+  from {
+    opacity: 0.94;
   }
   to {
     opacity: 1;

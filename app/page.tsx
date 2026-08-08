@@ -170,7 +170,7 @@ export default function Home() {
                   </button>
                   <button
                     onClick={() => setImportScheduleModalOpen(true)}
-                    className="flex items-center space-x-1.5 px-3 py-1.5 bg-charcoal hover:bg-black text-white text-xs font-bold rounded-xl transition-colors"
+                    className="ux-press flex items-center space-x-1.5 px-3 py-1.5 bg-charcoal hover:bg-black text-white text-xs font-bold rounded-xl transition-colors"
                   >
                     <FileUp className="w-3.5 h-3.5" />
                     <span>导入课表</span>
@@ -214,7 +214,7 @@ export default function Home() {
                 </div>
                 <button
                   onClick={() => setAddCourseModalOpen(true)}
-                  className="flex items-center space-x-1.5 px-3 py-1.5 bg-charcoal text-white text-xs font-medium rounded-xl hover:bg-black"
+                  className="ux-press flex items-center space-x-1.5 px-3 py-1.5 bg-charcoal text-white text-xs font-medium rounded-xl hover:bg-black"
                 >
                   <Plus className="w-3.5 h-3.5" />
                   <span>添加课程</span>
@@ -229,7 +229,7 @@ export default function Home() {
                     role="button"
                     tabIndex={0}
                     onKeyDown={cardKeyHandler(() => setSelectedCourseId(course.id))}
-                    className="group p-4 rounded-2xl border transition-all duration-[var(--motion-base)] ease-[var(--ease-standard)] cursor-pointer shadow-subtle hover:shadow-card hover:-translate-y-px flex flex-col justify-between"
+                    className="group p-4 rounded-2xl border transition-[transform,box-shadow] duration-[var(--motion-base)] ease-[var(--ease-standard)] cursor-pointer shadow-subtle hover:shadow-card hover:-translate-y-px flex flex-col justify-between"
                     style={{
                       backgroundColor: `${course.bgHex}50`,
                       borderColor: course.borderHex,
@@ -266,7 +266,7 @@ export default function Home() {
                             e.stopPropagation();
                             openAssignmentEditor({ courseId: course.id });
                           }}
-                          className="px-2 py-0.5 rounded-lg text-[10px] font-bold text-charcoal bg-white/90 border border-line-strong opacity-100 sm:opacity-0 sm:group-hover:opacity-100 hover:bg-alabaster transition-all"
+                          className="px-2 py-0.5 rounded-lg text-[10px] font-bold text-charcoal bg-white/90 border border-line-strong opacity-100 sm:opacity-0 sm:group-hover:opacity-100 hover:bg-alabaster transition-[opacity,background-color,border-color]"
                           title="添加任务"
                         >
                           + 任务

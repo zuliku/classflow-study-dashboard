@@ -71,7 +71,7 @@ export function Header() {
         <button
           onClick={() => setSearchModalOpen(true)}
           aria-label="全局搜索"
-          className="flex items-center space-x-2 bg-white border border-line-strong rounded-xl px-2.5 md:px-3 py-1.5 text-xs text-sandrift cursor-pointer hover:border-charcoal hover:bg-surface transition-all shadow-subtle min-w-0 md:min-w-[200px]"
+          className="flex items-center space-x-2 bg-white border border-line-strong rounded-xl px-2.5 md:px-3 py-1.5 text-xs text-sandrift cursor-pointer hover:border-charcoal hover:bg-surface transition-[background-color,border-color] shadow-subtle min-w-0 md:min-w-[200px]"
         >
           <Search className="w-3.5 h-3.5 text-[#A48F82] shrink-0" />
           <span className="hidden md:flex flex-1 font-medium min-w-0 truncate">

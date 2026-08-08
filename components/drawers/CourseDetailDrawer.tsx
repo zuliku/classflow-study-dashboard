@@ -465,7 +465,7 @@ export function CourseDetailDrawer() {
             ) : (
               <button
                 onClick={handleSaveCourse}
-                className="p-2 rounded-xl text-white bg-charcoal hover:bg-black transition-colors"
+                className="ux-press p-2 rounded-xl text-white bg-charcoal hover:bg-black transition-colors"
                 title="保存修改"
               >
                 <Save className="w-4 h-4" />
@@ -678,7 +678,7 @@ export function CourseDetailDrawer() {
                         </button>
                         <button
                           onClick={() => handleSaveSlotEdit(sched)}
-                          className="px-3 py-1 text-[11px] font-bold text-white bg-charcoal hover:bg-black rounded-lg"
+                          className="ux-press px-3 py-1 text-[11px] font-bold text-white bg-charcoal hover:bg-black rounded-lg"
                         >
                           保存时段
                         </button>
@@ -777,7 +777,7 @@ export function CourseDetailDrawer() {
               )}
               <button
                 type="submit"
-                className="w-full py-1.5 bg-charcoal hover:bg-black text-white font-bold rounded-lg text-xs transition-colors"
+                className="ux-press w-full py-1.5 bg-charcoal hover:bg-black text-white font-bold rounded-lg text-xs transition-colors"
               >
                 + 添加排课
               </button>
