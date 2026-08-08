@@ -4,6 +4,7 @@ import {
   bulkApplyPriority,
   bulkApplyStatus,
 } from "@/lib/assignmentSelection";
+import { openAssignmentEditor } from "@/lib/uiEvents";
 
 export interface DeleteResult {
   assignment: Assignment;
@@ -92,9 +93,8 @@ export function createAssignmentActions(api: AssignmentActionApi): AssignmentAct
   return {
     openDrawer: (id) => setSelectedAssignmentId(id),
     editDrawer: (id) => {
-      window.dispatchEvent(
-        new CustomEvent("classflow:open-assignment-editor", { detail: { assignmentId: id } })
-      );
+      // 统一事件入口（lib/uiEvents），不手写事件名
+      openAssignmentEditor({ assignmentId: id });
     },
     markCompleted: (ids) => bulkApplyStatus(targets(ids), "completed").forEach(updateAssignment),
     markDoing: (ids) => bulkApplyStatus(targets(ids), "doing").forEach(updateAssignment),

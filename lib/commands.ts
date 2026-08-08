@@ -19,13 +19,14 @@ import {
 } from "lucide-react";
 import { NavTab, Course, Assignment, Semester, TimeSliceFilter, Priority } from "@/types";
 import type { AssignmentActions } from "@/lib/assignmentActions";
+import { openAssignmentEditor } from "@/lib/uiEvents";
 
 /**
  * Command Registry：Command Center / Context Menu / 键盘快捷键 共用的唯一动作源。
  * 不要为三处各写一套动作实现。
  */
 
-export type CommandGroup = "create" | "navigate" | "action" | "search";
+export type CommandGroup = "context" | "create" | "navigate" | "action" | "search";
 
 export interface CommandContext {
   activeTab: NavTab;
@@ -76,8 +77,9 @@ export const NAV_GROUPS: { id: NavTab; label: string }[] = [
 /** 第一版命令集（顺序即空查询展示顺序：快速操作 → 导航） */
 export function getCommands(): AppCommand[] {
   return [
-    // ---- Create ----
-    { id: "create-task", label: "新建任务", keywords: ["任务", "todo"], group: "create", shortcut: "N", icon: Plus, run: (ctx) => { window.dispatchEvent(new CustomEvent("classflow:open-assignment-editor", { detail: {} })); ctx.close(); } },
+  // ---- Create ----
+  // 所有「打开任务编辑器」入口统一走 lib/uiEvents.ts 的 openAssignmentEditor
+  { id: "create-task", label: "新建任务", keywords: ["任务", "todo"], group: "create", shortcut: "N", icon: Plus, run: (ctx) => { openAssignmentEditor({}); ctx.close(); } },
     { id: "create-course", label: "新建课程", keywords: ["课程", "add"], group: "create", icon: BookOpen, run: (ctx) => { ctx.setAddCourseModalOpen(true); ctx.close(); } },
     { id: "import-schedule", label: "导入课表", keywords: ["导入", "课表", "import"], group: "create", icon: FileUp, run: (ctx) => { ctx.setImportScheduleModalOpen(true); ctx.close(); } },
     // ---- Navigate ----
@@ -158,6 +160,7 @@ export interface PaletteItem {
 }
 
 const GROUP_LABEL: Record<CommandGroup, string> = {
+  context: "上下文操作",
   create: "创建",
   navigate: "导航",
   action: "操作",
@@ -165,6 +168,64 @@ const GROUP_LABEL: Record<CommandGroup, string> = {
 };
 
 export const GROUP_LABELS = GROUP_LABEL;
+
+// ---- 选中实体 helpers（when 校验与 run 防 stale 共用） ----
+
+export function getSelectedCourse(ctx: CommandContext): Course | null {
+  if (!ctx.selectedCourseId) return null;
+  return ctx.courses.find((c) => c.id === ctx.selectedCourseId) ?? null;
+}
+
+export function getSelectedAssignment(ctx: CommandContext): Assignment | null {
+  if (!ctx.selectedAssignmentId) return null;
+  return ctx.assignments.find((a) => a.id === ctx.selectedAssignmentId) ?? null;
+}
+
+/**
+ * 课程 / 任务 Context Commands（Command System Task 2）：
+ * 只在对应实体确实存在时通过 when 显示；run 内再做轻量 defensive check（不 throw）。
+ * 打开任务编辑器一律复用 openAssignmentEditor，不复制 editor 状态。
+ */
+export function getContextCommands(ctx: CommandContext): AppCommand[] {
+  const commands: AppCommand[] = [];
+  const course = getSelectedCourse(ctx);
+  if (course) {
+    commands.push({
+      id: "ctx-course-new-task",
+      label: `为《${course.name}》新建任务`,
+      keywords: [course.name, "任务", "新建", "课程"],
+      group: "context",
+      icon: Plus,
+      when: (c) => !!getSelectedCourse(c),
+      run: (c) => {
+        const cur = getSelectedCourse(c);
+        if (!cur) return; // stale：课程已删除，静默退出
+        openAssignmentEditor({ courseId: cur.id });
+        c.close();
+      },
+    });
+  }
+
+  const assignment = getSelectedAssignment(ctx);
+  if (assignment) {
+    commands.push({
+      id: "ctx-assignment-edit",
+      label: `编辑「${assignment.title}」`,
+      keywords: [assignment.title, "编辑", "任务"],
+      group: "context",
+      icon: Plus,
+      when: (c) => !!getSelectedAssignment(c),
+      run: (c) => {
+        const cur = getSelectedAssignment(c);
+        if (!cur) return; // stale：任务已删除，静默退出
+        openAssignmentEditor({ assignmentId: cur.id });
+        c.close();
+      },
+    });
+  }
+
+  return commands;
+}
 
 /**
  * 任务上下文命令（Task 2）：
@@ -184,14 +245,14 @@ export function getAssignmentContextCommands(
   if (single && ctx.highlightedAssignmentId) {
     const id = ctx.highlightedAssignmentId;
     commands.push(
-      { id: "ctx-open", label: "打开任务", group: "action", icon: ClipboardCheck, run: (c) => { a.openDrawer(id); c.close(); } },
-      { id: "ctx-edit", label: "编辑任务", group: "action", icon: Plus, run: (c) => { a.editDrawer(id); c.close(); } }
+      { id: "ctx-open", label: "打开任务", group: "context", icon: ClipboardCheck, run: (c) => { a.openDrawer(id); c.close(); } },
+      { id: "ctx-edit", label: "编辑任务", group: "context", icon: Plus, run: (c) => { a.editDrawer(id); c.close(); } }
     );
   }
 
   commands.push(
-    { id: "ctx-complete", label: label("标记为完成"), group: "action", icon: CheckCircle2, run: (c) => { a.markCompleted(ids); c.close(); } },
-    { id: "ctx-doing", label: label("设为进行中"), group: "action", icon: Play, run: (c) => { a.markDoing(ids); c.close(); } }
+    { id: "ctx-complete", label: label("标记为完成"), group: "context", icon: CheckCircle2, run: (c) => { a.markCompleted(ids); c.close(); } },
+    { id: "ctx-doing", label: label("设为进行中"), group: "context", icon: Play, run: (c) => { a.markDoing(ids); c.close(); } }
   );
 
   const PRIORITIES: { p: Priority; label: string }[] = [
@@ -222,19 +283,19 @@ export function getAssignmentContextCommands(
   return commands;
 }
 
-/** 查询结果分组顺序：导航优先（打字即导航），随后创建 / 操作 / 实体搜索 */
-const QUERY_GROUP_ORDER: CommandGroup[] = ["navigate", "create", "action", "search"];
+/** 查询结果分组顺序：上下文操作最前（实体匹配优先），随后导航/创建/操作/实体搜索 */
+const QUERY_GROUP_ORDER: CommandGroup[] = ["context", "navigate", "create", "action", "search"];
 
 /**
  * 构建 Command Center 结果列表：
- * - 空查询：快速操作（create + action）→ 导航（全部可浏览，非空白）
+ * - 空查询：上下文操作（存在时）→ 快速操作（create + action）→ 导航（全部可浏览，非空白）
  * - 有查询：命令 + 课程 + 任务 合一
  */
 export function buildPalette(query: string, ctx: CommandContext): PaletteItem[] {
   const q = normalizeQuery(query);
   const items: PaletteItem[] = [];
 
-  // 任务选择上下文：highlight / selection 存在时注入「当前任务」命令
+  // 任务选择上下文：workspace 的 highlight / selection 存在时注入「当前任务」命令
   const contextIds =
     ctx.assignmentSelection.length > 0
       ? ctx.assignmentSelection
@@ -243,9 +304,31 @@ export function buildPalette(query: string, ctx: CommandContext): PaletteItem[] 
       : [];
 
   if (!q) {
-    const commands = getCommands();
-    for (const cmd of commands) {
+    // 1. 上下文操作（选中课程/任务；无对应上下文则不渲染该标题）
+    for (const cmd of getContextCommands(ctx)) {
+      items.push({
+        key: `cmd-${cmd.id}`,
+        kind: "command",
+        group: cmd.group,
+        label: cmd.label,
+        icon: cmd.icon,
+        run: () => cmd.run(ctx),
+      });
+    }
+    for (const cmd of getAssignmentContextCommands(ctx, contextIds)) {
+      items.push({
+        key: `ctx-${cmd.id}`,
+        kind: "command",
+        group: "context",
+        label: cmd.label,
+        icon: cmd.icon,
+        run: () => cmd.run(ctx),
+      });
+    }
+    // 2. 快速操作（create + action）
+    for (const cmd of getCommands()) {
       if (cmd.when && !cmd.when(ctx)) continue;
+      if (cmd.group === "navigate") continue;
       items.push({
         key: `cmd-${cmd.id}`,
         kind: "command",
@@ -256,13 +339,16 @@ export function buildPalette(query: string, ctx: CommandContext): PaletteItem[] 
         run: () => cmd.run(ctx),
       });
     }
-    // 空查询也可浏览「当前任务」上下文命令
-    for (const cmd of getAssignmentContextCommands(ctx, contextIds)) {
+    // 3. 导航
+    for (const cmd of getCommands()) {
+      if (cmd.when && !cmd.when(ctx)) continue;
+      if (cmd.group !== "navigate") continue;
       items.push({
-        key: `ctx-${cmd.id}`,
+        key: `cmd-${cmd.id}`,
         kind: "command",
-        group: "action",
+        group: cmd.group,
         label: cmd.label,
+        shortcut: cmd.shortcut,
         icon: cmd.icon,
         run: () => cmd.run(ctx),
       });
@@ -270,18 +356,20 @@ export function buildPalette(query: string, ctx: CommandContext): PaletteItem[] 
     return items;
   }
 
-  const commands = getCommands().filter((c) => {
-    if (c.when && !c.when(ctx)) return false;
-    return commandMatches(c, q);
-  });
-
   const groupRank = (g: CommandGroup) => {
     const idx = QUERY_GROUP_ORDER.indexOf(g);
     return idx === -1 ? 99 : idx;
   };
 
-  const byGroup = [...commands].sort((a, b) => groupRank(a.group) - groupRank(b.group));
-  for (const cmd of byGroup) {
+  const allCommands = [
+    ...getCommands().filter((c) => {
+      if (c.when && !c.when(ctx)) return false;
+      return commandMatches(c, q);
+    }),
+    ...getContextCommands(ctx).filter((c) => commandMatches(c, q)),
+  ].sort((a, b) => groupRank(a.group) - groupRank(b.group));
+
+  for (const cmd of allCommands) {
     items.push({
       key: `cmd-${cmd.id}`,
       kind: "command",

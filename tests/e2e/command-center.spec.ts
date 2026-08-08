@@ -94,4 +94,73 @@ test("空查询可浏览：打开即显示快速操作与导航分组", async ({
   await expect(page.getByTestId("command-results").getByText("前往设置")).toBeVisible();
   // 快捷键提示可见（桌面）
   await expect(page.getByTestId("command-results").getByText("N")).toBeVisible();
+  // 未选中任何实体：不显示「上下文操作」标题
+  await expect(page.getByText("上下文操作")).toHaveCount(0);
+});
+
+test("Course Context：选中课程后显示上下文命令，新建任务带入课程", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/");
+
+  // 课程 Tab 打开「微观经济学」Course Drawer → selectedCourseId 生效
+  await page.getByRole("button", { name: "课程资料" }).first().click();
+  await page.locator('div[role="button"]').filter({ hasText: "微观经济学" }).first().click();
+  await expect(page.getByRole("button", { name: "关闭" }).first()).toBeVisible();
+
+  await openPalette(page);
+  await expect(page.getByText("上下文操作")).toBeVisible();
+  const results = page.getByTestId("command-results");
+  await expect(results.getByText("为《微观经济学》新建任务")).toBeVisible();
+
+  // Enter 执行第一项（上下文命令优先）
+  await page.keyboard.press("Enter");
+  await expect(page.getByRole("heading", { name: "新建任务" })).toBeVisible();
+  await expect(page.getByTestId("command-center")).toHaveCount(0);
+
+  // Esc 只关闭 Assignment Editor（overlay 一致性：Command Center 不残留/不重开）
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("heading", { name: "新建任务" })).toHaveCount(0);
+  await expect(page.getByTestId("command-center")).toHaveCount(0);
+});
+
+test("Assignment Context：选中任务后显示编辑命令，打开的是编辑模式", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/");
+
+  // 打开「计量经济学大作业」Assignment Drawer → selectedAssignmentId 生效
+  await page.getByText("计量经济学大作业（第3章）").first().click();
+  await expect(page.getByRole("button", { name: "关闭" }).first()).toBeVisible();
+
+  await openPalette(page);
+  await expect(page.getByText("上下文操作")).toBeVisible();
+  await expect(
+    page.getByTestId("command-results").getByText("编辑「计量经济学大作业（第3章）」")
+  ).toBeVisible();
+
+  await page.keyboard.press("Enter");
+  // 编辑模式（heading 为「编辑任务」而非「新建任务」）→ 打开的是正确 assignment
+  await expect(page.getByRole("heading", { name: "编辑任务" })).toBeVisible();
+  await expect(page.getByTestId("command-center")).toHaveCount(0);
+
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("heading", { name: "编辑任务" })).toHaveCount(0);
+  await expect(page.getByTestId("command-center")).toHaveCount(0);
+});
+
+test("事件统一：palette「新建任务」与 N 走同一入口（都打开新建任务编辑器）", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/");
+
+  // 路径一：N
+  await page.keyboard.press("n");
+  await expect(page.getByRole("heading", { name: "新建任务" })).toBeVisible();
+  await page.keyboard.press("Escape");
+
+  // 路径二：palette 搜索「新建」→ Enter
+  await openPalette(page);
+  await page.keyboard.type("新建");
+  await page.keyboard.press("Enter");
+  await expect(page.getByRole("heading", { name: "新建任务" })).toBeVisible();
+  await expect(page.getByTestId("command-center")).toHaveCount(0);
+  await page.keyboard.press("Escape");
 });
