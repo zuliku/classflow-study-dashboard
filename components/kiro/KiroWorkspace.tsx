@@ -2,43 +2,51 @@
 
 import React, { useMemo, useState } from "react";
 import { useAppStore } from "@/store/useAppStore";
+import { useAISettingsStore } from "@/store/useAISettingsStore";
+import { useKiroChat } from "@/hooks/useKiroChat";
+import { getModelsForProvider, getActiveModelName } from "@/lib/ai/providers/registry";
 import { KiroHeader } from "@/components/kiro/KiroHeader";
 import { KiroEmptyState } from "@/components/kiro/KiroEmptyState";
-import { KiroConversation, KiroChatMessage } from "@/components/kiro/KiroConversation";
+import { KiroConversation } from "@/components/kiro/KiroConversation";
 import { KiroComposer } from "@/components/kiro/KiroComposer";
 import { KiroContextChip } from "@/components/kiro/KiroContextBar";
 import { KiroHistoryPanel } from "@/components/kiro/KiroHistoryPanel";
 
-let msgSeq = 0;
-const nextId = () => `kmsg_${++msgSeq}`;
-
 /**
- * Kiro Workspace：ClassFlow 的自然语言工作区（一级 Tab，非 Modal/Drawer）。
- * Task 0 为纯 UI：消息为本地 preview，不调用 AI、不改动任何 ClassFlow 数据。
- * 组件边界保持独立（Header / EmptyState / Conversation / Composer / Context / History），
- * 未来 Provider / Agent Runtime / Sidecar 直接复用。
+ * Kiro Workspace（Task 1）：真实 AI 流式聊天。
+ * Chat state 由 useKiroChat（AI SDK useChat）管理，UI 组件保持 Task 0 视觉。
+ * 本阶段不发送任何 ClassFlow Context / 数据。
  */
 export function KiroWorkspace() {
-  const [messages, setMessages] = useState<KiroChatMessage[]>([]);
+  const chat = useKiroChat();
   const [historyOpen, setHistoryOpen] = useState(false);
   const [manualContexts, setManualContexts] = useState<KiroContextChip[]>([]);
 
-  // 自动 Context：来自当前选中实体（Store 只读，属于 UI 展示）
-  const selectedAssignmentId = useAppStore((s) => s.selectedAssignmentId);
-  const selectedCourseId = useAppStore((s) => s.selectedCourseId);
-  const assignments = useAppStore((s) => s.assignments);
-  const courses = useAppStore((s) => s.courses);
+  // AI 设置（模型选择器数据源）
+  const provider = useAISettingsStore((s) => s.provider);
+  const model = useAISettingsStore((s) => s.model);
+  const custom = useAISettingsStore((s) => s.custom);
+  const setModel = useAISettingsStore((s) => s.setModel);
 
-  const autoContexts = useMemo(() => {
-    const chips: KiroContextChip[] = [];
-    const task = assignments.find((a) => a.id === selectedAssignmentId);
-    if (task) chips.push({ id: `auto-task-${task.id}`, kind: "assignment", label: `当前任务 · ${task.title}` });
-    const course = courses.find((c) => c.id === selectedCourseId);
-    if (course) chips.push({ id: `auto-course-${course.id}`, kind: "course", label: `当前课程 · ${course.name}` });
-    return chips;
-  }, [selectedAssignmentId, selectedCourseId, assignments, courses]);
+  const setSettingsModalOpen = useAppStore((s) => s.setSettingsModalOpen);
+  const setSettingsTargetSection = useAppStore((s) => s.setSettingsTargetSection);
 
-  const contexts = [...autoContexts, ...manualContexts];
+  const modelOptions = useMemo(() => {
+    if (provider === "custom-openai") {
+      return custom.model ? [{ value: custom.model, label: custom.model }] : [];
+    }
+    return getModelsForProvider(provider).map((m) => ({ value: m.id, label: m.name }));
+  }, [provider, custom.model]);
+
+  const activeModelName = useMemo(
+    () => getActiveModelName({ provider, model, customModel: custom.model }),
+    [provider, model, custom.model]
+  );
+
+  const openKiroSettings = () => {
+    setSettingsTargetSection("kiro");
+    setSettingsModalOpen(true);
+  };
 
   const addManualContext = (chip: KiroContextChip) => {
     setManualContexts((prev) => (prev.some((c) => c.id === chip.id) ? prev : [...prev, chip]));
@@ -47,23 +55,12 @@ export function KiroWorkspace() {
     setManualContexts((prev) => prev.filter((c) => c.id !== id));
   };
 
-  /** 发送本地 preview message（不产生任何真实效果） */
-  const send = (text: string) => {
-    setMessages((prev) => [
-      ...prev,
-      { id: nextId(), role: "user", content: text },
-      {
-        id: nextId(),
-        role: "kiro",
-        content: "Kiro 服务将在下一阶段接入。当前为界面预览，这只是一个本地占位回复，不会执行任何真实操作。",
-      },
-    ]);
-  };
-
   const newChat = () => {
-    setMessages([]);
+    chat.newChat();
     setManualContexts([]);
   };
+
+  const hasMessages = chat.messages.length > 0;
 
   return (
     <div
@@ -73,17 +70,30 @@ export function KiroWorkspace() {
       <KiroHeader onNewChat={newChat} onOpenHistory={() => setHistoryOpen(true)} />
 
       <div className="relative flex-1 min-h-0 flex flex-col">
-        {messages.length === 0 ? (
-          <KiroEmptyState onSuggestion={send} />
+        {!hasMessages ? (
+          <KiroEmptyState onSuggestion={chat.send} />
         ) : (
-          <KiroConversation messages={messages} />
+          <KiroConversation
+            messages={chat.messages}
+            error={chat.error}
+            onRetry={chat.retry}
+            onOpenSettings={openKiroSettings}
+          />
         )}
 
         <KiroComposer
-          contexts={contexts}
+          contexts={manualContexts}
           onAddContext={addManualContext}
           onRemoveContext={removeContext}
-          onSend={send}
+          onSend={chat.send}
+          streaming={chat.streaming}
+          onStop={chat.stop}
+          configured={chat.configured}
+          modelOptions={modelOptions}
+          activeModelName={activeModelName}
+          selectedModelId={model}
+          onSelectModel={setModel}
+          onOpenSettings={openKiroSettings}
         />
 
         {historyOpen && (

@@ -167,6 +167,7 @@ export type SettingsSection =
   | "semester"
   | "tasks"
   | "interaction"
+  | "kiro"
   | "data"
   | "about";
 

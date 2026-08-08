@@ -110,6 +110,42 @@ export const SETTINGS_REGISTRY: SettingDefinition[] = [
     description: "界面动画强度；跟随系统时尊重系统减弱动效设置",
     keywords: ["动效", "动画", "motion", "reduced", "减少"],
   },
+  // ---- Kiro / AI 服务 ----
+  {
+    id: "ai-enabled",
+    section: "kiro",
+    title: "启用 Kiro",
+    description: "Kiro 是否可发起 AI 请求",
+    keywords: ["kiro", "ai", "启用", "开关"],
+  },
+  {
+    id: "ai-provider",
+    section: "kiro",
+    title: "AI 服务",
+    description: "OpenCode Go / DeepSeek / 自定义服务",
+    keywords: ["provider", "服务", "模型来源", "deepseek", "opencode"],
+  },
+  {
+    id: "ai-model",
+    section: "kiro",
+    title: "模型",
+    description: "选择当前使用的对话模型",
+    keywords: ["模型", "model", "v4", "grok", "kimi", "glm"],
+  },
+  {
+    id: "ai-api-key",
+    section: "kiro",
+    title: "API Key",
+    description: "各服务的 API Key（仅保存在当前浏览器会话）",
+    keywords: ["api key", "密钥", "key", "token"],
+  },
+  {
+    id: "ai-custom-url",
+    section: "kiro",
+    title: "自定义服务地址",
+    description: "自定义 OpenAI 兼容服务的 Base URL 与模型",
+    keywords: ["自定义", "base url", "兼容", "openai"],
+  },
   // ---- 数据与存储 ----
   {
     id: "backup-full",

@@ -4,6 +4,7 @@ import React from "react";
 import { Home, User, Calendar, ListTodo, MousePointerClick, Database, Info } from "lucide-react";
 import { SettingsSection } from "@/types";
 import { cn } from "@/lib/utils";
+import { KIRO_ICON } from "@/components/layout/navItems";
 
 export const SETTINGS_NAV: {
   id: SettingsSection;
@@ -15,6 +16,7 @@ export const SETTINGS_NAV: {
   { id: "semester", label: "学期与课表", icon: Calendar },
   { id: "tasks", label: "任务", icon: ListTodo },
   { id: "interaction", label: "交互与快捷键", icon: MousePointerClick },
+  { id: "kiro", label: "Kiro 与 AI", icon: KIRO_ICON },
   { id: "data", label: "数据与存储", icon: Database },
 ];
 

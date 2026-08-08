@@ -10,6 +10,7 @@ import { TaskSettings } from "@/components/settings/TaskSettings";
 import { InteractionSettings } from "@/components/settings/InteractionSettings";
 import { DataSettings } from "@/components/settings/DataSettings";
 import { AboutSettings } from "@/components/settings/AboutSettings";
+import { KiroAISettings } from "@/components/settings/KiroAISettings";
 import { searchSettings, SettingDefinition } from "@/lib/settingsRegistry";
 import {
   getModifiedPreferenceKeys,
@@ -41,6 +42,17 @@ export function SettingsView({ searchQuery, onClearSearch, jumpToSetting }: Sett
   const preferences = useAppStore((s) => s.preferences);
   const resetPreferences = useAppStore((s) => s.resetPreferences);
   const pushToast = useToastStore((s) => s.pushToast);
+
+  // 外部请求跳转（如 Kiro「配置 AI 服务」）：切 section 并消费
+  const settingsTargetSection = useAppStore((s) => s.settingsTargetSection);
+  const setSettingsTargetSection = useAppStore((s) => s.setSettingsTargetSection);
+  React.useEffect(() => {
+    if (settingsTargetSection) {
+      setSection(settingsTargetSection);
+      setShowModified(false);
+      setSettingsTargetSection(null);
+    }
+  }, [settingsTargetSection, setSettingsTargetSection]);
 
   const modifiedKeys = useMemo(() => getModifiedPreferenceKeys(preferences), [preferences]);
   const modifiedSections = useMemo(
@@ -242,6 +254,9 @@ export function SettingsView({ searchQuery, onClearSearch, jumpToSetting }: Sett
             </div>
             <div className={cn(section === "interaction" && "ux-fade")} hidden={section !== "interaction"}>
               <InteractionSettings highlightedId={highlightedId ?? undefined} />
+            </div>
+            <div className={cn(section === "kiro" && "ux-fade")} hidden={section !== "kiro"}>
+              <KiroAISettings />
             </div>
             <div className={cn(section === "data" && "ux-fade")} hidden={section !== "data"}>
               <DataSettings />

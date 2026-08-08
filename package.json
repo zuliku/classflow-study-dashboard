@@ -12,6 +12,9 @@
     "test:e2e": "playwright test"
   },
   "dependencies": {
+    "@ai-sdk/openai-compatible": "^3.0.27",
+    "@ai-sdk/react": "^4.0.61",
+    "ai": "^7.0.58",
     "clsx": "^2.1.1",
     "date-fns": "^3.6.0",
     "jszip": "^3.10.1",

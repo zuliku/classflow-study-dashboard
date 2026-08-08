@@ -68,6 +68,7 @@ export function KiroContextBar({
           </button>
         </div>
       )}
+      <p className="mt-1 text-[9px] text-sandrift">ClassFlow 上下文将在下一阶段接入，目前不会发送给模型。</p>
     </div>
   );
 }

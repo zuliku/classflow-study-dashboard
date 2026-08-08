@@ -16,6 +16,7 @@ import {
   Material,
   TimeSliceFilter,
   AppPreferences,
+  SettingsSection,
 } from "@/types";
 import { createDefaultSemester, getSemesterWeek } from "@/lib/semester";
 import { getLocalDDLDate } from "@/lib/ddl";
@@ -158,6 +159,9 @@ interface AppState {
   /** 设置中心 Modal：侧边栏 / 底部导航 / 命令面板统一入口 */
   isSettingsModalOpen: boolean;
   setSettingsModalOpen: (open: boolean) => void;
+  /** 外部请求打开的设置 section（如 Kiro「配置 AI 服务」）；SettingsView 消费后清空 */
+  settingsTargetSection: SettingsSection | null;
+  setSettingsTargetSection: (section: SettingsSection | null) => void;
   /** Command Center 子视图：默认命令面板；? 打开快捷键指南 */
   searchModalView: "palette" | "guide";
   setSearchModalView: (view: "palette" | "guide") => void;
@@ -317,6 +321,8 @@ export const useAppStore = create<AppState>()(
       setSearchModalOpen: (open) => set({ isSearchModalOpen: open }),
       isSettingsModalOpen: false,
       setSettingsModalOpen: (open) => set({ isSettingsModalOpen: open }),
+      settingsTargetSection: null,
+      setSettingsTargetSection: (section) => set({ settingsTargetSection: section }),
       searchModalView: "palette",
       setSearchModalView: (view) => set({ searchModalView: view }),
       highlightedAssignmentId: null,
