@@ -13,7 +13,6 @@ import { CourseSchedule, ScheduleConflict } from "@/types";
 import {
   TIMETABLE_DAY_START_MINUTES,
   TIMETABLE_DAY_END_MINUTES,
-  TIMETABLE_TOTAL_MINUTES,
   pointerToMinutes,
   pointerToDayIndex,
   calculateDraggedSchedule,

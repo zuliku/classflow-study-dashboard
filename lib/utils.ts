@@ -1,7 +1,7 @@
 import { type ClassValue, clsx } from "clsx";
 import { twMerge } from "tailwind-merge";
 import type { KeyboardEvent } from "react";
-import { format, differenceInCalendarDays, parseISO, isToday, isTomorrow, isPast } from "date-fns";
+import { format, differenceInCalendarDays, parseISO, isToday, isTomorrow } from "date-fns";
 import { zhCN } from "date-fns/locale";
 import { Priority, AssignmentStatus } from "@/types";
 import { parseLocalDDL } from "@/lib/ddl";

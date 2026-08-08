@@ -1,4 +1,4 @@
-import { test, expect, Page } from "@playwright/test";
+import { test, expect } from "@playwright/test";
 
 /**
  * Reduced Motion QA：prefers-reduced-motion: reduce 下所有功能仍然可用，

@@ -16,7 +16,7 @@ async function openWorkspace(page: Page) {
 }
 
 test("导航：J J Enter → 打开正确的任务 Drawer", async ({ page }) => {
-  const list = await openWorkspace(page);
+  await openWorkspace(page);
   await page.keyboard.press("j");
   await page.keyboard.press("j");
   await page.keyboard.press("Enter");

@@ -35,8 +35,6 @@ import {
   Plus,
   FileUp,
   BarChart2,
-  CheckCircle2,
-  Clock,
   ExternalLink,
 } from "lucide-react";
 import {

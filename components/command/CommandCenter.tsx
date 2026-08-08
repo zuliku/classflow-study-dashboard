@@ -28,7 +28,6 @@ export function CommandCenter() {
     isSearchModalOpen,
     setSearchModalOpen,
     searchModalView,
-    setSearchModalView,
     courses,
     assignments,
     semester,
@@ -219,7 +218,7 @@ export function CommandCenter() {
             )}
             <ArrowRight
               className={cn(
-                "w-3.5 h-3.5 shrink-0 transition-all duration-[var(--motion-fast)]",
+                "w-3.5 h-3.5 shrink-0 transition-[opacity,transform] duration-[var(--motion-fast)]",
                 isHighlighted ? "opacity-100 translate-x-0 text-sandrift" : "opacity-0 -translate-x-0.5"
               )}
             />

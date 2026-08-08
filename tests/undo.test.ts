@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { useAppStore } from "@/store/useAppStore";
-import { CourseSchedule, Material } from "@/types";
+import { Material } from "@/types";
 import { getLocalDDLDate } from "@/lib/ddl";
 
 describe("删除撤销（Undo）", () => {

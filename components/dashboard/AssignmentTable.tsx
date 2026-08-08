@@ -4,9 +4,7 @@ import React, { useState, useEffect, useMemo, useRef } from "react";
 import {
   ChevronRight,
   Plus,
-  Filter,
   AlertTriangle,
-  Clock,
   CheckCircle2,
   Edit2,
   Trash2,
@@ -20,7 +18,7 @@ import { useConfirmStore } from "@/store/useConfirmStore";
 import { TimeSliceFilter, Priority } from "@/types";
 import { openAssignmentEditor } from "@/lib/uiEvents";
 import { useEnterOnAdd } from "@/lib/useEnterOnAdd";
-import { cardKeyHandler, cn, getPriorityMeta } from "@/lib/utils";
+import { cn, getPriorityMeta } from "@/lib/utils";
 import { isToday, differenceInDays } from "date-fns";
 import { parseLocalDDL, getLocalDDLDate } from "@/lib/ddl";
 import { createAssignmentActions } from "@/lib/assignmentActions";
@@ -52,11 +50,7 @@ export function AssignmentTable({ mode = "compact" }: AssignmentTableProps) {
   const {
     assignments,
     courses,
-    setSelectedAssignmentId,
     updateAssignmentStatus,
-    deleteAssignment,
-    restoreAssignment,
-    updateAssignment,
     setActiveTab,
     assignmentTimeSlice,
     setAssignmentTimeSlice,

@@ -36,7 +36,7 @@ export interface CommandContext {
   assignments: Assignment[];
   semester: Semester;
   currentSemesterWeek: number;
-  // Assignment Workspace 选择上下文（Task 2）
+  // Assignment Workspace 选择上下文（highlight / selection 驱动）
   highlightedAssignmentId: string | null;
   assignmentSelection: string[];
   assignmentActions: AssignmentActions;
@@ -186,7 +186,7 @@ export function getSelectedAssignment(ctx: CommandContext): Assignment | null {
 }
 
 /**
- * 课程 / 任务 Context Commands（Command System Task 2）：
+ * 课程 / 任务 Context Commands（entity scope）：
  * 只在对应实体确实存在时通过 when 显示；run 内再做轻量 defensive check（不 throw）。
  * 打开任务编辑器一律复用 openAssignmentEditor，不复制 editor 状态。
  * contextScope = "entity"：表达「当前打开/选中的实体」。

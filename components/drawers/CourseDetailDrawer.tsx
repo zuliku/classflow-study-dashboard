@@ -12,8 +12,6 @@ import {
   FileText,
   Edit,
   Save,
-  Download,
-  Eye,
   FileUp,
   Loader2,
   ClipboardList,
@@ -31,7 +29,7 @@ import { usePresence } from "@/lib/usePresence";
 import { useRestoreFocus } from "@/lib/useRestoreFocus";
 import { cn } from "@/lib/utils";
 import { openAssignmentEditor, previewMaterial } from "@/lib/uiEvents";
-import { pushOverlay, popOverlay, isTopmostOverlay } from "@/lib/overlayStack";
+import { popOverlay, isTopmostOverlay } from "@/lib/overlayStack";
 import { useEnterOnAdd } from "@/lib/useEnterOnAdd";
 
 const OVERLAY_ID = "course-detail-drawer";

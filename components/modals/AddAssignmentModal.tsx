@@ -1,10 +1,10 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
-import { X, ClipboardList, Clock, AlertCircle, Tag, Plus, Trash2 } from "lucide-react";
+import { X, ClipboardList, Clock, Plus, Trash2 } from "lucide-react";
 import { useAppStore } from "@/store/useAppStore";
 import { useToastStore } from "@/store/useToastStore";
-import { Assignment, Priority, AssignmentStatus, Subtask } from "@/types";
+import { Priority, AssignmentStatus, Subtask } from "@/types";
 import { combineLocalDateTime, getLocalDDLDate, getLocalDDLTime } from "@/lib/ddl";
 import { format } from "date-fns";
 import { usePresence } from "@/lib/usePresence";

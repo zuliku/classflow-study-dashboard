@@ -6,7 +6,7 @@ import { useAppStore } from "@/store/useAppStore";
 import { getSemesterWeek } from "@/lib/semester";
 import { parseLocalDDL } from "@/lib/ddl";
 import { isScheduleActive } from "@/lib/schedule";
-import { format, isSameWeek, isSameDay } from "date-fns";
+import { isSameWeek } from "date-fns";
 import { cardKeyHandler } from "@/lib/utils";
 
 /** 指标值变化：仅 2px 上移淡入（不做 count-up 数字滚动） */

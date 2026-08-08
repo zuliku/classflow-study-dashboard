@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
-import { X, BookOpen, Clock, Calendar, Plus, Trash2 } from "lucide-react";
+import { X, BookOpen, Clock, Plus, Trash2 } from "lucide-react";
 import { useAppStore } from "@/store/useAppStore";
 import { useToastStore } from "@/store/useToastStore";
 import { WEEK_RANGE_PRESETS, isValidTimeRange } from "@/lib/schedule";
@@ -81,7 +81,7 @@ export function AddCourseModal() {
     setScheduleSlots(scheduleSlots.filter((_, i) => i !== index));
   };
 
-  const handleSlotChange = (index: number, field: keyof SlotInput, value: any) => {
+  const handleSlotChange = (index: number, field: keyof SlotInput, value: string | number) => {
     const updated = [...scheduleSlots];
     updated[index] = { ...updated[index], [field]: value };
     setScheduleSlots(updated);

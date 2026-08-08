@@ -3,7 +3,7 @@ import { Assignment, CalendarMark, Course, CourseSchedule, GroupProject } from "
 /**
  * 数据完整性快照检查：仅报告，绝不自动修复/重新绑定。
  *
- * 原则（Release Hardening Task 3 第八节）：
+ * 原则：
  * - 检测到孤儿 schedule 时，不猜测 course，只报告；
  * - DDL mark 的 sourceId 指向不存在的 Assignment 时，报告问题，
  *   不静默重新绑定到标题相似的任务。

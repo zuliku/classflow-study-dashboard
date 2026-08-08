@@ -7,8 +7,6 @@ import {
   CheckSquare,
   Square,
   Trash2,
-  Calendar,
-  AlertTriangle,
   BookOpen,
   Edit3,
   ChevronRight,
@@ -16,7 +14,7 @@ import {
 import { useAppStore } from "@/store/useAppStore";
 import { useToastStore } from "@/store/useToastStore";
 import { Priority, AssignmentStatus } from "@/types";
-import { getPriorityMeta, getStatusMeta, getDDLStatusText } from "@/lib/utils";
+import { getDDLStatusText } from "@/lib/utils";
 import { format } from "date-fns";
 import { zhCN } from "date-fns/locale";
 import { parseLocalDDL } from "@/lib/ddl";
@@ -87,8 +85,6 @@ export function AssignmentDrawer() {
   };
 
   const course = courses.find((c) => c.id === assignment.courseId);
-  const priorityMeta = getPriorityMeta(assignment.priority);
-  const statusMeta = getStatusMeta(assignment.status);
   const { text: ddlText, isUrgent } = getDDLStatusText(assignment.ddl);
 
   let formattedDDL = "";

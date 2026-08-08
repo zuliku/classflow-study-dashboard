@@ -12,7 +12,6 @@ import {
   Sliders,
   ShieldCheck,
   Save,
-  BookOpen,
   Info,
   Archive,
   RefreshCw,

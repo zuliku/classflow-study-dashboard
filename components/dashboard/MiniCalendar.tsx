@@ -185,7 +185,7 @@ export function MiniCalendar() {
     return () => document.removeEventListener("pointerdown", onPointerDown);
   }, [timeEditOpen]);
 
-  // 打开修改时间：聚焦输入
+  // 打开修改时间：聚焦输入框
   useEffect(() => {
     if (timeEditOpen) timeInputRef.current?.focus();
   }, [timeEditOpen]);

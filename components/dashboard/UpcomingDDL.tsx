@@ -5,7 +5,6 @@ import { Clock, ArrowUpRight, CheckCircle2 } from "lucide-react";
 import { useAppStore } from "@/store/useAppStore";
 import { format, formatDistanceToNow, differenceInDays } from "date-fns";
 import { zhCN } from "date-fns/locale";
-import { cn } from "@/lib/utils";
 import { parseLocalDDL } from "@/lib/ddl";
 
 export function UpcomingDDL() {

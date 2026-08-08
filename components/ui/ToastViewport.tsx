@@ -2,7 +2,7 @@
 
 import React, { useEffect, useRef, useState } from "react";
 import { CheckCircle2, AlertTriangle, Info, XCircle, X } from "lucide-react";
-import { useToastStore, Toast, ToastType } from "@/store/useToastStore";
+import { useToastStore, ToastType } from "@/store/useToastStore";
 import { cn } from "@/lib/utils";
 
 const TYPE_META: Record<ToastType, { icon: React.ElementType; accent: string }> = {
