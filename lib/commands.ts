@@ -20,6 +20,7 @@ import {
 import { NavTab, Course, Assignment, Semester, TimeSliceFilter, Priority } from "@/types";
 import type { AssignmentActions } from "@/lib/assignmentActions";
 import { openAssignmentEditor } from "@/lib/uiEvents";
+import { KIRO_ICON } from "@/components/layout/navItems";
 
 /**
  * Command Registry：Command Center / Context Menu / 键盘快捷键 共用的唯一动作源。
@@ -72,6 +73,7 @@ export const NAV_GROUPS: { id: NavTab; label: string }[] = [
   { id: "timetable", label: "课表" },
   { id: "assignments", label: "任务" },
   { id: "courses", label: "课程" },
+  { id: "kiro", label: "Kiro" },
   { id: "analytics", label: "分析" },
   { id: "group", label: "小组" },
 ];
@@ -111,6 +113,7 @@ function navIcon(tab: NavTab): ElementType {
     case "timetable": return CalendarDays;
     case "assignments": return ClipboardCheck;
     case "courses": return FolderKanban;
+    case "kiro": return KIRO_ICON;
     case "analytics": return BarChart3;
     case "group": return Users2;
   }

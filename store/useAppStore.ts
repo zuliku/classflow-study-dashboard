@@ -76,7 +76,7 @@ interface LegacyPersistedStateV0 {
 
 const TIME_SLICES: TimeSliceFilter[] = ["all", "overdue", "today", "3days", "7days", "completed"];
 
-const NAV_TABS: NavTab[] = ["overview", "timetable", "assignments", "courses", "analytics", "group"];
+const NAV_TABS: NavTab[] = ["overview", "timetable", "assignments", "courses", "kiro", "analytics", "group"];
 
 function isValidSemester(v: unknown): v is Semester {
   return (

@@ -40,12 +40,16 @@ export function Sidebar() {
           {WORKSPACE_NAV_ITEMS.map((item) => {
             const Icon = item.icon;
             const isActive = activeTab === item.id;
+            // Kiro 通过轻微间距与核心学习管理区形成层次（无独立 Section Header）
+            const kiroGap = item.id === "kiro" || item.id === "analytics" ? "mt-2" : "";
             return (
               <button
                 key={item.id}
                 onClick={() => setActiveTab(item.id)}
                 aria-label={item.label}
+                aria-current={isActive ? "page" : undefined}
                 className={cn(
+                  kiroGap,
                   "relative w-full flex items-center justify-center xl:justify-start xl:gap-2.5 px-2 xl:px-3 py-2 rounded-xl text-xs font-medium transition-colors duration-[var(--motion-base)] ease-[var(--ease-standard)] group text-left",
                   isActive
                     ? "bg-pastel-mint text-charcoal font-semibold shadow-subtle"

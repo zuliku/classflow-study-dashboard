@@ -11,6 +11,7 @@ import { MiniCalendar } from "@/components/dashboard/MiniCalendar";
 import { StudyLoadChart } from "@/components/dashboard/StudyLoadChart";
 import { AssignmentTable } from "@/components/dashboard/AssignmentTable";
 import { GroupCollaborationView } from "@/components/group/GroupCollaborationView";
+import { KiroWorkspace } from "@/components/kiro/KiroWorkspace";
 import { SettingsModal } from "@/components/settings/SettingsModal";
 import { CourseDetailDrawer } from "@/components/drawers/CourseDetailDrawer";
 import { AssignmentDrawer } from "@/components/drawers/AssignmentDrawer";
@@ -396,6 +397,8 @@ export default function Home() {
               )}
             </div>
           )}
+
+          {activeTab === "kiro" && <KiroWorkspace />}
 
           {activeTab === "group" && <GroupCollaborationView />}
 

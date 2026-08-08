@@ -22,7 +22,7 @@ describe("resolveStartupTab（启动位置解析，纯函数）", () => {
   });
 
   it("任何输入都返回合法 NavTab", () => {
-    const tabs: string[] = ["overview", "timetable", "assignments", "courses", "analytics", "group"];
+    const tabs: string[] = ["overview", "timetable", "assignments", "courses", "kiro", "analytics", "group"];
     for (const v of ["overview", "timetable", "assignments", "last"] as const) {
       for (const last of tabs) {
         expect(tabs).toContain(resolveStartupTab(v, last as NavTab));

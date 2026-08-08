@@ -88,7 +88,9 @@ test.describe("responsive navigation", () => {
     await nav.getByRole("button", { name: "课表" }).click();
     await expect(page.getByRole("heading", { name: "学期课表" })).toBeVisible();
 
-    await nav.getByRole("button", { name: "课程" }).click();
+    // 更多菜单 → 课程（已移入「更多」）
+    await nav.getByRole("button", { name: "更多" }).click();
+    await page.getByRole("menuitem", { name: "课程" }).click();
     await expect(page.getByRole("heading", { name: "本学期课程" })).toBeVisible();
 
     // 更多菜单 → 设置（全屏 Modal）

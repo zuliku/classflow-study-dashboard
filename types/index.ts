@@ -4,6 +4,7 @@ export type NavTab =
   | "timetable"
   | "assignments"
   | "courses"
+  | "kiro"
   | "analytics"
   | "group";
 
