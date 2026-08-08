@@ -37,7 +37,7 @@ test("Desktop 1440：Sidebar 进入 Kiro，Empty State 与 Composer 可见，未
   // 未配置 AI：提示 + 配置入口
   await expect(composer.getByText("先连接一个 AI 服务即可开始使用 Kiro。")).toBeVisible();
   // 点击建议不产生消息（未配置，禁止请求）
-  await page.getByRole("button", { name: "制定一个学习计划" }).first().click();
+  await page.getByRole("button", { name: "帮我规划今天" }).first().click();
   await expect(page.getByTestId("kiro-user-message")).toHaveCount(0);
 
   // 配置 AI 服务 → 打开 Settings 的 Kiro section
@@ -58,13 +58,13 @@ test("Desktop：@ Context picker（UI foundation）与 History 空状态", async
   await page.locator("aside").first().getByRole("button", { name: "Kiro" }).click();
   const composer = page.getByTestId("kiro-composer");
 
-  // @ → 课程上下文 chip（演示数据有课程；Task 1 不发送给模型）
+  // @ → 课程上下文 chip（演示数据有课程；Task 2 起随消息发送）
   await composer.getByLabel("选择上下文").click();
   const picker = page.getByRole("dialog", { name: "选择上下文" });
   await expect(picker).toBeVisible();
-  await picker.getByRole("menuitem", { name: /ECON/ }).first().click();
+  await picker.getByRole("menuitem", { name: /微观经济学/ }).first().click();
   await expect(page.getByTestId("kiro-context-bar")).toContainText("微观经济学");
-  await expect(page.getByTestId("kiro-context-bar")).toContainText("下一阶段接入");
+  await expect(page.getByTestId("kiro-context-bar")).toContainText("本周");
 
   // 历史面板：空状态 + Esc 关闭
   await page.getByLabel("历史记录").click();

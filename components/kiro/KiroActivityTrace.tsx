@@ -1,27 +1,25 @@
 "use client";
 
 import React, { useState } from "react";
-import { Check, Loader2, Circle, ChevronDown } from "lucide-react";
+import { Check, Loader2, Circle, ChevronDown, BookOpenCheck } from "lucide-react";
 import { useAppStore } from "@/store/useAppStore";
+import { KiroActivityStep } from "@/hooks/useKiroChat";
 import { cn } from "@/lib/utils";
 
-export interface KiroTraceStep {
-  label: string;
-  status: "done" | "working" | "pending";
-}
-
 /**
- * Agent Activity Trace 视觉组件（Task 0 无 Agent Runtime，用静态/mock props）。
- * Collapsed：`✓ 完成 N 项操作` / `● Kiro 正在处理 · n / N`
- * Expanded：逐项状态列表。
+ * Kiro Activity Trace（Task 2）：展示真实 Read Tool 调用（用户语义标签）。
+ * mode="read"（Task 2）→ collapsed「✓ 读取 N 项 ClassFlow 信息」；
+ * mode="action"（未来 Task 3 写操作）→「完成 N 项操作」。
  * 禁止展示 JSON / tool args / 内部工具名 / token 细节。
  */
 export function KiroActivityTrace({
-  status,
   steps,
+  done,
+  mode = "read",
 }: {
-  status: "done" | "working";
-  steps: KiroTraceStep[];
+  steps: KiroActivityStep[];
+  done: boolean;
+  mode?: "read" | "action";
 }) {
   const [expanded, setExpanded] = useState(false);
   const contentDensity = useAppStore((s) => s.preferences.contentDensity);
@@ -29,9 +27,16 @@ export function KiroActivityTrace({
 
   const doneCount = steps.filter((s) => s.status === "done").length;
   const workingCount = steps.filter((s) => s.status === "working").length;
+  if (steps.length === 0) return null;
+
+  const summary = done
+    ? mode === "read"
+      ? `✓ 读取 ${steps.length} 项 ClassFlow 信息`
+      : `✓ 完成 ${steps.length} 项操作`
+    : `● Kiro 正在处理 · ${doneCount + workingCount} / ${steps.length}`;
 
   return (
-    <div className="inline-flex flex-col items-start">
+    <div className="inline-flex flex-col items-start" data-testid="kiro-activity-trace">
       <button
         onClick={() => setExpanded((v) => !v)}
         aria-expanded={expanded}
@@ -40,15 +45,15 @@ export function KiroActivityTrace({
           compact ? "py-1.5" : "py-2"
         )}
       >
-        {status === "done" ? (
+        {done ? (
           <>
             <Check className="w-3.5 h-3.5 text-success" />
-            完成 {steps.length} 项操作
+            {summary}
           </>
         ) : (
           <>
             <Loader2 className="w-3.5 h-3.5 animate-spin text-charcoal" />
-            Kiro 正在处理 · {doneCount + workingCount} / {steps.length}
+            {summary}
           </>
         )}
         <ChevronDown
@@ -59,7 +64,7 @@ export function KiroActivityTrace({
       {expanded && (
         <div
           role="list"
-          aria-label="Kiro 处理步骤"
+          aria-label="Kiro 读取记录"
           className="mt-1.5 w-full rounded-xl bg-[#F7F5F5] border border-line p-1.5 space-y-0.5 ux-fade"
         >
           {steps.map((s) => (
@@ -73,7 +78,7 @@ export function KiroActivityTrace({
                   ? "text-satin-grey"
                   : s.status === "working"
                   ? "text-charcoal font-semibold"
-                  : "text-sandrift"
+                  : "text-danger"
               )}
             >
               {s.status === "done" ? (
@@ -81,9 +86,12 @@ export function KiroActivityTrace({
               ) : s.status === "working" ? (
                 <Loader2 className="w-3.5 h-3.5 animate-spin text-charcoal shrink-0" />
               ) : (
-                <Circle className="w-3.5 h-3.5 text-line-strong shrink-0" />
+                <Circle className="w-3.5 h-3.5 text-danger shrink-0" />
               )}
               <span className="truncate">{s.label}</span>
+              {s.status === "error" && (
+                <BookOpenCheck className="w-3 h-3 text-sandrift shrink-0 ml-auto" aria-hidden="true" />
+              )}
             </div>
           ))}
         </div>

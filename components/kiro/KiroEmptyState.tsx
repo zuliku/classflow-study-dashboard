@@ -1,21 +1,32 @@
 "use client";
 
 import React from "react";
-import { CalendarRange, ListChecks, BookOpen, Target } from "lucide-react";
+import { CalendarCheck, ListChecks, BookOpen, TrendingUp } from "lucide-react";
+import { useAppStore } from "@/store/useAppStore";
 import { KiroMark } from "@/components/kiro/KiroHeader";
 
 /**
- * Kiro Empty State（Task 1）：
- * 模型尚未获得 ClassFlow Context，suggestion 使用通用学习辅助文案，
- * Task 2 接入 Context 后再恢复「查看最近 DDL / 分析本周负担」。
+ * Kiro Empty State（Task 2）：恢复 ClassFlow Context 相关建议。
+ * 有数据 / 无数据由本地确定性判断切换文案；点击 = 真实发送。
  */
 export function KiroEmptyState({ onSuggestion }: { onSuggestion: (text: string) => void }) {
-  const suggestions = [
-    { icon: CalendarRange, label: "制定一个学习计划", desc: "帮我规划今天的学习" },
-    { icon: ListChecks, label: "帮我拆解一个复杂任务", desc: "把大任务拆成可执行步骤" },
-    { icon: BookOpen, label: "解释一个知识点", desc: "用通俗方式讲清楚概念" },
-    { icon: Target, label: "规划今天的学习方法", desc: "给出一套高效的执行思路" },
-  ];
+  const courses = useAppStore((s) => s.courses);
+  const assignments = useAppStore((s) => s.assignments);
+  const schedules = useAppStore((s) => s.schedules);
+  const hasData = courses.length > 0 || assignments.length > 0 || schedules.length > 0;
+
+  const suggestions = hasData
+    ? [
+        { icon: CalendarCheck, label: "帮我规划今天", desc: "结合课表与 DDL 给出今日建议" },
+        { icon: ListChecks, label: "查看最近 DDL", desc: "梳理未来几天的截止任务" },
+        { icon: BookOpen, label: "看看我明天有什么课", desc: "基于当前周次查询课表" },
+        { icon: TrendingUp, label: "分析本周学习负担", desc: "按课程与任务估算本周压力" },
+      ]
+    : [
+        { icon: BookOpen, label: "了解 Kiro 能做什么", desc: "Kiro 会按需读取你的 ClassFlow 数据" },
+        { icon: ListChecks, label: "制定一个学习计划", desc: "帮我把大目标拆成可执行步骤" },
+        { icon: CalendarCheck, label: "解释一个知识点", desc: "用通俗方式讲清楚概念" },
+      ];
 
   return (
     <div
@@ -24,7 +35,9 @@ export function KiroEmptyState({ onSuggestion }: { onSuggestion: (text: string) 
     >
       <KiroMark size="lg" />
       <h2 className="text-lg font-bold text-charcoal mt-5">今天想先处理什么？</h2>
-      <p className="text-xs text-sandrift mt-1.5 max-w-xs">告诉我你的问题，Kiro 会直接回答。</p>
+      <p className="text-xs text-sandrift mt-1.5 max-w-xs">
+        Kiro 会按需读取完成当前问题所需的 ClassFlow 学习数据。
+      </p>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-7 w-full max-w-md">
         {suggestions.map((s) => {

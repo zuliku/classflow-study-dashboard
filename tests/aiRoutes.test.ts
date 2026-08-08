@@ -161,6 +161,115 @@ describe("/api/ai/chat（流式）", () => {
     const res = await post({ POST: chatPOST }, { provider: "deepseek", model: "x", apiKey: "k" });
     expect(res.status).toBe(400);
   });
+
+  it("Read Tool Call 从 /api/ai/chat 流入 UI Message Stream（tool-input 协议）", async () => {
+    // Mock Provider 返回 tool_calls（get_upcoming_assignments）
+    const toolChunk = JSON.stringify({
+      id: "chatcmpl-tool",
+      object: "chat.completion.chunk",
+      choices: [
+        {
+          index: 0,
+          delta: {
+            tool_calls: [
+              {
+                index: 0,
+                id: "call_1",
+                type: "function",
+                function: { name: "get_upcoming_assignments", arguments: '{"days":7}' },
+              },
+            ],
+          },
+          finish_reason: "tool_calls",
+        },
+      ],
+    });
+    fetchMock.mockImplementation(async () => {
+      const body = `data: ${toolChunk}\n\ndata: [DONE]\n\n`;
+      return new Response(body, { status: 200, headers: { "content-type": "text/event-stream" } });
+    });
+
+    const res = await post(
+      { POST: chatPOST },
+      {
+        ...baseBody,
+        baseContext: { version: 1, now: "2026-08-08T10:00:00.000Z", timezone: "Asia/Shanghai", summary: { courseCount: 1 } },
+        contextRefs: [{ kind: "week", id: "current", label: "本周" }],
+      }
+    );
+    expect(res.status).toBe(200);
+    const text = await res.text();
+    expect(text).toContain('"type":"tool-input-start"');
+    expect(text).toContain('"toolName":"get_upcoming_assignments"');
+    expect(text).toContain('"type":"tool-input-available"');
+    // 不泄漏 API Key
+    expect(text).not.toContain("sk-test-secret");
+  });
+
+  it("多轮 client tool call：tool output 消息被转换为 ModelMessage（role=tool 进入请求体）", async () => {
+    fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+      lastFetch = { url: String(input), init };
+      const bodyStr = String(init?.body ?? "");
+      const body = JSON.parse(bodyStr);
+      const roles = body.messages.map((m: { role: string }) => m.role);
+      // 第二轮（含 tool output）：请求体必须包含 role=tool 消息
+      if (roles.includes("tool")) {
+        return sseChunks([
+          completionChunk("最近", null),
+          completionChunk("的 DDL 是统计学作业。", "stop"),
+        ]);
+      }
+      const toolChunk = JSON.stringify({
+        id: "chatcmpl-tool2",
+        object: "chat.completion.chunk",
+        choices: [
+          {
+            index: 0,
+            delta: {
+              tool_calls: [
+                {
+                  index: 0,
+                  id: "call_2",
+                  type: "function",
+                  function: { name: "search_assignments", arguments: "{}" },
+                },
+              ],
+            },
+            finish_reason: "tool_calls",
+          },
+        ],
+      });
+      return new Response(`data: ${toolChunk}\n\ndata: [DONE]\n\n`, {
+        status: 200,
+        headers: { "content-type": "text/event-stream" },
+      });
+    });
+
+    // 客户端多轮消息：user → assistant(tool-call) → tool(output) → user? 
+    // 用 UIMessage 结构（tool-call part + output-available part）验证转换
+    const messages = [
+      { id: "u1", role: "user", parts: [{ type: "text", text: "我最近有什么 DDL？" }] },
+      {
+        id: "a1",
+        role: "assistant",
+        parts: [
+          {
+            type: "tool-call",
+            toolCallId: "call_2",
+            toolName: "search_assignments",
+            state: "output-available",
+            input: {},
+            output: { ok: true, data: { items: [] } },
+          },
+        ],
+      },
+    ];
+    const res = await post({ POST: chatPOST }, { ...baseBody, messages });
+    expect(res.status).toBe(200);
+    const text = await res.text();
+    expect(text).toContain('"delta":"最近"');
+    expect(text).not.toContain("sk-test-secret");
+  });
 });
 
 describe("/api/ai/test（连接测试）", () => {

@@ -13,9 +13,10 @@ import {
   Settings,
   Check,
 } from "lucide-react";
-import { KiroContextBar, KiroContextChip } from "@/components/kiro/KiroContextBar";
+import { KiroContextBar } from "@/components/kiro/KiroContextBar";
 import { KiroContextPicker } from "@/components/kiro/KiroContextPicker";
 import { ProviderLogo } from "@/components/kiro/ProviderLogo";
+import { KiroContextRef } from "@/lib/ai/context/types";
 import { AIModelVendor } from "@/lib/ai/providers/types";
 import { cn } from "@/lib/utils";
 
@@ -42,9 +43,9 @@ export function KiroComposer({
   onSelectModel,
   onOpenSettings,
 }: {
-  contexts: KiroContextChip[];
-  onAddContext: (chip: KiroContextChip) => void;
-  onRemoveContext: (id: string) => void;
+  contexts: KiroContextRef[];
+  onAddContext: (ref: KiroContextRef) => void;
+  onRemoveContext: (key: string) => void;
   onSend: (text: string) => void;
   streaming: boolean;
   onStop: () => void;
@@ -237,8 +238,8 @@ export function KiroComposer({
                 {pickerOpen && (
                   <KiroContextPicker
                     onClose={() => setPickerOpen(false)}
-                    onPick={(chip) => {
-                      onAddContext(chip);
+                    onPick={(ref) => {
+                      onAddContext(ref);
                       setPickerOpen(false);
                     }}
                   />
@@ -308,7 +309,7 @@ export function KiroComposer({
           </div>
         ) : (
           <p className="text-[10px] text-sandrift mt-1.5 px-1">
-            Kiro 当前可以对话与学习辅助，尚未读取你的 ClassFlow 数据。
+            Kiro 会按需读取完成当前问题所需的 ClassFlow 学习数据；当前仅支持读取，不会修改任何数据。
           </p>
         )}
       </div>

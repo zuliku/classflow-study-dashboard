@@ -133,3 +133,70 @@ test("Kiro Chat：streaming 时 Send 变为 Stop，点击停止生成", async ({
   await stopBtn.click();
   await expect(composer.getByLabel("发送")).toBeVisible({ timeout: 5000 });
 });
+
+test("Kiro Read Tool：tool call → 客户端执行 → 自动继续 → 最终回答 + Activity Trace", async ({ page }) => {
+  let requests = 0;
+  await page.route("**/api/ai/chat", async (route) => {
+    requests++;
+    const body = route.request().postDataJSON() as { messages: { role: string; parts?: { type: string; state?: string }[] }[] };
+    const hasToolOutput = (body?.messages ?? []).some(
+      (m) =>
+        m.role === "assistant" &&
+        (m.parts ?? []).some((p) => p.type.startsWith("tool-") && p.state === "output-available")
+    );
+
+    if (!hasToolOutput) {
+      // 第一轮：模型发出 get_upcoming_assignments tool call（含 step 边界，与真实 server 一致）
+      const chunks = [
+        JSON.stringify({ type: "start", messageId: "mock-msg-1" }),
+        JSON.stringify({ type: "start-step" }),
+        JSON.stringify({ type: "tool-input-start", toolCallId: "call_1", toolName: "get_upcoming_assignments" }),
+        JSON.stringify({ type: "tool-input-delta", toolCallId: "call_1", inputTextDelta: '{"days":7}' }),
+        JSON.stringify({ type: "tool-input-available", toolCallId: "call_1", toolName: "get_upcoming_assignments", input: { days: 7 } }),
+        JSON.stringify({ type: "finish-step" }),
+        JSON.stringify({ type: "finish", finishReason: "tool-calls" }),
+      ];
+      await route.fulfill({ status: 200, contentType: "text/event-stream", body: sse(chunks.join("\n")) });
+      return;
+    }
+    // 第二轮：客户端已执行工具并回传 output → 最终回答（新的 step，无 tool call）
+    const chunks = [
+      JSON.stringify({ type: "start", messageId: "mock-msg-1" }),
+      JSON.stringify({ type: "start-step" }),
+      JSON.stringify({ type: "text-start", id: "mock-text-2" }),
+      JSON.stringify({ type: "text-delta", id: "mock-text-2", delta: "你最近的 DDL 是统计学作业，明天 23:59 截止。我可以帮你分析，但目前只能读取、不能修改。" }),
+      JSON.stringify({ type: "text-end", id: "mock-text-2" }),
+      JSON.stringify({ type: "finish-step" }),
+      JSON.stringify({ type: "finish", finishReason: "stop" }),
+    ];
+    await route.fulfill({ status: 200, contentType: "text/event-stream", body: sse(chunks.join("\n")) });
+  });
+
+  await page.addInitScript(({ settings, key }) => {
+    localStorage.setItem("classflow-ai-settings-v1", JSON.stringify({ version: 0, state: settings }));
+    sessionStorage.setItem("classflow-ai-key:deepseek", key);
+  }, { settings: AI_SETTINGS, key: "sk-test-key" });
+
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/");
+  await page.locator("aside").first().getByRole("button", { name: "Kiro" }).click();
+
+  // 发送问题 → 第一轮 tool call
+  const composer = page.getByTestId("kiro-composer");
+  await composer.getByLabel("Ask Kiro").fill("我最近有什么 DDL？");
+  await composer.getByLabel("发送").click();
+  await expect(page.getByTestId("kiro-user-message")).toContainText("我最近有什么 DDL？");
+
+  // 客户端执行工具并自动继续：最终回答出现
+  await expect(page.getByTestId("kiro-message").last()).toContainText("你最近的 DDL 是统计学作业", { timeout: 10000 });
+  // 第二轮回传包含 tool output（客户端确实执行并回传了）
+  expect(requests).toBe(2);
+
+  // Activity Trace：显示用户语义标签（不显示工具名/JSON），可展开
+  const trace = page.getByTestId("kiro-activity-trace");
+  await expect(trace).toContainText("读取 1 项 ClassFlow 信息");
+  await page.waitForTimeout(300);
+  await trace.click();
+  await expect(trace).toContainText("查看近期 DDL");
+  await expect(trace.getByText("get_upcoming_assignments")).toHaveCount(0);
+});

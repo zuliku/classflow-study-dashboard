@@ -3,20 +3,20 @@
 import React, { useEffect, useRef } from "react";
 import { BookOpen, ClipboardCheck, CalendarRange, Users2, FileText } from "lucide-react";
 import { useAppStore } from "@/store/useAppStore";
-import { KiroContextChip } from "@/components/kiro/KiroContextBar";
+import { KiroContextRef } from "@/lib/ai/context/types";
 import { cn } from "@/lib/utils";
 
 /**
- * Context Picker（@）：从当前 Store 读取真实实体名称用于展示（属于 UI，不构建 Prompt、不发送数据）。
- * 分类预留：课程 / 任务 / 时间范围 / 小组项目 / 课程资料。
- * Desktop：absolute 弹层；Mobile：底部 sheet（适合移动端触控）。
+ * Context Picker（@）：从当前 Store 实时读取真实实体（属于 UI，不构建 Prompt、不发送数据）。
+ * 分类：课程 / 任务 / 时间范围 / 小组项目 / 课程资料。
+ * Desktop：absolute 弹层；Mobile：底部 sheet。
  */
 export function KiroContextPicker({
   onClose,
   onPick,
 }: {
   onClose: () => void;
-  onPick: (chip: KiroContextChip) => void;
+  onPick: (ref: KiroContextRef) => void;
 }) {
   const courses = useAppStore((s) => s.courses);
   const assignments = useAppStore((s) => s.assignments);
@@ -53,37 +53,76 @@ export function KiroContextPicker({
   );
   const iconCls = "w-4 h-4 text-sandrift shrink-0";
 
-  const groups: {
-    title: string;
-    items: { id: string; label: string; kind: KiroContextChip["kind"]; sub?: string }[];
-  }[] = [
+  const groups: { title: string; items: KiroContextRef[] }[] = [
     {
       title: "课程",
-      items: courses.slice(0, 8).map((c) => ({ id: `course-${c.id}`, kind: "course" as const, label: c.name, sub: c.code })),
+      items: courses.slice(0, 8).map((c) => ({
+        key: `manual-course-${c.id}`,
+        kind: "course" as const,
+        entityId: c.id,
+        label: `${c.name}（${c.teacher}）`,
+        source: "manual" as const,
+      })),
     },
     {
       title: "任务",
-      items: assignments.slice(0, 8).map((a) => ({ id: `assignment-${a.id}`, kind: "assignment" as const, label: a.title })),
+      items: assignments.slice(0, 8).map((a) => {
+        const course = courses.find((c) => c.id === a.courseId);
+        return {
+          key: `manual-assignment-${a.id}`,
+          kind: "assignment" as const,
+          entityId: a.id,
+          label: `${a.title}${course ? ` · ${course.name}` : ""}`,
+          source: "manual" as const,
+        };
+      }),
     },
     {
-      title: "课表 / 时间范围",
+      title: "时间范围",
       items: [
-        { id: "range-week", kind: "range" as const, label: "本周" },
-        { id: "range-month", kind: "range" as const, label: "本月" },
-        { id: "range-semester", kind: "range" as const, label: "本学期" },
+        { key: "manual-week-current", kind: "week" as const, entityId: "current", label: "本周", source: "manual" as const },
+        { key: "manual-week-next", kind: "week" as const, entityId: "next", label: "下周", source: "manual" as const },
       ],
     },
     {
       title: "小组项目",
-      items: groupProjects.slice(0, 6).map((p) => ({ id: `project-${p.id}`, kind: "project" as const, label: p.title })),
+      items: groupProjects.slice(0, 6).map((p) => {
+        const course = courses.find((c) => c.id === p.courseId);
+        return {
+          key: `manual-project-${p.id}`,
+          kind: "group-project" as const,
+          entityId: p.id,
+          label: `${p.title}${course ? ` · ${course.name}` : ""}`,
+          source: "manual" as const,
+        };
+      }),
     },
     {
       title: "课程资料",
       items: courses
-        .flatMap((c) => c.materials.map((m) => ({ id: `material-${m.id}`, kind: "material" as const, label: m.title, sub: c.name })))
+        .flatMap((c) =>
+          c.materials.map((m) => ({
+            key: `manual-material-${m.id}`,
+            kind: "material" as const,
+            entityId: m.id,
+            label: `${m.title} · ${c.name}`,
+            source: "manual" as const,
+          }))
+        )
         .slice(0, 8),
     },
   ].filter((g) => g.items.length > 0);
+
+  const itemIcon = (kind: KiroContextRef["kind"]) =>
+    kind === "course"
+      ? BookOpen
+      : kind === "assignment"
+      ? ClipboardCheck
+      : kind === "week"
+      ? CalendarRange
+      : kind === "group-project"
+      ? Users2
+      : FileText;
 
   const list = (
     <div className="space-y-2.5" role="menu" aria-label="选择上下文">
@@ -92,35 +131,23 @@ export function KiroContextPicker({
           <p className="px-3 pb-1 text-[10px] font-bold text-sandrift uppercase tracking-wider">{g.title}</p>
           <div className="space-y-0.5">
             {g.items.map((it) => {
-              const Icon =
-                it.kind === "course"
-                  ? BookOpen
-                  : it.kind === "assignment"
-                  ? ClipboardCheck
-                  : it.kind === "range"
-                  ? CalendarRange
-                  : it.kind === "project"
-                  ? Users2
-                  : FileText;
+              const Icon = itemIcon(it.kind);
               return (
                 <button
-                  key={it.id}
+                  key={it.key}
                   role="menuitem"
-                  onClick={() => onPick({ id: it.id, kind: it.kind, label: it.label, removable: true })}
+                  onClick={() => onPick(it)}
                   className={rowCls}
                 >
                   <Icon className={iconCls} />
-                  <span className="min-w-0">
-                    <span className="block truncate">{it.label}</span>
-                    {it.sub && <span className="block text-[10px] text-sandrift truncate">{it.sub}</span>}
-                  </span>
+                  <span className="min-w-0 truncate">{it.label}</span>
                 </button>
               );
             })}
           </div>
         </div>
       ))}
-      <p className="px-3 text-[10px] text-sandrift">仅用于界面预览，不会发送或修改任何数据。</p>
+      <p className="px-3 text-[10px] text-sandrift">所选上下文会随消息发送，Kiro 将据此优先查询。</p>
     </div>
   );
 
@@ -150,3 +177,4 @@ export function KiroContextPicker({
     </>
   );
 }
+

@@ -5,22 +5,32 @@ import { useAppStore } from "@/store/useAppStore";
 import { useAISettingsStore } from "@/store/useAISettingsStore";
 import { useKiroChat } from "@/hooks/useKiroChat";
 import { getModelsForProvider, getActiveModelName, getActiveModelVendor } from "@/lib/ai/providers/registry";
+import { buildAutoContextRefs } from "@/lib/ai/context/contextSelection";
+import { KiroContextRef } from "@/lib/ai/context/types";
 import { KiroHeader } from "@/components/kiro/KiroHeader";
 import { KiroEmptyState } from "@/components/kiro/KiroEmptyState";
 import { KiroConversation } from "@/components/kiro/KiroConversation";
 import { KiroComposer } from "@/components/kiro/KiroComposer";
-import { KiroContextChip } from "@/components/kiro/KiroContextBar";
+import { KiroContextBar } from "@/components/kiro/KiroContextBar";
 import { KiroHistoryPanel } from "@/components/kiro/KiroHistoryPanel";
 
 /**
- * Kiro Workspace（Task 1）：真实 AI 流式聊天。
- * Chat state 由 useKiroChat（AI SDK useChat）管理，UI 组件保持 Task 0 视觉。
- * 本阶段不发送任何 ClassFlow Context / 数据。
+ * Kiro Workspace（Task 2）：真实 Read Tools + 自动/手动 Context。
+ * Chat state 由 useKiroChat 管理；Context 状态（手动 refs + 被抑制的自动 refs）
+ * 在此维护并在每次发送时传入请求体。
  */
 export function KiroWorkspace() {
-  const chat = useKiroChat();
   const [historyOpen, setHistoryOpen] = useState(false);
-  const [manualContexts, setManualContexts] = useState<KiroContextChip[]>([]);
+  const [manualRefs, setManualRefs] = useState<KiroContextRef[]>([]);
+  const [suppressedAutoKeys, setSuppressedAutoKeys] = useState<string[]>([]);
+
+  // 自动 Context（进入 Kiro 时自动解析，UI 可见；可临时抑制）
+  // 每次渲染读取最新 Store：选中实体变化时自动更新
+  const autoRefs = buildAutoContextRefs();
+  const visibleAutoRefs = autoRefs.filter((r) => !suppressedAutoKeys.includes(r.key));
+  const activeRefs = [...visibleAutoRefs, ...manualRefs];
+
+  const chat = useKiroChat({ manualRefs, suppressedAutoKeys });
 
   // AI 设置（模型选择器数据源）
   const provider = useAISettingsStore((s) => s.provider);
@@ -58,16 +68,20 @@ export function KiroWorkspace() {
     setSettingsModalOpen(true);
   };
 
-  const addManualContext = (chip: KiroContextChip) => {
-    setManualContexts((prev) => (prev.some((c) => c.id === chip.id) ? prev : [...prev, chip]));
-  };
-  const removeContext = (id: string) => {
-    setManualContexts((prev) => prev.filter((c) => c.id !== id));
+  const removeContext = (key: string) => {
+    // 自动 → 抑制；手动 → 移除
+    const isAuto = autoRefs.some((r) => r.key === key);
+    if (isAuto) {
+      setSuppressedAutoKeys((prev) => (prev.includes(key) ? prev : [...prev, key]));
+    } else {
+      setManualRefs((prev) => prev.filter((r) => r.key !== key));
+    }
   };
 
   const newChat = () => {
     chat.newChat();
-    setManualContexts([]);
+    setManualRefs([]);
+    setSuppressedAutoKeys([]);
   };
 
   const hasMessages = chat.messages.length > 0;
@@ -85,6 +99,7 @@ export function KiroWorkspace() {
         ) : (
           <KiroConversation
             messages={chat.messages}
+            activity={chat.activity}
             error={chat.error}
             onRetry={chat.retry}
             onOpenSettings={openKiroSettings}
@@ -92,8 +107,10 @@ export function KiroWorkspace() {
         )}
 
         <KiroComposer
-          contexts={manualContexts}
-          onAddContext={addManualContext}
+          contexts={activeRefs}
+          onAddContext={(ref) => {
+            setManualRefs((prev) => (prev.some((r) => r.key === ref.key) ? prev : [...prev, ref]));
+          }}
           onRemoveContext={removeContext}
           onSend={chat.send}
           streaming={chat.streaming}
