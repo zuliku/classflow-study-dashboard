@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from "vitest";
 import {
   buildPalette,
   getContextCommands,
+  getAssignmentContextCommands,
   getSelectedCourse,
   getSelectedAssignment,
   CommandContext,
@@ -36,7 +37,11 @@ const assignment = (id: string, title: string): Assignment => ({
 
 function makeCtx(overrides: Partial<CommandContext> = {}): CommandContext {
   const courses = [course("c1", "高等数学")];
-  const assignments = [assignment("a1", "微积分作业")];
+  const assignments = [
+    assignment("a1", "微积分作业"),
+    assignment("a2", "经济学论文"),
+    assignment("a3", "英语演讲"),
+  ];
   return {
     activeTab: "overview",
     selectedCourseId: null,
@@ -54,6 +59,7 @@ function makeCtx(overrides: Partial<CommandContext> = {}): CommandContext {
       markDoing: () => {},
       setPriority: () => {},
       setDDLDate: () => {},
+      shiftDDL: () => {},
       remove: () => {},
     },
     setActiveTab: () => {},
@@ -159,5 +165,85 @@ describe("空查询展示顺序", () => {
 
     const none = buildPalette("", makeCtx());
     expect(none.some((i) => i.group === "context")).toBe(false);
+  });
+});
+
+describe("Context scope：entity 与 workspace 语义分层（Task 3）", () => {
+  it("仅 entity（选中任务）→ context 项带 entity scope", () => {
+    const ctx = makeCtx({ selectedAssignmentId: "a1" });
+    const items = buildPalette("", ctx).filter((i) => i.group === "context");
+    expect(items.length).toBeGreaterThan(0);
+    expect(items.every((i) => i.contextScope === "entity")).toBe(true);
+  });
+
+  it("entity + workspace 同时存在 → 两者都显示且 scope 正确", () => {
+    // 选中任务 a1 且工作区 highlight a1
+    const ctx = makeCtx({ selectedAssignmentId: "a1", highlightedAssignmentId: "a1" });
+    const items = buildPalette("", ctx).filter((i) => i.group === "context");
+    expect(items.some((i) => i.contextScope === "entity")).toBe(true);
+    expect(items.some((i) => i.contextScope === "workspace")).toBe(true);
+  });
+
+  it("workspace 命令 label 动态表达目标：单项目前任务 / 多选 N 项", () => {
+    const single = buildPalette("", makeCtx({ highlightedAssignmentId: "a1" }));
+    expect(single.some((i) => i.label === "标记当前任务完成")).toBe(true);
+
+    const multi = buildPalette(
+      "",
+      makeCtx({ assignmentSelection: ["a1", "a2", "a3"] })
+    );
+    expect(multi.some((i) => i.label === "标记已选 3 项完成")).toBe(true);
+    expect(multi.some((i) => i.label === "删除已选 3 项")).toBe(true);
+  });
+
+  it("selection 优先于 highlight：同时存在时操作目标为 selection", () => {
+    const ctx = makeCtx({
+      highlightedAssignmentId: "a1",
+      assignmentSelection: ["a1", "a2", "a3"],
+    });
+    const items = buildPalette("", ctx);
+    expect(items.some((i) => i.label === "标记已选 3 项完成")).toBe(true);
+    expect(items.some((i) => i.label === "标记当前任务完成")).toBe(false);
+  });
+});
+
+describe("Context 命令 Dedupe（Task 3）", () => {
+  it("selectedAssignmentId === 工作区目标 → 不重复出现编辑类命令", () => {
+    const ctx = makeCtx({ selectedAssignmentId: "a1", highlightedAssignmentId: "a1" });
+    const labels = buildPalette("", ctx)
+      .filter((i) => i.group === "context")
+      .map((i) => i.label);
+    // entity 的「编辑『微积分作业』」保留；workspace 的 编辑当前任务/打开当前任务 被去重
+    expect(labels.some((l) => l.includes("编辑「微积分作业」"))).toBe(true);
+    expect(labels.some((l) => l === "编辑当前任务")).toBe(false);
+    expect(labels.some((l) => l === "打开当前任务")).toBe(false);
+    // 不同动作正常保留
+    expect(labels.some((l) => l === "标记当前任务完成")).toBe(true);
+  });
+
+  it("target 与 entity 不同 → 编辑类命令正常出现", () => {
+    const ctx = makeCtx({ selectedAssignmentId: "a1" });
+    const cmds = getAssignmentContextCommands(
+      {
+        assignmentActions: ctx.assignmentActions,
+        highlightedAssignmentId: "a2",
+        selectedAssignmentId: "a1",
+        close: () => {},
+      },
+      ["a2"]
+    );
+    expect(cmds.some((c) => c.id === "ctx-edit")).toBe(true);
+    expect(cmds.some((c) => c.id === "ctx-open")).toBe(true);
+  });
+
+  it("stale highlighted / selection 含已删除 id → 上下文命令被过滤", () => {
+    // stale highlight → 无 workspace 上下文命令
+    const staleHl = makeCtx({ highlightedAssignmentId: "deleted" });
+    expect(buildPalette("", staleHl).filter((i) => i.group === "context").length).toBe(0);
+    // selection 含已删除 id：命令目标只保留存活的（单条 → 当前任务）
+    const sel = makeCtx({ assignmentSelection: ["a1", "deleted"] });
+    const items = buildPalette("", sel).filter((i) => i.group === "context");
+    expect(items.some((i) => i.label === "标记当前任务完成")).toBe(true);
+    expect(items.some((i) => i.label.includes("已选 2 项"))).toBe(false);
   });
 });

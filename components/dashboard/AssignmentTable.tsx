@@ -177,6 +177,7 @@ export function AssignmentTable({ mode = "compact" }: AssignmentTableProps) {
   const [ctxDdlDate, setCtxDdlDate] = useState("");
   const [bulkDdlOpen, setBulkDdlOpen] = useState(false);
   const [bulkDdlDate, setBulkDdlDate] = useState("");
+  const [bulkShiftDays, setBulkShiftDays] = useState("");
 
   // Context Menu Esc / 点击外部关闭
   useEffect(() => {
@@ -269,6 +270,8 @@ export function AssignmentTable({ mode = "compact" }: AssignmentTableProps) {
     const menuCtx = {
       assignmentActions: actions,
       highlightedAssignmentId: ctxMenu.highlightedId,
+      // 菜单场景无 entity 上下文：不触发「编辑」dedupe，菜单保持完整动作
+      selectedAssignmentId: null,
       close: () => setCtxMenu(null),
     } as Parameters<typeof getAssignmentContextCommands>[0];
     return getAssignmentContextCommands(menuCtx, ctxMenu.ids).map((cmd) => ({
@@ -285,6 +288,13 @@ export function AssignmentTable({ mode = "compact" }: AssignmentTableProps) {
     actions.setDDLDate(assignmentSelection, bulkDdlDate);
     setBulkDdlOpen(false);
     setBulkDdlDate("");
+  };
+  const applyBulkShift = () => {
+    const days = Number(bulkShiftDays);
+    if (!Number.isFinite(days) || days === 0) return;
+    actions.shiftDDL(assignmentSelection, days);
+    setBulkDdlOpen(false);
+    setBulkShiftDays("");
   };
   const applyCtxDDL = () => {
     if (!ctxMenu || !ctxDdlDate) return;
@@ -591,20 +601,62 @@ export function AssignmentTable({ mode = "compact" }: AssignmentTableProps) {
             ))}
           </select>
           {bulkDdlOpen ? (
-            <span className="flex items-center gap-1.5">
-              <input
-                type="date"
-                value={bulkDdlDate}
-                onChange={(e) => setBulkDdlDate(e.target.value)}
-                className="px-1.5 py-0.5 rounded-lg bg-white border border-line text-[11px] font-mono focus:outline-none"
-              />
-              <button
-                onClick={applyBulkDDL}
-                disabled={!bulkDdlDate}
-                className="px-2 py-1 rounded-lg font-bold text-white bg-charcoal hover:bg-black disabled:opacity-50 transition-colors"
-              >
-                应用
-              </button>
+            <span
+              data-testid="bulk-ddl-popover"
+              className="fixed bottom-16 left-1/2 -translate-x-1/2 z-50 w-72 bg-surface border border-line-strong rounded-2xl shadow-card p-3 space-y-2.5 text-xs ux-inline"
+            >
+              <div className="flex items-center justify-between">
+                <span className="font-bold text-charcoal">调整截止时间</span>
+                <button
+                  onClick={() => setBulkDdlOpen(false)}
+                  className="p-1 rounded-lg text-sandrift hover:bg-alabaster transition-colors"
+                  aria-label="关闭"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+              {/* 模式一：指定日期（保留各自原时间） */}
+              <div className="space-y-1">
+                <p className="text-[10px] font-bold text-sandrift">指定日期</p>
+                <div className="flex items-center gap-1.5">
+                  <input
+                    type="date"
+                    value={bulkDdlDate}
+                    onChange={(e) => setBulkDdlDate(e.target.value)}
+                    className="flex-1 px-1.5 py-1 rounded-lg bg-white border border-line text-[11px] font-mono focus:outline-none"
+                    aria-label="指定日期"
+                  />
+                  <button
+                    onClick={applyBulkDDL}
+                    disabled={!bulkDdlDate}
+                    className="px-2.5 py-1 rounded-lg font-bold text-white bg-charcoal hover:bg-black disabled:opacity-50 transition-colors"
+                  >
+                    应用
+                  </button>
+                </div>
+              </div>
+              {/* 模式二：整体提前/延后 N 天 */}
+              <div className="space-y-1 pt-2 border-t border-line-soft">
+                <p className="text-[10px] font-bold text-sandrift">整体平移</p>
+                <div className="flex items-center gap-1.5">
+                  <input
+                    type="number"
+                    value={bulkShiftDays}
+                    onChange={(e) => setBulkShiftDays(e.target.value)}
+                    placeholder="如 2 或 -1"
+                    className="flex-1 px-1.5 py-1 rounded-lg bg-white border border-line text-[11px] font-mono focus:outline-none"
+                    aria-label="平移天数"
+                  />
+                  <button
+                    onClick={applyBulkShift}
+                    disabled={!Number.isFinite(Number(bulkShiftDays)) || Number(bulkShiftDays) === 0}
+                    className="px-2.5 py-1 rounded-lg font-bold text-white bg-charcoal hover:bg-black disabled:opacity-50 transition-colors"
+                  >
+                    应用
+                  </button>
+                </div>
+                <p className="text-[9px] text-sandrift">各任务相对日期差保持不变，HH:mm 时间均保留</p>
+              </div>
             </span>
           ) : (
             <button

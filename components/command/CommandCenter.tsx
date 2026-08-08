@@ -174,58 +174,78 @@ export function CommandCenter() {
   };
 
   // 按分组顺序渲染，组间用极淡分隔线
+  // context 组按 scope 轻量分段：entity（当前对象）与 workspace（当前任务/已选任务）
+  // 只有两种 scope 同时存在时才显示二级标题，单一 scope 保持简洁
   const renderGroup = (group: string, groupItems: PaletteItem[]) => {
     if (groupItems.length === 0) return null;
     const firstGlobalIndex = items.findIndex((it) => it.group === group);
+    const hasEntity = groupItems.some((it) => it.contextScope === "entity");
+    const hasWorkspace = groupItems.some((it) => it.contextScope === "workspace");
+    const splitContext = group === "context" && hasEntity && hasWorkspace;
+    const renderRows = (rows: PaletteItem[]) =>
+      rows.map((item) => {
+        const globalIndex = items.indexOf(item);
+        const isHighlighted = globalIndex === highlighted;
+        const Icon = item.icon;
+        return (
+          <button
+            key={item.key}
+            type="button"
+            onMouseMove={() => setHighlighted(globalIndex)}
+            onClick={() => item.run()}
+            className={cn(
+              "w-full flex items-center gap-3 px-3 py-2 rounded-xl text-left transition-colors duration-[var(--motion-fast)]",
+              isHighlighted ? "bg-alabaster text-charcoal" : "text-satin-grey"
+            )}
+          >
+            <Icon
+              className={cn(
+                "w-4 h-4 shrink-0 transition-colors duration-[var(--motion-fast)]",
+                isHighlighted ? "text-charcoal" : "text-[#A48F82]"
+              )}
+            />
+            <span className="flex-1 min-w-0">
+              <span className="block text-xs font-semibold truncate text-charcoal">
+                {item.label}
+              </span>
+              {item.sub && (
+                <span className="block text-[10px] text-sandrift truncate">{item.sub}</span>
+              )}
+            </span>
+            {item.shortcut && (
+              <kbd className="hidden sm:inline-block bg-white text-charcoal text-[10px] font-mono px-1.5 py-0.5 rounded border border-line-strong">
+                {item.shortcut}
+              </kbd>
+            )}
+            <ArrowRight
+              className={cn(
+                "w-3.5 h-3.5 shrink-0 transition-all duration-[var(--motion-fast)]",
+                isHighlighted ? "opacity-100 translate-x-0 text-sandrift" : "opacity-0 -translate-x-0.5"
+              )}
+            />
+          </button>
+        );
+      });
     return (
       <div key={group}>
         {firstGlobalIndex > 0 && <div className="my-1 h-px bg-line-soft" />}
         <h4 className="px-3 pt-2 pb-1 text-[10px] font-bold text-sandrift uppercase tracking-wider">
           {GROUP_LABELS[group as keyof typeof GROUP_LABELS] ?? group}
         </h4>
-        {groupItems.map((item) => {
-          const globalIndex = items.indexOf(item);
-          const isHighlighted = globalIndex === highlighted;
-          const Icon = item.icon;
-          return (
-            <button
-              key={item.key}
-              type="button"
-              onMouseMove={() => setHighlighted(globalIndex)}
-              onClick={() => item.run()}
-              className={cn(
-                "w-full flex items-center gap-3 px-3 py-2 rounded-xl text-left transition-colors duration-[var(--motion-fast)]",
-                isHighlighted ? "bg-alabaster text-charcoal" : "text-satin-grey"
-              )}
-            >
-              <Icon
-                className={cn(
-                  "w-4 h-4 shrink-0 transition-colors duration-[var(--motion-fast)]",
-                  isHighlighted ? "text-charcoal" : "text-[#A48F82]"
-                )}
-              />
-              <span className="flex-1 min-w-0">
-                <span className="block text-xs font-semibold truncate text-charcoal">
-                  {item.label}
-                </span>
-                {item.sub && (
-                  <span className="block text-[10px] text-sandrift truncate">{item.sub}</span>
-                )}
-              </span>
-              {item.shortcut && (
-                <kbd className="hidden sm:inline-block bg-white text-charcoal text-[10px] font-mono px-1.5 py-0.5 rounded border border-line-strong">
-                  {item.shortcut}
-                </kbd>
-              )}
-              <ArrowRight
-                className={cn(
-                  "w-3.5 h-3.5 shrink-0 transition-all duration-[var(--motion-fast)]",
-                  isHighlighted ? "opacity-100 translate-x-0 text-sandrift" : "opacity-0 -translate-x-0.5"
-                )}
-              />
-            </button>
-          );
-        })}
+        {splitContext ? (
+          <>
+            <p className="px-3 pt-1 pb-0.5 text-[10px] font-semibold text-sandrift/80">
+              当前对象
+            </p>
+            {renderRows(groupItems.filter((it) => it.contextScope === "entity"))}
+            <p className="px-3 pt-2 pb-0.5 text-[10px] font-semibold text-sandrift/80">
+              当前任务 / 已选任务
+            </p>
+            {renderRows(groupItems.filter((it) => it.contextScope === "workspace"))}
+          </>
+        ) : (
+          renderRows(groupItems)
+        )}
       </div>
     );
   };

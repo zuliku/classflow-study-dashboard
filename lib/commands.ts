@@ -61,6 +61,8 @@ export interface AppCommand {
   shortcut?: string;
   icon: ElementType;
   when?: (ctx: CommandContext) => boolean;
+  /** 上下文命令的来源语义：entity=选中的实体；workspace=工作区操作目标 */
+  contextScope?: "entity" | "workspace";
   run: (ctx: CommandContext) => void;
 }
 
@@ -152,6 +154,8 @@ export interface PaletteItem {
   kind: PaletteItemKind;
   /** 分组标题（组内按此排序） */
   group: CommandGroup;
+  /** 上下文命令的来源语义（entity/workspace），用于 palette 内轻量分段 */
+  contextScope?: "entity" | "workspace";
   label: string;
   sub?: string;
   shortcut?: string;
@@ -185,6 +189,7 @@ export function getSelectedAssignment(ctx: CommandContext): Assignment | null {
  * 课程 / 任务 Context Commands（Command System Task 2）：
  * 只在对应实体确实存在时通过 when 显示；run 内再做轻量 defensive check（不 throw）。
  * 打开任务编辑器一律复用 openAssignmentEditor，不复制 editor 状态。
+ * contextScope = "entity"：表达「当前打开/选中的实体」。
  */
 export function getContextCommands(ctx: CommandContext): AppCommand[] {
   const commands: AppCommand[] = [];
@@ -195,6 +200,7 @@ export function getContextCommands(ctx: CommandContext): AppCommand[] {
       label: `为《${course.name}》新建任务`,
       keywords: [course.name, "任务", "新建", "课程"],
       group: "context",
+      contextScope: "entity",
       icon: Plus,
       when: (c) => !!getSelectedCourse(c),
       run: (c) => {
@@ -213,6 +219,7 @@ export function getContextCommands(ctx: CommandContext): AppCommand[] {
       label: `编辑「${assignment.title}」`,
       keywords: [assignment.title, "编辑", "任务"],
       group: "context",
+      contextScope: "entity",
       icon: Plus,
       when: (c) => !!getSelectedAssignment(c),
       run: (c) => {
@@ -228,31 +235,45 @@ export function getContextCommands(ctx: CommandContext): AppCommand[] {
 }
 
 /**
- * 任务上下文命令（Task 2）：
- * 当前任务 highlight / selection 存在时，Command Center 与 Context Menu 共用。
+ * 任务工作区上下文命令（contextScope = "workspace"）：
+ * 操作目标遵循统一优先级：selection.length > 0 → selection；否则 highlightedAssignmentId。
+ * Command Center 与 Context Menu 共用。
+ *
+ * Dedupe（仅针对 Assignment 场景的轻量规则，不做通用 engine）：
+ * 当 workspace 目标恰为 entity 上下文选中的同一任务（selectedAssignmentId === 目标 id）时，
+ * entity 的「编辑『任务名』」已提供编辑动作，因此跳过重复的 打开任务 / 编辑任务，
+ * 避免「编辑『论文』」与「编辑当前任务」并列。完成/优先级/删除等不同动作正常保留。
+ * Context Menu 场景不传 selectedAssignmentId，dedupe 不触发，菜单仍显示完整动作。
  */
 export function getAssignmentContextCommands(
-  ctx: Pick<CommandContext, "assignmentActions" | "highlightedAssignmentId" | "close">,
+  ctx: Pick<
+    CommandContext,
+    "assignmentActions" | "highlightedAssignmentId" | "selectedAssignmentId" | "close"
+  >,
   ids: string[]
 ): AppCommand[] {
   if (ids.length === 0) return [];
   const a = ctx.assignmentActions;
   const n = ids.length;
-  const label = (base: string) => (n === 1 ? base : `${base}（${n} 项）`);
   const single = n === 1;
+  // 目标直接进入 label：单项「当前任务」/ 多项「已选 N 项」，不重复追加计数
+  const targetLabel = single ? "当前任务" : `已选 ${n} 项`;
   const commands: AppCommand[] = [];
+  // entity 上下文已覆盖同一任务的编辑 → 跳过重复的 打开/编辑
+  const dedupeEdit =
+    single && ids[0] === ctx.selectedAssignmentId;
 
-  if (single && ctx.highlightedAssignmentId) {
+  if (single && ctx.highlightedAssignmentId && !dedupeEdit) {
     const id = ctx.highlightedAssignmentId;
     commands.push(
-      { id: "ctx-open", label: "打开任务", group: "context", icon: ClipboardCheck, run: (c) => { a.openDrawer(id); c.close(); } },
-      { id: "ctx-edit", label: "编辑任务", group: "context", icon: Plus, run: (c) => { a.editDrawer(id); c.close(); } }
+      { id: "ctx-open", label: "打开当前任务", group: "context", contextScope: "workspace", icon: ClipboardCheck, run: (c) => { a.openDrawer(id); c.close(); } },
+      { id: "ctx-edit", label: "编辑当前任务", group: "context", contextScope: "workspace", icon: Plus, run: (c) => { a.editDrawer(id); c.close(); } }
     );
   }
 
   commands.push(
-    { id: "ctx-complete", label: label("标记为完成"), group: "context", icon: CheckCircle2, run: (c) => { a.markCompleted(ids); c.close(); } },
-    { id: "ctx-doing", label: label("设为进行中"), group: "context", icon: Play, run: (c) => { a.markDoing(ids); c.close(); } }
+    { id: "ctx-complete", label: `标记${targetLabel}完成`, group: "context", contextScope: "workspace", icon: CheckCircle2, run: (c) => { a.markCompleted(ids); c.close(); } },
+    { id: "ctx-doing", label: `将${targetLabel}设为进行中`, group: "context", contextScope: "workspace", icon: Play, run: (c) => { a.markDoing(ids); c.close(); } }
   );
 
   const PRIORITIES: { p: Priority; label: string }[] = [
@@ -264,9 +285,10 @@ export function getAssignmentContextCommands(
   for (const { p, label: pLabel } of PRIORITIES) {
     commands.push({
       id: `ctx-priority-${p}`,
-      label: `优先级 → ${pLabel}`,
+      label: `将${targetLabel}设为${pLabel}优先级`,
       keywords: ["优先级", pLabel],
-      group: "action",
+      group: "context",
+      contextScope: "workspace",
       icon: Flag,
       run: (c) => { a.setPriority(ids, p); c.close(); },
     });
@@ -274,8 +296,9 @@ export function getAssignmentContextCommands(
 
   commands.push({
     id: "ctx-delete",
-    label: label("删除任务"),
-    group: "action",
+    label: `删除${targetLabel}`,
+    group: "context",
+    contextScope: "workspace",
     icon: Trash2,
     run: (c) => { a.remove(ids); c.close(); },
   });
@@ -295,13 +318,16 @@ export function buildPalette(query: string, ctx: CommandContext): PaletteItem[] 
   const q = normalizeQuery(query);
   const items: PaletteItem[] = [];
 
-  // 任务选择上下文：workspace 的 highlight / selection 存在时注入「当前任务」命令
-  const contextIds =
+  // 任务选择上下文：workspace 的 highlight / selection 存在时注入「当前任务」命令。
+  // 只保留仍存在的实体 id（stale highlight / 已删除的 selection 项不产生命令）。
+  const liveIds = (ids: string[]) => ids.filter((id) => ctx.assignments.some((a) => a.id === id));
+  const contextIds = liveIds(
     ctx.assignmentSelection.length > 0
       ? ctx.assignmentSelection
       : ctx.highlightedAssignmentId
       ? [ctx.highlightedAssignmentId]
-      : [];
+      : []
+  );
 
   if (!q) {
     // 1. 上下文操作（选中课程/任务；无对应上下文则不渲染该标题）
@@ -310,6 +336,7 @@ export function buildPalette(query: string, ctx: CommandContext): PaletteItem[] 
         key: `cmd-${cmd.id}`,
         kind: "command",
         group: cmd.group,
+        contextScope: cmd.contextScope,
         label: cmd.label,
         icon: cmd.icon,
         run: () => cmd.run(ctx),
@@ -320,6 +347,7 @@ export function buildPalette(query: string, ctx: CommandContext): PaletteItem[] 
         key: `ctx-${cmd.id}`,
         kind: "command",
         group: "context",
+        contextScope: cmd.contextScope ?? "workspace",
         label: cmd.label,
         icon: cmd.icon,
         run: () => cmd.run(ctx),
@@ -374,6 +402,7 @@ export function buildPalette(query: string, ctx: CommandContext): PaletteItem[] 
       key: `cmd-${cmd.id}`,
       kind: "command",
       group: cmd.group,
+      contextScope: cmd.contextScope,
       label: cmd.label,
       shortcut: cmd.shortcut,
       icon: cmd.icon,

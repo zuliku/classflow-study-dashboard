@@ -1,5 +1,12 @@
 import { Assignment, Priority } from "@/types";
-import { combineLocalDateTime, getLocalDDLTime } from "@/lib/ddl";
+import { combineLocalDateTime, getLocalDDLTime, parseLocalDDL } from "@/lib/ddl";
+
+/** 本地日期字符串（不用 toISOString，避免时区偏移） */
+export function localDateStr(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
+    d.getDate()
+  ).padStart(2, "0")}`;
+}
 
 /**
  * Assignment Workspace 的选择/批量逻辑（纯函数，可独立单测）。
@@ -61,6 +68,31 @@ export function bulkApplyDDLDate(
     ...a,
     ddl: combineLocalDateTime(targetDate, getLocalDDLTime(a.ddl)),
   }));
+}
+
+/**
+ * 批量整体平移截止日期：所有任务提前/延后 N 天（N 可为负），
+ * 相对日期差保持不变；HH:mm 墙钟时间保持；非法 DDL 原样保留；不 mutate 原数组。
+ * 纯本地日历运算（setDate 由 Date 内部按本地时区进位/借位），无 UTC 漂移。
+ */
+export function bulkShiftDDL(assignments: Assignment[], days: number): Assignment[] {
+  return assignments.map((a) => {
+    const d = parseLocalDDL(a.ddl);
+    if (!d) return a; // 无法解析：安全原样保留
+    const shifted = new Date(
+      d.getFullYear(),
+      d.getMonth(),
+      d.getDate() + days,
+      d.getHours(),
+      d.getMinutes(),
+      d.getSeconds() || 0,
+      0
+    );
+    return {
+      ...a,
+      ddl: combineLocalDateTime(localDateStr(shifted), getLocalDDLTime(a.ddl)),
+    };
+  });
 }
 
 /** 批量设置状态 */

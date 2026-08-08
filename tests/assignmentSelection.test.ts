@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { useAppStore } from "@/store/useAppStore";
 import { Assignment } from "@/types";
-import { getLocalDDLDate, getLocalDDLTime } from "@/lib/ddl";
+import { getLocalDDLDate, getLocalDDLTime, parseLocalDDL } from "@/lib/ddl";
 import {
   toggleSelection,
   rangeSelection,
@@ -11,6 +11,8 @@ import {
   bulkApplyDDLDate,
   bulkApplyStatus,
   bulkApplyPriority,
+  bulkShiftDDL,
+  localDateStr,
 } from "@/lib/assignmentSelection";
 import { createAssignmentActions } from "@/lib/assignmentActions";
 
@@ -99,6 +101,64 @@ describe("bulk status / priority", () => {
   });
 });
 
+describe("bulkShiftDDL：整体平移（Task 3）", () => {
+  it("延后 2 天：各日期分别平移，相对差保持，HH:mm 保留", () => {
+    const src = [
+      a("a1", "2026-08-10T18:00:00"),
+      a("a2", "2026-08-11T23:59:00"),
+      a("a3", "2026-08-13T09:30:00"),
+    ];
+    const moved = bulkShiftDDL(src, 2);
+    expect(moved.map((x) => getLocalDDLDate(x.ddl))).toEqual([
+      "2026-08-12",
+      "2026-08-13",
+      "2026-08-15",
+    ]);
+    expect(moved.map((x) => getLocalDDLTime(x.ddl))).toEqual(["18:00", "23:59", "09:30"]);
+  });
+
+  it("提前 1 天（负值）正常，跨月进位正确", () => {
+    const moved = bulkShiftDDL([a("a1", "2026-09-01T08:00:00")], -1);
+    expect(getLocalDDLDate(moved[0].ddl)).toBe("2026-08-31");
+    expect(getLocalDDLTime(moved[0].ddl)).toBe("08:00");
+  });
+
+  it("延后跨月正确（8月31日 +1 → 9月1日）", () => {
+    const moved = bulkShiftDDL([a("a1", "2026-08-31T23:59:00")], 1);
+    expect(getLocalDDLDate(moved[0].ddl)).toBe("2026-09-01");
+    expect(getLocalDDLTime(moved[0].ddl)).toBe("23:59");
+  });
+
+  it("本地 23:59 平移后仍是 23:59（无 UTC 漂移，不会变成次日 07:59）", () => {
+    const moved = bulkShiftDDL([a("a1", "2026-08-12T23:59:00")], 3);
+    expect(getLocalDDLTime(moved[0].ddl)).toBe("23:59");
+    const d = parseLocalDDL(moved[0].ddl)!;
+    expect(d.getHours()).toBe(23);
+    expect(d.getMinutes()).toBe(59);
+    expect(d.getDate()).toBe(15);
+  });
+
+  it("非法 DDL 安全原样保留，不 throw", () => {
+    const bad = a("a1", "not-a-date");
+    const moved = bulkShiftDDL([bad], 2);
+    expect(moved[0]).toEqual(bad);
+  });
+
+  it("保留非日期字段，且不 mutate 原数组", () => {
+    const src = a("a1", "2026-08-12T23:59:00", { status: "doing", progress: 40, tags: ["t"] });
+    const moved = bulkShiftDDL([src], 1);
+    expect(moved[0].status).toBe("doing");
+    expect(moved[0].progress).toBe(40);
+    expect(moved[0].tags).toEqual(["t"]);
+    expect(src.ddl).toBe("2026-08-12T23:59:00");
+  });
+
+  it("localDateStr 不使用 toISOString（时区安全）", () => {
+    const d = new Date(2026, 7, 12, 23, 59); // 本地 8月12日 23:59
+    expect(localDateStr(d)).toBe("2026-08-12");
+  });
+});
+
 describe("bulk delete + undo（store 集成）", () => {
   beforeEach(() => {
     useAppStore.getState().resetAllDataToDefault();
@@ -168,5 +228,46 @@ describe("bulk delete + undo（store 集成）", () => {
     expect(getLocalDDLTime(a3.ddl)).toBe(a3OrigTime);
     // CalendarMark 同步
     expect(after.calendarMarks.find((m) => m.sourceId === "a3")?.date).toBe("2026-12-25");
+  });
+
+  it("bulk shift / set date 后 undo：Assignment + CalendarMark 完整恢复", () => {
+    const beforeA1 = useAppStore.getState().assignments.find((x) => x.id === "a1")!;
+    const beforeA2 = useAppStore.getState().assignments.find((x) => x.id === "a2")!;
+    const beforeCm1 = useAppStore.getState().calendarMarks.find((m) => m.id === "cm1")!;
+    const beforeCm2 = useAppStore.getState().calendarMarks.find((m) => m.id === "cm2")!;
+
+    let undoAction: (() => void) | null = null;
+    const actions = createAssignmentActions({
+      getAssignments: () => useAppStore.getState().assignments,
+      updateAssignment: (x) => useAppStore.getState().updateAssignment(x),
+      setSelectedAssignmentId: () => {},
+      deleteAssignment: () => null,
+      restoreAssignment: () => {},
+      pushToast: (t) => {
+        undoAction = t.onAction ?? null;
+      },
+    });
+
+    // shift +2 天
+    actions.shiftDDL(["a1", "a2"], 2);
+    expect(undoAction).not.toBeNull();
+    const shifted = useAppStore.getState().assignments.find((x) => x.id === "a1")!;
+    expect(getLocalDDLDate(shifted.ddl)).not.toBe(getLocalDDLDate(beforeA1.ddl));
+    undoAction!();
+    // undo 后原 ddl 与 mark 日期恢复（sourceId 保留、无重复 mark）
+    const restored = useAppStore.getState();
+    expect(restored.assignments.find((x) => x.id === "a1")).toEqual(beforeA1);
+    expect(restored.assignments.find((x) => x.id === "a2")).toEqual(beforeA2);
+    expect(restored.calendarMarks.find((m) => m.id === "cm1")).toEqual(beforeCm1);
+    expect(restored.calendarMarks.find((m) => m.id === "cm2")).toEqual(beforeCm2);
+    expect(restored.calendarMarks.filter((m) => m.sourceId === "a1")).toHaveLength(1);
+
+    // set date 的 undo 同样恢复
+    undoAction = null;
+    actions.setDDLDate(["a1"], "2027-01-01");
+    expect(undoAction).not.toBeNull();
+    undoAction!();
+    expect(useAppStore.getState().assignments.find((x) => x.id === "a1")).toEqual(beforeA1);
+    expect(useAppStore.getState().calendarMarks.find((m) => m.id === "cm1")).toEqual(beforeCm1);
   });
 });

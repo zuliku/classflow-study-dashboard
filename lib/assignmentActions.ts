@@ -3,6 +3,7 @@ import {
   bulkApplyDDLDate,
   bulkApplyPriority,
   bulkApplyStatus,
+  bulkShiftDDL,
 } from "@/lib/assignmentSelection";
 import { openAssignmentEditor } from "@/lib/uiEvents";
 
@@ -19,6 +20,8 @@ export interface AssignmentActions {
   markDoing: (ids: string[]) => void;
   setPriority: (ids: string[], priority: Priority) => void;
   setDDLDate: (ids: string[], targetDate: string) => void;
+  /** 整体平移：提前/延后 N 天（负数为提前） */
+  shiftDDL: (ids: string[], days: number) => void;
   remove: (ids: string[]) => void;
 }
 
@@ -63,6 +66,23 @@ export function createAssignmentActions(api: AssignmentActionApi): AssignmentAct
   const targets = (ids: string[]): Assignment[] =>
     getAssignments().filter((a) => ids.includes(a.id));
 
+  /**
+   * 批量 DDL 修改（指定日期 / 整体平移）：
+   * 记录修改前的原 assignment，应用后给出撤销 Toast；
+   * 撤销时逐项 updateAssignment(original) → 同一 id 恢复原 ddl，
+   * CalendarMark 由 store 的 updateAssignment 自动同步回原日期（sourceId 保留，不重复）。
+   */
+  const applyDDL = (ids: string[], transform: (as: Assignment[]) => Assignment[]) => {
+    const originals = targets(ids);
+    if (originals.length === 0) return;
+    transform(originals).forEach(updateAssignment);
+    pushToast({
+      message: `${originals.length} 项任务截止时间已调整`,
+      actionLabel: "撤销",
+      onAction: () => originals.forEach(updateAssignment),
+    });
+  };
+
   const remove = (ids: string[]) => {
     if (ids.length === 0) return;
     const doDelete = () => {
@@ -99,7 +119,8 @@ export function createAssignmentActions(api: AssignmentActionApi): AssignmentAct
     markCompleted: (ids) => bulkApplyStatus(targets(ids), "completed").forEach(updateAssignment),
     markDoing: (ids) => bulkApplyStatus(targets(ids), "doing").forEach(updateAssignment),
     setPriority: (ids, priority) => bulkApplyPriority(targets(ids), priority).forEach(updateAssignment),
-    setDDLDate: (ids, targetDate) => bulkApplyDDLDate(targets(ids), targetDate).forEach(updateAssignment),
+    setDDLDate: (ids, targetDate) => applyDDL(ids, (as) => bulkApplyDDLDate(as, targetDate)),
+    shiftDDL: (ids, days) => applyDDL(ids, (as) => bulkShiftDDL(as, days)),
     remove,
   };
 }

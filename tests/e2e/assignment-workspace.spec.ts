@@ -77,7 +77,7 @@ test("Context Menu：右键任务 → 修改优先级 → 行内状态更新", a
 
   const menu = page.getByTestId("assignment-context-menu");
   await expect(menu).toBeVisible();
-  await menu.getByRole("button", { name: "优先级 → 高" }).click();
+  await menu.getByRole("button", { name: "将当前任务设为高优先级" }).click();
 
   await expect(page.locator('[data-assignment-id="a4"]').getByText("高优先", { exact: true })).toBeVisible();
   await expect(page.getByTestId("assignment-context-menu")).toHaveCount(0);
@@ -93,4 +93,64 @@ test("Mobile 390：点击行仍打开 Drawer，无 Peek / Bulk Bar", async ({ pa
   await expect(page.getByRole("button", { name: "关闭" }).first()).toBeVisible();
   await expect(page.getByTestId("assignment-peek")).toHaveCount(0);
   await expect(page.getByTestId("assignment-bulk-bar")).toHaveCount(0);
+});
+
+/** 本地日期字符串（与列表「截止: YYYY-MM-DD」一致） */
+function localDateStr(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
+    d.getDate()
+  ).padStart(2, "0")}`;
+}
+
+function dPlusLocal(n: number): string {
+  const d = new Date();
+  d.setDate(d.getDate() + n);
+  return localDateStr(d);
+}
+
+test("Bulk DDL 平移：已选 2 项延后 2 天（时间保留）→ 撤销恢复", async ({ page }) => {
+  await openWorkspace(page);
+  await page.keyboard.press("j"); // highlight a1
+  await page.keyboard.press("x"); // 选 a1
+  await page.keyboard.press("j"); // highlight a2
+  await page.keyboard.press("x"); // 选 a2
+
+  const bar = page.getByTestId("assignment-bulk-bar");
+  await expect(bar).toContainText("已选 2 项");
+  await bar.getByRole("button", { name: "调整DDL" }).click();
+
+  const popover = page.getByTestId("bulk-ddl-popover");
+  await expect(popover).toBeVisible();
+  await popover.locator('input[aria-label="平移天数"]').fill("2");
+  await popover.getByRole("button", { name: "应用" }).nth(1).click();
+  await expect(popover).toHaveCount(0);
+
+  // Toast + 两行日期平移 +2 天
+  await expect(page.getByText("2 项任务截止时间已调整").first()).toBeVisible();
+  const shifted = dPlusLocal(3); // a1 原为 明天(+1) → +2
+  await expect(page.locator('[data-assignment-id="a1"]')).toContainText(`截止: ${shifted}`);
+
+  // 撤销恢复原日期
+  await page.getByRole("button", { name: "撤销" }).click();
+  await expect(page.locator('[data-assignment-id="a1"]')).toContainText(
+    `截止: ${dPlusLocal(1)}`
+  );
+});
+
+test("Command Center 显示工作区上下文命令（标记当前任务完成）", async ({ page }) => {
+  await openWorkspace(page);
+  await page.keyboard.press("j"); // highlight a1
+  await page.keyboard.press("x"); // 选 a1
+
+  await page.keyboard.press("Control+k");
+  await expect(page.getByTestId("command-center")).toBeVisible();
+  await expect(page.getByText("上下文操作")).toBeVisible();
+  await expect(
+    page.getByTestId("command-results").getByText("标记当前任务完成")
+  ).toBeVisible();
+  await expect(
+    page.getByTestId("command-results").getByText("将当前任务设为高优先级")
+  ).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.getByTestId("command-center")).toHaveCount(0);
 });
