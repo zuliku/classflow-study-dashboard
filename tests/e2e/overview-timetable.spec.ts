@@ -27,9 +27,13 @@ test("1440×900：时间轴紧凑且完整（08:00 / 21:00 可见、21:00 未裁
   expect(t2100!.y + t2100!.height).toBeLessThanOrEqual(cardBox!.y + cardBox!.height + 1);
   expect(t2100!.y + t2100!.height).toBeGreaterThan(cardBox!.y + cardBox!.height - 24);
 
-  // 高度明显小于 comfortable（520px body）版本
-  expect(cardBox!.height).toBeLessThan(560);
-  expect(cardBox!.height).toBeGreaterThan(400);
+  // compact 下限生效：时间轴 body 至少 440px（完整 08:00-21:00 可读）；
+  // Row 2 共享行高由右侧（DDL+日历）决定，课表等比拉伸填满，不做硬上限断言
+  const body = await page
+    .getByTestId("timetable-card")
+    .locator("div.relative.flex-1.grid.grid-cols-8")
+    .evaluate((el) => el.getBoundingClientRect().height);
+  expect(body).toBeGreaterThanOrEqual(440);
 
   // 时间轴容器无内部垂直滚动条
   const noVScroll = await page
@@ -52,8 +56,9 @@ test("1920×1080：时间轴完整可见，无 overflow", async ({ page }) => {
   await openOverview(page, 1920, 1080);
   await expect(page.getByText("08:00", { exact: true }).first()).toBeVisible();
   await expect(page.getByText("21:00", { exact: true }).first()).toBeVisible();
+  const t2100 = await page.getByText("21:00", { exact: true }).first().boundingBox();
   const cardBox = await page.getByTestId("timetable-card").boundingBox();
-  expect(cardBox!.height).toBeLessThan(560);
+  expect(t2100!.y + t2100!.height).toBeLessThanOrEqual(cardBox!.y + cardBox!.height + 1);
   const overflow = await page.evaluate(
     () => document.documentElement.scrollWidth > window.innerWidth + 1
   );

@@ -41,6 +41,18 @@ describe("paginate", () => {
     expect(p3.items).toEqual(["item-11", "item-12"]);
   });
 
+  it("UpcomingDDL 场景（pageSize=3）：3/4/7 items 页数正确", () => {
+    expect(paginate(items(3), 1, 3).totalPages).toBe(1);
+    const p4 = paginate(items(4), 1, 3);
+    expect(p4.totalPages).toBe(2);
+    expect(p4.items).toHaveLength(3);
+    expect(paginate(items(4), 2, 3).items).toEqual(["item-4"]);
+    const p7 = paginate(items(7), 1, 3);
+    expect(p7.totalPages).toBe(3);
+    expect(paginate(items(7), 2, 3).items).toEqual(["item-4", "item-5", "item-6"]);
+    expect(paginate(items(7), 3, 3).items).toEqual(["item-7"]);
+  });
+
   it("page clamp：超出总页数回到最后一页，绝不出现 第 2 / 1 页", () => {
     const r = paginate(items(6), 5, 5); // 只有 2 页，请求第 5 页
     expect(r.currentPage).toBe(2);

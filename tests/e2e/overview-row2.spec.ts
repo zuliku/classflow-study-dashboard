@@ -1,0 +1,129 @@
+import { test, expect, Page } from "@playwright/test";
+
+/**
+ * Overview Row 2 等高 + UpcomingDDL 3条/页分页 E2E。
+ * 演示数据：a1-a4 在未来 7 天内（upcoming 4 条 → 2 页）。
+ */
+
+async function openOverview(page: Page, width = 1440, height = 900) {
+  await page.setViewportSize({ width, height });
+  await page.goto("/");
+  await expect(page.getByTestId("timetable-card")).toBeVisible();
+  await page.waitForTimeout(700);
+}
+
+test("1440×900：左右等高（顶部/底部/总高 ≤2px），左侧时间轴填满无空白", async ({ page }) => {
+  await openOverview(page);
+
+  const timetable = await page.getByTestId("timetable-card").boundingBox();
+  const upcoming = await page.getByTestId("upcoming-ddl-card").boundingBox();
+  const calendar = await page.getByTestId("calendar-card").boundingBox();
+
+  // 右侧总高 = Upcoming + 20px gap + MiniCalendar
+  const rightTotal = upcoming!.height + 20 + calendar!.height;
+  expect(Math.abs(timetable!.height - rightTotal)).toBeLessThanOrEqual(2);
+
+  // 顶部对齐 / 底部对齐
+  expect(Math.abs(timetable!.y - upcoming!.y)).toBeLessThanOrEqual(2);
+  expect(
+    Math.abs(
+      timetable!.y + timetable!.height - (calendar!.y + calendar!.height)
+    )
+  ).toBeLessThanOrEqual(2);
+
+  // MiniCalendar 明显高于 UpcomingDDL（剩余空间分配）
+  expect(calendar!.height).toBeGreaterThan(upcoming!.height * 1.2);
+
+  // 时间轴完整：08:00 / 21:00 可见且 21:00 未裁切
+  await expect(page.getByText("08:00", { exact: true }).first()).toBeVisible();
+  const t2100 = await page.getByText("21:00", { exact: true }).first().boundingBox();
+  expect(t2100!.y + t2100!.height).toBeLessThanOrEqual(timetable!.y + timetable!.height + 1);
+});
+
+test("UpcomingDDL 分页：5 条 → 第一页 3 条（1 / 2），下一页显示第 4-5 条，卡片高度不变", async ({ page }) => {
+  await openOverview(page);
+  const card = page.getByTestId("upcoming-ddl-card");
+
+  // 第一页：3 条 + 分页 1 / 2
+  await expect(card.getByText("数据库实验报告（实验四）")).toHaveCount(0);
+  await expect(card.getByText("计量经济学大作业（第3章）")).toBeVisible();
+  await expect(card.getByText("英语演讲PPT (Unit 6)")).toBeVisible();
+  await expect(card.getByText("1 / 2", { exact: true })).toBeVisible();
+  await expect(card.getByRole("button", { name: "上一页" })).toBeDisabled();
+
+  const base = await card.boundingBox();
+
+  // 下一页：第 4 条出现，第一页条目消失
+  await card.getByRole("button", { name: "下一页" }).click();
+  await expect(card.getByText("数据库实验报告（实验四）")).toBeVisible();
+  await expect(card.getByText("计量经济学大作业（第3章）")).toHaveCount(0);
+  await expect(card.getByText("2 / 2", { exact: true })).toBeVisible();
+  await expect(card.getByRole("button", { name: "下一页" })).toBeDisabled();
+
+  // 分页切换不改变卡片高度（列表区 min-h 固定 3 行）
+  await page.waitForTimeout(200);
+  const after = await card.boundingBox();
+  expect(Math.abs(after!.height - base!.height)).toBeLessThanOrEqual(1);
+
+  // 返回第一页
+  await card.getByRole("button", { name: "上一页" }).click();
+  await expect(card.getByText("1 / 2", { exact: true })).toBeVisible();
+});
+
+test("UpcomingDDL ≤3 条时不显示分页控件（删除导致页数减少自动 clamp）", async ({ page }) => {
+  await openOverview(page);
+  const card = page.getByTestId("upcoming-ddl-card");
+  await expect(card.getByText("5 项待办")).toBeVisible();
+
+  // 删除两条 upcoming（a4、a5）→ 剩 3 条
+  for (const id of ["a4", "a5"]) {
+    await page.getByRole("button", { name: "任务工作区" }).click();
+    await page.getByTestId("assignment-list").focus();
+    await page.locator(`[data-assignment-id="${id}"]`).click({ button: "right" });
+    await page
+      .getByTestId("assignment-context-menu")
+      .getByRole("button", { name: "删除当前任务" })
+      .click();
+    await page.getByRole("button", { name: "删除任务" }).last().click();
+    await expect(page.getByText("1 项任务已删除").first()).toBeVisible();
+    await page.getByRole("button", { name: "总览" }).first().click();
+    await expect(page.getByTestId("upcoming-ddl-card")).toBeVisible();
+  }
+
+  // 剩 3 条 → 无分页控件（currentPage 自动 clamp，不出 第 2 / 1 页）
+  await expect(page.getByTestId("upcoming-ddl-pagination")).toHaveCount(0);
+  await expect(page.getByTestId("upcoming-ddl-card").getByText("3 项待办")).toBeVisible();
+});
+
+test("Mobile 390：单列自然高度、无横向 overflow、DDL 仍 3 条/页", async ({ page }) => {
+  await openOverview(page, 390, 844);
+  await expect(page.getByTestId("upcoming-ddl-card")).toBeVisible();
+
+  // 单列：upcoming 卡片在课表下方自然排布（不强制等高）
+  const upcoming = await page.getByTestId("upcoming-ddl-card").boundingBox();
+  const timetable = await page.getByTestId("timetable-card").boundingBox();
+  expect(upcoming!.y).toBeGreaterThanOrEqual(timetable!.y + timetable!.height - 5);
+
+  // DDL 分页仍生效（3 条/页）
+  await expect(page.getByText("1 / 2", { exact: true }).first()).toBeVisible();
+
+  const overflow = await page.evaluate(
+    () => document.documentElement.scrollWidth > window.innerWidth + 1
+  );
+  expect(overflow).toBe(false);
+});
+
+test("1024×768 Tablet：双栏等高、无横向 overflow", async ({ page }) => {
+  await openOverview(page, 1024, 768);
+  const timetable = await page.getByTestId("timetable-card").boundingBox();
+  const upcoming = await page.getByTestId("upcoming-ddl-card").boundingBox();
+  const calendar = await page.getByTestId("calendar-card").boundingBox();
+
+  const rightTotal = upcoming!.height + 20 + calendar!.height;
+  expect(Math.abs(timetable!.height - rightTotal)).toBeLessThanOrEqual(2);
+
+  const overflow = await page.evaluate(
+    () => document.documentElement.scrollWidth > window.innerWidth + 1
+  );
+  expect(overflow).toBe(false);
+});

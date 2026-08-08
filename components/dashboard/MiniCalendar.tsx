@@ -430,7 +430,10 @@ export function MiniCalendar() {
   ].sort((x, y) => x.time.localeCompare(y.time));
 
   return (
-    <div className="bg-surface border border-line rounded-2xl p-4 shadow-subtle space-y-3 flex flex-col justify-between">
+    <div
+      data-testid="calendar-card"
+      className="bg-surface border border-line rounded-2xl p-4 shadow-subtle space-y-3 flex flex-col min-h-0 h-full"
+    >
       {/* Header */}
       <div className="flex items-center justify-between pb-2 border-b border-[#F0EBE1]">
         <div className="flex items-center space-x-2">
@@ -476,6 +479,8 @@ export function MiniCalendar() {
       </div>
 
       {/* Calendar Grid（日期格 = DDL drop target；共享 Selection Indicator 位于 z-0） */}
+      {/* 居中容器：获得额外高度时网格垂直居中（breathing room），而非挤顶或把 Agenda 硬推底部 */}
+      <div className="flex-1 min-h-0 flex flex-col justify-center">
       <div
         ref={containerRef}
         data-selected-date={selectedDateKey}
@@ -585,6 +590,7 @@ export function MiniCalendar() {
             </button>
           );
         })}
+      </div>
       </div>
 
       {/* Drag Preview：跟随 pointer，不复制完整卡片；无动画（Reduced Motion 下天然静态） */}
