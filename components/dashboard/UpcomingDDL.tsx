@@ -8,8 +8,8 @@ import { zhCN } from "date-fns/locale";
 import { parseLocalDDL } from "@/lib/ddl";
 import { paginate } from "@/lib/pagination";
 
-/** Overview「临近 DDL」每页最多 3 条（摘要定位，非完整工作区） */
-const UPCOMING_DDL_PAGE_SIZE = 3;
+/** Overview「临近 DDL」每页最多 2 条（摘要定位，压缩右侧高度为左侧课表让位） */
+const UPCOMING_DDL_PAGE_SIZE = 2;
 
 export function UpcomingDDL() {
   const { assignments, courses, setSelectedAssignmentId, setActiveTab } = useAppStore();
@@ -101,8 +101,8 @@ export function UpcomingDDL() {
         </button>
       </div>
 
-      {/* DDL Task Items List（最多 3 条/页；min-h 保证 3 行稳定内容高度，分页切换不引起卡片跳动） */}
-      <div className="space-y-2 min-h-[192px]">
+      {/* DDL Task Items List（最多 2 条/页；min-h 保证 2 行稳定内容高度，翻页不引起卡片跳动） */}
+      <div className="space-y-2 min-h-[126px]">
         {pagedItems.length === 0 ? (
           <div className="py-6 text-center text-xs text-sandrift space-y-1">
             <CheckCircle2 className="w-6 h-6 mx-auto text-success" />

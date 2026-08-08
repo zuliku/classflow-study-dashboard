@@ -40,43 +40,49 @@ test("1440×900：左右等高（顶部/底部/总高 ≤2px），左侧时间�
   expect(t2100!.y + t2100!.height).toBeLessThanOrEqual(timetable!.y + timetable!.height + 1);
 });
 
-test("UpcomingDDL 分页：5 条 → 第一页 3 条（1 / 2），下一页显示第 4-5 条，卡片高度不变", async ({ page }) => {
+test("UpcomingDDL 分页：5 条 → 每页 2 条（1 / 3），翻页替换内容且卡片高度不变", async ({ page }) => {
   await openOverview(page);
   const card = page.getByTestId("upcoming-ddl-card");
 
-  // 第一页：3 条 + 分页 1 / 2
+  // 第一页：2 条 + 分页 1 / 3
   await expect(card.getByText("数据库实验报告（实验四）")).toHaveCount(0);
   await expect(card.getByText("计量经济学大作业（第3章）")).toBeVisible();
-  await expect(card.getByText("英语演讲PPT (Unit 6)")).toBeVisible();
-  await expect(card.getByText("1 / 2", { exact: true })).toBeVisible();
+  await expect(card.getByText("市场营销案例汇报")).toBeVisible();
+  await expect(card.getByText("1 / 3", { exact: true })).toBeVisible();
   await expect(card.getByRole("button", { name: "上一页" })).toBeDisabled();
 
   const base = await card.boundingBox();
 
-  // 下一页：第 4 条出现，第一页条目消失
+  // 下一页：第 3-4 条出现，第一页条目消失
   await card.getByRole("button", { name: "下一页" }).click();
+  await expect(card.getByText("英语演讲PPT (Unit 6)")).toBeVisible();
   await expect(card.getByText("数据库实验报告（实验四）")).toBeVisible();
   await expect(card.getByText("计量经济学大作业（第3章）")).toHaveCount(0);
-  await expect(card.getByText("2 / 2", { exact: true })).toBeVisible();
+  await expect(card.getByText("2 / 3", { exact: true })).toBeVisible();
+
+  // 再下一页：最后 1 条（第 5 条）
+  await card.getByRole("button", { name: "下一页" }).click();
+  await expect(card.getByText("微观经济学课后习题（第5章）")).toBeVisible();
+  await expect(card.getByText("3 / 3", { exact: true })).toBeVisible();
   await expect(card.getByRole("button", { name: "下一页" })).toBeDisabled();
 
-  // 分页切换不改变卡片高度（列表区 min-h 固定 3 行）
+  // 翻页不改变卡片高度（列表区 min-h 固定 2 行）
   await page.waitForTimeout(200);
   const after = await card.boundingBox();
   expect(Math.abs(after!.height - base!.height)).toBeLessThanOrEqual(1);
 
-  // 返回第一页
+  // 返回上一页（第 3 → 第 2 页）
   await card.getByRole("button", { name: "上一页" }).click();
-  await expect(card.getByText("1 / 2", { exact: true })).toBeVisible();
+  await expect(card.getByText("2 / 3", { exact: true })).toBeVisible();
 });
 
-test("UpcomingDDL ≤3 条时不显示分页控件（删除导致页数减少自动 clamp）", async ({ page }) => {
+test("UpcomingDDL ≤2 条时不显示分页控件（删除导致页数减少自动 clamp）", async ({ page }) => {
   await openOverview(page);
   const card = page.getByTestId("upcoming-ddl-card");
   await expect(card.getByText("5 项待办")).toBeVisible();
 
-  // 删除两条 upcoming（a4、a5）→ 剩 3 条
-  for (const id of ["a4", "a5"]) {
+  // 删除三条 upcoming（a3、a4、a5）→ 剩 2 条
+  for (const id of ["a3", "a4", "a5"]) {
     await page.getByRole("button", { name: "任务工作区" }).click();
     await page.getByTestId("assignment-list").focus();
     await page.locator(`[data-assignment-id="${id}"]`).click({ button: "right" });
@@ -90,12 +96,12 @@ test("UpcomingDDL ≤3 条时不显示分页控件（删除导致页数减少自
     await expect(page.getByTestId("upcoming-ddl-card")).toBeVisible();
   }
 
-  // 剩 3 条 → 无分页控件（currentPage 自动 clamp，不出 第 2 / 1 页）
+  // 剩 2 条 → 无分页控件（currentPage 自动 clamp，不出无效页码）
   await expect(page.getByTestId("upcoming-ddl-pagination")).toHaveCount(0);
-  await expect(page.getByTestId("upcoming-ddl-card").getByText("3 项待办")).toBeVisible();
+  await expect(page.getByTestId("upcoming-ddl-card").getByText("2 项待办")).toBeVisible();
 });
 
-test("Mobile 390：单列自然高度、无横向 overflow、DDL 仍 3 条/页", async ({ page }) => {
+test("Mobile 390：单列自然高度、无横向 overflow、DDL 仍 2 条/页", async ({ page }) => {
   await openOverview(page, 390, 844);
   await expect(page.getByTestId("upcoming-ddl-card")).toBeVisible();
 
@@ -104,8 +110,8 @@ test("Mobile 390：单列自然高度、无横向 overflow、DDL 仍 3 条/页",
   const timetable = await page.getByTestId("timetable-card").boundingBox();
   expect(upcoming!.y).toBeGreaterThanOrEqual(timetable!.y + timetable!.height - 5);
 
-  // DDL 分页仍生效（3 条/页）
-  await expect(page.getByText("1 / 2", { exact: true }).first()).toBeVisible();
+  // DDL 分页仍生效（2 条/页，5 条 → 3 页）
+  await expect(page.getByTestId("upcoming-ddl-card").getByText("1 / 3", { exact: true })).toBeVisible();
 
   const overflow = await page.evaluate(
     () => document.documentElement.scrollWidth > window.innerWidth + 1
