@@ -178,9 +178,9 @@ export default function Home() {
                 </div>
               </div>
 
-              {/* Full height adaptive Timetable Container */}
+              {/* Full height adaptive Timetable Container（仅此工作区启用 Drag/Resize） */}
               <div className="flex-1 flex flex-col min-h-0">
-                <TimetableGrid />
+                <TimetableGrid editable />
               </div>
             </div>
           )}

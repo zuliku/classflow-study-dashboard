@@ -3,11 +3,23 @@
 import React, { useEffect, useRef, useState } from "react";
 import { ExternalLink, AlertTriangle, ChevronLeft, ChevronRight, MapPin, User } from "lucide-react";
 import { useAppStore } from "@/store/useAppStore";
+import { useToastStore } from "@/store/useToastStore";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import { getWeekDateRange, formatWeekDateRange } from "@/lib/semester";
 import { findScheduleConflicts } from "@/lib/conflicts";
 import { isScheduleActive, timeToMinutes } from "@/lib/schedule";
+import { CourseSchedule, ScheduleConflict } from "@/types";
+import {
+  TIMETABLE_DAY_START_MINUTES,
+  TIMETABLE_DAY_END_MINUTES,
+  TIMETABLE_TOTAL_MINUTES,
+  pointerToMinutes,
+  pointerToDayIndex,
+  calculateDraggedSchedule,
+  calculateResizedSchedule,
+  validateScheduleCandidate,
+} from "@/lib/timetableInteraction";
 
 const TIME_SLOTS = [
   "08:00",
@@ -26,7 +38,30 @@ const TIME_SLOTS = [
   "21:00",
 ];
 
-export function TimetableGrid() {
+/** 点击 vs 拖动阈值（px）：未超过仍视为点击，打开课程 Drawer */
+const DRAG_THRESHOLD_PX = 5;
+
+/** 直接编辑状态机：idle / move / resize。仅候选值存在组件内，Store 只在 pointerup 提交 */
+type Interaction =
+  | { type: "idle" }
+  | {
+      type: "move";
+      scheduleId: string;
+      origin: CourseSchedule;
+      candidate: CourseSchedule;
+      valid: boolean;
+      conflict: ScheduleConflict | null;
+    }
+  | {
+      type: "resize";
+      scheduleId: string;
+      origin: CourseSchedule;
+      candidate: CourseSchedule;
+      valid: boolean;
+      conflict: ScheduleConflict | null;
+    };
+
+export function TimetableGrid({ editable = false }: { editable?: boolean }) {
   const {
     courses,
     schedules,
@@ -38,7 +73,9 @@ export function TimetableGrid() {
     setSelectedConflict,
     setActiveTab,
     setFullTimetableModalOpen,
+    updateSchedule,
   } = useAppStore();
+  const pushToast = useToastStore((s) => s.pushToast);
 
   // 周一至周日表头完全由 semester.startDate + currentSemesterWeek 推导
   const weekDays = getWeekDateRange(semester, currentSemesterWeek);
@@ -53,8 +90,8 @@ export function TimetableGrid() {
 
   const timeToMinutesSafe = (timeStr: string) => timeToMinutes(timeStr) ?? 0;
 
-  const dayStartMinutes = 8 * 60;   // 08:00
-  const dayEndMinutes = 21 * 60;     // 21:00 (Includes evening classes)
+  const dayStartMinutes = TIMETABLE_DAY_START_MINUTES; // 08:00
+  const dayEndMinutes = TIMETABLE_DAY_END_MINUTES; // 21:00 (Includes evening classes)
   const totalMinutes = dayEndMinutes - dayStartMinutes; // 780 minutes total
 
   // Filter schedules active in currentSemesterWeek using unified isScheduleActive logic
@@ -77,6 +114,214 @@ export function TimetableGrid() {
   const handleOpenFullTimetable = () => {
     setActiveTab("timetable");
     setFullTimetableModalOpen(true);
+  };
+
+  // ---- 直接编辑：仅完整课表工作区 + viewport ≥768px + 精确指针（mouse/pen） ----
+  const [mediaState, setMediaState] = useState({ wide: false, fine: false });
+  useEffect(() => {
+    const wide = window.matchMedia("(min-width: 768px)");
+    const fine = window.matchMedia("(pointer: fine)");
+    const apply = () => setMediaState({ wide: wide.matches, fine: fine.matches });
+    apply();
+    wide.addEventListener("change", apply);
+    fine.addEventListener("change", apply);
+    return () => {
+      wide.removeEventListener("change", apply);
+      fine.removeEventListener("change", apply);
+    };
+  }, []);
+  // touch（手机/平板触摸）不进入拖动：不 setPointerCapture、不拦截滚动
+  const editingEnabled = editable && mediaState.wide && mediaState.fine;
+
+  const [interaction, setInteraction] = useState<Interaction>({ type: "idle" });
+  // 同步镜像：pointer 事件比 React 渲染更密集，handler 必须读 ref 而非闭包，
+  // 否则 pointerup 可能提交滞后的 candidate（例如 13:45 而非 14:00）。
+  const interactionRef = useRef<Interaction>({ type: "idle" });
+  const setInteractionSync = (it: Interaction) => {
+    interactionRef.current = it;
+    setInteraction(it);
+  };
+  const gridBodyRef = useRef<HTMLDivElement | null>(null);
+  const pendingRef = useRef<{
+    origin: CourseSchedule;
+    startX: number;
+    startY: number;
+  } | null>(null);
+  const dragOffsetRef = useRef(0);
+  const wasDraggedRef = useRef(false);
+
+  const cancelInteraction = () => {
+    pendingRef.current = null;
+    wasDraggedRef.current = false;
+    setInteractionSync({ type: "idle" });
+  };
+
+  // Esc 取消；组件卸载清理
+  useEffect(() => {
+    if (interaction.type === "idle") return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") cancelInteraction();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [interaction.type]);
+
+  useEffect(
+    () => () => {
+      pendingRef.current = null;
+      wasDraggedRef.current = false;
+    },
+    []
+  );
+
+  const getPointerMinutes = (clientY: number) => {
+    const rect = gridBodyRef.current?.getBoundingClientRect();
+    if (!rect) return dayStartMinutes;
+    return pointerToMinutes(clientY, rect.top, rect.height);
+  };
+
+  const getDayIndex = (clientX: number) => {
+    const rect = gridBodyRef.current?.getBoundingClientRect();
+    if (!rect) return 0;
+    return pointerToDayIndex(clientX, rect.left, rect.width);
+  };
+
+  /** 冲突的另一门课程名（candidate 之外的那一方） */
+  const conflictCourseName = (conflict: ScheduleConflict | null, candidateId: string) => {
+    if (!conflict) return "未知课程";
+    const other =
+      conflict.scheduleA.id === candidateId ? conflict.scheduleB : conflict.scheduleA;
+    return courses.find((c) => c.id === other.courseId)?.name ?? "未知课程";
+  };
+
+  // ---- Move ----
+  const engageMove = (origin: CourseSchedule, clientX: number, clientY: number) => {
+    const pointerMin = getPointerMinutes(clientY);
+    const candidate = calculateDraggedSchedule(
+      origin,
+      pointerMin,
+      dragOffsetRef.current,
+      getDayIndex(clientX) + 1
+    );
+    const { valid, conflict } = validateScheduleCandidate(candidate, schedules, origin.id);
+    wasDraggedRef.current = true;
+    setInteractionSync({ type: "move", scheduleId: origin.id, origin, candidate, valid, conflict });
+  };
+
+  const handleCardPointerDown = (e: React.PointerEvent, sched: CourseSchedule) => {
+    if (!editingEnabled || e.pointerType === "touch") return;
+    pendingRef.current = { origin: sched, startX: e.clientX, startY: e.clientY };
+    dragOffsetRef.current = getPointerMinutes(e.clientY) - timeToMinutesSafe(sched.startTime);
+    try {
+      (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    } catch {
+      /* 已释放的 capture 忽略 */
+    }
+  };
+
+  const handleCardPointerMove = (e: React.PointerEvent, sched: CourseSchedule) => {
+    const current = interactionRef.current;
+    const pending = pendingRef.current;
+    if (pending && current.type === "idle") {
+      const dist = Math.hypot(e.clientX - pending.startX, e.clientY - pending.startY);
+      if (dist >= DRAG_THRESHOLD_PX) engageMove(pending.origin, e.clientX, e.clientY);
+      return;
+    }
+    if (current.type === "move" && current.scheduleId === sched.id) {
+      const pointerMin = getPointerMinutes(e.clientY);
+      const candidate = calculateDraggedSchedule(
+        current.origin,
+        pointerMin,
+        dragOffsetRef.current,
+        getDayIndex(e.clientX) + 1
+      );
+      const { valid, conflict } = validateScheduleCandidate(
+        candidate,
+        schedules,
+        current.origin.id
+      );
+      setInteractionSync({ ...current, candidate, valid, conflict });
+    }
+  };
+
+  const handleCardPointerUp = (e: React.PointerEvent, sched: CourseSchedule) => {
+    try {
+      (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
+    } catch {
+      /* 已释放 */
+    }
+    const current = interactionRef.current;
+    if (current.type === "move" && current.scheduleId === sched.id) {
+      commitInteraction(current);
+      return;
+    }
+    // 未跨阈值 → 保持 click 语义（打开课程 Drawer）
+    pendingRef.current = null;
+  };
+
+  // ---- Resize ----
+  const handleResizePointerDown = (e: React.PointerEvent, sched: CourseSchedule) => {
+    e.stopPropagation();
+    if (!editingEnabled || e.pointerType === "touch") return;
+    e.preventDefault();
+    const candidate = calculateResizedSchedule(sched, getPointerMinutes(e.clientY));
+    const { valid, conflict } = validateScheduleCandidate(candidate, schedules, sched.id);
+    wasDraggedRef.current = true;
+    setInteractionSync({ type: "resize", scheduleId: sched.id, origin: sched, candidate, valid, conflict });
+    try {
+      (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    } catch {
+      /* ignore */
+    }
+  };
+
+  const handleResizePointerMove = (e: React.PointerEvent, sched: CourseSchedule) => {
+    const current = interactionRef.current;
+    if (current.type !== "resize" || current.scheduleId !== sched.id) return;
+    const candidate = calculateResizedSchedule(current.origin, getPointerMinutes(e.clientY));
+    const { valid, conflict } = validateScheduleCandidate(
+      candidate,
+      schedules,
+      current.origin.id
+    );
+    setInteractionSync({ ...current, candidate, valid, conflict });
+  };
+
+  const handleResizePointerUp = (e: React.PointerEvent, sched: CourseSchedule) => {
+    e.stopPropagation();
+    try {
+      (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
+    } catch {
+      /* ignore */
+    }
+    const current = interactionRef.current;
+    if (current.type === "resize" && current.scheduleId === sched.id) {
+      commitInteraction(current);
+    } else {
+      setInteractionSync({ type: "idle" });
+    }
+  };
+
+  // ---- 提交 / 取消 ----
+  const commitInteraction = (it: Interaction & { type: "move" | "resize" }) => {
+    if (it.valid) {
+      // 有效：立即写 Store，并给出可撤销 Toast（恢复 origin，同一 id，全部字段）
+      updateSchedule(it.candidate);
+      pushToast({
+        message: "课程时间已调整",
+        actionLabel: "撤销",
+        onAction: () => updateSchedule(it.origin),
+      });
+    } else {
+      // 冲突：不写 Store，回到 origin
+      pushToast({
+        type: "error",
+        message: `与《${conflictCourseName(it.conflict, it.candidate.id)}》时间冲突，未调整`,
+      });
+    }
+    pendingRef.current = null;
+    setInteractionSync({ type: "idle" });
   };
 
   return (
@@ -191,7 +436,11 @@ export function TimetableGrid() {
           </div>
 
           {/* 7 Columns for Days */}
-          <div className="col-span-7 grid grid-cols-7 relative border-l border-[#F0EBE1] h-full">
+          <div
+            ref={gridBodyRef}
+            data-testid="timetable-body"
+            className="col-span-7 grid grid-cols-7 relative border-l border-[#F0EBE1] h-full"
+          >
             {/* Horizontal Grid lines */}
             <div className="absolute inset-0 flex flex-col justify-between pointer-events-none h-full">
               {Array.from({ length: 13 }).map((_, i) => (
@@ -228,16 +477,31 @@ export function TimetableGrid() {
                     const heightPct =
                       ((endM - startM) / totalMinutes) * 100;
 
+                    const isOrigin = interaction.type !== "idle" && interaction.scheduleId === sched.id;
+
                     return (
                       <div
                         key={sched.id}
+                        data-testid="schedule-card"
                         onClick={() => {
+                          // 拖动结束后浏览器仍会在 capture 目标上派发 click，需吞掉
+                          if (wasDraggedRef.current) {
+                            wasDraggedRef.current = false;
+                            return;
+                          }
                           // 课程卡始终打开 Course Drawer；冲突有独立入口（卡片角标 + 顶部横幅）
                           setSelectedCourseId(course.id);
                         }}
+                        onPointerDown={(e) => handleCardPointerDown(e, sched)}
+                        onPointerMove={(e) => handleCardPointerMove(e, sched)}
+                        onPointerUp={(e) => handleCardPointerUp(e, sched)}
+                        onPointerCancel={cancelInteraction}
+                        title={editingEnabled ? "拖动调整上课时间" : undefined}
                         className={cn(
-                          "absolute left-0.5 right-0.5 rounded-xl p-1.5 sm:p-2 transition-all duration-[var(--motion-base)] ease-[var(--ease-standard)] cursor-pointer shadow-subtle hover:shadow-card hover:-translate-y-px border flex flex-col justify-between overflow-hidden group select-none",
-                          hasConflict && "ring-2 ring-danger bg-danger-bg border-danger-border"
+                          "absolute left-0.5 right-0.5 rounded-xl p-1.5 sm:p-2 transition-all duration-[var(--motion-base)] ease-[var(--ease-standard)] shadow-subtle hover:shadow-card hover:-translate-y-px border flex flex-col justify-between overflow-hidden group select-none",
+                          hasConflict && "ring-2 ring-danger bg-danger-bg border-danger-border",
+                          editingEnabled && "cursor-grab active:cursor-grabbing",
+                          isOrigin && "opacity-40"
                         )}
                         style={{
                           top: `${topPct}%`,
@@ -245,6 +509,7 @@ export function TimetableGrid() {
                           backgroundColor: hasConflict ? "#F2E8E6" : course.bgHex,
                           borderColor: hasConflict ? "#D9BCB8" : course.borderHex,
                           color: hasConflict ? "#9B5B57" : course.textHex,
+                          touchAction: editingEnabled ? "none" : "auto",
                         }}
                       >
                         {/* Top Section */}
@@ -266,6 +531,7 @@ export function TimetableGrid() {
                                     setConflictModalOpen(true);
                                   }
                                 }}
+                                onPointerDown={(e) => e.stopPropagation()}
                                 className="text-[8px] bg-danger text-white px-1 py-0.2 rounded font-bold shrink-0 ml-1 hover:bg-danger/85 transition-colors"
                                 title="查看冲突"
                               >
@@ -286,9 +552,103 @@ export function TimetableGrid() {
                           <MapPin className="w-2.5 h-2.5 mr-1 shrink-0 opacity-75" />
                           <span className="truncate">{sched.location}</span>
                         </div>
+
+                        {/* Resize Handle：仅工作区显示，hover/focus/拖拽中才明显 */}
+                        {editingEnabled && (
+                          <button
+                            data-testid="resize-handle"
+                            aria-label="调整课程结束时间"
+                            title="拖动调整结束时间"
+                            onPointerDown={(e) => handleResizePointerDown(e, sched)}
+                            onPointerMove={(e) => handleResizePointerMove(e, sched)}
+                            onPointerUp={(e) => handleResizePointerUp(e, sched)}
+                            onPointerCancel={cancelInteraction}
+                            onClick={(e) => e.stopPropagation()}
+                            className={cn(
+                              "absolute bottom-0.5 left-1/2 -translate-x-1/2 w-8 h-3.5 flex items-center justify-center rounded-md",
+                              "opacity-0 group-hover:opacity-100 focus-visible:opacity-100",
+                              "transition-opacity duration-[var(--motion-fast)]",
+                              interaction.type === "resize" &&
+                                interaction.scheduleId === sched.id &&
+                                "opacity-100"
+                            )}
+                            style={{ touchAction: "none" }}
+                          >
+                            <span className="w-5 h-1 rounded-full bg-charcoal/30 group-hover:bg-charcoal/50" />
+                          </button>
+                        )}
                       </div>
                     );
                   })}
+
+                  {/* Drag / Resize Ghost + 目标时间提示 */}
+                  {interaction.type !== "idle" &&
+                    interaction.candidate.dayOfWeek === wd.dayOfWeek && (
+                      <>
+                        {(() => {
+                          const c = interaction.candidate;
+                          const cStartM = timeToMinutesSafe(c.startTime);
+                          const cEndM = timeToMinutesSafe(c.endTime);
+                          const ghostTopPct =
+                            ((cStartM - dayStartMinutes) / totalMinutes) * 100;
+                          const ghostHeightPct =
+                            ((cEndM - cStartM) / totalMinutes) * 100;
+                          const invalid = !interaction.valid;
+                          return (
+                            <div
+                              aria-hidden="true"
+                              className={cn(
+                                "absolute left-0.5 right-0.5 rounded-xl p-1.5 border-2 border-dashed pointer-events-none flex flex-col justify-between overflow-hidden z-10",
+                                invalid
+                                  ? "bg-danger-bg border-danger-border"
+                                  : "bg-white/85 border-line-strong"
+                              )}
+                              style={{
+                                top: `${ghostTopPct}%`,
+                                height: `${Math.max(ghostHeightPct, 2.5)}%`,
+                              }}
+                            >
+                              <h4
+                                className={cn(
+                                  "font-extrabold text-[11px] tracking-tight leading-tight truncate",
+                                  invalid ? "text-danger" : "text-charcoal"
+                                )}
+                              >
+                                {courses.find((crs) => crs.id === c.courseId)?.name ?? ""}
+                              </h4>
+                              {invalid && (
+                                <p className="text-[9px] font-bold text-danger leading-none mt-0.5 truncate">
+                                  与《{conflictCourseName(interaction.conflict, c.id)}》冲突
+                                </p>
+                              )}
+                            </div>
+                          );
+                        })()}
+
+                        {/* 目标时间提示：靠近 ghost，不挡标题；无动画（Reduced Motion 下天然静态） */}
+                        {(() => {
+                          const c = interaction.candidate;
+                          const cStartM = timeToMinutesSafe(c.startTime);
+                          const ghostTopPct =
+                            ((cStartM - dayStartMinutes) / totalMinutes) * 100;
+                          const above = ghostTopPct >= 2.4;
+                          return (
+                            <div
+                              aria-hidden="true"
+                              className="absolute left-0.5 right-0.5 z-20 pointer-events-none flex justify-end"
+                              style={{
+                                top: `${above ? ghostTopPct - 2.2 : 0.6}%`,
+                                transform: above ? "translateY(-100%)" : "none",
+                              }}
+                            >
+                              <span className="px-1.5 py-0.5 rounded-md bg-charcoal text-white text-[9px] font-semibold whitespace-nowrap shadow-card">
+                                {wd.label} · {c.startTime}–{c.endTime}
+                              </span>
+                            </div>
+                          );
+                        })()}
+                      </>
+                    )}
                 </div>
               );
             })}
