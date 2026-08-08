@@ -60,7 +60,15 @@ type Interaction =
       conflict: ScheduleConflict | null;
     };
 
-export function TimetableGrid({ editable = false }: { editable?: boolean }) {
+export function TimetableGrid({
+  editable = false,
+  density = "comfortable",
+}: {
+  editable?: boolean;
+  /** compact：仅 Overview 只读表示层（更紧凑的时间轴）；default 保持舒展（workspace / FullTimetableModal） */
+  density?: "compact" | "comfortable";
+}) {
+  const isCompactDensity = density === "compact";
   const {
     courses,
     schedules,
@@ -340,7 +348,10 @@ export function TimetableGrid({ editable = false }: { editable?: boolean }) {
   };
 
   return (
-    <div className="bg-surface border border-line rounded-2xl p-4 shadow-subtle flex flex-col justify-between h-full w-full">
+    <div
+      data-testid="timetable-card"
+      className="bg-surface border border-line rounded-2xl p-4 shadow-subtle flex flex-col justify-between h-full w-full"
+    >
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-2.5 border-b border-[#F0EBE1] gap-2 shrink-0">
         <div className="flex items-center space-x-2">
@@ -434,7 +445,13 @@ export function TimetableGrid({ editable = false }: { editable?: boolean }) {
         </div>
 
         {/* Timetable Body Grid (08:00 to 21:00 Evening Range) */}
-        <div className="relative flex-1 grid grid-cols-8 mt-1 min-h-[520px]">
+        <div
+          className={cn(
+            "relative flex-1 grid grid-cols-8 mt-1 min-h-[520px]",
+            // Overview compact：md+ 压缩时间轴（每小时 ~33-35px），完整保留 08:00-21:00
+            isCompactDensity && "md:min-h-[440px]"
+          )}
+        >
           {/* Time Labels Column */}
           <div className="flex flex-col justify-between text-[10px] text-sandrift font-mono border-r border-[#F0EBE1] pr-1.5 py-0.5 h-full">
             {TIME_SLOTS.map((time, idx) => (
@@ -513,9 +530,11 @@ export function TimetableGrid({ editable = false }: { editable?: boolean }) {
                         onPointerCancel={cancelInteraction}
                         title={editingEnabled ? "拖动调整上课时间" : undefined}
                         className={cn(
-                          "absolute left-0.5 right-0.5 rounded-xl p-1.5 sm:p-2 shadow-subtle hover:shadow-card hover:-translate-y-px border flex flex-col justify-between overflow-hidden group select-none",
+                          "absolute left-0.5 right-0.5 rounded-xl shadow-subtle hover:shadow-card hover:-translate-y-px border flex flex-col justify-between overflow-hidden group select-none",
                           // 只过渡实际会变化的属性（位置/尺寸/透明度/阴影/边框），避免无关属性建立 transition
                           "transition-[top,height,opacity,transform,box-shadow,border-color,background-color] duration-[var(--motion-base)] ease-[var(--ease-standard)]",
+                          // Overview compact：更紧凑的卡内边距（标题字号不变）
+                          isCompactDensity ? "p-1.5" : "p-1.5 sm:p-2",
                           hasConflict && "ring-2 ring-danger bg-danger-bg border-danger-border",
                           editingEnabled && "cursor-grab active:cursor-grabbing",
                           // 拖动中：原卡轻微降存在感（0.5 左右），保持原位置，不 scale/rotate/blur

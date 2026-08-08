@@ -395,22 +395,34 @@ export function AssignmentTable({ mode = "compact" }: AssignmentTableProps) {
         </div>
       </div>
 
-      {/* Task List：compact = 固定行数 + 分页（禁止内部滚动）；workspace = 完整滚动工作区 */}
+      {/* Task List：compact = 可伸缩内容区（flex-1 min-h-0）+ 分页；workspace = 完整滚动工作区 */}
       <div
         data-testid="assignment-list"
         tabIndex={isWorkspace ? 0 : undefined}
         onKeyDown={isWorkspace ? handleListKeyDown : undefined}
         className={cn(
-          "divide-y divide-line-soft mt-1 flex-1 space-y-1",
+          "divide-y divide-line-soft mt-1 flex-1 min-h-0 space-y-1",
           isWorkspace &&
             "overflow-y-auto max-h-[380px] outline-none rounded-xl focus-visible:ring-2 focus-visible:ring-line-strong"
         )}
       >
         {pagedAssignments.length === 0 ? (
-          <div className="py-10 text-center text-xs text-sandrift space-y-1">
-            <CheckCircle2 className="w-8 h-8 mx-auto text-success" />
-            <p>该筛选条件下暂无任务</p>
-          </div>
+          // compact：空状态填满 Header/Filters 与 Footer 之间的完整内容区（真正垂直居中，非 py 假居中）；
+          // workspace：保持原有内边距样式
+          isWorkspace ? (
+            <div className="py-10 text-center text-xs text-sandrift space-y-1">
+              <CheckCircle2 className="w-8 h-8 mx-auto text-success" />
+              <p>该筛选条件下暂无任务</p>
+            </div>
+          ) : (
+            <div
+              data-testid="assignment-empty"
+              className="h-full flex flex-col items-center justify-center gap-2.5 text-center"
+            >
+              <CheckCircle2 className="w-9 h-9 text-success" />
+              <p className="text-xs text-sandrift">该筛选条件下暂无任务</p>
+            </div>
+          )
         ) : (
           (isWorkspace ? filteredAssignments : pagedAssignments).map((task) => {
             const course = courses.find((c) => c.id === task.courseId);
@@ -559,8 +571,16 @@ export function AssignmentTable({ mode = "compact" }: AssignmentTableProps) {
         )}
       </div>
 
-      {/* Footer：compact = 计数 + 分页 + 进入工作区；workspace = 键盘提示 */}
-      <div className="pt-2 border-t border-[#F0EBE1] flex justify-between items-center text-xs shrink-0">
+      {/* Footer：compact = 三段式 grid（左计数 / 中分页恒居中 / 右进入工作区）；workspace = 键盘提示 */}
+      <div
+        data-testid={isWorkspace ? undefined : "assignment-footer"}
+        className={cn(
+          "shrink-0 text-xs",
+          isWorkspace
+            ? "pt-2 border-t border-[#F0EBE1] flex justify-between items-center"
+            : "pt-3 pb-1.5 border-t border-[#F0EBE1] grid grid-cols-[1fr_auto_1fr] items-center"
+        )}
+      >
         {isWorkspace ? (
           <>
             <span className="text-[11px] text-sandrift">
@@ -570,27 +590,28 @@ export function AssignmentTable({ mode = "compact" }: AssignmentTableProps) {
           </>
         ) : (
           <>
-            <span className="text-[11px] text-sandrift">
+            <span className="text-[11px] text-sandrift justify-self-start">
               共 {compactPaged?.totalItems ?? filteredAssignments.length} 项任务
             </span>
+            {/* 中间列：分页器永远位于卡片真正水平中心，不随左右文案宽度漂移 */}
             {compactTotalPages > 1 && (
-              <span className="flex items-center gap-1.5">
+              <span className="inline-flex items-center gap-2">
                 <button
                   onClick={() => setCompactPage(compactSafePage - 1)}
                   disabled={compactSafePage <= 1}
                   aria-label="上一页"
-                  className="p-1 rounded-lg text-sandrift hover:bg-alabaster hover:text-charcoal transition-colors disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-sandrift"
+                  className="w-7 h-7 flex items-center justify-center rounded-lg text-sandrift hover:bg-alabaster hover:text-charcoal transition-colors disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-sandrift"
                 >
                   <ChevronLeft className="w-3.5 h-3.5" />
                 </button>
-                <span className="text-[11px] font-mono text-satin-grey">
+                <span className="min-w-[40px] text-center text-[11px] font-mono text-satin-grey">
                   {compactSafePage} / {compactTotalPages}
                 </span>
                 <button
                   onClick={() => setCompactPage(compactSafePage + 1)}
                   disabled={compactSafePage >= compactTotalPages}
                   aria-label="下一页"
-                  className="p-1 rounded-lg text-sandrift hover:bg-alabaster hover:text-charcoal transition-colors disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-sandrift"
+                  className="w-7 h-7 flex items-center justify-center rounded-lg text-sandrift hover:bg-alabaster hover:text-charcoal transition-colors disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-sandrift"
                 >
                   <ChevronRight className="w-3.5 h-3.5" />
                 </button>
@@ -598,7 +619,7 @@ export function AssignmentTable({ mode = "compact" }: AssignmentTableProps) {
             )}
             <button
               onClick={() => setActiveTab("assignments")}
-              className="font-bold text-charcoal hover:underline"
+              className="font-bold text-charcoal hover:underline justify-self-end"
             >
               任务工作区 →
             </button>

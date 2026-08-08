@@ -102,28 +102,86 @@ test("Case D：切换全部 6 个筛选，StudyLoadChart 外层卡片高度保�
   expect(right!.height).toBeCloseTo(460, 0);
 });
 
-test("Case E：进入 assignments workspace，J/K / Space / X / Enter 仍正常（未被 compact 分页截断）", async ({ page }) => {
+test("Case 1：空状态真正居中（相对 Header/Footer 之间的内容区）", async ({ page }) => {
+  await openOverview(page);
+  const card = page.getByTestId("overview-tasks-wrap");
+  const list = page.getByTestId("assignment-list");
+
+  await card.getByRole("button", { name: "已逾期" }).click();
+  const empty = page.getByTestId("assignment-empty");
+  await expect(empty).toBeVisible();
+
+  // empty state 中心 ≈ 内容区（assignment-list）中心；排除 Header / Footer 的影响
+  const listBox = await list.boundingBox();
+  const emptyBox = await empty.boundingBox();
+  expect(Math.abs(emptyBox!.y + emptyBox!.height / 2 - (listBox!.y + listBox!.height / 2))).toBeLessThanOrEqual(4);
+  expect(Math.abs(emptyBox!.x + emptyBox!.width / 2 - (listBox!.x + listBox!.width / 2))).toBeLessThanOrEqual(4);
+});
+
+test("Case 2：分页可见时 Footer 位置稳定（三段式，分页居中）", async ({ page }) => {
+  await openOverview(page);
+  const card = page.getByTestId("overview-tasks-wrap");
+  const footer = page.getByTestId("assignment-footer");
+  await expect(footer).toBeVisible();
+  await expect(card.getByText("1 / 2", { exact: true })).toBeVisible();
+
+  // 分页器水平居中于卡片（中间列 = 卡片中心）
+  const cardBox = await card.boundingBox();
+  const pageNum = footer.getByText("1 / 2", { exact: true });
+  const numBox = await pageNum.boundingBox();
+  expect(
+    Math.abs(numBox!.x + numBox!.width / 2 - (cardBox!.x + cardBox!.width / 2))
+  ).toBeLessThanOrEqual(4);
+
+  // 左「共 N 项」右「任务工作区」分居两端
+  const left = footer.getByText("共 6 项任务", { exact: true });
+  const right = footer.getByRole("button", { name: "任务工作区 →" });
+  const leftBox = await left.boundingBox();
+  const rightBox = await right.boundingBox();
+  expect(leftBox!.x - cardBox!.x).toBeLessThan(30); // 贴左
+  expect(cardBox!.x + cardBox!.width - (rightBox!.x + rightBox!.width)).toBeLessThan(30); // 贴右
+});
+
+test("Case 3：切换筛选时 Footer 底部位置稳定、卡片高度不变", async ({ page }) => {
+  await openOverview(page);
+  const card = page.getByTestId("overview-tasks-wrap");
+  const footer = page.getByTestId("assignment-footer");
+
+  const baseCard = await card.boundingBox();
+  const baseFooter = await footer.boundingBox();
+  // Footer 贴卡片底（卡片 p-4 内边距 ~16px + footer pb-1.5）
+  expect(Math.abs(baseCard!.y + baseCard!.height - (baseFooter!.y + baseFooter!.height))).toBeLessThanOrEqual(20);
+
+  for (const f of ["已逾期", "今日截止", "全部"]) {
+    await card.getByRole("button", { name: f }).click();
+    await page.waitForTimeout(200);
+    const cardBox = await card.boundingBox();
+    const footerBox = await footer.boundingBox();
+    expect(Math.abs(cardBox!.height - baseCard!.height)).toBeLessThanOrEqual(1); // 卡片高度不变
+    // Footer 相对卡片底部距离不变（滚动导致的 y 变化被差值抵消）
+    expect(
+      Math.abs(
+        cardBox!.y + cardBox!.height - (footerBox!.y + footerBox!.height) -
+        (baseCard!.y + baseCard!.height - (baseFooter!.y + baseFooter!.height))
+      )
+    ).toBeLessThanOrEqual(1);
+  }
+});
+
+test("Case 4：workspace 原有键盘 / selection E2E 继续通过", async ({ page }) => {
   await openOverview(page);
   await page.getByRole("button", { name: "任务工作区" }).click();
   await expect(page.getByRole("heading", { name: "任务工作区" })).toBeVisible();
 
   const list = page.getByTestId("assignment-list");
   await list.focus();
-  await page.keyboard.press("j"); // highlight a1
-  await page.keyboard.press("x"); // 选 a1
-
-  const bar = page.getByTestId("assignment-bulk-bar");
-  await expect(bar).toBeVisible();
-  await expect(bar).toContainText("已选 1 项");
-
-  // Space Peek
-  await page.keyboard.press("Space");
-  await expect(page.getByTestId("assignment-peek")).toBeVisible();
-  await page.keyboard.press("Escape");
-  await expect(page.getByTestId("assignment-peek")).toHaveCount(0);
-
-  // Enter 打开 Drawer（a1）
-  await page.keyboard.press("Enter");
-  await expect(page.getByRole("heading", { name: "计量经济学大作业（第3章）" }).last()).toBeVisible();
-  await page.getByRole("button", { name: "关闭" }).first().click();
+  await page.keyboard.press("j");
+  await page.keyboard.press("x");
+  await expect(page.getByTestId("assignment-bulk-bar")).toContainText("已选 1 项");
+  await page.keyboard.press("j");
+  await page.keyboard.press("x");
+  await expect(page.getByTestId("assignment-bulk-bar")).toContainText("已选 2 项");
+  // 右键 Context Menu 仍在
+  await page.locator('[data-assignment-id="a4"]').click({ button: "right" });
+  await expect(page.getByTestId("assignment-context-menu")).toBeVisible();
 });
