@@ -1,4 +1,5 @@
-import { test, expect, Page } from "@playwright/test";
+import { expect, Page } from "@playwright/test";
+import { test } from "./demoFixtures";
 
 /**
  * MiniCalendar DDL 直接拖动 E2E（Desktop 1440）。

@@ -1,4 +1,5 @@
-import { test, expect, Page } from "@playwright/test";
+import { expect, Page } from "@playwright/test";
+import { test } from "./demoFixtures";
 
 /**
  * 直接编辑课表 E2E（Desktop 1280）：Move / Undo / Conflict / Resize。

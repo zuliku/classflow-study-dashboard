@@ -1,10 +1,11 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { useAppStore } from "@/store/useAppStore";
+import { seedDemoData } from "./demoSeed";
 import { getLocalDDLDate } from "@/lib/ddl";
 
 describe("deleteCourse 级联清理", () => {
   beforeEach(() => {
-    useAppStore.getState().resetAllDataToDefault();
+    seedDemoData();
   });
 
   it("删除课程后：课程/排课/作业/关联 DDL 标记/小组项目消失，其余保留", () => {

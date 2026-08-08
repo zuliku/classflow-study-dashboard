@@ -1,4 +1,5 @@
-import { test, expect } from "@playwright/test";
+import { expect } from "@playwright/test";
+import { test } from "./demoFixtures";
 
 /**
  * Reduced Motion QA：prefers-reduced-motion: reduce 下所有功能仍然可用，

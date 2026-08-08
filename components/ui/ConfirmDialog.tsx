@@ -86,6 +86,7 @@ export function ConfirmDialog() {
             <button
               onClick={handleConfirm}
               autoFocus
+              data-testid="confirm-dialog-confirm"
               className={cn(
                 "ux-press px-4 py-2 text-xs font-bold rounded-xl transition-colors",
                 request.danger

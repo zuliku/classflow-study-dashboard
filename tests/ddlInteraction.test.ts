@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { useAppStore } from "@/store/useAppStore";
+import { seedDemoData } from "./demoSeed";
 import { Assignment } from "@/types";
 import { getLocalDDLDate, getLocalDDLTime, parseLocalDDL } from "@/lib/ddl";
 import {
@@ -92,7 +93,7 @@ describe("快速修改时间", () => {
 
 describe("数据回归：updateAssignment 链路", () => {
   beforeEach(() => {
-    useAppStore.getState().resetAllDataToDefault();
+    seedDemoData();
   });
 
   it("Drop 后 Assignment ID 不变，CalendarMark sourceId 关联仍有效且日期同步", () => {

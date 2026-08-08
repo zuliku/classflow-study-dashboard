@@ -4,7 +4,7 @@ import React from "react";
 import { ChevronRight } from "lucide-react";
 import { useAppStore } from "@/store/useAppStore";
 import { cn } from "@/lib/utils";
-import { NAV_ITEMS } from "@/components/layout/navItems";
+import { WORKSPACE_NAV_ITEMS, GLOBAL_NAV_ACTIONS } from "@/components/layout/navItems";
 
 export function Sidebar() {
   const { activeTab, setActiveTab, setSettingsModalOpen, userProfile } = useAppStore();
@@ -35,19 +35,15 @@ export function Sidebar() {
           />
         </div>
 
-        {/* Navigation Menu */}
+        {/* Navigation Menu（工作区 Tab） */}
         <nav className="space-y-0.5">
-          {NAV_ITEMS.map((item) => {
+          {WORKSPACE_NAV_ITEMS.map((item) => {
             const Icon = item.icon;
             const isActive = activeTab === item.id;
             return (
               <button
                 key={item.id}
-                onClick={() =>
-                  item.id === "settings"
-                    ? setSettingsModalOpen(true)
-                    : setActiveTab(item.id)
-                }
+                onClick={() => setActiveTab(item.id)}
                 aria-label={item.label}
                 className={cn(
                   "relative w-full flex items-center justify-center xl:justify-start xl:space-x-2.5 px-2 xl:px-3 py-2 rounded-xl text-xs font-medium transition-colors duration-[var(--motion-base)] ease-[var(--ease-standard)] group text-left",
@@ -93,30 +89,76 @@ export function Sidebar() {
             );
           })}
         </nav>
+
+        {/* 全局 Action：设置（Modal 入口，不改变 activeTab） */}
+        <div className="pt-1 mt-1 border-t border-line-soft space-y-0.5">
+          {GLOBAL_NAV_ACTIONS.map((item) => {
+            const Icon = item.icon;
+            return (
+              <button
+                key={item.id}
+                onClick={() => setSettingsModalOpen(true)}
+                aria-label={item.label}
+                className={cn(
+                  "relative w-full flex items-center justify-center xl:justify-start xl:space-x-2.5 px-2 xl:px-3 py-2 rounded-xl text-xs font-medium transition-colors duration-[var(--motion-base)] ease-[var(--ease-standard)] group text-left",
+                  "text-satin-grey hover:bg-alabaster hover:text-charcoal"
+                )}
+              >
+                <Icon className="w-4 h-4 shrink-0 transition-colors duration-[var(--motion-base)] text-sandrift group-hover:text-charcoal" />
+                <span data-testid="nav-label" className="hidden xl:inline truncate">{item.label}</span>
+                <span
+                  data-testid="nav-tooltip"
+                  role="tooltip"
+                  className={cn(
+                    "hidden md:inline-flex xl:hidden absolute left-full top-1/2 -translate-y-1/2 ml-2",
+                    "px-2 py-1 rounded-lg bg-charcoal text-white text-[11px] whitespace-nowrap",
+                    "opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100",
+                    "transition-opacity duration-[var(--motion-fast)] pointer-events-none z-50"
+                  )}
+                >
+                  {item.label}
+                </span>
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       {/* Bottom Profile Card（Icon Rail 下隐藏，仅 Desktop 显示） */}
       <div className="space-y-2 hidden xl:block">
         <div className="bg-alabaster/70 border border-line-strong rounded-2xl p-3 space-y-2.5 shadow-subtle">
           <div className="flex items-center space-x-2.5">
-            <img
-              src={userProfile.avatarUrl}
-              alt={userProfile.name}
-              className="w-8 h-8 rounded-full object-cover border border-[#CDB9AB]"
-            />
+            {/* 头像 fallback：无 avatarUrl 时显示首字/User 图标 */}
+            {userProfile.avatarUrl ? (
+              <img
+                src={userProfile.avatarUrl}
+                alt={userProfile.name || "用户"}
+                className="w-8 h-8 rounded-full object-cover border border-[#CDB9AB] shrink-0"
+              />
+            ) : (
+              <span className="w-8 h-8 rounded-full bg-pastel-mint border border-line-strong flex items-center justify-center text-[11px] font-bold text-charcoal shrink-0">
+                {userProfile.name ? userProfile.name.slice(0, 1) : "用"}
+              </span>
+            )}
             <div className="flex-1 min-w-0">
               <div className="flex items-center justify-between">
                 <h4 className="text-xs font-semibold text-charcoal truncate">
-                  {userProfile.name}
+                  {userProfile.name || "未设置姓名"}
                 </h4>
                 <ChevronRight className="w-3.5 h-3.5 text-sandrift" />
               </div>
-              <p className="text-[10px] text-satin-grey truncate">
-                {userProfile.college}
-              </p>
-              <p className="text-[10px] text-sandrift truncate">
-                {userProfile.grade}
-              </p>
+              {userProfile.college || userProfile.grade ? (
+                <>
+                  <p className="text-[10px] text-satin-grey truncate">
+                    {userProfile.college}
+                  </p>
+                  <p className="text-[10px] text-sandrift truncate">
+                    {userProfile.grade}
+                  </p>
+                </>
+              ) : (
+                <p className="text-[10px] text-sandrift truncate">完善个人资料</p>
+              )}
             </div>
           </div>
 

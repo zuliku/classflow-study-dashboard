@@ -1,11 +1,12 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { useAppStore } from "@/store/useAppStore";
+import { seedDemoData } from "./demoSeed";
 import { Material } from "@/types";
 import { getLocalDDLDate } from "@/lib/ddl";
 
 describe("删除撤销（Undo）", () => {
   beforeEach(() => {
-    useAppStore.getState().resetAllDataToDefault();
+    seedDemoData();
   });
 
   it("删除任务返回被删任务与 DDL 标记，撤销后按原 ID 与字段恢复", () => {

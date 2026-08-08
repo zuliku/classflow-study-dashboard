@@ -36,6 +36,7 @@ import {
   FileUp,
   BarChart2,
   ExternalLink,
+  CalendarDays,
 } from "lucide-react";
 import {
   PieChart,
@@ -61,6 +62,7 @@ export default function Home() {
     setAddCourseModalOpen,
     setImportScheduleModalOpen,
     setFullTimetableModalOpen,
+    setSettingsModalOpen,
   } = useAppStore();
 
   // 本周课程时长：按当前教学周实际生效课表实算（endTime - startTime）
@@ -122,6 +124,45 @@ export default function Home() {
           <PageTransition tab={activeTab} className="space-y-5">
           {activeTab === "overview" && (
             <>
+              {/* First Run：空工作区时显示 Getting Started（非阻塞，三个动作即可开始） */}
+              {courses.length === 0 && schedules.length === 0 && assignments.length === 0 ? (
+                <div
+                  data-testid="getting-started"
+                  className="bg-surface border border-line rounded-2xl p-8 shadow-subtle space-y-4 text-center"
+                >
+                  <div>
+                    <h2 className="text-lg font-bold text-charcoal">欢迎使用 ClassFlow</h2>
+                    <p className="text-xs text-sandrift mt-1">建立你的学习工作区</p>
+                  </div>
+                  <div className="flex flex-wrap items-center justify-center gap-2.5">
+                    <button
+                      onClick={() => setImportScheduleModalOpen(true)}
+                      className="ux-press flex items-center gap-1.5 px-4 py-2 bg-charcoal hover:bg-black text-white text-xs font-bold rounded-xl transition-colors shadow-subtle"
+                    >
+                      <FileUp className="w-3.5 h-3.5" />
+                      导入课表
+                    </button>
+                    <button
+                      onClick={() => setAddCourseModalOpen(true)}
+                      className="ux-press flex items-center gap-1.5 px-4 py-2 bg-pastel-mint hover:bg-pastel-mint text-charcoal text-xs font-bold rounded-xl transition-colors"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      添加第一门课程
+                    </button>
+                    <button
+                      onClick={() => setSettingsModalOpen(true)}
+                      className="ux-press flex items-center gap-1.5 px-4 py-2 bg-white border border-line-strong text-charcoal text-xs font-bold rounded-xl transition-colors hover:bg-alabaster"
+                    >
+                      <CalendarDays className="w-3.5 h-3.5 text-[#A48F82]" />
+                      设置当前学期
+                    </button>
+                  </div>
+                  <p className="text-[10px] text-sandrift">
+                    也可以直接新建任务或浏览课表，随时可以从设置中调整
+                  </p>
+                </div>
+              ) : (
+                <>
               {/* Row 1: Top 4 Stat Summary Cards */}
               <StatCards />
 
@@ -149,6 +190,8 @@ export default function Home() {
                   <AssignmentTable mode="compact" />
                 </div>
               </div>
+                </>
+              )}
             </>
           )}
 
@@ -191,7 +234,28 @@ export default function Home() {
 
               {/* Full height adaptive Timetable Container（仅此工作区启用 Drag/Resize） */}
               <div className="flex-1 flex flex-col min-h-0">
-                <TimetableGrid editable />
+                {courses.length === 0 ? (
+                  <div className="flex-1 flex flex-col items-center justify-center gap-2.5 bg-surface border border-line rounded-2xl shadow-subtle text-center p-6">
+                    <p className="text-xs font-bold text-charcoal">暂无课程</p>
+                    <p className="text-[11px] text-sandrift">添加课程或导入课表后即可查看排课</p>
+                    <div className="flex gap-2 mt-1">
+                      <button
+                        onClick={() => setAddCourseModalOpen(true)}
+                        className="ux-press px-3 py-1.5 bg-pastel-mint text-charcoal text-[11px] font-bold rounded-xl transition-colors"
+                      >
+                        添加课程
+                      </button>
+                      <button
+                        onClick={() => setImportScheduleModalOpen(true)}
+                        className="ux-press px-3 py-1.5 bg-charcoal text-white text-[11px] font-bold rounded-xl transition-colors"
+                      >
+                        导入课表
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <TimetableGrid editable />
+                )}
               </div>
             </div>
           )}
@@ -232,6 +296,19 @@ export default function Home() {
                 </button>
               </div>
 
+              {courses.length === 0 ? (
+                <div className="bg-surface border border-line rounded-2xl p-10 shadow-subtle flex flex-col items-center justify-center gap-2.5 text-center">
+                  <p className="text-xs font-bold text-charcoal">暂无课程</p>
+                  <p className="text-[11px] text-sandrift">添加第一门课程或导入课表</p>
+                  <button
+                    onClick={() => setAddCourseModalOpen(true)}
+                    className="ux-press mt-1 px-4 py-2 bg-charcoal hover:bg-black text-white text-xs font-bold rounded-xl transition-colors shadow-subtle"
+                  >
+                    <Plus className="w-3.5 h-3.5 inline-block mr-1" />
+                    添加课程
+                  </button>
+                </div>
+              ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {courses.map((course) => (
                   <div
@@ -290,6 +367,7 @@ export default function Home() {
                   </div>
                 ))}
               </div>
+              )}
             </div>
           )}
 
@@ -308,6 +386,12 @@ export default function Home() {
                 </p>
               </div>
 
+              {/* 无数据：不生成假图 */}
+              {assignments.length === 0 && schedules.length === 0 ? (
+                <div className="bg-surface border border-line rounded-2xl p-10 shadow-subtle flex items-center justify-center">
+                  <p className="text-xs text-sandrift">暂无可分析的学习数据</p>
+                </div>
+              ) : (<>
               {/* Metric Summary Cards Derived Dynamically */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="p-4 bg-surface border border-line rounded-2xl shadow-subtle space-y-1">
@@ -421,6 +505,7 @@ export default function Home() {
               <div className="w-full">
                 <StudyLoadChart />
               </div>
+              </>)}
             </div>
           )}
         </PageTransition>

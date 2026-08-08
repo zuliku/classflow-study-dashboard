@@ -1,4 +1,5 @@
-import { test, expect, Page } from "@playwright/test";
+import { expect, Page } from "@playwright/test";
+import { test } from "./demoFixtures";
 
 /**
  * Overview Row 2 等高 + UpcomingDDL 3条/页分页 E2E。

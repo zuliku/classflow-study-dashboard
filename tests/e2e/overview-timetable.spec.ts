@@ -1,4 +1,5 @@
-import { test, expect } from "@playwright/test";
+import { expect } from "@playwright/test";
+import { test } from "./demoFixtures";
 
 /**
  * Overview「本周课表」compact 时间轴 E2E：
@@ -31,7 +32,7 @@ test("1440×900：时间轴紧凑且完整（08:00 / 21:00 可见、21:00 未裁
   // Row 2 共享行高由右侧（DDL+日历）决定，课表等比拉伸填满，不做硬上限断言
   const body = await page
     .getByTestId("timetable-card")
-    .locator("div.relative.flex-1.grid.grid-cols-8")
+    .locator("div.relative.flex-1.grid")
     .evaluate((el) => el.getBoundingClientRect().height);
   expect(body).toBeGreaterThanOrEqual(440);
 
@@ -96,7 +97,7 @@ test("Full Timetable Workspace / Modal 不受 compact 影响", async ({ page }) 
   // workspace 保持舒展：body min-h 520（未加 md:min-h-[440px]）
   const body = await page
     .getByTestId("timetable-card")
-    .locator("div.relative.flex-1.grid.grid-cols-8")
+    .locator("div.relative.flex-1.grid")
     .evaluate((el) => el.getBoundingClientRect().height);
   expect(body).toBeGreaterThanOrEqual(520);
 });

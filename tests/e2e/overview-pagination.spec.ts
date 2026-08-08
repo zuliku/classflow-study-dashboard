@@ -1,4 +1,5 @@
-import { test, expect, Page } from "@playwright/test";
+import { expect, Page } from "@playwright/test";
+import { test } from "./demoFixtures";
 
 /**
  * Overview 双栏（课程负荷 + 任务清单分页）E2E。

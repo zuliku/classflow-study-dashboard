@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { useAppStore } from "@/store/useAppStore";
+import { seedDemoData } from "./demoSeed";
 import { findDataIntegrityIssues } from "@/lib/dataIntegrity";
 import { ClassFlowBackupData } from "@/types";
 
@@ -28,7 +29,7 @@ async function freshStore() {
 
 describe("数据完整性回归", () => {
   beforeEach(() => {
-    useAppStore.getState().resetAllDataToDefault();
+    seedDemoData();
     localStorage.clear();
   });
 
@@ -55,6 +56,7 @@ describe("数据完整性回归", () => {
   });
 
   it("restore 后 currentSemesterWeek 按新学期 clamp（16 → ≤12）", () => {
+    seedDemoData();
     useAppStore.getState().setCurrentSemesterWeek(16);
     expect(useAppStore.getState().currentSemesterWeek).toBe(16);
 
@@ -65,12 +67,12 @@ describe("数据完整性回归", () => {
     expect(week).toBeLessThanOrEqual(12);
   });
 
-  it("reset 清理业务数据、UI 瞬时状态与筛选偏好，无需 reload", () => {
+  it("clearLearningData 清空业务数据并保留 profile/semester/preferences", () => {
+    seedDemoData();
     // 制造脏状态
     useAppStore.setState({
       selectedCourseId: "c_1",
       selectedAssignmentId: "a_1",
-      isSearchModalOpen: true,
       isAddCourseModalOpen: true,
       isImportScheduleModalOpen: true,
       isConflictModalOpen: true,
@@ -78,23 +80,45 @@ describe("数据完整性回归", () => {
       selectedConflict: { scheduleA: {} as any, scheduleB: {} as any, dayOfWeek: 1, timeRange: "x" },
       assignmentTimeSlice: "overdue",
     });
+    const profileBefore = useAppStore.getState().userProfile;
+    const semesterBefore = useAppStore.getState().semester;
+    const prefsBefore = useAppStore.getState().preferences;
 
-    useAppStore.getState().resetAllDataToDefault();
+    useAppStore.getState().clearLearningData();
     const s = useAppStore.getState();
-    // 业务数据回演示默认
-    expect(s.courses).toHaveLength(6);
-    expect(s.assignments).toHaveLength(6);
-    expect(s.currentSemesterWeek).toBe(1);
+    // 业务数据清空
+    expect(s.courses).toHaveLength(0);
+    expect(s.schedules).toHaveLength(0);
+    expect(s.assignments).toHaveLength(0);
+    expect(s.calendarMarks).toHaveLength(0);
+    expect(s.groupProjects).toHaveLength(0);
+    // 保留 profile / semester / preferences
+    expect(s.userProfile).toEqual(profileBefore);
+    expect(s.semester).toEqual(semesterBefore);
+    expect(s.preferences).toEqual(prefsBefore);
     // 瞬时 UI 全部复位
     expect(s.selectedCourseId).toBeNull();
     expect(s.selectedAssignmentId).toBeNull();
     expect(s.selectedConflict).toBeNull();
-    expect(s.isSearchModalOpen).toBe(false);
+    expect(s.assignmentSelection).toHaveLength(0);
+    expect(s.assignmentPeekId).toBeNull();
     expect(s.isAddCourseModalOpen).toBe(false);
     expect(s.isImportScheduleModalOpen).toBe(false);
     expect(s.isConflictModalOpen).toBe(false);
     expect(s.isFullTimetableModalOpen).toBe(false);
     expect(s.assignmentTimeSlice).toBe("all");
+  });
+
+  it("resetEntireApp 回到 First Run 空状态（无演示数据）", () => {
+    seedDemoData();
+    useAppStore.getState().resetEntireApp();
+    const s = useAppStore.getState();
+    expect(s.courses).toHaveLength(0);
+    expect(s.assignments).toHaveLength(0);
+    expect(s.groupProjects).toHaveLength(0);
+    expect(s.userProfile.name).toBe("");
+    expect(s.assignmentTimeSlice).toBe("all");
+    expect(s.selectedCourseId).toBeNull();
   });
 
   it("同一毫秒批量创建不产生 ID 冲突（course/schedule/material/assignment/mark）", () => {

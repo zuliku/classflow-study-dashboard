@@ -7,7 +7,7 @@ import { format } from "date-fns";
 import { zhCN } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 import { getWeekDateRange, getSemesterWeek } from "@/lib/semester";
-import { NAV_ITEMS } from "@/components/layout/navItems";
+import { WORKSPACE_NAV_ITEMS } from "@/components/layout/navItems";
 
 export function Header() {
   const {
@@ -48,7 +48,7 @@ export function Header() {
   const isCurrentWeek = currentSemesterWeek === realCurrentWeek;
 
   const currentTabLabel =
-    NAV_ITEMS.find((n) => n.id === activeTab)?.label ?? "总览";
+    WORKSPACE_NAV_ITEMS.find((n) => n.id === activeTab)?.label ?? "总览";
 
   return (
     // 三档 Header：
@@ -61,7 +61,7 @@ export function Header() {
         <h2 className="text-base md:text-lg font-bold text-charcoal tracking-tight truncate">
           <span className="md:hidden">{currentTabLabel}</span>
           <span className="hidden md:inline">
-            {greeting}，{userProfile.name}
+            {greeting}，{userProfile.name || "未设置姓名"}
           </span>
         </h2>
       </div>

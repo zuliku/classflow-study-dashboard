@@ -17,14 +17,6 @@ import {
   TimeSliceFilter,
   AppPreferences,
 } from "@/types";
-import {
-  initialUserProfile,
-  initialCourses,
-  initialSchedules,
-  initialAssignments,
-  initialCalendarMarks,
-  initialGroupProjects,
-} from "@/lib/mockData";
 import { createDefaultSemester, getSemesterWeek } from "@/lib/semester";
 import { getLocalDDLDate } from "@/lib/ddl";
 import { deleteFileBlob, clearAllFileBlobs } from "@/lib/fileStorage";
@@ -32,6 +24,20 @@ import { isDDLMarkForAssignment, isLegacyDDLMarkForAssignment, linkLegacyDDLMark
 import { createId } from "@/lib/utils";
 import { calculateGroupProjectProgress, formatLocalDate, normalizeGroupProject } from "@/lib/groupProject";
 import { DEFAULT_PREFERENCES, sanitizePreferences } from "@/lib/preferences";
+
+/**
+ * 生产 First Run State：真实用户首次打开为空白、可配置、可导入。
+ * 业务数据一律从空开始（演示数据只存在于测试 fixture，生产 runtime 不引用）。
+ */
+const EMPTY_USER_PROFILE: UserProfile = {
+  name: "",
+  avatarUrl: "",
+  college: "",
+  grade: "",
+  studentId: "",
+  completedCredits: 0,
+  totalCredits: 0,
+};
 
 /**
  * 持久化白名单（localStorage，key 保持 classflow-storage-v2）：
@@ -96,7 +102,7 @@ function sanitizePersistedState(persisted: unknown): PersistedAppState {
     userProfile:
       legacy.userProfile && typeof legacy.userProfile === "object"
         ? (legacy.userProfile as UserProfile)
-        : initialUserProfile,
+        : EMPTY_USER_PROFILE,
     semester: isValidSemester(legacy.semester) ? legacy.semester : createDefaultSemester(),
     courses: Array.isArray(legacy.courses) ? (legacy.courses as Course[]) : [],
     schedules: Array.isArray(legacy.schedules) ? (legacy.schedules as CourseSchedule[]) : [],
@@ -171,8 +177,12 @@ interface AppState {
 
   // Actions
   updateUserProfile: (profile: Partial<UserProfile>) => void;
-  resetAllDataToDefault: () => void;
-  /** 从备份原子恢复全部业务数据（整体替换，而非追加） */
+  /** 只恢复偏好为默认值，不影响业务数据/个人资料/学期 */
+  resetPreferences: () => void;
+  /** 清空课程/排课/任务/日历/小组与附件 Blob；保留个人资料、学期与偏好 */
+  clearLearningData: () => void;
+  /** 回到真正 First Run State（空 profile + 空业务数据 + 默认偏好 + 默认学期） */
+  resetEntireApp: () => void;
   restoreAppData: (data: ClassFlowBackupData) => void;
 
   // Course & Schedule Actions
@@ -314,30 +324,62 @@ export const useAppStore = create<AppState>()(
       selectedConflict: null,
       setSelectedConflict: (conflict) => set({ selectedConflict: conflict }),
 
-      userProfile: initialUserProfile,
-      courses: initialCourses,
-      schedules: initialSchedules,
-      assignments: initialAssignments,
-      calendarMarks: initialCalendarMarks,
-      groupProjects: initialGroupProjects,
+      userProfile: EMPTY_USER_PROFILE,
+      courses: [],
+      schedules: [],
+      assignments: [],
+      calendarMarks: [],
+      groupProjects: [],
 
       updateUserProfile: (profile) =>
         set((state) => ({
           userProfile: { ...state.userProfile, ...profile },
         })),
 
-      resetAllDataToDefault: () => {
+      resetPreferences: () => {
+        // 只恢复偏好，不影响课程/任务/个人资料/学期
+        set({ preferences: DEFAULT_PREFERENCES });
+      },
+
+      clearLearningData: () => {
+        // 同步清空 IndexedDB 附件 Blob（fire-and-forget）
+        clearAllFileBlobs().catch(() => {});
+        // 清空业务数据；保留 userProfile / semester / preferences
+        set({
+          courses: [],
+          schedules: [],
+          assignments: [],
+          calendarMarks: [],
+          groupProjects: [],
+          currentSemesterWeek: Math.min(
+            Math.max(getSemesterWeek(new Date(), get().semester), 1),
+            get().semester.totalWeeks
+          ),
+          assignmentTimeSlice: "all",
+          selectedCourseId: null,
+          selectedAssignmentId: null,
+          selectedConflict: null,
+          assignmentSelection: [],
+          assignmentPeekId: null,
+          highlightedAssignmentId: null,
+          isAddCourseModalOpen: false,
+          isImportScheduleModalOpen: false,
+          isConflictModalOpen: false,
+          isFullTimetableModalOpen: false,
+        });
+      },
+
+      resetEntireApp: () => {
         // 同步清空 IndexedDB 中保存的文件 Blob（fire-and-forget）
         clearAllFileBlobs().catch(() => {});
-
-        // 业务数据回演示默认；瞬时 UI 状态一并复位（选中项、全部 overlay、筛选偏好）
+        // 真正 First Run State：空白个人资料 + 空业务数据 + 默认偏好，无任何演示数据
         set({
-          userProfile: initialUserProfile,
-          courses: initialCourses,
-          schedules: initialSchedules,
-          assignments: initialAssignments,
-          calendarMarks: initialCalendarMarks,
-          groupProjects: initialGroupProjects,
+          userProfile: EMPTY_USER_PROFILE,
+          courses: [],
+          schedules: [],
+          assignments: [],
+          calendarMarks: [],
+          groupProjects: [],
           semester: createDefaultSemester(),
           currentSemesterWeek: 1,
           assignmentTimeSlice: "all",
@@ -345,6 +387,9 @@ export const useAppStore = create<AppState>()(
           selectedCourseId: null,
           selectedAssignmentId: null,
           selectedConflict: null,
+          assignmentSelection: [],
+          assignmentPeekId: null,
+          highlightedAssignmentId: null,
           isSearchModalOpen: false,
           isSettingsModalOpen: false,
           isAddCourseModalOpen: false,

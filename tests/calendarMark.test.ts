@@ -5,6 +5,7 @@ import {
   linkLegacyDDLMarks,
 } from "@/lib/calendarMark";
 import { useAppStore } from "@/store/useAppStore";
+import { seedDemoData } from "./demoSeed";
 import { Assignment, CalendarMark } from "@/types";
 
 const mkAssignment = (over: Partial<Assignment> & { id: string; title: string; ddl: string }): Assignment => ({
@@ -97,7 +98,7 @@ describe("linkLegacyDDLMarks（唯一确定才补 sourceId）", () => {
 
 describe("store 层：legacy collision 不误删", () => {
   beforeEach(() => {
-    useAppStore.getState().resetAllDataToDefault();
+    seedDemoData();
   });
 
   function seedCollision() {

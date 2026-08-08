@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach } from "vitest";
 import { isScheduleActive, timeToMinutes, isValidTimeRange, hasTimeOverlap } from "@/lib/schedule";
 import { findScheduleConflicts } from "@/lib/conflicts";
 import { useAppStore } from "@/store/useAppStore";
+import { seedDemoData } from "./demoSeed";
 import { CourseSchedule } from "@/types";
 
 function mk(overrides: Partial<CourseSchedule> & { id: string }): CourseSchedule {
@@ -170,7 +171,7 @@ describe("timeToMinutes / isValidTimeRange / hasTimeOverlap", () => {
 
 describe("updateSchedule 回归（store）", () => {
   beforeEach(() => {
-    useAppStore.getState().resetAllDataToDefault();
+    seedDemoData();
   });
 
   it("编辑普通字段保留 excludedWeeks，且不影响其他时段", () => {

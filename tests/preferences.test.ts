@@ -149,11 +149,13 @@ describe("AppPreferences store 集成", () => {
     expect(p.enableScheduleDirectManipulation).toBe(true); // 缺失补默认
   });
 
-  it("resetAllDataToDefault 后 preferences 回到默认值", async () => {
+  it("resetPreferences 后 preferences 回到默认值且不动业务数据", async () => {
     const store = await freshStore();
     store.getState().updatePreferences({ motionPreference: "reduced" });
-    store.getState().resetAllDataToDefault();
+    store.getState().updateUserProfile({ name: "保留用户" });
+    store.getState().resetPreferences();
     expect(store.getState().preferences).toEqual(DEFAULT_PREFERENCES);
+    expect(store.getState().userProfile.name).toBe("保留用户");
   });
 });
 

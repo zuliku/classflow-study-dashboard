@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { useAppStore } from "@/store/useAppStore";
+import { seedDemoData } from "./demoSeed";
 import { calculateGroupProjectProgress, normalizeGroupProject, normalizeLocalDDL } from "@/lib/groupProject";
 import { combineLocalDateTime, getLocalDDLDate, getLocalDDLTime, parseLocalDDL } from "@/lib/ddl";
 import { GroupProject, ClassFlowBackupData } from "@/types";
@@ -97,7 +98,7 @@ describe("normalizeGroupProject（v1 → v2）", () => {
 
 describe("小组项目 Store CRUD", () => {
   beforeEach(() => {
-    useAppStore.getState().resetAllDataToDefault();
+    seedDemoData();
   });
 
   it("创建项目为空项目：无假任务、无硬编码成员，当前 userProfile 作为 leader", () => {

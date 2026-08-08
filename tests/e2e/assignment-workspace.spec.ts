@@ -1,4 +1,5 @@
-import { test, expect, Page } from "@playwright/test";
+import { expect, Page } from "@playwright/test";
+import { test } from "./demoFixtures";
 
 /**
  * Assignment Workspace E2E：键盘导航 / Peek / 多选 / Context Menu / Mobile 兼容。

@@ -3,6 +3,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { MoreHorizontal, ChevronUp } from "lucide-react";
 import { useAppStore } from "@/store/useAppStore";
+import { NavTab } from "@/types";
 import { cn } from "@/lib/utils";
 import {
   BOTTOM_NAV_MAIN,
@@ -38,10 +39,10 @@ export function BottomNav() {
     };
   }, [moreOpen]);
 
-  const handleSelect = (id: NavItem["id"]) => {
+  const handleSelect = (id: string) => {
     setMoreOpen(false);
     if (id === "settings") setSettingsModalOpen(true);
-    else setActiveTab(id);
+    else setActiveTab(id as NavTab);
   };
 
   const navItemClass = (isActive: boolean) =>
@@ -114,7 +115,8 @@ export function BottomNav() {
       >
         {BOTTOM_NAV_MORE.map((item) => {
           const Icon = item.icon;
-          const isActive = activeTab === item.id;
+          // settings 是 action：不高亮为 active workspace
+          const isActive = item.id !== "settings" && activeTab === item.id;
           return (
             <button
               key={item.id}

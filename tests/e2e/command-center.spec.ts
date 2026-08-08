@@ -1,4 +1,5 @@
-import { test, expect, Page } from "@playwright/test";
+import { expect, Page } from "@playwright/test";
+import { test } from "./demoFixtures";
 
 /**
  * Command Center E2E：Cmd/Ctrl+K 关闭态打开、导航、实体搜索、N 创建、输入守卫。
@@ -91,7 +92,7 @@ test("空查询可浏览：打开即显示快速操作与导航分组", async ({
 
   await expect(page.getByTestId("command-results").getByText("新建任务")).toBeVisible();
   await expect(page.getByTestId("command-results").getByText("前往课表")).toBeVisible();
-  await expect(page.getByTestId("command-results").getByText("前往设置")).toBeVisible();
+  await expect(page.getByTestId("command-results").getByText("打开设置")).toBeVisible();
   // 快捷键提示可见（桌面）
   await expect(page.getByTestId("command-results").getByText("N")).toBeVisible();
   // 未选中任何实体：不显示「上下文操作」标题

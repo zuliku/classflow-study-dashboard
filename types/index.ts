@@ -1,11 +1,11 @@
+/** 工作区页面 Tab（设置是 Modal Action，不是 Tab） */
 export type NavTab =
   | "overview"
   | "timetable"
   | "assignments"
   | "courses"
   | "analytics"
-  | "group"
-  | "settings";
+  | "group";
 
 export type TaskFilter = "all" | "doing" | "todo" | "completed";
 

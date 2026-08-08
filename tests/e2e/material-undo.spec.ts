@@ -1,4 +1,5 @@
-import { test, expect, Page } from "@playwright/test";
+import { expect, Page } from "@playwright/test";
+import { test } from "./demoFixtures";
 
 /** 打开课程 Drawer 并上传一个资料 */
 async function openCourseAndUpload(page: Page, fileName: string) {

@@ -15,6 +15,7 @@ export function ProfileSettings() {
   const pushToast = useToastStore((s) => s.pushToast);
 
   const [name, setName] = useState(userProfile.name);
+  const [avatarUrl, setAvatarUrl] = useState(userProfile.avatarUrl);
   const [studentId, setStudentId] = useState(userProfile.studentId);
   const [college, setCollege] = useState(userProfile.college);
   const [grade, setGrade] = useState(userProfile.grade);
@@ -23,6 +24,7 @@ export function ProfileSettings() {
 
   const dirty =
     name !== userProfile.name ||
+    avatarUrl !== userProfile.avatarUrl ||
     studentId !== userProfile.studentId ||
     college !== userProfile.college ||
     grade !== userProfile.grade ||
@@ -32,6 +34,7 @@ export function ProfileSettings() {
   const save = () => {
     updateUserProfile({
       name,
+      avatarUrl: avatarUrl.trim(),
       college,
       grade,
       studentId,
@@ -43,6 +46,7 @@ export function ProfileSettings() {
 
   const discard = () => {
     setName(userProfile.name);
+    setAvatarUrl(userProfile.avatarUrl);
     setStudentId(userProfile.studentId);
     setCollege(userProfile.college);
     setGrade(userProfile.grade);
@@ -57,16 +61,28 @@ export function ProfileSettings() {
     <div className="space-y-6" data-testid="settings-profile">
       <SettingsSection title="基本资料" description="你的身份信息，用于学习卡片与课表展示。">
         <div className="space-y-4 text-xs">
-          {/* 头像：预览现有值（本任务不实现文件上传） */}
+          {/* 头像：预览 + URL 修改（无本地文件上传） */}
           <div className="flex items-center gap-3">
-            <img
-              src={userProfile.avatarUrl}
-              alt={userProfile.name}
-              className="w-12 h-12 rounded-full object-cover border border-line-strong"
-            />
-            <div>
+            {avatarUrl ? (
+              <img
+                src={avatarUrl}
+                alt={name || "用户"}
+                className="w-12 h-12 rounded-full object-cover border border-line-strong shrink-0"
+              />
+            ) : (
+              <span className="w-12 h-12 rounded-full bg-pastel-mint border border-line-strong flex items-center justify-center text-base font-bold text-charcoal shrink-0">
+                {name ? name.slice(0, 1) : "用"}
+              </span>
+            )}
+            <div className="flex-1 min-w-0 space-y-1.5">
               <p className="font-bold text-charcoal">头像</p>
-              <p className="text-[10px] text-sandrift">使用当前资料中的头像（文件上传将在后续版本提供）</p>
+              <input
+                type="url"
+                value={avatarUrl}
+                onChange={(e) => setAvatarUrl(e.target.value)}
+                placeholder="头像图片 URL（可留空）"
+                className={`${inputCls} text-[11px]`}
+              />
             </div>
           </div>
 

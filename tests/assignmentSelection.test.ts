@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { useAppStore } from "@/store/useAppStore";
+import { seedDemoData } from "./demoSeed";
 import { Assignment } from "@/types";
 import { getLocalDDLDate, getLocalDDLTime, parseLocalDDL } from "@/lib/ddl";
 import {
@@ -161,7 +162,7 @@ describe("bulkShiftDDL：整体平移（Task 3）", () => {
 
 describe("bulk delete + undo（store 集成）", () => {
   beforeEach(() => {
-    useAppStore.getState().resetAllDataToDefault();
+    seedDemoData();
   });
 
   it("删除两项 → Toast 撤销 → 完整恢复（Assignment + CalendarMark + sourceId）", () => {

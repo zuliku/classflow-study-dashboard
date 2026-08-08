@@ -70,7 +70,7 @@ export function SettingsModal() {
             <div className="min-w-0">
               <h2 className="text-sm font-bold text-charcoal leading-tight">设置</h2>
               <p className="text-[10px] text-sandrift truncate hidden sm:block">
-                账户、学期、偏好与本地数据管理
+                学习环境、交互偏好与本地数据
               </p>
             </div>
           </div>

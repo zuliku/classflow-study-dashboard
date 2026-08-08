@@ -127,15 +127,16 @@ describe("Zustand persist 边界与迁移", () => {
     expect(s.selectedCourseId).toBeNull();
   });
 
-  it("首次启动（无任何存储数据）：初始演示数据完整保留，不被空清洗覆盖", async () => {
+  it("首次启动（无任何存储数据）：保持 First Run 空状态，不被 merge 覆盖", async () => {
     // localStorage 为空 → zustand 仍会调用 merge(undefined)，
-    // 必须原样保留 initial state，不能把 undefined 清洗成空数组
+    // 必须原样保留 initial state（生产 First Run = 空工作区），不能把 undefined 清洗成数组
     const store = await freshStore();
     const s = store.getState();
-    expect(s.courses).toHaveLength(6);
-    expect(s.schedules).toHaveLength(12);
-    expect(s.assignments).toHaveLength(6);
-    expect(s.calendarMarks).toHaveLength(4);
+    expect(s.courses).toHaveLength(0);
+    expect(s.schedules).toHaveLength(0);
+    expect(s.assignments).toHaveLength(0);
+    expect(s.calendarMarks).toHaveLength(0);
+    expect(s.userProfile.name).toBe("");
     expect(s.selectedCourseId).toBeNull();
     expect(s.activeTab).toBe("overview");
   });

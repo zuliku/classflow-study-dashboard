@@ -74,7 +74,6 @@ export const NAV_GROUPS: { id: NavTab; label: string }[] = [
   { id: "courses", label: "课程" },
   { id: "analytics", label: "分析" },
   { id: "group", label: "小组" },
-  { id: "settings", label: "设置" },
 ];
 
 /** 第一版命令集（顺序即空查询展示顺序：快速操作 → 导航） */
@@ -85,7 +84,7 @@ export function getCommands(): AppCommand[] {
   { id: "create-task", label: "新建任务", keywords: ["任务", "todo"], group: "create", shortcut: "N", icon: Plus, run: (ctx) => { openAssignmentEditor({}); ctx.close(); } },
     { id: "create-course", label: "新建课程", keywords: ["课程", "add"], group: "create", icon: BookOpen, run: (ctx) => { ctx.setAddCourseModalOpen(true); ctx.close(); } },
     { id: "import-schedule", label: "导入课表", keywords: ["导入", "课表", "import"], group: "create", icon: FileUp, run: (ctx) => { ctx.setImportScheduleModalOpen(true); ctx.close(); } },
-    // ---- Navigate ----
+    // ---- Navigate（工作区 Tab） ----
     ...NAV_GROUPS.map((g) => ({
       id: `nav-${g.id}`,
       label: `前往${g.label}`,
@@ -93,12 +92,12 @@ export function getCommands(): AppCommand[] {
       group: "navigate" as CommandGroup,
       icon: navIcon(g.id),
       run: (ctx: CommandContext) => {
-        // 设置已改为 Modal 入口，不再作为整页 Tab
-        if (g.id === "settings") ctx.setSettingsModalOpen(true);
-        else ctx.setActiveTab(g.id);
+        ctx.setActiveTab(g.id);
         ctx.close();
       },
     })),
+    // ---- Global Action ----
+    { id: "open-settings", label: "打开设置", keywords: ["设置", "settings", "偏好"], group: "action", icon: Settings, run: (ctx) => { ctx.setSettingsModalOpen(true); ctx.close(); } },
     // ---- Action ----
     { id: "today-assignments", label: "前往今日任务", keywords: ["今日", "任务", "today"], group: "action", icon: ClipboardCheck, run: (ctx) => { ctx.setActiveTab("assignments"); ctx.setAssignmentTimeSlice("today"); ctx.close(); } },
     { id: "reset-week", label: "回到本周", keywords: ["本周", "周次", "reset"], group: "action", icon: RotateCcw, run: (ctx) => { ctx.resetToCurrentWeek(); ctx.setActiveTab("timetable"); ctx.close(); } },
@@ -114,7 +113,6 @@ function navIcon(tab: NavTab): ElementType {
     case "courses": return FolderKanban;
     case "analytics": return BarChart3;
     case "group": return Users2;
-    case "settings": return Settings;
   }
 }
 

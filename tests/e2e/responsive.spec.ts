@@ -1,4 +1,5 @@
-import { test, expect, Page } from "@playwright/test";
+import { expect, Page } from "@playwright/test";
+import { test } from "./demoFixtures";
 
 /** viewport 无横向溢出：documentElement.scrollWidth 不超出可视宽度 */
 async function hasHorizontalOverflow(page: Page): Promise<boolean> {
