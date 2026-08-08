@@ -19,6 +19,7 @@ import { openAssignmentEditor } from "@/lib/uiEvents";
 import { cn, cardKeyHandler } from "@/lib/utils";
 import { Assignment } from "@/types";
 import { isValidDDL, moveAssignmentDDL, editAssignmentDDLTime } from "@/lib/ddlInteraction";
+import { useSlidingIndicator } from "@/lib/useSlidingIndicator";
 import {
   format,
   addMonths,
@@ -309,6 +310,13 @@ export function MiniCalendar() {
 
   const dragActive = drag.type === "dragging";
 
+  // ---- 共享 Selection Indicator：选中背景属于 Indicator，不属于具体日期 Button ----
+  // resetKey = 月份 → 月份切换时直接锚定（页面内容变化），日期点击才是平滑移动（同一空间选择变化）
+  const selectedDateKey = format(selectedDate, "yyyy-MM-dd");
+  const { containerRef, indicatorStyle } = useSlidingIndicator(selectedDateKey, {
+    resetKey: monthKey,
+  });
+
   // Agenda 按时间顺序排列：课程/DDL 按开始时间，考试/活动排在最后
   type AgendaItem = { key: string; time: string; node: React.ReactNode };
   const agendaItems: AgendaItem[] = [
@@ -459,11 +467,13 @@ export function MiniCalendar() {
         ))}
       </div>
 
-      {/* Calendar Grid（日期格 = DDL drop target） */}
+      {/* Calendar Grid（日期格 = DDL drop target；共享 Selection Indicator 位于 z-0） */}
       <div
+        ref={containerRef}
+        data-selected-date={selectedDateKey}
         key={monthKey}
         className={cn(
-          "grid grid-cols-7 gap-1 text-xs",
+          "relative grid grid-cols-7 gap-1 text-xs",
           monthDir !== 0 && "ux-month-enter"
         )}
         style={
@@ -472,6 +482,13 @@ export function MiniCalendar() {
             : undefined
         }
       >
+        {/* 共享选中滑块：黑色背景只属于它；只过渡 transform/width/height/opacity */}
+        <div
+          data-testid="calendar-selection-indicator"
+          aria-hidden="true"
+          className="absolute left-0 top-0 rounded-xl bg-charcoal shadow-subtle pointer-events-none z-0"
+          style={indicatorStyle}
+        />
         {days.map((day) => {
           const dateStr = format(day, "yyyy-MM-dd");
           const isSelected = isSameDay(day, selectedDate);
@@ -504,11 +521,16 @@ export function MiniCalendar() {
             <button
               key={dateStr}
               data-calendar-day={dateStr}
+              data-indicator-key={dateStr}
               onClick={() => setSelectedDate(day)}
               className={cn(
-                "h-8 rounded-xl flex flex-col items-center justify-center relative transition-colors duration-[var(--motion-fast)] ease-[var(--ease-standard)]",
+                "relative z-10 h-8 rounded-xl flex flex-col items-center justify-center",
+                // 选中背景由共享 Indicator 承担；按钮只处理前景色（120–140ms 过渡，先于滑块到位）
+                "transition-colors duration-[var(--motion-fast)] ease-[var(--ease-standard)]",
+                // 日期格取消全局 button:active 缩放，避免「格子缩一下 + 滑块移动」双重抖动
+                "active:transform-none",
                 isSelected
-                  ? "bg-charcoal text-white font-bold shadow-subtle ring-2 ring-black/10"
+                  ? "text-white font-bold"
                   : isTodayDate
                   ? "bg-pastel-mint text-charcoal font-extrabold border border-[#CDB9AB]"
                   : isCurrentMonth

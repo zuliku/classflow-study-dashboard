@@ -37,6 +37,7 @@
   --motion-panel: 260ms;
   --motion-page: 220ms;
   --motion-data: 320ms;
+  --motion-select: 180ms;
   --ease-standard: cubic-bezier(0.2, 0.8, 0.2, 1);
   --ease-emphasized: cubic-bezier(0.22, 1, 0.36, 1);
 }
