@@ -59,11 +59,6 @@ export function UpcomingDDL() {
     }
   };
 
-  const parseDateSafely = (dateStr: string) => {
-    const parsed = parseLocalDDL(dateStr);
-    return parsed ?? new Date();
-  };
-
   return (
     <div className="bg-surface border border-line rounded-2xl p-4 shadow-subtle flex flex-col justify-between space-y-3">
       {/* Card Header */}
@@ -96,7 +91,7 @@ export function UpcomingDDL() {
         ) : (
           upcomingAssignments.map((task) => {
             const course = courses.find((c) => c.id === task.courseId);
-            const ddlDate = parseDateSafely(task.ddl);
+            const ddlDate = parseLocalDDL(task.ddl) ?? new Date();
             const dateDisplay = format(ddlDate, "M月d日 EEE", { locale: zhCN });
             const relativeTime = formatDistanceToNow(ddlDate, {
               addSuffix: true,

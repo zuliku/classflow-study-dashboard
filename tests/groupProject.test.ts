@@ -1,20 +1,44 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { useAppStore } from "@/store/useAppStore";
 import { calculateGroupProjectProgress, normalizeGroupProject, normalizeLocalDDL } from "@/lib/groupProject";
-import { GroupProject } from "@/types";
+import { combineLocalDateTime, getLocalDDLDate, getLocalDDLTime, parseLocalDDL } from "@/lib/ddl";
+import { GroupProject, ClassFlowBackupData } from "@/types";
+
+const KEY = "classflow-storage-v2";
+
+function mkData(over: Partial<ClassFlowBackupData> = {}): ClassFlowBackupData {
+  return {
+    userProfile: { name: "张同学", avatarUrl: "", college: "经管学院", grade: "大三", studentId: "2022001", completedCredits: 10, totalCredits: 20 },
+    semester: { id: "sem_bak", name: "备份学期", startDate: "2026-02-23", totalWeeks: 12 },
+    courses: [
+      { id: "c_1", name: "微观经济学", code: "ECON-201", teacher: "王教授", classroom: "教二", credit: 3, bgHex: "#E3E6E0", borderHex: "#D0D5CC", textHex: "#313032", description: "", materials: [] },
+    ],
+    schedules: [{ id: "s_1", courseId: "c_1", dayOfWeek: 1, startTime: "08:00", endTime: "09:40", location: "教二", weeks: "1-12周" }],
+    assignments: [{ id: "a_1", courseId: "c_1", title: "习题", description: "", ddl: "2026-08-10T23:59:00", priority: "medium", status: "todo", progress: 0, tags: [] }],
+    calendarMarks: [{ id: "cm_1", date: "2026-08-10", type: "ddl", title: "习题", sourceId: "a_1" }],
+    groupProjects: [],
+    ...over,
+  };
+}
 
 describe("calculateGroupProjectProgress", () => {
+  const mkTasks = (completed: number, total: number) =>
+    Array.from({ length: total }, (_, i) => ({
+      id: `t${i}`,
+      title: `t${i}`,
+      ddl: "2026-08-10T23:59:00",
+      completed: i < completed,
+    })) as any;
+
   it("无任务 = 0%", () => {
     expect(calculateGroupProjectProgress([])).toBe(0);
   });
 
-  it("completed / total * 100", () => {
-    const tasks = [
-      { id: "t1", title: "a", ddl: "2026-08-10T23:59:00", completed: true },
-      { id: "t2", title: "b", ddl: "2026-08-10T23:59:00", completed: true },
-      { id: "t3", title: "c", ddl: "2026-08-10T23:59:00", completed: false },
-    ] as any;
-    expect(calculateGroupProjectProgress(tasks)).toBe(67);
+  it("进度矩阵：0/5=0, 1/4=25, 3/5=60, 5/5=100", () => {
+    expect(calculateGroupProjectProgress(mkTasks(0, 5))).toBe(0);
+    expect(calculateGroupProjectProgress(mkTasks(1, 4))).toBe(25);
+    expect(calculateGroupProjectProgress(mkTasks(3, 5))).toBe(60);
+    expect(calculateGroupProjectProgress(mkTasks(5, 5))).toBe(100);
   });
 });
 
@@ -136,6 +160,93 @@ describe("小组项目 Store CRUD", () => {
     expect(p.members.find((m) => m.id === member.id)).toBeUndefined();
     expect(p.tasks[0].assigneeId).toBeUndefined(); // 任务保留，负责人变未分配
     expect(p.tasks).toHaveLength(1);
+  });
+
+  it("删除已完成任务后 progress 重新计算", () => {
+    useAppStore.getState().addGroupProject({ courseId: "c_1", title: "P" });
+    const id = useAppStore.getState().groupProjects[0].id;
+    useAppStore.getState().addGroupTask(id, { title: "T1", ddl: "2026-08-10T23:59:00" });
+    useAppStore.getState().addGroupTask(id, { title: "T2", ddl: "2026-08-10T23:59:00" });
+    const t1 = useAppStore.getState().groupProjects[0].tasks[0];
+    const t2 = useAppStore.getState().groupProjects[0].tasks[1];
+
+    useAppStore.getState().toggleGroupTask(id, t1.id); // 1/2 = 50%
+    expect(useAppStore.getState().groupProjects[0].progress).toBe(50);
+
+    useAppStore.getState().deleteGroupTask(id, t1.id); // 删除已完成 → 0/1 = 0%
+    const p = useAppStore.getState().groupProjects[0];
+    expect(p.tasks.map((t) => t.id)).toEqual([t2.id]);
+    expect(p.progress).toBe(0);
+  });
+
+  it("删除一个项目不影响其他项目（ID 稳定）", () => {
+    const a = useAppStore.getState().addGroupProject({ courseId: "c_1", title: "A" });
+    const b = useAppStore.getState().addGroupProject({ courseId: "c_2", title: "B" });
+    const beforeB = useAppStore.getState().groupProjects.find((p) => p.id === b)!;
+
+    useAppStore.getState().deleteGroupProject(a);
+    const after = useAppStore.getState();
+    expect(after.groupProjects.find((p) => p.id === a)).toBeUndefined();
+    const afterB = after.groupProjects.find((p) => p.id === b)!;
+    expect(afterB.id).toBe(b);
+    expect(afterB).toEqual(beforeB);
+  });
+
+  it("删除课程时按既定策略删除关联 GroupProject", () => {
+    useAppStore.setState((s) => ({
+      groupProjects: [
+        { id: "gp_c4", courseId: "c_4", title: "c4项目", description: "", progress: 0, updatedAt: "2026-08-01", members: [], tasks: [] },
+        { id: "gp_c1", courseId: "c_1", title: "c1项目", description: "", progress: 0, updatedAt: "2026-08-01", members: [], tasks: [] },
+      ],
+    }));
+    useAppStore.getState().deleteCourse("c_4");
+    const after = useAppStore.getState();
+    expect(after.groupProjects.find((g) => g.id === "gp_c4")).toBeUndefined();
+    expect(after.groupProjects.find((g) => g.id === "gp_c1")).toBeTruthy();
+  });
+
+  it("backup restore 后 group 数据（含成员/任务）恢复且刷新后仍在", async () => {
+    const data = mkData({
+      groupProjects: [
+        {
+          id: "gp_bak",
+          courseId: "c_1",
+          title: "备份项目",
+          description: "",
+          progress: 50,
+          updatedAt: "2026-08-01",
+          members: [{ id: "gm_1", name: "张三", role: "leader" }],
+          tasks: [{ id: "gt_1", title: "任务", assigneeId: "gm_1", ddl: "2026-08-10T23:59:00", completed: true }],
+        },
+      ],
+    });
+    useAppStore.getState().restoreAppData(data);
+    await new Promise((r) => setTimeout(r, 0));
+
+    const raw = JSON.parse(localStorage.getItem(KEY)!);
+    expect(raw.state.groupProjects).toHaveLength(1);
+
+    vi.resetModules();
+    const { useAppStore: freshStore } = await import("@/store/useAppStore");
+    const project = freshStore.getState().groupProjects[0];
+    expect(project.title).toBe("备份项目");
+    expect(project.members[0].id).toBe("gm_1");
+    expect(project.tasks[0].assigneeId).toBe("gm_1");
+    // progress 为派生值：恢复时按任务重新计算（1/1 已完成 = 100）
+    expect(project.progress).toBe(100);
+  });
+
+  it("GroupTask DDL 本地时间：输入 2026-08-10 23:59 保存后无 UTC 漂移", () => {
+    useAppStore.getState().addGroupProject({ courseId: "c_1", title: "P" });
+    const id = useAppStore.getState().groupProjects[0].id;
+    useAppStore.getState().addGroupTask(id, { title: "T", ddl: combineLocalDateTime("2026-08-10", "23:59") });
+
+    const ddl = useAppStore.getState().groupProjects[0].tasks[0].ddl;
+    expect(ddl).toBe("2026-08-10T23:59:00");
+    expect(getLocalDDLDate(ddl)).toBe("2026-08-10");
+    expect(getLocalDDLTime(ddl)).toBe("23:59");
+    expect(parseLocalDDL(ddl)!.getDate()).toBe(10);
+    expect(parseLocalDDL(ddl)!.getHours()).toBe(23);
   });
 
   it("删除最后一个 leader 被阻止", () => {

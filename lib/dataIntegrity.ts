@@ -28,11 +28,28 @@ export interface DataIntegrityIssues {
   orphanDDLMarks: CalendarMark[];
   /** 无 sourceId 的历史遗留 ddl mark（信息性：等待唯一配对升级） */
   unlinkedLegacyDDLMarks: CalendarMark[];
+  /** groupTask.assigneeId 指向不存在的成员（只报告，不猜测负责人） */
+  orphanGroupTaskAssignments: { projectId: string; taskId: string; taskTitle: string; assigneeId: string }[];
 }
 
 export function findDataIntegrityIssues(snapshot: DataSnapshot): DataIntegrityIssues {
   const courseIds = new Set(snapshot.courses.map((c) => c.id));
   const assignmentIds = new Set(snapshot.assignments.map((a) => a.id));
+
+  const orphanGroupTaskAssignments: DataIntegrityIssues["orphanGroupTaskAssignments"] = [];
+  for (const project of snapshot.groupProjects) {
+    const memberIds = new Set(project.members.map((m) => m.id));
+    for (const task of project.tasks) {
+      if (task.assigneeId && !memberIds.has(task.assigneeId)) {
+        orphanGroupTaskAssignments.push({
+          projectId: project.id,
+          taskId: task.id,
+          taskTitle: task.title,
+          assigneeId: task.assigneeId,
+        });
+      }
+    }
+  }
 
   return {
     orphanSchedules: snapshot.schedules.filter((s) => !courseIds.has(s.courseId)),
@@ -44,5 +61,6 @@ export function findDataIntegrityIssues(snapshot: DataSnapshot): DataIntegrityIs
     unlinkedLegacyDDLMarks: snapshot.calendarMarks.filter(
       (m) => m.type === "ddl" && !m.sourceId
     ),
+    orphanGroupTaskAssignments,
   };
 }

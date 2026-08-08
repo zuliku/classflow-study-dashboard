@@ -8,6 +8,14 @@ describe("deleteCourse 级联清理", () => {
   });
 
   it("删除课程后：课程/排课/作业/关联 DDL 标记/小组项目消失，其余保留", () => {
+    // 注入小组项目（默认初始为空）
+    useAppStore.setState((s) => ({
+      groupProjects: [
+        { id: "gp_2", courseId: "c_4", title: "被删课程的项目", description: "", progress: 0, updatedAt: "2026-08-01", members: [], tasks: [] },
+        { id: "gp_1", courseId: "c_1", title: "其他课程的项目", description: "", progress: 0, updatedAt: "2026-08-01", members: [], tasks: [] },
+      ],
+    }));
+
     const before = useAppStore.getState();
     // c_4 关联：s3、s8（排课）、a1（作业，sourceId a1 的 cm1 标记）、gp_2（小组项目）
     expect(before.courses.find((c) => c.id === "c_4")).toBeTruthy();
