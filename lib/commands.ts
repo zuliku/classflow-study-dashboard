@@ -1,0 +1,264 @@
+import type { ElementType } from "react";
+import {
+  Plus,
+  BookOpen,
+  FolderKanban,
+  FileUp,
+  LayoutDashboard,
+  CalendarDays,
+  ClipboardCheck,
+  BarChart3,
+  Users2,
+  Settings,
+  RotateCcw,
+  CalendarRange,
+} from "lucide-react";
+import { NavTab, Course, Assignment, Semester, TimeSliceFilter } from "@/types";
+
+/**
+ * Command Registry：Command Center / Context Menu / 键盘快捷键 共用的唯一动作源。
+ * 不要为三处各写一套动作实现。
+ */
+
+export type CommandGroup = "create" | "navigate" | "action" | "search";
+
+export interface CommandContext {
+  activeTab: NavTab;
+  selectedCourseId: string | null;
+  selectedAssignmentId: string | null;
+  courses: Course[];
+  assignments: Assignment[];
+  semester: Semester;
+  currentSemesterWeek: number;
+  // 动作（由宿主注入，避免 lib 依赖 store）
+  setActiveTab: (tab: NavTab) => void;
+  setSelectedCourseId: (id: string | null) => void;
+  setSelectedAssignmentId: (id: string | null) => void;
+  setAddCourseModalOpen: (open: boolean) => void;
+  setImportScheduleModalOpen: (open: boolean) => void;
+  setFullTimetableModalOpen: (open: boolean) => void;
+  setAssignmentTimeSlice: (slice: TimeSliceFilter) => void;
+  resetToCurrentWeek: () => void;
+  close: () => void;
+}
+
+export interface AppCommand {
+  id: string;
+  label: string;
+  keywords?: string[];
+  group: CommandGroup;
+  /** 显示用快捷键（必须是真实实现过的） */
+  shortcut?: string;
+  icon: ElementType;
+  when?: (ctx: CommandContext) => boolean;
+  run: (ctx: CommandContext) => void;
+}
+
+export const NAV_GROUPS: { id: NavTab; label: string }[] = [
+  { id: "overview", label: "总览" },
+  { id: "timetable", label: "课表" },
+  { id: "assignments", label: "任务" },
+  { id: "courses", label: "课程" },
+  { id: "analytics", label: "分析" },
+  { id: "group", label: "小组" },
+  { id: "settings", label: "设置" },
+];
+
+/** 第一版命令集（顺序即空查询展示顺序：快速操作 → 导航） */
+export function getCommands(): AppCommand[] {
+  return [
+    // ---- Create ----
+    { id: "create-task", label: "新建任务", keywords: ["任务", "todo"], group: "create", shortcut: "N", icon: Plus, run: (ctx) => { window.dispatchEvent(new CustomEvent("classflow:open-assignment-editor", { detail: {} })); ctx.close(); } },
+    { id: "create-course", label: "新建课程", keywords: ["课程", "add"], group: "create", icon: BookOpen, run: (ctx) => { ctx.setAddCourseModalOpen(true); ctx.close(); } },
+    { id: "import-schedule", label: "导入课表", keywords: ["导入", "课表", "import"], group: "create", icon: FileUp, run: (ctx) => { ctx.setImportScheduleModalOpen(true); ctx.close(); } },
+    // ---- Navigate ----
+    ...NAV_GROUPS.map((g) => ({
+      id: `nav-${g.id}`,
+      label: `前往${g.label}`,
+      keywords: [g.label],
+      group: "navigate" as CommandGroup,
+      icon: navIcon(g.id),
+      run: (ctx: CommandContext) => { ctx.setActiveTab(g.id); ctx.close(); },
+    })),
+    // ---- Action ----
+    { id: "today-assignments", label: "前往今日任务", keywords: ["今日", "任务", "today"], group: "action", icon: ClipboardCheck, run: (ctx) => { ctx.setActiveTab("assignments"); ctx.setAssignmentTimeSlice("today"); ctx.close(); } },
+    { id: "reset-week", label: "回到本周", keywords: ["本周", "周次", "reset"], group: "action", icon: RotateCcw, run: (ctx) => { ctx.resetToCurrentWeek(); ctx.setActiveTab("timetable"); ctx.close(); } },
+    { id: "open-full-timetable", label: "打开完整课表", keywords: ["全屏", "课表", "完整"], group: "action", icon: CalendarRange, run: (ctx) => { ctx.setActiveTab("timetable"); ctx.setFullTimetableModalOpen(true); ctx.close(); } },
+  ];
+}
+
+function navIcon(tab: NavTab): ElementType {
+  switch (tab) {
+    case "overview": return LayoutDashboard;
+    case "timetable": return CalendarDays;
+    case "assignments": return ClipboardCheck;
+    case "courses": return FolderKanban;
+    case "analytics": return BarChart3;
+    case "group": return Users2;
+    case "settings": return Settings;
+  }
+}
+
+// ---- 搜索匹配（不引入 fuzzy 库：normalize + startsWith/includes + keywords） ----
+
+export function normalizeQuery(query: string): string {
+  return (query || "").trim().toLowerCase().replace(/\s+/g, "");
+}
+
+function fieldMatch(field: string, q: string): boolean {
+  const f = (field || "").toLowerCase();
+  return f.includes(q) || f.startsWith(q);
+}
+
+export function commandMatches(cmd: AppCommand, q: string): boolean {
+  if (!q) return false;
+  if (fieldMatch(cmd.label, q)) return true;
+  return (cmd.keywords ?? []).some((k) => fieldMatch(k, q));
+}
+
+export function courseMatches(course: Course, q: string): boolean {
+  return (
+    fieldMatch(course.name, q) ||
+    fieldMatch(course.code, q) ||
+    fieldMatch(course.teacher, q) ||
+    fieldMatch(course.description, q)
+  );
+}
+
+export function assignmentMatches(assignment: Assignment, q: string): boolean {
+  return (
+    fieldMatch(assignment.title, q) ||
+    fieldMatch(assignment.description, q)
+  );
+}
+
+// ---- Palette 结果模型 ----
+
+export type PaletteItemKind = "command" | "course" | "assignment";
+
+export interface PaletteItem {
+  key: string;
+  kind: PaletteItemKind;
+  /** 分组标题（组内按此排序） */
+  group: CommandGroup;
+  label: string;
+  sub?: string;
+  shortcut?: string;
+  icon: ElementType;
+  run: () => void;
+}
+
+const GROUP_LABEL: Record<CommandGroup, string> = {
+  create: "创建",
+  navigate: "导航",
+  action: "操作",
+  search: "搜索",
+};
+
+export const GROUP_LABELS = GROUP_LABEL;
+
+/** 查询结果分组顺序：导航优先（打字即导航），随后创建 / 操作 / 实体搜索 */
+const QUERY_GROUP_ORDER: CommandGroup[] = ["navigate", "create", "action", "search"];
+
+/**
+ * 构建 Command Center 结果列表：
+ * - 空查询：快速操作（create + action）→ 导航（全部可浏览，非空白）
+ * - 有查询：命令 + 课程 + 任务 合一
+ */
+export function buildPalette(query: string, ctx: CommandContext): PaletteItem[] {
+  const q = normalizeQuery(query);
+  const items: PaletteItem[] = [];
+
+  if (!q) {
+    const commands = getCommands();
+    for (const cmd of commands) {
+      if (cmd.when && !cmd.when(ctx)) continue;
+      items.push({
+        key: `cmd-${cmd.id}`,
+        kind: "command",
+        group: cmd.group,
+        label: cmd.label,
+        shortcut: cmd.shortcut,
+        icon: cmd.icon,
+        run: () => cmd.run(ctx),
+      });
+    }
+    return items;
+  }
+
+  const commands = getCommands().filter((c) => {
+    if (c.when && !c.when(ctx)) return false;
+    return commandMatches(c, q);
+  });
+
+  const groupRank = (g: CommandGroup) => {
+    const idx = QUERY_GROUP_ORDER.indexOf(g);
+    return idx === -1 ? 99 : idx;
+  };
+
+  const byGroup = [...commands].sort((a, b) => groupRank(a.group) - groupRank(b.group));
+  for (const cmd of byGroup) {
+    items.push({
+      key: `cmd-${cmd.id}`,
+      kind: "command",
+      group: cmd.group,
+      label: cmd.label,
+      shortcut: cmd.shortcut,
+      icon: cmd.icon,
+      run: () => cmd.run(ctx),
+    });
+  }
+
+  for (const c of ctx.courses) {
+    if (!courseMatches(c, q)) continue;
+    items.push({
+      key: `course-${c.id}`,
+      kind: "course",
+      group: "search",
+      label: c.name,
+      sub: `${c.code} · ${c.teacher}`,
+      icon: BookOpen,
+      run: () => { ctx.setSelectedCourseId(c.id); ctx.close(); },
+    });
+  }
+
+  for (const a of ctx.assignments) {
+    if (!assignmentMatches(a, q)) continue;
+    items.push({
+      key: `assignment-${a.id}`,
+      kind: "assignment",
+      group: "search",
+      label: a.title,
+      sub: `进度 ${a.progress}%`,
+      icon: ClipboardCheck,
+      run: () => { ctx.setSelectedAssignmentId(a.id); ctx.close(); },
+    });
+  }
+
+  return items;
+}
+
+// ---- 快捷键指南（只列真实实现的快捷键） ----
+
+export const SHORTCUT_GUIDE: { group: string; items: { keys: string; label: string }[] }[] = [
+  {
+    group: "全局",
+    items: [
+      { keys: "⌘K", label: "打开命令中心" },
+      { keys: "/", label: "快速搜索" },
+      { keys: "?", label: "快捷键指南" },
+    ],
+  },
+  {
+    group: "导航",
+    items: [
+      { keys: "↑ ↓", label: "选择结果" },
+      { keys: "Enter", label: "执行所选" },
+      { keys: "Esc", label: "关闭" },
+    ],
+  },
+  {
+    group: "任务",
+    items: [{ keys: "N", label: "新建任务（无输入焦点时）" }],
+  },
+];

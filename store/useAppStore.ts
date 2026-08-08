@@ -126,6 +126,9 @@ interface AppState {
   setSelectedAssignmentId: (id: string | null) => void;
   isSearchModalOpen: boolean;
   setSearchModalOpen: (open: boolean) => void;
+  /** Command Center 子视图：默认命令面板；? 打开快捷键指南 */
+  searchModalView: "palette" | "guide";
+  setSearchModalView: (view: "palette" | "guide") => void;
   isAddCourseModalOpen: boolean;
   setAddCourseModalOpen: (open: boolean) => void;
   isImportScheduleModalOpen: boolean;
@@ -263,6 +266,8 @@ export const useAppStore = create<AppState>()(
 
       isSearchModalOpen: false,
       setSearchModalOpen: (open) => set({ isSearchModalOpen: open }),
+      searchModalView: "palette",
+      setSearchModalView: (view) => set({ searchModalView: view }),
       isAddCourseModalOpen: false,
       setAddCourseModalOpen: (open) => set({ isAddCourseModalOpen: open }),
       isImportScheduleModalOpen: false,

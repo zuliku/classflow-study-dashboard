@@ -170,6 +170,14 @@ export function TimetableGrid({ editable = false }: { editable?: boolean }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [interaction.type]);
 
+  // 拖拽进行中标记：全局单键快捷键（如 N）据此跳过，避免拖拽中误触发
+  useEffect(() => {
+    document.body.dataset.dragActive = interaction.type !== "idle" ? "1" : "";
+    return () => {
+      document.body.dataset.dragActive = "";
+    };
+  }, [interaction.type]);
+
   useEffect(
     () => () => {
       pendingRef.current = null;

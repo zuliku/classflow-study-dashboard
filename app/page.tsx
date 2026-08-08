@@ -14,7 +14,8 @@ import { GroupCollaborationView } from "@/components/group/GroupCollaborationVie
 import { SettingsView } from "@/components/settings/SettingsView";
 import { CourseDetailDrawer } from "@/components/drawers/CourseDetailDrawer";
 import { AssignmentDrawer } from "@/components/drawers/AssignmentDrawer";
-import { GlobalSearchModal } from "@/components/layout/GlobalSearchModal";
+import { CommandCenter } from "@/components/command/CommandCenter";
+import { GlobalShortcutController } from "@/components/command/GlobalShortcutController";
 import { AddCourseModal } from "@/components/modals/AddCourseModal";
 import { ImportScheduleModal } from "@/components/modals/ImportScheduleModal";
 import { ConflictResolutionModal } from "@/components/modals/ConflictResolutionModal";
@@ -421,7 +422,8 @@ export default function Home() {
       {/* Global Drawers & Modals */}
       <CourseDetailDrawer />
       <AssignmentDrawer />
-      <GlobalSearchModal />
+      <CommandCenter />
+      <GlobalShortcutController />
       <AddCourseModal />
       <ImportScheduleModal />
       <ConflictResolutionModal />

@@ -13,6 +13,7 @@ export function Header() {
   const {
     userProfile,
     setSearchModalOpen,
+    setSearchModalView,
     semester,
     currentSemesterWeek,
     activeTab,
@@ -69,7 +70,10 @@ export function Header() {
       <div className="flex items-center gap-2 md:gap-2.5">
         {/* Global Search（Cmd+K）：Mobile 仅图标，≥md 完整输入框 */}
         <button
-          onClick={() => setSearchModalOpen(true)}
+          onClick={() => {
+            setSearchModalView("palette");
+            setSearchModalOpen(true);
+          }}
           aria-label="全局搜索"
           className="flex items-center space-x-2 bg-white border border-line-strong rounded-xl px-2.5 md:px-3 py-1.5 text-xs text-sandrift cursor-pointer hover:border-charcoal hover:bg-surface transition-[background-color,border-color] shadow-subtle min-w-0 md:min-w-[200px]"
         >

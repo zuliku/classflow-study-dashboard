@@ -26,6 +26,11 @@ export function isTopmostOverlay(id: string): boolean {
   return !!top && top.id === id;
 }
 
+/** 是否存在任何已挂载的 Overlay（用于单键快捷键的阻断判断，如 N） */
+export function hasAnyOverlay(): boolean {
+  return stack.length > 0;
+}
+
 /** 测试用 */
 export function clearOverlayStack(): void {
   stack = [];

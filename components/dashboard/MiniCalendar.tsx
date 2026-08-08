@@ -154,6 +154,14 @@ export function MiniCalendar() {
     setDragSync({ type: "idle" });
   };
 
+  // 拖拽进行中标记：全局单键快捷键据此跳过（与完整课表共用同一信号）
+  useEffect(() => {
+    document.body.dataset.dragActive = drag.type !== "idle" ? "1" : "";
+    return () => {
+      document.body.dataset.dragActive = "";
+    };
+  }, [drag.type]);
+
   // Esc 取消拖动 / 关闭时间弹层
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
