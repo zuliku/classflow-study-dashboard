@@ -7,6 +7,7 @@ import { format } from "date-fns";
 import { zhCN } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 import { getWeekDateRange, getSemesterWeek } from "@/lib/semester";
+import { NAV_ITEMS } from "@/components/layout/navItems";
 
 export function Header() {
   const {
@@ -14,6 +15,7 @@ export function Header() {
     setSearchModalOpen,
     semester,
     currentSemesterWeek,
+    activeTab,
     resetToCurrentWeek,
   } = useAppStore();
 
@@ -44,37 +46,51 @@ export function Header() {
   );
   const isCurrentWeek = currentSemesterWeek === realCurrentWeek;
 
+  const currentTabLabel =
+    NAV_ITEMS.find((n) => n.id === activeTab)?.label ?? "总览";
+
   return (
-    <header className="bg-[#F7F5F5] border-b border-line px-6 py-3.5 flex flex-col md:flex-row md:items-center justify-between gap-4 sticky top-0 z-10">
-      {/* Left: Clean Greeting */}
-      <div>
-        <h2 className="text-lg font-bold text-charcoal tracking-tight">
-          {greeting}，{userProfile.name}
+    // 三档 Header：
+    //   <768  当前页面标题 + 搜索入口（高频全局操作），不塞桌面控件
+    //   768–1279  问候语 + 紧凑搜索 + 日期范围
+    //   ≥1280  完整信息与间距
+    <header className="bg-[#F7F5F5] border-b border-line px-4 md:px-6 py-3 md:py-3.5 flex flex-col md:flex-row md:items-center justify-between gap-3 sticky top-0 z-10">
+      {/* Left: Mobile 显示当前页面标题；Desktop/Tablet 显示问候语 */}
+      <div className="min-w-0">
+        <h2 className="text-base md:text-lg font-bold text-charcoal tracking-tight truncate">
+          <span className="md:hidden">{currentTabLabel}</span>
+          <span className="hidden md:inline">
+            {greeting}，{userProfile.name}
+          </span>
         </h2>
       </div>
 
-      {/* Right: Global Search, Date Switcher, View Switcher */}
-      <div className="flex flex-wrap items-center gap-2.5">
-        {/* Global Search Bar (Cmd+K) */}
-        <div
+      {/* Right: Global Search + Date Switcher */}
+      <div className="flex items-center gap-2 md:gap-2.5">
+        {/* Global Search（Cmd+K）：Mobile 仅图标，≥md 完整输入框 */}
+        <button
           onClick={() => setSearchModalOpen(true)}
-          className="flex items-center space-x-2 bg-white border border-line-strong rounded-xl px-3 py-1.5 text-xs text-sandrift cursor-pointer hover:border-charcoal hover:bg-surface transition-all shadow-subtle min-w-[200px]"
+          aria-label="全局搜索"
+          className="flex items-center space-x-2 bg-white border border-line-strong rounded-xl px-2.5 md:px-3 py-1.5 text-xs text-sandrift cursor-pointer hover:border-charcoal hover:bg-surface transition-all shadow-subtle min-w-0 md:min-w-[200px]"
         >
-          <Search className="w-3.5 h-3.5 text-[#A48F82]" />
-          <span className="flex-1 font-medium">搜索课程、任务、资料</span>
-          <kbd className="hidden sm:inline-block bg-alabaster text-charcoal text-[10px] font-mono px-1.5 py-0.5 rounded border border-line-strong">
+          <Search className="w-3.5 h-3.5 text-[#A48F82] shrink-0" />
+          <span className="hidden md:flex flex-1 font-medium min-w-0 truncate">
+            搜索课程、任务、资料
+          </span>
+          <kbd className="hidden lg:inline-block bg-alabaster text-charcoal text-[10px] font-mono px-1.5 py-0.5 rounded border border-line-strong">
             ⌘ K
           </kbd>
-        </div>
+        </button>
 
-        {/* Date Range Picker Pill */}
-        <div className="flex items-center space-x-1.5 bg-white border border-line-strong rounded-xl px-3 py-1.5 text-xs font-semibold text-charcoal shadow-subtle">
-          <CalendarIcon className="w-3.5 h-3.5 text-[#A48F82]" />
-          <span>{dateRangeString}</span>
+        {/* Date Range Picker Pill（Mobile 隐藏，避免挤占标题） */}
+        <div className="hidden md:flex items-center space-x-1.5 bg-white border border-line-strong rounded-xl px-2.5 md:px-3 py-1.5 text-xs font-semibold text-charcoal shadow-subtle min-w-0">
+          <CalendarIcon className="w-3.5 h-3.5 text-[#A48F82] shrink-0" />
+          <span className="hidden lg:inline truncate">{dateRangeString}</span>
+          <span className="lg:hidden truncate">{dateRangeString.slice(0, 10)}</span>
           <button
             onClick={resetToCurrentWeek}
             className={cn(
-              "text-[10px] ml-1 px-1.5 py-0.5 rounded transition-colors",
+              "text-[10px] ml-1 px-1.5 py-0.5 rounded transition-colors shrink-0",
               isCurrentWeek
                 ? "bg-pastel-mint text-charcoal"
                 : "bg-alabaster text-sandrift hover:text-charcoal"

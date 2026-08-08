@@ -109,14 +109,14 @@ export function FilePreviewModal() {
   return (
     <div
       className={cn(
-        "fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 sm:p-6",
+        "fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-6",
         "ux-overlay",
         visible ? "opacity-100" : "opacity-0"
       )}
     >
       <div
         className={cn(
-          "w-full max-w-4xl bg-surface rounded-2xl shadow-2xl border border-line flex flex-col h-[88vh] overflow-hidden",
+          "w-full max-w-4xl bg-surface rounded-2xl shadow-2xl border border-line flex flex-col h-[88dvh] overflow-hidden",
           "ux-modal-panel",
           visible ? "opacity-100 scale-100 translate-y-0" : "opacity-0 scale-[0.985] translate-y-1"
         )}

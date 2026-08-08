@@ -516,7 +516,7 @@ export function CourseDetailDrawer() {
         </div>
 
         {/* Content Body */}
-        <div className="p-6 overflow-y-auto space-y-6 flex-1 text-xs">
+        <div className="p-6 pb-[calc(1.5rem+env(safe-area-inset-bottom))] overflow-y-auto space-y-6 flex-1 text-xs">
           {/* Edit Form or Readonly View */}
           {isEditing ? (
             <div className="space-y-3 p-4 bg-[#F7F5F5] rounded-2xl border border-line">

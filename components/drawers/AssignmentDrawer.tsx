@@ -111,7 +111,7 @@ export function AssignmentDrawer() {
     >
       <div
         className={cn(
-          "w-full max-w-lg bg-surface h-full shadow-drawer flex flex-col border-l border-line overflow-y-auto",
+          "w-full max-w-lg bg-surface h-full shadow-drawer flex flex-col border-l border-line overflow-y-auto pb-[env(safe-area-inset-bottom)]",
           "ux-drawer-panel",
           visible ? "translate-x-0 opacity-100" : "translate-x-8 opacity-0"
         )}

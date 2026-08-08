@@ -41,7 +41,7 @@ export function ConfirmDialog() {
   return (
     <div
       className={cn(
-        "fixed inset-0 z-[60] bg-black/40 backdrop-blur-sm flex items-center justify-center p-4",
+        "fixed inset-0 z-[60] bg-black/40 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4",
         "ux-overlay",
         visible ? "opacity-100" : "opacity-0"
       )}

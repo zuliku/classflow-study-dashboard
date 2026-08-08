@@ -53,14 +53,14 @@ export function FullTimetableModal() {
   return (
     <div
       className={cn(
-        "fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 sm:p-6",
+        "fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-3 sm:p-6",
         "ux-overlay",
         visible ? "opacity-100" : "opacity-0"
       )}
     >
       <div
         className={cn(
-          "w-full max-w-6xl bg-surface rounded-3xl shadow-2xl border border-line flex flex-col h-[94vh] overflow-hidden",
+          "w-full max-w-6xl bg-surface rounded-3xl shadow-2xl border border-line flex flex-col h-[94dvh] overflow-hidden",
           "ux-modal-panel",
           visible ? "opacity-100 scale-100 translate-y-0" : "opacity-0 scale-[0.985] translate-y-1"
         )}

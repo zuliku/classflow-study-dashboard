@@ -69,7 +69,7 @@ export function GlobalSearchModal() {
   return (
     <div
       className={cn(
-        "fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-start justify-center pt-20 p-4",
+        "fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-start justify-center pt-16 md:pt-20 p-3 sm:p-4",
         "ux-overlay",
         visible ? "opacity-100" : "opacity-0"
       )}
@@ -102,7 +102,7 @@ export function GlobalSearchModal() {
         </div>
 
         {/* Results Area */}
-        <div className="p-4 max-h-[400px] overflow-y-auto space-y-4">
+        <div className="p-4 max-h-[min(400px,60dvh)] overflow-y-auto space-y-4">
           {!searchQuery.trim() ? (
             <div className="py-8 text-center text-xs text-sandrift">
               输入关键词搜索课程、任务与 DDL

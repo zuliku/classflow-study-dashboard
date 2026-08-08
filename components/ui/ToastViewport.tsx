@@ -57,7 +57,7 @@ export function ToastViewport() {
 
   return (
     <div
-      className="fixed z-[70] bottom-4 right-4 left-4 sm:left-auto sm:bottom-5 sm:right-5 flex flex-col items-end sm:items-end gap-2 pointer-events-none"
+      className="fixed z-[70] bottom-24 sm:bottom-5 right-4 left-4 sm:left-auto sm:right-5 flex flex-col items-end sm:items-end gap-2 pointer-events-none"
       aria-live="polite"
     >
       {toasts.map((toast) => {

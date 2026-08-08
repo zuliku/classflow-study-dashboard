@@ -1,29 +1,10 @@
 "use client";
 
 import React from "react";
-import {
-  LayoutDashboard,
-  CalendarDays,
-  ClipboardCheck,
-  FolderKanban,
-  BarChart3,
-  Users2,
-  Settings,
-  ChevronRight,
-} from "lucide-react";
+import { ChevronRight } from "lucide-react";
 import { useAppStore } from "@/store/useAppStore";
-import { NavTab } from "@/types";
 import { cn } from "@/lib/utils";
-
-const NAV_ITEMS: { id: NavTab; label: string; icon: React.ElementType }[] = [
-  { id: "overview", label: "总览", icon: LayoutDashboard },
-  { id: "timetable", label: "我的课表", icon: CalendarDays },
-  { id: "assignments", label: "任务与 DDL", icon: ClipboardCheck },
-  { id: "courses", label: "课程资料", icon: FolderKanban },
-  { id: "analytics", label: "学习统计", icon: BarChart3 },
-  { id: "group", label: "小组协作", icon: Users2 },
-  { id: "settings", label: "设置", icon: Settings },
-];
+import { NAV_ITEMS } from "@/components/layout/navItems";
 
 export function Sidebar() {
   const { activeTab, setActiveTab, userProfile } = useAppStore();
@@ -34,18 +15,23 @@ export function Sidebar() {
       : 0;
 
   return (
-    <aside className="w-52 xl:w-56 h-screen bg-[#F7F5F5] border-r border-line flex flex-col justify-between p-3.5 sticky top-0 select-none z-20 shrink-0">
+    // 三档布局：
+    //   <768  隐藏（由 Bottom Nav 承担导航）
+    //   768–1279  Icon Rail（w-16，仅图标 + hover/focus tooltip）
+    //   ≥1280  完整 Sidebar（w-56，图标 + 文字 + 用户信息）
+    <aside className="hidden md:flex w-16 xl:w-56 h-screen bg-[#F7F5F5] border-r border-line flex-col justify-between p-3.5 sticky top-0 select-none z-20 shrink-0">
       {/* Top Section */}
       <div className="space-y-3">
-        {/* Brand Logo filling top-left area cleanly matching Figure 1 red box */}
+        {/* Brand Logo：Desktop 全宽；Icon Rail 显示 Logo mark */}
         <div
-          className="w-full py-1.5 px-0.5 flex items-center justify-start cursor-pointer transition-opacity hover:opacity-90"
+          className="w-full py-1.5 px-0.5 flex items-center justify-center xl:justify-start cursor-pointer transition-opacity hover:opacity-90"
           onClick={() => setActiveTab("overview")}
+          title="ClassFlow"
         >
           <img
             src="/logo.png"
             alt="ClassFlow"
-            className="w-full h-auto max-h-16 object-contain mix-blend-multiply"
+            className="w-9 h-9 xl:w-full xl:h-auto xl:max-h-16 object-contain mix-blend-multiply"
           />
         </div>
 
@@ -58,8 +44,9 @@ export function Sidebar() {
               <button
                 key={item.id}
                 onClick={() => setActiveTab(item.id)}
+                aria-label={item.label}
                 className={cn(
-                  "relative w-full flex items-center space-x-2.5 px-3 py-2 rounded-xl text-xs font-medium transition-colors duration-[var(--motion-base)] ease-[var(--ease-standard)] group text-left",
+                  "relative w-full flex items-center justify-center xl:justify-start xl:space-x-2.5 px-2 xl:px-3 py-2 rounded-xl text-xs font-medium transition-colors duration-[var(--motion-base)] ease-[var(--ease-standard)] group text-left",
                   isActive
                     ? "bg-pastel-mint text-charcoal font-semibold shadow-subtle"
                     : "text-satin-grey hover:bg-alabaster hover:text-charcoal"
@@ -76,21 +63,36 @@ export function Sidebar() {
                 />
                 <Icon
                   className={cn(
-                    "w-4 h-4 transition-colors duration-[var(--motion-base)]",
+                    "w-4 h-4 shrink-0 transition-colors duration-[var(--motion-base)]",
                     isActive
                       ? "text-charcoal"
                       : "text-sandrift group-hover:text-charcoal"
                   )}
                 />
-                <span>{item.label}</span>
+                {/* 文字标签：仅在完整 Sidebar 显示 */}
+                <span data-testid="nav-label" className="hidden xl:inline truncate">{item.label}</span>
+
+                {/* Icon Rail Tooltip（仅 768–1279 显示）：hover / focus 均可见 */}
+                <span
+                  data-testid="nav-tooltip"
+                  role="tooltip"
+                  className={cn(
+                    "hidden md:inline-flex xl:hidden absolute left-full top-1/2 -translate-y-1/2 ml-2",
+                    "px-2 py-1 rounded-lg bg-charcoal text-white text-[11px] whitespace-nowrap",
+                    "opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100",
+                    "transition-opacity duration-[var(--motion-fast)] pointer-events-none z-50"
+                  )}
+                >
+                  {item.label}
+                </span>
               </button>
             );
           })}
         </nav>
       </div>
 
-      {/* Bottom Profile Card */}
-      <div className="space-y-2">
+      {/* Bottom Profile Card（Icon Rail 下隐藏，仅 Desktop 显示） */}
+      <div className="space-y-2 hidden xl:block">
         <div className="bg-alabaster/70 border border-line-strong rounded-2xl p-3 space-y-2.5 shadow-subtle">
           <div className="flex items-center space-x-2.5">
             <img

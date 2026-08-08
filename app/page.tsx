@@ -3,6 +3,7 @@
 import React, { useEffect } from "react";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Header } from "@/components/layout/Header";
+import { BottomNav } from "@/components/layout/BottomNav";
 import { StatCards } from "@/components/dashboard/StatCards";
 import { TimetableGrid } from "@/components/dashboard/TimetableGrid";
 import { UpcomingDDL } from "@/components/dashboard/UpcomingDDL";
@@ -112,7 +113,7 @@ export default function Home() {
         <Header />
 
         {/* Dynamic Page Views */}
-        <main className="flex-1 p-6 overflow-y-auto">
+        <main className="flex-1 p-4 md:p-6 pb-24 md:pb-6 overflow-y-auto">
           <PageTransition tab={activeTab} className="space-y-5">
           {activeTab === "overview" && (
             <>
@@ -120,7 +121,8 @@ export default function Home() {
               <StatCards />
 
               {/* Row 2: Middle TimetableGrid (2/3) + Upcoming DDL & Mini Calendar (1/3) */}
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 items-stretch">
+              {/* Tablet 768–1023 自然降列 2+1，Desktop 恢复 2/3 + 1/3 */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 items-stretch">
                 <div className="lg:col-span-2 flex flex-col">
                   <TimetableGrid />
                 </div>
@@ -131,7 +133,8 @@ export default function Home() {
               </div>
 
               {/* Row 3: Bottom Study Load Chart (1/2) + Assignments Table (1/2) */}
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 items-stretch">
+              {/* Tablet 起 2 列，Mobile 单列 */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5 items-stretch">
                 <StudyLoadChart />
                 <AssignmentTable />
               </div>
@@ -139,7 +142,7 @@ export default function Home() {
           )}
 
           {activeTab === "timetable" && (
-            <div className="space-y-4 flex flex-col h-[calc(100vh-100px)]">
+            <div className="space-y-4 flex flex-col md:h-[calc(100vh-100px)]">
               {/* Top Banner with Edit & Import Actions */}
               <div className="bg-surface border border-line rounded-2xl p-4 shadow-subtle flex flex-col sm:flex-row sm:items-center justify-between gap-3 shrink-0">
                 <div>
@@ -150,7 +153,7 @@ export default function Home() {
                     {semester.name} · {userProfile.college}
                   </p>
                 </div>
-                <div className="flex items-center space-x-2 shrink-0">
+                <div className="flex flex-wrap items-center space-x-2 shrink-0">
                   <button
                     onClick={() => setFullTimetableModalOpen(true)}
                     className="flex items-center space-x-1.5 px-3 py-1.5 bg-white hover:bg-alabaster text-charcoal border border-line-strong text-xs font-bold rounded-xl transition-colors shadow-subtle"
@@ -427,6 +430,8 @@ export default function Home() {
       <FilePreviewModal />
       <ConfirmDialog />
       <ToastViewport />
+      {/* 移动端底部导航（<768px） */}
+      <BottomNav />
     </div>
   );
 }
