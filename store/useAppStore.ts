@@ -796,12 +796,17 @@ export const useAppStore = create<AppState>()(
         assignmentTimeSlice: state.assignmentTimeSlice,
       }),
       migrate: (persistedState) => sanitizePersistedState(persistedState),
+      // zustand 在存储为空时也会调用 merge（migratedState=undefined），
+      // 此时必须原样保留 currentState（初始演示数据），不能把 undefined 清洗成空数组；
       // 旧数据可能没有 version 键（zustand 不会触发 migrate），
       // 用 merge 兜底：只合并白名单字段，历史 UI 瞬时状态绝不进入 state。
-      merge: (persistedState, currentState) => ({
-        ...currentState,
-        ...sanitizePersistedState(persistedState),
-      }),
+      merge: (persistedState, currentState) => {
+        if (persistedState == null) return currentState;
+        return {
+          ...currentState,
+          ...sanitizePersistedState(persistedState),
+        };
+      },
     }
   )
 );

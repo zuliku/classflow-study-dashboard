@@ -30,6 +30,7 @@ import {
   checkMaterialAvailability,
   MaterialAvailability,
 } from "@/lib/backupPackage";
+import { findDataIntegrityIssues, classifyIntegrityIssues } from "@/lib/dataIntegrity";
 import { saveFileBlob } from "@/lib/fileStorage";
 
 const localDateStr = () => {
@@ -229,7 +230,17 @@ export function SettingsView() {
             pushToast({ type: "error", message: outcome.error });
             return;
           }
-          const { data, materials, missingMaterials } = outcome.parsed;
+          const { data, materials, missingMaterials, issues } = outcome.parsed;
+
+          // 完整性校验：fatal 阻止恢复（在写入任何状态之前），warnings 仅提示
+          const integrity = classifyIntegrityIssues(issues);
+          if (integrity.fatal.length > 0) {
+            pushToast({
+              type: "error",
+              message: "备份数据存在致命问题，已取消恢复：" + integrity.fatal.join("；"),
+            });
+            return;
+          }
 
           // 恢复 IndexedDB Blob（失败不阻断 metadata 恢复，但必须提示）
           const saveFailures: string[] = [];
@@ -247,7 +258,7 @@ export function SettingsView() {
           restoreAppData(data);
           syncFormState(data);
 
-          const warnings: string[] = [];
+          const warnings: string[] = [...integrity.warnings];
           for (const m of missingMaterials) {
             warnings.push(`「${m.title}」文件本体缺失，仅恢复元数据`);
           }
@@ -259,7 +270,7 @@ export function SettingsView() {
             `备份已恢复：${data.courses.length} 门课程、${data.schedules.length} 个上课时段、${data.assignments.length} 项任务，附件 ${materials.size} 个`
           );
           if (warnings.length > 0) {
-            setImportWarning(`${warnings.length} 个资料存在问题：` + warnings.join("；"));
+            setImportWarning(warnings.join("；"));
           }
           setTimeout(() => {
             setImportStatus(null);
@@ -285,6 +296,17 @@ export function SettingsView() {
         return;
       }
 
+      // 完整性校验：fatal 阻止恢复（写入任何状态之前），warnings 仅提示
+      const integrity = classifyIntegrityIssues(findDataIntegrityIssues(result.data));
+      if (integrity.fatal.length > 0) {
+        pushToast({
+          type: "error",
+          message: "备份数据存在致命问题，已取消恢复：" + integrity.fatal.join("；"),
+        });
+        finish();
+        return;
+      }
+
       // 原子恢复：整体替换现有业务数据，而非追加
       restoreAppData(result.data);
       syncFormState(result.data);
@@ -292,8 +314,12 @@ export function SettingsView() {
       setImportStatus(
         `备份已恢复：${result.data.courses.length} 门课程、${result.data.schedules.length} 个上课时段、${result.data.assignments.length} 项任务`
       );
+      const warnings = [...integrity.warnings];
       if (hasMaterialStorageKeys(result.data.courses)) {
-        setImportWarning("该备份不含课程附件，相关文件可能需要重新上传");
+        warnings.push("该备份不含课程附件，相关文件可能需要重新上传");
+      }
+      if (warnings.length > 0) {
+        setImportWarning(warnings.join("；"));
       }
       setTimeout(() => {
         setImportStatus(null);

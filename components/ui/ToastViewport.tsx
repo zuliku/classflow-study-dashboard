@@ -39,14 +39,17 @@ export function ToastViewport() {
     }, EXIT_MS);
   };
 
-  // 自动消失：带操作按钮的提示等待更久，便于用户撤销
+  // 自动消失：带操作按钮的提示等待更久，便于用户撤销。
+  // 每条 Toast 只调度一次定时器（用 ref 去重），
+  // 避免其他 Toast 到期触发 effect cleanup 时把本 Toast 的定时器重置。
+  const scheduledRef = useRef<Set<string>>(new Set());
   useEffect(() => {
-    const timers: number[] = [];
     toasts.forEach((t) => {
+      if (scheduledRef.current.has(t.id)) return;
+      scheduledRef.current.add(t.id);
       const duration = t.duration ?? (t.actionLabel ? 6000 : 4000);
-      timers.push(window.setTimeout(() => dismiss(t.id), duration));
+      window.setTimeout(() => dismiss(t.id), duration);
     });
-    return () => timers.forEach((t) => window.clearTimeout(t));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [toasts]);
 

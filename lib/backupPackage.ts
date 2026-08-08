@@ -2,6 +2,7 @@ import JSZip from "jszip";
 import { ClassFlowBackup, ClassFlowBackupData, Course } from "@/types";
 import { getFileBlob } from "@/lib/fileStorage";
 import { parseBackupJSON } from "@/lib/backup";
+import { findDataIntegrityIssues, DataIntegrityIssues } from "@/lib/dataIntegrity";
 
 export interface MaterialRef {
   storageKey: string;
@@ -126,6 +127,8 @@ export interface ParsedFullBackup {
   materials: Map<string, Blob>;
   /** metadata 声明了 storageKey 但 ZIP 内缺少对应文件 */
   missingMaterials: MaterialRef[];
+  /** 数据完整性检查结果（fatal 阻止恢复，warnings 提示） */
+  issues: DataIntegrityIssues;
 }
 
 export type FullBackupParseOutcome =
@@ -171,6 +174,11 @@ export async function parseFullBackupFile(file: Blob | ArrayBuffer): Promise<Ful
 
   return {
     ok: true,
-    parsed: { data: validated.data, materials, missingMaterials },
+    parsed: {
+      data: validated.data,
+      materials,
+      missingMaterials,
+      issues: findDataIntegrityIssues(validated.data),
+    },
   };
 }

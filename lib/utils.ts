@@ -97,7 +97,12 @@ export function cardKeyHandler(handler: () => void) {
   };
 }
 
-/** 生成带随机后缀的实体 ID，避免同一毫秒批量创建时冲突 */
+/** 生成带随机后缀的实体 ID，避免同一毫秒批量创建时冲突；优先 crypto.randomUUID */
 export function createId(prefix: string): string {
-  return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  const c = globalThis.crypto;
+  const random =
+    c && typeof c.randomUUID === "function"
+      ? c.randomUUID()
+      : `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`;
+  return `${prefix}_${random}`;
 }

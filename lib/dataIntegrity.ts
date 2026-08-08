@@ -64,3 +64,35 @@ export function findDataIntegrityIssues(snapshot: DataSnapshot): DataIntegrityIs
     orphanGroupTaskAssignments,
   };
 }
+
+/** 完整性问题的严重度分类：fatal 阻止恢复，warnings 仅提示（不自动猜测/重绑） */
+export interface ClassifiedIntegrityIssues {
+  fatal: string[];
+  warnings: string[];
+}
+
+export function classifyIntegrityIssues(issues: DataIntegrityIssues): ClassifiedIntegrityIssues {
+  const fatal: string[] = [];
+  const warnings: string[] = [];
+
+  if (issues.orphanSchedules.length > 0) {
+    fatal.push(`${issues.orphanSchedules.length} 个排课引用了不存在的课程`);
+  }
+  if (issues.orphanAssignments.length > 0) {
+    fatal.push(`${issues.orphanAssignments.length} 个任务引用了不存在的课程`);
+  }
+  if (issues.orphanGroupProjects.length > 0) {
+    fatal.push(`${issues.orphanGroupProjects.length} 个小组项目引用了不存在的课程`);
+  }
+  if (issues.orphanDDLMarks.length > 0) {
+    warnings.push(`${issues.orphanDDLMarks.length} 个日历标记指向已不存在的任务`);
+  }
+  if (issues.orphanGroupTaskAssignments.length > 0) {
+    warnings.push(`${issues.orphanGroupTaskAssignments.length} 个任务负责人不存在，将保持未分配`);
+  }
+  if (issues.unlinkedLegacyDDLMarks.length > 0) {
+    warnings.push(`${issues.unlinkedLegacyDDLMarks.length} 个旧日历标记未与任务关联`);
+  }
+
+  return { fatal, warnings };
+}

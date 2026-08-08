@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useEffect } from "react";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Header } from "@/components/layout/Header";
 import { StatCards } from "@/components/dashboard/StatCards";
@@ -27,6 +27,7 @@ import { useAppStore } from "@/store/useAppStore";
 import { computeWeekCourseLoad } from "@/lib/studyLoad";
 import { cardKeyHandler } from "@/lib/utils";
 import { openAssignmentEditor } from "@/lib/uiEvents";
+import { reconcileOrphanBlobs } from "@/lib/fileStorage";
 import {
   BookOpen,
   Plus,
@@ -64,6 +65,17 @@ export default function Home() {
 
   // 本周课程时长：按当前教学周实际生效课表实算（endTime - startTime）
   const weekCourseLoad = computeWeekCourseLoad(schedules, semester);
+
+  // 启动时孤儿 Blob 对账：清理刷新/关闭浏览器后遗留、不再被任何资料引用的 IndexedDB 文件
+  useEffect(() => {
+    const validKeys = new Set<string>();
+    useAppStore.getState().courses.forEach((c) =>
+      c.materials.forEach((m) => {
+        if (m.storageKey) validKeys.add(m.storageKey);
+      })
+    );
+    reconcileOrphanBlobs(validKeys).catch(() => {});
+  }, []);
 
   // Statistics derived dynamically 100% from Zustand store
   const totalTasks = assignments.length;

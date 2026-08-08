@@ -21,9 +21,13 @@ function openDB(): Promise<IDBDatabase> {
   });
 }
 
-/** 生成新的文件存储键 */
+/** 生成新的文件存储键（crypto.randomUUID，无该 API 时回退时间戳+随机） */
 export function createStorageKey(): string {
-  return `file_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+  const c = globalThis.crypto;
+  const random = c && typeof c.randomUUID === "function"
+    ? c.randomUUID()
+    : `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`;
+  return `file_${random}`;
 }
 
 /** 将 Blob 保存到 IndexedDB */
@@ -68,4 +72,36 @@ export async function clearAllFileBlobs(): Promise<void> {
     tx.oncomplete = () => resolve();
     tx.onerror = () => reject(tx.error);
   });
+}
+
+/** 枚举全部已保存的 Blob key（孤儿清理用） */
+export async function listFileKeys(): Promise<string[]> {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_NAME, "readonly");
+    const request = tx.objectStore(STORE_NAME).getAllKeys();
+    request.onsuccess = () =>
+      resolve((request.result as IDBValidKey[]).map((k) => String(k)));
+    request.onerror = () => reject(request.error);
+  });
+}
+
+/**
+ * 孤儿 Blob 对账：删除不在 validKeys 集合中的 Blob。
+ * 用于应用启动清理（刷新/关闭浏览器遗留的文件），单事务批量删除。
+ */
+export async function reconcileOrphanBlobs(validKeys: Set<string>): Promise<{ deleted: number }> {
+  const keys = await listFileKeys();
+  const orphans = keys.filter((k) => !validKeys.has(k));
+  if (orphans.length === 0) return { deleted: 0 };
+
+  const db = await openDB();
+  await new Promise<void>((resolve, reject) => {
+    const tx = db.transaction(STORE_NAME, "readwrite");
+    const store = tx.objectStore(STORE_NAME);
+    for (const key of orphans) store.delete(key);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+  return { deleted: orphans.length };
 }
