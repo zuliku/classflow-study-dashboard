@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { User, Calendar, ListTodo, Sliders, Database, Info } from "lucide-react";
+import { Home, User, Calendar, ListTodo, MousePointerClick, Database, Info } from "lucide-react";
 import { SettingsSection } from "@/types";
 import { cn } from "@/lib/utils";
 
@@ -10,10 +10,11 @@ export const SETTINGS_NAV: {
   label: string;
   icon: React.ElementType;
 }[] = [
+  { id: "general", label: "通用", icon: Home },
   { id: "profile", label: "个人资料", icon: User },
   { id: "semester", label: "学期与课表", icon: Calendar },
-  { id: "tasks", label: "任务与提醒", icon: ListTodo },
-  { id: "interaction", label: "交互与外观", icon: Sliders },
+  { id: "tasks", label: "任务", icon: ListTodo },
+  { id: "interaction", label: "交互与快捷键", icon: MousePointerClick },
   { id: "data", label: "数据与存储", icon: Database },
 ];
 
@@ -22,13 +23,16 @@ export const ABOUT_NAV = { id: "about" as const, label: "关于", icon: Info };
 interface SettingsNavProps {
   active: SettingsSection;
   onSelect: (section: SettingsSection) => void;
+  /** 存在非默认偏好的 section（显示克制的小圆点） */
+  modifiedSections: ReadonlySet<SettingsSection>;
 }
 
 /** 桌面/平板：左侧纵向导航；当前项使用 pastel-mint / charcoal selected language */
-export function SettingsNav({ active, onSelect }: SettingsNavProps) {
+export function SettingsNav({ active, onSelect, modifiedSections }: SettingsNavProps) {
   const renderItem = (item: { id: SettingsSection; label: string; icon: React.ElementType }) => {
     const Icon = item.icon;
     const isActive = active === item.id;
+    const modified = modifiedSections.has(item.id);
     return (
       <button
         key={item.id}
@@ -42,7 +46,9 @@ export function SettingsNav({ active, onSelect }: SettingsNavProps) {
         )}
       >
         <Icon className="w-4 h-4 shrink-0" />
-        <span className="truncate">{item.label}</span>
+        <span className="truncate flex-1 text-left">{item.label}</span>
+        {/* 已修改小圆点（克制，无数字 badge） */}
+        {modified && <span className="w-1.5 h-1.5 rounded-full bg-charcoal shrink-0" aria-hidden="true" />}
       </button>
     );
   };

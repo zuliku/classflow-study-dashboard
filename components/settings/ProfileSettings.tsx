@@ -75,7 +75,17 @@ export function ProfileSettings() {
               </span>
             )}
             <div className="flex-1 min-w-0 space-y-1.5">
-              <p className="font-bold text-charcoal">头像</p>
+              <div className="flex items-center justify-between">
+                <p className="font-bold text-charcoal">头像</p>
+                {avatarUrl && (
+                  <button
+                    onClick={() => setAvatarUrl("")}
+                    className="text-[10px] font-semibold text-sandrift hover:text-danger transition-colors"
+                  >
+                    清除头像
+                  </button>
+                )}
+              </div>
               <input
                 type="url"
                 value={avatarUrl}

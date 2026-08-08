@@ -7,6 +7,9 @@ import { useAppStore } from "@/store/useAppStore";
 import { useToastStore } from "@/store/useToastStore";
 import { SettingsSection } from "@/components/settings/SettingsSection";
 import { SettingsSaveBar } from "@/components/settings/SettingsSaveBar";
+import { SettingsRow } from "@/components/settings/SettingsRow";
+import { getModifiedPreferenceKeys } from "@/lib/preferences";
+import { cn } from "@/lib/utils";
 import { getCurrentSemesterWeek, getSemesterEndDate } from "@/lib/semester";
 
 const inputCls =
@@ -14,11 +17,15 @@ const inputCls =
 const inputErrorCls =
   "w-full p-2.5 bg-[#F7F5F5] border border-danger-border rounded-xl text-charcoal font-semibold focus:outline-none";
 
-export function SemesterSettings() {
+export function SemesterSettings({ highlightedId }: { highlightedId?: string }) {
   const semester = useAppStore((s) => s.semester);
   const setSemester = useAppStore((s) => s.setSemester);
+  const preferences = useAppStore((s) => s.preferences);
+  const updatePreferences = useAppStore((s) => s.updatePreferences);
   const pushToast = useToastStore((s) => s.pushToast);
+  const modified = getModifiedPreferenceKeys(preferences).includes("showWeekends");
 
+  const [editing, setEditing] = useState(false);
   const [name, setName] = useState(semester.name);
   const [startDate, setStartDate] = useState(semester.startDate);
   const [totalWeeks, setTotalWeeks] = useState(semester.totalWeeks);
@@ -50,6 +57,7 @@ export function SemesterSettings() {
       return;
     }
     setSemester({ ...semester, name: name.trim(), startDate, totalWeeks });
+    setEditing(false);
     pushToast({ message: "设置已保存" });
   };
 
@@ -58,6 +66,7 @@ export function SemesterSettings() {
     setStartDate(semester.startDate);
     setTotalWeeks(semester.totalWeeks);
     setTouched(false);
+    setEditing(false);
   };
 
   const overviewProgress = Math.min(
@@ -67,13 +76,16 @@ export function SemesterSettings() {
 
   return (
     <div className="space-y-6" data-testid="settings-semester">
-      {/* 当前学期概览：实时推导 */}
-      <SettingsSection title="当前学期概览" description="结束日期由开学日期与教学周数推导，不单独保存。">
-        <div className="p-4 bg-[#F7F5F5] border border-line rounded-xl space-y-3">
+      {/* 当前学期概览：实时推导；默认只显示状态，点击「编辑」才展开表单 */}
+      <SettingsSection title="当前学期" description="结束日期由开学日期与教学周数推导，不单独保存。">
+        <div
+          className="p-4 bg-[#F7F5F5] border border-line rounded-xl space-y-3"
+          data-setting-id="semester-overview"
+        >
           <div className="flex items-baseline justify-between">
             <p className="text-sm font-bold text-charcoal">{semester.name}</p>
             <span className="text-[10px] font-semibold text-sandrift bg-white border border-line px-2 py-0.5 rounded-lg">
-              {inSemester ? `当前第 ${currentWeek} 周` : "本周不在教学周内"}
+              {inSemester ? `第 ${currentWeek} / ${semester.totalWeeks} 周` : "本周不在教学周内"}
             </span>
           </div>
           <p className="text-[11px] text-satin-grey">
@@ -94,71 +106,115 @@ export function SemesterSettings() {
               <span>第 {semester.totalWeeks} 周</span>
             </div>
           </div>
-        </div>
-      </SettingsSection>
 
-      <SettingsSection title="编辑学期" description="修改后先预览，确认后再保存。">
-        <div className="space-y-4 text-xs">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="space-y-1">
-              <label htmlFor="settings-semester-name" className="font-bold text-sandrift">学期名称</label>
-              <input
-                id="settings-semester-name"
-                type="text"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                className={touched && errors.name ? inputErrorCls : inputCls}
-              />
-              {touched && errors.name && <p className="text-[10px] text-danger font-bold">{errors.name}</p>}
-            </div>
-            <div className="space-y-1">
-              <label htmlFor="settings-semester-start" className="font-bold text-sandrift">第一周开始日期</label>
-              <input
-                id="settings-semester-start"
-                type="date"
-                value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
-                className={`${touched && errors.startDate ? inputErrorCls : inputCls} font-mono`}
-              />
-              {touched && errors.startDate && <p className="text-[10px] text-danger font-bold">{errors.startDate}</p>}
-              <p className="text-[10px] text-sandrift">周一为学期第 1 周起始日</p>
-            </div>
-            <div className="space-y-1">
-              <label htmlFor="settings-semester-weeks" className="font-bold text-sandrift">总教学周数</label>
-              <input
-                id="settings-semester-weeks"
-                type="number"
-                min={1}
-                max={30}
-                value={totalWeeks}
-                onChange={(e) => setTotalWeeks(Number(e.target.value))}
-                className={touched && errors.totalWeeks ? inputErrorCls : inputCls}
-              />
-              {touched && errors.totalWeeks && (
-                <p className="text-[10px] text-danger font-bold">{errors.totalWeeks}</p>
-              )}
-            </div>
-          </div>
-
-          {/* 修改后即时预览（本地 form state 推导） */}
-          {(name !== semester.name || startDate !== semester.startDate || totalWeeks !== semester.totalWeeks) && (
-            <div className="p-3 bg-pastel-mint/60 border border-line rounded-xl space-y-0.5 text-[11px]" data-testid="semester-preview">
-              <p className="font-bold text-charcoal">修改后：</p>
-              <p className="text-satin-grey">
-                {dateValid ? `${format(new Date(startDate), "yyyy年M月d日", { locale: zhCN })}开始` : "日期无效"}
-              </p>
-              <p className="text-satin-grey">{weeksValid ? `${totalWeeks} 个教学周` : "周数无效"}</p>
-              <p className="text-satin-grey">
-                {previewEnd && weeksValid
-                  ? `预计于 ${format(previewEnd, "yyyy年M月d日", { locale: zhCN })}结束`
-                  : "预计结束日期暂不可用"}
-              </p>
+          {!editing && (
+            <div className="flex justify-end">
+              <button
+                onClick={() => setEditing(true)}
+                className="ux-press px-3 py-1.5 bg-white border border-line text-charcoal text-[11px] font-bold rounded-xl transition-colors hover:bg-alabaster"
+              >
+                编辑
+              </button>
             </div>
           )}
         </div>
       </SettingsSection>
 
-      <SettingsSaveBar dirty={dirty} onSave={save} onDiscard={discard} />
+      {editing && (
+        <SettingsSection title="编辑学期" description="修改后先预览，确认后再保存。">
+          <div className="space-y-4 text-xs">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="space-y-1">
+                <label htmlFor="settings-semester-name" className="font-bold text-sandrift">学期名称</label>
+                <input
+                  id="settings-semester-name"
+                  type="text"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  className={touched && errors.name ? inputErrorCls : inputCls}
+                />
+                {touched && errors.name && <p className="text-[10px] text-danger font-bold">{errors.name}</p>}
+              </div>
+              <div className="space-y-1">
+                <label htmlFor="settings-semester-start" className="font-bold text-sandrift">第一周开始日期</label>
+                <input
+                  id="settings-semester-start"
+                  type="date"
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                  className={`${touched && errors.startDate ? inputErrorCls : inputCls} font-mono`}
+                />
+                {touched && errors.startDate && <p className="text-[10px] text-danger font-bold">{errors.startDate}</p>}
+                <p className="text-[10px] text-sandrift">周一为学期第 1 周起始日</p>
+              </div>
+              <div className="space-y-1">
+                <label htmlFor="settings-semester-weeks" className="font-bold text-sandrift">总教学周数</label>
+                <input
+                  id="settings-semester-weeks"
+                  type="number"
+                  min={1}
+                  max={30}
+                  value={totalWeeks}
+                  onChange={(e) => setTotalWeeks(Number(e.target.value))}
+                  className={touched && errors.totalWeeks ? inputErrorCls : inputCls}
+                />
+                {touched && errors.totalWeeks && (
+                  <p className="text-[10px] text-danger font-bold">{errors.totalWeeks}</p>
+                )}
+              </div>
+            </div>
+
+            {/* 修改后即时预览（本地 form state 推导） */}
+            {(name !== semester.name || startDate !== semester.startDate || totalWeeks !== semester.totalWeeks) && (
+              <div className="p-3 bg-pastel-mint/60 border border-line rounded-xl space-y-0.5 text-[11px]" data-testid="semester-preview">
+                <p className="font-bold text-charcoal">修改后：</p>
+                <p className="text-satin-grey">
+                  {dateValid ? `${format(new Date(startDate), "yyyy年M月d日", { locale: zhCN })}开始` : "日期无效"}
+                </p>
+                <p className="text-satin-grey">{weeksValid ? `${totalWeeks} 个教学周` : "周数无效"}</p>
+                <p className="text-satin-grey">
+                  {previewEnd && weeksValid
+                    ? `预计于 ${format(previewEnd, "yyyy年M月d日", { locale: zhCN })}结束`
+                    : "预计结束日期暂不可用"}
+                </p>
+              </div>
+            )}
+          </div>
+        </SettingsSection>
+      )}
+
+      {editing && <SettingsSaveBar dirty={dirty} onSave={save} onDiscard={discard} />}
+
+      {/* 课表显示偏好：显示周末（属于学期与课表范围） */}
+      <SettingsSection title="课表显示" description="课表的时间范围偏好。">
+        <SettingsRow
+          settingId="show-weekends"
+          title="显示周末"
+          description="在课表中显示周六与周日"
+          modified={modified}
+          onReset={() => updatePreferences({ showWeekends: true })}
+          resetAriaLabel="将显示周末恢复默认"
+          highlighted={highlightedId === "show-weekends"}
+        >
+          <button
+            role="switch"
+            aria-checked={preferences.showWeekends}
+            aria-label="显示周末"
+            onClick={() => updatePreferences({ showWeekends: !preferences.showWeekends })}
+            className={cn(
+              "relative w-9 h-5 rounded-full transition-colors duration-[var(--motion-fast)]",
+              preferences.showWeekends ? "bg-charcoal" : "bg-alba"
+            )}
+          >
+            <span
+              className={cn(
+                "absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow-subtle transition-transform duration-[var(--motion-fast)]",
+                preferences.showWeekends && "translate-x-4"
+              )}
+            />
+          </button>
+        </SettingsRow>
+      </SettingsSection>
     </div>
   );
 }

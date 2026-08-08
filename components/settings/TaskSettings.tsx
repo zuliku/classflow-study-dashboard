@@ -3,44 +3,31 @@
 import React from "react";
 import { useAppStore } from "@/store/useAppStore";
 import { SettingsSection } from "@/components/settings/SettingsSection";
+import { SettingsRow } from "@/components/settings/SettingsRow";
 import { DDL_WARNING_DAYS } from "@/lib/preferences";
+import { getModifiedPreferenceKeys, resetPreferencePatch } from "@/lib/preferences";
 import { cn } from "@/lib/utils";
 
-/** 设置行：标题 + 描述 + 右侧控件 */
-function SettingsRow({
-  title,
-  description,
-  children,
-}: {
-  title: string;
-  description: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="flex items-center justify-between gap-6 py-3 border-b border-line-soft last:border-b-0">
-      <div className="min-w-0">
-        <h4 className="text-xs font-bold text-charcoal">{title}</h4>
-        <p className="text-[10px] text-sandrift mt-0.5">{description}</p>
-      </div>
-      <div className="shrink-0">{children}</div>
-    </div>
-  );
-}
-
-/** 任务与提醒偏好（immediate save：选择即更新 preferences，不弹 toast） */
-export function TaskSettings() {
+/** 任务偏好（immediate save：选择即更新 preferences，不弹 toast） */
+export function TaskSettings({ highlightedId }: { highlightedId?: string }) {
   const preferences = useAppStore((s) => s.preferences);
   const updatePreferences = useAppStore((s) => s.updatePreferences);
+  const modified = new Set(getModifiedPreferenceKeys(preferences));
 
   return (
     <SettingsSection
-      title="任务与提醒"
+      title="任务"
       description="用于总览与任务列表的临近截止提示。"
     >
       <div className="text-xs" data-testid="settings-tasks">
         <SettingsRow
+          settingId="ddl-warning-days"
           title="临近截止提醒"
-          description="在总览「临近 DDL」中展示未来多少天内的截止任务。"
+          description="未来多少天内显示截止任务。"
+          modified={modified.has("ddlWarningDays")}
+          onReset={() => updatePreferences(resetPreferencePatch("ddlWarningDays"))}
+          resetAriaLabel="将临近截止提醒恢复默认"
+          highlighted={highlightedId === "ddl-warning-days"}
         >
           <div className="flex items-center gap-1 bg-alabaster p-0.5 rounded-xl border border-line-strong">
             {DDL_WARNING_DAYS.map((d) => {
@@ -65,8 +52,13 @@ export function TaskSettings() {
         </SettingsRow>
 
         <SettingsRow
+          settingId="default-ddl-time"
           title="默认截止时间"
           description="新建任务时预填的截止时刻（HH:mm）；编辑已有任务不受影响。"
+          modified={modified.has("defaultDDLTime")}
+          onReset={() => updatePreferences(resetPreferencePatch("defaultDDLTime"))}
+          resetAriaLabel="将默认截止时间恢复默认"
+          highlighted={highlightedId === "default-ddl-time"}
         >
           <input
             type="time"

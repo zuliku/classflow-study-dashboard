@@ -3,29 +3,9 @@
 import React from "react";
 import { useAppStore } from "@/store/useAppStore";
 import { SettingsSection } from "@/components/settings/SettingsSection";
-import { MOTION_PREFERENCES } from "@/lib/preferences";
+import { SettingsRow } from "@/components/settings/SettingsRow";
+import { MOTION_PREFERENCES, getModifiedPreferenceKeys, resetPreferencePatch } from "@/lib/preferences";
 import { cn } from "@/lib/utils";
-
-/** 设置行：标题 + 描述 + 右侧控件 */
-function SettingsRow({
-  title,
-  description,
-  children,
-}: {
-  title: string;
-  description: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="flex items-center justify-between gap-6 py-3 border-b border-line-soft last:border-b-0">
-      <div className="min-w-0">
-        <h4 className="text-xs font-bold text-charcoal">{title}</h4>
-        <p className="text-[10px] text-sandrift mt-0.5">{description}</p>
-      </div>
-      <div className="shrink-0">{children}</div>
-    </div>
-  );
-}
 
 function Toggle({
   checked,
@@ -57,28 +37,28 @@ function Toggle({
   );
 }
 
-/** 交互与外观偏好（immediate save：开关即更新 preferences） */
-export function InteractionSettings() {
+/** 交互与快捷键（immediate save：开关即更新 preferences） */
+export function InteractionSettings({ highlightedId }: { highlightedId?: string }) {
   const preferences = useAppStore((s) => s.preferences);
   const updatePreferences = useAppStore((s) => s.updatePreferences);
+  const modified = new Set(getModifiedPreferenceKeys(preferences));
 
   return (
     <SettingsSection
-      title="交互与外观"
-      description="课表显示与直接操作的启用状态（对应业务模块将在后续版本接入）。"
+      title="交互与快捷键"
+      description="直接操作、键盘与动效偏好（对应业务模块已接入）。"
     >
       <div className="text-xs" data-testid="settings-interaction">
-        <SettingsRow title="显示周末" description="在课表中显示周六与周日。">
-          <Toggle
-            checked={preferences.showWeekends}
-            onChange={(v) => updatePreferences({ showWeekends: v })}
-            label="显示周末"
-          />
-        </SettingsRow>
-
         <SettingsRow
+          settingId="schedule-direct-manipulation"
           title="课表直接操作"
           description="在完整课表中启用拖动调整与缩放排课。"
+          modified={modified.has("enableScheduleDirectManipulation")}
+          onReset={() =>
+            updatePreferences(resetPreferencePatch("enableScheduleDirectManipulation"))
+          }
+          resetAriaLabel="将课表直接操作恢复默认"
+          highlighted={highlightedId === "schedule-direct-manipulation"}
         >
           <Toggle
             checked={preferences.enableScheduleDirectManipulation}
@@ -88,8 +68,13 @@ export function InteractionSettings() {
         </SettingsRow>
 
         <SettingsRow
+          settingId="ddl-direct-manipulation"
           title="DDL 直接操作"
           description="在日历中启用拖动调整截止日期。"
+          modified={modified.has("enableDDLDirectManipulation")}
+          onReset={() => updatePreferences(resetPreferencePatch("enableDDLDirectManipulation"))}
+          resetAriaLabel="将 DDL 直接操作恢复默认"
+          highlighted={highlightedId === "ddl-direct-manipulation"}
         >
           <Toggle
             checked={preferences.enableDDLDirectManipulation}
@@ -98,7 +83,15 @@ export function InteractionSettings() {
           />
         </SettingsRow>
 
-        <SettingsRow title="动效偏好" description="界面动画强度；跟随系统时尊重系统减弱动效设置。">
+        <SettingsRow
+          settingId="motion-preference"
+          title="动效偏好"
+          description="界面动画强度；跟随系统时尊重系统减弱动效设置。"
+          modified={modified.has("motionPreference")}
+          onReset={() => updatePreferences(resetPreferencePatch("motionPreference"))}
+          resetAriaLabel="将动效偏好恢复默认"
+          highlighted={highlightedId === "motion-preference"}
+        >
           <select
             value={preferences.motionPreference}
             onChange={(e) =>

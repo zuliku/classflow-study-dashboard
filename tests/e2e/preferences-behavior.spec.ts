@@ -13,7 +13,7 @@ async function openSettings(page: Page) {
 }
 
 async function gotoInteraction(page: Page) {
-  await page.getByRole("navigation", { name: "设置导航" }).getByRole("button", { name: "交互与外观" }).click();
+  await page.getByRole("navigation", { name: "设置导航" }).getByRole("button", { name: "交互与快捷键" }).click();
 }
 
 async function gotoOverview(page: Page) {
@@ -33,7 +33,7 @@ async function gotoWorkspaceTab(page: Page, name: string) {
 
 test("showWeekends：关闭 → 课表 5 列（周六/周日表头消失）→ 打开恢复", async ({ page }) => {
   await openSettings(page);
-  await gotoInteraction(page);
+  await page.getByRole("navigation", { name: "设置导航" }).getByRole("button", { name: "学期与课表" }).click();
   await page.getByRole("switch", { name: "显示周末" }).click(); // off
   await expect(page.getByRole("switch", { name: "显示周末" })).toHaveAttribute("aria-checked", "false");
 
@@ -44,7 +44,7 @@ test("showWeekends：关闭 → 课表 5 列（周六/周日表头消失）→ �
 
   // 打开恢复 7 列
   await openSettings(page);
-  await gotoInteraction(page);
+  await page.getByRole("navigation", { name: "设置导航" }).getByRole("button", { name: "学期与课表" }).click();
   await page.getByRole("switch", { name: "显示周末" }).click(); // on
   await expect(page.getByRole("switch", { name: "显示周末" })).toHaveAttribute("aria-checked", "true");
   await gotoOverview(page);
@@ -141,7 +141,7 @@ test("DDL drag：关闭 → 拖动不发生、点击正常；打开 → 拖动�
 
 test("ddlWarningDays：1 天 → 临近 DDL 只显示 2 条；7 天 → 5 条", async ({ page }) => {
   await openSettings(page);
-  await page.getByRole("navigation", { name: "设置导航" }).getByRole("button", { name: "任务与提醒" }).click();
+  await page.getByRole("navigation", { name: "设置导航" }).getByRole("button", { name: "任务" }).click();
 
   await page.getByRole("button", { name: "1 天", exact: true }).click();
   await expect(page.getByRole("button", { name: "1 天", exact: true })).toHaveAttribute("aria-pressed", "true");
@@ -151,7 +151,7 @@ test("ddlWarningDays：1 天 → 临近 DDL 只显示 2 条；7 天 → 5 条", 
   await expect(page.getByTestId("upcoming-ddl-card").getByText("2 项待办")).toBeVisible();
 
   await openSettings(page);
-  await page.getByRole("navigation", { name: "设置导航" }).getByRole("button", { name: "任务与提醒" }).click();
+  await page.getByRole("navigation", { name: "设置导航" }).getByRole("button", { name: "任务" }).click();
   await page.getByRole("button", { name: "7 天", exact: true }).click();
   await gotoOverview(page);
   await expect(page.getByTestId("upcoming-ddl-card").getByText("5 项待办")).toBeVisible();
@@ -159,7 +159,7 @@ test("ddlWarningDays：1 天 → 临近 DDL 只显示 2 条；7 天 → 5 条", 
 
 test("defaultDDLTime：改为 21:00 → 新建任务默认截止时间 21:00（编辑已有任务不受影响）", async ({ page }) => {
   await openSettings(page);
-  await page.getByRole("navigation", { name: "设置导航" }).getByRole("button", { name: "任务与提醒" }).click();
+  await page.getByRole("navigation", { name: "设置导航" }).getByRole("button", { name: "任务" }).click();
   const timeInput = page.getByTestId("settings-tasks").locator("input[type='time']");
   await timeInput.fill("21:00");
   await expect(timeInput).toHaveValue("21:00");

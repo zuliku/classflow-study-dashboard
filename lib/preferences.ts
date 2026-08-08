@@ -50,3 +50,35 @@ export function sanitizePreferences(v: unknown): AppPreferences {
       : DEFAULT_PREFERENCES.motionPreference,
   };
 }
+
+/** 偏好 → 所属设置 section（用于导航 modified dot 与已修改分组） */
+export const PREFERENCE_SECTIONS: Record<keyof AppPreferences, "semester" | "tasks" | "interaction"> = {
+  showWeekends: "semester",
+  ddlWarningDays: "tasks",
+  defaultDDLTime: "tasks",
+  enableScheduleDirectManipulation: "interaction",
+  enableDDLDirectManipulation: "interaction",
+  motionPreference: "interaction",
+};
+
+/** 当前与默认不同的偏好键（纯函数，UI 不自行比较） */
+export function getModifiedPreferenceKeys(preferences: AppPreferences): (keyof AppPreferences)[] {
+  return (Object.keys(DEFAULT_PREFERENCES) as (keyof AppPreferences)[]).filter(
+    (k) => preferences[k] !== DEFAULT_PREFERENCES[k]
+  );
+}
+
+/** 存在非默认偏好的 section 集合（导航 modified dot / 已修改分组） */
+export function getModifiedSections(preferences: AppPreferences): Set<"semester" | "tasks" | "interaction"> {
+  const sections = new Set<"semester" | "tasks" | "interaction">();
+  for (const key of getModifiedPreferenceKeys(preferences)) {
+    const sec = PREFERENCE_SECTIONS[key];
+    if (sec) sections.add(sec);
+  }
+  return sections;
+}
+
+/** 单项恢复默认的 patch（纯函数；调用方 updatePreferences(patch) 即可） */
+export function resetPreferencePatch(key: keyof AppPreferences): Partial<AppPreferences> {
+  return { [key]: DEFAULT_PREFERENCES[key] };
+}

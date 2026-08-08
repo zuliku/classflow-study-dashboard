@@ -144,6 +144,7 @@ export interface AppPreferences {
 
 /** 设置中心 section */
 export type SettingsSection =
+  | "general"
   | "profile"
   | "semester"
   | "tasks"

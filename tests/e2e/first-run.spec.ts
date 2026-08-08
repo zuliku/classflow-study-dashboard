@@ -65,6 +65,7 @@ test("Data Settings：清空学习数据后课程消失、个人资料保留", a
 
   // 设置个人资料
   await page.getByRole("button", { name: "设置" }).first().click();
+  await page.getByRole("navigation", { name: "设置导航" }).getByRole("button", { name: "个人资料" }).click();
   await page.getByTestId("settings-profile").getByLabel("姓名").fill("测试用户");
   await page.getByTestId("settings-profile").getByRole("button", { name: "保存" }).click();
   await expect(page.getByText("设置已保存").first()).toBeVisible();
