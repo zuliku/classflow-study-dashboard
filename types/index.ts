@@ -132,6 +132,25 @@ export interface CalendarMark {
   sourceId?: string; // Links DDL CalendarMark directly to assignment.id
 }
 
+/** 应用偏好（稳定用户偏好，持久化；Task 2 接入业务模块） */
+export interface AppPreferences {
+  showWeekends: boolean;
+  ddlWarningDays: 1 | 3 | 7;
+  defaultDDLTime: string; // "HH:mm"
+  enableScheduleDirectManipulation: boolean;
+  enableDDLDirectManipulation: boolean;
+  motionPreference: "system" | "full" | "reduced";
+}
+
+/** 设置中心 section */
+export type SettingsSection =
+  | "profile"
+  | "semester"
+  | "tasks"
+  | "interaction"
+  | "data"
+  | "about";
+
 /** 备份中的完整业务数据快照 */
 export interface ClassFlowBackupData {
   userProfile: UserProfile;
@@ -141,6 +160,8 @@ export interface ClassFlowBackupData {
   assignments: Assignment[];
   calendarMarks: CalendarMark[];
   groupProjects: GroupProject[];
+  /** 应用偏好（v1 旧备份可缺失，导入时回落为当前偏好） */
+  preferences?: AppPreferences;
 }
 
 /** 本地数据备份文件结构 (v1) */

@@ -15,6 +15,7 @@ import {
   ClassFlowBackupData,
   Material,
   TimeSliceFilter,
+  AppPreferences,
 } from "@/types";
 import {
   initialUserProfile,
@@ -30,6 +31,7 @@ import { deleteFileBlob, clearAllFileBlobs } from "@/lib/fileStorage";
 import { isDDLMarkForAssignment, isLegacyDDLMarkForAssignment, linkLegacyDDLMarks } from "@/lib/calendarMark";
 import { createId } from "@/lib/utils";
 import { calculateGroupProjectProgress, formatLocalDate, normalizeGroupProject } from "@/lib/groupProject";
+import { DEFAULT_PREFERENCES, sanitizePreferences } from "@/lib/preferences";
 
 /**
  * 持久化白名单（localStorage，key 保持 classflow-storage-v2）：
@@ -46,6 +48,8 @@ interface PersistedAppState {
   groupProjects: GroupProject[];
   /** 任务列表时间筛选：用户偏好，保留并在缺失时回落 "all" */
   assignmentTimeSlice?: TimeSliceFilter;
+  /** 应用偏好：v2 旧数据可缺失，sanitize 逐字段补默认值 */
+  preferences?: AppPreferences;
 }
 
 /** 旧版（无显式 version）持久化数据：可能混入瞬时 UI 状态，迁移时仅取白名单字段 */
@@ -58,6 +62,7 @@ interface LegacyPersistedStateV0 {
   calendarMarks?: unknown;
   groupProjects?: unknown;
   assignmentTimeSlice?: unknown;
+  preferences?: unknown;
 }
 
 const TIME_SLICES: TimeSliceFilter[] = ["all", "overdue", "today", "3days", "7days", "completed"];
@@ -103,6 +108,8 @@ function sanitizePersistedState(persisted: unknown): PersistedAppState {
     assignmentTimeSlice: TIME_SLICES.includes(legacy.assignmentTimeSlice as TimeSliceFilter)
       ? (legacy.assignmentTimeSlice as TimeSliceFilter)
       : "all",
+    // v3：preferences 稳定偏好，缺失/部分/非法均逐字段回落默认值
+    preferences: sanitizePreferences(legacy.preferences),
   };
 }
 
@@ -113,6 +120,11 @@ interface AppState {
   /** 任务列表时间筛选（全局共享，跨页保留） */
   assignmentTimeSlice: TimeSliceFilter;
   setAssignmentTimeSlice: (slice: TimeSliceFilter) => void;
+
+  // App Preferences（稳定用户偏好，持久化）
+  preferences: AppPreferences;
+  updatePreferences: (patch: Partial<AppPreferences>) => void;
+
   semester: Semester;
   setSemester: (semester: Semester) => void;
   currentSemesterWeek: number;
@@ -150,8 +162,7 @@ interface AppState {
   // Domain Data State
   userProfile: UserProfile;
   courses: Course[];
-  schedules: CourseSchedule[];
-  assignments: Assignment[];
+  schedules: CourseSchedule[];  assignments: Assignment[];
   calendarMarks: CalendarMark[];
   groupProjects: GroupProject[];
 
@@ -241,6 +252,12 @@ export const useAppStore = create<AppState>()(
       setActiveTab: (tab) => set({ activeTab: tab }),
       assignmentTimeSlice: "all",
       setAssignmentTimeSlice: (slice) => set({ assignmentTimeSlice: slice }),
+      preferences: DEFAULT_PREFERENCES,
+      updatePreferences: (patch) =>
+        set((state) => ({
+          // immutable merge；patch 字段先经 sanitize 逐字段回落，防非法值入库
+          preferences: sanitizePreferences({ ...state.preferences, ...patch }),
+        })),
       semester: createDefaultSemester(),
       setSemester: (semester) =>
         set((state) => ({
@@ -319,6 +336,7 @@ export const useAppStore = create<AppState>()(
           semester: createDefaultSemester(),
           currentSemesterWeek: 1,
           assignmentTimeSlice: "all",
+          preferences: DEFAULT_PREFERENCES,
           selectedCourseId: null,
           selectedAssignmentId: null,
           selectedConflict: null,
@@ -341,6 +359,10 @@ export const useAppStore = create<AppState>()(
           calendarMarks: linkLegacyDDLMarks(data.assignments, data.calendarMarks),
           // 备份恢复同样归一 GroupProject（v1 备份 → v2 schema）
           groupProjects: data.groupProjects.map(normalizeGroupProject),
+          // preferences：旧备份（v1 data 无该字段）缺失时保留当前偏好，不做覆盖
+          preferences: data.preferences
+            ? sanitizePreferences(data.preferences)
+            : state.preferences,
           currentSemesterWeek: Math.min(
             Math.max(state.currentSemesterWeek, 1),
             data.semester.totalWeeks
@@ -801,7 +823,8 @@ export const useAppStore = create<AppState>()(
     {
       name: "classflow-storage-v2",
       // v1 → v2：GroupTask 从 assigneeName/assigneeAvatar 改为 assigneeId
-      version: 2,
+      // v2 → v3：新增 AppPreferences（缺失/部分/非法逐字段回落默认值）
+      version: 3,
       storage: createJSONStorage(() => localStorage),
       partialize: (state): PersistedAppState => ({
         userProfile: state.userProfile,
@@ -812,6 +835,7 @@ export const useAppStore = create<AppState>()(
         calendarMarks: state.calendarMarks,
         groupProjects: state.groupProjects,
         assignmentTimeSlice: state.assignmentTimeSlice,
+        preferences: state.preferences,
       }),
       migrate: (persistedState) => sanitizePersistedState(persistedState),
       // zustand 在存储为空时也会调用 merge（migratedState=undefined），

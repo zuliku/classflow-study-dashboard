@@ -94,7 +94,7 @@ test.describe("responsive navigation", () => {
     await nav.getByRole("button", { name: "更多" }).click();
     await expect(page.getByRole("menuitem", { name: "设置" })).toBeVisible();
     await page.getByRole("menuitem", { name: "设置" }).click();
-    await expect(page.getByRole("heading", { name: "系统设置" })).toBeVisible();
+    await expect(page.getByTestId("settings-view")).toBeVisible();
 
     // 回到总览
     await nav.getByRole("button", { name: "总览" }).click();
