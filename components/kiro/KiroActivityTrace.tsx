@@ -1,38 +1,37 @@
 "use client";
 
 import React, { useState } from "react";
-import { Check, Loader2, Circle, ChevronDown, BookOpenCheck } from "lucide-react";
+import { Check, Loader2, Circle, ChevronDown, PencilLine } from "lucide-react";
 import { useAppStore } from "@/store/useAppStore";
 import { KiroActivityStep } from "@/hooks/useKiroChat";
 import { cn } from "@/lib/utils";
 
 /**
- * Kiro Activity Trace（Task 2）：展示真实 Read Tool 调用（用户语义标签）。
- * mode="read"（Task 2）→ collapsed「✓ 读取 N 项 ClassFlow 信息」；
- * mode="action"（未来 Task 3 写操作）→「完成 N 项操作」。
- * 禁止展示 JSON / tool args / 内部工具名 / token 细节。
+ * Kiro Activity Trace（Task 3）：展示真实工具调用（用户语义标签）。
+ * 本轮只有 Read →「✓ 读取 N 项 ClassFlow 信息」；
+ * 存在 Write →「✓ 完成 N 个步骤 · 修改 M 项内容」。
+ * 禁止展示 JSON / tool args / 内部工具名。
  */
 export function KiroActivityTrace({
   steps,
   done,
-  mode = "read",
 }: {
   steps: KiroActivityStep[];
   done: boolean;
-  mode?: "read" | "action";
 }) {
   const [expanded, setExpanded] = useState(false);
   const contentDensity = useAppStore((s) => s.preferences.contentDensity);
   const compact = contentDensity === "compact";
 
+  const writeCount = steps.filter((s) => s.kind === "write").length;
   const doneCount = steps.filter((s) => s.status === "done").length;
   const workingCount = steps.filter((s) => s.status === "working").length;
   if (steps.length === 0) return null;
 
   const summary = done
-    ? mode === "read"
-      ? `✓ 读取 ${steps.length} 项 ClassFlow 信息`
-      : `✓ 完成 ${steps.length} 项操作`
+    ? writeCount > 0
+      ? `✓ 完成 ${steps.length} 个步骤 · 修改 ${writeCount} 项内容`
+      : `✓ 读取 ${steps.length} 项 ClassFlow 信息`
     : `● Kiro 正在处理 · ${doneCount + workingCount} / ${steps.length}`;
 
   return (
@@ -64,7 +63,7 @@ export function KiroActivityTrace({
       {expanded && (
         <div
           role="list"
-          aria-label="Kiro 读取记录"
+          aria-label="Kiro 工具记录"
           className="mt-1.5 w-full rounded-xl bg-[#F7F5F5] border border-line p-1.5 space-y-0.5 ux-fade"
         >
           {steps.map((s) => (
@@ -89,8 +88,8 @@ export function KiroActivityTrace({
                 <Circle className="w-3.5 h-3.5 text-danger shrink-0" />
               )}
               <span className="truncate">{s.label}</span>
-              {s.status === "error" && (
-                <BookOpenCheck className="w-3 h-3 text-sandrift shrink-0 ml-auto" aria-hidden="true" />
+              {s.kind === "write" && s.status !== "error" && (
+                <PencilLine className="w-3 h-3 text-sandrift shrink-0 ml-auto" aria-hidden="true" />
               )}
             </div>
           ))}

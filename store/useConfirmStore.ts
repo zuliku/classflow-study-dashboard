@@ -8,6 +8,8 @@ export interface ConfirmRequest {
   confirmLabel?: string;
   danger?: boolean;
   onConfirm: () => void;
+  /** 取消时回调（Esc / X / 取消按钮统一触发）；确认按钮不触发 */
+  onCancel?: () => void;
 }
 
 interface ConfirmState {

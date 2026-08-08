@@ -229,13 +229,15 @@ describe("API Key sessionStorage", () => {
 });
 
 describe("System Prompt", () => {
-  it("Task 2 prompt：具备只读工具能力；明确无写权限、不冒充已操作", () => {
+  it("Task 3 prompt：可读可写；只有 ok:true 才能声称成功；Markdown 格式指导", () => {
     expect(KIRO_SYSTEM_PROMPT).toContain("Kiro");
-    expect(KIRO_SYSTEM_PROMPT).toContain("只读工具查询用户的 ClassFlow 学业数据");
-    expect(KIRO_SYSTEM_PROMPT).toContain("不得依靠猜测");
-    expect(KIRO_SYSTEM_PROMPT).toContain("不得自行猜测 ID");
-    expect(KIRO_SYSTEM_PROMPT).toContain("没有任何修改 ClassFlow 数据的权限");
-    expect(KIRO_SYSTEM_PROMPT).toContain("明确说明当前阶段只能读取和分析");
+    expect(KIRO_SYSTEM_PROMPT).toContain("通过工具读取并修改用户的 ClassFlow 学业数据");
+    expect(KIRO_SYSTEM_PROMPT).toContain("不得猜测 ID");
+    expect(KIRO_SYSTEM_PROMPT).toContain("只有在写工具返回 ok:true 后，才能告诉用户操作已成功");
+    expect(KIRO_SYSTEM_PROMPT).toContain("写工具返回失败、冲突或用户取消时，不得声称修改成功");
+    expect(KIRO_SYSTEM_PROMPT).toContain("冲突检测结果");
+    expect(KIRO_SYSTEM_PROMPT).toContain("不要输出 ASCII 表格");
+    expect(KIRO_SYSTEM_PROMPT).toContain("不要透露内部工具名称");
     expect(KIRO_SYSTEM_PROMPT).not.toContain("尚未获得 ClassFlow 学业数据");
   });
 });

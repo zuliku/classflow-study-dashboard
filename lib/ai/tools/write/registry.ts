@@ -1,0 +1,112 @@
+import { tool } from "ai";
+import { KIRO_WRITE_TOOL_SCHEMAS } from "@/lib/ai/tools/write/schemas";
+
+/**
+ * Write Tool 唯一注册表（Server 提供 schema；Client 按同名执行）。
+ * Write Tools 没有 server execute：全部由 Browser Executor 执行。
+ * 高风险工具（delete_*）由 risk 策略在 Client 侧强制确认。
+ */
+export const KIRO_WRITE_TOOLS = {
+  create_assignment: tool({
+    description: "创建任务。DDL 为本地时间 YYYY-MM-DDTHH:mm；默认优先级/状态来自用户偏好。",
+    inputSchema: KIRO_WRITE_TOOL_SCHEMAS.create_assignment,
+  }),
+  update_assignment: tool({
+    description: "修改任务的标题、描述或标签。",
+    inputSchema: KIRO_WRITE_TOOL_SCHEMAS.update_assignment,
+  }),
+  set_assignment_ddl: tool({
+    description: "修改任务截止时间（本地时间 YYYY-MM-DDTHH:mm）。日历标记会同步更新。",
+    inputSchema: KIRO_WRITE_TOOL_SCHEMAS.set_assignment_ddl,
+  }),
+  set_assignment_priority: tool({
+    description: "修改任务优先级（紧急/高/中/低）。",
+    inputSchema: KIRO_WRITE_TOOL_SCHEMAS.set_assignment_priority,
+  }),
+  set_assignment_status: tool({
+    description: "修改任务状态（待完成/进行中/已提交/已完成）。",
+    inputSchema: KIRO_WRITE_TOOL_SCHEMAS.set_assignment_status,
+  }),
+  set_assignment_progress: tool({
+    description: "修改任务进度（0-100），状态自动同步。",
+    inputSchema: KIRO_WRITE_TOOL_SCHEMAS.set_assignment_progress,
+  }),
+  toggle_assignment_subtask: tool({
+    description: "切换任务子步骤的完成状态。",
+    inputSchema: KIRO_WRITE_TOOL_SCHEMAS.toggle_assignment_subtask,
+  }),
+  delete_assignment: tool({
+    description: "删除任务（高风险，需要用户确认）。",
+    inputSchema: KIRO_WRITE_TOOL_SCHEMAS.delete_assignment,
+  }),
+  create_schedule: tool({
+    description: "创建排课。若与现有课程时间冲突将拒绝写入。",
+    inputSchema: KIRO_WRITE_TOOL_SCHEMAS.create_schedule,
+  }),
+  move_schedule: tool({
+    description: "移动课程到新的星期与开始时间，保持原时长；冲突时拒绝。",
+    inputSchema: KIRO_WRITE_TOOL_SCHEMAS.move_schedule,
+  }),
+  resize_schedule: tool({
+    description: "调整课程结束时间（15 分钟吸附，最短 30 分钟，不晚于 21:00）。",
+    inputSchema: KIRO_WRITE_TOOL_SCHEMAS.resize_schedule,
+  }),
+  update_schedule: tool({
+    description: "修改排课普通信息（地点/周次/时间等）；时间变化会做冲突检查。",
+    inputSchema: KIRO_WRITE_TOOL_SCHEMAS.update_schedule,
+  }),
+  exclude_schedule_week: tool({
+    description: "排除某教学周（调课/停课），该周不再显示此课。",
+    inputSchema: KIRO_WRITE_TOOL_SCHEMAS.exclude_schedule_week,
+  }),
+  delete_schedule: tool({
+    description: "删除单个排课（高风险，需要用户确认）。",
+    inputSchema: KIRO_WRITE_TOOL_SCHEMAS.delete_schedule,
+  }),
+  create_course: tool({
+    description: "创建课程（基本信息；外观使用默认配色）。",
+    inputSchema: KIRO_WRITE_TOOL_SCHEMAS.create_course,
+  }),
+  update_course: tool({
+    description: "修改课程基本信息（名称/代码/教师/教室/学分/描述）。",
+    inputSchema: KIRO_WRITE_TOOL_SCHEMAS.update_course,
+  }),
+  create_group_project: tool({
+    description: "创建小组项目。",
+    inputSchema: KIRO_WRITE_TOOL_SCHEMAS.create_group_project,
+  }),
+  update_group_project: tool({
+    description: "修改小组项目标题或描述。",
+    inputSchema: KIRO_WRITE_TOOL_SCHEMAS.update_group_project,
+  }),
+  add_group_member: tool({
+    description: "向小组项目添加成员（不包含头像）。",
+    inputSchema: KIRO_WRITE_TOOL_SCHEMAS.add_group_member,
+  }),
+  update_group_member: tool({
+    description: "修改成员姓名/角色/专业；唯一负责人不能被降级。",
+    inputSchema: KIRO_WRITE_TOOL_SCHEMAS.update_group_member,
+  }),
+  create_group_task: tool({
+    description: "创建小组任务（DDL 为本地时间 YYYY-MM-DDTHH:mm:ss）。",
+    inputSchema: KIRO_WRITE_TOOL_SCHEMAS.create_group_task,
+  }),
+  update_group_task: tool({
+    description: "修改小组任务标题。",
+    inputSchema: KIRO_WRITE_TOOL_SCHEMAS.update_group_task,
+  }),
+  assign_group_task: tool({
+    description: "分配小组任务给项目内成员（null = 取消分配）。",
+    inputSchema: KIRO_WRITE_TOOL_SCHEMAS.assign_group_task,
+  }),
+  set_group_task_ddl: tool({
+    description: "修改小组任务截止时间（本地时间 YYYY-MM-DDTHH:mm:ss，不做时区转换）。",
+    inputSchema: KIRO_WRITE_TOOL_SCHEMAS.set_group_task_ddl,
+  }),
+  toggle_group_task: tool({
+    description: "切换小组任务完成状态。",
+    inputSchema: KIRO_WRITE_TOOL_SCHEMAS.toggle_group_task,
+  }),
+};
+
+export const KIRO_WRITE_TOOL_NAMES = Object.keys(KIRO_WRITE_TOOLS) as (keyof typeof KIRO_WRITE_TOOLS)[];

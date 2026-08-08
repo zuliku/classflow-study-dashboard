@@ -103,6 +103,7 @@ export function KiroWorkspace() {
             error={chat.error}
             onRetry={chat.retry}
             onOpenSettings={openKiroSettings}
+            onUndo={chat.consumeUndo}
           />
         )}
 

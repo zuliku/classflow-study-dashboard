@@ -3,14 +3,14 @@
 import React, { useEffect, useRef } from "react";
 import { KiroMessage, KiroUserMessage } from "@/components/kiro/KiroMessage";
 import { KiroActivityTrace } from "@/components/kiro/KiroActivityTrace";
+import { KiroActionCard, actionToCardProps } from "@/components/kiro/KiroActionCard";
 import { KiroChatMessageView, KiroActivity } from "@/hooks/useKiroChat";
 import { AIError, AI_ERROR_MESSAGES } from "@/lib/ai/errors";
 import { RotateCcw, Settings } from "lucide-react";
 
 /**
  * Conversation 布局：max-width 820px 居中，纵向文档流。
- * 内部滚动；新内容时仅在用户位于底部时自动跟随。
- * 真实 Read Tool 调用通过 KiroActivityTrace 展示（用户语义标签，不展示 JSON）。
+ * Assistant Message 分层：Markdown 回答 → Activity Trace → Action Result Cards（事实 UI）。
  */
 export function KiroConversation({
   messages,
@@ -18,12 +18,14 @@ export function KiroConversation({
   error,
   onRetry,
   onOpenSettings,
+  onUndo,
 }: {
   messages: KiroChatMessageView[];
   activity: KiroActivity;
   error: AIError | null;
   onRetry: () => void;
   onOpenSettings: () => void;
+  onUndo: (toolCallId: string) => void;
 }) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const stickToBottomRef = useRef(true);
@@ -53,14 +55,25 @@ export function KiroConversation({
           m.role === "user" ? (
             <KiroUserMessage key={m.id} content={m.content} />
           ) : (
-            <KiroMessage key={m.id} content={m.content} streaming={m.streaming} />
+            <KiroMessage key={m.id} content={m.content} streaming={m.streaming}>
+              {/* Action Result Cards：真实 ToolResult 事实 UI */}
+              {m.actions && m.actions.length > 0 && (
+                <div className="space-y-2.5 pt-1">
+                  {m.actions.map((a) => (
+                    <KiroActionCard
+                      key={a.toolCallId}
+                      {...actionToCardProps(a.action)}
+                      onUndo={a.action.canUndo ? () => onUndo(a.toolCallId) : undefined}
+                    />
+                  ))}
+                </div>
+              )}
+            </KiroMessage>
           )
         )}
 
-        {/* 真实 Read Tool 活动轨迹（仅展示查看了哪些 ClassFlow 数据） */}
-        {activity.visible && (
-          <KiroActivityTrace steps={activity.steps} done={activity.done} mode="read" />
-        )}
+        {/* 真实工具活动轨迹（只展示语义标签） */}
+        {activity.visible && <KiroActivityTrace steps={activity.steps} done={activity.done} />}
 
         {error && (
           <div

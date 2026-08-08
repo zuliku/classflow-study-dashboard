@@ -6,6 +6,7 @@ import { useAppStore } from "@/store/useAppStore";
 import { useToastStore } from "@/store/useToastStore";
 import { WEEK_RANGE_PRESETS, isValidTimeRange } from "@/lib/schedule";
 import { findScheduleConflicts } from "@/lib/conflicts";
+import { COURSE_COLOR_OPTIONS } from "@/lib/courseAppearance";
 import { usePresence } from "@/lib/usePresence";
 import { useRestoreFocus } from "@/lib/useRestoreFocus";
 import { cn } from "@/lib/utils";
@@ -13,13 +14,7 @@ import { pushOverlay, popOverlay, isTopmostOverlay } from "@/lib/overlayStack";
 
 const OVERLAY_ID = "add-course-modal";
 
-const COLOR_OPTIONS = [
-  { name: "薄荷灰绿", bgHex: "#E3E6E0", borderHex: "#D0D5CC", textHex: "#313032" },
-  { name: "象牙浅米", bgHex: "#F0EBE1", borderHex: "#CDB9AB", textHex: "#313032" },
-  { name: "灰米暖调", bgHex: "#CCCBC4", borderHex: "#B8B7B0", textHex: "#313032" },
-  { name: "石褐沙土", bgHex: "#CDB9AB", borderHex: "#A48F82", textHex: "#313032" },
-  { name: "深砂棕", bgHex: "#A48F82", borderHex: "#8D786B", textHex: "#FFFFFF" },
-];
+const COLOR_OPTIONS = COURSE_COLOR_OPTIONS;
 
 interface SlotInput {
   dayOfWeek: number;

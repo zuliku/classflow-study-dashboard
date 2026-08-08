@@ -200,3 +200,178 @@ test("Kiro Read Tool：tool call → 客户端执行 → 自动继续 → 最终
   await expect(trace).toContainText("查看近期 DDL");
   await expect(trace.getByText("get_upcoming_assignments")).toHaveCount(0);
 });
+
+test("Kiro Write Tool：search → set_assignment_ddl → Action Card → 持久化 → Undo", async ({ page }) => {
+  // Seed：统计学作业 DDL 今天 23:59
+  const pad2 = (n: number) => String(n).padStart(2, "0");
+  const local = (d: Date) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+  const now = new Date();
+  const dow = now.getDay() === 0 ? 7 : now.getDay();
+  const monday = new Date(now);
+  monday.setDate(now.getDate() - (dow - 1));
+  const tomorrow = new Date(now);
+  tomorrow.setDate(now.getDate() + 1);
+  const tomorrowStr = local(tomorrow);
+  const todayStr = local(now);
+
+  await page.addInitScript(
+    ({ today, monday, tomorrowStr, settings, key }) => {
+      if (!localStorage.getItem("classflow-storage-v2")) {
+        const state = {
+        userProfile: { name: "测试", avatarUrl: "", college: "", grade: "", studentId: "", completedCredits: 0, totalCredits: 0 },
+        semester: { id: "sem", name: "测试学期", startDate: monday, totalWeeks: 16 },
+        courses: [{ id: "c1", name: "统计学", code: "STAT101", teacher: "李老师", classroom: "教101", credit: 3, bgHex: "#E7E3D8", borderHex: "#D5CDBE", textHex: "#313032", description: "", materials: [] }],
+        schedules: [],
+        assignments: [{ id: "a1", courseId: "c1", title: "统计学作业", description: "", ddl: `${today}T23:59:00`, priority: "medium", status: "todo", progress: 0, tags: [] }],
+        calendarMarks: [{ id: "cm1", date: today, type: "ddl", title: "统计学作业", sourceId: "a1" }],
+        groupProjects: [],
+        assignmentTimeSlice: "all", lastWorkspaceTab: "overview",
+        preferences: { showWeekends: true, ddlWarningDays: 7, defaultDDLTime: "23:59", enableScheduleDirectManipulation: true, enableDDLDirectManipulation: true, motionPreference: "system", startupView: "overview", defaultTaskPriority: "medium", defaultTaskStatus: "todo", enableSingleKeyShortcuts: true, contentDensity: "comfortable" },
+      };
+      localStorage.setItem("classflow-storage-v2", JSON.stringify({ version: 3, state }));
+      }
+      localStorage.setItem("classflow-ai-settings-v1", JSON.stringify({ version: 0, state: settings }));
+      sessionStorage.setItem("classflow-ai-key:deepseek", key);
+      (window as any).__tomorrowStr = tomorrowStr;
+    },
+    { today: todayStr, monday: local(monday), tomorrowStr, settings: AI_SETTINGS, key: "sk-test-key" }
+  );
+
+  let requests = 0;
+  await page.route("**/api/ai/chat", async (route) => {
+    requests++;
+    const body = route.request().postDataJSON() as { messages: { role: string; parts?: { type: string; state?: string; input?: unknown; output?: { ok: boolean; data?: { id?: string; items?: { id: string }[] } } }[] }[] };
+    const toolParts = (body?.messages ?? []).filter((m) => m.role === "assistant").flatMap((m) => m.parts ?? []).filter((p) => p.type.startsWith("tool-") && p.state === "output-available");
+
+    // 第 1 轮：search_assignments
+    if (toolParts.length === 0) {
+      const chunks = [
+        JSON.stringify({ type: "start", messageId: "mock-msg-1" }),
+        JSON.stringify({ type: "start-step" }),
+        JSON.stringify({ type: "tool-input-start", toolCallId: "call_1", toolName: "search_assignments" }),
+        JSON.stringify({ type: "tool-input-delta", toolCallId: "call_1", inputTextDelta: '{"query":"统计学"}' }),
+        JSON.stringify({ type: "tool-input-available", toolCallId: "call_1", toolName: "search_assignments", input: { query: "统计学" } }),
+        JSON.stringify({ type: "finish-step" }),
+        JSON.stringify({ type: "finish", finishReason: "tool-calls" }),
+      ];
+      await route.fulfill({ status: 200, contentType: "text/event-stream", body: sse(chunks.join("\n")) });
+      return;
+    }
+    // 第 2 轮：从真实 tool output 中取 assignmentId → set_assignment_ddl
+    if (toolParts.length === 1) {
+      const searchOut = toolParts[0].output as { data?: { items?: { id: string }[] } };
+      const assignmentId = searchOut?.data?.items?.[0]?.id ?? "a1";
+      const chunks = [
+        JSON.stringify({ type: "start", messageId: "mock-msg-1" }),
+        JSON.stringify({ type: "start-step" }),
+        JSON.stringify({ type: "tool-input-start", toolCallId: "call_2", toolName: "set_assignment_ddl" }),
+        JSON.stringify({ type: "tool-input-delta", toolCallId: "call_2", inputTextDelta: JSON.stringify({ assignmentId, ddl: `${tomorrowStr}T22:00:00` }) }),
+        JSON.stringify({ type: "tool-input-available", toolCallId: "call_2", toolName: "set_assignment_ddl", input: { assignmentId, ddl: `${tomorrowStr}T22:00:00` } }),
+        JSON.stringify({ type: "finish-step" }),
+        JSON.stringify({ type: "finish", finishReason: "tool-calls" }),
+      ];
+      await route.fulfill({ status: 200, contentType: "text/event-stream", body: sse(chunks.join("\n")) });
+      return;
+    }
+    // 第 3 轮：最终回答
+    const chunks = [
+      JSON.stringify({ type: "start", messageId: "mock-msg-1" }),
+      JSON.stringify({ type: "start-step" }),
+      JSON.stringify({ type: "text-start", id: "txt3" }),
+      JSON.stringify({ type: "text-delta", id: "txt3", delta: "已调整统计学作业的截止时间到明天 22:00。" }),
+      JSON.stringify({ type: "text-end", id: "txt3" }),
+      JSON.stringify({ type: "finish-step" }),
+      JSON.stringify({ type: "finish", finishReason: "stop" }),
+    ];
+    await route.fulfill({ status: 200, contentType: "text/event-stream", body: sse(chunks.join("\n")) });
+  });
+
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/");
+  await page.locator("aside").first().getByRole("button", { name: "Kiro" }).click();
+  const composer = page.getByTestId("kiro-composer");
+  await composer.getByLabel("Ask Kiro").fill("把统计学作业改到明天晚上十点");
+  await composer.getByLabel("发送").click();
+
+  // 最终回答 + Action Card
+  await expect(page.getByTestId("kiro-message").last()).toContainText("已调整统计学作业", { timeout: 15000 });
+  const card = page.getByTestId("kiro-action-card");
+  await expect(card).toBeVisible();
+  await expect(card).toContainText("已调整任务");
+  await expect(card).toContainText("撤销");
+  expect(requests).toBe(3);
+
+  // Store 真实改变：DDL + CalendarMark 同步（localStorage 即持久化数据库）
+  const stored = await page.evaluate(() => {
+    const raw = localStorage.getItem("classflow-storage-v2")!;
+    const s = JSON.parse(raw).state;
+    return { ddl: s.assignments[0].ddl, markDate: s.calendarMarks[0].date };
+  });
+  expect(stored.ddl).toBe(`${tomorrowStr}T22:00:00`);
+  expect(stored.markDate).toBe(tomorrowStr);
+
+  // Undo 恢复原 DDL（Card 撤销）
+  await card.getByRole("button", { name: "撤销" }).click();
+  await page.waitForTimeout(400);
+  const undone = await page.evaluate(() => {
+    const s = JSON.parse(localStorage.getItem("classflow-storage-v2")!).state;
+    return { ddl: s.assignments[0].ddl, markDate: s.calendarMarks[0].date };
+  });
+  expect(undone.ddl).toBe(`${todayStr}T23:59:00`);
+  expect(undone.markDate).toBe(todayStr);
+
+  // 刷新后仍保持（写入与撤销都真实持久化）
+  await page.reload();
+  await page.waitForTimeout(1200);
+  const afterReload = await page.evaluate(() => {
+    const s = JSON.parse(localStorage.getItem("classflow-storage-v2")!).state;
+    return s.assignments[0].ddl;
+  });
+  expect(afterReload).toBe(`${todayStr}T23:59:00`);
+});
+
+test("Kiro Markdown：heading / table / strong / list 真实渲染，无原始符号", async ({ page }) => {
+  await page.route("**/api/ai/chat", async (route) => {
+    const md = "## 最近 DDL\n\n| 日期 | 任务 | 课程 |\n| --- | --- | --- |\n| 8 月 9 日 | 高数习题 | 高等数学 |\n\n- **高优先级**\n- 尽快处理";
+    const chunks = [
+      JSON.stringify({ type: "start", messageId: "mock-md-1" }),
+      JSON.stringify({ type: "start-step" }),
+      JSON.stringify({ type: "text-start", id: "md-text" }),
+      JSON.stringify({ type: "text-delta", id: "md-text", delta: md }),
+      JSON.stringify({ type: "text-end", id: "md-text" }),
+      JSON.stringify({ type: "finish-step" }),
+      JSON.stringify({ type: "finish", finishReason: "stop" }),
+    ];
+    await route.fulfill({ status: 200, contentType: "text/event-stream", body: sse(chunks.join("\n")) });
+  });
+
+  await page.addInitScript(({ settings, key }) => {
+    localStorage.setItem("classflow-ai-settings-v1", JSON.stringify({ version: 0, state: settings }));
+    sessionStorage.setItem("classflow-ai-key:deepseek", key);
+  }, { settings: AI_SETTINGS, key: "sk-test-key" });
+
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/");
+  await page.locator("aside").first().getByRole("button", { name: "Kiro" }).click();
+  const composer = page.getByTestId("kiro-composer");
+  await composer.getByLabel("Ask Kiro").fill("查看最近 DDL");
+  await composer.getByLabel("发送").click();
+
+  const msg = page.getByTestId("kiro-message").last();
+  await expect(msg.getByRole("heading", { level: 2 })).toHaveText("最近 DDL", { timeout: 10000 });
+  // 真实 table（含表头与单元格）
+  const table = msg.locator("table");
+  await expect(table).toBeVisible();
+  await expect(table.locator("th")).toHaveText(["日期", "任务", "课程"]);
+  await expect(table.locator("td").first()).toHaveText("8 月 9 日");
+  // strong + list
+  await expect(msg.locator("strong")).toHaveText("高优先级");
+  await expect(msg.locator("li")).toHaveCount(2);
+  // 不显示原始 Markdown 符号
+  await expect(msg.getByText("| --- |")).toHaveCount(0);
+  await expect(msg.getByText("**")).toHaveCount(0);
+  await expect(msg.getByText("## 最近 DDL")).toHaveCount(0);
+  // 页面无横向溢出（长表格内部滚动）
+  const overflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1);
+  expect(overflow).toBe(false);
+});

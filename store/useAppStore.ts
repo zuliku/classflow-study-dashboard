@@ -129,7 +129,7 @@ function sanitizePersistedState(persisted: unknown): PersistedAppState {
   };
 }
 
-interface AppState {
+export interface AppState {
   // Navigation & UI State
   activeTab: NavTab;
   setActiveTab: (tab: NavTab) => void;
@@ -201,13 +201,15 @@ interface AppState {
   restoreAppData: (data: ClassFlowBackupData) => void;
 
   // Course & Schedule Actions
+  /** 创建课程（含排课），返回新课程 id */
   addCourseWithSchedule: (
     course: Omit<Course, "id" | "materials">,
     scheduleSlots: Omit<CourseSchedule, "id" | "courseId">[]
-  ) => void;
+  ) => string;
   updateCourse: (course: Course) => void;
   deleteCourse: (courseId: string) => void;
-  addScheduleSlot: (schedule: Omit<CourseSchedule, "id">) => void;
+  /** 创建单个排课，返回新排课 id */
+  addScheduleSlot: (schedule: Omit<CourseSchedule, "id">) => string;
   updateSchedule: (schedule: CourseSchedule) => void;
   deleteSchedule: (scheduleId: string) => CourseSchedule | null;
   /** 撤销删除：恢复原 Schedule（保留原 ID） */
@@ -229,7 +231,8 @@ interface AppState {
   restoreCourseMaterial: (courseId: string, material: Material) => void;
 
   // Assignment Actions
-  addAssignment: (assignment: Omit<Assignment, "id">) => void;
+  /** 创建任务，返回新任务 id */
+  addAssignment: (assignment: Omit<Assignment, "id">) => string;
   updateAssignment: (updatedAssignment: Assignment) => void;
   updateAssignmentStatus: (
     id: string,
@@ -257,7 +260,7 @@ interface AppState {
   addGroupMember: (
     projectId: string,
     member: { name: string; role?: GroupMember["role"]; major?: string; avatarUrl?: string }
-  ) => void;
+  ) => string;
   updateGroupMember: (projectId: string, member: GroupMember) => void;
   /** 删除成员：最后一个 leader 会被阻止；被删成员的任务变为未分配 */
   deleteGroupMember: (
@@ -267,7 +270,7 @@ interface AppState {
   addGroupTask: (
     projectId: string,
     task: { title: string; assigneeId?: string; ddl: string }
-  ) => void;
+  ) => string;
   updateGroupTask: (projectId: string, task: GroupTask) => void;
   deleteGroupTask: (projectId: string, taskId: string) => void;
   toggleGroupTask: (projectId: string, taskId: string) => void;
@@ -456,6 +459,7 @@ export const useAppStore = create<AppState>()(
           courses: [...state.courses, newCourse],
           schedules: [...state.schedules, ...newSchedules],
         }));
+        return courseId;
       },
 
       updateCourse: (updatedCourse) =>
@@ -502,6 +506,7 @@ export const useAppStore = create<AppState>()(
           id: createId("s"),
         };
         set((state) => ({ schedules: [...state.schedules, newSchedule] }));
+        return newSchedule.id;
       },
 
       updateSchedule: (updatedSchedule) =>
@@ -609,6 +614,7 @@ export const useAppStore = create<AppState>()(
           assignments: [newAssignment, ...state.assignments],
           calendarMarks: [...state.calendarMarks, newMark],
         }));
+        return newId;
       },
 
       updateAssignment: (updatedAssignment) =>
@@ -780,7 +786,8 @@ export const useAppStore = create<AppState>()(
           groupProjects: state.groupProjects.filter((p) => p.id !== projectId),
         })),
 
-      addGroupMember: (projectId, member) =>
+      addGroupMember: (projectId, member) => {
+        const newMemberId = createId("gm");
         set((state) => ({
           groupProjects: state.groupProjects.map((p) =>
             p.id === projectId
@@ -789,7 +796,7 @@ export const useAppStore = create<AppState>()(
                   members: [
                     ...p.members,
                     {
-                      id: createId("gm"),
+                      id: newMemberId,
                       name: member.name,
                       role: member.role ?? "member",
                       major: member.major,
@@ -800,7 +807,9 @@ export const useAppStore = create<AppState>()(
                 }
               : p
           ),
-        })),
+        }));
+        return newMemberId;
+      },
 
       updateGroupMember: (projectId, member) =>
         set((state) => ({
@@ -842,14 +851,15 @@ export const useAppStore = create<AppState>()(
         return { ok: true };
       },
 
-      addGroupTask: (projectId, task) =>
+      addGroupTask: (projectId, task) => {
+        const newTaskId = createId("gt");
         set((state) => ({
           groupProjects: state.groupProjects.map((p) => {
             if (p.id !== projectId) return p;
             const tasks: GroupTask[] = [
               ...p.tasks,
               {
-                id: createId("gt"),
+                id: newTaskId,
                 title: task.title,
                 assigneeId: task.assigneeId,
                 ddl: task.ddl,
@@ -858,7 +868,9 @@ export const useAppStore = create<AppState>()(
             ];
             return { ...p, tasks, progress: calculateGroupProjectProgress(tasks), updatedAt: formatLocalDate() };
           }),
-        })),
+        }));
+        return newTaskId;
+      },
 
       updateGroupTask: (projectId, task) =>
         set((state) => ({

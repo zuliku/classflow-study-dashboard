@@ -10,7 +10,7 @@ import { pushOverlay, popOverlay, isTopmostOverlay } from "@/lib/overlayStack";
 
 const OVERLAY_ID = "confirm-dialog";
 
-/** 统一危险操作确认对话框（仅用于删除课程、重置数据等高危操作） */
+/** 统一危险操作确认对话框（删除课程、重置数据、Kiro 高风险工具等） */
 export function ConfirmDialog() {
   const { request, close } = useConfirmStore();
   const { mounted, visible } = usePresence(!!request, 220);
@@ -20,7 +20,7 @@ export function ConfirmDialog() {
     if (!mounted) return;
     pushOverlay(OVERLAY_ID, 60);
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && isTopmostOverlay(OVERLAY_ID)) close();
+      if (e.key === "Escape" && isTopmostOverlay(OVERLAY_ID)) handleCancel();
     };
     window.addEventListener("keydown", onKey);
     return () => {
@@ -28,9 +28,16 @@ export function ConfirmDialog() {
       window.removeEventListener("keydown", onKey);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mounted]);
+  }, [mounted, request]);
 
   if (!mounted || !request) return null;
+
+  /** Esc / X / 取消按钮统一走 onCancel（确认按钮不触发） */
+  const handleCancel = () => {
+    const fn = request.onCancel;
+    close();
+    fn?.();
+  };
 
   const handleConfirm = () => {
     const fn = request.onConfirm;
@@ -64,7 +71,7 @@ export function ConfirmDialog() {
               <h3 className="text-sm font-bold text-charcoal">{request.title}</h3>
             </div>
             <button
-              onClick={close}
+              onClick={handleCancel}
               className="p-1 rounded-lg text-sandrift hover:bg-alabaster hover:text-charcoal transition-colors"
               aria-label="关闭"
             >
@@ -78,7 +85,7 @@ export function ConfirmDialog() {
 
           <div className="flex justify-end space-x-2 pt-2 border-t border-[#F0EBE1]">
             <button
-              onClick={close}
+              onClick={handleCancel}
               className="px-4 py-2 text-xs font-medium text-satin-grey bg-alabaster border border-line rounded-xl hover:bg-alba transition-colors"
             >
               取消

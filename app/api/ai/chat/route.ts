@@ -9,7 +9,7 @@ import {
 } from "ai";
 import { AI, KIRO_SYSTEM_PROMPT } from "@/lib/ai/config";
 import { getProviderConfig } from "@/lib/ai/providers/registry";
-import { KIRO_READ_TOOLS } from "@/lib/ai/tools/read/registry";
+import { KIRO_TOOLS } from "@/lib/ai/tools";
 import { normalizeAIError, AIError, AI_ERROR_MESSAGES } from "@/lib/ai/errors";
 import { createChatProvider, validateAIChatBody, createTimeoutController } from "@/lib/ai/server";
 
@@ -101,7 +101,7 @@ export async function POST(req: NextRequest) {
       model: provider(parsed.model),
       messages: modelMessages,
       system: systemMessage,
-      tools: KIRO_READ_TOOLS,
+      tools: KIRO_TOOLS,
       maxOutputTokens: AI.CHAT_MAX_OUTPUT_TOKENS,
       abortSignal: signal,
     });
