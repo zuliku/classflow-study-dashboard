@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
 import {
   ChevronRight,
+  ChevronLeft,
   Plus,
   AlertTriangle,
   CheckCircle2,
@@ -23,6 +24,7 @@ import { isToday, differenceInDays } from "date-fns";
 import { parseLocalDDL, getLocalDDLDate } from "@/lib/ddl";
 import { createAssignmentActions } from "@/lib/assignmentActions";
 import { getAssignmentContextCommands } from "@/lib/commands";
+import { paginate } from "@/lib/pagination";
 import {
   toggleSelection,
   rangeSelection,
@@ -43,6 +45,9 @@ const PRIORITY_OPTIONS: { value: Priority; label: string }[] = [
   { value: "medium", label: "中" },
   { value: "low", label: "低" },
 ];
+
+/** compact 模式每页任务数（超出后分页，不内部滚动） */
+const COMPACT_PAGE_SIZE = 5;
 
 export function AssignmentTable({ mode = "compact" }: AssignmentTableProps) {
   const isWorkspace = mode === "workspace";
@@ -104,6 +109,18 @@ export function AssignmentTable({ mode = "compact" }: AssignmentTableProps) {
     setHighlightedAssignmentId(sanitizeHighlight(highlightedAssignmentId, filteredIds));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filteredIdsKey]);
+
+  // ---- Compact 分页（纯展示状态，不写入 store） ----
+  // workspace 模式保持完整列表（键盘导航/多选语义不截断）
+  const [compactPage, setCompactPage] = useState(1);
+  const compactPaged = useMemo(() => {
+    if (isWorkspace) return null;
+    return paginate(filteredAssignments, compactPage, COMPACT_PAGE_SIZE);
+  }, [isWorkspace, filteredAssignments, compactPage]);
+  // 渲染用 clamp 后的安全页号（数据变化导致总页数减少时自动回退，绝不出现 第 2 / 1 页）
+  const pagedAssignments = compactPaged?.items ?? filteredAssignments;
+  const compactTotalPages = compactPaged?.totalPages ?? 1;
+  const compactSafePage = compactPaged?.currentPage ?? 1;
 
   // 桌面（Peek 仅 >=1024px）
   const [desktop, setDesktop] = useState(false);
@@ -332,7 +349,10 @@ export function AssignmentTable({ mode = "compact" }: AssignmentTableProps) {
             <BookOpen className="w-3.5 h-3.5 text-[#A48F82]" />
             <select
               value={courseFilter}
-              onChange={(e) => setCourseFilter(e.target.value)}
+              onChange={(e) => {
+                setCourseFilter(e.target.value);
+                if (!isWorkspace) setCompactPage(1); // 筛选变化回第一页
+              }}
               className="bg-transparent text-charcoal text-xs font-semibold focus:outline-none cursor-pointer"
             >
               <option value="all">全部课程 ({assignments.length})</option>
@@ -357,7 +377,10 @@ export function AssignmentTable({ mode = "compact" }: AssignmentTableProps) {
               return (
                 <button
                   key={slice.id}
-                  onClick={() => setAssignmentTimeSlice(slice.id as TimeSliceFilter)}
+                  onClick={() => {
+                    setAssignmentTimeSlice(slice.id as TimeSliceFilter);
+                    if (!isWorkspace) setCompactPage(1); // 筛选变化回第一页
+                  }}
                   className={`px-2.5 py-0.5 rounded-lg transition-colors duration-[var(--motion-fast)] ease-[var(--ease-standard)] ${
                     isActive
                       ? "bg-white text-charcoal font-bold shadow-subtle"
@@ -372,23 +395,24 @@ export function AssignmentTable({ mode = "compact" }: AssignmentTableProps) {
         </div>
       </div>
 
-      {/* Task List（workspace：roving focus 容器） */}
+      {/* Task List：compact = 固定行数 + 分页（禁止内部滚动）；workspace = 完整滚动工作区 */}
       <div
         data-testid="assignment-list"
         tabIndex={isWorkspace ? 0 : undefined}
         onKeyDown={isWorkspace ? handleListKeyDown : undefined}
         className={cn(
-          "divide-y divide-line-soft mt-1 flex-1 overflow-y-auto max-h-[380px] space-y-1",
-          isWorkspace && "outline-none rounded-xl focus-visible:ring-2 focus-visible:ring-line-strong"
+          "divide-y divide-line-soft mt-1 flex-1 space-y-1",
+          isWorkspace &&
+            "overflow-y-auto max-h-[380px] outline-none rounded-xl focus-visible:ring-2 focus-visible:ring-line-strong"
         )}
       >
-        {filteredAssignments.length === 0 ? (
+        {pagedAssignments.length === 0 ? (
           <div className="py-10 text-center text-xs text-sandrift space-y-1">
             <CheckCircle2 className="w-8 h-8 mx-auto text-success" />
             <p>该筛选条件下暂无任务</p>
           </div>
         ) : (
-          filteredAssignments.map((task) => {
+          (isWorkspace ? filteredAssignments : pagedAssignments).map((task) => {
             const course = courses.find((c) => c.id === task.courseId);
             const priorityMeta = getPriorityMeta(task.priority);
             const formattedDate = getLocalDDLDate(task.ddl);
@@ -535,20 +559,50 @@ export function AssignmentTable({ mode = "compact" }: AssignmentTableProps) {
         )}
       </div>
 
-      {/* Footer */}
-      <div className="pt-2 border-t border-[#F0EBE1] flex justify-between items-center text-xs">
-        <span className="text-[11px] text-sandrift">
-          {isWorkspace
-            ? "J/K 移动 · Space 预览 · X 选择 · Enter 打开 · 右键更多"
-            : "点击任务查看详情与子任务"}
-        </span>
-        {!isWorkspace && (
-          <button
-            onClick={() => setActiveTab("assignments")}
-            className="font-bold text-charcoal hover:underline"
-          >
-            查看全部
-          </button>
+      {/* Footer：compact = 计数 + 分页 + 进入工作区；workspace = 键盘提示 */}
+      <div className="pt-2 border-t border-[#F0EBE1] flex justify-between items-center text-xs shrink-0">
+        {isWorkspace ? (
+          <>
+            <span className="text-[11px] text-sandrift">
+              J/K 移动 · Space 预览 · X 选择 · Enter 打开 · 右键更多
+            </span>
+            <span />
+          </>
+        ) : (
+          <>
+            <span className="text-[11px] text-sandrift">
+              共 {compactPaged?.totalItems ?? filteredAssignments.length} 项任务
+            </span>
+            {compactTotalPages > 1 && (
+              <span className="flex items-center gap-1.5">
+                <button
+                  onClick={() => setCompactPage(compactSafePage - 1)}
+                  disabled={compactSafePage <= 1}
+                  aria-label="上一页"
+                  className="p-1 rounded-lg text-sandrift hover:bg-alabaster hover:text-charcoal transition-colors disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-sandrift"
+                >
+                  <ChevronLeft className="w-3.5 h-3.5" />
+                </button>
+                <span className="text-[11px] font-mono text-satin-grey">
+                  {compactSafePage} / {compactTotalPages}
+                </span>
+                <button
+                  onClick={() => setCompactPage(compactSafePage + 1)}
+                  disabled={compactSafePage >= compactTotalPages}
+                  aria-label="下一页"
+                  className="p-1 rounded-lg text-sandrift hover:bg-alabaster hover:text-charcoal transition-colors disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-sandrift"
+                >
+                  <ChevronRight className="w-3.5 h-3.5" />
+                </button>
+              </span>
+            )}
+            <button
+              onClick={() => setActiveTab("assignments")}
+              className="font-bold text-charcoal hover:underline"
+            >
+              任务工作区 →
+            </button>
+          </>
         )}
       </div>
 

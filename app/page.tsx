@@ -132,10 +132,14 @@ export default function Home() {
               </div>
 
               {/* Row 3: Bottom Study Load Chart (1/2) + Assignments Table (1/2) */}
-              {/* Tablet 起 2 列，Mobile 单列 */}
+              {/* md+ 统一 Dashboard 高度（左右卡片对齐、任务数量不影响行高）；mobile 自然高度单列 */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-5 items-stretch">
-                <StudyLoadChart />
-                <AssignmentTable mode="compact" />
+                <div className="md:h-[460px]" data-testid="overview-load-wrap">
+                  <StudyLoadChart />
+                </div>
+                <div className="md:h-[460px]" data-testid="overview-tasks-wrap">
+                  <AssignmentTable mode="compact" />
+                </div>
               </div>
             </>
           )}
