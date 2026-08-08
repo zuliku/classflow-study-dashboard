@@ -1,31 +1,42 @@
 "use client";
 
-import React from "react";
-import { Calendar, ClipboardList, Clock, CheckCircle2 } from "lucide-react";
+import React, { useMemo } from "react";
+import { Calendar, ClipboardList, Clock, CheckCircle2, ArrowUpRight } from "lucide-react";
 import { useAppStore } from "@/store/useAppStore";
 import { getSemesterWeek } from "@/lib/semester";
 import { parseLocalDDL } from "@/lib/ddl";
-import { isScheduleActive } from "@/lib/schedule";
-import { isSameWeek } from "date-fns";
-import { cardKeyHandler } from "@/lib/utils";
+import { isScheduleActive, timeToMinutes } from "@/lib/schedule";
+import { isSameWeek, differenceInDays, format } from "date-fns";
+import { zhCN } from "date-fns/locale";
+import { cardKeyHandler, cn } from "@/lib/utils";
 
-/** 指标值变化：仅 2px 上移淡入（不做 count-up 数字滚动） */
+/** 指标值变化：仅 2px 上移淡入（不做 count-up 数字滚动）；semibold 为焦点而非 extrabold */
 function AnimatedMetric({ value }: { value: string }) {
   return (
     <div
       key={value}
-      className="ux-metric text-xl font-extrabold text-charcoal tracking-tight"
+      className="ux-metric text-[26px] font-semibold text-charcoal tracking-tight leading-none"
     >
       {value}
     </div>
   );
 }
 
+/**
+ * Overview 顶部 Stat Cards：克制型信息密度卡片。
+ * - 统一 neutral surface + border-line-soft，hover 仅加深边框，无浮起/阴影
+ * - 数据语义与业务模块一致：
+ *   临近 DDL = 与 UpcomingDDL 同源（未完成 / 未逾期 / 在 ddlWarningDays 窗口内）
+ *   本周任务 = 本周 DDL 截止的任务，副信息给待完成数
+ *   已完成 = 总任务完成率
+ */
 export function StatCards() {
   const {
     schedules,
     assignments,
+    courses,
     semester,
+    preferences,
     setActiveTab,
     setAssignmentTimeSlice,
   } = useAppStore();
@@ -39,31 +50,69 @@ export function StatCards() {
   const isInSemester =
     realCurrentWeek >= 1 && realCurrentWeek <= semester.totalWeeks;
 
-  // 1. Today's Courses Count
-  const todaySchedules = isInSemester
-    ? schedules.filter(
-        (s) => s.dayOfWeek === currentDayOfWeek && isScheduleActive(s, realCurrentWeek)
-      )
-    : [];
-  const todayCourseCount = todaySchedules.length;
+  // ---- 今日课程：数量 + 下一节课（startTime + 课程名） ----
+  const todaySchedules = useMemo(
+    () =>
+      isInSemester
+        ? schedules
+            .filter(
+              (s) =>
+                s.dayOfWeek === currentDayOfWeek && isScheduleActive(s, realCurrentWeek)
+            )
+            .sort((a, b) => (timeToMinutes(a.startTime) ?? 0) - (timeToMinutes(b.startTime) ?? 0))
+        : [],
+    [schedules, isInSemester, realCurrentWeek, currentDayOfWeek]
+  );
+  const nowMinutes = today.getHours() * 60 + today.getMinutes();
+  const nextClass = todaySchedules.find(
+    (s) => (timeToMinutes(s.endTime) ?? 0) > nowMinutes
+  );
+  const nextCourse = nextClass ? courses.find((c) => c.id === nextClass.courseId) : null;
 
-  // 2. This Week Assignments Count (DDL 按本地时间语义)
-  const thisWeekAssignments = assignments.filter((a) => {
-    const ddl = parseLocalDDL(a.ddl);
-    if (!ddl) return false;
-    return isSameWeek(ddl, today, { weekStartsOn: 1 });
-  });
-  const thisWeekAssignmentsCount = thisWeekAssignments.length;
+  // ---- 本周任务：本周 DDL 截止 + 待完成数 ----
+  const thisWeekAssignments = useMemo(
+    () =>
+      assignments.filter((a) => {
+        const ddl = parseLocalDDL(a.ddl);
+        if (!ddl) return false;
+        return isSameWeek(ddl, today, { weekStartsOn: 1 });
+      }),
+    [assignments, today]
+  );
+  const thisWeekPendingCount = thisWeekAssignments.filter(
+    (a) => a.status !== "completed"
+  ).length;
 
-  // 3. Urgent / High Priority Upcoming DDLs Count
-  const urgentDDLs = assignments.filter((a) => {
-    if (a.status === "completed") return false;
-    return a.priority === "urgent" || a.priority === "high";
-  });
-  const urgentDDLCount = urgentDDLs.length;
+  // ---- 临近 DDL：与 UpcomingDDL 同源（未完成 / 未逾期 / ddlWarningDays 窗口内） ----
+  const warningDays = preferences.ddlWarningDays;
+  const upcomingAssignments = useMemo(
+    () =>
+      [...assignments]
+        .filter((a) => {
+          if (a.status === "completed") return false;
+          const ddlDate = parseLocalDDL(a.ddl);
+          if (!ddlDate) return false;
+          const diff = differenceInDays(ddlDate, today);
+          return diff >= 0 && diff <= warningDays;
+        })
+        .sort((a, b) => {
+          const timeA = parseLocalDDL(a.ddl)?.getTime() ?? 0;
+          const timeB = parseLocalDDL(b.ddl)?.getTime() ?? 0;
+          return timeA - timeB;
+        }),
+    [assignments, warningDays, today]
+  );
+  const closestDDL = upcomingAssignments[0] ? parseLocalDDL(upcomingAssignments[0].ddl) : null;
+  const highPriorityCount = upcomingAssignments.filter(
+    (a) => a.priority === "urgent" || a.priority === "high"
+  ).length;
 
-  // 4. Completed Tasks Count
+  // ---- 已完成：总完成率 ----
   const completedTasksCount = assignments.filter((a) => a.status === "completed").length;
+  const completionRate =
+    assignments.length > 0
+      ? Math.round((completedTasksCount / assignments.length) * 100)
+      : 0;
 
   // 点击行为：卡片直接跳转到对应 Tab，并带上正确筛选
   const handleCardClick = (id: string) => {
@@ -72,6 +121,7 @@ export function StatCards() {
         setActiveTab("timetable");
         break;
       case "week-assignments":
+        // 现有模型无 week filter；最小处理：保留现有 all 行为，不做 Store 改造
         setActiveTab("assignments");
         setAssignmentTimeSlice("all");
         break;
@@ -90,48 +140,57 @@ export function StatCards() {
     {
       id: "today-courses",
       title: "今日课程",
-      value: `${todayCourseCount} 节`,
-      subtext: todayCourseCount > 0 ? `今日共 ${todayCourseCount} 节课程` : "今日暂无课程",
+      value: `${todaySchedules.length} 节`,
+      subtext:
+        todaySchedules.length === 0
+          ? "今日暂无课程"
+          : nextClass
+          ? `${nextCourse?.name ?? "课程"} · ${nextClass.startTime}`
+          : "今日课程已结束",
       icon: Calendar,
-      bgHex: "#E3E6E0",
-      borderHex: "#D0D5CC",
-      iconColor: "text-charcoal",
+      iconColor: "text-sandrift",
     },
     {
       id: "week-assignments",
       title: "本周任务",
-      value: `${thisWeekAssignmentsCount} 项`,
-      subtext: `本周有 ${thisWeekAssignmentsCount} 项任务截止`,
+      value: `${thisWeekAssignments.length} 项`,
+      subtext:
+        thisWeekAssignments.length === 0
+          ? "本周暂无任务截止"
+          : thisWeekPendingCount > 0
+          ? `待完成 ${thisWeekPendingCount} 项`
+          : "本周任务已全部完成",
       icon: ClipboardList,
-      bgHex: "#F0EBE1",
-      borderHex: "#CDB9AB",
-      iconColor: "text-charcoal",
+      iconColor: "text-sandrift",
     },
     {
       id: "upcoming-ddl",
       title: "临近 DDL",
-      value: `${urgentDDLCount} 项`,
-      subtext: urgentDDLCount > 0 ? "需优先完成" : "暂无紧急任务",
-      subtextColor: urgentDDLCount > 0 ? "text-danger font-semibold" : "text-sandrift",
+      value: `${upcomingAssignments.length} 项`,
+      subtext:
+        upcomingAssignments.length === 0
+          ? "暂无临近 DDL"
+          : closestDDL
+          ? `最近 ${format(closestDDL, "M月d日 HH:mm")}${highPriorityCount > 0 ? ` · 高优 ${highPriorityCount}` : ""}`
+          : "暂无临近 DDL",
       icon: Clock,
-      bgHex: "#F2E8E6",
-      borderHex: "#D9BCB8",
-      iconColor: "text-danger",
+      iconColor: upcomingAssignments.length > 0 ? "text-danger" : "text-sandrift",
     },
     {
       id: "completed-tasks",
       title: "已完成任务",
-      value: `${completedTasksCount} 项`,
-      subtext: `累计完成 ${completedTasksCount} 项任务`,
+      value: assignments.length > 0 ? `${completionRate}%` : "0%",
+      subtext:
+        assignments.length === 0
+          ? "暂无任务"
+          : `已完成 ${completedTasksCount} 项`,
       icon: CheckCircle2,
-      bgHex: "#E3E6E0",
-      borderHex: "#D0D5CC",
       iconColor: "text-success",
     },
   ];
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
       {STATS.map((stat) => {
         const Icon = stat.icon;
         return (
@@ -141,27 +200,21 @@ export function StatCards() {
             role="button"
             tabIndex={0}
             onKeyDown={cardKeyHandler(() => handleCardClick(stat.id))}
-            className="bg-surface border border-line rounded-2xl p-4 shadow-subtle flex items-center justify-between transition-[transform,box-shadow] duration-[var(--motion-base)] ease-[var(--ease-standard)] hover:shadow-card hover:-translate-y-px cursor-pointer"
+            className="group h-[104px] p-3.5 bg-surface border border-line-soft rounded-xl flex flex-col transition-colors duration-[var(--motion-base)] ease-[var(--ease-standard)] hover:border-line-strong cursor-pointer"
           >
-            <div className="space-y-1">
-              <span className="text-xs font-semibold text-sandrift">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-medium text-sandrift">
                 {stat.title}
               </span>
-              <AnimatedMetric value={stat.value} />
-              <p
-                className={`text-[11px] ${
-                  stat.subtextColor || "text-sandrift"
-                }`}
-              >
-                {stat.subtext}
-              </p>
+              <span className="flex items-center gap-1">
+                <Icon className={cn("w-4 h-4 transition-colors", stat.iconColor)} />
+                <ArrowUpRight className="w-3.5 h-3.5 text-satin-grey opacity-0 group-hover:opacity-100 transition-opacity duration-[var(--motion-fast)]" />
+              </span>
             </div>
 
-            <div
-              className={`w-11 h-11 rounded-2xl flex items-center justify-center border shadow-subtle ${stat.iconColor}`}
-              style={{ backgroundColor: stat.bgHex, borderColor: stat.borderHex }}
-            >
-              <Icon className="w-5 h-5" />
+            <div className="mt-auto space-y-1 pt-2">
+              <AnimatedMetric value={stat.value} />
+              <p className="text-[11px] text-sandrift truncate">{stat.subtext}</p>
             </div>
           </div>
         );
