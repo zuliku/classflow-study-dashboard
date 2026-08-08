@@ -16,8 +16,18 @@ async function gotoInteraction(page: Page) {
 }
 
 async function gotoOverview(page: Page) {
+  // 设置是 Modal：先关闭（Esc），再回到总览
+  await page.keyboard.press("Escape");
+  await expect(page.getByTestId("settings-view")).toHaveCount(0);
   await page.getByRole("button", { name: "总览" }).first().click();
   await expect(page.getByTestId("timetable-card")).toBeVisible();
+}
+
+async function gotoWorkspaceTab(page: Page, name: string) {
+  // 设置是 Modal：先关闭（Esc），再切换到工作区 Tab
+  await page.keyboard.press("Escape");
+  await expect(page.getByTestId("settings-view")).toHaveCount(0);
+  await page.getByRole("button", { name }).first().click();
 }
 
 test("showWeekends：关闭 → 课表 5 列（周六/周日表头消失）→ 打开恢复", async ({ page }) => {
@@ -48,7 +58,7 @@ test("schedule manipulation：关闭 → 拖动不发生、点击正常；打开
   await expect(page.getByRole("switch", { name: "课表直接操作" })).toHaveAttribute("aria-checked", "false");
 
   // 关闭：拖高数课程 → 无提交 toast，位置不变
-  await page.getByRole("button", { name: "我的课表" }).first().click();
+  await gotoWorkspaceTab(page, "我的课表");
   await expect(page.getByTestId("timetable-body")).toBeVisible();
   const body = await page.getByTestId("timetable-body").boundingBox();
   const card = page.locator('[data-testid="schedule-card"]').filter({ hasText: "高等数学" }).first();
@@ -69,7 +79,7 @@ test("schedule manipulation：关闭 → 拖动不发生、点击正常；打开
   await openSettings(page);
   await gotoInteraction(page);
   await page.getByRole("switch", { name: "课表直接操作" }).click(); // on
-  await page.getByRole("button", { name: "我的课表" }).first().click();
+  await gotoWorkspaceTab(page, "我的课表");
   await expect(page.getByTestId("timetable-body")).toBeVisible();
   const body2 = await page.getByTestId("timetable-body").boundingBox();
   const card2 = page.locator('[data-testid="schedule-card"]').filter({ hasText: "高等数学" }).first();

@@ -11,7 +11,7 @@ import { MiniCalendar } from "@/components/dashboard/MiniCalendar";
 import { StudyLoadChart } from "@/components/dashboard/StudyLoadChart";
 import { AssignmentTable } from "@/components/dashboard/AssignmentTable";
 import { GroupCollaborationView } from "@/components/group/GroupCollaborationView";
-import { SettingsView } from "@/components/settings/SettingsView";
+import { SettingsModal } from "@/components/settings/SettingsModal";
 import { CourseDetailDrawer } from "@/components/drawers/CourseDetailDrawer";
 import { AssignmentDrawer } from "@/components/drawers/AssignmentDrawer";
 import { CommandCenter } from "@/components/command/CommandCenter";
@@ -423,9 +423,7 @@ export default function Home() {
               </div>
             </div>
           )}
-
-          {activeTab === "settings" && <SettingsView />}
-          </PageTransition>
+        </PageTransition>
         </main>
       </div>
 
@@ -434,6 +432,7 @@ export default function Home() {
       <AssignmentDrawer />
       <CommandCenter />
       <GlobalShortcutController />
+      <SettingsModal />
       <AddCourseModal />
       <ImportScheduleModal />
       <ConflictResolutionModal />

@@ -42,6 +42,7 @@ export interface CommandContext {
   assignmentActions: AssignmentActions;
   // 动作（由宿主注入，避免 lib 依赖 store）
   setActiveTab: (tab: NavTab) => void;
+  setSettingsModalOpen: (open: boolean) => void;
   setSelectedCourseId: (id: string | null) => void;
   setSelectedAssignmentId: (id: string | null) => void;
   setAddCourseModalOpen: (open: boolean) => void;
@@ -91,7 +92,12 @@ export function getCommands(): AppCommand[] {
       keywords: [g.label],
       group: "navigate" as CommandGroup,
       icon: navIcon(g.id),
-      run: (ctx: CommandContext) => { ctx.setActiveTab(g.id); ctx.close(); },
+      run: (ctx: CommandContext) => {
+        // 设置已改为 Modal 入口，不再作为整页 Tab
+        if (g.id === "settings") ctx.setSettingsModalOpen(true);
+        else ctx.setActiveTab(g.id);
+        ctx.close();
+      },
     })),
     // ---- Action ----
     { id: "today-assignments", label: "前往今日任务", keywords: ["今日", "任务", "today"], group: "action", icon: ClipboardCheck, run: (ctx) => { ctx.setActiveTab("assignments"); ctx.setAssignmentTimeSlice("today"); ctx.close(); } },

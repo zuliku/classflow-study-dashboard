@@ -90,11 +90,15 @@ test.describe("responsive navigation", () => {
     await nav.getByRole("button", { name: "课程" }).click();
     await expect(page.getByRole("heading", { name: "本学期课程" })).toBeVisible();
 
-    // 更多菜单 → 设置
+    // 更多菜单 → 设置（全屏 Modal）
     await nav.getByRole("button", { name: "更多" }).click();
     await expect(page.getByRole("menuitem", { name: "设置" })).toBeVisible();
     await page.getByRole("menuitem", { name: "设置" }).click();
     await expect(page.getByTestId("settings-view")).toBeVisible();
+
+    // 关闭设置 Modal 后回到底部导航
+    await page.keyboard.press("Escape");
+    await expect(page.getByTestId("settings-view")).toHaveCount(0);
 
     // 回到总览
     await nav.getByRole("button", { name: "总览" }).click();

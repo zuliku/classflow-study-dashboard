@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
 import { NAV_ITEMS } from "@/components/layout/navItems";
 
 export function Sidebar() {
-  const { activeTab, setActiveTab, userProfile } = useAppStore();
+  const { activeTab, setActiveTab, setSettingsModalOpen, userProfile } = useAppStore();
 
   const creditPercentage =
     userProfile.totalCredits > 0
@@ -43,7 +43,11 @@ export function Sidebar() {
             return (
               <button
                 key={item.id}
-                onClick={() => setActiveTab(item.id)}
+                onClick={() =>
+                  item.id === "settings"
+                    ? setSettingsModalOpen(true)
+                    : setActiveTab(item.id)
+                }
                 aria-label={item.label}
                 className={cn(
                   "relative w-full flex items-center justify-center xl:justify-start xl:space-x-2.5 px-2 xl:px-3 py-2 rounded-xl text-xs font-medium transition-colors duration-[var(--motion-base)] ease-[var(--ease-standard)] group text-left",

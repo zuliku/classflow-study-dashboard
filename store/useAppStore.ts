@@ -138,6 +138,9 @@ interface AppState {
   setSelectedAssignmentId: (id: string | null) => void;
   isSearchModalOpen: boolean;
   setSearchModalOpen: (open: boolean) => void;
+  /** 设置中心 Modal：侧边栏 / 底部导航 / 命令面板统一入口 */
+  isSettingsModalOpen: boolean;
+  setSettingsModalOpen: (open: boolean) => void;
   /** Command Center 子视图：默认命令面板；? 打开快捷键指南 */
   searchModalView: "palette" | "guide";
   setSearchModalView: (view: "palette" | "guide") => void;
@@ -290,6 +293,8 @@ export const useAppStore = create<AppState>()(
 
       isSearchModalOpen: false,
       setSearchModalOpen: (open) => set({ isSearchModalOpen: open }),
+      isSettingsModalOpen: false,
+      setSettingsModalOpen: (open) => set({ isSettingsModalOpen: open }),
       searchModalView: "palette",
       setSearchModalView: (view) => set({ searchModalView: view }),
       highlightedAssignmentId: null,
@@ -341,6 +346,7 @@ export const useAppStore = create<AppState>()(
           selectedAssignmentId: null,
           selectedConflict: null,
           isSearchModalOpen: false,
+          isSettingsModalOpen: false,
           isAddCourseModalOpen: false,
           isImportScheduleModalOpen: false,
           isConflictModalOpen: false,

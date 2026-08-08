@@ -13,7 +13,7 @@ import {
 
 /** 移动端（<768px）底部导航：4 个主入口 + 「更多」轻量菜单 */
 export function BottomNav() {
-  const { activeTab, setActiveTab } = useAppStore();
+  const { activeTab, setActiveTab, setSettingsModalOpen } = useAppStore();
   const [moreOpen, setMoreOpen] = useState(false);
   const navRef = useRef<HTMLElement | null>(null);
 
@@ -40,7 +40,8 @@ export function BottomNav() {
 
   const handleSelect = (id: NavItem["id"]) => {
     setMoreOpen(false);
-    setActiveTab(id);
+    if (id === "settings") setSettingsModalOpen(true);
+    else setActiveTab(id);
   };
 
   const navItemClass = (isActive: boolean) =>

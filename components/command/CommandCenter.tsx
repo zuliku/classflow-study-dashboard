@@ -45,6 +45,7 @@ export function CommandCenter() {
     setFullTimetableModalOpen,
     setAssignmentTimeSlice,
     resetToCurrentWeek,
+    setSettingsModalOpen,
   } = useAppStore(
     useShallow((s) => ({
       isSearchModalOpen: s.isSearchModalOpen,
@@ -68,6 +69,7 @@ export function CommandCenter() {
       setFullTimetableModalOpen: s.setFullTimetableModalOpen,
       setAssignmentTimeSlice: s.setAssignmentTimeSlice,
       resetToCurrentWeek: s.resetToCurrentWeek,
+      setSettingsModalOpen: s.setSettingsModalOpen,
     }))
   );
 
@@ -134,6 +136,7 @@ export function CommandCenter() {
       assignmentSelection,
       assignmentActions,
       setActiveTab: (t: NavTab) => setActiveTab(t),
+      setSettingsModalOpen: (o: boolean) => setSettingsModalOpen(o),
       setSelectedCourseId: (id: string | null) => setSelectedCourseId(id),
       setSelectedAssignmentId: (id: string | null) => setSelectedAssignmentId(id),
       setAddCourseModalOpen: (o: boolean) => setAddCourseModalOpen(o),
@@ -143,7 +146,7 @@ export function CommandCenter() {
       resetToCurrentWeek: () => resetToCurrentWeek(),
       close: () => setSearchModalOpen(false),
     }),
-    [activeTab, selectedCourseId, selectedAssignmentId, highlightedAssignmentId, assignmentSelection, courses, assignments, semester, currentSemesterWeek, assignmentActions, setActiveTab, setSelectedCourseId, setSelectedAssignmentId, setAddCourseModalOpen, setImportScheduleModalOpen, setFullTimetableModalOpen, setAssignmentTimeSlice, resetToCurrentWeek, setSearchModalOpen]
+    [activeTab, selectedCourseId, selectedAssignmentId, highlightedAssignmentId, assignmentSelection, courses, assignments, semester, currentSemesterWeek, assignmentActions, setActiveTab, setSelectedCourseId, setSelectedAssignmentId, setAddCourseModalOpen, setImportScheduleModalOpen, setFullTimetableModalOpen, setAssignmentTimeSlice, resetToCurrentWeek, setSearchModalOpen, setSettingsModalOpen]
   );
 
   const items = useMemo(() => buildPalette(query, ctx), [query, ctx]);

@@ -63,6 +63,7 @@ function makeCtx(overrides: Partial<CommandContext> = {}): CommandContext {
       remove: () => {},
     },
     setActiveTab: () => {},
+    setSettingsModalOpen: () => {},
     setSelectedCourseId: () => {},
     setSelectedAssignmentId: () => {},
     setAddCourseModalOpen: () => {},
