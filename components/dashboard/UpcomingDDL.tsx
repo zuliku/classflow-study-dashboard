@@ -12,12 +12,15 @@ import { paginate } from "@/lib/pagination";
 const UPCOMING_DDL_PAGE_SIZE = 2;
 
 export function UpcomingDDL() {
-  const { assignments, courses, setSelectedAssignmentId, setActiveTab } = useAppStore();
+  const { assignments, courses, setSelectedAssignmentId, setActiveTab, preferences } =
+    useAppStore();
   const [currentPage, setCurrentPage] = useState(1);
 
   const today = new Date();
+  // "临近 DDL" 窗口 = preferences.ddlWarningDays（默认 3 天；语义为临近截止提示，非筛选）
+  const warningDays = preferences.ddlWarningDays;
 
-  // "临近 DDL" = 尚未完成、未逾期、且在未来 7 天内截止（DDL 按本地时间语义）；
+  // "临近 DDL" = 尚未完成、未逾期、且在 warningDays 天内截止（DDL 按本地时间语义）；
   // 已逾期任务保留在 AssignmentTable 的"已逾期"筛选，不占据此处顶部
   const upcomingAssignments = useMemo(
     () =>
@@ -27,14 +30,14 @@ export function UpcomingDDL() {
           const ddlDate = parseLocalDDL(a.ddl);
           if (!ddlDate) return false;
           const diff = differenceInDays(ddlDate, today);
-          return diff >= 0 && diff <= 7;
+          return diff >= 0 && diff <= warningDays;
         })
         .sort((a, b) => {
           const timeA = parseLocalDDL(a.ddl)?.getTime() ?? 0;
           const timeB = parseLocalDDL(b.ddl)?.getTime() ?? 0;
           return timeA - timeB;
         }),
-    [assignments]
+    [assignments, warningDays]
   );
 
   // 纯展示分页：每页 3 条；currentPage 渲染时 clamp（任务数量变化自动回到最后一个有效页）

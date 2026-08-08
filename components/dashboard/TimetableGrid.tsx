@@ -81,13 +81,19 @@ export function TimetableGrid({
     setActiveTab,
     setFullTimetableModalOpen,
     updateSchedule,
+    preferences,
   } = useAppStore();
   const pushToast = useToastStore((s) => s.pushToast);
 
-  // 周一至周日表头完全由 semester.startDate + currentSemesterWeek 推导
+  // 周一至周日表头完全由 semester.startDate + currentSemesterWeek 推导。
+  // showWeekends=false 时只渲染 Mon–Fri 5 列：dayOfWeek = 列序 + 1（前 5 天连续），
+  // 指针几何、拖拽映射、表头与网格宽度全部一致；周六/周日课程数据不删除，重新打开即恢复。
   const weekDays = getWeekDateRange(semester, currentSemesterWeek);
-
-  const weekdays = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"].map((label, idx) => {
+  const dayCount = preferences.showWeekends ? 7 : 5;
+  const weekdays = (preferences.showWeekends
+    ? ["周一", "周二", "周三", "周四", "周五", "周六", "周日"]
+    : ["周一", "周二", "周三", "周四", "周五"]
+  ).map((label, idx) => {
     return {
       dayOfWeek: idx + 1,
       label,
@@ -138,7 +144,12 @@ export function TimetableGrid({
     };
   }, []);
   // touch（手机/平板触摸）不进入拖动：不 setPointerCapture、不拦截滚动
-  const editingEnabled = editable && mediaState.wide && mediaState.fine;
+  // 直接编辑：完整课表工作区（editable prop）+ viewport ≥768 + 精确指针 + 偏好开启
+  const editingEnabled =
+    editable &&
+    mediaState.wide &&
+    mediaState.fine &&
+    preferences.enableScheduleDirectManipulation;
 
   const [interaction, setInteraction] = useState<Interaction>({ type: "idle" });
   // 成功落位后短暂 settle 的目标卡片（ux-settle 只作用于刚提交的卡）
@@ -428,8 +439,11 @@ export function TimetableGrid({
       >
         {/* 内容最小宽度：窄容器内课表整体横向滚动，避免把课程信息压到不可读 */}
         <div className="min-w-[640px] flex flex-col flex-1 min-h-0">
-        {/* Weekday Header Row */}
-        <div className="grid grid-cols-8 border-b border-line pb-2 text-center text-xs shrink-0">
+        {/* Weekday Header Row（列数随 showWeekends 5/7 天动态） */}
+        <div
+          className="grid border-b border-line pb-2 text-center text-xs shrink-0"
+          style={{ gridTemplateColumns: `minmax(0, 1fr) repeat(${dayCount}, minmax(0, 1fr))` }}
+        >
           <div className="text-sandrift font-medium py-0.5 text-[11px]">时间</div>
           {weekdays.map((wd) => (
             <div
@@ -447,10 +461,11 @@ export function TimetableGrid({
         {/* Timetable Body Grid (08:00 to 21:00 Evening Range) */}
         <div
           className={cn(
-            "relative flex-1 grid grid-cols-8 mt-1 min-h-[520px]",
+            "relative flex-1 grid mt-1 min-h-[520px]",
             // Overview compact：md+ 压缩时间轴（每小时 ~33-35px），完整保留 08:00-21:00
             isCompactDensity && "md:min-h-[440px]"
           )}
+          style={{ gridTemplateColumns: `minmax(0, 1fr) repeat(${dayCount}, minmax(0, 1fr))` }}
         >
           {/* Time Labels Column */}
           <div className="flex flex-col justify-between text-[10px] text-sandrift font-mono border-r border-[#F0EBE1] pr-1.5 py-0.5 h-full">
@@ -467,11 +482,15 @@ export function TimetableGrid({
             ))}
           </div>
 
-          {/* 7 Columns for Days */}
+          {/* Day Columns（列数随 showWeekends 5/7 天动态） */}
           <div
             ref={gridBodyRef}
             data-testid="timetable-body"
-            className="col-span-7 grid grid-cols-7 relative border-l border-[#F0EBE1] h-full"
+            className="relative grid border-l border-[#F0EBE1] h-full"
+            style={{
+              gridTemplateColumns: `repeat(${dayCount}, minmax(0, 1fr))`,
+              gridColumn: `span ${dayCount} / span ${dayCount}`,
+            }}
           >
             {/* Horizontal Grid lines */}
             <div className="absolute inset-0 flex flex-col justify-between pointer-events-none h-full">

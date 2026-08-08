@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { getSemesterWeek, getWeekDateRange, getWeekStart } from "@/lib/semester";
+import { getSemesterWeek, getWeekDateRange, getWeekStart, getSemesterEndDate } from "@/lib/semester";
 import { Semester } from "@/types";
 import { format, differenceInCalendarDays } from "date-fns";
 
@@ -69,5 +69,17 @@ describe("getWeekStart / getWeekDateRange", () => {
     expect(format(getWeekStart(semester, 16), "yyyy-MM-dd")).toBe(
       format(getWeekDateRange(semester, 16)[0], "yyyy-MM-dd")
     );
+  });
+});
+
+describe("getSemesterEndDate", () => {
+  it("结束日 = 开学日 + totalWeeks 周（结束日期永远推导，不持久化）", () => {
+    const end = getSemesterEndDate("2026-09-07", 18);
+    expect(format(end, "yyyy-MM-dd")).toBe("2027-01-11");
+  });
+
+  it("16 周：2026-09-07 → 2026-12-28", () => {
+    const end = getSemesterEndDate("2026-09-07", 16);
+    expect(format(end, "yyyy-MM-dd")).toBe("2026-12-28");
   });
 });

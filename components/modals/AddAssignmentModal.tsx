@@ -21,6 +21,7 @@ export function AddAssignmentModal() {
     addAssignment,
     updateAssignment,
     assignments,
+    preferences,
   } = useAppStore();
   const pushToast = useToastStore((s) => s.pushToast);
 
@@ -88,7 +89,8 @@ export function AddAssignmentModal() {
         tomorrow.setDate(tomorrow.getDate() + 1);
         // 本地日期格式化（不用 toISOString，避免时区偏移导致日期错误）；日历发起时预填当天
         setDdlDate(detail.ddlDate || format(tomorrow, "yyyy-MM-dd"));
-        setDdlTime("23:59");
+        // 新建默认截止时间来自偏好（编辑已有任务不受影响，走上方回填分支）
+        setDdlTime(preferences.defaultDDLTime);
         setPriority("medium");
         setStatus("todo");
         setProgress(0);
@@ -101,7 +103,7 @@ export function AddAssignmentModal() {
     };
 
     return onOpenAssignmentEditor(handleOpen);
-  }, [assignments, courses]);
+  }, [assignments, courses, preferences.defaultDDLTime]);
 
   if (!mounted) return null;
 

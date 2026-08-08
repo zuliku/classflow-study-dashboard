@@ -256,3 +256,16 @@ button:disabled {
     scroll-behavior: auto !important;
   }
 }
+
+/* App-level Motion Preference（<html data-motion>，由 store 应用）：
+   system：仅依赖上方 OS 媒体查询（默认，无需额外规则）；
+   reduced：无论 OS 设置如何强制减少动效；
+   full：使用 ClassFlow 标准 Motion（本项目无危险/眩晕动画，无需额外规则）。 */
+html[data-motion="reduced"] *,
+html[data-motion="reduced"] *::before,
+html[data-motion="reduced"] *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+  scroll-behavior: auto !important;
+}

@@ -77,6 +77,12 @@ export default function Home() {
     reconcileOrphanBlobs(validKeys).catch(() => {});
   }, []);
 
+  // Motion Preference：应用级动效覆盖（system / full / reduced）写入 <html data-motion>
+  const motionPreference = useAppStore((s) => s.preferences.motionPreference);
+  useEffect(() => {
+    document.documentElement.dataset.motion = motionPreference;
+  }, [motionPreference]);
+
   // Statistics derived dynamically 100% from Zustand store
   const totalTasks = assignments.length;
   const completedTasks = assignments.filter((a) => a.status === "completed").length;

@@ -12,6 +12,25 @@ async function openOverview(page: Page, width = 1440, height = 900) {
   await page.waitForTimeout(700);
 }
 
+/** 通过 localStorage 注入 preferences.ddlWarningDays（先触发 persist 写入 demo 数据再修改） */
+async function setWarningDays(page: Page, days: number) {
+  await openOverview(page);
+  await page.getByTestId("overview-tasks-wrap").getByRole("button", { name: "已逾期" }).click();
+  await page.waitForTimeout(300);
+  await page.evaluate((d) => {
+    const key = "classflow-storage-v2";
+    const raw = localStorage.getItem(key);
+    const parsed = raw ? JSON.parse(raw) : null;
+    const state = parsed?.state ?? parsed;
+    if (!state) return;
+    state.preferences = { ...(state.preferences || {}), ddlWarningDays: d };
+    localStorage.setItem(key, JSON.stringify({ state, version: 3 }));
+  }, days);
+  await page.reload();
+  await expect(page.getByTestId("timetable-card")).toBeVisible();
+  await page.waitForTimeout(400);
+}
+
 test("1440×900：左右等高（顶部/底部/总高 ≤2px），左侧时间轴填满无空白", async ({ page }) => {
   await openOverview(page);
 
@@ -40,8 +59,8 @@ test("1440×900：左右等高（顶部/底部/总高 ≤2px），左侧时间�
   expect(t2100!.y + t2100!.height).toBeLessThanOrEqual(timetable!.y + timetable!.height + 1);
 });
 
-test("UpcomingDDL 分页：5 条 → 每页 2 条（1 / 3），翻页替换内容且卡片高度不变", async ({ page }) => {
-  await openOverview(page);
+test("UpcomingDDL 分页（ddlWarningDays=7）：5 条 → 每页 2 条（1 / 3），翻页替换内容且卡片高度不变", async ({ page }) => {
+  await setWarningDays(page, 7);
   const card = page.getByTestId("upcoming-ddl-card");
 
   // 第一页：2 条 + 分页 1 / 3
@@ -76,32 +95,15 @@ test("UpcomingDDL 分页：5 条 → 每页 2 条（1 / 3），翻页替换内�
   await expect(card.getByText("2 / 3", { exact: true })).toBeVisible();
 });
 
-test("UpcomingDDL ≤2 条时不显示分页控件（删除导致页数减少自动 clamp）", async ({ page }) => {
+test("UpcomingDDL 默认 3 天窗口：2 条 → 不显示分页控件", async ({ page }) => {
   await openOverview(page);
   const card = page.getByTestId("upcoming-ddl-card");
-  await expect(card.getByText("5 项待办")).toBeVisible();
-
-  // 删除三条 upcoming（a3、a4、a5）→ 剩 2 条
-  for (const id of ["a3", "a4", "a5"]) {
-    await page.getByRole("button", { name: "任务工作区" }).click();
-    await page.getByTestId("assignment-list").focus();
-    await page.locator(`[data-assignment-id="${id}"]`).click({ button: "right" });
-    await page
-      .getByTestId("assignment-context-menu")
-      .getByRole("button", { name: "删除当前任务" })
-      .click();
-    await page.getByRole("button", { name: "删除任务" }).last().click();
-    await expect(page.getByText("1 项任务已删除").first()).toBeVisible();
-    await page.getByRole("button", { name: "总览" }).first().click();
-    await expect(page.getByTestId("upcoming-ddl-card")).toBeVisible();
-  }
-
-  // 剩 2 条 → 无分页控件（currentPage 自动 clamp，不出无效页码）
+  // 默认 ddlWarningDays=3：仅 +1/+2 天任务（a1/a2）在窗口内
+  await expect(card.getByText("2 项待办")).toBeVisible();
   await expect(page.getByTestId("upcoming-ddl-pagination")).toHaveCount(0);
-  await expect(page.getByTestId("upcoming-ddl-card").getByText("2 项待办")).toBeVisible();
 });
 
-test("Mobile 390：单列自然高度、无横向 overflow、DDL 仍 2 条/页", async ({ page }) => {
+test("Mobile 390：单列自然高度、无横向 overflow、DDL 默认窗口生效", async ({ page }) => {
   await openOverview(page, 390, 844);
   await expect(page.getByTestId("upcoming-ddl-card")).toBeVisible();
 
@@ -110,8 +112,9 @@ test("Mobile 390：单列自然高度、无横向 overflow、DDL 仍 2 条/页",
   const timetable = await page.getByTestId("timetable-card").boundingBox();
   expect(upcoming!.y).toBeGreaterThanOrEqual(timetable!.y + timetable!.height - 5);
 
-  // DDL 分页仍生效（2 条/页，5 条 → 3 页）
-  await expect(page.getByTestId("upcoming-ddl-card").getByText("1 / 3", { exact: true })).toBeVisible();
+  // 默认 3 天窗口：2 条，无分页控件
+  await expect(page.getByTestId("upcoming-ddl-card").getByText("2 项待办")).toBeVisible();
+  await expect(page.getByTestId("upcoming-ddl-pagination")).toHaveCount(0);
 
   const overflow = await page.evaluate(
     () => document.documentElement.scrollWidth > window.innerWidth + 1

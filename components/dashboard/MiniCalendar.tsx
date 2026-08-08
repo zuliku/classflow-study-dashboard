@@ -72,6 +72,7 @@ export function MiniCalendar() {
     setSelectedCourseId,
     setSelectedAssignmentId,
     updateAssignment,
+    preferences,
   } = useAppStore();
 
   const [currentMonth, setCurrentMonth] = useState(new Date());
@@ -118,7 +119,9 @@ export function MiniCalendar() {
       fine.removeEventListener("change", apply);
     };
   }, []);
-  const ddlDragEnabled = mediaState.wide && mediaState.fine;
+  // DDL Drag：>=768px + 精确指针 + 偏好开启；关闭时点击仍打开 Assignment Drawer
+  const ddlDragEnabled =
+    mediaState.wide && mediaState.fine && preferences.enableDDLDirectManipulation;
 
   const [drag, setDrag] = useState<DDLDragState>({ type: "idle" });
   // 同步镜像：pointer 事件快于 React 渲染，handler 一律读 ref（见 Task 2 竞态修复）

@@ -22,7 +22,7 @@ test("Desktop：设置导航切换 section，Detail 正确更新", async ({ page
   // 学期与课表
   await nav.getByRole("button", { name: "学期与课表" }).click();
   await expect(page.getByTestId("settings-semester")).toBeVisible();
-  await expect(page.getByText("开学日期", { exact: true })).toBeVisible();
+  await expect(page.getByText("第一周开始日期", { exact: true })).toBeVisible();
 
   // 数据与存储
   await nav.getByRole("button", { name: "数据与存储" }).click();
@@ -59,12 +59,12 @@ test("Profile dirty：修改姓名 → 显示未保存 → 放弃更改 → 恢�
   const original = await nameInput.inputValue();
 
   await nameInput.fill("新名字测试");
-  await expect(page.getByTestId("settings-save-status")).toContainText("有未保存的更改");
+  await expect(page.getByTestId("settings-profile").getByTestId("settings-save-status")).toContainText("有未保存的更改");
 
   // 放弃更改 → 恢复原值，回到已保存状态
   await page.getByRole("button", { name: "放弃更改" }).click();
   await expect(nameInput).toHaveValue(original);
-  await expect(page.getByTestId("settings-save-status")).toContainText("已保存");
+  await expect(page.getByTestId("settings-profile").getByTestId("settings-save-status")).toContainText("已保存");
   await expect(page.getByRole("button", { name: "放弃更改" })).toHaveCount(0);
 });
 
@@ -75,7 +75,7 @@ test("Profile dirty：修改姓名 → 保存 → toast 且刷新后保持", asy
   await page.getByRole("button", { name: "保存" }).click();
 
   await expect(page.getByText("设置已保存").first()).toBeVisible();
-  await expect(page.getByTestId("settings-save-status")).toContainText("已保存");
+  await expect(page.getByTestId("settings-profile").getByTestId("settings-save-status")).toContainText("已保存");
 
   await page.reload();
   await page.getByRole("button", { name: "设置" }).first().click();

@@ -68,15 +68,26 @@ export function SettingsView() {
           </div>
         </div>
 
-        {/* Detail Pane：内容宽控制在合理范围 */}
+        {/* Detail Pane：内容宽控制在合理范围；所有 section 常驻挂载（切换不卸载，
+            保证 Profile/Semester 的本地 dirty state 保留，只有「放弃更改」才重置） */}
         <div className="min-w-0 max-w-[860px] w-full">
-          <div key={section} className="ux-fade">
-            {section === "profile" && <ProfileSettings />}
-            {section === "semester" && <SemesterSettings />}
-            {section === "tasks" && <TaskSettings />}
-            {section === "interaction" && <InteractionSettings />}
-            {section === "data" && <DataSettings />}
-            {section === "about" && <AboutSettings />}
+          <div className={cn(section === "profile" && "ux-fade")} hidden={section !== "profile"}>
+            <ProfileSettings />
+          </div>
+          <div className={cn(section === "semester" && "ux-fade")} hidden={section !== "semester"}>
+            <SemesterSettings />
+          </div>
+          <div className={cn(section === "tasks" && "ux-fade")} hidden={section !== "tasks"}>
+            <TaskSettings />
+          </div>
+          <div className={cn(section === "interaction" && "ux-fade")} hidden={section !== "interaction"}>
+            <InteractionSettings />
+          </div>
+          <div className={cn(section === "data" && "ux-fade")} hidden={section !== "data"}>
+            <DataSettings />
+          </div>
+          <div className={cn(section === "about" && "ux-fade")} hidden={section !== "about"}>
+            <AboutSettings />
           </div>
         </div>
       </div>

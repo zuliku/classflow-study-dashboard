@@ -48,3 +48,17 @@ export function formatWeekDateRange(semester: Semester, week: number): string {
   const days = getWeekDateRange(semester, week);
   return `${format(days[0], "M月d日")} - ${format(days[6], "M月d日")}`;
 }
+
+/** 学期结束日（不含）= 开学日 + totalWeeks 周；结束日期永远推导，不持久化。 */
+export function getSemesterEndDate(
+  startDate: string | Date,
+  totalWeeks: number
+): Date {
+  const start = typeof startDate === "string" ? parseISO(startDate) : startDate;
+  return addWeeks(start, totalWeeks);
+}
+
+/** 当前真实教学周（可能超出 [1, totalWeeks]） */
+export function getCurrentSemesterWeek(semester: Semester, now: Date = new Date()): number {
+  return getSemesterWeek(now, semester);
+}
