@@ -1,4 +1,4 @@
-import { AppPreferences } from "@/types";
+import { AppPreferences, Priority, ContentDensity, StartupView } from "@/types";
 
 /** 第一版默认偏好 */
 export const DEFAULT_PREFERENCES: AppPreferences = {
@@ -8,6 +8,11 @@ export const DEFAULT_PREFERENCES: AppPreferences = {
   enableScheduleDirectManipulation: true,
   enableDDLDirectManipulation: true,
   motionPreference: "system",
+  startupView: "overview",
+  defaultTaskPriority: "medium",
+  defaultTaskStatus: "todo",
+  enableSingleKeyShortcuts: true,
+  contentDensity: "comfortable",
 };
 
 export const DDL_WARNING_DAYS: readonly AppPreferences["ddlWarningDays"][] = [1, 3, 7];
@@ -16,6 +21,10 @@ export const MOTION_PREFERENCES: readonly AppPreferences["motionPreference"][] =
   "full",
   "reduced",
 ];
+export const STARTUP_VIEWS: readonly StartupView[] = ["overview", "timetable", "assignments", "last"];
+export const TASK_PRIORITIES: readonly Priority[] = ["low", "medium", "high", "urgent"];
+export const TASK_STATUSES: readonly AppPreferences["defaultTaskStatus"][] = ["todo", "doing"];
+export const CONTENT_DENSITIES: readonly ContentDensity[] = ["comfortable", "compact"];
 
 const HHMM_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
 
@@ -48,17 +57,40 @@ export function sanitizePreferences(v: unknown): AppPreferences {
     motionPreference: (MOTION_PREFERENCES as readonly unknown[]).includes(src.motionPreference)
       ? (src.motionPreference as AppPreferences["motionPreference"])
       : DEFAULT_PREFERENCES.motionPreference,
+    startupView: (STARTUP_VIEWS as readonly unknown[]).includes(src.startupView)
+      ? (src.startupView as StartupView)
+      : DEFAULT_PREFERENCES.startupView,
+    defaultTaskPriority: (TASK_PRIORITIES as readonly unknown[]).includes(src.defaultTaskPriority)
+      ? (src.defaultTaskPriority as Priority)
+      : DEFAULT_PREFERENCES.defaultTaskPriority,
+    defaultTaskStatus: (TASK_STATUSES as readonly unknown[]).includes(src.defaultTaskStatus)
+      ? (src.defaultTaskStatus as AppPreferences["defaultTaskStatus"])
+      : DEFAULT_PREFERENCES.defaultTaskStatus,
+    enableSingleKeyShortcuts: isBool(src.enableSingleKeyShortcuts)
+      ? src.enableSingleKeyShortcuts
+      : DEFAULT_PREFERENCES.enableSingleKeyShortcuts,
+    contentDensity: (CONTENT_DENSITIES as readonly unknown[]).includes(src.contentDensity)
+      ? (src.contentDensity as ContentDensity)
+      : DEFAULT_PREFERENCES.contentDensity,
   };
 }
 
 /** 偏好 → 所属设置 section（用于导航 modified dot 与已修改分组） */
-export const PREFERENCE_SECTIONS: Record<keyof AppPreferences, "semester" | "tasks" | "interaction"> = {
+export const PREFERENCE_SECTIONS: Record<
+  keyof AppPreferences,
+  "general" | "semester" | "tasks" | "interaction"
+> = {
   showWeekends: "semester",
   ddlWarningDays: "tasks",
   defaultDDLTime: "tasks",
   enableScheduleDirectManipulation: "interaction",
   enableDDLDirectManipulation: "interaction",
   motionPreference: "interaction",
+  startupView: "general",
+  defaultTaskPriority: "tasks",
+  defaultTaskStatus: "tasks",
+  enableSingleKeyShortcuts: "interaction",
+  contentDensity: "interaction",
 };
 
 /** 当前与默认不同的偏好键（纯函数，UI 不自行比较） */
@@ -69,8 +101,10 @@ export function getModifiedPreferenceKeys(preferences: AppPreferences): (keyof A
 }
 
 /** 存在非默认偏好的 section 集合（导航 modified dot / 已修改分组） */
-export function getModifiedSections(preferences: AppPreferences): Set<"semester" | "tasks" | "interaction"> {
-  const sections = new Set<"semester" | "tasks" | "interaction">();
+export function getModifiedSections(
+  preferences: AppPreferences
+): Set<"general" | "semester" | "tasks" | "interaction"> {
+  const sections = new Set<"general" | "semester" | "tasks" | "interaction">();
   for (const key of getModifiedPreferenceKeys(preferences)) {
     const sec = PREFERENCE_SECTIONS[key];
     if (sec) sections.add(sec);

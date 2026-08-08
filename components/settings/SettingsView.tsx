@@ -73,7 +73,7 @@ export function SettingsView({ searchQuery, onClearSearch, jumpToSetting }: Sett
   // 已修改视图：按 section 分组
   const modifiedGroups = useMemo(() => {
     const groups = new Map<
-      "semester" | "tasks" | "interaction",
+      "general" | "semester" | "tasks" | "interaction",
       { key: keyof typeof DEFAULT_PREFERENCES; default: unknown; current: unknown }[]
     >();
     for (const key of modifiedKeys) {
@@ -124,16 +124,18 @@ export function SettingsView({ searchQuery, onClearSearch, jumpToSetting }: Sett
         </div>
       </div>
 
-      {/* 顶部工具条：全部设置 / 已修改 N + 恢复全部默认 */}
-      <div className="md:hidden px-4 pt-2 flex items-center justify-between">
-        <ToolbarTabs showModified={showModified} setShowModified={setShowModified} modifiedCount={modifiedKeys.length} />
-      </div>
-      <div className="hidden md:flex px-5 pt-3 items-center justify-between shrink-0">
-        <ToolbarTabs showModified={showModified} setShowModified={setShowModified} modifiedCount={modifiedKeys.length} />
-      </div>
+      {/* 右侧 Workspace：Toolbar（全部设置 / 已修改 N）+ Detail Pane（唯一主要滚动区） */}
+      <div className="flex-1 min-w-0 min-h-0 flex flex-col" data-testid="settings-workspace">
+        {/* 顶部工具条：全部设置 / 已修改 N */}
+        <div
+          data-testid="settings-toolbar"
+          className="shrink-0 px-4 md:px-5 pt-2 md:pt-3 md:pb-3 flex items-center justify-between"
+        >
+          <ToolbarTabs showModified={showModified} setShowModified={setShowModified} modifiedCount={modifiedKeys.length} />
+        </div>
 
-      {/* Detail Pane：唯一滚动区；所有 section 常驻挂载 */}
-      <div className="flex-1 min-w-0 min-h-0 overflow-y-auto p-4 md:p-5">
+        {/* Detail Pane：唯一滚动区；所有 section 常驻挂载 */}
+        <div className="flex-1 min-w-0 min-h-0 overflow-y-auto p-4 md:pt-0 md:px-5 md:pb-5" data-testid="settings-detail">
         {/* ---- 搜索模式：Detail 临时切成搜索结果 ---- */}
         {searching ? (
           <div data-testid="settings-search-results">
@@ -250,6 +252,7 @@ export function SettingsView({ searchQuery, onClearSearch, jumpToSetting }: Sett
           </>
         )}
       </div>
+      </div>
     </div>
   );
 }
@@ -297,6 +300,11 @@ function preferenceTitle(key: keyof typeof DEFAULT_PREFERENCES): string {
     enableScheduleDirectManipulation: "课表直接操作",
     enableDDLDirectManipulation: "DDL 直接操作",
     motionPreference: "动效偏好",
+    startupView: "默认打开位置",
+    defaultTaskPriority: "默认优先级",
+    defaultTaskStatus: "默认状态",
+    enableSingleKeyShortcuts: "单键快捷键",
+    contentDensity: "界面密度",
   };
   return map[key];
 }
@@ -307,9 +315,24 @@ function formatPreferenceValue(key: keyof typeof DEFAULT_PREFERENCES, v: never):
       return `${v} 天`;
     case "motionPreference":
       return v === "system" ? "跟随系统" : v === "full" ? "完整动效" : "减少动效";
+    case "startupView":
+      return v === "overview"
+        ? "总览"
+        : v === "timetable"
+        ? "课表"
+        : v === "assignments"
+        ? "任务"
+        : "上次使用的位置";
+    case "defaultTaskPriority":
+      return v === "urgent" ? "紧急" : v === "high" ? "高" : v === "medium" ? "中" : "低";
+    case "defaultTaskStatus":
+      return v === "doing" ? "进行中" : "待完成";
+    case "contentDensity":
+      return v === "compact" ? "紧凑" : "舒适";
     case "showWeekends":
     case "enableScheduleDirectManipulation":
     case "enableDDLDirectManipulation":
+    case "enableSingleKeyShortcuts":
       return v ? "开" : "关";
     default:
       return String(v);

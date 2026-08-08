@@ -18,11 +18,18 @@ export function isEditableTarget(e: KeyboardEvent): boolean {
 /**
  * 全局快捷键控制器：常驻挂载（不依赖 Command Center 是否 mounted）。
  * 快捷键存在与否由它决定，而不是由弹层生命周期决定。
+ *
+ * 单键快捷键（N / ? / /）受 preferences.enableSingleKeyShortcuts 控制；
+ * Cmd/Ctrl 组合（⌘K / ⌘,）与标准键盘操作不受影响。
  */
 export function GlobalShortcutController() {
   const isSearchModalOpen = useAppStore((s) => s.isSearchModalOpen);
   const setSearchModalOpen = useAppStore((s) => s.setSearchModalOpen);
   const setSearchModalView = useAppStore((s) => s.setSearchModalView);
+  const setSettingsModalOpen = useAppStore((s) => s.setSettingsModalOpen);
+  const enableSingleKeyShortcuts = useAppStore(
+    (s) => s.preferences.enableSingleKeyShortcuts
+  );
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -36,7 +43,19 @@ export function GlobalShortcutController() {
         return;
       }
 
+      // Cmd/Ctrl + ,：打开设置（Input focused 时仍生效）
+      // Overlay 规则：已有任何 overlay 挂载时不绕过 overlay stack
+      if (mod && e.key === ",") {
+        e.preventDefault();
+        if (hasAnyOverlay()) return;
+        setSettingsModalOpen(true);
+        return;
+      }
+
       if (e.altKey) return;
+
+      // ---- 以下为单键快捷键：受 enableSingleKeyShortcuts 控制 ----
+      if (!enableSingleKeyShortcuts) return;
 
       // ?：快捷键指南
       if (e.key === "?" && !mod && !isEditableTarget(e)) {
@@ -66,7 +85,7 @@ export function GlobalShortcutController() {
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [isSearchModalOpen, setSearchModalOpen, setSearchModalView]);
+  }, [isSearchModalOpen, setSearchModalOpen, setSearchModalView, setSettingsModalOpen, enableSingleKeyShortcuts]);
 
   return null;
 }

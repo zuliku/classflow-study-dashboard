@@ -4,38 +4,14 @@ import React from "react";
 import { useAppStore } from "@/store/useAppStore";
 import { SettingsSection } from "@/components/settings/SettingsSection";
 import { SettingsRow } from "@/components/settings/SettingsRow";
-import { MOTION_PREFERENCES, getModifiedPreferenceKeys, resetPreferencePatch } from "@/lib/preferences";
-import { cn } from "@/lib/utils";
-
-function Toggle({
-  checked,
-  onChange,
-  label,
-}: {
-  checked: boolean;
-  onChange: (v: boolean) => void;
-  label: string;
-}) {
-  return (
-    <button
-      role="switch"
-      aria-checked={checked}
-      aria-label={label}
-      onClick={() => onChange(!checked)}
-      className={cn(
-        "relative w-9 h-5 rounded-full transition-colors duration-[var(--motion-fast)]",
-        checked ? "bg-charcoal" : "bg-alba"
-      )}
-    >
-      <span
-        className={cn(
-          "absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow-subtle transition-transform duration-[var(--motion-fast)]",
-          checked && "translate-x-4"
-        )}
-      />
-    </button>
-  );
-}
+import { SettingsToggle, SettingsSelect, SettingsSegmentedControl } from "@/components/settings/SettingsControls";
+import {
+  MOTION_PREFERENCES,
+  CONTENT_DENSITIES,
+  getModifiedPreferenceKeys,
+  resetPreferencePatch,
+} from "@/lib/preferences";
+import type { ContentDensity } from "@/types";
 
 /** 交互与快捷键（immediate save：开关即更新 preferences） */
 export function InteractionSettings({ highlightedId }: { highlightedId?: string }) {
@@ -60,7 +36,7 @@ export function InteractionSettings({ highlightedId }: { highlightedId?: string 
           resetAriaLabel="将课表直接操作恢复默认"
           highlighted={highlightedId === "schedule-direct-manipulation"}
         >
-          <Toggle
+          <SettingsToggle
             checked={preferences.enableScheduleDirectManipulation}
             onChange={(v) => updatePreferences({ enableScheduleDirectManipulation: v })}
             label="课表直接操作"
@@ -76,10 +52,46 @@ export function InteractionSettings({ highlightedId }: { highlightedId?: string 
           resetAriaLabel="将 DDL 直接操作恢复默认"
           highlighted={highlightedId === "ddl-direct-manipulation"}
         >
-          <Toggle
+          <SettingsToggle
             checked={preferences.enableDDLDirectManipulation}
             onChange={(v) => updatePreferences({ enableDDLDirectManipulation: v })}
             label="DDL 直接操作"
+          />
+        </SettingsRow>
+
+        <SettingsRow
+          settingId="single-key-shortcuts"
+          title="启用单键快捷键"
+          description="在未编辑文本时启用 N、J/K、X 等快速操作；标准键盘操作（方向键、Enter、Tab 与 Cmd/Ctrl 组合）始终可用。"
+          modified={modified.has("enableSingleKeyShortcuts")}
+          onReset={() => updatePreferences(resetPreferencePatch("enableSingleKeyShortcuts"))}
+          resetAriaLabel="将单键快捷键恢复默认"
+          highlighted={highlightedId === "single-key-shortcuts"}
+        >
+          <SettingsToggle
+            checked={preferences.enableSingleKeyShortcuts}
+            onChange={(v) => updatePreferences({ enableSingleKeyShortcuts: v })}
+            label="启用单键快捷键"
+          />
+        </SettingsRow>
+
+        <SettingsRow
+          settingId="content-density"
+          title="界面密度"
+          description="任务工作区、课程列表与命令中心的行高与间距。"
+          modified={modified.has("contentDensity")}
+          onReset={() => updatePreferences(resetPreferencePatch("contentDensity"))}
+          resetAriaLabel="将界面密度恢复默认"
+          highlighted={highlightedId === "content-density"}
+        >
+          <SettingsSegmentedControl<ContentDensity>
+            value={preferences.contentDensity}
+            onChange={(v) => updatePreferences({ contentDensity: v })}
+            ariaLabel="界面密度"
+            options={CONTENT_DENSITIES.map((d) => ({
+              value: d,
+              label: d === "comfortable" ? "舒适" : "紧凑",
+            }))}
           />
         </SettingsRow>
 
@@ -92,21 +104,17 @@ export function InteractionSettings({ highlightedId }: { highlightedId?: string 
           resetAriaLabel="将动效偏好恢复默认"
           highlighted={highlightedId === "motion-preference"}
         >
-          <select
+          <SettingsSelect
             value={preferences.motionPreference}
-            onChange={(e) =>
-              updatePreferences({
-                motionPreference: e.target.value as "system" | "full" | "reduced",
-              })
+            onChange={(v) =>
+              updatePreferences({ motionPreference: v as "system" | "full" | "reduced" })
             }
-            className="px-2.5 py-1.5 bg-[#F7F5F5] border border-line rounded-xl text-charcoal font-bold focus:outline-none cursor-pointer"
-          >
-            {MOTION_PREFERENCES.map((m) => (
-              <option key={m} value={m}>
-                {m === "system" ? "跟随系统" : m === "full" ? "完整动效" : "减少动效"}
-              </option>
-            ))}
-          </select>
+            ariaLabel="动效偏好"
+            options={MOTION_PREFERENCES.map((m) => ({
+              value: m,
+              label: m === "system" ? "跟随系统" : m === "full" ? "完整动效" : "减少动效",
+            }))}
+          />
         </SettingsRow>
       </div>
     </SettingsSection>

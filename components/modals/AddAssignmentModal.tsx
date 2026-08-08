@@ -12,6 +12,7 @@ import { useRestoreFocus } from "@/lib/useRestoreFocus";
 import { cn } from "@/lib/utils";
 import { onOpenAssignmentEditor } from "@/lib/uiEvents";
 import { pushOverlay, popOverlay, isTopmostOverlay } from "@/lib/overlayStack";
+import { getNewTaskDefaults } from "@/lib/taskDefaults";
 
 const OVERLAY_ID = "add-assignment-modal";
 
@@ -89,10 +90,12 @@ export function AddAssignmentModal() {
         tomorrow.setDate(tomorrow.getDate() + 1);
         // 本地日期格式化（不用 toISOString，避免时区偏移导致日期错误）；日历发起时预填当天
         setDdlDate(detail.ddlDate || format(tomorrow, "yyyy-MM-dd"));
-        // 新建默认截止时间来自偏好（编辑已有任务不受影响，走上方回填分支）
-        setDdlTime(preferences.defaultDDLTime);
-        setPriority("medium");
-        setStatus("todo");
+        // 新建任务默认值（截止时刻/优先级/状态）统一来自偏好；
+        // 编辑已有任务不受影响，走上方回填分支。
+        const defaults = getNewTaskDefaults(preferences);
+        setDdlTime(defaults.ddlTime);
+        setPriority(defaults.priority);
+        setStatus(defaults.status);
         setProgress(0);
         setTagsStr("作业, 个人任务");
         setDescription("");

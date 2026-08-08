@@ -5,18 +5,28 @@ import { CheckCircle2, Circle, Plus, FileUp } from "lucide-react";
 import { useAppStore } from "@/store/useAppStore";
 import type { SettingsSection } from "@/types";
 import { SettingsSection as SettingsSectionUI } from "@/components/settings/SettingsSection";
-import { getModifiedPreferenceKeys } from "@/lib/preferences";
+import { SettingsRow } from "@/components/settings/SettingsRow";
+import { SettingsSegmentedControl } from "@/components/settings/SettingsControls";
+import { STARTUP_VIEWS, getModifiedPreferenceKeys, resetPreferencePatch } from "@/lib/preferences";
+import type { StartupView } from "@/types";
+
+const STARTUP_VIEW_LABELS: Record<StartupView, string> = {
+  overview: "总览",
+  timetable: "课表",
+  assignments: "任务",
+  last: "上次使用的位置",
+};
 
 /**
  * General：学习工作区状态（derived checklist，不新增 persisted state）
- * + 常用入口。不是「乱放所有设置」。
+ * + 默认打开位置 + 常用入口。不是「乱放所有设置」。
  */
 export function GeneralSettings({
   onNavigate,
 }: {
   onNavigate: (section: SettingsSection) => void;
 }) {
-  const { courses, schedules, semester, preferences, setAddCourseModalOpen, setImportScheduleModalOpen } =
+  const { courses, schedules, semester, preferences, setAddCourseModalOpen, setImportScheduleModalOpen, updatePreferences } =
     useAppStore();
   const modifiedCount = getModifiedPreferenceKeys(preferences).length;
 
@@ -37,9 +47,9 @@ export function GeneralSettings({
       detail: "新建任务时预填",
     },
     {
-      done: false,
-      label: "尚未创建完整备份",
-      detail: "可在「数据与存储」中导出",
+      done: preferences.enableSingleKeyShortcuts,
+      label: `单键快捷键 · ${preferences.enableSingleKeyShortcuts ? "已开启" : "已关闭"}`,
+      detail: preferences.enableSingleKeyShortcuts ? "N 新建任务 / J/K 快速操作" : "可在「交互与快捷键」中开启",
     },
   ];
   const allReady = checks.filter((c) => c.done).length >= 3;
@@ -88,6 +98,24 @@ export function GeneralSettings({
             </div>
           )}
         </div>
+      </SettingsSectionUI>
+
+      <SettingsSectionUI title="默认打开位置" description="应用启动后进入的工作区。">
+        <SettingsRow
+          settingId="startup-view"
+          title="默认打开位置"
+          description="下次打开 ClassFlow 时进入的位置。"
+          modified={getModifiedPreferenceKeys(preferences).includes("startupView")}
+          onReset={() => updatePreferences(resetPreferencePatch("startupView"))}
+          resetAriaLabel="将默认打开位置恢复默认"
+        >
+          <SettingsSegmentedControl<StartupView>
+            value={preferences.startupView}
+            onChange={(v) => updatePreferences({ startupView: v })}
+            options={STARTUP_VIEWS.map((v) => ({ value: v, label: STARTUP_VIEW_LABELS[v] }))}
+            ariaLabel="默认打开位置"
+          />
+        </SettingsRow>
       </SettingsSectionUI>
 
       <SettingsSectionUI title="常用入口" description="快速前往相关设置与数据区域。">

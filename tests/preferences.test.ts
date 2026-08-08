@@ -12,6 +12,11 @@ const validPrefs = {
   enableScheduleDirectManipulation: false,
   enableDDLDirectManipulation: true,
   motionPreference: "reduced",
+  startupView: "last",
+  defaultTaskPriority: "high",
+  defaultTaskStatus: "doing",
+  enableSingleKeyShortcuts: false,
+  contentDensity: "compact",
 };
 
 describe("sanitizePreferences 逐字段回落", () => {
@@ -47,6 +52,36 @@ describe("sanitizePreferences 逐字段回落", () => {
   it("非布尔字段 → 回落默认", () => {
     expect(sanitizePreferences({ showWeekends: "yes" }).showWeekends).toBe(true);
     expect(sanitizePreferences({ enableScheduleDirectManipulation: 1 }).enableScheduleDirectManipulation).toBe(true);
+  });
+
+  it("新增字段缺失 → 回落默认（旧持久化数据安全补字段）", () => {
+    const out = sanitizePreferences({
+      showWeekends: true,
+      ddlWarningDays: 3,
+      defaultDDLTime: "23:59",
+      enableScheduleDirectManipulation: true,
+      enableDDLDirectManipulation: true,
+      motionPreference: "system",
+    });
+    expect(out.startupView).toBe("overview");
+    expect(out.defaultTaskPriority).toBe("medium");
+    expect(out.defaultTaskStatus).toBe("todo");
+    expect(out.enableSingleKeyShortcuts).toBe(true);
+    expect(out.contentDensity).toBe("comfortable");
+  });
+
+  it("新增字段非法值 → 回落默认", () => {
+    expect(sanitizePreferences({ startupView: "courses" }).startupView).toBe("overview");
+    expect(sanitizePreferences({ startupView: "assignments" }).startupView).toBe("assignments");
+    expect(sanitizePreferences({ startupView: "last" }).startupView).toBe("last");
+    expect(sanitizePreferences({ defaultTaskPriority: "critica!" }).defaultTaskPriority).toBe("medium");
+    expect(sanitizePreferences({ defaultTaskPriority: "urgent" }).defaultTaskPriority).toBe("urgent");
+    // 禁止 submitted/completed：默认状态只有 todo/doing
+    expect(sanitizePreferences({ defaultTaskStatus: "completed" }).defaultTaskStatus).toBe("todo");
+    expect(sanitizePreferences({ defaultTaskStatus: "doing" }).defaultTaskStatus).toBe("doing");
+    expect(sanitizePreferences({ enableSingleKeyShortcuts: "no" }).enableSingleKeyShortcuts).toBe(true);
+    expect(sanitizePreferences({ contentDensity: "huge" }).contentDensity).toBe("comfortable");
+    expect(sanitizePreferences({ contentDensity: "compact" }).contentDensity).toBe("compact");
   });
 });
 

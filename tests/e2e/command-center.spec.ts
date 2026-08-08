@@ -85,6 +85,42 @@ test("输入守卫：输入框聚焦时 N / ? / / 不触发全局命令", async 
   await expect(page.getByTestId("command-center")).toHaveCount(0);
 });
 
+test("单键快捷键关闭：N/? 不触发，Cmd+K 与 Cmd+, 仍生效", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/");
+
+  // 设置 → 交互与快捷键 → 关闭单键快捷键
+  await page.getByRole("button", { name: "设置" }).first().click();
+  await page
+    .getByRole("navigation", { name: "设置导航" })
+    .getByRole("button", { name: "交互与快捷键" })
+    .click();
+  await page.getByRole("switch", { name: "启用单键快捷键" }).click();
+  await expect(page.getByRole("switch", { name: "启用单键快捷键" })).toHaveAttribute(
+    "aria-checked",
+    "false"
+  );
+  await page.keyboard.press("Escape");
+  await page.waitForTimeout(300);
+
+  // N 不再触发新建任务
+  await page.keyboard.press("n");
+  await expect(page.getByRole("heading", { name: "新建任务" })).toHaveCount(0);
+  // ? 不再打开快捷键指南
+  await page.keyboard.press("?");
+  await expect(page.getByText("键盘快捷键")).toHaveCount(0);
+
+  // Cmd/Ctrl+K 组合仍触发命令中心
+  await page.keyboard.press("Control+k");
+  await expect(page.getByTestId("command-center")).toBeVisible();
+  await page.keyboard.press("Escape");
+  await page.waitForTimeout(300);
+
+  // Cmd/Ctrl+, 打开设置
+  await page.keyboard.press("Control+,");
+  await expect(page.getByTestId("settings-view")).toBeVisible();
+});
+
 test("空查询可浏览：打开即显示快速操作与导航分组", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/");

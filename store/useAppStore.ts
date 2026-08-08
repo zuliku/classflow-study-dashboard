@@ -54,6 +54,8 @@ interface PersistedAppState {
   groupProjects: GroupProject[];
   /** 任务列表时间筛选：用户偏好，保留并在缺失时回落 "all" */
   assignmentTimeSlice?: TimeSliceFilter;
+  /** 上次使用的工作区 Tab（仅记录 workspace，设置不是 Tab） */
+  lastWorkspaceTab?: NavTab;
   /** 应用偏好：v2 旧数据可缺失，sanitize 逐字段补默认值 */
   preferences?: AppPreferences;
 }
@@ -68,10 +70,13 @@ interface LegacyPersistedStateV0 {
   calendarMarks?: unknown;
   groupProjects?: unknown;
   assignmentTimeSlice?: unknown;
+  lastWorkspaceTab?: unknown;
   preferences?: unknown;
 }
 
 const TIME_SLICES: TimeSliceFilter[] = ["all", "overdue", "today", "3days", "7days", "completed"];
+
+const NAV_TABS: NavTab[] = ["overview", "timetable", "assignments", "courses", "analytics", "group"];
 
 function isValidSemester(v: unknown): v is Semester {
   return (
@@ -114,6 +119,10 @@ function sanitizePersistedState(persisted: unknown): PersistedAppState {
     assignmentTimeSlice: TIME_SLICES.includes(legacy.assignmentTimeSlice as TimeSliceFilter)
       ? (legacy.assignmentTimeSlice as TimeSliceFilter)
       : "all",
+    // 上次使用的工作区：缺失/非法回落 overview（旧数据从未记录该字段）
+    lastWorkspaceTab: NAV_TABS.includes(legacy.lastWorkspaceTab as NavTab)
+      ? (legacy.lastWorkspaceTab as NavTab)
+      : "overview",
     // v3：preferences 稳定偏好，缺失/部分/非法均逐字段回落默认值
     preferences: sanitizePreferences(legacy.preferences),
   };
@@ -123,6 +132,8 @@ interface AppState {
   // Navigation & UI State
   activeTab: NavTab;
   setActiveTab: (tab: NavTab) => void;
+  /** 上次使用的工作区 Tab（持久化；供 startupView=last 使用） */
+  lastWorkspaceTab: NavTab;
   /** 任务列表时间筛选（全局共享，跨页保留） */
   assignmentTimeSlice: TimeSliceFilter;
   setAssignmentTimeSlice: (slice: TimeSliceFilter) => void;
@@ -262,7 +273,8 @@ export const useAppStore = create<AppState>()(
   persist(
     (set, get) => ({
       activeTab: "overview",
-      setActiveTab: (tab) => set({ activeTab: tab }),
+      setActiveTab: (tab) => set({ activeTab: tab, lastWorkspaceTab: tab }),
+      lastWorkspaceTab: "overview",
       assignmentTimeSlice: "all",
       setAssignmentTimeSlice: (slice) => set({ assignmentTimeSlice: slice }),
       preferences: DEFAULT_PREFERENCES,
@@ -886,6 +898,7 @@ export const useAppStore = create<AppState>()(
         calendarMarks: state.calendarMarks,
         groupProjects: state.groupProjects,
         assignmentTimeSlice: state.assignmentTimeSlice,
+        lastWorkspaceTab: state.lastWorkspaceTab,
         preferences: state.preferences,
       }),
       migrate: (persistedState) => sanitizePersistedState(persistedState),

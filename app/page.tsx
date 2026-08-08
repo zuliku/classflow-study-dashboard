@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect } from "react";
+import React, { useEffect, useRef } from "react";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Header } from "@/components/layout/Header";
 import { BottomNav } from "@/components/layout/BottomNav";
@@ -27,9 +27,10 @@ import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { PageTransition } from "@/components/ui/PageTransition";
 import { useAppStore } from "@/store/useAppStore";
 import { computeWeekCourseLoad } from "@/lib/studyLoad";
-import { cardKeyHandler } from "@/lib/utils";
+import { cardKeyHandler, cn } from "@/lib/utils";
 import { openAssignmentEditor } from "@/lib/uiEvents";
 import { reconcileOrphanBlobs } from "@/lib/fileStorage";
+import { resolveStartupTab } from "@/lib/startup";
 import {
   BookOpen,
   Plus,
@@ -84,6 +85,22 @@ export default function Home() {
   useEffect(() => {
     document.documentElement.dataset.motion = motionPreference;
   }, [motionPreference]);
+
+  // 启动位置：hydrate 完成后只执行一次 startup resolution。
+  // last 使用上次使用的工作区（lastWorkspaceTab，持久化）。
+  // 只依赖空数组：修改设置值只影响下次打开 ClassFlow，不会把用户踢走。
+  const startupApplied = useRef(false);
+  useEffect(() => {
+    if (startupApplied.current) return;
+    startupApplied.current = true;
+    const s = useAppStore.getState();
+    const tab = resolveStartupTab(s.preferences.startupView, s.lastWorkspaceTab);
+    if (tab !== s.activeTab) s.setActiveTab(tab);
+  }, []);
+
+  // 内容密度：课程列表（任务工作区/命令中心各自处理）
+  const contentDensity = useAppStore((s) => s.preferences.contentDensity);
+  const compactCourses = contentDensity === "compact";
 
   // Statistics derived dynamically 100% from Zustand store
   const totalTasks = assignments.length;
@@ -309,7 +326,13 @@ export default function Home() {
                   </button>
                 </div>
               ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              <div
+                data-density={contentDensity}
+                className={cn(
+                  "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3",
+                  compactCourses ? "gap-3" : "gap-4"
+                )}
+              >
                 {courses.map((course) => (
                   <div
                     key={course.id}
@@ -317,7 +340,10 @@ export default function Home() {
                     role="button"
                     tabIndex={0}
                     onKeyDown={cardKeyHandler(() => setSelectedCourseId(course.id))}
-                    className="group p-4 rounded-2xl border transition-[transform,box-shadow] duration-[var(--motion-base)] ease-[var(--ease-standard)] cursor-pointer shadow-subtle hover:shadow-card hover:-translate-y-px flex flex-col justify-between"
+                    className={cn(
+                      "group rounded-2xl border transition-[transform,box-shadow] duration-[var(--motion-base)] ease-[var(--ease-standard)] cursor-pointer shadow-subtle hover:shadow-card hover:-translate-y-px flex flex-col justify-between",
+                      compactCourses ? "p-3" : "p-4"
+                    )}
                     style={{
                       backgroundColor: `${course.bgHex}50`,
                       borderColor: course.borderHex,

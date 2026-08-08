@@ -445,13 +445,21 @@ export function buildPalette(query: string, ctx: CommandContext): PaletteItem[] 
 
 // ---- 快捷键指南（只列真实实现的快捷键） ----
 
-export const SHORTCUT_GUIDE: { group: string; items: { keys: string; label: string }[] }[] = [
+export interface ShortcutGuideItem {
+  keys: string;
+  label: string;
+  /** 受「单键快捷键」开关控制（关闭时置灰并提示） */
+  singleKey?: boolean;
+}
+
+export const SHORTCUT_GUIDE: { group: string; items: ShortcutGuideItem[] }[] = [
   {
     group: "全局",
     items: [
       { keys: "⌘K", label: "打开命令中心" },
-      { keys: "/", label: "快速搜索" },
-      { keys: "?", label: "快捷键指南" },
+      { keys: "⌘,", label: "打开设置" },
+      { keys: "/", label: "快速搜索", singleKey: true },
+      { keys: "?", label: "快捷键指南", singleKey: true },
     ],
   },
   {
@@ -464,6 +472,13 @@ export const SHORTCUT_GUIDE: { group: string; items: { keys: string; label: stri
   },
   {
     group: "任务",
-    items: [{ keys: "N", label: "新建任务（无输入焦点时）" }],
+    items: [
+      { keys: "N", label: "新建任务（无输入焦点时）", singleKey: true },
+      { keys: "J / K", label: "在任务列表中移动（任务工作区）", singleKey: true },
+      { keys: "Space", label: "预览任务（任务工作区，桌面端）", singleKey: true },
+      { keys: "X", label: "选择 / 取消选择任务（任务工作区）", singleKey: true },
+      { keys: "↑ ↓", label: "任务列表移动（标准键盘操作）" },
+      { keys: "Enter", label: "打开所选任务" },
+    ],
   },
 ];

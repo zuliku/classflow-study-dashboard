@@ -14,6 +14,13 @@ export type TimeSliceFilter = "all" | "overdue" | "today" | "3days" | "7days" | 
 export type Priority = "urgent" | "high" | "medium" | "low";
 export type AssignmentStatus = "todo" | "doing" | "submitted" | "completed";
 
+/** 应用启动后进入的默认位置 */
+export type StartupView = "overview" | "timetable" | "assignments" | "last";
+/** 新建任务的默认状态（禁止 submitted/completed，无合理产品语义） */
+export type DefaultTaskStatus = "todo" | "doing";
+/** 内容密度：影响任务列表/课程卡片/命令中心行高 */
+export type ContentDensity = "comfortable" | "compact";
+
 export interface UserProfile {
   name: string;
   avatarUrl: string;
@@ -140,6 +147,16 @@ export interface AppPreferences {
   enableScheduleDirectManipulation: boolean;
   enableDDLDirectManipulation: boolean;
   motionPreference: "system" | "full" | "reduced";
+  /** 启动后进入的默认工作区（last = 上次使用的位置） */
+  startupView: StartupView;
+  /** 新建任务的默认优先级 */
+  defaultTaskPriority: Priority;
+  /** 新建任务的默认状态（仅 todo/doing） */
+  defaultTaskStatus: DefaultTaskStatus;
+  /** 单键快捷键（N/?// 与工作区 J/K/X/Space） */
+  enableSingleKeyShortcuts: boolean;
+  /** 内容密度（任务工作区 / 课程列表 / 命令中心） */
+  contentDensity: ContentDensity;
 }
 
 /** 设置中心 section */

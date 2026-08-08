@@ -14,6 +14,22 @@ export interface SettingDefinition {
 }
 
 export const SETTINGS_REGISTRY: SettingDefinition[] = [
+  // ---- 通用 ----
+  {
+    id: "startup-view",
+    section: "general",
+    title: "默认打开位置",
+    description: "启动后进入的默认工作区",
+    keywords: ["启动", "默认页面", "首页", "进入", "startup", "last"],
+  },
+  // ---- 个人资料 ----
+  {
+    id: "avatar-url",
+    section: "profile",
+    title: "头像地址",
+    description: "头像图片 URL，留空使用首字占位",
+    keywords: ["头像", "avatar", "图片", "照片"],
+  },
   // ---- 学期与课表 ----
   {
     id: "show-weekends",
@@ -44,6 +60,20 @@ export const SETTINGS_REGISTRY: SettingDefinition[] = [
     description: "新建任务的默认截止时刻",
     keywords: ["截止", "时间", "ddl", "新建任务", "预填"],
   },
+  {
+    id: "default-task-priority",
+    section: "tasks",
+    title: "默认优先级",
+    description: "新建任务的默认优先级",
+    keywords: ["优先级", "priority", "新建任务"],
+  },
+  {
+    id: "default-task-status",
+    section: "tasks",
+    title: "默认状态",
+    description: "新建任务的默认状态（待完成 / 进行中）",
+    keywords: ["任务状态", "状态", "status", "新建任务"],
+  },
   // ---- 交互与快捷键 ----
   {
     id: "schedule-direct-manipulation",
@@ -58,6 +88,20 @@ export const SETTINGS_REGISTRY: SettingDefinition[] = [
     title: "DDL 直接操作",
     description: "在日历中启用拖动调整截止日期",
     keywords: ["拖拽", "拖动", "日历", "ddl", "drag", "直接操作"],
+  },
+  {
+    id: "single-key-shortcuts",
+    section: "interaction",
+    title: "启用单键快捷键",
+    description: "N、J/K、X 等单键快速操作",
+    keywords: ["快捷键", "键盘", "按键", "single key", "shortcut"],
+  },
+  {
+    id: "content-density",
+    section: "interaction",
+    title: "界面密度",
+    description: "任务工作区、课程列表与命令中心的行高与间距",
+    keywords: ["密度", "紧凑", "舒适", "行高", "density", "compact"],
   },
   {
     id: "motion-preference",

@@ -69,6 +69,10 @@ export function AssignmentTable({ mode = "compact" }: AssignmentTableProps) {
   const setAssignmentSelection = useAppStore((s) => s.setAssignmentSelection);
   const assignmentPeekId = useAppStore((s) => s.assignmentPeekId);
   const setAssignmentPeekId = useAppStore((s) => s.setAssignmentPeekId);
+  // 单键快捷键开关：关闭后 J/K/X/Space 失效，方向键/Enter/Cmd+A/Esc 保留
+  const singleKeyEnabled = useAppStore((s) => s.preferences.enableSingleKeyShortcuts);
+  const contentDensity = useAppStore((s) => s.preferences.contentDensity);
+  const compactDensity = contentDensity === "compact";
 
   const [courseFilter, setCourseFilter] = useState<string>("all");
   const newTaskIds = useEnterOnAdd(assignments.map((a) => a.id));
@@ -203,6 +207,38 @@ export function AssignmentTable({ mode = "compact" }: AssignmentTableProps) {
   const handleListKeyDown = (e: React.KeyboardEvent) => {
     if (e.target !== e.currentTarget) return;
     const k = e.key;
+
+    // 单键快捷键关闭：只保留标准可访问键盘操作（方向键 / Enter / Cmd+A / Esc）
+    if (!singleKeyEnabled) {
+      if (k === "ArrowDown" || k === "ArrowUp") {
+        e.preventDefault();
+        moveHighlight(k === "ArrowDown" ? 1 : -1);
+      } else if (k === "Enter") {
+        if (ctxMenu) {
+          setCtxMenu(null);
+          return;
+        }
+        if (!highlightedAssignmentId) return;
+        e.preventDefault();
+        setAssignmentPeekId(null);
+        actions.openDrawer(highlightedAssignmentId);
+      } else if ((e.ctrlKey || e.metaKey) && k === "a") {
+        e.preventDefault();
+        setAssignmentSelection(selectAllVisible(filteredIds));
+      } else if (k === "Escape") {
+        if (ctxMenu) {
+          setCtxMenu(null);
+        } else if (assignmentPeekId) {
+          setAssignmentPeekId(null);
+        } else if (assignmentSelection.length > 0) {
+          setAssignmentSelection([]);
+        } else {
+          setHighlightedAssignmentId(null);
+          (e.currentTarget as HTMLElement).blur();
+        }
+      }
+      return;
+    }
 
     if (k === "ArrowDown" || k === "j" || k === "J") {
       e.preventDefault();
@@ -398,6 +434,7 @@ export function AssignmentTable({ mode = "compact" }: AssignmentTableProps) {
       {/* Task List：compact = 可伸缩内容区（flex-1 min-h-0）+ 分页；workspace = 完整滚动工作区 */}
       <div
         data-testid="assignment-list"
+        data-density={isWorkspace ? contentDensity : undefined}
         tabIndex={isWorkspace ? 0 : undefined}
         onKeyDown={isWorkspace ? handleListKeyDown : undefined}
         className={cn(
@@ -453,7 +490,8 @@ export function AssignmentTable({ mode = "compact" }: AssignmentTableProps) {
                 tabIndex={-1}
                 data-assignment-id={task.id}
                 className={cn(
-                  "p-3 rounded-xl transition-colors duration-[var(--motion-fast)] ease-[var(--ease-standard)] cursor-pointer flex items-center justify-between group",
+                  isWorkspace && compactDensity ? "p-2" : "p-3",
+                  "rounded-xl transition-colors duration-[var(--motion-fast)] ease-[var(--ease-standard)] cursor-pointer flex items-center justify-between group",
                   isNew && "animate-enter",
                   isWorkspace
                     ? isSelected
@@ -584,7 +622,9 @@ export function AssignmentTable({ mode = "compact" }: AssignmentTableProps) {
         {isWorkspace ? (
           <>
             <span className="text-[11px] text-sandrift">
-              J/K 移动 · Space 预览 · X 选择 · Enter 打开 · 右键更多
+              {singleKeyEnabled
+                ? "J/K 移动 · Space 预览 · X 选择 · Enter 打开 · 右键更多"
+                : "↑/↓ 移动 · Enter 打开 · 右键更多"}
             </span>
             <span />
           </>

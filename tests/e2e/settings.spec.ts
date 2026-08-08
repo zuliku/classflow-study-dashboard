@@ -96,3 +96,59 @@ test("Profile dirty：修改姓名 → 未保存 → 放弃更改 → 恢复原�
   await expect(page.getByTestId("settings-profile").getByTestId("settings-save-status")).toContainText("已保存");
   await expect(page.getByRole("button", { name: "放弃更改" })).toHaveCount(0);
 });
+
+test("Settings Layout：Toolbar 在右侧顶部，左栏导航稳定且不与内容重叠", async ({ page }) => {
+  await openSettings(page);
+
+  const dialog = page.getByRole("dialog", { name: "设置" });
+  const nav = page.getByRole("navigation", { name: "设置导航" });
+  const toolbar = page.getByTestId("settings-toolbar");
+  const detail = page.getByTestId("settings-detail");
+
+  await expect(toolbar).toBeVisible();
+  await expect(detail).toBeVisible();
+  await page.waitForTimeout(300); // 等入场动效（scale/opacity 220ms）完成后再测量几何
+
+  // Toolbar 位于 Detail Pane 顶部（同一右栏纵向堆叠，而非弹窗中部悬浮）
+  const tb = await toolbar.boundingBox();
+  const d = await detail.boundingBox();
+  const modal = await dialog.boundingBox();
+  expect(tb).not.toBeNull();
+  expect(d).not.toBeNull();
+  expect(modal).not.toBeNull();
+  expect(tb!.y + tb!.height).toBeLessThanOrEqual(d!.y + 1);
+  expect(tb!.y).toBeLessThan(modal!.y + modal!.height / 2); // 顶部区域而非中部
+  expect(tb!.x).toBeGreaterThanOrEqual(d!.x);
+  expect(tb!.x + tb!.width).toBeLessThanOrEqual(d!.x + d!.width + 1);
+
+  // 左栏导航与 Detail 不重叠（导航右缘 <= Detail 左缘）
+  const n = await nav.boundingBox();
+  expect(n).not.toBeNull();
+  expect(n!.x + n!.width).toBeLessThanOrEqual(d!.x + 1);
+
+  // 连续切换 3 个 section：左栏 x/y/width 不变
+  const first = n!;
+  for (const label of ["个人资料", "任务", "数据与存储"]) {
+    await nav.getByRole("button", { name: label }).click();
+    const box = await nav.boundingBox();
+    expect(box).not.toBeNull();
+    expect(box!.x).toBeCloseTo(first.x, 0);
+    expect(box!.y).toBeCloseTo(first.y, 0);
+    expect(box!.width).toBeCloseTo(first.width, 0);
+  }
+
+  // Modal 宽高不随 section 改变
+  for (const label of ["通用", "学期与课表", "关于"]) {
+    await nav.getByRole("button", { name: label }).click();
+    const box = await dialog.boundingBox();
+    expect(box).not.toBeNull();
+    expect(box!.width).toBeCloseTo(modal!.width, 0);
+    expect(box!.height).toBeCloseTo(modal!.height, 0);
+  }
+
+  // Mobile 390：横向 tabs 仍可用
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(nav).toBeHidden();
+  await page.getByRole("button", { name: "学期与课表" }).click();
+  await expect(page.getByTestId("settings-semester")).toBeVisible();
+});

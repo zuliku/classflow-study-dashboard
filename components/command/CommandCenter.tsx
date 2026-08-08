@@ -79,6 +79,8 @@ export function CommandCenter() {
 
   const pushToast = useToastStore((s) => s.pushToast);
   const confirmRequest = useConfirmStore((s) => s.confirm);
+  const singleKeyEnabled = useAppStore((s) => s.preferences.enableSingleKeyShortcuts);
+  const contentDensity = useAppStore((s) => s.preferences.contentDensity);
 
   // 任务动作（与 Context Menu / Bulk Bar 同一工厂）
   const assignmentActions = useMemo(
@@ -196,7 +198,8 @@ export function CommandCenter() {
             onMouseMove={() => setHighlighted(globalIndex)}
             onClick={() => item.run()}
             className={cn(
-              "w-full flex items-center gap-3 px-3 py-2 rounded-xl text-left transition-colors duration-[var(--motion-fast)]",
+              "w-full flex items-center gap-3 px-3 rounded-xl text-left transition-colors duration-[var(--motion-fast)]",
+              contentDensity === "compact" ? "py-1.5" : "py-2",
               isHighlighted ? "bg-alabaster text-charcoal" : "text-satin-grey"
             )}
           >
@@ -289,23 +292,45 @@ export function CommandCenter() {
                 <X className="w-4 h-4" />
               </button>
             </div>
+            {/* 单键快捷键状态提示 */}
+            <p className="text-[11px] font-semibold text-charcoal bg-alabaster border border-line-strong rounded-xl px-3 py-2">
+              单键快捷键：{singleKeyEnabled ? "已开启" : "已关闭"}
+            </p>
             {SHORTCUT_GUIDE.map((section) => (
               <div key={section.group}>
                 <h4 className="text-[10px] font-bold text-sandrift uppercase tracking-wider mb-1.5">
                   {section.group}
                 </h4>
                 <div className="space-y-1">
-                  {section.items.map((it) => (
-                    <div
-                      key={it.keys + it.label}
-                      className="flex items-center justify-between px-3 py-2 rounded-xl bg-[#F7F5F5]"
-                    >
-                      <span className="text-xs text-satin-grey">{it.label}</span>
-                      <kbd className="bg-white text-charcoal text-[10px] font-mono px-2 py-0.5 rounded border border-line-strong">
-                        {it.keys}
-                      </kbd>
-                    </div>
-                  ))}
+                  {section.items.map((it) => {
+                    const disabled = it.singleKey && !singleKeyEnabled;
+                    return (
+                      <div
+                        key={it.keys + it.label}
+                        className={cn(
+                          "flex items-center justify-between px-3 py-2 rounded-xl bg-[#F7F5F5]",
+                          disabled && "opacity-50"
+                        )}
+                      >
+                        <span className={cn("text-xs", disabled ? "text-satin-grey" : "text-satin-grey")}>
+                          {it.label}
+                          {disabled && (
+                            <span className="block text-[9px] text-sandrift mt-0.5">
+                              可在 设置 → 交互与快捷键 中开启
+                            </span>
+                          )}
+                        </span>
+                        <kbd
+                          className={cn(
+                            "bg-white text-charcoal text-[10px] font-mono px-2 py-0.5 rounded border border-line-strong",
+                            disabled && "line-through"
+                          )}
+                        >
+                          {it.keys}
+                        </kbd>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             ))}

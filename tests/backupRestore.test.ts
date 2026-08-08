@@ -5,7 +5,7 @@ import {
   commitBackupRestore,
 } from "@/lib/backupRestore";
 import { useAppStore } from "@/store/useAppStore";
-import { ClassFlowBackupData } from "@/types";
+import { ClassFlowBackupData, AppPreferences } from "@/types";
 
 /** 构造最小合法备份 data（v1 结构，无 preferences 字段 = legacy） */
 function buildBackupData(): ClassFlowBackupData {
@@ -151,7 +151,7 @@ describe("commitBackupRestore（确认后恢复）", () => {
 
   it("commit JSON：精确恢复且含 preferences 时应用", async () => {
     const data = buildBackupData();
-    data.preferences = { showWeekends: false, ddlWarningDays: 7, defaultDDLTime: "21:00", enableScheduleDirectManipulation: true, enableDDLDirectManipulation: true, motionPreference: "full" };
+    data.preferences = { showWeekends: false, ddlWarningDays: 7, defaultDDLTime: "21:00", enableScheduleDirectManipulation: true, enableDDLDirectManipulation: true, motionPreference: "full" } as AppPreferences;
     const prepared = await prepareBackupRestore(
       toFile(new Blob([backupJSON(data)]), "backup.json")
     );
