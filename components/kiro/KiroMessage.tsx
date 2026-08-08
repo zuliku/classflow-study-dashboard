@@ -1,8 +1,11 @@
 "use client";
 
 import React from "react";
+import { FileText, Image as ImageIcon } from "lucide-react";
 import { KiroMark } from "@/components/kiro/KiroHeader";
 import { KiroMarkdown } from "@/components/kiro/KiroMarkdown";
+import { KiroAttachmentView } from "@/lib/ai/attachments/types";
+import { cn } from "@/lib/utils";
 
 /**
  * Kiro 回复 Message：Kiro mark + 文档流（非左右气泡）。
@@ -48,12 +51,37 @@ export function KiroMessage({
   );
 }
 
-/** 用户 Message：轻量 soft bubble，右对齐（纯文本） */
-export function KiroUserMessage({ content }: { content: string }) {
+/** 用户 Message：轻量 soft bubble，右对齐（纯文本 + 附件 chips，不显示提取全文） */
+export function KiroUserMessage({
+  content,
+  attachments,
+}: {
+  content: string;
+  attachments?: KiroAttachmentView[];
+}) {
   return (
     <div className="flex justify-end" data-testid="kiro-user-message">
-      <div className="max-w-[85%] bg-alabaster border border-line rounded-2xl rounded-br-md px-4 py-2.5 text-xs font-medium text-charcoal whitespace-pre-wrap leading-relaxed">
-        {content}
+      <div className="max-w-[85%] flex flex-col items-end gap-1.5">
+        {attachments && attachments.length > 0 && (
+          <div className="flex flex-wrap justify-end gap-1.5">
+            {attachments.map((a) => {
+              const Icon = a.kind === "image" ? ImageIcon : FileText;
+              return (
+                <span
+                  key={a.id}
+                  data-testid="kiro-sent-attachment"
+                  className="inline-flex items-center gap-1.5 pl-2 pr-2 h-7 rounded-lg bg-surface border border-line text-[11px] font-semibold text-satin-grey"
+                >
+                  <Icon className="w-3 h-3 text-sandrift shrink-0" />
+                  <span className={cn("truncate max-w-[140px]")}>{a.name}</span>
+                </span>
+              );
+            })}
+          </div>
+        )}
+        <div className="bg-alabaster border border-line rounded-2xl rounded-br-md px-4 py-2.5 text-xs font-medium text-charcoal whitespace-pre-wrap leading-relaxed">
+          {content}
+        </div>
       </div>
     </div>
   );

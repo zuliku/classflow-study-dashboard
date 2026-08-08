@@ -4,6 +4,7 @@ import React, { useMemo, useState } from "react";
 import { useAppStore } from "@/store/useAppStore";
 import { useAISettingsStore } from "@/store/useAISettingsStore";
 import { useKiroChat } from "@/hooks/useKiroChat";
+import { useKiroAttachments } from "@/hooks/useKiroAttachments";
 import { getModelsForProvider, getActiveModelName, getActiveModelVendor } from "@/lib/ai/providers/registry";
 import { buildAutoContextRefs } from "@/lib/ai/context/contextSelection";
 import { KiroContextRef } from "@/lib/ai/context/types";
@@ -30,7 +31,8 @@ export function KiroWorkspace() {
   const visibleAutoRefs = autoRefs.filter((r) => !suppressedAutoKeys.includes(r.key));
   const activeRefs = [...visibleAutoRefs, ...manualRefs];
 
-  const chat = useKiroChat({ manualRefs, suppressedAutoKeys });
+  const attachmentsState = useKiroAttachments();
+  const chat = useKiroChat({ manualRefs, suppressedAutoKeys, attachments: attachmentsState.attachments });
 
   // AI 设置（模型选择器数据源）
   const provider = useAISettingsStore((s) => s.provider);
@@ -113,7 +115,10 @@ export function KiroWorkspace() {
             setManualRefs((prev) => (prev.some((r) => r.key === ref.key) ? prev : [...prev, ref]));
           }}
           onRemoveContext={removeContext}
-          onSend={chat.send}
+          onSend={(text) => {
+            chat.send(text);
+            attachmentsState.clear();
+          }}
           streaming={chat.streaming}
           onStop={chat.stop}
           configured={chat.configured}
@@ -123,6 +128,14 @@ export function KiroWorkspace() {
           activeModelVendor={activeModelVendor}
           onSelectModel={setModel}
           onOpenSettings={openKiroSettings}
+          attachments={attachmentsState.views}
+          hasProcessing={attachmentsState.hasProcessing}
+          visionEnabled={chat.visionEnabled}
+          onAddFiles={attachmentsState.addFiles}
+          onRemoveAttachment={attachmentsState.remove}
+          onRetryAttachment={attachmentsState.retry}
+          onSaveAttachmentToCourse={attachmentsState.saveToCourse}
+          onAddMaterial={attachmentsState.addMaterial}
         />
 
         {historyOpen && (

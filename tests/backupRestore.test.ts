@@ -140,8 +140,8 @@ describe("commitBackupRestore（确认后恢复）", () => {
       restoreAppData: (d) => useAppStore.getState().restoreAppData(d),
     });
 
-    // node 环境无 IndexedDB：附件写入失败被收集为 savedFailures，但不阻断数据恢复
-    expect(result.savedFailures).toEqual(["f1"]);
+    // 测试环境已提供 IndexedDB 内存实现（fake-indexeddb）：附件应成功写入
+    expect(result.savedFailures).toEqual([]);
     const after = useAppStore.getState();
     expect(after.courses.map((c) => c.id)).toEqual(["c_bak"]);
     expect(after.assignments.map((a) => a.id)).toEqual(["a_bak"]);

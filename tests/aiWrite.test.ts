@@ -57,7 +57,7 @@ async function freshModules() {
 }
 
 /** 真实 Store 之上的受限 api（与 hook 同构；registerUndo 收集到数组便于断言） */
-function buildApi(store: ReturnType<typeof useAppStoreLike>, undos: Map<string, () => void>) {
+function buildApi(store: { getState: () => any }, undos: Map<string, () => void>) {
   const s = () => store.getState();
   const api: KiroWriteApi = {
     getState: s,
@@ -92,10 +92,7 @@ function buildApi(store: ReturnType<typeof useAppStoreLike>, undos: Map<string, 
   return api;
 }
 
-type StoreLike = ReturnType<typeof useAppStoreLike>;
-function useAppStoreLike() {
-  return null as never;
-}
+type StoreLike = { getState: () => any };
 
 beforeEach(() => {
   localStorage.clear();
@@ -145,7 +142,7 @@ describe("Write Executor — Assignment", () => {
     expect(r.ok).toBe(true);
     if (!r.ok) return;
     const s = store.getState();
-    const created = s.assignments.find((a) => a.id === r.data.id);
+    const created = s.assignments.find((a) => a.id === (r.data as { id: string }).id);
     expect(created).toBeTruthy();
     expect(created?.priority).toBe("high"); // 偏好默认
     expect(created?.status).toBe("doing"); // 偏好默认
@@ -153,7 +150,7 @@ describe("Write Executor — Assignment", () => {
     expect(r.action.canUndo).toBe(true);
 
     undos.get("call_2")!();
-    expect(store.getState().assignments.some((a) => a.id === r.data.id)).toBe(false);
+    expect(store.getState().assignments.some((a) => a.id === (r.data as { id: string }).id)).toBe(false);
   });
 
   it("delete_assignment：删除 + CalendarMark 清理 + Undo 完整恢复", async () => {
@@ -305,17 +302,17 @@ describe("Write Executor — Course", () => {
     const r = executeKiroWriteTool("create_course", { name: "线性代数", teacher: "赵老师", credit: 4 }, api, "c");
     expect(r.ok).toBe(true);
     if (!r.ok) return;
-    const created = store.getState().courses.find((c) => c.id === r.data.id)!;
+    const created = store.getState().courses.find((c) => c.id === (r.data as { id: string }).id)!;
     const def = getDefaultCourseAppearance();
     expect(created.bgHex).toBe(def.bgHex);
     expect(created.borderHex).toBe(def.borderHex);
     expect(r.action.canUndo).toBe(false); // V1：不开放级联删除 Undo
 
-    const u = executeKiroWriteTool("update_course", { courseId: r.data.id, name: "线性代数A" }, api, "c2");
+    const u = executeKiroWriteTool("update_course", { courseId: (r.data as { id: string }).id, name: "线性代数A" }, api, "c2");
     expect(u.ok).toBe(true);
-    expect(store.getState().courses.find((c) => c.id === r.data.id)?.name).toBe("线性代数A");
+    expect(store.getState().courses.find((c) => c.id === (r.data as { id: string }).id)?.name).toBe("线性代数A");
     undos.get("c2")!();
-    expect(store.getState().courses.find((c) => c.id === r.data.id)?.name).toBe("线性代数");
+    expect(store.getState().courses.find((c) => c.id === (r.data as { id: string }).id)?.name).toBe("线性代数");
   });
 });
 

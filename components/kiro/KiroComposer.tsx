@@ -6,27 +6,26 @@ import {
   AtSign,
   ArrowUp,
   Square,
-  Paperclip,
-  FileText,
-  Image as ImageIcon,
   ChevronDown,
   Settings,
   Check,
+  Sparkles,
 } from "lucide-react";
 import { KiroContextBar } from "@/components/kiro/KiroContextBar";
 import { KiroContextPicker } from "@/components/kiro/KiroContextPicker";
+import { KiroAttachmentPicker } from "@/components/kiro/KiroAttachmentPicker";
+import { KiroMaterialPicker } from "@/components/kiro/KiroMaterialPicker";
+import { KiroAttachmentChip } from "@/components/kiro/KiroAttachmentChip";
 import { ProviderLogo } from "@/components/kiro/ProviderLogo";
 import { KiroContextRef } from "@/lib/ai/context/types";
+import { KiroAttachmentView } from "@/lib/ai/attachments/types";
 import { AIModelVendor } from "@/lib/ai/providers/types";
 import { cn } from "@/lib/utils";
 
 /**
- * Kiro Composer（Task 1）：真实发送入口。
- * - Enter 发送 / Shift+Enter 换行；empty 或未配置时 Send disabled
- * - streaming 时 Send 变为 Stop
- * - 真实 Model Selector（来自 registry；Custom 显示用户填写的 Model ID）
- * - + 附件菜单：仅 UI（标注「即将支持」，不读取文件）
- * - @ Context Picker：UI foundation（Task 1 不发送给模型）
+ * Kiro Composer（Task 4）：真实发送入口 + 附件（上传/拖拽/粘贴/课程资料/保存）。
+ * - 文档：选择后本地解析 → ready 才能发送
+ * - 图片：vision 模型以原生 image part 发送；非 vision 模型在发送前阻止
  */
 export function KiroComposer({
   contexts,
@@ -42,6 +41,14 @@ export function KiroComposer({
   activeModelVendor,
   onSelectModel,
   onOpenSettings,
+  attachments,
+  hasProcessing,
+  visionEnabled,
+  onAddFiles,
+  onRemoveAttachment,
+  onRetryAttachment,
+  onSaveAttachmentToCourse,
+  onAddMaterial,
 }: {
   contexts: KiroContextRef[];
   onAddContext: (ref: KiroContextRef) => void;
@@ -56,15 +63,30 @@ export function KiroComposer({
   activeModelVendor: AIModelVendor | null;
   onSelectModel: (id: string) => void;
   onOpenSettings: () => void;
+  attachments: KiroAttachmentView[];
+  hasProcessing: boolean;
+  visionEnabled: boolean;
+  onAddFiles: (files: File[]) => void;
+  onRemoveAttachment: (id: string) => void;
+  onRetryAttachment: (id: string) => void;
+  onSaveAttachmentToCourse: (id: string, courseId: string) => void;
+  onAddMaterial: (ref: { courseId: string; courseName: string; materialId: string; title: string; type: string }) => void;
 }) {
   const [text, setText] = useState("");
   const [attachOpen, setAttachOpen] = useState(false);
   const [modelOpen, setModelOpen] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [materialPickerOpen, setMaterialPickerOpen] = useState(false);
+  const [dragOver, setDragOver] = useState(false);
   const taRef = useRef<HTMLTextAreaElement | null>(null);
   const attachRef = useRef<HTMLDivElement | null>(null);
   const modelRef = useRef<HTMLDivElement | null>(null);
   const pickerWrapRef = useRef<HTMLDivElement | null>(null);
+  const dropRef = useRef<HTMLDivElement | null>(null);
+
+  const hasImages = attachments.some((a) => a.kind === "image");
+  const imagesBlocked = hasImages && !visionEnabled;
+  const canSend = text.trim().length > 0 && !hasProcessing && !imagesBlocked && !streaming;
 
   const autoGrow = () => {
     const el = taRef.current;
@@ -74,9 +96,8 @@ export function KiroComposer({
   };
 
   const submit = () => {
-    const v = text.trim();
-    if (!v || streaming) return;
-    onSend(v);
+    if (!canSend) return;
+    onSend(text.trim());
     setText("");
     requestAnimationFrame(() => {
       if (taRef.current) {
@@ -100,13 +121,17 @@ export function KiroComposer({
         setAttachOpen(false);
         setModelOpen(false);
         setPickerOpen(false);
+        setMaterialPickerOpen(false);
       }
     };
     const onPointerDown = (e: PointerEvent) => {
       const t = e.target as Node;
       if (attachRef.current && !attachRef.current.contains(t)) setAttachOpen(false);
       if (modelRef.current && !modelRef.current.contains(t)) setModelOpen(false);
-      if (pickerWrapRef.current && !pickerWrapRef.current.contains(t)) setPickerOpen(false);
+      if (pickerWrapRef.current && !pickerWrapRef.current.contains(t)) {
+        setPickerOpen(false);
+        setMaterialPickerOpen(false);
+      }
     };
     window.addEventListener("keydown", onKey);
     document.addEventListener("pointerdown", onPointerDown);
@@ -116,34 +141,26 @@ export function KiroComposer({
     };
   }, []);
 
-  const attachItems = [
-    { id: "file", icon: Paperclip, label: "上传文件", soon: true },
-    { id: "material", icon: FileText, label: "选择课程资料", soon: true },
-    { id: "image", icon: ImageIcon, label: "添加图片", soon: true },
-  ];
+  // 拖拽添加文件（Desktop）
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setDragOver(false);
+    const files = Array.from(e.dataTransfer.files ?? []);
+    if (files.length > 0) onAddFiles(files);
+  };
 
-  const attachMenu = (
-    <div role="menu" aria-label="添加附件" className="py-1">
-      {attachItems.map((it) => {
-        const Icon = it.icon;
-        return (
-          <button
-            key={it.id}
-            role="menuitem"
-            onClick={() => setAttachOpen(false)}
-            className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-left text-xs font-semibold text-charcoal hover:bg-alabaster transition-colors"
-          >
-            <Icon className="w-4 h-4 text-sandrift shrink-0" />
-            <span className="flex-1">{it.label}</span>
-            <span className="text-[9px] font-bold text-sandrift bg-[#F7F5F5] border border-line px-1.5 py-0.5 rounded">
-              即将支持
-            </span>
-          </button>
-        );
-      })}
-      <p className="px-3 pt-1 text-[10px] text-sandrift">附件读取将在后续 Task 提供。</p>
-    </div>
-  );
+  // 粘贴图片（Ctrl/Cmd+V）
+  const handlePaste = (e: React.ClipboardEvent) => {
+    const items = Array.from(e.clipboardData?.items ?? []);
+    const files = items
+      .filter((it) => it.kind === "file")
+      .map((it) => it.getAsFile())
+      .filter((f): f is File => f != null);
+    if (files.length > 0) {
+      e.preventDefault();
+      onAddFiles(files);
+    }
+  };
 
   const modelMenu = (
     <div role="menu" aria-label="选择模型" className="py-1">
@@ -163,7 +180,6 @@ export function KiroComposer({
               m.value === selectedModelId ? "text-charcoal bg-pastel-mint" : "text-satin-grey hover:bg-alabaster"
             )}
           >
-            {/* 品牌 Logo 与文字左边界严格对齐；Logo 22px 容器，视觉约 18px */}
             <ProviderLogo vendor={m.vendor} size="md" />
             <span className="min-w-0 flex-1 truncate">{m.label}</span>
             {m.value === selectedModelId && (
@@ -178,9 +194,52 @@ export function KiroComposer({
   );
 
   return (
-    <div className="shrink-0" data-testid="kiro-composer">
+    <div
+      ref={dropRef}
+      onDragOver={(e) => {
+        e.preventDefault();
+        setDragOver(true);
+      }}
+      onDragLeave={() => setDragOver(false)}
+      onDrop={handleDrop}
+      className="shrink-0 relative"
+      data-testid="kiro-composer"
+    >
+      {/* 拖拽提示：轻量，不夸张 */}
+      {dragOver && (
+        <div className="absolute inset-0 z-40 rounded-2xl border-2 border-dashed border-line-strong bg-surface/90 backdrop-blur-[1px] flex items-center justify-center pointer-events-none">
+          <span className="text-xs font-bold text-charcoal">释放以添加到 Kiro</span>
+        </div>
+      )}
+
       <div className="max-w-[820px] mx-auto">
         <KiroContextBar contexts={contexts} onRemove={onRemoveContext} />
+
+        {/* 附件 chips */}
+        {attachments.length > 0 && (
+          <div className="flex flex-wrap items-center gap-1.5 px-1 pb-2" data-testid="kiro-attachments">
+            {attachments.map((a) => (
+              <KiroAttachmentChip
+                key={a.id}
+                attachment={a}
+                onRemove={onRemoveAttachment}
+                onRetry={onRetryAttachment}
+                onSaveToCourse={onSaveAttachmentToCourse}
+              />
+            ))}
+            {hasImages && !visionEnabled && (
+              <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-warning px-2">
+                当前模型不支持图片理解
+                <button
+                  onClick={() => setModelOpen(true)}
+                  className="underline underline-offset-2 decoration-line-strong hover:text-charcoal"
+                >
+                  切换模型
+                </button>
+              </span>
+            )}
+          </div>
+        )}
 
         <div className="bg-surface border border-line-strong rounded-2xl shadow-subtle p-2.5 focus-within:border-charcoal transition-colors duration-[var(--motion-fast)]">
           <textarea
@@ -191,6 +250,7 @@ export function KiroComposer({
               autoGrow();
             }}
             onKeyDown={handleKeyDown}
+            onPaste={handlePaste}
             rows={1}
             placeholder="Ask Kiro…"
             aria-label="Ask Kiro"
@@ -205,6 +265,7 @@ export function KiroComposer({
                     setAttachOpen((v) => !v);
                     setModelOpen(false);
                     setPickerOpen(false);
+                    setMaterialPickerOpen(false);
                   }}
                   aria-label="添加附件"
                   aria-expanded={attachOpen}
@@ -216,7 +277,23 @@ export function KiroComposer({
                 </button>
                 {attachOpen && (
                   <div className="absolute bottom-full left-0 mb-1.5 w-60 bg-surface border border-line-strong rounded-2xl shadow-card z-40 ux-inline">
-                    {attachMenu}
+                    <KiroAttachmentPicker
+                      onClose={() => setAttachOpen(false)}
+                      onFiles={onAddFiles}
+                      onMaterials={() => setMaterialPickerOpen(true)}
+                    />
+                  </div>
+                )}
+                {materialPickerOpen && (
+                  <div className="absolute bottom-full left-0 mb-1.5 w-72 bg-surface border border-line-strong rounded-2xl shadow-card z-40 ux-inline">
+                    <KiroMaterialPicker
+                      onClose={() => setMaterialPickerOpen(false)}
+                      onPick={(ref) => {
+                        onAddMaterial(ref);
+                        setMaterialPickerOpen(false);
+                        setAttachOpen(false);
+                      }}
+                    />
                   </div>
                 )}
               </div>
@@ -284,7 +361,7 @@ export function KiroComposer({
               ) : (
                 <button
                   onClick={submit}
-                  disabled={!text.trim() || !configured}
+                  disabled={!canSend}
                   aria-label="发送"
                   title="发送"
                   className="ux-press w-11 h-11 md:w-9 md:h-9 flex items-center justify-center rounded-xl bg-charcoal text-white hover:bg-black transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
@@ -307,9 +384,13 @@ export function KiroComposer({
               配置 AI 服务
             </button>
           </div>
+        ) : attachments.length > 0 ? (
+          <p className="text-[10px] text-sandrift mt-1.5 px-1">
+            文件内容会发送给当前选择的 AI 服务以完成你的请求。
+          </p>
         ) : (
           <p className="text-[10px] text-sandrift mt-1.5 px-1">
-            Kiro 会按需读取完成当前问题所需的 ClassFlow 学习数据；当前仅支持读取，不会修改任何数据。
+            Kiro 会按需读取完成当前问题所需的 ClassFlow 学习数据；修改操作需要你的明确指令。
           </p>
         )}
       </div>

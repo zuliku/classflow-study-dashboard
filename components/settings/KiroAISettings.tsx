@@ -156,6 +156,32 @@ export function KiroAISettings() {
                 className={`${inputCls} font-mono`}
               />
             </SettingsRow>
+            <SettingsRow
+              settingId="ai-custom-capabilities"
+              title="模型能力"
+              description="只有你的兼容服务实际支持这些能力时才开启；默认关闭（保守策略）。"
+            >
+              <div className="flex items-center gap-4 text-[11px] font-semibold text-satin-grey">
+                <label className="flex items-center gap-1.5 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={custom.vision === true}
+                    onChange={(e) => setCustom({ vision: e.target.checked })}
+                    className="w-3.5 h-3.5 rounded accent-charcoal"
+                  />
+                  支持图片输入
+                </label>
+                <label className="flex items-center gap-1.5 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={custom.fileParts === true}
+                    onChange={(e) => setCustom({ fileParts: e.target.checked })}
+                    className="w-3.5 h-3.5 rounded accent-charcoal"
+                  />
+                  支持文件输入
+                </label>
+              </div>
+            </SettingsRow>
           </div>
         )}
 

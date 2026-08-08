@@ -18,6 +18,7 @@ export const KIRO_TOOL_LABELS: Record<string, string> = {
   get_group_tasks: "查看小组任务",
   get_calendar_range: "查看日历",
   get_material_metadata: "查看课程资料",
+  read_material: "读取资料正文",
   // Write
   create_assignment: "创建任务",
   update_assignment: "修改任务",

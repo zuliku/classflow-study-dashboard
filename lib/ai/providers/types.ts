@@ -36,6 +36,7 @@ export interface AIModelDefinition {
     tools: boolean;
     vision: boolean;
     fileParts: boolean;
+    pdf?: boolean;
   };
 }
 
@@ -53,6 +54,9 @@ export interface AICustomConfig {
   providerName: string;
   baseURL: string;
   model: string;
+  /** 高级：用户明确声明兼容服务的能力（默认全 false，保守策略） */
+  vision?: boolean;
+  fileParts?: boolean;
 }
 
 /** AI 服务设置（持久化于独立 storage，不含 API Key） */

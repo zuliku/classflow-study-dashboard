@@ -67,6 +67,11 @@ export const getMaterialMetadataSchema = z.object({
   materialId: z.string().trim().min(1).max(120).optional(),
 });
 
+export const readMaterialSchema = z.object({
+  courseId: z.string().trim().min(1).max(120),
+  materialId: z.string().trim().min(1).max(120),
+});
+
 /** Read Tool 输入 schema 注册表（tool name → zod schema；server/client 共用） */
 export const KIRO_READ_TOOL_SCHEMAS = {
   get_current_context: emptyInputSchema,
@@ -82,6 +87,7 @@ export const KIRO_READ_TOOL_SCHEMAS = {
   get_group_tasks: getGroupTasksSchema,
   get_calendar_range: getCalendarRangeSchema,
   get_material_metadata: getMaterialMetadataSchema,
+  read_material: readMaterialSchema,
 } as const;
 
 export type KiroReadToolName = keyof typeof KIRO_READ_TOOL_SCHEMAS;

@@ -13,6 +13,10 @@ import { buildBaseContext } from "@/lib/ai/context/buildBaseContext";
 import { buildAutoContextRefs, resolveContextRefs, refsForPrompt } from "@/lib/ai/context/contextSelection";
 import { KiroContextRef } from "@/lib/ai/context/types";
 import { executeKiroReadTool, ReadToolResult } from "@/lib/ai/tools/read/executor";
+import { executeReadMaterial } from "@/lib/ai/tools/read/material";
+import { MAX_MATERIAL_READS_PER_TURN } from "@/lib/ai/attachments/limits";
+import { KiroAttachment, KiroDocumentContext, KiroAttachmentView } from "@/lib/ai/attachments/types";
+import { getModelCapabilities } from "@/lib/ai/providers/capabilities";
 import { executeKiroWriteTool } from "@/lib/ai/tools/write/executor";
 import { isDestructiveWriteTool, KiroUndoEntry, KiroWriteApi, WriteToolResult } from "@/lib/ai/tools/write/types";
 import { KIRO_WRITE_TOOL_NAMES } from "@/lib/ai/tools/write/registry";
@@ -30,6 +34,8 @@ export interface KiroChatMessageView {
   streaming: boolean;
   /** 真实 Write Tool 结果（Action Card 事实来源，模型不得生成） */
   actions?: KiroActionResultView[];
+  /** 该 User Turn 绑定的附件（chips 展示；File 对象不进入 Chat state） */
+  attachments?: KiroAttachmentView[];
 }
 
 export interface KiroActionResultView {
@@ -133,9 +139,11 @@ type ToolOutput = { ok: boolean; code?: string; message?: string; data?: unknown
 export function useKiroChat({
   manualRefs,
   suppressedAutoKeys,
+  attachments,
 }: {
   manualRefs: KiroContextRef[];
   suppressedAutoKeys: string[];
+  attachments: KiroAttachment[];
 }) {
   const enabled = useAISettingsStore((s) => s.enabled);
   const provider = useAISettingsStore((s) => s.provider);
@@ -145,7 +153,13 @@ export function useKiroChat({
   const pushToast = useToastStore((s) => s.pushToast);
   const confirmRequest = useConfirmStore((s) => s.confirm);
 
-  // 每轮请求体：Base Context + 显式 Context 引用（每次渲染刷新为最新 Store 状态）
+  const capabilities = getModelCapabilities({ provider, model, custom });
+  const visionEnabled = capabilities.vision;
+
+  // 发送瞬间绑定的附件快照：按 user message 顺序消费（File 不进入 Chat state）
+  const snapshotQueueRef = useRef<KiroAttachmentView[][]>([]);
+
+  // 每轮请求体：Base Context + 显式 Context 引用 + 附件 Context（每次渲染刷新为最新 Store 状态）
   const bodyRef = useRef<Record<string, unknown>>({});
   bodyRef.current = {
     provider,
@@ -156,9 +170,12 @@ export function useKiroChat({
     contextRefs: refsForPrompt(
       resolveContextRefs(buildAutoContextRefs(), manualRefs, suppressedAutoKeys)
     ),
+    // 文档文本 Context（本地已提取；图片不走此路径，走原生 image part）
+    attachmentsContext: buildDocumentContexts(attachments),
   };
 
   const readCounterRef = useRef(0);
+  const materialReadCounterRef = useRef(0);
   const writeCounterRef = useRef(0);
   const limitReachedRef = useRef(false);
   const undoRegistryRef = useRef(new Map<string, KiroUndoEntry>());
@@ -198,6 +215,25 @@ export function useKiroChat({
       // ---- 循环保护 ----
       if (limitReachedRef.current) {
         failOutput("READ_TOOL_LIMIT_REACHED", "已达到本轮操作上限，请换个问法。");
+        return;
+      }
+
+      // ---- read_material（重量级，单独限制）----
+      if (toolName === "read_material") {
+        materialReadCounterRef.current += 1;
+        if (materialReadCounterRef.current > MAX_MATERIAL_READS_PER_TURN) {
+          failOutput("READ_TOOL_LIMIT_REACHED", "已达到本轮资料读取上限。");
+          return;
+        }
+        // Browser 异步执行（IndexedDB Blob → 提取）；完成后回传 Tool Output
+        void executeReadMaterial(input, useAppStore.getState()).then((result) => {
+          chat.addToolOutput({
+            tool: toolName as never,
+            toolCallId,
+            output: result as ToolOutput,
+            options: { body: bodyRef.current },
+          });
+        });
         return;
       }
 
@@ -298,16 +334,58 @@ export function useKiroChat({
       const v = text.trim();
       if (!v || !enabled) return;
       readCounterRef.current = 0;
+      materialReadCounterRef.current = 0;
       writeCounterRef.current = 0;
       limitReachedRef.current = false;
-      void chat.sendMessage({ text: v }, { body: bodyRef.current });
+
+      // 附件快照绑定到该 User Turn（发送后 Composer 清空，旧消息不受影响）
+      const snapshot: KiroAttachmentView[] = attachments
+        .filter((a) => a.status === "ready")
+        .map((a) =>
+          a.source === "local"
+            ? {
+                id: a.id,
+                source: "local" as const,
+                kind: a.kind,
+                name: a.name,
+                size: a.size,
+                status: "ready" as const,
+                thumbnail: a.kind === "image" ? undefined : undefined,
+              }
+            : {
+                id: a.id,
+                source: "material" as const,
+                kind: a.kind,
+                name: a.name,
+                status: "ready" as const,
+                courseName: a.courseName,
+              }
+        );
+      if (snapshot.length > 0) snapshotQueueRef.current.push(snapshot);
+
+      // 图片：仅 vision 模型以原生 image part 发送（非 vision 模型在 Composer 已被阻止）
+      const imageFiles = attachments
+        .filter((a): a is Extract<KiroAttachment, { source: "local" }> => a.source === "local" && a.kind === "image" && a.status === "ready")
+        .map((a) => a.file);
+      let files: FileList | undefined;
+      if (visionEnabled && imageFiles.length > 0 && typeof DataTransfer !== "undefined") {
+        const dt = new DataTransfer();
+        imageFiles.forEach((f) => dt.items.add(f));
+        files = dt.files;
+      }
+
+      void chat.sendMessage(
+        { text: v, files },
+        { body: bodyRef.current }
+      );
     },
-    [chat, enabled]
+    [chat, enabled, attachments, visionEnabled]
   );
 
   const retry = useCallback(() => {
     if (!enabled) return;
     readCounterRef.current = 0;
+    materialReadCounterRef.current = 0;
     writeCounterRef.current = 0;
     limitReachedRef.current = false;
     void chat.regenerate({ body: bodyRef.current });
@@ -316,9 +394,11 @@ export function useKiroChat({
   const newChat = useCallback(() => {
     chat.setMessages([]);
     readCounterRef.current = 0;
+    materialReadCounterRef.current = 0;
     writeCounterRef.current = 0;
     limitReachedRef.current = false;
     undoRegistryRef.current.clear();
+    snapshotQueueRef.current = [];
   }, [chat]);
 
   const normalizedError: AIError | null = chat.error ? normalizeAIError(chat.error) : null;
@@ -328,8 +408,27 @@ export function useKiroChat({
     [chat.messages, chat.status]
   );
 
+  // 用户消息按顺序消费发送时绑定的附件快照
+  const messages = useMemo(() => {
+    const queue = snapshotQueueRef.current;
+    let qi = 0;
+    return chat.messages.map((m) => {
+      const view = toView(m);
+      if (m.role === "user") {
+        if (qi < queue.length) {
+          const snapshot = queue[qi];
+          qi += 1;
+          if (snapshot.length > 0) view.attachments = snapshot;
+        } else {
+          qi += 1;
+        }
+      }
+      return view;
+    });
+  }, [chat.messages]);
+
   return {
-    messages: chat.messages.map(toView),
+    messages,
     status: chat.status,
     streaming,
     error: normalizedError,
@@ -340,7 +439,28 @@ export function useKiroChat({
     newChat,
     configured: enabled,
     consumeUndo,
+    visionEnabled,
   };
+}
+
+/** 本地文档附件 → 传给模型的文档 Context（含来源标记；截断明确标注） */
+function buildDocumentContexts(attachments: KiroAttachment[]): KiroDocumentContext[] {
+  const contexts: KiroDocumentContext[] = [];
+  for (const a of attachments) {
+    if (a.source === "local") {
+      if (a.kind === "image" || a.status !== "ready" || !a.extracted || !a.extracted.text) continue;
+      contexts.push({
+        attachmentId: a.id,
+        name: a.name,
+        type: a.kind,
+        text: a.extracted.text,
+        source: "chat",
+        truncated: a.extracted.truncated,
+        pages: a.extracted.pages,
+      });
+    }
+  }
+  return contexts;
 }
 
 /** 构建 Write Executor 的受限 API（白名单，禁止 setState） */

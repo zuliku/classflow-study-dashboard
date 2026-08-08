@@ -53,7 +53,7 @@ export function KiroConversation({
       <div className="max-w-[820px] mx-auto space-y-5 px-1 py-3">
         {messages.map((m) =>
           m.role === "user" ? (
-            <KiroUserMessage key={m.id} content={m.content} />
+            <KiroUserMessage key={m.id} content={m.content} attachments={m.attachments} />
           ) : (
             <KiroMessage key={m.id} content={m.content} streaming={m.streaming}>
               {/* Action Result Cards：真实 ToolResult 事实 UI */}

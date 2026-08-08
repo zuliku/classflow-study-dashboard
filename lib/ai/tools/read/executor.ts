@@ -19,7 +19,7 @@ import { KIRO_READ_TOOL_SCHEMAS, KiroReadToolName } from "@/lib/ai/tools/read/sc
  * 工具输出统一 envelope：ok / code / message / candidates。
  */
 
-export type ReadToolErrorCode = "NOT_FOUND" | "INVALID_INPUT" | "AMBIGUOUS" | "OUT_OF_RANGE";
+export type ReadToolErrorCode = "NOT_FOUND" | "INVALID_INPUT" | "AMBIGUOUS" | "OUT_OF_RANGE" | "FILE_MISSING";
 
 export type ReadToolResult<T> =
   | { ok: true; data: T }
@@ -490,7 +490,8 @@ export function getMaterialMetadata(state: ReadToolState, input: unknown): ReadT
 
 // ---------- 统一入口 ----------
 
-const EXECUTORS: Record<KiroReadToolName, (state: ReadToolState, input: unknown) => ReadToolResult<unknown>> = {
+/** 同步执行的 Read Tools（read_material 为异步重量级工具，独立处理） */
+const EXECUTORS: Record<Exclude<KiroReadToolName, "read_material">, (state: ReadToolState, input: unknown) => ReadToolResult<unknown>> = {
   get_current_context: getCurrentContext,
   get_user_study_profile: getUserStudyProfile,
   search_courses: searchCourses,
@@ -515,7 +516,10 @@ export function executeKiroReadTool(
   input: unknown,
   state: ReadToolState
 ): ReadToolResult<unknown> {
-  const executor = EXECUTORS[toolName as KiroReadToolName];
+  if (toolName === "read_material") {
+    return { ok: false, code: "INVALID_INPUT", message: "read_material 需要异步执行。" };
+  }
+  const executor = EXECUTORS[toolName as Exclude<KiroReadToolName, "read_material">];
   if (!executor) {
     return { ok: false, code: "INVALID_INPUT", message: `未知工具：${toolName}` };
   }

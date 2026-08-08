@@ -79,13 +79,34 @@ export async function POST(req: NextRequest) {
   const b = body as Record<string, unknown>;
   const baseContext = (typeof b.baseContext === "object" && b.baseContext !== null ? b.baseContext : null) as Record<string, unknown> | null;
   const contextRefs = Array.isArray(b.contextRefs) ? (b.contextRefs as Record<string, unknown>[]) : [];
+  const attachmentsContext = Array.isArray(b.attachmentsContext)
+    ? (b.attachmentsContext as { name?: string; text?: string; type?: string; source?: string; truncated?: boolean; courseName?: string }[])
+    : [];
+
+  const attachmentSection =
+    attachmentsContext.length > 0
+      ? `\n\n# 用户提供的文件内容\n${attachmentsContext
+          .map((f, i) => {
+            const header = [
+              `文件 ${i + 1}：${f.name ?? "未命名"}`,
+              f.source === "course-material" ? `来源：课程资料` : "来源：用户上传",
+              f.courseName ? `课程：${f.courseName}` : "",
+              `类型：${f.type ?? ""}`,
+              f.truncated ? "（内容已截断，未完整读取）" : "",
+            ]
+              .filter(Boolean)
+              .join(" · ");
+            return `### ${header}\n${f.text ?? ""}`;
+          })
+          .join("\n\n")}`.slice(0, 240_000)
+      : "";
 
   const systemMessage = baseContext
     ? `${KIRO_SYSTEM_PROMPT}\n\n# 当前 ClassFlow 上下文\n${JSON.stringify({
         baseContext,
         contextRefs,
-      })}`
-    : KIRO_SYSTEM_PROMPT;
+      })}${attachmentSection}`
+    : KIRO_SYSTEM_PROMPT + attachmentSection;
 
   // 兼容性归一：旧 {role, content} 形状 → UIMessage parts 形状（客户端始终发送 parts 版）
   const normalizedMessages = (parsed.messages as { id?: string; role: string; content?: string; parts?: unknown[] }[]).map(

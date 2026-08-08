@@ -375,3 +375,62 @@ test("Kiro Markdown：heading / table / strong / list 真实渲染，无原始�
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1);
   expect(overflow).toBe(false);
 });
+
+test("Kiro Attachment：上传 PDF → 本地解析 ready → 发送 → 附件 context 到达 Mock → 回答", async ({ page }) => {
+  const { buildMinimalPdf } = require("../fixtures/files");
+  let receivedContext = "";
+  await page.route("**/api/ai/chat", async (route) => {
+    const body = route.request().postDataJSON() as { attachmentsContext?: { name?: string; text?: string }[] };
+    receivedContext = body?.attachmentsContext?.[0]?.text ?? "";
+    const md = "根据《测试讲义.pdf》的正文，这份资料介绍了回归分析的要点。";
+    const chunks = [
+      JSON.stringify({ type: "start", messageId: "mock-att-1" }),
+      JSON.stringify({ type: "start-step" }),
+      JSON.stringify({ type: "text-start", id: "att-text" }),
+      JSON.stringify({ type: "text-delta", id: "att-text", delta: md }),
+      JSON.stringify({ type: "text-end", id: "att-text" }),
+      JSON.stringify({ type: "finish-step" }),
+      JSON.stringify({ type: "finish", finishReason: "stop" }),
+    ];
+    await route.fulfill({ status: 200, contentType: "text/event-stream", body: sse(chunks.join("\n")) });
+  });
+
+  await page.addInitScript(({ settings, key }) => {
+    localStorage.setItem("classflow-ai-settings-v1", JSON.stringify({ version: 0, state: settings }));
+    sessionStorage.setItem("classflow-ai-key:deepseek", key);
+  }, { settings: AI_SETTINGS, key: "sk-test-key" });
+
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/");
+  await page.locator("aside").first().getByRole("button", { name: "Kiro" }).click();
+  await page.waitForTimeout(500);
+
+  const composer = page.getByTestId("kiro-composer");
+
+  // 通过 + 菜单 → 上传文件 → filechooser 提供 PDF
+  const chooserPromise = page.waitForEvent("filechooser");
+  await composer.getByLabel("添加附件").click();
+  await page.getByRole("menuitem", { name: "上传文件" }).click();
+  const chooser = await chooserPromise;
+  await chooser.setFiles({
+    name: "测试讲义.pdf",
+    mimeType: "application/pdf",
+    buffer: Buffer.from(buildMinimalPdf("ClassFlow PDF test document")),
+  });
+
+  // 附件 chip：正在读取 → 已就绪（本地解析，不发送）
+  const chip = page.getByTestId("kiro-attachment-chip");
+  await expect(chip).toContainText("测试讲义.pdf", { timeout: 15000 });
+  await expect(chip).toContainText("已就绪", { timeout: 15000 });
+  await expect(page.getByText("文件内容会发送给当前选择的 AI 服务以完成你的请求。")).toBeVisible();
+
+  // 发送 → Mock 收到附件 context（真实提取文本）→ 回答引用文件
+  await composer.getByLabel("Ask Kiro").fill("这份资料讲了什么？");
+  await composer.getByLabel("发送").click();
+  await expect(page.getByTestId("kiro-message").last()).toContainText("测试讲义", { timeout: 10000 });
+  await expect(receivedContext).toContain("ClassFlow PDF test document");
+
+  // 用户消息显示附件 chip（不显示提取全文）
+  await expect(page.getByTestId("kiro-sent-attachment")).toContainText("测试讲义.pdf");
+  await expect(page.getByTestId("kiro-user-message")).not.toContainText("ClassFlow PDF test document");
+});

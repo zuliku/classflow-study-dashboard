@@ -40,3 +40,6 @@ if (typeof globalThis.sessionStorage === "undefined") {
     },
   } as Storage;
 }
+
+// Kiro 附件提取缓存 / 资料 Blob（IndexedDB）测试需要内存实现
+import "fake-indexeddb/auto";
