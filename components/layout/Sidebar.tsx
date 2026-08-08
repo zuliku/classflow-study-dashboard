@@ -46,7 +46,7 @@ export function Sidebar() {
                 onClick={() => setActiveTab(item.id)}
                 aria-label={item.label}
                 className={cn(
-                  "relative w-full flex items-center justify-center xl:justify-start xl:space-x-2.5 px-2 xl:px-3 py-2 rounded-xl text-xs font-medium transition-colors duration-[var(--motion-base)] ease-[var(--ease-standard)] group text-left",
+                  "relative w-full flex items-center justify-center xl:justify-start xl:gap-2.5 px-2 xl:px-3 py-2 rounded-xl text-xs font-medium transition-colors duration-[var(--motion-base)] ease-[var(--ease-standard)] group text-left",
                   isActive
                     ? "bg-pastel-mint text-charcoal font-semibold shadow-subtle"
                     : "text-satin-grey hover:bg-alabaster hover:text-charcoal"
@@ -100,7 +100,7 @@ export function Sidebar() {
                 onClick={() => setSettingsModalOpen(true)}
                 aria-label={item.label}
                 className={cn(
-                  "relative w-full flex items-center justify-center xl:justify-start xl:space-x-2.5 px-2 xl:px-3 py-2 rounded-xl text-xs font-medium transition-colors duration-[var(--motion-base)] ease-[var(--ease-standard)] group text-left",
+                  "relative w-full flex items-center justify-center xl:justify-start xl:gap-2.5 px-2 xl:px-3 py-2 rounded-xl text-xs font-medium transition-colors duration-[var(--motion-base)] ease-[var(--ease-standard)] group text-left",
                   "text-satin-grey hover:bg-alabaster hover:text-charcoal"
                 )}
               >
