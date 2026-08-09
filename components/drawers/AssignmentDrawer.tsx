@@ -25,6 +25,7 @@ import { openAssignmentEditor } from "@/lib/uiEvents";
 import { pushOverlay, popOverlay, isTopmostOverlay } from "@/lib/overlayStack";
 import { useKiroHandoff } from "@/hooks/useKiroHandoff";
 import { KIRO_ICON } from "@/components/layout/navItems";
+import { KiroFlowButton } from "@/components/kiro/KiroFlow";
 
 const OVERLAY_ID = "assignment-drawer";
 
@@ -303,14 +304,13 @@ export function AssignmentDrawer() {
               <Trash2 className="w-4 h-4" />
               <span>删除任务</span>
             </button>
-          <button
+          <KiroFlowButton
+            icon={KIRO_ICON}
+            label="Ask Kiro"
+            size="md"
+            className="h-9"
             onClick={handleAskKiro}
-            className="flex items-center space-x-1.5 text-xs font-bold text-charcoal bg-pastel-mint hover:bg-pastel-mint px-3 py-2 rounded-xl transition-colors"
-            title="Ask Kiro"
-          >
-            <KIRO_ICON className="w-4 h-4" />
-            <span>Ask Kiro</span>
-          </button>
+          />
           <button
             onClick={handleEdit}
             className="flex items-center space-x-1.5 text-xs text-satin-grey hover:bg-alba px-3 py-2 rounded-xl transition-colors"

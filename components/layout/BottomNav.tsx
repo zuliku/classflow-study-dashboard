@@ -5,6 +5,7 @@ import { MoreHorizontal, ChevronUp } from "lucide-react";
 import { useAppStore } from "@/store/useAppStore";
 import { NavTab } from "@/types";
 import { cn } from "@/lib/utils";
+import { KiroFlowIcon } from "@/components/kiro/KiroFlow";
 import {
   BOTTOM_NAV_MAIN,
   BOTTOM_NAV_MORE,
@@ -70,14 +71,19 @@ export function BottomNav() {
               aria-current={isActive ? "page" : undefined}
               className={navItemClass(isActive)}
             >
-              <span
-                className={cn(
-                  "flex items-center justify-center w-11 h-7 rounded-full transition-colors duration-[var(--motion-fast)]",
-                  isActive && "bg-pastel-mint"
-                )}
-              >
-                <Icon className="w-5 h-5" />
-              </span>
+              {item.id === "kiro" ? (
+                // Kiro Featured：彩色流光环 + 浅色底（与侧栏一致）
+                <KiroFlowIcon className={isActive ? "opacity-100" : "opacity-80"} />
+              ) : (
+                <span
+                  className={cn(
+                    "flex items-center justify-center w-11 h-7 rounded-full transition-colors duration-[var(--motion-fast)]",
+                    isActive && "bg-pastel-mint"
+                  )}
+                >
+                  <Icon className="w-5 h-5" />
+                </span>
+              )}
               <span className="text-[10px] font-semibold leading-none">
                 {item.label}
               </span>

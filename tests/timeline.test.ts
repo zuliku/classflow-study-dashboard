@@ -126,7 +126,9 @@ describe("deriveUnscheduledAssignments + studyBlockConflict", () => {
   it("Case 9/29：StudyBlock 与课程时间重叠 → 拒绝；与另一 StudyBlock 重叠 → 拒绝", () => {
     const state = {
       schedules: [{ id: "s1", courseId: "c1", dayOfWeek: 3, startTime: "10:00", endTime: "11:40", weeks: "1-16周" }],
-      studyBlocks: [{ id: "sb9", title: "已有计划", date: "2026-08-12", startTime: "19:00", endTime: "20:00", source: "manual" }],
+      studyBlocks: [
+        { id: "sb9", title: "已有计划", date: "2026-08-12", startTime: "19:00", endTime: "20:00", source: "manual" as const },
+      ],
       currentSemesterWeek: 1,
     };
     expect(studyBlockConflict({ date: "2026-08-12", startTime: "10:30", endTime: "11:30" }, state)).toEqual({ courseName: expect.stringContaining("课程时间重叠") });

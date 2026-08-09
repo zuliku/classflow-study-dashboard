@@ -30,6 +30,7 @@ import { useRestoreFocus } from "@/lib/useRestoreFocus";
 import { pushOverlay, popOverlay, isTopmostOverlay } from "@/lib/overlayStack";
 import { useKiroHandoff } from "@/hooks/useKiroHandoff";
 import { KIRO_ICON } from "@/components/layout/navItems";
+import { KiroFlowButton } from "@/components/kiro/KiroFlow";
 import { cn } from "@/lib/utils";
 import { GroupMember } from "@/types";
 
@@ -366,14 +367,13 @@ export function GroupCollaborationView() {
         </div>
         <div className="flex items-center gap-2 shrink-0">
           {activeProject && (
-            <button
+            <KiroFlowButton
+              icon={KIRO_ICON}
+              label="Ask Kiro"
+              size="md"
+              className="h-9"
               onClick={() => handoff.openForGroupProject(activeProject.id)}
-              className="flex items-center space-x-1.5 px-3 py-1.5 bg-pastel-mint hover:bg-pastel-mint text-charcoal text-xs font-bold rounded-xl transition-colors shrink-0"
-              title="Ask Kiro"
-            >
-              <KIRO_ICON className="w-3.5 h-3.5" />
-              <span>Ask Kiro</span>
-            </button>
+            />
           )}
           <button
             onClick={openCreateProject}

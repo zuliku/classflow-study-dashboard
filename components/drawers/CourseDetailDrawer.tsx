@@ -32,6 +32,7 @@ import { openAssignmentEditor, previewMaterial } from "@/lib/uiEvents";
 import { popOverlay, isTopmostOverlay } from "@/lib/overlayStack";
 import { useKiroHandoff } from "@/hooks/useKiroHandoff";
 import { KIRO_ICON } from "@/components/layout/navItems";
+import { KiroFlowButton } from "@/components/kiro/KiroFlow";
 import { useEnterOnAdd } from "@/lib/useEnterOnAdd";
 
 const OVERLAY_ID = "course-detail-drawer";
@@ -520,14 +521,13 @@ export function CourseDetailDrawer() {
             <FileUp className="w-3.5 h-3.5 text-[#A48F82]" />
             <span>上传资料</span>
           </button>
-          <button
+          <KiroFlowButton
+            icon={KIRO_ICON}
+            label="Ask Kiro"
+            size="sm"
+            className="h-7"
             onClick={handleAskKiro}
-            className="flex items-center space-x-1 px-2 py-1 rounded-lg text-[11px] font-semibold text-charcoal bg-pastel-mint hover:bg-pastel-mint transition-colors"
-            title="Ask Kiro"
-          >
-            <KIRO_ICON className="w-3.5 h-3.5 text-[#A48F82]" />
-            <span>Ask Kiro</span>
-          </button>
+          />
         </div>
 
         {/* Content Body */}

@@ -963,10 +963,16 @@ export function useKiroChat({
     [chatSendMessage, enabled, attachments, visionEnabled, pushToast]
   );
 
+  // retry/newChat/loadConversation 使用稳定子项时，必须经 ref 读取最新 chat
+  // （否则闭包会捕获创建时刻的旧 messages / 旧 regenerate）
+  const latestChatRef = useRef(chat);
+  latestChatRef.current = chat;
+
   const retry = useCallback(() => {
     if (!enabled) return;
+    const c = latestChatRef.current;
     // Defense in depth：含 Write Tool 的轮次或历史恢复轮次禁止 regenerate（即使 UI 误调用）
-    if (!lastTurnCanRegenerate(chat.messages)) {
+    if (!lastTurnCanRegenerate(c.messages)) {
       pushToast({ message: "操作结果已保留，可以继续向 Kiro 提问。", type: "info" });
       return;
     }
@@ -974,8 +980,8 @@ export function useKiroChat({
     materialReadCounterRef.current = 0;
     writeCounterRef.current = 0;
     limitReachedRef.current = false;
-    void chat.regenerate({ body: requestBody() });
-  }, [chat.regenerate, enabled, pushToast]);
+    void c.regenerate({ body: requestBody() });
+  }, [enabled, pushToast]);
 
   const newChat = useCallback(() => {
     chat.setMessages([]);

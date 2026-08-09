@@ -417,8 +417,11 @@ export function CommandCenter() {
                           highlighted === 0 ? "bg-alabaster text-charcoal" : "text-satin-grey"
                         )}
                       >
-                        <span className="w-5 h-5 rounded-lg bg-pastel-mint flex items-center justify-center shrink-0">
-                          <KIRO_ICON className="w-3.5 h-3.5 text-charcoal" />
+                        <span className="w-5 h-5 rounded-lg flex items-center justify-center shrink-0 relative overflow-hidden">
+                          <span aria-hidden="true" className="absolute -inset-1/2 kiro-ring kiro-featured-flow pointer-events-none opacity-80" />
+                          <span className="relative m-[1px] w-[calc(100%-2px)] h-[calc(100%-2px)] rounded-[5px] bg-[#F7F5F5] flex items-center justify-center">
+                            <KIRO_ICON className="w-3 h-3" />
+                          </span>
                         </span>
                         <span className="flex-1 min-w-0">
                           <span className="block text-xs font-bold text-charcoal truncate">

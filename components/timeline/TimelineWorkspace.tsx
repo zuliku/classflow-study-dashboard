@@ -21,6 +21,7 @@ import { useAppStore } from "@/store/useAppStore";
 import { useToastStore } from "@/store/useToastStore";
 import { useKiroHandoff } from "@/hooks/useKiroHandoff";
 import { KIRO_ICON } from "@/components/layout/navItems";
+import { KiroFlowButton } from "@/components/kiro/KiroFlow";
 import { TimetableGrid } from "@/components/dashboard/TimetableGrid";
 import { TimelineKeyLane } from "@/components/timeline/TimelineKeyLane";
 import { TimelineUnscheduledShelf } from "@/components/timeline/TimelineUnscheduledShelf";
@@ -377,13 +378,13 @@ export function TimelineWorkspace() {
           </div>
 
           {/* Ask Kiro */}
-          <button
+          <KiroFlowButton
+            icon={KIRO_ICON}
+            label="Ask Kiro"
+            size="sm"
+            className="h-8"
             onClick={() => handoff.openForWeek(currentSemesterWeek)}
-            className="flex items-center gap-1.5 h-8 px-2.5 rounded-lg text-[11px] font-bold text-charcoal bg-pastel-mint hover:bg-pastel-mint transition-colors"
-          >
-            <KIRO_ICON className="w-3.5 h-3.5" />
-            Ask Kiro
-          </button>
+          />
 
           {/* More */}
           <div className="relative">
