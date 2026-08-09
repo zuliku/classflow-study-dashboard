@@ -383,7 +383,7 @@ export function TimetableGrid({
       data-testid="timetable-card"
       className={
         variant === "embedded"
-          ? "flex flex-col justify-between h-full w-full min-h-0"
+          ? "flex flex-col flex-1 min-h-0 w-full"
           : "bg-surface border border-line rounded-2xl p-4 shadow-subtle flex flex-col justify-between h-full w-full"
       }
     >

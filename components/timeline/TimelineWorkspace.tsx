@@ -289,9 +289,8 @@ export function TimelineWorkspace() {
           </button>
         </div>
 
-        {/* Group B：Timeline Actions（逻辑分组间距） */}
-        <div className="flex items-center shrink-0">
-          <div className="flex items-center gap-0.5">
+        {/* Group B：Timeline Actions（单一 flex 容器，逻辑间距用 margin 表达） */}
+        <div className="flex items-center gap-0.5 shrink-0">
           {/* 筛选 */}
           <div className="relative">
             <button
@@ -388,7 +387,6 @@ export function TimelineWorkspace() {
             className="h-8 ml-1.5"
             onClick={() => handoff.openForWeek(currentSemesterWeek)}
           />
-
           {/* More */}
           <div className="relative ml-0.5">
             <button
@@ -430,7 +428,7 @@ export function TimelineWorkspace() {
 
       {/* ---------- 主体：Weekday Header（唯一一份）+ Key Timeline + Course Grid ---------- */}
       <div className="flex-1 min-h-0 flex flex-col overflow-x-auto">
-        <div className="min-w-[640px] flex flex-col flex-1 min-h-0 px-3 pt-1.5">
+        <div className="min-w-[640px] w-full flex flex-col flex-1 min-h-0 px-3 pt-1.5">
           {/* Weekday Header（与 Key Lane / Grid 共用 56px 时间 gutter） */}
           <div
             className="grid border-b border-line-soft pb-1 text-center text-xs shrink-0"
@@ -462,7 +460,6 @@ export function TimelineWorkspace() {
             />
           </div>
         </div>
-      </div>
       </div>
 
       {/* ---------- 安排学习计划（popover） ---------- */}
