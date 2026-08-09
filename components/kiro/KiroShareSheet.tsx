@@ -2,7 +2,7 @@
 
 import React from "react";
 import { ClipboardCopy, FileCode2, Share2 } from "lucide-react";
-import { useKiroSession } from "@/components/kiro/KiroSessionProvider";
+import { useKiroSessionActions } from "@/components/kiro/KiroSessionProvider";
 import { useToastStore } from "@/store/useToastStore";
 import {
   buildTranscriptMarkdown,
@@ -18,9 +18,10 @@ import {
  * 内容边界：仅用户可见消息 + Kiro 回答 + Action Result 摘要。
  */
 export function KiroShareSheet({ onClose }: { onClose: () => void }) {
-  const session = useKiroSession();
+  const sessionActions = useKiroSessionActions();
   const pushToast = useToastStore((s) => s.pushToast);
-  const messages = session.chat.messages;
+  // 打开 Sheet 时读取一次 transcript（不订阅 streaming messages）
+  const messages = sessionActions.getCurrentMessages();
 
   const copyDialog = async () => {
     const ok = await copyTextToClipboard(buildTranscriptText(messages));

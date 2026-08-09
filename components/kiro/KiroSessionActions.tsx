@@ -2,7 +2,7 @@
 
 import React from "react";
 import { Share2, MoreHorizontal, Plus, History as HistoryIcon, Expand, Copy, FileDown, Trash2, Brain } from "lucide-react";
-import { useKiroSession } from "@/components/kiro/KiroSessionProvider";
+import { useKiroSessionMeta, useKiroSessionActions } from "@/components/kiro/KiroSessionProvider";
 import { useToastStore } from "@/store/useToastStore";
 import { useConfirmStore } from "@/store/useConfirmStore";
 import { KiroMenuPanel, KiroMenuItem, KiroMenuDivider, useKiroPopover } from "@/components/kiro/KiroMenu";
@@ -33,29 +33,28 @@ export function KiroSessionActions({
   onOpenHistory?: () => void;
   onExpand?: () => void;
 }) {
-  const session = useKiroSession();
+  const sessionMeta = useKiroSessionMeta();
+  const sessionActions = useKiroSessionActions();
   const pushToast = useToastStore((s) => s.pushToast);
   const confirmRequest = useConfirmStore((s) => s.confirm);
   const share = useKiroPopover();
   const more = useKiroPopover();
   const [memoryManagerOpen, setMemoryManagerOpen] = React.useState(false);
-  const hasMessages = session.chat.messages.length > 0;
+  const hasMessages = sessionMeta.hasMessages;
 
   const copyAll = async () => {
-    const ok = await copyTextToClipboard(buildTranscriptText(session.chat.messages));
-    if (ok) pushToast({ message: "已复制" });
+    await sessionActions.copyCurrentTranscript();
     more.close();
   };
 
   const exportMarkdown = () => {
-    downloadMarkdownFile("kiro-conversation.md", buildTranscriptMarkdown(session.chat.messages));
-    pushToast({ message: "已导出 Markdown" });
+    sessionActions.exportCurrentTranscript();
     more.close();
   };
 
   const newChat = () => {
     if (onNewChat) onNewChat();
-    else session.newChat();
+    else sessionActions.newChat();
     more.close();
   };
 
@@ -67,7 +66,7 @@ export function KiroSessionActions({
       confirmLabel: "清空",
       danger: true,
       onConfirm: () => {
-        session.newChat();
+        sessionActions.newChat();
       },
     });
   };

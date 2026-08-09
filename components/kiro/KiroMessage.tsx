@@ -5,7 +5,6 @@ import { FileText, Image as ImageIcon, Copy, RefreshCw, MoreHorizontal } from "l
 import { KiroMark } from "@/components/kiro/KiroHeader";
 import { KiroMarkdown } from "@/components/kiro/KiroMarkdown";
 import { KiroMenuPanel, KiroMenuItem, KiroMenuDivider, useKiroPopover } from "@/components/kiro/KiroMenu";
-import { useKiroSession } from "@/components/kiro/KiroSessionProvider";
 import { useToastStore } from "@/store/useToastStore";
 import { KiroAttachmentView } from "@/lib/ai/attachments/types";
 import { KiroSourceMeta } from "@/lib/ai/citations/types";
@@ -32,6 +31,7 @@ export function KiroMessage({
   actionSummaries,
   actionsReady,
   sources,
+  onRetry,
 }: {
   content?: string;
   /** 流式进行中：末尾显示克制状态光标 */
@@ -46,8 +46,9 @@ export function KiroMessage({
   actionsReady?: boolean;
   /** 本消息可用的文档来源（Citation 渲染与导出用；不含正文） */
   sources?: KiroSourceMeta[];
+  /** 重新生成（由 Conversation 注入稳定 callback，避免每行订阅 Session Context） */
+  onRetry?: () => void;
 }) {
-  const session = useKiroSession();
   const pushToast = useToastStore((s) => s.pushToast);
   const more = useKiroPopover();
 
@@ -98,9 +99,9 @@ export function KiroMessage({
                   <Copy className="w-3.5 h-3.5" />
                   复制
                 </button>
-                {canRegenerate && (
+                {canRegenerate && onRetry && (
                   <button
-                    onClick={() => session.chat.retry()}
+                    onClick={onRetry}
                     aria-label="重新生成"
                     title="重新生成"
                     className="flex items-center gap-1 px-1.5 py-1 rounded-lg text-[11px] font-semibold text-sandrift hover:bg-alabaster hover:text-charcoal transition-colors"

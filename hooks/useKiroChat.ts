@@ -35,7 +35,7 @@ import { KiroTurnContextSnapshot } from "@/lib/ai/contextBudget/types";
 import { KiroSourceMeta } from "@/lib/ai/citations/types";
 import { buildTurnSourceRegistry, materialSourceId } from "@/lib/ai/citations/sources";
 import { renderPdfPages, selectScannedPdfPages, allocateVisionPages, extractExplicitPages } from "@/lib/ai/attachments/pdfVision";
-import { MAX_SCANNED_PDF_PAGES_PER_TURN } from "@/lib/ai/attachments/limits";
+import { MAX_SCANNED_PDF_PAGES_PER_TURN, MAX_SCANNED_PDF_IMAGE_BYTES_PER_TURN } from "@/lib/ai/attachments/limits";
 import { getFileBlob } from "@/lib/fileStorage";
 
 /** 每回合工具调用上限：Read ≤ 12，Write ≤ 8 */
@@ -98,6 +98,21 @@ interface ToolCallPart {
 /** 从 UI tool part 提取工具名（type 前缀 `tool-`） */
 function toolNameOf(part: ToolCallPart): string {
   return part.type.startsWith("tool-") ? part.type.slice("tool-".length) : part.toolName ?? part.type;
+}
+
+/** Message View 增量缓存（Task 13）：parts/metadata 引用未变 → 复用旧 view 对象 */
+export function reuseMessageView<V>(
+  cache: Map<string, { partsRef: unknown; metadataRef: unknown; view: V }>,
+  id: string,
+  parts: unknown,
+  metadata: unknown,
+  build: () => V
+): V {
+  const hit = cache.get(id);
+  if (hit && hit.partsRef === parts && hit.metadataRef === metadata) return hit.view;
+  const view = build();
+  cache.set(id, { partsRef: parts, metadataRef: metadata, view });
+  return view;
 }
 
 /** 该轮是否包含会持久化 mutation 的 Tool Call（业务写 / Change Set / 记忆写）——决定能否重新生成 */
@@ -433,6 +448,9 @@ export function useKiroChat({
   const restoredActionsRef = useRef(new Map<string, PersistedActionView[]>());
   const restoredAttachmentsRef = useRef(new Map<string, PersistedAttachmentView[]>());
   const restoredSourcesRef = useRef(new Map<string, KiroSourceMeta[]>());
+
+  // Message View 增量缓存：parts/metadata 引用未变 → 复用 view 对象（streaming 时旧消息不重算）
+  const viewCacheRef = useRef(new Map<string, { partsRef: unknown; metadataRef: unknown; view: KiroChatMessageView }>());
 
   const consumeUndo = useCallback((toolCallId: string) => {
     const entry = undoRegistryRef.current.get(toolCallId);
@@ -805,6 +823,10 @@ export function useKiroChat({
     [memory, latestUserText, pushToast]
   );
 
+  // send 依赖用稳定子项（chat.sendMessage 为 useChat 内 useCallback），
+  // 避免 chat 对象每次 token 变化导致 send 引用变化
+  const chatSendMessage = chat.sendMessage;
+
   const send = useCallback(
     async (text: string): Promise<boolean> => {
       const v = text.trim();
@@ -818,6 +840,7 @@ export function useKiroChat({
       // ---- Scanned PDF Vision（Task 12）：发送时渲染所选页面为 JPEG，再与用户图片合并发送 ----
       const scanned = attachments.filter(isScannedAttachment);
       const pageFiles: File[] = [];
+      let remainingVisionBytes = MAX_SCANNED_PDF_IMAGE_BYTES_PER_TURN;
       if (scanned.length > 0) {
         setPreparingVision(true);
         try {
@@ -865,9 +888,13 @@ export function useKiroChat({
               if (material?.storageKey) blob = await getFileBlob(material.storageKey);
             }
             if (!blob) continue;
-            const rendered = await renderPdfPages(blob, pages, sourceId);
+            // 全 Turn 字节预算：每份 PDF 只能使用剩余额度（Task 13）
+            const rendered = await renderPdfPages(blob, pages, sourceId, {
+              maxBytes: remainingVisionBytes,
+            });
             for (const r of rendered) {
               pageFiles.push(r.file);
+              remainingVisionBytes -= r.size;
               visionPagesRef.current.push({
                 sourceId,
                 page: r.page,
@@ -927,13 +954,13 @@ export function useKiroChat({
         }
       }
 
-      chat.sendMessage(
+      chatSendMessage(
         { text: v, files },
         { body: requestBody() }
       );
       return true;
     },
-    [chat, enabled, attachments, visionEnabled, pushToast]
+    [chatSendMessage, enabled, attachments, visionEnabled, pushToast]
   );
 
   const retry = useCallback(() => {
@@ -948,7 +975,7 @@ export function useKiroChat({
     writeCounterRef.current = 0;
     limitReachedRef.current = false;
     void chat.regenerate({ body: requestBody() });
-  }, [chat, enabled, pushToast]);
+  }, [chat.regenerate, enabled, pushToast]);
 
   const newChat = useCallback(() => {
     chat.setMessages([]);
@@ -961,10 +988,11 @@ export function useKiroChat({
     restoredActionsRef.current.clear();
     restoredAttachmentsRef.current.clear();
     restoredSourcesRef.current.clear();
+    viewCacheRef.current.clear();
     turnSourcesRef.current = [];
     setSources([]);
     visionPagesRef.current = [];
-  }, [chat]);
+  }, [chat.setMessages]);
 
   /**
    * 恢复历史对话（Task 6）：
@@ -990,6 +1018,7 @@ export function useKiroChat({
       restoredActionsRef.current = actionsMap;
       restoredAttachmentsRef.current = attachmentsMap;
       restoredSourcesRef.current = sourcesMap;
+      viewCacheRef.current.clear();
       readCounterRef.current = 0;
       materialReadCounterRef.current = 0;
       writeCounterRef.current = 0;
@@ -1000,7 +1029,7 @@ export function useKiroChat({
       setSources([]);
       chat.setMessages(restored);
     },
-    [chat]
+    [chat.setMessages]
   );
 
   const normalizedError: AIError | null = chat.error ? normalizeAIError(chat.error) : null;
@@ -1015,38 +1044,61 @@ export function useKiroChat({
     const queue = snapshotQueueRef.current;
     let qi = 0;
     return chat.messages.map((m) => {
-      const view = toView(m);
+      // 增量缓存：parts/metadata 引用未变 → 复用 view（streaming 时历史消息不重算 toView）
+      const partsRef = (m.parts ?? []) as unknown;
+      const metadataRef = m.metadata ?? null;
+      let view = reuseMessageView(viewCacheRef.current, m.id, partsRef, metadataRef, () => toView(m));
+
+      // ---- 附加展示数据（有需要才复制出新对象；否则直接复用缓存 view）----
+      let needsAttach = false;
       if (m.role === "user") {
         if (qi < queue.length) {
           const snapshot = queue[qi];
           qi += 1;
-          if (snapshot.length > 0) view.attachments = snapshot;
+          if (snapshot.length > 0) {
+            view = { ...view, attachments: snapshot };
+            needsAttach = true;
+          }
         } else {
           qi += 1;
         }
         // 历史恢复的附件 chips（仅展示：临时文件标记未保留）
         const restoredAtts = restoredAttachmentsRef.current.get(m.id);
-        if (!view.attachments && restoredAtts && restoredAtts.length > 0) {
-          view.attachments = restoredAtts.map((a) => ({
-            id: a.id,
-            source: a.source,
-            kind: a.kind as KiroAttachmentView["kind"],
-            name: a.name,
-            size: a.size,
-            status: "ready" as const,
-            courseName: a.courseName,
-            courseId: a.courseId,
-            materialId: a.materialId,
-            tempNotRetained: a.tempNotRetained,
-          }));
+        if (restoredAtts && restoredAtts.length > 0 && !view.attachments) {
+          view = {
+            ...view,
+            attachments: restoredAtts.map((a) => ({
+              id: a.id,
+              source: a.source,
+              kind: a.kind as KiroAttachmentView["kind"],
+              name: a.name,
+              size: a.size,
+              status: "ready" as const,
+              courseName: a.courseName,
+              courseId: a.courseId,
+              materialId: a.materialId,
+              tempNotRetained: a.tempNotRetained,
+            })),
+          };
+          needsAttach = true;
         }
       }
       // 历史恢复的 Action Cards（展示事实，canUndo 恒 false）
       const restoredActs = restoredActionsRef.current.get(m.id);
-      if (restoredActs && restoredActs.length > 0) view.historyActions = restoredActs;
+      if (restoredActs && restoredActs.length > 0) {
+        view = { ...view, historyActions: restoredActs };
+        needsAttach = true;
+      }
       // 历史恢复的 Citation 来源（展示 metadata；正文不落库）
       const restoredSrcs = restoredSourcesRef.current.get(m.id);
-      if (restoredSrcs && restoredSrcs.length > 0) view.sources = restoredSrcs;
+      if (restoredSrcs && restoredSrcs.length > 0) {
+        view = { ...view, sources: restoredSrcs };
+        needsAttach = true;
+      }
+      // 附加后的对象写回缓存（下一 token 直接复用，避免每次重建）
+      if (needsAttach) {
+        viewCacheRef.current.set(m.id, { partsRef, metadataRef, view });
+      }
       return view;
     });
   }, [chat.messages]);

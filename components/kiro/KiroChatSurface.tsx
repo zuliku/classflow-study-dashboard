@@ -3,7 +3,7 @@
 import React, { useMemo } from "react";
 import { useAppStore } from "@/store/useAppStore";
 import { useAISettingsStore } from "@/store/useAISettingsStore";
-import { useKiroSession } from "@/components/kiro/KiroSessionProvider";
+import { useKiroRuntime, useKiroSessionMeta } from "@/components/kiro/KiroSessionProvider";
 import { useAIModelCatalog } from "@/hooks/useAIModelCatalog";
 import { getActiveModelVendor } from "@/lib/ai/providers/registry";
 import { KiroEmptyState } from "@/components/kiro/KiroEmptyState";
@@ -17,8 +17,9 @@ import { KiroContextSuggestions } from "@/components/kiro/KiroContextSuggestions
  * 业务逻辑完全一致，只是显示密度不同（variant）。
  */
 export function KiroChatSurface({ variant }: { variant: "workspace" | "sidecar" }) {
-  const session = useKiroSession();
-  const { chat, attachments, activeRefs, removeContext, addManualContext } = session;
+  const runtime = useKiroRuntime();
+  const { chat, attachments, activeRefs, removeContext, addManualContext } = runtime;
+  const { suggestionsKind, suggestionsGen, lastUserTurnGen } = useKiroSessionMeta();
   const compact = variant === "sidecar";
 
   const provider = useAISettingsStore((s) => s.provider);
@@ -69,7 +70,7 @@ export function KiroChatSurface({ variant }: { variant: "workspace" | "sidecar" 
   const hasMessages = chat.messages.length > 0;
   // Context-aware 建议可见时，隐藏 EmptyState 的通用建议（两者不同时出现）
   const hasContextSuggestions =
-    session.suggestionsKind != null && session.suggestionsGen > session.lastUserTurnGen;
+    suggestionsKind != null && suggestionsGen > lastUserTurnGen;
   // Workspace 与 Sidecar 都启用 Context-aware Suggestions（无消息时渲染在标题下方）
   const emptyContextSuggestions =
     !hasMessages && hasContextSuggestions ? (

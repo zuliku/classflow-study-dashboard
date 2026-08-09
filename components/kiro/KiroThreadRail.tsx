@@ -2,7 +2,7 @@
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Plus, Search, MoreHorizontal, FileDown, Copy, Trash2, ChevronLeft, History as HistoryIcon } from "lucide-react";
-import { useKiroSession } from "@/components/kiro/KiroSessionProvider";
+import { useKiroSessionMeta, useKiroSessionActions } from "@/components/kiro/KiroSessionProvider";
 import { useToastStore } from "@/store/useToastStore";
 import { useConfirmStore } from "@/store/useConfirmStore";
 import { KiroLogoIcon } from "@/components/kiro/KiroLogo";
@@ -10,7 +10,6 @@ import { KiroThreadRow } from "@/components/kiro/KiroThreadRow";
 import { KiroMenuPanel, KiroMenuItem, KiroMenuDivider } from "@/components/kiro/KiroMenu";
 import { listConversations } from "@/lib/ai/history/db";
 import { KiroConversationRecord } from "@/lib/ai/history/types";
-import { buildTranscriptText, buildTranscriptMarkdown, copyTextToClipboard, downloadMarkdownFile } from "@/lib/ai/share";
 import { cn } from "@/lib/utils";
 
 /** Soft Plate：Kiro Logo 的浅色底座 + 1px 品牌 perimeter（方案 A；hover 流光由 CSS 驱动） */
@@ -53,7 +52,8 @@ function KiroRailPlate({
  * - Esc / 点击外部收起；Cmd/Ctrl+Shift+H toggle；不依赖 hover 展开
  */
 export function KiroThreadRail() {
-  const session = useKiroSession();
+  const meta = useKiroSessionMeta();
+  const actions = useKiroSessionActions();
   const pushToast = useToastStore((s) => s.pushToast);
   const confirmRequest = useConfirmStore((s) => s.confirm);
   const [expanded, setExpanded] = useState(false);
@@ -64,7 +64,12 @@ export function KiroThreadRail() {
   const railRef = useRef<HTMLDivElement | null>(null);
   const searchRef = useRef<HTMLInputElement | null>(null);
 
+  // Lazy History（Task 13）：collapsed 不读取 History DB；首次展开才 list；
+  // 展开期间 historyVersion 变化 → 后台刷新（collapse 后保留 cache）
+  const expandedRef = useRef(expanded);
+  expandedRef.current = expanded;
   useEffect(() => {
+    if (!expandedRef.current) return; // collapsed：不读取 / 不刷新
     let alive = true;
     void listConversations().then((list) => {
       if (alive) setRecords(list);
@@ -72,7 +77,7 @@ export function KiroThreadRail() {
     return () => {
       alive = false;
     };
-  }, [session.historyVersion]);
+  }, [expanded, meta.historyVersion]);
 
   const collapse = () => {
     setExpanded(false);
@@ -101,7 +106,7 @@ export function KiroThreadRail() {
       window.removeEventListener("pointerdown", onPointerDown);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [expanded, moreOpen, session.historyVersion]);
+  }, [expanded, moreOpen, meta.historyVersion]);
 
   const expand = (opts?: { focusSearch?: boolean }) => {
     setExpanded(true);
@@ -111,12 +116,12 @@ export function KiroThreadRail() {
   };
 
   const newChat = () => {
-    session.newChat();
+    actions.newChat();
     collapse();
   };
 
   const openThread = (id: string) => {
-    void session.loadConversation(id);
+    void actions.loadConversation(id);
     collapse();
   };
 
@@ -126,16 +131,14 @@ export function KiroThreadRail() {
     return q || showAll ? base : base.slice(0, 8);
   }, [records, query, showAll]);
 
-  const hasMessages = session.chat.messages.length > 0;
+  const hasMessages = meta.hasMessages;
 
   const copyAll = async () => {
-    const ok = await copyTextToClipboard(buildTranscriptText(session.chat.messages));
-    if (ok) pushToast({ message: "已复制" });
+    await actions.copyCurrentTranscript();
     setMoreOpen(false);
   };
   const exportMarkdown = () => {
-    downloadMarkdownFile("kiro-conversation.md", buildTranscriptMarkdown(session.chat.messages));
-    pushToast({ message: "已导出 Markdown" });
+    actions.exportCurrentTranscript();
     setMoreOpen(false);
   };
   const clearConversation = () => {
@@ -145,7 +148,7 @@ export function KiroThreadRail() {
       description: "仅清除当前会话中的消息，不影响你的 ClassFlow 数据。",
       confirmLabel: "清空",
       danger: true,
-      onConfirm: () => session.newChat(),
+      onConfirm: () => actions.newChat(),
     });
   };
 
@@ -272,7 +275,7 @@ export function KiroThreadRail() {
                 <KiroThreadRow
                   key={rec.id}
                   record={rec}
-                  isCurrent={session.currentConversationId === rec.id}
+                  isCurrent={meta.currentConversationId === rec.id}
                   onOpen={openThread}
                 />
               ))

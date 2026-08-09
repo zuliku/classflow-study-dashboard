@@ -84,7 +84,11 @@ export function selectScannedPdfPages(input: {
   return { pages, truncated: pageCount > max };
 }
 
-/** 多文档公平分配：先满足各文档 explicit 页，剩余预算 round-robin 默认页 */
+/**
+ * 多文档公平分配（Task 12 + Task 13 修复）：
+ * 无论 explicit / default / 多文档，最终总页数恒 ≤ maxTotal（explicit 不能绕过全局上限）。
+ * explicit 优先：round-robin 跨文档满足指定页（受 maxTotal 限制），剩余额度再 round-robin 默认页。
+ */
 export function allocateVisionPages(
   docs: { pageCount: number; explicitPages: number[] }[],
   maxTotal: number
@@ -92,23 +96,30 @@ export function allocateVisionPages(
   const per = docs.map((d) => ({ pageCount: Math.max(1, d.pageCount), explicit: d.explicitPages }));
   const out: number[][] = per.map(() => []);
   const seen: Set<number>[] = per.map(() => new Set());
-  const alive = per.map(() => true);
+  let total = 0;
 
-  // 1. explicit 优先（每份文档的合法页直接计入）
-  per.forEach((d, i) => {
-    for (const p of d.explicit) {
-      if (p >= 1 && p <= d.pageCount) {
-        out[i].push(p);
-        seen[i].add(p);
+  // 1. explicit 优先：round-robin 跨文档（全局上限内满足尽可能多的指定页）
+  let anyExplicit = true;
+  while (anyExplicit && total < maxTotal) {
+    anyExplicit = false;
+    per.forEach((d, i) => {
+      if (total >= maxTotal) return;
+      const next = d.explicit.find((p) => p >= 1 && p <= d.pageCount && !seen[i].has(p));
+      if (next !== undefined) {
+        seen[i].add(next);
+        out[i].push(next);
+        total++;
+        anyExplicit = true;
       }
-    }
-  });
+    });
+  }
 
-  // 2. round-robin 默认页（1 起逐页）填满总预算
-  let total = out.reduce((s, a) => s + a.length, 0);
+  // 2. 剩余额度：round-robin 默认页（1 起逐页）
+  const alive = per.map(() => true);
   let round = 1;
-  while (total < maxTotal) {
-    let advanced = false;
+  let advanced = true;
+  while (total < maxTotal && advanced) {
+    advanced = false;
     per.forEach((d, i) => {
       if (!alive[i] || total >= maxTotal) return;
       if (round > d.pageCount) {
@@ -122,7 +133,6 @@ export function allocateVisionPages(
         advanced = true;
       }
     });
-    if (!advanced) break; // 所有文档都已分配完
     round++;
   }
 
@@ -133,6 +143,18 @@ export function allocateVisionPages(
 }
 
 // ---------- 页面渲染（Browser only） ----------
+
+/** 全 Turn 字节预算裁剪（Task 13）：按序保留页面直到预算耗尽（纯函数，可测） */
+export function trimRenderedPagesByBudget<T extends { page: number; size: number }>(pages: T[], maxBytes: number): T[] {
+  const out: T[] = [];
+  let total = 0;
+  for (const p of pages) {
+    if (total + p.size > maxBytes) continue;
+    out.push(p);
+    total += p.size;
+  }
+  return out;
+}
 
 async function renderPageToJpeg(
   doc: PDFDocumentProxy,
@@ -166,44 +188,50 @@ async function renderPageToJpeg(
 
 /**
  * 渲染指定页为 JPEG File。
- * 单页失败 → 跳过（不中断其它页）；体积超限 → 降一次质量重试（最多一次）。
+ * 单页失败 → 跳过（不中断其它页）；单页超限 → 降一次质量重试（最多一次）。
+ * maxBytes：本份文档可占用的剩余 Turn 字节预算（多份 PDF 共用真正的全 Turn 额度）。
  * 返回的 File 只用于当前 Turn 发送，调用方不得持久化。
  */
 export async function renderPdfPages(
   blob: Blob,
   pageNumbers: number[],
-  sourceId: string
+  sourceId: string,
+  options?: { maxBytes?: number }
 ): Promise<KiroRenderedPdfPage[]> {
   if (pageNumbers.length === 0) return [];
+  const maxBytes = Math.min(
+    options?.maxBytes ?? MAX_SCANNED_PDF_IMAGE_BYTES_PER_TURN,
+    MAX_SCANNED_PDF_IMAGE_BYTES_PER_TURN
+  );
   const pdfjs = await loadPdfJs();
   const data = new Uint8Array(await blob.arrayBuffer());
   const fontDir = "node_modules/pdfjs-dist/standard_fonts/";
   const nodeInit = typeof window === "undefined" ? { standardFontDataUrl: new URL(`${fontDir}`, import.meta.url).toString() } : {};
   const doc = await pdfjs.getDocument({ data, ...nodeInit }).promise;
   try {
-    const out: KiroRenderedPdfPage[] = [];
+    const rendered: KiroRenderedPdfPage[] = [];
     for (const pageNum of pageNumbers) {
       try {
         let r = await renderPageToJpeg(doc, pageNum, MAX_PDF_VISION_DIMENSION, PDF_VISION_JPEG_QUALITY);
-        // 体积超限：降一次尺寸+质量（最多一次）
+        // 单页超限：降一次尺寸+质量（最多一次）
         if (r.blob.size > MAX_RENDERED_PAGE_BYTES) {
           r = await renderPageToJpeg(doc, pageNum, MAX_PDF_VISION_DIMENSION * 0.7, PDF_VISION_JPEG_QUALITY * 0.85);
         }
         if (r.blob.size === 0) continue;
         const fileName = `kiro-${sourceId}-page-${pageNum}.jpg`;
-        const file = new File([r.blob], fileName, { type: "image/jpeg" });
-        out.push({ page: pageNum, file, width: r.width, height: r.height, size: file.size });
+        rendered.push({
+          page: pageNum,
+          file: new File([r.blob], fileName, { type: "image/jpeg" }),
+          width: r.width,
+          height: r.height,
+          size: r.blob.size,
+        });
       } catch {
         /* 单页失败：跳过该页，继续其它页 */
       }
     }
-    // Turn 总字节预算：超出则从尾部丢弃（保留靠前页）
-    let total = out.reduce((s, p) => s + p.size, 0);
-    while (total > MAX_SCANNED_PDF_IMAGE_BYTES_PER_TURN && out.length > 0) {
-      const dropped = out.pop()!;
-      total -= dropped.size;
-    }
-    return out;
+    // 本份文档剩余额度：整页装不下则丢弃（多份 PDF 共用全 Turn 预算）
+    return trimRenderedPagesByBudget(rendered, maxBytes);
   } finally {
     const cleanup = (doc as unknown as { destroy?: () => Promise<void> }).destroy;
     if (cleanup) await cleanup();

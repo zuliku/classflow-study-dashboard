@@ -2,7 +2,7 @@
 
 import React, { useState } from "react";
 import { MoreHorizontal, PencilLine, Trash2, Check } from "lucide-react";
-import { useKiroSession } from "@/components/kiro/KiroSessionProvider";
+import { useKiroSessionActions } from "@/components/kiro/KiroSessionProvider";
 import { useToastStore } from "@/store/useToastStore";
 import { formatHistoryTime } from "@/lib/ai/history/sanitize";
 import { KiroConversationRecord } from "@/lib/ai/history/types";
@@ -21,7 +21,7 @@ export function KiroThreadRow({
   isCurrent: boolean;
   onOpen: (id: string) => void;
 }) {
-  const session = useKiroSession();
+  const session = useKiroSessionActions();
   const pushToast = useToastStore((s) => s.pushToast);
   const [menuOpen, setMenuOpen] = useState(false);
   const [editing, setEditing] = useState(false);

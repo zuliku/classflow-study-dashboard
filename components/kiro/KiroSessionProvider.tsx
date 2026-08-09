@@ -38,6 +38,8 @@ import { KiroConversationRecord, PersistedContextRef, KiroConversationSummary } 
 import { requestConversationCompact, toCompactMessages } from "@/lib/ai/history/summary";
 import { estimateTokens } from "@/lib/ai/contextBudget/estimate";
 import { shouldCompact, DEFAULT_CONTEXT_BUDGET } from "@/lib/ai/contextBudget/planner";
+import { buildTranscriptText, buildTranscriptMarkdown, copyTextToClipboard, downloadMarkdownFile } from "@/lib/ai/share";
+import { useToastStore } from "@/store/useToastStore";
 
 export type KiroSuggestionsKind = "assignment" | "course" | "group-project" | "week" | "generic";
 
@@ -77,6 +79,54 @@ interface KiroSessionValue {
   handoffPrompt: (prompt: string) => void;
 }
 
+/** Runtime：随 Chat 高频变化（主要消费者：Surface / Composer / Conversation） */
+interface KiroRuntimeValue {
+  chat: ReturnType<typeof useKiroChat>;
+  attachments: ReturnType<typeof useKiroAttachments>;
+  activeRefs: KiroContextRef[];
+  removeContext: (key: string) => void;
+  addManualContext: (ref: KiroContextRef) => void;
+}
+
+/** Meta：低频（对话元信息 / historyVersion / sidecar / suggestions / hasMessages） */
+interface KiroSessionMetaValue {
+  currentConversationId: string | null;
+  conversationTitle: string | null;
+  conversationCreatedAt: string | null;
+  conversationSummary: KiroConversationSummary | null;
+  historyVersion: number;
+  sidecarOpen: boolean;
+  suggestionsKind: KiroSuggestionsKind | null;
+  suggestionsGen: number;
+  lastUserTurnGen: number;
+  hasMessages: boolean;
+}
+
+/** Actions：稳定 callbacks（transcript 操作点击时才读取 Ref，不订阅 streaming messages） */
+interface KiroSessionActionsValue {
+  newChat: () => void;
+  loadConversation: (id: string) => void;
+  deleteConversation: (id: string) => void;
+  renameConversation: (id: string, title: string) => void;
+  clearHistory: () => void;
+  refreshHistory: () => void;
+  openSidecar: () => void;
+  closeSidecar: () => void;
+  expandSidecar: () => void;
+  openForAssignment: (id: string) => void;
+  openForCourse: (id: string) => void;
+  openForGroupProject: (id: string) => void;
+  openForWeek: (week: number) => void;
+  handoffPrompt: (prompt: string) => void;
+  /** 点击时读取当前 transcript（不订阅 messages） */
+  copyCurrentTranscript: () => Promise<void>;
+  exportCurrentTranscript: () => void;
+  getCurrentMessages: () => ReturnType<typeof useKiroChat>["messages"];
+}
+
+const KiroRuntimeContext = createContext<KiroRuntimeValue | null>(null);
+const KiroSessionMetaContext = createContext<KiroSessionMetaValue | null>(null);
+const KiroSessionActionsContext = createContext<KiroSessionActionsValue | null>(null);
 const KiroSessionContext = createContext<KiroSessionValue | null>(null);
 
 /**
@@ -140,7 +190,22 @@ export function KiroSessionProvider({ children }: { children: React.ReactNode })
   const aiModel = useAISettingsStore((s) => s.model);
   const aiCustom = useAISettingsStore((s) => s.custom);
 
-  // ---- Conversation Persistence（Task 6）----
+  // ---- Conversation Persistence（Task 6）：callback 稳定化（Task 13）----
+  // 通过 ref 读取最新值：persist / compact / pagehide listener 不随 token 重建
+  const chatRef = useRef(chat);
+  chatRef.current = chat;
+  const manualRefsRef = useRef(manualRefs);
+  manualRefsRef.current = manualRefs;
+  const entryRefsRef = useRef(entryRefs);
+  entryRefsRef.current = entryRefs;
+  const providerRef = useRef(aiProvider);
+  providerRef.current = aiProvider;
+  const modelRef = useRef(aiModel);
+  modelRef.current = aiModel;
+  const customRef = useRef(aiCustom);
+  customRef.current = aiCustom;
+  const chatMessagesRef = useRef<ReturnType<typeof useKiroChat>["messages"]>([]);
+  chatMessagesRef.current = chat.messages;
 
   const refreshHistory = useCallback(() => setHistoryVersion((v) => v + 1), []);
 
@@ -148,9 +213,10 @@ export function KiroSessionProvider({ children }: { children: React.ReactNode })
   const persistCurrent = useCallback(async () => {
     const id = conversationIdRef.current;
     if (!id) return; // 尚无会话（transient，直到第一条 User Message）
-    const messages = chat.messages;
-    if (messages.length === 0 || chat.streaming) return;
-    const snapshot = `${id}|${messages.length}|${messages[messages.length - 1]?.content.length ?? 0}|${chat.status}`;
+    const chatNow = chatRef.current;
+    const messages = chatNow.messages;
+    if (messages.length === 0 || chatNow.streaming) return;
+    const snapshot = `${id}|${messages.length}|${messages[messages.length - 1]?.content.length ?? 0}|${chatNow.status}`;
     if (snapshot === lastSavedSnapshotRef.current) return; // 无变化不重复写
     lastSavedSnapshotRef.current = snapshot;
     try {
@@ -158,11 +224,11 @@ export function KiroSessionProvider({ children }: { children: React.ReactNode })
         id,
         title: conversationTitleRef.current ?? "Kiro 对话",
         createdAt: conversationCreatedAtRef.current ?? new Date().toISOString(),
-        provider: aiProvider,
-        model: aiModel,
+        provider: providerRef.current,
+        model: modelRef.current,
         messages: messages as ReturnType<typeof useKiroChat>["messages"],
-        manualRefs,
-        entryRefs,
+        manualRefs: manualRefsRef.current,
+        entryRefs: entryRefsRef.current,
         summary: conversationSummaryRef.current,
       });
       await saveConversation(record);
@@ -170,7 +236,8 @@ export function KiroSessionProvider({ children }: { children: React.ReactNode })
     } catch (err) {
       console.warn("kiro history: save failed", err);
     }
-  }, [chat, manualRefs, entryRefs, aiProvider, aiModel, refreshHistory]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const scheduleSave = useCallback(() => {
     // 稳定点（turn 结束 / tool loop 完成）立即保存；防抖仅合并 streaming 状态抖动
@@ -193,8 +260,9 @@ export function KiroSessionProvider({ children }: { children: React.ReactNode })
   const maybeCompact = useCallback(async () => {
     const id = conversationIdRef.current;
     if (!id || compactingRef.current) return;
-    const msgs = chat.messages;
-    if (msgs.length === 0 || chat.streaming) return;
+    const chatNow = chatRef.current;
+    const msgs = chatNow.messages;
+    if (msgs.length === 0 || chatNow.streaming) return;
     let est = 0;
     for (const m of msgs) {
       est += estimateTokens(m.content);
@@ -213,9 +281,9 @@ export function KiroSessionProvider({ children }: { children: React.ReactNode })
 
     compactingRef.current = true;
     const summary = await requestConversationCompact({
-      provider: aiProvider,
-      model: aiModel,
-      customConfig: aiCustom,
+      provider: providerRef.current,
+      model: modelRef.current,
+      customConfig: customRef.current,
       oldSummary: conversationSummaryRef.current,
       messages: toCompactMessages(textViews),
     });
@@ -225,7 +293,8 @@ export function KiroSessionProvider({ children }: { children: React.ReactNode })
       setConversationSummary(summary);
       scheduleSave(); // 把 summary 一起落盘
     }
-  }, [chat, aiProvider, aiModel, aiCustom, scheduleSave]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scheduleSave]);
 
   // Turn 结束（streaming true→false）→ 保存稳定点 + 判断是否需要 compact；tool loop 完成同样落在这里
   const wasStreamingRef = useRef(false);
@@ -298,7 +367,7 @@ export function KiroSessionProvider({ children }: { children: React.ReactNode })
     attachments.clear();
     setLastUserTurnGen(suggestionsGenRef.current);
     refreshHistory();
-  }, [chat, attachments, flushSave, refreshHistory]);
+  }, [chat.newChat, attachments, flushSave, refreshHistory]);
 
   const openSidecar = useCallback(() => {
     setSidecarOpen(true);
@@ -357,7 +426,7 @@ export function KiroSessionProvider({ children }: { children: React.ReactNode })
       setLastUserTurnGen(suggestionsGenRef.current);
       chat.send(prompt);
     },
-    [chat]
+    [chat.send]
   );
 
   const sendWithTurn = useCallback(
@@ -383,7 +452,7 @@ export function KiroSessionProvider({ children }: { children: React.ReactNode })
       return ok;
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [chat]
+    [chat.send, attachments]
   );
 
   /** 恢复历史对话：先保存当前 → 加载目标 → 恢复 refs（校验实体仍存在）→ 关闭由 Panel 处理 */
@@ -420,7 +489,7 @@ export function KiroSessionProvider({ children }: { children: React.ReactNode })
       setLastUserTurnGen(suggestionsGenRef.current);
       attachments.clear();
     },
-    [chat, attachments, flushSave, refreshHistory]
+    [chat.loadConversation, attachments, flushSave, refreshHistory]
   );
 
   const deleteConversation = useCallback(
@@ -468,6 +537,101 @@ export function KiroSessionProvider({ children }: { children: React.ReactNode })
     };
   }, [sidecarOpen]);
 
+  // ---- Transcript 操作（Task 13）：点击时读 Ref，collapsed Rail 不订阅 streaming messages ----
+  const pushToast = useToastStore((s) => s.pushToast);
+
+  const copyCurrentTranscript = useCallback(async () => {
+    const ok = await copyTextToClipboard(buildTranscriptText(chatMessagesRef.current));
+    if (ok) pushToast({ message: "已复制" });
+  }, [pushToast]);
+
+  const exportCurrentTranscript = useCallback(() => {
+    downloadMarkdownFile("kiro-conversation.md", buildTranscriptMarkdown(chatMessagesRef.current));
+    pushToast({ message: "已导出 Markdown" });
+  }, [pushToast]);
+
+  const getCurrentMessages = useCallback(() => chatMessagesRef.current, []);
+
+  const runtimeValue = useMemo<KiroRuntimeValue>(
+    () => ({ chat, attachments, activeRefs, removeContext, addManualContext }),
+    [chat, attachments, activeRefs, removeContext, addManualContext]
+  );
+
+  // hasMessages：低频（只在 empty ↔ non-empty 切换时更新，不随 token）
+  const [hasMessages, setHasMessages] = useState(false);
+  const hasMessagesNow = chat.messages.length > 0;
+  React.useEffect(() => {
+    setHasMessages(hasMessagesNow);
+  }, [hasMessagesNow]);
+
+  const metaValue = useMemo<KiroSessionMetaValue>(
+    () => ({
+      currentConversationId: conversationId,
+      conversationTitle,
+      conversationCreatedAt,
+      conversationSummary,
+      historyVersion,
+      sidecarOpen,
+      suggestionsKind,
+      suggestionsGen: suggestionsGenRef.current,
+      lastUserTurnGen,
+      hasMessages,
+    }),
+    [
+      conversationId,
+      conversationTitle,
+      conversationCreatedAt,
+      conversationSummary,
+      historyVersion,
+      sidecarOpen,
+      suggestionsKind,
+      lastUserTurnGen,
+      hasMessages,
+    ]
+  );
+
+  const actionsValue = useMemo<KiroSessionActionsValue>(
+    () => ({
+      newChat,
+      loadConversation,
+      deleteConversation,
+      renameConversation,
+      clearHistory,
+      refreshHistory,
+      openSidecar,
+      closeSidecar,
+      expandSidecar,
+      openForAssignment,
+      openForCourse,
+      openForGroupProject,
+      openForWeek,
+      handoffPrompt,
+      copyCurrentTranscript,
+      exportCurrentTranscript,
+      getCurrentMessages,
+    }),
+    [
+      newChat,
+      loadConversation,
+      deleteConversation,
+      renameConversation,
+      clearHistory,
+      refreshHistory,
+      openSidecar,
+      closeSidecar,
+      expandSidecar,
+      openForAssignment,
+      openForCourse,
+      openForGroupProject,
+      openForWeek,
+      handoffPrompt,
+      copyCurrentTranscript,
+      exportCurrentTranscript,
+      getCurrentMessages,
+    ]
+  );
+
+  // 兼容层：旧 useKiroSession() 消费者（低频组件）合并三个 Context
   const value: KiroSessionValue = {
     chat,
     attachments,
@@ -507,15 +671,39 @@ export function KiroSessionProvider({ children }: { children: React.ReactNode })
   );
 
   return (
-    <KiroSessionContext.Provider value={sessionValue}>
-      {/* 固定视口高度外壳（h-dvh）：main 内部滚动，Kiro Conversation 独立滚动，不随内容撑高 */}
-      <div className="flex h-dvh bg-[#F7F5F5] font-sans antialiased text-charcoal">
-        {children}
-        {/* Sidecar 与 Workspace 互斥：进入 Kiro Workspace 时不渲染 Sidecar（Session 保留） */}
-        {sidecarOpen && activeTab !== "kiro" && <KiroSidecar />}
-      </div>
-    </KiroSessionContext.Provider>
+    <KiroRuntimeContext.Provider value={runtimeValue}>
+      <KiroSessionMetaContext.Provider value={metaValue}>
+        <KiroSessionActionsContext.Provider value={actionsValue}>
+          <KiroSessionContext.Provider value={sessionValue}>
+            {/* 固定视口高度外壳（h-dvh）：main 内部滚动，Kiro Conversation 独立滚动，不随内容撑高 */}
+            <div className="flex h-dvh bg-[#F7F5F5] font-sans antialiased text-charcoal">
+              {children}
+              {/* Sidecar 与 Workspace 互斥：进入 Kiro Workspace 时不渲染 Sidecar（Session 保留） */}
+              {sidecarOpen && activeTab !== "kiro" && <KiroSidecar />}
+            </div>
+          </KiroSessionContext.Provider>
+        </KiroSessionActionsContext.Provider>
+      </KiroSessionMetaContext.Provider>
+    </KiroRuntimeContext.Provider>
   );
+}
+
+export function useKiroRuntime(): KiroRuntimeValue {
+  const ctx = useContext(KiroRuntimeContext);
+  if (!ctx) throw new Error("useKiroRuntime 必须在 KiroSessionProvider 内使用");
+  return ctx;
+}
+
+export function useKiroSessionMeta(): KiroSessionMetaValue {
+  const ctx = useContext(KiroSessionMetaContext);
+  if (!ctx) throw new Error("useKiroSessionMeta 必须在 KiroSessionProvider 内使用");
+  return ctx;
+}
+
+export function useKiroSessionActions(): KiroSessionActionsValue {
+  const ctx = useContext(KiroSessionActionsContext);
+  if (!ctx) throw new Error("useKiroSessionActions 必须在 KiroSessionProvider 内使用");
+  return ctx;
 }
 
 export function useKiroSession(): KiroSessionValue {

@@ -5,6 +5,7 @@ import { KiroMessage, KiroUserMessage } from "@/components/kiro/KiroMessage";
 import { KiroActivityTrace } from "@/components/kiro/KiroActivityTrace";
 import { KiroChatMessageView, KiroActivity } from "@/hooks/useKiroChat";
 import { KiroSourceMeta } from "@/lib/ai/citations/types";
+import { useKiroSessionMeta } from "@/components/kiro/KiroSessionProvider";
 import { AIError, AI_ERROR_MESSAGES } from "@/lib/ai/errors";
 import { KiroActionCard, actionToCardProps, KiroActionCardVariant } from "@/components/kiro/KiroActionCard";
 import { actionSummaryText } from "@/lib/ai/share";
@@ -43,8 +44,19 @@ export function KiroConversation({
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const stickToBottomRef = useRef(true);
   const [showScrollBtn, setShowScrollBtn] = React.useState(false);
-  const { conversationSummary } = useKiroSession();
-  const contentKey = messages.map((m) => `${m.id}:${m.content.length}:${m.streaming}`).join("|");
+  const { conversationSummary } = useKiroSessionMeta();
+
+  // 尾部信号（Task 13）：不再为滚动构建整段 messages.map(...).join() key；
+  // 只跟随会真正改变滚动高度的尾部状态
+  const tail = messages[messages.length - 1];
+  const scrollSignal = [
+    messages.length,
+    tail?.id,
+    tail?.content.length ?? 0,
+    tail?.actions?.length ?? 0,
+    activity.phase,
+    activity.steps.length,
+  ].join("|");
 
   // 最后一条 assistant 消息：其操作栏必须等整个 Turn 结束（turnInFlight false）才显示；
   // 历史 assistant 消息不受当前 Turn 影响
@@ -64,11 +76,23 @@ export function KiroConversation({
     setShowScrollBtn((prev) => (prev === shouldShow ? prev : shouldShow));
   };
 
+  // 自动滚动（Task 13）：rAF 合并同一帧内的多次更新，避免每个 token 直接写 scrollTop
+  const rafRef = useRef<number | null>(null);
   useEffect(() => {
     const el = scrollRef.current;
-    if (!el) return;
-    if (stickToBottomRef.current) el.scrollTop = el.scrollHeight;
-  }, [contentKey]);
+    if (!el || !stickToBottomRef.current) return;
+    if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
+    rafRef.current = requestAnimationFrame(() => {
+      rafRef.current = null;
+      if (el && stickToBottomRef.current) el.scrollTop = el.scrollHeight;
+    });
+    return () => {
+      if (rafRef.current !== null) {
+        cancelAnimationFrame(rafRef.current);
+        rafRef.current = null;
+      }
+    };
+  }, [scrollSignal]);
 
   const scrollToBottom = () => {
     const el = scrollRef.current;
@@ -122,58 +146,16 @@ export function KiroConversation({
             </span>
           </div>
         )}
-        {messages.map((m, idx) => {
-          if (m.role === "user") {
-            return <KiroUserMessage key={m.id} content={m.content} attachments={m.attachments} />;
-          }
-          // 空 assistant（pre-response 占位）：Logo 由 Agent Progress 承担，不渲染第二个 Logo；
-          // 首个文本 token 到达后 KiroMessage 自然出现（同一 Turn 只保留一个 Kiro Logo）
-          if (!m.content && !m.actions?.length && !m.historyActions?.length) return null;
-          return (
-            <KiroMessage
-              key={m.id}
-              content={m.content}
-              streaming={m.streaming}
-              canRegenerate={m.canRegenerate}
-              actionsReady={idx === lastAssistantIndex ? !turnInFlight : true}
-              sources={m.sources ?? (idx === lastAssistantIndex ? sources : undefined)}
-              actionSummaries={[
-                ...(m.actions ?? []).map((a) => actionSummaryText(actionToCardProps(a.action))),
-                ...(m.historyActions ?? []).map((a) => actionSummaryText(a as Parameters<typeof actionSummaryText>[0])),
-              ]}
-            >
-              {/* Action Result Cards：真实 ToolResult 事实 UI */}
-              {m.actions && m.actions.length > 0 && (
-                <div className="space-y-2.5 pt-1">
-                  {m.actions.map((a) => (
-                    <KiroActionCard
-                      key={a.toolCallId}
-                      {...actionToCardProps(a.action)}
-                      onUndo={a.action.canUndo ? () => onUndo(a.toolCallId) : undefined}
-                    />
-                  ))}
-                </div>
-              )}
-              {/* 历史恢复的 Action Cards：纯展示事实（canUndo 恒 false） */}
-              {m.historyActions && m.historyActions.length > 0 && (
-                <div className="space-y-2.5 pt-1">
-                  {m.historyActions.map((a) => (
-                    <KiroActionCard
-                      key={a.toolCallId}
-                      variant={a.variant as KiroActionCardVariant}
-                      heading={a.heading}
-                      title={a.title}
-                      change={a.change ?? undefined}
-                      bullets={a.bullets}
-                      footer={a.footer}
-                      details={a.details}
-                    />
-                  ))}
-                </div>
-              )}
-            </KiroMessage>
-          );
-        })}
+        {messages.map((m, idx) => (
+          <KiroConversationRow
+            key={m.id}
+            view={m}
+            actionsReady={idx === lastAssistantIndex ? !turnInFlight : true}
+            sources={idx === lastAssistantIndex ? sources : undefined}
+            onUndo={onUndo}
+            onRetry={onRetry}
+          />
+        ))}
 
         {/* Agent 执行反馈（真实阶段 + 语义步骤；文本开始后淡出，有工具时保留完成摘要） */}
         {showAgentProgress && (
@@ -218,3 +200,80 @@ export function KiroConversation({
     </div>
   );
 }
+
+/**
+ * 单条消息行（Task 13）：React.memo。
+ * view 依赖 Message View 缓存（identity 稳定）→ streaming 时历史行不重渲染；
+ * actionsReady/sources 对历史行是稳定原语；最后一行收到真实变化值。
+ */
+const KiroConversationRow = React.memo(function KiroConversationRow({
+  view,
+  actionsReady,
+  sources,
+  onUndo,
+  onRetry,
+}: {
+  view: KiroChatMessageView;
+  actionsReady: boolean;
+  sources?: KiroSourceMeta[];
+  onUndo: (toolCallId: string) => void;
+  onRetry: () => void;
+}) {
+  if (view.role === "user") {
+    return <KiroUserMessage content={view.content} attachments={view.attachments} />;
+  }
+  // 空 assistant（pre-response 占位）：Logo 由 Agent Progress 承担，不渲染第二个 Logo；
+  // 首个文本 token 到达后 KiroMessage 自然出现（同一 Turn 只保留一个 Kiro Logo）
+  if (!view.content && !view.actions?.length && !view.historyActions?.length) return null;
+
+  // actionSummaries 随 view 稳定（Message View 缓存保证 identity）
+  const actionSummaries = React.useMemo(
+    () => [
+      ...(view.actions ?? []).map((a) => actionSummaryText(actionToCardProps(a.action))),
+      ...(view.historyActions ?? []).map((a) => actionSummaryText(a as Parameters<typeof actionSummaryText>[0])),
+    ],
+    [view]
+  );
+
+  return (
+    <KiroMessage
+      content={view.content}
+      streaming={view.streaming}
+      canRegenerate={view.canRegenerate}
+      actionsReady={actionsReady}
+      sources={view.sources ?? sources}
+      actionSummaries={actionSummaries}
+      onRetry={onRetry}
+    >
+      {/* Action Result Cards：真实 ToolResult 事实 UI */}
+      {view.actions && view.actions.length > 0 && (
+        <div className="space-y-2.5 pt-1">
+          {view.actions.map((a) => (
+            <KiroActionCard
+              key={a.toolCallId}
+              {...actionToCardProps(a.action)}
+              onUndo={a.action.canUndo ? () => onUndo(a.toolCallId) : undefined}
+            />
+          ))}
+        </div>
+      )}
+      {/* 历史恢复的 Action Cards：纯展示事实（canUndo 恒 false） */}
+      {view.historyActions && view.historyActions.length > 0 && (
+        <div className="space-y-2.5 pt-1">
+          {view.historyActions.map((a) => (
+            <KiroActionCard
+              key={a.toolCallId}
+              variant={a.variant as KiroActionCardVariant}
+              heading={a.heading}
+              title={a.title}
+              change={a.change ?? undefined}
+              bullets={a.bullets}
+              footer={a.footer}
+              details={a.details}
+            />
+          ))}
+        </div>
+      )}
+    </KiroMessage>
+  );
+});

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { useToastStore } from "@/store/useToastStore";
 import { useAppStore } from "@/store/useAppStore";
 import {
@@ -232,8 +232,9 @@ export function useKiroAttachments() {
     setAttachments([]);
   }, []);
 
-  const hasProcessing = attachments.some((a) => a.status === "processing");
-  const views = attachments.map(toView);
+  // 派生视图 memo：附件数组不变时不重建（避免无关 Chat token 触发）
+  const views = useMemo(() => attachments.map(toView), [attachments, toView]);
+  const hasProcessing = useMemo(() => attachments.some((a) => a.status === "processing"), [attachments]);
 
   return {
     attachments,
