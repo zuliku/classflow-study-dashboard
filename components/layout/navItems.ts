@@ -3,23 +3,26 @@ import {
   CalendarDays,
   ClipboardCheck,
   FolderKanban,
-  Sparkles,
   BarChart3,
   Users2,
   Settings,
 } from "lucide-react";
 import { NavTab } from "@/types";
+import { KiroLogoIcon } from "@/components/kiro/KiroLogo";
 
 /**
- * Kiro 图标集中定义：Kiro 正式 Logo 落地后只需替换此处的实现，
- * 所有入口（Sidebar / BottomNav / Header / Command Center / Kiro Workspace）自动生效。
+ * Kiro 图标集中定义：正式 Kiro Logo（透明 PNG，KiroLogoIcon）。
+ * 所有入口（Sidebar / BottomNav / Header / Command Center / Kiro Workspace / Ask Kiro）自动生效。
+ * 品牌 Logo ≠ 功能图标：AI 魔法类操作仍可用 Sparkles，这里只替换「Kiro 本身」。
  */
-export const KIRO_ICON = Sparkles;
+export const KIRO_ICON = KiroLogoIcon;
 
 export interface NavItem {
   id: NavTab;
   label: string;
   icon: React.ElementType;
+  /** 分组元数据：main = 核心学习功能；ai = AI Agent 独立区域 */
+  section?: "main" | "ai";
 }
 
 /** 全局 Action（非 Workspace Tab）：打开 Settings Modal */
@@ -29,16 +32,22 @@ export interface GlobalAction {
   icon: React.ElementType;
 }
 
-/** 工作区导航：Sidebar（Desktop/Icon Rail）与 Bottom Nav 共用 */
+/** 工作区导航：Sidebar（Desktop/Icon Rail）与 Bottom Nav 共用；Kiro 独立为 AI 区域 */
 export const WORKSPACE_NAV_ITEMS: NavItem[] = [
-  { id: "overview", label: "总览", icon: LayoutDashboard },
-  { id: "timetable", label: "我的课表", icon: CalendarDays },
-  { id: "assignments", label: "任务与 DDL", icon: ClipboardCheck },
-  { id: "courses", label: "课程资料", icon: FolderKanban },
-  { id: "kiro", label: "Kiro", icon: KIRO_ICON },
-  { id: "analytics", label: "学习统计", icon: BarChart3 },
-  { id: "group", label: "小组协作", icon: Users2 },
+  { id: "overview", label: "总览", icon: LayoutDashboard, section: "main" },
+  { id: "timetable", label: "我的课表", icon: CalendarDays, section: "main" },
+  { id: "assignments", label: "任务与 DDL", icon: ClipboardCheck, section: "main" },
+  { id: "courses", label: "课程资料", icon: FolderKanban, section: "main" },
+  { id: "analytics", label: "学习统计", icon: BarChart3, section: "main" },
+  { id: "group", label: "小组协作", icon: Users2, section: "main" },
+  { id: "kiro", label: "Kiro", icon: KIRO_ICON, section: "ai" },
 ];
+
+/** 核心学习功能（Sidebar 主区域渲染顺序） */
+export const MAIN_NAV_ITEMS: NavItem[] = WORKSPACE_NAV_ITEMS.filter((i) => i.section !== "ai");
+
+/** AI Agent 区域（Sidebar Featured Entry） */
+export const AI_NAV_ITEMS: NavItem[] = WORKSPACE_NAV_ITEMS.filter((i) => i.section === "ai");
 
 /** 全局 Action：设置是 Modal 入口，不假装是 Workspace Tab */
 export const GLOBAL_NAV_ACTIONS: GlobalAction[] = [

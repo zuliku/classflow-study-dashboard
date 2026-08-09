@@ -292,3 +292,36 @@ html[data-motion="reduced"] *::after {
 .katex-error {
   color: var(--danger);
 }
+
+/* Kiro Featured Entry：品牌色 perimeter sweep（低饱和：暖金 / 浅绿 / 灰蓝）。
+   Idle 静默 → Hover 慢速流动 → Active 静态细边；reduced-motion 完全关闭动画。 */
+.kiro-ring {
+  background: conic-gradient(
+    from 210deg,
+    transparent 0deg,
+    rgba(240, 208, 176, 0.85) 45deg,
+    rgba(176, 208, 208, 0.85) 105deg,
+    rgba(160, 176, 224, 0.85) 165deg,
+    rgba(240, 208, 176, 0.85) 225deg,
+    transparent 300deg,
+    transparent 360deg
+  );
+}
+
+.kiro-ring-animated {
+  animation: kiro-ring-spin 7s linear infinite;
+}
+
+@keyframes kiro-ring-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Reduced Motion：完全关闭 perimeter animation，只保留静态品牌色细边 */
+html[data-motion="reduced"] .kiro-ring-animated {
+  animation: none;
+}

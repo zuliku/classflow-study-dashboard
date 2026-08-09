@@ -4,7 +4,11 @@ import React from "react";
 import { ChevronRight } from "lucide-react";
 import { useAppStore } from "@/store/useAppStore";
 import { cn } from "@/lib/utils";
-import { WORKSPACE_NAV_ITEMS, GLOBAL_NAV_ACTIONS } from "@/components/layout/navItems";
+import {
+  MAIN_NAV_ITEMS,
+  AI_NAV_ITEMS,
+  GLOBAL_NAV_ACTIONS,
+} from "@/components/layout/navItems";
 
 export function Sidebar() {
   const { activeTab, setActiveTab, setSettingsModalOpen, userProfile } = useAppStore();
@@ -42,13 +46,11 @@ export function Sidebar() {
           />
         </div>
 
-        {/* Navigation Menu（工作区 Tab） */}
+        {/* Navigation Menu（核心学习功能） */}
         <nav className="space-y-0.5">
-          {WORKSPACE_NAV_ITEMS.map((item) => {
+          {MAIN_NAV_ITEMS.map((item) => {
             const Icon = item.icon;
             const isActive = activeTab === item.id;
-            // Kiro 通过轻微间距与核心学习管理区形成层次（无独立 Section Header）
-            const kiroGap = item.id === "kiro" || item.id === "analytics" ? "mt-2" : "";
             return (
               <button
                 key={item.id}
@@ -56,7 +58,6 @@ export function Sidebar() {
                 aria-label={item.label}
                 aria-current={isActive ? "page" : undefined}
                 className={cn(
-                  kiroGap,
                   "relative w-full flex items-center justify-center xl:justify-start xl:gap-2.5 px-2 xl:px-3 py-2 rounded-xl text-xs font-medium transition-colors duration-[var(--motion-base)] ease-[var(--ease-standard)] group text-left",
                   isActive
                     ? "bg-pastel-mint text-charcoal font-semibold shadow-subtle"
@@ -101,7 +102,83 @@ export function Sidebar() {
           })}
         </nav>
 
-        {/* 全局 Action：设置（Modal 入口，不改变 activeTab） */}
+        {/* AI Agent 区域：Kiro Featured Entry（独立分组，不做普通 nav row） */}
+        <div className="mt-3 pt-3 border-t border-line-soft space-y-0.5">
+          {AI_NAV_ITEMS.map((item) => {
+            const Icon = item.icon;
+            const isActive = activeTab === item.id;
+            return (
+              <button
+                key={item.id}
+                onClick={() => setActiveTab(item.id)}
+                aria-label={item.label}
+                aria-current={isActive ? "page" : undefined}
+                className={cn(
+                  "relative w-full flex items-center justify-center xl:justify-start rounded-xl group text-left",
+                  "overflow-hidden transition-colors duration-[var(--motion-base)] ease-[var(--ease-standard)]"
+                )}
+              >
+                {/* 1px 品牌色 perimeter：Idle 静默 / Hover 慢速流动 / Active 静态细边 */}
+                <span
+                  aria-hidden="true"
+                  className={cn(
+                    "absolute inset-0 kiro-ring pointer-events-none",
+                    "transition-opacity duration-[var(--motion-fast)]",
+                    isActive
+                      ? "opacity-100"
+                      : "opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100"
+                  )}
+                />
+                <span
+                  className={cn(
+                    "absolute inset-0 kiro-ring kiro-ring-animated pointer-events-none opacity-0",
+                    "transition-opacity duration-[var(--motion-fast)]",
+                    "group-hover:opacity-100 group-focus-visible:opacity-100",
+                    isActive && "hidden"
+                  )}
+                />
+                {/* 内容层：m-px 留出 1px 品牌色环 */}
+                <span
+                  className={cn(
+                    "relative m-px w-full h-11 rounded-[11px] bg-[#F7F5F5]",
+                    "flex items-center justify-center xl:justify-start xl:gap-2.5 px-2 xl:px-3",
+                    "text-xs font-semibold transition-colors duration-[var(--motion-base)]",
+                    isActive ? "bg-pastel-mint text-charcoal" : "text-charcoal"
+                  )}
+                >
+                  <Icon className="w-5 h-5 shrink-0" />
+                  {/* 文字标签：仅在完整 Sidebar 显示 */}
+                  <span data-testid="nav-label" className="hidden xl:inline truncate">{item.label}</span>
+
+                  {/* Icon Rail Tooltip（仅 768–1279 显示）：hover / focus 均可见 */}
+                  <span
+                    data-testid="nav-tooltip"
+                    role="tooltip"
+                    className={cn(
+                      "hidden md:inline-flex xl:hidden absolute left-full top-1/2 -translate-y-1/2 ml-2",
+                      "px-2 py-1 rounded-lg bg-charcoal text-white text-[11px] whitespace-nowrap",
+                      "opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100",
+                      "transition-opacity duration-[var(--motion-fast)] pointer-events-none z-50"
+                    )}
+                  >
+                    {item.label}
+                  </span>
+                </span>
+                {/* Active 指示条（保留统一 active 语义） */}
+                <span
+                  className={cn(
+                    "absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-5 rounded-full bg-charcoal",
+                    "transition-[opacity,transform] duration-[var(--motion-base)] ease-[var(--ease-standard)]",
+                    isActive ? "opacity-100 scale-y-100" : "opacity-0 scale-y-50"
+                  )}
+                  aria-hidden="true"
+                />
+              </button>
+            );
+          })}
+        </div>
+
+        {/* 全局 Action：设置（Modal 入口，不改变 activeTab）；与 AI 区域以 border-t 分隔 */}
         <div className="pt-1 mt-1 border-t border-line-soft space-y-0.5">
           {GLOBAL_NAV_ACTIONS.map((item) => {
             const Icon = item.icon;
