@@ -216,11 +216,17 @@ export function KiroComposer({
       )}
 
       <div className="max-w-[820px] mx-auto">
-        <KiroContextBar contexts={contexts} onRemove={onRemoveContext} />
+        <KiroContextBar contexts={contexts} onRemove={onRemoveContext} compact={compact} />
 
         {/* 附件 chips */}
         {attachments.length > 0 && (
-          <div className="flex flex-wrap items-center gap-1.5 px-1 pb-2" data-testid="kiro-attachments">
+          <div
+            className={cn(
+              "flex flex-wrap items-center gap-1.5 pb-2",
+              compact ? "px-3" : "px-1"
+            )}
+            data-testid="kiro-attachments"
+          >
             {attachments.map((a) => (
               <KiroAttachmentChip
                 key={a.id}
@@ -377,7 +383,7 @@ export function KiroComposer({
         </div>
 
         {!configured ? (
-          <div className="flex items-center justify-between gap-2 px-1 mt-2">
+          <div className={cn("flex items-center justify-between gap-2 mt-2", compact ? "px-3" : "px-1")}>
             <p className="text-[11px] text-sandrift">先连接一个 AI 服务即可开始使用 Kiro。</p>
             <button
               onClick={onOpenSettings}
@@ -388,7 +394,7 @@ export function KiroComposer({
             </button>
           </div>
         ) : attachments.length > 0 ? (
-          <p className="text-[10px] text-sandrift mt-1.5 px-1">
+          <p className={cn("text-[10px] text-sandrift mt-1.5", compact ? "px-3" : "px-1")}>
             文件内容会发送给当前选择的 AI 服务以完成你的请求。
           </p>
         ) : !compact ? (

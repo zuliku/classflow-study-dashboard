@@ -9,6 +9,7 @@ import {
   buildAutoContextRefs,
   resolveContextRefs,
   replaceEntryRefs,
+  dedupeContextRefs,
 } from "@/lib/ai/context/contextSelection";
 import {
   assignmentEntryRef,
@@ -65,6 +66,7 @@ export function KiroSessionProvider({ children }: { children: React.ReactNode })
   const [lastUserTurnGen, setLastUserTurnGen] = useState(0);
 
   const setActiveTab = useAppStore((s) => s.setActiveTab);
+  const activeTab = useAppStore((s) => s.activeTab);
 
   // Auto Context：reactive（Zustand selector 订阅 + useMemo，非偶然 rerender）
   const autoState = useAppStore(
@@ -90,8 +92,12 @@ export function KiroSessionProvider({ children }: { children: React.ReactNode })
   });
 
   const activeRefs = useMemo(
-    () => resolveContextRefs(autoRefs, manualRefs, entryRefs, suppressedAutoKeys),
-    [autoRefs, manualRefs, entryRefs, suppressedAutoKeys]
+    () =>
+      dedupeContextRefs(
+        resolveContextRefs(autoRefs, manualRefs, entryRefs, suppressedAutoKeys),
+        autoState.currentSemesterWeek
+      ),
+    [autoRefs, manualRefs, entryRefs, suppressedAutoKeys, autoState.currentSemesterWeek]
   );
 
   const removeContext = useCallback(
@@ -234,7 +240,8 @@ export function KiroSessionProvider({ children }: { children: React.ReactNode })
     <KiroSessionContext.Provider value={sessionValue}>
       <div className="flex min-h-screen bg-[#F7F5F5] font-sans antialiased text-charcoal">
         {children}
-        {sidecarOpen && <KiroSidecar />}
+        {/* Sidecar 与 Workspace 互斥：进入 Kiro Workspace 时不渲染 Sidecar（Session 保留） */}
+        {sidecarOpen && activeTab !== "kiro" && <KiroSidecar />}
       </div>
     </KiroSessionContext.Provider>
   );

@@ -55,11 +55,18 @@ export function KiroChatSurface({ variant }: { variant: "workspace" | "sidecar" 
   };
 
   const hasMessages = chat.messages.length > 0;
+  // Context-aware 建议可见时，隐藏 EmptyState 的通用建议（两者不同时出现）
+  const hasContextSuggestions =
+    session.suggestionsKind != null && session.suggestionsGen > session.lastUserTurnGen;
 
   return (
     <div className="relative flex-1 min-h-0 flex flex-col">
       {!hasMessages ? (
-        <KiroEmptyState onSuggestion={chat.send} compact={compact} />
+        <KiroEmptyState
+          onSuggestion={chat.send}
+          compact={compact}
+          hideSuggestions={variant === "sidecar" && hasContextSuggestions}
+        />
       ) : (
         <KiroConversation
           messages={chat.messages}
@@ -68,6 +75,7 @@ export function KiroChatSurface({ variant }: { variant: "workspace" | "sidecar" 
           onRetry={chat.retry}
           onOpenSettings={openKiroSettings}
           onUndo={chat.consumeUndo}
+          compact={compact}
         />
       )}
 

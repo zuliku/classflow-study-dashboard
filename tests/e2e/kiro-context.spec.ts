@@ -66,12 +66,17 @@ test("Assignment Drawer → Ask Kiro：关闭 Drawer、打开 Sidecar（entry co
   await expect(page.getByRole("button", { name: "Ask Kiro" })).toBeVisible();
   await expect(page.getByText("计量经济学大作业").first()).toBeVisible();
 
-  // Ask Kiro：Drawer 关闭 + Sidecar 打开 + entry 上下文 chip
+  // Ask Kiro：Drawer 关闭 + Sidecar 打开 + ContextBar collapsed 摘要（Header 不再重复 chip）
   await page.getByRole("button", { name: "Ask Kiro" }).click();
   await expect(page.getByRole("button", { name: "Ask Kiro" })).toHaveCount(0);
   const sidecar = page.getByTestId("kiro-sidecar");
   await expect(sidecar).toBeVisible();
-  await expect(sidecar).toContainText("任务 · 计量经济学大作业");
+  const bar = page.getByTestId("kiro-context-bar");
+  await expect(bar).toBeVisible();
+  await expect(bar.getByRole("button", { expanded: false })).toContainText("使用");
+  // 展开 chips 可见 entry 标签
+  await bar.getByRole("button", { expanded: false }).click();
+  await expect(bar).toContainText("计量经济学大作业");
 
   // Entry 建议出现（assignment kind）
   const suggestions = page.getByTestId("kiro-context-suggestions");

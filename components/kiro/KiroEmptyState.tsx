@@ -8,8 +8,17 @@ import { KiroMark } from "@/components/kiro/KiroHeader";
 /**
  * Kiro Empty State（Task 2）：恢复 ClassFlow Context 相关建议。
  * 有数据 / 无数据由本地确定性判断切换文案；点击 = 真实发送。
+ * hideSuggestions：Sidecar 存在 Entry Context 建议时隐藏通用建议（两者不同时出现）。
  */
-export function KiroEmptyState({ onSuggestion, compact }: { onSuggestion: (text: string) => void; compact?: boolean }) {
+export function KiroEmptyState({
+  onSuggestion,
+  compact,
+  hideSuggestions,
+}: {
+  onSuggestion: (text: string) => void;
+  compact?: boolean;
+  hideSuggestions?: boolean;
+}) {
   const courses = useAppStore((s) => s.courses);
   const assignments = useAppStore((s) => s.assignments);
   const schedules = useAppStore((s) => s.schedules);
@@ -43,24 +52,26 @@ export function KiroEmptyState({ onSuggestion, compact }: { onSuggestion: (text:
         </p>
       )}
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-7 w-full max-w-md">
-        {suggestions.map((s) => {
-          const Icon = s.icon;
-          return (
-            <button
-              key={s.label}
-              onClick={() => onSuggestion(s.label)}
-              className="ux-press flex items-start gap-2.5 p-3 bg-surface border border-line rounded-xl text-left hover:bg-alabaster hover:border-line-strong transition-colors duration-[var(--motion-fast)] group"
-            >
-              <Icon className="w-4 h-4 text-sandrift group-hover:text-charcoal shrink-0 mt-0.5" />
-              <span className="min-w-0">
-                <span className="block text-xs font-bold text-charcoal">{s.label}</span>
-                <span className="block text-[10px] text-sandrift mt-0.5 leading-relaxed">{s.desc}</span>
-              </span>
-            </button>
-          );
-        })}
-      </div>
+      {!hideSuggestions && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-7 w-full max-w-md">
+          {suggestions.map((s) => {
+            const Icon = s.icon;
+            return (
+              <button
+                key={s.label}
+                onClick={() => onSuggestion(s.label)}
+                className="ux-press flex items-start gap-2.5 p-3 bg-surface border border-line rounded-xl text-left hover:bg-alabaster hover:border-line-strong transition-colors duration-[var(--motion-fast)] group"
+              >
+                <Icon className="w-4 h-4 text-sandrift group-hover:text-charcoal shrink-0 mt-0.5" />
+                <span className="min-w-0">
+                  <span className="block text-xs font-bold text-charcoal">{s.label}</span>
+                  <span className="block text-[10px] text-sandrift mt-0.5 leading-relaxed">{s.desc}</span>
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

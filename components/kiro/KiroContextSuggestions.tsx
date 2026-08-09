@@ -1,36 +1,52 @@
 "use client";
 
 import React from "react";
+import {
+  Scissors,
+  Clock,
+  ClipboardList,
+  FileText,
+  BookOpen,
+  CalendarRange,
+  Target,
+  TrendingUp,
+  Users,
+  TriangleAlert,
+  Hourglass,
+  RefreshCw,
+  Lightbulb,
+} from "lucide-react";
 import { useKiroSession } from "@/components/kiro/KiroSessionProvider";
+import { cn } from "@/lib/utils";
 
-const SUGGESTIONS: Record<string, { icon: string; label: string }[]> = {
+const SUGGESTIONS: Record<string, { icon: React.ComponentType<{ className?: string }>; label: string }[]> = {
   assignment: [
-    { icon: "✂", label: "拆分这个任务" },
-    { icon: "⏰", label: "调整截止时间" },
-    { icon: "📋", label: "制定完成计划" },
-    { icon: "📝", label: "总结任务要求" },
+    { icon: Scissors, label: "拆分这个任务" },
+    { icon: Clock, label: "调整截止时间" },
+    { icon: ClipboardList, label: "制定完成计划" },
+    { icon: FileText, label: "总结任务要求" },
   ],
   course: [
-    { icon: "📚", label: "总结这门课程" },
-    { icon: "🗓", label: "安排复习计划" },
-    { icon: "🎯", label: "分析最近任务" },
-    { icon: "📄", label: "根据课程资料学习" },
+    { icon: BookOpen, label: "总结这门课程" },
+    { icon: CalendarRange, label: "安排复习计划" },
+    { icon: Target, label: "分析最近任务" },
+    { icon: FileText, label: "根据课程资料学习" },
   ],
   "group-project": [
-    { icon: "✂", label: "拆分项目任务" },
-    { icon: "📈", label: "总结项目进度" },
-    { icon: "⏰", label: "检查即将截止任务" },
-    { icon: "👥", label: "重新规划任务分工" },
+    { icon: Scissors, label: "拆分项目任务" },
+    { icon: TrendingUp, label: "总结项目进度" },
+    { icon: Clock, label: "检查即将截止任务" },
+    { icon: Users, label: "重新规划任务分工" },
   ],
   week: [
-    { icon: "🗓", label: "帮我调整本周课表" },
-    { icon: "⚠", label: "检查时间冲突" },
-    { icon: "⏳", label: "查看本周空闲时间" },
-    { icon: "🔁", label: "把某门课调到其他时间" },
+    { icon: CalendarRange, label: "帮我调整本周课表" },
+    { icon: TriangleAlert, label: "检查时间冲突" },
+    { icon: Hourglass, label: "查看本周空闲时间" },
+    { icon: RefreshCw, label: "把某门课调到其他时间" },
   ],
   generic: [
-    { icon: "💡", label: "了解当前页面" },
-    { icon: "🎯", label: "帮我规划下一步" },
+    { icon: Lightbulb, label: "了解当前页面" },
+    { icon: Target, label: "帮我规划下一步" },
   ],
 };
 
@@ -38,6 +54,7 @@ const SUGGESTIONS: Record<string, { icon: string; label: string }[]> = {
  * 上下文建议（Sidecar 专用）：按 entry type 返回本地确定性快捷 Prompt。
  * 只在 Sidecar 刚打开且没有针对该 Entry 的新 User Message 时显示。
  * 点击才发送，不调用模型生成。
+ * 有 Entry Context 时是唯一建议区（EmptyState 通用建议被隐藏，见 KiroChatSurface）。
  */
 export function KiroContextSuggestions({ compact }: { compact?: boolean }) {
   const session = useKiroSession();
@@ -47,18 +64,21 @@ export function KiroContextSuggestions({ compact }: { compact?: boolean }) {
 
   const items = SUGGESTIONS[kind] ?? [];
   return (
-    <div data-testid="kiro-context-suggestions" className="shrink-0 px-1 pb-1.5">
+    <div data-testid="kiro-context-suggestions" className={cn("shrink-0 pb-1.5", compact ? "px-3" : "px-1")}>
       <div className="flex flex-wrap gap-1.5">
-        {items.map((s) => (
-          <button
-            key={s.label}
-            onClick={() => session.chat.send(s.label)}
-            className={cnChip(compact)}
-          >
-            <span className="text-sandrift">{s.icon}</span>
-            {s.label}
-          </button>
-        ))}
+        {items.map((s) => {
+          const Icon = s.icon;
+          return (
+            <button
+              key={s.label}
+              onClick={() => session.chat.send(s.label)}
+              className={cnChip(compact)}
+            >
+              <Icon className="w-4 h-4 text-sandrift" />
+              {s.label}
+            </button>
+          );
+        })}
       </div>
     </div>
   );

@@ -6,6 +6,7 @@ import { KiroActivityTrace } from "@/components/kiro/KiroActivityTrace";
 import { KiroActionCard, actionToCardProps } from "@/components/kiro/KiroActionCard";
 import { KiroChatMessageView, KiroActivity } from "@/hooks/useKiroChat";
 import { AIError, AI_ERROR_MESSAGES } from "@/lib/ai/errors";
+import { cn } from "@/lib/utils";
 import { RotateCcw, Settings } from "lucide-react";
 
 /**
@@ -19,6 +20,7 @@ export function KiroConversation({
   onRetry,
   onOpenSettings,
   onUndo,
+  compact,
 }: {
   messages: KiroChatMessageView[];
   activity: KiroActivity;
@@ -26,6 +28,8 @@ export function KiroConversation({
   onRetry: () => void;
   onOpenSettings: () => void;
   onUndo: (toolCallId: string) => void;
+  /** sidecar：统一 12px 水平 gutter（与 Header/Composer 一致） */
+  compact?: boolean;
 }) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const stickToBottomRef = useRef(true);
@@ -50,7 +54,7 @@ export function KiroConversation({
       data-testid="kiro-conversation"
       className="flex-1 min-h-0 overflow-y-auto"
     >
-      <div className="max-w-[820px] mx-auto space-y-5 px-1 py-3">
+      <div className={cn("max-w-[820px] mx-auto space-y-5 py-3", compact ? "px-3" : "px-1")}>
         {messages.map((m) =>
           m.role === "user" ? (
             <KiroUserMessage key={m.id} content={m.content} attachments={m.attachments} />

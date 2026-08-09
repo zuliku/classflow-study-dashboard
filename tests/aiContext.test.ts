@@ -98,6 +98,7 @@ async function freshModules() {
     groupProjectEntryRef: (await import("@/lib/ai/context/handoff")).groupProjectEntryRef,
     weekEntryRef: (await import("@/lib/ai/context/handoff")).weekEntryRef,
     suggestionsTypeOf: (await import("@/lib/ai/context/handoff")).suggestionsTypeOf,
+    dedupeContextRefs: selMod.dedupeContextRefs,
     executeKiroReadTool: execMod.executeKiroReadTool,
     getUpcomingAssignments: execMod.getUpcomingAssignments,
     getWeekSchedule: execMod.getWeekSchedule,
@@ -212,6 +213,38 @@ describe("Entry Context（handoff）", () => {
     const { suggestionsTypeOf } = await freshModules();
     expect(suggestionsTypeOf({ key: "k", kind: "assignment", entityId: "a1", label: "任务", source: "entry" })).toBe("assignment");
     expect(suggestionsTypeOf({ key: "k", kind: "material", entityId: "m1", label: "资料", source: "entry" })).toBe("generic");
+  });
+
+  it("dedupe：auto 与 entry 同实体只保留一个；manual 优先", async () => {
+    const { dedupeContextRefs } = await freshModules();
+    const autoCourse = { key: "auto-course-c1", kind: "course" as const, entityId: "c1", label: "当前课程 · 统计学", source: "auto" as const };
+    const entryCourse = { key: "entry-course-c1", kind: "course" as const, entityId: "c1", label: "课程 · 统计学", source: "entry" as const };
+    const manualCourse = { key: "manual-course-c1", kind: "course" as const, entityId: "c1", label: "统计学", source: "manual" as const };
+    const refs = dedupeContextRefs([autoCourse, entryCourse], 3);
+    expect(refs).toEqual([entryCourse]);
+    expect(dedupeContextRefs([autoCourse, entryCourse, manualCourse], 3)).toEqual([manualCourse]);
+  });
+
+  it("dedupe：week 实体——entry 周次与当前周相同视为同一实体", async () => {
+    const { dedupeContextRefs } = await freshModules();
+    const autoWeek = { key: "auto-week-current", kind: "week" as const, entityId: "current", label: "时间范围 · 本周（第 3 周）", source: "auto" as const };
+    const entryWeek3 = { key: "entry-week-3", kind: "week" as const, entityId: "3", label: "时间范围 · 第 3 周", source: "entry" as const };
+    const entryWeek5 = { key: "entry-week-5", kind: "week" as const, entityId: "5", label: "时间范围 · 第 5 周", source: "entry" as const };
+    // 当前周 = 3：entry 第 3 周与本周去重（entry 优先），第 5 周保留
+    const refs = dedupeContextRefs([autoWeek, entryWeek3, entryWeek5], 3);
+    expect(refs.map((r) => r.key)).toEqual(["entry-week-3", "entry-week-5"]);
+    // 当前周 = 5：保留第 5 周 entry，去掉本周 auto
+    const refs2 = dedupeContextRefs([autoWeek, entryWeek3, entryWeek5], 5);
+    expect(refs2.map((r) => r.key)).toEqual(["entry-week-3", "entry-week-5"]);
+  });
+
+  it("dedupe：不同实体不被误删；无 currentWeek 时按原样处理", async () => {
+    const { dedupeContextRefs } = await freshModules();
+    const a = { key: "auto-course-c1", kind: "course" as const, entityId: "c1", label: "统计学", source: "auto" as const };
+    const b = { key: "auto-course-c2", kind: "course" as const, entityId: "c2", label: "高数", source: "auto" as const };
+    expect(dedupeContextRefs([a, b], 3).length).toBe(2);
+    const w = { key: "entry-week-2", kind: "week" as const, entityId: "2", label: "第 2 周", source: "entry" as const };
+    expect(dedupeContextRefs([w], undefined).length).toBe(1);
   });
 });
 

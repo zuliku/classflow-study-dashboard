@@ -86,3 +86,35 @@ export function refsForPrompt(refs: KiroContextRef[]): { kind: string; id?: stri
     label: r.label,
   }));
 }
+
+/**
+ * 语义去重（UI 显示层）：同一实体（course/assignment/group-project/week/material）即使来源不同
+ * （auto / entry / manual），也只保留一个引用。week 特别处理：entry 的周次与 currentWeek 相同
+ * 时与 auto「本周」视为同一实体。
+ * 优先级：manual > entry > auto（保留高优先级引用，输出顺序不变）。
+ */
+export function dedupeContextRefs(refs: KiroContextRef[], currentWeek?: number): KiroContextRef[] {
+  const sourcePriority = { auto: 0, entry: 1, manual: 2 } as const;
+  const canonicalKey = (r: KiroContextRef): string => {
+    if (r.kind === "week") {
+      const week = r.entityId === "current" ? "current" : r.entityId;
+      const resolved = week !== "current" && currentWeek != null && String(week) === String(currentWeek) ? "current" : week;
+      return `week:${resolved}`;
+    }
+    return `${r.kind}:${r.entityId ?? ""}`;
+  };
+  const best = new Map<string, KiroContextRef>();
+  for (const r of refs) {
+    const key = canonicalKey(r);
+    const cur = best.get(key);
+    if (!cur || sourcePriority[r.source] >= sourcePriority[cur.source]) best.set(key, r);
+  }
+  const seen = new Set<string>();
+  return refs.filter((r) => {
+    const key = canonicalKey(r);
+    if (best.get(key) !== r) return false;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}

@@ -9,33 +9,29 @@ import { KiroMark } from "@/components/kiro/KiroHeader";
 /**
  * Kiro Sidecar：贯穿 ClassFlow 的 AI Agent 入口。
  * 与 KiroWorkspace 共享同一个 Persistent Session（同一 Runtime / 附件 / Undo）。
+ * Header 只承担品牌与会话级操作；具体 Context 由 Composer 上方的 ContextBar 展示（不重复）。
  * Responsive：
- *  ≥1536  Docked（静态列，主内容 reflow）
+ *  ≥1536  Docked（sticky 整屏 AI Panel，独立滚动，Composer 固定底部）
  *  1280–1535  Right Overlay（border-left + shadow，不压窄课表）
  *  768–1279  Right Side Sheet
  *  <768  Full-screen
  */
 export function KiroSidecar() {
   const session = useKiroSession();
-  const { closeSidecar, expandSidecar, newChat, activeRefs } = session;
+  const { closeSidecar, expandSidecar, newChat } = session;
 
   return (
     <div
       data-testid="kiro-sidecar"
       className={cnSidecar()}
     >
-      {/* Compact Header */}
-      <div className="shrink-0 px-4 py-3 border-b border-line bg-[#F7F5F5] flex items-center justify-between gap-2">
+      {/* Compact Header：品牌 + Panel 操作，不重复 Context 信息 */}
+      <div className="shrink-0 px-3 py-3 border-b border-line bg-[#F7F5F5] flex items-center justify-between gap-2">
         <div className="flex items-center gap-2 min-w-0">
           <KiroMark size="sm" />
           <h2 className="text-sm font-bold text-charcoal" data-testid="kiro-sidecar-title">
             Kiro
           </h2>
-          {activeRefs.length > 0 && (
-            <span className="hidden sm:inline-block text-[10px] font-semibold text-sandrift bg-white border border-line px-1.5 py-0.5 rounded-md truncate max-w-[180px]">
-              {activeRefs[0].label}
-            </span>
-          )}
         </div>
         <div className="flex items-center gap-0.5 shrink-0">
           <button
@@ -81,7 +77,7 @@ function cnSidecar(): string {
     "md:inset-y-0 md:right-0 md:left-auto md:w-[min(420px,88vw)]",
     // 1280–1535：Right Overlay（400px）
     "xl:w-[400px] shadow-drawer border-l border-line",
-    // ≥1536：Docked（静态列，主内容 reflow）
-    "2xl:static 2xl:z-auto 2xl:shadow-none 2xl:h-auto",
+    // ≥1536：Docked（sticky 整屏 AI Panel：跟随 viewport 高度，内部独立滚动）
+    "2xl:sticky 2xl:top-0 2xl:h-dvh 2xl:self-start 2xl:z-auto 2xl:shadow-none",
   ].join(" ");
 }

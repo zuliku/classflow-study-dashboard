@@ -156,8 +156,11 @@ export default function Home() {
         <Header />
 
         {/* Dynamic Page Views */}
-        <main className="flex-1 p-4 md:p-6 pb-24 md:pb-6 overflow-y-auto">
-          <PageTransition tab={activeTab} className="space-y-5">
+        <main className="flex-1 flex flex-col p-4 md:p-6 pb-24 md:pb-6 overflow-y-auto">
+          <PageTransition
+            tab={activeTab}
+            className={cn("space-y-5", activeTab === "kiro" && "flex flex-col flex-1 min-h-0")}
+          >
           {activeTab === "overview" && (
             <>
               {/* First Run：空工作区时显示 Getting Started（非阻塞，三个动作即可开始） */}

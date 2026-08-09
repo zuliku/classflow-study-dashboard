@@ -23,7 +23,7 @@ export function KiroWorkspace() {
   return (
     <div
       data-testid="kiro-workspace"
-      className="relative h-[calc(100dvh-170px)] md:h-[calc(100dvh-96px)] flex flex-col"
+      className="relative flex-1 min-h-0 flex flex-col"
     >
       <KiroHeader onNewChat={newChat} onOpenHistory={() => setHistoryOpen(true)} />
       <KiroChatSurface variant="workspace" />

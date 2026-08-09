@@ -10,7 +10,7 @@ import { useToastStore } from "@/store/useToastStore";
 import { getSessionApiKey } from "@/lib/ai/sessionKeys";
 import { normalizeAIError, AIError } from "@/lib/ai/errors";
 import { buildBaseContext } from "@/lib/ai/context/buildBaseContext";
-import { resolveContextRefs, refsForPrompt } from "@/lib/ai/context/contextSelection";
+import { resolveContextRefs, refsForPrompt, dedupeContextRefs } from "@/lib/ai/context/contextSelection";
 import { KiroContextRef } from "@/lib/ai/context/types";
 import { executeKiroReadTool, ReadToolResult } from "@/lib/ai/tools/read/executor";
 import { executeReadMaterial } from "@/lib/ai/tools/read/material";
@@ -172,7 +172,10 @@ export function useKiroChat({
     customConfig: custom,
     baseContext: buildBaseContext(),
     contextRefs: refsForPrompt(
-      resolveContextRefs(autoRefs, manualRefs, entryRefs, suppressedAutoKeys)
+      dedupeContextRefs(
+        resolveContextRefs(autoRefs, manualRefs, entryRefs, suppressedAutoKeys),
+        useAppStore.getState().currentSemesterWeek
+      )
     ),
     // 文档文本 Context（本地已提取；图片不走此路径，走原生 image part）
     attachmentsContext: buildDocumentContexts(attachments),
