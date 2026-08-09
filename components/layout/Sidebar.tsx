@@ -30,7 +30,6 @@ export function Sidebar() {
         <div
           className="w-full h-10 px-0.5 flex items-center justify-center cursor-pointer transition-opacity hover:opacity-90"
           onClick={() => setActiveTab("overview")}
-          title="ClassFlow"
         >
           {/* 768–1279 Icon Rail：仅图形 Mark，居中，object-contain */}
           <img
