@@ -80,27 +80,33 @@ test("Case C：删除导致总页数减少 → 当前页自动 clamp（不出现
   await expect(list.locator('[data-assignment-id]')).toHaveCount(1);
 });
 
-test("Case D：切换全部 6 个筛选，StudyLoadChart 外层卡片高度保持不变", async ({ page }) => {
+test("Case D：切换筛选时图表卡与任务卡保持等高（≥460）、无重叠", async ({ page }) => {
   await openOverview(page);
   const card = page.getByTestId("overview-tasks-wrap");
   const chart = page.getByTestId("study-load-card");
-  // ResponsiveContainer 首次测量需要时间，等待高度稳定为固定 Dashboard 高度
+  // ResponsiveContainer 首次测量需要时间，等待高度稳定
   await page.waitForTimeout(700);
   const base = await chart.boundingBox();
-  expect(base!.height).toBeGreaterThan(300);
+  expect(base!.height).toBeGreaterThanOrEqual(460);
 
   const filters = ["已逾期", "今日截止", "3天内截止", "7天内截止", "已完成归档", "全部"];
   for (const f of filters) {
     await card.getByRole("button", { name: f }).click();
     await page.waitForTimeout(300);
-    const box = await chart.boundingBox();
-    expect(Math.abs(box!.height - base!.height)).toBeLessThanOrEqual(1);
+    const chartBox = await chart.boundingBox();
+    const cardBox = await card.boundingBox();
+    // 2 列等高（grid stretch）；高度可随内容自然增长，但不少于 460
+    expect(Math.abs(chartBox!.height - cardBox!.height)).toBeLessThanOrEqual(1);
+    expect(cardBox!.height).toBeGreaterThanOrEqual(460);
+    // Footer 始终位于最后一行之后（无重叠）
+    const footer = page.getByTestId("assignment-footer");
+    const lastRow = page.locator('[data-testid="assignment-list"] > div').last();
+    if (await lastRow.count()) {
+      const fBox = await footer.boundingBox();
+      const rBox = await lastRow.boundingBox();
+      expect(fBox!.y).toBeGreaterThanOrEqual(rBox!.y + rBox!.height - 1);
+    }
   }
-
-  // 左右两张卡片顶部对齐且高度一致（desktop，均固定 460px）
-  const right = await page.getByTestId("overview-tasks-wrap").boundingBox();
-  expect(Math.abs(right!.height - base!.height)).toBeLessThanOrEqual(1);
-  expect(right!.height).toBeCloseTo(460, 0);
 });
 
 test("Case 1：空状态真正居中（相对 Header/Footer 之间的内容区）", async ({ page }) => {
@@ -143,7 +149,7 @@ test("Case 2：分页可见时 Footer 位置稳定（三段式，分页居中）
   expect(cardBox!.x + cardBox!.width - (rightBox!.x + rightBox!.width)).toBeLessThan(30); // 贴右
 });
 
-test("Case 3：切换筛选时 Footer 底部位置稳定、卡片高度不变", async ({ page }) => {
+test("Case 3：切换筛选时 Footer 始终在最后一行之后、卡片高度可自然增长", async ({ page }) => {
   await openOverview(page);
   const card = page.getByTestId("overview-tasks-wrap");
   const footer = page.getByTestId("assignment-footer");
@@ -158,8 +164,9 @@ test("Case 3：切换筛选时 Footer 底部位置稳定、卡片高度不变", 
     await page.waitForTimeout(200);
     const cardBox = await card.boundingBox();
     const footerBox = await footer.boundingBox();
-    expect(Math.abs(cardBox!.height - baseCard!.height)).toBeLessThanOrEqual(1); // 卡片高度不变
-    // Footer 相对卡片底部距离不变（滚动导致的 y 变化被差值抵消）
+    // 卡片高度 ≥460（自然增长，不固定 460）
+    expect(cardBox!.height).toBeGreaterThanOrEqual(460);
+    // Footer 相对卡片底部距离不变（无重叠 / 无挤压）
     expect(
       Math.abs(
         cardBox!.y + cardBox!.height - (footerBox!.y + footerBox!.height) -

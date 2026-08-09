@@ -1,9 +1,9 @@
 "use client";
 
 import React from "react";
-import { Plus, History as HistoryIcon } from "lucide-react";
 import { KIRO_ICON } from "@/components/layout/navItems";
 import { cn } from "@/lib/utils";
+import { KiroSessionActions } from "@/components/kiro/KiroSessionActions";
 
 /** Kiro Mark：所有 Kiro 入口共用的视觉标记（正式 Logo 落地后替换 KIRO_ICON 即可） */
 export function KiroMark({ size = "md", className }: { size?: "sm" | "md" | "lg"; className?: string }) {
@@ -32,17 +32,15 @@ export function KiroMark({ size = "md", className }: { size?: "sm" | "md" | "lg"
 
 /**
  * Kiro Workspace 内部 Header：轻量，不承载 Provider / API Key / token 等技术信息。
- * 左侧：Kiro mark + 名称（+ 低权重 AI Workspace 标签）；右侧：会话级操作。
- * actions：预留扩展插槽（Share / More 等后续能力），不写死操作集合。
+ * 左侧：Kiro mark + 名称（+ 低权重 AI Workspace 标签）；右侧：会话级操作（Share / More）。
+ * 新对话 / 历史记录 移入 More 菜单（结构预留，便于后续 Share / More 扩展）。
  */
 export function KiroHeader({
   onNewChat,
   onOpenHistory,
-  actions,
 }: {
   onNewChat: () => void;
   onOpenHistory: () => void;
-  actions?: React.ReactNode;
 }) {
   return (
     <div className="shrink-0 flex items-center justify-between gap-3 pb-3 mb-1">
@@ -58,28 +56,7 @@ export function KiroHeader({
         </span>
       </div>
 
-      <div className="flex items-center gap-1 shrink-0">
-        <button
-          onClick={onNewChat}
-          aria-label="新对话"
-          title="新对话"
-          className="flex items-center gap-1.5 px-2.5 h-9 rounded-xl text-xs font-semibold text-satin-grey hover:bg-alabaster hover:text-charcoal transition-colors"
-        >
-          <Plus className="w-4 h-4" />
-          <span className="hidden sm:inline">新对话</span>
-        </button>
-        <button
-          onClick={onOpenHistory}
-          aria-label="历史记录"
-          title="历史记录"
-          aria-expanded={undefined}
-          className="flex items-center gap-1.5 px-2.5 h-9 rounded-xl text-xs font-semibold text-satin-grey hover:bg-alabaster hover:text-charcoal transition-colors"
-        >
-          <HistoryIcon className="w-4 h-4" />
-          <span className="hidden sm:inline">历史</span>
-        </button>
-        {actions}
-      </div>
+      <KiroSessionActions variant="workspace" onNewChat={onNewChat} onOpenHistory={onOpenHistory} />
     </div>
   );
 }

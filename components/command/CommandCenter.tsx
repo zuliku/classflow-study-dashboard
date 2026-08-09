@@ -180,11 +180,13 @@ export function CommandCenter() {
     () => (kiroHandoffItem ? [kiroHandoffItem, ...items] : items),
     [kiroHandoffItem, items]
   );
+  // 默认高亮第一个真实匹配项（Kiro handoff 行不抢占 Enter 语义；无匹配时高亮落在 Kiro 行）
+  const kiroOffset = kiroHandoffItem ? 1 : 0;
 
-  // 结果变化时高亮回到第一项
+  // 结果变化时高亮回到第一个真实匹配（Kiro 行仅在有真实匹配时不抢占；无匹配时高亮落在 Kiro 行）
   useEffect(() => {
-    setHighlighted(0);
-  }, [query, searchModalView]);
+    setHighlighted(Math.min(kiroOffset, displayItems.length - 1));
+  }, [query, searchModalView, kiroOffset, displayItems.length]);
 
   if (!mounted) return null;
 

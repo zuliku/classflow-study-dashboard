@@ -6,6 +6,7 @@ import { KiroActivityTrace } from "@/components/kiro/KiroActivityTrace";
 import { KiroActionCard, actionToCardProps } from "@/components/kiro/KiroActionCard";
 import { KiroChatMessageView, KiroActivity } from "@/hooks/useKiroChat";
 import { AIError, AI_ERROR_MESSAGES } from "@/lib/ai/errors";
+import { actionSummaryText } from "@/lib/ai/share";
 import { cn } from "@/lib/utils";
 import { RotateCcw, Settings, ChevronDown } from "lucide-react";
 
@@ -54,7 +55,8 @@ export function KiroConversation({
     const el = scrollRef.current;
     if (!el) return;
     stickToBottomRef.current = true;
-    el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+    const reduced = document.documentElement.dataset.motion === "reduced";
+    el.scrollTo({ top: el.scrollHeight, behavior: reduced ? "auto" : "smooth" });
     setShowScrollBtn(false);
   };
 
@@ -77,11 +79,17 @@ export function KiroConversation({
         </button>
       )}
       <div className={cn("max-w-[820px] mx-auto space-y-5 py-3", compact ? "px-3" : "px-1")}>
-        {messages.map((m) =>
+        {messages.map((m, idx) =>
           m.role === "user" ? (
             <KiroUserMessage key={m.id} content={m.content} attachments={m.attachments} />
           ) : (
-            <KiroMessage key={m.id} content={m.content} streaming={m.streaming}>
+            <KiroMessage
+              key={m.id}
+              content={m.content}
+              streaming={m.streaming}
+              isLast={idx === messages.length - 1}
+              actionSummaries={m.actions?.map((a) => actionSummaryText(actionToCardProps(a.action)))}
+            >
               {/* Action Result Cards：真实 ToolResult 事实 UI */}
               {m.actions && m.actions.length > 0 && (
                 <div className="space-y-2.5 pt-1">

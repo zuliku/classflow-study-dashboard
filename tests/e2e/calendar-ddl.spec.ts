@@ -153,11 +153,13 @@ test("Mobile 390：DDL cell 不进入拖动，点击仍打开详情，页面可�
   await expect(page.getByTestId("ddl-move-feedback")).toHaveCount(0);
   await expect(page.getByText("已移动到")).toHaveCount(0);
 
-  // 关闭抽屉后页面可正常滚动（页面滚动容器为 document）
+  // 关闭抽屉后页面可正常滚动（滚动容器为 main 内容区）
   await page.getByRole("button", { name: "关闭" }).first().click();
   const scrollable = await page.evaluate(() => {
-    window.scrollTo(0, 99999);
-    return window.scrollY;
+    const main = document.querySelector("main") as HTMLElement | null;
+    if (!main) return 0;
+    main.scrollTop = 99999;
+    return main.scrollTop;
   });
   expect(scrollable).toBeGreaterThan(0);
 });

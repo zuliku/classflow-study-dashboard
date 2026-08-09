@@ -351,7 +351,7 @@ export function AssignmentTable({ mode = "compact" }: AssignmentTableProps) {
   };
 
   return (
-    <div className="bg-surface border border-line rounded-2xl p-4 shadow-subtle flex flex-col justify-between h-full space-y-3">
+    <div className="bg-surface border border-line rounded-2xl p-4 shadow-subtle flex flex-col justify-between h-full space-y-3 min-w-0">
       {/* Header & Controls */}
       <div className="space-y-3 border-b border-[#F0EBE1] pb-3">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
@@ -389,7 +389,7 @@ export function AssignmentTable({ mode = "compact" }: AssignmentTableProps) {
                 setCourseFilter(e.target.value);
                 if (!isWorkspace) setCompactPage(1); // 筛选变化回第一页
               }}
-              className="bg-transparent text-charcoal text-xs font-semibold focus:outline-none cursor-pointer"
+              className="bg-transparent text-charcoal text-xs font-semibold focus:outline-none cursor-pointer max-w-[160px] truncate"
             >
               <option value="all">全部课程 ({assignments.length})</option>
               {courses.map((c) => (

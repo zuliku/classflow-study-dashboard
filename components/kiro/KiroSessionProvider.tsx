@@ -238,7 +238,8 @@ export function KiroSessionProvider({ children }: { children: React.ReactNode })
 
   return (
     <KiroSessionContext.Provider value={sessionValue}>
-      <div className="flex min-h-screen bg-[#F7F5F5] font-sans antialiased text-charcoal">
+      {/* 固定视口高度外壳（h-dvh）：main 内部滚动，Kiro Conversation 独立滚动，不随内容撑高 */}
+      <div className="flex h-dvh bg-[#F7F5F5] font-sans antialiased text-charcoal">
         {children}
         {/* Sidecar 与 Workspace 互斥：进入 Kiro Workspace 时不渲染 Sidecar（Session 保留） */}
         {sidecarOpen && activeTab !== "kiro" && <KiroSidecar />}

@@ -1,31 +1,72 @@
 "use client";
 
 import React from "react";
-import { FileText, Image as ImageIcon } from "lucide-react";
+import { FileText, Image as ImageIcon, Copy, RefreshCw, MoreHorizontal } from "lucide-react";
 import { KiroMark } from "@/components/kiro/KiroHeader";
 import { KiroMarkdown } from "@/components/kiro/KiroMarkdown";
+import { KiroMenuPanel, KiroMenuItem, KiroMenuDivider, useKiroPopover } from "@/components/kiro/KiroMenu";
+import { useKiroSession } from "@/components/kiro/KiroSessionProvider";
+import { useToastStore } from "@/store/useToastStore";
 import { KiroAttachmentView } from "@/lib/ai/attachments/types";
 import { cn } from "@/lib/utils";
+import {
+  markdownToPlainText,
+  copyTextToClipboard,
+} from "@/lib/ai/share";
 
 /**
  * Kiro 回复 Message：Kiro mark + 文档流（非左右气泡）。
  * 内容经 KiroMarkdown 渲染（真实 Markdown，不显示原始符号）。
- * 流式光标在 Markdown 渲染器外部显示，不拼进 Markdown source（避免破坏 table/code/bold）。
+ * Message 级操作：Copy / 重新生成（仅最后一条 assistant）/ More（复制文本 / Markdown / 结果摘要）。
+ * 流式光标在 Markdown 渲染器外部显示，不拼进 Markdown source。
+ * 移动端：操作常驻（不依赖 hover）；桌面 hover/focus 显示。
  */
 export function KiroMessage({
   content,
   streaming,
   children,
   testid,
+  isLast,
+  actionSummaries,
 }: {
   content?: string;
   /** 流式进行中：末尾显示克制状态光标 */
   streaming?: boolean;
   children?: React.ReactNode;
   testid?: string;
+  /** 最后一条 assistant 消息：可重新生成 */
+  isLast?: boolean;
+  /** Action Result 摘要文本（复制结果摘要用，仅可见事实） */
+  actionSummaries?: string[];
 }) {
+  const session = useKiroSession();
+  const pushToast = useToastStore((s) => s.pushToast);
+  const more = useKiroPopover();
+
+  const copyMarkdownSource = async () => {
+    const ok = await copyTextToClipboard(content ?? "");
+    if (ok) pushToast({ message: "已复制" });
+  };
+
+  const copyPlain = async () => {
+    const ok = await copyTextToClipboard(markdownToPlainText(content ?? ""));
+    if (ok) pushToast({ message: "已复制" });
+    more.close();
+  };
+
+  const copySummary = async () => {
+    const texts: string[] = [];
+    if (content) texts.push(markdownToPlainText(content));
+    if (actionSummaries && actionSummaries.length > 0) texts.push(`操作结果：${actionSummaries.join("；")}`);
+    const ok = await copyTextToClipboard(texts.join("\n"));
+    if (ok) pushToast({ message: "已复制" });
+    more.close();
+  };
+
+  const hasActions = !!actionSummaries && actionSummaries.length > 0;
+
   return (
-    <div className="flex gap-3" data-testid={testid ?? "kiro-message"}>
+    <div className="flex gap-3 group" data-testid={testid ?? "kiro-message"}>
       <KiroMark size="sm" className="mt-0.5" />
       <div className="min-w-0 flex-1 space-y-2 pt-0.5">
         {content ? (
@@ -36,6 +77,53 @@ export function KiroMessage({
                 aria-hidden="true"
                 className="inline-block w-[2px] h-3.5 bg-sandrift align-middle animate-pulse"
               />
+            )}
+            {!streaming && (
+              <div className="flex items-center gap-0.5 opacity-100 md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100 transition-opacity duration-[var(--motion-fast)]">
+                <button
+                  onClick={copyMarkdownSource}
+                  aria-label="复制"
+                  title="复制 Markdown"
+                  className="flex items-center gap-1 px-1.5 py-1 rounded-lg text-[11px] font-semibold text-sandrift hover:bg-alabaster hover:text-charcoal transition-colors"
+                >
+                  <Copy className="w-3.5 h-3.5" />
+                  复制
+                </button>
+                {isLast && (
+                  <button
+                    onClick={() => session.chat.retry()}
+                    aria-label="重新生成"
+                    title="重新生成"
+                    className="flex items-center gap-1 px-1.5 py-1 rounded-lg text-[11px] font-semibold text-sandrift hover:bg-alabaster hover:text-charcoal transition-colors"
+                  >
+                    <RefreshCw className="w-3.5 h-3.5" />
+                    重新生成
+                  </button>
+                )}
+                <div ref={more.ref} className="relative">
+                  <button
+                    onClick={more.toggle}
+                    aria-label="消息更多操作"
+                    aria-expanded={more.open}
+                    title="更多"
+                    className="p-1 rounded-lg text-sandrift hover:bg-alabaster hover:text-charcoal transition-colors"
+                  >
+                    <MoreHorizontal className="w-3.5 h-3.5" />
+                  </button>
+                  {more.open && (
+                    <KiroMenuPanel dir={isLast ? "up" : "down"}>
+                      <KiroMenuItem icon={Copy} label="复制文本" onClick={copyPlain} />
+                      <KiroMenuItem icon={FileText} label="复制 Markdown" onClick={copyMarkdownSource} />
+                      {hasActions && (
+                        <>
+                          <KiroMenuDivider />
+                          <KiroMenuItem icon={FileText} label="复制结果摘要" onClick={copySummary} />
+                        </>
+                      )}
+                    </KiroMenuPanel>
+                  )}
+                </div>
+              </div>
             )}
           </>
         ) : streaming ? (
@@ -51,7 +139,7 @@ export function KiroMessage({
   );
 }
 
-/** 用户 Message：轻量 soft bubble，右对齐（纯文本 + 附件 chips，不显示提取全文） */
+/** 用户 Message：轻量 soft bubble，右对齐（纯文本 + 附件 chips，不显示提取全文）；hover 可复制 */
 export function KiroUserMessage({
   content,
   attachments,
@@ -59,8 +147,14 @@ export function KiroUserMessage({
   content: string;
   attachments?: KiroAttachmentView[];
 }) {
+  const pushToast = useToastStore((s) => s.pushToast);
+  const copy = async () => {
+    const ok = await copyTextToClipboard(content);
+    if (ok) pushToast({ message: "已复制" });
+  };
+
   return (
-    <div className="flex justify-end" data-testid="kiro-user-message">
+    <div className="flex justify-end group" data-testid="kiro-user-message">
       <div className="max-w-[85%] flex flex-col items-end gap-1.5">
         {attachments && attachments.length > 0 && (
           <div className="flex flex-wrap justify-end gap-1.5">
@@ -82,6 +176,15 @@ export function KiroUserMessage({
         <div className="bg-alabaster border border-line rounded-2xl rounded-br-md px-4 py-2.5 text-xs font-medium text-charcoal whitespace-pre-wrap leading-relaxed">
           {content}
         </div>
+        <button
+          onClick={copy}
+          aria-label="复制"
+          title="复制"
+          className="flex items-center gap-1 px-1.5 py-1 rounded-lg text-[11px] font-semibold text-sandrift hover:bg-alabaster hover:text-charcoal transition-colors opacity-100 md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100"
+        >
+          <Copy className="w-3.5 h-3.5" />
+          复制
+        </button>
       </div>
     </div>
   );

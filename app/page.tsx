@@ -220,12 +220,14 @@ export default function Home() {
               </div>
 
               {/* Row 3: Bottom Study Load Chart (1/2) + Assignments Table (1/2) */}
-              {/* md+ 统一 Dashboard 高度（左右卡片对齐、任务数量不影响行高）；mobile 自然高度单列 */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-5 items-stretch">
-                <div className="md:h-[460px]" data-testid="overview-load-wrap">
+              {/* 依据主内容可用宽度降列（auto-fit minmax，非 viewport breakpoint）：
+                  容器 ≥1060px → 2 列；被 Docked Kiro 压窄 / 移动端 → 自动 1 列。
+                  两张卡 min-h-460 + grid stretch：2 列时视觉等高；内容超 460 时自然增长（绝无固定高度内重叠）。 */}
+              <div className="grid gap-5 items-stretch grid-cols-[repeat(auto-fit,minmax(520px,1fr))]">
+                <div className="md:min-h-[460px]" data-testid="overview-load-wrap">
                   <StudyLoadChart />
                 </div>
-                <div className="md:h-[460px]" data-testid="overview-tasks-wrap">
+                <div className="md:min-h-[460px] min-w-0" data-testid="overview-tasks-wrap">
                   <AssignmentTable mode="compact" />
                 </div>
               </div>
