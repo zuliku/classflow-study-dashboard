@@ -212,7 +212,7 @@ export function KiroComposer({
       className={cn("shrink-0 relative", compact && "px-3 pb-3")}
       data-testid="kiro-composer"
     >
-      {/* 拖拽提示：轻量，不夸张 */}
+      {/* 拖拽提示：覆盖 Composer Surface（不覆盖整个 Workspace），轻量 */}
       {dragOver && (
         <div className="absolute inset-0 z-40 rounded-2xl border-2 border-dashed border-line-strong bg-surface/90 backdrop-blur-[1px] flex items-center justify-center pointer-events-none">
           <span className="text-xs font-bold text-charcoal">释放以添加到 Kiro</span>
@@ -220,174 +220,185 @@ export function KiroComposer({
       )}
 
       <div className="max-w-[820px] mx-auto">
+        {/* Context Bar：Composer 外上方，明确 Kiro 正在使用的数据范围 */}
         <KiroContextBar contexts={contexts} onRemove={onRemoveContext} compact={compact} />
 
-        {/* 附件 chips（compact：root 已提供 px-3，此处对齐输入框左缘） */}
-        {attachments.length > 0 && (
-          <div
-            className={cn(
-              "flex flex-wrap items-center gap-1.5 pb-2",
-              compact ? "px-0" : "px-1"
-            )}
-            data-testid="kiro-attachments"
-          >
-            {attachments.map((a) => (
-              <KiroAttachmentChip
-                key={a.id}
-                attachment={a}
-                onRemove={onRemoveAttachment}
-                onRetry={onRetryAttachment}
-                onSaveToCourse={onSaveAttachmentToCourse}
-              />
-            ))}
-            {hasImages && !visionEnabled && (
-              <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-warning px-2">
-                当前模型不支持图片理解
-                <button
-                  onClick={() => setModelOpen(true)}
-                  className="underline underline-offset-2 decoration-line-strong hover:text-charcoal"
-                >
-                  切换模型
-                </button>
-              </span>
-            )}
-          </div>
-        )}
-
-        <div className="bg-surface border border-line-strong rounded-2xl shadow-subtle p-3 focus-within:border-sandrift focus-within:shadow-subtle transition-[border-color,box-shadow] duration-[var(--motion-fast)]">
-          <textarea
-            ref={taRef}
-            value={text}
-            onChange={(e) => {
-              setText(e.target.value);
-              autoGrow();
-            }}
-            onKeyDown={handleKeyDown}
-            onPaste={handlePaste}
-            rows={1}
-            placeholder="Ask Kiro…"
-            aria-label="Ask Kiro"
-            className="w-full resize-none bg-transparent px-1 pt-0.5 text-sm text-charcoal placeholder-sandrift focus:outline-none leading-relaxed"
-          />
-
-          <div className="flex items-center justify-between gap-2 pt-2">
-            <div className="flex items-center gap-1">
-              <div ref={attachRef} className="relative">
-                <button
-                  onClick={() => {
-                    setAttachOpen((v) => !v);
-                    setModelOpen(false);
-                    setPickerOpen(false);
-                    setMaterialPickerOpen(false);
-                  }}
-                  aria-label="添加附件"
-                  aria-expanded={attachOpen}
-                  aria-haspopup="menu"
-                  title="添加附件"
-                  className="w-11 h-11 md:w-9 md:h-9 flex items-center justify-center rounded-xl text-sandrift hover:bg-alabaster hover:text-charcoal transition-colors"
-                >
-                  <Plus className="w-5 h-5 md:w-4 md:h-4" />
-                </button>
-                {attachOpen && (
-                  <div className="absolute bottom-full left-0 mb-1.5 w-60 bg-surface border border-line-strong rounded-2xl shadow-card z-40 ux-inline">
-                    <KiroAttachmentPicker
-                      onClose={() => setAttachOpen(false)}
-                      onFiles={onAddFiles}
-                      onMaterials={() => setMaterialPickerOpen(true)}
-                    />
-                  </div>
-                )}
-                {materialPickerOpen && (
-                  <div className="absolute bottom-full left-0 mb-1.5 w-72 bg-surface border border-line-strong rounded-2xl shadow-card z-40 ux-inline">
-                    <KiroMaterialPicker
-                      onClose={() => setMaterialPickerOpen(false)}
-                      onPick={(ref) => {
-                        onAddMaterial(ref);
-                        setMaterialPickerOpen(false);
-                        setAttachOpen(false);
-                      }}
-                    />
-                  </div>
-                )}
-              </div>
-
-              <div ref={pickerWrapRef} className="relative">
-                <button
-                  onClick={() => {
-                    setPickerOpen((v) => !v);
-                    setAttachOpen(false);
-                    setModelOpen(false);
-                  }}
-                  aria-label="选择上下文"
-                  aria-expanded={pickerOpen}
-                  title="添加 ClassFlow 上下文"
-                  className="w-11 h-11 md:w-9 md:h-9 flex items-center justify-center rounded-xl text-sandrift hover:bg-alabaster hover:text-charcoal transition-colors"
-                >
-                  <AtSign className="w-5 h-5 md:w-4 md:h-4" />
-                </button>
-                {pickerOpen && (
-                  <KiroContextPicker
-                    onClose={() => setPickerOpen(false)}
-                    onPick={(ref) => {
-                      onAddContext(ref);
-                      setPickerOpen(false);
-                    }}
+        {/* Composer Surface：Attachment Shelf（次级层） + Prompt + Toolbar（主层） */}
+        <div className="bg-surface border border-line-strong rounded-2xl shadow-subtle focus-within:border-sandrift focus-within:shadow-subtle transition-[border-color,box-shadow] duration-[var(--motion-fast)]">
+          {/* Attachment Shelf：无附件时完全不存在 */}
+          {attachments.length > 0 && (
+            <div
+              className={cn(
+                "bg-alabaster/40 border-b border-line-soft rounded-t-2xl",
+                compact ? "px-2.5 py-1.5" : "px-3 py-2"
+              )}
+            >
+              {/* Tray：单行横向滚动，附件再多也不撑高 Composer */}
+              <div
+                className="flex items-center gap-1.5 overflow-x-auto kiro-attachment-tray"
+                data-testid="kiro-attachments"
+              >
+                {attachments.map((a) => (
+                  <KiroAttachmentChip
+                    key={a.id}
+                    attachment={a}
+                    onRemove={onRemoveAttachment}
+                    onRetry={onRetryAttachment}
+                    onSaveToCourse={onSaveAttachmentToCourse}
                   />
+                ))}
+                {hasImages && !visionEnabled && (
+                  <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-warning px-1.5 whitespace-nowrap">
+                    当前模型不支持图片理解
+                    <button
+                      onClick={() => setModelOpen(true)}
+                      className="underline underline-offset-2 decoration-line-strong hover:text-charcoal"
+                    >
+                      切换模型
+                    </button>
+                  </span>
                 )}
               </div>
             </div>
+          )}
 
-            <div className="flex items-center gap-2">
-              <div ref={modelRef} className="relative">
-                <button
-                  onClick={() => {
-                    setModelOpen((v) => !v);
-                    setAttachOpen(false);
-                    setPickerOpen(false);
-                  }}
-                  aria-label="选择模型"
-                  aria-expanded={modelOpen}
-                  aria-haspopup="menu"
-                  title="选择模型"
-                  className="hidden sm:flex items-center gap-1.5 h-9 px-2.5 rounded-xl text-[11px] font-semibold text-sandrift hover:bg-alabaster hover:text-charcoal transition-colors"
-                >
-                  <ProviderLogo vendor={activeModelVendor} size="sm" />
-                  <span className="truncate max-w-[140px]">{activeModelName}</span>
-                  <ChevronDown className="w-3 h-3 shrink-0" />
-                </button>
-                {modelOpen && (
-                  <div className="absolute bottom-full right-0 mb-1.5 w-60 bg-surface border border-line-strong rounded-2xl shadow-card z-40 ux-inline">
-                    {modelMenu}
-                  </div>
-                )}
+          {/* Prompt + Toolbar：统一内部 gutter，prompt 区保持最干净 */}
+          <div className={cn(compact ? "px-2.5 pt-2 pb-2" : "px-3 pt-2.5 pb-2.5")}>
+            <textarea
+              ref={taRef}
+              value={text}
+              onChange={(e) => {
+                setText(e.target.value);
+                autoGrow();
+              }}
+              onKeyDown={handleKeyDown}
+              onPaste={handlePaste}
+              rows={1}
+              placeholder="Ask Kiro…"
+              aria-label="Ask Kiro"
+              className="w-full resize-none bg-transparent text-sm text-charcoal placeholder-sandrift focus:outline-none leading-relaxed"
+            />
+
+            <div className="flex items-center justify-between gap-2 pt-1.5">
+              <div className="flex items-center gap-0.5">
+                <div ref={attachRef} className="relative">
+                  <button
+                    onClick={() => {
+                      setAttachOpen((v) => !v);
+                      setModelOpen(false);
+                      setPickerOpen(false);
+                      setMaterialPickerOpen(false);
+                    }}
+                    aria-label="添加附件"
+                    aria-expanded={attachOpen}
+                    aria-haspopup="menu"
+                    title="添加附件"
+                    className="w-9 h-9 flex items-center justify-center rounded-xl text-sandrift hover:bg-alabaster hover:text-charcoal transition-colors"
+                  >
+                    <Plus className="w-4 h-4" />
+                  </button>
+                  {attachOpen && (
+                    <div className="absolute bottom-full left-0 mb-1.5 w-60 bg-surface border border-line-strong rounded-2xl shadow-card z-40 ux-inline">
+                      <KiroAttachmentPicker
+                        onClose={() => setAttachOpen(false)}
+                        onFiles={onAddFiles}
+                        onMaterials={() => setMaterialPickerOpen(true)}
+                      />
+                    </div>
+                  )}
+                  {materialPickerOpen && (
+                    <div className="absolute bottom-full left-0 mb-1.5 w-72 bg-surface border border-line-strong rounded-2xl shadow-card z-40 ux-inline">
+                      <KiroMaterialPicker
+                        onClose={() => setMaterialPickerOpen(false)}
+                        onPick={(ref) => {
+                          onAddMaterial(ref);
+                          setMaterialPickerOpen(false);
+                          setAttachOpen(false);
+                        }}
+                      />
+                    </div>
+                  )}
+                </div>
+
+                <div ref={pickerWrapRef} className="relative">
+                  <button
+                    onClick={() => {
+                      setPickerOpen((v) => !v);
+                      setAttachOpen(false);
+                      setModelOpen(false);
+                    }}
+                    aria-label="选择上下文"
+                    aria-expanded={pickerOpen}
+                    title="添加 ClassFlow 上下文"
+                    className="w-9 h-9 flex items-center justify-center rounded-xl text-sandrift hover:bg-alabaster hover:text-charcoal transition-colors"
+                  >
+                    <AtSign className="w-4 h-4" />
+                  </button>
+                  {pickerOpen && (
+                    <KiroContextPicker
+                      onClose={() => setPickerOpen(false)}
+                      onPick={(ref) => {
+                        onAddContext(ref);
+                        setPickerOpen(false);
+                      }}
+                    />
+                  )}
+                </div>
               </div>
 
-              {streaming ? (
-                <button
-                  onClick={onStop}
-                  aria-label="停止生成"
-                  title="停止生成"
-                  className="ux-press w-11 h-11 md:w-9 md:h-9 flex items-center justify-center rounded-full bg-charcoal text-white hover:bg-black transition-colors"
-                >
-                  <Square className="w-4 h-4 fill-current" />
-                </button>
-              ) : (
-                <button
-                  onClick={submit}
-                  disabled={!canSend}
-                  aria-label="发送"
-                  title="发送"
-                  className="ux-press w-11 h-11 md:w-9 md:h-9 flex items-center justify-center rounded-full bg-charcoal text-white hover:bg-black transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-                >
-                  <ArrowUp className="w-5 h-5 md:w-4 md:h-4" />
-                </button>
-              )}
+              <div className="flex items-center gap-2">
+                <div ref={modelRef} className="relative">
+                  <button
+                    onClick={() => {
+                      setModelOpen((v) => !v);
+                      setAttachOpen(false);
+                      setPickerOpen(false);
+                    }}
+                    aria-label="选择模型"
+                    aria-expanded={modelOpen}
+                    aria-haspopup="menu"
+                    title="选择模型"
+                    className="hidden sm:flex items-center gap-1.5 h-9 px-2.5 rounded-xl text-[11px] font-semibold text-sandrift hover:bg-alabaster hover:text-charcoal transition-colors"
+                  >
+                    <ProviderLogo vendor={activeModelVendor} size="sm" />
+                    <span className="truncate max-w-[140px]">{activeModelName}</span>
+                    <ChevronDown className="w-3 h-3 shrink-0" />
+                  </button>
+                  {modelOpen && (
+                    <div className="absolute bottom-full right-0 mb-1.5 w-60 bg-surface border border-line-strong rounded-2xl shadow-card z-40 ux-inline">
+                      {modelMenu}
+                    </div>
+                  )}
+                </div>
+
+                {streaming ? (
+                  <button
+                    onClick={onStop}
+                    aria-label="停止生成"
+                    title="停止生成"
+                    className="ux-press w-9 h-9 flex items-center justify-center rounded-full bg-charcoal text-white hover:bg-black transition-colors"
+                  >
+                    <Square className="w-4 h-4 fill-current" />
+                  </button>
+                ) : (
+                  <button
+                    onClick={submit}
+                    disabled={!canSend}
+                    aria-label="发送"
+                    title="发送"
+                    className="ux-press w-9 h-9 flex items-center justify-center rounded-full bg-charcoal text-white hover:bg-black transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    <ArrowUp className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         </div>
 
+        {/* Composer 下方只保留真正需要用户注意的状态 */}
         {!configured ? (
-          <div className={cn("flex items-center justify-between gap-2 mt-2", compact ? "px-0" : "px-1")}>
+          <div className={cn("flex items-center justify-between gap-2 mt-2", compact ? "px-0" : "px-0.5")}>
             <p className="text-[11px] text-sandrift">先连接一个 AI 服务即可开始使用 Kiro。</p>
             <button
               onClick={onOpenSettings}
@@ -398,12 +409,8 @@ export function KiroComposer({
             </button>
           </div>
         ) : attachments.length > 0 ? (
-          <p className={cn("text-[10px] text-sandrift mt-1.5", compact ? "px-0" : "px-1")}>
+          <p className={cn("text-[10px] text-sandrift mt-1.5", compact ? "px-0" : "px-0.5")}>
             文件内容会发送给当前选择的 AI 服务以完成你的请求。
-          </p>
-        ) : !compact ? (
-          <p className="text-[10px] text-sandrift mt-1.5 px-1">
-            Kiro 会按需读取完成当前问题所需的 ClassFlow 学习数据；修改操作需要你的明确指令。
           </p>
         ) : null}
       </div>

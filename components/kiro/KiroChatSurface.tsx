@@ -70,10 +70,10 @@ export function KiroChatSurface({ variant }: { variant: "workspace" | "sidecar" 
   // Context-aware 建议可见时，隐藏 EmptyState 的通用建议（两者不同时出现）
   const hasContextSuggestions =
     session.suggestionsKind != null && session.suggestionsGen > session.lastUserTurnGen;
-  // 无消息：建议作为 EmptyState 主操作区（标题下方）；有消息：作为 Conversation 尾部 follow-up
+  // Workspace 与 Sidecar 都启用 Context-aware Suggestions（无消息时渲染在标题下方）
   const emptyContextSuggestions =
-    variant === "sidecar" && !hasMessages && hasContextSuggestions ? (
-      <KiroContextSuggestions compact inset={false} />
+    !hasMessages && hasContextSuggestions ? (
+      <KiroContextSuggestions compact={compact} inset={false} />
     ) : undefined;
 
   return (
@@ -94,6 +94,7 @@ export function KiroChatSurface({ variant }: { variant: "workspace" | "sidecar" 
           onUndo={chat.consumeUndo}
           compact={compact}
           turnInFlight={chat.streaming}
+          sources={chat.sources}
         />
       )}
 

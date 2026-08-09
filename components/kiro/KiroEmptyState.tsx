@@ -53,7 +53,7 @@ export function KiroEmptyState({
       </h2>
       {!compact && (
         <p className="text-xs text-sandrift mt-1.5 max-w-xs">
-          Kiro 会按需读取完成当前问题所需的 ClassFlow 学习数据。
+          基于你的课表、任务与课程资料
         </p>
       )}
 

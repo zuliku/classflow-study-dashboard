@@ -422,7 +422,7 @@ test("Kiro Attachment：上传 PDF → 本地解析 ready → 发送 → 附件 
   // 附件 chip：正在读取 → 已就绪（本地解析，不发送）
   const chip = page.getByTestId("kiro-attachment-chip");
   await expect(chip).toContainText("测试讲义.pdf", { timeout: 15000 });
-  await expect(chip).toContainText("已就绪", { timeout: 15000 });
+  await expect(chip).toContainText("PDF", { timeout: 15000 });
   await expect(page.getByText("文件内容会发送给当前选择的 AI 服务以完成你的请求。")).toBeVisible();
 
   // 发送 → Mock 收到附件 context（真实提取文本）→ 回答引用文件

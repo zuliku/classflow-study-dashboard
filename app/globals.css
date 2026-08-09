@@ -71,6 +71,24 @@ body {
   background: #A48F82;
 }
 
+/* Attachment Tray：单行横向滚动，滚动条极弱（视觉隐藏，仍可滚动） */
+.kiro-attachment-tray {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.kiro-attachment-tray::-webkit-scrollbar {
+  height: 3px;
+}
+
+.kiro-attachment-tray::-webkit-scrollbar-thumb {
+  background: transparent;
+}
+
+.kiro-attachment-tray:hover::-webkit-scrollbar-thumb {
+  background: #E4E0D8;
+}
+
 /* Keyboard focus: 可见焦点环，禁用状态下不显示 */
 button:focus-visible,
 a:focus-visible,

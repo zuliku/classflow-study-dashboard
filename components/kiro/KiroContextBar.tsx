@@ -15,8 +15,9 @@ const KIND_ICON: Record<KiroContextRef["kind"], string> = {
 
 /**
  * Context Bar：自动 Context + 手动 @ Context 的展示层（显式、可见、可移除）。
- * Workspace：默认展开 chips；Sidecar（compact）：默认 collapsed 摘要行，点击展开。
- * Collapsed：`@ 3 项上下文 ⌄`（compact）/ `◎ 使用 N 项 ClassFlow 上下文 ⌄`；Expanded：chips。
+ * Workspace 与 Sidecar 都默认 collapsed 摘要行（不默认铺满 chips），点击展开。
+ * 摘要：Workspace 有明确主 Context 时显示「@ 主项 · +N ⌄」；Sidecar 恒「@ N 项上下文 ⌄」。
+ * 位于 Composer 外部上方，宽度与 Composer 对齐（外层已共用 max-w）。
  */
 export function KiroContextBar({
   contexts,
@@ -25,24 +26,31 @@ export function KiroContextBar({
 }: {
   contexts: KiroContextRef[];
   onRemove: (key: string) => void;
-  /** sidecar：默认 collapsed + 对齐输入框左缘（root 已提供 px-3） */
+  /** sidecar：更紧凑 + 摘要恒为「N 项上下文」 */
   compact?: boolean;
 }) {
-  const [expanded, setExpanded] = useState(!compact);
+  const [expanded, setExpanded] = useState(false);
   if (contexts.length === 0) return null;
 
+  // 摘要主项：优先用户显式 @ 的 manual Context（更值得展示），否则取第一个
+  const primary = contexts.find((c) => c.source === "manual") ?? contexts[0];
+  const summary = compact
+    ? `${contexts.length} 项上下文`
+    : contexts.length === 1
+      ? primary.label
+      : `${primary.label} · +${contexts.length - 1}`;
+
   return (
-    <div data-testid="kiro-context-bar" className={cn("pb-2", compact ? "px-0" : "px-1")}>
+    <div data-testid="kiro-context-bar" className={cn("pb-1.5", compact && "px-0.5")}>
       {!expanded ? (
         <button
           onClick={() => setExpanded(true)}
           aria-expanded={false}
+          title="展开上下文"
           className="flex items-center gap-1.5 text-[11px] font-semibold text-satin-grey hover:text-charcoal transition-colors"
         >
           <AtSign className="w-3.5 h-3.5 text-sandrift shrink-0" />
-          <span className="truncate">
-            {compact ? `${contexts.length} 项上下文` : `使用 ${contexts.length} 项 ClassFlow 上下文`}
-          </span>
+          <span className="truncate max-w-[220px]">{summary}</span>
           <ChevronDown className="w-3 h-3 shrink-0" />
         </button>
       ) : (

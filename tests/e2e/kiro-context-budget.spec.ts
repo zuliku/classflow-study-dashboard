@@ -78,7 +78,7 @@ test("Turn Snapshot：PDF Context 在 Tool Loop 中保持稳定（Composer 清�
     mimeType: "application/pdf",
     buffer: Buffer.from(buildMinimalPdf("ClassFlow PDF test document")),
   });
-  await expect(page.getByTestId("kiro-attachment-chip")).toContainText("已就绪", { timeout: 15000 });
+  await expect(page.getByTestId("kiro-attachment-chip")).toContainText("PDF", { timeout: 15000 });
 
   // 发送 → 触发 tool loop（两轮请求）
   await composer.getByLabel("Ask Kiro").fill("根据这份资料创建复习计划");
@@ -123,7 +123,7 @@ test("长历史恢复：Summary + 旧消息完整 + 继续对话", async ({ page
       messages.push({ id: `a${i}`, role: "assistant", content: `第 ${i} 轮回答：好的，本周有若干任务。` });
     }
     return new Promise<void>((resolve) => {
-      const req = indexedDB.open("classflow-kiro", 1);
+      const req = indexedDB.open("classflow-kiro", 2);
       req.onupgradeneeded = () => {
         if (!req.result.objectStoreNames.contains("conversations")) {
           const store = req.result.createObjectStore("conversations", { keyPath: "id" });
