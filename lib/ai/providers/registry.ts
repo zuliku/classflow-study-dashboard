@@ -7,7 +7,7 @@ import {
 } from "@/lib/ai/providers/types";
 import { DEEPSEEK_MODELS, DEEPSEEK_DEFAULT_MODEL, getDeepSeekConfig } from "@/lib/ai/providers/deepSeek";
 import {
-  OPENCODE_CHAT_MODELS,
+  OPENCODE_MODELS,
   OPENCODE_DEFAULT_MODEL,
   getOpenCodeGoConfig,
 } from "@/lib/ai/providers/openCodeGo";
@@ -23,7 +23,7 @@ export function getModelsForProvider(provider: AIProviderId): AIModelDefinition[
     case "deepseek":
       return DEEPSEEK_MODELS;
     case "opencode-go":
-      return OPENCODE_CHAT_MODELS;
+      return OPENCODE_MODELS;
     case "custom-openai":
       return [];
   }
@@ -61,7 +61,7 @@ export function getActiveModelName(input: {
  */
 export function getVendorForModelId(modelId: string): AIModelVendor | null {
   if (!modelId) return null;
-  for (const def of [...DEEPSEEK_MODELS, ...OPENCODE_CHAT_MODELS]) {
+  for (const def of [...DEEPSEEK_MODELS, ...OPENCODE_MODELS]) {
     if (def.id === modelId) return def.vendor;
   }
   // 前缀兜底（仅覆盖已知厂商的命名空间，绝不猜厂商）

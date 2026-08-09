@@ -1,9 +1,9 @@
 import { NextRequest } from "next/server";
 import { generateText } from "ai";
 import { AI } from "@/lib/ai/config";
-import { getProviderConfig } from "@/lib/ai/providers/registry";
 import { AI_ERROR_MESSAGES, normalizeAIError } from "@/lib/ai/errors";
-import { createChatProvider, validateAIChatBody, createTimeoutController } from "@/lib/ai/server";
+import { resolveLanguageModel } from "@/lib/ai/providers/resolver";
+import { validateAIChatBody, createTimeoutController } from "@/lib/ai/server";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -25,10 +25,11 @@ export async function POST(req: NextRequest) {
     return Response.json({ ok: false, code: parsed.code, message: parsed.message }, { status: 400 });
   }
 
-  let cfg;
+  let resolved;
   try {
-    cfg = getProviderConfig({
+    resolved = await resolveLanguageModel({
       provider: parsed.provider,
+      model: parsed.model,
       apiKey: parsed.apiKey,
       custom: parsed.customConfig,
     });
@@ -37,13 +38,12 @@ export async function POST(req: NextRequest) {
     return Response.json({ ok: false, code: aiErr.code, message: aiErr.message }, { status: 400 });
   }
 
-  const provider = createChatProvider(cfg);
   const timeout = parsed.timeoutMs ?? AI.TEST_TIMEOUT_MS;
   const { signal, done } = createTimeoutController(timeout, req.signal);
 
   try {
     await generateText({
-      model: provider(parsed.model),
+      model: resolved.model,
       prompt: "只回复两个字母：OK",
       maxOutputTokens: 8,
       abortSignal: signal,

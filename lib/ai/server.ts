@@ -1,24 +1,11 @@
-import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
-import { AIProviderConfig } from "@/lib/ai/providers/types";
+/**
+ * Kiro Server 公共工具：
+ * - validateAIChatBody：chat / test / compact 共用请求体校验
+ * - createTimeoutController：超时 AbortController
+ * LanguageModel 构造统一走 lib/ai/providers/resolver.ts（resolveLanguageModel）。
+ */
 
-/** Server-only：构造 OpenAI Chat Completions provider 实例（chat/test route 共用） */
-export function createChatProvider(cfg: AIProviderConfig) {
-  return createOpenAICompatible({
-    name: "classflow-kiro",
-    baseURL: cfg.baseURL,
-    apiKey: cfg.apiKey ?? "",
-    // Custom Provider：不自动跟随 redirect，避免 SSRF 跳转到私网地址
-    fetch: cfg.noRedirect
-      ? (input, init) =>
-          fetch(input, {
-            ...init,
-            redirect: "manual",
-          } as RequestInit)
-      : undefined,
-  });
-}
-
-/** 请求体校验（chat / test 共用）：非法返回错误信息字符串 */
+/** 请求体校验（chat / test / compact 共用）：非法返回错误信息字符串 */
 export function validateAIChatBody(body: unknown): {
   ok: true;
   provider: "opencode-go" | "deepseek" | "custom-openai";

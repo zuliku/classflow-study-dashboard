@@ -1,15 +1,14 @@
 import { NextRequest } from "next/server";
 import { getModelsForProvider, getDefaultModel, getVendorForModelId } from "@/lib/ai/providers/registry";
-import { fetchOpenCodeGoModels, OPENCODE_CHAT_MODELS } from "@/lib/ai/providers/openCodeGo";
+import { fetchOpenCodeGoModels, OPENCODE_MODELS } from "@/lib/ai/providers/openCodeGo";
 import { AIProviderId, AIModelDefinition } from "@/lib/ai/providers/types";
 
 export const runtime = "nodejs";
 
 /**
- * 模型列表：Settings / Composer 共用。
- * OpenCode Go：优先远端 /models（按 openai-chat transport 筛选），失败回落 registry。
- * 远端模型 vendor 按 id 在 registry 中查找；未知厂商返回 null（UI fallback）。
- * DeepSeek：registry 固定列表。
+ * 模型列表：Settings / Composer 共用（模型发现 / metadata，不创建 Provider instance）。
+ * OpenCode Go：优先远端 /models（transport 以本地 OPENCODE_MODELS 为准；openai-responses 与未知模型过滤），
+ * 失败回落 registry。DeepSeek：registry 固定列表。
  */
 export async function GET(req: NextRequest) {
   const provider = new URL(req.url).searchParams.get("provider") as AIProviderId | null;
@@ -23,16 +22,19 @@ export async function GET(req: NextRequest) {
   if (provider === "opencode-go") {
     const remote = await fetchOpenCodeGoModels();
     if (remote && remote.length > 0) {
-      // 远端为最新来源：name 优先取 registry 已登记名称，新模型用 id 兜底
-      const byId = new Map(OPENCODE_CHAT_MODELS.map((m) => [m.id, m]));
-      models = remote.map((r) => ({
-        id: r.id,
-        name: byId.get(r.id)?.name ?? r.id,
-        provider: "opencode-go" as const,
-        vendor: getVendorForModelId(r.id),
-        transport: "openai-chat" as const,
-        capabilities: { streaming: true, tools: true, vision: false, fileParts: false },
-      }));
+      // 远端为最新来源：transport 原样保留（本地注册表已校验合法）；name 优先取已登记名称
+      const byId = new Map(OPENCODE_MODELS.map((m) => [m.id, m]));
+      models = remote.map((r) => {
+        const known = byId.get(r.id);
+        return {
+          id: r.id,
+          name: known?.name ?? r.id,
+          provider: "opencode-go" as const,
+          vendor: getVendorForModelId(r.id),
+          transport: r.transport as AIModelDefinition["transport"],
+          capabilities: known?.capabilities ?? { streaming: true, tools: true, vision: false, fileParts: false },
+        };
+      });
       source = "remote";
     }
   }

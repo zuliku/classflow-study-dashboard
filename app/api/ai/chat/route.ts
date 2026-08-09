@@ -8,10 +8,10 @@ import {
   ToolSet,
 } from "ai";
 import { AI, KIRO_SYSTEM_PROMPT } from "@/lib/ai/config";
-import { getProviderConfig } from "@/lib/ai/providers/registry";
 import { KIRO_TOOLS } from "@/lib/ai/tools";
 import { normalizeAIError, AIError, AI_ERROR_MESSAGES } from "@/lib/ai/errors";
-import { createChatProvider, validateAIChatBody, createTimeoutController } from "@/lib/ai/server";
+import { resolveLanguageModel } from "@/lib/ai/providers/resolver";
+import { validateAIChatBody, createTimeoutController } from "@/lib/ai/server";
 import {
   buildKiroModelContext,
   DEFAULT_CONTEXT_BUDGET,
@@ -65,11 +65,12 @@ export async function POST(req: NextRequest) {
     return Response.json({ code: "UNKNOWN", message: "缺少对话消息。" }, { status: 400 });
   }
 
-  // Custom Base URL SSRF 校验（registry 内执行）
-  let cfg;
+  // Model Resolver：provider/model → transport → LanguageModel（SSRF 校验在 resolver 内）
+  let resolved;
   try {
-    cfg = getProviderConfig({
+    resolved = await resolveLanguageModel({
       provider: parsed.provider,
+      model: parsed.model,
       apiKey: parsed.apiKey,
       custom: parsed.customConfig,
     });
@@ -78,7 +79,6 @@ export async function POST(req: NextRequest) {
     return Response.json({ code: aiErr.code, message: aiErr.message }, { status: 400 });
   }
 
-  const provider = createChatProvider(cfg);
   const timeout = parsed.timeoutMs ?? AI.CHAT_TIMEOUT_MS;
   const { signal } = createTimeoutController(timeout, req.signal);
 
@@ -179,7 +179,7 @@ export async function POST(req: NextRequest) {
   try {
     const modelMessages = await convertToModelMessages(plan.messages as never);
     const result = streamText({
-      model: provider(parsed.model),
+      model: resolved.model,
       messages: modelMessages,
       system: systemMessage,
       tools: KIRO_TOOLS,

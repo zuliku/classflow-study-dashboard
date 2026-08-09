@@ -1,8 +1,8 @@
-import { AIProviderId, AIProviderConfig, AIModelDefinition, AITransport } from "@/lib/ai/providers/types";
+import { AIProviderId, AIProviderConfig, AITransport } from "@/lib/ai/providers/types";
 
 /** 全局 AI 常量（唯一来源） */
 export const AI = {
-  /** OpenCode Go Chat Completions endpoint */
+  /** OpenCode Go 统一 endpoint（openai-chat → /chat/completions；anthropic-messages → /messages） */
   OPENCODE_BASE_URL: "https://opencode.ai/zen/go/v1",
   OPENCODE_MODELS_URL: "https://opencode.ai/zen/go/v1/models",
   DEEPSEEK_BASE_URL: "https://api.deepseek.com",
@@ -110,13 +110,6 @@ Memory 不是 ClassFlow 当前业务数据源。涉及当前任务、DDL、课�
 
 避免过度使用一级标题和大量粗体。`;
 
-/** Task 1 明确不支持的 OpenCode Go 模型（走其他 transport） */
-export const OPENCODE_NON_CHAT_MODEL_IDS: string[] = [
-  "gpt-5.6-luna",
-  "minimax-m3",
-  "qwen3.8-max",
-];
-
 /** Custom Base URL 归一化：允许用户粘贴完整 /chat/completions，避免拼接重复 */
 export function normalizeBaseURL(raw: string): string {
   const url = (raw || "").trim().replace(/\/+$/, "");
@@ -124,11 +117,6 @@ export function normalizeBaseURL(raw: string): string {
     return url.slice(0, -"/chat/completions".length).replace(/\/+$/, "");
   }
   return url;
-}
-
-/** 当前 Task 支持与否（仅 openai-chat transport） */
-export function isTask1Supported(model: Pick<AIModelDefinition, "transport">): boolean {
-  return model.transport === "openai-chat";
 }
 
 export type { AIProviderId, AIProviderConfig, AITransport };

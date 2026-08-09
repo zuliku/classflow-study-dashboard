@@ -1,8 +1,8 @@
 import { NextRequest } from "next/server";
 import { generateText } from "ai";
-import { getProviderConfig } from "@/lib/ai/providers/registry";
 import { normalizeAIError } from "@/lib/ai/errors";
-import { createChatProvider, validateAIChatBody, createTimeoutController } from "@/lib/ai/server";
+import { resolveLanguageModel } from "@/lib/ai/providers/resolver";
+import { validateAIChatBody, createTimeoutController } from "@/lib/ai/server";
 import { KiroConversationSummary } from "@/lib/ai/history/types";
 
 export const runtime = "nodejs";
@@ -79,15 +79,19 @@ export async function POST(req: NextRequest) {
     return Response.json({ code: "UNKNOWN", message: "缺少可摘要的消息。" }, { status: 400 });
   }
 
-  let cfg;
+  let resolved;
   try {
-    cfg = getProviderConfig({ provider: parsed.provider, apiKey: parsed.apiKey, custom: parsed.customConfig });
+    resolved = await resolveLanguageModel({
+      provider: parsed.provider,
+      model: parsed.model,
+      apiKey: parsed.apiKey,
+      custom: parsed.customConfig,
+    });
   } catch (err) {
     const aiErr = normalizeAIError(err);
     return Response.json({ code: aiErr.code, message: aiErr.message }, { status: 400 });
   }
 
-  const provider = createChatProvider(cfg);
   const { signal, done } = createTimeoutController(60_000, req.signal);
 
   const conversationText = messages.map((m) => `${m.role === "user" ? "用户" : "Kiro"}：${m.content}`).join("\n\n");
@@ -100,7 +104,7 @@ export async function POST(req: NextRequest) {
   try {
     // 无 tools：摘要请求永远不带 KIRO_TOOLS
     const result = await generateText({
-      model: provider(parsed.model),
+      model: resolved.model,
       system: SUMMARY_SYSTEM_PROMPT,
       prompt,
       maxOutputTokens: 2_048,

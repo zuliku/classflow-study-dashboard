@@ -1,12 +1,14 @@
-import { AI, OPENCODE_NON_CHAT_MODEL_IDS } from "@/lib/ai/config";
+import { AI } from "@/lib/ai/config";
 import { AIModelDefinition, AIProviderConfig } from "@/lib/ai/providers/types";
 
 /**
- * OpenCode Go：官方 Chat Completions 模型注册表。
- * 本列表为 Task 1 支持的 openai-chat 模型（fallback 与本地选择器数据源）；
- * 远端 /models 获取成功时以远端为最新来源，失败时回落到本列表。
+ * OpenCode Go 官方模型注册表（Task 10）：
+ * 以官方 endpoint 表为准，每个模型声明真实 transport（openai-chat / anthropic-messages）。
+ * 本列表是 /models 无法获取时的 fallback，也是远端模型 transport 的唯一来源
+ * （远端 /models 只返回 id，不返回 transport；未知模型一律跳过，绝不猜测协议）。
  */
-export const OPENCODE_CHAT_MODELS: AIModelDefinition[] = [
+export const OPENCODE_MODELS: AIModelDefinition[] = [
+  // ---- OpenAI Chat Completions（官方 endpoint：/v1/chat/completions）----
   { id: "grok-4.5", name: "Grok 4.5", provider: "opencode-go", vendor: "xai", transport: "openai-chat", capabilities: { streaming: true, tools: true, vision: true, fileParts: false } },
   { id: "glm-5.2", name: "GLM 5.2", provider: "opencode-go", vendor: "zai", transport: "openai-chat", capabilities: { streaming: true, tools: true, vision: false, fileParts: false } },
   { id: "glm-5.1", name: "GLM 5.1", provider: "opencode-go", vendor: "zai", transport: "openai-chat", capabilities: { streaming: true, tools: true, vision: false, fileParts: false } },
@@ -18,7 +20,19 @@ export const OPENCODE_CHAT_MODELS: AIModelDefinition[] = [
   { id: "mimo-v2.5", name: "MiMo V2.5", provider: "opencode-go", vendor: "mimo", transport: "openai-chat", capabilities: { streaming: true, tools: true, vision: true, fileParts: false } },
   { id: "mimo-v2.5-pro", name: "MiMo V2.5 Pro", provider: "opencode-go", vendor: "mimo", transport: "openai-chat", capabilities: { streaming: true, tools: true, vision: false, fileParts: false } },
   { id: "hy3", name: "Hy3", provider: "opencode-go", vendor: "tencent", transport: "openai-chat", capabilities: { streaming: true, tools: true, vision: false, fileParts: false } },
+  // ---- Anthropic Messages（官方 endpoint：/v1/messages）----
+  // V1 保守能力声明：streaming + tools 为强要求；vision/fileParts 未经实测不开（vendor 无 Logo → neutral fallback）
+  { id: "minimax-m3", name: "MiniMax M3", provider: "opencode-go", vendor: null, transport: "anthropic-messages", capabilities: { streaming: true, tools: true, vision: false, fileParts: false } },
+  { id: "minimax-m2.7", name: "MiniMax M2.7", provider: "opencode-go", vendor: null, transport: "anthropic-messages", capabilities: { streaming: true, tools: true, vision: false, fileParts: false } },
+  { id: "minimax-m2.5", name: "MiniMax M2.5", provider: "opencode-go", vendor: null, transport: "anthropic-messages", capabilities: { streaming: true, tools: true, vision: false, fileParts: false } },
+  { id: "qwen3.8-max", name: "Qwen3.8 Max", provider: "opencode-go", vendor: null, transport: "anthropic-messages", capabilities: { streaming: true, tools: true, vision: false, fileParts: false } },
+  { id: "qwen3.7-max", name: "Qwen3.7 Max", provider: "opencode-go", vendor: null, transport: "anthropic-messages", capabilities: { streaming: true, tools: true, vision: false, fileParts: false } },
+  { id: "qwen3.7-plus", name: "Qwen3.7 Plus", provider: "opencode-go", vendor: null, transport: "anthropic-messages", capabilities: { streaming: true, tools: true, vision: false, fileParts: false } },
+  { id: "qwen3.6-plus", name: "Qwen3.6 Plus", provider: "opencode-go", vendor: null, transport: "anthropic-messages", capabilities: { streaming: true, tools: true, vision: false, fileParts: false } },
 ];
+
+/** OpenAI Responses transport（官方 endpoint 表存在，但本阶段不实现 → 展示时过滤） */
+export const OPENCODE_RESPONSES_MODEL_IDS = ["gpt-5.6-luna"] as const;
 
 export const OPENCODE_DEFAULT_MODEL = "deepseek-v4-flash";
 
@@ -26,38 +40,64 @@ export function getOpenCodeGoConfig(apiKey: string): AIProviderConfig {
   return { baseURL: AI.OPENCODE_BASE_URL, apiKey };
 }
 
-/** 远端模型 metadata → 本 Task 支持的模型（只保留 openai-chat / 非黑名单） */
-export function filterRemoteChatModels(
-  raw: { id?: string; transport?: string }[]
-): { id: string; transport: string }[] {
+export interface RemoteGoModel {
+  id: string;
+  transport: "openai-chat" | "anthropic-messages";
+}
+
+/**
+ * 远端模型筛选（Task 10）：
+ * 远端 /models 只返回 id（无 transport）→ transport 唯一来源是本地 OPENCODE_MODELS。
+ * 已知 ID → 原样保留其 transport；openai-responses 模型（当前不实现）过滤；未知模型跳过，绝不默认 openai-chat。
+ */
+export function filterRemoteGoModels(raw: { id?: string }[]): RemoteGoModel[] {
   const seen = new Set<string>();
-  const out: { id: string; transport: string }[] = [];
+  const out: RemoteGoModel[] = [];
   for (const m of raw) {
     const id = m.id;
-    if (!id) continue;
-    if (OPENCODE_NON_CHAT_MODEL_IDS.includes(id)) continue;
-    const transport = (m.transport || "").toLowerCase() || "openai-chat";
-    if (transport !== "openai-chat" && transport !== "openai-responses") continue;
-    if (seen.has(id)) continue;
+    if (!id || seen.has(id)) continue;
     seen.add(id);
-    out.push({ id, transport });
+    const known = OPENCODE_MODELS.find((d) => d.id === id);
+    if (!known) continue;
+    if (known.transport === "openai-responses") continue;
+    if (known.transport !== "openai-chat" && known.transport !== "anthropic-messages") continue;
+    out.push({ id, transport: known.transport });
   }
   return out;
 }
 
+/** 远端模型列表短缓存（避免未知模型每条消息重复请求；模块级，不引入依赖） */
+const REMOTE_CACHE_TTL_MS = 120_000;
+let remoteCache: { at: number; models: RemoteGoModel[] | null } | null = null;
+
+/** 清空远端模型缓存（测试用） */
+export function resetOpenCodeGoModelsCache(): void {
+  remoteCache = null;
+}
+
 /** 拉取 OpenCode Go 远端模型列表（Server-only）；失败返回 null，由调用方回落 registry */
-export async function fetchOpenCodeGoModels(): Promise<{ id: string; transport: string }[] | null> {
+export async function fetchOpenCodeGoModels(): Promise<RemoteGoModel[] | null> {
+  if (remoteCache && Date.now() - remoteCache.at < REMOTE_CACHE_TTL_MS) {
+    return remoteCache.models;
+  }
   try {
     const res = await fetch(AI.OPENCODE_MODELS_URL, {
       headers: { accept: "application/json" },
       signal: AbortSignal.timeout(5_000),
       cache: "no-store",
     });
-    if (!res.ok) return null;
-    const data = (await res.json()) as { models?: { id?: string; transport?: string }[] };
-    if (!Array.isArray(data.models)) return null;
-    return filterRemoteChatModels(data.models);
+    if (!res.ok) {
+      remoteCache = { at: Date.now(), models: null };
+      return null;
+    }
+    const data = (await res.json()) as { models?: { id?: string }[]; data?: { id?: string }[] };
+    // 官方响应结构：{ object:"list", data:[...] }；旧版兼容 { models:[...] }
+    const list = Array.isArray(data.models) ? data.models : Array.isArray(data.data) ? data.data : null;
+    const filtered = list ? filterRemoteGoModels(list) : null;
+    remoteCache = { at: Date.now(), models: filtered };
+    return filtered;
   } catch {
+    remoteCache = { at: Date.now(), models: null };
     return null;
   }
 }

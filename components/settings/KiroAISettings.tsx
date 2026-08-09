@@ -4,7 +4,7 @@ import React, { useState } from "react";
 import { Check, Loader2, Eye, EyeOff, PlugZap } from "lucide-react";
 import { useAISettingsStore } from "@/store/useAISettingsStore";
 import { getSessionApiKey, setSessionApiKey } from "@/lib/ai/sessionKeys";
-import { getModelsForProvider } from "@/lib/ai/providers/registry";
+import { useAIModelCatalog } from "@/hooks/useAIModelCatalog";
 import { AI_ERROR_MESSAGES, AIErrorCode } from "@/lib/ai/errors";
 import { AIProviderId } from "@/lib/ai/providers/types";
 import { SettingsSection } from "@/components/settings/SettingsSection";
@@ -40,8 +40,12 @@ export function KiroAISettings() {
   const [showKey, setShowKey] = useState(false);
   const [test, setTest] = useState<TestState>({ status: "idle" });
 
-  const models = getModelsForProvider(provider);
+  // 统一模型 Catalog：Settings 与 Composer 共用同一模型集合（Task 10）
+  const { models: catalogModels } = useAIModelCatalog(provider);
+  const models = catalogModels;
   const isCustom = provider === "custom-openai";
+  // 当前模型不在 Catalog（已下线/远端不可用）：提示重新选择，不自动覆盖
+  const modelUnavailable = !isCustom && !!model && !models.some((m) => m.id === model);
 
   const handleProviderChange = (p: AIProviderId) => {
     setProvider(p);
@@ -107,14 +111,23 @@ export function KiroAISettings() {
           <SettingsRow
             settingId="ai-model"
             title="模型"
-            description={provider === "deepseek" ? "V4 Flash 适合日常对话，V4 Pro 质量更高。" : "OpenCode Go 当前支持的 Chat Completions 模型。"}
+            description={
+              provider === "deepseek"
+                ? "V4 Flash 适合日常对话，V4 Pro 质量更高。"
+                : "OpenCode Go 当前可用模型。"
+            }
           >
-            <SettingsSelect
-              value={model}
-              onChange={setModel}
-              ariaLabel="模型"
-              options={models.map((m) => ({ value: m.id, label: m.name }))}
-            />
+            <div className="flex flex-col items-end gap-1">
+              <SettingsSelect
+                value={model}
+                onChange={setModel}
+                ariaLabel="模型"
+                options={models.map((m) => ({ value: m.id, label: m.name }))}
+              />
+              {modelUnavailable && (
+                <span className="text-[10px] font-semibold text-danger">当前模型已不可用，请重新选择。</span>
+              )}
+            </div>
           </SettingsRow>
         ) : (
           <div className="space-y-4 pt-1">

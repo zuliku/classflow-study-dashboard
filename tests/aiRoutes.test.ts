@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import type { NextRequest } from "next/server";
+import { resetOpenCodeGoModelsCache } from "@/lib/ai/providers/openCodeGo";
 
 /** 构造 OpenAI Chat Completions SSE 流 */
 function sseChunks(chunks: string[]): Response {
@@ -51,6 +52,7 @@ beforeEach(() => {
   lastFetch = undefined;
   fetchMock = vi.fn(smartFetch());
   vi.stubGlobal("fetch", fetchMock);
+  resetOpenCodeGoModelsCache();
 });
 
 afterEach(() => {
@@ -206,6 +208,38 @@ describe("/api/ai/chat（流式）", () => {
     expect(text).not.toContain("sk-test-secret");
   });
 
+  it("OpenCode Go（Anthropic Messages）：流式到 /v1/messages，SSE 正常解析", async () => {
+    // Anthropic Messages SSE（事件流格式）
+    const anthropicSSE = [
+      `event: message_start\ndata: ${JSON.stringify({ type: "message_start", message: { id: "msg_1", type: "message", role: "assistant", content: [], model: "minimax-m3", stop_reason: null, stop_sequence: null, usage: { input_tokens: 10, output_tokens: 0 } } })}`,
+      `event: content_block_start\ndata: ${JSON.stringify({ type: "content_block_start", index: 0, content_block: { type: "text", text: "" } })}`,
+      `event: content_block_delta\ndata: ${JSON.stringify({ type: "content_block_delta", index: 0, delta: { type: "text_delta", text: "你" } })}`,
+      `event: content_block_delta\ndata: ${JSON.stringify({ type: "content_block_delta", index: 0, delta: { type: "text_delta", text: "好" } })}`,
+      `event: content_block_stop\ndata: ${JSON.stringify({ type: "content_block_stop", index: 0 })}`,
+      `event: message_delta\ndata: ${JSON.stringify({ type: "message_delta", delta: { stop_reason: "end_turn", stop_sequence: null }, usage: { output_tokens: 2 } })}`,
+      `event: message_stop\ndata: ${JSON.stringify({ type: "message_stop" })}`,
+    ].join("\n\n") + "\n\n";
+    fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+      lastFetch = { url: String(input), init };
+      return new Response(anthropicSSE, { status: 200, headers: { "content-type": "text/event-stream" } });
+    });
+    const res = await post(
+      { POST: chatPOST },
+      { ...baseBody, provider: "opencode-go", model: "minimax-m3" }
+    );
+    expect(res.status).toBe(200);
+    const text = await res.text();
+    expect(text).toContain('"type":"text-delta"');
+    expect(text).toContain('"delta":"你"');
+    // Bearer 鉴权（Authorization header），URL 为 /v1/messages（不重复拼接）
+    expect(lastFetch?.url).toBe("https://opencode.ai/zen/go/v1/messages");
+    const hdrs = (lastFetch?.init?.headers as Record<string, string> | undefined) ?? {};
+    const auth = String(hdrs["authorization"] ?? "");
+    expect(auth).toContain("Bearer sk-test-secret");
+    expect(String(hdrs["x-api-key"] ?? "")).toBe("");
+    expect(text).not.toContain("sk-test-secret");
+  });
+
   it("多轮 client tool call：tool output 消息被转换为 ModelMessage（role=tool 进入请求体）", async () => {
     fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
       lastFetch = { url: String(input), init };
@@ -303,6 +337,30 @@ describe("/api/ai/test（连接测试）", () => {
     expect(data.code).toBe("RATE_LIMITED");
   }, 30000);
 
+  it("Messages 模型（minimax-m3）：测试连接走 /v1/messages + Bearer 鉴权", async () => {
+    const anthropicJSON = JSON.stringify({
+      id: "msg_1",
+      type: "message",
+      role: "assistant",
+      content: [{ type: "text", text: "OK" }],
+      model: "minimax-m3",
+      stop_reason: "end_turn",
+      usage: { input_tokens: 10, output_tokens: 2 },
+    });
+    fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+      lastFetch = { url: String(input), init };
+      return new Response(anthropicJSON, { status: 200, headers: { "content-type": "application/json" } });
+    });
+    const res = await post(
+      { POST: testPOST },
+      { ...baseBody, provider: "opencode-go", model: "minimax-m3" }
+    );
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ ok: true });
+    expect(lastFetch?.url).toBe("https://opencode.ai/zen/go/v1/messages");
+    expect(String(((lastFetch?.init?.headers as Record<string, string> | undefined) ?? {})["authorization"] ?? "")).toContain("Bearer sk-test-secret");
+  });
+
   it("timeout → TIMEOUT", async () => {
     fetchMock.mockImplementationOnce(
       (input: RequestInfo | URL, init?: RequestInit) =>
@@ -334,13 +392,16 @@ describe("/api/ai/models", () => {
     expect(data.models.map((m) => m.id)).toContain("grok-4.5");
   });
 
-  it("opencode-go：远端成功 → 使用远端列表（剔除黑名单）", async () => {
+  it("opencode-go：远端成功 → transport 原样保留；responses 与未知模型过滤", async () => {
     fetchMock.mockResolvedValueOnce(
       new Response(
         JSON.stringify({
-          models: [
-            { id: "grok-4.5", transport: "openai-chat" },
-            { id: "gpt-5.6-luna", transport: "openai-responses" },
+          object: "list",
+          data: [
+            { id: "grok-4.5" },
+            { id: "minimax-m3" },
+            { id: "qwen3.7-plus" },
+            { id: "gpt-5.6-luna" },
             { id: "brand-new-model" },
           ],
         }),
@@ -348,11 +409,13 @@ describe("/api/ai/models", () => {
       )
     );
     const res = await modelsGET(new Request("http://localhost/api/ai/models?provider=opencode-go") as never);
-    const data = (await res.json()) as { models: { id: string }[]; source: string };
+    const data = (await res.json()) as { models: { id: string; transport: string }[]; source: string };
     expect(data.source).toBe("remote");
-    const ids = data.models.map((m) => m.id);
-    expect(ids).toContain("grok-4.5");
-    expect(ids).toContain("brand-new-model");
-    expect(ids).not.toContain("gpt-5.6-luna");
+    const byId = new Map(data.models.map((m) => [m.id, m.transport]));
+    expect(byId.get("grok-4.5")).toBe("openai-chat");
+    expect(byId.get("minimax-m3")).toBe("anthropic-messages");
+    expect(byId.get("qwen3.7-plus")).toBe("anthropic-messages");
+    expect(byId.has("gpt-5.6-luna")).toBe(false); // openai-responses：本轮不实现
+    expect(byId.has("brand-new-model")).toBe(false); // 未知 + 无 transport：跳过，不猜
   });
 });

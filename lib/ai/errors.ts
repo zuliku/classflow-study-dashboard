@@ -3,6 +3,8 @@
 export type AIErrorCode =
   | "INVALID_API_KEY"
   | "MODEL_NOT_FOUND"
+  | "MODEL_UNAVAILABLE"
+  | "UNSUPPORTED_TRANSPORT"
   | "RATE_LIMITED"
   | "TIMEOUT"
   | "PROVIDER_UNAVAILABLE"
@@ -24,6 +26,8 @@ export class AIError extends Error {
 export const AI_ERROR_MESSAGES: Record<AIErrorCode, string> = {
   INVALID_API_KEY: "API Key 无效，请在设置中检查。",
   MODEL_NOT_FOUND: "模型不可用，请在设置中选择其他模型。",
+  MODEL_UNAVAILABLE: "当前模型已不可用，请重新选择。",
+  UNSUPPORTED_TRANSPORT: "当前模型使用的接口暂未支持。",
   RATE_LIMITED: "请求过于频繁，请稍后再试。",
   TIMEOUT: "请求超时，请重试。",
   PROVIDER_UNAVAILABLE: "服务无法连接，请检查网络或稍后再试。",

@@ -59,7 +59,7 @@ describe("compact route", () => {
     generateTextMock.mockResolvedValueOnce({ text: "sk-12345 不应出现在摘要中，只总结目标。" });
     const res = await POST(req({
       provider: "deepseek",
-      model: "m",
+      model: "deepseek-v4-flash",
       apiKey: "sk-test",
       messages: [{ id: "u1", role: "user", content: "sk-12345 是我的 key，帮我规划" }],
     }));

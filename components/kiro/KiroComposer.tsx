@@ -38,6 +38,7 @@ export function KiroComposer({
   modelOptions,
   activeModelName,
   selectedModelId,
+  modelUnavailable,
   activeModelVendor,
   onSelectModel,
   onOpenSettings,
@@ -61,6 +62,8 @@ export function KiroComposer({
   modelOptions: { value: string; label: string; vendor: AIModelVendor | null }[];
   activeModelName: string;
   selectedModelId: string;
+  /** 当前选中模型不在 Catalog（已下线/不可用）：提示重新选择，不自动覆盖 */
+  modelUnavailable?: boolean;
   activeModelVendor: AIModelVendor | null;
   onSelectModel: (id: string) => void;
   onOpenSettings: () => void;
@@ -167,6 +170,11 @@ export function KiroComposer({
 
   const modelMenu = (
     <div role="menu" aria-label="选择模型" className="py-1 max-h-[min(320px,55vh)] overflow-y-auto">
+      {modelUnavailable && (
+        <p className="px-3 py-2 text-[11px] font-semibold text-danger border-b border-line-soft mb-1">
+          当前模型已不可用，请重新选择。
+        </p>
+      )}
       {modelOptions.length === 0 ? (
         <p className="px-3 py-2 text-xs text-sandrift">请先在设置中填写模型 ID。</p>
       ) : (

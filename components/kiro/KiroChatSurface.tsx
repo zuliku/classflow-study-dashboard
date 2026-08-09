@@ -4,7 +4,8 @@ import React, { useMemo } from "react";
 import { useAppStore } from "@/store/useAppStore";
 import { useAISettingsStore } from "@/store/useAISettingsStore";
 import { useKiroSession } from "@/components/kiro/KiroSessionProvider";
-import { getModelsForProvider, getActiveModelName, getActiveModelVendor } from "@/lib/ai/providers/registry";
+import { useAIModelCatalog } from "@/hooks/useAIModelCatalog";
+import { getActiveModelVendor } from "@/lib/ai/providers/registry";
 import { KiroEmptyState } from "@/components/kiro/KiroEmptyState";
 import { KiroConversation } from "@/components/kiro/KiroConversation";
 import { KiroComposer } from "@/components/kiro/KiroComposer";
@@ -27,23 +28,34 @@ export function KiroChatSurface({ variant }: { variant: "workspace" | "sidecar" 
   const setSettingsModalOpen = useAppStore((s) => s.setSettingsModalOpen);
   const setSettingsTargetSection = useAppStore((s) => s.setSettingsTargetSection);
 
+  // 统一模型 Catalog：Settings 与 Composer 共用同一模型集合（Task 10）
+  const { models: catalogModels } = useAIModelCatalog(provider);
+
   const modelOptions = useMemo(() => {
     if (provider === "custom-openai") {
       return custom.model
         ? [{ value: custom.model, label: custom.model, vendor: null }]
         : [];
     }
-    return getModelsForProvider(provider).map((m) => ({
+    return catalogModels.map((m) => ({
       value: m.id,
       label: m.name,
       vendor: m.vendor,
     }));
-  }, [provider, custom.model]);
+  }, [provider, custom.model, catalogModels]);
 
-  const activeModelName = useMemo(
-    () => getActiveModelName({ provider, model, customModel: custom.model }),
-    [provider, model, custom.model]
+  // 当前模型失效（不在 Catalog）：提示重新选择，不自动覆盖设置
+  const modelUnavailable =
+    provider !== "custom-openai" && !!model && !catalogModels.some((m) => m.id === model);
+
+  const activeModel = useMemo(
+    () => catalogModels.find((m) => m.id === model),
+    [catalogModels, model]
   );
+  const activeModelName = modelUnavailable
+    ? "模型不可用"
+    : activeModel?.name ??
+      (provider === "custom-openai" ? (custom.model ? custom.model : "未设置模型") : "选择模型");
   const activeModelVendor = useMemo(
     () => getActiveModelVendor({ provider, model, customModel: custom.model }),
     [provider, model, custom.model]
@@ -99,6 +111,7 @@ export function KiroChatSurface({ variant }: { variant: "workspace" | "sidecar" 
         modelOptions={modelOptions}
         activeModelName={activeModelName}
         selectedModelId={model}
+        modelUnavailable={modelUnavailable}
         activeModelVendor={activeModelVendor}
         onSelectModel={setModel}
         onOpenSettings={openKiroSettings}
