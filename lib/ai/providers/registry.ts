@@ -18,12 +18,39 @@ import {
 
 /** Model Registry：模型 metadata 的唯一来源（Settings 与 Composer 共用，不在多处复制） */
 
+/** 能力分值（高 → 前）：视觉 > 文件输入；其余同分 */
+function capabilityScore(c: { vision?: boolean; fileParts?: boolean }): number {
+  return (c.vision ? 2 : 0) + (c.fileParts ? 1 : 0);
+}
+
+/**
+ * 模型排序（Settings / Composer / models route 共用）：
+ * 1. 按厂商英文名首字母排序（相同厂商的模型放一起；未知厂商排最后）
+ * 2. 组内按模型能力降序（vision > fileParts）
+ * 3. 能力相同按 id 升序（稳定）
+ */
+export function sortModelsByVendorAndCapability<T extends { vendor: AIModelVendor | null; capabilities: { vision?: boolean; fileParts?: boolean } }>(
+  models: T[]
+): T[] {
+  return [...models].sort((a, b) => {
+    const va = a.vendor ?? "";
+    const vb = b.vendor ?? "";
+    if (va !== vb) return va < vb ? -1 : 1;
+    const ca = capabilityScore(a.capabilities);
+    const cb = capabilityScore(b.capabilities);
+    if (ca !== cb) return cb - ca;
+    const ia = (a as { id?: string }).id ?? "";
+    const ib = (b as { id?: string }).id ?? "";
+    return ia < ib ? -1 : ia > ib ? 1 : 0;
+  });
+}
+
 export function getModelsForProvider(provider: AIProviderId): AIModelDefinition[] {
   switch (provider) {
     case "deepseek":
-      return DEEPSEEK_MODELS;
+      return sortModelsByVendorAndCapability(DEEPSEEK_MODELS);
     case "opencode-go":
-      return OPENCODE_MODELS;
+      return sortModelsByVendorAndCapability(OPENCODE_MODELS);
     case "custom-openai":
       return [];
   }
@@ -70,6 +97,8 @@ export function getVendorForModelId(modelId: string): AIModelVendor | null {
   if (modelId.startsWith("glm-")) return "zai";
   if (modelId.startsWith("grok-")) return "xai";
   if (modelId.startsWith("mimo-")) return "mimo";
+  if (modelId.startsWith("minimax-")) return "minimax";
+  if (modelId.startsWith("qwen")) return "qwen";
   return null;
 }
 

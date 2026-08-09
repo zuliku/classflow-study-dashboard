@@ -37,7 +37,7 @@ describe("resolveModelDefinition", () => {
   it("B. OpenCode Messages：minimax-m3 → anthropic-messages", async () => {
     const def = await resolveModelDefinition({ provider: "opencode-go", model: "minimax-m3" });
     expect(def?.transport).toBe("anthropic-messages");
-    expect(def?.vendor).toBeNull();
+    expect(def?.vendor).toBe("minimax");
   });
 
   it("Custom 固定 openai-chat（不扩展 Anthropic-compatible）", async () => {

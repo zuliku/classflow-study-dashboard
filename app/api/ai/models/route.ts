@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { getModelsForProvider, getDefaultModel, getVendorForModelId } from "@/lib/ai/providers/registry";
+import { getModelsForProvider, getDefaultModel, getVendorForModelId, sortModelsByVendorAndCapability } from "@/lib/ai/providers/registry";
 import { fetchOpenCodeGoModels, OPENCODE_MODELS } from "@/lib/ai/providers/openCodeGo";
 import { AIProviderId, AIModelDefinition } from "@/lib/ai/providers/types";
 
@@ -24,17 +24,19 @@ export async function GET(req: NextRequest) {
     if (remote && remote.length > 0) {
       // 远端为最新来源：transport 原样保留（本地注册表已校验合法）；name 优先取已登记名称
       const byId = new Map(OPENCODE_MODELS.map((m) => [m.id, m]));
-      models = remote.map((r) => {
-        const known = byId.get(r.id);
-        return {
-          id: r.id,
-          name: known?.name ?? r.id,
-          provider: "opencode-go" as const,
-          vendor: getVendorForModelId(r.id),
-          transport: r.transport as AIModelDefinition["transport"],
-          capabilities: known?.capabilities ?? { streaming: true, tools: true, vision: false, fileParts: false },
-        };
-      });
+      models = sortModelsByVendorAndCapability(
+        remote.map((r) => {
+          const known = byId.get(r.id);
+          return {
+            id: r.id,
+            name: known?.name ?? r.id,
+            provider: "opencode-go" as const,
+            vendor: getVendorForModelId(r.id),
+            transport: r.transport as AIModelDefinition["transport"],
+            capabilities: known?.capabilities ?? { streaming: true, tools: true, vision: false, fileParts: false },
+          };
+        })
+      );
       source = "remote";
     }
   }

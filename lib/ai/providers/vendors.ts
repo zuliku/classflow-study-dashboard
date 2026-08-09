@@ -13,6 +13,8 @@ export const AI_PROVIDER_META: Record<AIModelVendor, AIModelVendorMeta> = {
   deepseek: { id: "deepseek", name: "DeepSeek", logo: "/ai-providers/deepseek.png" },
   mimo: { id: "mimo", name: "Xiaomi · MiMo", logo: "/ai-providers/mimo.png" },
   tencent: { id: "tencent", name: "Tencent · Hunyuan", logo: "/ai-providers/tencent.png" },
+  minimax: { id: "minimax", name: "MiniMax", logo: "/ai-providers/minimax.svg" },
+  qwen: { id: "qwen", name: "Qwen", logo: "/ai-providers/qwen.svg" },
 };
 
 /** 未知厂商的统一 fallback（ProviderLogo 组件兜底） */

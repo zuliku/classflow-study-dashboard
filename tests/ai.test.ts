@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { getModelsForProvider, getDefaultModel, getActiveModelName, getVendorForModelId, getActiveModelVendor } from "@/lib/ai/providers/registry";
+import { getModelsForProvider, getDefaultModel, getActiveModelName, getVendorForModelId, getActiveModelVendor, sortModelsByVendorAndCapability } from "@/lib/ai/providers/registry";
 import { AI_PROVIDER_META, getVendorMeta } from "@/lib/ai/providers/vendors";
 import { normalizeBaseURL, KIRO_SYSTEM_PROMPT } from "@/lib/ai/config";
 import { validateCustomBaseURL } from "@/lib/ai/providers/customOpenAI";
@@ -45,6 +45,38 @@ describe("Provider Registry", () => {
     const messagesModels = ["minimax-m3", "minimax-m2.7", "minimax-m2.5", "qwen3.8-max", "qwen3.7-max", "qwen3.7-plus", "qwen3.6-plus"];
     for (const id of chatModels) expect(byId.get(id), id).toBe("openai-chat");
     for (const id of messagesModels) expect(byId.get(id), id).toBe("anthropic-messages");
+  });
+
+  it("模型排序：厂商首字母分组相邻，组内按能力降序", () => {
+    const models = getModelsForProvider("opencode-go");
+    const vendors = models.map((m) => m.vendor);
+    // 相同厂商相邻（vendor 序列无交叉）
+    const seen = new Set<string>();
+    let last: string | null = null;
+    for (const v of vendors) {
+      const key = v ?? "";
+      if (seen.has(key) && key !== last) throw new Error(`vendor 交叉：${vendors.join(",")}`);
+      seen.add(key);
+      last = key;
+    }
+    // 厂商首字母序：deepseek(D) < kimi(K) < mimo(M) < minimax(M) < qwen(Q) < tencent(T) < xai(X) < zai(Z)
+    const unique = Array.from(new Set(vendors.map((v) => v ?? "")));
+    expect(unique).toEqual(["deepseek", "kimi", "mimo", "minimax", "qwen", "tencent", "xai", "zai"]);
+    // 组内能力降序：kimi-k3（vision）在 kimi-k2.7-code 前
+    const kimiIdx = models.map((m) => m.id);
+    expect(kimiIdx.indexOf("kimi-k3")).toBeLessThan(kimiIdx.indexOf("kimi-k2.7-code"));
+    // DeepSeek 组内按 id 稳定
+    expect(models.map((m) => m.id).indexOf("deepseek-v4-flash")).toBeLessThan(models.map((m) => m.id).indexOf("deepseek-v4-pro"));
+  });
+
+  it("排序纯函数：不修改原数组，能力相同保持稳定", () => {
+    const list = [
+      { id: "b", vendor: "kimi" as const, capabilities: { vision: false, fileParts: false } },
+      { id: "a", vendor: "kimi" as const, capabilities: { vision: false, fileParts: false } },
+    ];
+    const sorted = sortModelsByVendorAndCapability(list);
+    expect(sorted.map((m) => m.id)).toEqual(["a", "b"]);
+    expect(list.map((m) => m.id)).toEqual(["b", "a"]); // 原数组不变
   });
 
   it("Custom：registry 无固定列表；展示名来自用户 Model ID", () => {
@@ -99,20 +131,22 @@ describe("模型 → 厂商（Logo）映射", () => {
     expect(getVendorForModelId("deepseek-v4-pro")).toBe("deepseek");
     expect(getVendorForModelId("mimo-v2.5")).toBe("mimo");
     expect(getVendorForModelId("hy3")).toBe("tencent");
+    expect(getVendorForModelId("minimax-m3")).toBe("minimax");
+    expect(getVendorForModelId("qwen3.7-max")).toBe("qwen");
   });
 
   it("未知模型 → null（UI 走 neutral fallback），不猜厂商", () => {
     expect(getVendorForModelId("some-brand-new-model")).toBeNull();
     expect(getVendorForModelId("")).toBeNull();
     expect(getVendorForModelId("gpt-5.6-luna")).toBeNull(); // openai-responses 本轮不实现，不猜
-    expect(getVendorForModelId("minimax-m3")).toBeNull(); // 无本地 Logo → neutral fallback
-    expect(getVendorForModelId("qwen3.7-max")).toBeNull();
   });
 
   it("已知命名空间前缀兜底只覆盖明确厂商", () => {
     expect(getVendorForModelId("deepseek-v4-flash-free")).toBe("deepseek");
     expect(getVendorForModelId("kimi-k3-turbo")).toBe("kimi");
     expect(getVendorForModelId("mimo-v3")).toBe("mimo");
+    expect(getVendorForModelId("minimax-m3-turbo")).toBe("minimax");
+    expect(getVendorForModelId("qwen3-x-max")).toBe("qwen");
     expect(getVendorForModelId("mystery-model")).toBeNull();
   });
 
