@@ -49,8 +49,15 @@ test("发送后立即出现「Kiro 正在思考」，回答到达后消退", asy
   const trace = page.getByTestId("kiro-activity-trace");
   await expect(trace).toContainText("Kiro 正在思考", { timeout: 5000 });
   await expect(page.getByText("正在回复", { exact: true })).toHaveCount(0); // 无重复三点 loading
+  // 一个 Assistant Turn 只有一个 Kiro Logo（Progress 承担；空 assistant message 不再渲染）
+  await expect(
+    page.getByTestId("kiro-conversation").locator('img[src*="kiro-mark"]')
+  ).toHaveCount(1);
 
-  // 回答到达 → Progress 消退（无工具轮不残留）
+  // 回答到达 → Progress 消退（无工具轮不残留），唯一 Logo 由回答消息承担
   await expect(page.getByTestId("kiro-message").last()).toContainText("DDL 情况", { timeout: 10000 });
   await expect(trace).toHaveCount(0);
+  await expect(
+    page.getByTestId("kiro-conversation").locator('img[src*="kiro-mark"]')
+  ).toHaveCount(1);
 });

@@ -326,13 +326,29 @@ html[data-motion="reduced"] .kiro-ring-animated {
   animation: none;
 }
 
-/* Kiro Agent Progress：thinking 缓慢呼吸；acting 环扫略快（仍克制） */
-.kiro-agent-logo-thinking {
-  animation: kiro-breathe 2.4s ease-in-out infinite;
+/* Kiro Agent Progress：Logo 作为 Loading 动效主体（透明 PNG → drop-shadow 沿轮廓，非 box-shadow）
+   thinking：缓慢呼吸（opacity 不低于 0.8）+ 轻 glow；reading/composing：glow；acting：稍强 glow。
+   done：静态（仅 .kiro-agent-logo-active 的轻 drop-shadow 提升对比度）。 */
+.kiro-agent-logo-active {
+  filter: drop-shadow(0 0 3px rgba(225, 187, 137, 0.26))
+    drop-shadow(0 0 6px rgba(158, 185, 166, 0.18))
+    drop-shadow(0 0 8px rgba(143, 159, 198, 0.15));
 }
 
-.kiro-ring-fast {
-  animation-duration: 4.5s;
+.kiro-agent-logo-thinking {
+  animation: kiro-breathe 2.6s ease-in-out infinite;
+}
+
+.kiro-agent-logo-glow {
+  animation: kiro-agent-glow 2.8s ease-in-out infinite;
+}
+
+.kiro-agent-logo-glow-strong {
+  animation: kiro-agent-glow-strong 2.8s ease-in-out infinite;
+}
+
+.kiro-agent-logo-glow-soft {
+  animation: kiro-agent-glow-soft 3.2s ease-in-out infinite;
 }
 
 @keyframes kiro-breathe {
@@ -341,10 +357,56 @@ html[data-motion="reduced"] .kiro-ring-animated {
     opacity: 1;
   }
   50% {
-    opacity: 0.55;
+    opacity: 0.8;
   }
 }
 
-html[data-motion="reduced"] .kiro-agent-logo-thinking {
+@keyframes kiro-agent-glow {
+  0%,
+  100% {
+    filter: drop-shadow(0 0 3px rgba(225, 187, 137, 0.22))
+      drop-shadow(0 0 6px rgba(158, 185, 166, 0.14))
+      drop-shadow(0 0 8px rgba(143, 159, 198, 0.12));
+  }
+  50% {
+    filter: drop-shadow(0 0 4px rgba(225, 187, 137, 0.36))
+      drop-shadow(0 0 9px rgba(158, 185, 166, 0.24))
+      drop-shadow(0 0 12px rgba(143, 159, 198, 0.2));
+  }
+}
+
+@keyframes kiro-agent-glow-strong {
+  0%,
+  100% {
+    filter: drop-shadow(0 0 3px rgba(225, 187, 137, 0.26))
+      drop-shadow(0 0 6px rgba(158, 185, 166, 0.18))
+      drop-shadow(0 0 8px rgba(143, 159, 198, 0.16));
+  }
+  50% {
+    filter: drop-shadow(0 0 5px rgba(225, 187, 137, 0.42))
+      drop-shadow(0 0 11px rgba(158, 185, 166, 0.28))
+      drop-shadow(0 0 14px rgba(143, 159, 198, 0.24));
+  }
+}
+
+@keyframes kiro-agent-glow-soft {
+  0%,
+  100% {
+    filter: drop-shadow(0 0 3px rgba(225, 187, 137, 0.2))
+      drop-shadow(0 0 6px rgba(158, 185, 166, 0.12))
+      drop-shadow(0 0 8px rgba(143, 159, 198, 0.1));
+  }
+  50% {
+    filter: drop-shadow(0 0 3px rgba(225, 187, 137, 0.3))
+      drop-shadow(0 0 8px rgba(158, 185, 166, 0.2))
+      drop-shadow(0 0 10px rgba(143, 159, 198, 0.16));
+  }
+}
+
+/* Reduced Motion：关闭 breathe / glow 动画，保留静态轻 drop-shadow（状态文字照常更新） */
+html[data-motion="reduced"] .kiro-agent-logo-thinking,
+html[data-motion="reduced"] .kiro-agent-logo-glow,
+html[data-motion="reduced"] .kiro-agent-logo-glow-strong,
+html[data-motion="reduced"] .kiro-agent-logo-glow-soft {
   animation: none;
 }

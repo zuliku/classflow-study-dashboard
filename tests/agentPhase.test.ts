@@ -3,10 +3,10 @@ import { deriveActivity } from "@/hooks/useKiroChat";
 
 /** UIMessage 最小形状（测试用） */
 function userMsg(id: string) {
-  return { id, role: "user", parts: [{ type: "text", text: "查看最近 DDL" }] };
+  return { id, role: "user" as const, parts: [{ type: "text", text: "查看最近 DDL" }] };
 }
 function assistantMsg(id: string, parts: { type: string; state?: string }[]) {
-  return { id, role: "assistant", parts };
+  return { id, role: "assistant" as const, parts };
 }
 const textPart = (text: string, state = "streaming") => ({ type: "text", text, state });
 const toolPart = (name: string, state: "working" | "output-available" | "output-error") => ({

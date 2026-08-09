@@ -105,10 +105,14 @@ export function KiroConversation({
             </span>
           </div>
         )}
-        {messages.map((m) =>
-          m.role === "user" ? (
-            <KiroUserMessage key={m.id} content={m.content} attachments={m.attachments} />
-          ) : (
+        {messages.map((m) => {
+          if (m.role === "user") {
+            return <KiroUserMessage key={m.id} content={m.content} attachments={m.attachments} />;
+          }
+          // 空 assistant（pre-response 占位）：Logo 由 Agent Progress 承担，不渲染第二个 Logo；
+          // 首个文本 token 到达后 KiroMessage 自然出现（同一 Turn 只保留一个 Kiro Logo）
+          if (!m.content && !m.actions?.length && !m.historyActions?.length) return null;
+          return (
             <KiroMessage
               key={m.id}
               content={m.content}
@@ -148,8 +152,8 @@ export function KiroConversation({
                 </div>
               )}
             </KiroMessage>
-          )
-        )}
+          );
+        })}
 
         {/* Agent 执行反馈（真实阶段 + 语义步骤；文本开始后淡出，有工具时保留完成摘要） */}
         {showAgentProgress && (

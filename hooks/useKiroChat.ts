@@ -141,12 +141,19 @@ function toView(m: UIMessage): KiroChatMessageView {
   };
 }
 
+/** deriveActivity 的宽松输入形状（UIMessage 兼容；测试友好） */
+export interface ActivitySourceMessage {
+  id: string;
+  role: "user" | "assistant" | "system";
+  parts: { type: string; text?: string; state?: string; toolCallId?: string; output?: unknown; errorText?: string }[];
+}
+
 /**
  * 从最新 assistant 消息推导本轮真实工具调用（只显示用户语义标签）与 Agent 执行阶段。
  * 阶段为确定性推导：thinking（无任何输出）/ reading / acting / composing / done / error。
  * 只展示用户可理解的 Tool semantic label 与真实执行结果，绝不展示 chain-of-thought。
  */
-export function deriveActivity(messages: UIMessage[], status: string): KiroActivity {
+export function deriveActivity(messages: ActivitySourceMessage[], status: string): KiroActivity {
   const hasError = status === "error";
   const submitted = status === "submitted";
   const streaming = status === "streaming" || submitted;
@@ -160,7 +167,7 @@ export function deriveActivity(messages: UIMessage[], status: string): KiroActiv
     }
   }
   const inFlight = messages.slice(lastUserIdx + 1);
-  let target: UIMessage | null = null;
+  let target: ActivitySourceMessage | null = null;
   for (let i = inFlight.length - 1; i >= 0; i--) {
     const m = inFlight[i];
     if (m.role !== "assistant") continue;
@@ -581,7 +588,7 @@ export function useKiroChat({
   const normalizedError: AIError | null = chat.error ? normalizeAIError(chat.error) : null;
   const streaming = chat.status === "streaming" || chat.status === "submitted";
   const activity = useMemo(
-    () => deriveActivity(chat.messages, chat.status),
+    () => deriveActivity(chat.messages as ActivitySourceMessage[], chat.status),
     [chat.messages, chat.status]
   );
 
