@@ -104,6 +104,10 @@ export type WriteToolResult<T = unknown> =
         | "MEMORY_DISABLED";
       message: string;
       details?: unknown;
+      /** 事务失败时的实际写入数（Preflight / Rollback 后恒为 0） */
+      applied?: number;
+      /** 事务失败时的首个失败操作下标（Change Set 用） */
+      failedActionIndex?: number;
     };
 
 /** Undo 一次性条目 */

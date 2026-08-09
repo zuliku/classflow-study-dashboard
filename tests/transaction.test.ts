@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { preflightChangeSet, changeSetRequiresConfirm, changeSetConfirmText } from "@/lib/ai/transactions/preflight";
 import { executeChangeSet } from "@/lib/ai/transactions/executor";
 import { MAX_CHANGE_SET_ACTIONS, ChangeSetActionInput } from "@/lib/ai/transactions/types";
-import { messageHasWriteToolCalls } from "@/hooks/useKiroChat";
+import { deriveActivity, messageHasWriteToolCalls } from "@/hooks/useKiroChat";
 import { KiroWriteApi } from "@/lib/ai/tools/write/types";
 
 function makeState() {
@@ -323,5 +323,42 @@ describe("Risk & Regenerate", () => {
 
   it("apply_change_set 属于 Write Turn → 禁止 Regenerate", () => {
     expect(messageHasWriteToolCalls({ parts: [{ type: "tool-apply_change_set" }] } as never)).toBe(true);
+  });
+});
+
+describe("Change Set Activity Trace", () => {
+  const userMsg = { id: "u1", role: "user" as const, parts: [{ type: "text", text: "批量调整" }] };
+  const csPart = (over: { state?: "streaming" | "output-available" | "output-error"; output?: unknown; errorText?: string }) => ({
+    type: "tool-apply_change_set",
+    toolCallId: "c1",
+    state: over.state,
+    input: { summary: "调整本周任务", actions: [{ tool: "set_assignment_ddl" }, { tool: "set_assignment_priority" }] },
+    output: over.output,
+    errorText: over.errorText,
+  });
+
+  it("working：展示「正在检查 N 项修改」（无 tool name / JSON）", () => {
+    const a = deriveActivity([userMsg, { id: "a1", role: "assistant", parts: [csPart({ state: "streaming" })] }], "streaming");
+    expect(a.steps[0].label).toBe("正在检查 2 项修改");
+    expect(a.steps[0].count).toBe(2);
+  });
+
+  it("done：展示「完成 N 项修改」", () => {
+    const a = deriveActivity(
+      [userMsg, { id: "a1", role: "assistant", parts: [csPart({ state: "output-available", output: { ok: true, data: { count: 6 }, action: { changeSet: { count: 6 } } } })] }],
+      "ready"
+    );
+    expect(a.steps[0].label).toBe("完成 6 项修改");
+    expect(a.steps[0].count).toBe(6);
+  });
+
+  it("error：展示「未执行修改」+ 错误说明", () => {
+    const a = deriveActivity(
+      [userMsg, { id: "a1", role: "assistant", parts: [csPart({ state: "output-error", errorText: "第 3 项与《高等数学》冲突，因此没有修改。" })] }],
+      "error"
+    );
+    expect(a.steps[0].label).toBe("未执行修改");
+    expect(a.steps[0].count).toBe(0);
+    expect(a.steps[0].message).toContain("冲突");
   });
 });

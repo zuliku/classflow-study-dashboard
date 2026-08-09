@@ -65,9 +65,14 @@ export function KiroActivityTrace({
 
   const working = phase !== "done" && phase !== "error";
   const writeCount = steps.filter((s) => s.kind === "write").length;
-  const doneSummary = writeCount > 0
-    ? `完成 ${steps.length} 个步骤 · 修改 ${writeCount} 项内容`
-    : `已读取 ${steps.length} 项 ClassFlow 信息`;
+  const changeSetCount = steps.reduce((acc, s) => acc + (s.count ?? 0), 0);
+  // Change Set：整体摘要直接展示「完成 N 项修改」；其余按写/读分类
+  const doneSummary =
+    changeSetCount > 0
+      ? `完成 ${changeSetCount} 项修改`
+      : writeCount > 0
+        ? `完成 ${steps.length} 个步骤 · 修改 ${writeCount} 项内容`
+        : `已读取 ${steps.length} 项 ClassFlow 信息`;
 
   // Codex-style 顶部行：working =「正在处理」/ 无步骤 = 具体 phase；done =「已处理 Xs」
   const topLabel = done

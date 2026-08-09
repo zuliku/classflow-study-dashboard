@@ -64,6 +64,8 @@ export interface KiroActivityStep {
   status: "working" | "done" | "error";
   kind: "read" | "write";
   message?: string;
+  /** Change Set：内部操作数（展示「正在检查 N 项修改 / 完成 N 项修改」） */
+  count?: number;
 }
 
 /** Agent 执行阶段（从真实 Runtime 推导，不展示隐藏思维链） */
@@ -201,8 +203,35 @@ export function deriveActivity(messages: ActivitySourceMessage[], status: string
   const steps: KiroActivityStep[] = toolParts.map((p) => {
     const name = toolNameOf(p);
     const isWrite = (KIRO_MUTATING_TOOL_NAMES as string[]).includes(name);
-    if (p.state === "output-available") return { label: toolLabel(name), status: "done", kind: isWrite ? "write" : "read" };
-    if (p.state === "output-error") return { label: toolLabel(name), status: "error", kind: isWrite ? "write" : "read", message: p.errorText };
+    const isChangeSet = name === "apply_change_set";
+    if (p.state === "output-available") {
+      // Change Set：输出中带真实 count（不展示 tool name / JSON）
+      if (isChangeSet) {
+        const out = p.output as
+          | { data?: { count?: number }; action?: { changeSet?: { count?: number } } }
+          | undefined;
+        const count = out?.data?.count ?? out?.action?.changeSet?.count;
+        return {
+          label: count ? `完成 ${count} 项修改` : "完成整组修改",
+          status: "done" as const,
+          kind: "write" as const,
+          count,
+        };
+      }
+      return { label: toolLabel(name), status: "done" as const, kind: isWrite ? "write" : "read" };
+    }
+    if (p.state === "output-error") {
+      if (isChangeSet) {
+        return { label: "未执行修改", status: "error" as const, kind: "write" as const, message: p.errorText, count: 0 };
+      }
+      return { label: toolLabel(name), status: "error", kind: isWrite ? "write" : "read", message: p.errorText };
+    }
+    if (isChangeSet) {
+      // working：工具 input 已含 actions（流式完成前即可展示「正在检查 N 项修改」）
+      const input = p.input as { actions?: unknown[] } | undefined;
+      const count = input?.actions?.length;
+      return { label: count ? `正在检查 ${count} 项修改` : "正在检查修改", status: "working" as const, kind: "write" as const, count };
+    }
     return { label: toolLabel(name), status: "working", kind: isWrite ? "write" : "read" };
   });
 
@@ -477,6 +506,9 @@ export function useKiroChat({
                   code: result.code as WriteToolResult extends infer T ? (T extends { ok: false; code: infer C } ? C : never) : never,
                   message: result.message,
                   details: result.details,
+                  // 事务失败必须明确「实际写入数」（Preflight / 回滚后恒为 0）
+                  applied: result.applied,
+                  failedActionIndex: result.failedActionIndex,
                 };
           if (result.ok) {
             pushToast({
