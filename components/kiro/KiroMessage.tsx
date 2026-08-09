@@ -81,9 +81,9 @@ export function KiroMessage({
                 className="inline-block w-[2px] h-3.5 bg-sandrift align-middle animate-pulse"
               />
             )}
-            {/* Message Actions：整个 Turn 结束后才出现（actionsReady），且本消息非流式 */}
+            {/* Message Actions：整个 Turn 结束后常驻（不依赖 hover），低权重 inline toolbar */}
             {(actionsReady ?? true) && !streaming && (
-              <div className="flex items-center gap-0.5 opacity-100 md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100 transition-opacity duration-[var(--motion-fast)]">
+              <div className="flex items-center gap-1 text-[11px] font-semibold text-sandrift">
                 <button
                   onClick={copyMarkdownSource}
                   aria-label="复制"

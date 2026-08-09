@@ -410,3 +410,25 @@ html[data-motion="reduced"] .kiro-agent-logo-glow-strong,
 html[data-motion="reduced"] .kiro-agent-logo-glow-soft {
   animation: none;
 }
+
+/* Thread Rail Soft Plate（方案 A）：Logo 浅色底座 + 1px 品牌 perimeter。
+   Idle 隐藏 → hover 慢速流光 → active 静态细边；不使用任何 shadow。 */
+.kiro-rail-plate .kiro-ring {
+  opacity: 0;
+}
+
+.group\/plate:hover .kiro-rail-plate .kiro-ring,
+.group\/plate:focus-visible .kiro-rail-plate .kiro-ring {
+  opacity: 1;
+  animation: kiro-ring-spin 7s linear infinite;
+}
+
+.kiro-rail-plate-active .kiro-ring {
+  opacity: 1;
+  animation: none;
+}
+
+html[data-motion="reduced"] .group\/plate:hover .kiro-rail-plate .kiro-ring,
+html[data-motion="reduced"] .group\/plate:focus-visible .kiro-rail-plate .kiro-ring {
+  animation: none;
+}

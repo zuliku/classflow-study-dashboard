@@ -99,6 +99,33 @@ test("Thread Header：不再显示 Kiro Logo / 名称 / AI Workspace；标题 = 
   expect(eBox!.width).toBeCloseTo(40, 0);
 });
 
+test("Rail 溢出检查：展开后不超 viewport、无横向溢出（1024/1280/1536/1920）", async ({ page }) => {
+  await page.addInitScript(({ settings, key }) => {
+    localStorage.setItem("classflow-ai-settings-v1", JSON.stringify({ version: 0, state: settings }));
+    sessionStorage.setItem("classflow-ai-key:deepseek", key);
+  }, { settings: AI_SETTINGS, key: "sk-test-key" });
+  for (const width of [1024, 1280, 1536, 1920]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto("/");
+    await page.locator("aside").first().getByRole("button", { name: "Kiro" }).click();
+    await page.getByLabel("展开对话").click();
+    const dialog = page.getByRole("dialog", { name: "对话" });
+    await expect(dialog).toBeVisible();
+    const dBox = await dialog.boundingBox();
+    // Rail 在 viewport 内（右缘 / 底部不超）
+    expect(dBox!.x).toBeGreaterThanOrEqual(0);
+    expect(dBox!.x + dBox!.width).toBeLessThanOrEqual(width);
+    expect(dBox!.y).toBeGreaterThanOrEqual(0);
+    expect(dBox!.y + dBox!.height).toBeLessThanOrEqual(900);
+    // 页面无横向溢出
+    const overflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1);
+    expect(overflow).toBe(false);
+    // Composer 可见且未被遮挡
+    await expect(page.getByTestId("kiro-composer")).toBeVisible();
+    await page.keyboard.press("Escape");
+  }
+});
+
 test("Sidebar Kiro Active：无左侧黑线（active = pastel-mint + 静态品牌环）", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/");
