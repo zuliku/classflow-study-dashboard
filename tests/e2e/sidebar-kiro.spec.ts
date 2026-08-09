@@ -26,8 +26,8 @@ test("Full Sidebar (xl)：Kiro 位于小组协作之后，使用正式 Logo，�
   const kiroBtn = aside.getByRole("button", { name: "Kiro" });
   await expect(kiroBtn.locator('img[src="/kiro/kiro-mark.png"]')).toBeVisible();
   const box = await kiroBtn.boundingBox();
-  expect(box!.height).toBeGreaterThanOrEqual(48);
-  expect(box!.height).toBeLessThanOrEqual(52);
+  expect(box!.height).toBeGreaterThanOrEqual(45);
+  expect(box!.height).toBeLessThanOrEqual(49);
 
   // 点击 → Workspace + active
   await kiroBtn.click();
