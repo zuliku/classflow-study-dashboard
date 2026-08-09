@@ -10,6 +10,7 @@ import {
   Settings,
   Check,
   Sparkles,
+  Loader2,
 } from "lucide-react";
 import { KiroContextBar } from "@/components/kiro/KiroContextBar";
 import { KiroContextPicker } from "@/components/kiro/KiroContextPicker";
@@ -45,6 +46,7 @@ export function KiroComposer({
   attachments,
   hasProcessing,
   visionEnabled,
+  preparingVision,
   onAddFiles,
   onRemoveAttachment,
   onRetryAttachment,
@@ -55,7 +57,8 @@ export function KiroComposer({
   contexts: KiroContextRef[];
   onAddContext: (ref: KiroContextRef) => void;
   onRemoveContext: (key: string) => void;
-  onSend: (text: string) => void;
+  /** 返回 true = 已提交（扫描 PDF 渲染失败时 false，Prompt 保留） */
+  onSend: (text: string) => Promise<boolean> | boolean;
   streaming: boolean;
   onStop: () => void;
   configured: boolean;
@@ -70,6 +73,8 @@ export function KiroComposer({
   attachments: KiroAttachmentView[];
   hasProcessing: boolean;
   visionEnabled: boolean;
+  /** 扫描 PDF 页面渲染中（Send 禁用 + 提示） */
+  preparingVision?: boolean;
   onAddFiles: (files: File[]) => void;
   onRemoveAttachment: (id: string) => void;
   onRetryAttachment: (id: string) => void;
@@ -92,7 +97,16 @@ export function KiroComposer({
 
   const hasImages = attachments.some((a) => a.kind === "image");
   const imagesBlocked = hasImages && !visionEnabled;
-  const canSend = text.trim().length > 0 && !hasProcessing && !imagesBlocked && !streaming;
+  // 扫描型 PDF 需要 Vision 模型（Task 12）：非 Vision 模型阻止发送，绝不静默丢图
+  const needsScannedVision = attachments.some((a) => a.visionRequired === true);
+  const scannedBlocked = needsScannedVision && !visionEnabled;
+  const canSend =
+    text.trim().length > 0 &&
+    !hasProcessing &&
+    !imagesBlocked &&
+    !scannedBlocked &&
+    !streaming &&
+    !preparingVision;
 
   const autoGrow = () => {
     const el = taRef.current;
@@ -101,9 +115,11 @@ export function KiroComposer({
     el.style.height = `${Math.min(el.scrollHeight, 156)}px`;
   };
 
-  const submit = () => {
+  const submit = async () => {
     if (!canSend) return;
-    onSend(text.trim());
+    const ok = await onSend(text.trim());
+    // 只有真正提交（含扫描 PDF 渲染成功）后才清空；失败保留用户 Prompt
+    if (!ok) return;
     setText("");
     requestAnimationFrame(() => {
       if (taRef.current) {
@@ -247,15 +263,21 @@ export function KiroComposer({
                     onSaveToCourse={onSaveAttachmentToCourse}
                   />
                 ))}
-                {hasImages && !visionEnabled && (
+                {(hasImages && !visionEnabled) || scannedBlocked ? (
                   <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-warning px-1.5 whitespace-nowrap">
-                    当前模型不支持图片理解
+                    {scannedBlocked ? "扫描型 PDF 需要支持图片理解的模型" : "当前模型不支持图片理解"}
                     <button
                       onClick={() => setModelOpen(true)}
                       className="underline underline-offset-2 decoration-line-strong hover:text-charcoal"
                     >
                       切换模型
                     </button>
+                  </span>
+                ) : null}
+                {preparingVision && (
+                  <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-sandrift px-1.5 whitespace-nowrap">
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                    正在准备扫描 PDF…
                   </span>
                 )}
               </div>

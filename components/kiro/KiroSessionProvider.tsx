@@ -361,7 +361,7 @@ export function KiroSessionProvider({ children }: { children: React.ReactNode })
   );
 
   const sendWithTurn = useCallback(
-    (text: string) => {
+    async (text: string): Promise<boolean> => {
       // 第一次真实 User Message：创建会话（transient → 正式写 DB 在首个稳定点）
       if (!conversationIdRef.current) {
         const id = globalThis.crypto?.randomUUID
@@ -377,10 +377,13 @@ export function KiroSessionProvider({ children }: { children: React.ReactNode })
         setConversationCreatedAt(createdAt);
       }
       setLastUserTurnGen(suggestionsGenRef.current);
-      chat.send(text);
-      attachments.clear();
+      // 扫描 PDF 渲染失败时返回 false：不清空附件、不清空 Composer（Prompt 保留）
+      const ok = await chat.send(text);
+      if (ok) attachments.clear();
+      return ok;
     },
-    [chat, attachments]
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [chat]
   );
 
   /** 恢复历史对话：先保存当前 → 加载目标 → 恢复 refs（校验实体仍存在）→ 关闭由 Panel 处理 */

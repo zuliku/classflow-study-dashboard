@@ -8,13 +8,14 @@ import {
   KiroLocalAttachment,
   KiroMaterialAttachment,
   KiroAttachmentView,
+  KiroAttachmentKind,
 } from "@/lib/ai/attachments/types";
 import { routeAttachment, kindToMaterialType } from "@/lib/ai/attachments/router";
 import { extractAttachment } from "@/lib/ai/attachments";
 import { extractCacheKey } from "@/lib/ai/attachments/cache";
 import { MAX_ATTACHMENTS_PER_TURN } from "@/lib/ai/attachments/limits";
 import { createImageThumbnail } from "@/lib/ai/attachments/image";
-import { createStorageKey, saveFileBlob } from "@/lib/fileStorage";
+import { createStorageKey, saveFileBlob, getFileBlob } from "@/lib/fileStorage";
 
 let seq = 0;
 const nextId = () => `att_${++seq}_${Date.now().toString(36)}`;
@@ -31,6 +32,7 @@ export function useKiroAttachments() {
 
   const toView = useCallback((a: KiroAttachment): KiroAttachmentView => {
     if (a.source === "local") {
+      const scanned = a.extracted?.possiblyScanned === true;
       return {
         id: a.id,
         source: "local",
@@ -40,6 +42,8 @@ export function useKiroAttachments() {
         status: a.status,
         error: a.error,
         thumbnail: a.kind === "image" ? undefined : undefined,
+        visionRequired: scanned,
+        pageCount: scanned ? a.extracted?.pageCount : undefined,
       };
     }
     return {
@@ -47,8 +51,11 @@ export function useKiroAttachments() {
       source: "material",
       kind: a.kind,
       name: a.name,
-      status: "ready",
+      status: a.status,
+      error: a.error,
       courseName: a.courseName,
+      visionRequired: a.pdfVision?.scanned === true,
+      pageCount: a.pdfVision?.scanned === true ? a.pdfVision.pageCount : undefined,
     };
   }, []);
 
@@ -96,11 +103,11 @@ export function useKiroAttachments() {
           cacheKey: extractCacheKey({ name: base.file.name, size: base.file.size, lastModified: base.file.lastModified }),
         });
         if (result.ok) {
-          // 扫描型 PDF：明确 unsupported（不是损坏文件；OCR 属于后续 Task）
-          const possiblyScanned = (result.extracted as { possiblyScanned?: boolean }).possiblyScanned === true;
+          // 扫描型 PDF（Task 12）：不再是 error —— ready + Vision metadata（发送时渲染页面图）
+          const possiblyScanned = result.extracted.possiblyScanned === true;
           patch(
             possiblyScanned
-              ? { status: "error", error: "这是扫描型 PDF，当前暂不支持读取正文。" }
+              ? { status: "ready", extracted: result.extracted }
               : { status: "ready", extracted: result.extracted }
           );
         } else {
@@ -111,20 +118,62 @@ export function useKiroAttachments() {
     []
   );
 
-  /** 添加已有课程资料（引用；正文由 read_material 工具读取） */
+  /** 添加已有课程资料（引用；正文由 read_material 工具读取；PDF 异步 inspection 检测扫描件） */
   const addMaterial = useCallback(
     (ref: { courseId: string; courseName: string; materialId: string; title: string; type: string }) => {
+      const id = nextId();
+      const kind: KiroAttachmentKind =
+        ref.type === "pdf" ? "pdf" : ref.type === "image" ? "image" : ref.type === "doc" ? "docx" : "text";
       const att: KiroMaterialAttachment = {
-        id: nextId(),
+        id,
         source: "material",
         materialId: ref.materialId,
         courseId: ref.courseId,
         courseName: ref.courseName,
         name: ref.title,
-        kind: ref.type === "pdf" ? "pdf" : ref.type === "image" ? "image" : ref.type === "doc" ? "docx" : "text",
+        kind,
         status: "ready",
       };
       setAttachments((prev) => [...prev, att]);
+
+      // PDF：异步 inspection（只存 possiblyScanned/pageCount，不复制正文）
+      if (kind === "pdf") {
+        const storageKey = useAppStore
+          .getState()
+          .courses.find((c) => c.id === ref.courseId)
+          ?.materials.find((m) => m.id === ref.materialId)?.storageKey;
+        if (!storageKey) return; // 外部链接资料：不尝试下载，保持 ready
+        const patch = (partial: Partial<KiroMaterialAttachment>) =>
+          setAttachments((prev) => prev.map((a) => (a.id === id ? { ...(a as KiroMaterialAttachment), ...partial } : a)));
+        patch({ status: "processing" });
+        void (async () => {
+          try {
+            const blob = await getFileBlob(storageKey);
+            if (!blob) {
+              patch({ status: "error", error: "本地文件已丢失，请重新上传。" });
+              return;
+            }
+            const result = await extractAttachment(blob as Blob & { name?: string }, {
+              kind: "pdf",
+              cacheKey: extractCacheKey({ storageKey }),
+            });
+            if (!result.ok) {
+              patch({ status: "error", error: result.message });
+              return;
+            }
+            if (result.extracted.possiblyScanned === true) {
+              patch({
+                status: "ready",
+                pdfVision: { scanned: true, pageCount: result.extracted.pageCount ?? 1 },
+              });
+            } else {
+              patch({ status: "ready" });
+            }
+          } catch {
+            patch({ status: "error", error: "资料读取失败。" });
+          }
+        })();
+      }
     },
     []
   );

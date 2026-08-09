@@ -4,6 +4,7 @@ import { extractTextFile, ExtractedDocument } from "@/lib/ai/attachments/extract
 import { extractPdf } from "@/lib/ai/attachments/pdf";
 import { extractDocx } from "@/lib/ai/attachments/docx";
 import { getExtractCache, setExtractCache, extractCacheKey } from "@/lib/ai/attachments/cache";
+import { EXTRACTOR_VERSION } from "@/lib/ai/attachments/limits";
 
 /**
  * Attachment 统一入口：路由 → 提取（带缓存）。
@@ -30,7 +31,16 @@ export async function extractAttachment(
 
   const cached = await getExtractCache(cacheKey);
   if (cached) {
-    return { ok: true, extracted: { text: cached.text, pages: cached.pages, truncated: cached.text.length >= 100_000 } };
+    return {
+      ok: true,
+      extracted: {
+        text: cached.text,
+        pages: cached.pages,
+        truncated: cached.text.length >= 100_000,
+        pageCount: cached.pageCount,
+        possiblyScanned: cached.possiblyScanned,
+      },
+    };
   }
 
   try {
@@ -43,8 +53,10 @@ export async function extractAttachment(
     await setExtractCache(cacheKey, {
       text: extracted.text,
       pages: extracted.pages,
+      pageCount: extracted.pageCount,
+      possiblyScanned: extracted.possiblyScanned,
       extractedAt: new Date().toISOString(),
-      extractorVersion: 1,
+      extractorVersion: EXTRACTOR_VERSION,
     });
     return { ok: true, extracted };
   } catch {

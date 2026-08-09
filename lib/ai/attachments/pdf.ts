@@ -1,6 +1,29 @@
 import { ExtractedDocument, normalizeLineEndings, truncateWithPages } from "@/lib/ai/attachments/extractors";
 import { MAX_EXTRACTED_CHARS } from "@/lib/ai/attachments/limits";
 
+/** pdf.js 模块加载（Task 4/11 已依赖；Task 12 Vision 渲染复用同一实例与 worker 初始化） */
+export type PdfJsModule = typeof import("pdfjs-dist");
+
+export async function loadPdfJs(): Promise<PdfJsModule> {
+  if (pdfjsModule) return pdfjsModule;
+  // 统一使用 legacy build：Node 无需 DOM；浏览器把 worker 资源以 blob URL 提供，
+  // 避免 dev 环境下 worker chunk 加载不稳定导致挂起。
+  const mod = await import("pdfjs-dist/legacy/build/pdf.mjs");
+  const pdfjs = mod as unknown as PdfJsModule;
+  if (typeof window !== "undefined" && !(pdfjs as { GlobalWorkerOptions?: { workerSrc?: string } }).GlobalWorkerOptions?.workerSrc) {
+    try {
+      const worker = await import("pdfjs-dist/build/pdf.worker.mjs?url");
+      const res = await fetch(worker.default as string);
+      const blobUrl = URL.createObjectURL(await res.blob());
+      (pdfjs as { GlobalWorkerOptions: { workerSrc: string } }).GlobalWorkerOptions.workerSrc = blobUrl;
+    } catch {
+      /* worker 配置失败时 pdfjs 会走主线程回退 */
+    }
+  }
+  pdfjsModule = pdfjs;
+  return pdfjsModule;
+}
+
 /**
  * PDF 文本提取：只做 text PDF（不做视觉还原 / 多栏 / annotation）。
  * 提取结果接近空 → 判断为扫描件（possiblyScanned）。
@@ -34,13 +57,14 @@ export async function extractPdf(file: Blob): Promise<ExtractedDocument & { poss
     // 扫描件判断：多页文档几乎无文本才标记（单页短文本属于正常）
     const possiblyScanned = doc.numPages >= 3 && combined.replace(/\s+/g, "").length < 40;
     if (possiblyScanned) {
-      return { text: "", pages: [], truncated: false, possiblyScanned: true };
+      return { text: "", pages: [], truncated: false, pageCount: doc.numPages, possiblyScanned: true };
     }
     const limited = truncateWithPages(pages, MAX_EXTRACTED_CHARS);
     return {
       text: limited.text,
       pages: limited.pages,
       truncated: limited.truncated,
+      pageCount: doc.numPages,
       possiblyScanned: false,
     };
   } finally {
@@ -49,24 +73,4 @@ export async function extractPdf(file: Blob): Promise<ExtractedDocument & { poss
   }
 }
 
-let pdfjsModule: typeof import("pdfjs-dist") | null = null;
-
-async function loadPdfJs(): Promise<typeof import("pdfjs-dist")> {
-  if (pdfjsModule) return pdfjsModule;
-  // 统一使用 legacy build：Node 无需 DOM；浏览器把 worker 资源以 blob URL 提供，
-  // 避免 dev 环境下 worker chunk 加载不稳定导致挂起。
-  const mod = await import("pdfjs-dist/legacy/build/pdf.mjs");
-  const pdfjs = mod as unknown as typeof import("pdfjs-dist");
-  if (typeof window !== "undefined" && !(pdfjs as { GlobalWorkerOptions?: { workerSrc?: string } }).GlobalWorkerOptions?.workerSrc) {
-    try {
-      const worker = await import("pdfjs-dist/build/pdf.worker.mjs?url");
-      const res = await fetch(worker.default as string);
-      const blobUrl = URL.createObjectURL(await res.blob());
-      (pdfjs as { GlobalWorkerOptions: { workerSrc: string } }).GlobalWorkerOptions.workerSrc = blobUrl;
-    } catch {
-      /* worker 配置失败时 pdfjs 会走主线程回退 */
-    }
-  }
-  pdfjsModule = pdfjs;
-  return pdfjsModule;
-}
+let pdfjsModule: PdfJsModule | null = null;

@@ -109,6 +109,7 @@ export function KiroChatSurface({ variant }: { variant: "workspace" | "sidecar" 
         streaming={chat.streaming}
         onStop={chat.stop}
         configured={chat.configured}
+        preparingVision={chat.preparingVision}
         modelOptions={modelOptions}
         activeModelName={activeModelName}
         selectedModelId={model}

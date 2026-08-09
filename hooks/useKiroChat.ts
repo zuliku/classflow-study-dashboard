@@ -34,6 +34,9 @@ import { DEFAULT_CONTEXT_BUDGET } from "@/lib/ai/contextBudget/planner";
 import { KiroTurnContextSnapshot } from "@/lib/ai/contextBudget/types";
 import { KiroSourceMeta } from "@/lib/ai/citations/types";
 import { buildTurnSourceRegistry, materialSourceId } from "@/lib/ai/citations/sources";
+import { renderPdfPages, selectScannedPdfPages, allocateVisionPages, extractExplicitPages } from "@/lib/ai/attachments/pdfVision";
+import { MAX_SCANNED_PDF_PAGES_PER_TURN } from "@/lib/ai/attachments/limits";
+import { getFileBlob } from "@/lib/fileStorage";
 
 /** 每回合工具调用上限：Read ≤ 12，Write ≤ 8 */
 export const MAX_READ_TOOL_CALLS_PER_TURN_UI = 12;
@@ -323,6 +326,10 @@ export function useKiroChat({
   const [sources, setSources] = useState<KiroSourceMeta[]>([]);
   const turnSourcesRef = useRef<KiroSourceMeta[]>([]);
 
+  // ---- Scanned PDF Vision（Task 12）：发送时渲染的页面图 manifest（只存 metadata，不含 base64）----
+  const [preparingVision, setPreparingVision] = useState(false);
+  const visionPagesRef = useRef<{ sourceId: string; page: number; fileName: string; attachmentId: string }[]>([]);
+
   /** read_material 成功后把资料注册进本 Turn Source Registry（sourceId = material-<id>，绝不使用 storageKey） */
   const registerMaterialSource = useCallback(
     (data: { materialId?: string; title?: string; pages?: { page: number }[] }, input: unknown) => {
@@ -350,8 +357,21 @@ export function useKiroChat({
   const buildTurnSnapshot = (): Record<string, unknown> => {
     const contexts = buildDocumentContexts(attachments);
     const budgeted = budgetAttachments(contexts, DEFAULT_CONTEXT_BUDGET.attachmentBudgetTokens).attachments;
-    // Source Registry：availablePages 只取预算后实际发送的页码（模型不能引用不可见页面）
-    const registry = buildTurnSourceRegistry(budgeted).sources;
+    // 文本文档 Source Registry：availablePages 只取预算后实际发送的页码（模型不能引用不可见页面）
+    const textRegistry = buildTurnSourceRegistry(budgeted).sources;
+    // 扫描 PDF Source：sourceId 接在文本文档之后；availablePages 只含实际渲染发送的页面
+    const scannedDocs = attachments.filter(isScannedAttachment);
+    const scannedRegistry: KiroSourceMeta[] = scannedDocs.map((a, i) => {
+      const pages = visionPagesRef.current.filter((vp) => vp.attachmentId === a.id).map((vp) => vp.page);
+      return {
+        sourceId: `doc-${textRegistry.length + i + 1}`,
+        name: a.name,
+        source: a.source === "material" ? "course-material" : "chat",
+        courseName: a.source === "material" ? (a as Extract<KiroAttachment, { source: "material" }>).courseName : undefined,
+        availablePages: pages.length > 0 ? pages : undefined,
+      };
+    });
+    const registry = [...textRegistry, ...scannedRegistry];
     const byName = new Map(registry.map((s) => [s.name, s.sourceId]));
     const attachmentsContext = budgeted.map((a) => ({
       name: a.name,
@@ -381,6 +401,8 @@ export function useKiroChat({
         )
       ),
       attachmentsContext,
+      // 扫描 PDF 页面图 manifest（Task 12）：只含 sourceId/page/文件名映射，不含 base64
+      visionPages: visionPagesRef.current,
       conversationSummary: conversationSummary
         ? { text: conversationSummary.text, throughMessageId: conversationSummary.throughMessageId }
         : undefined,
@@ -784,13 +806,84 @@ export function useKiroChat({
   );
 
   const send = useCallback(
-    (text: string) => {
+    async (text: string): Promise<boolean> => {
       const v = text.trim();
-      if (!v || !enabled) return;
+      if (!v || !enabled) return false;
       readCounterRef.current = 0;
       materialReadCounterRef.current = 0;
       writeCounterRef.current = 0;
       limitReachedRef.current = false;
+      visionPagesRef.current = [];
+
+      // ---- Scanned PDF Vision（Task 12）：发送时渲染所选页面为 JPEG，再与用户图片合并发送 ----
+      const scanned = attachments.filter(isScannedAttachment);
+      const pageFiles: File[] = [];
+      if (scanned.length > 0) {
+        setPreparingVision(true);
+        try {
+          const textCount = buildDocumentContexts(attachments).length;
+          const explicit = extractExplicitPages(v).flatMap((r) => {
+            const arr: number[] = [];
+            for (let p = r.start; p <= r.end; p++) arr.push(p);
+            return arr;
+          });
+          const allocations =
+            scanned.length > 1
+              ? allocateVisionPages(
+                  scanned.map((a) => ({
+                    pageCount:
+                      a.source === "local"
+                        ? (a.extracted?.pageCount ?? 1)
+                        : (a.pdfVision?.pageCount ?? 1),
+                    explicitPages: explicit,
+                  })),
+                  MAX_SCANNED_PDF_PAGES_PER_TURN
+                )
+              : scanned.map((a) =>
+                  selectScannedPdfPages({
+                    userText: v,
+                    pageCount:
+                      a.source === "local"
+                        ? (a.extracted?.pageCount ?? 1)
+                        : (a.pdfVision?.pageCount ?? 1),
+                  })
+                );
+
+          for (let i = 0; i < scanned.length; i++) {
+            const a = scanned[i];
+            const sourceId = `doc-${textCount + i + 1}`;
+            const pages = allocations[i].pages;
+            if (pages.length === 0) continue;
+            let blob: Blob | null = null;
+            if (a.source === "local") {
+              blob = a.file;
+            } else {
+              const material = useAppStore
+                .getState()
+                .courses.find((c) => c.id === a.courseId)
+                ?.materials.find((m) => m.id === a.materialId);
+              if (material?.storageKey) blob = await getFileBlob(material.storageKey);
+            }
+            if (!blob) continue;
+            const rendered = await renderPdfPages(blob, pages, sourceId);
+            for (const r of rendered) {
+              pageFiles.push(r.file);
+              visionPagesRef.current.push({
+                sourceId,
+                page: r.page,
+                fileName: r.file.name,
+                attachmentId: a.id,
+              });
+            }
+          }
+          if (scanned.length > 0 && visionPagesRef.current.length === 0) {
+            pushToast({ message: "扫描 PDF 页面读取失败，请重新添加文件。", type: "error" });
+            return false; // Prompt 保留
+          }
+        } finally {
+          setPreparingVision(false);
+        }
+      }
 
       // ---- Turn Context Snapshot：本 Turn 内 Prompt Context 冻结（下一 Turn 才刷新） ----
       turnSnapshotRef.current = buildSnapshotRef.current();
@@ -820,23 +913,27 @@ export function useKiroChat({
         );
       if (snapshot.length > 0) snapshotQueueRef.current.push(snapshot);
 
-      // 图片：仅 vision 模型以原生 image part 发送（非 vision 模型在 Composer 已被阻止）
+      // 图片：扫描 PDF 页面图（固定在前） + 用户图片 → 一个 FileList（deterministic 顺序）
       const imageFiles = attachments
         .filter((a): a is Extract<KiroAttachment, { source: "local" }> => a.source === "local" && a.kind === "image" && a.status === "ready")
         .map((a) => a.file);
       let files: FileList | undefined;
-      if (visionEnabled && imageFiles.length > 0 && typeof DataTransfer !== "undefined") {
-        const dt = new DataTransfer();
-        imageFiles.forEach((f) => dt.items.add(f));
-        files = dt.files;
+      if ((visionEnabled && imageFiles.length > 0) || pageFiles.length > 0) {
+        if (typeof DataTransfer !== "undefined") {
+          const dt = new DataTransfer();
+          pageFiles.forEach((f) => dt.items.add(f));
+          imageFiles.forEach((f) => dt.items.add(f));
+          files = dt.files;
+        }
       }
 
-      void chat.sendMessage(
+      chat.sendMessage(
         { text: v, files },
         { body: requestBody() }
       );
+      return true;
     },
-    [chat, enabled, attachments, visionEnabled]
+    [chat, enabled, attachments, visionEnabled, pushToast]
   );
 
   const retry = useCallback(() => {
@@ -866,6 +963,7 @@ export function useKiroChat({
     restoredSourcesRef.current.clear();
     turnSourcesRef.current = [];
     setSources([]);
+    visionPagesRef.current = [];
   }, [chat]);
 
   /**
@@ -961,6 +1059,8 @@ export function useKiroChat({
     activity,
     /** 本 Turn 的文档来源（Citation 渲染用；不含正文） */
     sources,
+    /** 扫描 PDF 页面渲染中（Send 禁用 + 「正在准备扫描 PDF…」） */
+    preparingVision,
     send,
     retry,
     stop: chat.stop,
@@ -991,6 +1091,12 @@ function buildDocumentContexts(attachments: KiroAttachment[]): KiroDocumentConte
   }
   // 分配本 Turn 稳定 sourceId（doc-1…；顺序与发送顺序一致）
   return contexts.map((c, i) => ({ ...c, sourceId: `doc-${i + 1}` }));
+}
+
+/** 扫描型 PDF（Task 12）：本地 extracted.possiblyScanned / 课程资料 pdfVision.scanned */
+function isScannedAttachment(a: KiroAttachment): boolean {
+  if (a.source === "local") return a.kind === "pdf" && a.extracted?.possiblyScanned === true;
+  return a.pdfVision?.scanned === true;
 }
 
 /** 构建 Write Executor 的受限 API（白名单，禁止 setState） */

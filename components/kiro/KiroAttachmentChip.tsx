@@ -51,6 +51,7 @@ export function KiroAttachmentChip({
   const isImage = attachment.kind === "image";
   const isMaterial = attachment.source === "material";
   const failed = attachment.status === "error" || attachment.status === "unsupported";
+  const scanned = attachment.visionRequired === true;
   const Icon = isImage ? ImageIcon : FileText;
 
   const meta =
@@ -58,9 +59,11 @@ export function KiroAttachmentChip({
       ? "正在读取…"
       : failed
         ? (attachment.error ?? "读取失败")
-        : isMaterial
-          ? `${attachment.courseName ? `${attachment.courseName} · ` : ""}课程资料`
-          : [typeLabel(attachment), sizeLabel(attachment.size)].filter(Boolean).join(" · ");
+        : scanned
+          ? `PDF · 扫描件 · ${attachment.pageCount ?? "?"} 页`
+          : isMaterial
+            ? `${attachment.courseName ? `${attachment.courseName} · ` : ""}课程资料`
+            : [typeLabel(attachment), sizeLabel(attachment.size)].filter(Boolean).join(" · ");
 
   // Portal 菜单位置：基于触发按钮 rect，向上展开（Chip 在底部 Composer 内）
   const menuRect = (() => {

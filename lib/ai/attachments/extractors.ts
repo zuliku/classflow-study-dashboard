@@ -4,6 +4,10 @@ export interface ExtractedDocument {
   text: string;
   pages?: { page: number; text: string }[];
   truncated: boolean;
+  /** 文档总页数（PDF；扫描件也有，供 Vision fallback 页选择） */
+  pageCount?: number;
+  /** 扫描型 PDF：无有效文本层（需 Vision fallback），非损坏文件 */
+  possiblyScanned?: boolean;
 }
 
 /** 截断到上限并标记（不静默） */

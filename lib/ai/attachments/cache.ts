@@ -13,6 +13,10 @@ const DB_VERSION = 1;
 export interface ExtractCacheEntry {
   text: string;
   pages?: { page: number; text: string }[];
+  /** PDF 总页数（Task 12：扫描件 Vision fallback 需要） */
+  pageCount?: number;
+  /** 扫描型 PDF 标记（必须缓存，避免旧 cache 把扫描件读成空文本却丢失标记） */
+  possiblyScanned?: boolean;
   extractedAt: string;
   extractorVersion: number;
 }

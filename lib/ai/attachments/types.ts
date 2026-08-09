@@ -22,6 +22,8 @@ export interface KiroLocalAttachment {
     text: string;
     pages?: { page: number; text: string }[];
     truncated: boolean;
+    pageCount?: number;
+    possiblyScanned?: boolean;
   };
 }
 
@@ -35,7 +37,10 @@ export interface KiroMaterialAttachment {
   name: string;
   mimeType?: string;
   kind: KiroAttachmentKind;
-  status: "ready";
+  status: KiroAttachmentStatus;
+  error?: string;
+  /** PDF inspection 结果（Task 12）：扫描件标记 + 总页数（不保存正文） */
+  pdfVision?: { scanned: true; pageCount: number };
 }
 
 export type KiroAttachment = KiroLocalAttachment | KiroMaterialAttachment;
@@ -72,4 +77,8 @@ export interface KiroAttachmentView {
   materialId?: string;
   /** local 临时文件：历史恢复后未保留（只显示文件名/类型，不可再读） */
   tempNotRetained?: boolean;
+  /** 需要 Vision 模型（Task 12：扫描 PDF） */
+  visionRequired?: boolean;
+  /** PDF 总页数（扫描件展示用） */
+  pageCount?: number;
 }
