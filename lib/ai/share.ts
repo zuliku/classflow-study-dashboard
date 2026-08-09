@@ -8,6 +8,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { KiroMarkdown } from "@/components/kiro/KiroMarkdown";
 import { actionToCardProps, KiroActionCardProps } from "@/components/kiro/KiroActionCard";
 import { KiroChatMessageView } from "@/hooks/useKiroChat";
+import { citationsToReadableText } from "@/lib/ai/citations/parser";
 
 /** Action Card 摘要（可见事实，不含 tool arguments / 内部数据） */
 export function actionSummaryText(props: Omit<KiroActionCardProps, "onUndo">): string {
@@ -39,7 +40,7 @@ export function buildTranscriptMarkdown(messages: KiroChatMessageView[]): string
       const atts = attachmentNames(m);
       if (atts.length > 0) lines.push(atts.map((a) => `- 附件：${a}`).join("\n"));
     } else {
-      lines.push(`## Kiro\n\n${m.content}`);
+      lines.push(`## Kiro\n\n${citationsToReadableText(m.content, m.sources)}`);
       const summaries = actionSummariesOf(m);
       if (summaries.length > 0) lines.push(summaries.map((s) => `- 操作结果：${s}`).join("\n"));
     }
@@ -68,7 +69,7 @@ export function buildTranscriptText(messages: KiroChatMessageView[]): string {
       const atts = attachmentNames(m);
       if (atts.length > 0) lines.push(`附件：${atts.join("、")}`);
     } else {
-      lines.push(`Kiro：${markdownToPlainText(m.content)}`);
+      lines.push(`Kiro：${markdownToPlainText(citationsToReadableText(m.content, m.sources))}`);
       const summaries = actionSummariesOf(m);
       if (summaries.length > 0) lines.push(`操作结果：${summaries.join("；")}`);
     }

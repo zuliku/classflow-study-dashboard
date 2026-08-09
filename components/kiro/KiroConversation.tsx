@@ -4,6 +4,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { KiroMessage, KiroUserMessage } from "@/components/kiro/KiroMessage";
 import { KiroActivityTrace } from "@/components/kiro/KiroActivityTrace";
 import { KiroChatMessageView, KiroActivity } from "@/hooks/useKiroChat";
+import { KiroSourceMeta } from "@/lib/ai/citations/types";
 import { AIError, AI_ERROR_MESSAGES } from "@/lib/ai/errors";
 import { KiroActionCard, actionToCardProps, KiroActionCardVariant } from "@/components/kiro/KiroActionCard";
 import { actionSummaryText } from "@/lib/ai/share";
@@ -24,6 +25,7 @@ export function KiroConversation({
   onUndo,
   compact,
   turnInFlight,
+  sources,
 }: {
   messages: KiroChatMessageView[];
   activity: KiroActivity;
@@ -35,6 +37,8 @@ export function KiroConversation({
   compact?: boolean;
   /** 整个 Agent Turn 是否仍在进行（chat.status === submitted/streaming）——决定最后一条消息的操作栏时机 */
   turnInFlight: boolean;
+  /** 当前 Turn 的文档来源（Citation 渲染；live 消息用；不含正文） */
+  sources?: KiroSourceMeta[];
 }) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const stickToBottomRef = useRef(true);
@@ -132,6 +136,7 @@ export function KiroConversation({
               streaming={m.streaming}
               canRegenerate={m.canRegenerate}
               actionsReady={idx === lastAssistantIndex ? !turnInFlight : true}
+              sources={m.sources ?? (idx === lastAssistantIndex ? sources : undefined)}
               actionSummaries={[
                 ...(m.actions ?? []).map((a) => actionSummaryText(actionToCardProps(a.action))),
                 ...(m.historyActions ?? []).map((a) => actionSummaryText(a as Parameters<typeof actionSummaryText>[0])),

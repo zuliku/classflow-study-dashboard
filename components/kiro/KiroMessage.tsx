@@ -8,6 +8,8 @@ import { KiroMenuPanel, KiroMenuItem, KiroMenuDivider, useKiroPopover } from "@/
 import { useKiroSession } from "@/components/kiro/KiroSessionProvider";
 import { useToastStore } from "@/store/useToastStore";
 import { KiroAttachmentView } from "@/lib/ai/attachments/types";
+import { KiroSourceMeta } from "@/lib/ai/citations/types";
+import { citationsToReadableText } from "@/lib/ai/citations/parser";
 import { cn } from "@/lib/utils";
 import {
   markdownToPlainText,
@@ -29,6 +31,7 @@ export function KiroMessage({
   canRegenerate,
   actionSummaries,
   actionsReady,
+  sources,
 }: {
   content?: string;
   /** 流式进行中：末尾显示克制状态光标 */
@@ -41,25 +44,27 @@ export function KiroMessage({
   actionSummaries?: string[];
   /** 整个 Assistant Turn 是否已完成（chat.status 回到 ready）；最后一条消息由它决定操作栏时机 */
   actionsReady?: boolean;
+  /** 本消息可用的文档来源（Citation 渲染与导出用；不含正文） */
+  sources?: KiroSourceMeta[];
 }) {
   const session = useKiroSession();
   const pushToast = useToastStore((s) => s.pushToast);
   const more = useKiroPopover();
 
   const copyMarkdownSource = async () => {
-    const ok = await copyTextToClipboard(content ?? "");
+    const ok = await copyTextToClipboard(citationsToReadableText(content ?? "", sources));
     if (ok) pushToast({ message: "已复制" });
   };
 
   const copyPlain = async () => {
-    const ok = await copyTextToClipboard(markdownToPlainText(content ?? ""));
+    const ok = await copyTextToClipboard(markdownToPlainText(citationsToReadableText(content ?? "", sources)));
     if (ok) pushToast({ message: "已复制" });
     more.close();
   };
 
   const copySummary = async () => {
     const texts: string[] = [];
-    if (content) texts.push(markdownToPlainText(content));
+    if (content) texts.push(markdownToPlainText(citationsToReadableText(content, sources)));
     if (actionSummaries && actionSummaries.length > 0) texts.push(`操作结果：${actionSummaries.join("；")}`);
     const ok = await copyTextToClipboard(texts.join("\n"));
     if (ok) pushToast({ message: "已复制" });
@@ -74,7 +79,7 @@ export function KiroMessage({
       <div className="min-w-0 flex-1 space-y-2 pt-0.5">
         {content ? (
           <>
-            <KiroMarkdown content={content} />
+            <KiroMarkdown content={content} sources={sources} />
             {streaming && (
               <span
                 aria-hidden="true"

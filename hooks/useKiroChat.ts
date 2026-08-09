@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useRef } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { DefaultChatTransport, lastAssistantMessageIsCompleteWithToolCalls } from "ai";
 import { useChat, UIMessage } from "@ai-sdk/react";
 import { useAppStore } from "@/store/useAppStore";
@@ -28,10 +28,12 @@ import { useKiroMemory } from "@/hooks/useKiroMemory";
 import { hasExplicitMemoryIntent } from "@/lib/ai/memory/manager";
 import { KIRO_MEMORY_TOOL_NAMES, KIRO_MEMORY_TOOL_SCHEMAS } from "@/lib/ai/memory/tools";
 import { MAX_MEMORIES } from "@/lib/ai/memory/types";
-import { PersistedActionView, PersistedAttachmentView, KiroConversationRecord, KiroConversationSummary } from "@/lib/ai/history/types";
+import { PersistedActionView, PersistedAttachmentView, KiroConversationRecord, KiroConversationSummary, PersistedSourceMeta } from "@/lib/ai/history/types";
 import { budgetAttachments } from "@/lib/ai/contextBudget/attachmentBudget";
 import { DEFAULT_CONTEXT_BUDGET } from "@/lib/ai/contextBudget/planner";
 import { KiroTurnContextSnapshot } from "@/lib/ai/contextBudget/types";
+import { KiroSourceMeta } from "@/lib/ai/citations/types";
+import { buildTurnSourceRegistry, materialSourceId } from "@/lib/ai/citations/sources";
 
 /** 每回合工具调用上限：Read ≤ 12，Write ≤ 8 */
 export const MAX_READ_TOOL_CALLS_PER_TURN_UI = 12;
@@ -47,6 +49,8 @@ export interface KiroChatMessageView {
   actions?: KiroActionResultView[];
   /** 历史恢复的 Action Card 事实 UI（展示用，canUndo 恒 false） */
   historyActions?: PersistedActionView[];
+  /** 本 Turn 文档来源（Citation 校验与展示；不含正文） */
+  sources?: KiroSourceMeta[];
   /** 该 User Turn 绑定的附件（chips 展示；File 对象不进入 Chat state） */
   attachments?: KiroAttachmentView[];
   /** 是否可以「重新生成」：仅 live 且该轮无 Write Tool Call 的最后一条 */
@@ -315,19 +319,55 @@ export function useKiroChat({
   // 下一 Turn 重新快照（数据 freshness 与 turn consistency 同时成立）。
   const turnSnapshotRef = useRef<Record<string, unknown> | null>(null);
 
+  // ---- Turn Source Registry（Task 11）：本 Turn 文档来源（Citation 校验/展示；不含正文）----
+  const [sources, setSources] = useState<KiroSourceMeta[]>([]);
+  const turnSourcesRef = useRef<KiroSourceMeta[]>([]);
+
+  /** read_material 成功后把资料注册进本 Turn Source Registry（sourceId = material-<id>，绝不使用 storageKey） */
+  const registerMaterialSource = useCallback(
+    (data: { materialId?: string; title?: string; pages?: { page: number }[] }, input: unknown) => {
+      const parsed = input as { courseId?: string } | null;
+      const courseId = parsed?.courseId ?? "";
+      const materialId = data.materialId ?? "";
+      if (!materialId) return;
+      const course = useAppStore.getState().courses.find((c) => c.id === courseId);
+      const meta: KiroSourceMeta = {
+        sourceId: materialSourceId(materialId),
+        name: data.title ?? "课程资料",
+        source: "course-material",
+        courseName: course?.name,
+        availablePages:
+          Array.isArray(data.pages) && data.pages.length > 0 ? data.pages.map((p) => p.page) : undefined,
+      };
+      if (!turnSourcesRef.current.some((s) => s.sourceId === meta.sourceId)) {
+        turnSourcesRef.current = [...turnSourcesRef.current, meta];
+        setSources(turnSourcesRef.current);
+      }
+    },
+    []
+  );
+
   const buildTurnSnapshot = (): Record<string, unknown> => {
-    const attachmentsContext = budgetAttachments(
-      buildDocumentContexts(attachments),
-      DEFAULT_CONTEXT_BUDGET.attachmentBudgetTokens
-    ).attachments.map((a) => ({
+    const contexts = buildDocumentContexts(attachments);
+    const budgeted = budgetAttachments(contexts, DEFAULT_CONTEXT_BUDGET.attachmentBudgetTokens).attachments;
+    // Source Registry：availablePages 只取预算后实际发送的页码（模型不能引用不可见页面）
+    const registry = buildTurnSourceRegistry(budgeted).sources;
+    const byName = new Map(registry.map((s) => [s.name, s.sourceId]));
+    const attachmentsContext = budgeted.map((a) => ({
       name: a.name,
       type: a.type,
       text: a.text,
+      // Page metadata 必须贯通到请求体（Citation 的页码约束来源）
+      pages: a.pages,
+      sourceId: byName.get(a.name) ?? "",
       source: a.source === "course-material" ? ("course-material" as const) : ("chat" as const),
       truncated: a.truncated ?? false,
       budgetTruncated: a.budgetTruncated ?? false,
       courseName: a.courseName,
     }));
+    // 冻结本 Turn 的 Source Registry（read_material 之后还会追加 material 来源）
+    turnSourcesRef.current = registry;
+    setSources(registry);
     return {
       provider,
       model,
@@ -367,9 +407,10 @@ export function useKiroChat({
   const limitReachedRef = useRef(false);
   const undoRegistryRef = useRef(new Map<string, KiroUndoEntry>());
 
-  // 历史恢复的展示数据（Action Cards / 附件 chips）——不是可执行 Tool state
+  // 历史恢复的展示数据（Action Cards / 附件 chips / Citation 来源）——不是可执行 Tool state
   const restoredActionsRef = useRef(new Map<string, PersistedActionView[]>());
   const restoredAttachmentsRef = useRef(new Map<string, PersistedAttachmentView[]>());
+  const restoredSourcesRef = useRef(new Map<string, KiroSourceMeta[]>());
 
   const consumeUndo = useCallback((toolCallId: string) => {
     const entry = undoRegistryRef.current.get(toolCallId);
@@ -418,6 +459,12 @@ export function useKiroChat({
         }
         // Browser 异步执行（IndexedDB Blob → 提取）；完成后回传 Tool Output
         void executeReadMaterial(input, useAppStore.getState()).then((result) => {
+          if (result.ok) {
+            registerMaterialSource(
+              result.data as { materialId?: string; title?: string; pages?: { page: number }[] },
+              input
+            );
+          }
           chat.addToolOutput({
             tool: toolName as never,
             toolCallId,
@@ -816,6 +863,9 @@ export function useKiroChat({
     snapshotQueueRef.current = [];
     restoredActionsRef.current.clear();
     restoredAttachmentsRef.current.clear();
+    restoredSourcesRef.current.clear();
+    turnSourcesRef.current = [];
+    setSources([]);
   }, [chat]);
 
   /**
@@ -827,9 +877,11 @@ export function useKiroChat({
     (record: KiroConversationRecord) => {
       const actionsMap = new Map<string, PersistedActionView[]>();
       const attachmentsMap = new Map<string, PersistedAttachmentView[]>();
+      const sourcesMap = new Map<string, KiroSourceMeta[]>();
       const restored: UIMessage[] = record.messages.map((pm) => {
         if (pm.attachments && pm.attachments.length > 0) attachmentsMap.set(pm.id, pm.attachments);
         if (pm.actions && pm.actions.length > 0) actionsMap.set(pm.id, pm.actions);
+        if (pm.sources && pm.sources.length > 0) sourcesMap.set(pm.id, pm.sources);
         return {
           id: pm.id,
           role: pm.role,
@@ -839,12 +891,15 @@ export function useKiroChat({
       });
       restoredActionsRef.current = actionsMap;
       restoredAttachmentsRef.current = attachmentsMap;
+      restoredSourcesRef.current = sourcesMap;
       readCounterRef.current = 0;
       materialReadCounterRef.current = 0;
       writeCounterRef.current = 0;
       limitReachedRef.current = false;
       undoRegistryRef.current.clear();
       snapshotQueueRef.current = [];
+      turnSourcesRef.current = [];
+      setSources([]);
       chat.setMessages(restored);
     },
     [chat]
@@ -891,6 +946,9 @@ export function useKiroChat({
       // 历史恢复的 Action Cards（展示事实，canUndo 恒 false）
       const restoredActs = restoredActionsRef.current.get(m.id);
       if (restoredActs && restoredActs.length > 0) view.historyActions = restoredActs;
+      // 历史恢复的 Citation 来源（展示 metadata；正文不落库）
+      const restoredSrcs = restoredSourcesRef.current.get(m.id);
+      if (restoredSrcs && restoredSrcs.length > 0) view.sources = restoredSrcs;
       return view;
     });
   }, [chat.messages]);
@@ -901,6 +959,8 @@ export function useKiroChat({
     streaming,
     error: normalizedError,
     activity,
+    /** 本 Turn 的文档来源（Citation 渲染用；不含正文） */
+    sources,
     send,
     retry,
     stop: chat.stop,
@@ -912,7 +972,7 @@ export function useKiroChat({
   };
 }
 
-/** 本地文档附件 → 传给模型的文档 Context（含来源标记；截断明确标注） */
+/** 本地文档附件 → 传给模型的文档 Context（含 sourceId；截断明确标注） */
 function buildDocumentContexts(attachments: KiroAttachment[]): KiroDocumentContext[] {
   const contexts: KiroDocumentContext[] = [];
   for (const a of attachments) {
@@ -929,7 +989,8 @@ function buildDocumentContexts(attachments: KiroAttachment[]): KiroDocumentConte
       });
     }
   }
-  return contexts;
+  // 分配本 Turn 稳定 sourceId（doc-1…；顺序与发送顺序一致）
+  return contexts.map((c, i) => ({ ...c, sourceId: `doc-${i + 1}` }));
 }
 
 /** 构建 Write Executor 的受限 API（白名单，禁止 setState） */

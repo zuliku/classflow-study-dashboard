@@ -51,6 +51,8 @@ export interface KiroDocumentContext {
   pages?: { page: number; text: string }[];
   /** 已有资料：来源课程名 */
   courseName?: string;
+  /** 本 Turn 稳定来源 id（doc-1…；Citation 用，绝不暴露 storageKey） */
+  sourceId?: string;
 }
 
 /** 附件视图模型（用户消息下方 chips） */

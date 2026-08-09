@@ -130,3 +130,53 @@ describe("budgetAttachments", () => {
     expect(a.type).toBe("pdf");
   });
 });
+
+describe("budgetAttachments page-aware（Task 11）", () => {
+  const pdf = (pages: { page: number; text: string }[]) => ({
+    name: "讲义.pdf",
+    type: "pdf",
+    text: pages.map((p) => p.text).join("\n\n"),
+    pages,
+  });
+
+  it("A. 预算只够前两页：pages=[1,2]、budgetTruncated=true、text 由保留页重建", () => {
+    const r = budgetAttachments(
+      [pdf([{ page: 1, text: "x".repeat(1000) }, { page: 2, text: "y".repeat(1000) }, { page: 3, text: "z".repeat(1000) }])],
+      500
+    );
+    expect(r.attachments.length).toBe(1);
+    const a = r.attachments[0];
+    expect(a.pages?.map((p) => p.page)).toEqual([1, 2]);
+    expect(a.budgetTruncated).toBe(true);
+    // text 与 pages 一致（由保留页重建，无错位）
+    expect(a.text).toBe(a.pages!.map((p) => p.text).join("\n\n"));
+    expect(a.text).not.toContain("z".repeat(100));
+  });
+
+  it("最后一页只留部分预算：部分页文本 + budgetTruncated（不整页丢弃）", () => {
+    const r = budgetAttachments(
+      [pdf([{ page: 1, text: "x".repeat(500) }, { page: 2, text: "y".repeat(1000) }])],
+      300
+    );
+    const a = r.attachments[0];
+    expect(a.pages?.map((p) => p.page)).toEqual([1, 2]);
+    expect(a.pages![1].text.length).toBeGreaterThan(0);
+    expect(a.pages![1].text.length).toBeLessThan(1000);
+    expect(a.budgetTruncated).toBe(true);
+    expect(a.text).toBe(a.pages!.map((p) => p.text).join("\n\n"));
+  });
+
+  it("预算充足：pages 原样保留，text 不变，不标记截断", () => {
+    const pages = [{ page: 1, text: "a" }, { page: 2, text: "b" }];
+    const r = budgetAttachments([pdf(pages)], 1000);
+    expect(r.truncated).toBe(0);
+    expect(r.attachments[0].pages?.map((p) => p.page)).toEqual([1, 2]);
+    expect(r.attachments[0].budgetTruncated).toBeFalsy();
+  });
+
+  it("非 PDF（无 pages）：继续字符 slice（原有逻辑不变）", () => {
+    const r = budgetAttachments([{ name: "课程要求.docx", type: "docx", text: "y".repeat(5000) }], 1500);
+    expect(r.attachments[0].text.length).toBeLessThan(5000);
+    expect(r.attachments[0].budgetTruncated).toBe(true);
+  });
+});

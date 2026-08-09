@@ -87,7 +87,17 @@ export async function POST(req: NextRequest) {
   const baseContext = (typeof b.baseContext === "object" && b.baseContext !== null ? b.baseContext : null) as Record<string, unknown> | null;
   const contextRefs = Array.isArray(b.contextRefs) ? (b.contextRefs as Record<string, unknown>[]) : [];
   const attachmentsContext = Array.isArray(b.attachmentsContext)
-    ? (b.attachmentsContext as { name?: string; text?: string; type?: string; source?: string; truncated?: boolean; budgetTruncated?: boolean; courseName?: string }[])
+    ? (b.attachmentsContext as {
+        sourceId?: string;
+        name?: string;
+        text?: string;
+        type?: string;
+        source?: string;
+        truncated?: boolean;
+        budgetTruncated?: boolean;
+        courseName?: string;
+        pages?: { page: number; text: string }[];
+      }[])
     : [];
   const conversationSummary =
     typeof b.conversationSummary === "object" && b.conversationSummary !== null
@@ -104,24 +114,42 @@ export async function POST(req: NextRequest) {
           .join("\n")}\n需要完整内容时调用 search_memories。`
       : "";
 
-  const attachmentSection = (contexts: { name?: string; text?: string; type?: string; source?: string; truncated?: boolean; budgetTruncated?: boolean; courseName?: string }[]) =>
-    contexts.length > 0
-      ? `\n\n# 用户提供的文件内容\n${contexts
-          .map((f, i) => {
-            const header = [
-              `文件 ${i + 1}：${f.name ?? "未命名"}`,
-              f.source === "course-material" ? `来源：课程资料` : "来源：用户上传",
-              f.courseName ? `课程：${f.courseName}` : "",
-              `类型：${f.type ?? ""}`,
-              f.truncated ? "（内容已截断，未完整读取）" : "",
-              f.budgetTruncated ? "（内容因上下文预算进一步截断）" : "",
-            ]
-              .filter(Boolean)
-              .join(" · ");
-            return `### ${header}\n${f.text ?? ""}`;
-          })
-          .join("\n\n")}`
-      : "";
+  /**
+   * 附件正文结构化渲染（Task 11）：
+   * PDF → 分页块 [PAGE N]（页码与正文一一对应，模型据此输出 [[source:<id>:p<N>]]）；
+   * 非分页文档 → [DOCUMENT]。sourceId 是本 Turn 稳定 id（doc-1…），绝不暴露 storageKey。
+   */
+  const attachmentSection = (contexts: {
+    sourceId?: string;
+    name?: string;
+    text?: string;
+    type?: string;
+    source?: string;
+    truncated?: boolean;
+    budgetTruncated?: boolean;
+    courseName?: string;
+    pages?: { page: number; text: string }[];
+  }[]) => {
+    if (contexts.length === 0) return "";
+    const blocks = contexts.map((f) => {
+      const header = [
+        `文件：${f.name ?? "未命名"}`,
+        `类型：${f.type ?? ""}`,
+        f.source === "course-material" ? `来源：课程资料${f.courseName ? `（${f.courseName}）` : ""}` : "来源：用户上传",
+        f.truncated ? "（内容已截断，未完整读取）" : "",
+        f.budgetTruncated ? "（内容因上下文预算截断）" : "",
+      ]
+        .filter(Boolean)
+        .join(" · ");
+      const sourceId = f.sourceId ?? "";
+      const body =
+        Array.isArray(f.pages) && f.pages.length > 0
+          ? f.pages.map((p) => `[PAGE ${p.page}]\n${p.text}`).join("\n\n")
+          : `[DOCUMENT]\n${f.text ?? ""}`;
+      return `### SOURCE ${sourceId}\n${header}\n\n${body}`;
+    });
+    return `\n\n# 用户提供的文件内容（引用时使用 SOURCE 标记）\n${blocks.join("\n\n")}`;
+  };
 
   // 兼容性归一：旧 {role, content} 形状 → UIMessage parts 形状（客户端始终发送 parts 版）
   const normalizedMessages = (parsed.messages as { id?: string; role: string; content?: string; parts?: unknown[] }[]).map(

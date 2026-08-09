@@ -40,12 +40,23 @@ export interface PersistedActionView {
   details?: { label: string }[];
 }
 
+/** Citation 来源最小元数据（Task 11）：只存展示所需；正文 / 页码文本永不落库 */
+export interface PersistedSourceMeta {
+  sourceId: string;
+  name: string;
+  source: "chat" | "course-material";
+  courseName?: string;
+  availablePages?: number[];
+}
+
 export interface PersistedKiroMessage {
   id: string;
   role: PersistedRole;
   content: string;
   attachments?: PersistedAttachmentView[];
   actions?: PersistedActionView[];
+  /** 本消息的文档来源（Citation 显示用；可选，旧记录无此字段无需迁移） */
+  sources?: PersistedSourceMeta[];
 }
 
 /** Conversation Summary（Task 7）：内部 Model Context，不代表当前 ClassFlow 数据 */

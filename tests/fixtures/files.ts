@@ -27,6 +27,36 @@ export function buildMinimalPdf(text: string): Uint8Array {
   return Buffer.from(out, "utf8");
 }
 
+/** 构造最小 3 页无文本 PDF（扫描件特征：多页 + 无文本），供测试使用 */
+export function buildScannedPdf(): Uint8Array {
+  const blankPages: string[] = [];
+  const objects: string[] = [];
+  objects.push("<< /Type /Catalog /Pages 2 0 R >>");
+  objects.push("<< /Type /Pages /Kids [3 0 R 4 0 R 5 0 R] /Count 3 >>");
+  for (let i = 0; i < 3; i++) {
+    objects.push(
+      `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 6 0 R >> >> /Contents ${7 + i} 0 R >>`
+    );
+  }
+  objects.push("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>");
+  for (let i = 0; i < 3; i++) {
+    objects.push(`<< /Length 0 >>\nstream\nendstream`);
+  }
+
+  let out = "%PDF-1.4\n";
+  const offsets: number[] = [];
+  objects.forEach((body, i) => {
+    offsets.push(Buffer.byteLength(out, "utf8"));
+    out += `${i + 1} 0 obj\n${body}\nendobj\n`;
+  });
+  const xrefStart = Buffer.byteLength(out, "utf8");
+  out += `xref\n0 ${objects.length + 1}\n`;
+  out += "0000000000 65535 f \n";
+  for (const off of offsets) out += `${String(off).padStart(10, "0")} 00000 n \n`;
+  out += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xrefStart}\n%%EOF\n`;
+  return Buffer.from(out, "utf8");
+}
+
 /** 构造最小 DOCX（mammoth 可提取），供测试使用 */
 export async function buildMinimalDocx(paragraphs: string[]): Promise<Blob> {
   const zip = new JSZip();

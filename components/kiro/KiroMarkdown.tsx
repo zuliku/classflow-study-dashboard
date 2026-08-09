@@ -6,25 +6,29 @@ import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
 import { normalizeMathDelimiters } from "@/lib/ai/markdown";
+import { KiroSourceMeta } from "@/lib/ai/citations/types";
+import { splitCitationSegments } from "@/lib/ai/citations/parser";
+import { KiroCitation } from "@/components/kiro/KiroCitation";
 
 /**
  * Kiro Markdown：Assistant Markdown → ClassFlow styled React（prose + math 单一入口）。
  * Pipeline：normalizeMathDelimiters → remark-gfm → remark-math → rehype-katex → semantic components。
+ * Citation（Task 11）：[[source:doc-1:p12]] 在进入 Markdown 前切成独立段，
+ * 闭合 marker → KiroCitation pill；未闭合（流式中）→ 按普通文本保留（不报错、不吞正文）。
  * - KaTeX：throwOnError:false（非法/未完成公式退化为可读 source），trust:false（模型输入不可信）
  * - 不启用 rehype-raw：模型输出中的 HTML 按普通内容处理（无 script/iframe/style）
  * - 链接只允许 http/https/mailto；外链 target=_blank + noopener
  * - 全部样式集中在此，不散落到 KiroMessage
  */
-export function KiroMarkdown({ content }: { content: string }) {
-  return (
-    <div
-      className="text-[14px] md:text-[15px] leading-[1.8] text-charcoal"
-      data-testid="kiro-markdown"
-    >
-      <ReactMarkdown
-        remarkPlugins={[remarkGfm, remarkMath]}
-        rehypePlugins={[[rehypeKatex, { throwOnError: false, trust: false }]]}
-        components={{
+export function KiroMarkdown({ content, sources }: { content: string; sources?: KiroSourceMeta[] }) {
+  // Citation 分段：text 段各自走 Markdown 渲染；citation 段渲染 pill（流式未闭合 marker 留在 text 段）
+  const segments = splitCitationSegments(content);
+  const renderMarkdown = (text: string, key: number) => (
+    <ReactMarkdown
+      key={key}
+      remarkPlugins={[remarkGfm, remarkMath]}
+      rehypePlugins={[[rehypeKatex, { throwOnError: false, trust: false }]]}
+      components={{
           p: ({ children }) => <p className="mb-3 last:mb-0">{children}</p>,
           h1: ({ children }) => (
             <h1 className="text-[19px] leading-snug font-semibold text-charcoal mt-6 mb-3 first:mt-0">
@@ -112,8 +116,22 @@ export function KiroMarkdown({ content }: { content: string }) {
           ),
         }}
       >
-        {normalizeMathDelimiters(content)}
+        {normalizeMathDelimiters(text)}
       </ReactMarkdown>
+  );
+
+  return (
+    <div
+      className="text-[14px] md:text-[15px] leading-[1.8] text-charcoal"
+      data-testid="kiro-markdown"
+    >
+      {segments.map((seg, i) =>
+        seg.type === "citation" ? (
+          <KiroCitation key={i} citation={seg.citation} sources={sources} />
+        ) : (
+          renderMarkdown(seg.text, i)
+        )
+      )}
     </div>
   );
 }

@@ -99,6 +99,8 @@ export function sanitizeConversation(input: {
         content: clampContent(m.content),
         attachments: toPersistedAttachments(m.attachments),
         actions,
+        // Citation 来源最小元数据（不含正文；旧消息无 sources 则不写）
+        sources: m.sources && m.sources.length > 0 ? m.sources : undefined,
       };
     });
 

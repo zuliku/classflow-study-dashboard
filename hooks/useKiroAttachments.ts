@@ -95,11 +95,17 @@ export function useKiroAttachments() {
           kind: routed.kind,
           cacheKey: extractCacheKey({ name: base.file.name, size: base.file.size, lastModified: base.file.lastModified }),
         });
-        patch(
-          result.ok
-            ? { status: "ready", extracted: result.extracted }
-            : { status: "error", error: result.message }
-        );
+        if (result.ok) {
+          // 扫描型 PDF：明确 unsupported（不是损坏文件；OCR 属于后续 Task）
+          const possiblyScanned = (result.extracted as { possiblyScanned?: boolean }).possiblyScanned === true;
+          patch(
+            possiblyScanned
+              ? { status: "error", error: "这是扫描型 PDF，当前暂不支持读取正文。" }
+              : { status: "ready", extracted: result.extracted }
+          );
+        } else {
+          patch({ status: "error", error: result.message });
+        }
       }
     },
     []

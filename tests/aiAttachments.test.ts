@@ -91,6 +91,20 @@ describe("文本提取", () => {
     expect(r.pages?.length).toBeGreaterThanOrEqual(1);
   });
 
+  it("G. 扫描型 PDF：possiblyScanned=true，正文为空（不误判为损坏）", async () => {
+    const { buildScannedPdf } = await import("@/tests/fixtures/files");
+    const pdf = buildScannedPdf();
+    const r = await extractPdf(new Blob([pdf as unknown as BlobPart], { type: "application/pdf" }));
+    expect(r.possiblyScanned).toBe(true);
+    expect(r.text).toBe("");
+    expect(r.pages).toEqual([]);
+  });
+
+  it("G. System Prompt 不把扫描件当坏文件（UI 文案由附件层给出明确 unsupported 语义）", () => {
+    // 文案常量存在于 UI 层；这里只保证 prompt 不包含误导性「损坏」措辞
+    expect(KIRO_SYSTEM_PROMPT).not.toContain("文件损坏");
+  });
+
   it("extractAttachment：路由 + 提取一体化；缓存命中", async () => {
     const file = fileOf("a.txt", "text/plain", ["缓存测试内容"]);
     const r1 = await extractAttachment(file, { kind: "text" });
