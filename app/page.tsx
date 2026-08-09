@@ -228,7 +228,7 @@ export default function Home() {
           )}
 
           {activeTab === "timetable" && (
-            <div className="h-[calc(100vh-100px)] md:h-[calc(100vh-80px)] flex flex-col min-h-0">
+            <div className="space-y-4">
               <TimelineWorkspace />
             </div>
           )}

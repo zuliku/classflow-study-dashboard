@@ -236,21 +236,24 @@ export function TimelineWorkspace() {
   const isToday = (dateStr: string) => dateStr === todayStr;
 
   return (
+    <>
     <div
       ref={wrapRef}
       data-testid="timeline-workspace"
-      className="flex-1 flex flex-col min-h-0 bg-surface border border-line rounded-2xl shadow-subtle overflow-hidden"
+      className="h-[calc(100dvh-128px)] md:h-[calc(100dvh-92px)] flex flex-col min-h-0 bg-surface border border-line rounded-2xl shadow-subtle overflow-hidden"
     >
-      {/* ---------- Header Controls（分组：左侧周导航 | 右侧 Actions） ---------- */}
-      <div className="shrink-0 px-3 py-2 border-b border-line-soft flex items-center justify-between gap-2">
-        {/* Group A：Week Navigation（周次 + 日期范围 + ‹ › 今天） */}
+      {/* ---------- Header Controls（分组：左 Week Meta 固定宽度 + 周导航 | 右 Actions） ---------- */}
+      <div className="shrink-0 px-3 py-2 border-b border-line flex items-center justify-between gap-2">
+        {/* Group A：Week Navigation（Week Meta 固定宽度 → ‹ › 今天坐标稳定） */}
         <div className="flex items-center gap-1 min-w-0">
-          <h2 className="text-sm font-bold text-charcoal whitespace-nowrap">
-            第 {currentSemesterWeek} 周
-          </h2>
-          <span className="text-[11px] text-sandrift truncate">
-            {formatWeekDateRange(semester, currentSemesterWeek)}
-          </span>
+          <div className="flex items-baseline gap-1.5 w-[192px] shrink-0">
+            <h2 className="text-sm font-bold text-charcoal tabular-nums whitespace-nowrap">
+              第 {currentSemesterWeek} 周
+            </h2>
+            <span className="text-[11px] text-sandrift tabular-nums truncate">
+              {formatWeekDateRange(semester, currentSemesterWeek)}
+            </span>
+          </div>
           <div className="w-px h-4 bg-line-soft mx-1 shrink-0" />
           <button
             onClick={() => setCurrentSemesterWeek(currentSemesterWeek - 1)}
@@ -286,8 +289,9 @@ export function TimelineWorkspace() {
           </button>
         </div>
 
-        {/* Group B：Timeline Actions */}
-        <div className="flex items-center gap-0.5 shrink-0">
+        {/* Group B：Timeline Actions（逻辑分组间距） */}
+        <div className="flex items-center shrink-0">
+          <div className="flex items-center gap-0.5">
           {/* 筛选 */}
           <div className="relative">
             <button
@@ -376,17 +380,17 @@ export function TimelineWorkspace() {
             )}
           </div>
 
-          {/* Ask Kiro（Secondary Featured，唯一保留 Logo + Text） */}
+          {/* Ask Kiro（Secondary Featured，与 Create 组间隔 6px） */}
           <KiroFlowButton
             icon={KIRO_ICON}
             label="Ask Kiro"
             size="sm"
-            className="h-8 ml-0.5"
+            className="h-8 ml-1.5"
             onClick={() => handoff.openForWeek(currentSemesterWeek)}
           />
 
           {/* More */}
-          <div className="relative">
+          <div className="relative ml-0.5">
             <button
               onClick={() => { setMoreOpen((v) => !v); setFilterOpen(false); setQuickOpen(false); }}
               aria-label="更多操作"
@@ -459,12 +463,7 @@ export function TimelineWorkspace() {
           </div>
         </div>
       </div>
-
-      {/* ---------- Unscheduled Shelf（默认单行） ---------- */}
-      <TimelineUnscheduledShelf
-        assignments={unscheduled}
-        onArrange={(a) => { setArrangeFor(a); setMarkOpen(false); }}
-      />
+      </div>
 
       {/* ---------- 安排学习计划（popover） ---------- */}
       {arrangeFor && <ArrangeSheet assignment={arrangeFor} weekDates={weekDates} onClose={() => setArrangeFor(null)} onSubmit={submitArrange} />}
@@ -494,6 +493,13 @@ export function TimelineWorkspace() {
       {/* ---------- 考试 / 日程（popover） ---------- */}
       {markOpen && <MarkSheet weekDates={weekDates} onClose={() => setMarkOpen(false)} onSubmit={submitMark} />}
     </div>
+
+    {/* ---------- 待安排：独立 Secondary Panel（首屏之后，不挤压时间表） ---------- */}
+    <TimelineUnscheduledShelf
+      assignments={unscheduled}
+      onArrange={(a) => { setArrangeFor(a); setMarkOpen(false); }}
+    />
+    </>
   );
 }
 

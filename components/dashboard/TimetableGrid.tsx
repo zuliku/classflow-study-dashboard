@@ -501,7 +501,7 @@ export function TimetableGrid({
           style={{ gridTemplateColumns: `${TIMETABLE_GUTTER_PX}px repeat(${dayCount}, minmax(0, 1fr))` }}
         >
           {/* Time Labels Column */}
-          <div className="flex flex-col justify-between text-[10px] text-sandrift font-mono border-r border-[#F0EBE1] pr-1.5 py-0.5 h-full">
+          <div className="flex flex-col justify-between text-[10px] text-satin-grey font-mono border-r border-line-soft pr-1.5 py-0.5 h-full">
             {TIME_SLOTS.map((time, idx) => (
               <div
                 key={time}
@@ -525,12 +525,12 @@ export function TimetableGrid({
               gridColumn: `span ${dayCount} / span ${dayCount}`,
             }}
           >
-            {/* Horizontal Grid lines */}
+            {/* Horizontal Grid lines（小时线：比 line-soft 强一档，可快速判断小时区间） */}
             <div className="absolute inset-0 flex flex-col justify-between pointer-events-none h-full">
               {Array.from({ length: 13 }).map((_, i) => (
                 <div
                   key={i}
-                  className="flex-1 border-b border-line-soft w-full"
+                  className="flex-1 border-b border-line w-full"
                 />
               ))}
             </div>

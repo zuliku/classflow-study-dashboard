@@ -5,8 +5,8 @@ import { ChevronDown, ChevronUp, CalendarPlus } from "lucide-react";
 import { Assignment } from "@/types";
 
 /**
- * Unscheduled Shelf（Task：ClassFlow Timeline V1 排版优化）：
- * 默认 compact 单行横向滚动（不增加 Timeline 高度）；点击「展开」才允许多行纵向增长。
+ * 待安排（Task：ClassFlow Timeline V1 polish）：
+ * 独立 Secondary Panel，位于主时间表之后（页面滚动可见），默认单行横向滚动；点击展开才多行。
  */
 export function TimelineUnscheduledShelf({
   assignments,
@@ -26,9 +26,12 @@ export function TimelineUnscheduledShelf({
   };
 
   return (
-    <div className="shrink-0 border-t border-line-soft px-3 py-1.5">
-      {/* Shelf Header：计数 + 展开/收起 */}
-      <div className="flex items-center justify-between mb-1">
+    <div
+      data-testid="timeline-unscheduled"
+      className="bg-surface border border-line rounded-2xl shadow-subtle p-3"
+    >
+      {/* Panel Header：计数 + 展开/收起 */}
+      <div className="flex items-center justify-between mb-1.5">
         <span className="text-[11px] font-semibold text-satin-grey">
           待安排 {assignments.length}
         </span>
