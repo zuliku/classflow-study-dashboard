@@ -1,3 +1,4 @@
+@import "katex/dist/katex.min.css";
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -268,4 +269,26 @@ html[data-motion="reduced"] *::after {
   animation-iteration-count: 1 !important;
   transition-duration: 0.01ms !important;
   scroll-behavior: auto !important;
+}
+
+/* Kiro Math（KaTeX）：与 ClassFlow 排版统一，不重写 KaTeX 内部样式 */
+.katex {
+  font-size: 1.05em;
+}
+
+.katex-display {
+  margin: 0.5em 0 0.75em;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 0.125rem 0.25rem;
+  scrollbar-width: thin;
+}
+
+.katex-display::-webkit-scrollbar {
+  height: 4px;
+}
+
+/* 非法 / 流式中未完成公式：退化为可读 source（throwOnError: false），用 ClassFlow danger 提示 */
+.katex-error {
+  color: var(--danger);
 }

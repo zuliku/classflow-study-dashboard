@@ -65,4 +65,77 @@ describe("KiroMarkdown", () => {
     expect(html).toContain("<table");
     expect(() => render("**未闭合\n\n`未闭合")).not.toThrow();
   });
+
+  it("数学：$...$ 行内公式 → KaTeX，不渲染成 code", () => {
+    const html = render("需求函数可以写成 $Q_d = f(P)$。");
+    expect(html).toContain('class="katex"');
+    expect(html).not.toContain("language-");
+    expect(html).not.toContain("$Q_d");
+    // 下标（MathML <msub> 与 HTML 结构）
+    expect(html).toContain("msub");
+  });
+
+  it("数学：$$...$$ 独占行 → katex-display（块级）", () => {
+    const html = render("$$\nQ_d = a - bP\n$$");
+    expect(html).toContain("katex-display");
+    expect(html).not.toContain("<pre");
+    expect(html).not.toContain("katex-error");
+  });
+
+  it("数学：分式 / 上标 / 希腊字母 / 求和真实渲染", () => {
+    const html = render("$\\frac{\\Delta Q / Q}{\\Delta P / P}$ 与 $x^2$、$\\varepsilon_d$、$\\sum_{i=1}^{n} x_i$");
+    expect(html).toContain("mfrac"); // \frac（MathML/HTML 结构类名）
+    expect(html).toContain("msup"); // x^2
+    expect(html).toContain("ε"); // \varepsilon
+    expect(html).toContain("∑"); // \sum
+  });
+
+  it("数学：\\(...\\) 行内 / \\[...\\] display（normalize 转换）", () => {
+    const inline = render("\\( Q_d = a-bP \\) 行内");
+    expect(inline).toContain('class="katex"');
+    expect(inline).not.toContain("katex-display");
+    expect(inline).not.toContain("( Q_d");
+    const display = render("\\[\nx = y\n\\]");
+    expect(display).toContain("katex-display");
+  });
+
+  it("数学：段落内联 $$...$$ 被归一化为独立 display block", () => {
+    const html = render("线性需求函数：$$Q_d = a - bP$$ 其中 b>0");
+    expect(html).toContain("katex-display");
+  });
+
+  it("数学：```math 围栏 → KaTeX；普通 ```ts 仍是代码块", () => {
+    const math = render("```math\nQ_d = a - bP\n```");
+    expect(math).toContain("katex-display");
+    const code = render("```ts\nconst x = 1\n```");
+    expect(code).toContain("<pre");
+    expect(code).not.toContain("katex-display");
+  });
+
+  it("数学：非法 / 未完成 LaTeX 不崩溃，退化为可读 source", () => {
+    expect(() => render("$Q_d = \\frac{}$")).not.toThrow();
+    const html = render("$\\frac{}$");
+    // KaTeX throwOnError:false → 输出错误 class（katex-error 或 katex），不抛异常
+    expect(html).toContain("katex");
+  });
+
+  it("数学：KaTeX trust:false，\\href 不产生可点击危险链接", () => {
+    const html = render("$$\\href{javascript:alert(1)}{x}$$");
+    expect(html).not.toContain('href="javascript');
+    expect(() => render("$$\\href{javascript:alert(1)}{x}$$")).not.toThrow();
+  });
+
+  it("流式：未闭合 $ / $$ / 强调不崩溃", () => {
+    expect(() => render("价格 $Q_d =")).not.toThrow();
+    expect(() => render("$$\nQ_d = a -")).not.toThrow();
+    expect(() => render("**需求")).not.toThrow();
+    expect(() => render("\\[ x = y")).not.toThrow();
+    expect(() => render("\\( Q_d")).not.toThrow();
+  });
+
+  it("数学与 inline code 严格区分：inline code 不继承 KaTeX 样式", () => {
+    const html = render("`selectedAssignmentId` 与 $Q_d$");
+    expect(html).toContain("<code");
+    expect(html).toContain("msub");
+  });
 });
