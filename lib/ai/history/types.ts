@@ -36,6 +36,8 @@ export interface PersistedActionView {
   change?: { from: string; to: string } | null;
   bullets?: string[];
   footer?: string;
+  /** Change Set 明细（compact 动作视图，可持久化；不保存 Undo / Store / Tool JSON） */
+  details?: { label: string }[];
 }
 
 export interface PersistedKiroMessage {

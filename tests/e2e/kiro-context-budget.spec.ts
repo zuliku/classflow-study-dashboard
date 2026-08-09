@@ -155,14 +155,13 @@ test("长历史恢复：Summary + 旧消息完整 + 继续对话", async ({ page
     });
   });
 
-  // 打开 Kiro → History → 打开长对话
+  // 打开 Kiro → Thread Rail → 打开长对话
   await page.locator("aside").first().getByRole("button", { name: "Kiro" }).click();
-  await page.getByLabel("更多操作", { exact: true }).click();
-  await page.getByRole("menuitem", { name: "历史记录" }).click();
-  const panel = page.getByRole("dialog", { name: "历史记录" });
-  await expect(panel.getByText("长对话测试")).toBeVisible();
-  await panel.getByText("长对话测试").click();
-  await expect(panel).toHaveCount(0);
+  await page.getByLabel("展开对话").click();
+  const rail = page.getByRole("dialog", { name: "对话" });
+  await expect(rail.getByText("长对话测试")).toBeVisible();
+  await rail.getByText("长对话测试").click();
+  await expect(rail).toHaveCount(0);
 
   // UI 旧消息完整（不因 Context 压缩被删）
   await expect(page.getByTestId("kiro-user-message").first()).toContainText("第 0 轮问题");
@@ -177,7 +176,6 @@ test("长历史恢复：Summary + 旧消息完整 + 继续对话", async ({ page
   await expect(page.getByTestId("kiro-message").last()).toContainText("建议先完成统计学作业", { timeout: 10000 });
 
   // History 仍存在（没有被删除）
-  await page.getByLabel("更多操作", { exact: true }).click();
-  await page.getByRole("menuitem", { name: "历史记录" }).click();
-  await expect(page.getByRole("dialog", { name: "历史记录" }).getByText("长对话测试")).toBeVisible();
+  await page.getByLabel("展开对话").click();
+  await expect(page.getByRole("dialog", { name: "对话" }).getByText("长对话测试")).toBeVisible();
 });

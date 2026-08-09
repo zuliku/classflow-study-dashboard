@@ -57,13 +57,28 @@ export type WriteToolResult<T = unknown> =
           | "course"
           | "group-project"
           | "group-member"
-          | "group-task";
+          | "group-task"
+          | "change-set";
         entityId: string;
         title: string;
         operation: "create" | "update" | "delete";
         before?: unknown;
         after?: unknown;
         canUndo: boolean;
+        /** Change Set（apply_change_set）：整体结果摘要 */
+        changeSet?: {
+          count: number;
+          summary: string;
+          actions: {
+            tool: string;
+            entityType: string;
+            entityId: string;
+            title: string;
+            operation: string;
+            before?: unknown;
+            after?: unknown;
+          }[];
+        };
       };
     }
   | {
@@ -76,7 +91,12 @@ export type WriteToolResult<T = unknown> =
         | "LAST_LEADER"
         | "USER_CANCELLED"
         | "UNSUPPORTED"
-        | "EXECUTION_FAILED";
+        | "EXECUTION_FAILED"
+        | "TRANSACTION_PREFLIGHT_FAILED"
+        | "TRANSACTION_REPREFLIGHT_FAILED"
+        | "TRANSACTION_CONTRADICTORY"
+        | "TRANSACTION_INTEGRITY"
+        | "TRANSACTION_TOO_LARGE";
       message: string;
       details?: unknown;
     };

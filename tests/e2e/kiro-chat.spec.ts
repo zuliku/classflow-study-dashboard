@@ -192,11 +192,12 @@ test("Kiro Read Tool：tool call → 客户端执行 → 自动继续 → 最终
   // 第二轮回传包含 tool output（客户端确实执行并回传了）
   expect(requests).toBe(2);
 
-  // Activity Trace：显示用户语义标签（不显示工具名/JSON），可展开
+  // Agent Worklog：Codex 风格「已处理」折叠行 + 可展开真实语义 Steps（不显示工具名/JSON）
   const trace = page.getByTestId("kiro-activity-trace");
-  await expect(trace).toContainText("读取 1 项 ClassFlow 信息");
+  await expect(trace).toContainText("已处理");
   await page.waitForTimeout(300);
-  await trace.click();
+  await trace.getByRole("button").click();
+  await expect(trace).toContainText("已读取 1 项 ClassFlow 信息");
   await expect(trace).toContainText("查看近期 DDL");
   await expect(trace.getByText("get_upcoming_assignments")).toHaveCount(0);
 });

@@ -20,7 +20,9 @@ import { getModelCapabilities } from "@/lib/ai/providers/capabilities";
 import { executeKiroWriteTool } from "@/lib/ai/tools/write/executor";
 import { isDestructiveWriteTool, KiroUndoEntry, KiroWriteApi, WriteToolResult } from "@/lib/ai/tools/write/types";
 import { KIRO_WRITE_TOOL_NAMES } from "@/lib/ai/tools/write/registry";
+import { KIRO_WRITE_TOOL_SCHEMAS } from "@/lib/ai/tools/write/schemas";
 import { actionToastMessage, toolLabel } from "@/lib/ai/tools/formatters";
+import { executeChangeSet } from "@/lib/ai/transactions/executor";
 import { PersistedActionView, PersistedAttachmentView, KiroConversationRecord, KiroConversationSummary } from "@/lib/ai/history/types";
 import { budgetAttachments } from "@/lib/ai/contextBudget/attachmentBudget";
 import { DEFAULT_CONTEXT_BUDGET } from "@/lib/ai/contextBudget/planner";
@@ -376,6 +378,88 @@ export function useKiroChat({
             options: { body: requestBody() },
           });
         });
+        return;
+      }
+
+      // ---- Change Set（Task 8）：多写事务，全部合法才全部提交 ----
+      if (toolName === "apply_change_set") {
+        const parsed = KIRO_WRITE_TOOL_SCHEMAS.apply_change_set.safeParse(input);
+        if (!parsed.success) {
+          failOutput("INVALID_INPUT", "Change Set 输入不合法。");
+          return;
+        }
+        // 内部 mutation 计入本轮 Write 上限（不能绕过限制）
+        writeCounterRef.current += parsed.data.actions.length;
+        if (writeCounterRef.current > MAX_WRITE_TOOL_CALLS_PER_TURN) {
+          limitReachedRef.current = true;
+          failOutput("WRITE_TOOL_LIMIT_REACHED", "已达到本轮修改上限，请分步进行。");
+          return;
+        }
+        void (async () => {
+          const result = await executeChangeSet({
+            actions: parsed.data.actions,
+            summary: parsed.data.summary,
+            state: useAppStore.getState(),
+            api: buildWriteApi({
+              toolCallId,
+              pushToast,
+              registerUndo: (id, undo) => {
+                undoRegistryRef.current.set(id, { toolCallId: id, used: false, undo });
+              },
+              onCancelOutput: (msg) => failOutput("USER_CANCELLED", msg),
+            }),
+            toolCallId,
+            confirm: (req) =>
+              new Promise<boolean>((resolve) => {
+                confirmRequest({
+                  title: req.title,
+                  description: req.description as React.ReactNode,
+                  confirmLabel: req.confirmLabel,
+                  danger: req.danger,
+                  onConfirm: () => resolve(true),
+                  onCancel: () => resolve(false),
+                });
+              }),
+          });
+          const output: WriteToolResult =
+            result.ok
+              ? {
+                  ok: true,
+                  data: { count: result.changeSet.count },
+                  action: {
+                    tool: "apply_change_set",
+                    entityType: "change-set",
+                    entityId: toolCallId,
+                    title: result.changeSet.summary,
+                    operation: "update",
+                    canUndo: true,
+                    changeSet: {
+                      count: result.changeSet.count,
+                      summary: result.changeSet.summary,
+                      actions: result.changeSet.actions,
+                    },
+                  },
+                }
+              : {
+                  ok: false,
+                  code: result.code as WriteToolResult extends infer T ? (T extends { ok: false; code: infer C } ? C : never) : never,
+                  message: result.message,
+                  details: result.details,
+                };
+          if (result.ok) {
+            pushToast({
+              message: `已完成 ${result.changeSet.count} 项修改`,
+              actionLabel: "撤销",
+              onAction: () => consumeUndo(toolCallId),
+            });
+          }
+          chat.addToolOutput({
+            tool: toolName as never,
+            toolCallId,
+            output,
+            options: { body: requestBody() },
+          });
+        })();
         return;
       }
 

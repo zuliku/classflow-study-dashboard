@@ -151,9 +151,8 @@ test("Sidecar → 展开到 Kiro 工作区：同一会话保留；新对话清�
   await expect(page.getByTestId("kiro-workspace")).toBeVisible();
   await expect(page.getByTestId("kiro-user-message")).toContainText("帮我整理本周任务");
 
-  // 新对话（More 菜单内）：会话清空 → Empty State
-  await page.getByLabel("更多操作", { exact: true }).click();
-  await page.getByRole("menuitem", { name: "新对话" }).click();
+  // 新对话（Thread Rail 内）：会话清空 → Empty State
+  await page.getByLabel("新对话").click();
   await expect(page.getByTestId("kiro-empty")).toBeVisible();
   await expect(page.getByTestId("kiro-message")).toHaveCount(0);
 });

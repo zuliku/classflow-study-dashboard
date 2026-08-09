@@ -2,9 +2,9 @@ import { expect, Page } from "@playwright/test";
 import { test } from "./demoFixtures";
 
 /**
- * 三项 UI 修复验证（测试简化）：
- * 1. History Panel full-height（顶部无空隙 / 底部无空隙 / border-l 连续）
- * 2. KiroMark 无方形容器（Logo 直接展示，光学尺寸）
+ * Thread Rail / Logo UI 验证（测试简化）：
+ * 1. Thread Rail：collapsed 52px → expanded overlay（对话宽度不变 → 无跳动）→ Esc 收起
+ * 2. Thread Header 无重复品牌（标题替换 Logo/Kiro/AI Workspace）；Empty State 40px Logo
  * 3. Sidebar Kiro Featured 无左侧黑线（active 用 pastel-mint + 静态 ring）
  */
 
@@ -15,7 +15,7 @@ const AI_SETTINGS = {
   custom: { providerName: "", baseURL: "", model: "" },
 };
 
-test("History Panel：从 Header 下沿连续延伸到 Workspace 底部，border-l 不断线", async ({ page }) => {
+test("Thread Rail：collapsed → expanded overlay（聊天宽度不变）→ Esc 收起", async ({ page }) => {
   await page.addInitScript(({ settings, key }) => {
     localStorage.setItem("classflow-ai-settings-v1", JSON.stringify({ version: 0, state: settings }));
     sessionStorage.setItem("classflow-ai-key:deepseek", key);
@@ -24,56 +24,76 @@ test("History Panel：从 Header 下沿连续延伸到 Workspace 底部，border
   await page.goto("/");
   await page.locator("aside").first().getByRole("button", { name: "Kiro" }).click();
 
-  // 打开历史面板
-  await page.getByLabel("更多操作", { exact: true }).click();
-  await page.getByRole("menuitem", { name: "历史记录" }).click();
-  const panel = page.getByRole("dialog", { name: "历史记录" });
-  await expect(panel).toBeVisible();
+  // Collapsed Rail：52px 浮动条（含 Kiro Logo 唯一品牌点）
+  const rail = page.getByTestId("kiro-thread-rail");
+  await expect(rail).toBeVisible();
+  const collapsedBox = await rail.boundingBox();
+  expect(collapsedBox!.width).toBeGreaterThanOrEqual(50);
+  expect(collapsedBox!.width).toBeLessThanOrEqual(56);
+  await expect(rail.locator('img[src="/kiro/kiro-mark.png"]')).toBeVisible();
 
-  const globalHeader = page.locator("header").first();
-  const pBox = await panel.boundingBox();
-  const hBox = await globalHeader.boundingBox();
-  const mainBox = await page.locator("main").boundingBox();
-
-  // 顶部：面板顶 == 全局 Header 底（无空隙）
-  expect(Math.abs(pBox!.y - (hBox!.y + hBox!.height))).toBeLessThanOrEqual(1);
-  // 底部：面板底 == main 内容区底（接近 viewport 底，无空隙）
-  expect(Math.abs(pBox!.y + pBox!.height - (mainBox!.y + mainBox!.height))).toBeLessThanOrEqual(1);
-  expect(pBox!.y + pBox!.height).toBeGreaterThan(880);
-  // 宽度 ≈ 320（含 1px border-l）
-  expect(pBox!.width).toBeGreaterThanOrEqual(319);
-  expect(pBox!.width).toBeLessThanOrEqual(321);
-  // 内容区不为 History 覆盖：Composer 右缘 ≤ 面板左缘
+  // 展开前记录 Composer 宽度（中心聊天区位置）
   const composer = page.getByTestId("kiro-composer");
-  const cBox = await composer.boundingBox();
-  expect(cBox!.x + cBox!.width).toBeLessThanOrEqual(pBox!.x + 1);
+  const beforeBox = await composer.boundingBox();
 
-  // 打开/关闭无残留：内容恢复全宽
-  await panel.getByLabel("关闭历史记录").click();
-  await expect(panel).toHaveCount(0);
-  const cBox2 = await composer.boundingBox();
-  expect(cBox2!.x + cBox2!.width).toBeGreaterThan(pBox!.x);
+  // 展开：Overlay dialog
+  await page.getByLabel("展开对话").click();
+  const dialog = page.getByRole("dialog", { name: "对话" });
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByText("暂无历史对话")).toBeVisible();
+
+  // 关键：展开不重排聊天宽度（无左右跳动）
+  const afterBox = await composer.boundingBox();
+  expect(Math.abs(afterBox!.x - beforeBox!.x)).toBeLessThanOrEqual(1);
+  expect(Math.abs(afterBox!.width - beforeBox!.width)).toBeLessThanOrEqual(1);
+
+  // Esc 收起
+  await page.keyboard.press("Escape");
+  await expect(dialog).toHaveCount(0);
+  await expect(rail).toBeVisible();
 });
 
-test("KiroMark：无方形容器，Logo 直接展示（光学尺寸 28px）", async ({ page }) => {
+test("Thread Header：不再显示 Kiro Logo / 名称 / AI Workspace；标题 = 当前对话", async ({ page }) => {
+  await page.addInitScript(({ settings, key }) => {
+    localStorage.setItem("classflow-ai-settings-v1", JSON.stringify({ version: 0, state: settings }));
+    sessionStorage.setItem("classflow-ai-key:deepseek", key);
+  }, { settings: AI_SETTINGS, key: "sk-test-key" });
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/");
   await page.locator("aside").first().getByRole("button", { name: "Kiro" }).click();
 
-  // Workspace Header 的 Kiro Logo：直接 img，无背景 / 无边框 / 无圆角
-  const mark = page.getByTestId("kiro-workspace").locator('img[src="/kiro/kiro-mark.png"]').first();
-  await expect(mark).toBeVisible();
-  const info = await mark.evaluate((el) => {
-    const cs = getComputedStyle(el);
-    const box = el.getBoundingClientRect();
-    return { w: box.width, h: box.height, bg: cs.backgroundColor, radius: cs.borderRadius };
-  });
-  expect(info.w).toBeCloseTo(28, 0);
-  expect(info.h).toBeCloseTo(28, 0);
-  expect(info.bg).toBe("rgba(0, 0, 0, 0)");
-  expect(info.radius).toBe("0px");
+  // Header 只剩标题（新对话）+ 操作；无 Logo / AI Workspace badge
+  await expect(page.getByTestId("kiro-header-title")).toHaveText("新对话");
+  const headerRow = page.getByTestId("kiro-header-title").locator("..");
+  await expect(headerRow.locator('img[src="/kiro/kiro-mark.png"]')).toHaveCount(0);
+  await expect(page.getByText("AI Workspace")).toHaveCount(0);
 
-  // Empty State 也用大号 Logo（40px）无背景
+  // 发送消息后标题 = 第一条消息（auto title）
+  await page.route("**/api/ai/chat", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "text/event-stream",
+      body: [
+        JSON.stringify({ type: "start", messageId: "m1" }),
+        JSON.stringify({ type: "start-step" }),
+        JSON.stringify({ type: "text-start", id: "t1" }),
+        JSON.stringify({ type: "text-delta", id: "t1", delta: "好的。" }),
+        JSON.stringify({ type: "text-end", id: "t1" }),
+        JSON.stringify({ type: "finish-step" }),
+        JSON.stringify({ type: "finish", finishReason: "stop" }),
+      ]
+        .map((l) => `data: ${l}`)
+        .join("\n\n") + "\n\n",
+    });
+  });
+  const composer = page.getByTestId("kiro-composer");
+  await composer.getByLabel("Ask Kiro").fill("查看明天课程");
+  await composer.getByLabel("发送").click();
+  await expect(page.getByTestId("kiro-message").last()).toContainText("好的", { timeout: 10000 });
+  await expect(page.getByTestId("kiro-header-title")).toHaveText("查看明天课程");
+
+  // Empty State 大号 Logo（40px）
+  await page.getByLabel("新对话").click();
   const emptyMark = page.getByTestId("kiro-empty").locator('img[src="/kiro/kiro-mark.png"]');
   const eBox = await emptyMark.boundingBox();
   expect(eBox!.width).toBeCloseTo(40, 0);

@@ -1,14 +1,14 @@
 "use client";
 
 import React from "react";
-import { CalendarClock, CalendarDays, Plus, Check, ArrowDown, Undo2, PencilLine } from "lucide-react";
+import { CalendarClock, CalendarDays, Plus, Check, ArrowDown, Undo2, PencilLine, Layers, ChevronDown } from "lucide-react";
 import { parseLocalDDL, getLocalDDLDate, getLocalDDLTime } from "@/lib/ddl";
 import { format } from "date-fns";
 import { zhCN } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 import type { WriteToolResult } from "@/lib/ai/tools/write/types";
 
-export type KiroActionCardVariant = "ddl" | "schedule" | "create" | "generic";
+export type KiroActionCardVariant = "ddl" | "schedule" | "create" | "generic" | "change-set";
 
 export interface KiroActionCardProps {
   variant: KiroActionCardVariant;
@@ -18,15 +18,25 @@ export interface KiroActionCardProps {
   bullets?: string[];
   footer?: string;
   onUndo?: () => void;
+  /** 可展开的明细行（Change Set 内部动作等） */
+  details?: { label: string }[];
 }
 
 /**
  * Action Result Card（真实 Tool Result 事实 UI）：
  * 内容只来自 ToolResult.action.before / after，模型不得生成。
  */
-export function KiroActionCard({ variant, heading, title, change, bullets, footer, onUndo }: KiroActionCardProps) {
+export function KiroActionCard({ variant, heading, title, change, bullets, footer, onUndo, details }: KiroActionCardProps) {
   const Icon =
-    variant === "ddl" ? CalendarClock : variant === "schedule" ? CalendarDays : variant === "create" ? Plus : PencilLine;
+    variant === "ddl"
+      ? CalendarClock
+      : variant === "schedule"
+        ? CalendarDays
+        : variant === "create"
+          ? Plus
+          : variant === "change-set"
+            ? Layers
+            : PencilLine;
   const isCreate = variant === "create";
 
   return (
@@ -51,7 +61,7 @@ export function KiroActionCard({ variant, heading, title, change, bullets, foote
         </div>
       )}
 
-      {isCreate && bullets && (
+      {(isCreate || variant === "change-set") && bullets && (
         <ul className="pl-8 space-y-1">
           {bullets.map((b) => (
             <li key={b} className="text-[11px] text-satin-grey flex items-center gap-1.5">
@@ -60,6 +70,24 @@ export function KiroActionCard({ variant, heading, title, change, bullets, foote
             </li>
           ))}
         </ul>
+      )}
+
+      {/* Change Set 明细（展开可见具体动作，不生成多张 Card） */}
+      {variant === "change-set" && details && details.length > 0 && (
+        <details className="pl-8 group">
+          <summary className="cursor-pointer text-[10px] font-semibold text-sandrift hover:text-charcoal transition-colors list-none flex items-center gap-1">
+            <ChevronDown className="w-3 h-3 transition-transform duration-[var(--motion-fast)] group-open:rotate-180" />
+            查看明细
+          </summary>
+          <ul className="mt-1.5 space-y-1">
+            {details.map((d) => (
+              <li key={d.label} className="text-[10px] text-satin-grey flex items-center gap-1.5">
+                <span className="w-1 h-1 rounded-full bg-sandrift shrink-0" />
+                {d.label}
+              </li>
+            ))}
+          </ul>
+        </details>
       )}
 
       <div className="flex items-center justify-between pl-8 pt-1">
@@ -113,6 +141,23 @@ export function actionToCardProps(
   const op = action.operation;
   const before = action.before as Record<string, unknown> | undefined;
   const after = action.after as Record<string, unknown> | undefined;
+
+  // Change Set（Task 8）：一组修改的整体结果（不生成多张 Card）
+  if (tool === "apply_change_set" && action.changeSet) {
+    const cs = action.changeSet;
+    const grouped = new Map<string, number>();
+    for (const a of cs.actions) {
+      const label = CHANGE_SET_ACTION_LABELS[a.tool] ?? "修改";
+      grouped.set(label, (grouped.get(label) ?? 0) + 1);
+    }
+    return {
+      variant: "change-set",
+      heading: `已完成 ${cs.count} 项修改`,
+      title: cs.summary,
+      bullets: Array.from(grouped.entries()).map(([label, n]) => `${label} ${n} 项`),
+      details: cs.actions.map((a) => ({ label: `${a.title}（${CHANGE_SET_ACTION_LABELS[a.tool] ?? "修改"}）` })),
+    };
+  }
 
   // DDL 调整（任务 / 小组任务）
   if (tool === "set_assignment_ddl" || tool === "set_group_task_ddl") {
@@ -210,3 +255,25 @@ function keyLabel(key: string): string {
   };
   return map[key] ?? key;
 }
+
+const CHANGE_SET_ACTION_LABELS: Record<string, string> = {
+  set_assignment_ddl: "调整任务截止时间",
+  set_assignment_priority: "修改任务优先级",
+  set_assignment_status: "修改任务状态",
+  set_assignment_progress: "修改任务进度",
+  update_assignment: "修改任务信息",
+  toggle_assignment_subtask: "切换任务子步骤",
+  delete_assignment: "删除任务",
+  move_schedule: "移动课程",
+  resize_schedule: "调整课程时长",
+  update_schedule: "调整课程排课",
+  exclude_schedule_week: "排除教学周",
+  delete_schedule: "删除排课",
+  update_course: "修改课程信息",
+  update_group_project: "修改小组项目",
+  update_group_member: "修改小组成员",
+  update_group_task: "修改小组任务",
+  assign_group_task: "调整任务分配",
+  set_group_task_ddl: "调整小组任务截止时间",
+  toggle_group_task: "切换小组任务状态",
+};

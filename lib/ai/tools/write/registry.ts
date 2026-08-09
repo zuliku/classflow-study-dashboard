@@ -107,6 +107,13 @@ export const KIRO_WRITE_TOOLS = {
     description: "切换小组任务完成状态。",
     inputSchema: KIRO_WRITE_TOOL_SCHEMAS.toggle_group_task,
   }),
+  apply_change_set: tool({
+    description:
+      "把一组相互关联的 ClassFlow 修改作为一个事务整体执行（全部合法才全部提交，任一失败则一项都不改）。" +
+      "当用户明确要求两个及以上相关修改（批量调整 DDL / 优先级、跨课程课表协调等）时优先使用本工具，而不是连续调用多个独立写工具。" +
+      "调用前必须先通过读取工具解析真实实体 ID；存在歧义时先询问用户。Risk 与确认由系统决定，不要提供 risk 字段。",
+    inputSchema: KIRO_WRITE_TOOL_SCHEMAS.apply_change_set,
+  }),
 };
 
 export const KIRO_WRITE_TOOL_NAMES = Object.keys(KIRO_WRITE_TOOLS) as (keyof typeof KIRO_WRITE_TOOLS)[];

@@ -70,12 +70,14 @@ export function KiroMenuItem({
   onClick,
   danger,
   disabled,
+  className,
 }: {
   icon?: React.ComponentType<{ className?: string }>;
   label: string;
   onClick: () => void;
   danger?: boolean;
   disabled?: boolean;
+  className?: string;
 }) {
   return (
     <button
@@ -88,7 +90,8 @@ export function KiroMenuItem({
         danger
           ? "text-danger hover:bg-danger-bg"
           : "text-satin-grey hover:bg-alabaster hover:text-charcoal",
-        disabled && "opacity-40 cursor-not-allowed hover:bg-transparent hover:text-inherit"
+        disabled && "opacity-40 cursor-not-allowed hover:bg-transparent hover:text-inherit",
+        className
       )}
     >
       {Icon && <Icon className="w-3.5 h-3.5 shrink-0" />}

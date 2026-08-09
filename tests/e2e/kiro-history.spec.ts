@@ -79,27 +79,25 @@ test("主链路：发送 → 刷新 → History 恢复 → 继续对话", async 
   await expect(page.getByTestId("kiro-message").last()).toContainText("本周共 5 项任务", { timeout: 10000 });
   await expect(page.getByTestId("kiro-message").last().getByLabel("重新生成")).toBeVisible();
 
-  // 刷新前先确认已持久化（面板可见该对话）
-  await page.getByLabel("更多操作", { exact: true }).click();
-  await page.getByRole("menuitem", { name: "历史记录" }).click();
-  const prePanel = page.getByRole("dialog", { name: "历史记录" });
-  await expect(prePanel.getByText("帮我分析这周任务")).toBeVisible();
-  await prePanel.getByLabel("关闭历史记录").click();
+  // 刷新前先确认已持久化（Thread Rail 可见该对话）
+  await page.getByLabel("展开对话").click();
+  const preRail = page.getByRole("dialog", { name: "对话" });
+  await expect(preRail.getByText("帮我分析这周任务")).toBeVisible();
+  await preRail.getByLabel("收起对话").click();
 
-  // 刷新页面 → 重新进入 Kiro → History 列表仍存在该对话
+  // 刷新页面 → 重新进入 Kiro → Rail 列表仍存在该对话
   await page.reload();
   await page.locator("aside").first().getByRole("button", { name: "Kiro" }).click();
   await expect(page.getByTestId("kiro-workspace")).toBeVisible();
-  await page.getByLabel("更多操作", { exact: true }).click();
-  await page.getByRole("menuitem", { name: "历史记录" }).click();
+  await page.getByLabel("展开对话").click();
 
-  const panel = page.getByRole("dialog", { name: "历史记录" });
-  await expect(panel).toBeVisible();
-  await expect(panel.getByText("帮我分析这周任务")).toBeVisible();
+  const rail = page.getByRole("dialog", { name: "对话" });
+  await expect(rail).toBeVisible();
+  await expect(rail.getByText("帮我分析这周任务")).toBeVisible();
 
   // 打开恢复：原消息可见；恢复的消息不可重新生成
-  await panel.getByText("帮我分析这周任务").click();
-  await expect(panel).toHaveCount(0);
+  await rail.getByText("帮我分析这周任务").click();
+  await expect(rail).toHaveCount(0);
   await expect(page.getByTestId("kiro-user-message")).toContainText("帮我分析这周任务");
   await expect(page.getByTestId("kiro-message").last()).toContainText("本周共 5 项任务");
   await expect(page.getByTestId("kiro-message").last().getByLabel("重新生成")).toHaveCount(0);
@@ -123,24 +121,23 @@ test("历史行：重命名 / 删除", async ({ page }) => {
   await page.waitForTimeout(500); // 等稳定点保存落盘
   await page.reload();
   await page.locator("aside").first().getByRole("button", { name: "Kiro" }).click();
-  await page.getByLabel("更多操作", { exact: true }).click();
-  await page.getByRole("menuitem", { name: "历史记录" }).click();
-  const panel = page.getByRole("dialog", { name: "历史记录" });
-  await expect(panel.getByText("本周学习规划")).toBeVisible();
+  await page.getByLabel("展开对话").click();
+  const rail = page.getByRole("dialog", { name: "对话" });
+  await expect(rail.getByText("本周学习规划")).toBeVisible();
 
   // 重命名
-  await panel.getByLabel("对话 本周学习规划 更多操作").click();
-  await panel.getByRole("menuitem", { name: "重命名" }).click();
-  const renameInput = panel.getByLabel("重命名对话");
+  await rail.getByLabel("对话 本周学习规划 更多操作").click();
+  await rail.getByRole("menuitem", { name: "重命名" }).click();
+  const renameInput = rail.getByLabel("重命名对话");
   await renameInput.fill("新的规划标题");
-  await panel.getByLabel("确认重命名").click();
-  await expect(panel.getByText("新的规划标题")).toBeVisible();
+  await rail.getByLabel("确认重命名").click();
+  await expect(rail.getByText("新的规划标题")).toBeVisible();
 
   // 删除
-  await panel.getByLabel("对话 新的规划标题 更多操作").click();
-  await panel.getByRole("menuitem", { name: "删除" }).click();
-  await expect(panel.getByText("新的规划标题")).toHaveCount(0);
-  await expect(panel.getByText("暂无历史对话")).toBeVisible();
+  await rail.getByLabel("对话 新的规划标题 更多操作").click();
+  await rail.getByRole("menuitem", { name: "删除" }).click();
+  await expect(rail.getByText("新的规划标题")).toHaveCount(0);
+  await expect(rail.getByText("暂无历史对话")).toBeVisible();
 });
 
 test("Regenerate 安全：Write Tool 轮次不显示重新生成；直接 retry 不重复执行", async ({ page }) => {

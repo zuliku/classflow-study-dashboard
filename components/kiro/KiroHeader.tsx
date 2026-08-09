@@ -4,6 +4,7 @@ import React from "react";
 import { cn } from "@/lib/utils";
 import { KiroSessionActions } from "@/components/kiro/KiroSessionActions";
 import { KiroLogoIcon } from "@/components/kiro/KiroLogo";
+import { useKiroSession } from "@/components/kiro/KiroSessionProvider";
 
 /**
  * Kiro Mark：正式 Kiro Logo 直接展示（无方形容器 / 无背景 / 无边框）。
@@ -23,9 +24,10 @@ export function KiroMark({ size = "md", className }: { size?: "sm" | "md" | "lg"
 }
 
 /**
- * Kiro Workspace 内部 Header：轻量，不承载 Provider / API Key / token 等技术信息。
- * 左侧：Kiro mark + 名称（+ 低权重 AI Workspace 标签）；右侧：会话级操作（Share / More）。
- * 新对话 / 历史记录 移入 More 菜单（结构预留，便于后续 Share / More 扩展）。
+ * Kiro Workspace Thread Header（Codex-style）：
+ * 不再展示 Kiro Logo / 名称 / AI Workspace（品牌由 Floating Thread Rail 与 Assistant Turn 承担）。
+ * 左侧：当前 Thread 标题（复用 session.conversationTitle，无则「新对话」）；
+ * 右侧：会话级操作（Share / More）。
  */
 export function KiroHeader({
   onNewChat,
@@ -34,19 +36,17 @@ export function KiroHeader({
   onNewChat: () => void;
   onOpenHistory: () => void;
 }) {
+  const { conversationTitle } = useKiroSession();
+
   return (
     <div className="shrink-0 flex items-center justify-between gap-3 pb-3 mb-1">
-      <div className="flex items-center gap-2.5 min-w-0">
-        <KiroMark size="md" />
-        <div className="min-w-0">
-          <h2 className="text-base font-bold text-charcoal leading-tight" data-testid="kiro-header-title">
-            Kiro
-          </h2>
-        </div>
-        <span className="hidden sm:inline-block text-[10px] font-semibold text-sandrift bg-[#F7F5F5] border border-line px-1.5 py-0.5 rounded-md leading-none">
-          AI Workspace
-        </span>
-      </div>
+      <h2
+        className="min-w-0 text-sm md:text-base font-semibold text-charcoal truncate"
+        data-testid="kiro-header-title"
+        title={conversationTitle ?? "新对话"}
+      >
+        {conversationTitle ?? "新对话"}
+      </h2>
 
       <KiroSessionActions variant="workspace" onNewChat={onNewChat} onOpenHistory={onOpenHistory} />
     </div>

@@ -8,21 +8,20 @@ import { KiroLogoIcon } from "@/components/kiro/KiroLogo";
 import { cn } from "@/lib/utils";
 
 const PHASE_LABEL: Record<KiroAgentPhase, string> = {
-  thinking: "Kiro 正在思考",
-  reading: "Kiro 正在读取 ClassFlow 数据",
-  acting: "Kiro 正在执行修改",
-  composing: "Kiro 正在整理结果",
+  thinking: "正在思考",
+  reading: "正在读取 ClassFlow 数据",
+  acting: "正在执行修改",
+  composing: "正在整理结果",
   done: "",
-  error: "Kiro 遇到问题",
+  error: "遇到问题",
 };
 
 /**
- * Kiro Agent Progress（Assistant Turn 执行反馈）。
- * 一个 Assistant Turn 只有一个 Kiro Logo：working 由本组件承担；回答到达后由 KiroMessage 承担。
- * working：Logo（品牌色 glow/breathe）+ phase 文案 + elapsed + chevron（整行可展开真实 Tool Steps）
- * done：不显示 Logo（低权重 inline summary：✓ 已读取 N 项…），与回答共享同一 Logo
- * 计时器跨 phase 连续（thinking→reading→composing 累计），新一轮（done/error→working）重置。
- * 绝不展示 chain-of-thought / tool args / JSON。
+ * Kiro Agent Worklog（Codex-style）：一个 Assistant Turn 的连续执行记录。
+ * Working：Logo（glow/breathe）+「正在处理 · Xs」/ 无步骤时显示具体 phase；展开可见 phase 行 + 真实 Tool Steps。
+ * Done：「已处理 Xs」+ 展开保留 ✓ summary 与 Steps；不再显示 Logo。
+ * 底部极弱分割线（border-line-soft）衔接同 Turn 的最终回答，形成连续文档流。
+ * 计时器跨 phase 连续；新一轮（done/error→working）重置。绝不展示 chain-of-thought / tool args / JSON。
  */
 export function KiroActivityTrace({
   steps,
@@ -66,12 +65,16 @@ export function KiroActivityTrace({
 
   const working = phase !== "done" && phase !== "error";
   const writeCount = steps.filter((s) => s.kind === "write").length;
-  // 纯文字 summary（Check 图标由 JSX 单独渲染，避免双对号）
-  const summary = done
-    ? writeCount > 0
-      ? `完成 ${steps.length} 个步骤 · 修改 ${writeCount} 项内容`
-      : `已读取 ${steps.length} 项 ClassFlow 信息`
-    : PHASE_LABEL[phase];
+  const doneSummary = writeCount > 0
+    ? `完成 ${steps.length} 个步骤 · 修改 ${writeCount} 项内容`
+    : `已读取 ${steps.length} 项 ClassFlow 信息`;
+
+  // Codex-style 顶部行：working =「正在处理」/ 无步骤 = 具体 phase；done =「已处理 Xs」
+  const topLabel = done
+    ? `已处理${elapsed >= 1 ? ` ${elapsed.toFixed(1)}s` : ""}`
+    : steps.length > 0
+      ? "正在处理"
+      : PHASE_LABEL[phase];
 
   const glowClass =
     phase === "thinking"
@@ -85,93 +88,89 @@ export function KiroActivityTrace({
             : "";
 
   return (
-    <div
-      data-testid="kiro-activity-trace"
-      role="status"
-      aria-live="polite"
-      className={cn("inline-flex gap-3", !show && working && "opacity-0")}
-    >
-      {/* Logo 槽：working 显示 Kiro Logo（glow/breathe）；done 留空（与回答共享 Logo，保持对齐） */}
-      <span className="w-5 h-5 flex items-center justify-center shrink-0" aria-hidden="true">
-        {working ? (
-          <span className={cn("flex items-center justify-center", phase === "thinking" && "kiro-agent-logo-thinking")}>
-            <KiroLogoIcon className={cn("w-5 h-5 kiro-agent-logo-active", glowClass)} />
-          </span>
-        ) : null}
-      </span>
-
-      <div className="flex-1 min-w-0 pt-0.5">
-        <button
-          onClick={() => steps.length > 0 && setExpanded((v) => !v)}
-          aria-expanded={steps.length > 0 ? expanded : undefined}
-          disabled={steps.length === 0}
-          className={cn(
-            "flex items-center gap-1.5 text-left transition-colors",
-            working ? "text-xs font-medium text-charcoal" : "text-[11px] font-semibold text-sandrift hover:text-charcoal",
-            steps.length > 0 && "cursor-pointer"
-          )}
-        >
-          {done ? (
-            <Check className="w-3.5 h-3.5 text-success shrink-0" aria-hidden="true" />
-          ) : (
-            <Loader2 className="w-3.5 h-3.5 animate-spin text-sandrift shrink-0" aria-hidden="true" />
-          )}
-          <span className="truncate">{summary}</span>
-          {/* elapsed 只做视觉（aria-hidden）；语义状态由文案承担 */}
-          {working && show && elapsed >= 1.5 && (
-            <span aria-hidden="true" className="text-sandrift tabular-nums shrink-0">
-              · {elapsed.toFixed(1)}s
+    <div data-testid="kiro-activity-trace" role="status" aria-live="polite" className={cn("w-full", !show && working && "opacity-0")}>
+      {/* Worklog 行 */}
+      <div className="flex gap-3">
+        {/* Logo 槽：working 显示 Kiro Logo；done 留空（与回答共享 Logo） */}
+        <span className="w-5 h-5 flex items-center justify-center shrink-0" aria-hidden="true">
+          {working ? (
+            <span className={cn("flex items-center justify-center", phase === "thinking" && "kiro-agent-logo-thinking")}>
+              <KiroLogoIcon className={cn("w-5 h-5 kiro-agent-logo-active", glowClass)} />
             </span>
-          )}
-          {steps.length > 0 && (
-            <ChevronDown
-              className={cn(
-                "w-3 h-3 text-sandrift shrink-0 transition-transform duration-[var(--motion-fast)]",
-                expanded && "rotate-180"
-              )}
-            />
-          )}
-        </button>
+          ) : null}
+        </span>
 
-        {expanded && steps.length > 0 && (
-          <div
-            role="list"
-            aria-label="Kiro 工具记录"
+        <div className="flex-1 min-w-0 pt-0.5">
+          <button
+            onClick={() => steps.length > 0 && setExpanded((v) => !v)}
+            aria-expanded={steps.length > 0 ? expanded : undefined}
+            disabled={steps.length === 0}
             className={cn(
-              "mt-1.5 rounded-xl bg-[#F7F5F5] border border-line p-1.5 space-y-0.5 ux-fade",
-              compact ? "max-w-[300px]" : "max-w-[420px]"
+              "flex items-center gap-1.5 text-left transition-colors",
+              working ? "text-xs font-medium text-charcoal" : "text-[11px] font-semibold text-sandrift hover:text-charcoal",
+              steps.length > 0 && "cursor-pointer"
             )}
           >
-            {steps.map((s) => (
-              <div
-                key={s.label}
-                role="listitem"
+            {done ? (
+              <Check className="w-3.5 h-3.5 text-success shrink-0" aria-hidden="true" />
+            ) : (
+              <Loader2 className="w-3.5 h-3.5 animate-spin text-sandrift shrink-0" aria-hidden="true" />
+            )}
+            <span className="truncate">{topLabel}</span>
+            {steps.length > 0 && (
+              <ChevronDown
                 className={cn(
-                  "flex items-center gap-2 px-2 rounded-lg text-[11px]",
-                  compact ? "py-1.5" : "py-2",
-                  s.status === "done"
-                    ? "text-satin-grey"
-                    : s.status === "working"
-                      ? "text-charcoal font-semibold"
-                      : "text-danger"
+                  "w-3 h-3 text-sandrift shrink-0 transition-transform duration-[var(--motion-fast)]",
+                  expanded && "rotate-180"
                 )}
-              >
-                {s.status === "done" ? (
-                  <Check className="w-3.5 h-3.5 text-success shrink-0" />
-                ) : s.status === "working" ? (
-                  <Loader2 className="w-3.5 h-3.5 animate-spin text-charcoal shrink-0" aria-hidden="true" />
-                ) : (
-                  <Circle className="w-3.5 h-3.5 text-danger shrink-0" />
-                )}
-                <span className="truncate">{s.label}</span>
-                {s.kind === "write" && s.status !== "error" && (
-                  <PencilLine className="w-3 h-3 text-sandrift shrink-0 ml-auto" aria-hidden="true" />
-                )}
-              </div>
-            ))}
-          </div>
-        )}
+              />
+            )}
+          </button>
+
+          {expanded && steps.length > 0 && (
+            <div
+              role="list"
+              aria-label="Kiro 工具记录"
+              className={cn("mt-1.5 space-y-0.5", compact ? "max-w-[300px]" : "max-w-[420px]")}
+            >
+              {!done && (
+                <p className="text-[11px] font-semibold text-sandrift px-1 pb-0.5">{PHASE_LABEL[phase]}</p>
+              )}
+              {done && <p className="text-[11px] font-semibold text-success px-1 pb-0.5">{doneSummary}</p>}
+              {steps.map((s) => (
+                <div
+                  key={s.label}
+                  role="listitem"
+                  className={cn(
+                    "flex items-center gap-2 px-2 rounded-lg text-[11px]",
+                    compact ? "py-1.5" : "py-2",
+                    s.status === "done"
+                      ? "text-satin-grey"
+                      : s.status === "working"
+                        ? "text-charcoal font-semibold"
+                        : "text-danger"
+                  )}
+                >
+                  {s.status === "done" ? (
+                    <Check className="w-3.5 h-3.5 text-success shrink-0" />
+                  ) : s.status === "working" ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin text-charcoal shrink-0" aria-hidden="true" />
+                  ) : (
+                    <Circle className="w-3.5 h-3.5 text-danger shrink-0" />
+                  )}
+                  <span className="truncate">{s.label}</span>
+                  {s.kind === "write" && s.status !== "error" && (
+                    <PencilLine className="w-3 h-3 text-sandrift shrink-0 ml-auto" aria-hidden="true" />
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
+
+      {/* 极弱分割线：Worklog 与同一 Turn 的最终回答衔接 */}
+      <div className="border-t border-line-soft my-1.5" aria-hidden="true" />
     </div>
   );
 }

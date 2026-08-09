@@ -106,8 +106,9 @@ export function KiroSessionActions({
           <KiroMenuPanel dir="down">
             {variant === "workspace" ? (
               <>
-                <KiroMenuItem icon={Plus} label="新对话" onClick={newChat} />
+                {/* 新对话 / 历史记录由 Thread Rail 承担；移动端（<md）保留历史 Sheet 入口 */}
                 <KiroMenuItem
+                  className="md:hidden"
                   icon={HistoryIcon}
                   label="历史记录"
                   onClick={() => {

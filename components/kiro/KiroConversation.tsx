@@ -161,6 +161,7 @@ export function KiroConversation({
                       change={a.change ?? undefined}
                       bullets={a.bullets}
                       footer={a.footer}
+                      details={a.details}
                     />
                   ))}
                 </div>

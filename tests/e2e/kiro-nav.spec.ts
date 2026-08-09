@@ -66,13 +66,13 @@ test("Desktop：@ Context picker（UI foundation）与 History 空状态", async
   await expect(page.getByTestId("kiro-context-bar")).toContainText("微观经济学");
   await expect(page.getByTestId("kiro-context-bar")).toContainText("本周");
 
-  // 历史面板：More 菜单进入 + 空状态 + Esc 关闭
-  await page.getByLabel("更多操作", { exact: true }).click();
-  await page.getByRole("menuitem", { name: "历史记录" }).click();
-  await expect(page.getByRole("dialog", { name: "历史记录" })).toBeVisible();
-  await expect(page.getByRole("dialog", { name: "历史记录" })).toContainText("暂无历史对话");
+  // Thread Rail：展开 → 空状态 + Esc 关闭（Desktop 历史入口已从 More 移入 Rail）
+  await page.getByLabel("展开对话").click();
+  const rail = page.getByRole("dialog", { name: "对话" });
+  await expect(rail).toBeVisible();
+  await expect(rail).toContainText("暂无历史对话");
   await page.keyboard.press("Escape");
-  await expect(page.getByRole("dialog", { name: "历史记录" })).toHaveCount(0);
+  await expect(rail).toHaveCount(0);
 });
 
 test("Tablet 1024：Icon Rail 有 Kiro（tooltip），点击进入", async ({ page }) => {

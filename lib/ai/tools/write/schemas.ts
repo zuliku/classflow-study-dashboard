@@ -172,6 +172,37 @@ export const toggleGroupTaskSchema = z.object({
   taskId: z.string().trim().min(1).max(120),
 });
 
+/** Change Set（Task 8）：严格 discriminated union；risk 字段不存在（Risk 由 ClassFlow 计算） */
+export const applyChangeSetSchema = z.object({
+  summary: z.string().trim().min(1).max(200).optional(),
+  actions: z
+    .array(
+      z.discriminatedUnion("tool", [
+        z.object({ tool: z.literal("update_assignment"), input: updateAssignmentSchema }),
+        z.object({ tool: z.literal("set_assignment_ddl"), input: setAssignmentDDLSchema }),
+        z.object({ tool: z.literal("set_assignment_priority"), input: setAssignmentPrioritySchema }),
+        z.object({ tool: z.literal("set_assignment_status"), input: setAssignmentStatusSchema }),
+        z.object({ tool: z.literal("set_assignment_progress"), input: setAssignmentProgressSchema }),
+        z.object({ tool: z.literal("toggle_assignment_subtask"), input: toggleAssignmentSubtaskSchema }),
+        z.object({ tool: z.literal("delete_assignment"), input: deleteAssignmentSchema }),
+        z.object({ tool: z.literal("move_schedule"), input: moveScheduleSchema }),
+        z.object({ tool: z.literal("resize_schedule"), input: resizeScheduleSchema }),
+        z.object({ tool: z.literal("update_schedule"), input: updateScheduleSchema }),
+        z.object({ tool: z.literal("exclude_schedule_week"), input: excludeScheduleWeekSchema }),
+        z.object({ tool: z.literal("delete_schedule"), input: deleteScheduleSchema }),
+        z.object({ tool: z.literal("update_course"), input: updateCourseSchema }),
+        z.object({ tool: z.literal("update_group_project"), input: updateGroupProjectSchema }),
+        z.object({ tool: z.literal("update_group_member"), input: updateGroupMemberSchema }),
+        z.object({ tool: z.literal("update_group_task"), input: updateGroupTaskSchema }),
+        z.object({ tool: z.literal("assign_group_task"), input: assignGroupTaskSchema }),
+        z.object({ tool: z.literal("set_group_task_ddl"), input: setGroupTaskDDLSchema }),
+        z.object({ tool: z.literal("toggle_group_task"), input: toggleGroupTaskSchema }),
+      ])
+    )
+    .min(1)
+    .max(8),
+});
+
 /** Write Tool 输入 schema 注册表（tool name → zod schema） */
 export const KIRO_WRITE_TOOL_SCHEMAS = {
   create_assignment: createAssignmentSchema,
@@ -199,6 +230,7 @@ export const KIRO_WRITE_TOOL_SCHEMAS = {
   assign_group_task: assignGroupTaskSchema,
   set_group_task_ddl: setGroupTaskDDLSchema,
   toggle_group_task: toggleGroupTaskSchema,
+  apply_change_set: applyChangeSetSchema,
 } as const;
 
 export type KiroWriteToolName = keyof typeof KIRO_WRITE_TOOL_SCHEMAS;

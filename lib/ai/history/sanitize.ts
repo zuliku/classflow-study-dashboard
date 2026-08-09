@@ -86,6 +86,7 @@ export function sanitizeConversation(input: {
           change: p.change ?? null,
           bullets: p.bullets,
           footer: p.footer,
+          details: p.details,
         };
       });
       const actions =
