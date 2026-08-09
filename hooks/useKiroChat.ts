@@ -59,8 +59,12 @@ export interface KiroActivityStep {
   message?: string;
 }
 
+/** Agent 执行阶段（从真实 Runtime 推导，不展示隐藏思维链） */
+export type KiroAgentPhase = "thinking" | "reading" | "acting" | "composing" | "done" | "error";
+
 export interface KiroActivity {
   visible: boolean;
+  phase: KiroAgentPhase;
   steps: KiroActivityStep[];
   done: boolean;
 }
@@ -137,33 +141,88 @@ function toView(m: UIMessage): KiroChatMessageView {
   };
 }
 
-/** 从最新 assistant 消息推导本轮真实工具调用（只显示用户语义标签） */
-function deriveActivity(messages: UIMessage[], status: string): KiroActivity {
-  let target: UIMessage | null = null;
+/**
+ * 从最新 assistant 消息推导本轮真实工具调用（只显示用户语义标签）与 Agent 执行阶段。
+ * 阶段为确定性推导：thinking（无任何输出）/ reading / acting / composing / done / error。
+ * 只展示用户可理解的 Tool semantic label 与真实执行结果，绝不展示 chain-of-thought。
+ */
+export function deriveActivity(messages: UIMessage[], status: string): KiroActivity {
+  const hasError = status === "error";
+  const submitted = status === "submitted";
+  const streaming = status === "streaming" || submitted;
+
+  // 当前轮 = 最后一条 user 消息之后的 assistant 消息（避免把已完成旧轮的 Tool parts 算进来）
+  let lastUserIdx = -1;
   for (let i = messages.length - 1; i >= 0; i--) {
-    const m = messages[i];
+    if (messages[i].role === "user") {
+      lastUserIdx = i;
+      break;
+    }
+  }
+  const inFlight = messages.slice(lastUserIdx + 1);
+  let target: UIMessage | null = null;
+  for (let i = inFlight.length - 1; i >= 0; i--) {
+    const m = inFlight[i];
     if (m.role !== "assistant") continue;
     if ((m.parts ?? []).some((p) => typeof p.type === "string" && p.type.startsWith("tool-"))) {
       target = m;
       break;
     }
-    if ((m.parts ?? []).some((p) => p.type === "text")) break;
+    if ((m.parts ?? []).some((p) => p.type === "text")) {
+      target = m;
+      break;
+    }
   }
-  if (!target) return { visible: false, steps: [], done: true };
 
-  const parts = ((target.parts ?? []).filter(
-    (p) => typeof p.type === "string" && p.type.startsWith("tool-")
-  ) as unknown) as ToolCallPart[];
-  const steps: KiroActivityStep[] = parts.map((p) => {
+  const toolParts = target
+    ? (((target.parts ?? []).filter(
+        (p) => typeof p.type === "string" && p.type.startsWith("tool-")
+      ) as unknown) as ToolCallPart[])
+    : [];
+  const textStarted =
+    !!target && (target.parts ?? []).some((p) => p.type === "text" && typeof p.text === "string" && p.text.length > 0);
+
+  const steps: KiroActivityStep[] = toolParts.map((p) => {
     const name = toolNameOf(p);
     const isWrite = (KIRO_WRITE_TOOL_NAMES as string[]).includes(name);
     if (p.state === "output-available") return { label: toolLabel(name), status: "done", kind: isWrite ? "write" : "read" };
     if (p.state === "output-error") return { label: toolLabel(name), status: "error", kind: isWrite ? "write" : "read", message: p.errorText };
     return { label: toolLabel(name), status: "working", kind: isWrite ? "write" : "read" };
   });
-  const streaming = status === "streaming" || status === "submitted";
-  const done = steps.every((s) => s.status === "done") && !streaming;
-  return { visible: steps.length > 0, steps, done };
+
+  const hasWorkingWrite = steps.some((s) => s.status === "working" && s.kind === "write");
+  const hasWorkingRead = steps.some((s) => s.status === "working" && s.kind === "read");
+  const workingPhase: KiroAgentPhase = hasWorkingWrite ? "acting" : "reading";
+
+  // 出错：有真实步骤保留 error trace；无步骤交给现有 Error Card（Progress 不重复错误内容）
+  if (hasError) {
+    return steps.length > 0
+      ? { visible: true, phase: "error", steps, done: true }
+      : { visible: false, phase: "error", steps: [], done: true };
+  }
+
+  if (submitted) {
+    // 请求已发出但尚无任何内容 → thinking（修复 submitted 阶段空白；UI 延迟 ~300ms 显示）
+    if (target === null) return { visible: true, phase: "thinking", steps: [], done: false };
+    if (toolParts.length === 0) return { visible: true, phase: "thinking", steps: [], done: false };
+    return { visible: true, phase: workingPhase, steps, done: false };
+  }
+
+  if (streaming && toolParts.length > 0) {
+    if (hasWorkingWrite || hasWorkingRead) return { visible: true, phase: workingPhase, steps, done: false };
+    // 工具全部完成：文本未开始 → composing；文本已开始 → 保留完成摘要（低权重）
+    if (!textStarted) return { visible: true, phase: "composing", steps, done: false };
+    return { visible: true, phase: "done", steps, done: true };
+  }
+
+  if (streaming) {
+    // 无工具轮：首 token 前 → thinking
+    return { visible: true, phase: "thinking", steps: [], done: false };
+  }
+
+  // ready：本轮有真实工具 → 完成摘要；无工具 → 隐藏
+  if (toolParts.length > 0) return { visible: true, phase: "done", steps, done: true };
+  return { visible: false, phase: "done", steps: [], done: true };
 }
 
 type ToolOutput = { ok: boolean; code?: string; message?: string; data?: unknown; action?: unknown };

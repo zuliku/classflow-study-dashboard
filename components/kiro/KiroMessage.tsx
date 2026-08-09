@@ -78,6 +78,7 @@ export function KiroMessage({
                 className="inline-block w-[2px] h-3.5 bg-sandrift align-middle animate-pulse"
               />
             )}
+            {/* Message Actions（非流式时显示；流式期间由 Agent Progress 承担执行反馈） */}
             {!streaming && (
               <div className="flex items-center gap-0.5 opacity-100 md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100 transition-opacity duration-[var(--motion-fast)]">
                 <button
@@ -126,12 +127,6 @@ export function KiroMessage({
               </div>
             )}
           </>
-        ) : streaming ? (
-          <div className="flex items-center gap-1.5 pt-1" aria-label="Kiro 正在回复">
-            <span className="w-1.5 h-1.5 rounded-full bg-sandrift animate-pulse" />
-            <span className="w-1.5 h-1.5 rounded-full bg-sandrift animate-pulse [animation-delay:120ms]" />
-            <span className="w-1.5 h-1.5 rounded-full bg-sandrift animate-pulse [animation-delay:240ms]" />
-          </div>
         ) : null}
         {children}
       </div>

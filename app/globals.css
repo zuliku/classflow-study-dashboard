@@ -325,3 +325,26 @@ html[data-motion="reduced"] *::after {
 html[data-motion="reduced"] .kiro-ring-animated {
   animation: none;
 }
+
+/* Kiro Agent Progress：thinking 缓慢呼吸；acting 环扫略快（仍克制） */
+.kiro-agent-logo-thinking {
+  animation: kiro-breathe 2.4s ease-in-out infinite;
+}
+
+.kiro-ring-fast {
+  animation-duration: 4.5s;
+}
+
+@keyframes kiro-breathe {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.55;
+  }
+}
+
+html[data-motion="reduced"] .kiro-agent-logo-thinking {
+  animation: none;
+}

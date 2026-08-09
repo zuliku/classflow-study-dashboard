@@ -62,6 +62,19 @@ export function KiroConversation({
     setShowScrollBtn(false);
   };
 
+  // Agent Progress 淡出：文本开始流式后（activity 隐藏）200ms fade，避免硬消失跳动
+  const [agentLeaving, setAgentLeaving] = React.useState(false);
+  useEffect(() => {
+    if (activity.visible) {
+      setAgentLeaving(false);
+      return;
+    }
+    setAgentLeaving(true);
+    const t = setTimeout(() => setAgentLeaving(false), 200);
+    return () => clearTimeout(t);
+  }, [activity.visible]);
+  const showAgentProgress = activity.visible || agentLeaving;
+
   return (
     <div
       ref={scrollRef}
@@ -138,8 +151,17 @@ export function KiroConversation({
           )
         )}
 
-        {/* 真实工具活动轨迹（只展示语义标签） */}
-        {activity.visible && <KiroActivityTrace steps={activity.steps} done={activity.done} />}
+        {/* Agent 执行反馈（真实阶段 + 语义步骤；文本开始后淡出，有工具时保留完成摘要） */}
+        {showAgentProgress && (
+          <div
+            className={cn(
+              "transition-opacity duration-[var(--motion-fast)] ease-[var(--ease-standard)]",
+              agentLeaving && "opacity-0"
+            )}
+          >
+            <KiroActivityTrace steps={activity.steps} phase={activity.phase} done={activity.done} compact={compact} />
+          </div>
+        )}
 
         {error && (
           <div
