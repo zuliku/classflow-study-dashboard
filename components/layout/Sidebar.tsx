@@ -128,10 +128,10 @@ export function Sidebar() {
                     isActive && "opacity-100!"
                   )}
                 />
-                  {/* 内容层：m-px 留出 1px 品牌流光环；Active = 极浅 Soft Plate（不压 Logo 原色） */}
+                  {/* 内容层：m-[3px] + w calc(100%-6px)，四边均匀留出 3px 流光环（基底高亮，整环无断口） */}
                   <span
                     className={cn(
-                      "relative m-px w-full h-11 rounded-[11px] bg-[#F7F5F5]",
+                      "relative m-[3px] w-[calc(100%-6px)] h-11 rounded-[11px] bg-[#F7F5F5]",
                       "flex items-center justify-center xl:justify-start xl:gap-2.5 px-2 xl:px-3",
                       "text-xs font-semibold transition-colors duration-[var(--motion-base)]",
                       isActive ? "bg-surface text-charcoal" : "text-charcoal"

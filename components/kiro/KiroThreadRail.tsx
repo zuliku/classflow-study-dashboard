@@ -149,8 +149,8 @@ export function KiroThreadRail() {
     });
   };
 
-  const moreMenu = (
-    <KiroMenuPanel dir="up">
+  const moreMenu = (placement: "top-end" | "right-end") => (
+    <KiroMenuPanel placement={placement}>
       <KiroMenuItem icon={Copy} label="复制全部对话" disabled={!hasMessages} onClick={copyAll} />
       <KiroMenuItem icon={FileDown} label="导出 Markdown" disabled={!hasMessages} onClick={exportMarkdown} />
       <KiroMenuDivider />
@@ -211,7 +211,7 @@ export function KiroThreadRail() {
             >
               <MoreHorizontal className="w-4 h-4" />
             </button>
-            {moreOpen && moreMenu}
+            {moreOpen && moreMenu('right-end')}
           </div>
         </div>
       ) : (
@@ -221,8 +221,8 @@ export function KiroThreadRail() {
           aria-label="对话"
           className="w-[216px] lg:w-[232px] max-h-[calc(100dvh-120px)] rounded-2xl bg-surface border border-line shadow-card flex flex-col overflow-hidden"
         >
-          {/* Header：Soft Plate Logo + Kiro + 收起（浅色底，不压 Logo） */}
-          <div className="shrink-0 flex items-center justify-between gap-2 px-2.5 py-2.5 border-b border-line bg-pastel-mint/25">
+          {/* Header：Soft Plate Logo + Kiro + 收起（bg-surface 极浅底，不压 Logo 原色） */}
+          <div className="shrink-0 flex items-center justify-between gap-2 px-2.5 py-2.5 border-b border-line bg-surface">
             <div className="flex items-center gap-2 min-w-0 group/plate">
               <KiroRailPlate size="sm" active />
               <span className="text-xs font-semibold text-charcoal">Kiro</span>
@@ -299,7 +299,7 @@ export function KiroThreadRail() {
               >
                 <MoreHorizontal className="w-4 h-4" />
               </button>
-              {moreOpen && moreMenu}
+              {moreOpen && moreMenu('top-end')}
             </div>
           </div>
         </div>

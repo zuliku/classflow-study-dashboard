@@ -115,7 +115,7 @@ export function KiroMessage({
                     <MoreHorizontal className="w-3.5 h-3.5" />
                   </button>
                   {more.open && (
-                    <KiroMenuPanel dir="up">
+                    <KiroMenuPanel placement="top-end">
                       <KiroMenuItem icon={Copy} label="复制文本" onClick={copyPlain} />
                       <KiroMenuItem icon={FileText} label="复制 Markdown" onClick={copyMarkdownSource} />
                       {hasActions && (

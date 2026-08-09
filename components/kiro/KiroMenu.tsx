@@ -39,12 +39,13 @@ export function useKiroPopover() {
 }
 
 export function KiroMenuPanel({
-  dir = "down",
+  placement = "bottom-end",
   className,
   children,
 }: {
-  /** down：向下方展开（顶部按钮）；up：向上方展开（底部消息） */
-  dir?: "down" | "up";
+  /** bottom-end：右上按钮向下展开（Header）；top-end：底部按钮向上展开（Message / Expanded Rail）；
+      right-end：窄 Rail 按钮向右展开（左侧 Collapsed Rail 专用） */
+  placement?: "bottom-end" | "top-end" | "right-end";
   className?: string;
   children: React.ReactNode;
 }) {
@@ -55,7 +56,9 @@ export function KiroMenuPanel({
         "absolute right-0 z-40 bg-surface border border-line-strong rounded-2xl shadow-card ux-inline p-1",
         "min-w-[190px] max-w-[300px] text-xs",
         "max-h-[min(420px,60vh)] overflow-y-auto",
-        dir === "down" ? "top-full mt-1.5" : "bottom-full mb-1.5",
+        placement === "bottom-end" && "top-full mt-1.5",
+        placement === "top-end" && "bottom-full mb-1.5",
+        placement === "right-end" && "left-full right-auto bottom-0 ml-2",
         className
       )}
     >
