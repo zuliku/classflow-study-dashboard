@@ -91,8 +91,8 @@ test("390×844：Mobile 自然高度（不强制 compact 固定高度），可�
 test("Full Timetable Workspace / Modal 不受 compact 影响", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/");
-  await page.getByRole("button", { name: "我的课表" }).first().click();
-  await expect(page.getByRole("heading", { name: "学期课表" })).toBeVisible();
+  await page.getByRole("button", { name: "时间表" }).first().click();
+  await expect(page.getByRole("heading", { name: /第 \d+ 周/ })).toBeVisible();
 
   // workspace 保持舒展：body min-h 520（未加 md:min-h-[440px]）
   const body = await page

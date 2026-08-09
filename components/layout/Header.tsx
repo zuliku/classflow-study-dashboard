@@ -86,7 +86,8 @@ export function Header() {
           </kbd>
         </button>
 
-        {/* Date Range Picker Pill（Mobile 隐藏，避免挤占标题） */}
+        {/* Date Range Picker Pill（Mobile 隐藏；Timeline Tab 由 Timeline 自身管理时间，不重复显示） */}
+        {activeTab !== "timetable" && (
         <div className="hidden md:flex items-center space-x-1.5 bg-white border border-line-strong rounded-xl px-2.5 md:px-3 py-1.5 text-xs font-semibold text-charcoal shadow-subtle min-w-0">
           <CalendarIcon className="w-3.5 h-3.5 text-[#A48F82] shrink-0" />
           <span className="hidden lg:inline truncate">{dateRangeString}</span>
@@ -103,6 +104,7 @@ export function Header() {
             本周
           </button>
         </div>
+        )}
       </div>
     </header>
   );

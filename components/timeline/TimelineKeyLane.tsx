@@ -2,54 +2,72 @@
 
 import React, { useMemo } from "react";
 import { cn } from "@/lib/utils";
-import { TimelineItem, TimelineTemporalType } from "@/lib/timeline/timelineTypes";
+import { TimelineItem } from "@/lib/timeline/timelineTypes";
 import { timeToDayRatio, intervalToDayGeometry } from "@/lib/timeline/timelineGeometry";
 
 const MAX_TRACKS = 2;
+/** Deadline 文字常驻：默认只时间；空间足够时允许短标题（由 track 与宽度决定） */
+const DEADLINE_LABEL_RATIO = 0.32; // 估算 label 占用列宽比例（无 canvas 测量，deterministic）
+/** Interval 标题进入 block 的最小像素宽度 */
+const INTERVAL_INLINE_MIN_PX = 56;
 
-/** 当天事件的 lane packing：最多 2 条 track（重叠才换行），第 3 个及之后计入 +N */
-function packDayItems(items: TimelineItem[]): { tracks: TimelineItem[][]; overflow: number } {
+interface PackedDeadline {
+  item: TimelineItem;
+  ratio: number;
+  direction: "left" | "right";
+  /** 估算的视觉占用（列宽比例） */
+  visualStart: number;
+  visualEnd: number;
+  track: number;
+  showLabel: boolean;
+}
+
+/** Deadline 视觉碰撞布局（Task：Timeline 排版优化）：
+ *  - 按 Point ratio 决定 label 方向（<0.68 向右，≥0.68 向左，避免右缘越界）
+ *  - 用估算 label 占用做 2-track packing；两轨都冲突 → 只显示 Point + Time */
+function packDeadlines(items: TimelineItem[]): PackedDeadline[] {
   const sorted = [...items].sort((a, b) => (a.startTime ?? "99:99").localeCompare(b.startTime ?? "99:99"));
-  const tracks: TimelineItem[][] = [[], []];
-  const overlap = (a: TimelineItem, b: TimelineItem) => {
-    if (a.temporalType !== "interval" || b.temporalType !== "interval") return false;
-    return (a.startTime ?? "") < (b.endTime ?? "") && (b.startTime ?? "") < (a.endTime ?? "");
-  };
-  let overflow = 0;
+  const tracks: { start: number; end: number }[][] = [[], []];
+  const out: PackedDeadline[] = [];
   for (const item of sorted) {
+    const ratio = timeToDayRatio(item.startTime);
+    const direction: "left" | "right" = ratio < 0.68 ? "right" : "left";
+    const half = DEADLINE_LABEL_RATIO / 2;
+    const visualStart = direction === "right" ? ratio : Math.max(ratio - DEADLINE_LABEL_RATIO, 0);
+    const visualEnd = direction === "right" ? Math.min(ratio + DEADLINE_LABEL_RATIO, 1) : ratio;
     let placed = false;
+    let track = 0;
     for (let t = 0; t < MAX_TRACKS; t++) {
-      if (!tracks[t].some((x) => overlap(x, item))) {
-        tracks[t].push(item);
+      const conflict = tracks[t].some((r) => visualStart < r.end && r.start < visualEnd);
+      if (!conflict) {
+        tracks[t].push({ start: visualStart, end: visualEnd });
+        track = t;
         placed = true;
         break;
       }
     }
-    if (!placed) overflow++;
+    if (!placed) track = 0; // 两轨都冲突：仍显示 Point + Time（不显示标题）
+    out.push({ item, ratio, direction, visualStart, visualEnd, track, showLabel: placed });
+    void half;
   }
-  return { tracks, overflow };
+  return out;
 }
 
 /**
- * Timeline Key Lane（Task：ClassFlow Timeline V1）。
+ * Timeline Key Lane（Task：ClassFlow Timeline V1 排版优化）。
  * 真正的时间轴：每天 00:00–24:00 比例定位。
- * - Deadline → point marker（x = 当天时间比例）
- * - Interval（考试/活动）→ mini block（left/width = 时间比例）
- * - All-day（只有日期）→ 固定左上角小标签（不伪造时间）
- * 最多 2 条 track；更多显示 +N。
+ * - Deadline：Point 严格按时间比例；label 自动左右翻转 + 2-track 视觉 packing + 列内 truncate
+ * - Interval：Geometry Bar 严格按比例；标题按可用宽度进入 block 或浮动在 block 上方
+ * - All-day：独立顶部小层（不占时间位置）
+ * - 底部极弱 baseline，时间方向为水平
  */
 export function TimelineKeyLane({
   items,
   weekDates,
-  showDayLabels = true,
-  nowLine,
 }: {
   items: TimelineItem[];
-  /** 本周日期 "YYYY-MM-DD"（顺序 = 列顺序；7 天） */
+  /** 本周日期 "YYYY-MM-DD"（顺序 = 列顺序） */
   weekDates: string[];
-  showDayLabels?: boolean;
-  /** 当前周的真实时间线（今天列显示极细线；非当前周不传） */
-  nowLine?: { date: string; ratio: number } | null;
 }) {
   const byDay = useMemo(() => {
     const map = new Map<string, TimelineItem[]>();
@@ -65,64 +83,62 @@ export function TimelineKeyLane({
     <div className="relative border-b border-line-soft">
       <div
         className="grid"
-        style={{ gridTemplateColumns: `minmax(0, 1fr) repeat(${weekDates.length}, minmax(0, 1fr))` }}
+        style={{ gridTemplateColumns: `56px repeat(${weekDates.length}, minmax(0, 1fr))` }}
       >
         {/* 左标签列 */}
-        <div className="text-[9px] text-sandrift font-mono pr-1.5 py-0.5 self-start">关键时间轴</div>
+        <div className="text-[9px] text-sandrift font-mono pr-1.5 pt-1 self-start">关键时间轴</div>
 
         {weekDates.map((date, colIdx) => {
           const dayItems = byDay.get(date) ?? [];
-          const { tracks, overflow } = packDayItems(dayItems);
+          const allDays = dayItems.filter((it) => it.temporalType === "all-day");
+          const timed = dayItems.filter((it) => it.temporalType !== "all-day");
+          const intervals = timed.filter((it) => it.temporalType === "interval");
+          const deadlines = packDeadlines(timed.filter((it) => it.temporalType === "deadline"));
+          const hasAllDay = allDays.length > 0;
+          const laneHeight = hasAllDay ? "h-[58px]" : "h-[48px]";
+
           return (
             <div
               key={date}
               data-testid="timeline-key-lane"
               className={cn(
-                "relative h-[40px] min-h-[40px] border-r border-line-soft px-0.5",
-                colIdx === weekDates.length - 1 && "border-r-0"
+                "relative border-r border-line-soft px-0.5",
+                colIdx === weekDates.length - 1 && "border-r-0",
+                laneHeight
               )}
             >
-              {/* all-day：固定左上角（不占时间位置） */}
-              {dayItems
-                .filter((it) => it.temporalType === "all-day")
-                .map((it) => (
-                  <span
-                    key={it.id}
-                    title={`${it.title}（全天）`}
-                    className="absolute left-0.5 top-0.5 max-w-[calc(100%-4px)] truncate text-[9px] font-semibold text-satin-grey bg-alabaster/70 border border-line rounded px-1 py-px"
-                  >
-                    全天 · {it.title}
-                  </span>
-                ))}
+              {/* 时间 baseline：1px 极弱线（水平时间语义） */}
+              <div aria-hidden="true" className="absolute left-0 right-0 top-[30px] h-px bg-line-soft/70 pointer-events-none" />
 
-              {/* 时间比例定位：deadline point / interval block */}
-              {tracks.map((track, t) =>
-                track
-                  .filter((it) => it.temporalType !== "all-day")
-                  .map((it) =>
-                    it.temporalType === "interval" ? (
-                      <IntervalBlock key={it.id} item={it} track={t} />
-                    ) : (
-                      <DeadlineMarker key={it.id} item={it} track={t} />
-                    )
-                  )
+              {/* All-day 独立小层（有才占空间） */}
+              {hasAllDay && (
+                <div className="absolute left-0.5 right-0.5 top-0.5 space-y-0.5">
+                  {allDays.slice(0, 2).map((it) => (
+                    <span
+                      key={it.id}
+                      title={`${it.title}（全天）`}
+                      className="block truncate text-[10px] font-semibold text-satin-grey bg-alabaster/80 border border-line rounded px-1 py-px"
+                    >
+                      全天 · {it.title}
+                    </span>
+                  ))}
+                  {allDays.length > 2 && (
+                    <span className="block text-[9px] font-bold text-sandrift pl-1">+{allDays.length - 2}</span>
+                  )}
+                </div>
               )}
 
-              {/* 溢出提示 */}
-              {overflow > 0 && (
-                <span className="absolute right-1 bottom-0.5 text-[9px] font-bold text-sandrift">
-                  +{overflow}
-                </span>
-              )}
+              {/* Deadline Point + 自适应 Label */}
+              {deadlines.map((d) => (
+                <DeadlineMarker key={d.item.id} d={d} hasAllDay={hasAllDay} />
+              ))}
 
-              {/* 当前时间线：极细低饱和线（真实当前周 + 今天） */}
-              {nowLine && nowLine.date === date && (
-                <div
-                  aria-hidden="true"
-                  className="absolute left-0 right-0 h-px bg-sandrift/50 pointer-events-none z-10"
-                  style={{ top: `${Math.min(nowLine.ratio * 100, 99)}%` }}
-                />
-              )}
+              {/* Interval：真实几何 bar + 浮动标题 */}
+              {intervals.map((it) => (
+                <IntervalBlock key={it.id} item={it} hasAllDay={hasAllDay} />
+              ))}
+
+              {/* 溢出提示（interval 超出 2 条已由 track 覆盖；deadline 冲突降级为 time-only） */}
             </div>
           );
         })}
@@ -131,54 +147,81 @@ export function TimelineKeyLane({
   );
 }
 
-function DeadlineMarker({ item, track }: { item: TimelineItem; track: number }) {
-  const left = timeToDayRatio(item.startTime) * 100;
+function DeadlineMarker({ d, hasAllDay }: { d: PackedDeadline; hasAllDay: boolean }) {
+  const { item, ratio, direction, track, showLabel } = d;
   const urgent = item.priority === "urgent";
   const group = item.sourceType === "group-task";
+  const top = (hasAllDay ? 42 : 34) + track * 14;
+  const aria = `${item.title}，${item.startTime ?? ""} 截止${item.subtitle ? `，${item.subtitle}` : ""}`;
+  // Label 视觉范围限制在当天列内（不跨列）
+  const labelWidth = `calc(${DEADLINE_LABEL_RATIO * 100}% - 6px)`;
   return (
     <div
-      title={`${item.title}${item.startTime ? ` · ${item.startTime} 截止` : "截止"}${item.subtitle ? ` · ${item.subtitle}` : ""}`}
-      className="absolute -translate-x-1/2 pointer-events-auto group"
-      style={{ left: `${left}%`, top: `${track * 15 + 6}px` }}
+      aria-label={aria}
+      className="absolute pointer-events-auto flex items-center gap-1"
+      style={{
+        left: direction === "right" ? `${ratio * 100}%` : undefined,
+        right: direction === "left" ? `${(1 - ratio) * 100}%` : undefined,
+        top: `${top}px`,
+        maxWidth: "100%",
+      }}
     >
-      {/* Point */}
+      {/* Point：严格按真实时间比例 */}
       <span
         className={cn(
-          "block w-[7px] h-[7px] rounded-full border",
+          "block w-[7px] h-[7px] rounded-full border shrink-0",
           urgent
             ? "bg-danger/70 border-danger/40"
             : group
               ? "bg-pastel-mint border-pastel-mint/60"
               : "bg-sandrift/70 border-sandrift/40"
         )}
+        title={`${item.title} · ${item.startTime ?? ""} 截止${item.subtitle ? ` · ${item.subtitle}` : ""}`}
       />
-      {/* 短 label：时间 + 截断标题（hover 完整信息在 title） */}
-      <span className="absolute left-1.5 top-1/2 -translate-y-1/2 whitespace-nowrap text-[9px] font-semibold text-satin-grey leading-none">
+      {/* Label：短信息（时间 + 空间足够时的短标题），列内 truncate；direction 决定左右 */}
+      <span
+        className={cn("whitespace-nowrap truncate leading-none text-[10px] font-semibold text-satin-grey", direction === "left" && "order-first text-right")}
+        style={{ maxWidth: direction === "right" ? labelWidth : `calc(${DEADLINE_LABEL_RATIO * 100}% - 10px)` }}
+      >
         {item.startTime ?? ""}
-        <span className="ml-1 hidden xl:inline truncate max-w-[90px] text-sandrift font-medium">{item.title}</span>
+        {showLabel && (
+          <span className="ml-1 hidden xl:inline text-sandrift font-medium">{item.title}</span>
+        )}
       </span>
     </div>
   );
 }
 
-function IntervalBlock({ item, track }: { item: TimelineItem; track: number }) {
+function IntervalBlock({ item, hasAllDay }: { item: TimelineItem; hasAllDay: boolean }) {
   const { leftRatio, widthRatio } = intervalToDayGeometry(item.startTime, item.endTime);
   const exam = item.sourceType === "exam";
+  const top = (hasAllDay ? 42 : 34);
+  // 真实几何像素宽度（按列宽估算，用于决定标题是否可进 block）
+  const aria = `${item.title}，${item.startTime ?? ""} 至 ${item.endTime ?? ""}${item.subtitle ? `，${item.subtitle}` : ""}`;
   return (
     <div
+      aria-label={aria}
       title={`${item.title} · ${item.startTime ?? ""}–${item.endTime ?? ""}${item.subtitle ? ` · ${item.subtitle}` : ""}`}
-      className={cn(
-        "absolute h-[16px] rounded-md border flex items-center px-1 overflow-hidden",
-        exam ? "bg-[#F4E9DF] border-[#E3CFBC]" : "bg-alabaster border-line"
-      )}
+      className="absolute pointer-events-auto"
       style={{
         left: `${leftRatio * 100}%`,
+        top: `${top}px`,
         width: `${Math.max(widthRatio * 100, 2.2)}%`,
-        top: `${track * 15 + 5}px`,
       }}
     >
-      <span className="truncate text-[9px] font-semibold text-satin-grey leading-none">
+      {/* Geometry Bar：严格按真实时间比例 */}
+      <span
+        className={cn(
+          "block h-[6px] rounded-full",
+          exam ? "bg-[#E3CFBC]" : "bg-line-strong/50"
+        )}
+      />
+      {/* 浮动标题：block 窄时显示在 bar 上方；宽时标题旁附时间 */}
+      <span className="absolute left-0 top-[-13px] max-w-[100%] whitespace-nowrap truncate text-[10px] font-semibold text-satin-grey leading-none">
         {item.title}
+        <span className="ml-1 hidden 2xl:inline text-sandrift font-medium">
+          {item.startTime}–{item.endTime}
+        </span>
       </span>
     </div>
   );

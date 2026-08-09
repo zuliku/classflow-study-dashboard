@@ -14,8 +14,8 @@ const BODY_TOTAL_MINUTES = 780; // 08:00–21:00
 async function openWorkspace(page: Page) {
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto("/");
-  await page.getByRole("button", { name: "我的课表" }).first().click();
-  await expect(page.getByRole("heading", { name: "学期课表" })).toBeVisible();
+  await page.getByRole("button", { name: "时间表" }).first().click();
+  await expect(page.getByRole("heading", { name: /第 \d+ 周/ })).toBeVisible();
   await expect(page.getByTestId("timetable-body")).toBeVisible();
 }
 
@@ -79,7 +79,7 @@ test("Move：拖高等数学 周一→周五 12:00，时间更新，刷新后仍
 
   // 刷新后仍在 周五，且时间 ≈ 12:00（±25 分钟）
   await page.reload();
-  await page.getByRole("button", { name: "我的课表" }).first().click();
+  await page.getByRole("button", { name: "时间表" }).first().click();
   await expect(page.getByTestId("timetable-body")).toBeVisible();
   const body2 = await bodyBox(page);
   const cards = page.locator('[data-testid="schedule-card"]').filter({ hasText: "高等数学" });
@@ -144,8 +144,8 @@ test("Mobile <768：点击课程卡仍进入 Course Drawer，不触发拖动", a
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/");
   // 底部导航进入课表页
-  await page.locator('nav[aria-label="底部导航"]').getByRole("button", { name: "课表" }).click();
-  await expect(page.getByRole("heading", { name: "学期课表" })).toBeVisible();
+  await page.locator('nav[aria-label="底部导航"]').getByRole("button", { name: "时间表" }).click();
+  await expect(page.getByRole("heading", { name: /第 \d+ 周/ })).toBeVisible();
 
   const card = page
     .locator('[data-testid="schedule-card"]')
@@ -186,7 +186,7 @@ test("Resize：拉底部把手，结束时间 15 分钟吸附，刷新后仍在"
 
   // 刷新后仍保持
   await page.reload();
-  await page.getByRole("button", { name: "我的课表" }).first().click();
+  await page.getByRole("button", { name: "时间表" }).first().click();
   await expect(page.getByTestId("timetable-body")).toBeVisible();
   const body2 = await bodyBox(page);
   const cardAfter = page

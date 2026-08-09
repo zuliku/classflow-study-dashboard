@@ -235,45 +235,29 @@ export function TimelineWorkspace() {
 
   const isToday = (dateStr: string) => dateStr === todayStr;
 
-  // 当前时间线（真实当前周才显示）
-  const nowLine = isCurrentWeek
-    ? { date: todayStr, ratio: (new Date().getHours() * 60 + new Date().getMinutes()) / 1440 }
-    : null;
-
   return (
     <div
       ref={wrapRef}
       data-testid="timeline-workspace"
       className="flex-1 flex flex-col min-h-0 bg-surface border border-line rounded-2xl shadow-subtle overflow-hidden"
     >
-      {/* ---------- Header Controls（第 N 周 · 日期范围 + 操作） ---------- */}
-      <div className="shrink-0 px-3 py-2.5 border-b border-line-soft flex items-center justify-between gap-2">
-        <div className="flex items-center gap-1.5 min-w-0">
+      {/* ---------- Header Controls（分组：左侧周导航 | 右侧 Actions） ---------- */}
+      <div className="shrink-0 px-3 py-2 border-b border-line-soft flex items-center justify-between gap-2">
+        {/* Group A：Week Navigation（周次 + 日期范围 + ‹ › 今天） */}
+        <div className="flex items-center gap-1 min-w-0">
           <h2 className="text-sm font-bold text-charcoal whitespace-nowrap">
             第 {currentSemesterWeek} 周
           </h2>
           <span className="text-[11px] text-sandrift truncate">
             {formatWeekDateRange(semester, currentSemesterWeek)}
           </span>
-        </div>
-
-        <div className="flex items-center gap-0.5 shrink-0">
-          {/* 今天 */}
-          <button
-            onClick={() => setCurrentSemesterWeek(Math.min(Math.max(getSemesterWeekOf(new Date(), semester), 1), semester.totalWeeks))}
-            disabled={isCurrentWeek}
-            title="回到本周"
-            className="h-8 px-2.5 rounded-lg text-[11px] font-bold text-charcoal bg-pastel-mint hover:bg-pastel-mint disabled:opacity-40 disabled:cursor-default transition-colors"
-          >
-            今天
-          </button>
-          {/* ‹ › */}
+          <div className="w-px h-4 bg-line-soft mx-1 shrink-0" />
           <button
             onClick={() => setCurrentSemesterWeek(currentSemesterWeek - 1)}
             disabled={currentSemesterWeek <= 1}
             aria-label="上一周"
             title="上一周"
-            className="w-8 h-8 flex items-center justify-center rounded-lg text-sandrift hover:bg-alabaster hover:text-charcoal transition-colors disabled:opacity-30"
+            className="w-7 h-7 flex items-center justify-center rounded-lg text-sandrift hover:bg-alabaster hover:text-charcoal transition-colors disabled:opacity-30"
           >
             <ChevronLeft className="w-4 h-4" />
           </button>
@@ -282,13 +266,28 @@ export function TimelineWorkspace() {
             disabled={currentSemesterWeek >= semester.totalWeeks}
             aria-label="下一周"
             title="下一周"
-            className="w-8 h-8 flex items-center justify-center rounded-lg text-sandrift hover:bg-alabaster hover:text-charcoal transition-colors disabled:opacity-30"
+            className="w-7 h-7 flex items-center justify-center rounded-lg text-sandrift hover:bg-alabaster hover:text-charcoal transition-colors disabled:opacity-30"
           >
             <ChevronRight className="w-4 h-4" />
           </button>
+          {/* 今天：降权 neutral（当前周 subtle/disabled；非当前周增强） */}
+          <button
+            onClick={() => setCurrentSemesterWeek(Math.min(Math.max(getSemesterWeekOf(new Date(), semester), 1), semester.totalWeeks))}
+            disabled={isCurrentWeek}
+            title={isCurrentWeek ? "已在当前周" : "回到本周"}
+            className={cn(
+              "h-7 px-2.5 rounded-lg text-[11px] font-bold transition-colors",
+              isCurrentWeek
+                ? "text-sandrift/70 cursor-default"
+                : "text-charcoal bg-alabaster hover:bg-line-soft"
+            )}
+          >
+            今天
+          </button>
+        </div>
 
-          <div className="w-px h-5 bg-line-soft mx-1" />
-
+        {/* Group B：Timeline Actions */}
+        <div className="flex items-center gap-0.5 shrink-0">
           {/* 筛选 */}
           <div className="relative">
             <button
@@ -337,14 +336,14 @@ export function TimelineWorkspace() {
             )}
           </div>
 
-          {/* Quick Create + */}
+          {/* Quick Create +（主 Create Action） */}
           <div className="relative">
             <button
               onClick={() => { setQuickOpen((v) => !v); setFilterOpen(false); setMoreOpen(false); }}
               aria-label="新建"
               aria-expanded={quickOpen}
               title="新建"
-              className="w-8 h-8 flex items-center justify-center rounded-lg text-charcoal bg-charcoal text-white hover:bg-black transition-colors"
+              className="w-8 h-8 flex items-center justify-center rounded-lg bg-charcoal text-white hover:bg-black transition-colors"
             >
               <Plus className="w-4 h-4" />
             </button>
@@ -377,12 +376,12 @@ export function TimelineWorkspace() {
             )}
           </div>
 
-          {/* Ask Kiro */}
+          {/* Ask Kiro（Secondary Featured，唯一保留 Logo + Text） */}
           <KiroFlowButton
             icon={KIRO_ICON}
             label="Ask Kiro"
             size="sm"
-            className="h-8"
+            className="h-8 ml-0.5"
             onClick={() => handoff.openForWeek(currentSemesterWeek)}
           />
 
@@ -425,13 +424,13 @@ export function TimelineWorkspace() {
         </div>
       </div>
 
-      {/* ---------- 主体：Weekday Header + Key Timeline + Course Grid + Shelf ---------- */}
+      {/* ---------- 主体：Weekday Header（唯一一份）+ Key Timeline + Course Grid ---------- */}
       <div className="flex-1 min-h-0 flex flex-col overflow-x-auto">
-        <div className="min-w-[640px] flex flex-col flex-1 min-h-0 px-3 pt-2">
-          {/* Weekday Header（含今天轻高亮） */}
+        <div className="min-w-[640px] flex flex-col flex-1 min-h-0 px-3 pt-1.5">
+          {/* Weekday Header（与 Key Lane / Grid 共用 56px 时间 gutter） */}
           <div
-            className="grid border-b border-line-soft pb-1.5 text-center text-xs shrink-0"
-            style={{ gridTemplateColumns: `minmax(0, 1fr) repeat(${dayCount}, minmax(0, 1fr))` }}
+            className="grid border-b border-line-soft pb-1 text-center text-xs shrink-0"
+            style={{ gridTemplateColumns: `56px repeat(${dayCount}, minmax(0, 1fr))` }}
           >
             <div className="text-sandrift font-medium py-0.5 text-[11px]" />
             {weekDates.slice(0, dayCount).map((date, idx) => {
@@ -446,19 +445,24 @@ export function TimelineWorkspace() {
           </div>
 
           {/* 关键时间轴（真正的时间轴：24h 比例） */}
-          <TimelineKeyLane items={visibleItems} weekDates={weekDates.slice(0, dayCount)} nowLine={nowLine} />
+          <TimelineKeyLane items={visibleItems} weekDates={weekDates.slice(0, dayCount)} />
 
-          {/* Course-centric Hour Grid（复用 TimetableGrid；StudyBlock 走 extraLayers） */}
+          {/* Course-centric Hour Grid（embedded：无 Card 嵌套 / 无固定 min-height） */}
           <div className="flex-1 min-h-0 flex flex-col">
-            <TimetableGrid editable showHeader={false} extraLayers={studyLayer} />
+            <TimetableGrid
+              editable
+              variant="embedded"
+              showHeader={false}
+              showWeekdayHeader={false}
+              extraLayers={studyLayer}
+            />
           </div>
         </div>
       </div>
 
-      {/* ---------- Unscheduled Shelf ---------- */}
+      {/* ---------- Unscheduled Shelf（默认单行） ---------- */}
       <TimelineUnscheduledShelf
         assignments={unscheduled}
-        weekDates={weekDates}
         onArrange={(a) => { setArrangeFor(a); setMarkOpen(false); }}
       />
 

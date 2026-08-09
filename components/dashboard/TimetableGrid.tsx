@@ -60,10 +60,15 @@ type Interaction =
       conflict: ScheduleConflict | null;
     };
 
+/** 时间 gutter 固定宽度（Timeline / Overview / Fullscreen 统一，避免时间列与 Day 等宽浪费空间） */
+export const TIMETABLE_GUTTER_PX = 56;
+
 export function TimetableGrid({
   editable = false,
   density = "comfortable",
   showHeader = true,
+  showWeekdayHeader = true,
+  variant = "card",
   extraLayers,
 }: {
   editable?: boolean;
@@ -71,6 +76,10 @@ export function TimetableGrid({
   density?: "compact" | "comfortable";
   /** Timeline Workspace：Header 由外层 Timeline 提供（本组件不渲染自己的 header） */
   showHeader?: boolean;
+  /** Timeline Workspace：Weekday Header 由外层 Timeline 提供（避免重复） */
+  showWeekdayHeader?: boolean;
+  /** card：独立 Card（Overview / Fullscreen）；embedded：嵌入外层 Surface（Timeline，去 border/padding/min-height） */
+  variant?: "card" | "embedded";
   /** Timeline V1：在每一天列内渲染额外绝对定位层（如 StudyBlock） */
   extraLayers?: (ctx: {
     dayOfWeek: number;
@@ -372,7 +381,11 @@ export function TimetableGrid({
   return (
     <div
       data-testid="timetable-card"
-      className="bg-surface border border-line rounded-2xl p-4 shadow-subtle flex flex-col justify-between h-full w-full"
+      className={
+        variant === "embedded"
+          ? "flex flex-col justify-between h-full w-full min-h-0"
+          : "bg-surface border border-line rounded-2xl p-4 shadow-subtle flex flex-col justify-between h-full w-full"
+      }
     >
       {/* Header */}
       {showHeader && (
@@ -452,10 +465,11 @@ export function TimetableGrid({
       >
         {/* 内容最小宽度：窄容器内课表整体横向滚动，避免把课程信息压到不可读 */}
         <div className="min-w-[640px] flex flex-col flex-1 min-h-0">
-        {/* Weekday Header Row（列数随 showWeekends 5/7 天动态） */}
+        {/* Weekday Header Row（列数随 showWeekends 5/7 天动态；Timeline 由外层提供，避免重复） */}
+        {showWeekdayHeader && (
         <div
           className="grid border-b border-line pb-2 text-center text-xs shrink-0"
-          style={{ gridTemplateColumns: `minmax(0, 1fr) repeat(${dayCount}, minmax(0, 1fr))` }}
+          style={{ gridTemplateColumns: `${TIMETABLE_GUTTER_PX}px repeat(${dayCount}, minmax(0, 1fr))` }}
         >
           <div className="text-sandrift font-medium py-0.5 text-[11px]">时间</div>
           {weekdays.map((wd) => (
@@ -473,15 +487,18 @@ export function TimetableGrid({
             </div>
           ))}
         </div>
+        )}
 
         {/* Timetable Body Grid (08:00 to 21:00 Evening Range) */}
         <div
           className={cn(
-            "relative flex-1 grid mt-1 min-h-[520px]",
+            "relative flex-1 grid mt-1",
+            // Timeline embedded：高度由父容器分配（一屏完整展示）；独立 Card 保留最小高度
+            variant === "embedded" ? "min-h-0" : "min-h-[520px]",
             // Overview compact：md+ 压缩时间轴（每小时 ~33-35px），完整保留 08:00-21:00
             isCompactDensity && "md:min-h-[440px]"
           )}
-          style={{ gridTemplateColumns: `minmax(0, 1fr) repeat(${dayCount}, minmax(0, 1fr))` }}
+          style={{ gridTemplateColumns: `${TIMETABLE_GUTTER_PX}px repeat(${dayCount}, minmax(0, 1fr))` }}
         >
           {/* Time Labels Column */}
           <div className="flex flex-col justify-between text-[10px] text-sandrift font-mono border-r border-[#F0EBE1] pr-1.5 py-0.5 h-full">
