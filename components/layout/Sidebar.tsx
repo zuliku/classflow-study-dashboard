@@ -22,16 +22,23 @@ export function Sidebar() {
     <aside className="hidden md:flex w-16 xl:w-56 h-screen bg-[#F7F5F5] border-r border-line flex-col justify-between p-3.5 sticky top-0 select-none z-20 shrink-0">
       {/* Top Section */}
       <div className="space-y-3">
-        {/* Brand Logo：Desktop 全宽；Icon Rail 显示 Logo mark */}
+        {/* Brand Logo：Icon Rail 显示图形 Mark；完整 Sidebar 显示全横版 Logo（Responsive Swap，非缩放） */}
         <div
-          className="w-full py-1.5 px-0.5 flex items-center justify-center xl:justify-start cursor-pointer transition-opacity hover:opacity-90"
+          className="w-full h-10 px-0.5 flex items-center justify-center xl:justify-start xl:pl-[38px] cursor-pointer transition-opacity hover:opacity-90"
           onClick={() => setActiveTab("overview")}
           title="ClassFlow"
         >
+          {/* 768–1279 Icon Rail：仅图形 Mark，居中，object-contain */}
+          <img
+            src="/branding/classflow-mark.png"
+            alt="ClassFlow"
+            className="hidden md:block xl:hidden w-8 h-8 object-contain"
+          />
+          {/* ≥1280 完整 Sidebar：图形 + ClassFlow 文字，max-width 约束，与导航文字左对齐 */}
           <img
             src="/logo.png"
             alt="ClassFlow"
-            className="w-9 h-9 xl:w-full xl:h-auto xl:max-h-16 object-contain mix-blend-multiply"
+            className="hidden xl:block w-9 h-9 xl:w-auto xl:h-auto xl:max-w-[160px] object-contain mix-blend-multiply"
           />
         </div>
 
