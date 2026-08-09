@@ -4,8 +4,8 @@ import React, { useEffect, useRef } from "react";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Header } from "@/components/layout/Header";
 import { BottomNav } from "@/components/layout/BottomNav";
-import { StatCards } from "@/components/dashboard/StatCards";
 import { TimetableGrid } from "@/components/dashboard/TimetableGrid";
+import { TimetableQuickGlance } from "@/components/dashboard/TimetableQuickGlance";
 import { UpcomingDDL } from "@/components/dashboard/UpcomingDDL";
 import { MiniCalendar } from "@/components/dashboard/MiniCalendar";
 import { StudyLoadChart } from "@/components/dashboard/StudyLoadChart";
@@ -193,15 +193,12 @@ export default function Home() {
                 </div>
               ) : (
                 <>
-              {/* Row 1: Top 4 Stat Summary Cards */}
-              <StatCards />
-
-              {/* Row 2: Middle TimetableGrid (2/3) + Upcoming DDL & Mini Calendar (1/3) */}
+              {/* Row 1: TimetableGrid (2/3) + Upcoming DDL & Mini Calendar (1/3) */}
               {/* Tablet 768–1023 自然降列 2+1，Desktop 恢复 2/3 + 1/3 */}
               {/* items-stretch：左侧完整时间轴课表是 Row 高度基准；右侧用 grid-rows-[auto_1fr] 适配等高 */}
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 items-stretch">
                 <div className="lg:col-span-2 flex flex-col min-h-0">
-                  <TimetableGrid density="compact" />
+                  <TimetableGrid density="compact" headerActions={<TimetableQuickGlance />} />
                 </div>
                 {/* UpcomingDDL 按 3 条自然高度；MiniCalendar 占据剩余空间（明显高于 DDL 卡） */}
                 <div className="grid grid-rows-[auto_1fr] gap-5 h-full min-h-0">
@@ -379,7 +376,7 @@ export default function Home() {
               {/* Metric Summary Cards Derived Dynamically */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="p-4 bg-surface border border-line rounded-2xl shadow-subtle space-y-1">
-                  <span className="text-xs font-semibold text-sandrift">按时完成率</span>
+                  <span className="text-xs font-semibold text-sandrift">任务完成率</span>
                   <div className="text-2xl font-extrabold text-success">{completionRate}%</div>
                   <p className="text-[10px] text-success font-medium">
                     已完成 {completedTasks} / {totalTasks} 项任务

@@ -69,6 +69,7 @@ export function TimetableGrid({
   showHeader = true,
   showWeekdayHeader = true,
   variant = "card",
+  headerActions,
   extraLayers,
 }: {
   editable?: boolean;
@@ -80,6 +81,8 @@ export function TimetableGrid({
   showWeekdayHeader?: boolean;
   /** card：独立 Card（Overview / Fullscreen）；embedded：嵌入外层 Surface（Timeline，去 border/padding/min-height） */
   variant?: "card" | "embedded";
+  /** Overview：Header 右侧的 Quick Glance 等额外动作（渲染在「查看课表」之前） */
+  headerActions?: React.ReactNode;
   /** Timeline V1：在每一天列内渲染额外绝对定位层（如 StudyBlock） */
   extraLayers?: (ctx: {
     dayOfWeek: number;
@@ -417,6 +420,8 @@ export function TimetableGrid({
             </button>
           </div>
         </div>
+
+        {headerActions}
 
         <button
           onClick={handleOpenFullTimetable}
