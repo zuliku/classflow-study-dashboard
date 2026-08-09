@@ -38,6 +38,10 @@ export interface AIModelDefinition {
     fileParts: boolean;
     pdf?: boolean;
   };
+  /** 可靠的模型 Context 覆盖（无可靠 metadata 时不设；Custom Provider 一律用 ClassFlow 默认预算） */
+  contextBudget?: {
+    maxInputTokens: number;
+  };
 }
 
 /** Provider 连接配置（Server Route 使用） */

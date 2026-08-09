@@ -8,6 +8,7 @@ export type AIErrorCode =
   | "PROVIDER_UNAVAILABLE"
   | "INVALID_PROVIDER_RESPONSE"
   | "INVALID_CUSTOM_URL"
+  | "CONTEXT_TOO_LARGE"
   | "UNKNOWN";
 
 export class AIError extends Error {
@@ -28,6 +29,7 @@ export const AI_ERROR_MESSAGES: Record<AIErrorCode, string> = {
   PROVIDER_UNAVAILABLE: "服务无法连接，请检查网络或稍后再试。",
   INVALID_PROVIDER_RESPONSE: "服务返回异常，请稍后再试。",
   INVALID_CUSTOM_URL: "自定义服务地址无效。",
+  CONTEXT_TOO_LARGE: "当前对话内容较长，Kiro 已尝试压缩上下文。可以新建对话后继续。",
   UNKNOWN: "发生了未知错误，请重试。",
 };
 
@@ -105,6 +107,12 @@ export function normalizeAIError(err: unknown): AIError {
   }
   if (msg.includes("429") || msg.includes("rate limit")) return new AIError("RATE_LIMITED");
   if (msg.includes("model not found") || msg.includes("404")) return new AIError("MODEL_NOT_FOUND");
+  if (
+    (msg.includes("context") || msg.includes("prompt")) &&
+    (msg.includes("too large") || msg.includes("exceeded") || msg.includes("maximum") || msg.includes("too long") || msg.includes("length"))
+  ) {
+    return new AIError("CONTEXT_TOO_LARGE");
+  }
   if (msg.includes("502") || msg.includes("503") || msg.includes("fetch failed")) {
     return new AIError("PROVIDER_UNAVAILABLE");
   }

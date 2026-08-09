@@ -21,7 +21,10 @@ import { executeKiroWriteTool } from "@/lib/ai/tools/write/executor";
 import { isDestructiveWriteTool, KiroUndoEntry, KiroWriteApi, WriteToolResult } from "@/lib/ai/tools/write/types";
 import { KIRO_WRITE_TOOL_NAMES } from "@/lib/ai/tools/write/registry";
 import { actionToastMessage, toolLabel } from "@/lib/ai/tools/formatters";
-import { PersistedActionView, PersistedAttachmentView, KiroConversationRecord } from "@/lib/ai/history/types";
+import { PersistedActionView, PersistedAttachmentView, KiroConversationRecord, KiroConversationSummary } from "@/lib/ai/history/types";
+import { budgetAttachments } from "@/lib/ai/contextBudget/attachmentBudget";
+import { DEFAULT_CONTEXT_BUDGET } from "@/lib/ai/contextBudget/planner";
+import { KiroTurnContextSnapshot } from "@/lib/ai/contextBudget/types";
 
 /** 每回合工具调用上限：Read ≤ 12，Write ≤ 8 */
 export const MAX_READ_TOOL_CALLS_PER_TURN_UI = 12;
@@ -176,12 +179,15 @@ export function useKiroChat({
   entryRefs,
   suppressedAutoKeys,
   attachments,
+  conversationSummary,
 }: {
   autoRefs: KiroContextRef[];
   manualRefs: KiroContextRef[];
   entryRefs: KiroContextRef[];
   suppressedAutoKeys: string[];
   attachments: KiroAttachment[];
+  /** 当前 Conversation Summary（若有）：随 Turn Snapshot 冻结，作为 Model Context 的一部分 */
+  conversationSummary?: KiroConversationSummary | null;
 }) {
   const enabled = useAISettingsStore((s) => s.enabled);
   const provider = useAISettingsStore((s) => s.provider);
@@ -197,23 +203,48 @@ export function useKiroChat({
   // 发送瞬间绑定的附件快照：按 user message 顺序消费（File 不进入 Chat state）
   const snapshotQueueRef = useRef<KiroAttachmentView[][]>([]);
 
-  // 每轮请求体：Base Context + 显式 Context 引用 + 附件 Context（每次渲染刷新为最新 Store 状态）
-  const bodyRef = useRef<Record<string, unknown>>({});
-  bodyRef.current = {
-    provider,
-    model,
-    apiKey: getSessionApiKey(provider),
-    customConfig: custom,
-    baseContext: buildBaseContext(),
-    contextRefs: refsForPrompt(
-      dedupeContextRefs(
-        resolveContextRefs(autoRefs, manualRefs, entryRefs, suppressedAutoKeys),
-        useAppStore.getState().currentSemesterWeek
-      )
-    ),
-    // 文档文本 Context（本地已提取；图片不走此路径，走原生 image part）
-    attachmentsContext: buildDocumentContexts(attachments),
+  // ---- Turn Context Snapshot（Task 7 关键修复）----
+  // 一个 User Turn 内 Prompt Context 保持不变（附件/Context 冻结，即使 Composer 已清空）；
+  // 下一 Turn 重新快照（数据 freshness 与 turn consistency 同时成立）。
+  const turnSnapshotRef = useRef<Record<string, unknown> | null>(null);
+
+  const buildTurnSnapshot = (): Record<string, unknown> => {
+    const attachmentsContext = budgetAttachments(
+      buildDocumentContexts(attachments),
+      DEFAULT_CONTEXT_BUDGET.attachmentBudgetTokens
+    ).attachments.map((a) => ({
+      name: a.name,
+      type: a.type,
+      text: a.text,
+      source: a.source === "course-material" ? ("course-material" as const) : ("chat" as const),
+      truncated: a.truncated ?? false,
+      budgetTruncated: a.budgetTruncated ?? false,
+      courseName: a.courseName,
+    }));
+    return {
+      provider,
+      model,
+      apiKey: getSessionApiKey(provider),
+      customConfig: custom,
+      baseContext: buildBaseContext(),
+      contextRefs: refsForPrompt(
+        dedupeContextRefs(
+          resolveContextRefs(autoRefs, manualRefs, entryRefs, suppressedAutoKeys),
+          useAppStore.getState().currentSemesterWeek
+        )
+      ),
+      attachmentsContext,
+      conversationSummary: conversationSummary
+        ? { text: conversationSummary.text, throughMessageId: conversationSummary.throughMessageId }
+        : undefined,
+    };
   };
+
+  // 每轮请求体引用：优先使用当前 Turn Snapshot（冻结）；无快照时回退实时 body
+  const bodyRef = useRef<Record<string, unknown>>({});
+  const requestBody = (): Record<string, unknown> => turnSnapshotRef.current ?? bodyRef.current;
+  const buildSnapshotRef = useRef(buildTurnSnapshot);
+  buildSnapshotRef.current = buildTurnSnapshot;
 
   const readCounterRef = useRef(0);
   const materialReadCounterRef = useRef(0);
@@ -254,7 +285,7 @@ export function useKiroChat({
           tool: toolName as never,
           toolCallId,
           output: { ok: false, code, message } as ToolOutput,
-          options: { body: bodyRef.current },
+          options: { body: requestBody() },
         });
 
       // ---- 循环保护 ----
@@ -276,7 +307,7 @@ export function useKiroChat({
             tool: toolName as never,
             toolCallId,
             output: result as ToolOutput,
-            options: { body: bodyRef.current },
+            options: { body: requestBody() },
           });
         });
         return;
@@ -346,7 +377,7 @@ export function useKiroChat({
         tool: toolName as never,
         toolCallId,
         output: result as ToolOutput,
-        options: { body: bodyRef.current },
+        options: { body: requestBody() },
       });
     },
     sendAutomaticallyWhen: ({ messages }) =>
@@ -368,7 +399,7 @@ export function useKiroChat({
         tool: toolName as never,
         toolCallId,
         output: result as ToolOutput,
-        options: { body: bodyRef.current },
+        options: { body: requestBody() },
       });
     },
     [chat, consumeUndo, pushToast]
@@ -382,6 +413,9 @@ export function useKiroChat({
       materialReadCounterRef.current = 0;
       writeCounterRef.current = 0;
       limitReachedRef.current = false;
+
+      // ---- Turn Context Snapshot：本 Turn 内 Prompt Context 冻结（下一 Turn 才刷新） ----
+      turnSnapshotRef.current = buildSnapshotRef.current();
 
       // 附件快照绑定到该 User Turn（发送后 Composer 清空，旧消息不受影响）
       const snapshot: KiroAttachmentView[] = attachments
@@ -421,7 +455,7 @@ export function useKiroChat({
 
       void chat.sendMessage(
         { text: v, files },
-        { body: bodyRef.current }
+        { body: requestBody() }
       );
     },
     [chat, enabled, attachments, visionEnabled]
@@ -438,7 +472,7 @@ export function useKiroChat({
     materialReadCounterRef.current = 0;
     writeCounterRef.current = 0;
     limitReachedRef.current = false;
-    void chat.regenerate({ body: bodyRef.current });
+    void chat.regenerate({ body: requestBody() });
   }, [chat, enabled, pushToast]);
 
   const newChat = useCallback(() => {

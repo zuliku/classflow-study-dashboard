@@ -7,6 +7,7 @@ import { KiroChatMessageView, KiroActivity } from "@/hooks/useKiroChat";
 import { AIError, AI_ERROR_MESSAGES } from "@/lib/ai/errors";
 import { KiroActionCard, actionToCardProps, KiroActionCardVariant } from "@/components/kiro/KiroActionCard";
 import { actionSummaryText } from "@/lib/ai/share";
+import { useKiroSession } from "@/components/kiro/KiroSessionProvider";
 import { cn } from "@/lib/utils";
 import { RotateCcw, Settings, ChevronDown } from "lucide-react";
 
@@ -35,6 +36,7 @@ export function KiroConversation({
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const stickToBottomRef = useRef(true);
   const [showScrollBtn, setShowScrollBtn] = React.useState(false);
+  const { conversationSummary } = useKiroSession();
   const contentKey = messages.map((m) => `${m.id}:${m.content.length}:${m.streaming}`).join("|");
 
   const onScroll = () => {
@@ -79,6 +81,17 @@ export function KiroConversation({
         </button>
       )}
       <div className={cn("max-w-[820px] mx-auto space-y-5 py-3", compact ? "px-3" : "px-1")}>
+        {/* 极轻提示：真正发生过旧对话压缩时（不显示 token 数字） */}
+        {conversationSummary && (
+          <div className="flex justify-center">
+            <span
+              title="Kiro 保留最近消息，并压缩较早内容以保持对话稳定。"
+              className="text-[10px] text-sandrift bg-[#F7F5F5] border border-line px-2 py-0.5 rounded-full"
+            >
+              较早对话已压缩
+            </span>
+          </div>
+        )}
         {messages.map((m) =>
           m.role === "user" ? (
             <KiroUserMessage key={m.id} content={m.content} attachments={m.attachments} />

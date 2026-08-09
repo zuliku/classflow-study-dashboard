@@ -7,6 +7,7 @@ import { KiroChatMessageView } from "@/hooks/useKiroChat";
 import { actionToCardProps } from "@/components/kiro/KiroActionCard";
 import {
   KiroConversationRecord,
+  KiroConversationSummary,
   PersistedContextRef,
   PersistedKiroMessage,
 } from "@/lib/ai/history/types";
@@ -69,6 +70,7 @@ export function sanitizeConversation(input: {
   messages: KiroChatMessageView[];
   manualRefs: KiroContextRef[];
   entryRefs: KiroContextRef[];
+  summary?: KiroConversationSummary | null;
 }): KiroConversationRecord {
   const messages: PersistedKiroMessage[] = input.messages
     .filter((m) => m.content.length > 0 || m.role === "user")
@@ -112,6 +114,7 @@ export function sanitizeConversation(input: {
     messages,
     manualRefs: toRefs(input.manualRefs),
     entryRefs: toRefs(input.entryRefs),
+    summary: input.summary ?? undefined,
   };
 }
 

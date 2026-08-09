@@ -12,6 +12,13 @@ import { getProviderConfig } from "@/lib/ai/providers/registry";
 import { KIRO_TOOLS } from "@/lib/ai/tools";
 import { normalizeAIError, AIError, AI_ERROR_MESSAGES } from "@/lib/ai/errors";
 import { createChatProvider, validateAIChatBody, createTimeoutController } from "@/lib/ai/server";
+import {
+  buildKiroModelContext,
+  DEFAULT_CONTEXT_BUDGET,
+  KiroModelContextPlan,
+} from "@/lib/ai/contextBudget/planner";
+import { KiroPlannableMessage } from "@/lib/ai/contextBudget/types";
+import { estimateTokens } from "@/lib/ai/contextBudget/estimate";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -80,12 +87,16 @@ export async function POST(req: NextRequest) {
   const baseContext = (typeof b.baseContext === "object" && b.baseContext !== null ? b.baseContext : null) as Record<string, unknown> | null;
   const contextRefs = Array.isArray(b.contextRefs) ? (b.contextRefs as Record<string, unknown>[]) : [];
   const attachmentsContext = Array.isArray(b.attachmentsContext)
-    ? (b.attachmentsContext as { name?: string; text?: string; type?: string; source?: string; truncated?: boolean; courseName?: string }[])
+    ? (b.attachmentsContext as { name?: string; text?: string; type?: string; source?: string; truncated?: boolean; budgetTruncated?: boolean; courseName?: string }[])
     : [];
+  const conversationSummary =
+    typeof b.conversationSummary === "object" && b.conversationSummary !== null
+      ? (b.conversationSummary as { text?: string; throughMessageId?: string })
+      : null;
 
-  const attachmentSection =
-    attachmentsContext.length > 0
-      ? `\n\n# 用户提供的文件内容\n${attachmentsContext
+  const attachmentSection = (contexts: { name?: string; text?: string; type?: string; source?: string; truncated?: boolean; budgetTruncated?: boolean; courseName?: string }[]) =>
+    contexts.length > 0
+      ? `\n\n# 用户提供的文件内容\n${contexts
           .map((f, i) => {
             const header = [
               `文件 ${i + 1}：${f.name ?? "未命名"}`,
@@ -93,20 +104,14 @@ export async function POST(req: NextRequest) {
               f.courseName ? `课程：${f.courseName}` : "",
               `类型：${f.type ?? ""}`,
               f.truncated ? "（内容已截断，未完整读取）" : "",
+              f.budgetTruncated ? "（内容因上下文预算进一步截断）" : "",
             ]
               .filter(Boolean)
               .join(" · ");
             return `### ${header}\n${f.text ?? ""}`;
           })
-          .join("\n\n")}`.slice(0, 240_000)
+          .join("\n\n")}`
       : "";
-
-  const systemMessage = baseContext
-    ? `${KIRO_SYSTEM_PROMPT}\n\n# 当前 ClassFlow 上下文\n${JSON.stringify({
-        baseContext,
-        contextRefs,
-      })}${attachmentSection}`
-    : KIRO_SYSTEM_PROMPT + attachmentSection;
 
   // 兼容性归一：旧 {role, content} 形状 → UIMessage parts 形状（客户端始终发送 parts 版）
   const normalizedMessages = (parsed.messages as { id?: string; role: string; content?: string; parts?: unknown[] }[]).map(
@@ -116,8 +121,53 @@ export async function POST(req: NextRequest) {
         : { id: m.id ?? `m_${Math.random().toString(36).slice(2)}`, role: m.role, parts: [{ type: "text", text: m.content ?? "" }] }
   );
 
+  /**
+   * Model Context Planner（Task 7）：UI Messages（originalMessages 不变）→ Model Messages。
+   * 优先级：System > Base Context > Explicit Refs > Current Turn > Recent Turns > Summary。
+   * 预算超出 → 更激进的 Plan（Summary + 最近 3 Turn + 附件预算减半）重试一次。
+   */
+  const planFor = (aggressive: boolean): KiroModelContextPlan => {
+    const summaryText = conversationSummary?.text
+      ? `以下为更早对话的摘要（仅代表历史对话，不代表当前 ClassFlow 数据）：\n${conversationSummary.text}`
+      : undefined;
+    const plan = buildKiroModelContext({
+      messages: normalizedMessages as KiroPlannableMessage[],
+      summaryText,
+      attachments: attachmentsContext.map((a) => ({
+        name: a.name ?? "未命名",
+        type: a.type ?? "",
+        text: a.text ?? "",
+        source: a.source,
+        truncated: a.truncated,
+        budgetTruncated: a.budgetTruncated,
+        courseName: a.courseName,
+      })),
+      budget: DEFAULT_CONTEXT_BUDGET,
+      aggressive,
+    });
+    return plan;
+  };
+
+  const normalPlan = planFor(false);
+  const overBudget = normalPlan.budgetReport.estimatedTokens > DEFAULT_CONTEXT_BUDGET.maxInputTokens;
+  const plan = overBudget ? planFor(true) : normalPlan;
+  // 极激进后仍超预算：明确返回 CONTEXT_TOO_LARGE（不偷偷丢弃当前 Turn）
+  if (plan.budgetReport.estimatedTokens > DEFAULT_CONTEXT_BUDGET.maxInputTokens) {
+    return Response.json(
+      { code: "CONTEXT_TOO_LARGE", message: AI_ERROR_MESSAGES.CONTEXT_TOO_LARGE },
+      { status: 400 }
+    );
+  }
+
+  const systemMessage = baseContext
+    ? `${KIRO_SYSTEM_PROMPT}\n\n# 当前 ClassFlow 上下文\n${JSON.stringify({
+        baseContext,
+        contextRefs,
+      })}${attachmentSection(plan.attachmentContext)}`
+    : KIRO_SYSTEM_PROMPT + attachmentSection(plan.attachmentContext);
+
   try {
-    const modelMessages = await convertToModelMessages(normalizedMessages as never);
+    const modelMessages = await convertToModelMessages(plan.messages as never);
     const result = streamText({
       model: provider(parsed.model),
       messages: modelMessages,
@@ -130,6 +180,7 @@ export async function POST(req: NextRequest) {
     const uiStream = toUIMessageStream({
       stream: guardStream(result.stream),
       // 多轮 client tool call 时保留同一 assistant message id，避免重复消息
+      // UI 连续性 / Message ID / Tool Loop 始终基于真实 originalMessages（不做 compact 替换）
       originalMessages: parsed.messages as never,
       onError: (err: unknown) => {
         const aiErr = normalizeAIError(err);

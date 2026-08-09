@@ -34,7 +34,10 @@ import {
   renameConversationRecord,
   clearConversationHistory,
 } from "@/lib/ai/history/db";
-import { KiroConversationRecord, PersistedContextRef } from "@/lib/ai/history/types";
+import { KiroConversationRecord, PersistedContextRef, KiroConversationSummary } from "@/lib/ai/history/types";
+import { requestConversationCompact, toCompactMessages } from "@/lib/ai/history/summary";
+import { estimateTokens } from "@/lib/ai/contextBudget/estimate";
+import { shouldCompact, DEFAULT_CONTEXT_BUDGET } from "@/lib/ai/contextBudget/planner";
 
 export type KiroSuggestionsKind = "assignment" | "course" | "group-project" | "week" | "generic";
 
@@ -51,6 +54,7 @@ interface KiroSessionValue {
   currentConversationId: string | null;
   conversationTitle: string | null;
   conversationCreatedAt: string | null;
+  conversationSummary: KiroConversationSummary | null;
   historyVersion: number;
   loadConversation: (id: string) => void;
   deleteConversation: (id: string) => void;
@@ -100,6 +104,11 @@ export function KiroSessionProvider({ children }: { children: React.ReactNode })
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastSavedSnapshotRef = useRef<string>("");
 
+  // Conversation Summary（Task 7）：内部 Model Context；不代表当前 ClassFlow 数据
+  const [conversationSummary, setConversationSummary] = useState<KiroConversationSummary | null>(null);
+  const conversationSummaryRef = useRef<KiroConversationSummary | null>(null);
+  const compactingRef = useRef(false);
+
   const setActiveTab = useAppStore((s) => s.setActiveTab);
   const activeTab = useAppStore((s) => s.activeTab);
 
@@ -124,10 +133,12 @@ export function KiroSessionProvider({ children }: { children: React.ReactNode })
     entryRefs,
     suppressedAutoKeys,
     attachments: attachments.attachments,
+    conversationSummary,
   });
 
   const aiProvider = useAISettingsStore((s) => s.provider);
   const aiModel = useAISettingsStore((s) => s.model);
+  const aiCustom = useAISettingsStore((s) => s.custom);
 
   // ---- Conversation Persistence（Task 6）----
 
@@ -152,6 +163,7 @@ export function KiroSessionProvider({ children }: { children: React.ReactNode })
         messages: messages as ReturnType<typeof useKiroChat>["messages"],
         manualRefs,
         entryRefs,
+        summary: conversationSummaryRef.current,
       });
       await saveConversation(record);
       refreshHistory();
@@ -177,7 +189,45 @@ export function KiroSessionProvider({ children }: { children: React.ReactNode })
     await persistCurrent();
   }, [persistCurrent]);
 
-  // Turn 结束（streaming true→false）→ 保存稳定点；tool loop 完成同样落在这里
+  /** 后台 Compact（Task 7）：估算达到预算 75% 时，增量生成 Conversation Summary；失败静默（不阻塞聊天） */
+  const maybeCompact = useCallback(async () => {
+    const id = conversationIdRef.current;
+    if (!id || compactingRef.current) return;
+    const msgs = chat.messages;
+    if (msgs.length === 0 || chat.streaming) return;
+    let est = 0;
+    for (const m of msgs) {
+      est += estimateTokens(m.content);
+      if (m.actions) est += estimateTokens(JSON.stringify(m.actions).slice(0, 4000));
+      if (m.historyActions) est += estimateTokens(JSON.stringify(m.historyActions).slice(0, 4000));
+    }
+    if (!shouldCompact(est, DEFAULT_CONTEXT_BUDGET)) return;
+
+    const through = conversationSummaryRef.current?.throughMessageId;
+    const idx = through ? msgs.findIndex((m) => m.id === through) : -1;
+    const newMsgs = idx === -1 ? msgs : msgs.slice(idx + 1);
+    const textViews = newMsgs
+      .map((m) => ({ id: m.id, role: m.role, content: m.content }))
+      .filter((m) => m.content.length > 0);
+    if (textViews.length === 0) return;
+
+    compactingRef.current = true;
+    const summary = await requestConversationCompact({
+      provider: aiProvider,
+      model: aiModel,
+      customConfig: aiCustom,
+      oldSummary: conversationSummaryRef.current,
+      messages: toCompactMessages(textViews),
+    });
+    compactingRef.current = false;
+    if (summary) {
+      conversationSummaryRef.current = summary;
+      setConversationSummary(summary);
+      scheduleSave(); // 把 summary 一起落盘
+    }
+  }, [chat, aiProvider, aiModel, aiCustom, scheduleSave]);
+
+  // Turn 结束（streaming true→false）→ 保存稳定点 + 判断是否需要 compact；tool loop 完成同样落在这里
   const wasStreamingRef = useRef(false);
   React.useEffect(() => {
     if (chat.streaming) {
@@ -187,7 +237,8 @@ export function KiroSessionProvider({ children }: { children: React.ReactNode })
     if (!wasStreamingRef.current) return;
     wasStreamingRef.current = false;
     scheduleSave();
-  }, [chat.streaming, scheduleSave]);
+    void maybeCompact();
+  }, [chat.streaming, scheduleSave, maybeCompact]);
 
   // 卸载 / 页面隐藏前 flush（防丢最后状态）
   React.useEffect(() => {
@@ -236,9 +287,11 @@ export function KiroSessionProvider({ children }: { children: React.ReactNode })
     conversationIdRef.current = null;
     conversationTitleRef.current = null;
     conversationCreatedAtRef.current = null;
+    conversationSummaryRef.current = null;
     setConversationId(null);
     setConversationTitle(null);
     setConversationCreatedAt(null);
+    setConversationSummary(null);
     setManualRefs([]);
     setEntryRefs([]);
     setSuppressedAutoKeys([]);
@@ -352,9 +405,11 @@ export function KiroSessionProvider({ children }: { children: React.ReactNode })
       conversationIdRef.current = target.id;
       conversationTitleRef.current = target.title;
       conversationCreatedAtRef.current = target.createdAt;
+      conversationSummaryRef.current = target.summary ?? null;
       setConversationId(target.id);
       setConversationTitle(target.title);
       setConversationCreatedAt(target.createdAt);
+      setConversationSummary(target.summary ?? null);
       setManualRefs(restoreRefs(target.manualRefs, "manual"));
       setEntryRefs(restoreRefs(target.entryRefs, "entry"));
       setSuppressedAutoKeys([]);
@@ -420,6 +475,7 @@ export function KiroSessionProvider({ children }: { children: React.ReactNode })
     currentConversationId: conversationId,
     conversationTitle,
     conversationCreatedAt,
+    conversationSummary,
     historyVersion,
     loadConversation,
     deleteConversation,

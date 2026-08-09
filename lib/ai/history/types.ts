@@ -46,6 +46,14 @@ export interface PersistedKiroMessage {
   actions?: PersistedActionView[];
 }
 
+/** Conversation Summary（Task 7）：内部 Model Context，不代表当前 ClassFlow 数据 */
+export interface KiroConversationSummary {
+  version: 1;
+  text: string;
+  throughMessageId: string;
+  updatedAt: string;
+}
+
 export interface KiroConversationRecord {
   id: string;
   title: string;
@@ -56,4 +64,6 @@ export interface KiroConversationRecord {
   messages: PersistedKiroMessage[];
   manualRefs: PersistedContextRef[];
   entryRefs: PersistedContextRef[];
+  /** 旧记录可能没有 summary（正常加载） */
+  summary?: KiroConversationSummary;
 }
