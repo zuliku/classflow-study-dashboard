@@ -156,7 +156,14 @@ export default function Home() {
         <Header />
 
         {/* Dynamic Page Views */}
-        <main className="flex-1 flex flex-col p-4 md:p-6 pb-24 md:pb-6 overflow-y-auto">
+        {/* Kiro Tab：full-bleed shell（p-0 且 md+ 无底部 padding），gutter 由 KiroWorkspace 内部提供，
+            History Panel 可从 Header 下沿连续延伸到视口底部（border-l 不断线） */}
+        <main
+          className={cn(
+            "flex-1 flex flex-col overflow-y-auto",
+            activeTab === "kiro" ? "p-0 pb-24 md:p-0 md:pb-0" : "p-4 md:p-6 pb-24 md:pb-6"
+          )}
+        >
           <PageTransition
             tab={activeTab}
             className={cn("space-y-5", activeTab === "kiro" && "flex flex-col flex-1 min-h-0")}

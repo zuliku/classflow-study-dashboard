@@ -2,17 +2,20 @@
 
 import React, { useEffect } from "react";
 import { Plus, X, MessageSquare } from "lucide-react";
-import { cn } from "@/lib/utils";
 
 /**
  * Kiro History：不做假历史记录（本地持久化在后续版本）。
- * 面板结构已按「会话历史栏」组织：顶部标题区 / 最近对话 section / 列表容器（空状态位于容器内部）。
+ * desktop：full-height docked secondary panel（由 KiroWorkspace 作为 flex sibling 提供宽度/边框，
+ *  顶部无空隙、底部无空隙、border-l 连续——不再是悬浮在 main padding 内的 absolute 卡片）。
+ * mobile：底部 sheet。
  * 未来持久化后：在列表容器内渲染 list rows（紧凑、hover、当前会话 active、标题截断）。
  */
 export function KiroHistoryPanel({
+  variant,
   onClose,
   onNewChat,
 }: {
+  variant: "desktop" | "mobile";
   onClose: () => void;
   onNewChat: () => void;
 }) {
@@ -54,40 +57,39 @@ export function KiroHistoryPanel({
     </div>
   );
 
-  return (
-    <>
-      {/* 遮罩（mobile sheet 与 desktop panel 共用，点击关闭） */}
-      <div className="absolute inset-0 z-30 bg-black/20 md:bg-transparent" onClick={onClose} aria-hidden="true" />
-
-      {/* Mobile：底部 sheet */}
-      <div
-        role="dialog"
-        aria-label="历史记录"
-        className="md:hidden absolute inset-x-0 bottom-0 z-40 bg-surface border-t border-line rounded-t-2xl shadow-card p-4 pb-5 max-h-[65dvh] overflow-y-auto ux-inline"
-      >
-        <div className="w-10 h-1 rounded-full bg-line-strong mx-auto mb-4" />
-        {list}
-      </div>
-
-      {/* Desktop：右侧 320px 会话历史栏（统一 16px gutter，顶部与 Kiro Header 对齐） */}
-      <div
-        role="dialog"
-        aria-label="历史记录"
-        className="hidden md:flex absolute right-0 top-0 bottom-0 w-[320px] z-40 bg-surface border-l border-line shadow-card flex-col ux-drawer-panel"
-      >
-        {/* 顶部标题区：与 Kiro Header 同一高度语言 */}
-        <div className="shrink-0 flex items-center justify-between px-4 py-3 border-b border-line">
-          <h3 className="text-sm font-bold text-charcoal">历史记录</h3>
-          <button
-            onClick={onClose}
-            aria-label="关闭历史记录"
-            className="p-1.5 rounded-lg text-sandrift hover:bg-alabaster hover:text-charcoal transition-colors"
-          >
-            <X className="w-4 h-4" />
-          </button>
+  if (variant === "mobile") {
+    return (
+      <>
+        {/* 遮罩 */}
+        <div className="absolute inset-0 z-30 bg-black/20" onClick={onClose} aria-hidden="true" />
+        {/* 底部 sheet */}
+        <div
+          role="dialog"
+          aria-label="历史记录"
+          className="absolute inset-x-0 bottom-0 z-40 bg-surface border-t border-line rounded-t-2xl shadow-card p-4 pb-5 max-h-[65dvh] overflow-y-auto ux-inline"
+        >
+          <div className="w-10 h-1 rounded-full bg-line-strong mx-auto mb-4" />
+          {list}
         </div>
-        <div className="flex-1 min-h-0 overflow-y-auto p-4">{list}</div>
+      </>
+    );
+  }
+
+  // Desktop：full-height docked panel（高度由父级 flex 容器决定）
+  return (
+    <div role="dialog" aria-label="历史记录" className="h-full flex flex-col">
+      {/* 顶部标题区：与 Kiro Header 同一高度语言 */}
+      <div className="shrink-0 flex items-center justify-between px-4 py-3 border-b border-line">
+        <h3 className="text-sm font-bold text-charcoal">历史记录</h3>
+        <button
+          onClick={onClose}
+          aria-label="关闭历史记录"
+          className="p-1.5 rounded-lg text-sandrift hover:bg-alabaster hover:text-charcoal transition-colors"
+        >
+          <X className="w-4 h-4" />
+        </button>
       </div>
-    </>
+      <div className="flex-1 min-h-0 overflow-y-auto p-4">{list}</div>
+    </div>
   );
 }

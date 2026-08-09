@@ -1,32 +1,24 @@
 "use client";
 
 import React from "react";
-import { KIRO_ICON } from "@/components/layout/navItems";
 import { cn } from "@/lib/utils";
 import { KiroSessionActions } from "@/components/kiro/KiroSessionActions";
+import { KiroLogoIcon } from "@/components/kiro/KiroLogo";
 
-/** Kiro Mark：所有 Kiro 入口共用的视觉标记（正式 Logo 落地后替换 KIRO_ICON 即可） */
+/**
+ * Kiro Mark：正式 Kiro Logo 直接展示（无方形容器 / 无背景 / 无边框）。
+ * sm ≈ 20px、md ≈ 28px、lg ≈ 40px（按 PNG 透明边距做光学尺寸，object-contain 保比例）。
+ */
 export function KiroMark({ size = "md", className }: { size?: "sm" | "md" | "lg"; className?: string }) {
   return (
-    <span
-      aria-hidden="true"
+    <KiroLogoIcon
       className={cn(
-        "inline-flex items-center justify-center rounded-xl bg-pastel-mint border border-line-soft text-charcoal shrink-0",
-        size === "sm" && "w-7 h-7",
-        size === "md" && "w-9 h-9",
-        size === "lg" && "w-14 h-14 rounded-2xl",
+        size === "sm" && "w-5 h-5",
+        size === "md" && "w-7 h-7",
+        size === "lg" && "w-10 h-10",
         className
       )}
-    >
-      <KIRO_ICON
-        className={cn(
-          "text-charcoal",
-          size === "sm" && "w-3.5 h-3.5",
-          size === "md" && "w-4 h-4",
-          size === "lg" && "w-6 h-6"
-        )}
-      />
-    </span>
+    />
   );
 }
 

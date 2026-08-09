@@ -137,43 +137,34 @@ export function Sidebar() {
                     isActive && "hidden"
                   )}
                 />
-                {/* 内容层：m-px 留出 1px 品牌色环 */}
-                <span
-                  className={cn(
-                    "relative m-px w-full h-11 rounded-[11px] bg-[#F7F5F5]",
-                    "flex items-center justify-center xl:justify-start xl:gap-2.5 px-2 xl:px-3",
-                    "text-xs font-semibold transition-colors duration-[var(--motion-base)]",
-                    isActive ? "bg-pastel-mint text-charcoal" : "text-charcoal"
-                  )}
-                >
-                  <Icon className="w-5 h-5 shrink-0" />
-                  {/* 文字标签：仅在完整 Sidebar 显示 */}
-                  <span data-testid="nav-label" className="hidden xl:inline truncate">{item.label}</span>
-
-                  {/* Icon Rail Tooltip（仅 768–1279 显示）：hover / focus 均可见 */}
+                  {/* 内容层：m-px 留出 1px 品牌色环 */}
                   <span
-                    data-testid="nav-tooltip"
-                    role="tooltip"
                     className={cn(
-                      "hidden md:inline-flex xl:hidden absolute left-full top-1/2 -translate-y-1/2 ml-2",
-                      "px-2 py-1 rounded-lg bg-charcoal text-white text-[11px] whitespace-nowrap",
-                      "opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100",
-                      "transition-opacity duration-[var(--motion-fast)] pointer-events-none z-50"
+                      "relative m-px w-full h-11 rounded-[11px] bg-[#F7F5F5]",
+                      "flex items-center justify-center xl:justify-start xl:gap-2.5 px-2 xl:px-3",
+                      "text-xs font-semibold transition-colors duration-[var(--motion-base)]",
+                      isActive ? "bg-pastel-mint text-charcoal" : "text-charcoal"
                     )}
                   >
-                    {item.label}
+                    <Icon className="w-5 h-5 shrink-0" />
+                    {/* 文字标签：仅在完整 Sidebar 显示 */}
+                    <span data-testid="nav-label" className="hidden xl:inline truncate">{item.label}</span>
+
+                    {/* Icon Rail Tooltip（仅 768–1279 显示）：hover / focus 均可见 */}
+                    <span
+                      data-testid="nav-tooltip"
+                      role="tooltip"
+                      className={cn(
+                        "hidden md:inline-flex xl:hidden absolute left-full top-1/2 -translate-y-1/2 ml-2",
+                        "px-2 py-1 rounded-lg bg-charcoal text-white text-[11px] whitespace-nowrap",
+                        "opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100",
+                        "transition-opacity duration-[var(--motion-fast)] pointer-events-none z-50"
+                      )}
+                    >
+                      {item.label}
+                    </span>
                   </span>
-                </span>
-                {/* Active 指示条（保留统一 active 语义） */}
-                <span
-                  className={cn(
-                    "absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-5 rounded-full bg-charcoal",
-                    "transition-[opacity,transform] duration-[var(--motion-base)] ease-[var(--ease-standard)]",
-                    isActive ? "opacity-100 scale-y-100" : "opacity-0 scale-y-50"
-                  )}
-                  aria-hidden="true"
-                />
-              </button>
+                </button>
             );
           })}
         </div>
