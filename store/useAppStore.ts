@@ -17,6 +17,7 @@ import {
   TimeSliceFilter,
   AppPreferences,
   SettingsSection,
+  StudyBlock,
 } from "@/types";
 import { createDefaultSemester, getSemesterWeek } from "@/lib/semester";
 import { getLocalDDLDate } from "@/lib/ddl";
@@ -53,6 +54,8 @@ interface PersistedAppState {
   assignments: Assignment[];
   calendarMarks: CalendarMark[];
   groupProjects: GroupProject[];
+  /** Timeline V1：学习计划（旧数据可缺失 → 回落 []） */
+  studyBlocks?: StudyBlock[];
   /** 任务列表时间筛选：用户偏好，保留并在缺失时回落 "all" */
   assignmentTimeSlice?: TimeSliceFilter;
   /** 上次使用的工作区 Tab（仅记录 workspace，设置不是 Tab） */
@@ -73,6 +76,7 @@ interface LegacyPersistedStateV0 {
   assignmentTimeSlice?: unknown;
   lastWorkspaceTab?: unknown;
   preferences?: unknown;
+  studyBlocks?: unknown;
 }
 
 const TIME_SLICES: TimeSliceFilter[] = ["all", "overdue", "today", "3days", "7days", "completed"];
@@ -126,6 +130,8 @@ function sanitizePersistedState(persisted: unknown): PersistedAppState {
       : "overview",
     // v3：preferences 稳定偏好，缺失/部分/非法均逐字段回落默认值
     preferences: sanitizePreferences(legacy.preferences),
+    // v4：Timeline V1 学习计划（旧数据缺失 → []）
+    studyBlocks: Array.isArray(legacy.studyBlocks) ? (legacy.studyBlocks as StudyBlock[]) : [],
   };
 }
 
@@ -189,6 +195,8 @@ export interface AppState {
   schedules: CourseSchedule[];  assignments: Assignment[];
   calendarMarks: CalendarMark[];
   groupProjects: GroupProject[];
+  /** Timeline V1：学习计划 */
+  studyBlocks: StudyBlock[];
 
   // Actions
   updateUserProfile: (profile: Partial<UserProfile>) => void;
@@ -248,6 +256,17 @@ export interface AppState {
   deleteAssignment: (id: string) => { assignment: Assignment; marks: CalendarMark[] } | null;
   /** 撤销删除：恢复任务及对应 CalendarMark（保留原始 ID 与全部字段） */
   restoreAssignment: (assignment: Assignment, marks: CalendarMark[]) => void;
+
+  // Timeline V1：StudyBlock Actions
+  /** 创建学习计划，返回新 id */
+  addStudyBlock: (block: Omit<StudyBlock, "id">) => string;
+  updateStudyBlock: (id: string, patch: Partial<Omit<StudyBlock, "id">>) => void;
+  deleteStudyBlock: (id: string) => void;
+
+  // CalendarMark Actions（Timeline V1：考试 / 活动等独立日程）
+  /** 创建日程标记（exam / activity 等），返回新 id */
+  addCalendarMark: (mark: Omit<CalendarMark, "id">) => string;
+  deleteCalendarMark: (id: string) => void;
 
   // Group Project Actions
   /** 创建空项目（当前用户为组长），返回新项目 id */
@@ -351,6 +370,7 @@ export const useAppStore = create<AppState>()(
       assignments: [],
       calendarMarks: [],
       groupProjects: [],
+      studyBlocks: [],
 
       updateUserProfile: (profile) =>
         set((state) => ({
@@ -372,6 +392,7 @@ export const useAppStore = create<AppState>()(
           assignments: [],
           calendarMarks: [],
           groupProjects: [],
+          studyBlocks: [],
           currentSemesterWeek: Math.min(
             Math.max(getSemesterWeek(new Date(), get().semester), 1),
             get().semester.totalWeeks
@@ -401,6 +422,7 @@ export const useAppStore = create<AppState>()(
           assignments: [],
           calendarMarks: [],
           groupProjects: [],
+          studyBlocks: [],
           semester: createDefaultSemester(),
           currentSemesterWeek: 1,
           assignmentTimeSlice: "all",
@@ -431,6 +453,8 @@ export const useAppStore = create<AppState>()(
           calendarMarks: linkLegacyDDLMarks(data.assignments, data.calendarMarks),
           // 备份恢复同样归一 GroupProject（v1 备份 → v2 schema）
           groupProjects: data.groupProjects.map(normalizeGroupProject),
+          // Timeline V1：学习计划（旧备份缺失 → []）
+          studyBlocks: Array.isArray(data.studyBlocks) ? data.studyBlocks : [],
           // preferences：旧备份（v1 data 无该字段）缺失时保留当前偏好，不做覆盖
           preferences: data.preferences
             ? sanitizePreferences(data.preferences)
@@ -741,6 +765,35 @@ export const useAppStore = create<AppState>()(
           ],
         })),
 
+      // ---- Timeline V1：StudyBlock（学习计划）----
+      addStudyBlock: (blockData) => {
+        const block: StudyBlock = {
+          id: createId("sb"),
+          title: blockData.title,
+          date: blockData.date,
+          startTime: blockData.startTime,
+          endTime: blockData.endTime,
+          assignmentId: blockData.assignmentId,
+          courseId: blockData.courseId,
+          source: blockData.source ?? "manual",
+        };
+        set((state) => ({ studyBlocks: [block, ...state.studyBlocks] }));
+        return block.id;
+      },
+      updateStudyBlock: (id, patch) =>
+        set((state) => ({
+          studyBlocks: state.studyBlocks.map((b) => (b.id === id ? { ...b, ...patch } : b)),
+        })),
+      deleteStudyBlock: (id) =>
+        set((state) => ({ studyBlocks: state.studyBlocks.filter((b) => b.id !== id) })),
+      addCalendarMark: (markData) => {
+        const mark: CalendarMark = { id: createId("cm"), ...markData };
+        set((state) => ({ calendarMarks: [...state.calendarMarks, mark] }));
+        return mark.id;
+      },
+      deleteCalendarMark: (id) =>
+        set((state) => ({ calendarMarks: state.calendarMarks.filter((m) => m.id !== id) })),
+
       addGroupProject: (projectData) => {
         const current = get();
         // 空项目：不注入任何假成员/假任务；仅把当前真实用户设为 leader
@@ -915,6 +968,7 @@ export const useAppStore = create<AppState>()(
         assignments: state.assignments,
         calendarMarks: state.calendarMarks,
         groupProjects: state.groupProjects,
+        studyBlocks: state.studyBlocks,
         assignmentTimeSlice: state.assignmentTimeSlice,
         lastWorkspaceTab: state.lastWorkspaceTab,
         preferences: state.preferences,

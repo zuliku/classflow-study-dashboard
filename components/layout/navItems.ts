@@ -35,7 +35,7 @@ export interface GlobalAction {
 /** 工作区导航：Sidebar（Desktop/Icon Rail）与 Bottom Nav 共用；Kiro 独立为 AI 区域 */
 export const WORKSPACE_NAV_ITEMS: NavItem[] = [
   { id: "overview", label: "总览", icon: LayoutDashboard, section: "main" },
-  { id: "timetable", label: "我的课表", icon: CalendarDays, section: "main" },
+  { id: "timetable", label: "时间表", icon: CalendarDays, section: "main" },
   { id: "assignments", label: "任务与 DDL", icon: ClipboardCheck, section: "main" },
   { id: "courses", label: "课程资料", icon: FolderKanban, section: "main" },
   { id: "analytics", label: "学习统计", icon: BarChart3, section: "main" },
@@ -57,7 +57,7 @@ export const GLOBAL_NAV_ACTIONS: GlobalAction[] = [
 /** 移动端 Bottom Nav 主要入口（Kiro 是顶级入口，其余收进「更多」菜单） */
 export const BOTTOM_NAV_MAIN: NavItem[] = [
   { id: "overview", label: "总览", icon: LayoutDashboard },
-  { id: "timetable", label: "课表", icon: CalendarDays },
+  { id: "timetable", label: "时间表", icon: CalendarDays },
   { id: "assignments", label: "任务", icon: ClipboardCheck },
   { id: "kiro", label: "Kiro", icon: KIRO_ICON },
 ];

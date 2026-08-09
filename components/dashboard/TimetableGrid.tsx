@@ -63,10 +63,21 @@ type Interaction =
 export function TimetableGrid({
   editable = false,
   density = "comfortable",
+  showHeader = true,
+  extraLayers,
 }: {
   editable?: boolean;
   /** compact：仅 Overview 只读表示层（更紧凑的时间轴）；default 保持舒展（workspace / FullTimetableModal） */
   density?: "compact" | "comfortable";
+  /** Timeline Workspace：Header 由外层 Timeline 提供（本组件不渲染自己的 header） */
+  showHeader?: boolean;
+  /** Timeline V1：在每一天列内渲染额外绝对定位层（如 StudyBlock） */
+  extraLayers?: (ctx: {
+    dayOfWeek: number;
+    dayStartMinutes: number;
+    totalMinutes: number;
+    timeToMinutes: (t: string) => number;
+  }) => React.ReactNode;
 }) {
   const isCompactDensity = density === "compact";
   const {
@@ -364,6 +375,7 @@ export function TimetableGrid({
       className="bg-surface border border-line rounded-2xl p-4 shadow-subtle flex flex-col justify-between h-full w-full"
     >
       {/* Header */}
+      {showHeader && (
       <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-2.5 border-b border-[#F0EBE1] gap-2 shrink-0">
         <div className="flex items-center space-x-2">
           <h2 className="text-sm font-bold text-charcoal">本周课表</h2>
@@ -401,6 +413,7 @@ export function TimetableGrid({
           <ExternalLink className="w-3.5 h-3.5 transition-transform duration-[var(--motion-fast)] group-hover:translate-x-px" />
         </button>
       </div>
+      )}
 
       {/* Conflict Warning Banner */}
       {conflicts.length > 0 && (
@@ -448,7 +461,10 @@ export function TimetableGrid({
           {weekdays.map((wd) => (
             <div
               key={wd.dayOfWeek}
-              className="py-0.5 rounded-lg text-satin-grey font-medium"
+              className={cn(
+                "py-0.5 rounded-lg font-medium",
+                wd.dateStr === format(new Date(), "M/d") ? "text-charcoal font-bold" : "text-satin-grey"
+              )}
             >
               <span>{wd.label}</span>
               <span className="text-[10px] text-sandrift ml-1">
@@ -513,6 +529,12 @@ export function TimetableGrid({
                   key={wd.dayOfWeek}
                   className="relative border-r border-line-soft h-full"
                 >
+                  {extraLayers?.({
+                    dayOfWeek: wd.dayOfWeek,
+                    dayStartMinutes,
+                    totalMinutes,
+                    timeToMinutes: timeToMinutesSafe,
+                  })}
                   {daySchedules.map((sched) => {
                     const course = courses.find((c) => c.id === sched.courseId);
                     if (!course) return null;

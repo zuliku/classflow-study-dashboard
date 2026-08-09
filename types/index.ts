@@ -138,6 +138,21 @@ export interface CalendarMark {
   type: "course" | "ddl" | "exam" | "activity";
   title: string;
   sourceId?: string; // Links DDL CalendarMark directly to assignment.id
+  /** Timeline V1：固定时段事件（考试/活动）的开始与结束时间；缺失 = all-day 级别 */
+  startTime?: string; // "HH:mm"
+  endTime?: string; // "HH:mm"
+}
+
+/** Timeline V1：学习计划（我什么时候准备做某个学习任务） */
+export interface StudyBlock {
+  id: string;
+  title: string;
+  date: string; // "YYYY-MM-DD"
+  startTime: string; // "HH:mm"
+  endTime: string; // "HH:mm"
+  assignmentId?: string;
+  courseId?: string;
+  source?: "manual" | "kiro";
 }
 
 /** 应用偏好（稳定用户偏好，持久化；Task 2 接入业务模块） */
@@ -180,6 +195,8 @@ export interface ClassFlowBackupData {
   assignments: Assignment[];
   calendarMarks: CalendarMark[];
   groupProjects: GroupProject[];
+  /** Timeline V1：学习计划（旧备份可缺失） */
+  studyBlocks?: StudyBlock[];
   /** 应用偏好（v1 旧备份可缺失，导入时回落为当前偏好） */
   preferences?: AppPreferences;
 }

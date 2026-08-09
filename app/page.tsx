@@ -13,23 +13,7 @@ import { AssignmentTable } from "@/components/dashboard/AssignmentTable";
 import { GroupCollaborationView } from "@/components/group/GroupCollaborationView";
 import { KiroWorkspace } from "@/components/kiro/KiroWorkspace";
 import { KiroSessionProvider } from "@/components/kiro/KiroSessionProvider";
-import { useKiroHandoff } from "@/hooks/useKiroHandoff";
-import { KIRO_ICON } from "@/components/layout/navItems";
-
-/** 课表 Workspace 的 Kiro 入口：以当前教学周为 Entry Context */
-function TimetableAskKiroButton() {
-  const handoff = useKiroHandoff();
-  const currentSemesterWeek = useAppStore((s) => s.currentSemesterWeek);
-  return (
-    <button
-      onClick={() => handoff.openForWeek(currentSemesterWeek)}
-      className="flex items-center space-x-1.5 px-3 py-1.5 bg-pastel-mint hover:bg-pastel-mint text-charcoal text-xs font-bold rounded-xl transition-colors"
-    >
-      <KIRO_ICON className="w-3.5 h-3.5" />
-      <span>Ask Kiro</span>
-    </button>
-  );
-}
+import { TimelineWorkspace } from "@/components/timeline/TimelineWorkspace";
 import { SettingsModal } from "@/components/settings/SettingsModal";
 import { CourseDetailDrawer } from "@/components/drawers/CourseDetailDrawer";
 import { AssignmentDrawer } from "@/components/drawers/AssignmentDrawer";
@@ -244,68 +228,8 @@ export default function Home() {
           )}
 
           {activeTab === "timetable" && (
-            <div className="space-y-4 flex flex-col md:h-[calc(100vh-100px)]">
-              {/* Top Banner with Edit & Import Actions */}
-              <div className="bg-surface border border-line rounded-2xl p-4 shadow-subtle flex flex-col sm:flex-row sm:items-center justify-between gap-3 shrink-0">
-                <div>
-                  <h2 className="text-base font-bold text-charcoal mb-0.5">
-                    学期课表
-                  </h2>
-                  <p className="text-xs text-sandrift">
-                    {semester.name} · {userProfile.college}
-                  </p>
-                </div>
-                <div className="flex flex-wrap items-center space-x-2 shrink-0">
-                  <TimetableAskKiroButton />
-                  <button
-                    onClick={() => setFullTimetableModalOpen(true)}
-                    className="flex items-center space-x-1.5 px-3 py-1.5 bg-white hover:bg-alabaster text-charcoal border border-line-strong text-xs font-bold rounded-xl transition-colors shadow-subtle"
-                  >
-                    <ExternalLink className="w-3.5 h-3.5" />
-                    <span>全屏课表</span>
-                  </button>
-                  <button
-                    onClick={() => setAddCourseModalOpen(true)}
-                    className="flex items-center space-x-1.5 px-3 py-1.5 bg-pastel-mint hover:bg-pastel-mint text-charcoal text-xs font-bold rounded-xl transition-colors"
-                  >
-                    <Plus className="w-3.5 h-3.5" />
-                    <span>添加课程</span>
-                  </button>
-                  <button
-                    onClick={() => setImportScheduleModalOpen(true)}
-                    className="ux-press flex items-center space-x-1.5 px-3 py-1.5 bg-charcoal hover:bg-black text-white text-xs font-bold rounded-xl transition-colors"
-                  >
-                    <FileUp className="w-3.5 h-3.5" />
-                    <span>导入课表</span>
-                  </button>
-                </div>
-              </div>
-
-              {/* Full height adaptive Timetable Container（仅此工作区启用 Drag/Resize） */}
-              <div className="flex-1 flex flex-col min-h-0">
-                {courses.length === 0 ? (
-                  <div className="flex-1 flex flex-col items-center justify-center gap-2.5 bg-surface border border-line rounded-2xl shadow-subtle text-center p-6">
-                    <p className="text-xs font-bold text-charcoal">暂无课程</p>
-                    <p className="text-[11px] text-sandrift">添加课程或导入课表后即可查看排课</p>
-                    <div className="flex gap-2 mt-1">
-                      <button
-                        onClick={() => setAddCourseModalOpen(true)}
-                        className="ux-press px-3 py-1.5 bg-pastel-mint text-charcoal text-[11px] font-bold rounded-xl transition-colors"
-                      >
-                        添加课程
-                      </button>
-                      <button
-                        onClick={() => setImportScheduleModalOpen(true)}
-                        className="ux-press px-3 py-1.5 bg-charcoal text-white text-[11px] font-bold rounded-xl transition-colors"
-                      >
-                        导入课表
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  <TimetableGrid editable />
-                )}
-              </div>
+            <div className="h-[calc(100vh-100px)] md:h-[calc(100vh-80px)] flex flex-col min-h-0">
+              <TimelineWorkspace />
             </div>
           )}
 

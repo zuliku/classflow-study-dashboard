@@ -7,6 +7,7 @@ import {
   GroupProject,
   Semester,
   UserProfile,
+  StudyBlock,
 } from "@/types";
 
 export type BackupValidationResult =
@@ -30,6 +31,22 @@ const ARRAY_FIELDS: { key: keyof ClassFlowBackupData; label: string }[] = [
   { key: "calendarMarks", label: "日历标记 (calendarMarks)" },
   { key: "groupProjects", label: "小组项目 (groupProjects)" },
 ];
+
+/** Timeline V1：学习计划（旧备份可缺失 → 恢复时回落 []） */
+function validateStudyBlocks(v: unknown): v is StudyBlock[] {
+  return (
+    Array.isArray(v) &&
+    v.every(
+      (b) =>
+        isPlainObject(b) &&
+        isNonEmptyString(b.id) &&
+        isNonEmptyString(b.title) &&
+        isNonEmptyString(b.date) &&
+        isNonEmptyString(b.startTime) &&
+        isNonEmptyString(b.endTime)
+    )
+  );
+}
 
 function validateSemester(v: unknown): v is Semester {
   return (
@@ -133,6 +150,10 @@ export function validateBackup(raw: unknown): BackupValidationResult {
   }
   if (!validateGroupProjects(data.groupProjects)) {
     return { ok: false, error: "小组项目数据 (groupProjects) 格式异常，无法恢复" };
+  }
+  // Timeline V1：学习计划可选（旧备份缺失合法；存在则必须合法）
+  if (data.studyBlocks !== undefined && !validateStudyBlocks(data.studyBlocks)) {
+    return { ok: false, error: "学习计划数据 (studyBlocks) 格式异常，无法恢复" };
   }
 
   return {
