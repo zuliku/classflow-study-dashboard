@@ -1,12 +1,13 @@
 "use client";
 
 import React from "react";
-import { Share2, MoreHorizontal, Plus, History as HistoryIcon, Expand, Copy, FileDown, Trash2 } from "lucide-react";
+import { Share2, MoreHorizontal, Plus, History as HistoryIcon, Expand, Copy, FileDown, Trash2, Brain } from "lucide-react";
 import { useKiroSession } from "@/components/kiro/KiroSessionProvider";
 import { useToastStore } from "@/store/useToastStore";
 import { useConfirmStore } from "@/store/useConfirmStore";
 import { KiroMenuPanel, KiroMenuItem, KiroMenuDivider, useKiroPopover } from "@/components/kiro/KiroMenu";
 import { KiroShareSheet } from "@/components/kiro/KiroShareSheet";
+import { KiroMemoryManager } from "@/components/kiro/KiroMemoryManager";
 import {
   buildTranscriptMarkdown,
   buildTranscriptText,
@@ -37,6 +38,7 @@ export function KiroSessionActions({
   const confirmRequest = useConfirmStore((s) => s.confirm);
   const share = useKiroPopover();
   const more = useKiroPopover();
+  const [memoryManagerOpen, setMemoryManagerOpen] = React.useState(false);
   const hasMessages = session.chat.messages.length > 0;
 
   const copyAll = async () => {
@@ -134,6 +136,16 @@ export function KiroSessionActions({
             <KiroMenuItem icon={Copy} label="复制全部对话" disabled={!hasMessages} onClick={copyAll} />
             <KiroMenuItem icon={FileDown} label="导出 Markdown" disabled={!hasMessages} onClick={exportMarkdown} />
             <KiroMenuDivider />
+            {variant === "workspace" && (
+              <KiroMenuItem
+                icon={Brain}
+                label="Kiro 记忆"
+                onClick={() => {
+                  more.close();
+                  setMemoryManagerOpen(true);
+                }}
+              />
+            )}
             <KiroMenuItem
               icon={Trash2}
               label="清空当前对话"
@@ -144,6 +156,7 @@ export function KiroSessionActions({
           </KiroMenuPanel>
         )}
       </div>
+      <KiroMemoryManager open={memoryManagerOpen} onClose={() => setMemoryManagerOpen(false)} />
     </div>
   );
 }

@@ -10,6 +10,7 @@ import { AIProviderId } from "@/lib/ai/providers/types";
 import { SettingsSection } from "@/components/settings/SettingsSection";
 import { SettingsRow } from "@/components/settings/SettingsRow";
 import { SettingsToggle, SettingsSelect } from "@/components/settings/SettingsControls";
+import { KiroMemorySettings } from "@/components/settings/KiroMemorySettings";
 
 const PROVIDER_OPTIONS: { value: AIProviderId; label: string }[] = [
   { value: "opencode-go", label: "OpenCode Go" },
@@ -233,6 +234,11 @@ export function KiroAISettings() {
           {test.status === "error" && (
             <span className="text-[11px] font-semibold text-danger">{test.message}</span>
           )}
+        </div>
+
+        {/* Kiro 记忆（Task 9）：记忆开关 / 条目管理 / 清空 / 隐私说明 */}
+        <div className="border-t border-line pt-4 -mx-1 px-1">
+          <KiroMemorySettings />
         </div>
       </div>
     </SettingsSection>

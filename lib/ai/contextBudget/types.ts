@@ -63,4 +63,6 @@ export interface KiroTurnContextSnapshot {
   customConfig?: unknown;
   /** 当前 Conversation Summary（若有） */
   conversationSummary?: { text: string; throughMessageId: string } | null;
+  /** 长期学习记忆 Index（Task 9）：只含 id/title/category/scope，不含 content */
+  memoryIndex?: { id: string; title: string; category: string; scope: string; scopeId?: string }[];
 }

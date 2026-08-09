@@ -58,7 +58,8 @@ export type WriteToolResult<T = unknown> =
           | "group-project"
           | "group-member"
           | "group-task"
-          | "change-set";
+          | "change-set"
+          | "memory";
         entityId: string;
         title: string;
         operation: "create" | "update" | "delete";
@@ -96,7 +97,11 @@ export type WriteToolResult<T = unknown> =
         | "TRANSACTION_REPREFLIGHT_FAILED"
         | "TRANSACTION_CONTRADICTORY"
         | "TRANSACTION_INTEGRITY"
-        | "TRANSACTION_TOO_LARGE";
+        | "TRANSACTION_TOO_LARGE"
+        | "EXPLICIT_MEMORY_INTENT_REQUIRED"
+        | "MEMORY_SENSITIVE_CONTENT"
+        | "MEMORY_LIMIT_REACHED"
+        | "MEMORY_DISABLED";
       message: string;
       details?: unknown;
     };

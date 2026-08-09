@@ -16,6 +16,7 @@ interface AISettingsState extends AISettings {
   setProvider: (provider: AIProviderId) => void;
   setModel: (model: string) => void;
   setCustom: (patch: Partial<AICustomConfig>) => void;
+  setMemoryEnabled: (enabled: boolean) => void;
   reset: () => void;
 }
 
@@ -24,6 +25,7 @@ const DEFAULT_SETTINGS: AISettings = {
   provider: "deepseek",
   model: getDefaultModel("deepseek"),
   custom: { providerName: "", baseURL: "", model: "" },
+  memoryEnabled: true,
 };
 
 export const useAISettingsStore = create<AISettingsState>()(
@@ -39,6 +41,7 @@ export const useAISettingsStore = create<AISettingsState>()(
           model: provider === "custom-openai" ? state.custom.model : getDefaultModel(provider),
         })),
       setModel: (model) => set({ model }),
+      setMemoryEnabled: (enabled) => set({ memoryEnabled: enabled }),
       setCustom: (patch) =>
         set((state) => ({
           custom: { ...state.custom, ...patch },
@@ -55,6 +58,7 @@ export const useAISettingsStore = create<AISettingsState>()(
         provider: state.provider,
         model: state.model,
         custom: state.custom,
+        memoryEnabled: state.memoryEnabled,
       }),
     }
   )

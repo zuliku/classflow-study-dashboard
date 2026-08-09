@@ -11,7 +11,7 @@ import {
 import { messageHasWriteToolCalls, lastTurnCanRegenerate } from "@/hooks/useKiroChat";
 import { KiroChatMessageView } from "@/hooks/useKiroChat";
 import { KiroConversationRecord } from "@/lib/ai/history/types";
-import { resetKiroHistoryDbForTests } from "@/lib/ai/history/db";
+import { resetKiroDbForTests } from "@/lib/ai/history/db";
 
 const KIRO_HISTORY_DB_NAME = "classflow-kiro";
 
@@ -38,7 +38,7 @@ function makeRecord(over: Partial<KiroConversationRecord> = {}): KiroConversatio
 }
 
 beforeEach(async () => {
-  resetKiroHistoryDbForTests();
+  resetKiroDbForTests();
   await clearConversationHistory().catch(() => {});
 });
 
@@ -191,7 +191,7 @@ describe("IndexedDB CRUD", () => {
     await saveConversation(makeRecord({ id: "c1" }));
     // 直接写入一条损坏数据
     const db = await new Promise<IDBDatabase>((resolve, reject) => {
-      const req = indexedDB.open(KIRO_HISTORY_DB_NAME, 1);
+      const req = indexedDB.open(KIRO_HISTORY_DB_NAME, 2);
       req.onsuccess = () => resolve(req.result);
       req.onerror = () => reject(req.error);
     });

@@ -45,6 +45,12 @@ export const KIRO_TOOL_LABELS: Record<string, string> = {
   assign_group_task: "分配小组任务",
   set_group_task_ddl: "调整小组任务截止时间",
   toggle_group_task: "切换小组任务状态",
+  // Memory
+  search_memories: "读取学习偏好",
+  save_memory: "保存学习偏好",
+  update_memory: "更新学习偏好",
+  delete_memory: "删除学习偏好",
+  apply_change_set: "整体修改",
 };
 
 export function toolLabel(toolName: string): string {

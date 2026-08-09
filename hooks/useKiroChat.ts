@@ -21,8 +21,13 @@ import { executeKiroWriteTool } from "@/lib/ai/tools/write/executor";
 import { isDestructiveWriteTool, KiroUndoEntry, KiroWriteApi, WriteToolResult } from "@/lib/ai/tools/write/types";
 import { KIRO_WRITE_TOOL_NAMES } from "@/lib/ai/tools/write/registry";
 import { KIRO_WRITE_TOOL_SCHEMAS } from "@/lib/ai/tools/write/schemas";
+import { KIRO_MUTATING_TOOL_NAMES } from "@/lib/ai/tools/mutating";
 import { actionToastMessage, toolLabel } from "@/lib/ai/tools/formatters";
 import { executeChangeSet } from "@/lib/ai/transactions/executor";
+import { useKiroMemory } from "@/hooks/useKiroMemory";
+import { hasExplicitMemoryIntent } from "@/lib/ai/memory/manager";
+import { KIRO_MEMORY_TOOL_NAMES, KIRO_MEMORY_TOOL_SCHEMAS } from "@/lib/ai/memory/tools";
+import { MAX_MEMORIES } from "@/lib/ai/memory/types";
 import { PersistedActionView, PersistedAttachmentView, KiroConversationRecord, KiroConversationSummary } from "@/lib/ai/history/types";
 import { budgetAttachments } from "@/lib/ai/contextBudget/attachmentBudget";
 import { DEFAULT_CONTEXT_BUDGET } from "@/lib/ai/contextBudget/planner";
@@ -86,12 +91,12 @@ function toolNameOf(part: ToolCallPart): string {
   return part.type.startsWith("tool-") ? part.type.slice("tool-".length) : part.toolName ?? part.type;
 }
 
-/** 该轮是否包含 Write Tool Call（即使失败 / 被取消也是 Write Turn）——决定能否重新生成 */
+/** 该轮是否包含会持久化 mutation 的 Tool Call（业务写 / Change Set / 记忆写）——决定能否重新生成 */
 export function messageHasWriteToolCalls(m: Pick<UIMessage, "parts">): boolean {
   const parts = (m.parts ?? []) as unknown as ToolCallPart[];
   return parts.some((p) => {
     if (typeof p.type !== "string" || !p.type.startsWith("tool-")) return false;
-    return (KIRO_WRITE_TOOL_NAMES as string[]).includes(toolNameOf(p));
+    return (KIRO_MUTATING_TOOL_NAMES as string[]).includes(toolNameOf(p));
   });
 }
 
@@ -121,10 +126,12 @@ function toView(m: UIMessage): KiroChatMessageView {
   const streaming = parts.some((p) => p.type === "text" && p.state === "streaming");
 
   // 真实 Write Tool 结果（ok:true 且带 action）→ Action Card 数据
+  // Memory 工具只发 Toast，不生成 Action Card
   const actions: KiroActionResultView[] = [];
   for (const p of parts) {
     if (typeof p.type !== "string" || !p.type.startsWith("tool-")) continue;
     const tp = p as ToolCallPart;
+    if ((KIRO_MEMORY_TOOL_NAMES as string[]).includes(toolNameOf(tp))) continue;
     const output = tp.output as WriteToolResult | undefined;
     if (output && output.ok === true && output.action) {
       actions.push({ toolCallId: tp.toolCallId, action: output.action as KiroActionResultView["action"] });
@@ -193,7 +200,7 @@ export function deriveActivity(messages: ActivitySourceMessage[], status: string
 
   const steps: KiroActivityStep[] = toolParts.map((p) => {
     const name = toolNameOf(p);
-    const isWrite = (KIRO_WRITE_TOOL_NAMES as string[]).includes(name);
+    const isWrite = (KIRO_MUTATING_TOOL_NAMES as string[]).includes(name);
     if (p.state === "output-available") return { label: toolLabel(name), status: "done", kind: isWrite ? "write" : "read" };
     if (p.state === "output-error") return { label: toolLabel(name), status: "error", kind: isWrite ? "write" : "read", message: p.errorText };
     return { label: toolLabel(name), status: "working", kind: isWrite ? "write" : "read" };
@@ -268,6 +275,9 @@ export function useKiroChat({
   const capabilities = getModelCapabilities({ provider, model, custom });
   const visionEnabled = capabilities.vision;
 
+  // ---- Long-term Memory（Task 9）：跨会话稳定偏好；独立于业务 Write ----
+  const memory = useKiroMemory();
+
   // 发送瞬间绑定的附件快照：按 user message 顺序消费（File 不进入 Chat state）
   const snapshotQueueRef = useRef<KiroAttachmentView[][]>([]);
 
@@ -305,6 +315,14 @@ export function useKiroChat({
       conversationSummary: conversationSummary
         ? { text: conversationSummary.text, throughMessageId: conversationSummary.throughMessageId }
         : undefined,
+      // 长期学习记忆 Index（不含 content；memoryEnabled=false 时为空数组）
+      memoryIndex: memory.activeIndex.map((m) => ({
+        id: m.id,
+        title: m.title,
+        category: m.category,
+        scope: m.scope,
+        scopeId: m.scopeId,
+      })),
     };
   };
 
@@ -378,6 +396,20 @@ export function useKiroChat({
             options: { body: requestBody() },
           });
         });
+        return;
+      }
+
+      // ---- Memory Tools（Task 9）：Browser 执行 IndexedDB；独立于业务 Write ----
+      if ((KIRO_MEMORY_TOOL_NAMES as string[]).includes(toolName)) {
+        void (async () => {
+          const output = await runMemoryTool(toolName, input, toolCallId);
+          chat.addToolOutput({
+            tool: toolName as never,
+            toolCallId,
+            output,
+            options: { body: requestBody() },
+          });
+        })();
         return;
       }
 
@@ -553,6 +585,123 @@ export function useKiroChat({
       });
     },
     [chat, consumeUndo, pushToast]
+  );
+
+  /** 当前用户 Turn 的文本（Memory Intent 守卫使用：只能来自当前 User Message，附件/摘要不算） */
+  const latestUserText = useMemo(() => {
+    for (let i = chat.messages.length - 1; i >= 0; i--) {
+      const m = chat.messages[i];
+      if (m.role !== "user") continue;
+      return ((m.parts ?? []) as { type?: string; text?: string }[])
+        .filter((p) => p.type === "text" && typeof p.text === "string")
+        .map((p) => p.text as string)
+        .join(" ");
+    }
+    return "";
+  }, [chat.messages]);
+
+  /**
+   * Memory Tool 执行（Browser）：save 受 Explicit Intent 守卫；memoryEnabled=false 拒绝读写。
+   * 输出安全：不返回完整大对象。
+   */
+  const runMemoryTool = useCallback(
+    async (toolName: string, input: unknown, toolCallId: string): Promise<WriteToolResult> => {
+      if (!memory.memoryEnabled) {
+        return { ok: false, code: "MEMORY_DISABLED" as never, message: "Kiro 记忆已关闭，可在设置中重新开启。" };
+      }
+      if (toolName === "search_memories") {
+        const parsed = KIRO_MEMORY_TOOL_SCHEMAS.search_memories.safeParse(input);
+        if (!parsed.success) return { ok: false, code: "INVALID_INPUT" as never, message: "搜索条件不合法。" };
+        const results = await memory.search(parsed.data);
+        return {
+          ok: true,
+          data: results.map((m) => ({
+            id: m.id,
+            title: m.title,
+            content: m.content,
+            category: m.category,
+            scope: m.scope,
+            scopeId: m.scopeId,
+            tags: m.tags ?? [],
+            updatedAt: m.updatedAt,
+          })),
+          action: { tool: "search_memories", entityType: "memory" as never, entityId: "", title: "学习偏好", operation: "read" as never, canUndo: false },
+        };
+      }
+      if (toolName === "save_memory") {
+        const parsed = KIRO_MEMORY_TOOL_SCHEMAS.save_memory.safeParse(input);
+        if (!parsed.success) return { ok: false, code: "INVALID_INPUT" as never, message: "记忆内容不合法。" };
+        // Explicit Intent Guard：附件/摘要/历史都不能触发保存，只有当前用户消息
+        if (!hasExplicitMemoryIntent(latestUserText)) {
+          return { ok: false, code: "EXPLICIT_MEMORY_INTENT_REQUIRED" as never, message: "你没有明确要求记住这条内容，因此没有保存。" };
+        }
+        const result = await memory.save(parsed.data);
+        if (!result.created) {
+          if (result.code === "MEMORY_DISABLED") {
+            return { ok: false, code: "MEMORY_DISABLED" as never, message: "记忆功能已关闭，在设置中开启后可保存偏好。" };
+          }
+          if (result.code === "MEMORY_SENSITIVE_CONTENT") {
+            return { ok: false, code: "MEMORY_SENSITIVE_CONTENT" as never, message: "内容包含敏感信息，无法保存。" };
+          }
+          if (result.code === "MEMORY_LIMIT_REACHED") {
+            return { ok: false, code: "MEMORY_LIMIT_REACHED" as never, message: `记忆数量已达上限（${MAX_MEMORIES} 条）。` };
+          }
+          pushToast({ message: "这条偏好之前已经记住了。" });
+          return {
+            ok: true,
+            data: { id: result.memory.id, deduplicated: true },
+            action: { tool: "save_memory", entityType: "memory" as never, entityId: result.memory.id, title: result.memory.title, operation: "create" as never, canUndo: false },
+          };
+        }
+        pushToast({ message: `Kiro 已记住：${result.memory.title}` });
+        return {
+          ok: true,
+          data: {
+            id: result.memory.id,
+            title: result.memory.title,
+            category: result.memory.category,
+            scope: result.memory.scope,
+            scopeId: result.memory.scopeId,
+          },
+          action: { tool: "save_memory", entityType: "memory" as never, entityId: result.memory.id, title: result.memory.title, operation: "create" as never, canUndo: false },
+        };
+      }
+      if (toolName === "update_memory") {
+        const parsed = KIRO_MEMORY_TOOL_SCHEMAS.update_memory.safeParse(input);
+        if (!parsed.success) return { ok: false, code: "INVALID_INPUT" as never, message: "更新内容不合法。" };
+        const result = await memory.update(parsed.data.memoryId, {
+          title: parsed.data.title,
+          content: parsed.data.content,
+          category: parsed.data.category,
+          scope: parsed.data.scope,
+          scopeId: parsed.data.scopeId,
+          tags: parsed.data.tags,
+        });
+        if (!result.ok) {
+          if (result.code === "MEMORY_SENSITIVE_CONTENT") return { ok: false, code: "MEMORY_SENSITIVE_CONTENT" as never, message: "内容包含敏感信息，无法保存。" };
+          return { ok: false, code: "NOT_FOUND" as never, message: "未找到对应记忆。" };
+        }
+        pushToast({ message: "记忆已更新" });
+        return {
+          ok: true,
+          data: { id: parsed.data.memoryId },
+          action: { tool: "update_memory", entityType: "memory" as never, entityId: parsed.data.memoryId, title: "学习偏好", operation: "update" as never, canUndo: false },
+        };
+      }
+      if (toolName === "delete_memory") {
+        const parsed = KIRO_MEMORY_TOOL_SCHEMAS.delete_memory.safeParse(input);
+        if (!parsed.success) return { ok: false, code: "INVALID_INPUT" as never, message: "参数不合法。" };
+        await memory.remove(parsed.data.memoryId);
+        pushToast({ message: "记忆已删除" });
+        return {
+          ok: true,
+          data: { id: parsed.data.memoryId },
+          action: { tool: "delete_memory", entityType: "memory" as never, entityId: parsed.data.memoryId, title: "学习偏好", operation: "delete" as never, canUndo: false },
+        };
+      }
+      return { ok: false, code: "UNSUPPORTED" as never, message: `未知记忆工具：${toolName}` };
+    },
+    [memory, latestUserText, pushToast]
   );
 
   const send = useCallback(

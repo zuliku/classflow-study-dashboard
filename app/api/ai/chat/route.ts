@@ -93,6 +93,16 @@ export async function POST(req: NextRequest) {
     typeof b.conversationSummary === "object" && b.conversationSummary !== null
       ? (b.conversationSummary as { text?: string; throughMessageId?: string })
       : null;
+  const memoryIndex = Array.isArray(b.memoryIndex)
+    ? (b.memoryIndex as { id?: string; title?: string; category?: string; scope?: string; scopeId?: string }[])
+    : [];
+
+  const memorySection =
+    memoryIndex.length > 0
+      ? `\n\n# 用户长期学习记忆（Index；不代表当前 ClassFlow 业务状态）\n${memoryIndex
+          .map((m, i) => `- ${i + 1}. ${m.title ?? "未命名"}（${m.category ?? ""} · ${m.scope ?? "global"}${m.scopeId ? " · " + m.scopeId : ""}）`)
+          .join("\n")}\n需要完整内容时调用 search_memories。`
+      : "";
 
   const attachmentSection = (contexts: { name?: string; text?: string; type?: string; source?: string; truncated?: boolean; budgetTruncated?: boolean; courseName?: string }[]) =>
     contexts.length > 0
@@ -163,8 +173,8 @@ export async function POST(req: NextRequest) {
     ? `${KIRO_SYSTEM_PROMPT}\n\n# 当前 ClassFlow 上下文\n${JSON.stringify({
         baseContext,
         contextRefs,
-      })}${attachmentSection(plan.attachmentContext)}`
-    : KIRO_SYSTEM_PROMPT + attachmentSection(plan.attachmentContext);
+      })}${memorySection}${attachmentSection(plan.attachmentContext)}`
+    : KIRO_SYSTEM_PROMPT + memorySection + attachmentSection(plan.attachmentContext);
 
   try {
     const modelMessages = await convertToModelMessages(plan.messages as never);

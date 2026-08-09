@@ -146,6 +146,20 @@ export const SETTINGS_REGISTRY: SettingDefinition[] = [
     description: "自定义 OpenAI 兼容服务的 Base URL 与模型",
     keywords: ["自定义", "base url", "兼容", "openai"],
   },
+  {
+    id: "kiro-memory-enabled",
+    section: "kiro",
+    title: "启用 Kiro 记忆",
+    description: "Kiro 记住你的学习偏好并持续运用",
+    keywords: ["记忆", "记住", "偏好", "memory", "preference", "学习习惯"],
+  },
+  {
+    id: "kiro-memory-manager",
+    section: "kiro",
+    title: "Kiro 记忆条目",
+    description: "查看 / 编辑 / 删除 / 清空已记住的偏好",
+    keywords: ["记忆", "记忆管理", "条目", "清空", "memory", "preference"],
+  },
   // ---- 数据与存储 ----
   {
     id: "backup-full",

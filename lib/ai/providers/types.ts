@@ -69,4 +69,6 @@ export interface AISettings {
   provider: AIProviderId;
   model: string;
   custom: AICustomConfig;
+  /** Kiro 长期学习记忆开关（关闭不读不写，但保留已有记忆） */
+  memoryEnabled: boolean;
 }
