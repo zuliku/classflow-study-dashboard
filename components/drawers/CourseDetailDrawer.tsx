@@ -525,7 +525,7 @@ export function CourseDetailDrawer() {
             icon={KIRO_ICON}
             label="Ask Kiro"
             size="sm"
-            className="h-7"
+            className="h-8"
             onClick={handleAskKiro}
           />
         </div>

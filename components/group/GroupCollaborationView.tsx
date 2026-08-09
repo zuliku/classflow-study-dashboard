@@ -370,8 +370,8 @@ export function GroupCollaborationView() {
             <KiroFlowButton
               icon={KIRO_ICON}
               label="Ask Kiro"
-              size="md"
-              className="h-9"
+              size="sm"
+              className="h-8"
               onClick={() => handoff.openForGroupProject(activeProject.id)}
             />
           )}

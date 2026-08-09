@@ -307,8 +307,8 @@ export function AssignmentDrawer() {
           <KiroFlowButton
             icon={KIRO_ICON}
             label="Ask Kiro"
-            size="md"
-            className="h-9"
+            size="sm"
+            className="h-8"
             onClick={handleAskKiro}
           />
           <button
