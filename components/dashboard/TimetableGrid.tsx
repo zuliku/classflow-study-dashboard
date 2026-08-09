@@ -750,11 +750,11 @@ export function TimetableGrid({
                               <span className="px-1.5 py-0.5 rounded-md bg-charcoal text-white text-[9px] font-semibold whitespace-nowrap shadow-card">
                                 {wd.label} · {c.startTime}–{c.endTime}
                               </span>
-                            </div>
-                          );
-                        })()}
-                      </>
-                    )}
+                             </div>
+                           );
+                         })()}
+                       </>
+                     )}
                 </div>
               );
             })}
@@ -762,6 +762,10 @@ export function TimetableGrid({
         </div>
         </div>
       </div>
+
+      {/* Bottom Breathing Space（仅 Timeline embedded）：21:00 时间轴终点与外框之间纯视觉留白。
+          不参与时间几何：08:00–21:00 比例、课程 / StudyBlock 定位、拖拽计算完全不变。 */}
+      {variant === "embedded" && <div aria-hidden="true" className="h-2.5 md:h-3 shrink-0" />}
     </div>
   );
 }
