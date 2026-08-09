@@ -28,6 +28,7 @@ export function KiroMessage({
   testid,
   canRegenerate,
   actionSummaries,
+  actionsReady,
 }: {
   content?: string;
   /** 流式进行中：末尾显示克制状态光标 */
@@ -38,6 +39,8 @@ export function KiroMessage({
   canRegenerate?: boolean;
   /** Action Result 摘要文本（复制结果摘要用，仅可见事实） */
   actionSummaries?: string[];
+  /** 整个 Assistant Turn 是否已完成（chat.status 回到 ready）；最后一条消息由它决定操作栏时机 */
+  actionsReady?: boolean;
 }) {
   const session = useKiroSession();
   const pushToast = useToastStore((s) => s.pushToast);
@@ -78,8 +81,8 @@ export function KiroMessage({
                 className="inline-block w-[2px] h-3.5 bg-sandrift align-middle animate-pulse"
               />
             )}
-            {/* Message Actions（非流式时显示；流式期间由 Agent Progress 承担执行反馈） */}
-            {!streaming && (
+            {/* Message Actions：整个 Turn 结束后才出现（actionsReady），且本消息非流式 */}
+            {(actionsReady ?? true) && !streaming && (
               <div className="flex items-center gap-0.5 opacity-100 md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100 transition-opacity duration-[var(--motion-fast)]">
                 <button
                   onClick={copyMarkdownSource}

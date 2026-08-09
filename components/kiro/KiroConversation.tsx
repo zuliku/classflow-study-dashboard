@@ -23,6 +23,7 @@ export function KiroConversation({
   onOpenSettings,
   onUndo,
   compact,
+  turnInFlight,
 }: {
   messages: KiroChatMessageView[];
   activity: KiroActivity;
@@ -32,12 +33,24 @@ export function KiroConversation({
   onUndo: (toolCallId: string) => void;
   /** sidecar：统一 12px 水平 gutter（与 Header/Composer 一致） */
   compact?: boolean;
+  /** 整个 Agent Turn 是否仍在进行（chat.status === submitted/streaming）——决定最后一条消息的操作栏时机 */
+  turnInFlight: boolean;
 }) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const stickToBottomRef = useRef(true);
   const [showScrollBtn, setShowScrollBtn] = React.useState(false);
   const { conversationSummary } = useKiroSession();
   const contentKey = messages.map((m) => `${m.id}:${m.content.length}:${m.streaming}`).join("|");
+
+  // 最后一条 assistant 消息：其操作栏必须等整个 Turn 结束（turnInFlight false）才显示；
+  // 历史 assistant 消息不受当前 Turn 影响
+  let lastAssistantIndex = -1;
+  for (let i = messages.length - 1; i >= 0; i--) {
+    if (messages[i].role === "assistant") {
+      lastAssistantIndex = i;
+      break;
+    }
+  }
 
   const onScroll = () => {
     const el = scrollRef.current;
@@ -105,7 +118,7 @@ export function KiroConversation({
             </span>
           </div>
         )}
-        {messages.map((m) => {
+        {messages.map((m, idx) => {
           if (m.role === "user") {
             return <KiroUserMessage key={m.id} content={m.content} attachments={m.attachments} />;
           }
@@ -118,6 +131,7 @@ export function KiroConversation({
               content={m.content}
               streaming={m.streaming}
               canRegenerate={m.canRegenerate}
+              actionsReady={idx === lastAssistantIndex ? !turnInFlight : true}
               actionSummaries={[
                 ...(m.actions ?? []).map((a) => actionSummaryText(actionToCardProps(a.action))),
                 ...(m.historyActions ?? []).map((a) => actionSummaryText(a as Parameters<typeof actionSummaryText>[0])),

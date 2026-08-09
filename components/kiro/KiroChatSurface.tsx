@@ -81,6 +81,7 @@ export function KiroChatSurface({ variant }: { variant: "workspace" | "sidecar" 
           onOpenSettings={openKiroSettings}
           onUndo={chat.consumeUndo}
           compact={compact}
+          turnInFlight={chat.streaming}
         />
       )}
 

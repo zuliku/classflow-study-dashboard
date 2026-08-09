@@ -66,10 +66,11 @@ export function KiroActivityTrace({
 
   const working = phase !== "done" && phase !== "error";
   const writeCount = steps.filter((s) => s.kind === "write").length;
+  // 纯文字 summary（Check 图标由 JSX 单独渲染，避免双对号）
   const summary = done
     ? writeCount > 0
-      ? `✓ 完成 ${steps.length} 个步骤 · 修改 ${writeCount} 项内容`
-      : `✓ 已读取 ${steps.length} 项 ClassFlow 信息`
+      ? `完成 ${steps.length} 个步骤 · 修改 ${writeCount} 项内容`
+      : `已读取 ${steps.length} 项 ClassFlow 信息`
     : PHASE_LABEL[phase];
 
   const glowClass =
