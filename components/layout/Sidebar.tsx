@@ -28,7 +28,7 @@ export function Sidebar() {
       <div className="space-y-3">
         {/* Brand Logo：Icon Rail 显示图形 Mark；完整 Sidebar 显示全横版 Logo（Responsive Swap，非缩放） */}
         <div
-          className="w-full h-10 px-0.5 flex items-center justify-center cursor-pointer transition-opacity hover:opacity-90"
+          className="w-full h-10 px-0.5 flex items-center justify-center cursor-pointer"
           onClick={() => setActiveTab("overview")}
         >
           {/* 768–1279 Icon Rail：仅图形 Mark，居中，object-contain */}
