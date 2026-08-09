@@ -21,6 +21,7 @@ import { executeKiroWriteTool } from "@/lib/ai/tools/write/executor";
 import { isDestructiveWriteTool, KiroUndoEntry, KiroWriteApi, WriteToolResult } from "@/lib/ai/tools/write/types";
 import { KIRO_WRITE_TOOL_NAMES } from "@/lib/ai/tools/write/registry";
 import { actionToastMessage, toolLabel } from "@/lib/ai/tools/formatters";
+import { PersistedActionView, PersistedAttachmentView, KiroConversationRecord } from "@/lib/ai/history/types";
 
 /** 每回合工具调用上限：Read ≤ 12，Write ≤ 8 */
 export const MAX_READ_TOOL_CALLS_PER_TURN_UI = 12;
@@ -34,8 +35,12 @@ export interface KiroChatMessageView {
   streaming: boolean;
   /** 真实 Write Tool 结果（Action Card 事实来源，模型不得生成） */
   actions?: KiroActionResultView[];
+  /** 历史恢复的 Action Card 事实 UI（展示用，canUndo 恒 false） */
+  historyActions?: PersistedActionView[];
   /** 该 User Turn 绑定的附件（chips 展示；File 对象不进入 Chat state） */
   attachments?: KiroAttachmentView[];
+  /** 是否可以「重新生成」：仅 live 且该轮无 Write Tool Call 的最后一条 */
+  canRegenerate: boolean;
 }
 
 export interface KiroActionResultView {
@@ -72,6 +77,32 @@ function toolNameOf(part: ToolCallPart): string {
   return part.type.startsWith("tool-") ? part.type.slice("tool-".length) : part.toolName ?? part.type;
 }
 
+/** 该轮是否包含 Write Tool Call（即使失败 / 被取消也是 Write Turn）——决定能否重新生成 */
+export function messageHasWriteToolCalls(m: Pick<UIMessage, "parts">): boolean {
+  const parts = (m.parts ?? []) as unknown as ToolCallPart[];
+  return parts.some((p) => {
+    if (typeof p.type !== "string" || !p.type.startsWith("tool-")) return false;
+    return (KIRO_WRITE_TOOL_NAMES as string[]).includes(toolNameOf(p));
+  });
+}
+
+function isRestoredMessage(m: Pick<UIMessage, "metadata">): boolean {
+  return (m.metadata as Record<string, string> | undefined)?.restored === "1";
+}
+
+/** 判断上一轮能否安全 regenerate：最后一条 assistant 无 Write Tool 且非历史恢复 */
+export function lastTurnCanRegenerate(messages: Pick<UIMessage, "role" | "parts" | "metadata">[]): boolean {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const m = messages[i];
+    if (m.role !== "assistant") continue;
+    if ((m.parts ?? []).some((p) => typeof p.type === "string" && p.type.startsWith("tool-"))) {
+      return !messageHasWriteToolCalls(m as UIMessage) && !isRestoredMessage(m);
+    }
+    return !isRestoredMessage(m);
+  }
+  return false;
+}
+
 function toView(m: UIMessage): KiroChatMessageView {
   const parts = (m.parts ?? []) as unknown as (ToolCallPart | { type: "text"; text: string; state?: string })[];
   const content = parts
@@ -91,12 +122,15 @@ function toView(m: UIMessage): KiroChatMessageView {
     }
   }
 
+  const restored = isRestoredMessage(m);
   return {
     id: m.id,
     role: m.role === "assistant" ? "assistant" : "user",
     content,
     streaming,
     actions: actions.length > 0 ? actions : undefined,
+    // 历史恢复消息：禁止重新生成；live 且有 Write Tool Call 的轮次同样禁止
+    canRegenerate: !restored && !messageHasWriteToolCalls(m),
   };
 }
 
@@ -186,6 +220,10 @@ export function useKiroChat({
   const writeCounterRef = useRef(0);
   const limitReachedRef = useRef(false);
   const undoRegistryRef = useRef(new Map<string, KiroUndoEntry>());
+
+  // 历史恢复的展示数据（Action Cards / 附件 chips）——不是可执行 Tool state
+  const restoredActionsRef = useRef(new Map<string, PersistedActionView[]>());
+  const restoredAttachmentsRef = useRef(new Map<string, PersistedAttachmentView[]>());
 
   const consumeUndo = useCallback((toolCallId: string) => {
     const entry = undoRegistryRef.current.get(toolCallId);
@@ -391,12 +429,17 @@ export function useKiroChat({
 
   const retry = useCallback(() => {
     if (!enabled) return;
+    // Defense in depth：含 Write Tool 的轮次或历史恢复轮次禁止 regenerate（即使 UI 误调用）
+    if (!lastTurnCanRegenerate(chat.messages)) {
+      pushToast({ message: "操作结果已保留，可以继续向 Kiro 提问。", type: "info" });
+      return;
+    }
     readCounterRef.current = 0;
     materialReadCounterRef.current = 0;
     writeCounterRef.current = 0;
     limitReachedRef.current = false;
     void chat.regenerate({ body: bodyRef.current });
-  }, [chat, enabled]);
+  }, [chat, enabled, pushToast]);
 
   const newChat = useCallback(() => {
     chat.setMessages([]);
@@ -406,7 +449,41 @@ export function useKiroChat({
     limitReachedRef.current = false;
     undoRegistryRef.current.clear();
     snapshotQueueRef.current = [];
+    restoredActionsRef.current.clear();
+    restoredAttachmentsRef.current.clear();
   }, [chat]);
+
+  /**
+   * 恢复历史对话（Task 6）：
+   * 只恢复 user/assistant 文本（不重放 Tool Call）；下一轮需要真实数据时重新调用当前 Read Tools。
+   * 恢复的消息标记 restored → 禁止重新生成 / 撤销。
+   */
+  const loadConversation = useCallback(
+    (record: KiroConversationRecord) => {
+      const actionsMap = new Map<string, PersistedActionView[]>();
+      const attachmentsMap = new Map<string, PersistedAttachmentView[]>();
+      const restored: UIMessage[] = record.messages.map((pm) => {
+        if (pm.attachments && pm.attachments.length > 0) attachmentsMap.set(pm.id, pm.attachments);
+        if (pm.actions && pm.actions.length > 0) actionsMap.set(pm.id, pm.actions);
+        return {
+          id: pm.id,
+          role: pm.role,
+          parts: [{ type: "text", text: pm.content }],
+          metadata: { restored: "1" },
+        };
+      });
+      restoredActionsRef.current = actionsMap;
+      restoredAttachmentsRef.current = attachmentsMap;
+      readCounterRef.current = 0;
+      materialReadCounterRef.current = 0;
+      writeCounterRef.current = 0;
+      limitReachedRef.current = false;
+      undoRegistryRef.current.clear();
+      snapshotQueueRef.current = [];
+      chat.setMessages(restored);
+    },
+    [chat]
+  );
 
   const normalizedError: AIError | null = chat.error ? normalizeAIError(chat.error) : null;
   const streaming = chat.status === "streaming" || chat.status === "submitted";
@@ -415,7 +492,7 @@ export function useKiroChat({
     [chat.messages, chat.status]
   );
 
-  // 用户消息按顺序消费发送时绑定的附件快照
+  // 用户消息按顺序消费发送时绑定的附件快照；历史恢复的消息附加展示数据（actions/attachments）
   const messages = useMemo(() => {
     const queue = snapshotQueueRef.current;
     let qi = 0;
@@ -429,7 +506,26 @@ export function useKiroChat({
         } else {
           qi += 1;
         }
+        // 历史恢复的附件 chips（仅展示：临时文件标记未保留）
+        const restoredAtts = restoredAttachmentsRef.current.get(m.id);
+        if (!view.attachments && restoredAtts && restoredAtts.length > 0) {
+          view.attachments = restoredAtts.map((a) => ({
+            id: a.id,
+            source: a.source,
+            kind: a.kind as KiroAttachmentView["kind"],
+            name: a.name,
+            size: a.size,
+            status: "ready" as const,
+            courseName: a.courseName,
+            courseId: a.courseId,
+            materialId: a.materialId,
+            tempNotRetained: a.tempNotRetained,
+          }));
+        }
       }
+      // 历史恢复的 Action Cards（展示事实，canUndo 恒 false）
+      const restoredActs = restoredActionsRef.current.get(m.id);
+      if (restoredActs && restoredActs.length > 0) view.historyActions = restoredActs;
       return view;
     });
   }, [chat.messages]);
@@ -444,6 +540,7 @@ export function useKiroChat({
     retry,
     stop: chat.stop,
     newChat,
+    loadConversation,
     configured: enabled,
     consumeUndo,
     visionEnabled,

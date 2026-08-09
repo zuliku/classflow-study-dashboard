@@ -65,4 +65,9 @@ export interface KiroAttachmentView {
   /** 图片缩略图（data URL，仅 local image） */
   thumbnail?: string;
   courseName?: string;
+  /** material 引用（历史恢复后仍可标识原课程资料） */
+  courseId?: string;
+  materialId?: string;
+  /** local 临时文件：历史恢复后未保留（只显示文件名/类型，不可再读） */
+  tempNotRetained?: boolean;
 }

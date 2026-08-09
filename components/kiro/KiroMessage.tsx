@@ -26,7 +26,7 @@ export function KiroMessage({
   streaming,
   children,
   testid,
-  isLast,
+  canRegenerate,
   actionSummaries,
 }: {
   content?: string;
@@ -34,8 +34,8 @@ export function KiroMessage({
   streaming?: boolean;
   children?: React.ReactNode;
   testid?: string;
-  /** 最后一条 assistant 消息：可重新生成 */
-  isLast?: boolean;
+  /** 允许「重新生成」：仅 live 最新 read-only turn（含 Write Tool 或历史恢复的轮次为 false） */
+  canRegenerate?: boolean;
   /** Action Result 摘要文本（复制结果摘要用，仅可见事实） */
   actionSummaries?: string[];
 }) {
@@ -89,7 +89,7 @@ export function KiroMessage({
                   <Copy className="w-3.5 h-3.5" />
                   复制
                 </button>
-                {isLast && (
+                {canRegenerate && (
                   <button
                     onClick={() => session.chat.retry()}
                     aria-label="重新生成"
@@ -111,7 +111,7 @@ export function KiroMessage({
                     <MoreHorizontal className="w-3.5 h-3.5" />
                   </button>
                   {more.open && (
-                    <KiroMenuPanel dir={isLast ? "up" : "down"}>
+                    <KiroMenuPanel dir="up">
                       <KiroMenuItem icon={Copy} label="复制文本" onClick={copyPlain} />
                       <KiroMenuItem icon={FileText} label="复制 Markdown" onClick={copyMarkdownSource} />
                       {hasActions && (
@@ -168,6 +168,14 @@ export function KiroUserMessage({
                 >
                   <Icon className="w-3 h-3 text-sandrift shrink-0" />
                   <span className={cn("truncate max-w-[140px]")}>{a.name}</span>
+                  {a.tempNotRetained && (
+                    <span
+                      title="这份临时附件没有保存在本机历史中，请重新添加文件。"
+                      className="text-[9px] font-bold text-sandrift bg-alabaster border border-line-soft rounded px-1 py-px shrink-0"
+                    >
+                      临时附件未保留
+                    </span>
+                  )}
                 </span>
               );
             })}

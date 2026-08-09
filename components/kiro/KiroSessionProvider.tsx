@@ -3,6 +3,7 @@
 import React, { createContext, useCallback, useContext, useMemo, useRef, useState } from "react";
 import { useShallow } from "zustand/react/shallow";
 import { useAppStore } from "@/store/useAppStore";
+import { useAISettingsStore } from "@/store/useAISettingsStore";
 import { useKiroChat } from "@/hooks/useKiroChat";
 import { useKiroAttachments } from "@/hooks/useKiroAttachments";
 import {
@@ -21,6 +22,19 @@ import {
 import { KiroContextRef } from "@/lib/ai/context/types";
 import { KiroSidecar } from "@/components/kiro/KiroSidecar";
 import { pushOverlay, popOverlay, isTopmostOverlay } from "@/lib/overlayStack";
+import {
+  sanitizeConversation,
+  buildAutoTitle,
+  filterValidContextRefs,
+} from "@/lib/ai/history/sanitize";
+import {
+  saveConversation,
+  getConversation,
+  deleteConversationRecord,
+  renameConversationRecord,
+  clearConversationHistory,
+} from "@/lib/ai/history/db";
+import { KiroConversationRecord, PersistedContextRef } from "@/lib/ai/history/types";
 
 export type KiroSuggestionsKind = "assignment" | "course" | "group-project" | "week" | "generic";
 
@@ -33,6 +47,16 @@ interface KiroSessionValue {
   removeContext: (key: string) => void;
   addManualContext: (ref: KiroContextRef) => void;
   newChat: () => void;
+  // Conversation History（本地 IndexedDB）
+  currentConversationId: string | null;
+  conversationTitle: string | null;
+  conversationCreatedAt: string | null;
+  historyVersion: number;
+  loadConversation: (id: string) => void;
+  deleteConversation: (id: string) => void;
+  renameConversation: (id: string, title: string) => void;
+  clearHistory: () => void;
+  refreshHistory: () => void;
   // Sidecar
   sidecarOpen: boolean;
   openSidecar: () => void;
@@ -65,6 +89,17 @@ export function KiroSessionProvider({ children }: { children: React.ReactNode })
   const suggestionsGenRef = useRef(0);
   const [lastUserTurnGen, setLastUserTurnGen] = useState(0);
 
+  // Conversation History（Task 6）：只存本地 IndexedDB；不进入 useAppStore（属 AI Session 数据）
+  const [conversationId, setConversationId] = useState<string | null>(null);
+  const [conversationTitle, setConversationTitle] = useState<string | null>(null);
+  const [conversationCreatedAt, setConversationCreatedAt] = useState<string | null>(null);
+  const [historyVersion, setHistoryVersion] = useState(0);
+  const conversationIdRef = useRef<string | null>(null);
+  const conversationTitleRef = useRef<string | null>(null);
+  const conversationCreatedAtRef = useRef<string | null>(null);
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastSavedSnapshotRef = useRef<string>("");
+
   const setActiveTab = useAppStore((s) => s.setActiveTab);
   const activeTab = useAppStore((s) => s.activeTab);
 
@@ -90,6 +125,85 @@ export function KiroSessionProvider({ children }: { children: React.ReactNode })
     suppressedAutoKeys,
     attachments: attachments.attachments,
   });
+
+  const aiProvider = useAISettingsStore((s) => s.provider);
+  const aiModel = useAISettingsStore((s) => s.model);
+
+  // ---- Conversation Persistence（Task 6）----
+
+  const refreshHistory = useCallback(() => setHistoryVersion((v) => v + 1), []);
+
+  /** 保存当前会话到 IndexedDB（稳定点调用；streaming 中不保存半成品） */
+  const persistCurrent = useCallback(async () => {
+    const id = conversationIdRef.current;
+    if (!id) return; // 尚无会话（transient，直到第一条 User Message）
+    const messages = chat.messages;
+    if (messages.length === 0 || chat.streaming) return;
+    const snapshot = `${id}|${messages.length}|${messages[messages.length - 1]?.content.length ?? 0}|${chat.status}`;
+    if (snapshot === lastSavedSnapshotRef.current) return; // 无变化不重复写
+    lastSavedSnapshotRef.current = snapshot;
+    try {
+      const record = sanitizeConversation({
+        id,
+        title: conversationTitleRef.current ?? "Kiro 对话",
+        createdAt: conversationCreatedAtRef.current ?? new Date().toISOString(),
+        provider: aiProvider,
+        model: aiModel,
+        messages: messages as ReturnType<typeof useKiroChat>["messages"],
+        manualRefs,
+        entryRefs,
+      });
+      await saveConversation(record);
+      refreshHistory();
+    } catch (err) {
+      console.warn("kiro history: save failed", err);
+    }
+  }, [chat, manualRefs, entryRefs, aiProvider, aiModel, refreshHistory]);
+
+  const scheduleSave = useCallback(() => {
+    // 稳定点（turn 结束 / tool loop 完成）立即保存；防抖仅合并 streaming 状态抖动
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = setTimeout(() => {
+      saveTimerRef.current = null;
+      void persistCurrent();
+    }, 300);
+  }, [persistCurrent]);
+
+  const flushSave = useCallback(async () => {
+    if (saveTimerRef.current) {
+      clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = null;
+    }
+    await persistCurrent();
+  }, [persistCurrent]);
+
+  // Turn 结束（streaming true→false）→ 保存稳定点；tool loop 完成同样落在这里
+  const wasStreamingRef = useRef(false);
+  React.useEffect(() => {
+    if (chat.streaming) {
+      wasStreamingRef.current = true;
+      return;
+    }
+    if (!wasStreamingRef.current) return;
+    wasStreamingRef.current = false;
+    scheduleSave();
+  }, [chat.streaming, scheduleSave]);
+
+  // 卸载 / 页面隐藏前 flush（防丢最后状态）
+  React.useEffect(() => {
+    const onPageHide = () => {
+      if (saveTimerRef.current) {
+        clearTimeout(saveTimerRef.current);
+        saveTimerRef.current = null;
+      }
+      void persistCurrent();
+    };
+    window.addEventListener("pagehide", onPageHide);
+    return () => {
+      window.removeEventListener("pagehide", onPageHide);
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    };
+  }, [persistCurrent]);
 
   const activeRefs = useMemo(
     () =>
@@ -117,13 +231,21 @@ export function KiroSessionProvider({ children }: { children: React.ReactNode })
   }, []);
 
   const newChat = useCallback(() => {
+    void flushSave();
     chat.newChat();
+    conversationIdRef.current = null;
+    conversationTitleRef.current = null;
+    conversationCreatedAtRef.current = null;
+    setConversationId(null);
+    setConversationTitle(null);
+    setConversationCreatedAt(null);
     setManualRefs([]);
     setEntryRefs([]);
     setSuppressedAutoKeys([]);
     attachments.clear();
     setLastUserTurnGen(suggestionsGenRef.current);
-  }, [chat, attachments]);
+    refreshHistory();
+  }, [chat, attachments, flushSave, refreshHistory]);
 
   const openSidecar = useCallback(() => {
     setSidecarOpen(true);
@@ -187,12 +309,92 @@ export function KiroSessionProvider({ children }: { children: React.ReactNode })
 
   const sendWithTurn = useCallback(
     (text: string) => {
+      // 第一次真实 User Message：创建会话（transient → 正式写 DB 在首个稳定点）
+      if (!conversationIdRef.current) {
+        const id = globalThis.crypto?.randomUUID
+          ? globalThis.crypto.randomUUID()
+          : `conv_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`;
+        const title = buildAutoTitle(text);
+        const createdAt = new Date().toISOString();
+        conversationIdRef.current = id;
+        conversationTitleRef.current = title;
+        conversationCreatedAtRef.current = createdAt;
+        setConversationId(id);
+        setConversationTitle(title);
+        setConversationCreatedAt(createdAt);
+      }
       setLastUserTurnGen(suggestionsGenRef.current);
       chat.send(text);
       attachments.clear();
     },
     [chat, attachments]
   );
+
+  /** 恢复历史对话：先保存当前 → 加载目标 → 恢复 refs（校验实体仍存在）→ 关闭由 Panel 处理 */
+  const loadConversation = useCallback(
+    async (id: string) => {
+      const target = await getConversation(id);
+      if (!target) {
+        refreshHistory();
+        return;
+      }
+      await flushSave();
+      const state = useAppStore.getState();
+      const restoreRefs = (refs: PersistedContextRef[], source: "manual" | "entry"): KiroContextRef[] =>
+        filterValidContextRefs(refs, state).map((r) => ({
+          key: `restored-${source}-${r.kind}-${r.entityId ?? "?"}`,
+          kind: r.kind,
+          entityId: r.entityId,
+          label: r.label,
+          source,
+        }));
+      chat.loadConversation(target);
+      conversationIdRef.current = target.id;
+      conversationTitleRef.current = target.title;
+      conversationCreatedAtRef.current = target.createdAt;
+      setConversationId(target.id);
+      setConversationTitle(target.title);
+      setConversationCreatedAt(target.createdAt);
+      setManualRefs(restoreRefs(target.manualRefs, "manual"));
+      setEntryRefs(restoreRefs(target.entryRefs, "entry"));
+      setSuppressedAutoKeys([]);
+      setSuggestionsKind(null);
+      setLastUserTurnGen(suggestionsGenRef.current);
+      attachments.clear();
+    },
+    [chat, attachments, flushSave, refreshHistory]
+  );
+
+  const deleteConversation = useCallback(
+    async (id: string) => {
+      await deleteConversationRecord(id);
+      if (conversationIdRef.current === id) {
+        // 删除当前会话：切到新的 transient session，避免 UI 指向不存在的 ID
+        newChat();
+      }
+      refreshHistory();
+    },
+    [newChat, refreshHistory]
+  );
+
+  const renameConversation = useCallback(
+    async (id: string, title: string) => {
+      const t = title.trim();
+      if (!t) return;
+      await renameConversationRecord(id, t);
+      if (conversationIdRef.current === id) {
+        conversationTitleRef.current = t;
+        setConversationTitle(t);
+      }
+      refreshHistory();
+    },
+    [refreshHistory]
+  );
+
+  const clearHistory = useCallback(() => {
+    void clearConversationHistory();
+    newChat();
+  }, [newChat]);
 
   // Sidecar 打开时注册 overlay（Esc 只在最上层关闭）
   React.useEffect(() => {
@@ -215,6 +417,15 @@ export function KiroSessionProvider({ children }: { children: React.ReactNode })
     removeContext,
     addManualContext,
     newChat,
+    currentConversationId: conversationId,
+    conversationTitle,
+    conversationCreatedAt,
+    historyVersion,
+    loadConversation,
+    deleteConversation,
+    renameConversation,
+    clearHistory,
+    refreshHistory,
     sidecarOpen,
     openSidecar,
     closeSidecar,

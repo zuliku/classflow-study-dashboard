@@ -3,9 +3,9 @@
 import React, { useEffect, useRef, useState } from "react";
 import { KiroMessage, KiroUserMessage } from "@/components/kiro/KiroMessage";
 import { KiroActivityTrace } from "@/components/kiro/KiroActivityTrace";
-import { KiroActionCard, actionToCardProps } from "@/components/kiro/KiroActionCard";
 import { KiroChatMessageView, KiroActivity } from "@/hooks/useKiroChat";
 import { AIError, AI_ERROR_MESSAGES } from "@/lib/ai/errors";
+import { KiroActionCard, actionToCardProps, KiroActionCardVariant } from "@/components/kiro/KiroActionCard";
 import { actionSummaryText } from "@/lib/ai/share";
 import { cn } from "@/lib/utils";
 import { RotateCcw, Settings, ChevronDown } from "lucide-react";
@@ -79,7 +79,7 @@ export function KiroConversation({
         </button>
       )}
       <div className={cn("max-w-[820px] mx-auto space-y-5 py-3", compact ? "px-3" : "px-1")}>
-        {messages.map((m, idx) =>
+        {messages.map((m) =>
           m.role === "user" ? (
             <KiroUserMessage key={m.id} content={m.content} attachments={m.attachments} />
           ) : (
@@ -87,8 +87,11 @@ export function KiroConversation({
               key={m.id}
               content={m.content}
               streaming={m.streaming}
-              isLast={idx === messages.length - 1}
-              actionSummaries={m.actions?.map((a) => actionSummaryText(actionToCardProps(a.action)))}
+              canRegenerate={m.canRegenerate}
+              actionSummaries={[
+                ...(m.actions ?? []).map((a) => actionSummaryText(actionToCardProps(a.action))),
+                ...(m.historyActions ?? []).map((a) => actionSummaryText(a as Parameters<typeof actionSummaryText>[0])),
+              ]}
             >
               {/* Action Result Cards：真实 ToolResult 事实 UI */}
               {m.actions && m.actions.length > 0 && (
@@ -98,6 +101,22 @@ export function KiroConversation({
                       key={a.toolCallId}
                       {...actionToCardProps(a.action)}
                       onUndo={a.action.canUndo ? () => onUndo(a.toolCallId) : undefined}
+                    />
+                  ))}
+                </div>
+              )}
+              {/* 历史恢复的 Action Cards：纯展示事实（canUndo 恒 false） */}
+              {m.historyActions && m.historyActions.length > 0 && (
+                <div className="space-y-2.5 pt-1">
+                  {m.historyActions.map((a) => (
+                    <KiroActionCard
+                      key={a.toolCallId}
+                      variant={a.variant as KiroActionCardVariant}
+                      heading={a.heading}
+                      title={a.title}
+                      change={a.change ?? undefined}
+                      bullets={a.bullets}
+                      footer={a.footer}
                     />
                   ))}
                 </div>

@@ -19,7 +19,11 @@ export function actionSummaryText(props: Omit<KiroActionCardProps, "onUndo">): s
 }
 
 function actionSummariesOf(m: KiroChatMessageView): string[] {
-  return (m.actions ?? []).map((a) => actionSummaryText(actionToCardProps(a.action)));
+  const live = (m.actions ?? []).map((a) => actionSummaryText(actionToCardProps(a.action)));
+  const restored = (m.historyActions ?? []).map((a) =>
+    actionSummaryText(a as Parameters<typeof actionSummaryText>[0])
+  );
+  return [...live, ...restored];
 }
 
 function attachmentNames(m: KiroChatMessageView): string[] {
