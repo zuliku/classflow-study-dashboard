@@ -55,7 +55,7 @@ export function Header() {
     //   <768  当前页面标题 + 搜索入口（高频全局操作），不塞桌面控件
     //   768–1279  问候语 + 紧凑搜索 + 日期范围
     //   ≥1280  完整信息与间距
-    <header className="bg-[#F7F5F5] border-b border-line px-4 md:px-6 py-3 md:py-3.5 flex flex-col md:flex-row md:items-center justify-between gap-3 sticky top-0 z-10">
+    <header className="bg-[#F7F5F5] border-b border-line px-4 md:px-6 py-3 md:py-3.5 md:min-h-16 flex flex-col md:flex-row md:items-center justify-between gap-3 sticky top-0 z-10">
       {/* Left: Mobile 显示当前页面标题；Desktop/Tablet 显示问候语 */}
       <div className="min-w-0">
         <h2 className="text-base md:text-lg font-bold text-charcoal tracking-tight truncate">

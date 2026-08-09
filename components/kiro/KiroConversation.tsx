@@ -1,13 +1,13 @@
 "use client";
 
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { KiroMessage, KiroUserMessage } from "@/components/kiro/KiroMessage";
 import { KiroActivityTrace } from "@/components/kiro/KiroActivityTrace";
 import { KiroActionCard, actionToCardProps } from "@/components/kiro/KiroActionCard";
 import { KiroChatMessageView, KiroActivity } from "@/hooks/useKiroChat";
 import { AIError, AI_ERROR_MESSAGES } from "@/lib/ai/errors";
 import { cn } from "@/lib/utils";
-import { RotateCcw, Settings } from "lucide-react";
+import { RotateCcw, Settings, ChevronDown } from "lucide-react";
 
 /**
  * Conversation 布局：max-width 820px 居中，纵向文档流。
@@ -33,12 +33,15 @@ export function KiroConversation({
 }) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const stickToBottomRef = useRef(true);
+  const [showScrollBtn, setShowScrollBtn] = React.useState(false);
   const contentKey = messages.map((m) => `${m.id}:${m.content.length}:${m.streaming}`).join("|");
 
   const onScroll = () => {
     const el = scrollRef.current;
     if (!el) return;
     stickToBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+    const shouldShow = el.scrollHeight - el.scrollTop - el.clientHeight > 160;
+    setShowScrollBtn((prev) => (prev === shouldShow ? prev : shouldShow));
   };
 
   useEffect(() => {
@@ -47,13 +50,32 @@ export function KiroConversation({
     if (stickToBottomRef.current) el.scrollTop = el.scrollHeight;
   }, [contentKey]);
 
+  const scrollToBottom = () => {
+    const el = scrollRef.current;
+    if (!el) return;
+    stickToBottomRef.current = true;
+    el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+    setShowScrollBtn(false);
+  };
+
   return (
     <div
       ref={scrollRef}
       onScroll={onScroll}
       data-testid="kiro-conversation"
-      className="flex-1 min-h-0 overflow-y-auto"
+      className="relative flex-1 min-h-0 overflow-y-auto"
     >
+      {/* 用户上滑离开底部时：轻量「回到底部」浮钮（不遮挡 Composer） */}
+      {showScrollBtn && (
+        <button
+          onClick={scrollToBottom}
+          aria-label="回到底部"
+          title="回到底部"
+          className="absolute bottom-3 left-1/2 -translate-x-1/2 w-8 h-8 rounded-full bg-surface border border-line shadow-subtle flex items-center justify-center text-sandrift hover:text-charcoal hover:border-line-strong transition-colors z-10"
+        >
+          <ChevronDown className="w-4 h-4" />
+        </button>
+      )}
       <div className={cn("max-w-[820px] mx-auto space-y-5 py-3", compact ? "px-3" : "px-1")}>
         {messages.map((m) =>
           m.role === "user" ? (

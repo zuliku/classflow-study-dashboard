@@ -105,14 +105,15 @@ test("建议互斥：Assignment Entry 时只显示 Context-aware 建议，EmptyS
 
   const sidecar = page.getByTestId("kiro-sidecar");
   await expect(sidecar).toBeVisible();
-  // Context-aware 建议出现（assignment kind，Lucide 图标化）
+  // 建议区作为 EmptyState 主操作区（标题下方）
   const suggestions = page.getByTestId("kiro-context-suggestions");
   await expect(suggestions).toBeVisible();
   await expect(suggestions).toContainText("拆分这个任务");
-  // 通用建议不同时出现
-  await expect(suggestions).not.toContainText("帮我规划今天");
+  // 通用建议不同时出现（EmptyState 内只有 Context-aware 按钮）
   const empty = page.getByTestId("kiro-empty");
-  await expect(empty.getByRole("button")).toHaveCount(0);
+  await expect(empty).toContainText("拆分这个任务");
+  await expect(empty).not.toContainText("帮我规划今天");
+  await expect(empty.getByText("帮我规划今天", { exact: true })).toHaveCount(0);
 });
 
 test("Sidecar ContextBar 默认 collapsed；点击展开 chips；Header 不重复 Context", async ({ page }) => {
@@ -125,16 +126,16 @@ test("Sidecar ContextBar 默认 collapsed；点击展开 chips；Header 不重�
   await page.getByRole("button", { name: "Ask Kiro" }).click();
   await expect(page.getByTestId("kiro-sidecar")).toBeVisible();
 
-  // Header 只有品牌 + 操作，不重复 Context chip（"时间范围" 只出现 1 次 = ContextBar collapsed 摘要）
+  // Header 只有品牌 + 操作，不重复 Context（collapsed 摘要不显示具体标签）
   await expect(page.getByTestId("kiro-sidecar-title")).toHaveText("Kiro");
-  expect(await page.getByTestId("kiro-sidecar").getByText("时间范围").count()).toBe(1);
+  expect(await page.getByTestId("kiro-sidecar").getByText("时间范围").count()).toBe(0);
 
-  // ContextBar：collapsed 摘要行（aria-expanded=false）
+  // ContextBar：collapsed 摘要行（aria-expanded=false，短文案）
   const bar = page.getByTestId("kiro-context-bar");
   await expect(bar).toBeVisible();
   const summary = bar.getByRole("button", { expanded: false });
   await expect(summary).toBeVisible();
-  await expect(summary).toContainText("使用");
+  await expect(summary).toContainText("项上下文");
   // 点击展开 → chips 出现（entry 标签，语义去重后不重复本周）
   await summary.click();
   await expect(bar.getByRole("button", { name: "收起上下文" })).toBeVisible();
@@ -142,7 +143,7 @@ test("Sidecar ContextBar 默认 collapsed；点击展开 chips；Header 不重�
   await expect(bar.getByText("时间范围", { exact: true })).toHaveCount(0);
 });
 
-test("2xl Docked：Sidecar 为整屏 sticky Panel（高度=viewport，Composer 贴底）", async ({ page }) => {
+test("2xl Docked：Sidecar 为整屏 sticky Panel（高度=viewport，宽 424，Composer 底部留白）", async ({ page }) => {
   await seedAI(page);
   await page.setViewportSize({ width: 1600, height: 900 });
   await page.goto("/");
@@ -152,10 +153,40 @@ test("2xl Docked：Sidecar 为整屏 sticky Panel（高度=viewport，Composer �
   const box = await sidecar.boundingBox();
   expect(box!.height).toBe(900);
   expect(box!.y).toBe(0);
-  // Composer 位于 Panel 底部（贴视口底）
+  expect(box!.width).toBe(424);
+  // Composer 位于 Panel 底部且带 12px 底部留白（输入框不与 Panel 贴边）
   const composerBox = await page.getByTestId("kiro-composer").boundingBox();
-  expect(composerBox!.y + composerBox!.height).toBeLessThanOrEqual(900);
-  expect(composerBox!.y + composerBox!.height).toBeGreaterThan(880);
+  const inputBox = await page
+    .getByTestId("kiro-composer")
+    .locator("div.rounded-2xl")
+    .first()
+    .boundingBox();
+  // 输入框底部 = 900 - 12px（pb-3 留白）
+  expect(inputBox!.y + inputBox!.height).toBe(888);
+  // 左右留白：输入框 inset 12px（+1px panel border-l）
+  expect(composerBox!.x - box!.x).toBe(1);
+  expect(inputBox!.x - box!.x).toBe(13);
+  expect(box!.x + box!.width - (inputBox!.x + inputBox!.width)).toBe(12);
+});
+
+test("Header 对齐：全局 Header 与 Sidecar Header border-bottom 同一水平线（md+/xl+/2xl）", async ({ page }) => {
+  await seedAI(page);
+  for (const width of [1280, 1440, 1536, 1920]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto("/");
+    await openSidecarViaHandoff(page);
+
+    const globalHeader = page.locator("header").first();
+    const sidecarHeader = page.getByTestId("kiro-sidecar").locator("div").first();
+    const gBox = await globalHeader.boundingBox();
+    const sBox = await sidecarHeader.boundingBox();
+    // 统一 60–64px 视觉高度（含 1px border-b）
+    expect(gBox!.height).toBeGreaterThanOrEqual(64);
+    expect(gBox!.height).toBeLessThanOrEqual(66);
+    expect(Math.abs(gBox!.height - sBox!.height)).toBeLessThanOrEqual(1);
+    // 关键：border-bottom 同一水平线
+    expect(Math.abs(gBox!.y + gBox!.height - (sBox!.y + sBox!.height))).toBeLessThanOrEqual(1);
+  }
 });
 
 test("响应式：768–1279 Sheet / 1280–1535 Overlay 不横向溢出", async ({ page }) => {

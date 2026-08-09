@@ -51,12 +51,13 @@ const SUGGESTIONS: Record<string, { icon: React.ComponentType<{ className?: stri
 };
 
 /**
- * 上下文建议（Sidecar 专用）：按 entry type 返回本地确定性快捷 Prompt。
- * 只在 Sidecar 刚打开且没有针对该 Entry 的新 User Message 时显示。
+ * 上下文建议：按 entry type 返回本地确定性快捷 Prompt。
+ * 无消息时渲染在 EmptyState 标题下方（EmptyState 的主操作区）；
+ * 已有消息时可作为 Conversation 尾部的 follow-up 建议。
  * 点击才发送，不调用模型生成。
  * 有 Entry Context 时是唯一建议区（EmptyState 通用建议被隐藏，见 KiroChatSurface）。
  */
-export function KiroContextSuggestions({ compact }: { compact?: boolean }) {
+export function KiroContextSuggestions({ compact, inset }: { compact?: boolean; inset?: boolean }) {
   const session = useKiroSession();
   const kind = session.suggestionsKind;
   if (!kind) return null;
@@ -64,8 +65,11 @@ export function KiroContextSuggestions({ compact }: { compact?: boolean }) {
 
   const items = SUGGESTIONS[kind] ?? [];
   return (
-    <div data-testid="kiro-context-suggestions" className={cn("shrink-0 pb-1.5", compact ? "px-3" : "px-1")}>
-      <div className="flex flex-wrap gap-1.5">
+    <div
+      data-testid="kiro-context-suggestions"
+      className={cn("shrink-0", inset ? (compact ? "px-3 pb-1.5" : "px-1 pb-1.5") : "pb-0")}
+    >
+      <div className={cn("flex flex-wrap gap-1.5", !inset && "justify-center")}>
         {items.map((s) => {
           const Icon = s.icon;
           return (

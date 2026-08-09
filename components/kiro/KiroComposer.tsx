@@ -166,7 +166,7 @@ export function KiroComposer({
   };
 
   const modelMenu = (
-    <div role="menu" aria-label="选择模型" className="py-1">
+    <div role="menu" aria-label="选择模型" className="py-1 max-h-[min(320px,55vh)] overflow-y-auto">
       {modelOptions.length === 0 ? (
         <p className="px-3 py-2 text-xs text-sandrift">请先在设置中填写模型 ID。</p>
       ) : (
@@ -185,11 +185,7 @@ export function KiroComposer({
           >
             <ProviderLogo vendor={m.vendor} size="md" />
             <span className="min-w-0 flex-1 truncate">{m.label}</span>
-            {m.value === selectedModelId && (
-              <span className="w-4 h-4 rounded-full bg-charcoal flex items-center justify-center shrink-0">
-                <Check className="w-2.5 h-2.5 text-white" />
-              </span>
-            )}
+            {m.value === selectedModelId && <Check className="w-4 h-4 text-charcoal shrink-0" />}
           </button>
         ))
       )}
@@ -205,7 +201,7 @@ export function KiroComposer({
       }}
       onDragLeave={() => setDragOver(false)}
       onDrop={handleDrop}
-      className="shrink-0 relative"
+      className={cn("shrink-0 relative", compact && "px-3 pb-3")}
       data-testid="kiro-composer"
     >
       {/* 拖拽提示：轻量，不夸张 */}
@@ -218,12 +214,12 @@ export function KiroComposer({
       <div className="max-w-[820px] mx-auto">
         <KiroContextBar contexts={contexts} onRemove={onRemoveContext} compact={compact} />
 
-        {/* 附件 chips */}
+        {/* 附件 chips（compact：root 已提供 px-3，此处对齐输入框左缘） */}
         {attachments.length > 0 && (
           <div
             className={cn(
               "flex flex-wrap items-center gap-1.5 pb-2",
-              compact ? "px-3" : "px-1"
+              compact ? "px-0" : "px-1"
             )}
             data-testid="kiro-attachments"
           >
@@ -250,7 +246,7 @@ export function KiroComposer({
           </div>
         )}
 
-        <div className="bg-surface border border-line-strong rounded-2xl shadow-subtle p-2.5 focus-within:border-charcoal transition-colors duration-[var(--motion-fast)]">
+        <div className="bg-surface border border-line-strong rounded-2xl shadow-subtle p-3 focus-within:border-sandrift focus-within:shadow-subtle transition-[border-color,box-shadow] duration-[var(--motion-fast)]">
           <textarea
             ref={taRef}
             value={text}
@@ -263,10 +259,10 @@ export function KiroComposer({
             rows={1}
             placeholder="Ask Kiro…"
             aria-label="Ask Kiro"
-            className="w-full resize-none bg-transparent px-1.5 pt-1 text-sm text-charcoal placeholder-sandrift focus:outline-none leading-relaxed"
+            className="w-full resize-none bg-transparent px-1 pt-0.5 text-sm text-charcoal placeholder-sandrift focus:outline-none leading-relaxed"
           />
 
-          <div className="flex items-center justify-between gap-2 pt-1">
+          <div className="flex items-center justify-between gap-2 pt-2">
             <div className="flex items-center gap-1">
               <div ref={attachRef} className="relative">
                 <button
@@ -363,7 +359,7 @@ export function KiroComposer({
                   onClick={onStop}
                   aria-label="停止生成"
                   title="停止生成"
-                  className="ux-press w-11 h-11 md:w-9 md:h-9 flex items-center justify-center rounded-xl bg-charcoal text-white hover:bg-black transition-colors"
+                  className="ux-press w-11 h-11 md:w-9 md:h-9 flex items-center justify-center rounded-full bg-charcoal text-white hover:bg-black transition-colors"
                 >
                   <Square className="w-4 h-4 fill-current" />
                 </button>
@@ -373,7 +369,7 @@ export function KiroComposer({
                   disabled={!canSend}
                   aria-label="发送"
                   title="发送"
-                  className="ux-press w-11 h-11 md:w-9 md:h-9 flex items-center justify-center rounded-xl bg-charcoal text-white hover:bg-black transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                  className="ux-press w-11 h-11 md:w-9 md:h-9 flex items-center justify-center rounded-full bg-charcoal text-white hover:bg-black transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                   <ArrowUp className="w-5 h-5 md:w-4 md:h-4" />
                 </button>
@@ -383,7 +379,7 @@ export function KiroComposer({
         </div>
 
         {!configured ? (
-          <div className={cn("flex items-center justify-between gap-2 mt-2", compact ? "px-3" : "px-1")}>
+          <div className={cn("flex items-center justify-between gap-2 mt-2", compact ? "px-0" : "px-1")}>
             <p className="text-[11px] text-sandrift">先连接一个 AI 服务即可开始使用 Kiro。</p>
             <button
               onClick={onOpenSettings}
@@ -394,7 +390,7 @@ export function KiroComposer({
             </button>
           </div>
         ) : attachments.length > 0 ? (
-          <p className={cn("text-[10px] text-sandrift mt-1.5", compact ? "px-3" : "px-1")}>
+          <p className={cn("text-[10px] text-sandrift mt-1.5", compact ? "px-0" : "px-1")}>
             文件内容会发送给当前选择的 AI 服务以完成你的请求。
           </p>
         ) : !compact ? (

@@ -32,14 +32,17 @@ export function KiroMark({ size = "md", className }: { size?: "sm" | "md" | "lg"
 
 /**
  * Kiro Workspace 内部 Header：轻量，不承载 Provider / API Key / token 等技术信息。
- * 左侧：Kiro mark + 名称（+ 低权重 AI Workspace 标签）；右侧：新对话 / 历史。
+ * 左侧：Kiro mark + 名称（+ 低权重 AI Workspace 标签）；右侧：会话级操作。
+ * actions：预留扩展插槽（Share / More 等后续能力），不写死操作集合。
  */
 export function KiroHeader({
   onNewChat,
   onOpenHistory,
+  actions,
 }: {
   onNewChat: () => void;
   onOpenHistory: () => void;
+  actions?: React.ReactNode;
 }) {
   return (
     <div className="shrink-0 flex items-center justify-between gap-3 pb-3 mb-1">
@@ -75,6 +78,7 @@ export function KiroHeader({
           <HistoryIcon className="w-4 h-4" />
           <span className="hidden sm:inline">历史</span>
         </button>
+        {actions}
       </div>
     </div>
   );

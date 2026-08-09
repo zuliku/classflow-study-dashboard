@@ -73,7 +73,7 @@ test("Assignment Drawer → Ask Kiro：关闭 Drawer、打开 Sidecar（entry co
   await expect(sidecar).toBeVisible();
   const bar = page.getByTestId("kiro-context-bar");
   await expect(bar).toBeVisible();
-  await expect(bar.getByRole("button", { expanded: false })).toContainText("使用");
+  await expect(bar.getByRole("button", { expanded: false })).toContainText("项上下文");
   // 展开 chips 可见 entry 标签
   await bar.getByRole("button", { expanded: false }).click();
   await expect(bar).toContainText("计量经济学大作业");

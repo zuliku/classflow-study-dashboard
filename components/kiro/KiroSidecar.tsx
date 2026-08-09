@@ -25,8 +25,8 @@ export function KiroSidecar() {
       data-testid="kiro-sidecar"
       className={cnSidecar()}
     >
-      {/* Compact Header：品牌 + Panel 操作，不重复 Context 信息 */}
-      <div className="shrink-0 px-3 py-3 border-b border-line bg-[#F7F5F5] flex items-center justify-between gap-2">
+      {/* Compact Header：品牌 + Panel 操作，不重复 Context 信息；md+ 与全局 Header border 对齐（min-h-16） */}
+      <div className="shrink-0 px-3 py-3 md:min-h-16 border-b border-line bg-[#F7F5F5] flex items-center justify-between gap-2">
         <div className="flex items-center gap-2 min-w-0">
           <KiroMark size="sm" />
           <h2 className="text-sm font-bold text-charcoal" data-testid="kiro-sidecar-title">
@@ -77,7 +77,7 @@ function cnSidecar(): string {
     "md:inset-y-0 md:right-0 md:left-auto md:w-[min(420px,88vw)]",
     // 1280–1535：Right Overlay（400px）
     "xl:w-[400px] shadow-drawer border-l border-line",
-    // ≥1536：Docked（sticky 整屏 AI Panel：跟随 viewport 高度，内部独立滚动）
-    "2xl:sticky 2xl:top-0 2xl:h-dvh 2xl:self-start 2xl:z-auto 2xl:shadow-none",
+    // ≥1536：Docked（约 424px，sticky 整屏 AI Panel：跟随 viewport 高度，内部独立滚动）
+    "2xl:w-[424px] 2xl:sticky 2xl:top-0 2xl:h-dvh 2xl:self-start 2xl:z-auto 2xl:shadow-none",
   ].join(" ");
 }

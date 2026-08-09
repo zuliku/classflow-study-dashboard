@@ -4,20 +4,22 @@ import React from "react";
 import { CalendarCheck, ListChecks, BookOpen, TrendingUp } from "lucide-react";
 import { useAppStore } from "@/store/useAppStore";
 import { KiroMark } from "@/components/kiro/KiroHeader";
+import { cn } from "@/lib/utils";
 
 /**
- * Kiro Empty State（Task 2）：恢复 ClassFlow Context 相关建议。
- * 有数据 / 无数据由本地确定性判断切换文案；点击 = 真实发送。
- * hideSuggestions：Sidecar 存在 Entry Context 建议时隐藏通用建议（两者不同时出现）。
+ * Kiro Empty State：通用建议 / Entry Context 建议二选一作为主操作区。
+ * contextSuggestions 存在时隐藏通用建议（KiroChatSurface 保证两者不同时出现）。
+ * Sidecar（compact）：内容略偏上（ChatGPT/Claude 式），不过度垂直居中。
  */
 export function KiroEmptyState({
   onSuggestion,
   compact,
-  hideSuggestions,
+  contextSuggestions,
 }: {
   onSuggestion: (text: string) => void;
   compact?: boolean;
-  hideSuggestions?: boolean;
+  /** Entry Context 建议节点（无消息时渲染在标题下方） */
+  contextSuggestions?: React.ReactNode;
 }) {
   const courses = useAppStore((s) => s.courses);
   const assignments = useAppStore((s) => s.assignments);
@@ -40,7 +42,10 @@ export function KiroEmptyState({
   return (
     <div
       data-testid="kiro-empty"
-      className="flex-1 min-h-0 overflow-y-auto flex flex-col items-center justify-center text-center px-4 py-8"
+      className={cn(
+        "flex-1 min-h-0 overflow-y-auto flex flex-col items-center text-center",
+        compact ? "justify-start px-3 pt-10" : "justify-center px-4 py-8"
+      )}
     >
       <KiroMark size={compact ? "md" : "lg"} />
       <h2 className={compact ? "text-base font-bold text-charcoal mt-4" : "text-lg font-bold text-charcoal mt-5"}>
@@ -52,7 +57,9 @@ export function KiroEmptyState({
         </p>
       )}
 
-      {!hideSuggestions && (
+      {contextSuggestions ? (
+        <div className={cn("w-full max-w-md", compact ? "mt-5" : "mt-7")}>{contextSuggestions}</div>
+      ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-7 w-full max-w-md">
           {suggestions.map((s) => {
             const Icon = s.icon;

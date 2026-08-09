@@ -16,7 +16,7 @@ const KIND_ICON: Record<KiroContextRef["kind"], string> = {
 /**
  * Context Bar：自动 Context + 手动 @ Context 的展示层（显式、可见、可移除）。
  * Workspace：默认展开 chips；Sidecar（compact）：默认 collapsed 摘要行，点击展开。
- * Collapsed：`@ 使用 N 项 ClassFlow 上下文 ⌄`；Expanded：chips。
+ * Collapsed：`@ 3 项上下文 ⌄`（compact）/ `◎ 使用 N 项 ClassFlow 上下文 ⌄`；Expanded：chips。
  */
 export function KiroContextBar({
   contexts,
@@ -25,25 +25,23 @@ export function KiroContextBar({
 }: {
   contexts: KiroContextRef[];
   onRemove: (key: string) => void;
-  /** sidecar：默认 collapsed + 统一 12px gutter */
+  /** sidecar：默认 collapsed + 对齐输入框左缘（root 已提供 px-3） */
   compact?: boolean;
 }) {
   const [expanded, setExpanded] = useState(!compact);
   if (contexts.length === 0) return null;
 
   return (
-    <div data-testid="kiro-context-bar" className={cn("pb-2", compact ? "px-3" : "px-1")}>
+    <div data-testid="kiro-context-bar" className={cn("pb-2", compact ? "px-0" : "px-1")}>
       {!expanded ? (
         <button
           onClick={() => setExpanded(true)}
           aria-expanded={false}
           className="flex items-center gap-1.5 text-[11px] font-semibold text-satin-grey hover:text-charcoal transition-colors"
         >
-          <AtSign className="w-3.5 h-3.5 text-sandrift" />
+          <AtSign className="w-3.5 h-3.5 text-sandrift shrink-0" />
           <span className="truncate">
-            {contexts.length > 1
-              ? `使用 ${contexts.length} 项 ClassFlow 上下文`
-              : `使用 ClassFlow 上下文：${contexts[0].label}`}
+            {compact ? `${contexts.length} 项上下文` : `使用 ${contexts.length} 项 ClassFlow 上下文`}
           </span>
           <ChevronDown className="w-3 h-3 shrink-0" />
         </button>
