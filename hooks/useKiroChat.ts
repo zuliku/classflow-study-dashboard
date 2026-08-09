@@ -10,7 +10,7 @@ import { useToastStore } from "@/store/useToastStore";
 import { getSessionApiKey } from "@/lib/ai/sessionKeys";
 import { normalizeAIError, AIError } from "@/lib/ai/errors";
 import { buildBaseContext } from "@/lib/ai/context/buildBaseContext";
-import { buildAutoContextRefs, resolveContextRefs, refsForPrompt } from "@/lib/ai/context/contextSelection";
+import { resolveContextRefs, refsForPrompt } from "@/lib/ai/context/contextSelection";
 import { KiroContextRef } from "@/lib/ai/context/types";
 import { executeKiroReadTool, ReadToolResult } from "@/lib/ai/tools/read/executor";
 import { executeReadMaterial } from "@/lib/ai/tools/read/material";
@@ -137,11 +137,15 @@ type ToolOutput = { ok: boolean; code?: string; message?: string; data?: unknown
  * 高风险工具（delete_*）强制 Confirm；普通编辑直接执行；成功写操作注册一次性 Undo。
  */
 export function useKiroChat({
+  autoRefs,
   manualRefs,
+  entryRefs,
   suppressedAutoKeys,
   attachments,
 }: {
+  autoRefs: KiroContextRef[];
   manualRefs: KiroContextRef[];
+  entryRefs: KiroContextRef[];
   suppressedAutoKeys: string[];
   attachments: KiroAttachment[];
 }) {
@@ -168,7 +172,7 @@ export function useKiroChat({
     customConfig: custom,
     baseContext: buildBaseContext(),
     contextRefs: refsForPrompt(
-      resolveContextRefs(buildAutoContextRefs(), manualRefs, suppressedAutoKeys)
+      resolveContextRefs(autoRefs, manualRefs, entryRefs, suppressedAutoKeys)
     ),
     // 文档文本 Context（本地已提取；图片不走此路径，走原生 image part）
     attachmentsContext: buildDocumentContexts(attachments),

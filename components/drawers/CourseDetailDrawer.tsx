@@ -30,6 +30,8 @@ import { useRestoreFocus } from "@/lib/useRestoreFocus";
 import { cn } from "@/lib/utils";
 import { openAssignmentEditor, previewMaterial } from "@/lib/uiEvents";
 import { popOverlay, isTopmostOverlay } from "@/lib/overlayStack";
+import { useKiroHandoff } from "@/hooks/useKiroHandoff";
+import { KIRO_ICON } from "@/components/layout/navItems";
 import { useEnterOnAdd } from "@/lib/useEnterOnAdd";
 
 const OVERLAY_ID = "course-detail-drawer";
@@ -84,6 +86,7 @@ export function CourseDetailDrawer() {
     restoreCourseMaterial,
   } = useAppStore();
   const pushToast = useToastStore((s) => s.pushToast);
+  const handoff = useKiroHandoff();
   const confirmRequest = useConfirmStore((s) => s.confirm);
 
   const [isEditing, setIsEditing] = useState(false);
@@ -170,6 +173,12 @@ export function CourseDetailDrawer() {
   // 快捷操作：触发资料上传文件选择
   const handleQuickUploadMaterial = () => {
     materialInputRef.current?.click();
+  };
+
+  // Ask Kiro：固定课程 Entry Context → 关闭 Drawer → 打开 Sidecar
+  const handleAskKiro = () => {
+    handoff.openForCourse(course.id);
+    setSelectedCourseId(null);
   };
 
   // 相关任务：直接打开 AssignmentDrawer（保持上下文，不跳 Tab）
@@ -506,10 +515,18 @@ export function CourseDetailDrawer() {
           </button>
           <button
             onClick={handleQuickUploadMaterial}
-            className="flex items-center space-x-1 px-2 py-1 rounded-lg text-[11px] font-semibold text-charcoal hover:bg-white border border-transparent hover:border-line-strong transition-colors"
+            className="flex items-center space-x-1 px-2 py-1 rounded-lg text-[11px] font-semibold text-charcoal hover:bg-white transition-colors"
           >
             <FileUp className="w-3.5 h-3.5 text-[#A48F82]" />
             <span>上传资料</span>
+          </button>
+          <button
+            onClick={handleAskKiro}
+            className="flex items-center space-x-1 px-2 py-1 rounded-lg text-[11px] font-semibold text-charcoal bg-pastel-mint hover:bg-pastel-mint transition-colors"
+            title="Ask Kiro"
+          >
+            <KIRO_ICON className="w-3.5 h-3.5 text-[#A48F82]" />
+            <span>Ask Kiro</span>
           </button>
         </div>
 

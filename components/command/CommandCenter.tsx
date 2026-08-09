@@ -19,6 +19,8 @@ import { NavTab, TimeSliceFilter } from "@/types";
 import { createAssignmentActions } from "@/lib/assignmentActions";
 import { useToastStore } from "@/store/useToastStore";
 import { useConfirmStore } from "@/store/useConfirmStore";
+import { useKiroHandoff } from "@/hooks/useKiroHandoff";
+import { KIRO_ICON } from "@/components/layout/navItems";
 
 const OVERLAY_ID = "command-center";
 
@@ -79,6 +81,7 @@ export function CommandCenter() {
 
   const pushToast = useToastStore((s) => s.pushToast);
   const confirmRequest = useConfirmStore((s) => s.confirm);
+  const handoff = useKiroHandoff();
   const singleKeyEnabled = useAppStore((s) => s.preferences.enableSingleKeyShortcuts);
   const contentDensity = useAppStore((s) => s.preferences.contentDensity);
 
@@ -153,6 +156,31 @@ export function CommandCenter() {
 
   const items = useMemo(() => buildPalette(query, ctx), [query, ctx]);
 
+  // Kiro Handoff：仅在有查询时显示（synthetic row，本地搜索主逻辑不动）
+  const hasQuery = query.trim().length > 0;
+  const kiroHandoffItem: PaletteItem | null = useMemo(
+    () =>
+      hasQuery
+        ? {
+            key: "kiro-handoff",
+            kind: "command",
+            group: "search",
+            label: "交给 Kiro",
+            sub: "使用当前 ClassFlow 上下文",
+            icon: KIRO_ICON,
+            run: () => {
+              handoff.handoffPrompt(query.trim());
+              setSearchModalOpen(false);
+            },
+          }
+        : null,
+    [hasQuery, query, handoff, setSearchModalOpen]
+  );
+  const displayItems = useMemo(
+    () => (kiroHandoffItem ? [kiroHandoffItem, ...items] : items),
+    [kiroHandoffItem, items]
+  );
+
   // 结果变化时高亮回到第一项
   useEffect(() => {
     setHighlighted(0);
@@ -161,10 +189,10 @@ export function CommandCenter() {
   if (!mounted) return null;
 
   const clampIndex = (i: number) =>
-    items.length === 0 ? 0 : Math.min(Math.max(i, 0), items.length - 1);
+    displayItems.length === 0 ? 0 : Math.min(Math.max(i, 0), displayItems.length - 1);
 
   const handleInputKeyDown = (e: React.KeyboardEvent) => {
-    if (items.length === 0) return;
+    if (displayItems.length === 0) return;
     if (e.key === "ArrowDown") {
       e.preventDefault();
       setHighlighted((i) => clampIndex(i + 1));
@@ -173,7 +201,7 @@ export function CommandCenter() {
       setHighlighted((i) => clampIndex(i - 1));
     } else if (e.key === "Enter") {
       e.preventDefault();
-      items[highlighted]?.run();
+      displayItems[highlighted]?.run();
     }
   };
 
@@ -182,13 +210,13 @@ export function CommandCenter() {
   // 只有两种 scope 同时存在时才显示二级标题，单一 scope 保持简洁
   const renderGroup = (group: string, groupItems: PaletteItem[]) => {
     if (groupItems.length === 0) return null;
-    const firstGlobalIndex = items.findIndex((it) => it.group === group);
+    const firstGlobalIndex = displayItems.findIndex((it) => it.group === group);
     const hasEntity = groupItems.some((it) => it.contextScope === "entity");
     const hasWorkspace = groupItems.some((it) => it.contextScope === "workspace");
     const splitContext = group === "context" && hasEntity && hasWorkspace;
     const renderRows = (rows: PaletteItem[]) =>
       rows.map((item) => {
-        const globalIndex = items.indexOf(item);
+        const globalIndex = displayItems.indexOf(item);
         const isHighlighted = globalIndex === highlighted;
         const Icon = item.icon;
         return (
@@ -369,14 +397,46 @@ export function CommandCenter() {
               data-testid="command-results"
               className="p-2 max-h-[min(440px,60dvh)] overflow-y-auto"
             >
-              {items.length === 0 ? (
+              {displayItems.length === 0 ? (
                 <div className="py-10 text-center text-xs text-sandrift">
                   未找到匹配项
                 </div>
               ) : (
-                renderedGroups.map(({ g, items: groupItems }) =>
-                  renderGroup(g, groupItems)
-                )
+                <>
+                  {/* Kiro Handoff Row（有查询时置顶；键盘可选） */}
+                  {kiroHandoffItem && (
+                    <div className="pb-1">
+                      <button
+                        type="button"
+                        onMouseMove={() => setHighlighted(0)}
+                        onClick={() => kiroHandoffItem.run()}
+                        className={cn(
+                          "w-full flex items-center gap-3 px-3 py-2 rounded-xl text-left transition-colors duration-[var(--motion-fast)]",
+                          highlighted === 0 ? "bg-alabaster text-charcoal" : "text-satin-grey"
+                        )}
+                      >
+                        <span className="w-5 h-5 rounded-lg bg-pastel-mint flex items-center justify-center shrink-0">
+                          <KIRO_ICON className="w-3.5 h-3.5 text-charcoal" />
+                        </span>
+                        <span className="flex-1 min-w-0">
+                          <span className="block text-xs font-bold text-charcoal truncate">
+                            交给 Kiro
+                          </span>
+                          <span className="block text-[10px] text-sandrift truncate">
+                            使用当前 ClassFlow 上下文
+                          </span>
+                        </span>
+                        <kbd className="hidden sm:inline-block bg-white text-charcoal text-[10px] font-mono px-1.5 py-0.5 rounded border border-line-strong">
+                          ⏎
+                        </kbd>
+                      </button>
+                      <div className="my-1 h-px bg-line-soft" />
+                    </div>
+                  )}
+                  {renderedGroups.map(({ g, items: groupItems }) =>
+                    renderGroup(g, groupItems)
+                  )}
+                </>
               )}
             </div>
           </>

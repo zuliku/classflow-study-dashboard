@@ -23,6 +23,8 @@ import { useRestoreFocus } from "@/lib/useRestoreFocus";
 import { cn } from "@/lib/utils";
 import { openAssignmentEditor } from "@/lib/uiEvents";
 import { pushOverlay, popOverlay, isTopmostOverlay } from "@/lib/overlayStack";
+import { useKiroHandoff } from "@/hooks/useKiroHandoff";
+import { KIRO_ICON } from "@/components/layout/navItems";
 
 const OVERLAY_ID = "assignment-drawer";
 
@@ -41,6 +43,7 @@ export function AssignmentDrawer() {
     restoreAssignment,
   } = useAppStore();
   const pushToast = useToastStore((s) => s.pushToast);
+  const handoff = useKiroHandoff();
 
   const assignment = assignments.find((a) => a.id === selectedAssignmentId);
   const { mounted, visible } = usePresence(!!assignment, 260);
@@ -82,6 +85,12 @@ export function AssignmentDrawer() {
 
   const handleEdit = () => {
     openAssignmentEditor({ assignmentId: assignment.id });
+  };
+
+  // Ask Kiro：固定 Entry Context → 关闭 Drawer → 打开 Sidecar（保持当前 Workspace）
+  const handleAskKiro = () => {
+    handoff.openForAssignment(assignment.id);
+    setSelectedAssignmentId(null);
   };
 
   const course = courses.find((c) => c.id === assignment.courseId);
@@ -294,14 +303,22 @@ export function AssignmentDrawer() {
               <Trash2 className="w-4 h-4" />
               <span>删除任务</span>
             </button>
-            <button
-              onClick={handleEdit}
-              className="flex items-center space-x-1.5 text-xs text-satin-grey hover:bg-alba px-3 py-2 rounded-xl transition-colors"
-              title="编辑任务"
-            >
-              <Edit3 className="w-4 h-4" />
-              <span>编辑</span>
-            </button>
+          <button
+            onClick={handleAskKiro}
+            className="flex items-center space-x-1.5 text-xs font-bold text-charcoal bg-pastel-mint hover:bg-pastel-mint px-3 py-2 rounded-xl transition-colors"
+            title="Ask Kiro"
+          >
+            <KIRO_ICON className="w-4 h-4" />
+            <span>Ask Kiro</span>
+          </button>
+          <button
+            onClick={handleEdit}
+            className="flex items-center space-x-1.5 text-xs text-satin-grey hover:bg-alba px-3 py-2 rounded-xl transition-colors"
+            title="编辑任务"
+          >
+            <Edit3 className="w-4 h-4" />
+            <span>编辑</span>
+          </button>
           </div>
           <button
             onClick={() => setSelectedAssignmentId(null)}

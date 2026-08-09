@@ -39,11 +39,12 @@ export interface KiroBaseContext {
   };
 }
 
-/** 显式 Context 引用（自动 + 手动；传给模型的只有 kind/id/label） */
+/** 显式 Context 引用（自动 + 手动 + 入口；传给模型的只有 kind/id/label） */
 export interface KiroContextRef {
   key: string;
   kind: "course" | "assignment" | "group-project" | "material" | "week";
   entityId?: string;
   label: string;
-  source: "auto" | "manual";
+  /** auto：Store 选中实体；manual：用户 @；entry：从业务实体打开 Kiro */
+  source: "auto" | "manual" | "entry";
 }

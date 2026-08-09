@@ -28,6 +28,8 @@ import { formatLocalDate } from "@/lib/groupProject";
 import { usePresence } from "@/lib/usePresence";
 import { useRestoreFocus } from "@/lib/useRestoreFocus";
 import { pushOverlay, popOverlay, isTopmostOverlay } from "@/lib/overlayStack";
+import { useKiroHandoff } from "@/hooks/useKiroHandoff";
+import { KIRO_ICON } from "@/components/layout/navItems";
 import { cn } from "@/lib/utils";
 import { GroupMember } from "@/types";
 
@@ -151,6 +153,7 @@ export function GroupCollaborationView() {
   } = useAppStore();
   const pushToast = useToastStore((s) => s.pushToast);
   const confirmRequest = useConfirmStore((s) => s.confirm);
+  const handoff = useKiroHandoff();
 
   const [selectedProjectId, setSelectedProjectId] = useState<string>(groupProjects[0]?.id || "");
 
@@ -361,13 +364,25 @@ export function GroupCollaborationView() {
           </h2>
           <p className="text-xs text-sandrift">管理小组项目、成员与任务分工</p>
         </div>
-        <button
-          onClick={openCreateProject}
-          className="flex items-center space-x-1.5 px-3 py-1.5 bg-charcoal hover:bg-black text-white text-xs font-medium rounded-xl transition-colors shrink-0"
-        >
-          <Plus className="w-3.5 h-3.5" />
-          <span>新建项目</span>
-        </button>
+        <div className="flex items-center gap-2 shrink-0">
+          {activeProject && (
+            <button
+              onClick={() => handoff.openForGroupProject(activeProject.id)}
+              className="flex items-center space-x-1.5 px-3 py-1.5 bg-pastel-mint hover:bg-pastel-mint text-charcoal text-xs font-bold rounded-xl transition-colors shrink-0"
+              title="Ask Kiro"
+            >
+              <KIRO_ICON className="w-3.5 h-3.5" />
+              <span>Ask Kiro</span>
+            </button>
+          )}
+          <button
+            onClick={openCreateProject}
+            className="flex items-center space-x-1.5 px-3 py-1.5 bg-charcoal hover:bg-black text-white text-xs font-medium rounded-xl transition-colors shrink-0"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            <span>新建项目</span>
+          </button>
+        </div>
       </div>
 
       {/* Main Grid */}

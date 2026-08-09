@@ -92,6 +92,12 @@ async function freshModules() {
     buildAutoContextRefs: selMod.buildAutoContextRefs,
     resolveContextRefs: selMod.resolveContextRefs,
     refsForPrompt: selMod.refsForPrompt,
+    replaceEntryRefs: selMod.replaceEntryRefs,
+    assignmentEntryRef: (await import("@/lib/ai/context/handoff")).assignmentEntryRef,
+    courseEntryRef: (await import("@/lib/ai/context/handoff")).courseEntryRef,
+    groupProjectEntryRef: (await import("@/lib/ai/context/handoff")).groupProjectEntryRef,
+    weekEntryRef: (await import("@/lib/ai/context/handoff")).weekEntryRef,
+    suggestionsTypeOf: (await import("@/lib/ai/context/handoff")).suggestionsTypeOf,
     executeKiroReadTool: execMod.executeKiroReadTool,
     getUpcomingAssignments: execMod.getUpcomingAssignments,
     getWeekSchedule: execMod.getWeekSchedule,
@@ -142,7 +148,7 @@ describe("Context Selection", () => {
     const { store, buildAutoContextRefs } = await freshModules();
     store.getState().setSelectedCourseId("c1");
     store.getState().setSelectedAssignmentId("a1");
-    const refs = buildAutoContextRefs();
+    const refs = buildAutoContextRefs(store.getState());
     const kinds = refs.map((r) => r.kind);
     expect(kinds).toContain("course");
     expect(kinds).toContain("assignment");
@@ -158,14 +164,54 @@ describe("Context Selection", () => {
       { key: "auto-course-c1", kind: "course" as const, entityId: "c1", label: "当前课程", source: "auto" as const },
     ];
     const manual = [{ key: "manual-course-c2", kind: "course" as const, entityId: "c2", label: "统计学", source: "manual" as const }];
-    const active = resolveContextRefs(auto, manual, ["auto-course-c1"]);
-    expect(active.map((r) => r.key)).toEqual(["auto-week-current", "manual-course-c2"]);
+    const entry = [{ key: "entry-course-c3", kind: "course" as const, entityId: "c3", label: "高数", source: "entry" as const }];
+    const active = resolveContextRefs(auto, manual, entry, ["auto-course-c1"]);
+    expect(active.map((r) => r.key)).toEqual(["auto-week-current", "entry-course-c3", "manual-course-c2"]);
   });
 
   it("传给模型的引用只有 kind/id/label", async () => {
     const { refsForPrompt } = await freshModules();
     const refs = [{ key: "k", kind: "course" as const, entityId: "c1", label: "统计学", source: "manual" as const }];
     expect(refsForPrompt(refs)).toEqual([{ kind: "course", id: "c1", label: "统计学" }]);
+  });
+});
+
+describe("Entry Context（handoff）", () => {
+  it("存在的实体生成 entry ref；kind/label/source 正确", async () => {
+    seedStore();
+    const { store, assignmentEntryRef, courseEntryRef, groupProjectEntryRef, weekEntryRef } = await freshModules();
+    const s = store.getState();
+    const a = assignmentEntryRef(s, "a1");
+    expect(a).toEqual({ key: "entry-assignment-a1", kind: "assignment", entityId: "a1", label: "任务 · 统计学作业", source: "entry" });
+    const c = courseEntryRef(s, "c1");
+    expect(c?.kind).toBe("course");
+    expect(c?.label).toContain("统计学");
+    const g = groupProjectEntryRef(s, "gp1");
+    expect(g?.kind).toBe("group-project");
+    const w = weekEntryRef(3);
+    expect(w).toEqual({ key: "entry-week-3", kind: "week", entityId: "3", label: "时间范围 · 第 3 周", source: "entry" });
+  });
+
+  it("不存在的实体返回 null（不制造假引用）", async () => {
+    seedStore();
+    const { store, assignmentEntryRef, courseEntryRef, groupProjectEntryRef } = await freshModules();
+    const s = store.getState();
+    expect(assignmentEntryRef(s, "nope")).toBeNull();
+    expect(courseEntryRef(s, "nope")).toBeNull();
+    expect(groupProjectEntryRef(s, "nope")).toBeNull();
+  });
+
+  it("replaceEntryRefs：新入口替换旧入口（不累积）；手动 refs 不受影响", async () => {
+    const { replaceEntryRefs } = await freshModules();
+    const prev = [{ key: "entry-course-c1", kind: "course" as const, entityId: "c1", label: "统计学", source: "entry" as const }];
+    const next = [{ key: "entry-assignment-a2", kind: "assignment" as const, entityId: "a2", label: "报告", source: "entry" as const }];
+    expect(replaceEntryRefs(prev, next)).toEqual(next);
+  });
+
+  it("suggestionsTypeOf：未知 kind（material 等）回退 generic", async () => {
+    const { suggestionsTypeOf } = await freshModules();
+    expect(suggestionsTypeOf({ key: "k", kind: "assignment", entityId: "a1", label: "任务", source: "entry" })).toBe("assignment");
+    expect(suggestionsTypeOf({ key: "k", kind: "material", entityId: "m1", label: "资料", source: "entry" })).toBe("generic");
   });
 });
 

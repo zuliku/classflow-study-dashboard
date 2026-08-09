@@ -9,7 +9,7 @@ import { KiroMark } from "@/components/kiro/KiroHeader";
  * Kiro Empty State（Task 2）：恢复 ClassFlow Context 相关建议。
  * 有数据 / 无数据由本地确定性判断切换文案；点击 = 真实发送。
  */
-export function KiroEmptyState({ onSuggestion }: { onSuggestion: (text: string) => void }) {
+export function KiroEmptyState({ onSuggestion, compact }: { onSuggestion: (text: string) => void; compact?: boolean }) {
   const courses = useAppStore((s) => s.courses);
   const assignments = useAppStore((s) => s.assignments);
   const schedules = useAppStore((s) => s.schedules);
@@ -33,11 +33,15 @@ export function KiroEmptyState({ onSuggestion }: { onSuggestion: (text: string) 
       data-testid="kiro-empty"
       className="flex-1 min-h-0 overflow-y-auto flex flex-col items-center justify-center text-center px-4 py-8"
     >
-      <KiroMark size="lg" />
-      <h2 className="text-lg font-bold text-charcoal mt-5">今天想先处理什么？</h2>
-      <p className="text-xs text-sandrift mt-1.5 max-w-xs">
-        Kiro 会按需读取完成当前问题所需的 ClassFlow 学习数据。
-      </p>
+      <KiroMark size={compact ? "md" : "lg"} />
+      <h2 className={compact ? "text-base font-bold text-charcoal mt-4" : "text-lg font-bold text-charcoal mt-5"}>
+        今天想先处理什么？
+      </h2>
+      {!compact && (
+        <p className="text-xs text-sandrift mt-1.5 max-w-xs">
+          Kiro 会按需读取完成当前问题所需的 ClassFlow 学习数据。
+        </p>
+      )}
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-7 w-full max-w-md">
         {suggestions.map((s) => {

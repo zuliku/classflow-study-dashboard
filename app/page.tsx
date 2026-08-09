@@ -12,6 +12,24 @@ import { StudyLoadChart } from "@/components/dashboard/StudyLoadChart";
 import { AssignmentTable } from "@/components/dashboard/AssignmentTable";
 import { GroupCollaborationView } from "@/components/group/GroupCollaborationView";
 import { KiroWorkspace } from "@/components/kiro/KiroWorkspace";
+import { KiroSessionProvider } from "@/components/kiro/KiroSessionProvider";
+import { useKiroHandoff } from "@/hooks/useKiroHandoff";
+import { KIRO_ICON } from "@/components/layout/navItems";
+
+/** 课表 Workspace 的 Kiro 入口：以当前教学周为 Entry Context */
+function TimetableAskKiroButton() {
+  const handoff = useKiroHandoff();
+  const currentSemesterWeek = useAppStore((s) => s.currentSemesterWeek);
+  return (
+    <button
+      onClick={() => handoff.openForWeek(currentSemesterWeek)}
+      className="flex items-center space-x-1.5 px-3 py-1.5 bg-pastel-mint hover:bg-pastel-mint text-charcoal text-xs font-bold rounded-xl transition-colors"
+    >
+      <KIRO_ICON className="w-3.5 h-3.5" />
+      <span>Ask Kiro</span>
+    </button>
+  );
+}
 import { SettingsModal } from "@/components/settings/SettingsModal";
 import { CourseDetailDrawer } from "@/components/drawers/CourseDetailDrawer";
 import { AssignmentDrawer } from "@/components/drawers/AssignmentDrawer";
@@ -128,7 +146,7 @@ export default function Home() {
   ];
 
   return (
-    <div className="flex min-h-screen bg-[#F7F5F5] font-sans antialiased text-charcoal">
+    <KiroSessionProvider>
       {/* Fixed Left Navigation Sidebar */}
       <Sidebar />
 
@@ -226,6 +244,7 @@ export default function Home() {
                   </p>
                 </div>
                 <div className="flex flex-wrap items-center space-x-2 shrink-0">
+                  <TimetableAskKiroButton />
                   <button
                     onClick={() => setFullTimetableModalOpen(true)}
                     className="flex items-center space-x-1.5 px-3 py-1.5 bg-white hover:bg-alabaster text-charcoal border border-line-strong text-xs font-bold rounded-xl transition-colors shadow-subtle"
@@ -557,6 +576,6 @@ export default function Home() {
       <ToastViewport />
       {/* 移动端底部导航（<768px） */}
       <BottomNav />
-    </div>
+    </KiroSessionProvider>
   );
 }

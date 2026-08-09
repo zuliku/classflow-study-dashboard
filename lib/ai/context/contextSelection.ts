@@ -1,14 +1,10 @@
 import { KiroContextRef } from "@/lib/ai/context/types";
-import { useAppStore } from "@/store/useAppStore";
+import type { AppState } from "@/store/useAppStore";
 
-/**
- * Context Selection：自动 Context + 手动 @ Context + 被抑制的自动 Context。
- * 组件（Context Bar）与 Chat Body（contextRefs）共用同一来源。
- */
+/** Context Selection：自动 Context（reactive）+ 手动 @ + 入口 Entry。 */
 
-/** 自动 Context：从 Store 选中实体与当前教学周解析（进入 Kiro 时自动可见） */
-export function buildAutoContextRefs(): KiroContextRef[] {
-  const state = useAppStore.getState();
+/** 自动 Context：纯函数（Provider 通过 Zustand subscription + useMemo 调用，不依赖偶然 rerender） */
+export function buildAutoContextRefs(state: Pick<AppState, "selectedAssignmentId" | "selectedCourseId" | "highlightedAssignmentId" | "assignments" | "courses" | "semester" | "currentSemesterWeek">): KiroContextRef[] {
   const refs: KiroContextRef[] = [];
 
   if (state.selectedAssignmentId) {
@@ -59,14 +55,27 @@ export function buildAutoContextRefs(): KiroContextRef[] {
   return refs;
 }
 
-/** 生效的 Context 引用：自动（减去被抑制的）+ 手动 */
+/** 生效的 Context 引用：自动（减去被抑制的）+ 入口 + 手动 */
 export function resolveContextRefs(
   autoRefs: KiroContextRef[],
   manualRefs: KiroContextRef[],
+  entryRefs: KiroContextRef[],
   suppressedAutoKeys: string[]
 ): KiroContextRef[] {
   const suppressed = new Set(suppressedAutoKeys);
-  return [...autoRefs.filter((r) => !suppressed.has(r.key)), ...manualRefs];
+  return [
+    ...autoRefs.filter((r) => !suppressed.has(r.key)),
+    ...entryRefs.filter((r) => !suppressed.has(r.key)),
+    ...manualRefs,
+  ];
+}
+
+/**
+ * Entry Context 替换：新的业务实体打开 Kiro 时替换上一组 entry refs（防止上下文污染）。
+ * 手动 @ context 不受影响。
+ */
+export function replaceEntryRefs(_prev: KiroContextRef[], next: KiroContextRef[]): KiroContextRef[] {
+  return next;
 }
 
 /** 传给模型的极简引用（只含 kind/id/label，不塞完整实体） */

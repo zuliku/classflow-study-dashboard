@@ -49,6 +49,7 @@ export function KiroComposer({
   onRetryAttachment,
   onSaveAttachmentToCourse,
   onAddMaterial,
+  compact,
 }: {
   contexts: KiroContextRef[];
   onAddContext: (ref: KiroContextRef) => void;
@@ -71,6 +72,8 @@ export function KiroComposer({
   onRetryAttachment: (id: string) => void;
   onSaveAttachmentToCourse: (id: string, courseId: string) => void;
   onAddMaterial: (ref: { courseId: string; courseName: string; materialId: string; title: string; type: string }) => void;
+  /** sidecar：更紧凑的密度 */
+  compact?: boolean;
 }) {
   const [text, setText] = useState("");
   const [attachOpen, setAttachOpen] = useState(false);
@@ -388,11 +391,11 @@ export function KiroComposer({
           <p className="text-[10px] text-sandrift mt-1.5 px-1">
             文件内容会发送给当前选择的 AI 服务以完成你的请求。
           </p>
-        ) : (
+        ) : !compact ? (
           <p className="text-[10px] text-sandrift mt-1.5 px-1">
             Kiro 会按需读取完成当前问题所需的 ClassFlow 学习数据；修改操作需要你的明确指令。
           </p>
-        )}
+        ) : null}
       </div>
     </div>
   );
