@@ -78,16 +78,35 @@ export function TimelineKeyLane({
     return map;
   }, [items]);
 
+  // ---- Week-level 纵向几何（全周统一，避免某天 All-day 造成 baseline 断层） ----
+  const hasAnyAllDay = weekDates.some((date) => (byDay.get(date) ?? []).some((it) => it.temporalType === "all-day"));
+  const laneHeightClass = hasAnyAllDay ? "h-[78px]" : "h-[64px]";
+  const baselineTop = hasAnyAllDay ? 52 : 40;
+
   return (
     <div className="relative border-b border-line">
+      {/* 连续时间 baseline：单条 1px 线从 gutter 结束处贯穿所有日期（全周统一 Y，无列拼接断点） */}
       <div
-        className="grid"
+        aria-hidden="true"
+        className="absolute left-[56px] right-0 h-px bg-line pointer-events-none z-0"
+        style={{ top: baselineTop }}
+      />
+      <div
+        className="grid relative"
         style={{ gridTemplateColumns: `56px repeat(${weekDates.length}, minmax(0, 1fr))` }}
       >
-        {/* 左标签列：关键时间轴 Section Label */}
-        <div className="flex items-start gap-1 pr-1.5 pt-1.5 self-start">
-          <span aria-hidden="true" className="mt-[3px] w-[2px] h-3 rounded-full bg-sandrift/70 shrink-0" />
-          <span className="text-[10px] font-bold text-satin-grey leading-none whitespace-nowrap">关键时间轴</span>
+        {/* 左标签列：关键时间轴 Section Label（双行，与全周 baseline 垂直居中关联） */}
+        <div className="relative self-stretch pr-1.5">
+          <div
+            className="absolute left-0 flex items-center gap-1"
+            style={{ top: baselineTop, transform: "translateY(-50%)" }}
+          >
+            <span aria-hidden="true" className="w-[2px] h-6 rounded-full bg-sandrift/65 shrink-0" />
+            <span className="leading-[1.15]">
+              <span className="block text-[10px] font-bold text-charcoal">关键</span>
+              <span className="block text-[10px] font-semibold text-sandrift">时间轴</span>
+            </span>
+          </div>
         </div>
 
         {weekDates.map((date, colIdx) => {
@@ -96,10 +115,6 @@ export function TimelineKeyLane({
           const timed = dayItems.filter((it) => it.temporalType !== "all-day");
           const intervals = timed.filter((it) => it.temporalType === "interval");
           const points = packDeadlinePoints(timed.filter((it) => it.temporalType === "deadline"));
-          const hasAllDay = allDays.length > 0;
-          const laneHeight = hasAllDay ? "h-[78px]" : "h-[64px]";
-          // 时间轨（baseline）位置：all-day 层之下
-          const baselineTop = hasAllDay ? 52 : 40;
           const pointTop = baselineTop - 6;
 
           return (
@@ -109,18 +124,11 @@ export function TimelineKeyLane({
               className={cn(
                 "relative border-r border-line-soft px-0.5",
                 colIdx === weekDates.length - 1 && "border-r-0",
-                laneHeight
+                laneHeightClass
               )}
             >
-              {/* 时间 baseline：1px 可感知时间轨（Point 落在其上） */}
-              <div
-                aria-hidden="true"
-                className="absolute left-0 right-0 h-px bg-line pointer-events-none"
-                style={{ top: baselineTop }}
-              />
-
-              {/* All-day 独立小层（有才占空间） */}
-              {hasAllDay && (
+              {/* All-day 独立小层（有才显示；整周统一预留高度，不改变 baseline） */}
+              {allDays.length > 0 && (
                 <div className="absolute left-0.5 right-0.5 top-1 space-y-0.5">
                   {allDays.slice(0, 2).map((it) => (
                     <span
