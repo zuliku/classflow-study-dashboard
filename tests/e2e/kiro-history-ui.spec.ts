@@ -126,7 +126,7 @@ test("Rail 溢出检查：展开后不超 viewport、无横向溢出（1024/1280
   }
 });
 
-test("Sidebar Kiro Active：无左侧黑线（active = pastel-mint + 静态品牌环）", async ({ page }) => {
+test("Sidebar Kiro Active：无左侧黑线（active = 浅 Soft Plate + 常驻流光）", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/");
   await page.locator("aside").first().getByRole("button", { name: "Kiro" }).click();
@@ -136,10 +136,15 @@ test("Sidebar Kiro Active：无左侧黑线（active = pastel-mint + 静态品�
   await expect(kiroBtn).toHaveAttribute("aria-current", "page");
   // 无黑色左侧指示条（rounded-full + bg-charcoal 组合只属于旧 indicator）
   await expect(kiroBtn.locator("span.rounded-full.bg-charcoal")).toHaveCount(0);
-  // active：pastel-mint 内容层 + 静态 ring（动画层 active 时隐藏）
+  // active：极浅 Soft Plate 内容层（bg-surface，不压 Logo 原色）
   const content = kiroBtn.locator("span.relative");
-  await expect(content).toHaveCSS("background-color", "rgb(227, 230, 224)"); // pastel-mint
-  await expect(kiroBtn.locator(".kiro-ring-animated:visible")).toHaveCount(0);
+  await expect(content).toHaveCSS("background-color", "rgb(244, 242, 239)"); // surface
+  // 流光常驻：动画环始终可见且足够强（idle 0.8 → active 1）
+  const ring = kiroBtn.locator(".kiro-featured-flow");
+  await expect(ring).toBeVisible();
+  await page.waitForTimeout(250); // 等 opacity 过渡稳定
+  const opacity = parseFloat(await ring.evaluate((el) => getComputedStyle(el).opacity));
+  expect(opacity).toBeGreaterThan(0.7);
 
   // 普通导航保留左侧黑线
   const overviewBtn = page.locator("aside").first().getByRole("button", { name: "总览" });

@@ -118,32 +118,23 @@ export function Sidebar() {
                   "overflow-hidden transition-colors duration-[var(--motion-base)] ease-[var(--ease-standard)]"
                 )}
               >
-                {/* 1px 品牌色 perimeter：Idle 静默 / Hover 慢速流动 / Active 静态细边 */}
+                {/* 1px 品牌流光：常驻（Idle 0.8 → Hover/Active 1）；无透明段渐变 + 放大旋转层 → 连续无断口 */}
                 <span
                   aria-hidden="true"
                   className={cn(
-                    "absolute inset-0 kiro-ring pointer-events-none",
-                    "transition-opacity duration-[var(--motion-fast)]",
-                    isActive
-                      ? "opacity-100"
-                      : "opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100"
-                  )}
-                />
-                <span
-                  className={cn(
-                    "absolute inset-0 kiro-ring kiro-ring-animated pointer-events-none opacity-0",
-                    "transition-opacity duration-[var(--motion-fast)]",
+                    "absolute -inset-1/2 kiro-ring kiro-featured-flow pointer-events-none",
+                    "opacity-80 transition-opacity duration-[var(--motion-fast)]",
                     "group-hover:opacity-100 group-focus-visible:opacity-100",
-                    isActive && "hidden"
+                    isActive && "opacity-100!"
                   )}
                 />
-                  {/* 内容层：m-px 留出 1px 品牌色环 */}
+                  {/* 内容层：m-px 留出 1px 品牌流光环；Active = 极浅 Soft Plate（不压 Logo 原色） */}
                   <span
                     className={cn(
                       "relative m-px w-full h-11 rounded-[11px] bg-[#F7F5F5]",
                       "flex items-center justify-center xl:justify-start xl:gap-2.5 px-2 xl:px-3",
                       "text-xs font-semibold transition-colors duration-[var(--motion-base)]",
-                      isActive ? "bg-pastel-mint text-charcoal" : "text-charcoal"
+                      isActive ? "bg-surface text-charcoal" : "text-charcoal"
                     )}
                   >
                     <Icon className="w-5 h-5 shrink-0" />

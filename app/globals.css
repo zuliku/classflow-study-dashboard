@@ -294,17 +294,18 @@ html[data-motion="reduced"] *::after {
 }
 
 /* Kiro Featured Entry：品牌色 perimeter sweep（低饱和：暖金 / 浅绿 / 灰蓝）。
-   Idle 静默 → Hover 慢速流动 → Active 静态细边；reduced-motion 完全关闭动画。 */
+   无透明段：整环始终有低饱和底色（不会出现断口），亮色头部沿环缓慢流动。
+   Idle 弱 → Hover 中 → Active 强；reduced-motion 完全关闭动画。 */
 .kiro-ring {
   background: conic-gradient(
-    from 210deg,
-    transparent 0deg,
-    rgba(240, 208, 176, 0.85) 45deg,
-    rgba(176, 208, 208, 0.85) 105deg,
-    rgba(160, 176, 224, 0.85) 165deg,
-    rgba(240, 208, 176, 0.85) 225deg,
-    transparent 300deg,
-    transparent 360deg
+    from 0deg,
+    rgba(240, 208, 176, 0.5),
+    rgba(240, 208, 176, 0.95) 35deg,
+    rgba(176, 208, 208, 0.9) 100deg,
+    rgba(160, 176, 224, 0.9) 165deg,
+    rgba(240, 208, 176, 0.95) 230deg,
+    rgba(240, 208, 176, 0.5) 265deg,
+    rgba(240, 208, 176, 0.5)
   );
 }
 
@@ -323,6 +324,15 @@ html[data-motion="reduced"] *::after {
 
 /* Reduced Motion：完全关闭 perimeter animation，只保留静态品牌色细边 */
 html[data-motion="reduced"] .kiro-ring-animated {
+  animation: none;
+}
+
+/* 主 Sidebar Kiro Featured：常驻流光稍快（4.5s）；与 .kiro-ring（无透明段）同用，连续无断口 */
+.kiro-featured-flow {
+  animation: kiro-ring-spin 4.5s linear infinite;
+}
+
+html[data-motion="reduced"] .kiro-featured-flow {
   animation: none;
 }
 
