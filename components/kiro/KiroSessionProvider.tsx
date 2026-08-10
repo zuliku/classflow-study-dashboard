@@ -20,6 +20,7 @@ import {
   suggestionsTypeOf,
 } from "@/lib/ai/context/handoff";
 import { KiroContextRef } from "@/lib/ai/context/types";
+import { useKiroPreferencesStore } from "@/store/useKiroPreferencesStore";
 import { KiroSidecar } from "@/components/kiro/KiroSidecar";
 import { pushOverlay, popOverlay, isTopmostOverlay } from "@/lib/overlayStack";
 import {
@@ -208,7 +209,13 @@ export function KiroSessionProvider({ children }: { children: React.ReactNode })
       courses: s.courses,
     }))
   );
-  const autoRefs = useMemo(() => buildAutoContextRefs(autoState), [autoState]);
+  // Task 7E：自动环境上下文开关 —— 在 autoRefs 组合层过滤（UI 与模型同源，防止「UI 隐藏但模型仍收到」）。
+  // manualRefs / entryRefs（显式意图）不受影响；suppressedAutoKeys 会话级抑制语义保持。
+  const autoContextEnabled = useKiroPreferencesStore((s) => s.autoContextEnabled);
+  const autoRefs = useMemo(
+    () => (autoContextEnabled ? buildAutoContextRefs(autoState) : []),
+    [autoState, autoContextEnabled]
+  );
 
   const attachments = useKiroAttachments();
   const chat = useKiroChat({

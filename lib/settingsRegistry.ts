@@ -154,6 +154,13 @@ export const SETTINGS_REGISTRY: SettingDefinition[] = [
     keywords: ["kiro", "字号", "字体", "文字大小", "显示", "阅读", "输出", "font", "size"],
   },
   {
+    id: "kiro-auto-context",
+    section: "kiro",
+    title: "自动环境上下文",
+    description: "根据当前页面和时间范围自动为 Kiro 带入上下文",
+    keywords: ["kiro", "上下文", "自动上下文", "环境", "context", "auto context", "@"],
+  },
+  {
     id: "kiro-memory-enabled",
     section: "kiro",
     title: "启用 Kiro 记忆",

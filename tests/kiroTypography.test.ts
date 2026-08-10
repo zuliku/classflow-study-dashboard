@@ -60,4 +60,27 @@ describe("useKiroPreferencesStore（轻量 persistence 覆盖）", () => {
     const store = await freshStore();
     expect(store.getState().outputTextSize).toBe("standard");
   });
+
+  it("Task 7E：autoContextEnabled 默认 true", async () => {
+    const store = await freshStore();
+    expect(store.getState().autoContextEnabled).toBe(true);
+  });
+
+  it("Task 7E：set false → 持久化 false；重新 hydrate 保留", async () => {
+    const store = await freshStore();
+    store.getState().setAutoContextEnabled(false);
+    expect(store.getState().autoContextEnabled).toBe(false);
+    expect(localStorage.getItem(KEY)).toContain('"autoContextEnabled":false');
+
+    vi.resetModules();
+    const store2 = (await import("@/store/useKiroPreferencesStore")).useKiroPreferencesStore;
+    expect(store2.getState().autoContextEnabled).toBe(false);
+  });
+
+  it("Task 7E：legacy 持久化（无 autoContextEnabled 字段）→ fallback true", async () => {
+    localStorage.setItem(KEY, JSON.stringify({ state: { outputTextSize: "small" }, version: 0 }));
+    const store = await freshStore();
+    expect(store.getState().outputTextSize).toBe("small");
+    expect(store.getState().autoContextEnabled).toBe(true);
+  });
 });

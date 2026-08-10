@@ -63,19 +63,19 @@ test("Assignment Drawer → Ask Kiro：关闭 Drawer、打开 Sidecar（entry co
   await page.locator("aside").first().getByRole("button", { name: "任务" }).click();
   const row = page.locator('[data-testid="assignment-list"] [data-assignment-id="a1"]');
   await row.click();
-  await expect(page.getByRole("button", { name: "Ask Kiro" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Ask Kiro" }).last()).toBeVisible();
   await expect(page.getByText("计量经济学大作业").first()).toBeVisible();
 
-  // Ask Kiro：Drawer 关闭 + Sidecar 打开 + ContextBar collapsed 摘要（Header 不再重复 chip）
-  await page.getByRole("button", { name: "Ask Kiro" }).click();
-  await expect(page.getByRole("button", { name: "Ask Kiro" })).toHaveCount(0);
+  // Ask Kiro：Drawer 关闭 + Sidecar 打开 + Context Strip 直接展示 entry token（无展开/收起）
+  // （footer 按钮在 DOM 最后，避免与 Workspace Header / 学习安排区 Ask Kiro 冲突）
+  await page.getByRole("button", { name: "Ask Kiro" }).last().click();
+  // Drawer 已关闭：其内部 Ask Kiro 按钮消失；仅剩 Workspace Header 入口
+  await expect(page.getByRole("button", { name: "Ask Kiro" })).toHaveCount(1);
   const sidecar = page.getByTestId("kiro-sidecar");
   await expect(sidecar).toBeVisible();
   const bar = page.getByTestId("kiro-context-bar");
   await expect(bar).toBeVisible();
-  await expect(bar.getByRole("button", { expanded: false })).toContainText("项上下文");
-  // 展开 chips 可见 entry 标签
-  await bar.getByRole("button", { expanded: false }).click();
+  await expect(bar.getByRole("button", { expanded: false })).toHaveCount(0);
   await expect(bar).toContainText("计量经济学大作业");
 
   // Entry 建议出现（assignment kind）

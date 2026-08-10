@@ -1,23 +1,31 @@
 "use client";
 
-import React, { useState } from "react";
-import { AtSign, ChevronDown, X } from "lucide-react";
+import React, { useEffect, useRef, useState } from "react";
+import { BookOpen, CalendarClock, ClipboardCheck, FileText, Users, X } from "lucide-react";
 import { KiroContextRef } from "@/lib/ai/context/types";
+import {
+  formatKiroContextDisplayLabel,
+  getKiroContextVisualRole,
+  splitKiroContextsForDisplay,
+} from "@/lib/ai/context/presentation";
 import { cn } from "@/lib/utils";
 
-const KIND_ICON: Record<KiroContextRef["kind"], string> = {
-  course: "课",
-  assignment: "务",
-  "group-project": "组",
-  material: "料",
-  week: "周",
+/** Ambient（自动环境）kind 图标：只用 Lucide（week 用弱时间感 Clock 系，不再用 @ / 文字方块） */
+const AMBIENT_KIND_ICONS: Record<KiroContextRef["kind"], React.ComponentType<{ className?: string }>> = {
+  week: CalendarClock,
+  course: BookOpen,
+  assignment: ClipboardCheck,
+  "group-project": Users,
+  material: FileText,
 };
 
 /**
- * Context Bar：自动 Context + 手动 @ Context 的展示层（显式、可见、可移除）。
- * Workspace 与 Sidecar 都默认 collapsed 摘要行（不默认铺满 chips），点击展开。
- * 摘要：Workspace 有明确主 Context 时显示「@ 主项 · +N ⌄」；Sidecar 恒「@ N 项上下文 ⌄」。
- * 位于 Composer 外部上方，宽度与 Composer 对齐（外层已共用 max-w）。
+ * Kiro Context Strip（Task 7E）：Composer 上方的一条轻环境信息。
+ * - 无 expand/collapse 状态，直接渲染 active Contexts
+ * - Ambient Capsule（auto）：极浅底 + 弱时间/环境图标，× 仅 hover/focus 显示
+ * - Manual Token（manual / entry）：更明确的用户 token，× 常显
+ * - 展示数量：Desktop ambient 1 + manual 2；compact 1 + 1；其余进 +N（唯一管理入口）
+ * - 纯展示组件：不获取数据 / 不构建 Prompt / 不读 Store
  */
 export function KiroContextBar({
   contexts,
@@ -26,66 +34,120 @@ export function KiroContextBar({
 }: {
   contexts: KiroContextRef[];
   onRemove: (key: string) => void;
-  /** sidecar：更紧凑 + 摘要恒为「N 项上下文」 */
+  /** sidecar：更紧凑（ambient 1 + manual 1） */
   compact?: boolean;
 }) {
-  const [expanded, setExpanded] = useState(false);
+  const [overflowOpen, setOverflowOpen] = useState(false);
+  const overflowBtnRef = useRef<HTMLDivElement | null>(null);
+  const popoverRef = useRef<HTMLDivElement | null>(null);
+
+  // +N Popover：outside click / Esc 关闭（非 modal，不拦截原事件）
+  useEffect(() => {
+    if (!overflowOpen) return;
+    const onPointerDown = (e: PointerEvent) => {
+      const t = e.target as Node;
+      if (overflowBtnRef.current?.contains(t) || popoverRef.current?.contains(t)) return;
+      setOverflowOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOverflowOpen(false);
+    };
+    document.addEventListener("pointerdown", onPointerDown);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [overflowOpen]);
+
   if (contexts.length === 0) return null;
 
-  // 摘要主项：优先用户显式 @ 的 manual Context（更值得展示），否则取第一个
-  const primary = contexts.find((c) => c.source === "manual") ?? contexts[0];
-  const summary = compact
-    ? `${contexts.length} 项上下文`
-    : contexts.length === 1
-      ? primary.label
-      : `${primary.label} · +${contexts.length - 1}`;
+  const { visibleAmbient, visibleManual, overflow } = splitKiroContextsForDisplay(contexts, !!compact);
+  const allForPopover = [...visibleAmbient, ...visibleManual, ...overflow];
+
+  const removeButton = (c: KiroContextRef, revealOnHover: boolean) => (
+    <button
+      onClick={() => onRemove(c.key)}
+      aria-label={`移除上下文：${formatKiroContextDisplayLabel(c)}`}
+      title={getKiroContextVisualRole(c) === "ambient" ? "本次对话中不使用此上下文" : "移除"}
+      className={cn(
+        "p-0.5 rounded-full text-sandrift/80 hover:text-danger transition-colors shrink-0",
+        revealOnHover &&
+          "opacity-100 md:opacity-0 group-hover:opacity-100 group-focus-within:opacity-100"
+      )}
+    >
+      <X className="w-3 h-3" />
+    </button>
+  );
 
   return (
-    <div data-testid="kiro-context-bar" className={cn("pb-1.5", compact && "px-0.5")}>
-      {!expanded ? (
-        <button
-          onClick={() => setExpanded(true)}
-          aria-expanded={false}
-          title="展开上下文"
-          className="flex items-center gap-1.5 text-[11px] font-semibold text-satin-grey hover:text-charcoal transition-colors"
-        >
-          <AtSign className="w-3.5 h-3.5 text-sandrift shrink-0" />
-          <span className="truncate max-w-[220px]">{summary}</span>
-          <ChevronDown className="w-3 h-3 shrink-0" />
-        </button>
-      ) : (
-        <div className="flex flex-wrap items-center gap-1.5">
-          {contexts.map((c) => (
-            <span
-              key={c.key}
-              className={cn(
-                "inline-flex items-center gap-1.5 pl-2 pr-1 h-7 rounded-lg border text-[11px] font-semibold text-charcoal",
-                c.source === "auto"
-                  ? "bg-pastel-mint border-line-soft"
-                  : "bg-alabaster border-line"
-              )}
-            >
-              <span className="w-3.5 h-3.5 rounded bg-white/70 border border-line-soft flex items-center justify-center text-[8px] font-bold text-sandrift shrink-0">
-                {KIND_ICON[c.kind]}
-              </span>
-              <span className="truncate max-w-[160px]">{c.label}</span>
-              <button
-                onClick={() => onRemove(c.key)}
-                aria-label={`移除上下文 ${c.label}`}
-                title={c.source === "auto" ? "本次对话中移除" : "移除"}
-                className="p-0.5 rounded text-sandrift hover:text-danger transition-colors"
-              >
-                <X className="w-3 h-3" />
-              </button>
-            </span>
-          ))}
-          <button
-            onClick={() => setExpanded(false)}
-            aria-label="收起上下文"
-            className="p-1 rounded-lg text-sandrift hover:text-charcoal hover:bg-alabaster transition-colors"
+    <div
+      data-testid="kiro-context-bar"
+      className={cn("flex items-center gap-1.5 pb-1.5 overflow-hidden", compact && "px-0.5")}
+    >
+      {/* Ambient Capsule：系统自动环境（弱图标 + 极浅底，稳定存在） */}
+      {visibleAmbient.map((c) => {
+        const Icon = AMBIENT_KIND_ICONS[c.kind];
+        return (
+          <span
+            key={c.key}
+            className="group inline-flex items-center gap-1.5 pl-2 pr-1 h-7 max-w-[220px] rounded-full border border-line-soft bg-pastel-mint/55 text-[11px] font-semibold text-satin-grey hover:bg-pastel-mint/75 transition-colors shrink-0"
           >
-            <ChevronDown className="w-3 h-3" />
+            <Icon className="w-3.5 h-3.5 text-sandrift shrink-0" />
+            <span className="truncate">{formatKiroContextDisplayLabel(c)}</span>
+            {removeButton(c, true)}
+          </span>
+        );
+      })}
+
+      {/* Manual Token：用户显式 @ / Ask Kiro 实体入口（无图标，× 清晰） */}
+      {visibleManual.map((c) => (
+        <span
+          key={c.key}
+          className="inline-flex items-center gap-1 pl-2.5 pr-1 h-7 max-w-[200px] rounded-full bg-alabaster/70 border border-line text-[11px] font-semibold text-charcoal shrink-0"
+        >
+          <span className="truncate">{formatKiroContextDisplayLabel(c)}</span>
+          {removeButton(c, false)}
+        </span>
+      ))}
+
+      {/* +N：唯一「查看剩余 Context」入口 */}
+      {overflow.length > 0 && (
+        <div className="relative shrink-0" ref={overflowBtnRef}>
+          <button
+            onClick={() => setOverflowOpen((v) => !v)}
+            aria-label={`查看全部上下文，共 ${contexts.length} 项`}
+            aria-expanded={overflowOpen}
+            className="h-7 px-2 rounded-full text-[11px] font-semibold text-sandrift hover:bg-alabaster hover:text-charcoal transition-colors"
+          >
+            +{overflow.length}
           </button>
+          {overflowOpen && (
+            <div
+              ref={popoverRef}
+              role="dialog"
+              aria-label="当前上下文"
+              className="absolute left-0 bottom-full mb-1.5 w-[280px] max-h-[min(320px,50vh)] overflow-y-auto bg-surface border border-line-strong rounded-2xl shadow-card p-1.5 z-40 ux-inline"
+            >
+              <p className="px-2.5 pt-1.5 pb-1 text-[10px] font-bold text-sandrift">当前上下文</p>
+              {allForPopover.map((c) => {
+                const role = getKiroContextVisualRole(c);
+                const Icon = role === "ambient" ? AMBIENT_KIND_ICONS[c.kind] : null;
+                return (
+                  <div
+                    key={c.key}
+                    className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-left text-[11px]"
+                  >
+                    {Icon && <Icon className="w-3.5 h-3.5 text-sandrift shrink-0" />}
+                    <span className="flex-1 min-w-0 truncate font-semibold text-charcoal">
+                      {formatKiroContextDisplayLabel(c)}
+                    </span>
+                    {removeButton(c, false)}
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       )}
     </div>

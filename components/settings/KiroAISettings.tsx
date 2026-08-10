@@ -40,6 +40,9 @@ export function KiroAISettings() {
   // Task 7D：输出字号是纯 UI preference，仍属于 useKiroPreferencesStore（与 Rail More 菜单同一事实来源）
   const outputTextSize = useKiroPreferencesStore((s) => s.outputTextSize);
   const setOutputTextSize = useKiroPreferencesStore((s) => s.setOutputTextSize);
+  // Task 7E：自动环境上下文（纯 interaction preference，不放 useAISettingsStore）
+  const autoContextEnabled = useKiroPreferencesStore((s) => s.autoContextEnabled);
+  const setAutoContextEnabled = useKiroPreferencesStore((s) => s.setAutoContextEnabled);
 
   const [apiKeyInput, setApiKeyInput] = useState(getSessionApiKey(provider));
   const [showKey, setShowKey] = useState(false);
@@ -269,6 +272,19 @@ export function KiroAISettings() {
               { value: "standard", label: "标准" },
               { value: "large", label: "大" },
             ]}
+          />
+        </SettingsRow>
+
+        {/* Task 7E：自动环境上下文（当前会话手动 × 的 suppression 仍各自生效） */}
+        <SettingsRow
+          settingId="kiro-auto-context"
+          title="自动环境上下文"
+          description="根据当前页面、时间范围和选中对象，自动为 Kiro 带入相关上下文。关闭后仍可通过 @ 手动添加课程、任务和资料。"
+        >
+          <SettingsToggle
+            checked={autoContextEnabled}
+            onChange={setAutoContextEnabled}
+            label="自动环境上下文"
           />
         </SettingsRow>
 

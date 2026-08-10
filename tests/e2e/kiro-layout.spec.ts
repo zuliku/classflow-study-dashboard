@@ -98,10 +98,10 @@ test("建议互斥：Assignment Entry 时只显示 Context-aware 建议，EmptyS
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/");
 
-  // 任务 Drawer → Ask Kiro → Sidecar（assignment entry）
+  // 任务 Drawer → Ask Kiro → Sidecar（assignment entry；footer 按钮在 DOM 最后）
   await page.locator("aside").first().getByRole("button", { name: "任务" }).click();
   await page.locator('[data-testid="assignment-list"] [data-assignment-id="a1"]').click();
-  await page.getByRole("button", { name: "Ask Kiro" }).click();
+  await page.getByRole("button", { name: "Ask Kiro" }).last().click();
 
   const sidecar = page.getByTestId("kiro-sidecar");
   await expect(sidecar).toBeVisible();
@@ -122,25 +122,20 @@ test("Sidecar ContextBar 默认 collapsed；点击展开 chips；Header 不重�
   await page.goto("/");
 
   // Timetable Ask Kiro → week entry → sidecar
-  await page.locator("aside").first().getByRole("button", { name: "我的课表" }).click();
+  await page.locator("aside").first().getByRole("button", { name: "时间表" }).click();
   await page.getByRole("button", { name: "Ask Kiro" }).click();
   await expect(page.getByTestId("kiro-sidecar")).toBeVisible();
 
-  // Header 只有品牌 + 操作，不重复 Context（collapsed 摘要不显示具体标签）
+  // Header 只有品牌 + 操作，不重复 Context（Context 在 Strip 展示，不在 Header）
   await expect(page.getByTestId("kiro-sidecar-title")).toHaveText("Kiro");
   expect(await page.getByTestId("kiro-sidecar").getByText("时间范围").count()).toBe(0);
 
-  // ContextBar：collapsed 摘要行（aria-expanded=false，短文案）
+  // Task 7E：Context Strip 直接展示 Ambient Capsule（本周 · 第 N 周），无展开/收起交互
   const bar = page.getByTestId("kiro-context-bar");
   await expect(bar).toBeVisible();
-  const summary = bar.getByRole("button", { expanded: false });
-  await expect(summary).toBeVisible();
-  await expect(summary).toContainText("项上下文");
-  // 点击展开 → chips 出现（entry 标签，语义去重后不重复本周）
-  await summary.click();
-  await expect(bar.getByRole("button", { name: "收起上下文" })).toBeVisible();
-  await expect(bar).toContainText("时间范围 · 第");
-  await expect(bar.getByText("时间范围", { exact: true })).toHaveCount(0);
+  await expect(bar.getByText("本周 · 第")).toBeVisible();
+  await expect(bar.getByRole("button", { expanded: false })).toHaveCount(0);
+  await expect(bar.getByRole("button", { name: "收起上下文" })).toHaveCount(0);
 });
 
 test("2xl Docked：Sidecar 为整屏 sticky Panel（高度=viewport，宽 424，Composer 底部留白）", async ({ page }) => {

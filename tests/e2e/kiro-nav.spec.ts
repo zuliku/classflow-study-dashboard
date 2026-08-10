@@ -63,11 +63,10 @@ test("Desktop：@ Context picker（UI foundation）与 History 空状态", async
   const picker = page.getByRole("dialog", { name: "选择上下文" });
   await expect(picker).toBeVisible();
   await picker.getByRole("menuitem", { name: /微观经济学/ }).first().click();
-  // ContextBar 默认 collapsed：摘要显示主 Context（手动添加优先）
+  // Task 7E：Context Strip 直接展示 manual token（无展开/收起交互）
   await expect(page.getByTestId("kiro-context-bar")).toContainText("微观经济学");
-  await page.getByTestId("kiro-context-bar").getByRole("button", { expanded: false }).click();
-  await expect(page.getByTestId("kiro-context-bar")).toContainText("微观经济学");
-  await expect(page.getByTestId("kiro-context-bar")).toContainText("本周");
+  await expect(page.getByTestId("kiro-context-bar").getByRole("button", { expanded: false })).toHaveCount(0);
+  await expect(page.getByTestId("kiro-context-bar")).toContainText("本周 · 第");
 
   // Thread Rail：展开 → 空状态 + Esc 关闭（Desktop 历史入口已从 More 移入 Rail）
   await page.getByLabel("展开对话").click();
