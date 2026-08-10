@@ -57,24 +57,24 @@ export function Sidebar() {
                 aria-label={item.label}
                 aria-current={isActive ? "page" : undefined}
                 className={cn(
-                  "relative w-full flex items-center justify-center xl:justify-start xl:gap-2.5 px-2 xl:px-3 py-2 rounded-xl text-xs font-medium transition-colors duration-[var(--motion-base)] ease-[var(--ease-standard)] group text-left",
+                  "relative w-full flex items-center justify-center xl:justify-start xl:gap-2.5 px-2 xl:px-3 py-2 rounded-[13px] text-xs transition-colors duration-[var(--motion-base)] ease-[var(--ease-standard)] group text-left",
                   isActive
-                    ? "bg-pastel-mint text-charcoal font-semibold shadow-subtle"
-                    : "text-satin-grey hover:bg-alabaster hover:text-charcoal"
+                    ? "bg-pastel-mint/70 text-charcoal font-semibold"
+                    : "font-medium text-satin-grey hover:bg-alabaster hover:text-charcoal"
                 )}
               >
-                {/* Active 指示条：opacity + scaleY 过渡 */}
+                {/* Active 内嵌短 Indicator：属于 Plate 内部（不贴 Sidebar 边缘），opacity + scaleY 轻量出现 */}
                 <span
                   className={cn(
-                    "absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-4 rounded-full bg-charcoal",
+                    "absolute left-2.5 xl:left-[11px] top-1/2 -translate-y-1/2 w-[2px] h-[19px] rounded-full bg-charcoal/75",
                     "transition-[opacity,transform] duration-[var(--motion-base)] ease-[var(--ease-standard)]",
-                    isActive ? "opacity-100 scale-y-100" : "opacity-0 scale-y-50"
+                    isActive ? "opacity-100 scale-y-100" : "opacity-0 scale-y-75"
                   )}
                   aria-hidden="true"
                 />
                 <Icon
                   className={cn(
-                    "w-4 h-4 shrink-0 transition-colors duration-[var(--motion-base)]",
+                    "w-[18px] h-[18px] shrink-0 transition-colors duration-[var(--motion-base)]",
                     isActive
                       ? "text-charcoal"
                       : "text-sandrift group-hover:text-charcoal"
