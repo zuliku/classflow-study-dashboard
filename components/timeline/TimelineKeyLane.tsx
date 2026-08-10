@@ -1,12 +1,15 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 import { TimelineItem } from "@/lib/timeline/timelineTypes";
 import { timeToDayRatio, intervalToDayGeometry } from "@/lib/timeline/timelineGeometry";
 import { Priority } from "@/types";
+import { FloatingTimelineDetail } from "@/components/timeline/FloatingTimelineDetail";
 
 const MAX_TRACKS = 2;
+/** Short Interval 视觉最小宽度（px；真实时间长度不变，Semantic Geometry 与 Visual Affordance 分离） */
+const MIN_INTERVAL_VISUAL_PX = 16;
 
 /** Deadline Point 优先级颜色（ClassFlow muted palette；禁止纯红/纯橙/neon） */
 const PRIORITY_DOT: Record<Priority, string> = {
@@ -31,7 +34,6 @@ function packDeadlinePoints(items: TimelineItem[]): { item: TimelineItem; ratio:
   const out: { item: TimelineItem; ratio: number; track: number }[] = [];
   for (const item of sorted) {
     const ratio = timeToDayRatio(item.startTime);
-    // 优先空闲 track；都占用时选间隔最大的（微错开）；同刻 ≥3 个重叠在 track 0
     let track = 0;
     let bestGap = -1;
     for (let t = 0; t < MAX_TRACKS; t++) {
@@ -53,18 +55,19 @@ function packDeadlinePoints(items: TimelineItem[]): { item: TimelineItem; ratio:
 }
 
 /**
- * Timeline Key Lane（Task：ClassFlow Timeline V1 polish + V2）。
- * - Deadline：默认纯 Point（8px，优先级配色），真实 24h 几何；Hover/Focus 显示 Detail Tooltip（方向自适应）
- * - Interval：默认只显示真实几何 bar（无常驻名称）；Hover/Focus 显示 Detail Popover（方向自适应）
+ * Timeline Key Lane。
+ * - Deadline：纯 Point（真实 24h 几何）+ Floating Detail（Portal，collision 定位）
+ * - Interval：真实几何 bar；过短时用 16px capsule（以真实 midpoint 为中心 + 列内 clamp）
  * - All-day：独立顶部小层
- * - 底部 1px baseline（可感知时间轨）
  */
 export function TimelineKeyLane({
   items,
   weekDates,
+  boundsRef,
 }: {
   items: TimelineItem[];
   weekDates: string[];
+  boundsRef?: React.RefObject<HTMLElement | null>;
 }) {
   const byDay = useMemo(() => {
     const map = new Map<string, TimelineItem[]>();
@@ -76,24 +79,35 @@ export function TimelineKeyLane({
     return map;
   }, [items]);
 
-  // ---- Week-level 纵向几何（全周统一，避免某天 All-day 造成 baseline 断层） ----
+  // 列宽测量（Semantic Geometry → px 视觉）：真实 widthRatio * colWidth
+  const gridRef = useRef<HTMLDivElement | null>(null);
+  const [colWidth, setColWidth] = useState(180);
+  useLayoutEffect(() => {
+    const el = gridRef.current;
+    if (!el) return;
+    const measure = () => setColWidth(Math.max(el.clientWidth / weekDates.length, 40));
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [weekDates.length]);
+
   const hasAnyAllDay = weekDates.some((date) => (byDay.get(date) ?? []).some((it) => it.temporalType === "all-day"));
   const laneHeightClass = hasAnyAllDay ? "h-[78px]" : "h-[64px]";
   const baselineTop = hasAnyAllDay ? 52 : 40;
 
   return (
     <div className="relative border-b border-line">
-      {/* 连续时间 baseline：单条 1px 线从 gutter 结束处贯穿所有日期（全周统一 Y，无列拼接断点） */}
       <div
         aria-hidden="true"
         className="absolute left-[56px] right-0 h-px bg-line pointer-events-none z-0"
         style={{ top: baselineTop }}
       />
       <div
+        ref={gridRef}
         className="grid relative"
         style={{ gridTemplateColumns: `56px repeat(${weekDates.length}, minmax(0, 1fr))` }}
       >
-        {/* 左标签列：关键时间轴 Section Label（双行，与全周 baseline 垂直居中关联） */}
         <div className="relative self-stretch pr-1.5">
           <div
             className="absolute left-0 flex items-center gap-1"
@@ -125,7 +139,6 @@ export function TimelineKeyLane({
                 laneHeightClass
               )}
             >
-              {/* All-day 独立小层（有才显示；整周统一预留高度，不改变 baseline） */}
               {allDays.length > 0 && (
                 <div className="absolute left-0.5 right-0.5 top-1 space-y-0.5">
                   {allDays.slice(0, 2).map((it) => (
@@ -143,14 +156,25 @@ export function TimelineKeyLane({
                 </div>
               )}
 
-              {/* Deadline Points（纯 Point + Hover Detail） */}
               {points.map((p) => (
-                <DeadlinePoint key={p.item.id} item={p.item} ratio={p.ratio} track={p.track} top={pointTop} />
+                <DeadlinePoint
+                  key={p.item.id}
+                  item={p.item}
+                  ratio={p.ratio}
+                  track={p.track}
+                  top={pointTop}
+                  boundsRef={boundsRef}
+                />
               ))}
 
-              {/* Interval：真实几何 bar + 浮动标题 */}
               {intervals.map((it) => (
-                <IntervalBlock key={it.id} item={it} top={baselineTop - 7} />
+                <IntervalBlock
+                  key={it.id}
+                  item={it}
+                  top={baselineTop - 7}
+                  colWidth={colWidth}
+                  boundsRef={boundsRef}
+                />
               ))}
             </div>
           );
@@ -160,57 +184,96 @@ export function TimelineKeyLane({
   );
 }
 
+/** Hover Bridge 通用逻辑：mouseleave 延迟 100ms 关闭；popover mouseenter 取消 */
+function useHoverBridge(): {
+  open: boolean;
+  setOpen: (v: boolean) => void;
+  anchorLeave: () => void;
+  cancelClose: () => void;
+} {
+  const [open, setOpen] = useState(false);
+  const timerRef = useRef<number | null>(null);
+  const cancelClose = () => {
+    if (timerRef.current) {
+      window.clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+  };
+  const anchorLeave = () => {
+    cancelClose();
+    timerRef.current = window.setTimeout(() => setOpen(false), 100);
+  };
+  useEffect(
+    () => () => {
+      if (timerRef.current) window.clearTimeout(timerRef.current);
+    },
+    []
+  );
+  return { open, setOpen, anchorLeave, cancelClose };
+}
+
 function DeadlinePoint({
   item,
   ratio,
   track,
   top,
+  boundsRef,
 }: {
   item: TimelineItem;
   ratio: number;
   track: number;
   top: number;
+  boundsRef?: React.RefObject<HTMLElement | null>;
 }) {
-  const [hovered, setHovered] = useState(false);
+  const { open, setOpen, anchorLeave, cancelClose } = useHoverBridge();
+  const ref = useRef<HTMLDivElement | null>(null);
   const color = item.priority ? PRIORITY_DOT[item.priority] : DEFAULT_DOT;
   const dotTop = top + track * 12;
-  // Tooltip 方向：<0.65 向右，≥0.65 向左（防止 23:59 越界）
-  const tooltipRight = ratio < 0.65;
   const weekDay = item.date ? new Date(`${item.date}T00:00:00`).getDay() : 0;
   const dayLabel = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"][weekDay];
-  const dateLabel = `${Number(item.date.slice(5, 7))}月${Number(item.date.slice(8, 10))}日`;
 
   return (
-    <div
-      role="button"
-      tabIndex={0}
-      aria-label={`${item.title}，${dayLabel} ${item.startTime ?? ""} 截止${item.priority ? `，${PRIORITY_LABEL[item.priority]}` : ""}`}
-      className="absolute z-10 outline-none"
-      style={{ left: `${ratio * 100}%`, top: `${dotTop}px`, transform: "translateX(-50%)" }}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-      onFocus={() => setHovered(true)}
-      onBlur={() => setHovered(false)}
-    >
-      {/* Hover 命中区（18px，视觉只显示 8px dot） */}
-      <span className="block w-[18px] h-[18px] -m-[5px] flex items-center justify-center cursor-pointer">
-        <span
-          className={cn(
-            "block w-2 h-2 rounded-full transition-transform duration-[var(--motion-fast)]",
-            hovered && "scale-[1.15]"
-          )}
-          style={{ backgroundColor: color }}
-        />
-      </span>
+    <>
+      <div
+        ref={ref}
+        role="button"
+        tabIndex={0}
+        aria-label={`${item.title}，${dayLabel} ${item.startTime ?? ""} 截止${item.priority ? `，${PRIORITY_LABEL[item.priority]}` : ""}`}
+        className="absolute z-10 outline-none"
+        style={{ left: `${ratio * 100}%`, top: `${dotTop}px`, transform: "translateX(-50%)" }}
+        onMouseEnter={() => {
+          cancelClose();
+          setOpen(true);
+        }}
+        onMouseLeave={anchorLeave}
+        onFocus={() => {
+          cancelClose();
+          setOpen(true);
+        }}
+        onBlur={anchorLeave}
+      >
+        <span className="block w-[18px] h-[18px] -m-[5px] flex items-center justify-center cursor-pointer">
+          <span
+            className={cn(
+              "block w-2 h-2 rounded-full transition-transform duration-[var(--motion-fast)]",
+              open && "scale-[1.15]"
+            )}
+            style={{ backgroundColor: color }}
+          />
+        </span>
+      </div>
 
-      {/* Hover / Focus Detail Tooltip */}
-      {hovered && (
-        <div
-          className={cn(
-            "absolute top-full mt-1.5 w-max max-w-[220px] bg-surface border border-line-strong rounded-xl shadow-card px-2.5 py-2 space-y-0.5 z-30",
-            tooltipRight ? "left-0" : "right-0"
-          )}
-        >
+      <FloatingTimelineDetail
+        anchorRef={ref}
+        boundsRef={boundsRef ?? ref}
+        open={open}
+        kind="interval"
+        ariaLabel={item.title}
+        onRequestClose={() => setOpen(false)}
+        onMouseEnter={cancelClose}
+        onMouseLeave={anchorLeave}
+      >
+        <div className="px-2.5 py-2 space-y-0.5">
           <p className="text-[11px] font-bold text-charcoal leading-snug">{item.title}</p>
           <p className="text-[10px] font-semibold text-satin-grey">
             {dayLabel} · {item.startTime ?? ""} 截止
@@ -222,56 +285,89 @@ function DeadlinePoint({
             </p>
           )}
         </div>
-      )}
-    </div>
+      </FloatingTimelineDetail>
+    </>
   );
 }
 
-function IntervalBlock({ item, top }: { item: TimelineItem; top: number }) {
+function IntervalBlock({
+  item,
+  top,
+  colWidth,
+  boundsRef,
+}: {
+  item: TimelineItem;
+  top: number;
+  colWidth: number;
+  boundsRef?: React.RefObject<HTMLElement | null>;
+}) {
   const { leftRatio, widthRatio } = intervalToDayGeometry(item.startTime, item.endTime);
   const exam = item.sourceType === "exam";
-  const [hovered, setHovered] = useState(false);
+  const { open, setOpen, anchorLeave, cancelClose } = useHoverBridge();
+  const ref = useRef<HTMLDivElement | null>(null);
   const weekDay = item.date ? new Date(`${item.date}T00:00:00`).getDay() : 0;
   const dayLabel = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"][weekDay];
   const dateLabel = `${Number(item.date.slice(5, 7))}月${Number(item.date.slice(8, 10))}日`;
   const typeLabel = exam ? "考试" : "活动";
-  // Popover 方向：<0.65 向右，≥0.65 向左（防止周日晚间 Event 溢出 Timeline）
-  const popoverLeft = leftRatio < 0.65;
+
+  // Semantic Geometry（真实时间比例）
+  const trueWidthPx = widthRatio * colWidth;
+  const midRatio = leftRatio + widthRatio / 2;
+  const visualWidthPx = Math.max(trueWidthPx, MIN_INTERVAL_VISUAL_PX);
+
+  // Visual Affordance：短 capsule 以真实 midpoint 为中心，并 clamp 在列内（左右 2px）
+  const centerPx = midRatio * colWidth;
+  const leftPx =
+    trueWidthPx >= MIN_INTERVAL_VISUAL_PX
+      ? leftRatio * colWidth
+      : Math.min(Math.max(centerPx - visualWidthPx / 2, 2), Math.max(colWidth - visualWidthPx - 2, 2));
 
   return (
-    <div
-      role="button"
-      tabIndex={0}
-      aria-label={`${item.title}，${dayLabel} ${item.startTime ?? ""} 至 ${item.endTime ?? ""}`}
-      className="absolute z-10 outline-none"
-      style={{ left: `${leftRatio * 100}%`, top: `${top}px` }}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-      onFocus={() => setHovered(true)}
-      onBlur={() => setHovered(false)}
-    >
-      {/* Hover Hit Area：真实 bar + 最小 18px 透明命中扩展（不改变可见几何） */}
-      <span className="block min-w-[18px] flex items-center -m-[4px] p-[4px]">
-        <span
-          className={cn(
-            "block h-[7px] rounded-full transition-transform duration-[var(--motion-fast)]",
-            hovered && "scale-y-[1.3]"
-          )}
-          style={{
-            width: `${Math.max(widthRatio * 100, 2.2)}%`,
-            backgroundColor: exam ? "#D9BBA0" : "#C9C4BC",
-          }}
-        />
-      </span>
+    <>
+      <div
+        ref={ref}
+        role="button"
+        tabIndex={0}
+        aria-label={`${item.title}，${dayLabel} ${item.startTime ?? ""} 至 ${item.endTime ?? ""}`}
+        className="absolute z-10 outline-none"
+        style={{ left: `${leftPx}px`, top: `${top}px`, width: visualWidthPx }}
+        onMouseEnter={() => {
+          cancelClose();
+          setOpen(true);
+        }}
+        onMouseLeave={anchorLeave}
+        onFocus={() => {
+          cancelClose();
+          setOpen(true);
+        }}
+        onBlur={anchorLeave}
+      >
+        {/* Hover Hit Area：真实 bar（margin box 7px）+ 上下各 4px 命中扩展（不改变可见几何） */}
+        <span className="block h-[15px] -my-[4px] flex items-center">
+          <span
+            className={cn(
+              "block h-[7px] rounded-full transition-transform duration-[var(--motion-fast)]",
+              open && "scale-y-[1.3]"
+            )}
+            style={{
+              width: "100%",
+              backgroundColor: exam ? "#D9BBA0" : "#C9C4BC",
+            }}
+          />
+        </span>
+      </div>
 
-      {/* Hover / Focus Detail Popover（与 DeadlinePoint 同视觉语言） */}
-      {hovered && (
-        <div
-          className={cn(
-            "absolute top-full mt-1.5 w-max max-w-[220px] bg-surface border border-line-strong rounded-xl shadow-card px-2.5 py-2 space-y-0.5 z-30",
-            popoverLeft ? "left-0" : "right-0"
-          )}
-        >
+      <FloatingTimelineDetail
+        anchorRef={ref}
+        boundsRef={boundsRef ?? ref}
+        open={open}
+        kind="interval"
+        ariaLabel={item.title}
+        onRequestClose={() => setOpen(false)}
+        onMouseEnter={cancelClose}
+        onMouseLeave={anchorLeave}
+      >
+        <div className="px-2.5 py-2 space-y-0.5">
           <p className="text-[11px] font-bold text-charcoal leading-snug">{item.title}</p>
           <p className="text-[10px] font-semibold text-satin-grey">
             {dayLabel} · {dateLabel} · {item.startTime ?? "—"}–{item.endTime ?? "—"}
@@ -279,7 +375,7 @@ function IntervalBlock({ item, top }: { item: TimelineItem; top: number }) {
           <p className="text-[10px] font-semibold text-[#A87952]">{typeLabel}</p>
           {item.subtitle && <p className="text-[10px] text-satin-grey">{item.subtitle}</p>}
         </div>
-      )}
-    </div>
+      </FloatingTimelineDetail>
+    </>
   );
 }

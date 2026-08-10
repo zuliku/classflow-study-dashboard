@@ -77,6 +77,22 @@ interface KiroSessionValue {
   openForGroupProject: (id: string) => void;
   openForWeek: (week: number) => void;
   handoffPrompt: (prompt: string) => void;
+  /** Kiro Planning Proposal Ghost Preview（UI-only，不持久化；刷新即消失） */
+  planningPreview: KiroPlanningPreview | null;
+  setPlanningPreview: (p: KiroPlanningPreview | null) => void;
+}
+
+/** Ghost StudyBlock（ephemeral：不写入 Store / localStorage） */
+export interface KiroPlanningPreview {
+  blocks: {
+    id: string;
+    date: string;
+    startTime: string;
+    endTime: string;
+    title: string;
+    assignmentId?: string;
+    courseId?: string;
+  }[];
 }
 
 /** Runtime：随 Chat 高频变化（主要消费者：Surface / Composer / Conversation） */
@@ -142,6 +158,8 @@ export function KiroSessionProvider({ children }: { children: React.ReactNode })
   const [suggestionsKind, setSuggestionsKind] = useState<KiroSuggestionsKind | null>(null);
   const suggestionsGenRef = useRef(0);
   const [lastUserTurnGen, setLastUserTurnGen] = useState(0);
+  // Ghost Preview（Task 4A）：UI-only，不持久化
+  const [planningPreview, setPlanningPreview] = useState<KiroPlanningPreview | null>(null);
 
   // Conversation History（Task 6）：只存本地 IndexedDB；不进入 useAppStore（属 AI Session 数据）
   const [conversationId, setConversationId] = useState<string | null>(null);
@@ -661,6 +679,8 @@ export function KiroSessionProvider({ children }: { children: React.ReactNode })
     openForGroupProject,
     openForWeek,
     handoffPrompt,
+    planningPreview,
+    setPlanningPreview,
   };
 
   // 把 send 换成带回合标记的版本（surface 使用）

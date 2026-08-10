@@ -13,6 +13,9 @@ import { parseLocalDDL, getLocalDDLDate, getLocalDDLTime } from "@/lib/ddl";
 import { getSemesterWeek, getWeekDateRange } from "@/lib/semester";
 import { isScheduleActive, timeToMinutes } from "@/lib/schedule";
 import { deriveTaskWorkspace } from "@/lib/tasks/taskViews";
+import { deriveAssignmentHealth } from "@/lib/tasks/taskHealth";
+import { findFreeTime } from "@/lib/planning/freeTime";
+import { proposeStudyPlan } from "@/lib/planning/studyPlanner";
 import { KIRO_READ_TOOL_SCHEMAS, KiroReadToolName } from "@/lib/ai/tools/read/schemas";
 
 /**
@@ -367,6 +370,125 @@ export function getAssignmentSchedule(state: ReadToolState, input: unknown): Rea
   };
 }
 
+export function getAssignmentHealth(state: ReadToolState, input: unknown): ReadToolResult<unknown> {
+  const parsed = safeParse<{ assignmentId: string }>("get_assignment_health", input);
+  if (!parsed.ok) return parsed;
+  const a = findAssignment(state, parsed.data.assignmentId);
+  if (!a) return notFound("未找到对应任务。");
+  const now = new Date();
+
+  // Deadline 前可用空闲分钟：now → deadline（Deadline 当天截止到 Deadline 时刻）
+  let availableMinutesBeforeDeadline: number | undefined;
+  if (a.ddl) {
+    const deadline = parseLocalDDL(a.ddl);
+    if (deadline && deadline.getTime() > now.getTime()) {
+      const dlDate = a.ddl.slice(0, 10);
+      const dlMinutes = deadline.getHours() * 60 + deadline.getMinutes();
+      const slots = findFreeTime({
+        start: now,
+        end: deadline,
+        semester: state.semester,
+        currentSemesterWeek: state.currentSemesterWeek,
+        schedules: state.schedules,
+        calendarMarks: state.calendarMarks,
+        studyBlocks: state.studyBlocks,
+        dayCapMinutesByDate: { [dlDate]: dlMinutes },
+      });
+      availableMinutesBeforeDeadline = slots.reduce((sum, s) => sum + s.minutes, 0);
+    }
+  }
+
+  const health = deriveAssignmentHealth({
+    assignment: a,
+    studyBlocks: state.studyBlocks,
+    now,
+    availableMinutesBeforeDeadline,
+  });
+
+  return { ok: true, data: health };
+}
+
+export function getAvailableTime(state: ReadToolState, input: unknown): ReadToolResult<unknown> {
+  const parsed = safeParse<{ startDate: string; endDate: string; minimumMinutes?: number; beforeDeadlineOfAssignmentId?: string }>("get_available_time", input);
+  if (!parsed.ok) return parsed;
+  const { startDate, endDate, minimumMinutes, beforeDeadlineOfAssignmentId } = parsed.data;
+  const start = new Date(`${startDate}T00:00:00`);
+  const end = new Date(`${endDate}T23:59:59`);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return invalidInput("日期格式不合法。");
+  if (end < start) return invalidInput("结束日期早于开始日期。");
+  if (differenceInDays(end, start) > 30) return { ok: false, code: "OUT_OF_RANGE", message: "查询范围最长 30 天。" };
+
+  const dayCapMinutesByDate: Record<string, number> = {};
+  let effectiveEnd = end;
+  if (beforeDeadlineOfAssignmentId) {
+    const a = findAssignment(state, beforeDeadlineOfAssignmentId);
+    if (!a) return notFound("未找到对应任务。");
+    if (a.ddl) {
+      const deadline = parseLocalDDL(a.ddl);
+      if (deadline) {
+        if (deadline.getTime() < end.getTime()) effectiveEnd = deadline;
+        const dlDate = a.ddl.slice(0, 10);
+        if (dlDate >= startDate && dlDate <= endDate) {
+          dayCapMinutesByDate[dlDate] = deadline.getHours() * 60 + deadline.getMinutes();
+        }
+      }
+    }
+  }
+
+  const slots = findFreeTime({
+    start,
+    end: effectiveEnd,
+    semester: state.semester,
+    currentSemesterWeek: state.currentSemesterWeek,
+    schedules: state.schedules,
+    calendarMarks: state.calendarMarks,
+    studyBlocks: state.studyBlocks,
+    dayCapMinutesByDate,
+    minimumSlotMinutes: minimumMinutes,
+  });
+
+  return { ok: true, data: { startDate, endDate, slots: slots.slice(0, 20) } };
+}
+
+export function proposeStudyPlanTool(state: ReadToolState, input: unknown): ReadToolResult<unknown> {
+  const parsed = safeParse<{ assignmentIds: string[]; fromDate?: string; toDate?: string }>("propose_study_plan", input);
+  if (!parsed.ok) return parsed;
+  const { assignmentIds, fromDate, toDate } = parsed.data;
+
+  const now = new Date();
+  // 本周（默认窗口）：周一 → 周日；可被 fromDate/toDate 覆盖
+  const weekStart = getWeekDateRange(state.semester, state.currentSemesterWeek)[0];
+  const fromStr = fromDate ?? format(weekStart, "yyyy-MM-dd");
+  const toStr = toDate ?? format(new Date(weekStart.getTime() + 6 * 86400000), "yyyy-MM-dd");
+
+  const targets = assignmentIds
+    .map((id) => findAssignment(state, id))
+    .filter((a): a is Assignment => a !== null);
+  if (targets.length === 0) return notFound("未找到对应任务。");
+
+  const result = proposeStudyPlan({
+    assignments: targets,
+    studyBlocks: state.studyBlocks,
+    semester: state.semester,
+    currentSemesterWeek: state.currentSemesterWeek,
+    schedules: state.schedules,
+    calendarMarks: state.calendarMarks,
+    fromDate: fromStr,
+    toDate: toStr,
+    now,
+  });
+
+  return {
+    ok: true,
+    data: {
+      fromDate: fromStr,
+      toDate: toStr,
+      items: result.items,
+      reasons: result.reasons,
+    },
+  };
+}
+
 export function getUpcomingAssignments(state: ReadToolState, input: unknown): ReadToolResult<unknown> {
   const parsed = safeParse<{ days?: number; limit?: number }>("get_upcoming_assignments", input);
   if (!parsed.ok) return parsed;
@@ -572,6 +694,9 @@ const EXECUTORS: Record<Exclude<KiroReadToolName, "read_material">, (state: Read
   search_assignments: searchAssignments,
   get_assignment: getAssignment,
   get_assignment_schedule: getAssignmentSchedule,
+  get_assignment_health: getAssignmentHealth,
+  get_available_time: getAvailableTime,
+  propose_study_plan: proposeStudyPlanTool,
   get_upcoming_assignments: getUpcomingAssignments,
   search_group_projects: searchGroupProjects,
   get_group_project: getGroupProject,

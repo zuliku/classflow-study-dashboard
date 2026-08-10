@@ -29,6 +29,7 @@ import { hasExplicitMemoryIntent } from "@/lib/ai/memory/manager";
 import { KIRO_MEMORY_TOOL_NAMES, KIRO_MEMORY_TOOL_SCHEMAS } from "@/lib/ai/memory/tools";
 import { MAX_MEMORIES } from "@/lib/ai/memory/types";
 import { PersistedActionView, PersistedAttachmentView, KiroConversationRecord, KiroConversationSummary, PersistedSourceMeta } from "@/lib/ai/history/types";
+import { StudyPlanProposal } from "@/lib/planning/studyPlanner";
 import { budgetAttachments } from "@/lib/ai/contextBudget/attachmentBudget";
 import { DEFAULT_CONTEXT_BUDGET } from "@/lib/ai/contextBudget/planner";
 import { KiroTurnContextSnapshot } from "@/lib/ai/contextBudget/types";
@@ -56,6 +57,8 @@ export interface KiroChatMessageView {
   sources?: KiroSourceMeta[];
   /** 该 User Turn 绑定的附件（chips 展示；File 对象不进入 Chat state） */
   attachments?: KiroAttachmentView[];
+  /** Kiro propose_study_plan 的真实结果（Proposal Card 事实来源；模型不得生成） */
+  proposals?: StudyPlanProposal[];
   /** 是否可以「重新生成」：仅 live 且该轮无 Write Tool Call 的最后一条 */
   canRegenerate: boolean;
 }
@@ -152,9 +155,18 @@ function toView(m: UIMessage): KiroChatMessageView {
   // 真实 Write Tool 结果（ok:true 且带 action）→ Action Card 数据
   // Memory 工具只发 Toast，不生成 Action Card
   const actions: KiroActionResultView[] = [];
+  const proposals: StudyPlanProposal[] = [];
   for (const p of parts) {
     if (typeof p.type !== "string" || !p.type.startsWith("tool-")) continue;
     const tp = p as ToolCallPart;
+    if (toolNameOf(tp) === "propose_study_plan") {
+      const output = tp.output as ReadToolResult<unknown> | undefined;
+      if (output && output.ok === true) {
+        const data = output.data as { items?: StudyPlanProposal[] } | undefined;
+        if (data?.items) proposals.push(...data.items);
+      }
+      continue;
+    }
     if ((KIRO_MEMORY_TOOL_NAMES as string[]).includes(toolNameOf(tp))) continue;
     const output = tp.output as WriteToolResult | undefined;
     if (output && output.ok === true && output.action) {
@@ -169,6 +181,7 @@ function toView(m: UIMessage): KiroChatMessageView {
     content,
     streaming,
     actions: actions.length > 0 ? actions : undefined,
+    proposals: proposals.length > 0 ? proposals : undefined,
     // 历史恢复消息：禁止重新生成；live 且有 Write Tool Call 的轮次同样禁止
     canRegenerate: !restored && !messageHasWriteToolCalls(m),
   };

@@ -45,6 +45,26 @@ export const KIRO_READ_TOOLS = {
       "不要让模型遍历整个日历推算；本工具直接返回确定性结果。",
     inputSchema: KIRO_READ_TOOL_SCHEMAS.get_assignment_schedule,
   }),
+  get_assignment_health: tool({
+    description:
+      "判断某任务的 Deadline Health（确定性规则，非 AI 估计）：safe / attention / at-risk / overdue / unscheduled / unknown。" +
+      "任务没有截止时间或没有预计耗时会返回 unknown（合法状态）。返回截止前已安排分钟数、缺口分钟数与截止前可用空闲分钟数。",
+    inputSchema: KIRO_READ_TOOL_SCHEMAS.get_assignment_health,
+  }),
+  get_available_time: tool({
+    description:
+      "查询日期范围内的可用学习时间（自动排除生效课程、考试/固定活动、已有学习计划；08:00–21:00 窗口；不返回过去时间）。" +
+      "可选 beforeDeadlineOfAssignmentId：终点自动不超过该任务 Deadline（Deadline 当天最多到 Deadline 时刻）。" +
+      "不要让模型自己推算空闲时段，一律使用本工具。",
+    inputSchema: KIRO_READ_TOOL_SCHEMAS.get_available_time,
+  }),
+  propose_study_plan: tool({
+    description:
+      "为任务生成学习计划建议（确定性：Deadline 越早越优先，其次优先级；只补预计耗时缺口；30–90 分钟块；overdue 任务不安排）。" +
+      "这是 READ / PROPOSAL 工具，绝不写入 Store、绝不创建 StudyBlock；结果只是建议，用户确认后未来才会真正写入。" +
+      "生成排程建议必须优先使用本工具，不要让模型自己编造时间。",
+    inputSchema: KIRO_READ_TOOL_SCHEMAS.propose_study_plan,
+  }),
   get_upcoming_assignments: tool({
     description: "查看未来 N 天内截止的任务（默认 7 天），按 DDL 升序，默认排除已完成，逾期单独标记。",
     inputSchema: KIRO_READ_TOOL_SCHEMAS.get_upcoming_assignments,

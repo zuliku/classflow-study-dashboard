@@ -42,6 +42,26 @@ export const getAssignmentScheduleSchema = z.object({
   assignmentId: z.string().trim().min(1).max(120),
 });
 
+export const getAssignmentHealthSchema = z.object({
+  assignmentId: z.string().trim().min(1).max(120),
+});
+
+export const getAvailableTimeSchema = z.object({
+  startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "日期格式必须为 YYYY-MM-DD"),
+  endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "日期格式必须为 YYYY-MM-DD"),
+  /** 最短空闲时段（分钟），默认 30 */
+  minimumMinutes: z.number().int().min(15).max(240).optional(),
+  /** 提供任务 ID 时：终点自动不超过该任务 Deadline（Deadline 当天最多到 Deadline 时刻） */
+  beforeDeadlineOfAssignmentId: z.string().trim().min(1).max(120).optional(),
+});
+
+export const proposeStudyPlanSchema = z.object({
+  /** 要安排的任务（最多 8 个）；overdue 任务不会被安排 */
+  assignmentIds: z.array(z.string().trim().min(1).max(120)).min(1).max(8),
+  fromDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "日期格式必须为 YYYY-MM-DD").optional(),
+  toDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "日期格式必须为 YYYY-MM-DD").optional(),
+});
+
 export const getUpcomingAssignmentsSchema = z.object({
   days: z.number().int().min(1).max(30).default(7),
   limit: z.number().int().min(1).max(20).default(10),
@@ -90,6 +110,9 @@ export const KIRO_READ_TOOL_SCHEMAS = {
   search_assignments: searchAssignmentsSchema,
   get_assignment: getAssignmentSchema,
   get_assignment_schedule: getAssignmentScheduleSchema,
+  get_assignment_health: getAssignmentHealthSchema,
+  get_available_time: getAvailableTimeSchema,
+  propose_study_plan: proposeStudyPlanSchema,
   get_upcoming_assignments: getUpcomingAssignmentsSchema,
   search_group_projects: searchGroupProjectsSchema,
   get_group_project: getGroupProjectSchema,
