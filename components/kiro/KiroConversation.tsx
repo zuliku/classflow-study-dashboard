@@ -11,7 +11,6 @@ import { KiroActionCard, actionToCardProps, KiroActionCardVariant } from "@/comp
 import { StudyPlanProposalCard } from "@/components/kiro/StudyPlanProposalCard";
 import { TaskBreakdownProposalCard } from "@/components/kiro/TaskBreakdownProposalCard";
 import { actionSummaryText } from "@/lib/ai/share";
-import { useKiroSession } from "@/components/kiro/KiroSessionProvider";
 import { cn } from "@/lib/utils";
 import { RotateCcw, Settings, ChevronDown } from "lucide-react";
 
@@ -44,20 +43,26 @@ export function KiroConversation({
   sources?: KiroSourceMeta[];
 }) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
+  const contentRef = useRef<HTMLDivElement | null>(null);
   const stickToBottomRef = useRef(true);
   const [showScrollBtn, setShowScrollBtn] = React.useState(false);
-  const { conversationSummary } = useKiroSessionMeta();
+  const { conversationSummary, currentConversationId } = useKiroSessionMeta();
 
   // 尾部信号（Task 13）：不再为滚动构建整段 messages.map(...).join() key；
-  // 只跟随会真正改变滚动高度的尾部状态
+  // 只跟随会真正改变滚动高度的尾部状态（含 Proposal / Breakdown Card 等高度变化源）
   const tail = messages[messages.length - 1];
   const scrollSignal = [
     messages.length,
     tail?.id,
     tail?.content.length ?? 0,
     tail?.actions?.length ?? 0,
+    tail?.historyActions?.length ?? 0,
+    tail?.proposals?.length ?? 0,
+    tail?.breakdowns?.length ?? 0,
     activity.phase,
     activity.steps.length,
+    activity.visible,
+    activity.done,
   ].join("|");
 
   // 最后一条 assistant 消息：其操作栏必须等整个 Turn 结束（turnInFlight false）才显示；
@@ -70,15 +75,22 @@ export function KiroConversation({
     }
   }
 
-  const onScroll = () => {
+  /** 统一滚动状态同步（scroll 事件 / 内容高度变化共用） */
+  const syncScrollState = React.useCallback(() => {
     const el = scrollRef.current;
     if (!el) return;
-    stickToBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
-    const shouldShow = el.scrollHeight - el.scrollTop - el.clientHeight > 160;
+    const distance = el.scrollHeight - el.scrollTop - el.clientHeight;
+    stickToBottomRef.current = distance < 80;
+    const shouldShow = distance > 160;
     setShowScrollBtn((prev) => (prev === shouldShow ? prev : shouldShow));
+  }, []);
+
+  const onScroll = () => {
+    syncScrollState();
   };
 
-  // 自动滚动（Task 13）：rAF 合并同一帧内的多次更新，避免每个 token 直接写 scrollTop
+  // 自动滚动（Task 13）：rAF 合并同一帧内的多次更新，避免每个 token 直接写 scrollTop；
+  // streaming 自动跟随使用直接 scrollTop 赋值（不做 smooth，避免抖动 / scroll queue）
   const rafRef = useRef<number | null>(null);
   useEffect(() => {
     const el = scrollRef.current;
@@ -96,11 +108,62 @@ export function KiroConversation({
     };
   }, [scrollSignal]);
 
+  // 内容高度变化（streaming / Action / Proposal / Breakdown Card 增长）：
+  // ResizeObserver 观察内容 wrapper → rAF 合并 → 到底跟随 or 只更新按钮状态
+  useEffect(() => {
+    const content = contentRef.current;
+    if (!content) return;
+    const observer = new ResizeObserver(() => {
+      if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
+      rafRef.current = requestAnimationFrame(() => {
+        rafRef.current = null;
+        const el = scrollRef.current;
+        if (!el) return;
+        if (stickToBottomRef.current) {
+          el.scrollTop = el.scrollHeight;
+        }
+        syncScrollState();
+      });
+    });
+    observer.observe(content);
+    return () => {
+      observer.disconnect();
+      if (rafRef.current !== null) {
+        cancelAnimationFrame(rafRef.current);
+        rafRef.current = null;
+      }
+    };
+  }, [syncScrollState]);
+
+  // 切换会话 / 首次挂载：重置滚动状态（历史会话默认看到最新消息；新会话不继承旧状态）
+  const conversationScrollKey = currentConversationId ?? messages[0]?.id ?? "new";
+  const prevConversationKeyRef = useRef<string | null>(null);
+  useEffect(() => {
+    const key = conversationScrollKey;
+    if (prevConversationKeyRef.current === null) {
+      prevConversationKeyRef.current = key;
+      const el = scrollRef.current;
+      if (el) el.scrollTop = el.scrollHeight;
+      return;
+    }
+    if (prevConversationKeyRef.current !== key) {
+      prevConversationKeyRef.current = key;
+      stickToBottomRef.current = true;
+      setShowScrollBtn(false);
+      const raf = requestAnimationFrame(() => {
+        const el = scrollRef.current;
+        if (el) el.scrollTop = el.scrollHeight;
+      });
+      return () => cancelAnimationFrame(raf);
+    }
+  }, [conversationScrollKey]);
+
   const scrollToBottom = () => {
     const el = scrollRef.current;
     if (!el) return;
     stickToBottomRef.current = true;
     const reduced = document.documentElement.dataset.motion === "reduced";
+    // 用户手动点击：允许 smooth；streaming 自动跟随仍用直接赋值
     el.scrollTo({ top: el.scrollHeight, behavior: reduced ? "auto" : "smooth" });
     setShowScrollBtn(false);
   };
@@ -119,13 +182,75 @@ export function KiroConversation({
   const showAgentProgress = activity.visible || agentLeaving;
 
   return (
-    <div
-      ref={scrollRef}
-      onScroll={onScroll}
-      data-testid="kiro-conversation"
-      className="relative flex-1 min-h-0 overflow-y-auto"
-    >
-      {/* 用户上滑离开底部时：轻量「回到底部」浮钮（不遮挡 Composer） */}
+    // Outer Viewport Wrapper：负责浮层定位；Scroll Container 独立承担滚动（Task 6B-A）
+    <div data-testid="kiro-conversation" className="relative flex-1 min-h-0">
+      <div ref={scrollRef} onScroll={onScroll} className="h-full overflow-y-auto">
+        <div ref={contentRef} className={cn("max-w-[820px] mx-auto space-y-5 py-3 pb-12", compact ? "px-3" : "px-1")}>
+          {/* 极轻提示：真正发生过旧对话压缩时（不显示 token 数字） */}
+          {conversationSummary && (
+            <div className="flex justify-center">
+              <span
+                title="Kiro 保留最近消息，并压缩较早内容以保持对话稳定。"
+                className="text-[10px] text-sandrift bg-[#F7F5F5] border border-line px-2 py-0.5 rounded-full"
+              >
+                较早对话已压缩
+              </span>
+            </div>
+          )}
+          {messages.map((m, idx) => (
+            <KiroConversationRow
+              key={m.id}
+              view={m}
+              actionsReady={idx === lastAssistantIndex ? !turnInFlight : true}
+              sources={idx === lastAssistantIndex ? sources : undefined}
+              onUndo={onUndo}
+              onRetry={onRetry}
+            />
+          ))}
+
+          {/* Agent 执行反馈（真实阶段 + 语义步骤；文本开始后淡出，有工具时保留完成摘要） */}
+          {showAgentProgress && (
+            <div
+              className={cn(
+                "transition-opacity duration-[var(--motion-fast)] ease-[var(--ease-standard)]",
+                agentLeaving && "opacity-0"
+              )}
+            >
+              <KiroActivityTrace steps={activity.steps} phase={activity.phase} done={activity.done} compact={compact} />
+            </div>
+          )}
+
+          {error && (
+            <div
+              data-testid="kiro-error"
+              className="rounded-2xl bg-danger-bg border border-danger-border p-3.5 space-y-2"
+            >
+              <p className="text-xs font-bold text-danger">Kiro 暂时没有完成回复</p>
+              <p className="text-[11px] text-satin-grey leading-relaxed">
+                {error.message || AI_ERROR_MESSAGES[error.code]}
+              </p>
+              <div className="flex items-center gap-2 pt-0.5">
+                <button
+                  onClick={onRetry}
+                  className="flex items-center gap-1.5 px-3 h-8 rounded-lg text-[11px] font-bold text-white bg-charcoal hover:bg-black transition-colors"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  重试
+                </button>
+                <button
+                  onClick={onOpenSettings}
+                  className="flex items-center gap-1.5 px-3 h-8 rounded-lg text-[11px] font-semibold text-satin-grey bg-surface border border-line hover:text-charcoal hover:border-line-strong transition-colors"
+                >
+                  <Settings className="w-3.5 h-3.5" />
+                  打开设置
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* 用户上滑离开底部时：轻量「回到底部」浮钮（锚定 Conversation 可见区底部，不随消息滚动） */}
       {showScrollBtn && (
         <button
           onClick={scrollToBottom}
@@ -136,69 +261,6 @@ export function KiroConversation({
           <ChevronDown className="w-4 h-4" />
         </button>
       )}
-      <div className={cn("max-w-[820px] mx-auto space-y-5 py-3", compact ? "px-3" : "px-1")}>
-        {/* 极轻提示：真正发生过旧对话压缩时（不显示 token 数字） */}
-        {conversationSummary && (
-          <div className="flex justify-center">
-            <span
-              title="Kiro 保留最近消息，并压缩较早内容以保持对话稳定。"
-              className="text-[10px] text-sandrift bg-[#F7F5F5] border border-line px-2 py-0.5 rounded-full"
-            >
-              较早对话已压缩
-            </span>
-          </div>
-        )}
-        {messages.map((m, idx) => (
-          <KiroConversationRow
-            key={m.id}
-            view={m}
-            actionsReady={idx === lastAssistantIndex ? !turnInFlight : true}
-            sources={idx === lastAssistantIndex ? sources : undefined}
-            onUndo={onUndo}
-            onRetry={onRetry}
-          />
-        ))}
-
-        {/* Agent 执行反馈（真实阶段 + 语义步骤；文本开始后淡出，有工具时保留完成摘要） */}
-        {showAgentProgress && (
-          <div
-            className={cn(
-              "transition-opacity duration-[var(--motion-fast)] ease-[var(--ease-standard)]",
-              agentLeaving && "opacity-0"
-            )}
-          >
-            <KiroActivityTrace steps={activity.steps} phase={activity.phase} done={activity.done} compact={compact} />
-          </div>
-        )}
-
-        {error && (
-          <div
-            data-testid="kiro-error"
-            className="rounded-2xl bg-danger-bg border border-danger-border p-3.5 space-y-2"
-          >
-            <p className="text-xs font-bold text-danger">Kiro 暂时没有完成回复</p>
-            <p className="text-[11px] text-satin-grey leading-relaxed">
-              {error.message || AI_ERROR_MESSAGES[error.code]}
-            </p>
-            <div className="flex items-center gap-2 pt-0.5">
-              <button
-                onClick={onRetry}
-                className="flex items-center gap-1.5 px-3 h-8 rounded-lg text-[11px] font-bold text-white bg-charcoal hover:bg-black transition-colors"
-              >
-                <RotateCcw className="w-3.5 h-3.5" />
-                重试
-              </button>
-              <button
-                onClick={onOpenSettings}
-                className="flex items-center gap-1.5 px-3 h-8 rounded-lg text-[11px] font-semibold text-satin-grey bg-surface border border-line hover:text-charcoal hover:border-line-strong transition-colors"
-              >
-                <Settings className="w-3.5 h-3.5" />
-                打开设置
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
     </div>
   );
 }

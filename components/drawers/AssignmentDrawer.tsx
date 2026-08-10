@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   X,
   Clock,
@@ -10,16 +10,19 @@ import {
   BookOpen,
   Edit3,
   ChevronRight,
+  ChevronDown,
   CalendarClock,
   Tags,
   CalendarDays,
   Paperclip,
   Plus,
   Check,
+  Upload,
   FileText,
   Presentation,
   Link2,
   FileImage,
+  Loader2,
 } from "lucide-react";
 import { useAppStore } from "@/store/useAppStore";
 import { useToastStore } from "@/store/useToastStore";
@@ -29,6 +32,7 @@ import { zhCN } from "date-fns/locale";
 import { parseLocalDDL } from "@/lib/ddl";
 import { formatEstimatedMinutes } from "@/lib/tasks/taskSemantics";
 import { resolveAssignmentMaterials } from "@/lib/tasks/taskMaterials";
+import { uploadCourseMaterials } from "@/lib/materialUpload";
 import { deriveAssignmentHealthWithAvailability, healthViewMeta, healthExplanation } from "@/lib/tasks/taskHealthView";
 import { usePresence } from "@/lib/usePresence";
 import { useRestoreFocus } from "@/lib/useRestoreFocus";
@@ -97,6 +101,11 @@ export function AssignmentDrawer() {
   const handoff = useKiroHandoff();
   // Task 6A：关联资料 Mini Picker 展开状态
   const [materialPickerOpen, setMaterialPickerOpen] = useState(false);
+  // Task 6B-B：添加资料下拉（选择课程资料 / 上传文件）与上传中状态
+  const [addMenuOpen, setAddMenuOpen] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const addMenuRef = useRef<HTMLDivElement | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const assignment = assignments.find((a) => a.id === selectedAssignmentId);
   const { mounted, visible } = usePresence(!!assignment, 260);
@@ -115,6 +124,16 @@ export function AssignmentDrawer() {
       window.removeEventListener("keydown", onKey);
     };
   }, [mounted, setSelectedAssignmentId]);
+
+  // Task 6B-B：添加资料下拉 outside click 关闭（非 modal，不拦截页面交互）
+  useEffect(() => {
+    if (!addMenuOpen) return;
+    const onPointerDown = (e: PointerEvent) => {
+      if (!addMenuRef.current?.contains(e.target as Node)) setAddMenuOpen(false);
+    };
+    document.addEventListener("pointerdown", onPointerDown);
+    return () => document.removeEventListener("pointerdown", onPointerDown);
+  }, [addMenuOpen]);
 
   if (!mounted || !assignment) return null;
 
@@ -159,6 +178,47 @@ export function AssignmentDrawer() {
       ? current.filter((id) => id !== materialId)
       : [...current, materialId];
     setAssignmentMaterialIds(assignment.id, next);
+  };
+
+  // Task 6B-B：上传文件 → 创建真实 Course Material → 自动关联当前任务
+  const handleUploadFiles = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    setUploading(true);
+    try {
+      const fresh = useAppStore.getState();
+      const result = await uploadCourseMaterials({
+        courseId: assignment.courseId,
+        files: Array.from(files),
+        addMaterial: fresh.addCourseMaterial,
+      });
+      if (result.succeeded.length > 0) {
+        const current = fresh.assignments.find((a) => a.id === assignment.id);
+        const existing = current?.materialIds ?? [];
+        fresh.setAssignmentMaterialIds(assignment.id, [
+          ...existing,
+          ...result.succeeded.map((m) => m.id),
+        ]);
+        pushToast({
+          message:
+            result.succeeded.length === 1
+              ? "已添加 1 份任务资料"
+              : `已添加 ${result.succeeded.length} 份任务资料`,
+        });
+      }
+      if (result.failed.length > 0) {
+        pushToast({
+          type: "warning",
+          message:
+            result.failed.length === 1
+              ? `《${result.failed[0]}》上传失败`
+              : `另有 ${result.failed.length} 份上传失败`,
+        });
+      }
+    } finally {
+      setUploading(false);
+      e.target.value = "";
+    }
   };
 
   // Task 6A：根据关联资料请 Kiro 分析（轻量快捷入口，复用现有 Handoff）
@@ -437,13 +497,64 @@ export function AssignmentDrawer() {
                     根据资料分析
                   </button>
                 )}
-                <button
-                  onClick={() => setMaterialPickerOpen((v) => !v)}
-                  className="flex items-center gap-1 text-[10px] font-semibold text-satin-grey bg-white border border-line rounded-lg px-2 py-1 hover:text-charcoal hover:border-line-strong transition-colors"
-                >
-                  <Plus className="w-3 h-3" />
-                  {materialPickerOpen ? "收起" : "添加资料"}
-                </button>
+                <div className="relative" ref={addMenuRef}>
+                  <button
+                    onClick={() => {
+                      setAddMenuOpen((v) => !v);
+                      setMaterialPickerOpen(false);
+                    }}
+                    disabled={uploading}
+                    className="flex items-center gap-1 text-[10px] font-semibold text-satin-grey bg-white border border-line rounded-lg px-2 py-1 hover:text-charcoal hover:border-line-strong transition-colors disabled:opacity-50"
+                  >
+                    {uploading ? (
+                      <Loader2 className="w-3 h-3 animate-spin" />
+                    ) : (
+                      <Plus className="w-3 h-3" />
+                    )}
+                    {uploading ? "上传中…" : "添加资料"}
+                    {!uploading && <ChevronDown className="w-3 h-3" />}
+                  </button>
+                  {addMenuOpen && (
+                    <div
+                      data-testid="assignment-add-material-menu"
+                      className="absolute right-0 top-full mt-1.5 w-48 bg-surface border border-line-strong rounded-xl shadow-card p-1 z-40 text-[11px] ux-inline"
+                    >
+                      <button
+                        onClick={() => {
+                          setAddMenuOpen(false);
+                          setMaterialPickerOpen((v) => !v);
+                        }}
+                        className="w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-left font-semibold text-charcoal hover:bg-alabaster transition-colors"
+                      >
+                        <BookOpen className="w-3.5 h-3.5 text-sandrift" />
+                        选择课程资料
+                      </button>
+                      <button
+                        onClick={() => {
+                          setAddMenuOpen(false);
+                          fileInputRef.current?.click();
+                        }}
+                        className="w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-left font-semibold text-charcoal hover:bg-alabaster transition-colors"
+                      >
+                        <Upload className="w-3.5 h-3.5 text-sandrift" />
+                        上传文件
+                      </button>
+                      <p className="px-2.5 pt-1 pb-1.5 text-[9px] text-sandrift">
+                        上传后自动关联本任务（同时出现在课程资料）
+                      </p>
+                    </div>
+                  )}
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    multiple
+                    accept=".pdf,.doc,.docx,.ppt,.pptx,.txt,.md,.png,.jpg,.jpeg,.webp"
+                    onChange={handleUploadFiles}
+                    className="hidden"
+                    aria-hidden="true"
+                    tabIndex={-1}
+                  />
+                </div>
               </div>
             </div>
 

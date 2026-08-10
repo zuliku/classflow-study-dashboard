@@ -52,3 +52,60 @@ export function computeContextMenuPosition(input: ContextMenuPositionInput): { x
 
   return { x, y };
 }
+
+/**
+ * 通用 Floating Menu 定位（Task 6B-A：Attachment Chip Portal Menu 等）：
+ * 输入锚点 rect + 渲染后真实菜单尺寸 + viewport → 计算 fixed 坐标。
+ * - preferredSide=top：默认向上展开；顶部空间不足 → 自动翻转到下方（反之亦然）
+ * - align=end：菜单右缘对齐锚点右缘（start = 左缘对齐）
+ * - 最终 clamp 到 8px viewport 安全边距
+ */
+export interface FloatingPositionInput {
+  anchorRect: { left: number; top: number; right: number; bottom: number };
+  menuWidth: number;
+  menuHeight: number;
+  viewportWidth?: number;
+  viewportHeight?: number;
+  /** 首选展开方向；空间不足自动翻转 */
+  preferredSide?: "top" | "bottom";
+  /** 水平对齐：end = 菜单右缘对齐锚点右缘 */
+  align?: "start" | "end";
+  offset?: number;
+  padding?: number;
+}
+
+export function computeFloatingPosition(input: FloatingPositionInput): { x: number; y: number } {
+  const {
+    anchorRect,
+    menuWidth,
+    menuHeight,
+    viewportWidth = window.innerWidth,
+    viewportHeight = window.innerHeight,
+    preferredSide = "top",
+    align = "end",
+    offset = 8,
+    padding = 8,
+  } = input;
+
+  const spaceTop = anchorRect.top - padding;
+  const spaceBottom = viewportHeight - anchorRect.bottom - padding;
+
+  const enoughTop = spaceTop >= menuHeight;
+  const enoughBottom = spaceBottom >= menuHeight;
+  const side: "top" | "bottom" =
+    preferredSide === "top"
+      ? enoughTop || (!enoughBottom && spaceTop >= spaceBottom)
+        ? "top"
+        : "bottom"
+      : enoughBottom || (!enoughTop && spaceBottom >= spaceTop)
+        ? "bottom"
+        : "top";
+
+  let x = align === "end" ? anchorRect.right - menuWidth : anchorRect.left;
+  let y = side === "top" ? anchorRect.top - menuHeight - offset : anchorRect.bottom + offset;
+
+  x = Math.min(Math.max(x, padding), Math.max(padding, viewportWidth - menuWidth - padding));
+  y = Math.min(Math.max(y, padding), Math.max(padding, viewportHeight - menuHeight - padding));
+
+  return { x, y };
+}

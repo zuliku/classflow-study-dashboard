@@ -21,7 +21,8 @@ import { useAppStore } from "@/store/useAppStore";
 import { useToastStore } from "@/store/useToastStore";
 import { useConfirmStore } from "@/store/useConfirmStore";
 import { Material, CourseSchedule, ScheduleConflict } from "@/types";
-import { saveFileBlob, createStorageKey, deleteFileBlob } from "@/lib/fileStorage";
+import { deleteFileBlob } from "@/lib/fileStorage";
+import { uploadCourseMaterials } from "@/lib/materialUpload";
 import { getLocalDDLDate } from "@/lib/ddl";
 import { WEEK_RANGE_PRESETS, isValidTimeRange } from "@/lib/schedule";
 import { findScheduleConflicts } from "@/lib/conflicts";
@@ -342,50 +343,27 @@ export function CourseDetailDrawer() {
   };
 
   // Real File Upload Handler: File → IndexedDB 保存 Blob → 生成 storageKey → Zustand 只存 metadata
+  // （Task 6B-B：统一走 lib/materialUpload，Course / Task 上传不再维护两份逻辑）
   const handleRealFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
 
     setIsUploading(true);
-    let uploaded = 0;
-    let failed = 0;
     try {
-      for (const file of Array.from(files)) {
-        const storageKey = createStorageKey();
-        try {
-          await saveFileBlob(storageKey, file);
-        } catch {
-          failed += 1;
-          pushToast({ type: "error", message: `《${file.name}》保存失败，请重试` });
-          continue;
-        }
-
-        const sizeStr = (file.size / (1024 * 1024)).toFixed(2) + " MB";
-        const ext = file.name.split(".").pop()?.toLowerCase() || "";
-
-        let type: Material["type"] = "doc";
-        if (ext === "pdf") type = "pdf";
-        else if (["ppt", "pptx"].includes(ext)) type = "ppt";
-        else if (["png", "jpg", "jpeg", "svg", "gif", "webp"].includes(ext)) type = "image";
-
-        addCourseMaterial(course.id, {
-          title: file.name,
-          type,
-          size: sizeStr,
-          storageKey,
-        });
-        uploaded += 1;
+      const { succeeded, failed } = await uploadCourseMaterials({
+        courseId: course.id,
+        files: Array.from(files),
+        addMaterial: addCourseMaterial,
+      });
+      if (succeeded.length > 0) {
+        pushToast({ message: succeeded.length === 1 ? "资料已上传" : `${succeeded.length} 份资料已上传` });
+      }
+      for (const name of failed) {
+        pushToast({ type: "error", message: `《${name}》保存失败，请重试` });
       }
     } finally {
       setIsUploading(false);
       e.target.value = "";
-    }
-
-    if (uploaded > 0) {
-      pushToast({ message: uploaded === 1 ? "资料已上传" : `${uploaded} 份资料已上传` });
-    }
-    if (failed > 0) {
-      pushToast({ type: "warning", message: `${failed} 份资料上传失败` });
     }
   };
 

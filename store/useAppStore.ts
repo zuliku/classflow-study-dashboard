@@ -238,7 +238,7 @@ export interface AppState {
   addCourseMaterial: (
     courseId: string,
     material: { title: string; type: Material["type"]; size?: string; url?: string; storageKey?: string }
-  ) => void;
+  ) => Material;
   /** 删除资料：仅移除 Zustand metadata；Blob 由调用方在撤销窗口结束后延迟删除 */
   deleteCourseMaterial: (courseId: string, materialId: string) => Material | null;
   /** 撤销删除：恢复资料 metadata（Blob 未被删除） */
@@ -580,33 +580,28 @@ export const useAppStore = create<AppState>()(
           schedules: [...state.schedules, ...newSchedules],
         })),
 
-      addCourseMaterial: (courseId, materialData) =>
-        set((state) => {
-          const today = new Date();
-          const pad2 = (n: number) => String(n).padStart(2, "0");
-          const uploadDate = `${today.getFullYear()}-${pad2(today.getMonth() + 1)}-${pad2(today.getDate())}`;
+      addCourseMaterial: (courseId, materialData) => {
+        const today = new Date();
+        const pad2 = (n: number) => String(n).padStart(2, "0");
+        const uploadDate = `${today.getFullYear()}-${pad2(today.getMonth() + 1)}-${pad2(today.getDate())}`;
+        // Task 6B-B：返回创建的 Material（调用方（如 Task Upload）可直接拿到 id 自动关联）
+        const material: Material = {
+          id: createId("m"),
+          title: materialData.title,
+          type: materialData.type,
+          size: materialData.size || "1.5 MB",
+          uploadDate,
+          storageKey: materialData.storageKey,
+          url: materialData.url,
+        };
 
-          return {
-            courses: state.courses.map((c) => {
-              if (c.id !== courseId) return c;
-              return {
-                ...c,
-                materials: [
-                  ...c.materials,
-                  {
-                    id: createId("m"),
-                    title: materialData.title,
-                    type: materialData.type,
-                    size: materialData.size || "1.5 MB",
-                    uploadDate,
-                    storageKey: materialData.storageKey,
-                    url: materialData.url,
-                  },
-                ],
-              };
-            }),
-          };
-        }),
+        set((state) => ({
+          courses: state.courses.map((c) =>
+            c.id === courseId ? { ...c, materials: [...c.materials, material] } : c
+          ),
+        }));
+        return material;
+      },
 
       deleteCourseMaterial: (courseId, materialId) => {
         // 仅移除 metadata；Blob 由调用方在撤销窗口结束后延迟删除

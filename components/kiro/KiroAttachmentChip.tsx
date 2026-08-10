@@ -1,10 +1,11 @@
 "use client";
 
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { FileText, Image as ImageIcon, Loader2, MoreHorizontal, X, BookmarkPlus, RotateCcw } from "lucide-react";
 import { KiroAttachmentView } from "@/lib/ai/attachments/types";
 import { useAppStore } from "@/store/useAppStore";
+import { computeFloatingPosition } from "@/lib/contextMenuPosition";
 import { cn } from "@/lib/utils";
 
 /** 稳定文件类型标签（UI 层由 kind/扩展名推导，不改数据模型） */
@@ -46,7 +47,29 @@ export function KiroAttachmentChip({
   const menuBtnRef = useRef<HTMLButtonElement | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [menuPos, setMenuPos] = useState<{ x: number; y: number } | null>(null);
   usePortalMenuClose(menuOpen, () => setMenuOpen(false), [menuBtnRef, menuRef]);
+
+  // 渲染后按真实尺寸定位（preferred=top-end；顶部不足自动翻转到底部；clamp 8px）
+  useLayoutEffect(() => {
+    if (!menuOpen) {
+      setMenuPos(null);
+      return;
+    }
+    const btn = menuBtnRef.current;
+    const el = menuRef.current;
+    if (!btn || !el) return;
+    const r = btn.getBoundingClientRect();
+    setMenuPos(
+      computeFloatingPosition({
+        anchorRect: { left: r.left, top: r.top, right: r.right, bottom: r.bottom },
+        menuWidth: el.offsetWidth,
+        menuHeight: el.offsetHeight,
+        preferredSide: "top",
+        align: "end",
+      })
+    );
+  }, [menuOpen]);
 
   const isImage = attachment.kind === "image";
   const isMaterial = attachment.source === "material";
@@ -65,12 +88,12 @@ export function KiroAttachmentChip({
             ? `${attachment.courseName ? `${attachment.courseName} · ` : ""}课程资料`
             : [typeLabel(attachment), sizeLabel(attachment.size)].filter(Boolean).join(" · ");
 
-  // Portal 菜单位置：基于触发按钮 rect，向上展开（Chip 在底部 Composer 内）
-  const menuRect = (() => {
+  // Portal 菜单位置：基于触发按钮 rect + 真实菜单尺寸 + viewport（Task 6B-A 修复 magic offset）
+  const anchorRect = (() => {
     const el = menuBtnRef.current;
     if (!el) return null;
     const r = el.getBoundingClientRect();
-    return { left: r.right, top: r.top };
+    return { left: r.left, top: r.top, right: r.right, bottom: r.bottom };
   })();
 
   return (
@@ -132,13 +155,16 @@ export function KiroAttachmentChip({
             <MoreHorizontal className="w-3 h-3" />
           </button>
           {menuOpen &&
-            menuRect &&
+            anchorRect &&
             createPortal(
               <div
                 ref={menuRef}
                 role="menu"
-                className="fixed z-50 w-56 bg-surface border border-line-strong rounded-2xl shadow-card p-1 ux-inline"
-                style={{ left: menuRect.left - 224, top: menuRect.top - 8, transform: "translateY(-100%)" }}
+                className={cn(
+                  "fixed z-50 w-56 max-h-[min(320px,60dvh)] overflow-y-auto bg-surface border border-line-strong rounded-2xl shadow-card p-1 ux-inline",
+                  menuPos ? "opacity-100" : "opacity-0"
+                )}
+                style={menuPos ? { left: menuPos.x, top: menuPos.y } : { left: anchorRect.right, top: anchorRect.top }}
               >
                 <p className="px-2.5 pt-1.5 pb-1 text-[10px] font-bold text-sandrift">保存到课程资料</p>
                 {courses.length === 0 && <p className="px-2.5 py-2 text-[10px] text-sandrift">暂无课程，请先创建课程。</p>}

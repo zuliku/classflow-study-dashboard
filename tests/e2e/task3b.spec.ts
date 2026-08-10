@@ -94,6 +94,54 @@ test("Part B：Primary 仅 5 个 Tab；有风险不再是永久 Tab；已归档�
   await expect(page.getByRole("button", { name: /查看已归档/ })).toBeVisible();
 });
 
+test("Task 6B-B：Task Drawer 上传 → 自动关联 + Course 侧同一文件 + 刷新持久 + 解除关联不删文件", async ({ page }) => {
+  await openWorkspace(page);
+  // a2（c_5 市场营销案例汇报）初始无关联
+  await page.locator('[data-assignment-id="a2"]').click();
+  await expect(page.getByText("关联资料")).toBeVisible();
+
+  // 添加资料 ▾ → 上传文件（hidden input，multiple）
+  await page.getByRole("button", { name: /添加资料/ }).click();
+  await page.getByRole("button", { name: "上传文件" }).click();
+  await page.locator('input[type="file"]').last().setInputFiles({
+    name: "营销案例数据.pdf",
+    mimeType: "application/pdf",
+    buffer: Buffer.from("%PDF-1.4 test"),
+  });
+
+  // Drawer 立即显示关联文件
+  await expect(page.getByText("营销案例数据.pdf")).toBeVisible();
+  await expect(page.getByText("已添加 1 份任务资料").first()).toBeVisible();
+
+  // 同一文件在 Course（c_5）侧也存在（唯一 Source of Truth）
+  const inCourse = await page.evaluate(() => {
+    const raw = localStorage.getItem("classflow-storage-v2");
+    if (!raw) return false;
+    const s = JSON.parse(raw).state ?? {};
+    const c5 = (s.courses ?? []).find((c: any) => c.id === "c_5");
+    return (c5?.materials ?? []).some((m: any) => m.title === "营销案例数据.pdf");
+  });
+  expect(inCourse).toBe(true);
+
+  // 刷新后仍存在（persist）
+  await page.reload();
+  await page.getByRole("button", { name: "任务工作区" }).first().click();
+  await page.locator('[data-assignment-id="a2"]').click();
+  await expect(page.getByText("营销案例数据.pdf")).toBeVisible();
+
+  // 解除关联：Task 侧消失，Course 中仍在
+  await page.getByRole("button", { name: "解除关联 营销案例数据.pdf" }).click();
+  await expect(page.getByText("营销案例数据.pdf")).toHaveCount(0);
+  const stillInCourse = await page.evaluate(() => {
+    const raw = localStorage.getItem("classflow-storage-v2");
+    if (!raw) return false;
+    const s = JSON.parse(raw).state ?? {};
+    const c5 = (s.courses ?? []).find((c: any) => c.id === "c_5");
+    return (c5?.materials ?? []).some((m: any) => m.title === "营销案例数据.pdf");
+  });
+  expect(stillInCourse).toBe(true);
+});
+
 test("Task 6A：Drawer 关联资料 - 显示/解除关联只改 Task、不删课程文件；Picker 可重新添加", async ({ page }) => {
   await openWorkspace(page);
   // a1（c_4 计量经济学大作业）演示数据关联 m5
@@ -114,8 +162,9 @@ test("Task 6A：Drawer 关联资料 - 显示/解除关联只改 Task、不删课
   });
   expect(stillExists).toBe(true);
 
-  // Picker：显示课程内全部资料（含刚解除的），点击重新关联 → ✓ 出现
-  await page.getByRole("button", { name: "添加资料" }).click();
+  // Picker：添加资料 ▾ → 选择课程资料；显示课程内全部资料（含刚解除的），点击重新关联 → ✓ 出现
+  await page.getByRole("button", { name: /添加资料/ }).click();
+  await page.getByRole("button", { name: "选择课程资料" }).click();
   const picker = page.getByTestId("material-picker");
   await expect(picker).toBeVisible();
   await expect(picker.getByText("Lab 3 Pandas 数据清洗与回归拟合代码.ipynb")).toBeVisible();

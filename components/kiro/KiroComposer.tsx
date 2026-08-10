@@ -320,7 +320,7 @@ export function KiroComposer({
                     <Plus className="w-4 h-4" />
                   </button>
                   {attachOpen && (
-                    <div className="absolute bottom-full left-0 mb-1.5 w-60 bg-surface border border-line-strong rounded-2xl shadow-card z-40 ux-inline">
+                    <div className="absolute bottom-full left-0 mb-1.5 w-60 max-h-[min(320px,60dvh)] overflow-y-auto bg-surface border border-line-strong rounded-2xl shadow-card z-40 ux-inline">
                       <KiroAttachmentPicker
                         onClose={() => setAttachOpen(false)}
                         onFiles={onAddFiles}
@@ -329,7 +329,7 @@ export function KiroComposer({
                     </div>
                   )}
                   {materialPickerOpen && (
-                    <div className="absolute bottom-full left-0 mb-1.5 w-72 bg-surface border border-line-strong rounded-2xl shadow-card z-40 ux-inline">
+                    <div className="absolute bottom-full left-0 mb-1.5 w-72 max-h-[min(320px,60dvh)] overflow-y-auto bg-surface border border-line-strong rounded-2xl shadow-card z-40 ux-inline">
                       <KiroMaterialPicker
                         onClose={() => setMaterialPickerOpen(false)}
                         onPick={(ref) => {
@@ -387,7 +387,7 @@ export function KiroComposer({
                     <ChevronDown className="w-3 h-3 shrink-0" />
                   </button>
                   {modelOpen && (
-                    <div className="absolute bottom-full right-0 mb-1.5 w-60 bg-surface border border-line-strong rounded-2xl shadow-card z-40 ux-inline">
+                    <div className="absolute bottom-full right-0 mb-1.5 w-60 max-h-[min(320px,60dvh)] overflow-y-auto bg-surface border border-line-strong rounded-2xl shadow-card z-40 ux-inline">
                       {modelMenu}
                     </div>
                   )}
