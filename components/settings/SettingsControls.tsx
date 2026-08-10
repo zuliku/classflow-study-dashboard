@@ -71,8 +71,8 @@ export function SettingsToggle({
   );
 }
 
-/** 分段选择（3–4 项短文案，如 1/3/7 天、舒适/紧凑） */
-export function SettingsSegmentedControl<T extends string>({
+/** 分段选择（3–4 项短文案，如 1/3/7 天、舒适/紧凑；值可为 string 或 number） */
+export function SettingsSegmentedControl<T extends string | number>({
   value,
   onChange,
   options,

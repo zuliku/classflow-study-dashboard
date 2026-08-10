@@ -74,6 +74,27 @@ export const SETTINGS_REGISTRY: SettingDefinition[] = [
     description: "新建任务的默认状态（待完成 / 进行中）",
     keywords: ["任务状态", "状态", "status", "新建任务"],
   },
+  {
+    id: "browser-notifications",
+    section: "tasks",
+    title: "浏览器系统通知",
+    description: "提醒到期时同时发送浏览器系统通知",
+    keywords: ["通知", "提醒", "浏览器通知", "notification", "browser"],
+  },
+  {
+    id: "missed-reminder-policy",
+    section: "tasks",
+    title: "错过提醒处理",
+    description: "ClassFlow 未打开期间错过提醒时的处理方式",
+    keywords: ["错过", "补发", "提醒", "missed", "notification"],
+  },
+  {
+    id: "missed-reminder-window",
+    section: "tasks",
+    title: "补发时间范围",
+    description: "只补发距离当前时间不超过该范围的提醒",
+    keywords: ["补发", "1小时", "6小时", "24小时", "window", "reminder"],
+  },
   // ---- 交互与快捷键 ----
   {
     id: "schedule-direct-manipulation",

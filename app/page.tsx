@@ -26,6 +26,8 @@ import { FullTimetableModal } from "@/components/modals/FullTimetableModal";
 import { AddAssignmentModal } from "@/components/modals/AddAssignmentModal";
 import { FilePreviewModal } from "@/components/modals/FilePreviewModal";
 import { ToastViewport } from "@/components/ui/ToastViewport";
+import { ReminderRuntime } from "@/components/reminders/ReminderRuntime";
+import { ReminderViewport } from "@/components/reminders/ReminderViewport";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { PageTransition } from "@/components/ui/PageTransition";
 import { useAppStore } from "@/store/useAppStore";
@@ -589,6 +591,9 @@ export default function Home() {
       <FilePreviewModal />
       <ConfirmDialog />
       <ToastViewport />
+      {/* Reminder Local Runtime + 站内通知（独立于 KiroSession；不依赖 Kiro Provider） */}
+      <ReminderRuntime />
+      <ReminderViewport />
       {/* 移动端底部导航（<768px） */}
       <BottomNav />
     </KiroSessionProvider>

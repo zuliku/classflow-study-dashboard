@@ -14,7 +14,7 @@ export const SETTINGS_NAV: {
   { id: "general", label: "通用", icon: Home },
   { id: "profile", label: "个人资料", icon: User },
   { id: "semester", label: "学期与课表", icon: Calendar },
-  { id: "tasks", label: "任务", icon: ListTodo },
+  { id: "tasks", label: "任务与提醒", icon: ListTodo },
   { id: "interaction", label: "交互与快捷键", icon: MousePointerClick },
   { id: "kiro", label: "Kiro 与 AI", icon: KIRO_ICON },
   { id: "data", label: "数据与存储", icon: Database },
