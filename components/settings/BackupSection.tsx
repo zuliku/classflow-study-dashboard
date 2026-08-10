@@ -34,6 +34,7 @@ export function BackupSection() {
     calendarMarks,
     groupProjects,
     preferences,
+    reminders,
   } = state;
   const pushToast = useToastStore((s) => s.pushToast);
 
@@ -50,6 +51,7 @@ export function BackupSection() {
     calendarMarks,
     groupProjects,
     preferences,
+    reminders,
   });
 
   const exportFull = async () => {

@@ -1,4 +1,4 @@
-import { create } from "zustand";
+﻿import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import {
   Course,
@@ -10,6 +10,8 @@ import {
   GroupMember,
   GroupTask,
   NavTab,
+  Reminder,
+  ReminderTargetType,
   ScheduleConflict,
   Semester,
   ClassFlowBackupData,
@@ -20,7 +22,7 @@ import {
   StudyBlock,
 } from "@/types";
 import { createDefaultSemester, getSemesterWeek } from "@/lib/semester";
-import { getLocalDDLDate } from "@/lib/ddl";
+import { getLocalDDLDate, parseLocalDDL } from "@/lib/ddl";
 import { normalizeAssignment, hasTaskDeadline } from "@/lib/tasks/taskSemantics";
 import { sanitizeAssignmentMaterialIds } from "@/lib/tasks/taskMaterials";
 import { TaskWorkspaceView } from "@/lib/tasks/taskViews";
@@ -30,6 +32,62 @@ import { createId } from "@/lib/utils";
 import { calculateGroupProjectProgress, formatLocalDate, normalizeGroupProject } from "@/lib/groupProject";
 import { DEFAULT_PREFERENCES, sanitizePreferences } from "@/lib/preferences";
 import { buildNextRecurringAssignment } from "@/lib/tasks/taskRecurrence";
+import {
+  formatLocalDateTime,
+  getReminderTargetAnchor,
+  normalizeReminder,
+  reconcileTargetReminders,
+  resolveReminderTriggerAt,
+} from "@/lib/reminders/reminderDomain";
+
+/** Task 7G-A1：Reminder 时间戳统一本地墙钟 */
+const nowLocalString = () => formatLocalDateTime(new Date());
+
+/** Reminder target 的当前时间锚点（相对创建/更新时实时解析；无合法 anchor → null） */
+function findTargetAnchor(
+  state: { assignments: Assignment[]; studyBlocks: StudyBlock[]; calendarMarks: CalendarMark[] },
+  targetType: ReminderTargetType,
+  targetId: string
+): string | null {
+  if (targetType === "assignment") {
+    const a = state.assignments.find((x) => x.id === targetId);
+    return a ? getReminderTargetAnchor("assignment", a) : null;
+  }
+  if (targetType === "studyBlock") {
+    const b = state.studyBlocks.find((x) => x.id === targetId);
+    return b ? getReminderTargetAnchor("studyBlock", b) : null;
+  }
+  if (targetType === "calendarMark") {
+    const m = state.calendarMarks.find((x) => x.id === targetId);
+    return m ? getReminderTargetAnchor("calendarMark", m) : null;
+  }
+  return null;
+}
+
+/** Assignment 完成：清除其 scheduled reminders（fired 历史保留） */
+function clearScheduledAssignmentReminders(reminders: Reminder[], assignmentId: string): Reminder[] {
+  return reminders.filter(
+    (r) => !(r.targetType === "assignment" && r.targetId === assignmentId && r.status === "scheduled")
+  );
+}
+
+/**
+ * Task 7F + 7G：完成 Assignment 的统一 Domain 行为：
+ * recurrence spawn（若适用）+ 清除该任务的 scheduled reminders。
+ */
+function handleAssignmentCompleted(
+  assignments: Assignment[],
+  calendarMarks: CalendarMark[],
+  reminders: Reminder[],
+  completed: Assignment
+): { assignments: Assignment[]; calendarMarks: CalendarMark[]; reminders: Reminder[] } {
+  const spawned = spawnRecurringChild(assignments, calendarMarks, completed);
+  return {
+    assignments: spawned ? spawned.assignments : assignments,
+    calendarMarks: spawned ? spawned.calendarMarks : calendarMarks,
+    reminders: clearScheduledAssignmentReminders(reminders, completed.id),
+  };
+}
 
 /** Task V2：根据 Assignment 有效 DDL 构建 linked CalendarMark（addAssignment 与 recurrence spawn 共用同一 helper） */
 function buildAssignmentDDLMark(assignment: Assignment): CalendarMark | null {
@@ -98,6 +156,8 @@ interface PersistedAppState {
   lastWorkspaceTab?: NavTab;
   /** 应用偏好：v2 旧数据可缺失，sanitize 逐字段补默认值 */
   preferences?: AppPreferences;
+  /** Task 7G-A1：Reminder（旧数据可缺失 → []） */
+  reminders?: Reminder[];
 }
 
 /** 旧版（无显式 version）持久化数据：可能混入瞬时 UI 状态，迁移时仅取白名单字段 */
@@ -113,6 +173,7 @@ interface LegacyPersistedStateV0 {
   lastWorkspaceTab?: unknown;
   preferences?: unknown;
   studyBlocks?: unknown;
+  reminders?: unknown;
 }
 
 const TIME_SLICES: TimeSliceFilter[] = ["all", "overdue", "today", "3days", "7days", "completed"];
@@ -168,6 +229,10 @@ function sanitizePersistedState(persisted: unknown): PersistedAppState {
     preferences: sanitizePreferences(legacy.preferences),
     // v4：Timeline V1 学习计划（旧数据缺失 → []）
     studyBlocks: Array.isArray(legacy.studyBlocks) ? (legacy.studyBlocks as StudyBlock[]) : [],
+    // v5：Reminder（旧数据缺失 → []；非法条目丢弃）
+    reminders: Array.isArray(legacy.reminders)
+      ? (legacy.reminders as Reminder[]).map(normalizeReminder).filter((r): r is Reminder => r !== null)
+      : [],
   };
 }
 
@@ -315,6 +380,23 @@ export interface AppState {
   addCalendarMark: (mark: Omit<CalendarMark, "id">) => string;
   deleteCalendarMark: (id: string) => void;
 
+  // Reminder Actions（Task 7G-A1：Domain / Persistence 基础）
+  /** 业务数据：Reminder（持久化） */
+  reminders: Reminder[];
+  /** 创建 Reminder：relative 按当前 target anchor 实时解析 triggerAt；失败返回 null */
+  addReminder: (
+    input: Omit<Reminder, "id" | "status" | "firedAt" | "readAt" | "createdAt" | "updatedAt">
+  ) => string | null;
+  updateReminder: (id: string, patch: Partial<Omit<Reminder, "id">>) => void;
+  deleteReminder: (id: string) => void;
+  /** 已真正交付给 Reminder Runtime */
+  markReminderFired: (id: string, firedAt: string) => void;
+  /** 用户已看过/确认（只写 readAt，不改 status） */
+  markReminderRead: (id: string, readAt: string) => void;
+  markReminderSkipped: (id: string) => void;
+  /** target 时间变化后同步 relative reminders（absolute / fired 不动；anchor 消失 → scheduled relative 移除） */
+  reconcileTargetReminders: (targetType: ReminderTargetType, targetId: string) => void;
+
   // Group Project Actions
   /** 创建空项目（当前用户为组长），返回新项目 id */
   addGroupProject: (project: { courseId: string; title: string; description?: string }) => string;
@@ -420,6 +502,7 @@ export const useAppStore = create<AppState>()(
       calendarMarks: [],
       groupProjects: [],
       studyBlocks: [],
+      reminders: [],
 
       updateUserProfile: (profile) =>
         set((state) => ({
@@ -442,6 +525,7 @@ export const useAppStore = create<AppState>()(
           calendarMarks: [],
           groupProjects: [],
           studyBlocks: [],
+          reminders: [],
           currentSemesterWeek: Math.min(
             Math.max(getSemesterWeek(new Date(), get().semester), 1),
             get().semester.totalWeeks
@@ -472,6 +556,7 @@ export const useAppStore = create<AppState>()(
           calendarMarks: [],
           groupProjects: [],
           studyBlocks: [],
+          reminders: [],
           semester: createDefaultSemester(),
           currentSemesterWeek: 1,
           assignmentTimeSlice: "all",
@@ -508,6 +593,10 @@ export const useAppStore = create<AppState>()(
           preferences: data.preferences
             ? sanitizePreferences(data.preferences)
             : state.preferences,
+          // Task 7G-A1：Reminder（旧备份缺失 → []；非法条目丢弃）
+          reminders: Array.isArray(data.reminders)
+            ? data.reminders.map(normalizeReminder).filter((r): r is Reminder => r !== null)
+            : [],
           currentSemesterWeek: Math.min(
             Math.max(state.currentSemesterWeek, 1),
             data.semester.totalWeeks
@@ -697,6 +786,18 @@ export const useAppStore = create<AppState>()(
           let newAssignments = state.assignments.map((a) =>
             a.id === next.id ? next : a
           );
+          let newReminders = state.reminders;
+          // Task 7G-A1：DDL 变化 → 同步该任务的 relative reminders（absolute 不动；
+          // anchor 消失（DDL 删除）→ scheduled relative 移除，不自动变 absolute）
+          if (oldAssignment && (oldAssignment.ddl ?? null) !== (next.ddl ?? null)) {
+            newReminders = reconcileTargetReminders(
+              newReminders,
+              "assignment",
+              next.id,
+              hasDdl ? next.ddl ?? null : null,
+              nowLocalString()
+            );
+          }
 
           // 关联 mark 三态同步（Task V2）：
           // A. 有 DDL → 有 DDL：更新已有 linked mark（sourceId 精确匹配 / legacy 唯一匹配）
@@ -745,16 +846,21 @@ export const useAppStore = create<AppState>()(
             oldAssignment.status !== "completed" &&
             next.status === "completed"
           ) {
-            const spawned = spawnRecurringChild(newAssignments, newCalendarMarks, next);
-            if (spawned) {
-              newAssignments = spawned.assignments;
-              newCalendarMarks = spawned.calendarMarks;
-            }
+            const applied = handleAssignmentCompleted(
+              newAssignments,
+              newCalendarMarks,
+              newReminders,
+              next
+            );
+            newAssignments = applied.assignments;
+            newCalendarMarks = applied.calendarMarks;
+            newReminders = applied.reminders;
           }
 
           return {
             assignments: newAssignments,
             calendarMarks: newCalendarMarks,
+            reminders: newReminders,
           };
         }),
 
@@ -790,19 +896,19 @@ export const useAppStore = create<AppState>()(
             return { ...a, status, progress: isComp ? 100 : a.progress };
           });
           let calendarMarks = state.calendarMarks;
-          // Task 7F：completion-driven recurrence（Kiro set_assignment_status / UI 完成共用）
+          let reminders = state.reminders;
+          // Task 7F + 7G：completion → recurrence spawn + 清除 scheduled reminders
           if (completedNow && target) {
-            const spawned = spawnRecurringChild(assignments, calendarMarks, {
+            const applied = handleAssignmentCompleted(assignments, calendarMarks, reminders, {
               ...target,
               status,
               progress: 100,
             });
-            if (spawned) {
-              assignments = spawned.assignments;
-              calendarMarks = spawned.calendarMarks;
-            }
+            assignments = applied.assignments;
+            calendarMarks = applied.calendarMarks;
+            reminders = applied.reminders;
           }
-          return { assignments, calendarMarks };
+          return { assignments, calendarMarks, reminders };
         }),
 
       updateAssignmentPriority: (id, priority) =>
@@ -822,16 +928,16 @@ export const useAppStore = create<AppState>()(
             return { ...a, progress, status };
           });
           let calendarMarks = state.calendarMarks;
-          // Task 7F：进度拉满 → completed 也是完成路径（Drawer 滑杆 / Kiro set_assignment_progress）
+          let reminders = state.reminders;
+          // Task 7F + 7G：进度拉满 → completed（Drawer 滑杆 / Kiro set_assignment_progress）
           const updated = assignments.find((a) => a.id === id);
           if (target && updated && target.status !== "completed" && updated.status === "completed") {
-            const spawned = spawnRecurringChild(assignments, calendarMarks, updated);
-            if (spawned) {
-              assignments = spawned.assignments;
-              calendarMarks = spawned.calendarMarks;
-            }
+            const applied = handleAssignmentCompleted(assignments, calendarMarks, reminders, updated);
+            assignments = applied.assignments;
+            calendarMarks = applied.calendarMarks;
+            reminders = applied.reminders;
           }
-          return { assignments, calendarMarks };
+          return { assignments, calendarMarks, reminders };
         }),
 
       toggleSubtask: (assignmentId, subtaskId) =>
@@ -849,16 +955,16 @@ export const useAppStore = create<AppState>()(
             return { ...a, subtasks: updatedSub, progress: newProgress, status: newStatus };
           });
           let calendarMarks = state.calendarMarks;
-          // Task 7F：通过完成最后一个子任务完成重复任务 → 同样生成下一次（幂等保护）
+          let reminders = state.reminders;
+          // Task 7F + 7G：完成最后一个子任务 → 同样 spawn + 清除 scheduled reminders
           const updated = assignments.find((a) => a.id === assignmentId);
           if (target && updated && target.status !== "completed" && updated.status === "completed") {
-            const spawned = spawnRecurringChild(assignments, calendarMarks, updated);
-            if (spawned) {
-              assignments = spawned.assignments;
-              calendarMarks = spawned.calendarMarks;
-            }
+            const applied = handleAssignmentCompleted(assignments, calendarMarks, reminders, updated);
+            assignments = applied.assignments;
+            calendarMarks = applied.calendarMarks;
+            reminders = applied.reminders;
           }
-          return { assignments, calendarMarks };
+          return { assignments, calendarMarks, reminders };
         }),
 
       deleteAssignment: (id) => {
@@ -880,6 +986,8 @@ export const useAppStore = create<AppState>()(
           assignments: current.assignments.filter((a) => a.id !== id),
           calendarMarks: nextMarks,
           selectedAssignmentId: current.selectedAssignmentId === id ? null : current.selectedAssignmentId,
+          // Task 7G-A1：target 删除 → 关联 Reminder 一并删除（无 orphan）
+          reminders: current.reminders.filter((r) => !(r.targetType === "assignment" && r.targetId === id)),
         });
 
         return { assignment: target, marks: removedMarks };
@@ -925,17 +1033,39 @@ export const useAppStore = create<AppState>()(
         return created;
       },
       updateStudyBlock: (id, patch) =>
-        set((state) => ({
-          studyBlocks: state.studyBlocks.map((b) => (b.id === id ? { ...b, ...patch } : b)),
-        })),
+        set((state) => {
+          const prev = state.studyBlocks.find((b) => b.id === id);
+          const blocks = state.studyBlocks.map((b) => (b.id === id ? { ...b, ...patch } : b));
+          let reminders = state.reminders;
+          // Task 7G-A1：date / startTime 变化 → 同步 relative reminders（absolute 不动）
+          const next = prev ? blocks.find((b) => b.id === id) : undefined;
+          if (prev && next && (prev.date !== next.date || prev.startTime !== next.startTime)) {
+            reminders = reconcileTargetReminders(
+              reminders,
+              "studyBlock",
+              id,
+              getReminderTargetAnchor("studyBlock", next),
+              nowLocalString()
+            );
+          }
+          return { studyBlocks: blocks, reminders };
+        }),
       deleteStudyBlock: (id) =>
-        set((state) => ({ studyBlocks: state.studyBlocks.filter((b) => b.id !== id) })),
+        set((state) => ({
+          studyBlocks: state.studyBlocks.filter((b) => b.id !== id),
+          // Task 7G-A1：target 删除 → 关联 Reminder 一并删除（无 orphan）
+          reminders: state.reminders.filter((r) => !(r.targetType === "studyBlock" && r.targetId === id)),
+        })),
       deleteStudyBlocksBatch: (ids) => {
         const current = get();
         const idSet = new Set(ids);
         const removed = current.studyBlocks.filter((b) => idSet.has(b.id));
         if (removed.length === 0) return [];
-        set({ studyBlocks: current.studyBlocks.filter((b) => !idSet.has(b.id)) });
+        set({
+          studyBlocks: current.studyBlocks.filter((b) => !idSet.has(b.id)),
+          // Task 7G-A1：批量删除同样级联清理关联 Reminder
+          reminders: current.reminders.filter((r) => !(r.targetType === "studyBlock" && r.targetId && idSet.has(r.targetId))),
+        });
         return removed;
       },
       addCalendarMark: (markData) => {
@@ -944,7 +1074,79 @@ export const useAppStore = create<AppState>()(
         return mark.id;
       },
       deleteCalendarMark: (id) =>
-        set((state) => ({ calendarMarks: state.calendarMarks.filter((m) => m.id !== id) })),
+        set((state) => ({
+          calendarMarks: state.calendarMarks.filter((m) => m.id !== id),
+          // Task 7G-A1：target 删除 → 关联 Reminder 一并删除
+          reminders: state.reminders.filter((r) => !(r.targetType === "calendarMark" && r.targetId === id)),
+        })),
+
+      // ---- Reminder Actions（Task 7G-A1）----
+      addReminder: (input) => {
+        const now = nowLocalString();
+        const state = get();
+        let triggerAt = input.triggerAt;
+        if (input.timingMode === "relative") {
+          // relative：按当前 target anchor 实时解析（无合法 anchor → 创建失败，不 fallback absolute）
+          const anchor = findTargetAnchor(state, input.targetType, input.targetId ?? "");
+          if (!anchor) return null;
+          const resolved = resolveReminderTriggerAt({
+            timingMode: "relative",
+            triggerAt: anchor,
+            offsetMinutes: input.offsetMinutes,
+          });
+          if (!resolved) return null;
+          triggerAt = resolved;
+        } else if (!parseLocalDDL(input.triggerAt)) {
+          return null;
+        }
+        const reminder = normalizeReminder({
+          ...input,
+          id: createId("r"),
+          status: "scheduled",
+          triggerAt,
+          createdAt: now,
+          updatedAt: now,
+        });
+        if (!reminder) return null;
+        set((s) => ({ reminders: [...s.reminders, reminder] }));
+        return reminder.id;
+      },
+      updateReminder: (id, patch) =>
+        set((state) => ({
+          reminders: state.reminders.map((r) =>
+            r.id === id ? { ...r, ...patch, updatedAt: nowLocalString() } : r
+          ),
+        })),
+      deleteReminder: (id) =>
+        set((state) => ({ reminders: state.reminders.filter((r) => r.id !== id) })),
+      markReminderFired: (id, firedAt) =>
+        set((state) => ({
+          reminders: state.reminders.map((r) =>
+            r.id === id ? { ...r, status: "fired", firedAt, updatedAt: nowLocalString() } : r
+          ),
+        })),
+      markReminderRead: (id, readAt) =>
+        set((state) => ({
+          reminders: state.reminders.map((r) =>
+            r.id === id ? { ...r, readAt, updatedAt: nowLocalString() } : r
+          ),
+        })),
+      markReminderSkipped: (id) =>
+        set((state) => ({
+          reminders: state.reminders.map((r) =>
+            r.id === id ? { ...r, status: "skipped", updatedAt: nowLocalString() } : r
+          ),
+        })),
+      reconcileTargetReminders: (targetType, targetId) =>
+        set((state) => ({
+          reminders: reconcileTargetReminders(
+            state.reminders,
+            targetType,
+            targetId,
+            findTargetAnchor(state, targetType, targetId),
+            nowLocalString()
+          ),
+        })),
 
       addGroupProject: (projectData) => {
         const current = get();
@@ -1111,7 +1313,8 @@ export const useAppStore = create<AppState>()(
       // v1 → v2：GroupTask 从 assigneeName/assigneeAvatar 改为 assigneeId
       // v2 → v3：新增 AppPreferences（缺失/部分/非法逐字段回落默认值）
       // v3 → v4：Task V2 —— Assignment ddl 可选 + estimatedMinutes（normalizeAssignment 归一；旧数据 ddl 原值保留）
-      version: 4,
+      // v4 → v5：Task 7G-A1 —— Reminder（旧数据缺失 → []；sanitize 丢弃非法条目）
+      version: 5,
       storage: createJSONStorage(() => localStorage),
       partialize: (state): PersistedAppState => ({
         userProfile: state.userProfile,
@@ -1125,6 +1328,7 @@ export const useAppStore = create<AppState>()(
         assignmentTimeSlice: state.assignmentTimeSlice,
         lastWorkspaceTab: state.lastWorkspaceTab,
         preferences: state.preferences,
+        reminders: state.reminders,
       }),
       migrate: (persistedState) => sanitizePersistedState(persistedState),
       // zustand 在存储为空时也会调用 merge（migratedState=undefined），

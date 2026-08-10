@@ -5,6 +5,7 @@ import {
   Course,
   CourseSchedule,
   GroupProject,
+  Reminder,
   Semester,
   UserProfile,
   StudyBlock,
@@ -31,6 +32,25 @@ const ARRAY_FIELDS: { key: keyof ClassFlowBackupData; label: string }[] = [
   { key: "calendarMarks", label: "日历标记 (calendarMarks)" },
   { key: "groupProjects", label: "小组项目 (groupProjects)" },
 ];
+
+/** Task 7G-A1：Reminder（旧备份可缺失 → 恢复 []）；非法条目在 restore 时经 normalizeReminder 丢弃 */
+function validateReminders(v: unknown): v is Reminder[] {
+  return (
+    Array.isArray(v) &&
+    v.every(
+      (r) =>
+        isPlainObject(r) &&
+        isNonEmptyString(r.id) &&
+        isNonEmptyString(r.title) &&
+        (r.targetType === "assignment" ||
+          r.targetType === "studyBlock" ||
+          r.targetType === "calendarMark" ||
+          r.targetType === "standalone") &&
+        (r.timingMode === "relative" || r.timingMode === "absolute") &&
+        isNonEmptyString(r.triggerAt)
+    )
+  );
+}
 
 /** Timeline V1：学习计划（旧备份可缺失 → 恢复时回落 []） */
 function validateStudyBlocks(v: unknown): v is StudyBlock[] {
@@ -161,6 +181,10 @@ export function validateBackup(raw: unknown): BackupValidationResult {
   // Timeline V1：学习计划可选（旧备份缺失合法；存在则必须合法）
   if (data.studyBlocks !== undefined && !validateStudyBlocks(data.studyBlocks)) {
     return { ok: false, error: "学习计划数据 (studyBlocks) 格式异常，无法恢复" };
+  }
+  // Task 7G-A1：Reminder 可选（旧备份缺失合法 → 恢复 []；存在则必须合法）
+  if (data.reminders !== undefined && !validateReminders(data.reminders)) {
+    return { ok: false, error: "提醒数据 (reminders) 格式异常，无法恢复" };
   }
 
   return {

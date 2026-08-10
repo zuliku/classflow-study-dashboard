@@ -92,6 +92,38 @@ export interface Subtask {
 /** Task 7F：重复任务规则（第一版四种；缺失 = 普通任务） */
 export type TaskRecurrence = "daily" | "weekly" | "biweekly" | "monthly";
 
+/** Task 7G-A1：Reminder 目标类型 */
+export type ReminderTargetType = "assignment" | "studyBlock" | "calendarMark" | "standalone";
+export type ReminderTimingMode = "relative" | "absolute";
+export type ReminderStatus = "scheduled" | "fired" | "skipped";
+export type ReminderSource = "manual" | "kiro";
+
+export interface Reminder {
+  id: string;
+  title: string;
+  note?: string;
+  targetType: ReminderTargetType;
+  targetId?: string;
+  /**
+   * relative：triggerAt = target anchor + offsetMinutes（跟随目标时间变化）
+   * absolute：triggerAt 为用户明确指定时间（永不跟随）
+   */
+  timingMode: ReminderTimingMode;
+  /** 仅 relative 使用：提前 = 负数（到期=0，提前10分钟=-10，提前1小时=-60，提前1天=-1440） */
+  offsetMinutes?: number;
+  /** 最终可调度的本地墙钟时间 YYYY-MM-DDTHH:mm:ss */
+  triggerAt: string;
+  status: ReminderStatus;
+  firedAt?: string;
+  readAt?: string;
+  source: ReminderSource;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** Task 7G-A1：missed reminder policy（Reminder Runtime 消费的纯决策） */
+export type MissedReminderPolicy = "deliver" | "recent-only" | "skip";
+
 export interface Assignment {
   id: string;
   courseId: string;
@@ -216,6 +248,8 @@ export interface ClassFlowBackupData {
   studyBlocks?: StudyBlock[];
   /** 应用偏好（v1 旧备份可缺失，导入时回落为当前偏好） */
   preferences?: AppPreferences;
+  /** Task 7G-A1：Reminder（旧备份可缺失 → 恢复为 []）；Reminder Preferences 不进入备份 */
+  reminders?: Reminder[];
 }
 
 /** 本地数据备份文件结构 (v1) */
