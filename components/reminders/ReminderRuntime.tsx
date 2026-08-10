@@ -7,12 +7,12 @@ import { useReminderDeliveryStore } from "@/store/useReminderDeliveryStore";
 import { useReminderCenterStore } from "@/store/useReminderCenterStore";
 import { Reminder } from "@/types";
 import { evaluateMissedReminder, formatLocalDateTime } from "@/lib/reminders/reminderDomain";
-import { parseLocalDDL } from "@/lib/ddl";
 import {
   getDueScheduledReminders,
   getNextScheduledReminder,
   getReminderTimerDelay,
 } from "@/lib/reminders/reminderScheduler";
+import { getRunningSessionDueReminders, ReminderRuntimePhase } from "@/lib/reminders/reminderRuntimePolicy";
 import { getReminderDeliverySubtitle } from "@/lib/reminders/reminderPresentation";
 import { showBrowserReminderNotification } from "@/lib/reminders/browserNotifications";
 
@@ -28,6 +28,8 @@ import { showBrowserReminderNotification } from "@/lib/reminders/browserNotifica
 export function ReminderRuntime() {
   const timerRef = useRef<number | null>(null);
   const initializedRef = useRef(false);
+  // Task 7G-C：booting → initial-reconcile → running（phase guard 防止历史 overdue 绕过 missed policy）
+  const phaseRef = useRef<ReminderRuntimePhase>("booting");
   const enqueue = useReminderDeliveryStore((s) => s.enqueue);
 
   /** 系统通知点击 → 打开 ClassFlow + target navigation（bridge 不 import store，回调在此注入） */
@@ -75,7 +77,7 @@ export function ReminderRuntime() {
     }
   }, []);
 
-  /** 单 timer：清除旧 → 找最近 future scheduled → 设置一个 timer（>24h clamp） */
+  /** 单 timer：清除旧 → 找最近 future scheduled → 设置一个 timer（>24h clamp；到点统一走 session reconcile） */
   const scheduleNext = useCallback(() => {
     clearTimer();
     const state = useAppStore.getState();
@@ -86,21 +88,13 @@ export function ReminderRuntime() {
     if (delay === null) return;
     timerRef.current = window.setTimeout(() => {
       timerRef.current = null;
-      // timer 到时：重新获取真实时间 + Store（被修改/删除/fired → 不执行）
-      const now2 = formatLocalDateTime(new Date());
-      const st = useAppStore.getState();
-      const cur = st.reminders.find((r) => r.id === next.id);
-      if (cur && cur.status === "scheduled") {
-        const t = parseLocalDDL(cur.triggerAt);
-        const n = parseLocalDDL(now2);
-        if (t && n && t.getTime() <= n.getTime()) deliver(cur);
-      }
-      scheduleNext();
+      sessionReconcileRef.current();
     }, Math.max(delay, 0));
-  }, [clearTimer, deliver]);
+  }, [clearTimer]);
 
   /** 首次启动：按 missed policy 处理已过期 scheduled（网页之前没打开的语义） */
   const runInitialReconcile = useCallback(() => {
+    phaseRef.current = "initial-reconcile";
     const state = useAppStore.getState();
     const prefs = useReminderPreferencesStore.getState();
     const now = formatLocalDateTime(new Date());
@@ -116,20 +110,28 @@ export function ReminderRuntime() {
       else if (decision === "skip") state.markReminderSkipped(r.id);
       // pending → 不操作
     }
+    phaseRef.current = "running";
     scheduleNext();
   }, [deliver, scheduleNext]);
 
-  /** Session resume（休眠/后台/锁屏后恢复）：本 Session 已打开的页面 → 过期直接 deliver，不走 policy */
-  const runSessionResume = useCallback(() => {
+  /**
+   * Running Session Reconcile（Task 7G-C 核心）：timer / focus / visibility / reminders 变化的统一入口。
+   * running 阶段：scheduled && triggerAt <= now 立即 deliver（Assignment/StudyBlock retiming 后无需等待 focus/reload）。
+   * booting / initial-reconcile：返回 []（历史 overdue 必须走 missedReminderPolicy）。
+   */
+  const runSessionReconcile = useCallback(() => {
     if (!initializedRef.current) return;
     const state = useAppStore.getState();
     const now = formatLocalDateTime(new Date());
-    const due = getDueScheduledReminders(state.reminders, now);
+    const due = getRunningSessionDueReminders(state.reminders, now, phaseRef.current);
     for (const r of due) deliver(r);
     scheduleNext();
   }, [deliver, scheduleNext]);
+  // 避免 hook callback 循环依赖（timer callback / effects 统一经 ref 调用）
+  const sessionReconcileRef = useRef<() => void>(() => {});
+  sessionReconcileRef.current = runSessionReconcile;
 
-  // 等待两个 Store hydrate 后执行 initial reconcile
+  // 等待两个 Store hydrate 后执行 initial reconcile（booting → initial-reconcile → running）
   useEffect(() => {
     let appReady = useAppStore.persist.hasHydrated();
     let prefsReady = useReminderPreferencesStore.persist.hasHydrated();
@@ -154,19 +156,20 @@ export function ReminderRuntime() {
     };
   }, [runInitialReconcile, clearTimer]);
 
-  // reminders 变化 → 重排单 timer（新建/删除/fired 等都会改变数组）
+  // reminders 变化 → running 阶段立即 session reconcile（Task 7G-C：retiming 后 newly overdue 直接 deliver）；
+  // 同时重排单 timer。booting / initial-reconcile 阶段 phase guard 阻止直发（历史 overdue 必须走 missed policy）。
   const reminders = useAppStore((s) => s.reminders);
   useEffect(() => {
     if (!initializedRef.current) return;
-    scheduleNext();
+    sessionReconcileRef.current();
   }, [reminders, scheduleNext]);
 
-  // Session resume：visibilitychange（回到 visible）+ window focus
+  // Session resume：visibilitychange（回到 visible）+ window focus → 统一 session reconcile
   useEffect(() => {
     const onVisibility = () => {
-      if (document.visibilityState === "visible") runSessionResume();
+      if (document.visibilityState === "visible") sessionReconcileRef.current();
     };
-    const onFocus = () => runSessionResume();
+    const onFocus = () => sessionReconcileRef.current();
     document.addEventListener("visibilitychange", onVisibility);
     window.addEventListener("focus", onFocus);
     return () => {
@@ -174,7 +177,7 @@ export function ReminderRuntime() {
       window.removeEventListener("focus", onFocus);
       clearTimer();
     };
-  }, [runSessionResume, clearTimer]);
+  }, [clearTimer]);
 
   return null;
 }

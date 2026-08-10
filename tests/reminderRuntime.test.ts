@@ -6,6 +6,10 @@ import {
   getReminderTimerDelay,
   REMINDER_TIMER_MAX_DELAY_MS,
 } from "@/lib/reminders/reminderScheduler";
+import {
+  getRunningSessionDueReminders,
+  ReminderRuntimePhase,
+} from "@/lib/reminders/reminderRuntimePolicy";
 import { getReminderDeliverySubtitle } from "@/lib/reminders/reminderPresentation";
 
 const NOW = "2026-08-10T12:00:00";
@@ -87,6 +91,34 @@ describe("getReminderTimerDelay", () => {
     const trigger = "2026-08-10T23:59:00";
     const expected = new Date(2026, 7, 10, 23, 59).getTime() - new Date(2026, 7, 10, 12, 0).getTime();
     expect(getReminderTimerDelay(trigger, NOW)).toBe(expected);
+  });
+});
+
+describe("getRunningSessionDueReminders（Phase Guard）", () => {
+  const overdue = mkReminder("due", "2026-08-10T11:00:00");
+
+  it("A. booting / initial-reconcile → 返回 []（历史 overdue 不得绕过 missed policy 直发）", () => {
+    for (const phase of ["booting", "initial-reconcile"] as ReminderRuntimePhase[]) {
+      expect(getRunningSessionDueReminders([overdue], NOW, phase)).toEqual([]);
+    }
+  });
+
+  it("B. running + 已过期 scheduled → 返回该 Reminder", () => {
+    const out = getRunningSessionDueReminders([overdue, mkReminder("future", "2026-08-10T13:00:00")], NOW, "running");
+    expect(out.map((r) => r.id)).toEqual(["due"]);
+  });
+
+  it("C. running 阶段 fired / skipped 不返回", () => {
+    const out = getRunningSessionDueReminders(
+      [
+        overdue,
+        mkReminder("fired", "2026-08-10T10:00:00", { status: "fired" }),
+        mkReminder("skipped", "2026-08-10T10:30:00", { status: "skipped" }),
+      ],
+      NOW,
+      "running"
+    );
+    expect(out.map((r) => r.id)).toEqual(["due"]);
   });
 });
 
