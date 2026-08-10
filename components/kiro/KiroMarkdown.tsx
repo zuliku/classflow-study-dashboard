@@ -29,41 +29,41 @@ export function KiroMarkdown({ content, sources }: { content: string; sources?: 
       remarkPlugins={[remarkGfm, remarkMath]}
       rehypePlugins={[[rehypeKatex, { throwOnError: false, trust: false }]]}
       components={{
-          p: ({ children }) => <p className="mb-3 last:mb-0">{children}</p>,
+          p: ({ children }) => <p className="mb-[0.8em] last:mb-0">{children}</p>,
           h1: ({ children }) => (
-            <h1 className="text-[19px] leading-snug font-semibold text-charcoal mt-6 mb-3 first:mt-0">
+            <h1 className="text-[1.28em] leading-snug font-semibold text-charcoal mt-[1.6em] mb-[0.65em] first:mt-0">
               {children}
             </h1>
           ),
           h2: ({ children }) => (
-            <h2 className="text-[16px] leading-snug font-semibold text-charcoal mt-6 mb-2 first:mt-0">
+            <h2 className="text-[1.14em] leading-snug font-semibold text-charcoal mt-[1.45em] mb-[0.55em] first:mt-0">
               {children}
             </h2>
           ),
           h3: ({ children }) => (
-            <h3 className="text-[15px] leading-snug font-semibold text-charcoal mt-5 mb-2 first:mt-0">
+            <h3 className="text-[1.04em] leading-snug font-semibold text-charcoal mt-[1.25em] mb-[0.45em] first:mt-0">
               {children}
             </h3>
           ),
           strong: ({ children }) => <strong className="font-semibold text-charcoal">{children}</strong>,
           em: ({ children }) => <em className="italic">{children}</em>,
           ul: ({ children }) => (
-            <ul className="list-disc pl-5 my-3 space-y-1.5 marker:text-sandrift">{children}</ul>
+            <ul className="list-disc pl-5 my-[0.75em] space-y-[0.3em] marker:text-sandrift">{children}</ul>
           ),
           ol: ({ children }) => (
-            <ol className="list-decimal pl-5 my-3 space-y-1.5 marker:text-sandrift">{children}</ol>
+            <ol className="list-decimal pl-5 my-[0.75em] space-y-[0.3em] marker:text-sandrift">{children}</ol>
           ),
           li: ({ children }) => (
-            <li className="leading-[1.8] [&_ul]:my-2 [&_ol]:my-2 [&_input[type='checkbox']]:mr-1.5 [&_input[type='checkbox']]:accent-charcoal">
+            <li className="leading-[1.7] [&_ul]:my-[0.55em] [&_ol]:my-[0.55em] [&_input[type='checkbox']]:mr-1.5 [&_input[type='checkbox']]:accent-charcoal">
               {children}
             </li>
           ),
           blockquote: ({ children }) => (
-            <blockquote className="my-3 border-l-2 border-line-strong bg-alabaster/40 rounded-r-lg px-4 py-2.5 text-satin-grey [&_p]:mb-1.5 [&_p:last-child]:mb-0">
+            <blockquote className="my-[0.8em] border-l-2 border-line-strong bg-alabaster/40 rounded-r-lg px-[0.9em] py-[0.65em] text-satin-grey [&_p]:mb-[0.5em] [&_p:last-child]:mb-0">
               {children}
             </blockquote>
           ),
-          hr: () => <hr className="my-4 border-line-soft" />,
+          hr: () => <hr className="my-[1em] border-line-soft" />,
           a: ({ href, children }) => {
             const safe = typeof href === "string" && /^(https?:|mailto:)/i.test(href);
             if (!safe) return <span className="text-satin-grey">{children}</span>;
@@ -81,22 +81,22 @@ export function KiroMarkdown({ content, sources }: { content: string; sources?: 
           code: ({ children, className }) => {
             const isBlock = /language-/.test(className ?? "") || String(children).includes("\n");
             if (isBlock) {
-              return <code className="block font-mono text-[12.5px] leading-[1.7]">{children}</code>;
+              return <code className="block font-mono text-[0.84em] leading-[1.65]">{children}</code>;
             }
             return (
-              <code className="px-1.5 py-0.5 rounded-md bg-surface-muted font-mono text-[12.5px] text-charcoal break-words">
+              <code className="px-1.5 py-0.5 rounded-md bg-surface-muted font-mono text-[0.86em] text-charcoal break-words">
                 {children}
               </code>
             );
           },
           pre: ({ children }) => (
-            <pre className="my-3 overflow-x-auto rounded-xl bg-alabaster border border-line px-4 py-3.5 text-charcoal">
+            <pre className="my-[0.85em] overflow-x-auto rounded-xl bg-alabaster border border-line px-4 py-3.5 text-charcoal">
               {children}
             </pre>
           ),
           table: ({ children }) => (
-            <div className="my-3 overflow-x-auto rounded-xl border border-line">
-              <table className="w-full border-collapse text-left text-[13px] [&_tr:last-child>td]:border-b-0">
+            <div className="my-[0.85em] overflow-x-auto rounded-xl border border-line">
+              <table className="w-full border-collapse text-left text-[0.88em] [&_tr:last-child>td]:border-b-0">
                 {children}
               </table>
             </div>
@@ -105,7 +105,7 @@ export function KiroMarkdown({ content, sources }: { content: string; sources?: 
             <thead className="bg-alabaster/60 [&_th]:font-semibold">{children}</thead>
           ),
           th: ({ children }) => (
-            <th className="px-3 py-2.5 border-b border-line-strong text-charcoal whitespace-nowrap text-[12.5px]">
+            <th className="px-3 py-2.5 border-b border-line-strong text-charcoal whitespace-nowrap">
               {children}
             </th>
           ),
@@ -122,7 +122,8 @@ export function KiroMarkdown({ content, sources }: { content: string; sources?: 
 
   return (
     <div
-      className="text-[14px] md:text-[15px] leading-[1.8] text-charcoal"
+      className="kiro-markdown text-charcoal"
+      style={{ fontSize: "var(--kiro-output-font-size)", lineHeight: 1.74 }}
       data-testid="kiro-markdown"
     >
       {segments.map((seg, i) =>

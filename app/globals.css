@@ -333,20 +333,25 @@ html[data-motion="reduced"] *::after {
   scroll-behavior: auto !important;
 }
 
-/* Kiro Math（KaTeX）：与 ClassFlow 排版统一，不重写 KaTeX 内部样式 */
-.katex {
+/* Kiro Math（KaTeX，Task 7C）：只作用于 Kiro 输出 scope（.kiro-markdown），不污染全局。
+   inline math 与正文协调（1.05em）；display math 上下间距稳定 + 超宽横向滚动（不撑破 Sidecar）。 */
+.kiro-markdown .katex {
   font-size: 1.05em;
 }
 
-.katex-display {
-  margin: 0.5em 0 0.75em;
+.kiro-markdown .katex-display {
+  margin: 0.95em 0 1.05em;
   overflow-x: auto;
   overflow-y: hidden;
-  padding: 0.125rem 0.25rem;
+  padding: 0.1em 0 0.18em;
   scrollbar-width: thin;
 }
 
-.katex-display::-webkit-scrollbar {
+.kiro-markdown .katex-display > .katex {
+  font-size: 1.06em;
+}
+
+.kiro-markdown .katex-display::-webkit-scrollbar {
   height: 4px;
 }
 

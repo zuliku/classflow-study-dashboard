@@ -10,6 +10,8 @@ import { KiroEmptyState } from "@/components/kiro/KiroEmptyState";
 import { KiroConversation } from "@/components/kiro/KiroConversation";
 import { KiroComposer } from "@/components/kiro/KiroComposer";
 import { KiroContextSuggestions } from "@/components/kiro/KiroContextSuggestions";
+import { useKiroPreferencesStore } from "@/store/useKiroPreferencesStore";
+import { getKiroOutputFontSize } from "@/lib/ai/ui/typography";
 
 /**
  * Kiro Chat Surface：Workspace 与 Sidecar 共用的完整对话面。
@@ -21,6 +23,10 @@ export function KiroChatSurface({ variant }: { variant: "workspace" | "sidecar" 
   const { chat, attachments, activeRefs, removeContext, addManualContext } = runtime;
   const { suggestionsKind, suggestionsGen, lastUserTurnGen } = useKiroSessionMeta();
   const compact = variant === "sidecar";
+
+  // Task 7C：Kiro 输出字号（顶层一次订阅；CSS variable 让所有历史 Message 同步缩放，不逐条订阅）
+  const outputTextSize = useKiroPreferencesStore((s) => s.outputTextSize);
+  const outputFontSize = getKiroOutputFontSize(outputTextSize);
 
   const provider = useAISettingsStore((s) => s.provider);
   const model = useAISettingsStore((s) => s.model);
@@ -78,7 +84,10 @@ export function KiroChatSurface({ variant }: { variant: "workspace" | "sidecar" 
     ) : undefined;
 
   return (
-    <div className="relative flex-1 min-h-0 flex flex-col">
+    <div
+      className="relative flex-1 min-h-0 flex flex-col"
+      style={{ "--kiro-output-font-size": `${outputFontSize}px` } as React.CSSProperties}
+    >
       {!hasMessages ? (
         <KiroEmptyState
           onSuggestion={chat.send}

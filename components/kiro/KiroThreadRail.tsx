@@ -10,6 +10,8 @@ import { KiroThreadRow } from "@/components/kiro/KiroThreadRow";
 import { KiroMenuPanel, KiroMenuItem, KiroMenuDivider } from "@/components/kiro/KiroMenu";
 import { listConversations } from "@/lib/ai/history/db";
 import { KiroConversationRecord } from "@/lib/ai/history/types";
+import { useKiroPreferencesStore } from "@/store/useKiroPreferencesStore";
+import { KIRO_OUTPUT_TEXT_SIZE_LABELS, KiroOutputTextSize } from "@/lib/ai/ui/typography";
 import { cn } from "@/lib/utils";
 
 /** Soft Plate：Kiro Logo 的浅色底座 + 1px 品牌 perimeter（方案 A；hover 流光由 CSS 驱动） */
@@ -54,6 +56,9 @@ function KiroRailPlate({
 export function KiroThreadRail() {
   const meta = useKiroSessionMeta();
   const actions = useKiroSessionActions();
+  // Task 7C：Kiro 输出字号（低频 preference，仅 Expanded Rail 提供入口）
+  const outputTextSize = useKiroPreferencesStore((s) => s.outputTextSize);
+  const setOutputTextSize = useKiroPreferencesStore((s) => s.setOutputTextSize);
   const pushToast = useToastStore((s) => s.pushToast);
   const confirmRequest = useConfirmStore((s) => s.confirm);
   const [expanded, setExpanded] = useState(false);
@@ -293,6 +298,32 @@ export function KiroThreadRail() {
                 查看全部历史
               </button>
             )}
+          </div>
+
+          {/* 显示字号（Task 7C：Kiro 输出字号，低频 preference；关闭/刷新后保留） */}
+          <div className="shrink-0 px-3 py-2 border-t border-line space-y-1.5">
+            <p className="text-[10px] font-semibold text-sandrift">显示字号</p>
+            <div className="flex items-center gap-0.5 bg-[#F7F5F5] p-0.5 rounded-lg w-fit">
+              {(Object.keys(KIRO_OUTPUT_TEXT_SIZE_LABELS) as KiroOutputTextSize[]).map((size) => {
+                const active = outputTextSize === size;
+                return (
+                  <button
+                    key={size}
+                    onClick={() => setOutputTextSize(size)}
+                    aria-pressed={active}
+                    aria-label={`${KIRO_OUTPUT_TEXT_SIZE_LABELS[size]}字号`}
+                    className={cn(
+                      "px-2.5 h-6 rounded-md text-[11px] font-semibold transition-colors",
+                      active
+                        ? "bg-white text-charcoal shadow-subtle"
+                        : "text-sandrift hover:text-charcoal"
+                    )}
+                  >
+                    {KIRO_OUTPUT_TEXT_SIZE_LABELS[size]}
+                  </button>
+                );
+              })}
+            </div>
           </div>
 
           {/* Footer（固定区） */}
