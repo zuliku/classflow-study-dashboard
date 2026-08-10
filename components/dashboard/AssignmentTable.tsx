@@ -12,6 +12,8 @@ import {
   BookOpen,
   X,
   CalendarPlus,
+  Search,
+  Sparkles,
 } from "lucide-react";
 import { useAppStore } from "@/store/useAppStore";
 import { useToastStore } from "@/store/useToastStore";
@@ -22,6 +24,7 @@ import { useEnterOnAdd } from "@/lib/useEnterOnAdd";
 import { cn, getPriorityMeta } from "@/lib/utils";
 import { isToday, differenceInDays } from "date-fns";
 import { parseLocalDDL, getLocalDDLDate } from "@/lib/ddl";
+import { formatEstimatedMinutes } from "@/lib/tasks/taskSemantics";
 import { createAssignmentActions } from "@/lib/assignmentActions";
 import { getAssignmentContextCommands } from "@/lib/commands";
 import { paginate } from "@/lib/pagination";
@@ -33,6 +36,8 @@ import {
   sanitizeHighlight,
 } from "@/lib/assignmentSelection";
 import { AssignmentPeekPanel } from "@/components/assignment/AssignmentPeekPanel";
+import { deriveTaskWorkspace, TASK_WORKSPACE_VIEWS } from "@/lib/tasks/taskViews";
+import { useKiroHandoff } from "@/hooks/useKiroHandoff";
 
 export interface AssignmentTableProps {
   /** compact：Overview 只读点击式；workspace：Assignments Tab 的键盘优先工作区 */
@@ -59,9 +64,14 @@ export function AssignmentTable({ mode = "compact" }: AssignmentTableProps) {
     setActiveTab,
     assignmentTimeSlice,
     setAssignmentTimeSlice,
+    assignmentWorkspaceView,
+    setAssignmentWorkspaceView,
+    studyBlocks,
+    currentSemesterWeek,
   } = useAppStore();
   const pushToast = useToastStore((s) => s.pushToast);
   const confirmRequest = useConfirmStore((s) => s.confirm);
+  const handoff = useKiroHandoff();
 
   const highlightedAssignmentId = useAppStore((s) => s.highlightedAssignmentId);
   const setHighlightedAssignmentId = useAppStore((s) => s.setHighlightedAssignmentId);
@@ -75,16 +85,18 @@ export function AssignmentTable({ mode = "compact" }: AssignmentTableProps) {
   const compactDensity = contentDensity === "compact";
 
   const [courseFilter, setCourseFilter] = useState<string>("all");
+  const [searchQuery, setSearchQuery] = useState("");
   const newTaskIds = useEnterOnAdd(assignments.map((a) => a.id));
 
   const today = new Date();
 
-  // Filter assignments dynamically
-  const filteredAssignments = assignments.filter((item) => {
-    if (courseFilter !== "all" && item.courseId !== courseFilter) {
-      return false;
-    }
-    // Task V2：只有需要 DDL 的视图才要求存在 Deadline；「全部」必须包含无 DDL 任务
+  // 课程筛选（compact / workspace 共用；workspace 的 Search / View 在其后叠加）
+  const courseFiltered = assignments.filter(
+    (item) => courseFilter === "all" || item.courseId === courseFilter
+  );
+
+  // compact：TimeSlice 筛选（Task V2 后保持原逻辑，compact Overview 不动）
+  const filteredAssignments = courseFiltered.filter((item) => {
     if (assignmentTimeSlice === "all" || assignmentTimeSlice === "completed") {
       return assignmentTimeSlice === "completed" ? item.status === "completed" : true;
     }
@@ -106,7 +118,26 @@ export function AssignmentTable({ mode = "compact" }: AssignmentTableProps) {
     }
   });
 
-  const filteredIds = useMemo(() => filteredAssignments.map((a) => a.id), [filteredAssignments]);
+  // Workspace V2：视图派生（view + courseFilter）+ 文本搜索
+  const workspaceViewResult = isWorkspace
+    ? deriveTaskWorkspace(courseFiltered, studyBlocks, assignmentWorkspaceView, today)
+    : null;
+  const workspaceItems = (() => {
+    if (!workspaceViewResult) return [];
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return workspaceViewResult.items;
+    return workspaceViewResult.items.filter((it) => {
+      if (it.task.title.toLowerCase().includes(q)) return true;
+      const course = courses.find((c) => c.id === it.task.courseId);
+      return course?.name.toLowerCase().includes(q) ?? false;
+    });
+  })();
+
+  const filteredIds = useMemo(
+    () => (isWorkspace ? workspaceItems.map((it) => it.task.id) : filteredAssignments.map((a) => a.id)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [isWorkspace, workspaceViewResult, searchQuery, courseFilter, assignments]
+  );
   const filteredIdsKey = filteredIds.join(",");
 
   // 筛选变化 → 清理隐藏的 selection / highlight（保留可见项）
@@ -359,10 +390,15 @@ export function AssignmentTable({ mode = "compact" }: AssignmentTableProps) {
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
           <div className="flex items-center space-x-2">
             <h3 className="text-sm font-bold text-charcoal">
-              {isWorkspace ? "任务工作区" : "任务清单"}
+              {isWorkspace ? "任务与 DDL" : "任务清单"}
             </h3>
             <span className="text-[10px] font-semibold text-sandrift bg-[#F7F5F5] px-1.5 py-0.5 rounded border border-line">
-              {filteredAssignments.length} 项任务
+              {isWorkspace
+                ? workspaceViewResult
+                  ? workspaceViewResult.items.length
+                  : 0
+                : filteredAssignments.length}{" "}
+              项任务
             </span>
             {overdueCount > 0 && (
               <span className="text-[10px] font-bold text-danger bg-danger-bg px-2 py-0.5 rounded-full border border-danger-border flex items-center gap-1">
@@ -372,16 +408,31 @@ export function AssignmentTable({ mode = "compact" }: AssignmentTableProps) {
             )}
           </div>
 
-          <button
-            onClick={handleAddAssignmentClick}
-            className="ux-press flex items-center space-x-1 px-3 py-1.5 bg-charcoal hover:bg-black text-white text-xs font-bold rounded-xl transition-colors shadow-subtle shrink-0"
-          >
-            <Plus className="w-3.5 h-3.5" />
-            <span>新增任务</span>
-          </button>
+          <div className="flex items-center space-x-2 shrink-0">
+            {isWorkspace && (
+              <button
+                onClick={() =>
+                  highlightedAssignmentId
+                    ? handoff.openForAssignment(highlightedAssignmentId)
+                    : handoff.openForWeek(currentSemesterWeek)
+                }
+                className="ux-press flex items-center space-x-1 px-3 py-1.5 bg-alabaster hover:bg-[#F7F5F5] text-charcoal text-xs font-bold rounded-xl border border-line transition-colors shadow-subtle"
+              >
+                <Sparkles className="w-3.5 h-3.5 text-[#A48F82]" />
+                <span>Ask Kiro</span>
+              </button>
+            )}
+            <button
+              onClick={handleAddAssignmentClick}
+              className="ux-press flex items-center space-x-1 px-3 py-1.5 bg-charcoal hover:bg-black text-white text-xs font-bold rounded-xl transition-colors shadow-subtle shrink-0"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>新增任务</span>
+            </button>
+          </div>
         </div>
 
-        {/* Filters Row: Course Filter Dropdown + Time Slice Pills */}
+        {/* Filters Row: Course Filter + (compact: Time Slice Pills | workspace: View Tabs + Search) */}
         <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
           <div className="flex items-center space-x-1.5 bg-[#F7F5F5] border border-line rounded-xl px-2.5 py-1">
             <BookOpen className="w-3.5 h-3.5 text-[#A48F82]" />
@@ -402,34 +453,78 @@ export function AssignmentTable({ mode = "compact" }: AssignmentTableProps) {
             </select>
           </div>
 
-          <div className="flex flex-wrap items-center gap-1 bg-alabaster p-0.5 rounded-xl border border-line-strong text-[11px] font-medium">
-            {[
-              { id: "all", label: "全部" },
-              { id: "overdue", label: "已逾期" },
-              { id: "today", label: "今日截止" },
-              { id: "3days", label: "3天内截止" },
-              { id: "7days", label: "7天内截止" },
-              { id: "completed", label: "已完成归档" },
-            ].map((slice) => {
-              const isActive = assignmentTimeSlice === slice.id;
-              return (
-                <button
-                  key={slice.id}
-                  onClick={() => {
-                    setAssignmentTimeSlice(slice.id as TimeSliceFilter);
-                    if (!isWorkspace) setCompactPage(1); // 筛选变化回第一页
-                  }}
-                  className={`px-2.5 py-0.5 rounded-lg transition-colors duration-[var(--motion-fast)] ease-[var(--ease-standard)] ${
-                    isActive
-                      ? "bg-white text-charcoal font-bold shadow-subtle"
-                      : "text-satin-grey hover:text-charcoal"
-                  }`}
-                >
-                  {slice.label}
-                </button>
-              );
-            })}
-          </div>
+          {isWorkspace ? (
+            <div className="flex items-center gap-2 flex-wrap">
+              {/* Search */}
+              <div className="flex items-center gap-1.5 bg-[#F7F5F5] border border-line rounded-xl px-2.5 py-1 min-w-[150px]">
+                <Search className="w-3.5 h-3.5 text-[#A48F82]" />
+                <input
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="搜索任务…"
+                  className="bg-transparent text-charcoal text-xs font-medium focus:outline-none w-full placeholder:text-sandrift"
+                  aria-label="搜索任务"
+                />
+              </div>
+
+              {/* View Tabs（count = 课程筛选后该视图数量；search 不改变 count 语义） */}
+              <div className="flex flex-wrap items-center gap-1 bg-alabaster p-0.5 rounded-xl border border-line-strong text-[11px] font-medium">
+                {TASK_WORKSPACE_VIEWS.map((view) => {
+                  const isActive = assignmentWorkspaceView === view.id;
+                  const count = workspaceViewResult?.counts[view.id] ?? 0;
+                  return (
+                    <button
+                      key={view.id}
+                      onClick={() => setAssignmentWorkspaceView(view.id)}
+                      className={`flex items-center gap-1 px-2.5 py-0.5 rounded-lg transition-colors duration-[var(--motion-fast)] ease-[var(--ease-standard)] ${
+                        isActive
+                          ? "bg-white text-charcoal font-bold shadow-subtle"
+                          : "text-satin-grey hover:text-charcoal"
+                      }`}
+                    >
+                      {view.label}
+                      <span
+                        className={`text-[9px] font-bold px-1 rounded ${
+                          isActive ? "text-sandrift" : "text-satin-grey/60"
+                        }`}
+                      >
+                        {count}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ) : (
+            <div className="flex flex-wrap items-center gap-1 bg-alabaster p-0.5 rounded-xl border border-line-strong text-[11px] font-medium">
+              {[
+                { id: "all", label: "全部" },
+                { id: "overdue", label: "已逾期" },
+                { id: "today", label: "今日截止" },
+                { id: "3days", label: "3天内截止" },
+                { id: "7days", label: "7天内截止" },
+                { id: "completed", label: "已完成归档" },
+              ].map((slice) => {
+                const isActive = assignmentTimeSlice === slice.id;
+                return (
+                  <button
+                    key={slice.id}
+                    onClick={() => {
+                      setAssignmentTimeSlice(slice.id as TimeSliceFilter);
+                      if (!isWorkspace) setCompactPage(1); // 筛选变化回第一页
+                    }}
+                    className={`px-2.5 py-0.5 rounded-lg transition-colors duration-[var(--motion-fast)] ease-[var(--ease-standard)] ${
+                      isActive
+                        ? "bg-white text-charcoal font-bold shadow-subtle"
+                        : "text-satin-grey hover:text-charcoal"
+                    }`}
+                  >
+                    {slice.label}
+                  </button>
+                );
+              })}
+            </div>
+          )}
         </div>
       </div>
 
@@ -451,7 +546,7 @@ export function AssignmentTable({ mode = "compact" }: AssignmentTableProps) {
           isWorkspace ? (
             <div className="py-10 text-center text-xs text-sandrift space-y-1">
               <CheckCircle2 className="w-8 h-8 mx-auto text-success" />
-              <p>该筛选条件下暂无任务</p>
+              <p>该视图暂无任务</p>
             </div>
           ) : (
             <div
@@ -463,7 +558,10 @@ export function AssignmentTable({ mode = "compact" }: AssignmentTableProps) {
             </div>
           )
         ) : (
-          (isWorkspace ? filteredAssignments : pagedAssignments).map((task) => {
+          (isWorkspace ? workspaceItems.map((it) => it.task) : pagedAssignments).map((task) => {
+            const wsMeta = isWorkspace
+              ? workspaceViewResult?.items.find((it) => it.task.id === task.id)?.meta
+              : undefined;
             const course = courses.find((c) => c.id === task.courseId);
             const priorityMeta = getPriorityMeta(task.priority);
             const hasDdl = !!task.ddl && parseLocalDDL(task.ddl) !== null;
@@ -550,6 +648,20 @@ export function AssignmentTable({ mode = "compact" }: AssignmentTableProps) {
                       <span className="truncate font-semibold">{course?.name || "通用"}</span>
                       <span>·</span>
                       <span className={hasDdl ? "" : "text-satin-grey/70"}>截止: {formattedDate}</span>
+                      {task.estimatedMinutes && isWorkspace && (
+                        <>
+                          <span>·</span>
+                          <span>预计 {formatEstimatedMinutes(task.estimatedMinutes)}</span>
+                        </>
+                      )}
+                      {isWorkspace && wsMeta && wsMeta.studyBlockCount > 0 && (
+                        <>
+                          <span>·</span>
+                          <span className="font-semibold text-success/90">
+                            已计划 {formatEstimatedMinutes(wsMeta.scheduledMinutes)}
+                          </span>
+                        </>
+                      )}
                       {task.subtasks && task.subtasks.length > 0 && (
                         <>
                           <span>·</span>

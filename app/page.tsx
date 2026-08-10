@@ -89,6 +89,46 @@ export default function Home() {
     document.documentElement.dataset.motion = motionPreference;
   }, [motionPreference]);
 
+  // Dev Preview：?preview=task-v2 → 注入 Task V2 演示数据（覆盖确认 + 会话标记，仅开发构建）
+  useEffect(() => {
+    if (process.env.NODE_ENV !== "development") return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("preview") !== "task-v2") return;
+    if (sessionStorage.getItem("classflow-task-v2-preview") === "1") {
+      params.delete("preview");
+      const qs = params.toString();
+      window.history.replaceState(null, "", qs ? `?${qs}` : window.location.pathname);
+      return;
+    }
+    const doInject = () => {
+      import("@/lib/dev/taskV2PreviewData").then(({ buildTaskV2PreviewData }) => {
+        const store = useAppStore.getState();
+        if (
+          !confirm(
+            "Preview: 注入 Task V2 演示数据？\n\n将覆盖当前全部任务/课程/学习计划数据（个人资料与偏好保留）。"
+          )
+        ) {
+          return;
+        }
+        store.restoreAppData(buildTaskV2PreviewData());
+        sessionStorage.setItem("classflow-task-v2-preview", "1");
+        params.delete("preview");
+        const qs = params.toString();
+        window.history.replaceState(null, "", qs ? `?${qs}` : window.location.pathname);
+        store.setActiveTab("assignments");
+      });
+    };
+    if (document.readyState === "loading") {
+      const onReady = () => {
+        window.removeEventListener("load", onReady);
+        requestIdleCallback(() => doInject());
+      };
+      window.addEventListener("load", onReady);
+    } else {
+      requestIdleCallback(() => doInject());
+    }
+  }, []);
+
   // 启动位置：hydrate 完成后只执行一次 startup resolution。
   // last 使用上次使用的工作区（lastWorkspaceTab，持久化）。
   // 只依赖空数组：修改设置值只影响下次打开 ClassFlow，不会把用户踢走。
@@ -236,17 +276,7 @@ export default function Home() {
           )}
 
           {activeTab === "assignments" && (
-            <div className="space-y-4">
-              <div className="bg-surface border border-line rounded-2xl p-4 shadow-subtle flex items-center justify-between">
-                <div>
-                  <h2 className="text-base font-bold text-charcoal mb-0.5">
-                    任务清单
-                  </h2>
-                  <p className="text-xs text-sandrift">
-                    全部任务与截止时间
-                  </p>
-                </div>
-              </div>
+            <div className="space-y-4" data-testid="assignments-tab">
               <AssignmentTable mode="workspace" />
             </div>
           )}

@@ -9,15 +9,17 @@ import { test } from "./demoFixtures";
 async function openWorkspace(page: Page) {
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto("/");
-  await page.getByRole("button", { name: "任务与 DDL" }).first().click();
-  await expect(page.getByRole("heading", { name: "任务工作区" })).toBeVisible();
+  await page.getByRole("button", { name: "任务工作区" }).first().click();
+  await expect(page.getByRole("heading", { name: "任务与 DDL" })).toBeVisible();
   const list = page.getByTestId("assignment-list");
   await list.focus();
   return list;
 }
 
-test("导航：J J Enter → 打开正确的任务 Drawer", async ({ page }) => {
+test("导航：全部视图下 J J Enter → 打开正确的任务 Drawer", async ({ page }) => {
   await openWorkspace(page);
+  await page.getByRole("button", { name: "全部" }).first().click();
+  await page.getByTestId("assignment-list").focus();
   await page.keyboard.press("j");
   await page.keyboard.press("j");
   await page.keyboard.press("Enter");
@@ -50,8 +52,11 @@ test("Peek：Space 打开 → J 同步更新 → Esc 关闭", async ({ page }) =
   await expect(peek).toHaveCount(0);
 });
 
-test("多选：X J X → 已选 2 项 → 批量完成 → 两项均完成", async ({ page }) => {
+test("多选：全部视图下 X J X → 已选 2 项 → 批量完成 → 两项均完成", async ({ page }) => {
   await openWorkspace(page);
+  // 「全部」视图：完成任务后行仍可见（移到 archive 区），可断言 checkbox 状态
+  await page.getByRole("button", { name: "全部" }).first().click();
+  await page.getByTestId("assignment-list").focus();
   await page.keyboard.press("j"); // highlight a1
   await page.keyboard.press("x"); // 选 a1
   await page.keyboard.press("j"); // highlight a2
@@ -71,8 +76,9 @@ test("多选：X J X → 已选 2 项 → 批量完成 → 两项均完成", asy
   await expect(bar).toHaveCount(0);
 });
 
-test("Context Menu：右键任务 → 修改优先级 → 行内状态更新", async ({ page }) => {
+test("Context Menu：全部视图下右键任务 → 修改优先级 → 行内状态更新", async ({ page }) => {
   await openWorkspace(page);
+  await page.getByRole("button", { name: "全部" }).first().click();
   const row = page.locator('[data-assignment-id="a4"]');
   await row.click({ button: "right" });
 
@@ -88,7 +94,9 @@ test("Mobile 390：点击行仍打开 Drawer，无 Peek / Bulk Bar", async ({ pa
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/");
   await page.locator('nav[aria-label="底部导航"]').getByRole("button", { name: "任务" }).click();
-  await expect(page.getByRole("heading", { name: "任务工作区" })).toBeVisible();
+  await expect(
+    page.getByTestId("assignments-tab").getByRole("heading", { name: "任务与 DDL" })
+  ).toBeVisible();
 
   await page.locator('[data-assignment-id="a1"]').click();
   await expect(page.getByRole("button", { name: "关闭" }).first()).toBeVisible();

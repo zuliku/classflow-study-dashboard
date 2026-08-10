@@ -22,6 +22,7 @@ import {
 import { createDefaultSemester, getSemesterWeek } from "@/lib/semester";
 import { getLocalDDLDate } from "@/lib/ddl";
 import { normalizeAssignment, hasTaskDeadline } from "@/lib/tasks/taskSemantics";
+import { TaskWorkspaceView } from "@/lib/tasks/taskViews";
 import { deleteFileBlob, clearAllFileBlobs } from "@/lib/fileStorage";
 import { isDDLMarkForAssignment, isLegacyDDLMarkForAssignment, linkLegacyDDLMarks } from "@/lib/calendarMark";
 import { createId } from "@/lib/utils";
@@ -145,6 +146,9 @@ export interface AppState {
   /** 任务列表时间筛选（全局共享，跨页保留） */
   assignmentTimeSlice: TimeSliceFilter;
   setAssignmentTimeSlice: (slice: TimeSliceFilter) => void;
+  /** Assignment Workspace V2 视图（UI state，不持久化；focus/today/upcoming/unscheduled/all/archive） */
+  assignmentWorkspaceView: TaskWorkspaceView;
+  setAssignmentWorkspaceView: (view: TaskWorkspaceView) => void;
 
   // App Preferences（稳定用户偏好，持久化）
   preferences: AppPreferences;
@@ -306,6 +310,8 @@ export const useAppStore = create<AppState>()(
       lastWorkspaceTab: "overview",
       assignmentTimeSlice: "all",
       setAssignmentTimeSlice: (slice) => set({ assignmentTimeSlice: slice }),
+      assignmentWorkspaceView: "focus",
+      setAssignmentWorkspaceView: (view) => set({ assignmentWorkspaceView: view }),
       preferences: DEFAULT_PREFERENCES,
       updatePreferences: (patch) =>
         set((state) => ({

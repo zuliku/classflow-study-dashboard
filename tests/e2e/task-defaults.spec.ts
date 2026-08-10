@@ -31,10 +31,11 @@ test("任务默认值：设置 高/进行中/21:00 → N 新建任务预填并�
   await page.keyboard.press("Escape");
   await page.waitForTimeout(300);
 
-  // N 新建任务：编辑器预填高优先级 + 21:00
+  // N 新建任务：编辑器预填高优先级；Task V2 默认不设截止，勾选后 time 预填 21:00
   await page.keyboard.press("n");
   await expect(page.getByRole("heading", { name: "新建任务" })).toBeVisible();
   await expect(page.locator("form select").nth(1)).toHaveValue("high");
+  await page.getByLabel("设置截止时间").check();
   await expect(page.locator("input[type='time']")).toHaveValue("21:00");
 
   // 填写标题保存 → 落库检查 priority/status/ddl
@@ -79,9 +80,9 @@ test("startupView=任务：设置后 reload 进入任务工作区", async ({ pag
   await page.waitForTimeout(300);
 
   // 修改设置不影响当前页面（不会把用户踢走），reload 后才进入任务
-  await expect(page.getByRole("heading", { name: "任务工作区" })).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "任务与 DDL" })).toHaveCount(0);
   await page.reload();
-  await expect(page.getByRole("heading", { name: "任务工作区" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "任务与 DDL" })).toBeVisible();
   await expect(page.getByTestId("assignment-list")).toBeVisible();
 });
 

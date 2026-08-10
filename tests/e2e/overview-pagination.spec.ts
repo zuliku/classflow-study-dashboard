@@ -179,7 +179,7 @@ test("Case 3：切换筛选时 Footer 始终在最后一行之后、卡片高度
 test("Case 4：workspace 原有键盘 / selection E2E 继续通过", async ({ page }) => {
   await openOverview(page);
   await page.getByRole("button", { name: "任务工作区" }).click();
-  await expect(page.getByRole("heading", { name: "任务工作区" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "任务与 DDL" })).toBeVisible();
 
   const list = page.getByTestId("assignment-list");
   await list.focus();
@@ -189,7 +189,8 @@ test("Case 4：workspace 原有键盘 / selection E2E 继续通过", async ({ pa
   await page.keyboard.press("j");
   await page.keyboard.press("x");
   await expect(page.getByTestId("assignment-bulk-bar")).toContainText("已选 2 项");
-  // 右键 Context Menu 仍在
+  // 右键 Context Menu 仍在（a4 需先切「全部」视图）
+  await page.getByRole("button", { name: "全部" }).first().click();
   await page.locator('[data-assignment-id="a4"]').click({ button: "right" });
   await expect(page.getByTestId("assignment-context-menu")).toBeVisible();
 });
