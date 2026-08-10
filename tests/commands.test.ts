@@ -59,6 +59,7 @@ function makeCtx(overrides: Partial<CommandContext> = {}): CommandContext {
       markDoing: () => {},
       setPriority: () => {},
       setDDLDate: () => {},
+      clearDDLDate: () => {},
       shiftDDL: () => {},
       remove: () => {},
     },

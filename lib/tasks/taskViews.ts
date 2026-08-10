@@ -29,6 +29,19 @@ export const TASK_WORKSPACE_VIEWS: { id: TaskWorkspaceView; label: string }[] = 
   { id: "archive", label: "已归档" },
 ];
 
+/**
+ * Primary Views（Part B）：顶部 Tab 只保留 5 个高频工作区。
+ * at-risk（Health 状态）并入 Focus；archive（低频）经「···」进入。
+ * 完整 Domain 集合仍为 TASK_WORKSPACE_VIEWS（Kiro Search Scope / 未来 Command Center 复用）。
+ */
+export const PRIMARY_TASK_WORKSPACE_VIEWS: { id: TaskWorkspaceView; label: string }[] = [
+  { id: "focus", label: "聚焦" },
+  { id: "today", label: "今天" },
+  { id: "upcoming", label: "即将截止" },
+  { id: "unscheduled", label: "待安排" },
+  { id: "all", label: "全部" },
+];
+
 /** Health 计算所需的外部规划数据（可选；缺省时 at-risk 视图为空、行内无 Health 提示） */
 export interface TaskHealthPlanningInput {
   schedules: CourseSchedule[];
@@ -97,29 +110,31 @@ export function buildTaskWorkspaceMeta(
   return meta;
 }
 
-/** Focus 排序权重（小 = 前）：overdue > 今天截止 > 今天安排 > doing > urgent/high 临近 */
+/** Focus 排序权重（小 = 前）：overdue > at-risk > 今天截止 > 今天安排 > doing > urgent/high 临近 */
 function focusRank(item: TaskWorkspaceItem, now: Date): number {
   const { meta } = item;
   if (meta.overdue) return 0;
-  if (meta.deadlineToday) return 1;
-  if (meta.scheduledToday) return 2;
-  if (item.task.status === "doing") return 3;
+  // Part B：At Risk 并入 Focus（Health 判定；overdue 已在 0 位不重复计）
+  if (meta.health === "at-risk") return 1;
+  if (meta.deadlineToday) return 2;
+  if (meta.scheduledToday) return 3;
+  if (item.task.status === "doing") return 4;
   const d = meta.deadline;
   if (
     d &&
     (item.task.priority === "urgent" || item.task.priority === "high") &&
     (d.getTime() - now.getTime()) / 86400000 <= 3
   ) {
-    return 4;
+    return 5;
   }
-  return 5;
+  return 6;
 }
 
 const PRIORITY_ORDER: Record<string, number> = { urgent: 0, high: 1, medium: 2, low: 3 };
 
 /**
  * 视图派生：items + counts（同一规则，UI / Kiro 共用）。
- * - focus：active 且满足「逾期 / 今天截止 / 今天安排 / doing / urgent-high 3 天内」，按 focusRank 排序
+ * - focus：active 且满足「逾期 / at-risk / 今天截止 / 今天安排 / doing / urgent-high 3 天内」，按 focusRank 排序
  * - today：active 且（今天截止 或 今天有 StudyBlock）—— Do Date ≠ Due Date
  * - upcoming：active 且有 DDL 且 deadline 在「今天结束之后」，按 DDL 升序
  * - at-risk：active 且 Health 为 at-risk 或 overdue（基于 Deadline Health Engine；overdue 在前，内部 DDL 早优先）
@@ -181,7 +196,7 @@ function filterFor(view: TaskWorkspaceView, all: TaskWorkspaceItem[], now: Date)
       const items = all.filter(
         (it) =>
           isActiveTask(it.task) &&
-          focusRank(it, now) <= 4
+          focusRank(it, now) <= 5
       );
       return items.sort((a, b) => {
         const ra = focusRank(a, now);

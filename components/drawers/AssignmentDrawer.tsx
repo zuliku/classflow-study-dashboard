@@ -33,9 +33,10 @@ import { KiroFlowButton } from "@/components/kiro/KiroFlow";
 
 const OVERLAY_ID = "assignment-drawer";
 
-/** Kiro Contextual Quick Prompts（deterministic，非 AI 生成） */
+/** Kiro Contextual Quick Prompts（deterministic，非 AI 生成；顺序 = 理解 → 估时 → 风险 → 排程） */
 const QUICK_PROMPTS: { label: string; prompt: string }[] = [
-  { label: "帮我拆解这个任务", prompt: "帮我拆解这个任务，列出可以并行推进的步骤。" },
+  { label: "帮我拆解这个任务", prompt: "帮我拆解这个任务，拆成 2–8 个可执行的步骤，并估算每步和总耗时。" },
+  { label: "估计需要多久", prompt: "根据当前任务信息给出预计完成耗时。如果信息不足，请说明估计依据。" },
   { label: "检查能否按时完成", prompt: "检查这个任务能否按时完成，并说明原因。" },
   { label: "帮我安排学习时间", prompt: "帮我安排这个任务的学习时间。" },
 ];
@@ -308,7 +309,7 @@ export function AssignmentDrawer() {
                   </button>
                   <span className="text-sandrift">·</span>
                   <button
-                    onClick={() => handleQuickPrompt(QUICK_PROMPTS[2].prompt)}
+                    onClick={() => handleQuickPrompt(QUICK_PROMPTS[3].prompt)}
                     className="text-[11px] font-semibold text-satin-grey hover:text-charcoal transition-colors"
                   >
                     Ask Kiro

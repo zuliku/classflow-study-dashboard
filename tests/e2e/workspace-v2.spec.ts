@@ -124,6 +124,13 @@ async function openWorkspaceV2(page: Page) {
   await expect(page.getByRole("heading", { name: "任务与 DDL" })).toBeVisible();
 }
 
+/** Part B：已归档经「···」More 菜单进入（不再是永久 Tab） */
+async function openArchiveV2(page: Page) {
+  await page.getByRole("button", { name: "更多视图" }).click();
+  await page.getByRole("button", { name: /查看已归档/ }).click();
+  await expect(page.getByText(/^已归档 \d+$/)).toBeVisible();
+}
+
 const rowIds = (page: Page) =>
   page
     .locator('[data-assignment-id]')
@@ -144,7 +151,10 @@ test("默认 Focus 视图：逾期 > 今天截止 > 今天安排 > 进行中，c
   // Focus tab count = 5（active 且需要行动）
   await expect(page.getByRole("button", { name: /^聚焦 \d+$/ })).toContainText("5");
   await expect(page.getByRole("button", { name: /^今天 \d+$/ })).toContainText("3");
-  await expect(page.getByRole("button", { name: /^已归档 \d+$/ })).toContainText("2");
+  // 已归档不在 Primary Tabs，经 More 菜单进入后显示「已归档 N」临时状态
+  await expect(page.getByRole("button", { name: /^已归档 \d+$/ })).toHaveCount(0);
+  await openArchiveV2(page);
+  await expect(page.getByText(/^已归档 2$/)).toBeVisible();
 });
 
 test("今天视图：今天截止 或 今天有 StudyBlock（Do Date ≠ Due Date）", async ({ page }) => {
@@ -179,7 +189,7 @@ test("已归档视图：submitted + completed；无 DDL 行显示无截止日期
   const seed = await seedV2(page);
   await openWorkspaceV2(page);
 
-  await page.getByRole("button", { name: /^已归档 \d+$/ }).click();
+  await openArchiveV2(page);
   expect((await rowIds(page)).sort()).toEqual([seed.ids.aArchivedSubmitted, seed.ids.aArchivedCompleted].sort());
 
   // 已提交任务行（无 DDL 的已完成行显示「无截止日期」）
@@ -235,7 +245,7 @@ test("Peek V2：已提交任务显示已提交状态", async ({ page }) => {
   const seed = await seedV2(page);
   await openWorkspaceV2(page);
 
-  await page.getByRole("button", { name: "已归档" }).click();
+  await openArchiveV2(page);
   const row = page.locator(`[data-assignment-id="${seed.ids.aArchivedSubmitted}"]`);
   await row.hover();
   await page.getByTestId("assignment-list").focus();

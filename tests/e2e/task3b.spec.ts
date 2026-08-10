@@ -82,11 +82,14 @@ test("Drawer V2：Deadline Health + 学习安排 + 未估时/未设置截止", a
   await page.getByRole("button", { name: "关闭" }).first().click();
 });
 
-test("Workspace 有「有风险」Tab（count 与列表同一来源）", async ({ page }) => {
+test("Part B：Primary 仅 5 个 Tab；有风险不再是永久 Tab；已归档经 More 进入", async ({ page }) => {
   await openWorkspace(page);
-  const tab = page.getByRole("button", { name: /^有风险 \d+$/ });
-  await expect(tab).toBeVisible();
-  await tab.click();
-  // 列表非空时数量与 tab 一致；数据无 at-risk 时为空态也正常
-  await expect(page.getByTestId("assignment-list")).toBeVisible();
+  for (const name of [/^聚焦 \d+$/, /^今天 \d+$/, /^即将截止 \d+$/, /^待安排 \d+$/, /^全部 \d+$/]) {
+    await expect(page.getByRole("button", { name })).toBeVisible();
+  }
+  // 有风险不再占用一级 Tab（Domain 能力保留：Focus 内 Risk Filter / Kiro scope）
+  await expect(page.getByRole("button", { name: /^有风险 \d+$/ })).toHaveCount(0);
+  // 已归档经「···」More 菜单进入
+  await page.getByRole("button", { name: "更多视图" }).click();
+  await expect(page.getByRole("button", { name: /查看已归档/ })).toBeVisible();
 });

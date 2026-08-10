@@ -114,3 +114,8 @@ export function bulkApplyPriority(
 ): Assignment[] {
   return assignments.map((a) => ({ ...a, priority }));
 }
+
+/** 批量清除截止时间（ddl 恢复为 undefined；CalendarMark 由 store 的 updateAssignment 同步删除） */
+export function bulkClearDDL(assignments: Assignment[]): Assignment[] {
+  return assignments.map((a) => ({ ...a, ddl: undefined }));
+}

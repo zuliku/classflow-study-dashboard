@@ -76,7 +76,7 @@ test("多选：全部视图下 X J X → 已选 2 项 → 批量完成 → 两�
   await expect(bar).toHaveCount(0);
 });
 
-test("Context Menu：全部视图下右键任务 → 修改优先级 → 行内状态更新", async ({ page }) => {
+test("Context Menu：全部视图下右键任务 → 优先级 Drill-in → 行内状态更新", async ({ page }) => {
   await openWorkspace(page);
   await page.getByRole("button", { name: "全部" }).first().click();
   const row = page.locator('[data-assignment-id="a4"]');
@@ -84,7 +84,9 @@ test("Context Menu：全部视图下右键任务 → 修改优先级 → 行内�
 
   const menu = page.getByTestId("assignment-context-menu");
   await expect(menu).toBeVisible();
-  await menu.getByRole("button", { name: "将当前任务设为高优先级" }).click();
+  // 主菜单 → 优先级 Drill-in（一级菜单不再展开 4 项优先级）
+  await menu.getByRole("button", { name: /^优先级/ }).click();
+  await menu.getByRole("button", { name: "高", exact: true }).click();
 
   await expect(page.locator('[data-assignment-id="a4"]').getByText("高优先", { exact: true })).toBeVisible();
   await expect(page.getByTestId("assignment-context-menu")).toHaveCount(0);

@@ -14,6 +14,7 @@ import { getSemesterWeek, getWeekDateRange } from "@/lib/semester";
 import { isScheduleActive, timeToMinutes } from "@/lib/schedule";
 import { deriveTaskWorkspace } from "@/lib/tasks/taskViews";
 import { deriveAssignmentHealth } from "@/lib/tasks/taskHealth";
+import { parseTaskBreakdownProposal } from "@/lib/tasks/taskBreakdown";
 import { findFreeTime } from "@/lib/planning/freeTime";
 import { proposeStudyPlan } from "@/lib/planning/studyPlanner";
 import { KIRO_READ_TOOL_SCHEMAS, KiroReadToolName } from "@/lib/ai/tools/read/schemas";
@@ -273,13 +274,13 @@ function assignmentSchedule(state: ReadToolState, a: Assignment): { scheduledMin
 }
 
 export function searchAssignments(state: ReadToolState, input: unknown): ReadToolResult<unknown> {
-  const parsed = safeParse<{ query?: string; courseId?: string; status?: Assignment["status"]; due?: "overdue" | "today" | "3days" | "7days" | "all"; scope?: "focus" | "today" | "upcoming" | "unscheduled" | "all" | "archive" }>("search_assignments", input);
+  const parsed = safeParse<{ query?: string; courseId?: string; status?: Assignment["status"]; due?: "overdue" | "today" | "3days" | "7days" | "all"; scope?: "focus" | "today" | "upcoming" | "at-risk" | "unscheduled" | "all" | "archive" }>("search_assignments", input);
   if (!parsed.ok) return parsed;
   const { query, courseId, status, due, scope } = parsed.data;
   const now = new Date();
   const q = (query ?? "").trim().toLowerCase();
 
-  // Task V2 scope：复用 Workspace 同一套 view 派生（focus/today/upcoming/unscheduled/all/archive）
+  // Task V2 scope：复用 Workspace 同一套 view 派生（focus/today/upcoming/at-risk/unscheduled/all/archive）
   let matches: Assignment[];
   if (scope) {
     const { items } = deriveTaskWorkspace(state.assignments, state.studyBlocks, scope, now);
@@ -487,6 +488,37 @@ export function proposeStudyPlanTool(state: ReadToolState, input: unknown): Read
       reasons: result.reasons,
     },
   };
+}
+
+export function proposeTaskBreakdownTool(state: ReadToolState, input: unknown): ReadToolResult<unknown> {
+  // 模型生成的 Proposal 严格 schema 校验（invalid → INVALID_INPUT，UI 不显示 Apply）
+  const parsed = safeParse<TaskBreakdownProposalInput>("propose_task_breakdown", input);
+  if (!parsed.ok) return parsed;
+  const proposal = parseTaskBreakdownProposal(parsed.data);
+  if (!proposal) return invalidInput("任务拆解建议不符合要求（步骤 2–8 项、标题 1–120 字符）。");
+
+  const a = findAssignment(state, proposal.assignmentId);
+  if (!a) return notFound("未找到对应任务。");
+
+  return {
+    ok: true,
+    data: {
+      proposal: {
+        ...proposal,
+        assignmentId: a.id,
+        assignmentTitle: a.title,
+        courseName: courseName(state, a.courseId),
+      },
+    },
+  };
+}
+
+/** propose_task_breakdown 输入形状（与 TaskBreakdownProposal 一致；schema 校验为准） */
+interface TaskBreakdownProposalInput {
+  assignmentId: string;
+  subtasks?: { title: string; estimatedMinutes?: number }[];
+  suggestedEstimatedMinutes?: number;
+  rationale?: string[];
 }
 
 export function getUpcomingAssignments(state: ReadToolState, input: unknown): ReadToolResult<unknown> {
@@ -703,6 +735,7 @@ const EXECUTORS: Record<Exclude<KiroReadToolName, "read_material">, (state: Read
   get_group_tasks: getGroupTasks,
   get_calendar_range: getCalendarRange,
   get_material_metadata: getMaterialMetadata,
+  propose_task_breakdown: proposeTaskBreakdownTool,
 };
 
 /**

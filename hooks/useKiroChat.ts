@@ -30,6 +30,7 @@ import { KIRO_MEMORY_TOOL_NAMES, KIRO_MEMORY_TOOL_SCHEMAS } from "@/lib/ai/memor
 import { MAX_MEMORIES } from "@/lib/ai/memory/types";
 import { PersistedActionView, PersistedAttachmentView, KiroConversationRecord, KiroConversationSummary, PersistedSourceMeta } from "@/lib/ai/history/types";
 import { StudyPlanProposal } from "@/lib/planning/studyPlanner";
+import { TaskBreakdownProposal } from "@/lib/tasks/taskBreakdown";
 import { budgetAttachments } from "@/lib/ai/contextBudget/attachmentBudget";
 import { DEFAULT_CONTEXT_BUDGET } from "@/lib/ai/contextBudget/planner";
 import { KiroTurnContextSnapshot } from "@/lib/ai/contextBudget/types";
@@ -59,6 +60,8 @@ export interface KiroChatMessageView {
   attachments?: KiroAttachmentView[];
   /** Kiro propose_study_plan 的真实结果（Proposal Card 事实来源；模型不得生成） */
   proposals?: StudyPlanProposal[];
+  /** Kiro propose_task_breakdown 的真实结果（Task Breakdown Proposal Card 事实来源；模型不得生成） */
+  breakdowns?: TaskBreakdownProposal[];
   /** 是否可以「重新生成」：仅 live 且该轮无 Write Tool Call 的最后一条 */
   canRegenerate: boolean;
 }
@@ -156,6 +159,7 @@ function toView(m: UIMessage): KiroChatMessageView {
   // Memory 工具只发 Toast，不生成 Action Card
   const actions: KiroActionResultView[] = [];
   const proposals: StudyPlanProposal[] = [];
+  const breakdowns: TaskBreakdownProposal[] = [];
   for (const p of parts) {
     if (typeof p.type !== "string" || !p.type.startsWith("tool-")) continue;
     const tp = p as ToolCallPart;
@@ -164,6 +168,14 @@ function toView(m: UIMessage): KiroChatMessageView {
       if (output && output.ok === true) {
         const data = output.data as { items?: StudyPlanProposal[] } | undefined;
         if (data?.items) proposals.push(...data.items);
+      }
+      continue;
+    }
+    if (toolNameOf(tp) === "propose_task_breakdown") {
+      const output = tp.output as ReadToolResult<unknown> | undefined;
+      if (output && output.ok === true) {
+        const data = output.data as { proposal?: TaskBreakdownProposal } | undefined;
+        if (data?.proposal) breakdowns.push(data.proposal);
       }
       continue;
     }
@@ -182,6 +194,7 @@ function toView(m: UIMessage): KiroChatMessageView {
     streaming,
     actions: actions.length > 0 ? actions : undefined,
     proposals: proposals.length > 0 ? proposals : undefined,
+    breakdowns: breakdowns.length > 0 ? breakdowns : undefined,
     // 历史恢复消息：禁止重新生成；live 且有 Write Tool Call 的轮次同样禁止
     canRegenerate: !restored && !messageHasWriteToolCalls(m),
   };

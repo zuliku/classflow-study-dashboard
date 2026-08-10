@@ -158,6 +158,79 @@ describe("Kiro Task V2 Read Tools", () => {
     const r = read.executeKiroReadTool("search_assignments", { due: "today" }, store.getState()) as { ok: true; data: { id: string }[] };
     expect(r.data.map((x) => x.id)).toEqual(["a2"]);
   });
+
+  it("search_assignments scope=at-risk：Domain 保留（无 planning → 空列表，不报错）", async () => {
+    seedState();
+    const { store, read } = await freshModules();
+    const r = read.executeKiroReadTool("search_assignments", { scope: "at-risk" }, store.getState()) as { ok: true; data: { id: string }[] };
+    expect(r.ok).toBe(true);
+    expect(Array.isArray(r.data)).toBe(true);
+  });
+
+  it("propose_task_breakdown：合法 Proposal 通过校验并回显（含任务标题/课程）", async () => {
+    seedState();
+    const { store, read } = await freshModules();
+    const r = read.executeKiroReadTool(
+      "propose_task_breakdown",
+      {
+        assignmentId: "a4",
+        suggestedEstimatedMinutes: 180,
+        subtasks: [
+          { title: "明确研究问题", estimatedMinutes: 30 },
+          { title: "整理数据", estimatedMinutes: 60 },
+          { title: "完成回归与稳健性检验", estimatedMinutes: 60 },
+          { title: "撰写结论", estimatedMinutes: 30 },
+        ],
+        rationale: ["按实证报告流程拆解"],
+      },
+      store.getState()
+    ) as { ok: true; data: { proposal: any } };
+    expect(r.ok).toBe(true);
+    expect(r.data.proposal.assignmentId).toBe("a4");
+    expect(r.data.proposal.assignmentTitle).toBe("期末报告");
+    expect(r.data.proposal.courseName).toBe("统计学");
+    expect(r.data.proposal.subtasks).toHaveLength(4);
+    expect(r.data.proposal.suggestedEstimatedMinutes).toBe(180);
+  });
+
+  it("propose_task_breakdown：非法（步骤仅 1 项）→ INVALID_INPUT，不进入 Store", async () => {
+    seedState();
+    const { store, read } = await freshModules();
+    const before = store.getState().assignments;
+    const r = read.executeKiroReadTool(
+      "propose_task_breakdown",
+      { assignmentId: "a4", subtasks: [{ title: "唯一步骤" }] },
+      store.getState()
+    ) as { ok: false; code: string };
+    expect(r.ok).toBe(false);
+    expect(r.code).toBe("INVALID_INPUT");
+    expect(store.getState().assignments).toEqual(before);
+  });
+
+  it("propose_task_breakdown：任务不存在 → NOT_FOUND（不静默通过）", async () => {
+    seedState();
+    const { store, read } = await freshModules();
+    const r = read.executeKiroReadTool(
+      "propose_task_breakdown",
+      { assignmentId: "nope", suggestedEstimatedMinutes: 60 },
+      store.getState()
+    ) as { ok: false; code: string };
+    expect(r.ok).toBe(false);
+    expect(r.code).toBe("NOT_FOUND");
+  });
+
+  it("propose_task_breakdown：仅估时（无步骤）合法 → 支持「估计需要多久」", async () => {
+    seedState();
+    const { store, read } = await freshModules();
+    const r = read.executeKiroReadTool(
+      "propose_task_breakdown",
+      { assignmentId: "a4", suggestedEstimatedMinutes: 45, rationale: ["根据内容量与类型估计"] },
+      store.getState()
+    ) as { ok: true; data: { proposal: any } };
+    expect(r.ok).toBe(true);
+    expect(r.data.proposal.subtasks).toEqual([]);
+    expect(r.data.proposal.suggestedEstimatedMinutes).toBe(45);
+  });
 });
 
 describe("Kiro Task V2 Write Tools", () => {

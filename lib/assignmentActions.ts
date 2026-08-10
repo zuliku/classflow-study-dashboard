@@ -3,6 +3,7 @@ import {
   bulkApplyDDLDate,
   bulkApplyPriority,
   bulkApplyStatus,
+  bulkClearDDL,
   bulkShiftDDL,
 } from "@/lib/assignmentSelection";
 import { openAssignmentEditor } from "@/lib/uiEvents";
@@ -20,6 +21,8 @@ export interface AssignmentActions {
   markDoing: (ids: string[]) => void;
   setPriority: (ids: string[], priority: Priority) => void;
   setDDLDate: (ids: string[], targetDate: string) => void;
+  /** 清除截止时间（ddl → undefined） */
+  clearDDLDate: (ids: string[]) => void;
   /** 整体平移：提前/延后 N 天（负数为提前） */
   shiftDDL: (ids: string[], days: number) => void;
   remove: (ids: string[]) => void;
@@ -120,6 +123,7 @@ export function createAssignmentActions(api: AssignmentActionApi): AssignmentAct
     markDoing: (ids) => bulkApplyStatus(targets(ids), "doing").forEach(updateAssignment),
     setPriority: (ids, priority) => bulkApplyPriority(targets(ids), priority).forEach(updateAssignment),
     setDDLDate: (ids, targetDate) => applyDDL(ids, (as) => bulkApplyDDLDate(as, targetDate)),
+    clearDDLDate: (ids) => applyDDL(ids, (as) => bulkClearDDL(as)),
     shiftDDL: (ids, days) => applyDDL(ids, (as) => bulkShiftDDL(as, days)),
     remove,
   };

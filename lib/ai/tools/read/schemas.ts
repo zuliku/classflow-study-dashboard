@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { TaskBreakdownProposalSchema } from "@/lib/tasks/taskBreakdown";
 
 /**
  * Kiro Read Tool 输入 Schema（zod）。
@@ -22,15 +23,15 @@ export const getWeekScheduleSchema = z.object({
 
 const ASSIGNMENT_STATUS = z.enum(["todo", "doing", "submitted", "completed"]);
 const DUE_FILTER = z.enum(["overdue", "today", "3days", "7days", "all"]);
-/** Task V2 action scope（与 Assignment Workspace 视图同源；Today = 今天截止 OR 今天有 StudyBlock） */
-const ASSIGNMENT_SCOPE = z.enum(["focus", "today", "upcoming", "unscheduled", "all", "archive"]);
+/** Task V2 action scope（与 Assignment Workspace 视图同源；Today = 今天截止 OR 今天有 StudyBlock；at-risk 由 Deadline Health 派生） */
+const ASSIGNMENT_SCOPE = z.enum(["focus", "today", "upcoming", "at-risk", "unscheduled", "all", "archive"]);
 
 export const searchAssignmentsSchema = z.object({
   query: z.string().trim().min(1).max(120).optional(),
   courseId: z.string().trim().min(1).max(120).optional(),
   status: ASSIGNMENT_STATUS.optional(),
   due: DUE_FILTER.optional(),
-  /** Task V2 scope：focus/today/upcoming/unscheduled/all/archive（与 Workspace 视图同一套规则） */
+  /** Task V2 scope：focus/today/upcoming/at-risk/unscheduled/all/archive（与 Workspace 视图同一套规则） */
   scope: ASSIGNMENT_SCOPE.optional(),
 });
 
@@ -100,6 +101,9 @@ export const readMaterialSchema = z.object({
   materialId: z.string().trim().min(1).max(120),
 });
 
+/** 任务拆解 + 估时 Proposal 输入（模型生成结构化建议；与 TaskBreakdownProposal 同 schema） */
+export const proposeTaskBreakdownSchema = TaskBreakdownProposalSchema;
+
 /** Read Tool 输入 schema 注册表（tool name → zod schema；server/client 共用） */
 export const KIRO_READ_TOOL_SCHEMAS = {
   get_current_context: emptyInputSchema,
@@ -120,6 +124,7 @@ export const KIRO_READ_TOOL_SCHEMAS = {
   get_calendar_range: getCalendarRangeSchema,
   get_material_metadata: getMaterialMetadataSchema,
   read_material: readMaterialSchema,
+  propose_task_breakdown: proposeTaskBreakdownSchema,
 } as const;
 
 export type KiroReadToolName = keyof typeof KIRO_READ_TOOL_SCHEMAS;

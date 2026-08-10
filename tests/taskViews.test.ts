@@ -189,4 +189,46 @@ describe("at-risk 视图（Deadline Health 驱动）", () => {
     const { items } = deriveTaskWorkspace(tasks, [], "at-risk", NOW, planning);
     expect(items.map((i) => i.task.id)).toEqual(["overdue", "earlier-first", "later-first"]);
   });
+
+  it("Part B：at-risk 并入 Focus（overdue → at-risk → 今天截止 → 今天安排 → doing → urgent 临近）", () => {
+    const tasks = [
+      mk("overdue-a", { status: "doing", ddl: iso(new Date(2026, 7, 9), 23, 59), estimatedMinutes: 60 }),
+      mk("atrisk-a", { ddl: iso(new Date(2026, 7, 12), 23, 59), estimatedMinutes: 120 }),
+      mk("atrisk-b", { ddl: iso(new Date(2026, 7, 13), 23, 59), estimatedMinutes: 120 }),
+      mk("today-safe", { ddl: iso(new Date(2026, 7, 10), 23, 59), estimatedMinutes: 30 }),
+      mk("doing-a", { status: "doing", ddl: iso(new Date(2026, 7, 20), 23, 59), estimatedMinutes: 30 }),
+      mk("urgent-safe", { priority: "urgent", ddl: iso(new Date(2026, 7, 12), 23, 59), estimatedMinutes: 30 }),
+      mk("far-safe", { ddl: iso(new Date(2026, 7, 30), 23, 59), estimatedMinutes: 30 }),
+    ];
+    const blocks: StudyBlock[] = [
+      block("pb1", "today-safe", 0, "18:00", "18:30"),
+      block("pb2", "doing-a", 5, "10:00", "10:30"),
+      block("pb3", "urgent-safe", 1, "09:00", "09:30"),
+      block("pb4", "far-safe", 8, "09:00", "09:30"),
+    ];
+    const { items, counts } = deriveTaskWorkspace(tasks, blocks, "focus", NOW, planning);
+    expect(items.map((i) => i.task.id)).toEqual([
+      "overdue-a",
+      "atrisk-a",
+      "atrisk-b",
+      "today-safe",
+      "doing-a",
+      "urgent-safe",
+    ]);
+    // 安排充足（scheduled ≥ estimated）的远期任务不进入 Focus
+    expect(items.map((i) => i.task.id)).not.toContain("far-safe");
+    // at-risk Domain 仍可派生（overdue + 2 个 at-risk）
+    expect(counts["at-risk"]).toBe(3);
+  });
+
+  it("Part B：无 planning 时 focus 不含 at-risk 层级（Health 不可判定）", () => {
+    const tasks = [
+      mk("overdue-a", { status: "doing", ddl: iso(new Date(2026, 7, 9), 23, 59), estimatedMinutes: 60 }),
+      mk("atrisk-a", { status: "doing", ddl: iso(new Date(2026, 7, 12), 23, 59), estimatedMinutes: 120 }),
+      mk("today-safe", { ddl: iso(new Date(2026, 7, 10), 23, 59), estimatedMinutes: 30 }),
+    ];
+    const { items } = deriveTaskWorkspace(tasks, [], "focus", NOW);
+    // atrisk-a 无 health → 不因风险提前；按 逾期 → 今天截止 → doing 排序
+    expect(items.map((i) => i.task.id)).toEqual(["overdue-a", "today-safe", "atrisk-a"]);
+  });
 });

@@ -29,8 +29,8 @@ export const KIRO_READ_TOOLS = {
   }),
   search_assignments: tool({
     description:
-      "按关键词/课程/状态/截止范围搜索任务，也支持 Task V2 action scope（focus/today/upcoming/unscheduled/all/archive）。" +
-      "today = 今天截止 或 今天安排了学习计划（Do Date ≠ Due Date）；unscheduled = 未完成且无任何学习计划的任务（可能没有截止时间）。多个匹配时全部返回候选。",
+      "按关键词/课程/状态/截止范围搜索任务，也支持 Task V2 action scope（focus/today/upcoming/at-risk/unscheduled/all/archive）。" +
+      "today = 今天截止 或 今天安排了学习计划（Do Date ≠ Due Date）；at-risk = Deadline Health 判定为可能来不及或已逾期的任务；unscheduled = 未完成且无任何学习计划的任务（可能没有截止时间）。多个匹配时全部返回候选。",
     inputSchema: KIRO_READ_TOOL_SCHEMAS.search_assignments,
   }),
   get_assignment: tool({
@@ -93,6 +93,15 @@ export const KIRO_READ_TOOLS = {
     description:
       "读取课程资料的正文内容（PDF/DOCX/TXT 本地提取；图片无文本）。扫描 PDF 会明确说明。只读取明确指定的资料，不要无差别读取全部附件。",
     inputSchema: KIRO_READ_TOOL_SCHEMAS.read_material,
+  }),
+  propose_task_breakdown: tool({
+    description:
+      "提交任务拆解 + 估时建议（结构化 Proposal，AI 推理 + 严格 schema；不是 Markdown 列表）。" +
+      "调用前必须先 get_assignment 获取任务完整信息（标题/说明/课程/截止/已有子任务/预计耗时）；用户明确要求根据课程资料拆解时才先 read_material。" +
+      "subtasks 拆成 2–8 个有意义的可执行阶段，不做微动作；每步可带 estimatedMinutes。" +
+      "suggestedEstimatedMinutes 是 AI 估计（source=ai-estimate），不是已写入数据。" +
+      "本工具是 READ / PROPOSAL：绝不写入 Store，绝不修改 Subtasks 或 estimatedMinutes；只有用户确认 Apply 后才会写入。",
+    inputSchema: KIRO_READ_TOOL_SCHEMAS.propose_task_breakdown,
   }),
 };
 

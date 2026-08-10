@@ -35,8 +35,9 @@ import {
   sanitizeHighlight,
 } from "@/lib/assignmentSelection";
 import { AssignmentPeekPanel } from "@/components/assignment/AssignmentPeekPanel";
+import { AssignmentContextMenu, ContextMenuCommand } from "@/components/assignment/AssignmentContextMenu";
 import { QuickAddCard } from "@/components/assignment/QuickAddCard";
-import { deriveTaskWorkspace, TASK_WORKSPACE_VIEWS, TaskHealthPlanningInput } from "@/lib/tasks/taskViews";
+import { deriveTaskWorkspace, PRIMARY_TASK_WORKSPACE_VIEWS, TaskHealthPlanningInput } from "@/lib/tasks/taskViews";
 import { healthViewMeta } from "@/lib/tasks/taskHealthView";
 import { useKiroHandoff } from "@/hooks/useKiroHandoff";
 import { KIRO_ICON } from "@/components/layout/navItems";
@@ -92,6 +93,11 @@ export function AssignmentTable({ mode = "compact" }: AssignmentTableProps) {
 
   const [courseFilter, setCourseFilter] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState("");
+  // Part B：Focus 内「仅看有风险」轻量筛选（非第六个 Tab）
+  const [riskOnly, setRiskOnly] = useState(false);
+  // Part B：「···」More 菜单（低频入口：已归档）
+  const [moreOpen, setMoreOpen] = useState(false);
+  const moreMenuRef = useRef<HTMLDivElement | null>(null);
   const [quickAddOpen, setQuickAddOpen] = useState(false);
   const newTaskIds = useEnterOnAdd(assignments.map((a) => a.id));
 
@@ -130,15 +136,22 @@ export function AssignmentTable({ mode = "compact" }: AssignmentTableProps) {
     }
   });
 
-  // Workspace V2：视图派生（view + courseFilter + Health）+ 文本搜索
+  // Workspace V2：视图派生（view + courseFilter + Health）+ 文本搜索 + Focus 风险筛选
   const workspaceViewResult = isWorkspace
     ? deriveTaskWorkspace(courseFiltered, studyBlocks, assignmentWorkspaceView, today, planningInput ?? undefined)
     : null;
   const workspaceItems = (() => {
     if (!workspaceViewResult) return [];
+    let items = workspaceViewResult.items;
+    // Part B：Focus 内轻量 Risk Filter（仅看有风险；不新增第六个 Tab）
+    if (riskOnly && assignmentWorkspaceView === "focus") {
+      items = items.filter(
+        (it) => it.meta.health === "at-risk" || it.meta.overdue
+      );
+    }
     const q = searchQuery.trim().toLowerCase();
-    if (!q) return workspaceViewResult.items;
-    return workspaceViewResult.items.filter((it) => {
+    if (!q) return items;
+    return items.filter((it) => {
       if (it.task.title.toLowerCase().includes(q)) return true;
       const course = courses.find((c) => c.id === it.task.courseId);
       return course?.name.toLowerCase().includes(q) ?? false;
@@ -234,25 +247,37 @@ export function AssignmentTable({ mode = "compact" }: AssignmentTableProps) {
   };
 
   const [ctxMenu, setCtxMenu] = useState<{
-    x: number;
-    y: number;
+    anchorX: number;
+    anchorY: number;
     ids: string[];
     highlightedId: string | null;
   } | null>(null);
-  const [ctxDdlDate, setCtxDdlDate] = useState("");
   const [bulkDdlOpen, setBulkDdlOpen] = useState(false);
   const [bulkDdlDate, setBulkDdlDate] = useState("");
   const [bulkShiftDays, setBulkShiftDays] = useState("");
 
-  // Context Menu Esc / 点击外部关闭
+  // More 菜单：outside click / Esc 关闭（非 modal，不拦截页面交互）
   useEffect(() => {
-    if (!ctxMenu) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setCtxMenu(null);
+    if (!moreOpen) return;
+    const onPointerDown = (e: PointerEvent) => {
+      if (!moreMenuRef.current?.contains(e.target as Node)) setMoreOpen(false);
     };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setMoreOpen(false);
+    };
+    document.addEventListener("pointerdown", onPointerDown);
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [ctxMenu]);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [moreOpen]);
+
+  // 离开 Focus 视图时复位风险筛选；切视图时关闭 More 菜单
+  useEffect(() => {
+    if (assignmentWorkspaceView !== "focus") setRiskOnly(false);
+    setMoreOpen(false);
+  }, [assignmentWorkspaceView]);
 
   const handleListKeyDown = (e: React.KeyboardEvent) => {
     if (e.target !== e.currentTarget) return;
@@ -353,31 +378,43 @@ export function AssignmentTable({ mode = "compact" }: AssignmentTableProps) {
     e.preventDefault();
     setHighlightedAssignmentId(taskId);
     const ids = assignmentSelection.includes(taskId) ? assignmentSelection : [taskId];
+    // 记录 Viewport 锚点（clientX/clientY）；菜单定位在 AssignmentContextMenu 内
+    // 按真实尺寸 computeContextMenuPosition（翻转 / clamp），不做 magic 偏移
     setCtxMenu({
-      x: Math.min(e.clientX, window.innerWidth - 220),
-      y: Math.min(e.clientY, window.innerHeight - 320),
+      anchorX: e.clientX,
+      anchorY: e.clientY,
       ids,
       highlightedId: taskId,
     });
   };
 
   // Context Menu 项来自 Command Registry（打开/编辑/完成/进行中/优先级/删除）
-  const menuCommands = useMemo(() => {
-    if (!ctxMenu) return [];
-    const menuCtx = {
+  const menuCtx = useMemo(() => {
+    if (!ctxMenu) return null;
+    return {
       assignmentActions: actions,
       highlightedAssignmentId: ctxMenu.highlightedId,
       // 菜单场景无 entity 上下文：不触发「编辑」dedupe，菜单保持完整动作
       selectedAssignmentId: null,
       close: () => setCtxMenu(null),
     } as Parameters<typeof getAssignmentContextCommands>[0];
-    return getAssignmentContextCommands(menuCtx, ctxMenu.ids).map((cmd) => ({
-      ...cmd,
-      run: () => cmd.run(menuCtx as never),
-    }));
   }, [ctxMenu, actions]);
 
-  const ctxCount = ctxMenu?.ids.length ?? 0;
+  const menuCommands = useMemo<ContextMenuCommand[]>(() => {
+    if (!ctxMenu || !menuCtx) return [];
+    return getAssignmentContextCommands(menuCtx, ctxMenu.ids).map(
+      (cmd): ContextMenuCommand => ({
+        ...cmd,
+        run: () => cmd.run(menuCtx as never),
+      })
+    );
+  }, [ctxMenu, menuCtx]);
+
+  // 菜单目标任务中是否已有 DDL（决定「清除截止时间」显示）
+  const ctxHasDdl = useMemo(() => {
+    if (!ctxMenu) return false;
+    return ctxMenu.ids.some((id) => assignments.find((a) => a.id === id)?.ddl);
+  }, [ctxMenu, assignments]);
 
   const bulkCount = assignmentSelection.length;
   const applyBulkDDL = () => {
@@ -393,11 +430,14 @@ export function AssignmentTable({ mode = "compact" }: AssignmentTableProps) {
     setBulkDdlOpen(false);
     setBulkShiftDays("");
   };
-  const applyCtxDDL = () => {
-    if (!ctxMenu || !ctxDdlDate) return;
-    actions.setDDLDate(ctxMenu.ids, ctxDdlDate);
+  const applyCtxDDL = (date: string | null) => {
+    if (!ctxMenu) return;
+    if (date === null) {
+      actions.clearDDLDate(ctxMenu.ids);
+    } else if (date) {
+      actions.setDDLDate(ctxMenu.ids, date);
+    }
     setCtxMenu(null);
-    setCtxDdlDate("");
   };
 
   return (
@@ -438,6 +478,21 @@ export function AssignmentTable({ mode = "compact" }: AssignmentTableProps) {
                     : handoff.openForWeek(currentSemesterWeek)
                 }
               />
+            )}
+            {/* Part C：有 Highlight 时才显示「帮我拆解当前任务」快捷入口 */}
+            {isWorkspace && highlightedAssignmentId && (
+              <button
+                onClick={() => {
+                  handoff.openForAssignment(highlightedAssignmentId);
+                  handoff.handoffPrompt(
+                    "帮我拆解这个任务，拆成 2–8 个可执行的步骤，并估算每步和总耗时。"
+                  );
+                }}
+                title="Kiro 拆解当前高亮任务"
+                className="ux-press px-2.5 h-8 text-[11px] font-bold text-charcoal bg-alabaster hover:bg-alba border border-line rounded-lg transition-colors shrink-0"
+              >
+                帮我拆解当前任务
+              </button>
             )}
             <button
               onClick={handleAddAssignmentClick}
@@ -481,6 +536,23 @@ export function AssignmentTable({ mode = "compact" }: AssignmentTableProps) {
 
           {isWorkspace ? (
             <div className="flex items-center gap-2 flex-wrap">
+              {/* Part B：Focus 内轻量 Risk Filter（有风险时显示；不新增第六个 Tab） */}
+              {assignmentWorkspaceView === "focus" && (workspaceViewResult?.counts["at-risk"] ?? 0) > 0 && (
+                <button
+                  onClick={() => setRiskOnly((v) => !v)}
+                  data-testid="focus-risk-filter"
+                  aria-pressed={riskOnly}
+                  className={`flex items-center gap-1 px-2.5 py-1 rounded-xl border text-[11px] font-semibold transition-colors ${
+                    riskOnly
+                      ? "bg-danger-bg border-danger-border text-danger font-bold"
+                      : "bg-[#F7F5F5] border-line text-satin-grey hover:text-charcoal"
+                  }`}
+                >
+                  <AlertTriangle className="w-3 h-3" />
+                  有风险 {workspaceViewResult?.counts["at-risk"]}
+                </button>
+              )}
+
               {/* Search */}
               <div className="flex items-center gap-1.5 bg-[#F7F5F5] border border-line rounded-xl px-2.5 py-1 min-w-[150px]">
                 <Search className="w-3.5 h-3.5 text-[#A48F82]" />
@@ -493,33 +565,81 @@ export function AssignmentTable({ mode = "compact" }: AssignmentTableProps) {
                 />
               </div>
 
-              {/* View Tabs（count = 课程筛选后该视图数量；search 不改变 count 语义） */}
-              <div className="flex flex-wrap items-center gap-1 bg-alabaster p-0.5 rounded-xl border border-line-strong text-[11px] font-medium">
-                {TASK_WORKSPACE_VIEWS.map((view) => {
-                  const isActive = assignmentWorkspaceView === view.id;
-                  const count = workspaceViewResult?.counts[view.id] ?? 0;
-                  return (
+              {assignmentWorkspaceView === "archive" ? (
+                /* Archive：临时状态入口（不新增永久 Tab） */
+                <div className="flex items-center gap-1 bg-alabaster p-0.5 rounded-xl border border-line-strong text-[11px] font-medium">
+                  <span className="flex items-center gap-1 px-2.5 py-0.5 font-bold text-charcoal">
+                    已归档 {workspaceViewResult?.counts.archive ?? 0}
+                  </span>
+                  <button
+                    onClick={() => setAssignmentWorkspaceView("all")}
+                    className="px-2.5 py-0.5 rounded-lg text-satin-grey hover:text-charcoal hover:bg-white transition-colors"
+                  >
+                    ← 返回全部
+                  </button>
+                </div>
+              ) : (
+                <>
+                  {/* View Tabs：仅 Primary Views（count = 课程筛选后该视图数量；search 不改变 count 语义） */}
+                  <div className="flex flex-wrap items-center gap-1 bg-alabaster p-0.5 rounded-xl border border-line-strong text-[11px] font-medium">
+                    {PRIMARY_TASK_WORKSPACE_VIEWS.map((view) => {
+                      const isActive = assignmentWorkspaceView === view.id;
+                      const count = workspaceViewResult?.counts[view.id] ?? 0;
+                      return (
+                        <button
+                          key={view.id}
+                          onClick={() => setAssignmentWorkspaceView(view.id)}
+                          className={`flex items-center gap-1 px-2.5 py-0.5 rounded-lg transition-colors duration-[var(--motion-fast)] ease-[var(--ease-standard)] ${
+                            isActive
+                              ? "bg-white text-charcoal font-bold shadow-subtle"
+                              : "text-satin-grey hover:text-charcoal"
+                          }`}
+                        >
+                          {view.label}
+                          <span
+                            className={`text-[9px] font-bold px-1 rounded ${
+                              isActive ? "text-sandrift" : "text-satin-grey/60"
+                            }`}
+                          >
+                            {count}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {/* More：低频入口（已归档等） */}
+                  <div className="relative" ref={moreMenuRef}>
                     <button
-                      key={view.id}
-                      onClick={() => setAssignmentWorkspaceView(view.id)}
-                      className={`flex items-center gap-1 px-2.5 py-0.5 rounded-lg transition-colors duration-[var(--motion-fast)] ease-[var(--ease-standard)] ${
-                        isActive
-                          ? "bg-white text-charcoal font-bold shadow-subtle"
-                          : "text-satin-grey hover:text-charcoal"
-                      }`}
+                      onClick={() => setMoreOpen((v) => !v)}
+                      aria-label="更多视图"
+                      aria-expanded={moreOpen}
+                      className="w-7 h-6 flex items-center justify-center rounded-lg bg-alabaster border border-line-strong text-satin-grey hover:text-charcoal hover:bg-white transition-colors font-bold leading-none"
                     >
-                      {view.label}
-                      <span
-                        className={`text-[9px] font-bold px-1 rounded ${
-                          isActive ? "text-sandrift" : "text-satin-grey/60"
-                        }`}
-                      >
-                        {count}
-                      </span>
+                      ···
                     </button>
-                  );
-                })}
-              </div>
+                    {moreOpen && (
+                      <div
+                        data-testid="workspace-more-menu"
+                        className="absolute right-0 top-full mt-1.5 w-40 bg-surface border border-line-strong rounded-xl shadow-card p-1 z-40 text-[11px] ux-inline"
+                      >
+                        <button
+                          onClick={() => {
+                            setAssignmentWorkspaceView("archive");
+                            setMoreOpen(false);
+                          }}
+                          className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-left font-semibold text-charcoal hover:bg-alabaster transition-colors"
+                        >
+                          查看已归档
+                          <span className="ml-auto text-[9px] font-bold text-sandrift">
+                            {workspaceViewResult?.counts.archive ?? 0}
+                          </span>
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </>
+              )}
             </div>
           ) : (
             <div className="flex flex-wrap items-center gap-1 bg-alabaster p-0.5 rounded-xl border border-line-strong text-[11px] font-medium">
@@ -948,62 +1068,16 @@ export function AssignmentTable({ mode = "compact" }: AssignmentTableProps) {
         </div>
       )}
 
-      {/* ---- Workspace：Context Menu（菜单项来自 Command Registry） ---- */}
-      {isWorkspace && ctxMenu && (
-        <>
-          <div className="fixed inset-0 z-40" onClick={() => setCtxMenu(null)} />
-          <div
-            data-testid="assignment-context-menu"
-            className="fixed z-50 w-52 bg-surface border border-line-strong rounded-2xl shadow-card p-1.5 text-xs ux-inline"
-            style={{ left: ctxMenu.x, top: ctxMenu.y }}
-          >
-            {menuCommands.map((cmd) => {
-              const Icon = cmd.icon;
-              const isDelete = cmd.id === "ctx-delete";
-              const isPriority = cmd.id.startsWith("ctx-priority-");
-              return (
-                <button
-                  key={cmd.id}
-                  onClick={() => cmd.run()}
-                  className={cn(
-                    "w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-left transition-colors",
-                    isDelete
-                      ? "text-danger hover:bg-danger-bg font-bold"
-                      : isPriority
-                      ? "text-satin-grey hover:bg-alabaster"
-                      : "font-semibold text-charcoal hover:bg-alabaster"
-                  )}
-                >
-                  <Icon className="w-3.5 h-3.5 shrink-0" />
-                  <span className="truncate">{cmd.label}</span>
-                </button>
-              );
-            })}
-
-            {/* 调整截止时间（仅单条/多条均可）：Registry 外的小型内联控件 */}
-            <div className="mt-1 pt-1.5 border-t border-line-soft px-2">
-              <div className="flex items-center gap-1.5">
-                <input
-                  type="date"
-                  value={ctxDdlDate}
-                  onChange={(e) => setCtxDdlDate(e.target.value)}
-                  className="flex-1 px-1.5 py-1 rounded-lg bg-white border border-line text-[11px] font-mono focus:outline-none"
-                  aria-label="调整截止日期"
-                />
-                <button
-                  onClick={applyCtxDDL}
-                  disabled={!ctxDdlDate}
-                  className="px-2 py-1 rounded-lg font-bold text-white bg-charcoal hover:bg-black disabled:opacity-50 transition-colors"
-                >
-                  应用
-                </button>
-              </div>
-              <p className="text-[9px] text-sandrift mt-1">
-                {ctxCount > 1 ? `将 ${ctxCount} 项任务的日期改为所选日期（保留原时间）` : "保留原截止时间"}
-              </p>
-            </div>
-          </div>
-        </>
+      {/* ---- Workspace：Context Menu（Portal + fixed；非 modal，不拦截页面交互） ---- */}
+      {isWorkspace && ctxMenu && menuCtx && (
+        <AssignmentContextMenu
+          anchor={ctxMenu}
+          commands={menuCommands}
+          hasDdl={ctxHasDdl}
+          onRun={(cmd) => cmd.run()}
+          onApplyDDL={applyCtxDDL}
+          onClose={() => setCtxMenu(null)}
+        />
       )}
 
       {/* ---- Workspace：Assignment Peek（Desktop >=1024） ---- */}
