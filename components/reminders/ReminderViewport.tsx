@@ -4,6 +4,7 @@ import React, { useEffect, useRef } from "react";
 import { X } from "lucide-react";
 import { useAppStore } from "@/store/useAppStore";
 import { useReminderDeliveryStore } from "@/store/useReminderDeliveryStore";
+import { useReminderCenterStore } from "@/store/useReminderCenterStore";
 import { Reminder } from "@/types";
 import { formatLocalDateTime } from "@/lib/reminders/reminderDomain";
 import { getReminderDeliverySubtitle } from "@/lib/reminders/reminderPresentation";
@@ -46,8 +47,10 @@ export function ReminderViewport() {
       state.setSelectedAssignmentId(reminder.targetId);
     } else if (reminder.targetType === "studyBlock" || reminder.targetType === "calendarMark") {
       state.setActiveTab("timetable");
+    } else if (reminder.targetType === "standalone") {
+      // Task 7G-A3a：standalone 通知点击 → 打开 Reminder Center（A2 曾留空）
+      useReminderCenterStore.getState().open();
     }
-    // standalone：A3 Reminder Center 完成后接入导航
   };
 
   return (

@@ -3,6 +3,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { MoreHorizontal, ChevronUp } from "lucide-react";
 import { useAppStore } from "@/store/useAppStore";
+import { useReminderCenterStore } from "@/store/useReminderCenterStore";
 import { NavTab } from "@/types";
 import { cn } from "@/lib/utils";
 import { KiroFlowIcon } from "@/components/kiro/KiroFlow";
@@ -16,6 +17,7 @@ import {
 /** 移动端（<768px）底部导航：4 个主入口 + 「更多」轻量菜单 */
 export function BottomNav() {
   const { activeTab, setActiveTab, setSettingsModalOpen } = useAppStore();
+  const reminderCenterOpen = useReminderCenterStore((s) => s.open);
   const [moreOpen, setMoreOpen] = useState(false);
   const navRef = useRef<HTMLElement | null>(null);
 
@@ -43,6 +45,7 @@ export function BottomNav() {
   const handleSelect = (id: string) => {
     setMoreOpen(false);
     if (id === "settings") setSettingsModalOpen(true);
+    else if (id === "reminders") reminderCenterOpen();
     else setActiveTab(id as NavTab);
   };
 
@@ -121,8 +124,8 @@ export function BottomNav() {
       >
         {BOTTOM_NAV_MORE.map((item) => {
           const Icon = item.icon;
-          // settings 是 action：不高亮为 active workspace
-          const isActive = item.id !== "settings" && activeTab === item.id;
+          // reminders / settings 是 action：不高亮为 active workspace
+          const isActive = item.id !== "settings" && item.id !== "reminders" && activeTab === item.id;
           return (
             <button
               key={item.id}

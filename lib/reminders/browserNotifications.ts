@@ -40,6 +40,8 @@ export function showBrowserReminderNotification(input: {
   title: string;
   body: string;
   reminderId: string;
+  /** 系统通知点击回调（由 Runtime 注入 target navigation；bridge 保持通用，不 import store） */
+  onClick?: () => void;
 }): boolean {
   const api = notificationApi();
   if (!api || api.permission !== "granted") return false;
@@ -52,6 +54,7 @@ export function showBrowserReminderNotification(input: {
     });
     n.onclick = () => {
       window.focus();
+      input.onClick?.();
       n.close();
     };
     return true;

@@ -3,6 +3,8 @@
 import React from "react";
 import { ChevronRight } from "lucide-react";
 import { useAppStore } from "@/store/useAppStore";
+import { useReminderCenterStore } from "@/store/useReminderCenterStore";
+import { hasUnreadFiredReminders } from "@/lib/reminders/reminderCenterView";
 import { cn } from "@/lib/utils";
 import {
   MAIN_NAV_ITEMS,
@@ -12,6 +14,10 @@ import {
 
 export function Sidebar() {
   const { activeTab, setActiveTab, setSettingsModalOpen, userProfile } = useAppStore();
+  const reminderCenterOpen = useReminderCenterStore((s) => s.isOpen);
+  const reminderCenterToggle = useReminderCenterStore((s) => s.toggle);
+  const reminders = useAppStore((s) => s.reminders);
+  const hasUnread = hasUnreadFiredReminders(reminders);
 
   const creditPercentage =
     userProfile.totalCredits > 0
@@ -159,21 +165,35 @@ export function Sidebar() {
           })}
         </div>
 
-        {/* 全局 Action：设置（Modal 入口，不改变 activeTab）；与 AI 区域以 border-t 分隔 */}
+        {/* 全局 Action：Reminder Center（Bell，unread 小圆点）/ Settings（Modal 入口） */}
         <div className="pt-1 mt-1 border-t border-line-soft space-y-0.5">
           {GLOBAL_NAV_ACTIONS.map((item) => {
             const Icon = item.icon;
+            const isReminders = item.id === "reminders";
             return (
               <button
                 key={item.id}
-                onClick={() => setSettingsModalOpen(true)}
+                onClick={() =>
+                  isReminders ? reminderCenterToggle() : setSettingsModalOpen(true)
+                }
                 aria-label={item.label}
+                aria-expanded={isReminders ? reminderCenterOpen : undefined}
                 className={cn(
                   "relative w-full flex items-center justify-center xl:justify-start xl:gap-2.5 px-2 xl:px-3 py-2 rounded-xl text-xs font-medium transition-colors duration-[var(--motion-base)] ease-[var(--ease-standard)] group text-left",
-                  "text-satin-grey hover:bg-alabaster hover:text-charcoal"
+                  isReminders && reminderCenterOpen
+                    ? "bg-alabaster text-charcoal"
+                    : "text-satin-grey hover:bg-alabaster hover:text-charcoal"
                 )}
               >
                 <Icon className="w-4 h-4 shrink-0 transition-colors duration-[var(--motion-base)] text-sandrift group-hover:text-charcoal" />
+                {/* unread 小圆点（fired && !readAt；不显示数字） */}
+                {isReminders && hasUnread && (
+                  <span
+                    aria-hidden="true"
+                    data-testid="reminder-unread-dot"
+                    className="absolute top-1.5 left-1/2 -translate-x-1/2 xl:left-auto xl:right-2.5 xl:translate-x-0 w-2 h-2 rounded-full bg-danger border border-surface"
+                  />
+                )}
                 <span data-testid="nav-label" className="hidden xl:inline truncate">{item.label}</span>
                 <span
                   data-testid="nav-tooltip"

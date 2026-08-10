@@ -5,6 +5,7 @@ import {
   FolderKanban,
   BarChart3,
   Users2,
+  Bell,
   Settings,
 } from "lucide-react";
 import { NavTab } from "@/types";
@@ -25,9 +26,9 @@ export interface NavItem {
   section?: "main" | "ai";
 }
 
-/** 全局 Action（非 Workspace Tab）：打开 Settings Modal */
+/** 全局 Action（非 Workspace Tab）：Reminder Center 面板 / Settings Modal */
 export interface GlobalAction {
-  id: "settings";
+  id: "reminders" | "settings";
   label: string;
   icon: React.ElementType;
 }
@@ -49,8 +50,9 @@ export const MAIN_NAV_ITEMS: NavItem[] = WORKSPACE_NAV_ITEMS.filter((i) => i.sec
 /** AI Agent 区域（Sidebar Featured Entry） */
 export const AI_NAV_ITEMS: NavItem[] = WORKSPACE_NAV_ITEMS.filter((i) => i.section === "ai");
 
-/** 全局 Action：设置是 Modal 入口，不假装是 Workspace Tab */
+/** 全局 Action：Reminder Center 与 Settings 都是入口，不假装是 Workspace Tab */
 export const GLOBAL_NAV_ACTIONS: GlobalAction[] = [
+  { id: "reminders", label: "提醒", icon: Bell },
   { id: "settings", label: "设置", icon: Settings },
 ];
 
@@ -62,11 +64,12 @@ export const BOTTOM_NAV_MAIN: NavItem[] = [
   { id: "kiro", label: "Kiro", icon: KIRO_ICON },
 ];
 
-/** 更多菜单：课程/分析/小组为 workspace tab；设置是 action（打开 Settings Modal） */
+/** 更多菜单：课程/分析/小组为 workspace tab；提醒/设置是 action（面板 / Modal） */
 export const BOTTOM_NAV_MORE: (NavItem | GlobalAction)[] = [
   { id: "courses", label: "课程", icon: FolderKanban },
   { id: "analytics", label: "学习统计", icon: BarChart3 },
   { id: "group", label: "小组协作", icon: Users2 },
+  { id: "reminders", label: "提醒", icon: Bell },
   { id: "settings", label: "设置", icon: Settings },
 ];
 

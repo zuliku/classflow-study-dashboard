@@ -4,6 +4,7 @@ import React, { useCallback, useEffect, useRef } from "react";
 import { useAppStore } from "@/store/useAppStore";
 import { useReminderPreferencesStore } from "@/store/useReminderPreferencesStore";
 import { useReminderDeliveryStore } from "@/store/useReminderDeliveryStore";
+import { useReminderCenterStore } from "@/store/useReminderCenterStore";
 import { Reminder } from "@/types";
 import { evaluateMissedReminder, formatLocalDateTime } from "@/lib/reminders/reminderDomain";
 import { parseLocalDDL } from "@/lib/ddl";
@@ -29,6 +30,21 @@ export function ReminderRuntime() {
   const initializedRef = useRef(false);
   const enqueue = useReminderDeliveryStore((s) => s.enqueue);
 
+  /** 系统通知点击 → 打开 ClassFlow + target navigation（bridge 不 import store，回调在此注入） */
+  const buildNotificationOnClick = useCallback((reminder: Reminder) => {
+    return () => {
+      const state = useAppStore.getState();
+      state.markReminderRead(reminder.id, formatLocalDateTime(new Date()));
+      if (reminder.targetType === "assignment" && reminder.targetId) {
+        state.setSelectedAssignmentId(reminder.targetId);
+      } else if (reminder.targetType === "studyBlock" || reminder.targetType === "calendarMark") {
+        state.setActiveTab("timetable");
+      } else if (reminder.targetType === "standalone") {
+        useReminderCenterStore.getState().open();
+      }
+    };
+  }, []);
+
   /** 交付：站内 Card（始终）+ Browser Notification（granted 且已开启时）。返回是否实际交付。 */
   const deliver = useCallback(
     (reminder: Reminder): boolean => {
@@ -44,11 +60,12 @@ export function ReminderRuntime() {
           title: current.title,
           body: getReminderDeliverySubtitle(current),
           reminderId: current.id,
+          onClick: buildNotificationOnClick(current),
         });
       }
       return true;
     },
-    [enqueue]
+    [enqueue, buildNotificationOnClick]
   );
 
   const clearTimer = useCallback(() => {
