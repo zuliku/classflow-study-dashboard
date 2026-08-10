@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   ChevronLeft,
   ChevronRight,
@@ -29,7 +29,8 @@ import { KiroMenuPanel, KiroMenuItem, KiroMenuDivider } from "@/components/kiro/
 import { getWeekDateRange, formatWeekDateRange } from "@/lib/semester";
 import { deriveTimelineItems, deriveUnscheduledAssignments } from "@/lib/timeline/deriveTimelineItems";
 import { timeToMinutes } from "@/lib/timeline/timelineGeometry";
-import { Assignment, CalendarMark, StudyBlock } from "@/types";
+import { isScheduleActive } from "@/lib/schedule";
+import { Assignment, CalendarMark, CourseSchedule, StudyBlock } from "@/types";
 import { cn } from "@/lib/utils";
 
 interface TimelineFilters {
@@ -48,7 +49,7 @@ const DEFAULT_FILTERS: TimelineFilters = {
   group: true,
 };
 
-/** 学习计划与课程 / 其他学习计划的时间重叠校验 */
+/** 学习计划与课程 / 其他学习计划的时间重叠校验（课程只检查当前教学周真正生效的排课） */
 export function studyBlockConflict(
   block: { date: string; startTime: string; endTime: string; courseId?: string; id?: string },
   state: {
@@ -62,7 +63,8 @@ export function studyBlockConflict(
   if (e <= s) return { otherTitle: "结束时间需晚于开始时间" };
   const dow = new Date(`${block.date}T00:00:00`).getDay() || 7;
   for (const sch of state.schedules) {
-    if (sch.dayOfWeek !== dow || (block.courseId && sch.courseId !== block.courseId && false)) continue;
+    if (!isScheduleActive(sch as CourseSchedule, state.currentSemesterWeek)) continue;
+    if (sch.dayOfWeek !== dow) continue;
     const ss = timeToMinutes(sch.startTime) ?? 0;
     const se = timeToMinutes(sch.endTime) ?? ss + 60;
     if (s < se && ss < e) {
@@ -76,6 +78,27 @@ export function studyBlockConflict(
     if (s < be && bs < e) return { otherTitle: `与学习计划《${b.title}》重叠` };
   }
   return null;
+}
+
+/** StudyBlock 与某课程是否同时间重叠（视觉层判断；课程生效周由调用方过滤） */
+function overlapsSchedule(
+  block: { startTime: string; endTime: string },
+  schedule: { startTime: string; endTime: string }
+): boolean {
+  const s = timeToMinutes(block.startTime);
+  const e = timeToMinutes(block.endTime);
+  const ss = timeToMinutes(schedule.startTime);
+  const se = timeToMinutes(schedule.endTime);
+  if (s === null || e === null || ss === null || se === null) return false;
+  return s < se && ss < e;
+}
+
+/** 紧凑时长格式（Timeline 卡片空间紧）：30m / 1h / 1h30m（禁止出现 1min 式错误） */
+function formatCompactMinutes(minutes: number): string {
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  if (h === 0) return `${m}m`;
+  return m === 0 ? `${h}h` : `${h}h${m}m`;
 }
 
 /**
@@ -153,7 +176,7 @@ export function TimelineWorkspace() {
     [assignments, studyBlocks]
   );
 
-  // ---- StudyBlock 层（Grid 内弱时间块）----
+  // ---- StudyBlock 层（Grid 内弱时间块；Course > StudyBlock：重叠时不绘制 Card）----
   const studyLayer = (ctx: {
     dayOfWeek: number;
     dayStartMinutes: number;
@@ -162,39 +185,91 @@ export function TimelineWorkspace() {
   }) => {
     if (!filters.studyBlocks) return null;
     const date = weekDates[ctx.dayOfWeek - 1];
+    // 只与「当前教学周真正生效」的课程比较（单双周 / excludedWeeks / 调停课一致）
+    const daySchedules = schedules.filter(
+      (s) => s.dayOfWeek === ctx.dayOfWeek && isScheduleActive(s, currentSemesterWeek)
+    );
     const dayBlocks = studyBlocks.filter((b) => b.date === date);
+    const dayStart = ctx.dayStartMinutes;
+    const dayEnd = ctx.dayStartMinutes + ctx.totalMinutes;
     return (
       <>
         {dayBlocks.map((b) => {
-          const s = ctx.timeToMinutes(b.startTime) ?? 0;
-          const e = ctx.timeToMinutes(b.endTime) ?? s + 60;
-          const topPct = ((s - ctx.dayStartMinutes) / ctx.totalMinutes) * 100;
+          // 与课程重叠：不绘制 Card（课程卡右上角由 courseIndicators 显示 Task Marker）
+          if (daySchedules.some((s) => overlapsSchedule(b, s))) return null;
+          const rawS = timeToMinutes(b.startTime);
+          const rawE = timeToMinutes(b.endTime);
+          if (rawS === null || rawE === null) return null;
+          // Visual Clipping：只绘制 08:00–21:00 内的部分（不改真实数据）
+          const s = Math.max(rawS, dayStart);
+          const e = Math.min(rawE, dayEnd);
+          if (e <= s) return null; // 完全在 Timeline Grid 之外（如 22:00–23:00）
+          const topPct = ((s - dayStart) / ctx.totalMinutes) * 100;
           const heightPct = ((e - s) / ctx.totalMinutes) * 100;
-          const duration = Math.round((e - s) / 60);
+          const durationMinutes = e - s;
+          // 真实时间高度优先；跨界块不加 minimum（防突破 Grid 上下边界）
+          const touchesEdge = s <= dayStart || e >= dayEnd;
+          // 高度不足的短块：只显示 Title，不放 duration / delete
+          const showMeta = heightPct >= 3.4;
           return (
             <div
               key={b.id}
               data-testid="timeline-study-block"
-              title={`${b.title} · ${b.startTime}–${b.endTime}（${duration} 分钟）`}
-              className="absolute left-1 right-1 rounded-lg border border-dashed border-line-strong bg-pastel-mint/20 px-1.5 py-0.5 flex items-center gap-1 overflow-hidden pointer-events-auto"
-              style={{ top: `${topPct}%`, height: `${Math.max(heightPct - 0.3, 7)}%` }}
+              title={`${b.title} · ${b.startTime}–${b.endTime}（${formatCompactMinutes(rawE - rawS)}）`}
+              className="absolute left-1 right-1 z-[2] rounded-lg border border-dashed border-line-soft bg-pastel-mint/20 px-1.5 py-0.5 flex items-center gap-1 overflow-hidden pointer-events-auto group"
+              style={{ top: `${topPct}%`, height: `${heightPct}%`, minHeight: touchesEdge ? undefined : 6 }}
             >
               <span className="truncate text-[10px] font-semibold text-satin-grey">{b.title}</span>
-              <span className="text-[9px] text-sandrift font-medium shrink-0">{duration}min</span>
-              <button
-                onClick={() => {
-                  deleteStudyBlock(b.id);
-                  pushToast({ message: "已删除学习计划" });
-                }}
-                aria-label={`删除学习计划 ${b.title}`}
-                className="ml-auto p-0.5 rounded text-sandrift hover:text-danger transition-colors shrink-0 opacity-60 hover:opacity-100"
-              >
-                <X className="w-2.5 h-2.5" />
-              </button>
+              {showMeta && (
+                <>
+                  <span className="text-[9px] text-sandrift font-medium shrink-0">
+                    {formatCompactMinutes(durationMinutes)}
+                  </span>
+                  <button
+                    onClick={() => {
+                      deleteStudyBlock(b.id);
+                      pushToast({ message: "已删除学习计划" });
+                    }}
+                    aria-label={`删除学习计划 ${b.title}`}
+                    className="ml-auto p-0.5 rounded text-sandrift hover:text-danger transition-colors shrink-0 opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
+                  >
+                    <X className="w-2.5 h-2.5" />
+                  </button>
+                </>
+              )}
             </div>
           );
         })}
       </>
+    );
+  };
+
+  // ---- Course > StudyBlock：课程卡右上角 Task Marker（overlap 时替代 StudyBlock Card）----
+  const courseIndicators = ({
+    schedule,
+    dayOfWeek,
+    hasConflict,
+    dayStartMinutes,
+    totalMinutes,
+  }: {
+    schedule: CourseSchedule;
+    dayOfWeek: number;
+    hasConflict: boolean;
+    dayStartMinutes: number;
+    totalMinutes: number;
+  }) => {
+    if (!filters.studyBlocks) return null;
+    const date = weekDates[dayOfWeek - 1];
+    const blocks = studyBlocks.filter((b) => b.date === date && overlapsSchedule(b, schedule));
+    if (blocks.length === 0) return null;
+    return (
+      <CourseTaskMarker
+        blocks={blocks}
+        schedule={schedule}
+        hasConflict={hasConflict}
+        dayStartMinutes={dayStartMinutes}
+        totalMinutes={totalMinutes}
+      />
     );
   };
 
@@ -457,6 +532,7 @@ export function TimelineWorkspace() {
               showHeader={false}
               showWeekdayHeader={false}
               extraLayers={studyLayer}
+              courseIndicators={courseIndicators}
             />
           </div>
         </div>
@@ -497,6 +573,98 @@ export function TimelineWorkspace() {
       onArrange={(a) => { setArrangeFor(a); setMarkOpen(false); }}
     />
     </>
+  );
+}
+
+/**
+ * Course > StudyBlock 的 Task Marker：
+ * 课程卡右上角 secondary signal（默认纯 dot；多个 overlap 时 + 轻量 count）。
+ * Hover / Focus / Tap 显示 Popover 详情；点击不导航（stopPropagation 防误开课程 Drawer）。
+ */
+function CourseTaskMarker({
+  blocks,
+  schedule,
+  hasConflict,
+  dayStartMinutes,
+  totalMinutes,
+}: {
+  blocks: StudyBlock[];
+  schedule: CourseSchedule;
+  hasConflict: boolean;
+  dayStartMinutes: number;
+  totalMinutes: number;
+}) {
+  const [open, setOpen] = useState(false);
+  const markerRef = useRef<HTMLDivElement | null>(null);
+  const count = blocks.length;
+  const startMinutes = timeToMinutes(schedule.startTime) ?? 0;
+  // 课程接近 Grid 底部时 Popover 向上展开（防溢出 Timeline）
+  const upward = startMinutes - dayStartMinutes > totalMinutes * 0.6;
+
+  // Touch：点击 Marker 外部任意区域关闭（capture；Marker 自身由 onClick toggle）
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: PointerEvent) => {
+      if (markerRef.current && !markerRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener("pointerdown", onDown, true);
+    return () => document.removeEventListener("pointerdown", onDown, true);
+  }, [open]);
+
+  return (
+    <div
+      ref={markerRef}
+      data-testid="course-task-marker"
+      className="absolute z-[7]"
+      style={{ top: 6, right: hasConflict ? 28 : 6 }}
+    >
+      <button
+        type="button"
+        tabIndex={0}
+        aria-label={`${count} 个学习任务与本课程时间重叠`}
+        aria-expanded={open}
+        onClick={(e) => {
+          e.stopPropagation();
+          setOpen((v) => !v);
+        }}
+        onMouseEnter={() => setOpen(true)}
+        onMouseLeave={() => setOpen(false)}
+        onFocus={() => setOpen(true)}
+        onBlur={() => setOpen(false)}
+        className="w-[20px] h-[20px] -m-[1px] flex items-center justify-center gap-0.5 rounded-full cursor-pointer outline-none hover:scale-[1.12] transition-transform duration-[var(--motion-fast)]"
+        title="查看重叠的学习任务"
+      >
+        <span className="block w-[7px] h-[7px] rounded-full bg-[#A87952] shadow-subtle" />
+        {count > 1 && (
+          <span className="text-[9px] font-bold text-[#A87952] leading-none">{count}</span>
+        )}
+      </button>
+
+      {open && (
+        <div
+          className={cn(
+            "absolute w-max max-w-[240px] bg-surface border border-line-strong rounded-xl shadow-card px-2.5 py-2 space-y-1.5 z-30",
+            upward ? "bottom-full mb-1.5" : "top-full mt-1.5"
+          )}
+          style={{ right: hasConflict ? -22 : 0 }}
+        >
+          <p className="text-[11px] font-bold text-charcoal">学习任务</p>
+          {blocks.slice(0, 4).map((b) => (
+            <div key={b.id} className="space-y-0.5">
+              <p className="text-[10px] font-semibold text-charcoal leading-snug">{b.title}</p>
+              <p className="text-[9px] text-satin-grey">
+                {b.startTime}–{b.endTime} · 与当前课程时间重叠
+              </p>
+            </div>
+          ))}
+          {blocks.length > 4 && (
+            <p className="text-[10px] font-semibold text-satin-grey">还有 {blocks.length - 4} 项</p>
+          )}
+        </div>
+      )}
+    </div>
   );
 }
 

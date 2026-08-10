@@ -9,7 +9,7 @@ import { format } from "date-fns";
 import { getWeekDateRange, formatWeekDateRange, getSemesterWeek } from "@/lib/semester";
 import { findScheduleConflicts } from "@/lib/conflicts";
 import { isScheduleActive, timeToMinutes } from "@/lib/schedule";
-import { CourseSchedule, ScheduleConflict } from "@/types";
+import { Course, CourseSchedule, ScheduleConflict } from "@/types";
 import {
   TIMETABLE_DAY_START_MINUTES,
   TIMETABLE_DAY_END_MINUTES,
@@ -79,6 +79,7 @@ export function TimetableGrid({
   headerActions,
   fillAvailableHeight = false,
   extraLayers,
+  courseIndicators,
 }: {
   editable?: boolean;
   /** compact：仅 Overview 只读表示层（更紧凑的时间轴）；default 保持舒展（workspace / FullTimetableModal） */
@@ -100,7 +101,17 @@ export function TimetableGrid({
     totalMinutes: number;
     timeToMinutes: (t: string) => number;
   }) => React.ReactNode;
-}) {
+  /** Timeline Workspace：课程卡右上角 overlay（如重叠 StudyBlock 的 Task Marker）。
+     渲染在课程 Card 之外（不受 overflow-hidden 限制）；Overview / FullTimetableModal 不传 → 不显示。 */
+  courseIndicators?: (ctx: {
+    schedule: CourseSchedule;
+    course: Course;
+    dayOfWeek: number;
+    hasConflict: boolean;
+    dayStartMinutes: number;
+    totalMinutes: number;
+  }) => React.ReactNode;
+  }) {
   const isCompactDensity = density === "compact";
   const {
     courses,
@@ -639,44 +650,54 @@ export function TimetableGrid({
                     return (
                       <div
                         key={sched.id}
-                        data-testid="schedule-card"
-                        onClick={() => {
-                          // 拖动结束后浏览器仍会在 capture 目标上派发 click，需吞掉
-                          if (wasDraggedRef.current) {
-                            wasDraggedRef.current = false;
-                            return;
-                          }
-                          // 课程卡始终打开 Course Drawer；冲突有独立入口（卡片角标 + 顶部横幅）
-                          setSelectedCourseId(course.id);
-                        }}
-                        onPointerDown={(e) => handleCardPointerDown(e, sched)}
-                        onPointerMove={(e) => handleCardPointerMove(e, sched)}
-                        onPointerUp={(e) => handleCardPointerUp(e, sched)}
-                        onPointerCancel={cancelInteraction}
-                        title={editingEnabled ? "拖动调整上课时间" : undefined}
+                        // Geometry Wrapper：只负责定位（top/height/left/right）+ hover 位移
                         className={cn(
-                          "absolute left-0.5 right-0.5 rounded-xl shadow-subtle hover:shadow-card hover:-translate-y-px border flex flex-col justify-between overflow-hidden group select-none",
-                          // 只过渡实际会变化的属性（位置/尺寸/透明度/阴影/边框），避免无关属性建立 transition
-                          "transition-[top,height,opacity,transform,box-shadow,border-color,background-color] duration-[var(--motion-base)] ease-[var(--ease-standard)]",
-                          // Overview compact：更紧凑的卡内边距（标题字号不变）
-                          isCompactDensity ? "p-1.5" : "p-1.5 sm:p-2",
-                          hasConflict && "ring-2 ring-danger bg-danger-bg border-danger-border",
-                          // 当前正在上课：克制外框高亮（优先于 hover/其他，但让位于冲突提示）
-                          !hasConflict && nowCourseSchedule?.id === sched.id && "kiro-now-course ring-2",
-                          editingEnabled && "cursor-grab active:cursor-grabbing",
-                          // 拖动中：原卡轻微降存在感（0.5 左右），保持原位置，不 scale/rotate/blur
-                          isOrigin && "opacity-50",
-                          settleId === sched.id && "ux-settle"
+                          "absolute left-0.5 right-0.5 z-[5]",
+                          "transition-[top,height,transform,box-shadow] duration-[var(--motion-base)] ease-[var(--ease-standard)]",
+                          "hover:shadow-card hover:-translate-y-px"
                         )}
                         style={{
                           top: `${topPct}%`,
                           height: `${Math.max(heightPct - 0.3, 7.5)}%`,
-                          backgroundColor: hasConflict ? "#F2E8E6" : course.bgHex,
-                          borderColor: hasConflict ? "#D9BCB8" : course.borderHex,
-                          color: hasConflict ? "#9B5B57" : course.textHex,
-                          touchAction: editingEnabled ? "none" : "auto",
                         }}
                       >
+                        <div
+                          data-testid="schedule-card"
+                          onClick={() => {
+                            // 拖动结束后浏览器仍会在 capture 目标上派发 click，需吞掉
+                            if (wasDraggedRef.current) {
+                              wasDraggedRef.current = false;
+                              return;
+                            }
+                            // 课程卡始终打开 Course Drawer；冲突有独立入口（卡片角标 + 顶部横幅）
+                            setSelectedCourseId(course.id);
+                          }}
+                          onPointerDown={(e) => handleCardPointerDown(e, sched)}
+                          onPointerMove={(e) => handleCardPointerMove(e, sched)}
+                          onPointerUp={(e) => handleCardPointerUp(e, sched)}
+                          onPointerCancel={cancelInteraction}
+                          title={editingEnabled ? "拖动调整上课时间" : undefined}
+                          className={cn(
+                            "absolute inset-0 rounded-xl shadow-subtle border flex flex-col justify-between overflow-hidden group select-none",
+                            // 只过渡实际会变化的属性（透明度/阴影/边框），避免无关属性建立 transition
+                            "transition-[opacity,box-shadow,border-color,background-color] duration-[var(--motion-base)] ease-[var(--ease-standard)]",
+                            // Overview compact：更紧凑的卡内边距（标题字号不变）
+                            isCompactDensity ? "p-1.5" : "p-1.5 sm:p-2",
+                            hasConflict && "ring-2 ring-danger bg-danger-bg border-danger-border",
+                            // 当前正在上课：克制外框高亮（优先于 hover/其他，但让位于冲突提示）
+                            !hasConflict && nowCourseSchedule?.id === sched.id && "kiro-now-course ring-2",
+                            editingEnabled && "cursor-grab active:cursor-grabbing",
+                            // 拖动中：原卡轻微降存在感（0.5 左右），保持原位置，不 scale/rotate/blur
+                            isOrigin && "opacity-50",
+                            settleId === sched.id && "ux-settle"
+                          )}
+                          style={{
+                            backgroundColor: hasConflict ? "#F2E8E6" : course.bgHex,
+                            borderColor: hasConflict ? "#D9BCB8" : course.borderHex,
+                            color: hasConflict ? "#9B5B57" : course.textHex,
+                            touchAction: editingEnabled ? "none" : "auto",
+                          }}
+                        >
                         {/* Top Section */}
                         <div className="space-y-0.5 min-w-0">
                           {/* 1. Course Title */}
@@ -750,6 +771,17 @@ export function TimetableGrid({
                             />
                           </button>
                         )}
+
+                        {/* Course Overlay（Task Marker 等）：在 overflow-hidden Card 之外，几何跟随课程卡 */}
+                        {courseIndicators?.({
+                          schedule: sched,
+                          course,
+                          dayOfWeek: wd.dayOfWeek,
+                          hasConflict,
+                          dayStartMinutes,
+                          totalMinutes,
+                        })}
+                        </div>
                       </div>
                     );
                   })}

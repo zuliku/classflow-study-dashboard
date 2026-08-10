@@ -7,8 +7,6 @@ import { timeToDayRatio, intervalToDayGeometry } from "@/lib/timeline/timelineGe
 import { Priority } from "@/types";
 
 const MAX_TRACKS = 2;
-/** Interval 标题进入 block 的最小像素宽度（几何真实 + 标题可读分离） */
-const INTERVAL_INLINE_MIN_PX = 56;
 
 /** Deadline Point 优先级颜色（ClassFlow muted palette；禁止纯红/纯橙/neon） */
 const PRIORITY_DOT: Record<Priority, string> = {
@@ -55,9 +53,9 @@ function packDeadlinePoints(items: TimelineItem[]): { item: TimelineItem; ratio:
 }
 
 /**
- * Timeline Key Lane（Task：ClassFlow Timeline V1 polish）。
+ * Timeline Key Lane（Task：ClassFlow Timeline V1 polish + V2）。
  * - Deadline：默认纯 Point（8px，优先级配色），真实 24h 几何；Hover/Focus 显示 Detail Tooltip（方向自适应）
- * - Interval：真实几何 bar + 浮动短标题
+ * - Interval：默认只显示真实几何 bar（无常驻名称）；Hover/Focus 显示 Detail Popover（方向自适应）
  * - All-day：独立顶部小层
  * - 底部 1px baseline（可感知时间轨）
  */
@@ -232,37 +230,55 @@ function DeadlinePoint({
 function IntervalBlock({ item, top }: { item: TimelineItem; top: number }) {
   const { leftRatio, widthRatio } = intervalToDayGeometry(item.startTime, item.endTime);
   const exam = item.sourceType === "exam";
-  // 估算真实几何像素宽（列宽 ~(container/7)，用于决定标题是否可进 block）
-  const blockWidthPx = Math.max(widthRatio * 180, 12);
-  const showInlineLabel = blockWidthPx > INTERVAL_INLINE_MIN_PX;
-  const showFloatingLabel = !showInlineLabel;
+  const [hovered, setHovered] = useState(false);
   const weekDay = item.date ? new Date(`${item.date}T00:00:00`).getDay() : 0;
   const dayLabel = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"][weekDay];
+  const dateLabel = `${Number(item.date.slice(5, 7))}月${Number(item.date.slice(8, 10))}日`;
+  const typeLabel = exam ? "考试" : "活动";
+  // Popover 方向：<0.65 向右，≥0.65 向左（防止周日晚间 Event 溢出 Timeline）
+  const popoverLeft = leftRatio < 0.65;
 
   return (
     <div
+      role="button"
+      tabIndex={0}
       aria-label={`${item.title}，${dayLabel} ${item.startTime ?? ""} 至 ${item.endTime ?? ""}`}
-      title={`${item.title} · ${item.startTime ?? ""}–${item.endTime ?? ""}${item.subtitle ? ` · ${item.subtitle}` : ""}`}
-      className="absolute z-10 pointer-events-auto"
-      style={{ left: `${leftRatio * 100}%`, top: `${top}px`, width: `${Math.max(widthRatio * 100, 2.2)}%` }}
+      className="absolute z-10 outline-none"
+      style={{ left: `${leftRatio * 100}%`, top: `${top}px` }}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      onFocus={() => setHovered(true)}
+      onBlur={() => setHovered(false)}
     >
-      {/* Geometry Bar：严格按真实时间比例 */}
-      <span
-        className={cn(
-          "block h-[7px] rounded-full",
-          exam ? "bg-[#D9BBA0]" : "bg-line-strong/60"
-        )}
-      />
-      {/* 标题：block 宽时进入 bar 内；窄时浮动在 bar 上方 */}
-      {showInlineLabel && (
-        <span className="absolute left-0 top-full mt-0.5 max-w-[100%] truncate text-[10px] font-semibold text-satin-grey leading-none">
-          {item.title}
-        </span>
-      )}
-      {showFloatingLabel && (
-        <span className="absolute left-0 top-[-13px] max-w-[100%] whitespace-nowrap truncate text-[10px] font-semibold text-satin-grey leading-none">
-          {item.title}
-        </span>
+      {/* Hover Hit Area：真实 bar + 最小 18px 透明命中扩展（不改变可见几何） */}
+      <span className="block min-w-[18px] flex items-center -m-[4px] p-[4px]">
+        <span
+          className={cn(
+            "block h-[7px] rounded-full transition-transform duration-[var(--motion-fast)]",
+            hovered && "scale-y-[1.3]"
+          )}
+          style={{
+            width: `${Math.max(widthRatio * 100, 2.2)}%`,
+            backgroundColor: exam ? "#D9BBA0" : "#C9C4BC",
+          }}
+        />
+      </span>
+
+      {/* Hover / Focus Detail Popover（与 DeadlinePoint 同视觉语言） */}
+      {hovered && (
+        <div
+          className={cn(
+            "absolute top-full mt-1.5 w-max max-w-[220px] bg-surface border border-line-strong rounded-xl shadow-card px-2.5 py-2 space-y-0.5 z-30",
+            popoverLeft ? "left-0" : "right-0"
+          )}
+        >
+          <p className="text-[11px] font-bold text-charcoal leading-snug">{item.title}</p>
+          <p className="text-[10px] font-semibold text-satin-grey">
+            {dayLabel} · {dateLabel} · {item.startTime ?? "—"}–{item.endTime ?? "—"}
+          </p>
+          <p className="text-[10px] font-semibold text-[#A87952]">{typeLabel}</p>
+          {item.subtitle && <p className="text-[10px] text-satin-grey">{item.subtitle}</p>}
+        </div>
       )}
     </div>
   );
