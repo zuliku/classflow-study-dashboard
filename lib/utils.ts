@@ -14,10 +14,10 @@ export function cn(...inputs: ClassValue[]) {
  * Format ISO date string into human readable relative countdown
  * DDL 按本地时间语义解析（旧 Z 数据兼容）
  */
-export function getDDLStatusText(ddlISO: string): { text: string; isUrgent: boolean } {
+export function getDDLStatusText(ddlISO?: string | null): { text: string; isUrgent: boolean } {
   const ddlDate = parseLocalDDL(ddlISO);
   if (!ddlDate) {
-    return { text: "待定", isUrgent: false };
+    return { text: "无截止日期", isUrgent: false };
   }
 
   const today = new Date();

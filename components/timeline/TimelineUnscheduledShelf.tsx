@@ -19,6 +19,7 @@ export function TimelineUnscheduledShelf({
   if (assignments.length === 0) return null;
 
   const ddlText = (a: Assignment): string => {
+    if (!a.ddl) return "无截止日期";
     const date = a.ddl.slice(0, 10);
     const time = a.ddl.slice(11, 16);
     const label = `${Number(date.slice(5, 7))}月${Number(date.slice(8, 10))}日`;

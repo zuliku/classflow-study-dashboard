@@ -197,7 +197,7 @@ export function MiniCalendar() {
   // ---- DDL item Pointer 交互 ----
   const handleDDLPointerDown = (e: React.PointerEvent, assignment: Assignment) => {
     if (!ddlDragEnabled || e.pointerType === "touch") return;
-    if (!isValidDDL(assignment.ddl)) return; // 脏数据禁止拖动，点击仍可编辑
+    if (!assignment.ddl || !isValidDDL(assignment.ddl)) return; // 无 DDL / 脏数据禁止拖动，点击仍可编辑
     setDragSync({
       type: "pending",
       assignment,
@@ -649,6 +649,7 @@ export function MiniCalendar() {
                 cell.kind === "ddl" &&
                 !!cell.draggableAssignment &&
                 ddlDragEnabled &&
+                !!cell.draggableAssignment.ddl &&
                 isValidDDL(cell.draggableAssignment.ddl);
               return (
                 <button

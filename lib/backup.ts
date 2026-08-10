@@ -86,7 +86,14 @@ function validateSchedules(v: unknown): v is CourseSchedule[] {
 function validateAssignments(v: unknown): v is Assignment[] {
   return (
     Array.isArray(v) &&
-    v.every((a) => isPlainObject(a) && isNonEmptyString(a.id) && isNonEmptyString(a.ddl))
+    v.every(
+      (a) =>
+        isPlainObject(a) &&
+        isNonEmptyString(a.id) &&
+        // Task V2：ddl 可选（缺失合法）；estimatedMinutes 若存在必须为正数
+        (a.ddl === undefined || isNonEmptyString(a.ddl)) &&
+        (a.estimatedMinutes === undefined || (typeof a.estimatedMinutes === "number" && a.estimatedMinutes > 0))
+    )
   );
 }
 

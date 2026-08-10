@@ -37,7 +37,7 @@ async function seedDemoStorage(page: Page) {
   // 计算相对偏移：assignments 用 ddl 日期；calendarMarks 用 date
   const assignmentsWithOffset = initialAssignments.map((a) => ({
     ...a,
-    __dayOffset: dayOffsetFromDateStr(a.ddl.slice(0, 10)),
+    __dayOffset: dayOffsetFromDateStr((a.ddl ?? "").slice(0, 10)),
   }));
   const marksWithOffset = initialCalendarMarks.map((m) => ({
     ...m,

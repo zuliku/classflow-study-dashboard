@@ -21,6 +21,7 @@ import {
 } from "@/types";
 import { createDefaultSemester, getSemesterWeek } from "@/lib/semester";
 import { getLocalDDLDate } from "@/lib/ddl";
+import { normalizeAssignment, hasTaskDeadline } from "@/lib/tasks/taskSemantics";
 import { deleteFileBlob, clearAllFileBlobs } from "@/lib/fileStorage";
 import { isDDLMarkForAssignment, isLegacyDDLMarkForAssignment, linkLegacyDDLMarks } from "@/lib/calendarMark";
 import { createId } from "@/lib/utils";
@@ -100,7 +101,7 @@ function isValidSemester(v: unknown): v is Semester {
 function sanitizePersistedState(persisted: unknown): PersistedAppState {
   const legacy = (persisted ?? {}) as LegacyPersistedStateV0;
   const assignments = Array.isArray(legacy.assignments)
-    ? (legacy.assignments as Assignment[])
+    ? (legacy.assignments as Assignment[]).map(normalizeAssignment)
     : [];
   const marks = Array.isArray(legacy.calendarMarks)
     ? (legacy.calendarMarks as CalendarMark[])
@@ -242,6 +243,8 @@ export interface AppState {
   /** 创建任务，返回新任务 id */
   addAssignment: (assignment: Omit<Assignment, "id">) => string;
   updateAssignment: (updatedAssignment: Assignment) => void;
+  /** Task V2：字段级 patch（未来 Kiro update_task 的稳定 Domain API；DDL mark 三态同步内置） */
+  updateAssignmentPatch: (id: string, patch: Partial<Omit<Assignment, "id">>) => void;
   updateAssignmentStatus: (
     id: string,
     status: Assignment["status"]
@@ -448,7 +451,7 @@ export const useAppStore = create<AppState>()(
           semester: data.semester,
           courses: data.courses,
           schedules: data.schedules,
-          assignments: data.assignments,
+          assignments: data.assignments.map(normalizeAssignment),
           // 备份恢复为安全位置：唯一可确定的 legacy mark 自动补 sourceId
           calendarMarks: linkLegacyDDLMarks(data.assignments, data.calendarMarks),
           // 备份恢复同样归一 GroupProject（v1 备份 → v2 schema）
@@ -620,70 +623,80 @@ export const useAppStore = create<AppState>()(
 
       addAssignment: (assignmentData) => {
         const newId = createId("a");
-        const newAssignment: Assignment = {
+        const newAssignment: Assignment = normalizeAssignment({
           ...assignmentData,
           id: newId,
-        };
+        });
 
-        const ddlDateStr = getLocalDDLDate(assignmentData.ddl);
-        const newMark: CalendarMark = {
-          id: createId("cm"),
-          date: ddlDateStr,
-          type: "ddl",
-          title: assignmentData.title,
-          sourceId: newId,
-        };
+        // Task V2：仅当 Assignment 有合法 DDL 才创建 linked CalendarMark（无 DDL 不建空 date mark）
+        const marks: CalendarMark[] = [];
+        if (hasTaskDeadline(newAssignment)) {
+          marks.push({
+            id: createId("cm"),
+            date: getLocalDDLDate(newAssignment.ddl),
+            type: "ddl",
+            title: newAssignment.title,
+            sourceId: newId,
+          });
+        }
 
         set((state) => ({
           assignments: [newAssignment, ...state.assignments],
-          calendarMarks: [...state.calendarMarks, newMark],
+          calendarMarks: [...state.calendarMarks, ...marks],
         }));
         return newId;
       },
 
       updateAssignment: (updatedAssignment) =>
         set((state) => {
-          const newDdlDate = getLocalDDLDate(updatedAssignment.ddl);
-          const oldAssignment = state.assignments.find((a) => a.id === updatedAssignment.id);
+          const next = normalizeAssignment(updatedAssignment);
+          const oldAssignment = state.assignments.find((a) => a.id === next.id);
+          const hasDdl = hasTaskDeadline(next);
+          const newDdlDate = getLocalDDLDate(next.ddl);
 
           // Update assignment object in place, preserving ID
           const newAssignments = state.assignments.map((a) =>
-            a.id === updatedAssignment.id ? updatedAssignment : a
+            a.id === next.id ? next : a
           );
 
-          // 关联 mark：Level 1 sourceId 精确匹配；Level 2 旧数据按 title AND date 匹配。
-          // 一旦匹配到历史 mark，写入 sourceId 完成结构升级。
-          let markUpdated = false;
+          // 关联 mark 三态同步（Task V2）：
+          // A. 有 DDL → 有 DDL：更新已有 linked mark（sourceId 精确匹配 / legacy 唯一匹配）
+          // B. 无 DDL → 有 DDL：创建 linked mark
+          // C. 有 DDL → 无 DDL：删除 linked mark（不留下孤儿）
+          let matchedId: string | null = null;
           const newCalendarMarks = state.calendarMarks.map((m) => {
-            if (m.sourceId === updatedAssignment.id) {
-              markUpdated = true;
+            if (m.sourceId === next.id) {
+              matchedId = m.id;
+              if (!hasDdl) return null; // C：删除
               return {
                 ...m,
                 date: newDdlDate,
-                title: updatedAssignment.title,
-                sourceId: updatedAssignment.id,
+                title: next.title,
+                sourceId: next.id,
               };
             }
             if (oldAssignment && isLegacyDDLMarkForAssignment(m, oldAssignment)) {
-              markUpdated = true;
+              matchedId = m.id;
+              if (!hasDdl) return null; // C：删除
               return {
                 ...m,
                 date: newDdlDate,
-                title: updatedAssignment.title,
-                sourceId: updatedAssignment.id,
+                title: next.title,
+                sourceId: next.id,
               };
             }
             return m;
-          });
+          }).filter((m): m is CalendarMark => m !== null);
 
-          // If no mark existed, append a new linked mark
-          if (!markUpdated) {
+          // B：无关联 mark 且存在 DDL → 新建（避免重复：确认过滤后无同 id mark）
+          void matchedId;
+          if (hasDdl && !newCalendarMarks.some((m) => m.sourceId === next.id && m.type === "ddl")) {
             newCalendarMarks.push({
               id: createId("cm"),
               date: newDdlDate,
               type: "ddl",
-              title: updatedAssignment.title,
-              sourceId: updatedAssignment.id,
+              title: next.title,
+              sourceId: next.id,
             });
           }
 
@@ -692,6 +705,16 @@ export const useAppStore = create<AppState>()(
             calendarMarks: newCalendarMarks,
           };
         }),
+
+      /**
+       * Task V2：字段级 patch（未来 Kiro update_task 的稳定 Domain API）。
+       * 只改给定字段；DDL CalendarMark 三态同步由内部统一逻辑处理。
+       */
+      updateAssignmentPatch: (id, patch) => {
+        const current = get().assignments.find((a) => a.id === id);
+        if (!current) return;
+        get().updateAssignment({ ...current, ...patch, id });
+      },
 
       updateAssignmentStatus: (id, status) =>
         set((state) => ({
@@ -958,7 +981,8 @@ export const useAppStore = create<AppState>()(
       name: "classflow-storage-v2",
       // v1 → v2：GroupTask 从 assigneeName/assigneeAvatar 改为 assigneeId
       // v2 → v3：新增 AppPreferences（缺失/部分/非法逐字段回落默认值）
-      version: 3,
+      // v3 → v4：Task V2 —— Assignment ddl 可选 + estimatedMinutes（normalizeAssignment 归一；旧数据 ddl 原值保留）
+      version: 4,
       storage: createJSONStorage(() => localStorage),
       partialize: (state): PersistedAppState => ({
         userProfile: state.userProfile,

@@ -36,10 +36,11 @@ export function deriveTimelineItems(input: DeriveTimelineInput): TimelineItem[] 
   const weekSet = new Set(weekDates);
   const items: TimelineItem[] = [];
 
-  // ---- Assignment DDL（Source of Truth；未完成才醒目）----
+  // ---- Assignment DDL（Source of Truth；未完成才醒目；Task V2：无 DDL 不生成 deadline item） ----
   const assignmentDdlIds = new Set<string>();
   for (const a of assignments) {
     if (a.status === "completed") continue;
+    if (!a.ddl) continue;
     const date = ddlToDate(a.ddl);
     if (!weekSet.has(date)) continue;
     const time = a.ddl.slice(11, 16);

@@ -14,18 +14,18 @@ export function combineLocalDateTime(date: string, time: string): string {
   return `${date}T${hasSeconds ? t : `${t}:00`}`;
 }
 
-/** 取 DDL 的本地日期部分 "YYYY-MM-DD"（旧 Z 数据按字符串墙钟时间读取，不偏移） */
-export function getLocalDDLDate(ddl: string): string {
+/** 取 DDL 的本地日期部分 "YYYY-MM-DD"（旧 Z 数据按字符串墙钟时间读取，不偏移；无值返回 ""） */
+export function getLocalDDLDate(ddl?: string | null): string {
   const m = WALL_CLOCK_RE.exec(ddl || "");
   if (m) return `${m[1]}-${m[2]}-${m[3]}`;
   return (ddl || "").split("T")[0];
 }
 
-/** 取 DDL 的本地时间部分 "HH:mm"（旧 Z 数据按字符串墙钟时间读取，不偏移） */
-export function getLocalDDLTime(ddl: string): string {
+/** 取 DDL 的本地时间部分 "HH:mm"（旧 Z 数据按字符串墙钟时间读取，不偏移；无值返回 ""） */
+export function getLocalDDLTime(ddl?: string | null): string {
   const m = WALL_CLOCK_RE.exec(ddl || "");
   if (m) return `${m[4]}:${m[5]}`;
-  return "23:59";
+  return "";
 }
 
 /**
@@ -33,8 +33,9 @@ export function getLocalDDLTime(ddl: string): string {
  * - 新格式（无偏移）与带真实时区偏移的字符串：按标准 ISO 语义解析
  * - 旧格式（以 Z 结尾，本地时间曾被误标为 UTC）：按字符串中的墙钟时间
  *   重建本地 Date，避免中国等时区出现 +8 小时偏移，保证旧任务可正确读取
+ * - 无值 / 非法：返回 null（V2 无 DDL 任务合法）
  */
-export function parseLocalDDL(ddl: string): Date | null {
+export function parseLocalDDL(ddl?: string | null): Date | null {
   if (!ddl) return null;
 
   const trimmed = ddl.trim();

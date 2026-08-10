@@ -94,7 +94,10 @@ export interface Assignment {
   courseId: string;
   title: string;
   description: string;
-  ddl: string; // ISO 8601 string, e.g., "2025-05-21T23:59:00.000Z"
+  /** 可选 DDL：本地墙钟 "YYYY-MM-DDTHH:mm[:ss]"（无 Z）。缺省 = 未设截止（Task V2） */
+  ddl?: string;
+  /** 预计完成分钟数（无则未知，不得伪造默认值） */
+  estimatedMinutes?: number;
   priority: Priority;
   status: AssignmentStatus;
   progress: number; // 0 - 100

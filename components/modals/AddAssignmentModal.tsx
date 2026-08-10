@@ -5,7 +5,7 @@ import { X, ClipboardList, Clock, Plus, Trash2 } from "lucide-react";
 import { useAppStore } from "@/store/useAppStore";
 import { useToastStore } from "@/store/useToastStore";
 import { Priority, AssignmentStatus, Subtask } from "@/types";
-import { combineLocalDateTime, getLocalDDLDate, getLocalDDLTime } from "@/lib/ddl";
+import { combineLocalDateTime, getLocalDDLDate, getLocalDDLTime, parseLocalDDL } from "@/lib/ddl";
 import { format } from "date-fns";
 import { usePresence } from "@/lib/usePresence";
 import { useRestoreFocus } from "@/lib/useRestoreFocus";
@@ -50,8 +50,12 @@ export function AddAssignmentModal() {
 
   const [title, setTitle] = useState("");
   const [courseId, setCourseId] = useState(courses[0]?.id || "");
+  // Task V2：DDL 可选（默认关闭，编辑按原任务有无回填；日历入口自动开启）
+  const [ddlEnabled, setDdlEnabled] = useState(false);
   const [ddlDate, setDdlDate] = useState("");
   const [ddlTime, setDdlTime] = useState("23:59");
+  // Task V2：预计耗时（分钟，可选）
+  const [estimatedMinutes, setEstimatedMinutes] = useState("");
   const [priority, setPriority] = useState<Priority>("medium");
   const [status, setStatus] = useState<AssignmentStatus>("todo");
   const [progress, setProgress] = useState(0);
@@ -68,9 +72,11 @@ export function AddAssignmentModal() {
           setEditingId(target.id);
           setTitle(target.title);
           setCourseId(target.courseId);
-          // 统一本地时间语义回填（旧 Z 数据同样按本地墙钟读取）
+          // 统一本地时间语义回填（旧 Z 数据同样按本地墙钟读取）；无 DDL 任务默认关闭
+          setDdlEnabled(!!target.ddl && parseLocalDDL(target.ddl) !== null);
           setDdlDate(getLocalDDLDate(target.ddl));
-          setDdlTime(getLocalDDLTime(target.ddl));
+          setDdlTime(getLocalDDLTime(target.ddl) || "23:59");
+          setEstimatedMinutes(target.estimatedMinutes ? String(target.estimatedMinutes) : "");
           setPriority(target.priority);
           setStatus(target.status);
           setProgress(target.progress);
@@ -90,10 +96,13 @@ export function AddAssignmentModal() {
         tomorrow.setDate(tomorrow.getDate() + 1);
         // 本地日期格式化（不用 toISOString，避免时区偏移导致日期错误）；日历发起时预填当天
         setDdlDate(detail.ddlDate || format(tomorrow, "yyyy-MM-dd"));
+        // Task V2：日历入口语义 = 创建当天截止任务（自动开启 DDL）；其余默认不设截止
+        setDdlEnabled(!!detail.ddlDate);
         // 新建任务默认值（截止时刻/优先级/状态）统一来自偏好；
         // 编辑已有任务不受影响，走上方回填分支。
         const defaults = getNewTaskDefaults(preferences);
         setDdlTime(defaults.ddlTime);
+        setEstimatedMinutes("");
         setPriority(defaults.priority);
         setStatus(defaults.status);
         setProgress(0);
@@ -129,8 +138,11 @@ export function AddAssignmentModal() {
     if (!title.trim() || submittingRef.current) return;
     submittingRef.current = true;
 
-    // 本地时间语义：不追加 Z，避免 UTC 解释导致日期偏移
-    const fullDdl = combineLocalDateTime(ddlDate, ddlTime);
+    // 本地时间语义：不追加 Z，避免 UTC 解释导致日期偏移；Task V2：未启用 DDL 则不设截止
+    const fullDdl = ddlEnabled ? combineLocalDateTime(ddlDate, ddlTime) : undefined;
+    const estMinutes = estimatedMinutes.trim()
+      ? Number(estimatedMinutes.trim())
+      : undefined;
     const tags = tagsStr
       .split(/[,，]/)
       .map((t) => t.trim())
@@ -140,34 +152,29 @@ export function AddAssignmentModal() {
       .filter((st) => st.title.trim())
       .map((st) => ({ id: st.id, title: st.title.trim(), completed: st.completed }));
 
+    const baseFields = {
+      courseId: courseId || courses[0]?.id || "c_1",
+      title,
+      description,
+      ddl: fullDdl,
+      estimatedMinutes: estMinutes,
+      priority,
+      status,
+      progress,
+      tags,
+      subtasks: validSubtasks,
+    };
+
     if (editingId) {
       // Update existing assignment in-place preserving original ID
       updateAssignment({
         id: editingId,
-        courseId: courseId || courses[0]?.id || "c_1",
-        title,
-        description,
-        ddl: fullDdl,
-        priority,
-        status,
-        progress,
-        tags,
-        subtasks: validSubtasks,
+        ...baseFields,
       });
       pushToast({ message: "修改已保存" });
     } else {
       // Create new assignment
-      addAssignment({
-        courseId: courseId || courses[0]?.id || "c_1",
-        title,
-        description,
-        ddl: fullDdl,
-        priority,
-        status,
-        progress,
-        tags,
-        subtasks: validSubtasks,
-      });
+      addAssignment(baseFields);
       // 从课程/日历发起的任务创建，提示带上下文语义
       pushToast({ message: prefillSource ? "任务已添加" : "任务已创建" });
     }
@@ -254,27 +261,53 @@ export function AddAssignmentModal() {
             </div>
           </div>
 
-          {/* DDL Date & Time Picker */}
+          {/* DDL Date & Time Picker（Task V2：可选；未启用 = 无截止日期） */}
           <div className="p-3 bg-alabaster/60 border border-line-strong rounded-xl space-y-2">
-            <label className="font-bold text-charcoal flex items-center">
-              <Clock className="w-3.5 h-3.5 mr-1 text-[#A48F82]" /> 截止时间 (DDL)
+            <label className="flex items-center justify-between font-bold text-charcoal">
+              <span className="flex items-center">
+                <Clock className="w-3.5 h-3.5 mr-1 text-[#A48F82]" /> 截止时间 (DDL)
+              </span>
+              <input
+                type="checkbox"
+                checked={ddlEnabled}
+                onChange={(e) => setDdlEnabled(e.target.checked)}
+                className="w-3.5 h-3.5 rounded accent-charcoal"
+                aria-label="设置截止时间"
+              />
             </label>
-            <div className="grid grid-cols-2 gap-2">
-              <input
-                type="date"
-                value={ddlDate}
-                onChange={(e) => setDdlDate(e.target.value)}
-                className="w-full p-2 bg-white border border-line-strong rounded-lg font-mono text-xs focus:outline-none"
-                required
-              />
-              <input
-                type="time"
-                value={ddlTime}
-                onChange={(e) => setDdlTime(e.target.value)}
-                className="w-full p-2 bg-white border border-line-strong rounded-lg font-mono text-xs focus:outline-none"
-                required
-              />
-            </div>
+            {ddlEnabled ? (
+              <div className="grid grid-cols-2 gap-2">
+                <input
+                  type="date"
+                  value={ddlDate}
+                  onChange={(e) => setDdlDate(e.target.value)}
+                  className="w-full p-2 bg-white border border-line-strong rounded-lg font-mono text-xs focus:outline-none"
+                  required
+                />
+                <input
+                  type="time"
+                  value={ddlTime}
+                  onChange={(e) => setDdlTime(e.target.value)}
+                  className="w-full p-2 bg-white border border-line-strong rounded-lg font-mono text-xs focus:outline-none"
+                  required
+                />
+              </div>
+            ) : (
+              <p className="text-[11px] text-sandrift">未设置截止日期，任务仍可正常创建与安排。</p>
+            )}
+          </div>
+
+          {/* 预计耗时（分钟，可选） */}
+          <div className="flex items-center gap-2">
+            <input
+              type="number"
+              min={1}
+              value={estimatedMinutes}
+              onChange={(e) => setEstimatedMinutes(e.target.value)}
+              placeholder="预计耗时（分钟，可选）"
+              aria-label="预计耗时（分钟）"
+              className="flex-1 p-2 bg-white border border-line-strong rounded-lg font-mono text-xs focus:outline-none"
+            />
           </div>
 
           {/* Subtasks checklist */}

@@ -3,8 +3,8 @@ import { getLocalDDLDate, getLocalDDLTime, combineLocalDateTime, parseLocalDDL }
 
 const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
 
-/** DDL 是否为可解析的本地时间（历史脏数据不可拖，但可点击打开编辑） */
-export function isValidDDL(ddl: string): boolean {
+/** DDL 是否为可解析的本地时间（历史脏数据不可拖，但可点击打开编辑；无 DDL 返回 false） */
+export function isValidDDL(ddl?: string | null): boolean {
   return parseLocalDDL(ddl) !== null;
 }
 
@@ -31,7 +31,7 @@ export function moveAssignmentDDL(
   assignment: Assignment,
   targetDate: string
 ): DDLMoveResult | null {
-  if (!isValidDDL(assignment.ddl)) return null;
+  if (!assignment.ddl || !isValidDDL(assignment.ddl)) return null;
   const oldTime = getLocalDDLTime(assignment.ddl);
   if (getLocalDDLDate(assignment.ddl) === targetDate) return null;
   return {
@@ -50,7 +50,7 @@ export function editAssignmentDDLTime(
   targetDate: string,
   newTime: string
 ): DDLMoveResult | null {
-  if (!isValidDDL(assignment.ddl)) return null;
+  if (!assignment.ddl || !isValidDDL(assignment.ddl)) return null;
   const time = (newTime || "").trim();
   if (!isValidDDLTime(time)) return null;
   const newDdl = combineLocalDateTime(targetDate, time);

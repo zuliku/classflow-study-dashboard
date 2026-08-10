@@ -97,14 +97,12 @@ export function AssignmentDrawer() {
   const course = courses.find((c) => c.id === assignment.courseId);
   const { text: ddlText, isUrgent } = getDDLStatusText(assignment.ddl);
 
-  let formattedDDL = "";
+  let formattedDDL = "未设置";
   const parsedDDL = parseLocalDDL(assignment.ddl);
   if (parsedDDL) {
     formattedDDL = format(parsedDDL, "yyyy年MM月dd日 HH:mm", {
       locale: zhCN,
     });
-  } else {
-    formattedDDL = assignment.ddl;
   }
 
   return (

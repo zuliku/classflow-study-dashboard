@@ -84,6 +84,10 @@ export function AssignmentTable({ mode = "compact" }: AssignmentTableProps) {
     if (courseFilter !== "all" && item.courseId !== courseFilter) {
       return false;
     }
+    // Task V2：只有需要 DDL 的视图才要求存在 Deadline；「全部」必须包含无 DDL 任务
+    if (assignmentTimeSlice === "all" || assignmentTimeSlice === "completed") {
+      return assignmentTimeSlice === "completed" ? item.status === "completed" : true;
+    }
     const ddlDate = parseLocalDDL(item.ddl);
     if (!ddlDate) return false;
     const diff = differenceInDays(ddlDate, today);
@@ -97,8 +101,6 @@ export function AssignmentTable({ mode = "compact" }: AssignmentTableProps) {
         return item.status !== "completed" && diff >= 0 && diff <= 3;
       case "7days":
         return item.status !== "completed" && diff >= 0 && diff <= 7;
-      case "completed":
-        return item.status === "completed";
       default:
         return true;
     }
@@ -464,7 +466,8 @@ export function AssignmentTable({ mode = "compact" }: AssignmentTableProps) {
           (isWorkspace ? filteredAssignments : pagedAssignments).map((task) => {
             const course = courses.find((c) => c.id === task.courseId);
             const priorityMeta = getPriorityMeta(task.priority);
-            const formattedDate = getLocalDDLDate(task.ddl);
+            const hasDdl = !!task.ddl && parseLocalDDL(task.ddl) !== null;
+            const formattedDate = hasDdl ? getLocalDDLDate(task.ddl) : "无截止日期";
             const isCompleted = task.status === "completed";
 
             const ddlDate = parseLocalDDL(task.ddl);
@@ -546,7 +549,7 @@ export function AssignmentTable({ mode = "compact" }: AssignmentTableProps) {
                     <div className="flex items-center space-x-2 text-[10px] text-sandrift mt-1">
                       <span className="truncate font-semibold">{course?.name || "通用"}</span>
                       <span>·</span>
-                      <span>截止: {formattedDate}</span>
+                      <span className={hasDdl ? "" : "text-satin-grey/70"}>截止: {formattedDate}</span>
                       {task.subtasks && task.subtasks.length > 0 && (
                         <>
                           <span>·</span>
