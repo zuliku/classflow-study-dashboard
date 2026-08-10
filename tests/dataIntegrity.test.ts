@@ -1,7 +1,7 @@
-import { describe, it, expect, beforeEach, vi } from "vitest";
+﻿import { describe, it, expect, beforeEach, vi } from "vitest";
 import { useAppStore } from "@/store/useAppStore";
 import { seedDemoData } from "./demoSeed";
-import { findDataIntegrityIssues } from "@/lib/dataIntegrity";
+import { findDataIntegrityIssues, classifyIntegrityIssues } from "@/lib/dataIntegrity";
 import { ClassFlowBackupData } from "@/types";
 
 const KEY = "classflow-storage-v2";
@@ -188,5 +188,41 @@ describe("findDataIntegrityIssues", () => {
     expect(issues.orphanGroupProjects.map((g) => g.id)).toEqual(["gp_orphan"]);
     expect(issues.orphanDDLMarks.map((m) => m.id)).toEqual(["cm_orphan"]);
     expect(issues.unlinkedLegacyDDLMarks.map((m) => m.id)).toEqual(["cm_legacy"]);
+  });
+
+  it("Task 7G-C：orphan StudyBlock（missing Assignment / missing Course）→ orphan + fatal", () => {
+    const data = mkData({
+      studyBlocks: [
+        { id: "b_miss_assign", title: "无任务", date: "2026-08-14", startTime: "19:00", endTime: "20:00", assignmentId: "a_gone", source: "manual" },
+        { id: "b_miss_course", title: "无课程", date: "2026-08-14", startTime: "20:00", endTime: "21:00", courseId: "c_gone", source: "manual" },
+        { id: "b_ok", title: "正常", date: "2026-08-14", startTime: "19:00", endTime: "20:00", assignmentId: "a_1", courseId: "c_1", source: "manual" },
+      ],
+    });
+    const issues = findDataIntegrityIssues(data);
+    expect(issues.orphanStudyBlocks.map((b) => b.studyBlockId).sort()).toEqual(["b_miss_assign", "b_miss_course"]);
+    expect(issues.orphanStudyBlocks.find((b) => b.studyBlockId === "b_miss_assign")!.missingAssignmentId).toBe("a_gone");
+    expect(issues.orphanStudyBlocks.find((b) => b.studyBlockId === "b_miss_course")!.missingCourseId).toBe("c_gone");
+    
+    const classified = classifyIntegrityIssues(issues);
+    expect(classified.fatal.some((t) => t.includes("学习计划引用了不存在的课程或任务"))).toBe(true);
+  });
+
+  it("Task 7G-C：orphan Reminder target（Assignment / StudyBlock / CalendarMark）→ warning；standalone 不报", () => {
+    const data = mkData({
+      studyBlocks: [{ id: "b_1", title: "学习", date: "2026-08-14", startTime: "19:00", endTime: "20:00", courseId: "c_1", source: "manual" }],
+      reminders: [
+        { id: "r_a", title: "任务提醒", targetType: "assignment", targetId: "a_gone", timingMode: "absolute", triggerAt: "2026-08-15T20:00:00", status: "scheduled", source: "manual", createdAt: "2026-08-10T12:00:00", updatedAt: "2026-08-10T12:00:00" },
+        { id: "r_b", title: "学习提醒", targetType: "studyBlock", targetId: "b_gone", timingMode: "relative", offsetMinutes: -10, triggerAt: "2026-08-14T18:50:00", status: "scheduled", source: "manual", createdAt: "2026-08-10T12:00:00", updatedAt: "2026-08-10T12:00:00" },
+        { id: "r_m", title: "日历提醒", targetType: "calendarMark", targetId: "cm_gone", timingMode: "absolute", triggerAt: "2026-08-15T21:00:00", status: "scheduled", source: "manual", createdAt: "2026-08-10T12:00:00", updatedAt: "2026-08-10T12:00:00" },
+        { id: "r_ok", title: "正常提醒", targetType: "assignment", targetId: "a_1", timingMode: "absolute", triggerAt: "2026-08-15T20:00:00", status: "scheduled", source: "manual", createdAt: "2026-08-10T12:00:00", updatedAt: "2026-08-10T12:00:00" },
+        { id: "r_solo", title: "独立提醒", targetType: "standalone", timingMode: "absolute", triggerAt: "2026-08-20T09:00:00", status: "scheduled", source: "manual", createdAt: "2026-08-10T12:00:00", updatedAt: "2026-08-10T12:00:00" },
+      ],
+    });
+    const issues = findDataIntegrityIssues(data);
+    expect(issues.orphanReminderTargets.map((r) => r.reminderId).sort()).toEqual(["r_a", "r_b", "r_m"]);
+    
+    const classified = classifyIntegrityIssues(issues);
+    expect(classified.warnings.some((t) => t.includes("提醒指向已不存在的目标"))).toBe(true);
+    expect(classified.fatal).toHaveLength(0); // 该场景只有 warning
   });
 });
