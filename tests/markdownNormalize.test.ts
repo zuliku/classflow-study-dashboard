@@ -60,4 +60,29 @@ describe("normalizeMathDelimiters", () => {
   it("普通美元金额与无配对 $ 不动", () => {
     expect(normalizeMathDelimiters("售价 3$ 起，成本 2$")).toBe("售价 3$ 起，成本 2$");
   });
+
+  it("Task 7A：段落内联 $$...$$ 后不残留孤立 $（closing 对整体跳过）", () => {
+    const out = normalizeMathDelimiters("结果是 $$x^2 + y^2$$。");
+    expect(out).toBe("结果是 \n\n$$\nx^2 + y^2\n$$\n\n。");
+  });
+
+  it("Task 7A：行内 $...$ 不被 display normalization 改写", () => {
+    const out = normalizeMathDelimiters("行内公式 $x+y$ 保持行内。");
+    expect(out).toBe("行内公式 $x+y$ 保持行内。");
+  });
+
+  it("Task 7A：$...$ 与 $$...$$ 同存一行 → 各自语义保留（findFirstDelimiter 只识别连续 $$）", () => {
+    const out = normalizeMathDelimiters("文字 $a$ 后跟 $$b$$ 公式");
+    expect(out).toContain("文字 $a$ 后跟");
+    expect(out).toContain("\n\n$$\nb\n$$\n\n");
+    expect(out).toContain(" 公式");
+  });
+
+  it("Task 7A：行内 code 中的 $$ 原样（不转换）", () => {
+    expect(normalizeMathDelimiters("`$$x$$`")).toBe("`$$x$$`");
+  });
+
+  it("Task 7A：未闭合 $$ 在流式/原文中原样保留", () => {
+    expect(normalizeMathDelimiters("计算 $$x+y")).toBe("计算 $$x+y");
+  });
 });

@@ -65,7 +65,7 @@ function findFirstDelimiter(line: string): { index: number; type: "$$" | "\\(" |
       i += 1;
       continue;
     }
-    if (ch === "$" && !isEscaped(line, i)) {
+    if (ch === "$" && !isEscaped(line, i) && line[i + 1] === "$") {
       if (!best || i < best.index) best = { index: i, type: "$$" };
     }
   }
@@ -165,7 +165,8 @@ export function normalizeMathDelimiters(md: string): string {
       continue;
     }
     const before = line.slice(0, first.index);
-    const after = line.slice(closeIdx + 1);
+    // closing "$$" 是两个字符：必须从完整对之后开始，否则尾部残留孤立 "$"（Task 7A）
+    const after = line.slice(closeIdx + 2);
     if (!before.trim() && !after.trim()) {
       // 独占整行：remark-math 原生 display math，不动
       out.push(line);

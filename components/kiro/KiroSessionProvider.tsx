@@ -24,7 +24,6 @@ import { KiroSidecar } from "@/components/kiro/KiroSidecar";
 import { pushOverlay, popOverlay, isTopmostOverlay } from "@/lib/overlayStack";
 import {
   sanitizeConversation,
-  buildAutoTitle,
   filterValidContextRefs,
 } from "@/lib/ai/history/sanitize";
 import {
@@ -35,6 +34,7 @@ import {
   clearConversationHistory,
 } from "@/lib/ai/history/db";
 import { KiroConversationRecord, PersistedContextRef, KiroConversationSummary } from "@/lib/ai/history/types";
+import { buildConversationSeed } from "@/lib/ai/history/conversationSeed";
 import { requestConversationCompact, toCompactMessages } from "@/lib/ai/history/summary";
 import { estimateTokens } from "@/lib/ai/contextBudget/estimate";
 import { shouldCompact, DEFAULT_CONTEXT_BUDGET } from "@/lib/ai/contextBudget/planner";
@@ -438,32 +438,17 @@ export function KiroSessionProvider({ children }: { children: React.ReactNode })
     [openForEntry]
   );
 
-  const handoffPrompt = useCallback(
-    (prompt: string) => {
-      suggestionsGenRef.current += 1;
-      setSuggestionsKind("generic");
-      setSidecarOpen(true);
-      setLastUserTurnGen(suggestionsGenRef.current);
-      chat.send(prompt);
-    },
-    [chat.send]
-  );
-
   const sendWithTurn = useCallback(
     async (text: string): Promise<boolean> => {
       // 第一次真实 User Message：创建会话（transient → 正式写 DB 在首个稳定点）
       if (!conversationIdRef.current) {
-        const id = globalThis.crypto?.randomUUID
-          ? globalThis.crypto.randomUUID()
-          : `conv_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`;
-        const title = buildAutoTitle(text);
-        const createdAt = new Date().toISOString();
-        conversationIdRef.current = id;
-        conversationTitleRef.current = title;
-        conversationCreatedAtRef.current = createdAt;
-        setConversationId(id);
-        setConversationTitle(title);
-        setConversationCreatedAt(createdAt);
+        const seed = buildConversationSeed(text);
+        conversationIdRef.current = seed.id;
+        conversationTitleRef.current = seed.title;
+        conversationCreatedAtRef.current = seed.createdAt;
+        setConversationId(seed.id);
+        setConversationTitle(seed.title);
+        setConversationCreatedAt(seed.createdAt);
       }
       setLastUserTurnGen(suggestionsGenRef.current);
       // 扫描 PDF 渲染失败时返回 false：不清空附件、不清空 Composer（Prompt 保留）
@@ -473,6 +458,18 @@ export function KiroSessionProvider({ children }: { children: React.ReactNode })
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [chat.send, attachments]
+  );
+
+  // Task 7A：Conversation lifecycle 的 send 是 Provider 唯一暴露入口（不允许 runtime/session 语义分叉）
+  const handoffPrompt = useCallback(
+    (prompt: string) => {
+      suggestionsGenRef.current += 1;
+      setSuggestionsKind("generic");
+      setSidecarOpen(true);
+      setLastUserTurnGen(suggestionsGenRef.current);
+      void sendWithTurn(prompt);
+    },
+    [sendWithTurn]
   );
 
   /** 恢复历史对话：先保存当前 → 加载目标 → 恢复 refs（校验实体仍存在）→ 关闭由 Panel 处理 */
@@ -572,9 +569,17 @@ export function KiroSessionProvider({ children }: { children: React.ReactNode })
 
   const getCurrentMessages = useCallback(() => chatMessagesRef.current, []);
 
+  // Task 7A：唯一 sessionChat —— send 绑定 Conversation lifecycle（History 持久化入口）。
+  // Runtime / Session 两个 Context 必须暴露同一对象，禁止 runtime.raw send 与 session.sendWithTurn 分叉。
+  const sessionChat = useMemo(
+    () => ({ ...chat, send: sendWithTurn }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [chat, sendWithTurn]
+  );
+
   const runtimeValue = useMemo<KiroRuntimeValue>(
-    () => ({ chat, attachments, activeRefs, removeContext, addManualContext }),
-    [chat, attachments, activeRefs, removeContext, addManualContext]
+    () => ({ chat: sessionChat, attachments, activeRefs, removeContext, addManualContext }),
+    [sessionChat, attachments, activeRefs, removeContext, addManualContext]
   );
 
   // hasMessages：低频（只在 empty ↔ non-empty 切换时更新，不随 token）
@@ -653,7 +658,7 @@ export function KiroSessionProvider({ children }: { children: React.ReactNode })
 
   // 兼容层：旧 useKiroSession() 消费者（低频组件）合并三个 Context
   const value: KiroSessionValue = {
-    chat,
+    chat: sessionChat,
     attachments,
     activeRefs,
     removeContext,
@@ -685,12 +690,8 @@ export function KiroSessionProvider({ children }: { children: React.ReactNode })
     setPlanningPreview,
   };
 
-  // 把 send 换成带回合标记的版本（surface 使用）
-  const sessionValue = useMemo(
-    () => ({ ...value, chat: { ...value.chat, send: sendWithTurn } }),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [value, sendWithTurn]
-  );
+  // chat 已是唯一 sessionChat（带 Conversation lifecycle），不再二次覆盖 send
+  const sessionValue = value;
 
   return (
     <KiroRuntimeContext.Provider value={runtimeValue}>
