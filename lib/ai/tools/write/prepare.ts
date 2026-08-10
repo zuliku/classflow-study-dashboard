@@ -125,9 +125,9 @@ function projectGroup(state: AppState, projectId: string, updater: (p: AppState[
 // ---------- Assignment ----------
 
 function prepareUpdateAssignment(toolName: TransactionSafeToolName, input: unknown, state: AppState, fail: Fail): PreparedWriteResult {
-  const parsed = safeParse<{ assignmentId: string; title?: string; description?: string; tags?: string[] }>(toolName, input);
+  const parsed = safeParse<{ assignmentId: string; title?: string; description?: string; tags?: string[]; estimatedMinutes?: number | null }>(toolName, input);
   if (!parsed.ok) return parsed;
-  const { assignmentId, title, description, tags } = parsed.data;
+  const { assignmentId, title, description, tags, estimatedMinutes } = parsed.data;
   const before = state.assignments.find((a) => a.id === assignmentId);
   if (!before) return notFound("未找到对应任务。");
   const after = {
@@ -135,35 +135,44 @@ function prepareUpdateAssignment(toolName: TransactionSafeToolName, input: unkno
     title: title ?? before.title,
     description: description !== undefined ? description : before.description,
     tags: tags ?? before.tags,
+    // estimatedMinutes：undefined = 不改变；null = 清除；number = 设置（store normalize 清洗）
+    estimatedMinutes: estimatedMinutes === undefined ? before.estimatedMinutes : estimatedMinutes ?? undefined,
   };
   const view: PreparedActionView = {
     tool: toolName, entityType: "assignment", entityId: assignmentId, title: after.title, operation: "update",
-    before: { title: before.title, description: before.description, tags: before.tags },
-    after: { title: after.title, description: after.description, tags: after.tags },
+    before: { title: before.title, description: before.description, tags: before.tags, estimatedMinutes: before.estimatedMinutes ?? null },
+    after: { title: after.title, description: after.description, tags: after.tags, estimatedMinutes: after.estimatedMinutes ?? null },
+  };
+  const patch = {
+    title: title !== undefined ? title : undefined,
+    description: description !== undefined ? description : undefined,
+    tags: tags !== undefined ? tags : undefined,
+    estimatedMinutes: estimatedMinutes === undefined ? undefined : estimatedMinutes ?? undefined,
   };
   return makeAction(state, view,
     (s) => projectReplace(s, "assignments", assignmentId, after),
     (api, callId) => {
-      api.updateAssignment(after as never);
+      api.updateAssignmentPatch(assignmentId, patch);
       return { undo: () => api.updateAssignment(before as never) };
     });
 }
 
 function prepareSetAssignmentDDL(toolName: TransactionSafeToolName, input: unknown, state: AppState, fail: Fail): PreparedWriteResult {
-  const parsed = safeParse<{ assignmentId: string; ddl: string }>(toolName, input);
+  const parsed = safeParse<{ assignmentId: string; ddl: string | null }>(toolName, input);
   if (!parsed.ok) return parsed;
   const { assignmentId, ddl } = parsed.data;
   const before = state.assignments.find((a) => a.id === assignmentId);
   if (!before) return notFound("未找到对应任务。");
-  const after = { ...before, ddl };
+  // null = 清除截止时间（CalendarMark 由 Store 三态同步删除，工具不直接操作 CalendarMark）
+  const after = { ...before, ddl: ddl ?? undefined };
   const view: PreparedActionView = {
     tool: toolName, entityType: "assignment", entityId: assignmentId, title: before.title, operation: "update",
-    before: { ddl: before.ddl }, after: { ddl },
+    before: { ddl: before.ddl ?? null }, after: { ddl: ddl ?? null },
   };
   return makeAction(state, view,
     (s) => projectReplace(s, "assignments", assignmentId, after),
     (api, callId) => {
-      api.updateAssignment(after as never); // CalendarMark 由 store 自动同步
+      api.updateAssignmentPatch(assignmentId, { ddl: ddl ?? undefined });
       return { undo: () => api.updateAssignment(before as never) };
     });
 }

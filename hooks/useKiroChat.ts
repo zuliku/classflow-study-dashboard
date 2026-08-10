@@ -1174,6 +1174,7 @@ function buildWriteApi({
     getState: s,
     addAssignment: (a) => useAppStore.getState().addAssignment(a),
     updateAssignment: (a) => useAppStore.getState().updateAssignment(a),
+    updateAssignmentPatch: (id, patch) => useAppStore.getState().updateAssignmentPatch(id, patch),
     deleteAssignment: (id) => useAppStore.getState().deleteAssignment(id),
     restoreAssignment: (a, marks) => useAppStore.getState().restoreAssignment(a, marks),
     updateAssignmentStatus: (id, status) => useAppStore.getState().updateAssignmentStatus(id, status),

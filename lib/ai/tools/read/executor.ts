@@ -7,10 +7,12 @@ import {
   CourseSchedule,
   GroupProject,
   Material,
+  StudyBlock,
 } from "@/types";
 import { parseLocalDDL, getLocalDDLDate, getLocalDDLTime } from "@/lib/ddl";
 import { getSemesterWeek, getWeekDateRange } from "@/lib/semester";
 import { isScheduleActive, timeToMinutes } from "@/lib/schedule";
+import { deriveTaskWorkspace } from "@/lib/tasks/taskViews";
 import { KIRO_READ_TOOL_SCHEMAS, KiroReadToolName } from "@/lib/ai/tools/read/schemas";
 
 /**
@@ -50,6 +52,8 @@ export interface ReadToolState {
   assignments: Assignment[];
   calendarMarks: CalendarMark[];
   groupProjects: GroupProject[];
+  /** Task V2：学习计划（Kiro 读取 StudyBlock 的唯一来源） */
+  studyBlocks: StudyBlock[];
 }
 
 const notFound = (message: string): ReadToolResult<never> => ({ ok: false, code: "NOT_FOUND", message });
@@ -238,18 +242,58 @@ function dueMatch(a: Assignment, due: "overdue" | "today" | "3days" | "7days" | 
   }
 }
 
+/**
+ * 任务的 StudyBlock 学习安排（deterministic）：
+ * scheduledMinutes 用 timeToMinutes 计算；end <= start 的非法块跳过。
+ */
+function assignmentSchedule(state: ReadToolState, a: Assignment): { scheduledMinutes: number; blocks: { id: string; date: string; startTime: string; endTime: string; source: string | null }[] } {
+  const blocks = state.studyBlocks
+    .filter((b) => b.assignmentId === a.id)
+    .map((b) => {
+      const s = timeToMinutes(b.startTime);
+      const e = timeToMinutes(b.endTime);
+      return { b, minutes: s !== null && e !== null && e > s ? e - s : null };
+    })
+    .filter((x) => x.minutes !== null)
+    .map((x) => ({
+      id: x.b.id,
+      date: x.b.date,
+      startTime: x.b.startTime,
+      endTime: x.b.endTime,
+      source: x.b.source ?? "manual",
+    }));
+  const scheduledMinutes = blocks.reduce(
+    (sum, x) => sum + (timeToMinutes(x.endTime)! - timeToMinutes(x.startTime)!),
+    0
+  );
+  return { scheduledMinutes, blocks };
+}
+
 export function searchAssignments(state: ReadToolState, input: unknown): ReadToolResult<unknown> {
-  const parsed = safeParse<{ query?: string; courseId?: string; status?: Assignment["status"]; due?: "overdue" | "today" | "3days" | "7days" | "all" }>("search_assignments", input);
+  const parsed = safeParse<{ query?: string; courseId?: string; status?: Assignment["status"]; due?: "overdue" | "today" | "3days" | "7days" | "all"; scope?: "focus" | "today" | "upcoming" | "unscheduled" | "all" | "archive" }>("search_assignments", input);
   if (!parsed.ok) return parsed;
-  const { query, courseId, status, due } = parsed.data;
+  const { query, courseId, status, due, scope } = parsed.data;
   const now = new Date();
   const q = (query ?? "").trim().toLowerCase();
 
-  const matches = state.assignments
+  // Task V2 scope：复用 Workspace 同一套 view 派生（focus/today/upcoming/unscheduled/all/archive）
+  let matches: Assignment[];
+  if (scope) {
+    const { items } = deriveTaskWorkspace(state.assignments, state.studyBlocks, scope, now);
+    matches = items.map((it) => it.task);
+  } else {
+    matches = state.assignments;
+  }
+
+  const filtered = matches
     .filter((a) => {
       if (courseId && a.courseId !== courseId) return false;
       if (status && a.status !== status) return false;
       if (q && !a.title.toLowerCase().includes(q) && !a.description.toLowerCase().includes(q)) return false;
+      if (scope) {
+        // scope 已按视图过滤；due 与 scope 同时给出时忽略 due（避免语义冲突）
+        return true;
+      }
       if (!dueMatch(a, due, now)) return false;
       return true;
     })
@@ -257,12 +301,13 @@ export function searchAssignments(state: ReadToolState, input: unknown): ReadToo
 
   return {
     ok: true,
-    data: matches.map((a) => ({
+    data: filtered.map((a) => ({
       id: a.id,
       courseId: a.courseId,
       courseName: courseName(state, a.courseId),
       title: a.title,
-      ddl: a.ddl,
+      ddl: a.ddl ?? null,
+      deadline: a.ddl ?? null,
       priority: a.priority,
       status: a.status,
       progress: a.progress,
@@ -276,6 +321,7 @@ export function getAssignment(state: ReadToolState, input: unknown): ReadToolRes
   if (!parsed.ok) return parsed;
   const a = findAssignment(state, parsed.data.assignmentId);
   if (!a) return notFound("未找到对应任务。");
+  const schedule = assignmentSchedule(state, a);
 
   return {
     ok: true,
@@ -285,12 +331,38 @@ export function getAssignment(state: ReadToolState, input: unknown): ReadToolRes
       courseName: courseName(state, a.courseId),
       title: a.title,
       description: a.description,
-      ddl: a.ddl,
+      hasDeadline: parseLocalDDL(a.ddl) !== null,
+      deadline: a.ddl ?? null,
+      ddl: a.ddl ?? null,
+      estimatedMinutes: a.estimatedMinutes ?? null,
+      schedule: {
+        scheduledMinutes: schedule.scheduledMinutes,
+        blocks: schedule.blocks,
+      },
       priority: a.priority,
       status: a.status,
       progress: a.progress,
       tags: a.tags ?? [],
       subtasks: a.subtasks ?? [],
+    },
+  };
+}
+
+export function getAssignmentSchedule(state: ReadToolState, input: unknown): ReadToolResult<unknown> {
+  const parsed = safeParse<{ assignmentId: string }>("get_assignment_schedule", input);
+  if (!parsed.ok) return parsed;
+  const a = findAssignment(state, parsed.data.assignmentId);
+  if (!a) return notFound("未找到对应任务。");
+  const schedule = assignmentSchedule(state, a);
+
+  return {
+    ok: true,
+    data: {
+      assignmentId: a.id,
+      assignmentTitle: a.title,
+      estimatedMinutes: a.estimatedMinutes ?? null,
+      scheduledMinutes: schedule.scheduledMinutes,
+      blocks: schedule.blocks,
     },
   };
 }
@@ -499,6 +571,7 @@ const EXECUTORS: Record<Exclude<KiroReadToolName, "read_material">, (state: Read
   get_week_schedule: getWeekSchedule,
   search_assignments: searchAssignments,
   get_assignment: getAssignment,
+  get_assignment_schedule: getAssignmentSchedule,
   get_upcoming_assignments: getUpcomingAssignments,
   search_group_projects: searchGroupProjects,
   get_group_project: getGroupProject,

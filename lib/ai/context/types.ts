@@ -30,12 +30,16 @@ export interface KiroBaseContext {
     selectedCourseId: string | null;
     selectedAssignmentId: string | null;
     highlightedAssignmentId: string | null;
+    /** Task V2：Assignment Workspace 当前视图（focus/today/upcoming/unscheduled/all/archive） */
+    assignmentWorkspaceView: "focus" | "today" | "upcoming" | "unscheduled" | "all" | "archive";
   };
   summary: {
     courseCount: number;
     scheduleCount: number;
     assignmentCount: number;
     groupProjectCount: number;
+    /** Task V2：已安排的 StudyBlock 总数（不包含任务明细） */
+    studyBlockCount: number;
   };
 }
 

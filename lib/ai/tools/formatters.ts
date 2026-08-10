@@ -12,6 +12,7 @@ export const KIRO_TOOL_LABELS: Record<string, string> = {
   get_week_schedule: "查看课表",
   search_assignments: "查找任务",
   get_assignment: "读取任务详情",
+  get_assignment_schedule: "读取学习安排",
   get_upcoming_assignments: "查看近期 DDL",
   search_group_projects: "查找小组项目",
   get_group_project: "读取小组项目",

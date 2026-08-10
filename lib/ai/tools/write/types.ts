@@ -126,6 +126,8 @@ export interface KiroWriteApi {
 
   addAssignment: (a: Omit<Assignment, "id">) => string;
   updateAssignment: (a: Assignment) => void;
+  /** Task V2 字段级 patch（DDL CalendarMark 三态同步由 Store 统一处理；ddl 缺省 = 不改变） */
+  updateAssignmentPatch: (id: string, patch: Partial<Omit<Assignment, "id">>) => void;
   deleteAssignment: (id: string) => DeleteResult | null;
   restoreAssignment: (a: Assignment, marks: DeleteResult["marks"]) => void;
   updateAssignmentStatus: (id: string, status: Assignment["status"]) => void;

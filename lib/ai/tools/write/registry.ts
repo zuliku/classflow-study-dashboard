@@ -8,15 +8,18 @@ import { KIRO_WRITE_TOOL_SCHEMAS } from "@/lib/ai/tools/write/schemas";
  */
 export const KIRO_WRITE_TOOLS = {
   create_assignment: tool({
-    description: "创建任务。DDL 为本地时间 YYYY-MM-DDTHH:mm；默认优先级/状态来自用户偏好。",
+    description:
+      "创建学习任务（标题与课程必填）。截止时间（ddl）与预计耗时（estimatedMinutes）可选——任务允许没有截止时间，" +
+      "不要为了满足参数而凭空生成 DDL。默认优先级/状态来自用户偏好。",
     inputSchema: KIRO_WRITE_TOOL_SCHEMAS.create_assignment,
   }),
   update_assignment: tool({
-    description: "修改任务的标题、描述或标签。",
+    description: "修改任务的标题、描述、标签或预计耗时（estimatedMinutes：数字=设置，null=清除预计耗时）。",
     inputSchema: KIRO_WRITE_TOOL_SCHEMAS.update_assignment,
   }),
   set_assignment_ddl: tool({
-    description: "修改任务截止时间（本地时间 YYYY-MM-DDTHH:mm）。日历标记会同步更新。",
+    description:
+      "设置/修改任务截止时间（本地时间 YYYY-MM-DDTHH:mm）；ddl 传 null 表示清除截止时间，关联日历标记会同步删除。",
     inputSchema: KIRO_WRITE_TOOL_SCHEMAS.set_assignment_ddl,
   }),
   set_assignment_priority: tool({

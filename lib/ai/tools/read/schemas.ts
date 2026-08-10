@@ -22,15 +22,23 @@ export const getWeekScheduleSchema = z.object({
 
 const ASSIGNMENT_STATUS = z.enum(["todo", "doing", "submitted", "completed"]);
 const DUE_FILTER = z.enum(["overdue", "today", "3days", "7days", "all"]);
+/** Task V2 action scope（与 Assignment Workspace 视图同源；Today = 今天截止 OR 今天有 StudyBlock） */
+const ASSIGNMENT_SCOPE = z.enum(["focus", "today", "upcoming", "unscheduled", "all", "archive"]);
 
 export const searchAssignmentsSchema = z.object({
   query: z.string().trim().min(1).max(120).optional(),
   courseId: z.string().trim().min(1).max(120).optional(),
   status: ASSIGNMENT_STATUS.optional(),
   due: DUE_FILTER.optional(),
+  /** Task V2 scope：focus/today/upcoming/unscheduled/all/archive（与 Workspace 视图同一套规则） */
+  scope: ASSIGNMENT_SCOPE.optional(),
 });
 
 export const getAssignmentSchema = z.object({
+  assignmentId: z.string().trim().min(1).max(120),
+});
+
+export const getAssignmentScheduleSchema = z.object({
   assignmentId: z.string().trim().min(1).max(120),
 });
 
@@ -81,6 +89,7 @@ export const KIRO_READ_TOOL_SCHEMAS = {
   get_week_schedule: getWeekScheduleSchema,
   search_assignments: searchAssignmentsSchema,
   get_assignment: getAssignmentSchema,
+  get_assignment_schedule: getAssignmentScheduleSchema,
   get_upcoming_assignments: getUpcomingAssignmentsSchema,
   search_group_projects: searchGroupProjectsSchema,
   get_group_project: getGroupProjectSchema,

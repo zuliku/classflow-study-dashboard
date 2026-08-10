@@ -79,9 +79,9 @@ function validTimeRange(start: string, end: string): boolean {
 // ---------- Create（动态 ID 依赖，保持独立执行路径；不进入 Transaction V1） ----------
 
 function createAssignment(api: KiroWriteApi, input: unknown, toolCallId: string): WriteToolResult<unknown> {
-  const parsed = safeParse<{ courseId: string; title: string; description?: string; ddl: string; priority?: string; status?: string; progress?: number; tags?: string[] }>("create_assignment", input);
+  const parsed = safeParse<{ courseId: string; title: string; description?: string; ddl?: string; estimatedMinutes?: number; priority?: string; status?: string; progress?: number; tags?: string[] }>("create_assignment", input);
   if (!parsed.ok) return parsed;
-  const { courseId, title, description, ddl, priority, status, progress, tags } = parsed.data;
+  const { courseId, title, description, ddl, estimatedMinutes, priority, status, progress, tags } = parsed.data;
   if (!api.getState().courses.some((c) => c.id === courseId)) return notFound("未找到对应课程。");
 
   const prefs = api.getState().preferences;
@@ -89,7 +89,9 @@ function createAssignment(api: KiroWriteApi, input: unknown, toolCallId: string)
     courseId,
     title,
     description: description ?? "",
+    // Task V2：DDL 可选（缺省 = 无截止时间，Store 不创建空 mark）；estimatedMinutes 由 store normalize 清洗
     ddl,
+    estimatedMinutes,
     priority: (priority ?? prefs.defaultTaskPriority) as never,
     status: (status ?? prefs.defaultTaskStatus) as never,
     progress: progress ?? 0,
@@ -109,7 +111,7 @@ function createAssignment(api: KiroWriteApi, input: unknown, toolCallId: string)
       entityId: id,
       title,
       operation: "create",
-      after: { ddl, priority: priority ?? prefs.defaultTaskPriority, status: status ?? prefs.defaultTaskStatus },
+      after: { ddl: ddl ?? null, estimatedMinutes: estimatedMinutes ?? null, priority: priority ?? prefs.defaultTaskPriority, status: status ?? prefs.defaultTaskStatus },
       canUndo: true,
     },
   };

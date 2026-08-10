@@ -28,12 +28,22 @@ export const KIRO_READ_TOOLS = {
     inputSchema: KIRO_READ_TOOL_SCHEMAS.get_week_schedule,
   }),
   search_assignments: tool({
-    description: "按关键词/课程/状态/截止范围搜索任务。多个匹配时全部返回候选。",
+    description:
+      "按关键词/课程/状态/截止范围搜索任务，也支持 Task V2 action scope（focus/today/upcoming/unscheduled/all/archive）。" +
+      "today = 今天截止 或 今天安排了学习计划（Do Date ≠ Due Date）；unscheduled = 未完成且无任何学习计划的任务（可能没有截止时间）。多个匹配时全部返回候选。",
     inputSchema: KIRO_READ_TOOL_SCHEMAS.search_assignments,
   }),
   get_assignment: tool({
-    description: "读取指定任务的完整学习信息（描述、DDL、优先级、状态、子任务）。只读，不修改。",
+    description:
+      "读取指定任务的完整学习信息（描述、截止时间、预计耗时、状态、子任务、已安排的 StudyBlock 与计划分钟数）。" +
+      "任务可能没有截止时间（deadline 为 null，这是合法状态）。只读，不修改。",
     inputSchema: KIRO_READ_TOOL_SCHEMAS.get_assignment,
+  }),
+  get_assignment_schedule: tool({
+    description:
+      "查看某任务已经安排的 StudyBlock 学习计划（计划日期/时间段/来源）与累计计划分钟数（scheduledMinutes）。" +
+      "不要让模型遍历整个日历推算；本工具直接返回确定性结果。",
+    inputSchema: KIRO_READ_TOOL_SCHEMAS.get_assignment_schedule,
   }),
   get_upcoming_assignments: tool({
     description: "查看未来 N 天内截止的任务（默认 7 天），按 DDL 升序，默认排除已完成，逾期单独标记。",

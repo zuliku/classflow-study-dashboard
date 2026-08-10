@@ -11,11 +11,16 @@ const PRIORITY = z.enum(["urgent", "high", "medium", "low"]);
 const ASSIGNMENT_STATUS = z.enum(["todo", "doing", "submitted", "completed"]);
 const MEMBER_ROLE = z.enum(["leader", "member"]);
 
+/** 正整数预计耗时（分钟）；缺失 = 未知，禁止伪造默认值；上限由 normalizeEstimatedMinutes 统一处理 */
+const ESTIMATED_MINUTES = z.number().int().positive().max(7 * 24 * 60);
+
 export const createAssignmentSchema = z.object({
   courseId: z.string().trim().min(1).max(120),
   title: z.string().trim().min(1).max(200),
   description: z.string().max(2000).optional(),
-  ddl: z.string().regex(LOCAL_DDL_RE, "截止时间必须为本地时间 YYYY-MM-DDTHH:mm[:ss]"),
+  /** 可选 DDL：任务允许没有截止时间（不要凭空生成 DDL 填满 schema） */
+  ddl: z.string().regex(LOCAL_DDL_RE, "截止时间必须为本地时间 YYYY-MM-DDTHH:mm[:ss]").optional(),
+  estimatedMinutes: ESTIMATED_MINUTES.optional(),
   priority: PRIORITY.optional(),
   status: ASSIGNMENT_STATUS.optional(),
   progress: z.number().int().min(0).max(100).optional(),
@@ -27,11 +32,14 @@ export const updateAssignmentSchema = z.object({
   title: z.string().trim().min(1).max(200).optional(),
   description: z.string().max(2000).optional(),
   tags: z.array(z.string().trim().min(1).max(40)).max(20).optional(),
+  /** 预计耗时（分钟）；null = 清除预计耗时 */
+  estimatedMinutes: ESTIMATED_MINUTES.nullable().optional(),
 });
 
 export const setAssignmentDDLSchema = z.object({
   assignmentId: z.string().trim().min(1).max(120),
-  ddl: z.string().regex(LOCAL_DDL_RE, "截止时间必须为本地时间 YYYY-MM-DDTHH:mm[:ss]"),
+  /** string = 设置/修改截止时间；null = 清除截止时间（日历标记同步删除） */
+  ddl: z.string().regex(LOCAL_DDL_RE, "截止时间必须为本地时间 YYYY-MM-DDTHH:mm[:ss]").nullable(),
 });
 
 export const setAssignmentPrioritySchema = z.object({

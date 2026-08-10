@@ -47,6 +47,12 @@ class FakeApi {
     if (this.throwOnUpdateAssignmentId === a.id) throw new Error("boom");
     (this.state as any).assignments = (this.state as any).assignments.map((x: any) => (x.id === a.id ? a : x));
   }
+  updateAssignmentPatch(id: string, patch: Record<string, unknown>) {
+    if (this.throwOnUpdateAssignmentId === id) throw new Error("boom");
+    (this.state as any).assignments = (this.state as any).assignments.map((x: any) =>
+      x.id === id ? { ...x, ...patch } : x
+    );
+  }
   updateAssignmentPriority(id: string, p: string) {
     (this.state as any).assignments = (this.state as any).assignments.map((x: any) => (x.id === id ? { ...x, priority: p } : x));
   }

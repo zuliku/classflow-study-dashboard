@@ -35,12 +35,14 @@ export function buildBaseContext(): KiroBaseContext {
       selectedCourseId: state.selectedCourseId,
       selectedAssignmentId: state.selectedAssignmentId,
       highlightedAssignmentId: state.highlightedAssignmentId,
+      assignmentWorkspaceView: state.assignmentWorkspaceView,
     },
     summary: {
       courseCount: state.courses.length,
       scheduleCount: state.schedules.length,
       assignmentCount: state.assignments.length,
       groupProjectCount: state.groupProjects.length,
+      studyBlockCount: state.studyBlocks.length,
     },
   };
 }
