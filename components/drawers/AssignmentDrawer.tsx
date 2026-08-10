@@ -35,6 +35,7 @@ import { formatEstimatedMinutes } from "@/lib/tasks/taskSemantics";
 import { resolveAssignmentMaterials } from "@/lib/tasks/taskMaterials";
 import { uploadCourseMaterials } from "@/lib/materialUpload";
 import { RECURRENCE_LABELS } from "@/lib/tasks/taskRecurrence";
+import { AssignmentReminderSection } from "@/components/reminders/AssignmentReminderSection";
 import { deriveAssignmentHealthWithAvailability, healthViewMeta, healthExplanation } from "@/lib/tasks/taskHealthView";
 import { usePresence } from "@/lib/usePresence";
 import { useRestoreFocus } from "@/lib/useRestoreFocus";
@@ -442,6 +443,9 @@ export function AssignmentDrawer() {
               )}
             </div>
           </div>
+
+          {/* Task 7G-A3b：Assignment Reminder（多提醒管理；scheduled 由 Reminder Center 统一展示历史） */}
+          <AssignmentReminderSection assignment={assignment} />
 
           {/* EXECUTION：Progress + Subtasks */}
           <div className="space-y-4">
