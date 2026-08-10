@@ -1,10 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { Assignment, StudyBlock } from "@/types";
+import { Assignment, CalendarMark, CourseSchedule, Semester, StudyBlock } from "@/types";
 import {
   deriveTaskWorkspace,
   buildTaskWorkspaceMeta,
   TASK_WORKSPACE_VIEWS,
   TaskWorkspaceView,
+  TaskHealthPlanningInput,
 } from "@/lib/tasks/taskViews";
 
 // 2026-08-10 周一 12:00（与 fixture 无关，纯静态）
@@ -140,5 +141,52 @@ describe("buildTaskWorkspaceMeta", () => {
     const { items, counts } = deriveTaskWorkspace([], [], "focus", NOW);
     expect(items).toEqual([]);
     expect(counts.all).toBe(0);
+  });
+});
+
+describe("at-risk 视图（Deadline Health 驱动）", () => {
+  const SEMESTER: Semester = { id: "s", name: "S", startDate: date(0), totalWeeks: 16 };
+  // 每天 08:00-21:00 全占课程 → 截止前可用时间为 0
+  const fullSchedules: CourseSchedule[] = [1, 2, 3, 4, 5, 6, 7].map((dow) => ({
+    id: `s${dow}`,
+    courseId: "c1",
+    dayOfWeek: dow,
+    startTime: "08:00",
+    endTime: "21:00",
+    location: "",
+    weeks: "1-16周",
+  }));
+  const planning: TaskHealthPlanningInput = {
+    schedules: fullSchedules,
+    calendarMarks: [],
+    semester: SEMESTER,
+    currentSemesterWeek: 1,
+  };
+
+  it("planning 提供时包含 at-risk / overdue；无 planning 时为空", () => {
+    const tasks = [
+      mk("done", { ddl: iso(new Date(2026, 7, 12), 23, 59), estimatedMinutes: 60, status: "completed" }),
+      mk("noddl", { estimatedMinutes: 60 }), // unknown（missing_deadline）
+      mk("noestimate", { ddl: iso(new Date(2026, 7, 12), 23, 59) }), // unknown（missing_estimate）
+      mk("atrisk", { ddl: iso(new Date(2026, 7, 12), 23, 59), estimatedMinutes: 120 }), // free=0 → at-risk
+      mk("unsched-safe", { ddl: iso(new Date(2026, 7, 12), 23, 59), estimatedMinutes: 30 }), // free=0 < remaining 30 → 也 at-risk
+    ];
+    const withPlanning = deriveTaskWorkspace(tasks, [], "at-risk", NOW, planning);
+    expect(withPlanning.items.map((i) => i.task.id).sort()).toEqual(["atrisk", "unsched-safe"]);
+    expect(withPlanning.counts["at-risk"]).toBe(2);
+
+    const withoutPlanning = deriveTaskWorkspace(tasks, [], "at-risk", NOW);
+    expect(withoutPlanning.items).toEqual([]);
+    expect(withoutPlanning.counts["at-risk"]).toBe(0);
+  });
+
+  it("overdue 排在 at-risk 之前；内部 DDL 早优先", () => {
+    const tasks = [
+      mk("later-first", { ddl: iso(new Date(2026, 7, 13), 23, 59), estimatedMinutes: 60 }),
+      mk("overdue", { status: "doing", ddl: iso(new Date(2026, 7, 9), 23, 59), estimatedMinutes: 60 }),
+      mk("earlier-first", { ddl: iso(new Date(2026, 7, 12), 23, 59), estimatedMinutes: 60 }),
+    ];
+    const { items } = deriveTaskWorkspace(tasks, [], "at-risk", NOW, planning);
+    expect(items.map((i) => i.task.id)).toEqual(["overdue", "earlier-first", "later-first"]);
   });
 });

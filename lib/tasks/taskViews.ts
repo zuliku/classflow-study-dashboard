@@ -1,24 +1,41 @@
 /**
  * Task V2 Workspace 视图层（纯函数，无 React）。
- * 未来 Kiro get_tasks({ scope }) 直接复用同一 selector —— 业务规则不藏在 JSX。
- * 注意：本层不输出 Deadline Health（safe/at-risk 等留给后续 Task）。
+ * Workspace 与 Kiro get_tasks({ scope }) 共用同一 selector —— 业务规则不藏在 JSX。
+ * At Risk 视图基于 Deadline Health Engine（planning 数据可选；缺省时 at-risk 为空）。
  */
 
-import { Assignment } from "@/types";
+import { Assignment, CalendarMark, CourseSchedule, Semester, StudyBlock } from "@/types";
 import { getTaskDeadline } from "@/lib/tasks/taskSemantics";
 import { timeToMinutes } from "@/lib/timeline/timelineGeometry";
-import { StudyBlock } from "@/types";
+import { TaskHealthState } from "@/lib/tasks/taskHealth";
+import { deriveAssignmentHealthWithAvailability } from "@/lib/tasks/taskHealthView";
 
-export type TaskWorkspaceView = "focus" | "today" | "upcoming" | "unscheduled" | "all" | "archive";
+export type TaskWorkspaceView =
+  | "focus"
+  | "today"
+  | "upcoming"
+  | "at-risk"
+  | "unscheduled"
+  | "all"
+  | "archive";
 
 export const TASK_WORKSPACE_VIEWS: { id: TaskWorkspaceView; label: string }[] = [
   { id: "focus", label: "聚焦" },
   { id: "today", label: "今天" },
   { id: "upcoming", label: "即将截止" },
+  { id: "at-risk", label: "有风险" },
   { id: "unscheduled", label: "待安排" },
   { id: "all", label: "全部" },
   { id: "archive", label: "已归档" },
 ];
+
+/** Health 计算所需的外部规划数据（可选；缺省时 at-risk 视图为空、行内无 Health 提示） */
+export interface TaskHealthPlanningInput {
+  schedules: CourseSchedule[];
+  calendarMarks: CalendarMark[];
+  semester: Semester;
+  currentSemesterWeek: number;
+}
 
 export interface TaskWorkspaceMeta {
   hasDeadline: boolean;
@@ -29,6 +46,8 @@ export interface TaskWorkspaceMeta {
   scheduledToday: boolean;
   deadlineToday: boolean;
   overdue: boolean;
+  /** Deadline Health（planning 数据提供时才有） */
+  health?: TaskHealthState;
 }
 
 export interface TaskWorkspaceItem {
@@ -50,12 +69,17 @@ function studyBlockMinutes(b: StudyBlock): number {
   return e - s;
 }
 
-export function buildTaskWorkspaceMeta(task: Assignment, studyBlocks: StudyBlock[], now: Date): TaskWorkspaceMeta {
+export function buildTaskWorkspaceMeta(
+  task: Assignment,
+  studyBlocks: StudyBlock[],
+  now: Date,
+  planning?: TaskHealthPlanningInput
+): TaskWorkspaceMeta {
   const deadline = getTaskDeadline(task);
   const blocks = studyBlocks.filter((b) => b.assignmentId === task.id);
   const scheduledMinutes = blocks.reduce((sum, b) => sum + studyBlockMinutes(b), 0);
   const today = dayStr(now);
-  return {
+  const meta: TaskWorkspaceMeta = {
     hasDeadline: deadline !== null,
     deadline: deadline ?? undefined,
     scheduledMinutes,
@@ -67,6 +91,10 @@ export function buildTaskWorkspaceMeta(task: Assignment, studyBlocks: StudyBlock
       task.status !== "completed" &&
       dayStr(deadline) < today,
   };
+  if (planning) {
+    meta.health = deriveAssignmentHealthWithAvailability(task, studyBlocks, planning, now).state;
+  }
+  return meta;
 }
 
 /** Focus 排序权重（小 = 前）：overdue > 今天截止 > 今天安排 > doing > urgent/high 临近 */
@@ -90,10 +118,11 @@ function focusRank(item: TaskWorkspaceItem, now: Date): number {
 const PRIORITY_ORDER: Record<string, number> = { urgent: 0, high: 1, medium: 2, low: 3 };
 
 /**
- * 视图派生：items + counts（同一规则，UI / 未来 Kiro 共用）。
+ * 视图派生：items + counts（同一规则，UI / Kiro 共用）。
  * - focus：active 且满足「逾期 / 今天截止 / 今天安排 / doing / urgent-high 3 天内」，按 focusRank 排序
  * - today：active 且（今天截止 或 今天有 StudyBlock）—— Do Date ≠ Due Date
  * - upcoming：active 且有 DDL 且 deadline 在「今天结束之后」，按 DDL 升序
+ * - at-risk：active 且 Health 为 at-risk 或 overdue（基于 Deadline Health Engine；overdue 在前，内部 DDL 早优先）
  * - unscheduled：active 且无任何 StudyBlock（不要求有 DDL）
  * - all：全部任务，active 在前 archive 在后，无 DDL 任务不丢失
  * - archive：submitted + completed
@@ -102,11 +131,12 @@ export function deriveTaskWorkspace(
   assignments: Assignment[],
   studyBlocks: StudyBlock[],
   view: TaskWorkspaceView,
-  now: Date
+  now: Date,
+  planning?: TaskHealthPlanningInput
 ): { items: TaskWorkspaceItem[]; counts: Record<TaskWorkspaceView, number> } {
   const all: TaskWorkspaceItem[] = assignments.map((task) => ({
     task,
-    meta: buildTaskWorkspaceMeta(task, studyBlocks, now),
+    meta: buildTaskWorkspaceMeta(task, studyBlocks, now, planning),
   }));
 
   const byView = (v: TaskWorkspaceView): TaskWorkspaceItem[] =>
@@ -118,6 +148,7 @@ export function deriveTaskWorkspace(
       focus: byView("focus").length,
       today: byView("today").length,
       upcoming: byView("upcoming").length,
+      "at-risk": byView("at-risk").length,
       unscheduled: byView("unscheduled").length,
       all: all.length,
       archive: byView("archive").length,
@@ -171,6 +202,20 @@ function filterFor(view: TaskWorkspaceView, all: TaskWorkspaceItem[], now: Date)
       return all
         .filter((it) => isActiveTask(it.task) && !!it.meta.deadline && it.meta.deadline > dayEnd)
         .sort(deadlineAsc);
+    }
+    case "at-risk": {
+      // 只包含 Health 判定为 at-risk / overdue 的 active 任务；overdue 在前，内部 DDL 早优先
+      const items = all.filter(
+        (it) =>
+          isActiveTask(it.task) &&
+          (it.meta.health === "at-risk" || it.meta.health === "overdue")
+      );
+      return items.sort((a, b) => {
+        const ra = a.meta.health === "overdue" ? 0 : 1;
+        const rb = b.meta.health === "overdue" ? 0 : 1;
+        if (ra !== rb) return ra - rb;
+        return deadlineAsc(a, b);
+      });
     }
     case "unscheduled":
       return all

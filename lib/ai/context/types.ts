@@ -30,8 +30,8 @@ export interface KiroBaseContext {
     selectedCourseId: string | null;
     selectedAssignmentId: string | null;
     highlightedAssignmentId: string | null;
-    /** Task V2：Assignment Workspace 当前视图（focus/today/upcoming/unscheduled/all/archive） */
-    assignmentWorkspaceView: "focus" | "today" | "upcoming" | "unscheduled" | "all" | "archive";
+    /** Task V2：Assignment Workspace 当前视图（focus/today/upcoming/at-risk/unscheduled/all/archive） */
+    assignmentWorkspaceView: "focus" | "today" | "upcoming" | "at-risk" | "unscheduled" | "all" | "archive";
   };
   summary: {
     courseCount: number;

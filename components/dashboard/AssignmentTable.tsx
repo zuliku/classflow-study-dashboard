@@ -13,7 +13,6 @@ import {
   X,
   CalendarPlus,
   Search,
-  Sparkles,
 } from "lucide-react";
 import { useAppStore } from "@/store/useAppStore";
 import { useToastStore } from "@/store/useToastStore";
@@ -36,8 +35,12 @@ import {
   sanitizeHighlight,
 } from "@/lib/assignmentSelection";
 import { AssignmentPeekPanel } from "@/components/assignment/AssignmentPeekPanel";
-import { deriveTaskWorkspace, TASK_WORKSPACE_VIEWS } from "@/lib/tasks/taskViews";
+import { QuickAddCard } from "@/components/assignment/QuickAddCard";
+import { deriveTaskWorkspace, TASK_WORKSPACE_VIEWS, TaskHealthPlanningInput } from "@/lib/tasks/taskViews";
+import { healthViewMeta } from "@/lib/tasks/taskHealthView";
 import { useKiroHandoff } from "@/hooks/useKiroHandoff";
+import { KIRO_ICON } from "@/components/layout/navItems";
+import { KiroFlowButton } from "@/components/kiro/KiroFlow";
 
 export interface AssignmentTableProps {
   /** compact：Overview 只读点击式；workspace：Assignments Tab 的键盘优先工作区 */
@@ -67,6 +70,9 @@ export function AssignmentTable({ mode = "compact" }: AssignmentTableProps) {
     assignmentWorkspaceView,
     setAssignmentWorkspaceView,
     studyBlocks,
+    schedules,
+    calendarMarks,
+    semester,
     currentSemesterWeek,
   } = useAppStore();
   const pushToast = useToastStore((s) => s.pushToast);
@@ -86,9 +92,15 @@ export function AssignmentTable({ mode = "compact" }: AssignmentTableProps) {
 
   const [courseFilter, setCourseFilter] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState("");
+  const [quickAddOpen, setQuickAddOpen] = useState(false);
   const newTaskIds = useEnterOnAdd(assignments.map((a) => a.id));
 
   const today = new Date();
+
+  // Health 所需规划数据（workspace 视图派生用；At Risk 视图与行内 Health 提示依赖）
+  const planningInput: TaskHealthPlanningInput | null = isWorkspace
+    ? { schedules, calendarMarks, semester, currentSemesterWeek }
+    : null;
 
   // 课程筛选（compact / workspace 共用；workspace 的 Search / View 在其后叠加）
   const courseFiltered = assignments.filter(
@@ -118,9 +130,9 @@ export function AssignmentTable({ mode = "compact" }: AssignmentTableProps) {
     }
   });
 
-  // Workspace V2：视图派生（view + courseFilter）+ 文本搜索
+  // Workspace V2：视图派生（view + courseFilter + Health）+ 文本搜索
   const workspaceViewResult = isWorkspace
-    ? deriveTaskWorkspace(courseFiltered, studyBlocks, assignmentWorkspaceView, today)
+    ? deriveTaskWorkspace(courseFiltered, studyBlocks, assignmentWorkspaceView, today, planningInput ?? undefined)
     : null;
   const workspaceItems = (() => {
     if (!workspaceViewResult) return [];
@@ -185,6 +197,11 @@ export function AssignmentTable({ mode = "compact" }: AssignmentTableProps) {
   );
 
   const handleAddAssignmentClick = () => {
+    if (isWorkspace) {
+      // Quick Add V2：Header 下方 Inline Card（全屏编辑走「更多详情」）
+      setQuickAddOpen((v) => !v);
+      return;
+    }
     openAssignmentEditor(courseFilter !== "all" ? { courseId: courseFilter } : {});
   };
 
@@ -410,27 +427,36 @@ export function AssignmentTable({ mode = "compact" }: AssignmentTableProps) {
 
           <div className="flex items-center space-x-2 shrink-0">
             {isWorkspace && (
-              <button
+              <KiroFlowButton
+                icon={KIRO_ICON}
+                label="Ask Kiro"
+                size="sm"
+                className="h-8"
                 onClick={() =>
                   highlightedAssignmentId
                     ? handoff.openForAssignment(highlightedAssignmentId)
                     : handoff.openForWeek(currentSemesterWeek)
                 }
-                className="ux-press flex items-center space-x-1 px-3 py-1.5 bg-alabaster hover:bg-[#F7F5F5] text-charcoal text-xs font-bold rounded-xl border border-line transition-colors shadow-subtle"
-              >
-                <Sparkles className="w-3.5 h-3.5 text-[#A48F82]" />
-                <span>Ask Kiro</span>
-              </button>
+              />
             )}
             <button
               onClick={handleAddAssignmentClick}
+              aria-expanded={isWorkspace ? quickAddOpen : undefined}
               className="ux-press flex items-center space-x-1 px-3 py-1.5 bg-charcoal hover:bg-black text-white text-xs font-bold rounded-xl transition-colors shadow-subtle shrink-0"
             >
               <Plus className="w-3.5 h-3.5" />
-              <span>新增任务</span>
+              <span>{isWorkspace && quickAddOpen ? "收起" : "新增任务"}</span>
             </button>
           </div>
         </div>
+
+        {/* Quick Add V2（workspace inline；compact 不显示） */}
+        {isWorkspace && quickAddOpen && (
+          <QuickAddCard
+            defaultCourseId={courseFilter !== "all" ? courseFilter : undefined}
+            onClose={() => setQuickAddOpen(false)}
+          />
+        )}
 
         {/* Filters Row: Course Filter + (compact: Time Slice Pills | workspace: View Tabs + Search) */}
         <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
@@ -540,7 +566,8 @@ export function AssignmentTable({ mode = "compact" }: AssignmentTableProps) {
             "overflow-y-auto max-h-[380px] outline-none rounded-xl focus-visible:ring-2 focus-visible:ring-line-strong"
         )}
       >
-        {pagedAssignments.length === 0 ? (
+        {/* 空态判断按模式取正确数据源：workspace = 视图派生结果；compact = 分页结果 */}
+        {(isWorkspace ? workspaceItems.length : pagedAssignments.length) === 0 ? (
           // compact：空状态填满 Header/Filters 与 Footer 之间的完整内容区（真正垂直居中，非 py 假居中）；
           // workspace：保持原有内边距样式
           isWorkspace ? (
@@ -642,6 +669,20 @@ export function AssignmentTable({ mode = "compact" }: AssignmentTableProps) {
                           已逾期
                         </span>
                       )}
+                      {/* Health 异常提示（仅 at-risk / attention；safe 等正常任务保持干净） */}
+                      {isWorkspace &&
+                        wsMeta?.health &&
+                        !isOverdueTask &&
+                        (wsMeta.health === "at-risk" || wsMeta.health === "attention") && (
+                          <span
+                            className={cn(
+                              "text-[9px] px-1.5 py-0.2 rounded font-bold shrink-0 border",
+                              healthViewMeta(wsMeta.health).className
+                            )}
+                          >
+                            {healthViewMeta(wsMeta.health).label}
+                          </span>
+                        )}
                     </div>
 
                     <div className="flex items-center space-x-2 text-[10px] text-sandrift mt-1">

@@ -7,15 +7,26 @@ import { usePresence } from "@/lib/usePresence";
 import { getPriorityMeta } from "@/lib/utils";
 import { getLocalDDLDate, getLocalDDLTime, parseLocalDDL } from "@/lib/ddl";
 import { formatEstimatedMinutes } from "@/lib/tasks/taskSemantics";
+import { deriveAssignmentHealthWithAvailability, healthViewMeta, healthExplanation } from "@/lib/tasks/taskHealthView";
 import { cn } from "@/lib/utils";
 
 /**
  * Assignment Peek（Task V2）：桌面 Quick Look 风格的紧凑侧预览。
  * 「看，而不是编辑」——完整编辑仍在 Drawer（Enter）。
- * 新增：submitted 状态 / 未设 DDL / 预计耗时 / 已计划 StudyBlock / Tags。
+ * 包含：submitted 状态 / 未设 DDL / 预计耗时 / 已计划 StudyBlock / Tags / Deadline Health。
  */
 export function AssignmentPeekPanel() {
-  const { assignmentPeekId, setAssignmentPeekId, assignments, courses, studyBlocks } = useAppStore();
+  const {
+    assignmentPeekId,
+    setAssignmentPeekId,
+    assignments,
+    courses,
+    studyBlocks,
+    schedules,
+    calendarMarks,
+    semester,
+    currentSemesterWeek,
+  } = useAppStore();
   const assignment = assignments.find((a) => a.id === assignmentPeekId) ?? null;
 
   const { mounted, visible } = usePresence(!!assignment, 200);
@@ -26,6 +37,16 @@ export function AssignmentPeekPanel() {
   const priorityMeta = getPriorityMeta(assignment.priority);
   const completedSubtasks = assignment.subtasks?.filter((st) => st.completed).length ?? 0;
   const hasDdl = parseLocalDDL(assignment.ddl) !== null;
+
+  // Deadline Health（轻量摘要；数字来自 Health Result）
+  const health = deriveAssignmentHealthWithAvailability(
+    assignment,
+    studyBlocks,
+    { schedules, calendarMarks, semester, currentSemesterWeek },
+    new Date()
+  );
+  const healthMeta = healthViewMeta(health.state);
+  const healthHint = healthExplanation(health);
 
   const statusLabel =
     assignment.status === "completed"
@@ -109,6 +130,18 @@ export function AssignmentPeekPanel() {
               <span>预计 {formatEstimatedMinutes(assignment.estimatedMinutes)}</span>
             </div>
           )}
+        </div>
+
+        {/* Deadline Health（轻量摘要） */}
+        <div className="pt-2 border-t border-line-soft">
+          <div className="flex items-start gap-2">
+            <span className={cn("mt-0.5 text-[9px] px-1.5 py-0.5 rounded-full font-bold border shrink-0", healthMeta.className)}>
+              {healthMeta.label}
+            </span>
+            {healthHint && (
+              <p className="text-[10px] text-satin-grey leading-snug">{healthHint}</p>
+            )}
+          </div>
         </div>
 
         {/* 已计划 StudyBlock（Timeline V1 集成） */}
