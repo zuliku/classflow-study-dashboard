@@ -116,11 +116,13 @@ export function KiroThreadRail() {
   };
 
   const newChat = () => {
+    if (meta.conversationTransitioning) return;
     actions.newChat();
     collapse();
   };
 
   const openThread = (id: string) => {
+    if (meta.conversationTransitioning) return;
     void actions.loadConversation(id);
     collapse();
   };
@@ -183,8 +185,9 @@ export function KiroThreadRail() {
           <button
             onClick={newChat}
             aria-label="新对话"
-            title="新对话"
-            className="w-9 h-9 flex items-center justify-center rounded-xl text-sandrift hover:bg-alabaster hover:text-charcoal transition-colors"
+            title={meta.conversationTransitioning ? "正在切换会话…" : "新对话"}
+            disabled={meta.conversationTransitioning}
+            className="w-9 h-9 flex items-center justify-center rounded-xl text-sandrift hover:bg-alabaster hover:text-charcoal transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-sandrift"
           >
             <Plus className="w-4 h-4" />
           </button>
@@ -243,7 +246,8 @@ export function KiroThreadRail() {
           <div className="shrink-0 space-y-1.5 px-2.5 pt-2.5 pb-2">
             <button
               onClick={newChat}
-              className="w-full flex items-center gap-2 px-2.5 h-8 rounded-lg text-xs font-bold text-charcoal bg-pastel-mint hover:bg-pastel-mint transition-colors"
+              disabled={meta.conversationTransitioning}
+              className="w-full flex items-center gap-2 px-2.5 h-8 rounded-lg text-xs font-bold text-charcoal bg-pastel-mint hover:bg-pastel-mint transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <Plus className="w-3.5 h-3.5" />
               新对话
@@ -277,6 +281,7 @@ export function KiroThreadRail() {
                   record={rec}
                   isCurrent={meta.currentConversationId === rec.id}
                   onOpen={openThread}
+                  disabled={meta.conversationTransitioning}
                 />
               ))
             )}

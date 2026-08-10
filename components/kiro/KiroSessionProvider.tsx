@@ -35,6 +35,13 @@ import {
 } from "@/lib/ai/history/db";
 import { KiroConversationRecord, PersistedContextRef, KiroConversationSummary } from "@/lib/ai/history/types";
 import { buildConversationSeed } from "@/lib/ai/history/conversationSeed";
+import {
+  CONVERSATION_TRANSITION_IDLE,
+  conversationTransitionReducer,
+  ConversationTransitionEvent,
+  ConversationTransitionState,
+  PendingConversationTransition,
+} from "@/lib/ai/history/conversationTransition";
 import { requestConversationCompact, toCompactMessages } from "@/lib/ai/history/summary";
 import { estimateTokens } from "@/lib/ai/contextBudget/estimate";
 import { shouldCompact, DEFAULT_CONTEXT_BUDGET } from "@/lib/ai/contextBudget/planner";
@@ -77,6 +84,8 @@ interface KiroSessionValue {
   openForGroupProject: (id: string) => void;
   openForWeek: (week: number) => void;
   handoffPrompt: (prompt: string) => void;
+  /** Task 7B：会话切换进行中 */
+  conversationTransitioning: boolean;
   /** Kiro Planning Proposal Ghost Preview（UI-only，不持久化；刷新即消失） */
   planningPreview: KiroPlanningPreview | null;
   setPlanningPreview: (p: KiroPlanningPreview | null) => void;
@@ -118,6 +127,8 @@ interface KiroSessionMetaValue {
   suggestionsGen: number;
   lastUserTurnGen: number;
   hasMessages: boolean;
+  /** Task 7B：会话切换进行中（stop → 保存 → reset/load）——UI 可禁用切换入口 */
+  conversationTransitioning: boolean;
 }
 
 /** Actions：稳定 callbacks（transcript 操作点击时才读取 Ref，不订阅 streaming messages） */
@@ -171,6 +182,9 @@ export function KiroSessionProvider({ children }: { children: React.ReactNode })
   const conversationIdRef = useRef<string | null>(null);
   const conversationTitleRef = useRef<string | null>(null);
   const conversationCreatedAtRef = useRef<string | null>(null);
+  // Task 7B：Conversation Transition Lifecycle（ref 供 async 流读取；state 驱动 UI disable）
+  const transitionStateRef = useRef<ConversationTransitionState>(CONVERSATION_TRANSITION_IDLE);
+  const [transitionState, setTransitionState] = useState<ConversationTransitionState>(CONVERSATION_TRANSITION_IDLE);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastSavedSnapshotRef = useRef<string>("");
 
@@ -276,6 +290,109 @@ export function KiroSessionProvider({ children }: { children: React.ReactNode })
     await persistCurrent();
   }, [persistCurrent]);
 
+  // ---- Task 7B：Conversation Transition Lifecycle（统一 stop→save→switch；无固定 timeout） ----
+
+  const restoreRefs = (refs: PersistedContextRef[], source: "manual" | "entry"): KiroContextRef[] =>
+    filterValidContextRefs(refs, useAppStore.getState()).map((r) => ({
+      key: `restored-${source}-${r.kind}-${r.entityId ?? "?"}`,
+      kind: r.kind,
+      entityId: r.entityId,
+      label: r.label,
+      source,
+    }));
+
+  const applyTransition = useCallback((event: ConversationTransitionEvent) => {
+    const next = conversationTransitionReducer(transitionStateRef.current, event);
+    transitionStateRef.current = next;
+    setTransitionState(next);
+  }, []);
+
+  /**
+   * 完成切换（只允许在 streaming=false 后调用）：
+   * 1. flushSave 保存旧会话（pending 期间 conversationId 必须仍存在）
+   * 2. New：chat.newChat + 重置 refs / attachments / context；Load：恢复 target 会话
+   * 3. done → idle
+   */
+  const finishConversationTransition = useCallback(
+    async (transition: Exclude<PendingConversationTransition, null>) => {
+      try {
+        await flushSave();
+        if (transition.type === "new") {
+          chat.newChat();
+          conversationIdRef.current = null;
+          conversationTitleRef.current = null;
+          conversationCreatedAtRef.current = null;
+          conversationSummaryRef.current = null;
+          setConversationId(null);
+          setConversationTitle(null);
+          setConversationCreatedAt(null);
+          setConversationSummary(null);
+          setManualRefs([]);
+          setEntryRefs([]);
+          setSuppressedAutoKeys([]);
+          attachments.clear();
+          setLastUserTurnGen(suggestionsGenRef.current);
+        } else {
+          const target = await getConversation(transition.id);
+          if (!target) {
+            refreshHistory();
+            return; // 目标已消失：旧会话已保存，保持当前会话
+          }
+          chat.loadConversation(target);
+          conversationIdRef.current = target.id;
+          conversationTitleRef.current = target.title;
+          conversationCreatedAtRef.current = target.createdAt;
+          conversationSummaryRef.current = target.summary ?? null;
+          setConversationId(target.id);
+          setConversationTitle(target.title);
+          setConversationCreatedAt(target.createdAt);
+          setConversationSummary(target.summary ?? null);
+          setManualRefs(restoreRefs(target.manualRefs, "manual"));
+          setEntryRefs(restoreRefs(target.entryRefs, "entry"));
+          setSuppressedAutoKeys([]);
+          setSuggestionsKind(null);
+          setLastUserTurnGen(suggestionsGenRef.current);
+          attachments.clear();
+        }
+        refreshHistory();
+      } finally {
+        applyTransition({ type: "done" });
+      }
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [chat.newChat, chat.loadConversation, attachments, flushSave, refreshHistory, applyTransition]
+  );
+
+  /**
+   * 统一 transition 入口（New Chat / load Conversation / delete-current / clearHistory 共用）：
+   * - ready：直接 finish（flush → reset/load）
+   * - streaming/submitted：记录 pending → chat.stop()（不清空 messages/refs），
+   *   等 streaming 真正变 false 后由下方 effect 完成
+   * - pending 已存在：拒绝第二次请求（简单 deterministic 策略，无 queue）
+   */
+  const requestConversationTransition = useCallback(
+    (transition: Exclude<PendingConversationTransition, null>) => {
+      applyTransition({ type: "request", transition, streaming: chatRef.current.streaming });
+      const s = transitionStateRef.current;
+      if (s.pending !== transition) return; // 被拒绝（已有 pending）
+      if (s.phase === "stopping") {
+        chatRef.current.stop();
+      } else if (s.phase === "switching") {
+        void finishConversationTransition(transition);
+      }
+    },
+    [applyTransition, finishConversationTransition]
+  );
+
+  // streaming true→false：若存在 pending transition → stop 已完成 → finish（flush → reset/load）
+  React.useEffect(() => {
+    if (chat.streaming) return;
+    const pending = transitionStateRef.current.pending;
+    if (!pending) return;
+    applyTransition({ type: "stopped" });
+    void finishConversationTransition(pending);
+  }, [chat.streaming, applyTransition, finishConversationTransition]);
+
   /** 后台 Compact（Task 7）：估算达到预算 75% 时，增量生成 Conversation Summary；失败静默（不阻塞聊天） */
   const maybeCompact = useCallback(async () => {
     const id = conversationIdRef.current;
@@ -309,6 +426,8 @@ export function KiroSessionProvider({ children }: { children: React.ReactNode })
     });
     compactingRef.current = false;
     if (summary) {
+      // Task 7B：compact 完成时验证仍是同一会话（transition 期间可能已切换，禁止写错会话）
+      if (conversationIdRef.current !== id) return;
       conversationSummaryRef.current = summary;
       setConversationSummary(summary);
       scheduleSave(); // 把 summary 一起落盘
@@ -371,23 +490,8 @@ export function KiroSessionProvider({ children }: { children: React.ReactNode })
   }, []);
 
   const newChat = useCallback(() => {
-    void flushSave();
-    chat.newChat();
-    conversationIdRef.current = null;
-    conversationTitleRef.current = null;
-    conversationCreatedAtRef.current = null;
-    conversationSummaryRef.current = null;
-    setConversationId(null);
-    setConversationTitle(null);
-    setConversationCreatedAt(null);
-    setConversationSummary(null);
-    setManualRefs([]);
-    setEntryRefs([]);
-    setSuppressedAutoKeys([]);
-    attachments.clear();
-    setLastUserTurnGen(suggestionsGenRef.current);
-    refreshHistory();
-  }, [chat.newChat, attachments, flushSave, refreshHistory]);
+    requestConversationTransition({ type: "new" });
+  }, [requestConversationTransition]);
 
   const openSidecar = useCallback(() => {
     setSidecarOpen(true);
@@ -440,6 +544,8 @@ export function KiroSessionProvider({ children }: { children: React.ReactNode })
 
   const sendWithTurn = useCallback(
     async (text: string): Promise<boolean> => {
+      // Task 7B：会话切换中（pending transition）拒绝新发送，防止消息混入即将被重置的旧会话
+      if (transitionStateRef.current.pending) return false;
       // 第一次真实 User Message：创建会话（transient → 正式写 DB 在首个稳定点）
       if (!conversationIdRef.current) {
         const seed = buildConversationSeed(text);
@@ -472,41 +578,21 @@ export function KiroSessionProvider({ children }: { children: React.ReactNode })
     [sendWithTurn]
   );
 
-  /** 恢复历史对话：先保存当前 → 加载目标 → 恢复 refs（校验实体仍存在）→ 关闭由 Panel 处理 */
+  /**
+   * 恢复历史对话（Task 7B：经统一 transition lifecycle —— streaming 时先 stop 保存当前，再加载 target）。
+   * 快速失败：目标不存在仅刷新历史。
+   */
   const loadConversation = useCallback(
-    async (id: string) => {
-      const target = await getConversation(id);
-      if (!target) {
-        refreshHistory();
-        return;
-      }
-      await flushSave();
-      const state = useAppStore.getState();
-      const restoreRefs = (refs: PersistedContextRef[], source: "manual" | "entry"): KiroContextRef[] =>
-        filterValidContextRefs(refs, state).map((r) => ({
-          key: `restored-${source}-${r.kind}-${r.entityId ?? "?"}`,
-          kind: r.kind,
-          entityId: r.entityId,
-          label: r.label,
-          source,
-        }));
-      chat.loadConversation(target);
-      conversationIdRef.current = target.id;
-      conversationTitleRef.current = target.title;
-      conversationCreatedAtRef.current = target.createdAt;
-      conversationSummaryRef.current = target.summary ?? null;
-      setConversationId(target.id);
-      setConversationTitle(target.title);
-      setConversationCreatedAt(target.createdAt);
-      setConversationSummary(target.summary ?? null);
-      setManualRefs(restoreRefs(target.manualRefs, "manual"));
-      setEntryRefs(restoreRefs(target.entryRefs, "entry"));
-      setSuppressedAutoKeys([]);
-      setSuggestionsKind(null);
-      setLastUserTurnGen(suggestionsGenRef.current);
-      attachments.clear();
+    (id: string) => {
+      void getConversation(id).then((target) => {
+        if (!target) {
+          refreshHistory();
+          return;
+        }
+        requestConversationTransition({ type: "load", id });
+      });
     },
-    [chat.loadConversation, attachments, flushSave, refreshHistory]
+    [getConversation, refreshHistory, requestConversationTransition]
   );
 
   const deleteConversation = useCallback(
@@ -601,6 +687,7 @@ export function KiroSessionProvider({ children }: { children: React.ReactNode })
       suggestionsGen: suggestionsGenRef.current,
       lastUserTurnGen,
       hasMessages,
+      conversationTransitioning: transitionState.phase !== "idle",
     }),
     [
       conversationId,
@@ -612,6 +699,7 @@ export function KiroSessionProvider({ children }: { children: React.ReactNode })
       suggestionsKind,
       lastUserTurnGen,
       hasMessages,
+      transitionState,
     ]
   );
 
@@ -686,6 +774,7 @@ export function KiroSessionProvider({ children }: { children: React.ReactNode })
     openForGroupProject,
     openForWeek,
     handoffPrompt,
+    conversationTransitioning: transitionState.phase !== "idle",
     planningPreview,
     setPlanningPreview,
   };

@@ -50,6 +50,7 @@ export function KiroHistoryPanel({
   }, [records, query]);
 
   const openThread = (id: string) => {
+    if (session.conversationTransitioning) return;
     void session.loadConversation(id);
     onClose();
   };
@@ -84,7 +85,8 @@ export function KiroHistoryPanel({
             <button
               onClick={onNewChat}
               aria-label="新对话"
-              className="flex items-center gap-1 px-2 h-8 rounded-lg text-[11px] font-bold text-satin-grey hover:bg-alabaster hover:text-charcoal transition-colors"
+              disabled={session.conversationTransitioning}
+              className="flex items-center gap-1 px-2 h-8 rounded-lg text-[11px] font-bold text-satin-grey hover:bg-alabaster hover:text-charcoal transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
             >
               <Plus className="w-3.5 h-3.5" />
               新对话
@@ -118,6 +120,7 @@ export function KiroHistoryPanel({
                     record={rec}
                     isCurrent={session.currentConversationId === rec.id}
                     onOpen={openThread}
+                    disabled={session.conversationTransitioning}
                   />
                 ))}
               </div>

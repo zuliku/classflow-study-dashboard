@@ -16,10 +16,13 @@ export function KiroThreadRow({
   record,
   isCurrent,
   onOpen,
+  disabled,
 }: {
   record: KiroConversationRecord;
   isCurrent: boolean;
   onOpen: (id: string) => void;
+  /** Task 7B：会话切换进行中禁用打开 */
+  disabled?: boolean;
 }) {
   const session = useKiroSessionActions();
   const pushToast = useToastStore((s) => s.pushToast);
@@ -69,16 +72,25 @@ export function KiroThreadRow({
 
   return (
     <div
-      onClick={() => onOpen(record.id)}
+      onClick={() => {
+        if (disabled) return;
+        onOpen(record.id);
+      }}
       role="button"
-      tabIndex={0}
+      tabIndex={disabled ? -1 : 0}
+      aria-disabled={disabled ? "true" : undefined}
       aria-current={isCurrent ? "true" : undefined}
       onKeyDown={(e) => {
+        if (disabled) return;
         if (e.key === "Enter") onOpen(record.id);
       }}
       className={cn(
-        "group flex items-center gap-1.5 px-2 py-1.5 rounded-lg cursor-pointer transition-colors",
-        isCurrent ? "bg-pastel-mint" : "hover:bg-alabaster/70"
+        "group flex items-center gap-1.5 px-2 py-1.5 rounded-lg transition-colors",
+        disabled
+          ? "opacity-50 cursor-not-allowed"
+          : isCurrent
+            ? "bg-pastel-mint cursor-pointer"
+            : "hover:bg-alabaster/70 cursor-pointer"
       )}
     >
       <div className="min-w-0 flex-1">

@@ -120,7 +120,12 @@ export function KiroSessionActions({
               </>
             ) : (
               <>
-                <KiroMenuItem icon={Plus} label="新对话" onClick={newChat} />
+                <KiroMenuItem
+                  icon={Plus}
+                  label="新对话"
+                  disabled={sessionMeta.conversationTransitioning}
+                  onClick={newChat}
+                />
                 <KiroMenuItem
                   icon={Expand}
                   label="打开完整 Kiro 工作区"
