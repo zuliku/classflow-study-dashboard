@@ -84,6 +84,8 @@ interface KiroSessionValue {
 
 /** Ghost StudyBlock（ephemeral：不写入 Store / localStorage） */
 export interface KiroPlanningPreview {
+  /** Proposal Fingerprint（createStudyPlanProposalKey）：标识当前 Ghost 属于哪个 Proposal */
+  proposalKey?: string;
   blocks: {
     id: string;
     date: string;

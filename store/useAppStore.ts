@@ -267,8 +267,12 @@ export interface AppState {
   // Timeline V1：StudyBlock Actions
   /** 创建学习计划，返回新 id */
   addStudyBlock: (block: Omit<StudyBlock, "id">) => string;
+  /** Atomic Batch：一次性生成全部 ID，单次 set；全量成功或全量失败（Kiro Study Plan Apply） */
+  addStudyBlocksBatch: (blocks: Omit<StudyBlock, "id">[]) => StudyBlock[];
   updateStudyBlock: (id: string, patch: Partial<Omit<StudyBlock, "id">>) => void;
   deleteStudyBlock: (id: string) => void;
+  /** Batch Delete：返回实际被删除的 Block（Undo 只删除本次 Apply 创建的 ID） */
+  deleteStudyBlocksBatch: (ids: string[]) => StudyBlock[];
 
   // CalendarMark Actions（Timeline V1：考试 / 活动等独立日程）
   /** 创建日程标记（exam / activity 等），返回新 id */
@@ -809,12 +813,35 @@ export const useAppStore = create<AppState>()(
         set((state) => ({ studyBlocks: [block, ...state.studyBlocks] }));
         return block.id;
       },
+      addStudyBlocksBatch: (blocksData) => {
+        const created: StudyBlock[] = blocksData.map((b) => ({
+          id: createId("sb"),
+          title: b.title,
+          date: b.date,
+          startTime: b.startTime,
+          endTime: b.endTime,
+          assignmentId: b.assignmentId,
+          courseId: b.courseId,
+          source: b.source ?? "manual",
+        }));
+        // 整个 batch 只有一次 state mutation（All-or-None）
+        set((state) => ({ studyBlocks: [...created, ...state.studyBlocks] }));
+        return created;
+      },
       updateStudyBlock: (id, patch) =>
         set((state) => ({
           studyBlocks: state.studyBlocks.map((b) => (b.id === id ? { ...b, ...patch } : b)),
         })),
       deleteStudyBlock: (id) =>
         set((state) => ({ studyBlocks: state.studyBlocks.filter((b) => b.id !== id) })),
+      deleteStudyBlocksBatch: (ids) => {
+        const current = get();
+        const idSet = new Set(ids);
+        const removed = current.studyBlocks.filter((b) => idSet.has(b.id));
+        if (removed.length === 0) return [];
+        set({ studyBlocks: current.studyBlocks.filter((b) => !idSet.has(b.id)) });
+        return removed;
+      },
       addCalendarMark: (markData) => {
         const mark: CalendarMark = { id: createId("cm"), ...markData };
         set((state) => ({ calendarMarks: [...state.calendarMarks, mark] }));
