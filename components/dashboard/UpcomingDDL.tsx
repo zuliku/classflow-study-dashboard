@@ -8,8 +8,8 @@ import { zhCN } from "date-fns/locale";
 import { parseLocalDDL } from "@/lib/ddl";
 import { paginate } from "@/lib/pagination";
 
-/** Overview「临近 DDL」每页最多 3 条（Hero 高度增加后保持摘要定位，条目压缩） */
-const UPCOMING_DDL_PAGE_SIZE = 3;
+/** Overview「临近 DDL」每页最多 4 条（右栏 Hero 空间内充分利用，分页摘要定位） */
+const UPCOMING_DDL_PAGE_SIZE = 4;
 
 export function UpcomingDDL() {
   const { assignments, courses, setSelectedAssignmentId, setActiveTab, preferences } =
@@ -54,25 +54,25 @@ export function UpcomingDDL() {
     switch (priority) {
       case "urgent":
         return (
-          <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-danger-bg text-danger border border-danger-border">
+          <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-danger-bg text-danger border border-danger-border shrink-0">
             紧急
           </span>
         );
       case "high":
         return (
-          <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-warning-bg text-warning border border-warning-border">
-            高优先
+          <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-warning-bg text-warning border border-warning-border shrink-0">
+            高优
           </span>
         );
       case "medium":
         return (
-          <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-alabaster text-charcoal border border-stone-beige">
-            中优先
+          <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-alabaster text-charcoal border border-stone-beige shrink-0">
+            中优
           </span>
         );
       default:
         return (
-          <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-pastel-mint text-charcoal border border-pastel-mint">
+          <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-pastel-mint text-charcoal border border-pastel-mint shrink-0">
             普通
           </span>
         );
@@ -104,11 +104,11 @@ export function UpcomingDDL() {
         </button>
       </div>
 
-      {/* DDL Task Items List（最多 3 条/页；min-h 保证 3 行稳定内容高度，翻页/数量变化不引起卡片跳动） */}
-      <div className="space-y-1.5 min-h-[164px]">
+      {/* DDL Task Items List：固定 4 行容量（翻页/数量变化高度不变；空位自然留白，不拉伸项目） */}
+      <div className="flex-1 min-h-0 grid grid-rows-4 gap-1.5">
         {pagedItems.length === 0 ? (
-          <div className="py-6 text-center text-xs text-sandrift space-y-1">
-            <CheckCircle2 className="w-6 h-6 mx-auto text-success" />
+          <div className="row-span-4 flex flex-col items-center justify-center text-xs text-sandrift space-y-1">
+            <CheckCircle2 className="w-6 h-6 text-success" />
             <p>暂无临近 DDL</p>
           </div>
         ) : (
@@ -125,7 +125,7 @@ export function UpcomingDDL() {
               <div
                 key={task.id}
                 onClick={() => setSelectedAssignmentId(task.id)}
-                className="p-2 bg-[#F7F5F5] hover:bg-alabaster border border-line hover:border-[#CDB9AB] rounded-xl transition-colors duration-[var(--motion-fast)] ease-[var(--ease-standard)] cursor-pointer flex items-center justify-between group"
+                className="p-2 bg-[#F7F5F5] hover:bg-alabaster border border-line hover:border-[#CDB9AB] rounded-xl transition-colors duration-[var(--motion-fast)] ease-[var(--ease-standard)] cursor-pointer flex items-center justify-between group min-h-0"
               >
                 <div className="flex items-center space-x-2.5 min-w-0 flex-1">
                   <div className="w-8 h-8 rounded-lg bg-white border border-line-strong flex flex-col items-center justify-center shrink-0 text-center">
@@ -138,7 +138,7 @@ export function UpcomingDDL() {
                   </div>
 
                   <div className="min-w-0 flex-1">
-                    <div className="flex items-center space-x-1.5">
+                    <div className="flex items-center gap-1.5 min-w-0">
                       <h4 className="text-xs font-bold text-charcoal truncate group-hover:text-black">
                         {task.title}
                       </h4>
@@ -164,15 +164,15 @@ export function UpcomingDDL() {
         )}
       </div>
 
-      {/* 轻量分页 Footer：仅 >3 项时显示 */}
-      {showPagination && (
-        <div
-          data-testid="upcoming-ddl-pagination"
-          className="pt-2 border-t border-[#F0EBE1] flex items-center justify-between shrink-0"
-        >
-          <span className="text-[11px] text-sandrift">
-            共 {paged.totalItems} 项
-          </span>
+      {/* 轻量 Footer（恒显保证高度稳定；仅 >4 项时显示分页按钮） */}
+      <div
+        data-testid="upcoming-ddl-pagination"
+        className="pt-2 border-t border-[#F0EBE1] flex items-center justify-between shrink-0"
+      >
+        <span className="text-[11px] text-sandrift">
+          共 {paged.totalItems} 项
+        </span>
+        {showPagination && (
           <span className="inline-flex items-center gap-2">
             <button
               onClick={() => setCurrentPage(safePage - 1)}
@@ -194,8 +194,8 @@ export function UpcomingDDL() {
               <ChevronRight className="w-3.5 h-3.5" />
             </button>
           </span>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 }

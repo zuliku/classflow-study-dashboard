@@ -440,9 +440,9 @@ export function MiniCalendar() {
         ))}
       </div>
 
-      {/* Calendar Grid（日期格 = DDL drop target；共享 Selection Indicator 位于 z-0） */}
-      {/* 居中容器：获得额外高度时网格垂直居中（breathing room），而非挤顶或把 Agenda 硬推底部 */}
-      <div className="flex-1 min-h-0 flex flex-col justify-center">
+      {/* Calendar Grid（日期格 = DDL drop target；共享 Selection Indicator 位于 z-0）。
+          自然纵向结构（不垂直居中）：固定高度 Calendar 内 Header/Weekday/Grid/Agenda 紧凑均衡 */}
+      <div className="shrink-0">
       <div
         ref={containerRef}
         data-selected-date={selectedDateKey}

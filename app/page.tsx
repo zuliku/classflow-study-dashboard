@@ -200,10 +200,15 @@ export default function Home() {
                 <div className="lg:col-span-2 flex flex-col min-h-0">
                   <TimetableGrid density="compact" fillAvailableHeight headerActions={<TimetableQuickGlance />} />
                 </div>
-                {/* UpcomingDDL 约 34% + MiniCalendar 66%（稳定比例：DDL 条数变化 / 月份周数变化都不改变 Hero 高度） */}
-                <div className="grid grid-rows-[minmax(220px,0.34fr)_minmax(0,1fr)] gap-5 h-full min-h-0">
-                  <UpcomingDDL />
-                  <MiniCalendar />
+                {/* 右栏：DDL 吸收剩余高度（flex-1），Calendar 固定稳定高度（不随月份/内容变化）
+                    右栏总高恒等于左侧课表 → 三卡同顶同底 */}
+                <div className="flex flex-col h-full min-h-0 gap-5">
+                  <div className="flex-1 min-h-0">
+                    <UpcomingDDL />
+                  </div>
+                  <div className="h-[380px] lg:h-[390px] xl:h-[410px] 2xl:h-[420px] shrink-0">
+                    <MiniCalendar />
+                  </div>
                 </div>
               </div>
 
