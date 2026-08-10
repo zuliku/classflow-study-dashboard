@@ -6,7 +6,7 @@ import { useAppStore } from "@/store/useAppStore";
 import { useToastStore } from "@/store/useToastStore";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
-import { getWeekDateRange, formatWeekDateRange } from "@/lib/semester";
+import { getWeekDateRange, formatWeekDateRange, getSemesterWeek } from "@/lib/semester";
 import { findScheduleConflicts } from "@/lib/conflicts";
 import { isScheduleActive, timeToMinutes } from "@/lib/schedule";
 import { CourseSchedule, ScheduleConflict } from "@/types";
@@ -70,6 +70,7 @@ export function TimetableGrid({
   showWeekdayHeader = true,
   variant = "card",
   headerActions,
+  fillAvailableHeight = false,
   extraLayers,
 }: {
   editable?: boolean;
@@ -83,6 +84,8 @@ export function TimetableGrid({
   variant?: "card" | "embedded";
   /** Overview：Header 右侧的 Quick Glance 等额外动作（渲染在「查看课表」之前） */
   headerActions?: React.ReactNode;
+  /** Overview Hero：取消固定 min-height，由外层容器 flex 撑满首屏（08:00–21:00 均匀铺满） */
+  fillAvailableHeight?: boolean;
   /** Timeline V1：在每一天列内渲染额外绝对定位层（如 StudyBlock） */
   extraLayers?: (ctx: {
     dayOfWeek: number;
@@ -132,6 +135,11 @@ export function TimetableGrid({
 
   // Filter schedules active in currentSemesterWeek using unified isScheduleActive logic
   const activeSchedules = schedules.filter((s) => isScheduleActive(s, currentSemesterWeek));
+
+  // 今天 / 当前周（今天列 tint + 极细当前时间线）
+  const todayStr = format(new Date(), "yyyy-MM-dd");
+  const isRealCurrentWeek = getSemesterWeek(new Date(), semester) === currentSemesterWeek;
+  const nowMinutes = new Date().getHours() * 60 + new Date().getMinutes();
 
   // 统一冲突定义（与导入器一致）：星期相同 + 时间重叠 + 至少一个共同生效教学周
   const conflicts = findScheduleConflicts(activeSchedules);
@@ -501,10 +509,10 @@ export function TimetableGrid({
         <div
           className={cn(
             "relative flex-1 grid mt-1",
-            // Timeline embedded：高度由父容器分配（一屏完整展示）；独立 Card 保留最小高度
-            variant === "embedded" ? "min-h-0" : "min-h-[520px]",
+            // Timeline embedded / Overview Hero fill：高度由外层容器分配（一屏完整展示）
+            (variant === "embedded" || fillAvailableHeight) ? "min-h-0" : "min-h-[520px]",
             // Overview compact：md+ 压缩时间轴（每小时 ~33-35px），完整保留 08:00-21:00
-            isCompactDensity && "md:min-h-[440px]"
+            isCompactDensity && !fillAvailableHeight && "md:min-h-[440px]"
           )}
           style={{ gridTemplateColumns: `${TIMETABLE_GUTTER_PX}px repeat(${dayCount}, minmax(0, 1fr))` }}
         >
@@ -552,8 +560,20 @@ export function TimetableGrid({
               return (
                 <div
                   key={wd.dayOfWeek}
-                  className="relative border-r border-line-soft h-full"
+                  className={cn(
+                    "relative border-r border-line-soft h-full",
+                    // 今天列轻量 tint（极弱，仅快速定位「今天」）
+                    wd.dateStr === format(new Date(), "M/d") && "bg-pastel-mint/[0.06]"
+                  )}
                 >
+                  {/* 当前时间线：仅真实当前周 + 今天列（极细低饱和线，非当前周不显示） */}
+                  {isRealCurrentWeek && wd.dateStr === format(new Date(), "M/d") && (
+                    <div
+                      aria-hidden="true"
+                      className="absolute left-0 right-0 h-px bg-sandrift/60 pointer-events-none z-[5]"
+                      style={{ top: `${((nowMinutes - dayStartMinutes) / totalMinutes) * 100}%` }}
+                    />
+                  )}
                   {extraLayers?.({
                     dayOfWeek: wd.dayOfWeek,
                     dayStartMinutes,

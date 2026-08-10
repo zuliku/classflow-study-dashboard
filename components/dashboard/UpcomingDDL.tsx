@@ -8,8 +8,8 @@ import { zhCN } from "date-fns/locale";
 import { parseLocalDDL } from "@/lib/ddl";
 import { paginate } from "@/lib/pagination";
 
-/** Overview「临近 DDL」每页最多 2 条（摘要定位，压缩右侧高度为左侧课表让位） */
-const UPCOMING_DDL_PAGE_SIZE = 2;
+/** Overview「临近 DDL」每页最多 3 条（Hero 高度增加后保持摘要定位，条目压缩） */
+const UPCOMING_DDL_PAGE_SIZE = 3;
 
 export function UpcomingDDL() {
   const { assignments, courses, setSelectedAssignmentId, setActiveTab, preferences } =
@@ -82,10 +82,10 @@ export function UpcomingDDL() {
   return (
     <div
       data-testid="upcoming-ddl-card"
-      className="bg-surface border border-line rounded-2xl p-4 shadow-subtle flex flex-col space-y-3"
+      className="bg-surface border border-line rounded-2xl p-3.5 shadow-subtle flex flex-col space-y-2.5 min-h-0 h-full"
     >
       {/* Card Header */}
-      <div className="flex items-center justify-between border-b border-[#F0EBE1] pb-2.5 shrink-0">
+      <div className="flex items-center justify-between border-b border-[#F0EBE1] pb-2 shrink-0">
         <div className="flex items-center space-x-2">
           <Clock className="w-4 h-4 text-danger" />
           <h3 className="text-xs font-bold text-charcoal tracking-tight">
@@ -104,8 +104,8 @@ export function UpcomingDDL() {
         </button>
       </div>
 
-      {/* DDL Task Items List（最多 2 条/页；min-h 保证 2 行稳定内容高度，翻页不引起卡片跳动） */}
-      <div className="space-y-2 min-h-[126px]">
+      {/* DDL Task Items List（最多 3 条/页；min-h 保证 3 行稳定内容高度，翻页/数量变化不引起卡片跳动） */}
+      <div className="space-y-1.5 min-h-[164px]">
         {pagedItems.length === 0 ? (
           <div className="py-6 text-center text-xs text-sandrift space-y-1">
             <CheckCircle2 className="w-6 h-6 mx-auto text-success" />
@@ -125,14 +125,14 @@ export function UpcomingDDL() {
               <div
                 key={task.id}
                 onClick={() => setSelectedAssignmentId(task.id)}
-                className="p-2.5 bg-[#F7F5F5] hover:bg-alabaster border border-line hover:border-[#CDB9AB] rounded-xl transition-colors duration-[var(--motion-fast)] ease-[var(--ease-standard)] cursor-pointer flex items-center justify-between group"
+                className="p-2 bg-[#F7F5F5] hover:bg-alabaster border border-line hover:border-[#CDB9AB] rounded-xl transition-colors duration-[var(--motion-fast)] ease-[var(--ease-standard)] cursor-pointer flex items-center justify-between group"
               >
                 <div className="flex items-center space-x-2.5 min-w-0 flex-1">
-                  <div className="w-9 h-9 rounded-lg bg-white border border-line-strong flex flex-col items-center justify-center shrink-0 text-center">
-                    <span className="text-[9px] font-bold text-sandrift leading-none">
+                  <div className="w-8 h-8 rounded-lg bg-white border border-line-strong flex flex-col items-center justify-center shrink-0 text-center">
+                    <span className="text-[8px] font-bold text-sandrift leading-none">
                       {format(ddlDate, "M月")}
                     </span>
-                    <span className="text-xs font-extrabold text-charcoal leading-none mt-0.5">
+                    <span className="text-[11px] font-extrabold text-charcoal leading-none mt-0.5">
                       {format(ddlDate, "d")}
                     </span>
                   </div>
