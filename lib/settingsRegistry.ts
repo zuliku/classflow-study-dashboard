@@ -147,6 +147,13 @@ export const SETTINGS_REGISTRY: SettingDefinition[] = [
     keywords: ["自定义", "base url", "兼容", "openai"],
   },
   {
+    id: "kiro-output-text-size",
+    section: "kiro",
+    title: "输出字号",
+    description: "调整 Kiro 回复内容的显示大小",
+    keywords: ["kiro", "字号", "字体", "文字大小", "显示", "阅读", "输出", "font", "size"],
+  },
+  {
     id: "kiro-memory-enabled",
     section: "kiro",
     title: "启用 Kiro 记忆",

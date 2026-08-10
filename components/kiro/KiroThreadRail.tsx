@@ -160,9 +160,34 @@ export function KiroThreadRail() {
   };
 
   const moreMenu = (placement: "top-end" | "right-end") => (
-    <KiroMenuPanel placement={placement}>
+    <KiroMenuPanel placement={placement} className="w-[220px]">
       <KiroMenuItem icon={Copy} label="复制全部对话" disabled={!hasMessages} onClick={copyAll} />
       <KiroMenuItem icon={FileDown} label="导出 Markdown" disabled={!hasMessages} onClick={exportMarkdown} />
+      <KiroMenuDivider />
+      {/* Task 7D：输出字号（即时生效，不关闭菜单，可连续比较） */}
+      <div className="px-2.5 py-2 space-y-1.5" role="group" aria-label="Kiro 输出字号">
+        <p className="text-[10px] font-semibold text-sandrift">输出字号</p>
+        <div className="flex items-center gap-0.5 bg-[#F7F5F5] p-0.5 rounded-lg w-fit">
+          {(Object.keys(KIRO_OUTPUT_TEXT_SIZE_LABELS) as KiroOutputTextSize[]).map((size) => {
+            const active = outputTextSize === size;
+            return (
+              <button
+                key={size}
+                type="button"
+                onClick={() => setOutputTextSize(size)}
+                aria-pressed={active}
+                aria-label={`${KIRO_OUTPUT_TEXT_SIZE_LABELS[size]}字号`}
+                className={cn(
+                  "px-2.5 h-6 rounded-md text-[11px] font-semibold transition-colors",
+                  active ? "bg-white text-charcoal shadow-subtle" : "text-sandrift hover:text-charcoal"
+                )}
+              >
+                {KIRO_OUTPUT_TEXT_SIZE_LABELS[size]}
+              </button>
+            );
+          })}
+        </div>
+      </div>
       <KiroMenuDivider />
       <KiroMenuItem icon={Trash2} label="清空当前对话" danger disabled={!hasMessages} onClick={clearConversation} />
     </KiroMenuPanel>
@@ -298,32 +323,6 @@ export function KiroThreadRail() {
                 查看全部历史
               </button>
             )}
-          </div>
-
-          {/* 显示字号（Task 7C：Kiro 输出字号，低频 preference；关闭/刷新后保留） */}
-          <div className="shrink-0 px-3 py-2 border-t border-line space-y-1.5">
-            <p className="text-[10px] font-semibold text-sandrift">显示字号</p>
-            <div className="flex items-center gap-0.5 bg-[#F7F5F5] p-0.5 rounded-lg w-fit">
-              {(Object.keys(KIRO_OUTPUT_TEXT_SIZE_LABELS) as KiroOutputTextSize[]).map((size) => {
-                const active = outputTextSize === size;
-                return (
-                  <button
-                    key={size}
-                    onClick={() => setOutputTextSize(size)}
-                    aria-pressed={active}
-                    aria-label={`${KIRO_OUTPUT_TEXT_SIZE_LABELS[size]}字号`}
-                    className={cn(
-                      "px-2.5 h-6 rounded-md text-[11px] font-semibold transition-colors",
-                      active
-                        ? "bg-white text-charcoal shadow-subtle"
-                        : "text-sandrift hover:text-charcoal"
-                    )}
-                  >
-                    {KIRO_OUTPUT_TEXT_SIZE_LABELS[size]}
-                  </button>
-                );
-              })}
-            </div>
           </div>
 
           {/* Footer（固定区） */}

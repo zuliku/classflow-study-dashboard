@@ -47,6 +47,14 @@ describe("settingsRegistry 搜索", () => {
     expect(searchSettings("不存在的设置xyz")).toEqual([]);
   });
 
+  it("输入「字号」→ kiro 输出字号设置（Task 7D）", () => {
+    const r = searchSettings("字号");
+    expect(r.map((s) => s.id)).toContain("kiro-output-text-size");
+    // 同义词「字体」也能命中
+    expect(searchSettings("字体").map((s) => s.id)).toContain("kiro-output-text-size");
+    expect(searchSettings("font").map((s) => s.id)).toContain("kiro-output-text-size");
+  });
+
   it("大小写不敏感（ddl / DDL / DDL 提醒）", () => {
     expect(searchSettings("DDL").length).toBeGreaterThan(0);
     expect(searchSettings("ddl 提醒").length).toBeGreaterThan(0);

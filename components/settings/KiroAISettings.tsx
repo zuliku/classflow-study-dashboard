@@ -9,8 +9,10 @@ import { AI_ERROR_MESSAGES, AIErrorCode } from "@/lib/ai/errors";
 import { AIProviderId } from "@/lib/ai/providers/types";
 import { SettingsSection } from "@/components/settings/SettingsSection";
 import { SettingsRow } from "@/components/settings/SettingsRow";
-import { SettingsToggle, SettingsSelect } from "@/components/settings/SettingsControls";
+import { SettingsToggle, SettingsSelect, SettingsSegmentedControl } from "@/components/settings/SettingsControls";
 import { KiroMemorySettings } from "@/components/settings/KiroMemorySettings";
+import { useKiroPreferencesStore } from "@/store/useKiroPreferencesStore";
+import { KiroOutputTextSize } from "@/lib/ai/ui/typography";
 
 const PROVIDER_OPTIONS: { value: AIProviderId; label: string }[] = [
   { value: "opencode-go", label: "OpenCode Go" },
@@ -35,6 +37,9 @@ export function KiroAISettings() {
     setModel,
     setCustom,
   } = useAISettingsStore();
+  // Task 7D：输出字号是纯 UI preference，仍属于 useKiroPreferencesStore（与 Rail More 菜单同一事实来源）
+  const outputTextSize = useKiroPreferencesStore((s) => s.outputTextSize);
+  const setOutputTextSize = useKiroPreferencesStore((s) => s.setOutputTextSize);
 
   const [apiKeyInput, setApiKeyInput] = useState(getSessionApiKey(provider));
   const [showKey, setShowKey] = useState(false);
@@ -248,6 +253,24 @@ export function KiroAISettings() {
             <span className="text-[11px] font-semibold text-danger">{test.message}</span>
           )}
         </div>
+
+        {/* Task 7D：输出字号（即时生效并持久化；与 Kiro Rail More 菜单同一 store） */}
+        <SettingsRow
+          settingId="kiro-output-text-size"
+          title="输出字号"
+          description="调整 Kiro 回复正文、公式、代码与表格的显示大小。"
+        >
+          <SettingsSegmentedControl<KiroOutputTextSize>
+            value={outputTextSize}
+            onChange={setOutputTextSize}
+            ariaLabel="Kiro 输出字号"
+            options={[
+              { value: "small", label: "小" },
+              { value: "standard", label: "标准" },
+              { value: "large", label: "大" },
+            ]}
+          />
+        </SettingsRow>
 
         {/* Kiro 记忆（Task 9）：记忆开关 / 条目管理 / 清空 / 隐私说明 */}
         <div className="border-t border-line pt-4 -mx-1 px-1">
