@@ -108,6 +108,27 @@ html[data-motion="reduced"] .kiro-now-dot {
   opacity: 1;
 }
 
+/* 当前正在上课的课程卡：克制外框高亮（深于课程边框的强调色，轻微呼吸） */
+.kiro-now-course {
+  box-shadow: 0 0 0 2px rgba(49, 48, 50, 0.32);
+  animation: kiro-now-course-breathe 3.2s ease-in-out infinite;
+}
+
+@keyframes kiro-now-course-breathe {
+  0%,
+  100% {
+    box-shadow: 0 0 0 1.5px rgba(49, 48, 50, 0.26);
+  }
+  50% {
+    box-shadow: 0 0 0 2px rgba(49, 48, 50, 0.38);
+  }
+}
+
+html[data-motion="reduced"] .kiro-now-course {
+  animation: none;
+  box-shadow: 0 0 0 2px rgba(49, 48, 50, 0.32);
+}
+
 .kiro-attachment-tray:hover::-webkit-scrollbar-thumb {
   background: #E4E0D8;
 }

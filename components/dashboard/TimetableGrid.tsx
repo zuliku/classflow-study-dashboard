@@ -156,6 +156,17 @@ export function TimetableGrid({
     return () => clearInterval(timer);
   }, [isRealCurrentWeek]);
 
+  // 当前正在进行的课程（仅当前周 + 今天列；nowMinutes 落在某课程 [start,end) 内）
+  const nowDayOfWeek = new Date().getDay() === 0 ? 7 : new Date().getDay();
+  const nowCourseSchedule = isRealCurrentWeek
+    ? activeSchedules.find(
+        (s) =>
+          s.dayOfWeek === nowDayOfWeek &&
+          nowMinutes >= (timeToMinutes(s.startTime) ?? 0) &&
+          nowMinutes < (timeToMinutes(s.endTime) ?? 0)
+      )
+    : undefined;
+
   // 统一冲突定义（与导入器一致）：星期相同 + 时间重叠 + 至少一个共同生效教学周
   const conflicts = findScheduleConflicts(activeSchedules);
   const firstConflict = conflicts[0];
@@ -581,11 +592,10 @@ export function TimetableGrid({
                     wd.dateStr === format(new Date(), "M/d") && "bg-pastel-mint/[0.06]"
                   )}
                 >
-                  {/* Now Indicator：仅真实当前周 + 今天列。
-                      时间胶囊（左侧）+ 横线（胶囊右缘 → 列右缘）+ 末端圆点；
-                      位置随真实时间平滑移动（30s 更新 + CSS transition 线性过渡）；
-                      横线 z 低于课程卡（被自然遮挡），胶囊 z 高于课程卡保持可读 */}
-                  {isRealCurrentWeek && wd.dateStr === format(new Date(), "M/d") && (
+                  {/* Now Indicator：仅真实当前周 + 今天列；当前无进行中课程时才显示。
+                      时间胶囊水平居中压在线上（胶囊底色遮挡线中央），无右端圆点；
+                      位置随真实时间平滑移动；横线 z 低于课程卡（被自然遮挡），胶囊 z 高于课程卡 */}
+                  {isRealCurrentWeek && wd.dateStr === format(new Date(), "M/d") && !nowCourseSchedule && (
                     <div
                       aria-hidden="true"
                       className="absolute inset-x-0 z-[6] pointer-events-none"
@@ -594,12 +604,12 @@ export function TimetableGrid({
                         transition: "top 30s linear",
                       }}
                     >
-                      <div className="flex items-center -translate-y-1/2">
-                        <span className="shrink-0 ml-1 z-[7] h-[21px] px-2.5 rounded-full border bg-[#F7F5F5] border-line-strong/70 text-[11px] font-semibold tabular-nums text-charcoal flex items-center shadow-subtle">
+                      <div className="relative flex items-center -translate-y-1/2 h-[1.5px]">
+                        <span className="flex-1 h-[1.5px] bg-sandrift/60" />
+                        <span className="shrink-0 z-[7] h-[21px] px-2.5 rounded-full border bg-[#F7F5F5] border-line-strong/70 text-[11px] font-semibold tabular-nums text-charcoal flex items-center shadow-subtle">
                           {minutesToClock(nowMinutes)}
                         </span>
                         <span className="flex-1 h-[1.5px] bg-sandrift/60" />
-                        <span className="kiro-now-dot w-[7px] h-[7px] rounded-full bg-sandrift/80 shrink-0 mr-1" />
                       </div>
                     </div>
                   )}
@@ -651,6 +661,8 @@ export function TimetableGrid({
                           // Overview compact：更紧凑的卡内边距（标题字号不变）
                           isCompactDensity ? "p-1.5" : "p-1.5 sm:p-2",
                           hasConflict && "ring-2 ring-danger bg-danger-bg border-danger-border",
+                          // 当前正在上课：克制外框高亮（优先于 hover/其他，但让位于冲突提示）
+                          !hasConflict && nowCourseSchedule?.id === sched.id && "kiro-now-course ring-2",
                           editingEnabled && "cursor-grab active:cursor-grabbing",
                           // 拖动中：原卡轻微降存在感（0.5 左右），保持原位置，不 scale/rotate/blur
                           isOrigin && "opacity-50",
