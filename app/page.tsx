@@ -105,7 +105,14 @@ export default function Home() {
         const store = useAppStore.getState();
         if (
           !confirm(
-            "Preview: 注入 Task V2 演示数据？\n\n将覆盖当前全部任务/课程/学习计划数据（个人资料与偏好保留）。"
+            "Preview: 注入 Task V2 完整演示数据？\n\n" +
+              "覆盖范围（验证点）：\n" +
+              "· 六视图（聚焦/今天/即将截止/待安排/全部/已归档）与 count\n" +
+              "· 无 DDL 任务 / 预计耗时 / 子任务 / 标签\n" +
+              "· StudyBlock 已安排（含多段累计）\n" +
+              "· 逾期 / 今日截止 / 已提交 / 已完成\n" +
+              "· 5 门课程筛选 · Peek V2 · Ask Kiro 入口\n\n" +
+              "将覆盖当前全部任务/课程/学习计划数据（个人资料与偏好保留）。"
           )
         ) {
           return;

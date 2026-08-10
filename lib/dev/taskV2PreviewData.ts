@@ -1,6 +1,13 @@
 /**
  * Dev Preview fixture：?preview=task-v2
- * 注入 Task V2 Workspace 演示数据（无 DDL 任务、estimatedMinutes、StudyBlock 关联、mark 一致性）。
+ * 注入 Task V2 Workspace 完整演示数据，覆盖开发验证矩阵：
+ * - 六视图全覆盖：focus（逾期/今日截止/今日安排/doing/urgent-high 3 天内 五组全有）、
+ *   today（Do Date ≠ Due Date）、upcoming（明天/2/5/9 天升序）、unscheduled、all、archive
+ * - 无 DDL 任务（行「无截止日期」+ Peek「未设置」+ 编辑回填关闭）
+ * - estimatedMinutes 覆盖：<60 / 整小时 / 混合 / 缺失
+ * - StudyBlock：单段 / 多段累计（a7 = 240min）/ 今日已排（a3、a5）/ 未来已排（a4、a7、a11）
+ * - 状态：todo / doing / submitted / completed；优先级：urgent / high / medium / low
+ * - 子任务（部分完成）、标签、逾期徽章、5 门课程筛选、exam/activity CalendarMark
  * 仅开发构建 + 用户确认后注入；与生产 First Run（空工作区）无冲突。
  * 注意：本文件被 page.tsx dynamic import，永不参与生产 bundle。
  */
@@ -64,11 +71,11 @@ const assignments: Assignment[] = [
     priority: "medium", status: "todo", progress: 0, estimatedMinutes: 60,
     tags: ["复习笔记"],
   },
-  // doing + 3 天内截止（Focus 第四优先）
+  // doing + 明天截止（upcoming 首项，同时是 Focus 的 doing 组）
   {
     id: "a4", courseId: "c5", title: "TCP 三次握手抓包分析",
     description: "用 Wireshark 抓取 TCP 连接建立过程并标注各标志位。",
-    ddl: iso(2, 21, 0), priority: "low", status: "doing", progress: 45, estimatedMinutes: 120,
+    ddl: iso(1, 21, 0), priority: "low", status: "doing", progress: 45, estimatedMinutes: 120,
     tags: ["实验", "Wireshark"],
   },
   // 今天截止 + 今天有 block
@@ -83,14 +90,21 @@ const assignments: Assignment[] = [
       { id: "st5", title: "格式与引用检查", completed: false },
     ],
   },
-  // 后天截止（upcoming）
+  // 后天截止（upcoming 中部）
   {
     id: "a6", courseId: "c2", title: "置信区间与检验小测",
     description: "线上小测，覆盖区间估计与 t 检验。",
     ddl: iso(2, 20, 0), priority: "medium", status: "todo", progress: 0,
     tags: ["线上测试"],
   },
-  // 5 天后 + 已计划 block（upcoming）
+  // high + 2 天后截止、无安排（Focus 第四组：urgent/high 3 天内，非 overdue/today/doing）
+  {
+    id: "a15", courseId: "c1", title: "期中复习提纲整理",
+    description: "按章节整理考点清单与典型例题，供考前集中复习。",
+    ddl: iso(2, 23, 59), priority: "high", status: "todo", progress: 0, estimatedMinutes: 90,
+    tags: ["复习", "期中"],
+  },
+  // 5 天后 + 两段 StudyBlock（upcoming；scheduledMinutes 多 block 累计 = 2.5h + 1.5h）
   {
     id: "a7", courseId: "c3", title: "虚拟内存期末项目设计",
     description: "设计并模拟页面置换算法（FIFO/LRU/CLOCK），产出设计文档。",
@@ -152,6 +166,7 @@ const studyBlocks: StudyBlock[] = [
   { id: "b2", title: "Essay Draft: Renewable Energy", date: dateStr(0), startTime: "20:30", endTime: "21:30", assignmentId: "a5", courseId: "c4", source: "kiro" },
   { id: "b3", title: "TCP 三次握手抓包分析", date: dateStr(1), startTime: "18:00", endTime: "20:00", assignmentId: "a4", courseId: "c5", source: "manual" },
   { id: "b4", title: "虚拟内存期末项目设计", date: dateStr(2), startTime: "15:00", endTime: "17:30", assignmentId: "a7", courseId: "c3", source: "manual" },
+  { id: "b6", title: "虚拟内存期末项目设计（继续）", date: dateStr(3), startTime: "14:00", endTime: "15:30", assignmentId: "a7", courseId: "c3", source: "kiro" },
   { id: "b5", title: "大数定律专题精读", date: dateStr(6), startTime: "09:00", endTime: "10:15", assignmentId: "a11", courseId: "c2", source: "manual" },
 ];
 
@@ -165,6 +180,7 @@ const calendarMarks: CalendarMark[] = [
   { id: "cm7", date: dateStr(9), type: "ddl", title: "TCP/IP 协议分析读书笔记", sourceId: "a8" },
   { id: "cm8", date: dateStr(-3), type: "ddl", title: "局域网组网实验（实验二）", sourceId: "a12" },
   { id: "cm9", date: dateStr(14), type: "exam", title: "数据结构期中考试" },
+  { id: "cm10", date: dateStr(10), type: "activity", title: "学术沙龙与保研经验分享会" },
 ];
 
 export function buildTaskV2PreviewData(): ClassFlowBackupData {
