@@ -352,6 +352,9 @@ export function getAssignment(state: ReadToolState, input: unknown): ReadToolRes
       tags: a.tags ?? [],
       subtasks: a.subtasks ?? [],
       linkedMaterials,
+      // Task 7F：重复任务元信息（只暴露 recurrence / seriesId；recurrenceParentId 无必要）
+      recurrence: a.recurrence ?? null,
+      recurrenceSeriesId: a.recurrenceSeriesId ?? null,
     },
   };
 }

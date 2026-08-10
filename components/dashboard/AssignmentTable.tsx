@@ -24,6 +24,7 @@ import { cn, getPriorityMeta } from "@/lib/utils";
 import { isToday, differenceInDays } from "date-fns";
 import { parseLocalDDL, getLocalDDLDate } from "@/lib/ddl";
 import { formatEstimatedMinutes } from "@/lib/tasks/taskSemantics";
+import { RECURRENCE_LABELS } from "@/lib/tasks/taskRecurrence";
 import { createAssignmentActions } from "@/lib/assignmentActions";
 import { getAssignmentContextCommands } from "@/lib/commands";
 import { paginate } from "@/lib/pagination";
@@ -813,6 +814,15 @@ export function AssignmentTable({ mode = "compact" }: AssignmentTableProps) {
                         <>
                           <span>·</span>
                           <span>预计 {formatEstimatedMinutes(task.estimatedMinutes)}</span>
+                        </>
+                      )}
+                      {/* Task 7F：重复任务弱标记（仅 workspace 完整模式） */}
+                      {isWorkspace && task.recurrence && (
+                        <>
+                          <span>·</span>
+                          <span className="text-satin-grey/70">
+                            {RECURRENCE_LABELS[task.recurrence]}
+                          </span>
                         </>
                       )}
                       {isWorkspace && wsMeta && wsMeta.studyBlockCount > 0 && (

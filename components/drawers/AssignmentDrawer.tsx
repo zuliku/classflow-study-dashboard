@@ -18,6 +18,7 @@ import {
   Plus,
   Check,
   Upload,
+  Repeat2,
   FileText,
   Presentation,
   Link2,
@@ -33,6 +34,7 @@ import { parseLocalDDL } from "@/lib/ddl";
 import { formatEstimatedMinutes } from "@/lib/tasks/taskSemantics";
 import { resolveAssignmentMaterials } from "@/lib/tasks/taskMaterials";
 import { uploadCourseMaterials } from "@/lib/materialUpload";
+import { RECURRENCE_LABELS } from "@/lib/tasks/taskRecurrence";
 import { deriveAssignmentHealthWithAvailability, healthViewMeta, healthExplanation } from "@/lib/tasks/taskHealthView";
 import { usePresence } from "@/lib/usePresence";
 import { useRestoreFocus } from "@/lib/useRestoreFocus";
@@ -321,6 +323,7 @@ export function AssignmentDrawer() {
                 <select
                   value={assignment.status}
                   onChange={(e) => updateAssignmentStatus(assignment.id, e.target.value as AssignmentStatus)}
+                  aria-label="任务状态"
                   className="w-full text-xs font-medium bg-[#F7F5F5] border border-line rounded-xl p-2.5 text-charcoal focus:outline-none cursor-pointer"
                 >
                   <option value="todo">待完成</option>
@@ -366,6 +369,13 @@ export function AssignmentDrawer() {
                 <p className={cn("mt-1 text-xs font-semibold font-mono", parsedDDL ? "text-charcoal" : "text-satin-grey/70")}>
                   {formattedDDL}
                 </p>
+                {/* Task 7F：重复任务轻量 metadata */}
+                {assignment.recurrence && (
+                  <p className="mt-1 flex items-center gap-1 text-[10px] font-semibold text-satin-grey">
+                    <Repeat2 className="w-3 h-3 text-[#A48F82]" />
+                    重复 · {RECURRENCE_LABELS[assignment.recurrence]}
+                  </p>
+                )}
               </div>
               <div className="p-3 bg-[#F7F5F5] border border-line rounded-xl">
                 <p className="flex items-center gap-1.5 text-[10px] font-bold text-sandrift uppercase tracking-wider">

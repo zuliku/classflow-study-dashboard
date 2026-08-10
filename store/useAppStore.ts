@@ -29,6 +29,39 @@ import { isDDLMarkForAssignment, isLegacyDDLMarkForAssignment, linkLegacyDDLMark
 import { createId } from "@/lib/utils";
 import { calculateGroupProjectProgress, formatLocalDate, normalizeGroupProject } from "@/lib/groupProject";
 import { DEFAULT_PREFERENCES, sanitizePreferences } from "@/lib/preferences";
+import { buildNextRecurringAssignment } from "@/lib/tasks/taskRecurrence";
+
+/** Task V2：根据 Assignment 有效 DDL 构建 linked CalendarMark（addAssignment 与 recurrence spawn 共用同一 helper） */
+function buildAssignmentDDLMark(assignment: Assignment): CalendarMark | null {
+  if (!hasTaskDeadline(assignment)) return null;
+  return {
+    id: createId("cm"),
+    date: getLocalDDLDate(assignment.ddl),
+    type: "ddl",
+    title: assignment.title,
+    sourceId: assignment.id,
+  };
+}
+
+/**
+ * Task 7F：completion-driven recurrence spawn（所有完成路径共用；幂等）。
+ * 仅当 completed 任务有 recurrence 时生成下一次；child 已存在（recurrenceParentId 匹配）→ 不重复生成。
+ */
+function spawnRecurringChild(
+  assignments: Assignment[],
+  calendarMarks: CalendarMark[],
+  completed: Assignment
+): { assignments: Assignment[]; calendarMarks: CalendarMark[] } | null {
+  const draft = buildNextRecurringAssignment(completed);
+  if (!draft) return null;
+  if (assignments.some((a) => a.recurrenceParentId === completed.id)) return null;
+  const child = normalizeAssignment({ ...draft, id: createId("a") });
+  const mark = buildAssignmentDDLMark(child);
+  return {
+    assignments: [...assignments, child],
+    calendarMarks: mark ? [...calendarMarks, mark] : calendarMarks,
+  };
+}
 
 /**
  * 生产 First Run State：真实用户首次打开为空白、可配置、可导入。
@@ -643,16 +676,8 @@ export const useAppStore = create<AppState>()(
         });
 
         // Task V2：仅当 Assignment 有合法 DDL 才创建 linked CalendarMark（无 DDL 不建空 date mark）
-        const marks: CalendarMark[] = [];
-        if (hasTaskDeadline(newAssignment)) {
-          marks.push({
-            id: createId("cm"),
-            date: getLocalDDLDate(newAssignment.ddl),
-            type: "ddl",
-            title: newAssignment.title,
-            sourceId: newId,
-          });
-        }
+        const mark = buildAssignmentDDLMark(newAssignment);
+        const marks: CalendarMark[] = mark ? [mark] : [];
 
         set((state) => ({
           assignments: [newAssignment, ...state.assignments],
@@ -669,7 +694,7 @@ export const useAppStore = create<AppState>()(
           const newDdlDate = getLocalDDLDate(next.ddl);
 
           // Update assignment object in place, preserving ID
-          const newAssignments = state.assignments.map((a) =>
+          let newAssignments = state.assignments.map((a) =>
             a.id === next.id ? next : a
           );
 
@@ -678,7 +703,7 @@ export const useAppStore = create<AppState>()(
           // B. 无 DDL → 有 DDL：创建 linked mark
           // C. 有 DDL → 无 DDL：删除 linked mark（不留下孤儿）
           let matchedId: string | null = null;
-          const newCalendarMarks = state.calendarMarks.map((m) => {
+          let newCalendarMarks = state.calendarMarks.map((m) => {
             if (m.sourceId === next.id) {
               matchedId = m.id;
               if (!hasDdl) return null; // C：删除
@@ -714,6 +739,19 @@ export const useAppStore = create<AppState>()(
             });
           }
 
+          // Task 7F：completion-driven recurrence —— 本次从非完成 → 完成且为重复任务 → 生成下一次
+          if (
+            oldAssignment &&
+            oldAssignment.status !== "completed" &&
+            next.status === "completed"
+          ) {
+            const spawned = spawnRecurringChild(newAssignments, newCalendarMarks, next);
+            if (spawned) {
+              newAssignments = spawned.assignments;
+              newCalendarMarks = spawned.calendarMarks;
+            }
+          }
+
           return {
             assignments: newAssignments,
             calendarMarks: newCalendarMarks,
@@ -743,13 +781,29 @@ export const useAppStore = create<AppState>()(
       },
 
       updateAssignmentStatus: (id, status) =>
-        set((state) => ({
-          assignments: state.assignments.map((a) => {
+        set((state) => {
+          const target = state.assignments.find((a) => a.id === id);
+          const isComp = status === "completed";
+          const completedNow = !!target && target.status !== "completed" && isComp;
+          let assignments = state.assignments.map((a) => {
             if (a.id !== id) return a;
-            const isComp = status === "completed";
             return { ...a, status, progress: isComp ? 100 : a.progress };
-          }),
-        })),
+          });
+          let calendarMarks = state.calendarMarks;
+          // Task 7F：completion-driven recurrence（Kiro set_assignment_status / UI 完成共用）
+          if (completedNow && target) {
+            const spawned = spawnRecurringChild(assignments, calendarMarks, {
+              ...target,
+              status,
+              progress: 100,
+            });
+            if (spawned) {
+              assignments = spawned.assignments;
+              calendarMarks = spawned.calendarMarks;
+            }
+          }
+          return { assignments, calendarMarks };
+        }),
 
       updateAssignmentPriority: (id, priority) =>
         set((state) => ({
@@ -759,27 +813,53 @@ export const useAppStore = create<AppState>()(
         })),
 
       updateAssignmentProgress: (id, progress) =>
-        set((state) => ({
-          assignments: state.assignments.map((a) => {
+        set((state) => {
+          const target = state.assignments.find((a) => a.id === id);
+          let assignments = state.assignments.map((a) => {
             if (a.id !== id) return a;
-            const status = progress === 100 ? "completed" : progress > 0 ? "doing" : "todo";
+            const status: Assignment["status"] =
+              progress === 100 ? "completed" : progress > 0 ? "doing" : "todo";
             return { ...a, progress, status };
-          }),
-        })),
+          });
+          let calendarMarks = state.calendarMarks;
+          // Task 7F：进度拉满 → completed 也是完成路径（Drawer 滑杆 / Kiro set_assignment_progress）
+          const updated = assignments.find((a) => a.id === id);
+          if (target && updated && target.status !== "completed" && updated.status === "completed") {
+            const spawned = spawnRecurringChild(assignments, calendarMarks, updated);
+            if (spawned) {
+              assignments = spawned.assignments;
+              calendarMarks = spawned.calendarMarks;
+            }
+          }
+          return { assignments, calendarMarks };
+        }),
 
       toggleSubtask: (assignmentId, subtaskId) =>
-        set((state) => ({
-          assignments: state.assignments.map((a) => {
+        set((state) => {
+          const target = state.assignments.find((a) => a.id === assignmentId);
+          let assignments = state.assignments.map((a) => {
             if (a.id !== assignmentId || !a.subtasks) return a;
             const updatedSub = a.subtasks.map((st) =>
               st.id === subtaskId ? { ...st, completed: !st.completed } : st
             );
             const compCount = updatedSub.filter((st) => st.completed).length;
             const newProgress = Math.round((compCount / updatedSub.length) * 100);
-            const newStatus = newProgress === 100 ? "completed" : newProgress > 0 ? "doing" : "todo";
+            const newStatus: Assignment["status"] =
+              newProgress === 100 ? "completed" : newProgress > 0 ? "doing" : "todo";
             return { ...a, subtasks: updatedSub, progress: newProgress, status: newStatus };
-          }),
-        })),
+          });
+          let calendarMarks = state.calendarMarks;
+          // Task 7F：通过完成最后一个子任务完成重复任务 → 同样生成下一次（幂等保护）
+          const updated = assignments.find((a) => a.id === assignmentId);
+          if (target && updated && target.status !== "completed" && updated.status === "completed") {
+            const spawned = spawnRecurringChild(assignments, calendarMarks, updated);
+            if (spawned) {
+              assignments = spawned.assignments;
+              calendarMarks = spawned.calendarMarks;
+            }
+          }
+          return { assignments, calendarMarks };
+        }),
 
       deleteAssignment: (id) => {
         const current = get();

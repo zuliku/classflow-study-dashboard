@@ -89,6 +89,9 @@ export interface Subtask {
   completed: boolean;
 }
 
+/** Task 7F：重复任务规则（第一版四种；缺失 = 普通任务） */
+export type TaskRecurrence = "daily" | "weekly" | "biweekly" | "monthly";
+
 export interface Assignment {
   id: string;
   courseId: string;
@@ -108,6 +111,12 @@ export interface Assignment {
    * Course.materials 仍是 Source of Truth。无关联 = undefined。
    */
   materialIds?: string[];
+  /** Task 7F：重复规则；有 recurrence 必须有有效 DDL（normalize 强制）；缺失 = 普通任务 */
+  recurrence?: TaskRecurrence;
+  /** 同一重复任务系列的稳定 ID（首次开启时 Domain 层创建） */
+  recurrenceSeriesId?: string;
+  /** 该 occurrence 由哪个上一 occurrence 自动生成（idempotency：一个 occurrence 最多生成一个 child） */
+  recurrenceParentId?: string;
 }
 
 export interface GroupMember {

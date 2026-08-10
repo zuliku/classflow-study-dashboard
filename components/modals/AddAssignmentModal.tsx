@@ -4,7 +4,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { X, ClipboardList, Clock, Plus, Trash2 } from "lucide-react";
 import { useAppStore } from "@/store/useAppStore";
 import { useToastStore } from "@/store/useToastStore";
-import { Priority, AssignmentStatus, Subtask } from "@/types";
+import { Priority, AssignmentStatus, Subtask, TaskRecurrence } from "@/types";
 import { combineLocalDateTime, getLocalDDLDate, getLocalDDLTime, parseLocalDDL } from "@/lib/ddl";
 import { format } from "date-fns";
 import { usePresence } from "@/lib/usePresence";
@@ -15,6 +15,15 @@ import { pushOverlay, popOverlay, isTopmostOverlay } from "@/lib/overlayStack";
 import { getNewTaskDefaults } from "@/lib/taskDefaults";
 
 const OVERLAY_ID = "add-assignment-modal";
+
+/** Task 7F：重复规则选项（与 Domain TaskRecurrence 一一对应） */
+const RECURRENCE_OPTIONS: { value: TaskRecurrence | "none"; label: string }[] = [
+  { value: "none", label: "不重复" },
+  { value: "daily", label: "每天" },
+  { value: "weekly", label: "每周" },
+  { value: "biweekly", label: "每两周" },
+  { value: "monthly", label: "每月" },
+];
 
 export function AddAssignmentModal() {
   const {
@@ -54,6 +63,8 @@ export function AddAssignmentModal() {
   const [ddlEnabled, setDdlEnabled] = useState(false);
   const [ddlDate, setDdlDate] = useState("");
   const [ddlTime, setDdlTime] = useState("23:59");
+  // Task 7F：重复规则（"none" = 普通任务；仅在 DDL 启用时有效）
+  const [recurrence, setRecurrence] = useState<TaskRecurrence | "none">("none");
   // Task V2：预计耗时（分钟，可选）
   const [estimatedMinutes, setEstimatedMinutes] = useState("");
   const [priority, setPriority] = useState<Priority>("medium");
@@ -83,6 +94,7 @@ export function AddAssignmentModal() {
           setTagsStr(target.tags ? target.tags.join(", ") : "");
           setDescription(target.description || "");
           setSubtasks(target.subtasks || []);
+          setRecurrence(target.recurrence ?? "none");
         }
       } else {
         setEditingId(null);
@@ -109,6 +121,7 @@ export function AddAssignmentModal() {
         setTagsStr("作业, 个人任务");
         setDescription("");
         setSubtasks([]);
+        setRecurrence("none");
         setPrefillSource(detail.courseId ? "course" : detail.ddlDate ? "calendar" : null);
       }
       setIsOpen(true);
@@ -163,6 +176,8 @@ export function AddAssignmentModal() {
       progress,
       tags,
       subtasks: validSubtasks,
+      // Task 7F：仅 DDL 启用时才提交 recurrence（关闭 DDL 时同步为 none，避免非法组合）
+      recurrence: ddlEnabled && recurrence !== "none" ? recurrence : undefined,
     };
 
     if (editingId) {
@@ -270,28 +285,52 @@ export function AddAssignmentModal() {
               <input
                 type="checkbox"
                 checked={ddlEnabled}
-                onChange={(e) => setDdlEnabled(e.target.checked)}
+                onChange={(e) => {
+                  setDdlEnabled(e.target.checked);
+                  // Task 7F：关闭 DDL 必须同步清空重复规则（避免提交非法组合）
+                  if (!e.target.checked) setRecurrence("none");
+                }}
                 className="w-3.5 h-3.5 rounded accent-charcoal"
                 aria-label="设置截止时间"
               />
             </label>
             {ddlEnabled ? (
-              <div className="grid grid-cols-2 gap-2">
-                <input
-                  type="date"
-                  value={ddlDate}
-                  onChange={(e) => setDdlDate(e.target.value)}
-                  className="w-full p-2 bg-white border border-line-strong rounded-lg font-mono text-xs focus:outline-none"
-                  required
-                />
-                <input
-                  type="time"
-                  value={ddlTime}
-                  onChange={(e) => setDdlTime(e.target.value)}
-                  className="w-full p-2 bg-white border border-line-strong rounded-lg font-mono text-xs focus:outline-none"
-                  required
-                />
-              </div>
+              <>
+                <div className="grid grid-cols-2 gap-2">
+                  <input
+                    type="date"
+                    value={ddlDate}
+                    onChange={(e) => setDdlDate(e.target.value)}
+                    className="w-full p-2 bg-white border border-line-strong rounded-lg font-mono text-xs focus:outline-none"
+                    required
+                  />
+                  <input
+                    type="time"
+                    value={ddlTime}
+                    onChange={(e) => setDdlTime(e.target.value)}
+                    className="w-full p-2 bg-white border border-line-strong rounded-lg font-mono text-xs focus:outline-none"
+                    required
+                  />
+                </div>
+                {/* Task 7F：重复规则（仅 DDL 启用时显示；完成当前任务后自动生成下一次） */}
+                <div className="flex items-center justify-between gap-2 pt-1">
+                  <label htmlFor="task-recurrence" className="text-[11px] font-bold text-sandrift">
+                    重复
+                  </label>
+                  <select
+                    id="task-recurrence"
+                    value={recurrence}
+                    onChange={(e) => setRecurrence(e.target.value as TaskRecurrence | "none")}
+                    className="px-2 py-1.5 bg-white border border-line-strong rounded-lg text-xs font-semibold text-charcoal focus:outline-none cursor-pointer"
+                  >
+                    {RECURRENCE_OPTIONS.map((o) => (
+                      <option key={o.value} value={o.value}>
+                        {o.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </>
             ) : (
               <p className="text-[11px] text-sandrift">未设置截止日期，任务仍可正常创建与安排。</p>
             )}

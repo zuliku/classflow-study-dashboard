@@ -4,8 +4,16 @@
  * 后续 Workspace / Timeline / Kiro Tools 一律经此取语义，不各自判断 task.ddl。
  */
 
-import { Assignment } from "@/types";
+import { Assignment, TaskRecurrence } from "@/types";
 import { parseLocalDDL, getLocalDDLDate, getLocalDDLTime } from "@/lib/ddl";
+import { createId } from "@/lib/utils";
+
+/** 合法 recurrence 集合（非法 → undefined） */
+const RECURRENCE_VALUES: TaskRecurrence[] = ["daily", "weekly", "biweekly", "monthly"];
+
+function normalizeRecurrence(value: unknown): TaskRecurrence | undefined {
+  return RECURRENCE_VALUES.includes(value as TaskRecurrence) ? (value as TaskRecurrence) : undefined;
+}
 
 /** 预计耗时上限：7 天（防止 NaN / Infinity / 异常大值进入持久化） */
 export const MAX_ESTIMATED_MINUTES = 7 * 24 * 60;
@@ -69,6 +77,15 @@ export function normalizeAssignment(raw: unknown): Assignment {
   const a = (raw ?? {}) as Record<string, unknown>;
   const base = a as unknown as Assignment;
   const hasValidDdl = typeof a.ddl === "string" && a.ddl.length > 0;
+  // Task 7F：recurrence 必须有有效 DDL（无 DDL 的 weekly 组合不合法 → 清洗为 undefined）
+  const recurrence = hasValidDdl ? normalizeRecurrence(a.recurrence) : undefined;
+  // 有 recurrence 但无 seriesId（旧数据 / 其他入口）：Domain 层补稳定系列 ID
+  const recurrenceSeriesId =
+    recurrence && typeof a.recurrenceSeriesId === "string" && a.recurrenceSeriesId
+      ? a.recurrenceSeriesId
+      : recurrence
+        ? createId("rs")
+        : undefined;
   return {
     id: typeof a.id === "string" && a.id ? a.id : `a_${Math.random().toString(36).slice(2)}`,
     courseId: typeof a.courseId === "string" ? a.courseId : "",
@@ -82,5 +99,11 @@ export function normalizeAssignment(raw: unknown): Assignment {
     tags: Array.isArray(a.tags) ? a.tags.filter((t): t is string => typeof t === "string") : [],
     subtasks: Array.isArray(a.subtasks) ? (a.subtasks as Assignment["subtasks"]) : undefined,
     materialIds: normalizeMaterialIds(a.materialIds),
+    recurrence,
+    recurrenceSeriesId,
+    recurrenceParentId:
+      typeof a.recurrenceParentId === "string" && a.recurrenceParentId
+        ? a.recurrenceParentId
+        : undefined,
   };
 }

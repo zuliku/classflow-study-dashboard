@@ -142,6 +142,50 @@ test("Task 6B-B：Task Drawer 上传 → 自动关联 + Course 侧同一文件 +
   expect(stillInCourse).toBe(true);
 });
 
+test("Task 7F：新建每周重复任务 → 完成当前 → 自动生成下一周 occurrence", async ({ page }) => {
+  await openWorkspace(page);
+
+  // Quick Add → 更多详情打开 Full Editor（Full Editor 不继承 Quick Add 标题，需重填）
+  await page.getByRole("button", { name: "新增任务" }).click();
+  const card = page.getByTestId("quick-add-card");
+  await card.getByPlaceholder("要完成什么？").fill("每周英语单词复习");
+  await card.getByRole("button", { name: /更多详情/ }).click();
+  await expect(page.getByRole("heading", { name: "新建任务" })).toBeVisible();
+  await page.getByRole("textbox", { name: "如：计量经济学实证报告" }).fill("每周英语单词复习");
+
+  // 启用 DDL（明天）+ 重复 = 每周（scope 到 Modal 面板内的日期输入）
+  await page.getByLabel("设置截止时间").check();
+  const d = new Date();
+  d.setDate(d.getDate() + 1);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const tomorrow = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  await page.locator(".ux-modal-panel input[type=\"date\"]").fill(tomorrow);
+  await page.getByLabel("重复").selectOption("weekly");
+  await page.getByRole("button", { name: "保存" }).click();
+  await expect(page.getByRole("heading", { name: "新建任务" })).toHaveCount(0);
+
+  // 全部视图：打开当前 occurrence 的 Drawer → 状态设为「已完成」→ 自动生成下一周
+  await page.getByRole("button", { name: /^全部 \d+$/ }).first().click();
+  const rows = page.locator('[data-assignment-id]').filter({ hasText: "每周英语单词复习" });
+  await expect(rows).toHaveCount(1);
+  await rows.first().click();
+  await expect(page.getByRole("heading", { name: "每周英语单词复习" }).last()).toBeVisible();
+  await page.getByRole("combobox", { name: "任务状态" }).selectOption("completed");
+  await page.getByRole("button", { name: "关闭", exact: true }).first().click();
+
+  // 自动生成下一周 occurrence（同一标题，共 2 条）；原任务进入 archive 区（列表靠后）
+  await expect(rows).toHaveCount(2);
+  await expect(rows.last().locator('input[type="checkbox"]')).toBeChecked();
+  await expect(rows.first()).toContainText("截止: ");
+  // 新 occurrence 截止 = 下一周
+  await expect(rows.first()).toContainText("每周");
+
+  // 打开新 occurrence（active 区靠前）的 Drawer → 显示「重复 · 每周」
+  await rows.first().click();
+  await expect(page.getByRole("heading", { name: "每周英语单词复习" }).last()).toBeVisible();
+  await expect(page.getByText("重复 · 每周")).toBeVisible();
+});
+
 test("Task 6A：Drawer 关联资料 - 显示/解除关联只改 Task、不删课程文件；Picker 可重新添加", async ({ page }) => {
   await openWorkspace(page);
   // a1（c_4 计量经济学大作业）演示数据关联 m5
