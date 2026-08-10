@@ -9,6 +9,7 @@ import { format } from "date-fns";
 import { getWeekDateRange, formatWeekDateRange, getSemesterWeek } from "@/lib/semester";
 import { findScheduleConflicts } from "@/lib/conflicts";
 import { isScheduleActive, timeToMinutes } from "@/lib/schedule";
+import { getNowIndicatorPosition } from "@/lib/timeline/nowIndicator";
 import { Course, CourseSchedule, ScheduleConflict } from "@/types";
 import {
   TIMETABLE_DAY_START_MINUTES,
@@ -594,6 +595,12 @@ export function TimetableGrid({
                 (s) => s.dayOfWeek === wd.dayOfWeek
               );
 
+              // Hotfix：Now Indicator 位置（actual time ≠ visual position；21:00 后固定底部安全位）
+              const nowIndicator =
+                isRealCurrentWeek && wd.dateStr === format(new Date(), "M/d") && !nowCourseSchedule
+                  ? getNowIndicatorPosition({ nowMinutes, dayStartMinutes, totalMinutes })
+                  : null;
+
               return (
                 <div
                   key={wd.dayOfWeek}
@@ -605,13 +612,15 @@ export function TimetableGrid({
                 >
                   {/* Now Indicator：仅真实当前周 + 今天列；当前无进行中课程时才显示。
                       时间胶囊水平居中压在线上（胶囊底色遮挡线中央），无右端圆点；
-                      位置随真实时间平滑移动；横线 z 低于课程卡（被自然遮挡），胶囊 z 高于课程卡 */}
-                  {isRealCurrentWeek && wd.dateStr === format(new Date(), "M/d") && !nowCourseSchedule && (
+                      位置随真实时间平滑移动；横线 z 低于课程卡（被自然遮挡），胶囊 z 高于课程卡。
+                      21:00 后视觉位置固定，胶囊文字仍用真实 nowMinutes 持续更新 */}
+                  {nowIndicator && (
                     <div
                       aria-hidden="true"
+                      data-now-position={nowIndicator.position}
                       className="absolute inset-x-0 z-[6] pointer-events-none"
                       style={{
-                        top: `${((nowMinutes - dayStartMinutes) / totalMinutes) * 100}%`,
+                        top: nowIndicator.top,
                         transition: "top 30s linear",
                       }}
                     >
