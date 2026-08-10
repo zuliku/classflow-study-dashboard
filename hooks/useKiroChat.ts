@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useCallback, useMemo, useRef, useState } from "react";
 import { DefaultChatTransport, lastAssistantMessageIsCompleteWithToolCalls } from "ai";
@@ -1202,7 +1202,7 @@ function buildWriteApi({
     updateAssignment: (a) => useAppStore.getState().updateAssignment(a),
     updateAssignmentPatch: (id, patch) => useAppStore.getState().updateAssignmentPatch(id, patch),
     deleteAssignment: (id) => useAppStore.getState().deleteAssignment(id),
-    restoreAssignment: (a, marks) => useAppStore.getState().restoreAssignment(a, marks),
+    restoreAssignment: (snapshot) => useAppStore.getState().restoreAssignment(snapshot),
     updateAssignmentStatus: (id, status) => useAppStore.getState().updateAssignmentStatus(id, status),
     updateAssignmentPriority: (id, priority) => useAppStore.getState().updateAssignmentPriority(id, priority),
     updateAssignmentProgress: (id, progress) => useAppStore.getState().updateAssignmentProgress(id, progress),

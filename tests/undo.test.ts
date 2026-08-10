@@ -37,7 +37,7 @@ describe("删除撤销（Undo）", () => {
     expect(afterDelete.calendarMarks.find((m) => m.id === "legacy_cm")).toBeUndefined();
 
     // 撤销：恢复任务与标记（不创建新 ID）
-    useAppStore.getState().restoreAssignment(removed!.assignment, removed!.marks);
+    useAppStore.getState().restoreAssignment(removed!);
     const after = useAppStore.getState();
     const restored = after.assignments.find((a) => a.id === "a1")!;
     expect(restored).toEqual(a1);

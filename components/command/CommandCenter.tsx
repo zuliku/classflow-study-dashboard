@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import React, { useState, useEffect, useMemo, useRef } from "react";
 import { Search, X, ArrowRight, Keyboard } from "lucide-react";
@@ -93,7 +93,7 @@ export function CommandCenter() {
         updateAssignment: (a) => useAppStore.getState().updateAssignment(a),
         setSelectedAssignmentId: (id) => useAppStore.getState().setSelectedAssignmentId(id),
         deleteAssignment: (id) => useAppStore.getState().deleteAssignment(id),
-        restoreAssignment: (a, marks) => useAppStore.getState().restoreAssignment(a, marks),
+        restoreAssignment: (snapshot) => useAppStore.getState().restoreAssignment(snapshot),
         pushToast: (t) => pushToast(t),
         confirm: (r) => confirmRequest(r),
       }),

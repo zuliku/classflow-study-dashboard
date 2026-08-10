@@ -21,6 +21,10 @@ import {
   TIMETABLE_DAY_END_MINUTES,
 } from "@/lib/timetableInteraction";
 import { timeToMinutes } from "@/lib/schedule";
+import {
+  collectAssignmentDeleteSnapshot,
+  removeAssignmentDeleteSnapshot,
+} from "@/lib/dataDependencies";
 import { TransactionSafeToolName } from "@/lib/ai/transactions/types";
 
 export interface PreparedActionView {
@@ -270,11 +274,17 @@ function prepareDeleteAssignment(toolName: TransactionSafeToolName, input: unkno
     before: { title: before.title, ddl: before.ddl },
   };
   return makeAction(state, view,
-    (s) => projectRemove(s, "assignments", assignmentId),
+    // Task 7G-C：projection 必须与真实 commit 使用同一 dependency semantics
+    // （真实 Store 会同时删除 StudyBlocks / Reminders / DDL CalendarMarks）
+    (s) => {
+      const snapshot = collectAssignmentDeleteSnapshot(s, assignmentId);
+      if (!snapshot) return s;
+      return { ...s, ...removeAssignmentDeleteSnapshot(s, snapshot) };
+    },
     (api, callId) => {
       const removed = api.deleteAssignment(assignmentId);
       if (!removed) return null;
-      return { undo: () => api.restoreAssignment(removed.assignment, removed.marks) };
+      return { undo: () => api.restoreAssignment(removed) };
     });
 }
 

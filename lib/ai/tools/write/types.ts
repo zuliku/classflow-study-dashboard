@@ -8,7 +8,6 @@ import {
 } from "@/types";
 import type { AppState } from "@/store/useAppStore";
 import { DeleteResult } from "@/lib/assignmentActions";
-
 /** 写操作风险等级：risk 由 ClassFlow 决定，模型不得影响 */
 export type KiroWriteRisk = "normal" | "destructive";
 
@@ -134,7 +133,7 @@ export interface KiroWriteApi {
   /** Task V2 字段级 patch（DDL CalendarMark 三态同步由 Store 统一处理；ddl 缺省 = 不改变） */
   updateAssignmentPatch: (id: string, patch: Partial<Omit<Assignment, "id">>) => void;
   deleteAssignment: (id: string) => DeleteResult | null;
-  restoreAssignment: (a: Assignment, marks: DeleteResult["marks"]) => void;
+  restoreAssignment: (snapshot: DeleteResult) => void;
   updateAssignmentStatus: (id: string, status: Assignment["status"]) => void;
   updateAssignmentPriority: (id: string, priority: Priority) => void;
   updateAssignmentProgress: (id: string, progress: number) => void;

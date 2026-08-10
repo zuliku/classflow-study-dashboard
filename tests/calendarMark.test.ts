@@ -146,8 +146,8 @@ describe("store 层：legacy collision 不误删", () => {
   it("删除 + 撤销：legacy mark 正确恢复且不误删其他 mark", () => {
     seedCollision();
     const removed = useAppStore.getState().deleteAssignment("a_A");
-    expect(removed!.marks.map((m) => m.id)).toEqual(["cm_A"]);
-    useAppStore.getState().restoreAssignment(removed!.assignment, removed!.marks);
+    expect(removed!.calendarMarks.map((m) => m.id)).toEqual(["cm_A"]);
+    useAppStore.getState().restoreAssignment(removed!);
     const after = useAppStore.getState();
     expect(after.calendarMarks.find((m) => m.id === "cm_A")).toBeTruthy();
     expect(after.calendarMarks.find((m) => m.id === "cm_B")).toBeTruthy();

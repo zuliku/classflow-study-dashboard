@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from "vitest";
+﻿import { describe, it, expect, beforeEach } from "vitest";
 import { useAppStore } from "@/store/useAppStore";
 import { seedDemoData } from "./demoSeed";
 import { Assignment } from "@/types";
@@ -180,7 +180,7 @@ describe("bulk delete + undo（store 集成）", () => {
       updateAssignment: (x) => useAppStore.getState().updateAssignment(x),
       setSelectedAssignmentId: () => {},
       deleteAssignment: (id) => useAppStore.getState().deleteAssignment(id),
-      restoreAssignment: (x, marks) => useAppStore.getState().restoreAssignment(x, marks),
+      restoreAssignment: (snapshot) => useAppStore.getState().restoreAssignment(snapshot),
       pushToast: (t) => {
         undoAction = t.onAction ?? null;
       },

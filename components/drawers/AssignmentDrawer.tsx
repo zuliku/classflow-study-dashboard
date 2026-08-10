@@ -146,7 +146,7 @@ export function AssignmentDrawer() {
       pushToast({
         message: "任务已删除",
         actionLabel: "撤销",
-        onAction: () => restoreAssignment(removed.assignment, removed.marks),
+        onAction: () => restoreAssignment(removed),
       });
     }
   };

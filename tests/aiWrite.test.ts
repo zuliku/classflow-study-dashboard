@@ -65,7 +65,7 @@ function buildApi(store: { getState: () => any }, undos: Map<string, () => void>
     updateAssignment: (a) => store.getState().updateAssignment(a),
     updateAssignmentPatch: (id, patch) => store.getState().updateAssignmentPatch(id, patch),
     deleteAssignment: (id) => store.getState().deleteAssignment(id),
-    restoreAssignment: (a, marks) => store.getState().restoreAssignment(a, marks),
+    restoreAssignment: (snapshot) => store.getState().restoreAssignment(snapshot),
     updateAssignmentStatus: (id, status) => store.getState().updateAssignmentStatus(id, status),
     updateAssignmentPriority: (id, priority) => store.getState().updateAssignmentPriority(id, priority),
     updateAssignmentProgress: (id, progress) => store.getState().updateAssignmentProgress(id, progress),

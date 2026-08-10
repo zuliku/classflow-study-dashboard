@@ -27,11 +27,19 @@ import { normalizeAssignment, hasTaskDeadline } from "@/lib/tasks/taskSemantics"
 import { sanitizeAssignmentMaterialIds } from "@/lib/tasks/taskMaterials";
 import { TaskWorkspaceView } from "@/lib/tasks/taskViews";
 import { deleteFileBlob, clearAllFileBlobs } from "@/lib/fileStorage";
-import { isDDLMarkForAssignment, isLegacyDDLMarkForAssignment, linkLegacyDDLMarks } from "@/lib/calendarMark";
+import { isLegacyDDLMarkForAssignment, linkLegacyDDLMarks } from "@/lib/calendarMark";
 import { createId } from "@/lib/utils";
 import { calculateGroupProjectProgress, formatLocalDate, normalizeGroupProject } from "@/lib/groupProject";
 import { DEFAULT_PREFERENCES, sanitizePreferences } from "@/lib/preferences";
 import { buildNextRecurringAssignment } from "@/lib/tasks/taskRecurrence";
+import {
+  collectAssignmentDeleteSnapshot,
+  collectCourseDeleteCascade,
+  removeAssignmentDeleteSnapshot,
+  removeCourseDeleteCascade,
+  restoreAssignmentDeleteSnapshot,
+  AssignmentDeleteSnapshot,
+} from "@/lib/dataDependencies";
 import {
   formatLocalDateTime,
   getReminderTargetAnchor,
@@ -360,10 +368,10 @@ export interface AppState {
   toggleSubtask: (assignmentId: string, subtaskId: string) => void;
   /** Task 6A：设置任务关联的课程资料 ID（仅保留所属 Course 中真实存在的 ID，跨课程引用被清洗） */
   setAssignmentMaterialIds: (assignmentId: string, materialIds: string[]) => void;
-  /** 删除任务：返回被删任务与对应的 DDL CalendarMark（含兼容匹配），供撤销恢复 */
-  deleteAssignment: (id: string) => { assignment: Assignment; marks: CalendarMark[] } | null;
-  /** 撤销删除：恢复任务及对应 CalendarMark（保留原始 ID 与全部字段） */
-  restoreAssignment: (assignment: Assignment, marks: CalendarMark[]) => void;
+  /** 删除任务：返回完整依赖快照（Assignment + DDL mark + StudyBlocks + 关联 Reminder），供一次撤销恢复 */
+  deleteAssignment: (id: string) => AssignmentDeleteSnapshot | null;
+  /** 撤销删除：按快照原样恢复（原 ID / 原时间 / 原状态全部保持；按 ID 幂等） */
+  restoreAssignment: (snapshot: AssignmentDeleteSnapshot) => void;
 
   // Timeline V1：StudyBlock Actions
   /** 创建学习计划，返回新 id */
@@ -635,34 +643,27 @@ export const useAppStore = create<AppState>()(
 
       deleteCourse: (courseId) => {
         const current = get();
-        const targetCourse = current.courses.find((c) => c.id === courseId);
+        const cascade = collectCourseDeleteCascade(current, courseId);
+        if (!cascade) return;
 
         // 1. 同步清理该课程关联资料的 Blob（fire-and-forget，失败不阻塞）
-        targetCourse?.materials.forEach((m) => {
+        cascade.course.materials.forEach((m) => {
           if (m.storageKey) deleteFileBlob(m.storageKey).catch(() => {});
         });
 
-        // 2. 收集被删除课程的关联 Assignment，级联清理其 DDL CalendarMark
-        const deletedAssignments = current.assignments.filter((a) => a.courseId === courseId);
-        const deletedAssignmentIds = new Set(deletedAssignments.map((a) => a.id));
-
-        const isOrphanDDLMark = (mark: CalendarMark): boolean => {
-          if (mark.type !== "ddl") return false; // 严格限定 ddl，绝不误删 exam/activity
-          if (mark.sourceId && deletedAssignmentIds.has(mark.sourceId)) return true;
-          // 历史遗留无 sourceId 的 DDL 标记：仅允许 title AND date 同时匹配
-          if (!mark.sourceId) {
-            return deletedAssignments.some((a) => isLegacyDDLMarkForAssignment(mark, a));
-          }
-          return false;
-        };
-
-        set({
-          courses: current.courses.filter((c) => c.id !== courseId),
-          schedules: current.schedules.filter((s) => s.courseId !== courseId),
-          assignments: current.assignments.filter((a) => a.courseId !== courseId),
-          groupProjects: current.groupProjects.filter((gp) => gp.courseId !== courseId),
-          calendarMarks: current.calendarMarks.filter((m) => !isOrphanDDLMark(m)),
-          selectedCourseId: current.selectedCourseId === courseId ? null : current.selectedCourseId,
+        // 2. 一次 set 完成完整级联删除（Course + schedules + assignments + groupProjects +
+        //    DDL marks + course/assignment-owned StudyBlocks + 受影响 Reminder）
+        set((state) => {
+          const next = removeCourseDeleteCascade(state, cascade);
+          const deletedAssignmentIds = new Set(cascade.assignments.map((a) => a.id));
+          return {
+            ...next,
+            selectedCourseId: state.selectedCourseId === courseId ? null : state.selectedCourseId,
+            selectedAssignmentId:
+              state.selectedAssignmentId !== null && deletedAssignmentIds.has(state.selectedAssignmentId)
+                ? null
+                : state.selectedAssignmentId,
+          };
         });
       },
 
@@ -973,37 +974,22 @@ export const useAppStore = create<AppState>()(
 
       deleteAssignment: (id) => {
         const current = get();
-        const target = current.assignments.find((a) => a.id === id);
-        if (!target) return null;
+        const snapshot = collectAssignmentDeleteSnapshot(current, id);
+        if (!snapshot) return null;
 
-        // 记录被删除的 DDL CalendarMark（sourceId 精确匹配 + legacy title AND date），供撤销恢复
-        const removedMarks: CalendarMark[] = [];
-        const nextMarks = current.calendarMarks.filter((m) => {
-          if (isDDLMarkForAssignment(m, target)) {
-            removedMarks.push(m);
-            return false;
-          }
-          return true;
-        });
+        // Task 7G-C：一次 set 完成全部级联删除（Assignment + DDL mark + StudyBlocks + 三类 Reminder），
+        // 避免中间 orphan state（禁止 deleteStudyBlock → deleteReminder → deleteCalendarMark 连续调用）
+        set((state) => ({
+          ...removeAssignmentDeleteSnapshot(state, snapshot),
+          selectedAssignmentId: state.selectedAssignmentId === id ? null : state.selectedAssignmentId,
+        }));
 
-        set({
-          assignments: current.assignments.filter((a) => a.id !== id),
-          calendarMarks: nextMarks,
-          selectedAssignmentId: current.selectedAssignmentId === id ? null : current.selectedAssignmentId,
-          // Task 7G-A1：target 删除 → 关联 Reminder 一并删除（无 orphan）
-          reminders: current.reminders.filter((r) => !(r.targetType === "assignment" && r.targetId === id)),
-        });
-
-        return { assignment: target, marks: removedMarks };
+        return snapshot;
       },
 
-      restoreAssignment: (assignment, marks) =>
+      restoreAssignment: (snapshot) =>
         set((state) => ({
-          assignments: [assignment, ...state.assignments],
-          calendarMarks: [
-            ...state.calendarMarks,
-            ...marks.filter((m) => !state.calendarMarks.some((x) => x.id === m.id)),
-          ],
+          ...restoreAssignmentDeleteSnapshot(state, snapshot),
         })),
 
       // ---- Timeline V1：StudyBlock（学习计划）----

@@ -7,11 +7,10 @@ import {
   bulkShiftDDL,
 } from "@/lib/assignmentSelection";
 import { openAssignmentEditor } from "@/lib/uiEvents";
+import { AssignmentDeleteSnapshot } from "@/lib/dataDependencies";
 
-export interface DeleteResult {
-  assignment: Assignment;
-  marks: CalendarMark[];
-}
+/** Task 7G-C：删除任务 = 完整依赖快照（Assignment + DDL mark + StudyBlocks + 关联 Reminder），供一次撤销恢复 */
+export type DeleteResult = AssignmentDeleteSnapshot;
 
 /** Command Registry 与 Context Menu / Bulk Bar 共用的赋值动作集合 */
 export interface AssignmentActions {
@@ -33,7 +32,7 @@ export interface AssignmentActionApi {
   updateAssignment: (a: Assignment) => void;
   setSelectedAssignmentId: (id: string | null) => void;
   deleteAssignment: (id: string) => DeleteResult | null;
-  restoreAssignment: (assignment: Assignment, marks: CalendarMark[]) => void;
+  restoreAssignment: (snapshot: DeleteResult) => void;
   pushToast: (toast: {
     message: string;
     actionLabel?: string;
@@ -96,14 +95,14 @@ export function createAssignmentActions(api: AssignmentActionApi): AssignmentAct
         message: `${removed.length} 项任务已删除`,
         actionLabel: "撤销",
         onAction: () => {
-          removed.forEach((r) => restoreAssignment(r.assignment, r.marks));
+          removed.forEach((r) => restoreAssignment(r));
         },
       });
     };
     if (api.confirm) {
       api.confirm({
         title: `删除 ${ids.length} 项任务？`,
-        description: "任务、相关日历标记与本地数据将一并删除，此操作无法撤销。",
+        description: "任务及其学习安排与提醒将一并删除，删除后可通过「撤销」恢复。",
         confirmLabel: "删除任务",
         danger: true,
         onConfirm: doDelete,
