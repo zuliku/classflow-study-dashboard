@@ -196,7 +196,7 @@ export default function Home() {
               {/* Row 1: Overview Hero（Desktop ≥1280 = 一屏：课表 2/3 + DDL/月历 1/3，严格同顶同底） */}
               {/* Tablet 768–1023 自然降列 2+1，Desktop 恢复 2/3 + 1/3 */}
               {/* items-stretch：左侧完整时间轴课表是 Row 高度基准；右侧用稳定比例 grid-rows 适配等高 */}
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 items-stretch xl:h-[calc(100dvh-8.5rem)]">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 items-stretch xl:h-[calc(100dvh-7rem)]">
                 <div className="lg:col-span-2 flex flex-col min-h-0">
                   <TimetableGrid density="compact" fillAvailableHeight headerActions={<TimetableQuickGlance />} />
                 </div>
