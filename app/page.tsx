@@ -29,6 +29,7 @@ import { ToastViewport } from "@/components/ui/ToastViewport";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { PageTransition } from "@/components/ui/PageTransition";
 import { useAppStore } from "@/store/useAppStore";
+import { useToastStore } from "@/store/useToastStore";
 import { computeWeekCourseLoad } from "@/lib/studyLoad";
 import { cardKeyHandler, cn } from "@/lib/utils";
 import { openAssignmentEditor } from "@/lib/uiEvents";
@@ -89,7 +90,45 @@ export default function Home() {
     document.documentElement.dataset.motion = motionPreference;
   }, [motionPreference]);
 
-  // Dev Preview：?preview=task-v2 → 注入 Task V2 演示数据（覆盖确认 + 会话标记，仅开发构建）
+  // Dev 自动注入：开发构建 + 首次启动（无持久化数据）→ 自动载入全模块演示数据，
+  // 无需 ?preview= URL 即可查看所有模块。用户主动清空数据后不再注入（marker 保留）。
+  // 自动化测试环境（navigator.webdriver / __CLASSFLOW_E2E__）与生产构建完全禁用。
+  useEffect(() => {
+    if (process.env.NODE_ENV !== "development") return;
+    if (navigator.webdriver) return;
+    if ((window as unknown as { __CLASSFLOW_E2E__?: boolean }).__CLASSFLOW_E2E__) return;
+    try {
+      const KEY = "classflow-storage-v2";
+      const stored = localStorage.getItem(KEY);
+      if (stored) {
+        // persist 可能在注入前写入 first-run 空状态；只有「真正有业务数据」才跳过
+        try {
+          const parsed = JSON.parse(stored) as {
+            state?: Record<string, unknown>;
+          };
+          const s = (parsed.state ?? parsed) as Record<string, unknown>;
+          const arr = (k: string) => (Array.isArray(s[k]) ? (s[k] as unknown[]).length : 0);
+          const hasData = arr("assignments") > 0 || arr("courses") > 0 || arr("studyBlocks") > 0;
+          if (hasData) return;
+        } catch {
+          return; // 损坏数据不覆盖
+        }
+      }
+      if (localStorage.getItem("classflow-demo-injected") === "1") return;
+      import("@/lib/dev/fullDemoData").then(({ buildFullDemoData }) => {
+        useAppStore.getState().restoreAppData(buildFullDemoData());
+        localStorage.setItem("classflow-demo-injected", "1");
+        useToastStore.getState().pushToast({
+          message: "已载入完整演示数据（开发模式），可在设置 → 数据中清空",
+          type: "info",
+        });
+      });
+    } catch {
+      /* 注入失败不影响启动 */
+    }
+  }, []);
+
+  // Dev Preview 覆盖注入：?preview=task-v2 → confirm 后强制覆盖（仅开发构建）
   useEffect(() => {
     if (process.env.NODE_ENV !== "development") return;
     const params = new URLSearchParams(window.location.search);
@@ -101,23 +140,24 @@ export default function Home() {
       return;
     }
     const doInject = () => {
-      import("@/lib/dev/taskV2PreviewData").then(({ buildTaskV2PreviewData }) => {
+      import("@/lib/dev/fullDemoData").then(({ buildFullDemoData }) => {
         const store = useAppStore.getState();
         if (
           !confirm(
-            "Preview: 注入 Task V2 完整演示数据？\n\n" +
+            "Preview: 覆盖注入全模块演示数据？\n\n" +
               "覆盖范围（验证点）：\n" +
-              "· 六视图（聚焦/今天/即将截止/待安排/全部/已归档）与 count\n" +
-              "· 无 DDL 任务 / 预计耗时 / 子任务 / 标签\n" +
-              "· StudyBlock 已安排（含多段累计）\n" +
-              "· 逾期 / 今日截止 / 已提交 / 已完成\n" +
-              "· 5 门课程筛选 · Peek V2 · Ask Kiro 入口\n\n" +
+              "· 总览：课程/排课/任务/DDL 逾期/日历\n" +
+              "· 任务工作区 V2：六视图 + 无 DDL + 预计耗时 + 多段计划\n" +
+              "· 时间表：StudyBlock / 考试 / 活动\n" +
+              "· 课程资料：5 门课材料（pdf/ppt/doc/link）\n" +
+              "· 小组协作：2 个项目（成员/任务/进度）\n" +
+              "· Kiro：全业务数据可查询\n\n" +
               "将覆盖当前全部任务/课程/学习计划数据（个人资料与偏好保留）。"
           )
         ) {
           return;
         }
-        store.restoreAppData(buildTaskV2PreviewData());
+        store.restoreAppData(buildFullDemoData());
         sessionStorage.setItem("classflow-task-v2-preview", "1");
         params.delete("preview");
         const qs = params.toString();

@@ -1,18 +1,19 @@
 /**
- * Dev Preview fixture：?preview=task-v2
- * 注入 Task V2 Workspace 完整演示数据，覆盖开发验证矩阵：
- * - 六视图全覆盖：focus（逾期/今日截止/今日安排/doing/urgent-high 3 天内 五组全有）、
- *   today（Do Date ≠ Due Date）、upcoming（明天/2/5/9 天升序）、unscheduled、all、archive
- * - 无 DDL 任务（行「无截止日期」+ Peek「未设置」+ 编辑回填关闭）
- * - estimatedMinutes 覆盖：<60 / 整小时 / 混合 / 缺失
- * - StudyBlock：单段 / 多段累计（a7 = 240min）/ 今日已排（a3、a5）/ 未来已排（a4、a7、a11）
- * - 状态：todo / doing / submitted / completed；优先级：urgent / high / medium / low
- * - 子任务（部分完成）、标签、逾期徽章、5 门课程筛选、exam/activity CalendarMark
- * 仅开发构建 + 用户确认后注入；与生产 First Run（空工作区）无冲突。
+ * Dev Demo fixture：完整模块演示数据（开发模式自动注入 + ?preview=task-v2 强制注入共用）。
+ * 覆盖全模块验证矩阵：
+ * - 总览：课程/排课/任务/DDL 逾期徽章/日历 mark/学期
+ * - 任务工作区 V2：六视图全覆盖（focus 五组全有：逾期/今日截止/今日已排/doing/urgent-high 3 天内）、
+ *   无 DDL 任务、estimatedMinutes（<60/整时/混合/缺失）、多段 StudyBlock 累计、submitted/completed 归档
+ * - 时间表：StudyBlock（manual/kiro）+ exam/activity interval + 课程排课硬约束
+ * - 课程资料：5 门课各带材料（pdf/ppt/doc/link 四类）
+ * - 学习统计：任务状态分布/优先级分布/课程负荷实算
+ * - 小组协作：2 个项目（成员/任务/DDL/进度派生）
+ * - Kiro：全部业务数据可查（任务/课程/安排/健康）
+ * 仅开发构建可用；生产 First Run 仍是空工作区。E2E 通过 window.__CLASSFLOW_E2E__ 禁用自动注入。
  * 注意：本文件被 page.tsx dynamic import，永不参与生产 bundle。
  */
 
-import { ClassFlowBackupData, Course, CourseSchedule, Assignment, CalendarMark, StudyBlock } from "@/types";
+import { ClassFlowBackupData, Course, CourseSchedule, Assignment, CalendarMark, StudyBlock, GroupProject, Material } from "@/types";
 import { createDefaultSemester } from "@/lib/semester";
 
 const pad2 = (n: number) => String(n).padStart(2, "0");
@@ -29,12 +30,60 @@ const dateStr = (daysOffset: number) => {
   return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
 };
 
+const mat = (id: string, title: string, type: Material["type"], daysAgo: number, size?: string, url?: string): Material => ({
+  id,
+  title,
+  type,
+  size,
+  uploadDate: dateStr(-daysAgo),
+  url,
+});
+
 const courses: Course[] = [
-  { id: "c1", name: "数据结构与算法", code: "CS-210", teacher: "李教授", classroom: "计算机楼 102", credit: 4, bgHex: "#E3E6E0", borderHex: "#D0D5CC", textHex: "#313032", description: "线性表、树与图、排序与动态规划核心算法。", materials: [] },
-  { id: "c2", name: "概率论与数理统计", code: "MATH-207", teacher: "陈教授", classroom: "教三 305", credit: 4, bgHex: "#F0EBE1", borderHex: "#E0D7C6", textHex: "#313032", description: "随机变量、参数估计与假设检验。", materials: [] },
-  { id: "c3", name: "操作系统", code: "CS-305", teacher: "赵教授", classroom: "计算机楼 208", credit: 3, bgHex: "#CCCBC4", borderHex: "#B8B7B0", textHex: "#313032", description: "进程调度、内存管理与文件系统。", materials: [] },
-  { id: "c4", name: "学术英语写作", code: "ENGL-302", teacher: "Sarah Johnson", classroom: "外语楼 207", credit: 2, bgHex: "#CDB9AB", borderHex: "#BBA494", textHex: "#313032", description: "学术论文结构与引用规范。", materials: [] },
-  { id: "c5", name: "计算机网络", code: "CS-310", teacher: "王教授", classroom: "计算机楼 305", credit: 3, bgHex: "#E3E6E0", borderHex: "#D0D5CC", textHex: "#313032", description: "TCP/IP 协议栈与网络编程基础。", materials: [] },
+  {
+    id: "c1", name: "数据结构与算法", code: "CS-210", teacher: "李教授", classroom: "计算机楼 102", credit: 4,
+    bgHex: "#E3E6E0", borderHex: "#D0D5CC", textHex: "#313032",
+    description: "线性表、树与图、排序与动态规划核心算法，每周配 2 次上机。",
+    materials: [
+      mat("m1", "第3章 树与二叉树讲义.pdf", "pdf", 5, "2.4 MB"),
+      mat("m2", "算法可视化（Visualgo）", "link", 2, undefined, "https://visualgo.net/zh"),
+    ],
+  },
+  {
+    id: "c2", name: "概率论与数理统计", code: "MATH-207", teacher: "陈教授", classroom: "教三 305", credit: 4,
+    bgHex: "#F0EBE1", borderHex: "#E0D7C6", textHex: "#313032",
+    description: "随机变量、参数估计与假设检验，作业以课后习题为主。",
+    materials: [
+      mat("m3", "第5章 大数定律与中心极限定理.pdf", "pdf", 4, "3.5 MB"),
+    ],
+  },
+  {
+    id: "c3", name: "操作系统", code: "CS-305", teacher: "赵教授", classroom: "计算机楼 208", credit: 3,
+    bgHex: "#CCCBC4", borderHex: "#B8B7B0", textHex: "#313032",
+    description: "进程调度、内存管理与文件系统，含 3 次实验。",
+    materials: [
+      mat("m4", "进程调度课件.pptx", "ppt", 3, "8.1 MB"),
+      mat("m5", "实验二：进程调度实验指导.doc", "doc", 2, "0.9 MB"),
+    ],
+  },
+  {
+    id: "c4", name: "学术英语写作", code: "ENGL-302", teacher: "Sarah Johnson", classroom: "外语楼 207", credit: 2,
+    bgHex: "#CDB9AB", borderHex: "#BBA494", textHex: "#313032",
+    description: "学术论文结构与引用规范（APA/MLA），每两周一篇 draft。",
+    materials: [
+      mat("m6", "APA 引用规范速查.pdf", "pdf", 7, "1.2 MB"),
+      mat("m7", "Purdue OWL 写作指南", "link", 6, undefined, "https://owl.purdue.edu/owl/"),
+    ],
+  },
+  {
+    id: "c5", name: "计算机网络", code: "CS-310", teacher: "王教授", classroom: "计算机楼 305", credit: 3,
+    bgHex: "#E3E6E0", borderHex: "#D0D5CC", textHex: "#313032",
+    description: "TCP/IP 协议栈、网络编程与抓包实验。",
+    materials: [
+      mat("m8", "第4章 传输层协议.pdf", "pdf", 3, "5.8 MB"),
+      mat("m9", "Wireshark 实验课件.pptx", "ppt", 1, "12.0 MB"),
+    ],
+  },
 ];
 
 const schedules: CourseSchedule[] = [
@@ -174,16 +223,57 @@ const calendarMarks: CalendarMark[] = [
   { id: "cm1", date: dateStr(-1), type: "ddl", title: "进程调度实验报告", sourceId: "a1" },
   { id: "cm2", date: dateStr(0), type: "ddl", title: "贝叶斯公式课后练习", sourceId: "a2" },
   { id: "cm3", date: dateStr(0), type: "ddl", title: "Essay Draft: Renewable Energy", sourceId: "a5" },
-  { id: "cm4", date: dateStr(2), type: "ddl", title: "TCP 三次握手抓包分析", sourceId: "a4" },
+  { id: "cm4", date: dateStr(1), type: "ddl", title: "TCP 三次握手抓包分析", sourceId: "a4" },
   { id: "cm5", date: dateStr(2), type: "ddl", title: "置信区间与检验小测", sourceId: "a6" },
-  { id: "cm6", date: dateStr(5), type: "ddl", title: "虚拟内存期末项目设计", sourceId: "a7" },
-  { id: "cm7", date: dateStr(9), type: "ddl", title: "TCP/IP 协议分析读书笔记", sourceId: "a8" },
-  { id: "cm8", date: dateStr(-3), type: "ddl", title: "局域网组网实验（实验二）", sourceId: "a12" },
-  { id: "cm9", date: dateStr(14), type: "exam", title: "数据结构期中考试" },
-  { id: "cm10", date: dateStr(10), type: "activity", title: "学术沙龙与保研经验分享会" },
+  { id: "cm6", date: dateStr(2), type: "ddl", title: "期中复习提纲整理", sourceId: "a15" },
+  { id: "cm7", date: dateStr(5), type: "ddl", title: "虚拟内存期末项目设计", sourceId: "a7" },
+  { id: "cm8", date: dateStr(9), type: "ddl", title: "TCP/IP 协议分析读书笔记", sourceId: "a8" },
+  { id: "cm9", date: dateStr(-3), type: "ddl", title: "局域网组网实验（实验二）", sourceId: "a12" },
+  { id: "cm10", date: dateStr(6), type: "exam", title: "概率论小测验", startTime: "14:00", endTime: "16:00" },
+  { id: "cm11", date: dateStr(14), type: "exam", title: "数据结构期中考试", startTime: "09:00", endTime: "11:00" },
+  { id: "cm12", date: dateStr(10), type: "activity", title: "学术沙龙与保研经验分享会", startTime: "15:00", endTime: "17:30" },
 ];
 
-export function buildTaskV2PreviewData(): ClassFlowBackupData {
+const groupProjects: GroupProject[] = [
+  {
+    id: "g1",
+    courseId: "c1",
+    title: "校园导航系统课程设计",
+    description: "基于图的建模实现校园最短路径查询，展示 Dijkstra / Floyd 与数据结构选型分析。",
+    progress: 50,
+    updatedAt: dateStr(0),
+    members: [
+      { id: "gm1", name: "张同学", role: "leader", major: "计算机科学与技术" },
+      { id: "gm2", name: "李晨", role: "member", major: "软件工程" },
+      { id: "gm3", name: "王雨桐", role: "member", major: "人工智能" },
+      { id: "gm4", name: "陈昊", role: "member", major: "计算机科学与技术" },
+    ],
+    tasks: [
+      { id: "gt1", title: "需求分析与图建模", assigneeId: "gm1", ddl: iso(-2, 23, 59), completed: true },
+      { id: "gt2", title: "Dijkstra 算法实现", assigneeId: "gm2", ddl: iso(3, 23, 59), completed: true },
+      { id: "gt3", title: "UI 原型与地图渲染", assigneeId: "gm3", ddl: iso(7, 23, 59), completed: false },
+      { id: "gt4", title: "测试与报告撰写", assigneeId: "gm4", ddl: iso(12, 23, 59), completed: false },
+    ],
+  },
+  {
+    id: "g2",
+    courseId: "c4",
+    title: "AI Ethics 小组论文",
+    description: "围绕生成式 AI 的学术伦理争议完成 1500 词英文论文，两人一组互评。",
+    progress: 50,
+    updatedAt: dateStr(-1),
+    members: [
+      { id: "gm5", name: "张同学", role: "leader" },
+      { id: "gm6", name: "赵一鸣", role: "member" },
+    ],
+    tasks: [
+      { id: "gt5", title: "文献综述与论点梳理", assigneeId: "gm5", ddl: iso(5, 23, 59), completed: true },
+      { id: "gt6", title: "正文撰写与 Peer Review", assigneeId: "gm6", ddl: iso(15, 23, 59), completed: false },
+    ],
+  },
+];
+
+export function buildFullDemoData(): ClassFlowBackupData {
   return {
     userProfile: {
       name: "张同学",
@@ -199,7 +289,12 @@ export function buildTaskV2PreviewData(): ClassFlowBackupData {
     schedules,
     assignments,
     calendarMarks,
-    groupProjects: [],
+    groupProjects,
     studyBlocks,
   };
+}
+
+/** ?preview=task-v2 兼容别名（与自动注入同一份全模块数据） */
+export function buildTaskV2PreviewData(): ClassFlowBackupData {
+  return buildFullDemoData();
 }
