@@ -85,6 +85,29 @@ body {
   background: transparent;
 }
 
+/* Now Indicator 末端圆点：极轻呼吸 + 柔和外发光（克制，不闪烁） */
+.kiro-now-dot {
+  box-shadow: 0 0 5px rgba(164, 143, 130, 0.35);
+  animation: kiro-now-dot-breathe 3.2s ease-in-out infinite;
+}
+
+@keyframes kiro-now-dot-breathe {
+  0%,
+  100% {
+    opacity: 0.65;
+    box-shadow: 0 0 3px rgba(164, 143, 130, 0.25);
+  }
+  50% {
+    opacity: 1;
+    box-shadow: 0 0 6px rgba(164, 143, 130, 0.4);
+  }
+}
+
+html[data-motion="reduced"] .kiro-now-dot {
+  animation: none;
+  opacity: 1;
+}
+
 .kiro-attachment-tray:hover::-webkit-scrollbar-thumb {
   background: #E4E0D8;
 }

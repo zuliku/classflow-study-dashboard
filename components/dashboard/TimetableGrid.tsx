@@ -37,6 +37,13 @@ const TIME_SLOTS = [
   "21:00",
 ];
 
+/** 分钟 → "HH:mm"（Now 胶囊用） */
+function minutesToClock(minutes: number): string {
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+}
+
 /** 点击 vs 拖动阈值（px）：未超过仍视为点击，打开课程 Drawer */
 const DRAG_THRESHOLD_PX = 5;
 
@@ -136,10 +143,18 @@ export function TimetableGrid({
   // Filter schedules active in currentSemesterWeek using unified isScheduleActive logic
   const activeSchedules = schedules.filter((s) => isScheduleActive(s, currentSemesterWeek));
 
-  // 今天 / 当前周（今天列 tint + 极细当前时间线）
+  // 今天 / 当前周（今天列 tint + 实时 Now Indicator）
   const todayStr = format(new Date(), "yyyy-MM-dd");
   const isRealCurrentWeek = getSemesterWeek(new Date(), semester) === currentSemesterWeek;
-  const nowMinutes = new Date().getHours() * 60 + new Date().getMinutes();
+  const [nowMinutes, setNowMinutes] = useState(() => new Date().getHours() * 60 + new Date().getMinutes());
+  // 实时更新：仅当前周 + 今天列需要；30s 节流 + CSS 30s linear transition 实现平滑流动
+  React.useEffect(() => {
+    if (!isRealCurrentWeek) return;
+    const update = () => setNowMinutes(new Date().getHours() * 60 + new Date().getMinutes());
+    update();
+    const timer = setInterval(update, 30_000);
+    return () => clearInterval(timer);
+  }, [isRealCurrentWeek]);
 
   // 统一冲突定义（与导入器一致）：星期相同 + 时间重叠 + 至少一个共同生效教学周
   const conflicts = findScheduleConflicts(activeSchedules);
@@ -566,13 +581,27 @@ export function TimetableGrid({
                     wd.dateStr === format(new Date(), "M/d") && "bg-pastel-mint/[0.06]"
                   )}
                 >
-                  {/* 当前时间线：仅真实当前周 + 今天列（极细低饱和线，非当前周不显示） */}
+                  {/* Now Indicator：仅真实当前周 + 今天列。
+                      时间胶囊（左侧）+ 横线（胶囊右缘 → 列右缘）+ 末端圆点；
+                      位置随真实时间平滑移动（30s 更新 + CSS transition 线性过渡）；
+                      横线 z 低于课程卡（被自然遮挡），胶囊 z 高于课程卡保持可读 */}
                   {isRealCurrentWeek && wd.dateStr === format(new Date(), "M/d") && (
                     <div
                       aria-hidden="true"
-                      className="absolute left-0 right-0 h-px bg-sandrift/60 pointer-events-none z-[5]"
-                      style={{ top: `${((nowMinutes - dayStartMinutes) / totalMinutes) * 100}%` }}
-                    />
+                      className="absolute inset-x-0 z-[6] pointer-events-none"
+                      style={{
+                        top: `${((nowMinutes - dayStartMinutes) / totalMinutes) * 100}%`,
+                        transition: "top 30s linear",
+                      }}
+                    >
+                      <div className="flex items-center -translate-y-1/2">
+                        <span className="shrink-0 ml-1 z-[7] h-[21px] px-2.5 rounded-full border bg-[#F7F5F5] border-line-strong/70 text-[11px] font-semibold tabular-nums text-charcoal flex items-center shadow-subtle">
+                          {minutesToClock(nowMinutes)}
+                        </span>
+                        <span className="flex-1 h-[1.5px] bg-sandrift/60" />
+                        <span className="kiro-now-dot w-[7px] h-[7px] rounded-full bg-sandrift/80 shrink-0 mr-1" />
+                      </div>
+                    </div>
                   )}
                   {extraLayers?.({
                     dayOfWeek: wd.dayOfWeek,
