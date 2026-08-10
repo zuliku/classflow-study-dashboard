@@ -421,15 +421,18 @@ export function TimetableGrid({
           </div>
         </div>
 
-        {headerActions}
+        {/* 右侧：Quick Glance + 查看课表（同一 group，紧贴右对齐） */}
+        <div className="flex items-center gap-3 shrink-0">
+          {headerActions}
 
-        <button
-          onClick={handleOpenFullTimetable}
-          className="group flex items-center space-x-1 text-xs text-sandrift hover:text-charcoal transition-colors bg-[#F7F5F5] hover:bg-alabaster px-2 py-1 rounded-lg border border-line self-start sm:self-auto font-medium"
-        >
-          <span>查看课表</span>
-          <ExternalLink className="w-3.5 h-3.5 transition-transform duration-[var(--motion-fast)] group-hover:translate-x-px" />
-        </button>
+          <button
+            onClick={handleOpenFullTimetable}
+            className="group flex items-center space-x-1 text-xs text-sandrift hover:text-charcoal transition-colors bg-[#F7F5F5] hover:bg-alabaster px-2 py-1 rounded-lg border border-line self-start sm:self-auto font-medium"
+          >
+            <span>查看课表</span>
+            <ExternalLink className="w-3.5 h-3.5 transition-transform duration-[var(--motion-fast)] group-hover:translate-x-px" />
+          </button>
+        </div>
       </div>
       )}
 
