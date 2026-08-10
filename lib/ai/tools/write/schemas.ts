@@ -211,6 +211,47 @@ export const applyChangeSetSchema = z.object({
     .max(8),
 });
 
+/** Task 7G-B：Reminder 工具（相对/绝对；不进入 Change Set V1） */
+
+const REMINDER_TARGET = z.enum(["assignment", "studyBlock", "calendarMark", "standalone"]);
+const REMINDER_RELATIVE_TARGET = z.enum(["assignment", "studyBlock", "calendarMark"]);
+/** 提前 0 到 30 天（负数）；V1 不允许正 offset（不支持「开始后提醒」） */
+const REMINDER_OFFSET = z.number().int().min(-43200).max(0);
+
+export const createReminderSchema = z.discriminatedUnion("timingMode", [
+  z.object({
+    title: z.string().trim().min(1).max(200),
+    note: z.string().max(500).optional(),
+    targetType: REMINDER_RELATIVE_TARGET,
+    targetId: z.string().trim().min(1).max(120),
+    timingMode: z.literal("relative"),
+    offsetMinutes: REMINDER_OFFSET,
+  }),
+  z.object({
+    title: z.string().trim().min(1).max(200),
+    note: z.string().max(500).optional(),
+    timingMode: z.literal("absolute"),
+    triggerAt: z.string().regex(LOCAL_DDL_RE, "提醒时间必须为本地时间 YYYY-MM-DDTHH:mm[:ss]"),
+    /** 缺省 = standalone（独立提醒）；非 standalone 必须提供真实 targetId */
+    targetType: REMINDER_TARGET.optional(),
+    targetId: z.string().trim().min(1).max(120).optional(),
+  }),
+]);
+
+export const updateReminderSchema = z.object({
+  reminderId: z.string().trim().min(1).max(120),
+  title: z.string().trim().min(1).max(200).optional(),
+  note: z.string().max(500).nullable().optional(),
+  timingMode: z.enum(["relative", "absolute"]).optional(),
+  offsetMinutes: REMINDER_OFFSET.optional(),
+  triggerAt: z.string().regex(LOCAL_DDL_RE, "提醒时间必须为本地时间 YYYY-MM-DDTHH:mm[:ss]").optional(),
+  // 禁止 retarget（换目标 = 删除旧 + 新建新）
+});
+
+export const deleteReminderSchema = z.object({
+  reminderId: z.string().trim().min(1).max(120),
+});
+
 /** Write Tool 输入 schema 注册表（tool name → zod schema） */
 export const KIRO_WRITE_TOOL_SCHEMAS = {
   create_assignment: createAssignmentSchema,
@@ -239,6 +280,9 @@ export const KIRO_WRITE_TOOL_SCHEMAS = {
   set_group_task_ddl: setGroupTaskDDLSchema,
   toggle_group_task: toggleGroupTaskSchema,
   apply_change_set: applyChangeSetSchema,
+  create_reminder: createReminderSchema,
+  update_reminder: updateReminderSchema,
+  delete_reminder: deleteReminderSchema,
 } as const;
 
 export type KiroWriteToolName = keyof typeof KIRO_WRITE_TOOL_SCHEMAS;

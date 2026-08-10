@@ -23,6 +23,7 @@ export const KIRO_TOOL_LABELS: Record<string, string> = {
   get_calendar_range: "查看日历",
   get_material_metadata: "查看课程资料",
   read_material: "读取资料正文",
+  list_reminders: "查看提醒",
   // Write
   create_assignment: "创建任务",
   update_assignment: "修改任务",
@@ -49,6 +50,10 @@ export const KIRO_TOOL_LABELS: Record<string, string> = {
   assign_group_task: "分配小组任务",
   set_group_task_ddl: "调整小组任务截止时间",
   toggle_group_task: "切换小组任务状态",
+  // Reminder
+  create_reminder: "创建提醒",
+  update_reminder: "修改提醒",
+  delete_reminder: "删除提醒",
   // Memory
   search_memories: "读取学习偏好",
   save_memory: "保存学习偏好",
@@ -67,7 +72,10 @@ export function actionToastMessage(action: { tool: string; operation: string; ti
     action.operation === "create"
       ? "已创建"
       : action.operation === "delete"
-      ? "已删除"
-      : "已调整";
+        ? "已删除"
+        : "已调整";
+  if (action.tool === "create_reminder" || action.tool === "update_reminder" || action.tool === "delete_reminder") {
+    return `Kiro ${opText}提醒「${action.title}」`;
+  }
   return `Kiro ${opText}${action.title ? `「${action.title}」` : ""}`;
 }

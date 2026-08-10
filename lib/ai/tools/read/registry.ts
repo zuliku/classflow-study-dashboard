@@ -103,6 +103,12 @@ export const KIRO_READ_TOOLS = {
       "本工具是 READ / PROPOSAL：绝不写入 Store，绝不修改 Subtasks 或 estimatedMinutes；只有用户确认 Apply 后才会写入。",
     inputSchema: KIRO_READ_TOOL_SCHEMAS.propose_task_breakdown,
   }),
+  list_reminders: tool({
+    description:
+      "查询 ClassFlow 提醒。默认返回尚未触发的 scheduled reminders（triggerAt 升序，最早的在前），可按目标、状态与时间范围筛选。" +
+      "修改或删除提醒前应先使用本工具获取真实 reminderId；不要读取整个 Store 后自行筛选 Reminder。",
+    inputSchema: KIRO_READ_TOOL_SCHEMAS.list_reminders,
+  }),
 };
 
 export const KIRO_READ_TOOL_NAMES = Object.keys(KIRO_READ_TOOLS) as (keyof typeof KIRO_READ_TOOLS)[];

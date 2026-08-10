@@ -104,6 +104,16 @@ class FakeApi {
     );
   }
   toggleGroupTask() {}
+  // Task 7G-B：Reminder API 最小补齐（fixture 只保证编译；本文件不测 reminder 语义）
+  addReminder(input: unknown): string | null {
+    const id = `r_${(this.state as any).reminders?.length ?? 0}`;
+    (this.state as any).reminders = [...((this.state as any).reminders ?? []), { ...(input as object), id, status: "scheduled", createdAt: "", updatedAt: "" }];
+    return id;
+  }
+  updateReminder() {}
+  deleteReminder() {}
+  restoreReminder() {}
+  reconcileTargetReminders() {}
   pushToast() {}
   registerUndo(toolCallId: string, undo: () => void) {
     this.undos.set(toolCallId, undo);

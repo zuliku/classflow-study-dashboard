@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+﻿import { describe, it, expect, vi, beforeEach } from "vitest";
 import { KiroWriteApi } from "@/lib/ai/tools/write/types";
 
 /**
@@ -96,6 +96,11 @@ function buildApi(store: { getState: () => any }, undos: Map<string, () => void>
     updateGroupTask: (id, t) => store.getState().updateGroupTask(id, t),
     deleteGroupTask: (id, taskId) => store.getState().deleteGroupTask(id, taskId),
     toggleGroupTask: (id, taskId) => store.getState().toggleGroupTask(id, taskId),
+    addReminder: (input) => store.getState().addReminder(input),
+    updateReminder: (id, patch) => store.getState().updateReminder(id, patch),
+    deleteReminder: (id) => store.getState().deleteReminder(id),
+    restoreReminder: (r) => store.getState().restoreReminder(r),
+    reconcileTargetReminders: (targetType, targetId) => store.getState().reconcileTargetReminders(targetType, targetId),
     pushToast: () => {},
     registerUndo: (toolCallId, undo) => undos.set(toolCallId, undo),
   };

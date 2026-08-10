@@ -1,14 +1,14 @@
 "use client";
 
 import React from "react";
-import { CalendarClock, CalendarDays, Plus, Check, ArrowDown, Undo2, PencilLine, Layers, ChevronDown } from "lucide-react";
+import { CalendarClock, CalendarDays, Plus, Check, ArrowDown, Undo2, PencilLine, Layers, ChevronDown, Bell } from "lucide-react";
 import { parseLocalDDL, getLocalDDLDate, getLocalDDLTime } from "@/lib/ddl";
 import { format } from "date-fns";
 import { zhCN } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 import type { WriteToolResult } from "@/lib/ai/tools/write/types";
 
-export type KiroActionCardVariant = "ddl" | "schedule" | "create" | "generic" | "change-set";
+export type KiroActionCardVariant = "ddl" | "schedule" | "create" | "generic" | "change-set" | "reminder";
 
 export interface KiroActionCardProps {
   variant: KiroActionCardVariant;
@@ -36,8 +36,11 @@ export function KiroActionCard({ variant, heading, title, change, bullets, foote
           ? Plus
           : variant === "change-set"
             ? Layers
-            : PencilLine;
+            : variant === "reminder"
+              ? Bell
+              : PencilLine;
   const isCreate = variant === "create";
+  const showBullets = isCreate || variant === "change-set" || variant === "reminder";
 
   return (
     <div
@@ -61,7 +64,7 @@ export function KiroActionCard({ variant, heading, title, change, bullets, foote
         </div>
       )}
 
-      {(isCreate || variant === "change-set") && bullets && (
+      {(showBullets) && bullets && (
         <ul className="pl-8 space-y-1">
           {bullets.map((b) => (
             <li key={b} className="text-[11px] text-satin-grey flex items-center gap-1.5">
@@ -126,6 +129,20 @@ export function formatDDLDisplay(ddl: string): string {
   return `${format(d, "M月d日", { locale: zhCN })} ${time}`;
 }
 
+/** relative offset → 用户语义（0 → 到期时；-60 → 提前 1 小时；任意 offset 优雅 fallback） */
+function relativeOffsetLabel(offsetMinutes: number | undefined): string {
+  const offset = offsetMinutes ?? 0;
+  if (offset === 0) return "到期时";
+  const abs = Math.abs(offset);
+  const unit =
+    abs % 1440 === 0 && abs > 0
+      ? `${abs / 1440} 天`
+      : abs % 60 === 0 && abs > 0
+        ? `${abs / 60} 小时`
+        : `${abs} 分钟`;
+  return `提前 ${unit}`;
+}
+
 const DAY_NAMES = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"];
 
 function scheduleDisplay(s: { dayOfWeek?: number; startTime?: string; endTime?: string }): string {
@@ -156,6 +173,38 @@ export function actionToCardProps(
       title: cs.summary,
       bullets: Array.from(grouped.entries()).map(([label, n]) => `${label} ${n} 项`),
       details: cs.actions.map((a) => ({ label: `${a.title}（${CHANGE_SET_ACTION_LABELS[a.tool] ?? "修改"}）` })),
+    };
+  }
+
+  // Reminder（Task 7G-B）：只展示用户语义，不暴露 timingMode / offsetMinutes 等内部字段
+  if (tool === "create_reminder" || tool === "update_reminder" || tool === "delete_reminder") {
+    const after = action.after as { timingMode?: string; offsetMinutes?: number; triggerAt?: string } | undefined;
+    const before = action.before as { timingMode?: string; offsetMinutes?: number; triggerAt?: string } | undefined;
+    const lineOf = (t: { timingMode?: string; offsetMinutes?: number; triggerAt?: string } | undefined): string =>
+      [t?.timingMode === "relative" ? relativeOffsetLabel(t.offsetMinutes) : t?.timingMode === "absolute" ? "自定义时间" : "", t?.triggerAt ? formatDDLDisplay(t.triggerAt) : ""]
+        .filter(Boolean)
+        .join(" · ");
+    if (op === "create") {
+      return {
+        variant: "reminder",
+        heading: "已创建提醒",
+        title: action.title,
+        bullets: after ? [lineOf(after)] : undefined,
+      };
+    }
+    if (op === "delete") {
+      return {
+        variant: "reminder",
+        heading: "已删除提醒",
+        title: action.title,
+        change: before ? { from: lineOf(before), to: "已删除" } : undefined,
+      };
+    }
+    return {
+      variant: "reminder",
+      heading: "已调整提醒",
+      title: action.title,
+      change: { from: lineOf(before), to: lineOf(after) },
     };
   }
 

@@ -1224,6 +1224,13 @@ function buildWriteApi({
     updateGroupTask: (id, t) => useAppStore.getState().updateGroupTask(id, t),
     deleteGroupTask: (id, taskId) => useAppStore.getState().deleteGroupTask(id, taskId),
     toggleGroupTask: (id, taskId) => useAppStore.getState().toggleGroupTask(id, taskId),
+    // Task 7G-A1/B：Reminder 白名单
+    addReminder: (input) => useAppStore.getState().addReminder(input),
+    updateReminder: (id, patch) => useAppStore.getState().updateReminder(id, patch),
+    deleteReminder: (id) => useAppStore.getState().deleteReminder(id),
+    restoreReminder: (r) => useAppStore.getState().restoreReminder(r),
+    reconcileTargetReminders: (targetType, targetId) =>
+      useAppStore.getState().reconcileTargetReminders(targetType, targetId),
     pushToast,
     registerUndo: (id, undo) => registerUndo(id, undo),
   };

@@ -114,8 +114,27 @@ export const KIRO_WRITE_TOOLS = {
     description:
       "把一组相互关联的 ClassFlow 修改作为一个事务整体执行（全部合法才全部提交，任一失败则一项都不改）。" +
       "当用户明确要求两个及以上相关修改（批量调整 DDL / 优先级、跨课程课表协调等）时优先使用本工具，而不是连续调用多个独立写工具。" +
-      "调用前必须先通过读取工具解析真实实体 ID；存在歧义时先询问用户。Risk 与确认由系统决定，不要提供 risk 字段。",
+      "调用前必须先通过读取工具解析真实实体 ID；存在歧义时先询问用户。Risk 与确认由系统决定，不要提供 risk 字段。" +
+      "例外：Reminder 工具（create_reminder / update_reminder / delete_reminder）不属于 Change Set V1，多个提醒操作请直接调用对应工具。",
     inputSchema: KIRO_WRITE_TOOL_SCHEMAS.apply_change_set,
+  }),
+  create_reminder: tool({
+    description:
+      "创建提醒（只有用户当前明确要求提醒时才调用：'提醒我…' '设置一个提醒…' '帮我加个提醒…' 等；仅提到 DDL / 截止不构成授权）。" +
+      "relative：目标 + offsetMinutes（提前 0 到 30 天，负数为提前），模型不提供 triggerAt，Executor 按目标当前 anchor 自动解析并跟随目标时间变化。" +
+      "absolute：用户明确给出具体时间（如'明天晚上 8 点'）时使用；无业务对象 → standalone；有明确任务 → assignment + absolute。" +
+      "relative 优先于模型手算 absolute 时间（相对会跟随 DDL）。已完成任务禁止新增 relative 提醒。",
+    inputSchema: KIRO_WRITE_TOOL_SCHEMAS.create_reminder,
+  }),
+  update_reminder: tool({
+    description:
+      "修改已有提醒（仅 scheduled 提醒可修改；fired / skipped 历史提醒不能重新激活）。" +
+      "修改前若没有唯一 reminderId，先 list_reminders 定位；多个候选必须询问用户。不支持更换目标（换目标 = 删除旧 + 新建新）。",
+    inputSchema: KIRO_WRITE_TOOL_SCHEMAS.update_reminder,
+  }),
+  delete_reminder: tool({
+    description: "删除 / 取消提醒（仅 scheduled 状态；删除有 Undo 可恢复原记录）。删除前必须用 list_reminders 拿到真实 reminderId。",
+    inputSchema: KIRO_WRITE_TOOL_SCHEMAS.delete_reminder,
   }),
 };
 

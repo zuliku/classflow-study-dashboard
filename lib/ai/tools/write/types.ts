@@ -38,6 +38,10 @@ export const KIRO_WRITE_RISKS: Record<string, KiroWriteRisk> = {
   assign_group_task: "normal",
   set_group_task_ddl: "normal",
   toggle_group_task: "normal",
+  // Task 7G-B：Reminder 操作均 normal（UI 删除同为直接删除，且有 Undo；不触发 destructive 确认）
+  create_reminder: "normal",
+  update_reminder: "normal",
+  delete_reminder: "normal",
 };
 
 export function isDestructiveWriteTool(toolName: string): boolean {
@@ -59,7 +63,8 @@ export type WriteToolResult<T = unknown> =
           | "group-member"
           | "group-task"
           | "change-set"
-          | "memory";
+          | "memory"
+          | "reminder";
         entityId: string;
         title: string;
         operation: "create" | "update" | "delete";
@@ -166,6 +171,14 @@ export interface KiroWriteApi {
   updateGroupTask: (projectId: string, t: GroupTask) => void;
   deleteGroupTask: (projectId: string, taskId: string) => void;
   toggleGroupTask: (projectId: string, taskId: string) => void;
+
+  // Task 7G-A1/B：Reminder 白名单
+  addReminder: AppState["addReminder"];
+  updateReminder: AppState["updateReminder"];
+  deleteReminder: AppState["deleteReminder"];
+  /** Undo 精确恢复原 Reminder（相同 ID，不重新生成） */
+  restoreReminder: AppState["restoreReminder"];
+  reconcileTargetReminders: AppState["reconcileTargetReminders"];
 
   pushToast: (t: {
     message: string;

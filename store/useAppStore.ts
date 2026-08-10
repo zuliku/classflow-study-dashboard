@@ -396,6 +396,8 @@ export interface AppState {
   /** 一次标记所有 fired && !readAt 为已读（打开 Reminder Center 时调用） */
   markAllFiredRemindersRead: (readAt: string) => void;
   markReminderSkipped: (id: string) => void;
+  /** Task 7G-B：Undo 精确恢复原 Reminder（相同 ID，不重跑 normalize / 不重新生成 ID） */
+  restoreReminder: (reminder: Reminder) => void;
   /** target 时间变化后同步 relative reminders（absolute / fired 不动；anchor 消失 → scheduled relative 移除） */
   reconcileTargetReminders: (targetType: ReminderTargetType, targetId: string) => void;
 
@@ -1146,6 +1148,12 @@ export const useAppStore = create<AppState>()(
           reminders: state.reminders.map((r) =>
             r.id === id ? { ...r, status: "skipped", updatedAt: nowLocalString() } : r
           ),
+        })),
+      restoreReminder: (reminder) =>
+        set((state) => ({
+          reminders: state.reminders.some((r) => r.id === reminder.id)
+            ? state.reminders
+            : [...state.reminders, reminder],
         })),
       reconcileTargetReminders: (targetType, targetId) =>
         set((state) => ({

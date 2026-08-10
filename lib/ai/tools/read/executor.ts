@@ -7,6 +7,7 @@ import {
   CourseSchedule,
   GroupProject,
   Material,
+  Reminder,
   StudyBlock,
 } from "@/types";
 import { parseLocalDDL, getLocalDDLDate, getLocalDDLTime } from "@/lib/ddl";
@@ -59,6 +60,8 @@ export interface ReadToolState {
   groupProjects: GroupProject[];
   /** Task V2：学习计划（Kiro 读取 StudyBlock 的唯一来源） */
   studyBlocks: StudyBlock[];
+  /** Task 7G-A1：Reminder（optional：旧 fixture 无需改造；执行时回落 []） */
+  reminders?: Reminder[];
 }
 
 const notFound = (message: string): ReadToolResult<never> => ({ ok: false, code: "NOT_FOUND", message });
@@ -528,6 +531,61 @@ interface TaskBreakdownProposalInput {
   rationale?: string[];
 }
 
+export function listReminders(state: ReadToolState, input: unknown): ReadToolResult<unknown> {
+  const parsed = safeParse<{
+    query?: string;
+    targetType?: string;
+    targetId?: string;
+    status?: "scheduled" | "fired" | "skipped" | "all";
+    from?: string;
+    to?: string;
+    limit?: number;
+  }>("list_reminders", input);
+  if (!parsed.ok) return parsed;
+  const { query, targetType, targetId, status, from, to, limit } = parsed.data;
+  const reminders = state.reminders ?? [];
+  const q = (query ?? "").trim().toLowerCase();
+  const fromMs = from ? parseLocalDDL(from)?.getTime() ?? null : null;
+  const toMs = to ? parseLocalDDL(to)?.getTime() ?? null : null;
+
+  const matches = reminders.filter((r) => {
+    if (status && status !== "all" && r.status !== status) return false;
+    if (targetType && r.targetType !== targetType) return false;
+    if (targetId && r.targetId !== targetId) return false;
+    if (q && !r.title.toLowerCase().includes(q) && !(r.note ?? "").toLowerCase().includes(q)) return false;
+    const t = parseLocalDDL(r.triggerAt)?.getTime() ?? null;
+    if (t === null) return false;
+    if (fromMs !== null && t < fromMs) return false;
+    if (toMs !== null && t > toMs) return false;
+    return true;
+  });
+
+  // scheduled：triggerAt 升序（最早在前）；fired/skipped/all：最近优先
+  const ascending = status === "scheduled" || status === undefined;
+  matches.sort((a, b) => {
+    const at = parseLocalDDL(a.triggerAt)?.getTime() ?? 0;
+    const bt = parseLocalDDL(b.triggerAt)?.getTime() ?? 0;
+    return ascending ? at - bt : bt - at;
+  });
+
+  return {
+    ok: true,
+    data: matches.slice(0, limit ?? 20).map((r) => ({
+      id: r.id,
+      title: r.title,
+      note: r.note ?? null,
+      targetType: r.targetType,
+      targetId: r.targetId ?? null,
+      timingMode: r.timingMode,
+      offsetMinutes: r.offsetMinutes ?? null,
+      triggerAt: r.triggerAt,
+      status: r.status,
+      readAt: r.readAt ?? null,
+      source: r.source,
+    })),
+  };
+}
+
 export function getUpcomingAssignments(state: ReadToolState, input: unknown): ReadToolResult<unknown> {
   const parsed = safeParse<{ days?: number; limit?: number }>("get_upcoming_assignments", input);
   if (!parsed.ok) return parsed;
@@ -743,6 +801,7 @@ const EXECUTORS: Record<Exclude<KiroReadToolName, "read_material">, (state: Read
   get_calendar_range: getCalendarRange,
   get_material_metadata: getMaterialMetadata,
   propose_task_breakdown: proposeTaskBreakdownTool,
+  list_reminders: listReminders,
 };
 
 /**
