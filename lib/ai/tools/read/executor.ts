@@ -15,6 +15,7 @@ import { isScheduleActive, timeToMinutes } from "@/lib/schedule";
 import { deriveTaskWorkspace } from "@/lib/tasks/taskViews";
 import { deriveAssignmentHealth } from "@/lib/tasks/taskHealth";
 import { parseTaskBreakdownProposal } from "@/lib/tasks/taskBreakdown";
+import { resolveAssignmentMaterials } from "@/lib/tasks/taskMaterials";
 import { findFreeTime } from "@/lib/planning/freeTime";
 import { proposeStudyPlan } from "@/lib/planning/studyPlanner";
 import { KIRO_READ_TOOL_SCHEMAS, KiroReadToolName } from "@/lib/ai/tools/read/schemas";
@@ -326,6 +327,8 @@ export function getAssignment(state: ReadToolState, input: unknown): ReadToolRes
   const a = findAssignment(state, parsed.data.assignmentId);
   if (!a) return notFound("未找到对应任务。");
   const schedule = assignmentSchedule(state, a);
+  // Task 6A：关联资料 metadata（只含 id/title/type/size/uploadDate；不读正文）
+  const linkedMaterials = resolveAssignmentMaterials(a, state.courses).map(materialMeta);
 
   return {
     ok: true,
@@ -348,6 +351,7 @@ export function getAssignment(state: ReadToolState, input: unknown): ReadToolRes
       progress: a.progress,
       tags: a.tags ?? [],
       subtasks: a.subtasks ?? [],
+      linkedMaterials,
     },
   };
 }

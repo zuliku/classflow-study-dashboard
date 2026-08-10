@@ -101,6 +101,8 @@ const assignments: Assignment[] = [
     description: "实现 SJF / RR 两种调度算法并对比周转时间，提交代码与实验报告。",
     ddl: iso(-1, 23, 59), priority: "urgent", status: "doing", progress: 60,
     tags: ["实验报告", "C语言"],
+    // Task 6A：关联本课程实验指导与课件（真实存在的 c3.materials）
+    materialIds: ["m5", "m4"],
     subtasks: [
       { id: "st1", title: "完成 RR 时间片轮转实现", completed: true },
       { id: "st2", title: "撰写调度对比分析", completed: false },
@@ -126,6 +128,8 @@ const assignments: Assignment[] = [
     description: "用 Wireshark 抓取 TCP 连接建立过程并标注各标志位。",
     ddl: iso(1, 21, 0), priority: "low", status: "doing", progress: 45, estimatedMinutes: 120,
     tags: ["实验", "Wireshark"],
+    // Task 6A：关联本课程 Wireshark 实验课件
+    materialIds: ["m9"],
   },
   // 今天截止 + 今天有 block
   {
@@ -133,6 +137,8 @@ const assignments: Assignment[] = [
     description: "完成 800 词学术写作初稿，引用至少 5 篇文献。",
     ddl: iso(0, 18, 0), priority: "high", status: "todo", progress: 0, estimatedMinutes: 150,
     tags: ["论文", "英文"],
+    // Task 6A：关联本课程 APA 引用规范速查
+    materialIds: ["m6"],
     subtasks: [
       { id: "st3", title: "文献检索与提纲", completed: true },
       { id: "st4", title: "撰写正文初稿", completed: false },

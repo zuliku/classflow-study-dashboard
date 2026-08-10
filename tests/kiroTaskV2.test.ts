@@ -116,6 +116,26 @@ describe("Kiro Task V2 Read Tools", () => {
     expect(r.data.estimatedMinutes).toBeNull();
   });
 
+  it("get_assignment：Task 6A linkedMaterials 返回关联资料 metadata（按 materialIds 原序）", async () => {
+    seedState();
+    const { store, read } = await freshModules();
+    // c1（统计学）初始无资料：补两个资料再关联
+    store.getState().addCourseMaterial("c1", { title: "讲义.pdf", type: "pdf", size: "1 MB" });
+    store.getState().addCourseMaterial("c1", { title: "实验指导.pdf", type: "pdf", size: "2 MB" });
+    const c1 = store.getState().courses.find((c: any) => c.id === "c1")!;
+    const [mid1, mid2] = c1.materials.map((m: any) => m.id);
+    store.getState().setAssignmentMaterialIds("a2", [mid2, mid1]);
+
+    const r = read.executeKiroReadTool("get_assignment", { assignmentId: "a2" }, store.getState()) as { ok: true; data: any };
+    expect(r.ok).toBe(true);
+    expect(r.data.linkedMaterials.map((m: any) => m.id)).toEqual([mid2, mid1]);
+    expect(r.data.linkedMaterials[0].title).toBe("实验指导.pdf");
+    // 只返回 metadata，绝不返回 storageKey / url / 正文
+    expect(r.data.linkedMaterials[0].storageKey).toBeUndefined();
+    expect(r.data.linkedMaterials[0].url).toBeUndefined();
+    expect(r.data.linkedMaterials[0]).toHaveProperty("uploadDate");
+  });
+
   it("get_assignment：返回 estimatedMinutes + schedule（scheduledMinutes 累计，非法块跳过）", async () => {
     seedState();
     const { store, read } = await freshModules();

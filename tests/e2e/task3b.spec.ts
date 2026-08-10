@@ -93,3 +93,32 @@ test("Part B：Primary 仅 5 个 Tab；有风险不再是永久 Tab；已归档�
   await page.getByRole("button", { name: "更多视图" }).click();
   await expect(page.getByRole("button", { name: /查看已归档/ })).toBeVisible();
 });
+
+test("Task 6A：Drawer 关联资料 - 显示/解除关联只改 Task、不删课程文件；Picker 可重新添加", async ({ page }) => {
+  await openWorkspace(page);
+  // a1（c_4 计量经济学大作业）演示数据关联 m5
+  await page.locator('[data-assignment-id="a1"]').click();
+  await expect(page.getByText("关联资料")).toBeVisible();
+  await expect(page.getByText("Lab 3 Pandas 数据清洗与回归拟合代码.ipynb")).toBeVisible();
+
+  // 解除关联：Task 侧消失，课程 Material 仍然存在
+  await page.getByRole("button", { name: "解除关联 Lab 3 Pandas 数据清洗与回归拟合代码.ipynb" }).click();
+  await expect(page.getByText("Lab 3 Pandas 数据清洗与回归拟合代码.ipynb")).toHaveCount(0);
+
+  const stillExists = await page.evaluate(() => {
+    const raw = localStorage.getItem("classflow-storage-v2");
+    if (!raw) return false;
+    const s = JSON.parse(raw).state ?? {};
+    const c4 = (s.courses ?? []).find((c: any) => c.id === "c_4");
+    return (c4?.materials ?? []).some((m: any) => m.id === "m5");
+  });
+  expect(stillExists).toBe(true);
+
+  // Picker：显示课程内全部资料（含刚解除的），点击重新关联 → ✓ 出现
+  await page.getByRole("button", { name: "添加资料" }).click();
+  const picker = page.getByTestId("material-picker");
+  await expect(picker).toBeVisible();
+  await expect(picker.getByText("Lab 3 Pandas 数据清洗与回归拟合代码.ipynb")).toBeVisible();
+  await picker.getByText("Lab 3 Pandas 数据清洗与回归拟合代码.ipynb").click();
+  await expect(picker.locator("svg.lucide-check")).toHaveCount(1);
+});

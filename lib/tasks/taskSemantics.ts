@@ -45,11 +45,24 @@ export function formatEstimatedMinutes(minutes: number | undefined): string | nu
   return `${Math.floor(minutes / 60)} 小时 ${minutes % 60} 分`;
 }
 
+/** materialIds 清洗：仅保留非空 string + 去重；空结果 → undefined（无关联） */
+export function normalizeMaterialIds(value: unknown): string[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const ids: string[] = [];
+  for (const v of value) {
+    if (typeof v === "string" && v.trim().length > 0 && !ids.includes(v)) {
+      ids.push(v);
+    }
+  }
+  return ids.length > 0 ? ids : undefined;
+}
+
 /**
  * Assignment 归一化（persist hydrate / backup restore / patch 入口共用）：
  * - ddl：字符串保留原值，非字符串/缺失 → undefined（旧数据 ddl 必然存在，原值保留）
  * - estimatedMinutes：sanitize（非法 → undefined）
  * - subtasks 缺失合法
+ * - materialIds（Task 6A）：清洗（旧 Assignment 无此字段完全合法）
  * 不 throw：保证旧数据可正常 hydrate。
  */
 export function normalizeAssignment(raw: unknown): Assignment {
@@ -68,5 +81,6 @@ export function normalizeAssignment(raw: unknown): Assignment {
     progress: typeof a.progress === "number" && a.progress >= 0 && a.progress <= 100 ? a.progress : 0,
     tags: Array.isArray(a.tags) ? a.tags.filter((t): t is string => typeof t === "string") : [],
     subtasks: Array.isArray(a.subtasks) ? (a.subtasks as Assignment["subtasks"]) : undefined,
+    materialIds: normalizeMaterialIds(a.materialIds),
   };
 }

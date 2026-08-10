@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import {
   X,
   Clock,
@@ -13,14 +13,22 @@ import {
   CalendarClock,
   Tags,
   CalendarDays,
+  Paperclip,
+  Plus,
+  Check,
+  FileText,
+  Presentation,
+  Link2,
+  FileImage,
 } from "lucide-react";
 import { useAppStore } from "@/store/useAppStore";
 import { useToastStore } from "@/store/useToastStore";
-import { Priority, AssignmentStatus } from "@/types";
+import { Priority, AssignmentStatus, Material } from "@/types";
 import { format } from "date-fns";
 import { zhCN } from "date-fns/locale";
 import { parseLocalDDL } from "@/lib/ddl";
 import { formatEstimatedMinutes } from "@/lib/tasks/taskSemantics";
+import { resolveAssignmentMaterials } from "@/lib/tasks/taskMaterials";
 import { deriveAssignmentHealthWithAvailability, healthViewMeta, healthExplanation } from "@/lib/tasks/taskHealthView";
 import { usePresence } from "@/lib/usePresence";
 import { useRestoreFocus } from "@/lib/useRestoreFocus";
@@ -41,6 +49,29 @@ const QUICK_PROMPTS: { label: string; prompt: string }[] = [
   { label: "帮我安排学习时间", prompt: "帮我安排这个任务的学习时间。" },
 ];
 
+/** Task 6A：资料类型图标与标签（仅展示，不改 Material Domain） */
+const MATERIAL_TYPE_LABELS: Record<Material["type"], string> = {
+  pdf: "PDF",
+  ppt: "PPT",
+  doc: "DOC",
+  link: "链接",
+  image: "图片",
+};
+
+function MaterialTypeIcon({ type, className }: { type: Material["type"]; className?: string }) {
+  switch (type) {
+    case "pdf":
+    case "doc":
+      return <FileText className={`w-3.5 h-3.5 shrink-0 text-[#A48F82] ${className ?? ""}`} />;
+    case "ppt":
+      return <Presentation className={`w-3.5 h-3.5 shrink-0 text-[#A48F82] ${className ?? ""}`} />;
+    case "link":
+      return <Link2 className={`w-3.5 h-3.5 shrink-0 text-[#A48F82] ${className ?? ""}`} />;
+    case "image":
+      return <FileImage className={`w-3.5 h-3.5 shrink-0 text-[#A48F82] ${className ?? ""}`} />;
+  }
+}
+
 export function AssignmentDrawer() {
   const {
     assignments,
@@ -58,11 +89,14 @@ export function AssignmentDrawer() {
     updateAssignmentProgress,
     updateAssignmentPriority,
     toggleSubtask,
+    setAssignmentMaterialIds,
     deleteAssignment,
     restoreAssignment,
   } = useAppStore();
   const pushToast = useToastStore((s) => s.pushToast);
   const handoff = useKiroHandoff();
+  // Task 6A：关联资料 Mini Picker 展开状态
+  const [materialPickerOpen, setMaterialPickerOpen] = useState(false);
 
   const assignment = assignments.find((a) => a.id === selectedAssignmentId);
   const { mounted, visible } = usePresence(!!assignment, 260);
@@ -118,12 +152,32 @@ export function AssignmentDrawer() {
     setSelectedAssignmentId(null);
   };
 
+  // Task 6A：添加/解除关联（只改 Task 关系，绝不触碰 Course Material 原文件）
+  const toggleMaterial = (materialId: string) => {
+    const current = assignment.materialIds ?? [];
+    const next = current.includes(materialId)
+      ? current.filter((id) => id !== materialId)
+      : [...current, materialId];
+    setAssignmentMaterialIds(assignment.id, next);
+  };
+
+  // Task 6A：根据关联资料请 Kiro 分析（轻量快捷入口，复用现有 Handoff）
+  const handleMaterialAskKiro = () => {
+    handoff.openForAssignment(assignment.id);
+    handoff.handoffPrompt("请根据当前任务关联的课程资料，梳理任务要求并给出执行建议。");
+    setSelectedAssignmentId(null);
+  };
+
   const handleViewInTimeline = () => {
     setSelectedAssignmentId(null);
     setActiveTab("timetable");
   };
 
   const course = courses.find((c) => c.id === assignment.courseId);
+
+  // Task 6A：关联资料（按 materialIds 原顺序解析；Course.materials 是 Source of Truth）
+  const linkedMaterials = resolveAssignmentMaterials(assignment, courses);
+  const courseMaterials = course?.materials ?? [];
 
   // ---- Task V2 Detail ----
   const parsedDDL = parseLocalDDL(assignment.ddl);
@@ -359,6 +413,101 @@ export function AssignmentDrawer() {
                     </div>
                   ))}
                 </div>
+              </div>
+            )}
+          </div>
+
+          {/* Task 6A：关联资料（只关联所属课程已有资料；解除关联不删除课程文件） */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <h4 className="flex items-center gap-1.5 text-[10px] font-bold text-sandrift uppercase tracking-wider">
+                <Paperclip className="w-3 h-3 text-[#A48F82]" />
+                关联资料
+                {linkedMaterials.length > 0 && (
+                  <span className="text-[9px] font-bold text-satin-grey">({linkedMaterials.length})</span>
+                )}
+              </h4>
+              <div className="flex items-center gap-1.5">
+                {linkedMaterials.length > 0 && (
+                  <button
+                    onClick={handleMaterialAskKiro}
+                    title="根据关联资料请 Kiro 分析"
+                    className="text-[10px] font-semibold text-satin-grey hover:text-charcoal transition-colors"
+                  >
+                    根据资料分析
+                  </button>
+                )}
+                <button
+                  onClick={() => setMaterialPickerOpen((v) => !v)}
+                  className="flex items-center gap-1 text-[10px] font-semibold text-satin-grey bg-white border border-line rounded-lg px-2 py-1 hover:text-charcoal hover:border-line-strong transition-colors"
+                >
+                  <Plus className="w-3 h-3" />
+                  {materialPickerOpen ? "收起" : "添加资料"}
+                </button>
+              </div>
+            </div>
+
+            {linkedMaterials.length > 0 && (
+              <div className="space-y-1">
+                {linkedMaterials.map((m) => (
+                  <div
+                    key={m.id}
+                    className="flex items-center gap-2 p-2.5 bg-[#F7F5F5] hover:bg-alabaster/60 border border-line rounded-xl text-xs transition-colors"
+                  >
+                    <MaterialTypeIcon type={m.type} />
+                    <span className="flex-1 min-w-0 truncate font-medium text-charcoal">{m.title}</span>
+                    <span className="text-[9px] font-semibold text-sandrift shrink-0">
+                      {MATERIAL_TYPE_LABELS[m.type]}
+                    </span>
+                    <button
+                      onClick={() => toggleMaterial(m.id)}
+                      aria-label={`解除关联 ${m.title}`}
+                      title="解除关联（不删除课程资料）"
+                      className="p-1 rounded-lg text-sandrift hover:text-danger hover:bg-danger-bg transition-colors shrink-0"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {materialPickerOpen && (
+              <div
+                data-testid="material-picker"
+                className="p-2.5 bg-[#F7F5F5] border border-line rounded-xl space-y-1"
+              >
+                {courseMaterials.length === 0 ? (
+                  <div className="space-y-1.5 px-1 py-0.5">
+                    <p className="text-[11px] text-satin-grey">暂无课程资料</p>
+                    <button
+                      onClick={handleOpenCourse}
+                      className="text-[11px] font-semibold text-satin-grey hover:text-charcoal transition-colors"
+                    >
+                      前往课程资料 →
+                    </button>
+                  </div>
+                ) : (
+                  courseMaterials.map((m) => {
+                    const linkedNow = linkedMaterials.some((l) => l.id === m.id);
+                    return (
+                      <button
+                        key={m.id}
+                        onClick={() => toggleMaterial(m.id)}
+                        className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-left hover:bg-white transition-colors"
+                      >
+                        <MaterialTypeIcon type={m.type} />
+                        <span className="flex-1 min-w-0 truncate text-[11px] font-medium text-charcoal">
+                          {m.title}
+                        </span>
+                        <span className="text-[9px] font-semibold text-sandrift shrink-0">
+                          {MATERIAL_TYPE_LABELS[m.type]}
+                        </span>
+                        {linkedNow && <Check className="w-3.5 h-3.5 text-success shrink-0" />}
+                      </button>
+                    );
+                  })
+                )}
               </div>
             )}
           </div>

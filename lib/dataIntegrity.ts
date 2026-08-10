@@ -30,6 +30,8 @@ export interface DataIntegrityIssues {
   unlinkedLegacyDDLMarks: CalendarMark[];
   /** groupTask.assigneeId 指向不存在的成员（只报告，不猜测负责人） */
   orphanGroupTaskAssignments: { projectId: string; taskId: string; taskTitle: string; assigneeId: string }[];
+  /** Task 6A：assignment.materialIds 引用其所属 Course 中不存在的资料（只报告，不猜测重绑） */
+  orphanAssignmentMaterialRefs: { assignmentId: string; assignmentTitle: string; missingMaterialIds: string[] }[];
 }
 
 export function findDataIntegrityIssues(snapshot: DataSnapshot): DataIntegrityIssues {
@@ -51,6 +53,24 @@ export function findDataIntegrityIssues(snapshot: DataSnapshot): DataIntegrityIs
     }
   }
 
+  // Task 6A：任务关联了不存在（或跨课程）的资料 ID → 只报告（正常删除流程已清理，出现即异常）
+  const materialIdsByCourse = new Map(
+    snapshot.courses.map((c) => [c.id, new Set(c.materials.map((m) => m.id))])
+  );
+  const orphanAssignmentMaterialRefs: DataIntegrityIssues["orphanAssignmentMaterialRefs"] = [];
+  for (const a of snapshot.assignments) {
+    if (!a.materialIds || a.materialIds.length === 0) continue;
+    const valid = materialIdsByCourse.get(a.courseId);
+    const missing = a.materialIds.filter((id) => !valid?.has(id));
+    if (missing.length > 0) {
+      orphanAssignmentMaterialRefs.push({
+        assignmentId: a.id,
+        assignmentTitle: a.title,
+        missingMaterialIds: missing,
+      });
+    }
+  }
+
   return {
     orphanSchedules: snapshot.schedules.filter((s) => !courseIds.has(s.courseId)),
     orphanAssignments: snapshot.assignments.filter((a) => !courseIds.has(a.courseId)),
@@ -62,6 +82,7 @@ export function findDataIntegrityIssues(snapshot: DataSnapshot): DataIntegrityIs
       (m) => m.type === "ddl" && !m.sourceId
     ),
     orphanGroupTaskAssignments,
+    orphanAssignmentMaterialRefs,
   };
 }
 
@@ -92,6 +113,9 @@ export function classifyIntegrityIssues(issues: DataIntegrityIssues): Classified
   }
   if (issues.unlinkedLegacyDDLMarks.length > 0) {
     warnings.push(`${issues.unlinkedLegacyDDLMarks.length} 个旧日历标记未与任务关联`);
+  }
+  if (issues.orphanAssignmentMaterialRefs.length > 0) {
+    warnings.push(`${issues.orphanAssignmentMaterialRefs.length} 个任务关联了已不存在的课程资料`);
   }
 
   return { fatal, warnings };

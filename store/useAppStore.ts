@@ -22,6 +22,7 @@ import {
 import { createDefaultSemester, getSemesterWeek } from "@/lib/semester";
 import { getLocalDDLDate } from "@/lib/ddl";
 import { normalizeAssignment, hasTaskDeadline } from "@/lib/tasks/taskSemantics";
+import { sanitizeAssignmentMaterialIds } from "@/lib/tasks/taskMaterials";
 import { TaskWorkspaceView } from "@/lib/tasks/taskViews";
 import { deleteFileBlob, clearAllFileBlobs } from "@/lib/fileStorage";
 import { isDDLMarkForAssignment, isLegacyDDLMarkForAssignment, linkLegacyDDLMarks } from "@/lib/calendarMark";
@@ -259,6 +260,8 @@ export interface AppState {
   ) => void;
   updateAssignmentProgress: (id: string, progress: number) => void;
   toggleSubtask: (assignmentId: string, subtaskId: string) => void;
+  /** Task 6A：设置任务关联的课程资料 ID（仅保留所属 Course 中真实存在的 ID，跨课程引用被清洗） */
+  setAssignmentMaterialIds: (assignmentId: string, materialIds: string[]) => void;
   /** 删除任务：返回被删任务与对应的 DDL CalendarMark（含兼容匹配），供撤销恢复 */
   deleteAssignment: (id: string) => { assignment: Assignment; marks: CalendarMark[] } | null;
   /** 撤销删除：恢复任务及对应 CalendarMark（保留原始 ID 与全部字段） */
@@ -617,6 +620,12 @@ export const useAppStore = create<AppState>()(
               ? { ...c, materials: c.materials.filter((m) => m.id !== materialId) }
               : c
           ),
+          // Task 6A：资料被删除 → 清理所有同课程任务的 materialIds 引用（不留 dangling ref）
+          assignments: state.assignments.map((a) => {
+            if (a.courseId !== courseId || !a.materialIds?.includes(materialId)) return a;
+            const rest = a.materialIds.filter((id) => id !== materialId);
+            return { ...a, materialIds: rest.length > 0 ? rest : undefined };
+          }),
         }));
 
         return targetMaterial;
@@ -724,6 +733,18 @@ export const useAppStore = create<AppState>()(
         const current = get().assignments.find((a) => a.id === id);
         if (!current) return;
         get().updateAssignment({ ...current, ...patch, id });
+      },
+
+      /**
+       * Task 6A：设置任务关联的课程资料 ID。
+       * 仅保留所属 Course.materials 中真实存在的 ID（跨课程引用自动清洗）+ 去重；
+       * 空结果 → undefined（无关联）。复用 updateAssignment（DDL mark 同步为 no-op）。
+       */
+      setAssignmentMaterialIds: (assignmentId, materialIds) => {
+        const current = get().assignments.find((a) => a.id === assignmentId);
+        if (!current) return;
+        const valid = sanitizeAssignmentMaterialIds(current, get().courses, materialIds);
+        get().updateAssignment({ ...current, materialIds: valid.length > 0 ? valid : undefined });
       },
 
       updateAssignmentStatus: (id, status) =>

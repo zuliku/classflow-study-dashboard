@@ -154,6 +154,8 @@ export const initialAssignments: Assignment[] = [
     status: "doing",
     progress: 75,
     tags: ["实证分析", "回归模型"],
+    // Task 6A：关联所属课程（数据分析）的真实资料
+    materialIds: ["m5"],
     subtasks: [
       { id: "st1", title: "完成数据清洗与变量定义", completed: true },
       { id: "st2", title: "拟合回归模型并测试异方差", completed: true },
@@ -185,6 +187,8 @@ export const initialAssignments: Assignment[] = [
     status: "todo",
     progress: 0,
     tags: ["个人作业", "演讲"],
+    // Task 6A：关联所属课程（英语口语）的演讲模板资料
+    materialIds: ["m4"],
   },
   {
     id: "a4",
@@ -196,6 +200,8 @@ export const initialAssignments: Assignment[] = [
     status: "todo",
     progress: 0,
     tags: ["实验报告", "SQL"],
+    // Task 6A：关联所属课程（数据库系统）的 MySQL 实战资料
+    materialIds: ["m7"],
   },
   {
     id: "a5",

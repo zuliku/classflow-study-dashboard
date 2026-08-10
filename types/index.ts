@@ -103,6 +103,11 @@ export interface Assignment {
   progress: number; // 0 - 100
   tags: string[];
   subtasks?: Subtask[];
+  /**
+   * Task 6A：关联的课程资料 ID（仅本任务所属 Course.materials 中的 ID；只存 ID 不复制 Material 对象）。
+   * Course.materials 仍是 Source of Truth。无关联 = undefined。
+   */
+  materialIds?: string[];
 }
 
 export interface GroupMember {
