@@ -26,6 +26,11 @@ describe("Kiro Tool Capability Audit", () => {
     );
   });
 
+  it("has no open evidence-backed tool findings after Task 5", () => {
+    expect(KIRO_TOOL_CAPABILITY_AUDIT.task5Decision).toBe("skip");
+    expect(KIRO_TOOL_CAPABILITY_AUDIT.toolFindings).toEqual([]);
+  });
+
   it("all non-keep findings have evidence and recommendation", () => {
     for (const f of KIRO_TOOL_CAPABILITY_AUDIT.toolFindings) {
       const disposition = f.disposition as KiroToolFindingDisposition;
@@ -43,18 +48,27 @@ describe("Kiro Tool Capability Audit", () => {
     }
   });
 
-  it("finds get_available_time totalMinutes gap", () => {
-    const ids = KIRO_TOOL_CAPABILITY_AUDIT.toolFindings.map((x) => x.id);
-    expect(ids).toContain("available-time-total-minutes");
+  it("preserves the three resolved Task 5 findings as audit history", () => {
+    const ids = KIRO_TOOL_CAPABILITY_AUDIT.resolvedFindings.map((x) => x.id).sort();
+    expect(ids).toEqual(
+      [
+        "available-time-total-minutes",
+        "delete-reminder-listing-description",
+        "delete-reminder-scheduled-guard",
+      ].sort()
+    );
   });
 
-  it("finds delete_reminder listing-description gap", () => {
-    const ids = KIRO_TOOL_CAPABILITY_AUDIT.toolFindings.map((x) => x.id);
-    expect(ids).toContain("delete-reminder-listing-description");
+  it("marks the directly repaired scenarios as closed", () => {
+    const byId = new Map(KIRO_TOOL_CAPABILITY_AUDIT.scenarios.map((x) => [x.scenarioId, x]));
+    expect(byId.get("tonight-free-time")?.gap).toBe("none");
+    expect(byId.get("cancel-reminder")?.gap).toBe("none");
   });
 
-  it("finds delete_reminder scheduled guard gap", () => {
-    const ids = KIRO_TOOL_CAPABILITY_AUDIT.toolFindings.map((x) => x.id);
-    expect(ids).toContain("delete-reminder-scheduled-guard");
+  it("still does not recommend an aggregate tool", () => {
+    expect(KIRO_TOOL_CAPABILITY_AUDIT.aggregateTool.recommended).toBe(false);
+    expect(KIRO_TOOL_CAPABILITY_AUDIT.aggregateTool.supportingScenarioIds).toEqual([
+      "weekly-pressure",
+    ]);
   });
 });

@@ -43,8 +43,17 @@ export interface KiroToolCapabilityFinding {
   recommendation: string;
 }
 
+/** 已被修复的历史 Finding（审计历史；不再作为可执行项） */
+export interface KiroResolvedToolCapabilityFinding {
+  id: string;
+  tool: KiroAuditedToolName;
+  resolution: string;
+  evidence: string[];
+}
+
 export const KIRO_TOOL_CAPABILITY_AUDIT = {
-  task5Decision: "refine-existing-tools" as const,
+  // Task 4B 有证据要求处理的 existing-tool refinement 已全部完成（Task 5A/5B）
+  task5Decision: "skip" as const,
 
   aggregateTool: {
     recommended: false,
@@ -112,12 +121,12 @@ export const KIRO_TOOL_CAPABILITY_AUDIT = {
     {
       scenarioId: "tonight-free-time",
       coverage: "direct" as const,
-      gap: "low" as const,
+      gap: "none" as const,
       evidence: [
-        "get_available_time 通过确定性 free-time domain 排除课程/Calendar Marks/StudyBlocks，直接返回 slots",
-        "output 仅 { startDate, endDate, slots }，无 totalMinutes，模型需自行求和（见 finding available-time-total-minutes）",
+        "get_available_time 通过确定性 free-time domain 排除课程/Calendar Marks/StudyBlocks",
+        "Tool 现在直接返回基于完整未截断 slots 求和的 totalMinutes，同时 slots 详情仍最多 20 条",
       ],
-      conclusion: "路径正确；输出层可小步补齐 totalMinutes。",
+      conclusion: "直接覆盖：Kiro 可使用确定性 totalMinutes 回答总空闲时间，不再需要自行求和。",
     },
     {
       scenarioId: "pdf-task-breakdown",
@@ -162,13 +171,13 @@ export const KIRO_TOOL_CAPABILITY_AUDIT = {
     {
       scenarioId: "cancel-reminder",
       coverage: "composed" as const,
-      gap: "medium" as const,
+      gap: "none" as const,
       evidence: [
-        "list_reminders + delete_reminder 组合可完成定位与删除",
-        "delete_reminder description 强制「删除前必须 list_reminders」（无条件），与 Task 3「无唯一 ID 才 list」冲突",
-        "delete_reminder executor 无 scheduled-only guard，与 description「仅 scheduled 状态」不符（见 findings）",
+        "没有唯一 reminderId 时仍使用 list_reminders 定位；已有真实唯一 ID 时 delete_reminder 可直接调用",
+        "delete_reminder runtime 现在只允许 scheduled，fired/skipped 返回 INVALID_INPUT 且不 mutation/不注册 Undo",
+        "scheduled Reminder 删除后仍保留 exact-snapshot Undo",
       ],
-      conclusion: "路径存在，但 description 与 runtime 均有待修正确认，列为 Task 5 refine。",
+      conclusion: "定位 + 删除路径与 Task 3 Policy、Tool description、runtime guard 已一致。",
     },
     {
       scenarioId: "start-focus",
@@ -212,42 +221,37 @@ export const KIRO_TOOL_CAPABILITY_AUDIT = {
     },
   ],
 
-  toolFindings: [
+  // 当前无未解决的 evidence-backed Tool Finding（Task 4B 三个 Finding 已全部关闭）
+  toolFindings: [] as KiroToolCapabilityFinding[],
+
+  // 已被 Task 5A / 5B 修复的历史 Finding（审计历史，保留证据）
+  resolvedFindings: [
     {
       id: "available-time-total-minutes",
       tool: "get_available_time",
-      disposition: "refine-output" as const,
-      severity: "low" as const,
+      resolution: "现有 Tool 输出已增加 totalMinutes；基于完整未截断 slots 求和，slots 详情仍最多 20 条。",
       evidence: [
-        "executor 返回 { startDate, endDate, slots }（slots 截断为 20 条），没有 totalMinutes",
-        "「今晚还有多少空闲时间」需要总分钟数；Tool 已确定性计算 slots，却让模型自己再 sum",
+        "getAvailableTime 在 slice(0, 20) 前 reduce 完整 slots 得到 totalMinutes",
+        "kiroPlanning focused test 覆盖短窗口相等与 >20 slots 时 totalMinutes 大于返回详情分钟和",
       ],
-      recommendation: "Task 5：只给现有 Tool 输出增加 totalMinutes（确定性求和），不新增 Tool、不改 schema。",
     },
     {
       id: "delete-reminder-listing-description",
       tool: "delete_reminder",
-      disposition: "refine-description" as const,
-      severity: "medium" as const,
+      resolution: "description 已改为条件式：只有没有唯一 reminderId 时才要求 list_reminders。",
       evidence: [
-        "description 写死「删除前必须用 list_reminders 拿到真实 reminderId」（无条件）",
-        "Task 3 Policy 规定：只有没有唯一 reminderId 时才 list_reminders；当前 Turn 已有真实唯一 ID 时强制 list 属于无意义重复 Read",
-        "update_reminder description 已是条件式：「若没有唯一 reminderId，先 list_reminders 定位」",
+        "已有真实唯一 reminderId 时 description 明确允许直接删除",
+        "多个候选仍要求询问用户，不得猜 ID",
       ],
-      recommendation: "Task 5：把 delete_reminder description 改为与 update_reminder 一致的条件式措辞。",
     },
     {
       id: "delete-reminder-scheduled-guard",
       tool: "delete_reminder",
-      disposition: "refine-runtime" as const,
-      severity: "high" as const,
+      resolution: "executor 已增加 scheduled-only runtime guard。",
       evidence: [
-        "description 声明「仅 scheduled 状态」可删除",
-        "executor deleteReminder：find by id → 直接 delete，没有 if (target.status !== 'scheduled') guard",
-        "update_reminder executor 已有 scheduled-only guard（old.status !== 'scheduled' → invalidInput），delete 与之不一致",
+        "fired/skipped 删除返回 INVALID_INPUT",
+        "失败路径不 mutation、不注册 Undo；scheduled 删除与 Undo 保持原行为",
       ],
-      recommendation:
-        "Task 5：删除前拒绝 fired / skipped 提醒（与 update_reminder 现有 guard 一致），错误码 INVALID_INPUT（如「历史提醒不能删除。」，文案按现有 Domain 风格确定）。",
     },
   ],
 } as const;
