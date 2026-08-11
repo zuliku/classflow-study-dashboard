@@ -1,13 +1,14 @@
 "use client";
 
-import React from "react";
-import { FileText, Image as ImageIcon, Copy, RefreshCw, MoreHorizontal } from "lucide-react";
+import React, { useEffect, useRef, useState } from "react";
+import { FileText, Image as ImageIcon, Copy, Pencil, RefreshCw, MoreHorizontal, Send } from "lucide-react";
 import { KiroMark } from "@/components/kiro/KiroHeader";
 import { KiroMarkdown } from "@/components/kiro/KiroMarkdown";
 import { KiroMenuPanel, KiroMenuItem, KiroMenuDivider, useKiroPopover } from "@/components/kiro/KiroMenu";
 import { useToastStore } from "@/store/useToastStore";
 import { KiroAttachmentView } from "@/lib/ai/attachments/types";
 import { KiroSourceMeta } from "@/lib/ai/citations/types";
+import { UserMessageEditBlockReason } from "@/lib/ai/history/messageEditing";
 import { citationsToReadableText } from "@/lib/ai/citations/parser";
 import { cn } from "@/lib/utils";
 import {
@@ -143,19 +144,78 @@ export function KiroMessage({
   );
 }
 
-/** 用户 Message：轻量 soft bubble，右对齐（纯文本 + 附件 chips，不显示提取全文）；hover 可复制 */
+/** 用户 Message：轻量 soft bubble，右对齐（纯文本 + 附件 chips，不显示提取全文）；hover 可复制 / 内联编辑 */
 export function KiroUserMessage({
+  messageId,
   content,
   attachments,
+  canEdit,
+  editDisabledReason,
+  onEdit,
 }: {
+  messageId: string;
   content: string;
   attachments?: KiroAttachmentView[];
+  /** Task 7：是否可编辑（attachment/history 最终绑定后计算） */
+  canEdit?: boolean;
+  editDisabledReason?: UserMessageEditBlockReason;
+  onEdit?: (messageId: string, text: string) => Promise<boolean>;
 }) {
   const pushToast = useToastStore((s) => s.pushToast);
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const taRef = useRef<HTMLTextAreaElement | null>(null);
+
   const copy = async () => {
     const ok = await copyTextToClipboard(content);
     if (ok) pushToast({ message: "已复制" });
   };
+
+  const startEdit = () => {
+    setDraft(content);
+    setEditing(true);
+  };
+
+  const cancelEdit = () => {
+    setEditing(false);
+    setSubmitting(false);
+  };
+
+  // 轻量 autosize（不引入新依赖）
+  useEffect(() => {
+    if (!editing) return;
+    const el = taRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${Math.min(el.scrollHeight, 220)}px`;
+  }, [editing, draft]);
+
+  const submit = async () => {
+    const v = draft.trim();
+    if (!v || submitting) return; // 空内容禁止保存
+    if (v === content.trim()) {
+      cancelEdit(); // 内容未变：退出编辑态，不调用模型
+      return;
+    }
+    setSubmitting(true);
+    const ok = await onEdit?.(messageId, v);
+    if (ok) {
+      setEditing(false);
+      setSubmitting(false);
+    } else {
+      setSubmitting(false); // 失败：保留编辑态方便修正
+    }
+  };
+
+  const editDisabledTitle = editDisabledReason
+    ? {
+        "write-suffix": "该消息之后包含已执行操作，无法直接编辑；请发送新的修改指令。",
+        attachments: "该消息包含附件，暂不支持直接编辑；请重新发送。",
+        "turn-in-flight": "Kiro 正在处理当前消息，请稍后再编辑。",
+        "message-not-found": "该消息已不可编辑。",
+      }[editDisabledReason]
+    : undefined;
 
   return (
     <div className="flex justify-end group" data-testid="kiro-user-message">
@@ -185,18 +245,72 @@ export function KiroUserMessage({
             })}
           </div>
         )}
-        <div className="bg-alabaster border border-line rounded-2xl rounded-br-md px-4 py-2.5 text-xs font-medium text-charcoal whitespace-pre-wrap leading-relaxed">
-          {content}
-        </div>
-        <button
-          onClick={copy}
-          aria-label="复制"
-          title="复制"
-          className="flex items-center gap-1 px-1.5 py-1 rounded-lg text-[11px] font-semibold text-sandrift hover:bg-alabaster hover:text-charcoal transition-colors opacity-100 md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100"
-        >
-          <Copy className="w-3.5 h-3.5" />
-          复制
-        </button>
+        {editing ? (
+          <div className="w-full min-w-[260px] space-y-1.5">
+            <textarea
+              ref={taRef}
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Escape") {
+                  e.preventDefault();
+                  cancelEdit();
+                } else if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+                  e.preventDefault();
+                  void submit();
+                }
+              }}
+              aria-label="编辑消息"
+              className="w-full px-3 py-2.5 bg-white border border-line-strong rounded-2xl text-xs font-medium text-charcoal focus:outline-none focus:border-charcoal resize-none whitespace-pre-wrap leading-relaxed"
+            />
+            <div className="flex items-center justify-end gap-1.5">
+              <button
+                onClick={cancelEdit}
+                className="px-3 h-7 rounded-lg text-[11px] font-semibold text-satin-grey hover:bg-alabaster transition-colors"
+              >
+                取消
+              </button>
+              <button
+                onClick={() => void submit()}
+                disabled={!draft.trim() || submitting}
+                className="ux-press flex items-center gap-1 px-3 h-7 rounded-lg text-[11px] font-bold text-white bg-charcoal hover:bg-black disabled:opacity-50 transition-colors"
+              >
+                <Send className="w-3 h-3" />
+                {submitting ? "发送中…" : "保存并发送"}
+              </button>
+            </div>
+            <p className="text-[9px] text-sandrift text-right">
+              Esc 取消 · Ctrl/⌘+Enter 保存并发送 · Enter 换行
+            </p>
+          </div>
+        ) : (
+          <>
+            <div className="bg-alabaster border border-line rounded-2xl rounded-br-md px-4 py-2.5 text-xs font-medium text-charcoal whitespace-pre-wrap leading-relaxed">
+              {content}
+            </div>
+            <div className="flex items-center gap-0.5 opacity-100 md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100">
+              <button
+                onClick={startEdit}
+                disabled={!canEdit || submitting}
+                aria-disabled={!canEdit}
+                title={editDisabledTitle ?? "编辑消息"}
+                className="flex items-center gap-1 px-1.5 py-1 rounded-lg text-[11px] font-semibold text-sandrift hover:bg-alabaster hover:text-charcoal transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-sandrift"
+              >
+                <Pencil className="w-3.5 h-3.5" />
+                编辑
+              </button>
+              <button
+                onClick={copy}
+                aria-label="复制"
+                title="复制"
+                className="flex items-center gap-1 px-1.5 py-1 rounded-lg text-[11px] font-semibold text-sandrift hover:bg-alabaster hover:text-charcoal transition-colors"
+              >
+                <Copy className="w-3.5 h-3.5" />
+                复制
+              </button>
+            </div>
+          </>
+        )}
       </div>
     </div>
   );

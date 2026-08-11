@@ -25,6 +25,7 @@ export function KiroConversation({
   onRetry,
   onOpenSettings,
   onUndo,
+  onEditUserMessage,
   compact,
   turnInFlight,
   sources,
@@ -35,6 +36,8 @@ export function KiroConversation({
   onRetry: () => void;
   onOpenSettings: () => void;
   onUndo: (toolCallId: string) => void;
+  /** Task 8：编辑 User Message 并重发（Task 7 的安全语义） */
+  onEditUserMessage: (messageId: string, text: string) => Promise<boolean>;
   /** sidecar：统一 12px 水平 gutter（与 Header/Composer 一致） */
   compact?: boolean;
   /** 整个 Agent Turn 是否仍在进行（chat.status === submitted/streaming）——决定最后一条消息的操作栏时机 */
@@ -205,6 +208,7 @@ export function KiroConversation({
               sources={idx === lastAssistantIndex ? sources : undefined}
               onUndo={onUndo}
               onRetry={onRetry}
+              onEditUserMessage={onEditUserMessage}
             />
           ))}
 
@@ -276,15 +280,26 @@ const KiroConversationRow = React.memo(function KiroConversationRow({
   sources,
   onUndo,
   onRetry,
+  onEditUserMessage,
 }: {
   view: KiroChatMessageView;
   actionsReady: boolean;
   sources?: KiroSourceMeta[];
   onUndo: (toolCallId: string) => void;
   onRetry: () => void;
+  onEditUserMessage: (messageId: string, text: string) => Promise<boolean>;
 }) {
   if (view.role === "user") {
-    return <KiroUserMessage content={view.content} attachments={view.attachments} />;
+    return (
+      <KiroUserMessage
+        messageId={view.id}
+        content={view.content}
+        attachments={view.attachments}
+        canEdit={view.canEdit}
+        editDisabledReason={view.editDisabledReason}
+        onEdit={onEditUserMessage}
+      />
+    );
   }
   // 空 assistant（pre-response 占位）：Logo 由 Agent Progress 承担，不渲染第二个 Logo；
   // 首个文本 token 到达后 KiroMessage 自然出现（同一 Turn 只保留一个 Kiro Logo）

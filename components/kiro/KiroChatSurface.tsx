@@ -102,6 +102,7 @@ export function KiroChatSurface({ variant }: { variant: "workspace" | "sidecar" 
           onRetry={chat.retry}
           onOpenSettings={openKiroSettings}
           onUndo={chat.consumeUndo}
+          onEditUserMessage={chat.editAndResend}
           compact={compact}
           turnInFlight={chat.streaming}
           sources={chat.sources}
