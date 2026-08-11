@@ -151,7 +151,7 @@ it("turn settle 会 flush Tool 后剩余 provisional text", () => {
 });
 ```
 
-Keep existing tests. If an older test expects a single streaming paragraph after a settled Tool to be immediately `answer`, update that expectation to the approved provisional behavior rather than deleting coverage.
+Keep the existing tests. For the existing test whose purpose is `commentary → tool → commentary → tool → final answer 顺序正确`, explicitly mark its trailing final text as `text("今天建议先完成数学作业", "done")` so it continues testing ordered final-answer extraction rather than accidentally becoming a provisional-lookahead test. Any other older case that intentionally models a live single-paragraph Tool-following text should be updated to the new provisional expectation instead of deleting coverage.
 
 - [ ] **Step 2: Run the focused test and verify RED**
 
