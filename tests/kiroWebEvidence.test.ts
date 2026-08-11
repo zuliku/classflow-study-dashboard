@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from "vitest";
+﻿import { describe, it, expect, vi } from "vitest";
 import {
   resolveCurrentTurnWebSources,
   inspectCurrentTurnWebEvidenceState,
@@ -25,9 +25,14 @@ const CURRENT_TURN_SOURCES = [
   { sourceId: "web-4", url: "https://b.dev/4", title: "B4", domain: "b.dev" },
 ];
 
+/** Task 18C：默认 Native Reader mock —— 返回 NO_EVIDENCE，让旧 fallback-focused 测试继续走 fallback */
+function nativeNoEvidence() {
+  return vi.fn().mockResolvedValue({ ok: false, code: "WEB_NATIVE_NO_EVIDENCE" });
+}
+
 function readToolConfig(over: Partial<Parameters<typeof createKiroWebReadTool>[0]> = {}) {
   return {
-    provider: {
+    fallbackProvider: {
       id: "tavily" as const,
       checkCredential: vi.fn().mockResolvedValue({ ok: true }),
       search: vi.fn(),
@@ -38,6 +43,7 @@ function readToolConfig(over: Partial<Parameters<typeof createKiroWebReadTool>[0
         ],
       }),
     },
+    nativeReader: nativeNoEvidence(),
     credential: { mode: "byok" as const, userApiKey: "sk-user" },
     attemptsSoFar: 0,
     trustedSources: CURRENT_TURN_SOURCES,
@@ -67,7 +73,7 @@ describe("Case A：trust boundary", () => {
     const r = (await readTool.execute?.({ sourceIds: ["web-999"] }, {} as never)) as { ok: false; code: string };
     expect(r.ok).toBe(false);
     expect(r.code).toBe("WEB_SOURCE_NOT_FOUND");
-    expect(cfg.provider.extract).not.toHaveBeenCalled();
+    expect(cfg.fallbackProvider.extract).not.toHaveBeenCalled();
   });
 
   it("混入不可信 sourceId：web-3 合法 + web-999 非法 → 只读取 web-3", async () => {
@@ -76,7 +82,7 @@ describe("Case A：trust boundary", () => {
     const r = (await readTool.execute?.({ sourceIds: ["web-3", "web-999"] }, {} as never)) as { ok: true; data: { sources: { sourceId: string }[] } };
     expect(r.ok).toBe(true);
     expect(r.data.sources.map((s) => s.sourceId)).toEqual(["web-3"]);
-    expect(cfg.provider.extract).toHaveBeenCalledWith(
+    expect(cfg.fallbackProvider.extract).toHaveBeenCalledWith(
       expect.objectContaining({ sources: [{ sourceId: "web-3", url: "https://a.dev/3" }] }),
       expect.anything()
     );
@@ -110,7 +116,7 @@ describe("Case C：read limit", () => {
     const readTool = createKiroWebReadTool(cfg);
     const r = (await readTool.execute?.({ sourceIds: ["web-3"] }, {} as never)) as { ok: false; code: string };
     expect(r.code).toBe("WEB_READ_LIMIT_REACHED");
-    expect(cfg.provider.extract).not.toHaveBeenCalled();
+    expect(cfg.fallbackProvider.extract).not.toHaveBeenCalled();
   });
 
   it("同一 toolCallId 重复只计一次 attempt", () => {
@@ -132,16 +138,14 @@ describe("Case D/E：duplicate read guard", () => {
     const readTool = createKiroWebReadTool(cfg);
     const r = (await readTool.execute?.({ sourceIds: ["web-3"] }, {} as never)) as { ok: false; code: string };
     expect(r.code).toBe("WEB_SOURCE_ALREADY_READ");
-    expect(cfg.provider.extract).not.toHaveBeenCalled();
+    expect(cfg.fallbackProvider.extract).not.toHaveBeenCalled();
   });
 
   it("mixed：web-3 已读 + web-4 未读 → Provider 只收到 web-4", async () => {
     const cfg = readToolConfig({
       readSourceIds: ["web-3"],
-      provider: {
+      fallbackProvider: {
         id: "tavily" as const,
-        checkCredential: vi.fn().mockResolvedValue({ ok: true }),
-        search: vi.fn(),
         extract: vi.fn().mockResolvedValue({
           ok: true,
           sources: [{ sourceId: "web-4", title: "", url: "https://b.dev/4", domain: "", chunks: [{ text: "B4 内容" }], truncated: false }],
@@ -152,7 +156,7 @@ describe("Case D/E：duplicate read guard", () => {
     const r = (await readTool.execute?.({ sourceIds: ["web-3", "web-4"] }, {} as never)) as { ok: true; data: { sources: { sourceId: string }[] } };
     expect(r.ok).toBe(true);
     expect(r.data.sources.map((s) => s.sourceId)).toEqual(["web-4"]);
-    expect(cfg.provider.extract).toHaveBeenCalledWith(
+    expect(cfg.fallbackProvider.extract).toHaveBeenCalledWith(
       expect.objectContaining({ sources: [{ sourceId: "web-4", url: "https://b.dev/4" }] }),
       expect.anything()
     );
@@ -193,7 +197,7 @@ describe("Case F：evidence budget", () => {
         ],
       }),
     };
-    const readTool = createKiroWebReadTool(readToolConfig({ provider, evidenceCharsUsed: 0 }));
+    const readTool = createKiroWebReadTool(readToolConfig({ fallbackProvider: provider, evidenceCharsUsed: 0 }));
     const r = (await readTool.execute?.({ sourceIds: ["web-3", "web-4"] }, {} as never)) as {
       ok: true;
       data: { sources: { sourceId: string; chunks: { text: string }[]; truncated: boolean }[] };
@@ -201,6 +205,66 @@ describe("Case F：evidence budget", () => {
     const total = r.data.sources.reduce((sum, s) => sum + s.chunks.reduce((a, c) => a + c.text.length, 0), 0);
     expect(total).toBeLessThanOrEqual(MAX_WEB_EVIDENCE_CHARS_PER_TURN);
     expect(r.data.sources.some((s) => s.truncated)).toBe(true);
+  });
+});
+
+describe("Task 18C：Native-first read_web_source", () => {
+  it("Native success → credential 不解析、fallback 不调用、metadata 来自 trustedSources", async () => {
+    const fallbackProvider = {
+      id: "tavily" as const,
+      checkCredential: vi.fn(),
+      search: vi.fn(),
+      extract: vi.fn(),
+    };
+    const nativeReader = vi.fn().mockResolvedValue({
+      ok: true,
+      sourceId: "web-3",
+      finalUrl: "https://cdn.example.com/redirected",
+      chunks: [{ text: "Native 读取的正文" }, { text: "第二段" }],
+      truncated: false,
+    });
+    const readTool = createKiroWebReadTool(
+      readToolConfig({
+        fallbackProvider,
+        nativeReader,
+        trustedSources: [{ sourceId: "web-3", url: "https://example.com/a?utm=x", title: "官方标题", domain: "example.com" }],
+      })
+    );
+    const r = (await readTool.execute?.({ sourceIds: ["web-3"] }, {} as never)) as {
+      ok: true;
+      data: { sources: { sourceId: string; title: string; url: string; domain: string; chunks: { text: string }[] }[] };
+    };
+    expect(r.ok).toBe(true);
+    expect(r.data.sources).toHaveLength(1);
+    const s = r.data.sources[0];
+    expect(s.sourceId).toBe("web-3");
+    expect(s.title).toBe("官方标题"); // metadata 来自 trustedSources
+    expect(s.domain).toBe("example.com");
+    expect(s.url).toBe("https://example.com/a?utm=x"); // finalUrl 不覆盖 Citation URL
+    expect(s.chunks.map((c) => c.text)).toEqual(["Native 读取的正文", "第二段"]);
+    expect(nativeReader).toHaveBeenCalledTimes(1);
+    expect(nativeReader.mock.calls[0][0].url).toBe("https://example.com/a?utm=x");
+    expect(fallbackProvider.extract).not.toHaveBeenCalled();
+  });
+
+  it("Native NO_EVIDENCE → fallback extract 收到 sources 与 query", async () => {
+    const extract = vi.fn().mockResolvedValue({
+      ok: true,
+      sources: [{ sourceId: "web-3", title: "", url: "https://a.dev/3", domain: "", chunks: [{ text: "fallback 正文" }], truncated: false }],
+    });
+    const readTool = createKiroWebReadTool(
+      readToolConfig({
+        fallbackProvider: { id: "tavily" as const, extract },
+        nativeReader: vi.fn().mockResolvedValue({ ok: false, code: "WEB_NATIVE_NO_EVIDENCE" }),
+        trustedSources: [{ sourceId: "web-3", url: "https://a.dev/3", title: "A3", domain: "a.dev" }],
+      })
+    );
+    const r = (await readTool.execute?.({ sourceIds: ["web-3"], query: "报名条件" }, {} as never)) as { ok: true; data: { sources: unknown[] } };
+    expect(r.ok).toBe(true);
+    expect(extract).toHaveBeenCalledWith(
+      expect.objectContaining({ sources: [{ sourceId: "web-3", url: "https://a.dev/3" }], query: "报名条件" }),
+      expect.anything()
+    );
   });
 });
 
@@ -227,7 +291,7 @@ describe("Task 17A：evidence reader hardening", () => {
     });
     const readTool = createKiroWebReadTool(
       readToolConfig({
-        provider,
+        fallbackProvider: provider,
         trustedSources: [{ sourceId: "web-3", url: "https://example.com/a?utm_source=x", title: "A", domain: "example.com" }],
       })
     );
@@ -247,7 +311,7 @@ describe("Task 17A：evidence reader hardening", () => {
       ok: true,
       sources: [{ sourceId: "web-3", title: "", url: "https://a.dev/3", domain: "", chunks: [], truncated: false }],
     });
-    const readTool = createKiroWebReadTool(readToolConfig({ provider }));
+    const readTool = createKiroWebReadTool(readToolConfig({ fallbackProvider: provider }));
     const r = (await readTool.execute?.({ sourceIds: ["web-3"] }, {} as never)) as { ok: false; code: string };
     expect(r.ok).toBe(false);
     expect(r.code).toBe("WEB_READ_NO_EVIDENCE");
@@ -268,7 +332,7 @@ describe("Task 17A：evidence reader hardening", () => {
         { sourceId: "web-4", title: "", url: "https://b.dev/4", domain: "", chunks: [], truncated: false },
       ],
     });
-    const readTool = createKiroWebReadTool(readToolConfig({ provider }));
+    const readTool = createKiroWebReadTool(readToolConfig({ fallbackProvider: provider }));
     const r = (await readTool.execute?.({ sourceIds: ["web-3", "web-4"] }, {} as never)) as {
       ok: true;
       data: { sources: { sourceId: string }[]; unavailableSourceIds: string[] };
@@ -284,7 +348,7 @@ describe("Task 17A：evidence reader hardening", () => {
       received = req;
       return { ok: true, sources: [{ sourceId: "web-3", title: "", url: "https://a.dev/3", domain: "", chunks: [{ text: "x" }], truncated: false }] };
     });
-    const readTool = createKiroWebReadTool(readToolConfig({ provider }));
+    const readTool = createKiroWebReadTool(readToolConfig({ fallbackProvider: provider }));
     await readTool.execute?.({ sourceIds: ["web-3", "web-3"] }, {} as never);
     const req = received as { sources: { sourceId: string }[] };
     expect(req.sources).toHaveLength(1);
@@ -321,7 +385,7 @@ describe("Task 17A：evidence reader hardening", () => {
   it("Case G：evidence budget 已用满 → Provider 不调用（WEB_READ_LIMIT_REACHED）", async () => {
     const provider = evidenceProvider({ ok: true, sources: [] });
     const readTool = createKiroWebReadTool(
-      readToolConfig({ provider, evidenceCharsUsed: MAX_WEB_EVIDENCE_CHARS_PER_TURN })
+      readToolConfig({ fallbackProvider: provider, evidenceCharsUsed: MAX_WEB_EVIDENCE_CHARS_PER_TURN })
     );
     const r = (await readTool.execute?.({ sourceIds: ["web-3"] }, {} as never)) as { ok: false; code: string };
     expect(r.code).toBe("WEB_READ_LIMIT_REACHED");
@@ -330,12 +394,12 @@ describe("Task 17A：evidence reader hardening", () => {
 
   it("all-dup 全已读 / 不可信 source → Provider 不调用", async () => {
     const provider = evidenceProvider({ ok: true, sources: [] });
-    const readTool = createKiroWebReadTool(readToolConfig({ provider, readSourceIds: ["web-3"] }));
+    const readTool = createKiroWebReadTool(readToolConfig({ fallbackProvider: provider, readSourceIds: ["web-3"] }));
     const r = (await readTool.execute?.({ sourceIds: ["web-3"] }, {} as never)) as { ok: false; code: string };
     expect(r.code).toBe("WEB_SOURCE_ALREADY_READ");
     expect(provider.extract).not.toHaveBeenCalled();
 
-    const readTool2 = createKiroWebReadTool(readToolConfig({ provider }));
+    const readTool2 = createKiroWebReadTool(readToolConfig({ fallbackProvider: provider }));
     const r2 = (await readTool2.execute?.({ sourceIds: ["web-999"] }, {} as never)) as { ok: false; code: string };
     expect(r2.code).toBe("WEB_SOURCE_NOT_FOUND");
     expect(provider.extract).not.toHaveBeenCalled();

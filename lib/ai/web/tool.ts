@@ -21,10 +21,13 @@ import {
   MAX_WEB_READS_PER_TURN,
   MAX_WEB_EVIDENCE_CHARS_PER_TURN,
   WEB_SEARCH_TIMEOUT_MS,
+  WEB_READ_TIMEOUT_MS,
 } from "@/lib/ai/web/types";
 import { kiroWebSearchInputSchema, kiroWebReadSourceSchema, normalizeWebSearchDomain, resolveExactMatchFlag } from "@/lib/ai/web/schemas";
 import { resolveWebSearchCredential, KiroWebSearchCredentialResult } from "@/lib/ai/web/credentials";
-import { KiroWebSearchProvider, getKiroWebSearchProvider } from "@/lib/ai/web/provider";
+import { KiroWebSearchProvider, KiroWebEvidenceProvider, getKiroWebSearchProvider, getKiroWebEvidenceProvider } from "@/lib/ai/web/provider";
+import { resolveKiroWebEvidence } from "@/lib/ai/web/evidenceRuntime";
+import { readNativeWebSource } from "@/lib/ai/web/native/reader";
 import { webSearchSafeMessage, canonicalWebSearchUrl } from "@/lib/ai/web/tavily";
 
 /** 重复查询检测用归一化（trim / collapse whitespace / lowercase Latin；不做分词/stemming） */
@@ -307,7 +310,8 @@ export function assembleKiroToolsForRequest(input: {
       seenUrls: searchState.seenUrls,
     }),
     read_web_source: createKiroWebReadTool({
-      provider: getKiroWebSearchProvider("tavily"),
+      fallbackProvider: getKiroWebEvidenceProvider("tavily"),
+      nativeReader: readNativeWebSource,
       credential: input.credential,
       attemptsSoFar: evidenceState.attempts,
       trustedSources: resolveCurrentTurnWebSources(input.messages),
@@ -318,8 +322,11 @@ export function assembleKiroToolsForRequest(input: {
 }
 
 export interface KiroWebReadToolConfig {
-  provider: KiroWebSearchProvider;
-  /** 与 web_search 完全相同的 Server / BYOK credential */
+  /** Native-first fallback backend（只依赖 KiroWebEvidenceProvider；Tavily 只是实现） */
+  fallbackProvider: KiroWebEvidenceProvider;
+  /** Task 18C：Native Reader 默认实现；测试可注入 mock */
+  nativeReader?: typeof readNativeWebSource;
+  /** 与 web_search 相同的 Server / BYOK credential；只供惰性 fallback 使用 */
   credential: { mode: KiroWebSearchCredentialMode; userApiKey?: string };
   /** 本 Turn 已发生 read 尝试数（成功与失败都计入；跨 roundtrip 累计） */
   attemptsSoFar: number;
@@ -336,12 +343,14 @@ function readLimitFailure(): { ok: false; code: "WEB_READ_LIMIT_REACHED"; messag
 }
 
 /**
- * 创建 Server-side read_web_source tool（Task 16A）。
+ * 创建 Server-side read_web_source tool（Task 16A / 18C）。
  * Trust boundary：只能读取当前 Turn 真实成功 web_search 结果的 sourceId；
  * 模型永远不能把它当成通用 HTTP Client（schema 只接受 web-N sourceIds）。
+ * Task 18C：执行走 Evidence Runtime（Native-first + Tavily fallback），
+ * credential 惰性解析（Native 全成功不消耗 Tavily）；单次 Tool 共享 15s AbortController。
  */
 export function createKiroWebReadTool(config: KiroWebReadToolConfig) {
-  const { provider, credential, attemptsSoFar, trustedSources, readSourceIds, evidenceCharsUsed } = config;
+  const { fallbackProvider, nativeReader, credential, attemptsSoFar, trustedSources, readSourceIds, evidenceCharsUsed } = config;
   let remainingAttempts = Math.max(0, MAX_WEB_READS_PER_TURN - attemptsSoFar);
   const trustedById = new Map(trustedSources.map((s) => [s.sourceId, s]));
   const readSet = new Set(readSourceIds);
@@ -369,34 +378,41 @@ export function createKiroWebReadTool(config: KiroWebReadToolConfig) {
       if (unread.length === 0) {
         return { ok: false, code: "WEB_SOURCE_ALREADY_READ", message: webSearchSafeMessage("WEB_SOURCE_ALREADY_READ") };
       }
-      // 2) evidence 预算：Turn 预算已用满 → 不再请求 Provider
+      // 2) evidence 预算：Turn 预算已用满 → 不再请求任何 backend
       if (charsUsed >= MAX_WEB_EVIDENCE_CHARS_PER_TURN) {
         return { ok: false, code: "WEB_READ_LIMIT_REACHED", message: webSearchSafeMessage("WEB_READ_LIMIT_REACHED") };
       }
 
-      // 3) 凭据只在实际需要 Provider 时解析
-      const resolved = resolveWebSearchCredential({
-        mode: credential.mode,
-        userApiKey: credential.userApiKey,
-      });
-      if (!resolved.ok) return { ok: false, code: resolved.code, message: resolved.message };
-
+      // 3) 单个 Read Tool 总预算：Native + Fallback 共享同一 AbortController（最坏 15s 硬上限）
       const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), WEB_SEARCH_TIMEOUT_MS);
+      const timer = setTimeout(() => controller.abort(), WEB_READ_TIMEOUT_MS);
       try {
-        const outcome = await provider.extract(
+        const outcome = await resolveKiroWebEvidence(
           {
             sources: unread.map((id) => {
               const s = trustedById.get(id)!;
               return { sourceId: id, url: s.url };
             }),
             query: input.query,
+            signal: controller.signal,
           },
-          { apiKey: resolved.apiKey, signal: controller.signal }
+          {
+            nativeReader,
+            fallbackProvider,
+            // 惰性 credential：只有 fallback 真的需要时才解析（Native 全成功 0 调用）
+            resolveFallbackCredential: () =>
+              resolveWebSearchCredential({ mode: credential.mode, userApiKey: credential.userApiKey }),
+          }
         );
-        if (!outcome.ok) return { ok: false, code: outcome.code, message: outcome.message };
+        if (!outcome.ok) {
+          // 总 signal 已 abort 且无任何成功 evidence → WEB_READ_TIMEOUT
+          if (controller.signal.aborted) {
+            return { ok: false, code: "WEB_READ_TIMEOUT", message: webSearchSafeMessage("WEB_READ_TIMEOUT") };
+          }
+          return { ok: false, code: outcome.code, message: outcome.message };
+        }
 
-        // 4) 成功来源 = Provider 返回且 chunks 非空；metadata 一律来自可信注册表（title/url/domain）
+        // 4) 成功来源 = Runtime 返回且 chunks 非空；metadata 一律来自可信注册表（title/url/domain）
         const sources: {
           sourceId: string;
           title: string;
@@ -430,6 +446,7 @@ export function createKiroWebReadTool(config: KiroWebReadToolConfig) {
           sources.push({
             sourceId: ev.sourceId,
             title: trusted?.title ?? "网页来源",
+            // Native 的 finalUrl 只是内部 metadata；Citation URL 仍用原始可信 URL
             url: ev.url,
             domain: trusted?.domain ?? "",
             chunks: capped,

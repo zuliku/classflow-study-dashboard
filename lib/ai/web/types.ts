@@ -118,6 +118,8 @@ export const MAX_WEB_SEARCHES_PER_TURN = 3;
 export const MAX_WEB_RESULTS = 6;
 /** 单次搜索超时 */
 export const WEB_SEARCH_TIMEOUT_MS = 10_000;
+/** Task 18C：一次 read_web_source 总预算（Native + Fallback 共享同一 AbortController） */
+export const WEB_READ_TIMEOUT_MS = 15_000;
 /** snippet 单条最大字符数 */
 export const WEB_SEARCH_SNIPPET_MAX_CHARS = 900;
 /** Task 15B：未显式 includeDomains 时，单域名最多保留结果数（来源多样性） */

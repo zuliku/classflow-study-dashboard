@@ -1,6 +1,11 @@
 /**
- * Kiro Search — Provider 接口（Task 14A）。
+ * Kiro Search — Provider 接口（Task 14A / 18C）。
  * 上层（Route / Tool / UI / Citation）只依赖本接口，禁止直接 import Tavily response。
+ *
+ * Task 18C 拆分：
+ * - KiroWebSearchProvider = search + checkCredential（web_search 用）
+ * - KiroWebEvidenceProvider = extract（read_web_source 的 fallback backend 用）
+ * Evidence Runtime 只依赖 KiroWebEvidenceProvider；Tavily 只是 fallback implementation。
  */
 
 import {
@@ -26,7 +31,11 @@ export interface KiroWebSearchProvider {
     apiKey: string;
     signal?: AbortSignal;
   }): Promise<KiroWebSearchCredentialCheckOutcome>;
-  /** 网页证据读取（Task 16A）：Search=Discovery / Read=Evidence；只接受 URL 列表 */
+}
+
+/** Task 18C：Evidence Provider（网页正文提取）。Tavily Extract 只是默认 fallback implementation */
+export interface KiroWebEvidenceProvider {
+  id: KiroWebSearchProviderId;
   extract(
     request: KiroWebEvidenceRequest,
     context: {
@@ -36,12 +45,24 @@ export interface KiroWebSearchProvider {
   ): Promise<KiroWebEvidenceOutcome>;
 }
 
+export type KiroWebProvider = KiroWebSearchProvider & KiroWebEvidenceProvider;
+
 import { createTavilyWebSearchProvider } from "@/lib/ai/web/tavily";
 
-const PROVIDERS: Record<KiroWebSearchProviderId, KiroWebSearchProvider> = {
-  tavily: createTavilyWebSearchProvider(),
+const tavilyProvider = createTavilyWebSearchProvider();
+
+const SEARCH_PROVIDERS: Record<KiroWebSearchProviderId, KiroWebSearchProvider> = {
+  tavily: tavilyProvider,
+};
+
+const EVIDENCE_PROVIDERS: Record<KiroWebSearchProviderId, KiroWebEvidenceProvider> = {
+  tavily: tavilyProvider,
 };
 
 export function getKiroWebSearchProvider(id: KiroWebSearchProviderId): KiroWebSearchProvider {
-  return PROVIDERS[id];
+  return SEARCH_PROVIDERS[id];
+}
+
+export function getKiroWebEvidenceProvider(id: KiroWebSearchProviderId): KiroWebEvidenceProvider {
+  return EVIDENCE_PROVIDERS[id];
 }

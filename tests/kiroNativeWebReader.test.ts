@@ -197,7 +197,7 @@ describe("readNativeWebSource — 无证据 / 失败映射", () => {
     expect(out.ok).toBe(false);
     if (!out.ok) expect(out.code).toBe("WEB_NATIVE_NO_EVIDENCE");
   });
-  it("Test G. safeWebFetch 失败（BLOCKED_IP）→ WEB_NATIVE_FETCH_FAILED", async () => {
+  it("Test G. safeWebFetch 失败映射：BLOCKED_IP → WEB_NATIVE_POLICY_BLOCKED（§8-9）", async () => {
     const out = await readNativeWebSource(
       { sourceId: "web-5", url: "https://evil.example/" },
       {
@@ -208,7 +208,24 @@ describe("readNativeWebSource — 无证据 / 失败映射", () => {
       }
     );
     expect(out.ok).toBe(false);
-    if (!out.ok) expect(out.code).toBe("WEB_NATIVE_FETCH_FAILED");
+    if (!out.ok) expect(out.code).toBe("WEB_NATIVE_POLICY_BLOCKED");
+  });
+  it("Test G'. 安全策略类错误 → POLICY_BLOCKED；大小/格式 → UNSUPPORTED；网络类 → FETCH_FAILED", async () => {
+    const map = async (code: string) => {
+      const out = await readNativeWebSource(
+        { sourceId: "web-5", url: "https://x.example/" },
+        { fetcher: async (): Promise<KiroSafeFetchOutcome> => ({ ok: false, code: code as never }) }
+      );
+      return out.ok ? "ok" : out.code;
+    };
+    expect(await map("WEB_FETCH_INVALID_URL")).toBe("WEB_NATIVE_POLICY_BLOCKED");
+    expect(await map("WEB_FETCH_REDIRECT_BLOCKED")).toBe("WEB_NATIVE_POLICY_BLOCKED");
+    expect(await map("WEB_FETCH_TOO_MANY_REDIRECTS")).toBe("WEB_NATIVE_POLICY_BLOCKED");
+    expect(await map("WEB_FETCH_UNSUPPORTED_CONTENT")).toBe("WEB_NATIVE_UNSUPPORTED_CONTENT");
+    expect(await map("WEB_FETCH_TOO_LARGE")).toBe("WEB_NATIVE_UNSUPPORTED_CONTENT");
+    expect(await map("WEB_FETCH_TIMEOUT")).toBe("WEB_NATIVE_FETCH_FAILED");
+    expect(await map("WEB_FETCH_HTTP_ERROR")).toBe("WEB_NATIVE_FETCH_FAILED");
+    expect(await map("WEB_FETCH_FAILED")).toBe("WEB_NATIVE_FETCH_FAILED");
   });
 });
 

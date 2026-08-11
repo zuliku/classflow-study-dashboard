@@ -55,6 +55,8 @@ export interface KiroNativeWebReadSuccess {
 
 export type KiroNativeWebReadFailureCode =
   | "WEB_NATIVE_FETCH_FAILED"
+  | "WEB_NATIVE_POLICY_BLOCKED"
+  | "WEB_NATIVE_UNSUPPORTED_CONTENT"
   | "WEB_NATIVE_PARSE_FAILED"
   | "WEB_NATIVE_NO_EVIDENCE";
 
@@ -100,6 +102,39 @@ function fallbackContainerText(doc: Document): string {
 }
 
 /**
+ * Task 18C：Safe Fetch 错误 → Native Reader 失败分类（内部；details 不传播给上层）。
+ * 安全策略拒绝（SSRF / redirect / hostname / URL 形态）必须与普通网络失败区分，
+ * 因为前者绝不能触发 Tavily fallback（fallback 不能成为绕过 Safety Layer 的通道）。
+ */
+function mapSafeFetchFailure(code: string): KiroNativeWebReadFailureCode {
+  switch (code) {
+    case "WEB_FETCH_INVALID_URL":
+    case "WEB_FETCH_BLOCKED_HOST":
+    case "WEB_FETCH_BLOCKED_IP":
+    case "WEB_FETCH_REDIRECT_BLOCKED":
+    case "WEB_FETCH_TOO_MANY_REDIRECTS":
+      return "WEB_NATIVE_POLICY_BLOCKED";
+    case "WEB_FETCH_UNSUPPORTED_CONTENT":
+    case "WEB_FETCH_TOO_LARGE":
+      return "WEB_NATIVE_UNSUPPORTED_CONTENT";
+    case "WEB_FETCH_TIMEOUT":
+    case "WEB_FETCH_HTTP_ERROR":
+    case "WEB_FETCH_FAILED":
+    default:
+      return "WEB_NATIVE_FETCH_FAILED";
+  }
+}
+
+/**
+ * Task 18C：是否允许 Tavily fallback。
+ * WEB_NATIVE_POLICY_BLOCKED → false（安全策略拒绝必须是最终拒绝）；
+ * 其它（FETCH_FAILED / UNSUPPORTED_CONTENT / PARSE_FAILED / NO_EVIDENCE）→ true。
+ */
+export function shouldFallbackNativeWebRead(code: KiroNativeWebReadFailureCode): boolean {
+  return code !== "WEB_NATIVE_POLICY_BLOCKED";
+}
+
+/**
  * HTML Reader 主函数：Safe Fetch → JSDOM → Readability → fallback → evidence pipeline。
  */
 export async function readNativeWebSource(
@@ -110,8 +145,7 @@ export async function readNativeWebSource(
 
   const fetchResult = await fetcher({ url: request.url, signal: request.signal });
   if (!fetchResult.ok) {
-    // V1：safe error 细节（BLOCKED_IP / TOO_LARGE / …）不传播给上层；18C 再设计细粒度映射
-    return { ok: false, code: "WEB_NATIVE_FETCH_FAILED" };
+    return { ok: false, code: mapSafeFetchFailure(fetchResult.code) };
   }
   const fetch = fetchResult;
   const mediaType = mediaTypeOf(fetch.contentType);

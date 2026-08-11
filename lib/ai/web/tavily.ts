@@ -26,7 +26,7 @@ import {
   MAX_WEB_EVIDENCE_CHUNK_CHARS,
   WEB_SEARCH_SNIPPET_MAX_CHARS,
 } from "@/lib/ai/web/types";
-import { KiroWebSearchProvider } from "@/lib/ai/web/provider";
+import { KiroWebSearchProvider, KiroWebEvidenceProvider } from "@/lib/ai/web/provider";
 
 export const TAVILY_SEARCH_URL = "https://api.tavily.com/search";
 export const TAVILY_USAGE_URL = "https://api.tavily.com/usage";
@@ -182,7 +182,7 @@ function normalizeResults(raw: unknown): { results: KiroWebSearchResult[]; dupli
   return { results: out, duplicatesFiltered };
 }
 
-export function createTavilyWebSearchProvider(): KiroWebSearchProvider {
+export function createTavilyWebSearchProvider(): KiroWebSearchProvider & KiroWebEvidenceProvider {
   return {
     id: "tavily",
     async checkCredential({ apiKey, signal }) {
