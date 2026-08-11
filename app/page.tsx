@@ -29,6 +29,7 @@ import { ToastViewport } from "@/components/ui/ToastViewport";
 import { ReminderRuntime } from "@/components/reminders/ReminderRuntime";
 import { ReminderViewport } from "@/components/reminders/ReminderViewport";
 import { ReminderCenter } from "@/components/reminders/ReminderCenter";
+import { FocusRuntime } from "@/components/focus/FocusRuntime";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { PageTransition } from "@/components/ui/PageTransition";
 import { useAppStore } from "@/store/useAppStore";
@@ -596,6 +597,7 @@ export default function Home() {
       <ReminderRuntime />
       <ReminderViewport />
       <ReminderCenter />
+      <FocusRuntime />
       {/* 移动端底部导航（<768px） */}
       <BottomNav />
     </KiroSessionProvider>
