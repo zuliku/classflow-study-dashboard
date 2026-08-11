@@ -58,7 +58,11 @@ export function UISelect<T extends string | number>({
     Math.max(0, options.findIndex((o) => o.value === value))
   );
   const [menuStyle, setMenuStyle] = useState<React.CSSProperties>({});
-  const [menuWidth, setMenuWidth] = useState<number | undefined>(undefined);
+  /** 打开时 trigger 宽度（dropdown min-width 基准；dropdown 本身可更宽） */
+  const [triggerWidth, setTriggerWidth] = useState<number | undefined>(undefined);
+  /** 水平定位：先 left-align，溢出 viewport 时右对齐修正（挂载后测量） */
+  const [menuLeft, setMenuLeft] = useState<number | undefined>(undefined);
+  const [viewportMaxWidth, setViewportMaxWidth] = useState<number>(320);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
   const closeTimerRef = useRef<number | null>(null);
@@ -81,14 +85,15 @@ export function UISelect<T extends string | number>({
     const spaceAbove = rect.top;
     const openUp = spaceBelow < estHeight + gap && spaceAbove > spaceBelow;
     const top = openUp ? rect.top - estHeight - gap : rect.bottom + gap;
+    // 宽度策略：dropdown 与 trigger 解耦——min-width = trigger 宽，内容自动撑开，viewport 上限
     setMenuStyle({
       position: "fixed",
       top: Math.max(8, top),
-      left: rect.left,
-      width: rect.width,
       maxHeight: openUp ? Math.min(estHeight, spaceAbove - 16) : Math.min(estHeight, spaceBelow - 16),
     });
-    setMenuWidth(rect.width);
+    setTriggerWidth(rect.width);
+    setMenuLeft(rect.left);
+    setViewportMaxWidth(Math.min(320, window.innerWidth - 16));
     setOpen(true);
     setActiveIndex(options.findIndex((o) => o.value === value));
     if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
@@ -159,15 +164,26 @@ export function UISelect<T extends string | number>({
     return () => document.removeEventListener("keydown", onKey, true);
   }, [open, closeMenu]);
 
-  // 打开时聚焦到当前选中项
+  // 打开时聚焦到当前选中项（preventScroll）+ 保证 active option 在可视区域
   useEffect(() => {
     if (!open) return;
-    requestAnimationFrame(() => {
-      menuRef.current
-        ?.querySelector<HTMLElement>(`[data-index="${activeIndex}"]`)
-        ?.focus({ preventScroll: true });
-    });
+    const el = menuRef.current?.querySelector<HTMLElement>(`[data-index="${activeIndex}"]`);
+    el?.focus({ preventScroll: true });
+    el?.scrollIntoView({ block: "nearest" });
   }, [open, activeIndex]);
+
+  // 挂载后测量实际宽度：右侧溢出 → 右对齐修正；至少保留 8px viewport inset
+  useEffect(() => {
+    if (!open || !visible) return;
+    const menu = menuRef.current;
+    if (!menu || menuLeft === undefined) return;
+    const vw = window.innerWidth;
+    const width = menu.offsetWidth;
+    let left = menuLeft;
+    if (left + width > vw - 8) left = vw - 8 - width;
+    if (left < 8) left = 8;
+    if (left !== menuLeft) setMenuLeft(left);
+  }, [open, visible, menuLeft]);
 
   const selectOption = (index: number) => {
     const opt = options[index];
@@ -252,9 +268,15 @@ export function UISelect<T extends string | number>({
             id={listboxId}
             role="listbox"
             aria-label={ariaLabel}
-            style={{ ...menuStyle, width: menuWidth }}
+            style={{
+              ...menuStyle,
+              left: menuLeft,
+              // 宽度与 trigger 解耦：min = trigger 宽（或 168px 下限），内容自动撑开，viewport 上限
+              minWidth: Math.max(triggerWidth ?? 0, 168),
+              maxWidth: viewportMaxWidth,
+            }}
             className={cn(
-              "z-[60] overflow-y-auto rounded-lg border border-line bg-surface shadow-card py-1",
+              "z-[60] overflow-y-auto scrollbar-none rounded-lg border border-line bg-surface shadow-card py-1",
               "transition-opacity transition-transform duration-[var(--motion-fast)] ease-[var(--ease-standard)]",
               visible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-0.5",
               reducedMotion && "transition-none transform-none",
@@ -277,7 +299,7 @@ export function UISelect<T extends string | number>({
                   onClick={() => selectOption(i)}
                   onMouseEnter={() => setActiveIndex(i)}
                   className={cn(
-                    "flex w-full items-center gap-2 px-2.5 text-xs font-semibold text-left",
+                    "flex w-full items-center gap-1.5 px-2.5 text-xs font-semibold text-left",
                     "focus:outline-none",
                     itemClassName ?? "h-9",
                     isSelected
@@ -290,7 +312,10 @@ export function UISelect<T extends string | number>({
                   <span className="w-4 shrink-0 flex items-center justify-center">
                     {isSelected && <Check className="w-3.5 h-3.5 text-charcoal" aria-hidden="true" />}
                   </span>
-                  <span className="truncate">{opt.label}</span>
+                  {/* 常规 label 单行完整显示；仅超过菜单 max-width 时才省略 */}
+                  <span className="whitespace-nowrap overflow-hidden text-ellipsis" title={opt.label}>
+                    {opt.label}
+                  </span>
                 </button>
               );
             })}

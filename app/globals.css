@@ -77,6 +77,16 @@ body {
   -ms-overflow-style: none;
 }
 
+/* 通用隐藏滚动条（保持滚动能力，不显示轨道/滑块）：Dropdown 等浮层使用 */
+.scrollbar-none {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+
 .kiro-attachment-tray::-webkit-scrollbar {
   height: 3px;
 }
