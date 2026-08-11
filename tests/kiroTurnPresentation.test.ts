@@ -198,6 +198,22 @@ describe("deriveKiroAssistantTurn", () => {
     expect(p.phase).toBe("working"); // 仍有未完成 tool
     expect(p.answer).toBe("");
   });
+
+  it("Task 2：completed tool + working tool 并存 → [done, working]，且不存在虚构 pending step", () => {
+    const p = deriveKiroAssistantTurn(
+      [
+        toolPart("search_assignments", "output-available", { output: { ok: true, data: { items: [] } } }),
+        toolPart("get_week_schedule", "streaming", { input: {} }),
+      ],
+      true
+    );
+    const statuses = p.worklog.map((b) => (b as { status: string }).status);
+    expect(statuses).toEqual(["done", "working"]);
+    // 只有真实出现的 tool 进入 worklog：不得虚构 pending 步骤
+    expect(p.worklog).toHaveLength(2);
+    expect(p.hasTools).toBe(true);
+    expect(p.phase).toBe("working");
+  });
 });
 
 describe("KiroAssistantTurnPresentation 类型完整性", () => {

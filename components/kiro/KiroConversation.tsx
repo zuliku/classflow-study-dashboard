@@ -2,7 +2,7 @@
 
 import React, { useEffect, useRef, useState } from "react";
 import { KiroMessage, KiroUserMessage } from "@/components/kiro/KiroMessage";
-import { KiroActivityTrace } from "@/components/kiro/KiroActivityTrace";
+import { KiroPendingIndicator } from "@/components/kiro/KiroWorklog";
 import { KiroChatMessageView, KiroActivity } from "@/hooks/useKiroChat";
 import { KiroSourceMeta } from "@/lib/ai/citations/types";
 import { useKiroSessionMeta } from "@/components/kiro/KiroSessionProvider";
@@ -171,18 +171,15 @@ export function KiroConversation({
     setShowScrollBtn(false);
   };
 
-  // Agent Progress 淡出：文本开始流式后（activity 隐藏）200ms fade，避免硬消失跳动
-  const [agentLeaving, setAgentLeaving] = React.useState(false);
-  useEffect(() => {
-    if (activity.visible) {
-      setAgentLeaving(false);
-      return;
-    }
-    setAgentLeaving(true);
-    const t = setTimeout(() => setAgentLeaving(false), 200);
-    return () => clearTimeout(t);
-  }, [activity.visible]);
-  const showAgentProgress = activity.visible || agentLeaving;
+  // 首 token 前占位：turn in-flight 且当前没有任何可见 Assistant（content / worklog / action）
+  const lastMsg = messages[messages.length - 1];
+  const lastMsgIsEmptyAssistant =
+    lastMsg?.role === "assistant" &&
+    !lastMsg.content &&
+    !(lastMsg.assistantTurn?.worklog.length ?? 0) &&
+    !lastMsg.actions?.length &&
+    !lastMsg.historyActions?.length;
+  const showPending = turnInFlight && (lastMsg?.role !== "assistant" || lastMsgIsEmptyAssistant);
 
   return (
     // Outer Viewport Wrapper：负责浮层定位；Scroll Container 独立承担滚动（Task 6B-A）
@@ -212,17 +209,8 @@ export function KiroConversation({
             />
           ))}
 
-          {/* Agent 执行反馈（真实阶段 + 语义步骤；文本开始后淡出，有工具时保留完成摘要） */}
-          {showAgentProgress && (
-            <div
-              className={cn(
-                "transition-opacity duration-[var(--motion-fast)] ease-[var(--ease-standard)]",
-                agentLeaving && "opacity-0"
-              )}
-            >
-              <KiroActivityTrace steps={activity.steps} phase={activity.phase} done={activity.done} compact={compact} />
-            </div>
-          )}
+          {/* 首 token 前：Kiro Logo + 正在处理（Assistant 任一可见 part 出现后自动消失） */}
+          {showPending && <KiroPendingIndicator />}
 
           {error && (
             <div
@@ -301,9 +289,10 @@ const KiroConversationRow = React.memo(function KiroConversationRow({
       />
     );
   }
-  // 空 assistant（pre-response 占位）：Logo 由 Agent Progress 承担，不渲染第二个 Logo；
-  // 首个文本 token 到达后 KiroMessage 自然出现（同一 Turn 只保留一个 Kiro Logo）
-  if (!view.content && !view.actions?.length && !view.historyActions?.length) return null;
+  // 空 assistant（pre-response 占位）：Pending 指示器承担 Logo；
+  // 只要存在任一可见内容（final answer / worklog / action）就渲染消息行
+  const hasWorklog = (view.assistantTurn?.worklog.length ?? 0) > 0;
+  if (!view.content && !hasWorklog && !view.actions?.length && !view.historyActions?.length) return null;
 
   // actionSummaries 随 view 稳定（Message View 缓存保证 identity）
   const actionSummaries = React.useMemo(
@@ -322,6 +311,7 @@ const KiroConversationRow = React.memo(function KiroConversationRow({
       actionsReady={actionsReady}
       sources={view.sources ?? sources}
       actionSummaries={actionSummaries}
+      assistantTurn={view.assistantTurn}
       onRetry={onRetry}
     >
       {/* Action Result Cards：真实 ToolResult 事实 UI */}

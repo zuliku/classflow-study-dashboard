@@ -4,11 +4,13 @@ import React, { useEffect, useRef, useState } from "react";
 import { FileText, Image as ImageIcon, Copy, Pencil, RefreshCw, MoreHorizontal, Send } from "lucide-react";
 import { KiroMark } from "@/components/kiro/KiroHeader";
 import { KiroMarkdown } from "@/components/kiro/KiroMarkdown";
+import { KiroWorklog } from "@/components/kiro/KiroWorklog";
 import { KiroMenuPanel, KiroMenuItem, KiroMenuDivider, useKiroPopover } from "@/components/kiro/KiroMenu";
 import { useToastStore } from "@/store/useToastStore";
 import { KiroAttachmentView } from "@/lib/ai/attachments/types";
 import { KiroSourceMeta } from "@/lib/ai/citations/types";
 import { UserMessageEditBlockReason } from "@/lib/ai/history/messageEditing";
+import { KiroAssistantTurnPresentation } from "@/lib/ai/presentation/turnPresentation";
 import { citationsToReadableText } from "@/lib/ai/citations/parser";
 import { cn } from "@/lib/utils";
 import {
@@ -32,6 +34,7 @@ export function KiroMessage({
   actionSummaries,
   actionsReady,
   sources,
+  assistantTurn,
   onRetry,
 }: {
   content?: string;
@@ -47,11 +50,17 @@ export function KiroMessage({
   actionsReady?: boolean;
   /** 本消息可用的文档来源（Citation 渲染与导出用；不含正文） */
   sources?: KiroSourceMeta[];
+  /** Worklog V2：有序 Assistant Turn（commentary → tool → … → final answer） */
+  assistantTurn?: KiroAssistantTurnPresentation;
   /** 重新生成（由 Conversation 注入稳定 callback，避免每行订阅 Session Context） */
   onRetry?: () => void;
 }) {
   const pushToast = useToastStore((s) => s.pushToast);
   const more = useKiroPopover();
+
+  // streaming cursor 只在 final answer 流式时出现（phase === "answering"）；
+  // 绝不给 commentary / tool row 显示 cursor
+  const showStreamingCursor = assistantTurn ? assistantTurn.phase === "answering" : streaming;
 
   const copyMarkdownSource = async () => {
     const ok = await copyTextToClipboard(citationsToReadableText(content ?? "", sources));
@@ -79,10 +88,12 @@ export function KiroMessage({
     <div className="flex gap-3 group" data-testid={testid ?? "kiro-message"}>
       <KiroMark size="sm" className="mt-0.5" />
       <div className="min-w-0 flex-1 space-y-2 pt-0.5">
+        {/* Worklog V2：真实 part 时序（commentary → tool → … → final answer） */}
+        {assistantTurn && assistantTurn.worklog.length > 0 && <KiroWorklog turn={assistantTurn} />}
         {content ? (
           <>
             <KiroMarkdown content={content} sources={sources} />
-            {streaming && (
+            {showStreamingCursor && (
               <span
                 aria-hidden="true"
                 className="inline-block w-[2px] h-3.5 bg-sandrift align-middle animate-pulse"
