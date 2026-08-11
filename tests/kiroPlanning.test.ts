@@ -90,7 +90,13 @@ describe("get_available_time", () => {
       "get_available_time",
       { startDate: dayStr(0), endDate: dayStr(1) },
       store.getState()
-    ) as { ok: true; data: { slots: { date: string; startTime: string; endTime: string; minutes: number }[] } };
+    ) as {
+      ok: true;
+      data: {
+        totalMinutes: number;
+        slots: { date: string; startTime: string; endTime: string; minutes: number }[];
+      };
+    };
     const todaySlots = r.data.slots.filter((s) => s.date === dayStr(0));
     // 今天窗口从当前时刻起（不返回过去时间）
     for (const s of todaySlots) {
@@ -98,6 +104,30 @@ describe("get_available_time", () => {
       expect(s.startTime < "16:00" && s.endTime > "14:00").toBe(false);
     }
     expect(todaySlots.length).toBeGreaterThan(0);
+    // totalMinutes：短窗口（不触及 20 条 cap）应等于返回 slots 的分钟和
+    expect(typeof r.data.totalMinutes).toBe("number");
+    const returnedMinutes = r.data.slots.reduce((sum, slot) => sum + slot.minutes, 0);
+    expect(r.data.totalMinutes).toBe(returnedMinutes);
+  });
+
+  it("totalMinutes 汇总完整空闲结果，而 slots 详情仍最多返回 20 条", async () => {
+    seedState();
+    const { store, read } = await freshRead();
+    const r = read.executeKiroReadTool(
+      "get_available_time",
+      { startDate: dayStr(0), endDate: dayStr(30) },
+      store.getState()
+    ) as {
+      ok: true;
+      data: {
+        totalMinutes: number;
+        slots: { minutes: number }[];
+      };
+    };
+    const returnedMinutes = r.data.slots.reduce((sum, slot) => sum + slot.minutes, 0);
+    expect(r.data.slots).toHaveLength(20);
+    // totalMinutes 必须基于完整（未截断）slots，而不是详情 cap 的前 20 条
+    expect(r.data.totalMinutes).toBeGreaterThan(returnedMinutes);
   });
 
   it("beforeDeadlineOfAssignmentId：Deadline 当天不超过截止时刻", async () => {

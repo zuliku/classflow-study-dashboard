@@ -462,7 +462,10 @@ export function getAvailableTime(state: ReadToolState, input: unknown): ReadTool
     minimumSlotMinutes: minimumMinutes,
   });
 
-  return { ok: true, data: { startDate, endDate, slots: slots.slice(0, 20) } };
+  // totalMinutes 必须基于完整（未截断）slots 求和；slots 详情仍最多返回 20 条
+  const totalMinutes = slots.reduce((sum, slot) => sum + slot.minutes, 0);
+
+  return { ok: true, data: { startDate, endDate, totalMinutes, slots: slots.slice(0, 20) } };
 }
 
 export function proposeStudyPlanTool(state: ReadToolState, input: unknown): ReadToolResult<unknown> {
