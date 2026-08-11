@@ -38,7 +38,7 @@
 - Modify: `hooks/useKiroChat.ts`
 
 **Interfaces:**
-- Consumes: raw assistant `UIMessage.parts`, `KIRO_MUTATING_TOOL_NAMES`, `toolLabel()`.
+- Consumes: raw assistant `UIMessage.parts`, `KIRO_MUTATING_TOOL_NAMES`, `toolLabel()` and the existing chat-level `streaming` boolean.
 - Produces:
 
 ```ts
@@ -75,7 +75,7 @@ export interface KiroAssistantTurnPresentation {
 
 export function deriveKiroAssistantTurn(
   parts: unknown[],
-  messageStreaming: boolean
+  turnInFlight: boolean
 ): KiroAssistantTurnPresentation;
 
 export function formatKiroToolActivityDetail(input: {
@@ -86,17 +86,39 @@ export function formatKiroToolActivityDetail(input: {
 }): string[];
 ```
 
-- `KiroChatMessageView` gains:
+`KiroChatMessageView` gains:
 
 ```ts
 assistantTurn?: KiroAssistantTurnPresentation;
 ```
 
-- For assistant messages, `KiroChatMessageView.content` becomes the **final-answer text only**. User-message `content` semantics remain unchanged.
+For assistant messages, `KiroChatMessageView.content` becomes the **final-answer text only**. User-message `content` semantics remain unchanged.
+
+#### Cache requirement
+
+The current message-view cache keys only on `parts` / `metadata`. The final assistant view also depends on whether the current turn is still in flight. Extend the cache with an optional status key so the `streaming → ready` transition cannot reuse a stale `answerStreaming/phase` view:
+
+```ts
+export function reuseMessageView<V>(
+  cache: Map<string, {
+    partsRef: unknown;
+    metadataRef: unknown;
+    statusRef?: unknown;
+    view: V;
+  }>,
+  id: string,
+  parts: unknown,
+  metadata: unknown,
+  build: () => V,
+  statusRef?: unknown
+): V;
+```
+
+Existing callers/tests that omit `statusRef` remain valid.
 
 - [ ] **Step 1: Write the failing presentation tests**
 
-Create `tests/kiroTurnPresentation.test.ts` with synthetic parts. At minimum include these cases:
+Create `tests/kiroTurnPresentation.test.ts`:
 
 ```ts
 import { describe, expect, it } from "vitest";
@@ -127,6 +149,7 @@ describe("deriveKiroAssistantTurn", () => {
     expect(p.worklog.map((b) => b.kind)).toEqual(["commentary", "tool", "commentary", "tool"]);
     expect(p.answer).toBe("今天建议优先处理 TCP 抓包。");
     expect(p.phase).toBe("answering");
+    expect(p.answerStreaming).toBe(true);
     expect(p.worklogDone).toBe(true);
   });
 
@@ -155,6 +178,12 @@ describe("deriveKiroAssistantTurn", () => {
     const p = deriveKiroAssistantTurn(after, true);
     expect(p.answer).toBe("");
     expect(p.worklog.some((b) => b.kind === "commentary" && b.text.includes("本周课表"))).toBe(true);
+  });
+
+  it("uses chat-level in-flight state for the composing gap after tools", () => {
+    const parts = [doneTool("search_assignments", "t1")];
+    expect(deriveKiroAssistantTurn(parts, true).phase).toBe("composing");
+    expect(deriveKiroAssistantTurn(parts, false).phase).toBe("done");
   });
 
   it("never exposes reasoning parts", () => {
@@ -196,17 +225,15 @@ describe("formatKiroToolActivityDetail", () => {
 
 - [ ] **Step 2: Run the focused test and verify RED**
 
-Run:
-
 ```bash
 npx vitest run tests/kiroTurnPresentation.test.ts
 ```
 
-Expected: FAIL because `turnPresentation.ts` / `toolActivityDetails.ts` do not exist yet.
+Expected: FAIL because the new presentation modules do not exist.
 
 - [ ] **Step 3: Implement the safe tool detail formatter**
 
-In `lib/ai/presentation/toolActivityDetails.ts`, use defensive record/array readers only. Required behavior:
+Use defensive record/array readers only. Required fallback:
 
 ```ts
 const STATUS_FALLBACK = {
@@ -216,35 +243,35 @@ const STATUS_FALLBACK = {
 } as const;
 ```
 
-Whitelist these detail families without serializing arbitrary objects:
+Whitelist these facts only:
 
-```ts
-// search_assignments / get_upcoming_assignments:
-// if data.items or data.assignments is an array -> `找到 N 个任务`
+```text
+search_assignments / get_upcoming_assignments:
+  data.items or data.assignments array -> 找到 N 个任务
 
-// get_week_schedule:
-// if data.items or data.schedules is an array -> `读取 N 条课表安排`
+get_week_schedule:
+  data.items or data.schedules array -> 读取 N 条课表安排
 
-// get_assignment:
-// if data.title is a non-empty string -> `已读取「<title>」`
+get_assignment:
+  data.title string -> 已读取「title」
 
-// apply_change_set:
-// if data.count or action.changeSet.count is a finite number -> `完成 N 项修改`
+apply_change_set:
+  data.count or action.changeSet.count finite number -> 完成 N 项修改
 
-// any successful write tool:
-// if output.action.title is a non-empty string -> `已处理「<title>」`
+successful write tool:
+  output.action.title string -> 已处理「title」
 ```
 
-Never include `errorText`, IDs, storage keys, raw object keys, or `JSON.stringify(output)` in the returned strings. Unknown shapes return only the status fallback.
+Never include `errorText`, IDs, storage keys, raw object keys, or `JSON.stringify(output)`. Unknown shapes return only the status fallback.
 
 - [ ] **Step 4: Implement ordered turn derivation**
 
-In `lib/ai/presentation/turnPresentation.ts`:
+Rules:
 
 1. Iterate parts in original order.
-2. Increment `stepIndex` on every `step-start` after the initial step.
-3. Ignore `reasoning` parts completely.
-4. Treat `tool-*` parts as tool rows. Tool state mapping:
+2. `step-start` increments a `stepIndex`; it is not rendered.
+3. Ignore all `reasoning` parts.
+4. `tool-*` state mapping:
 
 ```ts
 if (state === "output-error") status = "error";
@@ -252,45 +279,54 @@ else if (state === "output-available") status = "done";
 else status = "working";
 ```
 
-5. `toolKind` is `write` iff `KIRO_MUTATING_TOOL_NAMES` includes the tool name.
-6. Determine `lastToolPartIndex` from the ordered parts.
-7. A trailing text part can become answer text only when:
-   - there are no tools in the message; or
-   - it appears after the current `lastToolPartIndex`, and the latest tool is settled (`done` or `error`).
-8. If a later tool part appears, re-derivation naturally moves `lastToolPartIndex` after the provisional text; that text returns to worklog commentary.
-9. Merge adjacent commentary text parts within the same step into one commentary block.
-10. Phase rules:
+5. `toolKind` is `write` iff `KIRO_MUTATING_TOOL_NAMES` contains the tool name.
+6. Find `lastToolPartIndex`.
+7. No tools: all visible text is answer text.
+8. With tools: trailing text becomes answer only when it is after `lastToolPartIndex` **and** the latest tool is settled (`done`/`error`). Text elsewhere becomes commentary.
+9. If a later tool appears, re-derivation moves `lastToolPartIndex` after the provisional answer; the earlier text becomes commentary automatically.
+10. Merge adjacent commentary text parts within the same step.
+11. Phase:
 
 ```ts
-if (!messageStreaming) phase = "done";
+if (!turnInFlight) phase = "done";
 else if (answer.length > 0) phase = "answering";
 else if (hasTools && every tool is done/error) phase = "composing";
 else phase = "working";
 ```
 
-`worklogDone = hasTools && (phase === "answering" || phase === "done")`.
+12. `answerStreaming = turnInFlight && answer.length > 0`.
+13. `worklogDone = hasTools && (phase === "answering" || phase === "done")`.
 
-- [ ] **Step 5: Wire the presentation into `useKiroChat.ts` without changing tool execution**
+- [ ] **Step 5: Wire the presentation into `useKiroChat.ts` with a status-aware view cache**
 
-Update `toView(m)`:
+Update the internal `toView` signature to accept `turnInFlight`:
 
 ```ts
-const assistantTurn =
-  m.role === "assistant"
-    ? deriveKiroAssistantTurn(parts as unknown[], streaming)
-    : undefined;
-
-const content =
-  m.role === "assistant"
-    ? assistantTurn?.answer ?? ""
-    : messageTextOf(m);
+function toView(m: UIMessage, turnInFlight: boolean): KiroChatMessageView
 ```
 
-Keep current action/proposal/breakdown extraction and mutation detection based on raw parts. Return `assistantTurn` only for assistant views.
+For assistant messages:
 
-Do not modify `onToolCall`, write executors, read executors, limits, confirmation, Undo, or message-edit guards.
+```ts
+const assistantTurn = deriveKiroAssistantTurn(parts as unknown[], turnInFlight);
+const content = assistantTurn.answer;
+const streaming = assistantTurn.answerStreaming;
+```
 
-- [ ] **Step 6: Run focused verification**
+For user messages, keep `messageTextOf(m)` and `streaming: false`.
+
+In the `messages` `useMemo`, calculate the latest user index once. The current assistant turn is any assistant message after that user while chat-level `streaming` is true:
+
+```ts
+const currentTurnInFlight = m.role === "assistant" && idx > lastUserIdx && streaming;
+const statusRef = currentTurnInFlight ? "live" : "settled";
+```
+
+Pass `statusRef` into the extended `reuseMessageView` cache key so a final `streaming → ready` transition rebuilds the last assistant view even if the parts reference itself did not change.
+
+Keep action/proposal/breakdown extraction and mutation detection based on raw parts. Do not modify `onToolCall`, read/write executors, limits, confirmations, Undo, or message-edit guards.
+
+- [ ] **Step 6: Verify**
 
 ```bash
 npx vitest run tests/kiroTurnPresentation.test.ts tests/kiroMessageEditing.test.ts
@@ -312,8 +348,6 @@ git commit -m "feat(kiro): derive ordered assistant turn presentation"
 - Create: `components/kiro/KiroWorklog.tsx`
 - Modify: `components/kiro/KiroMessage.tsx`
 - Modify: `components/kiro/KiroConversation.tsx`
-- Modify: `components/kiro/KiroChatSurface.tsx`
-- Optional cleanup only if unused after integration: `components/kiro/KiroActivityTrace.tsx`
 
 **Interfaces:**
 - Consumes: `KiroAssistantTurnPresentation` from Task 1.
@@ -331,15 +365,15 @@ export function KiroWorklog({
 export function KiroPendingIndicator(): JSX.Element;
 ```
 
-- `KiroMessage` gains:
+`KiroMessage` gains:
 
 ```ts
 assistantTurn?: KiroAssistantTurnPresentation;
 ```
 
-- [ ] **Step 1: Add minimal UI assertions to the existing pure presentation test**
+**Migration constraint:** Do not remove the existing `activity` prop from `KiroConversation` yet. Task 5 removes the old scroll signal that still references it, then removes the prop cleanly. Task 2 only stops rendering `KiroActivityTrace`.
 
-Do not create a component/E2E harness. Add assertions that the presentation model exposes everything the UI needs:
+- [ ] **Step 1: Extend the pure presentation test with UI-state facts**
 
 ```ts
 it("marks current and completed tools without inventing pending steps", () => {
@@ -357,47 +391,38 @@ it("marks current and completed tools without inventing pending steps", () => {
 });
 ```
 
-- [ ] **Step 2: Build `KiroWorklog.tsx` with existing ClassFlow colors only**
+- [ ] **Step 2: Build `KiroWorklog.tsx` using only existing semantic colors**
 
 Visual contract:
 
 ```text
 commentary        text-[11px] text-sandrift leading-relaxed line-clamp-2
-completed tool    Check icon + text-[11px] text-satin-grey; no card background
+completed tool    Check + text-[11px] text-satin-grey; no card background
 current tool      Loader2 + text-charcoal font-semibold + bg-alabaster/50 + border-line-soft
-error tool        danger icon/text using existing danger semantic token
-connector         border-line-soft only, visually weak
-safe details      text-[10px]/[11px] text-satin-grey, indented under the row
+error tool        existing danger semantic color
+connector         border-line-soft only
+safe details      text-[10px]/[11px] text-satin-grey, indented
 ```
 
-Use `Check`, `Loader2`, `CircleAlert`, `ChevronDown` from Lucide. Do **not** add blue/purple classes or a new accent variable.
+Use `Check`, `Loader2`, `CircleAlert`, `ChevronDown` from Lucide. Do not introduce blue/purple classes or a new agent accent token.
 
-Tool row interaction:
+Each tool row is a real button with `aria-expanded`. It starts collapsed and renders only `safeDetails`; the component must never inspect raw tool input/output.
 
-```tsx
-<button aria-expanded={expanded} ...>
-  ...
-</button>
+Footer rules:
+
+```text
+phase=composing                  ● 正在整理结果…
+worklogDone && toolCount > 1     ✓ 已完成 N 个步骤
+before final answer              border-t border-line-soft
 ```
 
-- default collapsed;
-- current/complete/error rows may be expanded;
-- expanded content renders only `safeDetails` already produced by the pure formatter;
-- never read `input` / `output` inside the React component.
+Commentary has no logo, no Markdown parser, no streaming cursor, and remains at most two visual lines.
 
-Worklog footer:
+`KiroPendingIndicator` uses the existing Kiro logo/glow and the text `正在处理`; it exists only for the pre-response gap.
 
-- if `phase === "composing"`: low-weight loader line `正在整理结果…`;
-- if `worklogDone && toolCount > 1`: low-weight `已完成 N 个步骤`;
-- divider before answer: `border-t border-line-soft`.
+- [ ] **Step 3: Integrate structured worklog into `KiroMessage.tsx`**
 
-`KiroPendingIndicator` is shown only before any visible assistant part exists and uses existing Kiro logo/glow + `正在处理`.
-
-- [ ] **Step 3: Integrate worklog and answer into `KiroMessage.tsx`**
-
-Keep the existing outer assistant row and Kiro mark so the logo appears once per assistant turn.
-
-Inside the assistant content column:
+Keep the existing outer Kiro mark so the assistant turn shows one logo.
 
 ```tsx
 {assistantTurn?.hasTools && (
@@ -414,36 +439,56 @@ Inside the assistant content column:
 {children}
 ```
 
-For Task 2, final answer may still use existing full `KiroMarkdown`; Task 4 replaces only this renderer.
+For Task 2, the final answer still uses `KiroMarkdown`; Task 4 replaces only that renderer.
 
-Do not show a streaming cursor on commentary/tool rows.
+- [ ] **Step 4: Integrate in `KiroConversation.tsx` and stop displaying the old ActivityTrace**
 
-- [ ] **Step 4: Remove the old whole-turn ActivityTrace from the normal conversation flow**
+Pass `view.assistantTurn` into `KiroMessage`.
 
-In `KiroConversation.tsx`:
+Update the empty-assistant guard so a live worklog is not discarded:
 
-- stop rendering the current bottom-level `KiroActivityTrace` worklog;
-- pass `view.assistantTurn` into `KiroMessage`;
-- show `<KiroPendingIndicator />` only when `turnInFlight` is true and the latest visible assistant view has neither final content nor worklog blocks;
-- keep Error Card, Action Cards, Proposal Cards, Task Breakdown Cards, retry/edit/undo flows unchanged.
+```ts
+const hasWorklog = (view.assistantTurn?.worklog.length ?? 0) > 0;
+if (
+  !view.content &&
+  !hasWorklog &&
+  !view.actions?.length &&
+  !view.historyActions?.length
+) return null;
+```
 
-Update `KiroChatSurface.tsx` to stop passing obsolete `activity` into `KiroConversation` if the prop is removed.
+Stop rendering `<KiroActivityTrace ... />` in the conversation body. Keep the `activity` prop temporarily because the existing `scrollSignal` still reads it until Task 5.
 
-It is acceptable for `useKiroChat` to keep returning the legacy `activity` value temporarily if other code/tests still import it. Do not display two worklogs.
+Show `<KiroPendingIndicator />` only when `turnInFlight` is true and the tail has no visible assistant surface:
 
-- [ ] **Step 5: Verify only the affected contract and TypeScript**
+```ts
+const tail = messages[messages.length - 1];
+const tailHasAssistantSurface =
+  tail?.role === "assistant" &&
+  (
+    tail.content.length > 0 ||
+    (tail.assistantTurn?.worklog.length ?? 0) > 0 ||
+    (tail.actions?.length ?? 0) > 0 ||
+    (tail.historyActions?.length ?? 0) > 0
+  );
+const showPending = turnInFlight && !tailHasAssistantSurface;
+```
+
+Keep Error Card, Action Cards, Proposal Cards, Task Breakdown Cards, retry/edit/undo behavior unchanged.
+
+- [ ] **Step 5: Verify**
 
 ```bash
 npx vitest run tests/kiroTurnPresentation.test.ts
 npm run typecheck
 ```
 
-Do not add Playwright for this task.
+No component/E2E harness is required.
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add components/kiro/KiroWorklog.tsx components/kiro/KiroMessage.tsx components/kiro/KiroConversation.tsx components/kiro/KiroChatSurface.tsx tests/kiroTurnPresentation.test.ts
+git add components/kiro/KiroWorklog.tsx components/kiro/KiroMessage.tsx components/kiro/KiroConversation.tsx tests/kiroTurnPresentation.test.ts
 git commit -m "ui(kiro): add compact ordered agent worklog"
 ```
 
@@ -461,7 +506,7 @@ git commit -m "ui(kiro): add compact ordered agent worklog"
 
 - [ ] **Step 1: Confirm installed APIs before editing**
 
-Inspect the installed package types (or current official AI SDK docs if package types are not locally searchable) and confirm these exact options compile for the repository's versions:
+Check local package types first. The expected supported shapes are:
 
 ```ts
 import { smoothStream } from "ai";
@@ -481,11 +526,11 @@ useChat({
 })
 ```
 
-Do not upgrade AI SDK packages.
+Do not upgrade dependencies and do not cast the complete options object to `any`.
 
 - [ ] **Step 2: Add server smoothing**
 
-In `app/api/ai/chat/route.ts`, add `smoothStream` to the existing `ai` import and define a reusable module-level segmenter:
+In `app/api/ai/chat/route.ts`, add `smoothStream` to the existing `ai` import and define:
 
 ```ts
 const KIRO_STREAM_SEGMENTER = new Intl.Segmenter("zh", { granularity: "word" });
@@ -500,27 +545,27 @@ experimental_transform: smoothStream({
 }),
 ```
 
-Keep `guardStream(result.stream)` exactly after `streamText`; do not replace timeout/error normalization. Do not buffer tool events manually.
+Keep `guardStream(result.stream)` and existing timeout/error normalization. Do not build a second transform that buffers tool events.
 
 - [ ] **Step 3: Add client throttling**
 
-In `hooks/useKiroChat.ts`, add to the current `useChat({...})` options:
+In the existing `useChat({...})` call:
 
 ```ts
 experimental_throttle: 50,
 ```
 
-Do not add a custom token queue, `setInterval`, or requestAnimationFrame text buffer.
+Do not add a custom token queue, `setInterval`, or rAF text buffer.
 
 - [ ] **Step 4: Verify compile only**
 
-This task is SDK wiring, so no artificial unit test is required. Run:
+This is SDK configuration wiring, so do not create a fake unit test for constants:
 
 ```bash
 npm run typecheck
 ```
 
-If TypeScript rejects either SDK option, stop and inspect the installed package type definition before changing the design. Do not solve a type mismatch by casting the whole options object to `any`.
+If compilation rejects an option, inspect the installed package type definition and fix the actual API usage. Do not bypass it with broad casts.
 
 - [ ] **Step 5: Commit**
 
@@ -538,7 +583,7 @@ git commit -m "perf(kiro): smooth and throttle streamed chat updates"
 - Create: `components/kiro/KiroStreamingMarkdown.tsx`
 - Create: `tests/kiroMarkdownBlocks.test.ts`
 - Modify: `components/kiro/KiroMessage.tsx`
-- Reuse without changing semantics: `components/kiro/KiroMarkdown.tsx`, `components/kiro/KiroCitation.tsx`
+- Reuse: `components/kiro/KiroMarkdown.tsx`, `components/kiro/KiroCitation.tsx`
 
 **Interfaces:**
 
@@ -564,7 +609,7 @@ export function KiroStreamingMarkdown({
 }): JSX.Element;
 ```
 
-- [ ] **Step 1: Write failing block-splitter tests**
+- [ ] **Step 1: Write failing splitter tests**
 
 Create `tests/kiroMarkdownBlocks.test.ts`:
 
@@ -573,7 +618,7 @@ import { describe, expect, it } from "vitest";
 import { splitKiroStreamingMarkdown } from "@/lib/ai/streaming/markdownBlocks";
 
 describe("splitKiroStreamingMarkdown", () => {
-  it("freezes complete blank-line-delimited blocks and keeps only the trailing block mutable", () => {
+  it("freezes complete blank-line blocks and keeps only the trailing block mutable", () => {
     const r = splitKiroStreamingMarkdown(
       "第一段。\n\n### 原因\n1. 截止时间最近\n2. 当前进度较低\n\n接下来可以",
       true
@@ -586,19 +631,13 @@ describe("splitKiroStreamingMarkdown", () => {
   });
 
   it("does not split inside an open fenced code block", () => {
-    const r = splitKiroStreamingMarkdown(
-      "```ts\nconst a = 1;\n\nconst b = 2;",
-      true
-    );
+    const r = splitKiroStreamingMarkdown("```ts\nconst a = 1;\n\nconst b = 2;", true);
     expect(r.stableBlocks).toEqual([]);
     expect(r.tail).toContain("const b = 2");
   });
 
   it("promotes a closed fenced code block", () => {
-    const r = splitKiroStreamingMarkdown(
-      "```ts\nconst a = 1;\n```\n继续输入",
-      true
-    );
+    const r = splitKiroStreamingMarkdown("```ts\nconst a = 1;\n```\n继续输入", true);
     expect(r.stableBlocks[0]).toContain("```ts");
     expect(r.tail).toBe("继续输入");
   });
@@ -623,11 +662,7 @@ describe("splitKiroStreamingMarkdown", () => {
 npx vitest run tests/kiroMarkdownBlocks.test.ts
 ```
 
-Expected: FAIL because the splitter does not exist.
-
-- [ ] **Step 3: Implement the deterministic splitter**
-
-`markdownBlocks.ts` uses a line scanner, not a second Markdown parser.
+- [ ] **Step 3: Implement the deterministic line scanner**
 
 Track:
 
@@ -638,18 +673,20 @@ let inDisplayMath = false;
 
 Rules:
 
-- a line whose trimmed text starts with triple backticks toggles `inFence`;
+- a trimmed line starting with triple backticks toggles `inFence`;
 - outside a fence, an odd number of unescaped `$$` delimiters toggles `inDisplayMath`;
-- blank lines become stable boundaries only when both states are false;
-- closing a fenced block may create a stable boundary at the closing line even without a following blank line;
-- closing display math may create a stable boundary at the closing delimiter line;
-- when `streaming === false`, all text is returned as stable blocks and `tail === ""`;
-- remove only separator blank lines between blocks; preserve block-internal newlines;
-- empty/whitespace-only content returns `{ stableBlocks: [], tail: "" }`.
+- blank lines are stable boundaries only when both states are false;
+- closing a fenced block may create a stable boundary on its closing line without waiting for a blank line;
+- closing display math may create a stable boundary on its closing line;
+- when `streaming === false`, all non-empty text is stable and `tail === ""`;
+- strip only separator blank lines between blocks; preserve block-internal newlines;
+- whitespace-only content returns `{ stableBlocks: [], tail: "" }`.
+
+This is not a second Markdown parser.
 
 - [ ] **Step 4: Build `KiroStreamingMarkdown.tsx`**
 
-Implementation structure:
+Use:
 
 ```tsx
 const StableMarkdownBlock = React.memo(function StableMarkdownBlock(...) {
@@ -657,40 +694,19 @@ const StableMarkdownBlock = React.memo(function StableMarkdownBlock(...) {
 });
 ```
 
-`KiroStreamingMarkdown`:
-
-1. `useMemo` the split result from `content` and `streaming`.
-2. Render each stable block through `StableMarkdownBlock`.
-3. Render the mutable tail with a lightweight renderer only.
+`KiroStreamingMarkdown` memoizes the split, renders stable blocks with full `KiroMarkdown`, and renders the mutable tail with a lightweight renderer.
 
 Active Tail rules:
 
-- use `splitCitationSegments(tail)` so a fully closed citation marker can still render as `KiroCitation`;
-- plain tail text uses `whitespace-pre-wrap`, the same `--kiro-output-font-size`, and line-height `1.74`;
-- do not call `KiroMarkdown`, ReactMarkdown, remark-gfm, remark-math, or KaTeX for the tail;
-- incomplete `**`, backticks, headings, tables, formulas remain visible source text until promoted;
-- keep existing final streaming cursor outside this component or render one simple cursor at the tail end; do not add a character-by-character animation.
+- use existing `splitCitationSegments(tail)` so a closed citation can still become `KiroCitation`;
+- plain tail text uses `whitespace-pre-wrap`, `var(--kiro-output-font-size)`, line-height `1.74`, and `text-charcoal`;
+- never call `KiroMarkdown`, ReactMarkdown, remark-gfm, remark-math, or KaTeX for the tail;
+- incomplete Markdown syntax remains visible source text until promotion;
+- no character-by-character animation.
 
-Use a wrapper such as:
-
-```tsx
-<div className="space-y-[0.8em]">
-  {stableBlocks.map(...) }
-  {tail && <KiroActiveTail ... />}
-</div>
-```
-
-Tune only spacing needed to avoid visible double margins; do not redesign the existing Markdown typography.
+Use stable keys that do not change when later blocks are appended, e.g. `key={`${index}:${block.length}`}`. Existing stable block props should remain referentially unchanged so `React.memo` can skip their re-render.
 
 - [ ] **Step 5: Replace only final-answer rendering in `KiroMessage.tsx`**
-
-Replace:
-
-```tsx
-<KiroMarkdown content={content} sources={sources} />
-```
-
-with:
 
 ```tsx
 <KiroStreamingMarkdown
@@ -722,25 +738,27 @@ git commit -m "perf(kiro): render stable markdown blocks with active tail"
 
 **Files:**
 - Modify: `components/kiro/KiroConversation.tsx`
+- Modify: `components/kiro/KiroChatSurface.tsx`
 
 **Interfaces:**
 - Keeps current `scrollRef`, `contentRef`, `stickToBottomRef`, `showScrollBtn` semantics.
 - Streaming height reconciliation is owned by one `ResizeObserver` + one rAF scheduler.
+- This task finally removes the now-obsolete `activity` prop from `KiroConversation`.
 
-- [ ] **Step 1: Inspect the existing scroll paths before editing**
+- [ ] **Step 1: Preserve existing scroll thresholds and explicit jumps**
 
-Identify and preserve these user-facing rules:
+Do not change:
 
-- distance `< 80px` means sticky-to-bottom;
-- distance `> 160px` shows the existing “回到底部” button;
-- conversation switch explicitly jumps to bottom;
-- user click on “回到底部” may use smooth scroll unless reduced motion is active.
+```text
+distance < 80px     sticky-to-bottom
+distance > 160px    show “回到底部”
+conversation switch direct jump to bottom
+manual “回到底部” may smooth-scroll unless reduced motion is active
+```
 
-The duplicate path to remove is the streaming `scrollSignal` effect driven by content length/activity changes. Do not remove the conversation-switch effect.
+- [ ] **Step 2: Replace duplicate streaming scheduling with one helper**
 
-- [ ] **Step 2: Converge streaming height handling on one scheduler**
-
-Keep one rAF ref and one helper:
+Keep one rAF ref and use:
 
 ```ts
 const scheduleHeightReconcile = React.useCallback(() => {
@@ -755,51 +773,56 @@ const scheduleHeightReconcile = React.useCallback(() => {
 }, [syncScrollState]);
 ```
 
-`ResizeObserver` calls only this scheduler.
+`ResizeObserver` calls only this helper.
 
-Remove the effect whose dependency is a string based on `tail.content.length`, `activity.steps.length`, phase, etc. New message insertion / answer growth / worklog expansion / Action Card growth all change container height and are therefore handled by `ResizeObserver`.
+Delete the streaming `scrollSignal` effect based on tail content length, Activity phase/steps, etc. Message insertion, answer growth, worklog expansion, and result-card growth all change wrapper height and are handled by `ResizeObserver`.
 
-Do not introduce `scrollIntoView` per token or smooth auto-scroll during streaming.
+Do not add per-token `scrollIntoView` or streaming smooth scroll.
 
-- [ ] **Step 3: Keep explicit non-streaming jumps separate**
+- [ ] **Step 3: Remove the obsolete Activity prop after `scrollSignal` is gone**
 
-Conversation mount/switch may still schedule one direct `el.scrollTop = el.scrollHeight` rAF. User “回到底部” continues to call `scrollTo({ behavior: reduced ? "auto" : "smooth" })`.
+In `KiroConversation.tsx`:
 
-- [ ] **Step 4: Verify compile and inspect the diff for accidental scroll behavior changes**
+- remove `activity` from props;
+- remove the `KiroActivity` type import if no longer used.
+
+In `KiroChatSurface.tsx`, stop passing `chat.activity` to `KiroConversation`.
+
+It is fine for `useKiroChat` to keep exporting legacy `activity` temporarily; Task 6 decides whether it is safe to remove.
+
+- [ ] **Step 4: Verify**
 
 ```bash
 npm run typecheck
 ```
 
-No new E2E is required unless the refactor exposes a focused reproducible scroll regression.
+No E2E is required unless this focused refactor creates a reproducible scroll regression.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add components/kiro/KiroConversation.tsx
+git add components/kiro/KiroConversation.tsx components/kiro/KiroChatSurface.tsx
 git commit -m "perf(kiro): unify streaming scroll reconciliation"
 ```
 
 ---
 
-### Task 6: History Compatibility, Action-Only Turn Retention, and Final Integration Gate
+### Task 6: History Compatibility, Action-Only Retention, Cleanup, and Final Gate
 
 **Files:**
 - Modify: `lib/ai/history/sanitize.ts`
 - Create: `tests/kiroStreamingHistory.test.ts`
-- Optional cleanup if no imports remain: `components/kiro/KiroActivityTrace.tsx`
-- Optional cleanup if legacy-only and no imports/tests rely on it: `deriveActivity` code in `hooks/useKiroChat.ts`
+- Delete only if no imports remain: `components/kiro/KiroActivityTrace.tsx`
+- Modify `hooks/useKiroChat.ts` only if removing legacy `deriveActivity` / `activity` is proven safe by repository search and typecheck.
 
 **Interfaces:**
-- Persisted assistant `content` is already `KiroChatMessageView.content`, which after Task 1 means final-answer text only.
-- Assistant turns with factual action cards but no final text must still be retained.
-- Old persisted assistant messages restore as text-only UIMessage and therefore derive as ordinary no-tool final answers.
+- Persisted assistant `content` is `KiroChatMessageView.content`, which after Task 1 is final-answer text only.
+- Assistant turns with action cards but no final text remain persisted.
+- Old persisted assistant messages restore as text-only UIMessage and derive as ordinary no-tool final answers.
 
 - [ ] **Step 1: Write failing history tests**
 
-Create `tests/kiroStreamingHistory.test.ts` and call the existing `sanitizeConversation()` directly.
-
-Use a minimal valid `KiroChatMessageView` fixture and verify:
+Create `tests/kiroStreamingHistory.test.ts`:
 
 ```ts
 import { describe, expect, it } from "vitest";
@@ -829,13 +852,15 @@ const baseInput = (messages: KiroChatMessageView[]) => ({
 });
 
 describe("Kiro streaming history", () => {
-  it("persists final answer content without intermediate commentary", () => {
+  it("persists final answer without intermediate commentary", () => {
     const record = sanitizeConversation(
       baseInput([
         assistant({
           content: "最终回答",
           assistantTurn: {
-            worklog: [{ kind: "commentary", id: "c", text: "我先看看", streaming: false, stepIndex: 0 }],
+            worklog: [
+              { kind: "commentary", id: "c", text: "我先看看", streaming: false, stepIndex: 0 },
+            ],
             answer: "最终回答",
             answerStreaming: false,
             hasTools: true,
@@ -853,7 +878,6 @@ describe("Kiro streaming history", () => {
     const record = sanitizeConversation(
       baseInput([
         assistant({
-          content: "",
           actions: [
             {
               toolCallId: "t1",
@@ -876,17 +900,17 @@ describe("Kiro streaming history", () => {
 });
 ```
 
-- [ ] **Step 2: Run and verify the action-only retention test fails on the old filter**
+- [ ] **Step 2: Run and verify RED for action-only retention**
 
 ```bash
 npx vitest run tests/kiroStreamingHistory.test.ts
 ```
 
-Expected before the fix: action-only assistant message is filtered out by the existing content-only assistant filter.
+Expected before the fix: action-only assistant message is filtered out by the current content-only assistant predicate.
 
 - [ ] **Step 3: Fix the persistence filter only**
 
-In `sanitizeConversation.ts`, replace the current assistant inclusion predicate with behavior equivalent to:
+Use behavior equivalent to:
 
 ```ts
 .filter(
@@ -898,24 +922,19 @@ In `sanitizeConversation.ts`, replace the current assistant inclusion predicate 
 )
 ```
 
-Do not persist worklog raw input/output. Do not add raw tool parts to IndexedDB.
+Do not persist worklog raw input/output or raw tool parts. Existing `content: clampContent(m.content)` now persists final answer only.
 
-Existing `content: clampContent(m.content)` now naturally persists the final answer only.
+- [ ] **Step 4: Remove obsolete Activity code only when repository search proves no runtime consumers remain**
 
-- [ ] **Step 4: Remove obsolete presentation code only when proven unused**
+Search for `KiroActivityTrace`, `deriveActivity`, `KiroActivity`, and `.activity` consumers.
 
-Search imports after Tasks 1–5.
+- If `KiroActivityTrace.tsx` has no imports, delete it.
+- If `deriveActivity` / `KiroActivity` are still used by legacy tests or another runtime surface, keep them; unused compatibility code is preferable to breaking unrelated behavior in this task.
+- If they have zero consumers, remove the dead code and the `activity` field from the `useKiroChat` return object.
 
-If `KiroActivityTrace.tsx` has no runtime imports, delete it.
+Do not refactor unrelated Kiro runtime code.
 
-If `deriveActivity` / `KiroActivity` are no longer consumed anywhere except legacy tests, either:
-
-- keep the exported pure function temporarily for compatibility; or
-- remove it and update only the directly affected legacy test.
-
-Do not combine this cleanup with unrelated Kiro refactors.
-
-- [ ] **Step 5: Run the final focused integration gate**
+- [ ] **Step 5: Run the final focused gate**
 
 ```bash
 npx vitest run \
@@ -927,53 +946,50 @@ npx vitest run \
 npm run typecheck
 ```
 
-Do **not** run full `npm test`, `npm run build`, or Playwright unless one of the focused checks exposes a concrete cross-module failure that cannot be diagnosed otherwise.
+Do not run full `npm test`, `npm run build`, or Playwright unless one focused check exposes a concrete cross-module failure that cannot be diagnosed otherwise.
 
-- [ ] **Step 6: Manual smoke checklist in dev only if convenient**
+- [ ] **Step 6: Manual dev smoke only if a dev server is already available**
 
-This is not a required automated E2E. If a dev server is already running, verify one multi-tool turn and one no-tool turn:
+Verify one multi-tool turn, one no-tool turn, and one long Markdown answer:
 
 ```text
 multi-tool:
-- commentary and tools alternate in real order
-- current tool is strongest
-- completed tools remain low weight
-- safe detail expansion works
-- final answer begins streaming immediately after tool work
-- no blue/purple worklog styling appears
+- commentary/tool order matches real execution
+- current tool strongest; completed tools low weight
+- safe detail expansion never shows raw JSON/IDs
+- final answer starts immediately after tool work
+- no blue/purple worklog styling
 
 no-tool:
 - normal answer renders directly
-- no empty worklog is shown
+- no empty worklog
 
 long answer:
-- earlier Markdown blocks stop visually changing
-- only the active tail updates
-- scrolling follows only when the user remains at the bottom
+- earlier Markdown blocks remain visually stable
+- only Active Tail changes
+- auto-scroll follows only while user remains at bottom
 ```
 
-Do not start Playwright solely for this checklist.
+Do not start Playwright solely for this smoke check.
 
 - [ ] **Step 7: Commit**
 
+Stage only files actually touched, then:
+
 ```bash
-git add lib/ai/history/sanitize.ts tests/kiroStreamingHistory.test.ts
-git add -u components/kiro/KiroActivityTrace.tsx hooks/useKiroChat.ts
 git commit -m "fix(kiro): preserve streaming turn history compatibility"
 ```
-
-If no cleanup files were removed/changed, stage only the history/test files.
 
 ---
 
 ## Dependency Order
 
 ```text
-Task 1  Ordered presentation + safe detail formatter
+Task 1  Ordered presentation + safe tool details
    ↓
-Task 2  Worklog UI integration
+Task 2  Compact worklog UI
    ↓
-Task 3  Stream smoothing + client throttle
+Task 3  Server smoothing + client throttle
    ↓
 Task 4  Stable Blocks + Active Tail
    ↓
@@ -982,18 +998,19 @@ Task 5  Scroll scheduler consolidation
 Task 6  History compatibility + cleanup + final gate
 ```
 
-Task 3 is technically independent after the current AI SDK types are confirmed, but keep the order above so UI chronology is correct before tuning cadence.
+Task 3 is technically independent after the installed AI SDK API is confirmed, but keep this order so chronology is corrected before cadence tuning.
 
 ## Final Success Criteria
 
-- A Kiro multi-tool turn is visually readable as `commentary → tool → commentary → tool → final answer`.
-- Intermediate narration remains visible but low-weight and never forms one large Markdown paragraph.
-- Tool rows are chronological, current step is visually strongest, completed steps remain visible, and only safe deterministic details are expandable.
-- Final answer begins streaming immediately after the latest settled tool and is downgraded correctly if a later tool arrives.
-- No hidden reasoning / raw tool JSON / raw IDs are exposed.
-- No new blue/purple agent UI palette is introduced.
-- Provider chunk cadence is smoothed server-side; React chat updates are throttled to 50 ms.
+- A Kiro multi-tool turn reads as `commentary → tool → commentary → tool → final answer` in real order.
+- Intermediate narration remains visible but low-weight and never forms one giant Markdown paragraph.
+- Tool rows are chronological; current tool is strongest; completed tools remain visible; expandable details are deterministic and safe.
+- Final answer begins streaming immediately after the latest settled tool and downgrades correctly if a later tool arrives.
+- The composing gap after tool completion is driven by chat-level in-flight state, not text-part state alone.
+- No hidden reasoning, raw tool JSON, raw IDs, or provider internals are exposed.
+- No new blue/purple agent palette is introduced.
+- Provider text cadence is smoothed server-side and React message updates are throttled to 50 ms.
 - Stable Markdown blocks stop re-parsing while only Active Tail remains mutable.
-- Streaming scroll has one height-driven reconciliation path and respects manual upward scrolling.
-- Existing Action Cards, Undo, confirmation, proposal UI, citations, message editing, and historical conversations remain functional.
+- Streaming scroll uses one height-driven reconciliation path and respects manual upward scrolling.
+- Existing Action Cards, Undo, confirmations, proposals, citations, message-edit safety, and old conversations remain functional.
 - Focused Vitest files and `npm run typecheck` pass; full suite/build/E2E remain unnecessary unless a focused failure requires escalation.
