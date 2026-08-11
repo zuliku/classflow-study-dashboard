@@ -37,7 +37,7 @@ Clicking `开始专注` opens a small anchored popover attached to the button. I
 
 The popover contains:
 
-- duration presets: 15 / 25 / 30 / 45 / 60 minutes;
+- duration presets: 15 / 25 / 30 / 45 / 60 minutes, with 30 minutes selected by default;
 - custom duration input;
 - one optional relation selector containing grouped Course and Assignment options;
 - optional free-text focus note;
@@ -125,6 +125,20 @@ remainingMs = Math.max(0, plannedMinutes * 60_000 - elapsedActiveMs);
 The UI may tick once per second for display, but each tick must not write the main store.
 
 Store duration internally in milliseconds. Round only for presentation.
+
+### Total actual study time
+
+V1 must expose a deterministic aggregate for actual study time even though no new overview statistics card is added:
+
+```ts
+totalStudyMs = sum(
+  completedFocusSessions.map(session => session.actualActiveMs ?? 0)
+);
+```
+
+Manual early-finish sessions therefore contribute their actual active duration; naturally/recovered completed sessions contribute their clamped final duration. Running/paused sessions are not persisted into the finalized total until completion, though UI may separately derive their current elapsed value when needed.
+
+Do not mix this value with scheduled course-load statistics.
 
 ### Backup compatibility
 
@@ -316,6 +330,7 @@ Required targeted coverage:
 - refresh/re-hydration recovery;
 - paused reload behavior;
 - one-active-session invariant;
+- total actual study-time aggregation;
 - idempotent completion/deduplication;
 - Kiro Focus tool validation and state transitions;
 - message-edit suffix truncation;
