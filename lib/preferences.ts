@@ -85,12 +85,13 @@ export const PREFERENCE_SECTIONS: Record<
   defaultDDLTime: "tasks",
   enableScheduleDirectManipulation: "interaction",
   enableDDLDirectManipulation: "interaction",
-  motionPreference: "interaction",
+  // Settings V3 IA：全局产品行为（界面密度/动效）归入通用
+  motionPreference: "general",
   startupView: "general",
   defaultTaskPriority: "tasks",
   defaultTaskStatus: "tasks",
   enableSingleKeyShortcuts: "interaction",
-  contentDensity: "interaction",
+  contentDensity: "general",
 };
 
 /** 当前与默认不同的偏好键（纯函数，UI 不自行比较） */

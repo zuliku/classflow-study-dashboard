@@ -86,7 +86,7 @@ describe("modified preference 检测", () => {
     const sections = getModifiedSections(prefs);
     expect(sections.has("semester")).toBe(true);
     expect(sections.has("tasks")).toBe(true);
-    expect(sections.has("interaction")).toBe(true);
+    expect(sections.has("general")).toBe(true); // Settings V3 IA：动效偏好归入通用
   });
 
   it("resetPreferencePatch 单项恢复默认", () => {

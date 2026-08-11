@@ -38,7 +38,7 @@ test("Settings Center：桌面导航与移动端 tabs 均可切换，About 版�
   await expect(page.getByRole("navigation", { name: "设置导航" })).toBeHidden();
   await page.getByRole("button", { name: "学期与课表" }).click();
   await expect(page.getByTestId("settings-semester")).toBeVisible();
-  await page.getByTestId("settings-view").getByRole("button", { name: "任务", exact: true }).click();
+  await page.getByTestId("settings-view").getByRole("button", { name: "任务与提醒", exact: true }).click();
   await expect(page.getByTestId("settings-tasks")).toBeVisible();
   const overflow = await page.evaluate(
     () => document.documentElement.scrollWidth > window.innerWidth + 1

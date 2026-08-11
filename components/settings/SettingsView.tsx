@@ -158,7 +158,7 @@ export function SettingsView({ searchQuery, onClearSearch, jumpToSetting }: Sett
               <p className="py-8 text-center text-xs text-sandrift">未找到匹配的设置</p>
             ) : (
               (() => {
-                // 按 section 分组
+                // 按 section 分组；每项显示「section › 设置名」路径，点击跳转对应 section + 滚动 + 高亮
                 const groups = new Map<SettingsSection, SettingDefinition[]>();
                 for (const r of searchResults) {
                   const arr = groups.get(r.section) ?? [];
@@ -167,9 +167,6 @@ export function SettingsView({ searchQuery, onClearSearch, jumpToSetting }: Sett
                 }
                 return Array.from(groups.entries()).map(([sec, items]) => (
                   <div key={sec} className="mb-4">
-                    <p className="text-[10px] font-bold text-sandrift uppercase tracking-wider mb-1.5">
-                      {sectionLabel(sec)}
-                    </p>
                     <div className="space-y-1">
                       {items.map((s) => (
                         <button
@@ -177,7 +174,10 @@ export function SettingsView({ searchQuery, onClearSearch, jumpToSetting }: Sett
                           onClick={() => handleJump(s)}
                           className="w-full p-3 bg-[#F7F5F5] border border-line rounded-xl text-left hover:bg-alabaster transition-colors"
                         >
-                          <p className="text-xs font-bold text-charcoal">{s.title}</p>
+                          <p className="text-[9px] font-bold text-sandrift uppercase tracking-wider">
+                            {sectionLabel(sec)} ›
+                          </p>
+                          <p className="text-xs font-bold text-charcoal mt-0.5">{s.title}</p>
                           <p className="text-[10px] text-sandrift mt-0.5">{s.description}</p>
                         </button>
                       ))}
@@ -241,7 +241,7 @@ export function SettingsView({ searchQuery, onClearSearch, jumpToSetting }: Sett
           /* ---- 常规 section 内容（常驻挂载） ---- */
           <>
             <div className={cn(section === "general" && "ux-fade")} hidden={section !== "general"}>
-              <GeneralSettings onNavigate={setSection} />
+              <GeneralSettings highlightedId={highlightedId ?? undefined} />
             </div>
             <div className={cn(section === "profile" && "ux-fade")} hidden={section !== "profile"}>
               <ProfileSettings />
@@ -272,38 +272,28 @@ export function SettingsView({ searchQuery, onClearSearch, jumpToSetting }: Sett
   );
 }
 
+/**
+ * 已修改入口（Settings V3 IA）：低视觉权重。
+ * 无修改时完全不显示；有修改时是一个克制的 ghost 文本按钮（可切换 全部设置 / 已修改）。
+ */
 function ToolbarTabs({
   showModified,
   setShowModified,
   modifiedCount,
 }: {
   showModified: boolean;
-  setShowModified: (v: boolean) => void;
+  setShowModified: React.Dispatch<React.SetStateAction<boolean>>;
   modifiedCount: number;
 }) {
+  if (modifiedCount === 0) return null;
   return (
-    <div className="flex items-center gap-1 bg-alabaster p-0.5 rounded-xl border border-line-strong text-[11px] font-medium">
-      <button
-        onClick={() => setShowModified(false)}
-        aria-pressed={!showModified}
-        className={cn(
-          "px-2.5 py-1 rounded-lg font-bold transition-colors",
-          !showModified ? "bg-white text-charcoal shadow-subtle" : "text-satin-grey hover:text-charcoal"
-        )}
-      >
-        全部设置
-      </button>
-      <button
-        onClick={() => setShowModified(true)}
-        aria-pressed={showModified}
-        className={cn(
-          "px-2.5 py-1 rounded-lg font-bold transition-colors",
-          showModified ? "bg-white text-charcoal shadow-subtle" : "text-satin-grey hover:text-charcoal"
-        )}
-      >
-        已修改 {modifiedCount > 0 ? modifiedCount : ""}
-      </button>
-    </div>
+    <button
+      onClick={() => setShowModified((v) => !v)}
+      aria-pressed={showModified}
+      className="flex items-center gap-1 text-[11px] font-semibold text-sandrift hover:text-charcoal transition-colors focus-visible:outline-2 focus-visible:outline-charcoal/30"
+    >
+      {showModified ? "← 全部设置" : `已修改 ${modifiedCount}`}
+    </button>
   );
 }
 

@@ -14,13 +14,27 @@ export interface SettingDefinition {
 }
 
 export const SETTINGS_REGISTRY: SettingDefinition[] = [
-  // ---- 通用 ----
+  // ---- 通用（全局产品行为）----
   {
     id: "startup-view",
     section: "general",
     title: "默认打开位置",
     description: "启动后进入的默认工作区",
     keywords: ["启动", "默认页面", "首页", "进入", "startup", "last"],
+  },
+  {
+    id: "content-density",
+    section: "general",
+    title: "界面密度",
+    description: "任务工作区、课程列表与命令中心的行高与间距",
+    keywords: ["密度", "紧凑", "舒适", "行高", "density", "compact"],
+  },
+  {
+    id: "motion-preference",
+    section: "general",
+    title: "动效偏好",
+    description: "界面动画强度；跟随系统时尊重系统减弱动效设置",
+    keywords: ["动效", "动画", "motion", "reduced", "减少"],
   },
   // ---- 个人资料 ----
   {
@@ -116,20 +130,6 @@ export const SETTINGS_REGISTRY: SettingDefinition[] = [
     title: "启用单键快捷键",
     description: "N、J/K、X 等单键快速操作",
     keywords: ["快捷键", "键盘", "按键", "single key", "shortcut"],
-  },
-  {
-    id: "content-density",
-    section: "interaction",
-    title: "界面密度",
-    description: "任务工作区、课程列表与命令中心的行高与间距",
-    keywords: ["密度", "紧凑", "舒适", "行高", "density", "compact"],
-  },
-  {
-    id: "motion-preference",
-    section: "interaction",
-    title: "动效偏好",
-    description: "界面动画强度；跟随系统时尊重系统减弱动效设置",
-    keywords: ["动效", "动画", "motion", "reduced", "减少"],
   },
   // ---- Kiro / AI 服务 ----
   {

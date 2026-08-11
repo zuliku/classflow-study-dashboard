@@ -35,10 +35,13 @@ test("desktop 1440：交互与快捷键 rows 完整显示且无横向溢出", as
   const dialog = page.getByRole("dialog");
   await noHorizontalOverflow(dialog);
 
-  // 5 个 SettingRow 的控件都在可视区域内且可见（toggle=switch / segmented=group / select=combobox）
+  // 交互页：3 个 toggle 都在可视区域内且可见
   for (const label of ["课表直接操作", "DDL 直接操作", "启用单键快捷键"]) {
     await expect(page.getByRole("switch", { name: label })).toBeVisible();
   }
+
+  // Settings V3 IA：界面密度 / 动效偏好归入通用页
+  await navTo(page, "通用");
   await expect(page.getByRole("group", { name: "界面密度" })).toBeVisible();
   await expect(page.getByRole("combobox", { name: "动效偏好" })).toBeVisible();
 });
@@ -75,7 +78,8 @@ test("mobile 390：rows 无重叠、控件不压扁、无横向溢出", async ({
   expect(labelBox).not.toBeNull();
   expect(ctrlBox!.x).toBeGreaterThanOrEqual(labelBox!.x + labelBox!.width - 1); // control 在 label 右侧，不重叠
 
-  // 分段控件完整可见（不溢出 dialog 右缘）
+  // 分段控件完整可见（不溢出 dialog 右缘）；界面密度已归入通用页
+  await navTo(page, "通用");
   const segmented = page.getByRole("group", { name: "界面密度" });
   await expect(segmented).toBeVisible();
   const segBox = await segmented.boundingBox();
