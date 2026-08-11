@@ -23,6 +23,7 @@ import {
   KiroWebEvidenceOutcome,
   MAX_WEB_RESULTS,
   MAX_WEB_EVIDENCE_CHARS_PER_SOURCE,
+  MAX_WEB_EVIDENCE_CHUNK_CHARS,
   WEB_SEARCH_SNIPPET_MAX_CHARS,
 } from "@/lib/ai/web/types";
 import { KiroWebSearchProvider } from "@/lib/ai/web/provider";
@@ -44,10 +45,11 @@ const SAFE_ERROR_MESSAGES: Record<KiroWebSearchErrorCode, string> = {
   WEB_SEARCH_LIMIT_REACHED: "本轮网络搜索次数已达上限。",
   WEB_SEARCH_DUPLICATE_QUERY: "本轮已经搜索过相同关键词。",
   WEB_SOURCE_NOT_FOUND: "找不到该网页来源。",
-  WEB_READ_LIMIT_REACHED: "本轮网页阅读次数已达上限。",
+  WEB_READ_LIMIT_REACHED: "本轮网页阅读额度已用完。",
   WEB_SOURCE_ALREADY_READ: "该网页来源本轮已经阅读过。",
   WEB_READ_TIMEOUT: "网页读取超时，请重试。",
   WEB_READ_FAILED: "网页读取失败，请稍后再试。",
+  WEB_READ_NO_EVIDENCE: "没有读取到可用的网页正文证据。",
 };
 
 export function webSearchSafeMessage(code: KiroWebSearchErrorCode): string {
@@ -74,6 +76,26 @@ const TRACKING_PARAMS = new Set([
   "gclid",
   "fbclid",
 ]);
+
+/**
+ * Evidence URL canonical（Task 17A）：
+ * 复用 canonicalWebSearchUrl（hash/tracking 参数），再补 pathname trailing slash 归一：
+ * https://example.com/a 与 https://example.com/a/ 视为同一 source；
+ * 根路径 https://example.com/ 保持合法。不做激进归一（?id=1 与 ?id=2 仍不同）。
+ */
+export function canonicalEvidenceUrl(raw: string): string | null {
+  const base = canonicalWebSearchUrl(raw);
+  if (!base) return null;
+  try {
+    const u = new URL(base);
+    if (u.pathname.length > 1 && u.pathname.endsWith("/")) {
+      u.pathname = u.pathname.replace(/\/+$/, "");
+    }
+    return u.toString();
+  } catch {
+    return base;
+  }
+}
 
 /**
  * canonical URL（Task 15A）：
@@ -317,7 +339,7 @@ interface TavilyExtractResult {
   chunks?: unknown;
 }
 
-/** 段落切分：双换行折叠为 ≤3 块，单块 ≤ ~1800 chars */
+/** 段落切分：双换行折叠为 ≤3 块，单块 ≤ MAX_WEB_EVIDENCE_CHUNK_CHARS */
 function splitEvidenceChunks(raw: string): string[] {
   const collapsed = raw.replace(/\r\n/g, "\n");
   const paragraphs = collapsed
@@ -327,7 +349,7 @@ function splitEvidenceChunks(raw: string): string[] {
   const chunks: string[] = [];
   let current = "";
   for (const p of paragraphs) {
-    if (current && current.length + p.length + 1 > 1800) {
+    if (current && current.length + p.length + 1 > MAX_WEB_EVIDENCE_CHUNK_CHARS) {
       chunks.push(current);
       current = p;
       if (chunks.length >= TAVILY_EXTRACT_CHUNKS_PER_SOURCE) break;
@@ -340,37 +362,65 @@ function splitEvidenceChunks(raw: string): string[] {
 }
 
 /**
- * Evidence 归一化（Task 16A）：
+ * Chunk 归一化管线（Task 17A）：
+ * normalize（折叠空白/trim）→ 空 chunk 删除 → exact 去重 → 单 chunk ≤ MAX_WEB_EVIDENCE_CHUNK_CHARS。
+ * 所有 Provider chunks 与 fallback 都经过同一管线；不做 HTML 解析 / embedding / similarity。
+ */
+function normalizeEvidenceChunks(rawChunks: string[]): { chunks: string[]; truncated: boolean } {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  let truncated = false;
+  for (const raw of rawChunks) {
+    const normalized = collapseWhitespace(raw);
+    if (!normalized) continue;
+    if (seen.has(normalized)) continue;
+    seen.add(normalized);
+    if (normalized.length > MAX_WEB_EVIDENCE_CHUNK_CHARS) {
+      out.push(normalized.slice(0, MAX_WEB_EVIDENCE_CHUNK_CHARS));
+      truncated = true;
+    } else {
+      out.push(normalized);
+    }
+  }
+  return { chunks: out, truncated };
+}
+
+/**
+ * Evidence 归一化（Task 16A/17A）：
  * - 只返回 clean text chunks（无 HTML/CSS/script/JSON-LD/metadata）
- * - 折叠空白、空 chunk 删除、单 chunk 截断、单 source ≤ source 预算
- * - 按请求 sourceIds 反查（url 匹配）；找不到的 source 跳过
+ * - canonicalEvidenceUrl 匹配（tracking 参数 / hash / trailing slash 兼容；?id=1 与 ?id=2 仍不同）
+ * - 空 evidence（无非空 chunk）的 source 不进入成功列表
  * - 绝不返回 raw response / usage / key
  */
 function normalizeEvidence(raw: unknown, requested: { sourceId: string; url: string }[]): KiroWebEvidenceSource[] {
   if (!Array.isArray(raw)) return [];
-  const byUrl = new Map<string, unknown>();
+  const byCanonical = new Map<string, { item: unknown; canonical: string }>();
   for (const item of raw) {
     if (!item || typeof item !== "object") continue;
     const r = item as TavilyExtractResult;
-    if (typeof r.url === "string") byUrl.set(r.url, item);
+    if (typeof r.url !== "string") continue;
+    const canonical = canonicalEvidenceUrl(r.url);
+    if (!canonical) continue;
+    if (!byCanonical.has(canonical)) byCanonical.set(canonical, { item, canonical });
   }
   const out: KiroWebEvidenceSource[] = [];
   for (const req of requested) {
-    const item = byUrl.get(req.url);
-    if (!item || typeof item !== "object") continue;
-    const r = item as TavilyExtractResult;
+    const canonical = canonicalEvidenceUrl(req.url);
+    if (!canonical) continue;
+    const found = byCanonical.get(canonical);
+    if (!found || typeof found.item !== "object") continue;
+    const r = found.item as TavilyExtractResult;
     // 优先 Provider chunks；否则 raw_content 段落切分
-    const chunks =
+    const rawChunks =
       Array.isArray(r.chunks) && r.chunks.length > 0
-        ? r.chunks
-            .map((c) => (typeof c === "string" ? c.replace(/\s+/g, " ").trim() : ""))
-            .filter((c) => c.length > 0)
+        ? r.chunks.filter((c): c is string => typeof c === "string")
         : splitEvidenceChunks(typeof r.raw_content === "string" ? r.raw_content : "");
+    const { chunks: normalizedChunks, truncated: chunkTruncated } = normalizeEvidenceChunks(rawChunks);
 
     let total = 0;
     const capped: KiroWebEvidenceSource["chunks"] = [];
-    let truncated = false;
-    for (const c of chunks) {
+    let truncated = chunkTruncated;
+    for (const c of normalizedChunks) {
       const room = MAX_WEB_EVIDENCE_CHARS_PER_SOURCE - total;
       if (room <= 0) {
         truncated = true;
@@ -381,6 +431,8 @@ function normalizeEvidence(raw: unknown, requested: { sourceId: string; url: str
       total += text.length;
       if (c.length > room) truncated = true;
     }
+    // 空 evidence（chunks 全空）不进入成功列表
+    if (capped.length === 0) continue;
     out.push({
       sourceId: req.sourceId,
       title: "", // title/domain 由调用层从可信 source 注册表补全

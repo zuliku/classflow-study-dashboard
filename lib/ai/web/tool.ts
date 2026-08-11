@@ -359,8 +359,8 @@ export function createKiroWebReadTool(config: KiroWebReadToolConfig) {
       if (remainingAttempts <= 0) return readLimitFailure();
       remainingAttempts -= 1;
 
-      // 1) trust boundary：sourceId 必须在本 Turn 真实 Search Result 中
-      const requested = input.sourceIds;
+      // 1) trust boundary：sourceId 必须在本 Turn 真实 Search Result 中（schema transform 已去重，这里防御性再去重）
+      const requested = Array.from(new Set(input.sourceIds));
       const notFound = requested.filter((id) => !trustedById.has(id));
       const unread = requested.filter((id) => trustedById.has(id) && !readSet.has(id));
       if (requested.length > 0 && notFound.length === requested.length) {
@@ -369,8 +369,12 @@ export function createKiroWebReadTool(config: KiroWebReadToolConfig) {
       if (unread.length === 0) {
         return { ok: false, code: "WEB_SOURCE_ALREADY_READ", message: webSearchSafeMessage("WEB_SOURCE_ALREADY_READ") };
       }
+      // 2) evidence 预算：Turn 预算已用满 → 不再请求 Provider
+      if (charsUsed >= MAX_WEB_EVIDENCE_CHARS_PER_TURN) {
+        return { ok: false, code: "WEB_READ_LIMIT_REACHED", message: webSearchSafeMessage("WEB_READ_LIMIT_REACHED") };
+      }
 
-      // 2) 凭据只在实际需要 Provider 时解析
+      // 3) 凭据只在实际需要 Provider 时解析
       const resolved = resolveWebSearchCredential({
         mode: credential.mode,
         userApiKey: credential.userApiKey,
@@ -392,7 +396,7 @@ export function createKiroWebReadTool(config: KiroWebReadToolConfig) {
         );
         if (!outcome.ok) return { ok: false, code: outcome.code, message: outcome.message };
 
-        // 3) 补全 metadata（title/domain 来自可信注册表）+ Turn 字符预算
+        // 4) 成功来源 = Provider 返回且 chunks 非空；metadata 一律来自可信注册表（title/url/domain）
         const sources: {
           sourceId: string;
           title: string;
@@ -401,7 +405,9 @@ export function createKiroWebReadTool(config: KiroWebReadToolConfig) {
           chunks: { text: string }[];
           truncated: boolean;
         }[] = [];
+        const withEvidence = new Set<string>();
         for (const ev of outcome.sources) {
+          if (ev.chunks.length === 0) continue; // empty evidence：不视为成功、不加入 readSet
           const trusted = trustedById.get(ev.sourceId);
           const room = Math.max(0, MAX_WEB_EVIDENCE_CHARS_PER_TURN - charsUsed);
           if (room <= 0) break;
@@ -420,16 +426,29 @@ export function createKiroWebReadTool(config: KiroWebReadToolConfig) {
           }
           charsUsed += total;
           readSet.add(ev.sourceId);
+          withEvidence.add(ev.sourceId);
           sources.push({
             sourceId: ev.sourceId,
-            title: trusted?.title ?? ev.title ?? "网页来源",
+            title: trusted?.title ?? "网页来源",
             url: ev.url,
-            domain: trusted?.domain ?? ev.domain ?? "",
+            domain: trusted?.domain ?? "",
             chunks: capped,
             truncated,
           });
         }
-        return { ok: true, data: { sources } };
+
+        // 5) partial：未取得 evidence 的 requested sources → unavailableSourceIds（只含 sourceId，无 Provider 细节）
+        const unavailableSourceIds = unread.filter((id) => !withEvidence.has(id));
+
+        if (sources.length === 0) {
+          // 全部无 evidence：仍然计一次 attempt，但不加入 readSet
+          return {
+            ok: false,
+            code: "WEB_READ_NO_EVIDENCE",
+            message: webSearchSafeMessage("WEB_READ_NO_EVIDENCE"),
+          };
+        }
+        return { ok: true, data: { sources, unavailableSourceIds } };
       } finally {
         clearTimeout(timer);
       }

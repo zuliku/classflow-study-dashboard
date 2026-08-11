@@ -5,8 +5,12 @@ import {
   createKiroWebReadTool,
 } from "@/lib/ai/web/tool";
 import { kiroWebReadSourceSchema } from "@/lib/ai/web/schemas";
-import { createTavilyWebSearchProvider, TAVILY_EXTRACT_URL } from "@/lib/ai/web/tavily";
-import { MAX_WEB_EVIDENCE_CHARS_PER_SOURCE, MAX_WEB_EVIDENCE_CHARS_PER_TURN } from "@/lib/ai/web/types";
+import { createTavilyWebSearchProvider, TAVILY_EXTRACT_URL, canonicalEvidenceUrl } from "@/lib/ai/web/tavily";
+import {
+  MAX_WEB_EVIDENCE_CHARS_PER_SOURCE,
+  MAX_WEB_EVIDENCE_CHARS_PER_TURN,
+  MAX_WEB_EVIDENCE_CHUNK_CHARS,
+} from "@/lib/ai/web/types";
 
 /** Search Result helper：构造当前 Turn 真实成功 web_search output */
 function searchMessages(webResults: { sourceId: string; url: string; title: string; domain: string }[]): unknown[] {
@@ -197,6 +201,144 @@ describe("Case F：evidence budget", () => {
     const total = r.data.sources.reduce((sum, s) => sum + s.chunks.reduce((a, c) => a + c.text.length, 0), 0);
     expect(total).toBeLessThanOrEqual(MAX_WEB_EVIDENCE_CHARS_PER_TURN);
     expect(r.data.sources.some((s) => s.truncated)).toBe(true);
+  });
+});
+
+describe("Task 17A：evidence reader hardening", () => {
+  function evidenceProvider(extractResult: unknown, extractImpl?: (req: unknown) => unknown) {
+    const extract = vi.fn((req: unknown) => {
+      if (extractImpl) return Promise.resolve(extractImpl(req)) as Promise<never>;
+      return Promise.resolve(extractResult) as Promise<never>;
+    });
+    return {
+      id: "tavily" as const,
+      checkCredential: vi.fn().mockResolvedValue({ ok: true }),
+      search: vi.fn(),
+      extract,
+    };
+  }
+
+  it("Case A：canonical URL 匹配——Search 带 tracking 参数、Extract 返回干净 URL → 同一 sourceId", async () => {
+    const provider = evidenceProvider({
+      ok: true,
+      sources: [
+        { sourceId: "web-3", title: "", url: "https://example.com/a", domain: "", chunks: [{ text: "正文内容" }], truncated: false },
+      ],
+    });
+    const readTool = createKiroWebReadTool(
+      readToolConfig({
+        provider,
+        trustedSources: [{ sourceId: "web-3", url: "https://example.com/a?utm_source=x", title: "A", domain: "example.com" }],
+      })
+    );
+    const r = (await readTool.execute?.({ sourceIds: ["web-3"] }, {} as never)) as { ok: true; data: { sources: { sourceId: string }[] } };
+    expect(r.ok).toBe(true);
+    expect(r.data.sources.map((s) => s.sourceId)).toEqual(["web-3"]);
+  });
+
+  it("Case B：trailing slash 兼容——requested /a、Extract /a/ → 匹配", () => {
+    expect(canonicalEvidenceUrl("https://example.com/a/")).toBe("https://example.com/a");
+    expect(canonicalEvidenceUrl("https://example.com/")).toBe("https://example.com/");
+    expect(canonicalEvidenceUrl("https://example.com/a?utm_source=1")).toBe("https://example.com/a");
+  });
+
+  it("Case C：empty evidence → WEB_READ_NO_EVIDENCE，且该 source 不进入 readSet", async () => {
+    const provider = evidenceProvider({
+      ok: true,
+      sources: [{ sourceId: "web-3", title: "", url: "https://a.dev/3", domain: "", chunks: [], truncated: false }],
+    });
+    const readTool = createKiroWebReadTool(readToolConfig({ provider }));
+    const r = (await readTool.execute?.({ sourceIds: ["web-3"] }, {} as never)) as { ok: false; code: string };
+    expect(r.ok).toBe(false);
+    expect(r.code).toBe("WEB_READ_NO_EVIDENCE");
+    // inspect 视角：该 attempt 计一次，但 web-3 不是已读 source
+    const state = inspectCurrentTurnWebEvidenceState([
+      { role: "user", parts: [{ type: "text", text: "查" }] },
+      { role: "assistant", parts: [{ type: "tool-read_web_source", toolCallId: "r1", output: r }] },
+    ]);
+    expect(state.attempts).toBe(1);
+    expect(state.readSourceIds).toEqual([]);
+  });
+
+  it("Case D：partial success——web-3 有证据 + web-4 无 → sources=[web-3], unavailableSourceIds=[web-4]", async () => {
+    const provider = evidenceProvider({
+      ok: true,
+      sources: [
+        { sourceId: "web-3", title: "", url: "https://a.dev/3", domain: "", chunks: [{ text: "A 内容" }], truncated: false },
+        { sourceId: "web-4", title: "", url: "https://b.dev/4", domain: "", chunks: [], truncated: false },
+      ],
+    });
+    const readTool = createKiroWebReadTool(readToolConfig({ provider }));
+    const r = (await readTool.execute?.({ sourceIds: ["web-3", "web-4"] }, {} as never)) as {
+      ok: true;
+      data: { sources: { sourceId: string }[]; unavailableSourceIds: string[] };
+    };
+    expect(r.ok).toBe(true);
+    expect(r.data.sources.map((s) => s.sourceId)).toEqual(["web-3"]);
+    expect(r.data.unavailableSourceIds).toEqual(["web-4"]);
+  });
+
+  it("Case E：duplicate sourceIds——Provider 只收到一个 URL", async () => {
+    let received: unknown = null;
+    const provider = evidenceProvider({ ok: true, sources: [{ sourceId: "web-3", title: "", url: "https://a.dev/3", domain: "", chunks: [{ text: "x" }], truncated: false }] }, (req) => {
+      received = req;
+      return { ok: true, sources: [{ sourceId: "web-3", title: "", url: "https://a.dev/3", domain: "", chunks: [{ text: "x" }], truncated: false }] };
+    });
+    const readTool = createKiroWebReadTool(readToolConfig({ provider }));
+    await readTool.execute?.({ sourceIds: ["web-3", "web-3"] }, {} as never);
+    const req = received as { sources: { sourceId: string }[] };
+    expect(req.sources).toHaveLength(1);
+    expect(req.sources[0].sourceId).toBe("web-3");
+  });
+
+  it("Case F：chunk 去重 + 单 chunk 上限——重复 chunk 消失、超长 chunk 截断", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            results: [
+              {
+                url: "https://a.dev/3",
+                chunks: ["报名时间为9月1日", "报名时间为9月1日", "x".repeat(3000)],
+              },
+            ],
+          }),
+          { status: 200 }
+        )
+      )
+    );
+    const provider = createTavilyWebSearchProvider();
+    const r = await provider.extract({ sources: [{ sourceId: "web-3", url: "https://a.dev/3" }] }, { apiKey: "sk" });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    const chunks = r.sources[0].chunks;
+    expect(chunks.map((c) => c.text)).toEqual(["报名时间为9月1日", "x".repeat(MAX_WEB_EVIDENCE_CHUNK_CHARS)]);
+    expect(chunks.every((c) => c.text.length <= MAX_WEB_EVIDENCE_CHUNK_CHARS)).toBe(true);
+    expect(r.sources[0].truncated).toBe(true);
+  });
+
+  it("Case G：evidence budget 已用满 → Provider 不调用（WEB_READ_LIMIT_REACHED）", async () => {
+    const provider = evidenceProvider({ ok: true, sources: [] });
+    const readTool = createKiroWebReadTool(
+      readToolConfig({ provider, evidenceCharsUsed: MAX_WEB_EVIDENCE_CHARS_PER_TURN })
+    );
+    const r = (await readTool.execute?.({ sourceIds: ["web-3"] }, {} as never)) as { ok: false; code: string };
+    expect(r.code).toBe("WEB_READ_LIMIT_REACHED");
+    expect(provider.extract).not.toHaveBeenCalled();
+  });
+
+  it("all-dup 全已读 / 不可信 source → Provider 不调用", async () => {
+    const provider = evidenceProvider({ ok: true, sources: [] });
+    const readTool = createKiroWebReadTool(readToolConfig({ provider, readSourceIds: ["web-3"] }));
+    const r = (await readTool.execute?.({ sourceIds: ["web-3"] }, {} as never)) as { ok: false; code: string };
+    expect(r.code).toBe("WEB_SOURCE_ALREADY_READ");
+    expect(provider.extract).not.toHaveBeenCalled();
+
+    const readTool2 = createKiroWebReadTool(readToolConfig({ provider }));
+    const r2 = (await readTool2.execute?.({ sourceIds: ["web-999"] }, {} as never)) as { ok: false; code: string };
+    expect(r2.code).toBe("WEB_SOURCE_NOT_FOUND");
+    expect(provider.extract).not.toHaveBeenCalled();
   });
 });
 

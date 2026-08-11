@@ -58,7 +58,8 @@ export type KiroWebSearchErrorCode =
   | "WEB_READ_LIMIT_REACHED"
   | "WEB_SOURCE_ALREADY_READ"
   | "WEB_READ_TIMEOUT"
-  | "WEB_READ_FAILED";
+  | "WEB_READ_FAILED"
+  | "WEB_READ_NO_EVIDENCE";
 
 export interface KiroWebSearchFailure {
   ok: false;
@@ -129,3 +130,5 @@ export const MAX_WEB_READS_PER_TURN = 2;
 export const MAX_WEB_EVIDENCE_CHARS_PER_SOURCE = 5_000;
 /** Task 16A：单 Turn evidence 字符总预算 */
 export const MAX_WEB_EVIDENCE_CHARS_PER_TURN = 10_000;
+/** Task 17A：单 chunk 字符上限（所有 Provider chunks 与 fallback 切分统一经过） */
+export const MAX_WEB_EVIDENCE_CHUNK_CHARS = 1_800;

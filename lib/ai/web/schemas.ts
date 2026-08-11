@@ -60,7 +60,8 @@ export const kiroWebReadSourceSchema = z.object({
   sourceIds: z
     .array(z.string().regex(/^web-\d+$/, "sourceId 必须是 web-N 形式"))
     .min(1, "至少选择一个网页来源")
-    .max(2, "一次最多读取 2 个网页来源"),
+    .max(2, "一次最多读取 2 个网页来源")
+    .transform((arr) => Array.from(new Set(arr))), // 确定性去重：["web-3","web-3"] → ["web-3"]
   /** 「希望从这些网页中找什么」；可选 */
   query: z.string().trim().min(2).max(300).optional(),
 });
