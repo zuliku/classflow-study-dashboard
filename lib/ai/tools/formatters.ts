@@ -66,6 +66,8 @@ export const KIRO_TOOL_LABELS: Record<string, string> = {
   update_memory: "更新学习偏好",
   delete_memory: "删除学习偏好",
   apply_change_set: "整体修改",
+  // Task 14：Kiro Search（联网搜索；产品层叫 Kiro Search，不显示 Tavily）
+  web_search: "搜索网络",
 };
 
 export function toolLabel(toolName: string): string {

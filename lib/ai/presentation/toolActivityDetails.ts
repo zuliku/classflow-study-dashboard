@@ -56,6 +56,14 @@ export function formatKiroToolActivityDetail(
   status: KiroToolDetailStatus,
   output?: unknown
 ): string[] {
+  // Task 14：web_search 专属（不展示工具名 / Tavily / raw query / API Key）
+  if (toolName === "web_search") {
+    if (status === "working") return ["正在搜索网络"];
+    if (status === "error") return ["网络搜索失败"];
+    const data = (output as { ok?: boolean; data?: { results?: unknown[] } } | null)?.data;
+    const count = Array.isArray(data?.results) ? data.results.length : 0;
+    return [`搜索网络 · ${count} 个来源`];
+  }
   if (status !== "done") return DEFAULT_DETAILS[status];
   if (!isOkEnvelope(output)) return DEFAULT_DETAILS.done;
 

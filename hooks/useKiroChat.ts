@@ -1,6 +1,6 @@
-﻿"use client";
+"use client";
 
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { DefaultChatTransport, lastAssistantMessageIsCompleteWithToolCalls } from "ai";
 import { useChat, UIMessage } from "@ai-sdk/react";
 import { useAppStore } from "@/store/useAppStore";
@@ -10,6 +10,7 @@ import { useConfirmStore } from "@/store/useConfirmStore";
 import { useToastStore } from "@/store/useToastStore";
 import { getSessionApiKey } from "@/lib/ai/sessionKeys";
 import { getSessionWebSearchApiKey } from "@/lib/ai/web/credentials";
+import { KiroWebSearchResult } from "@/lib/ai/web/types";
 import { normalizeAIError, AIError } from "@/lib/ai/errors";
 import { buildBaseContext } from "@/lib/ai/context/buildBaseContext";
 import { resolveContextRefs, refsForPrompt, dedupeContextRefs } from "@/lib/ai/context/contextSelection";
@@ -1199,6 +1200,38 @@ export function useKiroChat({
     },
     [chat.setMessages]
   );
+
+  // Task 14：从真实 tool-web_search output 注册可信 Web Source（只存 metadata，不存 snippet）。
+  // 模型正文里的 [[source:web-99]] 不会自动生成来源——只有 Tool Result 真实返回的 sourceId 才能注册。
+  useEffect(() => {
+    const additions: KiroSourceMeta[] = [];
+    for (const m of chat.messages) {
+      if (m.role !== "assistant") continue;
+      for (const p of (m.parts ?? []) as { type?: string; output?: unknown }[]) {
+        if (typeof p.type !== "string" || !p.type.startsWith("tool-")) continue;
+        if (p.type.slice("tool-".length) !== "web_search") continue;
+        const output = p.output as { ok?: boolean; data?: { results?: KiroWebSearchResult[] } } | null;
+        if (!output?.ok || !Array.isArray(output.data?.results)) continue;
+        for (const r of output.data.results) {
+          if (!r.sourceId) continue;
+          additions.push({
+            sourceId: r.sourceId,
+            name: r.title || r.domain || "网页来源",
+            source: "web",
+            url: r.url,
+            domain: r.domain,
+            publishedAt: r.publishedAt,
+          });
+        }
+      }
+    }
+    if (additions.length === 0) return;
+    const known = new Set(turnSourcesRef.current.map((s) => s.sourceId));
+    const fresh = additions.filter((a) => !known.has(a.sourceId));
+    if (fresh.length === 0) return;
+    turnSourcesRef.current = [...turnSourcesRef.current, ...fresh];
+    setSources(turnSourcesRef.current);
+  }, [chat.messages]);
 
   const normalizedError: AIError | null = chat.error ? normalizeAIError(chat.error) : null;
   const streaming = chat.status === "streaming" || chat.status === "submitted";

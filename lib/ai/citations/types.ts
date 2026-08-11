@@ -8,12 +8,16 @@
 /** 本 Turn 文档来源元数据（UI 展示与校验用；不保存正文） */
 export interface KiroSourceMeta {
   sourceId: string;
-  /** 文件显示名（如 第三章讲义.pdf） */
+  /** 文件显示名（如 第三章讲义.pdf / 网页标题） */
   name: string;
-  source: "chat" | "course-material";
+  source: "chat" | "course-material" | "web";
   courseName?: string;
   /** 本 Turn 实际发送给模型的页码（预算截断后） */
   availablePages?: number[];
+  /** Task 14：Web Source（Kiro Search）——只存 metadata，不存 snippet / 网页正文 / Provider 原始 response */
+  url?: string;
+  domain?: string;
+  publishedAt?: string;
 }
 
 /** History 持久化版本：只存展示所需最小元数据（正文永不落库） */

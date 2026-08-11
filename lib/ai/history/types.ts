@@ -40,13 +40,17 @@ export interface PersistedActionView {
   details?: { label: string }[];
 }
 
-/** Citation 来源最小元数据（Task 11）：只存展示所需；正文 / 页码文本永不落库 */
+/** Citation 来源最小元数据（Task 11/14）：只存展示所需；正文 / 页码文本 / snippet 永不落库 */
 export interface PersistedSourceMeta {
   sourceId: string;
   name: string;
-  source: "chat" | "course-material";
+  source: "chat" | "course-material" | "web";
   courseName?: string;
   availablePages?: number[];
+  /** Task 14：Web Source（Kiro Search）metadata——恢复后 Citation 仍可点击原 URL */
+  url?: string;
+  domain?: string;
+  publishedAt?: string;
 }
 
 export interface PersistedKiroMessage {

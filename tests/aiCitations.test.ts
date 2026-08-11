@@ -8,6 +8,7 @@ import {
 } from "@/lib/ai/citations/parser";
 import { buildTurnSourceRegistry, materialSourceId } from "@/lib/ai/citations/sources";
 import { KiroSourceMeta } from "@/lib/ai/citations/types";
+import { formatKiroToolActivityDetail } from "@/lib/ai/presentation/toolActivityDetails";
 
 const SOURCES: KiroSourceMeta[] = [
   {
@@ -97,6 +98,51 @@ describe("citationsToReadableText（导出/复制）", () => {
 
   it("无效引用：不包装成可信来源", () => {
     expect(citationsToReadableText("见[[source:doc-1:p99]]。", SOURCES)).toBe("见[来源不可验证]。");
+  });
+});
+
+describe("Task 14：Web Citation（Kiro Search）", () => {
+  const WEB_SOURCES: KiroSourceMeta[] = [
+    {
+      sourceId: "web-1",
+      name: "浙江大学研究生院2026年招生简章",
+      source: "web",
+      url: "https://grs.zju.edu.cn/postgraduate/2026",
+      domain: "grs.zju.edu.cn",
+      publishedAt: "2026-08-01",
+    },
+  ];
+
+  it("真实 web source → citation valid（文件级）", () => {
+    const src = resolveCitation({ sourceId: "web-1" }, WEB_SOURCES);
+    expect(src?.source).toBe("web");
+    expect(src?.url).toBe("https://grs.zju.edu.cn/postgraduate/2026");
+  });
+
+  it("fake web source → rejected", () => {
+    expect(resolveCitation({ sourceId: "web-999" }, WEB_SOURCES)).toBeNull();
+  });
+
+  it("web source + page → rejected（网页没有 PDF 页码）", () => {
+    expect(resolveCitation({ sourceId: "web-1", pageStart: 12, pageEnd: 12 }, WEB_SOURCES)).toBeNull();
+  });
+
+  it("export/copy 不暴露 [[source:web-*]]", () => {
+    const out = citationsToReadableText("来源见[[source:web-1]]。", WEB_SOURCES);
+    expect(out).not.toContain("[[source:");
+    expect(out).not.toContain("web-1");
+    expect(out).toContain("浙江大学研究生院2026年招生简章");
+  });
+
+  it("worklog formatter：web_search success → 搜索网络 · N 个来源；working/error 专属文案", () => {
+    const output = { ok: true, data: { results: [{ sourceId: "web-1" }, { sourceId: "web-2" }, { sourceId: "web-3" }] } };
+    expect(formatKiroToolActivityDetail("web_search", "done", output)).toEqual(["搜索网络 · 3 个来源"]);
+    expect(formatKiroToolActivityDetail("web_search", "working", {})).toEqual(["正在搜索网络"]);
+    expect(formatKiroToolActivityDetail("web_search", "error", {})).toEqual(["网络搜索失败"]);
+    // 不展示工具名 / Tavily / raw query
+    const raw = JSON.stringify(formatKiroToolActivityDetail("web_search", "done", output));
+    expect(raw).not.toContain("tavily");
+    expect(raw).not.toContain("web_search");
   });
 });
 

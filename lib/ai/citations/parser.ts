@@ -66,6 +66,8 @@ export function splitCitationSegments(text: string): CitationSegment[] {
 export function resolveCitation(citation: KiroCitation, sources: KiroSourceMeta[]): KiroSourceMeta | null {
   const source = sources.find((s) => s.sourceId === citation.sourceId);
   if (!source) return null;
+  // Task 14：Web Source 没有 PDF 页码——[[source:web-1:p12]] 一律非法
+  if (source.source === "web" && citation.pageStart !== undefined) return null;
   if (citation.pageStart !== undefined) {
     const pages = source.availablePages ?? [];
     for (let p = citation.pageStart; p <= (citation.pageEnd ?? citation.pageStart); p++) {
