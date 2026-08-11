@@ -7,13 +7,16 @@
  *
  * - step-start 是真实 step boundary（自身不渲染）
  * - reasoning 完全忽略（绝不进入 worklog / answer）
- * - 只有「最后一个 Tool 之后 且 最后一个 Tool 已 settled」的 trailing text
- *   才是 final answer candidate；新 Tool 出现后自动降级为 commentary
+ * - Provisional Lookahead：最后一个 Tool 之后的 trailing text 先暂存，
+ *   只有「第一段已稳定 + 第二段已开始」或「单段已 done」或「Turn 结束」才 commit
+ *   为 Final Answer；否则隐藏（不进 answer 也不进 commentary）。
+ *   这样 Tool 后的文字不会先以大字号 answer 出现、随后因新 Tool 突变成 commentary。
  */
 
 import { KIRO_MUTATING_TOOL_NAMES } from "@/lib/ai/tools/mutating";
 import { toolLabel } from "@/lib/ai/tools/formatters";
 import { formatKiroToolActivityDetail } from "@/lib/ai/presentation/toolActivityDetails";
+import { splitKiroStreamingMarkdown } from "@/lib/ai/streaming/markdownBlocks";
 
 export type KiroTurnPhase = "working" | "composing" | "answering" | "done";
 
@@ -92,12 +95,33 @@ export function deriveKiroAssistantTurn(
     }
   }
 
+  const hasSettledLastTool = lastToolStatus === "done" || lastToolStatus === "error";
+
+  // ---- Provisional Lookahead：只对「当前 Turn 已存在 Tool」的 trailing text 生效 ----
+  // 收集最后一个 Tool 之后的所有 text part（保持原始顺序）
+  const trailingTextParts =
+    lastToolPartIndex >= 0
+      ? rawParts
+          .slice(lastToolPartIndex + 1)
+          .filter((part): part is Extract<RawPart, { type: "text" }> => part?.type === "text")
+      : [];
+  const trailingText = trailingTextParts.map((part) => part.text ?? "").join("");
+
+  let commitTrailingAnswer = false;
+  if (lastToolPartIndex >= 0 && hasSettledLastTool && trailingText.length > 0) {
+    // 复用 Stable Block Splitter：第一块已稳定 + 第二块已开始 = lookahead 成立
+    const split = splitKiroStreamingMarkdown(trailingText, true);
+    const hasOneBlockLookahead = split.stableBlocks.length > 0 && split.tail.trim().length > 0;
+    // 单段已完成（不会再出现新段落/新 Tool 的等待理由）
+    const trailingTextDone =
+      trailingTextParts.length > 0 && trailingTextParts.every((part) => part.state === "done");
+    commitTrailingAnswer = hasOneBlockLookahead || trailingTextDone || !turnInFlight;
+  }
+
   // 第二遍：构建 worklog（commentary / tool）+ 提取 answer
   const worklog: KiroWorklogBlock[] = [];
   let answerTexts: string[] = [];
   let answerStreaming = false;
-
-  const hasSettledLastTool = lastToolStatus === "done" || lastToolStatus === "error";
 
   for (let i = 0; i < rawParts.length; i++) {
     const p = rawParts[i];
@@ -130,15 +154,19 @@ export function deriveKiroAssistantTurn(
     if (p.type === "text") {
       const textValue = p.text ?? "";
       const isStreaming = p.state === "streaming";
-      // 没有任何 Tool：所有可见 text 都是普通最终回答；
-      // 有 Tool：只有「位于最后一个 Tool 之后 且 最后一个 Tool 已 settled」的 trailing text 才可能是最终回答
+      const afterLatestTool = lastToolPartIndex >= 0 && i > lastToolPartIndex;
+      // 没有任何 Tool：所有可见 text 都是普通最终回答（立即流式）；
+      // 有 Tool：只有「位于最后一个 Tool 之后 且 已 settled 且 lookahead 成立」的 trailing text 才是最终回答
       const isAnswerText =
-        lastToolPartIndex < 0
-          ? true
-          : i > lastToolPartIndex && hasSettledLastTool;
+        lastToolPartIndex < 0 ? true : afterLatestTool && hasSettledLastTool && commitTrailingAnswer;
       if (isAnswerText) {
         answerTexts.push(textValue);
         if (isStreaming) answerStreaming = true;
+        continue;
+      }
+      // Provisional：Tool 后文字尚未 commit（不能确认是 Final Answer 还是后续旁白）→ 完全隐藏。
+      // 新 Tool 出现后 lastToolPartIndex 前移，本段自然走下方 commentary 合并逻辑。
+      if (afterLatestTool && hasSettledLastTool && !commitTrailingAnswer) {
         continue;
       }
       // 普通旁白：相邻且属于同一个 step 的 commentary 合并

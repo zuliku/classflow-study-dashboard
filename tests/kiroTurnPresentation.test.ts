@@ -30,7 +30,7 @@ describe("deriveKiroAssistantTurn", () => {
           output: { ok: true, data: { items: [{ id: "s1" }] } },
         }),
         stepStart(),
-        text("今天建议先完成数学作业"),
+        text("今天建议先完成数学作业", "done"),
       ],
       true
     );
@@ -233,6 +233,71 @@ describe("hasMeaningfulKiroToolDetails", () => {
     expect(hasMeaningfulKiroToolDetails(["已读取「TCP 三次握手抓包分析」"])).toBe(true);
     expect(hasMeaningfulKiroToolDetails(["完成 4 项修改"])).toBe(true);
     expect(hasMeaningfulKiroToolDetails(["已处理「高等数学作业」"])).toBe(true);
+  });
+});
+
+describe("Provisional Commentary Lookahead", () => {
+  const settledSearch = () =>
+    toolPart("search_assignments", "output-available", { output: { ok: true, data: { items: [] } } });
+
+  it("CASE 1: settled Tool + 第一段仍在 streaming → provisional（answer 空、不入 commentary、composing）", () => {
+    const p = deriveKiroAssistantTurn(
+      [settledSearch(), text("我先整理一下今天的安排。", "streaming")],
+      true
+    );
+    expect(p.answer).toBe("");
+    expect(p.phase).toBe("composing");
+    expect(p.worklog.filter((b) => b.kind === "commentary")).toHaveLength(0);
+  });
+
+  it("CASE 2: 第一段已形成稳定块但第二段未开始（只有空行）→ 仍 provisional", () => {
+    const p = deriveKiroAssistantTurn(
+      [settledSearch(), text("第一段已经完整。\n\n", "streaming")],
+      true
+    );
+    expect(p.answer).toBe("");
+    expect(p.phase).toBe("composing");
+    expect(p.worklog.filter((b) => b.kind === "commentary")).toHaveLength(0);
+  });
+
+  it("CASE 3: 第二段已开始 → lookahead 成立，整体 commit Final Answer", () => {
+    const trailing = "第一段已经完整。\n\n第二段正在生成";
+    const p = deriveKiroAssistantTurn([settledSearch(), text(trailing, "streaming")], true);
+    expect(p.answer).toBe(trailing);
+    expect(p.phase).toBe("answering");
+    expect(p.answerStreaming).toBe(true);
+  });
+
+  it("CASE 4: Tool 后单段且 state=done → 立即 commit（不卡在正在整理结果）", () => {
+    const p = deriveKiroAssistantTurn([settledSearch(), text("最终只有这一段。", "done")], true);
+    expect(p.answer).toBe("最终只有这一段。");
+    expect(p.phase).toBe("answering");
+  });
+
+  it("CASE 5: provisional text 后出现新 Tool → 整段只作为 commentary 出现一次", () => {
+    const p = deriveKiroAssistantTurn(
+      [
+        settledSearch(),
+        text("让我再确认一下今天可用的时间。", "streaming"),
+        toolPart("get_available_time", "streaming", { input: {} }),
+      ],
+      true
+    );
+    expect(p.answer).toBe("");
+    const commentary = p.worklog.filter((b) => b.kind === "commentary").map((b) => (b as { text: string }).text);
+    expect(commentary).toEqual(["让我再确认一下今天可用的时间。"]);
+  });
+
+  it("CASE 6: 无 Tool → 首 token 立即流式显示", () => {
+    const p = deriveKiroAssistantTurn([text("你好，正在回答", "streaming")], true);
+    expect(p.answer).toBe("你好，正在回答");
+    expect(p.phase).toBe("answering");
+  });
+
+  it("CASE 7: Tool 后仍只有一段 provisional 但 turnInFlight=false → flush 成 Final Answer", () => {
+    const p = deriveKiroAssistantTurn([settledSearch(), text("这是最终回答。", "streaming")], false);
+    expect(p.answer).toBe("这是最终回答。");
+    expect(p.phase).toBe("done");
   });
 });
 
