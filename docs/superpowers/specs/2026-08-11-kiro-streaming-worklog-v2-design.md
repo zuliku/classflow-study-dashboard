@@ -49,6 +49,8 @@ Use a compact Codex-style worklog:
 - Never display raw tool input, raw output JSON, provider metadata, or hidden reasoning / chain-of-thought.
 - Intermediate assistant narration is retained and inserted between tool steps as low-weight gray commentary.
 - Final answer is visually separate from the worklog.
+- Do not show per-step timestamps in V1; they add noise without helping the learning workflow.
+- Do not add a second whole-worklog collapse interaction in V1. Only individual tool rows need expandable details.
 
 Example:
 
@@ -82,6 +84,7 @@ Presentation:
 - No streaming cursor.
 - No full Markdown pipeline.
 - Preserve line breaks but keep the surface visually compact.
+- Default visual clamp is two lines per commentary fragment; the full text stays in the DOM for accessibility and may be exposed via native title on desktop.
 - Do not expose or derive hidden reasoning. Only render actual visible model `text` parts.
 
 ### 3.3 Tool rows
@@ -327,6 +330,7 @@ For the first implementation, historical persistence remains conservative:
 
 - persisted assistant `content` should represent the user-facing final answer, not a concatenation of all intermediate commentary;
 - existing persisted Action Cards remain unchanged;
+- an assistant message that has no final-answer text but does contain persisted Action Cards must still be retained by `sanitizeConversation` rather than being filtered out;
 - old conversations load normally;
 - raw tool calls are never replayed;
 - persisting the full safe read-tool worklog across reload is explicitly deferred unless it can be added as a small optional sanitized field without complicating the core streaming rollout.
@@ -354,7 +358,8 @@ Required pure tests:
 5. reasoning parts never appear in worklog;
 6. safe tool detail formatter never falls back to raw JSON;
 7. Stable Blocks splitter freezes complete blocks and leaves only the incomplete tail mutable;
-8. open code fence / display math is not split early.
+8. open code fence / display math is not split early;
+9. history sanitization retains tool-only assistant messages when they contain persisted action facts.
 
 Integration verification should normally be limited to the directly affected Kiro tests plus `npm run typecheck`.
 
