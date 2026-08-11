@@ -25,12 +25,12 @@
 - Kiro explicit present-tense Focus commands execute directly. Missing required information is clarified. Planning statements do not start timers.
 - Focus write tools are not undoable in V1.
 - Kiro user-message edit is text-only truncate-and-resend. Any mutating-tool call in the truncated suffix blocks editing.
-- Attachment-bearing user messages are not editable in V1.
+- Attachment-bearing target user messages are not editable in V1.
 - Do not add conversation branching or a version-tree UI.
 
 ## Dependency Order
 
-`Task 1` is independent and can land first. The Focus chain is `Task 2 -> Task 3 -> Task 4 -> Task 5 -> Task 6`. Message editing is `Task 7 -> Task 8`, but Task 7 must run after Task 5 so the Focus write-tool names are already included in the global mutating-tool registry used by edit safety.
+`Task 1` is independent and can land first. The Focus chain is `Task 2 -> Task 3 -> Task 4 -> Task 5 -> Task 6`. Message editing is `Task 7 -> Task 8`, and Task 7 runs after Task 5 so the Focus write-tool names are already present in the mutating-tool registry used by edit safety.
 
 ---
 
@@ -70,16 +70,15 @@ Update comments that still say four items. Keep the existing footer and paginati
 
 - [ ] **Step 3: Make the model popup have exactly one vertical scroll owner**
 
-In `components/kiro/KiroComposer.tsx`, keep the semantic `role="menu"` element as the only vertical scroller and use this exact class suffix:
+In `components/kiro/KiroComposer.tsx`, keep the semantic `role="menu"` element as the only vertical scroller and use this exact class string:
 ```tsx
 className="py-1 max-h-[min(320px,55vh)] overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
 ```
 
-On the surrounding absolute popup container, remove only its `max-h-[min(320px,60dvh)]` and `overflow-y-auto` classes. Preserve its positioning, width, background, border, radius, and shadow. Mouse wheel, touchpad, keyboard focus, and menu semantics must continue to work.
+On the surrounding absolute popup container, remove only its `max-h-[min(320px,60dvh)]` and `overflow-y-auto` classes. Preserve positioning, width, background, border, radius, and shadow. Mouse wheel, touchpad, keyboard focus, and menu semantics must continue to work.
 
 - [ ] **Step 4: Verify**
 
-Run:
 ```bash
 npx vitest run tests/pagination.test.ts
 npm run typecheck
@@ -104,11 +103,11 @@ git commit -m "ui: polish model menu and ddl pagination"
 - Modify: `store/useAppStore.ts`
 - Modify: `components/settings/BackupSection.tsx`
 
-**Produces:** `FocusSession` types, deterministic pure timing/transition helpers, persisted Store actions, backup/restore support, and a derived actual-study-time aggregate.
+**Produces:** `FocusSession` types, deterministic timing/transition helpers, persisted Store actions, backup/restore support, and a derived actual-study-time aggregate.
 
-- [ ] **Step 1: Add the Focus types**
+- [ ] **Step 1: Add Focus types**
 
-In `types/index.ts`, add exactly:
+In `types/index.ts`, add:
 ```ts
 export type FocusSessionStatus = "running" | "paused" | "completed";
 export type FocusSessionEndReason = "timer" | "manual" | "recovered";
@@ -135,12 +134,11 @@ export interface FocusSession {
 }
 ```
 
-Add `focusSessions?: FocusSession[]` to `ClassFlowBackupData` so older backup fixtures remain valid.
+Add `focusSessions?: FocusSession[]` to `ClassFlowBackupData` so old backup fixtures remain valid.
 
-- [ ] **Step 2: Write failing deterministic domain tests**
+- [ ] **Step 2: Write failing domain tests**
 
-Create `tests/focusDomain.test.ts`. Use small fixture builders defined inside the test file; do not depend on wall-clock time. Cover these exact behaviors:
-
+Create `tests/focusDomain.test.ts` with deterministic fixture builders defined in the test file. Cover these exact cases:
 ```ts
 it("derives elapsed time from timestamps instead of tick accumulation", () => {
   const session = makeRunningSession({
@@ -167,9 +165,9 @@ it("paused wall-clock time never increases active elapsed time", () => {
 });
 ```
 
-Also test: pause captures the current active segment; resume starts a new segment without counting the pause gap; manual finish stores real active elapsed milliseconds; invalid persisted records normalize to `null`; `sumCompletedFocusMs` sums exact milliseconds from completed history.
+Also test: pause captures the current active segment; resume starts a new segment without counting the pause gap; manual finish stores real active milliseconds; invalid persisted records normalize to `null`; `sumCompletedFocusMs` sums exact completed-session milliseconds without per-session rounding.
 
-- [ ] **Step 3: Run the new tests and confirm the expected failure**
+- [ ] **Step 3: Confirm the expected failing test**
 
 ```bash
 npx vitest run tests/focusDomain.test.ts
@@ -178,7 +176,7 @@ Expected: FAIL because the Focus domain does not exist yet.
 
 - [ ] **Step 4: Implement the pure Focus domain**
 
-In `lib/focus/focusDomain.ts`, export these contracts:
+In `lib/focus/focusDomain.ts`, export:
 ```ts
 export type FocusErrorCode =
   | "FOCUS_SESSION_ALREADY_ACTIVE"
@@ -198,24 +196,21 @@ export interface FocusClock {
   remainingMs: number;
   due: boolean;
 }
-```
 
-Export these functions with these responsibilities:
-```ts
-normalizeFocusSession(value: unknown): FocusSession | null;
-deriveFocusClock(session: FocusSession, now: number): FocusClock;
-pauseFocusSessionRecord(session: FocusSession, now: number): FocusSession;
-resumeFocusSessionRecord(session: FocusSession, now: number): FocusSession;
-finishFocusSessionRecord(session: FocusSession, now: number): FocusSession;
-completeFocusSessionRecord(
+export function normalizeFocusSession(value: unknown): FocusSession | null;
+export function deriveFocusClock(session: FocusSession, now: number): FocusClock;
+export function pauseFocusSessionRecord(session: FocusSession, now: number): FocusSession;
+export function resumeFocusSessionRecord(session: FocusSession, now: number): FocusSession;
+export function finishFocusSessionRecord(session: FocusSession, now: number): FocusSession;
+export function completeFocusSessionRecord(
   session: FocusSession,
   reason: "timer" | "recovered",
   now: number
 ): FocusSession;
-sumCompletedFocusMs(sessions: FocusSession[]): number;
+export function sumCompletedFocusMs(sessions: FocusSession[]): number;
 ```
 
-`deriveFocusClock` uses timestamp derivation:
+`deriveFocusClock` uses:
 ```ts
 const plannedMs = session.plannedMinutes * 60_000;
 const currentActiveMs =
@@ -227,9 +222,9 @@ const remainingMs = Math.max(0, plannedMs - elapsedActiveMs);
 return { elapsedActiveMs, remainingMs, due: remainingMs === 0 };
 ```
 
-All transition helpers return new objects and never mutate input. Natural/recovered completion clamps `actualActiveMs` to `plannedMinutes * 60_000`. Manual finish stores actual active time without rounding.
+All transition helpers return new objects. Natural/recovered completion clamps `actualActiveMs` to `plannedMinutes * 60_000`; manual finish stores actual active time without rounding.
 
-- [ ] **Step 5: Add Store state and actions**
+- [ ] **Step 5: Add Store state/actions**
 
 Add to `AppState`:
 ```ts
@@ -254,35 +249,35 @@ completeFocusSession: (
 ) => FocusMutationResult;
 ```
 
-Store rules:
+Rules:
 - valid `plannedMinutes` is an integer from 1 through 240;
 - reject a second `running` or `paused` Session;
 - validate relation IDs against current Store state;
-- selecting an Assignment writes its `assignmentId`, its real `courseId`, `assignmentTitleSnapshot`, and `courseNameSnapshot`;
-- providing both Assignment and Course rejects a mismatch;
+- selecting an Assignment writes its real `assignmentId`, `courseId`, `assignmentTitleSnapshot`, and `courseNameSnapshot`;
+- Assignment plus a nonmatching Course rejects with `FOCUS_TARGET_MISMATCH`;
 - selecting only a Course writes `courseId` and `courseNameSnapshot`;
 - source defaults to `manual`;
-- `pause`, `resume`, and `finish` operate only on the single active Session;
-- `completeFocusSession` succeeds only when the requested ID is still `running`; repeated completion attempts return a bounded non-success result and do not mutate data.
+- pause/resume/finish operate on the single active Session;
+- `completeFocusSession` succeeds only when the requested ID is still `running`, so repeated completion attempts cannot double-count or double-notify.
 
 - [ ] **Step 6: Persist and back up Focus history**
 
 In `store/useAppStore.ts`:
 - add optional `focusSessions` to `PersistedAppState` and `LegacyPersistedStateV0`;
-- sanitize persisted entries through `normalizeFocusSession` and drop invalid entries;
+- sanitize through `normalizeFocusSession` and drop invalid entries;
 - initialize `focusSessions: []`;
-- clear Focus history in `clearLearningData` and `resetEntireApp`;
-- restore `data.focusSessions` when present, otherwise restore `[]`;
-- include `focusSessions` in `partialize`;
-- bump Zustand persist version from 5 to 6 and document that v6 adds Focus Sessions.
+- clear it in `clearLearningData` and `resetEntireApp`;
+- restore `data.focusSessions` when present, otherwise `[]`;
+- include it in `partialize`;
+- bump persist version from 5 to 6 and document v6 as Focus Sessions.
 
 In `components/settings/BackupSection.tsx`, select `focusSessions` and include it in `backupData()`.
 
 - [ ] **Step 7: Add Store behavior tests**
 
-In `tests/focusDomain.test.ts`, reset Store state in `beforeEach` and cover the one-active invariant, relation validation, pause-gap accounting, manual finish accounting, and old backup restore without `focusSessions`.
+Reset Store state in `beforeEach`. Test one-active, relation validation, pause-gap accounting, manual finish, and old backup restore without `focusSessions`.
 
-The one-active test must include:
+The one-active test includes:
 ```ts
 const first = useAppStore.getState().startFocusSession({ plannedMinutes: 30 }, 1_000);
 expect(first.ok).toBe(true);
@@ -321,22 +316,22 @@ git commit -m "feat(focus): add persistent focus session domain"
 
 **Consumes:** Task 2 `deriveFocusClock` and `completeFocusSession`.
 
-**Produces:** one hydration-aware root runtime, one completion timeout, and best-effort delivery helpers.
+**Produces:** one hydration-aware root runtime, one completion timeout, and best-effort completion delivery.
 
-- [ ] **Step 1: Write failing runtime decision tests**
+- [ ] **Step 1: Write failing runtime tests**
 
-Create `tests/focusRuntime.test.ts` for: no active Session -> `none`; paused Session -> `none`; running and not due -> `none`; booting and overdue -> `complete-recovered`; running phase and overdue -> `complete-live`. Also verify Store idempotency by calling `completeFocusSession` twice and asserting only the first call succeeds.
+Create `tests/focusRuntime.test.ts`. Cover: no active -> `none`; paused -> `none`; running/not due -> `none`; booting/overdue -> `complete-recovered`; running-phase/overdue -> `complete-live`; duplicate Store completion where only the first call succeeds.
 
-- [ ] **Step 2: Run and confirm failure**
+- [ ] **Step 2: Confirm failure**
 
 ```bash
 npx vitest run tests/focusRuntime.test.ts
 ```
 Expected: FAIL because runtime helpers do not exist.
 
-- [ ] **Step 3: Add the pure runtime decision seam**
+- [ ] **Step 3: Add runtime decision seam**
 
-In `lib/focus/focusRuntime.ts`, export:
+In `lib/focus/focusRuntime.ts`:
 ```ts
 export type FocusRuntimePhase = "booting" | "running";
 export type FocusRuntimeDecision = "none" | "complete-recovered" | "complete-live";
@@ -352,39 +347,35 @@ export function getFocusRuntimeDecision(
 }
 ```
 
-- [ ] **Step 4: Implement best-effort completion helpers**
+- [ ] **Step 4: Implement notification helpers**
 
 In `lib/focus/focusNotifications.ts`, export:
 ```ts
-playFocusCompleteSound(): boolean;
-showFocusBrowserNotification(input: { title: string; body: string }): boolean;
+export function playFocusCompleteSound(): boolean;
+export function showFocusBrowserNotification(input: { title: string; body: string }): boolean;
 ```
 
-Rules:
-- never call `Notification.requestPermission()`;
-- browser notification requires `Notification.permission === "granted"`;
-- sound is a short local WebAudio tone, plays once, and catches all failures;
-- helper failures return `false` and never throw into Focus completion.
+Rules: never call `Notification.requestPermission()`; require `Notification.permission === "granted"`; sound is one short local WebAudio tone; all failures return `false` and never throw into completion.
 
 - [ ] **Step 5: Implement `FocusRuntime`**
 
 `components/focus/FocusRuntime.tsx` must:
 - wait for `useAppStore.persist` hydration;
-- on first reconcile use phase `booting`;
-- find the single `running` Focus Session;
-- on boot overdue call `completeFocusSession(id, "recovered", now)` and show only a lightweight in-app Toast;
-- once initial reconcile finishes, set phase to `running`;
-- schedule one timeout using current derived `remainingMs`;
-- on timeout, `visibilitychange` back to visible, and window focus, reread Store and reconcile;
-- a paused Session schedules no timeout;
-- every Session change clears and reschedules the single timeout;
-- live completion first persists through `completeFocusSession(id, "timer", now)`; only an `ok: true` result may trigger Toast, sound, and browser notification;
-- browser notification additionally requires `useReminderPreferencesStore.getState().browserNotificationsEnabled === true`;
-- manual early finish is handled by UI/Kiro actions and must not trigger completion sound or browser notification here.
+- reconcile first with phase `booting`;
+- find the single `running` Session;
+- boot overdue -> `completeFocusSession(id, "recovered", now)` + in-app Toast only;
+- after initial reconcile set phase `running`;
+- schedule one timeout from derived `remainingMs`;
+- timeout, `visibilitychange` to visible, and window focus all reread Store and reconcile;
+- paused -> no timeout;
+- Session changes clear/reschedule the one timeout;
+- live completion persists first via `completeFocusSession(id, "timer", now)`; only `ok: true` triggers Toast + sound + browser notification;
+- browser notification also requires `useReminderPreferencesStore.getState().browserNotificationsEnabled === true`;
+- manual finish is not delivered by this runtime.
 
-- [ ] **Step 6: Mount the runtime once**
+- [ ] **Step 6: Mount once**
 
-In `app/page.tsx`, import `FocusRuntime` and render exactly one `<FocusRuntime />` near the existing `ReminderRuntime` and `ToastViewport`. Do not place it inside `MiniCalendar` or Kiro.
+In `app/page.tsx`, import and render exactly one `<FocusRuntime />` near `ReminderRuntime` and `ToastViewport`. Do not mount it inside MiniCalendar or Kiro.
 
 - [ ] **Step 7: Verify**
 
@@ -413,20 +404,20 @@ git commit -m "feat(focus): add real-time runtime and completion delivery"
 
 **Produces:** a low-intrusion MiniCalendar-header Focus controller.
 
-- [ ] **Step 1: Implement the three compact header states**
+- [ ] **Step 1: Implement compact states**
 
-`FocusControl` renders:
+Render:
 - idle: `开始专注`;
-- running: `● MM:SS · 专注中`, switching to `H:MM:SS` when remaining duration is at least one hour;
-- paused: `Ⅱ MM:SS · 已暂停`, with the same hour formatting rule.
+- running: `● MM:SS · 专注中`, using `H:MM:SS` at one hour or more;
+- paused: `Ⅱ MM:SS · 已暂停`, with the same hour rule.
 
-Default setup duration is 30 minutes. Presets are exactly `15`, `25`, `30`, `45`, and `60`. Custom duration is an integer from 1 through 240.
+Default setup duration is 30 minutes. Presets are 15, 25, 30, 45, 60. Custom duration is integer 1 through 240.
 
-- [ ] **Step 2: Implement the anchored setup popover**
+- [ ] **Step 2: Implement anchored setup popover**
 
-Use a `relative` wrapper and an `absolute` panel positioned from the Focus button; do not use a Dialog, portal, or full-screen overlay.
+Use a `relative` wrapper and an `absolute` panel; no Dialog, portal, or full-screen overlay.
 
-The relation selector must render exact grouped options from current Store data:
+Render the relation selector from current Store data:
 ```tsx
 <select aria-label="关联对象" value={relation} onChange={(event) => setRelation(event.target.value)}>
   <option value="none">不关联</option>
@@ -449,21 +440,21 @@ The relation selector must render exact grouped options from current Store data:
 </select>
 ```
 
-Use a text input or textarea with `aria-label="专注说明"`, maximum 200 characters, and no required value. Starting a Session calls `startFocusSession` with `source: "manual"`; map bounded domain errors to concise existing Toast messages.
+Use a `<textarea aria-label="专注说明" maxLength={200} />`. Starting calls `startFocusSession` with `source: "manual"`. Map each bounded Focus error code to one concise existing Toast message; do not expose raw error codes.
 
-- [ ] **Step 3: Implement active status mode**
+- [ ] **Step 3: Implement active popover**
 
-For a running Session, use component-local `now` state refreshed once per second only for display. Do not persist ticks. Running popover actions are `暂停` and `提前结束`. Paused popover actions are `继续` and `提前结束`. Display `assignmentTitleSnapshot` first, otherwise `courseNameSnapshot`, and display `note` when present.
+Running Session display uses component-local `now` refreshed once per second only for rendering; no per-second Zustand writes. Running actions: `暂停`, `提前结束`. Paused actions: `继续`, `提前结束`. Display `assignmentTitleSnapshot`, otherwise `courseNameSnapshot`; show note when present.
 
-Manual finish shows a lightweight Toast such as `已结束专注 · 本次 12 分钟`; it does not play completion sound or create a system notification.
+Manual finish shows `已结束专注 · 本次 N 分钟` using the final `actualActiveMs` rounded only for display. It does not play completion sound or create a system notification.
 
-- [ ] **Step 4: Add popover dismissal behavior**
+- [ ] **Step 4: Dismissal**
 
-Escape closes the popover. Pointer-down outside the wrapper closes the popover. State transitions do not create a second overlay stack.
+Escape closes the popover. Pointer-down outside the wrapper closes it. Do not create another overlay stack.
 
-- [ ] **Step 5: Insert the control beside `回到今天`**
+- [ ] **Step 5: Insert beside `回到今天`**
 
-In `MiniCalendar`'s existing right-side header control group, import `FocusControl` and insert `<FocusControl />` immediately before the existing `回到今天` button. Do not rewrite the previous/next month buttons.
+In MiniCalendar's existing right-side header controls, import `FocusControl` and insert `<FocusControl />` immediately before the current `回到今天` button. Do not rewrite previous/next month buttons.
 
 Do not add a calendar footer, permanent Focus statistics, floating timer, sidebar timer, or browser-title timer.
 
@@ -497,36 +488,28 @@ git commit -m "feat(focus): add compact overview focus control"
 - Modify: `lib/ai/tools/mutating.ts`
 - Modify: `hooks/useKiroChat.ts`
 - Create: `tests/kiroFocusTools.test.ts`
-- Modify only KiroWriteApi fixtures reported by typecheck, with likely locations `tests/aiWrite.test.ts`, `tests/kiroTaskV2.test.ts`, and `tests/transaction.test.ts`.
+- Modify only KiroWriteApi fixtures reported by typecheck; likely locations are `tests/aiWrite.test.ts`, `tests/kiroTaskV2.test.ts`, and `tests/transaction.test.ts`.
 
-**Produces:** read tool `get_focus_status`; write tools `start_focus_session`, `pause_focus_session`, `resume_focus_session`, `finish_focus_session`.
+**Produces:** `get_focus_status`, `start_focus_session`, `pause_focus_session`, `resume_focus_session`, `finish_focus_session`.
 
-- [ ] **Step 1: Write failing Focus tool tests**
+- [ ] **Step 1: Write failing tool tests**
 
-Create `tests/kiroFocusTools.test.ts` with a real Store-backed or faithful `KiroWriteApi` fixture. Cover:
-- `get_focus_status` returns `{ active: false }` when no Session exists;
-- after start, status returns `status`, `plannedMinutes`, exact `elapsedActiveMs`, exact `remainingMs`, relation snapshots, and note;
-- direct start succeeds;
-- second start rejects with `FOCUS_SESSION_ALREADY_ACTIVE`;
-- invalid/missing relation IDs reject;
-- Assignment/Course mismatch rejects;
-- pause and resume enforce state transitions;
-- finish records actual active elapsed time and returns `canUndo: false`.
+Create `tests/kiroFocusTools.test.ts` with a `KiroWriteApi` fixture whose four Focus methods delegate to `useAppStore.getState()` and whose unrelated methods follow the existing minimal fixture style. Cover inactive status, running status facts, direct start, second-start rejection, missing relation, relation mismatch, pause/resume guards, manual finish actual time, and `canUndo: false`.
 
-- [ ] **Step 2: Run and confirm failure**
+- [ ] **Step 2: Confirm failure**
 
 ```bash
 npx vitest run tests/kiroFocusTools.test.ts
 ```
-Expected: FAIL because the tools are not registered.
+Expected: FAIL because tools are not registered.
 
-- [ ] **Step 3: Add Read Tool schema, registry, and executor**
+- [ ] **Step 3: Add Read Tool**
 
-Add `get_focus_status` with `z.object({})`. Extend `ReadToolState` with optional `focusSessions?: FocusSession[]` so old fixtures compile. The executor finds the single active Session and uses `deriveFocusClock(active, Date.now())`; the model must never calculate timer facts itself.
+Add `get_focus_status` with `z.object({})`. Extend `ReadToolState` with optional `focusSessions?: FocusSession[]`. Executor finds the one active Session and uses `deriveFocusClock(active, Date.now())`; the model never calculates timer facts.
 
-- [ ] **Step 4: Add Write Tool schemas and registry**
+- [ ] **Step 4: Add Write Tool schemas/registry**
 
-Use this exact start schema:
+Start schema:
 ```ts
 z.object({
   plannedMinutes: z.number().int().min(1).max(240),
@@ -536,11 +519,11 @@ z.object({
 })
 ```
 
-Use `z.object({})` for pause, resume, and finish. Register all four as normal risk. Add all four names to `KIRO_MUTATING_TOOL_NAMES` so regenerate and edit safety recognize them as persistent mutations.
+Pause/resume/finish use `z.object({})`. All four risks are normal. Add all four write names to `KIRO_MUTATING_TOOL_NAMES`.
 
-- [ ] **Step 5: Extend the bounded Kiro write API and result envelope**
+- [ ] **Step 5: Extend `KiroWriteApi` and result envelope**
 
-In `lib/ai/tools/write/types.ts`, add:
+Add:
 ```ts
 startFocusSession: AppState["startFocusSession"];
 pauseFocusSession: AppState["pauseFocusSession"];
@@ -548,15 +531,15 @@ resumeFocusSession: AppState["resumeFocusSession"];
 finishFocusSession: AppState["finishFocusSession"];
 ```
 
-Add `"focus-session"` to action `entityType`. Add all Task 2 Focus error codes to the failure `code` union. Focus action results always have `canUndo: false`.
+Add `"focus-session"` to action `entityType`, and add every Task 2 Focus error code to the failure-code union. Focus actions always return `canUndo: false`.
 
 - [ ] **Step 6: Implement Write Tool executors**
 
-`start_focus_session` calls `api.startFocusSession` with `source: "kiro"`. Pause/resume/finish call the matching bounded API action. Translate the Store result into `WriteToolResult`; do not call `useAppStore.setState` from the executor. Include real Session facts in `action.after` so Task 6 can render factual result cards.
+`start_focus_session` calls `api.startFocusSession` with `source: "kiro"`. Pause/resume/finish call matching API methods. Translate Store results into bounded `WriteToolResult`; no direct `setState`. Put real Session facts in `action.after` so presentation can be factual.
 
-- [ ] **Step 7: Expose Store Focus actions in `buildWriteApi`**
+- [ ] **Step 7: Expose Store Focus methods in `buildWriteApi`**
 
-In `hooks/useKiroChat.ts`, add these exact wrappers:
+Add:
 ```ts
 startFocusSession: (input, now) => useAppStore.getState().startFocusSession(input, now),
 pauseFocusSession: (now) => useAppStore.getState().pauseFocusSession(now),
@@ -564,16 +547,16 @@ resumeFocusSession: (now) => useAppStore.getState().resumeFocusSession(now),
 finishFocusSession: (now) => useAppStore.getState().finishFocusSession(now),
 ```
 
-Do not create Focus timer state inside Kiro.
+Do not create Kiro-local timer state.
 
-- [ ] **Step 8: Repair compile-only KiroWriteApi fixtures**
+- [ ] **Step 8: Repair compile-only fixtures**
 
 Run:
 ```bash
 rg "KiroWriteApi|implements KiroWriteApi" tests lib components hooks
 ```
 
-Add only the four new Focus method stubs/wrappers where TypeScript requires them. Do not broaden unrelated test behavior.
+Add only the four new Focus methods to fixtures TypeScript reports. Do not widen unrelated tests.
 
 - [ ] **Step 9: Verify**
 
@@ -600,30 +583,30 @@ git commit -m "feat(kiro): add bounded focus tools"
 - Modify: `components/kiro/KiroActionCard.tsx`
 - Create: `tests/kiroFocusPresentation.test.ts`
 
-**Consumes:** Task 5 Focus tool names and factual tool results.
+**Consumes:** Task 5 Focus tool names/results.
 
-**Produces:** explicit Focus intent policy, semantic activity labels, and Focus action cards.
+**Produces:** explicit Focus intent policy, semantic activity labels, factual Focus action cards.
 
 - [ ] **Step 1: Write failing presentation tests**
 
-Create `tests/kiroFocusPresentation.test.ts`. Assert `toolLabel` names and `actionToCardProps` headings for all four actions:
+Create `tests/kiroFocusPresentation.test.ts`. Assert labels and `actionToCardProps` headings:
 - start -> `已开始专注`;
 - pause -> `已暂停专注`;
 - resume -> `已继续专注`;
 - finish -> `已结束专注`.
 
-Assert duration, remaining-time, relation title, and note are read from `action.after`/`action.before`, not reconstructed from model prose.
+Assert duration, remaining time, relation title, and note are derived from action facts, not model prose.
 
-- [ ] **Step 2: Run and confirm failure**
+- [ ] **Step 2: Confirm failure**
 
 ```bash
 npx vitest run tests/kiroFocusPresentation.test.ts
 ```
-Expected: FAIL because Focus presentation is not registered.
+Expected: FAIL because Focus presentation is absent.
 
-- [ ] **Step 3: Add Focus semantics to `KIRO_SYSTEM_PROMPT`**
+- [ ] **Step 3: Add system-prompt Focus semantics**
 
-Add a `# Focus Session 语义` section containing these rules:
+Add `# Focus Session 语义` with these rules:
 ```text
 - FocusSession 表示现在正在进行或已经完成的一次真实专注计时，不是 StudyBlock 计划。
 - 明确现在执行的命令，例如“开始专注30分钟”“现在专注统计学45分钟”，可直接调用 start_focus_session，不额外确认。
@@ -635,9 +618,9 @@ Add a `# Focus Session 语义` section containing these rules:
 - 只有 Tool 返回 ok:true 后才能声称 Focus 状态已经改变。
 ```
 
-- [ ] **Step 4: Add activity labels and action-card variant**
+- [ ] **Step 4: Add labels and action-card variant**
 
-Add formatter labels:
+Add:
 ```ts
 get_focus_status: "查看专注状态",
 start_focus_session: "开始专注",
@@ -646,7 +629,7 @@ resume_focus_session: "继续专注",
 finish_focus_session: "结束专注",
 ```
 
-Extend `KiroActionCardVariant` with `"focus-session"` and use a compact Lucide `Timer` or `Clock3` icon already available in the installed `lucide-react` version. Render only factual fields from the Write Tool action result.
+Extend `KiroActionCardVariant` with `"focus-session"` and use Lucide `Timer`. Render only fields from the real Write Tool action result.
 
 - [ ] **Step 5: Verify**
 
@@ -672,30 +655,31 @@ git commit -m "feat(kiro): teach Kiro focus intent and presentation"
 - Create: `tests/kiroMessageEditing.test.ts`
 - Modify: `hooks/useKiroChat.ts`
 
-**Consumes:** the global `KIRO_MUTATING_TOOL_NAMES`, including the Focus writes from Task 5.
+**Consumes:** `KIRO_MUTATING_TOOL_NAMES`, including Task 5 Focus writes.
 
-**Produces:** pure suffix safety/truncation helpers, per-user-message editability metadata, and `chat.editAndResend(messageId, text)`.
+**Produces:** suffix safety/truncation helpers, robust message attachment mapping, per-user-message editability metadata, and `chat.editAndResend(messageId, text)`.
 
-- [ ] **Step 1: Write failing pure safety tests**
+- [ ] **Step 1: Write failing safety tests**
 
-Create `tests/kiroMessageEditing.test.ts` with explicit fixtures for:
-1. a text-only user message followed only by read-only assistant turns -> allowed;
-2. a target user message whose later assistant suffix contains `tool-update_assignment` -> blocked with `write-suffix`;
-3. the earliest user message when a still-later turn contains a write -> blocked with `write-suffix`;
-4. a target user message with an attachment snapshot -> blocked with `attachments`;
-5. a restored assistant message ID listed in `historicalWriteMessageIds` -> blocked with `write-suffix` even though restored raw parts contain only text;
-6. truncation returns all messages strictly before the edited user message and removes the edited message plus every later message.
+Create `tests/kiroMessageEditing.test.ts` with fixtures for:
+1. text-only target + read-only suffix -> allowed;
+2. later `tool-update_assignment` in suffix -> `write-suffix`;
+3. an earlier target with a still-later write -> `write-suffix`;
+4. target attachment -> `attachments`;
+5. restored assistant ID in `historicalWriteMessageIds` -> `write-suffix` even though restored raw parts are text-only;
+6. truncation returns all messages strictly before the target and removes target plus suffix;
+7. restored messages alone do not block editing when their suffix has no persisted actions.
 
-- [ ] **Step 2: Run and confirm failure**
+- [ ] **Step 2: Confirm failure**
 
 ```bash
 npx vitest run tests/kiroMessageEditing.test.ts
 ```
-Expected: FAIL because the helper does not exist.
+Expected: FAIL because edit helpers do not exist.
 
-- [ ] **Step 3: Implement library-safe mutation detection and edit helpers**
+- [ ] **Step 3: Implement library-safe mutation/edit helpers**
 
-In `lib/ai/history/messageEditing.ts`, export:
+In `lib/ai/history/messageEditing.ts`:
 ```ts
 export type UserMessageEditBlockReason =
   | "turn-in-flight"
@@ -721,46 +705,49 @@ export function truncateBeforeEditedUserMessage<T extends { id: string; role: st
 ): T[];
 ```
 
-`truncateBeforeEditedUserMessage` must return `messages.slice(0, targetIndex)` for a valid target. `getUserMessageEditBlockReason` scans from the target index through the end and blocks any live mutating tool call or any message ID in `historicalWriteMessageIds`.
+`truncateBeforeEditedUserMessage` returns `messages.slice(0, targetIndex)`. The guard scans from target through current end. Move hook-local mutation detection to this helper and keep `messageHasWriteToolCalls` as a thin alias only if existing imports require the old export name.
 
-Move the existing mutation test out of hook-local implementation by making `hooks/useKiroChat.ts` import `messageHasMutatingToolCalls`; preserve the exported `messageHasWriteToolCalls` name as a thin alias if existing tests/importers require it.
+- [ ] **Step 4: Make turn attachment input explicit**
 
-- [ ] **Step 4: Make attachment-free resend explicit**
+Refactor `buildTurnSnapshot` to accept `turnAttachments: KiroAttachment[]` and build document context from that argument rather than the hook's ambient Composer attachment array.
 
-Refactor the current `send` implementation inside `useKiroChat` into an internal helper that accepts a concrete `turnAttachments: KiroAttachment[]`. Standard Composer send calls it with the current `attachments`; edit resend calls it with `[]`.
+Refactor the current send body into an internal `sendWithAttachments(text: string, turnAttachments: KiroAttachment[]): Promise<boolean>`. Public `send(text)` calls `sendWithAttachments(text, attachments)`. Edit resend calls `sendWithAttachments(revisedText, [])`. This ensures editing never consumes or sends attachments currently waiting in the Composer, and the Composer attachment state remains unchanged.
 
-Also change the turn-snapshot builder to accept the same concrete attachment list, so an edited text-only message cannot accidentally include attachments currently sitting in the Composer. The Composer attachment state itself must remain untouched by editing.
+- [ ] **Step 5: Stabilize attachment snapshots for truncation/history**
 
-The external `send(text: string)` signature remains unchanged.
+Change `snapshotQueueRef` semantics so every live user send pushes exactly one entry, including `[]` for text-only turns. When deriving message views, consume `snapshotQueueRef` only for user messages where `isRestoredMessage(m) === false`; restored attachments continue to come only from `restoredAttachmentsRef`.
 
-- [ ] **Step 5: Derive editability after attachment/history metadata is attached to views**
+This gives one positional snapshot per live user message and prevents a new live resend from attaching to the first restored historical user message.
 
-Extend `KiroChatMessageView` with:
+- [ ] **Step 6: Derive per-message editability**
+
+Extend `KiroChatMessageView`:
 ```ts
 canEdit?: boolean;
 editDisabledReason?: UserMessageEditBlockReason;
 ```
 
-When building user views, compute `targetHasAttachments` from the final `view.attachments`. Build `historicalWriteMessageIds` from restored assistant-message IDs whose `restoredActionsRef` entry is non-empty. Do not block a historical message merely because `metadata.restored === "1"`; a restored text-only read-only suffix is editable.
+After final attachment/history metadata is attached to a user view, compute `targetHasAttachments` from `view.attachments`. Build `historicalWriteMessageIds` from restored assistant IDs whose `restoredActionsRef` entry is non-empty. A message is not blocked merely because `metadata.restored === "1"`. Include current `streaming`/submitted state so all edit actions temporarily disable while a turn is in flight.
 
-Include `streaming`/turn-in-flight state in editability derivation so all user messages temporarily disable while a turn is submitted or streaming.
-
-- [ ] **Step 6: Implement `editAndResend` in `useKiroChat`**
+- [ ] **Step 7: Implement `editAndResend`**
 
 At submit time:
 1. trim and reject empty text;
-2. locate the target raw user message and reconstruct its current text;
-3. if trimmed text is unchanged, return `true` without a model request;
-4. rerun the full safety guard using current raw messages, final target attachment state, current turn-in-flight state, and restored write IDs;
-5. on a blocked guard, push an informational Toast and return `false`;
+2. locate the target raw user message and reconstruct current text;
+3. unchanged trimmed text -> return `true` without a model request;
+4. rerun the full safety guard using current raw messages, final target attachment state, current in-flight state, and restored write IDs;
+5. blocked -> informational Toast + return `false`;
 6. compute `prefix = truncateBeforeEditedUserMessage(chat.messages, messageId)`;
-7. call `chat.setMessages(prefix)`;
-8. clear stale view/source/undo state that belongs only to the removed suffix while preserving the existing conversation identity;
-9. call the internal attachment-free send helper with revised text and `[]`.
+7. collect `removedIds` from the raw messages after the prefix;
+8. `chat.setMessages(prefix)`;
+9. trim live attachment snapshots to the number of non-restored user messages in `prefix`;
+10. delete `removedIds` from `restoredActionsRef`, `restoredAttachmentsRef`, and `restoredSourcesRef`;
+11. clear `viewCacheRef`, `turnSourcesRef`, visible `sources`, and `visionPagesRef`; keep `undoRegistryRef` because the guard guarantees no truncated suffix write while earlier-prefix writes may still be undoable;
+12. call `sendWithAttachments(revisedText, [])`.
 
-Editing only occurs inside an existing conversation, so `KiroSessionProvider` does not create a new conversation seed. The existing provider spreads the hook chat object into `sessionChat`; expose `editAndResend` unchanged through that object. History persistence observes the updated messages under the same conversation ID.
+Editing happens inside an existing conversation, so do not create a new conversation seed. `KiroSessionProvider` already spreads the hook chat object into `sessionChat`; expose `editAndResend` unchanged and retain the current conversation ID for persistence.
 
-- [ ] **Step 7: Verify**
+- [ ] **Step 8: Verify**
 
 ```bash
 npx vitest run tests/kiroMessageEditing.test.ts tests/kiroConversationSeed.test.ts
@@ -768,7 +755,7 @@ npm run typecheck
 ```
 Expected: PASS.
 
-- [ ] **Step 8: Commit**
+- [ ] **Step 9: Commit**
 
 ```bash
 git add lib/ai/history/messageEditing.ts hooks/useKiroChat.ts tests/kiroMessageEditing.test.ts
@@ -786,25 +773,25 @@ git commit -m "feat(kiro): add safe user message edit semantics"
 
 **Consumes:** Task 7 `canEdit`, `editDisabledReason`, and `chat.editAndResend`.
 
-**Produces:** a Pencil action and inline textarea editing on Kiro user messages.
+**Produces:** Pencil action + inline textarea editing.
 
-- [ ] **Step 1: Thread the edit callback through existing component props**
+- [ ] **Step 1: Thread callback through existing props**
 
-Add `onEditUserMessage: (messageId: string, text: string) => Promise<boolean>` to `KiroConversation`. In the existing `KiroChatSurface` call, pass `onEditUserMessage={chat.editAndResend}`. In `KiroConversationRow`, pass the current user message ID, `view.canEdit`, `view.editDisabledReason`, and the callback into `KiroUserMessage`.
+Add `onEditUserMessage: (messageId: string, text: string) => Promise<boolean>` to `KiroConversation`. Pass `onEditUserMessage={chat.editAndResend}` from the existing `KiroChatSurface` call. In `KiroConversationRow`, pass message ID, `view.canEdit`, `view.editDisabledReason`, and the callback to `KiroUserMessage`.
 
-- [ ] **Step 2: Add the Pencil action beside Copy**
+- [ ] **Step 2: Add Pencil beside Copy**
 
-Use Lucide `Pencil` or `PencilLine`. Keep the existing action visibility behavior: mobile always reachable; desktop visible on group hover/focus.
+Use Lucide `Pencil`. Preserve current responsive action visibility: mobile always reachable; desktop group hover/focus.
 
-Keep the Edit control visible but disabled when blocked. Use these exact `title` strings:
+Keep Edit visible but disabled when blocked. Exact `title` strings:
 - `write-suffix`: `该消息之后包含已执行操作，无法直接编辑；请发送新的修改指令。`
 - `attachments`: `该消息包含附件，暂不支持直接编辑；请重新发送。`
 - `turn-in-flight`: `Kiro 正在处理当前消息，请稍后再编辑。`
 - `message-not-found`: `该消息已不可编辑。`
 
-- [ ] **Step 3: Implement inline edit state inside `KiroUserMessage`**
+- [ ] **Step 3: Implement inline edit state**
 
-Clicking Edit replaces only the text bubble with an autosizing textarea initialized to the current content. Render two controls below it: `取消` and `保存并发送`.
+Edit replaces only the text bubble with an autosizing textarea initialized to current content. Render `取消` and `保存并发送` below it.
 
 Keyboard behavior:
 ```ts
@@ -812,11 +799,11 @@ if (event.key === "Escape") cancelEdit();
 if ((event.metaKey || event.ctrlKey) && event.key === "Enter") submitEdit();
 ```
 
-Plain Enter inserts a newline. A trimmed empty value cannot submit. Unchanged trimmed text exits edit mode without invoking `onEditUserMessage`. While submit is awaiting the Promise, disable both submit and repeated Edit actions.
+Plain Enter inserts a newline. Trimmed empty text cannot submit. Unchanged trimmed text exits without calling `onEditUserMessage`. While awaiting submit Promise, disable submit and repeated Edit.
 
-- [ ] **Step 4: Preserve the existing low-intrusion layout**
+- [ ] **Step 4: Preserve layout scope**
 
-Do not use a Dialog/Modal. Do not add branches or versions. Do not change assistant-message Copy/Regenerate/More behavior.
+No Dialog/Modal. No branch/version UI. Do not change assistant Copy/Regenerate/More behavior.
 
 - [ ] **Step 5: Verify**
 
@@ -837,8 +824,7 @@ git commit -m "feat(kiro): add inline user message editing"
 
 ## Final Integration Gate
 
-After Tasks 1 through 8 are individually reviewed and committed, run only this consolidated targeted gate:
-
+After Tasks 1 through 8 are individually reviewed and committed:
 ```bash
 npx vitest run \
   tests/pagination.test.ts \
@@ -851,7 +837,6 @@ npx vitest run \
   tests/kiroConversationSeed.test.ts
 npm run typecheck
 ```
-
 Expected: all targeted tests and typecheck PASS.
 
 Do not run `npm run build`, the full Vitest suite, or Playwright by default. Escalate only if a targeted failure demonstrates a cross-cutting regression.
