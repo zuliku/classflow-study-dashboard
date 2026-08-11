@@ -18,6 +18,8 @@ export function validateAIChatBody(body: unknown): {
   timeoutMs?: number;
   /** Intelligence V2 Task 1：回答偏好（可安全 fallback；非法/缺失 → dense，不报错） */
   responsePreference: KiroResponsePreference;
+  /** Task 14：联网搜索配置（enabled / credentialMode / 仅 BYOK 带 userApiKey） */
+  webSearchConfig?: { enabled?: boolean; credentialMode?: "server" | "byok"; apiKey?: string };
 } | { ok: false; code: string; message: string } {
   const b = (typeof body === "object" && body !== null ? body : {}) as Record<string, unknown>;
   const provider = b.provider;
@@ -31,6 +33,7 @@ export function validateAIChatBody(body: unknown): {
     return { ok: false, code: "INVALID_API_KEY", message: "缺少 API Key。" };
   }
   const custom = (typeof b.customConfig === "object" && b.customConfig !== null ? b.customConfig : {}) as Record<string, unknown>;
+  const webSearch = (typeof b.webSearchConfig === "object" && b.webSearchConfig !== null ? b.webSearchConfig : {}) as Record<string, unknown>;
   return {
     ok: true,
     provider,
@@ -44,6 +47,11 @@ export function validateAIChatBody(body: unknown): {
     messages: b.messages,
     timeoutMs: typeof b.timeoutMs === "number" && b.timeoutMs > 0 ? b.timeoutMs : undefined,
     responsePreference: normalizeKiroResponsePreference(b.responsePreference),
+    webSearchConfig: {
+      enabled: webSearch.enabled === true,
+      credentialMode: webSearch.credentialMode === "byok" ? "byok" : "server",
+      apiKey: typeof webSearch.apiKey === "string" ? webSearch.apiKey : undefined,
+    },
   };
 }
 

@@ -261,6 +261,43 @@ describe("Kiro Search tool + turn state", () => {
     const { KIRO_MUTATING_TOOL_NAMES } = await import("@/lib/ai/tools/mutating");
     expect((KIRO_MUTATING_TOOL_NAMES as string[]).includes("web_search")).toBe(false);
   });
+
+  it("assembleKiroToolsForRequest：enabled → 有 web_search；disabled → 无；client tools 保留", async () => {
+    const { assembleKiroToolsForRequest } = await import("@/lib/ai/web/tool");
+    const { KIRO_TOOLS } = await import("@/lib/ai/tools");
+    const clientTools = { ...KIRO_TOOLS };
+
+    const enabled = assembleKiroToolsForRequest({
+      webSearchEnabled: true,
+      credential: { mode: "server" },
+      messages: [],
+      clientTools,
+    });
+    expect("web_search" in enabled).toBe(true);
+    expect("search_assignments" in enabled).toBe(true); // client tools 保留
+
+    const disabled = assembleKiroToolsForRequest({
+      webSearchEnabled: false,
+      credential: { mode: "server" },
+      messages: [],
+      clientTools,
+    });
+    expect("web_search" in disabled).toBe(false);
+    expect("search_assignments" in disabled).toBe(true);
+  });
+
+  it("Client Read/Write Tools 没有 server execute（保持原 client-side 架构）", async () => {
+    const { KIRO_READ_TOOLS } = await import("@/lib/ai/tools/read/registry");
+    const { KIRO_WRITE_TOOLS } = await import("@/lib/ai/tools/write/registry");
+    const read = KIRO_READ_TOOLS as unknown as Record<string, { execute?: unknown }>;
+    const write = KIRO_WRITE_TOOLS as unknown as Record<string, { execute?: unknown }>;
+    for (const [name, t] of Object.entries(read)) {
+      expect(t.execute, `read ${name}`).toBeUndefined();
+    }
+    for (const [name, t] of Object.entries(write)) {
+      expect(t.execute, `write ${name}`).toBeUndefined();
+    }
+  });
 });
 
 void _unused;

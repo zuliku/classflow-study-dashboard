@@ -11,6 +11,7 @@ import {
   DEFAULT_KIRO_RESPONSE_PREFERENCE,
   normalizeKiroResponsePreference,
 } from "@/lib/ai/responsePreference";
+import { KiroWebSearchCredentialMode } from "@/lib/ai/web/types";
 
 /**
  * Kiro UI / Behavior Preference（独立于业务 useAppStore / useAISettingsStore）：
@@ -25,9 +26,14 @@ interface KiroPreferencesState {
   autoContextEnabled: boolean;
   /** Intelligence V2 Task 1：回答偏好（只影响 Final Answer 表达深度） */
   responsePreference: KiroResponsePreference;
+  /** Task 14：Kiro Search（联网搜索）；Key 绝不进入 Store */
+  webSearchEnabled: boolean;
+  webSearchCredentialMode: KiroWebSearchCredentialMode;
   setOutputTextSize: (size: KiroOutputTextSize) => void;
   setAutoContextEnabled: (enabled: boolean) => void;
   setResponsePreference: (preference: KiroResponsePreference) => void;
+  setWebSearchEnabled: (enabled: boolean) => void;
+  setWebSearchCredentialMode: (mode: KiroWebSearchCredentialMode) => void;
 }
 
 export const useKiroPreferencesStore = create<KiroPreferencesState>()(
@@ -36,10 +42,15 @@ export const useKiroPreferencesStore = create<KiroPreferencesState>()(
       outputTextSize: "standard",
       autoContextEnabled: true,
       responsePreference: DEFAULT_KIRO_RESPONSE_PREFERENCE,
+      webSearchEnabled: true,
+      webSearchCredentialMode: "server",
       setOutputTextSize: (size) => set({ outputTextSize: normalizeKiroOutputTextSize(size) }),
       setAutoContextEnabled: (enabled) => set({ autoContextEnabled: enabled }),
       setResponsePreference: (preference) =>
         set({ responsePreference: normalizeKiroResponsePreference(preference) }),
+      setWebSearchEnabled: (enabled) => set({ webSearchEnabled: enabled }),
+      setWebSearchCredentialMode: (mode) =>
+        set({ webSearchCredentialMode: mode === "byok" ? "byok" : "server" }),
     }),
     {
       name: "classflow-kiro-preferences-v1",
@@ -48,6 +59,8 @@ export const useKiroPreferencesStore = create<KiroPreferencesState>()(
         outputTextSize: state.outputTextSize,
         autoContextEnabled: state.autoContextEnabled,
         responsePreference: state.responsePreference,
+        webSearchEnabled: state.webSearchEnabled,
+        webSearchCredentialMode: state.webSearchCredentialMode,
       }),
       // 持久化值 hydrate 时同样清洗（旧数据 / 非法值 → 默认）
       merge: (persisted, current) => {
@@ -61,6 +74,10 @@ export const useKiroPreferencesStore = create<KiroPreferencesState>()(
             typeof p?.autoContextEnabled === "boolean" ? p.autoContextEnabled : true,
           // 旧持久化没有 responsePreference → 默认 dense；非法旧数据 → dense
           responsePreference: normalizeKiroResponsePreference(p?.responsePreference),
+          // Task 14：旧持久化无字段 → 默认 enabled=true / server
+          webSearchEnabled:
+            typeof p?.webSearchEnabled === "boolean" ? p.webSearchEnabled : true,
+          webSearchCredentialMode: p?.webSearchCredentialMode === "byok" ? "byok" : "server",
         };
       },
     }

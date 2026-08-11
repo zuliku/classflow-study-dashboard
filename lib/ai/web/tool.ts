@@ -7,7 +7,7 @@
  * - sourceId（web-N）由本层分配，跨 roundtrip 保持递增唯一
  */
 
-import { tool } from "ai";
+import { tool, ToolSet } from "ai";
 import { z } from "zod";
 import {
   KiroWebSearchCredentialMode,
@@ -17,7 +17,7 @@ import {
 } from "@/lib/ai/web/types";
 import { kiroWebSearchInputSchema, normalizeWebSearchDomain } from "@/lib/ai/web/schemas";
 import { resolveWebSearchCredential, KiroWebSearchCredentialResult } from "@/lib/ai/web/credentials";
-import { KiroWebSearchProvider } from "@/lib/ai/web/provider";
+import { KiroWebSearchProvider, getKiroWebSearchProvider } from "@/lib/ai/web/provider";
 import { webSearchSafeMessage } from "@/lib/ai/web/tavily";
 
 export interface KiroWebSearchToolConfig {
@@ -84,6 +84,30 @@ function credentialFailure(
   result: Extract<KiroWebSearchCredentialResult, { ok: false }>
 ): { ok: false; code: typeof result.code; message: string } {
   return { ok: false, code: result.code, message: result.message };
+}
+
+/**
+ * 组装本次请求的 Agent Tools：
+ * - 保留全部 Client Tools（Read/Write/Memory/...原架构）
+ * - webSearchEnabled 时追加 Server-side web_search（基于 messages 的 Turn 状态）
+ */
+export function assembleKiroToolsForRequest(input: {
+  webSearchEnabled: boolean;
+  credential: { mode: KiroWebSearchCredentialMode; userApiKey?: string };
+  messages: unknown[];
+  clientTools: ToolSet;
+}): ToolSet {
+  if (!input.webSearchEnabled) return input.clientTools;
+  const state = inspectCurrentTurnWebSearchState(input.messages);
+  return {
+    ...input.clientTools,
+    web_search: createKiroWebSearchTool({
+      provider: getKiroWebSearchProvider("tavily"),
+      credential: input.credential,
+      callsSoFar: state.calls,
+      nextSourceIndex: state.nextSourceIndex,
+    }),
+  };
 }
 
 /**

@@ -7,9 +7,11 @@ import {
   TextStreamPart,
   ToolSet,
   smoothStream,
+  isStepCount,
 } from "ai";
 import { AI, KIRO_SYSTEM_PROMPT } from "@/lib/ai/config";
 import { KIRO_TOOLS } from "@/lib/ai/tools";
+import { assembleKiroToolsForRequest } from "@/lib/ai/web/tool";
 import { normalizeAIError, AIError, AI_ERROR_MESSAGES } from "@/lib/ai/errors";
 import { logProviderError } from "@/lib/ai/providerLog";
 import { buildKiroResponsePreferenceContext } from "@/lib/ai/responsePreference";
@@ -227,13 +229,25 @@ export async function POST(req: NextRequest) {
 
   try {
     const modelMessages = await convertToModelMessages(plan.messages as never);
+    // Task 14：Server-side web_search（enabled 时追加；Server Key 不下发 Browser）
+    const tools = assembleKiroToolsForRequest({
+      webSearchEnabled: parsed.webSearchConfig?.enabled ?? false,
+      credential: {
+        mode: parsed.webSearchConfig?.credentialMode ?? "server",
+        userApiKey: parsed.webSearchConfig?.apiKey,
+      },
+      messages: parsed.messages as unknown[],
+      clientTools: KIRO_TOOLS,
+    });
     const result = streamText({
       model: resolved.model,
       messages: modelMessages,
       system: systemMessage,
-      tools: KIRO_TOOLS,
+      tools,
       maxOutputTokens: AI.CHAT_MAX_OUTPUT_TOKENS,
       abortSignal: signal,
+      // Task 14：Server execute tool 允许有限多步自动执行；客户端工具调用时 loop 自然暂停等 Client Result
+      stopWhen: isStepCount(5),
       // Worklog V2 Task 3：按词分块 + 12ms 间隔的流式节奏；
       // 只平滑 text/reasoning，Tool / step event 原样透传
       experimental_transform: smoothStream({

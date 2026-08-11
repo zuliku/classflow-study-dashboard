@@ -9,6 +9,7 @@ import { useKiroPreferencesStore } from "@/store/useKiroPreferencesStore";
 import { useConfirmStore } from "@/store/useConfirmStore";
 import { useToastStore } from "@/store/useToastStore";
 import { getSessionApiKey } from "@/lib/ai/sessionKeys";
+import { getSessionWebSearchApiKey } from "@/lib/ai/web/credentials";
 import { normalizeAIError, AIError } from "@/lib/ai/errors";
 import { buildBaseContext } from "@/lib/ai/context/buildBaseContext";
 import { resolveContextRefs, refsForPrompt, dedupeContextRefs } from "@/lib/ai/context/contextSelection";
@@ -386,6 +387,9 @@ export function useKiroChat({
   const custom = useAISettingsStore((s) => s.custom);
   // Intelligence V2 Task 1：回答偏好随 Turn Snapshot 冻结（Turn 中途改设置不影响当前 Turn）
   const responsePreference = useKiroPreferencesStore((s) => s.responsePreference);
+  // Task 14：Kiro Search（联网搜索）——随 Turn Snapshot 冻结；Key 不进 Store
+  const webSearchEnabled = useKiroPreferencesStore((s) => s.webSearchEnabled);
+  const webSearchCredentialMode = useKiroPreferencesStore((s) => s.webSearchCredentialMode);
 
   const pushToast = useToastStore((s) => s.pushToast);
   const confirmRequest = useConfirmStore((s) => s.confirm);
@@ -476,6 +480,14 @@ export function useKiroChat({
       apiKey: getSessionApiKey(provider),
       customConfig: custom,
       responsePreference,
+      // Task 14：联网搜索配置（Server Key 永远不进入 Browser；仅 BYOK 带用户 Key）
+      webSearchConfig: {
+        enabled: webSearchEnabled,
+        credentialMode: webSearchCredentialMode,
+        ...(webSearchCredentialMode === "byok" && getSessionWebSearchApiKey()
+          ? { apiKey: getSessionWebSearchApiKey() }
+          : {}),
+      },
       baseContext: buildBaseContext(),
       contextRefs: refsForPrompt(
         dedupeContextRefs(
