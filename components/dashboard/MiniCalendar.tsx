@@ -12,6 +12,7 @@ import {
   Plus,
 } from "lucide-react";
 import { useAppStore } from "@/store/useAppStore";
+import { FocusControl } from "@/components/focus/FocusControl";
 import { getSemesterWeek } from "@/lib/semester";
 import { getLocalDDLDate, getLocalDDLTime } from "@/lib/ddl";
 import { isScheduleActive } from "@/lib/schedule";
@@ -406,6 +407,7 @@ export function MiniCalendar() {
         </div>
 
         <div className="flex items-center space-x-1">
+          <FocusControl />
           <button
             onClick={handleResetToday}
             className="text-[10px] bg-alabaster hover:bg-alba text-charcoal px-2 py-0.5 rounded-lg font-bold transition-colors mr-1"
