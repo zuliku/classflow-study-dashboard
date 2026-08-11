@@ -16,6 +16,10 @@ async function gotoInteraction(page: Page) {
   await page.getByRole("navigation", { name: "设置导航" }).getByRole("button", { name: "交互与快捷键" }).click();
 }
 
+async function gotoGeneral(page: Page) {
+  await page.getByRole("navigation", { name: "设置导航" }).getByRole("button", { name: "通用" }).click();
+}
+
 async function gotoOverview(page: Page) {
   // 设置是 Modal：先关闭（Esc），再回到总览
   await page.keyboard.press("Escape");
@@ -182,8 +186,10 @@ test("defaultDDLTime：改为 21:00 → 新建任务默认截止时间 21:00（�
 
 test("motionPreference：reduced → html[data-motion] 生效且导航功能正常", async ({ page }) => {
   await openSettings(page);
-  await gotoInteraction(page);
-  await page.getByTestId("settings-interaction").locator("select").selectOption("reduced");
+  // Settings V3 IA：动效偏好归入通用页；自定义 dropdown（combobox + option）
+  await gotoGeneral(page);
+  await page.getByRole("combobox", { name: "动效偏好" }).click();
+  await page.getByRole("option", { name: "减少动效" }).click();
   await expect(page.locator("html")).toHaveAttribute("data-motion", "reduced");
 
   // 功能正常：切换 Tab + 命令中心

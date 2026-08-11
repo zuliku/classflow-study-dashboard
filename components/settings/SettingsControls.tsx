@@ -2,18 +2,16 @@
 
 import React from "react";
 import { cn } from "@/lib/utils";
+import { UISelect, SelectOption } from "@/components/ui/Select";
 
 /**
- * Settings 共享控件 primitives（Settings V3 Task 1）：
+ * Settings 共享控件 primitives（Settings V3）：
  * 统一高度、字体、边框、focus-visible ring、disabled 状态。
  * 圆角体系：Input/Button/Segmented = 小圆角（rounded-lg）；Segmented 内项 = rounded-md。
- * 不建完整 UI framework，只收敛设置页常用的控件。
+ * SettingsSelect：通用 UISelect（自定义 dropdown，非原生 <select>）的 Settings 规格包装。
  */
 
-const controlCls =
-  "h-9 px-2.5 bg-[#F7F5F5] border border-line rounded-lg text-xs font-bold text-charcoal focus:outline-none focus:border-charcoal focus-visible:outline-2 focus-visible:outline-charcoal/30 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed";
-
-/** 标准下拉（优先级/状态/动效等） */
+/** 标准下拉（优先级/状态/动效等）：自定义 ClassFlow dropdown（native popup 已移除） */
 export function SettingsSelect<T extends string>({
   value,
   onChange,
@@ -22,22 +20,18 @@ export function SettingsSelect<T extends string>({
 }: {
   value: T;
   onChange: (v: T) => void;
-  options: { value: T; label: string }[];
+  options: SelectOption<T>[];
   ariaLabel?: string;
 }) {
   return (
-    <select
+    <UISelect
       value={value}
-      onChange={(e) => onChange(e.target.value as T)}
-      aria-label={ariaLabel}
-      className={controlCls}
-    >
-      {options.map((o) => (
-        <option key={o.value} value={o.value}>
-          {o.label}
-        </option>
-      ))}
-    </select>
+      onChange={onChange}
+      options={options}
+      ariaLabel={ariaLabel}
+      triggerClassName="min-w-[150px] w-full"
+      menuClassName="min-w-[150px]"
+    />
   );
 }
 

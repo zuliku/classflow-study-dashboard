@@ -6,6 +6,7 @@ import { useAppStore } from "@/store/useAppStore";
 import { useToastStore } from "@/store/useToastStore";
 import { ClassFlowBackup, ClassFlowBackupData } from "@/types";
 import { buildFullBackupZip } from "@/lib/backupPackage";
+import { SettingsActionRow } from "@/components/settings/SettingsActionRow";
 
 const localDateStr = () => {
   const d = new Date();
@@ -22,7 +23,7 @@ function downloadBlob(href: string, filename: string) {
   anchor.remove();
 }
 
-/** 备份：完整 ZIP 为 primary，仅数据 JSON 为 secondary；反馈留在本区不弹大 banner */
+/** 备份（Settings V3 Task 6）：两行统一 action row；完整 ZIP 为 primary，仅数据 JSON 为 secondary */
 export function BackupSection() {
   const state = useAppStore();
   const {
@@ -100,58 +101,47 @@ export function BackupSection() {
   };
 
   return (
-    <div className="space-y-2.5 text-xs" data-testid="backup-section">
+    <div data-testid="backup-section">
+      <SettingsActionRow
+        title="完整备份"
+        description="包含课程、任务、设置与课程资料文件"
+        variant="primary"
+        icon={
+          isExportingZip ? (
+            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+          ) : (
+            <Archive className="w-3.5 h-3.5" />
+          )
+        }
+        actionLabel={isExportingZip ? "正在打包…" : "导出 ZIP"}
+        onAction={() => void exportFull()}
+        actionMinWidth="min-w-[104px]"
+      />
+      <SettingsActionRow
+        title="仅数据备份"
+        description="不包含课程资料文件"
+        icon={
+          isExportingJson ? (
+            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+          ) : (
+            <Download className="w-3.5 h-3.5 text-[#A48F82]" />
+          )
+        }
+        actionLabel={isExportingJson ? "正在导出…" : "导出 JSON"}
+        onAction={() => void exportJSON()}
+        actionMinWidth="min-w-[104px]"
+      />
       {feedback && (
-        <div className="p-2.5 bg-pastel-mint/60 border border-line rounded-xl space-y-0.5">
-          <p className="font-bold text-success">{feedback.message}</p>
+        <div className="pt-2 space-y-0.5">
+          <p className="font-bold text-success text-[11px]">{feedback.message}</p>
           {feedback.warning && (
-            <p className="flex items-center gap-1.5 text-warning font-semibold">
-              <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+            <p className="flex items-center gap-1.5 text-warning font-semibold text-[10px]">
+              <AlertTriangle className="w-3 h-3 shrink-0" />
               {feedback.warning}
             </p>
           )}
         </div>
       )}
-
-      {/* 完整备份（primary） */}
-      <div className="flex items-center justify-between gap-4 p-3 bg-[#F7F5F5] border border-line rounded-xl">
-        <div className="min-w-0">
-          <p className="flex items-center gap-1.5 font-bold text-charcoal">
-            <Archive className="w-3.5 h-3.5 text-[#A48F82]" />
-            完整备份
-            <span className="text-[9px] font-bold text-charcoal bg-pastel-mint px-1.5 py-0.5 rounded-full">推荐</span>
-          </p>
-          <p className="text-[10px] text-sandrift mt-0.5">包含课程、任务、设置与课程资料文件</p>
-        </div>
-        <button
-          onClick={exportFull}
-          disabled={isExportingZip || isExportingJson}
-          className="ux-press flex items-center gap-1.5 px-3 py-1.5 bg-charcoal hover:bg-black text-white font-bold rounded-xl transition-colors shadow-subtle disabled:opacity-60 shrink-0"
-        >
-          {isExportingZip ? (
-            <Loader2 className="w-3.5 h-3.5 animate-spin" />
-          ) : (
-            <Archive className="w-3.5 h-3.5" />
-          )}
-          {isExportingZip ? "正在打包…" : "导出 ZIP"}
-        </button>
-      </div>
-
-      {/* 仅数据备份（secondary） */}
-      <div className="flex items-center justify-between gap-4 p-3 bg-[#F7F5F5] border border-line rounded-xl">
-        <div className="min-w-0">
-          <p className="font-bold text-charcoal">仅数据备份</p>
-          <p className="text-[10px] text-sandrift mt-0.5">不包含课程资料文件</p>
-        </div>
-        <button
-          onClick={exportJSON}
-          disabled={isExportingZip || isExportingJson}
-          className="ux-press flex items-center gap-1.5 px-3 py-1.5 bg-white border border-line text-charcoal font-bold rounded-xl transition-colors hover:bg-alabaster disabled:opacity-60 shrink-0"
-        >
-          <Download className="w-3.5 h-3.5 text-[#A48F82]" />
-          {isExportingJson ? "正在导出…" : "导出 JSON"}
-        </button>
-      </div>
     </div>
   );
 }

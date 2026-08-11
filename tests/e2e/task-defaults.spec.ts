@@ -23,8 +23,10 @@ test("任务默认值：设置 高/进行中/21:00 → N 新建任务预填并�
     .getByRole("navigation", { name: "设置导航" })
     .getByRole("button", { name: "任务" })
     .click();
-  await page.getByLabel("默认优先级").selectOption("high");
-  await page.getByLabel("默认状态").selectOption("doing");
+  await page.getByRole("combobox", { name: "默认优先级" }).click();
+  await page.getByRole("option", { name: "高", exact: true }).click();
+  await page.getByRole("combobox", { name: "默认状态" }).click();
+  await page.getByRole("option", { name: "进行中", exact: true }).click();
   await page.getByTestId("settings-tasks").locator("input[type='time']").fill("21:00");
   await expect(page.getByTestId("settings-tasks").locator("input[type='time']")).toHaveValue("21:00");
 
@@ -91,7 +93,7 @@ test("界面密度：紧凑 → 任务工作区 data-density=compact", async ({ 
 
   await page
     .getByRole("navigation", { name: "设置导航" })
-    .getByRole("button", { name: "交互与快捷键" })
+    .getByRole("button", { name: "通用" })
     .click();
   await page.locator('[data-setting-id="content-density"]').getByRole("button", { name: "紧凑" }).click();
   await expect(page.locator('[data-setting-id="content-density"]').getByRole("button", { name: "紧凑" })).toHaveAttribute("aria-pressed", "true");

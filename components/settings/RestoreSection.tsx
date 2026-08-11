@@ -6,6 +6,7 @@ import { useAppStore } from "@/store/useAppStore";
 import { useToastStore } from "@/store/useToastStore";
 import { prepareBackupRestore, commitBackupRestore, PreparedRestore } from "@/lib/backupRestore";
 import { RestorePreviewDialog } from "@/components/settings/RestorePreviewDialog";
+import { SettingsActionRow } from "@/components/settings/SettingsActionRow";
 
 export interface RestoreResult {
   courses: number;
@@ -85,24 +86,20 @@ export function RestoreSection({
         className="hidden"
         id="restore-file-input"
       />
-      <div className="flex items-center justify-between gap-4 p-3 bg-[#F7F5F5] border border-line rounded-xl">
-        <div className="min-w-0">
-          <p className="font-bold text-charcoal">从 ClassFlow 备份恢复</p>
-          <p className="text-[10px] text-sandrift mt-0.5">支持 .zip / .json，选择后先预览再确认恢复</p>
-        </div>
-        <button
-          onClick={() => inputRef.current?.click()}
-          disabled={isPreparing}
-          className="ux-press flex items-center gap-1.5 px-3 py-1.5 bg-white border border-line text-charcoal font-bold rounded-xl transition-colors hover:bg-alabaster disabled:opacity-60 shrink-0"
-        >
-          {isPreparing ? (
+      <SettingsActionRow
+        title="从 ClassFlow 备份恢复"
+        description="支持 .zip / .json，选择后先预览再确认恢复"
+        icon={
+          isPreparing ? (
             <Loader2 className="w-3.5 h-3.5 animate-spin text-sandrift" />
           ) : (
             <Upload className="w-3.5 h-3.5 text-[#A48F82]" />
-          )}
-          {isPreparing ? "正在检查…" : "选择文件"}
-        </button>
-      </div>
+          )
+        }
+        actionLabel={isPreparing ? "正在检查…" : "选择文件"}
+        onAction={() => inputRef.current?.click()}
+        actionMinWidth="min-w-[104px]"
+      />
 
       {prepared && (
         <RestorePreviewDialog

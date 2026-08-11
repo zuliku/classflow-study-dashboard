@@ -18,14 +18,14 @@ export function SettingsGroup({
   children: React.ReactNode;
 }) {
   return (
-    <section className="space-y-1.5">
+    <section className="space-y-2">
       {title && (
-        <h4 className="text-[10px] font-bold text-sandrift uppercase tracking-wider px-0.5">
+        <h4 className="text-[10px] font-bold text-sandrift uppercase tracking-wider leading-snug px-0.5">
           {title}
         </h4>
       )}
       {description && !title && (
-        <p className="text-[10px] text-sandrift px-0.5">{description}</p>
+        <p className="text-[10px] text-sandrift px-0.5 leading-relaxed">{description}</p>
       )}
       <div className="rounded-xl border border-line bg-surface overflow-hidden px-4">
         {children}

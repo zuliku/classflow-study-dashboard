@@ -60,7 +60,7 @@ export function DataSettings() {
       <div className="space-y-4" data-testid="settings-data">
         {/* 数据概览：紧凑 metric（非 Dashboard 大 Stat Card） */}
         <SettingsGroup title="数据概览">
-          <div className="px-0 py-3">
+          <div className="py-3">
             <DataOverview counts={counts} />
           </div>
 
@@ -89,7 +89,7 @@ export function DataSettings() {
 
         {/* 数据状态：完整性检查（信息性质，非设置） */}
         <SettingsGroup title="数据状态">
-          <div className="px-0 py-3">
+          <div className="py-3">
             <DataHealth />
           </div>
         </SettingsGroup>
@@ -114,25 +114,17 @@ export function DataSettings() {
           </div>
         )}
 
-        {/* 备份 */}
+        {/* 备份 / 恢复 / 危险操作：统一 SettingsActionRow 布局 */}
         <SettingsGroup title="备份">
-          <div className="px-0 py-3">
-            <BackupSection />
-          </div>
+          <BackupSection />
         </SettingsGroup>
 
-        {/* 恢复 */}
         <SettingsGroup title="恢复">
-          <div className="px-0 py-3">
-            <RestoreSection onRestored={setRestoreResult} />
-          </div>
+          <RestoreSection onRestored={setRestoreResult} />
         </SettingsGroup>
 
-        {/* 危险操作：保持三层风险确认 */}
         <SettingsGroup title="危险操作">
-          <div className="px-0 py-3">
-            <DangerZone />
-          </div>
+          <DangerZone />
         </SettingsGroup>
       </div>
     </SettingsSection>

@@ -5,9 +5,9 @@ import { RotateCcw, Trash2, XCircle } from "lucide-react";
 import { useAppStore } from "@/store/useAppStore";
 import { useConfirmStore } from "@/store/useConfirmStore";
 import { useToastStore } from "@/store/useToastStore";
-import { SettingsDangerRow } from "@/components/settings/SettingsDangerRow";
+import { SettingsActionRow } from "@/components/settings/SettingsActionRow";
 
-/** 危险操作：三个明确语义层级（偏好 / 学习数据 / 全部本地数据） */
+/** 危险操作：三个明确语义层级（偏好 / 学习数据 / 全部本地数据）；确认逻辑保持原有 safety */
 export function DangerZone() {
   const resetPreferences = useAppStore((s) => s.resetPreferences);
   const clearLearningData = useAppStore((s) => s.clearLearningData);
@@ -102,17 +102,18 @@ export function DangerZone() {
   ];
 
   return (
-    <div className="space-y-2.5 text-xs" data-testid="danger-zone">
+    <div className="space-y-0" data-testid="danger-zone">
       {rows.map((r) => (
-        <SettingsDangerRow
+        <SettingsActionRow
           key={r.key}
-          icon={r.icon}
           title={r.title}
           description={r.description}
-          actionLabel={r.label}
           variant={r.danger ? "danger" : "secondary"}
+          icon={r.icon}
+          actionLabel={r.label}
           onAction={r.action}
           actionTestid={`danger-${r.key}`}
+          actionMinWidth="min-w-[104px]"
         />
       ))}
     </div>
