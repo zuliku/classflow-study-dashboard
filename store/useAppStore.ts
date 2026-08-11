@@ -1522,11 +1522,15 @@ export const useAppStore = create<AppState>()(
 
 // 启动校正：当前教学周不持久化（避免历史周次过期），
 // 每次打开按真实日期计算并 clamp 到 [1, semester.totalWeeks]。
+// Settings V3：任务工作区视图不持久化，每次打开按「默认任务视图」偏好 seed。
 {
   const state = useAppStore.getState();
   const week = Math.min(
     Math.max(getSemesterWeek(new Date(), state.semester), 1),
     state.semester.totalWeeks
   );
-  useAppStore.setState({ currentSemesterWeek: week });
+  useAppStore.setState({
+    currentSemesterWeek: week,
+    assignmentWorkspaceView: state.preferences.defaultTaskWorkspaceView,
+  });
 }

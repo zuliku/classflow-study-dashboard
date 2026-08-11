@@ -20,6 +20,16 @@ const validPrefs = {
 };
 
 describe("sanitizePreferences 逐字段回落", () => {
+  it("Settings V3：defaultTaskWorkspaceView 合法值通过、非法回落 focus", () => {
+    expect(DEFAULT_PREFERENCES.defaultTaskWorkspaceView).toBe("focus");
+    expect(sanitizePreferences({ defaultTaskWorkspaceView: "today" }).defaultTaskWorkspaceView).toBe("today");
+    expect(sanitizePreferences({ defaultTaskWorkspaceView: "unscheduled" }).defaultTaskWorkspaceView).toBe("unscheduled");
+    expect(sanitizePreferences({ defaultTaskWorkspaceView: "archive" }).defaultTaskWorkspaceView).toBe("archive");
+    // 非法 / 缺失 → focus
+    expect(sanitizePreferences({ defaultTaskWorkspaceView: "hacked" }).defaultTaskWorkspaceView).toBe("focus");
+    expect(sanitizePreferences({}).defaultTaskWorkspaceView).toBe("focus");
+  });
+
   it("缺失 → 全部默认值", () => {
     expect(sanitizePreferences(undefined)).toEqual(DEFAULT_PREFERENCES);
     expect(sanitizePreferences(null)).toEqual(DEFAULT_PREFERENCES);

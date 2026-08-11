@@ -89,6 +89,13 @@ export const SETTINGS_REGISTRY: SettingDefinition[] = [
     keywords: ["任务状态", "状态", "status", "新建任务"],
   },
   {
+    id: "default-task-workspace-view",
+    section: "tasks",
+    title: "默认任务视图",
+    description: "每次打开 ClassFlow 时任务工作区的默认视图",
+    keywords: ["任务", "视图", "聚焦", "今天", "即将截止", "待安排", "workspace", "view", "默认"],
+  },
+  {
     id: "browser-notifications",
     section: "tasks",
     title: "浏览器系统通知",

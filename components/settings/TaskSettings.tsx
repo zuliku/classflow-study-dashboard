@@ -8,6 +8,7 @@ import { SettingsRow } from "@/components/settings/SettingsRow";
 import { SettingsToggle, SettingsSelect, SettingsSegmentedControl } from "@/components/settings/SettingsControls";
 import { DDL_WARNING_DAYS, TASK_PRIORITIES, TASK_STATUSES } from "@/lib/preferences";
 import { getModifiedPreferenceKeys, resetPreferencePatch } from "@/lib/preferences";
+import { PRIMARY_TASK_WORKSPACE_VIEWS } from "@/lib/tasks/taskViews";
 import { MissedReminderPolicy } from "@/types";
 import { MissedReminderWindowHours } from "@/store/useReminderPreferencesStore";
 import {
@@ -157,7 +158,7 @@ export function TaskSettings({ highlightedId }: { highlightedId?: string }) {
         <SettingsRow
           settingId="default-task-status"
           title="默认状态"
-          description="新建任务时预填的状态（仅待完成 / 进行中）。"
+          description="新建任务时预填的状态（进行中的任务默认待完成）。"
           modified={modified.has("defaultTaskStatus")}
           onReset={() => updatePreferences(resetPreferencePatch("defaultTaskStatus"))}
           resetAriaLabel="将默认状态恢复默认"
@@ -168,6 +169,23 @@ export function TaskSettings({ highlightedId }: { highlightedId?: string }) {
             onChange={(v) => updatePreferences({ defaultTaskStatus: v })}
             ariaLabel="默认状态"
             options={TASK_STATUSES.map((s) => ({ value: s, label: STATUS_LABELS[s] }))}
+          />
+        </SettingsRow>
+
+        <SettingsRow
+          settingId="default-task-workspace-view"
+          title="默认任务视图"
+          description="每次打开 ClassFlow 时，任务工作区默认显示的视图。"
+          modified={modified.has("defaultTaskWorkspaceView")}
+          onReset={() => updatePreferences(resetPreferencePatch("defaultTaskWorkspaceView"))}
+          resetAriaLabel="将默认任务视图恢复默认"
+          highlighted={highlightedId === "default-task-workspace-view"}
+        >
+          <SettingsSegmentedControl
+            value={preferences.defaultTaskWorkspaceView}
+            onChange={(v) => updatePreferences({ defaultTaskWorkspaceView: v })}
+            ariaLabel="默认任务视图"
+            options={PRIMARY_TASK_WORKSPACE_VIEWS.map((v) => ({ value: v.id, label: v.label }))}
           />
         </SettingsRow>
 

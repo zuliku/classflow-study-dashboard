@@ -310,6 +310,7 @@ function preferenceTitle(key: keyof typeof DEFAULT_PREFERENCES): string {
     defaultTaskStatus: "默认状态",
     enableSingleKeyShortcuts: "单键快捷键",
     contentDensity: "界面密度",
+    defaultTaskWorkspaceView: "默认任务视图",
   };
   return map[key];
 }
@@ -334,6 +335,18 @@ function formatPreferenceValue(key: keyof typeof DEFAULT_PREFERENCES, v: never):
       return v === "doing" ? "进行中" : "待完成";
     case "contentDensity":
       return v === "compact" ? "紧凑" : "舒适";
+    case "defaultTaskWorkspaceView":
+      return v === "focus"
+        ? "聚焦"
+        : v === "today"
+          ? "今天"
+          : v === "upcoming"
+            ? "即将截止"
+            : v === "unscheduled"
+              ? "待安排"
+              : v === "archive"
+                ? "已归档"
+                : "全部";
     case "showWeekends":
     case "enableScheduleDirectManipulation":
     case "enableDDLDirectManipulation":

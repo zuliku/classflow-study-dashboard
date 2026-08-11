@@ -1,4 +1,5 @@
 import { AppPreferences, Priority, ContentDensity, StartupView } from "@/types";
+import { TASK_WORKSPACE_VIEWS, TaskWorkspaceView } from "@/lib/tasks/taskViews";
 
 /** 第一版默认偏好 */
 export const DEFAULT_PREFERENCES: AppPreferences = {
@@ -13,6 +14,8 @@ export const DEFAULT_PREFERENCES: AppPreferences = {
   defaultTaskStatus: "todo",
   enableSingleKeyShortcuts: true,
   contentDensity: "comfortable",
+  // Settings V3：任务工作区默认视图 = 当前初始值（focus）
+  defaultTaskWorkspaceView: "focus",
 };
 
 export const DDL_WARNING_DAYS: readonly AppPreferences["ddlWarningDays"][] = [1, 3, 7];
@@ -72,6 +75,10 @@ export function sanitizePreferences(v: unknown): AppPreferences {
     contentDensity: (CONTENT_DENSITIES as readonly unknown[]).includes(src.contentDensity)
       ? (src.contentDensity as ContentDensity)
       : DEFAULT_PREFERENCES.contentDensity,
+    defaultTaskWorkspaceView: (TASK_WORKSPACE_VIEWS as readonly { id: TaskWorkspaceView }[])
+      .some((v) => v.id === src.defaultTaskWorkspaceView)
+      ? (src.defaultTaskWorkspaceView as TaskWorkspaceView)
+      : DEFAULT_PREFERENCES.defaultTaskWorkspaceView,
   };
 }
 
@@ -92,6 +99,7 @@ export const PREFERENCE_SECTIONS: Record<
   defaultTaskStatus: "tasks",
   enableSingleKeyShortcuts: "interaction",
   contentDensity: "general",
+  defaultTaskWorkspaceView: "tasks",
 };
 
 /** 当前与默认不同的偏好键（纯函数，UI 不自行比较） */

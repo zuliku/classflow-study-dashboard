@@ -8,6 +8,9 @@ export type NavTab =
   | "analytics"
   | "group";
 
+import type { TaskWorkspaceView } from "@/lib/tasks/taskViews";
+export type { TaskWorkspaceView };
+
 export type TaskFilter = "all" | "doing" | "todo" | "completed";
 
 export type TimeSliceFilter = "all" | "overdue" | "today" | "3days" | "7days" | "completed";
@@ -252,6 +255,8 @@ export interface AppPreferences {
   enableSingleKeyShortcuts: boolean;
   /** 内容密度（任务工作区 / 课程列表 / 命令中心） */
   contentDensity: ContentDensity;
+  /** Settings V3：每次打开 ClassFlow 时任务工作区默认视图（消费：启动校正 seed assignmentWorkspaceView） */
+  defaultTaskWorkspaceView: TaskWorkspaceView;
 }
 
 /** 设置中心 section */
