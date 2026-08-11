@@ -7,28 +7,31 @@ import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
 import { normalizeMathDelimiters } from "@/lib/ai/markdown";
 import { KiroSourceMeta } from "@/lib/ai/citations/types";
-import { splitCitationSegments } from "@/lib/ai/citations/parser";
 import { KiroCitation } from "@/components/kiro/KiroCitation";
+import { remarkKiroCitation } from "@/lib/ai/citations/remarkCitation";
 
 /**
  * Kiro Markdown：Assistant Markdown → ClassFlow styled React（prose + math 单一入口）。
- * Pipeline：normalizeMathDelimiters → remark-gfm → remark-math → rehype-katex → semantic components。
- * Citation（Task 11）：[[source:doc-1:p12]] 在进入 Markdown 前切成独立段，
- * 闭合 marker → KiroCitation pill；未闭合（流式中）→ 按普通文本保留（不报错、不吞正文）。
+ * Pipeline：normalizeMathDelimiters → remark-gfm → remark-math → remarkKiroCitation → rehype-katex → components。
+ * Citation（Hotfix）：[[source:...]] 由 remarkKiroCitation 在 mdast 内转成 inline node，
+ * 整份 Markdown 只 parse 一次 —— 段落 / 列表 / 强调等父结构不再被 marker 拆散，
+ * 「正文 [来源]。」保持同一 <p> / <li>（修复标点与列表独占一行 Bug）。
  * - KaTeX：throwOnError:false（非法/未完成公式退化为可读 source），trust:false（模型输入不可信）
  * - 不启用 rehype-raw：模型输出中的 HTML 按普通内容处理（无 script/iframe/style）
  * - 链接只允许 http/https/mailto；外链 target=_blank + noopener
  * - 全部样式集中在此，不散落到 KiroMessage
  */
 export function KiroMarkdown({ content, sources }: { content: string; sources?: KiroSourceMeta[] }) {
-  // Citation 分段：text 段各自走 Markdown 渲染；citation 段渲染 pill（流式未闭合 marker 留在 text 段）
-  const segments = splitCitationSegments(content);
-  const renderMarkdown = (text: string, key: number) => (
-    <ReactMarkdown
-      key={key}
-      remarkPlugins={[remarkGfm, remarkMath]}
-      rehypePlugins={[[rehypeKatex, { throwOnError: false, trust: false }]]}
-      components={{
+  return (
+    <div
+      className="kiro-markdown text-charcoal"
+      style={{ fontSize: "var(--kiro-output-font-size)", lineHeight: 1.74 }}
+      data-testid="kiro-markdown"
+    >
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm, remarkMath, remarkKiroCitation]}
+        rehypePlugins={[[rehypeKatex, { throwOnError: false, trust: false }]]}
+        components={{
           p: ({ children }) => <p className="mb-[0.8em] last:mb-0">{children}</p>,
           h1: ({ children }) => (
             <h1 className="text-[1.28em] leading-snug font-semibold text-charcoal mt-[1.6em] mb-[0.65em] first:mt-0">
@@ -114,25 +117,31 @@ export function KiroMarkdown({ content, sources }: { content: string; sources?: 
               {children}
             </td>
           ),
+          // Hotfix：remarkKiroCitation 生成的 span（data-kiro-citation）→ KiroCitation pill；
+          // 普通 span（KaTeX 等）必须原样传递（不把 node 传到 DOM）。
+          span: ({ node: _node, children, ...rest }) => {
+            const attrs = rest as Record<string, unknown>;
+            const sourceId = attrs["data-kiro-source-id"];
+            if (attrs["data-kiro-citation"] === "true" && typeof sourceId === "string") {
+              const citation: {
+                sourceId: string;
+                pageStart?: number;
+                pageEnd?: number;
+              } = { sourceId };
+              const pageStart = attrs["data-kiro-page-start"];
+              const pageEnd = attrs["data-kiro-page-end"];
+              if (typeof pageStart === "string" && pageStart) {
+                citation.pageStart = parseInt(pageStart, 10);
+                citation.pageEnd = typeof pageEnd === "string" && pageEnd ? parseInt(pageEnd, 10) : citation.pageStart;
+              }
+              return <KiroCitation citation={citation} sources={sources} />;
+            }
+            return <span {...rest}>{children}</span>;
+          },
         }}
       >
-        {normalizeMathDelimiters(text)}
+        {normalizeMathDelimiters(content)}
       </ReactMarkdown>
-  );
-
-  return (
-    <div
-      className="kiro-markdown text-charcoal"
-      style={{ fontSize: "var(--kiro-output-font-size)", lineHeight: 1.74 }}
-      data-testid="kiro-markdown"
-    >
-      {segments.map((seg, i) =>
-        seg.type === "citation" ? (
-          <KiroCitation key={i} citation={seg.citation} sources={sources} />
-        ) : (
-          renderMarkdown(seg.text, i)
-        )
-      )}
     </div>
   );
 }

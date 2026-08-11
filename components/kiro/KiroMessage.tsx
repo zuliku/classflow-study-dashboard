@@ -1,15 +1,16 @@
 "use client";
 
 import React, { useEffect, useRef, useState } from "react";
-import { FileText, Image as ImageIcon, Copy, Pencil, RefreshCw, MoreHorizontal, Send } from "lucide-react";
+import { FileText, Image as ImageIcon, Copy, Pencil, RefreshCw, MoreHorizontal, Send, Globe2 } from "lucide-react";
 import { KiroMark } from "@/components/kiro/KiroHeader";
 import { KiroStreamingMarkdown } from "@/components/kiro/KiroStreamingMarkdown";
 import { KiroWorklog } from "@/components/kiro/KiroWorklog";
 import { KiroMenuPanel, KiroMenuItem, KiroMenuDivider, useKiroPopover } from "@/components/kiro/KiroMenu";
+import { KiroSourcesMenuView } from "@/components/kiro/KiroSourcesMenuView";
 import { useToastStore } from "@/store/useToastStore";
 import { KiroAttachmentView } from "@/lib/ai/attachments/types";
 import { KiroSourceMeta } from "@/lib/ai/citations/types";
-import { KiroSourcesTray } from "@/components/kiro/KiroSourcesTray";
+import { collectCitedWebSources } from "@/lib/ai/citations/parser";
 import { UserMessageEditBlockReason } from "@/lib/ai/history/messageEditing";
 import { KiroAssistantTurnPresentation } from "@/lib/ai/presentation/turnPresentation";
 import { citationsToReadableText } from "@/lib/ai/citations/parser";
@@ -59,6 +60,16 @@ export function KiroMessage({
   const pushToast = useToastStore((s) => s.pushToast);
   const more = useKiroPopover();
 
+  // More Popover 页面状态：actions（默认）/ sources；每次打开都回到 actions
+  const [moreView, setMoreView] = useState<"actions" | "sources">("actions");
+  const toggleMore = () => {
+    setMoreView("actions");
+    more.toggle();
+  };
+
+  // Final Answer 实际引用的 Web Sources（首次引用顺序、去重）——用于 More → 来源
+  const citedWebSources = React.useMemo(() => collectCitedWebSources(content ?? "", sources), [content, sources]);
+
   // streaming cursor 只在 final answer 流式时出现（phase === "answering"）；
   // 绝不给 commentary / tool row 显示 cursor
   const showStreamingCursor = assistantTurn ? assistantTurn.phase === "answering" : streaming;
@@ -101,10 +112,7 @@ export function KiroMessage({
                 className="inline-block w-[2px] h-3.5 bg-sandrift align-middle animate-pulse"
               />
             )}
-            {/* Task 17B：Final Answer 实际引用的 Web Sources（Turn 结束后显示；默认折叠） */}
-            {!streaming && (actionsReady ?? true) && (
-              <KiroSourcesTray content={content} sources={sources} />
-            )}
+            {/* Hotfix：正文底部不再显示独立 Sources Tray（来源移入 More → 来源） */}
             {/* Message Actions：整个 Turn 结束后常驻（不依赖 hover），低权重 inline toolbar */}
             {(actionsReady ?? true) && !streaming && (
               <div className="flex items-center gap-1 text-[11px] font-semibold text-sandrift">
@@ -130,7 +138,7 @@ export function KiroMessage({
                 )}
                 <div ref={more.ref} className="relative">
                   <button
-                    onClick={more.toggle}
+                    onClick={toggleMore}
                     aria-label="消息更多操作"
                     aria-expanded={more.open}
                     title="更多"
@@ -139,13 +147,35 @@ export function KiroMessage({
                     <MoreHorizontal className="w-3.5 h-3.5" />
                   </button>
                   {more.open && (
-                    <KiroMenuPanel placement="top-end">
-                      <KiroMenuItem icon={Copy} label="复制文本" onClick={copyPlain} />
-                      <KiroMenuItem icon={FileText} label="复制 Markdown" onClick={copyMarkdownSource} />
-                      {hasActions && (
+                    <KiroMenuPanel
+                      placement="top-end"
+                      className={moreView === "sources" ? "w-[280px]" : undefined}
+                    >
+                      {moreView === "sources" ? (
+                        <KiroSourcesMenuView
+                          sources={citedWebSources}
+                          onBack={() => setMoreView("actions")}
+                        />
+                      ) : (
                         <>
-                          <KiroMenuDivider />
-                          <KiroMenuItem icon={FileText} label="复制结果摘要" onClick={copySummary} />
+                          <KiroMenuItem icon={Copy} label="复制文本" onClick={copyPlain} />
+                          <KiroMenuItem icon={FileText} label="复制 Markdown" onClick={copyMarkdownSource} />
+                          {hasActions && (
+                            <>
+                              <KiroMenuDivider />
+                              <KiroMenuItem icon={FileText} label="复制结果摘要" onClick={copySummary} />
+                            </>
+                          )}
+                          {citedWebSources.length > 0 && (
+                            <>
+                              <KiroMenuDivider />
+                              <KiroMenuItem
+                                icon={Globe2}
+                                label={`来源 · ${citedWebSources.length}`}
+                                onClick={() => setMoreView("sources")}
+                              />
+                            </>
+                          )}
                         </>
                       )}
                     </KiroMenuPanel>
