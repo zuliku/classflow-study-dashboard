@@ -162,6 +162,7 @@ const nodeHttpTransport: KiroHttpTransport = {
   request(opts) {
     return new Promise((resolve, reject) => {
       const mod = opts.protocol === "https:" ? https : http;
+      const family = opts.pinnedAddress.includes(":") ? 6 : 4;
       const req = mod.request(
         {
           protocol: opts.protocol,
@@ -170,11 +171,19 @@ const nodeHttpTransport: KiroHttpTransport = {
           path: opts.path,
           method: "GET",
           headers: opts.headers,
+          // Node 20+（autoSelectFamily）会以 all:true 调用自定义 lookup（期望地址数组）；
+          // 老式调用为 (err, address, family)。两种签名都要兼容。
           lookup: (
             _hostname: string,
-            _options: unknown,
-            callback: (err: NodeJS.ErrnoException | null, address: string, family: number) => void
-          ) => callback(null, opts.pinnedAddress, opts.pinnedAddress.includes(":") ? 6 : 4),
+            options: unknown,
+            callback: (err: NodeJS.ErrnoException | null, address: string | Array<{ address: string; family: number }>, family?: number) => void
+          ) => {
+            if ((options as { all?: boolean } | null)?.all === true) {
+              callback(null, [{ address: opts.pinnedAddress, family }]);
+            } else {
+              callback(null, opts.pinnedAddress, family);
+            }
+          },
           signal: opts.signal,
         },
         (res) => {
