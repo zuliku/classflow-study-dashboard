@@ -35,4 +35,22 @@ export const kiroWebSearchInputSchema = z.object({
     .array(z.string().trim().min(1).max(200))
     .max(WEB_SEARCH_MAX_INCLUDE_DOMAINS, `最多 ${WEB_SEARCH_MAX_INCLUDE_DOMAINS} 个域名`)
     .optional(),
+  excludeDomains: z
+    .array(z.string().trim().min(1).max(200))
+    .max(WEB_SEARCH_MAX_INCLUDE_DOMAINS, `最多 ${WEB_SEARCH_MAX_INCLUDE_DOMAINS} 个域名`)
+    .optional(),
+  /** 精确名称 / 短语搜索；true 时 query 必须包含引号短语（否则 planner 归一为 false） */
+  exactMatch: z.boolean().optional(),
 });
+
+const QUOTED_PHRASE_RE = /["“”][^"“”]{2,}["“”]/;
+
+/**
+ * exactMatch guard：exactMatch=true 时 query 必须至少包含一个引号包裹短语。
+ * 不满足 → 返回 false（Provider 不应收到 exact_match=true）。
+ * 支持 "phrase" 与 “中文短语”。
+ */
+export function resolveExactMatchFlag(query: string, exactMatch?: boolean): boolean {
+  if (exactMatch !== true) return false;
+  return QUOTED_PHRASE_RE.test(query);
+}

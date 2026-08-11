@@ -34,6 +34,7 @@ const SAFE_ERROR_MESSAGES: Record<KiroWebSearchErrorCode, string> = {
   WEB_SEARCH_TIMEOUT: "网络搜索超时，请重试。",
   WEB_SEARCH_FAILED: "网络搜索失败，请稍后再试。",
   WEB_SEARCH_LIMIT_REACHED: "本轮网络搜索次数已达上限。",
+  WEB_SEARCH_DUPLICATE_QUERY: "本轮已经搜索过相同关键词。",
 };
 
 export function webSearchSafeMessage(code: KiroWebSearchErrorCode): string {
@@ -105,10 +106,11 @@ interface TavilyRawResult {
   publishedDate?: unknown;
 }
 
-function normalizeResults(raw: unknown): KiroWebSearchResult[] {
-  if (!Array.isArray(raw)) return [];
+function normalizeResults(raw: unknown): { results: KiroWebSearchResult[]; duplicatesFiltered: number } {
+  if (!Array.isArray(raw)) return { results: [], duplicatesFiltered: 0 };
   const out: KiroWebSearchResult[] = [];
   const seenCanonical = new Set<string>();
+  let duplicatesFiltered = 0;
   for (const item of raw) {
     if (out.length >= MAX_WEB_RESULTS) break;
     if (!item || typeof item !== "object") continue;
@@ -118,7 +120,10 @@ function normalizeResults(raw: unknown): KiroWebSearchResult[] {
     if (!urlInfo) continue;
     // 确定性 canonical URL 去重（tracking 参数差异不重复计数）
     const canonical = canonicalWebSearchUrl(r.url);
-    if (!canonical || seenCanonical.has(canonical)) continue;
+    if (!canonical || seenCanonical.has(canonical)) {
+      duplicatesFiltered += 1;
+      continue;
+    }
     seenCanonical.add(canonical);
     const title = typeof r.title === "string" ? r.title.trim() : "";
     if (!title && !r.content) continue;
@@ -139,7 +144,7 @@ function normalizeResults(raw: unknown): KiroWebSearchResult[] {
     });
     if (out.length >= MAX_WEB_RESULTS) break;
   }
-  return out;
+  return { results: out, duplicatesFiltered };
 }
 
 export function createTavilyWebSearchProvider(): KiroWebSearchProvider {
@@ -193,6 +198,11 @@ export function createTavilyWebSearchProvider(): KiroWebSearchProvider {
       if (request.includeDomains && request.includeDomains.length > 0) {
         body.include_domains = request.includeDomains;
       }
+      if (request.excludeDomains && request.excludeDomains.length > 0) {
+        body.exclude_domains = request.excludeDomains;
+      }
+      if (request.exactMatch === true) body.exact_match = true;
+      // 绝不发送：auto_parameters / advanced depth / 其他 Provider knobs
 
       let response: Response;
       try {
@@ -232,8 +242,8 @@ export function createTavilyWebSearchProvider(): KiroWebSearchProvider {
         return { ok: false, code: "WEB_SEARCH_FAILED", message: SAFE_ERROR_MESSAGES.WEB_SEARCH_FAILED };
       }
 
-      const results = normalizeResults(payload.results);
-      return { ok: true, query: request.query, count: results.length, results };
+      const { results, duplicatesFiltered } = normalizeResults(payload.results);
+      return { ok: true, query: request.query, count: results.length, results, duplicatesFiltered };
     },
   };
 }

@@ -13,12 +13,19 @@ import {
   KiroWebSearchCredentialMode,
   KiroWebSearchResult,
   MAX_WEB_SEARCHES_PER_TURN,
+  MAX_WEB_RESULTS,
+  MAX_WEB_RESULTS_PER_DOMAIN,
   WEB_SEARCH_TIMEOUT_MS,
 } from "@/lib/ai/web/types";
-import { kiroWebSearchInputSchema, normalizeWebSearchDomain } from "@/lib/ai/web/schemas";
+import { kiroWebSearchInputSchema, normalizeWebSearchDomain, resolveExactMatchFlag } from "@/lib/ai/web/schemas";
 import { resolveWebSearchCredential, KiroWebSearchCredentialResult } from "@/lib/ai/web/credentials";
 import { KiroWebSearchProvider, getKiroWebSearchProvider } from "@/lib/ai/web/provider";
-import { webSearchSafeMessage } from "@/lib/ai/web/tavily";
+import { webSearchSafeMessage, canonicalWebSearchUrl } from "@/lib/ai/web/tavily";
+
+/** 重复查询检测用归一化（trim / collapse whitespace / lowercase Latin；不做分词/stemming） */
+export function normalizeWebSearchQuery(query: string): string {
+  return query.trim().replace(/\s+/g, " ").toLowerCase();
+}
 
 export interface KiroWebSearchToolConfig {
   provider: KiroWebSearchProvider;
@@ -28,6 +35,10 @@ export interface KiroWebSearchToolConfig {
   attemptsSoFar: number;
   /** 下一个可用 web-N index（conversation-wide 递增） */
   nextSourceIndex: number;
+  /** 本 Turn 已成功搜索的 normalized queries（重复查询守卫；跨 roundtrip 累计） */
+  successfulQueries: string[];
+  /** 本 Turn 已成功返回结果的 canonical URLs（跨搜索去重；跨 roundtrip 累计） */
+  seenUrls: string[];
 }
 
 interface ToolPartLike {
@@ -37,14 +48,17 @@ interface ToolPartLike {
 }
 
 /**
- * 扫描 Conversation 计算 Kiro Search 状态（Task 15A）：
+ * 扫描 Conversation 计算 Kiro Search 状态（Task 15A/B）：
  * - attempts：只统计最后一个 User Message 之后、已产生 Tool Result（无论 ok）的 tool-web_search part，
  *   按 toolCallId 去重（无 toolCallId 的旧记录按 occurrence 计一次）
  * - nextSourceIndex：扫描整段 Conversation（所有 Turn），只信真实 Tool Result 的 /^web-(\d+)$/ sourceId
+ * - successfulQueries / seenUrls：只扫描当前 Turn 的真实成功 web_search outputs
  */
 export function inspectCurrentTurnWebSearchState(messages: unknown[]): {
   attempts: number;
   nextSourceIndex: number;
+  successfulQueries: string[];
+  seenUrls: string[];
 } {
   const list = Array.isArray(messages) ? messages : [];
   let lastUserIdx = -1;
@@ -59,6 +73,8 @@ export function inspectCurrentTurnWebSearchState(messages: unknown[]): {
   const attemptedIds = new Set<string>();
   let attempts = 0;
   let maxSourceIndex = 0;
+  const successfulQueries: string[] = [];
+  const seenCanonical = new Set<string>();
 
   for (let i = 0; i < list.length; i++) {
     const m = list[i] as { role?: string; parts?: unknown[] } | null;
@@ -69,12 +85,24 @@ export function inspectCurrentTurnWebSearchState(messages: unknown[]): {
       const toolName = p.type.slice("tool-".length);
       if (toolName !== "web_search") continue;
 
-      const output = p.output as { ok?: boolean; data?: { results?: KiroWebSearchResult[] } } | null;
+      const output = p.output as {
+        ok?: boolean;
+        query?: string;
+        data?: { results?: KiroWebSearchResult[] };
+      } | null;
       if (output?.ok === true) {
         const results = Array.isArray(output.data?.results) ? output.data.results : [];
         for (const r of results) {
           const mIdx = /^web-(\d+)$/.exec(r.sourceId ?? "");
           if (mIdx) maxSourceIndex = Math.max(maxSourceIndex, parseInt(mIdx[1], 10));
+          // seenUrls（conversation-wide 或 turn-wide？）：只对当前 Turn 生效（去重范围 = 本 Turn）
+          if (inCurrentTurn && r.url) {
+            const canonical = canonicalWebSearchUrl(r.url);
+            if (canonical) seenCanonical.add(canonical);
+          }
+        }
+        if (inCurrentTurn && typeof output.query === "string" && output.query.trim()) {
+          successfulQueries.push(normalizeWebSearchQuery(output.query));
         }
       }
 
@@ -91,7 +119,12 @@ export function inspectCurrentTurnWebSearchState(messages: unknown[]): {
       }
     }
   }
-  return { attempts, nextSourceIndex: maxSourceIndex + 1 };
+  return {
+    attempts,
+    nextSourceIndex: maxSourceIndex + 1,
+    successfulQueries,
+    seenUrls: Array.from(seenCanonical),
+  };
 }
 
 function limitFailure(): { ok: false; code: "WEB_SEARCH_LIMIT_REACHED"; message: string } {
@@ -100,6 +133,52 @@ function limitFailure(): { ok: false; code: "WEB_SEARCH_LIMIT_REACHED"; message:
     code: "WEB_SEARCH_LIMIT_REACHED",
     message: webSearchSafeMessage("WEB_SEARCH_LIMIT_REACHED"),
   };
+}
+
+function duplicateQueryFailure(): {
+  ok: false;
+  code: "WEB_SEARCH_DUPLICATE_QUERY";
+  message: string;
+} {
+  return {
+    ok: false,
+    code: "WEB_SEARCH_DUPLICATE_QUERY",
+    message: "本轮已经搜索过相同关键词，请使用已有结果或调整搜索关键词。",
+  };
+}
+
+/**
+ * Post-processing pipeline（Task 15B，纯函数）：
+ * provider 结果 → 跨搜索 canonical URL 去重 → domain diversity（无 includeDomains 时每域 ≤2）→ 上限 6。
+ * 保持 Provider relevance 顺序；diversity 只是 skip 超出 domain cap 的后续结果。
+ */
+export function filterWebSearchResults(input: {
+  results: KiroWebSearchResult[];
+  seenCanonicalUrls: string[];
+  includeDomains?: string[];
+}): { results: KiroWebSearchResult[]; duplicatesFiltered: number } {
+  const seen = new Set(input.seenCanonicalUrls);
+  const perDomain = new Map<string, number>();
+  const kept: KiroWebSearchResult[] = [];
+  let duplicatesFiltered = 0;
+  const diversityEnabled = !(input.includeDomains && input.includeDomains.length > 0);
+
+  for (const r of input.results) {
+    if (kept.length >= MAX_WEB_RESULTS) break;
+    const canonical = canonicalWebSearchUrl(r.url);
+    if (!canonical || seen.has(canonical)) {
+      duplicatesFiltered += 1;
+      continue;
+    }
+    seen.add(canonical);
+    if (diversityEnabled) {
+      const n = perDomain.get(r.domain) ?? 0;
+      if (n >= MAX_WEB_RESULTS_PER_DOMAIN) continue; // 多样性跳过（非重复，不计数）
+      perDomain.set(r.domain, n + 1);
+    }
+    kept.push(r);
+  }
+  return { results: kept, duplicatesFiltered };
 }
 
 function credentialFailure(
@@ -128,6 +207,8 @@ export function assembleKiroToolsForRequest(input: {
       credential: input.credential,
       attemptsSoFar: state.attempts,
       nextSourceIndex: state.nextSourceIndex,
+      successfulQueries: state.successfulQueries,
+      seenUrls: state.seenUrls,
     }),
   };
 }
@@ -140,6 +221,8 @@ export function createKiroWebSearchTool(config: KiroWebSearchToolConfig) {
   const { provider, credential, attemptsSoFar, nextSourceIndex } = config;
   let remainingAttempts = Math.max(0, MAX_WEB_SEARCHES_PER_TURN - attemptsSoFar);
   let sourceCursor = nextSourceIndex;
+  const successfulQueries = new Set(config.successfulQueries.map(normalizeWebSearchQuery));
+  const seenCanonicalUrls = new Set(config.seenUrls);
 
   return tool({
     description:
@@ -160,6 +243,11 @@ export function createKiroWebSearchTool(config: KiroWebSearchToolConfig) {
       }
 
       remainingAttempts -= 1;
+
+      // Task 15B：重复查询守卫（仍计一次 logical attempt；不请求 Provider）
+      const normalizedQuery = normalizeWebSearchQuery(input.query);
+      if (successfulQueries.has(normalizedQuery)) return duplicateQueryFailure();
+
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), WEB_SEARCH_TIMEOUT_MS);
       try {
@@ -169,17 +257,40 @@ export function createKiroWebSearchTool(config: KiroWebSearchToolConfig) {
             topic: input.topic,
             timeRange: input.timeRange,
             includeDomains: input.includeDomains?.map(normalizeWebSearchDomain).filter(Boolean),
+            excludeDomains: input.excludeDomains?.map(normalizeWebSearchDomain).filter(Boolean),
+            // exactMatch 守卫：query 无引号短语时归一为 false，Provider 不收到 exact_match=true
+            exactMatch: resolveExactMatchFlag(input.query, input.exactMatch),
           },
           { apiKey: resolved.apiKey, signal: controller.signal }
         );
         if (!outcome.ok) return { ok: false, code: outcome.code, message: outcome.message };
-        // sourceId 分配：web-<cursor> 起，跨 roundtrip 唯一递增
-        const results = outcome.results.map((r, i) => ({
+
+        // 跨搜索去重 + domain diversity + 上限（保持 Provider relevance 顺序）
+        const filtered = filterWebSearchResults({
+          results: outcome.results,
+          seenCanonicalUrls: Array.from(seenCanonicalUrls),
+          includeDomains: input.includeDomains,
+        });
+        // sourceId 只分配给最终返回的新结果，且保持连续（web-<cursor> 起）
+        const results = filtered.results.map((r, i) => ({
           ...r,
           sourceId: `web-${sourceCursor + i}`,
         }));
         sourceCursor += results.length;
-        return { ok: true, data: { query: outcome.query, count: results.length, results } };
+        for (const r of results) {
+          const canonical = canonicalWebSearchUrl(r.url);
+          if (canonical) seenCanonicalUrls.add(canonical);
+        }
+        successfulQueries.add(normalizedQuery);
+        return {
+          ok: true,
+          data: {
+            query: outcome.query,
+            count: results.length,
+            results,
+            duplicatesFiltered: (outcome.duplicatesFiltered ?? 0) + filtered.duplicatesFiltered,
+          },
+        };
       } finally {
         clearTimeout(timer);
       }

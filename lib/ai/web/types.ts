@@ -19,6 +19,10 @@ export interface KiroWebSearchRequest {
   topic?: KiroWebSearchTopic;
   timeRange?: KiroWebSearchTimeRange;
   includeDomains?: string[];
+  /** Task 15B：显式排除域名（用户/Agent 明确要求；不建默认黑名单） */
+  excludeDomains?: string[];
+  /** 精确名称 / 短语搜索（仅用户明确要求精确匹配时；request planner 校验引号短语） */
+  exactMatch?: boolean;
 }
 
 /** 归一化后的搜索结果（untrusted external content；sourceId 由调用层分配） */
@@ -37,6 +41,8 @@ export interface KiroWebSearchSuccess {
   query: string;
   count: number;
   results: KiroWebSearchResult[];
+  /** Provider 层 canonical 去重移除的数量（安全确定性数字） */
+  duplicatesFiltered?: number;
 }
 
 export type KiroWebSearchErrorCode =
@@ -46,7 +52,8 @@ export type KiroWebSearchErrorCode =
   | "WEB_SEARCH_RATE_LIMITED"
   | "WEB_SEARCH_TIMEOUT"
   | "WEB_SEARCH_FAILED"
-  | "WEB_SEARCH_LIMIT_REACHED";
+  | "WEB_SEARCH_LIMIT_REACHED"
+  | "WEB_SEARCH_DUPLICATE_QUERY";
 
 export interface KiroWebSearchFailure {
   ok: false;
@@ -73,3 +80,5 @@ export const MAX_WEB_RESULTS = 6;
 export const WEB_SEARCH_TIMEOUT_MS = 10_000;
 /** snippet 单条最大字符数 */
 export const WEB_SEARCH_SNIPPET_MAX_CHARS = 900;
+/** Task 15B：未显式 includeDomains 时，单域名最多保留结果数（来源多样性） */
+export const MAX_WEB_RESULTS_PER_DOMAIN = 2;

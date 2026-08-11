@@ -3,7 +3,7 @@ import { createTavilyWebSearchProvider, TAVILY_SEARCH_URL, webSearchSafeMessage,
 import { resolveWebSearchCredential, getSessionWebSearchApiKey, setSessionWebSearchApiKey } from "@/lib/ai/web/credentials";
 import { MAX_WEB_RESULTS } from "@/lib/ai/web/types";
 import { kiroWebSearchInputSchema, normalizeWebSearchDomain } from "@/lib/ai/web/schemas";
-import { createKiroWebSearchTool, inspectCurrentTurnWebSearchState } from "@/lib/ai/web/tool";
+import { createKiroWebSearchTool, inspectCurrentTurnWebSearchState, filterWebSearchResults } from "@/lib/ai/web/tool";
 import { createTavilyWebSearchProvider as _unused } from "@/lib/ai/web/tavily";
 
 const SERVER_KEY = "sk-server-tavily";
@@ -211,6 +211,23 @@ describe("Tavily adapter normalization", () => {
     expect(canonicalWebSearchUrl("javascript:alert(1)")).toBeNull();
     expect(canonicalWebSearchUrl("https://a.dev/?utm_source=1")).toBe("https://a.dev/");
   });
+
+  it("Task 15B Case F：Tavily 请求映射 exclude_domains / exact_match；无 auto_parameters；search_depth=basic", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(tavilyPayload([]), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    await provider.search(
+      { query: "\"全国高校商业精英挑战赛\" 官方", exactMatch: true, excludeDomains: ["reddit.com"] },
+      { apiKey: "sk" }
+    );
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe(TAVILY_SEARCH_URL);
+    const body = JSON.parse(String(init.body)) as Record<string, unknown>;
+    expect(body.exclude_domains).toEqual(["reddit.com"]);
+    expect(body.exact_match).toBe(true);
+    expect(body.search_depth).toBe("basic");
+    expect("auto_parameters" in body).toBe(false);
+    expect("advanced" in body).toBe(false);
+  });
 });
 
 describe("web_search schema", () => {
@@ -254,7 +271,7 @@ describe("Kiro Search tool + turn state", () => {
 
   it("execute：分配 web-N sourceId 并返回 ok envelope", async () => {
     const provider = fakeProvider();
-    const webTool = createKiroWebSearchTool({ provider, credential: { mode: "byok", userApiKey: "sk-test" }, attemptsSoFar: 0, nextSourceIndex: 1 });
+    const webTool = createKiroWebSearchTool({ provider, credential: { mode: "byok", userApiKey: "sk-test" }, attemptsSoFar: 0, nextSourceIndex: 1, successfulQueries: [], seenUrls: [] });
     const r = (await webTool.execute?.({ query: "news" }, {} as never)) as { ok: true; data: { results: { sourceId: string }[] } };
     expect(r.ok).toBe(true);
     expect(r.data.results.map((x) => x.sourceId)).toEqual(["web-1", "web-2"]);
@@ -262,7 +279,7 @@ describe("Kiro Search tool + turn state", () => {
 
   it("已 3 次 web_search → 第 4 次返回 WEB_SEARCH_LIMIT_REACHED（不调用 provider）", async () => {
     const provider = fakeProvider();
-    const webTool = createKiroWebSearchTool({ provider, credential: { mode: "server" }, attemptsSoFar: 3, nextSourceIndex: 10 });
+    const webTool = createKiroWebSearchTool({ provider, credential: { mode: "server" }, attemptsSoFar: 3, nextSourceIndex: 10, successfulQueries: [], seenUrls: [] });
     const r = (await webTool.execute?.({ query: "again" }, {} as never)) as { ok: false; code: string };
     expect(r.ok).toBe(false);
     expect(r.code).toBe("WEB_SEARCH_LIMIT_REACHED");
@@ -284,7 +301,7 @@ describe("Kiro Search tool + turn state", () => {
       },
     ]);
     expect(s.attempts).toBe(3);
-    const webTool = createKiroWebSearchTool({ provider, credential: { mode: "server" }, attemptsSoFar: s.attempts, nextSourceIndex: s.nextSourceIndex });
+    const webTool = createKiroWebSearchTool({ provider, credential: { mode: "server" }, attemptsSoFar: s.attempts, nextSourceIndex: s.nextSourceIndex, successfulQueries: s.successfulQueries, seenUrls: s.seenUrls });
     const r = (await webTool.execute?.({ query: "fourth" }, {} as never)) as { ok: false; code: string };
     expect(r.code).toBe("WEB_SEARCH_LIMIT_REACHED");
     expect(provider.search).not.toHaveBeenCalled();
@@ -324,6 +341,120 @@ describe("Kiro Search tool + turn state", () => {
       { role: "assistant", parts: [{ type: "tool-web_search", toolCallId: "c1", output: { ok: true, data: { results: [{ sourceId: "web-2" }] } } }] },
     ]);
     expect(s.nextSourceIndex).toBe(3);
+  });
+
+  it("Task 15B Case A：重复 normalized query → WEB_SEARCH_DUPLICATE_QUERY，Provider 不再次调用", async () => {
+    const provider = fakeProvider();
+    const webTool = createKiroWebSearchTool({
+      provider,
+      credential: { mode: "byok", userApiKey: "sk-test" },
+      attemptsSoFar: 0,
+      nextSourceIndex: 1,
+      successfulQueries: ["openai latest"],
+      seenUrls: [],
+    });
+    const r = (await webTool.execute?.({ query: "  OpenAI   latest " }, {} as never)) as { ok: false; code: string };
+    expect(r.ok).toBe(false);
+    expect(r.code).toBe("WEB_SEARCH_DUPLICATE_QUERY");
+    expect(provider.search).not.toHaveBeenCalled();
+  });
+
+  it("Task 15B Case B：跨搜索 URL 去重——第二次只返回新结果", async () => {
+    const provider = fakeProvider();
+    const webTool = createKiroWebSearchTool({
+      provider,
+      credential: { mode: "byok", userApiKey: "sk-test" },
+      attemptsSoFar: 0,
+      nextSourceIndex: 1,
+      successfulQueries: [],
+      seenUrls: ["https://a.dev/1", "https://a.dev/2"], // Search 1: A B
+    });
+    provider.search.mockResolvedValueOnce({
+      ok: true,
+      query: "q2",
+      count: 3,
+      results: [
+        { sourceId: "", title: "B", url: "https://a.dev/2", domain: "a.dev", snippet: "s" }, // 已见
+        { sourceId: "", title: "C", url: "https://a.dev/3", domain: "a.dev", snippet: "s" },
+        { sourceId: "", title: "D", url: "https://b.dev/1", domain: "b.dev", snippet: "s" },
+      ],
+    });
+    const r = (await webTool.execute?.({ query: "q2" }, {} as never)) as {
+      ok: true;
+      data: { count: number; results: { sourceId: string; url: string }[]; duplicatesFiltered: number };
+    };
+    expect(r.ok).toBe(true);
+    expect(r.data.count).toBe(2);
+    expect(r.data.results.map((x) => x.url)).toEqual(["https://a.dev/3", "https://b.dev/1"]);
+    expect(r.data.duplicatesFiltered).toBe(1); // B 被跨搜索去重
+  });
+
+  it("Task 15B Case C：去重后 sourceId 连续分配（web-4, web-5）", async () => {
+    const provider = fakeProvider();
+    const webTool = createKiroWebSearchTool({
+      provider,
+      credential: { mode: "byok", userApiKey: "sk-test" },
+      attemptsSoFar: 0,
+      nextSourceIndex: 4, // 已有 web-1..3
+      successfulQueries: [],
+      seenUrls: ["https://a.dev/1"], // 与 provider 首条重复
+    });
+    provider.search.mockResolvedValueOnce({
+      ok: true,
+      query: "q",
+      count: 3,
+      results: [
+        { sourceId: "", title: "dup", url: "https://a.dev/1", domain: "a.dev", snippet: "s" },
+        { sourceId: "", title: "D", url: "https://d.dev/1", domain: "d.dev", snippet: "s" },
+        { sourceId: "", title: "E", url: "https://e.dev/1", domain: "e.dev", snippet: "s" },
+      ],
+    });
+    const r = (await webTool.execute?.({ query: "q" }, {} as never)) as {
+      ok: true;
+      data: { count: number; results: { sourceId: string }[] };
+    };
+    expect(r.data.count).toBe(2);
+    expect(r.data.results.map((x) => x.sourceId)).toEqual(["web-4", "web-5"]); // 连续，无 web-7/web-9 空洞
+  });
+
+  it("Task 15B Case D：无 includeDomains 时单域最多 2 条（domain diversity）", () => {
+    const { results } = filterWebSearchResults({
+      results: [
+        { sourceId: "", title: "A", url: "https://example.com/a", domain: "example.com", snippet: "s" },
+        { sourceId: "", title: "B", url: "https://example.com/b", domain: "example.com", snippet: "s" },
+        { sourceId: "", title: "C", url: "https://example.com/c", domain: "example.com", snippet: "s" },
+        { sourceId: "", title: "D", url: "https://example.com/d", domain: "example.com", snippet: "s" },
+        { sourceId: "", title: "E", url: "https://official.org/e", domain: "official.org", snippet: "s" },
+        { sourceId: "", title: "F", url: "https://news.org/f", domain: "news.org", snippet: "s" },
+      ],
+      seenCanonicalUrls: [],
+    });
+    const exampleCount = results.filter((x) => x.domain === "example.com").length;
+    expect(exampleCount).toBe(2);
+    expect(results.length).toBe(4); // example×2 + official + news
+  });
+
+  it("Task 15B Case E：includeDomains 显式指定时不强制 diversity（同域可 >2）", () => {
+    const { results } = filterWebSearchResults({
+      results: [
+        { sourceId: "", title: "A", url: "https://example.com/a", domain: "example.com", snippet: "s" },
+        { sourceId: "", title: "B", url: "https://example.com/b", domain: "example.com", snippet: "s" },
+        { sourceId: "", title: "C", url: "https://example.com/c", domain: "example.com", snippet: "s" },
+        { sourceId: "", title: "D", url: "https://example.com/d", domain: "example.com", snippet: "s" },
+        { sourceId: "", title: "E", url: "https://example.com/e", domain: "example.com", snippet: "s" },
+      ],
+      seenCanonicalUrls: [],
+      includeDomains: ["example.com"],
+    });
+    expect(results.length).toBe(5);
+  });
+
+  it("exactMatch guard：query 无引号短语 → resolveExactMatchFlag=false（Provider 不收到 exact_match）", async () => {
+    const { resolveExactMatchFlag } = await import("@/lib/ai/web/schemas");
+    expect(resolveExactMatchFlag("普通语义查询", true)).toBe(false);
+    expect(resolveExactMatchFlag('"全国高校商业精英挑战赛" 官方', true)).toBe(true);
+    expect(resolveExactMatchFlag("“完整短语” 官方", true)).toBe(true);
+    expect(resolveExactMatchFlag("普通查询", undefined)).toBe(false);
   });
 
   it("web_search 不属于 mutating：不在 KIRO_MUTATING_TOOL_NAMES", async () => {
