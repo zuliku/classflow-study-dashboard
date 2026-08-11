@@ -175,6 +175,13 @@ export const SETTINGS_REGISTRY: SettingDefinition[] = [
     keywords: ["kiro", "字号", "字体", "文字大小", "显示", "阅读", "输出", "font", "size"],
   },
   {
+    id: "kiro-response-preference",
+    section: "kiro",
+    title: "回答偏好",
+    description: "调整 Kiro 最终回答的信息密度与解释深度",
+    keywords: ["kiro", "回答", "偏好", "高密度", "平衡", "深入", "response", "density"],
+  },
+  {
     id: "kiro-auto-context",
     section: "kiro",
     title: "自动环境上下文",

@@ -12,6 +12,7 @@ import { AI, KIRO_SYSTEM_PROMPT } from "@/lib/ai/config";
 import { KIRO_TOOLS } from "@/lib/ai/tools";
 import { normalizeAIError, AIError, AI_ERROR_MESSAGES } from "@/lib/ai/errors";
 import { logProviderError } from "@/lib/ai/providerLog";
+import { buildKiroResponsePreferenceContext } from "@/lib/ai/responsePreference";
 import { resolveLanguageModel } from "@/lib/ai/providers/resolver";
 import { validateAIChatBody, createTimeoutController } from "@/lib/ai/server";
 import {
@@ -214,12 +215,15 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  // Intelligence V2 Task 1：Server 生成的受信任回答偏好 Context（只输出归一后的 enum，绝不信任 raw value）
+  const trustedBasePrompt = KIRO_SYSTEM_PROMPT + buildKiroResponsePreferenceContext(parsed.responsePreference);
+
   const systemMessage = baseContext
-    ? `${KIRO_SYSTEM_PROMPT}\n\n# 当前 ClassFlow 上下文\n${JSON.stringify({
+    ? `${trustedBasePrompt}\n\n# 当前 ClassFlow 上下文\n${JSON.stringify({
         baseContext,
         contextRefs,
       })}${memorySection}${attachmentSection(plan.attachmentContext)}${visionPagesSection}`
-    : KIRO_SYSTEM_PROMPT + memorySection + attachmentSection(plan.attachmentContext) + visionPagesSection;
+    : trustedBasePrompt + memorySection + attachmentSection(plan.attachmentContext) + visionPagesSection;
 
   try {
     const modelMessages = await convertToModelMessages(plan.messages as never);

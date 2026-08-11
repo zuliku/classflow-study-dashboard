@@ -5,6 +5,7 @@ import { DefaultChatTransport, lastAssistantMessageIsCompleteWithToolCalls } fro
 import { useChat, UIMessage } from "@ai-sdk/react";
 import { useAppStore } from "@/store/useAppStore";
 import { useAISettingsStore } from "@/store/useAISettingsStore";
+import { useKiroPreferencesStore } from "@/store/useKiroPreferencesStore";
 import { useConfirmStore } from "@/store/useConfirmStore";
 import { useToastStore } from "@/store/useToastStore";
 import { getSessionApiKey } from "@/lib/ai/sessionKeys";
@@ -383,6 +384,8 @@ export function useKiroChat({
   const provider = useAISettingsStore((s) => s.provider);
   const model = useAISettingsStore((s) => s.model);
   const custom = useAISettingsStore((s) => s.custom);
+  // Intelligence V2 Task 1：回答偏好随 Turn Snapshot 冻结（Turn 中途改设置不影响当前 Turn）
+  const responsePreference = useKiroPreferencesStore((s) => s.responsePreference);
 
   const pushToast = useToastStore((s) => s.pushToast);
   const confirmRequest = useConfirmStore((s) => s.confirm);
@@ -472,6 +475,7 @@ export function useKiroChat({
       model,
       apiKey: getSessionApiKey(provider),
       customConfig: custom,
+      responsePreference,
       baseContext: buildBaseContext(),
       contextRefs: refsForPrompt(
         dedupeContextRefs(

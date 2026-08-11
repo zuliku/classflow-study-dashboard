@@ -13,6 +13,7 @@ import { SettingsToggle, SettingsSelect, SettingsSegmentedControl } from "@/comp
 import { KiroMemorySettings } from "@/components/settings/KiroMemorySettings";
 import { useKiroPreferencesStore } from "@/store/useKiroPreferencesStore";
 import { KiroOutputTextSize } from "@/lib/ai/ui/typography";
+import { KiroResponsePreference } from "@/lib/ai/responsePreference";
 
 const PROVIDER_OPTIONS: { value: AIProviderId; label: string }[] = [
   { value: "opencode-go", label: "OpenCode Go" },
@@ -43,6 +44,15 @@ export function KiroAISettings() {
   // Task 7E：自动环境上下文（纯 interaction preference，不放 useAISettingsStore）
   const autoContextEnabled = useKiroPreferencesStore((s) => s.autoContextEnabled);
   const setAutoContextEnabled = useKiroPreferencesStore((s) => s.setAutoContextEnabled);
+  // Intelligence V2 Task 1：回答偏好（随 Turn Snapshot 冻结；只影响 Final Answer 表达深度）
+  const responsePreference = useKiroPreferencesStore((s) => s.responsePreference);
+  const setResponsePreference = useKiroPreferencesStore((s) => s.setResponsePreference);
+
+  const RESPONSE_PREFERENCE_DESCRIPTIONS: Record<KiroResponsePreference, string> = {
+    dense: "结论、关键事实与行动优先",
+    balanced: "在结论之外补充必要原因",
+    deep: "更完整解释；必要时附一段直接相关的学习建议",
+  };
 
   const [apiKeyInput, setApiKeyInput] = useState(getSessionApiKey(provider));
   const [showKey, setShowKey] = useState(false);
@@ -273,6 +283,27 @@ export function KiroAISettings() {
               { value: "large", label: "大" },
             ]}
           />
+        </SettingsRow>
+
+        {/* Intelligence V2 Task 1：回答偏好（只影响最终回答表达深度；不改变 Tool / 安全规则） */}
+        <SettingsRow
+          settingId="kiro-response-preference"
+          title="回答偏好"
+          description="只调整 Kiro 最终回答的表达深度，不影响必要的数据读取、工具调用或安全规则。"
+        >
+          <SettingsSegmentedControl<KiroResponsePreference>
+            value={responsePreference}
+            onChange={setResponsePreference}
+            ariaLabel="Kiro 回答偏好"
+            options={[
+              { value: "dense", label: "高密度" },
+              { value: "balanced", label: "平衡" },
+              { value: "deep", label: "深入" },
+            ]}
+          />
+          <p className="text-[10px] text-sandrift leading-relaxed mt-1.5">
+            {RESPONSE_PREFERENCE_DESCRIPTIONS[responsePreference]}
+          </p>
         </SettingsRow>
 
         {/* Task 7E：自动环境上下文（当前会话手动 × 的 suppression 仍各自生效） */}

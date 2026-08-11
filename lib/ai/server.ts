@@ -5,6 +5,8 @@
  * LanguageModel 构造统一走 lib/ai/providers/resolver.ts（resolveLanguageModel）。
  */
 
+import { KiroResponsePreference, normalizeKiroResponsePreference } from "@/lib/ai/responsePreference";
+
 /** 请求体校验（chat / test / compact 共用）：非法返回错误信息字符串 */
 export function validateAIChatBody(body: unknown): {
   ok: true;
@@ -14,6 +16,8 @@ export function validateAIChatBody(body: unknown): {
   customConfig?: { providerName: string; baseURL: string; model: string };
   messages?: unknown;
   timeoutMs?: number;
+  /** Intelligence V2 Task 1：回答偏好（可安全 fallback；非法/缺失 → dense，不报错） */
+  responsePreference: KiroResponsePreference;
 } | { ok: false; code: string; message: string } {
   const b = (typeof body === "object" && body !== null ? body : {}) as Record<string, unknown>;
   const provider = b.provider;
@@ -39,6 +43,7 @@ export function validateAIChatBody(body: unknown): {
     },
     messages: b.messages,
     timeoutMs: typeof b.timeoutMs === "number" && b.timeoutMs > 0 ? b.timeoutMs : undefined,
+    responsePreference: normalizeKiroResponsePreference(b.responsePreference),
   };
 }
 
