@@ -114,13 +114,14 @@ export function SettingsSegmentedControl<T extends string | number>({
   );
 }
 
-export type SettingsButtonVariant = "primary" | "secondary" | "ghost" | "danger";
+export type SettingsButtonVariant = "primary" | "secondary" | "ghost" | "danger" | "accent";
 
 const BUTTON_VARIANTS: Record<SettingsButtonVariant, string> = {
   primary: "bg-charcoal text-white hover:bg-black shadow-subtle",
   secondary: "bg-white border border-line text-charcoal hover:bg-alabaster",
   ghost: "text-satin-grey hover:bg-alabaster hover:text-charcoal",
   danger: "bg-danger-bg text-danger border border-danger-border hover:bg-danger-border",
+  accent: "bg-pastel-mint text-charcoal hover:bg-pastel-mint",
 };
 
 /** 动作按钮（统一 h-8 / rounded-lg / 小号字体 / disabled）；icon 由调用方传入 */

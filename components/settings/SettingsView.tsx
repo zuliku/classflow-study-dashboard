@@ -7,6 +7,7 @@ import { GeneralSettings } from "@/components/settings/GeneralSettings";
 import { ProfileSettings } from "@/components/settings/ProfileSettings";
 import { SemesterSettings } from "@/components/settings/SemesterSettings";
 import { TaskSettings } from "@/components/settings/TaskSettings";
+import { FocusSettings } from "@/components/settings/FocusSettings";
 import { InteractionSettings } from "@/components/settings/InteractionSettings";
 import { DataSettings } from "@/components/settings/DataSettings";
 import { AboutSettings } from "@/components/settings/AboutSettings";
@@ -251,6 +252,9 @@ export function SettingsView({ searchQuery, onClearSearch, jumpToSetting }: Sett
             </div>
             <div className={cn(section === "tasks" && "ux-fade")} hidden={section !== "tasks"}>
               <TaskSettings highlightedId={highlightedId ?? undefined} />
+            </div>
+            <div className={cn(section === "focus" && "ux-fade")} hidden={section !== "focus"}>
+              <FocusSettings />
             </div>
             <div className={cn(section === "interaction" && "ux-fade")} hidden={section !== "interaction"}>
               <InteractionSettings highlightedId={highlightedId ?? undefined} />

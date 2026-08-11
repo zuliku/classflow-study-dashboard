@@ -265,6 +265,7 @@ export type SettingsSection =
   | "profile"
   | "semester"
   | "tasks"
+  | "focus"
   | "interaction"
   | "kiro"
   | "data"

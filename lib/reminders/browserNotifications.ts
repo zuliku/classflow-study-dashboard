@@ -22,6 +22,24 @@ export function getBrowserNotificationPermission(): NotificationPermission | "un
   return api.permission;
 }
 
+export type BrowserNotificationPermissionState = NotificationPermission | "unsupported";
+
+/** Settings 展示用的权限状态（纯函数；真实反映浏览器状态，绝不伪造「已开启」） */
+export function describeBrowserNotificationPermission(
+  state: BrowserNotificationPermissionState
+): { label: string; tone: "success" | "warning" | "neutral" } {
+  switch (state) {
+    case "granted":
+      return { label: "浏览器已授权", tone: "success" };
+    case "denied":
+      return { label: "浏览器已阻止通知权限，请在浏览器设置中修改", tone: "warning" };
+    case "default":
+      return { label: "未授权 · 开启开关时会请求授权", tone: "neutral" };
+    default:
+      return { label: "当前浏览器不支持系统通知，站内提醒仍可使用", tone: "neutral" };
+  }
+}
+
 /** 用户主动开启开关时调用（granted → 后续可发送；denied/default → 由调用方处理） */
 export async function requestBrowserNotificationPermission(): Promise<
   NotificationPermission | "unsupported"

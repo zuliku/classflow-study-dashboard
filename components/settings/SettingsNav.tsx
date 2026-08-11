@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { Home, User, Calendar, ListTodo, MousePointerClick, Database, Info } from "lucide-react";
+import { Home, User, Calendar, ListTodo, Timer, MousePointerClick, Database, Info } from "lucide-react";
 import { SettingsSection } from "@/types";
 import { cn } from "@/lib/utils";
 import { KIRO_ICON } from "@/components/layout/navItems";
@@ -15,6 +15,7 @@ export const SETTINGS_NAV: {
   { id: "profile", label: "个人资料", icon: User },
   { id: "semester", label: "学期与课表", icon: Calendar },
   { id: "tasks", label: "任务与提醒", icon: ListTodo },
+  { id: "focus", label: "专注与学习", icon: Timer },
   { id: "interaction", label: "交互与快捷键", icon: MousePointerClick },
   { id: "kiro", label: "Kiro 与 AI", icon: KIRO_ICON },
   { id: "data", label: "数据与存储", icon: Database },

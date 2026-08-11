@@ -4,6 +4,7 @@ import React, { useState } from "react";
 import { useAppStore } from "@/store/useAppStore";
 import { useReminderPreferencesStore } from "@/store/useReminderPreferencesStore";
 import { SettingsSection } from "@/components/settings/SettingsSection";
+import { SettingsGroup } from "@/components/settings/SettingsGroup";
 import { SettingsRow } from "@/components/settings/SettingsRow";
 import { SettingsToggle, SettingsSelect, SettingsSegmentedControl } from "@/components/settings/SettingsControls";
 import { DDL_WARNING_DAYS, TASK_PRIORITIES, TASK_STATUSES } from "@/lib/preferences";
@@ -15,6 +16,7 @@ import {
   getBrowserNotificationPermission,
   isBrowserNotificationSupported,
   requestBrowserNotificationPermission,
+  describeBrowserNotificationPermission,
 } from "@/lib/reminders/browserNotifications";
 import { cn } from "@/lib/utils";
 
@@ -46,8 +48,14 @@ export function TaskSettings({ highlightedId }: { highlightedId?: string }) {
   const setMissedReminderPolicy = useReminderPreferencesStore((s) => s.setMissedReminderPolicy);
   const missedReminderWindowHours = useReminderPreferencesStore((s) => s.missedReminderWindowHours);
   const setMissedReminderWindowHours = useReminderPreferencesStore((s) => s.setMissedReminderWindowHours);
-  // 权限状态直接行内小字展示（不用 Toast）
+  // 权限状态直接行内小字展示（不用 Toast）：真实反映 granted / denied / default / unsupported
   const [permissionNote, setPermissionNote] = useState("");
+  const permissionState = getBrowserNotificationPermission();
+  const permissionLabel = permissionNote || describeBrowserNotificationPermission(permissionState).label;
+  const permissionTone =
+    permissionNote && !permissionNote.includes("已授权")
+      ? "warning"
+      : describeBrowserNotificationPermission(permissionState).tone;
 
   // 只有用户主动打开开关才申请权限；denied 不重复自动请求
   const handleBrowserNotificationToggle = async (checked: boolean) => {
@@ -89,7 +97,8 @@ export function TaskSettings({ highlightedId }: { highlightedId?: string }) {
       title="任务与提醒"
       description="任务默认值、临近截止提示与提醒通知偏好。"
     >
-      <div className="text-xs" data-testid="settings-tasks">
+      <div className="text-xs space-y-4" data-testid="settings-tasks">
+        <SettingsGroup title="任务">
         <SettingsRow
           settingId="ddl-warning-days"
           title="临近截止提醒"
@@ -188,62 +197,83 @@ export function TaskSettings({ highlightedId }: { highlightedId?: string }) {
             options={PRIMARY_TASK_WORKSPACE_VIEWS.map((v) => ({ value: v.id, label: v.label }))}
           />
         </SettingsRow>
+        </SettingsGroup>
 
-        {/* ---- 提醒（Task 7G-A2） ---- */}
-        <div className="flex items-center gap-2 pt-1 pb-0.5">
-          <span className="text-[10px] font-bold text-sandrift uppercase tracking-wider">提醒</span>
-          <div className="flex-1 h-px bg-line-soft" />
-        </div>
-
-        <SettingsRow
-          settingId="browser-notifications"
-          title="浏览器系统通知"
-          description="提醒到期时同时发送浏览器系统通知。"
-          highlighted={highlightedId === "browser-notifications"}
-        >
-          <div className="flex flex-col items-end gap-1">
-            <SettingsToggle
-              checked={browserNotificationsEnabled}
-              onChange={(v) => void handleBrowserNotificationToggle(v)}
-              label="浏览器系统通知"
-            />
-            {permissionNote && <p className="text-[10px] text-sandrift max-w-[220px] text-right">{permissionNote}</p>}
-          </div>
-        </SettingsRow>
-
-        <SettingsRow
-          settingId="missed-reminder-policy"
-          title="错过提醒处理"
-          description="ClassFlow 未打开期间错过提醒时的处理方式。"
-          highlighted={highlightedId === "missed-reminder-policy"}
-        >
-          <SettingsSelect
-            value={missedReminderPolicy}
-            onChange={(v) => setMissedReminderPolicy(v)}
-            ariaLabel="错过提醒处理"
-            options={MISSED_POLICY_OPTIONS}
-          />
-        </SettingsRow>
-
-        {missedReminderPolicy === "recent-only" && (
+        <SettingsGroup title="提醒">
+          {/* 应用内提醒：核心行为，始终开启（无底层开关，不伪造设置） */}
           <SettingsRow
-            settingId="missed-reminder-window"
-            title="补发时间范围"
-            description="只补发距离当前时间不超过该范围的提醒。"
-            highlighted={highlightedId === "missed-reminder-window"}
+            settingId="in-app-reminders"
+            title="应用内提醒"
+            description="提醒到期时在 ClassFlow 内展示提醒中心与角标。"
           >
-            <SettingsSegmentedControl<MissedReminderWindowHours>
-              value={missedReminderWindowHours}
-              onChange={(v) => setMissedReminderWindowHours(v)}
-              ariaLabel="补发时间范围"
-              options={[
-                { value: 1, label: "1 小时" },
-                { value: 6, label: "6 小时" },
-                { value: 24, label: "24 小时" },
-              ]}
+            <span className="px-2 py-0.5 rounded-full bg-pastel-mint text-[10px] font-bold text-charcoal shrink-0">
+              始终开启
+            </span>
+          </SettingsRow>
+
+          <SettingsRow
+            settingId="browser-notifications"
+            title="浏览器系统通知"
+            description="提醒到期时同时发送浏览器系统通知。"
+            highlighted={highlightedId === "browser-notifications"}
+          >
+            <div className="flex flex-col items-end gap-1">
+              <SettingsToggle
+                checked={browserNotificationsEnabled}
+                onChange={(v) => void handleBrowserNotificationToggle(v)}
+                label="浏览器系统通知"
+              />
+              {/* 权限状态反映真实浏览器状态（granted / denied / default / unsupported） */}
+              <p
+                className={cn(
+                  "text-[10px] max-w-[220px] text-right",
+                  permissionTone === "success"
+                    ? "text-success"
+                    : permissionTone === "warning"
+                      ? "text-warning"
+                      : "text-sandrift"
+                )}
+                data-testid="notification-permission-state"
+              >
+                {permissionLabel}
+              </p>
+            </div>
+          </SettingsRow>
+
+          <SettingsRow
+            settingId="missed-reminder-policy"
+            title="错过提醒处理"
+            description="ClassFlow 未打开期间错过提醒时的处理方式。"
+            highlighted={highlightedId === "missed-reminder-policy"}
+          >
+            <SettingsSelect
+              value={missedReminderPolicy}
+              onChange={(v) => setMissedReminderPolicy(v)}
+              ariaLabel="错过提醒处理"
+              options={MISSED_POLICY_OPTIONS}
             />
           </SettingsRow>
-        )}
+
+          {missedReminderPolicy === "recent-only" && (
+            <SettingsRow
+              settingId="missed-reminder-window"
+              title="补发时间范围"
+              description="只补发距离当前时间不超过该范围的提醒。"
+              highlighted={highlightedId === "missed-reminder-window"}
+            >
+              <SettingsSegmentedControl<MissedReminderWindowHours>
+                value={missedReminderWindowHours}
+                onChange={(v) => setMissedReminderWindowHours(v)}
+                ariaLabel="补发时间范围"
+                options={[
+                  { value: 1, label: "1 小时" },
+                  { value: 6, label: "6 小时" },
+                  { value: 24, label: "24 小时" },
+                ]}
+              />
+            </SettingsRow>
+          )}
+        </SettingsGroup>
       </div>
     </SettingsSection>
   );
