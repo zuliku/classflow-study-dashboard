@@ -193,7 +193,10 @@ export function KiroPendingIndicator() {
       <span className="w-5 h-5 flex items-center justify-center shrink-0" aria-hidden="true">
         <KiroLogoIcon className="w-5 h-5 kiro-agent-logo-active kiro-agent-logo-glow" />
       </span>
-      <span className="text-xs font-medium text-charcoal">正在处理</span>
+      <div className="flex items-center gap-1.5">
+        <span className="text-xs font-medium text-charcoal">正在处理</span>
+        <Loader2 className="w-3.5 h-3.5 animate-spin text-sandrift shrink-0" aria-hidden="true" />
+      </div>
     </div>
   );
 }
