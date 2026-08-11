@@ -24,8 +24,29 @@ describe("Kiro Prompt V2 core", () => {
     expect(KIRO_SYSTEM_PROMPT).toContain("不要透露内部工具名称、JSON、Tool Arguments");
   });
 
-  it("does not prematurely include Task 3 policies", () => {
-    expect(KIRO_SYSTEM_PROMPT).not.toContain("# Agent Decision Policy");
-    expect(KIRO_SYSTEM_PROMPT).not.toContain("# Tool Selection Policy");
+  it("includes Task 3 agent decision and tool selection policy", () => {
+    expect(KIRO_SYSTEM_PROMPT).toContain("# Agent Decision Policy");
+    expect(KIRO_SYSTEM_PROMPT).toContain("# Tool Selection Policy");
+  });
+
+  it("defines minimum-fact reuse and stopping behavior", () => {
+    expect(KIRO_SYSTEM_PROMPT).toContain("最小必要事实集");
+    expect(KIRO_SYSTEM_PROMPT).toContain("复用本 Turn 已返回的有效 Tool Result");
+    expect(KIRO_SYSTEM_PROMPT).toContain("不要为了\"再确认一下\"重复读取");
+    expect(KIRO_SYSTEM_PROMPT).toContain("所需事实已经足够时，停止调用工具");
+    expect(KIRO_SYSTEM_PROMPT).toContain("不要把 get_current_context 当作固定开场");
+    expect(KIRO_SYSTEM_PROMPT).toContain("不依赖当前 ClassFlow 状态时，可以直接回答");
+  });
+
+  it("prefers deterministic direct tools over redundant reconstruction", () => {
+    expect(KIRO_SYSTEM_PROMPT).toContain("get_assignment_health 已经返回截止前可用分钟数");
+    expect(KIRO_SYSTEM_PROMPT).toContain("除非用户需要具体空闲时段，否则不要再调用 get_available_time");
+    expect(KIRO_SYSTEM_PROMPT).toContain("不要通过 get_week_schedule 手工重建空闲时间");
+    expect(KIRO_SYSTEM_PROMPT).toContain("不要先用 get_week_schedule + get_available_time 手工拼排程");
+    expect(KIRO_SYSTEM_PROMPT).toContain("get_upcoming_assignments");
+  });
+
+  it("keeps tool selection independent of response preference", () => {
+    expect(KIRO_SYSTEM_PROMPT).toContain("responsePreference 不参与 Tool Selection");
   });
 });
