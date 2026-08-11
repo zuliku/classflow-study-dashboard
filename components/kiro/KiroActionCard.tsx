@@ -1,14 +1,14 @@
 "use client";
 
 import React from "react";
-import { CalendarClock, CalendarDays, Plus, Check, ArrowDown, Undo2, PencilLine, Layers, ChevronDown, Bell } from "lucide-react";
+import { CalendarClock, CalendarDays, Plus, Check, ArrowDown, Undo2, PencilLine, Layers, ChevronDown, Bell, Timer } from "lucide-react";
 import { parseLocalDDL, getLocalDDLDate, getLocalDDLTime } from "@/lib/ddl";
 import { format } from "date-fns";
 import { zhCN } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 import type { WriteToolResult } from "@/lib/ai/tools/write/types";
 
-export type KiroActionCardVariant = "ddl" | "schedule" | "create" | "generic" | "change-set" | "reminder";
+export type KiroActionCardVariant = "ddl" | "schedule" | "create" | "generic" | "change-set" | "reminder" | "focus-session";
 
 export interface KiroActionCardProps {
   variant: KiroActionCardVariant;
@@ -38,9 +38,11 @@ export function KiroActionCard({ variant, heading, title, change, bullets, foote
             ? Layers
             : variant === "reminder"
               ? Bell
-              : PencilLine;
+              : variant === "focus-session"
+                ? Timer
+                : PencilLine;
   const isCreate = variant === "create";
-  const showBullets = isCreate || variant === "change-set" || variant === "reminder";
+  const showBullets = isCreate || variant === "change-set" || variant === "reminder" || variant === "focus-session";
 
   return (
     <div
@@ -173,6 +175,30 @@ export function actionToCardProps(
       title: cs.summary,
       bullets: Array.from(grouped.entries()).map(([label, n]) => `${label} ${n} 项`),
       details: cs.actions.map((a) => ({ label: `${a.title}（${CHANGE_SET_ACTION_LABELS[a.tool] ?? "修改"}）` })),
+    };
+  }
+
+  // Focus Session（Task 6）：heading 按操作；时长/剩余等事实只来自 action.before / action.after
+  if (tool === "start_focus_session" || tool === "pause_focus_session" || tool === "resume_focus_session" || tool === "finish_focus_session") {
+    const after = action.after as { plannedMinutes?: number; actualActiveMs?: number; status?: string; note?: string } | undefined;
+    const bullets: string[] = [];
+    if (after?.plannedMinutes) bullets.push(`专注 ${after.plannedMinutes} 分钟`);
+    if (tool === "finish_focus_session" && typeof after?.actualActiveMs === "number") {
+      bullets.push(`本次 ${Math.max(1, Math.round(after.actualActiveMs / 60_000))} 分钟`);
+    }
+    if (after?.note) bullets.push(String(after.note));
+    return {
+      variant: "focus-session",
+      heading:
+        tool === "start_focus_session"
+          ? "已开始专注"
+          : tool === "pause_focus_session"
+            ? "已暂停专注"
+            : tool === "resume_focus_session"
+              ? "已继续专注"
+              : "已结束专注",
+      title: action.title,
+      bullets: bullets.length > 0 ? bullets : undefined,
     };
   }
 
