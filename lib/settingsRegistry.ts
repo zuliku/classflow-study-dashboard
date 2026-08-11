@@ -272,6 +272,20 @@ export const SETTINGS_REGISTRY: SettingDefinition[] = [
     description: "查看 / 编辑 / 删除 / 清空已记住的偏好",
     keywords: ["记忆", "记忆管理", "条目", "清空", "memory", "preference"],
   },
+  {
+    id: "kiro-web-search-enabled",
+    section: "kiro",
+    title: "联网搜索",
+    description: "Kiro Search：Kiro 需要最新信息时自动联网搜索",
+    keywords: ["联网", "搜索", "网络", "web search", "kiro search", "tavily", "实时"],
+  },
+  {
+    id: "kiro-web-search-credential",
+    section: "kiro",
+    title: "Kiro Search 凭据",
+    description: "搜索凭据来源：ClassFlow 提供或自己的 API Key",
+    keywords: ["凭据", "api key", "byok", "搜索 key", "credential"],
+  },
   // ---- 数据与存储 ----
   {
     id: "backup-full",

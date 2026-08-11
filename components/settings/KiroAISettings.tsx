@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
-import { Check, Loader2, Eye, EyeOff, PlugZap } from "lucide-react";
+import { Check, Loader2, Eye, EyeOff, PlugZap, Globe2 } from "lucide-react";
 import { useAISettingsStore } from "@/store/useAISettingsStore";
 import { getSessionApiKey, setSessionApiKey } from "@/lib/ai/sessionKeys";
 import { useAIModelCatalog } from "@/hooks/useAIModelCatalog";
@@ -15,6 +15,10 @@ import { KiroMemorySettings } from "@/components/settings/KiroMemorySettings";
 import { useKiroPreferencesStore } from "@/store/useKiroPreferencesStore";
 import { KiroOutputTextSize } from "@/lib/ai/ui/typography";
 import { KiroResponsePreference } from "@/lib/ai/responsePreference";
+import {
+  getSessionWebSearchApiKey,
+  setSessionWebSearchApiKey,
+} from "@/lib/ai/web/credentials";
 import { cn } from "@/lib/utils";
 
 const PROVIDER_OPTIONS: { value: AIProviderId; label: string }[] = [
@@ -46,6 +50,11 @@ export function KiroAISettings() {
   // Intelligence V2 Task 1：回答偏好（随 Turn Snapshot 冻结；只影响 Final Answer 表达深度）
   const responsePreference = useKiroPreferencesStore((s) => s.responsePreference);
   const setResponsePreference = useKiroPreferencesStore((s) => s.setResponsePreference);
+  // Task 14：Kiro Search（联网搜索）——Key 只在 sessionStorage，不进 Store
+  const webSearchEnabled = useKiroPreferencesStore((s) => s.webSearchEnabled);
+  const setWebSearchEnabled = useKiroPreferencesStore((s) => s.setWebSearchEnabled);
+  const webSearchCredentialMode = useKiroPreferencesStore((s) => s.webSearchCredentialMode);
+  const setWebSearchCredentialMode = useKiroPreferencesStore((s) => s.setWebSearchCredentialMode);
 
   const RESPONSE_PREFERENCE_DESCRIPTIONS: Record<KiroResponsePreference, string> = {
     dense: "结论、关键事实与行动优先",
@@ -55,7 +64,9 @@ export function KiroAISettings() {
 
   const [apiKeyInput, setApiKeyInput] = useState(getSessionApiKey(provider));
   const [showKey, setShowKey] = useState(false);
+  const [showWebSearchKey, setShowWebSearchKey] = useState(false);
   const [test, setTest] = useState<TestState>({ status: "idle" });
+  const [webSearchTest, setWebSearchTest] = useState<TestState>({ status: "idle" });
 
   // 统一模型 Catalog：Settings 与 Composer 共用同一模型集合（Task 10）
   const { models: catalogModels } = useAIModelCatalog(provider);
@@ -94,6 +105,25 @@ export function KiroAISettings() {
       else setTest({ status: "error", message: data.message || AI_ERROR_MESSAGES[data.code ?? "UNKNOWN"] });
     } catch {
       setTest({ status: "error", message: AI_ERROR_MESSAGES.PROVIDER_UNAVAILABLE });
+    }
+  };
+
+  const runWebSearchTest = async () => {
+    setWebSearchTest({ status: "testing" });
+    try {
+      const res = await fetch("/api/ai/web-search/test", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          credentialMode: webSearchCredentialMode,
+          apiKey: webSearchCredentialMode === "byok" ? getSessionWebSearchApiKey() : undefined,
+        }),
+      });
+      const data = (await res.json()) as { ok: boolean; code?: string; message?: string };
+      if (data.ok) setWebSearchTest({ status: "success" });
+      else setWebSearchTest({ status: "error", message: data.message || "搜索服务不可用" });
+    } catch {
+      setWebSearchTest({ status: "error", message: "搜索服务不可用" });
     }
   };
 
@@ -323,6 +353,107 @@ export function KiroAISettings() {
               onChange={setAutoContextEnabled}
               label="自动环境上下文"
             />
+          </SettingsRow>
+        </SettingsGroup>
+
+        {/* ---- Kiro Search（Task 14）：产品层叫 Kiro Search；Tavily 只在 BYOK 配置层出现 ---- */}
+        <SettingsGroup title="联网搜索">
+          <SettingsRow
+            settingId="kiro-web-search-enabled"
+            title="联网搜索"
+            description="Kiro 需要最新或可能随时间变化的信息时自动联网搜索。"
+          >
+            <SettingsToggle
+              checked={webSearchEnabled}
+              onChange={setWebSearchEnabled}
+              label="联网搜索"
+            />
+          </SettingsRow>
+
+          <SettingsRow settingId="kiro-web-search-service" title="搜索服务" description="Kiro Search 提供实时网页检索能力。">
+            <span className="px-2 py-0.5 rounded-full bg-pastel-mint text-[10px] font-bold text-charcoal shrink-0">
+              Kiro Search
+            </span>
+          </SettingsRow>
+
+          <SettingsRow
+            settingId="kiro-web-search-credential"
+            title="凭据"
+            description="选择搜索凭据来源；使用自己的 API Key 时，Key 仅保存在当前浏览器会话中。"
+          >
+            <SettingsSegmentedControl<"server" | "byok">
+              value={webSearchCredentialMode}
+              onChange={(v) => {
+                setWebSearchCredentialMode(v);
+                setWebSearchTest({ status: "idle" });
+              }}
+              ariaLabel="Kiro Search 凭据"
+              options={[
+                { value: "server", label: "ClassFlow 提供" },
+                { value: "byok", label: "自己的 API Key" },
+              ]}
+            />
+          </SettingsRow>
+
+          {webSearchCredentialMode === "byok" && (
+            <SettingsRow
+              settingId="kiro-web-search-byok-key"
+              title="Tavily API Key"
+              description="仅保存在当前浏览器会话中（调用时发送到 ClassFlow 服务端转发）。"
+            >
+              <div className="relative w-full">
+                <SettingsInput
+                  type={showWebSearchKey ? "text" : "password"}
+                  value={getSessionWebSearchApiKey()}
+                  onChange={setSessionWebSearchApiKey}
+                  placeholder="tvly-..."
+                  ariaLabel="Tavily API Key"
+                  autoComplete="off"
+                  spellCheck={false}
+                  mono
+                  className="pr-9"
+                />
+                <button
+                  onClick={() => setShowWebSearchKey((v) => !v)}
+                  aria-label={showWebSearchKey ? "隐藏 Kiro Search API Key" : "显示 Kiro Search API Key"}
+                  className="absolute right-1.5 top-1/2 -translate-y-1/2 p-1.5 rounded-lg text-sandrift hover:text-charcoal hover:bg-alabaster transition-colors"
+                >
+                  {showWebSearchKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+            </SettingsRow>
+          )}
+
+          <SettingsRow
+            settingId="kiro-web-search-test"
+            title="测试搜索连接"
+            description="只发送最小搜索请求验证凭据，不发送对话或 ClassFlow 数据。"
+          >
+            <div className="flex items-center gap-2.5">
+              <SettingsButton variant="accent" onClick={runWebSearchTest} disabled={webSearchTest.status === "testing" || !webSearchEnabled}>
+                {webSearchTest.status === "testing" ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <Globe2 className="w-3.5 h-3.5" />
+                )}
+                测试连接
+              </SettingsButton>
+              {webSearchTest.status === "success" && (
+                <span className="flex items-center gap-1 text-[11px] font-semibold text-success">
+                  <Check className="w-3.5 h-3.5" />
+                  搜索服务可用
+                </span>
+              )}
+              {webSearchTest.status === "error" && (
+                <span className="text-[11px] font-semibold text-danger">{webSearchTest.message}</span>
+              )}
+            </div>
+          </SettingsRow>
+
+          <SettingsRow settingId="kiro-web-search-privacy" title="隐私" description="联网搜索开启时，Kiro 可能将当前搜索查询发送给搜索服务。使用自己的 API Key 时，Key 仅保存在当前浏览器会话中。">
+            <span className="px-2 py-0.5 rounded-full bg-alabaster border border-line text-[10px] font-bold text-satin-grey shrink-0">
+              按需发送
+            </span>
           </SettingsRow>
         </SettingsGroup>
 

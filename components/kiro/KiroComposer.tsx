@@ -11,6 +11,7 @@ import {
   Check,
   Sparkles,
   Loader2,
+  Globe2,
 } from "lucide-react";
 import { KiroContextBar } from "@/components/kiro/KiroContextBar";
 import { KiroContextPicker } from "@/components/kiro/KiroContextPicker";
@@ -21,6 +22,7 @@ import { ProviderLogo } from "@/components/kiro/ProviderLogo";
 import { KiroContextRef } from "@/lib/ai/context/types";
 import { KiroAttachmentView } from "@/lib/ai/attachments/types";
 import { AIModelVendor } from "@/lib/ai/providers/types";
+import { useKiroPreferencesStore } from "@/store/useKiroPreferencesStore";
 import { cn } from "@/lib/utils";
 
 /**
@@ -100,6 +102,9 @@ export function KiroComposer({
   // 扫描型 PDF 需要 Vision 模型（Task 12）：非 Vision 模型阻止发送，绝不静默丢图
   const needsScannedVision = attachments.some((a) => a.visionRequired === true);
   const scannedBlocked = needsScannedVision && !visionEnabled;
+  // Task 14：Kiro Search（Workspace / Sidecar 共用同一 store，开关共享）
+  const webSearchEnabled = useKiroPreferencesStore((s) => s.webSearchEnabled);
+  const setWebSearchEnabled = useKiroPreferencesStore((s) => s.setWebSearchEnabled);
   const canSend =
     text.trim().length > 0 &&
     !hasProcessing &&
@@ -371,6 +376,22 @@ export function KiroComposer({
                     />
                   )}
                 </div>
+
+                {/* Task 14：Kiro Search（联网搜索）轻量开关——只切换 enabled；V1 = 自动判断 */}
+                <button
+                  onClick={() => setWebSearchEnabled(!webSearchEnabled)}
+                  aria-label="联网搜索"
+                  aria-pressed={webSearchEnabled}
+                  title={webSearchEnabled ? "联网搜索：自动" : "联网搜索：关闭"}
+                  className={cn(
+                    "w-9 h-9 flex items-center justify-center rounded-xl transition-colors",
+                    webSearchEnabled
+                      ? "text-charcoal bg-pastel-mint/60 hover:bg-pastel-mint"
+                      : "text-sandrift hover:bg-alabaster hover:text-charcoal"
+                  )}
+                >
+                  <Globe2 className="w-4 h-4" />
+                </button>
               </div>
 
               <div className="flex items-center gap-2">

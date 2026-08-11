@@ -298,6 +298,24 @@ describe("Kiro Search tool + turn state", () => {
       expect(t.execute, `write ${name}`).toBeUndefined();
     }
   });
+
+  it("Task 14D：Kiro Search 偏好默认 enabled=true / credentialMode=server；BYOK Key 不入 Store", async () => {
+    const { useKiroPreferencesStore } = await import("@/store/useKiroPreferencesStore");
+    const s = useKiroPreferencesStore.getState();
+    expect(s.webSearchEnabled).toBe(true);
+    expect(s.webSearchCredentialMode).toBe("server");
+    // Key 不进 Store：设置切换后 Store 仍无 Key 字段
+    s.setWebSearchCredentialMode("byok");
+    expect(useKiroPreferencesStore.getState().webSearchCredentialMode).toBe("byok");
+    const raw = JSON.stringify(useKiroPreferencesStore.getState());
+    expect(raw).not.toContain("tvly-");
+    expect(raw).not.toContain("apiKey");
+    s.setWebSearchCredentialMode("server");
+    expect(useKiroPreferencesStore.getState().webSearchCredentialMode).toBe("server");
+    // 非法值回落
+    s.setWebSearchCredentialMode("hacked" as never);
+    expect(useKiroPreferencesStore.getState().webSearchCredentialMode).toBe("server");
+  });
 });
 
 void _unused;

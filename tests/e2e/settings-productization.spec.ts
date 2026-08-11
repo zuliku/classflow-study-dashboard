@@ -62,10 +62,14 @@ test("Kiro 与 AI：模型/回答/记忆/隐私分组齐全，输出字号与记
   const kiro = page.getByTestId("settings-kiro");
   await expect(kiro).toBeVisible();
 
-  // 分组结构：唯一文本的组标题（「模型」与 row 标题撞名，改用组内 row 验证）
+  // 分组结构：唯一文本的组标题（「模型」与 row 标题撞名，改用组内 row 验证；
+  // 「隐私」同时是隐私组标题与联网搜索组内的一行文案）
   await expect(kiro.getByText("回答", { exact: true })).toBeVisible();
   await expect(kiro.getByText("记忆", { exact: true })).toBeVisible();
-  await expect(kiro.getByText("隐私", { exact: true })).toBeVisible();
+  await expect(kiro.getByText("隐私", { exact: true }).first()).toBeVisible();
+  // 联网搜索组（Task 14）
+  await expect(kiro.getByText("联网搜索", { exact: true }).first()).toBeVisible();
+  await expect(kiro.getByRole("switch", { name: "联网搜索" })).toBeVisible();
   // 模型组：AI 服务 / API Key / 连接状态 rows 均存在
   await expect(kiro.locator('[data-setting-id="ai-provider"]')).toBeVisible();
   await expect(kiro.locator('[data-setting-id="ai-api-key"]')).toBeVisible();
@@ -85,6 +89,7 @@ test("Kiro 与 AI：模型/回答/记忆/隐私分组齐全，输出字号与记
   await memoryToggle.click();
   await expect(memoryToggle).toHaveAttribute("aria-checked", "true");
 
-  // 连接状态：测试连接按钮存在
-  await expect(kiro.getByRole("button", { name: "测试连接" })).toBeVisible();
+  // 连接状态：模型组与联网搜索组各有「测试连接」按钮（严格模式用 first）
+  await expect(kiro.getByRole("button", { name: "测试连接" }).first()).toBeVisible();
+  await expect(kiro.getByRole("button", { name: "测试连接" })).toHaveCount(2);
 });
