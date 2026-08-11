@@ -124,6 +124,36 @@ export interface Reminder {
 /** Task 7G-A1：missed reminder policy（Reminder Runtime 消费的纯决策） */
 export type MissedReminderPolicy = "deliver" | "recent-only" | "skip";
 
+/** Task 2：Focus Session Domain（UI / Runtime / Kiro 共用的唯一状态来源） */
+export type FocusSessionStatus = "running" | "paused" | "completed";
+export type FocusSessionEndReason = "timer" | "manual" | "recovered";
+export type FocusSessionSource = "manual" | "kiro";
+
+export interface FocusSession {
+  id: string;
+  /** 计划专注时长（分钟，整数 1–240） */
+  plannedMinutes: number;
+  /** 会话创建（进入 running）的 epoch ms */
+  startedAt: number;
+  /** running 状态下最近一次进入 active 的 epoch ms（paused 时缺失） */
+  activeStartedAt?: number;
+  /** 已累计的 active 毫秒（不含当前 activeStartedAt 之后的区间） */
+  accumulatedActiveMs: number;
+  status: FocusSessionStatus;
+  endedAt?: number;
+  endReason?: FocusSessionEndReason;
+  /** 结算的真实 active 毫秒（最多等于 plannedMs；manual 提前结束可为更小值） */
+  actualActiveMs?: number;
+  assignmentId?: string;
+  courseId?: string;
+  assignmentTitleSnapshot?: string;
+  courseNameSnapshot?: string;
+  note?: string;
+  source: FocusSessionSource;
+  createdAt: number;
+  updatedAt: number;
+}
+
 export interface Assignment {
   id: string;
   courseId: string;
@@ -250,6 +280,8 @@ export interface ClassFlowBackupData {
   preferences?: AppPreferences;
   /** Task 7G-A1：Reminder（旧备份可缺失 → 恢复为 []）；Reminder Preferences 不进入备份 */
   reminders?: Reminder[];
+  /** Task 2：Focus Session（旧备份可缺失 → 恢复为 []） */
+  focusSessions?: FocusSession[];
 }
 
 /** 本地数据备份文件结构 (v1) */

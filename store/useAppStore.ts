@@ -41,6 +41,16 @@ import {
   AssignmentDeleteSnapshot,
 } from "@/lib/dataDependencies";
 import {
+  FocusErrorCode,
+  FocusMutationResult,
+  completeFocusSessionRecord,
+  finishFocusSessionRecord,
+  normalizeFocusSession,
+  pauseFocusSessionRecord,
+  resumeFocusSessionRecord,
+} from "@/lib/focus/focusDomain";
+import { FocusSession } from "@/types";
+import {
   formatLocalDateTime,
   getReminderTargetAnchor,
   normalizeReminder,
@@ -166,6 +176,8 @@ interface PersistedAppState {
   preferences?: AppPreferences;
   /** Task 7G-A1：Reminder（旧数据可缺失 → []） */
   reminders?: Reminder[];
+  /** Task 2：Focus Session（旧数据可缺失 → []） */
+  focusSessions?: FocusSession[];
 }
 
 /** 旧版（无显式 version）持久化数据：可能混入瞬时 UI 状态，迁移时仅取白名单字段 */
@@ -182,6 +194,7 @@ interface LegacyPersistedStateV0 {
   preferences?: unknown;
   studyBlocks?: unknown;
   reminders?: unknown;
+  focusSessions?: unknown;
 }
 
 const TIME_SLICES: TimeSliceFilter[] = ["all", "overdue", "today", "3days", "7days", "completed"];
@@ -240,6 +253,10 @@ function sanitizePersistedState(persisted: unknown): PersistedAppState {
     // v5：Reminder（旧数据缺失 → []；非法条目丢弃）
     reminders: Array.isArray(legacy.reminders)
       ? (legacy.reminders as Reminder[]).map(normalizeReminder).filter((r): r is Reminder => r !== null)
+      : [],
+    // v6：Focus Session（旧数据缺失 → []；非法条目丢弃）
+    focusSessions: Array.isArray(legacy.focusSessions)
+      ? (legacy.focusSessions as FocusSession[]).map(normalizeFocusSession).filter((f): f is FocusSession => f !== null)
       : [],
   };
 }
@@ -409,6 +426,31 @@ export interface AppState {
   /** target 时间变化后同步 relative reminders（absolute / fired 不动；anchor 消失 → scheduled relative 移除） */
   reconcileTargetReminders: (targetType: ReminderTargetType, targetId: string) => void;
 
+  // Focus Session Actions（Task 2：全局最多一个 running / paused Session）
+  /** 业务数据：Focus Session（持久化） */
+  focusSessions: FocusSession[];
+  /** 启动专注：plannedMinutes 必须为整数 1–240；Assignment 关联自动取 courseId + 标题快照 */
+  startFocusSession: (input: {
+    plannedMinutes: number;
+    assignmentId?: string;
+    courseId?: string;
+    note?: string;
+    source?: FocusSession["source"];
+    now?: number;
+  }) => FocusMutationResult;
+  /** 暂停唯一 active Session（已 paused → FOCUS_ALREADY_PAUSED） */
+  pauseFocusSession: (now?: number) => FocusMutationResult;
+  /** 恢复唯一 paused Session（非 paused → FOCUS_NOT_PAUSED） */
+  resumeFocusSession: (now?: number) => FocusMutationResult;
+  /** manual 结束唯一 active Session（无 active → NO_ACTIVE_FOCUS_SESSION） */
+  finishFocusSession: (now?: number) => FocusMutationResult;
+  /** 结算指定 running Session（timer / recovered 自然结束；重复完成 → FOCUS_NOT_PAUSED 之外的失败码） */
+  completeFocusSession: (
+    sessionId: string,
+    reason: "timer" | "recovered",
+    now?: number
+  ) => FocusMutationResult;
+
   // Group Project Actions
   /** 创建空项目（当前用户为组长），返回新项目 id */
   addGroupProject: (project: { courseId: string; title: string; description?: string }) => string;
@@ -515,6 +557,7 @@ export const useAppStore = create<AppState>()(
       groupProjects: [],
       studyBlocks: [],
       reminders: [],
+      focusSessions: [],
 
       updateUserProfile: (profile) =>
         set((state) => ({
@@ -538,6 +581,7 @@ export const useAppStore = create<AppState>()(
           groupProjects: [],
           studyBlocks: [],
           reminders: [],
+          focusSessions: [],
           currentSemesterWeek: Math.min(
             Math.max(getSemesterWeek(new Date(), get().semester), 1),
             get().semester.totalWeeks
@@ -569,6 +613,7 @@ export const useAppStore = create<AppState>()(
           groupProjects: [],
           studyBlocks: [],
           reminders: [],
+          focusSessions: [],
           semester: createDefaultSemester(),
           currentSemesterWeek: 1,
           assignmentTimeSlice: "all",
@@ -608,6 +653,10 @@ export const useAppStore = create<AppState>()(
           // Task 7G-A1：Reminder（旧备份缺失 → []；非法条目丢弃）
           reminders: Array.isArray(data.reminders)
             ? data.reminders.map(normalizeReminder).filter((r): r is Reminder => r !== null)
+            : [],
+          // Task 2：Focus Session（旧备份缺失 → []）
+          focusSessions: Array.isArray(data.focusSessions)
+            ? data.focusSessions.map(normalizeFocusSession).filter((f): f is FocusSession => f !== null)
             : [],
           currentSemesterWeek: Math.min(
             Math.max(state.currentSemesterWeek, 1),
@@ -1152,6 +1201,118 @@ export const useAppStore = create<AppState>()(
           ),
         })),
 
+      // ---- Focus Session Actions（Task 2）----
+
+      startFocusSession: (input) => {
+        const now = input.now ?? Date.now();
+        if (
+          !Number.isInteger(input.plannedMinutes) ||
+          input.plannedMinutes < 1 ||
+          input.plannedMinutes > 240
+        ) {
+          return { ok: false, code: "INVALID_FOCUS_DURATION" };
+        }
+        const current = get();
+        if (current.focusSessions.some((s) => s.status === "running" || s.status === "paused")) {
+          return { ok: false, code: "FOCUS_SESSION_ALREADY_ACTIVE" };
+        }
+        let assignmentId = input.assignmentId;
+        let courseId = input.courseId;
+        let assignmentTitleSnapshot: string | undefined;
+        let courseNameSnapshot: string | undefined;
+        if (assignmentId !== undefined) {
+          const assignment = current.assignments.find((a) => a.id === assignmentId);
+          if (!assignment) return { ok: false, code: "FOCUS_TARGET_NOT_FOUND" };
+          assignmentTitleSnapshot = assignment.title;
+          courseId = assignment.courseId;
+          courseNameSnapshot =
+            current.courses.find((c) => c.id === assignment.courseId)?.name ?? undefined;
+        } else if (courseId !== undefined) {
+          const course = current.courses.find((c) => c.id === courseId);
+          if (!course) return { ok: false, code: "FOCUS_TARGET_NOT_FOUND" };
+          courseNameSnapshot = course.name;
+        }
+        // Assignment + courseId 同时提供但不匹配 → mismatch（courseId 未显式提供时已被 assignment 覆盖，不算冲突）
+        if (
+          input.assignmentId !== undefined &&
+          input.courseId !== undefined &&
+          input.courseId !== courseId
+        ) {
+          return { ok: false, code: "FOCUS_TARGET_MISMATCH" };
+        }
+        const session: FocusSession = {
+          id: createId("fs"),
+          plannedMinutes: input.plannedMinutes,
+          startedAt: now,
+          activeStartedAt: now,
+          accumulatedActiveMs: 0,
+          status: "running",
+          assignmentId,
+          courseId,
+          assignmentTitleSnapshot,
+          courseNameSnapshot,
+          note: input.note,
+          source: input.source ?? "manual",
+          createdAt: now,
+          updatedAt: now,
+        };
+        set((state) => ({ focusSessions: [...state.focusSessions, session] }));
+        return { ok: true, session };
+      },
+
+      pauseFocusSession: (now) => {
+        const t = now ?? Date.now();
+        const state = get();
+        const active = state.focusSessions.find((s) => s.status === "running");
+        if (!active) return { ok: false, code: "NO_ACTIVE_FOCUS_SESSION" };
+        const session = pauseFocusSessionRecord(active, t);
+        if (session.status !== "paused") return { ok: false, code: "FOCUS_ALREADY_PAUSED" };
+        set((s) => ({
+          focusSessions: s.focusSessions.map((x) => (x.id === session.id ? session : x)),
+        }));
+        return { ok: true, session };
+      },
+
+      resumeFocusSession: (now) => {
+        const t = now ?? Date.now();
+        const state = get();
+        const paused = state.focusSessions.find((s) => s.status === "paused");
+        if (!paused) return { ok: false, code: "FOCUS_NOT_PAUSED" };
+        const session = resumeFocusSessionRecord(paused, t);
+        if (session.status !== "running") return { ok: false, code: "FOCUS_NOT_PAUSED" };
+        set((s) => ({
+          focusSessions: s.focusSessions.map((x) => (x.id === session.id ? session : x)),
+        }));
+        return { ok: true, session };
+      },
+
+      finishFocusSession: (now) => {
+        const t = now ?? Date.now();
+        const state = get();
+        const active = state.focusSessions.find((s) => s.status === "running");
+        if (!active) return { ok: false, code: "NO_ACTIVE_FOCUS_SESSION" };
+        const session = finishFocusSessionRecord(active, t);
+        set((s) => ({
+          focusSessions: s.focusSessions.map((x) => (x.id === session.id ? session : x)),
+        }));
+        return { ok: true, session };
+      },
+
+      completeFocusSession: (sessionId, reason, now) => {
+        const t = now ?? Date.now();
+        const state = get();
+        const target = state.focusSessions.find((s) => s.id === sessionId);
+        if (!target || target.status !== "running") {
+          // 指定 session 不存在或已结算：第二次完成必须失败
+          return { ok: false, code: "NO_ACTIVE_FOCUS_SESSION" };
+        }
+        const session = completeFocusSessionRecord(target, reason, t);
+        set((s) => ({
+          focusSessions: s.focusSessions.map((x) => (x.id === session.id ? session : x)),
+        }));
+        return { ok: true, session };
+      },
+
       addGroupProject: (projectData) => {
         const current = get();
         // 空项目：不注入任何假成员/假任务；仅把当前真实用户设为 leader
@@ -1318,7 +1479,8 @@ export const useAppStore = create<AppState>()(
       // v2 → v3：新增 AppPreferences（缺失/部分/非法逐字段回落默认值）
       // v3 → v4：Task V2 —— Assignment ddl 可选 + estimatedMinutes（normalizeAssignment 归一；旧数据 ddl 原值保留）
       // v4 → v5：Task 7G-A1 —— Reminder（旧数据缺失 → []；sanitize 丢弃非法条目）
-      version: 5,
+      // v5 → v6：Task 2 —— Focus Session（旧数据缺失 → []；sanitize 丢弃非法条目）
+      version: 6,
       storage: createJSONStorage(() => localStorage),
       partialize: (state): PersistedAppState => ({
         userProfile: state.userProfile,
@@ -1333,6 +1495,7 @@ export const useAppStore = create<AppState>()(
         lastWorkspaceTab: state.lastWorkspaceTab,
         preferences: state.preferences,
         reminders: state.reminders,
+        focusSessions: state.focusSessions,
       }),
       migrate: (persistedState) => sanitizePersistedState(persistedState),
       // zustand 在存储为空时也会调用 merge（migratedState=undefined），
