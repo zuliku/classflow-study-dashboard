@@ -27,7 +27,7 @@ State rules:
 - A settled historical / `done` turn → collapsed by default.
 - After the user manually toggles the Worklog once, respect the user choice for the rest of that mounted turn; do not auto-collapse or auto-expand again.
 - Collapsing hides commentary rows and tool rows, but keeps the group summary visible.
-- Expanding restores the exact existing worklog order and per-tool detail states.
+- Re-expanding restores the exact worklog order. Individual tool-detail disclosures may reset to collapsed; preserving nested disclosure state is not required.
 
 The group summary becomes the main disclosure button:
 
@@ -35,13 +35,13 @@ The group summary becomes the main disclosure button:
 ≋ 已完成 8 个步骤                         ˅
 ```
 
-During active execution, when collapsed manually:
+If the user manually collapses while the agent is still working, only show facts already known from the current presentation:
 
 ```text
-≋ 正在执行 · 已完成 5 / 8 个步骤          ˅
+≋ 正在执行 · 已完成 5 个步骤              ˅
 ```
 
-Do not invent pending steps. If total tool count is not known yet, use only facts already present in the current presentation, e.g. `正在执行 · 已完成 5 个步骤`.
+Do not show a planned total such as `5 / 8`, because future tool calls are not known yet. Do not invent pending steps.
 
 ### 2. Summary icon
 
@@ -173,8 +173,8 @@ Do not reset the user's manual choice on every streamed re-render.
 ## Accessibility
 
 - Group summary is a real `button` with `aria-expanded`.
-- Per-tool rows remain real buttons only when they have meaningful expandable details.
-- Non-expandable tool rows should not be disabled buttons with misleading disclosure semantics; render them as non-interactive rows or buttons without disclosure only if existing structure requires it.
+- Per-tool rows are real disclosure buttons only when they have meaningful expandable details.
+- Non-expandable tool rows should render as non-interactive rows rather than disabled disclosure buttons.
 - State must remain understandable by icon + text, not color alone.
 
 ## Focused Testing
