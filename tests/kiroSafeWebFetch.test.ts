@@ -262,9 +262,9 @@ describe("safeWebFetch — 大小预算与内容策略", () => {
     expect(bad.ok).toBe(false);
     if (!bad.ok) expect(bad.code).toBe("WEB_FETCH_UNSUPPORTED_CONTENT");
   });
-  it("Content-Encoding 非 identity → WEB_FETCH_UNSUPPORTED_CONTENT", async () => {
+  it("Content-Encoding 未知编码（compress）→ WEB_FETCH_UNSUPPORTED_CONTENT", async () => {
     const { transport } = recordingTransport(async () =>
-      htmlResponse({ headers: { "content-type": "text/html", "content-encoding": "gzip" } })
+      htmlResponse({ headers: { "content-type": "text/html", "content-encoding": "compress" } })
     );
     const out = await safeWebFetch(
       { url: "https://example.com/" },
@@ -317,7 +317,119 @@ describe("safeWebFetch — 超时 / 状态码", () => {
   });
   it("默认常量符合任务约束", () => {
     expect(MAX_WEB_FETCH_REDIRECTS).toBe(3);
-    expect(WEB_FETCH_TIMEOUT_MS).toBe(8_000);
+    expect(WEB_FETCH_TIMEOUT_MS).toBe(10_000); // Hotfix：8s → 10s（总硬上限；Read Tool 15s 不变）
     expect(MAX_WEB_FETCH_BYTES).toBe(1_500_000);
+  });
+});
+
+describe("Compatibility Hotfix — address failover / 压缩 / charset", () => {
+  it("Hotfix 1. IPv4 失败 → IPv6 failover 成功；仍 pin 原 hostname", async () => {
+    const { transport, calls } = recordingTransport(async (opts) => {
+      if (opts.pinnedAddress === "93.184.216.34") throw new Error("IPv4 connect failure");
+      return htmlResponse();
+    });
+    const out = await safeWebFetch(
+      { url: "https://example.com/path" },
+      {
+        // DNS：IPv6 在前 → 排序后 IPv4 优先尝试
+        resolveHost: dns("2606:4700::1111", "93.184.216.34"),
+        transport,
+      }
+    );
+    expect(out.ok).toBe(true);
+    expect(calls).toHaveLength(2);
+    expect(calls[0].pinnedAddress).toBe("93.184.216.34"); // IPv4 优先
+    expect(calls[1].pinnedAddress).toBe("2606:4700::1111"); // v4 失败 → failover v6
+    expect(calls[0].hostname).toBe("example.com"); // Host/SNI 保持
+    expect(calls[1].hostname).toBe("example.com");
+  });
+
+  it("Hotfix 2. 全部地址网络失败 → WEB_FETCH_FAILED（不泄漏 ECONNRESET 等）", async () => {
+    const { transport } = recordingTransport(async () => {
+      throw new Error("ECONNRESET");
+    });
+    const out = await safeWebFetch(
+      { url: "https://example.com/" },
+      { resolveHost: dns("93.184.216.34", "8.8.8.8"), transport }
+    );
+    expect(out.ok).toBe(false);
+    if (!out.ok) expect(out.code).toBe("WEB_FETCH_FAILED");
+  });
+
+  it("Hotfix 3. gzip 响应 → 正确解码正文", async () => {
+    const { gzipSync } = await import("node:zlib");
+    const gzipped = gzipSync(Buffer.from("<html><body>中文网页正文内容</body></html>", "utf8"));
+    const { transport } = recordingTransport(async () =>
+      htmlResponse({ headers: { "content-type": "text/html; charset=utf-8", "content-encoding": "gzip" }, body: bodyOf([new Uint8Array(gzipped)]) })
+    );
+    const out = await safeWebFetch(
+      { url: "https://example.com/" },
+      { resolveHost: dns("93.184.216.34"), transport }
+    );
+    expect(out.ok).toBe(true);
+    if (out.ok) expect(out.body).toBe("<html><body>中文网页正文内容</body></html>");
+  });
+
+  it("Hotfix 3b. br 响应 → 正确解码；未知编码 zstd → UNSUPPORTED_CONTENT", async () => {
+    const { brotliCompressSync } = await import("node:zlib");
+    const br = brotliCompressSync(Buffer.from("<p>Brotli 正文</p>", "utf8"));
+    const { transport } = recordingTransport(async () =>
+      htmlResponse({ headers: { "content-type": "text/html", "content-encoding": "br" }, body: bodyOf([new Uint8Array(br)]) })
+    );
+    const ok = await safeWebFetch({ url: "https://example.com/" }, { resolveHost: dns("93.184.216.34"), transport });
+    expect(ok.ok).toBe(true);
+    if (ok.ok) expect(ok.body).toBe("<p>Brotli 正文</p>");
+
+    const { transport: t2 } = recordingTransport(async () =>
+      htmlResponse({ headers: { "content-type": "text/html", "content-encoding": "zstd" } })
+    );
+    const bad = await safeWebFetch({ url: "https://example.com/" }, { resolveHost: dns("93.184.216.34"), transport: t2 });
+    expect(bad.ok).toBe(false);
+    if (!bad.ok) expect(bad.code).toBe("WEB_FETCH_UNSUPPORTED_CONTENT");
+  });
+
+  it("Hotfix 4. GBK charset（header）→ 正确中文正文", async () => {
+    // "中国人民" GBK bytes：中=D6D0 国=B9FA 人=C8CB 民=C3F1
+    const gbkBytes = new Uint8Array([0xD6, 0xD0, 0xB9, 0xFA, 0xC8, 0xCB, 0xC3, 0xF1]);
+    const { transport } = recordingTransport(async () =>
+      htmlResponse({ headers: { "content-type": "text/html; charset=gbk" }, body: bodyOf([gbkBytes]) })
+    );
+    const out = await safeWebFetch(
+      { url: "https://example.com/" },
+      { resolveHost: dns("93.184.216.34"), transport }
+    );
+    expect(out.ok).toBe(true);
+    if (out.ok) expect(out.body).toBe("中国人民");
+  });
+
+  it("Hotfix 4b. meta charset=gb2312（header 无 charset）→ 正确解码", async () => {
+    // <meta charset="gb2312"> + GBK bytes：浙江大学
+    // 浙=D5E3 江=BDAD 大=B4F3 学=D1A7
+    const gbkBytes = new Uint8Array([
+      0x3c, 0x6d, 0x65, 0x74, 0x61, 0x20, 0x63, 0x68, 0x61, 0x72, 0x73, 0x65, 0x74, 0x3d, 0x22, 0x67, 0x62, 0x32, 0x33, 0x31, 0x32, 0x22, 0x3e, // <meta charset="gb2312">
+      0xD5, 0xE3, 0xBD, 0xAD, 0xB4, 0xF3, 0xD1, 0xA7,
+    ]);
+    const { transport } = recordingTransport(async () =>
+      htmlResponse({ headers: { "content-type": "text/html" }, body: bodyOf([gbkBytes]) })
+    );
+    const out = await safeWebFetch(
+      { url: "https://example.com/" },
+      { resolveHost: dns("93.184.216.34"), transport }
+    );
+    expect(out.ok).toBe(true);
+    if (out.ok) expect(out.body).toContain("浙江大学");
+  });
+
+  it("Hotfix 5. 压缩态超限（>2MB）→ WEB_FETCH_TOO_LARGE（压缩侧预算）", async () => {
+    const big = new Uint8Array(2_100_000);
+    const { transport } = recordingTransport(async () =>
+      htmlResponse({ headers: { "content-type": "text/html", "content-encoding": "gzip" }, body: bodyOf([big]) })
+    );
+    const out = await safeWebFetch(
+      { url: "https://example.com/" },
+      { resolveHost: dns("93.184.216.34"), transport }
+    );
+    expect(out.ok).toBe(false);
+    if (!out.ok) expect(out.code).toBe("WEB_FETCH_TOO_LARGE");
   });
 });

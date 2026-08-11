@@ -14,6 +14,7 @@
  * - 不向 Agent 暴露 backend（native / tavily / fallback）信息
  */
 import { readNativeWebSource, shouldFallbackNativeWebRead, KiroNativeWebReadOutcome } from "@/lib/ai/web/native/reader";
+import { debugKiroWebRead } from "@/lib/ai/web/native/debug";
 import { KiroWebEvidenceProvider } from "@/lib/ai/web/provider";
 import {
   KiroWebEvidenceOutcome,
@@ -38,6 +39,17 @@ export interface KiroEvidenceRuntimeDeps {
 export type KiroEvidenceRuntimeOutcome =
   | { ok: true; sources: KiroWebEvidenceSource[] }
   | { ok: false; code: KiroWebSearchErrorCode; message: string };
+
+/** 诊断用 hostname（只记录 host） */
+function hostOfSource(request: KiroEvidenceRuntimeRequest, sourceId: string): string {
+  const source = request.sources.find((s) => s.sourceId === sourceId);
+  if (!source) return "";
+  try {
+    return new URL(source.url).hostname;
+  } catch {
+    return "";
+  }
+}
 
 /** Native success → Kiro Evidence Source；url/title/domain 由 Tool 层 trustedById 补全（这里是空值占位） */
 function nativeToEvidenceSource(
@@ -108,6 +120,13 @@ export async function resolveKiroWebEvidence(
   );
 
   const nativeById: Map<string, KiroNativeWebReadOutcome> = new Map(nativeResults.map((r) => [r.sourceId, r.outcome]));
+  for (const { sourceId, outcome } of nativeResults) {
+    debugKiroWebRead("runtime-native", {
+      sourceId,
+      host: hostOfSource(request, sourceId),
+      result: outcome.ok ? "success" : outcome.code,
+    });
+  }
   const nativeSuccess = new Set<string>();
   for (const { sourceId, outcome } of nativeResults) {
     if (outcome.ok) nativeSuccess.add(sourceId);
@@ -134,9 +153,11 @@ export async function resolveKiroWebEvidence(
 
   let fallbackEvidence: KiroWebEvidenceSource[] = [];
   if (fallbackSources.length > 0) {
+    debugKiroWebRead("runtime-fallback", { sourceIds: fallbackSources.map((s) => s.sourceId).join(","), attempted: true });
     // 惰性 credential：只有真的需要 fallback 才解析（Native 全成功路径 0 调用）
     const resolved = deps.resolveFallbackCredential();
     if (!resolved.ok) {
+      debugKiroWebRead("runtime-fallback", { attempted: true, result: "credential-failed" });
       // credential 失败：Native 至少成功一个 → 保留 Native 证据，不整体失败
       if (nativeSuccess.size > 0) {
         return {
@@ -159,6 +180,7 @@ export async function resolveKiroWebEvidence(
     );
     if (outcome.ok) {
       fallbackEvidence = outcome.sources;
+      debugKiroWebRead("runtime-fallback", { attempted: true, result: "success", sources: outcome.sources.length });
     } else if (nativeSuccess.size > 0) {
       // fallback 真实失败 + Native 部分成功 → 保留 Native 证据
       return {
@@ -172,8 +194,11 @@ export async function resolveKiroWebEvidence(
       };
     } else {
       // Native 全失败 + fallback 真实失败：传播 fallback safe error（不伪装成功）
+      debugKiroWebRead("runtime-fallback", { attempted: true, result: "failure", code: outcome.code });
       return { ok: false, code: outcome.code, message: outcome.message };
     }
+  } else if (request.sources.length > 0) {
+    debugKiroWebRead("runtime-fallback", { sourceIds: request.sources.map((s) => s.sourceId).join(","), attempted: false, reason: "no-eligible-or-all-native" });
   }
 
   // ---- 4) 合并：Native 优先（成功者不再 fallback），按 request 顺序、sourceId 去重 ----

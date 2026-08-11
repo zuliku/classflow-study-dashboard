@@ -20,6 +20,7 @@ import { JSDOM } from "jsdom";
 import { Readability } from "@mozilla/readability";
 import { safeWebFetch } from "@/lib/ai/web/native/safeFetch";
 import type { KiroSafeFetchSuccess } from "@/lib/ai/web/native/safeFetch";
+import { debugKiroWebRead } from "@/lib/ai/web/native/debug";
 import {
   applyNativeEvidenceBudget,
   chunkNativeEvidence,
@@ -134,6 +135,15 @@ export function shouldFallbackNativeWebRead(code: KiroNativeWebReadFailureCode):
   return code !== "WEB_NATIVE_POLICY_BLOCKED";
 }
 
+/** 诊断用 hostname（只记录 host，不记录完整 URL / query） */
+function hostOf(rawUrl: string): string {
+  try {
+    return new URL(rawUrl).hostname;
+  } catch {
+    return "";
+  }
+}
+
 /**
  * HTML Reader 主函数：Safe Fetch → JSDOM → Readability → fallback → evidence pipeline。
  */
@@ -157,7 +167,7 @@ export async function readNativeWebSource(
     // Plain Text：不创建 jsdom；直接 normalize pipeline
     parsedText = normalizeNativeWebText(fetch.body);
   } else {
-    const parsed = parseHtmlEvidence(fetch);
+    const parsed = parseHtmlEvidence(fetch, request.sourceId);
     if (!parsed.ok) return parsed;
     parsedText = parsed.text;
     metadata = parsed.metadata;
@@ -165,6 +175,7 @@ export async function readNativeWebSource(
 
   const normalized = normalizeNativeWebText(parsedText);
   if (normalized.length < MIN_NATIVE_WEB_EVIDENCE_CHARS) {
+    debugKiroWebRead("parse-no-evidence", { sourceId: request.sourceId, host: hostOf(request.url), chars: normalized.length });
     return { ok: false, code: "WEB_NATIVE_NO_EVIDENCE" };
   }
 
@@ -176,6 +187,14 @@ export async function readNativeWebSource(
   const { chunks, truncated: budgetTruncated } = applyNativeEvidenceBudget(selected);
 
   if (chunks.length === 0) return { ok: false, code: "WEB_NATIVE_NO_EVIDENCE" };
+
+  debugKiroWebRead("native-read-ok", {
+    sourceId: request.sourceId,
+    host: hostOf(request.url),
+    chunks: chunks.length,
+    chars: chunks.reduce((s, c) => s + c.text.length, 0),
+    truncated: scanTruncated || selectionTruncated || budgetTruncated,
+  });
 
   return {
     ok: true,
@@ -196,7 +215,7 @@ interface HtmlEvidence {
 }
 
 /** HTML/XHTML：JSDOM（无脚本/无资源）→ complexity guard → Readability → fallback */
-function parseHtmlEvidence(fetch: KiroSafeFetchSuccess): HtmlEvidence | KiroNativeWebReadFailure {
+function parseHtmlEvidence(fetch: KiroSafeFetchSuccess, sourceId: string): HtmlEvidence | KiroNativeWebReadFailure {
   const dom = new JSDOM(fetch.body, { url: fetch.finalUrl });
   try {
     const document = dom.window.document;
@@ -218,6 +237,7 @@ function parseHtmlEvidence(fetch: KiroSafeFetchSuccess): HtmlEvidence | KiroNati
 
     const articleText = article?.textContent ?? "";
     if (article && normalizeNativeWebText(articleText).length >= MIN_NATIVE_WEB_EVIDENCE_CHARS) {
+      debugKiroWebRead("parse-readability-success", { sourceId, chars: articleText.length });
       return {
         ok: true,
         text: articleText,
@@ -231,6 +251,7 @@ function parseHtmlEvidence(fetch: KiroSafeFetchSuccess): HtmlEvidence | KiroNati
 
     // Fallback（§26-30）：Readability 不适合的通知/公告/文档类页面
     const fallbackText = fallbackContainerText(document);
+    debugKiroWebRead("parse-fallback", { chars: fallbackText.length });
     return {
       ok: true,
       text: fallbackText,
