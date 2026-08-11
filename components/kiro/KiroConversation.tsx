@@ -3,7 +3,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { KiroMessage, KiroUserMessage } from "@/components/kiro/KiroMessage";
 import { KiroPendingIndicator } from "@/components/kiro/KiroWorklog";
-import { KiroChatMessageView, KiroActivity } from "@/hooks/useKiroChat";
+import { KiroChatMessageView } from "@/hooks/useKiroChat";
 import { KiroSourceMeta } from "@/lib/ai/citations/types";
 import { useKiroSessionMeta } from "@/components/kiro/KiroSessionProvider";
 import { AIError, AI_ERROR_MESSAGES } from "@/lib/ai/errors";
@@ -16,11 +16,11 @@ import { RotateCcw, Settings, ChevronDown } from "lucide-react";
 
 /**
  * Conversation 布局：max-width 820px 居中，纵向文档流。
- * Assistant Message 分层：Markdown 回答 → Activity Trace → Action Result Cards（事实 UI）。
+ * Assistant Message 分层：Worklog → Final Answer → Action Result Cards（事实 UI）。
+ * 滚动（Task 5）：单一 ResizeObserver + 单一 rAF scheduler，统一 reconcile 高度。
  */
 export function KiroConversation({
   messages,
-  activity,
   error,
   onRetry,
   onOpenSettings,
@@ -31,7 +31,6 @@ export function KiroConversation({
   sources,
 }: {
   messages: KiroChatMessageView[];
-  activity: KiroActivity;
   error: AIError | null;
   onRetry: () => void;
   onOpenSettings: () => void;
@@ -50,23 +49,6 @@ export function KiroConversation({
   const stickToBottomRef = useRef(true);
   const [showScrollBtn, setShowScrollBtn] = React.useState(false);
   const { conversationSummary, currentConversationId } = useKiroSessionMeta();
-
-  // 尾部信号（Task 13）：不再为滚动构建整段 messages.map(...).join() key；
-  // 只跟随会真正改变滚动高度的尾部状态（含 Proposal / Breakdown Card 等高度变化源）
-  const tail = messages[messages.length - 1];
-  const scrollSignal = [
-    messages.length,
-    tail?.id,
-    tail?.content.length ?? 0,
-    tail?.actions?.length ?? 0,
-    tail?.historyActions?.length ?? 0,
-    tail?.proposals?.length ?? 0,
-    tail?.breakdowns?.length ?? 0,
-    activity.phase,
-    activity.steps.length,
-    activity.visible,
-    activity.done,
-  ].join("|");
 
   // 最后一条 assistant 消息：其操作栏必须等整个 Turn 结束（turnInFlight false）才显示；
   // 历史 assistant 消息不受当前 Turn 影响
@@ -92,42 +74,28 @@ export function KiroConversation({
     syncScrollState();
   };
 
-  // 自动滚动（Task 13）：rAF 合并同一帧内的多次更新，避免每个 token 直接写 scrollTop；
-  // streaming 自动跟随使用直接 scrollTop 赋值（不做 smooth，避免抖动 / scroll queue）
+  // 单一 rAF scheduler（Task 5）：高度变化只在同一帧合并一次 reconcile；
+  // sticky 跟随使用直接 scrollTop 赋值（不做 smooth，避免抖动 / scroll queue）
   const rafRef = useRef<number | null>(null);
-  useEffect(() => {
-    const el = scrollRef.current;
-    if (!el || !stickToBottomRef.current) return;
-    if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
+  const scheduleHeightReconcile = React.useCallback(() => {
+    if (rafRef.current !== null) return;
     rafRef.current = requestAnimationFrame(() => {
       rafRef.current = null;
-      if (el && stickToBottomRef.current) el.scrollTop = el.scrollHeight;
-    });
-    return () => {
-      if (rafRef.current !== null) {
-        cancelAnimationFrame(rafRef.current);
-        rafRef.current = null;
+      const el = scrollRef.current;
+      if (!el) return;
+      if (stickToBottomRef.current) {
+        el.scrollTop = el.scrollHeight;
       }
-    };
-  }, [scrollSignal]);
+      syncScrollState();
+    });
+  }, [syncScrollState]);
 
-  // 内容高度变化（streaming / Action / Proposal / Breakdown Card 增长）：
-  // ResizeObserver 观察内容 wrapper → rAF 合并 → 到底跟随 or 只更新按钮状态
+  // 内容高度变化（streaming / Worklog / Action / Proposal / Breakdown Card 增长）：
+  // 唯一 reconcile 入口（Task 5：不再有第二套 scrollSignal 驱动路径）
   useEffect(() => {
     const content = contentRef.current;
     if (!content) return;
-    const observer = new ResizeObserver(() => {
-      if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
-      rafRef.current = requestAnimationFrame(() => {
-        rafRef.current = null;
-        const el = scrollRef.current;
-        if (!el) return;
-        if (stickToBottomRef.current) {
-          el.scrollTop = el.scrollHeight;
-        }
-        syncScrollState();
-      });
-    });
+    const observer = new ResizeObserver(() => scheduleHeightReconcile());
     observer.observe(content);
     return () => {
       observer.disconnect();
@@ -136,7 +104,7 @@ export function KiroConversation({
         rafRef.current = null;
       }
     };
-  }, [syncScrollState]);
+  }, [scheduleHeightReconcile]);
 
   // 切换会话 / 首次挂载：重置滚动状态（历史会话默认看到最新消息；新会话不继承旧状态）
   const conversationScrollKey = currentConversationId ?? messages[0]?.id ?? "new";

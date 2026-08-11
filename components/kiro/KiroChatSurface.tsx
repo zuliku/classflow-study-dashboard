@@ -97,7 +97,6 @@ export function KiroChatSurface({ variant }: { variant: "workspace" | "sidecar" 
       ) : (
         <KiroConversation
           messages={chat.messages}
-          activity={chat.activity}
           error={chat.error}
           onRetry={chat.retry}
           onOpenSettings={openKiroSettings}
