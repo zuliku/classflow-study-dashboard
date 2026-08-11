@@ -12,7 +12,7 @@ import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { LanguageModel } from "ai";
 import { AIError } from "@/lib/ai/errors";
 import { AIProviderId, AICustomConfig, AIModelDefinition, AIProviderConfig } from "@/lib/ai/providers/types";
-import { DEEPSEEK_MODELS } from "@/lib/ai/providers/deepSeek";
+import { DEEPSEEK_MODELS, deepSeekTransformRequestBody } from "@/lib/ai/providers/deepSeek";
 import { OPENCODE_MODELS, fetchOpenCodeGoModels } from "@/lib/ai/providers/openCodeGo";
 import { getProviderConfig } from "@/lib/ai/providers/registry";
 
@@ -79,10 +79,13 @@ export function createLanguageModelFromDefinition(
     })(definition.id);
   }
   if (definition.transport === "openai-chat") {
+    // DeepSeek V4：V4 默认 thinking=on，与 tool calling 不兼容 → 显式禁用（仅 DeepSeek 官方 transport）
+    const deepSeekCompat = definition.provider === "deepseek";
     return createOpenAICompatible({
       name: "classflow-kiro",
       baseURL: cfg.baseURL,
       apiKey: cfg.apiKey ?? "",
+      ...(deepSeekCompat ? { transformRequestBody: deepSeekTransformRequestBody } : {}),
       // Custom Provider：不自动跟随 redirect，避免 SSRF 跳转到私网地址
       fetch: cfg.noRedirect
         ? (input, init) =>

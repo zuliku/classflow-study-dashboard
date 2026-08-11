@@ -73,6 +73,24 @@ describe("createLanguageModelFromDefinition（Adapter 选择）", () => {
     );
   });
 
+  it("F1b. DeepSeek V4 兼容：openai-chat 注入 thinking disabled transform，且只作用于 deepseek provider", () => {
+    const deepseekModel = createLanguageModelFromDefinition(
+      { id: "deepseek-v4-flash", name: "x", provider: "deepseek", vendor: "deepseek", transport: "openai-chat", capabilities: { streaming: true, tools: true, vision: false, fileParts: false } },
+      { baseURL: "https://api.deepseek.com", apiKey: "sk-1" }
+    );
+    const dsArgs = (openAICompatibleFactory.mock.calls[0] as unknown[])[0] as { transformRequestBody?: (body: Record<string, unknown>) => Record<string, unknown> };
+    expect(typeof dsArgs.transformRequestBody).toBe("function");
+    const body = dsArgs.transformRequestBody?.({ model: "deepseek-v4-flash", messages: [], tools: [] });
+    expect(body?.thinking).toEqual({ type: "disabled" });
+    // 非 deepseek 的其他 openai-chat（如 custom-openai）不得带 transform
+    createLanguageModelFromDefinition(
+      { id: "my-model", name: "x", provider: "custom-openai", vendor: null, transport: "openai-chat", capabilities: { streaming: true, tools: true, vision: false, fileParts: false } },
+      { baseURL: "https://custom.example.com/v1", apiKey: "sk-2" }
+    );
+    const customArgs = (openAICompatibleFactory.mock.calls[1] as unknown[])[0] as { transformRequestBody?: unknown };
+    expect(customArgs.transformRequestBody).toBeUndefined();
+  });
+
   it("F2. anthropic-messages → Anthropic adapter（Bearer authToken，baseURL 不含 /messages）", () => {
     const m = createLanguageModelFromDefinition(
       { id: "minimax-m3", name: "x", provider: "opencode-go", vendor: null, transport: "anthropic-messages", capabilities: { streaming: true, tools: true, vision: false, fileParts: false } },
@@ -80,10 +98,11 @@ describe("createLanguageModelFromDefinition（Adapter 选择）", () => {
     );
     expect(providerOf(m)).toBe("anthropic");
     expect(modelIdOf(m)).toBe("minimax-m3");
-    const args = (anthropicFactory.mock.calls[0] as unknown[])[0] as { baseURL?: string; authToken?: string; apiKey?: string };
+    const args = (anthropicFactory.mock.calls[0] as unknown[])[0] as { baseURL?: string; authToken?: string; apiKey?: string; transformRequestBody?: unknown };
     expect(args.baseURL).toBe("https://opencode.ai/zen/go/v1");
     expect(args.authToken).toBe("sk-go");
     expect(args.apiKey).toBeUndefined();
+    expect(args.transformRequestBody).toBeUndefined(); // Anthropic transport 不受 DeepSeek 兼容层影响
   });
 
   it("E. openai-responses → 明确 UNSUPPORTED_TRANSPORT（不偷偷降级为 openai-chat）", () => {

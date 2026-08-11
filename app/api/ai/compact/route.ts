@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { generateText } from "ai";
 import { normalizeAIError } from "@/lib/ai/errors";
+import { logProviderError } from "@/lib/ai/providerLog";
 import { resolveLanguageModel } from "@/lib/ai/providers/resolver";
 import { validateAIChatBody, createTimeoutController } from "@/lib/ai/server";
 import { KiroConversationSummary } from "@/lib/ai/history/types";
@@ -88,6 +89,7 @@ export async function POST(req: NextRequest) {
       custom: parsed.customConfig,
     });
   } catch (err) {
+    logProviderError("compact/resolve", err);
     const aiErr = normalizeAIError(err);
     return Response.json({ code: aiErr.code, message: aiErr.message }, { status: 400 });
   }
@@ -124,6 +126,7 @@ export async function POST(req: NextRequest) {
     };
     return Response.json({ summary });
   } catch (err) {
+    logProviderError("compact/generate", err);
     const aiErr = normalizeAIError(err);
     return Response.json({ code: aiErr.code, message: aiErr.message }, { status: 500 });
   } finally {

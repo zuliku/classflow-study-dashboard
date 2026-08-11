@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { generateText } from "ai";
 import { AI } from "@/lib/ai/config";
 import { AI_ERROR_MESSAGES, normalizeAIError } from "@/lib/ai/errors";
+import { logProviderError } from "@/lib/ai/providerLog";
 import { resolveLanguageModel } from "@/lib/ai/providers/resolver";
 import { validateAIChatBody, createTimeoutController } from "@/lib/ai/server";
 
@@ -34,6 +35,7 @@ export async function POST(req: NextRequest) {
       custom: parsed.customConfig,
     });
   } catch (err) {
+    logProviderError("test/resolve", err);
     const aiErr = normalizeAIError(err);
     return Response.json({ ok: false, code: aiErr.code, message: aiErr.message }, { status: 400 });
   }
@@ -52,6 +54,7 @@ export async function POST(req: NextRequest) {
     return Response.json({ ok: true });
   } catch (err) {
     done();
+    logProviderError("test/generate", err);
     const aiErr = normalizeAIError(err);
     return Response.json(
       { ok: false, code: aiErr.code, message: aiErr.message ?? AI_ERROR_MESSAGES[aiErr.code] },

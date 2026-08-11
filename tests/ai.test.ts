@@ -4,6 +4,7 @@ import { AI_PROVIDER_META, getVendorMeta } from "@/lib/ai/providers/vendors";
 import { normalizeBaseURL, KIRO_SYSTEM_PROMPT } from "@/lib/ai/config";
 import { validateCustomBaseURL } from "@/lib/ai/providers/customOpenAI";
 import { normalizeAIError, AIError } from "@/lib/ai/errors";
+import { logProviderError } from "@/lib/ai/providerLog";
 import { getSessionApiKey, setSessionApiKey } from "@/lib/ai/sessionKeys";
 import { DEEPSEEK_MODELS } from "@/lib/ai/providers/deepSeek";
 import { OPENCODE_MODELS, filterRemoteGoModels } from "@/lib/ai/providers/openCodeGo";
@@ -235,6 +236,63 @@ describe("AI Error 归一化", () => {
     expect(normalizeAIError({ statusCode: 503 }).code).toBe("PROVIDER_UNAVAILABLE");
   });
 
+  it("400/415/422 → INVALID_PROVIDER_REQUEST（不再吞成 UNKNOWN）", () => {
+    expect(normalizeAIError({ statusCode: 400 }).code).toBe("INVALID_PROVIDER_REQUEST");
+    expect(normalizeAIError({ statusCode: 415 }).code).toBe("INVALID_PROVIDER_REQUEST");
+    expect(normalizeAIError({ statusCode: 422 }).code).toBe("INVALID_PROVIDER_REQUEST");
+    // 用户 UI 展示安全自然语言，不含 Provider 细节
+    expect(normalizeAIError({ statusCode: 400 }).message).toBe("当前模型请求格式不兼容，请更换模型或稍后重试。");
+  });
+
+  it("Provider 错误体（APICallError.responseBody）：按 error.code 稳定区分", () => {
+    // 400 + invalid_request_error（DeepSeek schema 拒绝的真实响应形状）
+    const schemaRejected = normalizeAIError({
+      statusCode: 400,
+      responseBody: JSON.stringify({
+        error: {
+          message: "Invalid schema for function 'create_reminder': schema must be a JSON Schema of 'type: object'",
+          type: "invalid_request_error",
+          code: "invalid_request_error",
+        },
+      }),
+    });
+    expect(schemaRejected.code).toBe("INVALID_PROVIDER_REQUEST");
+    // 400 + context_length_exceeded → CONTEXT_TOO_LARGE（不应被 400 分支吞掉）
+    expect(
+      normalizeAIError({
+        statusCode: 400,
+        responseBody: JSON.stringify({ error: { code: "context_length_exceeded", message: "This model's maximum context length is 131072 tokens" } }),
+      }).code
+    ).toBe("CONTEXT_TOO_LARGE");
+    // 401 + invalid_api_key body
+    expect(
+      normalizeAIError({ statusCode: 401, responseBody: JSON.stringify({ error: { code: "invalid_api_key", message: "bad key" } }) }).code
+    ).toBe("INVALID_API_KEY");
+    // 429 + rate_limit_exceeded
+    expect(
+      normalizeAIError({ statusCode: 429, responseBody: JSON.stringify({ error: { code: "rate_limit_exceeded", message: "slow down" } }) }).code
+    ).toBe("RATE_LIMITED");
+    // 非 JSON body → 回落 statusCode 分支
+    expect(normalizeAIError({ statusCode: 400, responseBody: "not-json" }).code).toBe("INVALID_PROVIDER_REQUEST");
+  });
+
+  it("Tool schema / Tool Call / Reasoning+Tool 组合文本特征 → INVALID_PROVIDER_REQUEST", () => {
+    expect(normalizeAIError({ message: "Tool calls are not supported: tool_call with thinking enabled" }).code).toBe("INVALID_PROVIDER_REQUEST");
+    expect(normalizeAIError({ message: "invalid tool schema for function foo" }).code).toBe("INVALID_PROVIDER_REQUEST");
+    expect(normalizeAIError({ message: "reasoning not supported with tools" }).code).toBe("INVALID_PROVIDER_REQUEST");
+  });
+
+  it("AI_RetryError（errors 数组）：取最后一次失败并优先 responseBody", () => {
+    const err = normalizeAIError({
+      name: "AI_RetryError",
+      errors: [
+        { statusCode: 503 },
+        { statusCode: 400, responseBody: JSON.stringify({ error: { code: "invalid_request_error", message: "bad schema" } }) },
+      ],
+    });
+    expect(err.code).toBe("INVALID_PROVIDER_REQUEST");
+  });
+
   it("AbortError / timeout 文案 → TIMEOUT", () => {
     expect(normalizeAIError(new DOMException("timeout", "TimeoutError")).code).toBe("TIMEOUT");
     expect(normalizeAIError({ name: "AbortError", message: "The operation was aborted" }).code).toBe("TIMEOUT");
@@ -256,6 +314,52 @@ describe("AI Error 归一化", () => {
     expect(normalizeAIError(null).code).toBe("UNKNOWN");
     expect(normalizeAIError({}).code).toBe("UNKNOWN");
     expect(normalizeAIError("boom").code).toBe("UNKNOWN");
+  });
+});
+
+describe("Provider 安全日志（providerLog）", () => {
+  const realError = console.error;
+
+  it("记录 status / provider code / message / requestId；绝不记录 API Key 与请求体", () => {
+    const calls: unknown[][] = [];
+    console.error = (...args: unknown[]) => calls.push(args);
+    try {
+      logProviderError("test/ctx", {
+        statusCode: 400,
+        url: "https://api.deepseek.com/chat/completions?foo=bar",
+        responseHeaders: { "x-request-id": "req-123" },
+        responseBody: JSON.stringify({
+          error: { code: "invalid_request_error", message: "Invalid schema, key sk-super-secret-abc123xyz in body" },
+        }),
+      });
+    } finally {
+      console.error = realError;
+    }
+    expect(calls.length).toBe(1);
+    const text = calls[0].map(String).join("\n");
+    expect(text).toContain("test/ctx");
+    expect(text).toContain("status=400");
+    expect(text).toContain("code=invalid_request_error");
+    expect(text).toContain("requestId=req-123");
+    expect(text).toContain("/chat/completions");
+    expect(text).not.toContain("foo=bar"); // 不记录 query string
+    expect(text).not.toContain("sk-super-secret-abc123xyz"); // message 中回显的 key 被打码
+  });
+
+  it("沿 cause 链找到最内层 Provider 错误（AI SDK 重试包裹）", () => {
+    const calls: unknown[][] = [];
+    console.error = (...args: unknown[]) => calls.push(args);
+    try {
+      logProviderError("chat/stream", {
+        name: "AI_RetryError",
+        message: "retried",
+        cause: { statusCode: 400, responseBody: JSON.stringify({ error: { code: "invalid_request_error" } }) },
+      });
+    } finally {
+      console.error = realError;
+    }
+    expect(calls.length).toBe(1);
+    expect(calls[0].map(String).join("\n")).toContain("status=400");
   });
 });
 

@@ -10,6 +10,7 @@ import {
 import { AI, KIRO_SYSTEM_PROMPT } from "@/lib/ai/config";
 import { KIRO_TOOLS } from "@/lib/ai/tools";
 import { normalizeAIError, AIError, AI_ERROR_MESSAGES } from "@/lib/ai/errors";
+import { logProviderError } from "@/lib/ai/providerLog";
 import { resolveLanguageModel } from "@/lib/ai/providers/resolver";
 import { validateAIChatBody, createTimeoutController } from "@/lib/ai/server";
 import {
@@ -75,6 +76,7 @@ export async function POST(req: NextRequest) {
       custom: parsed.customConfig,
     });
   } catch (err) {
+    logProviderError("chat/resolve", err);
     const aiErr = normalizeAIError(err);
     return Response.json({ code: aiErr.code, message: aiErr.message }, { status: 400 });
   }
@@ -232,6 +234,7 @@ export async function POST(req: NextRequest) {
       // UI 连续性 / Message ID / Tool Loop 始终基于真实 originalMessages（不做 compact 替换）
       originalMessages: parsed.messages as never,
       onError: (err: unknown) => {
+        logProviderError("chat/stream", err);
         const aiErr = normalizeAIError(err);
         // 客户端只收到归一化的 code + 自然语言，不泄漏 Provider 细节
         return JSON.stringify({ code: aiErr.code, message: aiErr.message ?? aiErr.code });
@@ -240,6 +243,7 @@ export async function POST(req: NextRequest) {
 
     return createUIMessageStreamResponse({ stream: uiStream });
   } catch (err) {
+    logProviderError("chat/init", err);
     const aiErr = normalizeAIError(err);
     return Response.json({ code: aiErr.code, message: aiErr.message }, { status: 500 });
   }
