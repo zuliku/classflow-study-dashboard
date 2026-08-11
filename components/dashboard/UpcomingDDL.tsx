@@ -8,8 +8,8 @@ import { zhCN } from "date-fns/locale";
 import { parseLocalDDL } from "@/lib/ddl";
 import { paginate } from "@/lib/pagination";
 
-/** Overview「临近 DDL」每页最多 4 条（右栏 Hero 空间内充分利用，分页摘要定位） */
-const UPCOMING_DDL_PAGE_SIZE = 4;
+/** Overview「临近 DDL」每页最多 3 条（右栏 Hero 空间内充分利用，分页摘要定位） */
+const UPCOMING_DDL_PAGE_SIZE = 3;
 
 export function UpcomingDDL() {
   const { assignments, courses, setSelectedAssignmentId, setActiveTab, preferences } =
@@ -104,10 +104,10 @@ export function UpcomingDDL() {
         </button>
       </div>
 
-      {/* DDL Task Items List：固定 4 行容量（翻页/数量变化高度不变；空位自然留白，不拉伸项目） */}
-      <div className="flex-1 min-h-0 grid grid-rows-4 gap-1.5">
+      {/* DDL Task Items List：固定 3 行容量（翻页/数量变化高度不变；空位自然留白，不拉伸项目） */}
+      <div className="flex-1 min-h-0 grid grid-rows-3 gap-1.5">
         {pagedItems.length === 0 ? (
-          <div className="row-span-4 flex flex-col items-center justify-center text-xs text-sandrift space-y-1">
+          <div className="row-span-3 flex flex-col items-center justify-center text-xs text-sandrift space-y-1">
             <CheckCircle2 className="w-6 h-6 text-success" />
             <p>暂无临近 DDL</p>
           </div>

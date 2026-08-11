@@ -185,7 +185,12 @@ export function KiroComposer({
   };
 
   const modelMenu = (
-    <div role="menu" aria-label="选择模型" className="py-1 max-h-[min(320px,55vh)] overflow-y-auto">
+    // 唯一真实滚动容器：支持滚轮/触控板，但视觉隐藏 scrollbar（避免与外层 popup 双滚动条）
+    <div
+      role="menu"
+      aria-label="选择模型"
+      className="py-1 max-h-[min(320px,55vh)] overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+    >
       {modelUnavailable && (
         <p className="px-3 py-2 text-[11px] font-semibold text-danger border-b border-line-soft mb-1">
           当前模型已不可用，请重新选择。
@@ -387,7 +392,7 @@ export function KiroComposer({
                     <ChevronDown className="w-3 h-3 shrink-0" />
                   </button>
                   {modelOpen && (
-                    <div className="absolute bottom-full right-0 mb-1.5 w-60 max-h-[min(320px,60dvh)] overflow-y-auto bg-surface border border-line-strong rounded-2xl shadow-card z-40 ux-inline">
+                    <div className="absolute bottom-full right-0 mb-1.5 w-60 bg-surface border border-line-strong rounded-2xl shadow-card z-40 ux-inline">
                       {modelMenu}
                     </div>
                   )}
