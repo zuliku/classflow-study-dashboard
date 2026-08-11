@@ -18,13 +18,21 @@ import {
   KiroWebSearchResult,
   KiroWebSearchOutcome,
   KiroWebSearchErrorCode,
+  KiroWebEvidenceRequest,
+  KiroWebEvidenceSource,
+  KiroWebEvidenceOutcome,
   MAX_WEB_RESULTS,
+  MAX_WEB_EVIDENCE_CHARS_PER_SOURCE,
   WEB_SEARCH_SNIPPET_MAX_CHARS,
 } from "@/lib/ai/web/types";
 import { KiroWebSearchProvider } from "@/lib/ai/web/provider";
 
 export const TAVILY_SEARCH_URL = "https://api.tavily.com/search";
 export const TAVILY_USAGE_URL = "https://api.tavily.com/usage";
+export const TAVILY_EXTRACT_URL = "https://api.tavily.com/extract";
+
+/** Task 16A：Extract 固定参数（ClassFlow 决定，Agent 不能控制） */
+const TAVILY_EXTRACT_CHUNKS_PER_SOURCE = 3;
 
 const SAFE_ERROR_MESSAGES: Record<KiroWebSearchErrorCode, string> = {
   WEB_SEARCH_DISABLED: "Kiro Search 已关闭。",
@@ -35,6 +43,11 @@ const SAFE_ERROR_MESSAGES: Record<KiroWebSearchErrorCode, string> = {
   WEB_SEARCH_FAILED: "网络搜索失败，请稍后再试。",
   WEB_SEARCH_LIMIT_REACHED: "本轮网络搜索次数已达上限。",
   WEB_SEARCH_DUPLICATE_QUERY: "本轮已经搜索过相同关键词。",
+  WEB_SOURCE_NOT_FOUND: "找不到该网页来源。",
+  WEB_READ_LIMIT_REACHED: "本轮网页阅读次数已达上限。",
+  WEB_SOURCE_ALREADY_READ: "该网页来源本轮已经阅读过。",
+  WEB_READ_TIMEOUT: "网页读取超时，请重试。",
+  WEB_READ_FAILED: "网页读取失败，请稍后再试。",
 };
 
 export function webSearchSafeMessage(code: KiroWebSearchErrorCode): string {
@@ -245,5 +258,137 @@ export function createTavilyWebSearchProvider(): KiroWebSearchProvider {
       const { results, duplicatesFiltered } = normalizeResults(payload.results);
       return { ok: true, query: request.query, count: results.length, results, duplicatesFiltered };
     },
+    async extract(request, { apiKey, signal }) {
+      if (!apiKey) {
+        return { ok: false, code: "WEB_SEARCH_KEY_REQUIRED", message: SAFE_ERROR_MESSAGES.WEB_SEARCH_KEY_REQUIRED };
+      }
+      const body: Record<string, unknown> = {
+        urls: request.sources.map((s) => s.url),
+        extract_depth: "basic",
+        chunks_per_source: TAVILY_EXTRACT_CHUNKS_PER_SOURCE,
+      };
+      if (request.query && request.query.trim()) body.query = request.query.trim();
+
+      let response: Response;
+      try {
+        response = await fetch(TAVILY_EXTRACT_URL, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${apiKey}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(body),
+          signal,
+        });
+      } catch (err) {
+        const aborted =
+          signal?.aborted ||
+          (err instanceof Error && (/abort/i.test(err.message) || err.name === "AbortError" || err.name === "TimeoutError"));
+        if (aborted) {
+          return { ok: false, code: "WEB_READ_TIMEOUT", message: SAFE_ERROR_MESSAGES.WEB_READ_TIMEOUT };
+        }
+        return { ok: false, code: "WEB_READ_FAILED", message: SAFE_ERROR_MESSAGES.WEB_READ_FAILED };
+      }
+      if (response.status === 401 || response.status === 403) {
+        return { ok: false, code: "WEB_SEARCH_AUTH_FAILED", message: SAFE_ERROR_MESSAGES.WEB_SEARCH_AUTH_FAILED };
+      }
+      if (response.status === 429) {
+        return { ok: false, code: "WEB_SEARCH_RATE_LIMITED", message: SAFE_ERROR_MESSAGES.WEB_SEARCH_RATE_LIMITED };
+      }
+      if (!response.ok) {
+        return { ok: false, code: "WEB_READ_FAILED", message: SAFE_ERROR_MESSAGES.WEB_READ_FAILED };
+      }
+
+      let payload: { results?: unknown };
+      try {
+        payload = (await response.json()) as { results?: unknown };
+      } catch {
+        return { ok: false, code: "WEB_READ_FAILED", message: SAFE_ERROR_MESSAGES.WEB_READ_FAILED };
+      }
+
+      return { ok: true, sources: normalizeEvidence(payload.results, request.sources) };
+    },
   };
+}
+
+interface TavilyExtractResult {
+  url?: unknown;
+  raw_content?: unknown;
+  chunks?: unknown;
+}
+
+/** 段落切分：双换行折叠为 ≤3 块，单块 ≤ ~1800 chars */
+function splitEvidenceChunks(raw: string): string[] {
+  const collapsed = raw.replace(/\r\n/g, "\n");
+  const paragraphs = collapsed
+    .split(/\n\s*\n/)
+    .map((p) => p.replace(/\s+/g, " ").trim())
+    .filter((p) => p.length > 0);
+  const chunks: string[] = [];
+  let current = "";
+  for (const p of paragraphs) {
+    if (current && current.length + p.length + 1 > 1800) {
+      chunks.push(current);
+      current = p;
+      if (chunks.length >= TAVILY_EXTRACT_CHUNKS_PER_SOURCE) break;
+    } else {
+      current = current ? `${current} ${p}` : p;
+    }
+  }
+  if (current) chunks.push(current);
+  return chunks.slice(0, TAVILY_EXTRACT_CHUNKS_PER_SOURCE);
+}
+
+/**
+ * Evidence 归一化（Task 16A）：
+ * - 只返回 clean text chunks（无 HTML/CSS/script/JSON-LD/metadata）
+ * - 折叠空白、空 chunk 删除、单 chunk 截断、单 source ≤ source 预算
+ * - 按请求 sourceIds 反查（url 匹配）；找不到的 source 跳过
+ * - 绝不返回 raw response / usage / key
+ */
+function normalizeEvidence(raw: unknown, requested: { sourceId: string; url: string }[]): KiroWebEvidenceSource[] {
+  if (!Array.isArray(raw)) return [];
+  const byUrl = new Map<string, unknown>();
+  for (const item of raw) {
+    if (!item || typeof item !== "object") continue;
+    const r = item as TavilyExtractResult;
+    if (typeof r.url === "string") byUrl.set(r.url, item);
+  }
+  const out: KiroWebEvidenceSource[] = [];
+  for (const req of requested) {
+    const item = byUrl.get(req.url);
+    if (!item || typeof item !== "object") continue;
+    const r = item as TavilyExtractResult;
+    // 优先 Provider chunks；否则 raw_content 段落切分
+    const chunks =
+      Array.isArray(r.chunks) && r.chunks.length > 0
+        ? r.chunks
+            .map((c) => (typeof c === "string" ? c.replace(/\s+/g, " ").trim() : ""))
+            .filter((c) => c.length > 0)
+        : splitEvidenceChunks(typeof r.raw_content === "string" ? r.raw_content : "");
+
+    let total = 0;
+    const capped: KiroWebEvidenceSource["chunks"] = [];
+    let truncated = false;
+    for (const c of chunks) {
+      const room = MAX_WEB_EVIDENCE_CHARS_PER_SOURCE - total;
+      if (room <= 0) {
+        truncated = true;
+        break;
+      }
+      const text = c.length > room ? c.slice(0, room) : c;
+      capped.push({ text });
+      total += text.length;
+      if (c.length > room) truncated = true;
+    }
+    out.push({
+      sourceId: req.sourceId,
+      title: "", // title/domain 由调用层从可信 source 注册表补全
+      url: req.url,
+      domain: "",
+      chunks: capped,
+      truncated,
+    });
+  }
+  return out;
 }

@@ -53,7 +53,12 @@ export type KiroWebSearchErrorCode =
   | "WEB_SEARCH_TIMEOUT"
   | "WEB_SEARCH_FAILED"
   | "WEB_SEARCH_LIMIT_REACHED"
-  | "WEB_SEARCH_DUPLICATE_QUERY";
+  | "WEB_SEARCH_DUPLICATE_QUERY"
+  | "WEB_SOURCE_NOT_FOUND"
+  | "WEB_READ_LIMIT_REACHED"
+  | "WEB_SOURCE_ALREADY_READ"
+  | "WEB_READ_TIMEOUT"
+  | "WEB_READ_FAILED";
 
 export interface KiroWebSearchFailure {
   ok: false;
@@ -72,6 +77,40 @@ export type KiroWebSearchCredentialCheckOutcome =
       message: string;
     };
 
+/* ---------------- Kiro Web Evidence（Task 16A：Search=Discovery / Read=Evidence） ---------------- */
+
+/** 可信 Web Source（只来自当前 Turn 真实成功 web_search Tool Result） */
+export interface KiroTrustedWebSource {
+  sourceId: string;
+  title: string;
+  url: string;
+  domain: string;
+  publishedAt?: string;
+}
+
+export interface KiroWebEvidenceRequest {
+  sources: { sourceId: string; url: string }[];
+  /** 「希望从这些网页中找什么」；Agent 可选 */
+  query?: string;
+}
+
+export interface KiroWebEvidenceChunk {
+  text: string;
+}
+
+export interface KiroWebEvidenceSource {
+  sourceId: string;
+  title: string;
+  url: string;
+  domain: string;
+  chunks: KiroWebEvidenceChunk[];
+  truncated: boolean;
+}
+
+export type KiroWebEvidenceOutcome =
+  | { ok: true; sources: KiroWebEvidenceSource[] }
+  | { ok: false; code: KiroWebSearchErrorCode; message: string };
+
 /** 一个 User Turn 内 web_search 最多调用次数（跨 client tool HTTP roundtrip 仍生效） */
 export const MAX_WEB_SEARCHES_PER_TURN = 3;
 /** 每次搜索返回结果上限（ClassFlow 成本边界，LLM 不能覆盖） */
@@ -82,3 +121,11 @@ export const WEB_SEARCH_TIMEOUT_MS = 10_000;
 export const WEB_SEARCH_SNIPPET_MAX_CHARS = 900;
 /** Task 15B：未显式 includeDomains 时，单域名最多保留结果数（来源多样性） */
 export const MAX_WEB_RESULTS_PER_DOMAIN = 2;
+/** Task 16A：一次 read_web_source 最多读取的 source 数 */
+export const MAX_WEB_SOURCES_PER_READ = 2;
+/** Task 16A：一个 User Turn 最多执行 read_web_source 次数（与 search limit 独立） */
+export const MAX_WEB_READS_PER_TURN = 2;
+/** Task 16A：单 source evidence 字符预算 */
+export const MAX_WEB_EVIDENCE_CHARS_PER_SOURCE = 5_000;
+/** Task 16A：单 Turn evidence 字符总预算 */
+export const MAX_WEB_EVIDENCE_CHARS_PER_TURN = 10_000;

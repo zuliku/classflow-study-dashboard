@@ -1,0 +1,245 @@
+import { describe, it, expect, vi } from "vitest";
+import {
+  resolveCurrentTurnWebSources,
+  inspectCurrentTurnWebEvidenceState,
+  createKiroWebReadTool,
+} from "@/lib/ai/web/tool";
+import { kiroWebReadSourceSchema } from "@/lib/ai/web/schemas";
+import { createTavilyWebSearchProvider, TAVILY_EXTRACT_URL } from "@/lib/ai/web/tavily";
+import { MAX_WEB_EVIDENCE_CHARS_PER_SOURCE, MAX_WEB_EVIDENCE_CHARS_PER_TURN } from "@/lib/ai/web/types";
+
+/** Search Result helper：构造当前 Turn 真实成功 web_search output */
+function searchMessages(webResults: { sourceId: string; url: string; title: string; domain: string }[]): unknown[] {
+  return [
+    { role: "user", parts: [{ type: "text", text: "查一下" }] },
+    { role: "assistant", parts: [{ type: "tool-web_search", toolCallId: "s1", output: { ok: true, data: { results: webResults } } }] },
+  ];
+}
+
+const CURRENT_TURN_SOURCES = [
+  { sourceId: "web-3", url: "https://a.dev/3", title: "A3", domain: "a.dev" },
+  { sourceId: "web-4", url: "https://b.dev/4", title: "B4", domain: "b.dev" },
+];
+
+function readToolConfig(over: Partial<Parameters<typeof createKiroWebReadTool>[0]> = {}) {
+  return {
+    provider: {
+      id: "tavily" as const,
+      checkCredential: vi.fn().mockResolvedValue({ ok: true }),
+      search: vi.fn(),
+      extract: vi.fn().mockResolvedValue({
+        ok: true,
+        sources: [
+          { sourceId: "web-3", title: "", url: "https://a.dev/3", domain: "", chunks: [{ text: "evidence 内容" }], truncated: false },
+        ],
+      }),
+    },
+    credential: { mode: "byok" as const, userApiKey: "sk-user" },
+    attemptsSoFar: 0,
+    trustedSources: CURRENT_TURN_SOURCES,
+    readSourceIds: [],
+    evidenceCharsUsed: 0,
+    ...over,
+  };
+}
+
+describe("Case A：trust boundary", () => {
+  it("当前 Turn 真实 web-3 → resolve 成功；web-999 / 旧 Turn web-1 → 拒绝", () => {
+    const msgs = [
+      { role: "user", parts: [{ type: "text", text: "T1" }] },
+      { role: "assistant", parts: [{ type: "tool-web_search", toolCallId: "t1", output: { ok: true, data: { results: [{ sourceId: "web-1", url: "https://old.dev/1", title: "旧", domain: "old.dev" }] } } }] },
+      { role: "user", parts: [{ type: "text", text: "T2" }] },
+      { role: "assistant", parts: [{ type: "tool-web_search", toolCallId: "t2", output: { ok: true, data: { results: CURRENT_TURN_SOURCES } } }] },
+    ];
+    const sources = resolveCurrentTurnWebSources(msgs);
+    const ids = sources.map((s) => s.sourceId);
+    expect(ids).toEqual(["web-3", "web-4"]); // 旧 Turn web-1 不在
+    expect(ids).not.toContain("web-1");
+  });
+
+  it("编造 sourceId web-999 → 全部 NOT_FOUND，Provider 不调用", async () => {
+    const cfg = readToolConfig();
+    const readTool = createKiroWebReadTool(cfg);
+    const r = (await readTool.execute?.({ sourceIds: ["web-999"] }, {} as never)) as { ok: false; code: string };
+    expect(r.ok).toBe(false);
+    expect(r.code).toBe("WEB_SOURCE_NOT_FOUND");
+    expect(cfg.provider.extract).not.toHaveBeenCalled();
+  });
+
+  it("混入不可信 sourceId：web-3 合法 + web-999 非法 → 只读取 web-3", async () => {
+    const cfg = readToolConfig();
+    const readTool = createKiroWebReadTool(cfg);
+    const r = (await readTool.execute?.({ sourceIds: ["web-3", "web-999"] }, {} as never)) as { ok: true; data: { sources: { sourceId: string }[] } };
+    expect(r.ok).toBe(true);
+    expect(r.data.sources.map((s) => s.sourceId)).toEqual(["web-3"]);
+    expect(cfg.provider.extract).toHaveBeenCalledWith(
+      expect.objectContaining({ sources: [{ sourceId: "web-3", url: "https://a.dev/3" }] }),
+      expect.anything()
+    );
+  });
+});
+
+describe("Case B：arbitrary URL impossible", () => {
+  it("schema 只接受 sourceIds（web-N）；url / apiKey / extractDepth 被拒", () => {
+    expect(kiroWebReadSourceSchema.safeParse({ url: "https://example.com" }).success).toBe(false);
+    expect(kiroWebReadSourceSchema.safeParse({ sourceIds: ["https://example.com"] }).success).toBe(false);
+    expect(kiroWebReadSourceSchema.safeParse({ sourceIds: ["web-1"] }).success).toBe(true);
+    expect(kiroWebReadSourceSchema.safeParse({ sourceIds: ["web-1", "web-2", "web-3"] }).success).toBe(false); // >2
+    expect(kiroWebReadSourceSchema.safeParse({ sourceIds: ["web-1"], url: "https://x.dev" }).success).toBe(true); // url 被剥离
+    const stripped = kiroWebReadSourceSchema.parse({ sourceIds: ["web-1"], apiKey: "sk", extractDepth: "advanced" });
+    expect("url" in stripped).toBe(false);
+    expect("apiKey" in stripped).toBe(false);
+    expect("extractDepth" in stripped).toBe(false);
+  });
+});
+
+describe("Case C：read limit", () => {
+  it("当前 Turn 已两次 read → 第三次 WEB_READ_LIMIT_REACHED，Provider 不调用", async () => {
+    const msgs = searchMessages(CURRENT_TURN_SOURCES);
+    msgs.push(
+      { role: "assistant", parts: [{ type: "tool-read_web_source", toolCallId: "r1", output: { ok: true, data: { sources: [] } } }] },
+      { role: "assistant", parts: [{ type: "tool-read_web_source", toolCallId: "r2", output: { ok: false, code: "X" } }] }
+    );
+    const state = inspectCurrentTurnWebEvidenceState(msgs);
+    expect(state.attempts).toBe(2);
+    const cfg = readToolConfig({ attemptsSoFar: state.attempts });
+    const readTool = createKiroWebReadTool(cfg);
+    const r = (await readTool.execute?.({ sourceIds: ["web-3"] }, {} as never)) as { ok: false; code: string };
+    expect(r.code).toBe("WEB_READ_LIMIT_REACHED");
+    expect(cfg.provider.extract).not.toHaveBeenCalled();
+  });
+
+  it("同一 toolCallId 重复只计一次 attempt", () => {
+    const msgs = searchMessages(CURRENT_TURN_SOURCES);
+    msgs.push(
+      { role: "assistant", parts: [
+        { type: "tool-read_web_source", toolCallId: "dup", output: { ok: true, data: { sources: [] } } },
+        { type: "tool-read_web_source", toolCallId: "dup", output: { ok: true, data: { sources: [] } } },
+      ] }
+    );
+    const state = inspectCurrentTurnWebEvidenceState(msgs);
+    expect(state.attempts).toBe(1);
+  });
+});
+
+describe("Case D/E：duplicate read guard", () => {
+  it("web-3 已成功读过 → 再次请求 → WEB_SOURCE_ALREADY_READ，Provider 不调用", async () => {
+    const cfg = readToolConfig({ readSourceIds: ["web-3"] });
+    const readTool = createKiroWebReadTool(cfg);
+    const r = (await readTool.execute?.({ sourceIds: ["web-3"] }, {} as never)) as { ok: false; code: string };
+    expect(r.code).toBe("WEB_SOURCE_ALREADY_READ");
+    expect(cfg.provider.extract).not.toHaveBeenCalled();
+  });
+
+  it("mixed：web-3 已读 + web-4 未读 → Provider 只收到 web-4", async () => {
+    const cfg = readToolConfig({
+      readSourceIds: ["web-3"],
+      provider: {
+        id: "tavily" as const,
+        checkCredential: vi.fn().mockResolvedValue({ ok: true }),
+        search: vi.fn(),
+        extract: vi.fn().mockResolvedValue({
+          ok: true,
+          sources: [{ sourceId: "web-4", title: "", url: "https://b.dev/4", domain: "", chunks: [{ text: "B4 内容" }], truncated: false }],
+        }),
+      },
+    });
+    const readTool = createKiroWebReadTool(cfg);
+    const r = (await readTool.execute?.({ sourceIds: ["web-3", "web-4"] }, {} as never)) as { ok: true; data: { sources: { sourceId: string }[] } };
+    expect(r.ok).toBe(true);
+    expect(r.data.sources.map((s) => s.sourceId)).toEqual(["web-4"]);
+    expect(cfg.provider.extract).toHaveBeenCalledWith(
+      expect.objectContaining({ sources: [{ sourceId: "web-4", url: "https://b.dev/4" }] }),
+      expect.anything()
+    );
+  });
+});
+
+describe("Case F：evidence budget", () => {
+  it("超长 chunks → 单 source ≤ source 预算、truncated=true", async () => {
+    const long = "x".repeat(2000);
+    const provider = createTavilyWebSearchProvider();
+    // 通过 provider.extract 直接归一化验证（mock fetch）
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({ results: [{ url: "https://a.dev/3", raw_content: `${long}\n\n${long}\n\n${long}` }] }), { status: 200 })
+      )
+    );
+    const r = await provider.extract({ sources: [{ sourceId: "web-3", url: "https://a.dev/3" }] }, { apiKey: "sk" });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    const src = r.sources[0];
+    const total = src.chunks.reduce((sum, c) => sum + c.text.length, 0);
+    expect(total).toBeLessThanOrEqual(MAX_WEB_EVIDENCE_CHARS_PER_SOURCE);
+    expect(total).toBeLessThanOrEqual(MAX_WEB_EVIDENCE_CHARS_PER_TURN);
+    expect(src.truncated).toBe(true); // 6000 chars > 5000 预算
+  });
+
+  it("Tool 层按 Turn 预算截断多个来源", async () => {
+    const provider = {
+      id: "tavily" as const,
+      checkCredential: vi.fn().mockResolvedValue({ ok: true }),
+      search: vi.fn(),
+      extract: vi.fn().mockResolvedValue({
+        ok: true,
+        sources: [
+          { sourceId: "web-3", title: "", url: "https://a.dev/3", domain: "", chunks: [{ text: "c".repeat(7000) }], truncated: false },
+          { sourceId: "web-4", title: "", url: "https://b.dev/4", domain: "", chunks: [{ text: "d".repeat(7000) }], truncated: false },
+        ],
+      }),
+    };
+    const readTool = createKiroWebReadTool(readToolConfig({ provider, evidenceCharsUsed: 0 }));
+    const r = (await readTool.execute?.({ sourceIds: ["web-3", "web-4"] }, {} as never)) as {
+      ok: true;
+      data: { sources: { sourceId: string; chunks: { text: string }[]; truncated: boolean }[] };
+    };
+    const total = r.data.sources.reduce((sum, s) => sum + s.chunks.reduce((a, c) => a + c.text.length, 0), 0);
+    expect(total).toBeLessThanOrEqual(MAX_WEB_EVIDENCE_CHARS_PER_TURN);
+    expect(r.data.sources.some((s) => s.truncated)).toBe(true);
+  });
+});
+
+describe("Case G：provider normalization（Tavily Extract）", () => {
+  it("只返回 clean chunks + source metadata；不含 raw response / usage / key", async () => {
+    const rawPayload = {
+      results: [{ url: "https://a.dev/3", raw_content: "  第一段  \n\n  第二段  " }],
+      failed_results: [],
+      response_time: 1.2,
+      usage: { api_key: "sk-secret", tokens: 999 },
+    };
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify(rawPayload), { status: 200 })));
+    const provider = createTavilyWebSearchProvider();
+    const r = await provider.extract({ sources: [{ sourceId: "web-3", url: "https://a.dev/3" }] }, { apiKey: "sk" });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    const src = r.sources[0];
+    expect(src.sourceId).toBe("web-3");
+    expect(src.url).toBe("https://a.dev/3");
+    expect(src.chunks.length).toBeGreaterThan(0);
+    expect(src.chunks[0].text).toContain("第一段");
+    const raw = JSON.stringify(r);
+    expect(raw).not.toContain("sk-secret");
+    expect(raw).not.toContain("usage");
+    expect(raw).not.toContain("response_time");
+    expect(raw).not.toContain("failed_results");
+  });
+
+  it("请求映射：POST /extract，extract_depth=basic + chunks_per_source + query；无 include_images", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ results: [] }), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const provider = createTavilyWebSearchProvider();
+    await provider.extract(
+      { sources: [{ sourceId: "web-3", url: "https://a.dev/3" }], query: "报名条件" },
+      { apiKey: "sk" }
+    );
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe(TAVILY_EXTRACT_URL);
+    const body = JSON.parse(String(init.body)) as Record<string, unknown>;
+    expect(body.urls).toEqual(["https://a.dev/3"]);
+    expect(body.extract_depth).toBe("basic");
+    expect(body.chunks_per_source).toBe(3);
+    expect(body.query).toBe("报名条件");
+    expect("include_images" in body).toBe(false);
+  });
+});

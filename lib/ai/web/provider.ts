@@ -8,6 +8,8 @@ import {
   KiroWebSearchRequest,
   KiroWebSearchOutcome,
   KiroWebSearchCredentialCheckOutcome,
+  KiroWebEvidenceRequest,
+  KiroWebEvidenceOutcome,
 } from "@/lib/ai/web/types";
 
 export interface KiroWebSearchProvider {
@@ -24,6 +26,14 @@ export interface KiroWebSearchProvider {
     apiKey: string;
     signal?: AbortSignal;
   }): Promise<KiroWebSearchCredentialCheckOutcome>;
+  /** 网页证据读取（Task 16A）：Search=Discovery / Read=Evidence；只接受 URL 列表 */
+  extract(
+    request: KiroWebEvidenceRequest,
+    context: {
+      apiKey: string;
+      signal?: AbortSignal;
+    }
+  ): Promise<KiroWebEvidenceOutcome>;
 }
 
 import { createTavilyWebSearchProvider } from "@/lib/ai/web/tavily";

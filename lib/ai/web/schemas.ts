@@ -43,7 +43,7 @@ export const kiroWebSearchInputSchema = z.object({
   exactMatch: z.boolean().optional(),
 });
 
-const QUOTED_PHRASE_RE = /["“”][^"“”]{2,}["“”]/;
+const QUOTED_PHRASE_RE = /["“”][^"“”]{2,}["“”"]/;
 
 /**
  * exactMatch guard：exactMatch=true 时 query 必须至少包含一个引号包裹短语。
@@ -54,3 +54,13 @@ export function resolveExactMatchFlag(query: string, exactMatch?: boolean): bool
   if (exactMatch !== true) return false;
   return QUOTED_PHRASE_RE.test(query);
 }
+
+/** Task 16A：read_web_source schema——只接受真实 Search Result 的 sourceIds，绝不接受任意 URL */
+export const kiroWebReadSourceSchema = z.object({
+  sourceIds: z
+    .array(z.string().regex(/^web-\d+$/, "sourceId 必须是 web-N 形式"))
+    .min(1, "至少选择一个网页来源")
+    .max(2, "一次最多读取 2 个网页来源"),
+  /** 「希望从这些网页中找什么」；可选 */
+  query: z.string().trim().min(2).max(300).optional(),
+});
