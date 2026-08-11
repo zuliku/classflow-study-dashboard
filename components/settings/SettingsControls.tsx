@@ -114,6 +114,59 @@ export function SettingsSegmentedControl<T extends string | number>({
   );
 }
 
+/** 统一输入框（Settings V3 Task 5：text/url/number/time/password；error 变体用于表单校验） */
+export function SettingsInput({
+  id,
+  type = "text",
+  value,
+  onChange,
+  placeholder,
+  ariaLabel,
+  required,
+  error,
+  mono,
+  min,
+  autoComplete,
+  spellCheck,
+  className,
+}: {
+  id?: string;
+  type?: "text" | "url" | "number" | "time" | "password";
+  value: string | number;
+  onChange: (v: string) => void;
+  placeholder?: string;
+  ariaLabel?: string;
+  required?: boolean;
+  /** 表单校验错误（danger 边框） */
+  error?: boolean;
+  mono?: boolean;
+  min?: number;
+  autoComplete?: string;
+  spellCheck?: boolean;
+  className?: string;
+}) {
+  return (
+    <input
+      id={id}
+      type={type}
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      placeholder={placeholder}
+      aria-label={ariaLabel}
+      required={required}
+      min={min}
+      autoComplete={autoComplete}
+      spellCheck={spellCheck}
+      className={cn(
+        "w-full h-9 px-2.5 bg-[#F7F5F5] border rounded-lg text-xs font-semibold text-charcoal focus:outline-none focus:border-charcoal placeholder-sandrift disabled:opacity-50 disabled:cursor-not-allowed",
+        error ? "border-danger-border" : "border-line",
+        mono && "font-mono",
+        className
+      )}
+    />
+  );
+}
+
 export type SettingsButtonVariant = "primary" | "secondary" | "ghost" | "danger" | "accent";
 
 const BUTTON_VARIANTS: Record<SettingsButtonVariant, string> = {

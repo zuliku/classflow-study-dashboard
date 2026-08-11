@@ -10,7 +10,7 @@ import { AIProviderId } from "@/lib/ai/providers/types";
 import { SettingsSection } from "@/components/settings/SettingsSection";
 import { SettingsGroup } from "@/components/settings/SettingsGroup";
 import { SettingsRow } from "@/components/settings/SettingsRow";
-import { SettingsToggle, SettingsSelect, SettingsSegmentedControl, SettingsButton } from "@/components/settings/SettingsControls";
+import { SettingsToggle, SettingsSelect, SettingsSegmentedControl, SettingsButton, SettingsInput } from "@/components/settings/SettingsControls";
 import { KiroMemorySettings } from "@/components/settings/KiroMemorySettings";
 import { useKiroPreferencesStore } from "@/store/useKiroPreferencesStore";
 import { KiroOutputTextSize } from "@/lib/ai/ui/typography";
@@ -24,9 +24,6 @@ const PROVIDER_OPTIONS: { value: AIProviderId; label: string }[] = [
 ];
 
 type TestState = { status: "idle" | "testing" } | { status: "success" } | { status: "error"; message: string };
-
-const inputCls =
-  "w-full h-9 px-2.5 bg-[#F7F5F5] border border-line rounded-xl text-xs font-semibold text-charcoal focus:outline-none focus:border-charcoal placeholder-sandrift";
 
 /** Kiro / AI 服务设置：Provider / 模型 / API Key（sessionStorage）/ 自定义服务 / 测试连接 */
 export function KiroAISettings() {
@@ -161,12 +158,10 @@ export function KiroAISettings() {
                 title="Provider 名称"
                 description="仅用于识别，如「本地网关」。"
               >
-                <input
-                  type="text"
+                <SettingsInput
                   value={custom.providerName}
-                  onChange={(e) => setCustom({ providerName: e.target.value })}
+                  onChange={(v) => setCustom({ providerName: v })}
                   placeholder="如：公司网关"
-                  className={inputCls}
                 />
               </SettingsRow>
               <SettingsRow
@@ -174,12 +169,11 @@ export function KiroAISettings() {
                 title="Base URL"
                 description="https:// 开头，兼容 OpenAI Chat Completions；私网地址会被拒绝。"
               >
-                <input
-                  type="text"
+                <SettingsInput
                   value={custom.baseURL}
-                  onChange={(e) => setCustom({ baseURL: e.target.value })}
+                  onChange={(v) => setCustom({ baseURL: v })}
                   placeholder="https://provider.example.com/v1"
-                  className={`${inputCls} font-mono`}
+                  mono
                 />
               </SettingsRow>
               <SettingsRow
@@ -187,12 +181,11 @@ export function KiroAISettings() {
                 title="Model ID"
                 description="手动填写该服务支持的模型 ID。"
               >
-                <input
-                  type="text"
+                <SettingsInput
                   value={custom.model}
-                  onChange={(e) => setCustom({ model: e.target.value })}
+                  onChange={(v) => setCustom({ model: v })}
                   placeholder="如：my-model"
-                  className={`${inputCls} font-mono`}
+                  mono
                 />
               </SettingsRow>
               <SettingsRow
@@ -229,15 +222,17 @@ export function KiroAISettings() {
             title="API Key"
             description="API Key 默认仅保存在当前浏览器会话中（调用时会发送到 ClassFlow 服务端转发）。"
           >
-            <div className="relative">
-              <input
+            <div className="relative w-full">
+              <SettingsInput
                 type={showKey ? "text" : "password"}
                 value={apiKeyInput}
-                onChange={(e) => handleApiKeyChange(e.target.value)}
+                onChange={handleApiKeyChange}
                 placeholder="sk-..."
+                ariaLabel="API Key"
                 autoComplete="off"
                 spellCheck={false}
-                className={`${inputCls} pr-9 font-mono`}
+                mono
+                className="pr-9"
               />
               <button
                 onClick={() => setShowKey((v) => !v)}

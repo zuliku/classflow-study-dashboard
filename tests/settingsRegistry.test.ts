@@ -59,6 +59,16 @@ describe("settingsRegistry 搜索", () => {
     expect(searchSettings("DDL").length).toBeGreaterThan(0);
     expect(searchSettings("ddl 提醒").length).toBeGreaterThan(0);
   });
+
+  it("Settings V3 Task 5：真实设置全部可搜索（profile 字段 / custom / 连接状态）", () => {
+    expect(searchSettings("姓名").some((s) => s.id === "profile-name")).toBe(true);
+    expect(searchSettings("学号").some((s) => s.id === "profile-student-id")).toBe(true);
+    expect(searchSettings("学院").some((s) => s.id === "profile-college")).toBe(true);
+    expect(searchSettings("年级").some((s) => s.id === "profile-grade")).toBe(true);
+    expect(searchSettings("学分").some((s) => s.id === "profile-credits")).toBe(true);
+    expect(searchSettings("自定义").some((s) => s.id === "ai-custom-name")).toBe(true);
+    expect(searchSettings("连接").some((s) => s.id === "ai-connection-status")).toBe(true);
+  });
 });
 
 describe("modified preference 检测", () => {

@@ -6,7 +6,7 @@ import { useReminderPreferencesStore } from "@/store/useReminderPreferencesStore
 import { SettingsSection } from "@/components/settings/SettingsSection";
 import { SettingsGroup } from "@/components/settings/SettingsGroup";
 import { SettingsRow } from "@/components/settings/SettingsRow";
-import { SettingsToggle, SettingsSelect, SettingsSegmentedControl } from "@/components/settings/SettingsControls";
+import { SettingsToggle, SettingsSelect, SettingsSegmentedControl, SettingsInput } from "@/components/settings/SettingsControls";
 import { DDL_WARNING_DAYS, TASK_PRIORITIES, TASK_STATUSES } from "@/lib/preferences";
 import { getModifiedPreferenceKeys, resetPreferencePatch } from "@/lib/preferences";
 import { PRIMARY_TASK_WORKSPACE_VIEWS } from "@/lib/tasks/taskViews";
@@ -139,11 +139,12 @@ export function TaskSettings({ highlightedId }: { highlightedId?: string }) {
           resetAriaLabel="将默认截止时间恢复默认"
           highlighted={highlightedId === "default-ddl-time"}
         >
-          <input
+          <SettingsInput
             type="time"
             value={preferences.defaultDDLTime}
-            onChange={(e) => updatePreferences({ defaultDDLTime: e.target.value })}
-            className="h-9 px-2.5 bg-[#F7F5F5] border border-line rounded-xl text-charcoal font-mono font-bold focus:outline-none focus:border-charcoal"
+            onChange={(v) => updatePreferences({ defaultDDLTime: v })}
+            ariaLabel="默认截止时间"
+            className="font-mono font-bold"
           />
         </SettingsRow>
 

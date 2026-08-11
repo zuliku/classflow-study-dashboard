@@ -81,6 +81,16 @@ test("Settings Search：Cmd+F → 输入「截止」→ 跳转默认截止时间
   await expect(page.getByTestId("settings-modified")).toHaveCount(0);
 });
 
+test("Settings Search：搜索「姓名」→ 跳到个人资料 section（profile 字段已入 Registry）", async ({ page }) => {
+  await openSettings(page);
+  await page.keyboard.press("Control+f");
+  await page.getByRole("textbox", { name: "搜索设置" }).fill("姓名");
+  await expect(page.getByTestId("settings-search-results")).toContainText("姓名");
+  await page.getByTestId("settings-search-results").getByText("姓名", { exact: true }).click();
+  await expect(page.getByTestId("settings-profile")).toBeVisible();
+  await expect(page.locator('[data-setting-id="profile-name"]')).toBeVisible();
+});
+
 test("Profile dirty：修改姓名 → 未保存 → 放弃更改 → 恢复原值", async ({ page }) => {
   await openSettings(page);
   await page.getByRole("navigation", { name: "设置导航" }).getByRole("button", { name: "个人资料" }).click();

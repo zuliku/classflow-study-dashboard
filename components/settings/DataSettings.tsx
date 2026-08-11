@@ -5,6 +5,7 @@ import { useShallow } from "zustand/react/shallow";
 import { useAppStore } from "@/store/useAppStore";
 import { useToastStore } from "@/store/useToastStore";
 import { SettingsSection } from "@/components/settings/SettingsSection";
+import { SettingsGroup } from "@/components/settings/SettingsGroup";
 import { DataOverview } from "@/components/settings/DataOverview";
 import { DataHealth } from "@/components/settings/DataHealth";
 import { BackupSection } from "@/components/settings/BackupSection";
@@ -56,11 +57,12 @@ export function DataSettings() {
 
   return (
     <SettingsSection title="数据与存储" description="本地数据概览、健康检查与备份管理。">
-      <div className="space-y-5" data-testid="settings-data">
-        {/* 本地数据 */}
-        <div className="space-y-2">
-          <p className="text-[10px] font-bold text-sandrift uppercase tracking-wider">本地数据</p>
-          <DataOverview counts={counts} />
+      <div className="space-y-4" data-testid="settings-data">
+        {/* 数据概览：紧凑 metric（非 Dashboard 大 Stat Card） */}
+        <SettingsGroup title="数据概览">
+          <div className="px-0 py-3">
+            <DataOverview counts={counts} />
+          </div>
 
           {/* Dev Only：演示数据重载入口（生产构建不渲染） */}
           {process.env.NODE_ENV === "development" && (
@@ -76,22 +78,23 @@ export function DataSettings() {
               </div>
               <button
                 onClick={reloadDemoData}
-                className="ux-press flex items-center gap-1.5 px-3 py-1.5 bg-charcoal hover:bg-black text-white text-xs font-bold rounded-xl transition-colors shrink-0"
+                className="ux-press flex items-center gap-1.5 px-3 py-1.5 bg-charcoal hover:bg-black text-white text-xs font-bold rounded-lg transition-colors shrink-0"
               >
                 <RefreshCcw className="w-3.5 h-3.5" />
                 重新载入
               </button>
             </div>
           )}
-        </div>
+        </SettingsGroup>
 
-        {/* 数据状态 */}
-        <div className="space-y-2">
-          <p className="text-[10px] font-bold text-sandrift uppercase tracking-wider">数据状态</p>
-          <DataHealth />
-        </div>
+        {/* 数据状态：完整性检查（信息性质，非设置） */}
+        <SettingsGroup title="数据状态">
+          <div className="px-0 py-3">
+            <DataHealth />
+          </div>
+        </SettingsGroup>
 
-        {/* 恢复结果反馈 */}
+        {/* 恢复结果反馈（留在本区，不制造页面顶部大 Alert） */}
         {restoreResult && (
           <div className="p-3 bg-pastel-mint/60 border border-line rounded-xl space-y-0.5 text-xs" data-testid="restore-result">
             <p className="flex items-center gap-1.5 font-bold text-success">
@@ -112,22 +115,25 @@ export function DataSettings() {
         )}
 
         {/* 备份 */}
-        <div className="space-y-2">
-          <p className="text-[10px] font-bold text-sandrift uppercase tracking-wider">备份</p>
-          <BackupSection />
-        </div>
+        <SettingsGroup title="备份">
+          <div className="px-0 py-3">
+            <BackupSection />
+          </div>
+        </SettingsGroup>
 
         {/* 恢复 */}
-        <div className="space-y-2">
-          <p className="text-[10px] font-bold text-sandrift uppercase tracking-wider">恢复</p>
-          <RestoreSection onRestored={setRestoreResult} />
-        </div>
+        <SettingsGroup title="恢复">
+          <div className="px-0 py-3">
+            <RestoreSection onRestored={setRestoreResult} />
+          </div>
+        </SettingsGroup>
 
-        {/* 危险操作 */}
-        <div className="space-y-2 pt-1 border-t border-line-soft">
-          <p className="text-[10px] font-bold text-sandrift uppercase tracking-wider">危险操作</p>
-          <DangerZone />
-        </div>
+        {/* 危险操作：保持三层风险确认 */}
+        <SettingsGroup title="危险操作">
+          <div className="px-0 py-3">
+            <DangerZone />
+          </div>
+        </SettingsGroup>
       </div>
     </SettingsSection>
   );

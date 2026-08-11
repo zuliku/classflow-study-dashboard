@@ -13,9 +13,9 @@ import { cn } from "@/lib/utils";
 import { getCurrentSemesterWeek, getSemesterEndDate } from "@/lib/semester";
 
 const inputCls =
-  "w-full p-2.5 bg-[#F7F5F5] border border-line rounded-xl text-charcoal font-semibold focus:outline-none";
+  "w-full h-9 px-2.5 bg-[#F7F5F5] border border-line rounded-lg text-charcoal font-semibold focus:outline-none";
 const inputErrorCls =
-  "w-full p-2.5 bg-[#F7F5F5] border border-danger-border rounded-xl text-charcoal font-semibold focus:outline-none";
+  "w-full h-9 px-2.5 bg-[#F7F5F5] border border-danger-border rounded-lg text-charcoal font-semibold focus:outline-none";
 
 export function SemesterSettings({ highlightedId }: { highlightedId?: string }) {
   const semester = useAppStore((s) => s.semester);

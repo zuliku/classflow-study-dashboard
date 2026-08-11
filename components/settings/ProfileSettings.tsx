@@ -5,9 +5,7 @@ import { useAppStore } from "@/store/useAppStore";
 import { useToastStore } from "@/store/useToastStore";
 import { SettingsSection } from "@/components/settings/SettingsSection";
 import { SettingsSaveBar } from "@/components/settings/SettingsSaveBar";
-
-const inputCls =
-  "w-full p-2.5 bg-[#F7F5F5] border border-line rounded-xl text-charcoal font-semibold focus:outline-none";
+import { SettingsInput } from "@/components/settings/SettingsControls";
 
 export function ProfileSettings() {
   const userProfile = useAppStore((s) => s.userProfile);
@@ -86,32 +84,34 @@ export function ProfileSettings() {
                   </button>
                 )}
               </div>
-              <input
+              <SettingsInput
+                id="settings-profile-avatar-url"
                 type="url"
                 value={avatarUrl}
-                onChange={(e) => setAvatarUrl(e.target.value)}
+                onChange={setAvatarUrl}
                 placeholder="头像图片 URL（可留空）"
-                className={`${inputCls} text-[11px]`}
+                ariaLabel="头像地址"
+                className="text-[11px]"
               />
             </div>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="space-y-1">
+            <div className="space-y-1" data-setting-id="profile-name">
               <label htmlFor="settings-profile-name" className="font-bold text-sandrift">姓名</label>
-              <input id="settings-profile-name" type="text" value={name} onChange={(e) => setName(e.target.value)} className={inputCls} required />
+              <SettingsInput id="settings-profile-name" value={name} onChange={setName} required />
             </div>
-            <div className="space-y-1">
+            <div className="space-y-1" data-setting-id="profile-student-id">
               <label htmlFor="settings-profile-student-id" className="font-bold text-sandrift">学号</label>
-              <input id="settings-profile-student-id" type="text" value={studentId} onChange={(e) => setStudentId(e.target.value)} className={`${inputCls} font-mono`} required />
+              <SettingsInput id="settings-profile-student-id" value={studentId} onChange={setStudentId} mono required />
             </div>
-            <div className="space-y-1">
+            <div className="space-y-1" data-setting-id="profile-college">
               <label htmlFor="settings-profile-college" className="font-bold text-sandrift">学院 / 专业</label>
-              <input id="settings-profile-college" type="text" value={college} onChange={(e) => setCollege(e.target.value)} className={inputCls} required />
+              <SettingsInput id="settings-profile-college" value={college} onChange={setCollege} required />
             </div>
-            <div className="space-y-1">
+            <div className="space-y-1" data-setting-id="profile-grade">
               <label htmlFor="settings-profile-grade" className="font-bold text-sandrift">年级</label>
-              <input id="settings-profile-grade" type="text" value={grade} onChange={(e) => setGrade(e.target.value)} className={inputCls} required />
+              <SettingsInput id="settings-profile-grade" value={grade} onChange={setGrade} required />
             </div>
           </div>
         </div>
@@ -120,24 +120,26 @@ export function ProfileSettings() {
       <SettingsSection title="学业信息" description="用于总览与侧栏的学分进度展示。">
         <div className="space-y-4 text-xs">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="space-y-1">
-              <label className="font-bold text-sandrift">已完成学分</label>
-              <input
+            <div className="space-y-1" data-setting-id="profile-credits">
+              <label htmlFor="settings-profile-credits-completed" className="font-bold text-sandrift">已完成学分</label>
+              <SettingsInput
+                id="settings-profile-credits-completed"
                 type="number"
                 min={0}
                 value={completedCredits}
-                onChange={(e) => setCompletedCredits(Number(e.target.value))}
-                className={`${inputCls} font-bold`}
+                onChange={(v) => setCompletedCredits(Number(v))}
+                className="font-bold"
               />
             </div>
             <div className="space-y-1">
-              <label className="font-bold text-sandrift">目标 / 总学分</label>
-              <input
+              <label htmlFor="settings-profile-credits-total" className="font-bold text-sandrift">目标 / 总学分</label>
+              <SettingsInput
+                id="settings-profile-credits-total"
                 type="number"
                 min={0}
                 value={totalCredits}
-                onChange={(e) => setTotalCredits(Number(e.target.value))}
-                className={`${inputCls} font-bold`}
+                onChange={(v) => setTotalCredits(Number(v))}
+                className="font-bold"
               />
             </div>
           </div>
