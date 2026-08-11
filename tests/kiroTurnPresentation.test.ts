@@ -1,6 +1,9 @@
 import { describe, it, expect } from "vitest";
 import { deriveKiroAssistantTurn, KiroAssistantTurnPresentation } from "@/lib/ai/presentation/turnPresentation";
-import { formatKiroToolActivityDetail } from "@/lib/ai/presentation/toolActivityDetails";
+import {
+  formatKiroToolActivityDetail,
+  hasMeaningfulKiroToolDetails,
+} from "@/lib/ai/presentation/toolActivityDetails";
 
 /** v7 客户端 UIMessage part 形状（与 useKiroChat 收到的真实 parts 一致） */
 const text = (t: string, state?: string) => ({ type: "text", text: t, ...(state ? { state } : {}) });
@@ -213,6 +216,23 @@ describe("deriveKiroAssistantTurn", () => {
     expect(p.worklog).toHaveLength(2);
     expect(p.hasTools).toBe(true);
     expect(p.phase).toBe("working");
+  });
+});
+
+describe("hasMeaningfulKiroToolDetails", () => {
+  it("generic fallback details are not expandable", () => {
+    expect(hasMeaningfulKiroToolDetails([])).toBe(false);
+    expect(hasMeaningfulKiroToolDetails(["正在处理…"])).toBe(false);
+    expect(hasMeaningfulKiroToolDetails(["已完成"])).toBe(false);
+    expect(hasMeaningfulKiroToolDetails(["执行未完成"])).toBe(false);
+  });
+
+  it("deterministic factual details are expandable", () => {
+    expect(hasMeaningfulKiroToolDetails(["找到 3 个任务"])).toBe(true);
+    expect(hasMeaningfulKiroToolDetails(["读取 5 条课表安排"])).toBe(true);
+    expect(hasMeaningfulKiroToolDetails(["已读取「TCP 三次握手抓包分析」"])).toBe(true);
+    expect(hasMeaningfulKiroToolDetails(["完成 4 项修改"])).toBe(true);
+    expect(hasMeaningfulKiroToolDetails(["已处理「高等数学作业」"])).toBe(true);
   });
 });
 

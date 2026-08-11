@@ -17,6 +17,19 @@ const DEFAULT_DETAILS: Record<KiroToolDetailStatus, string[]> = {
   error: ["执行未完成"],
 };
 
+/** 通用 fallback 文案（无实质信息；UI 不为其显示 disclosure） */
+const GENERIC_TOOL_DETAILS = new Set(["正在处理…", "已完成", "执行未完成"]);
+
+/**
+ * 是否有「有意义的」Tool Detail：
+ * 只用于决定 UI 是否出现 Chevron / disclosure。
+ * generic fallback（formatKiroToolActivityDetail 的默认值）→ false；
+ * 真实确定性事实（找到 N 个任务 / 已读取「title」等）→ true。
+ */
+export function hasMeaningfulKiroToolDetails(details: string[]): boolean {
+  return details.some((detail) => !GENERIC_TOOL_DETAILS.has(detail.trim()));
+}
+
 function isOkEnvelope(output: unknown): output is { ok: true; data?: unknown; action?: unknown } {
   return (
     typeof output === "object" &&
