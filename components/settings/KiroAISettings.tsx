@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Check, Loader2, Eye, EyeOff, PlugZap, Globe2 } from "lucide-react";
 import { useAISettingsStore } from "@/store/useAISettingsStore";
 import { getSessionApiKey, setSessionApiKey } from "@/lib/ai/sessionKeys";
@@ -68,6 +68,25 @@ export function KiroAISettings() {
   const [webSearchApiKeyInput, setWebSearchApiKeyInput] = useState(getSessionWebSearchApiKey());
   const [test, setTest] = useState<TestState>({ status: "idle" });
   const [webSearchTest, setWebSearchTest] = useState<TestState>({ status: "idle" });
+  const [serverSearchConfigured, setServerSearchConfigured] = useState<boolean | null>(null);
+
+  // Hotfix：Server Search 配置状态（null = 检测中；不阻塞 Settings 渲染）
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/ai/web-search/status")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data: { serverConfigured?: boolean } | null) => {
+        if (!cancelled && data && typeof data.serverConfigured === "boolean") {
+          setServerSearchConfigured(data.serverConfigured);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setServerSearchConfigured(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // 统一模型 Catalog：Settings 与 Composer 共用同一模型集合（Task 10）
   const { models: catalogModels } = useAIModelCatalog(provider);
@@ -401,6 +420,23 @@ export function KiroAISettings() {
                 { value: "byok", label: "自己的 API Key" },
               ]}
             />
+            {webSearchCredentialMode === "server" && serverSearchConfigured === false && (
+              <div className="flex flex-col gap-1.5 w-full">
+                <span className="text-[11px] font-semibold text-danger">
+                  当前服务端未配置搜索凭据，请使用自己的 API Key。
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setWebSearchCredentialMode("byok");
+                    setWebSearchTest({ status: "idle" });
+                  }}
+                  className="self-start text-[11px] font-semibold text-sandrift hover:text-charcoal transition-colors"
+                >
+                  使用自己的 API Key
+                </button>
+              </div>
+            )}
           </SettingsRow>
 
           {webSearchCredentialMode === "byok" && (

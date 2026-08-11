@@ -10,20 +10,43 @@
 
 import { KiroWebSearchCredentialMode, KiroWebSearchErrorCode } from "@/lib/ai/web/types";
 
+/** Legacy ClassFlow-specific env 别名（Hotfix：向后兼容已有部署） */
 export const KIRO_TAVILY_API_KEY_ENV = "KIRO_TAVILY_API_KEY";
+/** Tavily 官方标准 env（Hotfix：服务端同时支持） */
+export const TAVILY_API_KEY_ENV = "TAVILY_API_KEY";
 
 export type KiroWebSearchCredentialResult =
   | { ok: true; apiKey: string; mode: KiroWebSearchCredentialMode }
   | { ok: false; code: KiroWebSearchErrorCode; message: string };
+
+/**
+ * Server Key Resolver（Hotfix）：
+ * 优先级：1) KIRO_TAVILY_API_KEY（legacy 优先，不破坏已有部署）→ 2) TAVILY_API_KEY（标准）→ 3) ""。
+ * 严禁 NEXT_PUBLIC_*（API Key 不能进客户端 bundle）；绝不 hardcode key。
+ */
+export function getServerWebSearchApiKey(): string {
+  const legacy = (process.env[KIRO_TAVILY_API_KEY_ENV] ?? "").trim();
+  if (legacy) return legacy;
+  return (process.env[TAVILY_API_KEY_ENV] ?? "").trim();
+}
+
+/** Server Search 是否真正配置（只返回 boolean；绝不暴露 Key / prefix / 长度 / usage） */
+export function isServerWebSearchConfigured(): boolean {
+  return getServerWebSearchApiKey().length > 0;
+}
 
 export function resolveWebSearchCredential(input: {
   mode: KiroWebSearchCredentialMode;
   userApiKey?: string;
 }): KiroWebSearchCredentialResult {
   if (input.mode === "server") {
-    const key = (process.env[KIRO_TAVILY_API_KEY_ENV] ?? "").trim();
+    const key = getServerWebSearchApiKey();
     if (!key) {
-      return { ok: false, code: "WEB_SEARCH_KEY_REQUIRED", message: "Kiro Search 尚未配置。" };
+      return {
+        ok: false,
+        code: "WEB_SEARCH_KEY_REQUIRED",
+        message: "Kiro Search 服务端未配置，请使用自己的 Tavily API Key 或配置服务端搜索凭据。",
+      };
     }
     return { ok: true, apiKey: key, mode: "server" };
   }

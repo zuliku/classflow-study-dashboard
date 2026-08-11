@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { createTavilyWebSearchProvider, TAVILY_SEARCH_URL, webSearchSafeMessage, canonicalWebSearchUrl } from "@/lib/ai/web/tavily";
-import { resolveWebSearchCredential, getSessionWebSearchApiKey, setSessionWebSearchApiKey } from "@/lib/ai/web/credentials";
+import { resolveWebSearchCredential, getServerWebSearchApiKey, isServerWebSearchConfigured, getSessionWebSearchApiKey, setSessionWebSearchApiKey } from "@/lib/ai/web/credentials";
 import { MAX_WEB_RESULTS } from "@/lib/ai/web/types";
 import { kiroWebSearchInputSchema, normalizeWebSearchDomain } from "@/lib/ai/web/schemas";
 import { createKiroWebSearchTool, inspectCurrentTurnWebSearchState, filterWebSearchResults } from "@/lib/ai/web/tool";
@@ -13,15 +13,19 @@ function tavilyPayload(results: unknown[]): string {
 }
 
 describe("Kiro Search credential resolver", () => {
-  const prev = process.env.KIRO_TAVILY_API_KEY;
+  const prevKiro = process.env.KIRO_TAVILY_API_KEY;
+  const prevStandard = process.env.TAVILY_API_KEY;
 
   beforeEach(() => {
     delete process.env.KIRO_TAVILY_API_KEY;
+    delete process.env.TAVILY_API_KEY;
     sessionStorage.clear();
   });
   afterEach(() => {
-    if (prev === undefined) delete process.env.KIRO_TAVILY_API_KEY;
-    else process.env.KIRO_TAVILY_API_KEY = prev;
+    if (prevKiro === undefined) delete process.env.KIRO_TAVILY_API_KEY;
+    else process.env.KIRO_TAVILY_API_KEY = prevKiro;
+    if (prevStandard === undefined) delete process.env.TAVILY_API_KEY;
+    else process.env.TAVILY_API_KEY = prevStandard;
   });
 
   it("1. server mode → 读取 Server Key", () => {
@@ -53,6 +57,76 @@ describe("Kiro Search credential resolver", () => {
     const r = resolveWebSearchCredential({ mode: "server" });
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.code).toBe("WEB_SEARCH_KEY_REQUIRED");
+  });
+
+  it("RED/HOTFIX: 标准 TAVILY_API_KEY 应被识别（KIRO_ 未设置时）", () => {
+    process.env.TAVILY_API_KEY = "tvly-standard";
+    const r = resolveWebSearchCredential({ mode: "server" });
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.apiKey).toBe("tvly-standard");
+      expect(r.mode).toBe("server");
+    }
+    delete process.env.TAVILY_API_KEY;
+  });
+
+  it("Case A: 只有 KIRO_TAVILY_API_KEY → server success", () => {
+    process.env.KIRO_TAVILY_API_KEY = "kiro-key";
+    delete process.env.TAVILY_API_KEY;
+    const r = resolveWebSearchCredential({ mode: "server" });
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.apiKey).toBe("kiro-key");
+  });
+
+  it("Case B: 只有 TAVILY_API_KEY → server success", () => {
+    delete process.env.KIRO_TAVILY_API_KEY;
+    process.env.TAVILY_API_KEY = "standard-key";
+    const r = resolveWebSearchCredential({ mode: "server" });
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.apiKey).toBe("standard-key");
+  });
+
+  it("Case C: 两个都有 → KIRO_ 优先", () => {
+    process.env.KIRO_TAVILY_API_KEY = "kiro-key";
+    process.env.TAVILY_API_KEY = "standard-key";
+    const r = resolveWebSearchCredential({ mode: "server" });
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.apiKey).toBe("kiro-key");
+  });
+
+  it("Case D: 两个都没有 → WEB_SEARCH_KEY_REQUIRED", () => {
+    delete process.env.KIRO_TAVILY_API_KEY;
+    delete process.env.TAVILY_API_KEY;
+    const r = resolveWebSearchCredential({ mode: "server" });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.code).toBe("WEB_SEARCH_KEY_REQUIRED");
+  });
+
+  it("Case E: Server 有 Key，但 byok 缺 userApiKey → WEB_SEARCH_KEY_REQUIRED（不偷 fallback Server）", () => {
+    process.env.KIRO_TAVILY_API_KEY = "kiro-key";
+    process.env.TAVILY_API_KEY = "standard-key";
+    const r = resolveWebSearchCredential({ mode: "byok" });
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.code).toBe("WEB_SEARCH_KEY_REQUIRED");
+      expect(r.message).not.toContain("kiro-key");
+      expect(r.message).not.toContain("standard-key");
+    }
+  });
+
+  it("isServerWebSearchConfigured: 无 env → false；任一 env → true；getServerWebSearchApiKey 优先级一致", () => {
+    delete process.env.KIRO_TAVILY_API_KEY;
+    delete process.env.TAVILY_API_KEY;
+    expect(isServerWebSearchConfigured()).toBe(false);
+    expect(getServerWebSearchApiKey()).toBe("");
+
+    process.env.TAVILY_API_KEY = "standard-key";
+    expect(isServerWebSearchConfigured()).toBe(true);
+    expect(getServerWebSearchApiKey()).toBe("standard-key");
+
+    process.env.KIRO_TAVILY_API_KEY = "kiro-key";
+    expect(isServerWebSearchConfigured()).toBe(true);
+    expect(getServerWebSearchApiKey()).toBe("kiro-key");
   });
 
   it("BYOK sessionStorage：Key 只在 sessionStorage，不进 localStorage", () => {
