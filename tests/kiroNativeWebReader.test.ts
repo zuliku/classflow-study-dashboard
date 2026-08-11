@@ -8,6 +8,7 @@ import {
   normalizeNativeWebText,
   chunkNativeEvidence,
   selectNativeEvidenceChunks,
+  applyNativeEvidenceBudget,
   normalizeWebQueryTokens,
   MAX_NATIVE_WEB_EVIDENCE_CHUNKS,
   MAX_NATIVE_WEB_TEXT_SCAN_CHARS,
@@ -47,10 +48,19 @@ describe("normalizeNativeWebText", () => {
 });
 
 describe("chunkNativeEvidence / 预算", () => {
-  it("单段超长硬切，chunk 上限正确", () => {
+  it("Test A. 超长单段完整切分：4200 → [1800, 1800, 600]，正文不丢失，truncated=false", () => {
+    const paragraph = "甲".repeat(4200);
+    const { chunks, truncated } = chunkNativeEvidence(`段A\n\n${paragraph}\n\n段B`);
+    expect(truncated).toBe(false); // 发生切分 ≠ 证据丢失
+    expect(chunks.map((c) => c.text.length)).toEqual([2, 1800, 1800, 600, 2]);
+    expect(chunks[0].text).toBe("段A");
+    expect(chunks.slice(1, 4).map((c) => c.text).join("")).toBe(paragraph);
+    expect(chunks[chunks.length - 1].text).toBe("段B");
+  });
+  it("chunk 上限正确（所有 chunk ≤ 1800）", () => {
     const long = "甲".repeat(2000);
     const { chunks, truncated } = chunkNativeEvidence(`段A\n\n${long}\n\n段B`);
-    expect(truncated).toBe(true);
+    expect(truncated).toBe(false); // Task 18B1 §6：正文未丢失
     expect(chunks.every((c) => c.text.length <= MAX_WEB_EVIDENCE_CHUNK_CHARS)).toBe(true);
   });
   it("scan 上限 100k 生效并标 truncated", () => {
@@ -268,5 +278,63 @@ describe("readNativeWebSource — Budget（Test F）", () => {
   });
   it("selectNativeEvidenceChunks 上限与常量一致", () => {
     expect(MAX_NATIVE_WEB_EVIDENCE_CHUNKS).toBe(3);
+  });
+});
+
+describe("Task 18B1 — Long Block Integrity", () => {
+  it("Test A'. 长段切分后各 chunk 的 index 稳定递增（§9）", () => {
+    const long = "甲".repeat(4200);
+    const { chunks } = chunkNativeEvidence(long);
+    expect(chunks.length).toBe(3);
+    expect(chunks.map((c) => c.index)).toEqual([0, 1, 2]);
+  });
+
+  it("Test B. query 命中正文后部（约 5000 chars 处的关键短语）", () => {
+    const head = "普通背景内容介绍，供参考阅读，与考试无关。".repeat(160); // ~4800 chars
+    const key = "2027招生考试科目为871经济学，请考生注意复习重点。";
+    const paragraph = head + key + "。".repeat(500);
+    const { chunks } = chunkNativeEvidence(paragraph);
+    const { selected } = selectNativeEvidenceChunks(chunks, "考试科目 871经济学");
+    expect(selected.length).toBeGreaterThan(0);
+    expect(selected.map((c) => c.text).join("")).toContain("871经济学");
+  });
+
+  it("Test C. scan 上限 100k：后部关键内容在候选 chunks 中不存在，truncated=true", () => {
+    const filler = "背景".repeat(50_000); // 100k chars，关键句从 index 100000 起，恰在 scan 之外
+    const tailKey = "100000之后的独家关键信息xyz";
+    const text = filler + tailKey + "。".repeat(30_000); // total > 100k
+    const { chunks, truncated } = chunkNativeEvidence(text);
+    expect(truncated).toBe(true);
+    const joined = chunks.map((c) => c.text).join("");
+    expect(joined).not.toContain("独家关键信息");
+  });
+
+  it("Test D. 完全相同的长段落重复两次 → 第二份整体跳过（段落级去重），truncated=true（§14）", () => {
+    const long = "完全相同的内容段落。".repeat(300); // ~2700 chars → 1800+900 两片
+    const { chunks, truncated } = chunkNativeEvidence(`${long}\n\n${long}`);
+    expect(truncated).toBe(true);
+    expect(chunks.length).toBe(2); // 只有第一份的两片；第二份若进入会是 4
+  });
+
+  it("Test E. 3×1800 候选经 budget 后总 chars ≤5000（chunk 上限不变）", () => {
+    const chunks = [
+      { index: 0, text: "甲".repeat(1800) },
+      { index: 1, text: "乙".repeat(1800) },
+      { index: 2, text: "丙".repeat(1800) },
+    ];
+    const { chunks: out, truncated } = applyNativeEvidenceBudget(chunks);
+    const total = out.reduce((s, c) => s + c.text.length, 0);
+    expect(total).toBeLessThanOrEqual(MAX_WEB_EVIDENCE_CHARS_PER_SOURCE);
+    expect(truncated).toBe(true); // 预算截断
+  });
+
+  it("Test E'. 长段 + 短段混合：short → long-1 → long-2 → 后续短段新 buffer（§16-18）", () => {
+    const shortA = "短段落甲。";
+    const long = "长段落内容。".repeat(700); // ~4200 chars
+    const shortB = "短段落乙。";
+    const { chunks } = chunkNativeEvidence(`${shortA}\n\n${long}\n\n${shortB}`);
+    expect(chunks.map((c) => c.text.length)).toEqual([5, 1800, 1800, 600, 5]);
+    expect(chunks[0].text).toBe(shortA);
+    expect(chunks[chunks.length - 1].text).toBe(shortB);
   });
 });

@@ -50,11 +50,26 @@ interface ChunkPipelineResult {
 }
 
 /**
- * Paragraph → chunk（§37-38、§49）：
- * - 正文超过 MAX_NATIVE_WEB_TEXT_SCAN_CHARS → 先截断，标 truncated
+ * 超长单段完整切分（Task 18B1 §3-5）：
+ * 4200 chars / max=1800 → [0-1799, 1800-3599, 3600-4199]。
+ * 确定性字符切分（V1 不做句子分割），正文不丢失。
+ */
+export function splitLongParagraph(paragraph: string, maxChunkChars: number): string[] {
+  const out: string[] = [];
+  if (!paragraph) return out;
+  for (let start = 0; start < paragraph.length; start += maxChunkChars) {
+    out.push(paragraph.slice(start, start + maxChunkChars));
+  }
+  return out;
+}
+
+/**
+ * Paragraph → chunk（§37-38、§49 + Task 18B1）：
+ * - 正文超过 MAX_NATIVE_WEB_TEXT_SCAN_CHARS → 先截断（§8：先 scan limit 再切分），标 truncated
  * - 按段落顺序累计到 MAX_WEB_EVIDENCE_CHUNK_CHARS 附近再开新 chunk
- * - 单段超长 → 硬切 1800
- * - exact dedupe（normalized 后完全相同的段落只保留一次；§39）
+ * - 超长单段 → splitLongParagraph 完整切分，每片获得稳定递增 index（§9）；发生切分 ≠ truncated（§6）
+ * - 长段落前先 flush 当前 buffer（§17）；后续短段落进入新 buffer（§18）
+ * - exact dedupe 以完整 normalized paragraph 为单位（§14）；被去重的重复内容标 truncated
  */
 export function chunkNativeEvidence(
   text: string,
@@ -85,17 +100,19 @@ export function chunkNativeEvidence(
   for (const rawParagraph of paragraphs) {
     const paragraph = rawParagraph.trim();
     if (!paragraph) continue;
+    // 完整 normalized paragraph 级别 exact dedupe（不把每个 1800 slice 全局去重）
     if (seen.has(paragraph)) {
-      truncated = true; // 原文存在重复段落（被去重 = 未完整保留）
+      truncated = true; // 重复内容被去除 = 实际有内容未保留
       continue;
     }
     seen.add(paragraph);
 
     if (paragraph.length > maxChunkChars) {
-      flush();
-      chunks.push({ index: index++, text: paragraph.slice(0, maxChunkChars) });
-      truncated = true; // 单段硬切
-      continue;
+      flush(); // 先清空当前 buffer，保证顺序：short chunk → long-1 → long-2 → …
+      for (const piece of splitLongParagraph(paragraph, maxChunkChars)) {
+        chunks.push({ index: index++, text: piece });
+      }
+      continue; // 后续短段落重新进入新的 current buffer
     }
     if (current && current.length + paragraph.length + 1 > maxChunkChars) {
       flush();
