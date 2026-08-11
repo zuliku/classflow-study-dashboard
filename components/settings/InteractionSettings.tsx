@@ -3,6 +3,7 @@
 import React from "react";
 import { useAppStore } from "@/store/useAppStore";
 import { SettingsSection } from "@/components/settings/SettingsSection";
+import { SettingsGroup } from "@/components/settings/SettingsGroup";
 import { SettingsRow } from "@/components/settings/SettingsRow";
 import { SettingsToggle, SettingsSelect, SettingsSegmentedControl } from "@/components/settings/SettingsControls";
 import {
@@ -25,7 +26,8 @@ export function InteractionSettings({ highlightedId }: { highlightedId?: string 
       description="直接操作、键盘与动效偏好（对应业务模块已接入）。"
     >
       <div className="text-xs" data-testid="settings-interaction">
-        <SettingsRow
+        <SettingsGroup>
+          <SettingsRow
           settingId="schedule-direct-manipulation"
           title="课表直接操作"
           description="在完整课表中启用拖动调整与缩放排课。"
@@ -116,6 +118,7 @@ export function InteractionSettings({ highlightedId }: { highlightedId?: string 
             }))}
           />
         </SettingsRow>
+        </SettingsGroup>
       </div>
     </SettingsSection>
   );

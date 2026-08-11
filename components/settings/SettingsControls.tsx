@@ -4,13 +4,14 @@ import React from "react";
 import { cn } from "@/lib/utils";
 
 /**
- * Settings 共享控件 primitives：
- * 统一高度、字体、边框、focus ring、disabled 状态。
- * 不建完整 UI framework，只收敛设置页常用的三种控件。
+ * Settings 共享控件 primitives（Settings V3 Task 1）：
+ * 统一高度、字体、边框、focus-visible ring、disabled 状态。
+ * 圆角体系：Input/Button/Segmented = 小圆角（rounded-lg）；Segmented 内项 = rounded-md。
+ * 不建完整 UI framework，只收敛设置页常用的控件。
  */
 
 const controlCls =
-  "h-9 px-2.5 bg-[#F7F5F5] border border-line rounded-xl text-xs font-bold text-charcoal focus:outline-none focus:border-charcoal cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed";
+  "h-9 px-2.5 bg-[#F7F5F5] border border-line rounded-lg text-xs font-bold text-charcoal focus:outline-none focus:border-charcoal focus-visible:outline-2 focus-visible:outline-charcoal/30 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed";
 
 /** 标准下拉（优先级/状态/动效等） */
 export function SettingsSelect<T extends string>({
@@ -40,7 +41,7 @@ export function SettingsSelect<T extends string>({
   );
 }
 
-/** 开关（role=switch） */
+/** 开关（role=switch；pill 形态保留） */
 export function SettingsToggle({
   checked,
   onChange,
@@ -58,6 +59,7 @@ export function SettingsToggle({
       onClick={() => onChange(!checked)}
       className={cn(
         "relative w-9 h-5 rounded-full transition-colors duration-[var(--motion-fast)]",
+        "focus-visible:outline-2 focus-visible:outline-charcoal/30 focus-visible:outline-offset-2",
         checked ? "bg-charcoal" : "bg-alba"
       )}
     >
@@ -87,7 +89,7 @@ export function SettingsSegmentedControl<T extends string | number>({
     <div
       role="group"
       aria-label={ariaLabel}
-      className="flex items-center gap-1 bg-alabaster p-0.5 rounded-xl border border-line-strong"
+      className="flex items-center gap-1 bg-alabaster p-0.5 rounded-lg border border-line-strong"
     >
       {options.map((o) => {
         const isActive = value === o.value;
@@ -97,7 +99,8 @@ export function SettingsSegmentedControl<T extends string | number>({
             onClick={() => onChange(o.value)}
             aria-pressed={isActive}
             className={cn(
-              "px-2.5 py-1.5 rounded-lg text-[11px] font-bold whitespace-nowrap transition-colors duration-[var(--motion-fast)]",
+              "px-2.5 py-1.5 rounded-md text-[11px] font-bold whitespace-nowrap transition-colors duration-[var(--motion-fast)]",
+              "focus-visible:outline-2 focus-visible:outline-charcoal/30",
               isActive
                 ? "bg-white text-charcoal shadow-subtle"
                 : "text-satin-grey hover:text-charcoal"
@@ -108,5 +111,52 @@ export function SettingsSegmentedControl<T extends string | number>({
         );
       })}
     </div>
+  );
+}
+
+export type SettingsButtonVariant = "primary" | "secondary" | "ghost" | "danger";
+
+const BUTTON_VARIANTS: Record<SettingsButtonVariant, string> = {
+  primary: "bg-charcoal text-white hover:bg-black shadow-subtle",
+  secondary: "bg-white border border-line text-charcoal hover:bg-alabaster",
+  ghost: "text-satin-grey hover:bg-alabaster hover:text-charcoal",
+  danger: "bg-danger-bg text-danger border border-danger-border hover:bg-danger-border",
+};
+
+/** 动作按钮（统一 h-8 / rounded-lg / 小号字体 / disabled）；icon 由调用方传入 */
+export function SettingsButton({
+  variant = "secondary",
+  disabled,
+  onClick,
+  children,
+  className,
+  "aria-label": ariaLabel,
+  testid,
+}: {
+  variant?: SettingsButtonVariant;
+  disabled?: boolean;
+  onClick?: () => void;
+  children: React.ReactNode;
+  className?: string;
+  "aria-label"?: string;
+  testid?: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      aria-label={ariaLabel}
+      data-testid={testid}
+      className={cn(
+        "ux-press flex items-center gap-1.5 px-3 h-8 text-[11px] font-bold rounded-lg transition-colors shrink-0",
+        "focus-visible:outline-2 focus-visible:outline-charcoal/30",
+        "disabled:opacity-50 disabled:cursor-not-allowed",
+        BUTTON_VARIANTS[variant],
+        className
+      )}
+    >
+      {children}
+    </button>
   );
 }

@@ -32,13 +32,13 @@ export function SettingsRow({
     <div
       data-setting-id={settingId}
       className={[
-        "flex items-center justify-between gap-4 py-3 border-b border-line-soft last:border-b-0 transition-colors duration-[var(--motion-fast)]",
+        "flex items-center justify-between gap-4 min-h-[56px] py-3 border-b border-line-soft last:border-b-0 transition-colors duration-[var(--motion-fast)]",
         highlighted ? "bg-pastel-mint/60" : "",
       ].join(" ")}
     >
       <div className="min-w-0">
-        <h4 className="text-xs font-bold text-charcoal">{title}</h4>
-        <p className="text-[10px] text-sandrift mt-0.5">{description}</p>
+        <h4 className="text-xs font-bold text-charcoal break-words">{title}</h4>
+        <p className="text-[10px] text-sandrift mt-0.5 break-words">{description}</p>
       </div>
       <div className="flex items-center gap-2 shrink-0">
         {modified && onReset && (
@@ -46,7 +46,7 @@ export function SettingsRow({
             onClick={onReset}
             aria-label={resetAriaLabel ?? `将${title}恢复默认`}
             title="恢复默认"
-            className="p-1 rounded-lg text-sandrift hover:bg-alabaster hover:text-charcoal transition-colors opacity-70 hover:opacity-100"
+            className="p-1 rounded-lg text-sandrift hover:bg-alabaster hover:text-charcoal transition-colors opacity-70 hover:opacity-100 focus-visible:outline-2 focus-visible:outline-charcoal/30"
           >
             <RotateCcw className="w-3.5 h-3.5" />
           </button>

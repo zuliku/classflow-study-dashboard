@@ -5,8 +5,9 @@ import { CheckCircle2, Circle, Plus, FileUp } from "lucide-react";
 import { useAppStore } from "@/store/useAppStore";
 import type { SettingsSection } from "@/types";
 import { SettingsSection as SettingsSectionUI } from "@/components/settings/SettingsSection";
+import { SettingsGroup } from "@/components/settings/SettingsGroup";
 import { SettingsRow } from "@/components/settings/SettingsRow";
-import { SettingsSegmentedControl } from "@/components/settings/SettingsControls";
+import { SettingsSegmentedControl, SettingsButton } from "@/components/settings/SettingsControls";
 import { STARTUP_VIEWS, getModifiedPreferenceKeys, resetPreferencePatch } from "@/lib/preferences";
 import type { StartupView } from "@/types";
 
@@ -81,41 +82,37 @@ export function GeneralSettings({
 
           {courses.length === 0 && (
             <div className="flex items-center gap-2 pt-1">
-              <button
-                onClick={() => setAddCourseModalOpen(true)}
-                className="ux-press flex items-center gap-1.5 px-3 py-1.5 bg-charcoal text-white text-[11px] font-bold rounded-xl transition-colors hover:bg-black"
-              >
+              <SettingsButton variant="primary" onClick={() => setAddCourseModalOpen(true)}>
                 <Plus className="w-3.5 h-3.5" />
                 添加课程
-              </button>
-              <button
-                onClick={() => setImportScheduleModalOpen(true)}
-                className="ux-press flex items-center gap-1.5 px-3 py-1.5 bg-white border border-line text-charcoal text-[11px] font-bold rounded-xl transition-colors hover:bg-alabaster"
-              >
+              </SettingsButton>
+              <SettingsButton variant="secondary" onClick={() => setImportScheduleModalOpen(true)}>
                 <FileUp className="w-3.5 h-3.5 text-[#A48F82]" />
                 导入课表
-              </button>
+              </SettingsButton>
             </div>
           )}
         </div>
       </SettingsSectionUI>
 
       <SettingsSectionUI title="默认打开位置" description="应用启动后进入的工作区。">
-        <SettingsRow
-          settingId="startup-view"
-          title="默认打开位置"
-          description="下次打开 ClassFlow 时进入的位置。"
-          modified={getModifiedPreferenceKeys(preferences).includes("startupView")}
-          onReset={() => updatePreferences(resetPreferencePatch("startupView"))}
-          resetAriaLabel="将默认打开位置恢复默认"
-        >
-          <SettingsSegmentedControl<StartupView>
-            value={preferences.startupView}
-            onChange={(v) => updatePreferences({ startupView: v })}
-            options={STARTUP_VIEWS.map((v) => ({ value: v, label: STARTUP_VIEW_LABELS[v] }))}
-            ariaLabel="默认打开位置"
-          />
-        </SettingsRow>
+        <SettingsGroup>
+          <SettingsRow
+            settingId="startup-view"
+            title="默认打开位置"
+            description="下次打开 ClassFlow 时进入的位置。"
+            modified={getModifiedPreferenceKeys(preferences).includes("startupView")}
+            onReset={() => updatePreferences(resetPreferencePatch("startupView"))}
+            resetAriaLabel="将默认打开位置恢复默认"
+          >
+            <SettingsSegmentedControl<StartupView>
+              value={preferences.startupView}
+              onChange={(v) => updatePreferences({ startupView: v })}
+              options={STARTUP_VIEWS.map((v) => ({ value: v, label: STARTUP_VIEW_LABELS[v] }))}
+              ariaLabel="默认打开位置"
+            />
+          </SettingsRow>
+        </SettingsGroup>
       </SettingsSectionUI>
 
       <SettingsSectionUI title="常用入口" description="快速前往相关设置与数据区域。">
