@@ -136,6 +136,24 @@ export const KIRO_WRITE_TOOLS = {
     description: "删除 / 取消提醒（仅 scheduled 状态；删除有 Undo 可恢复原记录）。删除前必须用 list_reminders 拿到真实 reminderId。",
     inputSchema: KIRO_WRITE_TOOL_SCHEMAS.delete_reminder,
   }),
+  start_focus_session: tool({
+    description:
+      "开始一个专注会话（Focus Session）。plannedMinutes 为整数 1–240；可选关联 Assignment 或 Course（自动取真实 courseId 与标题快照）。" +
+      "全局同时最多一个进行中的会话；已有 running/paused 会话时失败。",
+    inputSchema: KIRO_WRITE_TOOL_SCHEMAS.start_focus_session,
+  }),
+  pause_focus_session: tool({
+    description: "暂停当前进行中的专注会话（已暂停 → 失败）。",
+    inputSchema: KIRO_WRITE_TOOL_SCHEMAS.pause_focus_session,
+  }),
+  resume_focus_session: tool({
+    description: "恢复当前已暂停的专注会话（未暂停 → 失败）。",
+    inputSchema: KIRO_WRITE_TOOL_SCHEMAS.resume_focus_session,
+  }),
+  finish_focus_session: tool({
+    description: "提前结束当前进行中的专注会话（无进行中会话 → 失败）。",
+    inputSchema: KIRO_WRITE_TOOL_SCHEMAS.finish_focus_session,
+  }),
 };
 
 export const KIRO_WRITE_TOOL_NAMES = Object.keys(KIRO_WRITE_TOOLS) as (keyof typeof KIRO_WRITE_TOOLS)[];

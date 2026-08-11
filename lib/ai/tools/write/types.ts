@@ -41,6 +41,11 @@ export const KIRO_WRITE_RISKS: Record<string, KiroWriteRisk> = {
   create_reminder: "normal",
   update_reminder: "normal",
   delete_reminder: "normal",
+  // Task 5：Focus 操作均 normal（不弹 ConfirmDialog；无 Undo）
+  start_focus_session: "normal",
+  pause_focus_session: "normal",
+  resume_focus_session: "normal",
+  finish_focus_session: "normal",
 };
 
 export function isDestructiveWriteTool(toolName: string): boolean {
@@ -63,7 +68,8 @@ export type WriteToolResult<T = unknown> =
           | "group-task"
           | "change-set"
           | "memory"
-          | "reminder";
+          | "reminder"
+          | "focus-session";
         entityId: string;
         title: string;
         operation: "create" | "update" | "delete";
@@ -105,7 +111,14 @@ export type WriteToolResult<T = unknown> =
         | "EXPLICIT_MEMORY_INTENT_REQUIRED"
         | "MEMORY_SENSITIVE_CONTENT"
         | "MEMORY_LIMIT_REACHED"
-        | "MEMORY_DISABLED";
+        | "MEMORY_DISABLED"
+        | "FOCUS_SESSION_ALREADY_ACTIVE"
+        | "NO_ACTIVE_FOCUS_SESSION"
+        | "FOCUS_ALREADY_PAUSED"
+        | "FOCUS_NOT_PAUSED"
+        | "INVALID_FOCUS_DURATION"
+        | "FOCUS_TARGET_NOT_FOUND"
+        | "FOCUS_TARGET_MISMATCH";
       message: string;
       details?: unknown;
       /** 事务失败时的实际写入数（Preflight / Rollback 后恒为 0） */
@@ -178,6 +191,12 @@ export interface KiroWriteApi {
   /** Undo 精确恢复原 Reminder（相同 ID，不重新生成） */
   restoreReminder: AppState["restoreReminder"];
   reconcileTargetReminders: AppState["reconcileTargetReminders"];
+
+  // Task 5：Focus Session 白名单（canUndo=false；不暴露 setState）
+  startFocusSession: AppState["startFocusSession"];
+  pauseFocusSession: AppState["pauseFocusSession"];
+  resumeFocusSession: AppState["resumeFocusSession"];
+  finishFocusSession: AppState["finishFocusSession"];
 
   pushToast: (t: {
     message: string;

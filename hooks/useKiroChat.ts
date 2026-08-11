@@ -1231,6 +1231,11 @@ function buildWriteApi({
     restoreReminder: (r) => useAppStore.getState().restoreReminder(r),
     reconcileTargetReminders: (targetType, targetId) =>
       useAppStore.getState().reconcileTargetReminders(targetType, targetId),
+    // Task 5：Focus Session 白名单（canUndo=false）
+    startFocusSession: (input) => useAppStore.getState().startFocusSession(input),
+    pauseFocusSession: (now) => useAppStore.getState().pauseFocusSession(now),
+    resumeFocusSession: (now) => useAppStore.getState().resumeFocusSession(now),
+    finishFocusSession: (now) => useAppStore.getState().finishFocusSession(now),
     pushToast,
     registerUndo: (id, undo) => registerUndo(id, undo),
   };

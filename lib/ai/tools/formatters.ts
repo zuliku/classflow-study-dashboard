@@ -54,6 +54,12 @@ export const KIRO_TOOL_LABELS: Record<string, string> = {
   create_reminder: "创建提醒",
   update_reminder: "修改提醒",
   delete_reminder: "删除提醒",
+  // Focus
+  get_focus_status: "查看专注状态",
+  start_focus_session: "开始专注",
+  pause_focus_session: "暂停专注",
+  resume_focus_session: "继续专注",
+  finish_focus_session: "结束专注",
   // Memory
   search_memories: "读取学习偏好",
   save_memory: "保存学习偏好",

@@ -109,6 +109,11 @@ export const KIRO_READ_TOOLS = {
       "修改或删除提醒前应先使用本工具获取真实 reminderId；不要读取整个 Store 后自行筛选 Reminder。",
     inputSchema: KIRO_READ_TOOL_SCHEMAS.list_reminders,
   }),
+  get_focus_status: tool({
+    description:
+      "查看当前 Focus 专注会话状态。无进行中的会话 → active:false；有 → 返回剩余/已专注时间（由 ClassFlow 计算，不要自己推算时间）、关联任务或课程与备注。",
+    inputSchema: KIRO_READ_TOOL_SCHEMAS.get_focus_status,
+  }),
 };
 
 export const KIRO_READ_TOOL_NAMES = Object.keys(KIRO_READ_TOOLS) as (keyof typeof KIRO_READ_TOOLS)[];

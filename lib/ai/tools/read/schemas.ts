@@ -140,6 +140,7 @@ export const KIRO_READ_TOOL_SCHEMAS = {
   read_material: readMaterialSchema,
   propose_task_breakdown: proposeTaskBreakdownSchema,
   list_reminders: listRemindersSchema,
+  get_focus_status: emptyInputSchema,
 } as const;
 
 export type KiroReadToolName = keyof typeof KIRO_READ_TOOL_SCHEMAS;

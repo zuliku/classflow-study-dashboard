@@ -101,6 +101,10 @@ function buildApi(store: { getState: () => any }, undos: Map<string, () => void>
     deleteReminder: (id) => store.getState().deleteReminder(id),
     restoreReminder: (r) => store.getState().restoreReminder(r),
     reconcileTargetReminders: (targetType, targetId) => store.getState().reconcileTargetReminders(targetType, targetId),
+    startFocusSession: (input) => store.getState().startFocusSession(input),
+    pauseFocusSession: (now) => store.getState().pauseFocusSession(now),
+    resumeFocusSession: (now) => store.getState().resumeFocusSession(now),
+    finishFocusSession: (now) => store.getState().finishFocusSession(now),
     pushToast: () => {},
     registerUndo: (toolCallId, undo) => undos.set(toolCallId, undo),
   };

@@ -252,6 +252,17 @@ export const deleteReminderSchema = z.object({
   reminderId: z.string().trim().min(1).max(120),
 });
 
+/** Task 5：Focus 工具（有界：不创建 timer / 不实现 Undo） */
+export const startFocusSessionSchema = z.object({
+  plannedMinutes: z.number().int().min(1).max(240),
+  assignmentId: z.string().trim().min(1).max(120).optional(),
+  courseId: z.string().trim().min(1).max(120).optional(),
+  note: z.string().trim().max(200).optional(),
+});
+export const pauseFocusSessionSchema = z.object({});
+export const resumeFocusSessionSchema = z.object({});
+export const finishFocusSessionSchema = z.object({});
+
 /** Write Tool 输入 schema 注册表（tool name → zod schema） */
 export const KIRO_WRITE_TOOL_SCHEMAS = {
   create_assignment: createAssignmentSchema,
@@ -283,6 +294,10 @@ export const KIRO_WRITE_TOOL_SCHEMAS = {
   create_reminder: createReminderSchema,
   update_reminder: updateReminderSchema,
   delete_reminder: deleteReminderSchema,
+  start_focus_session: startFocusSessionSchema,
+  pause_focus_session: pauseFocusSessionSchema,
+  resume_focus_session: resumeFocusSessionSchema,
+  finish_focus_session: finishFocusSessionSchema,
 } as const;
 
 export type KiroWriteToolName = keyof typeof KIRO_WRITE_TOOL_SCHEMAS;

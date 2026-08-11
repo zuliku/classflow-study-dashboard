@@ -5,6 +5,7 @@ import {
   CalendarMark,
   Course,
   CourseSchedule,
+  FocusSession,
   GroupProject,
   Material,
   Reminder,
@@ -17,6 +18,7 @@ import { deriveTaskWorkspace } from "@/lib/tasks/taskViews";
 import { deriveAssignmentHealth } from "@/lib/tasks/taskHealth";
 import { parseTaskBreakdownProposal } from "@/lib/tasks/taskBreakdown";
 import { resolveAssignmentMaterials } from "@/lib/tasks/taskMaterials";
+import { deriveFocusClock } from "@/lib/focus/focusDomain";
 import { findFreeTime } from "@/lib/planning/freeTime";
 import { proposeStudyPlan } from "@/lib/planning/studyPlanner";
 import { KIRO_READ_TOOL_SCHEMAS, KiroReadToolName } from "@/lib/ai/tools/read/schemas";
@@ -62,6 +64,8 @@ export interface ReadToolState {
   studyBlocks: StudyBlock[];
   /** Task 7G-A1：Reminder（optional：旧 fixture 无需改造；执行时回落 []） */
   reminders?: Reminder[];
+  /** Task 5：Focus Session（optional：旧 fixture 无需改造；执行时回落 []） */
+  focusSessions?: FocusSession[];
 }
 
 const notFound = (message: string): ReadToolResult<never> => ({ ok: false, code: "NOT_FOUND", message });
@@ -586,6 +590,38 @@ export function listReminders(state: ReadToolState, input: unknown): ReadToolRes
   };
 }
 
+export function getFocusStatus(state: ReadToolState): ReadToolResult<unknown> {
+  const active = (state.focusSessions ?? []).find(
+    (s) => s.status === "running" || s.status === "paused"
+  );
+  if (!active) return { ok: true, data: { active: false } };
+
+  // 时间事实必须来自 deriveFocusClock（模型不得自己计算）
+  const clock = deriveFocusClock(active, Date.now());
+  const assignment =
+    active.assignmentId !== undefined
+      ? state.assignments.find((a) => a.id === active.assignmentId)
+      : undefined;
+  const course = active.courseId !== undefined ? state.courses.find((c) => c.id === active.courseId) : undefined;
+
+  return {
+    ok: true,
+    data: {
+      active: true,
+      sessionId: active.id,
+      status: active.status,
+      plannedMinutes: active.plannedMinutes,
+      elapsedActiveMs: clock.elapsedMs,
+      remainingMs: clock.remainingMs,
+      assignmentId: active.assignmentId ?? null,
+      assignmentTitle: assignment?.title ?? active.assignmentTitleSnapshot ?? null,
+      courseId: active.courseId ?? null,
+      courseName: course?.name ?? active.courseNameSnapshot ?? null,
+      note: active.note ?? null,
+    },
+  };
+}
+
 export function getUpcomingAssignments(state: ReadToolState, input: unknown): ReadToolResult<unknown> {
   const parsed = safeParse<{ days?: number; limit?: number }>("get_upcoming_assignments", input);
   if (!parsed.ok) return parsed;
@@ -802,6 +838,7 @@ const EXECUTORS: Record<Exclude<KiroReadToolName, "read_material">, (state: Read
   get_material_metadata: getMaterialMetadata,
   propose_task_breakdown: proposeTaskBreakdownTool,
   list_reminders: listReminders,
+  get_focus_status: getFocusStatus,
 };
 
 /**

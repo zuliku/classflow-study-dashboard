@@ -568,6 +568,110 @@ function deleteReminder(api: KiroWriteApi, input: unknown, toolCallId: string): 
   };
 }
 
+// ---------- Task 5：Focus 工具（有界：canUndo=false，不创建 timer） ----------
+
+function startFocusSession(api: KiroWriteApi, input: unknown, toolCallId: string): WriteToolResult<unknown> {
+  const parsed = safeParse<{ plannedMinutes: number; assignmentId?: string; courseId?: string; note?: string }>(
+    "start_focus_session",
+    input
+  );
+  if (!parsed.ok) return parsed;
+  const result = api.startFocusSession({
+    plannedMinutes: parsed.data.plannedMinutes,
+    assignmentId: parsed.data.assignmentId,
+    courseId: parsed.data.courseId,
+    note: parsed.data.note,
+    source: "kiro",
+  });
+  if (!result.ok) return { ok: false, code: result.code, message: focusErrorMessage(result.code) };
+  return {
+    ok: true,
+    data: { id: result.session.id },
+    action: {
+      tool: "start_focus_session",
+      entityType: "focus-session",
+      entityId: result.session.id,
+      title: result.session.assignmentTitleSnapshot ?? result.session.courseNameSnapshot ?? "专注会话",
+      operation: "create",
+      after: {
+        plannedMinutes: result.session.plannedMinutes,
+        assignmentId: result.session.assignmentId ?? null,
+        courseId: result.session.courseId ?? null,
+        note: result.session.note ?? null,
+      },
+      canUndo: false,
+    },
+  };
+}
+
+function pauseFocusSession(api: KiroWriteApi, _input: unknown, _toolCallId: string): WriteToolResult<unknown> {
+  const result = api.pauseFocusSession();
+  if (!result.ok) return { ok: false, code: result.code, message: focusErrorMessage(result.code) };
+  return {
+    ok: true,
+    data: { id: result.session.id },
+    action: {
+      tool: "pause_focus_session",
+      entityType: "focus-session",
+      entityId: result.session.id,
+      title: result.session.assignmentTitleSnapshot ?? result.session.courseNameSnapshot ?? "专注会话",
+      operation: "update",
+      after: { status: "paused" },
+      canUndo: false,
+    },
+  };
+}
+
+function resumeFocusSession(api: KiroWriteApi, _input: unknown, _toolCallId: string): WriteToolResult<unknown> {
+  const result = api.resumeFocusSession();
+  if (!result.ok) return { ok: false, code: result.code, message: focusErrorMessage(result.code) };
+  return {
+    ok: true,
+    data: { id: result.session.id },
+    action: {
+      tool: "resume_focus_session",
+      entityType: "focus-session",
+      entityId: result.session.id,
+      title: result.session.assignmentTitleSnapshot ?? result.session.courseNameSnapshot ?? "专注会话",
+      operation: "update",
+      after: { status: "running" },
+      canUndo: false,
+    },
+  };
+}
+
+function finishFocusSession(api: KiroWriteApi, _input: unknown, _toolCallId: string): WriteToolResult<unknown> {
+  const result = api.finishFocusSession();
+  if (!result.ok) return { ok: false, code: result.code, message: focusErrorMessage(result.code) };
+  return {
+    ok: true,
+    data: { id: result.session.id },
+    action: {
+      tool: "finish_focus_session",
+      entityType: "focus-session",
+      entityId: result.session.id,
+      title: result.session.assignmentTitleSnapshot ?? result.session.courseNameSnapshot ?? "专注会话",
+      operation: "delete",
+      after: { status: "completed", actualActiveMs: result.session.actualActiveMs ?? null },
+      canUndo: false,
+    },
+  };
+}
+
+/** Focus Domain 错误 → 用户可读 message（不暴露内部实现） */
+function focusErrorMessage(code: string): string {
+  const map: Record<string, string> = {
+    FOCUS_SESSION_ALREADY_ACTIVE: "已有进行中的专注会话。",
+    NO_ACTIVE_FOCUS_SESSION: "当前没有进行中的专注会话。",
+    FOCUS_ALREADY_PAUSED: "专注会话已处于暂停状态。",
+    FOCUS_NOT_PAUSED: "专注会话未处于暂停状态。",
+    INVALID_FOCUS_DURATION: "专注时长需为 1–240 的整数。",
+    FOCUS_TARGET_NOT_FOUND: "关联的课程或任务不存在。",
+    FOCUS_TARGET_MISMATCH: "任务与课程不匹配。",
+  };
+  return map[code] ?? "操作失败。";
+}
+
 // ---------- 统一入口 ----------
 
 const EXECUTORS: Record<KiroWriteToolName, (api: KiroWriteApi, input: unknown, toolCallId: string) => WriteToolResult<unknown>> = {
@@ -599,6 +703,10 @@ const EXECUTORS: Record<KiroWriteToolName, (api: KiroWriteApi, input: unknown, t
   create_reminder: createReminder,
   update_reminder: updateReminder,
   delete_reminder: deleteReminder,
+  start_focus_session: startFocusSession,
+  pause_focus_session: pauseFocusSession,
+  resume_focus_session: resumeFocusSession,
+  finish_focus_session: finishFocusSession,
   apply_change_set: (() => {
     // apply_change_set 不在 EXECUTORS 单写路径执行（走 useKiroChat 事务分支）
     return (): WriteToolResult<never> => ({ ok: false, code: "UNSUPPORTED", message: "请通过事务执行 Change Set。" });
