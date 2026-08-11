@@ -29,6 +29,12 @@ import { hasExplicitMemoryIntent } from "@/lib/ai/memory/manager";
 import { KIRO_MEMORY_TOOL_NAMES, KIRO_MEMORY_TOOL_SCHEMAS } from "@/lib/ai/memory/tools";
 import { MAX_MEMORIES } from "@/lib/ai/memory/types";
 import { PersistedActionView, PersistedAttachmentView, KiroConversationRecord, KiroConversationSummary, PersistedSourceMeta } from "@/lib/ai/history/types";
+import {
+  getUserMessageEditBlockReason,
+  messageHasMutatingToolCalls,
+  truncateBeforeEditedUserMessage,
+  UserMessageEditBlockReason,
+} from "@/lib/ai/history/messageEditing";
 import { StudyPlanProposal } from "@/lib/planning/studyPlanner";
 import { TaskBreakdownProposal } from "@/lib/tasks/taskBreakdown";
 import { budgetAttachments } from "@/lib/ai/contextBudget/attachmentBudget";
@@ -62,6 +68,10 @@ export interface KiroChatMessageView {
   proposals?: StudyPlanProposal[];
   /** Kiro propose_task_breakdown 的真实结果（Task Breakdown Proposal Card 事实来源；模型不得生成） */
   breakdowns?: TaskBreakdownProposal[];
+  /** Task 7：User Message 是否可编辑（attachment/history metadata 最终绑定后计算） */
+  canEdit?: boolean;
+  /** 不可编辑原因（canEdit=false 时） */
+  editDisabledReason?: UserMessageEditBlockReason;
   /** 是否可以「重新生成」：仅 live 且该轮无 Write Tool Call 的最后一条 */
   canRegenerate: boolean;
 }
@@ -121,17 +131,24 @@ export function reuseMessageView<V>(
   return view;
 }
 
-/** 该轮是否包含会持久化 mutation 的 Tool Call（业务写 / Change Set / 记忆写）——决定能否重新生成 */
+/** thin alias（Task 7：mutating detection 已移至 lib/ai/history/messageEditing，保持旧 import 兼容） */
 export function messageHasWriteToolCalls(m: Pick<UIMessage, "parts">): boolean {
-  const parts = (m.parts ?? []) as unknown as ToolCallPart[];
-  return parts.some((p) => {
-    if (typeof p.type !== "string" || !p.type.startsWith("tool-")) return false;
-    return (KIRO_MUTATING_TOOL_NAMES as string[]).includes(toolNameOf(p));
-  });
+  return messageHasMutatingToolCalls(m as { parts?: { type: string }[] });
 }
 
 function isRestoredMessage(m: Pick<UIMessage, "metadata">): boolean {
   return (m.metadata as Record<string, string> | undefined)?.restored === "1";
+}
+
+/** UIMessage 文本（v5 无 content 字段；text parts 拼接） */
+function messageTextOf(m: { parts?: unknown[] }): string {
+  return (m.parts ?? [])
+    .filter(
+      (p): p is { type: string; text?: string } =>
+        typeof p === "object" && p !== null && (p as { type?: string }).type === "text"
+    )
+    .map((p) => p.text ?? "")
+    .join("");
 }
 
 /** 判断上一轮能否安全 regenerate：最后一条 assistant 无 Write Tool 且非历史恢复 */
@@ -395,13 +412,13 @@ export function useKiroChat({
     []
   );
 
-  const buildTurnSnapshot = (): Record<string, unknown> => {
-    const contexts = buildDocumentContexts(attachments);
+  const buildTurnSnapshot = (turnAttachments: KiroAttachment[]): Record<string, unknown> => {
+    const contexts = buildDocumentContexts(turnAttachments);
     const budgeted = budgetAttachments(contexts, DEFAULT_CONTEXT_BUDGET.attachmentBudgetTokens).attachments;
     // 文本文档 Source Registry：availablePages 只取预算后实际发送的页码（模型不能引用不可见页面）
     const textRegistry = buildTurnSourceRegistry(budgeted).sources;
     // 扫描 PDF Source：sourceId 接在文本文档之后；availablePages 只含实际渲染发送的页面
-    const scannedDocs = attachments.filter(isScannedAttachment);
+    const scannedDocs = turnAttachments.filter(isScannedAttachment);
     const scannedRegistry: KiroSourceMeta[] = scannedDocs.map((a, i) => {
       const pages = visionPagesRef.current.filter((vp) => vp.attachmentId === a.id).map((vp) => vp.page);
       return {
@@ -853,8 +870,8 @@ export function useKiroChat({
   // 避免 chat 对象每次 token 变化导致 send 引用变化
   const chatSendMessage = chat.sendMessage;
 
-  const send = useCallback(
-    async (text: string): Promise<boolean> => {
+  const sendWithAttachments = useCallback(
+    async (text: string, turnAttachments: KiroAttachment[]): Promise<boolean> => {
       const v = text.trim();
       if (!v || !enabled) return false;
       readCounterRef.current = 0;
@@ -864,13 +881,13 @@ export function useKiroChat({
       visionPagesRef.current = [];
 
       // ---- Scanned PDF Vision（Task 12）：发送时渲染所选页面为 JPEG，再与用户图片合并发送 ----
-      const scanned = attachments.filter(isScannedAttachment);
+      const scanned = turnAttachments.filter(isScannedAttachment);
       const pageFiles: File[] = [];
       let remainingVisionBytes = MAX_SCANNED_PDF_IMAGE_BYTES_PER_TURN;
       if (scanned.length > 0) {
         setPreparingVision(true);
         try {
-          const textCount = buildDocumentContexts(attachments).length;
+          const textCount = buildDocumentContexts(turnAttachments).length;
           const explicit = extractExplicitPages(v).flatMap((r) => {
             const arr: number[] = [];
             for (let p = r.start; p <= r.end; p++) arr.push(p);
@@ -939,10 +956,10 @@ export function useKiroChat({
       }
 
       // ---- Turn Context Snapshot：本 Turn 内 Prompt Context 冻结（下一 Turn 才刷新） ----
-      turnSnapshotRef.current = buildSnapshotRef.current();
+      turnSnapshotRef.current = buildSnapshotRef.current(turnAttachments);
 
       // 附件快照绑定到该 User Turn（发送后 Composer 清空，旧消息不受影响）
-      const snapshot: KiroAttachmentView[] = attachments
+      const snapshot: KiroAttachmentView[] = turnAttachments
         .filter((a) => a.status === "ready")
         .map((a) =>
           a.source === "local"
@@ -964,10 +981,11 @@ export function useKiroChat({
                 courseName: a.courseName,
               }
         );
-      if (snapshot.length > 0) snapshotQueueRef.current.push(snapshot);
+      // Task 7：每次 live user send 都 push 一项（即使 []），否则 text-only 与 attachment turn 位置错配
+      snapshotQueueRef.current.push(snapshot);
 
       // 图片：扫描 PDF 页面图（固定在前） + 用户图片 → 一个 FileList（deterministic 顺序）
-      const imageFiles = attachments
+      const imageFiles = turnAttachments
         .filter((a): a is Extract<KiroAttachment, { source: "local" }> => a.source === "local" && a.kind === "image" && a.status === "ready")
         .map((a) => a.file);
       let files: FileList | undefined;
@@ -986,7 +1004,84 @@ export function useKiroChat({
       );
       return true;
     },
-    [chatSendMessage, enabled, attachments, visionEnabled, pushToast]
+    [chatSendMessage, enabled, visionEnabled, pushToast]
+  );
+
+  // 普通发送：使用 Composer 当前附件（sendWithAttachments 内部不闭包读取附件，编辑场景可传 []）
+  const send = useCallback(
+    async (text: string): Promise<boolean> => sendWithAttachments(text, attachments),
+    [sendWithAttachments, attachments]
+  );
+
+  /**
+   * Task 7：编辑 User Message 并重新发送（不做 conversation branch）。
+   * 提交时重新做全部 guard（不能只信 UI）：trim / 空文本 / 内容未变 / in-flight / target 附件 / suffix write。
+   * 成功后：删除目标及其后整个 suffix → 清理 restored maps / view cache / turn sources / vision pages /
+   * live snapshot queue 裁剪 → 保留 prefix 之前的 undoRegistry → sendWithAttachments(revisedText, [])。
+   */
+  const editAndResend = useCallback(
+    async (messageId: string, text: string): Promise<boolean> => {
+      const v = text.trim();
+      if (!v || !enabled) return false;
+      const all = latestChatRef.current.messages as UIMessage[];
+      const targetIdx = all.findIndex((m) => m.id === messageId && m.role === "user");
+      const target = targetIdx === -1 ? null : all[targetIdx];
+      const targetText = target ? messageTextOf(target) : "";
+      if (target && v === targetText.trim()) return true; // 内容未变：不请求模型
+
+      const inFlight = chat.status === "streaming" || chat.status === "submitted";
+      const suffix = targetIdx >= 0 ? all.slice(targetIdx) : [];
+      // target 附件：live → snapshot queue 对应项；restored → restoredAttachmentsRef
+      let targetHasAttachments = false;
+      if (target) {
+        if (isRestoredMessage(target)) {
+          targetHasAttachments = (restoredAttachmentsRef.current.get(target.id)?.length ?? 0) > 0;
+        } else {
+          const liveBefore = all.slice(0, targetIdx).filter((m) => m.role === "user" && !isRestoredMessage(m)).length;
+          targetHasAttachments = (snapshotQueueRef.current[liveBefore]?.length ?? 0) > 0;
+        }
+      }
+
+      const blockReason = getUserMessageEditBlockReason({
+        target: target ? { text: targetText, hasAttachments: targetHasAttachments } : null,
+        suffixAssistantMessages: suffix.filter((m) => m.role === "assistant").map((m) => ({
+          id: m.id,
+          parts: (m.parts ?? []) as unknown[],
+        })),
+        restoredWriteMessageIds: suffix
+          .filter((m) => isRestoredMessage(m) && (restoredActionsRef.current.get(m.id)?.length ?? 0) > 0)
+          .map((m) => m.id),
+        streaming: inFlight,
+      });
+      if (blockReason) return false;
+
+      const prefix = truncateBeforeEditedUserMessage(all, messageId);
+      if (!prefix) return false;
+
+      // 清理被删除 suffix 的展示数据
+      const removedIds = new Set(suffix.map((m) => m.id));
+      removedIds.forEach((id) => {
+        restoredActionsRef.current.delete(id);
+        restoredAttachmentsRef.current.delete(id);
+        restoredSourcesRef.current.delete(id);
+        viewCacheRef.current.delete(id);
+      });
+      // live snapshot queue 裁剪到 prefix 中 live user message 数量
+      const liveUserCount = prefix.filter((m) => m.role === "user" && !isRestoredMessage(m)).length;
+      if (snapshotQueueRef.current.length > liveUserCount) {
+        snapshotQueueRef.current = snapshotQueueRef.current.slice(0, liveUserCount);
+      }
+      // 当前 turn 文档来源 / 扫描页缓存一并清理
+      turnSourcesRef.current = [];
+      setSources([]);
+      visionPagesRef.current = [];
+      viewCacheRef.current.clear();
+      // 保留 prefix 之前的 undoRegistry（不 clear）
+      chat.setMessages(prefix);
+
+      return sendWithAttachments(v, []);
+    },
+    [enabled, chat, sendWithAttachments]
   );
 
   // retry/newChat/loadConversation 使用稳定子项时，必须经 ref 读取最新 chat
@@ -1071,11 +1166,12 @@ export function useKiroChat({
     [chat.messages, chat.status]
   );
 
-  // 用户消息按顺序消费发送时绑定的附件快照；历史恢复的消息附加展示数据（actions/attachments）
+  // 用户消息按顺序消费发送时绑定的附件快照（仅 live 消息消费 live queue；restored 只使用 restoredAttachmentsRef）；
+  // 并在 attachment/history 绑定后计算 canEdit（Task 7）
   const messages = useMemo(() => {
     const queue = snapshotQueueRef.current;
     let qi = 0;
-    return chat.messages.map((m) => {
+    return chat.messages.map((m, idx) => {
       // 增量缓存：parts/metadata 引用未变 → 复用 view（streaming 时历史消息不重算 toView）
       const partsRef = (m.parts ?? []) as unknown;
       const metadataRef = m.metadata ?? null;
@@ -1084,15 +1180,14 @@ export function useKiroChat({
       // ---- 附加展示数据（有需要才复制出新对象；否则直接复用缓存 view）----
       let needsAttach = false;
       if (m.role === "user") {
-        if (qi < queue.length) {
+        const restored = isRestoredMessage(m);
+        if (!restored && qi < queue.length) {
           const snapshot = queue[qi];
           qi += 1;
           if (snapshot.length > 0) {
             view = { ...view, attachments: snapshot };
             needsAttach = true;
           }
-        } else {
-          qi += 1;
         }
         // 历史恢复的附件 chips（仅展示：临时文件标记未保留）
         const restoredAtts = restoredAttachmentsRef.current.get(m.id);
@@ -1127,13 +1222,34 @@ export function useKiroChat({
         view = { ...view, sources: restoredSrcs };
         needsAttach = true;
       }
+      // Task 7：User Message 编辑安全（attachment/history 绑定完成后计算；turn in-flight 一律不可编辑）
+      if (m.role === "user") {
+        const targetAttachments =
+          isRestoredMessage(m)
+            ? (restoredAttachmentsRef.current.get(m.id)?.length ?? 0) > 0
+            : (view.attachments?.length ?? 0) > 0;
+        const blockReason = getUserMessageEditBlockReason({
+          target: { text: messageTextOf(m), hasAttachments: targetAttachments },
+          suffixAssistantMessages: chat.messages.slice(idx + 1).map((s) => ({
+            id: s.id,
+            parts: (s.parts ?? []) as unknown[],
+          })),
+          restoredWriteMessageIds: chat.messages
+            .slice(idx + 1)
+            .filter((s) => isRestoredMessage(s) && (restoredActionsRef.current.get(s.id)?.length ?? 0) > 0)
+            .map((s) => s.id),
+          streaming,
+        });
+        view = { ...view, canEdit: !streaming && blockReason === null, editDisabledReason: blockReason ?? undefined };
+        needsAttach = true;
+      }
       // 附加后的对象写回缓存（下一 token 直接复用，避免每次重建）
       if (needsAttach) {
         viewCacheRef.current.set(m.id, { partsRef, metadataRef, view });
       }
       return view;
     });
-  }, [chat.messages]);
+  }, [chat.messages, streaming]);
 
   return {
     messages,
@@ -1150,6 +1266,7 @@ export function useKiroChat({
     stop: chat.stop,
     newChat,
     loadConversation,
+    editAndResend,
     configured: enabled,
     consumeUndo,
     visionEnabled,
