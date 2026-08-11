@@ -43,8 +43,10 @@ export interface DataIntegrityIssues {
     missingCourseId?: string;
     missingAssignmentId?: string;
   }[];
-  /** Task 7G-C：Reminder target 指向不存在实体（standalone 合法；只报告，不转 standalone） */
-  orphanReminderTargets: { reminderId: string; reminderTitle: string; targetType: string; missingTargetId: string }[];
+  /** Task 7G-C：Reminder target 指向不存在实体（standalone 合法；只报告，不转 standalone）。
+   *  7G-C1：非 standalone 缺 targetId 同样报告；missingTargetId 只在「有 ID 但目标不存在」时填充，
+   *  本身缺失 targetId 时省略（不伪造占位值）。 */
+  orphanReminderTargets: { reminderId: string; reminderTitle: string; targetType: string; missingTargetId?: string }[];
 }
 
 export function findDataIntegrityIssues(snapshot: DataSnapshot): DataIntegrityIssues {
@@ -107,7 +109,15 @@ export function findDataIntegrityIssues(snapshot: DataSnapshot): DataIntegrityIs
   const orphanReminderTargets: DataIntegrityIssues["orphanReminderTargets"] = [];
   for (const r of reminders) {
     if (r.targetType === "standalone") continue; // 独立提醒无 target 合法
-    if (!r.targetId) continue; // 缺 targetId 但非 standalone：记录
+    if (!r.targetId) {
+      // Task 7G-C1：非 standalone 且 targetId 缺失 → 记录（缺 ID 时不伪造占位值）
+      orphanReminderTargets.push({
+        reminderId: r.id,
+        reminderTitle: r.title,
+        targetType: r.targetType,
+      });
+      continue;
+    }
     const exists =
       r.targetType === "assignment"
         ? assignmentIds.has(r.targetId)

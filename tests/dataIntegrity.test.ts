@@ -225,4 +225,32 @@ describe("findDataIntegrityIssues", () => {
     expect(classified.warnings.some((t) => t.includes("提醒指向已不存在的目标"))).toBe(true);
     expect(classified.fatal).toHaveLength(0); // 该场景只有 warning
   });
+
+  it("Task 7G-C1：非 standalone Reminder 缺 targetId → 记录为 orphan Reminder target warning", () => {
+    const data = mkData({
+      reminders: [
+        {
+          id: "r_missing_target",
+          title: "缺失目标",
+          targetType: "assignment",
+          // 故意无 targetId
+          timingMode: "absolute",
+          triggerAt: "2026-08-15T20:00:00",
+          status: "scheduled",
+          source: "manual",
+          createdAt: "2026-08-10T12:00:00",
+          updatedAt: "2026-08-10T12:00:00",
+        },
+      ],
+    });
+
+    const issues = findDataIntegrityIssues(data);
+    const entry = issues.orphanReminderTargets.find((r) => r.reminderId === "r_missing_target");
+    expect(entry).toBeTruthy();
+    expect(entry!.targetType).toBe("assignment");
+    expect(entry!.missingTargetId).toBeUndefined(); // targetId 本身缺失：不伪造占位值
+
+    const classified = classifyIntegrityIssues(issues);
+    expect(classified.warnings.some((text) => text.includes("提醒指向已不存在的目标"))).toBe(true);
+  });
 });
