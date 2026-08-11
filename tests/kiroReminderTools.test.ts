@@ -1,6 +1,7 @@
 ﻿import { describe, it, expect, vi, beforeEach } from "vitest";
 import { Assignment, Reminder } from "@/types";
 import { KiroWriteApi } from "@/lib/ai/tools/write/types";
+import { KIRO_WRITE_TOOLS } from "@/lib/ai/tools/write/registry";
 
 /**
  * Task 7G-B：Kiro Reminder Agent Tools（真实 Store + 真实 Executor）。
@@ -251,8 +252,8 @@ describe("update_reminder / delete_reminder", () => {
     expect(store.getState().reminders[0].status).toBe("fired");
   });
 
-  it("10. delete + Undo：恢复相同 ID / triggerAt / targetId / status", async () => {
-    seedState({ reminders: [seedReminder({ status: "fired", firedAt: "2026-08-10T12:00:00", readAt: "2026-08-10T12:05:00" })] });
+  it("10. delete scheduled + Undo：恢复相同 ID / triggerAt / targetId / status", async () => {
+    seedState({ reminders: [seedReminder({ status: "scheduled" })] });
     const { store, write } = await freshModules();
     const undos = new Map<string, () => void>();
     const api = buildApi(store, undos);
@@ -268,5 +269,48 @@ describe("update_reminder / delete_reminder", () => {
     expect(restored.targetId).toBe(before.targetId);
     expect(restored.status).toBe(before.status);
     expect(restored.readAt).toBe(before.readAt);
+  });
+
+  it("11. fired / skipped reminder cannot be deleted and no Undo is registered", async () => {
+    seedState({
+      reminders: [
+        seedReminder({ id: "r-fired", status: "fired", firedAt: "2026-08-10T12:00:00" }),
+        seedReminder({ id: "r-skipped", status: "skipped" }),
+      ],
+    });
+    const { store, write } = await freshModules();
+    const undos = new Map<string, () => void>();
+    const api = buildApi(store, undos);
+
+    const before = store.getState().reminders.map((x: Reminder) => ({ ...x }));
+
+    const fired = write.executeKiroWriteTool("delete_reminder", { reminderId: "r-fired" }, api, "delete-fired") as {
+      ok: false;
+      code: string;
+      message: string;
+    };
+    const skipped = write.executeKiroWriteTool("delete_reminder", { reminderId: "r-skipped" }, api, "delete-skipped") as {
+      ok: false;
+      code: string;
+      message: string;
+    };
+
+    expect(fired.ok).toBe(false);
+    expect(fired.code).toBe("INVALID_INPUT");
+    expect(skipped.ok).toBe(false);
+    expect(skipped.code).toBe("INVALID_INPUT");
+    // 失败：不 mutation、不注册 Undo
+    expect(store.getState().reminders).toEqual(before);
+    expect(undos.has("delete-fired")).toBe(false);
+    expect(undos.has("delete-skipped")).toBe(false);
+  });
+});
+
+describe("delete_reminder contract", () => {
+  it("description only requires list_reminders when reminderId is not uniquely known", () => {
+    const description = String(KIRO_WRITE_TOOLS.delete_reminder.description ?? "");
+    expect(description).toContain("没有唯一 reminderId");
+    expect(description).toContain("list_reminders");
+    expect(description).not.toContain("删除前必须用 list_reminders");
   });
 });

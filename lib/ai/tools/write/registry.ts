@@ -133,7 +133,10 @@ export const KIRO_WRITE_TOOLS = {
     inputSchema: KIRO_WRITE_TOOL_SCHEMAS.update_reminder,
   }),
   delete_reminder: tool({
-    description: "删除 / 取消提醒（仅 scheduled 状态；删除有 Undo 可恢复原记录）。删除前必须用 list_reminders 拿到真实 reminderId。",
+    description:
+      "删除 / 取消提醒（仅 scheduled 状态；删除有 Undo 可恢复原记录）。" +
+      "若当前消息没有唯一 reminderId，先 list_reminders 定位；已有真实唯一 reminderId 时可直接删除。" +
+      "多个候选必须询问用户，不得猜 ID。",
     inputSchema: KIRO_WRITE_TOOL_SCHEMAS.delete_reminder,
   }),
   start_focus_session: tool({

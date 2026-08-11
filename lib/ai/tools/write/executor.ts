@@ -550,6 +550,8 @@ function deleteReminder(api: KiroWriteApi, input: unknown, toolCallId: string): 
   if (!parsed.ok) return parsed;
   const target = api.getState().reminders.find((r) => r.id === parsed.data.reminderId);
   if (!target) return notFound("未找到对应提醒。");
+  // scheduled-only guard：fired / skipped 属于历史提醒，禁止删除（与 update_reminder 一致）
+  if (target.status !== "scheduled") return invalidInput("历史提醒不能删除。");
   const snapshot: Reminder = { ...target };
   api.deleteReminder(target.id);
   api.registerUndo(toolCallId, () => api.restoreReminder(snapshot));
