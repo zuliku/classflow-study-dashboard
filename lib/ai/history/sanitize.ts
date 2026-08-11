@@ -73,7 +73,15 @@ export function sanitizeConversation(input: {
   summary?: KiroConversationSummary | null;
 }): KiroConversationRecord {
   const messages: PersistedKiroMessage[] = input.messages
-    .filter((m) => m.content.length > 0 || m.role === "user")
+    // Worklog V2：assistant 可能 Final Answer 为空但产生 Action Card —— 消息必须保留；
+    // 旁白（assistantTurn.worklog）不进入历史
+    .filter(
+      (m) =>
+        m.role === "user" ||
+        m.content.length > 0 ||
+        (m.actions?.length ?? 0) > 0 ||
+        (m.historyActions?.length ?? 0) > 0
+    )
     .map((m) => {
       // live action（可 undo）→ 最小事实数据；恢复的历史 action 原样透传（canUndo 恒 false）
       const liveActions = (m.actions ?? []).map((a) => {
