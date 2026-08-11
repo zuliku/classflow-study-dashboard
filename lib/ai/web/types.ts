@@ -56,6 +56,15 @@ export interface KiroWebSearchFailure {
 
 export type KiroWebSearchOutcome = KiroWebSearchSuccess | KiroWebSearchFailure;
 
+/** 凭据检查结果（Task 15A）：只表达「凭据是否工作」，绝不返回 usage/limit/plan/credits/account/key */
+export type KiroWebSearchCredentialCheckOutcome =
+  | { ok: true }
+  | {
+      ok: false;
+      code: "WEB_SEARCH_AUTH_FAILED" | "WEB_SEARCH_RATE_LIMITED" | "WEB_SEARCH_TIMEOUT" | "WEB_SEARCH_FAILED";
+      message: string;
+    };
+
 /** 一个 User Turn 内 web_search 最多调用次数（跨 client tool HTTP roundtrip 仍生效） */
 export const MAX_WEB_SEARCHES_PER_TURN = 3;
 /** 每次搜索返回结果上限（ClassFlow 成本边界，LLM 不能覆盖） */

@@ -1201,10 +1201,10 @@ export function useKiroChat({
     [chat.setMessages]
   );
 
-  // Task 14：从真实 tool-web_search output 注册可信 Web Source（只存 metadata，不存 snippet）。
-  // 模型正文里的 [[source:web-99]] 不会自动生成来源——只有 Tool Result 真实返回的 sourceId 才能注册。
+  // Task 14/15A：从真实 tool-web_search output 注册可信 Web Source（只存 metadata，不存 snippet）。
+  // 模型正文里的 [[source:web-99]] 不会自动生成来源；同一 sourceId 只保留一份 metadata（确定性 Map 去重）。
   useEffect(() => {
-    const additions: KiroSourceMeta[] = [];
+    const additions = new Map<string, KiroSourceMeta>();
     for (const m of chat.messages) {
       if (m.role !== "assistant") continue;
       for (const p of (m.parts ?? []) as { type?: string; output?: unknown }[]) {
@@ -1214,7 +1214,7 @@ export function useKiroChat({
         if (!output?.ok || !Array.isArray(output.data?.results)) continue;
         for (const r of output.data.results) {
           if (!r.sourceId) continue;
-          additions.push({
+          additions.set(r.sourceId, {
             sourceId: r.sourceId,
             name: r.title || r.domain || "网页来源",
             source: "web",
@@ -1225,9 +1225,9 @@ export function useKiroChat({
         }
       }
     }
-    if (additions.length === 0) return;
+    if (additions.size === 0) return;
     const known = new Set(turnSourcesRef.current.map((s) => s.sourceId));
-    const fresh = additions.filter((a) => !known.has(a.sourceId));
+    const fresh = Array.from(additions.values()).filter((a) => !known.has(a.sourceId));
     if (fresh.length === 0) return;
     turnSourcesRef.current = [...turnSourcesRef.current, ...fresh];
     setSources(turnSourcesRef.current);

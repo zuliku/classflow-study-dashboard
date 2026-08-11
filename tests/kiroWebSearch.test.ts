@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { createTavilyWebSearchProvider, TAVILY_SEARCH_URL, webSearchSafeMessage } from "@/lib/ai/web/tavily";
+import { createTavilyWebSearchProvider, TAVILY_SEARCH_URL, webSearchSafeMessage, canonicalWebSearchUrl } from "@/lib/ai/web/tavily";
 import { resolveWebSearchCredential, getSessionWebSearchApiKey, setSessionWebSearchApiKey } from "@/lib/ai/web/credentials";
 import { MAX_WEB_RESULTS } from "@/lib/ai/web/types";
 import { kiroWebSearchInputSchema, normalizeWebSearchDomain } from "@/lib/ai/web/schemas";
@@ -164,6 +164,53 @@ describe("Tavily adapter normalization", () => {
     if (!r.ok) return;
     expect(r.results[0].sourceId).toBe(""); // adapter 不生成 web-N
   });
+
+  it("Case D：checkCredential 用 /usage；200→ok、401→AUTH_FAILED，且不请求 /search", async () => {
+    const usageUrl = "https://api.tavily.com/usage";
+    const searchUrl = "https://api.tavily.com/search";
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(new Response("{}", { status: 200 }))
+      .mockResolvedValueOnce(new Response("{}", { status: 401 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const ok = await provider.checkCredential({ apiKey: "sk" });
+    expect(ok).toEqual({ ok: true });
+    const auth = await provider.checkCredential({ apiKey: "bad" });
+    expect(auth.ok).toBe(false);
+    if (!auth.ok) expect(auth.code).toBe("WEB_SEARCH_AUTH_FAILED");
+
+    const requested: string[] = [];
+    for (const call of fetchMock.mock.calls) requested.push(String(call[0]));
+    expect(requested).toEqual([usageUrl, usageUrl]);
+    expect(requested.some((u) => u === searchUrl)).toBe(false);
+  });
+
+  it("Case E：URL canonical 去重——tracking 参数差异合并；业务 query 参数保留", async () => {
+    const raw = [
+      { title: "a", url: "https://example.com/article?utm_source=x&id=1", content: "c" },
+      { title: "b", url: "https://example.com/article?utm_source=y&id=1", content: "c" }, // canonical 相同 → 去重
+      { title: "c", url: "https://example.com/article?id=2", content: "c" }, // 业务参数不同 → 保留
+    ] as never;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(new Response(tavilyPayload(raw), { status: 200 }))
+    );
+    const r = await provider.search({ query: "q" }, { apiKey: "sk" });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.results).toHaveLength(2);
+    expect(r.count).toBe(2);
+    expect(r.results.some((x) => x.url.includes("id=2"))).toBe(true);
+  });
+
+  it("canonicalWebSearchUrl：hash 移除 / hostname 小写 / 非法协议 null", () => {
+    expect(canonicalWebSearchUrl("https://Example.com/a?utm_campaign=x&keep=1#sec")).toBe(
+      "https://example.com/a?keep=1"
+    );
+    expect(canonicalWebSearchUrl("javascript:alert(1)")).toBeNull();
+    expect(canonicalWebSearchUrl("https://a.dev/?utm_source=1")).toBe("https://a.dev/");
+  });
 });
 
 describe("web_search schema", () => {
@@ -192,6 +239,7 @@ describe("Kiro Search tool + turn state", () => {
   function fakeProvider() {
     return {
       id: "tavily" as const,
+      checkCredential: vi.fn().mockResolvedValue({ ok: true }),
       search: vi.fn().mockResolvedValue({
         ok: true,
         query: "q",
@@ -206,7 +254,7 @@ describe("Kiro Search tool + turn state", () => {
 
   it("execute：分配 web-N sourceId 并返回 ok envelope", async () => {
     const provider = fakeProvider();
-    const webTool = createKiroWebSearchTool({ provider, credential: { mode: "byok", userApiKey: "sk-test" }, callsSoFar: 0, nextSourceIndex: 1 });
+    const webTool = createKiroWebSearchTool({ provider, credential: { mode: "byok", userApiKey: "sk-test" }, attemptsSoFar: 0, nextSourceIndex: 1 });
     const r = (await webTool.execute?.({ query: "news" }, {} as never)) as { ok: true; data: { results: { sourceId: string }[] } };
     expect(r.ok).toBe(true);
     expect(r.data.results.map((x) => x.sourceId)).toEqual(["web-1", "web-2"]);
@@ -214,47 +262,68 @@ describe("Kiro Search tool + turn state", () => {
 
   it("已 3 次 web_search → 第 4 次返回 WEB_SEARCH_LIMIT_REACHED（不调用 provider）", async () => {
     const provider = fakeProvider();
-    const webTool = createKiroWebSearchTool({ provider, credential: { mode: "server" }, callsSoFar: 3, nextSourceIndex: 10 });
+    const webTool = createKiroWebSearchTool({ provider, credential: { mode: "server" }, attemptsSoFar: 3, nextSourceIndex: 10 });
     const r = (await webTool.execute?.({ query: "again" }, {} as never)) as { ok: false; code: string };
     expect(r.ok).toBe(false);
     expect(r.code).toBe("WEB_SEARCH_LIMIT_REACHED");
     expect(provider.search).not.toHaveBeenCalled();
   });
 
-  it("inspectCurrentTurnWebSearchState：calls / nextSourceIndex 跨 tool parts 正确", () => {
-    const messages = [
+  it("Case A：失败也算 attempt——success+timeout+429 后第 4 次 LIMIT_REACHED 且不再请求 Provider", async () => {
+    const provider = fakeProvider();
+    // 已发生 3 次（2 成功 1 失败）
+    const s = inspectCurrentTurnWebSearchState([
       { role: "user", parts: [{ type: "text", text: "hi" }] },
       {
         role: "assistant",
         parts: [
-          { type: "tool-web_search", toolCallId: "c1", output: { ok: true, data: { results: [{ sourceId: "web-1" }, { sourceId: "web-2" }] } } },
-          { type: "tool-web_search", toolCallId: "c2", output: { ok: true, data: { results: [{ sourceId: "web-3" }, { sourceId: "web-4" }, { sourceId: "web-5" }] } } },
-          { type: "tool-search_assignments", toolCallId: "c3", output: { ok: true } },
+          { type: "tool-web_search", toolCallId: "c1", output: { ok: true, data: { results: [{ sourceId: "web-1" }] } } },
+          { type: "tool-web_search", toolCallId: "c2", output: { ok: false, code: "WEB_SEARCH_TIMEOUT" } },
+          { type: "tool-web_search", toolCallId: "c3", output: { ok: false, code: "WEB_SEARCH_RATE_LIMITED" } },
         ],
       },
-      { role: "user", parts: [{ type: "text", text: "继续" }] },
-      {
-        role: "assistant",
-        parts: [
-          { type: "tool-web_search", toolCallId: "c4", output: { ok: true, data: { results: [{ sourceId: "web-6" }] } } },
-          { type: "tool-web_search", toolCallId: "c5", output: { ok: false, code: "X" } },
-        ],
-      },
-    ];
-    const s = inspectCurrentTurnWebSearchState(messages);
-    expect(s.calls).toBe(1); // 最后一个 user 之后：web-6 成功 1 次 + 失败 1 次不计
-    expect(s.nextSourceIndex).toBe(7);
+    ]);
+    expect(s.attempts).toBe(3);
+    const webTool = createKiroWebSearchTool({ provider, credential: { mode: "server" }, attemptsSoFar: s.attempts, nextSourceIndex: s.nextSourceIndex });
+    const r = (await webTool.execute?.({ query: "fourth" }, {} as never)) as { ok: false; code: string };
+    expect(r.code).toBe("WEB_SEARCH_LIMIT_REACHED");
+    expect(provider.search).not.toHaveBeenCalled();
   });
 
-  it("不同轮（另一个 user 之前的 web_search）不计入当前 Turn", () => {
-    const messages = [
+  it("Case B：同一 toolCallId 重复出现只计一次 attempt", () => {
+    const s = inspectCurrentTurnWebSearchState([
       { role: "user", parts: [{ type: "text", text: "hi" }] },
-      { role: "assistant", parts: [{ type: "tool-web_search", toolCallId: "old", output: { ok: true, data: { results: [{ sourceId: "web-1" }] } } }] },
-      { role: "user", parts: [{ type: "text", text: "新问题" }] },
-    ];
-    const s = inspectCurrentTurnWebSearchState(messages);
-    expect(s.calls).toBe(0);
-    expect(s.nextSourceIndex).toBe(1);
+      {
+        role: "assistant",
+        parts: [
+          { type: "tool-web_search", toolCallId: "dup", output: { ok: true, data: { results: [{ sourceId: "web-1" }] } } },
+          { type: "tool-web_search", toolCallId: "dup", output: { ok: false, code: "X" } }, // 消息结构重复
+          { type: "tool-web_search", toolCallId: "c2", output: { ok: false, code: "WEB_SEARCH_FAILED" } },
+        ],
+      },
+    ]);
+    expect(s.attempts).toBe(2); // dup 计 1 + c2 计 1
+  });
+
+  it("Case C：attempts 只统计当前 Turn；nextSourceIndex conversation-wide", () => {
+    const s = inspectCurrentTurnWebSearchState([
+      { role: "user", parts: [{ type: "text", text: "T1" }] },
+      { role: "assistant", parts: [{ type: "tool-web_search", toolCallId: "t1", output: { ok: true, data: { results: [{ sourceId: "web-1" }, { sourceId: "web-2" }] } } }] },
+      { role: "user", parts: [{ type: "text", text: "T2" }] },
+      { role: "assistant", parts: [{ type: "tool-web_search", toolCallId: "t2", output: { ok: true, data: { results: [{ sourceId: "web-3" }] } } }] },
+      { role: "user", parts: [{ type: "text", text: "T3（当前）" }] },
+    ]);
+    expect(s.attempts).toBe(0); // 当前 Turn 无尝试
+    expect(s.nextSourceIndex).toBe(4); // 整段会话最大 web-3 → 4
+  });
+
+  it("nextSourceIndex 只信真实 Tool Result 的 /^web-(\\d+)$/；模型正文 web-999 不影响", () => {
+    const s = inspectCurrentTurnWebSearchState([
+      { role: "user", parts: [{ type: "text", text: "hi" }] },
+      { role: "assistant", parts: [{ type: "text", text: "参考 [[source:web-999]]" }] },
+      { role: "assistant", parts: [{ type: "tool-web_search", toolCallId: "c1", output: { ok: true, data: { results: [{ sourceId: "web-2" }] } } }] },
+    ]);
+    expect(s.nextSourceIndex).toBe(3);
   });
 
   it("web_search 不属于 mutating：不在 KIRO_MUTATING_TOOL_NAMES", async () => {

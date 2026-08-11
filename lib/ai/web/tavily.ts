@@ -24,6 +24,7 @@ import {
 import { KiroWebSearchProvider } from "@/lib/ai/web/provider";
 
 export const TAVILY_SEARCH_URL = "https://api.tavily.com/search";
+export const TAVILY_USAGE_URL = "https://api.tavily.com/usage";
 
 const SAFE_ERROR_MESSAGES: Record<KiroWebSearchErrorCode, string> = {
   WEB_SEARCH_DISABLED: "Kiro Search 已关闭。",
@@ -45,6 +46,40 @@ function parseUrl(raw: string): { url: string; domain: string } | null {
     const u = new URL(raw);
     if (u.protocol !== "http:" && u.protocol !== "https:") return null;
     return { url: u.href, domain: u.hostname.replace(/^www\./, "") };
+  } catch {
+    return null;
+  }
+}
+
+const TRACKING_PARAMS = new Set([
+  "utm_source",
+  "utm_medium",
+  "utm_campaign",
+  "utm_term",
+  "utm_content",
+  "gclid",
+  "fbclid",
+]);
+
+/**
+ * canonical URL（Task 15A）：
+ * - http/https only（非法 → null）
+ * - hostname lowercase
+ * - 移除 hash
+ * - 移除常见 tracking 参数（utm_* / gclid / fbclid）
+ * - 保留其余业务 query params（?id=1 与 ?id=2 视为不同 URL）
+ */
+export function canonicalWebSearchUrl(raw: string): string | null {
+  try {
+    const u = new URL(raw);
+    if (u.protocol !== "http:" && u.protocol !== "https:") return null;
+    u.hash = "";
+    const params = Array.from(u.searchParams.keys());
+    for (const key of params) {
+      if (TRACKING_PARAMS.has(key)) u.searchParams.delete(key);
+    }
+    u.search = u.searchParams.toString();
+    return u.toString();
   } catch {
     return null;
   }
@@ -73,12 +108,18 @@ interface TavilyRawResult {
 function normalizeResults(raw: unknown): KiroWebSearchResult[] {
   if (!Array.isArray(raw)) return [];
   const out: KiroWebSearchResult[] = [];
+  const seenCanonical = new Set<string>();
   for (const item of raw) {
     if (out.length >= MAX_WEB_RESULTS) break;
     if (!item || typeof item !== "object") continue;
     const r = item as TavilyRawResult;
-    const urlInfo = typeof r.url === "string" ? parseUrl(r.url) : null;
+    if (typeof r.url !== "string") continue;
+    const urlInfo = parseUrl(r.url);
     if (!urlInfo) continue;
+    // 确定性 canonical URL 去重（tracking 参数差异不重复计数）
+    const canonical = canonicalWebSearchUrl(r.url);
+    if (!canonical || seenCanonical.has(canonical)) continue;
+    seenCanonical.add(canonical);
     const title = typeof r.title === "string" ? r.title.trim() : "";
     if (!title && !r.content) continue;
     const publishedAt =
@@ -104,6 +145,38 @@ function normalizeResults(raw: unknown): KiroWebSearchResult[] {
 export function createTavilyWebSearchProvider(): KiroWebSearchProvider {
   return {
     id: "tavily",
+    async checkCredential({ apiKey, signal }) {
+      if (!apiKey) {
+        return { ok: false, code: "WEB_SEARCH_AUTH_FAILED", message: SAFE_ERROR_MESSAGES.WEB_SEARCH_AUTH_FAILED };
+      }
+      let response: Response;
+      try {
+        response = await fetch(TAVILY_USAGE_URL, {
+          method: "GET",
+          headers: { Authorization: `Bearer ${apiKey}` },
+          signal,
+        });
+      } catch (err) {
+        const aborted =
+          signal?.aborted ||
+          (err instanceof Error && (/abort/i.test(err.message) || err.name === "AbortError" || err.name === "TimeoutError"));
+        if (aborted) {
+          return { ok: false, code: "WEB_SEARCH_TIMEOUT", message: SAFE_ERROR_MESSAGES.WEB_SEARCH_TIMEOUT };
+        }
+        return { ok: false, code: "WEB_SEARCH_FAILED", message: SAFE_ERROR_MESSAGES.WEB_SEARCH_FAILED };
+      }
+      if (response.status === 401 || response.status === 403) {
+        return { ok: false, code: "WEB_SEARCH_AUTH_FAILED", message: SAFE_ERROR_MESSAGES.WEB_SEARCH_AUTH_FAILED };
+      }
+      if (response.status === 429) {
+        return { ok: false, code: "WEB_SEARCH_RATE_LIMITED", message: SAFE_ERROR_MESSAGES.WEB_SEARCH_RATE_LIMITED };
+      }
+      if (!response.ok) {
+        return { ok: false, code: "WEB_SEARCH_FAILED", message: SAFE_ERROR_MESSAGES.WEB_SEARCH_FAILED };
+      }
+      // 200 → 凭据可用；不解析 / 不返回 usage body
+      return { ok: true };
+    },
     async search(request, { apiKey, signal }) {
       if (!apiKey) {
         return { ok: false, code: "WEB_SEARCH_KEY_REQUIRED", message: SAFE_ERROR_MESSAGES.WEB_SEARCH_KEY_REQUIRED };

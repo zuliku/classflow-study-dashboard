@@ -3,7 +3,12 @@
  * 上层（Route / Tool / UI / Citation）只依赖本接口，禁止直接 import Tavily response。
  */
 
-import { KiroWebSearchProviderId, KiroWebSearchRequest, KiroWebSearchOutcome } from "@/lib/ai/web/types";
+import {
+  KiroWebSearchProviderId,
+  KiroWebSearchRequest,
+  KiroWebSearchOutcome,
+  KiroWebSearchCredentialCheckOutcome,
+} from "@/lib/ai/web/types";
 
 export interface KiroWebSearchProvider {
   id: KiroWebSearchProviderId;
@@ -14,6 +19,11 @@ export interface KiroWebSearchProvider {
       signal?: AbortSignal;
     }
   ): Promise<KiroWebSearchOutcome>;
+  /** 凭据检查（Task 15A）：轻量 endpoint，不消耗搜索配额 */
+  checkCredential(context: {
+    apiKey: string;
+    signal?: AbortSignal;
+  }): Promise<KiroWebSearchCredentialCheckOutcome>;
 }
 
 import { createTavilyWebSearchProvider } from "@/lib/ai/web/tavily";

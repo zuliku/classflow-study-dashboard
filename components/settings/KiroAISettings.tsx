@@ -65,6 +65,7 @@ export function KiroAISettings() {
   const [apiKeyInput, setApiKeyInput] = useState(getSessionApiKey(provider));
   const [showKey, setShowKey] = useState(false);
   const [showWebSearchKey, setShowWebSearchKey] = useState(false);
+  const [webSearchApiKeyInput, setWebSearchApiKeyInput] = useState(getSessionWebSearchApiKey());
   const [test, setTest] = useState<TestState>({ status: "idle" });
   const [webSearchTest, setWebSearchTest] = useState<TestState>({ status: "idle" });
 
@@ -106,6 +107,13 @@ export function KiroAISettings() {
     } catch {
       setTest({ status: "error", message: AI_ERROR_MESSAGES.PROVIDER_UNAVAILABLE });
     }
+  };
+
+  /** BYOK Key：受控 React state + sessionStorage 同步（模式切换不丢失已输入值） */
+  const handleWebSearchKeyChange = (value: string) => {
+    setWebSearchApiKeyInput(value);
+    setSessionWebSearchApiKey(value);
+    setWebSearchTest({ status: "idle" });
   };
 
   const runWebSearchTest = async () => {
@@ -404,8 +412,8 @@ export function KiroAISettings() {
               <div className="relative w-full">
                 <SettingsInput
                   type={showWebSearchKey ? "text" : "password"}
-                  value={getSessionWebSearchApiKey()}
-                  onChange={setSessionWebSearchApiKey}
+                  value={webSearchApiKeyInput}
+                  onChange={handleWebSearchKeyChange}
                   placeholder="tvly-..."
                   ariaLabel="Tavily API Key"
                   autoComplete="off"

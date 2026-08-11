@@ -7,9 +7,10 @@ export const runtime = "nodejs";
 export const maxDuration = 20;
 
 /**
- * Kiro Search 测试连接（Task 14D）：
- * - 只发送最小搜索请求验证凭据（不发送 Chat History / ClassFlow 数据 / 用户资料）
- * - Server mode：测试部署侧 Server Key；BYOK：测试用户提供的 Key
+ * Kiro Search 测试连接（Task 14D / 15A）：
+ * - 通过轻量 credential endpoint（/usage）验证凭据，不执行 /search、不消耗搜索配额
+ * - 不发送 Chat History / ClassFlow 数据 / 用户资料
+ * - Server mode：只用 Server Key；BYOK：只用 User Key，失败绝不 fallback Server
  * - 返回 { ok:true } 或 { ok:false, code, message }；绝不返回 usage detail / API Key / Tavily raw errors
  */
 export async function POST(req: NextRequest) {
@@ -34,10 +35,10 @@ export async function POST(req: NextRequest) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), WEB_SEARCH_TIMEOUT_MS);
   try {
-    const outcome = await provider.search(
-      { query: "ClassFlow" },
-      { apiKey: resolved.apiKey, signal: controller.signal }
-    );
+    const outcome = await provider.checkCredential({
+      apiKey: resolved.apiKey,
+      signal: controller.signal,
+    });
     if (!outcome.ok) {
       return Response.json({ ok: false, code: outcome.code, message: outcome.message }, { status: 200 });
     }
