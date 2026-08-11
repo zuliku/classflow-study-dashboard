@@ -532,6 +532,8 @@ export function useKiroChat({
       api: "/api/ai/chat",
       body: bodyRef.current,
     }),
+    // Worklog V2 Task 3：客户端 50ms 节流（SDK 内建；不引入手写 queue / rAF / debounce）
+    experimental_throttle: 50,
     onError: () => {
       // error 状态由 useChat 内部维护；归一化在下方派生
     },

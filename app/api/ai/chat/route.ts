@@ -6,6 +6,7 @@ import {
   convertToModelMessages,
   TextStreamPart,
   ToolSet,
+  smoothStream,
 } from "ai";
 import { AI, KIRO_SYSTEM_PROMPT } from "@/lib/ai/config";
 import { KIRO_TOOLS } from "@/lib/ai/tools";
@@ -23,6 +24,9 @@ import { estimateTokens } from "@/lib/ai/contextBudget/estimate";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
+
+/** smoothStream 中文分词器（module scope 复用；只作用于 text/reasoning cadence） */
+const KIRO_STREAM_SEGMENTER = new Intl.Segmenter("zh", { granularity: "word" });
 
 /** 超时 abort → 归一化错误 part；用户主动 Stop 的 abort 原样透传 */
 function guardStream<TOOLS extends ToolSet>(
@@ -226,6 +230,12 @@ export async function POST(req: NextRequest) {
       tools: KIRO_TOOLS,
       maxOutputTokens: AI.CHAT_MAX_OUTPUT_TOKENS,
       abortSignal: signal,
+      // Worklog V2 Task 3：按词分块 + 12ms 间隔的流式节奏；
+      // 只平滑 text/reasoning，Tool / step event 原样透传
+      experimental_transform: smoothStream({
+        chunking: KIRO_STREAM_SEGMENTER,
+        delayInMs: 12,
+      }),
     });
 
     const uiStream = toUIMessageStream({
