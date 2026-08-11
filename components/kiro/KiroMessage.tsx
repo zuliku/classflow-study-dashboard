@@ -3,7 +3,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { FileText, Image as ImageIcon, Copy, Pencil, RefreshCw, MoreHorizontal, Send } from "lucide-react";
 import { KiroMark } from "@/components/kiro/KiroHeader";
-import { KiroMarkdown } from "@/components/kiro/KiroMarkdown";
+import { KiroStreamingMarkdown } from "@/components/kiro/KiroStreamingMarkdown";
 import { KiroWorklog } from "@/components/kiro/KiroWorklog";
 import { KiroMenuPanel, KiroMenuItem, KiroMenuDivider, useKiroPopover } from "@/components/kiro/KiroMenu";
 import { useToastStore } from "@/store/useToastStore";
@@ -92,7 +92,8 @@ export function KiroMessage({
         {assistantTurn && assistantTurn.worklog.length > 0 && <KiroWorklog turn={assistantTurn} />}
         {content ? (
           <>
-            <KiroMarkdown content={content} sources={sources} />
+            {/* Worklog V2 Task 4：Stable Blocks（React.memo 缓存）+ Active Tail（轻量纯文本） */}
+            <KiroStreamingMarkdown content={content} streaming={!!streaming} sources={sources} />
             {showStreamingCursor && (
               <span
                 aria-hidden="true"
