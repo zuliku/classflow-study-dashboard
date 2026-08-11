@@ -1263,8 +1263,12 @@ export const useAppStore = create<AppState>()(
       pauseFocusSession: (now) => {
         const t = now ?? Date.now();
         const state = get();
-        const active = state.focusSessions.find((s) => s.status === "running");
+        // active = running 或 paused（paused 再次 pause 必须给出 FOCUS_ALREADY_PAUSED，而非「找不到」）
+        const active = state.focusSessions.find(
+          (s) => s.status === "running" || s.status === "paused"
+        );
         if (!active) return { ok: false, code: "NO_ACTIVE_FOCUS_SESSION" };
+        if (active.status === "paused") return { ok: false, code: "FOCUS_ALREADY_PAUSED" };
         const session = pauseFocusSessionRecord(active, t);
         if (session.status !== "paused") return { ok: false, code: "FOCUS_ALREADY_PAUSED" };
         set((s) => ({
@@ -1289,7 +1293,10 @@ export const useAppStore = create<AppState>()(
       finishFocusSession: (now) => {
         const t = now ?? Date.now();
         const state = get();
-        const active = state.focusSessions.find((s) => s.status === "running");
+        // active = running 或 paused：paused 会话的 actualActiveMs 由 finishFocusSessionRecord 按真实 active 时间结算
+        const active = state.focusSessions.find(
+          (s) => s.status === "running" || s.status === "paused"
+        );
         if (!active) return { ok: false, code: "NO_ACTIVE_FOCUS_SESSION" };
         const session = finishFocusSessionRecord(active, t);
         set((s) => ({

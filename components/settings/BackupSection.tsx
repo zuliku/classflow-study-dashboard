@@ -35,6 +35,7 @@ export function BackupSection() {
     groupProjects,
     preferences,
     reminders,
+    focusSessions,
   } = state;
   const pushToast = useToastStore((s) => s.pushToast);
 
@@ -52,6 +53,7 @@ export function BackupSection() {
     groupProjects,
     preferences,
     reminders,
+    focusSessions,
   });
 
   const exportFull = async () => {

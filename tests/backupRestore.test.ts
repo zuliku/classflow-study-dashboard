@@ -166,4 +166,52 @@ describe("commitBackupRestore（确认后恢复）", () => {
     expect(after.preferences.motionPreference).toBe("full");
     expect(after.preferences.defaultDDLTime).toBe("21:00");
   });
+
+  it("Focus：completed Session 随备份恢复；旧备份无 focusSessions → 恢复为 []", async () => {
+    const data = buildBackupData();
+    data.focusSessions = [
+      {
+        id: "fs_bak",
+        plannedMinutes: 30,
+        startedAt: 1000,
+        accumulatedActiveMs: 600000,
+        status: "completed",
+        endedAt: 601000,
+        endReason: "manual",
+        actualActiveMs: 600000,
+        courseId: "c_bak",
+        courseNameSnapshot: "备份课程",
+        source: "manual",
+        createdAt: 1000,
+        updatedAt: 601000,
+      },
+    ];
+    const prepared = await prepareBackupRestore(
+      toFile(new Blob([backupJSON(data)]), "backup-focus.json")
+    );
+    expect(prepared.ok).toBe(true);
+    if (!prepared.ok) return;
+
+    await commitBackupRestore(prepared.prepared, {
+      restoreAppData: (d) => useAppStore.getState().restoreAppData(d),
+    });
+    const after = useAppStore.getState();
+    expect(after.focusSessions.length).toBe(1);
+    expect(after.focusSessions[0].id).toBe("fs_bak");
+    expect(after.focusSessions[0].actualActiveMs).toBe(600000);
+    expect(after.focusSessions[0].status).toBe("completed");
+
+    // 旧备份（无 focusSessions 字段）→ 恢复为 []（不清空失败，也不残留）
+    const legacyData = buildBackupData();
+    expect("focusSessions" in legacyData).toBe(false);
+    const legacyPrepared = await prepareBackupRestore(
+      toFile(new Blob([backupJSON(legacyData)]), "legacy-focus.json")
+    );
+    expect(legacyPrepared.ok).toBe(true);
+    if (!legacyPrepared.ok) return;
+    await commitBackupRestore(legacyPrepared.prepared, {
+      restoreAppData: (d) => useAppStore.getState().restoreAppData(d),
+    });
+    expect(useAppStore.getState().focusSessions).toEqual([]);
+  });
 });
