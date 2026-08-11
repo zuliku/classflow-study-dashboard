@@ -257,6 +257,7 @@ describe("Kiro Search tool + turn state", () => {
     return {
       id: "tavily" as const,
       checkCredential: vi.fn().mockResolvedValue({ ok: true }),
+      extract: vi.fn().mockResolvedValue({ ok: true, sources: [] }),
       search: vi.fn().mockResolvedValue({
         ok: true,
         query: "q",
