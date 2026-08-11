@@ -56,12 +56,12 @@ function KiroToolRow({ block }: { block: ToolBlock }) {
           type="button"
           onClick={() => setOpen((v) => !v)}
           aria-expanded={open}
-          className={cn(TOOL_ROW_BODY, rowClasses(block))}
+          className={cn(TOOL_ROW_BODY, rowClasses(block, expandable))}
         >
           {rowBody}
         </button>
       ) : (
-        <div className={cn(TOOL_ROW_BODY, rowClasses(block))}>{rowBody}</div>
+        <div className={cn(TOOL_ROW_BODY, rowClasses(block, expandable))}>{rowBody}</div>
       )}
       {open && expandable && (
         <div className="mt-0.5 pl-2 pr-2 pb-1 space-y-0.5">
@@ -76,11 +76,11 @@ function KiroToolRow({ block }: { block: ToolBlock }) {
   );
 }
 
-function rowClasses(block: ToolBlock): string {
+function rowClasses(block: ToolBlock, expandable: boolean): string {
   if (block.status === "error") return "text-danger bg-danger-bg/50 border border-danger-border";
   if (block.status === "working") return "text-charcoal font-semibold bg-alabaster/50 border border-line-soft";
-  // completed：低权重，默认无 border/背景；有详情可展开时 hover 轻微反馈
-  return "text-satin-grey hover:bg-alabaster";
+  // completed：低权重，默认无 border/背景；只有可展开（有真实详情）的步骤 hover 有反馈
+  return cn("text-satin-grey", expandable && "hover:bg-alabaster");
 }
 
 /**
@@ -133,27 +133,9 @@ export function KiroWorklog({ turn }: { turn: KiroAssistantTurnPresentation }) {
 
   return (
     <div data-testid="kiro-worklog" className="space-y-1 min-w-0 w-full">
-      {/* Group Summary：整体 disclosure（工作流图标 + 统计 + Chevron） */}
-      <button
-        type="button"
-        onClick={toggleExpanded}
-        aria-expanded={expanded}
-        className="flex w-full items-center gap-1.5 rounded-lg px-1.5 py-1 text-[11px] font-semibold text-sandrift hover:bg-alabaster/60 transition-colors"
-      >
-        <ListTree className="w-3.5 h-3.5 text-sandrift shrink-0" aria-hidden="true" />
-        <span className="truncate">{summaryLabel}</span>
-        <ChevronDown
-          className={cn(
-            "w-3 h-3 text-sandrift shrink-0 ml-auto transition-transform duration-[var(--motion-fast)]",
-            expanded && "rotate-180"
-          )}
-          aria-hidden="true"
-        />
-      </button>
-
-      {/* Expanded：commentary / Tool rows 真实时序；collapsed 时整体隐藏 */}
+      {/* Expanded：commentary / Tool rows 真实时序在前；collapsed 时整体隐藏 */}
       {expanded && (
-        <div className="pt-1 space-y-1">
+        <div className="space-y-1">
           {turn.worklog.map((block) =>
             block.kind === "commentary" ? (
               <p
@@ -173,6 +155,26 @@ export function KiroWorklog({ turn }: { turn: KiroAssistantTurnPresentation }) {
             </p>
           )}
         </div>
+      )}
+
+      {/* Group Summary：整体 disclosure 固定在展开流程底部（折叠时单独显示） */}
+      {toolCount > 0 && (
+        <button
+          type="button"
+          onClick={toggleExpanded}
+          aria-expanded={expanded}
+          className="flex w-full items-center gap-1.5 rounded-lg px-1.5 py-1 text-[11px] font-semibold text-sandrift hover:bg-alabaster/60 transition-colors"
+        >
+          <ListTree className="w-3.5 h-3.5 text-sandrift shrink-0" aria-hidden="true" />
+          <span className="truncate">{summaryLabel}</span>
+          <ChevronDown
+            className={cn(
+              "w-3 h-3 text-sandrift shrink-0 ml-auto transition-transform duration-[var(--motion-fast)]",
+              expanded && "rotate-180"
+            )}
+            aria-hidden="true"
+          />
+        </button>
       )}
 
       {/* Final Answer 前的极弱分割线：无论折叠与否都保留 */}
