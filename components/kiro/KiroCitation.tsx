@@ -3,18 +3,7 @@
 import React from "react";
 import { BookOpen, Globe2 } from "lucide-react";
 import { KiroCitation as KiroCitationData, KiroSourceMeta } from "@/lib/ai/citations/types";
-import { resolveCitation, citationLabel } from "@/lib/ai/citations/parser";
-
-/** URL 二次校验（Web Citation 可点击；只允许 http/https） */
-function isSafeWebUrl(url: string | undefined): url is string {
-  if (!url) return false;
-  try {
-    const u = new URL(url);
-    return u.protocol === "http:" || u.protocol === "https:";
-  } catch {
-    return false;
-  }
-}
+import { resolveCitation, citationLabel, isSafeWebUrl } from "@/lib/ai/citations/parser";
 
 /** Web pill 紧凑 label：短标题直接用；过长时用 domain，title 属性显示完整标题 + domain */
 function webLabel(source: KiroSourceMeta): string {

@@ -30,6 +30,99 @@ export function hasMeaningfulKiroToolDetails(details: string[]): boolean {
   return details.some((detail) => !GENERIC_TOOL_DETAILS.has(detail.trim()));
 }
 
+/* ---------------- Task 17B：Tool Row 主文案（headline）安全格式化 ---------------- */
+
+export const WEB_ACTIVITY_QUERY_MAX_CHARS = 72;
+export const WEB_ACTIVITY_TITLE_MAX_CHARS = 52;
+
+/** Search Query sanitizer：trim / collapse whitespace / ≤72 chars（69 + …）；只允许显示 query 字段 */
+export function formatWebSearchQueryForActivity(input: unknown): string {
+  const q = (input as { query?: unknown } | null)?.query;
+  if (typeof q !== "string") return "";
+  const collapsed = q.trim().replace(/\s+/g, " ");
+  if (!collapsed) return "";
+  if (collapsed.length <= WEB_ACTIVITY_QUERY_MAX_CHARS) return collapsed;
+  return `${collapsed.slice(0, WEB_ACTIVITY_QUERY_MAX_CHARS - 3)}…`;
+}
+
+function truncateActivityTitle(text: string): string {
+  if (text.length <= WEB_ACTIVITY_TITLE_MAX_CHARS) return text;
+  return `${text.slice(0, WEB_ACTIVITY_TITLE_MAX_CHARS - 3)}…`;
+}
+
+function searchResultCount(output: unknown): number {
+  const data = (output as { ok?: boolean; data?: { results?: unknown[] } } | null)?.data;
+  return Array.isArray(data?.results) ? data.results.length : 0;
+}
+
+function readSourceIdsOf(input: unknown): string[] {
+  const ids = (input as { sourceIds?: unknown } | null)?.sourceIds;
+  return Array.isArray(ids) ? ids.filter((id): id is string => typeof id === "string") : [];
+}
+
+function readSuccessCount(output: unknown): number {
+  const sources = (output as { ok?: boolean; data?: { sources?: unknown[] } } | null)?.data?.sources;
+  return Array.isArray(sources) ? sources.length : 0;
+}
+
+export interface KiroToolActivityHeadlineInput {
+  toolName: string;
+  status: KiroToolDetailStatus;
+  input?: unknown;
+  output?: unknown;
+  /** 当前 Turn 已完成 web_search 结果的 source lookup（Presentation 内构建；只含 title/domain） */
+  trustedWebSources?: Map<string, { title: string; domain: string }>;
+}
+
+/**
+ * Tool Row 主文案（Task 17B）：
+ * - web_search：显示 sanitized query（working/done/error 三态）；无安全 query → 通用文案
+ * - read_web_source：显示来源 title（来自当前 Turn 真实 Search Result lookup）；内部 ID / URL 绝不展示
+ * - 其他 Tool：返回 null（UI 继续用 block.label）
+ * 严禁 raw JSON.stringify、includeDomains/excludeDomains/sourceIds/apiKey 等其它字段。
+ */
+export function formatKiroToolActivityHeadline(input: KiroToolActivityHeadlineInput): string | null {
+  const { toolName, status, input: toolInput, output, trustedWebSources } = input;
+
+  if (toolName === "web_search") {
+    const q = formatWebSearchQueryForActivity(toolInput);
+    if (status === "working") return q ? `正在搜索网页：${q}` : "正在搜索网页…";
+    if (status === "error") return q ? `网页搜索失败：${q}` : "网页搜索失败";
+    const count = searchResultCount(output);
+    const suffix = count > 0 ? ` · ${count} 个来源` : "";
+    return q ? `已搜索网页：${q}${suffix}` : `搜索网页${suffix}`;
+  }
+
+  if (toolName === "read_web_source") {
+    const ids = readSourceIdsOf(toolInput);
+    const present = ids
+      .map((id) => trustedWebSources?.get(id))
+      .filter((t): t is { title: string; domain: string } => !!t);
+    const multi = ids.length > 1;
+    const titleOf = (t: { title: string; domain: string } | undefined) =>
+      t ? truncateActivityTitle(t.title || t.domain) : "";
+
+    if (status === "working") {
+      if (multi) return `正在阅读 ${ids.length} 个网页来源`;
+      const t = titleOf(present[0]);
+      return t ? `正在阅读网页：${t}` : "正在阅读网页…";
+    }
+    if (status === "error") return "网页内容读取失败";
+    const successCount = readSuccessCount(output);
+    if (successCount > 1) return `已阅读 ${successCount} 个网页来源`;
+    if (successCount === 1) {
+      // Task 17B1 §24：请求多个、只成功一个 → partial，主行用数量；不展示失败 sourceId
+      if (multi) return "已阅读 1 个网页来源";
+      const t = titleOf(present[0]);
+      return t ? `已阅读网页：${t}` : "已阅读网页…";
+    }
+    return "网页内容读取失败"; // empty evidence：不显示「已阅读 0 个来源」
+  }
+
+  // Task 17B1 §5：非联网 Tool 一律返回 null，UI 继续用 block.label（禁止顺手重写其它 Tool 文案）
+  return null;
+}
+
 function isOkEnvelope(output: unknown): output is { ok: true; data?: unknown; action?: unknown } {
   return (
     typeof output === "object" &&

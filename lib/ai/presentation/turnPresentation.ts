@@ -15,7 +15,7 @@
 
 import { KIRO_MUTATING_TOOL_NAMES } from "@/lib/ai/tools/mutating";
 import { toolLabel } from "@/lib/ai/tools/formatters";
-import { formatKiroToolActivityDetail } from "@/lib/ai/presentation/toolActivityDetails";
+import { formatKiroToolActivityDetail, formatKiroToolActivityHeadline } from "@/lib/ai/presentation/toolActivityDetails";
 import { splitKiroStreamingMarkdown } from "@/lib/ai/streaming/markdownBlocks";
 
 export type KiroTurnPhase = "working" | "composing" | "answering" | "done";
@@ -34,6 +34,7 @@ export type KiroWorklogBlock =
       toolCallId: string;
       toolName: string;
       label: string;
+      headline?: string | null;
       status: "working" | "done" | "error";
       toolKind: "read" | "write";
       safeDetails: string[];
@@ -57,11 +58,12 @@ type RawPart =
       type: string;
       toolCallId?: string;
       state?: string;
+      input?: unknown;
       output?: unknown;
       errorText?: string;
     };
 
-function isToolPart(p: RawPart): p is { type: string; toolCallId?: string; state?: string; output?: unknown } {
+function isToolPart(p: RawPart): p is { type: string; toolCallId?: string; state?: string; input?: unknown; output?: unknown } {
   return typeof p.type === "string" && p.type.startsWith("tool-");
 }
 
@@ -84,6 +86,26 @@ export function deriveKiroAssistantTurn(
   let stepIndex = 0;
   let lastToolPartIndex = -1;
   let lastToolStatus: "working" | "done" | "error" | null = null;
+
+  // ---- Task 17B：Trusted Web Source Lookup（仅当前 Turn / 同一 assistant message 内已完成 web_search） ----
+  // 只取 title / domain 两个安全字段；raw URL、html、rawContent 一律不进入 lookup
+  const trustedWebSources = new Map<string, { title: string; domain: string }>();
+  for (const p of rawParts) {
+    if (!isToolPart(p)) continue;
+    if (toolNameOf(p) !== "web_search") continue;
+    if (toolStatusOf(p) !== "done") continue;
+    const data = (p.output as { ok?: boolean; data?: { results?: unknown[] } } | null)?.data;
+    const results = data?.results;
+    if (!Array.isArray(results)) continue;
+    for (const r of results) {
+      const rec = r as { sourceId?: unknown; title?: unknown; domain?: unknown } | null;
+      if (typeof rec?.sourceId !== "string" || !rec.sourceId) continue;
+      trustedWebSources.set(rec.sourceId, {
+        title: typeof rec.title === "string" ? rec.title : "",
+        domain: typeof rec.domain === "string" ? rec.domain : "",
+      });
+    }
+  }
 
   // 第一遍：定位最后一个 Tool part 与其 settled 状态（决定哪些 text 是 answer candidate）
   for (let i = 0; i < rawParts.length; i++) {
@@ -142,6 +164,13 @@ export function deriveKiroAssistantTurn(
         toolCallId: p.toolCallId ?? "",
         toolName,
         label: toolLabel(toolName),
+        headline: formatKiroToolActivityHeadline({
+          toolName,
+          status,
+          input: p.input,
+          output: p.output,
+          trustedWebSources,
+        }),
         status,
         toolKind: isWrite ? "write" : "read",
         safeDetails: formatKiroToolActivityDetail(toolName, status, p.output),

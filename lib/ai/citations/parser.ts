@@ -94,6 +94,36 @@ export function citationLabel(source: KiroSourceMeta, citation: KiroCitation): s
   return range ? `${source.name} · ${range}` : source.name;
 }
 
+/** URL 二次校验（Web Citation 可点击；只允许 http/https） */
+export function isSafeWebUrl(url: string | undefined): url is string {
+  if (!url) return false;
+  try {
+    const u = new URL(url);
+    return u.protocol === "http:" || u.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Task 17B：收集正文实际引用的 Web Sources（Sources Tray）。
+ * 只接受 resolveCitation 通过的真实 Web Source；按首次出现顺序去重；
+ * 不校验 page（Web Source 不允许页码）；无引用 → 空数组。
+ */
+export function collectCitedWebSources(content: string, sources?: KiroSourceMeta[]): KiroSourceMeta[] {
+  if (!content || !sources || sources.length === 0) return [];
+  const seen = new Set<string>();
+  const out: KiroSourceMeta[] = [];
+  for (const citation of parseCitationMarkers(content)) {
+    const source = resolveCitation(citation, sources);
+    if (!source || source.source !== "web") continue;
+    if (seen.has(source.sourceId)) continue;
+    seen.add(source.sourceId);
+    out.push(source);
+  }
+  return out;
+}
+
 /** 无效引用的降级显示（不展示可信来源；正文保留） */
 export const INVALID_CITATION_TEXT = "来源不可验证";
 

@@ -9,6 +9,7 @@ import { KiroMenuPanel, KiroMenuItem, KiroMenuDivider, useKiroPopover } from "@/
 import { useToastStore } from "@/store/useToastStore";
 import { KiroAttachmentView } from "@/lib/ai/attachments/types";
 import { KiroSourceMeta } from "@/lib/ai/citations/types";
+import { KiroSourcesTray } from "@/components/kiro/KiroSourcesTray";
 import { UserMessageEditBlockReason } from "@/lib/ai/history/messageEditing";
 import { KiroAssistantTurnPresentation } from "@/lib/ai/presentation/turnPresentation";
 import { citationsToReadableText } from "@/lib/ai/citations/parser";
@@ -99,6 +100,10 @@ export function KiroMessage({
                 aria-hidden="true"
                 className="inline-block w-[2px] h-3.5 bg-sandrift align-middle animate-pulse"
               />
+            )}
+            {/* Task 17B：Final Answer 实际引用的 Web Sources（Turn 结束后显示；默认折叠） */}
+            {!streaming && (actionsReady ?? true) && (
+              <KiroSourcesTray content={content} sources={sources} />
             )}
             {/* Message Actions：整个 Turn 结束后常驻（不依赖 hover），低权重 inline toolbar */}
             {(actionsReady ?? true) && !streaming && (

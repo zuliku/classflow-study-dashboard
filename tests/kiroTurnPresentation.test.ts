@@ -311,3 +311,50 @@ describe("KiroAssistantTurnPresentation 类型完整性", () => {
     expect(["working", "composing", "answering", "done"]).toContain(p.phase);
   });
 });
+
+describe("Task 17B：Tool Row headline（流式 web 流程）", () => {
+  const searchPart = () =>
+    toolPart("web_search", "output-available", {
+      input: { query: "新学期 选课" },
+      output: {
+        ok: true,
+        data: {
+          results: [{ sourceId: "web-1", title: "新学期选课通知", domain: "example.com" }],
+        },
+      },
+    });
+
+  it("HEADLINE 1: web_search headline 展示 sanitized query + 来源数", () => {
+    const p = deriveKiroAssistantTurn([searchPart()], true);
+    const block = p.worklog.find((b) => b.kind === "tool" && b.toolName === "web_search");
+    expect(block?.kind === "tool" && block.headline).toBe("已搜索网页：新学期 选课 · 1 个来源");
+  });
+
+  it("HEADLINE 2: read_web_source 用同 Turn 真实 search result 解析 title", () => {
+    const readPart = toolPart("read_web_source", "working", {
+      input: { sourceIds: ["web-1"] },
+    });
+    const p = deriveKiroAssistantTurn([searchPart(), readPart], true);
+    const block = p.worklog.find((b) => b.kind === "tool" && b.toolName === "read_web_source");
+    expect(block?.kind === "tool" && block.headline).toBe("正在阅读网页：新学期选课通知");
+  });
+
+  it("HEADLINE 3: lookup 之外的 sourceId → 通用文案（不暴露内部 ID）", () => {
+    const readPart = toolPart("read_web_source", "working", {
+      input: { sourceIds: ["internal-secret-id"] },
+    });
+    const p = deriveKiroAssistantTurn([searchPart(), readPart], true);
+    const block = p.worklog.find((b) => b.kind === "tool" && b.toolName === "read_web_source");
+    expect(block?.kind === "tool" && block.headline).toBe("正在阅读网页…");
+  });
+
+  it("HEADLINE 4: 非 web Tool → headline 为 null（UI 回退 block.label）", () => {
+    const p = deriveKiroAssistantTurn(
+      [toolPart("search_assignments", "output-available", { output: { ok: true, data: { items: [] } } })],
+      true
+    );
+    const block = p.worklog.find((b) => b.kind === "tool" && b.toolName === "search_assignments");
+    expect(block?.kind === "tool" && block.headline).toBeNull();
+    expect(block?.kind === "tool" && block.label).toBeTruthy();
+  });
+});

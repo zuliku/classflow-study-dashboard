@@ -36,7 +36,7 @@ function KiroToolRow({ block }: { block: ToolBlock }) {
   const rowBody = (
     <>
       {icon}
-      <span className="truncate">{block.label}</span>
+      <span className="truncate">{block.headline ?? block.label}</span>
       {expandable && (
         <ChevronDown
           className={cn(
