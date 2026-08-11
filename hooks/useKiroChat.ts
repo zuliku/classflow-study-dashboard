@@ -45,6 +45,10 @@ import { buildTurnSourceRegistry, materialSourceId } from "@/lib/ai/citations/so
 import { renderPdfPages, selectScannedPdfPages, allocateVisionPages, extractExplicitPages } from "@/lib/ai/attachments/pdfVision";
 import { MAX_SCANNED_PDF_PAGES_PER_TURN, MAX_SCANNED_PDF_IMAGE_BYTES_PER_TURN } from "@/lib/ai/attachments/limits";
 import { getFileBlob } from "@/lib/fileStorage";
+import {
+  deriveKiroAssistantTurn,
+  KiroAssistantTurnPresentation,
+} from "@/lib/ai/presentation/turnPresentation";
 
 /** 每回合工具调用上限：Read ≤ 12，Write ≤ 8 */
 export const MAX_READ_TOOL_CALLS_PER_TURN_UI = 12;
@@ -74,6 +78,8 @@ export interface KiroChatMessageView {
   editDisabledReason?: UserMessageEditBlockReason;
   /** 是否可以「重新生成」：仅 live 且该轮无 Write Tool Call 的最后一条 */
   canRegenerate: boolean;
+  /** Task 1（Worklog V2）：Assistant Turn 有序 Presentation（commentary → tool → … → final answer） */
+  assistantTurn?: KiroAssistantTurnPresentation;
 }
 
 export interface KiroActionResultView {
@@ -116,18 +122,21 @@ function toolNameOf(part: ToolCallPart): string {
   return part.type.startsWith("tool-") ? part.type.slice("tool-".length) : part.toolName ?? part.type;
 }
 
-/** Message View 增量缓存（Task 13）：parts/metadata 引用未变 → 复用旧 view 对象 */
+/** Message View 增量缓存（Task 13 + Worklog V2）：parts/metadata/statusRef 引用未变 → 复用旧 view 对象 */
 export function reuseMessageView<V>(
-  cache: Map<string, { partsRef: unknown; metadataRef: unknown; view: V }>,
+  cache: Map<string, { partsRef: unknown; metadataRef: unknown; statusRef?: unknown; view: V }>,
   id: string,
   parts: unknown,
   metadata: unknown,
-  build: () => V
+  build: () => V,
+  statusRef?: unknown
 ): V {
   const hit = cache.get(id);
-  if (hit && hit.partsRef === parts && hit.metadataRef === metadata) return hit.view;
+  if (hit && hit.partsRef === parts && hit.metadataRef === metadata && hit.statusRef === statusRef) {
+    return hit.view;
+  }
   const view = build();
-  cache.set(id, { partsRef: parts, metadataRef: metadata, view });
+  cache.set(id, { partsRef: parts, metadataRef: metadata, statusRef, view });
   return view;
 }
 
@@ -164,13 +173,25 @@ export function lastTurnCanRegenerate(messages: Pick<UIMessage, "role" | "parts"
   return false;
 }
 
-function toView(m: UIMessage): KiroChatMessageView {
+function toView(m: UIMessage, turnInFlight: boolean): KiroChatMessageView {
   const parts = (m.parts ?? []) as unknown as (ToolCallPart | { type: "text"; text: string; state?: string })[];
-  const content = parts
-    .filter((p): p is { type: "text"; text: string } => p.type === "text")
-    .map((p) => p.text)
-    .join("");
-  const streaming = parts.some((p) => p.type === "text" && p.state === "streaming");
+  const restored = isRestoredMessage(m);
+
+  // Worklog V2：Assistant 的 content 只代表最终回答；worklog 保留真实 part 时序（commentary/tool）
+  let content: string;
+  let streaming: boolean;
+  let assistantTurn: KiroAssistantTurnPresentation | undefined;
+  if (m.role === "assistant") {
+    assistantTurn = deriveKiroAssistantTurn(m.parts ?? [], turnInFlight);
+    content = assistantTurn.answer;
+    streaming = assistantTurn.answerStreaming;
+  } else {
+    content = parts
+      .filter((p): p is { type: "text"; text: string } => p.type === "text")
+      .map((p) => p.text)
+      .join("");
+    streaming = parts.some((p) => p.type === "text" && p.state === "streaming");
+  }
 
   // 真实 Write Tool 结果（ok:true 且带 action）→ Action Card 数据
   // Memory 工具只发 Toast，不生成 Action Card
@@ -203,7 +224,6 @@ function toView(m: UIMessage): KiroChatMessageView {
     }
   }
 
-  const restored = isRestoredMessage(m);
   return {
     id: m.id,
     role: m.role === "assistant" ? "assistant" : "user",
@@ -214,6 +234,7 @@ function toView(m: UIMessage): KiroChatMessageView {
     breakdowns: breakdowns.length > 0 ? breakdowns : undefined,
     // 历史恢复消息：禁止重新生成；live 且有 Write Tool Call 的轮次同样禁止
     canRegenerate: !restored && !messageHasWriteToolCalls(m),
+    assistantTurn,
   };
 }
 
@@ -493,7 +514,9 @@ export function useKiroChat({
   const restoredSourcesRef = useRef(new Map<string, KiroSourceMeta[]>());
 
   // Message View 增量缓存：parts/metadata 引用未变 → 复用 view 对象（streaming 时旧消息不重算）
-  const viewCacheRef = useRef(new Map<string, { partsRef: unknown; metadataRef: unknown; view: KiroChatMessageView }>());
+  const viewCacheRef = useRef(
+    new Map<string, { partsRef: unknown; metadataRef: unknown; statusRef?: unknown; view: KiroChatMessageView }>()
+  );
 
   const consumeUndo = useCallback((toolCallId: string) => {
     const entry = undoRegistryRef.current.get(toolCallId);
@@ -1171,11 +1194,25 @@ export function useKiroChat({
   const messages = useMemo(() => {
     const queue = snapshotQueueRef.current;
     let qi = 0;
+    // Worklog V2：最后一条 user 之后且仍在 streaming 的 assistant 消息 = 当前 Turn in-flight
+    let lastUserIdx = -1;
+    for (let i = chat.messages.length - 1; i >= 0; i--) {
+      if (chat.messages[i].role === "user") {
+        lastUserIdx = i;
+        break;
+      }
+    }
     return chat.messages.map((m, idx) => {
-      // 增量缓存：parts/metadata 引用未变 → 复用 view（streaming 时历史消息不重算 toView）
+      // 增量缓存：parts/metadata/statusRef 引用未变 → 复用 view
+      //（streaming→ready 时即使 parts 引用不变，statusRef 也会变化，避免缓存返回过期 phase）
       const partsRef = (m.parts ?? []) as unknown;
       const metadataRef = m.metadata ?? null;
-      let view = reuseMessageView(viewCacheRef.current, m.id, partsRef, metadataRef, () => toView(m));
+      const currentTurnInFlight = m.role === "assistant" && idx > lastUserIdx && streaming;
+      const statusRef: "live" | "settled" = currentTurnInFlight ? "live" : "settled";
+      let view = reuseMessageView(viewCacheRef.current, m.id, partsRef, metadataRef, () =>
+        toView(m, currentTurnInFlight),
+        statusRef
+      );
 
       // ---- 附加展示数据（有需要才复制出新对象；否则直接复用缓存 view）----
       let needsAttach = false;
@@ -1245,7 +1282,7 @@ export function useKiroChat({
       }
       // 附加后的对象写回缓存（下一 token 直接复用，避免每次重建）
       if (needsAttach) {
-        viewCacheRef.current.set(m.id, { partsRef, metadataRef, view });
+        viewCacheRef.current.set(m.id, { partsRef, metadataRef, statusRef, view });
       }
       return view;
     });
