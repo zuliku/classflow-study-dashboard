@@ -56,6 +56,14 @@ export function formatKiroToolActivityDetail(
   status: KiroToolDetailStatus,
   output?: unknown
 ): string[] {
+  // Task 16B：read_web_source 专属（不展示工具名 / URL / query / Tavily Extract）
+  if (toolName === "read_web_source") {
+    if (status === "working") return ["正在阅读网页"];
+    if (status === "error") return ["网页内容读取失败"];
+    const sources = (output as { ok?: boolean; data?: { sources?: unknown[] } } | null)?.data?.sources;
+    const count = Array.isArray(sources) ? sources.length : 0;
+    return [`已阅读 ${count} 个来源`];
+  }
   // Task 14：web_search 专属（不展示工具名 / Tavily / raw query / API Key）
   if (toolName === "web_search") {
     if (status === "working") return ["正在搜索网络"];

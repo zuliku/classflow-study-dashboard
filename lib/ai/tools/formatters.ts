@@ -68,6 +68,8 @@ export const KIRO_TOOL_LABELS: Record<string, string> = {
   apply_change_set: "整体修改",
   // Task 14：Kiro Search（联网搜索；产品层叫 Kiro Search，不显示 Tavily）
   web_search: "搜索网络",
+  // Task 16A：Kiro Web Evidence（用户侧显示「阅读网页」，不出现 Tavily Extract）
+  read_web_source: "阅读网页",
 };
 
 export function toolLabel(toolName: string): string {

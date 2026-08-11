@@ -200,6 +200,46 @@ describe("Case F：evidence budget", () => {
   });
 });
 
+describe("Task 16B：presentation & policy", () => {
+  it("Case A：activity formatter——working/done N 来源/error", async () => {
+    const { formatKiroToolActivityDetail } = await import("@/lib/ai/presentation/toolActivityDetails");
+    expect(formatKiroToolActivityDetail("read_web_source", "working", {})).toEqual(["正在阅读网页"]);
+    expect(
+      formatKiroToolActivityDetail("read_web_source", "done", {
+        ok: true,
+        data: { sources: [{ sourceId: "web-3" }, { sourceId: "web-4" }] },
+      })
+    ).toEqual(["已阅读 2 个来源"]);
+    expect(
+      formatKiroToolActivityDetail("read_web_source", "done", { ok: true, data: { sources: [{ sourceId: "web-3" }] } })
+    ).toEqual(["已阅读 1 个来源"]);
+    expect(formatKiroToolActivityDetail("read_web_source", "error", {})).toEqual(["网页内容读取失败"]);
+    // 不展示工具名 / URL / query
+    const raw = JSON.stringify(formatKiroToolActivityDetail("read_web_source", "done", { ok: true, data: { sources: [{ sourceId: "web-3" }] } }));
+    expect(raw).not.toContain("read_web_source");
+    expect(raw).not.toContain("http");
+  });
+
+  it("tool label：read_web_source → 阅读网页（不出现 Tavily Extract）", async () => {
+    const { toolLabel } = await import("@/lib/ai/tools/formatters");
+    expect(toolLabel("read_web_source")).toBe("阅读网页");
+  });
+
+  it("Case B：read_web_source 不属于 mutating（不在 KIRO_MUTATING_TOOL_NAMES）", async () => {
+    const { KIRO_MUTATING_TOOL_NAMES } = await import("@/lib/ai/tools/mutating");
+    expect((KIRO_MUTATING_TOOL_NAMES as string[]).includes("read_web_source")).toBe(false);
+  });
+
+  it("Case C：Reader output 不能单独注册 Web Source——只有 web_search output 是可信 registry 来源", () => {
+    const msgs = [
+      { role: "user", parts: [{ type: "text", text: "查" }] },
+      { role: "assistant", parts: [{ type: "tool-read_web_source", toolCallId: "r1", output: { ok: true, data: { sources: [{ sourceId: "web-3", title: "仅Reader", url: "https://a.dev/3" }] } } }] },
+    ];
+    const sources = resolveCurrentTurnWebSources(msgs);
+    expect(sources).toEqual([]); // 只有 Search output 才会注册
+  });
+});
+
 describe("Case G：provider normalization（Tavily Extract）", () => {
   it("只返回 clean chunks + source metadata；不含 raw response / usage / key", async () => {
     const rawPayload = {
