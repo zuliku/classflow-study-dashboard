@@ -40,6 +40,7 @@ import { deriveAssignmentHealthWithAvailability, healthViewMeta, healthExplanati
 import { usePresence } from "@/lib/usePresence";
 import { useRestoreFocus } from "@/lib/useRestoreFocus";
 import { cn } from "@/lib/utils";
+import { UISelect } from "@/components/ui/Select";
 import { openAssignmentEditor } from "@/lib/uiEvents";
 import { pushOverlay, popOverlay, isTopmostOverlay } from "@/lib/overlayStack";
 import { useKiroHandoff } from "@/hooks/useKiroHandoff";
@@ -321,30 +322,31 @@ export function AssignmentDrawer() {
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
                 <label className="text-[10px] font-bold text-sandrift uppercase tracking-wider">任务状态</label>
-                <select
+                <UISelect<AssignmentStatus>
                   value={assignment.status}
-                  onChange={(e) => updateAssignmentStatus(assignment.id, e.target.value as AssignmentStatus)}
-                  aria-label="任务状态"
-                  className="w-full text-xs font-medium bg-[#F7F5F5] border border-line rounded-xl p-2.5 text-charcoal focus:outline-none cursor-pointer"
-                >
-                  <option value="todo">待完成</option>
-                  <option value="doing">进行中</option>
-                  <option value="submitted">已提交</option>
-                  <option value="completed">已完成</option>
-                </select>
+                  onChange={(v) => updateAssignmentStatus(assignment.id, v)}
+                  ariaLabel="任务状态"
+                  options={[
+                    { value: "todo", label: "待完成" },
+                    { value: "doing", label: "进行中" },
+                    { value: "submitted", label: "已提交" },
+                    { value: "completed", label: "已完成" },
+                  ]}
+                />
               </div>
               <div className="space-y-1">
                 <label className="text-[10px] font-bold text-sandrift uppercase tracking-wider">优先级</label>
-                <select
+                <UISelect<Priority>
                   value={assignment.priority}
-                  onChange={(e) => updateAssignmentPriority(assignment.id, e.target.value as Priority)}
-                  className="w-full text-xs font-medium bg-[#F7F5F5] border border-line rounded-xl p-2.5 text-charcoal focus:outline-none cursor-pointer"
-                >
-                  <option value="urgent">紧急</option>
-                  <option value="high">高</option>
-                  <option value="medium">中</option>
-                  <option value="low">低</option>
-                </select>
+                  onChange={(v) => updateAssignmentPriority(assignment.id, v)}
+                  ariaLabel="优先级"
+                  options={[
+                    { value: "urgent", label: "紧急" },
+                    { value: "high", label: "高" },
+                    { value: "medium", label: "中" },
+                    { value: "low", label: "低" },
+                  ]}
+                />
               </div>
             </div>
 

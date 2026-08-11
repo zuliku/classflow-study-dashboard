@@ -10,6 +10,7 @@ import { format } from "date-fns";
 import { usePresence } from "@/lib/usePresence";
 import { useRestoreFocus } from "@/lib/useRestoreFocus";
 import { cn } from "@/lib/utils";
+import { UISelect, SelectOption } from "@/components/ui/Select";
 import { onOpenAssignmentEditor } from "@/lib/uiEvents";
 import { pushOverlay, popOverlay, isTopmostOverlay } from "@/lib/overlayStack";
 import { getNewTaskDefaults } from "@/lib/taskDefaults";
@@ -248,31 +249,27 @@ export function AddAssignmentModal() {
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1">
               <label className="font-bold text-sandrift">关联课程</label>
-              <select
+              <UISelect
                 value={courseId}
-                onChange={(e) => setCourseId(e.target.value)}
-                className="w-full p-2.5 bg-[#F7F5F5] border border-line rounded-xl focus:outline-none text-xs font-medium"
-              >
-                {courses.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name} ({c.code})
-                  </option>
-                ))}
-              </select>
+                onChange={(v) => setCourseId(v)}
+                ariaLabel="关联课程"
+                options={courses.map((c) => ({ value: c.id, label: `${c.name} (${c.code})` }))}
+              />
             </div>
 
             <div className="space-y-1">
               <label className="font-bold text-sandrift">优先级</label>
-              <select
+              <UISelect<Priority>
                 value={priority}
-                onChange={(e) => setPriority(e.target.value as Priority)}
-                className="w-full p-2.5 bg-[#F7F5F5] border border-line rounded-xl focus:outline-none text-xs font-bold"
-              >
-                <option value="urgent">紧急</option>
-                <option value="high">高优先级</option>
-                <option value="medium">中优先级</option>
-                <option value="low">低优先级</option>
-              </select>
+                onChange={setPriority}
+                ariaLabel="优先级"
+                options={[
+                  { value: "urgent", label: "紧急" },
+                  { value: "high", label: "高优先级" },
+                  { value: "medium", label: "中优先级" },
+                  { value: "low", label: "低优先级" },
+                ]}
+              />
             </div>
           </div>
 
@@ -314,21 +311,16 @@ export function AddAssignmentModal() {
                 </div>
                 {/* Task 7F：重复规则（仅 DDL 启用时显示；完成当前任务后自动生成下一次） */}
                 <div className="flex items-center justify-between gap-2 pt-1">
-                  <label htmlFor="task-recurrence" className="text-[11px] font-bold text-sandrift">
+                  <label id="task-recurrence-label" className="text-[11px] font-bold text-sandrift">
                     重复
                   </label>
-                  <select
-                    id="task-recurrence"
+                  <UISelect<TaskRecurrence | "none">
                     value={recurrence}
-                    onChange={(e) => setRecurrence(e.target.value as TaskRecurrence | "none")}
-                    className="px-2 py-1.5 bg-white border border-line-strong rounded-lg text-xs font-semibold text-charcoal focus:outline-none cursor-pointer"
-                  >
-                    {RECURRENCE_OPTIONS.map((o) => (
-                      <option key={o.value} value={o.value}>
-                        {o.label}
-                      </option>
-                    ))}
-                  </select>
+                    onChange={setRecurrence}
+                    ariaLabel="重复"
+                    options={RECURRENCE_OPTIONS}
+                    triggerClassName="min-w-[120px]"
+                  />
                 </div>
               </>
             ) : (

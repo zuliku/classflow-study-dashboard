@@ -160,7 +160,8 @@ test("Task 7F：新建每周重复任务 → 完成当前 → 自动生成下一
   const pad = (n: number) => String(n).padStart(2, "0");
   const tomorrow = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
   await page.locator(".ux-modal-panel input[type=\"date\"]").fill(tomorrow);
-  await page.getByLabel("重复").selectOption("weekly");
+  await page.getByRole("combobox", { name: "重复" }).click();
+  await page.getByRole("option", { name: "每周" }).click();
   await page.getByRole("button", { name: "保存" }).click();
   await expect(page.getByRole("heading", { name: "新建任务" })).toHaveCount(0);
 
@@ -170,7 +171,8 @@ test("Task 7F：新建每周重复任务 → 完成当前 → 自动生成下一
   await expect(rows).toHaveCount(1);
   await rows.first().click();
   await expect(page.getByRole("heading", { name: "每周英语单词复习" }).last()).toBeVisible();
-  await page.getByRole("combobox", { name: "任务状态" }).selectOption("completed");
+  await page.getByRole("combobox", { name: "任务状态" }).click();
+  await page.getByRole("option", { name: "已完成" }).click();
   await page.getByRole("button", { name: "关闭", exact: true }).first().click();
 
   // 自动生成下一周 occurrence（同一标题，共 2 条）；原任务进入 archive 区（列表靠后）

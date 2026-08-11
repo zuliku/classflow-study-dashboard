@@ -8,6 +8,7 @@ import { Priority } from "@/types";
 import { combineLocalDateTime } from "@/lib/ddl";
 import { format } from "date-fns";
 import { openAssignmentEditor } from "@/lib/uiEvents";
+import { UISelect } from "@/components/ui/Select";
 import { getNewTaskDefaults } from "@/lib/taskDefaults";
 
 /**
@@ -109,18 +110,13 @@ export function QuickAddCard({
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
-        <select
-          value={courseId}
-          onChange={(e) => setCourseId(e.target.value)}
-          aria-label="关联课程"
-          className="h-8 px-2.5 bg-white border border-line-strong rounded-lg text-[11px] font-semibold text-charcoal focus:outline-none cursor-pointer max-w-[180px] truncate"
-        >
-          {courses.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.name}
-            </option>
-          ))}
-        </select>
+              <UISelect
+                value={courseId}
+                onChange={(v) => setCourseId(v)}
+                ariaLabel="关联课程"
+                options={courses.map((c) => ({ value: c.id, label: c.name }))}
+                triggerClassName="h-8 bg-white border-line-strong text-[11px] font-semibold max-w-[180px]"
+              />
 
         {ddlEnabled ? (
           <div className="flex items-center gap-1.5">
@@ -183,16 +179,18 @@ export function QuickAddCard({
           <div className="mt-2.5 grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="space-y-1">
               <label className="text-[10px] font-bold text-sandrift">优先级</label>
-              <select
+              <UISelect<Priority>
                 value={priority}
-                onChange={(e) => setPriority(e.target.value as Priority)}
-                className="w-full h-8 px-2.5 bg-white border border-line-strong rounded-lg text-[11px] font-semibold text-charcoal focus:outline-none cursor-pointer"
-              >
-                <option value="urgent">紧急</option>
-                <option value="high">高</option>
-                <option value="medium">中</option>
-                <option value="low">低</option>
-              </select>
+                onChange={setPriority}
+                ariaLabel="优先级"
+                options={[
+                  { value: "urgent", label: "紧急" },
+                  { value: "high", label: "高" },
+                  { value: "medium", label: "中" },
+                  { value: "low", label: "低" },
+                ]}
+                triggerClassName="h-8 bg-white border-line-strong text-[11px] font-semibold"
+              />
             </div>
             <div className="space-y-1">
               <label className="text-[10px] font-bold text-sandrift">预计耗时（分钟）</label>

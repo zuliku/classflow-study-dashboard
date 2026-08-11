@@ -63,7 +63,7 @@ test("schedule manipulation：关闭 → 拖动不发生、点击正常；打开
   await expect(page.getByRole("switch", { name: "课表直接操作" })).toHaveAttribute("aria-checked", "false");
 
   // 关闭：拖高数课程 → 无提交 toast，位置不变
-  await gotoWorkspaceTab(page, "我的课表");
+  await gotoWorkspaceTab(page, "时间表");
   await expect(page.getByTestId("timetable-body")).toBeVisible();
   const body = await page.getByTestId("timetable-body").boundingBox();
   const card = page.locator('[data-testid="schedule-card"]').filter({ hasText: "高等数学" }).first();
@@ -84,7 +84,7 @@ test("schedule manipulation：关闭 → 拖动不发生、点击正常；打开
   await openSettings(page);
   await gotoInteraction(page);
   await page.getByRole("switch", { name: "课表直接操作" }).click(); // on
-  await gotoWorkspaceTab(page, "我的课表");
+  await gotoWorkspaceTab(page, "时间表");
   await expect(page.getByTestId("timetable-body")).toBeVisible();
   const body2 = await page.getByTestId("timetable-body").boundingBox();
   const card2 = page.locator('[data-testid="schedule-card"]').filter({ hasText: "高等数学" }).first();
@@ -168,10 +168,11 @@ test("defaultDDLTime：改为 21:00 → 新建任务默认截止时间 21:00（�
   await timeInput.fill("21:00");
   await expect(timeInput).toHaveValue("21:00");
 
-  // 新建任务（N）→ 弹窗默认 21:00
+  // 新建任务（N）→ 启用截止时间 → 弹窗默认 21:00（Task V2：未启用 = 无截止日期）
   await gotoOverview(page);
   await page.keyboard.press("n");
   await expect(page.getByRole("heading", { name: "新建任务" })).toBeVisible();
+  await page.getByLabel("设置截止时间").check();
   const modalTime = page.locator("input[type='time']").last();
   await expect(modalTime).toHaveValue("21:00");
   await page.keyboard.press("Escape");

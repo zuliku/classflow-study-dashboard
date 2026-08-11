@@ -103,7 +103,7 @@ describe("Zustand persist 边界与迁移", () => {
     expect(saved.selectedConflict).toBeUndefined();
     expect(saved.courses).toHaveLength(1);
     expect(saved.assignmentTimeSlice).toBe("all");
-    expect(raw.version).toBe(4); // v4：Task V2（ddl 可选 + estimatedMinutes）持久化 schema
+    expect(raw.version).toBe(6); // 当前 persist schema version
   });
 
   it("核心数组缺失时回落空数组，不崩溃", async () => {

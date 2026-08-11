@@ -10,6 +10,7 @@ import { COURSE_COLOR_OPTIONS } from "@/lib/courseAppearance";
 import { usePresence } from "@/lib/usePresence";
 import { useRestoreFocus } from "@/lib/useRestoreFocus";
 import { cn } from "@/lib/utils";
+import { UISelect } from "@/components/ui/Select";
 import { pushOverlay, popOverlay, isTopmostOverlay } from "@/lib/overlayStack";
 
 const OVERLAY_ID = "add-course-modal";
@@ -294,34 +295,25 @@ export function AddCourseModal() {
                   <div className="grid grid-cols-2 gap-2">
                     <div>
                       <label className="text-[10px] text-sandrift">周次规则</label>
-                      <select
+                      <UISelect
                         value={slot.weeks}
-                        onChange={(e) => handleSlotChange(idx, "weeks", e.target.value)}
-                        className="w-full p-1.5 bg-white border border-line-strong rounded-lg focus:outline-none text-[11px]"
-                      >
-                        {WEEK_RANGE_PRESETS.map((preset) => (
-                          <option key={preset.value} value={preset.value}>
-                            {preset.label}
-                          </option>
-                        ))}
-                      </select>
+                        onChange={(v) => handleSlotChange(idx, "weeks", v)}
+                        ariaLabel="周次规则"
+                        options={WEEK_RANGE_PRESETS}
+                      />
                     </div>
 
                     <div>
                       <label className="text-[10px] text-sandrift">星期</label>
-                      <select
+                      <UISelect<number>
                         value={slot.dayOfWeek}
-                        onChange={(e) => handleSlotChange(idx, "dayOfWeek", Number(e.target.value))}
-                        className="w-full p-1.5 bg-white border border-line-strong rounded-lg focus:outline-none text-[11px]"
-                      >
-                        <option value={1}>周一</option>
-                        <option value={2}>周二</option>
-                        <option value={3}>周三</option>
-                        <option value={4}>周四</option>
-                        <option value={5}>周五</option>
-                        <option value={6}>周六</option>
-                        <option value={7}>周日</option>
-                      </select>
+                        onChange={(v) => handleSlotChange(idx, "dayOfWeek", v)}
+                        ariaLabel="星期"
+                        options={[1, 2, 3, 4, 5, 6, 7].map((d) => ({
+                          value: d,
+                          label: ["周一", "周二", "周三", "周四", "周五", "周六", "周日"][d - 1],
+                        }))}
+                      />
                     </div>
                   </div>
 

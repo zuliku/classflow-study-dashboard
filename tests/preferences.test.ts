@@ -134,7 +134,7 @@ describe("AppPreferences store 集成", () => {
     // 触发 persist 写入
     await new Promise((r) => setTimeout(r, 10));
     const raw = JSON.parse(localStorage.getItem(KEY)!);
-    expect(raw.version).toBe(3);
+    expect(raw.version).toBe(6); // 当前 persist schema version
     expect(raw.state.preferences.motionPreference).toBe("reduced");
 
     // 重新加载 store（模拟刷新）

@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import React, { useState, useEffect, useMemo, useRef } from "react";
 import {
@@ -21,6 +21,7 @@ import { TimeSliceFilter, Priority } from "@/types";
 import { openAssignmentEditor } from "@/lib/uiEvents";
 import { useEnterOnAdd } from "@/lib/useEnterOnAdd";
 import { cn, getPriorityMeta } from "@/lib/utils";
+import { UISelect } from "@/components/ui/Select";
 import { isToday, differenceInDays } from "date-fns";
 import { parseLocalDDL, getLocalDDLDate } from "@/lib/ddl";
 import { formatEstimatedMinutes } from "@/lib/tasks/taskSemantics";
@@ -518,21 +519,20 @@ export function AssignmentTable({ mode = "compact" }: AssignmentTableProps) {
         <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
           <div className="flex items-center space-x-1.5 bg-[#F7F5F5] border border-line rounded-xl px-2.5 py-1">
             <BookOpen className="w-3.5 h-3.5 text-[#A48F82]" />
-            <select
+            <UISelect
               value={courseFilter}
-              onChange={(e) => {
-                setCourseFilter(e.target.value);
+              onChange={(v) => {
+                setCourseFilter(v);
                 if (!isWorkspace) setCompactPage(1); // 筛选变化回第一页
               }}
-              className="bg-transparent text-charcoal text-xs font-semibold focus:outline-none cursor-pointer max-w-[160px] truncate"
-            >
-              <option value="all">全部课程 ({assignments.length})</option>
-              {courses.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
+              ariaLabel="课程筛选"
+              options={[
+                { value: "all", label: `全部课程 (${assignments.length})` },
+                ...courses.map((c) => ({ value: c.id, label: c.name })),
+              ]}
+              triggerClassName="bg-transparent border-0 h-7 px-1 min-w-[120px] text-xs font-semibold max-w-[160px]"
+              itemClassName="h-8"
+            />
           </div>
 
           {isWorkspace ? (
@@ -975,26 +975,17 @@ export function AssignmentTable({ mode = "compact" }: AssignmentTableProps) {
           >
             进行中
           </button>
-          <select
+          <UISelect<Priority | "">
             value=""
-            onChange={(e) => {
-              if (e.target.value) {
-                actions.setPriority(assignmentSelection, e.target.value as Priority);
-                e.target.value = "";
-              }
+            onChange={(v) => {
+              if (v) actions.setPriority(assignmentSelection, v);
             }}
-            className="px-2 py-1 rounded-lg font-semibold text-satin-grey bg-[#F7F5F5] border border-line cursor-pointer focus:outline-none"
-            aria-label="修改优先级"
-          >
-            <option value="" disabled>
-              优先级
-            </option>
-            {PRIORITY_OPTIONS.map((p) => (
-              <option key={p.value} value={p.value}>
-                {p.label}
-              </option>
-            ))}
-          </select>
+            ariaLabel="修改优先级"
+            placeholder="优先级"
+            options={PRIORITY_OPTIONS}
+            triggerClassName="h-7 px-2 text-[11px] font-semibold text-satin-grey min-w-[92px]"
+            itemClassName="h-8"
+          />
           {bulkDdlOpen ? (
             <span
               data-testid="bulk-ddl-popover"

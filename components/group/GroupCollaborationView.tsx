@@ -19,6 +19,7 @@ import {
 import { useAppStore } from "@/store/useAppStore";
 import { useToastStore } from "@/store/useToastStore";
 import { useConfirmStore } from "@/store/useConfirmStore";
+import { UISelect } from "@/components/ui/Select";
 import { format, formatDistanceToNow } from "date-fns";
 import { zhCN } from "date-fns/locale";
 import { cardKeyHandler } from "@/lib/utils";
@@ -726,13 +727,7 @@ export function GroupCollaborationView() {
             </div>
             <div>
               <label className={labelCls}>关联课程 *</label>
-              <select value={pCourseId} onChange={(e) => setPCourseId(e.target.value)} className={inputCls}>
-                {courses.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name} ({c.code})
-                  </option>
-                ))}
-              </select>
+              <UISelect value={pCourseId} onChange={setPCourseId} ariaLabel="关联课程" options={courses.map((c) => ({ value: c.id, label: `${c.name} (${c.code})` }))} />
             </div>
             <div>
               <label className={labelCls}>项目说明</label>
@@ -771,10 +766,7 @@ export function GroupCollaborationView() {
             </div>
             <div>
               <label className={labelCls}>身份</label>
-              <select value={mRole} onChange={(e) => setMRole(e.target.value as GroupMember["role"])} className={inputCls}>
-                <option value="member">组员</option>
-                <option value="leader">组长</option>
-              </select>
+              <UISelect<GroupMember["role"]> value={mRole} onChange={setMRole} ariaLabel="成员角色" options={[{ value: "member", label: "组员" }, { value: "leader", label: "组长" }]} />
             </div>
             <div>
               <label className={labelCls}>专业（可选）</label>
@@ -813,14 +805,7 @@ export function GroupCollaborationView() {
             </div>
             <div>
               <label className={labelCls}>负责人</label>
-              <select value={tAssigneeId} onChange={(e) => setTAssigneeId(e.target.value)} className={inputCls}>
-                <option value="">未分配</option>
-                {(selectedProject?.members ?? []).map((m) => (
-                  <option key={m.id} value={m.id}>
-                    {m.name}
-                  </option>
-                ))}
-              </select>
+              <UISelect value={tAssigneeId} onChange={setTAssigneeId} ariaLabel="负责人" options={[{ value: "", label: "未分配" }, ...(selectedProject?.members ?? []).map((m) => ({ value: m.id, label: m.name }))]} />
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>

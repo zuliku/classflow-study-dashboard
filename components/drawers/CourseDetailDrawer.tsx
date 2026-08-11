@@ -29,6 +29,7 @@ import { findScheduleConflicts } from "@/lib/conflicts";
 import { usePresence } from "@/lib/usePresence";
 import { useRestoreFocus } from "@/lib/useRestoreFocus";
 import { cn } from "@/lib/utils";
+import { UISelect } from "@/components/ui/Select";
 import { openAssignmentEditor, previewMaterial } from "@/lib/uiEvents";
 import { popOverlay, isTopmostOverlay } from "@/lib/overlayStack";
 import { useKiroHandoff } from "@/hooks/useKiroHandoff";
@@ -44,18 +45,16 @@ function WeeksSelect({ value, onChange }: { value: string; onChange: (weeks: str
   const isCustom = !WEEK_RANGE_PRESETS.some((p) => p.value === value);
   return (
     <div className="space-y-1.5">
-      <select
+      <UISelect
         value={isCustom ? "__custom__" : value}
-        onChange={(e) => onChange(e.target.value === "__custom__" ? value : e.target.value)}
-        className="w-full p-1.5 bg-white border border-line-strong rounded-lg focus:outline-none text-[11px]"
-      >
-        {WEEK_RANGE_PRESETS.map((preset) => (
-          <option key={preset.value} value={preset.value}>
-            {preset.label}
-          </option>
-        ))}
-        <option value="__custom__">自定义…</option>
-      </select>
+        onChange={(v) => onChange(v === "__custom__" ? value : v)}
+        ariaLabel="周次规则"
+        options={[
+          ...WEEK_RANGE_PRESETS.map((p) => ({ value: p.value, label: p.label })),
+          { value: "__custom__", label: "自定义…" },
+        ]}
+        triggerClassName="bg-white border-line-strong text-[11px]"
+      />
       {isCustom && (
         <input
           type="text"
@@ -599,19 +598,16 @@ export function CourseDetailDrawer() {
                       <div className="grid grid-cols-2 gap-2">
                         <div>
                           <label className="text-[10px] text-sandrift">星期</label>
-                          <select
+                          <UISelect<number>
                             value={slotForm.dayOfWeek}
-                            onChange={(e) =>
-                              setSlotForm({ ...slotForm, dayOfWeek: Number(e.target.value) })
-                            }
-                            className="w-full p-1.5 bg-[#F7F5F5] border border-line rounded-lg focus:outline-none text-[11px]"
-                          >
-                            {["周一", "周二", "周三", "周四", "周五", "周六", "周日"].map((label, i) => (
-                              <option key={i} value={i + 1}>
-                                {label}
-                              </option>
-                            ))}
-                          </select>
+                            onChange={(v) => setSlotForm({ ...slotForm, dayOfWeek: v })}
+                            ariaLabel="星期"
+                            options={[1, 2, 3, 4, 5, 6, 7].map((d) => ({
+                              value: d,
+                              label: ["周一", "周二", "周三", "周四", "周五", "周六", "周日"][d - 1],
+                            }))}
+                            triggerClassName="bg-[#F7F5F5] text-[11px]"
+                          />
                         </div>
                         <div>
                           <label className="text-[10px] text-sandrift">周次</label>
@@ -726,17 +722,16 @@ export function CourseDetailDrawer() {
             <form onSubmit={handleAddSlot} className="p-3 bg-alabaster/60 border border-line-strong rounded-xl space-y-2">
               <span className="font-bold text-charcoal text-[11px]">添加上课时段</span>
               <div className="grid grid-cols-2 gap-2">
-                <select
+                <UISelect<number>
                   value={newDay}
-                  onChange={(e) => setNewDay(Number(e.target.value))}
-                  className="p-1.5 bg-white border border-line-strong rounded-lg text-xs"
-                >
-                  {["周一", "周二", "周三", "周四", "周五", "周六", "周日"].map((label, i) => (
-                    <option key={i} value={i + 1}>
-                      {label}
-                    </option>
-                  ))}
-                </select>
+                  onChange={setNewDay}
+                  ariaLabel="星期"
+                  options={[1, 2, 3, 4, 5, 6, 7].map((d) => ({
+                    value: d,
+                    label: ["周一", "周二", "周三", "周四", "周五", "周六", "周日"][d - 1],
+                  }))}
+                  triggerClassName="bg-white border-line-strong text-xs"
+                />
                 <WeeksSelect value={newWeeks} onChange={setNewWeeks} />
               </div>
               <div className="grid grid-cols-3 gap-2">

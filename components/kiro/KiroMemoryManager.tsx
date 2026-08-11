@@ -8,6 +8,7 @@ import { useConfirmStore } from "@/store/useConfirmStore";
 import { useAppStore } from "@/store/useAppStore";
 import { MEMORY_CATEGORY_LABELS, MEMORY_SCOPE_LABELS, KiroMemory, MemoryCategory, MemoryScope } from "@/lib/ai/memory/types";
 import { cn } from "@/lib/utils";
+import { UISelect } from "@/components/ui/Select";
 
 /**
  * Kiro Memory Manager（Task 9）：查看 / 编辑 / 删除 / 清空长期学习记忆。
@@ -150,38 +151,36 @@ export function KiroMemoryManager({
                         className="w-full bg-white border border-line-strong rounded-lg px-2 py-1.5 text-xs text-charcoal focus:outline-none resize-none"
                       />
                       <div className="flex flex-wrap items-center gap-2">
-                        <select
+                        <UISelect<MemoryCategory>
                           value={form.category}
-                          onChange={(e) => setForm((f) => ({ ...f, category: e.target.value as MemoryCategory }))}
-                          aria-label="记忆分类"
-                          className="bg-white border border-line rounded-lg px-2 py-1 text-[11px] text-charcoal focus:outline-none"
-                        >
-                          {(Object.keys(MEMORY_CATEGORY_LABELS) as MemoryCategory[]).map((c) => (
-                            <option key={c} value={c}>{MEMORY_CATEGORY_LABELS[c]}</option>
-                          ))}
-                        </select>
-                        <select
+                          onChange={(v) => setForm((f) => ({ ...f, category: v }))}
+                          ariaLabel="记忆分类"
+                          options={(Object.keys(MEMORY_CATEGORY_LABELS) as MemoryCategory[]).map(
+                            (c) => ({ value: c, label: MEMORY_CATEGORY_LABELS[c] })
+                          )}
+                          triggerClassName="h-8 bg-white text-[11px] font-semibold min-w-[110px]"
+                        />
+                        <UISelect<MemoryScope>
                           value={form.scope}
-                          onChange={(e) => setForm((f) => ({ ...f, scope: e.target.value as MemoryScope, scopeId: "" }))}
-                          aria-label="记忆范围"
-                          className="bg-white border border-line rounded-lg px-2 py-1 text-[11px] text-charcoal focus:outline-none"
-                        >
-                          {(Object.keys(MEMORY_SCOPE_LABELS) as MemoryScope[]).map((s) => (
-                            <option key={s} value={s}>{MEMORY_SCOPE_LABELS[s]}</option>
-                          ))}
-                        </select>
+                          onChange={(v) => setForm((f) => ({ ...f, scope: v, scopeId: "" }))}
+                          ariaLabel="记忆范围"
+                          options={(Object.keys(MEMORY_SCOPE_LABELS) as MemoryScope[]).map((s) => ({
+                            value: s,
+                            label: MEMORY_SCOPE_LABELS[s],
+                          }))}
+                          triggerClassName="h-8 bg-white text-[11px] font-semibold min-w-[110px]"
+                        />
                         {form.scope === "course" && (
-                          <select
+                          <UISelect
                             value={form.scopeId}
-                            onChange={(e) => setForm((f) => ({ ...f, scopeId: e.target.value }))}
-                            aria-label="关联课程"
-                            className="bg-white border border-line rounded-lg px-2 py-1 text-[11px] text-charcoal focus:outline-none"
-                          >
-                            <option value="">选择课程</option>
-                            {courses.map((c) => (
-                              <option key={c.id} value={c.id}>{c.name}</option>
-                            ))}
-                          </select>
+                            onChange={(v) => setForm((f) => ({ ...f, scopeId: v }))}
+                            ariaLabel="关联课程"
+                            options={[
+                              { value: "", label: "选择课程" },
+                              ...courses.map((c) => ({ value: c.id, label: c.name })),
+                            ]}
+                            triggerClassName="h-8 bg-white text-[11px] font-semibold min-w-[120px]"
+                          />
                         )}
                         <div className="ml-auto flex items-center gap-1.5">
                           <button onClick={() => setEditing(null)} className="px-2 h-7 rounded-lg text-[11px] font-bold text-satin-grey hover:bg-alabaster transition-colors">取消</button>

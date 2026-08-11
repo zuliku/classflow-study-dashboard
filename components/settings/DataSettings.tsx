@@ -6,6 +6,7 @@ import { useAppStore } from "@/store/useAppStore";
 import { useToastStore } from "@/store/useToastStore";
 import { SettingsSection } from "@/components/settings/SettingsSection";
 import { SettingsGroup } from "@/components/settings/SettingsGroup";
+import { SettingsActionRow } from "@/components/settings/SettingsActionRow";
 import { DataOverview } from "@/components/settings/DataOverview";
 import { DataHealth } from "@/components/settings/DataHealth";
 import { BackupSection } from "@/components/settings/BackupSection";
@@ -63,28 +64,6 @@ export function DataSettings() {
           <div className="py-3">
             <DataOverview counts={counts} />
           </div>
-
-          {/* Dev Only：演示数据重载入口（生产构建不渲染） */}
-          {process.env.NODE_ENV === "development" && (
-            <div
-              data-testid="dev-demo-reload"
-              className="flex items-center justify-between gap-3 p-3 bg-alabaster/60 border border-dashed border-line-strong rounded-xl text-xs"
-            >
-              <div className="min-w-0">
-                <p className="font-bold text-charcoal">完整演示数据（开发模式）</p>
-                <p className="text-[11px] text-sandrift">
-                  重载全模块预览：总览 / 时间表 / 任务 V2 / 课程资料 / 学习统计 / 小组协作
-                </p>
-              </div>
-              <button
-                onClick={reloadDemoData}
-                className="ux-press flex items-center gap-1.5 px-3 py-1.5 bg-charcoal hover:bg-black text-white text-xs font-bold rounded-lg transition-colors shrink-0"
-              >
-                <RefreshCcw className="w-3.5 h-3.5" />
-                重新载入
-              </button>
-            </div>
-          )}
         </SettingsGroup>
 
         {/* 数据状态：完整性检查（信息性质，非设置） */}
@@ -126,6 +105,20 @@ export function DataSettings() {
         <SettingsGroup title="危险操作">
           <DangerZone />
         </SettingsGroup>
+
+        {/* 开发工具（仅 dev）：低权重，位于页面最底部，不属于正式设置 */}
+        {process.env.NODE_ENV === "development" && (
+          <SettingsGroup title="开发工具">
+            <SettingsActionRow
+              title="完整演示数据"
+              description="重载用于本地开发的完整模块数据（覆盖业务数据，保留个人资料与偏好）"
+              icon={<RefreshCcw className="w-3.5 h-3.5 text-[#A48F82]" />}
+              actionLabel="重新载入"
+              onAction={reloadDemoData}
+              actionMinWidth="min-w-[104px]"
+            />
+          </SettingsGroup>
+        )}
       </div>
     </SettingsSection>
   );

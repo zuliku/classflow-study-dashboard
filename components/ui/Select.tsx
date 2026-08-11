@@ -16,17 +16,19 @@ import { cn } from "@/lib/utils";
  * - focus：mouse 点击不保留刺眼 ring；键盘 focus-visible 轻量 ring（:focus-visible）
  */
 
-export interface SelectOption<T extends string> {
+export interface SelectOption<T extends string | number> {
   value: T;
   label: string;
 }
 
-interface UISelectProps<T extends string> {
+interface UISelectProps<T extends string | number> {
   value: T;
   onChange: (v: T) => void;
   options: SelectOption<T>[];
   ariaLabel?: string;
   disabled?: boolean;
+  /** value 未匹配任何 option 时显示（如批量操作占位） */
+  placeholder?: string;
   /** trigger 样式（SettingsSelect 传入 Settings 规格） */
   triggerClassName?: string;
   /** 菜单容器附加样式 */
@@ -36,7 +38,7 @@ interface UISelectProps<T extends string> {
   testid?: string;
 }
 
-export function UISelect<T extends string>({
+export function UISelect<T extends string | number>({
   value,
   onChange,
   options,
@@ -45,12 +47,13 @@ export function UISelect<T extends string>({
   triggerClassName,
   menuClassName,
   itemClassName,
+  placeholder,
   testid,
 }: UISelectProps<T>) {
   const baseId = useId().replace(/[^a-zA-Z0-9]/g, "");
   const listboxId = `select-listbox-${baseId}`;
   const [open, setOpen] = useState(false);
-  const [closing, setClosing] = useState(false);
+  const [visible, setVisible] = useState(false);
   const [activeIndex, setActiveIndex] = useState(() =>
     Math.max(0, options.findIndex((o) => o.value === value))
   );
@@ -58,19 +61,14 @@ export function UISelect<T extends string>({
   const [menuWidth, setMenuWidth] = useState<number | undefined>(undefined);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
+  const closeTimerRef = useRef<number | null>(null);
+  const rafRef = useRef<number | null>(null);
   const selectedIndex = Math.max(0, options.findIndex((o) => o.value === value));
 
   const reducedMotion =
     typeof document !== "undefined" && document.documentElement.dataset.motion === "reduced";
 
-  const closeMenu = useCallback(() => {
-    setClosing(true);
-    window.setTimeout(() => {
-      setOpen(false);
-      setClosing(false);
-    }, reducedMotion ? 0 : 120);
-  }, [reducedMotion]);
-
+  // 打开：先挂载（opacity-0）→ 下一帧切到可见（opacity-100 + translate-y-0）
   const openMenu = useCallback(() => {
     if (disabled || options.length === 0) return;
     const el = triggerRef.current;
@@ -92,9 +90,36 @@ export function UISelect<T extends string>({
     });
     setMenuWidth(rect.width);
     setOpen(true);
-    setClosing(false);
     setActiveIndex(options.findIndex((o) => o.value === value));
-  }, [disabled, options, value]);
+    if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
+    if (reducedMotion) {
+      setVisible(true);
+    } else {
+      setVisible(false);
+      rafRef.current = requestAnimationFrame(() => {
+        rafRef.current = null;
+        setVisible(true);
+      });
+    }
+  }, [disabled, options, value, reducedMotion]);
+
+  // 关闭：先切不可见（fade）→ 动画结束后卸载
+  const closeMenu = useCallback(() => {
+    if (closeTimerRef.current !== null) window.clearTimeout(closeTimerRef.current);
+    setVisible(false);
+    closeTimerRef.current = window.setTimeout(() => {
+      closeTimerRef.current = null;
+      setOpen(false);
+    }, reducedMotion ? 0 : 120);
+  }, [reducedMotion]);
+
+  useEffect(
+    () => () => {
+      if (closeTimerRef.current !== null) window.clearTimeout(closeTimerRef.current);
+      if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
+    },
+    []
+  );
 
   // outside click / scroll / resize 关闭
   useEffect(() => {
@@ -116,11 +141,15 @@ export function UISelect<T extends string>({
     };
   }, [open, closeMenu]);
 
-  // Escape 全局（菜单打开时）
+  // Escape 全局（菜单打开且可见时拦截；淡出中不拦截，避免吞掉 Modal / Drawer 的 Escape）
+  const visibleRef = useRef(visible);
+  useEffect(() => {
+    visibleRef.current = visible;
+  }, [visible]);
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
+      if (e.key === "Escape" && visibleRef.current) {
         e.stopPropagation();
         closeMenu();
         triggerRef.current?.focus();
@@ -144,7 +173,11 @@ export function UISelect<T extends string>({
     const opt = options[index];
     if (!opt) return;
     onChange(opt.value);
-    closeMenu();
+    // 选择完成：立即卸载（不保留淡出窗口，避免拦截紧随其后的 Escape / 上层交互）
+    if (closeTimerRef.current !== null) window.clearTimeout(closeTimerRef.current);
+    closeTimerRef.current = null;
+    setVisible(false);
+    setOpen(false);
     triggerRef.current?.focus();
   };
 
@@ -177,7 +210,7 @@ export function UISelect<T extends string>({
     }
   };
 
-  const selectedLabel = options.find((o) => o.value === value)?.label ?? "";
+  const selectedLabel = options.find((o) => o.value === value)?.label ?? placeholder ?? "";
 
   return (
     <>
@@ -222,8 +255,9 @@ export function UISelect<T extends string>({
             style={{ ...menuStyle, width: menuWidth }}
             className={cn(
               "z-[60] overflow-y-auto rounded-lg border border-line bg-surface shadow-card py-1",
-              "transition-opacity duration-[var(--motion-fast)] ease-[var(--ease-standard)]",
-              reducedMotion ? "opacity-100" : "opacity-0 translate-y-0.5",
+              "transition-opacity transition-transform duration-[var(--motion-fast)] ease-[var(--ease-standard)]",
+              visible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-0.5",
+              reducedMotion && "transition-none transform-none",
               menuClassName
             )}
             onKeyDown={onMenuKeyDown}
@@ -233,7 +267,7 @@ export function UISelect<T extends string>({
               const isActive = i === activeIndex;
               return (
                 <button
-                  key={opt.value}
+                  key={String(opt.value)}
                   type="button"
                   id={`${listboxId}-option-${i}`}
                   role="option"

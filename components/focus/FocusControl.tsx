@@ -7,6 +7,7 @@ import { useToastStore } from "@/store/useToastStore";
 import { FocusSession } from "@/types";
 import { deriveFocusClock } from "@/lib/focus/focusDomain";
 import { cn } from "@/lib/utils";
+import { UISelect } from "@/components/ui/Select";
 
 const PRESETS = [15, 25, 30, 45, 60];
 
@@ -211,33 +212,18 @@ export function FocusControl() {
 
               <div className="space-y-1">
                 <p className="text-[10px] font-bold text-sandrift uppercase tracking-wider">关联对象</p>
-                <select
+                <UISelect
                   value={target}
-                  onChange={(e) => setTarget(e.target.value)}
-                  className="w-full px-2 py-1.5 bg-[#F7F5F5] border border-line rounded-lg text-[11px] text-charcoal focus:outline-none cursor-pointer"
-                >
-                  <option value="none">不关联</option>
-                  {courses.length > 0 && (
-                    <optgroup label="课程">
-                      {courses.map((c) => (
-                        <option key={c.id} value={`course:${c.id}`}>
-                          {c.name}
-                        </option>
-                      ))}
-                    </optgroup>
-                  )}
-                  {assignments.filter((a) => a.status !== "completed").length > 0 && (
-                    <optgroup label="任务">
-                      {assignments
-                        .filter((a) => a.status !== "completed")
-                        .map((a) => (
-                          <option key={a.id} value={`assignment:${a.id}`}>
-                            {a.title}
-                          </option>
-                        ))}
-                    </optgroup>
-                  )}
-                </select>
+                  onChange={setTarget}
+                  ariaLabel="关联对象"
+                  options={[
+                    { value: "none", label: "不关联" },
+                    ...courses.map((c) => ({ value: `course:${c.id}`, label: `课程 · ${c.name}` })),
+                    ...assignments
+                      .filter((a) => a.status !== "completed")
+                      .map((a) => ({ value: `assignment:${a.id}`, label: `任务 · ${a.title}` })),
+                  ]}
+                />
               </div>
 
               <div className="space-y-1">
