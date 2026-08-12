@@ -1,67 +1,45 @@
 "use client";
 
-import React, { useEffect } from "react";
+import React from "react";
 import { AlertTriangle, X } from "lucide-react";
 import { useConfirmStore } from "@/store/useConfirmStore";
-import { usePresence } from "@/lib/usePresence";
-import { useRestoreFocus } from "@/lib/useRestoreFocus";
+import { Dialog } from "@/components/ui/Dialog";
 import { cn } from "@/lib/utils";
-import { pushOverlay, popOverlay, isTopmostOverlay } from "@/lib/overlayStack";
 
 const OVERLAY_ID = "confirm-dialog";
 
 /** 统一危险操作确认对话框（删除课程、重置数据、Kiro 高风险工具等） */
 export function ConfirmDialog() {
   const { request, close } = useConfirmStore();
-  const { mounted, visible } = usePresence(!!request, 220);
-  useRestoreFocus(!!request);
-
-  useEffect(() => {
-    if (!mounted) return;
-    pushOverlay(OVERLAY_ID, 60);
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && isTopmostOverlay(OVERLAY_ID)) handleCancel();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => {
-      popOverlay(OVERLAY_ID);
-      window.removeEventListener("keydown", onKey);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mounted, request]);
-
-  if (!mounted || !request) return null;
 
   /** Esc / X / 取消按钮统一走 onCancel（确认按钮不触发） */
   const handleCancel = () => {
-    const fn = request.onCancel;
+    const fn = request?.onCancel;
     close();
     fn?.();
   };
 
   const handleConfirm = () => {
+    if (!request) return;
     const fn = request.onConfirm;
     close();
     fn();
   };
 
   return (
-    <div
-      className={cn(
-        "fixed inset-0 z-[60] bg-black/40 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4",
-        "ux-overlay",
-        visible ? "opacity-100" : "opacity-0"
-      )}
+    <Dialog
+      open={!!request}
+      onOpenChange={(next) => {
+        if (!next) handleCancel();
+      }}
+      overlayId={OVERLAY_ID}
+      stackZ={60}
+      closeOnBackdrop={false}
       role="alertdialog"
-      aria-modal="true"
+      aria-label={request?.title}
+      className="max-w-sm"
     >
-      <div
-        className={cn(
-          "w-full max-w-sm bg-surface rounded-2xl shadow-drawer border border-line overflow-hidden",
-          "ux-modal-panel",
-          visible ? "opacity-100 scale-100 translate-y-0" : "opacity-0 scale-[0.985] translate-y-1"
-        )}
-      >
+      {request && (
         <div className="p-5 space-y-3">
           <div className="flex items-start justify-between gap-2">
             <div className="flex items-center gap-2">
@@ -105,7 +83,7 @@ export function ConfirmDialog() {
             </button>
           </div>
         </div>
-      </div>
-    </div>
+      )}
+    </Dialog>
   );
 }
