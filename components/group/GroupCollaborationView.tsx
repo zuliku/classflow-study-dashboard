@@ -4,10 +4,16 @@ import React, { useState, useEffect } from "react";
 
 import { WorkspaceHeader } from "@/components/layout/WorkspaceHeader";
 import { Button } from "@/components/ui/Button";
+import { IconButton } from "@/components/ui/IconButton";
+import { Input } from "@/components/ui/Input";
+import { Textarea } from "@/components/ui/Textarea";
+import { Field } from "@/components/ui/Field";
+import { SearchField } from "@/components/ui/SearchField";
+import { Checkbox } from "@/components/ui/Checkbox";
 import {
   Plus,
   CheckSquare,
-  Square,
+
   Clock,
   User,
   ChevronRight,
@@ -15,7 +21,7 @@ import {
   Trash2,
   Pencil,
   X,
-  Search,
+
 } from "lucide-react";
 import { useAppStore } from "@/store/useAppStore";
 import { useToastStore } from "@/store/useToastStore";
@@ -88,13 +94,14 @@ function GroupModal({
     >
       <div className="p-4 px-5 border-b border-line-soft flex items-center justify-between shrink-0">
         <h3 className="text-sm font-bold text-charcoal flex items-center gap-2">{title}</h3>
-        <button
+        <IconButton
+          variant="ghost"
+          size="sm"
           onClick={onClose}
-          className="p-1 rounded-lg text-sandrift hover:bg-alabaster hover:text-charcoal transition-colors"
           aria-label="关闭"
         >
           <X className="w-4 h-4" />
-        </button>
+        </IconButton>
       </div>
       <div className="p-5 space-y-3 overflow-y-auto text-xs">{children}</div>
       {footer && (
@@ -109,10 +116,6 @@ function usePresenceId(): string {
   const [id] = useState(() => `group-modal-${modalCounter++}`);
   return id;
 }
-
-const inputCls =
-  "w-full p-2.5 bg-white border border-line-strong rounded-xl focus:outline-none focus:border-sandrift text-xs";
-const labelCls = "font-bold text-sandrift block mb-1";
 
 export function GroupCollaborationView() {
   const {
@@ -368,13 +371,10 @@ export function GroupCollaborationView() {
             <div className="py-10 text-center space-y-2 bg-surface border border-line rounded-2xl">
               <p className="text-xs font-semibold text-charcoal">还没有小组项目</p>
               <p className="text-[11px] text-sandrift">创建项目后，可以在这里管理成员和任务分工。</p>
-              <button
-                onClick={openCreateProject}
-                className="inline-flex items-center space-x-1 px-3 py-1.5 bg-charcoal hover:bg-black text-white text-[11px] font-bold rounded-xl transition-colors"
-              >
+              <Button variant="primary" size="sm" onClick={openCreateProject}>
                 <Plus className="w-3 h-3" />
                 <span>新建项目</span>
-              </button>
+              </Button>
             </div>
           ) : (
             <div className="space-y-2">
@@ -433,24 +433,28 @@ export function GroupCollaborationView() {
                   <span className="text-xs font-mono text-sandrift px-2 py-0.5 bg-white rounded border border-line-strong">
                     {courses.find((c) => c.id === selectedProject.courseId)?.name || "通用课题"}
                   </span>
-                  <div className="flex items-center space-x-2 mt-1.5">
+                  <div className="flex items-center space-x-1 mt-1.5">
                     <h3 className="text-lg font-bold text-charcoal truncate">{selectedProject.title}</h3>
-                    <button
+                    <IconButton
+                      variant="ghost"
+                      size="sm"
                       onClick={openEditProject}
-                      className="p-1 text-sandrift hover:bg-alabaster rounded-lg"
                       title="编辑项目"
                       aria-label="编辑项目"
+                      className="h-7 w-7"
                     >
                       <Pencil className="w-3.5 h-3.5" />
-                    </button>
-                    <button
+                    </IconButton>
+                    <IconButton
+                      variant="danger"
+                      size="sm"
                       onClick={handleDeleteProject}
-                      className="p-1 text-danger hover:bg-danger-bg rounded-lg"
                       title="删除项目"
                       aria-label="删除项目"
+                      className="h-7 w-7"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
-                    </button>
+                    </IconButton>
                   </div>
                 </div>
                 <div className="text-right">
@@ -476,25 +480,24 @@ export function GroupCollaborationView() {
                   <h4 className="text-xs font-bold text-sandrift uppercase tracking-wider">
                     小组成员 ({selectedProject.members.length})
                   </h4>
-                  <button
+                  <Button
+                    variant="secondary"
+                    size="sm"
                     onClick={openAddMember}
-                    className="flex items-center space-x-1 text-[11px] font-bold text-charcoal hover:bg-alabaster px-2 py-1 rounded-lg transition-colors"
+                    className="h-7 px-2 text-[11px]"
                   >
                     <Plus className="w-3 h-3" />
                     <span>添加成员</span>
-                  </button>
+                  </Button>
                 </div>
 
                 {selectedProject.members.length === 0 ? (
                   <div className="py-6 text-center space-y-2 bg-white border border-line rounded-xl">
                     <p className="text-[11px] text-sandrift">还没有成员</p>
-                    <button
-                      onClick={openAddMember}
-                      className="inline-flex items-center space-x-1 px-3 py-1.5 bg-charcoal hover:bg-black text-white text-[11px] font-bold rounded-lg"
-                    >
+                    <Button variant="primary" size="sm" onClick={openAddMember}>
                       <Plus className="w-3 h-3" />
                       <span>添加成员</span>
-                    </button>
+                    </Button>
                   </div>
                 ) : (
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
@@ -523,22 +526,26 @@ export function GroupCollaborationView() {
                           </div>
                         </div>
                         <div className="flex flex-col shrink-0">
-                          <button
+                          <IconButton
+                            variant="ghost"
+                            size="sm"
                             onClick={() => openEditMember(m)}
-                            className="p-1 text-sandrift hover:bg-alabaster rounded-lg opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
-                            title="编辑成员"
                             aria-label={`编辑成员 ${m.name}`}
+                            title="编辑成员"
+                            className="h-6 w-6 opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
                           >
                             <Pencil className="w-3 h-3" />
-                          </button>
-                          <button
+                          </IconButton>
+                          <IconButton
+                            variant="danger"
+                            size="sm"
                             onClick={() => handleRemoveMember(m.id)}
-                            className="p-1 text-sandrift hover:bg-danger-bg hover:text-danger rounded-lg opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
-                            title="移除成员"
                             aria-label={`移除成员 ${m.name}`}
+                            title="移除成员"
+                            className="h-6 w-6 opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
                           >
                             <Trash2 className="w-3 h-3" />
-                          </button>
+                          </IconButton>
                         </div>
                       </div>
                     ))}
@@ -554,31 +561,25 @@ export function GroupCollaborationView() {
                   <CheckSquare className="w-4 h-4 text-sandrift" />
                   任务清单 ({selectedProject.tasks.filter((t) => t.completed).length} / {selectedProject.tasks.length})
                 </h4>
-                <div className="flex items-center space-x-2">
+                <div className="flex items-center gap-2">
                   {/* 任务检索 */}
-                  <div className="flex items-center space-x-1 bg-white border border-line-strong rounded-lg px-2 py-1">
-                    <Search className="w-3 h-3 text-sandrift shrink-0" />
-                    <input
-                      type="text"
-                      placeholder="检索任务"
-                      value={taskSearch}
-                      onChange={(e) => setTaskSearch(e.target.value)}
-                      className="w-24 sm:w-32 bg-transparent text-[11px] focus:outline-none placeholder-sandrift"
-                      aria-label="检索任务"
-                    />
-                    {taskSearch && (
-                      <button onClick={() => setTaskSearch("")} aria-label="清除检索" className="text-sandrift hover:text-charcoal">
-                        <X className="w-3 h-3" />
-                      </button>
-                    )}
-                  </div>
-                  <button
+                  <SearchField
+                    value={taskSearch}
+                    onChange={(e) => setTaskSearch(e.target.value)}
+                    onClear={() => setTaskSearch("")}
+                    placeholder="检索任务"
+                    aria-label="检索任务"
+                    className="w-28 sm:w-36"
+                  />
+                  <Button
+                    variant="primary"
+                    size="sm"
                     onClick={openAddTask}
-                    className="flex items-center space-x-1 px-2.5 py-1.5 bg-charcoal hover:bg-black text-white text-[11px] font-bold rounded-lg transition-colors"
+                    className="h-7 px-2.5 text-[11px]"
                   >
                     <Plus className="w-3 h-3" />
                     <span>添加任务</span>
-                  </button>
+                  </Button>
                 </div>
               </div>
 
@@ -589,13 +590,10 @@ export function GroupCollaborationView() {
                       {selectedProject.tasks.length === 0 ? "还没有任务" : "没有匹配的任务"}
                     </p>
                     {selectedProject.tasks.length === 0 && (
-                      <button
-                        onClick={openAddTask}
-                        className="inline-flex items-center space-x-1 px-3 py-1.5 bg-charcoal hover:bg-black text-white text-[11px] font-bold rounded-lg"
-                      >
+                      <Button variant="primary" size="sm" onClick={openAddTask}>
                         <Plus className="w-3 h-3" />
                         <span>添加任务</span>
-                      </button>
+                      </Button>
                     )}
                   </div>
                 ) : (
@@ -614,18 +612,11 @@ export function GroupCollaborationView() {
                         )}
                       >
                         <div className="flex items-center space-x-3 min-w-0">
-                          <button
-                            onClick={() => toggleGroupTask(selectedProject.id, task.id)}
-                            className="text-charcoal transition-colors shrink-0"
-                            title={task.completed ? "标记未完成" : "标记完成"}
+                          <Checkbox
+                            checked={task.completed}
+                            onChange={() => toggleGroupTask(selectedProject.id, task.id)}
                             aria-label={task.completed ? "标记未完成" : "标记完成"}
-                          >
-                            {task.completed ? (
-                              <CheckSquare className="w-4 h-4 text-success" />
-                            ) : (
-                              <Square className="w-4 h-4 text-sandrift" />
-                            )}
-                          </button>
+                          />
                           <div className="min-w-0">
                             <span className={cn("font-semibold", task.completed ? "text-satin-grey line-through" : "text-charcoal")}>
                               {task.title}
@@ -651,22 +642,26 @@ export function GroupCollaborationView() {
 
                         <div className="flex items-center space-x-1 shrink-0">
                           {assignee ? <MemberAvatar member={assignee} size="w-6 h-6" ring /> : null}
-                          <button
+                          <IconButton
+                            variant="ghost"
+                            size="sm"
                             onClick={() => openEditTask(task.id)}
-                            className="p-1 text-sandrift hover:bg-alabaster rounded-lg opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
-                            title="编辑任务"
                             aria-label={`编辑任务 ${task.title}`}
+                            title="编辑任务"
+                            className="h-6 w-6 opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
                           >
                             <Pencil className="w-3 h-3" />
-                          </button>
-                          <button
+                          </IconButton>
+                          <IconButton
+                            variant="danger"
+                            size="sm"
                             onClick={() => handleDeleteTask(task.id)}
-                            className="p-1 text-sandrift hover:bg-danger-bg hover:text-danger rounded-lg opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
-                            title="删除任务"
                             aria-label={`删除任务 ${task.title}`}
+                            title="删除任务"
+                            className="h-6 w-6 opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
                           >
                             <Trash2 className="w-3 h-3" />
-                          </button>
+                          </IconButton>
                         </div>
                       </div>
                     );
@@ -691,31 +686,41 @@ export function GroupCollaborationView() {
         }
         onClose={() => setProjectForm(null)}
       >
-          <form id="group-project-form" onSubmit={submitProject} className="space-y-3">
-            <div>
-              <label className={labelCls}>项目名称 *</label>
-              <input type="text" value={pName} onChange={(e) => setPName(e.target.value)} className={inputCls} autoFocus required />
-            </div>
-            <div>
-              <label className={labelCls}>关联课程 *</label>
-              <UISelect value={pCourseId} onChange={setPCourseId} ariaLabel="关联课程" options={courses.map((c) => ({ value: c.id, label: `${c.name} (${c.code})` }))} />
-            </div>
-            <div>
-              <label className={labelCls}>项目说明</label>
-              <textarea rows={3} value={pDesc} onChange={(e) => setPDesc(e.target.value)} className={`${inputCls} resize-none`} />
-            </div>
+          <form id="group-project-form" onSubmit={submitProject} className="space-y-4">
+            <Field label="项目名称" required htmlFor="group-project-name">
+              <Input
+                id="group-project-name"
+                type="text"
+                value={pName}
+                onChange={(e) => setPName(e.target.value)}
+                autoFocus
+                required
+              />
+            </Field>
+            <Field label="关联课程" required>
+              <UISelect
+                value={pCourseId}
+                onChange={setPCourseId}
+                ariaLabel="关联课程"
+                options={courses.map((c) => ({ value: c.id, label: `${c.name} (${c.code})` }))}
+              />
+            </Field>
+            <Field label="项目说明">
+              <Textarea rows={3} value={pDesc} onChange={(e) => setPDesc(e.target.value)} />
+            </Field>
           </form>
-          <div className="flex justify-end space-x-2">
-            <button onClick={() => setProjectForm(null)} className="px-4 py-2 text-xs font-medium text-satin-grey bg-alabaster border border-line rounded-xl hover:bg-alba">
+          <div className="flex justify-end gap-2">
+            <Button variant="secondary" size="sm" onClick={() => setProjectForm(null)}>
               取消
-            </button>
-            <button
+            </Button>
+            <Button
               type="submit"
               form="group-project-form"
-              className="ux-press px-4 py-2 text-xs font-bold text-white bg-charcoal rounded-xl hover:bg-black"
+              variant="primary"
+              size="sm"
             >
               {projectForm?.mode === "edit" ? "保存修改" : "创建项目"}
-            </button>
+            </Button>
           </div>
         </GroupModal>
 
@@ -730,31 +735,49 @@ export function GroupCollaborationView() {
         }
         onClose={() => setMemberForm(null)}
       >
-          <form id="group-member-form" onSubmit={submitMember} className="space-y-3">
-            <div>
-              <label className={labelCls}>姓名 *</label>
-              <input type="text" value={mName} onChange={(e) => setMName(e.target.value)} className={inputCls} autoFocus required />
-            </div>
-            <div>
-              <label className={labelCls}>身份</label>
-              <UISelect<GroupMember["role"]> value={mRole} onChange={setMRole} ariaLabel="成员角色" options={[{ value: "member", label: "组员" }, { value: "leader", label: "组长" }]} />
-            </div>
-            <div>
-              <label className={labelCls}>专业（可选）</label>
-              <input type="text" value={mMajor} onChange={(e) => setMMajor(e.target.value)} className={inputCls} placeholder="如：经济学" />
-            </div>
-            <div>
-              <label className={labelCls}>头像 URL（可选）</label>
-              <input type="text" value={mAvatar} onChange={(e) => setMAvatar(e.target.value)} className={inputCls} placeholder="留空则显示姓名首字" />
-            </div>
+          <form id="group-member-form" onSubmit={submitMember} className="space-y-4">
+            <Field label="姓名" required htmlFor="group-member-name">
+              <Input
+                id="group-member-name"
+                type="text"
+                value={mName}
+                onChange={(e) => setMName(e.target.value)}
+                autoFocus
+                required
+              />
+            </Field>
+            <Field label="身份">
+              <UISelect<GroupMember["role"]>
+                value={mRole}
+                onChange={setMRole}
+                ariaLabel="成员角色"
+                options={[{ value: "member", label: "组员" }, { value: "leader", label: "组长" }]}
+              />
+            </Field>
+            <Field label="专业" description="可选">
+              <Input
+                type="text"
+                value={mMajor}
+                onChange={(e) => setMMajor(e.target.value)}
+                placeholder="如：经济学"
+              />
+            </Field>
+            <Field label="头像 URL" description="留空则显示姓名首字">
+              <Input
+                type="text"
+                value={mAvatar}
+                onChange={(e) => setMAvatar(e.target.value)}
+                placeholder="https://…"
+              />
+            </Field>
           </form>
-          <div className="flex justify-end space-x-2">
-            <button onClick={() => setMemberForm(null)} className="px-4 py-2 text-xs font-medium text-satin-grey bg-alabaster border border-line rounded-xl hover:bg-alba">
+          <div className="flex justify-end gap-2">
+            <Button variant="secondary" size="sm" onClick={() => setMemberForm(null)}>
               取消
-            </button>
-            <button type="submit" form="group-member-form" className="ux-press px-4 py-2 text-xs font-bold text-white bg-charcoal rounded-xl hover:bg-black">
+            </Button>
+            <Button type="submit" form="group-member-form" variant="primary" size="sm">
               {memberForm?.mode === "edit" ? "保存修改" : "添加成员"}
-            </button>
+            </Button>
           </div>
         </GroupModal>
 
@@ -769,33 +792,50 @@ export function GroupCollaborationView() {
         }
         onClose={() => setTaskForm(null)}
       >
-          <form id="group-task-form" onSubmit={submitTask} className="space-y-3">
-            <div>
-              <label className={labelCls}>任务名称 *</label>
-              <input type="text" value={tTitle} onChange={(e) => setTTitle(e.target.value)} className={inputCls} autoFocus required />
-            </div>
-            <div>
-              <label className={labelCls}>负责人</label>
-              <UISelect value={tAssigneeId} onChange={setTAssigneeId} ariaLabel="负责人" options={[{ value: "", label: "未分配" }, ...(selectedProject?.members ?? []).map((m) => ({ value: m.id, label: m.name }))]} />
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className={labelCls}>截止日期 *</label>
-                <input type="date" value={tDate} onChange={(e) => setTDate(e.target.value)} className={inputCls} required />
-              </div>
-              <div>
-                <label className={labelCls}>截止时间</label>
-                <input type="time" value={tTime} onChange={(e) => setTTime(e.target.value)} className={inputCls} />
-              </div>
+          <form id="group-task-form" onSubmit={submitTask} className="space-y-4">
+            <Field label="任务名称" required htmlFor="group-task-title">
+              <Input
+                id="group-task-title"
+                type="text"
+                value={tTitle}
+                onChange={(e) => setTTitle(e.target.value)}
+                autoFocus
+                required
+              />
+            </Field>
+            <Field label="负责人">
+              <UISelect
+                value={tAssigneeId}
+                onChange={setTAssigneeId}
+                ariaLabel="负责人"
+                options={[{ value: "", label: "未分配" }, ...(selectedProject?.members ?? []).map((m) => ({ value: m.id, label: m.name }))]}
+              />
+            </Field>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <Field label="截止日期" required>
+                <Input
+                  type="date"
+                  value={tDate}
+                  onChange={(e) => setTDate(e.target.value)}
+                  required
+                />
+              </Field>
+              <Field label="截止时间">
+                <Input
+                  type="time"
+                  value={tTime}
+                  onChange={(e) => setTTime(e.target.value)}
+                />
+              </Field>
             </div>
           </form>
-          <div className="flex justify-end space-x-2">
-            <button onClick={() => setTaskForm(null)} className="px-4 py-2 text-xs font-medium text-satin-grey bg-alabaster border border-line rounded-xl hover:bg-alba">
+          <div className="flex justify-end gap-2">
+            <Button variant="secondary" size="sm" onClick={() => setTaskForm(null)}>
               取消
-            </button>
-            <button type="submit" form="group-task-form" className="ux-press px-4 py-2 text-xs font-bold text-white bg-charcoal rounded-xl hover:bg-black">
+            </Button>
+            <Button type="submit" form="group-task-form" variant="primary" size="sm">
               {taskForm?.mode === "edit" ? "保存修改" : "添加任务"}
-            </button>
+            </Button>
           </div>
         </GroupModal>
     </div>
