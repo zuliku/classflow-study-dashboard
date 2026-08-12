@@ -53,7 +53,8 @@ async function openTimeline(page: import("@playwright/test").Page) {
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/");
   await page.getByRole("button", { name: "时间表" }).first().click();
-  await expect(page.getByRole("heading", { name: /第 \d+ 周/ })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "时间表" })).toBeVisible();
+  await expect(page.getByTestId("timeline-workspace")).toBeVisible();
 }
 
 base("duration 修复 + 21:00 clip + 22:00 不显示 + overlap marker + interval bar-only", async ({ page }) => {
@@ -83,9 +84,10 @@ base("duration 修复 + 21:00 clip + 22:00 不显示 + overlap marker + interval
   ).toHaveCount(1);
 
   // 5) Interval：默认无标题常驻；hover 显示 popover
-  const lane = page.getByTestId("timeline-key-lane").first();
-  await expect(lane.getByText("概率论期中考试", { exact: true })).toHaveCount(0);
-  await lane.getByRole("button", { name: /概率论期中考试/ }).hover();
+  // 注：key lane 按天渲染（7 个 lane），mark 落在当日 lane —— 用文档级唯一定位，不依赖 .first()
+  const markButton = page.getByRole("button", { name: /概率论期中考试/ });
+  await expect(page.getByText("概率论期中考试", { exact: true })).toHaveCount(0);
+  await markButton.hover();
   await expect(page.getByText("概率论期中考试", { exact: true }).first()).toBeVisible();
   await expect(page.getByText("考试", { exact: true }).first()).toBeVisible();
   await expect(page.getByText(/14:00–16:00/)).toBeVisible();
@@ -98,4 +100,42 @@ base("Overview 不显示 Task Marker（课程卡干净）", async ({ page }) => 
   await page.goto("/");
   await expect(page.getByTestId("timetable-card").first()).toBeVisible();
   await expect(page.locator('[data-testid="course-task-marker"]')).toHaveCount(0);
+});
+
+base("Task 2B1：Timeline Filter/Create/More 统一浮层并保持 dismiss/互斥", async ({ page }) => {
+  const { monday, dow1 } = dayAnchor();
+  await page.addInitScript(seedScript(monday, dow1));
+  await openTimeline(page);
+
+  const filterButton = page.getByRole("button", { name: "筛选" });
+  const createButton = page.getByRole("button", { name: "新建" });
+  const moreButton = page.getByRole("button", { name: "更多操作" });
+
+  await filterButton.click();
+  const filterPanel = page.getByRole("group", { name: "时间表筛选" });
+  await expect(filterPanel).toBeVisible();
+  await expect(filterButton).toHaveAttribute("aria-expanded", "true");
+
+  await createButton.click();
+  await expect(filterPanel).toHaveCount(0);
+  const createMenu = page.getByRole("menu", { name: "新建" });
+  await expect(createMenu).toBeVisible();
+
+  await moreButton.click();
+  await expect(createMenu).toHaveCount(0);
+  const moreMenu = page.getByRole("menu", { name: "更多操作" });
+  await expect(moreMenu).toBeVisible();
+
+  await page.keyboard.press("Escape");
+  await expect(moreMenu).toHaveCount(0);
+  await expect(moreButton).toHaveAttribute("aria-expanded", "false");
+
+  await filterButton.click();
+  await expect(filterPanel).toBeVisible();
+  await page.getByRole("heading", { name: "时间表" }).click();
+  await expect(filterPanel).toHaveCount(0);
+
+  await createButton.click();
+  await page.getByRole("menu", { name: "新建" }).getByRole("menuitem", { name: "学习计划" }).click();
+  await expect(page.getByTestId("timeline-arrange-sheet")).toBeVisible();
 });

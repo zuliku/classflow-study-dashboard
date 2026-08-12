@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -24,11 +24,17 @@ import { KIRO_ICON } from "@/components/layout/navItems";
 import { KiroFlowButton } from "@/components/kiro/KiroFlow";
 import { useKiroSession } from "@/components/kiro/KiroSessionProvider";
 import { WorkspaceHeader } from "@/components/layout/WorkspaceHeader";
+import { IconButton } from "@/components/ui/IconButton";
+import { Popover, PopoverPanel } from "@/components/ui/Popover";
+import {
+  DropdownMenuPanel,
+  DropdownMenuItem,
+  DropdownMenuDivider,
+} from "@/components/ui/DropdownMenu";
 import { TimetableGrid } from "@/components/dashboard/TimetableGrid";
 import { TimelineKeyLane } from "@/components/timeline/TimelineKeyLane";
 import { FloatingTimelineDetail } from "@/components/timeline/FloatingTimelineDetail";
 import { TimelineUnscheduledShelf } from "@/components/timeline/TimelineUnscheduledShelf";
-import { KiroMenuPanel, KiroMenuItem, KiroMenuDivider } from "@/components/kiro/KiroMenu";
 import { getWeekDateRange, formatWeekDateRange } from "@/lib/semester";
 import { deriveTimelineItems, deriveUnscheduledAssignments } from "@/lib/timeline/deriveTimelineItems";
 import { timeToMinutes } from "@/lib/timeline/timelineGeometry";
@@ -402,22 +408,28 @@ export function TimelineWorkspace() {
 
         {/* Group B：Timeline Actions（单一 flex 容器，逻辑间距用 margin 表达） */}
         <div className="flex items-center gap-0.5 shrink-0">
-          {/* 筛选 */}
-          <div className="relative">
-            <button
-              onClick={() => { setFilterOpen((v) => !v); setQuickOpen(false); setMoreOpen(false); }}
+          {/* 筛选 → Control Popover（全局 primitive；role=group + checkbox） */}
+          <Popover open={filterOpen} onOpenChange={setFilterOpen}>
+            <IconButton
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setFilterOpen((v) => !v);
+                setQuickOpen(false);
+                setMoreOpen(false);
+              }}
               aria-label="筛选"
               aria-expanded={filterOpen}
               title="筛选"
-              className="w-8 h-8 flex items-center justify-center rounded-lg text-sandrift hover:bg-alabaster hover:text-charcoal transition-colors"
             >
               <SlidersHorizontal className="w-4 h-4" />
-            </button>
+            </IconButton>
             {filterOpen && (
-              <div
-                role="menu"
+              <PopoverPanel
+                placement="bottom-end"
+                role="group"
                 aria-label="时间表筛选"
-                className="absolute right-0 top-full mt-1 w-44 bg-surface border border-line-strong rounded-2xl shadow-card z-40 ux-inline p-1.5 space-y-0.5"
+                className="w-44 p-1.5 space-y-0.5"
               >
                 <p className="px-1.5 pb-1 text-[10px] font-bold text-sandrift">显示</p>
                 <FilterToggle label="课程" checked disabled hint="时间表骨架，恒显示" />
@@ -446,34 +458,35 @@ export function TimelineWorkspace() {
                   checked={filters.group}
                   onChange={(v) => setFilters((f) => ({ ...f, group: v }))}
                 />
-              </div>
+              </PopoverPanel>
             )}
-          </div>
+          </Popover>
 
-          {/* Quick Create +（主 Create Action） */}
-          <div className="relative">
-            <button
+          {/* Quick Create +（主 Create Action）→ DropdownMenu */}
+          <Popover open={quickOpen} onOpenChange={setQuickOpen}>
+            <IconButton
+              variant="primary"
+              size="sm"
               onClick={() => { setQuickOpen((v) => !v); setFilterOpen(false); setMoreOpen(false); }}
               aria-label="新建"
               aria-expanded={quickOpen}
               title="新建"
-              className="w-8 h-8 flex items-center justify-center rounded-lg bg-charcoal text-white hover:bg-black transition-colors"
             >
               <Plus className="w-4 h-4" />
-            </button>
+            </IconButton>
             {quickOpen && (
-              <div role="menu" aria-label="新建" className="absolute right-0 top-full mt-1 w-52 bg-surface border border-line-strong rounded-2xl shadow-card z-40 ux-inline p-1">
-                <KiroMenuItem
+              <DropdownMenuPanel placement="bottom-end" aria-label="新建" className="w-52">
+                <DropdownMenuItem
                   icon={GraduationCap}
                   label="新建课程"
                   onClick={() => { setQuickOpen(false); setAddCourseModalOpen(true); }}
                 />
-                <KiroMenuItem
+                <DropdownMenuItem
                   icon={BookOpenCheck}
                   label="学习计划"
                   onClick={() => { setQuickOpen(false); setFreeBlockOpen(true); }}
                 />
-                <KiroMenuItem
+                <DropdownMenuItem
                   icon={ListChecks}
                   label="新建任务"
                   onClick={() => {
@@ -481,14 +494,14 @@ export function TimelineWorkspace() {
                     import("@/lib/uiEvents").then(({ openAssignmentEditor }) => openAssignmentEditor({}));
                   }}
                 />
-                <KiroMenuItem
+                <DropdownMenuItem
                   icon={CalendarClock}
                   label="考试 / 日程"
                   onClick={() => { setQuickOpen(false); setMarkOpen(true); }}
                 />
-              </div>
+              </DropdownMenuPanel>
             )}
-          </div>
+          </Popover>
 
           {/* Ask Kiro（Secondary Featured，与 Create 组间隔 6px） */}
           <KiroFlowButton
@@ -498,31 +511,32 @@ export function TimelineWorkspace() {
             className="h-8 ml-1.5"
             onClick={() => handoff.openForWeek(currentSemesterWeek)}
           />
-          {/* More */}
-          <div className="relative ml-0.5">
-            <button
+          {/* More → DropdownMenu */}
+          <Popover open={moreOpen} onOpenChange={setMoreOpen} className="ml-0.5">
+            <IconButton
+              variant="ghost"
+              size="sm"
               onClick={() => { setMoreOpen((v) => !v); setFilterOpen(false); setQuickOpen(false); }}
               aria-label="更多操作"
               aria-expanded={moreOpen}
               title="更多"
-              className="w-8 h-8 flex items-center justify-center rounded-lg text-sandrift hover:bg-alabaster hover:text-charcoal transition-colors"
             >
               <MoreHorizontal className="w-4 h-4" />
-            </button>
+            </IconButton>
             {moreOpen && (
-              <KiroMenuPanel placement="bottom-end">
-                <KiroMenuItem
+              <DropdownMenuPanel placement="bottom-end" aria-label="更多操作">
+                <DropdownMenuItem
                   icon={FileUp}
                   label="导入课表"
                   onClick={() => { setMoreOpen(false); setImportScheduleModalOpen(true); }}
                 />
-                <KiroMenuItem
+                <DropdownMenuItem
                   icon={ExternalLink}
                   label="全屏查看"
                   onClick={() => { setMoreOpen(false); setFullTimetableModalOpen(true); }}
                 />
-                <KiroMenuDivider />
-                <KiroMenuItem
+                <DropdownMenuDivider />
+                <DropdownMenuItem
                   icon={SettingsIcon}
                   label="时间表设置"
                   onClick={() => {
@@ -531,9 +545,9 @@ export function TimelineWorkspace() {
                     useAppStore.getState().setSettingsModalOpen(true);
                   }}
                 />
-              </KiroMenuPanel>
+              </DropdownMenuPanel>
             )}
-          </div>
+          </Popover>
         </div>
       </div>
 
