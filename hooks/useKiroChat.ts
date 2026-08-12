@@ -45,6 +45,7 @@ import { DEFAULT_CONTEXT_BUDGET } from "@/lib/ai/contextBudget/planner";
 import { KiroTurnContextSnapshot } from "@/lib/ai/contextBudget/types";
 import { KiroSourceMeta } from "@/lib/ai/citations/types";
 import { buildTurnSourceRegistry, materialSourceId } from "@/lib/ai/citations/sources";
+import { enrichWebSourcePages } from "@/lib/ai/citations/sourceRegistry";
 import { renderPdfPages, selectScannedPdfPages, allocateVisionPages, extractExplicitPages } from "@/lib/ai/attachments/pdfVision";
 import { MAX_SCANNED_PDF_PAGES_PER_TURN, MAX_SCANNED_PDF_IMAGE_BYTES_PER_TURN } from "@/lib/ai/attachments/limits";
 import { getFileBlob } from "@/lib/fileStorage";
@@ -1250,31 +1251,12 @@ export function useKiroChat({
     if (additions.size === 0 && readPages.length === 0) return;
     const known = new Set(turnSourcesRef.current.map((s) => s.sourceId));
     const fresh = Array.from(additions.values()).filter((a) => !known.has(a.sourceId));
-    let next: KiroSourceMeta[] = [...turnSourcesRef.current, ...fresh];
 
-    // enrichment：只有 sourceId 已存在于真实 web_search Registry 的 web source 才能获得页码
-    if (readPages.length > 0) {
-      const byId = new Map(next.map((s) => [s.sourceId, s]));
-      let changed = false;
-      for (const rp of readPages) {
-        const existing = byId.get(rp.sourceId);
-        if (!existing || existing.source !== "web") continue;
-        const union = Array.from(new Set([...(existing.availablePages ?? []), ...rp.availablePages])).sort(
-          (a, b) => a - b
-        );
-        if (union.length > 0 && (existing.availablePages?.length ?? 0) !== union.length) {
-          existing.availablePages = union;
-          changed = true;
-        }
-      }
-      if (changed) next = Array.from(byId.values());
-    }
+    // Task 19B1：不可变 enrichment（纯函数；不修改任何已有对象；无变化 → 同一引用）
+    const base: readonly KiroSourceMeta[] = fresh.length > 0 ? [...turnSourcesRef.current, ...fresh] : turnSourcesRef.current;
+    const next = enrichWebSourcePages(base, readPages);
 
-    if (fresh.length === 0 && next.length === turnSourcesRef.current.length) {
-      // 只有页码变化才更新（避免无意义 setSources）
-      const same = next.every((s, i) => s === turnSourcesRef.current[i]);
-      if (same) return;
-    }
+    if (next === turnSourcesRef.current) return; // 无变化：不触发无意义 setSources
     turnSourcesRef.current = next;
     setSources(next);
   }, [chat.messages]);
