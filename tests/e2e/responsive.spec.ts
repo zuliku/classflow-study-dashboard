@@ -20,6 +20,10 @@ test.describe("responsive navigation", () => {
     const box = await sidebar.boundingBox();
     expect(box!.width).toBeGreaterThan(150);
 
+    // Workspace Header：总览 title + 全局搜索可达
+    await expect(page.getByRole("heading", { name: "总览" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "全局搜索" })).toBeVisible();
+
     // 导航文字标签可见（Icon Rail 模式下隐藏）
     await expect(
       sidebar.locator('[data-testid="nav-label"]', { hasText: "任务与 DDL" })
@@ -45,17 +49,22 @@ test.describe("responsive navigation", () => {
     // Icon Rail：宽度 ≤ 72px，仅图标
     const box = await sidebar.boundingBox();
     expect(box!.width).toBeLessThanOrEqual(72);
+
+    // Workspace Header：总览 title + 全局搜索可达
+    await expect(page.getByRole("heading", { name: "总览" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "全局搜索" })).toBeVisible();
+
     await expect(
       sidebar.locator('[data-testid="nav-label"]', { hasText: "任务与 DDL" })
     ).toBeHidden();
 
     // Hover 显示 tooltip
-    const railButton = sidebar.getByRole("button", { name: "我的课表" });
+    const railButton = sidebar.getByRole("button", { name: "时间表" });
     const tooltip = railButton.locator('[role="tooltip"]');
     await expect(tooltip).toHaveCSS("opacity", "0");
     await railButton.hover();
     await expect(tooltip).toHaveCSS("opacity", "1");
-    await expect(tooltip).toContainText("我的课表");
+    await expect(tooltip).toContainText("时间表");
 
     // 主内容无横向 viewport overflow
     expect(await hasHorizontalOverflow(page)).toBe(false);
@@ -83,15 +92,16 @@ test.describe("responsive navigation", () => {
 
     // 切换主要页面
     await nav.getByRole("button", { name: "任务" }).click();
-    await expect(page.getByRole("heading", { name: "任务清单" }).first()).toBeVisible();
+    await expect(page.getByRole("heading", { name: "任务与 DDL" }).first()).toBeVisible();
+    await expect(page.getByRole("button", { name: "全局搜索" })).toBeVisible();
 
-    await nav.getByRole("button", { name: "课表" }).click();
-    await expect(page.getByRole("heading", { name: "学期课表" })).toBeVisible();
+    await nav.getByRole("button", { name: "时间表" }).click();
+    await expect(page.getByRole("heading", { name: "时间表" })).toBeVisible();
 
     // 更多菜单 → 课程（已移入「更多」）
     await nav.getByRole("button", { name: "更多" }).click();
     await page.getByRole("menuitem", { name: "课程" }).click();
-    await expect(page.getByRole("heading", { name: "本学期课程" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "课程资料" })).toBeVisible();
 
     // 更多菜单 → 设置（全屏 Modal）
     await nav.getByRole("button", { name: "更多" }).click();

@@ -1,8 +1,8 @@
-"use client";
+﻿"use client";
 
 import React, { useEffect, useRef } from "react";
 import { Sidebar } from "@/components/layout/Sidebar";
-import { Header } from "@/components/layout/Header";
+import { WorkspaceHeader } from "@/components/layout/WorkspaceHeader";
 import { BottomNav } from "@/components/layout/BottomNav";
 import { TimetableGrid } from "@/components/dashboard/TimetableGrid";
 import { TimetableQuickGlance } from "@/components/dashboard/TimetableQuickGlance";
@@ -10,6 +10,7 @@ import { UpcomingDDL } from "@/components/dashboard/UpcomingDDL";
 import { MiniCalendar } from "@/components/dashboard/MiniCalendar";
 import { StudyLoadChart } from "@/components/dashboard/StudyLoadChart";
 import { AssignmentTable } from "@/components/dashboard/AssignmentTable";
+import { AssignmentsWorkspace } from "@/components/assignment/AssignmentsWorkspace";
 import { GroupCollaborationView } from "@/components/group/GroupCollaborationView";
 import { KiroWorkspace } from "@/components/kiro/KiroWorkspace";
 import { KiroSessionProvider } from "@/components/kiro/KiroSessionProvider";
@@ -39,11 +40,11 @@ import { cardKeyHandler, cn } from "@/lib/utils";
 import { openAssignmentEditor } from "@/lib/uiEvents";
 import { reconcileOrphanBlobs } from "@/lib/fileStorage";
 import { resolveStartupTab } from "@/lib/startup";
+import { formatWeekDateRange } from "@/lib/semester";
 import {
   BookOpen,
   Plus,
   FileUp,
-  BarChart2,
   ExternalLink,
   CalendarDays,
 } from "lucide-react";
@@ -64,8 +65,8 @@ export default function Home() {
     activeTab,
     courses,
     assignments,
-    userProfile,
     semester,
+    currentSemesterWeek,
     schedules,
     setSelectedCourseId,
     setAddCourseModalOpen,
@@ -73,6 +74,12 @@ export default function Home() {
     setFullTimetableModalOpen,
     setSettingsModalOpen,
   } = useAppStore();
+
+  // 当前周 Context（Overview / Timeline / Analytics 共用同一学期模型数据源）
+  const currentWeekContext = `第 ${currentSemesterWeek} 周 · ${formatWeekDateRange(
+    semester,
+    currentSemesterWeek
+  )}`;
 
   // 本周课程时长：按当前教学周实际生效课表实算（endTime - startTime）
   const weekCourseLoad = computeWeekCourseLoad(schedules, semester);
@@ -227,9 +234,6 @@ export default function Home() {
 
       {/* Main Content Workspace */}
       <div className="flex-1 flex flex-col min-w-0">
-        {/* Top Header */}
-        <Header />
-
         {/* Dynamic Page Views */}
         {/* Kiro Tab：full-bleed shell（p-0 且 md+ 无底部 padding），gutter 由 KiroWorkspace 内部提供，
             History Panel 可从 Header 下沿连续延伸到视口底部（border-l 不断线） */}
@@ -241,10 +245,14 @@ export default function Home() {
         >
           <PageTransition
             tab={activeTab}
-            className={cn("space-y-5", activeTab === "kiro" && "flex flex-col flex-1 min-h-0")}
+            className={cn(
+              "space-y-5",
+              activeTab === "kiro" && "flex flex-col flex-1 min-h-0"
+            )}
           >
           {activeTab === "overview" && (
             <>
+              <WorkspaceHeader title="总览" context={currentWeekContext} sticky />
               {/* First Run：空工作区时显示 Getting Started（非阻塞，三个动作即可开始） */}
               {courses.length === 0 && schedules.length === 0 && assignments.length === 0 ? (
                 <div
@@ -326,32 +334,25 @@ export default function Home() {
             </div>
           )}
 
-          {activeTab === "assignments" && (
-            <div className="space-y-4" data-testid="assignments-tab">
-              <AssignmentTable mode="workspace" />
-            </div>
-          )}
+          {activeTab === "assignments" && <AssignmentsWorkspace />}
 
           {activeTab === "courses" && (
             <div className="space-y-4">
-              <div className="bg-surface border border-line rounded-2xl p-4 shadow-subtle flex items-center justify-between">
-                <div>
-                  <h2 className="text-base font-bold text-charcoal mb-0.5">
-                    本学期课程
-                  </h2>
-                  <p className="text-xs text-sandrift">
-                    点击课程卡片查看资料
-                  </p>
-                </div>
-                <button
-                  onClick={() => setAddCourseModalOpen(true)}
-                  className="ux-press flex items-center space-x-1.5 px-3 py-1.5 bg-charcoal text-white text-xs font-medium rounded-xl hover:bg-black"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  <span>添加课程</span>
-                </button>
-              </div>
-
+              <WorkspaceHeader
+                title="课程资料"
+                context={`${courses.length} 门课程 · ${totalCredits} 学分`}
+                primaryAction={
+                  <button
+                    type="button"
+                    onClick={() => setAddCourseModalOpen(true)}
+                    className="ux-press flex h-8 items-center gap-1.5 rounded-lg bg-charcoal px-3 text-xs font-bold text-white transition-colors hover:bg-black"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    <span>添加课程</span>
+                  </button>
+                }
+                sticky
+              />
               {courses.length === 0 ? (
                 <div className="bg-surface border border-line rounded-2xl p-10 shadow-subtle flex flex-col items-center justify-center gap-2.5 text-center">
                   <p className="text-xs font-bold text-charcoal">暂无课程</p>
@@ -436,22 +437,18 @@ export default function Home() {
             </div>
           )}
 
-          {activeTab === "kiro" && <KiroWorkspace />}
+          {activeTab === "kiro" && (
+            <div className="flex flex-1 min-h-0 flex-col">
+              <WorkspaceHeader title="Kiro" className="px-4 md:px-6" />
+              <KiroWorkspace />
+            </div>
+          )}
 
           {activeTab === "group" && <GroupCollaborationView />}
 
           {activeTab === "analytics" && (
             <div className="space-y-4">
-              {/* Analytics Header Banner */}
-              <div className="bg-surface border border-line rounded-2xl p-4 shadow-subtle">
-                <h2 className="text-base font-bold text-charcoal mb-0.5 flex items-center gap-2">
-                  <BarChart2 className="w-4 h-4 text-[#A48F82]" />
-                  学习统计
-                </h2>
-                <p className="text-xs text-sandrift">
-                  任务完成进度与本周课程负荷
-                </p>
-              </div>
+              <WorkspaceHeader title="学习统计" context={`本学期 · 第 ${currentSemesterWeek} 周`} sticky />
 
               {/* 无数据：不生成假图 */}
               {assignments.length === 0 && schedules.length === 0 ? (
