@@ -104,10 +104,11 @@ export function UpcomingDDL() {
         </button>
       </div>
 
-      {/* DDL Task Items List：固定 3 行容量（翻页/数量变化高度不变；空位自然留白，不拉伸项目） */}
-      <div className="flex-1 min-h-0 grid grid-rows-3 gap-1.5">
+      {/* DDL Task Items List：flex 列 + 每条 min-h-[56px] 硬下限（任何情况下不被压扁重叠）；
+          空间充足时 flex-1 轻微增长；不足时只溢出到容器内而不压缩文字 */}
+      <div className="flex-1 min-h-0 flex flex-col gap-1.5">
         {pagedItems.length === 0 ? (
-          <div className="row-span-3 flex flex-col items-center justify-center text-xs text-sandrift space-y-1">
+          <div className="flex-1 flex flex-col items-center justify-center text-xs text-sandrift space-y-1">
             <CheckCircle2 className="w-6 h-6 text-success" />
             <p>暂无临近 DDL</p>
           </div>
@@ -125,7 +126,7 @@ export function UpcomingDDL() {
               <div
                 key={task.id}
                 onClick={() => setSelectedAssignmentId(task.id)}
-                className="p-2 bg-[#F7F5F5] hover:bg-alabaster border border-line hover:border-[#CDB9AB] rounded-xl transition-colors duration-[var(--motion-fast)] ease-[var(--ease-standard)] cursor-pointer flex items-center justify-between group min-h-0"
+                className="p-2 bg-[#F7F5F5] hover:bg-alabaster border border-line hover:border-[#CDB9AB] rounded-xl transition-colors duration-[var(--motion-fast)] ease-[var(--ease-standard)] cursor-pointer flex items-center justify-between group min-h-[56px] flex-1"
               >
                 <div className="flex items-center space-x-2.5 min-w-0 flex-1">
                   <div className="w-8 h-8 rounded-lg bg-white border border-line-strong flex flex-col items-center justify-center shrink-0 text-center">
@@ -154,7 +155,8 @@ export function UpcomingDDL() {
                   <span className="text-[10px] font-bold text-danger block">
                     {relativeTime}
                   </span>
-                  <span className="text-[9px] text-sandrift block mt-0.5">
+                  {/* 窄右栏（<2xl）隐藏具体日期行：Calendar 已展示日期，避免文字挤压 */}
+                  <span className="text-[9px] text-sandrift block mt-0.5 hidden 2xl:block">
                     {dateDisplay}
                   </span>
                 </div>

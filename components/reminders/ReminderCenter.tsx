@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useRef, useState } from "react";
-import { Bell, Plus, Trash2, X, PencilLine, Check } from "lucide-react";
+import { Bell, Plus, Trash2, X, PencilLine, Check, Clock, CalendarClock } from "lucide-react";
 import { useAppStore } from "@/store/useAppStore";
 import { useReminderCenterStore } from "@/store/useReminderCenterStore";
 import { Reminder } from "@/types";
@@ -9,6 +9,11 @@ import { combineLocalDateTime, parseLocalDDL } from "@/lib/ddl";
 import { formatLocalDateTime } from "@/lib/reminders/reminderDomain";
 import { getReminderCenterGroups, formatReminderCenterTime } from "@/lib/reminders/reminderCenterView";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/Button";
+import { IconButton } from "@/components/ui/IconButton";
+import { Input } from "@/components/ui/Input";
+import { Textarea } from "@/components/ui/Textarea";
+import { Field } from "@/components/ui/Field";
 
 const TARGET_LABELS: Record<Reminder["targetType"], string> = {
   assignment: "任务",
@@ -17,12 +22,13 @@ const TARGET_LABELS: Record<Reminder["targetType"], string> = {
   standalone: "独立提醒",
 };
 
+/** 来源 / 提前时间（Tertiary 信息，视觉权重低于标题与相对时间） */
 function metaLine(r: Reminder): string {
-  if (r.targetType === "standalone") return "自定义时间 · 独立提醒";
+  if (r.targetType === "standalone") return "独立提醒";
   const target = TARGET_LABELS[r.targetType];
   if (r.timingMode === "absolute") return `自定义时间 · ${target}`;
   const offset = r.offsetMinutes ?? 0;
-  if (offset === 0) return `到期时 · ${target}`;
+  if (offset === 0) return `${target}`;
   const abs = Math.abs(offset);
   const unit =
     abs % 1440 === 0 && abs > 0
@@ -41,12 +47,11 @@ interface StandaloneDraft {
 }
 
 /**
- * Reminder Center（Task 7G-A3a）：Global Action 浮动面板（非 Workspace / NavTab）。
- * - Desktop：Sidebar 右侧展开（md left-16 / xl left-56，w-[380px]）
- * - Mobile：全宽 sheet（BottomNav More → 提醒）
- * - 分区：即将提醒（scheduled 升序）/ 已提醒（fired+skipped 最近优先）
+ * Reminder Center（ClassFlow 通知中心 + 提醒管理入口，非 Dashboard / 复杂设置页）。
+ * - Desktop：Sidebar 右侧展开（md left-16 / xl left-56，w-[400px]）；Mobile：全宽 sheet
+ * - 分区：即将提醒（scheduled 升序）/ 历史提醒（fired+skipped 最近优先），Settings-like 分组 surface
  * - 打开即 markAllFiredRemindersRead（铃铛小点消失）
- * - standalone CRUD：Panel 内联 editor（仅 scheduled 可编辑；fired/skipped 只展示历史）
+ * - standalone CRUD：Panel 内联 Composer（仅 scheduled 可编辑；fired/skipped 只展示历史）
  */
 export function ReminderCenter() {
   const reminders = useAppStore((s) => s.reminders);
@@ -104,10 +109,15 @@ export function ReminderCenter() {
     setEditor({ mode: "edit", reminder: r });
   };
 
+  const cancelEditor = () => {
+    setEditor(null);
+    setError("");
+  };
+
   const saveDraft = () => {
     const title = draft.title.trim();
     if (!title) {
-      setError("请输入提醒标题");
+      setError("请输入提醒内容");
       return;
     }
     const triggerAt = combineLocalDateTime(draft.date, draft.time);
@@ -159,7 +169,7 @@ export function ReminderCenter() {
     }
   };
 
-  const renderRow = (r: Reminder, statusNote?: string) => {
+  const renderRow = (r: Reminder, isHistory: boolean) => {
     const editable = r.targetType === "standalone" && r.status === "scheduled";
     return (
       <div
@@ -170,41 +180,64 @@ export function ReminderCenter() {
         onKeyDown={(e) => {
           if (e.key === "Enter") handleOpenItem(r);
         }}
-        className="w-full flex items-center gap-2 px-2 py-2 rounded-lg text-left hover:bg-alabaster/70 transition-colors"
+        className={cn(
+          "w-full flex items-center gap-2.5 px-3 py-2.5 text-left hover:bg-alabaster/60 transition-colors",
+          isHistory && "opacity-75"
+        )}
       >
+        {/* 状态 icon：upcoming = 时钟；history = 已提醒勾 */}
+        <span
+          className={cn(
+            "w-6 h-6 rounded-full flex items-center justify-center shrink-0",
+            isHistory ? "bg-pastel-mint/60 text-success" : "bg-alabaster text-sandrift"
+          )}
+        >
+          {isHistory ? (
+            <Check className="w-3 h-3" />
+          ) : (
+            <Clock className="w-3 h-3" />
+          )}
+        </span>
+
+        {/* 信息层级：Primary title / Secondary 相对时间 / Tertiary 来源·提前 */}
         <div className="flex-1 min-w-0">
-          <p className="text-xs font-semibold text-charcoal truncate">{r.title}</p>
-          <p className="text-[10px] text-sandrift mt-0.5">
-            {formatReminderCenterTime(r.triggerAt, formatLocalDateTime(new Date()))}
+          <p className={cn("text-xs font-bold truncate", isHistory ? "text-satin-grey" : "text-charcoal")}>
+            {r.title}
           </p>
-          <p className="text-[10px] text-satin-grey/80 mt-0.5">
-            {metaLine(r)}
-            {statusNote ? ` · ${statusNote}` : ""}
+          <p className="text-[10px] text-sandrift mt-0.5 truncate">
+            {formatReminderCenterTime(r.triggerAt, formatLocalDateTime(new Date()))}
+            <span className="text-satin-grey/80"> · {metaLine(r)}</span>
+            {isHistory && r.status === "skipped" ? <span className="text-satin-grey/80"> · 已跳过</span> : null}
           </p>
         </div>
+
+        {/* 行操作：编辑（ghost）/ 删除（danger） */}
         <div className="flex items-center gap-0.5 shrink-0">
           {editable && (
-            <button
+            <IconButton
+              variant="ghost"
+              size="sm"
+              aria-label={`编辑提醒 ${r.title}`}
               onClick={(e) => {
                 e.stopPropagation();
                 startEdit(r);
               }}
-              aria-label={`编辑提醒 ${r.title}`}
-              className="p-1.5 rounded-lg text-sandrift hover:text-charcoal hover:bg-white transition-colors"
             >
               <PencilLine className="w-3.5 h-3.5" />
-            </button>
+            </IconButton>
           )}
-          <button
+          <IconButton
+            variant="ghost"
+            size="sm"
+            aria-label={`删除提醒 ${r.title}`}
+            className="hover:bg-danger-bg hover:text-danger"
             onClick={(e) => {
               e.stopPropagation();
               handleDelete(r.id);
             }}
-            aria-label={`删除提醒 ${r.title}`}
-            className="p-1.5 rounded-lg text-sandrift hover:text-danger hover:bg-danger-bg transition-colors"
           >
             <Trash2 className="w-3.5 h-3.5" />
-          </button>
+          </IconButton>
         </div>
       </div>
     );
@@ -217,113 +250,143 @@ export function ReminderCenter() {
         data-testid="reminder-center"
         className={cn(
           "pointer-events-auto fixed inset-y-0 bg-surface border-r border-line shadow-card flex flex-col",
-          "left-0 right-0 md:left-16 md:right-auto xl:left-56 md:w-[380px]"
+          "left-0 right-0 md:left-16 md:right-auto xl:left-56 md:w-[400px]"
         )}
       >
-        {/* Header */}
-        <div className="flex items-center justify-between px-4 h-12 border-b border-line shrink-0">
-          <h2 className="flex items-center gap-2 text-sm font-bold text-charcoal">
-            <Bell className="w-4 h-4 text-[#A48F82]" />
-            提醒
+        {/* Header：Bell + 标题 + 数量 badge | 新建提醒 + 关闭 */}
+        <div className="flex items-center justify-between px-4 h-12 border-b border-line shrink-0 bg-[#F7F5F5]">
+          <h2 className="flex items-center gap-2 text-sm font-bold text-charcoal min-w-0">
+            <Bell className="w-4 h-4 text-[#A48F82] shrink-0" />
+            <span className="truncate">提醒</span>
+            {upcoming.length > 0 && (
+              <span className="text-[10px] font-bold text-white bg-charcoal px-1.5 py-0.5 rounded-full shrink-0">
+                {upcoming.length}
+              </span>
+            )}
           </h2>
-          <div className="flex items-center gap-1">
-            <button
-              onClick={startCreate}
-              aria-label="新建提醒"
-              className="p-1.5 rounded-lg text-sandrift hover:text-charcoal hover:bg-alabaster transition-colors"
-            >
-              <Plus className="w-4 h-4" />
-            </button>
-            <button
-              onClick={close}
-              aria-label="关闭提醒中心"
-              className="p-1.5 rounded-lg text-sandrift hover:text-charcoal hover:bg-alabaster transition-colors"
-            >
+          <div className="flex items-center gap-1.5 shrink-0">
+            <Button variant="primary" size="sm" onClick={startCreate}>
+              <Plus className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">新建提醒</span>
+              <span className="sm:hidden">新建</span>
+            </Button>
+            <IconButton variant="ghost" size="sm" aria-label="关闭提醒中心" onClick={close}>
               <X className="w-4 h-4" />
-            </button>
+            </IconButton>
           </div>
         </div>
 
-        {/* Standalone inline editor */}
+        {/* New Reminder Composer（inline，非 Modal；轻量 surface） */}
         {editor && (
-          <div className="shrink-0 px-4 py-3 border-b border-line bg-[#F7F5F5]/60 space-y-2">
-            <p className="text-[10px] font-bold text-sandrift uppercase tracking-wider">
-              {editor.mode === "edit" ? "编辑独立提醒" : "新建独立提醒"}
-            </p>
-            <input
-              value={draft.title}
-              onChange={(e) => setDraft({ ...draft, title: e.target.value })}
-              placeholder="提醒标题"
-              aria-label="提醒标题"
-              className="w-full px-2.5 h-9 bg-white border border-line-strong rounded-lg text-xs font-semibold text-charcoal focus:outline-none"
-            />
-            <div className="flex items-center gap-2">
-              <input
-                type="date"
-                value={draft.date}
-                onChange={(e) => setDraft({ ...draft, date: e.target.value })}
-                aria-label="提醒日期"
-                className="flex-1 px-2 h-9 bg-white border border-line-strong rounded-lg font-mono text-[11px] focus:outline-none min-w-0"
-              />
-              <input
-                type="time"
-                value={draft.time}
-                onChange={(e) => setDraft({ ...draft, time: e.target.value })}
-                aria-label="提醒时间"
-                className="w-24 px-2 h-9 bg-white border border-line-strong rounded-lg font-mono text-[11px] focus:outline-none"
-              />
+          <div className="shrink-0 px-4 py-3 border-b border-line bg-alabaster/30 space-y-3">
+            <div className="flex items-center justify-between">
+              <p className="text-xs font-bold text-charcoal">
+                {editor.mode === "edit" ? "编辑提醒" : "新建提醒"}
+              </p>
+              <IconButton variant="ghost" size="sm" aria-label="关闭编辑器" onClick={cancelEditor}>
+                <X className="w-3.5 h-3.5" />
+              </IconButton>
             </div>
-            <input
-              value={draft.note}
-              onChange={(e) => setDraft({ ...draft, note: e.target.value })}
-              placeholder="备注（可选）"
-              aria-label="提醒备注"
-              className="w-full px-2.5 h-9 bg-white border border-line rounded-lg text-xs text-charcoal focus:outline-none"
-            />
+            <Field label="提醒内容" required>
+              <Input
+                value={draft.title}
+                onChange={(e) => setDraft({ ...draft, title: e.target.value })}
+                placeholder="提醒内容"
+                aria-label="提醒内容"
+                autoFocus
+                invalid={!!error && !draft.title.trim()}
+              />
+            </Field>
+            <Field label="提醒时间">
+              <div className="flex items-center gap-2">
+                <Input
+                  type="date"
+                  value={draft.date}
+                  onChange={(e) => setDraft({ ...draft, date: e.target.value })}
+                  aria-label="提醒日期"
+                  className="flex-1 min-w-0"
+                />
+                <Input
+                  type="time"
+                  value={draft.time}
+                  onChange={(e) => setDraft({ ...draft, time: e.target.value })}
+                  aria-label="提醒时间"
+                  className="w-28"
+                />
+              </div>
+            </Field>
+            <Field label="备注">
+              <Textarea
+                rows={2}
+                value={draft.note}
+                onChange={(e) => setDraft({ ...draft, note: e.target.value })}
+                placeholder="备注（可选）"
+                aria-label="提醒备注"
+              />
+            </Field>
             {error && <p className="text-[10px] font-semibold text-danger">{error}</p>}
-            <div className="flex items-center gap-2">
-              <button
-                onClick={saveDraft}
-                className="ux-press flex items-center gap-1 px-3 h-8 rounded-lg text-[11px] font-bold text-white bg-charcoal hover:bg-black transition-colors"
-              >
+            <div className="flex items-center justify-end gap-2">
+              <Button variant="secondary" onClick={cancelEditor}>
+                取消
+              </Button>
+              <Button variant="primary" onClick={saveDraft}>
                 <Check className="w-3 h-3" />
                 保存
-              </button>
-              <button
-                onClick={() => {
-                  setEditor(null);
-                  setError("");
-                }}
-                className="px-3 h-8 rounded-lg text-[11px] font-semibold text-satin-grey hover:bg-alabaster transition-colors"
-              >
-                取消
-              </button>
+              </Button>
             </div>
           </div>
         )}
 
-        {/* Sections */}
-        <div className="flex-1 min-h-0 overflow-y-auto px-2 py-2 space-y-4">
-          <div className="space-y-0.5">
-            <p className="px-2 pt-1 pb-0.5 text-[10px] font-bold text-sandrift uppercase tracking-wider">
-              即将提醒 {upcoming.length > 0 && `(${upcoming.length})`}
-            </p>
+        {/* Sections：即将提醒 / 历史提醒（Settings-like group surface + row divider） */}
+        <div className="flex-1 min-h-0 overflow-y-auto px-3 py-3 space-y-4">
+          {/* Upcoming Group */}
+          <section className="rounded-xl border border-line overflow-hidden bg-surface">
+            <div className="flex items-center justify-between px-3 pt-2.5 pb-2 border-b border-line-soft bg-[#F7F5F5]/60">
+              <h3 className="text-[11px] font-bold text-charcoal">即将提醒</h3>
+              <span className="text-[10px] font-semibold text-sandrift bg-alabaster px-1.5 py-0.5 rounded border border-line">
+                {upcoming.length}
+              </span>
+            </div>
             {upcoming.length === 0 ? (
-              <p className="px-2 py-2 text-[10px] text-sandrift">暂无即将提醒</p>
+              <div className="flex flex-col items-center text-center gap-1.5 px-4 py-7">
+                <CalendarClock className="w-7 h-7 text-sandrift" />
+                <p className="text-xs font-bold text-charcoal">暂时没有即将提醒</p>
+                <p className="text-[10px] text-sandrift leading-relaxed">
+                  任务、DDL 和你创建的提醒
+                  <br />
+                  会出现在这里
+                </p>
+                <Button variant="primary" size="sm" className="mt-2" onClick={startCreate}>
+                  <Plus className="w-3.5 h-3.5" />
+                  新建提醒
+                </Button>
+              </div>
             ) : (
-              upcoming.map((r) => renderRow(r))
+              <div className="divide-y divide-line-soft">
+                {upcoming.map((r) => renderRow(r, false))}
+              </div>
             )}
-          </div>
-          <div className="space-y-0.5">
-            <p className="px-2 pt-1 pb-0.5 text-[10px] font-bold text-sandrift uppercase tracking-wider">
-              已提醒 {history.length > 0 && `(${history.length})`}
-            </p>
+          </section>
+
+          {/* History Group（视觉权重低于 Upcoming） */}
+          <section className="rounded-xl border border-line overflow-hidden bg-surface">
+            <div className="flex items-center justify-between px-3 pt-2.5 pb-2 border-b border-line-soft bg-[#F7F5F5]/60">
+              <h3 className="text-[11px] font-bold text-charcoal">历史提醒</h3>
+              <span className="text-[10px] font-semibold text-sandrift bg-alabaster px-1.5 py-0.5 rounded border border-line">
+                {history.length}
+              </span>
+            </div>
             {history.length === 0 ? (
-              <p className="px-2 py-2 text-[10px] text-sandrift">暂无历史提醒</p>
+              <div className="px-4 py-3.5 text-center">
+                <p className="text-[10px] text-sandrift">还没有提醒记录</p>
+                <p className="text-[9px] text-satin-grey mt-0.5">触发过的提醒会保留在这里</p>
+              </div>
             ) : (
-              history.map((r) => renderRow(r, r.status === "skipped" ? "已跳过" : "已提醒"))
+              <div className="divide-y divide-line-soft">
+                {history.map((r) => renderRow(r, true))}
+              </div>
             )}
-          </div>
+          </section>
         </div>
       </div>
     </div>

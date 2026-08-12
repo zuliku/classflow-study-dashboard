@@ -290,19 +290,20 @@ export default function Home() {
                 <>
               {/* Overview Hero Section（xl+ 严格占满 Header 以下首屏，padding 计入 section box；
                   < xl 自然流式堆叠，不强制视口高度） */}
-              <section className="min-h-0 shrink-0 p-4 pb-24 md:p-6 md:pb-6 xl:h-[calc(100dvh-4.0625rem)]">
+              <section className="min-h-0 shrink-0 p-4 pb-24 md:p-6 md:pb-6 xl:h-[calc(100dvh-4.0625rem)] [@media(max-height:720px)]:!pt-2 [@media(max-height:720px)]:!pb-4">
                 {/* 三卡 Grid：xl 时 h-full 填满 Hero Section；三卡同顶同底（items-stretch） */}
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 items-stretch h-full min-h-0">
                 <div className="lg:col-span-2 flex flex-col min-h-0">
                   <TimetableGrid density="compact" fillAvailableHeight headerActions={<TimetableQuickGlance />} />
                 </div>
                 {/* 右栏：DDL 吸收剩余高度（flex-1），Calendar 固定稳定高度（不随月份/内容变化）
-                    右栏总高恒等于左侧课表 → 三卡同顶同底 */}
+                    右栏总高恒等于左侧课表 → 三卡同顶同底
+                    高度受限（≤800px 视口）：Agenda 隐藏 + Calendar shell 缩短，空间让给 DDL */}
                 <div className="flex flex-col h-full min-h-0 gap-5">
                   <div className="flex-1 min-h-0">
                     <UpcomingDDL />
                   </div>
-                  <div className="h-[380px] lg:h-[390px] xl:h-[410px] 2xl:h-[420px] shrink-0">
+                  <div className="h-[380px] lg:h-[390px] xl:h-[410px] 2xl:h-[420px] shrink-0 [@media(max-height:800px)]:h-[315px]">
                     <MiniCalendar />
                   </div>
                 </div>

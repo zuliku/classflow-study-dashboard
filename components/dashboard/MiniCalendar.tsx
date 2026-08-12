@@ -577,8 +577,9 @@ export function MiniCalendar() {
       )}
 
       {/* Selected Date Agenda：横向 Compact Event Grid（4 列/页，仅类型 + 图标；详情走 Drawer）
-          矮视口（≤740px 高）下隐藏，避免与 Overview 首屏 hero 争高度 */}
-      <div className="pt-2 border-t border-[#F0EBE1] shrink-0 [@media(max-height:740px)]:hidden">
+          视口高度 ≤800px 时整体隐藏（标题 + 数量 + 卡片全部），同时 Calendar shell 在外层缩短，
+          把空间让给 UpcomingDDL（避免 DDL 三行被压扁重叠） */}
+      <div className="pt-2 border-t border-[#F0EBE1] shrink-0 [@media(max-height:800px)]:hidden">
         <div className="flex justify-between items-center text-xs">
           <span className="font-bold text-charcoal">
             {isSelectedInSemester
