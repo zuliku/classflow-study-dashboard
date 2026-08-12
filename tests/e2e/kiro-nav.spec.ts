@@ -106,8 +106,10 @@ test("Mobile 390：Bottom Nav 有 Kiro，进入后 Composer 可用且无横向�
   await expect(page.getByTestId("kiro-workspace")).toBeVisible();
   const composer = page.getByTestId("kiro-composer");
   await expect(composer.getByLabel("Ask Kiro")).toBeVisible();
-  // Mobile Header 显示当前页名 Kiro
-  await expect(page.locator("header h2").first()).toContainText("Kiro");
+  // Mobile Header 显示当前页名 Kiro（App Shell structural header 标题）
+  await expect(
+    page.locator("header").first().getByRole("heading", { name: "Kiro" })
+  ).toBeVisible();
   // 无横向溢出
   expect(await hasHorizontalOverflow(page)).toBe(false);
 });

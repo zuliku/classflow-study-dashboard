@@ -73,6 +73,7 @@ export function SettingsSegmentedControl<T extends string | number>({
       onChange={onChange}
       ariaLabel={ariaLabel}
       options={options.map((o) => ({ value: o.value, label: o.label }))}
+      className="max-w-full min-w-0 overflow-x-auto scrollbar-none"
     />
   );
 }

@@ -357,17 +357,18 @@ export function TimelineWorkspace() {
   const isToday = (dateStr: string) => dateStr === todayStr;
 
   return (
-    <>
-    {/* Task 1：Timeline Workspace Header（统一 Shell；周切换/Filter/+ /Ask Kiro/More 留在 Local Toolbar） */}
+    <div className="flex flex-1 min-h-0 flex-col">
+    {/* Timeline Workspace Header（App Shell Structural；周切换/Filter/+ /Ask Kiro/More 留在 Local Toolbar） */}
     <WorkspaceHeader
       title="时间表"
       context={`第 ${currentSemesterWeek} 周 · ${formatWeekDateRange(semester, currentSemesterWeek)}`}
       sticky
     />
+    <div className="flex flex-1 min-h-0 flex-col p-4 pb-24 md:p-6 md:pb-6">
     <div
       ref={wrapRef}
       data-testid="timeline-workspace"
-      className="h-[calc(100dvh-128px)] md:h-[calc(100dvh-128px)] flex flex-col min-h-0 bg-surface border border-line rounded-2xl shadow-subtle overflow-hidden"
+      className="flex flex-1 min-h-0 flex-col bg-surface border border-line rounded-2xl shadow-subtle overflow-hidden"
     >
       {/* ---------- Local Toolbar（周导航 | Actions；Week Meta 已上移 Workspace Header，不再重复） ---------- */}
       <div className="shrink-0 px-3 py-2 border-b border-line flex items-center justify-between gap-2">
@@ -623,7 +624,8 @@ export function TimelineWorkspace() {
       assignments={unscheduled}
       onArrange={(a) => { setArrangeFor(a); setMarkOpen(false); }}
     />
-    </>
+    </div>
+    </div>
   );
 }
 

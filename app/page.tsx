@@ -236,25 +236,18 @@ export default function Home() {
       {/* Main Content Workspace */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* Dynamic Page Views */}
-        {/* Kiro Tab：full-bleed shell（p-0 且 md+ 无底部 padding），gutter 由 KiroWorkspace 内部提供，
-            History Panel 可从 Header 下沿连续延伸到视口底部（border-l 不断线） */}
-        <main
-          className={cn(
-            "flex-1 flex flex-col overflow-y-auto",
-            activeTab === "kiro" ? "p-0 pb-24 md:p-0 md:pb-0" : "p-4 md:p-6 pb-24 md:pb-6"
-          )}
-        >
+        {/* main：只负责 flex / overflow / workspace geometry，不承担页面 gutter。
+            WorkspaceHeader 是 full-width structural layer；page padding 由各页面 body 自己负责。
+            Kiro Tab 保持 full-bleed（p-0），gutter 由 KiroWorkspace 内部提供。 */}
+        <main className="flex-1 flex flex-col overflow-y-auto">
           <PageTransition
             tab={activeTab}
-            className={
-              activeTab === "kiro"
-                ? "flex flex-col flex-1 min-h-0"
-                : "space-y-5"
-            }
+            className="flex flex-col flex-1 min-h-0"
           >
           {activeTab === "overview" && (
-            <>
+            <div className="flex flex-1 min-h-0 flex-col">
               <WorkspaceHeader title="总览" context={currentWeekContext} sticky />
+              <div className="flex flex-1 min-h-0 flex-col space-y-5 p-4 pb-24 md:p-6 md:pb-6">
               {/* First Run：空工作区时显示 Getting Started（非阻塞，三个动作即可开始） */}
               {courses.length === 0 && schedules.length === 0 && assignments.length === 0 ? (
                 <div
@@ -297,7 +290,7 @@ export default function Home() {
               {/* Row 1: Overview Hero（Desktop ≥1280 = 一屏：课表 2/3 + DDL/月历 1/3，严格同顶同底） */}
               {/* Tablet 768–1023 自然降列 2+1，Desktop 恢复 2/3 + 1/3 */}
               {/* items-stretch：左侧完整时间轴课表是 Row 高度基准；右侧用稳定比例 grid-rows 适配等高 */}
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 items-stretch xl:h-[calc(100dvh-7rem)]">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 items-stretch xl:h-[calc(100dvh-81px)]">
                 <div className="lg:col-span-2 flex flex-col min-h-0">
                   <TimetableGrid density="compact" fillAvailableHeight headerActions={<TimetableQuickGlance />} />
                 </div>
@@ -327,19 +320,16 @@ export default function Home() {
               </div>
                 </>
               )}
-            </>
-          )}
-
-          {activeTab === "timetable" && (
-            <div className="space-y-4">
-              <TimelineWorkspace />
+              </div>
             </div>
           )}
+
+          {activeTab === "timetable" && <TimelineWorkspace />}
 
           {activeTab === "assignments" && <AssignmentsWorkspace />}
 
           {activeTab === "courses" && (
-            <div className="space-y-4">
+            <div className="flex flex-1 min-h-0 flex-col">
               <WorkspaceHeader
                 title="课程资料"
                 context={`${courses.length} 门课程 · ${totalCredits} 学分`}
@@ -351,6 +341,7 @@ export default function Home() {
                 }
                 sticky
               />
+              <div className="flex flex-1 min-h-0 flex-col space-y-4 p-4 pb-24 md:p-6 md:pb-6">
               {courses.length === 0 ? (
                 <div className="bg-surface border border-line rounded-2xl p-10 shadow-subtle flex flex-col items-center justify-center gap-2.5 text-center">
                   <p className="text-xs font-bold text-charcoal">暂无课程</p>
@@ -432,12 +423,13 @@ export default function Home() {
                 ))}
               </div>
               )}
+              </div>
             </div>
           )}
 
           {activeTab === "kiro" && (
             <div className="flex flex-1 min-h-0 flex-col">
-              <WorkspaceHeader title="Kiro" className="px-4 md:px-6" />
+              <WorkspaceHeader title="Kiro" />
               <KiroWorkspace />
             </div>
           )}
@@ -445,8 +437,9 @@ export default function Home() {
           {activeTab === "group" && <GroupCollaborationView />}
 
           {activeTab === "analytics" && (
-            <div className="space-y-4">
+            <div className="flex flex-1 min-h-0 flex-col">
               <WorkspaceHeader title="学习统计" context={`本学期 · 第 ${currentSemesterWeek} 周`} sticky />
+              <div className="flex flex-1 min-h-0 flex-col space-y-4 p-4 pb-24 md:p-6 md:pb-6">
 
               {/* 无数据：不生成假图 */}
               {assignments.length === 0 && schedules.length === 0 ? (
@@ -568,6 +561,7 @@ export default function Home() {
                 <StudyLoadChart />
               </div>
               </>)}
+              </div>
             </div>
           )}
         </PageTransition>

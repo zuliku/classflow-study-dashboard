@@ -64,7 +64,7 @@ export function SettingsModal() {
       }}
       aria-label="设置"
       className={cn(
-        "w-full h-full md:w-[min(900px,calc(100vw-48px))] md:h-[min(680px,calc(100dvh-48px))]",
+        "w-full h-full max-w-none md:w-[min(900px,calc(100vw-48px))] md:h-[min(680px,calc(100dvh-48px))]",
         "rounded-none md:rounded-2xl"
       )}
     >

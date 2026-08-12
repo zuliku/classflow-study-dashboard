@@ -5,10 +5,14 @@ import { cn } from "@/lib/utils";
 import { WorkspaceSearchButton } from "@/components/layout/WorkspaceSearchButton";
 
 /**
- * Workspace Header（UI Productization Task 1）：全站统一 Workspace 顶部结构。
+ * Workspace Header（App Shell Structural Header）：Main Workspace 的固定结构层顶栏。
  *
  * 结构：Title / Context（左） + Actions / Primary / Search（右）。
- * 视觉：非 Card、无 shadow-subtle、subtle bottom border、暖灰背景、sticky top-0。
+ * 几何：width 100%、shrink-0、solid 背景（不透内容）、border-bottom、
+ *       no margin / no outer radius / no shadow、sticky top-0（main 为 scroll container）、
+ *       z-20（普通内容 < Header < Popover z-40 < Dialog/Overlay z-50）。
+ * Header surface full bleed；内部自带 px-4 md:px-6，与下方 page content 左右内容线对齐，
+ * 不依赖 page padding 制造 gutter。
  * 无 feature variant（禁止 variant="tasks" 等）；页面业务 Context 由页面自身计算后传入。
  * 不建立 Header Registry / Context slot store；className 只用于布局对齐。
  */
@@ -34,7 +38,7 @@ export function WorkspaceHeader({
   return (
     <header
       className={cn(
-        "z-20 flex min-h-14 shrink-0 items-center justify-between gap-3 border-b border-line bg-[#F7F5F5] py-2.5",
+        "z-20 flex min-h-14 w-full shrink-0 items-center justify-between gap-3 border-b border-line bg-[#F7F5F5] px-4 py-2.5 md:min-h-16 md:px-6 md:py-2",
         sticky && "sticky top-0",
         className
       )}

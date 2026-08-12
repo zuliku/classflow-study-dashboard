@@ -68,7 +68,7 @@ export function AssignmentsWorkspace() {
   );
 
   return (
-    <div className="space-y-4" data-testid="assignments-tab">
+    <div className="flex flex-1 min-h-0 flex-col" data-testid="assignments-tab">
       <WorkspaceHeader
         title="任务与 DDL"
         context={`${incompleteCount} 项未完成`}
@@ -76,11 +76,13 @@ export function AssignmentsWorkspace() {
         primaryAction={primaryAction}
         sticky
       />
-      <AssignmentTable
-        mode="workspace"
-        workspaceQuickAddOpen={quickAddOpen}
-        onWorkspaceQuickAddOpenChange={setQuickAddOpen}
-      />
+      <div className="flex flex-1 min-h-0 flex-col space-y-4 p-4 pb-24 md:p-6 md:pb-6">
+        <AssignmentTable
+          mode="workspace"
+          workspaceQuickAddOpen={quickAddOpen}
+          onWorkspaceQuickAddOpenChange={setQuickAddOpen}
+        />
+      </div>
     </div>
   );
 }

@@ -335,8 +335,8 @@ export function GroupCollaborationView() {
     : [];
 
   return (
-    <div className="space-y-4">
-      {/* Task 1：统一 Workspace Header（Banner 已删除；Ask Kiro 仅 activeProject 时显示） */}
+    <div className="flex flex-1 min-h-0 flex-col">
+      {/* 统一 Workspace Header（App Shell Structural；Banner 已删除；Ask Kiro 仅 activeProject 时显示） */}
       <WorkspaceHeader
         title="小组协作"
         context={`${groupProjects.length} 个项目`}
@@ -360,6 +360,7 @@ export function GroupCollaborationView() {
         sticky
       />
 
+      <div className="flex flex-1 min-h-0 flex-col space-y-4 p-4 pb-24 md:p-6 md:pb-6">
       {/* Main Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 items-start">
         {/* Left: Project List */}
@@ -838,6 +839,7 @@ export function GroupCollaborationView() {
             </Button>
           </div>
         </GroupModal>
+    </div>
     </div>
   );
 }
