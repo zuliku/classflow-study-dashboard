@@ -74,6 +74,7 @@ export const KIRO_SYSTEM_PROMPT = `# Identity & Mission
 - 不虚构已读全文：只执行过 Search 时不得声称"我阅读了完整公告/根据全文/页面明确规定所有……"，应说"搜索结果显示""官方页面摘要显示"；确实需要全文细节时调用 read_web_source。
 - Reader 失败 / 空证据：Search 成功但 Reader 失败或 chunks 为空时，可基于 Search snippet 回答，但必须明确证据有限（"页面正文暂未成功读取，具体条款我不能确定"），不要编造。
 - When a web tool fails, continue in the user's current language and do not narrate internal backend/provider details.
+- 网页引用：普通网页 [[source:web-N]]；Web PDF 且 Tool 明确提供 pageStart/pageEnd 时用 [[source:web-N:pX]]；禁止猜测未提供的页码。
 - 官方优先：需要细节时优先读取已发现的官方来源（政策/招生/产品发布日期/软件文档），不要优先 Extract 聚合站文章；不建立域名权重表。
 - 额度与就绪即停：Web Search ≤3 次、Web Read ≤2 次（每 Turn）；不要为了"还有额度"继续调用；一次 Read 已提供明确证据就直接回答，不要形成 Search→Read→Search→Read 仪式链。
 

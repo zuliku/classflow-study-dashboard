@@ -62,17 +62,21 @@ export function splitCitationSegments(text: string): CitationSegment[] {
   return segments;
 }
 
-/** 校验引用：sourceId 必须在本 Turn 注册；页码必须在该 source 实际提供的范围内 */
+/**
+ * 校验引用（Task 19B 统一规则）：
+ * - 无页码 → sourceId 存在即可（任意 source 类型）
+ * - 有页码 → source.availablePages 必须存在，且 citation 中每一页都在 availablePages 内
+ * HTML Web Source 没有 availablePages → 页码引用非法（保持原行为）；
+ * Web PDF（read_web_source 提供可信 availablePages）→ [[source:web-N:pX]] 合法。
+ * 页码信任边界：availablePages 只含实际发送给模型的 Evidence 页面。
+ */
 export function resolveCitation(citation: KiroCitation, sources: KiroSourceMeta[]): KiroSourceMeta | null {
   const source = sources.find((s) => s.sourceId === citation.sourceId);
   if (!source) return null;
-  // Task 14：Web Source 没有 PDF 页码——[[source:web-1:p12]] 一律非法
-  if (source.source === "web" && citation.pageStart !== undefined) return null;
-  if (citation.pageStart !== undefined) {
-    const pages = source.availablePages ?? [];
-    for (let p = citation.pageStart; p <= (citation.pageEnd ?? citation.pageStart); p++) {
-      if (!pages.includes(p)) return null;
-    }
+  if (citation.pageStart === undefined) return source;
+  const pages = source.availablePages ?? [];
+  for (let p = citation.pageStart; p <= (citation.pageEnd ?? citation.pageStart); p++) {
+    if (!pages.includes(p)) return null;
   }
   return source;
 }

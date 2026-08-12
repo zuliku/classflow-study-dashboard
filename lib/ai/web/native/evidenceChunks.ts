@@ -140,11 +140,12 @@ export function normalizeWebQueryTokens(query: string): string[] {
  * - 有 query → 每 chunk 命中 token +1、完整 phrase 命中额外 +3；
  *   存在 score>0 时取最高分最多 3 个并按文档 index 恢复自然顺序；
  *   全部 score=0 → 退回前 3 个（不返回空证据）
+ * Task 19B：泛型化——PdfEvidenceCandidate（带 pageStart/pageEnd）经 selection 后页码不丢失。
  */
-export function selectNativeEvidenceChunks(
-  chunks: NativeEvidenceChunk[],
+export function selectNativeEvidenceChunks<T extends NativeEvidenceChunk>(
+  chunks: T[],
   query?: string
-): { selected: NativeEvidenceChunk[]; truncated: boolean } {
+): { selected: T[]; truncated: boolean } {
   const sorted = [...chunks].sort((a, b) => a.index - b.index);
   const fallback = sorted.slice(0, MAX_NATIVE_WEB_EVIDENCE_CHUNKS);
   const truncated = sorted.length > MAX_NATIVE_WEB_EVIDENCE_CHUNKS;

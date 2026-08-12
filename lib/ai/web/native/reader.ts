@@ -50,7 +50,9 @@ export interface KiroNativeWebReadSuccess {
   parsedTitle?: string;
   siteName?: string;
   publishedAt?: string;
-  chunks: { text: string }[];
+  /** Task 19B：本次实际向模型提供 Evidence 的页面（PDF）；HTML 不设置 */
+  availablePages?: number[];
+  chunks: { text: string; pageStart?: number; pageEnd?: number }[];
   truncated: boolean;
 }
 
@@ -59,7 +61,9 @@ export type KiroNativeWebReadFailureCode =
   | "WEB_NATIVE_POLICY_BLOCKED"
   | "WEB_NATIVE_UNSUPPORTED_CONTENT"
   | "WEB_NATIVE_PARSE_FAILED"
-  | "WEB_NATIVE_NO_EVIDENCE";
+  | "WEB_NATIVE_NO_EVIDENCE"
+  /** Task 19B：扫描型 Web PDF（无文本层；允许 fallback；未来独立 Vision 任务） */
+  | "WEB_NATIVE_PDF_SCANNED";
 
 export interface KiroNativeWebReadFailure {
   ok: false;
@@ -107,7 +111,7 @@ function fallbackContainerText(doc: Document): string {
  * 安全策略拒绝（SSRF / redirect / hostname / URL 形态）必须与普通网络失败区分，
  * 因为前者绝不能触发 Tavily fallback（fallback 不能成为绕过 Safety Layer 的通道）。
  */
-function mapSafeFetchFailure(code: string): KiroNativeWebReadFailureCode {
+export function mapSafeFetchFailure(code: string): KiroNativeWebReadFailureCode {
   switch (code) {
     case "WEB_FETCH_INVALID_URL":
     case "WEB_FETCH_BLOCKED_HOST":
@@ -132,6 +136,7 @@ function mapSafeFetchFailure(code: string): KiroNativeWebReadFailureCode {
  * 其它（FETCH_FAILED / UNSUPPORTED_CONTENT / PARSE_FAILED / NO_EVIDENCE）→ true。
  */
 export function shouldFallbackNativeWebRead(code: KiroNativeWebReadFailureCode): boolean {
+  // 安全策略拒绝必须是最终拒绝；scanned PDF 允许 fallback（并保留独立 code 供未来 Vision 分支判断）
   return code !== "WEB_NATIVE_POLICY_BLOCKED";
 }
 

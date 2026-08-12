@@ -1203,6 +1203,8 @@ export function useKiroChat({
 
   // Task 14/15A：从真实 tool-web_search output 注册可信 Web Source（只存 metadata，不存 snippet）。
   // 模型正文里的 [[source:web-99]] 不会自动生成来源；同一 sourceId 只保留一份 metadata（确定性 Map 去重）。
+  // Task 19B：read_web_source 成功输出 availablePages → 只对已注册 web source 做页码 enrichment
+  //（不覆盖 url/title/domain；模型不能凭空增加页码）。
   useEffect(() => {
     const additions = new Map<string, KiroSourceMeta>();
     for (const m of chat.messages) {
@@ -1225,12 +1227,56 @@ export function useKiroChat({
         }
       }
     }
-    if (additions.size === 0) return;
+
+    // Task 19B：收集 read_web_source 成功输出的可信 availablePages
+    const readPages: { sourceId: string; availablePages: number[] }[] = [];
+    for (const m of chat.messages) {
+      if (m.role !== "assistant") continue;
+      for (const p of (m.parts ?? []) as { type?: string; output?: unknown }[]) {
+        if (typeof p.type !== "string" || p.type.slice("tool-".length) !== "read_web_source") continue;
+        const output = p.output as {
+          ok?: boolean;
+          data?: { sources?: { sourceId?: string; availablePages?: number[] }[] };
+        } | null;
+        if (!output?.ok || !Array.isArray(output.data?.sources)) continue;
+        for (const s of output.data.sources) {
+          if (s.sourceId && Array.isArray(s.availablePages) && s.availablePages.length > 0) {
+            readPages.push({ sourceId: s.sourceId, availablePages: s.availablePages });
+          }
+        }
+      }
+    }
+
+    if (additions.size === 0 && readPages.length === 0) return;
     const known = new Set(turnSourcesRef.current.map((s) => s.sourceId));
     const fresh = Array.from(additions.values()).filter((a) => !known.has(a.sourceId));
-    if (fresh.length === 0) return;
-    turnSourcesRef.current = [...turnSourcesRef.current, ...fresh];
-    setSources(turnSourcesRef.current);
+    let next: KiroSourceMeta[] = [...turnSourcesRef.current, ...fresh];
+
+    // enrichment：只有 sourceId 已存在于真实 web_search Registry 的 web source 才能获得页码
+    if (readPages.length > 0) {
+      const byId = new Map(next.map((s) => [s.sourceId, s]));
+      let changed = false;
+      for (const rp of readPages) {
+        const existing = byId.get(rp.sourceId);
+        if (!existing || existing.source !== "web") continue;
+        const union = Array.from(new Set([...(existing.availablePages ?? []), ...rp.availablePages])).sort(
+          (a, b) => a - b
+        );
+        if (union.length > 0 && (existing.availablePages?.length ?? 0) !== union.length) {
+          existing.availablePages = union;
+          changed = true;
+        }
+      }
+      if (changed) next = Array.from(byId.values());
+    }
+
+    if (fresh.length === 0 && next.length === turnSourcesRef.current.length) {
+      // 只有页码变化才更新（避免无意义 setSources）
+      const same = next.every((s, i) => s === turnSourcesRef.current[i]);
+      if (same) return;
+    }
+    turnSourcesRef.current = next;
+    setSources(next);
   }, [chat.messages]);
 
   const normalizedError: AIError | null = chat.error ? normalizeAIError(chat.error) : null;

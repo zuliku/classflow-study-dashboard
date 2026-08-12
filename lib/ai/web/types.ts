@@ -95,8 +95,11 @@ export interface KiroWebEvidenceRequest {
   query?: string;
 }
 
+/** Task 19B：chunk 可携带可信页码（Web PDF；普通 HTML 只有 text） */
 export interface KiroWebEvidenceChunk {
   text: string;
+  pageStart?: number;
+  pageEnd?: number;
 }
 
 export interface KiroWebEvidenceSource {
@@ -104,6 +107,8 @@ export interface KiroWebEvidenceSource {
   title: string;
   url: string;
   domain: string;
+  /** Task 19B：本次 Tool Result 实际向模型提供 Evidence 的页面（非整份 PDF 页数）；HTML/Tavily fallback 不设置 */
+  availablePages?: number[];
   chunks: KiroWebEvidenceChunk[];
   truncated: boolean;
 }

@@ -13,7 +13,8 @@
  * - Native 成功 source 永不重新 fallback；最终按 request.sources 顺序合并、sourceId 去重
  * - 不向 Agent 暴露 backend（native / tavily / fallback）信息
  */
-import { readNativeWebSource, shouldFallbackNativeWebRead, KiroNativeWebReadOutcome } from "@/lib/ai/web/native/reader";
+import { shouldFallbackNativeWebRead, KiroNativeWebReadOutcome } from "@/lib/ai/web/native/reader";
+import { readNativeWebDocumentSource, KiroNativeDocumentReaderDeps } from "@/lib/ai/web/native/documentReader";
 import { debugKiroWebRead } from "@/lib/ai/web/native/debug";
 import { KiroWebEvidenceProvider } from "@/lib/ai/web/provider";
 import {
@@ -31,7 +32,9 @@ export interface KiroEvidenceRuntimeRequest {
 }
 
 export interface KiroEvidenceRuntimeDeps {
-  nativeReader?: typeof readNativeWebSource;
+  /** 生产 = readNativeWebDocumentSource（HTML → PDF Router）；测试 = mock */
+  nativeReader?: typeof readNativeWebDocumentSource;
+  nativeReaderDeps?: KiroNativeDocumentReaderDeps;
   fallbackProvider: KiroWebEvidenceProvider;
   resolveFallbackCredential: () => KiroWebSearchCredentialResult;
 }
@@ -51,9 +54,10 @@ function hostOfSource(request: KiroEvidenceRuntimeRequest, sourceId: string): st
   }
 }
 
-/** Native success → Kiro Evidence Source；url/title/domain 由 Tool 层 trustedById 补全（这里是空值占位） */
+/** Native success → Kiro Evidence Source；url/title/domain 由 Tool 层 trustedById 补全（这里是空值占位）。
+ * Task 19B：保留 availablePages 与 chunk pageStart/pageEnd（PDF 页码 Citation 信任边界） */
 function nativeToEvidenceSource(
-  native: { sourceId: string; chunks: { text: string }[]; truncated: boolean },
+  native: { sourceId: string; availablePages?: number[]; chunks: { text: string; pageStart?: number; pageEnd?: number }[]; truncated: boolean },
   requestUrl: string
 ): KiroWebEvidenceSource {
   return {
@@ -61,7 +65,11 @@ function nativeToEvidenceSource(
     url: requestUrl, // 原始可信 Source URL；finalUrl 只是内部 metadata，绝不成为 Citation URL
     title: "",
     domain: "",
-    chunks: native.chunks,
+    availablePages: native.availablePages,
+    chunks: native.chunks.map((c) => ({
+      text: c.text,
+      ...(c.pageStart !== undefined ? { pageStart: c.pageStart, pageEnd: c.pageEnd ?? c.pageStart } : {}),
+    })),
     truncated: native.truncated,
   };
 }
@@ -96,18 +104,22 @@ export async function resolveKiroWebEvidence(
   request: KiroEvidenceRuntimeRequest,
   deps: KiroEvidenceRuntimeDeps
 ): Promise<KiroEvidenceRuntimeOutcome> {
-  const nativeReader = deps.nativeReader ?? readNativeWebSource;
+  const nativeReader = deps.nativeReader ?? readNativeWebDocumentSource;
+  const nativeDeps = deps.nativeReaderDeps;
 
   // ---- 1) Native-first（并发上限天然 = MAX_WEB_SOURCES_PER_READ = 2，不需要 pool/queue） ----
   const nativeResults = await Promise.all(
     request.sources.map(async (source) => {
       try {
-        const out = await nativeReader({
-          sourceId: source.sourceId,
-          url: source.url,
-          query: request.query,
-          signal: request.signal,
-        });
+        const out = await nativeReader(
+          {
+            sourceId: source.sourceId,
+            url: source.url,
+            query: request.query,
+            signal: request.signal,
+          },
+          nativeDeps
+        );
         return { sourceId: source.sourceId, outcome: out };
       } catch {
         // Native Reader 意外 throw：不 500，视为 PARSE_FAILED 走正常 fallback 规则

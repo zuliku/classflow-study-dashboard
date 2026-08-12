@@ -73,6 +73,41 @@ describe("resolveKiroWebEvidence — Native-first", () => {
     expect(req.sources).toEqual([{ sourceId: "web-3", url: "https://a.dev/3" }]);
   });
 
+  it("Task 19B. Native PDF page metadata 完整保留：availablePages + chunk pageStart/pageEnd，fallback 0 调用", async () => {
+    const { deps, extract, resolveFallbackCredential } = makeDeps({
+      nativeResults: (r) =>
+        r.sourceId === "web-3"
+          ? ({
+              ok: true,
+              sourceId: "web-3",
+              finalUrl: "https://cdn.example.com/zhaosheng.pdf",
+              availablePages: [8, 12],
+              chunks: [
+                { text: "报名条件…", pageStart: 8, pageEnd: 8 },
+                { text: "考试科目为871经济学…", pageStart: 12, pageEnd: 12 },
+              ],
+              truncated: false,
+            } as KiroNativeWebReadOutcome)
+          : ({
+              ok: true,
+              sourceId: "web-4",
+              finalUrl: "https://cdn.example.com/other.pdf",
+              availablePages: [1],
+              chunks: [{ text: "web-4 PDF 内容", pageStart: 1, pageEnd: 1 }],
+              truncated: false,
+            } as KiroNativeWebReadOutcome),
+    });
+    const out = await resolveKiroWebEvidence(REQUEST, deps);
+    expect(out.ok).toBe(true);
+    if (!out.ok) return;
+    expect(out.sources[0].availablePages).toEqual([8, 12]);
+    expect(out.sources[0].chunks[1]).toEqual({ text: "考试科目为871经济学…", pageStart: 12, pageEnd: 12 });
+    expect(out.sources[0].url).toBe("https://a.dev/3"); // finalUrl 不覆盖
+    expect(out.sources[1].availablePages).toEqual([1]);
+    expect(extract).not.toHaveBeenCalled();
+    expect(resolveFallbackCredential).not.toHaveBeenCalled();
+  });
+
   it("Test C. mixed：web-3 Native success + web-4 Native fail → 合并顺序稳定", async () => {
     const { deps, extract } = makeDeps({
       nativeResults: (r) => (r.sourceId === "web-3" ? nativeOk("web-3", "web-3 native 正文") : nativeFail("WEB_NATIVE_PARSE_FAILED")),

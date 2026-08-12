@@ -127,6 +127,25 @@ describe("Task 14：Web Citation（Kiro Search）", () => {
     expect(resolveCitation({ sourceId: "web-1", pageStart: 12, pageEnd: 12 }, WEB_SOURCES)).toBeNull();
   });
 
+  it("Task 19B Case 1. Web PDF：availablePages:[12] → p12 valid、p13 invalid", () => {
+    const pdfSource: KiroSourceMeta = {
+      sourceId: "web-3",
+      name: "2026年硕士研究生招生简章.pdf",
+      source: "web",
+      url: "https://grs.zju.edu.cn/zhaosheng.pdf",
+      domain: "grs.zju.edu.cn",
+      availablePages: [12],
+    };
+    expect(resolveCitation({ sourceId: "web-3", pageStart: 12, pageEnd: 12 }, [pdfSource])?.sourceId).toBe("web-3");
+    expect(resolveCitation({ sourceId: "web-3", pageStart: 13, pageEnd: 13 }, [pdfSource])).toBeNull();
+    expect(resolveCitation({ sourceId: "web-3" }, [pdfSource])?.sourceId).toBe("web-3"); // 文件级引用仍合法
+  });
+
+  it("Task 19B Case 2. 普通 web（availablePages undefined）→ 页码引用 invalid", () => {
+    expect(resolveCitation({ sourceId: "web-1", pageStart: 12, pageEnd: 12 }, WEB_SOURCES)).toBeNull();
+    expect(resolveCitation({ sourceId: "web-1" }, WEB_SOURCES)?.sourceId).toBe("web-1");
+  });
+
   it("export/copy 不暴露 [[source:web-*]]", () => {
     const out = citationsToReadableText("来源见[[source:web-1]]。", WEB_SOURCES);
     expect(out).not.toContain("[[source:");
