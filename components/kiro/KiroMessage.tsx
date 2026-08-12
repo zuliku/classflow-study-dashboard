@@ -38,6 +38,7 @@ export function KiroMessage({
   sources,
   assistantTurn,
   onRetry,
+  animateAnswerEntry = false,
 }: {
   content?: string;
   /** 流式进行中：末尾显示克制状态光标 */
@@ -56,6 +57,8 @@ export function KiroMessage({
   assistantTurn?: KiroAssistantTurnPresentation;
   /** 重新生成（由 Conversation 注入稳定 callback，避免每行订阅 Session Context） */
   onRetry?: () => void;
+  /** Final Answer 区域首次出现时播放一次结构动画。 */
+  animateAnswerEntry?: boolean;
 }) {
   const pushToast = useToastStore((s) => s.pushToast);
   const more = useKiroPopover();
@@ -103,7 +106,7 @@ export function KiroMessage({
         {/* Worklog V2：真实 part 时序（commentary → tool → … → final answer） */}
         {assistantTurn && assistantTurn.worklog.length > 0 && <KiroWorklog turn={assistantTurn} />}
         {content ? (
-          <>
+          <div className={cn(animateAnswerEntry && "animate-enter")}>
             {/* Worklog V2 Task 4：Stable Blocks（React.memo 缓存）+ Active Tail（轻量纯文本） */}
             <KiroStreamingMarkdown content={content} streaming={!!streaming} sources={sources} />
             {showStreamingCursor && (
@@ -183,7 +186,7 @@ export function KiroMessage({
                 </div>
               </div>
             )}
-          </>
+          </div>
         ) : null}
         {children}
       </div>

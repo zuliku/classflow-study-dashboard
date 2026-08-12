@@ -37,11 +37,13 @@ export function KiroAttachmentChip({
   onRemove,
   onRetry,
   onSaveToCourse,
+  disabled = false,
 }: {
   attachment: KiroAttachmentView;
   onRemove: (id: string) => void;
   onRetry?: (id: string) => void;
   onSaveToCourse?: (id: string, courseId: string) => void;
+  disabled?: boolean;
 }) {
   const courses = useAppStore((s) => s.courses);
   const menuBtnRef = useRef<HTMLButtonElement | null>(null);
@@ -133,7 +135,10 @@ export function KiroAttachmentChip({
 
       {failed && onRetry && (
         <button
-          onClick={() => onRetry(attachment.id)}
+          onClick={() => {
+            if (!disabled) onRetry(attachment.id);
+          }}
+          disabled={disabled}
           aria-label={`重试 ${attachment.name}`}
           title="重试"
           className="p-1 rounded text-sandrift hover:text-charcoal transition-colors shrink-0"
@@ -146,7 +151,10 @@ export function KiroAttachmentChip({
         <>
           <button
             ref={menuBtnRef}
-            onClick={() => setMenuOpen((v) => !v)}
+            onClick={() => {
+              if (!disabled) setMenuOpen((v) => !v);
+            }}
+            disabled={disabled}
             aria-label={`${attachment.name} 更多操作`}
             aria-expanded={menuOpen}
             title="保存到课程资料"
@@ -189,9 +197,12 @@ export function KiroAttachmentChip({
       )}
 
       <button
-        onClick={() => onRemove(attachment.id)}
+        onClick={() => {
+          if (!disabled) onRemove(attachment.id);
+        }}
+        disabled={disabled}
         aria-label={`移除附件 ${attachment.name}`}
-        className="p-1 rounded text-sandrift hover:text-danger transition-colors shrink-0"
+        className="p-1 rounded text-sandrift hover:text-danger transition-colors shrink-0 disabled:opacity-35 disabled:cursor-not-allowed"
       >
         <X className="w-3 h-3" />
       </button>

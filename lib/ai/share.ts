@@ -11,7 +11,7 @@ import { KiroChatMessageView } from "@/hooks/useKiroChat";
 import { citationsToReadableText } from "@/lib/ai/citations/parser";
 
 /** Action Card 摘要（可见事实，不含 tool arguments / 内部数据） */
-export function actionSummaryText(props: Omit<KiroActionCardProps, "onUndo">): string {
+export function actionSummaryText(props: Omit<KiroActionCardProps, "onUndo" | "entering">): string {
   let s = `${props.heading}：${props.title}`;
   if (props.change) s += `（${props.change.from} → ${props.change.to}）`;
   if (props.bullets && props.bullets.length > 0) s += `；${props.bullets.join("；")}`;

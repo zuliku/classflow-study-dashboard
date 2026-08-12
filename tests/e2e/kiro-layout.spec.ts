@@ -52,9 +52,11 @@ test("互斥：进入 Kiro Workspace 后 Sidecar 不再渲染（会话保留）"
   await expect(page.getByTestId("kiro-sidecar")).toHaveCount(0);
   expect(await page.getByTestId("kiro-composer").count()).toBe(1);
 
-  // 离开 Workspace 后 Sidecar 会话仍在（未销毁）
+  // 离开 Workspace 后不会复现隐形 Sidecar；会话数据仍由 Provider 保留。
   await page.locator("aside").first().getByRole("button", { name: "总览" }).click();
-  await expect(page.getByTestId("kiro-sidecar")).toBeVisible();
+  await expect(page.getByTestId("kiro-sidecar")).toHaveCount(0);
+  await page.locator("aside").first().getByRole("button", { name: "Kiro" }).click();
+  await expect(page.getByTestId("kiro-user-message")).toContainText("看看本周安排");
 });
 
 test("expandSidecar：关闭 Sidecar 进入 Workspace，同一会话保留", async ({ page }) => {

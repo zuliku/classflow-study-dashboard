@@ -36,6 +36,7 @@ export function KiroComposer({
   onRemoveContext,
   onSend,
   streaming,
+  runtimeStatus,
   onStop,
   configured,
   modelOptions,
@@ -62,6 +63,7 @@ export function KiroComposer({
   /** 返回 true = 已提交（扫描 PDF 渲染失败时 false，Prompt 保留） */
   onSend: (text: string) => Promise<boolean> | boolean;
   streaming: boolean;
+  runtimeStatus: "ready" | "submitted" | "streaming" | "error";
   onStop: () => void;
   configured: boolean;
   modelOptions: { value: string; label: string; vendor: AIModelVendor | null }[];
@@ -91,6 +93,8 @@ export function KiroComposer({
   const [pickerOpen, setPickerOpen] = useState(false);
   const [materialPickerOpen, setMaterialPickerOpen] = useState(false);
   const [dragOver, setDragOver] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const submittingRef = useRef(false);
   const taRef = useRef<HTMLTextAreaElement | null>(null);
   const attachRef = useRef<HTMLDivElement | null>(null);
   const modelRef = useRef<HTMLDivElement | null>(null);
@@ -111,7 +115,23 @@ export function KiroComposer({
     !imagesBlocked &&
     !scannedBlocked &&
     !streaming &&
+    !submitting &&
     !preparingVision;
+  const turnLocked = submitting || streaming;
+
+  useEffect(() => {
+    if ((!streaming && runtimeStatus !== "error") || !submittingRef.current) return;
+    submittingRef.current = false;
+    setSubmitting(false);
+  }, [runtimeStatus, streaming]);
+
+  useEffect(() => {
+    if (!turnLocked) return;
+    setAttachOpen(false);
+    setModelOpen(false);
+    setPickerOpen(false);
+    setMaterialPickerOpen(false);
+  }, [turnLocked]);
 
   const autoGrow = () => {
     const el = taRef.current;
@@ -121,17 +141,29 @@ export function KiroComposer({
   };
 
   const submit = async () => {
-    if (!canSend) return;
-    const ok = await onSend(text.trim());
-    // 只有真正提交（含扫描 PDF 渲染成功）后才清空；失败保留用户 Prompt
-    if (!ok) return;
-    setText("");
-    requestAnimationFrame(() => {
-      if (taRef.current) {
-        taRef.current.style.height = "auto";
-        taRef.current.focus();
+    if (!canSend || submittingRef.current) return;
+    submittingRef.current = true;
+    setSubmitting(true);
+    try {
+      const ok = await onSend(text.trim());
+      // 只有真正提交（含扫描 PDF 渲染成功）后才清空；失败保留用户 Prompt
+      if (!ok) {
+        submittingRef.current = false;
+        setSubmitting(false);
+        return;
       }
-    });
+      setText("");
+      requestAnimationFrame(() => {
+        if (taRef.current) {
+          taRef.current.style.height = "auto";
+          taRef.current.focus();
+        }
+      });
+    } catch (error) {
+      submittingRef.current = false;
+      setSubmitting(false);
+      throw error;
+    }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -172,12 +204,14 @@ export function KiroComposer({
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     setDragOver(false);
+    if (turnLocked) return;
     const files = Array.from(e.dataTransfer.files ?? []);
     if (files.length > 0) onAddFiles(files);
   };
 
   // 粘贴图片（Ctrl/Cmd+V）
   const handlePaste = (e: React.ClipboardEvent) => {
+    if (turnLocked) return;
     const items = Array.from(e.clipboardData?.items ?? []);
     const files = items
       .filter((it) => it.kind === "file")
@@ -247,7 +281,12 @@ export function KiroComposer({
 
       <div className="max-w-[820px] mx-auto">
         {/* Context Bar：Composer 外上方，明确 Kiro 正在使用的数据范围 */}
-        <KiroContextBar contexts={contexts} onRemove={onRemoveContext} compact={compact} />
+        <KiroContextBar
+          contexts={contexts}
+          onRemove={onRemoveContext}
+          compact={compact}
+          locked={turnLocked}
+        />
 
         {/* Composer Surface：Attachment Shelf（次级层） + Prompt + Toolbar（主层） */}
         <div className="bg-surface border border-line-strong rounded-2xl shadow-subtle focus-within:border-sandrift focus-within:shadow-subtle transition-[border-color,box-shadow] duration-[var(--motion-fast)]">
@@ -271,6 +310,7 @@ export function KiroComposer({
                     onRemove={onRemoveAttachment}
                     onRetry={onRetryAttachment}
                     onSaveToCourse={onSaveAttachmentToCourse}
+                    disabled={turnLocked}
                   />
                 ))}
                 {(hasImages && !visionEnabled) || scannedBlocked ? (
@@ -316,6 +356,7 @@ export function KiroComposer({
                 <div ref={attachRef} className="relative">
                   <button
                     onClick={() => {
+                      if (turnLocked) return;
                       setAttachOpen((v) => !v);
                       setModelOpen(false);
                       setPickerOpen(false);
@@ -324,6 +365,7 @@ export function KiroComposer({
                     aria-label="添加附件"
                     aria-expanded={attachOpen}
                     aria-haspopup="menu"
+                    disabled={turnLocked}
                     title="添加附件"
                     className="w-9 h-9 flex items-center justify-center rounded-xl text-sandrift hover:bg-alabaster hover:text-charcoal transition-colors"
                   >
@@ -355,6 +397,7 @@ export function KiroComposer({
                 <div ref={pickerWrapRef} className="relative">
                   <button
                     onClick={() => {
+                      if (turnLocked) return;
                       setPickerOpen((v) => !v);
                       setAttachOpen(false);
                       setModelOpen(false);
@@ -362,27 +405,30 @@ export function KiroComposer({
                     aria-label="选择上下文"
                     aria-expanded={pickerOpen}
                     title="添加 ClassFlow 上下文"
-                    className="w-9 h-9 flex items-center justify-center rounded-xl text-sandrift hover:bg-alabaster hover:text-charcoal transition-colors"
+                    disabled={turnLocked}
+                    className="w-9 h-9 flex items-center justify-center rounded-xl text-sandrift hover:bg-alabaster hover:text-charcoal transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                   >
                     <AtSign className="w-4 h-4" />
                   </button>
-                  {pickerOpen && (
-                    <KiroContextPicker
-                      onClose={() => setPickerOpen(false)}
-                      onPick={(ref) => {
-                        onAddContext(ref);
-                        setPickerOpen(false);
-                      }}
-                    />
-                  )}
+                  <KiroContextPicker
+                    open={pickerOpen}
+                    onClose={() => setPickerOpen(false)}
+                    onPick={(ref) => {
+                      onAddContext(ref);
+                      setPickerOpen(false);
+                    }}
+                  />
                 </div>
 
                 {/* Task 14：Kiro Search（联网搜索）轻量开关——只切换 enabled；V1 = 自动判断 */}
                 <button
-                  onClick={() => setWebSearchEnabled(!webSearchEnabled)}
+                  onClick={() => {
+                    if (!turnLocked) setWebSearchEnabled(!webSearchEnabled);
+                  }}
                   aria-label="联网搜索"
                   aria-pressed={webSearchEnabled}
                   title={webSearchEnabled ? "联网搜索：自动" : "联网搜索：关闭"}
+                  disabled={turnLocked}
                   className={cn(
                     "w-9 h-9 flex items-center justify-center rounded-xl transition-colors",
                     webSearchEnabled
@@ -398,6 +444,7 @@ export function KiroComposer({
                 <div ref={modelRef} className="relative">
                   <button
                     onClick={() => {
+                      if (turnLocked) return;
                       setModelOpen((v) => !v);
                       setAttachOpen(false);
                       setPickerOpen(false);
@@ -406,7 +453,8 @@ export function KiroComposer({
                     aria-expanded={modelOpen}
                     aria-haspopup="menu"
                     title="选择模型"
-                    className="hidden sm:flex items-center gap-1.5 h-9 px-2.5 rounded-xl text-[11px] font-semibold text-sandrift hover:bg-alabaster hover:text-charcoal transition-colors"
+                    disabled={turnLocked}
+                    className="hidden sm:flex items-center gap-1.5 h-9 px-2.5 rounded-xl text-[11px] font-semibold text-sandrift hover:bg-alabaster hover:text-charcoal transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                   >
                     <ProviderLogo vendor={activeModelVendor} size="sm" />
                     <span className="truncate max-w-[140px]">{activeModelName}</span>
@@ -427,6 +475,16 @@ export function KiroComposer({
                     className="ux-press w-9 h-9 flex items-center justify-center rounded-full bg-charcoal text-white hover:bg-black transition-colors"
                   >
                     <Square className="w-4 h-4 fill-current" />
+                  </button>
+                ) : submitting ? (
+                  <button
+                    type="button"
+                    disabled
+                    aria-label="正在准备"
+                    title="正在准备"
+                    className="w-9 h-9 flex items-center justify-center rounded-full bg-charcoal text-white opacity-80 cursor-wait"
+                  >
+                    <Loader2 className="w-4 h-4 animate-spin" />
                   </button>
                 ) : (
                   <button

@@ -91,6 +91,32 @@ test("Settings Search：搜索「姓名」→ 跳到个人资料 section（profi
   await expect(page.locator('[data-setting-id="profile-name"]')).toBeVisible();
 });
 
+test("Settings Search：Modal 关闭时不劫持 Ctrl+F，也不预创建隐藏搜索状态", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/");
+  await page.evaluate(() => {
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "f", ctrlKey: true, bubbles: true }));
+  });
+
+  await page.getByRole("button", { name: "设置" }).first().click();
+
+  await expect(page.getByRole("dialog", { name: "设置" })).toBeVisible();
+  await expect(page.getByRole("textbox", { name: "搜索设置" })).toHaveCount(0);
+});
+
+test("Settings Modal：关闭后焦点回到打开按钮", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/");
+  const trigger = page.getByRole("button", { name: "设置" }).first();
+  await trigger.focus();
+  await trigger.click();
+  await expect(page.getByRole("dialog", { name: "设置" })).toBeVisible();
+
+  await page.keyboard.press("Escape");
+
+  await expect(trigger).toBeFocused();
+});
+
 test("Profile dirty：修改姓名 → 未保存 → 放弃更改 → 恢复原值", async ({ page }) => {
   await openSettings(page);
   await page.getByRole("navigation", { name: "设置导航" }).getByRole("button", { name: "个人资料" }).click();
@@ -117,7 +143,7 @@ test("Settings Layout：Toolbar 在右侧顶部，左栏导航稳定且不与内
 
   await expect(toolbar).toBeVisible();
   await expect(detail).toBeVisible();
-  await page.waitForTimeout(300); // 等入场动效（scale/opacity 220ms）完成后再测量几何
+  await expect(dialog).toHaveCSS("opacity", "1");
 
   // Toolbar 位于 Detail Pane 顶部（同一右栏纵向堆叠，而非弹窗中部悬浮）
   const tb = await toolbar.boundingBox();

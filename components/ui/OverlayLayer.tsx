@@ -13,7 +13,7 @@ import { cn } from "@/lib/utils";
  * 不绑定 Dialog 或 Drawer 的视觉（背景由调用方 className 提供）。
  *
  * - 不维护 open state（controlled）
- * - callback 经 latest ref，stack 注册只依赖 mounted/overlayId/stackZ（避免每次 render 重排栈）
+ * - callback 经 latest ref，stack 注册只依赖 open/overlayId/stackZ（退出视觉不再占用交互栈）
  * - 不新增 Context / Portal registry / scroll lock / focus trap
  */
 export interface OverlayLayerRenderState {
@@ -52,35 +52,45 @@ export function OverlayLayer({
   const onEscapeKeyDownRef = useRef(onEscapeKeyDown);
   onEscapeKeyDownRef.current = onEscapeKeyDown;
 
-  // Stack 注册：只依赖 mounted/overlayId/stackZ
+  // Stack 只表达交互所有权；退出视觉可继续 mounted，但关闭后立即释放栈。
   useEffect(() => {
-    if (!mounted) return;
+    if (!open) return;
     pushOverlay(overlayId, stackZ);
     return () => popOverlay(overlayId);
-  }, [mounted, overlayId, stackZ]);
+  }, [open, overlayId, stackZ]);
 
   // Esc：只有 topmost overlay 处理；consumer 可 preventDefault 拦截默认关闭
   useEffect(() => {
-    if (!mounted) return;
+    if (!open) return;
     const onKey = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
       if (!isTopmostOverlay(overlayId)) return;
       onEscapeKeyDownRef.current?.(event);
-      if (!event.defaultPrevented) onOpenChangeRef.current(false);
+      if (!event.defaultPrevented) {
+        // React 提交 open=false 前同步释放交互栈，允许连续 Esc 命中下一层。
+        popOverlay(overlayId);
+        onOpenChangeRef.current(false);
+      }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [mounted, overlayId]);
+  }, [open, overlayId]);
 
   if (!mounted || typeof document === "undefined") return null;
 
   return createPortal(
     <div
-      className={cn("ux-overlay", visible ? "opacity-100" : "opacity-0", className)}
+      className={cn(
+        "ux-overlay",
+        visible ? "opacity-100" : "opacity-0",
+        !open && "pointer-events-none",
+        className
+      )}
       style={{ zIndex: stackZ }}
       onPointerDown={(event) => {
         // backdrop request-close：仅点击背景本身（target === currentTarget），面板内点击不关闭
         if (closeOnBackdrop && event.target === event.currentTarget) {
+          popOverlay(overlayId);
           onOpenChangeRef.current(false);
         }
       }}

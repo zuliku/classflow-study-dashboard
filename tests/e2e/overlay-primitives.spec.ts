@@ -30,6 +30,20 @@ test("Case A：Drawer + Confirm 嵌套栈（Esc 先关 Confirm 再关 Drawer）"
   await expect(page.getByRole("dialog", { name: "课程详情" })).toHaveCount(0);
 });
 
+test("Case A2：嵌套浮层连续 Esc 不被退出动画占用栈", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto("/");
+  await page.getByRole("heading", { name: "微观经济学" }).first().click();
+  await page.getByRole("button", { name: "删除课程" }).first().click();
+  await expect(page.getByRole("alertdialog")).toBeVisible();
+
+  await page.keyboard.press("Escape");
+  await page.keyboard.press("Escape");
+
+  await expect(page.getByRole("alertdialog")).toHaveCount(0);
+  await expect(page.getByRole("dialog", { name: "课程详情" })).toHaveCount(0);
+});
+
 test("Case B：Settings backdrop close；面板内点击不关闭", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto("/");
@@ -75,4 +89,23 @@ test("Case C：Timeline ArrangeSheet backdrop close；MarkSheet Esc close", asyn
   // Esc 关闭
   await page.keyboard.press("Escape");
   await expect(mark).toHaveCount(0);
+});
+
+test("Case D：reduced motion 关闭后不保留透明点击拦截层", async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto("/");
+  const target = page.getByRole("button", { name: "课程资料" }).first();
+  const targetBox = await target.boundingBox();
+  expect(targetBox).not.toBeNull();
+  await page.getByRole("button", { name: "设置" }).first().click();
+  await expect(page.getByRole("dialog", { name: "设置" })).toBeVisible();
+
+  await page.keyboard.press("Escape");
+  await page.mouse.click(
+    targetBox!.x + targetBox!.width / 2,
+    targetBox!.y + targetBox!.height / 2
+  );
+
+  await expect(page.getByRole("heading", { name: "课程资料", exact: true })).toBeVisible();
 });

@@ -134,8 +134,12 @@ test("Kiro Chat：streaming 时 Send 变为 Stop，点击停止生成", async ({
   await expect(composer.getByLabel("发送")).toBeVisible({ timeout: 5000 });
 });
 
-test("Kiro Read Tool：tool call → 客户端执行 → 自动继续 → 最终回答 + Activity Trace", async ({ page }) => {
+test("Kiro Read Tool：tool call → 客户端执行 → 自动继续 → 最终回答 + Worklog", async ({ page }) => {
   let requests = 0;
+  let releaseFinal!: () => void;
+  const finalGate = new Promise<void>((resolve) => {
+    releaseFinal = resolve;
+  });
   await page.route("**/api/ai/chat", async (route) => {
     requests++;
     const body = route.request().postDataJSON() as { messages: { role: string; parts?: { type: string; state?: string }[] }[] };
@@ -160,6 +164,7 @@ test("Kiro Read Tool：tool call → 客户端执行 → 自动继续 → 最终
       return;
     }
     // 第二轮：客户端已执行工具并回传 output → 最终回答（新的 step，无 tool call）
+    await finalGate;
     const chunks = [
       JSON.stringify({ type: "start", messageId: "mock-msg-1" }),
       JSON.stringify({ type: "start-step" }),
@@ -187,19 +192,19 @@ test("Kiro Read Tool：tool call → 客户端执行 → 自动继续 → 最终
   await composer.getByLabel("发送").click();
   await expect(page.getByTestId("kiro-user-message")).toContainText("我最近有什么 DDL？");
 
+  // 工具已完成、最终文本尚未到达：折叠摘要也明确进入 compose 阶段，并由 live region 播报。
+  const worklog = page.getByTestId("kiro-worklog");
+  await expect(worklog.getByRole("status")).toHaveText("正在整理回答", { timeout: 10000 });
+  releaseFinal();
+
   // 客户端执行工具并自动继续：最终回答出现
   await expect(page.getByTestId("kiro-message").last()).toContainText("你最近的 DDL 是统计学作业", { timeout: 10000 });
   // 第二轮回传包含 tool output（客户端确实执行并回传了）
   expect(requests).toBe(2);
 
-  // Agent Worklog：Codex 风格「已处理」折叠行 + 可展开真实语义 Steps（不显示工具名/JSON）
-  const trace = page.getByTestId("kiro-activity-trace");
-  await expect(trace).toContainText("已处理");
-  await page.waitForTimeout(300);
-  await trace.getByRole("button").click();
-  await expect(trace).toContainText("已读取 1 项 ClassFlow 信息");
-  await expect(trace).toContainText("查看近期 DDL");
-  await expect(trace.getByText("get_upcoming_assignments")).toHaveCount(0);
+  // Agent Worklog：完成后保持低噪声摘要；不泄漏原始工具名/JSON。
+  await expect(worklog).toContainText("已完成 1 个步骤");
+  await expect(worklog.getByText("get_upcoming_assignments")).toHaveCount(0);
 });
 
 test("Kiro Write Tool：search → set_assignment_ddl → Action Card → 持久化 → Undo", async ({ page }) => {
@@ -313,22 +318,25 @@ test("Kiro Write Tool：search → set_assignment_ddl → Action Card → 持久
 
   // Undo 恢复原 DDL（Card 撤销）
   await card.getByRole("button", { name: "撤销" }).click();
-  await page.waitForTimeout(400);
-  const undone = await page.evaluate(() => {
-    const s = JSON.parse(localStorage.getItem("classflow-storage-v2")!).state;
-    return { ddl: s.assignments[0].ddl, markDate: s.calendarMarks[0].date };
-  });
-  expect(undone.ddl).toBe(`${todayStr}T23:59:00`);
-  expect(undone.markDate).toBe(todayStr);
+  await expect
+    .poll(() =>
+      page.evaluate(() => {
+        const s = JSON.parse(localStorage.getItem("classflow-storage-v2")!).state;
+        return { ddl: s.assignments[0].ddl, markDate: s.calendarMarks[0].date };
+      })
+    )
+    .toEqual({ ddl: `${todayStr}T23:59:00`, markDate: todayStr });
 
   // 刷新后仍保持（写入与撤销都真实持久化）
   await page.reload();
-  await page.waitForTimeout(1200);
-  const afterReload = await page.evaluate(() => {
-    const s = JSON.parse(localStorage.getItem("classflow-storage-v2")!).state;
-    return s.assignments[0].ddl;
-  });
-  expect(afterReload).toBe(`${todayStr}T23:59:00`);
+  await expect
+    .poll(() =>
+      page.evaluate(() => {
+        const s = JSON.parse(localStorage.getItem("classflow-storage-v2")!).state;
+        return s.assignments[0].ddl;
+      })
+    )
+    .toBe(`${todayStr}T23:59:00`);
 });
 
 test("Kiro Markdown：heading / table / strong / list 真实渲染，无原始符号", async ({ page }) => {
@@ -404,9 +412,9 @@ test("Kiro Attachment：上传 PDF → 本地解析 ready → 发送 → 附件 
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/");
   await page.locator("aside").first().getByRole("button", { name: "Kiro" }).click();
-  await page.waitForTimeout(500);
 
   const composer = page.getByTestId("kiro-composer");
+  await expect(composer).toBeVisible();
 
   // 通过 + 菜单 → 上传文件 → filechooser 提供 PDF
   const chooserPromise = page.waitForEvent("filechooser");

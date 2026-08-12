@@ -6,6 +6,8 @@ import { useKiroSession } from "@/components/kiro/KiroSessionProvider";
 import { KiroChatSurface } from "@/components/kiro/KiroChatSurface";
 import { KiroMark } from "@/components/kiro/KiroHeader";
 import { KiroSessionActions } from "@/components/kiro/KiroSessionActions";
+import { usePresence } from "@/lib/usePresence";
+import { cn } from "@/lib/utils";
 
 /**
  * Kiro Sidecar：贯穿 ClassFlow 的 AI Agent 入口。
@@ -18,14 +20,26 @@ import { KiroSessionActions } from "@/components/kiro/KiroSessionActions";
  *  768–1279  Right Side Sheet
  *  <768  Full-screen
  */
-export function KiroSidecar() {
+export function KiroSidecar({ open }: { open: boolean }) {
   const session = useKiroSession();
   const { closeSidecar, expandSidecar } = session;
+  const { mounted, visible } = usePresence(open, 160);
+
+  if (!mounted) return null;
 
   return (
     <div
       data-testid="kiro-sidecar"
-      className={cnSidecar()}
+      data-state={open ? "open" : "closed"}
+      aria-hidden={!open}
+      className={cn(
+        cnSidecar(),
+        "transition-[opacity,transform] ease-[var(--ease-standard)]",
+        visible
+          ? "duration-[var(--motion-panel)] translate-x-0 opacity-100"
+          : "duration-[160ms] translate-x-2 opacity-0 pointer-events-none",
+        "2xl:translate-x-0"
+      )}
     >
       {/* Compact Header：品牌 + 会话级操作；md+ 与全局 Header border 对齐（min-h-16） */}
       <div className="shrink-0 px-3 py-3 md:min-h-16 border-b border-line bg-[#F7F5F5] flex items-center justify-between gap-2">

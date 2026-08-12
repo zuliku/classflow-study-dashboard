@@ -21,6 +21,26 @@ export interface ConversationTransitionState {
   pending: PendingConversationTransition;
 }
 
+export interface ConversationTransitionView {
+  phase: "idle" | "stopping" | "saving" | "loading";
+  target: "new" | string | null;
+}
+
+/** 将内部 lifecycle 投影为可安全展示的阶段；不泄露实现细节。 */
+export function toConversationTransitionView(
+  state: ConversationTransitionState
+): ConversationTransitionView {
+  const target = state.pending
+    ? state.pending.type === "new"
+      ? "new"
+      : state.pending.id
+    : null;
+  return {
+    phase: state.phase === "switching" ? "loading" : state.phase,
+    target,
+  };
+}
+
 export type ConversationTransitionEvent =
   | { type: "request"; transition: PendingConversationTransition; streaming: boolean }
   /** chat.streaming 真正变为 false（stop 完成 / generation 自然结束） */

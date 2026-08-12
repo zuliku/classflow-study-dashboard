@@ -40,8 +40,8 @@ export function AssignmentsWorkspace() {
         <button
           type="button"
           onClick={() => {
-            handoff.openForAssignment(highlightedAssignmentId);
-            handoff.handoffPrompt(
+            handoff.handoffAssignmentPrompt(
+              highlightedAssignmentId,
               "帮我拆解这个任务，拆成 2–8 个可执行的步骤，并估算每步和总耗时。"
             );
           }}

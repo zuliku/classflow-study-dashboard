@@ -5,6 +5,7 @@ import { BookOpen, ClipboardCheck, CalendarRange, Users2, FileText } from "lucid
 import { useAppStore } from "@/store/useAppStore";
 import { KiroContextRef } from "@/lib/ai/context/types";
 import { cn } from "@/lib/utils";
+import { usePresence } from "@/lib/usePresence";
 
 /**
  * Context Picker（@）：从当前 Store 实时读取真实实体（属于 UI，不构建 Prompt、不发送数据）。
@@ -12,9 +13,11 @@ import { cn } from "@/lib/utils";
  * Desktop：absolute 弹层；Mobile：底部 sheet。
  */
 export function KiroContextPicker({
+  open,
   onClose,
   onPick,
 }: {
+  open: boolean;
   onClose: () => void;
   onPick: (ref: KiroContextRef) => void;
 }) {
@@ -25,18 +28,21 @@ export function KiroContextPicker({
   const compact = contentDensity === "compact";
   const mobilePanelRef = useRef<HTMLDivElement | null>(null);
   const desktopPanelRef = useRef<HTMLDivElement | null>(null);
+  const { mounted, visible } = usePresence(open, 160);
 
   // Esc 关闭
   useEffect(() => {
+    if (!open) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
+  }, [open, onClose]);
 
   // 点击外部关闭（mobile / desktop 两套面板同时挂载，分别检查）
   useEffect(() => {
+    if (!open) return;
     const onPointerDown = (e: PointerEvent) => {
       const t = e.target as Node;
       const inside =
@@ -45,7 +51,9 @@ export function KiroContextPicker({
     };
     document.addEventListener("pointerdown", onPointerDown);
     return () => document.removeEventListener("pointerdown", onPointerDown);
-  }, [onClose]);
+  }, [open, onClose]);
+
+  if (!mounted) return null;
 
   const rowCls = cn(
     "w-full flex items-center gap-2.5 px-3 rounded-lg text-left text-xs font-semibold text-charcoal hover:bg-alabaster transition-colors",
@@ -154,12 +162,28 @@ export function KiroContextPicker({
   return (
     <>
       {/* Mobile：底部 sheet（<md） */}
-      <div className="md:hidden fixed inset-0 z-40 bg-black/30" onClick={onClose} aria-hidden="true" />
+      <div
+        className={cn(
+          "md:hidden fixed inset-0 z-40 bg-black/30 transition-opacity ease-[var(--ease-standard)]",
+          visible
+            ? "duration-[var(--motion-panel)] opacity-100"
+            : "duration-[160ms] opacity-0 pointer-events-none"
+        )}
+        onClick={onClose}
+        aria-hidden="true"
+      />
       <div
         ref={mobilePanelRef}
         role="dialog"
         aria-label="选择上下文"
-        className="md:hidden fixed inset-x-0 bottom-0 z-50 bg-surface border-t border-line rounded-t-2xl shadow-card p-4 pb-5 max-h-[70dvh] overflow-y-auto ux-inline"
+        data-state={open ? "open" : "closed"}
+        aria-hidden={!open}
+        className={cn(
+          "md:hidden fixed inset-x-0 bottom-0 z-50 bg-surface border-t border-line rounded-t-2xl shadow-card p-4 pb-5 max-h-[70dvh] overflow-y-auto transition-[opacity,transform] ease-[var(--ease-standard)]",
+          visible
+            ? "duration-[var(--motion-panel)] translate-y-0 opacity-100"
+            : "duration-[160ms] translate-y-2 opacity-0 pointer-events-none"
+        )}
       >
         <div className="w-10 h-1 rounded-full bg-line-strong mx-auto mb-3" />
         {list}
@@ -170,7 +194,14 @@ export function KiroContextPicker({
         ref={desktopPanelRef}
         role="dialog"
         aria-label="选择上下文"
-        className="hidden md:block absolute bottom-full left-0 mb-2 w-80 max-h-[min(420px,60dvh)] overflow-y-auto bg-surface border border-line-strong rounded-2xl shadow-card p-3 z-40 ux-inline"
+        data-state={open ? "open" : "closed"}
+        aria-hidden={!open}
+        className={cn(
+          "hidden md:block absolute bottom-full left-0 mb-2 w-80 max-h-[min(420px,60dvh)] overflow-y-auto bg-surface border border-line-strong rounded-2xl shadow-card p-3 z-40 transition-[opacity,transform] ease-[var(--ease-standard)]",
+          visible
+            ? "duration-[var(--motion-panel)] translate-y-0 opacity-100"
+            : "duration-[160ms] translate-y-1.5 opacity-0 pointer-events-none"
+        )}
       >
         {list}
       </div>

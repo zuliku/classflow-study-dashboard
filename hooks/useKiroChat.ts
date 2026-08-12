@@ -80,6 +80,8 @@ export interface KiroChatMessageView {
   breakdowns?: TaskBreakdownProposal[];
   /** Task 7：User Message 是否可编辑（attachment/history metadata 最终绑定后计算） */
   canEdit?: boolean;
+  /** 历史恢复消息只参与整段会话淡入，不播放逐条结构动画。 */
+  restored?: boolean;
   /** 不可编辑原因（canEdit=false 时） */
   editDisabledReason?: UserMessageEditBlockReason;
   /** 是否可以「重新生成」：仅 live 且该轮无 Write Tool Call 的最后一条 */
@@ -238,6 +240,7 @@ function toView(m: UIMessage, turnInFlight: boolean): KiroChatMessageView {
     actions: actions.length > 0 ? actions : undefined,
     proposals: proposals.length > 0 ? proposals : undefined,
     breakdowns: breakdowns.length > 0 ? breakdowns : undefined,
+    restored,
     // 历史恢复消息：禁止重新生成；live 且有 Write Tool Call 的轮次同样禁止
     canRegenerate: !restored && !messageHasWriteToolCalls(m),
     assistantTurn,

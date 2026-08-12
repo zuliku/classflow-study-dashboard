@@ -26,6 +26,7 @@ export function SettingsModal() {
 
   // Cmd/Ctrl+F 聚焦设置搜索（与 overlay Esc 无关的独立快捷键）
   useEffect(() => {
+    if (!isOpen) return;
     const onKey = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "f") {
         e.preventDefault();
@@ -35,7 +36,7 @@ export function SettingsModal() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, []);
+  }, [isOpen]);
 
   // 关闭 Modal 时重置搜索
   useEffect(() => {

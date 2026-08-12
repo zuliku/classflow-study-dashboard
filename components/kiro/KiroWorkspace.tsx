@@ -35,11 +35,13 @@ export function KiroWorkspace() {
       </div>
 
       {/* Mobile History Sheet（<768；Rail 不显示） */}
-      {historyOpen && (
-        <div className="md:hidden">
-          <KiroHistoryPanel onClose={() => setHistoryOpen(false)} onNewChat={newChat} />
-        </div>
-      )}
+      <div className="md:hidden">
+        <KiroHistoryPanel
+          open={historyOpen}
+          onClose={() => setHistoryOpen(false)}
+          onNewChat={newChat}
+        />
+      </div>
     </div>
   );
 }

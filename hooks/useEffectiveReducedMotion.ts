@@ -1,14 +1,19 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { resolveEffectiveReducedMotion } from "@/lib/motionPreference";
+import { readEffectiveMotionDataset, resolveEffectiveReducedMotion } from "@/lib/motionPreference";
 import { useAppStore } from "@/store/useAppStore";
 
 const MEDIA_QUERY = "(prefers-reduced-motion: reduce)";
 
+function readBootstrappedReducedMotion(): boolean {
+  return typeof document !== "undefined"
+    && readEffectiveMotionDataset(document.documentElement.dataset.motionEffective);
+}
+
 export function useEffectiveReducedMotion(): boolean {
   const preference = useAppStore((state) => state.preferences.motionPreference);
-  const [reducedMotion, setReducedMotion] = useState(false);
+  const [reducedMotion, setReducedMotion] = useState(readBootstrappedReducedMotion);
 
   useEffect(() => {
     const mediaQuery = window.matchMedia(MEDIA_QUERY);

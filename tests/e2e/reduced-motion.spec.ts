@@ -48,15 +48,15 @@ test.describe("reduced motion", () => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto("/");
     await page.getByRole("button", { name: "课程资料" }).first().click();
-    await expect(page.getByRole("heading", { name: "本学期课程" })).toBeVisible();
-    await page.getByRole("button", { name: "我的课表" }).first().click();
-    await expect(page.getByRole("heading", { name: "学期课表" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "课程资料", exact: true })).toBeVisible();
+    await page.getByRole("button", { name: "时间表" }).first().click();
+    await expect(page.getByRole("heading", { name: "时间表", exact: true })).toBeVisible();
   });
 
   test("课表仍可拖动（不依赖动画）", async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 800 });
     await page.goto("/");
-    await page.getByRole("button", { name: "我的课表" }).first().click();
+    await page.getByRole("button", { name: "时间表" }).first().click();
     await expect(page.getByTestId("timetable-body")).toBeVisible();
     const body = await page.getByTestId("timetable-body").boundingBox();
     const card = page
@@ -83,5 +83,28 @@ test.describe("reduced motion", () => {
     await expect(page.getByRole("heading", { name: "添加课程" })).toBeVisible();
     await page.getByRole("button", { name: "取消" }).first().click();
     await expect(page.getByRole("heading", { name: "添加课程" })).toHaveCount(0);
+  });
+
+  test("显式完整动效覆盖系统 reduced，显式减少动效保持即时 Select", async ({ page }) => {
+    await page.addInitScript(() => {
+      const raw = localStorage.getItem("classflow-storage-v2");
+      if (!raw) return;
+      const stored = JSON.parse(raw);
+      stored.state.preferences.motionPreference = "full";
+      localStorage.setItem("classflow-storage-v2", JSON.stringify(stored));
+    });
+    await page.goto("/");
+    await expect(page.locator("html")).toHaveAttribute("data-motion-preference", "full");
+    await expect(page.locator("html")).toHaveAttribute("data-motion-effective", "full");
+
+    await page.getByRole("button", { name: "设置" }).first().click();
+    await page.getByRole("navigation", { name: "设置导航" }).getByRole("button", { name: "通用" }).click();
+    const motion = page.getByRole("combobox", { name: "动效偏好" });
+    await motion.click();
+    await page.getByRole("option", { name: "减少动效" }).click();
+    await expect(page.locator("html")).toHaveAttribute("data-motion-effective", "reduced");
+    await motion.click();
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("listbox", { name: "动效偏好" })).toHaveCount(0);
   });
 });

@@ -8,6 +8,7 @@ import {
   getKiroContextVisualRole,
   splitKiroContextsForDisplay,
 } from "@/lib/ai/context/presentation";
+import { useEnterOnAdd } from "@/lib/useEnterOnAdd";
 import { cn } from "@/lib/utils";
 
 /** Ambient（自动环境）kind 图标：只用 Lucide（week 用弱时间感 Clock 系，不再用 @ / 文字方块） */
@@ -31,15 +32,19 @@ export function KiroContextBar({
   contexts,
   onRemove,
   compact,
+  locked = false,
 }: {
   contexts: KiroContextRef[];
   onRemove: (key: string) => void;
   /** sidecar：更紧凑（ambient 1 + manual 1） */
   compact?: boolean;
+  /** 当前回复使用已冻结的 Context Snapshot；修改留给下一条消息。 */
+  locked?: boolean;
 }) {
   const [overflowOpen, setOverflowOpen] = useState(false);
   const overflowBtnRef = useRef<HTMLDivElement | null>(null);
   const popoverRef = useRef<HTMLDivElement | null>(null);
+  const enteringContextKeys = useEnterOnAdd(contexts.map((context) => context.key));
 
   // +N Popover：outside click / Esc 关闭（非 modal，不拦截原事件）
   useEffect(() => {
@@ -60,18 +65,21 @@ export function KiroContextBar({
     };
   }, [overflowOpen]);
 
-  if (contexts.length === 0) return null;
+  if (contexts.length === 0 && !locked) return null;
 
   const { visibleAmbient, visibleManual, overflow } = splitKiroContextsForDisplay(contexts, !!compact);
   const allForPopover = [...visibleAmbient, ...visibleManual, ...overflow];
 
   const removeButton = (c: KiroContextRef, revealOnHover: boolean) => (
     <button
-      onClick={() => onRemove(c.key)}
+      onClick={() => {
+        if (!locked) onRemove(c.key);
+      }}
+      disabled={locked}
       aria-label={`移除上下文：${formatKiroContextDisplayLabel(c)}`}
       title={getKiroContextVisualRole(c) === "ambient" ? "本次对话中不使用此上下文" : "移除"}
       className={cn(
-        "p-0.5 rounded-full text-sandrift/80 hover:text-danger transition-colors shrink-0",
+        "p-0.5 rounded-full text-sandrift/80 hover:text-danger transition-colors shrink-0 disabled:opacity-35 disabled:cursor-not-allowed",
         revealOnHover &&
           "opacity-100 md:opacity-0 group-hover:opacity-100 group-focus-within:opacity-100"
       )}
@@ -83,15 +91,23 @@ export function KiroContextBar({
   return (
     <div
       data-testid="kiro-context-bar"
-      className={cn("flex items-center gap-1.5 pb-1.5 overflow-hidden", compact && "px-0.5")}
+      className={cn("flex flex-wrap items-center gap-1.5 pb-1.5 overflow-hidden", compact && "px-0.5")}
     >
+      {locked && (
+        <p className="basis-full text-[10px] font-medium text-sandrift" role="status" aria-live="polite">
+          本轮上下文已锁定 · 回复完成后可为下一条调整
+        </p>
+      )}
       {/* Ambient Capsule：系统自动环境（弱图标 + 极浅底，稳定存在） */}
       {visibleAmbient.map((c) => {
         const Icon = AMBIENT_KIND_ICONS[c.kind];
         return (
           <span
             key={c.key}
-            className="group inline-flex items-center gap-1.5 pl-2 pr-1 h-7 max-w-[220px] rounded-full border border-line-soft bg-pastel-mint/55 text-[11px] font-semibold text-satin-grey hover:bg-pastel-mint/75 transition-colors shrink-0"
+            className={cn(
+              "group inline-flex items-center gap-1.5 pl-2 pr-1 h-7 max-w-[220px] rounded-full border border-line-soft bg-pastel-mint/55 text-[11px] font-semibold text-satin-grey hover:bg-pastel-mint/75 transition-colors shrink-0",
+              enteringContextKeys.has(c.key) && "animate-enter"
+            )}
           >
             <Icon className="w-3.5 h-3.5 text-sandrift shrink-0" />
             <span className="truncate">{formatKiroContextDisplayLabel(c)}</span>
@@ -104,7 +120,10 @@ export function KiroContextBar({
       {visibleManual.map((c) => (
         <span
           key={c.key}
-          className="inline-flex items-center gap-1 pl-2.5 pr-1 h-7 max-w-[200px] rounded-full bg-alabaster/70 border border-line text-[11px] font-semibold text-charcoal shrink-0"
+          className={cn(
+            "inline-flex items-center gap-1 pl-2.5 pr-1 h-7 max-w-[200px] rounded-full bg-alabaster/70 border border-line text-[11px] font-semibold text-charcoal shrink-0",
+            enteringContextKeys.has(c.key) && "animate-enter"
+          )}
         >
           <span className="truncate">{formatKiroContextDisplayLabel(c)}</span>
           {removeButton(c, false)}

@@ -3,6 +3,7 @@
 import React, { useCallback, useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Check, ChevronDown } from "lucide-react";
+import { useEffectiveReducedMotion } from "@/hooks/useEffectiveReducedMotion";
 import { cn } from "@/lib/utils";
 
 /**
@@ -69,8 +70,7 @@ export function UISelect<T extends string | number>({
   const rafRef = useRef<number | null>(null);
   const selectedIndex = Math.max(0, options.findIndex((o) => o.value === value));
 
-  const reducedMotion =
-    typeof document !== "undefined" && document.documentElement.dataset.motion === "reduced";
+  const reducedMotion = useEffectiveReducedMotion();
 
   // 打开：先挂载（opacity-0）→ 下一帧切到可见（opacity-100 + translate-y-0）
   const openMenu = useCallback(() => {
@@ -112,10 +112,15 @@ export function UISelect<T extends string | number>({
   const closeMenu = useCallback(() => {
     if (closeTimerRef.current !== null) window.clearTimeout(closeTimerRef.current);
     setVisible(false);
+    if (reducedMotion) {
+      closeTimerRef.current = null;
+      setOpen(false);
+      return;
+    }
     closeTimerRef.current = window.setTimeout(() => {
       closeTimerRef.current = null;
       setOpen(false);
-    }, reducedMotion ? 0 : 120);
+    }, 120);
   }, [reducedMotion]);
 
   useEffect(
@@ -155,13 +160,15 @@ export function UISelect<T extends string | number>({
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape" && visibleRef.current) {
+        // 注册在 window capture，先于上层 Overlay 的 window bubble listener 取得 Esc 所有权。
         e.stopPropagation();
+        e.preventDefault();
         closeMenu();
         triggerRef.current?.focus();
       }
     };
-    document.addEventListener("keydown", onKey, true);
-    return () => document.removeEventListener("keydown", onKey, true);
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
   }, [open, closeMenu]);
 
   // 打开时聚焦到当前选中项（preventScroll）+ 保证 active option 在可视区域
@@ -206,7 +213,13 @@ export function UISelect<T extends string | number>({
   };
 
   const onMenuKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "ArrowDown") {
+    if (e.key === "Escape") {
+      // Portal 内由 React handler 同步消费，避免原生 window overlay listener 关闭父 Dialog。
+      e.preventDefault();
+      e.stopPropagation();
+      closeMenu();
+      triggerRef.current?.focus();
+    } else if (e.key === "ArrowDown") {
       e.preventDefault();
       setActiveIndex((i) => (i + 1) % options.length);
     } else if (e.key === "ArrowUp") {
@@ -274,11 +287,12 @@ export function UISelect<T extends string | number>({
               // 宽度与 trigger 解耦：min = trigger 宽（或 168px 下限），内容自动撑开，viewport 上限
               minWidth: Math.max(triggerWidth ?? 0, 168),
               maxWidth: viewportMaxWidth,
+              zIndex: 100,
             }}
             className={cn(
-              "z-[60] overflow-y-auto scrollbar-none rounded-lg border border-line bg-surface shadow-card py-1",
+              "overflow-y-auto scrollbar-none rounded-lg border border-line bg-surface shadow-card py-1 pointer-events-auto",
               "transition-opacity transition-transform duration-[var(--motion-fast)] ease-[var(--ease-standard)]",
-              visible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-0.5",
+              visible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-0.5 pointer-events-none",
               reducedMotion && "transition-none transform-none",
               menuClassName
             )}

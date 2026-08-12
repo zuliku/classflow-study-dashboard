@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
-import { MoreHorizontal, PencilLine, Trash2, Check } from "lucide-react";
+import { MoreHorizontal, PencilLine, Trash2, Check, Loader2 } from "lucide-react";
 import { useKiroSessionActions } from "@/components/kiro/KiroSessionProvider";
 import { useToastStore } from "@/store/useToastStore";
 import { formatHistoryTime } from "@/lib/ai/history/sanitize";
@@ -17,12 +17,14 @@ export function KiroThreadRow({
   isCurrent,
   onOpen,
   disabled,
+  transitioning = false,
 }: {
   record: KiroConversationRecord;
   isCurrent: boolean;
   onOpen: (id: string) => void;
   /** Task 7B：会话切换进行中禁用打开 */
   disabled?: boolean;
+  transitioning?: boolean;
 }) {
   const session = useKiroSessionActions();
   const pushToast = useToastStore((s) => s.pushToast);
@@ -98,12 +100,18 @@ export function KiroThreadRow({
           {record.title}
         </p>
         <p className="text-[10px] text-sandrift mt-0.5">
-          {formatHistoryTime(record.updatedAt)}
+          {transitioning ? "正在切换" : formatHistoryTime(record.updatedAt)}
           {isCurrent && <span className="ml-1.5 font-bold text-success">当前</span>}
         </p>
       </div>
+      {transitioning && (
+        <Loader2 className="w-3.5 h-3.5 animate-spin text-sandrift shrink-0" aria-label="正在切换" />
+      )}
       {/* Row Menu：hover 显示（触屏常驻） */}
-      <div className="relative shrink-0 opacity-100 md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100 transition-opacity">
+      <div className={cn(
+        "relative shrink-0 opacity-100 md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100 transition-opacity",
+        transitioning && "hidden"
+      )}>
         <button
           onClick={(e) => {
             e.stopPropagation();

@@ -14,5 +14,6 @@ export function useKiroHandoff() {
     openForGroupProject: session.openForGroupProject,
     openForWeek: session.openForWeek,
     handoffPrompt: session.handoffPrompt,
+    handoffAssignmentPrompt: session.handoffAssignmentPrompt,
   };
 }

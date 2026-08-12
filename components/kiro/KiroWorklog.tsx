@@ -124,12 +124,14 @@ export function KiroWorklog({ turn }: { turn: KiroAssistantTurnPresentation }) {
   };
 
   // Summary 文案：agent 仍在执行 → 「正在执行」+ 已完成数（绝不显示 5/8 这类未知总数）
-  const active = turn.phase === "working" || turn.phase === "composing";
-  const summaryLabel = active
-    ? completedToolCount > 0
-      ? `正在执行 · 已完成 ${completedToolCount} 个步骤`
-      : "正在执行"
-    : `已完成 ${toolCount} 个步骤`;
+  const summaryLabel =
+    turn.phase === "composing"
+      ? "正在整理回答"
+      : turn.phase === "working"
+        ? completedToolCount > 0
+          ? `正在处理 · 已完成 ${completedToolCount} 个步骤`
+          : "正在处理"
+        : `已完成 ${toolCount} 个步骤`;
 
   return (
     <div data-testid="kiro-worklog" className="space-y-1 min-w-0 w-full">
@@ -141,7 +143,9 @@ export function KiroWorklog({ turn }: { turn: KiroAssistantTurnPresentation }) {
         className="flex w-full items-center gap-1.5 rounded-lg px-1.5 py-1 text-[11px] font-semibold text-sandrift hover:bg-alabaster/60 transition-colors"
       >
         <ListTree className="w-3.5 h-3.5 text-sandrift shrink-0" aria-hidden="true" />
-        <span className="truncate">{summaryLabel}</span>
+        <span className="truncate" role="status" aria-live="polite" aria-atomic="true">
+          {summaryLabel}
+        </span>
         <ChevronDown
           className={cn(
             "w-3 h-3 text-sandrift shrink-0 ml-auto transition-transform duration-[var(--motion-fast)]",
@@ -167,9 +171,9 @@ export function KiroWorklog({ turn }: { turn: KiroAssistantTurnPresentation }) {
             )
           )}
           {turn.phase === "composing" && (
-            <p className="flex items-center gap-1.5 text-[11px] text-sandrift">
+            <p className="flex items-center gap-1.5 text-[11px] text-sandrift" aria-hidden="true">
               <Loader2 className="w-3 h-3 animate-spin text-sandrift shrink-0" aria-hidden="true" />
-              正在整理结果…
+              正在整理回答
             </p>
           )}
         </div>
@@ -184,17 +188,23 @@ export function KiroWorklog({ turn }: { turn: KiroAssistantTurnPresentation }) {
 }
 
 /**
- * 首 token 前占位：Kiro Logo（glow）+ 「正在处理」。
+ * 首 token 前占位：Kiro Logo（glow）+ 「正在准备」。
  * Assistant 任一可见 part（content / worklog / action）出现后自动消失，绝不与消息 Logo 同时出现。
  */
 export function KiroPendingIndicator() {
   return (
-    <div data-testid="kiro-pending" role="status" className="flex items-center gap-3">
+    <div
+      data-testid="kiro-pending"
+      role="status"
+      aria-live="polite"
+      aria-atomic="true"
+      className="flex items-center gap-3 animate-enter"
+    >
       <span className="w-5 h-5 flex items-center justify-center shrink-0" aria-hidden="true">
         <KiroLogoIcon className="w-5 h-5 kiro-agent-logo-active kiro-agent-logo-glow" />
       </span>
       <div className="flex items-center gap-1.5">
-        <span className="text-xs font-medium text-charcoal">正在处理</span>
+        <span className="text-xs font-medium text-charcoal">正在准备</span>
         <Loader2 className="w-3.5 h-3.5 animate-spin text-sandrift shrink-0" aria-hidden="true" />
       </div>
     </div>

@@ -20,13 +20,15 @@ export interface KiroActionCardProps {
   onUndo?: () => void;
   /** 可展开的明细行（Change Set 内部动作等） */
   details?: { label: string }[];
+  /** 只在稳定 Action ID 首次出现时启用结构动画。 */
+  entering?: boolean;
 }
 
 /**
  * Action Result Card（真实 Tool Result 事实 UI）：
  * 内容只来自 ToolResult.action.before / after，模型不得生成。
  */
-export function KiroActionCard({ variant, heading, title, change, bullets, footer, onUndo, details }: KiroActionCardProps) {
+export function KiroActionCard({ variant, heading, title, change, bullets, footer, onUndo, details, entering = false }: KiroActionCardProps) {
   const Icon =
     variant === "ddl"
       ? CalendarClock
@@ -47,7 +49,10 @@ export function KiroActionCard({ variant, heading, title, change, bullets, foote
   return (
     <div
       data-testid="kiro-action-card"
-      className="max-w-md rounded-2xl bg-[#F7F5F5] border border-line p-3.5 space-y-2.5"
+      className={cn(
+        "max-w-md rounded-2xl bg-[#F7F5F5] border border-line p-3.5 space-y-2.5",
+        entering && "animate-enter"
+      )}
     >
       <div className="flex items-center gap-2">
         <span className="w-6 h-6 rounded-lg bg-pastel-mint flex items-center justify-center shrink-0">
@@ -155,7 +160,7 @@ function scheduleDisplay(s: { dayOfWeek?: number; startTime?: string; endTime?: 
 /** 从真实 ToolResult.action 构建 Card 视图（事实 UI，模型不得生成） */
 export function actionToCardProps(
   action: Extract<WriteToolResult, { ok: true }>["action"]
-): Omit<KiroActionCardProps, "onUndo"> {
+): Omit<KiroActionCardProps, "onUndo" | "entering"> {
   const tool = action.tool;
   const op = action.operation;
   const before = action.before as Record<string, unknown> | undefined;

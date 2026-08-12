@@ -68,6 +68,7 @@ export function KiroThreadRail() {
   const [moreOpen, setMoreOpen] = useState(false);
   const railRef = useRef<HTMLDivElement | null>(null);
   const searchRef = useRef<HTMLInputElement | null>(null);
+  const collapseAfterTransitionRef = useRef(false);
 
   // Lazy History（Task 13）：collapsed 不读取 History DB；首次展开才 list；
   // 展开期间 historyVersion 变化 → 后台刷新（collapse 后保留 cache）
@@ -85,6 +86,7 @@ export function KiroThreadRail() {
   }, [expanded, meta.historyVersion]);
 
   const collapse = () => {
+    collapseAfterTransitionRef.current = false;
     setExpanded(false);
     setMoreOpen(false);
     setQuery("");
@@ -128,9 +130,18 @@ export function KiroThreadRail() {
 
   const openThread = (id: string) => {
     if (meta.conversationTransitioning) return;
+    collapseAfterTransitionRef.current = true;
     void actions.loadConversation(id);
-    collapse();
   };
+
+  useEffect(() => {
+    if (!collapseAfterTransitionRef.current || meta.conversationTransitioning) return;
+    collapseAfterTransitionRef.current = false;
+    setExpanded(false);
+    setMoreOpen(false);
+    setQuery("");
+    setShowAll(false);
+  }, [meta.conversationTransitioning]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -255,7 +266,7 @@ export function KiroThreadRail() {
         <div
           role="dialog"
           aria-label="对话"
-          className="w-[216px] lg:w-[232px] max-h-[calc(100dvh-120px)] rounded-2xl bg-surface border border-line shadow-card flex flex-col overflow-hidden"
+          className="w-[216px] lg:w-[232px] max-h-[calc(100dvh-120px)] rounded-2xl bg-surface border border-line shadow-card flex flex-col overflow-hidden animate-enter"
         >
           {/* Header：Soft Plate Logo + Kiro + 收起（bg-surface 极浅底，不压 Logo 原色） */}
           <div className="shrink-0 flex items-center justify-between gap-2 px-2.5 py-2.5 border-b border-line bg-surface">
@@ -312,6 +323,7 @@ export function KiroThreadRail() {
                   isCurrent={meta.currentConversationId === rec.id}
                   onOpen={openThread}
                   disabled={meta.conversationTransitioning}
+                  transitioning={meta.conversationTransition.target === rec.id}
                 />
               ))
             )}

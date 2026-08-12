@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   readPersistedMotionPreference,
+  readEffectiveMotionDataset,
   resolveEffectiveReducedMotion,
 } from "@/lib/motionPreference";
 
@@ -30,5 +31,13 @@ describe("readPersistedMotionPreference", () => {
     ["not-json", "system"],
   ] as const)("reads %j as %s", (raw, expected) => {
     expect(readPersistedMotionPreference(raw)).toBe(expected);
+  });
+});
+
+describe("readEffectiveMotionDataset", () => {
+  it("uses the pre-hydration dataset for the first client render", () => {
+    expect(readEffectiveMotionDataset("reduced")).toBe(true);
+    expect(readEffectiveMotionDataset("full")).toBe(false);
+    expect(readEffectiveMotionDataset(undefined)).toBe(false);
   });
 });

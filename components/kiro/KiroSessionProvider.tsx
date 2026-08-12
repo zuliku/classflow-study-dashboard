@@ -42,6 +42,8 @@ import {
   ConversationTransitionEvent,
   ConversationTransitionState,
   PendingConversationTransition,
+  ConversationTransitionView,
+  toConversationTransitionView,
 } from "@/lib/ai/history/conversationTransition";
 import { requestConversationCompact, toCompactMessages } from "@/lib/ai/history/summary";
 import { estimateTokens } from "@/lib/ai/contextBudget/estimate";
@@ -85,8 +87,10 @@ interface KiroSessionValue {
   openForGroupProject: (id: string) => void;
   openForWeek: (week: number) => void;
   handoffPrompt: (prompt: string) => void;
+  handoffAssignmentPrompt: (id: string, prompt: string) => void;
   /** Task 7B：会话切换进行中 */
   conversationTransitioning: boolean;
+  conversationTransition: ConversationTransitionView;
   /** Kiro Planning Proposal Ghost Preview（UI-only，不持久化；刷新即消失） */
   planningPreview: KiroPlanningPreview | null;
   setPlanningPreview: (p: KiroPlanningPreview | null) => void;
@@ -130,6 +134,7 @@ interface KiroSessionMetaValue {
   hasMessages: boolean;
   /** Task 7B：会话切换进行中（stop → 保存 → reset/load）——UI 可禁用切换入口 */
   conversationTransitioning: boolean;
+  conversationTransition: ConversationTransitionView;
 }
 
 /** Actions：稳定 callbacks（transcript 操作点击时才读取 Ref，不订阅 streaming messages） */
@@ -148,6 +153,7 @@ interface KiroSessionActionsValue {
   openForGroupProject: (id: string) => void;
   openForWeek: (week: number) => void;
   handoffPrompt: (prompt: string) => void;
+  handoffAssignmentPrompt: (id: string, prompt: string) => void;
   /** 点击时读取当前 transcript（不订阅 messages） */
   copyCurrentTranscript: () => Promise<void>;
   exportCurrentTranscript: () => void;
@@ -188,6 +194,10 @@ export function KiroSessionProvider({ children }: { children: React.ReactNode })
   const [transitionState, setTransitionState] = useState<ConversationTransitionState>(CONVERSATION_TRANSITION_IDLE);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastSavedSnapshotRef = useRef<string>("");
+  // 所有发送入口共享同一份同步所有权。SDK status 接管前也不能让双击/并发 handoff 穿透。
+  const sendLockRef = useRef(false);
+  const turnStartedRef = useRef(false);
+  const [sendClaimed, setSendClaimed] = useState(false);
 
   // Conversation Summary（Task 7）：内部 Model Context；不代表当前 ClassFlow 数据
   const [conversationSummary, setConversationSummary] = useState<KiroConversationSummary | null>(null);
@@ -343,7 +353,7 @@ export function KiroSessionProvider({ children }: { children: React.ReactNode })
           const target = await getConversation(transition.id);
           if (!target) {
             refreshHistory();
-            return; // 目标已消失：旧会话已保存，保持当前会话
+            throw new Error("目标对话不存在或无法读取");
           }
           chat.loadConversation(target);
           conversationIdRef.current = target.id;
@@ -362,6 +372,9 @@ export function KiroSessionProvider({ children }: { children: React.ReactNode })
           attachments.clear();
         }
         refreshHistory();
+      } catch (error) {
+        console.warn("kiro history: transition failed", error);
+        useToastStore.getState().pushToast({ message: "无法打开这条对话，请重试。", type: "error" });
       } finally {
         applyTransition({ type: "done" });
       }
@@ -479,6 +492,36 @@ export function KiroSessionProvider({ children }: { children: React.ReactNode })
       ),
     [autoRefs, manualRefs, entryRefs, suppressedAutoKeys, autoState.currentSemesterWeek]
   );
+  const activeRefsRef = useRef(activeRefs);
+  activeRefsRef.current = activeRefs;
+  // 显式 entry handoff 需要在同一事件栈内覆盖 snapshot，不能等待 React commit。
+  const pendingEntryRefsRef = useRef<KiroContextRef[] | null>(null);
+  // 请求体在 useKiroChat 内冻结；这里同步冻结同一时刻的展示 chips，保证 UI 与本轮事实一致。
+  const [frozenActiveRefs, setFrozenActiveRefs] = useState<KiroContextRef[] | null>(null);
+  const presentedActiveRefs = frozenActiveRefs ?? activeRefs;
+
+  React.useEffect(() => {
+    if (chat.streaming) {
+      turnStartedRef.current = true;
+      // React/SDK 已接管 pending/streaming UI；同步锁继续持有到整轮结束。
+      setSendClaimed(false);
+      return;
+    }
+    if (!turnStartedRef.current && chat.status !== "error") return;
+    turnStartedRef.current = false;
+    sendLockRef.current = false;
+    setSendClaimed(false);
+    setFrozenActiveRefs(null);
+  }, [chat.streaming, chat.status]);
+
+  const stopWithTurnRelease = useCallback(async () => {
+    // stop() can run before the SDK has observed submitted; release the provider-owned claim too.
+    sendLockRef.current = false;
+    turnStartedRef.current = false;
+    setSendClaimed(false);
+    setFrozenActiveRefs(null);
+    await chatRef.current.stop();
+  }, []);
 
   const removeContext = useCallback(
     (key: string) => {
@@ -552,7 +595,17 @@ export function KiroSessionProvider({ children }: { children: React.ReactNode })
   const sendWithTurn = useCallback(
     async (text: string): Promise<boolean> => {
       // Task 7B：会话切换中（pending transition）拒绝新发送，防止消息混入即将被重置的旧会话
-      if (transitionStateRef.current.pending) return false;
+      if (transitionStateRef.current.pending || sendLockRef.current || chatRef.current.streaming) return false;
+      sendLockRef.current = true;
+      setSendClaimed(true);
+      const snapshotRefs = pendingEntryRefsRef.current
+        ? dedupeContextRefs(
+            resolveContextRefs(autoRefs, manualRefs, pendingEntryRefsRef.current, suppressedAutoKeys),
+            autoState.currentSemesterWeek
+          )
+        : activeRefsRef.current;
+      pendingEntryRefsRef.current = null;
+      setFrozenActiveRefs([...snapshotRefs]);
       // 第一次真实 User Message：创建会话（transient → 正式写 DB 在首个稳定点）
       if (!conversationIdRef.current) {
         const seed = buildConversationSeed(text);
@@ -565,21 +618,52 @@ export function KiroSessionProvider({ children }: { children: React.ReactNode })
       }
       setLastUserTurnGen(suggestionsGenRef.current);
       // 扫描 PDF 渲染失败时返回 false：不清空附件、不清空 Composer（Prompt 保留）
-      const ok = await chat.send(text);
-      if (ok) attachments.clear();
-      return ok;
+      try {
+        const ok = await chatRef.current.send(text);
+        if (!ok) {
+          sendLockRef.current = false;
+          setSendClaimed(false);
+          setFrozenActiveRefs(null);
+          return false;
+        }
+        attachments.clear();
+        return true;
+      } catch (error) {
+        sendLockRef.current = false;
+        setSendClaimed(false);
+        setFrozenActiveRefs(null);
+        throw error;
+      }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [chat.send, attachments]
+    [attachments]
   );
 
   // Task 7A：Conversation lifecycle 的 send 是 Provider 唯一暴露入口（不允许 runtime/session 语义分叉）
   const handoffPrompt = useCallback(
     (prompt: string) => {
-      suggestionsGenRef.current += 1;
-      setSuggestionsKind("generic");
       setSidecarOpen(true);
-      setLastUserTurnGen(suggestionsGenRef.current);
+      void sendWithTurn(prompt).then((ok) => {
+        if (!ok) return;
+        suggestionsGenRef.current += 1;
+        setSuggestionsKind("generic");
+        setLastUserTurnGen(suggestionsGenRef.current);
+      });
+    },
+    [sendWithTurn]
+  );
+
+  /** 原子 Assignment Handoff：显式 ref 先进入 send snapshot，避免 React state 提交竞态。 */
+  const handoffAssignmentPrompt = useCallback(
+    (id: string, prompt: string) => {
+      const ref = assignmentEntryRef(useAppStore.getState(), id);
+      if (!ref) return;
+      const nextEntryRefs = [ref];
+      setEntryRefs(nextEntryRefs);
+      entryRefsRef.current = nextEntryRefs;
+      pendingEntryRefsRef.current = nextEntryRefs;
+      setSuggestionsKind(suggestionsTypeOf(ref));
+      setSidecarOpen(true);
       void sendWithTurn(prompt);
     },
     [sendWithTurn]
@@ -591,15 +675,9 @@ export function KiroSessionProvider({ children }: { children: React.ReactNode })
    */
   const loadConversation = useCallback(
     (id: string) => {
-      void getConversation(id).then((target) => {
-        if (!target) {
-          refreshHistory();
-          return;
-        }
-        requestConversationTransition({ type: "load", id });
-      });
+      requestConversationTransition({ type: "load", id });
     },
-    [getConversation, refreshHistory, requestConversationTransition]
+    [requestConversationTransition]
   );
 
   const deleteConversation = useCallback(
@@ -633,9 +711,16 @@ export function KiroSessionProvider({ children }: { children: React.ReactNode })
     newChat();
   }, [newChat]);
 
-  // Sidecar 打开时注册 overlay（Esc 只在最上层关闭）
+  const effectiveSidecarOpen = sidecarOpen && activeTab !== "kiro";
+
+  // 直接进入 Kiro Workspace 等价于收起 Sidecar，避免离开后意外复现。
   React.useEffect(() => {
-    if (!sidecarOpen) return;
+    if (activeTab === "kiro" && sidecarOpen) setSidecarOpen(false);
+  }, [activeTab, sidecarOpen]);
+
+  // Sidecar 真正可见时才注册 overlay（Esc 只在最上层关闭）
+  React.useEffect(() => {
+    if (!effectiveSidecarOpen) return;
     pushOverlay("kiro-sidecar", 45);
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape" && isTopmostOverlay("kiro-sidecar")) setSidecarOpen(false);
@@ -645,7 +730,7 @@ export function KiroSessionProvider({ children }: { children: React.ReactNode })
       popOverlay("kiro-sidecar");
       window.removeEventListener("keydown", onKey);
     };
-  }, [sidecarOpen]);
+  }, [effectiveSidecarOpen]);
 
   // ---- Transcript 操作（Task 13）：点击时读 Ref，collapsed Rail 不订阅 streaming messages ----
   const pushToast = useToastStore((s) => s.pushToast);
@@ -665,14 +750,21 @@ export function KiroSessionProvider({ children }: { children: React.ReactNode })
   // Task 7A：唯一 sessionChat —— send 绑定 Conversation lifecycle（History 持久化入口）。
   // Runtime / Session 两个 Context 必须暴露同一对象，禁止 runtime.raw send 与 session.sendWithTurn 分叉。
   const sessionChat = useMemo(
-    () => ({ ...chat, send: sendWithTurn }),
+    () => ({
+      ...chat,
+      send: sendWithTurn,
+      stop: stopWithTurnRelease,
+      // 同步 claim 覆盖 SDK status 尚未更新的首帧，所有入口立即进入同一 turn lock。
+      streaming: chat.streaming || sendClaimed,
+      status: sendClaimed && chat.status === "ready" ? ("submitted" as const) : chat.status,
+    }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [chat, sendWithTurn]
+    [chat, sendWithTurn, sendClaimed, stopWithTurnRelease]
   );
 
   const runtimeValue = useMemo<KiroRuntimeValue>(
-    () => ({ chat: sessionChat, attachments, activeRefs, removeContext, addManualContext }),
-    [sessionChat, attachments, activeRefs, removeContext, addManualContext]
+    () => ({ chat: sessionChat, attachments, activeRefs: presentedActiveRefs, removeContext, addManualContext }),
+    [sessionChat, attachments, presentedActiveRefs, removeContext, addManualContext]
   );
 
   // hasMessages：低频（只在 empty ↔ non-empty 切换时更新，不随 token）
@@ -695,6 +787,7 @@ export function KiroSessionProvider({ children }: { children: React.ReactNode })
       lastUserTurnGen,
       hasMessages,
       conversationTransitioning: transitionState.phase !== "idle",
+      conversationTransition: toConversationTransitionView(transitionState),
     }),
     [
       conversationId,
@@ -726,6 +819,7 @@ export function KiroSessionProvider({ children }: { children: React.ReactNode })
       openForGroupProject,
       openForWeek,
       handoffPrompt,
+      handoffAssignmentPrompt,
       copyCurrentTranscript,
       exportCurrentTranscript,
       getCurrentMessages,
@@ -745,6 +839,7 @@ export function KiroSessionProvider({ children }: { children: React.ReactNode })
       openForGroupProject,
       openForWeek,
       handoffPrompt,
+      handoffAssignmentPrompt,
       copyCurrentTranscript,
       exportCurrentTranscript,
       getCurrentMessages,
@@ -755,7 +850,7 @@ export function KiroSessionProvider({ children }: { children: React.ReactNode })
   const value: KiroSessionValue = {
     chat: sessionChat,
     attachments,
-    activeRefs,
+    activeRefs: presentedActiveRefs,
     removeContext,
     addManualContext,
     newChat,
@@ -781,7 +876,9 @@ export function KiroSessionProvider({ children }: { children: React.ReactNode })
     openForGroupProject,
     openForWeek,
     handoffPrompt,
+    handoffAssignmentPrompt,
     conversationTransitioning: transitionState.phase !== "idle",
+    conversationTransition: toConversationTransitionView(transitionState),
     planningPreview,
     setPlanningPreview,
   };
@@ -797,8 +894,8 @@ export function KiroSessionProvider({ children }: { children: React.ReactNode })
             {/* 固定视口高度外壳（h-dvh）：main 内部滚动，Kiro Conversation 独立滚动，不随内容撑高 */}
             <div className="flex h-dvh bg-[#F7F5F5] font-sans antialiased text-charcoal">
               {children}
-              {/* Sidecar 与 Workspace 互斥：进入 Kiro Workspace 时不渲染 Sidecar（Session 保留） */}
-              {sidecarOpen && activeTab !== "kiro" && <KiroSidecar />}
+              {/* Sidecar 与 Workspace 互斥；保留组件到 exit presence 完成。 */}
+              <KiroSidecar open={effectiveSidecarOpen} />
             </div>
           </KiroSessionContext.Provider>
         </KiroSessionActionsContext.Provider>

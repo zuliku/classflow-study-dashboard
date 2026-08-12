@@ -185,7 +185,7 @@ export function TaskBreakdownProposalCard({ proposals }: { proposals: TaskBreakd
   return (
     <div
       data-testid="task-breakdown-proposal"
-      className="mt-2.5 bg-surface border border-line-strong rounded-2xl shadow-card p-3.5 space-y-3"
+      className="mt-2.5 bg-surface border border-line-strong rounded-2xl shadow-card p-3.5 space-y-3 animate-enter"
     >
       <div className="flex items-center justify-between">
         <p className="flex items-center gap-1.5 text-[11px] font-bold text-charcoal">

@@ -105,7 +105,7 @@ export function CommandCenter() {
 
   // Overlay 栈 + Esc（仅最上层）
   useEffect(() => {
-    if (!mounted) return;
+    if (!isSearchModalOpen) return;
     pushOverlay(OVERLAY_ID, 50);
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape" && isTopmostOverlay(OVERLAY_ID)) {
@@ -117,7 +117,7 @@ export function CommandCenter() {
       popOverlay(OVERLAY_ID);
       window.removeEventListener("keydown", onKey);
     };
-  }, [mounted, setSearchModalOpen]);
+  }, [isSearchModalOpen, setSearchModalOpen]);
 
   // 打开时重置查询与高亮；切换视图时复位
   useEffect(() => {
@@ -295,7 +295,8 @@ export function CommandCenter() {
       className={cn(
         "fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-start justify-center pt-16 md:pt-20 p-3 sm:p-4",
         "ux-overlay",
-        visible ? "opacity-100" : "opacity-0"
+        visible ? "opacity-100" : "opacity-0",
+        !isSearchModalOpen && "pointer-events-none"
       )}
     >
       <div

@@ -30,7 +30,8 @@ test("鼠标：点击 trigger 打开 → 选择 option → 关闭且值更新", 
   await listbox.getByRole("option", { name: "减少动效" }).click();
   await expect(listbox).toHaveCount(0); // 选择后关闭
   await expect(motion).toHaveText("减少动效");
-  await expect(page.locator("html")).toHaveAttribute("data-motion", "reduced");
+  await expect(page.locator("html")).toHaveAttribute("data-motion-preference", "reduced");
+  await expect(page.locator("html")).toHaveAttribute("data-motion-effective", "reduced");
 });
 
 test("outside click 关闭菜单且不改变值", async ({ page }) => {
@@ -105,7 +106,9 @@ test("mobile 390：通用页 dropdown 可用且无横向溢出", async ({ page }
   await expect(page.getByTestId("settings-view")).toBeVisible();
   const motion = page.getByRole("combobox", { name: "动效偏好" });
   await motion.click();
-  await page.getByRole("option", { name: "完整动效" }).click();
+  // Mobile 全屏 Dialog 下用 Select 的键盘契约，避免 body portal 与 viewport resize 的命中测试竞态。
+  await page.keyboard.press("ArrowDown");
+  await page.keyboard.press("Enter");
   await expect(motion).toHaveText("完整动效");
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1);
   expect(overflow).toBe(false);

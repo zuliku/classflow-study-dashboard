@@ -148,8 +148,7 @@ export function AssignmentDrawer() {
   };
 
   const handleQuickPrompt = (prompt: string) => {
-    handoff.openForAssignment(assignment.id);
-    handoff.handoffPrompt(prompt);
+    handoff.handoffAssignmentPrompt(assignment.id, prompt);
     setSelectedAssignmentId(null);
   };
 
@@ -205,8 +204,10 @@ export function AssignmentDrawer() {
 
   // Task 6A：根据关联资料请 Kiro 分析（轻量快捷入口，复用现有 Handoff）
   const handleMaterialAskKiro = () => {
-    handoff.openForAssignment(assignment.id);
-    handoff.handoffPrompt("请根据当前任务关联的课程资料，梳理任务要求并给出执行建议。");
+    handoff.handoffAssignmentPrompt(
+      assignment.id,
+      "请根据当前任务关联的课程资料，梳理任务要求并给出执行建议。"
+    );
     setSelectedAssignmentId(null);
   };
 

@@ -29,6 +29,10 @@ export function readPersistedMotionPreference(raw: string | null): MotionPrefere
   }
 }
 
+export function readEffectiveMotionDataset(value: string | undefined): boolean {
+  return value === "reduced";
+}
+
 export const MOTION_BOOTSTRAP_SCRIPT = `
 (() => {
   let preference = "system";

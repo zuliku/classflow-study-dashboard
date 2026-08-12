@@ -8,15 +8,19 @@ import { useToastStore } from "@/store/useToastStore";
 import { KiroThreadRow } from "@/components/kiro/KiroThreadRow";
 import { listConversations } from "@/lib/ai/history/db";
 import { KiroConversationRecord } from "@/lib/ai/history/types";
+import { usePresence } from "@/lib/usePresence";
+import { cn } from "@/lib/utils";
 
 /**
  * Kiro History（移动端底部 Sheet，<768；Desktop 历史入口 = Thread Rail）。
  * 列表 / 搜索 / 重命名 / 删除 与 Rail 共用 KiroThreadRow 与同一 History Runtime。
  */
 export function KiroHistoryPanel({
+  open,
   onClose,
   onNewChat,
 }: {
+  open: boolean;
   onClose: () => void;
   onNewChat: () => void;
 }) {
@@ -25,6 +29,26 @@ export function KiroHistoryPanel({
   const confirmRequest = useConfirmStore((s) => s.confirm);
   const [records, setRecords] = useState<KiroConversationRecord[]>([]);
   const [query, setQuery] = useState("");
+  const [requestedThreadId, setRequestedThreadId] = useState<string | null>(null);
+  const [requestedTransitionStarted, setRequestedTransitionStarted] = useState(false);
+  const { mounted, visible } = usePresence(open, 160);
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return q ? records.filter((r) => r.title.toLowerCase().includes(q)) : records;
+  }, [records, query]);
+
+  useEffect(() => {
+    if (!open) return;
+    if (!requestedThreadId) return;
+    if (session.conversationTransitioning) {
+      setRequestedTransitionStarted(true);
+      return;
+    }
+    if (!requestedTransitionStarted) return;
+    setRequestedThreadId(null);
+    setRequestedTransitionStarted(false);
+    onClose();
+  }, [open, requestedThreadId, requestedTransitionStarted, session.conversationTransitioning, onClose]);
 
   useEffect(() => {
     let alive = true;
@@ -37,22 +61,21 @@ export function KiroHistoryPanel({
   }, [session.historyVersion]);
 
   useEffect(() => {
+    if (!open) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
+  }, [open, onClose]);
 
-  const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    return q ? records.filter((r) => r.title.toLowerCase().includes(q)) : records;
-  }, [records, query]);
+  if (!mounted) return null;
 
   const openThread = (id: string) => {
     if (session.conversationTransitioning) return;
     void session.loadConversation(id);
-    onClose();
+    setRequestedThreadId(id);
+    setRequestedTransitionStarted(false);
   };
 
   const clearAll = () => {
@@ -71,12 +94,28 @@ export function KiroHistoryPanel({
   return (
     <>
       {/* 遮罩 */}
-      <div className="absolute inset-0 z-30 bg-black/20" onClick={onClose} aria-hidden="true" />
+      <div
+        className={cn(
+          "absolute inset-0 z-30 bg-black/20 transition-opacity ease-[var(--ease-standard)]",
+          visible
+            ? "duration-[var(--motion-panel)] opacity-100"
+            : "duration-[160ms] opacity-0 pointer-events-none"
+        )}
+        onClick={onClose}
+        aria-hidden="true"
+      />
       {/* 底部 sheet */}
       <div
         role="dialog"
         aria-label="历史记录"
-        className="absolute inset-x-0 bottom-0 z-40 bg-surface border-t border-line rounded-t-2xl shadow-card p-4 pb-5 max-h-[65dvh] overflow-y-auto ux-inline"
+        data-state={open ? "open" : "closed"}
+        aria-hidden={!open}
+        className={cn(
+          "absolute inset-x-0 bottom-0 z-40 bg-surface border-t border-line rounded-t-2xl shadow-card p-4 pb-5 max-h-[65dvh] overflow-y-auto transition-[opacity,transform] ease-[var(--ease-standard)]",
+          visible
+            ? "duration-[var(--motion-panel)] translate-y-0 opacity-100"
+            : "duration-[160ms] translate-y-2 opacity-0 pointer-events-none"
+        )}
       >
         <div className="w-10 h-1 rounded-full bg-line-strong mx-auto mb-4" />
         <div className="space-y-3">
@@ -121,6 +160,7 @@ export function KiroHistoryPanel({
                     isCurrent={session.currentConversationId === rec.id}
                     onOpen={openThread}
                     disabled={session.conversationTransitioning}
+                    transitioning={session.conversationTransition.target === rec.id}
                   />
                 ))}
               </div>

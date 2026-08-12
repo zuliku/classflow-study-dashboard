@@ -3,6 +3,7 @@ import {
   CONVERSATION_TRANSITION_IDLE,
   conversationTransitionReducer,
   ConversationTransitionState,
+  toConversationTransitionView,
 } from "@/lib/ai/history/conversationTransition";
 
 /**
@@ -110,5 +111,17 @@ describe("conversationTransitionReducer", () => {
     s = conversationTransitionReducer(s, { type: "request", transition: LOAD_B, streaming: false });
     expect(s.phase).toBe("switching");
     expect(s.pending).toEqual(LOAD_B);
+  });
+});
+
+describe("toConversationTransitionView", () => {
+  it.each([
+    [mk("idle", null), { phase: "idle", target: null }],
+    [mk("stopping", LOAD_B), { phase: "stopping", target: "conv-b" }],
+    [mk("saving", LOAD_B), { phase: "saving", target: "conv-b" }],
+    [mk("switching", LOAD_B), { phase: "loading", target: "conv-b" }],
+    [mk("switching", NEW), { phase: "loading", target: "new" }],
+  ] as const)("projects %j to public view %j", (state, expected) => {
+    expect(toConversationTransitionView(state)).toEqual(expected);
   });
 });

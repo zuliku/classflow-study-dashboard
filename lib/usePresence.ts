@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useEffectiveReducedMotion } from "@/hooks/useEffectiveReducedMotion";
 
 /**
  * 轻量两阶段 presence：
@@ -6,21 +7,39 @@ import { useEffect, useState } from "react";
  * 关闭时先隐藏 → duration 后再卸载（保证退出动画可播放）。
  */
 export function usePresence(open: boolean, duration = 260): { mounted: boolean; visible: boolean } {
+  const reducedMotion = useEffectiveReducedMotion();
   const [mounted, setMounted] = useState(open);
   const [visible, setVisible] = useState(false);
 
   useEffect(() => {
+    let firstFrame = 0;
+    let secondFrame = 0;
+    let exitTimer = 0;
+
     if (open) {
       setMounted(true);
-      const raf = requestAnimationFrame(() =>
-        requestAnimationFrame(() => setVisible(true))
-      );
-      return () => cancelAnimationFrame(raf);
+      if (reducedMotion) {
+        setVisible(true);
+      } else {
+        firstFrame = requestAnimationFrame(() => {
+          secondFrame = requestAnimationFrame(() => setVisible(true));
+        });
+      }
+    } else {
+      setVisible(false);
+      if (reducedMotion) {
+        setMounted(false);
+      } else {
+        exitTimer = window.setTimeout(() => setMounted(false), duration);
+      }
     }
-    setVisible(false);
-    const timer = window.setTimeout(() => setMounted(false), duration);
-    return () => window.clearTimeout(timer);
-  }, [open, duration]);
+
+    return () => {
+      cancelAnimationFrame(firstFrame);
+      cancelAnimationFrame(secondFrame);
+      window.clearTimeout(exitTimer);
+    };
+  }, [open, duration, reducedMotion]);
 
   return { mounted, visible };
 }
