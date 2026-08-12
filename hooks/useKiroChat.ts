@@ -10,6 +10,8 @@ import { useConfirmStore } from "@/store/useConfirmStore";
 import { useToastStore } from "@/store/useToastStore";
 import { getSessionApiKey } from "@/lib/ai/sessionKeys";
 import { getSessionWebSearchApiKey } from "@/lib/ai/web/credentials";
+import { getSessionWebPdfVisionApiKey } from "@/lib/ai/web/vision/credentials";
+import { normalizeWebPdfVisionModel } from "@/lib/ai/web/vision/models";
 import { KiroWebSearchResult } from "@/lib/ai/web/types";
 import { normalizeAIError, AIError } from "@/lib/ai/errors";
 import { buildBaseContext } from "@/lib/ai/context/buildBaseContext";
@@ -392,6 +394,9 @@ export function useKiroChat({
   // Task 14：Kiro Search（联网搜索）——随 Turn Snapshot 冻结；Key 不进 Store
   const webSearchEnabled = useKiroPreferencesStore((s) => s.webSearchEnabled);
   const webSearchCredentialMode = useKiroPreferencesStore((s) => s.webSearchCredentialMode);
+  // Task 19C1：扫描 Web PDF Vision 设置（Key 独立 session 存储，不进 Store）
+  const webPdfVisionEnabled = useKiroPreferencesStore((s) => s.webPdfVisionEnabled);
+  const webPdfVisionModel = useKiroPreferencesStore((s) => s.webPdfVisionModel);
 
   const pushToast = useToastStore((s) => s.pushToast);
   const confirmRequest = useConfirmStore((s) => s.confirm);
@@ -488,6 +493,15 @@ export function useKiroChat({
         credentialMode: webSearchCredentialMode,
         ...(webSearchCredentialMode === "byok" && getSessionWebSearchApiKey()
           ? { apiKey: getSessionWebSearchApiKey() }
+          : {}),
+      },
+      // Task 19C1：扫描 Web PDF Vision 配置（Provider 固定 OpenCode Go；不发送 provider/baseURL/transport）。
+      // Key 缺失仍可发送 enabled/model（19C2 负责 missing key → Vision unavailable → Tavily fallback）
+      webPdfVisionConfig: {
+        enabled: webPdfVisionEnabled,
+        model: normalizeWebPdfVisionModel(webPdfVisionModel),
+        ...(getSessionWebPdfVisionApiKey()
+          ? { apiKey: getSessionWebPdfVisionApiKey() }
           : {}),
       },
       baseContext: buildBaseContext(),

@@ -17,11 +17,13 @@ export function SettingsSelect<T extends string>({
   onChange,
   options,
   ariaLabel,
+  disabled,
 }: {
   value: T;
   onChange: (v: T) => void;
   options: SelectOption<T>[];
   ariaLabel?: string;
+  disabled?: boolean;
 }) {
   return (
     <UISelect
@@ -29,6 +31,7 @@ export function SettingsSelect<T extends string>({
       onChange={onChange}
       options={options}
       ariaLabel={ariaLabel}
+      disabled={disabled}
       triggerClassName="min-w-[150px] w-full"
       menuClassName="min-w-[150px]"
     />

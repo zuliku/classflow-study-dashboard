@@ -65,6 +65,43 @@ describe("Kiro Response Preference（Task 1 Foundation）", () => {
     expect(hits.some((s) => s.id === "kiro-response-preference")).toBe(true);
   });
 
+  it("Task 19C1. validateAIChatBody：webPdfVisionConfig normalize（arbitrary model → mimo-v2.5；apiKey trim；旧 Client 缺失 → enabled=false）", () => {
+    const ok = validateAIChatBody({
+      ...validBody,
+      webPdfVisionConfig: {
+        enabled: true,
+        model: "arbitrary-model",
+        apiKey: "  secret-key  ",
+      },
+    });
+    expect(ok.ok).toBe(true);
+    if (ok.ok) {
+      expect(ok.webPdfVisionConfig).toBeDefined();
+      expect(ok.webPdfVisionConfig!.enabled).toBe(true);
+      expect(ok.webPdfVisionConfig!.model).toBe("mimo-v2.5");
+      expect(ok.webPdfVisionConfig!.apiKey).toBe("secret-key"); // trim
+    }
+
+    // 旧 Client / 缺失 → enabled=false（不会触发未来 Vision API）
+    const missing = validateAIChatBody(validBody);
+    expect(missing.ok).toBe(true);
+    if (missing.ok) {
+      expect(missing.webPdfVisionConfig!.enabled).toBe(false);
+      expect(missing.webPdfVisionConfig!.model).toBe("mimo-v2.5");
+      expect(missing.webPdfVisionConfig!.apiKey).toBeUndefined();
+    }
+
+    // 非 boolean enabled → false
+    const badEnabled = validateAIChatBody({ ...validBody, webPdfVisionConfig: { enabled: "yes", model: "kimi-k3" } });
+    expect(badEnabled.ok).toBe(true);
+    if (badEnabled.ok) expect(badEnabled.webPdfVisionConfig!.enabled).toBe(false);
+
+    // 空 apiKey → undefined（不泄漏空串）
+    const emptyKey = validateAIChatBody({ ...validBody, webPdfVisionConfig: { enabled: true, model: "mimo-v2.5", apiKey: "   " } });
+    expect(emptyKey.ok).toBe(true);
+    if (emptyKey.ok) expect(emptyKey.webPdfVisionConfig!.apiKey).toBeUndefined();
+  });
+
   it("Answer Contract：dense 模式包含完整表达契约", () => {
     const ctx = buildKiroResponsePreferenceContext("dense");
     expect(ctx).toContain("# Answer Quality Contract");

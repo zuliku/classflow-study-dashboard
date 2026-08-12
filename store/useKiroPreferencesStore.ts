@@ -12,6 +12,10 @@ import {
   normalizeKiroResponsePreference,
 } from "@/lib/ai/responsePreference";
 import { KiroWebSearchCredentialMode } from "@/lib/ai/web/types";
+import {
+  DEFAULT_WEB_PDF_VISION_MODEL,
+  normalizeWebPdfVisionModel,
+} from "@/lib/ai/web/vision/models";
 
 /**
  * Kiro UI / Behavior Preference（独立于业务 useAppStore / useAISettingsStore）：
@@ -29,11 +33,16 @@ interface KiroPreferencesState {
   /** Task 14：Kiro Search（联网搜索）；Key 绝不进入 Store */
   webSearchEnabled: boolean;
   webSearchCredentialMode: KiroWebSearchCredentialMode;
+  /** Task 19C1：扫描 Web PDF Vision（设置；Key 绝不进入 Store） */
+  webPdfVisionEnabled: boolean;
+  webPdfVisionModel: string;
   setOutputTextSize: (size: KiroOutputTextSize) => void;
   setAutoContextEnabled: (enabled: boolean) => void;
   setResponsePreference: (preference: KiroResponsePreference) => void;
   setWebSearchEnabled: (enabled: boolean) => void;
   setWebSearchCredentialMode: (mode: KiroWebSearchCredentialMode) => void;
+  setWebPdfVisionEnabled: (enabled: boolean) => void;
+  setWebPdfVisionModel: (model: string) => void;
 }
 
 export const useKiroPreferencesStore = create<KiroPreferencesState>()(
@@ -44,6 +53,8 @@ export const useKiroPreferencesStore = create<KiroPreferencesState>()(
       responsePreference: DEFAULT_KIRO_RESPONSE_PREFERENCE,
       webSearchEnabled: true,
       webSearchCredentialMode: "server",
+      webPdfVisionEnabled: true,
+      webPdfVisionModel: DEFAULT_WEB_PDF_VISION_MODEL,
       setOutputTextSize: (size) => set({ outputTextSize: normalizeKiroOutputTextSize(size) }),
       setAutoContextEnabled: (enabled) => set({ autoContextEnabled: enabled }),
       setResponsePreference: (preference) =>
@@ -51,6 +62,9 @@ export const useKiroPreferencesStore = create<KiroPreferencesState>()(
       setWebSearchEnabled: (enabled) => set({ webSearchEnabled: enabled }),
       setWebSearchCredentialMode: (mode) =>
         set({ webSearchCredentialMode: mode === "byok" ? "byok" : "server" }),
+      setWebPdfVisionEnabled: (enabled) => set({ webPdfVisionEnabled: enabled }),
+      // Store 内永远不保存任意 model id（非法 → 默认 mimo-v2.5）
+      setWebPdfVisionModel: (model) => set({ webPdfVisionModel: normalizeWebPdfVisionModel(model) }),
     }),
     {
       name: "classflow-kiro-preferences-v1",
@@ -61,6 +75,9 @@ export const useKiroPreferencesStore = create<KiroPreferencesState>()(
         responsePreference: state.responsePreference,
         webSearchEnabled: state.webSearchEnabled,
         webSearchCredentialMode: state.webSearchCredentialMode,
+        // Task 19C1：持久化设置（API Key 绝不进入 partialize）
+        webPdfVisionEnabled: state.webPdfVisionEnabled,
+        webPdfVisionModel: state.webPdfVisionModel,
       }),
       // 持久化值 hydrate 时同样清洗（旧数据 / 非法值 → 默认）
       merge: (persisted, current) => {
@@ -78,6 +95,10 @@ export const useKiroPreferencesStore = create<KiroPreferencesState>()(
           webSearchEnabled:
             typeof p?.webSearchEnabled === "boolean" ? p.webSearchEnabled : true,
           webSearchCredentialMode: p?.webSearchCredentialMode === "byok" ? "byok" : "server",
+          // Task 19C1：旧持久化无字段 → 默认 enabled=true / mimo-v2.5；非法持久化模型 → 归一
+          webPdfVisionEnabled:
+            typeof p?.webPdfVisionEnabled === "boolean" ? p.webPdfVisionEnabled : true,
+          webPdfVisionModel: normalizeWebPdfVisionModel(p?.webPdfVisionModel),
         };
       },
     }

@@ -19,6 +19,11 @@ import {
   getSessionWebSearchApiKey,
   setSessionWebSearchApiKey,
 } from "@/lib/ai/web/credentials";
+import {
+  getSessionWebPdfVisionApiKey,
+  setSessionWebPdfVisionApiKey,
+} from "@/lib/ai/web/vision/credentials";
+import { getWebPdfVisionModelOptions } from "@/lib/ai/web/vision/models";
 import { cn } from "@/lib/utils";
 
 const PROVIDER_OPTIONS: { value: AIProviderId; label: string }[] = [
@@ -55,6 +60,10 @@ export function KiroAISettings() {
   const setWebSearchEnabled = useKiroPreferencesStore((s) => s.setWebSearchEnabled);
   const webSearchCredentialMode = useKiroPreferencesStore((s) => s.webSearchCredentialMode);
   const setWebSearchCredentialMode = useKiroPreferencesStore((s) => s.setWebSearchCredentialMode);
+  const webPdfVisionEnabled = useKiroPreferencesStore((s) => s.webPdfVisionEnabled);
+  const setWebPdfVisionEnabled = useKiroPreferencesStore((s) => s.setWebPdfVisionEnabled);
+  const webPdfVisionModel = useKiroPreferencesStore((s) => s.webPdfVisionModel);
+  const setWebPdfVisionModel = useKiroPreferencesStore((s) => s.setWebPdfVisionModel);
 
   const RESPONSE_PREFERENCE_DESCRIPTIONS: Record<KiroResponsePreference, string> = {
     dense: "结论、关键事实与行动优先",
@@ -66,6 +75,8 @@ export function KiroAISettings() {
   const [showKey, setShowKey] = useState(false);
   const [showWebSearchKey, setShowWebSearchKey] = useState(false);
   const [webSearchApiKeyInput, setWebSearchApiKeyInput] = useState(getSessionWebSearchApiKey());
+  const [webPdfVisionApiKeyInput, setWebPdfVisionApiKeyInput] = useState(getSessionWebPdfVisionApiKey());
+  const [showWebPdfVisionKey, setShowWebPdfVisionKey] = useState(false);
   const [test, setTest] = useState<TestState>({ status: "idle" });
   const [webSearchTest, setWebSearchTest] = useState<TestState>({ status: "idle" });
   const [serverSearchConfigured, setServerSearchConfigured] = useState<boolean | null>(null);
@@ -498,6 +509,64 @@ export function KiroAISettings() {
             <span className="px-2 py-0.5 rounded-full bg-alabaster border border-line text-[10px] font-bold text-satin-grey shrink-0">
               按需发送
             </span>
+          </SettingsRow>
+
+          {/* ---- Task 19C1：扫描 Web PDF Vision（设置 + 独立会话 Key；19C2 才消费） ---- */}
+          <SettingsRow
+            settingId="kiro-web-pdf-vision-enabled"
+            title="扫描 PDF 识别"
+            description="仅用于读取联网搜索发现的扫描型 PDF（无文本层页面）。"
+          >
+            <SettingsToggle
+              checked={webPdfVisionEnabled}
+              onChange={setWebPdfVisionEnabled}
+              label="扫描 PDF 识别"
+            />
+          </SettingsRow>
+
+          <SettingsRow
+            settingId="kiro-web-pdf-vision-model"
+            title="Vision 模型"
+            description="用于识别扫描 PDF 页面的 OpenCode Go 视觉模型。"
+          >
+            <SettingsSelect
+              value={webPdfVisionModel}
+              onChange={setWebPdfVisionModel}
+              disabled={!webPdfVisionEnabled}
+              ariaLabel="扫描 PDF Vision 模型"
+              options={getWebPdfVisionModelOptions().map((m) => ({ value: m.id, label: m.name }))}
+            />
+          </SettingsRow>
+
+          <SettingsRow
+            settingId="kiro-web-pdf-vision-key"
+            title="OpenCode Go Vision API Key"
+            description="仅用于读取联网搜索发现的扫描型 PDF。密钥仅保存在当前浏览器会话中。"
+          >
+            <div className="relative w-full">
+              <SettingsInput
+                type={showWebPdfVisionKey ? "text" : "password"}
+                value={webPdfVisionApiKeyInput}
+                onChange={(v) => {
+                  setWebPdfVisionApiKeyInput(v);
+                  setSessionWebPdfVisionApiKey(v);
+                }}
+                placeholder="sk-..."
+                ariaLabel="OpenCode Go Vision API Key"
+                autoComplete="off"
+                spellCheck={false}
+                mono
+                className="pr-9"
+              />
+              <button
+                type="button"
+                onClick={() => setShowWebPdfVisionKey((v) => !v)}
+                aria-label={showWebPdfVisionKey ? "隐藏 Vision API Key" : "显示 Vision API Key"}
+                className="absolute right-1.5 top-1/2 -translate-y-1/2 p-1.5 rounded-lg text-sandrift hover:text-charcoal hover:bg-alabaster transition-colors"
+              >
+                {showWebPdfVisionKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+            </div>
           </SettingsRow>
         </SettingsGroup>
 

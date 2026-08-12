@@ -6,6 +6,7 @@
  */
 
 import { KiroResponsePreference, normalizeKiroResponsePreference } from "@/lib/ai/responsePreference";
+import { normalizeWebPdfVisionModel } from "@/lib/ai/web/vision/models";
 
 /** 请求体校验（chat / test / compact 共用）：非法返回错误信息字符串 */
 export function validateAIChatBody(body: unknown): {
@@ -20,6 +21,14 @@ export function validateAIChatBody(body: unknown): {
   responsePreference: KiroResponsePreference;
   /** Task 14：联网搜索配置（enabled / credentialMode / 仅 BYOK 带 userApiKey） */
   webSearchConfig?: { enabled?: boolean; credentialMode?: "server" | "byok"; apiKey?: string };
+  /** Task 19C1：扫描 Web PDF Vision 配置（Provider 固定 OpenCode Go；19C2 才消费）。
+   * 旧 Client 无该字段 → enabled=false（不会突然触发未来 Vision API）。
+   * apiKey 只作为 transient server value：trim / 空值视为 undefined / 绝不写日志 / 不返回客户端。 */
+  webPdfVisionConfig?: {
+    enabled: boolean;
+    model: string;
+    apiKey?: string;
+  };
 } | { ok: false; code: string; message: string } {
   const b = (typeof body === "object" && body !== null ? body : {}) as Record<string, unknown>;
   const provider = b.provider;
@@ -34,6 +43,7 @@ export function validateAIChatBody(body: unknown): {
   }
   const custom = (typeof b.customConfig === "object" && b.customConfig !== null ? b.customConfig : {}) as Record<string, unknown>;
   const webSearch = (typeof b.webSearchConfig === "object" && b.webSearchConfig !== null ? b.webSearchConfig : {}) as Record<string, unknown>;
+  const vision = (typeof b.webPdfVisionConfig === "object" && b.webPdfVisionConfig !== null ? b.webPdfVisionConfig : {}) as Record<string, unknown>;
   return {
     ok: true,
     provider,
@@ -51,6 +61,13 @@ export function validateAIChatBody(body: unknown): {
       enabled: webSearch.enabled === true,
       credentialMode: webSearch.credentialMode === "byok" ? "byok" : "server",
       apiKey: typeof webSearch.apiKey === "string" ? webSearch.apiKey : undefined,
+    },
+    webPdfVisionConfig: {
+      // 只有真正 boolean true 才接受；旧 Client 缺失 → false（不会触发未来 Vision API）
+      enabled: vision.enabled === true,
+      // arbitrary model id 无法穿透：非法 → 默认 mimo-v2.5
+      model: normalizeWebPdfVisionModel(vision.model),
+      apiKey: typeof vision.apiKey === "string" ? vision.apiKey.trim() || undefined : undefined,
     },
   };
 }
