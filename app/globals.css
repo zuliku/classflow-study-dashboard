@@ -34,12 +34,12 @@
 
   /* Motion tokens */
   --motion-fast: 140ms;
-  --motion-base: 190ms;
-  --motion-panel: 260ms;
-  --motion-page: 220ms;
-  --motion-data: 320ms;
-  --motion-select: 180ms;
-  --motion-snap: 100ms;
+  --motion-base: 200ms;
+  --motion-panel: 230ms;
+  --motion-page: 230ms;
+  --motion-data: 200ms;
+  --motion-select: 140ms;
+  --motion-snap: 90ms;
   --ease-standard: cubic-bezier(0.2, 0.8, 0.2, 1);
   --ease-emphasized: cubic-bezier(0.22, 1, 0.36, 1);
 }
@@ -113,7 +113,7 @@ body {
   }
 }
 
-html[data-motion="reduced"] .kiro-now-dot {
+html[data-motion-effective="reduced"] .kiro-now-dot {
   animation: none;
   opacity: 1;
 }
@@ -134,7 +134,7 @@ html[data-motion="reduced"] .kiro-now-dot {
   }
 }
 
-html[data-motion="reduced"] .kiro-now-course {
+html[data-motion-effective="reduced"] .kiro-now-course {
   animation: none;
   box-shadow: 0 0 0 2px rgba(49, 48, 50, 0.32);
 }
@@ -320,9 +320,9 @@ button:disabled {
 
 /* 尊重系统减弱动效偏好 */
 @media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
+  html:not([data-motion-preference="full"]) *,
+  html:not([data-motion-preference="full"]) *::before,
+  html:not([data-motion-preference="full"]) *::after {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
@@ -330,13 +330,10 @@ button:disabled {
   }
 }
 
-/* App-level Motion Preference（<html data-motion>，由 store 应用）：
-   system：仅依赖上方 OS 媒体查询（默认，无需额外规则）；
-   reduced：无论 OS 设置如何强制减少动效；
-   full：使用 ClassFlow 标准 Motion（本项目无危险/眩晕动画，无需额外规则）。 */
-html[data-motion="reduced"] *,
-html[data-motion="reduced"] *::before,
-html[data-motion="reduced"] *::after {
+/* Effective motion is resolved before the body paints and kept current by the app hook. */
+html[data-motion-effective="reduced"] *,
+html[data-motion-effective="reduced"] *::before,
+html[data-motion-effective="reduced"] *::after {
   animation-duration: 0.01ms !important;
   animation-iteration-count: 1 !important;
   transition-duration: 0.01ms !important;
@@ -409,8 +406,8 @@ html[data-motion="reduced"] *::after {
 }
 
 /* Reduced Motion：关闭动画，保留静态品牌细边 */
-html[data-motion="reduced"] .kiro-ring-animated,
-html[data-motion="reduced"] .kiro-featured-flow {
+html[data-motion-effective="reduced"] .kiro-ring-animated,
+html[data-motion-effective="reduced"] .kiro-featured-flow {
   animation: none;
 }
 
@@ -492,10 +489,10 @@ html[data-motion="reduced"] .kiro-featured-flow {
 }
 
 /* Reduced Motion：关闭 breathe / glow 动画，保留静态轻 drop-shadow（状态文字照常更新） */
-html[data-motion="reduced"] .kiro-agent-logo-thinking,
-html[data-motion="reduced"] .kiro-agent-logo-glow,
-html[data-motion="reduced"] .kiro-agent-logo-glow-strong,
-html[data-motion="reduced"] .kiro-agent-logo-glow-soft {
+html[data-motion-effective="reduced"] .kiro-agent-logo-thinking,
+html[data-motion-effective="reduced"] .kiro-agent-logo-glow,
+html[data-motion-effective="reduced"] .kiro-agent-logo-glow-strong,
+html[data-motion-effective="reduced"] .kiro-agent-logo-glow-soft {
   animation: none;
 }
 
@@ -515,7 +512,7 @@ html[data-motion="reduced"] .kiro-agent-logo-glow-soft {
   opacity: 0.85;
 }
 
-html[data-motion="reduced"] .kiro-rail-plate .kiro-ring {
+html[data-motion-effective="reduced"] .kiro-rail-plate .kiro-ring {
   animation: none;
   opacity: 0.6;
 }

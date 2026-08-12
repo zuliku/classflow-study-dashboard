@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import { useEffectiveReducedMotion } from "@/hooks/useEffectiveReducedMotion";
 import {
   BarChart,
   Bar,
@@ -37,6 +38,7 @@ function ChartTooltip({ active, payload }: { active?: boolean; payload?: Tooltip
 }
 
 export function StudyLoadChart() {
+  const reducedMotion = useEffectiveReducedMotion();
   const { schedules, semester } = useAppStore();
 
   const today = new Date();
@@ -136,7 +138,13 @@ export function StudyLoadChart() {
               cursor={{ fill: "rgba(240, 235, 225, 0.4)" }}
               content={<ChartTooltip />}
             />
-            <Bar dataKey="hours" radius={[4, 4, 0, 0]} animationDuration={450} animationEasing="ease-out">
+            <Bar
+              dataKey="hours"
+              radius={[4, 4, 0, 0]}
+              isAnimationActive={!reducedMotion}
+              animationDuration={reducedMotion ? 0 : 450}
+              animationEasing="ease-out"
+            >
               {weekLoad.days.map((d, index) => (
                 <Cell
                   key={`cell-${index}`}

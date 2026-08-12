@@ -36,6 +36,7 @@ import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { PageTransition } from "@/components/ui/PageTransition";
 import { useAppStore } from "@/store/useAppStore";
 import { useToastStore } from "@/store/useToastStore";
+import { useEffectiveReducedMotion } from "@/hooks/useEffectiveReducedMotion";
 import { computeWeekCourseLoad } from "@/lib/studyLoad";
 import { cardKeyHandler, cn } from "@/lib/utils";
 import { openAssignmentEditor } from "@/lib/uiEvents";
@@ -96,11 +97,7 @@ export default function Home() {
     reconcileOrphanBlobs(validKeys).catch(() => {});
   }, []);
 
-  // Motion Preference：应用级动效覆盖（system / full / reduced）写入 <html data-motion>
-  const motionPreference = useAppStore((s) => s.preferences.motionPreference);
-  useEffect(() => {
-    document.documentElement.dataset.motion = motionPreference;
-  }, [motionPreference]);
+  const reducedMotion = useEffectiveReducedMotion();
 
   // Dev 自动注入：开发构建 + 首次启动（无持久化数据）→ 自动载入全模块演示数据，
   // 无需 ?preview= URL 即可查看所有模块。用户主动清空数据后不再注入（marker 保留）。
@@ -492,8 +489,9 @@ export default function Home() {
                           outerRadius={85}
                           paddingAngle={4}
                           dataKey="value"
-                          animationBegin={140}
-                          animationDuration={500}
+                          isAnimationActive={!reducedMotion}
+                          animationBegin={reducedMotion ? 0 : 140}
+                          animationDuration={reducedMotion ? 0 : 500}
                           animationEasing="ease-out"
                         >
                           {statusPieData.map((entry, index) => (
@@ -543,7 +541,14 @@ export default function Home() {
                             fontSize: "11px",
                           }}
                         />
-                        <Bar dataKey="value" radius={[6, 6, 0, 0]} animationBegin={140} animationDuration={500} animationEasing="ease-out">
+                        <Bar
+                          dataKey="value"
+                          radius={[6, 6, 0, 0]}
+                          isAnimationActive={!reducedMotion}
+                          animationBegin={reducedMotion ? 0 : 140}
+                          animationDuration={reducedMotion ? 0 : 500}
+                          animationEasing="ease-out"
+                        >
                           {priorityPieData.map((entry, index) => (
                             <Cell key={`cell-${index}`} fill={entry.color} />
                           ))}
