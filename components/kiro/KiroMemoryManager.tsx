@@ -10,6 +10,11 @@ import { MEMORY_CATEGORY_LABELS, MEMORY_SCOPE_LABELS, KiroMemory, MemoryCategory
 import { cn } from "@/lib/utils";
 import { UISelect } from "@/components/ui/Select";
 import { Dialog } from "@/components/ui/Dialog";
+import { IconButton } from "@/components/ui/IconButton";
+import { Input } from "@/components/ui/Input";
+import { Textarea } from "@/components/ui/Textarea";
+import { Field } from "@/components/ui/Field";
+import { Button } from "@/components/ui/Button";
 
 /**
  * Kiro Memory Manager（Task 9）：查看 / 编辑 / 删除 / 清空长期学习记忆。
@@ -35,18 +40,6 @@ export function KiroMemoryManager({
     if (open) void memory.refresh();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
-
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        if (editing) setEditing(null);
-        else onClose();
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [open, editing, onClose]);
 
   const staleMemo = useMemo(() => {
     const state = useAppStore.getState();
@@ -134,9 +127,14 @@ export function KiroMemoryManager({
               {memory.memories.length} 条
             </span>
           </div>
-          <button onClick={onClose} aria-label="关闭记忆" className="p-1.5 rounded-lg text-sandrift hover:bg-alabaster hover:text-charcoal transition-colors">
+          <IconButton
+            variant="ghost"
+            size="sm"
+            onClick={onClose}
+            aria-label="关闭记忆"
+          >
             <X className="w-4 h-4" />
-          </button>
+          </IconButton>
         </div>
 
         {/* Body */}
@@ -153,41 +151,51 @@ export function KiroMemoryManager({
               return (
                 <div key={m.id} className={cn("rounded-xl bg-[#F7F5F5] border border-line p-3", editing?.id === m.id && "ring-1 ring-line-strong")}>
                   {editing?.id === m.id ? (
-                    <div className="space-y-2">
-                      <input
-                        value={form.title}
-                        onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
-                        aria-label="记忆标题"
-                        className="w-full bg-white border border-line-strong rounded-lg px-2 py-1.5 text-xs text-charcoal focus:outline-none"
-                      />
-                      <textarea
-                        value={form.content}
-                        onChange={(e) => setForm((f) => ({ ...f, content: e.target.value }))}
-                        aria-label="记忆内容"
-                        rows={2}
-                        className="w-full bg-white border border-line-strong rounded-lg px-2 py-1.5 text-xs text-charcoal focus:outline-none resize-none"
-                      />
-                      <div className="flex flex-wrap items-center gap-2">
-                        <UISelect<MemoryCategory>
-                          value={form.category}
-                          onChange={(v) => setForm((f) => ({ ...f, category: v }))}
-                          ariaLabel="记忆分类"
-                          options={(Object.keys(MEMORY_CATEGORY_LABELS) as MemoryCategory[]).map(
-                            (c) => ({ value: c, label: MEMORY_CATEGORY_LABELS[c] })
-                          )}
-                          triggerClassName="h-8 bg-white text-[11px] font-semibold min-w-[110px]"
+                    <div className="space-y-3">
+                      <Field label="标题">
+                        <Input
+                          value={form.title}
+                          onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
+                          aria-label="记忆标题"
+                          className="bg-white border-line-strong"
                         />
-                        <UISelect<MemoryScope>
-                          value={form.scope}
-                          onChange={(v) => setForm((f) => ({ ...f, scope: v, scopeId: "" }))}
-                          ariaLabel="记忆范围"
-                          options={(Object.keys(MEMORY_SCOPE_LABELS) as MemoryScope[]).map((s) => ({
-                            value: s,
-                            label: MEMORY_SCOPE_LABELS[s],
-                          }))}
-                          triggerClassName="h-8 bg-white text-[11px] font-semibold min-w-[110px]"
+                      </Field>
+                      <Field label="内容">
+                        <Textarea
+                          value={form.content}
+                          onChange={(e) => setForm((f) => ({ ...f, content: e.target.value }))}
+                          aria-label="记忆内容"
+                          rows={2}
+                          className="bg-white border-line-strong"
                         />
-                        {form.scope === "course" && (
+                      </Field>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <Field label="分类">
+                          <UISelect<MemoryCategory>
+                            value={form.category}
+                            onChange={(v) => setForm((f) => ({ ...f, category: v }))}
+                            ariaLabel="记忆分类"
+                            options={(Object.keys(MEMORY_CATEGORY_LABELS) as MemoryCategory[]).map(
+                              (c) => ({ value: c, label: MEMORY_CATEGORY_LABELS[c] })
+                            )}
+                            triggerClassName="h-8 bg-white min-w-[110px]"
+                          />
+                        </Field>
+                        <Field label="范围">
+                          <UISelect<MemoryScope>
+                            value={form.scope}
+                            onChange={(v) => setForm((f) => ({ ...f, scope: v, scopeId: "" }))}
+                            ariaLabel="记忆范围"
+                            options={(Object.keys(MEMORY_SCOPE_LABELS) as MemoryScope[]).map((s) => ({
+                              value: s,
+                              label: MEMORY_SCOPE_LABELS[s],
+                            }))}
+                            triggerClassName="h-8 bg-white min-w-[110px]"
+                          />
+                        </Field>
+                      </div>
+                      {form.scope === "course" && (
+                        <Field label="关联课程">
                           <UISelect
                             value={form.scopeId}
                             onChange={(v) => setForm((f) => ({ ...f, scopeId: v }))}
@@ -196,13 +204,17 @@ export function KiroMemoryManager({
                               { value: "", label: "选择课程" },
                               ...courses.map((c) => ({ value: c.id, label: c.name })),
                             ]}
-                            triggerClassName="h-8 bg-white text-[11px] font-semibold min-w-[120px]"
+                            triggerClassName="h-8 bg-white min-w-[120px]"
                           />
-                        )}
-                        <div className="ml-auto flex items-center gap-1.5">
-                          <button onClick={() => setEditing(null)} className="px-2 h-7 rounded-lg text-[11px] font-bold text-satin-grey hover:bg-alabaster transition-colors">取消</button>
-                          <button onClick={commitEdit} className="px-2.5 h-7 rounded-lg text-[11px] font-bold text-charcoal bg-pastel-mint hover:bg-pastel-mint transition-colors">保存</button>
-                        </div>
+                        </Field>
+                      )}
+                      <div className="flex justify-end gap-2 pt-1">
+                        <Button variant="secondary" size="sm" onClick={() => setEditing(null)}>
+                          取消
+                        </Button>
+                        <Button variant="primary" size="sm" onClick={commitEdit}>
+                          保存
+                        </Button>
                       </div>
                     </div>
                   ) : (
@@ -217,20 +229,24 @@ export function KiroMemoryManager({
                           </span>
                         </div>
                         <div className="flex items-center gap-0.5">
-                          <button
+                          <IconButton
+                            variant="ghost"
+                            size="sm"
                             onClick={() => startEdit(m)}
                             aria-label={`编辑记忆 ${m.title}`}
-                            className="p-1.5 rounded-lg text-sandrift hover:bg-white hover:text-charcoal transition-colors"
+                            className="h-6 w-6"
                           >
                             <PencilLine className="w-3.5 h-3.5" />
-                          </button>
-                          <button
+                          </IconButton>
+                          <IconButton
+                            variant="danger"
+                            size="sm"
                             onClick={() => remove(m.id)}
                             aria-label={`删除记忆 ${m.title}`}
-                            className="p-1.5 rounded-lg text-sandrift hover:bg-white hover:text-danger transition-colors"
+                            className="h-6 w-6"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
-                          </button>
+                          </IconButton>
                         </div>
                       </div>
                     </>
@@ -245,14 +261,19 @@ export function KiroMemoryManager({
         </div>
 
         {/* Footer */}
-        <div className="shrink-0 px-4 py-2.5 border-t border-line flex items-center justify-between gap-2">
-          <p className="text-[10px] text-sandrift leading-relaxed">
+        <div className="shrink-0 px-4 py-2.5 border-t border-line flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+          <p className="text-[10px] text-sandrift leading-relaxed max-w-[420px]">
             记忆保存在当前浏览器中。只有完成当前请求需要时，相关记忆内容才会发送给你选择的 AI 服务。
           </p>
           {memory.memories.length > 0 && (
-            <button onClick={clearAll} className="shrink-0 text-[11px] font-bold text-sandrift hover:text-danger transition-colors">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={clearAll}
+              className="shrink-0 text-danger hover:text-danger hover:bg-danger-bg"
+            >
               清空全部
-            </button>
+            </Button>
           )}
         </div>
       </Dialog>

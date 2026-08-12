@@ -221,3 +221,45 @@ test("More 菜单 → Kiro 记忆入口打开 Manager", async ({ page }) => {
   await manager.getByRole("button", { name: "关闭记忆" }).click();
   await expect(manager).not.toBeVisible();
 });
+
+test("Task 2C3B：编辑态 Esc 只退出编辑，再 Esc 关闭 Manager", async ({ page }) => {
+  await page.route("**/api/ai/chat", async (route) => {
+    const body = route.request().postDataJSON() as {
+      messages?: { role?: string; parts?: { type?: string; state?: string }[] }[];
+    };
+    if (roundKind(body) === "tool") {
+      await route.fulfill({ status: 200, contentType: "text/event-stream", body: saveMemoryTurn() });
+      return;
+    }
+    await route.fulfill({ status: 200, contentType: "text/event-stream", body: finalTextTurn("已记住。") });
+  });
+
+  await page.addInitScript(({ settings, key }) => {
+    localStorage.setItem("classflow-ai-settings-v1", JSON.stringify({ version: 0, state: settings }));
+    sessionStorage.setItem("classflow-ai-key:deepseek", key);
+  }, { settings: AI_SETTINGS, key: "sk-test-key" });
+
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await openKiro(page);
+
+  const composer = page.getByTestId("kiro-composer");
+  await composer.getByLabel("Ask Kiro").fill("记住我一般晚上学习");
+  await composer.getByLabel("发送").click();
+  await expect(page.getByText("Kiro 已记住：我一般晚上学习").first()).toBeVisible();
+
+  await page.getByRole("button", { name: "更多操作", exact: true }).click();
+  await page.getByRole("menuitem", { name: "Kiro 记忆" }).click();
+  const manager = page.getByTestId("kiro-memory-manager");
+  await expect(manager).toBeVisible();
+
+  // 进入编辑态 → 第一次 Esc 只退出编辑，Manager 仍在
+  await manager.getByRole("button", { name: "编辑记忆 我一般晚上学习" }).click();
+  await expect(manager.getByLabel("记忆标题")).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(manager.getByLabel("记忆标题")).toHaveCount(0);
+  await expect(manager).toBeVisible();
+
+  // 第二次 Esc → Manager 关闭
+  await page.keyboard.press("Escape");
+  await expect(manager).not.toBeVisible();
+});
