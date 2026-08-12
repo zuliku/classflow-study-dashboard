@@ -196,7 +196,7 @@ test("motionPreference：reduced → html[data-motion] 生效且导航功能正�
   // 功能正常：切换 Tab + 命令中心
   await gotoOverview(page);
   await page.getByRole("button", { name: "课程资料" }).first().click();
-  await expect(page.getByRole("heading", { name: "本学期课程" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "课程资料" })).toBeVisible();
   await page.keyboard.press("Control+k");
   await expect(page.getByTestId("command-center")).toBeVisible();
   await page.keyboard.press("Escape");

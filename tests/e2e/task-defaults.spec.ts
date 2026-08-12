@@ -33,10 +33,10 @@ test("任务默认值：设置 高/进行中/21:00 → N 新建任务预填并�
   await page.keyboard.press("Escape");
   await page.waitForTimeout(300);
 
-  // N 新建任务：编辑器预填高优先级；Task V2 默认不设截止，勾选后 time 预填 21:00
+  // N 新建任务：编辑器预填高优先级（UISelect trigger 显示选中值）；Task V2 默认不设截止，勾选后 time 预填 21:00
   await page.keyboard.press("n");
   await expect(page.getByRole("heading", { name: "新建任务" })).toBeVisible();
-  await expect(page.locator("form select").nth(1)).toHaveValue("high");
+  await expect(page.getByRole("combobox", { name: "优先级" })).toContainText("高优先级");
   await page.getByLabel("设置截止时间").check();
   await expect(page.locator("input[type='time']")).toHaveValue("21:00");
 

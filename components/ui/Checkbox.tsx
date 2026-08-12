@@ -21,7 +21,7 @@ export function Checkbox({ checked, onChange, label, className, ...props }: Chec
   return (
     <label
       className={cn(
-        "inline-flex items-center gap-1.5 select-none",
+        "relative inline-flex items-center gap-1.5 select-none",
         props.disabled ? "opacity-50 cursor-not-allowed" : "cursor-pointer",
         className
       )}
@@ -31,13 +31,13 @@ export function Checkbox({ checked, onChange, label, className, ...props }: Chec
         checked={checked}
         onChange={(e) => onChange(e.target.checked)}
         disabled={props.disabled}
-        className="sr-only peer"
+        className="peer absolute inset-0 opacity-0 cursor-inherit"
         {...props}
       />
       <span
         aria-hidden="true"
         className={cn(
-          "flex h-4 w-4 shrink-0 items-center justify-center rounded-md border transition-colors duration-[var(--motion-fast)]",
+          "flex h-4 w-4 shrink-0 items-center justify-center rounded-md border transition-colors duration-[var(--motion-fast)] pointer-events-none",
           "peer-focus-visible:outline-2 peer-focus-visible:outline-charcoal/30 peer-focus-visible:outline-offset-2",
           checked ? "bg-charcoal border-charcoal text-white" : "bg-white border-line-strong text-transparent",
           props.disabled && "cursor-not-allowed"
