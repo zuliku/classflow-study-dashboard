@@ -24,7 +24,7 @@ Tasks More / Context Menu、Dialog、Drawer 均不进入本任务。
 
 Timeline 又同时存在三种实现：
 
-1. Filter：手写 menu shell；
+1. Filter：手写 popover shell；
 2. Quick Create：手写 menu shell + `KiroMenuItem`；
 3. More：直接使用 `KiroMenuPanel / Item / Divider`。
 
@@ -41,7 +41,7 @@ Popover (controlled dismiss + relative anchor)
         ↓
 PopoverPanel (surface + placement)
         ↓
-DropdownMenuPanel / Item / Divider (menu semantics)
+DropdownMenuPanel / Item / Divider (command menu semantics)
 ```
 
 Kiro compatibility：
@@ -73,7 +73,7 @@ components/timeline/TimelineWorkspace.tsx
 tests/e2e/timeline-v2-visual.spec.ts
 ```
 
-如现有 Timeline 测试结构不适合菜单行为，可在同一 `timeline-v2-visual.spec.ts` 中增加一个独立非截图 case；不要新建大测试文件。
+在现有 `timeline-v2-visual.spec.ts` 中增加一个独立非截图菜单行为 case；不要新建大测试文件。
 
 ### Explicit non-goals
 
@@ -100,7 +100,7 @@ Dialog/Drawer 单独进入 Task 2B2。
 
 ### 5.1 `Popover`
 
-建议 API：
+API：
 
 ```ts
 export interface PopoverProps extends React.HTMLAttributes<HTMLDivElement> {
@@ -127,11 +127,11 @@ export interface PopoverProps extends React.HTMLAttributes<HTMLDivElement> {
 - collision / viewport flipping；
 - focus trap。
 
-Timeline 保留 `filterOpen / quickOpen / moreOpen`，以及打开一个菜单时关闭另外两个的现有业务逻辑。
+Timeline 保留 `filterOpen / quickOpen / moreOpen`，以及打开一个浮层时关闭另外两个的现有业务逻辑。
 
 ### 5.2 `PopoverPanel`
 
-建议 placement：
+Placement：
 
 ```ts
 export type PopoverPlacement =
@@ -141,7 +141,7 @@ export type PopoverPlacement =
   | "right-end";
 ```
 
-建议 API：
+API：
 
 ```ts
 export interface PopoverPanelProps
@@ -172,15 +172,15 @@ top-end      → right-0 bottom-full mb-1.5
 right-end    → left-full right-auto bottom-0 ml-2
 ```
 
-Panel 不默认声明 `role="menu"`，因为 Share Sheet 等内容不是菜单。
+Panel 不默认声明 `role="menu"`，因为筛选控制、Share Sheet 等内容不是命令菜单。
 
 ## 6. Dropdown Menu
 
-`components/ui/DropdownMenu.tsx` 建立在 PopoverPanel 上。
+`components/ui/DropdownMenu.tsx` 建立在 `PopoverPanel` 上，只用于命令型菜单。
 
 ### 6.1 `DropdownMenuPanel`
 
-建议 API：
+API：
 
 ```ts
 export interface DropdownMenuPanelProps
@@ -199,11 +199,11 @@ text-xs
 p-1
 ```
 
-允许 `aria-label` 和 `className` 覆盖宽度/spacing，例如 Timeline Filter `w-44 p-1.5`、Quick Create `w-52`、Kiro Share `w-[290px] p-3`。
+允许 `aria-label` 和 `className` 覆盖宽度/spacing，例如 Quick Create `w-52`、Kiro Share `w-[290px] p-3`。
 
 ### 6.2 `DropdownMenuItem`
 
-建议 API：
+API：
 
 ```ts
 export interface DropdownMenuItemProps {
@@ -242,9 +242,8 @@ disabled: opacity-40 cursor-not-allowed
 
 ```text
 my-1 h-px bg-line-soft
+role="separator"
 ```
-
-可加 `role="separator"`。
 
 ## 7. Timeline Migration
 
@@ -271,17 +270,22 @@ More   → variant="ghost"
 
 上一周/下一周/今天不属于本次 menu migration，不为了扩大 primitive 使用率而修改。
 
-### 7.2 Filter
+### 7.2 Filter = Control Popover, not Menu
 
-把手写 `relative + conditional div` 迁到：
+Filter 内含连续 checkbox，因此使用 `PopoverPanel`，而不是 `DropdownMenuPanel`：
 
 ```tsx
 <Popover open={filterOpen} onOpenChange={setFilterOpen}>
   <IconButton ... />
   {filterOpen && (
-    <DropdownMenuPanel aria-label="时间表筛选" className="w-44 p-1.5">
+    <PopoverPanel
+      placement="bottom-end"
+      role="group"
+      aria-label="时间表筛选"
+      className="w-44 p-1.5 space-y-0.5"
+    >
       ...existing FilterToggle content...
-    </DropdownMenuPanel>
+    </PopoverPanel>
   )}
 </Popover>
 ```
@@ -290,7 +294,7 @@ Filter 内部 checkbox / `FilterToggle` 保持 feature-local，不强行变成 `
 
 ### 7.3 Quick Create
 
-迁移到同一 Popover + DropdownMenuPanel，菜单项使用 global `DropdownMenuItem`：
+迁移到 `Popover + DropdownMenuPanel`，菜单项使用 global `DropdownMenuItem`：
 
 - 新建课程；
 - 学习计划；
@@ -301,7 +305,7 @@ Filter 内部 checkbox / `FilterToggle` 保持 feature-local，不强行变成 `
 
 ### 7.4 More
 
-由 `KiroMenu*` 改为 global primitives：
+由 `KiroMenu*` 改为 `Popover + DropdownMenuPanel / Item / Divider`：
 
 - 导入课表；
 - 全屏查看；
@@ -333,7 +337,7 @@ KiroMenuDivider
 
 `useKiroPopover` 本轮保留现有公开 API 和行为，避免改写 SessionActions / KiroMessage / ThreadRail 的 state ownership。它可以继续作为 legacy compatibility state helper；不要因为“彻底抽象”而强迫 Kiro 消费者改成 global `Popover`。
 
-这样本轮先消除视觉/menu component ownership 错位，不扩大 Kiro 回归面。
+本轮 Kiro compatibility hook 与 global Popover 不叠加使用，避免双 dismiss listener。
 
 ## 9. Dismiss & Event Semantics
 
@@ -341,13 +345,13 @@ Global `Popover`：
 
 - Esc → `onOpenChange(false)`；
 - outside pointerdown → `onOpenChange(false)`；
-- inside click 不自动关闭；具体 menu item handler 继续由 feature 主动 `setXOpen(false)`；
+- inside click不自动关闭；具体 command handler 继续由 feature 主动 `setXOpen(false)`；
 - trigger 点击由 consumer 自己 toggle；
 - unmount / open=false 时 listener 清理。
 
 这与 Timeline 当前 handler 模式一致，也不会改变 Filter checkbox 连续操作体验。
 
-Kiro compatibility hook 继续保持当前自己的 dismiss 行为；本轮不让 Kiro 同时套 global Popover，以免产生双 listener。
+Kiro compatibility hook 继续保持当前自己的 dismiss 行为；本轮不让 Kiro 同时套 global Popover。
 
 ## 10. Accessibility
 
@@ -355,12 +359,12 @@ Kiro compatibility hook 继续保持当前自己的 dismiss 行为；本轮不�
 
 - trigger 是真实 button；
 - trigger 有 `aria-label` + `aria-expanded`；
-- menu panel 为 `role="menu"`；
-- menu item 为 `role="menuitem"`；
-- divider 使用 separator 语义；
+- Quick Create / More panel 为 `role="menu"`；
+- command item 为 `role="menuitem"`；
+- divider 为 `role="separator"`；
+- Filter panel 为 `role="group"`，保留真实 checkbox；
 - disabled item 使用 native disabled；
-- Filter checkbox 保持真实 checkbox；
-- Esc 可以关闭 Timeline 当前打开 menu。
+- Esc 可以关闭 Timeline 当前打开的浮层。
 
 本轮不新增 ArrowUp/ArrowDown roving focus；这是独立 accessibility enhancement，不与结构迁移捆绑。
 
@@ -423,10 +427,10 @@ Task 2B1 完成必须满足：
 
 - `Popover.tsx` 与 `DropdownMenu.tsx` 是 feature-neutral global primitives；
 - Popover 为 controlled-first；
-- Timeline Filter / Create / More 使用统一 Popover/Menu primitives；
+- Timeline Filter 使用 control Popover，Create / More 使用 command menu primitives；
 - Timeline FilterToggle 行为不变；
 - Timeline `+` 仍只有一份；
-- 三个 menu 保持互斥；
+- 三个浮层保持互斥；
 - Esc / outside click dismiss 有效；
 - Quick Create handlers 不变；
 - More handlers 与 settings deep link 不变；
