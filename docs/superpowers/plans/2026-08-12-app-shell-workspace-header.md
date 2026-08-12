@@ -6,7 +6,7 @@
 
 **Architecture:** Each workspace owner composes the same `WorkspaceHeader`; there is no central header registry or new Store/event channel. `AssignmentsWorkspace` is the only new feature wrapper because Task Quick Add must remain inline and local-state driven while the page title/create action moves out of `AssignmentTable`.
 
-**Tech Stack:** Next.js App Router, React, TypeScript, Zustand, Tailwind CSS, Lucide, Playwright/Vitest as already configured.
+**Tech Stack:** Next.js App Router, React, TypeScript, Zustand, Tailwind CSS, Lucide, existing Playwright/Vitest setup.
 
 ## Global Constraints
 
@@ -19,26 +19,27 @@
 - Timeline Quick Create remains local; do not duplicate its `+` in Workspace Header.
 - Task Quick Add remains the existing inline `QuickAddCard`; compact AssignmentTable behavior must remain unchanged.
 - Keep tests targeted; no full Playwright suite unless a targeted regression proves cross-shell breakage.
+- Maximum implementation commits: 2.
 
 ---
 
 ## File Structure
 
 **Create**
-- `components/layout/WorkspaceHeader.tsx` — shared workspace identity/actions shell.
-- `components/layout/WorkspaceSearchButton.tsx` — shared Command Center launcher.
-- `components/assignment/AssignmentsWorkspace.tsx` — task page shell + controlled Quick Add state.
+- `components/layout/WorkspaceHeader.tsx`
+- `components/layout/WorkspaceSearchButton.tsx`
+- `components/assignment/AssignmentsWorkspace.tsx`
 
 **Modify**
-- `app/page.tsx` — remove unconditional legacy Header; compose Overview/Courses/Analytics/Kiro headers and use `AssignmentsWorkspace`.
-- `components/dashboard/AssignmentTable.tsx` — workspace mode stops owning page title/create; accepts controlled Quick Add state; compact mode unchanged.
-- `components/timeline/TimelineWorkspace.tsx` — add shared Workspace Header; demote original top row to local controls.
-- `components/group/GroupCollaborationView.tsx` — replace Header Banner with shared Workspace Header.
-- `tests/e2e/responsive.spec.ts` — shell title/search coverage at 1440/1024/390.
-- `tests/e2e/assignment-workspace.spec.ts` — workspace header + inline Quick Add regression.
+- `app/page.tsx`
+- `components/dashboard/AssignmentTable.tsx`
+- `components/timeline/TimelineWorkspace.tsx`
+- `components/group/GroupCollaborationView.tsx`
+- `tests/e2e/responsive.spec.ts`
+- `tests/e2e/assignment-workspace.spec.ts`
 
 **Delete after import check**
-- `components/layout/Header.tsx` — legacy greeting-centric header.
+- `components/layout/Header.tsx`
 
 **Run unchanged regression tests**
 - `tests/e2e/command-center.spec.ts`
@@ -48,15 +49,18 @@
 
 ---
 
-### Task 1: Shared Workspace Header primitives
+### Task 1: Shared header primitive + simple workspace migration
 
 **Files:**
 - Create: `components/layout/WorkspaceSearchButton.tsx`
 - Create: `components/layout/WorkspaceHeader.tsx`
+- Modify: `app/page.tsx`
+- Delete after import check: `components/layout/Header.tsx`
 - Test: `tests/e2e/responsive.spec.ts`
+- Regression: `tests/e2e/command-center.spec.ts`
+- Regression: `tests/e2e/first-run.spec.ts`
 
-**Interfaces:**
-- Produces:
+**Produces:**
 
 ```ts
 export interface WorkspaceHeaderProps {
@@ -73,28 +77,33 @@ export function WorkspaceHeader(props: WorkspaceHeaderProps): React.ReactElement
 export function WorkspaceSearchButton(): React.ReactElement;
 ```
 
-- [ ] **Step 1: Add the failing responsive assertions**
+- [ ] **Step 1: Add the failing shell assertions**
 
-In `tests/e2e/responsive.spec.ts`, extend the existing desktop/tablet/mobile cases with only stable shell assertions:
+Extend the existing desktop/tablet/mobile cases in `tests/e2e/responsive.spec.ts` with stable semantic assertions:
 
 ```ts
 await expect(page.getByRole("heading", { name: "总览" })).toBeVisible();
 await expect(page.getByRole("button", { name: "全局搜索" })).toBeVisible();
 ```
 
-For the mobile case, also assert the same button remains reachable after switching to Tasks.
+In the mobile case, after switching to Tasks, also assert:
 
-- [ ] **Step 2: Run the focused responsive test and confirm RED**
+```ts
+await expect(page.getByRole("heading", { name: "任务与 DDL" })).toBeVisible();
+await expect(page.getByRole("button", { name: "全局搜索" })).toBeVisible();
+```
+
+- [ ] **Step 2: Run the responsive test and confirm RED**
 
 ```bash
 npx playwright test tests/e2e/responsive.spec.ts
 ```
 
-Expected: the new `总览` desktop/tablet heading assertion fails because legacy Header still renders greeting text.
+Expected: desktop/tablet `总览` heading assertion fails because the legacy Header still renders greeting text.
 
 - [ ] **Step 3: Implement `WorkspaceSearchButton`**
 
-Use the exact existing Command Center open behavior from `components/layout/Header.tsx`:
+Reuse the current Command Center open behavior exactly:
 
 ```ts
 const setSearchModalOpen = useAppStore((s) => s.setSearchModalOpen);
@@ -106,13 +115,7 @@ const openSearch = () => {
 };
 ```
 
-Render one real button with:
-
-```tsx
-aria-label="全局搜索"
-```
-
-Responsive content:
+Render a real button with `aria-label="全局搜索"`. Responsive content:
 
 ```text
 <768      icon only
@@ -120,245 +123,53 @@ Responsive content:
 >=1024    icon + 搜索 + ⌘ K
 ```
 
-Use existing semantic colors; no `shadow-subtle`.
+Use existing semantic colors and no `shadow-subtle`.
 
 - [ ] **Step 4: Implement `WorkspaceHeader`**
 
-Base semantic structure:
+Use this semantic skeleton:
 
 ```tsx
-<header className={cn(
-  "z-20 flex min-h-14 shrink-0 items-center justify-between gap-3 border-b border-line bg-[#F7F5F5] py-2.5",
-  sticky && "sticky top-0",
-  className
-)}>
+<header
+  className={cn(
+    "z-20 flex min-h-14 shrink-0 items-center justify-between gap-3 border-b border-line bg-[#F7F5F5] py-2.5",
+    sticky && "sticky top-0",
+    className
+  )}
+>
   <div className="min-w-0">
-    <h1 className="truncate text-base md:text-lg font-semibold tracking-tight text-charcoal">
+    <h1 className="truncate text-base font-semibold tracking-tight text-charcoal md:text-lg">
       {title}
     </h1>
-    {context && (
-      <div className="mt-0.5 truncate text-[11px] md:text-xs text-sandrift">
-        {context}
-      </div>
-    )}
+    {context ? (
+      <div className="mt-0.5 truncate text-[11px] text-sandrift md:text-xs">{context}</div>
+    ) : null}
   </div>
   <div className="flex shrink-0 items-center gap-1.5 md:gap-2">
     {actions}
     {primaryAction}
-    {!hideSearch && <WorkspaceSearchButton />}
+    {!hideSearch ? <WorkspaceSearchButton /> : null}
   </div>
 </header>
 ```
 
 Do not add feature variants.
 
-- [ ] **Step 5: Do not wire pages yet; typecheck primitives**
+- [ ] **Step 5: Remove the unconditional legacy Header**
 
-```bash
-npm run typecheck
-```
+Delete the `Header` import and `<Header />` render from `app/page.tsx`.
 
-Expected: PASS.
-
-- [ ] **Step 6: Commit primitives**
-
-```bash
-git add components/layout/WorkspaceHeader.tsx components/layout/WorkspaceSearchButton.tsx tests/e2e/responsive.spec.ts
-git commit -m "refactor(ui): add shared workspace header"
-```
-
----
-
-### Task 2: Extract Tasks page shell without breaking Quick Add
-
-**Files:**
-- Create: `components/assignment/AssignmentsWorkspace.tsx`
-- Modify: `components/dashboard/AssignmentTable.tsx`
-- Modify: `app/page.tsx`
-- Test: `tests/e2e/assignment-workspace.spec.ts`
-- Regression: `tests/e2e/overview-pagination.spec.ts`
-
-**Interfaces:**
-- `AssignmentTableProps` becomes:
-
-```ts
-export interface AssignmentTableProps {
-  mode?: "compact" | "workspace";
-  workspaceQuickAddOpen?: boolean;
-  onWorkspaceQuickAddOpenChange?: (open: boolean) => void;
-}
-```
-
-- `AssignmentsWorkspace` owns `quickAddOpen` and renders `AssignmentTable mode="workspace"`.
-
-- [ ] **Step 1: Add failing task workspace assertions**
-
-Extend the existing open-workspace flow in `tests/e2e/assignment-workspace.spec.ts`:
-
-```ts
-await expect(page.getByRole("heading", { name: "任务与 DDL" })).toBeVisible();
-await expect(page.getByRole("button", { name: "新增任务" })).toBeVisible();
-```
-
-Then click the Header create action and assert the existing inline Quick Add appears using its existing stable selector/text; do not assert implementation classes.
-
-- [ ] **Step 2: Run task workspace test and confirm RED**
-
-```bash
-npx playwright test tests/e2e/assignment-workspace.spec.ts
-```
-
-Expected: the new shell/placement assertion fails before migration.
-
-- [ ] **Step 3: Make workspace Quick Add controlled**
-
-In `AssignmentTable.tsx`:
-
-1. Remove workspace ownership of `quickAddOpen` local state.
-2. Read:
-
-```ts
-const quickAddOpen = workspaceQuickAddOpen ?? false;
-const setQuickAddOpen = (open: boolean) => onWorkspaceQuickAddOpenChange?.(open);
-```
-
-3. In **workspace mode only**, remove the title/create/Kiro action row.
-4. Keep `QuickAddCard` inside `AssignmentTable`:
-
-```tsx
-{isWorkspace && quickAddOpen && (
-  <QuickAddCard
-    defaultCourseId={courseFilter !== "all" ? courseFilter : undefined}
-    onClose={() => setQuickAddOpen(false)}
-  />
-)}
-```
-
-5. Preserve compact mode's existing `任务清单` title, count, overdue indicator, add button, modal behavior and pagination exactly.
-
-- [ ] **Step 4: Create `AssignmentsWorkspace`**
-
-Use local state:
-
-```ts
-const [quickAddOpen, setQuickAddOpen] = useState(false);
-```
-
-Context:
-
-```ts
-const incompleteCount = assignments.filter((a) => a.status !== "completed").length;
-```
-
-Header Primary:
-
-```tsx
-<button
-  type="button"
-  aria-expanded={quickAddOpen}
-  onClick={() => setQuickAddOpen((v) => !v)}
-  className="ux-press flex h-8 items-center gap-1.5 rounded-lg bg-charcoal px-3 text-xs font-bold text-white hover:bg-black"
->
-  <Plus className="h-3.5 w-3.5" />
-  <span className="hidden sm:inline">{quickAddOpen ? "收起" : "新增任务"}</span>
-  <span className="sm:hidden">{quickAddOpen ? "收起" : "新增"}</span>
-</button>
-```
-
-Move the existing Ask Kiro and highlighted-task breakdown actions from `AssignmentTable` into `WorkspaceHeader.actions`, using the same `highlightedAssignmentId/currentSemesterWeek/useKiroHandoff` behavior. Do not change prompt copy.
-
-Render:
-
-```tsx
-<div className="space-y-4" data-testid="assignments-tab">
-  <WorkspaceHeader
-    title="任务与 DDL"
-    context={`${incompleteCount} 项未完成`}
-    actions={...}
-    primaryAction={...}
-    sticky
-  />
-  <AssignmentTable
-    mode="workspace"
-    workspaceQuickAddOpen={quickAddOpen}
-    onWorkspaceQuickAddOpenChange={setQuickAddOpen}
-  />
-</div>
-```
-
-- [ ] **Step 5: Replace direct workspace table in `app/page.tsx`**
-
-Replace:
-
-```tsx
-<AssignmentTable mode="workspace" />
-```
-
-with:
-
-```tsx
-<AssignmentsWorkspace />
-```
-
-Keep compact Overview usage untouched.
-
-- [ ] **Step 6: Run focused task + compact regression**
-
-```bash
-npx playwright test tests/e2e/assignment-workspace.spec.ts tests/e2e/overview-pagination.spec.ts
-```
-
-Expected: PASS.
-
-- [ ] **Step 7: Typecheck**
-
-```bash
-npm run typecheck
-```
-
-Expected: PASS.
-
----
-
-### Task 3: Remove legacy global Header and migrate simple workspaces
-
-**Files:**
-- Modify: `app/page.tsx`
-- Delete after import check: `components/layout/Header.tsx`
-- Test: `tests/e2e/responsive.spec.ts`
-- Regression: `tests/e2e/command-center.spec.ts`
-- Regression: `tests/e2e/first-run.spec.ts`
-
-**Interfaces:**
-- Consumes `WorkspaceHeader`.
-
-- [ ] **Step 1: Remove unconditional legacy Header**
-
-Delete from `app/page.tsx`:
-
-```tsx
-import { Header } from "@/components/layout/Header";
-```
-
-and:
-
-```tsx
-<Header />
-```
-
-Before deleting `Header.tsx`, run:
+Before deleting the file, run:
 
 ```bash
 grep -R 'components/layout/Header' app components tests -n
 ```
 
-If `app/page.tsx` was the only runtime import, delete the file.
+If no runtime import remains, delete `components/layout/Header.tsx`.
 
-- [ ] **Step 2: Add required date/week derivation in `app/page.tsx`**
+- [ ] **Step 6: Add current-week context in `app/page.tsx`**
 
-Reuse existing semester helpers; do not copy Header logic into a second helper. Import `formatWeekDateRange` if not already present and read `currentSemesterWeek` from Store.
-
-Use:
+Read `currentSemesterWeek` from Store and import `formatWeekDateRange` from `@/lib/semester`.
 
 ```ts
 const currentWeekContext = `第 ${currentSemesterWeek} 周 · ${formatWeekDateRange(
@@ -367,17 +178,17 @@ const currentWeekContext = `第 ${currentSemesterWeek} 周 · ${formatWeekDateRa
 )}`;
 ```
 
-- [ ] **Step 3: Migrate Overview**
+- [ ] **Step 7: Migrate Overview**
 
-At the top of Overview content render:
+Render before Overview body:
 
 ```tsx
 <WorkspaceHeader title="总览" context={currentWeekContext} sticky />
 ```
 
-Do not redesign Getting Started or Overview cards.
+Do not change Getting Started or Dashboard cards.
 
-- [ ] **Step 4: Migrate Courses**
+- [ ] **Step 8: Migrate Courses**
 
 Delete the old Courses Header Card and render:
 
@@ -386,8 +197,12 @@ Delete the old Courses Header Card and render:
   title="课程资料"
   context={`${courses.length} 门课程 · ${totalCredits} 学分`}
   primaryAction={
-    <button type="button" onClick={() => setAddCourseModalOpen(true)} ...>
-      <Plus ... />
+    <button
+      type="button"
+      onClick={() => setAddCourseModalOpen(true)}
+      className="ux-press flex h-8 items-center gap-1.5 rounded-lg bg-charcoal px-3 text-xs font-bold text-white transition-colors hover:bg-black"
+    >
+      <Plus className="h-3.5 w-3.5" />
       <span>添加课程</span>
     </button>
   }
@@ -397,9 +212,9 @@ Delete the old Courses Header Card and render:
 
 Do not change Course Card UI.
 
-- [ ] **Step 5: Migrate Analytics**
+- [ ] **Step 9: Migrate Analytics**
 
-Delete the Analytics Banner Card and render:
+Delete the old Analytics Banner Card and render:
 
 ```tsx
 <WorkspaceHeader
@@ -409,11 +224,11 @@ Delete the Analytics Banner Card and render:
 />
 ```
 
-Do not alter metrics/charts/empty state.
+Do not change metrics/charts/empty state.
 
-- [ ] **Step 6: Add Kiro Workspace-level header without changing Thread Header**
+- [ ] **Step 10: Add Kiro Workspace-level header**
 
-For `activeTab === "kiro"`, render a flex column wrapper:
+For `activeTab === "kiro"` render:
 
 ```tsx
 <div className="flex flex-1 min-h-0 flex-col">
@@ -422,7 +237,9 @@ For `activeTab === "kiro"`, render a flex column wrapper:
 </div>
 ```
 
-Change `PageTransition` class selection so Kiro does **not** inherit `space-y-5` between Workspace Header and `KiroWorkspace`:
+Do not edit `KiroHeader.tsx`.
+
+Change `PageTransition` classes so Kiro does not inherit `space-y-5`:
 
 ```ts
 activeTab === "kiro"
@@ -430,9 +247,7 @@ activeTab === "kiro"
   : "space-y-5"
 ```
 
-Do not edit `KiroHeader.tsx`.
-
-- [ ] **Step 7: Run simple shell regressions**
+- [ ] **Step 11: Run focused shell regressions**
 
 ```bash
 npx playwright test \
@@ -443,30 +258,193 @@ npx playwright test \
 
 Expected: PASS.
 
-- [ ] **Step 8: Typecheck**
+- [ ] **Step 12: Typecheck and commit**
 
 ```bash
 npm run typecheck
+
+git add app/page.tsx components/layout/WorkspaceHeader.tsx components/layout/WorkspaceSearchButton.tsx components/layout/Header.tsx tests/e2e/responsive.spec.ts
+git commit -m "refactor(ui): establish workspace header shell"
 ```
 
-Expected: PASS.
+If `Header.tsx` was deleted, `git add` should naturally stage the deletion.
 
 ---
 
-### Task 4: Migrate Timeline and Group local-owner headers
+### Task 2: Tasks, Timeline and Group migration
 
 **Files:**
+- Create: `components/assignment/AssignmentsWorkspace.tsx`
+- Modify: `components/dashboard/AssignmentTable.tsx`
+- Modify: `app/page.tsx`
 - Modify: `components/timeline/TimelineWorkspace.tsx`
 - Modify: `components/group/GroupCollaborationView.tsx`
+- Test: `tests/e2e/assignment-workspace.spec.ts`
+- Regression: `tests/e2e/overview-pagination.spec.ts`
 - Regression: `tests/e2e/timetable-drag.spec.ts`
-- Test: `tests/e2e/responsive.spec.ts`
+- Regression: `tests/e2e/responsive.spec.ts`
 
-**Interfaces:**
-- Both components consume `WorkspaceHeader` directly because their primary/local actions depend on local component state.
+**AssignmentTable interface:**
 
-- [ ] **Step 1: Migrate Timeline identity to Workspace Header**
+```ts
+export interface AssignmentTableProps {
+  mode?: "compact" | "workspace";
+  workspaceQuickAddOpen?: boolean;
+  onWorkspaceQuickAddOpenChange?: (open: boolean) => void;
+}
+```
 
-At the top of `TimelineWorkspace` fragment render:
+- [ ] **Step 1: Add failing Task Workspace assertions**
+
+In `tests/e2e/assignment-workspace.spec.ts`, after opening the workspace assert:
+
+```ts
+await expect(page.getByRole("heading", { name: "任务与 DDL" })).toBeVisible();
+await expect(page.getByRole("button", { name: "新增任务" })).toBeVisible();
+```
+
+Click `新增任务` and assert:
+
+```ts
+await expect(page.getByTestId("quick-add-card")).toBeVisible();
+```
+
+Click the same header button again and assert:
+
+```ts
+await expect(page.getByTestId("quick-add-card")).toBeHidden();
+```
+
+- [ ] **Step 2: Run the task workspace test and confirm RED**
+
+```bash
+npx playwright test tests/e2e/assignment-workspace.spec.ts
+```
+
+Expected: Header placement/controlled Quick Add assertions fail before migration.
+
+- [ ] **Step 3: Make workspace Quick Add controlled in `AssignmentTable`**
+
+Remove the workspace `quickAddOpen` local state. Read:
+
+```ts
+const quickAddOpen = workspaceQuickAddOpen ?? false;
+const setQuickAddOpen = (open: boolean) => onWorkspaceQuickAddOpenChange?.(open);
+```
+
+For `isWorkspace === true`:
+
+- do not render the `任务与 DDL` title row;
+- do not render workspace Ask Kiro / breakdown / create controls;
+- keep `QuickAddCard` inside the table so it continues to use local `courseFilter`:
+
+```tsx
+{quickAddOpen ? (
+  <QuickAddCard
+    defaultCourseId={courseFilter !== "all" ? courseFilter : undefined}
+    onClose={() => setQuickAddOpen(false)}
+  />
+) : null}
+```
+
+For compact mode, preserve the current `任务清单` heading, count, overdue badge, create button, modal behavior and pagination.
+
+- [ ] **Step 4: Create `AssignmentsWorkspace`**
+
+Use:
+
+```ts
+const [quickAddOpen, setQuickAddOpen] = useState(false);
+const assignments = useAppStore((s) => s.assignments);
+const highlightedAssignmentId = useAppStore((s) => s.highlightedAssignmentId);
+const currentSemesterWeek = useAppStore((s) => s.currentSemesterWeek);
+const incompleteCount = assignments.filter((a) => a.status !== "completed").length;
+const handoff = useKiroHandoff();
+```
+
+Actions:
+
+```tsx
+const headerActions = (
+  <>
+    <KiroFlowButton
+      icon={KIRO_ICON}
+      label="Ask Kiro"
+      size="sm"
+      className="h-8"
+      onClick={() =>
+        highlightedAssignmentId
+          ? handoff.openForAssignment(highlightedAssignmentId)
+          : handoff.openForWeek(currentSemesterWeek)
+      }
+    />
+    {highlightedAssignmentId ? (
+      <button
+        type="button"
+        onClick={() => {
+          handoff.openForAssignment(highlightedAssignmentId);
+          handoff.handoffPrompt(
+            "帮我拆解这个任务，拆成 2–8 个可执行的步骤，并估算每步和总耗时。"
+          );
+        }}
+        className="ux-press hidden h-8 rounded-lg border border-line bg-alabaster px-2.5 text-[11px] font-bold text-charcoal transition-colors hover:bg-line-soft lg:inline-flex lg:items-center"
+      >
+        帮我拆解当前任务
+      </button>
+    ) : null}
+  </>
+);
+```
+
+Primary action:
+
+```tsx
+const primaryAction = (
+  <button
+    type="button"
+    aria-expanded={quickAddOpen}
+    onClick={() => setQuickAddOpen((v) => !v)}
+    className="ux-press flex h-8 items-center gap-1.5 rounded-lg bg-charcoal px-3 text-xs font-bold text-white transition-colors hover:bg-black"
+  >
+    <Plus className="h-3.5 w-3.5" />
+    <span className="hidden sm:inline">{quickAddOpen ? "收起" : "新增任务"}</span>
+    <span className="sm:hidden">{quickAddOpen ? "收起" : "新增"}</span>
+  </button>
+);
+```
+
+Render:
+
+```tsx
+<div className="space-y-4" data-testid="assignments-tab">
+  <WorkspaceHeader
+    title="任务与 DDL"
+    context={`${incompleteCount} 项未完成`}
+    actions={headerActions}
+    primaryAction={primaryAction}
+    sticky
+  />
+  <AssignmentTable
+    mode="workspace"
+    workspaceQuickAddOpen={quickAddOpen}
+    onWorkspaceQuickAddOpenChange={setQuickAddOpen}
+  />
+</div>
+```
+
+- [ ] **Step 5: Use `AssignmentsWorkspace` in `app/page.tsx`**
+
+Replace the direct workspace table branch with:
+
+```tsx
+{activeTab === "assignments" ? <AssignmentsWorkspace /> : null}
+```
+
+Do not change Overview's `<AssignmentTable mode="compact" />`.
+
+- [ ] **Step 6: Migrate Timeline header identity**
+
+Import and render:
 
 ```tsx
 <WorkspaceHeader
@@ -476,27 +454,15 @@ At the top of `TimelineWorkspace` fragment render:
 />
 ```
 
-- [ ] **Step 2: Convert Timeline's original Header Controls to a local toolbar**
-
-Remove only the fixed week identity block:
-
-```text
-第 N 周 + date range
-```
-
-Keep in the local toolbar:
+In the existing Timeline local controls remove only the fixed week identity/date block. Keep exactly one local create button and keep:
 
 ```text
 ‹  ›  今天                         Filter  +  Ask Kiro  ···
 ```
 
-The `+` remains exactly one copy and keeps its existing `quickOpen` menu/state.
+Do not change menu contents or Timeline business interactions.
 
-Do not change Filter menu content, More menu content, StudyBlock interactions, Key Lane, grid or unscheduled shelf.
-
-- [ ] **Step 3: Adjust Timeline height only as required by the new header**
-
-Start with the smallest deterministic change: keep mobile behavior and change the desktop root from:
+Change only the desktop Timeline root height expression from:
 
 ```text
 md:h-[calc(100dvh-92px)]
@@ -508,28 +474,34 @@ to:
 md:h-[calc(100dvh-128px)]
 ```
 
-Do not introduce a second scroll container. Verify the 08:00–21:00 grid remains visible at 1440×900 and 1024×768; if this exact value causes clipping, adjust only this single shell offset using measured header height—do not redesign Timeline internals.
+Keep the existing mobile `h-[calc(100dvh-128px)]` behavior.
 
-- [ ] **Step 4: Migrate Group Header Banner**
+- [ ] **Step 7: Migrate Group Header Banner**
 
-Replace the existing Group Header Banner with:
+Replace the current Group Header Banner with:
 
 ```tsx
 <WorkspaceHeader
   title="小组协作"
   context={`${groupProjects.length} 个项目`}
-  actions={activeProject ? (
-    <KiroFlowButton
-      icon={KIRO_ICON}
-      label="Ask Kiro"
-      size="sm"
-      className="h-8"
-      onClick={() => handoff.openForGroupProject(activeProject.id)}
-    />
-  ) : undefined}
+  actions={
+    activeProject ? (
+      <KiroFlowButton
+        icon={KIRO_ICON}
+        label="Ask Kiro"
+        size="sm"
+        className="h-8"
+        onClick={() => handoff.openForGroupProject(activeProject.id)}
+      />
+    ) : undefined
+  }
   primaryAction={
-    <button type="button" onClick={openCreateProject} ...>
-      <Plus ... />
+    <button
+      type="button"
+      onClick={openCreateProject}
+      className="ux-press flex h-8 items-center gap-1.5 rounded-lg bg-charcoal px-3 text-xs font-bold text-white transition-colors hover:bg-black"
+    >
+      <Plus className="h-3.5 w-3.5" />
       <span>新建项目</span>
     </button>
   }
@@ -537,36 +509,36 @@ Replace the existing Group Header Banner with:
 />
 ```
 
-Delete only the old Banner shell; keep `openCreateProject`, forms, project list and empty-state secondary create action unchanged.
+Keep `openCreateProject`, project form state, Ask Kiro condition, project list and empty-state secondary create action unchanged. Do not add Store state or CustomEvents.
 
-- [ ] **Step 5: Run Timeline drag + responsive regressions**
+- [ ] **Step 8: Run focused regressions**
 
 ```bash
-npx playwright test tests/e2e/timetable-drag.spec.ts tests/e2e/responsive.spec.ts
+npx playwright test \
+  tests/e2e/assignment-workspace.spec.ts \
+  tests/e2e/overview-pagination.spec.ts \
+  tests/e2e/timetable-drag.spec.ts \
+  tests/e2e/responsive.spec.ts
 ```
 
 Expected: PASS.
 
-- [ ] **Step 6: Typecheck**
+If `timetable-drag.spec.ts` fails because the grid bounding box moved vertically, use `superpowers:systematic-debugging`; fix only the Workspace Header/Timeline root-height composition, not drag math or TimetableGrid internals.
+
+- [ ] **Step 9: Typecheck and commit**
 
 ```bash
 npm run typecheck
-```
 
-Expected: PASS.
-
-- [ ] **Step 7: Commit workspace migrations**
-
-```bash
-git add app/page.tsx components/layout components/assignment components/dashboard/AssignmentTable.tsx components/timeline/TimelineWorkspace.tsx components/group/GroupCollaborationView.tsx tests/e2e/responsive.spec.ts tests/e2e/assignment-workspace.spec.ts
-git commit -m "refactor(ui): unify workspace headers"
+git add app/page.tsx components/assignment/AssignmentsWorkspace.tsx components/dashboard/AssignmentTable.tsx components/timeline/TimelineWorkspace.tsx components/group/GroupCollaborationView.tsx tests/e2e/assignment-workspace.spec.ts
+git commit -m "refactor(ui): migrate workspaces to shared header"
 ```
 
 ---
 
-### Task 5: Final focused verification and visual smoke
+### Task 3: Final focused verification
 
-**Files:** no new production files unless fixing a regression found here.
+**Files:** no planned production changes.
 
 - [ ] **Step 1: Run the minimal E2E set**
 
@@ -580,7 +552,7 @@ npx playwright test \
   tests/e2e/timetable-drag.spec.ts
 ```
 
-Do not run the full Playwright suite unless this set reveals a shared-shell regression.
+Do not run the full Playwright suite unless this set exposes a shared-shell regression.
 
 - [ ] **Step 2: Run typecheck**
 
@@ -598,44 +570,43 @@ npm run build
 
 Expected: PASS.
 
-- [ ] **Step 4: Desktop visual smoke at 1440×900**
+- [ ] **Step 4: Desktop smoke at 1440×900**
 
 Verify:
 
 ```text
-Overview    总览 + week context + search
-Timeline    时间表 + one local + button only
-Tasks       任务与 DDL + inline Quick Add
+Overview    总览 + week context + Global Search
+Timeline    时间表 + one local Quick Create button only
+Tasks       任务与 DDL + Header create toggles inline Quick Add
 Courses     no old banner card
 Analytics   no old banner card
 Group       no old banner card; Ask Kiro + 新建项目 work
-Kiro        Kiro workspace title + existing thread title; no vertical overflow regression
+Kiro        Workspace title Kiro + existing Thread title; no scroll-height regression
 ```
 
 - [ ] **Step 5: Tablet smoke at 1024×768**
 
-Verify Icon Rail remains unchanged, Header title/search remain reachable, Timeline has no double scroll and primary actions do not collide.
+Verify Icon Rail unchanged, Workspace title/Search reachable, Timeline has no double scroll, and Header actions do not collide.
 
 - [ ] **Step 6: Mobile smoke at 390×844**
 
-Verify Bottom Nav unchanged, title always visible, Global Search icon reachable, Tasks/Courses/Group create actions fit without horizontal overflow, Kiro Composer remains above Bottom Nav.
+Verify Bottom Nav unchanged, title always visible, Global Search icon reachable, Tasks/Courses/Group create actions fit without horizontal overflow, and Kiro Composer remains above Bottom Nav.
 
-- [ ] **Step 7: Confirm scope discipline**
-
-Run:
+- [ ] **Step 7: Scope check**
 
 ```bash
-git diff --stat HEAD~2..HEAD
 git status --short
+git log --oneline -4
 ```
 
-Confirm no unrelated primitives/cards/charts/modals were redesigned.
+Confirm there are at most two implementation commits and no unrelated Button/Modal/Card/Chart redesign.
 
 ---
 
-## Self-review notes
+## Self-review
 
-- **Spec coverage:** Covers all seven workspaces, Search, greeting/date ownership, Task Quick Add, Timeline local `+`, Group local form state, Kiro two-level header, responsive behavior and explicit non-goals.
-- **No Header state registry:** `AssignmentsWorkspace`, Timeline and Group keep ephemeral actions local; no Store/CustomEvent is added.
-- **Compact task safety:** Overview `AssignmentTable mode="compact"` remains outside the new wrapper and retains its existing header/create/pagination behavior.
-- **Testing scope:** Two existing E2E files receive small stable assertions; four existing regression files are run unchanged. No new visual test framework or full suite is required.
+- Spec coverage: all seven workspaces, global Search, greeting/date ownership, Tasks Quick Add, Timeline local `+`, Group local form state, Kiro two-level header and responsive behavior are covered.
+- No placeholder interfaces remain.
+- `AssignmentTable` compact behavior remains explicitly outside the new `AssignmentsWorkspace` wrapper.
+- No central Header registry, Store state, or CustomEvent is introduced.
+- The test plan modifies only two existing E2E files and runs four additional existing regression files unchanged.
