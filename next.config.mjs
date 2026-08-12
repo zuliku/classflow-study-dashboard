@@ -10,6 +10,12 @@ const nextConfig = {
   env: {
     NEXT_PUBLIC_APP_VERSION: pkg.version,
   },
+  // Task 19C2：@napi-rs/canvas 是 Node 原生模块（skia .node 二进制），
+  // 只允许 Server runtime 使用；必须 external，禁止打进任何 bundle（含 server bundle）。
+  // Next 14：experimental.serverComponentsExternalPackages（15 起改名 serverExternalPackages）
+  experimental: {
+    serverComponentsExternalPackages: ["@napi-rs/canvas"],
+  },
 };
 
 export default nextConfig;

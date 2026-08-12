@@ -28,6 +28,8 @@ import { resolveWebSearchCredential, KiroWebSearchCredentialResult } from "@/lib
 import { KiroWebSearchProvider, KiroWebEvidenceProvider, getKiroWebSearchProvider, getKiroWebEvidenceProvider } from "@/lib/ai/web/provider";
 import { resolveKiroWebEvidence } from "@/lib/ai/web/evidenceRuntime";
 import { readNativeWebDocumentSource } from "@/lib/ai/web/native/documentReader";
+import { createWebPdfVisionBudget } from "@/lib/ai/web/vision/runtime";
+import { normalizeWebPdfVisionModel } from "@/lib/ai/web/vision/models";
 import { webSearchSafeMessage, canonicalWebSearchUrl } from "@/lib/ai/web/tavily";
 
 /** 重复查询检测用归一化（trim / collapse whitespace / lowercase Latin；不做分词/stemming） */
@@ -293,6 +295,8 @@ function credentialFailure(
 export function assembleKiroToolsForRequest(input: {
   webSearchEnabled: boolean;
   credential: { mode: KiroWebSearchCredentialMode; userApiKey?: string };
+  /** Task 19C2：已由 validateAIChatBody 归一化的 Vision 配置（enabled/model/apiKey） */
+  webPdfVisionConfig?: { enabled: boolean; model: string; apiKey?: string };
   messages: unknown[];
   clientTools: ToolSet;
 }): ToolSet {
@@ -312,6 +316,7 @@ export function assembleKiroToolsForRequest(input: {
     read_web_source: createKiroWebReadTool({
       fallbackProvider: getKiroWebEvidenceProvider("tavily"),
       nativeReader: readNativeWebDocumentSource,
+      webPdfVisionConfig: input.webPdfVisionConfig,
       credential: input.credential,
       attemptsSoFar: evidenceState.attempts,
       trustedSources: resolveCurrentTurnWebSources(input.messages),
@@ -326,6 +331,8 @@ export interface KiroWebReadToolConfig {
   fallbackProvider: KiroWebEvidenceProvider;
   /** Task 18C/19B：Native Document Reader（HTML → PDF Router）；测试可注入 mock */
   nativeReader?: typeof readNativeWebDocumentSource;
+  /** Task 19C2：归一化后的 Vision 配置（Provider 固定 OpenCode Go；绝不传 provider/baseURL/vendor） */
+  webPdfVisionConfig?: { enabled: boolean; model: string; apiKey?: string };
   /** 与 web_search 相同的 Server / BYOK credential；只供惰性 fallback 使用 */
   credential: { mode: KiroWebSearchCredentialMode; userApiKey?: string };
   /** 本 Turn 已发生 read 尝试数（成功与失败都计入；跨 roundtrip 累计） */
@@ -350,7 +357,7 @@ function readLimitFailure(): { ok: false; code: "WEB_READ_LIMIT_REACHED"; messag
  * credential 惰性解析（Native 全成功不消耗 Tavily）；单次 Tool 共享 15s AbortController。
  */
 export function createKiroWebReadTool(config: KiroWebReadToolConfig) {
-  const { fallbackProvider, nativeReader, credential, attemptsSoFar, trustedSources, readSourceIds, evidenceCharsUsed } = config;
+  const { fallbackProvider, nativeReader, webPdfVisionConfig, credential, attemptsSoFar, trustedSources, readSourceIds, evidenceCharsUsed } = config;
   let remainingAttempts = Math.max(0, MAX_WEB_READS_PER_TURN - attemptsSoFar);
   const trustedById = new Map(trustedSources.map((s) => [s.sourceId, s]));
   const readSet = new Set(readSourceIds);
@@ -389,6 +396,8 @@ export function createKiroWebReadTool(config: KiroWebReadToolConfig) {
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), WEB_READ_TIMEOUT_MS);
       try {
+        // Task 19C2：一次 execute 恰好一个共享 Vision budget（跨所有 PDF sources；不跨 tool call/turn）
+        const visionBudget = createWebPdfVisionBudget();
         const outcome = await resolveKiroWebEvidence(
           {
             sources: unread.map((id) => {
@@ -400,6 +409,22 @@ export function createKiroWebReadTool(config: KiroWebReadToolConfig) {
           },
           {
             nativeReader,
+            nativeReaderDeps: {
+              pdfReaderDeps: {
+                ...(webPdfVisionConfig
+                  ? {
+                      vision: {
+                        config: {
+                          enabled: webPdfVisionConfig.enabled,
+                          model: normalizeWebPdfVisionModel(webPdfVisionConfig.model),
+                          apiKey: webPdfVisionConfig.apiKey,
+                        },
+                        budget: visionBudget,
+                      },
+                    }
+                  : {}),
+              },
+            },
             fallbackProvider,
             // 惰性 credential：只有 fallback 真的需要时才解析（Native 全成功 0 调用）
             resolveFallbackCredential: () =>

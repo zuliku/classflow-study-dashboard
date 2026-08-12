@@ -15,6 +15,8 @@ import { readNativeWebPdfSource, KiroNativeWebPdfReaderDeps } from "@/lib/ai/web
 export interface KiroNativeDocumentReaderDeps {
   htmlReader?: typeof readNativeWebSource;
   pdfReader?: typeof readNativeWebPdfSource;
+  /** Task 19C2：Vision config + 共享 budget 透传给 PDF Reader（不塞进 generic request） */
+  pdfReaderDeps?: KiroNativeWebPdfReaderDeps;
 }
 
 export async function readNativeWebDocumentSource(
@@ -27,7 +29,7 @@ export async function readNativeWebDocumentSource(
     return html;
   }
   const pdfReader = deps?.pdfReader ?? readNativeWebPdfSource;
-  return pdfReader(request);
+  return pdfReader(request, deps?.pdfReaderDeps);
 }
 
 export type { KiroNativeWebPdfReaderDeps };

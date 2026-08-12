@@ -103,9 +103,11 @@ export async function rasterizeWebPdfPages(
   if (!render && !deps?.skipLoad) {
     try {
       const pdfjs = await loadPdfJs();
+      const fontDir = "node_modules/pdfjs-dist/standard_fonts/";
       const nodeInit =
         typeof window === "undefined"
-          ? { standardFontDataUrl: new URL("node_modules/pdfjs-dist/standard_fonts/", import.meta.url).toString() }
+          ? // 变量 + 模板字符串（非字面量）：webpack 不做静态解析（与 attachments/pdf.ts 一致），运行时解析为文件 URL
+            { standardFontDataUrl: new URL(`${fontDir}`, import.meta.url).toString() }
           : {};
       doc = await pdfjs.getDocument({ data: request.bytes, ...nodeInit }).promise;
     } catch {

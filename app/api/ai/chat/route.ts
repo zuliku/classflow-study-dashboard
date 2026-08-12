@@ -236,6 +236,8 @@ export async function POST(req: NextRequest) {
         mode: parsed.webSearchConfig?.credentialMode ?? "server",
         userApiKey: parsed.webSearchConfig?.apiKey,
       },
+      // Task 19C2：扫描 Web PDF Vision（Provider 固定 OpenCode Go；19C2 read 工具消费）
+      webPdfVisionConfig: parsed.webPdfVisionConfig,
       messages: parsed.messages as unknown[],
       clientTools: KIRO_TOOLS,
     });

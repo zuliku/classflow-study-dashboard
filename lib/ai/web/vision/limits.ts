@@ -10,3 +10,5 @@ export const MAX_WEB_PDF_VISION_IMAGE_BYTES_PER_READ = 4 * 1024 * 1024;
 export const MAX_WEB_PDF_VISION_DIMENSION = 1600;
 export const MAX_WEB_PDF_VISION_PAGE_BYTES = 1_500_000;
 export const WEB_PDF_VISION_JPEG_QUALITY = 0.82;
+/** Task 19C2：每页 Vision 输出 token 上限（成本 + 防幻觉膨胀） */
+export const MAX_WEB_PDF_VISION_OUTPUT_TOKENS_PER_PAGE = 1200;

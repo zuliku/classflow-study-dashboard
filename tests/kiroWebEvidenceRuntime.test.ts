@@ -108,6 +108,57 @@ describe("resolveKiroWebEvidence — Native-first", () => {
     expect(resolveFallbackCredential).not.toHaveBeenCalled();
   });
 
+  it("Task 19C2. Vision success（native 带页码）→ fallback 0 calls", async () => {
+    const { deps, extract, resolveFallbackCredential } = makeDeps({
+      nativeResults: (r) =>
+        ({
+          ok: true,
+          sourceId: r.sourceId,
+          finalUrl: "https://cdn.example.com/scanned.pdf",
+          availablePages: [3],
+          chunks: [{ text: "扫描页转录文字", pageStart: 3, pageEnd: 3 }],
+          truncated: false,
+        } as KiroNativeWebReadOutcome),
+    });
+    const out = await resolveKiroWebEvidence(REQUEST, deps);
+    expect(out.ok).toBe(true);
+    if (!out.ok) return;
+    expect(out.sources[0].availablePages).toEqual([3]);
+    expect(out.sources[0].chunks[0]).toEqual({ text: "扫描页转录文字", pageStart: 3, pageEnd: 3 });
+    expect(extract).not.toHaveBeenCalled();
+    expect(resolveFallbackCredential).not.toHaveBeenCalled();
+  });
+
+  it("Task 19C2. Vision fail（PDF_SCANNED）→ Tavily fallback success：chunks 无 page metadata、availablePages undefined", async () => {
+    const { deps, extract } = makeDeps({
+      nativeResults: (r) => nativeFail("WEB_NATIVE_PDF_SCANNED"),
+      fallbackResult: {
+        ok: true,
+        sources: [{ sourceId: "web-3", title: "", url: "https://a.dev/3", domain: "", chunks: [{ text: "Tavily 提取内容" }], truncated: false }],
+      },
+    });
+    const out = await resolveKiroWebEvidence(REQUEST, deps);
+    expect(out.ok).toBe(true);
+    if (!out.ok) return;
+    expect(extract).toHaveBeenCalledTimes(1);
+    expect(out.sources[0].availablePages).toBeUndefined();
+    expect(out.sources[0].chunks[0].pageStart).toBeUndefined();
+    expect(out.sources[0].chunks[0].pageEnd).toBeUndefined();
+  });
+
+  it("Task 19C2. Native 部分成功 + 另一 source Vision/Tavily 全失败 → 保留成功 evidence", async () => {
+    const { deps, extract } = makeDeps({
+      nativeResults: (r) =>
+        r.sourceId === "web-3" ? nativeOk("web-3", "web-3 native 正文") : nativeFail("WEB_NATIVE_PDF_SCANNED"),
+      fallbackResult: { ok: false, code: "WEB_READ_FAILED", message: "extract 失败" },
+    });
+    const out = await resolveKiroWebEvidence(REQUEST, deps);
+    expect(out.ok).toBe(true);
+    if (!out.ok) return;
+    expect(out.sources.map((s) => s.sourceId)).toEqual(["web-3"]);
+    expect(out.sources[0].chunks[0].text).toBe("web-3 native 正文");
+  });
+
   it("Test C. mixed：web-3 Native success + web-4 Native fail → 合并顺序稳定", async () => {
     const { deps, extract } = makeDeps({
       nativeResults: (r) => (r.sourceId === "web-3" ? nativeOk("web-3", "web-3 native 正文") : nativeFail("WEB_NATIVE_PARSE_FAILED")),
