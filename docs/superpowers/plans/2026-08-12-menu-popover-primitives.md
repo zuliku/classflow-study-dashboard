@@ -58,12 +58,7 @@
 **Interfaces:**
 
 ```ts
-// components/ui/Popover.tsx
-export type PopoverPlacement =
-  | "bottom-end"
-  | "bottom-start"
-  | "top-end"
-  | "right-end";
+export type PopoverPlacement = "bottom-end" | "bottom-start" | "top-end" | "right-end";
 
 export interface PopoverProps extends React.HTMLAttributes<HTMLDivElement> {
   open: boolean;
@@ -75,13 +70,7 @@ export interface PopoverPanelProps extends React.HTMLAttributes<HTMLDivElement> 
   placement?: PopoverPlacement;
 }
 
-export function Popover(props: PopoverProps): React.ReactElement;
-export function PopoverPanel(props: PopoverPanelProps): React.ReactElement;
-
-// components/ui/DropdownMenu.tsx
-export interface DropdownMenuPanelProps extends React.HTMLAttributes<HTMLDivElement> {
-  placement?: PopoverPlacement;
-}
+export type DropdownMenuPanelProps = PopoverPanelProps;
 
 export interface DropdownMenuItemProps {
   icon?: React.ComponentType<{ className?: string }>;
@@ -91,15 +80,11 @@ export interface DropdownMenuItemProps {
   disabled?: boolean;
   className?: string;
 }
-
-export function DropdownMenuPanel(props: DropdownMenuPanelProps): React.ReactElement;
-export function DropdownMenuItem(props: DropdownMenuItemProps): React.ReactElement;
-export function DropdownMenuDivider(): React.ReactElement;
 ```
 
-- [ ] **Step 1: Implement controlled `Popover`**
+- [ ] **Step 1: Implement controlled `Popover` and `PopoverPanel`**
 
-Create `components/ui/Popover.tsx` with this behavior:
+Create `components/ui/Popover.tsx`:
 
 ```tsx
 "use client";
@@ -107,11 +92,7 @@ Create `components/ui/Popover.tsx` with this behavior:
 import React, { useEffect, useRef } from "react";
 import { cn } from "@/lib/utils";
 
-export type PopoverPlacement =
-  | "bottom-end"
-  | "bottom-start"
-  | "top-end"
-  | "right-end";
+export type PopoverPlacement = "bottom-end" | "bottom-start" | "top-end" | "right-end";
 
 export interface PopoverProps extends React.HTMLAttributes<HTMLDivElement> {
   open: boolean;
@@ -124,16 +105,13 @@ export function Popover({ open, onOpenChange, className, children, ...props }: P
 
   useEffect(() => {
     if (!open) return;
-
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") onOpenChange(false);
     };
-
     const onPointerDown = (event: PointerEvent) => {
       const root = ref.current;
       if (root && !root.contains(event.target as Node)) onOpenChange(false);
     };
-
     window.addEventListener("keydown", onKeyDown);
     document.addEventListener("pointerdown", onPointerDown);
     return () => {
@@ -148,15 +126,7 @@ export function Popover({ open, onOpenChange, className, children, ...props }: P
     </div>
   );
 }
-```
 
-Do not add internal open state, Context, Portal, focus trap, or collision logic.
-
-- [ ] **Step 2: Implement `PopoverPanel` placement and surface**
-
-In the same file, implement:
-
-```tsx
 const PLACEMENT_CLASSES: Record<PopoverPlacement, string> = {
   "bottom-end": "right-0 top-full mt-1.5",
   "bottom-start": "left-0 top-full mt-1.5",
@@ -168,12 +138,7 @@ export interface PopoverPanelProps extends React.HTMLAttributes<HTMLDivElement> 
   placement?: PopoverPlacement;
 }
 
-export function PopoverPanel({
-  placement = "bottom-end",
-  className,
-  children,
-  ...props
-}: PopoverPanelProps) {
+export function PopoverPanel({ placement = "bottom-end", className, children, ...props }: PopoverPanelProps) {
   return (
     <div
       className={cn(
@@ -190,11 +155,11 @@ export function PopoverPanel({
 }
 ```
 
-`PopoverPanel` must not set `role="menu"` by default.
+`PopoverPanel` must not set `role="menu"`. Do not add internal open state, Context, Portal, focus trap, or collision logic.
 
-- [ ] **Step 3: Implement command-menu primitives**
+- [ ] **Step 2: Implement command-menu primitives**
 
-Create `components/ui/DropdownMenu.tsx` using `PopoverPanel`:
+Create `components/ui/DropdownMenu.tsx`:
 
 ```tsx
 "use client";
@@ -203,15 +168,11 @@ import React from "react";
 import { PopoverPanel, PopoverPanelProps } from "@/components/ui/Popover";
 import { cn } from "@/lib/utils";
 
-export interface DropdownMenuPanelProps extends PopoverPanelProps {}
+export type DropdownMenuPanelProps = PopoverPanelProps;
 
 export function DropdownMenuPanel({ className, children, ...props }: DropdownMenuPanelProps) {
   return (
-    <PopoverPanel
-      role="menu"
-      className={cn("min-w-[190px] max-w-[300px] p-1 text-xs", className)}
-      {...props}
-    >
+    <PopoverPanel role="menu" className={cn("min-w-[190px] max-w-[300px] p-1 text-xs", className)} {...props}>
       {children}
     </PopoverPanel>
   );
@@ -226,14 +187,7 @@ export interface DropdownMenuItemProps {
   className?: string;
 }
 
-export function DropdownMenuItem({
-  icon: Icon,
-  label,
-  onClick,
-  danger,
-  disabled,
-  className,
-}: DropdownMenuItemProps) {
+export function DropdownMenuItem({ icon: Icon, label, onClick, danger, disabled, className }: DropdownMenuItemProps) {
   return (
     <button
       type="button"
@@ -242,9 +196,7 @@ export function DropdownMenuItem({
       disabled={disabled}
       className={cn(
         "w-full flex items-center gap-2.5 px-2.5 py-2 rounded-xl text-left font-semibold transition-colors",
-        danger
-          ? "text-danger hover:bg-danger-bg"
-          : "text-satin-grey hover:bg-alabaster hover:text-charcoal",
+        danger ? "text-danger hover:bg-danger-bg" : "text-satin-grey hover:bg-alabaster hover:text-charcoal",
         disabled && "opacity-40 cursor-not-allowed hover:bg-transparent hover:text-inherit",
         className
       )}
@@ -262,11 +214,9 @@ export function DropdownMenuDivider() {
 
 Do not add keyboard roving, submenu, checkbox-item, shortcut, or portal APIs.
 
-- [ ] **Step 4: Convert `KiroMenu.tsx` to a compatibility facade**
+- [ ] **Step 3: Convert `KiroMenu.tsx` to a compatibility facade**
 
-Keep `useKiroPopover()` public behavior unchanged, including its existing `{ open, setOpen, toggle, close, ref }` return shape and Esc/outside dismissal.
-
-Replace only the Panel/Item/Divider implementations with thin wrappers:
+Keep the current `useKiroPopover()` implementation and its `{ open, setOpen, toggle, close, ref }` return shape unchanged. Replace only Panel/Item/Divider rendering:
 
 ```tsx
 import {
@@ -280,11 +230,7 @@ export function KiroMenuPanel({ placement = "bottom-end", className, children }:
   className?: string;
   children: React.ReactNode;
 }) {
-  return (
-    <DropdownMenuPanel placement={placement} className={className}>
-      {children}
-    </DropdownMenuPanel>
-  );
+  return <DropdownMenuPanel placement={placement} className={className}>{children}</DropdownMenuPanel>;
 }
 
 export function KiroMenuItem(props: {
@@ -303,26 +249,17 @@ export function KiroMenuDivider() {
 }
 ```
 
-Do not change Kiro consumer imports in `KiroSessionActions`, `KiroMessage`, `KiroThreadRail`, or other Kiro files.
+Do not change imports in Kiro consumer files.
 
-- [ ] **Step 5: Run typecheck**
+- [ ] **Step 4: Run typecheck and commit Task 1**
 
 ```bash
 npm run typecheck
-```
-
-Expected: PASS. Fix only primitive/facade typing issues before continuing.
-
-- [ ] **Step 6: Commit the primitive layer**
-
-```bash
-git add \
-  components/ui/Popover.tsx \
-  components/ui/DropdownMenu.tsx \
-  components/kiro/KiroMenu.tsx
-
+git add components/ui/Popover.tsx components/ui/DropdownMenu.tsx components/kiro/KiroMenu.tsx
 git commit -m "refactor(ui): add menu and popover primitives"
 ```
+
+Expected: typecheck PASS before commit.
 
 ---
 
@@ -332,11 +269,9 @@ git commit -m "refactor(ui): add menu and popover primitives"
 - Modify: `tests/e2e/timeline-v2-visual.spec.ts`
 - Modify: `components/timeline/TimelineWorkspace.tsx`
 
-**Consumes:** `Popover`, `PopoverPanel`, `DropdownMenuPanel`, `DropdownMenuItem`, `DropdownMenuDivider`, and existing `IconButton`.
+- [ ] **Step 1: Update Timeline test helper and add one failing behavior case**
 
-- [ ] **Step 1: Update the Timeline E2E helper to current shell semantics**
-
-In `tests/e2e/timeline-v2-visual.spec.ts`, change `openTimeline` so it no longer expects the pre-Task-1 week heading:
+Replace `openTimeline` with:
 
 ```ts
 async function openTimeline(page: import("@playwright/test").Page) {
@@ -348,9 +283,7 @@ async function openTimeline(page: import("@playwright/test").Page) {
 }
 ```
 
-- [ ] **Step 2: Add one failing menu behavior case**
-
-Append this focused case to `tests/e2e/timeline-v2-visual.spec.ts`:
+Append:
 
 ```ts
 base("Task 2B1：Timeline Filter/Create/More 统一浮层并保持 dismiss/互斥", async ({ page }) => {
@@ -392,25 +325,17 @@ base("Task 2B1：Timeline Filter/Create/More 统一浮层并保持 dismiss/互�
 });
 ```
 
-The intended pre-migration RED signal is the Filter assertion: current Filter is `role="menu"`, not `role="group"`; current More panel also lacks the explicit `aria-label="更多操作"`.
-
-- [ ] **Step 3: Run only the targeted Timeline file to verify RED**
+Run only:
 
 ```bash
 npx playwright test tests/e2e/timeline-v2-visual.spec.ts
 ```
 
-Expected: the new Task 2B1 case FAILS on the old Filter/More semantics. Do not run other E2E files.
+Expected pre-migration: new case FAILS because old Filter is a menu rather than a group and old More lacks an accessible menu name.
 
-- [ ] **Step 4: Replace Timeline menu imports**
+- [ ] **Step 2: Replace Timeline imports**
 
-In `components/timeline/TimelineWorkspace.tsx`, remove:
-
-```ts
-import { KiroMenuPanel, KiroMenuItem, KiroMenuDivider } from "@/components/kiro/KiroMenu";
-```
-
-Add:
+Remove the `KiroMenuPanel/KiroMenuItem/KiroMenuDivider` import and add:
 
 ```ts
 import { IconButton } from "@/components/ui/IconButton";
@@ -422,11 +347,9 @@ import {
 } from "@/components/ui/DropdownMenu";
 ```
 
-Do not change unrelated imports or Timeline business helpers.
+- [ ] **Step 3: Migrate Filter to control Popover**
 
-- [ ] **Step 5: Migrate Filter to a control Popover**
-
-Replace only the Filter trigger/wrapper/panel with:
+Use this complete content:
 
 ```tsx
 <Popover open={filterOpen} onOpenChange={setFilterOpen}>
@@ -444,24 +367,23 @@ Replace only the Filter trigger/wrapper/panel with:
   >
     <SlidersHorizontal className="w-4 h-4" />
   </IconButton>
-
   {filterOpen ? (
-    <PopoverPanel
-      placement="bottom-end"
-      role="group"
-      aria-label="时间表筛选"
-      className="w-44 p-1.5 space-y-0.5"
-    >
+    <PopoverPanel placement="bottom-end" role="group" aria-label="时间表筛选" className="w-44 p-1.5 space-y-0.5">
       <p className="px-1.5 pb-1 text-[10px] font-bold text-sandrift">显示</p>
-      {/* keep the existing FilterToggle calls exactly */}
+      <FilterToggle label="课程" checked disabled hint="时间表骨架，恒显示" />
+      <FilterToggle label="学习计划" checked={filters.studyBlocks} onChange={(v) => setFilters((f) => ({ ...f, studyBlocks: v }))} />
+      <FilterToggle label="DDL" checked={filters.ddl} onChange={(v) => setFilters((f) => ({ ...f, ddl: v }))} />
+      <FilterToggle label="考试" checked={filters.exam} onChange={(v) => setFilters((f) => ({ ...f, exam: v }))} />
+      <FilterToggle label="活动" checked={filters.activity} onChange={(v) => setFilters((f) => ({ ...f, activity: v }))} />
+      <FilterToggle label="小组节点" checked={filters.group} onChange={(v) => setFilters((f) => ({ ...f, group: v }))} />
     </PopoverPanel>
   ) : null}
 </Popover>
 ```
 
-Copy all existing `FilterToggle` calls unchanged into the panel. Do not replace their checkboxes or state setters.
+Do not modify `FilterToggle`.
 
-- [ ] **Step 6: Migrate Quick Create to command-menu primitives**
+- [ ] **Step 4: Migrate Quick Create**
 
 Use:
 
@@ -481,18 +403,27 @@ Use:
   >
     <Plus className="w-4 h-4" />
   </IconButton>
-
   {quickOpen ? (
     <DropdownMenuPanel placement="bottom-end" aria-label="新建" className="w-52">
-      {/* four existing actions using DropdownMenuItem */}
+      <DropdownMenuItem icon={GraduationCap} label="新建课程" onClick={() => { setQuickOpen(false); setAddCourseModalOpen(true); }} />
+      <DropdownMenuItem icon={BookOpenCheck} label="学习计划" onClick={() => { setQuickOpen(false); setFreeBlockOpen(true); }} />
+      <DropdownMenuItem
+        icon={ListChecks}
+        label="新建任务"
+        onClick={() => {
+          setQuickOpen(false);
+          import("@/lib/uiEvents").then(({ openAssignmentEditor }) => openAssignmentEditor({}));
+        }}
+      />
+      <DropdownMenuItem icon={CalendarClock} label="考试 / 日程" onClick={() => { setQuickOpen(false); setMarkOpen(true); }} />
     </DropdownMenuPanel>
   ) : null}
 </Popover>
 ```
 
-Use four `DropdownMenuItem` entries with the existing icons, labels, and handlers. Preserve each existing `setQuickOpen(false)` call and preserve the dynamic import for `openAssignmentEditor`.
+Keep the existing CustomEvent-based assignment editor path; do not introduce a Store action.
 
-- [ ] **Step 7: Migrate More to command-menu primitives**
+- [ ] **Step 5: Migrate More**
 
 Use:
 
@@ -512,25 +443,10 @@ Use:
   >
     <MoreHorizontal className="w-4 h-4" />
   </IconButton>
-
   {moreOpen ? (
     <DropdownMenuPanel placement="bottom-end" aria-label="更多操作">
-      <DropdownMenuItem
-        icon={FileUp}
-        label="导入课表"
-        onClick={() => {
-          setMoreOpen(false);
-          setImportScheduleModalOpen(true);
-        }}
-      />
-      <DropdownMenuItem
-        icon={ExternalLink}
-        label="全屏查看"
-        onClick={() => {
-          setMoreOpen(false);
-          setFullTimetableModalOpen(true);
-        }}
-      />
+      <DropdownMenuItem icon={FileUp} label="导入课表" onClick={() => { setMoreOpen(false); setImportScheduleModalOpen(true); }} />
+      <DropdownMenuItem icon={ExternalLink} label="全屏查看" onClick={() => { setMoreOpen(false); setFullTimetableModalOpen(true); }} />
       <DropdownMenuDivider />
       <DropdownMenuItem
         icon={SettingsIcon}
@@ -546,63 +462,35 @@ Use:
 </Popover>
 ```
 
-Do not modify settings deep-link semantics.
+- [ ] **Step 6: Verify scope and run GREEN**
 
-- [ ] **Step 8: Verify the toolbar did not expand in scope**
+Confirm the diff did not modify previous/next/today, Ask Kiro, `FilterToggle`, Timeline geometry, drag/resize, `ArrangeSheet`, or `MarkSheet`. Confirm exactly one toolbar trigger has `aria-label="新建"`.
 
-Check the Timeline toolbar diff. The following must remain untouched:
-
-```text
-上一周
-下一周
-今天
-Ask Kiro
-FilterToggle implementation
-Timeline grid/body
-TimelineKeyLane
-StudyBlock/DDL drag and resize logic
-ArrangeSheet/MarkSheet implementation
-```
-
-There must still be exactly one `aria-label="新建"` toolbar trigger.
-
-- [ ] **Step 9: Run the single targeted E2E file**
+Run:
 
 ```bash
 npx playwright test tests/e2e/timeline-v2-visual.spec.ts
-```
-
-Expected: PASS for all tests in this file, including the Task 2B1 menu case.
-
-If the new case fails because clicking the Workspace Header heading is intercepted by sticky layout, use `page.getByTestId("timeline-workspace").click({ position: { x: 20, y: 100 } })` as the outside-click target; do not weaken the outside-dismiss assertion.
-
-- [ ] **Step 10: Run final typecheck**
-
-```bash
 npm run typecheck
 ```
 
-Expected: PASS.
+Expected: both PASS.
 
-- [ ] **Step 11: Conditional build gate**
+If the heading cannot serve as the outside-click target due to layout interception, replace only that test action with:
 
-Do not run `npm run build` by default.
-
-Run it only if implementation produced a Client/Server import boundary error, unresolved module/runtime compile problem, config/dependency change, or Tailwind/Next compile anomaly not covered by typecheck.
-
-If none occurred, final report must state:
-
-```text
-build: skipped by Task 2B1 test policy
+```ts
+await page.getByTestId("timeline-workspace").click({ position: { x: 20, y: 100 } });
 ```
 
-- [ ] **Step 12: Commit the Timeline migration**
+Keep the outside-dismiss assertion.
+
+- [ ] **Step 7: Apply conditional build policy and commit Task 2**
+
+Do not run `npm run build` unless a Client/Server boundary, unresolved module/runtime compile issue, config/dependency change, or Next/Tailwind compile anomaly occurred. Otherwise report `build: skipped by Task 2B1 test policy`.
+
+Commit:
 
 ```bash
-git add \
-  components/timeline/TimelineWorkspace.tsx \
-  tests/e2e/timeline-v2-visual.spec.ts
-
+git add components/timeline/TimelineWorkspace.tsx tests/e2e/timeline-v2-visual.spec.ts
 git commit -m "refactor(ui): migrate timeline menus to shared primitives"
 ```
 
@@ -610,25 +498,25 @@ git commit -m "refactor(ui): migrate timeline menus to shared primitives"
 
 ## Final Verification Policy
 
-Required and sufficient for normal Task 2B1 completion:
+Normal completion requires only:
 
 ```bash
 npm run typecheck
 npx playwright test tests/e2e/timeline-v2-visual.spec.ts
 ```
 
-Do not run `npm test`, full Playwright, `timetable-drag.spec.ts`, Kiro E2E, Settings E2E, Tasks E2E, or screenshot regression unless the focused test exposes a concrete issue in one of those domains.
+Do not run `npm test`, full Playwright, `timetable-drag.spec.ts`, Kiro E2E, Settings E2E, Tasks E2E, or screenshot regression unless the focused Timeline test exposes a concrete cross-domain issue.
 
 ## Final Report
 
-Report only:
+Report actual results for:
 
 ```text
 UI Productization Task 2B1 Result
 
 Commits:
-- actual commit SHA and message for primitive/facade change
-- actual commit SHA and message for Timeline migration
+- primitive/facade commit SHA and message
+- Timeline migration commit SHA and message
 
 Primitives:
 - Popover / PopoverPanel
@@ -638,16 +526,16 @@ Timeline:
 - Filter control Popover
 - Quick Create command menu
 - More command menu
-- mutual exclusion / Esc / outside dismiss status
+- mutual exclusion / Esc / outside dismiss
 
 Kiro compatibility:
 - KiroMenu facade status
-- confirm no bulk Kiro import migration
+- whether any Kiro consumer import changed
 
 Verification:
-- timeline-v2-visual.spec.ts result
-- typecheck result
-- build result or skipped by Task 2B1 policy
+- timeline-v2-visual.spec.ts
+- typecheck
+- build PASS or skipped by policy
 
 Scope:
 - Dialog/Drawer not started
