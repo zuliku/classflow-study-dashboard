@@ -4,13 +4,13 @@ import React, { useEffect, useRef, useState } from "react";
 import {
   X,
   Clock,
-  CheckSquare,
-  Square,
+
+
   Trash2,
   BookOpen,
   Edit3,
   ChevronRight,
-  ChevronDown,
+
   CalendarClock,
   Tags,
   CalendarDays,
@@ -43,6 +43,11 @@ import { cn } from "@/lib/utils";
 import { UISelect } from "@/components/ui/Select";
 import { openAssignmentEditor } from "@/lib/uiEvents";
 import { Drawer } from "@/components/ui/Drawer";
+import { IconButton } from "@/components/ui/IconButton";
+import { Button } from "@/components/ui/Button";
+import { Checkbox } from "@/components/ui/Checkbox";
+import { Popover } from "@/components/ui/Popover";
+import { DropdownMenuPanel, DropdownMenuItem } from "@/components/ui/DropdownMenu";
 import { useKiroHandoff } from "@/hooks/useKiroHandoff";
 import { KIRO_ICON } from "@/components/layout/navItems";
 import { KiroFlowButton } from "@/components/kiro/KiroFlow";
@@ -108,20 +113,9 @@ export function AssignmentDrawer() {
   // Task 6B-B：添加资料下拉（选择课程资料 / 上传文件）与上传中状态
   const [addMenuOpen, setAddMenuOpen] = useState(false);
   const [uploading, setUploading] = useState(false);
-  const addMenuRef = useRef<HTMLDivElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const assignment = assignments.find((a) => a.id === selectedAssignmentId);
-
-  // Task 6B-B：添加资料下拉 outside click 关闭（非 modal，不拦截页面交互）
-  useEffect(() => {
-    if (!addMenuOpen) return;
-    const onPointerDown = (e: PointerEvent) => {
-      if (!addMenuRef.current?.contains(e.target as Node)) setAddMenuOpen(false);
-    };
-    document.addEventListener("pointerdown", onPointerDown);
-    return () => document.removeEventListener("pointerdown", onPointerDown);
-  }, [addMenuOpen]);
 
   if (!assignment) return null;
 
@@ -285,13 +279,14 @@ export function AssignmentDrawer() {
               {assignment.title}
             </h2>
           </div>
-          <button
+          <IconButton
+            variant="secondary"
+            size="sm"
             onClick={() => setSelectedAssignmentId(null)}
-            className="p-2 rounded-xl bg-white hover:bg-alabaster text-charcoal border border-line-strong transition-colors shrink-0"
             aria-label="关闭"
           >
             <X className="w-4 h-4" />
-          </button>
+          </IconButton>
         </div>
 
         {/* Body */}
@@ -452,20 +447,18 @@ export function AssignmentDrawer() {
                 </h4>
                 <div className="space-y-1.5">
                   {assignment.subtasks.map((st) => (
-                    <div
+                    <label
                       key={st.id}
-                      onClick={() => toggleSubtask(assignment.id, st.id)}
-                      className="flex items-center space-x-2.5 p-2.5 bg-[#F7F5F5] hover:bg-alabaster/60 border border-line rounded-xl text-xs cursor-pointer transition-colors"
+                      className="flex items-center gap-2.5 p-2.5 bg-[#F7F5F5] hover:bg-alabaster/60 border border-line rounded-xl text-xs cursor-pointer transition-colors"
                     >
-                      {st.completed ? (
-                        <CheckSquare className="w-4 h-4 text-success shrink-0" />
-                      ) : (
-                        <Square className="w-4 h-4 text-[#A48F82] shrink-0" />
-                      )}
+                      <Checkbox
+                        checked={st.completed}
+                        onChange={() => toggleSubtask(assignment.id, st.id)}
+                      />
                       <span className={cn("flex-1 text-charcoal", st.completed ? "line-through text-sandrift" : "font-medium")}>
                         {st.title}
                       </span>
-                    </div>
+                    </label>
                   ))}
                 </div>
               </div>
@@ -492,14 +485,16 @@ export function AssignmentDrawer() {
                     根据资料分析
                   </button>
                 )}
-                <div className="relative" ref={addMenuRef}>
-                  <button
+                <Popover open={addMenuOpen} onOpenChange={setAddMenuOpen}>
+                  <Button
+                    variant="secondary"
+                    size="sm"
                     onClick={() => {
                       setAddMenuOpen((v) => !v);
                       setMaterialPickerOpen(false);
                     }}
                     disabled={uploading}
-                    className="flex items-center gap-1 text-[10px] font-semibold text-satin-grey bg-white border border-line rounded-lg px-2 py-1 hover:text-charcoal hover:border-line-strong transition-colors disabled:opacity-50"
+                    className="h-7 px-2 text-[10px]"
                   >
                     {uploading ? (
                       <Loader2 className="w-3 h-3 animate-spin" />
@@ -507,37 +502,29 @@ export function AssignmentDrawer() {
                       <Plus className="w-3 h-3" />
                     )}
                     {uploading ? "上传中…" : "添加资料"}
-                    {!uploading && <ChevronDown className="w-3 h-3" />}
-                  </button>
+                  </Button>
                   {addMenuOpen && (
-                    <div
-                      data-testid="assignment-add-material-menu"
-                      className="absolute right-0 top-full mt-1.5 w-48 bg-surface border border-line-strong rounded-xl shadow-card p-1 z-40 text-[11px] ux-inline"
-                    >
-                      <button
+                    <DropdownMenuPanel placement="bottom-end" aria-label="添加资料" className="w-48">
+                      <DropdownMenuItem
+                        icon={BookOpen}
+                        label="选择课程资料"
                         onClick={() => {
                           setAddMenuOpen(false);
                           setMaterialPickerOpen((v) => !v);
                         }}
-                        className="w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-left font-semibold text-charcoal hover:bg-alabaster transition-colors"
-                      >
-                        <BookOpen className="w-3.5 h-3.5 text-sandrift" />
-                        选择课程资料
-                      </button>
-                      <button
+                      />
+                      <DropdownMenuItem
+                        icon={Upload}
+                        label="上传文件"
                         onClick={() => {
                           setAddMenuOpen(false);
                           fileInputRef.current?.click();
                         }}
-                        className="w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-left font-semibold text-charcoal hover:bg-alabaster transition-colors"
-                      >
-                        <Upload className="w-3.5 h-3.5 text-sandrift" />
-                        上传文件
-                      </button>
+                      />
                       <p className="px-2.5 pt-1 pb-1.5 text-[9px] text-sandrift">
                         上传后自动关联本任务（同时出现在课程资料）
                       </p>
-                    </div>
+                    </DropdownMenuPanel>
                   )}
                   <input
                     ref={fileInputRef}
@@ -549,7 +536,7 @@ export function AssignmentDrawer() {
                     aria-hidden="true"
                     tabIndex={-1}
                   />
-                </div>
+                </Popover>
               </div>
             </div>
 
@@ -565,14 +552,16 @@ export function AssignmentDrawer() {
                     <span className="text-[9px] font-semibold text-sandrift shrink-0">
                       {MATERIAL_TYPE_LABELS[m.type]}
                     </span>
-                    <button
+                    <IconButton
+                      variant="danger"
+                      size="sm"
                       onClick={() => toggleMaterial(m.id)}
                       aria-label={`解除关联 ${m.title}`}
                       title="解除关联（不删除课程资料）"
-                      className="p-1 rounded-lg text-sandrift hover:text-danger hover:bg-danger-bg transition-colors shrink-0"
+                      className="h-7 w-7"
                     >
                       <X className="w-3.5 h-3.5" />
-                    </button>
+                    </IconButton>
                   </div>
                 ))}
               </div>
@@ -660,14 +649,16 @@ export function AssignmentDrawer() {
             ))}
           </div>
           <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-1">
-              <button
+            <div className="flex items-center gap-1">
+              <Button
+                variant="danger"
+                size="sm"
                 onClick={handleDelete}
-                className="flex items-center space-x-1.5 text-xs text-danger hover:bg-danger-bg px-3 py-2 rounded-xl transition-colors"
+                className="px-2.5"
               >
                 <Trash2 className="w-4 h-4" />
                 <span>删除任务</span>
-              </button>
+              </Button>
               <KiroFlowButton
                 icon={KIRO_ICON}
                 label="Ask Kiro"
@@ -675,22 +666,21 @@ export function AssignmentDrawer() {
                 className="h-8"
                 onClick={handleAskKiro}
               />
-              <button
+              <Button
+                variant="secondary"
+                size="sm"
                 onClick={handleEdit}
-                className="flex items-center space-x-1.5 text-xs text-satin-grey hover:bg-alba px-3 py-2 rounded-xl transition-colors"
+                className="px-2.5"
                 title="编辑任务"
               >
                 <Edit3 className="w-4 h-4" />
                 <span>编辑</span>
-              </button>
+              </Button>
             </div>
-            <button
-              onClick={() => setSelectedAssignmentId(null)}
-              className="px-4 py-2 bg-charcoal text-white text-xs font-medium rounded-xl hover:bg-black transition-colors"
-            >
+            <Button variant="primary" size="sm" onClick={() => setSelectedAssignmentId(null)}>
               完成
-              </button>
-            </div>
+            </Button>
+          </div>
           </div>
         </Drawer>
   );

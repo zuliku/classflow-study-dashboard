@@ -37,6 +37,11 @@ import { KIRO_ICON } from "@/components/layout/navItems";
 import { KiroFlowButton } from "@/components/kiro/KiroFlow";
 import { useEnterOnAdd } from "@/lib/useEnterOnAdd";
 import { Drawer } from "@/components/ui/Drawer";
+import { IconButton } from "@/components/ui/IconButton";
+import { Input } from "@/components/ui/Input";
+import { Textarea } from "@/components/ui/Textarea";
+import { Field } from "@/components/ui/Field";
+import { Button } from "@/components/ui/Button";
 
 
 const DAY_LABELS = ["一", "二", "三", "四", "五", "六", "日"];
@@ -417,40 +422,48 @@ export function CourseDetailDrawer() {
             </div>
           </div>
 
-          <div className="flex items-center space-x-2 shrink-0">
+          <div className="flex items-center space-x-1.5 shrink-0">
             {!isEditing ? (
-              <button
+              <IconButton
+                variant="secondary"
+                size="sm"
                 onClick={handleStartEdit}
-                className="p-2 rounded-xl text-sandrift hover:bg-white hover:text-charcoal transition-colors border border-line-strong bg-white/70"
                 title="编辑课程信息"
+                aria-label="编辑课程信息"
               >
                 <Edit className="w-4 h-4" />
-              </button>
+              </IconButton>
             ) : (
-              <button
+              <IconButton
+                variant="primary"
+                size="sm"
                 onClick={handleSaveCourse}
-                className="ux-press p-2 rounded-xl text-white bg-charcoal hover:bg-black transition-colors"
                 title="保存修改"
+                aria-label="保存修改"
               >
                 <Save className="w-4 h-4" />
-              </button>
+              </IconButton>
             )}
 
-            <button
+            <IconButton
+              variant="danger"
+              size="sm"
               onClick={handleDeleteCourse}
-              className="p-2 rounded-xl text-danger hover:bg-danger-bg transition-colors border border-danger-border bg-white/70"
               title="删除课程"
+              aria-label="删除课程"
             >
               <Trash2 className="w-4 h-4" />
-            </button>
+            </IconButton>
 
-            <button
+            <IconButton
+              variant="secondary"
+              size="sm"
               onClick={() => setSelectedCourseId(null)}
-              className="p-2 rounded-xl text-sandrift hover:bg-white hover:text-charcoal transition-colors border border-line-strong bg-white/70"
+              title="关闭"
               aria-label="关闭"
             >
-              <X className="w-5 h-5" />
-            </button>
+              <X className="w-4 h-4" />
+            </IconButton>
           </div>
         </div>
 
@@ -490,40 +503,42 @@ export function CourseDetailDrawer() {
         <div className="p-6 pb-[calc(1.5rem+env(safe-area-inset-bottom))] overflow-y-auto space-y-6 flex-1 text-xs">
           {/* Edit Form or Readonly View */}
           {isEditing ? (
-            <div className="space-y-3 p-4 bg-[#F7F5F5] rounded-2xl border border-line">
-              <h3 className="font-bold text-charcoal">修改课程信息</h3>
-              <div className="space-y-2">
-                <input
+            <div className="space-y-4 p-4 bg-[#F7F5F5] rounded-2xl border border-line">
+              <h3 className="text-[13px] font-bold text-charcoal">修改课程信息</h3>
+              <Field label="课程名称">
+                <Input
                   type="text"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   placeholder="课程名称"
-                  className="w-full p-2 bg-white border border-line rounded-xl font-bold"
                 />
-                <div className="grid grid-cols-2 gap-2">
-                  <input
+              </Field>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <Field label="授课教师">
+                  <Input
                     type="text"
                     value={teacher}
                     onChange={(e) => setTeacher(e.target.value)}
                     placeholder="授课教师"
-                    className="p-2 bg-white border border-line rounded-xl"
                   />
-                  <input
+                </Field>
+                <Field label="上课教室">
+                  <Input
                     type="text"
                     value={classroom}
                     onChange={(e) => setClassroom(e.target.value)}
                     placeholder="上课教室"
-                    className="p-2 bg-white border border-line rounded-xl"
                   />
-                </div>
-                <textarea
+                </Field>
+              </div>
+              <Field label="课程说明">
+                <Textarea
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
                   placeholder="课程大纲与要求"
                   rows={2}
-                  className="w-full p-2 bg-white border border-line rounded-xl"
                 />
-              </div>
+              </Field>
             </div>
           ) : (
             <div className="space-y-2">
@@ -565,18 +580,21 @@ export function CourseDetailDrawer() {
                     >
                       <div className="flex items-center justify-between">
                         <span className="text-[10px] font-bold text-sandrift">编辑时段</span>
-                        <button
+                        <IconButton
+                          variant="ghost"
+                          size="sm"
                           onClick={handleCancelEditSlot}
-                          className="p-0.5 text-sandrift hover:text-charcoal rounded transition-colors"
+                          aria-label="取消编辑"
                           title="取消编辑"
+                          className="h-6 w-6"
                         >
                           <X className="w-3.5 h-3.5" />
-                        </button>
+                        </IconButton>
                       </div>
 
                       <div className="grid grid-cols-2 gap-2">
                         <div>
-                          <label className="text-[10px] text-sandrift">星期</label>
+                          <label className="text-[10px] font-bold text-sandrift">星期</label>
                           <UISelect<number>
                             value={slotForm.dayOfWeek}
                             onChange={(v) => setSlotForm({ ...slotForm, dayOfWeek: v })}
@@ -589,7 +607,7 @@ export function CourseDetailDrawer() {
                           />
                         </div>
                         <div>
-                          <label className="text-[10px] text-sandrift">周次</label>
+                          <label className="text-[10px] font-bold text-sandrift">周次</label>
                           <WeeksSelect
                             value={slotForm.weeks}
                             onChange={(weeks) => setSlotForm({ ...slotForm, weeks })}
@@ -597,33 +615,33 @@ export function CourseDetailDrawer() {
                         </div>
                       </div>
 
-                      <div className="grid grid-cols-3 gap-2">
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                         <div>
-                          <label className="text-[10px] text-sandrift">开始</label>
-                          <input
+                          <label className="text-[10px] font-bold text-sandrift">开始</label>
+                          <Input
                             type="time"
                             value={slotForm.startTime}
                             onChange={(e) => setSlotForm({ ...slotForm, startTime: e.target.value })}
-                            className="w-full p-1.5 bg-[#F7F5F5] border border-line rounded-lg font-mono text-[11px] focus:outline-none"
+                            className="bg-[#F7F5F5] font-mono"
                           />
                         </div>
                         <div>
-                          <label className="text-[10px] text-sandrift">结束</label>
-                          <input
+                          <label className="text-[10px] font-bold text-sandrift">结束</label>
+                          <Input
                             type="time"
                             value={slotForm.endTime}
                             onChange={(e) => setSlotForm({ ...slotForm, endTime: e.target.value })}
-                            className="w-full p-1.5 bg-[#F7F5F5] border border-line rounded-lg font-mono text-[11px] focus:outline-none"
+                            className="bg-[#F7F5F5] font-mono"
                           />
                         </div>
                         <div>
-                          <label className="text-[10px] text-sandrift">教室</label>
-                          <input
+                          <label className="text-[10px] font-bold text-sandrift">教室</label>
+                          <Input
                             type="text"
                             value={slotForm.location}
                             onChange={(e) => setSlotForm({ ...slotForm, location: e.target.value })}
                             placeholder={sched.location}
-                            className="w-full p-1.5 bg-[#F7F5F5] border border-line rounded-lg text-[11px] focus:outline-none"
+                            className="bg-[#F7F5F5]"
                           />
                         </div>
                       </div>
@@ -637,19 +655,23 @@ export function CourseDetailDrawer() {
                         </p>
                       )}
 
-                      <div className="flex justify-end space-x-2 pt-1">
-                        <button
+                      <div className="flex justify-end gap-2 pt-1">
+                        <Button
+                          variant="secondary"
+                          size="sm"
                           onClick={handleCancelEditSlot}
-                          className="px-3 py-1 text-[11px] font-medium text-satin-grey bg-[#F7F5F5] border border-line rounded-lg hover:bg-alba"
+                          className="h-7 px-2.5 text-[11px]"
                         >
                           取消
-                        </button>
-                        <button
+                        </Button>
+                        <Button
+                          variant="primary"
+                          size="sm"
                           onClick={() => handleSaveSlotEdit(sched)}
-                          className="ux-press px-3 py-1 text-[11px] font-bold text-white bg-charcoal hover:bg-black rounded-lg"
+                          className="h-7 px-2.5 text-[11px]"
                         >
                           保存时段
-                        </button>
+                        </Button>
                       </div>
                     </div>
                   );
@@ -676,21 +698,27 @@ export function CourseDetailDrawer() {
                         )}
                       </div>
                     </div>
-                    <div className="flex items-center space-x-1 shrink-0">
-                      <button
+                    <div className="flex items-center space-x-0.5 shrink-0">
+                      <IconButton
+                        variant="ghost"
+                        size="sm"
                         onClick={() => handleStartEditSlot(sched)}
-                        className="p-1.5 text-sandrift hover:bg-alba rounded-lg transition-colors"
+                        aria-label="编辑此排课时段"
                         title="编辑此排课时段"
+                        className="h-7 w-7"
                       >
                         <Edit className="w-3.5 h-3.5" />
-                      </button>
-                      <button
+                      </IconButton>
+                      <IconButton
+                        variant="danger"
+                        size="sm"
                         onClick={() => handleDeleteSlot(sched)}
-                        className="p-1.5 text-danger hover:bg-danger-bg rounded-lg transition-colors"
+                        aria-label="删除此排课时段"
                         title="删除此排课时段"
+                        className="h-7 w-7"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
-                      </button>
+                      </IconButton>
                     </div>
                   </div>
                 );
@@ -713,25 +741,28 @@ export function CourseDetailDrawer() {
                 />
                 <WeeksSelect value={newWeeks} onChange={setNewWeeks} />
               </div>
-              <div className="grid grid-cols-3 gap-2">
-                <input
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                <Input
                   type="time"
                   value={newStart}
                   onChange={(e) => setNewStart(e.target.value)}
-                  className="p-1.5 bg-white border border-line-strong rounded-lg text-xs font-mono"
+                  className="bg-white border-line-strong font-mono"
+                  aria-label="开始时间"
                 />
-                <input
+                <Input
                   type="time"
                   value={newEnd}
                   onChange={(e) => setNewEnd(e.target.value)}
-                  className="p-1.5 bg-white border border-line-strong rounded-lg text-xs font-mono"
+                  className="bg-white border-line-strong font-mono"
+                  aria-label="结束时间"
                 />
-                <input
+                <Input
                   type="text"
                   value={newLocation}
                   onChange={(e) => setNewLocation(e.target.value)}
                   placeholder={course.classroom}
-                  className="p-1.5 bg-white border border-line-strong rounded-lg text-xs"
+                  className="bg-white border-line-strong"
+                  aria-label="教室"
                 />
               </div>
               {slotError && (
@@ -742,12 +773,14 @@ export function CourseDetailDrawer() {
                   {slotConflict}，已阻止添加。
                 </p>
               )}
-              <button
+              <Button
                 type="submit"
-                className="ux-press w-full py-1.5 bg-charcoal hover:bg-black text-white font-bold rounded-lg text-xs transition-colors"
+                variant="primary"
+                size="sm"
+                className="w-full"
               >
                 + 添加排课
-              </button>
+              </Button>
             </form>
           </div>
 
@@ -864,6 +897,7 @@ export function CourseDetailDrawer() {
                         }}
                         className="p-1.5 text-danger hover:bg-danger-bg rounded-lg transition-colors opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
                         title="删除此资料"
+                        aria-label="删除此资料"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
