@@ -151,3 +151,80 @@ test("Sidebar Kiro Active：无左侧黑线（active = 浅 Soft Plate + 常驻�
   await overviewBtn.click();
   await expect(overviewBtn.locator("span.rounded-full.bg-charcoal")).toHaveCount(1);
 });
+
+/** 覆盖持久化动效偏好（reload 后 pre-paint bootstrap 与 store 一并生效） */
+async function setMotionPreference(page: Page, preference: "full" | "reduced") {
+  await page.evaluate((pref) => {
+    const raw = localStorage.getItem("classflow-storage-v2");
+    if (!raw) return;
+    const parsed = JSON.parse(raw);
+    parsed.state.preferences.motionPreference = pref;
+    localStorage.setItem("classflow-storage-v2", JSON.stringify(parsed));
+  }, preference);
+  await page.reload();
+}
+
+/**
+ * Presence lifecycle（Motion & Kiro Foundation Final Closure）：
+ * 共享 usePresence(open, 160) contract，Kiro History Panel 为代表 surface。
+ */
+test("Presence full motion：History Panel 关闭经历 closed 态（non-interactive）后 unmount", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/");
+  await setMotionPreference(page, "full");
+  await page.waitForTimeout(800);
+
+  await page.locator('nav[aria-label="底部导航"]').getByRole("button", { name: "Kiro" }).click();
+  await expect(page.getByTestId("kiro-workspace")).toBeVisible();
+  // 移动端历史入口在「更多」菜单内
+  await page.getByRole("button", { name: "更多操作" }).click();
+  await page.getByRole("menuitem", { name: "历史记录" }).click();
+
+  const panel = page.getByRole("dialog", { name: "历史记录" });
+  await expect(panel).toHaveAttribute("data-state", "open");
+
+  await page.keyboard.press("Escape");
+
+  // closed presence 窗口（160ms）内：仍 mounted + data-state=closed + non-interactive
+  // waitForFunction 以 rAF 轮询捕获瞬态，避免 timing-sensitive 等待
+  const closedSnapshot = await page.waitForFunction(() => {
+    const el = document.querySelector('[role="dialog"][aria-label="历史记录"]');
+    if (!el) return { unmounted: true };
+    const state = el.getAttribute("data-state");
+    if (state === "open") return null; // 尚未进入 closed，继续等待
+    return {
+      state,
+      ariaHidden: el.getAttribute("aria-hidden"),
+      pointerEvents: getComputedStyle(el).pointerEvents,
+    };
+  }, { timeout: 3000 });
+  expect(await closedSnapshot.jsonValue()).toEqual({
+    state: "closed",
+    ariaHidden: "true",
+    pointerEvents: "none",
+  });
+
+  // 最终 unmount（Playwright 自动轮询 count=0）
+  await expect(panel).toHaveCount(0);
+});
+
+test("Presence reduced motion：History Panel 关闭后立即 unmount（无 long closed-presence）", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/");
+  await setMotionPreference(page, "reduced");
+  await page.waitForTimeout(800);
+
+  await page.locator('nav[aria-label="底部导航"]').getByRole("button", { name: "Kiro" }).click();
+  await expect(page.getByTestId("kiro-workspace")).toBeVisible();
+  // 移动端历史入口在「更多」菜单内
+  await page.getByRole("button", { name: "更多操作" }).click();
+  await page.getByRole("menuitem", { name: "历史记录" }).click();
+
+  const panel = page.getByRole("dialog", { name: "历史记录" });
+  await expect(panel).toHaveAttribute("data-state", "open");
+
+  await page.keyboard.press("Escape");
+
+  // reduced：不经历可观察的长期 closed-presence，快速达到 count=0（Playwright 自动轮询）
+  await expect(panel).toHaveCount(0, { timeout: 2000 });
+});
