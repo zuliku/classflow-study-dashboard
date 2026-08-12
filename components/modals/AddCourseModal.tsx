@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import React, { useState, useEffect, useRef } from "react";
 import { X, BookOpen, Clock, Plus, Trash2 } from "lucide-react";
@@ -7,13 +7,14 @@ import { useToastStore } from "@/store/useToastStore";
 import { WEEK_RANGE_PRESETS, isValidTimeRange } from "@/lib/schedule";
 import { findScheduleConflicts } from "@/lib/conflicts";
 import { COURSE_COLOR_OPTIONS } from "@/lib/courseAppearance";
-import { usePresence } from "@/lib/usePresence";
-import { useRestoreFocus } from "@/lib/useRestoreFocus";
-import { cn } from "@/lib/utils";
-import { UISelect } from "@/components/ui/Select";
-import { pushOverlay, popOverlay, isTopmostOverlay } from "@/lib/overlayStack";
 
-const OVERLAY_ID = "add-course-modal";
+
+import { cn } from "@/lib/utils";
+import { Dialog } from "@/components/ui/Dialog";
+import { UISelect } from "@/components/ui/Select";
+
+
+
 
 const COLOR_OPTIONS = COURSE_COLOR_OPTIONS;
 
@@ -43,25 +44,6 @@ export function AddCourseModal() {
   const [scheduleSlots, setScheduleSlots] = useState<SlotInput[]>([
     { dayOfWeek: 1, startTime: "08:00", endTime: "09:40", location: "", weeks: "1-16周" },
   ]);
-
-  const { mounted, visible } = usePresence(isAddCourseModalOpen, 220);
-  useRestoreFocus(isAddCourseModalOpen);
-
-  // Esc 关闭（仅在 Overlay 栈最上层时）
-  useEffect(() => {
-    if (!mounted) return;
-    pushOverlay(OVERLAY_ID, 50);
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && isTopmostOverlay(OVERLAY_ID)) setAddCourseModalOpen(false);
-    };
-    window.addEventListener("keydown", onKey);
-    return () => {
-      popOverlay(OVERLAY_ID);
-      window.removeEventListener("keydown", onKey);
-    };
-  }, [mounted, setAddCourseModalOpen]);
-
-  if (!mounted) return null;
 
   const handleAddSlot = () => {
     setFormError(null);
@@ -166,20 +148,16 @@ export function AddCourseModal() {
   };
 
   return (
-    <div
-      className={cn(
-        "fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4",
-        "ux-overlay",
-        visible ? "opacity-100" : "opacity-0"
-      )}
+    <Dialog
+      open={isAddCourseModalOpen}
+      onOpenChange={(next) => {
+        if (!next) setAddCourseModalOpen(false);
+      }}
+      overlayId="add-course-modal"
+      stackZ={50}
+      aria-label="添加课程"
+      className="max-w-lg max-h-[90dvh]"
     >
-      <div
-        className={cn(
-          "w-full max-w-lg bg-surface rounded-2xl shadow-drawer border border-line overflow-hidden flex flex-col max-h-[90dvh]",
-          "ux-modal-panel",
-          visible ? "opacity-100 scale-100 translate-y-0" : "opacity-0 scale-[0.985] translate-y-1"
-        )}
-      >
         {/* Header */}
         <div className="p-4 px-6 border-b border-[#F0EBE1] bg-[#F7F5F5] flex items-center justify-between">
           <div className="flex items-center space-x-2">
@@ -407,7 +385,6 @@ export function AddCourseModal() {
             </button>
           </div>
         </form>
-      </div>
-    </div>
+      </Dialog>
   );
 }

@@ -1,7 +1,7 @@
-"use client";
+﻿"use client";
 
 import React, { useState, useEffect } from "react";
-import { createPortal } from "react-dom";
+
 import { WorkspaceHeader } from "@/components/layout/WorkspaceHeader";
 import { Button } from "@/components/ui/Button";
 import {
@@ -27,13 +27,14 @@ import { cardKeyHandler } from "@/lib/utils";
 import { useEnterOnAdd } from "@/lib/useEnterOnAdd";
 import { parseLocalDDL, getLocalDDLDate, getLocalDDLTime, combineLocalDateTime } from "@/lib/ddl";
 import { formatLocalDate } from "@/lib/groupProject";
-import { usePresence } from "@/lib/usePresence";
-import { useRestoreFocus } from "@/lib/useRestoreFocus";
-import { pushOverlay, popOverlay, isTopmostOverlay } from "@/lib/overlayStack";
+
+
+
 import { useKiroHandoff } from "@/hooks/useKiroHandoff";
 import { KIRO_ICON } from "@/components/layout/navItems";
 import { KiroFlowButton } from "@/components/kiro/KiroFlow";
 import { cn } from "@/lib/utils";
+import { Dialog } from "@/components/ui/Dialog";
 import { GroupMember } from "@/types";
 
 /** 头像 fallback：无头像时显示姓名首字 */
@@ -58,7 +59,7 @@ function MemberAvatar({ member, size = "w-7 h-7", ring = false }: { member: Grou
   );
 }
 
-/** 小组模块统一弹窗壳（进入/退出动画 + Esc 顶层关闭 + 焦点恢复） */
+/** 小组模块统一弹窗壳（enter/exit 动画 + Esc 顶层关闭 + 焦点恢复 → 委托全局 Dialog；保留 feature-local wrapper） */
 function GroupModal({
   open,
   title,
@@ -73,59 +74,33 @@ function GroupModal({
   footer?: React.ReactNode;
 }) {
   const overlayId = usePresenceId();
-  const { mounted, visible } = usePresence(open, 220);
-  useRestoreFocus(open);
 
-  useEffect(() => {
-    if (!mounted) return;
-    pushOverlay(overlayId, 50);
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && isTopmostOverlay(overlayId)) onClose();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => {
-      popOverlay(overlayId);
-      window.removeEventListener("keydown", onKey);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mounted]);
-
-  if (!mounted) return null;
-
-  // Portal 到 body：避免被 main 滚动容器 / 页面过渡等祖先的
-  // transform、overflow、contain 约束，backdrop 保证全屏覆盖 Sidebar 与 Header
-  return createPortal(
-    <div
-      className={cn(
-        "fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4",
-        "ux-overlay",
-        visible ? "opacity-100" : "opacity-0"
-      )}
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        if (!next) onClose();
+      }}
+      overlayId={overlayId}
+      stackZ={50}
+      aria-label="小组项目"
+      className="max-w-md max-h-[85dvh]"
     >
-      <div
-        className={cn(
-          "w-full max-w-md bg-surface rounded-2xl shadow-drawer border border-line overflow-hidden flex flex-col max-h-[85dvh]",
-          "ux-modal-panel",
-          visible ? "opacity-100 scale-100 translate-y-0" : "opacity-0 scale-[0.985] translate-y-1"
-        )}
-      >
-        <div className="p-4 px-5 border-b border-line-soft flex items-center justify-between shrink-0">
-          <h3 className="text-sm font-bold text-charcoal flex items-center gap-2">{title}</h3>
-          <button
-            onClick={onClose}
-            className="p-1 rounded-lg text-sandrift hover:bg-alabaster hover:text-charcoal transition-colors"
-            aria-label="关闭"
-          >
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-        <div className="p-5 space-y-3 overflow-y-auto text-xs">{children}</div>
-        {footer && (
-          <div className="px-5 py-3 border-t border-line-soft flex justify-end space-x-2 shrink-0">{footer}</div>
-        )}
+      <div className="p-4 px-5 border-b border-line-soft flex items-center justify-between shrink-0">
+        <h3 className="text-sm font-bold text-charcoal flex items-center gap-2">{title}</h3>
+        <button
+          onClick={onClose}
+          className="p-1 rounded-lg text-sandrift hover:bg-alabaster hover:text-charcoal transition-colors"
+          aria-label="关闭"
+        >
+          <X className="w-4 h-4" />
+        </button>
       </div>
-    </div>,
-    document.body
+      <div className="p-5 space-y-3 overflow-y-auto text-xs">{children}</div>
+      {footer && (
+        <div className="px-5 py-3 border-t border-line-soft flex justify-end space-x-2 shrink-0">{footer}</div>
+      )}
+    </Dialog>
   );
 }
 

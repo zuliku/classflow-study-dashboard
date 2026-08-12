@@ -26,6 +26,7 @@ import { useKiroSession } from "@/components/kiro/KiroSessionProvider";
 import { WorkspaceHeader } from "@/components/layout/WorkspaceHeader";
 import { IconButton } from "@/components/ui/IconButton";
 import { Popover, PopoverPanel } from "@/components/ui/Popover";
+import { Dialog } from "@/components/ui/Dialog";
 import {
   DropdownMenuPanel,
   DropdownMenuItem,
@@ -799,9 +800,18 @@ function ArrangeSheet({
   const [end, setEnd] = useState("20:00");
   const [title, setTitle] = useState(assignment?.title ?? "");
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" data-testid="timeline-arrange-sheet">
-      <div className="absolute inset-0 bg-black/20 backdrop-blur-[1px]" onClick={onClose} aria-hidden="true" />
-      <div role="dialog" aria-label="安排学习计划" className="relative w-full max-w-sm bg-surface border border-line-strong rounded-2xl shadow-card p-4 space-y-3 ux-modal-panel">
+    <Dialog
+      open
+      onOpenChange={(next) => {
+        if (!next) onClose();
+      }}
+      overlayId="timeline-arrange-sheet"
+      stackZ={50}
+      closeOnBackdrop
+      aria-label="安排学习计划"
+      data-testid="timeline-arrange-sheet"
+      className="max-w-sm p-4 space-y-3 border-line-strong rounded-2xl shadow-card"
+    >
         <div className="flex items-center justify-between">
           <h3 className="text-sm font-bold text-charcoal">安排学习计划</h3>
           <button onClick={onClose} aria-label="关闭" className="p-1.5 rounded-lg text-sandrift hover:bg-alabaster hover:text-charcoal">
@@ -848,8 +858,7 @@ function ArrangeSheet({
             确认安排
           </button>
         </div>
-      </div>
-    </div>
+      </Dialog>
   );
 }
 
@@ -872,9 +881,18 @@ function MarkSheet({
   const [end, setEnd] = useState("");
   const canSubmit = title.trim().length > 0;
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" data-testid="timeline-mark-sheet">
-      <div className="absolute inset-0 bg-black/20 backdrop-blur-[1px]" onClick={onClose} aria-hidden="true" />
-      <div role="dialog" aria-label="添加考试或日程" className="relative w-full max-w-sm bg-surface border border-line-strong rounded-2xl shadow-card p-4 space-y-3 ux-modal-panel">
+    <Dialog
+      open
+      onOpenChange={(next) => {
+        if (!next) onClose();
+      }}
+      overlayId="timeline-mark-sheet"
+      stackZ={50}
+      closeOnBackdrop
+      aria-label="添加考试或日程"
+      data-testid="timeline-mark-sheet"
+      className="max-w-sm p-4 space-y-3 border-line-strong rounded-2xl shadow-card"
+    >
         <div className="flex items-center justify-between">
           <h3 className="text-sm font-bold text-charcoal">考试 / 日程</h3>
           <button onClick={onClose} aria-label="关闭" className="p-1.5 rounded-lg text-sandrift hover:bg-alabaster hover:text-charcoal">
@@ -930,10 +948,9 @@ function MarkSheet({
             onClick={() => onSubmit({ title: title.trim(), type, date, startTime: start || undefined, endTime: end || undefined })}
             className="px-3 h-8 rounded-lg text-[11px] font-bold text-charcoal bg-pastel-mint hover:bg-pastel-mint transition-colors disabled:opacity-40"
           >
-            添加
+             添加
           </button>
         </div>
-      </div>
-    </div>
+      </Dialog>
   );
 }

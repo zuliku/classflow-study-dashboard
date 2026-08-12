@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import React, { useState, useEffect } from "react";
 import { X, FileUp, CheckCircle, Download, FileCode, Server, AlertTriangle, ArrowRight, Info } from "lucide-react";
@@ -7,12 +7,13 @@ import { useToastStore } from "@/store/useToastStore";
 import { parseICS, parseJSONSchedule, parseCSVSchedule, ParsedImportResult } from "@/lib/parser";
 import { findScheduleConflicts } from "@/lib/conflicts";
 import { Course, CourseSchedule, ScheduleConflict } from "@/types";
-import { usePresence } from "@/lib/usePresence";
-import { useRestoreFocus } from "@/lib/useRestoreFocus";
-import { cn } from "@/lib/utils";
-import { pushOverlay, popOverlay, isTopmostOverlay } from "@/lib/overlayStack";
 
-const OVERLAY_ID = "import-schedule-modal";
+
+import { cn } from "@/lib/utils";
+import { Dialog } from "@/components/ui/Dialog";
+
+
+
 
 const DAY_LABELS = ["一", "二", "三", "四", "五", "六", "日"];
 const dayLabel = (d: number) => `周${DAY_LABELS[d - 1]}`;
@@ -45,28 +46,6 @@ export function ImportScheduleModal() {
   const [step, setStep] = useState<1 | 2>(1);
   const [parsedData, setParsedData] = useState<ParsedImportResult | null>(null);
   const [skippedCourseIds, setSkippedCourseIds] = useState<string[]>([]);
-
-  const { mounted, visible } = usePresence(isImportScheduleModalOpen, 220);
-  useRestoreFocus(isImportScheduleModalOpen);
-
-  // Esc 关闭（与关闭按钮行为一致：回到第一步并关闭；仅在 Overlay 栈最上层时）
-  useEffect(() => {
-    if (!mounted) return;
-    pushOverlay(OVERLAY_ID, 50);
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && isTopmostOverlay(OVERLAY_ID)) {
-        setStep(1);
-        setImportScheduleModalOpen(false);
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => {
-      popOverlay(OVERLAY_ID);
-      window.removeEventListener("keydown", onKey);
-    };
-  }, [mounted, setImportScheduleModalOpen]);
-
-  if (!mounted) return null;
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -157,20 +136,19 @@ export function ImportScheduleModal() {
   };
 
   return (
-    <div
-      className={cn(
-        "fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4",
-        "ux-overlay",
-        visible ? "opacity-100" : "opacity-0"
-      )}
+    <Dialog
+      open={isImportScheduleModalOpen}
+      onOpenChange={(next) => {
+        if (!next) {
+          setStep(1);
+          setImportScheduleModalOpen(false);
+        }
+      }}
+      overlayId="import-schedule-modal"
+      stackZ={50}
+      aria-label="导入课表"
+      className="max-w-2xl max-h-[85dvh]"
     >
-      <div
-        className={cn(
-          "w-full max-w-2xl bg-surface rounded-2xl shadow-drawer border border-line overflow-hidden flex flex-col max-h-[85dvh]",
-          "ux-modal-panel",
-          visible ? "opacity-100 scale-100 translate-y-0" : "opacity-0 scale-[0.985] translate-y-1"
-        )}
-      >
         {/* Header */}
         <div className="p-4 px-6 border-b border-[#F0EBE1] bg-[#F7F5F5] flex items-center justify-between">
           <div className="flex items-center space-x-2">
@@ -468,7 +446,6 @@ export function ImportScheduleModal() {
             </div>
           </div>
         )}
-      </div>
-    </div>
+      </Dialog>
   );
 }

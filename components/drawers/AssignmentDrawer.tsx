@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import React, { useEffect, useRef, useState } from "react";
 import {
@@ -37,12 +37,12 @@ import { uploadCourseMaterials } from "@/lib/materialUpload";
 import { RECURRENCE_LABELS } from "@/lib/tasks/taskRecurrence";
 import { AssignmentReminderSection } from "@/components/reminders/AssignmentReminderSection";
 import { deriveAssignmentHealthWithAvailability, healthViewMeta, healthExplanation } from "@/lib/tasks/taskHealthView";
-import { usePresence } from "@/lib/usePresence";
-import { useRestoreFocus } from "@/lib/useRestoreFocus";
+
+
 import { cn } from "@/lib/utils";
 import { UISelect } from "@/components/ui/Select";
 import { openAssignmentEditor } from "@/lib/uiEvents";
-import { pushOverlay, popOverlay, isTopmostOverlay } from "@/lib/overlayStack";
+import { Drawer } from "@/components/ui/Drawer";
 import { useKiroHandoff } from "@/hooks/useKiroHandoff";
 import { KIRO_ICON } from "@/components/layout/navItems";
 import { KiroFlowButton } from "@/components/kiro/KiroFlow";
@@ -112,22 +112,6 @@ export function AssignmentDrawer() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const assignment = assignments.find((a) => a.id === selectedAssignmentId);
-  const { mounted, visible } = usePresence(!!assignment, 260);
-  useRestoreFocus(!!assignment);
-
-  // Overlay Stack：Drawer 层，Esc 只在最上层时关闭
-  useEffect(() => {
-    if (!mounted) return;
-    pushOverlay(OVERLAY_ID, 40);
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && isTopmostOverlay(OVERLAY_ID)) setSelectedAssignmentId(null);
-    };
-    window.addEventListener("keydown", onKey);
-    return () => {
-      popOverlay(OVERLAY_ID);
-      window.removeEventListener("keydown", onKey);
-    };
-  }, [mounted, setSelectedAssignmentId]);
 
   // Task 6B-B：添加资料下拉 outside click 关闭（非 modal，不拦截页面交互）
   useEffect(() => {
@@ -139,7 +123,7 @@ export function AssignmentDrawer() {
     return () => document.removeEventListener("pointerdown", onPointerDown);
   }, [addMenuOpen]);
 
-  if (!mounted || !assignment) return null;
+  if (!assignment) return null;
 
   const handleDelete = () => {
     const removed = deleteAssignment(assignment.id);
@@ -267,20 +251,15 @@ export function AssignmentDrawer() {
   }, 0);
 
   return (
-    <div
-      className={cn(
-        "fixed inset-0 z-40 overflow-hidden bg-black/30 backdrop-blur-sm flex justify-end",
-        "ux-overlay",
-        visible ? "opacity-100" : "opacity-0"
-      )}
+    <Drawer
+      open={!!assignment}
+      onOpenChange={(next) => {
+        if (!next) setSelectedAssignmentId(null);
+      }}
+      overlayId="assignment-drawer"
+      aria-label="任务详情"
+      className="max-w-lg overflow-y-auto pb-[env(safe-area-inset-bottom)]"
     >
-      <div
-        className={cn(
-          "w-full max-w-lg bg-surface h-full shadow-drawer flex flex-col border-l border-line overflow-y-auto pb-[env(safe-area-inset-bottom)]",
-          "ux-drawer-panel",
-          visible ? "translate-x-0 opacity-100" : "translate-x-8 opacity-0"
-        )}
-      >
         {/* HEADER：课程 + 标题 + 关闭 */}
         <div className="p-5 border-b border-[#F0EBE1] bg-[#F7F5F5] flex items-start justify-between gap-3">
           <div className="space-y-1 min-w-0">
@@ -710,10 +689,9 @@ export function AssignmentDrawer() {
               className="px-4 py-2 bg-charcoal text-white text-xs font-medium rounded-xl hover:bg-black transition-colors"
             >
               完成
-            </button>
+              </button>
+            </div>
           </div>
-        </div>
-      </div>
-    </div>
+        </Drawer>
   );
 }

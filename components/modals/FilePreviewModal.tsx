@@ -1,16 +1,17 @@
-"use client";
+﻿"use client";
 
 import React, { useState, useEffect, useRef } from "react";
 import { X, Download, FileText, Loader2 } from "lucide-react";
 import { Material } from "@/types";
 import { getFileBlob } from "@/lib/fileStorage";
-import { usePresence } from "@/lib/usePresence";
-import { useRestoreFocus } from "@/lib/useRestoreFocus";
-import { cn } from "@/lib/utils";
-import { onPreviewMaterial } from "@/lib/uiEvents";
-import { pushOverlay, popOverlay, isTopmostOverlay } from "@/lib/overlayStack";
 
-const OVERLAY_ID = "file-preview-modal";
+
+import { cn } from "@/lib/utils";
+import { Dialog } from "@/components/ui/Dialog";
+import { onPreviewMaterial } from "@/lib/uiEvents";
+
+
+
 
 export function FilePreviewModal() {
   const [isOpen, setIsOpen] = useState(false);
@@ -20,26 +21,6 @@ export function FilePreviewModal() {
   const [loadFailed, setLoadFailed] = useState(false);
 
   const objectUrlRef = useRef<string | null>(null);
-  const { mounted, visible } = usePresence(isOpen, 220);
-  useRestoreFocus(isOpen);
-
-  // Esc 关闭
-  useEffect(() => {
-    if (!mounted) return;
-    pushOverlay(OVERLAY_ID, 50);
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && isTopmostOverlay(OVERLAY_ID)) {
-        setIsOpen(false);
-        releaseObjectUrl();
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => {
-      popOverlay(OVERLAY_ID);
-      window.removeEventListener("keydown", onKey);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mounted]);
 
   const releaseObjectUrl = () => {
     if (objectUrlRef.current) {
@@ -99,7 +80,7 @@ export function FilePreviewModal() {
     releaseObjectUrl();
   };
 
-  if (!mounted || !material) return null;
+  if (!material) return null;
 
   const isPdf = material.type === "pdf" || material.title.endsWith(".pdf");
   const isImage =
@@ -107,20 +88,16 @@ export function FilePreviewModal() {
   const displayUrl = previewUrl ?? material.url;
 
   return (
-    <div
-      className={cn(
-        "fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-6",
-        "ux-overlay",
-        visible ? "opacity-100" : "opacity-0"
-      )}
+    <Dialog
+      open={isOpen}
+      onOpenChange={(next) => {
+        if (!next) handleClose();
+      }}
+      overlayId="file-preview-modal"
+      stackZ={50}
+      aria-label="文件预览"
+      className="max-w-4xl h-[88dvh]"
     >
-      <div
-        className={cn(
-          "w-full max-w-4xl bg-surface rounded-2xl shadow-2xl border border-line flex flex-col h-[88dvh] overflow-hidden",
-          "ux-modal-panel",
-          visible ? "opacity-100 scale-100 translate-y-0" : "opacity-0 scale-[0.985] translate-y-1"
-        )}
-      >
         {/* Header */}
         <div className="p-4 px-6 border-b border-[#F0EBE1] bg-[#F7F5F5] flex items-center justify-between shrink-0">
           <div className="flex items-center space-x-3 min-w-0 flex-1">
@@ -221,7 +198,6 @@ export function FilePreviewModal() {
             </div>
           )}
         </div>
-      </div>
-    </div>
+      </Dialog>
   );
 }

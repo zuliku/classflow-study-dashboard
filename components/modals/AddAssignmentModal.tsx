@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import React, { useState, useEffect, useRef } from "react";
 import { X, ClipboardList, Clock, Plus, Trash2 } from "lucide-react";
@@ -7,15 +7,16 @@ import { useToastStore } from "@/store/useToastStore";
 import { Priority, AssignmentStatus, Subtask, TaskRecurrence } from "@/types";
 import { combineLocalDateTime, getLocalDDLDate, getLocalDDLTime, parseLocalDDL } from "@/lib/ddl";
 import { format } from "date-fns";
-import { usePresence } from "@/lib/usePresence";
-import { useRestoreFocus } from "@/lib/useRestoreFocus";
+
+
 import { cn } from "@/lib/utils";
+import { Dialog } from "@/components/ui/Dialog";
 import { UISelect, SelectOption } from "@/components/ui/Select";
 import { onOpenAssignmentEditor } from "@/lib/uiEvents";
-import { pushOverlay, popOverlay, isTopmostOverlay } from "@/lib/overlayStack";
+
 import { getNewTaskDefaults } from "@/lib/taskDefaults";
 
-const OVERLAY_ID = "add-assignment-modal";
+
 
 /** Task 7F：重复规则选项（与 Domain TaskRecurrence 一一对应） */
 const RECURRENCE_OPTIONS: { value: TaskRecurrence | "none"; label: string }[] = [
@@ -40,23 +41,6 @@ export function AddAssignmentModal() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [prefillSource, setPrefillSource] = useState<"course" | "calendar" | null>(null);
   const submittingRef = useRef(false);
-
-  const { mounted, visible } = usePresence(isOpen, 220);
-  useRestoreFocus(isOpen);
-
-  // Overlay Stack：Modal 层，Esc 只在最上层时关闭
-  useEffect(() => {
-    if (!mounted) return;
-    pushOverlay(OVERLAY_ID, 50);
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && isTopmostOverlay(OVERLAY_ID)) setIsOpen(false);
-    };
-    window.addEventListener("keydown", onKey);
-    return () => {
-      popOverlay(OVERLAY_ID);
-      window.removeEventListener("keydown", onKey);
-    };
-  }, [mounted]);
 
   const [title, setTitle] = useState("");
   const [courseId, setCourseId] = useState(courses[0]?.id || "");
@@ -131,7 +115,6 @@ export function AddAssignmentModal() {
     return onOpenAssignmentEditor(handleOpen);
   }, [assignments, courses, preferences.defaultDDLTime]);
 
-  if (!mounted) return null;
 
   const handleAddSubtask = () => {
     setSubtasks([...subtasks, { id: `st_${Date.now()}`, title: "", completed: false }]);
@@ -200,20 +183,16 @@ export function AddAssignmentModal() {
   };
 
   return (
-    <div
-      className={cn(
-        "fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4",
-        "ux-overlay",
-        visible ? "opacity-100" : "opacity-0"
-      )}
+    <Dialog
+      open={isOpen}
+      onOpenChange={(next) => {
+        if (!next) setIsOpen(false);
+      }}
+      overlayId="add-assignment-modal"
+      stackZ={50}
+      aria-label="添加任务"
+      className="max-w-lg max-h-[90dvh]"
     >
-      <div
-        className={cn(
-          "w-full max-w-lg bg-surface rounded-2xl shadow-drawer border border-line overflow-hidden flex flex-col max-h-[90dvh]",
-          "ux-modal-panel",
-          visible ? "opacity-100 scale-100 translate-y-0" : "opacity-0 scale-[0.985] translate-y-1"
-        )}
-      >
         {/* Header */}
         <div className="p-4 px-6 border-b border-[#F0EBE1] bg-[#F7F5F5] flex items-center justify-between">
           <div className="flex items-center space-x-2">
@@ -418,7 +397,6 @@ export function AddAssignmentModal() {
             </button>
           </div>
         </form>
-      </div>
-    </div>
+      </Dialog>
   );
 }

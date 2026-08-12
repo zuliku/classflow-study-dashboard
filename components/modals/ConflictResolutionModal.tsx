@@ -1,14 +1,15 @@
-"use client";
+﻿"use client";
 
 import React, { useEffect } from "react";
 import { AlertTriangle, X, Trash2 } from "lucide-react";
 import { useAppStore } from "@/store/useAppStore";
-import { usePresence } from "@/lib/usePresence";
-import { useRestoreFocus } from "@/lib/useRestoreFocus";
-import { cn } from "@/lib/utils";
-import { pushOverlay, popOverlay, isTopmostOverlay } from "@/lib/overlayStack";
 
-const OVERLAY_ID = "conflict-modal";
+
+import { cn } from "@/lib/utils";
+import { Dialog } from "@/components/ui/Dialog";
+
+
+
 
 export function ConflictResolutionModal() {
   const {
@@ -21,24 +22,7 @@ export function ConflictResolutionModal() {
     excludeWeekFromSchedule,
   } = useAppStore();
 
-  const { mounted, visible } = usePresence(isConflictModalOpen, 220);
-  useRestoreFocus(isConflictModalOpen);
-
-  // Esc 关闭（仅在 Overlay 栈最上层时）
-  useEffect(() => {
-    if (!mounted) return;
-    pushOverlay(OVERLAY_ID, 50);
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && isTopmostOverlay(OVERLAY_ID)) setConflictModalOpen(false);
-    };
-    window.addEventListener("keydown", onKey);
-    return () => {
-      popOverlay(OVERLAY_ID);
-      window.removeEventListener("keydown", onKey);
-    };
-  }, [mounted, setConflictModalOpen]);
-
-  if (!mounted || !selectedConflict) return null;
+  if (!selectedConflict) return null;
 
   const { scheduleA, scheduleB, dayOfWeek, timeRange } = selectedConflict;
   const courseA = courses.find((c) => c.id === scheduleA.courseId);
@@ -68,20 +52,16 @@ export function ConflictResolutionModal() {
   };
 
   return (
-    <div
-      className={cn(
-        "fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4",
-        "ux-overlay",
-        visible ? "opacity-100" : "opacity-0"
-      )}
+    <Dialog
+      open={isConflictModalOpen}
+      onOpenChange={(next) => {
+        if (!next) setConflictModalOpen(false);
+      }}
+      overlayId="conflict-modal"
+      stackZ={50}
+      aria-label="课程时间重叠"
+      className="max-w-md max-h-[85dvh]"
     >
-      <div
-        className={cn(
-          "w-full max-w-md bg-surface rounded-2xl shadow-drawer border border-line overflow-hidden flex flex-col max-h-[85dvh]",
-          "ux-modal-panel",
-          visible ? "opacity-100 scale-100 translate-y-0" : "opacity-0 scale-[0.985] translate-y-1"
-        )}
-      >
         {/* Header */}
         <div className="p-4 px-6 border-b border-danger-border bg-danger-bg flex items-center justify-between">
           <div className="flex items-center space-x-2 text-danger">
@@ -178,7 +158,6 @@ export function ConflictResolutionModal() {
             </button>
           </div>
         </div>
-      </div>
-    </div>
+      </Dialog>
   );
 }

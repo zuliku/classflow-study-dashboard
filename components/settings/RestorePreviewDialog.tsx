@@ -3,12 +3,8 @@
 import React from "react";
 import { X, CheckCircle2, AlertTriangle, XCircle } from "lucide-react";
 import { PreparedRestore } from "@/lib/backupRestore";
-import { pushOverlay, popOverlay, isTopmostOverlay } from "@/lib/overlayStack";
-import { usePresence } from "@/lib/usePresence";
-import { useRestoreFocus } from "@/lib/useRestoreFocus";
+import { Dialog } from "@/components/ui/Dialog";
 import { cn } from "@/lib/utils";
-
-const OVERLAY_ID = "restore-preview";
 
 interface RestorePreviewDialogProps {
   prepared: PreparedRestore;
@@ -24,25 +20,6 @@ export function RestorePreviewDialog({
   onConfirm,
   committing,
 }: RestorePreviewDialogProps) {
-  const { mounted, visible } = usePresence(true, 200);
-  useRestoreFocus(true);
-
-  // Esc（最上层时关闭；blocked 态也允许关闭）
-  React.useEffect(() => {
-    if (!mounted) return;
-    pushOverlay(OVERLAY_ID, 50);
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && isTopmostOverlay(OVERLAY_ID) && !committing) onCancel();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => {
-      popOverlay(OVERLAY_ID);
-      window.removeEventListener("keydown", onKey);
-    };
-  }, [mounted, onCancel, committing]);
-
-  if (!mounted) return null;
-
   const blocked = prepared.integrity.fatal.length > 0;
   const summaryRows = [
     { label: "课程", value: prepared.summary.courses },
@@ -53,21 +30,20 @@ export function RestorePreviewDialog({
   ];
 
   return (
-    <div
-      className={cn(
-        "fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4",
-        "ux-overlay",
-        visible ? "opacity-100" : "opacity-0"
-      )}
+    <Dialog
+      open
+      onOpenChange={(next) => {
+        if (!next && !committing) onCancel();
+      }}
+      overlayId="restore-preview"
+      stackZ={50}
+      onEscapeKeyDown={(event) => {
+        // committing 期间禁止 Esc 关闭
+        if (committing) event.preventDefault();
+      }}
+      aria-label="恢复备份"
+      data-testid="restore-preview"
     >
-      <div
-        data-testid="restore-preview"
-        className={cn(
-          "w-full max-w-md bg-surface rounded-2xl shadow-drawer border border-line overflow-hidden flex flex-col",
-          "ux-modal-panel",
-          visible ? "opacity-100 scale-100 translate-y-0" : "opacity-0 scale-[0.985] translate-y-1"
-        )}
-      >
         {/* Header */}
         <div className="px-5 py-3.5 border-b border-line-soft flex items-center justify-between shrink-0">
           <div>
@@ -172,7 +148,6 @@ export function RestorePreviewDialog({
             )}
           </div>
         </div>
-      </div>
-    </div>
+      </Dialog>
   );
 }

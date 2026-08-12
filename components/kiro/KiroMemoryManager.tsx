@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import React, { useEffect, useMemo, useState } from "react";
 import { X, PencilLine, Trash2, Brain } from "lucide-react";
@@ -9,6 +9,7 @@ import { useAppStore } from "@/store/useAppStore";
 import { MEMORY_CATEGORY_LABELS, MEMORY_SCOPE_LABELS, KiroMemory, MemoryCategory, MemoryScope } from "@/lib/ai/memory/types";
 import { cn } from "@/lib/utils";
 import { UISelect } from "@/components/ui/Select";
+import { Dialog } from "@/components/ui/Dialog";
 
 /**
  * Kiro Memory Manager（Task 9）：查看 / 编辑 / 删除 / 清空长期学习记忆。
@@ -103,9 +104,25 @@ export function KiroMemoryManager({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" data-testid="kiro-memory-manager">
-      <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={onClose} aria-hidden="true" />
-      <div role="dialog" aria-label="Kiro 记忆" className="relative w-full max-w-lg bg-surface border border-line-strong rounded-2xl shadow-card flex flex-col max-h-[80dvh] ux-modal-panel">
+    <Dialog
+      open
+      onOpenChange={(next) => {
+        if (!next) onClose();
+      }}
+      overlayId="kiro-memory-manager"
+      stackZ={50}
+      closeOnBackdrop
+      onEscapeKeyDown={(event) => {
+        // 编辑态：第一次 Esc 只退出编辑，不关闭 Manager
+        if (editing !== null) {
+          event.preventDefault();
+          setEditing(null);
+        }
+      }}
+      aria-label="Kiro 记忆"
+      data-testid="kiro-memory-manager"
+      className="max-w-lg max-h-[80dvh] border-line-strong rounded-2xl shadow-card"
+    >
         {/* Header */}
         <div className="shrink-0 flex items-center justify-between gap-2 px-4 py-3 border-b border-line">
           <div className="flex items-center gap-2">
@@ -238,7 +255,6 @@ export function KiroMemoryManager({
             </button>
           )}
         </div>
-      </div>
-    </div>
+      </Dialog>
   );
 }

@@ -1,15 +1,16 @@
-"use client";
+﻿"use client";
 
 import React, { useEffect, useRef, useState } from "react";
 import { Settings as SettingsIcon, Search, X } from "lucide-react";
 import { useAppStore } from "@/store/useAppStore";
-import { usePresence } from "@/lib/usePresence";
-import { useRestoreFocus } from "@/lib/useRestoreFocus";
-import { pushOverlay, popOverlay, isTopmostOverlay } from "@/lib/overlayStack";
+
+
+
 import { SettingsView } from "@/components/settings/SettingsView";
 import { cn } from "@/lib/utils";
+import { Dialog } from "@/components/ui/Dialog";
 
-const OVERLAY_ID = "settings-modal";
+
 
 /**
  * 设置中心 Modal：居中弹层，固定宽高。
@@ -23,36 +24,18 @@ export function SettingsModal() {
   const [searchQuery, setSearchQuery] = useState("");
   const searchInputRef = useRef<HTMLInputElement | null>(null);
 
-  const { mounted, visible } = usePresence(isOpen, 220);
-  useRestoreFocus(isOpen);
-
-  // Overlay Stack：Modal 层，Esc 只在最上层时关闭；Cmd/Ctrl+F 聚焦设置搜索
+  // Cmd/Ctrl+F 聚焦设置搜索（与 overlay Esc 无关的独立快捷键）
   useEffect(() => {
-    if (!mounted) return;
-    pushOverlay(OVERLAY_ID, 50);
     const onKey = (e: KeyboardEvent) => {
-      const isTop = isTopmostOverlay(OVERLAY_ID);
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "f") {
         e.preventDefault();
         setSearchOpen(true);
         requestAnimationFrame(() => searchInputRef.current?.focus());
-        return;
-      }
-      if (e.key === "Escape" && isTop) {
-        if (searchOpen && document.activeElement === searchInputRef.current) {
-          setSearchOpen(false);
-          setSearchQuery("");
-        } else {
-          setSettingsModalOpen(false);
-        }
       }
     };
     window.addEventListener("keydown", onKey);
-    return () => {
-      popOverlay(OVERLAY_ID);
-      window.removeEventListener("keydown", onKey);
-    };
-  }, [mounted, setSettingsModalOpen, searchOpen]);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
   // 关闭 Modal 时重置搜索
   useEffect(() => {
@@ -62,31 +45,29 @@ export function SettingsModal() {
     }
   }, [isOpen]);
 
-  if (!mounted) return null;
-
   return (
-    <div
-      className={cn(
-        "fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center md:p-4",
-        "ux-overlay",
-        visible ? "opacity-100" : "opacity-0"
-      )}
-      onPointerDown={(e) => {
-        if (e.target === e.currentTarget) setSettingsModalOpen(false);
+    <Dialog
+      open={isOpen}
+      onOpenChange={(next) => {
+        if (!next) setSettingsModalOpen(false);
       }}
+      overlayId="settings-modal"
+      stackZ={50}
+      closeOnBackdrop
+      onEscapeKeyDown={(event) => {
+        // 搜索输入聚焦时：第一次 Esc 只退出搜索，不关闭 Modal
+        if (searchOpen && document.activeElement === searchInputRef.current) {
+          event.preventDefault();
+          setSearchOpen(false);
+          setSearchQuery("");
+        }
+      }}
+      aria-label="设置"
+      className={cn(
+        "w-full h-full md:w-[min(900px,calc(100vw-48px))] md:h-[min(680px,calc(100dvh-48px))]",
+        "rounded-none md:rounded-2xl"
+      )}
     >
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-label="设置"
-        className={cn(
-          "w-full h-full md:w-[min(900px,calc(100vw-48px))] md:h-[min(680px,calc(100dvh-48px))]",
-          "bg-surface rounded-none md:rounded-2xl shadow-drawer border border-line",
-          "overflow-hidden flex flex-col",
-          "ux-modal-panel",
-          visible ? "opacity-100 scale-100 translate-y-0" : "opacity-0 scale-[0.985] translate-y-1"
-        )}
-      >
         {/* Modal Header：设置标题 + 搜索 + 关闭 */}
         <div className="shrink-0 px-4 md:px-5 py-3 border-b border-[#F0EBE1] bg-[#F7F5F5] flex items-center justify-between gap-3">
           {searchOpen ? (
@@ -161,7 +142,6 @@ export function SettingsModal() {
             setSearchOpen(false);
           }}
         />
-      </div>
-    </div>
+      </Dialog>
   );
 }

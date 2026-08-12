@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import React, { useState, useEffect, useRef } from "react";
 import {
@@ -26,18 +26,19 @@ import { uploadCourseMaterials } from "@/lib/materialUpload";
 import { getLocalDDLDate } from "@/lib/ddl";
 import { WEEK_RANGE_PRESETS, isValidTimeRange } from "@/lib/schedule";
 import { findScheduleConflicts } from "@/lib/conflicts";
-import { usePresence } from "@/lib/usePresence";
-import { useRestoreFocus } from "@/lib/useRestoreFocus";
+
+
 import { cn } from "@/lib/utils";
 import { UISelect } from "@/components/ui/Select";
 import { openAssignmentEditor, previewMaterial } from "@/lib/uiEvents";
-import { popOverlay, isTopmostOverlay } from "@/lib/overlayStack";
+
 import { useKiroHandoff } from "@/hooks/useKiroHandoff";
 import { KIRO_ICON } from "@/components/layout/navItems";
 import { KiroFlowButton } from "@/components/kiro/KiroFlow";
 import { useEnterOnAdd } from "@/lib/useEnterOnAdd";
+import { Drawer } from "@/components/ui/Drawer";
 
-const OVERLAY_ID = "course-detail-drawer";
+
 const DAY_LABELS = ["一", "二", "三", "四", "五", "六", "日"];
 
 /** 周次选择：预设下拉 + 自定义输入（自定义状态由 value 是否命中预设推导） */
@@ -129,26 +130,9 @@ export function CourseDetailDrawer() {
   const newScheduleIds = useEnterOnAdd(courseSchedules.map((s) => s.id));
   const newMaterialIds = useEnterOnAdd(course?.materials.map((m) => m.id) ?? []);
 
-  const { mounted, visible } = usePresence(!!course, 260);
-  useRestoreFocus(!!course);
+  if (!course) return null;
 
-  // Esc 关闭
-  useEffect(() => {
-    if (!mounted) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && isTopmostOverlay(OVERLAY_ID)) setSelectedCourseId(null);
-    };
-    window.addEventListener("keydown", onKey);
-    return () => {
-      popOverlay(OVERLAY_ID);
-      window.removeEventListener("keydown", onKey);
-    };
-  }, [mounted, setSelectedCourseId]);
-
-  if (!mounted || !course) return null;
-
-  const handleStartEdit = () => {
-    setName(course.name);
+  const handleStartEdit = () => {    setName(course.name);
     setTeacher(course.teacher);
     setClassroom(course.classroom);
     setCredit(course.credit);
@@ -405,20 +389,15 @@ export function CourseDetailDrawer() {
   };
 
   return (
-    <div
-      className={cn(
-        "fixed inset-0 z-40 bg-black/40 backdrop-blur-sm flex justify-end",
-        "ux-overlay",
-        visible ? "opacity-100" : "opacity-0"
-      )}
+    <Drawer
+      open={!!course}
+      onOpenChange={(next) => {
+        if (!next) setSelectedCourseId(null);
+      }}
+      overlayId="course-detail-drawer"
+      aria-label="课程详情"
+      className="max-w-lg justify-between"
     >
-      <div
-        className={cn(
-          "w-full max-w-lg bg-surface h-full shadow-drawer border-l border-line flex flex-col justify-between overflow-hidden",
-          "ux-drawer-panel",
-          visible ? "translate-x-0 opacity-100" : "translate-x-8 opacity-0"
-        )}
-      >
         {/* Header */}
         <div
           className="p-6 border-b border-line-strong flex items-center justify-between"
@@ -895,7 +874,6 @@ export function CourseDetailDrawer() {
             </div>
           </div>
         </div>
-      </div>
-    </div>
+        </Drawer>
   );
 }
