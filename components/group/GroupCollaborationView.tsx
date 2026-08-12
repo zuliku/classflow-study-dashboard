@@ -2,8 +2,8 @@
 
 import React, { useState, useEffect } from "react";
 import { createPortal } from "react-dom";
+import { WorkspaceHeader } from "@/components/layout/WorkspaceHeader";
 import {
-  Users2,
   Plus,
   CheckSquare,
   Square,
@@ -357,17 +357,12 @@ export function GroupCollaborationView() {
 
   return (
     <div className="space-y-4">
-      {/* Header Banner */}
-      <div className="bg-surface border border-line rounded-2xl p-4 shadow-subtle flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div>
-          <h2 className="text-base font-bold text-charcoal mb-0.5 flex items-center gap-2">
-            <Users2 className="w-4 h-4 text-sandrift" />
-            小组协作
-          </h2>
-          <p className="text-xs text-sandrift">管理小组项目、成员与任务分工</p>
-        </div>
-        <div className="flex items-center gap-2 shrink-0">
-          {activeProject && (
+      {/* Task 1：统一 Workspace Header（Banner 已删除；Ask Kiro 仅 activeProject 时显示） */}
+      <WorkspaceHeader
+        title="小组协作"
+        context={`${groupProjects.length} 个项目`}
+        actions={
+          activeProject ? (
             <KiroFlowButton
               icon={KIRO_ICON}
               label="Ask Kiro"
@@ -375,16 +370,20 @@ export function GroupCollaborationView() {
               className="h-8"
               onClick={() => handoff.openForGroupProject(activeProject.id)}
             />
-          )}
+          ) : undefined
+        }
+        primaryAction={
           <button
+            type="button"
             onClick={openCreateProject}
-            className="flex items-center space-x-1.5 px-3 py-1.5 bg-charcoal hover:bg-black text-white text-xs font-medium rounded-xl transition-colors shrink-0"
+            className="ux-press flex h-8 items-center gap-1.5 rounded-lg bg-charcoal px-3 text-xs font-bold text-white transition-colors hover:bg-black"
           >
-            <Plus className="w-3.5 h-3.5" />
+            <Plus className="h-3.5 w-3.5" />
             <span>新建项目</span>
           </button>
-        </div>
-      </div>
+        }
+        sticky
+      />
 
       {/* Main Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 items-start">

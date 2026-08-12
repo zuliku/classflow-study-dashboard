@@ -16,6 +16,22 @@ async function openWorkspace(page: Page) {
   return list;
 }
 
+test("Task 1 Header：任务与 DDL heading + 新增任务 按钮可见；点击 toggle QuickAddCard", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto("/");
+  await page.getByRole("button", { name: "任务工作区" }).first().click();
+
+  await expect(page.getByRole("heading", { name: "任务与 DDL" })).toBeVisible();
+  const addButton = page.getByRole("button", { name: /新增任务/ });
+  await expect(addButton).toBeVisible();
+
+  // 点击 → inline QuickAddCard visible；再次点击（按钮变「收起」）→ hidden
+  await addButton.click();
+  await expect(page.getByTestId("quick-add-card")).toBeVisible();
+  await page.getByRole("button", { name: "收起" }).click();
+  await expect(page.getByTestId("quick-add-card")).toBeHidden();
+});
+
 test("导航：全部视图下 J J Enter → 打开正确的任务 Drawer", async ({ page }) => {
   await openWorkspace(page);
   await page.getByRole("button", { name: "全部" }).first().click();

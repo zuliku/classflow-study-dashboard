@@ -1,4 +1,4 @@
-import { test, expect, Page } from "@playwright/test";
+﻿import { test, expect, Page } from "@playwright/test";
 
 /**
  * First Run E2E：生产初始状态（无演示数据）——真实空工作区。
@@ -51,7 +51,7 @@ test("其他页面空态：课程/课表/分析均为真实空状态", async ({ 
 
   // 课表页（Timeline V1：空网格布局，无课程数据泄漏）
   await page.getByRole("button", { name: "时间表" }).first().click();
-  await expect(page.getByRole("heading", { name: /第 \d+ 周/ })).toBeVisible();
+  await expect(page.getByText(/第 \d+ 周/).first()).toBeVisible();
   await expect(page.getByText("微观经济学")).toHaveCount(0);
 });
 

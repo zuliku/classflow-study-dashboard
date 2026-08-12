@@ -23,6 +23,7 @@ import { useKiroHandoff } from "@/hooks/useKiroHandoff";
 import { KIRO_ICON } from "@/components/layout/navItems";
 import { KiroFlowButton } from "@/components/kiro/KiroFlow";
 import { useKiroSession } from "@/components/kiro/KiroSessionProvider";
+import { WorkspaceHeader } from "@/components/layout/WorkspaceHeader";
 import { TimetableGrid } from "@/components/dashboard/TimetableGrid";
 import { TimelineKeyLane } from "@/components/timeline/TimelineKeyLane";
 import { FloatingTimelineDetail } from "@/components/timeline/FloatingTimelineDetail";
@@ -350,24 +351,21 @@ export function TimelineWorkspace() {
 
   return (
     <>
+    {/* Task 1：Timeline Workspace Header（统一 Shell；周切换/Filter/+ /Ask Kiro/More 留在 Local Toolbar） */}
+    <WorkspaceHeader
+      title="时间表"
+      context={`第 ${currentSemesterWeek} 周 · ${formatWeekDateRange(semester, currentSemesterWeek)}`}
+      sticky
+    />
     <div
       ref={wrapRef}
       data-testid="timeline-workspace"
-      className="h-[calc(100dvh-128px)] md:h-[calc(100dvh-92px)] flex flex-col min-h-0 bg-surface border border-line rounded-2xl shadow-subtle overflow-hidden"
+      className="h-[calc(100dvh-128px)] md:h-[calc(100dvh-128px)] flex flex-col min-h-0 bg-surface border border-line rounded-2xl shadow-subtle overflow-hidden"
     >
-      {/* ---------- Header Controls（分组：左 Week Meta 固定宽度 + 周导航 | 右 Actions） ---------- */}
+      {/* ---------- Local Toolbar（周导航 | Actions；Week Meta 已上移 Workspace Header，不再重复） ---------- */}
       <div className="shrink-0 px-3 py-2 border-b border-line flex items-center justify-between gap-2">
-        {/* Group A：Week Navigation（Week Meta 固定宽度 → ‹ › 今天坐标稳定） */}
+        {/* Group A：Week Navigation（‹ › 今天坐标稳定） */}
         <div className="flex items-center gap-1 min-w-0">
-          <div className="flex items-baseline gap-1.5 w-[192px] shrink-0">
-            <h2 className="text-sm font-bold text-charcoal tabular-nums whitespace-nowrap">
-              第 {currentSemesterWeek} 周
-            </h2>
-            <span className="text-[11px] text-sandrift tabular-nums truncate">
-              {formatWeekDateRange(semester, currentSemesterWeek)}
-            </span>
-          </div>
-          <div className="w-px h-4 bg-line-soft mx-1 shrink-0" />
           <button
             onClick={() => setCurrentSemesterWeek(currentSemesterWeek - 1)}
             disabled={currentSemesterWeek <= 1}

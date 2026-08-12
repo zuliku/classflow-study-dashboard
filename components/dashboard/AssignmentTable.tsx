@@ -48,6 +48,9 @@ import { KiroFlowButton } from "@/components/kiro/KiroFlow";
 export interface AssignmentTableProps {
   /** compact：Overview 只读点击式；workspace：Assignments Tab 的键盘优先工作区 */
   mode?: "compact" | "workspace";
+  /** Task 1：workspace Quick Add 受控（由 AssignmentsWorkspace Header 主按钮驱动） */
+  workspaceQuickAddOpen?: boolean;
+  onWorkspaceQuickAddOpenChange?: (open: boolean) => void;
 }
 
 const PRIORITY_OPTIONS: { value: Priority; label: string }[] = [
@@ -60,8 +63,18 @@ const PRIORITY_OPTIONS: { value: Priority; label: string }[] = [
 /** compact 模式每页任务数（超出后分页，不内部滚动） */
 const COMPACT_PAGE_SIZE = 5;
 
-export function AssignmentTable({ mode = "compact" }: AssignmentTableProps) {
+export function AssignmentTable({
+  mode = "compact",
+  workspaceQuickAddOpen,
+  onWorkspaceQuickAddOpenChange,
+}: AssignmentTableProps) {
   const isWorkspace = mode === "workspace";
+
+  // Task 1：workspace Quick Add 受控（Header 主按钮）；compact 保持内部状态
+  const quickAddOpen = isWorkspace ? (workspaceQuickAddOpen ?? false) : false;
+  const setQuickAddOpen = (open: boolean) => {
+    if (isWorkspace) onWorkspaceQuickAddOpenChange?.(open);
+  };
 
   const {
     assignments,
@@ -100,7 +113,6 @@ export function AssignmentTable({ mode = "compact" }: AssignmentTableProps) {
   // Part B：「···」More 菜单（低频入口：已归档）
   const [moreOpen, setMoreOpen] = useState(false);
   const moreMenuRef = useRef<HTMLDivElement | null>(null);
-  const [quickAddOpen, setQuickAddOpen] = useState(false);
   const newTaskIds = useEnterOnAdd(assignments.map((a) => a.id));
 
   const today = new Date();
@@ -213,8 +225,8 @@ export function AssignmentTable({ mode = "compact" }: AssignmentTableProps) {
 
   const handleAddAssignmentClick = () => {
     if (isWorkspace) {
-      // Quick Add V2：Header 下方 Inline Card（全屏编辑走「更多详情」）
-      setQuickAddOpen((v) => !v);
+      // Quick Add V2：Header 下方 Inline Card（全屏编辑走「更多详情」）——由 AssignmentsWorkspace Header 驱动
+      setQuickAddOpen(!quickAddOpen);
       return;
     }
     openAssignmentEditor(courseFilter !== "all" ? { courseId: courseFilter } : {});
@@ -446,6 +458,9 @@ export function AssignmentTable({ mode = "compact" }: AssignmentTableProps) {
     <div className="bg-surface border border-line rounded-2xl p-4 shadow-subtle flex flex-col justify-between h-full space-y-3 min-w-0">
       {/* Header & Controls */}
       <div className="space-y-3 border-b border-[#F0EBE1] pb-3">
+        {/* Task 1：workspace 模式标题/主创建/Ask Kiro 已上移到 AssignmentsWorkspace Header；
+            compact 保留原有 任务清单 标题区 */}
+        {!isWorkspace && (
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
           <div className="flex items-center space-x-2">
             <h3 className="text-sm font-bold text-charcoal">
@@ -468,46 +483,19 @@ export function AssignmentTable({ mode = "compact" }: AssignmentTableProps) {
           </div>
 
           <div className="flex items-center space-x-2 shrink-0">
-            {isWorkspace && (
-              <KiroFlowButton
-                icon={KIRO_ICON}
-                label="Ask Kiro"
-                size="sm"
-                className="h-8"
-                onClick={() =>
-                  highlightedAssignmentId
-                    ? handoff.openForAssignment(highlightedAssignmentId)
-                    : handoff.openForWeek(currentSemesterWeek)
-                }
-              />
-            )}
-            {/* Part C：有 Highlight 时才显示「帮我拆解当前任务」快捷入口 */}
-            {isWorkspace && highlightedAssignmentId && (
-              <button
-                onClick={() => {
-                  handoff.openForAssignment(highlightedAssignmentId);
-                  handoff.handoffPrompt(
-                    "帮我拆解这个任务，拆成 2–8 个可执行的步骤，并估算每步和总耗时。"
-                  );
-                }}
-                title="Kiro 拆解当前高亮任务"
-                className="ux-press px-2.5 h-8 text-[11px] font-bold text-charcoal bg-alabaster hover:bg-alba border border-line rounded-lg transition-colors shrink-0"
-              >
-                帮我拆解当前任务
-              </button>
-            )}
             <button
               onClick={handleAddAssignmentClick}
-              aria-expanded={isWorkspace ? quickAddOpen : undefined}
+              aria-expanded={undefined}
               className="ux-press flex items-center space-x-1 px-3 py-1.5 bg-charcoal hover:bg-black text-white text-xs font-bold rounded-xl transition-colors shadow-subtle shrink-0"
             >
               <Plus className="w-3.5 h-3.5" />
-              <span>{isWorkspace && quickAddOpen ? "收起" : "新增任务"}</span>
+              <span>新增任务</span>
             </button>
           </div>
         </div>
+        )}
 
-        {/* Quick Add V2（workspace inline；compact 不显示） */}
+        {/* Quick Add V2（workspace inline；compact 不显示）——受控自 AssignmentsWorkspace Header */}
         {isWorkspace && quickAddOpen && (
           <QuickAddCard
             defaultCourseId={courseFilter !== "all" ? courseFilter : undefined}

@@ -35,7 +35,7 @@ test("导航：Cmd+K 输入「课表」Enter → activeTab 切换为课表", asy
   await page.keyboard.type("课表");
   await page.keyboard.press("Enter");
 
-  await expect(page.getByRole("heading", { name: "学期课表" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "时间表" })).toBeVisible();
   await expect(page.getByTestId("command-center")).toHaveCount(0);
 });
 

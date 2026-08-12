@@ -1,4 +1,4 @@
-import { expect, Page } from "@playwright/test";
+﻿import { expect, Page } from "@playwright/test";
 import { test } from "./demoFixtures";
 
 /**
@@ -15,7 +15,7 @@ async function openWorkspace(page: Page) {
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto("/");
   await page.getByRole("button", { name: "时间表" }).first().click();
-  await expect(page.getByRole("heading", { name: /第 \d+ 周/ })).toBeVisible();
+  await expect(page.getByText(/第 \d+ 周/).first()).toBeVisible();
   await expect(page.getByTestId("timetable-body")).toBeVisible();
 }
 
@@ -145,7 +145,7 @@ test("Mobile <768：点击课程卡仍进入 Course Drawer，不触发拖动", a
   await page.goto("/");
   // 底部导航进入课表页
   await page.locator('nav[aria-label="底部导航"]').getByRole("button", { name: "时间表" }).click();
-  await expect(page.getByRole("heading", { name: /第 \d+ 周/ })).toBeVisible();
+  await expect(page.getByText(/第 \d+ 周/).first()).toBeVisible();
 
   const card = page
     .locator('[data-testid="schedule-card"]')
