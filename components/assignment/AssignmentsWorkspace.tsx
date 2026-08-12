@@ -3,6 +3,7 @@
 import React, { useState } from "react";
 import { Plus } from "lucide-react";
 import { WorkspaceHeader } from "@/components/layout/WorkspaceHeader";
+import { Button } from "@/components/ui/Button";
 import { AssignmentTable } from "@/components/dashboard/AssignmentTable";
 import { KiroFlowButton } from "@/components/kiro/KiroFlow";
 import { KIRO_ICON } from "@/components/layout/navItems";
@@ -54,16 +55,16 @@ export function AssignmentsWorkspace() {
   );
 
   const primaryAction = (
-    <button
-      type="button"
+    <Button
+      variant="primary"
+      size="sm"
       aria-expanded={quickAddOpen}
       onClick={() => setQuickAddOpen((v) => !v)}
-      className="ux-press flex h-8 items-center gap-1.5 rounded-lg bg-charcoal px-3 text-xs font-bold text-white transition-colors hover:bg-black"
     >
       <Plus className="h-3.5 w-3.5" />
       <span className="hidden sm:inline">{quickAddOpen ? "收起" : "新增任务"}</span>
       <span className="sm:hidden">{quickAddOpen ? "收起" : "新增"}</span>
-    </button>
+    </Button>
   );
 
   return (

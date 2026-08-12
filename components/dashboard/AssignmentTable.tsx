@@ -39,6 +39,8 @@ import {
 import { AssignmentPeekPanel } from "@/components/assignment/AssignmentPeekPanel";
 import { AssignmentContextMenu, ContextMenuCommand } from "@/components/assignment/AssignmentContextMenu";
 import { QuickAddCard } from "@/components/assignment/QuickAddCard";
+import { SearchField } from "@/components/ui/SearchField";
+import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { deriveTaskWorkspace, PRIMARY_TASK_WORKSPACE_VIEWS, TaskHealthPlanningInput } from "@/lib/tasks/taskViews";
 import { healthViewMeta } from "@/lib/tasks/taskHealthView";
 import { useKiroHandoff } from "@/hooks/useKiroHandoff";
@@ -542,17 +544,14 @@ export function AssignmentTable({
                 </button>
               )}
 
-              {/* Search */}
-              <div className="flex items-center gap-1.5 bg-[#F7F5F5] border border-line rounded-xl px-2.5 py-1 min-w-[150px]">
-                <Search className="w-3.5 h-3.5 text-[#A48F82]" />
-                <input
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="搜索任务…"
-                  className="bg-transparent text-charcoal text-xs font-medium focus:outline-none w-full placeholder:text-sandrift"
-                  aria-label="搜索任务"
-                />
-              </div>
+              {/* Search → 全局 SearchField（筛选语义不变） */}
+              <SearchField
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="搜索任务…"
+                aria-label="搜索任务"
+                className="min-w-[150px]"
+              />
 
               {assignmentWorkspaceView === "archive" ? (
                 /* Archive：临时状态入口（不新增永久 Tab） */
@@ -569,33 +568,23 @@ export function AssignmentTable({
                 </div>
               ) : (
                 <>
-                  {/* View Tabs：仅 Primary Views（count = 课程筛选后该视图数量；search 不改变 count 语义） */}
-                  <div className="flex flex-wrap items-center gap-1 bg-alabaster p-0.5 rounded-xl border border-line-strong text-[11px] font-medium">
-                    {PRIMARY_TASK_WORKSPACE_VIEWS.map((view) => {
-                      const isActive = assignmentWorkspaceView === view.id;
-                      const count = workspaceViewResult?.counts[view.id] ?? 0;
-                      return (
-                        <button
-                          key={view.id}
-                          onClick={() => setAssignmentWorkspaceView(view.id)}
-                          className={`flex items-center gap-1 px-2.5 py-0.5 rounded-lg transition-colors duration-[var(--motion-fast)] ease-[var(--ease-standard)] ${
-                            isActive
-                              ? "bg-white text-charcoal font-bold shadow-subtle"
-                              : "text-satin-grey hover:text-charcoal"
-                          }`}
-                        >
+                  {/* View Tabs：仅 Primary Views → 全局 SegmentedControl（count = 课程筛选后该视图数量；search 不改变 count 语义） */}
+                  <SegmentedControl
+                    value={assignmentWorkspaceView}
+                    onChange={setAssignmentWorkspaceView}
+                    ariaLabel="任务视图"
+                    options={PRIMARY_TASK_WORKSPACE_VIEWS.map((view) => ({
+                      value: view.id,
+                      label: (
+                        <span className="flex items-center gap-1">
                           {view.label}
-                          <span
-                            className={`text-[9px] font-bold px-1 rounded ${
-                              isActive ? "text-sandrift" : "text-satin-grey/60"
-                            }`}
-                          >
-                            {count}
+                          <span className="text-[9px] font-bold text-sandrift/80">
+                            {workspaceViewResult?.counts[view.id] ?? 0}
                           </span>
-                        </button>
-                      );
-                    })}
-                  </div>
+                        </span>
+                      ),
+                    }))}
+                  />
 
                   {/* More：低频入口（已归档等） */}
                   <div className="relative" ref={moreMenuRef}>

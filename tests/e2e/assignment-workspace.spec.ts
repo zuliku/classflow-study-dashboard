@@ -32,6 +32,25 @@ test("Task 1 Header：任务与 DDL heading + 新增任务 按钮可见；点击
   await expect(page.getByTestId("quick-add-card")).toBeHidden();
 });
 
+test("Task 2A core controls：搜索筛选 + Primary View 切换保持可用", async ({ page }) => {
+  await openWorkspace(page);
+
+  // 默认视图为「聚焦」；切到「全部」后搜索能跨全部任务筛选
+  const allView = page.getByRole("button", { name: /全部/ }).first();
+  await allView.click();
+
+  const search = page.getByLabel("搜索任务");
+  await search.fill("数据库");
+  await expect(page.locator('[data-assignment-id="a4"]')).toBeVisible();
+  await expect(page.locator('[data-assignment-id="a1"]')).toHaveCount(0);
+
+  await search.fill("");
+  await expect(page.locator('[data-assignment-id="a1"]')).toBeVisible();
+  await allView.click();
+  await expect(allView).toHaveAttribute("aria-pressed", "true");
+  await expect(page.locator('[data-assignment-id="a1"]')).toBeVisible();
+});
+
 test("导航：全部视图下 J J Enter → 打开正确的任务 Drawer", async ({ page }) => {
   await openWorkspace(page);
   await page.getByRole("button", { name: "全部" }).first().click();

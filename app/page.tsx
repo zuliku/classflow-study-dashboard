@@ -3,6 +3,7 @@
 import React, { useEffect, useRef } from "react";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { WorkspaceHeader } from "@/components/layout/WorkspaceHeader";
+import { Button } from "@/components/ui/Button";
 import { BottomNav } from "@/components/layout/BottomNav";
 import { TimetableGrid } from "@/components/dashboard/TimetableGrid";
 import { TimetableQuickGlance } from "@/components/dashboard/TimetableQuickGlance";
@@ -245,10 +246,11 @@ export default function Home() {
         >
           <PageTransition
             tab={activeTab}
-            className={cn(
-              "space-y-5",
-              activeTab === "kiro" && "flex flex-col flex-1 min-h-0"
-            )}
+            className={
+              activeTab === "kiro"
+                ? "flex flex-col flex-1 min-h-0"
+                : "space-y-5"
+            }
           >
           {activeTab === "overview" && (
             <>
@@ -342,14 +344,10 @@ export default function Home() {
                 title="课程资料"
                 context={`${courses.length} 门课程 · ${totalCredits} 学分`}
                 primaryAction={
-                  <button
-                    type="button"
-                    onClick={() => setAddCourseModalOpen(true)}
-                    className="ux-press flex h-8 items-center gap-1.5 rounded-lg bg-charcoal px-3 text-xs font-bold text-white transition-colors hover:bg-black"
-                  >
+                  <Button variant="primary" size="sm" onClick={() => setAddCourseModalOpen(true)}>
                     <Plus className="h-3.5 w-3.5" />
                     <span>添加课程</span>
-                  </button>
+                  </Button>
                 }
                 sticky
               />

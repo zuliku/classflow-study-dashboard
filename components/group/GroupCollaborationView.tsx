@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { WorkspaceHeader } from "@/components/layout/WorkspaceHeader";
+import { Button } from "@/components/ui/Button";
 import {
   Plus,
   CheckSquare,
@@ -373,14 +374,10 @@ export function GroupCollaborationView() {
           ) : undefined
         }
         primaryAction={
-          <button
-            type="button"
-            onClick={openCreateProject}
-            className="ux-press flex h-8 items-center gap-1.5 rounded-lg bg-charcoal px-3 text-xs font-bold text-white transition-colors hover:bg-black"
-          >
+          <Button variant="primary" size="sm" onClick={openCreateProject}>
             <Plus className="h-3.5 w-3.5" />
             <span>新建项目</span>
-          </button>
+          </Button>
         }
         sticky
       />
