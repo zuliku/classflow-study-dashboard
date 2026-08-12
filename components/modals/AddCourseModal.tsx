@@ -11,6 +11,11 @@ import { COURSE_COLOR_OPTIONS } from "@/lib/courseAppearance";
 
 import { cn } from "@/lib/utils";
 import { Dialog } from "@/components/ui/Dialog";
+import { Input } from "@/components/ui/Input";
+import { Textarea } from "@/components/ui/Textarea";
+import { Field } from "@/components/ui/Field";
+import { Button } from "@/components/ui/Button";
+import { IconButton } from "@/components/ui/IconButton";
 import { UISelect } from "@/components/ui/Select";
 
 
@@ -174,80 +179,74 @@ export function AddCourseModal() {
         </div>
 
         {/* Form */}
-        <form onSubmit={handleSubmit} className="p-6 space-y-4 overflow-y-auto text-xs">
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1">
-              <label className="font-bold text-sandrift">课程名称 *</label>
-              <input
+        <form onSubmit={handleSubmit} className="p-5 space-y-4 overflow-y-auto text-xs">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <Field label="课程名称" required htmlFor="course-name">
+              <Input
+                id="course-name"
                 type="text"
                 placeholder="如：行为经济学"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                className="w-full p-2.5 bg-[#F7F5F5] border border-line rounded-xl focus:outline-none focus:border-charcoal text-charcoal"
                 autoFocus
                 required
               />
-            </div>
-            <div className="space-y-1">
-              <label className="font-bold text-sandrift">课程代码</label>
-              <input
+            </Field>
+            <Field label="课程代码">
+              <Input
                 type="text"
                 placeholder="如：ECON-305"
                 value={code}
                 onChange={(e) => setCode(e.target.value)}
-                className="w-full p-2.5 bg-[#F7F5F5] border border-line rounded-xl focus:outline-none focus:border-charcoal text-charcoal font-mono"
+                mono
               />
-            </div>
+            </Field>
           </div>
 
-          <div className="grid grid-cols-3 gap-3">
-            <div className="space-y-1">
-              <label className="font-bold text-sandrift">授课教师</label>
-              <input
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <Field label="授课教师">
+              <Input
                 type="text"
                 placeholder="教师姓名"
                 value={teacher}
                 onChange={(e) => setTeacher(e.target.value)}
-                className="w-full p-2.5 bg-[#F7F5F5] border border-line rounded-xl focus:outline-none"
               />
-            </div>
-            <div className="space-y-1">
-              <label className="font-bold text-sandrift">默认教室</label>
-              <input
+            </Field>
+            <Field label="默认教室">
+              <Input
                 type="text"
                 placeholder="如：教二 401"
                 value={classroom}
                 onChange={(e) => setClassroom(e.target.value)}
-                className="w-full p-2.5 bg-[#F7F5F5] border border-line rounded-xl focus:outline-none"
               />
-            </div>
-            <div className="space-y-1">
-              <label className="font-bold text-sandrift">学分</label>
-              <input
+            </Field>
+            <Field label="学分">
+              <Input
                 type="number"
                 min="1"
                 max="10"
                 value={credit}
                 onChange={(e) => setCredit(Number(e.target.value))}
-                className="w-full p-2.5 bg-[#F7F5F5] border border-line rounded-xl focus:outline-none"
               />
-            </div>
+            </Field>
           </div>
 
           {/* Dynamic Schedule Slots List (支持一门课多个上课时间) */}
           <div className="space-y-2 pt-1">
             <div className="flex items-center justify-between">
-              <h4 className="font-bold text-charcoal flex items-center">
+              <h4 className="text-[12px] font-bold text-charcoal flex items-center">
                 <Clock className="w-3.5 h-3.5 mr-1 text-[#A48F82]" /> 上课时间与周次 ({scheduleSlots.length} 时段)
               </h4>
-              <button
+              <Button
                 type="button"
+                variant="accent"
+                size="sm"
                 onClick={handleAddSlot}
-                className="flex items-center space-x-1 text-[11px] font-bold text-charcoal bg-pastel-mint hover:bg-pastel-mint px-2.5 py-1 rounded-lg transition-colors"
+                className="h-7 px-2.5 text-[11px]"
               >
                 <Plus className="w-3 h-3" />
                 <span>添加上课时段</span>
-              </button>
+              </Button>
             </div>
 
             <div className="space-y-2.5">
@@ -259,20 +258,23 @@ export function AddCourseModal() {
                   <div className="flex items-center justify-between border-b border-line-strong/60 pb-1.5 text-[11px]">
                     <span className="font-bold text-sandrift">时段 #{idx + 1}</span>
                     {scheduleSlots.length > 1 && (
-                      <button
+                      <IconButton
+                        variant="danger"
+                        size="sm"
                         type="button"
                         onClick={() => handleRemoveSlot(idx)}
-                        className="text-danger hover:bg-danger-bg p-0.5 rounded transition-colors"
+                        aria-label="删除此时段"
                         title="删除此时段"
+                        className="h-7 w-7"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
-                      </button>
+                      </IconButton>
                     )}
                   </div>
 
                   <div className="grid grid-cols-2 gap-2">
                     <div>
-                      <label className="text-[10px] text-sandrift">周次规则</label>
+                      <label className="text-[10px] font-bold text-sandrift">周次规则</label>
                       <UISelect
                         value={slot.weeks}
                         onChange={(v) => handleSlotChange(idx, "weeks", v)}
@@ -282,7 +284,7 @@ export function AddCourseModal() {
                     </div>
 
                     <div>
-                      <label className="text-[10px] text-sandrift">星期</label>
+                      <label className="text-[10px] font-bold text-sandrift">星期</label>
                       <UISelect<number>
                         value={slot.dayOfWeek}
                         onChange={(v) => handleSlotChange(idx, "dayOfWeek", v)}
@@ -295,33 +297,33 @@ export function AddCourseModal() {
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-3 gap-2">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                     <div>
-                      <label className="text-[10px] text-sandrift">开始时间</label>
-                      <input
+                      <label className="text-[10px] font-bold text-sandrift">开始时间</label>
+                      <Input
                         type="time"
                         value={slot.startTime}
                         onChange={(e) => handleSlotChange(idx, "startTime", e.target.value)}
-                        className="w-full p-1.5 bg-white border border-line-strong rounded-lg focus:outline-none font-mono text-[11px]"
+                        className="bg-white border-line-strong font-mono"
                       />
                     </div>
                     <div>
-                      <label className="text-[10px] text-sandrift">结束时间</label>
-                      <input
+                      <label className="text-[10px] font-bold text-sandrift">结束时间</label>
+                      <Input
                         type="time"
                         value={slot.endTime}
                         onChange={(e) => handleSlotChange(idx, "endTime", e.target.value)}
-                        className="w-full p-1.5 bg-white border border-line-strong rounded-lg focus:outline-none font-mono text-[11px]"
+                        className="bg-white border-line-strong font-mono"
                       />
                     </div>
                     <div>
-                      <label className="text-[10px] text-sandrift">教室 (选填)</label>
-                      <input
+                      <label className="text-[10px] font-bold text-sandrift">教室 (选填)</label>
+                      <Input
                         type="text"
                         placeholder={classroom || "教室"}
                         value={slot.location}
                         onChange={(e) => handleSlotChange(idx, "location", e.target.value)}
-                        className="w-full p-1.5 bg-white border border-line-strong rounded-lg focus:outline-none text-[11px]"
+                        className="bg-white border-line-strong"
                       />
                     </div>
                   </div>
@@ -330,16 +332,16 @@ export function AddCourseModal() {
             </div>
           </div>
 
-          {/* Color Theme Selector */}
+          {/* Color Theme Selector（业务特定 UI：保留色块按钮模型，仅统一 focus/size/radius/selected ring） */}
           <div className="space-y-1.5 pt-1">
-            <label className="font-bold text-sandrift">卡片主题配色</label>
+            <label className="text-[11px] font-bold text-charcoal">卡片主题配色</label>
             <div className="flex space-x-2">
               {COLOR_OPTIONS.map((c, i) => (
                 <button
                   key={i}
                   type="button"
                   onClick={() => setColorIndex(i)}
-                  className={`w-8 h-8 rounded-xl border flex items-center justify-center transition-colors duration-[var(--motion-fast)] ease-[var(--ease-standard)] ${
+                  className={`w-8 h-8 rounded-lg border flex items-center justify-center transition-colors duration-[var(--motion-fast)] ease-[var(--ease-standard)] focus-visible:outline-2 focus-visible:outline-charcoal/30 focus-visible:outline-offset-1 ${
                     colorIndex === i ? "ring-2 ring-charcoal ring-offset-1" : ""
                   }`}
                   style={{ backgroundColor: c.bgHex, borderColor: c.borderHex }}
@@ -352,16 +354,14 @@ export function AddCourseModal() {
           </div>
 
           {/* Description */}
-          <div className="space-y-1">
-            <label className="font-bold text-sandrift">课程说明</label>
-            <textarea
+          <Field label="课程说明">
+            <Textarea
               rows={2}
               placeholder="课程说明"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              className="w-full p-2.5 bg-[#F7F5F5] border border-line rounded-xl focus:outline-none resize-none"
             />
-          </div>
+          </Field>
 
           {/* Actions */}
           {formError && (
@@ -369,20 +369,18 @@ export function AddCourseModal() {
               {formError}
             </p>
           )}
-          <div className="flex justify-end space-x-2 pt-2 border-t border-[#F0EBE1]">
-            <button
+          <div className="flex justify-end gap-2 pt-2 border-t border-[#F0EBE1]">
+            <Button
               type="button"
+              variant="secondary"
+              size="sm"
               onClick={() => setAddCourseModalOpen(false)}
-              className="px-4 py-2 text-xs font-medium text-satin-grey bg-[#F7F5F5] border border-line rounded-xl hover:bg-alba"
             >
               取消
-            </button>
-            <button
-              type="submit"
-              className="ux-press px-4 py-2 text-xs font-medium text-white bg-charcoal rounded-xl hover:bg-black font-bold"
-            >
-               创建课程
-            </button>
+            </Button>
+            <Button type="submit" variant="primary" size="sm">
+              创建课程
+            </Button>
           </div>
         </form>
       </Dialog>

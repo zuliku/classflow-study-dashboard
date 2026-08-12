@@ -11,6 +11,12 @@ import { format } from "date-fns";
 
 import { cn } from "@/lib/utils";
 import { Dialog } from "@/components/ui/Dialog";
+import { Input } from "@/components/ui/Input";
+import { Textarea } from "@/components/ui/Textarea";
+import { Checkbox } from "@/components/ui/Checkbox";
+import { Field } from "@/components/ui/Field";
+import { Button } from "@/components/ui/Button";
+import { IconButton } from "@/components/ui/IconButton";
 import { UISelect, SelectOption } from "@/components/ui/Select";
 import { onOpenAssignmentEditor } from "@/lib/uiEvents";
 
@@ -211,33 +217,30 @@ export function AddAssignmentModal() {
         </div>
 
         {/* Form */}
-        <form onSubmit={handleSubmit} className="p-6 space-y-4 overflow-y-auto text-xs">
-          <div className="space-y-1">
-            <label className="font-bold text-sandrift">任务名称 *</label>
-            <input
+        <form onSubmit={handleSubmit} className="p-5 space-y-4 overflow-y-auto text-xs">
+          <Field label="任务名称" required htmlFor="assignment-title">
+            <Input
+              id="assignment-title"
               type="text"
               placeholder="如：计量经济学实证报告"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               autoFocus
-              className="w-full p-2.5 bg-[#F7F5F5] border border-line rounded-xl focus:outline-none focus:border-charcoal text-charcoal text-xs font-semibold"
               required
             />
-          </div>
+          </Field>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1">
-              <label className="font-bold text-sandrift">关联课程</label>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <Field label="关联课程">
               <UISelect
                 value={courseId}
                 onChange={(v) => setCourseId(v)}
                 ariaLabel="关联课程"
                 options={courses.map((c) => ({ value: c.id, label: `${c.name} (${c.code})` }))}
               />
-            </div>
+            </Field>
 
-            <div className="space-y-1">
-              <label className="font-bold text-sandrift">优先级</label>
+            <Field label="优先级">
               <UISelect<Priority>
                 value={priority}
                 onChange={setPriority}
@@ -249,50 +252,48 @@ export function AddAssignmentModal() {
                   { value: "low", label: "低优先级" },
                 ]}
               />
-            </div>
+            </Field>
           </div>
 
           {/* DDL Date & Time Picker（Task V2：可选；未启用 = 无截止日期） */}
           <div className="p-3 bg-alabaster/60 border border-line-strong rounded-xl space-y-2">
-            <label className="flex items-center justify-between font-bold text-charcoal">
-              <span className="flex items-center">
+            <div className="flex items-center justify-between">
+              <span className="flex items-center font-bold text-charcoal text-[11px]">
                 <Clock className="w-3.5 h-3.5 mr-1 text-[#A48F82]" /> 截止时间 (DDL)
               </span>
-              <input
-                type="checkbox"
+              <Checkbox
                 checked={ddlEnabled}
-                onChange={(e) => {
-                  setDdlEnabled(e.target.checked);
+                onChange={(checked) => {
+                  setDdlEnabled(checked);
                   // Task 7F：关闭 DDL 必须同步清空重复规则（避免提交非法组合）
-                  if (!e.target.checked) setRecurrence("none");
+                  if (!checked) setRecurrence("none");
                 }}
-                className="w-3.5 h-3.5 rounded accent-charcoal"
                 aria-label="设置截止时间"
               />
-            </label>
+            </div>
             {ddlEnabled ? (
               <>
                 <div className="grid grid-cols-2 gap-2">
-                  <input
+                  <Input
                     type="date"
                     value={ddlDate}
                     onChange={(e) => setDdlDate(e.target.value)}
-                    className="w-full p-2 bg-white border border-line-strong rounded-lg font-mono text-xs focus:outline-none"
+                    className="bg-white border-line-strong font-mono"
                     required
                   />
-                  <input
+                  <Input
                     type="time"
                     value={ddlTime}
                     onChange={(e) => setDdlTime(e.target.value)}
-                    className="w-full p-2 bg-white border border-line-strong rounded-lg font-mono text-xs focus:outline-none"
+                    className="bg-white border-line-strong font-mono"
                     required
                   />
                 </div>
                 {/* Task 7F：重复规则（仅 DDL 启用时显示；完成当前任务后自动生成下一次） */}
                 <div className="flex items-center justify-between gap-2 pt-1">
-                  <label id="task-recurrence-label" className="text-[11px] font-bold text-sandrift">
+                  <span id="task-recurrence-label" className="text-[11px] font-bold text-sandrift">
                     重复
-                  </label>
+                  </span>
                   <UISelect<TaskRecurrence | "none">
                     value={recurrence}
                     onChange={setRecurrence}
@@ -308,93 +309,92 @@ export function AddAssignmentModal() {
           </div>
 
           {/* 预计耗时（分钟，可选） */}
-          <div className="flex items-center gap-2">
-            <input
+          <Field label="预计耗时" description="可选，单位为分钟">
+            <Input
               type="number"
               min={1}
               value={estimatedMinutes}
               onChange={(e) => setEstimatedMinutes(e.target.value)}
-              placeholder="预计耗时（分钟，可选）"
+              placeholder="如：120"
               aria-label="预计耗时（分钟）"
-              className="flex-1 p-2 bg-white border border-line-strong rounded-lg font-mono text-xs focus:outline-none"
+              className="font-mono"
             />
-          </div>
+          </Field>
 
           {/* Subtasks checklist */}
           <div className="space-y-2 pt-1">
             <div className="flex items-center justify-between">
-              <label className="font-bold text-sandrift">子任务拆解 ({subtasks.length})</label>
-              <button
+              <label className="text-[11px] font-bold text-charcoal">子任务拆解 ({subtasks.length})</label>
+              <Button
                 type="button"
+                variant="accent"
+                size="sm"
                 onClick={handleAddSubtask}
-                className="flex items-center space-x-1 text-[11px] font-bold text-charcoal bg-pastel-mint hover:bg-pastel-mint px-2 py-0.5 rounded-lg transition-colors"
+                className="h-7 px-2.5 text-[11px]"
               >
                 <Plus className="w-3 h-3" />
                 <span>添加子任务</span>
-              </button>
+              </Button>
             </div>
 
             <div className="space-y-1.5">
               {subtasks.map((st, idx) => (
-                <div key={st.id || idx} className="flex items-center space-x-2">
-                  <input
+                <div key={st.id || idx} className="flex items-center gap-2">
+                  <Input
                     type="text"
                     placeholder={`子步骤 #${idx + 1}（如：收集案例数据）`}
                     value={st.title}
                     onChange={(e) => handleSubtaskChange(idx, e.target.value)}
-                    className="flex-1 p-2 bg-[#F7F5F5] border border-line rounded-lg text-xs"
+                    className="flex-1"
                   />
-                  <button
-                    type="button"
+                  <IconButton
+                    variant="danger"
+                    size="sm"
                     onClick={() => handleRemoveSubtask(idx)}
-                    className="p-1.5 text-danger hover:bg-danger-bg rounded-lg"
+                    aria-label="删除子任务"
+                    title="删除子任务"
+                    className="h-8 w-8"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
-                  </button>
+                  </IconButton>
                 </div>
               ))}
             </div>
           </div>
 
           {/* Tags */}
-          <div className="space-y-1">
-            <label className="font-bold text-sandrift">标签 (逗号分隔)</label>
-            <input
+          <Field label="标签" description="使用逗号分隔">
+            <Input
               type="text"
               placeholder="如：个人作业、回归模型、PPT"
               value={tagsStr}
               onChange={(e) => setTagsStr(e.target.value)}
-              className="w-full p-2.5 bg-[#F7F5F5] border border-line rounded-xl focus:outline-none text-xs"
             />
-          </div>
+          </Field>
 
           {/* Description */}
-          <div className="space-y-1">
-            <label className="font-bold text-sandrift">任务要求与说明</label>
-            <textarea
+          <Field label="任务要求与说明">
+            <Textarea
               rows={3}
               placeholder="补充任务要求、提交格式等"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              className="w-full p-2.5 bg-[#F7F5F5] border border-line rounded-xl focus:outline-none resize-none text-xs leading-relaxed"
             />
-          </div>
+          </Field>
 
           {/* Actions */}
-          <div className="flex justify-end space-x-2 pt-2 border-t border-[#F0EBE1]">
-            <button
+          <div className="flex justify-end gap-2 pt-2 border-t border-[#F0EBE1]">
+            <Button
               type="button"
+              variant="secondary"
+              size="sm"
               onClick={() => setIsOpen(false)}
-              className="px-4 py-2 text-xs font-medium text-satin-grey bg-[#F7F5F5] border border-line rounded-xl hover:bg-alba"
             >
               取消
-            </button>
-            <button
-              type="submit"
-              className="ux-press px-4 py-2 text-xs font-bold text-white bg-charcoal rounded-xl hover:bg-black"
-            >
-               保存
-            </button>
+            </Button>
+            <Button type="submit" variant="primary" size="sm">
+              保存
+            </Button>
           </div>
         </form>
       </Dialog>
