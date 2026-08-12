@@ -32,6 +32,7 @@
 - Analytics 在 `app/page.tsx` 内建立独立 Banner Card；
 - Tasks 的 `AssignmentTable mode="workspace"` 同时承担页面标题、主创建动作、筛选、搜索、View Tabs 与任务列表；
 - Timeline 自己拥有完整 Header Controls；
+- Group 自己拥有 Header Banner；
 - Kiro 自己拥有 Thread Header。
 
 结果是：切换 Workspace 时，页面顶部的信息层级、Surface、Primary Action 位置持续变化，削弱产品统一感。
@@ -53,7 +54,7 @@
 
 ## 4. Chosen Architecture
 
-采用 **Integrated Workspace Header**。
+采用 **Integrated Workspace Header primitive + workspace-owned composition**。
 
 ```text
 ClassFlow App Shell
@@ -73,14 +74,24 @@ ClassFlow App Shell
     └── Workspace Body
 ```
 
+关键实现约束：
+
+- `WorkspaceHeader` 是统一 primitive；
+- **不建立中央 Header registry / Context slot store**；
+- 每个 Workspace 的 owner 负责把自己的 Context/Action 传给 `WorkspaceHeader`；
+- `app/page.tsx` 中直接定义的 Workspace（Overview / Courses / Analytics / Kiro）由 `app/page.tsx` 组合 Header；
+- Timeline / Group 因为 Header action 依赖组件内临时状态，由各自组件直接组合 Header；
+- Tasks 新增一个轻量 `AssignmentsWorkspace` wrapper，负责 Workspace Header 与 Quick Add open state；`AssignmentTable` 继续负责表格/筛选本身。
+
 不采用：
 
 1. “保留现有 Global Header + 再增加 Page Header”——会形成两层甚至三层 Chrome；
-2. “页面通过 Context/Registry 动态注册 Header Slot”——当前收益不足，会引入不必要的生命周期与状态同步复杂度。
+2. “所有页面通过 Context/Registry 动态注册 Header Slot”——当前收益不足，会引入不必要的生命周期与状态同步复杂度；
+3. “为了 Header action 新增 Zustand persisted/transient registry 或 CustomEvent”——Task 1 不为视觉迁移制造新的跨组件控制通道。
 
 ## 5. Workspace Header Contract
 
-新增一个通用 `WorkspaceHeader`，建议接口：
+新增通用 `WorkspaceHeader`，建议接口：
 
 ```ts
 interface WorkspaceHeaderProps {
@@ -90,6 +101,7 @@ interface WorkspaceHeaderProps {
   actions?: React.ReactNode;
   hideSearch?: boolean;
   sticky?: boolean;
+  className?: string;
 }
 ```
 
@@ -99,7 +111,8 @@ interface WorkspaceHeaderProps {
 - 页面业务 Context 由页面自身计算后传入；
 - Layout Layer 不依赖所有业务 Domain；
 - `navItems.ts` 继续只负责导航 id/label/icon/section；
-- 不建立巨大 Workspace 配置 Registry。
+- 不建立巨大 Workspace 配置 Registry；
+- `className` 只用于布局对齐（例如 Kiro full-bleed），不承担 feature variant。
 
 ## 6. Workspace Search
 
@@ -190,26 +203,37 @@ Greeting 仅允许作为 Overview 的轻量 Context 或 Overview Body 内容。
 
 ## 10. Workspace Mapping
 
-| Workspace | Title | Context | Primary Action | Local/Secondary Controls |
+| Workspace | Title | Context | Header Primary Action | Local/Secondary Controls |
 |---|---|---|---|---|
 | Overview | 总览 | 第 N 周 · 日期范围 | 无 | Global Search |
-| Timeline | 时间表 | 第 N 周 · 日期范围 | `+` 新建菜单 | 周切换、今天、Filter、Ask Kiro、More |
-| Tasks | 任务与 DDL | 待完成数 · 风险数（若可安全复用现有派生结果） | 新增任务 | View/Search/Filter/More 留 Workspace 内部 |
+| Timeline | 时间表 | 第 N 周 · 日期范围 | 无 | 周切换、今天、Filter、`+` Quick Create、Ask Kiro、More |
+| Tasks | 任务与 DDL | `N 项未完成` | 新增任务 | Ask Kiro / contextual breakdown 可进 Header actions；View/Search/Filter/More 留 Workspace 内部 |
 | Courses | 课程资料 | N 门课程 · X 学分 | 添加课程 | 本任务不新增 Sort/View |
 | Analytics | 学习统计 | 本学期 · 第 N 周 | 无 | 后续 Productization 再设计范围/指标控制 |
-| Group | 小组协作 | N 个项目 | 新建项目 | 项目内部动作留内容区 |
+| Group | 小组协作 | N 个项目 | 新建项目 | Ask Kiro 作为 Header secondary；项目内部动作留内容区 |
 | Kiro | Kiro | 无 | 无 | Thread Header 继续显示对话标题/Share/More |
+
+### Timeline special rule
+
+Timeline 的 `+` **不迁移到 Workspace Header**。
+
+原因：它与 `quickOpen / filterOpen / moreOpen` 等 Timeline-local popover 状态紧密耦合。它继续是 Local Control Bar 内唯一 filled/primary create control，但全站 Header primary slot 对 Timeline 为空。
+
+这样避免同一个 `+` 在 Header 与 Timeline Toolbar 中重复。
 
 ## 11. Button Hierarchy
 
-Task 1 同时固定 Workspace Header 的操作层级：
+Task 1 固定 Workspace 顶层操作语法：
 
 ```text
-Primary
+Header Primary
 → 每个 Workspace 最多 1 个
 
 Secondary / Ghost
 → 当前页面高频辅助操作
+
+Local Primary
+→ 允许极少数高度上下文化的局部 Workspace（Timeline）保留 1 个
 
 Overflow
 → 低频操作
@@ -223,7 +247,7 @@ Header Primary 映射：
 - Tasks：新增任务；
 - Courses：添加课程；
 - Group：新建项目；
-- Timeline：紧凑 `+` dropdown；
+- Timeline：无（Quick Create 留 Local Toolbar）；
 - Overview：无；
 - Analytics：无；
 - Kiro：无。
@@ -261,34 +285,55 @@ Timeline Body
 
 要求：
 
-- 从 Timeline 内部 Header Controls 移除重复的“第 N 周 + 日期”身份信息；
+- `TimelineWorkspace` 直接组合 `WorkspaceHeader`，因此不需要把 local action 状态提升到 Store/parent；
+- 从原内部 Header Controls 移除重复的“第 N 周 + 日期”身份信息；
 - 周导航按钮与今天继续保留在 local control bar；
-- Filter / Create / Ask Kiro / More 行为不变；
+- Filter / Quick Create / Ask Kiro / More 行为不变；
 - 不改 Key Lane、TimetableGrid、StudyBlock、Unscheduled Shelf 视觉/业务；
-- 不重做 Timeline outer surface，除非为消除 Header duplication 所需的最小边框调整。
+- 不重做 Timeline outer surface，除非为消除 Header duplication/高度冲突所需的最小布局调整；
+- Timeline 当前依赖 viewport 高度计算，迁移后必须重新验证 1440/1024 下不出现双滚动或底部被截断。
 
 ### 12.3 Tasks
 
-从 `AssignmentTable mode="workspace"` 中抽离：
+新增：
 
-- 页面标题；
-- Primary “新增任务”。
+```text
+components/assignment/AssignmentsWorkspace.tsx
+```
 
-保留在任务 Workspace 内部：
+职责：
 
-- View Tabs；
-- Course Filter；
-- Search；
-- Risk Filter；
-- More；
-- Selection / Bulk；
-- Peek；
-- Context Menu；
-- List。
+- 组合 `WorkspaceHeader`；
+- 计算 `N 项未完成`；
+- 提供 Header Primary “新增任务”；
+- 提供现有 Ask Kiro / 高亮任务 breakdown contextual action；
+- 持有 Workspace Quick Add 的 open/close state；
+- 渲染 `AssignmentTable mode="workspace"`。
 
-Task 1 不重设计 Task Toolbar。
+`AssignmentTable` 增加最小 controlled props，例如：
 
-若 `AssignmentTable` 同时服务 `mode="compact"` 与 `mode="workspace"`，必须保证 compact Overview 版本不出现 Workspace Header 逻辑。
+```ts
+interface AssignmentTableProps {
+  mode?: "compact" | "workspace";
+  workspaceQuickAddOpen?: boolean;
+  onWorkspaceQuickAddOpenChange?: (open: boolean) => void;
+}
+```
+
+Workspace 模式：
+
+- 不再渲染“任务与 DDL”页面标题；
+- 不再渲染 workspace Primary “新增任务”；
+- QuickAddCard 仍然在 AssignmentTable 内部渲染，从而继续使用内部 `courseFilter` 作为 `defaultCourseId`；
+- QuickAdd open state 使用 wrapper 传入的 controlled state；
+- Filters / Search / View Tabs / Risk / More / Selection / Peek / Context Menu / List 保持原逻辑。
+
+Compact 模式：
+
+- **保持当前 `任务清单` 标题、count、逾期提示、compact 新增按钮与分页行为不变**；
+- Overview 的 `AssignmentTable mode="compact"` 不依赖 `AssignmentsWorkspace`。
+
+不新增 Quick Add CustomEvent，不把 Quick Add 状态写入 Zustand。
 
 ### 12.4 Courses
 
@@ -330,16 +375,23 @@ Task 1 不改：
 
 ### 12.6 Group
 
-统一使用 Workspace Header：
+`GroupCollaborationView` 直接组合统一 `WorkspaceHeader`，因为 `openCreateProject` 与 project form state 属于组件本地临时状态。
+
+目标：
 
 ```text
 小组协作
-N 个项目                         + 新建项目
+N 个项目                   Ask Kiro   + 新建项目
 ```
 
-主创建入口应复用现有 `openCreateProject` 逻辑。
+要求：
 
-本任务不迁移 GroupModal/Input/Button primitives。
+- 删除当前 Group Header Banner Card；
+- Primary 直接调用现有 `openCreateProject`；
+- Ask Kiro 保持现有 `activeProject` 条件与 handoff 行为；
+- 不把 `projectForm` / form fields 提升到 Zustand；
+- 不增加 Global UI Event；
+- 本任务不迁移 GroupModal/Input/Button primitives。
 
 ### 12.7 Kiro
 
@@ -353,9 +405,14 @@ Thread Header
 当前对话标题                       Share / More
 ```
 
-不要把 `KiroHeader` 的 Thread title 改成“Kiro”。
+要求：
 
-Kiro full-bleed body/padding 语义必须保持；不能因统一 Header 导致 History rail、Composer 或 Sidecar 布局回归。
+- `app/page.tsx` 在 Kiro Workspace 外层组合 `WorkspaceHeader title="Kiro"`；
+- 不把 `KiroHeader` 的 Thread title 改成“Kiro”；
+- Kiro Workspace Header 允许用 `className` 对齐 full-bleed body gutter；
+- Kiro full-bleed body/padding 语义必须保持；
+- History rail、Composer、Sidecar、conversation scroll 高度不能因多一层 WorkspaceHeader 退化；
+- `PageTransition` 的 Kiro flex/min-height 语义需重新验证，避免新增 `space-y-*` 把 Header 与 Conversation 撑出视口。
 
 ## 13. Responsive Rules
 
@@ -397,6 +454,7 @@ Title + Context                          Actions + Primary + Search
 ```text
 components/layout/WorkspaceHeader.tsx
 components/layout/WorkspaceSearchButton.tsx
+components/assignment/AssignmentsWorkspace.tsx
 ```
 
 修改：
@@ -409,24 +467,45 @@ components/dashboard/AssignmentTable.tsx
 components/group/GroupCollaborationView.tsx
 ```
 
-`Header.tsx` 可以：
+`Header.tsx`：
 
-- 被删除并由 `WorkspaceHeader` 替代；或
-- 暂时变成薄 wrapper。
+- 最终应删除或停止使用；
+- 不保留两个等价 Header abstraction；
+- 如果删除文件会造成不必要的大范围 import churn，可在同一 Task 内先变成薄兼容 wrapper，但验收前应确认没有双 Header。
 
-优先选择减少重复和长期清晰度更高的方案，不保留两个等价 Header abstraction。
+## 15. App Shell Composition Rule
 
-## 15. Data / State Rules
+`app/page.tsx` 不再无条件渲染旧 `<Header />`。
+
+Workspace Header 由当前 Workspace owner 渲染：
+
+```text
+Overview   → app/page.tsx
+Courses    → app/page.tsx
+Analytics  → app/page.tsx
+Kiro       → app/page.tsx
+Tasks      → AssignmentsWorkspace
+Timeline   → TimelineWorkspace
+Group      → GroupCollaborationView
+```
+
+这不是“每个页面重新造 Header”：所有 owner 都只能使用同一个 `WorkspaceHeader` primitive。
+
+这样既保持统一视觉，又不需要新增 Header slot registry，也避免把 Timeline/Group 的本地 ephemeral action state 提升到 Store。
+
+## 16. Data / State Rules
 
 - 不新增 Zustand persisted state；
 - 不新增 Workspace Header registry store；
 - 不新增 Context Provider 仅用于 Header slot；
+- 不新增仅为 Header 服务的 CustomEvent；
 - 不改变 `activeTab` / startup / navigation 语义；
 - 不改变 Command Center 行为；
 - 不改变 Modal/Drawer opening APIs；
-- 页面 Context 从已有 Store/derived data 读取。
+- 页面 Context 从已有 Store/derived data 读取；
+- Tasks Quick Add 仅使用 React local controlled state。
 
-## 16. Accessibility
+## 17. Accessibility
 
 必须保持：
 
@@ -437,7 +516,7 @@ components/group/GroupCollaborationView.tsx
 - 不移除现有 `focus-visible` 全局语义；
 - 页面标题保持单一清晰的 `h1/h2` 语义层级，避免 Header 与内部 Banner 同时出现同名标题。
 
-## 17. Testing Strategy
+## 18. Testing Strategy
 
 保持精简，不做全站视觉截图回归。
 
@@ -447,21 +526,23 @@ components/group/GroupCollaborationView.tsx
 
 优先验证纯/可稳定断言的行为：
 
-- Workspace title 与 activeTab mapping；
+- Workspace title mapping；
 - Search 打开 Command Center；
-- Tasks/Courses/Group Primary action 继续调用原有入口；
+- Tasks Quick Add controlled state 不影响 compact mode；
+- Courses/Group Primary action 继续调用原入口；
 - Timeline 周切换/Today/Filter/Create 行为未改变。
 
 ### Existing E2E / Targeted E2E
 
-只跑与 Shell/Navigation 直接相关的现有测试，例如实际存在的：
+只跑与 Shell/Navigation 直接相关的现有测试。先通过文件名/grep 确认真实存在，再选择最小集合。优先：
 
 - responsive；
 - command-center；
 - first-run；
 - timeline；
-- task workspace；
-- settings entry（如果 Header 改动影响全局层）。
+- assignment workspace；
+- Kiro workspace/layout（若已有）；
+- settings entry 仅在旧 Header 删除影响入口时运行。
 
 不要跑全量 Playwright，除非 targeted regression 暴露跨 Shell 问题。
 
@@ -472,28 +553,32 @@ components/group/GroupCollaborationView.tsx
 - `npm run build`；
 - Desktop 1440 / Tablet 1024 / Mobile 390 手工 smoke。
 
-## 18. Acceptance Criteria
+## 19. Acceptance Criteria
 
 Task 1 完成必须同时满足：
 
 1. Desktop/Tablet 不再以 greeting 作为所有页面主标题；
-2. 所有 Workspace 有稳定的统一 Workspace Header；
+2. 所有 Workspace 使用同一个 `WorkspaceHeader` primitive；
 3. Global Search 在所有 Workspace 中保持稳定位置与可达性；
 4. Courses 顶部 Banner Card 删除；
 5. Analytics 顶部 Banner Card 删除；
-6. Tasks 页面标题与 Primary Create 不再由 `AssignmentTable` 自己承担；
-7. Timeline 不再重复显示页面身份/周信息，但 local controls 行为不变；
-8. Group 的主创建动作进入统一 Header，业务逻辑复用原实现；
-9. Kiro 保持 Workspace Header + Thread Header 两级语义；
-10. Sidebar / Icon Rail / Bottom Nav IA 不改变；
-11. Command Center 行为不改变；
-12. Overview compact AssignmentTable 不退化；
-13. 不引入新的 persisted state / Header registry；
-14. 不进行全站 Button/Modal/Card/Typography 重构；
-15. typecheck、focused tests、build 通过；
-16. 1440 / 1024 / 390 三档布局无明显 overflow/header collision。
+6. Group 顶部 Banner Card 删除；
+7. Tasks 页面标题与 workspace Primary Create 不再由 `AssignmentTable` 自己承担；
+8. Tasks Quick Add V2 仍为 inline card，且课程筛选 prefill 语义不变；
+9. Overview compact AssignmentTable 的标题、count、逾期提示、compact create 与分页行为不变；
+10. Timeline 不再重复显示页面身份/周信息，`+` 只保留一份且仍在 local toolbar；
+11. Timeline 周切换/Today/Filter/Create/Ask Kiro/More 行为不变；
+12. Group Header Primary 直接复用原 `openCreateProject`，不新增 Store/event；
+13. Kiro 保持 Workspace Header + Thread Header 两级语义；
+14. Kiro History rail / Composer / Sidecar / scroll 高度无明显回归；
+15. Sidebar / Icon Rail / Bottom Nav IA 不改变；
+16. Command Center 行为不改变；
+17. 不引入新的 persisted state / Header registry / Header CustomEvent；
+18. 不进行全站 Button/Modal/Card/Typography 重构；
+19. typecheck、focused tests、build 通过；
+20. 1440 / 1024 / 390 三档布局无明显 overflow、双滚动或 header collision。
 
-## 19. Explicit Non-goals
+## 20. Explicit Non-goals
 
 本任务明确不做：
 
@@ -514,7 +599,7 @@ Task 1 完成必须同时满足：
 - 新导航结构；
 - 业务数据模型变更。
 
-## 20. Follow-up Productization Tasks
+## 21. Follow-up Productization Tasks
 
 Task 1 完成后，建议顺序：
 
