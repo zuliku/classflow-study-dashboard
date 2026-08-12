@@ -145,7 +145,7 @@ The key is attached only when non-empty.
 Server request validation must treat every field as untrusted:
 
 - `enabled` → boolean, default false when absent at the server boundary for backward compatibility.
-- `model` → normalized through the local OpenCode Go vision-model whitelist; invalid values fall back to `mimo-v2.5` or cause the vision sub-runtime to be unavailable, but must never become an arbitrary provider model id.
+- `model` → normalize through the local OpenCode Go vision-model whitelist; every missing or invalid value becomes `mimo-v2.5`. An arbitrary provider model id must never pass through unchanged.
 - `apiKey` → transient string only; never returned in errors or logs.
 
 Task 19C1 only validates and transports this configuration. It does not invoke the vision provider.
@@ -228,14 +228,16 @@ MAX_WEB_PDF_VISION_PAGE_BYTES = 1_500_000
 WEB_PDF_VISION_JPEG_QUALITY = 0.82
 ```
 
-These limits apply per `read_web_source` invocation. Existing Web Read limits already cap the user turn at two reads, therefore the maximum intended envelope is six rasterized pages and eight MiB of generated Web PDF page images per turn.
+The first two limits are shared across one complete `read_web_source` invocation, including the case where that tool reads two Web sources. They are **not** reset for each PDF source. Task 19C2 will own the cross-source remaining-budget counter and pass the remaining page/byte allowance into each rasterizer call.
 
-The rasterizer must:
+Existing Web Read limits cap a user turn at two `read_web_source` invocations, so the intended worst-case envelope remains six rasterized pages and eight MiB of generated Web PDF page images per turn.
+
+The rasterizer itself must accept caller-provided remaining limits and must never exceed them. It must also:
 
 - render only requested page numbers;
 - ignore invalid/out-of-range pages safely;
 - process pages sequentially or with a very small deterministic concurrency;
-- keep the aggregate image-byte budget;
+- keep the caller-provided aggregate image-byte budget;
 - lower image size/quality once when a page exceeds the single-page cap, mirroring the existing local scanned-PDF policy;
 - skip a page that still exceeds the limit or fails to render, without leaking raw errors.
 
@@ -309,8 +311,8 @@ Task 19C1 automated coverage should include:
 1. vision-model whitelist contains the default `mimo-v2.5` and excludes non-vision / non-openai-chat OpenCode models;
 2. persisted invalid model normalizes to the default;
 3. dedicated Vision API key helper uses a separate sessionStorage key and clearing it removes the key;
-4. request validation rejects/arrests arbitrary vision model ids and never echoes a key;
-5. rasterizer preserves page number, returns JPEG bytes, and obeys page/byte caps using a tiny fixture or injected test adapter;
+4. request validation normalizes arbitrary vision model ids to `mimo-v2.5` and never echoes a key;
+5. rasterizer preserves page number, returns JPEG bytes, and obeys caller-provided page/byte caps using a tiny fixture or injected test adapter;
 6. rasterizer skips one failed page without aborting successful pages;
 7. existing local browser `pdfVision.ts` behavior remains untouched.
 
@@ -368,6 +370,7 @@ Will implement after 19C1 is verified:
 - `{page,text}` normalization;
 - existing evidence selection/budget reuse;
 - `availablePages` propagation;
+- shared per-read page/image budget across all scanned PDF sources;
 - Tavily fallback on every ordinary vision failure;
 - real scanned-PDF smoke test and page-aware citations.
 
@@ -379,7 +382,7 @@ Will implement after 19C1 is verified:
 - Vision API key is demonstrably independent and session-only;
 - invalid model ids cannot reach the future provider call path;
 - a server-side page rasterizer can render a bounded PDF page to JPEG bytes inside the current Next.js Node deployment model;
-- rasterizer limits are enforced;
+- rasterizer limits are enforced and can be constrained by caller-provided remaining per-read budget;
 - existing Web PDF text reader and local scanned-PDF browser vision path are unchanged;
 - focused tests pass;
 - `npm run typecheck` passes;
