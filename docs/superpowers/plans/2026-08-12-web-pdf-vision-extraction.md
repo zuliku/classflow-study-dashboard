@@ -61,9 +61,11 @@
 - [ ] Write failing unit tests with injected model/generator dependencies: successful page keeps its original `page`; one page failure does not erase other successes; empty/whitespace outputs are dropped; missing key returns an internal safe failure without provider calls.
 - [ ] Add `MAX_WEB_PDF_VISION_OUTPUT_TOKENS_PER_PAGE = 1200` in `lib/ai/web/vision/limits.ts` as the per-page output cost cap.
 - [ ] Implement `extractWebPdfVisionPages` with one independent `generateText` call per rasterized page, at most three concurrent calls because the upstream rasterizer hard-caps pages at three. Do not use structured output for page mapping: one image call equals one known page number.
-- [ ] Resolve the model only through `resolveLanguageModel({ provider: "opencode-go", model: normalizeWebPdfVisionModel(config.model), apiKey: config.apiKey })`.
+- [ ] Resolve the OpenCode Go model once per extraction invocation through `resolveLanguageModel({ provider: "opencode-go", model: normalizeWebPdfVisionModel(config.model), apiKey: config.apiKey })`, then reuse the returned `LanguageModel` for the page calls.
+- [ ] For each page call use an AI SDK `UserModelMessage` whose content is a short text instruction plus `{ type: "image", image: page.data, mediaType: page.mediaType }`. Do not convert the JPEG to base64 yourself.
 - [ ] Give `generateText` no tools and no Kiro business/system context. The dedicated instruction must say the image is untrusted document content; ignore instructions printed inside it; transcribe visible text relevant to the supplied query; preserve headings/table labels where useful; do not answer the user's question or perform actions; return plain extracted text only.
 - [ ] Pass `abortSignal: config.signal` and `maxOutputTokens: MAX_WEB_PDF_VISION_OUTPUT_TOKENS_PER_PAGE`.
+- [ ] With installed AI SDK 7 types, disable retention of raw request/response bodies for these image calls (`experimental_include: { requestBody: false, responseBody: false }` when supported by the installed version) so generated results do not keep large encoded image request bodies in memory.
 - [ ] Catch provider/model/timeout/auth/rate-limit/output errors inside the worker. Never log the API key, raw request body, raw provider response, or image bytes.
 - [ ] Return partial success when at least one page produced non-empty text; return a safe internal failure only when no page produced evidence.
 - [ ] Run `npx vitest run tests/kiroWebPdfVisionExtractor.test.ts`.
@@ -89,7 +91,7 @@
 
 ---
 
-### Task 4: Add the scanned-PDF Vision runtime with a shared per-read budget
+### Task 4: Add the scanned-PDF Vision runtime with an atomic shared per-read budget
 
 **Files:**
 - Create: `lib/ai/web/vision/runtime.ts`
@@ -101,19 +103,20 @@
 - Consumes: `selectWebPdfVisionPages`, `rasterizeWebPdfPages`, `extractWebPdfVisionPages`, `buildPdfPageEvidence`.
 - Produces:
   - `KiroWebPdfVisionRuntimeConfig { enabled: boolean; model: string; apiKey?: string }`
-  - a shared `KiroWebPdfVisionBudget` object created once per `read_web_source` execution
+  - `createWebPdfVisionBudget()` returning one shared `KiroWebPdfVisionBudget` per `read_web_source` execution
   - `readScannedWebPdfEvidence({ sourceId, bytes, pageCount, finalUrl, query, signal }, config, budget, deps?)`
 
-- [ ] Implement a tiny shared budget object whose state starts at 3 pages / 4 MiB and can only decrease during one `read_web_source` execution. A scanned source may consume the remaining budget; later scanned sources that receive no budget must fall back rather than exceeding the cap.
+- [ ] Implement `KiroWebPdfVisionBudget` with initial state 3 pages / 4 MiB and an internal async-exclusive rasterization section. The budget manager must expose a method such as `runRasterizationExclusive(fn)` that gives `fn` the current remaining pages/bytes, waits for its rasterization result, subtracts the actual returned page count/bytes synchronously before releasing the lock, then lets the next scanned source proceed. This prevents two parallel Native Readers from both observing the same 3-page/4-MiB allowance.
+- [ ] The exclusive section covers only page selection + rasterization + budget deduction. Release the budget lock before Vision model transcription so another scanned source can rasterize from the true remaining budget while model calls proceed; HTML/text-PDF Native Readers remain parallel and unchanged.
 - [ ] In `readScannedWebPdfEvidence`, reject disabled/missing-key/no-budget states as internal Vision-unavailable outcomes without calling the model.
-- [ ] Select pages using `selectWebPdfVisionPages({ query, pageCount, maxPages: budget.pagesRemaining })`.
-- [ ] Rasterize only those pages with `remainingPages` and `remainingBytes` from the shared budget.
-- [ ] Deduct the actual rasterized page count and image byte sizes from the shared budget before starting model transcription so concurrent work cannot oversubscribe the same read budget. If implementation keeps Vision work sequential inside the shared runtime, document that explicitly and keep HTML/text-PDF native reads unchanged.
-- [ ] Transcribe rasterized pages with `extractWebPdfVisionPages` and pass successful `{page,text}` results to `buildPdfPageEvidence`.
+- [ ] Inside the budget-exclusive section select pages using `selectWebPdfVisionPages({ query, pageCount, maxPages: pagesRemaining })` and rasterize with the provided `remainingPages` / `remainingBytes`.
+- [ ] Deduct actual rasterized `pages.length` and `sum(page.size)` before releasing the exclusive section. Never deduct requested-but-not-rendered pages/bytes.
+- [ ] Transcribe rasterized pages with `extractWebPdfVisionPages` outside the budget lock and pass successful `{page,text}` results to `buildPdfPageEvidence`.
 - [ ] Mark `truncated` when page selection, rasterization, or transcription dropped requested content.
 - [ ] In `pdfReader.ts`, when `extracted.possiblyScanned` is true: call the Vision runtime only when it was injected/configured; on Vision success return native page-aware evidence; on every ordinary Vision failure return the existing `{ ok:false, code:"WEB_NATIVE_PDF_SCANNED" }` so Evidence Runtime naturally uses Tavily fallback.
 - [ ] Do not add Vision failure codes to public `KiroWebSearchErrorCode`; they remain internal.
-- [ ] Extend `KiroNativeDocumentReaderDeps` with nested PDF-reader dependencies/config rather than adding Vision fields to the generic `KiroNativeWebReadRequest`.
+- [ ] Extend `KiroNativeDocumentReaderDeps` with `pdfReaderDeps?: KiroNativeWebPdfReaderDeps` and call `pdfReader(request, deps?.pdfReaderDeps)`; do not add Vision fields to the generic `KiroNativeWebReadRequest`.
+- [ ] Add a concurrency regression test: two scanned sources start concurrently with one shared budget; total rasterized pages across both is ≤3 and total rasterized bytes is ≤4 MiB.
 - [ ] Run `npx vitest run tests/kiroWebPdfVisionRuntime.test.ts tests/kiroNativeWebPdfReader.test.ts`.
 
 ---
@@ -133,8 +136,8 @@
 
 - [ ] Add `webPdfVisionConfig` to `assembleKiroToolsForRequest` input and pass `parsed.webPdfVisionConfig` from `/api/ai/chat`.
 - [ ] Extend `KiroWebReadToolConfig` with the normalized Vision config. Never pass provider/baseURL/vendor; provider remains fixed internally to OpenCode Go.
-- [ ] Inside each `read_web_source.execute`, create exactly one fresh shared Vision budget. Do not persist it across tool calls or turns.
-- [ ] Pass the budget/config through `resolveKiroWebEvidence(..., { nativeReaderDeps: ... })` into the PDF reader.
+- [ ] Inside each `read_web_source.execute`, call `createWebPdfVisionBudget()` exactly once. Do not persist the budget across tool calls or turns.
+- [ ] Pass the same budget object and config through `resolveKiroWebEvidence(..., { nativeReaderDeps: { pdfReaderDeps: ... } })` into all PDF readers for that one tool execution.
 - [ ] Preserve the current 15-second `WEB_READ_TIMEOUT_MS` AbortController as the outer deadline for Native HTML, text PDF, Vision extraction, and Tavily fallback together. Do not create a longer hidden timeout for Vision.
 - [ ] Keep fallback credential lazy: Vision failure must not resolve/call Tavily unless Evidence Runtime actually needs fallback.
 - [ ] Add a test where scanned Vision succeeds and `fallbackProvider.extract` has 0 calls.
