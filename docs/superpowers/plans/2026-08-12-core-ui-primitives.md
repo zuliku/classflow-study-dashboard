@@ -170,9 +170,11 @@ disabled:opacity-50 disabled:cursor-not-allowed
 `SearchField` must:
 - render a Lucide `Search` icon on the left;
 - forward `value`, `onChange`, `placeholder`, `aria-label`, and other input props;
-- keep the input as a real search/text input with no debounce or filtering logic;
+- render the inner input with `type="search"` so it has searchbox semantics;
+- keep filtering/debounce logic outside the primitive;
 - render a clear button only when `onClear` exists and the controlled/string value is non-empty;
-- if a clear button is rendered, give it `aria-label="清除搜索"`.
+- if a clear button is rendered, give it `aria-label="清除搜索"`;
+- treat `className` as additional styling for the input element; the primitive's wrapper remains feature-neutral.
 
 - [ ] **Step 3: Implement `SegmentedControl` and `Switch`**
 
@@ -279,36 +281,32 @@ git commit -m "refactor(ui): add core UI primitives"
 
 - [ ] **Step 1: Add one focused Tasks regression case before migration**
 
-Append a single test to `tests/e2e/assignment-workspace.spec.ts` that uses the existing `openWorkspace(page)` helper:
+Append this single test to `tests/e2e/assignment-workspace.spec.ts` using the existing `openWorkspace(page)` helper:
 
 ```ts
 test("Task 2A core controls：搜索筛选 + Primary View 切换保持可用", async ({ page }) => {
   await openWorkspace(page);
 
-  const search = page.getByRole("searchbox", { name: "搜索任务" });
+  const search = page.getByLabel("搜索任务");
   await search.fill("数据库");
   await expect(page.locator('[data-assignment-id="a4"]')).toBeVisible();
   await expect(page.locator('[data-assignment-id="a1"]')).toHaveCount(0);
 
   await search.fill("");
-  await page.getByRole("button", { name: /全部/ }).first().click();
-  await expect(page.getByRole("button", { name: /全部/ }).first()).toHaveAttribute(
-    "aria-pressed",
-    "true"
-  );
+  const allView = page.getByRole("button", { name: /全部/ }).first();
+  await allView.click();
+  await expect(allView).toHaveAttribute("aria-pressed", "true");
   await expect(page.locator('[data-assignment-id="a1"]')).toBeVisible();
 });
 ```
 
-If `role="searchbox"` is not emitted by the chosen SearchField implementation, use `page.getByLabel("搜索任务")`; do not add test-only attributes just to satisfy this test.
-
-- [ ] **Step 2: Run only this E2E file once to establish the baseline**
+- [ ] **Step 2: Run only this E2E file once to establish the RED baseline**
 
 ```bash
 npx playwright test tests/e2e/assignment-workspace.spec.ts
 ```
 
-Expected before migration: the new `aria-pressed` assertion may fail on the current hand-written view tabs. That is the intended RED signal. Do not run other E2E files.
+Expected before migration: the new `aria-pressed` assertion fails because the current hand-written Primary View tabs do not expose pressed semantics. Search behavior may already pass. Do not run other E2E files.
 
 - [ ] **Step 3: Migrate `WorkspaceSearchButton`**
 
@@ -319,7 +317,7 @@ setSearchModalView("palette");
 setSearchModalOpen(true);
 ```
 
-Use the global `Button` for the desktop/tablet control and `IconButton` if it simplifies the mobile icon-only rendering. Keep:
+Use the global `Button` for the control. Keep:
 
 ```text
 aria-label="全局搜索"
@@ -327,6 +325,8 @@ aria-label="全局搜索"
 >=768 icon + 搜索
 >=1024 icon + 搜索 + ⌘ K
 ```
+
+`IconButton` is part of the new global vocabulary but does not need a forced consumer in Task 2A; do not split one responsive search action into two DOM buttons solely to demonstrate it.
 
 Do not change Command Center behavior or keyboard shortcut behavior.
 
@@ -377,8 +377,6 @@ Replace only the hand-written Search icon/input wrapper in `AssignmentTable.tsx`
   className="min-w-[150px]"
 />
 ```
-
-If `SearchField` expects width on an outer wrapper rather than the input itself, expose a minimal `className` convention inside the primitive rather than creating a Tasks-only wrapper API.
 
 Do not change search/filter semantics.
 
@@ -473,12 +471,14 @@ git commit -m "refactor(ui): migrate core workspace controls"
 
 ## Final Report Format
 
+Report exactly these sections with the actual commit SHAs created during implementation:
+
 ```text
 UI Productization Task 2A Result
 
 Commits:
-- <sha> refactor(ui): add core UI primitives
-- <sha> refactor(ui): migrate core workspace controls
+- first implementation commit SHA and message
+- second implementation commit SHA and message, if a second commit was created
 
 Primitives:
 - Button
@@ -500,9 +500,9 @@ Migrated surfaces:
 - Kiro PageTransition spacing hotfix
 
 Verification:
-- assignment-workspace.spec.ts: PASS/FAIL
-- typecheck: PASS/FAIL
-- build: PASS or skipped by Task 2A policy
+- assignment-workspace.spec.ts: actual PASS/FAIL result
+- typecheck: actual PASS/FAIL result
+- build: actual PASS result, or "skipped by Task 2A test policy"
 
 Scope:
 - Task 2B not started
