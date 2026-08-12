@@ -1,17 +1,21 @@
 "use client";
 
 import React from "react";
-import { cn } from "@/lib/utils";
 import { UISelect, SelectOption } from "@/components/ui/Select";
+import { Button, ButtonVariant } from "@/components/ui/Button";
+import { Input } from "@/components/ui/Input";
+import { SegmentedControl } from "@/components/ui/SegmentedControl";
+import { Switch } from "@/components/ui/Switch";
 
 /**
- * Settings 共享控件 primitives（Settings V3）：
- * 统一高度、字体、边框、focus-visible ring、disabled 状态。
- * 圆角体系：Input/Button/Segmented = 小圆角（rounded-lg）；Segmented 内项 = rounded-md。
- * SettingsSelect：通用 UISelect（自定义 dropdown，非原生 <select>）的 Settings 规格包装。
+ * Settings 共享控件 compatibility layer（UI Productization Task 2A）：
+ * 保留现有 Settings API（SettingsButton / SettingsInput / SettingsToggle /
+ * SettingsSegmentedControl / SettingsSelect / SettingsButtonVariant），
+ * 内部全部委托全局 primitives（SettingsSelect 继续走 UISelect）。
+ * 禁止在本文件复制第二套完整 Tailwind 控件样式。
  */
 
-/** 标准下拉（优先级/状态/动效等）：自定义 ClassFlow dropdown（native popup 已移除） */
+/** 标准下拉（优先级/状态/动效等）：继续由 UISelect 承载 */
 export function SettingsSelect<T extends string>({
   value,
   onChange,
@@ -38,7 +42,7 @@ export function SettingsSelect<T extends string>({
   );
 }
 
-/** 开关（role=switch；pill 形态保留） */
+/** 开关（role=switch；pill 形态保留）→ Switch */
 export function SettingsToggle({
   checked,
   onChange,
@@ -48,29 +52,10 @@ export function SettingsToggle({
   onChange: (v: boolean) => void;
   label: string;
 }) {
-  return (
-    <button
-      role="switch"
-      aria-checked={checked}
-      aria-label={label}
-      onClick={() => onChange(!checked)}
-      className={cn(
-        "relative w-9 h-5 rounded-full transition-colors duration-[var(--motion-fast)]",
-        "focus-visible:outline-2 focus-visible:outline-charcoal/30 focus-visible:outline-offset-2",
-        checked ? "bg-charcoal" : "bg-alba"
-      )}
-    >
-      <span
-        className={cn(
-          "absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow-subtle transition-transform duration-[var(--motion-fast)]",
-          checked && "translate-x-4"
-        )}
-      />
-    </button>
-  );
+  return <Switch checked={checked} onChange={onChange} label={label} />;
 }
 
-/** 分段选择（3–4 项短文案，如 1/3/7 天、舒适/紧凑；值可为 string 或 number） */
+/** 分段选择 → SegmentedControl */
 export function SettingsSegmentedControl<T extends string | number>({
   value,
   onChange,
@@ -83,35 +68,16 @@ export function SettingsSegmentedControl<T extends string | number>({
   ariaLabel?: string;
 }) {
   return (
-    <div
-      role="group"
-      aria-label={ariaLabel}
-      className="flex items-center gap-1 bg-alabaster p-0.5 rounded-lg border border-line-strong"
-    >
-      {options.map((o) => {
-        const isActive = value === o.value;
-        return (
-          <button
-            key={o.value}
-            onClick={() => onChange(o.value)}
-            aria-pressed={isActive}
-            className={cn(
-              "px-2.5 py-1.5 rounded-md text-[11px] font-bold whitespace-nowrap transition-colors duration-[var(--motion-fast)]",
-              "focus-visible:outline-2 focus-visible:outline-charcoal/30",
-              isActive
-                ? "bg-white text-charcoal shadow-subtle"
-                : "text-satin-grey hover:text-charcoal"
-            )}
-          >
-            {o.label}
-          </button>
-        );
-      })}
-    </div>
+    <SegmentedControl
+      value={value}
+      onChange={onChange}
+      ariaLabel={ariaLabel}
+      options={options.map((o) => ({ value: o.value, label: o.label }))}
+    />
   );
 }
 
-/** 统一输入框（Settings V3 Task 5：text/url/number/time/password；error 变体用于表单校验） */
+/** 统一输入框 → Input（legacy prop 适配：error → invalid；ariaLabel → aria-label） */
 export function SettingsInput({
   id,
   type = "text",
@@ -143,7 +109,7 @@ export function SettingsInput({
   className?: string;
 }) {
   return (
-    <input
+    <Input
       id={id}
       type={type}
       value={value}
@@ -154,27 +120,16 @@ export function SettingsInput({
       min={min}
       autoComplete={autoComplete}
       spellCheck={spellCheck}
-      className={cn(
-        "w-full h-9 px-2.5 bg-[#F7F5F5] border rounded-lg text-xs font-semibold text-charcoal focus:outline-none focus:border-charcoal placeholder-sandrift disabled:opacity-50 disabled:cursor-not-allowed",
-        error ? "border-danger-border" : "border-line",
-        mono && "font-mono",
-        className
-      )}
+      invalid={error}
+      mono={mono}
+      className={className}
     />
   );
 }
 
-export type SettingsButtonVariant = "primary" | "secondary" | "ghost" | "danger" | "accent";
+export type SettingsButtonVariant = ButtonVariant;
 
-const BUTTON_VARIANTS: Record<SettingsButtonVariant, string> = {
-  primary: "bg-charcoal text-white hover:bg-black shadow-subtle",
-  secondary: "bg-white border border-line text-charcoal hover:bg-alabaster",
-  ghost: "text-satin-grey hover:bg-alabaster hover:text-charcoal",
-  danger: "bg-danger-bg text-danger border border-danger-border hover:bg-danger-border",
-  accent: "bg-pastel-mint text-charcoal hover:bg-pastel-mint",
-};
-
-/** 动作按钮（统一 h-8 / rounded-lg / 小号字体 / disabled）；icon 由调用方传入 */
+/** 动作按钮 → Button（legacy prop 适配：testid → data-testid） */
 export function SettingsButton({
   variant = "secondary",
   disabled,
@@ -193,21 +148,15 @@ export function SettingsButton({
   testid?: string;
 }) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
+    <Button
+      variant={variant}
       disabled={disabled}
+      onClick={onClick}
       aria-label={ariaLabel}
       data-testid={testid}
-      className={cn(
-        "ux-press flex items-center gap-1.5 px-3 h-8 text-[11px] font-bold rounded-lg transition-colors shrink-0",
-        "focus-visible:outline-2 focus-visible:outline-charcoal/30",
-        "disabled:opacity-50 disabled:cursor-not-allowed",
-        BUTTON_VARIANTS[variant],
-        className
-      )}
+      className={className}
     >
       {children}
-    </button>
+    </Button>
   );
 }
