@@ -6,9 +6,13 @@ import {
 } from "@/lib/ai/web/native/networkSafety";
 import {
   safeWebFetch,
+  safeWebFetchPdf,
+  hasPdfSignature,
   MAX_WEB_FETCH_REDIRECTS,
   WEB_FETCH_TIMEOUT_MS,
   MAX_WEB_FETCH_BYTES,
+  MAX_WEB_PDF_FETCH_BYTES,
+  MAX_WEB_PDF_COMPRESSED_BYTES,
 } from "@/lib/ai/web/native/safeFetch";
 import type {
   KiroHttpTransport,
@@ -431,5 +435,129 @@ describe("Compatibility Hotfix — address failover / 压缩 / charset", () => {
     );
     expect(out.ok).toBe(false);
     if (!out.ok) expect(out.code).toBe("WEB_FETCH_TOO_LARGE");
+  });
+});
+
+describe("Task 19A — safeWebFetchPdf（binary-safe）", () => {
+  /** 含 0x00/0xff/0x80/0x01 的合法 PDF 签名 fixture */
+  function pdfBytes(size = 64): Uint8Array {
+    const head = new TextEncoder().encode("%PDF-1.7\n");
+    const arr = new Uint8Array(Math.max(size, head.length + 4));
+    arr.set(head);
+    arr[head.length] = 0x00;
+    arr[head.length + 1] = 0xff;
+    arr[head.length + 2] = 0x80;
+    arr[head.length + 3] = 0x01;
+    return arr;
+  }
+
+  it("PDF 必测 2. binary integrity：bytes byte-for-byte 相同（无 UTF-8 roundtrip）", async () => {
+    const input = pdfBytes();
+    const { transport } = recordingTransport(async () =>
+      htmlResponse({ headers: { "content-type": "application/pdf" }, body: bodyOf([input]) })
+    );
+    const out = await safeWebFetchPdf(
+      { url: "https://example.com/doc.pdf" },
+      { resolveHost: dns("93.184.216.34"), transport }
+    );
+    expect(out.ok).toBe(true);
+    if (!out.ok) return;
+    expect(out.contentType).toBe("application/pdf");
+    expect(out.bytes.length).toBe(input.length);
+    expect(Buffer.from(out.bytes).equals(Buffer.from(input))).toBe(true);
+  });
+
+  it("PDF 必测 3. wrapper content isolation：pdf 对 text 拒、html 对 pdf 拒", async () => {
+    const pdf = pdfBytes();
+    const { transport: t1 } = recordingTransport(async () =>
+      htmlResponse({ headers: { "content-type": "application/pdf" }, body: bodyOf([pdf]) })
+    );
+    const textOut = await safeWebFetch({ url: "https://example.com/doc.pdf" }, { resolveHost: dns("93.184.216.34"), transport: t1 });
+    expect(textOut.ok).toBe(false);
+    if (!textOut.ok) expect(textOut.code).toBe("WEB_FETCH_UNSUPPORTED_CONTENT");
+
+    const { transport: t2 } = recordingTransport(async () => htmlResponse());
+    const pdfOut = await safeWebFetchPdf({ url: "https://example.com/page" }, { resolveHost: dns("93.184.216.34"), transport: t2 });
+    expect(pdfOut.ok).toBe(false);
+    if (!pdfOut.ok) expect(pdfOut.code).toBe("WEB_FETCH_UNSUPPORTED_CONTENT");
+  });
+
+  it("PDF 必测 4. 假 PDF（application/pdf + html body）→ WEB_FETCH_UNSUPPORTED_CONTENT", async () => {
+    const { transport } = recordingTransport(async () =>
+      htmlResponse({ headers: { "content-type": "application/pdf" }, body: bodyOf([encode("<html>login required</html>")]) })
+    );
+    const out = await safeWebFetchPdf(
+      { url: "https://example.com/fake.pdf" },
+      { resolveHost: dns("93.184.216.34"), transport }
+    );
+    expect(out.ok).toBe(false);
+    if (!out.ok) expect(out.code).toBe("WEB_FETCH_UNSUPPORTED_CONTENT");
+  });
+
+  it("PDF 必测 4b. 空 body（0 bytes）→ WEB_FETCH_UNSUPPORTED_CONTENT", async () => {
+    const { transport } = recordingTransport(async () =>
+      htmlResponse({ headers: { "content-type": "application/pdf" }, body: bodyOf([]) })
+    );
+    const out = await safeWebFetchPdf(
+      { url: "https://example.com/empty.pdf" },
+      { resolveHost: dns("93.184.216.34"), transport }
+    );
+    expect(out.ok).toBe(false);
+    if (!out.ok) expect(out.code).toBe("WEB_FETCH_UNSUPPORTED_CONTENT");
+  });
+
+  it("PDF 必测 5. gzip PDF → 解压后原 PDF bytes（signature + byte-for-byte）", async () => {
+    const { gzipSync } = await import("node:zlib");
+    const input = pdfBytes();
+    const gzipped = gzipSync(Buffer.from(input));
+    const { transport } = recordingTransport(async () =>
+      htmlResponse({
+        headers: { "content-type": "application/pdf", "content-encoding": "gzip" },
+        body: bodyOf([new Uint8Array(gzipped)]),
+      })
+    );
+    const out = await safeWebFetchPdf(
+      { url: "https://example.com/doc.pdf" },
+      { resolveHost: dns("93.184.216.34"), transport }
+    );
+    expect(out.ok).toBe(true);
+    if (!out.ok) return;
+    expect(Buffer.from(out.bytes).equals(Buffer.from(input))).toBe(true);
+  });
+
+  it("PDF 必测 6. 大小上限（maxBytes override）→ WEB_FETCH_TOO_LARGE", async () => {
+    const { transport } = recordingTransport(async () =>
+      htmlResponse({ headers: { "content-type": "application/pdf" }, body: bodyOf([pdfBytes(200)]) })
+    );
+    const out = await safeWebFetchPdf(
+      { url: "https://example.com/doc.pdf" },
+      { resolveHost: dns("93.184.216.34"), transport, maxBytes: 100 }
+    );
+    expect(out.ok).toBe(false);
+    if (!out.ok) expect(out.code).toBe("WEB_FETCH_TOO_LARGE");
+  });
+
+  it("PDF 必测 7. security shared core：mixed DNS → BLOCKED_IP，transport 0 calls", async () => {
+    const { transport, calls } = recordingTransport(async () => htmlResponse());
+    const out = await safeWebFetchPdf(
+      { url: "https://example.com/doc.pdf" },
+      { resolveHost: dns("93.184.216.34", "127.0.0.1"), transport }
+    );
+    expect(out.ok).toBe(false);
+    if (!out.ok) expect(out.code).toBe("WEB_FETCH_BLOCKED_IP");
+    expect(calls).toHaveLength(0);
+  });
+
+  it("hasPdfSignature：前 1024 bytes 内 %PDF-；假 PDF / 空 → false", () => {
+    expect(hasPdfSignature(new TextEncoder().encode("%PDF-1.7\n%EOF"))).toBe(true);
+    expect(hasPdfSignature(new Uint8Array([0xef, 0xbb, 0xbf, 0x25, 0x50, 0x44, 0x46, 0x2d]))).toBe(true); // BOM + %PDF-
+    const fake = new TextEncoder().encode("<html>not pdf</html>");
+    expect(hasPdfSignature(fake)).toBe(false);
+    expect(hasPdfSignature(new Uint8Array(0))).toBe(false);
+  });
+
+  it("PDF 预算常量：8MB final / 10MB compressed（Web ≠ 本地附件 20MB）", () => {
+    expect(MAX_WEB_PDF_FETCH_BYTES).toBe(8 * 1024 * 1024);
+    expect(MAX_WEB_PDF_COMPRESSED_BYTES).toBe(10 * 1024 * 1024);
   });
 });
