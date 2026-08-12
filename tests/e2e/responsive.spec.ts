@@ -82,9 +82,9 @@ test.describe("responsive navigation", () => {
     await expect(nav).toBeVisible();
 
     // 主内容底部留白，避免最后一行被 Bottom Nav 遮挡
-    // （App Shell 结构：main 无 padding，底部留白由页面 body 容器承担）
+    // （App Shell 结构：main 无 padding，底部留白由页面 body 容器承担——hero/secondary 为 section）
     const bodyPadding = await page
-      .locator("main > div > div > div")
+      .locator("main > div > div > div, main > div > div > section")
       .first()
       .evaluate((el) => parseFloat(getComputedStyle(el).paddingBottom));
     expect(bodyPadding).toBeGreaterThanOrEqual(80);

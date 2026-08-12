@@ -4,10 +4,10 @@ import React from "react";
 import { cn } from "@/lib/utils";
 
 /**
- * 页面 Tab 切换 wrapper：以 activeTab 为 key，进入时
- * opacity 0→1 + translateY 4px→0（220ms），不做退出动画与左右滑动。
- * className 用于传入页面内容的纵向间距（如 space-y-5），
- * 避免间距挂在 main 上但被本包装层隔断。
+ * 页面 Tab 切换 wrapper：以 activeTab 为 key，进入时 opacity 0→1（180ms，--motion-page）。
+ * 仅 opacity-only（无 translateY）：避免动画期 transient scroll overflow / scrollbar 布局抖动，
+ * 与 main [scrollbar-gutter:stable] 共同保证切换期间 App Shell / Header 完全稳定。
+ * className 仅用于内容布局；不做 Old/New crossfade（避免双挂载复杂度）。
  */
 export function PageTransition({
   tab,

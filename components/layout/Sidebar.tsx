@@ -1,10 +1,11 @@
 "use client";
 
-import React from "react";
+import React, { useCallback, useLayoutEffect, useRef, useState } from "react";
 import { ChevronRight } from "lucide-react";
 import { useAppStore } from "@/store/useAppStore";
 import { useReminderCenterStore } from "@/store/useReminderCenterStore";
 import { hasUnreadFiredReminders } from "@/lib/reminders/reminderCenterView";
+import { useEffectiveReducedMotion } from "@/hooks/useEffectiveReducedMotion";
 import { cn } from "@/lib/utils";
 import {
   MAIN_NAV_ITEMS,
@@ -18,11 +19,43 @@ export function Sidebar() {
   const reminderCenterToggle = useReminderCenterStore((s) => s.toggle);
   const reminders = useAppStore((s) => s.reminders);
   const hasUnread = hasUnreadFiredReminders(reminders);
+  const reducedMotion = useEffectiveReducedMotion();
 
   const creditPercentage =
     userProfile.totalCredits > 0
       ? Math.round((userProfile.completedCredits / userProfile.totalCredits) * 100)
       : 0;
+
+  // ---- 共享 Navigation Active Plate（IM1）：MAIN_NAV 唯一 selection surface ----
+  // 仅 transform/opacity 动画（无 top/margin/layout reflow）；首次加载直接定位不播放动画。
+  const navRef = useRef<HTMLElement | null>(null);
+  const itemRefs = useRef<Map<string, HTMLButtonElement>>(new Map());
+  const interactedRef = useRef(false);
+  const [plate, setPlate] = useState<{ y: number; h: number } | null>(null);
+
+  const measurePlate = useCallback(() => {
+    const el = itemRefs.current.get(activeTab);
+    if (!el) return;
+    setPlate({ y: el.offsetTop, h: el.offsetHeight });
+  }, [activeTab]);
+
+  // 首次 render / activeTab 变化：paint 前同步定位（无 transition 由 interacted 控制）
+  useLayoutEffect(() => {
+    measurePlate();
+  }, [measurePlate]);
+
+  // nav 尺寸变化（md↔xl breakpoint / 内容变化）→ 重新测量
+  useLayoutEffect(() => {
+    const nav = navRef.current;
+    if (!nav) return;
+    const ro = new ResizeObserver(() => measurePlate());
+    ro.observe(nav);
+    return () => ro.disconnect();
+  }, [measurePlate]);
+
+  const isMainActive = MAIN_NAV_ITEMS.some((i) => i.id === activeTab);
+  // 用户交互后才启用 transform transition；reduced motion 始终直接定位
+  const plateAnimated = interactedRef.current && !reducedMotion;
 
   return (
     // 三档布局：
@@ -35,7 +68,10 @@ export function Sidebar() {
         {/* Brand Logo：Icon Rail 显示图形 Mark；完整 Sidebar 显示全横版 Logo（Responsive Swap，非缩放） */}
         <div
           className="w-full h-10 px-0.5 flex items-center justify-center cursor-pointer"
-          onClick={() => setActiveTab("overview")}
+          onClick={() => {
+            interactedRef.current = true;
+            setActiveTab("overview");
+          }}
         >
           {/* 768–1279 Icon Rail：仅图形 Mark，居中，object-contain */}
           <img
@@ -52,32 +88,49 @@ export function Sidebar() {
         </div>
 
         {/* Navigation Menu（核心学习功能） */}
-        <nav className="space-y-0.5">
+        <nav ref={navRef} className="relative space-y-0.5">
+          {/* 共享 Navigation Active Plate：MAIN_NAV 唯一 selection surface（surface + 左侧指示条一体移动）。
+              transform/opacity 动画；用户交互后才启用 transition；首次加载直接定位；reduced 直接跳转；
+              Kiro（非 MAIN_NAV）时淡出。 */}
+          <div
+            aria-hidden="true"
+            data-testid="nav-active-plate"
+            className={cn(
+              "absolute left-0 right-0 rounded-xl bg-pastel-mint shadow-subtle transition-[transform,opacity] ease-[var(--ease-standard)]",
+              plateAnimated ? "duration-[var(--motion-base)]" : "duration-0",
+              isMainActive ? "opacity-100" : "opacity-0"
+            )}
+            style={{
+              transform: plate ? `translateY(${plate.y}px)` : "translateY(-40px)",
+              height: plate?.h ?? 40,
+            }}
+          >
+            <span className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-4 rounded-full bg-charcoal" />
+          </div>
+
           {MAIN_NAV_ITEMS.map((item) => {
             const Icon = item.icon;
             const isActive = activeTab === item.id;
             return (
               <button
                 key={item.id}
-                onClick={() => setActiveTab(item.id)}
+                ref={(el) => {
+                  if (el) itemRefs.current.set(item.id, el);
+                  else itemRefs.current.delete(item.id);
+                }}
+                onClick={() => {
+                  interactedRef.current = true;
+                  setActiveTab(item.id);
+                }}
                 aria-label={item.label}
                 aria-current={isActive ? "page" : undefined}
                 className={cn(
                   "relative w-full flex items-center justify-center xl:justify-start xl:gap-2.5 px-2 xl:px-3 py-2 rounded-xl text-xs font-medium transition-colors duration-[var(--motion-base)] ease-[var(--ease-standard)] group text-left",
                   isActive
-                    ? "bg-pastel-mint text-charcoal font-semibold shadow-subtle"
+                    ? "text-charcoal font-semibold"
                     : "text-satin-grey hover:bg-alabaster hover:text-charcoal"
                 )}
               >
-                {/* Active 指示条：opacity + scaleY 过渡 */}
-                <span
-                  className={cn(
-                    "absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-4 rounded-full bg-charcoal",
-                    "transition-[opacity,transform] duration-[var(--motion-base)] ease-[var(--ease-standard)]",
-                    isActive ? "opacity-100 scale-y-100" : "opacity-0 scale-y-50"
-                  )}
-                  aria-hidden="true"
-                />
                 <Icon
                   className={cn(
                     "w-4 h-4 shrink-0 transition-colors duration-[var(--motion-base)]",
