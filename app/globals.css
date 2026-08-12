@@ -198,7 +198,7 @@ button:disabled {
     animation: ux-enter var(--motion-base) var(--ease-standard) both;
   }
 
-  /* 页面 Tab 切换：opacity + 4px 上移 */
+  /* 页面 Tab 切换：opacity-only（无 translateY，避免动画期 scroll overflow / 布局抖动） */
   .ux-page {
     animation: ux-page-in var(--motion-page) var(--ease-standard) both;
   }
@@ -245,14 +245,14 @@ button:disabled {
   }
 }
 
+/* 页面 Tab 切换：opacity-only（避免 translateY 在动画期产生 transient scroll overflow，
+   与 scrollbar-gutter: stable 共同保证切换时 layout width 稳定） */
 @keyframes ux-page-in {
   from {
     opacity: 0;
-    transform: translateY(4px);
   }
   to {
     opacity: 1;
-    transform: none;
   }
 }
 

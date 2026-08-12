@@ -165,7 +165,12 @@ test("Assignment Context：选中任务后显示编辑命令，打开的是编�
   await page.goto("/");
 
   // 打开「计量经济学大作业」Assignment Drawer → selectedAssignmentId 生效
-  await page.getByText("计量经济学大作业（第3章）").first().click();
+  // （限定任务列表作用域：课程卡 hover tooltip 也存在同名文本，但为隐藏态）
+  await page
+    .getByTestId("assignment-list")
+    .getByText("计量经济学大作业（第3章）")
+    .first()
+    .click();
   await expect(page.getByRole("button", { name: "关闭" }).first()).toBeVisible();
 
   await openPalette(page);

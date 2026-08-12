@@ -457,7 +457,13 @@ export function AssignmentTable({
   };
 
   return (
-    <div className="bg-surface border border-line rounded-2xl p-4 shadow-subtle flex flex-col justify-between h-full space-y-3 min-w-0">
+    <div
+      className={cn(
+        "bg-surface border border-line rounded-2xl p-4 shadow-subtle flex flex-col h-full space-y-3 min-w-0",
+        // workspace：list 紧跟 filters 且 flex-1 填满剩余（无中间空白岛）；compact：justify-between 分散
+        isWorkspace ? "justify-start" : "justify-between"
+      )}
+    >
       {/* Header & Controls */}
       <div className="space-y-3 border-b border-[#F0EBE1] pb-3">
         {/* Task 1：workspace 模式标题/主创建/Ask Kiro 已上移到 AssignmentsWorkspace Header；
@@ -661,7 +667,7 @@ export function AssignmentTable({
         className={cn(
           "divide-y divide-line-soft mt-1 flex-1 min-h-0 space-y-1",
           isWorkspace &&
-            "overflow-y-auto max-h-[380px] outline-none rounded-xl focus-visible:ring-2 focus-visible:ring-line-strong"
+            "overflow-y-auto outline-none focus-visible:ring-2 focus-visible:ring-line-strong"
         )}
       >
         {/* 空态判断按模式取正确数据源：workspace = 视图派生结果；compact = 分页结果 */}

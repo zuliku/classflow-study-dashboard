@@ -29,7 +29,7 @@ export function TimelineUnscheduledShelf({
   return (
     <div
       data-testid="timeline-unscheduled"
-      className="bg-surface border border-line rounded-2xl shadow-subtle p-3"
+      className="bg-surface border border-line rounded-2xl shadow-subtle p-3 shrink-0"
     >
       {/* Panel Header：计数 + 展开/收起 */}
       <div className="flex items-center justify-between mb-1.5">

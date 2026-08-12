@@ -364,7 +364,8 @@ export function TimelineWorkspace() {
       context={`第 ${currentSemesterWeek} 周 · ${formatWeekDateRange(semester, currentSemesterWeek)}`}
       sticky
     />
-    <div className="flex flex-1 min-h-0 flex-col p-4 pb-24 md:p-6 md:pb-6">
+    {/* body：主卡 flex-1 吸收剩余空间；shelf shrink-0；section spacing 由父容器 gap-4 统一控制 */}
+    <div className="flex flex-1 min-h-0 flex-col gap-4 p-4 pb-24 md:p-6 md:pb-6">
     <div
       ref={wrapRef}
       data-testid="timeline-workspace"

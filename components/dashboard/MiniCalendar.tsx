@@ -576,8 +576,9 @@ export function MiniCalendar() {
         </div>
       )}
 
-      {/* Selected Date Agenda：横向 Compact Event Grid（4 列/页，仅类型 + 图标；详情走 Drawer） */}
-      <div className="pt-2 border-t border-[#F0EBE1] shrink-0">
+      {/* Selected Date Agenda：横向 Compact Event Grid（4 列/页，仅类型 + 图标；详情走 Drawer）
+          矮视口（≤740px 高）下隐藏，避免与 Overview 首屏 hero 争高度 */}
+      <div className="pt-2 border-t border-[#F0EBE1] shrink-0 [@media(max-height:740px)]:hidden">
         <div className="flex justify-between items-center text-xs">
           <span className="font-bold text-charcoal">
             {isSelectedInSemester

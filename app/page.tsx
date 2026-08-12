@@ -239,7 +239,7 @@ export default function Home() {
         {/* main：只负责 flex / overflow / workspace geometry，不承担页面 gutter。
             WorkspaceHeader 是 full-width structural layer；page padding 由各页面 body 自己负责。
             Kiro Tab 保持 full-bleed（p-0），gutter 由 KiroWorkspace 内部提供。 */}
-        <main className="flex-1 flex flex-col overflow-y-auto">
+        <main className="flex-1 flex flex-col overflow-y-auto [scrollbar-gutter:stable]">
           <PageTransition
             tab={activeTab}
             className="flex flex-col flex-1 min-h-0"
@@ -247,9 +247,9 @@ export default function Home() {
           {activeTab === "overview" && (
             <div className="flex flex-1 min-h-0 flex-col">
               <WorkspaceHeader title="总览" context={currentWeekContext} sticky />
-              <div className="flex flex-1 min-h-0 flex-col space-y-5 p-4 pb-24 md:p-6 md:pb-6">
               {/* First Run：空工作区时显示 Getting Started（非阻塞，三个动作即可开始） */}
               {courses.length === 0 && schedules.length === 0 && assignments.length === 0 ? (
+                <div className="flex flex-1 min-h-0 flex-col p-4 pb-24 md:p-6 md:pb-6">
                 <div
                   data-testid="getting-started"
                   className="bg-surface border border-line rounded-2xl p-8 shadow-subtle space-y-4 text-center"
@@ -285,12 +285,14 @@ export default function Home() {
                     也可以直接新建任务或浏览课表，随时可以从设置中调整
                   </p>
                 </div>
+              </div>
               ) : (
                 <>
-              {/* Row 1: Overview Hero（Desktop ≥1280 = 一屏：课表 2/3 + DDL/月历 1/3，严格同顶同底） */}
-              {/* Tablet 768–1023 自然降列 2+1，Desktop 恢复 2/3 + 1/3 */}
-              {/* items-stretch：左侧完整时间轴课表是 Row 高度基准；右侧用稳定比例 grid-rows 适配等高 */}
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 items-stretch xl:h-[calc(100dvh-81px)]">
+              {/* Overview Hero Section（xl+ 严格占满 Header 以下首屏，padding 计入 section box；
+                  < xl 自然流式堆叠，不强制视口高度） */}
+              <section className="min-h-0 shrink-0 p-4 pb-24 md:p-6 md:pb-6 xl:h-[calc(100dvh-4.0625rem)]">
+                {/* 三卡 Grid：xl 时 h-full 填满 Hero Section；三卡同顶同底（items-stretch） */}
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 items-stretch h-full min-h-0">
                 <div className="lg:col-span-2 flex flex-col min-h-0">
                   <TimetableGrid density="compact" fillAvailableHeight headerActions={<TimetableQuickGlance />} />
                 </div>
@@ -304,23 +306,20 @@ export default function Home() {
                     <MiniCalendar />
                   </div>
                 </div>
-              </div>
+                </div>
+              </section>
 
-              {/* Row 3: Bottom Study Load Chart (1/2) + Assignments Table (1/2) */}
-              {/* 依据主内容可用宽度降列（auto-fit minmax，非 viewport breakpoint）：
-                  容器 ≥1060px → 2 列；被 Docked Kiro 压窄 / 移动端 → 自动 1 列。
-                  两张卡 min-h-460 + grid stretch：2 列时视觉等高；内容超 460 时自然增长（绝无固定高度内重叠）。 */}
-              <div className="grid gap-5 items-stretch grid-cols-[repeat(auto-fit,minmax(520px,1fr))]">
+              {/* Overview Secondary Section：完全位于首屏 fold 以下，滚动后才可见 */}
+              <section className="grid gap-5 items-stretch shrink-0 grid-cols-[repeat(auto-fit,minmax(520px,1fr))] px-4 pb-24 md:px-6 md:pb-6">
                 <div className="md:min-h-[460px]" data-testid="overview-load-wrap">
                   <StudyLoadChart />
                 </div>
                 <div className="md:min-h-[460px] min-w-0" data-testid="overview-tasks-wrap">
                   <AssignmentTable mode="compact" />
                 </div>
-              </div>
+              </section>
                 </>
               )}
-              </div>
             </div>
           )}
 
@@ -492,7 +491,8 @@ export default function Home() {
                           outerRadius={85}
                           paddingAngle={4}
                           dataKey="value"
-                          animationDuration={450}
+                          animationBegin={140}
+                          animationDuration={500}
                           animationEasing="ease-out"
                         >
                           {statusPieData.map((entry, index) => (
@@ -542,7 +542,7 @@ export default function Home() {
                             fontSize: "11px",
                           }}
                         />
-                        <Bar dataKey="value" radius={[6, 6, 0, 0]} animationDuration={450} animationEasing="ease-out">
+                        <Bar dataKey="value" radius={[6, 6, 0, 0]} animationBegin={140} animationDuration={500} animationEasing="ease-out">
                           {priorityPieData.map((entry, index) => (
                             <Cell key={`cell-${index}`} fill={entry.color} />
                           ))}
