@@ -38,6 +38,11 @@ import { FloatingTimelineDetail } from "@/components/timeline/FloatingTimelineDe
 import { TimelineUnscheduledShelf } from "@/components/timeline/TimelineUnscheduledShelf";
 import { getWeekDateRange, formatWeekDateRange } from "@/lib/semester";
 import { deriveTimelineItems, deriveUnscheduledAssignments } from "@/lib/timeline/deriveTimelineItems";
+import { pointerToMinutes } from "@/lib/timetableInteraction";
+import {
+  calculateMovedStudyBlock,
+  isSameStudyBlockPosition,
+} from "@/lib/timeline/studyBlockInteraction";
 import { timeToMinutes } from "@/lib/timeline/timelineGeometry";
 import { isScheduleActive } from "@/lib/schedule";
 import { Assignment, CalendarMark, CourseSchedule, StudyBlock } from "@/types";
@@ -132,6 +137,7 @@ export function TimelineWorkspace() {
     setFullTimetableModalOpen,
     addStudyBlock,
     deleteStudyBlock,
+    updateStudyBlock,
     addCalendarMark,
   } = useAppStore();
   const pushToast = useToastStore((s) => s.pushToast);
@@ -153,6 +159,143 @@ export function TimelineWorkspace() {
   const dayCount = preferences.showWeekends ? 7 : 5;
   const todayStr = format(new Date(), "yyyy-MM-dd");
   const isCurrentWeek = todayStr >= weekDates[0] && todayStr <= weekDates[6];
+
+  // ---- IM5A：StudyBlock Move 直接拖动（Timeline Workspace + pointer:fine + preference）----
+  type StudyBlockDragState =
+    | { type: "idle" }
+    | { type: "pending"; block: StudyBlock; startX: number; startY: number; pointerOffsetMinutes: number }
+    | {
+        type: "dragging";
+        origin: StudyBlock;
+        candidate: StudyBlock;
+        pointerOffsetMinutes: number;
+        valid: boolean;
+        conflictMessage?: string;
+      };
+  const [studyDrag, setStudyDrag] = useState<StudyBlockDragState>({ type: "idle" });
+  const studyDragRef = useRef<StudyBlockDragState>({ type: "idle" });
+  const [finePointer, setFinePointer] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia("(pointer: fine)");
+    setFinePointer(mq.matches);
+    const onChange = (e: MediaQueryListEvent) => setFinePointer(e.matches);
+    mq.addEventListener("change", onChange);
+    return () => mq.removeEventListener("change", onChange);
+  }, []);
+  const studyDragEnabled = preferences.enableScheduleDirectManipulation && finePointer;
+
+  // pointer 坐标 → 候选 StudyBlock（elementFromPoint 找 data-timetable-day 列；15min snap + clamp；冲突复用 studyBlockConflict）
+  const evaluateStudyCandidate = (
+    origin: StudyBlock,
+    clientX: number,
+    clientY: number,
+    offset: number
+  ): { candidate: StudyBlock; conflict: ReturnType<typeof studyBlockConflict> } | null => {
+    const el = document.elementFromPoint(clientX, clientY);
+    const dayCol = el?.closest?.("[data-timetable-day]") as HTMLElement | null;
+    if (!dayCol) return null;
+    const dow = Number(dayCol.dataset.timetableDay);
+    const targetDate = weekDates[dow - 1];
+    if (!targetDate) return null;
+    const rect = dayCol.getBoundingClientRect();
+    const pointerMinutes = pointerToMinutes(clientY, rect.top, rect.height);
+    const candidate = calculateMovedStudyBlock(origin, targetDate, pointerMinutes, offset);
+    const conflict = studyBlockConflict(candidate, { schedules, studyBlocks, currentSemesterWeek });
+    return { candidate, conflict };
+  };
+
+  useEffect(() => {
+    const drag = studyDragRef.current;
+    if (drag.type === "idle") return;
+    const clearDragActive = () => {
+      document.body.dataset.dragActive = "0";
+    };
+    const toDragging = (
+      result: { candidate: StudyBlock; conflict: ReturnType<typeof studyBlockConflict> } | null,
+      origin: StudyBlock,
+      offset: number
+    ) => {
+      if (!result) return;
+      studyDragRef.current = {
+        type: "dragging",
+        origin,
+        candidate: result.candidate,
+        pointerOffsetMinutes: offset,
+        valid: !result.conflict,
+        conflictMessage: result.conflict ? (result.conflict.courseName ?? result.conflict.otherTitle) : undefined,
+      };
+      setStudyDrag(studyDragRef.current);
+    };
+    const onPointerMove = (e: PointerEvent) => {
+      const current = studyDragRef.current;
+      if (current.type === "idle") return;
+      if (current.type === "pending") {
+        // 5px 阈值后才 engage
+        if (Math.abs(e.clientX - current.startX) < 5 && Math.abs(e.clientY - current.startY) < 5) return;
+        document.body.dataset.dragActive = "1";
+        toDragging(
+          evaluateStudyCandidate(current.block, e.clientX, e.clientY, current.pointerOffsetMinutes),
+          current.block,
+          current.pointerOffsetMinutes
+        );
+        return;
+      }
+      toDragging(
+        evaluateStudyCandidate(current.origin, e.clientX, e.clientY, current.pointerOffsetMinutes),
+        current.origin,
+        current.pointerOffsetMinutes
+      );
+    };
+    const onPointerUp = () => {
+      const current = studyDragRef.current;
+      studyDragRef.current = { type: "idle" };
+      clearDragActive();
+      if (current.type === "dragging") {
+        const { origin, candidate, valid, conflictMessage } = current;
+        if (!valid) {
+          pushToast({ type: "error", message: conflictMessage ?? "时间冲突，学习计划未调整" });
+        } else if (!isSameStudyBlockPosition(origin, candidate)) {
+          updateStudyBlock(origin.id, {
+            date: candidate.date,
+            startTime: candidate.startTime,
+            endTime: candidate.endTime,
+          });
+          pushToast({
+            message: "学习计划时间已调整",
+            actionLabel: "撤销",
+            onAction: () => {
+              updateStudyBlock(origin.id, {
+                date: origin.date,
+                startTime: origin.startTime,
+                endTime: origin.endTime,
+              });
+            },
+          });
+        }
+      }
+      setStudyDrag({ type: "idle" });
+    };
+    const onPointerCancel = () => {
+      studyDragRef.current = { type: "idle" };
+      clearDragActive();
+      setStudyDrag({ type: "idle" });
+    };
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onPointerCancel();
+    };
+    window.addEventListener("pointermove", onPointerMove);
+    window.addEventListener("pointerup", onPointerUp);
+    window.addEventListener("pointercancel", onPointerCancel);
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      window.removeEventListener("pointermove", onPointerMove);
+      window.removeEventListener("pointerup", onPointerUp);
+      window.removeEventListener("pointercancel", onPointerCancel);
+      window.removeEventListener("keydown", onKeyDown);
+      clearDragActive();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [studyDrag.type, weekDates, schedules, studyBlocks, currentSemesterWeek, pushToast, updateStudyBlock, studyDragEnabled]);
 
   const courseNameOf = useMemo(
     () => (courseId: string) => courses.find((c) => c.id === courseId)?.name ?? "",
@@ -225,12 +368,38 @@ export function TimelineWorkspace() {
           const touchesEdge = s <= dayStart || e >= dayEnd;
           // 高度不足的短块：只显示 Title，不放 duration / delete
           const showMeta = heightPct >= 3.4;
+          const isDraggingThis = studyDrag.type === "dragging" && studyDrag.origin.id === b.id;
           return (
             <div
               key={b.id}
               data-testid="timeline-study-block"
               title={`${b.title} · ${b.startTime}–${b.endTime}（${formatCompactMinutes(rawE - rawS)}）`}
-              className="absolute left-1 right-1 z-[2] rounded-lg border border-dashed border-line-soft bg-pastel-mint/20 px-1.5 py-0.5 flex items-center gap-1 overflow-hidden pointer-events-auto group"
+              onPointerDown={(e) => {
+                if (!studyDragEnabled) return;
+                if (e.button !== 0) return;
+                e.preventDefault();
+                e.currentTarget.setPointerCapture?.(e.pointerId);
+                const dayCol = e.currentTarget.closest("[data-timetable-day]") as HTMLElement | null;
+                if (!dayCol) return;
+                const rect = dayCol.getBoundingClientRect();
+                const pointerMinutes = pointerToMinutes(e.clientY, rect.top, rect.height);
+                const startM = timeToMinutes(b.startTime) ?? pointerMinutes;
+                studyDragRef.current = {
+                  type: "pending",
+                  block: b,
+                  startX: e.clientX,
+                  startY: e.clientY,
+                  pointerOffsetMinutes: pointerMinutes - startM,
+                };
+                setStudyDrag(studyDragRef.current);
+              }}
+              className={cn(
+                "absolute left-1 right-1 z-[2] rounded-lg border border-dashed border-line-soft bg-pastel-mint/20 px-1.5 py-0.5 flex items-center gap-1 overflow-hidden group",
+                "transition-opacity duration-[var(--motion-fast)]",
+                isDraggingThis && "opacity-50",
+                studyDragEnabled && !isDraggingThis && "cursor-grab",
+                isDraggingThis && "cursor-grabbing"
+              )}
               style={{ top: `${topPct}%`, height: `${heightPct}%`, minHeight: touchesEdge ? undefined : 6 }}
             >
               <span className="truncate text-[10px] font-semibold text-satin-grey">{b.title}</span>
@@ -240,7 +409,9 @@ export function TimelineWorkspace() {
                     {formatCompactMinutes(durationMinutes)}
                   </span>
                   <button
-                    onClick={() => {
+                    onPointerDown={(e) => e.stopPropagation()}
+                    onClick={(e) => {
+                      e.stopPropagation();
                       deleteStudyBlock(b.id);
                       pushToast({ message: "已删除学习计划" });
                     }}
@@ -254,6 +425,37 @@ export function TimelineWorkspace() {
             </div>
           );
         })}
+
+        {/* IM5A：拖动 Ghost（真实 candidate 几何；valid = mint / invalid = danger；snap 过渡 top） */}
+        {studyDrag.type === "dragging" && studyDrag.candidate.date === date && (
+          <div
+            data-testid="study-block-ghost"
+            className={cn(
+              "absolute left-1 right-1 z-[4] rounded-lg border-2 border-dashed px-1.5 py-0.5 flex items-center gap-1 overflow-hidden pointer-events-none",
+              "transition-[top,background-color,border-color,opacity] duration-[var(--motion-snap)] ease-[var(--ease-standard)]",
+              studyDrag.valid
+                ? "border-pastel-mint bg-pastel-mint/25"
+                : "border-danger/60 bg-danger-bg/40"
+            )}
+            style={{
+              top: `${(((ctx.timeToMinutes(studyDrag.candidate.startTime) ?? 0) - dayStart) / ctx.totalMinutes) * 100}%`,
+              height: `${(((ctx.timeToMinutes(studyDrag.candidate.endTime) ?? 0) - (ctx.timeToMinutes(studyDrag.candidate.startTime) ?? 0)) / ctx.totalMinutes) * 100}%`,
+              minHeight: 6,
+            }}
+          >
+            <span className="truncate text-[10px] font-semibold text-satin-grey">
+              {studyDrag.candidate.title}
+            </span>
+            <span className="text-[9px] text-sandrift font-medium shrink-0">
+              {studyDrag.candidate.startTime}–{studyDrag.candidate.endTime}
+            </span>
+            {!studyDrag.valid && (
+              <span className="ml-auto text-[9px] font-bold text-danger shrink-0 truncate max-w-[50%]">
+                {studyDrag.conflictMessage ?? "时间冲突"}
+              </span>
+            )}
+          </div>
+        )}
 
         {/* Kiro Proposal Ghost（ephemeral；弱于真实 StudyBlock；冲突时标记「计划已过期」） */}
         {ghostBlocks.map((g) => {

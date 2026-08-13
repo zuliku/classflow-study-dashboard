@@ -604,6 +604,7 @@ export function TimetableGrid({
               return (
                 <div
                   key={wd.dayOfWeek}
+                  data-timetable-day={wd.dayOfWeek}
                   className={cn(
                     "relative border-r border-line-soft h-full",
                     // 今天列轻量 tint（极弱，仅快速定位「今天」）
