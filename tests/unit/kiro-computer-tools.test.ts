@@ -554,6 +554,42 @@ describe("update_document（V2 Part 2）", () => {
     expect(source?.document.blocks[1]).toEqual(IR_V2.blocks[1]);
   });
 
+  it("Guided update_document asks without quota and approved resume consumes one", async () => {
+    const artifactId = await seedEditableDoc(counters());
+    expect(artifactId).toBeTruthy();
+    if (!artifactId) return;
+
+    const c = counters();
+    const pending = await executeKiroComputerTool({
+      toolName: "update_document",
+      toolCallId: "call-doc-quota",
+      toolInput: { artifactId, expectedRevision: 1, document: IR_V2 },
+      context: ctx(),
+      counters: c,
+    });
+    expect(pending.kind).toBe("approval-required");
+    expect(c.mutationCount).toBe(0);
+
+    const oneShots: ComputerOneShotApproval[] = [{
+      approvalId: "doc-quota-a1",
+      toolCallId: "call-doc-quota",
+      capability: "document.modify",
+      workspaceId: "research",
+      rootId: "output",
+      relativePath: "plan.md",
+    }];
+    const resumed = await executeKiroComputerTool({
+      toolName: "update_document",
+      toolCallId: "call-doc-quota",
+      toolInput: { artifactId, expectedRevision: 1, document: IR_V2 },
+      context: ctx(),
+      counters: c,
+      oneShotApprovals: oneShots,
+    });
+    expect(resumed.kind).toBe("completed");
+    if (resumed.kind === "completed") expect(resumed.output.ok).toBe(true);
+    expect(c.mutationCount).toBe(1);
+  });
   it("stale expectedRevision → ARTIFACT_REVISION_CONFLICT 且文件保持 v1", async () => {
     const c = counters();
     const artifactId = await seedEditableDoc(c);
@@ -565,18 +601,20 @@ describe("update_document（V2 Part 2）", () => {
       context: ctx(AUTO_SNAPSHOT),
       counters: c,
     });
-    // stale：registry 已 v2，模型仍发 expectedRevision 1
+    // stale：registry 已 v2，模型仍发 expectedRevision 1（fresh counter：reject 不消耗 quota）
+    const staleCounter = counters();
     const attempt = await executeKiroComputerTool({
       toolName: "update_document",
       toolCallId: "call_update_stale",
       toolInput: { artifactId, expectedRevision: 1, document: IR_V2 },
       context: ctx(AUTO_SNAPSHOT),
-      counters: c,
+      counters: staleCounter,
     });
     expect(attempt.kind).toBe("completed");
     if (attempt.kind !== "completed") return;
     expect(attempt.output.ok).toBe(false);
     expect((attempt.output as { code: string }).code).toBe("ARTIFACT_REVISION_CONFLICT");
+    expect(staleCounter.mutationCount).toBe(0);
     const read = await completedOutput({
       toolName: "read_text",
       toolInput: { path: "plan.md" },
@@ -639,16 +677,18 @@ describe("update_document（V2 Part 2）", () => {
     if (!artifactId) return;
     // 直接放大当前文件（超过 5 MiB；绕过 patch schema 的内容上限）
     await sandboxWriteText(SANDBOX_REF, "plan.md", "x".repeat(COMPUTER_DOCUMENT_REVISION_LIMIT_BYTES + 1));
+    const bigCounter = counters();
     const attempt = await executeKiroComputerTool({
       toolName: "update_document",
       toolCallId: "call_update_big",
       toolInput: { artifactId, expectedRevision: 1, document: IR_V2 },
       context: ctx(AUTO_SNAPSHOT),
-      counters: c,
+      counters: bigCounter,
     });
     expect(attempt.kind).toBe("completed");
     if (attempt.kind !== "completed") return;
     expect(attempt.output.ok).toBe(false);
     expect((attempt.output as { code: string }).code).toBe("FILE_TOO_LARGE");
+    expect(bigCounter.mutationCount).toBe(0);
   });
 });

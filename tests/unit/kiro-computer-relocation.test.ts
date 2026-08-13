@@ -294,8 +294,70 @@ describe("dual-resource permission", () => {
 });
 
 describe("relocation approval", () => {
-  it("Guided rename returns approval-required before IO", async () => {
+    it("Guided rename approval-required does not consume mutation quota", async () => {
     await sandboxWriteText(SANDBOX_A, "draft.md", "d");
+    const c = counters();
+    const attempt = await executeKiroComputerTool({
+      toolName: "rename_file",
+      toolCallId: "call-quota-rename",
+      toolInput: { rootId: "output", path: "draft.md", newName: "final.md" },
+      context: ctx(workspace, [], "guided"),
+      counters: c,
+    });
+    expect(attempt.kind).toBe("approval-required");
+    expect(c.mutationCount).toBe(0);
+    expect(await sandboxReadText(SANDBOX_A, "draft.md")).toBe("d");
+  });
+
+  it("Workspace Auto move approval-required does not consume mutation quota", async () => {
+    await sandboxWriteText(SANDBOX_A, "notes.md", "n");
+    const c = counters();
+    const attempt = await executeKiroComputerTool({
+      toolName: "move_file",
+      toolCallId: "call-quota-move",
+      toolInput: {
+        rootId: "output",
+        path: "notes.md",
+        destinationRootId: "archive",
+        destinationPath: "notes.md",
+      },
+      context: ctx(),
+      counters: c,
+      oneShotApprovals: [],
+    });
+    expect(attempt.kind).toBe("approval-required");
+    expect(c.mutationCount).toBe(0);
+  });
+
+  it("approved relocation consumes exactly one mutation quota", async () => {
+    await sandboxWriteText(SANDBOX_A, "notes.md", "n");
+    const c = counters();
+    const oneShots: ComputerOneShotApproval[] = [{
+      approvalId: "quota-a1",
+      toolCallId: "call-quota-resume",
+      capability: "fs.move",
+      workspaceId: "research",
+      rootId: "output",
+      relativePath: "notes.md",
+    }];
+    const attempt = await executeKiroComputerTool({
+      toolName: "move_file",
+      toolCallId: "call-quota-resume",
+      toolInput: {
+        rootId: "output",
+        path: "notes.md",
+        destinationRootId: "archive",
+        destinationPath: "notes.md",
+      },
+      context: ctx(),
+      counters: c,
+      oneShotApprovals: oneShots,
+    });
+    expect(attempt.kind).toBe("completed");
+    if (attempt.kind === "completed") expect(attempt.output.ok).toBe(true);
+    expect(c.mutationCount).toBe(1);
+  });
+it("Guided rename returns approval-required before IO", async () => {    await sandboxWriteText(SANDBOX_A, "draft.md", "d");
     const attempt = await executeKiroComputerTool({
       toolName: "rename_file",
       toolCallId: "call-gd",

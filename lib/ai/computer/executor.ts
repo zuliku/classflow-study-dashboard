@@ -220,7 +220,6 @@ export async function executeKiroComputerTool(request: {
 
     // ---- V2 Relocation：rename_file / move_file（双资源 policy：source + destination 各自评估）----
     if (toolName === "rename_file" || toolName === "move_file") {
-      counters.mutationCount += 1;
       const sourcePath = normalizeRelativeComputerPath(resource.path).path;
       let destRoot: KiroWorkspaceRootMeta;
       let destinationPath: string;
@@ -316,6 +315,8 @@ export async function executeKiroComputerTool(request: {
       const artifact = await findArtifactByLocation(ws.id, root.id, sourcePath);
       const sourceAdapter = getComputerAdapterForAdapterRef(root.adapterRef);
       const destAdapter = getComputerAdapterForAdapterRef(destRoot.adapterRef);
+      // 只在真正开始 filesystem relocation 前计数一次（approval/preflight 不消耗；resume 也不重复）
+      counters.mutationCount += 1;
       if (root.adapterRef === destRoot.adapterRef) {
         await sourceAdapter.move(sourcePath, destinationPath);
       } else {
@@ -370,7 +371,6 @@ export async function executeKiroComputerTool(request: {
 
     // ---- V2 Part 2：update_document（artifactId → Registry → 正常 resolver/sandbox/policy/grant 链）----
     if (toolName === "update_document") {
-      counters.mutationCount += 1;
       const artifactId = String(args.artifactId);
       const expectedRevision = Number(args.expectedRevision);
       const document = args.document as Parameters<typeof renderMarkdown>[0];
@@ -457,20 +457,35 @@ export async function executeKiroComputerTool(request: {
           ? { format: "markdown", text: await adapter.readText(artifactPath) }
           : { format: "docx", bytes: await adapter.readBytes(artifactPath) };
 
-      // render → write → verify（格式由 artifact.type 决定，模型不能选择）
+      // PHASE：PURE RENDER（不写文件、不计数、不回滚；render 失败 → 直接 DOCUMENT_RENDER_FAILED）
+      let rendered: RenderedDocumentWrite;
       try {
-        if (artifact.type === "markdown") {
-          const markdown = renderMarkdown(document);
-          await adapter.writeText(artifactPath, markdown, "text/markdown");
+        rendered =
+          artifact.type === "markdown"
+            ? { format: "markdown", text: renderMarkdown(document) }
+            : { format: "docx", bytes: await renderDocx(document) };
+      } catch {
+        return {
+          kind: "completed",
+          output: { ok: false, code: "DOCUMENT_RENDER_FAILED", message: "文档渲染失败" },
+        };
+      }
+
+      // 即将开始真实 filesystem mutation：只在此计数一次
+      counters.mutationCount += 1;
+
+      // PHASE：write → verify（格式由 artifact.type 决定，模型不能选择）；失败走 exact rollback
+      try {
+        if (rendered.format === "markdown") {
+          await adapter.writeText(artifactPath, rendered.text, "text/markdown");
           const readBack = await adapter.readText(artifactPath);
-          if (!(await verifyMarkdownWritten(markdown, readBack))) {
+          if (!(await verifyMarkdownWritten(rendered.text, readBack))) {
             throw new ComputerError("VERIFICATION_FAILED", "Markdown 校验失败");
           }
         } else {
-          const bytes = await renderDocx(document);
           await adapter.writeBytes(
             artifactPath,
-            bytes,
+            rendered.bytes,
             "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
           );
           const readBack = await adapter.readBytes(artifactPath);
@@ -1066,6 +1081,11 @@ function combineRelocationPolicies(
   if (source.effect === "ask" || destination.effect === "ask") return "ask";
   return "allow";
 }
+
+/** update_document 渲染产物（纯 pre-write 阶段生成；不落库/不进模型） */
+type RenderedDocumentWrite =
+  | { format: "markdown"; text: string }
+  | { format: "docx"; bytes: Uint8Array };
 
 const WINDOWS_RESERVED_BASENAME = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(\..*)?$/i;
 
