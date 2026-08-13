@@ -8,6 +8,7 @@ import {
   applyInverseToAdapter,
 } from "@/lib/ai/computer/checkpoints";
 import { getComputerAdapterForAdapterRef, executeKiroComputerTool } from "@/lib/ai/computer/executor";
+import { ComputerAdapterIO } from "@/lib/ai/computer/executor-types";
 import { KiroComputerTurnSnapshot } from "@/lib/ai/contextBudget/types";
 import { KiroWorkspaceMeta } from "@/lib/ai/computer/types";
 import { ComputerError } from "@/lib/ai/computer/errors";
@@ -457,5 +458,59 @@ describe("restore-generic-artifact-revision（V2 Part 3.1 生产 dispatch）", (
     });
     expect(await sandboxReadText(SANDBOX_REF, "s.txt")).toBe("v3");
     expect((await getArtifact(artifactId))?.revision).toBe(3);
+  });
+});
+
+describe("structured document Undo write-count（V2 closeout）", () => {
+  const IR_V1: KiroDocument = {
+    title: "研究方案",
+    blocks: [
+      { type: "heading", level: 1, content: [{ text: "引言" }] },
+      { type: "paragraph", content: [{ text: "版本一" }] },
+    ],
+  };
+  const IR_V2: KiroDocument = {
+    title: "研究方案",
+    blocks: [
+      { type: "heading", level: 1, content: [{ text: "引言" }] },
+      { type: "paragraph", content: [{ text: "版本二" }] },
+    ],
+  };
+
+  function countingIo(base: ComputerAdapterIO) {
+    let writes = 0;
+    return {
+      io: {
+        ...base,
+        writeText: async (p: string, c: string, t?: string) => {
+          writes += 1;
+          await base.writeText(p, c, t);
+        },
+        writeBytes: async (p: string, c: Uint8Array, t?: string) => {
+          writes += 1;
+          await base.writeBytes(p, c, t);
+        },
+      },
+      count: () => writes,
+    };
+  }
+
+  it("Markdown 成功 Undo 只有一次 restore write（factual previous read-only verify）", async () => {
+    const c = counters();
+    const attempt = await runTool("create_document", { path: "plan.md", document: IR_V1 }, c);
+    if (attempt.kind !== "completed" || !attempt.runtime?.change.artifactId) return;
+    const artifactId = attempt.runtime.change.artifactId;
+    const update = await runTool("update_document", { artifactId, expectedRevision: 1, document: IR_V2 }, c);
+    if (update.kind !== "completed" || !update.runtime?.inverse) return;
+    const inverse = update.runtime.inverse;
+    if (inverse.type !== "restore-document-revision") return;
+
+    const counted = countingIo(await io());
+    await undoDocumentRevisionRuntime({ io: counted.io, inverse });
+    expect(counted.count()).toBe(1);
+    expect(await sandboxReadText(SANDBOX_REF, "plan.md")).toBe(
+      inverse.snapshot.format === "markdown" ? inverse.snapshot.text : ""
+    );
+    expect((await getArtifact(artifactId))?.revision).toBe(1);
   });
 });

@@ -97,6 +97,25 @@ async function writeAndVerifySnapshot(
   }
 }
 
+/** read-only 验证（绝不写）：factual previous 分支确认文档已 exact 恢复 */
+async function verifySnapshot(
+  io: ComputerAdapterIO,
+  path: string,
+  snapshot: DocumentFileSnapshot
+): Promise<void> {
+  if (snapshot.format === "markdown") {
+    const readBack = await io.readText(path);
+    if (readBack !== snapshot.text) {
+      throw new ComputerError("VERIFICATION_FAILED", "撤销后文档校验失败");
+    }
+    return;
+  }
+  const readBack = await io.readBytes(path);
+  if (!bytesEqual(readBack, snapshot.bytes)) {
+    throw new ComputerError("VERIFICATION_FAILED", "撤销后文档校验失败");
+  }
+}
+
 function bytesEqual(a: Uint8Array, b: Uint8Array): boolean {
   if (a.byteLength !== b.byteLength) return false;
   for (let i = 0; i < a.byteLength; i++) {
@@ -187,8 +206,8 @@ export async function undoDocumentRevisionRuntime(input: {
   });
 
   if (state === "previous") {
-    // Registry + Source 已事实恢复：即使 restoreArtifactRevision 抛过，也验证文件后成功
-    await writeAndVerifySnapshot(io, inverse.relativePath, inverse.snapshot);
+    // Registry + Source 已事实恢复：read-only 验证文件（不二次写、不补偿）
+    await verifySnapshot(io, inverse.relativePath, inverse.snapshot);
     return;
   }
 

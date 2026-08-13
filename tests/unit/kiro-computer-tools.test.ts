@@ -818,3 +818,99 @@ describe("update_document（V2 Part 2）", () => {
     expect(bigCounter.mutationCount).toBe(0);
   });
 });
+
+describe("patch Undo byte boundary（V2 closeout：UTF-8 bytes 而非字符数）", () => {
+  it("CASE A：ASCII < 1 MiB → inverse 存在", async () => {
+    const c = counters();
+    await sandboxWriteText(SANDBOX_REF, "case-a.txt", "anchor" + "a".repeat(1024));
+    const attempt = await executeKiroComputerTool({
+      toolName: "patch_text_file",
+      toolCallId: "call-case-a",
+      toolInput: { rootId: "output", path: "case-a.txt", edits: [{ oldText: "anchor", newText: "anchor2" }] },
+      context: ctx(AUTO_SNAPSHOT),
+      counters: c,
+    });
+    expect(attempt.kind).toBe("completed");
+    if (attempt.kind !== "completed") return;
+    expect(attempt.output.ok).toBe(true);
+    expect(attempt.runtime?.inverse).toBeTruthy();
+  });
+
+  it("CASE B：multibyte UTF-8 text.length < 1 MiB 但 bytes > 1 MiB → inverse undefined", async () => {
+    const c = counters();
+    // 350,000 个中文字符：length=350000 < 1048576，但 UTF-8 bytes = 1,050,000 > 1 MiB
+    await sandboxWriteText(SANDBOX_REF, "case-b.txt", "锚点" + "中".repeat(350000 - 2));
+    const attempt = await executeKiroComputerTool({
+      toolName: "patch_text_file",
+      toolCallId: "call-case-b",
+      toolInput: { rootId: "output", path: "case-b.txt", edits: [{ oldText: "锚点", newText: "锚点2" }] },
+      context: ctx(AUTO_SNAPSHOT),
+      counters: c,
+    });
+    expect(attempt.kind).toBe("completed");
+    if (attempt.kind !== "completed") return;
+    expect(attempt.output.ok).toBe(true);
+    expect(attempt.runtime?.inverse).toBeUndefined();
+  });
+
+  it("CASE C：registered generic Artifact 同条件 → revision +1、id 不变、inverse undefined", async () => {
+    const c = counters();
+    const created = await executeKiroComputerTool({
+      toolName: "create_text_file",
+      toolCallId: "call-case-c-seed",
+      toolInput: { rootId: "output", path: "case-c.txt", content: "seed" },
+      context: ctx(AUTO_SNAPSHOT),
+      counters: c,
+    });
+    expect(created.kind).toBe("completed");
+    if (created.kind !== "completed" || !created.runtime?.change.artifactId) return;
+    const artifactId = created.runtime.change.artifactId;
+    await sandboxWriteText(SANDBOX_REF, "case-c.txt", "锚点" + "中".repeat(350000 - 2));
+    const attempt = await executeKiroComputerTool({
+      toolName: "patch_text_file",
+      toolCallId: "call-case-c",
+      toolInput: { rootId: "output", path: "case-c.txt", edits: [{ oldText: "锚点", newText: "锚点2" }] },
+      context: ctx(AUTO_SNAPSHOT),
+      counters: c,
+    });
+    expect(attempt.kind).toBe("completed");
+    if (attempt.kind !== "completed") return;
+    expect(attempt.output.ok).toBe(true);
+    expect(attempt.runtime?.inverse).toBeUndefined();
+    const updated = await getArtifact(artifactId);
+    expect(updated?.revision).toBe(2);
+    expect(updated?.id).toBe(artifactId);
+  });
+
+  it("CASE D：exactly 1 MiB bytes → inverse 存在", async () => {
+    const c = counters();
+    await sandboxWriteText(SANDBOX_REF, "case-d.txt", "anchor" + "a".repeat(1024 * 1024 - 6));
+    const attempt = await executeKiroComputerTool({
+      toolName: "patch_text_file",
+      toolCallId: "call-case-d",
+      toolInput: { rootId: "output", path: "case-d.txt", edits: [{ oldText: "anchor", newText: "anchor2" }] },
+      context: ctx(AUTO_SNAPSHOT),
+      counters: c,
+    });
+    expect(attempt.kind).toBe("completed");
+    if (attempt.kind !== "completed") return;
+    expect(attempt.output.ok).toBe(true);
+    expect(attempt.runtime?.inverse).toBeTruthy();
+  });
+
+  it("CASE E：1 MiB + 1 byte → inverse undefined", async () => {
+    const c = counters();
+    await sandboxWriteText(SANDBOX_REF, "case-e.txt", "anchor" + "a".repeat(1024 * 1024 + 1 - 6));
+    const attempt = await executeKiroComputerTool({
+      toolName: "patch_text_file",
+      toolCallId: "call-case-e",
+      toolInput: { rootId: "output", path: "case-e.txt", edits: [{ oldText: "anchor", newText: "anchor2" }] },
+      context: ctx(AUTO_SNAPSHOT),
+      counters: c,
+    });
+    expect(attempt.kind).toBe("completed");
+    if (attempt.kind !== "completed") return;
+    expect(attempt.output.ok).toBe(true);
+    expect(attempt.runtime?.inverse).toBeUndefined();
+  });
+});

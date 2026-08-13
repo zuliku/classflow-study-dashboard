@@ -46,6 +46,14 @@ async function writeExactText(io: ComputerAdapterIO, path: string, text: string)
   }
 }
 
+/** read-only 验证（绝不写）：factual previous 分支确认文件已 exact 恢复 */
+async function verifyExactText(io: ComputerAdapterIO, path: string, expected: string): Promise<void> {
+  const readBack = await io.readText(path);
+  if (readBack !== expected) {
+    throw new ComputerError("VERIFICATION_FAILED", "撤销后文本校验失败");
+  }
+}
+
 /**
  * generic Artifact patch Undo（runtime-only）。
  * A. preflight（文件写入前）→ B. exact 恢复 beforeText → C. 原子恢复 metadata revision →
@@ -119,8 +127,8 @@ export async function undoGenericArtifactPatchRuntime(input: {
     after.relativePath === inverse.relativePath;
 
   if (after && locationMatches && after.revision === inverse.previousRevision) {
-    // 事实 previous：验证文件后成功（restore API 曾 throw 也不补偿）
-    await writeExactText(io, inverse.relativePath, inverse.beforeText);
+    // 事实 previous：read-only 验证文件已恢复（restore API 曾 throw 也不补偿、不二次写）
+    await verifyExactText(io, inverse.relativePath, inverse.beforeText);
     return;
   }
 

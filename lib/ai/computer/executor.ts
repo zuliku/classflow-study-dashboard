@@ -969,7 +969,10 @@ export async function executeKiroComputerTool(request: {
         }
       }
 
-      const canUndo = current.length <= COMPUTER_PATCH_UNDO_LIMIT_BYTES;
+      // V2 closeout：Undo 快照边界用 UTF-8 bytes（string.length 不是 bytes；避免 checkpoint 创建
+      // 与 runtime stat.size 判定不一致——多字节文本必须按 1 MiB bytes 判定）
+      const undoSnapshotBytes = new TextEncoder().encode(current).byteLength;
+      const canUndo = undoSnapshotBytes <= COMPUTER_PATCH_UNDO_LIMIT_BYTES;
       const runtime = buildMutationRuntime({
         toolName,
         toolCallId,

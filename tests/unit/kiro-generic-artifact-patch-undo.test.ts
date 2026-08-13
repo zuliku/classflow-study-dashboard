@@ -83,7 +83,7 @@ function inverse(overrides: Partial<RestoreGenericArtifactRevisionInverse> = {})
 describe("undoGenericArtifactPatchRuntime", () => {
   it("restores exact previous text and revision", async () => {
     const registry = new FakeRegistry(ARTIFACT);
-    const { io, text } = fakeIo({ "notes.txt": "v2" });
+    const { io, writes, text } = fakeIo({ "notes.txt": "v2" });
     await undoGenericArtifactPatchRuntime({
       io,
       inverse: inverse(),
@@ -97,6 +97,8 @@ describe("undoGenericArtifactPatchRuntime", () => {
     });
     expect(text()).toBe("v1");
     expect(registry.get("art-1")?.revision).toBe(1);
+    // V2 closeout：factual previous 必须 read-only 验证，不能二次写
+    expect(writes).toHaveLength(1);
   });
 
   it("rejects stale revision before any file write", async () => {
@@ -118,7 +120,7 @@ describe("undoGenericArtifactPatchRuntime", () => {
 
   it("treats post-commit API throw as success when factual registry is previous", async () => {
     const registry = new FakeRegistry(ARTIFACT);
-    const { io, text } = fakeIo({ "notes.txt": "v2" });
+    const { io, writes, text } = fakeIo({ "notes.txt": "v2" });
     await undoGenericArtifactPatchRuntime({
       io,
       inverse: inverse(),
@@ -132,6 +134,8 @@ describe("undoGenericArtifactPatchRuntime", () => {
     });
     expect(text()).toBe("v1");
     expect(registry.get("art-1")?.revision).toBe(1);
+    // factual previous → read-only verify，仍只有一次 restore write
+    expect(writes).toHaveLength(1);
   });
 
   it("compensates file to pre-undo text when registry factually remains newer", async () => {
