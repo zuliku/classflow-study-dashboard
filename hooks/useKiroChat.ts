@@ -30,7 +30,8 @@ import {
 import { sessionRuleForRequest, workspaceRuleForRequest } from "@/lib/ai/computer/approval";
 import { appendComputerAuditEntry } from "@/lib/ai/computer/audit";
 import { relocateFile } from "@/lib/ai/computer/filesystem/relocate";
-import { updateArtifactLocation, restoreArtifactRevision, getArtifact, getArtifactSource } from "@/lib/ai/computer/artifacts/service";
+import { updateArtifactLocation } from "@/lib/ai/computer/artifacts/service";
+import { undoDocumentRevisionRuntime } from "@/lib/ai/computer/documentRevisionUndo";
 import { useKiroComputerRuntimeStore } from "@/store/useKiroComputerRuntimeStore";
 import { useKiroPreferencesStore } from "@/store/useKiroPreferencesStore";
 import { useConfirmStore } from "@/store/useConfirmStore";
@@ -1175,7 +1176,11 @@ export function useKiroChat({
             continue;
           }
           if (inverse.type === "restore-document-revision") {
-            await undoDocumentRevision(ws, inverse);
+            // V2 Part 2.1：委托给可测试的 runtime helper（事实重读 + 安全补偿）
+            const root = ws.roots.find((r) => r.id === inverse.rootId);
+            if (!root) throw new ComputerError("ROOT_NOT_FOUND", "根目录不存在");
+            const io = getComputerAdapterForAdapterRef(root.adapterRef);
+            await undoDocumentRevisionRuntime({ io, inverse });
             continue;
           }
           const root = ws.roots.find((r) => r.id === inverse.rootId);
@@ -1976,68 +1981,7 @@ async function undoMoveBack(
   }
 }
 
-/**
- * V2 Part 2：restore-document-revision Undo（runtime-only）。
- * 1. live Workspace/root 解析 → 2. 当前 Artifact revision 必须等于 expectedCurrentRevision 且位置匹配
- * （否则 undo_failed，绝不覆盖较新版本）→ 3. 恢复 exact 文件快照 → 4. verify exact
- * → 5. restoreArtifactRevision（原子 metadata + Source IR）→ 6. 重读确认双 store 回到 previousRevision。
- */
-async function undoDocumentRevision(
-  ws: KiroWorkspaceMeta,
-  inverse: Extract<ComputerInverseOperation, { type: "restore-document-revision" }>
-): Promise<void> {
-  const root = ws.roots.find((r) => r.id === inverse.rootId);
-  if (!root) throw new ComputerError("ROOT_NOT_FOUND", "根目录不存在");
-  const io = getComputerAdapterForAdapterRef(root.adapterRef);
 
-  const artifact = await getArtifact(inverse.artifactId);
-  if (!artifact) throw new ComputerError("ARTIFACT_NOT_FOUND", "Artifact 不存在");
-  if (artifact.revision !== inverse.expectedCurrentRevision) {
-    throw new ComputerError("ARTIFACT_REVISION_CONFLICT", "Artifact 已被更新到更新版本，撤销被拒绝");
-  }
-  if (artifact.rootId !== inverse.rootId || artifact.relativePath !== inverse.relativePath) {
-    throw new ComputerError("VERIFICATION_FAILED", "Artifact 位置与撤销目标不一致");
-  }
-
-  // 恢复 exact 文件快照 + verify
-  if (inverse.snapshot.format === "markdown") {
-    await io.writeText(inverse.relativePath, inverse.snapshot.text);
-    const readBack = await io.readText(inverse.relativePath);
-    if (readBack !== inverse.snapshot.text) {
-      throw new ComputerError("VERIFICATION_FAILED", "撤销文档校验失败");
-    }
-  } else {
-    await io.writeBytes(inverse.relativePath, inverse.snapshot.bytes);
-    const readBack = await io.readBytes(inverse.relativePath);
-    if (!bytesEqual(readBack, inverse.snapshot.bytes)) {
-      throw new ComputerError("VERIFICATION_FAILED", "撤销文档校验失败");
-    }
-  }
-
-  // 原子恢复 Artifact metadata + Source IR
-  await restoreArtifactRevision({
-    artifactId: inverse.artifactId,
-    expectedCurrentRevision: inverse.expectedCurrentRevision,
-    revision: inverse.previousRevision,
-    document: inverse.previousDocument,
-  });
-  const after = await getArtifact(inverse.artifactId);
-  if (!after || after.revision !== inverse.previousRevision) {
-    throw new ComputerError("VERIFICATION_FAILED", "撤销后 Artifact 版本校验失败");
-  }
-  const sourceAfter = await getArtifactSource(inverse.artifactId);
-  if (!sourceAfter || sourceAfter.revision !== inverse.previousRevision) {
-    throw new ComputerError("VERIFICATION_FAILED", "撤销后文档源校验失败");
-  }
-}
-
-function bytesEqual(a: Uint8Array, b: Uint8Array): boolean {
-  if (a.byteLength !== b.byteLength) return false;
-  for (let i = 0; i < a.byteLength; i++) {
-    if (a[i] !== b[i]) return false;
-  }
-  return true;
-}
 
 /** 本地文档附件 → 传给模型的文档 Context（含 sourceId；截断明确标注） */
 function buildDocumentContexts(attachments: KiroAttachment[]): KiroDocumentContext[] {

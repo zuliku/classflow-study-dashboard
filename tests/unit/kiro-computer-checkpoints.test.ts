@@ -12,8 +12,9 @@ import { KiroComputerTurnSnapshot } from "@/lib/ai/contextBudget/types";
 import { KiroWorkspaceMeta } from "@/lib/ai/computer/types";
 import { ComputerError } from "@/lib/ai/computer/errors";
 import { sandboxListDirectory, sandboxReadText, sandboxWriteText, sandboxDelete } from "@/lib/ai/computer/adapters/sandbox";
-import { registerCreatedArtifact, getArtifact, getArtifactSource } from "@/lib/ai/computer/artifacts/service";
+import { registerCreatedArtifact, getArtifact, getArtifactSource, restoreArtifactRevision } from "@/lib/ai/computer/artifacts/service";
 import { KiroDocument } from "@/lib/ai/computer/documents/types";
+import { undoDocumentRevisionRuntime } from "@/lib/ai/computer/documentRevisionUndo";
 
 const SANDBOX_REF = "sandbox-checkpoint-ref";
 
@@ -206,7 +207,7 @@ describe("checkpoint semantics", () => {
   });
 });
 
-describe("restore-document-revision（V2 Part 2）", () => {
+describe("restore-document-revision（V2 Part 2.1 helper）", () => {
   const IR_V1: KiroDocument = {
     title: "研究方案",
     blocks: [
@@ -222,54 +223,175 @@ describe("restore-document-revision（V2 Part 2）", () => {
     ],
   };
 
-  it("Markdown v2 → Undo 恢复 exact v1 文本 + Source IR + revision 1", async () => {
+  async function seedDoc(path: string, doc: KiroDocument): Promise<string> {
     const c = counters();
-    const attempt = await runTool("create_document", { path: "plan.md", document: IR_V1 }, c);
-    if (attempt.kind !== "completed" || !attempt.runtime?.change.artifactId) return;
-    const artifactId = attempt.runtime.change.artifactId;
+    const attempt = await runTool("create_document", { path, document: doc }, c);
+    if (attempt.kind !== "completed" || !attempt.runtime?.change.artifactId) {
+      throw new Error("seed create failed");
+    }
+    return attempt.runtime.change.artifactId;
+  }
 
-    const update = await runTool("update_document", { artifactId, expectedRevision: 1, document: IR_V2 }, c);
-    expect(update.kind).toBe("completed");
-    if (update.kind !== "completed" || !update.runtime?.inverse) return;
-    const inverse = update.runtime.inverse;
+  async function updateDoc(artifactId: string, expectedRevision: number, doc: KiroDocument) {
+    const attempt = await runTool("update_document", { artifactId, expectedRevision, document: doc }, counters());
+    expect(attempt.kind).toBe("completed");
+    if (attempt.kind !== "completed" || !attempt.runtime?.inverse) {
+      throw new Error("update failed");
+    }
+    return attempt.runtime.inverse;
+  }
+
+  it("Markdown v2 → Undo 恢复 exact v1 文本 + Source IR + revision 1", async () => {
+    const artifactId = await seedDoc("plan.md", IR_V1);
+    const inverse = await updateDoc(artifactId, 1, IR_V2);
     expect(inverse.type).toBe("restore-document-revision");
     if (inverse.type !== "restore-document-revision") return;
-    expect(inverse.snapshot.format).toBe("markdown");
-    expect(inverse.previousRevision).toBe(1);
-    expect(inverse.expectedCurrentRevision).toBe(2);
 
-    // 手动执行与 useKiroChat 相同的 Undo 语义：恢复文件 + 原子恢复 registry/source
-    const { restoreArtifactRevision } = await import("@/lib/ai/computer/artifacts/service");
-    const v1Markdown = inverse.snapshot.format === "markdown" ? inverse.snapshot.text : "";
-    await sandboxWriteText(SANDBOX_REF, "plan.md", v1Markdown);
-    expect(await sandboxReadText(SANDBOX_REF, "plan.md")).toBe(v1Markdown);
-    await restoreArtifactRevision({
-      artifactId,
-      expectedCurrentRevision: inverse.expectedCurrentRevision,
-      revision: inverse.previousRevision,
-      document: inverse.previousDocument,
-    });
-    const artifact = await getArtifact(artifactId);
-    expect(artifact?.revision).toBe(1);
+    await undoDocumentRevisionRuntime({ io: await io(), inverse });
+    const v1Text = inverse.snapshot.format === "markdown" ? inverse.snapshot.text : "";
+    expect(await sandboxReadText(SANDBOX_REF, "plan.md")).toBe(v1Text);
+    expect((await getArtifact(artifactId))?.revision).toBe(1);
     const source = await getArtifactSource(artifactId);
     expect(source?.revision).toBe(1);
     expect(source?.document.blocks[1]).toEqual(IR_V1.blocks[1]);
   });
 
-  it("stale revision 外部变更 → Undo 拒绝（不覆盖较新版本）", async () => {
-    const c = counters();
-    const attempt = await runTool("create_document", { path: "plan.md", document: IR_V1 }, c);
-    if (attempt.kind !== "completed" || !attempt.runtime?.change.artifactId) return;
-    const artifactId = attempt.runtime.change.artifactId;
-    await runTool("update_document", { artifactId, expectedRevision: 1, document: IR_V2 }, c);
-    // 外部又更新到 v3
-    await runTool("update_document", { artifactId, expectedRevision: 2, document: IR_V2 }, c);
-    // 撤销 v3→v2 的 inverse 里 expectedCurrentRevision=3 时匹配；但 v2→v1 的 inverse expectedCurrent=2 不匹配当前 3
-    const { restoreArtifactRevision } = await import("@/lib/ai/computer/artifacts/service");
+  it("DOCX v2 → Undo 恢复 byte-exact v1 + Source IR + revision 1", async () => {
+    const artifactId = await seedDoc("plan.docx", IR_V1);
+    // 捕获 v1 exact bytes
+    const io1 = await io();
+    const v1Bytes = await io1.readBytes("plan.docx");
+    const inverse = await updateDoc(artifactId, 1, IR_V2);
+    expect(inverse.type).toBe("restore-document-revision");
+    if (inverse.type !== "restore-document-revision") return;
+
+    await undoDocumentRevisionRuntime({ io: await io(), inverse });
+    const finalBytes = await (await io()).readBytes("plan.docx");
+    expect(bytesEqual(finalBytes, v1Bytes)).toBe(true);
+    expect((await getArtifact(artifactId))?.revision).toBe(1);
+    const source = await getArtifactSource(artifactId);
+    expect(source?.revision).toBe(1);
+    expect(source?.document.blocks[1]).toEqual(IR_V1.blocks[1]);
+  });
+
+  it("restore API 抛错但事务已 commit（factual previous）→ Undo 成功且不补偿回 newer", async () => {
+    const artifactId = await seedDoc("plan.md", IR_V1);
+    const inverse = await updateDoc(artifactId, 1, IR_V2);
+    if (inverse.type !== "restore-document-revision") return;
+    const realRestore = restoreArtifactRevision;
+
+    await undoDocumentRevisionRuntime({
+      io: await io(),
+      inverse,
+      deps: {
+        restoreArtifactRevision: async (args) => {
+          await realRestore(args);
+          throw new Error("simulated post-commit confirmation failure");
+        },
+      },
+    });
+    // 事实 previous：成功返回；文件保持 previous snapshot
+    const v1Text = inverse.snapshot.format === "markdown" ? inverse.snapshot.text : "";
+    expect(await sandboxReadText(SANDBOX_REF, "plan.md")).toBe(v1Text);
+    expect((await getArtifact(artifactId))?.revision).toBe(1);
+  });
+
+  it("restore 未提交（factual newer）→ 文件补偿回 newer + VERIFICATION_FAILED", async () => {
+    const artifactId = await seedDoc("plan.md", IR_V1);
+    const inverse = await updateDoc(artifactId, 1, IR_V2);
+    if (inverse.type !== "restore-document-revision") return;
+    const v2Text = await sandboxReadText(SANDBOX_REF, "plan.md"); // 当前（newer）内容
+
     await expect(
-      restoreArtifactRevision({ artifactId, expectedCurrentRevision: 2, revision: 1, document: IR_V1 })
-    ).rejects.toThrowError(expect.objectContaining({ code: "ARTIFACT_REVISION_CONFLICT" }));
-    // 文件/版本未被覆盖
+      undoDocumentRevisionRuntime({
+        io: await io(),
+        inverse,
+        deps: {
+          restoreArtifactRevision: async () => {
+            throw new Error("simulated pre-commit failure");
+          },
+        },
+      })
+    ).rejects.toMatchObject({ code: "VERIFICATION_FAILED" });
+    // 文件补偿回 newer；Artifact + Source 仍 newer
+    expect(await sandboxReadText(SANDBOX_REF, "plan.md")).toBe(v2Text);
+    expect((await getArtifact(artifactId))?.revision).toBe(2);
+    expect((await getArtifactSource(artifactId))?.revision).toBe(2);
+  });
+
+  it("split registry（artifact previous / source newer）→ unknown → 无 blind 补偿 + VERIFICATION_FAILED", async () => {
+    const artifactId = await seedDoc("plan.md", IR_V1);
+    const inverse = await updateDoc(artifactId, 1, IR_V2);
+    if (inverse.type !== "restore-document-revision") return;
+    const { artifactDbPut } = await import("@/lib/ai/computer/artifacts/db");
+    const current = await getArtifact(artifactId);
+    expect(current).toBeTruthy();
+    if (!current) return;
+
+    await expect(
+      undoDocumentRevisionRuntime({
+        io: await io(),
+        inverse,
+        deps: {
+          restoreArtifactRevision: async () => {
+            // 只改 Artifact metadata → previous；Source 仍 newer → split
+            await artifactDbPut({ ...current, revision: inverse.previousRevision, updatedAt: new Date().toISOString() });
+            throw new Error("simulated split state");
+          },
+        },
+      })
+    ).rejects.toMatchObject({ code: "VERIFICATION_FAILED" });
+    // 无 blind 补偿：文件保持 previous snapshot（helper 正常路径先写 previous），registry 保持 split
+    const v1Text = inverse.snapshot.format === "markdown" ? inverse.snapshot.text : "";
+    expect(await sandboxReadText(SANDBOX_REF, "plan.md")).toBe(v1Text);
+    expect((await getArtifact(artifactId))?.revision).toBe(1);
+    expect((await getArtifactSource(artifactId))?.revision).toBe(2);
+  });
+
+  it("stale preflight：expectedCurrentRevision 不匹配 → 文件写入前拒绝", async () => {
+    const artifactId = await seedDoc("plan.md", IR_V1);
+    const inverseV2 = await updateDoc(artifactId, 1, IR_V2);
+    await updateDoc(artifactId, 2, IR_V2); // v3
+    const v3Text = await sandboxReadText(SANDBOX_REF, "plan.md");
+    if (inverseV2.type !== "restore-document-revision") return;
+
+    await expect(undoDocumentRevisionRuntime({ io: await io(), inverse: inverseV2 })).rejects.toMatchObject({
+      code: "ARTIFACT_REVISION_CONFLICT",
+    });
+    // 文件完全 unchanged（V3）
+    expect(await sandboxReadText(SANDBOX_REF, "plan.md")).toBe(v3Text);
     expect((await getArtifact(artifactId))?.revision).toBe(3);
+    expect((await getArtifactSource(artifactId))?.revision).toBe(3);
+  });
+
+  it("multi revision reverse：v1→v2→v3，先 undo v3→v2 再 undo v2→v1", async () => {
+    const artifactId = await seedDoc("plan.md", IR_V1);
+    const inverseA = await updateDoc(artifactId, 1, IR_V2); // v1→v2
+    const inverseB = await updateDoc(artifactId, 2, IR_V2); // v2→v3
+    if (inverseA.type !== "restore-document-revision" || inverseB.type !== "restore-document-revision") return;
+
+    // reverse：inverseB → v2
+    await undoDocumentRevisionRuntime({ io: await io(), inverse: inverseB });
+    const v2Text = inverseB.snapshot.format === "markdown" ? inverseB.snapshot.text : "";
+    expect(await sandboxReadText(SANDBOX_REF, "plan.md")).toBe(v2Text);
+    expect((await getArtifact(artifactId))?.revision).toBe(2);
+    expect((await getArtifactSource(artifactId))?.revision).toBe(2);
+
+    // 然后 inverseA → v1
+    await undoDocumentRevisionRuntime({ io: await io(), inverse: inverseA });
+    const v1Text = inverseA.snapshot.format === "markdown" ? inverseA.snapshot.text : "";
+    expect(await sandboxReadText(SANDBOX_REF, "plan.md")).toBe(v1Text);
+    expect((await getArtifact(artifactId))?.revision).toBe(1);
+    const source = await getArtifactSource(artifactId);
+    expect(source?.revision).toBe(1);
+    expect(source?.document.blocks[1]).toEqual(IR_V1.blocks[1]);
   });
 });
+
+function bytesEqual(a: Uint8Array, b: Uint8Array): boolean {
+  if (a.byteLength !== b.byteLength) return false;
+  for (let i = 0; i < a.byteLength; i++) {
+    if (a[i] !== b[i]) return false;
+  }
+  return true;
+}
