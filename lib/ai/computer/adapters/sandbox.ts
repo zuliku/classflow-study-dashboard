@@ -227,3 +227,50 @@ export async function sandboxWriteBytes(adapterRef: string, path: string, conten
 export async function sandboxDelete(adapterRef: string, path: string): Promise<void> {
   await dbDelete(sandboxKey(adapterRef, path));
 }
+
+/** Undo 专用（非 Model Tool）：只删除单个文件或空目录；非空目录 → VERIFICATION_FAILED（undo fail） */
+export async function sandboxRemove(adapterRef: string, path: string, kind: "file" | "directory"): Promise<void> {
+  const entry = await sandboxStat(adapterRef, path);
+  if (!entry) throw new ComputerError("RESOURCE_NOT_FOUND", `不存在：${path}`);
+  if (kind === "file") {
+    if (entry.kind !== "file") throw new ComputerError("VERIFICATION_FAILED", `不是文件：${path}`);
+    await dbDelete(sandboxKey(adapterRef, path));
+    return;
+  }
+  // directory：只删除空目录（目录 marker `path/`；存在子项 → 拒绝）
+  if (entry.kind !== "directory") throw new ComputerError("VERIFICATION_FAILED", `不是目录：${path}`);
+  const prefix = sandboxKey(adapterRef, path + "/");
+  const children = await new Promise<number>((resolve) => {
+    const dbPromise = openSandboxDb();
+    void dbPromise.then((db) => {
+      if (!db) {
+        resolve(0);
+        return;
+      }
+      const tx = db.transaction(KIRO_SANDBOX_FILES_STORE, "readonly");
+      const store = tx.objectStore(KIRO_SANDBOX_FILES_STORE);
+      let count = 0;
+      const req = store.openCursor(IDBKeyRange.bound(prefix, prefix + "\uffff"));
+      req.onsuccess = () => {
+        const cursor = req.result;
+        if (cursor) {
+          count += 1;
+          cursor.continue();
+        } else {
+          db.close();
+          resolve(count);
+        }
+      };
+      req.onerror = () => {
+        db.close();
+        resolve(count);
+      };
+      tx.onabort = () => {
+        db.close();
+        resolve(count);
+      };
+    });
+  });
+  if (children > 0) throw new ComputerError("VERIFICATION_FAILED", `目录非空，无法撤销：${path}`);
+  await dbDelete(sandboxKey(adapterRef, path + "/"));
+}

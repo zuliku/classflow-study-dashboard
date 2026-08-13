@@ -235,6 +235,7 @@ export function KiroSessionProvider({ children }: { children: React.ReactNode })
     suppressedAutoKeys,
     attachments: attachments.attachments,
     conversationSummary,
+    conversationId,
   });
 
   const aiProvider = useAISettingsStore((s) => s.provider);

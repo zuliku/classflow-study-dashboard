@@ -5,6 +5,8 @@ import { getComputerToolsForMode, COMPUTER_TOOLS } from "@/lib/ai/computer/tools
 import { getKiroToolsForRequest } from "@/lib/ai/tools";
 import { KiroComputerTurnSnapshot } from "@/lib/ai/contextBudget/types";
 import { KiroWorkspaceMeta, ComputerPermissionRule } from "@/lib/ai/computer/types";
+import { ComputerExecutionAttempt } from "@/lib/ai/computer/result";
+import { ComputerOneShotApproval } from "@/lib/ai/computer/approval";
 import { sandboxDelete, sandboxWriteText, sandboxListDirectory } from "@/lib/ai/computer/adapters/sandbox";
 
 const SANDBOX_REF = "sandbox-test-ref";
@@ -39,8 +41,29 @@ function counters() {
   return { readCount: 0, mutationCount: 0 };
 }
 
-/** Part 2：mutation 走 workspace-auto（guided 下所有 mutation 一律 WORKSPACE_PERMISSION_REQUIRED） */
+/** mutation 直接执行路径（workspace-auto） */
 const AUTO_SNAPSHOT: KiroComputerTurnSnapshot = { ...snapshot, agentMode: "workspace-auto" };
+
+/** 解包 attempt → completed output（approval-required 时测试必须显式断言） */
+async function completedOutput(req: {
+  toolName: string;
+  toolCallId?: string;
+  toolInput: unknown;
+  context: ReturnType<typeof ctx>;
+  counters: ReturnType<typeof counters>;
+  oneShotApprovals?: ComputerOneShotApproval[];
+}): Promise<Extract<ComputerExecutionAttempt, { kind: "completed" }>["output"]> {
+  const attempt = await executeKiroComputerTool({
+    toolName: req.toolName,
+    toolCallId: req.toolCallId ?? "call_x",
+    toolInput: req.toolInput,
+    context: req.context,
+    counters: req.counters,
+    oneShotApprovals: req.oneShotApprovals,
+  });
+  expect(attempt.kind).toBe("completed");
+  return attempt.kind === "completed" ? attempt.output : { ok: false, code: "UNEXPECTED", message: "" };
+}
 
 async function clean() {
   for (const item of await sandboxListDirectory(SANDBOX_REF, "")) {
@@ -69,7 +92,7 @@ describe("tool exposure", () => {
     }
   });
 
-  it("Part 2 不暴露 delete/shell/app/network 工具", () => {
+  it("不暴露 delete/shell/app/network 工具（delete/undo 只属于 runtime，不是 Model Tool）", () => {
     const names = COMPUTER_TOOLS.map((t) => t.name);
     expect(names).not.toContain("delete_file");
     expect(names).not.toContain("delete_directory");
@@ -77,30 +100,27 @@ describe("tool exposure", () => {
     expect(names).not.toContain("launch_application");
     expect(names).not.toContain("move_file");
     expect(names).not.toContain("rename_file");
+    // Model schema 绝不能加入权限相关参数
+    expect(names.length).toBe(11);
   });
 });
 
 describe("read tools", () => {
   it("list_workspace_roots 返回逻辑 roots", async () => {
-    const r = await executeKiroComputerTool({
-      toolName: "list_workspace_roots",
-      toolInput: {},
-      context: ctx(),
-      counters: counters(),
-    });
+    const r = await completedOutput({ toolName: "list_workspace_roots", toolInput: {}, context: ctx(), counters: counters() });
     expect(r.ok).toBe(true);
     expect((r as { data: { roots: unknown[] } }).data.roots).toHaveLength(1);
   });
 
   it("create + list + read_text + get_file_metadata + search + grep", async () => {
     const c = counters();
-    await executeKiroComputerTool({
+    await completedOutput({
       toolName: "create_text_file",
       toolInput: { path: "notes.md", content: "alpha\nbeta hello" },
       context: ctx(AUTO_SNAPSHOT),
       counters: c,
     });
-    const read = await executeKiroComputerTool({
+    const read = await completedOutput({
       toolName: "read_text",
       toolInput: { path: "notes.md" },
       context: ctx(AUTO_SNAPSHOT),
@@ -108,68 +128,74 @@ describe("read tools", () => {
     });
     expect((read as { data: { text: string } }).data.text).toContain("beta hello");
 
-    const list = await executeKiroComputerTool({
+    const list = await completedOutput({
       toolName: "list_directory",
       toolInput: { path: "." },
-      context: ctx(),
+      context: ctx(AUTO_SNAPSHOT),
       counters: c,
     });
     expect((list as { data: { items: { name: string }[] } }).data.items.map((i) => i.name)).toContain("notes.md");
 
-    const meta = await executeKiroComputerTool({
+    const meta = await completedOutput({
       toolName: "get_file_metadata",
       toolInput: { path: "notes.md" },
-      context: ctx(),
+      context: ctx(AUTO_SNAPSHOT),
       counters: c,
     });
     expect((meta as { data: { meta: { kind: string } } }).data.meta.kind).toBe("file");
 
-    const search = await executeKiroComputerTool({
+    const search = await completedOutput({
       toolName: "search_files",
       toolInput: { query: "notes" },
-      context: ctx(),
+      context: ctx(AUTO_SNAPSHOT),
       counters: c,
     });
     expect((search as { data: { results: { path: string }[] } }).data.results.map((r) => r.path)).toContain("notes.md");
 
-    const grep = await executeKiroComputerTool({
+    const grep = await completedOutput({
       toolName: "grep_files",
       toolInput: { query: "hello" },
-      context: ctx(),
+      context: ctx(AUTO_SNAPSHOT),
       counters: c,
     });
     expect((grep as { data: { matches: { path: string }[] } }).data.matches.length).toBeGreaterThan(0);
   });
 
   it("read_text maxChars 边界 + startLine", async () => {
-    await executeKiroComputerTool({
+    await completedOutput({
       toolName: "create_text_file",
       toolInput: { path: "long.md", content: "l1\nl2\nl3\nl4" },
-      context: ctx(),
+      context: ctx(AUTO_SNAPSHOT),
       counters: counters(),
     });
-    const r = await executeKiroComputerTool({
+    const r = await completedOutput({
       toolName: "read_text",
       toolInput: { path: "long.md", startLine: 2, endLine: 3 },
-      context: ctx(),
+      context: ctx(AUTO_SNAPSHOT),
       counters: counters(),
     });
     expect((r as { data: { text: string } }).data.text).toBe("l2\nl3");
   });
 });
 
-describe("mutation tools + policy", () => {
-  it("create_text_file 写后 verify（read-back exact）；重复创建拒绝", async () => {
+describe("mutation tools + policy（Part 2 回归 + Part 3 attempt 语义）", () => {
+  it("create_text_file 写后 verify（read-back exact）+ runtime facts；重复创建拒绝", async () => {
     const c = counters();
-    const r1 = await executeKiroComputerTool({
+    const attempt = await executeKiroComputerTool({
       toolName: "create_text_file",
+      toolCallId: "call_create",
       toolInput: { path: "x.md", content: "hello" },
       context: ctx(AUTO_SNAPSHOT),
       counters: c,
     });
-    expect(r1.ok).toBe(true);
-    expect((r1 as { actionFact?: unknown }).actionFact).toBeTruthy();
-    const r2 = await executeKiroComputerTool({
+    expect(attempt.kind).toBe("completed");
+    if (attempt.kind !== "completed") return;
+    expect(attempt.output.ok).toBe(true);
+    expect(attempt.runtime).toBeTruthy();
+    expect(attempt.runtime?.change.resourceType).toBe("text");
+    expect(attempt.runtime?.inverse?.type).toBe("remove-created");
+
+    const r2 = await completedOutput({
       toolName: "create_text_file",
       toolInput: { path: "x.md", content: "hello" },
       context: ctx(AUTO_SNAPSHOT),
@@ -179,23 +205,35 @@ describe("mutation tools + policy", () => {
     expect((r2 as { code: string }).code).toBe("RESOURCE_ALREADY_EXISTS");
   });
 
-  it("patch_text_file：精确修改 + read-back verify；冲突不写", async () => {
+  it("patch_text_file：精确修改 + read-back verify + text-patch review；冲突不写", async () => {
     const c = counters();
-    await executeKiroComputerTool({
+    await completedOutput({
       toolName: "create_text_file",
       toolInput: { path: "p.md", content: "标题\n正文内容" },
       context: ctx(AUTO_SNAPSHOT),
       counters: c,
     });
-    const r = await executeKiroComputerTool({
+    const attempt = await executeKiroComputerTool({
       toolName: "patch_text_file",
+      toolCallId: "call_patch",
       toolInput: { path: "p.md", edits: [{ oldText: "正文内容", newText: "修改后的正文" }] },
       context: ctx(AUTO_SNAPSHOT),
       counters: c,
     });
-    expect(r.ok).toBe(true);
-    expect((r as { actionFact: { changeCount: number } }).actionFact.changeCount).toBe(1);
-    const conflict = await executeKiroComputerTool({
+    expect(attempt.kind).toBe("completed");
+    if (attempt.kind !== "completed") return;
+    expect(attempt.output.ok).toBe(true);
+    expect(attempt.runtime?.inverse?.type).toBe("restore-text");
+    if (attempt.runtime?.inverse?.type === "restore-text") {
+      expect(attempt.runtime.inverse.beforeText).toBe("标题\n正文内容");
+    }
+    const review = attempt.runtime?.change.review;
+    expect(review?.kind).toBe("text-patch");
+    if (review?.kind === "text-patch") {
+      expect(review.edits).toEqual([{ before: "正文内容", after: "修改后的正文" }]);
+    }
+
+    const conflict = await completedOutput({
       toolName: "patch_text_file",
       toolInput: { path: "p.md", edits: [{ oldText: "不存在的内容", newText: "x" }] },
       context: ctx(AUTO_SNAPSHOT),
@@ -205,46 +243,129 @@ describe("mutation tools + policy", () => {
     expect((conflict as { code: string }).code).toBe("PATCH_CONFLICT");
   });
 
-  it("Guided modify → WORKSPACE_PERMISSION_REQUIRED（不执行）", async () => {
+  it("Guided patch → approval-required（无 mutation、无 Tool Output、文件不变）", async () => {
     const c = counters();
-    await executeKiroComputerTool({
+    await completedOutput({
       toolName: "create_text_file",
       toolInput: { path: "g.md", content: "before" },
-      context: ctx(),
+      context: ctx(AUTO_SNAPSHOT),
       counters: c,
     });
-    const r = await executeKiroComputerTool({
+    const attempt = await executeKiroComputerTool({
       toolName: "patch_text_file",
+      toolCallId: "call_guided_patch",
       toolInput: { path: "g.md", edits: [{ oldText: "before", newText: "after" }] },
-      context: ctx(),
+      context: ctx(), // guided
       counters: c,
     });
-    expect(r.ok).toBe(false);
-    expect((r as { code: string }).code).toBe("WORKSPACE_PERMISSION_REQUIRED");
+    expect(attempt.kind).toBe("approval-required");
+    if (attempt.kind !== "approval-required") return;
+    expect(attempt.request.capability).toBe("fs.modify");
+    expect(attempt.request.relativePath).toBe("g.md");
+    expect(attempt.request.allowedDecisions).toContain("allow-once");
+    expect(attempt.request.allowedDecisions).toContain("deny");
+    // 文件 unchanged
+    const read = await completedOutput({
+      toolName: "read_text",
+      toolInput: { path: "g.md" },
+      context: ctx(AUTO_SNAPSHOT),
+      counters: c,
+    });
+    expect((read as { data: { text: string } }).data.text).toBe("before");
+    // ask 不消耗 mutation 计数（approval 不是 error；计数只在实际执行时增加）
+    expect(c.mutationCount).toBe(1); // 只有 seed create 消耗
   });
 
-  it("Workspace Auto modify 正常执行", async () => {
+  it("allow-once exact match：resume 执行并消费；不同 path 不匹配 → 仍 approval-required", async () => {
     const c = counters();
-    const autoSnap: KiroComputerTurnSnapshot = { ...snapshot, agentMode: "workspace-auto" };
-    await executeKiroComputerTool({
+    await completedOutput({
       toolName: "create_text_file",
       toolInput: { path: "a.md", content: "v1" },
-      context: ctx(autoSnap),
+      context: ctx(AUTO_SNAPSHOT),
       counters: c,
     });
-    const r = await executeKiroComputerTool({
+    const oneShot: ComputerOneShotApproval[] = [
+      {
+        approvalId: "a1",
+        toolCallId: "call_a",
+        capability: "fs.modify",
+        workspaceId: "research",
+        rootId: "output",
+        relativePath: "a.md",
+      },
+    ];
+    const attempt = await executeKiroComputerTool({
       toolName: "patch_text_file",
+      toolCallId: "call_a",
       toolInput: { path: "a.md", edits: [{ oldText: "v1", newText: "v2" }] },
-      context: ctx(autoSnap),
+      context: ctx(),
       counters: c,
+      oneShotApprovals: oneShot,
     });
-    expect(r.ok).toBe(true);
+    expect(attempt.kind).toBe("completed");
+    if (attempt.kind !== "completed") return;
+    expect(attempt.output.ok).toBe(true);
+    expect(oneShot.length).toBe(0); // 一次消费
+
+    // 不同 path：不匹配 → 仍 ask（approval 不能匹配其它文件）
+    const oneShot2: ComputerOneShotApproval[] = [
+      {
+        approvalId: "a2",
+        toolCallId: "call_b",
+        capability: "fs.modify",
+        workspaceId: "research",
+        rootId: "output",
+        relativePath: "other.md",
+      },
+    ];
+    const attempt2 = await executeKiroComputerTool({
+      toolName: "patch_text_file",
+      toolCallId: "call_b",
+      toolInput: { path: "a.md", edits: [{ oldText: "v2", newText: "v3" }] },
+      context: ctx(),
+      counters: c,
+      oneShotApprovals: oneShot2,
+    });
+    expect(attempt2.kind).toBe("approval-required");
   });
 
-  it("Plan 模式拒绝 mutation", async () => {
+  it("explicit deny rule：不能 approval（deny 永远不可覆盖）", async () => {
+    const c = counters();
+    const denyRule: ComputerPermissionRule = {
+      id: "deny-modify-a",
+      effect: "deny",
+      capability: "fs.modify",
+      workspaceId: "research",
+      resourcePattern: "a.md",
+      scope: "persistent",
+    };
+    const attempt = await executeKiroComputerTool({
+      toolName: "patch_text_file",
+      toolCallId: "call_c",
+      toolInput: { path: "a.md", edits: [{ oldText: "x", newText: "y" }] },
+      context: ctx(snapshot, workspace, [denyRule]),
+      counters: c,
+      oneShotApprovals: [
+        {
+          approvalId: "a3",
+          toolCallId: "call_c",
+          capability: "fs.modify",
+          workspaceId: "research",
+          rootId: "output",
+          relativePath: "a.md",
+        },
+      ],
+    });
+    expect(attempt.kind).toBe("completed");
+    if (attempt.kind !== "completed") return;
+    expect(attempt.output.ok).toBe(false);
+    expect((attempt.output as { code: string }).code).toBe("PERMISSION_DENIED");
+  });
+
+  it("Plan 模式拒绝 mutation（deny 不能 approval）", async () => {
     const c = counters();
     const planSnap: KiroComputerTurnSnapshot = { ...snapshot, agentMode: "plan" };
-    const r = await executeKiroComputerTool({
+    const r = await completedOutput({
       toolName: "create_text_file",
       toolInput: { path: "plan.md", content: "x" },
       context: ctx(planSnap),
@@ -254,7 +375,7 @@ describe("mutation tools + policy", () => {
     expect((r as { code: string }).code).toBe("PERMISSION_DENIED");
   });
 
-  it("read-only root 拒绝 mutation", async () => {
+  it("read-only root 拒绝 mutation（不可审批绕过）", async () => {
     const c = counters();
     const snap: KiroComputerTurnSnapshot = {
       enabled: true,
@@ -262,7 +383,7 @@ describe("mutation tools + policy", () => {
       agentMode: "workspace-auto",
       roots: [{ id: "raw", label: "原始数据", access: "read-only" }],
     };
-    const r = await executeKiroComputerTool({
+    const r = await completedOutput({
       toolName: "create_text_file",
       toolInput: { path: "x.md", content: "x" },
       context: ctx(snap, readOnlyWorkspace),
@@ -271,30 +392,41 @@ describe("mutation tools + policy", () => {
     expect(r.ok).toBe(false);
   });
 
-  it("create_document：Markdown 生成 + verify + ActionFact", async () => {
+  it("create_document：Markdown 生成 + verify + document review facts", async () => {
     const c = counters();
-    const r = await executeKiroComputerTool({
+    const attempt = await executeKiroComputerTool({
       toolName: "create_document",
+      toolCallId: "call_doc_md",
       toolInput: {
         path: "方案.md",
         document: {
           title: "研究方案",
-          blocks: [{ type: "paragraph", content: [{ text: "正文" }] }],
+          blocks: [
+            { type: "heading", level: 1, content: [{ text: "引言" }] },
+            { type: "paragraph", content: [{ text: "正文" }] },
+          ],
         },
       },
-      context: ctx(),
+      context: ctx(AUTO_SNAPSHOT),
       counters: c,
     });
-    expect(r.ok).toBe(true);
-    const fact = (r as { actionFact: { format: string; verification: string } }).actionFact;
-    expect(fact.format).toBe("markdown");
-    expect(fact.verification).toBe("passed");
+    expect(attempt.kind).toBe("completed");
+    if (attempt.kind !== "completed") return;
+    expect(attempt.output.ok).toBe(true);
+    const review = attempt.runtime?.change.review;
+    expect(review?.kind).toBe("document");
+    if (review?.kind === "document") {
+      expect(review.headings).toEqual(["引言"]);
+      expect(review.paragraphs).toBe(1);
+      expect(review.title).toBe("研究方案");
+    }
   });
 
   it("create_document：DOCX 生成 + 验证", async () => {
     const c = counters();
-    const r = await executeKiroComputerTool({
+    const attempt = await executeKiroComputerTool({
       toolName: "create_document",
+      toolCallId: "call_doc_docx",
       toolInput: {
         path: "方案.docx",
         document: {
@@ -305,16 +437,20 @@ describe("mutation tools + policy", () => {
           ],
         },
       },
-      context: ctx(),
+      context: ctx(AUTO_SNAPSHOT),
       counters: c,
     });
-    expect(r.ok).toBe(true);
-    expect((r as { actionFact: { format: string } }).actionFact.format).toBe("docx");
+    expect(attempt.kind).toBe("completed");
+    if (attempt.kind !== "completed") return;
+    expect(attempt.output.ok).toBe(true);
+    if (attempt.runtime?.change.format) {
+      expect(attempt.runtime.change.format).toBe("docx");
+    }
   });
 
   it("调用限制：read > 12 / mutation > 6", async () => {
     const c = { readCount: 12, mutationCount: 0 };
-    const r = await executeKiroComputerTool({
+    const r = await completedOutput({
       toolName: "read_text",
       toolInput: { path: "x.md" },
       context: ctx(),
@@ -322,7 +458,7 @@ describe("mutation tools + policy", () => {
     });
     expect(r.ok).toBe(false);
     const m = { readCount: 0, mutationCount: 6 };
-    const r2 = await executeKiroComputerTool({
+    const r2 = await completedOutput({
       toolName: "create_text_file",
       toolInput: { path: "y.md", content: "" },
       context: ctx(),

@@ -12,6 +12,9 @@ import { KiroComposer } from "@/components/kiro/KiroComposer";
 import { KiroContextSuggestions } from "@/components/kiro/KiroContextSuggestions";
 import { useKiroPreferencesStore } from "@/store/useKiroPreferencesStore";
 import { useKiroComputerStore } from "@/store/useKiroComputerStore";
+import { useKiroComputerRuntimeStore } from "@/store/useKiroComputerRuntimeStore";
+import { ComputerApprovalDialog } from "@/components/kiro/computer/ComputerApprovalDialog";
+import { KiroChangeReviewDialog } from "@/components/kiro/computer/KiroChangeReviewDialog";
 import { getModelCapabilities } from "@/lib/ai/providers/capabilities";
 import { getKiroOutputFontSize } from "@/lib/ai/ui/typography";
 
@@ -25,6 +28,12 @@ export function KiroChatSurface({ variant }: { variant: "workspace" | "sidecar" 
   const { chat, attachments, activeRefs, removeContext, addManualContext } = runtime;
   const { suggestionsKind, suggestionsGen, lastUserTurnGen } = useKiroSessionMeta();
   const compact = variant === "sidecar";
+
+  // Computer Agent Part 3：审批对话框 + 更改审查（runtime store 只存展示状态）
+  const pendingApproval = useKiroComputerRuntimeStore((s) => s.pendingApproval);
+  const setPendingApproval = useKiroComputerRuntimeStore((s) => s.setPendingApproval);
+  const reviewTaskId = useKiroComputerRuntimeStore((s) => s.reviewTaskId);
+  const setReviewTaskId = useKiroComputerRuntimeStore((s) => s.setReviewTaskId);
 
   // Task 7C：Kiro 输出字号（顶层一次订阅；CSS variable 让所有历史 Message 同步缩放，不逐条订阅）
   const outputTextSize = useKiroPreferencesStore((s) => s.outputTextSize);
@@ -155,7 +164,8 @@ export function KiroChatSurface({ variant }: { variant: "workspace" | "sidecar" 
           compact={compact}
           turnInFlight={chat.streaming}
           sources={chat.sources}
-          computerActions={chat.computerActions}
+          onReviewComputerTask={setReviewTaskId}
+          onUndoComputerTask={(taskId) => void chat.undoTask(taskId)}
         />
       )}
 
@@ -196,6 +206,20 @@ export function KiroChatSurface({ variant }: { variant: "workspace" | "sidecar" 
         onSetReasoningEffort={setReasoningEffort}
         workspace={workspace}
         workspaceIsSandbox={workspaceIsSandbox}
+      />
+
+      {/* Computer Agent Part 3：Approval（ask 暂停；决策后 resume 同一条 exact call）+ Change Review */}
+      <ComputerApprovalDialog request={pendingApproval} onDecision={(id, decision) => void chat.resolveApproval(id, decision)} />
+      <KiroChangeReviewDialog
+        task={
+          reviewTaskId
+            ? (chat.messages.find((m) => m.computerTask?.id === reviewTaskId)?.computerTask ?? null)
+            : null
+        }
+        onOpenChange={(open) => {
+          if (!open) setPendingApproval(null);
+          setReviewTaskId(null);
+        }}
       />
     </div>
   );

@@ -9,8 +9,7 @@ import { useKiroSessionMeta } from "@/components/kiro/KiroSessionProvider";
 import { useEffectiveReducedMotion } from "@/hooks/useEffectiveReducedMotion";
 import { AIError, AI_ERROR_MESSAGES } from "@/lib/ai/errors";
 import { KiroActionCard, actionToCardProps, KiroActionCardVariant } from "@/components/kiro/KiroActionCard";
-import { KiroComputerActionCard } from "@/components/kiro/computer/KiroComputerActionCard";
-import { ComputerActionFact } from "@/lib/ai/computer/types";
+import { KiroAgentTaskCard } from "@/components/kiro/computer/KiroAgentTaskCard";
 import { StudyPlanProposalCard } from "@/components/kiro/StudyPlanProposalCard";
 import { TaskBreakdownProposalCard } from "@/components/kiro/TaskBreakdownProposalCard";
 import { actionSummaryText } from "@/lib/ai/share";
@@ -33,7 +32,8 @@ export function KiroConversation({
   compact,
   turnInFlight,
   sources,
-  computerActions,
+  onReviewComputerTask,
+  onUndoComputerTask,
 }: {
   messages: KiroChatMessageView[];
   error: AIError | null;
@@ -48,8 +48,9 @@ export function KiroConversation({
   turnInFlight: boolean;
   /** 当前 Turn 的文档来源（Citation 渲染；live 消息用；不含正文） */
   sources?: KiroSourceMeta[];
-  /** Computer Agent 本 Turn 真实 mutation 事实（Action Card；live result） */
-  computerActions?: ComputerActionFact[];
+  /** Computer Agent Part 3：Task 更改审查 / 撤销（仅 live task 提供） */
+  onReviewComputerTask?: (taskId: string) => void;
+  onUndoComputerTask?: (taskId: string) => void;
 }) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const contentRef = useRef<HTMLDivElement | null>(null);
@@ -154,14 +155,16 @@ export function KiroConversation({
     setShowScrollBtn(false);
   };
 
-  // 首 token 前占位：turn in-flight 且当前没有任何可见 Assistant（content / worklog / action）
+  // 首 token 前占位：turn in-flight 且当前没有任何可见 Assistant（content / worklog / action / computer task）
   const lastMsg = messages[messages.length - 1];
   const lastMsgIsEmptyAssistant =
     lastMsg?.role === "assistant" &&
     !lastMsg.content &&
     !(lastMsg.assistantTurn?.worklog.length ?? 0) &&
     !lastMsg.actions?.length &&
-    !lastMsg.historyActions?.length;
+    !lastMsg.historyActions?.length &&
+    !lastMsg.computerTask &&
+    !lastMsg.historyComputerTask;
   const showPending = turnInFlight && (lastMsg?.role !== "assistant" || lastMsgIsEmptyAssistant);
 
   return (
@@ -190,18 +193,11 @@ export function KiroConversation({
                 onUndo={onUndo}
                 onRetry={onRetry}
                 onEditUserMessage={onEditUserMessage}
+                onReviewComputerTask={onReviewComputerTask}
+                onUndoComputerTask={onUndoComputerTask}
                 entering={enteringMessageIds.has(m.id)}
               />
             ))}
-
-            {/* Computer Agent 本 Turn 真实 mutation 事实（Action Cards；live result） */}
-            {computerActions && computerActions.length > 0 && (
-              <div className="space-y-2" data-testid="kiro-computer-actions">
-                {computerActions.map((fact, i) => (
-                  <KiroComputerActionCard key={i} fact={fact} />
-                ))}
-              </div>
-            )}
 
             {/* 首 token 前：Kiro Logo + 正在处理（Assistant 任一可见 part 出现后自动消失） */}
             {showPending && <KiroPendingIndicator />}
@@ -264,6 +260,8 @@ const KiroConversationRow = React.memo(function KiroConversationRow({
   onUndo,
   onRetry,
   onEditUserMessage,
+  onReviewComputerTask,
+  onUndoComputerTask,
   entering,
 }: {
   view: KiroChatMessageView;
@@ -272,6 +270,8 @@ const KiroConversationRow = React.memo(function KiroConversationRow({
   onUndo: (toolCallId: string) => void;
   onRetry: () => void;
   onEditUserMessage: (messageId: string, text: string) => Promise<boolean>;
+  onReviewComputerTask?: (taskId: string) => void;
+  onUndoComputerTask?: (taskId: string) => void;
   entering: boolean;
 }) {
   // Hooks 必须在 assistant 占位由空变为可见内容前后保持同一顺序。
@@ -303,9 +303,18 @@ const KiroConversationRow = React.memo(function KiroConversationRow({
     );
   }
   // 空 assistant（pre-response 占位）：Pending 指示器承担 Logo；
-  // 只要存在任一可见内容（final answer / worklog / action）就渲染消息行
+  // 只要存在任一可见内容（final answer / worklog / action / computer task）就渲染消息行
   const hasWorklog = (view.assistantTurn?.worklog.length ?? 0) > 0;
-  if (!view.content && !hasWorklog && !view.actions?.length && !view.historyActions?.length) return null;
+  const hasComputerTask = Boolean(view.computerTask || view.historyComputerTask);
+  if (
+    !view.content &&
+    !hasWorklog &&
+    !view.actions?.length &&
+    !view.historyActions?.length &&
+    !hasComputerTask
+  ) {
+    return null;
+  }
 
   return (
     <div className={cn(entering && "animate-enter")}>
@@ -358,6 +367,17 @@ const KiroConversationRow = React.memo(function KiroConversationRow({
         {view.breakdowns && view.breakdowns.length > 0 && !view.streaming && (
           <TaskBreakdownProposalCard proposals={view.breakdowns} />
         )}
+        {/* Computer Agent Task Card（Part 3）：绑定 owning assistant message；历史 → display-only */}
+        {hasComputerTask && (
+          <div className="pt-1">
+            <KiroAgentTaskCard
+              task={view.computerTask}
+              historyTask={view.historyComputerTask}
+              onReview={onReviewComputerTask}
+              onUndo={onUndoComputerTask}
+            />
+          </div>
+        )}
       </KiroMessage>
     </div>
   );
@@ -369,6 +389,8 @@ function isVisibleConversationMessage(message: KiroChatMessageView): boolean {
     message.content ||
       message.assistantTurn?.worklog.length ||
       message.actions?.length ||
-      message.historyActions?.length
+      message.historyActions?.length ||
+      message.computerTask ||
+      message.historyComputerTask
   );
 }

@@ -8,11 +8,13 @@ import { actionToCardProps } from "@/components/kiro/KiroActionCard";
 import {
   KiroConversationRecord,
   KiroConversationSummary,
+  PersistedComputerTaskView,
   PersistedContextRef,
   PersistedKiroMessage,
 } from "@/lib/ai/history/types";
 import { KiroContextRef } from "@/lib/ai/context/types";
 import type { AppState } from "@/store/useAppStore";
+import { KiroAgentTask } from "@/lib/ai/computer/task";
 
 /** 单条消息内容上限（极宽但有限，防止异常历史卡死 UI） */
 export const MAX_PERSISTED_MESSAGE_CONTENT = 100_000;
@@ -20,6 +22,37 @@ export const MAX_PERSISTED_MESSAGE_CONTENT = 100_000;
 function clampContent(text: string): string {
   if (text.length <= MAX_PERSISTED_MESSAGE_CONTENT) return text;
   return text.slice(0, MAX_PERSISTED_MESSAGE_CONTENT);
+}
+
+/** Computer Task（live 或 restored）→ 持久化展示视图（只存最小事实；不存 review/checkpoint/beforeText） */
+export function toPersistedComputerTask(
+  task: KiroAgentTask | undefined,
+  restored: PersistedComputerTaskView | undefined
+): PersistedComputerTaskView | undefined {
+  const source = task ?? restored;
+  if (!source) return undefined;
+  const status = source.status === "completed" || source.status === "failed" || source.status === "cancelled" || source.status === "undone" || source.status === "undo_failed"
+    ? source.status
+    : "completed";
+  return {
+    taskId: "taskId" in source ? source.taskId : source.id,
+    title: source.title,
+    status,
+    changes: source.changes.map((c) => ({
+      operation: c.operation,
+      resourceType: c.resourceType,
+      displayName: c.displayName,
+      workspaceLabel: c.workspaceLabel,
+      rootLabel: c.rootLabel,
+      relativePath: c.relativePath,
+      format: c.format,
+      size: c.size,
+      changeCount: c.changeCount,
+      verification: c.verification,
+    })),
+    startedAt: source.startedAt,
+    completedAt: source.completedAt,
+  };
 }
 
 /** 附件 → 持久化视图（local 临时文件标记未保留；material 保留安全引用） */
@@ -74,13 +107,15 @@ export function sanitizeConversation(input: {
 }): KiroConversationRecord {
   const messages: PersistedKiroMessage[] = input.messages
     // Worklog V2：assistant 可能 Final Answer 为空但产生 Action Card —— 消息必须保留；
+    // Part 3：Computer Task（仅展示事实）同理必须保留；
     // 旁白（assistantTurn.worklog）不进入历史
     .filter(
       (m) =>
         m.role === "user" ||
         m.content.length > 0 ||
         (m.actions?.length ?? 0) > 0 ||
-        (m.historyActions?.length ?? 0) > 0
+        (m.historyActions?.length ?? 0) > 0 ||
+        Boolean(m.computerTask || m.historyComputerTask)
     )
     .map((m) => {
       // live action（可 undo）→ 最小事实数据；恢复的历史 action 原样透传（canUndo 恒 false）
@@ -109,6 +144,8 @@ export function sanitizeConversation(input: {
         actions,
         // Citation 来源最小元数据（不含正文；旧消息无 sources 则不写）
         sources: m.sources && m.sources.length > 0 ? m.sources : undefined,
+        // Computer Task 展示事实（Part 3；无 review/checkpoint/beforeText）
+        computerTask: toPersistedComputerTask(m.computerTask, m.historyComputerTask),
       };
     });
 

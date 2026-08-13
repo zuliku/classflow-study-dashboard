@@ -7,9 +7,28 @@ import { useAppStore } from "@/store/useAppStore";
 import { useAISettingsStore } from "@/store/useAISettingsStore";
 import { useKiroComputerStore } from "@/store/useKiroComputerStore";
 import { KiroComputerTurnSnapshot } from "@/lib/ai/contextBudget/types";
-import { ComputerActionFact } from "@/lib/ai/computer/types";
-import { executeKiroComputerTool } from "@/lib/ai/computer/executor";
-import { isComputerToolName } from "@/lib/ai/computer/result";
+import { ComputerActionFact, ComputerCapability } from "@/lib/ai/computer/types";
+import { ComputerError } from "@/lib/ai/computer/errors";
+import { executeKiroComputerTool, getComputerAdapterForAdapterRef } from "@/lib/ai/computer/executor";
+import { isComputerToolName, ComputerExecutionAttempt } from "@/lib/ai/computer/result";
+import { ComputerApprovalRequest, ComputerApprovalDecision, ComputerOneShotApproval } from "@/lib/ai/computer/approval";
+import {
+  KiroAgentTask,
+  createAgentTask,
+  taskStepForToolCall,
+  completeTaskStep,
+  failTaskStep,
+  toolStepLabel,
+} from "@/lib/ai/computer/task";
+import {
+  ComputerTaskCheckpoint,
+  createTaskCheckpoint,
+  appendInverseToCheckpoint,
+  applyInverseToAdapter,
+} from "@/lib/ai/computer/checkpoints";
+import { sessionRuleForRequest, workspaceRuleForRequest } from "@/lib/ai/computer/approval";
+import { appendComputerAuditEntry } from "@/lib/ai/computer/audit";
+import { useKiroComputerRuntimeStore } from "@/store/useKiroComputerRuntimeStore";
 import { useKiroPreferencesStore } from "@/store/useKiroPreferencesStore";
 import { useConfirmStore } from "@/store/useConfirmStore";
 import { useToastStore } from "@/store/useToastStore";
@@ -38,7 +57,7 @@ import { useKiroMemory } from "@/hooks/useKiroMemory";
 import { hasExplicitMemoryIntent } from "@/lib/ai/memory/manager";
 import { KIRO_MEMORY_TOOL_NAMES, KIRO_MEMORY_TOOL_SCHEMAS } from "@/lib/ai/memory/tools";
 import { MAX_MEMORIES } from "@/lib/ai/memory/types";
-import { PersistedActionView, PersistedAttachmentView, KiroConversationRecord, KiroConversationSummary, PersistedSourceMeta } from "@/lib/ai/history/types";
+import { PersistedActionView, PersistedAttachmentView, KiroConversationRecord, KiroConversationSummary, PersistedSourceMeta, PersistedComputerTaskView } from "@/lib/ai/history/types";
 import {
   getUserMessageEditBlockReason,
   messageHasMutatingToolCalls,
@@ -93,6 +112,10 @@ export interface KiroChatMessageView {
   canRegenerate: boolean;
   /** Task 1（Worklog V2）：Assistant Turn 有序 Presentation（commentary → tool → … → final answer） */
   assistantTurn?: KiroAssistantTurnPresentation;
+  /** Computer Agent 主 Task（live：绑定本 assistant 消息的 toolCallIds；Part 3） */
+  computerTask?: KiroAgentTask;
+  /** 历史恢复的 Computer Task 展示事实（无 checkpoint → 不能 Undo） */
+  historyComputerTask?: PersistedComputerTaskView;
 }
 
 export interface KiroActionResultView {
@@ -372,6 +395,15 @@ export function deriveActivity(messages: ActivitySourceMessage[], status: string
 
 type ToolOutput = { ok: boolean; code?: string; message?: string; data?: unknown; action?: unknown };
 
+/** Pending executable（Part 3）：真正可执行的请求只存在于 useKiroChat refs（runtime store 只存 UI 展示） */
+interface PendingComputerExecution {
+  request: ComputerApprovalRequest;
+  toolName: string;
+  toolCallId: string;
+  input: unknown;
+  frozenSnapshot: KiroComputerTurnSnapshot;
+}
+
 /**
  * Kiro Chat runtime（Task 3）：Read + Write client-side tools。
  * 安全链：LLM → Tool Call → Client Validation → Existing ClassFlow Action → Tool Result。
@@ -384,6 +416,7 @@ export function useKiroChat({
   suppressedAutoKeys,
   attachments,
   conversationSummary,
+  conversationId,
 }: {
   autoRefs: KiroContextRef[];
   manualRefs: KiroContextRef[];
@@ -392,6 +425,8 @@ export function useKiroChat({
   attachments: KiroAttachment[];
   /** 当前 Conversation Summary（若有）：随 Turn Snapshot 冻结，作为 Model Context 的一部分 */
   conversationSummary?: KiroConversationSummary | null;
+  /** Part 3：当前会话 id（Task/Audit 记录用；useKiroChat 不拥有会话生命周期） */
+  conversationId?: string | null;
 }) {
   const enabled = useAISettingsStore((s) => s.enabled);
   const provider = useAISettingsStore((s) => s.provider);
@@ -410,6 +445,10 @@ export function useKiroChat({
 
   const pushToast = useToastStore((s) => s.pushToast);
   const confirmRequest = useConfirmStore((s) => s.confirm);
+
+  // Part 3：会话 id 供 Task/Audit 使用（KiroSessionProvider 传入；ref 避免重建 callback）
+  const conversationIdRef = useRef<string | null>(conversationId ?? null);
+  conversationIdRef.current = conversationId ?? null;
 
   const capabilities = getModelCapabilities({ provider, model, custom });
   const visionEnabled = capabilities.vision;
@@ -569,8 +608,19 @@ export function useKiroChat({
   const undoRegistryRef = useRef(new Map<string, KiroUndoEntry>());
   // Kiro Computer Agent V1：每 Turn 独立的 Computer 调用限制（read <= 12 / mutation <= 6）
   const computerCountersRef = useRef({ readCount: 0, mutationCount: 0 });
-  // Computer 真实 mutation 事实（Action Card 渲染；live result，不含 handle/path/token）
-  const [computerActions, setComputerActions] = useState<ComputerActionFact[]>([]);
+
+  // ---- Computer Agent Task Runtime（Part 3）：Task 绑定 owning assistant message 的 toolCallIds ----
+  const [tasksState, setTasksState] = useState<Map<string, KiroAgentTask>>(new Map());
+  const tasksRef = useRef<Map<string, KiroAgentTask>>(new Map());
+  const activeTaskRef = useRef<KiroAgentTask | null>(null);
+  const checkpointsRef = useRef<Map<string, ComputerTaskCheckpoint>>(new Map());
+  const pendingExecutionsRef = useRef<Map<string, PendingComputerExecution>>(new Map());
+  const oneShotApprovalsRef = useRef<ComputerOneShotApproval[]>([]);
+
+  const setPendingApproval = useKiroComputerRuntimeStore((s) => s.setPendingApproval);
+
+  // ---- History Restore（Part 3）：显示-only Computer Task 事实（无 checkpoint / Undo）----
+  const restoredComputerTasksRef = useRef(new Map<string, PersistedComputerTaskView>());
 
   // 历史恢复的展示数据（Action Cards / 附件 chips / Citation 来源）——不是可执行 Tool state
   const restoredActionsRef = useRef(new Map<string, PersistedActionView[]>());
@@ -661,33 +711,11 @@ export function useKiroChat({
         return;
       }
 
-      // ---- Computer Tools（Part 2）：Browser Executor + Frozen Turn intent + Live security state ----
+      // ---- Computer Tools（Part 2/3）：Browser Executor + Frozen Turn intent + Live security state ----
+      // ask → approval-required：不执行 IO、不 addToolOutput（Tool Call 保持 pending）；
+      // 用户决策后 resume 同一条 exact call（同一 sandbox/policy/grant 检查）。
       if (isComputerToolName(toolName)) {
-        void (async () => {
-          const snapshot = (turnSnapshotRef.current as Record<string, unknown> | null)
-            ?.computerSnapshot as KiroComputerTurnSnapshot | undefined;
-          const output = await executeKiroComputerTool({
-            toolName,
-            toolInput: input,
-            context: {
-              // Frozen intent：本 Turn 发送时的 workspace / agentMode
-              turnSnapshot: snapshot ?? buildComputerSnapshot(),
-              // Live security state：实时 rules / grants（撤销立即生效）
-              liveWorkspaces: useKiroComputerStore.getState().workspaces,
-              livePermissionRules: useKiroComputerStore.getState().permissionRules,
-            },
-            counters: computerCountersRef.current,
-          });
-          if (output.ok && output.actionFact) {
-            setComputerActions((prev) => [...prev, output.actionFact!]);
-          }
-          chat.addToolOutput({
-            tool: toolName as never,
-            toolCallId,
-            output: output as ToolOutput,
-            options: { body: requestBody() },
-          });
-        })();
+        void runComputerToolCall(toolName, toolCallId, input);
         return;
       }
 
@@ -867,6 +895,330 @@ export function useKiroChat({
     },
     [chat, consumeUndo, pushToast]
   );
+
+  // ==================== Computer Agent Task / Approval / Undo Runtime（Part 3） ====================
+
+  /** 更新 Task 渲染状态（ref + state 同源） */
+  const updateTasks = useCallback(() => {
+    tasksRef.current = new Map(tasksRef.current);
+    setTasksState(tasksRef.current);
+  }, []);
+
+  /** 当前 Turn 的主 Task（第一个 Computer tool call 时创建；绑定其 toolCallIds） */
+  const ensureActiveTask = useCallback((): KiroAgentTask => {
+    let task = activeTaskRef.current;
+    if (task) return task;
+    const lastUser = [...latestChatRef.current.messages].reverse().find((m) => m.role === "user");
+    task = createAgentTask({
+      userMessageId: lastUser?.id ?? "",
+      conversationId: conversationIdRef.current,
+      title: "工作区文件操作",
+    });
+    activeTaskRef.current = task;
+    tasksRef.current.set(task.id, task);
+    updateTasks();
+    return task;
+  }, [updateTasks]);
+
+  /** 显示下一个 pending approval（队列单例展示；可执行请求仍留在 refs） */
+  const advancePendingApproval = useCallback(() => {
+    const next = pendingExecutionsRef.current.values().next().value as PendingComputerExecution | undefined;
+    setPendingApproval(next ? next.request : null);
+  }, [setPendingApproval]);
+
+  /** approval-required：保持 Tool Call pending（不 addToolOutput）；Task step → awaiting_permission */
+  const handleApprovalRequired = useCallback(
+    (
+      request: ComputerApprovalRequest,
+      toolName: string,
+      toolCallId: string,
+      input: unknown,
+      frozenSnapshot: KiroComputerTurnSnapshot
+    ) => {
+      pendingExecutionsRef.current.set(request.id, { request, toolName, toolCallId, input, frozenSnapshot });
+      if (!useKiroComputerRuntimeStore.getState().pendingApproval) {
+        setPendingApproval(request);
+      }
+      const task = tasksRef.current.get(request.taskId);
+      if (task) {
+        const step = taskStepForToolCall(task, toolCallId, toolStepLabel(toolName));
+        step.status = "awaiting_permission";
+        task.status = "awaiting_permission";
+        updateTasks();
+      }
+    },
+    [setPendingApproval, updateTasks]
+  );
+
+  /** completed attempt：只有 completed.output 进入 addToolOutput；runtime 事实进 checkpoint/task */
+  const applyCompletedAttempt = useCallback(
+    (attempt: ComputerExecutionAttempt, toolName: string, toolCallId: string, taskId: string) => {
+      if (attempt.kind !== "completed") return;
+      const { output, runtime } = attempt;
+      const task = tasksRef.current.get(taskId);
+      if (task) {
+        if (output.ok && runtime) {
+          let cp = checkpointsRef.current.get(taskId);
+          if (!cp) {
+            cp = createTaskCheckpoint(taskId);
+            checkpointsRef.current.set(taskId, cp);
+          }
+          if (runtime.inverse) appendInverseToCheckpoint(cp, runtime.inverse);
+          task.changes.push(runtime.change);
+          if (cp.inverses.length > 0 && !task.undoUsed) {
+            task.canUndo = true;
+          }
+          task.status = "running";
+          completeTaskStep(task, toolCallId);
+          const change = runtime.change;
+          void appendComputerAuditEntry({
+            id: `audit-${crypto.randomUUID()}`,
+            timestamp: new Date().toISOString(),
+            taskId,
+            conversationId: conversationIdRef.current,
+            toolCallId,
+            toolName,
+            capability: capabilityForChange(change),
+            decision: "auto",
+            outcome: "executed",
+            workspaceId: change.workspaceId,
+            workspaceLabel: change.workspaceLabel,
+            rootId: change.rootId,
+            rootLabel: change.rootLabel,
+            relativePath: change.relativePath,
+            verification: "passed",
+          });
+        } else if (!output.ok) {
+          failTaskStep(task, toolCallId);
+        } else {
+          completeTaskStep(task, toolCallId);
+        }
+        updateTasks();
+      }
+      latestChatRef.current.addToolOutput({
+        tool: toolName as never,
+        toolCallId,
+        output: output as ToolOutput,
+        options: { body: requestBody() },
+      });
+    },
+    [updateTasks]
+  );
+
+  /** 执行 Computer Tool Call（onToolCall / approval resume 共用入口） */
+  const runComputerToolCall = useCallback(
+    async (toolName: string, toolCallId: string, input: unknown) => {
+      const snapshot = (turnSnapshotRef.current as Record<string, unknown> | null)
+        ?.computerSnapshot as KiroComputerTurnSnapshot | undefined;
+      const frozenSnapshot = snapshot ?? buildComputerSnapshot();
+      const taskId = ensureActiveTask().id;
+      const attempt = await executeKiroComputerTool({
+        toolName,
+        toolCallId,
+        toolInput: input,
+        context: {
+          // Frozen intent：本 Turn 发送时的 workspace / agentMode
+          turnSnapshot: frozenSnapshot,
+          // Live security state：实时 rules / grants（撤销立即生效）
+          liveWorkspaces: useKiroComputerStore.getState().workspaces,
+          livePermissionRules: useKiroComputerStore.getState().permissionRules,
+          taskId,
+        },
+        counters: computerCountersRef.current,
+        oneShotApprovals: oneShotApprovalsRef.current,
+      });
+      if (attempt.kind === "approval-required") {
+        handleApprovalRequired(attempt.request, toolName, toolCallId, input, frozenSnapshot);
+        return;
+      }
+      applyCompletedAttempt(attempt, toolName, toolCallId, taskId);
+    },
+    [buildComputerSnapshot, ensureActiveTask, handleApprovalRequired, applyCompletedAttempt]
+  );
+
+  /**
+   * 用户审批决策（ComputerApprovalDialog）：
+   * deny → USER_CANCELLED Tool Output；allow-* → 建立规则后 resume 同一条 exact call
+   *（同一 frozen snapshot + live rules/grants；executor 内重复完整 policy 求值）。
+   */
+  const handleApprovalDecision = useCallback(
+    async (approvalId: string, decision: ComputerApprovalDecision) => {
+      const pending = pendingExecutionsRef.current.get(approvalId);
+      if (!pending) return;
+      pendingExecutionsRef.current.delete(approvalId);
+      const { request, toolName, toolCallId, input, frozenSnapshot } = pending;
+      const taskId = request.taskId;
+
+      if (decision === "deny") {
+        const task = tasksRef.current.get(taskId);
+        if (task) {
+          const step = task.steps.find((s) => s.toolCallId === toolCallId);
+          if (step) {
+            step.status = "cancelled";
+            step.completedAt = new Date().toISOString();
+          }
+          task.status = "cancelled";
+          updateTasks();
+        }
+        void appendComputerAuditEntry({
+          id: `audit-${crypto.randomUUID()}`,
+          timestamp: new Date().toISOString(),
+          taskId,
+          conversationId: conversationIdRef.current,
+          toolCallId,
+          toolName,
+          capability: request.capability,
+          decision: "deny",
+          outcome: "denied",
+          workspaceId: request.workspaceId,
+          workspaceLabel: request.workspaceLabel,
+          rootId: request.rootId,
+          rootLabel: request.rootLabel,
+          relativePath: request.relativePath,
+        });
+        advancePendingApproval();
+        latestChatRef.current.addToolOutput({
+          tool: toolName as never,
+          toolCallId,
+          output: { ok: false, code: "USER_CANCELLED", message: "用户拒绝了此操作。" } as ToolOutput,
+          options: { body: requestBody() },
+        });
+        return;
+      }
+
+      if (decision === "allow-once") {
+        oneShotApprovalsRef.current.push({
+          approvalId,
+          toolCallId,
+          capability: request.capability,
+          workspaceId: request.workspaceId,
+          rootId: request.rootId,
+          relativePath: request.relativePath,
+        });
+      } else if (decision === "allow-session") {
+        useKiroComputerStore.getState().upsertPermissionRule(sessionRuleForRequest(request));
+      } else if (decision === "allow-workspace") {
+        useKiroComputerStore.getState().upsertPermissionRule(workspaceRuleForRequest(request));
+      }
+
+      // Resume EXACT Tool Call（same sandbox/policy/grant checks）
+      const attempt = await executeKiroComputerTool({
+        toolName,
+        toolCallId,
+        toolInput: input,
+        context: {
+          turnSnapshot: frozenSnapshot,
+          liveWorkspaces: useKiroComputerStore.getState().workspaces,
+          livePermissionRules: useKiroComputerStore.getState().permissionRules,
+          taskId,
+        },
+        counters: computerCountersRef.current,
+        oneShotApprovals: oneShotApprovalsRef.current,
+      });
+      if (attempt.kind === "approval-required") {
+        handleApprovalRequired(attempt.request, toolName, toolCallId, input, frozenSnapshot);
+        return;
+      }
+      void appendComputerAuditEntry({
+        id: `audit-${crypto.randomUUID()}`,
+        timestamp: new Date().toISOString(),
+        taskId,
+        conversationId: conversationIdRef.current,
+        toolCallId,
+        toolName,
+        capability: request.capability,
+        decision,
+        outcome: "executed",
+        workspaceId: request.workspaceId,
+        workspaceLabel: request.workspaceLabel,
+        rootId: request.rootId,
+        rootLabel: request.rootLabel,
+        relativePath: request.relativePath,
+        verification: "passed",
+      });
+      applyCompletedAttempt(attempt, toolName, toolCallId, taskId);
+      advancePendingApproval();
+    },
+    [advancePendingApproval, applyCompletedAttempt, handleApprovalRequired]
+  );
+
+  /** Task-level Undo（session runtime only）：reverse order + 每条 verified；失败 → undo_failed */
+  const undoTask = useCallback(
+    async (taskId: string) => {
+      const cp = checkpointsRef.current.get(taskId);
+      const task = tasksRef.current.get(taskId);
+      if (!cp || !task || cp.used) return; // single-use
+      cp.used = true;
+      task.undoUsed = true;
+      task.canUndo = false;
+      updateTasks();
+      let outcome: "undone" | "undo_failed" = "undone";
+      try {
+        for (const inverse of [...cp.inverses].reverse()) {
+          const ws = useKiroComputerStore
+            .getState()
+            .workspaces.find((w) => w.id === inverse.workspaceId);
+          if (!ws) throw new ComputerError("WORKSPACE_NOT_FOUND", "工作区不存在");
+          const root = ws.roots.find((r) => r.id === inverse.rootId);
+          if (!root) throw new ComputerError("ROOT_NOT_FOUND", "工作区根不存在");
+          const io = getComputerAdapterForAdapterRef(root.adapterRef);
+          await applyInverseToAdapter(io, inverse);
+        }
+        task.status = "undone";
+      } catch {
+        task.status = "undo_failed";
+        outcome = "undo_failed";
+      }
+      updateTasks();
+      const capability = task.changes.length > 0 ? capabilityForChange(task.changes[0]) : "fs.modify";
+      void appendComputerAuditEntry({
+        id: `audit-${crypto.randomUUID()}`,
+        timestamp: new Date().toISOString(),
+        taskId,
+        conversationId: conversationIdRef.current,
+        toolCallId: task.changes[0]?.toolCallId ?? "",
+        toolName: "undo",
+        capability,
+        decision: "none",
+        outcome,
+        workspaceId: task.changes[0]?.workspaceId ?? "",
+        workspaceLabel: task.changes[0]?.workspaceLabel ?? "",
+        rootId: task.changes[0]?.rootId,
+        rootLabel: task.changes[0]?.rootLabel,
+        relativePath: task.changes[0]?.relativePath,
+        verification: outcome === "undone" ? "passed" : "failed",
+      });
+    },
+    [updateTasks]
+  );
+
+  /** Turn 结束（streaming false）→ 收尾 active task（failed / cancelled / completed） */
+  const finalizeActiveTask = useCallback(() => {
+    const task = activeTaskRef.current;
+    if (!task) return;
+    activeTaskRef.current = null;
+    if (task.status === "running" || task.status === "awaiting_permission") {
+      const hasFailed = task.steps.some((s) => s.status === "failed");
+      const hasCancelled = task.steps.some((s) => s.status === "cancelled");
+      task.status = hasFailed ? "failed" : hasCancelled ? "cancelled" : "completed";
+    }
+    task.completedAt = task.completedAt ?? new Date().toISOString();
+    updateTasks();
+  }, [updateTasks]);
+
+  // Turn 结束：finalize active task（approval pending 且用户 stop 时，stop 已清 pending + 标 cancelled）
+  useEffect(() => {
+    if (chat.status === "streaming" || chat.status === "submitted") return;
+    finalizeActiveTask();
+  }, [chat.status, finalizeActiveTask]);
+
+  // Unmount：清除 stale approvals（approval 不能在新会话继续执行）
+  useEffect(() => {
+    return () => {
+      pendingExecutionsRef.current.clear();
+      setPendingApproval(null);
+    };
+  }, [setPendingApproval]);
 
   /** 当前用户 Turn 的文本（Memory Intent 守卫使用：只能来自当前 User Message，附件/摘要不算） */
   const latestUserText = useMemo(() => {
@@ -1076,9 +1428,9 @@ export function useKiroChat({
 
       // ---- Turn Context Snapshot：本 Turn 内 Prompt Context 冻结（下一 Turn 才刷新） ----
       turnSnapshotRef.current = buildSnapshotRef.current(turnAttachments);
-      // Computer 调用限制 / Action 事实按 Turn 重置（冻结意图配套）
+      // Computer 调用限制 / 新 Turn Task 重置（冻结意图配套；历史 Task 仍保留展示）
       computerCountersRef.current = { readCount: 0, mutationCount: 0 };
-      setComputerActions([]);
+      activeTaskRef.current = null;
 
       // 附件快照绑定到该 User Turn（发送后 Composer 清空，旧消息不受影响）
       const snapshot: KiroAttachmentView[] = turnAttachments
@@ -1216,7 +1568,20 @@ export function useKiroChat({
     const c = latestChatRef.current;
     // Defense in depth：含 Write Tool 的轮次或历史恢复轮次禁止 regenerate（即使 UI 误调用）
     if (!lastTurnCanRegenerate(c.messages)) {
-      pushToast({ message: "操作结果已保留，可以继续向 Kiro 提问。", type: "info" });
+      const lastAssistant = [...c.messages].reverse().find((m) => m.role === "assistant");
+      const hasComputerMutation =
+        !!lastAssistant &&
+        ((lastAssistant.parts ?? []) as { type?: string }[]).some((p) =>
+          typeof p.type === "string" && p.type.startsWith("tool-")
+            ? (KIRO_MUTATING_TOOL_NAMES as string[]).includes(p.type.slice("tool-".length))
+            : false
+        );
+      pushToast({
+        message: hasComputerMutation
+          ? "该回复已修改工作区文件，不能直接重新生成。"
+          : "操作结果已保留，可以继续向 Kiro 提问。",
+        type: "info",
+      });
       return;
     }
     readCounterRef.current = 0;
@@ -1226,7 +1591,24 @@ export function useKiroChat({
     void c.regenerate({ body: requestBody() });
   }, [enabled, pushToast]);
 
+  /** stale approval / 本会话 task 状态清理（newChat / loadConversation 共用；不清理已完成任务展示？） */
+  const clearComputerSessionState = useCallback(
+    (keepRestored: boolean) => {
+      pendingExecutionsRef.current.clear();
+      oneShotApprovalsRef.current = [];
+      setPendingApproval(null);
+      activeTaskRef.current = null;
+      checkpointsRef.current = new Map();
+      tasksRef.current = new Map();
+      setTasksState(new Map());
+      computerCountersRef.current = { readCount: 0, mutationCount: 0 };
+      if (!keepRestored) restoredComputerTasksRef.current = new Map();
+    },
+    [setPendingApproval]
+  );
+
   const newChat = useCallback(() => {
+    clearComputerSessionState(false);
     chat.setMessages([]);
     readCounterRef.current = 0;
     materialReadCounterRef.current = 0;
@@ -1241,11 +1623,12 @@ export function useKiroChat({
     turnSourcesRef.current = [];
     setSources([]);
     visionPagesRef.current = [];
-  }, [chat.setMessages]);
+  }, [chat.setMessages, clearComputerSessionState]);
 
   /**
-   * 恢复历史对话（Task 6）：
-   * 只恢复 user/assistant 文本（不重放 Tool Call）；下一轮需要真实数据时重新调用当前 Read Tools。
+   * 恢复历史对话（Task 6 / Part 3）：
+   * 只恢复 user/assistant 文本与展示事实（不重放 Tool Call）；Computer Task 以
+   * restoredComputerTasksRef 恢复（display-only，无 checkpoint → 不能 Undo）。
    * 恢复的消息标记 restored → 禁止重新生成 / 撤销。
    */
   const loadConversation = useCallback(
@@ -1253,10 +1636,12 @@ export function useKiroChat({
       const actionsMap = new Map<string, PersistedActionView[]>();
       const attachmentsMap = new Map<string, PersistedAttachmentView[]>();
       const sourcesMap = new Map<string, KiroSourceMeta[]>();
+      const computerTasksMap = new Map<string, PersistedComputerTaskView>();
       const restored: UIMessage[] = record.messages.map((pm) => {
         if (pm.attachments && pm.attachments.length > 0) attachmentsMap.set(pm.id, pm.attachments);
         if (pm.actions && pm.actions.length > 0) actionsMap.set(pm.id, pm.actions);
         if (pm.sources && pm.sources.length > 0) sourcesMap.set(pm.id, pm.sources);
+        if (pm.computerTask) computerTasksMap.set(pm.id, pm.computerTask);
         return {
           id: pm.id,
           role: pm.role,
@@ -1264,6 +1649,8 @@ export function useKiroChat({
           metadata: { restored: "1" },
         };
       });
+      clearComputerSessionState(true);
+      restoredComputerTasksRef.current = computerTasksMap;
       restoredActionsRef.current = actionsMap;
       restoredAttachmentsRef.current = attachmentsMap;
       restoredSourcesRef.current = sourcesMap;
@@ -1278,7 +1665,7 @@ export function useKiroChat({
       setSources([]);
       chat.setMessages(restored);
     },
-    [chat.setMessages]
+    [chat.setMessages, clearComputerSessionState]
   );
 
   // Task 14/15A：从真实 tool-web_search output 注册可信 Web Source（只存 metadata，不存 snippet）。
@@ -1411,6 +1798,29 @@ export function useKiroChat({
         view = { ...view, historyActions: restoredActs };
         needsAttach = true;
       }
+      // Computer Agent Task（Part 3）：live task 绑定 owning assistant message（toolCallIds 相交）；
+      // 历史恢复 → display-only（无 checkpoint，不能 Undo）
+      if (m.role === "assistant") {
+        const ids = new Set(
+          ((m.parts ?? []) as unknown as ToolCallPart[])
+            .filter((p) => typeof p.type === "string" && p.type.startsWith("tool-") && p.toolCallId)
+            .map((p) => p.toolCallId)
+        );
+        let attachedTask: KiroAgentTask | undefined;
+        if (ids.size > 0) {
+          for (const t of Array.from(tasksRef.current.values())) {
+            if (t.toolCallIds.some((id) => ids.has(id))) {
+              attachedTask = t;
+              break;
+            }
+          }
+        }
+        const restoredTask = restoredComputerTasksRef.current.get(m.id);
+        if (attachedTask || restoredTask) {
+          view = { ...view, computerTask: attachedTask, historyComputerTask: restoredTask };
+          needsAttach = true;
+        }
+      }
       // 历史恢复的 Citation 来源（展示 metadata；正文不落库）
       const restoredSrcs = restoredSourcesRef.current.get(m.id);
       if (restoredSrcs && restoredSrcs.length > 0) {
@@ -1444,7 +1854,23 @@ export function useKiroChat({
       }
       return view;
     });
-  }, [chat.messages, streaming]);
+    // tasksState：task 状态变化（undo/approval/complete）需要重算消息绑定
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chat.messages, streaming, tasksState]);
+
+  /** Stop：清除 stale approvals（旧 Approval 不能在新会话执行）；awaiting task → cancelled */
+  const handleStop = useCallback(() => {
+    pendingExecutionsRef.current.clear();
+    oneShotApprovalsRef.current = [];
+    setPendingApproval(null);
+    const task = activeTaskRef.current;
+    if (task && (task.status === "awaiting_permission" || task.status === "running")) {
+      task.status = "cancelled";
+      task.completedAt = new Date().toISOString();
+      updateTasks();
+    }
+    void chat.stop();
+  }, [chat, setPendingApproval, updateTasks]);
 
   return {
     messages,
@@ -1454,20 +1880,28 @@ export function useKiroChat({
     activity,
     /** 本 Turn 的文档来源（Citation 渲染用；不含正文） */
     sources,
-    /** Computer Agent 本 Turn 真实 mutation 事实（Action Card 渲染） */
-    computerActions,
     /** 扫描 PDF 页面渲染中（Send 禁用 + 「正在准备扫描 PDF…」） */
     preparingVision,
     send,
     retry,
-    stop: chat.stop,
+    stop: handleStop,
     newChat,
     loadConversation,
     editAndResend,
     configured: enabled,
     consumeUndo,
     visionEnabled,
+    /** Computer Agent Part 3：approval 决策 / Task Undo（UI 入口） */
+    resolveApproval: handleApprovalDecision,
+    undoTask,
   };
+}
+
+/** Computer change 类型 → capability（Audit metadata 用） */
+function capabilityForChange(change: { resourceType: "directory" | "text" | "document"; operation: "create" | "modify" }): ComputerCapability {
+  if (change.resourceType === "document") return "document.create";
+  if (change.resourceType === "directory") return "fs.create";
+  return change.operation === "modify" ? "fs.modify" : "fs.create";
 }
 
 /** 本地文档附件 → 传给模型的文档 Context（含 sourceId；截断明确标注） */

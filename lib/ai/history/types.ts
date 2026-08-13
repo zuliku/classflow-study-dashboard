@@ -53,6 +53,30 @@ export interface PersistedSourceMeta {
   publishedAt?: string;
 }
 
+/**
+ * Computer Task 持久化视图（Part 3）：只存展示事实。
+ * 禁止：review 文本 / beforeText / checkpoint / tool input / adapterRef / handle / native path / bytes。
+ */
+export interface PersistedComputerTaskView {
+  taskId: string;
+  title: string;
+  status: "completed" | "failed" | "cancelled" | "undone" | "undo_failed";
+  changes: Array<{
+    operation: "create" | "modify";
+    resourceType: "directory" | "text" | "document";
+    displayName: string;
+    workspaceLabel: string;
+    rootLabel: string;
+    relativePath: string;
+    format?: "markdown" | "docx";
+    size?: number;
+    changeCount?: number;
+    verification: "passed";
+  }>;
+  startedAt: string;
+  completedAt?: string;
+}
+
 export interface PersistedKiroMessage {
   id: string;
   role: PersistedRole;
@@ -61,6 +85,8 @@ export interface PersistedKiroMessage {
   actions?: PersistedActionView[];
   /** 本消息的文档来源（Citation 显示用；可选，旧记录无此字段无需迁移） */
   sources?: PersistedSourceMeta[];
+  /** Computer Task 展示事实（Part 3；display-only，恢复后不能 Undo） */
+  computerTask?: PersistedComputerTaskView;
 }
 
 /** Conversation Summary（Task 7）：内部 Model Context，不代表当前 ClassFlow 数据 */

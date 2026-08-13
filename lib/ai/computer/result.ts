@@ -3,6 +3,9 @@ import { KiroComputerTurnSnapshot } from "@/lib/ai/contextBudget/types";
 import { ComputerError } from "@/lib/ai/computer/errors";
 import { COMPUTER_TOOL_NAMES } from "@/lib/ai/computer/tools/registry";
 import { ComputerAdapterIO } from "@/lib/ai/computer/executor-types";
+import { ComputerApprovalRequest } from "@/lib/ai/computer/approval";
+import { ComputerInverseOperation } from "@/lib/ai/computer/checkpoints";
+import { KiroComputerChange } from "@/lib/ai/computer/task";
 
 /** 捕获 Computer 域错误 → 归一化 result（不抛给 tool loop） */
 export function toComputerResult(fn: () => Promise<unknown>): Promise<{ ok: true; data: unknown } | { ok: false; code: string; message: string }> {
@@ -46,6 +49,33 @@ export function buildActionFact(input: {
     changeCount: input.changeCount,
     verification: "passed",
   };
+}
+
+/**
+ * Part 3：Executor 分层结果。
+ * - completed.output 是唯一允许进入 chat.addToolOutput 的 model-safe 输出；
+ *   runtime（变更事实 + inverse）只属于 runtime（checkpoint/review）。
+ * - approval-required 携带 safe ApprovalRequest（无 tool input / handle / bytes）。
+ */
+export type ComputerExecutionAttempt =
+  | {
+      kind: "completed";
+      output: ComputerToolResult;
+      runtime?: ComputerRuntimeMutation;
+    }
+  | {
+      kind: "approval-required";
+      request: ComputerApprovalRequest;
+    };
+
+export type ComputerToolResult =
+  | { ok: true; data: unknown; actionFact?: ComputerActionFact }
+  | { ok: false; code: string; message: string };
+
+/** Verified mutation 的 runtime-only 事实：change（review 用）+ inverse（checkpoint 用，可选） */
+export interface ComputerRuntimeMutation {
+  change: KiroComputerChange;
+  inverse?: ComputerInverseOperation;
 }
 
 /** 校验 toolName 属于 Computer 域 */

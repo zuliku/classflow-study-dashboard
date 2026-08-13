@@ -20,6 +20,27 @@ interface DirectoryHandleLike {
   name: string;
 }
 
+/** runtime-only：Browser Adapter 消费的统一 handle 类型（不进任何持久化 UI 层） */
+export interface BrowserWorkspaceDirectoryHandle extends DirectoryHandleLike {
+  kind: "directory";
+  getDirectoryHandle: (name: string, options?: { create?: boolean }) => Promise<BrowserWorkspaceDirectoryHandle>;
+  getFileHandle: (name: string, options?: { create?: boolean }) => Promise<BrowserFileHandle>;
+  entries: () => AsyncIterable<[string, BrowserWorkspaceDirectoryHandle | BrowserFileHandle]>;
+  remove: () => Promise<void>;
+}
+
+export interface BrowserFileHandle extends DirectoryHandleLike {
+  kind: "file";
+  createWritable: () => Promise<{ write: (data: string | Uint8Array) => Promise<void>; close: () => Promise<void> }>;
+  getFile: () => Promise<{
+    size: number;
+    type: string;
+    text: () => Promise<string>;
+    arrayBuffer: () => Promise<ArrayBuffer>;
+  }>;
+  remove: () => Promise<void>;
+}
+
 function openGrantDb(): Promise<IDBDatabase | null> {
   return new Promise((resolve) => {
     if (typeof indexedDB === "undefined") {
@@ -100,6 +121,15 @@ export async function chooseBrowserWorkspaceDirectory(): Promise<{
 }
 
 export type BrowserGrantStatus = "granted" | "prompt" | "denied" | "missing";
+
+/** runtime-only：从 grant store 取 handle（统一入口；Browser Adapter 只消费，不重复维护 DB 常量） */
+export async function getBrowserWorkspaceDirectoryHandle(
+  adapterRef: string
+): Promise<BrowserWorkspaceDirectoryHandle | null> {
+  const handle = await getHandle(adapterRef);
+  if (!handle) return null;
+  return handle as BrowserWorkspaceDirectoryHandle;
+}
 
 /** 查询授权状态（不触发任何权限请求） */
 export async function queryBrowserGrant(adapterRef: string): Promise<BrowserGrantStatus> {
