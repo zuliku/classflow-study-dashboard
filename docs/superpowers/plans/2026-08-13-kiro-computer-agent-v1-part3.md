@@ -2,71 +2,72 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Complete Kiro Computer Agent V1 by adding interactive approval, runtime-backed agent tasks, reviewable change records, task-level checkpoints/Undo, bounded audit/history metadata, and safe regenerate behavior on top of the verified Part 2 filesystem/document runtime.
+**Goal:** Complete Kiro Computer Agent V1 with interactive approvals, message-owned Agent Tasks, reviewable Computer changes, task-level session Undo, bounded audit metadata, safe conversation-history restore, and regenerate hardening.
 
-**Architecture:** Keep `lib/ai/computer/*` as the independent trust domain. Part 3 does not change which model-facing tools exist; it adds a runtime control layer around the existing executor. A Computer tool that evaluates to `ask` must pause without returning tool output, surface a safe approval request to the user, and only resume the exact pending call after an explicit decision. Mutation execution returns model-safe output plus runtime-only change/checkpoint facts; sensitive snapshots never enter tool output, chat history, Zustand persistence, or model context.
+**Architecture:** Keep `lib/ai/computer/*` as a separate trust domain. `ask` must pause the exact client tool call without mutation or tool output; approval resumes only that call through the same sandbox/policy/grant checks. Model-safe tool output is separated from runtime-only review/checkpoint facts. Reuse the existing Kiro conversation persistence (`lib/ai/history/types.ts` + `sanitize.ts` + `KiroSessionProvider`) for display-only Computer task history instead of creating a parallel conversation-history database.
 
-**Tech Stack:** Next.js 14, React 18, TypeScript 5.5, Zustand 4.5, AI SDK 7, Zod, IndexedDB, File System Access API, existing Dialog/Drawer/Button primitives, Vitest 4, fake-indexeddb, Playwright.
+**Tech Stack:** Next.js 14, React 18, TypeScript 5.5, Zustand 4.5, AI SDK 7, IndexedDB, File System Access API, existing Dialog/Button primitives, Vitest 4, fake-indexeddb, Playwright.
 
 ## Global Constraints
 
 - Source of truth: `docs/superpowers/specs/2026-08-13-kiro-computer-agent-v1-design.md`.
-- Continue from Part 2 HEAD (`eb514b3` or newer); do not replace the Part 1/2 runtime, reasoning controls, workspace model, tool schemas, or document renderer.
-- Sandbox remains a technical boundary. Approval can change `ask → allow` only for an already-valid operation; it can never expand workspace roots or bypass `PATH_OUTSIDE_SANDBOX`, read-only roots, hard deny capabilities, missing/revoked grants, or adapter failures.
-- The model cannot choose approval persistence. No Computer tool schema may add `permission`, `approval`, `remember`, `force`, `unsafe`, or `skipCheck` fields.
-- V1 still exposes no model tools for delete, move/rename, shell/PowerShell/cmd, application launch, MCP, arbitrary network access, or Full Access.
-- Internal Undo may remove resources that were created by the same Computer task. This is runtime restoration, not an LLM delete capability.
-- Every mutation and every Undo must verify the resulting adapter state before reporting success.
-- Computer task steps are factual runtime activity only; do not expose or synthesize model chain-of-thought.
-- No raw absolute path, `adapterRef`, `FileSystemDirectoryHandle`, permission token, file bytes, before-snapshot, or full text diff may enter model-facing tool output or persisted conversation history.
-- Runtime-only text snapshots are capped at 1 MiB per modified file. Part 2 already rejects patching larger source files; preserve that boundary.
-- Audit log stores metadata only and is bounded to the most recent 500 entries.
-- Part 2 live Computer actions currently exist as a turn-global array. Part 3 must bind actions/tasks to the actual assistant message/toolCallId and remove the global bottom-of-conversation rendering path.
-- Browser adapter must stop owning grant IndexedDB constants/lookup. Runtime handle retrieval belongs to `workspace/grants.ts`; the adapter consumes the exported runtime-only accessor.
-- Test policy remains targeted: new Part 3 Vitest files + one focused Computer E2E. Do not run full Vitest, full Playwright, screenshot regression, or build by default.
+- Continue from Part 2 HEAD `eb514b3` or newer; preserve Part 1/2 reasoning, workspace, permission, tool, Markdown/DOCX, and verification behavior.
+- Sandbox is not permission. Approval may satisfy only a policy result that is already `ask`. It must never override `deny`, hard deny, read-only roots, `PATH_OUTSIDE_SANDBOX`, missing/revoked grants, or adapter errors.
+- No Computer tool schema may expose `permission`, `approval`, `remember`, `force`, `unsafe`, or `skipCheck`.
+- V1 still exposes no model-facing delete/move/rename, shell/PowerShell/cmd, application launch, MCP, arbitrary network, or Full Access tools.
+- Internal Undo may remove only resources created by the same task; this is runtime restoration, not an LLM delete capability.
+- Mutation and Undo success require read/stat verification.
+- Task/progress UI shows factual runtime activity only, never hidden model reasoning.
+- Never persist/send native absolute paths, `adapterRef`, `FileSystemDirectoryHandle`, permission tokens, file bytes, checkpoint snapshots, or raw full-file content.
+- Runtime text snapshot for patch Undo is capped by the existing Part 2 patch limit (1 MiB source file).
+- Audit metadata keeps at most 500 entries.
+- Remove Part 2's turn-global `computerActions` footer; Computer tasks/changes must attach to the assistant message that owns their toolCallIds.
+- Centralize Browser grant IndexedDB lookup in `lib/ai/computer/workspace/grants.ts`; `adapters/browser.ts` must not duplicate grant DB constants/access.
+- Tests must be deterministic and offline. The Part 3 Playwright test must not call a real external model/API. Use an existing mock route/fixture if available; otherwise intercept `/api/ai/chat` with a deterministic AI SDK-compatible tool-call stream for only this test.
+- Test policy: targeted Part 3 Vitest + one focused Computer E2E + typecheck. No full Vitest/Playwright/screenshot regression/build by default.
 
 ---
 
 ## File Map
 
 ### Create
-- `lib/ai/computer/approval.ts` — approval request/decision types, one-shot grant matching, persistent/session rule construction.
-- `lib/ai/computer/task.ts` — agent task/change/step/view types and pure task reducer/helpers.
-- `lib/ai/computer/checkpoints.ts` — runtime-only inverse-operation model and task Undo executor.
-- `lib/ai/computer/audit.ts` — bounded IndexedDB audit metadata store.
-- `lib/ai/computer/history.ts` — persisted display-only Computer task views keyed by conversation/message identity.
-- `store/useKiroComputerRuntimeStore.ts` — non-persisted current-task/pending-approval UI state; no handles/snapshots.
-- `components/kiro/computer/ComputerApprovalDialog.tsx` — dedicated approval UI.
-- `components/kiro/computer/KiroAgentTaskCard.tsx` — factual task progress + grouped change summary.
-- `components/kiro/computer/KiroChangeReviewDialog.tsx` — transient review of runtime change facts.
-- `components/settings/KiroComputerAuditPanel.tsx` — recent safe audit metadata.
-- `tests/unit/kiro-computer-approval.test.ts` — approval/rule/one-shot semantics.
-- `tests/unit/kiro-computer-checkpoints.test.ts` — inverse operations/task Undo.
-- `tests/unit/kiro-computer-history-audit.test.ts` — metadata sanitization, bounded audit/history restore.
-- `tests/e2e/kiro-computer-agent-v1.spec.ts` — focused Sandbox approval → modify → review → Undo flow.
+- `lib/ai/computer/approval.ts` — approval request/decision and exact one-shot matching.
+- `lib/ai/computer/task.ts` — Agent Task, step, change, and pure update helpers.
+- `lib/ai/computer/checkpoints.ts` — runtime-only inverse operations and verified task Undo.
+- `lib/ai/computer/audit.ts` — bounded safe audit metadata IndexedDB.
+- `store/useKiroComputerRuntimeStore.ts` — non-persisted approval/review UI state only.
+- `components/kiro/computer/ComputerApprovalDialog.tsx` — dedicated permission dialog.
+- `components/kiro/computer/KiroAgentTaskCard.tsx` — task progress/change summary.
+- `components/kiro/computer/KiroChangeReviewDialog.tsx` — bounded runtime review.
+- `components/settings/KiroComputerAuditPanel.tsx` — latest safe Computer activity.
+- `tests/unit/kiro-computer-approval.test.ts`
+- `tests/unit/kiro-computer-checkpoints.test.ts`
+- `tests/unit/kiro-computer-history-audit.test.ts`
+- `tests/e2e/kiro-computer-agent-v1.spec.ts`
 
 ### Modify
-- `lib/ai/computer/types.ts` — reuse existing public types; add only shared non-sensitive identifiers required by task/change views.
-- `lib/ai/computer/result.ts` — separate model-safe `ComputerToolResult` from runtime-only execution metadata.
-- `lib/ai/computer/executor.ts` — emit approval-required attempt without mutation; support exact one-shot approval; return runtime change/checkpoint data after verified mutation.
-- `lib/ai/computer/adapters/types.ts` — add runtime-only `removeResource` method used solely by checkpoint restoration.
-- `lib/ai/computer/adapters/browser.ts` — use grant-store accessor; implement safe non-recursive runtime remove.
-- `lib/ai/computer/adapters/sandbox.ts` — implement runtime remove with explicit directory-empty checks.
-- `lib/ai/computer/workspace/grants.ts` — export runtime-only directory-handle accessor; keep picker/requestPermission boundaries unchanged.
-- `store/useKiroComputerStore.ts` — use existing persistent/session permission-rule actions; ensure session rules remain excluded from persistence.
-- `hooks/useKiroChat.ts` — approval pause/resume orchestration, current Computer task ownership, checkpoint registry, message binding, history/audit writes, task-level Undo, regenerate guard UX integration.
-- `components/kiro/KiroChatSurface.tsx` — mount approval/review UI and pass task actions.
-- `components/kiro/KiroConversation.tsx` — render Computer task/card inside the owning assistant message instead of global turn footer.
-- `components/kiro/computer/KiroComputerActionCard.tsx` — become a child display surface for task changes; add review affordance only from runtime facts.
-- `components/settings/KiroAgentSettings.tsx` — show recent activity via `KiroComputerAuditPanel`; do not change agent-mode policy semantics.
-- `lib/ai/tools/mutating.ts` — preserve Part 2 Computer mutation regenerate classification.
-- `tests/unit/kiro-computer-tools.test.ts` — adapt executor result shape and verify ask never mutates before approval.
+- `lib/ai/computer/types.ts`
+- `lib/ai/computer/result.ts`
+- `lib/ai/computer/executor.ts`
+- `lib/ai/computer/executor-types.ts`
+- `lib/ai/computer/adapters/browser.ts`
+- `lib/ai/computer/adapters/sandbox.ts`
+- `lib/ai/computer/workspace/grants.ts`
+- `store/useKiroComputerStore.ts`
+- `hooks/useKiroChat.ts`
+- `components/kiro/KiroChatSurface.tsx`
+- `components/kiro/KiroConversation.tsx`
+- `components/kiro/computer/KiroComputerActionCard.tsx`
+- `components/settings/KiroAgentSettings.tsx`
+- `lib/ai/history/types.ts`
+- `lib/ai/history/sanitize.ts`
+- `tests/unit/kiro-computer-tools.test.ts`
+
+Do not create a second Computer conversation-history database. Existing `KiroSessionProvider` already persists `sanitizeConversation(...)` to `lib/ai/history/db.ts`; extend that pipeline.
 
 ---
 
 ## Core Interfaces
-
-### Approval
 
 ```ts
 export type ComputerApprovalDecision =
@@ -99,56 +100,13 @@ export interface ComputerOneShotApproval {
   rootId?: string;
   relativePath?: string;
 }
-```
 
-`allow-once` is an in-memory exact-match token. It never becomes a permission rule.
-
-`allow-session` creates:
-
-```ts
-{
-  id: `computer-rule-${crypto.randomUUID()}`,
-  effect: "allow",
-  capability,
-  workspaceId,
-  rootId,
-  resourcePattern: relativePath,
-  scope: "session"
-}
-```
-
-`allow-workspace` creates a persistent workspace-scoped capability rule and deliberately omits `resourcePattern`:
-
-```ts
-{
-  id: `computer-rule-${crypto.randomUUID()}`,
-  effect: "allow",
-  capability,
-  workspaceId,
-  scope: "persistent"
-}
-```
-
-Do not create allow rules for any hard-denied capability.
-
-### Execution split
-
-```ts
 export type ComputerExecutionAttempt =
-  | {
-      kind: "completed";
-      output: ComputerToolResult;
-      runtime?: ComputerRuntimeMutation;
-    }
-  | {
-      kind: "approval-required";
-      request: ComputerApprovalRequest;
-    };
+  | { kind: "completed"; output: ComputerToolResult; runtime?: ComputerRuntimeMutation }
+  | { kind: "approval-required"; request: ComputerApprovalRequest };
 ```
 
-`output` is the only part passed to `chat.addToolOutput`. `runtime` is never sent to the model.
-
-### Task / change
+Only `completed.output` is passed to `chat.addToolOutput`. `runtime` and pending execution context are never sent to the model.
 
 ```ts
 export type KiroAgentTaskStatus =
@@ -186,16 +144,7 @@ export interface KiroComputerChange {
   review:
     | { kind: "create"; preview?: string }
     | { kind: "text-patch"; edits: Array<{ before: string; after: string }> }
-    | {
-        kind: "document";
-        title?: string;
-        headings: string[];
-        paragraphs: number;
-        lists: number;
-        tables: number;
-        codeBlocks: number;
-        characters: number;
-      };
+    | { kind: "document"; title?: string; headings: string[]; paragraphs: number; lists: number; tables: number; codeBlocks: number; characters: number };
 }
 
 export interface KiroAgentTask {
@@ -215,26 +164,97 @@ export interface KiroAgentTask {
 }
 ```
 
-Persisted history must use a narrower display-only type; do not persist `review.edits`, preview text, checkpoints, adapter refs, handles, or snapshots.
+Conversation persistence uses a narrower `PersistedComputerTaskView`; it must omit `review`, checkpoints, before text, native data, and executable Undo.
 
-### Checkpoint
+---
+
+### Task 1: Interactive Approval + Grant Store Boundary + Message Ownership
+
+**Files:**
+- Create: `lib/ai/computer/approval.ts`
+- Create: `lib/ai/computer/task.ts`
+- Create: `store/useKiroComputerRuntimeStore.ts`
+- Create: `components/kiro/computer/ComputerApprovalDialog.tsx`
+- Modify: `lib/ai/computer/result.ts`
+- Modify: `lib/ai/computer/executor.ts`
+- Modify: `lib/ai/computer/workspace/grants.ts`
+- Modify: `lib/ai/computer/adapters/browser.ts`
+- Modify: `hooks/useKiroChat.ts`
+- Modify: `components/kiro/KiroChatSurface.tsx`
+- Modify: `components/kiro/KiroConversation.tsx`
+- Test: `tests/unit/kiro-computer-approval.test.ts`
+- Test: `tests/unit/kiro-computer-tools.test.ts`
+
+- [ ] **Step 1: Write approval tests before implementation.** Cover Guided `patch_text_file → approval-required` with unchanged file; exact one-shot matching; different path/toolCall fails; explicit `deny` remains deny; hard-denied capability never creates an approval request; session/workspace rule shapes.
+
+- [ ] **Step 2: Run RED.**
+
+```bash
+npx vitest run tests/unit/kiro-computer-approval.test.ts tests/unit/kiro-computer-tools.test.ts
+```
+
+- [ ] **Step 3: Centralize Browser handle retrieval.** Export runtime-only `getBrowserWorkspaceDirectoryHandle(adapterRef)` from `workspace/grants.ts`. Keep `showDirectoryPicker()` only in `chooseBrowserWorkspaceDirectory()` and `requestPermission()` only in the explicit reauthorization helper. Remove duplicated grant DB/store/version and direct IndexedDB handle lookup from `adapters/browser.ts`.
+
+- [ ] **Step 4: Implement approval helpers.** `allow-once` is an exact in-memory grant. `allow-session` creates an exact resource rule (`scope:"session"`). `allow-workspace` creates a capability + workspace persistent rule. These helpers may be called only after executor policy returned `ask`; they must never convert `deny` into allow.
+
+- [ ] **Step 5: Refactor executor to return `ComputerExecutionAttempt`.** Required order:
+
+```text
+schema → frozen snapshot/live workspace → path/sandbox → policy
+→ deny: completed false output
+→ ask without exact one-shot: approval-required, NO IO
+→ ask with exact one-shot: continue
+→ live grant/adapter → execute → verify → completed
+```
+
+Remove the Part 2 special-case copy that treated Guided patch independently; `policy.effect` is authoritative.
+
+- [ ] **Step 6: Build non-persisted runtime UI store.** It may hold only `pendingApproval: ComputerApprovalRequest | null` and `reviewTaskId: string | null`. Pending original tool input/snapshot/callbacks remain in `useKiroChat` refs, not Zustand.
+
+- [ ] **Step 7: Pause/resume the exact tool call in `useKiroChat`.** On approval-required: do not `addToolOutput`; store safe request; hold `{approvalId, toolCallId, toolName, input, frozenComputerSnapshot, taskId}` in a ref; mark step awaiting permission. Decision semantics:
+  - deny → one final `USER_CANCELLED` tool output, no execution;
+  - allow-once → rerun exact call with one-shot;
+  - allow-session → add session rule, rerun normal policy;
+  - allow-workspace → add persistent workspace rule, rerun normal policy.
+
+Live workspace/rules/grant are rechecked on resume. Stop/newChat/loadConversation/unmount clears pending approval and ref.
+
+- [ ] **Step 8: Build `ComputerApprovalDialog`.** Use shared `Dialog`. Show safe logical workspace/root/path and only the decisions listed in `allowedDecisions`. Do not reuse destructive ConfirmDialog.
+
+- [ ] **Step 9: Introduce one live Computer task per Computer-enabled user turn.** Create at send boundary, append factual steps for actual Computer calls, track toolCallIds. Bind the task to the assistant message whose tool parts contain those ids while building `KiroChatMessageView`. Remove the Part 2 global `computerActions` footer from `KiroChatSurface`/`KiroConversation`.
+
+- [ ] **Step 10: GREEN and commit.**
+
+```bash
+npx vitest run tests/unit/kiro-computer-approval.test.ts tests/unit/kiro-computer-tools.test.ts
+git add lib/ai/computer store/useKiroComputerRuntimeStore.ts hooks/useKiroChat.ts components/kiro tests/unit/kiro-computer-approval.test.ts tests/unit/kiro-computer-tools.test.ts
+git commit -m "feat(kiro): add interactive computer approvals"
+```
+
+---
+
+### Task 2: Change Review + Verified Checkpoint/Undo
+
+**Files:**
+- Create: `lib/ai/computer/checkpoints.ts`
+- Create: `components/kiro/computer/KiroAgentTaskCard.tsx`
+- Create: `components/kiro/computer/KiroChangeReviewDialog.tsx`
+- Modify: `lib/ai/computer/result.ts`
+- Modify: `lib/ai/computer/executor.ts`
+- Modify: `lib/ai/computer/executor-types.ts`
+- Modify: `lib/ai/computer/adapters/browser.ts`
+- Modify: `lib/ai/computer/adapters/sandbox.ts`
+- Modify: `hooks/useKiroChat.ts`
+- Modify: `components/kiro/KiroConversation.tsx`
+- Modify: `components/kiro/computer/KiroComputerActionCard.tsx`
+- Test: `tests/unit/kiro-computer-checkpoints.test.ts`
+
+Checkpoint types:
 
 ```ts
 export type ComputerInverseOperation =
-  | {
-      type: "remove-created";
-      workspaceId: string;
-      rootId: string;
-      relativePath: string;
-      resourceType: "file" | "directory";
-    }
-  | {
-      type: "restore-text";
-      workspaceId: string;
-      rootId: string;
-      relativePath: string;
-      beforeText: string;
-    };
+  | { type: "remove-created"; workspaceId: string; rootId: string; relativePath: string; resourceType: "file" | "directory" }
+  | { type: "restore-text"; workspaceId: string; rootId: string; relativePath: string; beforeText: string };
 
 export interface ComputerTaskCheckpoint {
   taskId: string;
@@ -243,456 +263,90 @@ export interface ComputerTaskCheckpoint {
 }
 ```
 
-Undo executes inverses in reverse order and verifies each inverse before moving to the next.
+- [ ] **Step 1: Write checkpoint tests.** Cover create text/docx/directory Undo, patch restoration, reverse-order mixed Undo, second Undo rejection, non-empty directory removal rejection, revoked grant failure, and verification after each inverse.
 
----
+- [ ] **Step 2: Add runtime-only removal IO.** Extend `ComputerAdapterIO` with `remove(path, kind)` for checkpoint restoration only. Browser uses non-recursive directory removal; Sandbox removes exactly one file or empty directory. Do not register any model-facing delete tool.
 
-### Task 1: Approval Lifecycle + Grant Store Boundary
+- [ ] **Step 3: Split model-safe result from runtime mutation facts.** Verified mutations return `ComputerRuntimeMutation` separately from `ComputerToolResult`. Runtime facts contain:
+  - create → `remove-created` inverse;
+  - patch → exact pre-write `beforeText` inverse;
+  - text patch review → exact `{before,after}` edit pairs;
+  - create text preview → first 2000 chars only;
+  - document review → structural facts derived from validated Document IR.
 
-**Files:**
-- Create: `lib/ai/computer/approval.ts`
-- Create: `store/useKiroComputerRuntimeStore.ts`
-- Modify: `lib/ai/computer/result.ts`
-- Modify: `lib/ai/computer/executor.ts`
-- Modify: `lib/ai/computer/workspace/grants.ts`
-- Modify: `lib/ai/computer/adapters/browser.ts`
-- Modify: `hooks/useKiroChat.ts`
-- Create: `components/kiro/computer/ComputerApprovalDialog.tsx`
-- Modify: `components/kiro/KiroChatSurface.tsx`
-- Test: `tests/unit/kiro-computer-approval.test.ts`
-- Test: `tests/unit/kiro-computer-tools.test.ts`
+No runtime snapshot enters `addToolOutput`.
 
-**Produces:** interactive ask-policy flow where no tool output is sent and no mutation occurs until the user decides.
+- [ ] **Step 4: Build Task Card + Review Dialog.** `KiroAgentTaskCard` lives inside the owning assistant message and shows factual status/change count. Completed tasks expose `[查看更改]` and, only when checkpoint exists and unused, `[撤销本次更改]`. `KiroChangeReviewDialog` truncates each text before/after side to 2000 display chars and shows document structure rather than binary diff.
 
-- [ ] **Step 1: Add failing approval tests**
+- [ ] **Step 5: Implement task-level Undo.** Keep checkpoint registry in a `useKiroChat` ref keyed by taskId. Execute inverses in reverse order using current live workspace/root/grant; verify each result. Only after all inverses pass mark checkpoint used/task `undone`. Any failure stops the rollback and sets `undo_failed`; do not claim full success.
 
-Cover all of the following:
-
-```ts
-// guided patch -> approval-required, target unchanged
-expect(attempt.kind).toBe("approval-required");
-expect(await readTarget()).toBe(before);
-
-// allow-once only matches same toolCall/capability/workspace/root/path
-expect(matchesOneShotApproval(grant, exactContext)).toBe(true);
-expect(matchesOneShotApproval(grant, differentPath)).toBe(false);
-
-// hard deny can never be converted to approval-required/allow
-expect(evaluate(... "fs.delete" ...).effect).toBe("deny");
-
-// session rule is not persistent
-expect(rule.scope).toBe("session");
-
-// workspace rule is capability + workspace scoped
-expect(rule.resourcePattern).toBeUndefined();
-```
-
-- [ ] **Step 2: Run only approval/tools tests and confirm RED**
-
-```bash
-npx vitest run tests/unit/kiro-computer-approval.test.ts tests/unit/kiro-computer-tools.test.ts
-```
-
-- [ ] **Step 3: Centralize Browser handle lookup in `workspace/grants.ts`**
-
-Export a runtime-only accessor such as:
-
-```ts
-export async function getBrowserWorkspaceDirectoryHandle(
-  adapterRef: string
-): Promise<DirectoryHandleLike | null>;
-```
-
-`showDirectoryPicker()` remains only in `chooseBrowserWorkspaceDirectory()`. `requestPermission()` remains only in the explicit re-authorization helper. Remove duplicated grant DB/store/version constants and direct IndexedDB lookup from `adapters/browser.ts`.
-
-- [ ] **Step 4: Implement approval helpers**
-
-`buildComputerApprovalRequest()` receives trusted executor/preflight facts plus `toolCallId/taskId`. It builds only safe logical labels/path. `buildPermissionRuleFromDecision()` returns a rule only for `allow-session` or `allow-workspace`. `allow-once` produces an exact in-memory grant. `deny` produces neither.
-
-- [ ] **Step 5: Refactor executor return shape**
-
-`executeKiroComputerTool()` receives `toolCallId`, `taskId`, and optional `oneShotApproval`.
-
-Mandatory logic:
-
-```text
-schema
-→ frozen snapshot/live workspace
-→ path/sandbox
-→ policy
-→ hard deny => completed false output
-→ ask + no matching one-shot => approval-required (NO IO)
-→ ask + exact matching one-shot => continue
-→ live grant/adapter
-→ execute
-→ verify
-→ completed
-```
-
-A one-shot grant must not skip a later live grant check, read-only check, sandbox check, or verification.
-
-- [ ] **Step 6: Implement non-persisted approval UI state**
-
-`useKiroComputerRuntimeStore` holds only serializable UI facts:
-
-```ts
-pendingApproval: ComputerApprovalRequest | null
-reviewTaskId: string | null
-```
-
-It must not persist and must not hold callbacks, file handles, adapter refs, snapshots, text before-images, or bytes.
-
-The actual pending execution context stays in `useKiroChat` refs keyed by `approvalId`.
-
-- [ ] **Step 7: Pause/resume the exact tool call in `useKiroChat`**
-
-On `approval-required`:
-
-1. Do not call `chat.addToolOutput`.
-2. Record the safe request in the runtime store.
-3. Keep `{ toolCallId, toolName, original input, frozen snapshot, taskId }` in a hook ref.
-4. Mark the task/step `awaiting_permission`.
-
-On decision:
-
-- `deny`: send one final false tool output with `USER_CANCELLED`; do not execute.
-- `allow-once`: rerun exact call with exact one-shot grant, then add its real output.
-- `allow-session`: add session rule to `useKiroComputerStore`, rerun exact call through normal policy, then add its real output.
-- `allow-workspace`: add persistent workspace rule, rerun exact call through normal policy, then add its real output.
-
-If workspace/grant was revoked while waiting, the resumed executor must fail normally.
-
-- [ ] **Step 8: Build dedicated approval dialog**
-
-Use shared `Dialog`; do not reuse the destructive `ConfirmDialog`.
-
-Show:
-
-```text
-Kiro 请求文件权限
-修改已有文件
-notes.md
-论文研究 / output
-
-[拒绝]
-[允许这一次]
-[本次会话允许]
-[此 Workspace 始终允许]
-```
-
-Only render decisions contained in `allowedDecisions`. The UI cannot manufacture stronger permission choices than the request permits.
-
-- [ ] **Step 9: Cancellation cleanup**
-
-Stop/new conversation/session switch/unmount must clear the visible approval and pending execution ref. Never execute a stale approval against a different turn/session.
-
-- [ ] **Step 10: Run targeted tests and commit**
-
-```bash
-npx vitest run tests/unit/kiro-computer-approval.test.ts tests/unit/kiro-computer-tools.test.ts
-
-git add lib/ai/computer store/useKiroComputerRuntimeStore.ts hooks/useKiroChat.ts components/kiro tests/unit/kiro-computer-approval.test.ts tests/unit/kiro-computer-tools.test.ts
-git commit -m "feat(kiro): add interactive computer approvals"
-```
-
----
-
-### Task 2: Runtime Agent Tasks, Changes, Checkpoints, and Undo
-
-**Files:**
-- Create: `lib/ai/computer/task.ts`
-- Create: `lib/ai/computer/checkpoints.ts`
-- Modify: `lib/ai/computer/result.ts`
-- Modify: `lib/ai/computer/executor.ts`
-- Modify: `lib/ai/computer/adapters/types.ts`
-- Modify: `lib/ai/computer/adapters/browser.ts`
-- Modify: `lib/ai/computer/adapters/sandbox.ts`
-- Modify: `hooks/useKiroChat.ts`
-- Create: `components/kiro/computer/KiroAgentTaskCard.tsx`
-- Create: `components/kiro/computer/KiroChangeReviewDialog.tsx`
-- Modify: `components/kiro/computer/KiroComputerActionCard.tsx`
-- Modify: `components/kiro/KiroConversation.tsx`
-- Test: `tests/unit/kiro-computer-checkpoints.test.ts`
-
-**Produces:** each Computer turn has one factual task with steps/changes and one task-level Undo checkpoint.
-
-- [ ] **Step 1: Add failing task/checkpoint tests**
-
-Cover:
-
-- create text → inverse removes created file;
-- create DOCX → inverse removes created file;
-- create directory → inverse removes only that empty created directory;
-- patch text → inverse restores exact previous text;
-- mixed task Undo executes reverse order;
-- Undo twice is rejected;
-- external/unrelated content prevents unsafe directory removal;
-- revoked grant causes Undo failure rather than false success;
-- verified state after every inverse.
-
-- [ ] **Step 2: Add runtime-only adapter remove**
-
-Extend `ComputerAdapter` with:
-
-```ts
-removeResource(
-  resource: ResolvedComputerResource,
-  options: { kind: "file" | "directory" }
-): Promise<void>;
-```
-
-This method is not exported as a model tool.
-
-Browser implementation uses `removeEntry(name)` with no recursive deletion. Sandbox deletes exactly one file record or an empty directory record; non-empty directory removal fails.
-
-- [ ] **Step 3: Return runtime mutation metadata separately from model-safe output**
-
-For each verified mutation, executor returns runtime-only facts:
-
-- create directory/file/document → `remove-created` inverse;
-- patch → full pre-write `beforeText` inverse, capped by the existing 1 MiB patch limit;
-- text patch review → exact edit pairs;
-- text create preview → first 2000 characters only;
-- document review → structural facts derived from validated Document IR, not model prose.
-
-None of this runtime payload is included in `chat.addToolOutput`.
-
-- [ ] **Step 4: Implement task reducer/helpers**
-
-Task creation occurs at user send only when the frozen Computer snapshot is enabled. The initial title may be the first 60 visible characters of the user's request; this is display text only, not authority.
-
-Each Computer tool call appends a factual step using a fixed tool-name label map:
-
-```text
-list/search/grep/read       → 查看/搜索/读取工作区
-create_directory            → 创建目录
-create_text_file            → 创建文件
-patch_text_file             → 修改文件
-create_document             → 创建文档
-inspect_document            → 检查文档
-```
-
-Do not expose raw input JSON in the step UI.
-
-- [ ] **Step 5: Bind task/actions to the owning assistant message**
-
-Remove the Part 2 turn-global `computerActions` footer path.
-
-Track the task's `toolCallIds`. When building `KiroChatMessageView`, attach the live task to the assistant message whose tool-call parts contain those ids. Historical restored task views are keyed by assistant message id.
-
-`KiroConversationRow` renders `KiroAgentTaskCard` inside that assistant message alongside existing worklog/action surfaces.
-
-- [ ] **Step 6: Build Change Review**
-
-`KiroAgentTaskCard` shows status, number of verified changes, and buttons:
-
-```text
-[查看更改]
-[撤销本次更改]  // only when canUndo && !undoUsed && task completed
-```
-
-`KiroChangeReviewDialog` groups changes:
-
-- created directory/file: logical location + size/preview if available;
-- text patch: each exact before/after pair, with UI truncation at 2000 chars per side;
-- DOCX/Markdown document: title/headings/count facts;
-- no native path/adapterRef.
-
-- [ ] **Step 7: Implement task-level Undo**
-
-Checkpoint registry lives in a hook/runtime ref keyed by taskId, not persisted Zustand/history.
-
-`undoComputerTask(taskId)`:
-
-```text
-load checkpoint
-→ reject used
-→ resolve each live workspace/root
-→ execute inverse operations in reverse
-→ verify each inverse
-→ mark checkpoint used
-→ mark task undone
-→ append audit entries
-```
-
-If any inverse fails, stop, mark `undo_failed`, report exact safe error, and never claim full rollback succeeded.
-
-- [ ] **Step 8: Run targeted checkpoint test and existing tool tests**
+- [ ] **Step 6: GREEN and commit.**
 
 ```bash
 npx vitest run tests/unit/kiro-computer-checkpoints.test.ts tests/unit/kiro-computer-tools.test.ts
-```
-
-- [ ] **Step 9: Commit**
-
-```bash
 git add lib/ai/computer hooks/useKiroChat.ts components/kiro tests/unit/kiro-computer-checkpoints.test.ts tests/unit/kiro-computer-tools.test.ts
 git commit -m "feat(kiro): add computer task review and undo"
 ```
 
 ---
 
-### Task 3: Audit, Display-Only History, Regenerate Safety, and Settings Activity
+### Task 3: Existing Conversation History + Audit + Regenerate + Focused V1 Regression
 
 **Files:**
 - Create: `lib/ai/computer/audit.ts`
-- Create: `lib/ai/computer/history.ts`
 - Create: `components/settings/KiroComputerAuditPanel.tsx`
-- Modify: `components/settings/KiroAgentSettings.tsx`
+- Modify: `lib/ai/history/types.ts`
+- Modify: `lib/ai/history/sanitize.ts`
 - Modify: `hooks/useKiroChat.ts`
+- Modify: `components/settings/KiroAgentSettings.tsx`
 - Modify: `components/kiro/KiroConversation.tsx`
 - Modify: `components/kiro/computer/KiroAgentTaskCard.tsx`
 - Test: `tests/unit/kiro-computer-history-audit.test.ts`
+- Test: `tests/e2e/kiro-computer-agent-v1.spec.ts`
 
-**Produces:** bounded metadata audit + restored non-sensitive Computer task cards; restored tasks never regain executable Undo state.
-
-- [ ] **Step 1: Add failing audit/history tests**
-
-Audit sanitizer must reject/strip keys named or shaped like:
-
-```text
-adapterRef
-absolutePath
-nativePath
-handle
-fileBytes
-beforeText
-content
-permissionToken
-```
-
-History view includes only:
+Persisted display-only shape:
 
 ```ts
-{
-  taskId,
-  assistantMessageId,
-  title,
-  status,
-  changes: [
-    {
-      operation,
-      resourceType,
-      displayName,
-      workspaceLabel,
-      rootLabel,
-      relativePath,
-      format,
-      size,
-      changeCount,
-      verification
-    }
-  ],
-  canUndo: false,
-  startedAt,
-  completedAt
+export interface PersistedComputerTaskView {
+  taskId: string;
+  title: string;
+  status: "completed" | "failed" | "cancelled" | "undone" | "undo_failed";
+  changes: Array<{
+    operation: "create" | "modify";
+    resourceType: "directory" | "text" | "document";
+    displayName: string;
+    workspaceLabel: string;
+    rootLabel: string;
+    relativePath: string;
+    format?: "markdown" | "docx";
+    size?: number;
+    changeCount?: number;
+    verification: "passed";
+  }>;
+  startedAt: string;
+  completedAt?: string;
 }
 ```
 
-Write 510 audit records and verify only the newest 500 remain.
+Add `computerTask?: PersistedComputerTaskView` to `PersistedKiroMessage`.
 
-- [ ] **Step 2: Implement bounded audit store**
+- [ ] **Step 1: Write history/audit tests.** Verify sanitizer preserves only the shape above; no `review`, `beforeText`, content preview, handle, adapterRef, native path, bytes, permission token, or checkpoint. Write 510 audit records and verify only newest 500 remain.
 
-Use IndexedDB `classflow-kiro-computer-audit-v1`, store `entries`. Append after policy decision and after final execution/Undo outcome. Store metadata only.
+- [ ] **Step 2: Reuse existing Kiro history pipeline.** Extend `KiroChatMessageView` with live `computerTask?` and restored `historyComputerTask?`. `sanitizeConversation()` maps either to one `PersistedKiroMessage.computerTask`, and its filter retains an assistant message that has a Computer task even if text/actions are empty. `loadConversation()` populates `restoredComputerTasksRef` and restored task UI is display-only with no executable Undo/checkpoint.
 
-Minimum entry:
+Do not create `classflow-kiro-computer-history-v1`; conversation history continues through the existing `KiroSessionProvider → sanitizeConversation → saveConversation` flow. fileciteturn288file0L2-L6 fileciteturn289file0L2-L6
 
-```ts
-{
-  id,
-  timestamp,
-  taskId,
-  conversationId,
-  toolCallId,
-  toolName,
-  capability,
-  decision: "allow" | "ask" | "deny",
-  outcome: "completed" | "cancelled" | "failed" | "undone",
-  workspaceId,
-  workspaceLabel,
-  rootId,
-  rootLabel,
-  relativePath,
-  verification?: "passed" | "failed"
-}
-```
+- [ ] **Step 3: Preserve edit/regenerate safety for restored Computer mutations.** When computing `restoredWriteMessageIds`, include restored assistant message ids whose persisted Computer task has one or more changes. Mutation turns remain `canRegenerate=false`; read-only Computer turns keep current behavior. Retry defense-in-depth must show concise copy such as `该回复已修改工作区文件，不能直接重新生成。` and never replay a mutation automatically.
 
-No content snapshots.
+- [ ] **Step 4: Implement bounded audit DB.** Use `classflow-kiro-computer-audit-v1`, store `entries`, max 500. Metadata only: timestamp/task/conversation/toolCall/toolName/capability/policy decision/outcome/workspace/root/relativePath/verification. Log approval decision and final execution/Undo outcome. Add Settings panel with latest 10 and `清除活动记录`; clearing audit must not modify files, rules, workspaces, or conversation history.
 
-- [ ] **Step 3: Implement display-only Computer history store**
+- [ ] **Step 5: Add deterministic offline E2E.** `tests/e2e/kiro-computer-agent-v1.spec.ts` uses Sandbox. Do not call a real model. First inspect existing Kiro E2E helpers for an AI-route mock. If none exists, intercept `/api/ai/chat` inside this test and emit deterministic AI SDK-compatible client tool-call streams for exactly these two scripted turns:
+  1. Workspace Auto → `create_text_file(notes.md, known text)`;
+  2. Guided → `patch_text_file(notes.md, exact known edit)`.
 
-Use IndexedDB `classflow-kiro-computer-history-v1`, store `tasks`, keyed by `${conversationId}:${assistantMessageId}`.
+Then verify: created task card belongs inside assistant message; Guided patch opens approval; `允许这一次` resumes exact call; review shows actual before/after; Undo restores original; switch/load the conversation and restored Computer task is visible but has no Undo.
 
-Persist/update only after an assistant message id is known. On history restore, load display-only task views into `restoredComputerTasksRef` and attach them to the corresponding `KiroChatMessageView`.
-
-Restored views always set `canUndo=false`; checkpoint data is session-runtime only.
-
-- [ ] **Step 4: Add recent activity to Settings**
-
-`KiroComputerAuditPanel` loads the latest 10 entries and presents compact rows such as:
-
-```text
-已允许 · 修改文件 · notes.md
-论文研究 / output · 14:32
-```
-
-Provide a user-only `清除活动记录` action. Clearing audit metadata does not alter files, workspaces, permission rules, or conversation history.
-
-- [ ] **Step 5: Regenerate safety**
-
-Keep Computer mutation tool names in `KIRO_MUTATING_TOOL_NAMES` and preserve `canRegenerate=false` for a turn that performed a mutation.
-
-Do not add an automatic replay path. If the existing Kiro UI exposes regenerate for a restored/current Computer-mutating turn due to another code path, force it disabled and use existing disabled-reason copy or a concise Computer-specific reason:
-
-```text
-该回复已修改工作区文件，不能直接重新生成。
-```
-
-Pure Computer read-only turns remain eligible under existing rules.
-
-- [ ] **Step 6: Run history/audit tests**
-
-```bash
-npx vitest run tests/unit/kiro-computer-history-audit.test.ts tests/unit/kiro-computer-checkpoints.test.ts
-```
-
-- [ ] **Step 7: Commit**
-
-```bash
-git add lib/ai/computer components/settings components/kiro hooks/useKiroChat.ts tests/unit/kiro-computer-history-audit.test.ts
-git commit -m "feat(kiro): persist safe computer activity metadata"
-```
-
----
-
-### Task 4: Full V1 Focused Regression and Security Audit
-
-**Files:**
-- Create: `tests/e2e/kiro-computer-agent-v1.spec.ts`
-- Modify: `tests/unit/kiro-computer-approval.test.ts`
-- Modify: `tests/unit/kiro-computer-checkpoints.test.ts`
-- Modify: `tests/unit/kiro-computer-history-audit.test.ts`
-- Modify: `tests/unit/kiro-computer-tools.test.ts` only for real integration regressions found during this task.
-
-- [ ] **Step 1: Write one focused Sandbox E2E**
-
-Use Sandbox so CI does not need native directory permission.
-
-Scenario:
-
-1. Open Kiro and enable Computer Sandbox.
-2. Set `workspace-auto`; ask Kiro to create `notes.md` with known content. Confirm a verified Computer task/action appears inside the assistant message.
-3. Switch to `guided`; ask Kiro to modify the existing file through `patch_text_file`.
-4. Confirm `ComputerApprovalDialog` appears and the task status says awaiting permission.
-5. Choose `允许这一次`.
-6. Confirm the same task resumes, verified modification appears, and approval dialog disappears.
-7. Open `查看更改`; confirm before/after text appears.
-8. Click `撤销本次更改`; confirm task changes to undone and a direct `read_text`/UI-visible runtime check shows original content restored.
-9. Reload/switch away-and-back using the existing Kiro session flow; confirm the historical Computer task card restores as display-only and does not offer executable Undo.
-
-Do not create screenshot assertions.
-
-- [ ] **Step 2: Run targeted Vitest**
+- [ ] **Step 6: Run final targeted verification.**
 
 ```bash
 npx vitest run \
@@ -700,115 +354,84 @@ npx vitest run \
   tests/unit/kiro-computer-checkpoints.test.ts \
   tests/unit/kiro-computer-history-audit.test.ts \
   tests/unit/kiro-computer-tools.test.ts
-```
 
-- [ ] **Step 3: Run only the Part 3 Computer E2E**
-
-```bash
 npx playwright test tests/e2e/kiro-computer-agent-v1.spec.ts
-```
 
-Do not run the full Kiro/Playwright suite.
-
-- [ ] **Step 4: Typecheck**
-
-```bash
 npm run typecheck
 ```
 
-- [ ] **Step 5: Static security audit**
+- [ ] **Step 7: Security audit.**
 
 ```bash
 grep -R -n \
   "FileSystemDirectoryHandle\|adapterRef\|absolutePath\|nativePath\|beforeText\|fileBytes\|showDirectoryPicker\|run_shell\|PowerShell\|delete_file\|delete_directory" \
-  app hooks lib/ai/computer store components/kiro components/settings
+  app hooks lib/ai/computer lib/ai/history store components/kiro components/settings
 ```
 
-Review every hit. Expected sensitive uses:
+Review every hit. Expected sensitive values stay only in grant/adapter/checkpoint runtime and tests; `showDirectoryPicker` stays in explicit grant helper; there are no model-facing shell/delete tools.
 
-- handle / adapterRef: workspace metadata, grants, adapter/executor runtime only;
-- `beforeText`: checkpoint runtime/tests only;
-- `showDirectoryPicker`: explicit workspace grant helper only;
-- no model-facing shell/delete tools.
-
-Also confirm approval UI/store/history/audit files contain no handle/adapterRef/native path or raw snapshot persistence.
-
-- [ ] **Step 6: Build policy**
-
-Skip `npm run build` by default. Run it only for a demonstrated Next/client-server bundling issue not covered by typecheck.
-
-- [ ] **Step 7: Final commit if regression fixes were required**
+- [ ] **Step 8: Commit.**
 
 ```bash
-git add tests lib/ai/computer hooks components store
-git commit -m "fix(kiro): harden computer agent v1 lifecycle"
+git add lib/ai/computer lib/ai/history hooks/useKiroChat.ts components/kiro components/settings tests
+git commit -m "feat(kiro): complete computer agent v1 lifecycle"
 ```
 
-If there are no post-verification code changes, do not create an empty commit.
+Build is skipped by default. Run `npm run build` only for a demonstrated Next client/server or bundling problem not covered by typecheck.
 
 ---
 
 ## Part 3 Acceptance
 
 ### Approval
-- [ ] `ask` pauses without mutation and without model tool output.
-- [ ] deny never executes.
-- [ ] allow-once matches only the exact pending tool call/resource/capability.
-- [ ] session permission is in-memory only.
-- [ ] workspace permission is persistent and workspace-scoped.
-- [ ] hard deny/read-only/path/grant boundaries remain non-overridable.
-- [ ] stale approvals are cancelled on stop/session switch/unmount.
+- [ ] `ask` pauses with no mutation and no model tool output.
+- [ ] approval can satisfy only `ask`, never `deny`.
+- [ ] allow-once is exact call/resource/capability only.
+- [ ] session allow is memory-only and not persisted by `useKiroComputerStore`.
+- [ ] workspace allow is persistent workspace capability rule.
+- [ ] stale pending approvals are cleared on Stop/New/Load/unmount.
 
-### Agent Task / Change Review
-- [ ] one Computer task per Computer-enabled user turn.
-- [ ] steps are factual tool activity, not hidden reasoning.
-- [ ] task is bound to the owning assistant message/toolCallIds.
-- [ ] Part 2 global `computerActions` footer path is removed.
-- [ ] text patch review shows real exact before/after edits.
-- [ ] document review derives from structured document facts.
-- [ ] no native path/adapterRef in review UI.
+### Task / Review
+- [ ] one factual Computer task per Computer-enabled user turn.
+- [ ] task is attached to owning assistant message/toolCallIds.
+- [ ] Part 2 global Computer action footer is removed.
+- [ ] text patch review uses real exact edits; document review uses IR facts.
+- [ ] no native path/adapterRef in UI.
 
-### Checkpoint / Undo
-- [ ] create file/document/directory can be undone through runtime-only removal.
-- [ ] patch can restore exact before text.
-- [ ] task Undo runs reverse order and verifies every inverse.
-- [ ] no recursive directory delete.
-- [ ] checkpoint can only be consumed once.
-- [ ] Undo failure is explicit; no false full-success claim.
-- [ ] checkpoint/snapshot data is not persisted to chat/history/Zustand.
+### Undo
+- [ ] create file/document/empty directory can Undo via runtime-only remove.
+- [ ] patch restores exact previous text.
+- [ ] inverses execute in reverse order and verify.
+- [ ] no recursive delete; checkpoint is single-use.
+- [ ] rollback failure is explicit and never reported as full success.
+- [ ] checkpoint/snapshot is not persisted.
 
-### Audit / History
-- [ ] audit metadata store capped at 500.
-- [ ] recent activity visible in Kiro Agent Settings.
-- [ ] conversation restore shows display-only Computer task/change facts.
-- [ ] restored task cannot Undo.
-- [ ] no content/bytes/handles/adapterRef/native path/snapshots in persisted metadata.
+### History / Audit
+- [ ] existing Kiro conversation DB persists display-only Computer task facts.
+- [ ] restored tasks never regain Undo.
+- [ ] restored Computer mutation blocks edit/regenerate replay.
+- [ ] audit metadata capped at 500; Settings shows latest 10.
+- [ ] no raw content/bytes/handles/adapterRef/native path/checkpoint in persisted metadata.
 
-### Regenerate
-- [ ] mutation turns remain non-regenerable.
-- [ ] read-only Computer turns preserve normal regenerate behavior.
-- [ ] no automatic replay of Computer mutations.
-
-### Part 2 Structural Closeout
-- [ ] Browser adapter no longer duplicates grant DB lookup/constants.
-- [ ] grant handle access is centralized in `workspace/grants.ts`.
+### Structural Closeout
+- [ ] Browser grant lookup is centralized in `workspace/grants.ts`.
+- [ ] `adapters/browser.ts` no longer duplicates grant DB constants/lookup.
 
 ### Verification
-- [ ] four targeted Vitest files pass.
-- [ ] one focused Part 3 Computer E2E passes.
-- [ ] `npm run typecheck` passes.
-- [ ] build skipped by policy or justified/pass if run.
+- [ ] four targeted Vitest files PASS.
+- [ ] one deterministic offline Part 3 E2E PASS.
+- [ ] `npm run typecheck` PASS.
+- [ ] build skipped by policy or justified PASS if run.
 
-## Explicitly Deferred Beyond V1
+## Deferred Beyond V1
 
-- Model-facing delete/move/rename tools.
-- App launch/open/reveal.
-- Shell/PowerShell/cmd and Windows process sandbox.
-- MCP/plugin computer capabilities.
-- Arbitrary network permissions.
-- Tauri/Windows native adapter.
-- Parallel workers/background automations.
-- Persistent executable checkpoints across browser restarts.
-- Full binary/document diff editor.
+- model-facing delete/move/rename;
+- app open/reveal;
+- shell/PowerShell/cmd and Windows process sandbox;
+- MCP/arbitrary network permissions;
+- Tauri/Windows adapter;
+- parallel workers/background automations;
+- persistent executable checkpoints across browser restarts;
+- full binary/document diff editor.
 
-Part 3 must STOP after V1 approval, task/review, session-level checkpoint/Undo, audit/history metadata, and focused regression are complete.
+Part 3 must STOP after approval, message-owned tasks/review, session checkpoint/Undo, existing-history integration, audit metadata, regenerate hardening, and focused regression are complete.
