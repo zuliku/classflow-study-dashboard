@@ -55,13 +55,24 @@ import { renderMarkdown } from "@/lib/ai/computer/documents/markdown";
 import { renderDocx } from "@/lib/ai/computer/documents/docx";
 import { verifyMarkdownWritten, verifyDocxBytes, inspectDocumentFacts } from "@/lib/ai/computer/documents/verify";
 import { isKiroDocument } from "@/lib/ai/computer/documents/types";
-import { registerCreatedArtifact, findArtifactByLocation, updateArtifactLocation } from "@/lib/ai/computer/artifacts/service";
+import {
+  registerCreatedArtifact,
+  findArtifactByLocation,
+  updateArtifactLocation,
+  getEditableArtifactRevisionState,
+  commitArtifactRevision,
+} from "@/lib/ai/computer/artifacts/service";
+import { KiroArtifact } from "@/lib/ai/computer/artifacts/types";
+import { DocumentFileSnapshot } from "@/lib/ai/computer/checkpoints";
 import { relocateFile } from "@/lib/ai/computer/filesystem/relocate";
 import { KiroComputerChange } from "@/lib/ai/computer/task";
 import { ComputerInverseOperation } from "@/lib/ai/computer/checkpoints";
 
 export const COMPUTER_READ_LIMIT_PER_TURN = 12;
 export const COMPUTER_MUTATION_LIMIT_PER_TURN = 6;
+
+/** V2 Part 2：文档结构化更新上限（保证 exact 回滚/Undo 快照有界） */
+export const COMPUTER_DOCUMENT_REVISION_LIMIT_BYTES = 5 * 1024 * 1024;
 
 /** Patch Undo before-text 上限（超限 → canUndo=false，不保留 checkpoint 快照） */
 export const COMPUTER_PATCH_UNDO_LIMIT_BYTES = 1024 * 1024;
@@ -353,6 +364,209 @@ export async function executeKiroComputerTool(request: {
       return {
         kind: "completed",
         output: { ok: true, data: { fromPath: sourcePath, path: destinationPath, verified: true } },
+        runtime,
+      };
+    }
+
+    // ---- V2 Part 2：update_document（artifactId → Registry → 正常 resolver/sandbox/policy/grant 链）----
+    if (toolName === "update_document") {
+      counters.mutationCount += 1;
+      const artifactId = String(args.artifactId);
+      const expectedRevision = Number(args.expectedRevision);
+      const document = args.document as Parameters<typeof renderMarkdown>[0];
+
+      // 每次执行都重读 Registry（Approval resume 时 useKiroChat 会用 frozen input 重跑本函数 → 自然重检 revision/location）
+      const { artifact, source: previousSource } = await getEditableArtifactRevisionState(artifactId, expectedRevision);
+      if (artifact.workspaceId !== ws.id) {
+        return {
+          kind: "completed",
+          output: { ok: false, code: "PERMISSION_DENIED", message: "Artifact 不属于当前 Workspace" },
+        };
+      }
+      const artifactRoot = ws.roots.find((r) => r.id === artifact.rootId);
+      if (!artifactRoot) {
+        return {
+          kind: "completed",
+          output: { ok: false, code: "ROOT_NOT_FOUND", message: `Artifact 根目录不存在：${artifact.rootId}` },
+        };
+      }
+      const artifactPath = normalizeRelativeComputerPath(artifact.relativePath).path;
+
+      // 正常 document.modify policy（Plan deny / Guided ask / Workspace Auto allow；explicit deny 权威）
+      const policy = prepareComputerTool({
+        mode: turnSnapshot.agentMode,
+        rules: livePermissionRules,
+        workspace: ws,
+        capability: "document.modify",
+        resource: { workspaceId: ws.id, rootId: artifactRoot.id, path: artifactPath },
+      });
+      if (policy.effect === "deny") {
+        return { kind: "completed", output: { ok: false, code: "PERMISSION_DENIED", message: policy.reason } };
+      }
+      if (policy.effect === "ask") {
+        const matchedOneShot =
+          oneShotApprovals && oneShotApprovals.length > 0
+            ? oneShotApprovals.findIndex((o) =>
+                oneShotApprovalMatches(o, {
+                  toolCallId,
+                  capability: "document.modify",
+                  workspaceId: resource.workspaceId,
+                  rootId: artifactRoot.id,
+                  relativePath: artifactPath,
+                })
+              )
+            : -1;
+        if (matchedOneShot === -1) {
+          return {
+            kind: "approval-required",
+            request: buildApprovalRequest({
+              id: newApprovalId(),
+              toolCallId,
+              taskId: context.taskId ?? "",
+              capability: "document.modify",
+              workspaceId: ws.id,
+              workspaceLabel: ws.name,
+              rootId: artifactRoot.id,
+              rootLabel: artifactRoot.label,
+              relativePath: artifactPath,
+              resourceLabel: artifactPath.split("/").pop() ?? artifactPath,
+              description: `更新文档 ${artifactPath.split("/").pop() ?? artifactPath}（v${expectedRevision} → v${expectedRevision + 1}）`,
+            }),
+          };
+        }
+        oneShotApprovals!.splice(matchedOneShot, 1);
+      }
+
+      // 修改前 exact snapshot（runtime-only；≤ 5 MiB 保证回滚/Undo 有界）
+      const adapter = getComputerAdapterForAdapterRef(artifactRoot.adapterRef);
+      const stat = await adapter.stat(artifactPath);
+      if (!stat || stat.kind !== "file") {
+        return {
+          kind: "completed",
+          output: { ok: false, code: "RESOURCE_NOT_FOUND", message: `Artifact 文件不存在：${artifactPath}` },
+        };
+      }
+      if (stat.size > COMPUTER_DOCUMENT_REVISION_LIMIT_BYTES) {
+        return {
+          kind: "completed",
+          output: { ok: false, code: "FILE_TOO_LARGE", message: "文档超过 5 MiB，暂不支持结构化更新" },
+        };
+      }
+      const snapshot: DocumentFileSnapshot =
+        artifact.type === "markdown"
+          ? { format: "markdown", text: await adapter.readText(artifactPath) }
+          : { format: "docx", bytes: await adapter.readBytes(artifactPath) };
+
+      // render → write → verify（格式由 artifact.type 决定，模型不能选择）
+      try {
+        if (artifact.type === "markdown") {
+          const markdown = renderMarkdown(document);
+          await adapter.writeText(artifactPath, markdown, "text/markdown");
+          const readBack = await adapter.readText(artifactPath);
+          if (!(await verifyMarkdownWritten(markdown, readBack))) {
+            throw new ComputerError("VERIFICATION_FAILED", "Markdown 校验失败");
+          }
+        } else {
+          const bytes = await renderDocx(document);
+          await adapter.writeBytes(
+            artifactPath,
+            bytes,
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+          );
+          const readBack = await adapter.readBytes(artifactPath);
+          if (!(await verifyDocxBytes(readBack))) {
+            throw new ComputerError("VERIFICATION_FAILED", "DOCX 校验失败");
+          }
+        }
+      } catch (err) {
+        // 新文件校验失败 → 恢复 exact 快照；回滚失败 → VERIFICATION_FAILED（状态需人工检查）
+        try {
+          await rollbackDocumentFile(adapter, artifactPath, snapshot);
+        } catch {
+          return {
+            kind: "completed",
+            output: {
+              ok: false,
+              code: "VERIFICATION_FAILED",
+              message: "文档更新失败且回滚未完成，文件/Artifact 状态可能需要人工检查。",
+            },
+          };
+        }
+        if (err instanceof ComputerError) {
+          return { kind: "completed", output: { ok: false, code: err.code, message: err.message } };
+        }
+        return { kind: "completed", output: { ok: false, code: "VERIFICATION_FAILED", message: "文档更新失败" } };
+      }
+
+      // 文件验证通过后才 commit（原子 metadata + Source IR；conflict 也回滚文件）
+      let updatedArtifact: KiroArtifact;
+      try {
+        updatedArtifact = await commitArtifactRevision({ artifactId, expectedRevision, document });
+      } catch (err) {
+        try {
+          await rollbackDocumentFile(adapter, artifactPath, snapshot);
+        } catch {
+          return {
+            kind: "completed",
+            output: {
+              ok: false,
+              code: "VERIFICATION_FAILED",
+              message: "文档已写入但版本登记失败且回滚未完成，文件/Artifact 状态可能需要人工检查。",
+            },
+          };
+        }
+        if (err instanceof ComputerError) {
+          return { kind: "completed", output: { ok: false, code: err.code, message: err.message } };
+        }
+        return {
+          kind: "completed",
+          output: { ok: false, code: "VERIFICATION_FAILED", message: "Artifact revision 提交失败" },
+        };
+      }
+
+      // runtime facts（review 来自真实 IR 结构；inverse 供 Undo 精确恢复）
+      const format = artifact.type === "markdown" ? ("markdown" as const) : ("docx" as const);
+      const facts = inspectDocumentFacts(document, format);
+      const runtime = buildMutationRuntime({
+        toolName,
+        toolCallId,
+        operation: "modify",
+        resourceType: "document",
+        snapshot: turnSnapshot,
+        workspaceLabel: ws.name,
+        root: artifactRoot,
+        relativePath: artifactPath,
+        artifactId,
+        format,
+        revision: updatedArtifact.revision,
+        review: {
+          kind: "document",
+          title: facts.title,
+          headings: documentHeadings(document),
+          paragraphs: facts.paragraphs,
+          lists: facts.lists,
+          tables: facts.tables,
+          codeBlocks: facts.codeBlocks,
+          characters: facts.characters,
+        },
+        inverse: {
+          type: "restore-document-revision",
+          workspaceId: ws.id,
+          rootId: artifactRoot.id,
+          relativePath: artifactPath,
+          artifactId,
+          previousRevision: expectedRevision,
+          expectedCurrentRevision: updatedArtifact.revision,
+          previousDocument: previousSource.document,
+          snapshot,
+        },
+      });
+      return {
+        kind: "completed",
+        output: {
+          ok: true,
+          data: { artifactId, path: artifactPath, format, revision: updatedArtifact.revision, verified: true },
+        },
         runtime,
       };
     }
@@ -870,6 +1084,35 @@ function buildRenameTargetPath(sourcePath: string, newName: string): string {
   return normalizeRelativeComputerPath(`${dir}${newName}`).path;
 }
 
+/** post-write 失败时恢复 exact 快照（Markdown exact text / DOCX exact bytes）；回滚本身失败 → 抛 VERIFICATION_FAILED */
+async function rollbackDocumentFile(
+  adapter: ComputerAdapterIO,
+  path: string,
+  snapshot: DocumentFileSnapshot
+): Promise<void> {
+  if (snapshot.format === "markdown") {
+    await adapter.writeText(path, snapshot.text);
+    const readBack = await adapter.readText(path);
+    if (readBack !== snapshot.text) {
+      throw new ComputerError("VERIFICATION_FAILED", "文档回滚校验失败");
+    }
+    return;
+  }
+  await adapter.writeBytes(path, snapshot.bytes);
+  const readBack = await adapter.readBytes(path);
+  if (!bytesEqual(readBack, snapshot.bytes)) {
+    throw new ComputerError("VERIFICATION_FAILED", "文档回滚校验失败");
+  }
+}
+
+function bytesEqual(a: Uint8Array, b: Uint8Array): boolean {
+  if (a.byteLength !== b.byteLength) return false;
+  for (let i = 0; i < a.byteLength; i++) {
+    if (a[i] !== b[i]) return false;
+  }
+  return true;
+}
+
 /** 构建 verified mutation 的 runtime-only 事实（change + inverse）；inverse 缺失 → canUndo=false */
 function buildMutationRuntime(input: {
   toolName: string;
@@ -887,6 +1130,7 @@ function buildMutationRuntime(input: {
   format?: "markdown" | "docx";
   size?: number;
   changeCount?: number;
+  revision?: number;
   review: KiroComputerChange["review"];
   inverse?: ComputerInverseOperation;
 }): ComputerRuntimeMutation {
@@ -908,6 +1152,7 @@ function buildMutationRuntime(input: {
     format: input.format,
     size: input.size,
     changeCount: input.changeCount,
+    revision: input.revision,
     verification: "passed",
     review: input.review,
   };

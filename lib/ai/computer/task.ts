@@ -46,6 +46,8 @@ export interface KiroComputerChange {
   format?: "markdown" | "docx";
   size?: number;
   changeCount?: number;
+  /** V2 Part 2：文档 revision（安全 display metadata） */
+  revision?: number;
   verification: "passed";
   review:
     | { kind: "create"; preview?: string }
@@ -108,6 +110,8 @@ export function toolStepLabel(toolName: string): string {
       return "正在重命名文件";
     case "move_file":
       return "正在移动文件";
+    case "update_document":
+      return "正在更新文档";
     default:
       return "正在执行操作";
   }
@@ -120,7 +124,8 @@ export function isComputerMutationTool(toolName: string): boolean {
     toolName === "patch_text_file" ||
     toolName === "create_document" ||
     toolName === "rename_file" ||
-    toolName === "move_file"
+    toolName === "move_file" ||
+    toolName === "update_document"
   );
 }
 

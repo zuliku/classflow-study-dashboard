@@ -14,6 +14,7 @@ import {
   createDocumentSchema,
   renameFileSchema,
   moveFileSchema,
+  updateDocumentSchema,
 } from "@/lib/ai/computer/tools/schemas";
 
 export interface ComputerToolDefinition {
@@ -118,6 +119,13 @@ export const COMPUTER_MUTATION_TOOLS: ComputerToolDefinition[] = [
     description: "在同一 Workspace 内把文件移动到另一个根目录（目标必须不存在）。",
     schema: moveFileSchema,
     capability: "fs.move",
+    mutation: true,
+  },
+  {
+    name: "update_document",
+    description: "更新 Kiro 创建的 Markdown/DOCX Artifact；必须提供当前 expectedRevision。",
+    schema: updateDocumentSchema,
+    capability: "document.modify",
     mutation: true,
   },
 ];

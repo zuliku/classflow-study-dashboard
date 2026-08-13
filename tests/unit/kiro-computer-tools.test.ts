@@ -8,6 +8,9 @@ import { KiroWorkspaceMeta, ComputerPermissionRule } from "@/lib/ai/computer/typ
 import { ComputerExecutionAttempt } from "@/lib/ai/computer/result";
 import { ComputerOneShotApproval } from "@/lib/ai/computer/approval";
 import { sandboxDelete, sandboxWriteText, sandboxListDirectory } from "@/lib/ai/computer/adapters/sandbox";
+import { registerCreatedArtifact, adoptWorkspaceArtifact, getArtifact, getArtifactSource } from "@/lib/ai/computer/artifacts/service";
+import { KiroDocument } from "@/lib/ai/computer/documents/types";
+import { COMPUTER_DOCUMENT_REVISION_LIMIT_BYTES } from "@/lib/ai/computer/executor";
 
 const SANDBOX_REF = "sandbox-test-ref";
 
@@ -101,8 +104,22 @@ describe("tool exposure", () => {
     // V2：rename_file / move_file 是 fs.move（默认 ask），不是 delete
     expect(names).toContain("rename_file");
     expect(names).toContain("move_file");
+    expect(names).toContain("update_document");
     // Model schema 绝不能加入权限相关参数
-    expect(names.length).toBe(13);
+    expect(names.length).toBe(14);
+  });
+
+  it("update_document 权限模式：Plan 不暴露 / Guided ask / Workspace Auto allow", () => {
+    const plan = getComputerToolsForMode("plan");
+    expect(plan.some((t) => t.name === "update_document")).toBe(false);
+    const guided = getComputerToolsForMode("guided");
+    expect(guided.some((t) => t.name === "update_document")).toBe(true);
+    const auto = getComputerToolsForMode("workspace-auto");
+    expect(auto.some((t) => t.name === "update_document")).toBe(true);
+    // mutation guard
+    const def = COMPUTER_TOOLS.find((t) => t.name === "update_document");
+    expect(def?.mutation).toBe(true);
+    expect(def?.capability).toBe("document.modify");
   });
 });
 
@@ -466,5 +483,172 @@ describe("mutation tools + policy（Part 2 回归 + Part 3 attempt 语义）", (
       counters: m,
     });
     expect(r2.ok).toBe(false);
+  });
+});
+
+describe("update_document（V2 Part 2）", () => {
+  const IR_V1: KiroDocument = {
+    title: "研究方案",
+    blocks: [
+      { type: "heading", level: 1, content: [{ text: "引言" }] },
+      { type: "paragraph", content: [{ text: "版本一" }] },
+    ],
+  };
+  const IR_V2: KiroDocument = {
+    title: "研究方案",
+    blocks: [
+      { type: "heading", level: 1, content: [{ text: "引言" }] },
+      { type: "paragraph", content: [{ text: "版本二" }] },
+    ],
+  };
+
+  async function seedEditableDoc(c = counters()) {
+    const attempt = await executeKiroComputerTool({
+      toolName: "create_document",
+      toolCallId: "call_seed_doc",
+      toolInput: { path: "plan.md", document: IR_V1 },
+      context: ctx(AUTO_SNAPSHOT),
+      counters: c,
+    });
+    expect(attempt.kind).toBe("completed");
+    if (attempt.kind !== "completed") return null;
+    return (attempt.runtime?.change.artifactId ?? null) as string | null;
+  }
+
+  it("Workspace Auto：update_document 无审批执行 + revision 2 + 文件 v2 + Source IR v2", async () => {
+    const c = counters();
+    const artifactId = await seedEditableDoc(c);
+    expect(artifactId).toBeTruthy();
+    if (!artifactId) return;
+
+    const attempt = await executeKiroComputerTool({
+      toolName: "update_document",
+      toolCallId: "call_update_1",
+      toolInput: { artifactId, expectedRevision: 1, document: IR_V2 },
+      context: ctx(AUTO_SNAPSHOT),
+      counters: c,
+    });
+    expect(attempt.kind).toBe("completed");
+    if (attempt.kind !== "completed") return;
+    expect(attempt.output.ok).toBe(true);
+    expect((attempt.output as { data: { revision: number } }).data.revision).toBe(2);
+    expect(attempt.runtime?.change.revision).toBe(2);
+    expect(attempt.runtime?.inverse?.type).toBe("restore-document-revision");
+    if (attempt.runtime?.inverse?.type === "restore-document-revision") {
+      expect(attempt.runtime.inverse.previousRevision).toBe(1);
+      expect(attempt.runtime.inverse.expectedCurrentRevision).toBe(2);
+      expect(attempt.runtime.inverse.snapshot.format).toBe("markdown");
+    }
+    // 文件 + registry + source 一致
+    const read = await completedOutput({
+      toolName: "read_text",
+      toolInput: { path: "plan.md" },
+      context: ctx(AUTO_SNAPSHOT),
+      counters: c,
+    });
+    expect((read as { data: { text: string } }).data.text).toContain("版本二");
+    const artifact = await getArtifact(artifactId);
+    expect(artifact?.revision).toBe(2);
+    const source = await getArtifactSource(artifactId);
+    expect(source?.revision).toBe(2);
+    expect(source?.document.blocks[1]).toEqual(IR_V2.blocks[1]);
+  });
+
+  it("stale expectedRevision → ARTIFACT_REVISION_CONFLICT 且文件保持 v1", async () => {
+    const c = counters();
+    const artifactId = await seedEditableDoc(c);
+    if (!artifactId) return;
+    await executeKiroComputerTool({
+      toolName: "update_document",
+      toolCallId: "call_update_2",
+      toolInput: { artifactId, expectedRevision: 1, document: IR_V2 },
+      context: ctx(AUTO_SNAPSHOT),
+      counters: c,
+    });
+    // stale：registry 已 v2，模型仍发 expectedRevision 1
+    const attempt = await executeKiroComputerTool({
+      toolName: "update_document",
+      toolCallId: "call_update_stale",
+      toolInput: { artifactId, expectedRevision: 1, document: IR_V2 },
+      context: ctx(AUTO_SNAPSHOT),
+      counters: c,
+    });
+    expect(attempt.kind).toBe("completed");
+    if (attempt.kind !== "completed") return;
+    expect(attempt.output.ok).toBe(false);
+    expect((attempt.output as { code: string }).code).toBe("ARTIFACT_REVISION_CONFLICT");
+    const read = await completedOutput({
+      toolName: "read_text",
+      toolInput: { path: "plan.md" },
+      context: ctx(AUTO_SNAPSHOT),
+      counters: c,
+    });
+    expect((read as { data: { text: string } }).data.text).toContain("版本二"); // 未被覆盖
+  });
+
+  it("workspace-existing Artifact → ARTIFACT_NOT_EDITABLE", async () => {
+    await sandboxWriteText(SANDBOX_REF, "existing.md", "# 已有");
+    const adopted = await adoptWorkspaceArtifact({
+      workspaceId: "research",
+      rootId: "output",
+      relativePath: "existing.md",
+      type: "markdown",
+    });
+    const attempt = await executeKiroComputerTool({
+      toolName: "update_document",
+      toolCallId: "call_update_3",
+      toolInput: { artifactId: adopted.id, expectedRevision: 1, document: IR_V2 },
+      context: ctx(AUTO_SNAPSHOT),
+      counters: counters(),
+    });
+    expect(attempt.kind).toBe("completed");
+    if (attempt.kind !== "completed") return;
+    expect(attempt.output.ok).toBe(false);
+    expect((attempt.output as { code: string }).code).toBe("ARTIFACT_NOT_EDITABLE");
+  });
+
+  it("generic create_text_file .md（无 Source IR）→ ARTIFACT_NOT_EDITABLE", async () => {
+    const c = counters();
+    await executeKiroComputerTool({
+      toolName: "create_text_file",
+      toolCallId: "call_seed_text",
+      toolInput: { path: "generic.md", content: "plain" },
+      context: ctx(AUTO_SNAPSHOT),
+      counters: c,
+    });
+    const { findArtifactByLocation } = await import("@/lib/ai/computer/artifacts/service");
+    const artifact = await findArtifactByLocation("research", "output", "generic.md");
+    expect(artifact).toBeTruthy();
+    if (!artifact) return;
+    const attempt = await executeKiroComputerTool({
+      toolName: "update_document",
+      toolCallId: "call_update_4",
+      toolInput: { artifactId: artifact.id, expectedRevision: 1, document: IR_V2 },
+      context: ctx(AUTO_SNAPSHOT),
+      counters: counters(),
+    });
+    expect(attempt.kind).toBe("completed");
+    if (attempt.kind !== "completed") return;
+    expect(attempt.output.ok).toBe(false);
+    expect((attempt.output as { code: string }).code).toBe("ARTIFACT_NOT_EDITABLE");
+  });
+
+  it(">5 MiB 在写入前拒绝 FILE_TOO_LARGE", async () => {
+    const c = counters();
+    const artifactId = await seedEditableDoc(c);
+    if (!artifactId) return;
+    // 直接放大当前文件（超过 5 MiB；绕过 patch schema 的内容上限）
+    await sandboxWriteText(SANDBOX_REF, "plan.md", "x".repeat(COMPUTER_DOCUMENT_REVISION_LIMIT_BYTES + 1));
+    const attempt = await executeKiroComputerTool({
+      toolName: "update_document",
+      toolCallId: "call_update_big",
+      toolInput: { artifactId, expectedRevision: 1, document: IR_V2 },
+      context: ctx(AUTO_SNAPSHOT),
+      counters: c,
+    });
+    expect(attempt.kind).toBe("completed");
+    if (attempt.kind !== "completed") return;
+    expect(attempt.output.ok).toBe(false);
+    expect((attempt.output as { code: string }).code).toBe("FILE_TOO_LARGE");
   });
 });

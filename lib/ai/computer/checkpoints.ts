@@ -6,6 +6,12 @@
  */
 import { ComputerError } from "@/lib/ai/computer/errors";
 import { ComputerAdapterIO } from "@/lib/ai/computer/executor-types";
+import { KiroDocument } from "@/lib/ai/computer/documents/types";
+
+/** V2 Part 2：文档 revision 的 exact 文件快照（runtime-only；绝不定持久化/进模型） */
+export type DocumentFileSnapshot =
+  | { format: "markdown"; text: string }
+  | { format: "docx"; bytes: Uint8Array };
 
 export type ComputerInverseOperation =
   | {
@@ -31,6 +37,17 @@ export type ComputerInverseOperation =
       toPath: string;
       /** V2：直接把 artifactId 放进 runtime checkpoint（Undo 时不需要从 UI 反向猜） */
       artifactId?: string;
+    }
+  | {
+      type: "restore-document-revision";
+      workspaceId: string;
+      rootId: string;
+      relativePath: string;
+      artifactId: string;
+      previousRevision: number;
+      expectedCurrentRevision: number;
+      previousDocument: KiroDocument;
+      snapshot: DocumentFileSnapshot;
     };
 
 export interface ComputerTaskCheckpoint {
@@ -64,6 +81,10 @@ export async function applyInverseToAdapter(io: ComputerAdapterIO, inverse: Comp
   if (inverse.type === "move-back") {
     // 双 root 操作由 useKiroChat Undo orchestration 单独处理；这里防御性拒绝
     throw new ComputerError("VERIFICATION_FAILED", "move-back 需要在 Undo orchestration 中执行");
+  }
+  if (inverse.type === "restore-document-revision") {
+    // revision 恢复需要同步 Artifact metadata + Source Store，由 useKiroChat Undo orchestration 处理
+    throw new ComputerError("VERIFICATION_FAILED", "restore-document-revision 需要在 Undo orchestration 中执行");
   }
   // restore-text：写回 beforeText 并 exact read-back verify
   await io.writeText(inverse.relativePath, inverse.beforeText);

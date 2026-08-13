@@ -87,3 +87,12 @@ export const moveFileSchema = z.object({
   destinationRootId: z.string().trim().min(1).max(120),
   destinationPath: resourcePath,
 });
+
+/** V2 Part 2：update_document —— 模型只提供 artifactId + expectedRevision + Document IR（无路径/adapterRef/bytes） */
+export const updateDocumentSchema = z.object({
+  artifactId: z.string().trim().min(1).max(160),
+  expectedRevision: z.number().int().min(1).max(1_000_000),
+  document: z
+    .unknown()
+    .refine(isKiroDocument, { message: "document 必须是结构化 KiroDocument IR" }),
+});
