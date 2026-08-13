@@ -33,6 +33,7 @@ export function KiroContextBar({
   onRemove,
   compact,
   locked = false,
+  leading,
 }: {
   contexts: KiroContextRef[];
   onRemove: (key: string) => void;
@@ -40,6 +41,8 @@ export function KiroContextBar({
   compact?: boolean;
   /** 当前回复使用已冻结的 Context Snapshot；修改留给下一条消息。 */
   locked?: boolean;
+  /** 前缀 slot：Workspace / Sandbox 等「当前 Kiro 正在处理什么」的轻量指示，与 context 胶囊同一 strip */
+  leading?: React.ReactNode;
 }) {
   const [overflowOpen, setOverflowOpen] = useState(false);
   const overflowBtnRef = useRef<HTMLDivElement | null>(null);
@@ -65,7 +68,7 @@ export function KiroContextBar({
     };
   }, [overflowOpen]);
 
-  if (contexts.length === 0 && !locked) return null;
+  if (contexts.length === 0 && !locked && !leading) return null;
 
   const { visibleAmbient, visibleManual, overflow } = splitKiroContextsForDisplay(contexts, !!compact);
   const allForPopover = [...visibleAmbient, ...visibleManual, ...overflow];
@@ -98,6 +101,8 @@ export function KiroContextBar({
           本轮上下文已锁定 · 回复完成后可为下一条调整
         </p>
       )}
+      {/* Leading：Workspace / Sandbox 指示（先于 ambient/manual context 渲染） */}
+      {leading}
       {/* Ambient Capsule：系统自动环境（弱图标 + 极浅底，稳定存在） */}
       {visibleAmbient.map((c) => {
         const Icon = AMBIENT_KIND_ICONS[c.kind];

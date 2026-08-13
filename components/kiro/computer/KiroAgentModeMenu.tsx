@@ -35,7 +35,8 @@ export function KiroAgentModeMenu({
         <ShieldCheckIcon />
         {MODE_COPY[mode].label}
       </button>
-      <DropdownMenuPanel open={open} placement="bottom-end" aria-label="权限模式" className="w-56 p-1">
+      {/* Composer 位于页面底部 → 向上展开，避免越出 viewport */}
+      <DropdownMenuPanel open={open} placement="top-end" aria-label="权限模式" className="w-56 p-1">
         {(Object.keys(MODE_COPY) as KiroAgentMode[]).map((m) => (
           <div key={m} className="px-1 py-0.5">
             <DropdownMenuItem

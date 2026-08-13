@@ -24,16 +24,29 @@ test("Computer controls：Sandbox 引导 → 状态同步（Composer ↔ Setting
   await computerToggle.click();
   await expect(computerToggle).toHaveAttribute("aria-pressed", "true");
 
-  // 3. Workspace strip 显示 Sandbox
+  // 3. Workspace strip（Context Bar 层）显示 Sandbox
   await expect(composer.getByRole("button", { name: "工作区" })).toBeVisible();
   await expect(composer.getByRole("button", { name: "工作区" })).toContainText("Sandbox");
 
-  // 4. Agent Mode 菜单可见（Computer ON 时）；受控 → 计划
+  // 3b. UX Closeout：Workspace 在 Context Strip（不压缩 Prompt）；textarea 保持稳定输入高度
+  const textarea = composer.getByLabel("Ask Kiro");
+  const textareaBox = await textarea.boundingBox();
+  expect(textareaBox).not.toBeNull();
+  expect(textareaBox!.height).toBeGreaterThanOrEqual(60);
+
+  // 4. Agent Mode 菜单可见（Computer ON 时）；受控 → 计划；菜单向上展开且完整在 viewport 内
   const modeMenu = composer.getByRole("button", { name: "权限模式" });
   await expect(modeMenu).toBeVisible();
   await expect(modeMenu).toContainText("受控");
   await modeMenu.click();
   await expect(page.getByRole("menu", { name: "权限模式" })).toBeVisible();
+  const menuBox = await page.getByRole("menu", { name: "权限模式" }).boundingBox();
+  const triggerBox = await modeMenu.boundingBox();
+  expect(menuBox).not.toBeNull();
+  expect(triggerBox).not.toBeNull();
+  // 向上展开：menu 底 <= trigger 顶（+4 容差），且 menu 完整在 viewport 内
+  expect(menuBox!.y + menuBox!.height).toBeLessThanOrEqual(triggerBox!.y + 4);
+  expect(menuBox!.y).toBeGreaterThanOrEqual(0);
   await page.getByRole("menuitem", { name: /计划/ }).first().click();
   await expect(modeMenu).toContainText("计划");
 
@@ -66,4 +79,16 @@ test("Computer controls：Sandbox 引导 → 状态同步（Composer ↔ Setting
 
   // 9. 普通聊天不受影响：Ask Kiro textarea 可用
   await expect(composer.getByLabel("Ask Kiro")).toBeVisible();
+
+  // 10. Responsive sanity：1100×700 下 Composer/Send 可见，权限菜单仍在 viewport 内
+  await page.setViewportSize({ width: 1100, height: 700 });
+  await page.waitForTimeout(400);
+  await expect(composer).toBeVisible();
+  await expect(composer.getByRole("button", { name: "发送" })).toBeVisible();
+  await modeMenu.click();
+  await expect(page.getByRole("menu", { name: "权限模式" })).toBeVisible();
+  const respBox = await page.getByRole("menu", { name: "权限模式" }).boundingBox();
+  expect(respBox).not.toBeNull();
+  expect(respBox!.y).toBeGreaterThanOrEqual(0);
+  expect(respBox!.y + respBox!.height).toBeLessThanOrEqual(700);
 });

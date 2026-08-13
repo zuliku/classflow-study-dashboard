@@ -44,7 +44,8 @@ export function KiroReasoningMenu({
         <BrainIcon />
         思考 {effort === "default" ? "默认" : EFFORT_LABELS[effort]}
       </button>
-      <DropdownMenuPanel open={open} placement="bottom-end" aria-label="思考程度" className="w-40 p-1">
+      {/* Composer 位于页面底部 → 向上展开，避免越出 viewport */}
+      <DropdownMenuPanel open={open} placement="top-end" aria-label="思考程度" className="w-40 p-1">
         {capability.supportedEfforts.map((e) => (
           <DropdownMenuItem
             key={e}

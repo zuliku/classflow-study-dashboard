@@ -310,12 +310,27 @@ export function KiroComposer({
       )}
 
       <div className="max-w-[820px] mx-auto">
-        {/* Context Bar：Composer 外上方，明确 Kiro 正在使用的数据范围 */}
+        {/* Context Bar：Composer 外上方，明确 Kiro 正在使用的数据范围（Workspace/Sandbox 经 leading slot 同层） */}
         <KiroContextBar
           contexts={contexts}
           onRemove={onRemoveContext}
           compact={compact}
           locked={turnLocked}
+          leading={
+            computerEnabled ? (
+              <>
+                <KiroWorkspacePicker
+                  workspace={workspace ?? null}
+                  isSandbox={workspaceIsSandbox ?? false}
+                  grantWarning={grantWarning ?? null}
+                  disabled={turnLocked}
+                />
+                {grantWarning && (
+                  <span className="text-[9px] font-semibold text-danger truncate">需要重新授权</span>
+                )}
+              </>
+            ) : undefined
+          }
         />
 
         {/* Composer Surface：Attachment Shelf（次级层） + Prompt + Toolbar（主层） */}
@@ -366,20 +381,6 @@ export function KiroComposer({
 
           {/* Prompt + Toolbar：统一内部 gutter，prompt 区保持最干净 */}
           <div className={cn(compact ? "px-2.5 pt-2 pb-2" : "px-3 pt-2.5 pb-2.5")}>
-            {/* Kiro Computer Agent V1：Workspace Strip（上下文区，低噪声）——Computer ON 时显示 */}
-            {computerEnabled && (
-              <div className="flex items-center gap-1.5 pb-1.5 min-w-0">
-                <KiroWorkspacePicker
-                  workspace={workspace ?? null}
-                  isSandbox={workspaceIsSandbox ?? false}
-                  grantWarning={grantWarning ?? null}
-                  disabled={turnLocked}
-                />
-                {grantWarning && (
-                  <span className="text-[9px] font-semibold text-danger truncate">需要重新授权</span>
-                )}
-              </div>
-            )}
             <textarea
               ref={taRef}
               value={text}
@@ -392,7 +393,11 @@ export function KiroComposer({
               rows={1}
               placeholder="Ask Kiro…"
               aria-label="Ask Kiro"
-              className="w-full resize-none bg-transparent text-sm text-charcoal placeholder-sandrift focus:outline-none leading-relaxed"
+              className={cn(
+                "w-full resize-none bg-transparent text-sm text-charcoal placeholder-sandrift focus:outline-none leading-relaxed",
+                // Computer Agent ON：输入区稳定最低高度（desktop 64 / compact 44），不随 context strip 压缩
+                computerEnabled && (compact ? "min-h-[44px]" : "min-h-[64px]")
+              )}
             />
 
             <div className="flex items-center justify-between gap-2 pt-1.5">

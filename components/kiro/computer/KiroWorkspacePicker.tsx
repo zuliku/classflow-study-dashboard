@@ -57,7 +57,7 @@ export function KiroWorkspacePicker({
         aria-label="工作区"
         aria-expanded={open}
         disabled={disabled}
-        className="inline-flex items-center gap-1.5 h-6 pl-2 pr-1.5 rounded-full bg-pastel-mint/55 border border-line-soft text-[10px] font-semibold text-satin-grey hover:bg-pastel-mint/75 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+        className="inline-flex items-center gap-1.5 pl-2 pr-1.5 h-7 rounded-full bg-pastel-mint/55 border border-line-soft text-[11px] font-semibold text-satin-grey hover:bg-pastel-mint/75 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
       >
         {isSandbox ? <SandboxIcon /> : <LocalIcon />}
         <span className="truncate max-w-[140px]">{workspace.name}</span>
