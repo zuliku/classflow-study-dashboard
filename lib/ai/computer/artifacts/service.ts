@@ -14,6 +14,7 @@ import {
 } from "@/lib/ai/computer/artifacts/types";
 import {
   artifactDbAll,
+  artifactDbCommitRevision,
   artifactDbDelete,
   artifactDbGet,
   artifactDbPut,
@@ -22,6 +23,7 @@ import {
   artifactSourcePut,
 } from "@/lib/ai/computer/artifacts/db";
 import { KiroDocument } from "@/lib/ai/computer/documents/types";
+import { ComputerError } from "@/lib/ai/computer/errors";
 
 function newArtifactId(): string {
   return `artifact-${crypto.randomUUID()}`;
@@ -170,4 +172,97 @@ export async function removeArtifactsForWorkspace(workspaceId: string): Promise<
     await artifactSourceDelete(artifact.id);
     await artifactDbDelete(artifact.id);
   }
+}
+
+// ==================== V2 Part 2：Structured Document Revision ====================
+
+export interface EditableArtifactRevisionState {
+  artifact: KiroArtifact;
+  source: KiroArtifactSourceRecord;
+}
+
+/** 结构化文档更新前预检（全部通过才可编辑）：
+ *  artifact 存在 + kiro-created + markdown/docx + Source IR 存在 + source.revision === artifact.revision + expectedRevision 匹配。
+ *  抛 ARTIFACT_NOT_FOUND / ARTIFACT_NOT_EDITABLE / ARTIFACT_REVISION_CONFLICT。
+ */
+export async function getEditableArtifactRevisionState(
+  artifactId: string,
+  expectedRevision: number
+): Promise<EditableArtifactRevisionState> {
+  const artifact = await artifactDbGet(artifactId);
+  if (!artifact) {
+    throw new ComputerError("ARTIFACT_NOT_FOUND", `Artifact 不存在：${artifactId}`);
+  }
+  if (artifact.source !== "kiro-created" || (artifact.type !== "markdown" && artifact.type !== "docx")) {
+    throw new ComputerError("ARTIFACT_NOT_EDITABLE", "只有 Kiro 创建的 Markdown/DOCX Artifact 支持结构化更新");
+  }
+  const source = await artifactSourceGet(artifactId);
+  if (!source) {
+    throw new ComputerError("ARTIFACT_NOT_EDITABLE", "该 Artifact 没有可编辑的结构化文档源");
+  }
+  if (source.revision !== artifact.revision) {
+    throw new ComputerError("ARTIFACT_REVISION_CONFLICT", "Artifact 元数据与文档源版本不一致");
+  }
+  if (expectedRevision !== artifact.revision) {
+    throw new ComputerError(
+      "ARTIFACT_REVISION_CONFLICT",
+      `Artifact 当前版本为 ${artifact.revision}，期望 ${expectedRevision}`
+    );
+  }
+  return { artifact, source };
+}
+
+/** 原子提交新 revision（+1）：artifacts + sources 同事务；乐观锁 expectedRevision 校验 */
+export async function commitArtifactRevision(input: {
+  artifactId: string;
+  expectedRevision: number;
+  document: KiroDocument;
+}): Promise<KiroArtifact> {
+  const { outcome, artifact } = await artifactDbCommitRevision({
+    artifactId: input.artifactId,
+    expectedRevision: input.expectedRevision,
+    artifactPatch: (a) => ({
+      ...a,
+      revision: a.revision + 1,
+      updatedAt: now(),
+    }),
+    sourcePatch: (s) => ({
+      artifactId: s.artifactId,
+      revision: s.revision + 1,
+      document: input.document,
+      updatedAt: now(),
+    }),
+  });
+  if (outcome !== "committed") {
+    throw new ComputerError("VERIFICATION_FAILED", "Artifact revision 提交失败");
+  }
+  return artifact;
+}
+
+/** Undo：恢复到显式旧 revision（仅当当前 revision 等于 expectedCurrentRevision） */
+export async function restoreArtifactRevision(input: {
+  artifactId: string;
+  expectedCurrentRevision: number;
+  revision: number;
+  document: KiroDocument;
+}): Promise<KiroArtifact> {
+  const { outcome, artifact } = await artifactDbCommitRevision({
+    artifactId: input.artifactId,
+    expectedRevision: input.expectedCurrentRevision,
+    artifactPatch: (a) => ({
+      ...a,
+      revision: input.revision,
+      updatedAt: now(),
+    }),
+    sourcePatch: (s) => ({
+      artifactId: s.artifactId,
+      revision: input.revision,
+      document: input.document,
+      updatedAt: now(),
+    }),
+  });
+  if (outcome !== "committed") {
+    throw new ComputerError("VERIFICATION_FAILED", "Artifact revision 恢复失败");
+  }
+  return artifact;
 }

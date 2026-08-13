@@ -20,7 +20,10 @@ export type ComputerErrorCode =
   | "DOCUMENT_RENDER_FAILED"
   | "VERIFICATION_FAILED"
   | "FILE_TOO_LARGE"
-  | "INVALID_INPUT";
+  | "INVALID_INPUT"
+  | "ARTIFACT_NOT_FOUND"
+  | "ARTIFACT_NOT_EDITABLE"
+  | "ARTIFACT_REVISION_CONFLICT";
 
 export class ComputerError extends Error {
   readonly code: ComputerErrorCode;
