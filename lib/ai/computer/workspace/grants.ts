@@ -37,6 +37,7 @@ export interface BrowserFileHandle extends DirectoryHandleLike {
     type: string;
     text: () => Promise<string>;
     arrayBuffer: () => Promise<ArrayBuffer>;
+    slice: (start?: number, end?: number) => { text: () => Promise<string> };
   }>;
   remove: () => Promise<void>;
 }

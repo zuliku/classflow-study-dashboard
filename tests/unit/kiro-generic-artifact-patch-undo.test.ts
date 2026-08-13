@@ -48,6 +48,11 @@ function fakeIo(initial: Record<string, string>): { io: ComputerAdapterIO; write
       files.delete(p);
     },
     move: async () => undefined,
+    readTextPrefix: async (p, maxBytes) => {
+      const t = files.get(p) ?? "";
+      const bytes = new TextEncoder().encode(t).slice(0, maxBytes);
+      return { text: new TextDecoder().decode(bytes), truncated: new TextEncoder().encode(t).byteLength > maxBytes };
+    },
   };
   return { io, writes, text: () => files.get("notes.txt") ?? "" };
 }
