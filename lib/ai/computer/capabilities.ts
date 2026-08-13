@@ -64,7 +64,7 @@ export const AGENT_MODE_DEFAULTS: Record<
 };
 
 /** V1 Hard Deny：无论 Agent Mode / 规则如何都拒绝（未来桌面版单独设计后解除）。 */
-export const HARD_DENY_CAPABILITIES: ReadonlySet<ComputerCapability> = new Set([
+export const HARD_DENY_CAPABILITIES: ReadonlySet<ComputerCapability> = new Set<ComputerCapability>([
   "fs.delete",
   "app.open",
   "app.reveal",
@@ -73,7 +73,7 @@ export const HARD_DENY_CAPABILITIES: ReadonlySet<ComputerCapability> = new Set([
 ]);
 
 /** V1 允许模型使用的 capability（Part 1 不暴露任何 Computer File Tools 给模型，但 policy 引擎预置全部）。 */
-export const MUTATION_CAPABILITIES: ReadonlySet<ComputerCapability> = new Set([
+export const MUTATION_CAPABILITIES: ReadonlySet<ComputerCapability> = new Set<ComputerCapability>([
   "fs.create",
   "fs.modify",
   "fs.move",
