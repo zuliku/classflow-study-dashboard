@@ -151,6 +151,7 @@ export function KiroMessage({
                   </button>
                   {more.open && (
                     <KiroMenuPanel
+                      open={more.open}
                       placement="top-end"
                       className={moreView === "sources" ? "w-[280px]" : undefined}
                     >

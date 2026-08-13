@@ -27,7 +27,7 @@ import {
 } from "lucide-react";
 import { useAppStore } from "@/store/useAppStore";
 import { useToastStore } from "@/store/useToastStore";
-import { Priority, AssignmentStatus, Material } from "@/types";
+import { Priority, AssignmentStatus, Material, Assignment } from "@/types";
 import { format } from "date-fns";
 import { zhCN } from "date-fns/locale";
 import { parseLocalDDL } from "@/lib/ddl";
@@ -115,7 +115,13 @@ export function AssignmentDrawer() {
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-  const assignment = assignments.find((a) => a.id === selectedAssignmentId);
+  const currentAssignment = assignments.find((a) => a.id === selectedAssignmentId);
+  // 关闭（selected 清空）期间保留最后一次内容渲染，让 Drawer exit presence 生效
+  const [staleAssignment, setStaleAssignment] = useState<Assignment | null>(null);
+  const assignment = currentAssignment ?? staleAssignment;
+  useEffect(() => {
+    if (currentAssignment) setStaleAssignment(currentAssignment);
+  }, [currentAssignment?.id]);
 
   if (!assignment) return null;
 
@@ -247,7 +253,7 @@ export function AssignmentDrawer() {
 
   return (
     <Drawer
-      open={!!assignment}
+      open={!!currentAssignment}
       onOpenChange={(next) => {
         if (!next) setSelectedAssignmentId(null);
       }}
@@ -504,29 +510,27 @@ export function AssignmentDrawer() {
                     )}
                     {uploading ? "上传中…" : "添加资料"}
                   </Button>
-                  {addMenuOpen && (
-                    <DropdownMenuPanel placement="bottom-end" aria-label="添加资料" className="w-48">
-                      <DropdownMenuItem
-                        icon={BookOpen}
-                        label="选择课程资料"
-                        onClick={() => {
-                          setAddMenuOpen(false);
-                          setMaterialPickerOpen((v) => !v);
-                        }}
-                      />
-                      <DropdownMenuItem
-                        icon={Upload}
-                        label="上传文件"
-                        onClick={() => {
-                          setAddMenuOpen(false);
-                          fileInputRef.current?.click();
-                        }}
-                      />
-                      <p className="px-2.5 pt-1 pb-1.5 text-[9px] text-sandrift">
-                        上传后自动关联本任务（同时出现在课程资料）
-                      </p>
-                    </DropdownMenuPanel>
-                  )}
+                  <DropdownMenuPanel open={addMenuOpen} placement="bottom-end" aria-label="添加资料" className="w-48">
+                    <DropdownMenuItem
+                      icon={BookOpen}
+                      label="选择课程资料"
+                      onClick={() => {
+                        setAddMenuOpen(false);
+                        setMaterialPickerOpen((v) => !v);
+                      }}
+                    />
+                    <DropdownMenuItem
+                      icon={Upload}
+                      label="上传文件"
+                      onClick={() => {
+                        setAddMenuOpen(false);
+                        fileInputRef.current?.click();
+                      }}
+                    />
+                    <p className="px-2.5 pt-1 pb-1.5 text-[9px] text-sandrift">
+                      上传后自动关联本任务（同时出现在课程资料）
+                    </p>
+                  </DropdownMenuPanel>
                   <input
                     ref={fileInputRef}
                     type="file"

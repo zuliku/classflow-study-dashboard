@@ -28,7 +28,7 @@ export function Dialog({
   onOpenChange,
   overlayId,
   stackZ = 50,
-  exitMs = 220,
+  exitMs = 190,
   closeOnBackdrop = false,
   onEscapeKeyDown,
   overlayClassName,
@@ -56,7 +56,10 @@ export function Dialog({
           aria-modal="true"
           className={cn(
             "w-full max-w-md bg-surface border border-line rounded-2xl shadow-drawer overflow-hidden ux-modal-panel",
-            visible ? "opacity-100 scale-100 translate-y-0" : "opacity-0 scale-[0.985] translate-y-1",
+            // enter ≈200ms（scale 0.985 + 4px 上移）；exit ≈150ms（scale 0.99 + 2px），exit < enter
+            visible
+              ? "opacity-100 scale-100 translate-y-0 !duration-[200ms]"
+              : "opacity-0 scale-[0.99] translate-y-0.5 !duration-[150ms]",
             className
           )}
           {...props}

@@ -46,15 +46,17 @@ export function useKiroPopover() {
 
 export function KiroMenuPanel({
   placement = "bottom-end",
+  open,
   className,
   children,
 }: {
   placement?: "bottom-end" | "top-end" | "right-end";
+  open?: boolean;
   className?: string;
   children: React.ReactNode;
 }) {
   return (
-    <DropdownMenuPanel placement={placement} className={className}>
+    <DropdownMenuPanel open={open} placement={placement} className={className}>
       {children}
     </DropdownMenuPanel>
   );

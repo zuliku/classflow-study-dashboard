@@ -167,9 +167,9 @@ button:disabled {
 
 /* 统一过渡与动效工具类 */
 @layer utilities {
-  /* 遮罩：仅透明度过渡 */
+  /* 遮罩：仅透明度过渡（介于 panel enter/exit 之间，不拖尾） */
   .ux-overlay {
-    transition: opacity var(--motion-panel) var(--ease-standard);
+    transition: opacity var(--motion-base) var(--ease-standard);
   }
 
   /* Drawer 面板：右侧滑入 + 透明度 */

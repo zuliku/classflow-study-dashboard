@@ -171,7 +171,7 @@ export function KiroThreadRail() {
   };
 
   const moreMenu = (placement: "top-end" | "right-end") => (
-    <KiroMenuPanel placement={placement} className="w-[220px]">
+    <KiroMenuPanel open={moreOpen} placement={placement} className="w-[220px]">
       <KiroMenuItem icon={Copy} label="复制全部对话" disabled={!hasMessages} onClick={copyAll} />
       <KiroMenuItem icon={FileDown} label="导出 Markdown" disabled={!hasMessages} onClick={exportMarkdown} />
       <KiroMenuDivider />
@@ -258,7 +258,7 @@ export function KiroThreadRail() {
             >
               <MoreHorizontal className="w-4 h-4" />
             </button>
-            {moreOpen && moreMenu('right-end')}
+            {moreMenu('right-end')}
           </div>
         </div>
       ) : (
@@ -349,7 +349,7 @@ export function KiroThreadRail() {
               >
                 <MoreHorizontal className="w-4 h-4" />
               </button>
-              {moreOpen && moreMenu('top-end')}
+              {moreMenu('top-end')}
             </div>
           </div>
         </div>

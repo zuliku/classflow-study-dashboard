@@ -20,7 +20,7 @@ import {
 import { useAppStore } from "@/store/useAppStore";
 import { useToastStore } from "@/store/useToastStore";
 import { useConfirmStore } from "@/store/useConfirmStore";
-import { Material, CourseSchedule, ScheduleConflict } from "@/types";
+import { Material, CourseSchedule, ScheduleConflict, Course } from "@/types";
 import { deleteFileBlob } from "@/lib/fileStorage";
 import { uploadCourseMaterials } from "@/lib/materialUpload";
 import { getLocalDDLDate } from "@/lib/ddl";
@@ -128,7 +128,13 @@ export function CourseDetailDrawer() {
   const [slotError, setSlotError] = useState<string | null>(null);
   const [slotConflict, setSlotConflict] = useState<string | null>(null);
 
-  const course = courses.find((c) => c.id === selectedCourseId);
+  const currentCourse = courses.find((c) => c.id === selectedCourseId);
+  // 关闭（selected 清空）期间保留最后一次内容渲染，让 Drawer exit presence 生效
+  const [staleCourse, setStaleCourse] = useState<Course | null>(null);
+  const course = currentCourse ?? staleCourse;
+  useEffect(() => {
+    if (currentCourse) setStaleCourse(currentCourse);
+  }, [currentCourse?.id]);
   const courseSchedules = schedules.filter((s) => s.courseId === selectedCourseId);
   const courseAssignments = assignments.filter((a) => a.courseId === selectedCourseId);
 
@@ -395,7 +401,7 @@ export function CourseDetailDrawer() {
 
   return (
     <Drawer
-      open={!!course}
+      open={!!currentCourse}
       onOpenChange={(next) => {
         if (!next) setSelectedCourseId(null);
       }}

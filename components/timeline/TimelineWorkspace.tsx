@@ -427,13 +427,13 @@ export function TimelineWorkspace() {
             >
               <SlidersHorizontal className="w-4 h-4" />
             </IconButton>
-            {filterOpen && (
-              <PopoverPanel
-                placement="bottom-end"
-                role="group"
-                aria-label="时间表筛选"
-                className="w-44 p-1.5 space-y-0.5"
-              >
+            <PopoverPanel
+              open={filterOpen}
+              placement="bottom-end"
+              role="group"
+              aria-label="时间表筛选"
+              className="w-44 p-1.5 space-y-0.5"
+            >
                 <p className="px-1.5 pb-1 text-[10px] font-bold text-sandrift">显示</p>
                 <FilterToggle label="课程" checked disabled hint="时间表骨架，恒显示" />
                 <FilterToggle
@@ -462,7 +462,6 @@ export function TimelineWorkspace() {
                   onChange={(v) => setFilters((f) => ({ ...f, group: v }))}
                 />
               </PopoverPanel>
-            )}
           </Popover>
 
           {/* Quick Create +（主 Create Action）→ DropdownMenu */}
@@ -477,8 +476,7 @@ export function TimelineWorkspace() {
             >
               <Plus className="w-4 h-4" />
             </IconButton>
-            {quickOpen && (
-              <DropdownMenuPanel placement="bottom-end" aria-label="新建" className="w-52">
+            <DropdownMenuPanel open={quickOpen} placement="bottom-end" aria-label="新建" className="w-52">
                 <DropdownMenuItem
                   icon={GraduationCap}
                   label="新建课程"
@@ -503,7 +501,6 @@ export function TimelineWorkspace() {
                   onClick={() => { setQuickOpen(false); setMarkOpen(true); }}
                 />
               </DropdownMenuPanel>
-            )}
           </Popover>
 
           {/* Ask Kiro（Secondary Featured，与 Create 组间隔 6px） */}
@@ -526,8 +523,7 @@ export function TimelineWorkspace() {
             >
               <MoreHorizontal className="w-4 h-4" />
             </IconButton>
-            {moreOpen && (
-              <DropdownMenuPanel placement="bottom-end" aria-label="更多操作">
+            <DropdownMenuPanel open={moreOpen} placement="bottom-end" aria-label="更多操作">
                 <DropdownMenuItem
                   icon={FileUp}
                   label="导入课表"
@@ -549,7 +545,6 @@ export function TimelineWorkspace() {
                   }}
                 />
               </DropdownMenuPanel>
-            )}
           </Popover>
         </div>
       </div>

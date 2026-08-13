@@ -85,8 +85,8 @@ export function KiroSessionActions({
         >
           <Share2 className="w-4 h-4" />
         </button>
-        {share.open && (
-          <KiroMenuPanel placement="bottom-end" className="w-[290px] p-3">
+          {share.open && (
+            <KiroMenuPanel open={share.open} placement="bottom-end" className="w-[290px] p-3">
             <KiroShareSheet onClose={share.close} />
           </KiroMenuPanel>
         )}
@@ -103,8 +103,8 @@ export function KiroSessionActions({
         >
           <MoreHorizontal className="w-4 h-4" />
         </button>
-        {more.open && (
-          <KiroMenuPanel placement="bottom-end">
+          {more.open && (
+            <KiroMenuPanel open={more.open} placement="bottom-end">
             {variant === "workspace" ? (
               <>
                 {/* 新对话 / 历史记录由 Thread Rail 承担；移动端（<md）保留历史 Sheet 入口 */}

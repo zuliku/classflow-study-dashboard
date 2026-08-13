@@ -27,7 +27,7 @@ export function Drawer({
   onOpenChange,
   overlayId,
   stackZ = 40,
-  exitMs = 260,
+  exitMs = 200,
   closeOnBackdrop = false,
   onEscapeKeyDown,
   overlayClassName,
@@ -52,7 +52,10 @@ export function Drawer({
           aria-modal="true"
           className={cn(
             "h-full w-full bg-surface shadow-drawer border-l border-line flex flex-col overflow-hidden ux-drawer-panel",
-            visible ? "translate-x-0 opacity-100" : "translate-x-8 opacity-0",
+            // 右侧来源感：enter ≈220ms（12px 位移）；exit ≈160ms（更快），不像是从屏幕外飞入
+            visible
+              ? "translate-x-0 opacity-100 !duration-[220ms]"
+              : "translate-x-3 opacity-0 !duration-[160ms]",
             className
           )}
           {...props}

@@ -7,6 +7,7 @@ import { useReminderCenterStore } from "@/store/useReminderCenterStore";
 import { NavTab } from "@/types";
 import { cn } from "@/lib/utils";
 import { KiroFlowIcon } from "@/components/kiro/KiroFlow";
+import { DropdownMenuPanel } from "@/components/ui/DropdownMenu";
 import {
   BOTTOM_NAV_MAIN,
   BOTTOM_NAV_MORE,
@@ -113,14 +114,12 @@ export function BottomNav() {
         </button>
       </div>
 
-      {/* 更多菜单 */}
-      <div
-        className={cn(
-          "absolute bottom-full right-3 mb-2 w-44 bg-surface border border-line rounded-2xl shadow-card p-1.5 ux-inline",
-          moreOpen ? "opacity-100 translate-y-0" : "opacity-0 translate-y-1 pointer-events-none"
-        )}
+      {/* 更多菜单：共享 DropdownMenuPanel surface（presence + 向上轻 reveal：translateY 3px） */}
+      <DropdownMenuPanel
+        open={moreOpen}
+        placement="top-end"
         role="menu"
-        hidden={!moreOpen}
+        className="w-44 min-w-0 right-3 mb-2 p-1.5"
       >
         {BOTTOM_NAV_MORE.map((item) => {
           const Icon = item.icon;
@@ -144,7 +143,7 @@ export function BottomNav() {
             </button>
           );
         })}
-      </div>
+      </DropdownMenuPanel>
     </nav>
   );
 }
