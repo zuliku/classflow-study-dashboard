@@ -70,7 +70,14 @@ import { KiroArtifact } from "@/lib/ai/computer/artifacts/types";
 import { DocumentFileSnapshot } from "@/lib/ai/computer/checkpoints";
 import { relocateFile } from "@/lib/ai/computer/filesystem/relocate";
 import { GENERIC_ARTIFACT_PATCH_UNDO_LIMIT_BYTES } from "@/lib/ai/computer/genericArtifactPatchUndo";
-import { markWorkspaceKnowledgeDirty } from "@/lib/ai/computer/knowledge/service";
+import { markWorkspaceKnowledgeDirty, refreshWorkspaceKnowledge, getWorkspaceKnowledgeStatus, queryWorkspaceKnowledge } from "@/lib/ai/computer/knowledge/service";
+import {
+  KIRO_KNOWLEDGE_SEARCH_DEFAULT_RESULTS,
+  KIRO_KNOWLEDGE_SEARCH_MAX_RESULTS,
+  KiroKnowledgeContentType,
+  KiroKnowledgeIndexState,
+  KiroKnowledgeSearchResult,
+} from "@/lib/ai/computer/knowledge/types";
 import { KiroComputerChange } from "@/lib/ai/computer/task";
 import { ComputerInverseOperation } from "@/lib/ai/computer/checkpoints";
 
@@ -212,6 +219,200 @@ export async function executeKiroComputerTool(request: {
             workspaceId: ws.id,
             workspaceLabel: ws.name,
             roots: ws.roots.map((r) => ({ id: r.id, label: r.label, access: r.access })),
+          },
+        },
+      };
+    }
+
+    // ---- V3 Part 1：search_workspace_knowledge（multi-root read tool；专用 branch）----
+    if (toolName === "search_workspace_knowledge") {
+      const query = String(args.query);
+      const maxResults = args.maxResults === undefined ? KIRO_KNOWLEDGE_SEARCH_DEFAULT_RESULTS : Number(args.maxResults);
+      // 1. requested roots（缺省 = frozen snapshot roots 顺序）；必须同时存在于 frozen snapshot 与 live Workspace
+      const requestedRootIds =
+        Array.isArray(args.rootIds) && args.rootIds.length > 0
+          ? (args.rootIds as string[])
+          : turnSnapshot.roots.map((r) => r.id);
+      for (const rootId of requestedRootIds) {
+        const inSnapshot = turnSnapshot.roots.some((r) => r.id === rootId);
+        const inLive = ws.roots.some((r) => r.id === rootId);
+        if (!inSnapshot || !inLive) {
+          return {
+            kind: "completed",
+            output: { ok: false, code: "ROOT_NOT_FOUND", message: `知识索引 root 不存在：${rootId}` },
+          };
+        }
+      }
+      // 2-6. 每个 requested root 评估当前 fs.search policy（root scope "."）
+      for (const rootId of requestedRootIds) {
+        const policy = prepareComputerTool({
+          mode: turnSnapshot.agentMode,
+          rules: livePermissionRules,
+          workspace: ws,
+          capability: "fs.search",
+          resource: { workspaceId: ws.id, rootId, path: "" },
+        });
+        if (policy.effect === "deny") {
+          return {
+            kind: "completed",
+            output: { ok: false, code: "PERMISSION_DENIED", message: policy.reason },
+          };
+        }
+        if (policy.effect === "ask") {
+          const matchedOneShot =
+            oneShotApprovals && oneShotApprovals.length > 0
+              ? oneShotApprovals.findIndex((o) =>
+                  oneShotApprovalMatches(o, {
+                    toolCallId,
+                    capability: "fs.search",
+                    workspaceId: ws.id,
+                    rootId,
+                    relativePath: "",
+                  })
+                )
+              : -1;
+          if (matchedOneShot === -1) {
+            return {
+              kind: "approval-required",
+              request: buildApprovalRequest({
+                id: newApprovalId(),
+                toolCallId,
+                taskId: context.taskId ?? "",
+                capability: "fs.search",
+                workspaceId: ws.id,
+                workspaceLabel: ws.name,
+                rootId,
+                rootLabel: ws.roots.find((r) => r.id === rootId)?.label ?? rootId,
+                relativePath: "",
+                resourceLabel: ws.roots.find((r) => r.id === rootId)?.label ?? rootId,
+                description: `搜索工作区知识（root: ${rootId}）`,
+              }),
+            };
+          }
+          oneShotApprovals!.splice(matchedOneShot, 1);
+        }
+      }
+
+      // 真正开始执行搜索：readCount 恰好 +1（内部 refresh/扫描不额外计数）
+      counters.readCount += 1;
+
+      // 7-8. 首次无索引 → bounded initial refresh；dirty → bounded incremental refresh
+      const state = await getWorkspaceKnowledgeStatus(ws.id);
+      let indexState: KiroKnowledgeIndexState;
+      let partial = false;
+      if (!state) {
+        try {
+          const refreshed = await refreshWorkspaceKnowledge({
+            workspace: ws,
+            mode: "incremental",
+            agentMode: turnSnapshot.agentMode,
+            permissionRules: livePermissionRules,
+            getAdapter: getComputerAdapterForAdapterRef,
+          });
+          indexState = refreshed.partial ? "partial" : "ready";
+          partial = refreshed.partial;
+        } catch {
+          indexState = "unavailable";
+        }
+      } else {
+        if (state.dirty) {
+          try {
+            const refreshed = await refreshWorkspaceKnowledge({
+              workspace: ws,
+              mode: "incremental",
+              agentMode: turnSnapshot.agentMode,
+              permissionRules: livePermissionRules,
+              getAdapter: getComputerAdapterForAdapterRef,
+            });
+            indexState = refreshed.partial ? "partial" : "ready";
+            partial = refreshed.partial;
+          } catch {
+            indexState = "stale"; // 有旧缓存
+          }
+        } else {
+          indexState = state.partial ? "partial" : "ready";
+          partial = state.partial;
+        }
+      }
+
+      // 9. 本地查询
+      let candidates: Array<{ result: KiroKnowledgeSearchResult; metadataScore: number; contentScore: number; snippet?: string }>;
+      try {
+        const scored = await queryWorkspaceKnowledge({
+          workspaceId: ws.id,
+          query,
+          rootIds: requestedRootIds,
+          maxResults: KIRO_KNOWLEDGE_SEARCH_MAX_RESULTS,
+        });
+        candidates = scored;
+      } catch {
+        candidates = [];
+        if (indexState === "ready" || indexState === "partial") indexState = "stale";
+      }
+      if (indexState === "unavailable" && candidates.length === 0) {
+        return {
+          kind: "completed",
+          output: { ok: false, code: "UNSUPPORTED_BROWSER", message: "知识索引暂不可用" },
+        };
+      }
+
+      // 10. current-access filtering：每个候选重新计算 exact-file fs.read
+      const results: Array<{
+        rootId: string;
+        path: string;
+        title?: string;
+        type: KiroKnowledgeContentType;
+        snippet?: string;
+        score: number;
+        matchReasons: string[];
+      }> = [];
+      for (const candidate of candidates) {
+        const root = ws.roots.find((r) => r.id === candidate.result.rootId);
+        if (!root) continue;
+        const readPolicy = prepareComputerTool({
+          mode: turnSnapshot.agentMode,
+          rules: livePermissionRules,
+          workspace: ws,
+          capability: "fs.read",
+          resource: { workspaceId: ws.id, rootId: root.id, path: candidate.result.path },
+        });
+        if (readPolicy.effect === "allow") {
+          results.push({
+            rootId: candidate.result.rootId,
+            path: candidate.result.path,
+            title: candidate.result.title,
+            type: candidate.result.type,
+            snippet: candidate.snippet,
+            score: candidate.metadataScore + candidate.contentScore,
+            matchReasons: candidate.result.matchReasons,
+          });
+        } else {
+          // ask/deny：去掉正文 evidence；仅 metadataScore
+          const metadataReasons = candidate.result.matchReasons.filter(
+            (r) => r === "filename" || r === "path" || r === "title"
+          );
+          if (candidate.metadataScore <= 0 || metadataReasons.length === 0) continue; // 隐藏正文匹配不泄露
+          results.push({
+            rootId: candidate.result.rootId,
+            path: candidate.result.path,
+            title: candidate.result.title,
+            type: candidate.result.type,
+            snippet: undefined,
+            score: candidate.metadataScore,
+            matchReasons: metadataReasons,
+          });
+        }
+        if (results.length >= Math.min(maxResults, KIRO_KNOWLEDGE_SEARCH_MAX_RESULTS)) break;
+      }
+
+      return {
+        kind: "completed",
+        output: {
+          ok: true,
+          data: {
+            results,
+            indexState,
+            partial,
           },
         },
       };

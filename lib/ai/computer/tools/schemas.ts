@@ -96,3 +96,10 @@ export const updateDocumentSchema = z.object({
     .unknown()
     .refine(isKiroDocument, { message: "document 必须是结构化 KiroDocument IR" }),
 });
+
+/** V3 Part 1：search_workspace_knowledge —— 本地知识索引候选搜索（正文结论仍需实时读取） */
+export const searchWorkspaceKnowledgeSchema = z.object({
+  query: z.string().trim().min(1).max(200),
+  rootIds: z.array(z.string().trim().min(1).max(120)).min(1).max(32).optional(),
+  maxResults: z.number().int().min(1).max(50).optional(),
+});

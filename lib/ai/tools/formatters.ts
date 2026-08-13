@@ -6,8 +6,7 @@
 export const KIRO_TOOL_LABELS: Record<string, string> = {
   // Read
   get_current_context: "读取当前上下文",
-  get_user_study_profile: "读取学习信息",
-  search_courses: "查找课程",
+  get_user_study_profile: "读取学习信息",  search_courses: "查找课程",
   get_course: "读取课程信息",
   get_week_schedule: "查看课表",
   search_assignments: "查找任务",
@@ -23,6 +22,7 @@ export const KIRO_TOOL_LABELS: Record<string, string> = {
   get_calendar_range: "查看日历",
   get_material_metadata: "查看课程资料",
   read_material: "读取资料正文",
+  search_workspace_knowledge: "搜索工作区知识",
   list_reminders: "查看提醒",
   // Write
   create_assignment: "创建任务",

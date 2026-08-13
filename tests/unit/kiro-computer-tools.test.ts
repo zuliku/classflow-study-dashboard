@@ -9,6 +9,7 @@ import { ComputerExecutionAttempt } from "@/lib/ai/computer/result";
 import { ComputerOneShotApproval } from "@/lib/ai/computer/approval";
 import { sandboxDelete, sandboxWriteText, sandboxListDirectory } from "@/lib/ai/computer/adapters/sandbox";
 import { registerCreatedArtifact, adoptWorkspaceArtifact, getArtifact, getArtifactSource } from "@/lib/ai/computer/artifacts/service";
+import { clearWorkspaceKnowledge } from "@/lib/ai/computer/knowledge/db";
 import { KiroDocument } from "@/lib/ai/computer/documents/types";
 import { COMPUTER_DOCUMENT_REVISION_LIMIT_BYTES } from "@/lib/ai/computer/executor";
 
@@ -72,6 +73,8 @@ async function clean() {
   for (const item of await sandboxListDirectory(SANDBOX_REF, "")) {
     await sandboxDelete(SANDBOX_REF, item.name);
   }
+  // V3 Part 1：knowledge 索引测试隔离
+  await clearWorkspaceKnowledge("research");
 }
 
 beforeEach(async () => {
@@ -105,8 +108,9 @@ describe("tool exposure", () => {
     expect(names).toContain("rename_file");
     expect(names).toContain("move_file");
     expect(names).toContain("update_document");
+    expect(names).toContain("search_workspace_knowledge");
     // Model schema 绝不能加入权限相关参数
-    expect(names.length).toBe(14);
+    expect(names.length).toBe(15);
   });
 
   it("update_document 权限模式：Plan 不暴露 / Guided ask / Workspace Auto allow", () => {
@@ -912,5 +916,101 @@ describe("patch Undo byte boundary（V2 closeout：UTF-8 bytes 而非字符数�
     if (attempt.kind !== "completed") return;
     expect(attempt.output.ok).toBe(true);
     expect(attempt.runtime?.inverse).toBeUndefined();
+  });
+});
+
+describe("search_workspace_knowledge（V3 Part 1）", () => {
+  it("is a read tool in all modes", () => {
+    for (const mode of ["plan", "guided", "workspace-auto"] as const) {
+      const def = getComputerToolsForMode(mode).find((t) => t.name === "search_workspace_knowledge");
+      expect(def?.mutation).toBe(false);
+      expect(def?.capability).toBe("fs.search");
+    }
+  });
+
+  it("consumes exactly one read count; invalid root rejected before scan", async () => {
+    const c = counters();
+    const bad = await executeKiroComputerTool({
+      toolName: "search_workspace_knowledge",
+      toolCallId: "call-knowledge-bad",
+      toolInput: { query: "研究方法", rootIds: ["missing-root"] },
+      context: ctx(AUTO_SNAPSHOT),
+      counters: c,
+    });
+    expect(bad.kind).toBe("completed");
+    if (bad.kind !== "completed") return;
+    expect(bad.output.ok).toBe(false);
+    expect((bad.output as { code: string }).code).toBe("ROOT_NOT_FOUND");
+    expect(c.readCount).toBe(0);
+    expect(c.mutationCount).toBe(0);
+
+    // 正常执行（无索引 → initial refresh）
+    const ok = await executeKiroComputerTool({
+      toolName: "search_workspace_knowledge",
+      toolCallId: "call-knowledge-ok",
+      toolInput: { query: "研究方法", maxResults: 5 },
+      context: ctx(AUTO_SNAPSHOT),
+      counters: c,
+    });
+    expect(ok.kind).toBe("completed");
+    if (ok.kind !== "completed") return;
+    expect(ok.output.ok).toBe(true);
+    expect(c.readCount).toBe(1);
+    expect(c.mutationCount).toBe(0);
+  });
+
+  it("returns candidates only with indexState; no adapterRef/native path/bytes", async () => {
+    await sandboxWriteText(SANDBOX_REF, "research/method.md", "研究方法采用事件研究，并进行平行趋势检验。");
+    const c = counters();
+    const attempt = await executeKiroComputerTool({
+      toolName: "search_workspace_knowledge",
+      toolCallId: "call-knowledge-q",
+      toolInput: { query: "研究方法" },
+      context: ctx(AUTO_SNAPSHOT),
+      counters: c,
+    });
+    expect(attempt.kind).toBe("completed");
+    if (attempt.kind !== "completed") return;
+    const data = (attempt.output as { data: { results: unknown[]; indexState: string } }).data;
+    console.log("DBG KQ", JSON.stringify(data));
+    expect(data.indexState).toBe("ready");
+    expect(data.results.length).toBeGreaterThan(0);
+    const serialized = JSON.stringify(data);
+    for (const forbidden of ["adapterRef", "nativePath", "FileSystemDirectoryHandle", "bytes"]) {
+      expect(serialized).not.toContain(forbidden);
+    }
+  });
+
+  it("fs.read deny strips content evidence; content-only matches dropped", async () => {
+    await sandboxWriteText(SANDBOX_REF, "research/method.md", "研究方法采用事件研究。");
+    // resourcePattern 精确匹配目标文件：fs.search(root scope) 仍 allow，fs.read(该文件) deny
+    const denyRead: ComputerPermissionRule = {
+      id: "deny-read-k",
+      effect: "deny",
+      capability: "fs.read",
+      workspaceId: "research",
+      rootId: "output",
+      resourcePattern: "research/method.md",
+      scope: "persistent",
+    };
+    const c = counters();
+    const attempt = await executeKiroComputerTool({
+      toolName: "search_workspace_knowledge",
+      toolCallId: "call-knowledge-deny",
+      toolInput: { query: "研究方法" },
+      context: ctx(AUTO_SNAPSHOT, workspace, [denyRead]),
+      counters: c,
+    });
+    expect(attempt.kind).toBe("completed");
+    if (attempt.kind !== "completed") return;
+    console.log("DBG DENY", JSON.stringify(attempt.output));
+    const data = (attempt.output as { data: { results: { snippet?: string; matchReasons: string[] }[] } }).data;
+    // content-only 候选被完全移除（不泄露正文匹配）；允许的候选也可能带 snippet，但必须无正文 reason
+    expect(data.results.length).toBe(0);
+    for (const r of data.results) {
+      expect(r.snippet).toBeUndefined();
+      expect(r.matchReasons).not.toContain("phrase");
+      expect(r.matchReasons).not.toContain("content-token");
+    }
   });
 });

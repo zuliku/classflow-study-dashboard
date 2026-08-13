@@ -15,6 +15,7 @@ import {
   renameFileSchema,
   moveFileSchema,
   updateDocumentSchema,
+  searchWorkspaceKnowledgeSchema,
 } from "@/lib/ai/computer/tools/schemas";
 
 export interface ComputerToolDefinition {
@@ -52,6 +53,13 @@ export const COMPUTER_READ_TOOLS: ComputerToolDefinition[] = [
     name: "grep_files",
     description: "在工作区文本文件中进行精确文本搜索（非正则）。",
     schema: grepFilesSchema,
+    capability: "fs.search",
+    mutation: false,
+  },
+  {
+    name: "search_workspace_knowledge",
+    description: "在当前 Workspace 的本地知识索引中搜索相关文件候选；正文结论仍需实时读取文件确认。",
+    schema: searchWorkspaceKnowledgeSchema,
     capability: "fs.search",
     mutation: false,
   },
