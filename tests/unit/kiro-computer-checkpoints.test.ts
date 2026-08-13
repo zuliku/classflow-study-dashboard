@@ -11,7 +11,9 @@ import { getComputerAdapterForAdapterRef, executeKiroComputerTool } from "@/lib/
 import { KiroComputerTurnSnapshot } from "@/lib/ai/contextBudget/types";
 import { KiroWorkspaceMeta } from "@/lib/ai/computer/types";
 import { ComputerError } from "@/lib/ai/computer/errors";
-import { sandboxListDirectory, sandboxReadText, sandboxDelete } from "@/lib/ai/computer/adapters/sandbox";
+import { sandboxListDirectory, sandboxReadText, sandboxWriteText, sandboxDelete } from "@/lib/ai/computer/adapters/sandbox";
+import { registerCreatedArtifact, getArtifact, getArtifactSource } from "@/lib/ai/computer/artifacts/service";
+import { KiroDocument } from "@/lib/ai/computer/documents/types";
 
 const SANDBOX_REF = "sandbox-checkpoint-ref";
 
@@ -201,5 +203,73 @@ describe("checkpoint semantics", () => {
     await applyInverseToAdapter(await io(), inverse);
     // writeText 写入了 beforeText 且 read-back exact → 通过
     expect(await sandboxReadText(SANDBOX_REF, "v.md")).toBe("expected-restored");
+  });
+});
+
+describe("restore-document-revision（V2 Part 2）", () => {
+  const IR_V1: KiroDocument = {
+    title: "研究方案",
+    blocks: [
+      { type: "heading", level: 1, content: [{ text: "引言" }] },
+      { type: "paragraph", content: [{ text: "版本一" }] },
+    ],
+  };
+  const IR_V2: KiroDocument = {
+    title: "研究方案",
+    blocks: [
+      { type: "heading", level: 1, content: [{ text: "引言" }] },
+      { type: "paragraph", content: [{ text: "版本二" }] },
+    ],
+  };
+
+  it("Markdown v2 → Undo 恢复 exact v1 文本 + Source IR + revision 1", async () => {
+    const c = counters();
+    const attempt = await runTool("create_document", { path: "plan.md", document: IR_V1 }, c);
+    if (attempt.kind !== "completed" || !attempt.runtime?.change.artifactId) return;
+    const artifactId = attempt.runtime.change.artifactId;
+
+    const update = await runTool("update_document", { artifactId, expectedRevision: 1, document: IR_V2 }, c);
+    expect(update.kind).toBe("completed");
+    if (update.kind !== "completed" || !update.runtime?.inverse) return;
+    const inverse = update.runtime.inverse;
+    expect(inverse.type).toBe("restore-document-revision");
+    if (inverse.type !== "restore-document-revision") return;
+    expect(inverse.snapshot.format).toBe("markdown");
+    expect(inverse.previousRevision).toBe(1);
+    expect(inverse.expectedCurrentRevision).toBe(2);
+
+    // 手动执行与 useKiroChat 相同的 Undo 语义：恢复文件 + 原子恢复 registry/source
+    const { restoreArtifactRevision } = await import("@/lib/ai/computer/artifacts/service");
+    const v1Markdown = inverse.snapshot.format === "markdown" ? inverse.snapshot.text : "";
+    await sandboxWriteText(SANDBOX_REF, "plan.md", v1Markdown);
+    expect(await sandboxReadText(SANDBOX_REF, "plan.md")).toBe(v1Markdown);
+    await restoreArtifactRevision({
+      artifactId,
+      expectedCurrentRevision: inverse.expectedCurrentRevision,
+      revision: inverse.previousRevision,
+      document: inverse.previousDocument,
+    });
+    const artifact = await getArtifact(artifactId);
+    expect(artifact?.revision).toBe(1);
+    const source = await getArtifactSource(artifactId);
+    expect(source?.revision).toBe(1);
+    expect(source?.document.blocks[1]).toEqual(IR_V1.blocks[1]);
+  });
+
+  it("stale revision 外部变更 → Undo 拒绝（不覆盖较新版本）", async () => {
+    const c = counters();
+    const attempt = await runTool("create_document", { path: "plan.md", document: IR_V1 }, c);
+    if (attempt.kind !== "completed" || !attempt.runtime?.change.artifactId) return;
+    const artifactId = attempt.runtime.change.artifactId;
+    await runTool("update_document", { artifactId, expectedRevision: 1, document: IR_V2 }, c);
+    // 外部又更新到 v3
+    await runTool("update_document", { artifactId, expectedRevision: 2, document: IR_V2 }, c);
+    // 撤销 v3→v2 的 inverse 里 expectedCurrentRevision=3 时匹配；但 v2→v1 的 inverse expectedCurrent=2 不匹配当前 3
+    const { restoreArtifactRevision } = await import("@/lib/ai/computer/artifacts/service");
+    await expect(
+      restoreArtifactRevision({ artifactId, expectedCurrentRevision: 2, revision: 1, document: IR_V1 })
+    ).rejects.toThrowError(expect.objectContaining({ code: "ARTIFACT_REVISION_CONFLICT" }));
+    // 文件/版本未被覆盖
+    expect((await getArtifact(artifactId))?.revision).toBe(3);
   });
 });

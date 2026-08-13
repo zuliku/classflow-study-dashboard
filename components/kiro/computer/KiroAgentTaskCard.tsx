@@ -173,12 +173,13 @@ function ChangeList({ changes }: { changes: Array<KiroComputerChange | Persisted
   );
 }
 
-function changeSummary(c: { operation: string; displayName: string; fromRelativePath?: string; relativePath: string }): string {
+function changeSummary(c: { operation: string; displayName: string; fromRelativePath?: string; relativePath: string; revision?: number }): string {
   if (c.operation === "rename") {
     return `重命名 ${c.fromRelativePath ?? c.displayName} → ${c.displayName}`;
   }
   if (c.operation === "move") {
     return `移动 ${c.fromRelativePath ?? c.displayName} → ${c.relativePath}`;
   }
-  return `${c.operation === "create" ? "创建" : "修改"} ${c.displayName}`;
+  const name = c.operation === "create" ? `创建 ${c.displayName}` : `修改 ${c.displayName}`;
+  return c.revision !== undefined ? `${name} · v${c.revision}` : name;
 }

@@ -52,6 +52,7 @@ export function toPersistedComputerTask(
       format: c.format,
       size: c.size,
       changeCount: c.changeCount,
+      revision: c.revision,
       verification: c.verification,
     })),
     startedAt: source.startedAt,

@@ -178,8 +178,7 @@ describe("history sanitize — Computer Task 安全边界", () => {
     expect(record.messages[1].computerTask?.status).toBe("undone");
   });
 
-  it("relocation facts persisted safely（operation move/rename + logical from/to + artifactId；无 IR/bytes）", () => {
-    const task = makeTask();
+  it("relocation facts persisted safely（operation move/rename + logical from/to + artifactId；无 IR/bytes）", () => {    const task = makeTask();
     task.status = "completed";
     task.changes = [
       {
@@ -305,5 +304,58 @@ describe("audit persistence boundary", () => {
     expect(serialized).not.toContain("bytes");
     expect(serialized).not.toContain("handle");
     expect(serialized).not.toContain("token");
+  });
+});
+
+describe("document revision history facts（V2 Part 2）", () => {
+  it("persists revision metadata；绝不持久化 previousDocument/snapshot/Source IR/bytes/checkpoint", () => {
+    const task = makeTask();
+    task.status = "completed";
+    task.changes = [
+      {
+        id: "change-rev",
+        toolCallId: "call_rev",
+        operation: "modify",
+        resourceType: "document",
+        workspaceId: "research",
+        workspaceLabel: "论文研究",
+        rootId: "output",
+        rootLabel: "输出",
+        relativePath: "plan.md",
+        displayName: "plan.md",
+        artifactId: "artifact-123",
+        format: "markdown",
+        revision: 2,
+        verification: "passed",
+        review: { kind: "document", title: "研究方案", headings: ["引言"], paragraphs: 1, lists: 0, tables: 0, codeBlocks: 0, characters: 12 },
+      },
+    ];
+    const record = sanitizeConversation({
+      id: "conv-rev",
+      title: "对话",
+      createdAt: "2026-08-13T10:00:00.000Z",
+      provider: "deepseek",
+      model: "deepseek-v4-flash",
+      messages: [
+        makeView({ role: "user", content: "更新文档" }),
+        makeView({ computerTask: task }),
+      ],
+      manualRefs: [],
+      entryRefs: [],
+    });
+    const persisted = record.messages[1].computerTask;
+    expect(persisted?.changes[0].operation).toBe("modify");
+    expect(persisted?.changes[0].artifactId).toBe("artifact-123");
+    expect(persisted?.changes[0].revision).toBe(2);
+    expect(persisted?.changes[0].format).toBe("markdown");
+    const serialized = JSON.stringify(persisted);
+    // 敏感边界：无 previousDocument / snapshot / Source IR / bytes / checkpoint
+    expect(serialized).not.toContain("previousDocument");
+    expect(serialized).not.toContain("snapshot");
+    expect(serialized).not.toContain("blocks");
+    expect(serialized).not.toContain("checkpoint");
+    expect(serialized).not.toContain("bytes");
+    expect(serialized).not.toContain("adapterRef");
+    expect(serialized).not.toContain("beforeText");
   });
 });
