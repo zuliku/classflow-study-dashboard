@@ -65,4 +65,24 @@ export interface KiroTurnContextSnapshot {
   conversationSummary?: { text: string; throughMessageId: string } | null;
   /** 长期学习记忆 Index（Task 9）：只含 id/title/category/scope，不含 content */
   memoryIndex?: { id: string; title: string; category: string; scope: string; scopeId?: string }[];
+  /** Computer Agent Turn Snapshot（Kiro Computer Agent V1）：发送瞬间冻结的意图元数据。
+   *  只含逻辑信息；绝不包含 adapterRef / native handle / 路径 / permission token。
+   *  live grants/rules 保持 runtime state，不冻结进请求。 */
+  computerSnapshot?: KiroComputerTurnSnapshot;
+}
+
+/**
+ * Computer Agent Turn Snapshot（frozen at send boundary）。
+ * - enabled / workspaceId / agentMode / roots（仅 id/label/access）。
+ * - 不含 adapterRef、FileSystemDirectoryHandle、native path、permission rules、token。
+ */
+export interface KiroComputerTurnSnapshot {
+  enabled: boolean;
+  workspaceId: string | null;
+  agentMode: "plan" | "guided" | "workspace-auto";
+  roots: Array<{
+    id: string;
+    label: string;
+    access: "read-only" | "read-write";
+  }>;
 }

@@ -5,6 +5,8 @@ import { DefaultChatTransport, lastAssistantMessageIsCompleteWithToolCalls } fro
 import { useChat, UIMessage } from "@ai-sdk/react";
 import { useAppStore } from "@/store/useAppStore";
 import { useAISettingsStore } from "@/store/useAISettingsStore";
+import { useKiroComputerStore } from "@/store/useKiroComputerStore";
+import { KiroComputerTurnSnapshot } from "@/lib/ai/contextBudget/types";
 import { useKiroPreferencesStore } from "@/store/useKiroPreferencesStore";
 import { useConfirmStore } from "@/store/useConfirmStore";
 import { useToastStore } from "@/store/useToastStore";
@@ -392,6 +394,8 @@ export function useKiroChat({
   const provider = useAISettingsStore((s) => s.provider);
   const model = useAISettingsStore((s) => s.model);
   const custom = useAISettingsStore((s) => s.custom);
+  // Kiro Computer Agent V1：推理投入随 Turn Snapshot 冻结（Composer/Settings 共用同一 store）
+  const reasoningEffort = useAISettingsStore((s) => s.reasoningEffort);
   // Intelligence V2 Task 1：回答偏好随 Turn Snapshot 冻结（Turn 中途改设置不影响当前 Turn）
   const responsePreference = useKiroPreferencesStore((s) => s.responsePreference);
   // Task 14：Kiro Search（联网搜索）——随 Turn Snapshot 冻结；Key 不进 Store
@@ -528,6 +532,10 @@ export function useKiroChat({
         scope: m.scope,
         scopeId: m.scopeId,
       })),
+      // Kiro Computer Agent V1：推理投入冻结（capability-driven；不支持时 server 归一为 default）
+      reasoningEffort,
+      // Computer Turn Snapshot（冻结意图；只含逻辑元数据，live grants/rules 不入请求）
+      computerSnapshot: buildComputerSnapshot(),
     };
   };
 
@@ -536,6 +544,20 @@ export function useKiroChat({
   const requestBody = (): Record<string, unknown> => turnSnapshotRef.current ?? bodyRef.current;
   const buildSnapshotRef = useRef(buildTurnSnapshot);
   buildSnapshotRef.current = buildTurnSnapshot;
+
+  // Computer Turn Snapshot（send 边界冻结；只读逻辑元数据，绝不包含 adapterRef/handle/path/token）
+  const buildComputerSnapshot = (): KiroComputerTurnSnapshot => {
+    const cs = useKiroComputerStore.getState();
+    const ws = cs.workspaces.find((w) => w.id === cs.activeWorkspaceId) ?? null;
+    return {
+      enabled: cs.computerEnabled,
+      workspaceId: cs.activeWorkspaceId,
+      agentMode: cs.agentMode,
+      roots: ws
+        ? ws.roots.map((r) => ({ id: r.id, label: r.label, access: r.access }))
+        : [],
+    };
+  };
 
   const readCounterRef = useRef(0);
   const materialReadCounterRef = useRef(0);

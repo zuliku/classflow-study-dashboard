@@ -18,6 +18,7 @@ import { buildKiroResponsePreferenceContext } from "@/lib/ai/responsePreference"
 import { resolveLanguageModel, resolveModelDefinition } from "@/lib/ai/providers/resolver";
 import { validateAIChatBody, createTimeoutController } from "@/lib/ai/server";
 import { resolveReasoningProviderOptions } from "@/lib/ai/reasoning/providerOptions";
+import { validateComputerTurnSnapshot } from "@/lib/ai/computer/snapshot";
 import {
   buildKiroModelContext,
   DEFAULT_CONTEXT_BUDGET,
@@ -104,6 +105,11 @@ export async function POST(req: NextRequest) {
     custom: parsed.customConfig,
     effort: parsed.reasoningEffort,
   });
+
+  // Computer Turn Snapshot：server 信任边界校验（Part 1 仅作 metadata；非法 → 忽略，不阻塞）
+  validateComputerTurnSnapshot(
+    (body as Record<string, unknown>).computerSnapshot
+  );
 
   // 客户端的 Base Context + 显式 Context 引用（不含敏感字段与完整实体）
   const b = body as Record<string, unknown>;

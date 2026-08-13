@@ -8,3 +8,17 @@ export const KIRO_TOOLS = {
   ...KIRO_WRITE_TOOLS,
   ...KIRO_MEMORY_TOOLS,
 };
+
+/**
+ * 请求级工具域组装入口（Kiro Computer Agent V1 Part 1）：
+ * 未来 Computer 工具在此按 snapshot/turn 条件加入（Part 2）。
+ * Part 1 明确不暴露任何 Computer File Tools——只返回现有 Read/Write/Memory 域。
+ */
+export function getKiroToolsForRequest(_input: {
+  computerSnapshot?: {
+    enabled: boolean;
+    agentMode: "plan" | "guided" | "workspace-auto";
+  };
+}): typeof KIRO_TOOLS {
+  return KIRO_TOOLS;
+}
