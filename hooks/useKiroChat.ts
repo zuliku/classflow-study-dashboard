@@ -616,6 +616,8 @@ export function useKiroChat({
   const checkpointsRef = useRef<Map<string, ComputerTaskCheckpoint>>(new Map());
   const pendingExecutionsRef = useRef<Map<string, PendingComputerExecution>>(new Map());
   const oneShotApprovalsRef = useRef<ComputerOneShotApproval[]>([]);
+  // Task 状态版本（undo/approval 后递增）：历史保存 snapshot 需要感知（任务状态变化也落盘）
+  const [computerVersion, setComputerVersion] = useState(0);
 
   const setPendingApproval = useKiroComputerRuntimeStore((s) => s.setPendingApproval);
 
@@ -957,6 +959,8 @@ export function useKiroChat({
       const { output, runtime } = attempt;
       const task = tasksRef.current.get(taskId);
       if (task) {
+        // 确保 step 与 toolCallId 已注册（读/写/失败都计入；Task 绑定 owning message 的事实来源）
+        taskStepForToolCall(task, toolCallId, toolStepLabel(toolName));
         if (output.ok && runtime) {
           let cp = checkpointsRef.current.get(taskId);
           if (!cp) {
@@ -968,7 +972,10 @@ export function useKiroChat({
           if (cp.inverses.length > 0 && !task.undoUsed) {
             task.canUndo = true;
           }
-          task.status = "running";
+          // 保持当前状态（新 task 默认 running）；审批 resume 场景从 awaiting 回到 running
+          if (task.status === "awaiting_permission") {
+            task.status = "running";
+          }
           completeTaskStep(task, toolCallId);
           const change = runtime.change;
           void appendComputerAuditEntry({
@@ -1164,12 +1171,13 @@ export function useKiroChat({
           const io = getComputerAdapterForAdapterRef(root.adapterRef);
           await applyInverseToAdapter(io, inverse);
         }
-        task.status = "undone";
-      } catch {
-        task.status = "undo_failed";
-        outcome = "undo_failed";
-      }
-      updateTasks();
+      task.status = "undone";
+    } catch {
+      task.status = "undo_failed";
+      outcome = "undo_failed";
+    }
+    updateTasks();
+    setComputerVersion((v) => v + 1);
       const capability = task.changes.length > 0 ? capabilityForChange(task.changes[0]) : "fs.modify";
       void appendComputerAuditEntry({
         id: `audit-${crypto.randomUUID()}`,
@@ -1196,6 +1204,8 @@ export function useKiroChat({
   const finalizeActiveTask = useCallback(() => {
     const task = activeTaskRef.current;
     if (!task) return;
+    // Approval 未决（客户端 tool 处理间隙 status 可能闪 ready）：等用户决策后再收尾
+    if (pendingExecutionsRef.current.size > 0) return;
     activeTaskRef.current = null;
     if (task.status === "running" || task.status === "awaiting_permission") {
       const hasFailed = task.steps.some((s) => s.status === "failed");
@@ -1894,6 +1904,8 @@ export function useKiroChat({
     /** Computer Agent Part 3：approval 决策 / Task Undo（UI 入口） */
     resolveApproval: handleApprovalDecision,
     undoTask,
+    /** Computer Task 状态版本（历史保存 signal：undo/approval 后变化） */
+    computerVersion,
   };
 }
 

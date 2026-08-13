@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { Eye } from "lucide-react";
+import { Eye, X } from "lucide-react";
 import { Dialog } from "@/components/ui/Dialog";
 import { KiroAgentTask, KiroComputerChange } from "@/lib/ai/computer/task";
 
@@ -24,7 +24,13 @@ export function KiroChangeReviewDialog({
   const open = task !== null;
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange} overlayId="kiro-change-review" stackZ={80}>
+    <Dialog
+      open={open}
+      onOpenChange={onOpenChange}
+      overlayId="kiro-change-review"
+      stackZ={80}
+      onEscapeKeyDown={() => onOpenChange(false)}
+    >
       <div data-testid="kiro-change-review-dialog" className="p-4 space-y-3.5 max-h-[80vh] overflow-y-auto">
         <div className="flex items-center gap-2.5">
           <span className="w-8 h-8 rounded-full bg-pastel-mint/60 flex items-center justify-center shrink-0">
@@ -34,6 +40,13 @@ export function KiroChangeReviewDialog({
             <h2 className="text-sm font-bold text-charcoal">更改详情</h2>
             <p className="text-[11px] text-sandrift truncate">{task?.title}</p>
           </div>
+          <button
+            onClick={() => onOpenChange(false)}
+            aria-label="关闭"
+            className="w-7 h-7 rounded-lg flex items-center justify-center text-sandrift hover:text-charcoal hover:bg-alabaster transition-colors"
+          >
+            <X className="w-4 h-4" />
+          </button>
         </div>
 
         {task && (

@@ -17,6 +17,7 @@ import {
   BrowserGrantStatus,
 } from "@/lib/ai/computer/workspace/grants";
 import { sandboxAdapterCapabilities } from "@/lib/ai/computer/adapters/sandbox";
+import { KiroComputerAuditPanel } from "@/components/settings/KiroComputerAuditPanel";
 
 const MODE_OPTIONS: { value: KiroAgentMode; label: string }[] = [
   { value: "plan", label: "计划" },
@@ -290,6 +291,8 @@ export function KiroAgentSettings() {
               受限沙箱
             </span>
           </SettingsRow>
+          {/* Part 3：Computer Audit（最近活动；只清 audit metadata） */}
+          <KiroComputerAuditPanel />
           <SettingsRow
             title="桌面能力"
             description="Full Access、终端与系统级操作属于未来桌面版（Tauri）能力。"

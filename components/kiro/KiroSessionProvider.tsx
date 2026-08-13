@@ -268,7 +268,7 @@ export function KiroSessionProvider({ children }: { children: React.ReactNode })
     const chatNow = chatRef.current;
     const messages = chatNow.messages;
     if (messages.length === 0 || chatNow.streaming) return;
-    const snapshot = `${id}|${messages.length}|${messages[messages.length - 1]?.content.length ?? 0}|${chatNow.status}`;
+    const snapshot = `${id}|${messages.length}|${messages[messages.length - 1]?.content.length ?? 0}|${chatNow.status}|${chatNow.computerVersion ?? 0}`;
     if (snapshot === lastSavedSnapshotRef.current) return; // 无变化不重复写
     lastSavedSnapshotRef.current = snapshot;
     try {
