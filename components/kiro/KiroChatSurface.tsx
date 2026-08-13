@@ -155,6 +155,7 @@ export function KiroChatSurface({ variant }: { variant: "workspace" | "sidecar" 
           compact={compact}
           turnInFlight={chat.streaming}
           sources={chat.sources}
+          computerActions={chat.computerActions}
         />
       )}
 

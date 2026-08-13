@@ -63,6 +63,13 @@ test("Computer controls：Sandbox 引导 → 状态同步（Composer ↔ Setting
   await expect(agentToggle).toHaveAttribute("aria-checked", "true");
   await expect(page.getByTestId("settings-kiro-agent")).toContainText("Kiro Sandbox");
 
+  // 6b. Part 2：Workspace Card 显示聚集 badges（当前 / Sandbox / 读写）
+  await expect(page.getByTestId("kiro-workspace-card")).toBeVisible();
+  const badges = page.getByTestId("kiro-workspace-badges");
+  await expect(badges).toContainText("当前");
+  await expect(badges).toContainText("Sandbox");
+  await expect(badges).toContainText("读写");
+
   // 7. Settings → Kiro 与 AI：思考程度 = 当前模型不可调（fixed 不展示假 control）
   await page.getByRole("navigation", { name: "设置导航" }).getByRole("button", { name: "Kiro 与 AI" }).click();
   await page.waitForTimeout(400);

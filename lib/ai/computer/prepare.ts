@@ -48,7 +48,8 @@ export function prepareComputerTool(
     rootId = root.id;
     rootAccess = root.access;
     // 路径 sandbox 验证（不可逃逸；抛 PATH_OUTSIDE_SANDBOX）
-    resourcePath = normalizeRelativeComputerPath(resource.path).path;
+    // allowRoot：executor 已对 list/search/grep 归一 root scope（path=""）——这里放行 root scope，escape 一律拒绝
+    resourcePath = normalizeRelativeComputerPath(resource.path, { allowRoot: true }).path;
   }
 
   return evaluateComputerPolicy({

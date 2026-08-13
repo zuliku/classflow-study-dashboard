@@ -9,6 +9,8 @@ import { useKiroSessionMeta } from "@/components/kiro/KiroSessionProvider";
 import { useEffectiveReducedMotion } from "@/hooks/useEffectiveReducedMotion";
 import { AIError, AI_ERROR_MESSAGES } from "@/lib/ai/errors";
 import { KiroActionCard, actionToCardProps, KiroActionCardVariant } from "@/components/kiro/KiroActionCard";
+import { KiroComputerActionCard } from "@/components/kiro/computer/KiroComputerActionCard";
+import { ComputerActionFact } from "@/lib/ai/computer/types";
 import { StudyPlanProposalCard } from "@/components/kiro/StudyPlanProposalCard";
 import { TaskBreakdownProposalCard } from "@/components/kiro/TaskBreakdownProposalCard";
 import { actionSummaryText } from "@/lib/ai/share";
@@ -31,6 +33,7 @@ export function KiroConversation({
   compact,
   turnInFlight,
   sources,
+  computerActions,
 }: {
   messages: KiroChatMessageView[];
   error: AIError | null;
@@ -45,6 +48,8 @@ export function KiroConversation({
   turnInFlight: boolean;
   /** 当前 Turn 的文档来源（Citation 渲染；live 消息用；不含正文） */
   sources?: KiroSourceMeta[];
+  /** Computer Agent 本 Turn 真实 mutation 事实（Action Card；live result） */
+  computerActions?: ComputerActionFact[];
 }) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const contentRef = useRef<HTMLDivElement | null>(null);
@@ -188,6 +193,15 @@ export function KiroConversation({
                 entering={enteringMessageIds.has(m.id)}
               />
             ))}
+
+            {/* Computer Agent 本 Turn 真实 mutation 事实（Action Cards；live result） */}
+            {computerActions && computerActions.length > 0 && (
+              <div className="space-y-2" data-testid="kiro-computer-actions">
+                {computerActions.map((fact, i) => (
+                  <KiroComputerActionCard key={i} fact={fact} />
+                ))}
+              </div>
+            )}
 
             {/* 首 token 前：Kiro Logo + 正在处理（Assistant 任一可见 part 出现后自动消失） */}
             {showPending && <KiroPendingIndicator />}
