@@ -22,14 +22,36 @@ test("Task 1 Header：任务与 DDL heading + 新增任务 按钮可见；点击
   await page.getByRole("button", { name: "任务工作区" }).first().click();
 
   await expect(page.getByRole("heading", { name: "任务与 DDL" })).toBeVisible();
-  const addButton = page.getByRole("button", { name: /新增任务/ });
+  // 按钮在 quickAdd 打开后文案变为「收起」
+  const addButton = page.getByRole("button", { name: /新增任务|收起/ });
   await expect(addButton).toBeVisible();
 
-  // 点击 → inline QuickAddCard visible；再次点击（按钮变「收起」）→ hidden
+  // 点击 → inline QuickAddCard visible；Header aria-expanded=true
   await addButton.click();
   await expect(page.getByTestId("quick-add-card")).toBeVisible();
+  await expect(addButton).toHaveAttribute("aria-expanded", "true");
+
+  // 展开「更多」→ progressive details（priority / 预计耗时 / 描述）可见
+  const card = page.getByTestId("quick-add-card");
+  const moreBtn = card.getByRole("button", { name: "更多", exact: true });
+  await moreBtn.click();
+  await expect(moreBtn).toHaveAttribute("aria-expanded", "true");
+  await expect(card.getByLabel("优先级")).toBeVisible();
+  await expect(card.getByLabel("预计耗时（分钟）")).toBeVisible();
+
+  // 收起「更多」→ aria-expanded=false，detail 最终不可见
+  await moreBtn.click();
+  await expect(moreBtn).toHaveAttribute("aria-expanded", "false");
+  await expect(card.getByLabel("预计耗时（分钟）")).toBeHidden();
+
+  // 再次展开（输入值在 QuickAddCard parent state 保持）→ detail 回来
+  await moreBtn.click();
+  await expect(card.getByLabel("预计耗时（分钟）")).toBeVisible();
+
+  // 关闭 Quick Add → Header aria-expanded=false，card 最终 unmount
   await page.getByRole("button", { name: "收起" }).click();
-  await expect(page.getByTestId("quick-add-card")).toBeHidden();
+  await expect(addButton).toHaveAttribute("aria-expanded", "false");
+  await expect(page.getByTestId("quick-add-card")).toHaveCount(0);
 });
 
 test("Task 2A core controls：搜索筛选 + Primary View 切换保持可用", async ({ page }) => {

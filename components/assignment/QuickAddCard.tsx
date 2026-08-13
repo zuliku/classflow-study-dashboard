@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
-import { X, ChevronDown, ChevronUp, Clock } from "lucide-react";
+import { X, ChevronDown, Clock } from "lucide-react";
 import { useAppStore } from "@/store/useAppStore";
 import { useToastStore } from "@/store/useToastStore";
 import { Priority } from "@/types";
@@ -9,7 +9,9 @@ import { combineLocalDateTime } from "@/lib/ddl";
 import { format } from "date-fns";
 import { openAssignmentEditor } from "@/lib/uiEvents";
 import { UISelect } from "@/components/ui/Select";
+import { DisclosureRegion } from "@/components/ui/DisclosureRegion";
 import { getNewTaskDefaults } from "@/lib/taskDefaults";
+import { cn } from "@/lib/utils";
 
 /**
  * Quick Add V2：任务工作区的快速捕获入口（Inline Card）。
@@ -171,51 +173,55 @@ export function QuickAddCard({
           aria-expanded={moreOpen}
           className="flex items-center gap-1 text-[11px] font-semibold text-sandrift hover:text-charcoal transition-colors"
         >
-          {moreOpen ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+          <ChevronDown
+            className={cn(
+              "w-3.5 h-3.5 transition-transform duration-[var(--motion-fast)]",
+              moreOpen && "rotate-180"
+            )}
+            aria-hidden="true"
+          />
           更多
         </button>
 
-        {moreOpen && (
-          <div className="mt-2.5 grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div className="space-y-1">
-              <label className="text-[10px] font-bold text-sandrift">优先级</label>
-              <UISelect<Priority>
-                value={priority}
-                onChange={setPriority}
-                ariaLabel="优先级"
-                options={[
-                  { value: "urgent", label: "紧急" },
-                  { value: "high", label: "高" },
-                  { value: "medium", label: "中" },
-                  { value: "low", label: "低" },
-                ]}
-                triggerClassName="h-8 bg-white border-line-strong text-[11px] font-semibold"
-              />
-            </div>
-            <div className="space-y-1">
-              <label className="text-[10px] font-bold text-sandrift">预计耗时（分钟）</label>
-              <input
-                type="number"
-                min={1}
-                value={estimatedMinutes}
-                onChange={(e) => setEstimatedMinutes(e.target.value)}
-                placeholder="可选"
-                aria-label="预计耗时（分钟）"
-                className="w-full h-8 px-2.5 bg-white border border-line-strong rounded-lg text-[11px] font-mono text-charcoal focus:outline-none placeholder:text-sandrift"
-              />
-            </div>
-            <div className="space-y-1 sm:col-span-2">
-              <label className="text-[10px] font-bold text-sandrift">描述</label>
-              <textarea
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                rows={2}
-                placeholder="可选"
-                className="w-full px-2.5 py-2 bg-white border border-line-strong rounded-lg text-[11px] text-charcoal focus:outline-none placeholder:text-sandrift resize-none"
-              />
-            </div>
+        <DisclosureRegion open={moreOpen} innerClassName="mt-2.5 grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="space-y-1">
+            <label className="text-[10px] font-bold text-sandrift">优先级</label>
+            <UISelect<Priority>
+              value={priority}
+              onChange={setPriority}
+              ariaLabel="优先级"
+              options={[
+                { value: "urgent", label: "紧急" },
+                { value: "high", label: "高" },
+                { value: "medium", label: "中" },
+                { value: "low", label: "低" },
+              ]}
+              triggerClassName="h-8 bg-white border-line-strong text-[11px] font-semibold"
+            />
           </div>
-        )}
+          <div className="space-y-1">
+            <label className="text-[10px] font-bold text-sandrift">预计耗时（分钟）</label>
+            <input
+              type="number"
+              min={1}
+              value={estimatedMinutes}
+              onChange={(e) => setEstimatedMinutes(e.target.value)}
+              placeholder="可选"
+              aria-label="预计耗时（分钟）"
+              className="w-full h-8 px-2.5 bg-white border border-line-strong rounded-lg text-[11px] font-mono text-charcoal focus:outline-none placeholder:text-sandrift"
+            />
+          </div>
+          <div className="space-y-1 sm:col-span-2">
+            <label className="text-[10px] font-bold text-sandrift">描述</label>
+            <textarea
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              rows={2}
+              placeholder="可选"
+              className="w-full px-2.5 py-2 bg-white border border-line-strong rounded-lg text-[11px] text-charcoal focus:outline-none placeholder:text-sandrift resize-none"
+            />
+          </div>
+        </DisclosureRegion>
       </div>
 
       {/* Secondary：进入 Full Editor */}

@@ -205,6 +205,20 @@ test("Kiro Read Tool：tool call → 客户端执行 → 自动继续 → 最终
   // Agent Worklog：完成后保持低噪声摘要；不泄漏原始工具名/JSON。
   await expect(worklog).toContainText("已完成 1 个步骤");
   await expect(worklog.getByText("get_upcoming_assignments")).toHaveCount(0);
+
+  // Worklog disclosure（IM2B）：进入 answering 自动折叠 → summary aria-expanded=false；
+  // 点击展开 → true + tool row 真实详情可见（expandable 才有 Chevron/disclosure）
+  const summary = worklog.getByRole("button").first();
+  await expect(summary).toHaveAttribute("aria-expanded", "false");
+  await summary.click();
+  await expect(summary).toHaveAttribute("aria-expanded", "true");
+
+  const toolRow = worklog.getByRole("button").nth(1);
+  await expect(toolRow).toHaveAttribute("aria-expanded", "false");
+  await toolRow.click();
+  await expect(toolRow).toHaveAttribute("aria-expanded", "true");
+  // tool detail 内容（safeDetails）可见且 data-state=open
+  await expect(worklog.locator('[data-state="open"]').first()).toBeVisible();
 });
 
 test("Kiro Write Tool：search → set_assignment_ddl → Action Card → 持久化 → Undo", async ({ page }) => {

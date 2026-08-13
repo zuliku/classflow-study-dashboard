@@ -5,6 +5,7 @@ import { Check, Loader2, AlertCircle, ChevronDown, ListTree } from "lucide-react
 import { KiroAssistantTurnPresentation, KiroWorklogBlock } from "@/lib/ai/presentation/turnPresentation";
 import { hasMeaningfulKiroToolDetails } from "@/lib/ai/presentation/toolActivityDetails";
 import { KiroLogoIcon } from "@/components/kiro/KiroLogo";
+import { DisclosureRegion } from "@/components/ui/DisclosureRegion";
 import { cn } from "@/lib/utils";
 
 type ToolBlock = Extract<KiroWorklogBlock, { kind: "tool" }>;
@@ -63,14 +64,14 @@ function KiroToolRow({ block }: { block: ToolBlock }) {
       ) : (
         <div className={cn(TOOL_ROW_BODY, rowClasses(block))}>{rowBody}</div>
       )}
-      {open && expandable && (
-        <div className="mt-0.5 pl-2 pr-2 pb-1 space-y-0.5">
+      {expandable && (
+        <DisclosureRegion open={open} innerClassName="mt-0.5 pl-2 pr-2 pb-1 space-y-0.5">
           {block.safeDetails.map((d) => (
             <p key={d} className="text-[10px] text-satin-grey leading-relaxed">
               {d}
             </p>
           ))}
-        </div>
+        </DisclosureRegion>
       )}
     </div>
   );
@@ -155,29 +156,27 @@ export function KiroWorklog({ turn }: { turn: KiroAssistantTurnPresentation }) {
         />
       </button>
 
-      {/* Expanded：commentary / Tool rows 真实时序；collapsed 时整体隐藏 */}
-      {expanded && (
-        <div className="pt-1 space-y-1">
-          {turn.worklog.map((block) =>
-            block.kind === "commentary" ? (
-              <p
-                key={block.id}
-                className="text-[11px] text-sandrift leading-relaxed whitespace-pre-wrap break-words"
-              >
-                {block.text}
-              </p>
-            ) : (
-              <KiroToolRow key={block.id} block={block} />
-            )
-          )}
-          {turn.phase === "composing" && (
-            <p className="flex items-center gap-1.5 text-[11px] text-sandrift" aria-hidden="true">
+      {/* Expanded：commentary / Tool rows 真实时序；collapsed 时结构收起（DisclosureRegion 处理 presence） */}
+      <DisclosureRegion open={expanded} innerClassName="pt-1 space-y-1">
+        {turn.worklog.map((block) =>
+          block.kind === "commentary" ? (
+            <p
+              key={block.id}
+              className="text-[11px] text-sandrift leading-relaxed whitespace-pre-wrap break-words"
+            >
+              {block.text}
+            </p>
+          ) : (
+            <KiroToolRow key={block.id} block={block} />
+          )
+        )}
+        {turn.phase === "composing" && (
+          <p className="flex items-center gap-1.5 text-[11px] text-sandrift" aria-hidden="true">
               <Loader2 className="w-3 h-3 animate-spin text-sandrift shrink-0" aria-hidden="true" />
               正在整理回答
             </p>
           )}
-        </div>
-      )}
+      </DisclosureRegion>
 
       {/* Final Answer 前的极弱分割线：无论折叠与否都保留 */}
       {turn.worklog.length > 0 && turn.answer.length > 0 && (

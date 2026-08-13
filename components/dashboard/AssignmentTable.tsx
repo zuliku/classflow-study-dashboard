@@ -39,6 +39,7 @@ import {
 import { AssignmentPeekPanel } from "@/components/assignment/AssignmentPeekPanel";
 import { AssignmentContextMenu, ContextMenuCommand } from "@/components/assignment/AssignmentContextMenu";
 import { QuickAddCard } from "@/components/assignment/QuickAddCard";
+import { DisclosureRegion } from "@/components/ui/DisclosureRegion";
 import { SearchField } from "@/components/ui/SearchField";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { deriveTaskWorkspace, PRIMARY_TASK_WORKSPACE_VIEWS, TaskHealthPlanningInput } from "@/lib/tasks/taskViews";
@@ -503,12 +504,15 @@ export function AssignmentTable({
         </div>
         )}
 
-        {/* Quick Add V2（workspace inline；compact 不显示）——受控自 AssignmentsWorkspace Header */}
-        {isWorkspace && quickAddOpen && (
-          <QuickAddCard
-            defaultCourseId={courseFilter !== "all" ? courseFilter : undefined}
-            onClose={() => setQuickAddOpen(false)}
-          />
+        {/* Quick Add V2（workspace inline；compact 不显示）——受控自 AssignmentsWorkspace Header；
+            DisclosureRegion 负责结构性展开/收起（presence + unmount；draft state 在 QuickAddCard 内保持） */}
+        {isWorkspace && (
+          <DisclosureRegion open={quickAddOpen}>
+            <QuickAddCard
+              defaultCourseId={courseFilter !== "all" ? courseFilter : undefined}
+              onClose={() => setQuickAddOpen(false)}
+            />
+          </DisclosureRegion>
         )}
 
         {/* Filters Row: Course Filter + (compact: Time Slice Pills | workspace: View Tabs + Search) */}
