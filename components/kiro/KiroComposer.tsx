@@ -12,6 +12,7 @@ import {
   Sparkles,
   Loader2,
   Globe2,
+  Cpu,
 } from "lucide-react";
 import { KiroContextBar } from "@/components/kiro/KiroContextBar";
 import { KiroContextPicker } from "@/components/kiro/KiroContextPicker";
@@ -23,6 +24,11 @@ import { KiroContextRef } from "@/lib/ai/context/types";
 import { KiroAttachmentView } from "@/lib/ai/attachments/types";
 import { AIModelVendor } from "@/lib/ai/providers/types";
 import { useKiroPreferencesStore } from "@/store/useKiroPreferencesStore";
+import { KiroAgentMode, KiroWorkspaceMeta } from "@/lib/ai/computer/types";
+import { KiroReasoningEffort, ReasoningCapability } from "@/lib/ai/reasoning/types";
+import { KiroAgentModeMenu } from "@/components/kiro/computer/KiroAgentModeMenu";
+import { KiroReasoningMenu } from "@/components/kiro/computer/KiroReasoningMenu";
+import { KiroWorkspacePicker } from "@/components/kiro/computer/KiroWorkspacePicker";
 import { cn } from "@/lib/utils";
 
 /**
@@ -56,6 +62,17 @@ export function KiroComposer({
   onSaveAttachmentToCourse,
   onAddMaterial,
   compact,
+  // Kiro Computer Agent V1：Computer 模式控制（owner = KiroChatSurface 订阅 stores）
+  computerEnabled,
+  onToggleComputer,
+  agentMode,
+  onSetAgentMode,
+  reasoningCapability,
+  reasoningEffort,
+  onSetReasoningEffort,
+  workspace,
+  workspaceIsSandbox,
+  grantWarning,
 }: {
   contexts: KiroContextRef[];
   onAddContext: (ref: KiroContextRef) => void;
@@ -86,6 +103,19 @@ export function KiroComposer({
   onAddMaterial: (ref: { courseId: string; courseName: string; materialId: string; title: string; type: string }) => void;
   /** sidecar：更紧凑的密度 */
   compact?: boolean;
+  /** Computer Agent ON（active 样式 + workspace strip + agent mode） */
+  computerEnabled?: boolean;
+  /** Computer toggle（无 workspace 时由 owner 引导授权流程，不直接启用） */
+  onToggleComputer?: (enabled: boolean) => void;
+  agentMode?: KiroAgentMode;
+  onSetAgentMode?: (mode: KiroAgentMode) => void;
+  /** capability-driven reasoning（fixed 时 Composer 不显示 chip） */
+  reasoningCapability?: ReasoningCapability;
+  reasoningEffort?: KiroReasoningEffort;
+  onSetReasoningEffort?: (effort: KiroReasoningEffort) => void;
+  workspace?: KiroWorkspaceMeta | null;
+  workspaceIsSandbox?: boolean;
+  grantWarning?: string | null;
 }) {
   const [text, setText] = useState("");
   const [attachOpen, setAttachOpen] = useState(false);
@@ -336,6 +366,20 @@ export function KiroComposer({
 
           {/* Prompt + Toolbar：统一内部 gutter，prompt 区保持最干净 */}
           <div className={cn(compact ? "px-2.5 pt-2 pb-2" : "px-3 pt-2.5 pb-2.5")}>
+            {/* Kiro Computer Agent V1：Workspace Strip（上下文区，低噪声）——Computer ON 时显示 */}
+            {computerEnabled && (
+              <div className="flex items-center gap-1.5 pb-1.5 min-w-0">
+                <KiroWorkspacePicker
+                  workspace={workspace ?? null}
+                  isSandbox={workspaceIsSandbox ?? false}
+                  grantWarning={grantWarning ?? null}
+                  disabled={turnLocked}
+                />
+                {grantWarning && (
+                  <span className="text-[9px] font-semibold text-danger truncate">需要重新授权</span>
+                )}
+              </div>
+            )}
             <textarea
               ref={taRef}
               value={text}
@@ -438,9 +482,41 @@ export function KiroComposer({
                 >
                   <Globe2 className="w-4 h-4" />
                 </button>
+
+                {/* Kiro Computer Agent V1：Computer toggle（ON = active；无 workspace 时引导授权） */}
+                <button
+                  onClick={() => {
+                    if (turnLocked) return;
+                    onToggleComputer?.(!computerEnabled);
+                  }}
+                  aria-label="Computer"
+                  aria-pressed={computerEnabled}
+                  title={computerEnabled ? "Computer Agent：已开启" : "Computer Agent：关闭"}
+                  disabled={turnLocked}
+                  className={cn(
+                    "w-9 h-9 flex items-center justify-center rounded-xl transition-colors",
+                    computerEnabled
+                      ? "text-charcoal bg-pastel-mint/60 hover:bg-pastel-mint"
+                      : "text-sandrift hover:bg-alabaster hover:text-charcoal"
+                  )}
+                >
+                  <Cpu className="w-4 h-4" />
+                </button>
               </div>
 
               <div className="flex items-center gap-2">
+                {/* Kiro Computer Agent V1：Agent Mode（仅 Computer ON）+ Reasoning（capability-driven） */}
+                {computerEnabled && agentMode && (
+                  <KiroAgentModeMenu mode={agentMode} onChange={(m) => onSetAgentMode?.(m)} disabled={turnLocked} />
+                )}
+                {reasoningCapability && reasoningEffort && (
+                  <KiroReasoningMenu
+                    capability={reasoningCapability}
+                    effort={reasoningEffort}
+                    onChange={(e) => onSetReasoningEffort?.(e)}
+                    disabled={turnLocked}
+                  />
+                )}
                 <div ref={modelRef} className="relative">
                   <button
                     onClick={() => {

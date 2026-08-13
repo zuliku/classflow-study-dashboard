@@ -11,6 +11,8 @@ import { KiroConversation } from "@/components/kiro/KiroConversation";
 import { KiroComposer } from "@/components/kiro/KiroComposer";
 import { KiroContextSuggestions } from "@/components/kiro/KiroContextSuggestions";
 import { useKiroPreferencesStore } from "@/store/useKiroPreferencesStore";
+import { useKiroComputerStore } from "@/store/useKiroComputerStore";
+import { getModelCapabilities } from "@/lib/ai/providers/capabilities";
 import { getKiroOutputFontSize } from "@/lib/ai/ui/typography";
 
 /**
@@ -71,6 +73,54 @@ export function KiroChatSurface({ variant }: { variant: "workspace" | "sidecar" 
   const openKiroSettings = () => {
     setSettingsTargetSection("kiro");
     setSettingsModalOpen(true);
+  };
+
+  // ---- Kiro Computer Agent V1：Composer Computer 模式 owner（订阅 stores + capability）----
+  const {
+    computerEnabled,
+    activeWorkspaceId,
+    agentMode,
+    workspaces,
+    setComputerEnabled,
+    setActiveWorkspaceId,
+    setAgentMode,
+    addWorkspace,
+  } = useKiroComputerStore();
+  const reasoningEffort = useAISettingsStore((s) => s.reasoningEffort);
+  const setReasoningEffort = useAISettingsStore((s) => s.setReasoningEffort);
+  const reasoningCapability = useMemo(
+    () => getModelCapabilities({ provider, model, custom }).reasoning,
+    [provider, model, custom]
+  );
+  const workspace = workspaces.find((w) => w.id === activeWorkspaceId) ?? null;
+  const workspaceIsSandbox =
+    workspace?.roots.every(
+      (r) => r.adapterRef === "sandbox-default" || r.adapterRef.startsWith("sandbox")
+    ) ?? false;
+
+  // Computer toggle：无 workspace 时走 Sandbox 引导（CI-friendly）；不直接启用
+  const handleToggleComputer = (enabled: boolean) => {
+    if (!enabled) {
+      setComputerEnabled(false);
+      return;
+    }
+    if (workspaces.length === 0) {
+      const now = new Date().toISOString();
+      addWorkspace({
+        id: `ws-${crypto.randomUUID()}`,
+        name: "Kiro Sandbox",
+        roots: [
+          { id: "root-sandbox", label: "Sandbox（当前浏览器）", access: "read-write", adapterRef: "sandbox-default" },
+        ],
+        createdAt: now,
+        updatedAt: now,
+      });
+      setActiveWorkspaceId(useKiroComputerStore.getState().workspaces.at(-1)?.id ?? null);
+      setComputerEnabled(true);
+      return;
+    }
+    if (!activeWorkspaceId) setActiveWorkspaceId(workspaces[0].id);
+    setComputerEnabled(true);
   };
 
   const hasMessages = chat.messages.length > 0;
@@ -136,6 +186,15 @@ export function KiroChatSurface({ variant }: { variant: "workspace" | "sidecar" 
         onRetryAttachment={attachments.retry}
         onSaveAttachmentToCourse={attachments.saveToCourse}
         onAddMaterial={attachments.addMaterial}
+        computerEnabled={computerEnabled}
+        onToggleComputer={handleToggleComputer}
+        agentMode={agentMode}
+        onSetAgentMode={setAgentMode}
+        reasoningCapability={reasoningCapability}
+        reasoningEffort={reasoningEffort}
+        onSetReasoningEffort={setReasoningEffort}
+        workspace={workspace}
+        workspaceIsSandbox={workspaceIsSandbox}
       />
     </div>
   );
