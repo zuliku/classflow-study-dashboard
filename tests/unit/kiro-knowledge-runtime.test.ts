@@ -22,6 +22,7 @@ import {
 } from "@/lib/ai/computer/knowledge/types";
 import { getComputerAdapterForAdapterRef } from "@/lib/ai/computer/executor";
 import { clearSandboxAdapter, sandboxWriteText, sandboxCreateDirectory } from "@/lib/ai/computer/adapters/sandbox";
+import { queryWorkspaceKnowledge } from "@/lib/ai/computer/knowledge/service";
 import { KiroAgentMode, KiroWorkspaceMeta } from "@/lib/ai/computer/types";
 
 const REF = "sandbox-knowledge-ref";
@@ -217,5 +218,48 @@ describe("knowledge refresh", () => {
     expect(files.find((f) => f.relativePath === "secret.md")?.contentStatus).toBe("metadata-only");
     const text = (await listKnowledgeChunks("ws-k")).map((c) => c.text).join("");
     expect(text).not.toContain("机密正文内容");
+  });
+});
+
+describe("V3 Part 2.1 stabilization", () => {
+  it("dirty -> successful incremental refresh -> dirty=false（生命周期消费）", async () => {
+    await sandboxWriteText(REF, "a.md", "内容");
+    await refreshWorkspaceKnowledge({
+      workspace,
+      mode: "force",
+      agentMode: "workspace-auto",
+      permissionRules: [],
+      getAdapter: getComputerAdapterForAdapterRef,
+    });
+    await markWorkspaceKnowledgeDirty("ws-k");
+    expect((await getWorkspaceKnowledgeStatus("ws-k"))?.dirty).toBe(true);
+    await refreshWorkspaceKnowledge({
+      workspace,
+      mode: "incremental",
+      agentMode: "workspace-auto",
+      permissionRules: [],
+      getAdapter: getComputerAdapterForAdapterRef,
+    });
+    const after = await getWorkspaceKnowledgeStatus("ws-k");
+    expect(after?.dirty).toBe(false);
+    // 下一次普通 retrieval 不再因旧 dirty 标记重复 refresh（dirty 已消费）
+    expect(after?.partial).toBe(false);
+  });
+
+  it("queryWorkspaceKnowledge 在 service 层落实 maxResults（先 slice 再 build snippet）", async () => {
+    for (let i = 0; i < 10; i++) {
+      await sandboxWriteText(REF, `m${i}.md`, `研究方法说明内容 ${i}`);
+    }
+    await refreshWorkspaceKnowledge({
+      workspace,
+      mode: "force",
+      agentMode: "workspace-auto",
+      permissionRules: [],
+      getAdapter: getComputerAdapterForAdapterRef,
+    });
+    const limited = await queryWorkspaceKnowledge({ workspaceId: "ws-k", query: "研究方法", maxResults: 3 });
+    expect(limited.length).toBe(3);
+    const defaulted = await queryWorkspaceKnowledge({ workspaceId: "ws-k", query: "研究方法" });
+    expect(defaulted.length).toBeLessThanOrEqual(20);
   });
 });

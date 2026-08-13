@@ -8,6 +8,8 @@
 import { ComputerAdapterIO } from "@/lib/ai/computer/executor-types";
 import { KiroAgentMode, ComputerPermissionRule, KiroWorkspaceMeta } from "@/lib/ai/computer/types";
 import {
+  KIRO_KNOWLEDGE_SEARCH_DEFAULT_RESULTS,
+  KIRO_KNOWLEDGE_SEARCH_MAX_RESULTS,
   KiroKnowledgeChunkRecord,
   KiroKnowledgeFileRecord,
   KiroKnowledgeIndexState,
@@ -42,7 +44,6 @@ export async function refreshWorkspaceKnowledge(
   const priorState = await getKnowledgeWorkspaceState(input.workspace.id);
   const existingFiles = priorState ? await listKnowledgeFiles(input.workspace.id) : [];
   const existingChunks = priorState ? await listKnowledgeChunks(input.workspace.id) : [];
-  const dirty = priorState?.dirty ?? false;
 
   let scan;
   try {
@@ -64,7 +65,6 @@ export async function refreshWorkspaceKnowledge(
   }
 
   // 原子写入新记录
-  const newFileKeys = new Set(scan.files.map((f) => f.key));
   const chunksByFile = new Map<string, KiroKnowledgeChunkRecord[]>();
   for (const c of scan.chunks) {
     const list = chunksByFile.get(c.fileKey) ?? [];
@@ -88,7 +88,9 @@ export async function refreshWorkspaceKnowledge(
     fileCount: scan.files.length,
     chunkCount: scan.chunks.length,
     partial: scan.partial || scan.unavailableRootIds.length > 0,
-    dirty: dirty && input.mode === "incremental" ? dirty : false,
+    // V3 Part 2.1：只要本次 scan + Knowledge DB reconcile 正常完成（incremental 或 force），
+    // 已消费的 dirty 标记一律清除；partial 是另一维状态，不用 dirty 重复表达。
+    dirty: false,
     unavailableRootIds: scan.unavailableRootIds,
   };
   await putKnowledgeWorkspaceState(state);
@@ -129,8 +131,14 @@ export async function queryWorkspaceKnowledge(input: {
     .filter((f) => (rootFilter ? rootFilter.has(f.rootId) : true))
     .map((file) => ({ file, chunks: chunksByFile.get(file.key) ?? [] }));
   const scored = rankKnowledgeCandidates(candidates, input.query);
+  // V3 Part 2.1：service 层统一落实 bounded result（clamp 1..50；先 slice 再 build snippet）
+  const limit = Math.max(
+    1,
+    Math.min(input.maxResults ?? KIRO_KNOWLEDGE_SEARCH_DEFAULT_RESULTS, KIRO_KNOWLEDGE_SEARCH_MAX_RESULTS)
+  );
+  const top = scored.slice(0, limit);
   const tokens = Array.from(new Set(tokenizeKnowledgeText(input.query)));
-  return scored.map((c) => {
+  return top.map((c) => {
     const file = fileByLocation.get(`${c.result.rootId}\u0000${c.result.path}`);
     const candidateChunks = file ? chunksByFile.get(file.key) ?? [] : [];
     return {

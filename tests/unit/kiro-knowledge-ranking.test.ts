@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import { buildLiveExcerpt } from "@/lib/ai/computer/knowledge/excerpt";
 import { normalizeKnowledgeText, tokenizeKnowledgeText } from "@/lib/ai/computer/knowledge/tokenize";
 import {
   rankKnowledgeCandidates,
@@ -109,5 +110,35 @@ describe("ranking", () => {
     const b = { file: file("a.md"), chunks: [chunk("a.md", "方法论说明")] };
     const ranked = rankKnowledgeCandidates([a, b], "方法论");
     expect(ranked.map((r) => r.result.path)).toEqual(["a.md", "b.md"]);
+  });
+});
+
+describe("live excerpt（V3 Part 2.1）", () => {
+  it("500-char 完整 excerpt → truncated=false", () => {
+    const src = "研究方法" + "x".repeat(496);
+    expect(src.length).toBe(500);
+    const r = buildLiveExcerpt(src, "研究方法");
+    expect(r.excerpt.length).toBe(500);
+    expect(r.truncated).toBe(false);
+  });
+
+  it(">1600-char source → truncated=true", () => {
+    const src = "研究方法" + "x".repeat(2000);
+    const r = buildLiveExcerpt(src, "研究方法");
+    expect(r.truncated).toBe(true);
+  });
+
+  it("匹配位于文件尾部 → excerpt 包含真实尾部匹配（无 offset 漂移）", () => {
+    const src = "a".repeat(1400) + "。" + "研究方法结论" + "b".repeat(300);
+    const r = buildLiveExcerpt(src, "研究方法结论");
+    expect(r.excerpt).toContain("研究方法结论");
+    expect(r.truncated).toBe(true); // start > 0
+  });
+
+  it("匹配前存在大量空白/换行 → 不产生 normalized offset 漂移（返回 raw window）", () => {
+    const src = "\n\n\n   \n".repeat(50) + "研究方法说明内容";
+    const r = buildLiveExcerpt(src, "研究方法");
+    expect(r.excerpt).toContain("研究方法说明内容");
+    expect(r.excerpt.length).toBeLessThanOrEqual(1600);
   });
 });

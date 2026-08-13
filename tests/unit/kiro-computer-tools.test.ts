@@ -1163,3 +1163,44 @@ describe("retrieve_workspace_context budget & missing（V3 Part 2）", () => {
     expect(JSON.stringify(data)).not.toContain("事件研究正文");
   });
 });
+
+describe("retrieve text-like consistency（V3 Part 2.1）", () => {
+  it("csv 与 json 可被 live retrieval（与 Knowledge 索引同白名单）", async () => {
+    await sandboxWriteText(SANDBOX_REF, "data.csv", "a,b\n研究方法,值");
+    await sandboxWriteText(SANDBOX_REF, "config.json", "{\"topic\": \"研究方法说明\"}");
+    const c = counters();
+    const attempt = await executeKiroComputerTool({
+      toolName: "retrieve_workspace_context",
+      toolCallId: "call-ret-textlike",
+      toolInput: { query: "研究方法", maxFiles: 4 },
+      context: ctx(AUTO_SNAPSHOT),
+      counters: c,
+    });
+    expect(attempt.kind).toBe("completed");
+    if (attempt.kind !== "completed") return;
+    const data = (attempt.output as { data: { items: { path: string; excerpt: string }[]; skipped: unknown[] } }).data;
+    const csv = data.items.find((i) => i.path === "data.csv");
+    expect(csv?.excerpt).toContain("研究方法");
+    const json = data.items.find((i) => i.path === "config.json");
+    expect(json?.excerpt).toContain("研究方法");
+  });
+
+  it("unsupported binary 仍 skipped（不读正文）", async () => {
+    const { sandboxWriteBytes } = await import("@/lib/ai/computer/adapters/sandbox");
+    await sandboxWriteBytes(SANDBOX_REF, "blob.bin", new TextEncoder().encode("研究方法二进制"), "application/octet-stream");
+    const c = counters();
+    const attempt = await executeKiroComputerTool({
+      toolName: "retrieve_workspace_context",
+      toolCallId: "call-ret-bin",
+      toolInput: { query: "研究方法" },
+      context: ctx(AUTO_SNAPSHOT),
+      counters: c,
+    });
+    expect(attempt.kind).toBe("completed");
+    if (attempt.kind !== "completed") return;
+    const data = (attempt.output as { data: { items: unknown[]; skipped: { reason: string; path: string }[] } }).data;
+    // blob.bin 索引时是 metadata-only（不支持类型）→ 被 skip，且绝不返回正文
+    expect(data.skipped.some((s) => s.path === "blob.bin")).toBe(true);
+    expect(JSON.stringify(data)).not.toContain("研究方法二进制");
+  });
+});

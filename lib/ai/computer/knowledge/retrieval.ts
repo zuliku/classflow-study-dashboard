@@ -15,6 +15,7 @@ import {
 } from "@/lib/ai/computer/knowledge/service";
 import { buildLiveExcerpt, RETRIEVE_EXCERPT_MAX_CHARS } from "@/lib/ai/computer/knowledge/excerpt";
 import { KiroKnowledgeIndexState, KiroKnowledgeSearchResult } from "@/lib/ai/computer/knowledge/types";
+import { TEXT_LIKE_EXTENSIONS } from "@/lib/ai/computer/filesystem/search";
 import { KIRO_KNOWLEDGE_MAX_CONTENT_BYTES } from "@/lib/ai/computer/knowledge/types";
 
 export const RETRIEVE_DEFAULT_MAX_FILES = 3;
@@ -182,7 +183,9 @@ export async function retrieveWorkspaceContext(
     }
 
     const extension = candidate.path.split(".").pop()?.toLowerCase() ?? "";
-    if (extension !== "docx" && extension !== "md" && extension !== "txt") {
+    // V3 Part 2.1：与 Knowledge 索引保持一致——docx 走 Mammoth raw text；TEXT_LIKE_EXTENSIONS 走 readText；
+    // 其它（PDF/二进制）→ unsupported（不读正文）
+    if (extension !== "docx" && !TEXT_LIKE_EXTENSIONS.has(extension)) {
       skipped.push({ rootId: candidate.rootId, path: candidate.path, reason: "unsupported" });
       continue;
     }
