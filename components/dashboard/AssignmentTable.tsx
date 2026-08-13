@@ -22,6 +22,7 @@ import { TimeSliceFilter, Priority, Assignment } from "@/types";
 import { openAssignmentEditor } from "@/lib/uiEvents";
 import { useEnterOnAdd } from "@/lib/useEnterOnAdd";
 import { useExitPresenceList } from "@/lib/useExitPresenceList";
+import { ExitCollapse } from "@/components/ui/ExitCollapse";
 import { cn, getPriorityMeta } from "@/lib/utils";
 import { UISelect } from "@/components/ui/Select";
 import { DropdownMenuPanel } from "@/components/ui/DropdownMenu";
@@ -895,9 +896,9 @@ export function AssignmentTable({
             ? retainedWorkspaceList.map((entry) => {
                 const task = entry.item.task;
                 return (
-                  <ExitRow key={task.id} exiting={entry.exiting}>
+                  <ExitCollapse key={task.id} exiting={entry.exiting}>
                     {renderAssignmentRow(task)}
-                  </ExitRow>
+                  </ExitCollapse>
                 );
               })
             : pagedAssignments.map((task) => (
@@ -1094,26 +1095,6 @@ export function AssignmentTable({
 
       {/* ---- Workspace：Assignment Peek（Desktop >=1024） ---- */}
       {isWorkspace && desktop && <AssignmentPeekPanel />}
-    </div>
-  );
-}
-
-/**
- * Exit-only Row wrapper（IM4A）：真实数据 mutation（完成/删除离开当前 View）时
- * 轻 fade + structural collapse（grid 1fr→0fr + opacity），约 160ms；首次 render 不播放 entry。
- * exiting 时 aria-hidden + pointer-events-none（不可再交互）。Reduced motion 由全局体系近即时降级。
- */
-function ExitRow({ exiting, children }: { exiting: boolean; children: React.ReactNode }) {
-  return (
-    <div
-      aria-hidden={exiting || undefined}
-      data-state={exiting ? "exiting" : undefined}
-      className={cn(
-        "grid transition-[grid-template-rows,opacity] duration-[160ms] ease-[var(--ease-standard)]",
-        exiting ? "grid-rows-[0fr] opacity-0 pointer-events-none" : "grid-rows-[1fr] opacity-100"
-      )}
-    >
-      <div className="min-h-0 overflow-hidden">{children}</div>
     </div>
   );
 }

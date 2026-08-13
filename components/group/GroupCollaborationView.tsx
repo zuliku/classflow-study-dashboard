@@ -31,6 +31,8 @@ import { format, formatDistanceToNow } from "date-fns";
 import { zhCN } from "date-fns/locale";
 import { cardKeyHandler } from "@/lib/utils";
 import { useEnterOnAdd } from "@/lib/useEnterOnAdd";
+import { useExitPresenceList } from "@/lib/useExitPresenceList";
+import { ExitCollapse } from "@/components/ui/ExitCollapse";
 import { parseLocalDDL, getLocalDDLDate, getLocalDDLTime, combineLocalDateTime } from "@/lib/ddl";
 import { formatLocalDate } from "@/lib/groupProject";
 
@@ -144,9 +146,28 @@ export function GroupCollaborationView() {
   const [taskForm, setTaskForm] = useState<null | { mode: "create" } | { mode: "edit"; taskId: string }>(null);
   const [taskSearch, setTaskSearch] = useState("");
 
-  // 新增小组任务：仅新创建的 item 出场（页面初次渲染不 stagger）
+  // 新增小组任务：仅新创建的 item 出场（页面初次渲染不 stagger；scope = 项目，切换项目不误报新增）
   const selectedProjectTasks = groupProjects.find((p) => p.id === selectedProjectId);
-  const newTaskIds = useEnterOnAdd(selectedProjectTasks?.tasks.map((t) => t.id) ?? []);
+  const newTaskIds = useEnterOnAdd(selectedProjectTasks?.tasks.map((t) => t.id) ?? [], selectedProjectId);
+
+  // IM4B：Project / Member / Task mutation continuity（exit-only；filter/search/项目切换直接同步）
+  const activeProject = groupProjects.find((p) => p.id === selectedProjectId) || groupProjects[0];
+  const selectedProject = groupProjects.find((p) => p.id === selectedProjectId) || null;
+
+  const newProjectIds = useEnterOnAdd(groupProjects.map((p) => p.id));
+  const retainedProjects = useExitPresenceList({
+    items: groupProjects,
+    getId: (p) => p.id,
+    resetKey: "group-projects",
+  });
+
+  const projectMembers = selectedProject?.members ?? [];
+  const newMemberIds = useEnterOnAdd(projectMembers.map((m) => m.id), selectedProjectId);
+  const retainedMembers = useExitPresenceList({
+    items: projectMembers,
+    getId: (m) => m.id,
+    resetKey: selectedProjectId,
+  });
 
   // 表单字段
   const [pName, setPName] = useState("");
@@ -162,9 +183,6 @@ export function GroupCollaborationView() {
   const [tAssigneeId, setTAssigneeId] = useState("");
   const [tDate, setTDate] = useState("");
   const [tTime, setTTime] = useState("23:59");
-
-  const activeProject = groupProjects.find((p) => p.id === selectedProjectId) || groupProjects[0];
-  const selectedProject = groupProjects.find((p) => p.id === selectedProjectId) || null;
 
   // ---- 项目表单 ----
   const openCreateProject = () => {
@@ -334,6 +352,16 @@ export function GroupCollaborationView() {
     ? selectedProject.tasks.filter((t) => t.title.toLowerCase().includes(taskSearch.trim().toLowerCase()))
     : [];
 
+  // Task exit：真实删除 → exit；搜索/项目切换 → 直接同步
+  const retainedTasks = useExitPresenceList({
+    items: filteredTasks,
+    getId: (t) => t.id,
+    resetKey: `${selectedProjectId}|${taskSearch}`,
+  });
+  const taskExitingIds = new Set(
+    retainedTasks.filter((e) => e.exiting).map((e) => e.item.id)
+  );
+
   return (
     <div className="flex flex-1 min-h-0 flex-col">
       {/* 统一 Workspace Header（App Shell Structural；Banner 已删除；Ask Kiro 仅 activeProject 时显示） */}
@@ -379,17 +407,20 @@ export function GroupCollaborationView() {
             </div>
           ) : (
             <div className="space-y-2">
-              {groupProjects.map((p) => {
+              {retainedProjects.map((entry) => {
+                const p = entry.item;
                 const isSelected = activeProject?.id === p.id;
                 const course = courses.find((c) => c.id === p.courseId);
                 return (
+                  <ExitCollapse key={p.id} exiting={entry.exiting}>
                   <div
-                    key={p.id}
                     onClick={() => setSelectedProjectId(p.id)}
                     role="button"
                     tabIndex={0}
                     onKeyDown={cardKeyHandler(() => setSelectedProjectId(p.id))}
                     className={`p-4 rounded-2xl border transition-colors duration-[var(--motion-base)] ease-[var(--ease-standard)] cursor-pointer shadow-subtle flex flex-col justify-between ${
+                      newProjectIds.has(p.id) && "animate-enter"
+                    } ${
                       isSelected
                         ? "bg-pastel-mint/60 border-stone-beige ring-1 ring-stone-beige"
                         : "bg-surface border-line hover:bg-alabaster"
@@ -418,6 +449,7 @@ export function GroupCollaborationView() {
                       </div>
                     </div>
                   </div>
+                  </ExitCollapse>
                 );
               })}
             </div>
@@ -492,7 +524,7 @@ export function GroupCollaborationView() {
                   </Button>
                 </div>
 
-                {selectedProject.members.length === 0 ? (
+                {retainedMembers.length === 0 ? (
                   <div className="py-6 text-center space-y-2 bg-white border border-line rounded-xl">
                     <p className="text-[11px] text-sandrift">还没有成员</p>
                     <Button variant="primary" size="sm" onClick={openAddMember}>
@@ -502,10 +534,15 @@ export function GroupCollaborationView() {
                   </div>
                 ) : (
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
-                    {selectedProject.members.map((m) => (
+                    {retainedMembers.map((entry) => {
+                      const m = entry.item;
+                      return (
+                      <ExitCollapse key={m.id} exiting={entry.exiting} className="min-w-0">
                       <div
-                        key={m.id}
-                        className="p-2.5 bg-white border border-line rounded-xl flex items-center space-x-2 text-xs group"
+                        className={cn(
+                          "p-2.5 bg-white border border-line rounded-xl flex items-center space-x-2 text-xs group w-full",
+                          newMemberIds.has(m.id) && "animate-enter"
+                        )}
                       >
                         <MemberAvatar member={m} size="w-7 h-7" ring />
                         <div className="min-w-0 flex-1">
@@ -549,7 +586,9 @@ export function GroupCollaborationView() {
                           </IconButton>
                         </div>
                       </div>
-                    ))}
+                      </ExitCollapse>
+                      );
+                    })}
                   </div>
                 )}
               </div>
@@ -585,7 +624,7 @@ export function GroupCollaborationView() {
               </div>
 
               <div className="space-y-2">
-                {filteredTasks.length === 0 ? (
+                {retainedTasks.length === 0 ? (
                   <div className="py-6 text-center space-y-2 bg-white border border-line rounded-xl">
                     <p className="text-[11px] text-sandrift">
                       {selectedProject.tasks.length === 0 ? "还没有任务" : "没有匹配的任务"}
@@ -598,12 +637,13 @@ export function GroupCollaborationView() {
                     )}
                   </div>
                 ) : (
-                  filteredTasks.map((task) => {
+                  retainedTasks.map((entry) => {
+                    const task = entry.item;
                     const assignee = selectedProject.members.find((m) => m.id === task.assigneeId);
                     const ddlDate = parseLocalDDL(task.ddl);
                     return (
+                      <ExitCollapse key={task.id} exiting={entry.exiting}>
                       <div
-                        key={task.id}
                         className={cn(
                           "p-3 rounded-xl border transition-colors flex items-center justify-between text-xs group",
                           newTaskIds.has(task.id) && "animate-enter",
@@ -665,6 +705,7 @@ export function GroupCollaborationView() {
                           </IconButton>
                         </div>
                       </div>
+                      </ExitCollapse>
                     );
                   })
                 )}

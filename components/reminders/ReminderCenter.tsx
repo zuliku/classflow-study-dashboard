@@ -8,12 +8,15 @@ import { Reminder } from "@/types";
 import { combineLocalDateTime, parseLocalDDL } from "@/lib/ddl";
 import { formatLocalDateTime } from "@/lib/reminders/reminderDomain";
 import { getReminderCenterGroups, formatReminderCenterTime } from "@/lib/reminders/reminderCenterView";
+import { useExitPresenceList } from "@/lib/useExitPresenceList";
+import { useEnterOnAdd } from "@/lib/useEnterOnAdd";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
 import { IconButton } from "@/components/ui/IconButton";
 import { Input } from "@/components/ui/Input";
 import { Textarea } from "@/components/ui/Textarea";
 import { Field } from "@/components/ui/Field";
+import { ExitCollapse } from "@/components/ui/ExitCollapse";
 
 const TARGET_LABELS: Record<Reminder["targetType"], string> = {
   assignment: "任务",
@@ -62,7 +65,19 @@ export function ReminderCenter() {
   const [draft, setDraft] = useState<StandaloneDraft>({ title: "", date: "", time: "23:59", note: "" });
   const [error, setError] = useState("");
 
-  const { upcoming, history } = getReminderCenterGroups(reminders);
+  // IM4B：全局 reminders 级 mutation retention——真删除 → exit；scheduled→fired 是 status move（id 仍在 → 不 exit）。
+  // resetKey = panel session：关闭期间发生的变更不重播动画；重新打开为新会话。
+  const retainedReminders = useExitPresenceList({
+    items: reminders,
+    getId: (r) => r.id,
+    resetKey: isOpen ? "open" : "closed",
+  });
+  const newReminderIds = useEnterOnAdd(reminders.map((r) => r.id));
+  const retainedExiting = new Map(
+    retainedReminders.filter((e) => e.exiting).map((e) => [e.item.id, true])
+  );
+  // 分组基于 visual 列表（含 exiting 快照）→ 删除最后一条时空态不提前出现
+  const { upcoming, history } = getReminderCenterGroups(retainedReminders.map((e) => e.item));
 
   // 打开 → 统一标记 fired && !readAt 为已读（一次 set）
   useEffect(() => {
@@ -169,22 +184,24 @@ export function ReminderCenter() {
     }
   };
 
-  const renderRow = (r: Reminder, isHistory: boolean) => {
+  const renderRow = (r: Reminder, opts: { isHistory: boolean; exiting: boolean; entering: boolean }) => {
+    const { isHistory, exiting, entering } = opts;
     const editable = r.targetType === "standalone" && r.status === "scheduled";
     return (
-      <div
-        key={r.id}
-        role="button"
-        tabIndex={0}
-        onClick={() => handleOpenItem(r)}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") handleOpenItem(r);
-        }}
-        className={cn(
-          "w-full flex items-center gap-2.5 px-3 py-2.5 text-left hover:bg-alabaster/60 transition-colors",
-          isHistory && "opacity-75"
-        )}
-      >
+      <ExitCollapse key={r.id} exiting={exiting}>
+        <div
+          role="button"
+          tabIndex={0}
+          onClick={() => handleOpenItem(r)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") handleOpenItem(r);
+          }}
+          className={cn(
+            "w-full flex items-center gap-2.5 px-3 py-2.5 text-left hover:bg-alabaster/60 transition-colors",
+            isHistory && "opacity-75",
+            entering && "animate-enter"
+          )}
+        >
         {/* 状态 icon：upcoming = 时钟；history = 已提醒勾 */}
         <span
           className={cn(
@@ -239,7 +256,8 @@ export function ReminderCenter() {
             <Trash2 className="w-3.5 h-3.5" />
           </IconButton>
         </div>
-      </div>
+        </div>
+      </ExitCollapse>
     );
   };
 
@@ -363,7 +381,13 @@ export function ReminderCenter() {
               </div>
             ) : (
               <div className="divide-y divide-line-soft">
-                {upcoming.map((r) => renderRow(r, false))}
+                {upcoming.map((r) =>
+                  renderRow(r, {
+                    isHistory: false,
+                    exiting: retainedExiting.has(r.id) ?? false,
+                    entering: newReminderIds.has(r.id),
+                  })
+                )}
               </div>
             )}
           </section>
@@ -383,7 +407,13 @@ export function ReminderCenter() {
               </div>
             ) : (
               <div className="divide-y divide-line-soft">
-                {history.map((r) => renderRow(r, true))}
+                {history.map((r) =>
+                  renderRow(r, {
+                    isHistory: true,
+                    exiting: retainedExiting.has(r.id) ?? false,
+                    entering: false,
+                  })
+                )}
               </div>
             )}
           </section>
