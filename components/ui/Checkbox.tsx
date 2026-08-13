@@ -43,7 +43,14 @@ export function Checkbox({ checked, onChange, label, className, ...props }: Chec
           props.disabled && "cursor-not-allowed"
         )}
       >
-        <Check className="h-3 w-3" strokeWidth={3} />
+        {/* Check glyph：极轻 opacity + scale reveal（box 本身不缩放，避免列表布局跳动） */}
+        <Check
+          className={cn(
+            "h-3 w-3 transition-[opacity,transform] duration-[var(--motion-fast)] ease-[var(--ease-standard)]",
+            checked ? "opacity-100 scale-100" : "opacity-0 scale-[0.85]"
+          )}
+          strokeWidth={3}
+        />
       </span>
       {label ? <span className="text-[11px] font-bold text-charcoal">{label}</span> : null}
     </label>

@@ -143,7 +143,7 @@ test("DDL drag：关闭 → 拖动不发生、点击正常；打开 → 拖动�
   await expect(page.getByTestId("ddl-move-feedback")).toBeVisible();
 });
 
-test("ddlWarningDays：1 天 → 临近 DDL 只显示 2 条；7 天 → 5 条", async ({ page }) => {
+test("ddlWarningDays：1 天 → 临近 DDL 只显示 1 条；7 天 → 5 条", async ({ page }) => {
   await openSettings(page);
   await page.getByRole("navigation", { name: "设置导航" }).getByRole("button", { name: "任务" }).click();
 
@@ -151,8 +151,8 @@ test("ddlWarningDays：1 天 → 临近 DDL 只显示 2 条；7 天 → 5 条", 
   await expect(page.getByRole("button", { name: "1 天", exact: true })).toHaveAttribute("aria-pressed", "true");
 
   await gotoOverview(page);
-  // differenceInDays 为「经过整天数」：+1/+2 天（18:00 前）的任务均在 1 天窗口内
-  await expect(page.getByTestId("upcoming-ddl-card").getByText("2 项待办")).toBeVisible();
+  // differenceInDays 为「经过整天数」：1 天窗口内仅「明天 23:59」这一条（2 天后 18:00 diff=2）
+  await expect(page.getByTestId("upcoming-ddl-card").getByText("1 项待办")).toBeVisible();
 
   await openSettings(page);
   await page.getByRole("navigation", { name: "设置导航" }).getByRole("button", { name: "任务" }).click();
