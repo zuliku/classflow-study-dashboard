@@ -254,7 +254,8 @@ export async function sandboxRemove(adapterRef: string, path: string, kind: "fil
       req.onsuccess = () => {
         const cursor = req.result;
         if (cursor) {
-          count += 1;
+          // 排除目录自身 marker（key === prefix）
+          if (String(cursor.key) !== prefix) count += 1;
           cursor.continue();
         } else {
           db.close();
