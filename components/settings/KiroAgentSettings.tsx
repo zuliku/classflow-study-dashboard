@@ -9,6 +9,7 @@ import { SettingsGroup } from "@/components/settings/SettingsGroup";
 import { SettingsRow } from "@/components/settings/SettingsRow";
 import { SettingsToggle, SettingsSegmentedControl } from "@/components/settings/SettingsControls";
 import { Button } from "@/components/ui/Button";
+import { cn } from "@/lib/utils";
 import {
   chooseBrowserWorkspaceDirectory,
   queryBrowserGrant,
@@ -199,60 +200,81 @@ export function KiroAgentSettings() {
           ) : (
             <div className="px-1 space-y-1.5">
               {workspaces.map((ws) => (
-                <div key={ws.id} className="flex flex-col gap-1 rounded-xl border border-line bg-[#F7F5F5] p-2.5">
-                  <div className="flex items-center justify-between gap-2">
+                <div key={ws.id} data-testid="kiro-workspace-card" className="flex flex-col gap-1.5 rounded-xl border border-line bg-[#F7F5F5] p-2.5">
+                  <div className="flex items-center gap-1.5 flex-wrap">
                     <span className="text-[11px] font-bold text-charcoal truncate">{ws.name}</span>
-                    {ws.id === activeWorkspaceId && (
-                      <span className="text-[9px] font-bold text-charcoal bg-pastel-mint px-1.5 py-0.5 rounded">
-                        当前
-                      </span>
-                    )}
+                    <span
+                      data-testid="kiro-workspace-badges"
+                      className="flex items-center gap-1 flex-wrap"
+                    >
+                      {ws.id === activeWorkspaceId && (
+                        <span className="text-[9px] font-bold text-charcoal bg-pastel-mint px-1.5 py-0.5 rounded">
+                          当前
+                        </span>
+                      )}
+                      {ws.roots.map((root) => {
+                        const status = grantStatus[root.adapterRef] ?? "missing";
+                        const isSandbox = root.adapterRef === "sandbox-default" || root.adapterRef.startsWith("sandbox");
+                        return (
+                          <span key={root.id} className="flex items-center gap-1 flex-wrap">
+                            <span className="text-[9px] font-semibold text-sandrift px-1.5 py-0.5 rounded bg-white border border-line">
+                              {isSandbox ? "Sandbox" : "本地"}
+                            </span>
+                            <span
+                              className={cn(
+                                "text-[9px] font-semibold px-1.5 py-0.5 rounded border",
+                                root.access === "read-write"
+                                  ? "text-success border-line"
+                                  : "text-sandrift border-line"
+                              )}
+                            >
+                              {root.access === "read-write" ? "读写" : "只读"}
+                            </span>
+                            {!isSandbox && (
+                              <span
+                                className={cn(
+                                  "text-[9px] font-semibold px-1.5 py-0.5 rounded border",
+                                  status === "granted"
+                                    ? "text-success border-line"
+                                    : "text-danger border-danger-border bg-danger-bg"
+                                )}
+                              >
+                                {status === "granted" ? "已授权" : status === "missing" ? "未授权" : "需要重新授权"}
+                              </span>
+                            )}
+                          </span>
+                        );
+                      })}
+                    </span>
                   </div>
-                  {ws.roots.map((root) => {
-                    const status = grantStatus[root.adapterRef] ?? "missing";
-                    const isSandbox = root.adapterRef === "sandbox-default" || root.adapterRef.startsWith("sandbox");
-                    return (
-                      <div key={root.id} className="flex items-center justify-between gap-2 text-[10px]">
-                        <span className="flex items-center gap-1 min-w-0 truncate text-satin-grey">
+                  <div className="flex flex-col gap-0.5">
+                    {ws.roots.map((root) => {
+                      const isSandbox = root.adapterRef === "sandbox-default" || root.adapterRef.startsWith("sandbox");
+                      return (
+                        <span key={root.id} className="flex items-center gap-1 text-[10px] text-satin-grey truncate">
                           {isSandbox ? (
                             <HardDrive className="w-3 h-3 shrink-0 text-sandrift" />
                           ) : (
                             <FolderOpen className="w-3 h-3 shrink-0 text-sandrift" />
                           )}
                           <span className="truncate">{root.label}</span>
-                          <span className="text-[9px] font-semibold shrink-0">
-                            {isSandbox ? "Sandbox" : "本地"}
-                          </span>
                         </span>
-                        <span className="flex items-center gap-1.5 shrink-0">
-                          <span
-                            className={root.access === "read-write" ? "text-success font-semibold" : "text-sandrift font-semibold"}
-                          >
-                            {root.access === "read-write" ? "读写" : "只读"}
-                          </span>
-                          {!isSandbox && (
-                            <span className={status === "granted" ? "text-success" : "text-danger font-semibold"}>
-                              {status === "granted" ? "已授权" : status === "missing" ? "未授权" : "需要重新授权"}
-                            </span>
-                          )}
-                        </span>
-                      </div>
-                    );
-                  })}
-                  {ws.id === activeWorkspaceId && (
-                    <div className="flex flex-wrap gap-1.5 pt-1">
-                      <Button variant="secondary" size="sm" onClick={handleAddBrowserLocation} disabled={addingLocation}>
-                        <FolderOpen className="w-3 h-3" />
-                        添加本地位置
-                      </Button>
-                      <Button variant="secondary" size="sm" onClick={handleUseSandbox}>
-                        <HardDrive className="w-3 h-3" />
-                        添加 Sandbox
-                      </Button>
-                    </div>
-                  )}
+                      );
+                    })}
+                  </div>
                 </div>
               ))}
+              {/* 添加位置：独立于单个 Workspace 卡（视觉上不表示“修改当前 root”） */}
+              <div className="flex flex-wrap gap-1.5 pt-1.5">
+                <Button variant="secondary" size="sm" onClick={handleAddBrowserLocation} disabled={addingLocation}>
+                  <FolderOpen className="w-3 h-3" />
+                  添加本地位置
+                </Button>
+                <Button variant="secondary" size="sm" onClick={handleUseSandbox}>
+                  <HardDrive className="w-3 h-3" />
+                  添加 Sandbox
+                </Button>
+              </div>
             </div>
           )}
         </SettingsGroup>

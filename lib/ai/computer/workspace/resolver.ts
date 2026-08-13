@@ -26,17 +26,25 @@ export interface NormalizedComputerPath {
  * - 拒绝 control chars / NUL；
  * - 拒绝 Windows reserved device names（CON.txt 等，大小写不敏感）；
  * - 拒绝 `..` 逃逸出 root（`../secret`）；路径内部合法的 `a/../b` 归一到 `b`；
- * - 空路径 / `.` 拒绝。
+ * - 空路径 / `.` 默认拒绝。
+ *
+ * allowRoot=true（仅 list/search/grep scope）："." / 空字符串解析为 root scope（relativePath=""），
+ * 其余安全规则完全不变（../、absolute、drive、UNC、reserved 仍拒绝）。
  *
  * 抛 ComputerError(PATH_OUTSIDE_SANDBOX)，绝不返回可逃逸路径。
  */
-export function normalizeRelativeComputerPath(input: string): NormalizedComputerPath {
-  if (typeof input !== "string" || input.length === 0) {
-    throw new ComputerError("PATH_OUTSIDE_SANDBOX", "路径为空");
+export function normalizeRelativeComputerPath(
+  input: string,
+  options?: { allowRoot?: boolean }
+): NormalizedComputerPath {
+  const allowRoot = options?.allowRoot === true;
+  if (typeof input !== "string") {
+    throw new ComputerError("PATH_OUTSIDE_SANDBOX", "路径无效");
   }
 
   const raw = input.trim();
-  if (raw.length === 0) {
+  if (raw.length === 0 || raw === ".") {
+    if (allowRoot) return { path: "", segments: [] };
     throw new ComputerError("PATH_OUTSIDE_SANDBOX", "路径为空");
   }
   if (INVALID_CHARS.test(raw)) {
