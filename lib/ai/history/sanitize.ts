@@ -154,8 +154,12 @@ export function sanitizeConversation(input: {
       };
     });
 
+  // V2 Part 3：Artifact Context 是 session-ephemeral（path/revision 只是当前会话快照）；
+  // durable identity 在 Artifact Registry，不写入 Kiro 对话历史
   const toRefs = (refs: KiroContextRef[]): PersistedContextRef[] =>
-    refs.map((r) => ({ kind: r.kind, entityId: r.entityId, label: r.label }));
+    refs
+      .filter((r) => r.kind !== "artifact")
+      .map((r) => ({ kind: r.kind as PersistedContextRef["kind"], entityId: r.entityId, label: r.label }));
 
   return {
     id: input.id,

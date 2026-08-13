@@ -78,13 +78,99 @@ export function replaceEntryRefs(_prev: KiroContextRef[], next: KiroContextRef[]
   return next;
 }
 
-/** 传给模型的极简引用（只含 kind/id/label，不塞完整实体） */
-export function refsForPrompt(refs: KiroContextRef[]): { kind: string; id?: string; label: string }[] {
-  return refs.map((r) => ({
-    kind: r.kind,
-    id: r.entityId,
-    label: r.label,
-  }));
+/**
+ * Prompt Context 引用（strict whitelist；V2 Part 3 Artifact 显式构造，绝不 spread 原 ref）。
+ * Artifact 只含 id/workspaceId/rootId/relativePath/type/revision——content/adapterRef/nativePath/bytes 永不进入。
+ */
+export type KiroPromptContextRef =
+  | {
+      kind: "course" | "assignment" | "group-project" | "material" | "week";
+      id?: string;
+      label: string;
+    }
+  | {
+      kind: "artifact";
+      id: string;
+      label: string;
+      workspaceId: string;
+      rootId: string;
+      relativePath: string;
+      type: "text" | "markdown" | "docx";
+      revision: number;
+    };
+
+/** 传给模型的极简引用（Artifact 走逻辑 whitelist；显式构造；无 meta 的 artifact ref 不输出） */
+export function refsForPrompt(refs: KiroContextRef[]): KiroPromptContextRef[] {
+  const out: KiroPromptContextRef[] = [];
+  for (const r of refs) {
+    if (r.kind === "artifact") {
+      if (!r.artifact) continue;
+      out.push({
+        kind: "artifact",
+        id: r.artifact.artifactId,
+        label: r.label,
+        workspaceId: r.artifact.workspaceId,
+        rootId: r.artifact.rootId,
+        relativePath: r.artifact.relativePath,
+        type: r.artifact.type,
+        revision: r.artifact.revision,
+      });
+      continue;
+    }
+    out.push({
+      kind: r.kind,
+      id: r.entityId,
+      label: r.label,
+    });
+  }
+  return out;
+}
+
+const PROMPT_CONTEXT_KINDS = new Set(["course", "assignment", "group-project", "material", "week", "artifact"]);
+const ARTIFACT_TYPES = new Set(["text", "markdown", "docx"]);
+
+/**
+ * Server 端再次归一化（不可信输入）：只保留白名单字段。
+ * 恶意请求的 adapterRef/nativePath/content 等额外字段全部丢弃。
+ */
+export function normalizePromptContextRefs(input: unknown): KiroPromptContextRef[] {
+  if (!Array.isArray(input)) return [];
+  const out: KiroPromptContextRef[] = [];
+  for (const raw of input) {
+    if (typeof raw !== "object" || raw === null) continue;
+    const record = raw as Record<string, unknown>;
+    const kind = typeof record.kind === "string" ? record.kind : "";
+    if (!PROMPT_CONTEXT_KINDS.has(kind)) continue;
+    const label = typeof record.label === "string" ? record.label : "";
+    if (kind === "artifact") {
+      const id = typeof record.id === "string" ? record.id : "";
+      const workspaceId = typeof record.workspaceId === "string" ? record.workspaceId : "";
+      const rootId = typeof record.rootId === "string" ? record.rootId : "";
+      const relativePath = typeof record.relativePath === "string" ? record.relativePath : "";
+      const type = typeof record.type === "string" ? record.type : "";
+      const revision = typeof record.revision === "number" ? record.revision : NaN;
+      if (!id || !workspaceId || !rootId || !relativePath || !ARTIFACT_TYPES.has(type) || !Number.isInteger(revision) || revision < 1) {
+        continue;
+      }
+      out.push({
+        kind: "artifact",
+        id,
+        label,
+        workspaceId,
+        rootId,
+        relativePath,
+        type: type as "text" | "markdown" | "docx",
+        revision,
+      });
+      continue;
+    }
+    out.push({
+      kind: kind as "course" | "assignment" | "group-project" | "material" | "week",
+      id: typeof record.id === "string" ? record.id : undefined,
+      label,
+    });
+  }
+  return out;
 }
 
 /**

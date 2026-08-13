@@ -130,6 +130,10 @@ export function KiroContextPicker({
       ? CalendarRange
       : kind === "group-project"
       ? Users2
+      : kind === "material"
+      ? FileText
+      : kind === "artifact"
+      ? FileText
       : FileText;
 
   const list = (

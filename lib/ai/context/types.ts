@@ -43,12 +43,27 @@ export interface KiroBaseContext {
   };
 }
 
-/** 显式 Context 引用（自动 + 手动 + 入口；传给模型的只有 kind/id/label） */
+/**
+ * V2 Part 3：Artifact Context 只含逻辑 metadata 快照（session-ephemeral）。
+ * 不含 content / adapterRef / nativePath / bytes / Source IR；不提供任何额外权限。
+ */
+export interface KiroArtifactContextMeta {
+  artifactId: string;
+  workspaceId: string;
+  rootId: string;
+  relativePath: string;
+  type: "text" | "markdown" | "docx";
+  revision: number;
+}
+
+/** 显式 Context 引用（自动 + 手动 + 入口；传给模型的只有 kind/id/label；Artifact 加逻辑 whitelist） */
 export interface KiroContextRef {
   key: string;
-  kind: "course" | "assignment" | "group-project" | "material" | "week";
+  kind: "course" | "assignment" | "group-project" | "material" | "week" | "artifact";
   entityId?: string;
   label: string;
   /** auto：Store 选中实体；manual：用户 @；entry：从业务实体打开 Kiro */
   source: "auto" | "manual" | "entry";
+  /** V2 Part 3：仅 kind === "artifact"（由 Recent Artifacts 以 manual 添加） */
+  artifact?: KiroArtifactContextMeta;
 }

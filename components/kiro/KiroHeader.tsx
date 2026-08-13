@@ -3,6 +3,7 @@
 import React from "react";
 import { cn } from "@/lib/utils";
 import { KiroSessionActions } from "@/components/kiro/KiroSessionActions";
+import { KiroRecentArtifactsPopover } from "@/components/kiro/computer/KiroRecentArtifactsPopover";
 import { KiroLogoIcon } from "@/components/kiro/KiroLogo";
 import { useKiroSession } from "@/components/kiro/KiroSessionProvider";
 
@@ -48,7 +49,11 @@ export function KiroHeader({
         {conversationTitle ?? "新对话"}
       </h2>
 
-      <KiroSessionActions variant="workspace" onNewChat={onNewChat} onOpenHistory={onOpenHistory} />
+      <div className="flex items-center gap-1.5 shrink-0">
+        {/* V2 Part 3：最近文件（仅 Workspace；Sidecar 不挂载） */}
+        <KiroRecentArtifactsPopover />
+        <KiroSessionActions variant="workspace" onNewChat={onNewChat} onOpenHistory={onOpenHistory} />
+      </div>
     </div>
   );
 }

@@ -18,6 +18,7 @@ const AMBIENT_KIND_ICONS: Record<KiroContextRef["kind"], React.ComponentType<{ c
   assignment: ClipboardCheck,
   "group-project": Users,
   material: FileText,
+  artifact: FileText,
 };
 
 /**
