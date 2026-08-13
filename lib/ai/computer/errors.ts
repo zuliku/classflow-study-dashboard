@@ -23,7 +23,8 @@ export type ComputerErrorCode =
   | "INVALID_INPUT"
   | "ARTIFACT_NOT_FOUND"
   | "ARTIFACT_NOT_EDITABLE"
-  | "ARTIFACT_REVISION_CONFLICT";
+  | "ARTIFACT_REVISION_CONFLICT"
+  | "ARTIFACT_UNSUPPORTED_OPERATION";
 
 export class ComputerError extends Error {
   readonly code: ComputerErrorCode;

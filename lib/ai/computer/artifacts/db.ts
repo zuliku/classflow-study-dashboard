@@ -211,3 +211,59 @@ export async function artifactDbCommitRevision(input: {
     db.close();
   }
 }
+
+/**
+ * V2 Part 3：generic Artifact 文本 patch 的 metadata-only revision（单个 artifacts readwrite 事务）。
+ * 校验当前 revision === expectedRevision → +1 → updatedAt → put；oncomplete 后重新读取确认。
+ * 不触碰 sources store（generic Artifact 无 Source IR）。
+ */
+export async function artifactDbCommitMetadataRevision(input: {
+  artifactId: string;
+  expectedRevision: number;
+}): Promise<KiroArtifact> {
+  const db = await openArtifactDb();
+  if (!db) throw new ComputerError("UNSUPPORTED_BROWSER", "当前环境不支持 Artifact Registry（无 IndexedDB）");
+  try {
+    return await new Promise((resolve, reject) => {
+      const tx = db.transaction(ARTIFACT_STORE, "readwrite");
+      const store = tx.objectStore(ARTIFACT_STORE);
+      const getReq = store.get(input.artifactId);
+      getReq.onsuccess = () => {
+        const artifact = getReq.result as KiroArtifact | undefined;
+        if (!artifact) {
+          reject(new ComputerError("ARTIFACT_NOT_FOUND", "Artifact 不存在"));
+          return;
+        }
+        if (artifact.revision !== input.expectedRevision) {
+          reject(
+            new ComputerError(
+              "ARTIFACT_REVISION_CONFLICT",
+              `Artifact 当前版本为 ${artifact.revision}，期望 ${input.expectedRevision}`
+            )
+          );
+          return;
+        }
+        const updated: KiroArtifact = {
+          ...artifact,
+          revision: artifact.revision + 1,
+          updatedAt: new Date().toISOString(),
+        };
+        store.put(updated, updated.id);
+      };
+      getReq.onerror = () => reject(new ComputerError("VERIFICATION_FAILED", "Artifact 读取失败"));
+      tx.oncomplete = () => {
+        void artifactDbGet(input.artifactId).then((after) => {
+          if (!after) {
+            reject(new ComputerError("VERIFICATION_FAILED", "Artifact 提交后无法确认"));
+            return;
+          }
+          resolve(after);
+        });
+      };
+      tx.onabort = () => reject(new ComputerError("VERIFICATION_FAILED", "Artifact revision 事务中止"));
+      tx.onerror = () => reject(new ComputerError("VERIFICATION_FAILED", "Artifact revision 提交失败"));
+    });
+  } finally {
+    db.close();
+  }
+}

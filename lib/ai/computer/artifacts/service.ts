@@ -14,6 +14,7 @@ import {
 } from "@/lib/ai/computer/artifacts/types";
 import {
   artifactDbAll,
+  artifactDbCommitMetadataRevision,
   artifactDbCommitRevision,
   artifactDbDelete,
   artifactDbGet,
@@ -172,6 +173,68 @@ export async function removeArtifactsForWorkspace(workspaceId: string): Promise<
     await artifactSourceDelete(artifact.id);
     await artifactDbDelete(artifact.id);
   }
+}
+
+/** 显式删除 Artifact record（只删 metadata + Source IR；绝不触碰 filesystem 内容） */
+export async function removeArtifactRecord(artifactId: string): Promise<void> {
+  await artifactSourceDelete(artifactId);
+  await artifactDbDelete(artifactId);
+  const after = await artifactDbGet(artifactId);
+  const sourceAfter = await artifactSourceGet(artifactId);
+  if (after !== null || sourceAfter !== null) {
+    throw new ComputerError("VERIFICATION_FAILED", "Artifact 记录清理失败");
+  }
+}
+
+/**
+ * 条件删除（create Undo 用）：Artifact 已不存在 → idempotent success；
+ * 存在但 logical location 已变化（移动/重绑定）→ 拒绝删除（防旧 checkpoint 误删）。
+ */
+export async function removeArtifactRecordIfMatches(input: {
+  artifactId: string;
+  workspaceId: string;
+  rootId: string;
+  relativePath: string;
+}): Promise<void> {
+  const artifact = await artifactDbGet(input.artifactId);
+  if (!artifact) return; // idempotent
+  if (
+    artifact.workspaceId !== input.workspaceId ||
+    artifact.rootId !== input.rootId ||
+    artifact.relativePath !== input.relativePath
+  ) {
+    throw new ComputerError(
+      "ARTIFACT_REVISION_CONFLICT",
+      "Artifact 已移动到其它位置，拒绝用旧记录删除"
+    );
+  }
+  await removeArtifactRecord(input.artifactId);
+}
+
+/** generic Artifact 文本 patch 后：metadata revision +1（原子单事务；无 Source IR） */
+export async function commitGenericArtifactRevision(input: {
+  artifactId: string;
+  expectedRevision: number;
+}): Promise<KiroArtifact> {
+  return artifactDbCommitMetadataRevision(input);
+}
+
+/** 当前 Workspace 最近 Artifact（updatedAt DESC；limit 1..12）——只返回 metadata，不 stat 文件 */
+export async function listRecentArtifactsForWorkspace(
+  workspaceId: string,
+  limit = 12
+): Promise<KiroArtifact[]> {
+  const clamped = Math.max(1, Math.min(limit, 12));
+  const all = await artifactDbAll();
+  return all
+    .filter((a) => a.workspaceId === workspaceId)
+    .sort((a, b) => {
+      const aTime = Date.parse(a.updatedAt);
+      const bTime = Date.parse(b.updatedAt);
+      if (aTime !== bTime) return bTime - aTime;
+      return Date.parse(b.createdAt) - Date.parse(a.createdAt);
+    })
+    .slice(0, clamped);
 }
 
 // ==================== V2 Part 2：Structured Document Revision ====================

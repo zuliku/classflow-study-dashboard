@@ -7,6 +7,7 @@
 import { ComputerError } from "@/lib/ai/computer/errors";
 import { ComputerAdapterIO } from "@/lib/ai/computer/executor-types";
 import { KiroDocument } from "@/lib/ai/computer/documents/types";
+import { removeArtifactRecordIfMatches } from "@/lib/ai/computer/artifacts/service";
 
 /** V2 Part 2：文档 revision 的 exact 文件快照（runtime-only；绝不定持久化/进模型） */
 export type DocumentFileSnapshot =
@@ -20,6 +21,8 @@ export type ComputerInverseOperation =
       rootId: string;
       relativePath: string;
       resourceType: "file" | "directory";
+      /** V2 Part 3：create 登记的 Artifact（create_text_file/create_document 携带；目录无） */
+      artifactId?: string;
     }
   | {
       type: "restore-text";
@@ -75,6 +78,15 @@ export async function applyInverseToAdapter(io: ComputerAdapterIO, inverse: Comp
     const after = await io.stat(inverse.relativePath);
     if (after !== null) {
       throw new ComputerError("VERIFICATION_FAILED", "撤销删除校验失败");
+    }
+    // V2 Part 3：create 登记的 Artifact 同步清理（匹配位置才删；registry 清理失败 → undo_failed）
+    if (inverse.resourceType === "file" && inverse.artifactId) {
+      await removeArtifactRecordIfMatches({
+        artifactId: inverse.artifactId,
+        workspaceId: inverse.workspaceId,
+        rootId: inverse.rootId,
+        relativePath: inverse.relativePath,
+      });
     }
     return;
   }

@@ -61,6 +61,8 @@ import {
   updateArtifactLocation,
   getEditableArtifactRevisionState,
   commitArtifactRevision,
+  getArtifactSource,
+  commitGenericArtifactRevision,
 } from "@/lib/ai/computer/artifacts/service";
 import { KiroArtifact } from "@/lib/ai/computer/artifacts/types";
 import { DocumentFileSnapshot } from "@/lib/ai/computer/checkpoints";
@@ -712,7 +714,6 @@ export async function executeKiroComputerTool(request: {
     if (toolName === "inspect_document") {
       counters.readCount += 1;
       const bytes = await adapter.readBytes(normalized);
-      const raw = await adapter.readText(normalized);
       const ext = normalized.split(".").pop()?.toLowerCase();
       const format = ext === "docx" ? ("docx" as const) : ext === "md" ? ("markdown" as const) : null;
       if (!format) {
@@ -722,6 +723,7 @@ export async function executeKiroComputerTool(request: {
         };
       }
       if (format === "markdown") {
+        const raw = await adapter.readText(normalized);
         const lines = raw.split("\n");
         return {
           kind: "completed",
@@ -740,14 +742,62 @@ export async function executeKiroComputerTool(request: {
           },
         };
       }
+      // DOCX（V2 Part 3）：绝不 readText 二进制；Mammoth raw-text 提取 + 结构事实（优先 Source IR）
+      const { extractDocx } = await import("@/lib/ai/attachments/docx");
+      let extracted: { text: string; truncated: boolean };
+      try {
+        extracted = await extractDocx(
+          new Blob([bytes.slice().buffer as ArrayBuffer], {
+            type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+          })
+        );
+      } catch {
+        return {
+          kind: "completed",
+          output: { ok: false, code: "UNSUPPORTED_FILE_TYPE", message: "无法读取 DOCX 正文" },
+        };
+      }
+      const text = extracted.text.slice(0, 12000);
+      const truncated = extracted.truncated || extracted.text.length > 12000;
+      const artifact = await findArtifactByLocation(ws.id, root.id, normalized);
+      const source = artifact ? await getArtifactSource(artifact.id) : null;
+      let facts: { title?: string; headings: number; paragraphs: number; lists: number; tables: number; codeBlocks: number; characters: number };
+      if (artifact && source && source.revision === artifact.revision) {
+        const inspected = inspectDocumentFacts(source.document, "docx");
+        facts = {
+          title: inspected.title,
+          headings: inspected.headings,
+          paragraphs: inspected.paragraphs,
+          lists: inspected.lists,
+          tables: inspected.tables,
+          codeBlocks: inspected.codeBlocks,
+          characters: inspected.characters,
+        };
+      } else {
+        const paragraphs = text
+          .split(/\n+/)
+          .map((p) => p.trim())
+          .filter(Boolean).length;
+        facts = {
+          title: artifact?.title ?? normalized.split("/").pop() ?? normalized,
+          headings: 0,
+          paragraphs,
+          lists: 0,
+          tables: 0,
+          codeBlocks: 0,
+          characters: text.length,
+        };
+      }
       return {
         kind: "completed",
         output: {
           ok: true,
           data: {
             format,
-            characters: raw.length,
+            ...facts,
             bytes: bytes.byteLength,
+            text,
+            truncated,
           },
         },
       };
@@ -830,6 +880,7 @@ export async function executeKiroComputerTool(request: {
           rootId: root.id,
           relativePath: normalized,
           resourceType: "file",
+          artifactId,
         },
         artifactId,
       });
@@ -840,17 +891,83 @@ export async function executeKiroComputerTool(request: {
       };
     }
     if (toolName === "patch_text_file") {
-      counters.mutationCount += 1;
       const current = await adapter.readText(normalized);
       const edits = (args.edits as { oldText: string; newText: string }[]).map((e) => ({
         oldText: e.oldText,
         newText: e.newText,
       }));
+      // V2 Part 3：Artifact 一致性
+      // - Kiro 结构化文档（有匹配 Source IR）→ 拒绝 raw patch，引导 update_document（不计数、不写）
+      // - generic 已登记 Artifact（无 Source IR）→ patch 后 Artifact revision +1（原子 metadata）
+      const registeredArtifact = await findArtifactByLocation(ws.id, root.id, normalized);
+      let artifactId: string | undefined;
+      let artifactRevision: number | undefined;
+      if (registeredArtifact) {
+        artifactId = registeredArtifact.id;
+        artifactRevision = registeredArtifact.revision;
+        const source = await getArtifactSource(registeredArtifact.id);
+        if (source) {
+          if (source.revision !== registeredArtifact.revision) {
+            return {
+              kind: "completed",
+              output: { ok: false, code: "ARTIFACT_REVISION_CONFLICT", message: "Artifact 元数据与文档源版本不一致" },
+            };
+          }
+          return {
+            kind: "completed",
+            output: {
+              ok: false,
+              code: "ARTIFACT_UNSUPPORTED_OPERATION",
+              message: "该文件是 Kiro 结构化文档，请使用 update_document 更新，不能使用原始文本 patch。",
+            },
+          };
+        }
+      }
+      // 内存中完全计算 patch（写前；不消耗 quota）
       const { content: patched, changeCount } = applyExactPatches(current, edits);
+      // 即将开始真实 filesystem mutation
+      counters.mutationCount += 1;
       await adapter.writeText(normalized, patched);
       // Verify：read-back exact
       const readBack = await adapter.readText(normalized);
       if (readBack !== patched) throw new ComputerError("VERIFICATION_FAILED", "修改校验失败");
+
+      // generic Artifact：文件验证后提交 metadata revision（+1）；失败 → exact rollback
+      let newRevision: number | undefined;
+      if (artifactId && artifactRevision !== undefined) {
+        try {
+          const updated = await commitGenericArtifactRevision({
+            artifactId,
+            expectedRevision: artifactRevision,
+          });
+          newRevision = updated.revision;
+        } catch (err) {
+          try {
+            await adapter.writeText(normalized, current);
+            const rollbackRead = await adapter.readText(normalized);
+            if (rollbackRead !== current) {
+              throw new ComputerError("VERIFICATION_FAILED", "Artifact 版本回滚校验失败");
+            }
+          } catch {
+            return {
+              kind: "completed",
+              output: {
+                ok: false,
+                code: "VERIFICATION_FAILED",
+                message: "文件已修改但 Artifact 版本登记失败且回滚未完成，文件/Artifact 状态可能需要人工检查。",
+              },
+            };
+          }
+          if (err instanceof ComputerError) {
+            return { kind: "completed", output: { ok: false, code: err.code, message: err.message } };
+          }
+          return {
+            kind: "completed",
+            output: { ok: false, code: "VERIFICATION_FAILED", message: "Artifact 版本登记失败" },
+          };
+        }
+      }
+
       const canUndo = current.length <= COMPUTER_PATCH_UNDO_LIMIT_BYTES;
       const runtime = buildMutationRuntime({
         toolName,
@@ -862,6 +979,8 @@ export async function executeKiroComputerTool(request: {
         root,
         relativePath: normalized,
         changeCount,
+        artifactId,
+        revision: newRevision,
         review: {
           kind: "text-patch",
           edits: edits.map((e) => ({ before: e.oldText, after: e.newText })),
@@ -943,6 +1062,7 @@ export async function executeKiroComputerTool(request: {
             rootId: root.id,
             relativePath: normalized,
             resourceType: "file",
+            artifactId,
           },
           artifactId,
         });
@@ -1012,6 +1132,7 @@ export async function executeKiroComputerTool(request: {
             rootId: root.id,
             relativePath: normalized,
             resourceType: "file",
+            artifactId,
           },
           artifactId,
         });

@@ -61,19 +61,28 @@ beforeEach(async () => {
 });
 
 describe("create text undo", () => {
-  it("create_text_file → inverse remove-created(file) → verify null", async () => {
+  it("create_text_file → inverse remove-created(file) 携带 artifactId → Undo 后 file/Artifact/Source 全空", async () => {
     const attempt = await runTool("create_text_file", { path: "u.md", content: "hello" });
     expect(attempt.kind).toBe("completed");
     if (attempt.kind !== "completed" || !attempt.runtime?.inverse) return;
     expect(attempt.runtime.inverse.type).toBe("remove-created");
-
+    const artifactId = attempt.runtime.change.artifactId;
+    expect(attempt.runtime.change.artifactId).toBeTruthy();
+    if (attempt.runtime.inverse.type === "remove-created") {
+      expect(attempt.runtime.inverse.artifactId).toBe(artifactId);
+    }
+    // 生产/测试同一路径：applyInverseToAdapter（含 registry cleanup）
     await applyInverseToAdapter(await io(), attempt.runtime.inverse);
     await expect(sandboxReadText(SANDBOX_REF, "u.md")).rejects.toBeInstanceOf(ComputerError);
+    if (artifactId) {
+      expect(await getArtifact(artifactId)).toBeNull();
+      expect(await getArtifactSource(artifactId)).toBeNull();
+    }
   });
 });
 
 describe("create docx undo", () => {
-  it("create_document(docx) → inverse remove-created → verify null", async () => {
+  it("create_document(docx) → inverse remove-created 携带 artifactId → Undo 后 file/Artifact/Source 全空", async () => {
     const attempt = await runTool("create_document", {
       path: "doc.docx",
       document: {
@@ -83,9 +92,18 @@ describe("create docx undo", () => {
     });
     expect(attempt.kind).toBe("completed");
     if (attempt.kind !== "completed" || !attempt.runtime?.inverse) return;
+    const artifactId = attempt.runtime.change.artifactId;
+    expect(attempt.runtime.change.artifactId).toBeTruthy();
+    if (attempt.runtime.inverse.type === "remove-created") {
+      expect(attempt.runtime.inverse.artifactId).toBe(artifactId);
+    }
     await applyInverseToAdapter(await io(), attempt.runtime.inverse);
     const stat = await (await io()).stat("doc.docx");
     expect(stat).toBeNull();
+    if (artifactId) {
+      expect(await getArtifact(artifactId)).toBeNull();
+      expect(await getArtifactSource(artifactId)).toBeNull();
+    }
   });
 });
 

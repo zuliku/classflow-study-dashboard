@@ -671,6 +671,96 @@ describe("update_document（V2 Part 2）", () => {
     expect((attempt.output as { code: string }).code).toBe("ARTIFACT_NOT_EDITABLE");
   });
 
+  it("structured Kiro 文档 raw patch 被拒绝（ARTIFACT_UNSUPPORTED_OPERATION，不计数不写）", async () => {
+    const artifactId = await seedEditableDoc(counters());
+    expect(artifactId).toBeTruthy();
+    if (!artifactId) return;
+    const c = counters();
+    const attempt = await executeKiroComputerTool({
+      toolName: "patch_text_file",
+      toolCallId: "call-structured-patch",
+      toolInput: { rootId: "output", path: "plan.md", edits: [{ oldText: "版本一", newText: "绕过 IR" }] },
+      context: ctx(AUTO_SNAPSHOT),
+      counters: c,
+    });
+    expect(attempt.kind).toBe("completed");
+    if (attempt.kind !== "completed") return;
+    expect(attempt.output.ok).toBe(false);
+    expect((attempt.output as { code: string }).code).toBe("ARTIFACT_UNSUPPORTED_OPERATION");
+    expect((await getArtifact(artifactId))?.revision).toBe(1);
+    expect(c.mutationCount).toBe(0);
+  });
+
+  it("generic 已登记文本 patch：Artifact revision +1、id 不变、runtime facts 携带", async () => {
+    const c = counters();
+    await executeKiroComputerTool({
+      toolName: "create_text_file",
+      toolCallId: "call-gen-seed",
+      toolInput: { rootId: "output", path: "notes.txt", content: "v1" },
+      context: ctx(AUTO_SNAPSHOT),
+      counters: c,
+    });
+    const { findArtifactByLocation } = await import("@/lib/ai/computer/artifacts/service");
+    const artifact = await findArtifactByLocation("research", "output", "notes.txt");
+    expect(artifact).toBeTruthy();
+    if (!artifact) return;
+
+    const attempt = await executeKiroComputerTool({
+      toolName: "patch_text_file",
+      toolCallId: "call-gen-patch",
+      toolInput: { rootId: "output", path: "notes.txt", edits: [{ oldText: "v1", newText: "v2" }] },
+      context: ctx(AUTO_SNAPSHOT),
+      counters: c,
+    });
+    expect(attempt.kind).toBe("completed");
+    if (attempt.kind !== "completed") return;
+    expect(attempt.output.ok).toBe(true);
+    const updated = await getArtifact(artifact.id);
+    expect(updated?.revision).toBe(2);
+    expect(updated?.id).toBe(artifact.id);
+    expect(attempt.runtime?.change.artifactId).toBe(artifact.id);
+    expect(attempt.runtime?.change.revision).toBe(2);
+  });
+
+  it("inspect_document DOCX：正文可读取（Mammoth raw text）+ Source IR 结构事实 + 无 HTML/OOXML/bytes array", async () => {
+    // Mammoth 首次动态加载较慢（node 环境）
+    const c = counters();
+    await executeKiroComputerTool({
+      toolName: "create_document",
+      toolCallId: "call-docx-inspect",
+      toolInput: {
+        rootId: "output",
+        path: "word.docx",
+        document: {
+          title: "Word 测试",
+          blocks: [
+            { type: "heading", level: 1, content: [{ text: "标题" }] },
+            { type: "paragraph", content: [{ text: "Word 正文可读取" }] },
+          ],
+        },
+      },
+      context: ctx(AUTO_SNAPSHOT),
+      counters: c,
+    });
+    const inspect = await completedOutput({
+      toolName: "inspect_document",
+      toolInput: { rootId: "output", path: "word.docx" },
+      context: ctx(AUTO_SNAPSHOT),
+      counters: c,
+    });
+    expect(inspect.ok).toBe(true);
+    const data = (inspect as { data: Record<string, unknown> }).data;
+    expect(data.format).toBe("docx");
+    expect(String(data.text)).toContain("Word 正文可读取");
+    // 结构事实来自 Source IR
+    expect(data.headings).toBe(1);
+    expect(data.paragraphs).toBe(1);
+    const serialized = JSON.stringify(data);
+    expect(serialized).not.toContain("<html");
+    expect(serialized).not.toContain("<w:document");
+    expect(serialized).not.toContain("Uint8Array");
+    expect(serialized).not.toContain('"document"');
+  }, 20000);
   it(">5 MiB 在写入前拒绝 FILE_TOO_LARGE", async () => {
     const c = counters();
     const artifactId = await seedEditableDoc(c);
