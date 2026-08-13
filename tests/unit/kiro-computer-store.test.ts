@@ -123,4 +123,143 @@ describe("useKiroComputerStore", () => {
     // adapterRef 是 opaque key，不是 native path
     expect(persisted).toContain("opaque-ref-1");
   });
+
+  it("ensureDefaultSandboxWorkspace reuses one canonical Sandbox", () => {
+    const first = useKiroComputerStore.getState().ensureDefaultSandboxWorkspace();
+    const second = useKiroComputerStore.getState().ensureDefaultSandboxWorkspace();
+
+    expect(second).toBe(first);
+    const state = useKiroComputerStore.getState();
+    expect(state.activeWorkspaceId).toBe(first);
+    expect(state.computerEnabled).toBe(true);
+    expect(
+      state.workspaces.filter((w) =>
+        w.roots.some((r) => r.adapterRef === "sandbox-default")
+      )
+    ).toHaveLength(1);
+  });
+
+  it("removing active Workspace selects next remaining Workspace", () => {
+    const store = useKiroComputerStore.getState();
+    store.addWorkspace(ws("a", "A"));
+    store.addWorkspace(ws("b", "B"));
+    store.setActiveWorkspaceId("a");
+    store.setComputerEnabled(true);
+
+    useKiroComputerStore.getState().removeWorkspace("a");
+
+    const state = useKiroComputerStore.getState();
+    expect(state.activeWorkspaceId).toBe("b");
+    expect(state.computerEnabled).toBe(true);
+  });
+
+  it("removing last Workspace disables Computer Agent", () => {
+    const store = useKiroComputerStore.getState();
+    store.addWorkspace(ws("only", "Only"));
+    store.setActiveWorkspaceId("only");
+    store.setComputerEnabled(true);
+
+    useKiroComputerStore.getState().removeWorkspace("only");
+
+    const state = useKiroComputerStore.getState();
+    expect(state.workspaces).toEqual([]);
+    expect(state.activeWorkspaceId).toBeNull();
+    expect(state.computerEnabled).toBe(false);
+  });
+
+  it("removing Workspace removes only permission rules scoped to it", () => {
+    const store = useKiroComputerStore.getState();
+    store.addWorkspace(ws("a", "A"));
+    store.addWorkspace(ws("b", "B"));
+    store.upsertPermissionRule({
+      id: "a-persistent",
+      effect: "allow",
+      capability: "fs.modify",
+      workspaceId: "a",
+      scope: "persistent",
+    });
+    store.upsertPermissionRule({
+      id: "a-session",
+      effect: "allow",
+      capability: "fs.modify",
+      workspaceId: "a",
+      scope: "session",
+    });
+    store.upsertPermissionRule({
+      id: "b-rule",
+      effect: "allow",
+      capability: "fs.modify",
+      workspaceId: "b",
+      scope: "persistent",
+    });
+
+    useKiroComputerStore.getState().removeWorkspace("a");
+
+    expect(useKiroComputerStore.getState().permissionRules.map((r) => r.id)).toEqual([
+      "b-rule",
+    ]);
+  });
+
+  it("persisted state includes activeWorkspaceId", () => {
+    const store = useKiroComputerStore.getState();
+    store.addWorkspace(ws("research", "论文研究"));
+    store.setActiveWorkspaceId("research");
+
+    const persisted = useKiroComputerStore.persist.getOptions().partialize?.(
+      useKiroComputerStore.getState()
+    ) as { activeWorkspaceId?: string | null };
+
+    expect(persisted.activeWorkspaceId).toBe("research");
+  });
+
+  it("migrate v1→v2：legacy 重复 sandbox-default 只保留第一项（不删文件），active 重定向", () => {
+    const legacy = {
+      computerEnabled: true,
+      activeWorkspaceId: "dup-2",
+      agentMode: "guided" as const,
+      workspaces: [
+        {
+          id: "sandbox-1",
+          name: "Kiro Sandbox",
+          roots: [
+            { id: "r1", label: "Sandbox（当前浏览器）", access: "read-write" as const, adapterRef: "sandbox-default" },
+          ],
+          createdAt: "2026-01-01T00:00:00.000Z",
+          updatedAt: "2026-01-01T00:00:00.000Z",
+        },
+        {
+          id: "dup-2",
+          name: "Kiro Sandbox",
+          roots: [
+            { id: "r1", label: "Sandbox（当前浏览器）", access: "read-write" as const, adapterRef: "sandbox-default" },
+          ],
+          createdAt: "2026-01-02T00:00:00.000Z",
+          updatedAt: "2026-01-02T00:00:00.000Z",
+        },
+        {
+          id: "browser-1",
+          name: "论文资料",
+          roots: [
+            { id: "r1", label: "论文资料", access: "read-write" as const, adapterRef: "browser-grant-1" },
+          ],
+          createdAt: "2026-01-03T00:00:00.000Z",
+          updatedAt: "2026-01-03T00:00:00.000Z",
+        },
+      ],
+      permissionRules: [
+        { id: "r-dup", effect: "allow" as const, capability: "fs.modify" as const, workspaceId: "dup-2", scope: "persistent" as const },
+        { id: "r-browser", effect: "allow" as const, capability: "fs.modify" as const, workspaceId: "browser-1", scope: "persistent" as const },
+      ],
+    };
+    const migrated = useKiroComputerStore.persist.getOptions().migrate?.(legacy, 1) as {
+      workspaces?: { id: string }[];
+      activeWorkspaceId?: string | null;
+      permissionRules?: { id: string }[];
+    };
+    expect(migrated.workspaces?.map((w) => w.id)).toEqual(["sandbox-1", "browser-1"]);
+    expect(migrated.activeWorkspaceId).toBe("sandbox-1");
+    expect(migrated.permissionRules?.map((r) => r.id)).toEqual(["r-browser"]);
+    // 已是 v2 的 state 原样透传
+    expect(useKiroComputerStore.persist.getOptions().migrate?.(legacy, 2)).toBe(legacy);
+  });
 });

@@ -107,25 +107,14 @@ export function KiroChatSurface({ variant }: { variant: "workspace" | "sidecar" 
       (r) => r.adapterRef === "sandbox-default" || r.adapterRef.startsWith("sandbox")
     ) ?? false;
 
-  // Computer toggle：无 workspace 时走 Sandbox 引导（CI-friendly）；不直接启用
+  // Computer toggle：无 workspace 时走 canonical Sandbox 引导（CI-friendly；绝不产生重复 Sandbox）
   const handleToggleComputer = (enabled: boolean) => {
     if (!enabled) {
       setComputerEnabled(false);
       return;
     }
     if (workspaces.length === 0) {
-      const now = new Date().toISOString();
-      addWorkspace({
-        id: `ws-${crypto.randomUUID()}`,
-        name: "Kiro Sandbox",
-        roots: [
-          { id: "root-sandbox", label: "Sandbox（当前浏览器）", access: "read-write", adapterRef: "sandbox-default" },
-        ],
-        createdAt: now,
-        updatedAt: now,
-      });
-      setActiveWorkspaceId(useKiroComputerStore.getState().workspaces.at(-1)?.id ?? null);
-      setComputerEnabled(true);
+      useKiroComputerStore.getState().ensureDefaultSandboxWorkspace();
       return;
     }
     if (!activeWorkspaceId) setActiveWorkspaceId(workspaces[0].id);

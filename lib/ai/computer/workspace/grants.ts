@@ -156,3 +156,23 @@ export async function requestBrowserGrant(adapterRef: string): Promise<boolean> 
     return false;
   }
 }
+
+/**
+ * Settings 显式移除 Browser Workspace：只删除 ClassFlow 的授权记录。
+ * 绝不调用 handle.remove()、绝不删除用户真实文件夹中的任何文件。
+ */
+export async function forgetBrowserWorkspaceGrant(adapterRef: string): Promise<void> {
+  const db = await openGrantDb();
+  if (!db) return;
+  try {
+    await new Promise<void>((resolve) => {
+      const tx = db.transaction(GRANT_STORE, "readwrite");
+      tx.objectStore(GRANT_STORE).delete(adapterRef);
+      tx.oncomplete = () => resolve();
+      tx.onabort = () => resolve();
+      tx.onerror = () => resolve();
+    });
+  } finally {
+    db.close();
+  }
+}

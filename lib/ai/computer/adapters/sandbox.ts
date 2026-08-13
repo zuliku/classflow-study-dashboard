@@ -228,6 +228,35 @@ export async function sandboxDelete(adapterRef: string, path: string): Promise<v
   await dbDelete(sandboxKey(adapterRef, path));
 }
 
+/**
+ * 清理某 adapterRef 的整个 Sandbox namespace（Settings 显式删除 Workspace 时调用）。
+ * 只删除 `${adapterRef}\u0000` 前缀的 keys；绝不 deleteDatabase、不影响其它 adapter。
+ */
+export async function clearSandboxAdapter(adapterRef: string): Promise<void> {
+  const db = await openSandboxDb();
+  if (!db) return;
+  try {
+    await new Promise<void>((resolve) => {
+      const tx = db.transaction(KIRO_SANDBOX_FILES_STORE, "readwrite");
+      const store = tx.objectStore(KIRO_SANDBOX_FILES_STORE);
+      const prefix = `${adapterRef}\u0000`;
+      const req = store.openCursor(IDBKeyRange.bound(prefix, `${prefix}\uffff`));
+      req.onsuccess = () => {
+        const cursor = req.result;
+        if (cursor) {
+          cursor.delete();
+          cursor.continue();
+        }
+      };
+      tx.oncomplete = () => resolve();
+      tx.onabort = () => resolve();
+      tx.onerror = () => resolve();
+    });
+  } finally {
+    db.close();
+  }
+}
+
 /** Undo 专用（非 Model Tool）：只删除单个文件或空目录；非空目录 → VERIFICATION_FAILED（undo fail） */
 export async function sandboxRemove(adapterRef: string, path: string, kind: "file" | "directory"): Promise<void> {
   const entry = await sandboxStat(adapterRef, path);
