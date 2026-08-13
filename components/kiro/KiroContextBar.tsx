@@ -94,7 +94,8 @@ export function KiroContextBar({
   return (
     <div
       data-testid="kiro-context-bar"
-      className={cn("flex flex-wrap items-center gap-1.5 pb-1.5 overflow-hidden", compact && "px-0.5")}
+      // 不能用 overflow-hidden：会裁剪 leading（Workspace）与 +N 的 absolute popover
+      className={cn("flex flex-wrap items-center gap-1.5 pb-1.5", compact && "px-0.5")}
     >
       {locked && (
         <p className="basis-full text-[10px] font-medium text-sandrift" role="status" aria-live="polite">
