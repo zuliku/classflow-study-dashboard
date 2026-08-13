@@ -23,7 +23,6 @@ import {
   Presentation,
   Link2,
   FileImage,
-  Loader2,
 } from "lucide-react";
 import { useAppStore } from "@/store/useAppStore";
 import { useToastStore } from "@/store/useToastStore";
@@ -500,15 +499,12 @@ export function AssignmentDrawer() {
                       setAddMenuOpen((v) => !v);
                       setMaterialPickerOpen(false);
                     }}
-                    disabled={uploading}
+                    loading={uploading}
+                    loadingLabel="上传中"
                     className="h-7 px-2 text-[10px]"
                   >
-                    {uploading ? (
-                      <Loader2 className="w-3 h-3 animate-spin" />
-                    ) : (
-                      <Plus className="w-3 h-3" />
-                    )}
-                    {uploading ? "上传中…" : "添加资料"}
+                    <Plus className="w-3 h-3" />
+                    添加资料
                   </Button>
                   <DropdownMenuPanel open={addMenuOpen} placement="bottom-end" aria-label="添加资料" className="w-48">
                     <DropdownMenuItem

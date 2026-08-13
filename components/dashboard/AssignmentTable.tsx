@@ -12,6 +12,7 @@ import {
   BookOpen,
   X,
   CalendarPlus,
+  MoreHorizontal,
   Search,
 } from "lucide-react";
 import { useAppStore } from "@/store/useAppStore";
@@ -22,6 +23,7 @@ import { openAssignmentEditor } from "@/lib/uiEvents";
 import { useEnterOnAdd } from "@/lib/useEnterOnAdd";
 import { cn, getPriorityMeta } from "@/lib/utils";
 import { UISelect } from "@/components/ui/Select";
+import { DropdownMenuPanel } from "@/components/ui/DropdownMenu";
 import { isToday, differenceInDays } from "date-fns";
 import { parseLocalDDL, getLocalDDLDate } from "@/lib/ddl";
 import { formatEstimatedMinutes } from "@/lib/tasks/taskSemantics";
@@ -578,11 +580,14 @@ export function AssignmentTable({
                 </div>
               ) : (
                 <>
-                  {/* View Tabs：仅 Primary Views → 全局 SegmentedControl（count = 课程筛选后该视图数量；search 不改变 count 语义） */}
+                  {/* View Control Cluster：SegmentedControl 决定自然高度；More 同高正方形（self-stretch + aspect-square）。
+                      窄窗口 Segmented 自身横向 overflow，More 恒 shrink-0 不 wrap */}
+                  <div className="flex items-stretch gap-1.5 min-w-0">
                   <SegmentedControl
                     value={assignmentWorkspaceView}
                     onChange={setAssignmentWorkspaceView}
                     ariaLabel="任务视图"
+                    className="min-w-0 overflow-x-auto scrollbar-none"
                     options={PRIMARY_TASK_WORKSPACE_VIEWS.map((view) => ({
                       value: view.id,
                       label: (
@@ -596,35 +601,31 @@ export function AssignmentTable({
                     }))}
                   />
 
-                  {/* More：低频入口（已归档等） */}
-                  <div className="relative" ref={moreMenuRef}>
+                  {/* More：低频入口（已归档等）——与 Segmented 同高、正方形 icon action */}
+                  <div className="relative self-stretch flex" ref={moreMenuRef}>
                     <button
                       onClick={() => setMoreOpen((v) => !v)}
                       aria-label="更多视图"
                       aria-expanded={moreOpen}
-                      className="w-7 h-6 flex items-center justify-center rounded-lg bg-alabaster border border-line-strong text-satin-grey hover:text-charcoal hover:bg-white transition-colors font-bold leading-none"
+                      className="h-full aspect-square flex items-center justify-center rounded-lg bg-alabaster border border-line-strong text-satin-grey hover:text-charcoal hover:bg-white transition-colors"
                     >
-                      ···
+                      <MoreHorizontal className="w-4 h-4" />
                     </button>
-                    {moreOpen && (
-                      <div
-                        data-testid="workspace-more-menu"
-                        className="absolute right-0 top-full mt-1.5 w-40 bg-surface border border-line-strong rounded-xl shadow-card p-1 z-40 text-[11px] ux-inline"
+                    <DropdownMenuPanel open={moreOpen} placement="bottom-end" aria-label="更多视图" className="w-40 p-1">
+                      <button
+                        onClick={() => {
+                          setAssignmentWorkspaceView("archive");
+                          setMoreOpen(false);
+                        }}
+                        className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-left font-semibold text-charcoal hover:bg-alabaster transition-colors"
                       >
-                        <button
-                          onClick={() => {
-                            setAssignmentWorkspaceView("archive");
-                            setMoreOpen(false);
-                          }}
-                          className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-left font-semibold text-charcoal hover:bg-alabaster transition-colors"
-                        >
-                          查看已归档
-                          <span className="ml-auto text-[9px] font-bold text-sandrift">
-                            {workspaceViewResult?.counts.archive ?? 0}
-                          </span>
-                        </button>
-                      </div>
-                    )}
+                        查看已归档
+                        <span className="ml-auto text-[9px] font-bold text-sandrift">
+                          {workspaceViewResult?.counts.archive ?? 0}
+                        </span>
+                      </button>
+                    </DropdownMenuPanel>
+                  </div>
                   </div>
                 </>
               )}

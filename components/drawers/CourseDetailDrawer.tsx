@@ -846,21 +846,17 @@ export function CourseDetailDrawer() {
                 className="hidden"
                 id="real-material-upload"
               />
-              <label
-                htmlFor="real-material-upload"
-                className={`flex items-center justify-center space-x-1 min-w-[96px] px-2.5 py-1 text-[11px] font-bold rounded-xl cursor-pointer transition-colors ${
-                  isUploading
-                    ? "bg-pastel-mint text-sandrift cursor-not-allowed"
-                    : "bg-charcoal hover:bg-black text-white"
-                }`}
+              <Button
+                variant="primary"
+                size="sm"
+                loading={isUploading}
+                loadingLabel="上传中"
+                onClick={() => document.getElementById("real-material-upload")?.click()}
+                className="min-w-[96px]"
               >
-                {isUploading ? (
-                  <Loader2 className="w-3 h-3 animate-spin" />
-                ) : (
-                  <FileUp className="w-3 h-3" />
-                )}
-                <span>{isUploading ? "正在上传…" : "上传资料"}</span>
-              </label>
+                <FileUp className="w-3 h-3" />
+                上传资料
+              </Button>
             </div>
 
             {/* Materials List */}
