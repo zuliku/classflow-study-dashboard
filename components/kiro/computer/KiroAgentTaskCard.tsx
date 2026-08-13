@@ -165,10 +165,20 @@ function ChangeList({ changes }: { changes: Array<KiroComputerChange | Persisted
         <li key={c.displayName + c.relativePath} className="flex items-center gap-1.5 text-[11px] text-satin-grey">
           <span className="w-1 h-1 rounded-full bg-sandrift shrink-0" aria-hidden="true" />
           <span className="truncate">
-            {c.operation === "create" ? "创建" : "修改"} {c.displayName}
+            {changeSummary(c)}
           </span>
         </li>
       ))}
     </ul>
   );
+}
+
+function changeSummary(c: { operation: string; displayName: string; fromRelativePath?: string; relativePath: string }): string {
+  if (c.operation === "rename") {
+    return `重命名 ${c.fromRelativePath ?? c.displayName} → ${c.displayName}`;
+  }
+  if (c.operation === "move") {
+    return `移动 ${c.fromRelativePath ?? c.displayName} → ${c.relativePath}`;
+  }
+  return `${c.operation === "create" ? "创建" : "修改"} ${c.displayName}`;
 }

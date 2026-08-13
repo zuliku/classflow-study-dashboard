@@ -177,6 +177,59 @@ describe("history sanitize — Computer Task 安全边界", () => {
     expect(record.messages[1].computerTask?.taskId).toBe("task-hist");
     expect(record.messages[1].computerTask?.status).toBe("undone");
   });
+
+  it("relocation facts persisted safely（operation move/rename + logical from/to + artifactId；无 IR/bytes）", () => {
+    const task = makeTask();
+    task.status = "completed";
+    task.changes = [
+      {
+        id: "change-ren",
+        toolCallId: "call_ren",
+        operation: "rename",
+        resourceType: "text",
+        workspaceId: "research",
+        workspaceLabel: "论文研究",
+        rootId: "output",
+        rootLabel: "输出",
+        relativePath: "final.md",
+        displayName: "final.md",
+        artifactId: "artifact-abc",
+        fromRootId: "output",
+        fromRootLabel: "输出",
+        fromRelativePath: "draft.md",
+        verification: "passed",
+        review: { kind: "relocation" },
+      },
+    ];
+    const record = sanitizeConversation({
+      id: "conv-5",
+      title: "对话",
+      createdAt: "2026-08-13T10:00:00.000Z",
+      provider: "deepseek",
+      model: "deepseek-v4-flash",
+      messages: [
+        makeView({ role: "user", content: "重命名文件" }),
+        makeView({ computerTask: task }),
+      ],
+      manualRefs: [],
+      entryRefs: [],
+    });
+    const persisted = record.messages[1].computerTask;
+    expect(persisted?.changes[0].operation).toBe("rename");
+    expect(persisted?.changes[0].artifactId).toBe("artifact-abc");
+    expect(persisted?.changes[0].fromRelativePath).toBe("draft.md");
+    expect(persisted?.changes[0].relativePath).toBe("final.md");
+    const serialized = JSON.stringify(persisted);
+    // 安全边界：无 source IR / preview body / bytes / adapterRef / handle / checkpoint / beforeText
+    expect(serialized).not.toContain("document");
+    expect(serialized).not.toContain("blocks");
+    expect(serialized).not.toContain("preview");
+    expect(serialized).not.toContain("beforeText");
+    expect(serialized).not.toContain("adapterRef");
+    expect(serialized).not.toContain("handle");
+    expect(serialized).not.toContain("bytes");
+    expect(serialized).not.toContain("checkpoint");
+  });
 });
 
 describe("audit persistence boundary", () => {
