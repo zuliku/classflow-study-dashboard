@@ -2,9 +2,8 @@
 
 import React from "react";
 import { KiroMarkdown } from "@/components/kiro/KiroMarkdown";
-import { KiroCitation } from "@/components/kiro/KiroCitation";
+import { KiroStreamingTail } from "@/components/kiro/KiroStreamingTail";
 import { KiroSourceMeta } from "@/lib/ai/citations/types";
-import { splitCitationSegments } from "@/lib/ai/citations/parser";
 import { splitKiroStreamingMarkdown } from "@/lib/ai/streaming/markdownBlocks";
 
 /**
@@ -29,14 +28,14 @@ const StableBlock = React.memo(function StableBlock({
 });
 
 /**
- * Kiro Streaming Markdown（Worklog V2 Task 4）：
+ * Kiro Streaming Markdown（Worklog V2 Task 4 + Streaming UX V2 Phase 2）：
  * Stable Blocks（完整 Markdown 渲染，React.memo 缓存）
- * + Active Tail（轻量纯文本，完全绕开 Markdown pipeline）。
+ * + Active Tail（KiroStreamingTail：与最终 Markdown 完全一致的视觉语义）。
  *
  * Tail 规则：
- * - 只做 white-space / 换行 + 现有字体大小 + line-height 1.74 + text-charcoal
- * - 未完成 Markdown（** ` ### $$ 等）直接按文本显示，等 block stable 后才升级完整 Markdown
- * - 仅当 citation marker 已完整闭合时允许显示 KiroCitation（复用 splitCitationSegments）
+ * - text 态：同一套 KiroMarkdown pipeline（heading / list / bold / code / KaTeX / citation
+ *   在 streaming 期间就是最终语义，闭合瞬间不再发生「纯文本 → Markdown」整段重排）
+ * - fence / math 态（未闭合块级构造）：稳定几何 fallback 容器（pre / 块 div）
  * - 无 typewriter 动画
  */
 export function KiroStreamingMarkdown({
@@ -48,11 +47,10 @@ export function KiroStreamingMarkdown({
   streaming: boolean;
   sources?: KiroSourceMeta[];
 }) {
-  const { stableBlocks, tail } = React.useMemo(
+  const { stableBlocks, tail, tailState } = React.useMemo(
     () => splitKiroStreamingMarkdown(content, streaming),
     [content, streaming]
   );
-  const tailSegments = tail.length > 0 ? splitCitationSegments(tail) : [];
 
   return (
     <div data-testid="kiro-streaming-markdown">
@@ -60,23 +58,9 @@ export function KiroStreamingMarkdown({
         <StableBlock key={i} text={block} sources={sources} spacing={i > 0} />
       ))}
 
-      {tailSegments.length > 0 && (
-        <div
-          className={[
-            "whitespace-pre-wrap break-words text-charcoal",
-            stableBlocks.length > 0 ? "mt-[0.8em]" : undefined,
-          ]
-            .filter(Boolean)
-            .join(" ")}
-          style={{ fontSize: "var(--kiro-output-font-size)", lineHeight: 1.74 }}
-        >
-          {tailSegments.map((seg, i) =>
-            seg.type === "citation" ? (
-              <KiroCitation key={i} citation={seg.citation} sources={sources} />
-            ) : (
-              <span key={i}>{seg.text}</span>
-            )
-          )}
+      {tail.length > 0 && (
+        <div className={stableBlocks.length > 0 ? "mt-[0.8em]" : undefined}>
+          <KiroStreamingTail text={tail} tailState={tailState} sources={sources} />
         </div>
       )}
     </div>

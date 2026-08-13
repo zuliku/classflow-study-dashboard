@@ -93,7 +93,8 @@ export function KiroConversation({
   };
 
   // 单一 rAF scheduler（Task 5）：高度变化只在同一帧合并一次 reconcile；
-  // sticky 跟随使用直接 scrollTop 赋值（不做 smooth，避免抖动 / scroll queue）
+  // sticky 跟随使用直接 scrollTop 赋值（不做 smooth，避免抖动 / scroll queue）；
+  // 只有确实存在距离差（>2px tolerance）时才赋值，避免无意义重复写 scrollTop
   const rafRef = useRef<number | null>(null);
   const scheduleHeightReconcile = React.useCallback(() => {
     if (rafRef.current !== null) return;
@@ -102,7 +103,10 @@ export function KiroConversation({
       const el = scrollRef.current;
       if (!el) return;
       if (stickToBottomRef.current) {
-        el.scrollTop = el.scrollHeight;
+        const distance = el.scrollHeight - el.scrollTop - el.clientHeight;
+        if (distance > 2) {
+          el.scrollTop = el.scrollHeight;
+        }
       }
       syncScrollState();
     });
@@ -170,7 +174,13 @@ export function KiroConversation({
   return (
     // Outer Viewport Wrapper：负责浮层定位；Scroll Container 独立承担滚动（Task 6B-A）
     <div data-testid="kiro-conversation" className="relative flex-1 min-h-0">
-      <div ref={scrollRef} onScroll={onScroll} className="h-full overflow-y-auto">
+      <div
+        ref={scrollRef}
+        onScroll={onScroll}
+        className="h-full overflow-y-auto"
+        // overflow-anchor: none —— 受控 reconcile 与 Browser scroll anchoring 不打架
+        style={{ overflowAnchor: "none" }}
+      >
         <div ref={contentRef} className={cn("max-w-[820px] mx-auto py-3 pb-12", compact ? "px-3" : "px-1")}>
           <div key={conversationScrollKey} className="space-y-5 ux-fade">
             {/* 极轻提示：真正发生过旧对话压缩时（不显示 token 数字） */}
@@ -327,7 +337,6 @@ const KiroConversationRow = React.memo(function KiroConversationRow({
         actionSummaries={actionSummaries}
         assistantTurn={view.assistantTurn}
         onRetry={onRetry}
-        animateAnswerEntry={!view.restored}
       >
         {/* Action Result Cards：真实 ToolResult 事实 UI */}
         {view.actions && view.actions.length > 0 && (

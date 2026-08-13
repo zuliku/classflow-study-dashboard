@@ -1,5 +1,5 @@
 /**
- * Kiro Streaming Markdown Splitter（Worklog V2 Task 4）。
+ * Kiro Streaming Markdown Splitter（Worklog V2 Task 4 / Streaming UX V2）。
  *
  * 轻量 line scanner（不实现第二套完整 Markdown parser）：
  * - 空行 且 不在 code fence 且 不在 display math → stable boundary
@@ -7,13 +7,22 @@
  * - $$ display math：未闭合前不 split；闭合后：完整 math block 可稳定
  * - streaming=false：剩余全部内容升级成 stable
  *
+ * tailState：Active Tail 的当前未闭合构造（供 KiroStreamingTail 选择
+ * 与最终 Markdown 几何一致的 fallback 容器）：
+ * - "fence"：尾部存在未闭合 ```（渲染为与稳定 code block 相同几何的 pre）
+ * - "math" ：尾部存在未闭合 $$（渲染为与 katex-display 相近的块容器）
+ * - "text" ：无未闭合块级构造（直接走同一套 Markdown pipeline 渲染）
+ *
  * 调用方：KiroStreamingMarkdown 按 block 稳定渲染（React.memo），
  * 只有 Active Tail 每 token 变化，避免长回答逐 chunk 重跑 Markdown pipeline。
  */
 
+export type KiroMarkdownTailState = "text" | "fence" | "math";
+
 export interface KiroMarkdownStreamSplit {
   stableBlocks: string[];
   tail: string;
+  tailState: KiroMarkdownTailState;
 }
 
 export function splitKiroStreamingMarkdown(
@@ -21,7 +30,7 @@ export function splitKiroStreamingMarkdown(
   streaming: boolean
 ): KiroMarkdownStreamSplit {
   if (!streaming) {
-    return { stableBlocks: content.length > 0 ? [content] : [], tail: "" };
+    return { stableBlocks: content.length > 0 ? [content] : [], tail: "", tailState: "text" };
   }
 
   const lines = content.split("\n");
@@ -57,5 +66,9 @@ export function splitKiroStreamingMarkdown(
     current.push(line);
   }
 
-  return { stableBlocks, tail: current.join("\n") };
+  return {
+    stableBlocks,
+    tail: current.join("\n"),
+    tailState: inFence ? "fence" : inDisplayMath ? "math" : "text",
+  };
 }

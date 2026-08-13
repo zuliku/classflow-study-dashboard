@@ -1,5 +1,12 @@
 import { describe, it, expect } from "vitest";
-import { deriveKiroAssistantTurn, KiroAssistantTurnPresentation } from "@/lib/ai/presentation/turnPresentation";
+import {
+  deriveKiroAssistantTurn,
+  KiroAssistantTurnPresentation,
+  updateLiveTurnPresentation,
+  createLiveTurnCommitState,
+  LiveTurnCommitState,
+  KIRO_LEADING_SETTLE_GATE_MS,
+} from "@/lib/ai/presentation/turnPresentation";
 import {
   formatKiroToolActivityDetail,
   hasMeaningfulKiroToolDetails,
@@ -15,7 +22,16 @@ const toolPart = (
   patch: Record<string, unknown> = {}
 ) => ({ type: `tool-${name}`, toolCallId: `call_${name}`, state, ...patch });
 
-describe("deriveKiroAssistantTurn", () => {
+/** stateful live 推导 helper：注入可控时钟与 gate */
+function makeLive(gateMs = KIRO_LEADING_SETTLE_GATE_MS) {
+  let nowMs = 0;
+  const commit = createLiveTurnCommitState();
+  const step = (parts: unknown[], turnInFlight = true) =>
+    updateLiveTurnPresentation(commit, parts, turnInFlight, { now: () => nowMs, settleGateMs: gateMs });
+  return { commit, step, advance: (ms: number) => { nowMs += ms; }, now: () => nowMs };
+}
+
+describe("deriveKiroAssistantTurn（静态：fresh commit）", () => {
   it("1. commentary → tool → commentary → tool → final answer 顺序正确", () => {
     const p = deriveKiroAssistantTurn(
       [
@@ -30,7 +46,7 @@ describe("deriveKiroAssistantTurn", () => {
           output: { ok: true, data: { items: [{ id: "s1" }] } },
         }),
         stepStart(),
-        text("今天建议先完成数学作业", "done"),
+        text("今天建议先完成数学作业，以下是安排。\n\n第二段", "streaming"),
       ],
       true
     );
@@ -53,20 +69,20 @@ describe("deriveKiroAssistantTurn", () => {
       status: "done",
       stepIndex: 2,
     });
-    // 最终回答只有最后一个 Tool 之后的 trailing text
-    expect(p.answer).toBe("今天建议先完成数学作业");
+    // 最终回答只有最后一个 Tool 之后的 trailing text（lookahead：第二段已开始）
+    expect(p.answer).toBe("今天建议先完成数学作业，以下是安排。\n\n第二段");
     expect(p.answerStreaming).toBe(true);
     expect(p.phase).toBe("answering");
     expect(p.hasTools).toBe(true);
     expect(p.worklogDone).toBe(true);
   });
 
-  it("2. 无 Tool 普通回答：全部 text 合并为 answer，无 worklog", () => {
-    const p = deriveKiroAssistantTurn([text("你好"), text("！")], true);
+  it("2. 静态推导：settled 无 Tool 回答 → 全部 text 合并为 answer，无 worklog", () => {
+    const p = deriveKiroAssistantTurn([text("你好"), text("！")], false);
     expect(p.answer).toBe("你好！");
     expect(p.worklog).toEqual([]);
     expect(p.hasTools).toBe(false);
-    expect(p.phase).toBe("answering");
+    expect(p.phase).toBe("done");
     expect(p.worklogDone).toBe(false);
   });
 
@@ -236,7 +252,7 @@ describe("hasMeaningfulKiroToolDetails", () => {
   });
 });
 
-describe("Provisional Commentary Lookahead", () => {
+describe("Provisional Commentary Lookahead（trailing text）", () => {
   const settledSearch = () =>
     toolPart("search_assignments", "output-available", { output: { ok: true, data: { items: [] } } });
 
@@ -288,16 +304,175 @@ describe("Provisional Commentary Lookahead", () => {
     expect(commentary).toEqual(["让我再确认一下今天可用的时间。"]);
   });
 
-  it("CASE 6: 无 Tool → 首 token 立即流式显示", () => {
-    const p = deriveKiroAssistantTurn([text("你好，正在回答", "streaming")], true);
-    expect(p.answer).toBe("你好，正在回答");
-    expect(p.phase).toBe("answering");
-  });
-
-  it("CASE 7: Tool 后仍只有一段 provisional 但 turnInFlight=false → flush 成 Final Answer", () => {
+  it("CASE 6: Tool 后仍只有一段 provisional 但 turnInFlight=false → flush 成 Final Answer", () => {
     const p = deriveKiroAssistantTurn([settledSearch(), text("这是最终回答。", "streaming")], false);
     expect(p.answer).toBe("这是最终回答。");
     expect(p.phase).toBe("done");
+  });
+});
+
+describe("Streaming UX V2：leading provisional + 单调 lane", () => {
+  it("S1. leading text → Tool：provisional 期间不进 answer；Tool 到达后 commit commentary，全程无 Answer→Commentary 迁移", () => {
+    const { step, advance } = makeLive();
+    const parts = [stepStart(), text("我先查看一下工作区文件", "streaming")];
+
+    // T0：首 token 到达，gate 未过期 → provisional（隐藏：answer 空、worklog 空、phase working）
+    const p0 = step(parts);
+    expect(p0.answer).toBe("");
+    expect(p0.worklog).toEqual([]);
+    expect(p0.phase).toBe("working");
+
+    // 仍无 Tool：gate 到期前保持 provisional（即使继续有 delta）
+    advance(60);
+    const p1 = step([stepStart(), text("我先查看一下工作区文件", "streaming")]);
+    expect(p1.answer).toBe("");
+    expect(p1.worklog).toEqual([]);
+
+    // Tool 在 gate 内到达 → leading text commit commentary（只出现一次）
+    advance(30); // T=90ms < 100ms gate
+    const withTool = [
+      stepStart(),
+      text("我先查看一下工作区文件", "done"),
+      toolPart("read_file", "output-available", { output: { ok: true, data: { path: "notes.md" } } }),
+    ];
+    const p2 = step(withTool);
+    expect(p2.answer).toBe("");
+    expect(p2.hasTools).toBe(true);
+    const commentary = p2.worklog.filter((b) => b.kind === "commentary").map((b) => (b as { text: string }).text);
+    expect(commentary).toEqual(["我先查看一下工作区文件"]);
+
+    // 后续渲染（新 Tool / 更多 parts）不得重复或迁移
+    const p3 = step([
+      ...withTool,
+      toolPart("write_file", "output-available", { output: { ok: true, data: {} } }),
+    ]);
+    expect(p3.answer).toBe("");
+    expect(
+      p3.worklog.filter((b) => b.kind === "commentary").map((b) => (b as { text: string }).text)
+    ).toEqual(["我先查看一下工作区文件"]);
+  });
+
+  it("S2. 无 Tool 普通聊天：gate 过期 → commit answer 流式显示；Turn 结束 → done", () => {
+    const { step, advance } = makeLive();
+
+    // 首 delta 到达（T=50，since=50）
+    advance(50);
+    const p0 = step([text("你好，正在回答", "streaming")]);
+    expect(p0.answer).toBe("");
+    expect(p0.phase).toBe("working");
+
+    // gate 内仍无 Tool → 继续 provisional
+    advance(40); // T=90 → 90-50=40ms < gate
+    const pMid = step([text("你好，正在回答", "streaming")]);
+    expect(pMid.answer).toBe("");
+    expect(pMid.worklog).toEqual([]);
+
+    // gate 过期（>=100ms 无 Tool）→ answer
+    advance(70); // T=160 → 160-50=110ms >= gate
+    const p1 = step([text("你好，正在回答", "streaming")]);
+    expect(p1.answer).toBe("你好，正在回答");
+    expect(p1.phase).toBe("answering");
+    expect(p1.answerStreaming).toBe(true);
+    expect(p1.hasTools).toBe(false);
+    expect(p1.worklogDone).toBe(false);
+
+    // 后续 delta 继续流入 answer（单调，无回流）
+    advance(20);
+    const p2 = step([text("你好，正在回答"), text("！", "streaming")]);
+    expect(p2.answer).toBe("你好，正在回答！");
+    expect(p2.phase).toBe("answering");
+
+    // Turn 结束
+    const p3 = step([text("你好，正在回答！", "done")], false);
+    expect(p3.phase).toBe("done");
+    expect(p3.answerStreaming).toBe(false);
+  });
+
+  it("S3. leading committed answer 后出现 Tool：保持 answer（单调，不回流 commentary）", () => {
+    const { step, advance } = makeLive();
+    const p0 = step([text("我先看一下", "done")]);
+    expect(p0.answer).toBe(""); // provisional（gate 内）
+
+    advance(150); // gate 过期
+    const pCommit = step([text("我先看一下", "done")]);
+    expect(pCommit.answer).toBe("我先看一下");
+
+    const p1 = step([
+      text("我先看一下", "done"),
+      toolPart("search_assignments", "output-available", { output: { ok: true, data: { items: [] } } }),
+    ]);
+    expect(p1.answer).toBe("我先看一下"); // 已展示文字保持 answer
+    expect(p1.hasTools).toBe(true);
+    expect(
+      p1.worklog.filter((b) => b.kind === "commentary").map((b) => (b as { text: string }).text)
+    ).toEqual([]);
+  });
+
+  it("S4. answerStreaming：被接受的 answer text 全部 done 但 Turn 仍 in-flight → false", () => {
+    const { step } = makeLive();
+    const trailing = "第一段已经完整。\n\n第二段正在生成";
+    // lookahead commit → answer 且 streaming
+    const p0 = step([settledSearchPart(), text(trailing, "streaming")]);
+    expect(p0.answer).toBe(trailing);
+    expect(p0.answerStreaming).toBe(true);
+    expect(p0.phase).toBe("answering");
+
+    // 同一 Turn 仍 in-flight，但 answer text part 已 done → answerStreaming=false
+    const p1 = step([settledSearchPart(), text(trailing, "done")]);
+    expect(p1.answer).toBe(trailing);
+    expect(p1.answerStreaming).toBe(false);
+    expect(p1.phase).toBe("answering");
+  });
+
+  it("S5. trailing committed 单调：新 Tool 到达不得把已展示 answer 降级为 commentary", () => {
+    const { step } = makeLive();
+    // trailing 已 commit（第二段已开始）
+    step([settledSearchPart(), text("第一段。\n\n第二段", "streaming")]);
+
+    // 新 Tool 到达（越过已展示文字）
+    const p = step([
+      settledSearchPart(),
+      text("第一段。\n\n第二段", "done"),
+      toolPart("get_assignment", "output-available", { output: { ok: true, data: { title: "数学作业" } } }),
+    ]);
+    expect(p.answer).toBe("第一段。\n\n第二段");
+    const commentary = p.worklog.filter((b) => b.kind === "commentary").map((b) => (b as { text: string }).text);
+    expect(commentary).toEqual([]);
+    expect(p.worklog.map((b) => b.kind)).toEqual(["tool", "tool"]);
+  });
+
+  it("S6. 多 Tool：commentary → tool → commentary → tool → final 顺序稳定（live controller）", () => {
+    const { step } = makeLive();
+    const p = step([
+      stepStart(),
+      text("我先看看", "done"),
+      toolPart("search_assignments", "output-available", { output: { ok: true, data: { items: [] } } }),
+      stepStart(),
+      text("再查课表", "done"),
+      toolPart("get_week_schedule", "output-available", { output: { ok: true, data: { items: [] } } }),
+      stepStart(),
+      text("总结如下", "streaming"),
+    ]);
+    expect(p.worklog.map((b) => b.kind)).toEqual(["commentary", "tool", "commentary", "tool"]);
+    expect(p.answer).toBe("");
+    expect(p.phase).toBe("composing"); // trailing 未 commit（单段 streaming 无 lookahead）
+  });
+
+  it("S7. 多 Tool 且 trailing lookahead：最终 answer 与 worklog 顺序正确", () => {
+    const { step } = makeLive();
+    const p = step([
+      stepStart(),
+      text("我先看看", "done"),
+      toolPart("search_assignments", "output-available", { output: { ok: true, data: { items: [] } } }),
+      stepStart(),
+      text("再查课表", "done"),
+      toolPart("get_week_schedule", "output-available", { output: { ok: true, data: { items: [] } } }),
+      stepStart(),
+      text("总结如下\n\n第二段", "streaming"),
+    ]);
+    expect(p.worklog.map((b) => b.kind)).toEqual(["commentary", "tool", "commentary", "tool"]);
+    expect(p.answer).toBe("总结如下\n\n第二段");
+    expect(p.phase).toBe("answering");
   });
 });
 
@@ -358,3 +533,7 @@ describe("Task 17B：Tool Row headline（流式 web 流程）", () => {
     expect(block?.kind === "tool" && block.label).toBeTruthy();
   });
 });
+
+function settledSearchPart() {
+  return toolPart("search_assignments", "output-available", { output: { ok: true, data: { items: [] } } });
+}

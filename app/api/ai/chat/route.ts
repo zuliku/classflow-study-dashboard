@@ -38,6 +38,9 @@ export const maxDuration = 60;
 /** smoothStream 中文分词器（module scope 复用；只作用于 text/reasoning cadence） */
 const KIRO_STREAM_SEGMENTER = new Intl.Segmenter("zh", { granularity: "word" });
 
+/** smoothStream 词间间隔（Streaming UX V2 Phase 4：与客户端 24ms throttle 配合形成连续节奏） */
+const KIRO_SMOOTH_STREAM_DELAY_MS = 12;
+
 /** 超时 abort → 归一化错误 part；用户主动 Stop 的 abort 原样透传 */
 function guardStream<TOOLS extends ToolSet>(
   src: ReadableStream<TextStreamPart<TOOLS>>
@@ -299,11 +302,11 @@ export async function POST(req: NextRequest) {
         : undefined,
       // Task 14：Server execute tool 允许有限多步自动执行；客户端工具调用时 loop 自然暂停等 Client Result
       stopWhen: isStepCount(5),
-      // Worklog V2 Task 3：按词分块 + 12ms 间隔的流式节奏；
-      // 只平滑 text/reasoning，Tool / step event 原样透传
+      // Worklog V2 Task 3 + Streaming UX V2 Phase 4：按词分块 + 12ms 间隔的流式节奏
+      //（单一 cadence owner：client throttle 24ms 只是合并 React 更新，不叠加节流层）
       experimental_transform: smoothStream({
         chunking: KIRO_STREAM_SEGMENTER,
-        delayInMs: 12,
+        delayInMs: KIRO_SMOOTH_STREAM_DELAY_MS,
       }),
     });
 

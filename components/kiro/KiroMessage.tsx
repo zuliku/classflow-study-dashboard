@@ -38,7 +38,6 @@ export function KiroMessage({
   sources,
   assistantTurn,
   onRetry,
-  animateAnswerEntry = false,
 }: {
   content?: string;
   /** 流式进行中：末尾显示克制状态光标 */
@@ -57,8 +56,6 @@ export function KiroMessage({
   assistantTurn?: KiroAssistantTurnPresentation;
   /** 重新生成（由 Conversation 注入稳定 callback，避免每行订阅 Session Context） */
   onRetry?: () => void;
-  /** Final Answer 区域首次出现时播放一次结构动画。 */
-  animateAnswerEntry?: boolean;
 }) {
   const pushToast = useToastStore((s) => s.pushToast);
   const more = useKiroPopover();
@@ -73,9 +70,11 @@ export function KiroMessage({
   // Final Answer 实际引用的 Web Sources（首次引用顺序、去重）——用于 More → 来源
   const citedWebSources = React.useMemo(() => collectCitedWebSources(content ?? "", sources), [content, sources]);
 
-  // streaming cursor 只在 final answer 流式时出现（phase === "answering"）；
-  // 绝不给 commentary / tool row 显示 cursor
-  const showStreamingCursor = assistantTurn ? assistantTurn.phase === "answering" : streaming;
+  // streaming cursor 只在 Final Answer 真正 streaming 时出现（phase === "answering" 且
+  // answer 仍有 streaming text part）；绝不给 commentary / tool row / 已完成的 answer 显示 cursor
+  const showStreamingCursor = assistantTurn
+    ? assistantTurn.phase === "answering" && assistantTurn.answerStreaming
+    : streaming;
 
   const copyMarkdownSource = async () => {
     const ok = await copyTextToClipboard(citationsToReadableText(content ?? "", sources));
@@ -106,12 +105,13 @@ export function KiroMessage({
         {/* Worklog V2：真实 part 时序（commentary → tool → … → final answer） */}
         {assistantTurn && assistantTurn.worklog.length > 0 && <KiroWorklog turn={assistantTurn} />}
         {content ? (
-          <div className={cn(animateAnswerEntry && "animate-enter")}>
-            {/* Worklog V2 Task 4：Stable Blocks（React.memo 缓存）+ Active Tail（轻量纯文本） */}
+          <div>
+            {/* Worklog V2 Task 4：Stable Blocks（React.memo 缓存）+ Active Tail（同语义 Markdown） */}
             <KiroStreamingMarkdown content={content} streaming={!!streaming} sources={sources} />
             {showStreamingCursor && (
               <span
                 aria-hidden="true"
+                data-testid="kiro-streaming-cursor"
                 className="inline-block w-[2px] h-3.5 bg-sandrift align-middle animate-pulse"
               />
             )}

@@ -85,10 +85,23 @@ import {
   deriveKiroAssistantTurn,
   KiroAssistantTurnPresentation,
 } from "@/lib/ai/presentation/turnPresentation";
+import {
+  updateLiveTurnPresentation,
+  createLiveTurnCommitState,
+  LiveTurnCommitState,
+  KIRO_LEADING_SETTLE_GATE_MS,
+} from "@/lib/ai/presentation/liveTurnPresentation";
 
 /** 每回合工具调用上限：Read ≤ 12，Write ≤ 8 */
 export const MAX_READ_TOOL_CALLS_PER_TURN_UI = 12;
 export const MAX_WRITE_TOOL_CALLS_PER_TURN = 8;
+
+/**
+ * 客户端流式节流（Streaming UX V2 Phase 4）：
+ * server smoothStream 按词 ~12ms 送达；客户端每 24ms 合并一次 React 更新，
+ * 避免逐 token 重渲染 + 50ms 成块跳字。单一 cadence owner（不叠第三层节流）。
+ */
+export const KIRO_CLIENT_STREAM_THROTTLE_MS = 24;
 
 /** 统一 Message 视图模型：UI 组件只消费它，不依赖 Provider 原始结构 */
 export interface KiroChatMessageView {
@@ -215,7 +228,11 @@ export function lastTurnCanRegenerate(messages: Pick<UIMessage, "role" | "parts"
   return false;
 }
 
-function toView(m: UIMessage, turnInFlight: boolean): KiroChatMessageView {
+function toView(
+  m: UIMessage,
+  turnInFlight: boolean,
+  commit?: LiveTurnCommitState
+): KiroChatMessageView {
   const parts = (m.parts ?? []) as unknown as (ToolCallPart | { type: "text"; text: string; state?: string })[];
   const restored = isRestoredMessage(m);
 
@@ -224,7 +241,11 @@ function toView(m: UIMessage, turnInFlight: boolean): KiroChatMessageView {
   let streaming: boolean;
   let assistantTurn: KiroAssistantTurnPresentation | undefined;
   if (m.role === "assistant") {
-    assistantTurn = deriveKiroAssistantTurn(m.parts ?? [], turnInFlight);
+    // Streaming UX V2：live turn 走单调 lane controller（commit 持久化）；
+    // 无 commit（非 assistant 或未初始化）时回退静态推导（settled 结果一致）
+    assistantTurn = commit
+      ? updateLiveTurnPresentation(commit, m.parts ?? [], turnInFlight)
+      : deriveKiroAssistantTurn(m.parts ?? [], turnInFlight);
     content = assistantTurn.answer;
     streaming = assistantTurn.answerStreaming;
   } else {
@@ -640,6 +661,20 @@ export function useKiroChat({
     new Map<string, { partsRef: unknown; metadataRef: unknown; statusRef?: unknown; view: KiroChatMessageView }>()
   );
 
+  // Streaming UX V2：Live Turn Presentation commit 状态（assistant message id → commit）。
+  // 单调 lane：已 commit 的文字绝不跨视觉通道迁移；settled 消息复用同一 commit 保证不回流。
+  const liveTurnCommitsRef = useRef(new Map<string, LiveTurnCommitState>());
+  const getOrCreateLiveTurnCommit = useCallback((messageId: string): LiveTurnCommitState => {
+    let commit = liveTurnCommitsRef.current.get(messageId);
+    if (!commit) {
+      commit = createLiveTurnCommitState();
+      liveTurnCommitsRef.current.set(messageId, commit);
+    }
+    return commit;
+  }, []);
+  // leading provisional 歧义窗口：deltas 停止后由 timer 强制重估一次（辅助信号，非 debounce 主路径）
+  const [liveTurnTick, setLiveTurnTick] = useState(0);
+
   const consumeUndo = useCallback((toolCallId: string) => {
     const entry = undoRegistryRef.current.get(toolCallId);
     if (entry && !entry.used) {
@@ -654,8 +689,8 @@ export function useKiroChat({
       api: "/api/ai/chat",
       body: bodyRef.current,
     }),
-    // Worklog V2 Task 3：客户端 50ms 节流（SDK 内建；不引入手写 queue / rAF / debounce）
-    experimental_throttle: 50,
+    // Streaming UX V2 Phase 4：24ms 客户端节流（SDK 内建；不引入手写 queue / rAF / debounce）
+    experimental_throttle: KIRO_CLIENT_STREAM_THROTTLE_MS,
     onError: () => {
       // error 状态由 useChat 内部维护；归一化在下方派生
     },
@@ -882,6 +917,33 @@ export function useKiroChat({
     sendAutomaticallyWhen: ({ messages }) =>
       !limitReachedRef.current && lastAssistantMessageIsCompleteWithToolCalls({ messages }),
   });
+
+  // Streaming UX V2：leading provisional 歧义窗口（辅助信号，非 debounce 主路径）。
+  // 当 live turn 存在未 commit 的 leading text 且无 Tool 时，调度一次 gate timer；
+  // deltas 停止后（模型停顿 / 即将发 Tool）由 controller 依据真实时间把 leading commit 为 answer。
+  useEffect(() => {
+    const msgs = chat.messages as UIMessage[];
+    let lastUserIdx = -1;
+    for (let i = msgs.length - 1; i >= 0; i--) {
+      if (msgs[i].role === "user") {
+        lastUserIdx = i;
+        break;
+      }
+    }
+    const live = msgs[msgs.length - 1];
+    if (!live || live.role !== "assistant" || lastUserIdx < 0) return;
+    const commit = liveTurnCommitsRef.current.get(live.id);
+    if (!commit || commit.leadingLane !== null) return;
+    const hasTool = (live.parts ?? []).some(
+      (p) => typeof p.type === "string" && p.type.startsWith("tool-")
+    );
+    const hasLeadingText = (live.parts ?? []).some((p) => p.type === "text");
+    if (hasTool || !hasLeadingText) return;
+    // 一次 gate 内只调度一个 timer；触发后由 controller 依据真实时间决定 commit
+    const timer = window.setTimeout(() => setLiveTurnTick((t) => t + 1), KIRO_LEADING_SETTLE_GATE_MS);
+    return () => window.clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chat.messages, chat.status, liveTurnTick]);
 
   /** 执行 Write Tool：preflight + mutation + Undo 注册 + Toast + addToolOutput */
   const runWriteTool = useCallback(
@@ -1598,6 +1660,7 @@ export function useKiroChat({
       setSources([]);
       visionPagesRef.current = [];
       viewCacheRef.current.clear();
+      liveTurnCommitsRef.current.clear();
       // 保留 prefix 之前的 undoRegistry（不 clear）
       chat.setMessages(prefix);
 
@@ -1668,6 +1731,7 @@ export function useKiroChat({
     restoredAttachmentsRef.current.clear();
     restoredSourcesRef.current.clear();
     viewCacheRef.current.clear();
+    liveTurnCommitsRef.current.clear();
     turnSourcesRef.current = [];
     setSources([]);
     visionPagesRef.current = [];
@@ -1703,6 +1767,7 @@ export function useKiroChat({
       restoredAttachmentsRef.current = attachmentsMap;
       restoredSourcesRef.current = sourcesMap;
       viewCacheRef.current.clear();
+      liveTurnCommitsRef.current.clear();
       readCounterRef.current = 0;
       materialReadCounterRef.current = 0;
       writeCounterRef.current = 0;
@@ -1801,9 +1866,12 @@ export function useKiroChat({
       const partsRef = (m.parts ?? []) as unknown;
       const metadataRef = m.metadata ?? null;
       const currentTurnInFlight = m.role === "assistant" && idx > lastUserIdx && streaming;
-      const statusRef: "live" | "settled" = currentTurnInFlight ? "live" : "settled";
+      // Streaming UX V2：liveTurnTick 纳入 live 消息缓存键——provisional 歧义窗口到期后
+      // timer 强制重估，controller 依据真实时间把 leading text commit 为 answer
+      const statusRef: string = currentTurnInFlight ? `live-${liveTurnTick}` : "settled";
+      const commit = m.role === "assistant" ? getOrCreateLiveTurnCommit(m.id) : undefined;
       let view = reuseMessageView(viewCacheRef.current, m.id, partsRef, metadataRef, () =>
-        toView(m, currentTurnInFlight),
+        toView(m, currentTurnInFlight, commit),
         statusRef
       );
 
@@ -1903,8 +1971,9 @@ export function useKiroChat({
       return view;
     });
     // tasksState：task 状态变化（undo/approval/complete）需要重算消息绑定
+    // liveTurnTick：provisional 歧义窗口到期重估（Streaming UX V2）
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [chat.messages, streaming, tasksState]);
+  }, [chat.messages, streaming, tasksState, liveTurnTick]);
 
   /** Stop：清除 stale approvals（旧 Approval 不能在新会话执行）；awaiting task → cancelled */
   const handleStop = useCallback(() => {
