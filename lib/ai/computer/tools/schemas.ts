@@ -103,3 +103,11 @@ export const searchWorkspaceKnowledgeSchema = z.object({
   rootIds: z.array(z.string().trim().min(1).max(120)).min(1).max(32).optional(),
   maxResults: z.number().int().min(1).max(50).optional(),
 });
+
+/** V3 Part 2：retrieve_workspace_context —— Grounded Retrieval（live excerpt；有界 budget） */
+export const retrieveWorkspaceContextSchema = z.object({
+  query: z.string().trim().min(1).max(200),
+  rootIds: z.array(z.string().trim().min(1).max(120)).min(1).max(32).optional(),
+  maxFiles: z.number().int().min(1).max(4).optional(),
+  maxChars: z.number().int().min(1).max(6000).optional(),
+});

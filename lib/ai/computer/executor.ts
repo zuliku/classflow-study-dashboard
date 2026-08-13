@@ -71,6 +71,7 @@ import { DocumentFileSnapshot } from "@/lib/ai/computer/checkpoints";
 import { relocateFile } from "@/lib/ai/computer/filesystem/relocate";
 import { GENERIC_ARTIFACT_PATCH_UNDO_LIMIT_BYTES } from "@/lib/ai/computer/genericArtifactPatchUndo";
 import { markWorkspaceKnowledgeDirty, refreshWorkspaceKnowledge, getWorkspaceKnowledgeStatus, queryWorkspaceKnowledge } from "@/lib/ai/computer/knowledge/service";
+import { retrieveWorkspaceContext } from "@/lib/ai/computer/knowledge/retrieval";
 import {
   KIRO_KNOWLEDGE_SEARCH_DEFAULT_RESULTS,
   KIRO_KNOWLEDGE_SEARCH_MAX_RESULTS,
@@ -414,6 +415,98 @@ export async function executeKiroComputerTool(request: {
             indexState,
             partial,
           },
+        },
+      };
+    }
+
+    // ---- V3 Part 2：retrieve_workspace_context（Grounded Retrieval；search + live read）----
+    if (toolName === "retrieve_workspace_context") {
+      const query = String(args.query);
+      const maxFiles = args.maxFiles === undefined ? undefined : Number(args.maxFiles);
+      const maxChars = args.maxChars === undefined ? undefined : Number(args.maxChars);
+      // root 校验：必须同时存在于 frozen snapshot 与 live Workspace
+      const requestedRootIds =
+        Array.isArray(args.rootIds) && args.rootIds.length > 0
+          ? (args.rootIds as string[])
+          : turnSnapshot.roots.map((r) => r.id);
+      for (const rootId of requestedRootIds) {
+        const inSnapshot = turnSnapshot.roots.some((r) => r.id === rootId);
+        const inLive = ws.roots.some((r) => r.id === rootId);
+        if (!inSnapshot || !inLive) {
+          return {
+            kind: "completed",
+            output: { ok: false, code: "ROOT_NOT_FOUND", message: `检索 root 不存在：${rootId}` },
+          };
+        }
+      }
+      // 候选发现权限：逐 requested root 评估 fs.search（ask → 现有 approval lifecycle，零 quota/零 IO）
+      for (const rootId of requestedRootIds) {
+        const policy = prepareComputerTool({
+          mode: turnSnapshot.agentMode,
+          rules: livePermissionRules,
+          workspace: ws,
+          capability: "fs.search",
+          resource: { workspaceId: ws.id, rootId, path: "" },
+        });
+        if (policy.effect === "deny") {
+          return {
+            kind: "completed",
+            output: { ok: false, code: "PERMISSION_DENIED", message: policy.reason },
+          };
+        }
+        if (policy.effect === "ask") {
+          const matchedOneShot =
+            oneShotApprovals && oneShotApprovals.length > 0
+              ? oneShotApprovals.findIndex((o) =>
+                  oneShotApprovalMatches(o, {
+                    toolCallId,
+                    capability: "fs.search",
+                    workspaceId: ws.id,
+                    rootId,
+                    relativePath: "",
+                  })
+                )
+              : -1;
+          if (matchedOneShot === -1) {
+            return {
+              kind: "approval-required",
+              request: buildApprovalRequest({
+                id: newApprovalId(),
+                toolCallId,
+                taskId: context.taskId ?? "",
+                capability: "fs.search",
+                workspaceId: ws.id,
+                workspaceLabel: ws.name,
+                rootId,
+                rootLabel: ws.roots.find((r) => r.id === rootId)?.label ?? rootId,
+                relativePath: "",
+                resourceLabel: ws.roots.find((r) => r.id === rootId)?.label ?? rootId,
+                description: `检索工作区上下文（root: ${rootId}）`,
+              }),
+            };
+          }
+          oneShotApprovals!.splice(matchedOneShot, 1);
+        }
+      }
+
+      // 真正执行：readCount 恰好 +1（内部候选/文件读取不单独计数）
+      counters.readCount += 1;
+
+      const pack = await retrieveWorkspaceContext({
+        workspace: ws,
+        agentMode: turnSnapshot.agentMode,
+        permissionRules: livePermissionRules,
+        getAdapter: getComputerAdapterForAdapterRef,
+        query,
+        rootIds: requestedRootIds,
+        maxFiles,
+        maxChars,
+      });
+      return {
+        kind: "completed",
+        output: {
+          ok: true,
+          data: pack,
         },
       };
     }

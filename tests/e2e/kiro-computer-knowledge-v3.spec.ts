@@ -64,6 +64,10 @@ async function seedSandboxFixture(page: import("@playwright/test").Page) {
         for (const [path, text] of Object.entries(files)) {
           store.put({ kind: "file", text, size: new TextEncoder().encode(text).byteLength, mtime: new Date().toISOString() }, `sandbox-default\u0000${path}`);
         }
+        // 目录 marker（sandbox list 依赖它们推导目录结构）
+        for (const dir of ["data/", "research/"]) {
+          store.put({ kind: "directory", size: 0, mtime: new Date().toISOString() }, `sandbox-default\u0000${dir}`);
+        }
         tx.oncomplete = () => resolve();
         tx.onerror = () => resolve();
         tx.onabort = () => resolve();
@@ -162,4 +166,75 @@ test("V3 Part 1：KIRO.md 指令 + 知识搜索 + 实时读取回答", async ({ 
   expect(serializedThird).toContain("平行趋势检验");
   expect(serializedThird).toContain("research/method.md");
   expect(serializedThird).not.toContain("adapterRef");
+});
+
+test("V3 Part 2：retrieve_workspace_context 一次获得 live 相关正文", async ({ page }) => {
+  let requestCount = 0;
+  let secondBody: Record<string, unknown> | null = null;
+  await page.route("**/api/ai/chat", async (route) => {
+    requestCount += 1;
+    if (requestCount === 1) {
+      await route.fulfill({
+        status: 200,
+        contentType: "text/event-stream",
+        body: toolCallStream("r2-msg-1", "call_retrieve", "retrieve_workspace_context", {
+          query: "研究方法",
+          maxFiles: 3,
+          maxChars: 4800,
+        }),
+      });
+      return;
+    }
+    if (requestCount === 2) {
+      const body = route.request().postDataJSON() as Record<string, unknown>;
+      secondBody = body;
+      await route.fulfill({
+        status: 200,
+        contentType: "text/event-stream",
+        body: answerStream("r2-msg-1", "研究方法采用事件研究，并进行平行趋势检验。"),
+      });
+      return;
+    }
+    await route.fulfill({
+      status: 200,
+      contentType: "text/event-stream",
+      body: answerStream("r2-msg-1", "研究方法采用事件研究，并进行平行趋势检验。"),
+    });
+  });
+
+  await page.addInitScript(({ settings, key }) => {
+    localStorage.setItem("classflow-ai-settings-v1", JSON.stringify({ version: 0, state: settings }));
+    sessionStorage.setItem("classflow-ai-key:deepseek", key);
+  }, { settings: AI_SETTINGS, key: "sk-test-key" });
+
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/");
+  await seedSandboxFixture(page);
+
+  await page.locator("aside").first().getByRole("button", { name: "Kiro" }).click();
+  await page.waitForTimeout(800);
+
+  const composer = page.getByTestId("kiro-composer");
+  await expect(composer).toBeVisible();
+  await composer.getByRole("button", { name: "Computer" }).click();
+  await expect(composer.getByRole("button", { name: "Computer" })).toHaveAttribute("aria-pressed", "true");
+  const modeMenu = composer.getByRole("button", { name: "权限模式" });
+  await modeMenu.click();
+  await page.getByRole("menuitem", { name: /工作区自动/ }).first().click();
+
+  await composer.getByLabel("Ask Kiro").fill("我的研究方法是什么？用工作区资料回答。");
+  await composer.getByLabel("发送").click();
+  await expect(page.locator('[data-testid="kiro-message"]').last()).toContainText("事件研究", { timeout: 20000 });
+  expect(requestCount).toBeLessThanOrEqual(3);
+
+  // retrieve 的 live excerpt 出现在第二个请求历史中（一次调用获得正文，无多次 read_text）
+  const serialized = JSON.stringify(secondBody);
+
+  expect(serialized).toContain("平行趋势检验");
+  expect(serialized).toContain("research/method.md");
+  // 无需连续 read_text
+  expect(serialized).not.toContain('"tool-read_text"');
+  for (const forbidden of ["adapterRef", "sandbox-default", "nativePath", "grant", "bytes"]) {
+    expect(serialized).not.toContain(forbidden);
+  }
 });

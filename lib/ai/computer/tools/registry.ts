@@ -16,6 +16,7 @@ import {
   moveFileSchema,
   updateDocumentSchema,
   searchWorkspaceKnowledgeSchema,
+  retrieveWorkspaceContextSchema,
 } from "@/lib/ai/computer/tools/schemas";
 
 export interface ComputerToolDefinition {
@@ -60,6 +61,13 @@ export const COMPUTER_READ_TOOLS: ComputerToolDefinition[] = [
     name: "search_workspace_knowledge",
     description: "在当前 Workspace 的本地知识索引中搜索相关文件候选；正文结论仍需实时读取文件确认。",
     schema: searchWorkspaceKnowledgeSchema,
+    capability: "fs.search",
+    mutation: false,
+  },
+  {
+    name: "retrieve_workspace_context",
+    description: "在工作区知识索引定位候选文件后，实时读取少量最相关文件的有界正文片段（Grounded Context）。正文来自当前文件内容；完整段落/表格请继续用 read_text / inspect_document / grep_files。",
+    schema: retrieveWorkspaceContextSchema,
     capability: "fs.search",
     mutation: false,
   },
