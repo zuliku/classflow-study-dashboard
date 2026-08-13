@@ -19,6 +19,7 @@ import {
   artifactDbDelete,
   artifactDbGet,
   artifactDbPut,
+  artifactDbRestoreMetadataRevision,
   artifactSourceDelete,
   artifactSourceGet,
   artifactSourcePut,
@@ -217,6 +218,15 @@ export async function commitGenericArtifactRevision(input: {
   expectedRevision: number;
 }): Promise<KiroArtifact> {
   return artifactDbCommitMetadataRevision(input);
+}
+
+/** generic Artifact patch Undo：原子恢复 metadata revision（expectedCurrentRevision → revision；无 Source IR） */
+export async function restoreGenericArtifactRevision(input: {
+  artifactId: string;
+  expectedCurrentRevision: number;
+  revision: number;
+}): Promise<KiroArtifact> {
+  return artifactDbRestoreMetadataRevision(input);
 }
 
 /** 当前 Workspace 最近 Artifact（updatedAt DESC；limit 1..12）——只返回 metadata，不 stat 文件 */

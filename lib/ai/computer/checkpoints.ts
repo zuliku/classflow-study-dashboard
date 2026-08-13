@@ -8,6 +8,10 @@ import { ComputerError } from "@/lib/ai/computer/errors";
 import { ComputerAdapterIO } from "@/lib/ai/computer/executor-types";
 import { KiroDocument } from "@/lib/ai/computer/documents/types";
 import { removeArtifactRecordIfMatches } from "@/lib/ai/computer/artifacts/service";
+import {
+  RestoreGenericArtifactRevisionInverse,
+  undoGenericArtifactPatchRuntime,
+} from "@/lib/ai/computer/genericArtifactPatchUndo";
 
 /** V2 Part 2：文档 revision 的 exact 文件快照（runtime-only；绝不定持久化/进模型） */
 export type DocumentFileSnapshot =
@@ -51,7 +55,8 @@ export type ComputerInverseOperation =
       expectedCurrentRevision: number;
       previousDocument: KiroDocument;
       snapshot: DocumentFileSnapshot;
-    };
+    }
+  | RestoreGenericArtifactRevisionInverse;
 
 export interface ComputerTaskCheckpoint {
   taskId: string;
@@ -97,6 +102,11 @@ export async function applyInverseToAdapter(io: ComputerAdapterIO, inverse: Comp
   if (inverse.type === "restore-document-revision") {
     // revision 恢复需要同步 Artifact metadata + Source Store，由 useKiroChat Undo orchestration 处理
     throw new ComputerError("VERIFICATION_FAILED", "restore-document-revision 需要在 Undo orchestration 中执行");
+  }
+  if (inverse.type === "restore-generic-artifact-revision") {
+    // generic Artifact patch Undo：exact 文本 + 原子 metadata revision 恢复（无 Source IR）
+    await undoGenericArtifactPatchRuntime({ io, inverse });
+    return;
   }
   // restore-text：写回 beforeText 并 exact read-back verify
   await io.writeText(inverse.relativePath, inverse.beforeText);

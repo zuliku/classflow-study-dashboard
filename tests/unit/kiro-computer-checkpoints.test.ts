@@ -139,7 +139,7 @@ describe("create empty directory undo", () => {
 });
 
 describe("patch undo", () => {
-  it("restore-text → 内容 exact 恢复原状", async () => {
+  it("registered generic patch inverse → 内容 exact 恢复原状（+ Artifact revision 恢复）", async () => {
     await runTool("create_text_file", { path: "p.md", content: "标题\n原始正文" });
     const attempt = await runTool("patch_text_file", {
       path: "p.md",
@@ -147,8 +147,8 @@ describe("patch undo", () => {
     });
     expect(attempt.kind).toBe("completed");
     if (attempt.kind !== "completed" || !attempt.runtime?.inverse) return;
-    expect(attempt.runtime.inverse.type).toBe("restore-text");
-    if (attempt.runtime.inverse.type !== "restore-text") return;
+    expect(attempt.runtime.inverse.type).toBe("restore-generic-artifact-revision");
+    if (attempt.runtime.inverse.type !== "restore-generic-artifact-revision") return;
     expect(attempt.runtime.inverse.beforeText).toBe("标题\n原始正文");
 
     await applyInverseToAdapter(await io(), attempt.runtime.inverse);
@@ -171,14 +171,18 @@ describe("mixed actions reverse order", () => {
     if (file.kind === "completed" && file.runtime?.inverse) appendInverseToCheckpoint(cp, file.runtime.inverse);
     if (patch.runtime?.inverse) appendInverseToCheckpoint(cp, patch.runtime.inverse);
 
-    // reverse：restore-text → remove file → remove dir
-    expect(cp.inverses.map((i) => i.type)).toEqual(["remove-created", "remove-created", "restore-text"]);
+    // reverse：restore-generic-artifact-revision → remove file → remove dir
+    expect(cp.inverses.map((i) => i.type)).toEqual([
+      "remove-created",
+      "remove-created",
+      "restore-generic-artifact-revision",
+    ]);
     const ad = await io();
     for (const inverse of [...cp.inverses].reverse()) {
       await applyInverseToAdapter(ad, inverse);
     }
     // 目录删空后 remove-created(directory) 成功 → 全部清理；
-    // patch 目标是 restore-text（文件恢复为 v1，仍存在）
+    // patch 目标是 generic inverse（文件恢复为 v1，仍存在）
     expect(await ad.stat("mix-2")).toBeNull();
     expect(await ad.stat("mix-2/a.md")).toBeNull();
     expect(await sandboxReadText(SANDBOX_REF, "mix/a.md")).toBe("v1");
@@ -413,3 +417,45 @@ function bytesEqual(a: Uint8Array, b: Uint8Array): boolean {
   }
   return true;
 }
+
+describe("restore-generic-artifact-revision（V2 Part 3.1 生产 dispatch）", () => {
+  it("registered generic Artifact patch Undo：file v1 + Artifact revision 1 + id 不变 + Source null", async () => {
+    const c = counters();
+    // create generic text artifact（revision 1）
+    const created = await runTool("create_text_file", { path: "notes.txt", content: "v1" }, c);
+    expect(created.kind).toBe("completed");
+    if (created.kind !== "completed" || !created.runtime?.change.artifactId) return;
+    const artifactId = created.runtime.change.artifactId;
+
+    // patch → revision 2 / file v2（生成 restore-generic-artifact-revision inverse）
+    const patched = await runTool("patch_text_file", { path: "notes.txt", edits: [{ oldText: "v1", newText: "v2" }] }, c);
+    expect(patched.kind).toBe("completed");
+    if (patched.kind !== "completed" || !patched.runtime?.inverse) return;
+    expect(patched.runtime.inverse.type).toBe("restore-generic-artifact-revision");
+    expect((await getArtifact(artifactId))?.revision).toBe(2);
+
+    // 生产路径 dispatch：applyInverseToAdapter（同 useKiroChat）
+    await applyInverseToAdapter(await io(), patched.runtime.inverse);
+    expect(await sandboxReadText(SANDBOX_REF, "notes.txt")).toBe("v1");
+    expect((await getArtifact(artifactId))?.revision).toBe(1);
+    expect((await getArtifact(artifactId))?.id).toBe(artifactId);
+    expect(await getArtifactSource(artifactId)).toBeNull();
+  });
+
+  it("stale generic inverse → ARTIFACT_REVISION_CONFLICT 且文件 unchanged", async () => {
+    const c = counters();
+    const created = await runTool("create_text_file", { path: "s.txt", content: "v1" }, c);
+    if (created.kind !== "completed" || !created.runtime?.change.artifactId) return;
+    const artifactId = created.runtime.change.artifactId;
+    const patched = await runTool("patch_text_file", { path: "s.txt", edits: [{ oldText: "v1", newText: "v2" }] }, c);
+    if (patched.kind !== "completed" || !patched.runtime?.inverse) return;
+    // 外部再 patch 到 v3
+    await runTool("patch_text_file", { path: "s.txt", edits: [{ oldText: "v2", newText: "v3" }] }, c);
+    // 旧 inverse（expected 2）现在 stale
+    await expect(applyInverseToAdapter(await io(), patched.runtime.inverse)).rejects.toMatchObject({
+      code: "ARTIFACT_REVISION_CONFLICT",
+    });
+    expect(await sandboxReadText(SANDBOX_REF, "s.txt")).toBe("v3");
+    expect((await getArtifact(artifactId))?.revision).toBe(3);
+  });
+});

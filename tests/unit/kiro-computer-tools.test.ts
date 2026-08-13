@@ -241,8 +241,9 @@ describe("mutation tools + policy（Part 2 回归 + Part 3 attempt 语义）", (
     expect(attempt.kind).toBe("completed");
     if (attempt.kind !== "completed") return;
     expect(attempt.output.ok).toBe(true);
-    expect(attempt.runtime?.inverse?.type).toBe("restore-text");
-    if (attempt.runtime?.inverse?.type === "restore-text") {
+    // create_text_file 登记的 generic Artifact → V2 Part 3.1 专用 inverse（revision 一起恢复）
+    expect(attempt.runtime?.inverse?.type).toBe("restore-generic-artifact-revision");
+    if (attempt.runtime?.inverse?.type === "restore-generic-artifact-revision") {
       expect(attempt.runtime.inverse.beforeText).toBe("标题\n正文内容");
     }
     const review = attempt.runtime?.change.review;
@@ -720,6 +721,41 @@ describe("update_document（V2 Part 2）", () => {
     expect(updated?.id).toBe(artifact.id);
     expect(attempt.runtime?.change.artifactId).toBe(artifact.id);
     expect(attempt.runtime?.change.revision).toBe(2);
+    // V2 Part 3.1：registered generic Artifact 生成专用 inverse（修复 revision drift）
+    expect(attempt.runtime?.inverse?.type).toBe("restore-generic-artifact-revision");
+    if (attempt.runtime?.inverse?.type === "restore-generic-artifact-revision") {
+      expect(attempt.runtime.inverse.artifactId).toBe(artifact.id);
+      expect(attempt.runtime.inverse.previousRevision).toBe(1);
+      expect(attempt.runtime.inverse.expectedCurrentRevision).toBe(2);
+      expect(attempt.runtime.inverse.beforeText).toBe("v1");
+    }
+  });
+
+  it("unregistered 文件 patch 仍为 restore-text inverse", async () => {
+    const c = counters();
+    await executeKiroComputerTool({
+      toolName: "create_text_file",
+      toolCallId: "call-unreg-seed",
+      toolInput: { rootId: "output", path: "loose.txt", content: "x1" },
+      context: ctx(AUTO_SNAPSHOT),
+      counters: c,
+    });
+    const { removeArtifactRecord } = await import("@/lib/ai/computer/artifacts/service");
+    const { findArtifactByLocation } = await import("@/lib/ai/computer/artifacts/service");
+    const registered = await findArtifactByLocation("research", "output", "loose.txt");
+    if (registered) await removeArtifactRecord(registered.id); // 模拟未登记
+
+    const attempt = await executeKiroComputerTool({
+      toolName: "patch_text_file",
+      toolCallId: "call-unreg-patch",
+      toolInput: { rootId: "output", path: "loose.txt", edits: [{ oldText: "x1", newText: "x2" }] },
+      context: ctx(AUTO_SNAPSHOT),
+      counters: c,
+    });
+    expect(attempt.kind).toBe("completed");
+    if (attempt.kind !== "completed") return;
+    expect(attempt.output.ok).toBe(true);
+    expect(attempt.runtime?.inverse?.type).toBe("restore-text");
   });
 
   it("inspect_document DOCX：正文可读取（Mammoth raw text）+ Source IR 结构事实 + 无 HTML/OOXML/bytes array", async () => {

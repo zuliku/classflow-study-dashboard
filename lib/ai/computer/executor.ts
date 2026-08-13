@@ -67,6 +67,7 @@ import {
 import { KiroArtifact } from "@/lib/ai/computer/artifacts/types";
 import { DocumentFileSnapshot } from "@/lib/ai/computer/checkpoints";
 import { relocateFile } from "@/lib/ai/computer/filesystem/relocate";
+import { GENERIC_ARTIFACT_PATCH_UNDO_LIMIT_BYTES } from "@/lib/ai/computer/genericArtifactPatchUndo";
 import { KiroComputerChange } from "@/lib/ai/computer/task";
 import { ComputerInverseOperation } from "@/lib/ai/computer/checkpoints";
 
@@ -77,7 +78,7 @@ export const COMPUTER_MUTATION_LIMIT_PER_TURN = 6;
 export const COMPUTER_DOCUMENT_REVISION_LIMIT_BYTES = 5 * 1024 * 1024;
 
 /** Patch Undo before-text 上限（超限 → canUndo=false，不保留 checkpoint 快照） */
-export const COMPUTER_PATCH_UNDO_LIMIT_BYTES = 1024 * 1024;
+export const COMPUTER_PATCH_UNDO_LIMIT_BYTES = GENERIC_ARTIFACT_PATCH_UNDO_LIMIT_BYTES;
 
 export interface ComputerExecutorContext {
   turnSnapshot: KiroComputerTurnSnapshot;
@@ -986,13 +987,24 @@ export async function executeKiroComputerTool(request: {
           edits: edits.map((e) => ({ before: e.oldText, after: e.newText })),
         },
         inverse: canUndo
-          ? {
-              type: "restore-text",
-              workspaceId: ws.id,
-              rootId: root.id,
-              relativePath: normalized,
-              beforeText: current,
-            }
+          ? artifactId && artifactRevision !== undefined && newRevision !== undefined
+            ? {
+                type: "restore-generic-artifact-revision",
+                workspaceId: ws.id,
+                rootId: root.id,
+                relativePath: normalized,
+                artifactId,
+                previousRevision: artifactRevision,
+                expectedCurrentRevision: newRevision,
+                beforeText: current,
+              }
+            : {
+                type: "restore-text",
+                workspaceId: ws.id,
+                rootId: root.id,
+                relativePath: normalized,
+                beforeText: current,
+              }
           : undefined,
       });
       return {
