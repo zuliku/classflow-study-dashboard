@@ -113,3 +113,74 @@ test("mobile 390：通用页 dropdown 可用且无横向溢出", async ({ page }
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1);
   expect(overflow).toBe(false);
 });
+
+
+test("模型菜单内部滚动不关闭，滚动后的选项仍可选择；外部 scroll 关闭", async ({ page }) => {
+  await page.route("**/api/ai/models?provider=opencode-go", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        models: Array.from({ length: 20 }, (_, i) => ({
+          id: `scroll-model-${i + 1}`,
+          name: `测试滚动模型 ${String(i + 1).padStart(2, "0")}`,
+          transport: "openai-compatible",
+          vendor: "openai",
+        })),
+      }),
+    });
+  });
+  await page.addInitScript(({ settings }) => {
+    localStorage.setItem(
+      "classflow-ai-settings-v1",
+      JSON.stringify({
+        version: 0,
+        state: settings,
+      })
+    );
+  }, {
+    settings: {
+      enabled: true,
+      provider: "opencode-go",
+      model: "scroll-model-01",
+      custom: { providerName: "", baseURL: "", model: "" },
+    },
+  });
+
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/");
+  await page.getByRole("button", { name: "设置" }).first().click();
+  await expect(page.getByTestId("settings-view")).toBeVisible();
+  await page.getByRole("navigation", { name: "设置导航" }).getByRole("button", { name: "Kiro 与 AI" }).click();
+  await page.waitForTimeout(400);
+
+  const modelTrigger = page.getByRole("combobox", { name: "模型", exact: true });
+  await expect(modelTrigger).toBeVisible();
+  await modelTrigger.click();
+  const listbox = page.getByRole("listbox", { name: "模型", exact: true });
+  await expect(listbox).toBeVisible();
+  await expect(listbox.getByRole("option", { name: "测试滚动模型 01" })).toBeVisible();
+
+  // 列表真实可滚动
+  await expect.poll(() => listbox.evaluate((el) => el.scrollHeight > el.clientHeight)).toBe(true);
+
+  // 菜单内部 wheel 滚动：菜单保持打开
+  await listbox.hover();
+  await page.mouse.wheel(0, 500);
+  await expect(listbox).toBeVisible();
+
+  // 滚动后的选项仍可选择
+  const last = listbox.getByRole("option", { name: "测试滚动模型 20" });
+  await last.scrollIntoViewIfNeeded();
+  await last.click();
+  await expect(listbox).toHaveCount(0);
+  await expect(modelTrigger).toContainText("测试滚动模型 20");
+
+  // 外部 window scroll：fixed-position 菜单关闭
+  await modelTrigger.click();
+  await expect(listbox).toBeVisible();
+  await page.evaluate(() => {
+    window.dispatchEvent(new Event("scroll"));
+  });
+  await expect(listbox).toHaveCount(0);
+});

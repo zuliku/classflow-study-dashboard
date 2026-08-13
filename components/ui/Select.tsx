@@ -139,7 +139,13 @@ export function UISelect<T extends string | number>({
       if (menuRef.current?.contains(t) || triggerRef.current?.contains(t)) return;
       closeMenu();
     };
-    const onScroll = () => closeMenu();
+    // 菜单内部滚动（overflow-y-auto listbox）不应关闭菜单；外部页面/容器滚动保持关闭，
+    // 避免 fixed-position 菜单与 Trigger 脱锚（capture 阶段监听，事件 target 判定来源）
+    const onScroll = (event: Event) => {
+      const target = event.target;
+      if (target instanceof Node && menuRef.current?.contains(target)) return;
+      closeMenu();
+    };
     const onResize = () => closeMenu();
     document.addEventListener("pointerdown", onPointerDown);
     window.addEventListener("scroll", onScroll, true);
