@@ -32,6 +32,7 @@ import {
   sandboxWriteBytes,
   sandboxRemove,
   sandboxMove,
+  sandboxReadTextPrefix,
 } from "@/lib/ai/computer/adapters/sandbox";
 import {
   browserListDirectory,
@@ -43,6 +44,7 @@ import {
   browserWriteBytes,
   browserRemove,
   browserMove,
+  browserReadTextPrefix,
 } from "@/lib/ai/computer/adapters/browser";
 import {
   applyReadBounds,
@@ -68,6 +70,7 @@ import { KiroArtifact } from "@/lib/ai/computer/artifacts/types";
 import { DocumentFileSnapshot } from "@/lib/ai/computer/checkpoints";
 import { relocateFile } from "@/lib/ai/computer/filesystem/relocate";
 import { GENERIC_ARTIFACT_PATCH_UNDO_LIMIT_BYTES } from "@/lib/ai/computer/genericArtifactPatchUndo";
+import { markWorkspaceKnowledgeDirty } from "@/lib/ai/computer/knowledge/service";
 import { KiroComputerChange } from "@/lib/ai/computer/task";
 import { ComputerInverseOperation } from "@/lib/ai/computer/checkpoints";
 
@@ -107,6 +110,7 @@ export function getComputerAdapterForAdapterRef(adapterRef: string): ComputerAda
       writeBytes: (p, c, t) => sandboxWriteBytes(adapterRef, p, c, t),
       remove: (p, k) => sandboxRemove(adapterRef, p, k),
       move: (from, to) => sandboxMove(adapterRef, from, to),
+      readTextPrefix: (p, maxBytes) => sandboxReadTextPrefix(adapterRef, p, maxBytes),
     };
   }
   return {
@@ -119,6 +123,7 @@ export function getComputerAdapterForAdapterRef(adapterRef: string): ComputerAda
     writeBytes: (p, c) => browserWriteBytes(adapterRef, p, c),
     remove: (p, k) => browserRemove(adapterRef, p, k),
     move: (from, to) => browserMove(adapterRef, from, to),
+    readTextPrefix: (p, maxBytes) => browserReadTextPrefix(adapterRef, p, maxBytes),
   };
 }
 
@@ -367,6 +372,7 @@ export async function executeKiroComputerTool(request: {
       });
       return {
         kind: "completed",
+
         output: { ok: true, data: { fromPath: sourcePath, path: destinationPath, verified: true } },
         runtime,
       };
@@ -828,6 +834,7 @@ export async function executeKiroComputerTool(request: {
           resourceType: "directory",
         },
       });
+      void markKnowledgeDirtyBestEffort(ws.id);
       return {
         kind: "completed",
         output: {
@@ -887,6 +894,7 @@ export async function executeKiroComputerTool(request: {
       });
       return {
         kind: "completed",
+
         output: { ok: true, data: { path: normalized, verified: true } },
         runtime,
       };
@@ -1012,6 +1020,7 @@ export async function executeKiroComputerTool(request: {
       });
       return {
         kind: "completed",
+
         output: { ok: true, data: { path: normalized, changeCount, verified: true } },
         runtime,
       };
@@ -1083,6 +1092,7 @@ export async function executeKiroComputerTool(request: {
         });
         return {
           kind: "completed",
+
           output: { ok: true, data: { path: normalized, format: "markdown", verified: true } },
           runtime,
         };
@@ -1151,6 +1161,7 @@ export async function executeKiroComputerTool(request: {
           },
           artifactId,
         });
+        void markKnowledgeDirtyBestEffort(ws.id);
         return {
           kind: "completed",
           output: { ok: true, data: { path: normalized, format: "docx", verified: true } },
@@ -1258,6 +1269,15 @@ async function rollbackDocumentFile(
   const readBack = await adapter.readBytes(path);
   if (!bytesEqual(readBack, snapshot.bytes)) {
     throw new ComputerError("VERIFICATION_FAILED", "文档回滚校验失败");
+  }
+}
+
+/** V3 Part 1：verified filesystem mutation 后 best-effort 标记 Knowledge dirty（失败绝不改变已验证结果） */
+async function markKnowledgeDirtyBestEffort(workspaceId: string): Promise<void> {
+  try {
+    await markWorkspaceKnowledgeDirty(workspaceId);
+  } catch {
+    // Knowledge cache failure cannot retroactively fail verified filesystem work.
   }
 }
 

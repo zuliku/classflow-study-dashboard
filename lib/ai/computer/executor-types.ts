@@ -10,4 +10,6 @@ export interface ComputerAdapterIO {
   remove(path: string, kind: "file" | "directory"): Promise<void>;
   /** V2：file-only verified relocation（same adapter；实现层保证 source absent + target present） */
   move(from: string, to: string): Promise<void>;
+  /** V3 Part 1：bounded text prefix read（KIRO.md 用；实现必须按 byte prefix，不先读全文再截断） */
+  readTextPrefix(path: string, maxBytes: number): Promise<{ text: string; truncated: boolean }>;
 }

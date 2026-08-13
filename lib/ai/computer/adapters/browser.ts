@@ -178,6 +178,23 @@ export async function browserRemove(adapterRef: string, path: string, kind: "fil
   });
 }
 
+/** V3 Part 1：bounded text prefix（File.slice(0, maxBytes) 后才 decode；绝不先读全文） */
+export async function browserReadTextPrefix(
+  adapterRef: string,
+  path: string,
+  maxBytes: number
+): Promise<{ text: string; truncated: boolean }> {
+  const root = await requireGrantedHandle(adapterRef);
+  const { dir, name } = await resolveHandlePath(root, path);
+  const file = await dir.getFileHandle(name).catch(() => {
+    throw new ComputerError("RESOURCE_NOT_FOUND", `文件不存在：${path}`);
+  });
+  const f = await file.getFile();
+  const sliced = f.slice(0, maxBytes);
+  const text = await sliced.text();
+  return { text, truncated: f.size > maxBytes };
+}
+
 /** V2：file-only verified relocation（same browser root；Executor/relocate 已做 policy/覆盖检查） */
 export async function browserMove(adapterRef: string, from: string, to: string): Promise<void> {
   const root = await requireGrantedHandle(adapterRef);

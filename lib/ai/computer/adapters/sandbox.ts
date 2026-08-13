@@ -228,6 +228,28 @@ export async function sandboxDelete(adapterRef: string, path: string): Promise<v
   await dbDelete(sandboxKey(adapterRef, path));
 }
 
+/** V3 Part 1：bounded text prefix（先按 byte slice 编码字节再 decode；绝不先解码全文） */
+export async function sandboxReadTextPrefix(
+  adapterRef: string,
+  path: string,
+  maxBytes: number
+): Promise<{ text: string; truncated: boolean }> {
+  const entry = await sandboxStat(adapterRef, path);
+  if (!entry) throw new ComputerError("RESOURCE_NOT_FOUND", `文件不存在：${path}`);
+  if (entry.kind !== "file") throw new ComputerError("UNSUPPORTED_FILE_TYPE", `不是文件：${path}`);
+  if (entry.text !== undefined) {
+    const bytes = new TextEncoder().encode(entry.text);
+    const sliced = bytes.slice(0, maxBytes);
+    return { text: new TextDecoder().decode(sliced), truncated: bytes.byteLength > maxBytes };
+  }
+  if (entry.bytes) {
+    const bytes = new Uint8Array(entry.bytes);
+    const sliced = bytes.slice(0, maxBytes);
+    return { text: new TextDecoder().decode(sliced), truncated: bytes.byteLength > maxBytes };
+  }
+  throw new ComputerError("UNSUPPORTED_FILE_TYPE", `无法读取文本：${path}`);
+}
+
 /** V2：file-only verified relocation（same sandbox adapter；Executor/relocate 已做 policy/覆盖检查） */
 export async function sandboxMove(adapterRef: string, from: string, to: string): Promise<void> {
   const entry = await sandboxStat(adapterRef, from);

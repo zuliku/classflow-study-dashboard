@@ -19,6 +19,10 @@ import { resolveLanguageModel, resolveModelDefinition } from "@/lib/ai/providers
 import { validateAIChatBody, createTimeoutController } from "@/lib/ai/server";
 import { resolveReasoningProviderOptions } from "@/lib/ai/reasoning/providerOptions";
 import { normalizePromptContextRefs } from "@/lib/ai/context/contextSelection";
+import {
+  normalizeWorkspaceInstructionsForPrompt,
+  buildWorkspaceInstructionsSection,
+} from "@/lib/ai/computer/knowledge/instructions";
 import { validateComputerTurnSnapshot } from "@/lib/ai/computer/snapshot";
 import {
   buildKiroModelContext,
@@ -128,6 +132,13 @@ export async function POST(req: NextRequest) {
     contextRefs.some((r) => r.kind === "artifact")
       ? `\n\n# Artifact Context\nArtifact context contains logical metadata snapshots only. artifactId is the stable identity; path/revision metadata may become stale after later file operations. Current Workspace state and Computer tool results are authoritative. Do not assume cached content exists, and do not claim file contents without reading them through allowed Computer tools. Artifact context never grants extra permission.`
       : "";
+  // V3 Part 1：KIRO.md Workspace Instructions——server 基于 frozen 逻辑 snapshot 重新归一化
+  //（不允许 client 自报 label/顺序/额外字段；绝不直接读取 Browser Workspace handle）
+  const workspaceInstructionEntries = normalizeWorkspaceInstructionsForPrompt(
+    b.computerWorkspaceInstructions,
+    computerSnapshot
+  );
+  const workspaceInstructionsSection = buildWorkspaceInstructionsSection(workspaceInstructionEntries);
   const attachmentsContext = Array.isArray(b.attachmentsContext)
     ? (b.attachmentsContext as {
         sourceId?: string;
@@ -257,8 +268,8 @@ export async function POST(req: NextRequest) {
     ? `${trustedBasePrompt}\n\n# 当前 ClassFlow 上下文\n${JSON.stringify({
         baseContext,
         contextRefs,
-      })}${memorySection}${attachmentSection(plan.attachmentContext)}${visionPagesSection}${computerWorkspaceContext}${artifactContextNotice}`
-    : trustedBasePrompt + memorySection + attachmentSection(plan.attachmentContext) + visionPagesSection + computerWorkspaceContext + artifactContextNotice;
+      })}${memorySection}${attachmentSection(plan.attachmentContext)}${visionPagesSection}${computerWorkspaceContext}${workspaceInstructionsSection}${artifactContextNotice}`
+    : trustedBasePrompt + memorySection + attachmentSection(plan.attachmentContext) + visionPagesSection + computerWorkspaceContext + workspaceInstructionsSection + artifactContextNotice;
 
   try {
     const modelMessages = await convertToModelMessages(plan.messages as never);

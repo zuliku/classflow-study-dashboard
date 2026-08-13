@@ -32,6 +32,8 @@ import { appendComputerAuditEntry } from "@/lib/ai/computer/audit";
 import { relocateFile } from "@/lib/ai/computer/filesystem/relocate";
 import { updateArtifactLocation } from "@/lib/ai/computer/artifacts/service";
 import { undoDocumentRevisionRuntime } from "@/lib/ai/computer/documentRevisionUndo";
+import { loadWorkspaceInstructionsForTurn } from "@/lib/ai/computer/knowledge/instructions";
+import { markWorkspaceKnowledgeDirty } from "@/lib/ai/computer/knowledge/service";
 import { useKiroComputerRuntimeStore } from "@/store/useKiroComputerRuntimeStore";
 import { useKiroPreferencesStore } from "@/store/useKiroPreferencesStore";
 import { useConfirmStore } from "@/store/useConfirmStore";
@@ -1170,6 +1172,9 @@ export function useKiroChat({
             .getState()
             .workspaces.find((w) => w.id === inverse.workspaceId);
           if (!ws) throw new ComputerError("WORKSPACE_NOT_FOUND", "工作区不存在");
+          // V3 Part 1：inverse 执行一旦开始（即使最后 undo_failed），对应 Workspace best-effort dirty
+          // （部分 Undo 可能已改变文件系统）
+          void markWorkspaceKnowledgeDirty(ws.id).catch(() => undefined);
           // V2：move-back / restore-document-revision 是特殊 inverse（多 store），单独 orchestration
           if (inverse.type === "move-back") {
             await undoMoveBack(ws, inverse);
@@ -1454,7 +1459,23 @@ export function useKiroChat({
       }
 
       // ---- Turn Context Snapshot：本 Turn 内 Prompt Context 冻结（下一 Turn 才刷新） ----
-      turnSnapshotRef.current = buildSnapshotRef.current(turnAttachments);
+      // V3 Part 1：先冻结 Computer snapshot，再异步经 live Workspace/rules/grant + 精确 fs.read policy
+      // 读取 bounded root-level KIRO.md（绝不重建/切换 Workspace；Server 会再次基于 frozen snapshot 归一化）
+      const baseTurnSnapshot = buildSnapshotRef.current(turnAttachments);
+      const frozenComputerSnapshot = baseTurnSnapshot.computerSnapshot as KiroComputerTurnSnapshot | undefined;
+      const computerWorkspaceInstructions =
+        frozenComputerSnapshot && frozenComputerSnapshot.enabled
+          ? await loadWorkspaceInstructionsForTurn({
+              snapshot: frozenComputerSnapshot,
+              liveWorkspaces: useKiroComputerStore.getState().workspaces,
+              livePermissionRules: useKiroComputerStore.getState().permissionRules,
+              getAdapter: getComputerAdapterForAdapterRef,
+            })
+          : undefined;
+      turnSnapshotRef.current = {
+        ...baseTurnSnapshot,
+        ...(computerWorkspaceInstructions ? { computerWorkspaceInstructions } : {}),
+      };
       // Computer 调用限制 / 新 Turn Task 重置（冻结意图配套；历史 Task 仍保留展示）
       computerCountersRef.current = { readCount: 0, mutationCount: 0 };
       activeTaskRef.current = null;
