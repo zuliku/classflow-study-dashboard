@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import React, { useState, useEffect, useMemo, useRef } from "react";
 import {
@@ -18,9 +18,10 @@ import {
 import { useAppStore } from "@/store/useAppStore";
 import { useToastStore } from "@/store/useToastStore";
 import { useConfirmStore } from "@/store/useConfirmStore";
-import { TimeSliceFilter, Priority } from "@/types";
+import { TimeSliceFilter, Priority, Assignment } from "@/types";
 import { openAssignmentEditor } from "@/lib/uiEvents";
 import { useEnterOnAdd } from "@/lib/useEnterOnAdd";
+import { useExitPresenceList } from "@/lib/useExitPresenceList";
 import { cn, getPriorityMeta } from "@/lib/utils";
 import { UISelect } from "@/components/ui/Select";
 import { DropdownMenuPanel } from "@/components/ui/DropdownMenu";
@@ -183,6 +184,14 @@ export function AssignmentTable({
     [isWorkspace, workspaceViewResult, searchQuery, courseFilter, assignments]
   );
   const filteredIdsKey = filteredIds.join(",");
+
+  // IM4A：Exit-only 列表保留——仅真实数据 mutation（完成/删除导致离开当前视图）触发 Row 退出；
+  // View/筛选/搜索/风险过滤 变化（resetKey）直接同步新列表，不播放大面积退出
+  const retainedWorkspaceList = useExitPresenceList({
+    items: workspaceItems,
+    getId: (it) => it.task.id,
+    resetKey: `${assignmentWorkspaceView}|${courseFilter}|${searchQuery}|${riskOnly}`,
+  });
 
   // 筛选变化 → 清理隐藏的 selection / highlight（保留可见项）
   useEffect(() => {
@@ -459,16 +468,205 @@ export function AssignmentTable({
     setCtxMenu(null);
   };
 
+  // ---- IM4A：行渲染（workspace 与 compact 共用；ExitRow 只用于 workspace mutation exit） ----
+  const renderAssignmentRow = (task: Assignment) => {
+    const wsMeta = isWorkspace
+      ? workspaceViewResult?.items.find((it) => it.task.id === task.id)?.meta
+      : undefined;
+    const course = courses.find((c) => c.id === task.courseId);
+    const priorityMeta = getPriorityMeta(task.priority);
+    const hasDdl = !!task.ddl && parseLocalDDL(task.ddl) !== null;
+    const formattedDate = hasDdl ? getLocalDDLDate(task.ddl) : "无截止日期";
+    const isCompleted = task.status === "completed";
+
+    const ddlDate = parseLocalDDL(task.ddl);
+    const isOverdueTask =
+      !!ddlDate &&
+      !isCompleted &&
+      differenceInDays(ddlDate, today) < 0 &&
+      !isToday(ddlDate);
+
+    const isNew = newTaskIds.has(task.id);
+    const isHighlighted = isWorkspace && highlightedAssignmentId === task.id;
+    const isSelected = isWorkspace && assignmentSelection.includes(task.id);
+
+    return (
+      <div
+        onClick={(e) => handleRowClick(e, task.id)}
+        onContextMenu={(e) => handleRowContextMenu(e, task.id)}
+        onMouseEnter={() => {
+          if (isWorkspace) setHighlightedAssignmentId(task.id);
+        }}
+        role="button"
+        tabIndex={-1}
+        data-assignment-id={task.id}
+        className={cn(
+          isWorkspace && compactDensity ? "p-2" : "p-3",
+          "rounded-xl transition-colors duration-[var(--motion-fast)] ease-[var(--ease-standard)] cursor-pointer flex items-center justify-between group",
+          isNew && "animate-enter",
+          isWorkspace
+            ? isSelected
+              ? "bg-pastel-mint border border-line-strong"
+              : isOverdueTask
+              ? "bg-danger-bg border border-danger-border"
+              : isHighlighted
+              ? "bg-alabaster/80 ring-1 ring-inset ring-line-strong border border-transparent"
+              : "hover:bg-alabaster bg-surface border border-line-soft"
+            : isOverdueTask
+            ? "bg-danger-bg border border-danger-border"
+            : "hover:bg-alabaster bg-surface border border-line-soft"
+        )}
+      >
+        <div className="flex items-center space-x-3 min-w-0 flex-1">
+          <input
+            type="checkbox"
+            checked={isCompleted}
+            onChange={(e) => {
+              e.stopPropagation();
+              updateAssignmentStatus(
+                task.id,
+                e.target.checked ? "completed" : "doing"
+              );
+            }}
+            onClick={(e) => e.stopPropagation()}
+            className="w-4 h-4 rounded text-charcoal border-[#CDB9AB] focus:ring-0 cursor-pointer shrink-0"
+          />
+
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center space-x-2">
+              <h4
+                className={`text-xs font-bold truncate ${
+                  isCompleted
+                    ? "line-through text-sandrift"
+                    : "text-charcoal group-hover:text-black"
+                }`}
+              >
+                {task.title}
+              </h4>
+              <span
+                className={`text-[9px] px-1.5 py-0.2 rounded font-bold shrink-0 border ${priorityMeta.bg} ${priorityMeta.text} ${priorityMeta.border}`}
+              >
+                {priorityMeta.label}
+              </span>
+              {isOverdueTask && (
+                <span className="text-[9px] bg-danger text-white px-1.5 py-0.2 rounded font-extrabold shrink-0">
+                  已逾期
+                </span>
+              )}
+              {/* Health 异常提示（仅 at-risk / attention；safe 等正常任务保持干净） */}
+              {isWorkspace &&
+                wsMeta?.health &&
+                !isOverdueTask &&
+                (wsMeta.health === "at-risk" || wsMeta.health === "attention") && (
+                  <span
+                    className={cn(
+                      "text-[9px] px-1.5 py-0.2 rounded font-bold shrink-0 border",
+                      healthViewMeta(wsMeta.health).className
+                    )}
+                  >
+                    {healthViewMeta(wsMeta.health).label}
+                  </span>
+                )}
+            </div>
+
+            <div className="flex items-center space-x-2 text-[10px] text-sandrift mt-1">
+              <span className="truncate font-semibold">{course?.name || "通用"}</span>
+              <span>·</span>
+              <span className={hasDdl ? "" : "text-satin-grey/70"}>截止: {formattedDate}</span>
+              {task.estimatedMinutes && isWorkspace && (
+                <>
+                  <span>·</span>
+                  <span>预计 {formatEstimatedMinutes(task.estimatedMinutes)}</span>
+                </>
+              )}
+              {/* Task 7F：重复任务弱标记（仅 workspace 完整模式） */}
+              {isWorkspace && task.recurrence && (
+                <>
+                  <span>·</span>
+                  <span className="text-satin-grey/70">
+                    {RECURRENCE_LABELS[task.recurrence]}
+                  </span>
+                </>
+              )}
+              {isWorkspace && wsMeta && wsMeta.studyBlockCount > 0 && (
+                <>
+                  <span>·</span>
+                  <span className="font-semibold text-success/90">
+                    已计划 {formatEstimatedMinutes(wsMeta.scheduledMinutes)}
+                  </span>
+                </>
+              )}
+              {task.subtasks && task.subtasks.length > 0 && (
+                <>
+                  <span>·</span>
+                  <span>
+                    子任务: {task.subtasks.filter((st) => st.completed).length} / {task.subtasks.length}
+                  </span>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+
+        <div className="flex items-center space-x-2 shrink-0 ml-2">
+          <div className="w-16 hidden sm:block">
+            <div className="flex justify-between text-[9px] text-sandrift mb-0.5">
+              <span>进度</span>
+              <span className="font-bold text-charcoal">
+                {task.progress}%
+              </span>
+            </div>
+            <div className="w-full bg-alabaster rounded-full h-1 overflow-hidden">
+              <div
+                className="bg-success h-1 rounded-full transition-[width] duration-[var(--motion-data)] ease-[var(--ease-emphasized)]"
+                style={{ width: `${task.progress}%` }}
+              />
+            </div>
+          </div>
+
+          {/* workspace：操作按钮 hover 可见（键盘 highlight 后用 Context Menu / 快捷键） */}
+          <button
+            onClick={(e) => handleEditClick(e, task.id)}
+            className={cn(
+              "p-1.5 rounded-lg text-sandrift hover:bg-alba hover:text-charcoal transition-colors",
+              isWorkspace && "opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity"
+            )}
+            title="编辑任务"
+          >
+            <Edit2 className="w-3.5 h-3.5" />
+          </button>
+
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              actions.remove([task.id]);
+            }}
+            className={cn(
+              "p-1.5 rounded-lg text-danger hover:bg-danger-bg transition-colors",
+              isWorkspace && "opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity"
+            )}
+            title="删除任务"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+          </button>
+
+          <ChevronRight className="w-3.5 h-3.5 text-sandrift group-hover:text-charcoal transition-colors" />
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div
       className={cn(
-        "bg-surface border border-line rounded-2xl p-4 shadow-subtle flex flex-col h-full space-y-3 min-w-0",
-        // workspace：list 紧跟 filters 且 flex-1 填满剩余（无中间空白岛）；compact：justify-between 分散
-        isWorkspace ? "justify-start" : "justify-between"
+        "bg-surface border border-line rounded-2xl shadow-subtle flex flex-col h-full min-w-0",
+        // workspace：edge-owned scroll surface（p-0，Header/Filters/List/Footer 分区拥有 padding；scrollbar 贴卡片右缘）
+        // compact：保持原卡片 padding 布局
+        isWorkspace ? "p-0 justify-start" : "p-4 justify-between space-y-3"
       )}
     >
       {/* Header & Controls */}
-      <div className="space-y-3 border-b border-[#F0EBE1] pb-3">
+      <div className={cn("space-y-3 border-b border-[#F0EBE1]", isWorkspace ? "px-4 pt-4 pb-3" : "pb-3")}>
         {/* Task 1：workspace 模式标题/主创建/Ask Kiro 已上移到 AssignmentsWorkspace Header；
             compact 保留原有 任务清单 标题区 */}
         {!isWorkspace && (
@@ -538,7 +736,7 @@ export function AssignmentTable({
           </div>
 
           {isWorkspace ? (
-            <div className="flex items-center gap-2 flex-wrap">
+            <div className="flex items-center gap-2 flex-wrap min-w-0 max-w-full">
               {/* Part B：Focus 内轻量 Risk Filter（有风险时显示；不新增第六个 Tab） */}
               {assignmentWorkspaceView === "focus" && (workspaceViewResult?.counts["at-risk"] ?? 0) > 0 && (
                 <button
@@ -580,14 +778,13 @@ export function AssignmentTable({
                 </div>
               ) : (
                 <>
-                  {/* View Control Cluster：SegmentedControl 决定自然高度；More 同高正方形（self-stretch + aspect-square）。
-                      窄窗口 Segmented 自身横向 overflow，More 恒 shrink-0 不 wrap */}
-                  <div className="flex items-stretch gap-1.5 min-w-0">
+                  {/* View Control Cluster：Segmented 拥有剩余空间（flex-1 + 内部横向滚动）；More 恒 shrink-0 */}
+                  <div className="flex items-stretch gap-1.5 min-w-0 max-w-full">
                   <SegmentedControl
                     value={assignmentWorkspaceView}
                     onChange={setAssignmentWorkspaceView}
                     ariaLabel="任务视图"
-                    className="min-w-0 overflow-x-auto scrollbar-none"
+                    className="flex-1 min-w-0 overflow-x-auto scrollbar-none"
                     options={PRIMARY_TASK_WORKSPACE_VIEWS.map((view) => ({
                       value: view.id,
                       label: (
@@ -601,13 +798,13 @@ export function AssignmentTable({
                     }))}
                   />
 
-                  {/* More：低频入口（已归档等）——与 Segmented 同高、正方形 icon action */}
-                  <div className="relative self-stretch flex" ref={moreMenuRef}>
+                  {/* More：低频入口（已归档等）——与 Segmented 同高（self-stretch）、正方形 icon action */}
+                  <div className="relative self-stretch flex shrink-0" ref={moreMenuRef}>
                     <button
                       onClick={() => setMoreOpen((v) => !v)}
                       aria-label="更多视图"
                       aria-expanded={moreOpen}
-                      className="h-full aspect-square flex items-center justify-center rounded-lg bg-alabaster border border-line-strong text-satin-grey hover:text-charcoal hover:bg-white transition-colors"
+                      className="m-auto w-8 h-8 flex items-center justify-center rounded-lg bg-alabaster border border-line-strong text-satin-grey hover:text-charcoal hover:bg-white transition-colors"
                     >
                       <MoreHorizontal className="w-4 h-4" />
                     </button>
@@ -672,7 +869,7 @@ export function AssignmentTable({
         className={cn(
           "divide-y divide-line-soft mt-1 flex-1 min-h-0 space-y-1",
           isWorkspace &&
-            "overflow-y-auto outline-none focus-visible:ring-2 focus-visible:ring-line-strong"
+            "overflow-y-auto px-4 [scrollbar-gutter:stable] overscroll-contain outline-none focus-visible:ring-2 focus-visible:ring-line-strong"
         )}
       >
         {/* 空态判断按模式取正确数据源：workspace = 视图派生结果；compact = 分页结果 */}
@@ -694,192 +891,18 @@ export function AssignmentTable({
             </div>
           )
         ) : (
-          (isWorkspace ? workspaceItems.map((it) => it.task) : pagedAssignments).map((task) => {
-            const wsMeta = isWorkspace
-              ? workspaceViewResult?.items.find((it) => it.task.id === task.id)?.meta
-              : undefined;
-            const course = courses.find((c) => c.id === task.courseId);
-            const priorityMeta = getPriorityMeta(task.priority);
-            const hasDdl = !!task.ddl && parseLocalDDL(task.ddl) !== null;
-            const formattedDate = hasDdl ? getLocalDDLDate(task.ddl) : "无截止日期";
-            const isCompleted = task.status === "completed";
-
-            const ddlDate = parseLocalDDL(task.ddl);
-            const isOverdueTask =
-              !!ddlDate &&
-              !isCompleted &&
-              differenceInDays(ddlDate, today) < 0 &&
-              !isToday(ddlDate);
-
-            const isNew = newTaskIds.has(task.id);
-            const isHighlighted = isWorkspace && highlightedAssignmentId === task.id;
-            const isSelected = isWorkspace && assignmentSelection.includes(task.id);
-
-            return (
-              <div
-                key={task.id}
-                onClick={(e) => handleRowClick(e, task.id)}
-                onContextMenu={(e) => handleRowContextMenu(e, task.id)}
-                onMouseEnter={() => {
-                  if (isWorkspace) setHighlightedAssignmentId(task.id);
-                }}
-                role="button"
-                tabIndex={-1}
-                data-assignment-id={task.id}
-                className={cn(
-                  isWorkspace && compactDensity ? "p-2" : "p-3",
-                  "rounded-xl transition-colors duration-[var(--motion-fast)] ease-[var(--ease-standard)] cursor-pointer flex items-center justify-between group",
-                  isNew && "animate-enter",
-                  isWorkspace
-                    ? isSelected
-                      ? "bg-pastel-mint border border-line-strong"
-                      : isOverdueTask
-                      ? "bg-danger-bg border border-danger-border"
-                      : isHighlighted
-                      ? "bg-alabaster/80 ring-1 ring-inset ring-line-strong border border-transparent"
-                      : "hover:bg-alabaster bg-surface border border-line-soft"
-                    : isOverdueTask
-                    ? "bg-danger-bg border border-danger-border"
-                    : "hover:bg-alabaster bg-surface border border-line-soft"
-                )}
-              >
-                <div className="flex items-center space-x-3 min-w-0 flex-1">
-                  <input
-                    type="checkbox"
-                    checked={isCompleted}
-                    onChange={(e) => {
-                      e.stopPropagation();
-                      updateAssignmentStatus(
-                        task.id,
-                        e.target.checked ? "completed" : "doing"
-                      );
-                    }}
-                    className="w-4 h-4 rounded text-charcoal border-[#CDB9AB] focus:ring-0 cursor-pointer shrink-0"
-                  />
-
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center space-x-2">
-                      <h4
-                        className={`text-xs font-bold truncate ${
-                          isCompleted
-                            ? "line-through text-sandrift"
-                            : "text-charcoal group-hover:text-black"
-                        }`}
-                      >
-                        {task.title}
-                      </h4>
-                      <span
-                        className={`text-[9px] px-1.5 py-0.2 rounded font-bold shrink-0 border ${priorityMeta.bg} ${priorityMeta.text} ${priorityMeta.border}`}
-                      >
-                        {priorityMeta.label}
-                      </span>
-                      {isOverdueTask && (
-                        <span className="text-[9px] bg-danger text-white px-1.5 py-0.2 rounded font-extrabold shrink-0">
-                          已逾期
-                        </span>
-                      )}
-                      {/* Health 异常提示（仅 at-risk / attention；safe 等正常任务保持干净） */}
-                      {isWorkspace &&
-                        wsMeta?.health &&
-                        !isOverdueTask &&
-                        (wsMeta.health === "at-risk" || wsMeta.health === "attention") && (
-                          <span
-                            className={cn(
-                              "text-[9px] px-1.5 py-0.2 rounded font-bold shrink-0 border",
-                              healthViewMeta(wsMeta.health).className
-                            )}
-                          >
-                            {healthViewMeta(wsMeta.health).label}
-                          </span>
-                        )}
-                    </div>
-
-                    <div className="flex items-center space-x-2 text-[10px] text-sandrift mt-1">
-                      <span className="truncate font-semibold">{course?.name || "通用"}</span>
-                      <span>·</span>
-                      <span className={hasDdl ? "" : "text-satin-grey/70"}>截止: {formattedDate}</span>
-                      {task.estimatedMinutes && isWorkspace && (
-                        <>
-                          <span>·</span>
-                          <span>预计 {formatEstimatedMinutes(task.estimatedMinutes)}</span>
-                        </>
-                      )}
-                      {/* Task 7F：重复任务弱标记（仅 workspace 完整模式） */}
-                      {isWorkspace && task.recurrence && (
-                        <>
-                          <span>·</span>
-                          <span className="text-satin-grey/70">
-                            {RECURRENCE_LABELS[task.recurrence]}
-                          </span>
-                        </>
-                      )}
-                      {isWorkspace && wsMeta && wsMeta.studyBlockCount > 0 && (
-                        <>
-                          <span>·</span>
-                          <span className="font-semibold text-success/90">
-                            已计划 {formatEstimatedMinutes(wsMeta.scheduledMinutes)}
-                          </span>
-                        </>
-                      )}
-                      {task.subtasks && task.subtasks.length > 0 && (
-                        <>
-                          <span>·</span>
-                          <span>
-                            子任务: {task.subtasks.filter((st) => st.completed).length} / {task.subtasks.length}
-                          </span>
-                        </>
-                      )}
-                    </div>
-                  </div>
-                </div>
-
-                <div className="flex items-center space-x-2 shrink-0 ml-2">
-                  <div className="w-16 hidden sm:block">
-                    <div className="flex justify-between text-[9px] text-sandrift mb-0.5">
-                      <span>进度</span>
-                      <span className="font-bold text-charcoal">
-                        {task.progress}%
-                      </span>
-                    </div>
-                    <div className="w-full bg-alabaster rounded-full h-1 overflow-hidden">
-                      <div
-                        className="bg-success h-1 rounded-full transition-[width] duration-[var(--motion-data)] ease-[var(--ease-emphasized)]"
-                        style={{ width: `${task.progress}%` }}
-                      />
-                    </div>
-                  </div>
-
-                  {/* workspace：操作按钮 hover 可见（键盘 highlight 后用 Context Menu / 快捷键） */}
-                  <button
-                    onClick={(e) => handleEditClick(e, task.id)}
-                    className={cn(
-                      "p-1.5 rounded-lg text-sandrift hover:bg-alba hover:text-charcoal transition-colors",
-                      isWorkspace && "opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity"
-                    )}
-                    title="编辑任务"
-                  >
-                    <Edit2 className="w-3.5 h-3.5" />
-                  </button>
-
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      actions.remove([task.id]);
-                    }}
-                    className={cn(
-                      "p-1.5 rounded-lg text-danger hover:bg-danger-bg transition-colors",
-                      isWorkspace && "opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity"
-                    )}
-                    title="删除任务"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
-
-                  <ChevronRight className="w-3.5 h-3.5 text-sandrift group-hover:text-charcoal transition-colors" />
-                </div>
-              </div>
-            );
-          })
+          isWorkspace
+            ? retainedWorkspaceList.map((entry) => {
+                const task = entry.item.task;
+                return (
+                  <ExitRow key={task.id} exiting={entry.exiting}>
+                    {renderAssignmentRow(task)}
+                  </ExitRow>
+                );
+              })
+            : pagedAssignments.map((task) => (
+                <div key={task.id}>{renderAssignmentRow(task)}</div>
+              ))
         )}
       </div>
 
@@ -889,7 +912,7 @@ export function AssignmentTable({
         className={cn(
           "shrink-0 text-xs",
           isWorkspace
-            ? "pt-2 border-t border-[#F0EBE1] flex justify-between items-center"
+            ? "mx-4 mb-4 pt-2 border-t border-[#F0EBE1] flex justify-between items-center"
             : "pt-3 pb-1.5 border-t border-[#F0EBE1] grid grid-cols-[1fr_auto_1fr] items-center"
         )}
       >
@@ -1071,6 +1094,26 @@ export function AssignmentTable({
 
       {/* ---- Workspace：Assignment Peek（Desktop >=1024） ---- */}
       {isWorkspace && desktop && <AssignmentPeekPanel />}
+    </div>
+  );
+}
+
+/**
+ * Exit-only Row wrapper（IM4A）：真实数据 mutation（完成/删除离开当前 View）时
+ * 轻 fade + structural collapse（grid 1fr→0fr + opacity），约 160ms；首次 render 不播放 entry。
+ * exiting 时 aria-hidden + pointer-events-none（不可再交互）。Reduced motion 由全局体系近即时降级。
+ */
+function ExitRow({ exiting, children }: { exiting: boolean; children: React.ReactNode }) {
+  return (
+    <div
+      aria-hidden={exiting || undefined}
+      data-state={exiting ? "exiting" : undefined}
+      className={cn(
+        "grid transition-[grid-template-rows,opacity] duration-[160ms] ease-[var(--ease-standard)]",
+        exiting ? "grid-rows-[0fr] opacity-0 pointer-events-none" : "grid-rows-[1fr] opacity-100"
+      )}
+    >
+      <div className="min-h-0 overflow-hidden">{children}</div>
     </div>
   );
 }
