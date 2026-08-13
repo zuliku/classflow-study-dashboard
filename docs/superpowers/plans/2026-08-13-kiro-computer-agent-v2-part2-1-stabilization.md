@@ -4,24 +4,25 @@
 
 **Goal:** Fix premature Computer mutation-quota consumption and make structured-document Undo preserve factual filesystem/Artifact revision consistency across restore and confirmation failures.
 
-**Architecture:** Keep the existing V2 Computer Executor, Approval, Artifact Registry, and Checkpoint model. Move mutation counting for relocation/document revision to the actual mutation boundary, and extract document-revision Undo from `useKiroChat.ts` into a small runtime helper that can factually re-read Artifact/Source state after restore errors and compensate the filesystem only when the authoritative registry state is coherently known.
+**Architecture:** Keep the existing V2 Computer Executor, Approval, Artifact Registry, and Checkpoint model. Move mutation counting for relocation/document revision to the actual write boundary, and extract document-revision Undo from `useKiroChat.ts` into a focused runtime helper that can factually re-read Artifact/Source state after restore errors and compensate the filesystem only when the registry state is coherently known.
 
-**Tech Stack:** Next.js 14, React 18, TypeScript 5.5, Zustand, IndexedDB/fake-indexeddb, existing Computer Runtime/Artifact Service, Vitest.
+**Tech Stack:** Next.js 14, React 18, TypeScript 5.5, IndexedDB/fake-indexeddb, existing Computer Runtime/Artifact Service, Vitest.
 
 ## Global Constraints
 
-- Add no new user-facing Computer capability or UI.
-- Do not change model-facing tool schemas or permission modes.
+- Add no user-facing Computer capability or UI.
+- Do not change model-facing tool schemas, capabilities, or permission modes.
 - Approval-required is not a mutation: no filesystem mutation, no Tool Output, and no mutation quota consumption.
 - `rename_file`, `move_file`, and `update_document` increment `mutationCount` exactly once immediately before the first filesystem mutation.
-- Pre-write invalid input, deny, read-only, approval-required, Artifact revision conflict, and file-too-large failures consume zero mutation quota.
-- Once real filesystem mutation begins, the call counts as one mutation even if verification/registry synchronization later fails.
-- A document Undo may report success only when filesystem content, Artifact metadata, and Source IR all factually match the previous revision.
-- A thrown `restoreArtifactRevision()` call does not prove whether its IndexedDB transaction committed; always factually re-read Artifact + Source before choosing compensation.
+- Invalid input, path/sandbox rejection, deny, read-only, approval-required, Artifact revision conflict, file-too-large, and pure render failure consume zero mutation quota.
+- Pure document rendering must happen outside the write/rollback `try` block. A render failure must not trigger a compensating file write.
+- Once the first filesystem mutation begins, the call counts as one mutation even if verification/registry synchronization later fails.
+- Document Undo may report success only when filesystem content, Artifact metadata, and Source IR all factually match the previous revision.
+- A thrown `restoreArtifactRevision()` does not prove whether its IndexedDB transaction committed; factually re-read Artifact + Source before choosing compensation.
 - Compensate the file back to the newer state only when Artifact and Source are coherently still on `expectedCurrentRevision`.
-- Split/missing/unreadable/unknown Artifact state must fail safely without blind compensation.
-- Current/newer file snapshots, previous file snapshots, Source IR, checkpoint internals, adapter refs, native paths, and tool inputs remain runtime-only and never enter Tool Output, Kiro history, audit, or persisted Zustand.
-- Keep verification focused: `kiro-computer-relocation.test.ts`, `kiro-computer-tools.test.ts`, `kiro-computer-checkpoints.test.ts`, and `npm run typecheck`. Skip Playwright/full suites/build by default.
+- Split/missing/unreadable/unknown Artifact state fails safely without blind compensation or blind revision commit.
+- Current/newer and previous file snapshots, Source IR, checkpoint internals, adapter refs, native paths, and tool inputs remain runtime-only and never enter Tool Output, Kiro history, audit, or persisted Zustand.
+- Keep verification focused: three Computer unit files plus `npm run typecheck`. Skip Playwright/full suites/build by default.
 
 ---
 
@@ -31,13 +32,13 @@
 - `lib/ai/computer/documentRevisionUndo.ts` — testable runtime helper for `restore-document-revision`, factual state classification, and safe filesystem compensation.
 
 ### Modify
-- `lib/ai/computer/executor.ts` — move relocation/update-document mutation counters to the first filesystem mutation boundary.
-- `hooks/useKiroChat.ts` — delegate `restore-document-revision` execution to the new runtime helper; keep task/checkpoint orchestration unchanged.
-- `tests/unit/kiro-computer-relocation.test.ts` — approval/quota regression for rename/move and approved resume.
+- `lib/ai/computer/executor.ts` — correct relocation/update-document mutation-counter timing.
+- `hooks/useKiroChat.ts` — delegate document-revision Undo to the new runtime helper.
+- `tests/unit/kiro-computer-relocation.test.ts` — rename/move approval and resume quota regression.
 - `tests/unit/kiro-computer-tools.test.ts` — update-document approval/preflight quota regression.
-- `tests/unit/kiro-computer-checkpoints.test.ts` — direct document-Undo helper tests for Markdown, DOCX, restore ambiguity, compensation, stale state, and multi-revision reverse Undo.
+- `tests/unit/kiro-computer-checkpoints.test.ts` — direct runtime Undo coverage for Markdown, DOCX, ambiguous restore, compensation, stale state, and multiple revisions.
 
-No schema/history/audit/UI files should change unless typecheck proves a direct requirement.
+No schema/history/audit/UI file is part of the planned change set.
 
 ---
 
@@ -49,14 +50,12 @@ No schema/history/audit/UI files should change unless typecheck proves a direct 
 - Test: `tests/unit/kiro-computer-tools.test.ts`
 
 **Interfaces:**
-- Consumes: existing `ComputerCounterState { readCount: number; mutationCount: number }`, `executeKiroComputerTool()`, Approval/one-shot semantics.
-- Produces: unchanged public interfaces; only corrected timing of `counters.mutationCount += 1`.
+- Consumes: existing `ComputerCounterState`, `executeKiroComputerTool()`, Approval and one-shot rules.
+- Produces: unchanged public interfaces; corrected timing of `counters.mutationCount += 1` only.
 
 - [ ] **Step 1: Add failing relocation quota tests**
 
-In `tests/unit/kiro-computer-relocation.test.ts`, extend `describe("relocation approval")` with exact counter assertions.
-
-For Guided rename:
+Extend `describe("relocation approval")` in `tests/unit/kiro-computer-relocation.test.ts`.
 
 ```ts
 it("Guided rename approval-required does not consume mutation quota", async () => {
@@ -74,8 +73,6 @@ it("Guided rename approval-required does not consume mutation quota", async () =
   expect(await sandboxReadText(SANDBOX_A, "draft.md")).toBe("d");
 });
 ```
-
-For Workspace Auto move (still `fs.move = ask`):
 
 ```ts
 it("Workspace Auto move approval-required does not consume mutation quota", async () => {
@@ -98,8 +95,6 @@ it("Workspace Auto move approval-required does not consume mutation quota", asyn
   expect(c.mutationCount).toBe(0);
 });
 ```
-
-For approved resume:
 
 ```ts
 it("approved relocation consumes exactly one mutation quota", async () => {
@@ -134,25 +129,24 @@ it("approved relocation consumes exactly one mutation quota", async () => {
 
 - [ ] **Step 2: Add failing `update_document` quota tests**
 
-In `tests/unit/kiro-computer-tools.test.ts`, inside `describe("update_document（V2 Part 2）")`, add:
+Inside `describe("update_document（V2 Part 2）")` in `tests/unit/kiro-computer-tools.test.ts`, add:
 
 ```ts
-it("Guided update_document approval-required does not consume mutation quota; approved resume consumes one", async () => {
-  const seedCounters = counters();
-  const artifactId = await seedEditableDoc(seedCounters);
+it("Guided update_document asks without quota and approved resume consumes one", async () => {
+  const artifactId = await seedEditableDoc(counters());
   expect(artifactId).toBeTruthy();
   if (!artifactId) return;
 
-  const approvalCounters = counters();
+  const c = counters();
   const pending = await executeKiroComputerTool({
     toolName: "update_document",
     toolCallId: "call-doc-quota",
     toolInput: { artifactId, expectedRevision: 1, document: IR_V2 },
     context: ctx(),
-    counters: approvalCounters,
+    counters: c,
   });
   expect(pending.kind).toBe("approval-required");
-  expect(approvalCounters.mutationCount).toBe(0);
+  expect(c.mutationCount).toBe(0);
 
   const oneShots: ComputerOneShotApproval[] = [{
     approvalId: "doc-quota-a1",
@@ -167,18 +161,18 @@ it("Guided update_document approval-required does not consume mutation quota; ap
     toolCallId: "call-doc-quota",
     toolInput: { artifactId, expectedRevision: 1, document: IR_V2 },
     context: ctx(),
-    counters: approvalCounters,
+    counters: c,
     oneShotApprovals: oneShots,
   });
   expect(resumed.kind).toBe("completed");
   if (resumed.kind === "completed") expect(resumed.output.ok).toBe(true);
-  expect(approvalCounters.mutationCount).toBe(1);
+  expect(c.mutationCount).toBe(1);
 });
 ```
 
-Also assert zero mutation count for stale revision and >5 MiB pre-write rejection by giving those calls fresh `counters()` objects and checking `.mutationCount === 0` after the call.
+For the existing stale-revision and `>5 MiB` tests, give the rejected call a fresh counter object and assert `mutationCount === 0` after rejection.
 
-- [ ] **Step 3: Run only the two affected unit files and confirm RED**
+- [ ] **Step 3: Run Task 1 tests RED**
 
 ```bash
 npx vitest run \
@@ -186,18 +180,17 @@ npx vitest run \
   tests/unit/kiro-computer-tools.test.ts
 ```
 
-Expected before the fix: the new approval/preflight counter assertions fail because special V2 branches increment too early.
+Expected before fix: new quota assertions fail because V2 special branches increment before approval/preflight completes.
 
-- [ ] **Step 4: Move relocation counting to the mutation boundary**
+- [ ] **Step 4: Move relocation counter to the actual relocation boundary**
 
-In `lib/ai/computer/executor.ts`, remove the early increment at the beginning of:
+In `lib/ai/computer/executor.ts`, remove the increment at the top of:
 
 ```ts
 if (toolName === "rename_file" || toolName === "move_file") {
-  counters.mutationCount += 1;
 ```
 
-After schema/path/policy/approval handling and immediately before the first adapter relocation call, add exactly one increment:
+Keep schema/path, dual-resource policy, approval, Artifact lookup, and adapter resolution before quota consumption. Immediately before `sourceAdapter.move(...)` or `relocateFile(...)`, increment once:
 
 ```ts
 const artifact = await findArtifactByLocation(ws.id, root.id, sourcePath);
@@ -218,59 +211,69 @@ if (root.adapterRef === destRoot.adapterRef) {
 }
 ```
 
-Do not add a second increment during Artifact Registry synchronization or resume.
+Do not increment again during Artifact Registry location synchronization or Approval resume.
 
-- [ ] **Step 5: Move `update_document` counting to the first file write**
+- [ ] **Step 5: Separate `update_document` render from mutation/rollback**
 
-Remove the early:
+Remove the early counter increment from the beginning of the `update_document` branch.
 
-```ts
-counters.mutationCount += 1;
-```
-
-from the beginning of the `update_document` branch.
-
-Keep all of these before quota consumption:
-
-```text
-Artifact editability/revision check
-frozen Workspace check
-root/path resolution
-policy / approval
-stat + file-size limit
-exact current snapshot
-rendering of the new Markdown/DOCX payload
-```
-
-Restructure the render/write block so render completes before the increment. The intended shape is:
+After editability/workspace/policy/approval/stat/size/snapshot preflight, render the target payload in a pure pre-write phase:
 
 ```ts
-if (artifact.type === "markdown") {
-  const markdown = renderMarkdown(document); // pure pre-write work
-  counters.mutationCount += 1;
-  await adapter.writeText(artifactPath, markdown, "text/markdown");
-  const readBack = await adapter.readText(artifactPath);
-  if (!(await verifyMarkdownWritten(markdown, readBack))) {
-    throw new ComputerError("VERIFICATION_FAILED", "Markdown 校验失败");
-  }
-} else {
-  const bytes = await renderDocx(document); // render before quota consumption
-  counters.mutationCount += 1;
-  await adapter.writeBytes(
-    artifactPath,
-    bytes,
-    "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-  );
-  const readBack = await adapter.readBytes(artifactPath);
-  if (!(await verifyDocxBytes(readBack))) {
-    throw new ComputerError("VERIFICATION_FAILED", "DOCX 校验失败");
-  }
+type RenderedDocumentWrite =
+  | { format: "markdown"; text: string }
+  | { format: "docx"; bytes: Uint8Array };
+
+let rendered: RenderedDocumentWrite;
+try {
+  rendered =
+    artifact.type === "markdown"
+      ? { format: "markdown", text: renderMarkdown(document) }
+      : { format: "docx", bytes: await renderDocx(document) };
+} catch {
+  return {
+    kind: "completed",
+    output: { ok: false, code: "DOCUMENT_RENDER_FAILED", message: "文档渲染失败" },
+  };
 }
 ```
 
-Each execution path reaches exactly one increment. Do not increment again for atomic Artifact revision commit or rollback.
+A render failure must return here: no quota increment and no rollback write because the filesystem has not changed.
 
-- [ ] **Step 6: Run Task 1 tests GREEN**
+- [ ] **Step 6: Count exactly once immediately before the first document write**
+
+After successful render:
+
+```ts
+counters.mutationCount += 1;
+
+try {
+  if (rendered.format === "markdown") {
+    await adapter.writeText(artifactPath, rendered.text, "text/markdown");
+    const readBack = await adapter.readText(artifactPath);
+    if (!(await verifyMarkdownWritten(rendered.text, readBack))) {
+      throw new ComputerError("VERIFICATION_FAILED", "Markdown 校验失败");
+    }
+  } else {
+    await adapter.writeBytes(
+      artifactPath,
+      rendered.bytes,
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    );
+    const readBack = await adapter.readBytes(artifactPath);
+    if (!(await verifyDocxBytes(readBack))) {
+      throw new ComputerError("VERIFICATION_FAILED", "DOCX 校验失败");
+    }
+  }
+} catch (err) {
+  // Existing exact rollback semantics remain here because a filesystem write has begun.
+  ...
+}
+```
+
+Keep the existing exact rollback and Artifact revision commit behavior after this boundary. Do not add any second increment for rollback or Registry commit.
+
+- [ ] **Step 7: Run Task 1 tests GREEN**
 
 ```bash
 npx vitest run \
@@ -278,7 +281,7 @@ npx vitest run \
   tests/unit/kiro-computer-tools.test.ts
 ```
 
-- [ ] **Step 7: Commit Task 1**
+- [ ] **Step 8: Commit Task 1**
 
 ```bash
 git add \
@@ -300,27 +303,18 @@ git commit -m "fix(kiro): count computer mutations at execution"
 
 **Interfaces:**
 
-Create this exported helper contract:
+Create:
 
 ```ts
-import { ComputerAdapterIO } from "@/lib/ai/computer/executor-types";
-import { ComputerInverseOperation } from "@/lib/ai/computer/checkpoints";
-import { KiroArtifact, KiroArtifactSourceRecord } from "@/lib/ai/computer/artifacts/types";
-
 export type RestoreDocumentRevisionInverse = Extract<
   ComputerInverseOperation,
   { type: "restore-document-revision" }
 >;
 
 export interface DocumentRevisionUndoDeps {
-  getArtifact: (artifactId: string) => Promise<KiroArtifact | null>;
-  getArtifactSource: (artifactId: string) => Promise<KiroArtifactSourceRecord | null>;
-  restoreArtifactRevision: (input: {
-    artifactId: string;
-    expectedCurrentRevision: number;
-    revision: number;
-    document: RestoreDocumentRevisionInverse["previousDocument"];
-  }) => Promise<KiroArtifact>;
+  getArtifact: typeof getArtifact;
+  getArtifactSource: typeof getArtifactSource;
+  restoreArtifactRevision: typeof restoreArtifactRevision;
 }
 
 export async function undoDocumentRevisionRuntime(input: {
@@ -330,13 +324,11 @@ export async function undoDocumentRevisionRuntime(input: {
 }): Promise<void>;
 ```
 
-Default deps use the existing Artifact service functions. Injection exists only to make failure states deterministic in unit tests; it is not persisted or exposed to the model.
+The helper uses real Artifact service functions by default. Dependency injection exists only for deterministic failure-state tests.
 
-- [ ] **Step 1: Add failing direct helper tests for normal Markdown/DOCX Undo**
+- [ ] **Step 1: Replace the manual Markdown checkpoint test with a direct runtime-helper test**
 
-In `tests/unit/kiro-computer-checkpoints.test.ts`, import `undoDocumentRevisionRuntime` and replace the current manual Markdown restoration test with a direct helper call.
-
-Markdown pattern:
+Import `undoDocumentRevisionRuntime` in `tests/unit/kiro-computer-checkpoints.test.ts` and change the existing Markdown V2→V1 test to call the helper directly:
 
 ```ts
 await undoDocumentRevisionRuntime({ io: await io(), inverse });
@@ -347,22 +339,26 @@ expect((await getArtifact(artifactId))?.revision).toBe(1);
 expect((await getArtifactSource(artifactId))?.revision).toBe(1);
 ```
 
-Add a DOCX test that:
+- [ ] **Step 2: Add exact DOCX Undo coverage**
 
-1. creates `plan.docx` with IR V1;
-2. reads and stores exact V1 bytes;
-3. updates to V2;
-4. calls the helper with the runtime inverse;
-5. reads exact post-Undo bytes and compares byte-for-byte with V1;
-6. asserts Artifact + Source revision are 1 and Source IR is V1.
+Test flow:
 
-Use a local `bytesEqual()` test helper; no new dependency.
+```text
+create_document plan.docx with IR_V1
+read exact V1 bytes
+update_document to IR_V2
+extract restore-document-revision inverse
+undoDocumentRevisionRuntime(...)
+read exact final bytes
+```
 
-- [ ] **Step 2: Add failing restore-error state-classification tests**
+Assert byte-for-byte equality with the saved V1 bytes, Artifact revision 1, Source revision 1, and Source IR V1. Add a local deterministic `bytesEqual(a,b)` test helper.
 
-Add three deterministic tests using `deps.restoreArtifactRevision` injection.
+- [ ] **Step 3: Add factual restore-error tests**
 
-**Case A — commit actually happened, API then throws:**
+Add these three tests.
+
+**A. Commit succeeds, wrapper throws afterward:**
 
 ```ts
 const realRestore = restoreArtifactRevision;
@@ -371,67 +367,101 @@ await undoDocumentRevisionRuntime({
   inverse,
   deps: {
     restoreArtifactRevision: async (args) => {
-      await realRestore(args); // commits previous revision
+      await realRestore(args);
       throw new Error("simulated post-commit confirmation failure");
     },
   },
 });
 ```
 
-Expected: helper factually re-reads Artifact/Source as previous revision and returns success; it must not compensate the file back to V2.
+Assert helper returns successfully, file remains previous snapshot, and Artifact + Source are previous revision. This proves thrown API error does not trigger blind compensation.
 
-**Case B — restore fails before commit, stores remain newer:**
-
-Inject:
+**B. Restore fails before commit:**
 
 ```ts
-restoreArtifactRevision: async () => {
-  throw new Error("simulated pre-commit failure");
-}
+await expect(
+  undoDocumentRevisionRuntime({
+    io: await io(),
+    inverse,
+    deps: {
+      restoreArtifactRevision: async () => {
+        throw new Error("simulated pre-commit failure");
+      },
+    },
+  })
+).rejects.toMatchObject({ code: "VERIFICATION_FAILED" });
 ```
 
-Expected: helper restores the captured newer file content, verifies Artifact + Source remain at `expectedCurrentRevision`, then rejects with `ComputerError` / `VERIFICATION_FAILED` semantics. Assert file is V2 and Registry/Source are still V2.
+Assert file has been compensated exactly back to V2/current content and Artifact + Source remain on `expectedCurrentRevision`.
 
-**Case C — restore leaves split registry state:**
+**C. Restore leaves a split Registry state:**
 
-Use the existing exported Artifact DB functions to modify only one store inside the injected restore function, then throw. For example, update Artifact metadata to `previousRevision` while leaving Source IR at `expectedCurrentRevision`.
+Inside the injected restore function, use existing exported Artifact DB APIs to write only Artifact metadata to `previousRevision`, leave Source at `expectedCurrentRevision`, then throw.
 
-Expected: helper rejects with manual-inspection `VERIFICATION_FAILED` semantics and does not blindly write the newer snapshot back merely because the restore call threw.
+Assert helper rejects with `VERIFICATION_FAILED` manual-inspection semantics. Assert it does not blindly compensate the file back to newer merely because an error was thrown.
 
-- [ ] **Step 3: Add stale preflight and multi-revision reverse tests**
+- [ ] **Step 4: Add stale preflight test**
 
-Stale test:
-
-1. produce a V2 inverse expecting current revision 2;
-2. advance the Artifact/Source to revision 3 through a legitimate `update_document` call;
-3. record current file bytes/text;
-4. call `undoDocumentRevisionRuntime()` with the stale V2 inverse;
-5. expect `ARTIFACT_REVISION_CONFLICT` before any file mutation;
-6. assert file remains unchanged at V3.
-
-Multi-revision test:
+Produce an inverse expecting revision 2, then legitimately advance Artifact + Source to revision 3. Capture current V3 file. Call the stale inverse and assert:
 
 ```text
-create V1
-update V1 -> V2  => inverseA(expectedCurrent=2, previous=1)
-update V2 -> V3  => inverseB(expectedCurrent=3, previous=2)
-undo inverseB    => V2
-undo inverseA    => V1
+ARTIFACT_REVISION_CONFLICT
+file unchanged at V3
+Artifact revision 3
+Source revision 3
 ```
 
-After each helper call assert exact file content + Artifact revision + Source revision match the expected revision.
+No file write may occur before this rejection.
 
-- [ ] **Step 4: Run checkpoint tests and confirm RED**
+- [ ] **Step 5: Add two-revision reverse Undo test**
+
+Execute:
+
+```text
+V1 create
+V1 -> V2 = inverseA
+V2 -> V3 = inverseB
+undo inverseB => V2
+undo inverseA => V1
+```
+
+After each Undo, assert exact file content and both stored revision numbers.
+
+- [ ] **Step 6: Run checkpoint tests RED**
 
 ```bash
 npx vitest run tests/unit/kiro-computer-checkpoints.test.ts
 ```
 
-Expected before helper implementation: import/function is missing and current Hook-only implementation cannot satisfy injected failure-state tests.
+Expected before implementation: helper import is missing and current Hook-only code cannot support the injected recovery-state cases.
 
-- [ ] **Step 5: Implement factual state helpers in `documentRevisionUndo.ts`**
+- [ ] **Step 7: Implement exact snapshot utilities in `documentRevisionUndo.ts`**
 
-Define an internal coherent-state classifier:
+Use the existing `DocumentFileSnapshot` type from `checkpoints.ts`.
+
+```ts
+const DOCUMENT_UNDO_LIMIT_BYTES = 5 * 1024 * 1024;
+
+async function readCurrentSnapshot(
+  io: ComputerAdapterIO,
+  inverse: RestoreDocumentRevisionInverse
+): Promise<DocumentFileSnapshot> {
+  const stat = await io.stat(inverse.relativePath);
+  if (!stat || stat.kind !== "file") {
+    throw new ComputerError("RESOURCE_NOT_FOUND", "Artifact 文件不存在");
+  }
+  if (stat.size > DOCUMENT_UNDO_LIMIT_BYTES) {
+    throw new ComputerError("FILE_TOO_LARGE", "文档超过 5 MiB，无法安全撤销");
+  }
+  return inverse.snapshot.format === "markdown"
+    ? { format: "markdown", text: await io.readText(inverse.relativePath) }
+    : { format: "docx", bytes: await io.readBytes(inverse.relativePath) };
+}
+```
+
+Implement `writeAndVerifySnapshot()` using exact string equality or exact byte equality.
+
+- [ ] **Step 8: Implement coherent revision-state classification**
 
 ```ts
 type RegistryRevisionState = "previous" | "newer" | "unknown";
@@ -442,62 +472,64 @@ function classifyRegistryState(input: {
   previousRevision: number;
   expectedCurrentRevision: number;
 }): RegistryRevisionState {
-  const { artifact, source, previousRevision, expectedCurrentRevision } = input;
-  if (artifact?.revision === previousRevision && source?.revision === previousRevision) return "previous";
   if (
-    artifact?.revision === expectedCurrentRevision &&
-    source?.revision === expectedCurrentRevision
+    input.artifact?.revision === input.previousRevision &&
+    input.source?.revision === input.previousRevision
+  ) return "previous";
+
+  if (
+    input.artifact?.revision === input.expectedCurrentRevision &&
+    input.source?.revision === input.expectedCurrentRevision
   ) return "newer";
+
   return "unknown";
 }
 ```
 
-Also define exact snapshot helpers:
+Do not infer a state from Artifact metadata alone.
 
-```ts
-async function readCurrentSnapshot(
-  io: ComputerAdapterIO,
-  inverse: RestoreDocumentRevisionInverse
-): Promise<DocumentFileSnapshot>;
+- [ ] **Step 9: Implement stale/location/source preflight before file mutation**
 
-async function writeAndVerifySnapshot(
-  io: ComputerAdapterIO,
-  path: string,
-  snapshot: DocumentFileSnapshot
-): Promise<void>;
-```
-
-`writeAndVerifySnapshot()` must use exact text equality for Markdown and exact byte equality for DOCX.
-
-Before capturing current state, `io.stat(inverse.relativePath)` must return a file and must be `<= 5 * 1024 * 1024` bytes; otherwise throw `RESOURCE_NOT_FOUND` or `FILE_TOO_LARGE` before file mutation.
-
-- [ ] **Step 6: Implement normal Undo preflight**
-
-At the start of `undoDocumentRevisionRuntime()`:
+`undoDocumentRevisionRuntime()` must first read Artifact and Source and require:
 
 ```text
-read current Artifact
-read current Source
-require Artifact exists
-require Artifact.workspaceId === inverse.workspaceId
-require Artifact.rootId === inverse.rootId
-require Artifact.relativePath === inverse.relativePath
-require Artifact.revision === inverse.expectedCurrentRevision
-require Source exists
-require Source.revision === inverse.expectedCurrentRevision
-capture exact current/newer file snapshot
+Artifact exists
+Artifact.workspaceId === inverse.workspaceId
+Artifact.rootId === inverse.rootId
+Artifact.relativePath === inverse.relativePath
+Artifact.revision === inverse.expectedCurrentRevision
+Source exists
+Source.revision === inverse.expectedCurrentRevision
 ```
 
-A revision mismatch throws `ARTIFACT_REVISION_CONFLICT`; location/source mismatch throws `VERIFICATION_FAILED` or the existing specific Artifact error before touching the file.
+Revision mismatch → `ARTIFACT_REVISION_CONFLICT`.
 
-- [ ] **Step 7: Implement previous-file restore and factual registry recovery**
+Missing/split/location mismatch → existing specific Artifact error or `VERIFICATION_FAILED`.
 
-Normal flow:
+Only after all checks pass, capture the exact current/newer file snapshot.
+
+- [ ] **Step 10: Implement normal previous-revision restore**
+
+Flow:
 
 ```ts
-await writeAndVerifySnapshot(io, inverse.relativePath, inverse.snapshot);
+const newerSnapshot = await readCurrentSnapshot(io, inverse);
 
-let restoreError: unknown = null;
+try {
+  await writeAndVerifySnapshot(io, inverse.relativePath, inverse.snapshot);
+} catch {
+  // Registry is still known-newer because restoreArtifactRevision has not run.
+  try {
+    await writeAndVerifySnapshot(io, inverse.relativePath, newerSnapshot);
+  } catch {
+    throw new ComputerError(
+      "VERIFICATION_FAILED",
+      "撤销文件恢复失败且无法恢复撤销前状态，文件 / Artifact 可能需要人工检查"
+    );
+  }
+  throw new ComputerError("VERIFICATION_FAILED", "撤销未完成，已恢复撤销前状态");
+}
+
 try {
   await deps.restoreArtifactRevision({
     artifactId: inverse.artifactId,
@@ -505,10 +537,16 @@ try {
     revision: inverse.previousRevision,
     document: inverse.previousDocument,
   });
-} catch (error) {
-  restoreError = error;
+} catch {
+  // Do not decide yet; factual read below determines state.
 }
+```
 
+- [ ] **Step 11: Re-read facts and choose exactly one recovery path**
+
+After the restore call, whether it resolved or threw:
+
+```ts
 const artifactAfter = await deps.getArtifact(inverse.artifactId);
 const sourceAfter = await deps.getArtifactSource(inverse.artifactId);
 const state = classifyRegistryState({
@@ -519,51 +557,49 @@ const state = classifyRegistryState({
 });
 ```
 
-Then:
+Behavior:
 
 ```text
-state = previous
-  -> verify file still exactly equals inverse.snapshot
-  -> return success even if restoreError existed
+previous:
+  verify file exactly equals inverse.snapshot
+  return success
 
-state = newer
-  -> writeAndVerifySnapshot(current/newer snapshot)
-  -> re-read Artifact + Source and require both still newer
-  -> throw VERIFICATION_FAILED("撤销未完成，已恢复撤销前状态")
+newer:
+  write newerSnapshot back
+  exact verify
+  re-read Artifact + Source and require both still newer
+  throw VERIFICATION_FAILED("撤销未完成，已恢复撤销前状态")
 
-state = unknown
-  -> do not guess / do not blind-commit / do not blindly compensate
-  -> throw VERIFICATION_FAILED("撤销状态无法确认，文件 / Artifact 可能需要人工检查")
+unknown:
+  do not blind-compensate
+  do not write registry
+  throw VERIFICATION_FAILED("撤销状态无法确认，文件 / Artifact 可能需要人工检查")
 ```
 
-If compensation for `state = newer` fails, throw the manual-inspection `VERIFICATION_FAILED` message.
+If newer-state compensation or its final re-read fails, throw the manual-inspection message.
 
-If writing/verifying the previous file snapshot itself fails before any registry restoration attempt, the registry is still factually newer. Attempt to restore the captured newer file snapshot; if that compensation verifies, throw a normal Undo failure; if it does not, throw manual-inspection verification failure.
+- [ ] **Step 12: Delegate Hook orchestration to the helper**
 
-- [ ] **Step 8: Replace Hook-local Undo implementation with the helper**
-
-In `hooks/useKiroChat.ts`:
-
-1. import `undoDocumentRevisionRuntime`;
-2. keep the existing live Workspace/root lookup;
-3. get `io = getComputerAdapterForAdapterRef(root.adapterRef)`;
-4. call:
+In `hooks/useKiroChat.ts`, keep live Workspace/root resolution in the existing Undo loop. For `restore-document-revision`:
 
 ```ts
+const root = ws.roots.find((r) => r.id === inverse.rootId);
+if (!root) throw new ComputerError("ROOT_NOT_FOUND", "根目录不存在");
+const io = getComputerAdapterForAdapterRef(root.adapterRef);
 await undoDocumentRevisionRuntime({ io, inverse });
 ```
 
-Delete the duplicated local Artifact revision/file restoration implementation and its local `bytesEqual()` if no longer used elsewhere.
+Delete the old Hook-local file/Artifact restoration implementation and its local byte-comparison helper if unused.
 
-Do not change task status logic: the existing caller already maps thrown errors to `undo_failed` and only marks `undone` after all inverses return successfully.
+Do not change the existing task/checkpoint status logic: thrown helper error → `undo_failed`; only successful completion of every inverse → `undone`.
 
-- [ ] **Step 9: Run checkpoint tests GREEN**
+- [ ] **Step 13: Run checkpoint tests GREEN**
 
 ```bash
 npx vitest run tests/unit/kiro-computer-checkpoints.test.ts
 ```
 
-- [ ] **Step 10: Commit Task 2**
+- [ ] **Step 14: Commit Task 2**
 
 ```bash
 git add \
@@ -579,11 +615,11 @@ git commit -m "fix(kiro): harden document revision undo"
 ### Task 3: Focused Verification and Boundary Audit
 
 **Files:**
-- Modify only if a focused test exposes a defect directly covered by this spec.
+- No planned source changes.
 
 **Interfaces:**
 - Consumes: Tasks 1–2.
-- Produces: verified Part 2.1 stabilization with no new UI/tool surface.
+- Produces: verified Part 2.1 stabilization without new UI/tool surface.
 
 - [ ] **Step 1: Run the full focused unit set**
 
@@ -600,7 +636,7 @@ npx vitest run \
 npm run typecheck
 ```
 
-- [ ] **Step 3: Run a narrow static audit**
+- [ ] **Step 3: Run the narrow static audit**
 
 ```bash
 rg -n \
@@ -608,34 +644,43 @@ rg -n \
   lib/ai/computer hooks/useKiroChat.ts lib/ai/history
 ```
 
-Manually confirm:
+Confirm:
 
 ```text
 rename_file/move_file/update_document do not increment before approval
 approved executions increment exactly once
-runtime document snapshots remain in checkpoints/documentRevisionUndo/useKiroChat runtime only
+render failure performs no rollback write
+runtime document snapshots remain confined to checkpoints/documentRevisionUndo/useKiroChat runtime paths
 history sanitizer does not persist previousDocument/snapshot/bytes
-no new model schema/tool/capability was introduced
+no new model-facing tool/schema/capability exists
 ```
 
-- [ ] **Step 4: Build policy**
-
-Default:
+- [ ] **Step 4: Build / Playwright policy**
 
 ```text
-npm run build — SKIP
+Playwright: SKIP — no user-visible behavior changed
+npm run build: SKIP — no client/server or bundling boundary changed
 ```
 
-Run build only if typecheck exposes a Next client/server or bundling-only concern. No Playwright is required because Part 2.1 changes no visible UI behavior.
+Only run build if typecheck reveals a compile/bundle-only issue.
 
-- [ ] **Step 5: Optional hardening commit only if verification required a direct fix**
+- [ ] **Step 5: If focused verification exposes a directly related defect, fix it and create one hardening commit**
+
+Only the following known files may be included in that hardening commit:
 
 ```bash
-git add <only directly affected files>
+git add \
+  lib/ai/computer/executor.ts \
+  lib/ai/computer/documentRevisionUndo.ts \
+  hooks/useKiroChat.ts \
+  tests/unit/kiro-computer-relocation.test.ts \
+  tests/unit/kiro-computer-tools.test.ts \
+  tests/unit/kiro-computer-checkpoints.test.ts
+
 git commit -m "fix(kiro): harden revision stabilization"
 ```
 
-Do not create an empty verification commit.
+If there is no additional change, do not create this commit.
 
 ---
 
@@ -648,17 +693,18 @@ Do not create an empty verification commit.
 - [ ] Guided `update_document` ask consumes 0.
 - [ ] Approved relocation consumes exactly 1.
 - [ ] Approved document update consumes exactly 1.
-- [ ] Stale Artifact revision consumes 0 before write.
-- [ ] File-too-large consumes 0 before write.
+- [ ] Stale Artifact revision consumes 0.
+- [ ] File-too-large consumes 0.
+- [ ] Pure render failure consumes 0 and performs no rollback write.
 - [ ] Verification/registry failure after first write still counts as 1.
 
 ### Document Undo
 
 - [ ] Markdown exact Undo restores file + Artifact + Source.
 - [ ] DOCX exact-byte Undo restores file + Artifact + Source.
-- [ ] Stale Artifact/Source fails before file mutation.
-- [ ] Restore API error + factually previous Registry is accepted as success.
-- [ ] Factually newer Registry triggers exact file compensation to newer state and returns `undo_failed`.
+- [ ] Stale/split preflight fails before file mutation.
+- [ ] Restore error + factually previous Registry is accepted as success.
+- [ ] Factually newer Registry triggers exact file compensation to newer state and returns failure.
 - [ ] Split/unknown Registry state never triggers blind compensation/commit.
 - [ ] Compensation failure reports manual-inspection verification failure.
 - [ ] Two revisions undo in reverse order without drift.
@@ -669,7 +715,7 @@ Do not create an empty verification commit.
 - [ ] No new model-facing tool/schema/capability.
 - [ ] No native path/handle/adapterRef exposed.
 - [ ] Newer/previous file snapshots remain runtime-only.
-- [ ] Previous/newer Source IR remains runtime-only except the existing Artifact Source Store.
+- [ ] Source IR remains only in the existing Artifact Source Store and runtime checkpoint/helper paths.
 - [ ] Kiro history/audit/Zustand do not persist checkpoint snapshots.
 
 ### Verification
@@ -686,7 +732,7 @@ Prefer two implementation commits:
 1. `fix(kiro): count computer mutations at execution`
 2. `fix(kiro): harden document revision undo`
 
-Allow one additional `fix(kiro): harden revision stabilization` only if focused verification reveals a directly related defect.
+Allow one additional `fix(kiro): harden revision stabilization` only if focused verification finds a directly related defect.
 
 ## Final Report
 
@@ -701,7 +747,7 @@ Commits:
 Mutation quota:
 - relocation ask/resume
 - document update ask/resume
-- preflight failures
+- preflight/render failures
 
 Document Undo:
 - factual registry classification
