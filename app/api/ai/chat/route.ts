@@ -15,8 +15,9 @@ import { assembleKiroToolsForRequest } from "@/lib/ai/web/tool";
 import { normalizeAIError, AIError, AI_ERROR_MESSAGES } from "@/lib/ai/errors";
 import { logProviderError } from "@/lib/ai/providerLog";
 import { buildKiroResponsePreferenceContext } from "@/lib/ai/responsePreference";
-import { resolveLanguageModel } from "@/lib/ai/providers/resolver";
+import { resolveLanguageModel, resolveModelDefinition } from "@/lib/ai/providers/resolver";
 import { validateAIChatBody, createTimeoutController } from "@/lib/ai/server";
+import { resolveReasoningProviderOptions } from "@/lib/ai/reasoning/providerOptions";
 import {
   buildKiroModelContext,
   DEFAULT_CONTEXT_BUDGET,
@@ -90,6 +91,19 @@ export async function POST(req: NextRequest) {
 
   const timeout = parsed.timeoutMs ?? AI.CHAT_TIMEOUT_MS;
   const { signal } = createTimeoutController(timeout, req.signal);
+
+  // Reasoning：客户端只发 effort；server resolve definition → normalize → verified provider options
+  // （客户端永远不能注入原始 providerOptions）
+  const modelDefinition = await resolveModelDefinition({
+    provider: parsed.provider,
+    model: parsed.model,
+    custom: parsed.customConfig,
+  });
+  const reasoningProviderOptions = resolveReasoningProviderOptions({
+    definition: modelDefinition,
+    custom: parsed.customConfig,
+    effort: parsed.reasoningEffort,
+  });
 
   // 客户端的 Base Context + 显式 Context 引用（不含敏感字段与完整实体）
   const b = body as Record<string, unknown>;
@@ -248,6 +262,11 @@ export async function POST(req: NextRequest) {
       tools,
       maxOutputTokens: AI.CHAT_MAX_OUTPUT_TOKENS,
       abortSignal: signal,
+      // Reasoning effort：verified provider options（default/不支持 → 不发送，保持 provider 默认）。
+      // key 与 createOpenAICompatible/createAnthropic 的 name 一致（"classflow-kiro"）。
+      providerOptions: reasoningProviderOptions
+        ? ({ "classflow-kiro": reasoningProviderOptions } as Parameters<typeof streamText>[0]["providerOptions"])
+        : undefined,
       // Task 14：Server execute tool 允许有限多步自动执行；客户端工具调用时 loop 自然暂停等 Client Result
       stopWhen: isStepCount(5),
       // Worklog V2 Task 3：按词分块 + 12ms 间隔的流式节奏；

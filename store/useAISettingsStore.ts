@@ -4,6 +4,7 @@ import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import { AIProviderId, AICustomConfig, AISettings } from "@/lib/ai/providers/types";
 import { getDefaultModel } from "@/lib/ai/providers/registry";
+import { KiroReasoningEffort } from "@/lib/ai/reasoning/types";
 
 /**
  * AI 服务设置（独立于业务 useAppStore）：
@@ -17,6 +18,7 @@ interface AISettingsState extends AISettings {
   setModel: (model: string) => void;
   setCustom: (patch: Partial<AICustomConfig>) => void;
   setMemoryEnabled: (enabled: boolean) => void;
+  setReasoningEffort: (effort: KiroReasoningEffort) => void;
   reset: () => void;
 }
 
@@ -26,6 +28,7 @@ const DEFAULT_SETTINGS: AISettings = {
   model: getDefaultModel("deepseek"),
   custom: { providerName: "", baseURL: "", model: "" },
   memoryEnabled: true,
+  reasoningEffort: "default",
 };
 
 export const useAISettingsStore = create<AISettingsState>()(
@@ -42,6 +45,7 @@ export const useAISettingsStore = create<AISettingsState>()(
         })),
       setModel: (model) => set({ model }),
       setMemoryEnabled: (enabled) => set({ memoryEnabled: enabled }),
+      setReasoningEffort: (effort) => set({ reasoningEffort: effort }),
       setCustom: (patch) =>
         set((state) => ({
           custom: { ...state.custom, ...patch },
@@ -59,6 +63,7 @@ export const useAISettingsStore = create<AISettingsState>()(
         model: state.model,
         custom: state.custom,
         memoryEnabled: state.memoryEnabled,
+        reasoningEffort: state.reasoningEffort,
       }),
     }
   )

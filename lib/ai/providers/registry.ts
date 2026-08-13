@@ -135,3 +135,17 @@ export function getProviderConfig(input: {
 
 export { DEEPSEEK_DEFAULT_MODEL, OPENCODE_DEFAULT_MODEL };
 export type { AIProviderId, AICustomConfig, AIProviderConfig, AIModelDefinition, AIModelVendor };
+
+/**
+ * 当前选中模型的完整 definition（Settings / Composer / Server 共用）。
+ * custom-openai 无静态 definition → null。
+ */
+export function resolveActiveModelDefinition(input: {
+  provider: AIProviderId;
+  model: string;
+}): AIModelDefinition | null {
+  if (input.provider === "custom-openai") return null;
+  return (
+    getModelsForProvider(input.provider).find((m) => m.id === input.model) ?? null
+  );
+}

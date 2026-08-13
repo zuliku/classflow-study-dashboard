@@ -1,5 +1,7 @@
 /** AI Provider 类型定义（唯一来源） */
 
+import { KiroReasoningEffort, ReasoningCapability } from "@/lib/ai/reasoning/types";
+
 export type AIProviderId = "opencode-go" | "deepseek" | "custom-openai";
 
 /** 模型厂商（Logo 与展示名来源；与「服务商」是不同维度） */
@@ -39,6 +41,8 @@ export interface AIModelDefinition {
     vision: boolean;
     fileParts: boolean;
     pdf?: boolean;
+    /** 显式声明的推理可调能力；缺失 = fixed（绝不由模型名/厂商/transport 推断） */
+    reasoning?: ReasoningCapability;
   };
   /** 可靠的模型 Context 覆盖（无可靠 metadata 时不设；Custom Provider 一律用 ClassFlow 默认预算） */
   contextBudget?: {
@@ -63,6 +67,8 @@ export interface AICustomConfig {
   /** 高级：用户明确声明兼容服务的能力（默认全 false，保守策略） */
   vision?: boolean;
   fileParts?: boolean;
+  /** 高级：用户明确声明服务支持思考程度（reasoning effort）。只有 true 才允许映射。 */
+  reasoningEffort?: boolean;
 }
 
 /** AI 服务设置（持久化于独立 storage，不含 API Key） */
@@ -73,4 +79,6 @@ export interface AISettings {
   custom: AICustomConfig;
   /** Kiro 长期学习记忆开关（关闭不读不写，但保留已有记忆） */
   memoryEnabled: boolean;
+  /** 当前推理投入（capability-driven；不支持时 UI 显示固定态，值恒为 default） */
+  reasoningEffort: KiroReasoningEffort;
 }
