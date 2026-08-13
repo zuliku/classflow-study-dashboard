@@ -1,95 +1,91 @@
 # Kiro Computer Agent V2 — Artifact & File Lifecycle Design
 
-**Status:** Draft for user review
+**Status:** Ready for user review
 
 **Date:** 2026-08-13
 
 ## 1. Goal
 
-Kiro Computer Agent V1 already provides a safe workspace runtime, real Browser/Sandbox file IO, Markdown/DOCX creation, approval, review, undo, history, and audit. V2 turns those one-off file mutations into a persistent artifact workflow so files created or adopted by Kiro can be found, previewed, downloaded, moved, renamed, revised, and referenced again without weakening the V1 sandbox/permission boundary.
+Kiro Computer Agent V1 already provides a safe Workspace runtime, real Browser/Sandbox file IO, Markdown/DOCX creation, approval, review, undo, history, and audit. V2 turns those one-off mutations into a durable artifact workflow so files created or adopted by Kiro can be found, previewed, downloaded, moved, renamed, revised, and referenced again without weakening the V1 sandbox/permission boundary.
 
-The product goal is not to build a full file explorer. The goal is to make Kiro-created work products behave like durable Agent artifacts rather than transient tool results.
+The product goal is not a full file explorer. It is to make Kiro work products behave like durable Agent artifacts rather than transient Tool Results.
 
 ## 2. Baseline
 
-V2 builds on the current V1 architecture and must preserve:
+V2 must preserve and reuse:
 
 - independent `lib/ai/computer` runtime;
-- workspace-first logical resource addressing;
+- Workspace-first logical resource addressing;
 - Sandbox != Permission;
 - Browser and Sandbox adapters;
 - `Plan / Guided / Workspace Auto` modes;
 - reasoning effort controls;
-- verified Computer mutations;
+- verified mutations;
 - interactive approval;
 - task-bound change review;
 - runtime checkpoint/undo;
 - existing Kiro history integration;
 - metadata-only audit;
-- no model access to raw native paths, handles, adapter refs, file bytes, or permission tokens.
+- no model access to native paths, handles, adapter refs, bytes, or permission tokens.
 
-V2 must not replace any of these systems with a parallel implementation.
+No V1 subsystem is replaced with a parallel implementation.
 
 ## 3. Product Principles
 
 ### 3.1 Artifact identity is stable; paths are not
 
-An artifact has a durable `artifactId`. `workspaceId + rootId + relativePath` describes its current location and may change after rename/move.
-
-The model should be able to refer to an artifact by stable identity after it moves.
+Every registered artifact gets a durable `artifactId`. `workspaceId + rootId + relativePath` describes its current location and may change after rename/move.
 
 ### 3.2 Registry is metadata, not filesystem authority
 
-The filesystem adapter remains the source of truth for file existence and bytes. The Artifact Registry stores only bounded metadata and optional Kiro-owned source IR.
+The adapter remains authoritative for file existence and bytes. The Artifact Registry stores bounded metadata plus optional Kiro-owned structured source IR.
 
-A registry entry does not bypass workspace, sandbox, grant, or permission checks.
+### 3.3 One logical file location maps to at most one active artifact record
 
-### 3.3 Existing user files and Kiro-created artifacts are different trust cases
+Within one Workspace, the tuple:
 
-Kiro-created documents may retain structured source IR for safe future revisions.
+```text
+workspaceId + rootId + normalized relativePath
+```
 
-Existing arbitrary DOCX files may be inspected and previewed, but V2 does not promise full structured OOXML editing for them.
+must not produce duplicate active Artifact Registry records. Registration reuses the existing artifact entry when the logical location already exists.
 
-### 3.4 Move and rename remain controlled mutations
+### 3.4 Kiro-created documents and arbitrary user documents are different trust cases
 
-`move_file` and `rename_file` are reversible filesystem mutations but can break user references. They require approval in both Guided and Workspace Auto modes in V2.
+Kiro-created documents may retain structured `KiroDocument` source IR for safe revision. Existing arbitrary DOCX files may be inspected/previewed/adopted, but V2 does not promise full structured OOXML editing for them.
 
-### 3.5 No delete capability
+### 3.5 Move/rename remain controlled mutations
 
-V2 still exposes no model-facing delete tool. Internal removal remains available only for verified undo/checkpoint restoration and explicit Settings lifecycle actions already present in V1.
+Both operations can break references. They require approval in `Guided` and `Workspace Auto` modes in V2.
 
-## 4. High-Level Architecture
+### 3.6 No model-facing delete capability
+
+V2 still exposes no `delete_file` or `delete_directory`. Internal removal is only for verified Undo and explicit user-initiated Workspace/registry lifecycle actions.
+
+## 4. Architecture
 
 ```text
 Kiro / LLM
     |
-    | Computer Tool Calls
     v
 Existing Computer Runtime
     |
     +--> Workspace Resolver / Sandbox / Permission
-    |
     +--> Computer Adapter
-    |
     +--> Artifact Service
             |
-            +--> Artifact Registry (metadata)
-            +--> Artifact Source Store (Kiro-owned Document IR only)
-            +--> Preview / Export
-            +--> Revision guard
+            +--> Artifact Registry
+            +--> Artifact Source Store
+            +--> Preview / Download
+            +--> Revision Guard
 ```
 
-The Artifact Service sits behind the existing Computer Runtime. It is not a new execution trust domain.
+Artifact Service is behind the existing Computer Runtime. It is not a new trust domain and cannot bypass permission or sandbox checks.
 
 ## 5. Artifact Model
 
-Introduce:
-
 ```ts
-export type KiroArtifactType =
-  | "text"
-  | "markdown"
-  | "docx";
+export type KiroArtifactType = "text" | "markdown" | "docx";
 
 export type KiroArtifactSource =
   | "kiro-created"
@@ -118,32 +114,32 @@ export interface KiroArtifact {
 }
 ```
 
-### 5.1 Registry invariants
+Registry invariants:
 
-- `id` is stable across rename and move.
-- `relativePath` is updated only after the filesystem mutation verifies successfully.
-- `revision` increments only after a verified content revision.
-- path changes do not increment document revision.
-- registry metadata never stores `adapterRef`, native path, handle, file bytes, permission token, or full file contents.
+- `id` remains stable across rename/move;
+- location changes update only after verified filesystem success;
+- `revision` increments only after verified content revision;
+- move/rename does not increment document revision;
+- metadata never stores `adapterRef`, native path, handle, bytes, permission token, or full file content.
 
-## 6. Artifact Registry Storage
+## 6. Artifact Storage
 
-Use a dedicated browser-local IndexedDB database:
+Use IndexedDB:
 
 ```text
 classflow-kiro-artifacts-v1
 ```
 
-Object stores:
+Stores:
 
 ```text
 artifacts
 sources
 ```
 
-`artifacts` stores `KiroArtifact` metadata.
+`artifacts` contains `KiroArtifact` metadata.
 
-`sources` stores only Kiro-owned structured document source, keyed by artifact id:
+`sources` contains structured source only for Kiro-generated documents:
 
 ```ts
 interface KiroArtifactSourceRecord {
@@ -154,71 +150,56 @@ interface KiroArtifactSourceRecord {
 }
 ```
 
-### 6.1 Source IR boundary
+Do not store raw OOXML, binary DOCX bytes, raw HTML, native handles, native paths, or unbounded extracted text in the source store.
 
-Source IR is stored only when:
+## 7. Registration and Adoption
 
-```text
-artifact.source === "kiro-created"
-```
+### 7.1 New Kiro-created files
 
-and the artifact was generated from the trusted `KiroDocument` IR pipeline.
+After verified `create_text_file` or `create_document`, register/reuse the logical artifact location.
 
-Do not persist:
+`create_document`:
 
-- raw OOXML;
-- binary DOCX bytes;
-- raw HTML;
-- unbounded extracted document contents;
-- Browser handles or native paths.
-
-## 7. Artifact Registration
-
-### 7.1 Kiro-created files
-
-After verified `create_text_file` or `create_document`, register an artifact.
-
-For `create_document`:
-
-- Markdown -> artifact type `markdown`;
-- DOCX -> artifact type `docx`;
+- Markdown -> `markdown`;
+- DOCX -> `docx`;
 - source = `kiro-created`;
-- source IR persisted;
+- persist source IR;
 - revision = 1.
 
-For generic `create_text_file`:
+Generic `create_text_file`:
 
 - `.md` -> `markdown`;
-- other supported text -> `text`;
+- supported plain text -> `text`;
 - source = `kiro-created`;
-- no Document IR unless it came through `create_document`.
+- no Document IR unless creation used `create_document`.
 
-### 7.2 Existing workspace files
+### 7.2 Existing Workspace files
 
-Previewing or explicitly adopting an existing supported file may create a registry entry with:
+V2 performs no automatic full Workspace crawl and no migration/backfill scan of V1 files.
+
+An existing supported file is lazily adopted when the user/Kiro opens it through the Artifact workflow or explicitly requests artifact actions. If its logical location already has an artifact, reuse that record. Otherwise create:
 
 ```text
 source = workspace-existing
 ```
 
-V2 does not require automatic indexing of every file in a workspace.
+Old V1-created files therefore remain usable without an expensive migration; they become registered only when actually used.
 
-No semantic index or full workspace crawl is introduced.
+## 8. New Computer Mutation Tools
 
-## 8. New File Lifecycle Tools
-
-Add two model-facing Computer mutation tools:
+Add:
 
 ```text
 rename_file
 move_file
+update_document
 ```
 
-Do not add `delete_file` or `delete_directory`.
+Do not add deletion tools.
 
-### 8.1 rename_file
+## 9. `rename_file`
 
-Logical input:
+Input:
 
 ```ts
 {
@@ -228,19 +209,21 @@ Logical input:
 }
 ```
 
-Rules:
+Requirements:
 
-- source must exist;
-- target must stay within the same authorized root;
-- `newName` must pass Windows-safe/path-safe validation;
+- source exists;
+- remains inside the same authorized root;
+- `newName` passes existing Windows/path safety rules;
 - destination must not already exist;
-- rename must verify source absent + destination present;
-- if source is a registered artifact, update its path after verification;
-- if not registered, no artifact is invented unless the tool result is later adopted.
+- no implicit overwrite;
+- verify source absent + destination present;
+- update registered artifact location only after verification.
 
-### 8.2 move_file
+Unregistered files are not automatically registered merely because they were renamed.
 
-Logical input:
+## 10. `move_file`
+
+Input:
 
 ```ts
 {
@@ -251,28 +234,40 @@ Logical input:
 }
 ```
 
-V2 scope:
+V2 allows moves only inside the same active Workspace.
 
-- move within the same active Workspace only;
-- both roots must be authorized;
-- destination root must be read-write;
-- source must exist;
-- destination must not exist;
-- no cross-Workspace moves;
-- no implicit overwrite;
-- success requires target exists + source absent verification.
+Requirements:
 
-If the file is a registered artifact, update `rootId` and `relativePath` only after verification.
+- source and destination roots are authorized;
+- destination root is read-write;
+- source exists;
+- destination does not exist;
+- no cross-Workspace move;
+- no overwrite;
+- success requires destination exists and source no longer exists;
+- update artifact location only after verification.
 
-## 9. Move / Rename Permission Policy
+### 10.1 Same-adapter move
 
-Both tools use capability:
+When both roots resolve to the same adapter instance/namespace, use adapter-native relocation when available.
 
-```text
-fs.move
-```
+### 10.2 Cross-adapter move inside one Workspace
 
-Mode defaults:
+When roots resolve to different adapters/namespaces, V2 may implement a verified copy-then-remove sequence:
+
+1. read source bytes/text;
+2. write destination;
+3. verify destination equals source representation;
+4. remove source using runtime-internal removal;
+5. verify source absent.
+
+If step 4 or 5 fails after destination creation, runtime must attempt compensating removal of the newly-created destination. If compensation also fails, report a partial-failure state accurately and do not update Artifact Registry location. Never report an atomic move when atomicity was not achieved.
+
+The internal removal path is not registered as an LLM tool.
+
+## 11. Move/Rename Permission Policy
+
+Both use `fs.move`.
 
 ```text
 Plan           -> deny
@@ -280,30 +275,25 @@ Guided         -> ask
 Workspace Auto -> ask
 ```
 
-Workspace Auto intentionally does not auto-approve relocation in V2.
+Explicit deny, read-only roots, missing/revoked grants, path violations, and hard deny remain non-overridable.
 
-Explicit deny, read-only roots, missing/revoked grants, path sandbox violations, and hard deny remain non-overridable.
+## 12. Adapter Contract Extension
 
-## 10. Adapter Contract Extension
+Extend the existing adapter IO with relocation support sufficient for the runtime to implement §10 while keeping adapter/native details hidden.
 
-Extend the existing Computer adapter IO with one relocation primitive:
+The implementation plan may choose either:
 
 ```ts
-move(
-  from: string,
-  to: string
-): Promise<void>;
+move(from: string, to: string): Promise<void>
 ```
 
-The runtime resolves source/destination roots before adapter invocation.
+for same-adapter relocation, plus existing read/write/remove primitives for cross-adapter relocation, or an equivalent focused interface matching the current adapter shape.
 
-For cross-root moves inside one Workspace, the runtime may use read/write/remove semantics only when the adapter cannot perform a native move, but it must preserve the same verified all-or-fail product semantics. If rollback cannot be guaranteed after partial failure, the tool must return failure and retain accurate runtime facts; it must never claim an atomic move when it was not atomic.
+The architecture requirement is fixed: higher Kiro layers never receive native handles/paths.
 
-Browser and Sandbox implementations must be adapter-specific and must not leak native handles upward.
+## 13. Move/Rename Undo
 
-## 11. Move / Rename Checkpoint & Undo
-
-Extend checkpoint inverse operations:
+Extend checkpoint inverses with verified relocation restoration:
 
 ```ts
 {
@@ -316,28 +306,18 @@ Extend checkpoint inverse operations:
 }
 ```
 
-Meaning: the forward operation moved from `from*` to `to*`; undo moves the verified target back to the original location.
-
 Undo requirements:
 
-- execute inverses in reverse order as V1 already does;
-- destination-back location must still be free;
-- move-back must pass sandbox/adapter resolution using the original runtime checkpoint authority;
-- verify original exists and moved location no longer exists;
-- only then mark undo successful;
-- update Artifact Registry path back after successful inverse verification.
+- reverse-order execution;
+- original destination-back location must still be available;
+- execute through runtime resolver/adapter authority;
+- verify original restored + moved location absent;
+- update Artifact Registry location back only after verification;
+- mark task `undone` only when every inverse verifies.
 
-No model-facing delete capability is introduced.
+## 14. `update_document`
 
-## 12. Structured Document Revision
-
-Add model-facing tool:
-
-```text
-update_document
-```
-
-V2 only supports artifacts that satisfy all conditions:
+Only supported when:
 
 ```text
 artifact.source === "kiro-created"
@@ -355,39 +335,31 @@ Input:
 }
 ```
 
-### 12.1 Revision preflight
+Preflight:
 
-Before execution:
-
-1. load artifact metadata;
-2. confirm artifact belongs to active Workspace;
-3. resolve current root/path through normal Computer Runtime;
+1. load artifact;
+2. artifact belongs to active Workspace;
+3. resolve current root/path through existing Computer Runtime;
 4. verify `expectedRevision === artifact.revision`;
-5. verify source IR exists and source is Kiro-owned;
+5. verify Kiro-owned source IR exists;
 6. evaluate `document.modify` permission;
-7. render using the existing Markdown/DOCX renderer;
+7. render through existing Markdown/DOCX renderer;
 8. write;
 9. verify output;
-10. save new source IR;
+10. persist new source IR;
 11. increment revision.
 
-If revision mismatches, return:
+Revision mismatch returns:
 
 ```text
 ARTIFACT_REVISION_CONFLICT
 ```
 
-The model must reread/inspect and retry instead of overwriting a newer revision.
+No silent overwrite of a newer revision.
 
-## 13. Update Document Permission
+## 15. `update_document` Permission
 
-`update_document` uses capability:
-
-```text
-document.modify
-```
-
-Policy follows V1 modify semantics:
+Use `document.modify`:
 
 ```text
 Plan           -> deny
@@ -395,124 +367,112 @@ Guided         -> ask
 Workspace Auto -> allow
 ```
 
-Explicit rules still override mode defaults according to the V1 policy precedence.
+V1 explicit rule precedence remains unchanged.
 
-## 14. Content Checkpoint for update_document
+## 16. Document Revision Checkpoint
 
-V1 checkpoint already restores exact text for text patches. V2 adds bounded document restoration for Kiro-owned generated artifacts.
+Before `update_document`, retain runtime-only prior source IR and sufficient prior rendered content to restore the exact previous revision during the current runtime session.
 
-Before updating a generated document, retain runtime-only previous source IR and previous rendered bytes/text sufficient to restore that exact revision during the current runtime session.
+Checkpoint data never enters Tool Output, chat history, audit, Zustand persisted state, or Artifact metadata.
 
-Checkpoint data:
+Undo must:
 
-- never enters model tool output;
-- never enters history;
-- never enters audit;
-- never enters Zustand persisted state;
-- remains bounded by the same safety philosophy as V1 checkpoints.
+- restore file content;
+- verify restoration;
+- restore source IR;
+- restore artifact revision;
+- report success only after all four succeed.
 
-After Undo:
-
-- file content must verify against the previous revision;
-- source IR restored;
-- artifact revision restored to the previous number;
-- task reports `undone` only after all verification succeeds.
-
-## 15. Artifact Preview
+## 17. Artifact Preview
 
 Create `KiroArtifactPreviewDialog` using the shared Dialog primitive.
 
-Supported preview behavior:
-
 ### Markdown
 
-- rendered Markdown preview using the project’s existing safe Markdown rendering path;
-- optional raw source view if already supported without a new editor subsystem.
+V2 requires:
+
+- rendered preview using the project’s existing safe Markdown rendering path;
+- raw-source toggle with bounded content.
 
 ### Text
 
-- bounded monospace preview;
-- large files are truncated with an explicit message.
+- read-only monospace preview;
+- bounded content;
+- explicit truncation notice for large files.
 
 ### DOCX
 
-- use the project’s existing DOCX read/HTML conversion capability if available;
-- sanitize any generated HTML through the project’s existing safe rendering boundary;
-- if full preview cannot be safely produced, show document structure facts plus a download action rather than unsafe HTML.
+Minimum guaranteed V2 preview is a safe structural preview using `inspect_document` facts:
 
-Preview is read-only in V2.
+- title;
+- headings;
+- paragraph/list/table/code counts;
+- character count.
 
-## 16. Artifact Download / Export
+If the repository already has a safe Mammoth-to-sanitized-HTML path that can be reused without introducing a new sanitizer/security subsystem, the implementation may additionally render rich DOCX preview. Rich HTML preview is not required for V2 completion.
 
-Web V2 must provide real download/export for artifacts.
+Preview remains read-only.
 
-For Sandbox:
+## 18. Download / Export
 
-- read bytes/text through Sandbox Adapter;
-- create a transient Blob URL;
+Web V2 must provide real download behavior.
+
+Sandbox:
+
+- read through Sandbox Adapter;
+- create transient Blob URL;
 - trigger download;
-- revoke URL after use.
+- revoke URL.
 
-For Browser Workspace:
+Browser Workspace:
 
-- provide `下载副本` by reading the authorized file and downloading through the browser;
-- do not claim “open in Explorer” or native file opening.
+- provide `下载副本` by reading through the authorized adapter;
+- do not claim native open/reveal behavior.
 
-Future Desktop adapters may expose:
+Desktop `open`/`reveal` remains deferred.
 
-```text
-open
-reveal
-```
+## 19. Artifact UI
 
-but those capabilities are not implemented in V2 Web.
+V2 does not create a new global Explorer workspace.
 
-## 17. Artifact UI
+### 19.1 Agent Task Card
 
-V2 does not add a full Explorer page.
-
-Add a lightweight Kiro artifact surface with two entry points:
-
-### 17.1 Agent Task / Change card
-
-For a registered artifact change, expose actions such as:
+Registered artifact changes expose:
 
 ```text
 预览
 下载
 ```
 
-If applicable:
+and retain applicable:
 
 ```text
 查看更改
 撤销本次更改
 ```
 
-Do not overload the card with rename/move controls; those remain Agent operations or recent-artifact actions.
+Rename/move controls do not need to be embedded directly into every Task Card.
 
-### 17.2 Recent Artifacts
+### 19.2 Recent Artifacts
 
-Add a lightweight `最近文件` / `Artifacts` surface inside the Kiro workspace UI, not a new global app workspace.
+Add a lightweight Kiro-local `最近文件` / `Artifacts` surface showing exactly the latest **12** registered artifacts by `updatedAt` descending.
 
-Show a bounded recent list, for example the latest 10–20 registered artifacts:
+Each item shows:
 
 - display name;
 - type;
-- current Workspace/root label;
+- logical Workspace/root label;
 - revision when >1;
 - updated time;
-- preview;
-- download;
+- Preview;
+- Download;
 - `Ask Kiro` contextual action.
 
-This surface must remain lower visual priority than the conversation itself.
+The surface remains visually subordinate to the conversation and does not become a full file explorer.
 
-## 18. Ask Kiro About Artifact
+## 20. Ask Kiro About Artifact
 
-Recent Artifact UI may start a Kiro context attachment using stable artifact metadata.
-
-Model context receives only safe logical facts:
+Context handoff uses stable safe metadata only:
 
 ```text
 artifactId
@@ -523,71 +483,49 @@ type
 revision
 ```
 
-The runtime must reread the file through normal Computer tools if content is needed.
+File contents are reread through normal Computer tools when needed. Cached full content is never injected automatically.
 
-Do not inject cached full artifact contents automatically.
+## 21. Change Model Extension
 
-## 19. Task / Change Model Extension
-
-Extend `KiroComputerChange.operation` from:
+Extend `KiroComputerChange.operation`:
 
 ```text
-create | modify
+create | modify | move | rename
 ```
 
-to include:
-
-```text
-move
-rename
-```
-
-Change facts must include enough verified logical metadata to render:
+Verified display facts must support:
 
 ```text
 移动 notes.md -> archive/notes.md
 重命名 draft.md -> final.md
-```
-
-For document revisions:
-
-```text
 修改 研究方案.docx · v2
 ```
 
-History stores display-only facts, not runtime review snapshots or source IR.
+History stores display-only facts, not runtime source/review/checkpoint data.
 
-## 20. History Integration
+## 22. History Integration
 
-Continue using the existing Kiro history database and `PersistedKiroMessage` extension path established in V1.
+Continue using the existing Kiro history database and `PersistedKiroMessage` flow.
 
-Persist safe Artifact/change display facts only:
+Safe persisted artifact/change facts may include:
 
 - artifactId;
 - display name;
 - type/format;
-- logical workspace/root labels;
+- Workspace/root labels;
 - relative path;
 - revision;
 - operation;
 - verification status;
 - timestamps.
 
-Do not persist:
+Do not persist Document IR in chat history, preview text, bytes, checkpoint data, handles, adapter refs, or native paths.
 
-- Document IR in chat history;
-- preview text;
-- file bytes;
-- before/after checkpoint data;
-- handles;
-- adapter refs;
-- native paths.
+Source IR belongs only in the Artifact Source Store.
 
-Artifact source IR belongs only in the Artifact Source Store.
+## 23. Regenerate Safety
 
-## 21. Regenerate Safety
-
-Add these to Computer mutation/regenerate guards:
+Add to mutation guards:
 
 ```text
 rename_file
@@ -595,64 +533,60 @@ move_file
 update_document
 ```
 
-Any assistant turn that performs one of these mutations must remain non-regenerable under the same V1 safety semantics.
+Turns containing these mutations are non-regenerable under existing V1 semantics.
 
-Read-only preview/download UI actions are not Agent mutations and do not affect regenerate safety.
+Preview/download UI actions are read-only UI operations and do not change regenerate safety.
 
-## 22. Artifact Consistency and Stale Records
+## 24. Stale Artifact Records
 
-The filesystem remains authoritative.
+Filesystem remains authoritative.
 
 When an artifact is opened or acted on:
 
-1. resolve its current logical location;
-2. stat the file;
-3. if missing, mark the registry record as unavailable/stale for UI purposes;
-4. do not silently recreate it;
-5. offer a safe way to remove the stale registry metadata from the Artifact UI if needed.
+1. resolve current logical location;
+2. stat file;
+3. if missing, mark record unavailable/stale in UI;
+4. do not recreate silently;
+5. allow the user to remove stale registry metadata.
 
-Removing stale artifact metadata is not deleting a filesystem file and is not an LLM delete capability.
+Removing stale metadata is not deleting a filesystem file and is never an Agent tool.
 
-## 23. Workspace Deletion Integration
+## 25. Workspace Removal Integration
 
-When a Workspace is explicitly removed from Settings:
+When the user explicitly removes a Workspace in Settings:
 
-- remove Artifact Registry metadata belonging to that Workspace;
-- remove corresponding Kiro-owned source IR records;
-- then continue existing adapter cleanup semantics;
-- never delete real Browser Workspace files beyond the existing explicit Sandbox cleanup behavior.
+- delete Artifact Registry metadata for that Workspace;
+- delete matching source IR records;
+- then continue existing Workspace adapter/grant cleanup;
+- never delete real Browser Workspace files beyond existing explicit Sandbox lifecycle behavior.
 
-Artifact cleanup must follow the same user-initiated Workspace lifecycle and must not create a model tool.
+No model tool is introduced for this cleanup.
 
-## 24. Settings Authorization Spacing Fix
+## 26. Settings Authorization Spacing Fix
 
-The current `SettingsGroup` is designed around `SettingsRow` children and therefore provides horizontal padding but no generic vertical padding. The custom Authorization Workspace list currently touches the group’s top/bottom borders.
+The current `SettingsGroup` assumes `SettingsRow` children and provides horizontal but not generic vertical padding. The custom Authorization Workspace list therefore visually touches the group border.
 
-Fix this locally inside `KiroAgentSettings.tsx` only.
-
-Target:
+Fix only `KiroAgentSettings.tsx`:
 
 ```tsx
 <SettingsGroup title="授权位置">
   <div className="py-2.5 space-y-2">
-    ...workspace rows...
-    ...add location action...
+    ...
   </div>
 </SettingsGroup>
 ```
 
-Exact final spacing may use the closest existing semantic spacing token/class, but must satisfy:
+Requirements:
 
-- first Workspace row has visible top breathing room;
-- bottom action row has visible bottom breathing room;
-- Workspace row does not visually intersect the outer group border;
-- add-location button does not visually intersect the outer group border;
-- do not modify global `SettingsGroup` padding;
-- do not redesign the compact Workspace row introduced by the stabilization task.
+- visible breathing room above first Workspace row;
+- visible breathing room below Add Location action;
+- no row/action overlaps the outer border;
+- do not change global `SettingsGroup` padding;
+- do not redesign the compact Workspace row already introduced.
 
-## 25. Error Model Extensions
+## 27. Error Model Extensions
 
-Add explicit Computer/Artifact errors as needed, including at minimum:
+Add at minimum:
 
 ```text
 ARTIFACT_NOT_FOUND
@@ -660,147 +594,132 @@ ARTIFACT_SOURCE_UNAVAILABLE
 ARTIFACT_REVISION_CONFLICT
 ARTIFACT_UNSUPPORTED_OPERATION
 DESTINATION_ALREADY_EXISTS
+MOVE_PARTIAL_FAILURE
 ```
 
-Reuse existing path/sandbox/grant/permission errors where appropriate.
+Reuse existing sandbox/path/grant/permission errors where applicable. Model-visible errors remain logical and bounded.
 
-Errors returned to the model must remain bounded and logical; no native paths or runtime internals.
+## 28. Audit
 
-## 26. Audit
-
-Extend existing Computer Audit metadata for:
+Audit Agent mutations:
 
 ```text
 rename_file
 move_file
 update_document
-artifact preview/download only if the existing audit model already records user-side actions cleanly
 ```
 
-Agent mutation audit remains mandatory.
+Do **not** add audit entries for ordinary user-side Preview or Download actions in V2. They are read-only UI actions, not Agent decisions.
 
-Do not audit file contents or source IR.
+Audit remains metadata-only.
 
-## 27. Security Boundaries
+## 29. Security Boundaries
 
-V2 must preserve all of the following:
+V2 preserves:
 
-- no model-facing delete tool;
+- no model-facing delete;
 - no shell/PowerShell/cmd;
-- no application launch;
+- no app launch;
 - no arbitrary network capability;
 - no MCP;
-- no Tauri/desktop runtime;
+- no Tauri/Desktop runtime;
 - no native path in model context;
-- no Browser handle in registry/history/store;
+- no Browser handle in Registry/history/store;
 - no adapterRef in model-facing artifact metadata;
-- no raw OOXML from the model;
-- no silent overwrite on move/rename;
-- no permission prompt may bypass sandbox/read-only/hard deny;
-- artifact registry never becomes filesystem authority.
+- no raw OOXML from model;
+- no silent overwrite;
+- no approval bypass of sandbox/read-only/hard deny;
+- Artifact Registry never becomes filesystem authority.
 
-## 28. Explicit Non-Goals
+## 30. Explicit Non-Goals
 
 V2 does not implement:
 
 - file/directory deletion tools;
-- full file explorer;
-- semantic workspace indexing;
-- embeddings/vector search;
+- full Explorer;
+- semantic indexing/embeddings;
 - background file watchers;
 - Kiro Skills;
 - MCP;
-- shell or process sandbox;
-- Tauri or Windows packaging;
-- application control;
+- shell/process sandbox;
+- Tauri/Windows packaging;
+- app control;
 - native open/reveal;
 - full arbitrary DOCX editing;
-- PPTX;
-- XLSX;
-- PDF artifact generation;
+- PPTX/XLSX/PDF artifact generation;
 - multi-agent workers;
 - background automations.
 
-These remain later phases.
+## 31. Implementation Plan Decomposition
 
-## 29. Suggested Implementation Plan Decomposition
-
-V2 is large enough to use two or three implementation parts without fragmenting it into micro-tasks.
-
-Recommended three-part structure:
+Use at most three large implementation plans.
 
 ### Part 1 — Artifact Foundation & Relocation
 
-- authorization spacing UI fix;
+- Authorization spacing fix;
 - Artifact Registry / Source Store;
-- artifact registration from existing create tools;
-- `move_file` / `rename_file`;
-- verified relocation;
-- checkpoint move-back;
-- history/change/audit integration.
+- create-tool artifact registration;
+- lazy adoption;
+- `rename_file` / `move_file`;
+- relocation verification;
+- move-back checkpoint;
+- change/history/audit integration.
 
 ### Part 2 — Structured Document Revision
 
 - `update_document`;
-- revision conflict handling;
 - source IR lifecycle;
+- revision conflicts;
 - Markdown/DOCX rerender + verify;
-- document update checkpoint/undo;
+- document revision checkpoint/undo;
 - task/review/history integration.
 
 ### Part 3 — Artifact UX
 
-- preview;
-- download/export;
-- recent artifacts surface;
-- Ask Kiro context handoff;
-- stale registry behavior;
-- Workspace deletion artifact cleanup;
-- targeted regression.
+- Preview;
+- Download;
+- Recent 12 artifacts;
+- Ask Kiro artifact context;
+- stale record handling;
+- Workspace-removal registry cleanup;
+- focused regression.
 
-If implementation inspection shows Parts 2 and 3 are tightly coupled and remain reviewable, they may be merged into one larger second part. Do not split into more than three plans unless a concrete blocker is discovered.
+Parts 2 and 3 may be merged only if implementation inspection shows they remain one reviewable dependency chain. Do not split into more than three plans without a concrete blocker.
 
-## 30. Testing Strategy
+## 32. Testing Strategy
 
-Continue the project’s efficiency-first testing policy.
+Efficiency-first testing remains mandatory.
 
-### Required low-cost tests
+Focused Vitest coverage:
 
-Focused Vitest coverage should include:
-
-- Artifact Registry create/update/path-change/revision behavior;
-- registry/source persistence boundaries;
-- move/rename destination conflict;
-- move/rename verification;
-- move-back checkpoint/undo;
-- `update_document` revision conflict;
-- source IR restore on undo;
+- Registry uniqueness and registration reuse;
+- source IR persistence boundary;
+- lazy adoption;
+- move/rename conflict and verification;
+- cross-adapter partial-failure compensation;
+- move-back Undo;
+- revision conflict;
+- document source/revision restore on Undo;
 - history sanitizer excludes source IR/preview/checkpoint/native internals;
-- Workspace removal cleans artifact metadata only.
+- Workspace removal cleans Registry/source metadata only.
 
-### Targeted E2E
-
-Use one deterministic offline Kiro Computer Agent V2 E2E file or extend the existing offline Computer Agent E2E.
-
-Cover one compact lifecycle:
+One deterministic offline Computer Agent V2 E2E should cover a compact lifecycle:
 
 ```text
 create document
 -> artifact registered
--> preview/download action visible
+-> Preview/Download available
 -> rename or move with approval
--> artifact path updated
+-> location updates
 -> update document revision
 -> review
 -> undo one mutation
--> reload history display remains safe/read-only
+-> reload history remains display-only/safe
 ```
 
-Do not use external AI APIs.
+No external AI API.
 
-### Verification policy
-
-Required:
+Required verification:
 
 ```text
 focused Vitest
@@ -808,22 +727,20 @@ focused deterministic Playwright
 npm run typecheck
 ```
 
-`npm run build` remains skipped by default unless a client/server/bundling issue requires it.
+`npm run build` remains skipped by default unless a client/server/bundling-only problem requires it. Do not run full Vitest/Playwright suites by default.
 
-Do not run full Vitest/Playwright suites by default.
-
-## 31. Success Criteria
+## 33. Success Criteria
 
 V2 is complete when a user can:
 
-1. ask Kiro to create a Markdown or DOCX artifact;
-2. see it as a durable registered artifact rather than only a transient tool fact;
-3. preview or download it in Web;
-4. ask Kiro to move or rename it under controlled permission rules;
-5. continue revising a Kiro-generated document through structured `update_document` with revision conflict protection;
-6. review verified changes and use existing task-level Undo semantics;
-7. return later and still see safe artifact/history metadata;
-8. remove a Workspace without leaving artifact metadata attached to it;
-9. use the Authorization Settings section without Workspace rows/actions visually touching the outer group border.
+1. create Markdown/DOCX with Kiro and receive a durable artifact identity;
+2. lazily adopt supported existing files without full Workspace indexing;
+3. preview or download registered artifacts in Web;
+4. move/rename files under controlled permission rules with verified outcomes;
+5. continue revising Kiro-generated Markdown/DOCX through `update_document` with stale-revision protection;
+6. review and Undo verified mutations through the existing Agent Task lifecycle;
+7. reload later and retain safe artifact/history metadata;
+8. remove a Workspace without leaving Artifact Registry/source metadata attached to it;
+9. use the Authorization Settings section without rows/actions touching the outer group border.
 
-The system must still expose no shell, delete, MCP, or unrestricted computer access.
+The system still exposes no shell, delete, MCP, or unrestricted computer access.
