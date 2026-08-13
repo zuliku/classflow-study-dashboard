@@ -1,9 +1,10 @@
 "use client";
 
 import React from "react";
-import { CheckCircle2, Eye, RotateCcw, Clock3, XCircle, AlertTriangle } from "lucide-react";
+import { CheckCircle2, Eye, RotateCcw, Clock3, XCircle, AlertTriangle, Download } from "lucide-react";
 import { KiroAgentTask, KiroComputerChange } from "@/lib/ai/computer/task";
 import { PersistedComputerTaskView } from "@/lib/ai/history/types";
+import { useKiroArtifactActions } from "@/hooks/useKiroArtifactActions";
 import { cn } from "@/lib/utils";
 
 /**
@@ -11,6 +12,7 @@ import { cn } from "@/lib/utils";
  * - 只展示真实 runtime 事实（steps / changes），绝不展示 chain-of-thought。
  * - completed 且 checkpoint 存在且未使用 → [查看更改] [撤销本次更改]。
  * - 历史恢复 → display-only（无 checkpoint，无按钮）。
+ * - V2 Part 3：每个带 artifactId 的 change row 提供低权重 [预览]/[下载]（历史卡同样可用）。
  */
 export function KiroAgentTaskCard({
   task,
@@ -23,6 +25,7 @@ export function KiroAgentTaskCard({
   onReview?: (taskId: string) => void;
   onUndo?: (taskId: string) => void;
 }) {
+  const { previewArtifact, downloadArtifact } = useKiroArtifactActions();
   if (historyTask) {
     return (
       <div
@@ -31,7 +34,9 @@ export function KiroAgentTaskCard({
       >
         <TaskHeader status={historyTask.status} changeCount={historyTask.changes.length} />
         <p className="text-xs font-bold text-charcoal truncate">{historyTask.title}</p>
-        {historyTask.changes.length > 0 && <ChangeList changes={historyTask.changes} />}
+        {historyTask.changes.length > 0 && (
+          <ChangeList changes={historyTask.changes} onPreview={previewArtifact} onDownload={downloadArtifact} />
+        )}
         <p className="text-[10px] text-sandrift">历史记录（仅展示，不能撤销）</p>
       </div>
     );
@@ -78,7 +83,9 @@ export function KiroAgentTaskCard({
         <p className="text-[11px] text-satin-grey">部分操作未完成</p>
       )}
 
-      {task.changes.length > 0 && <ChangeList changes={task.changes} />}
+      {task.changes.length > 0 && (
+        <ChangeList changes={task.changes} onPreview={previewArtifact} onDownload={downloadArtifact} />
+      )}
 
       {task.status === "undone" && (
         <p className="text-[11px] font-semibold text-success flex items-center gap-1.5">
@@ -158,17 +165,46 @@ function TaskHeader({ status, changeCount }: { status: string; changeCount: numb
   );
 }
 
-function ChangeList({ changes }: { changes: Array<KiroComputerChange | PersistedComputerTaskView["changes"][number]> }) {
+function ChangeList({
+  changes,
+  onPreview,
+  onDownload,
+}: {
+  changes: Array<KiroComputerChange | PersistedComputerTaskView["changes"][number]>;
+  onPreview: (artifactId: string) => void;
+  onDownload: (artifactId: string) => void;
+}) {
   return (
     <ul className="space-y-1">
-      {changes.map((c) => (
-        <li key={c.displayName + c.relativePath} className="flex items-center gap-1.5 text-[11px] text-satin-grey">
-          <span className="w-1 h-1 rounded-full bg-sandrift shrink-0" aria-hidden="true" />
-          <span className="truncate">
-            {changeSummary(c)}
-          </span>
-        </li>
-      ))}
+      {changes.map((c) => {
+        const artifactId = "artifactId" in c ? c.artifactId : undefined;
+        return (
+          <li key={c.displayName + c.relativePath} className="flex items-center gap-1.5 text-[11px] text-satin-grey">
+            <span className="w-1 h-1 rounded-full bg-sandrift shrink-0" aria-hidden="true" />
+            <span className="truncate min-w-0">{changeSummary(c)}</span>
+            {artifactId && (
+              <span className="flex items-center gap-0.5 shrink-0 ml-auto pl-1">
+                <button
+                  onClick={() => onPreview(artifactId)}
+                  aria-label={`预览 ${c.displayName}`}
+                  title="预览"
+                  className="w-6 h-6 rounded-md flex items-center justify-center text-sandrift hover:text-charcoal hover:bg-alabaster transition-colors"
+                >
+                  <Eye className="w-3.5 h-3.5" />
+                </button>
+                <button
+                  onClick={() => void onDownload(artifactId)}
+                  aria-label={`下载 ${c.displayName}`}
+                  title="下载"
+                  className="w-6 h-6 rounded-md flex items-center justify-center text-sandrift hover:text-charcoal hover:bg-alabaster transition-colors"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                </button>
+              </span>
+            )}
+          </li>
+        );
+      })}
     </ul>
   );
 }

@@ -50,6 +50,7 @@ import { estimateTokens } from "@/lib/ai/contextBudget/estimate";
 import { shouldCompact, DEFAULT_CONTEXT_BUDGET } from "@/lib/ai/contextBudget/planner";
 import { buildTranscriptText, buildTranscriptMarkdown, copyTextToClipboard, downloadMarkdownFile } from "@/lib/ai/share";
 import { useToastStore } from "@/store/useToastStore";
+import { KiroArtifactPreviewDialogHost } from "@/components/kiro/computer/KiroArtifactPreviewDialogHost";
 
 export type KiroSuggestionsKind = "assignment" | "course" | "group-project" | "week" | "generic";
 
@@ -897,6 +898,8 @@ export function KiroSessionProvider({ children }: { children: React.ReactNode })
               {children}
               {/* Sidecar 与 Workspace 互斥；保留组件到 exit presence 完成。 */}
               <KiroSidecar open={effectiveSidecarOpen} />
+              {/* V2 Part 3：全局唯一 Artifact Preview Host（Workspace/Sidecar 共用） */}
+              <KiroArtifactPreviewDialogHost />
             </div>
           </KiroSessionContext.Provider>
         </KiroSessionActionsContext.Provider>
