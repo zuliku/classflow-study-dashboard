@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useCallback, useEffect, useState } from "react";
-import { Database, RefreshCw, Trash2, FileText } from "lucide-react";
+import { RefreshCw, Trash2, FileText } from "lucide-react";
 import { SettingsRow } from "@/components/settings/SettingsRow";
 import { Button } from "@/components/ui/Button";
 import { useKiroComputerStore } from "@/store/useKiroComputerStore";
@@ -22,10 +22,16 @@ function knowledgeStatusLabel(state: KiroKnowledgeWorkspaceState | null): string
   return "已就绪";
 }
 
+function formatTimeOnly(iso: string): string {
+  const d = new Date(iso);
+  const pad2 = (n: number) => String(n).padStart(2, "0");
+  return `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+}
+
 /**
- * V3 Part 1：Workspace Knowledge 紧凑状态面板（Settings → Kiro Agent → current Workspace）。
- * 只显示 counts/status/time/actions；无 Explorer / 文件树 / 编辑器。
- * 建立/更新索引 = 用户显式 UI 操作（force），不消耗 Computer model tool quota。
+ * V3 Part 1：Workspace Knowledge 设置项（V3 Part 1.1 Productization）。
+ * SettingsRow 是唯一主容器；状态/计数/时间/KIRO.md 均为 inline metadata，无第二层卡片。
+ * 建立/更新索引 = 用户显式 UI 操作（bounded force refresh），不消耗 Computer model tool quota。
  */
 export function KiroWorkspaceKnowledgePanel({ workspaceId }: { workspaceId: string }) {
   const workspaces = useKiroComputerStore((s) => s.workspaces);
@@ -38,8 +44,7 @@ export function KiroWorkspaceKnowledgePanel({ workspaceId }: { workspaceId: stri
   const [kiroEnabled, setKiroEnabled] = useState(false);
 
   const refresh = useCallback(async () => {
-    const s = await getWorkspaceKnowledgeStatus(workspaceId);
-    setState(s);
+    setState(await getWorkspaceKnowledgeStatus(workspaceId));
   }, [workspaceId]);
 
   useEffect(() => {
@@ -47,7 +52,7 @@ export function KiroWorkspaceKnowledgePanel({ workspaceId }: { workspaceId: stri
   }, [refresh, workspaceId]);
 
   useEffect(() => {
-    // KIRO.md 已启用：exact root-level KIRO.md 存在且当前精确 fs.read policy = allow
+    // KIRO.md 已启用：exact root-level KIRO.md 存在且当前精确 fs.read policy = allow 且 adapter 可访问
     const workspace = workspaces.find((w) => w.id === workspaceId);
     if (!workspace) {
       setKiroEnabled(false);
@@ -79,14 +84,14 @@ export function KiroWorkspaceKnowledgePanel({ workspaceId }: { workspaceId: stri
     })();
   }, [workspaceId, workspaces, agentMode, permissionRules]);
 
-  const runRefresh = async (mode: "incremental" | "force") => {
+  const runRefresh = async () => {
     const workspace = workspaces.find((w) => w.id === workspaceId);
     if (!workspace || busy) return;
     setBusy(true);
     try {
       const next = await refreshWorkspaceKnowledge({
         workspace,
-        mode,
+        mode: "force",
         agentMode,
         permissionRules,
         getAdapter: getComputerAdapterForAdapterRef,
@@ -114,53 +119,62 @@ export function KiroWorkspaceKnowledgePanel({ workspaceId }: { workspaceId: stri
     }
   };
 
+  const primary = `${knowledgeStatusLabel(state)}${state ? ` · ${state.fileCount} 文件 · ${state.chunkCount} 片段` : ""}`;
+  const secondary =
+    state && !state.dirty
+      ? `上次更新 ${formatTimeOnly(state.lastIndexedAt)}${kiroEnabled ? " · KIRO.md 已启用" : ""}`
+      : kiroEnabled
+        ? "KIRO.md 已启用"
+        : "";
+
   return (
     <SettingsRow
       settingId="kiro-workspace-knowledge"
       title="工作区知识"
       description="本地词法索引用于查找相关文件候选；文件正文结论始终以实时读取为准。"
     >
-      <div className="min-w-0 w-full flex flex-col gap-2" data-testid="kiro-workspace-knowledge-panel">
-        <div className="rounded-xl border border-line bg-[#F7F5F5] px-3 py-2.5 flex items-center gap-2.5">
-          <span className="w-7 h-7 rounded-lg bg-surface border border-line flex items-center justify-center shrink-0">
-            <Database className="w-3.5 h-3.5 text-sandrift" aria-hidden="true" />
+      <div
+        className="min-w-0 w-full flex flex-col gap-1"
+        data-testid="kiro-workspace-knowledge-panel"
+      >
+        <div className="flex items-center justify-between gap-2 flex-wrap">
+          <p className="text-[11px] font-semibold text-charcoal min-w-0 truncate">{primary}</p>
+          <span className="flex items-center gap-1.5 shrink-0">
+            {!state ? (
+              <Button variant="secondary" size="sm" onClick={() => void runRefresh()} disabled={busy}>
+                <RefreshCw className="w-3 h-3" />
+                {busy ? "建立中…" : "建立索引"}
+              </Button>
+            ) : (
+              <>
+                <Button variant="secondary" size="sm" onClick={() => void runRefresh()} disabled={busy}>
+                  <RefreshCw className="w-3 h-3" />
+                  {busy ? "更新中…" : "更新"}
+                </Button>
+                <Button variant="ghost" size="sm" onClick={() => void runClear()} disabled={busy}>
+                  <Trash2 className="w-3 h-3" />
+                  清除
+                </Button>
+              </>
+            )}
           </span>
-          <div className="min-w-0 flex-1">
-            <p className="text-[11px] font-bold text-charcoal">{knowledgeStatusLabel(state)}</p>
-            <p className="text-[10px] text-sandrift truncate">
-              {state
-                ? `已索引 ${state.fileCount} 个文件 · ${state.chunkCount} 个片段 · ${new Date(state.lastIndexedAt).toLocaleTimeString()}`
-                : "尚未建立索引"}
-            </p>
-          </div>
         </div>
-
-        {kiroEnabled && (
-          <p className="text-[10px] font-semibold text-success flex items-center gap-1">
-            <FileText className="w-3 h-3" aria-hidden="true" />
-            KIRO.md 已启用
+        {secondary && (
+          <p className="text-[10px] text-sandrift min-w-0 truncate">
+            {secondary.includes("KIRO.md 已启用") ? (
+              <>
+                {secondary.replace(" · KIRO.md 已启用", "")}
+                {secondary.startsWith("上次更新") && " · "}
+                <span className="text-success font-semibold inline-flex items-center gap-0.5">
+                  <FileText className="w-3 h-3" aria-hidden="true" />
+                  KIRO.md 已启用
+                </span>
+              </>
+            ) : (
+              secondary
+            )}
           </p>
         )}
-
-        <div className="flex flex-wrap gap-1.5">
-          {!state ? (
-            <Button variant="secondary" size="sm" onClick={() => void runRefresh("force")} disabled={busy}>
-              <Database className="w-3 h-3" />
-              {busy ? "建立中…" : "建立索引"}
-            </Button>
-          ) : (
-            <>
-              <Button variant="secondary" size="sm" onClick={() => void runRefresh("force")} disabled={busy}>
-                <RefreshCw className="w-3 h-3" />
-                {busy ? "更新中…" : "更新索引"}
-              </Button>
-              <Button variant="ghost" size="sm" onClick={() => void runClear()} disabled={busy}>
-                <Trash2 className="w-3 h-3" />
-                清除索引
-              </Button>
-            </>
-          )}
-        </div>
       </div>
     </SettingsRow>
   );

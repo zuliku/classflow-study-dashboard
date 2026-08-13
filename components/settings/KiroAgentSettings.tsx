@@ -239,87 +239,81 @@ export function KiroAgentSettings() {
         </SettingsGroup>
 
         <SettingsGroup title="授权位置">
-          {/* 自定义 Workspace list：稳定上下留白（不改 SettingsGroup 全局间距） */}
-          <div className="px-1 py-2.5 space-y-2">
+          <div className="px-1">
             {workspaces.length === 0 && (
-              <p className="text-[10px] text-sandrift leading-relaxed">
-                还没有授权位置。选择本地文件夹（受支持浏览器）或使用 Kiro Sandbox
-                （数据仅保存在当前浏览器）。
-              </p>
+              <p className="text-[10px] text-sandrift pb-2">尚未授权任何位置。</p>
             )}
 
-            {workspaces.map((ws) => {
-              const isSandboxWs = ws.roots.some((r) => isSandboxAdapterRef(r.adapterRef));
-              const metadata = ws.roots
-                .map((root) => {
-                  const status = grantStatus[root.adapterRef] ?? "missing";
-                  const kind = isSandboxAdapterRef(root.adapterRef) ? "Sandbox" : "本地";
-                  const grantLabel =
-                    !isSandboxAdapterRef(root.adapterRef)
-                      ? status === "granted"
-                        ? "已授权"
-                        : status === "missing"
-                          ? "未授权"
-                          : "需要重新授权"
-                      : null;
-                  return [root.label, kind, grantLabel, root.access === "read-write" ? "读写" : "只读"]
-                    .filter(Boolean)
-                    .join(" · ");
-                })
-                .join(" · ");
-              return (
-                <div
-                  key={ws.id}
-                  data-testid="kiro-workspace-row"
-                  data-workspace-id={ws.id}
-                  className="rounded-xl border border-line bg-surface px-3 py-2.5 flex items-center gap-2.5"
-                >
-                  <span className="w-7 h-7 rounded-lg bg-[#F7F5F5] border border-line flex items-center justify-center shrink-0">
-                    {isSandboxWs ? (
-                      <HardDrive className="w-3.5 h-3.5 text-sandrift" aria-hidden="true" />
-                    ) : (
-                      <FolderOpen className="w-3.5 h-3.5 text-sandrift" aria-hidden="true" />
-                    )}
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-[11px] font-bold text-charcoal truncate">{ws.name}</p>
-                    <p className="text-[10px] text-sandrift truncate">{metadata}</p>
-                  </div>
-                  {ws.id === activeWorkspaceId ? (
-                    <span className="text-[9px] font-bold text-charcoal bg-pastel-mint px-1.5 py-0.5 rounded shrink-0">
-                      当前
+            {/* Flat Workspace List：单行紧凑、soft divide；不再卡片套卡片 */}
+            <div className="divide-y divide-line-soft">
+              {workspaces.map((ws) => {
+                const isSandboxWs = ws.roots.every((r) => isSandboxAdapterRef(r.adapterRef));
+                const metadata = isSandboxWs
+                  ? `当前浏览器 · ${ws.roots
+                      .map((r) => (r.access === "read-write" ? "读写" : "只读"))
+                      .join(" · ")}`
+                  : ws.roots
+                      .map((root) => {
+                        const status = grantStatus[root.adapterRef] ?? "missing";
+                        const grantLabel =
+                          status === "granted" ? "已授权" : status === "missing" ? "未授权" : "需要重新授权";
+                        return `本地文件夹 · ${grantLabel} · ${root.access === "read-write" ? "读写" : "只读"}`;
+                      })
+                      .join(" · ");
+                return (
+                  <div
+                    key={ws.id}
+                    data-testid="kiro-workspace-row"
+                    data-workspace-id={ws.id}
+                    className="flex items-center gap-2.5 py-2 min-w-0"
+                  >
+                    <span className="w-7 h-7 rounded-lg bg-alabaster flex items-center justify-center shrink-0">
+                      {isSandboxWs ? (
+                        <HardDrive className="w-3.5 h-3.5 text-sandrift" aria-hidden="true" />
+                      ) : (
+                        <FolderOpen className="w-3.5 h-3.5 text-sandrift" aria-hidden="true" />
+                      )}
                     </span>
-                  ) : (
-                    <Button
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[11px] font-bold text-charcoal truncate">{ws.name}</p>
+                      <p className="text-[10px] text-sandrift truncate">{metadata}</p>
+                    </div>
+                    {ws.id === activeWorkspaceId ? (
+                      <span className="text-[9px] font-bold text-charcoal bg-pastel-mint px-1.5 py-0.5 rounded shrink-0">
+                        当前
+                      </span>
+                    ) : (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="shrink-0"
+                        onClick={() => setActiveWorkspaceId(ws.id)}
+                      >
+                        设为当前
+                      </Button>
+                    )}
+                    <IconButton
                       variant="ghost"
                       size="sm"
-                      className="shrink-0"
-                      onClick={() => setActiveWorkspaceId(ws.id)}
+                      aria-label={`删除工作区 ${ws.name}`}
+                      onClick={() => handleDeleteWorkspace(ws)}
+                      className="shrink-0 text-sandrift hover:text-danger"
                     >
-                      设为当前
-                    </Button>
-                  )}
-                  <IconButton
-                    variant="ghost"
-                    size="sm"
-                    aria-label={`删除工作区 ${ws.name}`}
-                    onClick={() => handleDeleteWorkspace(ws)}
-                    className="shrink-0 text-sandrift hover:text-danger"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </IconButton>
-                </div>
-              );
-            })}
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </IconButton>
+                  </div>
+                );
+              })}
+            </div>
 
-            {/* 添加位置：canonical Sandbox 已存在时不再显示「使用 Kiro Sandbox」（row 本身可设为当前） */}
-            <div className="flex flex-wrap gap-1.5 pt-1.5">
+            {/* 添加位置：compact footer（canonical Sandbox 已存在时不再显示「使用 Kiro Sandbox」） */}
+            <div className="flex flex-wrap items-center gap-1.5 pt-2">
               <Button variant="secondary" size="sm" onClick={handleAddBrowserLocation} disabled={addingLocation}>
                 <FolderOpen className="w-3 h-3" />
                 {addingLocation ? "授权中…" : "添加本地位置"}
               </Button>
               {!hasCanonicalSandbox && (
-                <Button variant="secondary" size="sm" onClick={handleUseSandbox}>
+                <Button variant="ghost" size="sm" onClick={handleUseSandbox}>
                   <HardDrive className="w-3 h-3" />
                   使用 Kiro Sandbox
                 </Button>
