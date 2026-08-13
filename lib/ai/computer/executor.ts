@@ -51,6 +51,7 @@ import { renderMarkdown } from "@/lib/ai/computer/documents/markdown";
 import { renderDocx } from "@/lib/ai/computer/documents/docx";
 import { verifyMarkdownWritten, verifyDocxBytes, inspectDocumentFacts } from "@/lib/ai/computer/documents/verify";
 import { isKiroDocument } from "@/lib/ai/computer/documents/types";
+import { registerCreatedArtifact } from "@/lib/ai/computer/artifacts/service";
 import { KiroComputerChange } from "@/lib/ai/computer/task";
 import { ComputerInverseOperation } from "@/lib/ai/computer/checkpoints";
 
@@ -408,6 +409,24 @@ export async function executeKiroComputerTool(request: {
       // Verify：read-back exact match
       const readBack = await adapter.readText(normalized);
       if (readBack !== content) throw new ComputerError("VERIFICATION_FAILED", "写入校验失败");
+      // V2：verified create 登记 Artifact（.md → markdown；其它 → text；不保存 Document IR）
+      let artifactId: string | undefined;
+      try {
+        const artifact = await registerCreatedArtifact({
+          workspaceId: ws.id,
+          rootId: root.id,
+          relativePath: normalized,
+          type: normalized.toLowerCase().endsWith(".md") ? "markdown" : "text",
+          sourceTaskId: context.taskId,
+        });
+        artifactId = artifact.id;
+      } catch {
+        // 文件已创建并验证，但 metadata 登记失败：不谎称成功，也不删除已生成文件
+        throw new ComputerError(
+          "VERIFICATION_FAILED",
+          "文件已创建并验证，但 Artifact 元数据登记失败；请重新检查工作区文件后再继续。"
+        );
+      }
       const runtime = buildMutationRuntime({
         toolName,
         toolCallId,
@@ -426,6 +445,7 @@ export async function executeKiroComputerTool(request: {
           relativePath: normalized,
           resourceType: "file",
         },
+        artifactId,
       });
       return {
         kind: "completed",
@@ -491,6 +511,25 @@ export async function executeKiroComputerTool(request: {
           throw new ComputerError("VERIFICATION_FAILED", "Markdown 校验失败");
         }
         const facts = inspectDocumentFacts(document, "markdown");
+        // V2：verified 文档登记 Artifact（markdown type + Kiro-owned Document IR）
+        let artifactId: string | undefined;
+        try {
+          const artifact = await registerCreatedArtifact({
+            workspaceId: ws.id,
+            rootId: root.id,
+            relativePath: normalized,
+            type: "markdown",
+            title: facts.title,
+            sourceTaskId: context.taskId,
+            document,
+          });
+          artifactId = artifact.id;
+        } catch {
+          throw new ComputerError(
+            "VERIFICATION_FAILED",
+            "文件已创建并验证，但 Artifact 元数据登记失败；请重新检查工作区文件后再继续。"
+          );
+        }
         const runtime = buildMutationRuntime({
           toolName,
           toolCallId,
@@ -519,6 +558,7 @@ export async function executeKiroComputerTool(request: {
             relativePath: normalized,
             resourceType: "file",
           },
+          artifactId,
         });
         return {
           kind: "completed",
@@ -540,6 +580,25 @@ export async function executeKiroComputerTool(request: {
           throw new ComputerError("VERIFICATION_FAILED", "DOCX 校验失败");
         }
         const facts = inspectDocumentFacts(document, "docx");
+        // V2：verified 文档登记 Artifact（docx type + Kiro-owned Document IR）
+        let artifactId: string | undefined;
+        try {
+          const artifact = await registerCreatedArtifact({
+            workspaceId: ws.id,
+            rootId: root.id,
+            relativePath: normalized,
+            type: "docx",
+            title: facts.title,
+            sourceTaskId: context.taskId,
+            document,
+          });
+          artifactId = artifact.id;
+        } catch {
+          throw new ComputerError(
+            "VERIFICATION_FAILED",
+            "文件已创建并验证，但 Artifact 元数据登记失败；请重新检查工作区文件后再继续。"
+          );
+        }
         const runtime = buildMutationRuntime({
           toolName,
           toolCallId,
@@ -568,6 +627,7 @@ export async function executeKiroComputerTool(request: {
             relativePath: normalized,
             resourceType: "file",
           },
+          artifactId,
         });
         return {
           kind: "completed",
@@ -630,12 +690,16 @@ function documentHeadings(document: Parameters<typeof renderMarkdown>[0]): strin
 function buildMutationRuntime(input: {
   toolName: string;
   toolCallId: string;
-  operation: "create" | "modify";
+  operation: "create" | "modify" | "move" | "rename";
   resourceType: "directory" | "text" | "document";
   snapshot: KiroComputerTurnSnapshot;
   workspaceLabel: string;
   root: { id: string; label: string };
   relativePath: string;
+  artifactId?: string;
+  fromRootId?: string;
+  fromRootLabel?: string;
+  fromRelativePath?: string;
   format?: "markdown" | "docx";
   size?: number;
   changeCount?: number;
@@ -653,6 +717,10 @@ function buildMutationRuntime(input: {
     rootLabel: input.root.label,
     relativePath: input.relativePath,
     displayName: input.relativePath.split("/").pop() ?? input.relativePath,
+    artifactId: input.artifactId,
+    fromRootId: input.fromRootId,
+    fromRootLabel: input.fromRootLabel,
+    fromRelativePath: input.fromRelativePath,
     format: input.format,
     size: input.size,
     changeCount: input.changeCount,

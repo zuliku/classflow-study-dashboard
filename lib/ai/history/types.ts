@@ -54,23 +54,31 @@ export interface PersistedSourceMeta {
 }
 
 /**
- * Computer Task 持久化视图（Part 3）：只存展示事实。
- * 禁止：review 文本 / beforeText / checkpoint / tool input / adapterRef / handle / native path / bytes。
+ * Computer Task 持久化视图（Part 3 + V2 Part 1）：只存展示事实。
+ * 禁止：review 文本 / beforeText / checkpoint / tool input / adapterRef / handle / native path /
+ * bytes / Document source IR。
  */
 export interface PersistedComputerTaskView {
   taskId: string;
   title: string;
   status: "completed" | "failed" | "cancelled" | "undone" | "undo_failed";
   changes: Array<{
-    operation: "create" | "modify";
+    operation: "create" | "modify" | "move" | "rename";
     resourceType: "directory" | "text" | "document";
     displayName: string;
     workspaceLabel: string;
     rootLabel: string;
     relativePath: string;
+    /** V2：Artifact 长期身份（仅展示） */
+    artifactId?: string;
+    /** V2：relocation 来源展示事实 */
+    fromRootId?: string;
+    fromRootLabel?: string;
+    fromRelativePath?: string;
     format?: "markdown" | "docx";
     size?: number;
     changeCount?: number;
+    revision?: number;
     verification: "passed";
   }>;
   startedAt: string;

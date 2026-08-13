@@ -29,7 +29,7 @@ export interface KiroAgentTaskStep {
 export interface KiroComputerChange {
   id: string;
   toolCallId: string;
-  operation: "create" | "modify";
+  operation: "create" | "modify" | "move" | "rename";
   resourceType: "directory" | "text" | "document";
   workspaceId: string;
   workspaceLabel: string;
@@ -37,6 +37,12 @@ export interface KiroComputerChange {
   rootLabel: string;
   relativePath: string;
   displayName: string;
+  /** V2：Artifact 长期身份（rename/move 不变；create 时登记） */
+  artifactId?: string;
+  /** V2：relocation 来源（rename/move 展示事实；destination 用 rootId/rootLabel/relativePath） */
+  fromRootId?: string;
+  fromRootLabel?: string;
+  fromRelativePath?: string;
   format?: "markdown" | "docx";
   size?: number;
   changeCount?: number;

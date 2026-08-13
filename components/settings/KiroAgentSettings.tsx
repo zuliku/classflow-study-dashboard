@@ -25,6 +25,7 @@ import {
   adapterRefStillReferenced,
   isDefaultSandboxWorkspace,
 } from "@/lib/ai/computer/workspace/management";
+import { removeArtifactsForWorkspace } from "@/lib/ai/computer/artifacts/service";
 import { sandboxAdapterCapabilities } from "@/lib/ai/computer/adapters/sandbox";
 import { KiroComputerAuditPanel } from "@/components/settings/KiroComputerAuditPanel";
 
@@ -142,7 +143,7 @@ export function KiroAgentSettings() {
 
   /**
    * 删除 Workspace（Settings 显式操作；不是 Agent capability）：
-   * 先快照 remaining → 逻辑删除 → 对 removed 的 unique adapterRef：
+   * 先清 Artifact metadata/source → 快照 remaining → 逻辑删除 → 对 removed 的 unique adapterRef：
    * 仍被引用则不动；Sandbox → clearSandboxAdapter；Browser → forgetBrowserWorkspaceGrant。
    * 清理失败：Workspace metadata 保持删除，只提示缓存未清理。
    */
@@ -153,6 +154,11 @@ export function KiroAgentSettings() {
     useKiroComputerStore.getState().removeWorkspace(ws.id);
     const uniqueRefs = Array.from(new Set(ws.roots.map((r) => r.adapterRef)));
     let cleanupFailed = false;
+    try {
+      await removeArtifactsForWorkspace(ws.id);
+    } catch {
+      cleanupFailed = true;
+    }
     for (const ref of uniqueRefs) {
       if (adapterRefStillReferenced(remaining, ref)) continue; // shared adapter：不清理
       try {
@@ -225,9 +231,10 @@ export function KiroAgentSettings() {
         </SettingsGroup>
 
         <SettingsGroup title="授权位置">
-          <div className="px-1 space-y-1.5">
+          {/* 自定义 Workspace list：稳定上下留白（不改 SettingsGroup 全局间距） */}
+          <div className="px-1 py-2.5 space-y-2">
             {workspaces.length === 0 && (
-              <p className="text-[10px] text-sandrift leading-relaxed pb-1">
+              <p className="text-[10px] text-sandrift leading-relaxed">
                 还没有授权位置。选择本地文件夹（受支持浏览器）或使用 Kiro Sandbox
                 （数据仅保存在当前浏览器）。
               </p>
