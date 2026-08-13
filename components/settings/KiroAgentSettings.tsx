@@ -1,21 +1,30 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import { FolderOpen, HardDrive, ShieldAlert, MonitorUp } from "lucide-react";
+import { FolderOpen, HardDrive, ShieldAlert, MonitorUp, Trash2 } from "lucide-react";
 import { useKiroComputerStore } from "@/store/useKiroComputerStore";
+import { useConfirmStore } from "@/store/useConfirmStore";
+import { useToastStore } from "@/store/useToastStore";
 import { KiroAgentMode, KiroWorkspaceMeta } from "@/lib/ai/computer/types";
 import { SettingsSection } from "@/components/settings/SettingsSection";
 import { SettingsGroup } from "@/components/settings/SettingsGroup";
 import { SettingsRow } from "@/components/settings/SettingsRow";
 import { SettingsToggle, SettingsSegmentedControl } from "@/components/settings/SettingsControls";
 import { Button } from "@/components/ui/Button";
+import { IconButton } from "@/components/ui/IconButton";
 import { cn } from "@/lib/utils";
 import {
   chooseBrowserWorkspaceDirectory,
   queryBrowserGrant,
   supportsFileSystemAccess,
+  forgetBrowserWorkspaceGrant,
   BrowserGrantStatus,
 } from "@/lib/ai/computer/workspace/grants";
+import { clearSandboxAdapter } from "@/lib/ai/computer/adapters/sandbox";
+import {
+  adapterRefStillReferenced,
+  isDefaultSandboxWorkspace,
+} from "@/lib/ai/computer/workspace/management";
 import { sandboxAdapterCapabilities } from "@/lib/ai/computer/adapters/sandbox";
 import { KiroComputerAuditPanel } from "@/components/settings/KiroComputerAuditPanel";
 
@@ -24,6 +33,10 @@ const MODE_OPTIONS: { value: KiroAgentMode; label: string }[] = [
   { value: "guided", label: "受控" },
   { value: "workspace-auto", label: "工作区自动" },
 ];
+
+function isSandboxAdapterRef(ref: string): boolean {
+  return ref === "sandbox-default" || ref.startsWith("sandbox");
+}
 
 /** Kiro Agent 设置（独立于 Kiro 与 AI）：Computer Agent 控制平面 */
 export function KiroAgentSettings() {
@@ -39,11 +52,15 @@ export function KiroAgentSettings() {
     updateWorkspace,
   } = useKiroComputerStore();
 
+  const confirmRequest = useConfirmStore((s) => s.confirm);
+  const pushToast = useToastStore((s) => s.pushToast);
+
   const [grantStatus, setGrantStatus] = useState<Record<string, BrowserGrantStatus>>({});
   const [addingLocation, setAddingLocation] = useState(false);
   const [error, setError] = useState("");
 
   const activeWorkspace = workspaces.find((w) => w.id === activeWorkspaceId) ?? null;
+  const hasCanonicalSandbox = workspaces.some(isDefaultSandboxWorkspace);
 
   // 启动 + workspaces 变化时查询各 root 的授权状态
   useEffect(() => {
@@ -100,27 +117,11 @@ export function KiroAgentSettings() {
     }
   };
 
-  /** 显式使用 Kiro Sandbox（CI-friendly / 不支持 File System Access 的环境） */
+  /** 显式使用 Kiro Sandbox（canonical：已存在则复用，绝不产生重复 Sandbox） */
   const handleUseSandbox = () => {
-    const now = new Date().toISOString();
-    const ws: KiroWorkspaceMeta = {
-      id: `ws-${crypto.randomUUID()}`,
-      name: "Kiro Sandbox",
-      roots: [
-        {
-          id: "root-sandbox",
-          label: "Sandbox（当前浏览器）",
-          access: "read-write",
-          adapterRef: "sandbox-default",
-        },
-      ],
-      createdAt: now,
-      updatedAt: now,
-    };
-    addWorkspace(ws);
-    setActiveWorkspaceId(ws.id);
-    setComputerEnabled(true);
+    useKiroComputerStore.getState().ensureDefaultSandboxWorkspace();
     setGrantStatus((s) => ({ ...s, "sandbox-default": "granted" }));
+    setError("");
   };
 
   const handleToggleEnabled = (enabled: boolean) => {
@@ -139,6 +140,49 @@ export function KiroAgentSettings() {
     setComputerEnabled(true);
   };
 
+  /**
+   * 删除 Workspace（Settings 显式操作；不是 Agent capability）：
+   * 先快照 remaining → 逻辑删除 → 对 removed 的 unique adapterRef：
+   * 仍被引用则不动；Sandbox → clearSandboxAdapter；Browser → forgetBrowserWorkspaceGrant。
+   * 清理失败：Workspace metadata 保持删除，只提示缓存未清理。
+   */
+  const deleteWorkspace = async (ws: KiroWorkspaceMeta) => {
+    const remaining = useKiroComputerStore
+      .getState()
+      .workspaces.filter((w) => w.id !== ws.id);
+    useKiroComputerStore.getState().removeWorkspace(ws.id);
+    const uniqueRefs = Array.from(new Set(ws.roots.map((r) => r.adapterRef)));
+    let cleanupFailed = false;
+    for (const ref of uniqueRefs) {
+      if (adapterRefStillReferenced(remaining, ref)) continue; // shared adapter：不清理
+      try {
+        if (isSandboxAdapterRef(ref)) {
+          await clearSandboxAdapter(ref);
+        } else {
+          await forgetBrowserWorkspaceGrant(ref);
+        }
+      } catch {
+        cleanupFailed = true;
+      }
+    }
+    if (cleanupFailed) {
+      pushToast({ message: "工作区已移除，但部分本地缓存未能清理。", type: "error" });
+    }
+  };
+
+  const handleDeleteWorkspace = (ws: KiroWorkspaceMeta) => {
+    const isSandboxWs = ws.roots.some((r) => isSandboxAdapterRef(r.adapterRef));
+    confirmRequest({
+      title: isSandboxWs ? "删除 Kiro Sandbox？" : "移除本地工作区？",
+      description: isSandboxWs
+        ? "此操作会删除该 Sandbox 在当前浏览器中保存的文件和工作区记录，无法撤销。"
+        : "ClassFlow 将忘记这个文件夹的授权记录，但不会删除电脑上的任何文件。",
+      confirmLabel: isSandboxWs ? "删除" : "移除",
+      danger: true,
+      onConfirm: () => void deleteWorkspace(ws),
+    });
+  };
+
   return (
     <SettingsSection
       title="Kiro Agent"
@@ -149,7 +193,7 @@ export function KiroAgentSettings() {
           <SettingsRow
             settingId="kiro-computer-enabled"
             title="Computer Agent"
-            description="开启后 Kiro 可在授权工作区内执行受限操作（V1：不包含文件写入工具）。"
+            description="开启后 Kiro 可在授权工作区内读取、创建和受控修改文件；危险系统能力仍保持禁用。"
           >
             <SettingsToggle checked={computerEnabled} onChange={handleToggleEnabled} label="Computer Agent" />
           </SettingsRow>
@@ -181,103 +225,92 @@ export function KiroAgentSettings() {
         </SettingsGroup>
 
         <SettingsGroup title="授权位置">
-          {workspaces.length === 0 ? (
-            <div className="px-1 py-2 space-y-2">
-              <p className="text-[10px] text-sandrift leading-relaxed">
+          <div className="px-1 space-y-1.5">
+            {workspaces.length === 0 && (
+              <p className="text-[10px] text-sandrift leading-relaxed pb-1">
                 还没有授权位置。选择本地文件夹（受支持浏览器）或使用 Kiro Sandbox
                 （数据仅保存在当前浏览器）。
               </p>
-              <div className="flex flex-wrap gap-2">
-                <Button variant="primary" size="sm" onClick={handleAddBrowserLocation} disabled={addingLocation}>
-                  <FolderOpen className="w-3 h-3" />
-                  {addingLocation ? "授权中…" : "选择本地文件夹"}
-                </Button>
+            )}
+
+            {workspaces.map((ws) => {
+              const isSandboxWs = ws.roots.some((r) => isSandboxAdapterRef(r.adapterRef));
+              const metadata = ws.roots
+                .map((root) => {
+                  const status = grantStatus[root.adapterRef] ?? "missing";
+                  const kind = isSandboxAdapterRef(root.adapterRef) ? "Sandbox" : "本地";
+                  const grantLabel =
+                    !isSandboxAdapterRef(root.adapterRef)
+                      ? status === "granted"
+                        ? "已授权"
+                        : status === "missing"
+                          ? "未授权"
+                          : "需要重新授权"
+                      : null;
+                  return [root.label, kind, grantLabel, root.access === "read-write" ? "读写" : "只读"]
+                    .filter(Boolean)
+                    .join(" · ");
+                })
+                .join(" · ");
+              return (
+                <div
+                  key={ws.id}
+                  data-testid="kiro-workspace-row"
+                  data-workspace-id={ws.id}
+                  className="rounded-xl border border-line bg-surface px-3 py-2.5 flex items-center gap-2.5"
+                >
+                  <span className="w-7 h-7 rounded-lg bg-[#F7F5F5] border border-line flex items-center justify-center shrink-0">
+                    {isSandboxWs ? (
+                      <HardDrive className="w-3.5 h-3.5 text-sandrift" aria-hidden="true" />
+                    ) : (
+                      <FolderOpen className="w-3.5 h-3.5 text-sandrift" aria-hidden="true" />
+                    )}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[11px] font-bold text-charcoal truncate">{ws.name}</p>
+                    <p className="text-[10px] text-sandrift truncate">{metadata}</p>
+                  </div>
+                  {ws.id === activeWorkspaceId ? (
+                    <span className="text-[9px] font-bold text-charcoal bg-pastel-mint px-1.5 py-0.5 rounded shrink-0">
+                      当前
+                    </span>
+                  ) : (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="shrink-0"
+                      onClick={() => setActiveWorkspaceId(ws.id)}
+                    >
+                      设为当前
+                    </Button>
+                  )}
+                  <IconButton
+                    variant="ghost"
+                    size="sm"
+                    aria-label={`删除工作区 ${ws.name}`}
+                    onClick={() => handleDeleteWorkspace(ws)}
+                    className="shrink-0 text-sandrift hover:text-danger"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </IconButton>
+                </div>
+              );
+            })}
+
+            {/* 添加位置：canonical Sandbox 已存在时不再显示「使用 Kiro Sandbox」（row 本身可设为当前） */}
+            <div className="flex flex-wrap gap-1.5 pt-1.5">
+              <Button variant="secondary" size="sm" onClick={handleAddBrowserLocation} disabled={addingLocation}>
+                <FolderOpen className="w-3 h-3" />
+                {addingLocation ? "授权中…" : "添加本地位置"}
+              </Button>
+              {!hasCanonicalSandbox && (
                 <Button variant="secondary" size="sm" onClick={handleUseSandbox}>
                   <HardDrive className="w-3 h-3" />
                   使用 Kiro Sandbox
                 </Button>
-              </div>
+              )}
             </div>
-          ) : (
-            <div className="px-1 space-y-1.5">
-              {workspaces.map((ws) => (
-                <div key={ws.id} data-testid="kiro-workspace-card" className="flex flex-col gap-1.5 rounded-xl border border-line bg-[#F7F5F5] p-2.5">
-                  <div className="flex items-center gap-1.5 flex-wrap">
-                    <span className="text-[11px] font-bold text-charcoal truncate">{ws.name}</span>
-                    <span
-                      data-testid="kiro-workspace-badges"
-                      className="flex items-center gap-1 flex-wrap"
-                    >
-                      {ws.id === activeWorkspaceId && (
-                        <span className="text-[9px] font-bold text-charcoal bg-pastel-mint px-1.5 py-0.5 rounded">
-                          当前
-                        </span>
-                      )}
-                      {ws.roots.map((root) => {
-                        const status = grantStatus[root.adapterRef] ?? "missing";
-                        const isSandbox = root.adapterRef === "sandbox-default" || root.adapterRef.startsWith("sandbox");
-                        return (
-                          <span key={root.id} className="flex items-center gap-1 flex-wrap">
-                            <span className="text-[9px] font-semibold text-sandrift px-1.5 py-0.5 rounded bg-white border border-line">
-                              {isSandbox ? "Sandbox" : "本地"}
-                            </span>
-                            <span
-                              className={cn(
-                                "text-[9px] font-semibold px-1.5 py-0.5 rounded border",
-                                root.access === "read-write"
-                                  ? "text-success border-line"
-                                  : "text-sandrift border-line"
-                              )}
-                            >
-                              {root.access === "read-write" ? "读写" : "只读"}
-                            </span>
-                            {!isSandbox && (
-                              <span
-                                className={cn(
-                                  "text-[9px] font-semibold px-1.5 py-0.5 rounded border",
-                                  status === "granted"
-                                    ? "text-success border-line"
-                                    : "text-danger border-danger-border bg-danger-bg"
-                                )}
-                              >
-                                {status === "granted" ? "已授权" : status === "missing" ? "未授权" : "需要重新授权"}
-                              </span>
-                            )}
-                          </span>
-                        );
-                      })}
-                    </span>
-                  </div>
-                  <div className="flex flex-col gap-0.5">
-                    {ws.roots.map((root) => {
-                      const isSandbox = root.adapterRef === "sandbox-default" || root.adapterRef.startsWith("sandbox");
-                      return (
-                        <span key={root.id} className="flex items-center gap-1 text-[10px] text-satin-grey truncate">
-                          {isSandbox ? (
-                            <HardDrive className="w-3 h-3 shrink-0 text-sandrift" />
-                          ) : (
-                            <FolderOpen className="w-3 h-3 shrink-0 text-sandrift" />
-                          )}
-                          <span className="truncate">{root.label}</span>
-                        </span>
-                      );
-                    })}
-                  </div>
-                </div>
-              ))}
-              {/* 添加位置：独立于单个 Workspace 卡（视觉上不表示“修改当前 root”） */}
-              <div className="flex flex-wrap gap-1.5 pt-1.5">
-                <Button variant="secondary" size="sm" onClick={handleAddBrowserLocation} disabled={addingLocation}>
-                  <FolderOpen className="w-3 h-3" />
-                  添加本地位置
-                </Button>
-                <Button variant="secondary" size="sm" onClick={handleUseSandbox}>
-                  <HardDrive className="w-3 h-3" />
-                  添加 Sandbox
-                </Button>
-              </div>
-            </div>
-          )}
+          </div>
         </SettingsGroup>
 
         <SettingsGroup title="安全与能力">

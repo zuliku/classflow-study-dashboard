@@ -63,12 +63,16 @@ test("Computer controls：Sandbox 引导 → 状态同步（Composer ↔ Setting
   await expect(agentToggle).toHaveAttribute("aria-checked", "true");
   await expect(page.getByTestId("settings-kiro-agent")).toContainText("Kiro Sandbox");
 
-  // 6b. Part 2：Workspace Card 显示聚集 badges（当前 / Sandbox / 读写）
-  await expect(page.getByTestId("kiro-workspace-card")).toBeVisible();
-  const badges = page.getByTestId("kiro-workspace-badges");
-  await expect(badges).toContainText("当前");
-  await expect(badges).toContainText("Sandbox");
-  await expect(badges).toContainText("读写");
+  // 6b. Workspace Management：紧凑 row（exactly one canonical Sandbox；当前 badge；inline metadata）
+  const workspaceRows = page.getByTestId("kiro-workspace-row");
+  await expect(workspaceRows).toHaveCount(1);
+  await expect(workspaceRows.first()).toContainText("Kiro Sandbox");
+  await expect(workspaceRows.first()).toContainText("当前");
+  await expect(workspaceRows.first()).toContainText("Sandbox");
+  await expect(workspaceRows.first()).toContainText("读写");
+  await expect(workspaceRows.first().getByRole("button", { name: /删除工作区/ })).toBeVisible();
+  // canonical Sandbox 已存在 → 不再显示「使用 Kiro Sandbox」（杜绝重复创建）
+  await expect(page.getByRole("button", { name: "使用 Kiro Sandbox" })).toHaveCount(0);
 
   // 7. Settings → Kiro 与 AI：思考程度 = 当前模型不可调（fixed 不展示假 control）
   await page.getByRole("navigation", { name: "设置导航" }).getByRole("button", { name: "Kiro 与 AI" }).click();
@@ -87,7 +91,30 @@ test("Computer controls：Sandbox 引导 → 状态同步（Composer ↔ Setting
   // 9. 普通聊天不受影响：Ask Kiro textarea 可用
   await expect(composer.getByLabel("Ask Kiro")).toBeVisible();
 
+  // 9b. Workspace Management：删除最后一个 Sandbox → row 消失 + Computer Agent OFF
+  await page.locator("aside").first().getByRole("button", { name: "设置" }).first().click();
+  await page.waitForTimeout(700);
+  await page.getByRole("navigation", { name: "设置导航" }).getByRole("button", { name: "Kiro Agent" }).click();
+  await page.waitForTimeout(400);
+  await workspaceRows.first().getByRole("button", { name: /删除工作区/ }).click();
+  const confirmDialog = page.getByRole("alertdialog");
+  await expect(confirmDialog).toContainText("删除 Kiro Sandbox");
+  await confirmDialog.getByRole("button", { name: "删除" }).click();
+  await expect(workspaceRows).toHaveCount(0);
+  await expect(page.getByRole("switch", { name: "Computer Agent" })).toHaveAttribute(
+    "aria-checked",
+    "false"
+  );
+
   // 10. Responsive sanity：1100×700 下 Composer/Send 可见，权限菜单仍在 viewport 内
+  await page.keyboard.press("Escape");
+  await page.waitForTimeout(300);
+  await page.locator("aside").first().getByRole("button", { name: "Kiro" }).click();
+  await page.waitForTimeout(600);
+  // 删除后 Computer OFF；重新打开走 canonical Sandbox 引导（再次创建且仅一个）
+  await expect(composer.getByRole("button", { name: "Computer" })).toHaveAttribute("aria-pressed", "false");
+  await composer.getByRole("button", { name: "Computer" }).click();
+  await expect(composer.getByRole("button", { name: "Computer" })).toHaveAttribute("aria-pressed", "true");
   await page.setViewportSize({ width: 1100, height: 700 });
   await page.waitForTimeout(400);
   await expect(composer).toBeVisible();
