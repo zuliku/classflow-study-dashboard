@@ -268,6 +268,7 @@ export type SettingsSection =
   | "focus"
   | "interaction"
   | "kiro"
+  | "kiro-agent"
   | "data"
   | "about";
 

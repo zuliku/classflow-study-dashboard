@@ -227,8 +227,15 @@ export const SETTINGS_REGISTRY: SettingDefinition[] = [
     id: "ai-custom-capabilities",
     section: "kiro",
     title: "自定义模型能力",
-    description: "自定义服务是否支持图片 / 文件输入",
-    keywords: ["自定义", "能力", "图片", "文件", "vision", "file", "capability"],
+    description: "自定义服务是否支持图片 / 文件输入 / 思考程度",
+    keywords: ["自定义", "能力", "图片", "文件", "vision", "file", "capability", "思考"],
+  },
+  {
+    id: "ai-reasoning-effort",
+    section: "kiro",
+    title: "思考程度",
+    description: "控制支持该能力的模型在回答前投入的推理计算",
+    keywords: ["思考", "推理", "reasoning", "effort", "深度思考", "推理程度"],
   },
   {
     id: "ai-connection-status",
@@ -307,6 +314,35 @@ export const SETTINGS_REGISTRY: SettingDefinition[] = [
     title: "恢复数据",
     description: "从 ClassFlow 备份恢复课程、任务与设置",
     keywords: ["备份", "恢复", "导入", "restore"],
+  },
+  // ---- Kiro Agent（Computer Agent 控制平面） ----
+  {
+    id: "kiro-computer-enabled",
+    section: "kiro-agent",
+    title: "Computer Agent",
+    description: "开启后在授权工作区内执行受限操作",
+    keywords: ["agent", "computer", "工作区", "授权", "开关", "启用"],
+  },
+  {
+    id: "kiro-agent-mode",
+    section: "kiro-agent",
+    title: "默认权限模式",
+    description: "计划 / 受控 / 工作区自动",
+    keywords: ["权限", "模式", "计划", "受控", "自动", "permission", "mode"],
+  },
+  {
+    id: "kiro-agent-workspace",
+    section: "kiro-agent",
+    title: "当前 Workspace",
+    description: "当前工作区与授权位置",
+    keywords: ["workspace", "工作区", "位置", "root", "sandbox", "本地"],
+  },
+  {
+    id: "kiro-agent-permissions",
+    section: "kiro-agent",
+    title: "活动与安全",
+    description: "V1 安全边界：无 shell / 删除 / 应用启动 / MCP / Full Access",
+    keywords: ["安全", "权限", "shell", "删除", "终端", "full access", "sandbox", "沙箱"],
   },
 ];
 

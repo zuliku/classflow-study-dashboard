@@ -13,6 +13,8 @@ import { SettingsRow } from "@/components/settings/SettingsRow";
 import { SettingsToggle, SettingsSelect, SettingsSegmentedControl, SettingsButton, SettingsInput } from "@/components/settings/SettingsControls";
 import { KiroMemorySettings } from "@/components/settings/KiroMemorySettings";
 import { useKiroPreferencesStore } from "@/store/useKiroPreferencesStore";
+import { getModelCapabilities } from "@/lib/ai/providers/capabilities";
+import { KiroReasoningEffort } from "@/lib/ai/reasoning/types";
 import { KiroOutputTextSize } from "@/lib/ai/ui/typography";
 import { KiroResponsePreference } from "@/lib/ai/responsePreference";
 import {
@@ -32,6 +34,13 @@ const PROVIDER_OPTIONS: { value: AIProviderId; label: string }[] = [
   { value: "custom-openai", label: "自定义 OpenAI 兼容服务" },
 ];
 
+const REASONING_EFFORT_LABELS: Record<KiroReasoningEffort, string> = {
+  default: "默认",
+  low: "低",
+  medium: "中",
+  high: "高",
+};
+
 type TestState = { status: "idle" | "testing" } | { status: "success" } | { status: "error"; message: string };
 
 /** Kiro / AI 服务设置：Provider / 模型 / API Key（sessionStorage）/ 自定义服务 / 测试连接 */
@@ -41,10 +50,12 @@ export function KiroAISettings() {
     provider,
     model,
     custom,
+    reasoningEffort,
     setEnabled,
     setProvider,
     setModel,
     setCustom,
+    setReasoningEffort,
   } = useAISettingsStore();
   // Task 7D：输出字号是纯 UI preference，仍属于 useKiroPreferencesStore（与 Rail More 菜单同一事实来源）
   const outputTextSize = useKiroPreferencesStore((s) => s.outputTextSize);
@@ -105,6 +116,8 @@ export function KiroAISettings() {
   const isCustom = provider === "custom-openai";
   // 当前模型不在 Catalog（已下线/远端不可用）：提示重新选择，不自动覆盖
   const modelUnavailable = !isCustom && !!model && !models.some((m) => m.id === model);
+  // Reasoning：capability-driven（与 Composer 同一事实来源 useAISettingsStore）
+  const reasoningCapability = getModelCapabilities({ provider, model, custom }).reasoning;
 
   const handleProviderChange = (p: AIProviderId) => {
     setProvider(p);
@@ -280,10 +293,39 @@ export function KiroAISettings() {
                     />
                     支持文件输入
                   </label>
+                  <label className="flex items-center gap-1.5 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={custom.reasoningEffort === true}
+                      onChange={(e) => setCustom({ reasoningEffort: e.target.checked })}
+                      className="w-3.5 h-3.5 rounded accent-charcoal"
+                    />
+                    支持思考程度
+                  </label>
                 </div>
               </SettingsRow>
             </>
           )}
+
+          <SettingsRow
+            settingId="ai-reasoning-effort"
+            title="思考程度"
+            description="控制支持该能力的模型在回答前投入的推理计算。"
+          >
+            {reasoningCapability.adjustable ? (
+              <SettingsSegmentedControl<KiroReasoningEffort>
+                value={reasoningEffort}
+                onChange={setReasoningEffort}
+                options={reasoningCapability.supportedEfforts.map((effort) => ({
+                  value: effort,
+                  label: REASONING_EFFORT_LABELS[effort],
+                }))}
+                ariaLabel="思考程度"
+              />
+            ) : (
+              <span className="text-[11px] font-semibold text-sandrift">当前模型不可调</span>
+            )}
+          </SettingsRow>
 
           <SettingsRow
             settingId="ai-api-key"

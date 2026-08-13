@@ -12,6 +12,7 @@ import { InteractionSettings } from "@/components/settings/InteractionSettings";
 import { DataSettings } from "@/components/settings/DataSettings";
 import { AboutSettings } from "@/components/settings/AboutSettings";
 import { KiroAISettings } from "@/components/settings/KiroAISettings";
+import { KiroAgentSettings } from "@/components/settings/KiroAgentSettings";
 import { searchSettings, SettingDefinition } from "@/lib/settingsRegistry";
 import {
   getModifiedPreferenceKeys,
@@ -261,6 +262,9 @@ export function SettingsView({ searchQuery, onClearSearch, jumpToSetting }: Sett
             </div>
             <div className={cn(section === "kiro" && "ux-fade")} hidden={section !== "kiro"}>
               <KiroAISettings />
+            </div>
+            <div className={cn(section === "kiro-agent" && "ux-fade")} hidden={section !== "kiro-agent"}>
+              <KiroAgentSettings />
             </div>
             <div className={cn(section === "data" && "ux-fade")} hidden={section !== "data"}>
               <DataSettings />
