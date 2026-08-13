@@ -238,10 +238,29 @@ export function KiroAgentSettings() {
           </SettingsRow>
         </SettingsGroup>
 
-        <SettingsGroup title="授权位置">
+        <SettingsGroup
+          title="授权位置"
+          action={
+            <div
+              className="flex items-center gap-1.5 flex-wrap"
+              data-testid="kiro-authorization-actions"
+            >
+              <Button variant="secondary" size="sm" onClick={handleAddBrowserLocation} disabled={addingLocation}>
+                <FolderOpen className="w-3 h-3" />
+                {addingLocation ? "授权中…" : "添加本地位置"}
+              </Button>
+              {!hasCanonicalSandbox && (
+                <Button variant="ghost" size="sm" onClick={handleUseSandbox}>
+                  <HardDrive className="w-3 h-3" />
+                  使用 Kiro Sandbox
+                </Button>
+              )}
+            </div>
+          }
+        >
           <div className="px-1">
             {workspaces.length === 0 && (
-              <p className="text-[10px] text-sandrift pb-2">尚未授权任何位置。</p>
+              <p className="text-[10px] text-sandrift py-2.5">尚未授权任何位置。</p>
             )}
 
             {/* Flat Workspace List：单行紧凑、soft divide；不再卡片套卡片 */}
@@ -304,20 +323,6 @@ export function KiroAgentSettings() {
                   </div>
                 );
               })}
-            </div>
-
-            {/* 添加位置：compact footer（canonical Sandbox 已存在时不再显示「使用 Kiro Sandbox」） */}
-            <div className="flex flex-wrap items-center gap-1.5 pt-2">
-              <Button variant="secondary" size="sm" onClick={handleAddBrowserLocation} disabled={addingLocation}>
-                <FolderOpen className="w-3 h-3" />
-                {addingLocation ? "授权中…" : "添加本地位置"}
-              </Button>
-              {!hasCanonicalSandbox && (
-                <Button variant="ghost" size="sm" onClick={handleUseSandbox}>
-                  <HardDrive className="w-3 h-3" />
-                  使用 Kiro Sandbox
-                </Button>
-              )}
             </div>
           </div>
         </SettingsGroup>
