@@ -21,6 +21,16 @@ export type ComputerInverseOperation =
       rootId: string;
       relativePath: string;
       beforeText: string;
+    }
+  | {
+      type: "move-back";
+      workspaceId: string;
+      fromRootId: string;
+      fromPath: string;
+      toRootId: string;
+      toPath: string;
+      /** V2：直接把 artifactId 放进 runtime checkpoint（Undo 时不需要从 UI 反向猜） */
+      artifactId?: string;
     };
 
 export interface ComputerTaskCheckpoint {
@@ -50,6 +60,10 @@ export async function applyInverseToAdapter(io: ComputerAdapterIO, inverse: Comp
       throw new ComputerError("VERIFICATION_FAILED", "撤销删除校验失败");
     }
     return;
+  }
+  if (inverse.type === "move-back") {
+    // 双 root 操作由 useKiroChat Undo orchestration 单独处理；这里防御性拒绝
+    throw new ComputerError("VERIFICATION_FAILED", "move-back 需要在 Undo orchestration 中执行");
   }
   // restore-text：写回 beforeText 并 exact read-back verify
   await io.writeText(inverse.relativePath, inverse.beforeText);

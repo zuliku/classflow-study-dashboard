@@ -177,3 +177,39 @@ export async function browserRemove(adapterRef: string, path: string, kind: "fil
     throw new ComputerError("VERIFICATION_FAILED", `目录非空或无法删除：${path}`);
   });
 }
+
+/** V2：file-only verified relocation（same browser root；Executor/relocate 已做 policy/覆盖检查） */
+export async function browserMove(adapterRef: string, from: string, to: string): Promise<void> {
+  const root = await requireGrantedHandle(adapterRef);
+  const src = await resolveHandlePath(root, from);
+  const srcHandle = await src.dir.getFileHandle(src.name).catch(() => {
+    throw new ComputerError("RESOURCE_NOT_FOUND", `源文件不存在：${from}`);
+  });
+  const dst = await resolveHandlePath(root, to);
+  const targetExists = await dst.dir
+    .getFileHandle(dst.name)
+    .then(() => true)
+    .catch(() => false);
+  if (targetExists) throw new ComputerError("RESOURCE_ALREADY_EXISTS", `目标已存在：${to}`);
+  const file = await srcHandle.getFile();
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  const writable = await dst.dir.getFileHandle(dst.name, { create: true }).then((h) => h.createWritable());
+  await writable.write(bytes);
+  await writable.close();
+  // Verify target
+  const after = await dst.dir.getFileHandle(dst.name).then((h) => h.getFile()).catch(() => null);
+  if (!after || after.size !== bytes.byteLength) {
+    await dst.dir.getFileHandle(dst.name).then((h) => h.remove()).catch(() => undefined);
+    throw new ComputerError("VERIFICATION_FAILED", "目标写入校验失败");
+  }
+  // Remove source + verify absent
+  try {
+    await srcHandle.remove();
+    const sourceAfter = await src.dir.getFileHandle(src.name).catch(() => null);
+    if (sourceAfter) throw new ComputerError("VERIFICATION_FAILED", "源文件删除校验失败");
+  } catch (err) {
+    await dst.dir.getFileHandle(dst.name).then((h) => h.remove()).catch(() => undefined);
+    if (err instanceof ComputerError) throw err;
+    throw new ComputerError("VERIFICATION_FAILED", "文件移动校验失败");
+  }
+}

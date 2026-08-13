@@ -5,6 +5,8 @@ import {
   KiroWorkspaceMeta,
   LogicalComputerResource,
   ComputerCapability,
+  ComputerPermissionEffect,
+  KiroWorkspaceRootMeta,
 } from "@/lib/ai/computer/types";
 import { ComputerError } from "@/lib/ai/computer/errors";
 import { normalizeRelativeComputerPath } from "@/lib/ai/computer/workspace/resolver";
@@ -29,6 +31,7 @@ import {
   sandboxWriteText,
   sandboxWriteBytes,
   sandboxRemove,
+  sandboxMove,
 } from "@/lib/ai/computer/adapters/sandbox";
 import {
   browserListDirectory,
@@ -39,6 +42,7 @@ import {
   browserWriteText,
   browserWriteBytes,
   browserRemove,
+  browserMove,
 } from "@/lib/ai/computer/adapters/browser";
 import {
   applyReadBounds,
@@ -51,7 +55,8 @@ import { renderMarkdown } from "@/lib/ai/computer/documents/markdown";
 import { renderDocx } from "@/lib/ai/computer/documents/docx";
 import { verifyMarkdownWritten, verifyDocxBytes, inspectDocumentFacts } from "@/lib/ai/computer/documents/verify";
 import { isKiroDocument } from "@/lib/ai/computer/documents/types";
-import { registerCreatedArtifact } from "@/lib/ai/computer/artifacts/service";
+import { registerCreatedArtifact, findArtifactByLocation, updateArtifactLocation } from "@/lib/ai/computer/artifacts/service";
+import { relocateFile } from "@/lib/ai/computer/filesystem/relocate";
 import { KiroComputerChange } from "@/lib/ai/computer/task";
 import { ComputerInverseOperation } from "@/lib/ai/computer/checkpoints";
 
@@ -87,6 +92,7 @@ export function getComputerAdapterForAdapterRef(adapterRef: string): ComputerAda
       writeText: (p, c, t) => sandboxWriteText(adapterRef, p, c, t),
       writeBytes: (p, c, t) => sandboxWriteBytes(adapterRef, p, c, t),
       remove: (p, k) => sandboxRemove(adapterRef, p, k),
+      move: (from, to) => sandboxMove(adapterRef, from, to),
     };
   }
   return {
@@ -98,6 +104,7 @@ export function getComputerAdapterForAdapterRef(adapterRef: string): ComputerAda
     writeText: (p, c) => browserWriteText(adapterRef, p, c),
     writeBytes: (p, c) => browserWriteBytes(adapterRef, p, c),
     remove: (p, k) => browserRemove(adapterRef, p, k),
+    move: (from, to) => browserMove(adapterRef, from, to),
   };
 }
 
@@ -199,6 +206,156 @@ export async function executeKiroComputerTool(request: {
     };
     if (!resource.rootId) throw new ComputerError("ROOT_NOT_FOUND", "未指定工作区根目录");
     const root = findRoot(ws, resource);
+
+    // ---- V2 Relocation：rename_file / move_file（双资源 policy：source + destination 各自评估）----
+    if (toolName === "rename_file" || toolName === "move_file") {
+      counters.mutationCount += 1;
+      const sourcePath = normalizeRelativeComputerPath(resource.path).path;
+      let destRoot: KiroWorkspaceRootMeta;
+      let destinationPath: string;
+      if (toolName === "rename_file") {
+        destRoot = root;
+        const newName = String(args.newName);
+        if (!isValidRenameBasename(newName)) {
+          return {
+            kind: "completed",
+            output: {
+              ok: false,
+              code: "INVALID_INPUT",
+              message: "newName 必须是合法文件名（不允许路径分隔符、. / .. 或系统保留名）。",
+            },
+          };
+        }
+        destinationPath = buildRenameTargetPath(sourcePath, newName);
+      } else {
+        destinationPath = normalizeRelativeComputerPath(String(args.destinationPath)).path;
+        const destinationRootId = String(args.destinationRootId);
+        const foundDestRoot = ws.roots.find((r) => r.id === destinationRootId);
+        if (!foundDestRoot) throw new ComputerError("ROOT_NOT_FOUND", `目标根目录不存在：${destinationRootId}`);
+        destRoot = foundDestRoot;
+      }
+
+      // 双资源 policy：source（fs.move @ source root/path）+ destination（fs.move @ dest root/path）。
+      // 任意 deny → deny（destination deny 不能被 source allow 绕过）；否则任意 ask → ask；否则 allow。
+      const sourcePolicy = prepareComputerTool({
+        mode: turnSnapshot.agentMode,
+        rules: livePermissionRules,
+        workspace: ws,
+        capability: "fs.move",
+        resource: { ...resource, path: sourcePath },
+      });
+      const destPolicy = prepareComputerTool({
+        mode: turnSnapshot.agentMode,
+        rules: livePermissionRules,
+        workspace: ws,
+        capability: "fs.move",
+        resource: { workspaceId: ws.id, rootId: destRoot.id, path: destinationPath },
+      });
+      const combined = combineRelocationPolicies(sourcePolicy, destPolicy);
+
+      if (combined === "deny") {
+        return {
+          kind: "completed",
+          output: {
+            ok: false,
+            code: "PERMISSION_DENIED",
+            message: sourcePolicy.effect === "deny" ? sourcePolicy.reason : destPolicy.reason,
+          },
+        };
+      }
+      if (combined === "ask") {
+        const matchedOneShot =
+          oneShotApprovals && oneShotApprovals.length > 0
+            ? oneShotApprovals.findIndex((o) =>
+                oneShotApprovalMatches(o, {
+                  toolCallId,
+                  capability: "fs.move",
+                  workspaceId: resource.workspaceId,
+                  rootId: resource.rootId,
+                  relativePath: sourcePath,
+                })
+              )
+            : -1;
+        if (matchedOneShot === -1) {
+          const description =
+            toolName === "rename_file"
+              ? `重命名 ${sourcePath} → ${destinationPath}`
+              : `移动 ${sourcePath} → ${destinationPath}`;
+          return {
+            kind: "approval-required",
+            request: buildApprovalRequest({
+              id: newApprovalId(),
+              toolCallId,
+              taskId: context.taskId ?? "",
+              capability: "fs.move",
+              workspaceId: ws.id,
+              workspaceLabel: ws.name,
+              rootId: root.id,
+              rootLabel: root.label,
+              relativePath: sourcePath,
+              resourceLabel: sourcePath.split("/").pop() ?? sourcePath,
+              description,
+            }),
+          };
+        }
+        oneShotApprovals!.splice(matchedOneShot, 1); // 一次消费（resume 时重新评估双 policy）
+      }
+
+      // Artifact：relocation 前按源位置查找（filesystem 是事实来源；找不到也允许移动）
+      const artifact = await findArtifactByLocation(ws.id, root.id, sourcePath);
+      const sourceAdapter = getComputerAdapterForAdapterRef(root.adapterRef);
+      const destAdapter = getComputerAdapterForAdapterRef(destRoot.adapterRef);
+      if (root.adapterRef === destRoot.adapterRef) {
+        await sourceAdapter.move(sourcePath, destinationPath);
+      } else {
+        await relocateFile({
+          source: sourceAdapter,
+          sourcePath,
+          destination: destAdapter,
+          destinationPath,
+        });
+      }
+      // filesystem verify 成功后同步 Artifact 位置（保持 id 与 revision）
+      let artifactId: string | undefined;
+      if (artifact) {
+        try {
+          const updated = await updateArtifactLocation(artifact.id, destRoot.id, destinationPath);
+          artifactId = updated.id;
+        } catch {
+          throw new ComputerError("VERIFICATION_FAILED", "文件已移动，但 Artifact Registry 同步失败。");
+        }
+      }
+      const operation = toolName === "rename_file" ? "rename" : "move";
+      const runtime = buildMutationRuntime({
+        toolName,
+        toolCallId,
+        operation,
+        resourceType: "text",
+        snapshot: turnSnapshot,
+        workspaceLabel: ws.name,
+        root: destRoot,
+        relativePath: destinationPath,
+        artifactId,
+        fromRootId: root.id,
+        fromRootLabel: root.label,
+        fromRelativePath: sourcePath,
+        review: { kind: "relocation" },
+        inverse: {
+          type: "move-back",
+          workspaceId: ws.id,
+          fromRootId: root.id,
+          fromPath: sourcePath,
+          toRootId: destRoot.id,
+          toPath: destinationPath,
+          artifactId,
+        },
+      });
+      return {
+        kind: "completed",
+        output: { ok: true, data: { fromPath: sourcePath, path: destinationPath, verified: true } },
+        runtime,
+      };
+    }
 
     // path sandbox（allowRoot 仅 list/search/grep scope）
     const allowRoot =
@@ -684,6 +841,33 @@ function documentHeadings(document: Parameters<typeof renderMarkdown>[0]): strin
     }
   }
   return out;
+}
+
+/** 双资源 policy 合并：任意 deny → deny；否则任意 ask → ask；否则 allow */
+function combineRelocationPolicies(
+  source: { effect: ComputerPermissionEffect },
+  destination: { effect: ComputerPermissionEffect }
+): ComputerPermissionEffect {
+  if (source.effect === "deny" || destination.effect === "deny") return "deny";
+  if (source.effect === "ask" || destination.effect === "ask") return "ask";
+  return "allow";
+}
+
+const WINDOWS_RESERVED_BASENAME = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(\..*)?$/i;
+
+/** rename 的 newName 必须是 basename：无 / \\、非 . ..、无 control chars、非 Windows 保留名 */
+export function isValidRenameBasename(name: string): boolean {
+  if (!name || name === "." || name === "..") return false;
+  if (name.includes("/") || name.includes("\\")) return false;
+  if (/[\u0000-\u001f\u007f]/.test(name)) return false;
+  if (WINDOWS_RESERVED_BASENAME.test(name)) return false;
+  return true;
+}
+
+/** dirname(source) + newName → 完整目标路径（重新走 path sandbox 归一） */
+function buildRenameTargetPath(sourcePath: string, newName: string): string {
+  const dir = sourcePath.includes("/") ? sourcePath.slice(0, sourcePath.lastIndexOf("/") + 1) : "";
+  return normalizeRelativeComputerPath(`${dir}${newName}`).path;
 }
 
 /** 构建 verified mutation 的 runtime-only 事实（change + inverse）；inverse 缺失 → canUndo=false */

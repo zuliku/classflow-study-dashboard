@@ -72,3 +72,18 @@ export const createDocumentSchema = z.object({
     .unknown()
     .refine(isKiroDocument, { message: "document 必须是结构化 KiroDocument IR" }),
 });
+
+/** V2：rename_file —— newName 只能是 basename（/ \\ . .. NUL/control/Windows reserved 由运行时拒绝） */
+export const renameFileSchema = z.object({
+  rootId: z.string().trim().min(1).max(120),
+  path: resourcePath,
+  newName: z.string().trim().min(1).max(255),
+});
+
+/** V2：move_file —— 同一 frozen Workspace 内跨 root 移动；目标不存在（无隐式覆盖） */
+export const moveFileSchema = z.object({
+  rootId: z.string().trim().min(1).max(120),
+  path: resourcePath,
+  destinationRootId: z.string().trim().min(1).max(120),
+  destinationPath: resourcePath,
+});

@@ -7,7 +7,7 @@ import { useAppStore } from "@/store/useAppStore";
 import { useAISettingsStore } from "@/store/useAISettingsStore";
 import { useKiroComputerStore } from "@/store/useKiroComputerStore";
 import { KiroComputerTurnSnapshot } from "@/lib/ai/contextBudget/types";
-import { ComputerActionFact, ComputerCapability } from "@/lib/ai/computer/types";
+import { ComputerActionFact, ComputerCapability, KiroWorkspaceMeta } from "@/lib/ai/computer/types";
 import { ComputerError } from "@/lib/ai/computer/errors";
 import { executeKiroComputerTool, getComputerAdapterForAdapterRef } from "@/lib/ai/computer/executor";
 import { isComputerToolName, ComputerExecutionAttempt } from "@/lib/ai/computer/result";
@@ -25,9 +25,12 @@ import {
   createTaskCheckpoint,
   appendInverseToCheckpoint,
   applyInverseToAdapter,
+  ComputerInverseOperation,
 } from "@/lib/ai/computer/checkpoints";
 import { sessionRuleForRequest, workspaceRuleForRequest } from "@/lib/ai/computer/approval";
 import { appendComputerAuditEntry } from "@/lib/ai/computer/audit";
+import { relocateFile } from "@/lib/ai/computer/filesystem/relocate";
+import { updateArtifactLocation } from "@/lib/ai/computer/artifacts/service";
 import { useKiroComputerRuntimeStore } from "@/store/useKiroComputerRuntimeStore";
 import { useKiroPreferencesStore } from "@/store/useKiroPreferencesStore";
 import { useConfirmStore } from "@/store/useConfirmStore";
@@ -1166,6 +1169,11 @@ export function useKiroChat({
             .getState()
             .workspaces.find((w) => w.id === inverse.workspaceId);
           if (!ws) throw new ComputerError("WORKSPACE_NOT_FOUND", "工作区不存在");
+          // V2：move-back 是双 root 操作（原位置/现位置），单独 orchestration；不走单 adapter 的 applyInverseToAdapter
+          if (inverse.type === "move-back") {
+            await undoMoveBack(ws, inverse);
+            continue;
+          }
           const root = ws.roots.find((r) => r.id === inverse.rootId);
           if (!root) throw new ComputerError("ROOT_NOT_FOUND", "工作区根不存在");
           const io = getComputerAdapterForAdapterRef(root.adapterRef);
@@ -1910,10 +1918,58 @@ export function useKiroChat({
 }
 
 /** Computer change 类型 → capability（Audit metadata 用） */
-function capabilityForChange(change: { resourceType: "directory" | "text" | "document"; operation: "create" | "modify" }): ComputerCapability {
+function capabilityForChange(change: {
+  resourceType: "directory" | "text" | "document";
+  operation: "create" | "modify" | "move" | "rename";
+}): ComputerCapability {
+  if (change.operation === "move" || change.operation === "rename") return "fs.move";
   if (change.resourceType === "document") return "document.create";
   if (change.resourceType === "directory") return "fs.create";
   return change.operation === "modify" ? "fs.modify" : "fs.create";
+}
+
+/**
+ * V2：move-back Undo（双 root orchestration）。
+ * resolve live Workspace → toRoot（当前文件位置）→ fromRoot（原位置）→ verified relocate 回原位置
+ * → verify 原位置存在 + 现位置不存在 → Artifact Registry 位置还原。
+ */
+async function undoMoveBack(
+  ws: KiroWorkspaceMeta,
+  inverse: Extract<ComputerInverseOperation, { type: "move-back" }>
+): Promise<void> {
+  const toRoot = ws.roots.find((r) => r.id === inverse.toRootId);
+  if (!toRoot) throw new ComputerError("ROOT_NOT_FOUND", "移动目标根目录不存在");
+  const fromRoot = ws.roots.find((r) => r.id === inverse.fromRootId);
+  if (!fromRoot) throw new ComputerError("ROOT_NOT_FOUND", "原位置根目录不存在");
+  const sourceAdapter = getComputerAdapterForAdapterRef(toRoot.adapterRef);
+  const destAdapter = getComputerAdapterForAdapterRef(fromRoot.adapterRef);
+  if (toRoot.adapterRef === fromRoot.adapterRef) {
+    await sourceAdapter.move(inverse.toPath, inverse.fromPath);
+  } else {
+    await relocateFile({
+      source: sourceAdapter,
+      sourcePath: inverse.toPath,
+      destination: destAdapter,
+      destinationPath: inverse.fromPath,
+    });
+  }
+  // verify：原位置存在 + 现位置不存在（relocateFile/adapter.move 已内部校验；这里再显式确认）
+  const original = await destAdapter.stat(inverse.fromPath);
+  if (!original || original.kind !== "file") {
+    throw new ComputerError("VERIFICATION_FAILED", "撤销移动校验失败：原位置文件不存在");
+  }
+  const moved = await sourceAdapter.stat(inverse.toPath);
+  if (moved !== null) {
+    throw new ComputerError("VERIFICATION_FAILED", "撤销移动校验失败：移动目标仍存在");
+  }
+  // Artifact Registry 位置还原（保持 id/revision）
+  if (inverse.artifactId) {
+    try {
+      await updateArtifactLocation(inverse.artifactId, inverse.fromRootId, inverse.fromPath);
+    } catch {
+      throw new ComputerError("VERIFICATION_FAILED", "撤销完成，但 Artifact Registry 位置未还原。");
+    }
+  }
 }
 
 /** 本地文档附件 → 传给模型的文档 Context（含 sourceId；截断明确标注） */

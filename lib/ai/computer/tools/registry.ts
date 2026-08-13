@@ -12,6 +12,8 @@ import {
   createTextFileSchema,
   patchTextFileSchema,
   createDocumentSchema,
+  renameFileSchema,
+  moveFileSchema,
 } from "@/lib/ai/computer/tools/schemas";
 
 export interface ComputerToolDefinition {
@@ -102,6 +104,20 @@ export const COMPUTER_MUTATION_TOOLS: ComputerToolDefinition[] = [
     description: "从结构化文档 IR 生成 Markdown 或 DOCX 文件。",
     schema: createDocumentSchema,
     capability: "document.create",
+    mutation: true,
+  },
+  {
+    name: "rename_file",
+    description: "在同一目录内重命名文件（newName 必须是 basename）。",
+    schema: renameFileSchema,
+    capability: "fs.move",
+    mutation: true,
+  },
+  {
+    name: "move_file",
+    description: "在同一 Workspace 内把文件移动到另一个根目录（目标必须不存在）。",
+    schema: moveFileSchema,
+    capability: "fs.move",
     mutation: true,
   },
 ];

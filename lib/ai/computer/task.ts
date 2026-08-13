@@ -59,7 +59,8 @@ export interface KiroComputerChange {
         tables: number;
         codeBlocks: number;
         characters: number;
-      };
+      }
+    | { kind: "relocation" };
 }
 
 export interface KiroAgentTask {
@@ -103,6 +104,10 @@ export function toolStepLabel(toolName: string): string {
       return "正在修改文件";
     case "create_document":
       return "正在创建文档";
+    case "rename_file":
+      return "正在重命名文件";
+    case "move_file":
+      return "正在移动文件";
     default:
       return "正在执行操作";
   }
@@ -113,7 +118,9 @@ export function isComputerMutationTool(toolName: string): boolean {
     toolName === "create_directory" ||
     toolName === "create_text_file" ||
     toolName === "patch_text_file" ||
-    toolName === "create_document"
+    toolName === "create_document" ||
+    toolName === "rename_file" ||
+    toolName === "move_file"
   );
 }
 

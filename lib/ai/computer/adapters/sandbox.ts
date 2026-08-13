@@ -228,6 +228,33 @@ export async function sandboxDelete(adapterRef: string, path: string): Promise<v
   await dbDelete(sandboxKey(adapterRef, path));
 }
 
+/** V2：file-only verified relocation（same sandbox adapter；Executor/relocate 已做 policy/覆盖检查） */
+export async function sandboxMove(adapterRef: string, from: string, to: string): Promise<void> {
+  const entry = await sandboxStat(adapterRef, from);
+  if (!entry) throw new ComputerError("RESOURCE_NOT_FOUND", `源文件不存在：${from}`);
+  if (entry.kind !== "file") throw new ComputerError("UNSUPPORTED_FILE_TYPE", "仅支持移动文件（不支持目录）");
+  const target = await sandboxStat(adapterRef, to);
+  if (target) throw new ComputerError("RESOURCE_ALREADY_EXISTS", `目标已存在：${to}`);
+  const bytes = await sandboxReadBytes(adapterRef, from);
+  await sandboxWriteBytes(adapterRef, to, bytes, entry.type);
+  // Verify target
+  const after = await sandboxStat(adapterRef, to);
+  if (!after || after.kind !== "file" || after.size !== bytes.byteLength) {
+    await dbDelete(sandboxKey(adapterRef, to));
+    throw new ComputerError("VERIFICATION_FAILED", "目标写入校验失败");
+  }
+  // Remove source + verify absent
+  try {
+    await dbDelete(sandboxKey(adapterRef, from));
+    const sourceAfter = await sandboxStat(adapterRef, from);
+    if (sourceAfter !== null) throw new ComputerError("VERIFICATION_FAILED", "源文件删除校验失败");
+  } catch (err) {
+    await dbDelete(sandboxKey(adapterRef, to)).catch(() => undefined);
+    if (err instanceof ComputerError) throw err;
+    throw new ComputerError("VERIFICATION_FAILED", "文件移动校验失败");
+  }
+}
+
 /**
  * 清理某 adapterRef 的整个 Sandbox namespace（Settings 显式删除 Workspace 时调用）。
  * 只删除 `${adapterRef}\u0000` 前缀的 keys；绝不 deleteDatabase、不影响其它 adapter。

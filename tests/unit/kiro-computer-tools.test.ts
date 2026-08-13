@@ -98,10 +98,11 @@ describe("tool exposure", () => {
     expect(names).not.toContain("delete_directory");
     expect(names).not.toContain("run_shell");
     expect(names).not.toContain("launch_application");
-    expect(names).not.toContain("move_file");
-    expect(names).not.toContain("rename_file");
+    // V2：rename_file / move_file 是 fs.move（默认 ask），不是 delete
+    expect(names).toContain("rename_file");
+    expect(names).toContain("move_file");
     // Model schema 绝不能加入权限相关参数
-    expect(names.length).toBe(11);
+    expect(names.length).toBe(13);
   });
 });
 
