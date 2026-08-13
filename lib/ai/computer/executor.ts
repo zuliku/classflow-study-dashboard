@@ -152,6 +152,16 @@ function newApprovalId(): string {
   return `approval-${crypto.randomUUID()}`;
 }
 
+/** Document IR 校验失败 → 有界可纠正摘要（最多 3 条；每条含字段路径与期望；绝不 echo 文档正文） */
+function buildDocumentSchemaIssueSummary(issues: ReadonlyArray<{ path: PropertyKey[]; message: string }>): string {
+  const lines: string[] = [];
+  for (const issue of issues.slice(0, 3)) {
+    const path = issue.path.map((p) => String(p)).join(".");
+    lines.push(`${path || "document"}: ${issue.message}`);
+  }
+  return `document IR 校验失败：${lines.join("；")}。请读取 inputSchema 修正后重试（最多一次结构修正）。`;
+}
+
 /**
  * Computer Tool 唯一执行入口（Part 3）：
  * schema → enabled → workspace/root → path sandbox → policy → (ask → approval-required / deny → fail)
@@ -199,9 +209,14 @@ export async function executeKiroComputerTool(request: {
   // schema 校验
   const parsed = definition.schema.safeParse(toolInput);
   if (!parsed.success) {
+    // P0：Document IR 校验失败时给出有界、可纠正的 issue 摘要（最多 3 条；不 echo 全文/敏感数据）
+    const message =
+      toolName === "create_document" || toolName === "update_document"
+        ? buildDocumentSchemaIssueSummary(parsed.error.issues)
+        : "输入不合法";
     return {
       kind: "completed",
-      output: { ok: false, code: "INVALID_INPUT", message: "输入不合法" },
+      output: { ok: false, code: "INVALID_INPUT", message },
     };
   }
   const args = parsed.data as Record<string, unknown>;

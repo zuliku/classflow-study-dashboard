@@ -118,7 +118,8 @@ export const COMPUTER_MUTATION_TOOLS: ComputerToolDefinition[] = [
   },
   {
     name: "create_document",
-    description: "从结构化文档 IR 生成 Markdown 或 DOCX 文件。",
+    description:
+      "从 KiroDocument IR 创建 .md 或 .docx。document = { title?: string, blocks: [...] }。block 支持 heading / paragraph / bullet-list / numbered-list / table / quote / code / page-break；文件格式由 path 扩展名决定。",
     schema: createDocumentSchema,
     capability: "document.create",
     mutation: true,
@@ -139,7 +140,8 @@ export const COMPUTER_MUTATION_TOOLS: ComputerToolDefinition[] = [
   },
   {
     name: "update_document",
-    description: "更新 Kiro 创建的 Markdown/DOCX Artifact；必须提供当前 expectedRevision。",
+    description:
+      "更新 Kiro 创建的 Markdown/DOCX Artifact；必须提供当前 expectedRevision。document 使用与 create_document 完全相同的 KiroDocument IR。",
     schema: updateDocumentSchema,
     capability: "document.modify",
     mutation: true,

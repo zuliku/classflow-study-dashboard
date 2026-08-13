@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { isKiroDocument } from "@/lib/ai/computer/documents/types";
+import { kiroDocumentSchema } from "@/lib/ai/computer/documents/schema";
 
 /**
  * Computer Tool 输入 Schema（zod）——所有工具在 Executor 内强制校验。
@@ -68,9 +68,7 @@ export const patchTextFileSchema = z.object({
 
 export const createDocumentSchema = z.object({
   path: resourcePath,
-  document: z
-    .unknown()
-    .refine(isKiroDocument, { message: "document 必须是结构化 KiroDocument IR" }),
+  document: kiroDocumentSchema,
 });
 
 /** V2：rename_file —— newName 只能是 basename（/ \\ . .. NUL/control/Windows reserved 由运行时拒绝） */
@@ -92,9 +90,7 @@ export const moveFileSchema = z.object({
 export const updateDocumentSchema = z.object({
   artifactId: z.string().trim().min(1).max(160),
   expectedRevision: z.number().int().min(1).max(1_000_000),
-  document: z
-    .unknown()
-    .refine(isKiroDocument, { message: "document 必须是结构化 KiroDocument IR" }),
+  document: kiroDocumentSchema,
 });
 
 /** V3 Part 1：search_workspace_knowledge —— 本地知识索引候选搜索（正文结论仍需实时读取） */
