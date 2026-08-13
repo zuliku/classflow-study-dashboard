@@ -79,8 +79,8 @@ export function TimelineUnscheduledShelf({
               title={directManipulationEnabled ? "拖到时间表快速安排 1 小时" : undefined}
               className={cn(
                 "inline-flex items-center gap-1.5 pl-1.5 pr-1 h-7 rounded-lg bg-surface border border-line text-[11px] font-semibold text-charcoal max-w-[240px] shrink-0",
-                directManipulationEnabled && "cursor-grab select-none",
-                isDragging && "opacity-50"
+                directManipulationEnabled && !isDragging && "cursor-grab select-none",
+                isDragging && "opacity-50 cursor-grabbing"
               )}
             >
               {directManipulationEnabled && (

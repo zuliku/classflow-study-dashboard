@@ -155,8 +155,14 @@ export function TimelineWorkspace() {
   const [markOpen, setMarkOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement | null>(null);
 
-  const weekDays = getWeekDateRange(semester, currentSemesterWeek);
-  const weekDates = weekDays.map((d) => format(d, "yyyy-MM-dd"));
+  const weekDays = useMemo(
+    () => getWeekDateRange(semester, currentSemesterWeek),
+    [semester, currentSemesterWeek]
+  );
+  const weekDates = useMemo(
+    () => weekDays.map((d) => format(d, "yyyy-MM-dd")),
+    [weekDays]
+  );
   const dayCount = preferences.showWeekends ? 7 : 5;
   const todayStr = format(new Date(), "yyyy-MM-dd");
   const isCurrentWeek = todayStr >= weekDates[0] && todayStr <= weekDates[6];
@@ -168,7 +174,7 @@ export function TimelineWorkspace() {
     | {
         type: "dragging";
         origin: StudyBlock;
-        candidate: StudyBlock;
+        candidate: StudyBlock | null;
         pointerOffsetMinutes: number;
         valid: boolean;
         conflictMessage?: string;
@@ -205,9 +211,18 @@ export function TimelineWorkspace() {
     return { candidate, conflict };
   };
 
+  // 整个 interaction session（idle→pending→dragging→drop/cancel）共享同一组 listener；
+  // 依赖 studyInteractionActive（非 studyDrag.type），pending→dragging 不触发 teardown/重绑。
+  const studyInteractionActive = studyDrag.type !== "idle";
   useEffect(() => {
-    const drag = studyDragRef.current;
-    if (drag.type === "idle") return;
+    if (!studyInteractionActive) return;
+    // capability 在交互中被关闭（preference / pointer 能力变化）→ 静默取消，不注册 listener
+    if (!studyDragEnabled) {
+      studyDragRef.current = { type: "idle" };
+      document.body.dataset.dragActive = "0";
+      setStudyDrag({ type: "idle" });
+      return;
+    }
     const clearDragActive = () => {
       document.body.dataset.dragActive = "0";
     };
@@ -216,15 +231,23 @@ export function TimelineWorkspace() {
       origin: StudyBlock,
       offset: number
     ) => {
-      if (!result) return;
-      studyDragRef.current = {
-        type: "dragging",
-        origin,
-        candidate: result.candidate,
-        pointerOffsetMinutes: offset,
-        valid: !result.conflict,
-        conflictMessage: result.conflict ? (result.conflict.courseName ?? result.conflict.otherTitle) : undefined,
-      };
+      // pointer 不在有效 day column → candidate=null（outside-grid 不保留旧 candidate，drop 时静默取消）
+      studyDragRef.current = result
+        ? {
+            type: "dragging",
+            origin,
+            candidate: result.candidate,
+            pointerOffsetMinutes: offset,
+            valid: !result.conflict,
+            conflictMessage: result.conflict ? (result.conflict.courseName ?? result.conflict.otherTitle) : undefined,
+          }
+        : {
+            type: "dragging",
+            origin,
+            candidate: null,
+            pointerOffsetMinutes: offset,
+            valid: false,
+          };
       setStudyDrag(studyDragRef.current);
     };
     const onPointerMove = (e: PointerEvent) => {
@@ -251,7 +274,7 @@ export function TimelineWorkspace() {
       const current = studyDragRef.current;
       studyDragRef.current = { type: "idle" };
       clearDragActive();
-      if (current.type === "dragging") {
+      if (current.type === "dragging" && current.candidate) {
         const { origin, candidate, valid, conflictMessage } = current;
         if (!valid) {
           pushToast({ type: "error", message: conflictMessage ?? "时间冲突，学习计划未调整" });
@@ -296,7 +319,7 @@ export function TimelineWorkspace() {
       clearDragActive();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [studyDrag.type, weekDates, schedules, studyBlocks, currentSemesterWeek, pushToast, updateStudyBlock, studyDragEnabled]);
+  }, [studyInteractionActive, studyDragEnabled, weekDates, schedules, studyBlocks, currentSemesterWeek, pushToast, updateStudyBlock]);
 
   // ---- IM5B：Unscheduled Assignment 拖入 Timeline 快速安排（1h StudyBlock）----
   type UnscheduledDragState =
@@ -313,7 +336,9 @@ export function TimelineWorkspace() {
       };
   const [unscheduledDrag, setUnscheduledDrag] = useState<UnscheduledDragState>({ type: "idle" });
   const unscheduledDragRef = useRef<UnscheduledDragState>({ type: "idle" });
-  const unscheduledDragEnabled = studyDragEnabled;
+  // filter 一致性：用户隐藏「学习计划」时禁用 Quick Drag（避免创建当前不可见的 StudyBlock）；
+  // 精确「安排」按钮仍可用（filters 不影响 ArrangeSheet）
+  const unscheduledDragEnabled = studyDragEnabled && filters.studyBlocks;
 
   const evaluateQuickCandidate = (
     assignment: Assignment,
@@ -333,9 +358,16 @@ export function TimelineWorkspace() {
     return { candidate, conflict };
   };
 
+  const unscheduledInteractionActive = unscheduledDrag.type !== "idle";
   useEffect(() => {
-    const drag = unscheduledDragRef.current;
-    if (drag.type === "idle") return;
+    if (!unscheduledInteractionActive) return;
+    // capability / filter 在交互中被关闭 → 静默取消，不注册 listener
+    if (!unscheduledDragEnabled) {
+      unscheduledDragRef.current = { type: "idle" };
+      document.body.dataset.dragActive = "0";
+      setUnscheduledDrag({ type: "idle" });
+      return;
+    }
     const clearDragActive = () => {
       document.body.dataset.dragActive = "0";
     };
@@ -411,7 +443,7 @@ export function TimelineWorkspace() {
       clearDragActive();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [weekDates, schedules, studyBlocks, currentSemesterWeek, pushToast, addStudyBlock, deleteStudyBlock, unscheduledDragEnabled]);
+  }, [unscheduledInteractionActive, unscheduledDragEnabled, weekDates, schedules, studyBlocks, currentSemesterWeek, pushToast, addStudyBlock, deleteStudyBlock]);
 
   const courseNameOf = useMemo(
     () => (courseId: string) => courses.find((c) => c.id === courseId)?.name ?? "",
@@ -543,7 +575,7 @@ export function TimelineWorkspace() {
         })}
 
         {/* IM5A：拖动 Ghost（真实 candidate 几何；valid = mint / invalid = danger；snap 过渡 top） */}
-        {studyDrag.type === "dragging" && studyDrag.candidate.date === date && (
+        {studyDrag.type === "dragging" && studyDrag.candidate && studyDrag.candidate.date === date && (
           <div
             data-testid="study-block-ghost"
             className={cn(
@@ -981,7 +1013,7 @@ export function TimelineWorkspace() {
       onArrange={(a) => { setArrangeFor(a); setMarkOpen(false); }}
       directManipulationEnabled={unscheduledDragEnabled}
       draggingAssignmentId={
-        unscheduledDrag.type === "pending" || unscheduledDrag.type === "dragging"
+        unscheduledDrag.type === "dragging"
           ? unscheduledDrag.assignment.id
           : null
       }
@@ -1094,7 +1126,7 @@ function CourseTaskMarker({
             setOpen(true);
           }}
           onBlur={scheduleClose}
-          className="w-[20px] h-[20px] -m-[1px] flex items-center justify-center gap-0.5 rounded-full cursor-pointer outline-none hover:scale-[1.12] transition-transform duration-[var(--motion-fast)]"
+          className="w-[20px] h-[20px] -m-[1px] flex items-center justify-center gap-0.5 rounded-full cursor-pointer outline-none hover:scale-[1.06] transition-transform duration-[var(--motion-fast)]"
           title="查看重叠的学习任务"
         >
           <span className="block w-[7px] h-[7px] rounded-full bg-[#A87952] shadow-subtle" />

@@ -51,7 +51,20 @@ test("StudyBlock drag：周一 13:00 → 周五 18:00–19:00；Undo 恢复", as
   await page.mouse.move(dayBox.x + dayBox.width / 2, targetY, { steps: 6 });
   // 拖动中 ghost 出现（candidate 几何）
   await expect(page.getByTestId("study-block-ghost")).toBeVisible();
+
+  // dragActive 生命周期契约：真实 dragging 后为 "1"；连续移动 + re-render 后仍为 "1"；结束后清理
+  const dragActive = () => page.evaluate(() => document.body.dataset.dragActive ?? "");
+  expect(await dragActive()).toBe("1");
+  for (let i = 0; i < 3; i++) {
+    await page.mouse.move(dayBox.x + dayBox.width / 2, targetY - (i + 1) * 20, { steps: 2 });
+    await page.waitForTimeout(50);
+    expect(await dragActive()).toBe("1");
+  }
+  // 移回原目标再 drop
+  await page.mouse.move(dayBox.x + dayBox.width / 2, targetY, { steps: 2 });
   await page.mouse.up();
+  await page.waitForTimeout(300);
+  expect(await dragActive()).not.toBe("1");
   await page.waitForTimeout(500);
 
   // 落库：block 移动到周五 18:00–19:00（offset 30min 保持 grab 位置）
