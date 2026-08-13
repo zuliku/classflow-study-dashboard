@@ -7,6 +7,9 @@ import { useAppStore } from "@/store/useAppStore";
 import { useAISettingsStore } from "@/store/useAISettingsStore";
 import { useKiroComputerStore } from "@/store/useKiroComputerStore";
 import { KiroComputerTurnSnapshot } from "@/lib/ai/contextBudget/types";
+import { ComputerActionFact } from "@/lib/ai/computer/types";
+import { executeKiroComputerTool } from "@/lib/ai/computer/executor";
+import { isComputerToolName } from "@/lib/ai/computer/result";
 import { useKiroPreferencesStore } from "@/store/useKiroPreferencesStore";
 import { useConfirmStore } from "@/store/useConfirmStore";
 import { useToastStore } from "@/store/useToastStore";
@@ -564,6 +567,10 @@ export function useKiroChat({
   const writeCounterRef = useRef(0);
   const limitReachedRef = useRef(false);
   const undoRegistryRef = useRef(new Map<string, KiroUndoEntry>());
+  // Kiro Computer Agent V1：每 Turn 独立的 Computer 调用限制（read <= 12 / mutation <= 6）
+  const computerCountersRef = useRef({ readCount: 0, mutationCount: 0 });
+  // Computer 真实 mutation 事实（Action Card 渲染；live result，不含 handle/path/token）
+  const [computerActions, setComputerActions] = useState<ComputerActionFact[]>([]);
 
   // 历史恢复的展示数据（Action Cards / 附件 chips / Citation 来源）——不是可执行 Tool state
   const restoredActionsRef = useRef(new Map<string, PersistedActionView[]>());
@@ -648,6 +655,36 @@ export function useKiroChat({
             tool: toolName as never,
             toolCallId,
             output,
+            options: { body: requestBody() },
+          });
+        })();
+        return;
+      }
+
+      // ---- Computer Tools（Part 2）：Browser Executor + Frozen Turn intent + Live security state ----
+      if (isComputerToolName(toolName)) {
+        void (async () => {
+          const snapshot = (turnSnapshotRef.current as Record<string, unknown> | null)
+            ?.computerSnapshot as KiroComputerTurnSnapshot | undefined;
+          const output = await executeKiroComputerTool({
+            toolName,
+            toolInput: input,
+            context: {
+              // Frozen intent：本 Turn 发送时的 workspace / agentMode
+              turnSnapshot: snapshot ?? buildComputerSnapshot(),
+              // Live security state：实时 rules / grants（撤销立即生效）
+              liveWorkspaces: useKiroComputerStore.getState().workspaces,
+              livePermissionRules: useKiroComputerStore.getState().permissionRules,
+            },
+            counters: computerCountersRef.current,
+          });
+          if (output.ok && output.actionFact) {
+            setComputerActions((prev) => [...prev, output.actionFact!]);
+          }
+          chat.addToolOutput({
+            tool: toolName as never,
+            toolCallId,
+            output: output as ToolOutput,
             options: { body: requestBody() },
           });
         })();
@@ -1039,6 +1076,9 @@ export function useKiroChat({
 
       // ---- Turn Context Snapshot：本 Turn 内 Prompt Context 冻结（下一 Turn 才刷新） ----
       turnSnapshotRef.current = buildSnapshotRef.current(turnAttachments);
+      // Computer 调用限制 / Action 事实按 Turn 重置（冻结意图配套）
+      computerCountersRef.current = { readCount: 0, mutationCount: 0 };
+      setComputerActions([]);
 
       // 附件快照绑定到该 User Turn（发送后 Composer 清空，旧消息不受影响）
       const snapshot: KiroAttachmentView[] = turnAttachments
@@ -1414,6 +1454,8 @@ export function useKiroChat({
     activity,
     /** 本 Turn 的文档来源（Citation 渲染用；不含正文） */
     sources,
+    /** Computer Agent 本 Turn 真实 mutation 事实（Action Card 渲染） */
+    computerActions,
     /** 扫描 PDF 页面渲染中（Send 禁用 + 「正在准备扫描 PDF…」） */
     preparingVision,
     send,

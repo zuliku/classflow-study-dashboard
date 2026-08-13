@@ -1,0 +1,127 @@
+import { z } from "zod";
+import { ComputerCapability, KiroAgentMode } from "@/lib/ai/computer/types";
+import {
+  listWorkspaceRootsSchema,
+  listDirectorySchema,
+  searchFilesSchema,
+  grepFilesSchema,
+  getFileMetadataSchema,
+  readTextSchema,
+  inspectDocumentSchema,
+  createDirectorySchema,
+  createTextFileSchema,
+  patchTextFileSchema,
+  createDocumentSchema,
+} from "@/lib/ai/computer/tools/schemas";
+
+export interface ComputerToolDefinition {
+  name: string;
+  description: string;
+  schema: z.ZodType;
+  capability: ComputerCapability;
+  /** 该 tool 是否 mutation（影响 regenerate guard / 调用限制） */
+  mutation: boolean;
+}
+
+export const COMPUTER_READ_TOOLS: ComputerToolDefinition[] = [
+  {
+    name: "list_workspace_roots",
+    description: "列出当前 Workspace 的授权根目录（id/label/access）。",
+    schema: listWorkspaceRootsSchema,
+    capability: "workspace.list",
+    mutation: false,
+  },
+  {
+    name: "list_directory",
+    description: "列出目录内容（从授权 root 或相对路径开始）。",
+    schema: listDirectorySchema,
+    capability: "fs.list",
+    mutation: false,
+  },
+  {
+    name: "search_files",
+    description: "按文件名搜索工作区文件（相对路径）。",
+    schema: searchFilesSchema,
+    capability: "fs.search",
+    mutation: false,
+  },
+  {
+    name: "grep_files",
+    description: "在工作区文本文件中进行精确文本搜索（非正则）。",
+    schema: grepFilesSchema,
+    capability: "fs.search",
+    mutation: false,
+  },
+  {
+    name: "get_file_metadata",
+    description: "获取文件或目录的元信息（kind/size/type）。",
+    schema: getFileMetadataSchema,
+    capability: "fs.read",
+    mutation: false,
+  },
+  {
+    name: "read_text",
+    description: "读取文本文件（支持 startLine/endLine/maxChars 分界读取）。",
+    schema: readTextSchema,
+    capability: "fs.read",
+    mutation: false,
+  },
+  {
+    name: "inspect_document",
+    description: "检查文档结构事实（Markdown/DOCX）：标题、章节、段落、表格等计数。",
+    schema: inspectDocumentSchema,
+    capability: "fs.read",
+    mutation: false,
+  },
+];
+
+export const COMPUTER_MUTATION_TOOLS: ComputerToolDefinition[] = [
+  {
+    name: "create_directory",
+    description: "在工作区创建目录（已存在时返回 exists，不覆盖）。",
+    schema: createDirectorySchema,
+    capability: "fs.create",
+    mutation: true,
+  },
+  {
+    name: "create_text_file",
+    description: "在工作区创建新文本文件（已存在时拒绝，绝不覆盖）。",
+    schema: createTextFileSchema,
+    capability: "fs.create",
+    mutation: true,
+  },
+  {
+    name: "patch_text_file",
+    description: "对现有文本文件进行精确修改（oldText 必须唯一匹配）。",
+    schema: patchTextFileSchema,
+    capability: "fs.modify",
+    mutation: true,
+  },
+  {
+    name: "create_document",
+    description: "从结构化文档 IR 生成 Markdown 或 DOCX 文件。",
+    schema: createDocumentSchema,
+    capability: "document.create",
+    mutation: true,
+  },
+];
+
+export const COMPUTER_TOOLS: ComputerToolDefinition[] = [
+  ...COMPUTER_READ_TOOLS,
+  ...COMPUTER_MUTATION_TOOLS,
+];
+
+export const COMPUTER_TOOL_NAMES = new Set(COMPUTER_TOOLS.map((t) => t.name));
+
+/** Mutation 工具名（regenerate guard / 调用限制使用） */
+export const COMPUTER_MUTATION_TOOL_NAMES = new Set(COMPUTER_MUTATION_TOOLS.map((t) => t.name));
+
+/**
+ * 按 Agent Mode 暴露工具（server 过滤；不是安全边界——executor 仍独立 policy 求值）：
+ * - plan：只读工具
+ * - guided / workspace-auto：read + mutation
+ */
+export function getComputerToolsForMode(mode: KiroAgentMode): ComputerToolDefinition[] {
+  if (mode === "plan") return COMPUTER_READ_TOOLS;
+  return COMPUTER_TOOLS;
+}

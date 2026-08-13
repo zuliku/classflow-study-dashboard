@@ -62,3 +62,20 @@ export interface LogicalComputerResource {
 }
 
 export type KiroAgentModeLabels = Record<KiroAgentMode, string>;
+
+/** Mutation 成功的运行时事实（用于 Action Card；绝不含 native path / adapterRef / content blob） */
+export interface ComputerActionFact {
+  tool: string;
+  operation: "create" | "modify";
+  resourceType: "text" | "document" | "directory";
+  workspaceId: string;
+  workspaceLabel: string;
+  rootId: string;
+  rootLabel: string;
+  relativePath: string;
+  displayName: string;
+  format?: "markdown" | "docx";
+  size?: number;
+  changeCount?: number;
+  verification: "passed";
+}

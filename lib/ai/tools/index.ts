@@ -1,24 +1,47 @@
+import { tool, ToolSet } from "ai";
 import { KIRO_READ_TOOLS } from "@/lib/ai/tools/read/registry";
 import { KIRO_WRITE_TOOLS } from "@/lib/ai/tools/write/registry";
 import { KIRO_MEMORY_TOOLS } from "@/lib/ai/memory/tools";
+import { COMPUTER_TOOLS, getComputerToolsForMode } from "@/lib/ai/computer/tools/registry";
+import { ComputerActionFact } from "@/lib/ai/computer/types";
 
-/** Kiro 全部工具（Read + Write + Memory）：Server 提供 schema，Client 按同名执行 */
+/** Kiro 全部基础工具（Read + Write + Memory）：Server 提供 schema，Client 按同名执行 */
 export const KIRO_TOOLS = {
   ...KIRO_READ_TOOLS,
   ...KIRO_WRITE_TOOLS,
   ...KIRO_MEMORY_TOOLS,
 };
 
+export type KiroToolSet = typeof KIRO_TOOLS;
+
+/** Computer 工具 → AI SDK tool set（schema 注册；client 端同名执行） */
+export function buildComputerToolSet(mode: "plan" | "guided" | "workspace-auto"): ToolSet {
+  const set: ToolSet = {};
+  for (const def of getComputerToolsForMode(mode)) {
+    set[def.name] = tool({
+      description: def.description,
+      inputSchema: def.schema,
+    });
+  }
+  return set;
+}
+
 /**
- * 请求级工具域组装入口（Kiro Computer Agent V1 Part 1）：
- * 未来 Computer 工具在此按 snapshot/turn 条件加入（Part 2）。
- * Part 1 明确不暴露任何 Computer File Tools——只返回现有 Read/Write/Memory 域。
+ * 请求级工具域组装（Kiro Computer Agent V1 Part 2）：
+ * Computer 工具按 turn snapshot 条件加入（Computer OFF → 0 个；plan → 只读；guided/auto → read + mutation）。
+ * server 过滤不是安全边界——Browser Executor 仍独立 policy 求值。
  */
-export function getKiroToolsForRequest(_input: {
+export function getKiroToolsForRequest(input: {
   computerSnapshot?: {
     enabled: boolean;
     agentMode: "plan" | "guided" | "workspace-auto";
   };
-}): typeof KIRO_TOOLS {
-  return KIRO_TOOLS;
+}): ToolSet {
+  const base = { ...KIRO_TOOLS } as ToolSet;
+  const snap = input.computerSnapshot;
+  if (!snap?.enabled) return base;
+  return { ...base, ...buildComputerToolSet(snap.agentMode) };
 }
+
+export { COMPUTER_TOOLS };
+export type { ComputerActionFact };
