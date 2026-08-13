@@ -19,7 +19,8 @@ export type ComputerErrorCode =
   | "UNSUPPORTED_BROWSER"
   | "DOCUMENT_RENDER_FAILED"
   | "VERIFICATION_FAILED"
-  | "FILE_TOO_LARGE";
+  | "FILE_TOO_LARGE"
+  | "INVALID_INPUT";
 
 export class ComputerError extends Error {
   readonly code: ComputerErrorCode;
