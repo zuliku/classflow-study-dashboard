@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Establish Kiro's independent Computer Runtime foundation, workspace/grant model, permission policy, model reasoning controls, and productized Composer/Settings controls without yet exposing filesystem/document mutation tools to the model.
+**Goal:** Establish Kiro's independent Computer Runtime foundation, workspace/grant control plane, permission policy, model reasoning controls, and productized Composer/Settings controls without yet exposing filesystem/document mutation tools to the model.
 
-**Architecture:** Keep the existing Kiro Harness and add a separate `lib/ai/computer/*` trust domain. Computer access is workspace-first and adapter-driven; sandbox boundaries and permission decisions stay separate. Reasoning is model-capability-driven and frozen per turn, while live Computer grants/rules remain runtime state. Part 1 creates the safe shell and control plane that Part 2 will use for actual file/document tools.
+**Architecture:** Keep the existing Kiro Harness and add a separate `lib/ai/computer/*` trust domain. Computer access is workspace-first and adapter-driven; sandbox boundaries and permission decisions stay separate. Reasoning is model-capability-driven and frozen per turn, while live Computer grants/rules remain runtime state. Part 1 creates the safe shell and control plane that Part 2 will use for real file/document tools.
 
 **Tech Stack:** Next.js 14, React 18, TypeScript 5.5, Zustand 4.5, AI SDK 7 (`ai`, `@ai-sdk/react`, `@ai-sdk/anthropic`, `@ai-sdk/openai-compatible`), IndexedDB / File System Access API, Vitest, Playwright, existing ClassFlow UI primitives.
 
@@ -13,66 +13,69 @@
 - Source of truth: `docs/superpowers/specs/2026-08-13-kiro-computer-agent-v1-design.md`.
 - Architecture = Approach B: independent Computer Runtime integrated into existing Kiro Harness.
 - Sandbox is a technical boundary; Permission is a policy decision. Permission must never enlarge sandbox roots.
-- Model-facing Computer resources use logical `workspaceId + rootId + relative path`, never raw native paths/handles.
+- Model-facing resources use logical `workspaceId + rootId + relative path`, never raw native paths/handles.
 - Chromium real-folder support uses File System Access API only after explicit user gesture; unsupported environments use Kiro Sandbox backed by IndexedDB.
-- V1 usable Agent Modes: `plan`, `guided`, `workspace-auto`; no usable Web `full-access` mode.
-- V1 must not expose shell, PowerShell, command execution, delete-file/delete-directory, app launch, MCP, or arbitrary network capability.
-- Reasoning and response preference are distinct. Reasoning controls model inference when supported; response preference remains output presentation depth.
-- Reasoning support is capability-driven. Do not infer from model name/vendor. If a model/transport has no verified mechanism, it must resolve to `default` only.
-- Current DeepSeek official compatibility transform forcibly disables thinking for tool-calling stability; Part 1 must not present unsupported adjustable reasoning for that transport unless code-level evidence changes.
-- No raw `FileSystemDirectoryHandle`, absolute path, permission token, or file bytes in Kiro chat history or model request body.
-- Do not add new dependencies in Part 1.
-- Keep `useKiroChat.ts` as orchestration/router only; Computer execution/policy logic belongs under `lib/ai/computer`.
-- Composer normal Kiro mode must remain usable; Computer mode enhances the same Composer rather than creating a separate chat product.
-- Composer visual direction: borrow Codex-style information hierarchy (workspace/context top-left; agent/model/reasoning controls grouped low-noise near the send affordance) without copying branding or creating a separate design language.
-- Test policy: prefer targeted Vitest + `npm run typecheck` + at most one targeted Composer/Settings Playwright file. Do not run full Vitest/Playwright/build by default.
+- Usable Web V1 Agent Modes: `plan`, `guided`, `workspace-auto`; no usable `full-access` mode.
+- Do not expose shell, PowerShell, command execution, delete-file/delete-directory, app launch, MCP, or arbitrary network capability.
+- Reasoning and response preference are distinct. Reasoning controls model inference when supported; response preference remains final-answer presentation depth.
+- Reasoning support is capability-driven. Do not infer support from model name/vendor/transport. If support cannot be verified against the current installed provider integration, the model remains `default` only.
+- Preserve current DeepSeek official compatibility behavior that forces thinking disabled while tool calling is used; do not present adjustable reasoning for that path unless current code-level support is deliberately changed and verified.
+- No raw `FileSystemDirectoryHandle`, absolute native path, permission token, or file bytes in chat history or model request body.
+- No new dependencies in Part 1.
+- `hooks/useKiroChat.ts` remains orchestration/router code; Computer execution/policy logic belongs under `lib/ai/computer`.
+- Computer mode enhances the existing `KiroComposer`; do not create a second chat product.
+- Composer direction: borrow the supplied Codex reference's information hierarchy—workspace/context quiet at the top, clean prompt area, execution controls grouped near send—without copying branding or adding fake branch semantics.
+- Test policy: targeted Vitest + `npm run typecheck` + one focused Playwright file at most. Do not run full Vitest, full Playwright, or build by default.
 
 ---
 
-## File Map
+## Exact File Map
 
 ### Create
-- `lib/ai/computer/types.ts` — shared Computer runtime/workspace/permission types.
-- `lib/ai/computer/errors.ts` — Computer-domain error codes/helpers.
-- `lib/ai/computer/capabilities.ts` — capability/risk constants and Agent Mode defaults.
-- `lib/ai/computer/policy.ts` — deterministic permission evaluation.
-- `lib/ai/computer/prepare.ts` — Part 1 preflight entry point; no file mutation execution yet.
-- `lib/ai/computer/adapters/types.ts` — environment-independent adapter contract.
-- `lib/ai/computer/adapters/browser.ts` — Browser File System Access grant helpers / adapter skeleton.
-- `lib/ai/computer/adapters/sandbox.ts` — IndexedDB-backed sandbox adapter skeleton/state capability.
-- `lib/ai/computer/workspace/types.ts` — workspace/root/grant metadata types if not kept in top-level types.
-- `lib/ai/computer/workspace/grants.ts` — IndexedDB directory-handle grant persistence and permission querying.
-- `lib/ai/computer/workspace/resolver.ts` — logical path validation and resource resolution boundary.
-- `lib/ai/reasoning/types.ts` — reasoning effort/capability types.
-- `lib/ai/reasoning/providerOptions.ts` — provider/transport-specific reasoning mapping.
-- `store/useKiroComputerStore.ts` — persisted logical Computer UI/policy state, never native handles.
-- `components/settings/KiroAgentSettings.tsx` — Computer Agent settings surface.
-- `components/kiro/computer/KiroWorkspacePicker.tsx` — workspace/context selector surface.
-- `components/kiro/computer/KiroAgentModeMenu.tsx` — Composer permission-mode control.
-- `components/kiro/computer/KiroReasoningMenu.tsx` — Composer reasoning control.
-- `tests/unit/kiro-computer-policy.test.ts` — policy/sandbox boundary tests.
-- `tests/unit/kiro-reasoning.test.ts` — capability normalization/provider mapping tests.
-- `tests/unit/kiro-computer-store.test.ts` — store defaults/mode/workspace behavior if existing store-test style supports it.
+- `lib/ai/computer/types.ts`
+- `lib/ai/computer/errors.ts`
+- `lib/ai/computer/capabilities.ts`
+- `lib/ai/computer/policy.ts`
+- `lib/ai/computer/prepare.ts`
+- `lib/ai/computer/workspace/resolver.ts`
+- `lib/ai/computer/workspace/grants.ts`
+- `lib/ai/computer/adapters/types.ts`
+- `lib/ai/computer/adapters/browser.ts`
+- `lib/ai/computer/adapters/sandbox.ts`
+- `lib/ai/reasoning/types.ts`
+- `lib/ai/reasoning/providerOptions.ts`
+- `store/useKiroComputerStore.ts`
+- `components/settings/KiroAgentSettings.tsx`
+- `components/kiro/computer/KiroWorkspacePicker.tsx`
+- `components/kiro/computer/KiroAgentModeMenu.tsx`
+- `components/kiro/computer/KiroReasoningMenu.tsx`
+- `tests/unit/kiro-computer-policy.test.ts`
+- `tests/unit/kiro-computer-store.test.ts`
+- `tests/unit/kiro-reasoning.test.ts`
+- `tests/e2e/kiro-computer-controls.spec.ts`
 
 ### Modify
-- `lib/ai/providers/types.ts` — add reasoning capability metadata and custom capability declaration.
-- `lib/ai/providers/capabilities.ts` — expose normalized reasoning capability.
-- `lib/ai/providers/registry.ts` and provider model registries — explicitly declare verified reasoning support only.
-- `store/useAISettingsStore.ts` — persist `reasoningEffort` and setter.
-- `components/settings/KiroAISettings.tsx` — add Reasoning row in Model group; keep response preference separate.
-- settings navigation/registry file(s) discovered by grep — surface `KiroAgentSettings` as a separate Kiro Agent section without bloating `KiroAISettings`.
-- `components/kiro/KiroComposer.tsx` — Codex-inspired Computer mode hierarchy and controls.
-- Composer parent (`KiroWorkspace.tsx` or actual current owner discovered by grep) — pass Computer/reasoning/workspace props/state.
-- `hooks/useKiroChat.ts` — freeze reasoning/agent mode/workspace into turn request; no Computer execution logic in hook.
-- `app/api/ai/chat/route.ts` — validate normalized reasoning/computer metadata and apply verified provider options; do not trust raw provider options from client.
-- request/context types used by chat route — add minimal logical Computer snapshot.
-- `lib/ai/tools/index.ts` or current server tool assembly — Part 1 only establishes Computer-domain registration gating hook; do not expose mutation tools yet.
-- `lib/ai/contextBudget/types.ts` — include minimal turn snapshot metadata only if this is the canonical snapshot type.
-- existing targeted Kiro/Settings E2E file, or create `tests/e2e/kiro-computer-controls.spec.ts` only if no focused existing file is suitable.
+- `lib/ai/providers/types.ts`
+- `lib/ai/providers/capabilities.ts`
+- `lib/ai/providers/registry.ts`
+- `lib/ai/providers/openCodeGo.ts`
+- `lib/ai/providers/deepSeek.ts`
+- `store/useAISettingsStore.ts`
+- `types/index.ts`
+- `components/settings/KiroAISettings.tsx`
+- `components/settings/SettingsNav.tsx`
+- `components/settings/SettingsView.tsx`
+- `lib/settingsRegistry.ts`
+- `components/kiro/KiroComposer.tsx`
+- `components/kiro/KiroChatSurface.tsx`
+- `hooks/useKiroChat.ts`
+- `lib/ai/contextBudget/types.ts`
+- `lib/ai/tools/index.ts`
+- `app/api/ai/chat/route.ts`
 
 ---
 
-### Task 1: Define Computer Runtime Types, Modes, Policy, and Path Boundary
+## Task 1 — Computer Runtime Types, Modes, Policy, and Logical Path Boundary
 
 **Files:**
 - Create: `lib/ai/computer/types.ts`
@@ -83,11 +86,10 @@
 - Create: `lib/ai/computer/workspace/resolver.ts`
 - Test: `tests/unit/kiro-computer-policy.test.ts`
 
-**Interfaces:**
+**Core interfaces:**
 
 ```ts
 export type KiroAgentMode = "plan" | "guided" | "workspace-auto";
-
 export type ComputerPermissionEffect = "allow" | "ask" | "deny";
 
 export type ComputerCapability =
@@ -105,14 +107,6 @@ export type ComputerCapability =
   | "app.reveal"
   | "shell.execute"
   | "network.access";
-
-export type ComputerRisk =
-  | "read"
-  | "create"
-  | "modify"
-  | "destructive"
-  | "execute"
-  | "external";
 
 export interface ComputerPermissionRule {
   id: string;
@@ -145,91 +139,26 @@ export interface LogicalComputerResource {
   rootId: string;
   path: string;
 }
-
-export interface ComputerPolicyContext {
-  mode: KiroAgentMode;
-  rules: ComputerPermissionRule[];
-  workspace: KiroWorkspaceMeta;
-  capability: ComputerCapability;
-  rootId?: string;
-  relativePath?: string;
-}
-
-export type ComputerPolicyDecision =
-  | { effect: "allow"; source: string }
-  | { effect: "ask"; source: string }
-  | { effect: "deny"; source: string };
 ```
 
-- [ ] **Step 1: Write policy tests before implementation**
+- [ ] **Write RED policy/path tests first.** Required cases:
+  - Plan: read allow, create/modify deny.
+  - Guided: read/create allow, modify/move ask, destructive/execute deny.
+  - Workspace Auto: read/create/modify allow, move ask, destructive/execute deny.
+  - read-only root hard-denies mutation regardless of mode.
+  - explicit deny rule wins over allow mode default.
+  - safe relative path normalizes separators and internal `.`/`..`.
+  - `../secret`, leading `/`, drive path, UNC path, NUL/control chars, and Windows reserved device names are rejected.
 
-Test exact behaviors:
-
-```ts
-import { describe, expect, it } from "vitest";
-import { evaluateComputerPolicy } from "@/lib/ai/computer/policy";
-import { normalizeRelativeComputerPath } from "@/lib/ai/computer/workspace/resolver";
-
-const workspace = {
-  id: "research",
-  name: "论文研究",
-  roots: [
-    { id: "output", label: "输出", access: "read-write" as const, adapterRef: "grant-output" },
-    { id: "raw", label: "原始数据", access: "read-only" as const, adapterRef: "grant-raw" },
-  ],
-  createdAt: "2026-08-13T00:00:00.000Z",
-  updatedAt: "2026-08-13T00:00:00.000Z",
-};
-
-describe("computer policy", () => {
-  it("plan allows reads and denies writes", () => {
-    expect(evaluateComputerPolicy({ mode: "plan", rules: [], workspace, capability: "fs.read", rootId: "output" }).effect).toBe("allow");
-    expect(evaluateComputerPolicy({ mode: "plan", rules: [], workspace, capability: "fs.create", rootId: "output" }).effect).toBe("deny");
-  });
-
-  it("guided allows create and asks modify", () => {
-    expect(evaluateComputerPolicy({ mode: "guided", rules: [], workspace, capability: "fs.create", rootId: "output" }).effect).toBe("allow");
-    expect(evaluateComputerPolicy({ mode: "guided", rules: [], workspace, capability: "fs.modify", rootId: "output" }).effect).toBe("ask");
-  });
-
-  it("workspace-auto still denies unsupported destructive/execute capabilities", () => {
-    expect(evaluateComputerPolicy({ mode: "workspace-auto", rules: [], workspace, capability: "fs.delete", rootId: "output" }).effect).toBe("deny");
-    expect(evaluateComputerPolicy({ mode: "workspace-auto", rules: [], workspace, capability: "shell.execute", rootId: "output" }).effect).toBe("deny");
-  });
-
-  it("read-only root hard-denies mutation even when mode would allow", () => {
-    expect(evaluateComputerPolicy({ mode: "workspace-auto", rules: [], workspace, capability: "fs.modify", rootId: "raw" }).effect).toBe("deny");
-  });
-
-  it("explicit deny wins over an allow-mode default", () => {
-    const rules = [{ id: "deny-output-modify", effect: "deny" as const, capability: "fs.modify" as const, workspaceId: "research", rootId: "output", scope: "persistent" as const }];
-    expect(evaluateComputerPolicy({ mode: "workspace-auto", rules, workspace, capability: "fs.modify", rootId: "output" }).effect).toBe("deny");
-  });
-});
-
-describe("computer paths", () => {
-  it("normalizes safe relative paths", () => {
-    expect(normalizeRelativeComputerPath("notes/../output/plan.md")).toBe("output/plan.md");
-  });
-
-  it.each(["../secret.txt", "/etc/passwd", "C:\\Users\\x", "\\\\server\\share", "CON.txt"])(
-    "rejects path outside safe logical resource grammar: %s",
-    (input) => expect(() => normalizeRelativeComputerPath(input)).toThrow()
-  );
-});
-```
-
-- [ ] **Step 2: Run only the policy test for RED**
+Run only:
 
 ```bash
 npx vitest run tests/unit/kiro-computer-policy.test.ts
 ```
 
-Expected: FAIL because Computer Runtime modules do not exist.
+Expected before implementation: FAIL.
 
-- [ ] **Step 3: Implement mode defaults and deterministic rule evaluation**
-
-Mode defaults must be exactly:
+- [ ] **Implement exact mode defaults** in `capabilities.ts`:
 
 ```ts
 export const AGENT_MODE_DEFAULTS = {
@@ -284,29 +213,18 @@ export const AGENT_MODE_DEFAULTS = {
 } as const;
 ```
 
-Hard-deny precedence in Part 1:
-1. unsupported V1 capabilities (`fs.delete`, `app.open`, `app.reveal`, `shell.execute`, `network.access`);
-2. mutation against a read-only root;
-3. matching explicit deny rule;
-4. most-specific matching allow/ask rule;
-5. mode default.
+- [ ] **Implement policy precedence**:
+  1. V1 hard deny (`fs.delete`, `app.open`, `app.reveal`, `shell.execute`, `network.access`);
+  2. read-only root mutation deny;
+  3. matching explicit deny;
+  4. most-specific matching explicit allow/ask;
+  5. mode default.
 
-Do not implement a broad glob engine. `resourcePattern` may be persisted for future compatibility, but Part 1 policy matching may support only exact normalized path or an anchored `prefix/**` form if needed. Do not introduce a dependency.
+No glob dependency. Part 1 may support exact resource path and simple normalized `prefix/**` only.
 
-- [ ] **Step 4: Implement logical-path normalization**
+- [ ] **Implement `normalizeRelativeComputerPath()`** with `/` normalization, traversal escape prevention, absolute/drive/UNC rejection, control-char rejection, and case-insensitive Windows reserved basename rejection (`CON`, `PRN`, `AUX`, `NUL`, `COM1..9`, `LPT1..9`, including extensions).
 
-`normalizeRelativeComputerPath` must:
-- convert `\\` to `/`;
-- reject drive letters/UNC/leading `/`;
-- process `.` and `..` without ever escaping root;
-- reject empty final path where a file path is required;
-- reject NUL/control characters;
-- reject Windows reserved device basenames such as `CON`, `PRN`, `AUX`, `NUL`, `COM1..9`, `LPT1..9` case-insensitively even with extensions;
-- return normalized `/` separators.
-
-- [ ] **Step 5: Implement `prepareComputerTool` as Part 1 preflight only**
-
-It receives logical operation metadata and returns allow/ask/deny; it must not touch browser handles or execute file writes yet.
+- [ ] **Implement `prepareComputerTool()`** as preflight only:
 
 ```ts
 export function prepareComputerTool(input: {
@@ -318,15 +236,15 @@ export function prepareComputerTool(input: {
 }): ComputerPolicyDecision
 ```
 
-- [ ] **Step 6: Run GREEN**
+It must not touch native handles or execute mutations.
+
+- [ ] **Run GREEN:**
 
 ```bash
 npx vitest run tests/unit/kiro-computer-policy.test.ts
 ```
 
-Expected: PASS.
-
-- [ ] **Step 7: Commit runtime policy foundation**
+- [ ] **Commit:**
 
 ```bash
 git add lib/ai/computer tests/unit/kiro-computer-policy.test.ts
@@ -335,7 +253,7 @@ git commit -m "feat(kiro): add computer policy foundation"
 
 ---
 
-### Task 2: Add Workspace Metadata Store and Native Grant Persistence Boundary
+## Task 2 — Workspace Metadata Store and Native Grant Boundary
 
 **Files:**
 - Create: `store/useKiroComputerStore.ts`
@@ -345,7 +263,7 @@ git commit -m "feat(kiro): add computer policy foundation"
 - Create: `lib/ai/computer/workspace/grants.ts`
 - Test: `tests/unit/kiro-computer-store.test.ts`
 
-**Interfaces:**
+**State interface:**
 
 ```ts
 export interface KiroComputerState {
@@ -365,32 +283,15 @@ export interface KiroComputerState {
 }
 ```
 
-Persist store metadata to a dedicated key such as `classflow-kiro-computer-v1`. `partialize` must contain only logical metadata/rules/mode flags. It must not persist directory handles.
+Persist under `classflow-kiro-computer-v1`. Persist logical metadata plus persistent rules only. Native directory handles and session rules must not enter localStorage.
 
-`lib/ai/computer/workspace/grants.ts` owns a separate IndexedDB database/store for native grants, keyed by opaque `adapterRef`.
-
-- [ ] **Step 1: Write store tests**
-
-Verify:
-- default: disabled, mode `guided`, activeWorkspaceId `null`, empty workspaces/rules;
-- enabling Computer does not invent a workspace;
-- removing active workspace clears activeWorkspaceId;
-- changing mode does not alter roots or rules;
-- metadata serialization contains no `handle` property.
-
-- [ ] **Step 2: RED run**
+- [ ] **RED tests:** defaults are disabled / guided / no active workspace; enabling does not invent a workspace; removing active workspace clears selection; changing mode does not change roots; persisted JSON contains no handle/native path; session rule is not persisted.
 
 ```bash
 npx vitest run tests/unit/kiro-computer-store.test.ts
 ```
 
-- [ ] **Step 3: Implement the Zustand store**
-
-Keep session-only permission rules out of persisted state. Either maintain them in a separate in-memory field and exclude them from `partialize`, or persist only rules where `scope === "persistent"`.
-
-- [ ] **Step 4: Define adapter boundary**
-
-Part 1 adapter contract is capability/grant oriented and may include read/list method signatures for Part 2, but do not implement model-facing file tools yet.
+- [ ] **Implement adapter capability contract:**
 
 ```ts
 export type ComputerAdapterKind = "browser" | "sandbox";
@@ -405,11 +306,9 @@ export interface ComputerAdapterCapabilities {
 }
 ```
 
-`BrowserFileAdapter` may expose helper methods for resolving a granted directory handle but must require an existing user grant; it must never invoke `showDirectoryPicker()` from background Agent execution.
+Do not add shell/process/network methods.
 
-- [ ] **Step 5: Implement explicit-user-gesture grant creation**
-
-Export a UI-triggered helper:
+- [ ] **Implement explicit-user-gesture Browser grant helper:**
 
 ```ts
 export async function chooseBrowserWorkspaceDirectory(): Promise<{
@@ -418,27 +317,28 @@ export async function chooseBrowserWorkspaceDirectory(): Promise<{
 } | null>
 ```
 
-Rules:
-- call `window.showDirectoryPicker()` only inside this function;
-- return `null` on user cancel;
-- save returned handle under opaque adapterRef in IndexedDB;
-- do not put handle in Zustand/localStorage/chat state;
-- provide `queryBrowserGrant(adapterRef)` returning `"granted" | "prompt" | "denied" | "missing"`.
+Only this explicit UI helper may call `window.showDirectoryPicker()`. It saves the returned handle in a dedicated IndexedDB grant store keyed by opaque `adapterRef`. User cancellation returns `null`.
 
-Use TypeScript-safe feature detection because File System Access types may not be in the current DOM lib configuration. Prefer local narrow interfaces over `any` spreading through the code.
+Also implement:
 
-- [ ] **Step 6: Implement SandboxAdapter identity/fallback state**
+```ts
+export async function queryBrowserGrant(
+  adapterRef: string
+): Promise<"granted" | "prompt" | "denied" | "missing">
+```
 
-Part 1 only needs a stable adapter kind/capabilities and reserved IndexedDB namespace. Part 2 will implement actual file records. Do not duplicate existing course-material blob storage.
+Use narrow local File System Access interfaces if DOM typings are incomplete; do not spread `any` across the runtime.
 
-- [ ] **Step 7: GREEN + typecheck**
+- [ ] **Implement Sandbox adapter identity/fallback namespace.** Part 1 needs capability/status plus a stable IndexedDB namespace only; Part 2 will add actual file records.
+
+- [ ] **Run:**
 
 ```bash
 npx vitest run tests/unit/kiro-computer-store.test.ts
 npm run typecheck
 ```
 
-- [ ] **Step 8: Commit workspace/grant control plane**
+- [ ] **Commit:**
 
 ```bash
 git add store/useKiroComputerStore.ts lib/ai/computer/adapters lib/ai/computer/workspace/grants.ts tests/unit/kiro-computer-store.test.ts
@@ -447,17 +347,18 @@ git commit -m "feat(kiro): add computer workspace grants"
 
 ---
 
-### Task 3: Add Capability-Driven Reasoning Effort to Model Settings and Server Requests
+## Task 3 — Capability-Driven Reasoning Effort
 
 **Files:**
 - Create: `lib/ai/reasoning/types.ts`
 - Create: `lib/ai/reasoning/providerOptions.ts`
 - Modify: `lib/ai/providers/types.ts`
 - Modify: `lib/ai/providers/capabilities.ts`
-- Modify: built-in provider model registry files under `lib/ai/providers/`
+- Modify: `lib/ai/providers/registry.ts`
+- Modify: `lib/ai/providers/openCodeGo.ts`
+- Modify: `lib/ai/providers/deepSeek.ts`
 - Modify: `store/useAISettingsStore.ts`
 - Modify: `app/api/ai/chat/route.ts`
-- Modify: request/body validation types used by route
 - Test: `tests/unit/kiro-reasoning.test.ts`
 
 **Interfaces:**
@@ -472,91 +373,44 @@ export interface ReasoningCapability {
 }
 ```
 
-Add to model definition capabilities:
+Add optional `reasoning?: ReasoningCapability` to `AIModelDefinition.capabilities`. Add explicit Custom-provider declaration `reasoningEffort?: boolean` to `AICustomConfig`. Add persisted `reasoningEffort` to `AISettings`, default `"default"`, plus `setReasoningEffort` to `useAISettingsStore`.
 
-```ts
-reasoning?: ReasoningCapability;
-```
-
-Add to `AICustomConfig`:
-
-```ts
-reasoningEffort?: boolean;
-```
-
-Add to persisted `AISettings`:
-
-```ts
-reasoningEffort: KiroReasoningEffort;
-```
-
-Default = `"default"`.
-
-- [ ] **Step 1: Inspect installed provider SDK types before coding mapping**
-
-Use local code/type definitions, not memory:
+- [ ] **Inspect installed SDK/provider types before mapping:**
 
 ```bash
-grep -R "reasoningEffort\|effort.*low\|thinking.*budget" node_modules/@ai-sdk/openai-compatible node_modules/@ai-sdk/anthropic -n | head -80
+grep -R "reasoningEffort\|effort.*low\|thinking.*budget" \
+  node_modules/@ai-sdk/openai-compatible \
+  node_modules/@ai-sdk/anthropic \
+  node_modules/ai -n | head -100
 ```
 
-Also inspect current `streamText` invocation and provider option naming in installed `ai` package types. Record the exact verified mapping in code comments.
+Use the installed types as source of truth. Do not install packages and do not invent provider option keys.
 
-Do not install packages.
-
-- [ ] **Step 2: Write tests for normalization**
-
-Tests must prove:
-- missing reasoning capability resolves to `default` only;
-- unsupported requested effort normalizes to `default` (or returns a typed unsupported result, but UI/server behavior must be consistent);
-- `default` produces no provider override;
-- DeepSeek official transport currently stays fixed/default because repository transform forcibly sets `thinking: { type: "disabled" }`;
-- Custom OpenAI only becomes adjustable when user explicitly sets `custom.reasoningEffort === true`.
-
-- [ ] **Step 3: RED run**
+- [ ] **RED tests** must prove:
+  - missing reasoning capability = `default` only;
+  - unsupported requested effort normalizes to `default` or a typed unsupported result with identical UI/server semantics;
+  - `default` adds no provider override;
+  - DeepSeek official remains fixed/default while its transform explicitly forces `thinking: { type: "disabled" }`;
+  - Custom OpenAI becomes adjustable only when `custom.reasoningEffort === true`.
 
 ```bash
 npx vitest run tests/unit/kiro-reasoning.test.ts
 ```
 
-- [ ] **Step 4: Extend model capability metadata conservatively**
+- [ ] **Declare built-in model support conservatively.** Do not mark every OpenAI-compatible or Anthropic-transport model adjustable. Only mark models whose current provider integration can be verified. If none can be proven, keep them fixed rather than show a fake control.
 
-Rules:
-- do not mark every `openai-chat` or `anthropic-messages` model adjustable automatically;
-- mark only models for which the current transport/provider implementation has verified support;
-- if no built-in OpenCode model can be proven adjustable from current provider behavior, leave them fixed for Part 1 rather than fabricate support;
-- Custom OpenAI capability remains explicit user opt-in.
+- [ ] **Implement server normalization:** client sends only `reasoningEffort`; server resolves model definition, normalizes against capability, builds verified provider options, and passes them to `streamText`. Client must never send raw `providerOptions`.
 
-- [ ] **Step 5: Add persisted reasoning setting**
+- [ ] **Preserve DeepSeek transform/schema compatibility logic.** Do not remove the existing tool-schema normalization or thinking-disable transform.
 
-`useAISettingsStore` and `AISettings` gain `reasoningEffort` + `setReasoningEffort`. Existing persisted settings without the field must hydrate safely to `default` through store defaults/migration behavior.
-
-- [ ] **Step 6: Implement server-side normalized mapping**
-
-Client may send only `reasoningEffort`. It must never send arbitrary providerOptions.
-
-Server flow:
-
-```text
-request reasoningEffort
-→ resolve model definition
-→ normalize against definition.capabilities.reasoning
-→ resolve verified providerOptions
-→ streamText(...)
-```
-
-If normalized effort is `default`, omit provider override.
-
-Do not remove DeepSeek's existing request-body transform/schema fix.
-
-- [ ] **Step 7: GREEN + typecheck**
+- [ ] **Run:**
 
 ```bash
 npx vitest run tests/unit/kiro-reasoning.test.ts
 npm run typecheck
 ```
 
-- [ ] **Step 8: Commit reasoning capability**
+- [ ] **Commit:**
 
 ```bash
 git add lib/ai/reasoning lib/ai/providers store/useAISettingsStore.ts app/api/ai/chat tests/unit/kiro-reasoning.test.ts
@@ -565,16 +419,15 @@ git commit -m "feat(kiro): add reasoning effort controls"
 
 ---
 
-### Task 4: Freeze Computer/Reasoning Turn Snapshot and Establish Kiro Tool-Domain Hook
+## Task 4 — Turn Snapshot and Computer Tool-Domain Hook
 
 **Files:**
 - Modify: `hooks/useKiroChat.ts`
-- Modify: `lib/ai/contextBudget/types.ts` or the actual canonical turn-request snapshot type
+- Modify: `lib/ai/contextBudget/types.ts`
+- Modify: `lib/ai/tools/index.ts`
 - Modify: `app/api/ai/chat/route.ts`
-- Modify: `lib/ai/tools/index.ts` or current server tool assembly
-- Test: extend `tests/unit/kiro-reasoning.test.ts` and/or create one focused runtime snapshot test only if existing test seams require it.
 
-**Turn snapshot:**
+**Snapshot:**
 
 ```ts
 export interface KiroComputerTurnSnapshot {
@@ -589,177 +442,113 @@ export interface KiroComputerTurnSnapshot {
 }
 ```
 
-No `adapterRef`, handles, native paths, rules, or permission tokens are sent to the model/server context.
+No `adapterRef`, native handle/path, permission rule, or permission token is serialized into this snapshot.
 
-- [ ] **Step 1: Add request snapshot creation in `useKiroChat`**
+- [ ] At send boundary in `useKiroChat`, freeze current provider/model, reasoning effort, Computer enabled, active workspace logical metadata, and Agent Mode into the request used for that turn.
+- [ ] Do not freeze grants/rules as authority. Live grant/rule changes must remain runtime state for future Computer tool calls.
+- [ ] Validate Computer snapshot on server as context/tool-selection metadata only. Reject malformed IDs, absolute-looking values, and oversized root arrays.
+- [ ] Refactor `lib/ai/tools/index.ts` just enough to support a future domain assembly function such as `getKiroToolsForRequest(...)`; **Part 1 must still return only existing Read/Write/Memory tools and must not expose Computer file tools.**
+- [ ] Keep `useKiroChat.ts` free of Browser handle/File System Access execution code.
 
-At send boundary, capture:
-- current selected model/provider;
-- `reasoningEffort`;
-- `computerEnabled`;
-- active workspace logical metadata;
-- `agentMode`.
-
-A running turn must not change if the user later switches model/reasoning/mode/workspace in the store. The Composer already treats submitting/streaming as `turnLocked`; preserve that model.
-
-- [ ] **Step 2: Keep live grants/rules out of snapshot**
-
-Permission rules and grant revocation remain live client runtime state for future tool execution. Do not serialize them into the request as authority.
-
-- [ ] **Step 3: Add server validation of logical Computer context**
-
-Server treats it as context/tool-selection metadata only, not authority. Reject malformed IDs/oversized root arrays. Do not accept absolute paths.
-
-- [ ] **Step 4: Add Computer tool-domain gating hook without exposing tools**
-
-Part 1 may add:
-
-```ts
-resolveKiroToolDomains({ computerEnabled, agentMode })
-```
-
-or equivalent structure so Part 2 can register Computer tools cleanly. In Part 1, model-facing Computer file mutation tools must still be absent.
-
-- [ ] **Step 5: Targeted test/typecheck**
-
-Use existing test seam if present. Otherwise rely on reasoning/policy unit tests + typecheck; do not build a large chat integration harness solely for this snapshot.
+Run:
 
 ```bash
 npm run typecheck
 ```
 
-- [ ] **Step 6: Commit turn snapshot integration**
+Commit:
 
 ```bash
-git add hooks/useKiroChat.ts lib/ai/contextBudget app/api/ai/chat lib/ai/tools
+git add hooks/useKiroChat.ts lib/ai/contextBudget/types.ts lib/ai/tools/index.ts app/api/ai/chat/route.ts
 git commit -m "feat(kiro): snapshot computer agent turn controls"
 ```
 
 ---
 
-### Task 5: Productize Settings for Reasoning and Computer Agent
+## Task 5 — Settings IA: Reasoning + Separate Kiro Agent Section
 
 **Files:**
 - Create: `components/settings/KiroAgentSettings.tsx`
 - Modify: `components/settings/KiroAISettings.tsx`
-- Modify: actual Settings navigation/registry discovered by grep
-- Modify: `lib/ai/providers/types.ts` / Custom provider UI as required
+- Modify: `types/index.ts`
+- Modify: `components/settings/SettingsNav.tsx`
+- Modify: `components/settings/SettingsView.tsx`
+- Modify: `lib/settingsRegistry.ts`
 
-**Settings ownership:**
-- `KiroAISettings`: Provider, Model, Reasoning Effort, Answer Preference, Search/Vision, Memory/privacy as currently appropriate.
-- `KiroAgentSettings`: Computer enable, default Agent Mode, Workspaces, Authorized roots, grant status, reauthorize/remove, permission-rule summary/future system capability labels.
+- [ ] Extend `SettingsSection` in `types/index.ts` with `"kiro-agent"`.
+- [ ] Add nav item in `SettingsNav.tsx` immediately after `kiro`, label `Kiro Agent`, using a restrained computer/shield icon from existing lucide-react.
+- [ ] Import/render `KiroAgentSettings` in `SettingsView.tsx` as a persistent section, consistent with all other settings sections.
+- [ ] Add searchable registry rows in `lib/settingsRegistry.ts` for `ai-reasoning-effort`, `kiro-computer-enabled`, `kiro-agent-mode`, `kiro-agent-workspace`, and `kiro-agent-permissions`.
 
-- [ ] **Step 1: Add Reasoning row inside existing Model group**
+### KiroAISettings changes
 
-Display:
-- `默认 / 低 / 中 / 高` only when active model supports those efforts;
-- unsupported current model: disabled neutral control/copy such as `当前模型不可调`;
-- keep `回答偏好` under Answer section with copy explicitly stating it changes final expression depth, not model reasoning.
+- [ ] Add Reasoning row inside the existing `模型` group, not the `回答` group.
+- [ ] If active model supports adjustable efforts, show `默认 / 低 / 中 / 高` filtered to its declared supportedEfforts.
+- [ ] If active model is fixed, show neutral copy `当前模型不可调` rather than a fake enabled control.
+- [ ] Keep `回答偏好` in the Answer group and retain wording that it affects final answer presentation, not reasoning/tools/safety.
+- [ ] For Custom OpenAI advanced capabilities, add explicit checkbox `支持思考程度`; checking it only declares compatibility and still goes through server normalization.
 
-For Custom OpenAI advanced capabilities add an explicit checkbox:
-
-```text
-支持思考程度
-```
-
-It only enables the Kiro reasoning control; it does not bypass server normalization.
-
-- [ ] **Step 2: Build `KiroAgentSettings`**
-
-Use existing Settings primitives and groups. Required rows:
+### KiroAgentSettings required rows
 
 ```text
-Computer Agent                       ON/OFF
-默认权限模式                          计划 / 受控 / 工作区自动
-当前 Workspace                       name / 未配置
-授权位置                              roots list + read-only/read-write state
-添加位置                              user-gesture action
-活动与安全                            explain local authorization / no shell/delete in V1
-桌面能力                              Full Access / terminal = 桌面版后续支持
+Computer Agent          ON/OFF
+默认权限模式             计划 / 受控 / 工作区自动
+当前 Workspace          name / 未配置
+授权位置                 roots + 本地/Sandbox + read-only/read-write + grant status
+添加位置                 explicit user-gesture button
+活动与安全               V1 no shell/delete/full access
+桌面能力                 Full Access / 终端 = 桌面版后续支持
 ```
 
-When File System Access is unsupported, show `Kiro Sandbox（当前浏览器）` and permit logical Sandbox workspace creation without pretending it is a native folder.
+- [ ] First enable with no workspace must route user to choose a real directory on supported Chromium or explicitly choose Kiro Sandbox. Cancelling the native picker keeps Computer disabled unless Sandbox is explicitly selected.
+- [ ] Revoked/missing Browser grant shows `需要重新授权`; reauthorization is user-triggered and not background Agent behavior.
 
-- [ ] **Step 3: First-enable flow**
-
-Turning Computer Agent ON with no workspace must not silently create native access. UI should guide user to:
-- choose a real folder on supported Chromium, or
-- create/use Kiro Sandbox fallback.
-
-If user cancels folder picker, Computer remains disabled unless they explicitly select Sandbox.
-
-- [ ] **Step 4: Reauthorization state**
-
-For roots whose grant is `prompt/denied/missing`, show a clear state and user-triggered reauthorization/manage action. Background Kiro execution cannot open the picker.
-
-- [ ] **Step 5: Typecheck**
+Run:
 
 ```bash
 npm run typecheck
 ```
 
-- [ ] **Step 6: Commit settings surfaces**
+Commit:
 
 ```bash
-git add components/settings lib/ai/providers/types.ts
+git add components/settings types/index.ts lib/settingsRegistry.ts
 git commit -m "feat(kiro): add agent and reasoning settings"
 ```
 
 ---
 
-### Task 6: Redesign Kiro Composer Computer Mode with Codex-Inspired Information Hierarchy
+## Task 6 — Codex-Inspired Computer Composer Controls
 
 **Files:**
 - Create: `components/kiro/computer/KiroWorkspacePicker.tsx`
 - Create: `components/kiro/computer/KiroAgentModeMenu.tsx`
 - Create: `components/kiro/computer/KiroReasoningMenu.tsx`
 - Modify: `components/kiro/KiroComposer.tsx`
-- Modify: Composer owner component that supplies model/settings state
-- Test: existing focused Kiro E2E or create `tests/e2e/kiro-computer-controls.spec.ts`
+- Modify: `components/kiro/KiroChatSurface.tsx`
+- Test: `tests/e2e/kiro-computer-controls.spec.ts`
 
-**Visual/interaction direction:**
+### Required layout
 
-Computer Agent ON:
+When Computer Agent ON:
 
 ```text
-┌──────────────────────────────────────────────────────────────┐
-│ [论文研究]  [本地 / Sandbox]                                 │
-│                                                              │
-│ Ask Kiro…                                                    │
-│                                                              │
-│ +   @   Web   Computer ✓             [受控] [思考 中] [模型] ↑ │
-└──────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────┐
+│ [论文研究]  [本地 / Sandbox]                             │
+│                                                          │
+│ Ask Kiro…                                                │
+│                                                          │
+│ +   @   Web   Computer ✓       [受控] [思考 中] [模型] ↑ │
+└──────────────────────────────────────────────────────────┘
 ```
 
-This borrows Codex's hierarchy from the supplied reference: context/workspace state is visible but quiet near the top edge; the main prompt area stays clean; execution controls cluster near send. Do not add a Git branch chip because ClassFlow V1 has no branch semantics.
+Do not add a Git branch chip; ClassFlow V1 has no branch semantic.
 
-Normal Computer OFF mode should remain close to current Kiro Composer and must not show a meaningless permission-mode chip.
-
-- [ ] **Step 1: Replace ad-hoc new menus with existing shared Popover/Dropdown primitives**
-
-Use the UI primitives already established in Task 2B1. Do not create new outside-click/Escape menu infrastructure.
-
-- [ ] **Step 2: Add Computer toggle**
-
-Use a low-noise desktop/computer icon. States:
-- OFF: neutral;
-- ON: pastel-mint active treatment consistent with Web Search;
-- disabled while `turnLocked`.
-
-If enabling requires workspace setup, invoke the controlled workspace setup flow; do not toggle true before a valid workspace/sandbox is selected.
-
-- [ ] **Step 3: Add workspace/context strip**
-
-Only visible when Computer Agent is enabled. Show:
-- active workspace name;
-- adapter label `本地` or `Sandbox`;
-- grant warning when current workspace is not executable.
-
-Keep ClassFlow context chips/attachments as the existing context system; do not duplicate them into this strip.
-
-- [ ] **Step 4: Add Agent Mode control**
-
-Options and copy:
+- [ ] Use existing shared Popover/Dropdown primitives for new workspace/mode/reasoning menus. Do not add new outside-click/Escape infrastructure.
+- [ ] Add a low-noise Computer toggle next to existing context/web controls. OFF = neutral; ON = ClassFlow active treatment; disabled while `turnLocked`.
+- [ ] Enabling with no valid workspace opens the controlled setup flow; do not set enabled true first and repair state later.
+- [ ] When enabled, show a quiet workspace strip above prompt with active workspace name and `本地` / `Sandbox`; show grant warning if unavailable.
+- [ ] Agent Mode menu visible only when Computer is ON. Exact user copy:
 
 ```text
 计划       只读取和分析，不修改文件
@@ -767,63 +556,25 @@ Options and copy:
 工作区自动 在授权 Workspace 内自动创建/修改；危险能力仍禁用
 ```
 
-Control is visible only when Computer Agent is ON. Changing mode updates `useKiroComputerStore`. Disable while turnLocked.
+- [ ] Reasoning control uses the same `useAISettingsStore.reasoningEffort` as Settings. Show it only if the active model has more than one supported effort. Fixed models omit the Composer reasoning chip; Settings carries explanation.
+- [ ] Desktop control order near send: `Agent Mode → Reasoning → Model → Send`. With Computer OFF: `Reasoning → Model → Send`.
+- [ ] Sidecar/narrow layouts collapse labels without toolbar wrap/overlap. Keep model selector accessible.
+- [ ] Preserve all current Composer behavior: attachments, drag/drop, paste, `@` context, Web Search, scanned-PDF/vision blocking, model unavailable state, submit/stop/loading, and turnLocked closing menus.
 
-- [ ] **Step 5: Add Reasoning control**
+### Focused E2E
 
-Show a compact control only if current model capability has >1 supported effort. If not adjustable, omit the Composer chip rather than clutter it with a disabled control; Settings still explains capability.
+Create one test file only: `tests/e2e/kiro-computer-controls.spec.ts`.
 
-Labels:
-
-```text
-默认
-思考 低
-思考 中
-思考 高
-```
-
-Changing it updates the same `useAISettingsStore.reasoningEffort` that Settings consumes.
-
-- [ ] **Step 6: Keep Model + Send hierarchy stable**
-
-Desktop right-side order:
-
-```text
-Agent Mode → Reasoning → Model → Send
-```
-
-If Computer OFF:
-
-```text
-Reasoning → Model → Send
-```
-
-On compact/sidecar widths, collapse text labels to icons/tooltips or shorter labels without wrapping the toolbar. Do not remove the model selector.
-
-- [ ] **Step 7: Preserve current attachment/context/Web Search behavior**
-
-Do not regress:
-- `+` attachment picker;
-- `@` ClassFlow context picker;
-- web search toggle;
-- image/PDF vision blocking;
-- send/stop/submitting states;
-- model unavailable flow;
-- drag/drop/paste attachment flows.
-
-- [ ] **Step 8: Add one focused E2E file/case**
-
-Prefer a single file with one flow:
-1. open Kiro;
-2. verify Computer OFF initially;
-3. choose Sandbox setup in test environment (do not depend on native directory picker in Playwright CI);
-4. Computer becomes ON;
-5. switch `受控 → 计划` and verify active/selected state;
-6. if fixture model is reasoning-adjustable, switch reasoning and verify selected state; otherwise verify no misleading reasoning chip;
-7. open Settings and verify Agent Mode/Reasoning reflect same store values;
-8. return to Kiro and verify values remain synchronized.
-
-Do not test actual file writes in Part 1.
+Flow:
+1. Open Kiro.
+2. Verify Computer is initially OFF for clean test storage.
+3. Use Kiro Sandbox setup path; do not rely on native directory picker in CI.
+4. Verify Computer becomes ON and workspace strip says Sandbox.
+5. Switch `受控 → 计划`; verify selected/pressed/menu state.
+6. If fixture model is reasoning-adjustable, switch reasoning and verify; if fixture is fixed, verify Composer does not falsely show an adjustable reasoning chip.
+7. Open Settings → Kiro Agent / Kiro & AI and verify the same Agent Mode / Reasoning stores are reflected.
+8. Return to Kiro; verify state remains synchronized.
+9. Do not test actual filesystem writes in Part 1.
 
 Run only:
 
@@ -831,43 +582,38 @@ Run only:
 npx playwright test tests/e2e/kiro-computer-controls.spec.ts
 ```
 
-If a pre-existing focused file is reused, run only that file.
-
-- [ ] **Step 9: Final typecheck**
+Then:
 
 ```bash
 npm run typecheck
 ```
 
-- [ ] **Step 10: Commit Composer productization**
+Commit:
 
 ```bash
-git add components/kiro components/settings tests/e2e
+git add components/kiro tests/e2e/kiro-computer-controls.spec.ts
 git commit -m "feat(kiro): add computer agent composer controls"
 ```
 
 ---
 
-### Task 7: Part 1 Static Audit and Verification
+## Task 7 — Static Audit, Targeted Verification, STOP
 
-**Files:** No new feature files unless fixes are required.
-
-- [ ] **Step 1: Audit trust-boundary leakage**
-
-Search:
+- [ ] Audit leakage:
 
 ```bash
-grep -R "showDirectoryPicker\|FileSystemDirectoryHandle\|adapterRef\|reasoningEffort\|computerEnabled\|workspace-auto" hooks app lib store components -n
+grep -R "showDirectoryPicker\|FileSystemDirectoryHandle\|adapterRef\|reasoningEffort\|computerEnabled\|workspace-auto" \
+  hooks app lib store components -n
 ```
 
 Confirm:
-- `showDirectoryPicker` only appears in explicit UI/grant helper code;
-- native handles do not appear in `useAISettingsStore`, `useKiroComputerStore` persistence, chat request types, or history serializers;
-- raw providerOptions are not accepted from client request;
-- `useKiroChat.ts` contains routing/snapshot assembly but no Computer filesystem execution logic;
-- Computer model-facing tool schemas are not exposed yet in Part 1.
+- `showDirectoryPicker` appears only in explicit workspace grant/setup code;
+- directory handles do not enter `useAISettingsStore`, `useKiroComputerStore` persisted JSON, chat request types, or history serializers;
+- client cannot submit arbitrary providerOptions;
+- `useKiroChat.ts` contains no Computer filesystem execution;
+- `KIRO_TOOLS` / request tool assembly exposes no Part 2 Computer file tools yet.
 
-- [ ] **Step 2: Run only required unit files together**
+- [ ] Run only required unit tests together:
 
 ```bash
 npx vitest run \
@@ -876,48 +622,43 @@ npx vitest run \
   tests/unit/kiro-reasoning.test.ts
 ```
 
-If the store test was folded into policy due existing project conventions, run the actual two focused files only.
-
-- [ ] **Step 3: Run the single focused E2E file**
+- [ ] Run only targeted E2E:
 
 ```bash
 npx playwright test tests/e2e/kiro-computer-controls.spec.ts
 ```
 
-Skip if the environment cannot start the app and report the exact infrastructure blocker; do not substitute a full suite.
+If E2E cannot start because of infrastructure, report the exact blocker; do not substitute a full suite.
 
-- [ ] **Step 4: Final typecheck**
+- [ ] Final typecheck:
 
 ```bash
 npm run typecheck
 ```
 
-- [ ] **Step 5: Build policy**
+- [ ] Build default = SKIP. Run `npm run build` only for a real Client/Server import boundary, Next route compile-only, or File System Access DOM typing/compile issue not resolved by typecheck.
 
-Default: skip `npm run build`.
+### Part 1 Acceptance
 
-Run build only if Part 1 introduced a Client/Server import boundary issue, Next route compile-only issue, or TypeScript DOM/File System Access type issue not caught by `typecheck`.
-
-- [ ] **Step 6: Final acceptance audit**
-
-Part 1 is complete only if all are true:
-- independent Computer Runtime exists;
-- policy modes and hard-deny behavior exist;
-- workspace logical metadata is persisted separately from native grants;
-- supported Chromium has explicit user-gesture directory grant path;
-- unsupported browser has Sandbox fallback path;
-- Reasoning Effort is separate from response preference;
-- unsupported models are not falsely shown as adjustable;
-- current DeepSeek forced-thinking-disabled compatibility is preserved;
+All must hold:
+- independent `lib/ai/computer` trust domain exists;
+- Plan/Guided/Workspace Auto policy and hard-deny behavior exist;
+- logical workspace metadata persists separately from native grants;
+- supported Chromium has explicit user-gesture directory grant flow;
+- unsupported browser has explicit Kiro Sandbox fallback;
+- Reasoning Effort is distinct from response preference;
+- unsupported/fixed models are not presented as adjustable;
+- current DeepSeek forced-thinking-disabled compatibility remains intact;
 - reasoning/model/mode/workspace are frozen at turn start;
 - live grants/rules are not serialized as authority;
-- Composer and Settings share the same reasoning/mode stores;
-- Computer mode Composer uses Codex-inspired hierarchy without copying Codex branding/branch semantics;
-- no Computer file mutation tools are exposed yet;
-- shell/delete/app/MCP/full-access remain unavailable;
-- existing attachment/context/Web Search/model/send flows remain intact.
+- Composer and Settings share the same Reasoning and Agent Mode stores;
+- Kiro Agent is a separate Settings section from Kiro & AI;
+- Computer Composer follows Codex-inspired hierarchy without copying branding or fake branch semantics;
+- no Computer file mutation tools are model-facing yet;
+- no shell/delete/app/MCP/full-access capability is exposed;
+- existing attachment/context/Web Search/model/send behavior remains intact.
 
-- [ ] **Step 7: Final report and STOP**
+### Final Report
 
 Report only:
 
@@ -933,15 +674,15 @@ Runtime:
 
 Reasoning:
 - capability model
-- supported transports/models
-- unsupported/fixed behavior
+- actually adjustable models/transports
+- fixed/unsupported behavior
 
 UI:
 - Composer Computer mode
 - Agent Mode
 - Reasoning
 - Workspace indicator
-- Settings sections
+- Kiro Agent Settings
 
 Turn integration:
 - frozen snapshot fields
@@ -949,7 +690,7 @@ Turn integration:
 
 Verification:
 - targeted unit files
-- targeted E2E file
+- targeted E2E
 - typecheck
 - build: PASS / skipped by policy
 
@@ -958,7 +699,7 @@ Deferred to Part 2:
 - create directory/text/document
 - patch text
 - Markdown/DOCX render/verify
-- File Action Cards for real mutations
+- real mutation Action Cards
 ```
 
 STOP. Do not begin Part 2.
