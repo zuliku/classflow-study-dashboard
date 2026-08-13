@@ -4,6 +4,8 @@ import {
   clampStudyBlockStart,
   getStudyBlockDuration,
   isSameStudyBlockPosition,
+  createQuickStudyBlockCandidate,
+  QUICK_SCHEDULE_DURATION_MINUTES,
 } from "@/lib/timeline/studyBlockInteraction";
 import { StudyBlock } from "@/types";
 
@@ -79,5 +81,42 @@ describe("studyBlockInteraction", () => {
     // clamp 独立可用：08:20 保留；21:00 - 1h 上界
     expect(clampStudyBlockStart(500, 60)).toBe(500);
     expect(clampStudyBlockStart(1300, 60)).toBe(1200); // 21:00 - 1h
+  });
+});
+
+const quickAssignment = { id: "a-1", title: "期中复习提纲整理", courseId: "c-2" };
+
+describe("createQuickStudyBlockCandidate", () => {
+  it("14:07 → 14:00–15:00（pointer 代表 start，15min snap）", () => {
+    const c = createQuickStudyBlockCandidate({ assignment: quickAssignment, date: "2026-08-13", pointerMinutes: 14 * 60 + 7 });
+    expect(c.startTime).toBe("14:00");
+    expect(c.endTime).toBe("15:00");
+  });
+
+  it("20:50 → 20:00–21:00（21:00 上界 clamp，duration 不缩短）", () => {
+    const c = createQuickStudyBlockCandidate({ assignment: quickAssignment, date: "2026-08-13", pointerMinutes: 20 * 60 + 50 });
+    expect(c.startTime).toBe("20:00");
+    expect(c.endTime).toBe("21:00");
+  });
+
+  it("08:02 → 08:00–09:00（08:00 下界 clamp）", () => {
+    const c = createQuickStudyBlockCandidate({ assignment: quickAssignment, date: "2026-08-13", pointerMinutes: 8 * 60 + 2 });
+    expect(c.startTime).toBe("08:00");
+    expect(c.endTime).toBe("09:00");
+  });
+
+  it("identity/domain 字段保留：title / assignmentId / courseId / source=manual", () => {
+    const c = createQuickStudyBlockCandidate({ assignment: quickAssignment, date: "2026-08-14", pointerMinutes: 10 * 60 });
+    expect(c.title).toBe("期中复习提纲整理");
+    expect(c.assignmentId).toBe("a-1");
+    expect(c.courseId).toBe("c-2");
+    expect(c.source).toBe("manual");
+    expect(c.date).toBe("2026-08-14");
+  });
+
+  it("QUICK_SCHEDULE_DURATION_MINUTES === 60（快速安排固定 1 小时）", () => {
+    expect(QUICK_SCHEDULE_DURATION_MINUTES).toBe(60);
+    const c = createQuickStudyBlockCandidate({ assignment: quickAssignment, date: "2026-08-13", pointerMinutes: 16 * 60 });
+    expect(getStudyBlockDuration(c)).toBe(60);
   });
 });

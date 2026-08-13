@@ -42,6 +42,7 @@ import { pointerToMinutes } from "@/lib/timetableInteraction";
 import {
   calculateMovedStudyBlock,
   isSameStudyBlockPosition,
+  createQuickStudyBlockCandidate,
 } from "@/lib/timeline/studyBlockInteraction";
 import { timeToMinutes } from "@/lib/timeline/timelineGeometry";
 import { isScheduleActive } from "@/lib/schedule";
@@ -297,6 +298,121 @@ export function TimelineWorkspace() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [studyDrag.type, weekDates, schedules, studyBlocks, currentSemesterWeek, pushToast, updateStudyBlock, studyDragEnabled]);
 
+  // ---- IM5B：Unscheduled Assignment 拖入 Timeline 快速安排（1h StudyBlock）----
+  type UnscheduledDragState =
+    | { type: "idle" }
+    | { type: "pending"; assignment: Assignment; startX: number; startY: number }
+    | {
+        type: "dragging";
+        assignment: Assignment;
+        x: number;
+        y: number;
+        candidate: Omit<StudyBlock, "id"> | null;
+        valid: boolean;
+        conflictMessage?: string;
+      };
+  const [unscheduledDrag, setUnscheduledDrag] = useState<UnscheduledDragState>({ type: "idle" });
+  const unscheduledDragRef = useRef<UnscheduledDragState>({ type: "idle" });
+  const unscheduledDragEnabled = studyDragEnabled;
+
+  const evaluateQuickCandidate = (
+    assignment: Assignment,
+    clientX: number,
+    clientY: number
+  ): { candidate: Omit<StudyBlock, "id">; conflict: ReturnType<typeof studyBlockConflict> } | null => {
+    const el = document.elementFromPoint(clientX, clientY);
+    const dayCol = el?.closest?.("[data-timetable-day]") as HTMLElement | null;
+    if (!dayCol) return null;
+    const dow = Number(dayCol.dataset.timetableDay);
+    const targetDate = weekDates[dow - 1];
+    if (!targetDate) return null;
+    const rect = dayCol.getBoundingClientRect();
+    const pointerMinutes = pointerToMinutes(clientY, rect.top, rect.height);
+    const candidate = createQuickStudyBlockCandidate({ assignment, date: targetDate, pointerMinutes });
+    const conflict = studyBlockConflict(candidate, { schedules, studyBlocks, currentSemesterWeek });
+    return { candidate, conflict };
+  };
+
+  useEffect(() => {
+    const drag = unscheduledDragRef.current;
+    if (drag.type === "idle") return;
+    const clearDragActive = () => {
+      document.body.dataset.dragActive = "0";
+    };
+    const onPointerMove = (e: PointerEvent) => {
+      const current = unscheduledDragRef.current;
+      if (current.type === "idle") return;
+      if (current.type === "pending") {
+        // 5px 阈值后才 engage（同时确认 StudyBlock drag 未 active）
+        if (Math.abs(e.clientX - current.startX) < 5 && Math.abs(e.clientY - current.startY) < 5) return;
+        if (studyDragRef.current.type !== "idle") return;
+        document.body.dataset.dragActive = "1";
+        const result = evaluateQuickCandidate(current.assignment, e.clientX, e.clientY);
+        unscheduledDragRef.current = {
+          type: "dragging",
+          assignment: current.assignment,
+          x: e.clientX,
+          y: e.clientY,
+          candidate: result?.candidate ?? null,
+          valid: result ? !result.conflict : false,
+          conflictMessage: result?.conflict ? (result.conflict.courseName ?? result.conflict.otherTitle) : undefined,
+        };
+        setUnscheduledDrag(unscheduledDragRef.current);
+        return;
+      }
+      const result = evaluateQuickCandidate(current.assignment, e.clientX, e.clientY);
+      unscheduledDragRef.current = {
+        ...current,
+        x: e.clientX,
+        y: e.clientY,
+        candidate: result?.candidate ?? null,
+        valid: result ? !result.conflict : false,
+        conflictMessage: result?.conflict ? (result.conflict.courseName ?? result.conflict.otherTitle) : undefined,
+      };
+      setUnscheduledDrag(unscheduledDragRef.current);
+    };
+    const onPointerUp = () => {
+      const current = unscheduledDragRef.current;
+      unscheduledDragRef.current = { type: "idle" };
+      clearDragActive();
+      if (current.type === "dragging" && current.candidate) {
+        if (!current.valid) {
+          pushToast({ type: "error", message: current.conflictMessage ?? "与课程时间冲突，未安排" });
+        } else {
+          const createdId = addStudyBlock(current.candidate);
+          pushToast({
+            message: "已安排学习时间 · 1 小时",
+            actionLabel: "撤销",
+            onAction: () => {
+              if (createdId) deleteStudyBlock(createdId);
+            },
+          });
+        }
+      }
+      setUnscheduledDrag({ type: "idle" });
+    };
+    const onPointerCancel = () => {
+      unscheduledDragRef.current = { type: "idle" };
+      clearDragActive();
+      setUnscheduledDrag({ type: "idle" });
+    };
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onPointerCancel();
+    };
+    window.addEventListener("pointermove", onPointerMove);
+    window.addEventListener("pointerup", onPointerUp);
+    window.addEventListener("pointercancel", onPointerCancel);
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      window.removeEventListener("pointermove", onPointerMove);
+      window.removeEventListener("pointerup", onPointerUp);
+      window.removeEventListener("pointercancel", onPointerCancel);
+      window.removeEventListener("keydown", onKeyDown);
+      clearDragActive();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [weekDates, schedules, studyBlocks, currentSemesterWeek, pushToast, addStudyBlock, deleteStudyBlock, unscheduledDragEnabled]);
+
   const courseNameOf = useMemo(
     () => (courseId: string) => courses.find((c) => c.id === courseId)?.name ?? "",
     [courses]
@@ -455,6 +571,48 @@ export function TimelineWorkspace() {
               </span>
             )}
           </div>
+        )}
+
+        {/* IM5B：Unscheduled Quick Schedule Ghost + 目标日弱高亮（candidate 几何；1h；valid/invalid） */}
+        {unscheduledDrag.type === "dragging" && unscheduledDrag.candidate?.date === date && (
+          <>
+            <div
+              aria-hidden="true"
+              className={cn(
+                "absolute inset-0 pointer-events-none",
+                unscheduledDrag.valid
+                  ? "bg-pastel-mint/5 ring-1 ring-inset ring-pastel-mint/40"
+                  : "bg-danger-bg/10 ring-1 ring-inset ring-danger/30"
+              )}
+            />
+            <div
+              data-testid="unscheduled-ghost"
+              className={cn(
+                "absolute left-1 right-1 z-[4] rounded-lg border-2 border-dashed px-1.5 py-0.5 flex items-center gap-1 overflow-hidden pointer-events-none",
+                "transition-[top,background-color,border-color,opacity] duration-[var(--motion-snap)] ease-[var(--ease-standard)]",
+                unscheduledDrag.valid
+                  ? "border-pastel-mint bg-pastel-mint/25"
+                  : "border-danger/60 bg-danger-bg/40"
+              )}
+              style={{
+                top: `${(((ctx.timeToMinutes(unscheduledDrag.candidate.startTime) ?? 0) - dayStart) / ctx.totalMinutes) * 100}%`,
+                height: `${(((ctx.timeToMinutes(unscheduledDrag.candidate.endTime) ?? 0) - (ctx.timeToMinutes(unscheduledDrag.candidate.startTime) ?? 0)) / ctx.totalMinutes) * 100}%`,
+                minHeight: 6,
+              }}
+            >
+              <span className="truncate text-[10px] font-semibold text-satin-grey">
+                {unscheduledDrag.candidate.title}
+              </span>
+              <span className="text-[9px] text-sandrift font-medium shrink-0">
+                {unscheduledDrag.candidate.startTime}–{unscheduledDrag.candidate.endTime}
+              </span>
+              {!unscheduledDrag.valid && (
+                <span className="ml-auto text-[9px] font-bold text-danger shrink-0 truncate max-w-[50%]">
+                  {unscheduledDrag.conflictMessage ?? "时间冲突"}
+                </span>
+              )}
+            </div>
+          </>
         )}
 
         {/* Kiro Proposal Ghost（ephemeral；弱于真实 StudyBlock；冲突时标记「计划已过期」） */}
@@ -821,7 +979,42 @@ export function TimelineWorkspace() {
     <TimelineUnscheduledShelf
       assignments={unscheduled}
       onArrange={(a) => { setArrangeFor(a); setMarkOpen(false); }}
+      directManipulationEnabled={unscheduledDragEnabled}
+      draggingAssignmentId={
+        unscheduledDrag.type === "pending" || unscheduledDrag.type === "dragging"
+          ? unscheduledDrag.assignment.id
+          : null
+      }
+      onAssignmentPointerDown={(e, a) => {
+        if (!unscheduledDragEnabled) return;
+        if (e.button !== 0) return;
+        if (studyDragRef.current.type !== "idle") return;
+        e.preventDefault();
+        e.currentTarget.setPointerCapture?.(e.pointerId);
+        unscheduledDragRef.current = {
+          type: "pending",
+          assignment: a,
+          startX: e.clientX,
+          startY: e.clientY,
+        };
+        setUnscheduledDrag(unscheduledDragRef.current);
+      }}
     />
+
+    {/* IM5B：Floating Drag Preview（fixed 跟随 pointer；初次 engage 轻 opacity；无 left/top 过渡防拖尾） */}
+    {unscheduledDrag.type === "dragging" && (
+      <div
+        data-testid="unscheduled-drag-chip"
+        aria-hidden="true"
+        className="fixed z-[80] pointer-events-none bg-surface border border-line-strong rounded-xl shadow-card px-2.5 py-1.5 ux-fade"
+        style={{ left: unscheduledDrag.x + 12, top: unscheduledDrag.y + 12 }}
+      >
+        <p className="text-[11px] font-bold text-charcoal truncate max-w-[220px]">
+          {unscheduledDrag.assignment.title}
+        </p>
+        <p className="text-[9px] text-sandrift">快速安排 · 1 小时</p>
+      </div>
+    )}
     </div>
     </div>
   );

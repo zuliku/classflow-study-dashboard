@@ -1,4 +1,4 @@
-import { StudyBlock } from "@/types";
+import { Assignment, StudyBlock } from "@/types";
 import { timeToMinutes } from "@/lib/timeline/timelineGeometry";
 import {
   snapMinutes,
@@ -58,4 +58,41 @@ export function isSameStudyBlockPosition(
   b: Pick<StudyBlock, "date" | "startTime" | "endTime">
 ): boolean {
   return a.date === b.date && a.startTime === b.startTime && a.endTime === b.endTime;
+}
+
+/**
+ * Direct shelf drag 快速安排时长：固定 1 小时。
+ * Direct drag uses one-hour quick scheduling; custom duration remains available through ArrangeSheet.
+ * （Assignment.estimatedMinutes 是整任务预计耗时，与单次学习时段语义不同，不作为拖拽时长。）
+ */
+export const QUICK_SCHEDULE_DURATION_MINUTES = 60;
+
+/**
+ * Quick Schedule 候选（IM5B）：把待安排 Assignment 拖到 Timeline 某天/时间 →
+ * 生成一个 1h StudyBlock 候选（不含 id，由 addStudyBlock 分配）。
+ * pointer 对应 block start（无原块 offset）；15min snap；clamp 保证 start>=08:00、end<=21:00（duration 不变）。
+ * 纯函数：不检查冲突、不写 Store。
+ */
+export function createQuickStudyBlockCandidate({
+  assignment,
+  date,
+  pointerMinutes,
+}: {
+  assignment: Pick<Assignment, "id" | "title" | "courseId">;
+  date: string;
+  pointerMinutes: number;
+}): Omit<StudyBlock, "id"> {
+  const start = clampStudyBlockStart(
+    snapMinutes(pointerMinutes),
+    QUICK_SCHEDULE_DURATION_MINUTES
+  );
+  return {
+    title: assignment.title,
+    date,
+    startTime: minutesToTime(start),
+    endTime: minutesToTime(start + QUICK_SCHEDULE_DURATION_MINUTES),
+    assignmentId: assignment.id,
+    courseId: assignment.courseId,
+    source: "manual",
+  };
 }

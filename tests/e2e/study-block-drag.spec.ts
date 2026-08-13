@@ -120,3 +120,62 @@ test("StudyBlock drag 冲突：拖到课程时段 → danger ghost + Store 不�
   expect(sb?.endTime).toBe("14:00");
   await expect(page.getByText(/时间冲突|重叠/).first()).toBeVisible();
 });
+
+test("Unscheduled 任务拖入时间表：创建 1h StudyBlock（周五 18:00–19:00）；Undo 回到 Shelf", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/");
+  await page.locator("aside").first().getByRole("button", { name: "时间表" }).first().click();
+  await page.waitForTimeout(800);
+
+  // 找一个无 StudyBlock 的未完成任务（demo 数据均无 studyBlocks → 全部在 Shelf）
+  const shelf = page.getByTestId("timeline-unscheduled");
+  await expect(shelf).toBeVisible();
+  const targetTitle = "计量经济学大作业（第3章）";
+  const item = shelf.getByText(targetTitle).first().locator("..");
+  await expect(item).toBeVisible();
+  const itemBox = await item.boundingBox();
+  if (!itemBox) throw new Error("shelf item unavailable");
+
+  // 目标：周五（day 5）18:00（mockData 周五 16:00–17:40 有课；pointer = start → 18:00–19:00 空闲）
+  const day5 = page.locator('[data-timetable-day="5"]').first();
+  const dayBox = await day5.boundingBox();
+  if (!dayBox) throw new Error("day geometry unavailable");
+  const targetY = dayBox.y + ((18 - 8) / 13) * dayBox.height;
+
+  await page.mouse.move(itemBox.x + itemBox.width / 2, itemBox.y + itemBox.height / 2);
+  await page.mouse.down();
+  // 拖动中 floating chip 跟随；进入 day5 后 ghost 出现
+  await page.mouse.move(dayBox.x + dayBox.width / 2, targetY, { steps: 8 });
+  await expect(page.getByTestId("unscheduled-drag-chip")).toBeVisible();
+  await expect(page.getByTestId("unscheduled-ghost")).toBeVisible();
+  await page.mouse.up();
+  await page.waitForTimeout(500);
+
+  // Store：新增 assignmentId=目标 + 周五 18:00–19:00
+  const created = await page.evaluate((title) => {
+    const raw = localStorage.getItem("classflow-storage-v2") ?? "";
+    const state = JSON.parse(raw).state;
+    const asgn = state.assignments.find((x: { title: string }) => x.title === title);
+    const blocks = state.studyBlocks ?? [];
+    const b = blocks.find((x: { assignmentId: string }) => x.assignmentId === asgn.id);
+    return b ? { date: b.date, startTime: b.startTime, endTime: b.endTime } : null;
+  }, targetTitle);
+  expect(created).not.toBeNull();
+  expect(created!.startTime).toBe("18:00");
+  expect(created!.endTime).toBe("19:00");
+
+  // Shelf：该任务不再出现
+  await expect(page.getByTestId("timeline-unscheduled").getByText(targetTitle).first()).toHaveCount(0);
+
+  // Undo：删除本次创建的 StudyBlock → 任务回到 Shelf
+  await page.getByRole("button", { name: "撤销" }).first().click();
+  await page.waitForTimeout(500);
+  const after = await page.evaluate((title) => {
+    const raw = localStorage.getItem("classflow-storage-v2") ?? "";
+    const state = JSON.parse(raw).state;
+    const asgn = state.assignments.find((x: { title: string }) => x.title === title);
+    return (state.studyBlocks ?? []).some((x: { assignmentId: string }) => x.assignmentId === asgn.id);
+  }, targetTitle);
+  expect(after).toBe(false);
+  await expect(page.getByTestId("timeline-unscheduled").getByText(targetTitle).first()).toBeVisible();
+});

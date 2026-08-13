@@ -24,7 +24,7 @@ export function InteractionSettings({ highlightedId }: { highlightedId?: string 
           <SettingsRow
             settingId="schedule-direct-manipulation"
             title="课表直接操作"
-            description="在时间表中启用课程与学习计划的直接调整。"
+            description="在时间表中启用课程、学习计划与待安排任务的直接操作。"
             modified={modified.has("enableScheduleDirectManipulation")}
             onReset={() =>
               updatePreferences(resetPreferencePatch("enableScheduleDirectManipulation"))
