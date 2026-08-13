@@ -8,12 +8,15 @@ import { cn } from "@/lib/utils";
  * 共享 Disclosure 内容 primitive（Interaction Motion IM2B）：
  * 现有布局内部的结构性展开/收起（Worklog / Tool detail / Quick Add）。
  *
- * 职责 ONLY：open/closed presence、CSS Grid 1fr/0fr 结构动画、opacity、closed 交互保护、reduced motion。
- * Trigger / Chevron / open state / business state 均由 consumer 拥有（不接管）。
- *
- * 动画：grid-template-rows 1fr↔0fr + opacity（无 JS 高度测量，处理未知高度内容）。
- * closed presence 窗口（≈180ms）内 aria-hidden + pointer-events-none + inert（不可 Tab 聚焦），最终 unmount。
- * reduced motion 由 usePresence + 全局 data-motion-effective 自然降级。
+ * Lifecycle contract（IM6B audit）：
+ * - mounted：usePresence 控制是否存在于 DOM（open → 先 mount hidden → 下一帧 visible；
+ *   close → visible=false 后 180ms exit presence → unmount）。
+ * - visible：驱动视觉 expanded/collapsed（grid-rows 1fr↔0fr + opacity）——真正进入动画由 visible 驱动，
+ *   而不是 open 直切（open 是 semantic ownership）。
+ * - aria-hidden / inert / data-state 由 open 决定：semantic close 立即释放（与 OverlayLayer 一致，
+ *   visual exit 在其后）。
+ * - duration 统一 180ms（CSS 与 usePresence 对齐，避免 unmount 早于 transition 完成）。
+ * - reduced motion 由 usePresence + 全局 data-motion-effective 自然降级。
  */
 export interface DisclosureRegionProps {
   open: boolean;
@@ -49,10 +52,10 @@ export function DisclosureRegion({
       data-state={open ? "open" : "closed"}
       aria-hidden={!open}
       className={cn(
-        "grid transition-[grid-template-rows,opacity] ease-[var(--ease-standard)]",
-        open
-          ? "grid-rows-[1fr] opacity-100 duration-[var(--motion-base)]"
-          : "grid-rows-[0fr] opacity-0 pointer-events-none duration-[var(--motion-base)]",
+        "grid transition-[grid-template-rows,opacity] duration-[180ms] ease-[var(--ease-standard)]",
+        visible
+          ? "grid-rows-[1fr] opacity-100"
+          : "grid-rows-[0fr] opacity-0 pointer-events-none",
         className
       )}
     >

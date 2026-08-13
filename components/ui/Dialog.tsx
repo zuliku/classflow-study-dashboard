@@ -56,7 +56,7 @@ export function Dialog({
           aria-modal="true"
           className={cn(
             "w-full max-w-md bg-surface border border-line rounded-2xl shadow-drawer overflow-hidden ux-modal-panel",
-            // enter ≈200ms（scale 0.985 + 4px 上移）；exit ≈150ms（scale 0.99 + 2px），exit < enter
+            // enter ≈200ms（scale 0.99→1 + 2px 上移归零）；exit ≈150ms（scale 1→0.99 + 2px），exit < enter
             visible
               ? "opacity-100 scale-100 translate-y-0 !duration-[200ms]"
               : "opacity-0 scale-[0.99] translate-y-0.5 !duration-[150ms]",

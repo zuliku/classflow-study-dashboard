@@ -149,12 +149,11 @@ export function KiroMessage({
                   >
                     <MoreHorizontal className="w-3.5 h-3.5" />
                   </button>
-                  {more.open && (
-                    <KiroMenuPanel
-                      open={more.open}
-                      placement="top-end"
-                      className={moreView === "sources" ? "w-[280px]" : undefined}
-                    >
+                  <KiroMenuPanel
+                    open={more.open}
+                    placement="top-end"
+                    className={moreView === "sources" ? "w-[280px]" : undefined}
+                  >
                       {moreView === "sources" ? (
                         <KiroSourcesMenuView
                           sources={citedWebSources}
@@ -183,7 +182,6 @@ export function KiroMessage({
                         </>
                       )}
                     </KiroMenuPanel>
-                  )}
                 </div>
               </div>
             )}
