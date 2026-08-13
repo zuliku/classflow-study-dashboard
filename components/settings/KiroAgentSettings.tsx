@@ -26,8 +26,10 @@ import {
   isDefaultSandboxWorkspace,
 } from "@/lib/ai/computer/workspace/management";
 import { removeArtifactsForWorkspace } from "@/lib/ai/computer/artifacts/service";
+import { clearWorkspaceKnowledge } from "@/lib/ai/computer/knowledge/db";
 import { sandboxAdapterCapabilities } from "@/lib/ai/computer/adapters/sandbox";
 import { KiroComputerAuditPanel } from "@/components/settings/KiroComputerAuditPanel";
+import { KiroWorkspaceKnowledgePanel } from "@/components/settings/KiroWorkspaceKnowledgePanel";
 
 const MODE_OPTIONS: { value: KiroAgentMode; label: string }[] = [
   { value: "plan", label: "计划" },
@@ -156,6 +158,12 @@ export function KiroAgentSettings() {
     let cleanupFailed = false;
     try {
       await removeArtifactsForWorkspace(ws.id);
+    } catch {
+      cleanupFailed = true;
+    }
+    // V3 Part 1：Knowledge 记录清理（只清 classflow-kiro-knowledge-v1 中该 Workspace；绝不删真实文件）
+    try {
+      await clearWorkspaceKnowledge(ws.id);
     } catch {
       cleanupFailed = true;
     }
@@ -321,6 +329,8 @@ export function KiroAgentSettings() {
         </SettingsGroup>
 
         <SettingsGroup title="安全与能力">
+          {/* V3 Part 1：Workspace Knowledge（current Workspace 紧凑状态/动作） */}
+          {activeWorkspace && <KiroWorkspaceKnowledgePanel workspaceId={activeWorkspace.id} />}
           <SettingsRow
             settingId="kiro-agent-permissions"
             title="活动与安全"
