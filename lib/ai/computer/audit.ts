@@ -23,7 +23,7 @@ export interface ComputerAuditEntry {
   capability: ComputerCapability;
   /** 触发方式：auto（无需审批）/ allow-once / allow-session / allow-workspace / deny / none */
   decision: ComputerApprovalDecision | "auto" | "none";
-  outcome: "executed" | "denied" | "undone" | "undo_failed" | "failed";
+  outcome: "executed" | "denied" | "undone" | "undo_failed" | "failed" | "error";
   workspaceId: string;
   workspaceLabel: string;
   rootId?: string;

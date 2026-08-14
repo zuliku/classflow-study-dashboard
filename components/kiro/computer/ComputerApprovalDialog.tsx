@@ -36,6 +36,12 @@ export function ComputerApprovalDialog({
   const [busy, setBusy] = React.useState(false);
   const open = request !== null;
 
+  // V2.7：busy 绑定 approval ID 生命周期——新 approval（含队列下一条）必须可点击，
+  // 防止 busy=true 从上一个 request 永久继承导致审批 UI 卡死。
+  React.useEffect(() => {
+    setBusy(false);
+  }, [request?.id]);
+
   const decide = (decision: ComputerApprovalDecision) => {
     if (!request || busy) return;
     setBusy(true);

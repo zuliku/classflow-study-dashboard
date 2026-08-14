@@ -1191,14 +1191,25 @@ export function useKiroChat({
    * 用户审批决策（ComputerApprovalDialog）：
    * deny → USER_CANCELLED Tool Output；allow-* → 建立规则后 resume 同一条 exact call
    *（同一 frozen snapshot + live rules/grants；executor 内重复完整 policy 求值）。
+   *
+   * V2.7 生命周期：决策被接受 → 立即从 UI queue 移除当前 approval（不等 IO 完成）；
+   * resume 包 try/catch/finally——异常归一化为 Tool Output ok:false（Task step → error），
+   * 绝不残留 stale pendingApproval / busy Dialog。
    */
   const handleApprovalDecision = useCallback(
     async (approvalId: string, decision: ComputerApprovalDecision) => {
       const pending = pendingExecutionsRef.current.get(approvalId);
-      if (!pending) return;
+      if (!pending) {
+        // V2.7 stale approval 防御：ref 中不存在该 request → 推进队列并恢复 UI，绝不残留 Dialog
+        advancePendingApproval();
+        return;
+      }
       pendingExecutionsRef.current.delete(approvalId);
       const { request, toolName, toolCallId, input, frozenSnapshot } = pending;
       const taskId = request.taskId;
+
+      // V2.7：决策被接受 → 立即关闭当前 approval / 显示下一条（后台 resume，不阻塞 UI）
+      advancePendingApproval();
 
       if (decision === "deny") {
         const task = tasksRef.current.get(taskId);
@@ -1227,7 +1238,6 @@ export function useKiroChat({
           rootLabel: request.rootLabel,
           relativePath: request.relativePath,
         });
-        advancePendingApproval();
         emitToolOutput(toolName, toolCallId, {
           ok: false,
           code: "USER_CANCELLED",
@@ -1251,45 +1261,82 @@ export function useKiroChat({
         useKiroComputerStore.getState().upsertPermissionRule(workspaceRuleForRequest(request));
       }
 
-      // Resume EXACT Tool Call（same sandbox/policy/grant checks）
-      const attempt = await executeKiroComputerTool({
-        toolName,
-        toolCallId,
-        toolInput: input,
-        context: {
-          turnSnapshot: frozenSnapshot,
-          liveWorkspaces: useKiroComputerStore.getState().workspaces,
-          livePermissionRules: useKiroComputerStore.getState().permissionRules,
+      try {
+        // Resume EXACT Tool Call（same sandbox/policy/grant checks）
+        const attempt = await executeKiroComputerTool({
+          toolName,
+          toolCallId,
+          toolInput: input,
+          context: {
+            turnSnapshot: frozenSnapshot,
+            liveWorkspaces: useKiroComputerStore.getState().workspaces,
+            livePermissionRules: useKiroComputerStore.getState().permissionRules,
+            taskId,
+          },
+          counters: computerCountersRef.current,
+          oneShotApprovals: oneShotApprovalsRef.current,
+        });
+        if (attempt.kind === "approval-required") {
+          handleApprovalRequired(attempt.request, toolName, toolCallId, input, frozenSnapshot);
+          return;
+        }
+        void appendComputerAuditEntry({
+          id: `audit-${crypto.randomUUID()}`,
+          timestamp: new Date().toISOString(),
           taskId,
-        },
-        counters: computerCountersRef.current,
-        oneShotApprovals: oneShotApprovalsRef.current,
-      });
-      if (attempt.kind === "approval-required") {
-        handleApprovalRequired(attempt.request, toolName, toolCallId, input, frozenSnapshot);
-        return;
+          conversationId: conversationIdRef.current,
+          toolCallId,
+          toolName,
+          capability: request.capability,
+          decision,
+          outcome: "executed",
+          workspaceId: request.workspaceId,
+          workspaceLabel: request.workspaceLabel,
+          rootId: request.rootId,
+          rootLabel: request.rootLabel,
+          relativePath: request.relativePath,
+          verification: "passed",
+        });
+        applyCompletedAttempt(attempt, toolName, toolCallId, taskId);
+      } catch (error) {
+        // V2.7：resume 异常 → 归一化为 Tool Output ok:false（绝不 Unhandled Rejection / 卡 Dialog）
+        const output: ToolOutput =
+          error instanceof ComputerError
+            ? { ok: false, code: error.code, message: error.message }
+            : {
+                ok: false,
+                code: "UNKNOWN",
+                message: error instanceof Error ? error.message : "审批后执行失败",
+              };
+        const task = tasksRef.current.get(taskId);
+        if (task) {
+          failTaskStep(task, toolCallId);
+          updateTasks();
+        }
+        emitToolOutput(toolName, toolCallId, output);
+        void appendComputerAuditEntry({
+          id: `audit-${crypto.randomUUID()}`,
+          timestamp: new Date().toISOString(),
+          taskId,
+          conversationId: conversationIdRef.current,
+          toolCallId,
+          toolName,
+          capability: request.capability,
+          decision,
+          outcome: "error",
+          workspaceId: request.workspaceId,
+          workspaceLabel: request.workspaceLabel,
+          rootId: request.rootId,
+          rootLabel: request.rootLabel,
+          relativePath: request.relativePath,
+          verification: "failed",
+        });
+      } finally {
+        // 兜底：任何路径都推进队列，确保 UI 不残留 stale approval
+        advancePendingApproval();
       }
-      void appendComputerAuditEntry({
-        id: `audit-${crypto.randomUUID()}`,
-        timestamp: new Date().toISOString(),
-        taskId,
-        conversationId: conversationIdRef.current,
-        toolCallId,
-        toolName,
-        capability: request.capability,
-        decision,
-        outcome: "executed",
-        workspaceId: request.workspaceId,
-        workspaceLabel: request.workspaceLabel,
-        rootId: request.rootId,
-        rootLabel: request.rootLabel,
-        relativePath: request.relativePath,
-        verification: "passed",
-      });
-      applyCompletedAttempt(attempt, toolName, toolCallId, taskId);
-      advancePendingApproval();
     },
-    [advancePendingApproval, applyCompletedAttempt, handleApprovalRequired]
+    [advancePendingApproval, applyCompletedAttempt, handleApprovalRequired, failTaskStep, updateTasks, emitToolOutput]
   );
 
   /** Task-level Undo（session runtime only）：reverse order + 每条 verified；失败 → undo_failed */
