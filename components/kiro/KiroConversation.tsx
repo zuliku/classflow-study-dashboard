@@ -44,7 +44,7 @@ export function KiroConversation({
   onEditUserMessage: (messageId: string, text: string) => Promise<boolean>;
   /** sidecar：统一 12px 水平 gutter（与 Header/Composer 一致） */
   compact?: boolean;
-  /** 整个 Agent Turn 是否仍在进行（chat.status === submitted/streaming）——决定最后一条消息的操作栏时机 */
+  /** 整个 Agent Turn 是否仍在进行（turnExecution !== settled；含 awaiting-tool-result / awaiting-continuation）——决定最后一条消息的操作栏时机 */
   turnInFlight: boolean;
   /** 当前 Turn 的文档来源（Citation 渲染；live 消息用；不含正文） */
   sources?: KiroSourceMeta[];

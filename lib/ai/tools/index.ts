@@ -1,15 +1,27 @@
 import { tool, ToolSet } from "ai";
+import { z } from "zod";
 import { KIRO_READ_TOOLS } from "@/lib/ai/tools/read/registry";
 import { KIRO_WRITE_TOOLS } from "@/lib/ai/tools/write/registry";
 import { KIRO_MEMORY_TOOLS } from "@/lib/ai/memory/tools";
 import { COMPUTER_TOOLS, getComputerToolsForMode } from "@/lib/ai/computer/tools/registry";
 import { ComputerActionFact } from "@/lib/ai/computer/types";
+import {
+  KIRO_FINAL_ANSWER_TOOL_NAME,
+  KIRO_FINAL_ANSWER_TOOL_DESCRIPTION,
+} from "@/lib/ai/tools/finalAnswer";
 
 /** Kiro 全部基础工具（Read + Write + Memory）：Server 提供 schema，Client 按同名执行 */
 export const KIRO_TOOLS = {
   ...KIRO_READ_TOOLS,
   ...KIRO_WRITE_TOOLS,
   ...KIRO_MEMORY_TOOLS,
+  // Final Answer Boundary（Streaming UX V3）：内部控制信号工具。
+  // Client onToolCall 直接回填 ok:true（不执行、不计数、不进 worklog/audit）；
+  // server 在收到含该信号的续跑请求时关闭业务工具（toolChoice none）。
+  [KIRO_FINAL_ANSWER_TOOL_NAME]: tool({
+    description: KIRO_FINAL_ANSWER_TOOL_DESCRIPTION,
+    inputSchema: z.object({}),
+  }),
 };
 
 export type KiroToolSet = typeof KIRO_TOOLS;

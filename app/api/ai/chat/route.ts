@@ -288,11 +288,22 @@ export async function POST(req: NextRequest) {
       messages: parsed.messages as unknown[],
       clientTools: getKiroToolsForRequest({ computerSnapshot: computerSnapshot ?? undefined }),
     });
+
+    // Streaming UX V3：Final Answer Boundary —— 本请求的对话里已出现 begin_final_answer 信号
+    //（客户端已回填输出）→ 从协议上关闭全部业务工具（toolChoice none），模型只能输出 Final Answer 正文。
+    const finalAnswerStarted = (parsed.messages as { role?: string; parts?: { type?: string }[] }[]).some(
+      (m) =>
+        m?.role === "assistant" &&
+        Array.isArray(m.parts) &&
+        m.parts.some((p) => p?.type === "tool-begin_final_answer")
+    );
+
     const result = streamText({
       model: resolved.model,
       messages: modelMessages,
       system: systemMessage,
-      tools,
+      tools: finalAnswerStarted ? {} : tools,
+      toolChoice: finalAnswerStarted ? "none" : undefined,
       maxOutputTokens: AI.CHAT_MAX_OUTPUT_TOKENS,
       abortSignal: signal,
       // Reasoning effort：verified provider options（default/不支持 → 不发送，保持 provider 默认）。

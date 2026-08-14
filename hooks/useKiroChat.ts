@@ -89,8 +89,10 @@ import {
   updateLiveTurnPresentation,
   createLiveTurnCommitState,
   LiveTurnCommitState,
-  KIRO_LEADING_SETTLE_GATE_MS,
 } from "@/lib/ai/presentation/liveTurnPresentation";
+import {
+  isKiroFinalAnswerToolName,
+} from "@/lib/ai/tools/finalAnswer";
 
 /** 每回合工具调用上限：Read ≤ 12，Write ≤ 8 */
 export const MAX_READ_TOOL_CALLS_PER_TURN_UI = 12;
@@ -102,6 +104,20 @@ export const MAX_WRITE_TOOL_CALLS_PER_TURN = 8;
  * 避免逐 token 重渲染 + 50ms 成块跳字。单一 cadence owner（不叠第三层节流）。
  */
 export const KIRO_CLIENT_STREAM_THROTTLE_MS = 24;
+
+/**
+ * Turn Execution Lifecycle（Streaming UX V3 Phase 3）：
+ * 取代「chat.status === ready → done」的假 settled：
+ * - executing：请求已发出 / 正在流式
+ * - awaiting-tool-result：client 工具执行中 / 审批等待中（tool part 未回填）
+ * - awaiting-continuation：tool output 已回填，SDK 自动续跑即将/正在发起（瞬时 ready 窗口）
+ * - settled：真正结束（唯一允许 Worklog 自动折叠 / 显示操作栏的状态）
+ */
+export type KiroTurnExecutionState =
+  | "executing"
+  | "awaiting-tool-result"
+  | "awaiting-continuation"
+  | "settled";
 
 /** 统一 Message 视图模型：UI 组件只消费它，不依赖 Provider 原始结构 */
 export interface KiroChatMessageView {
@@ -263,6 +279,8 @@ function toView(
   const breakdowns: TaskBreakdownProposal[] = [];
   for (const p of parts) {
     if (typeof p.type !== "string" || !p.type.startsWith("tool-")) continue;
+    // Streaming UX V3：begin_final_answer 是内部控制信号（不产生 Action Card / Proposal）
+    if (isKiroFinalAnswerToolName(p.type.slice("tool-".length))) continue;
     const tp = p as ToolCallPart;
     if (toolNameOf(tp) === "propose_study_plan") {
       const output = tp.output as ReadToolResult<unknown> | undefined;
@@ -342,9 +360,13 @@ export function deriveActivity(messages: ActivitySourceMessage[], status: string
     }
   }
 
+  // Streaming UX V3：begin_final_answer 是内部控制信号，不计入 Activity steps
   const toolParts = target
     ? (((target.parts ?? []).filter(
-        (p) => typeof p.type === "string" && p.type.startsWith("tool-")
+        (p) =>
+          typeof p.type === "string" &&
+          p.type.startsWith("tool-") &&
+          !isKiroFinalAnswerToolName(p.type.slice("tool-".length))
       ) as unknown) as ToolCallPart[])
     : [];
   const textStarted =
@@ -672,8 +694,16 @@ export function useKiroChat({
     }
     return commit;
   }, []);
-  // leading provisional 歧义窗口：deltas 停止后由 timer 强制重估一次（辅助信号，非 debounce 主路径）
-  const [liveTurnTick, setLiveTurnTick] = useState(0);
+
+  // ---- Turn Execution Lifecycle（Streaming UX V3 Phase 3）----
+  // 真实生命周期，不再用 timer 补偿 SDK 的瞬时 ready：
+  // - 每次 addToolOutput 完成 tool output 后，SDK 的 sendAutomaticallyWhen 会立即发起续跑请求，
+  //   但在续跑请求（status→submitted）真正开始前 status 会瞬时保持 ready。
+  //   用 pendingAutoContinueRef 覆盖该窗口（SDK 保证会自动续跑；limitReached 时不续跑）。
+  // - status 回到 submitted/streaming 或 error → 清除标记（续跑已开始 / 请求已结束）。
+  const pendingAutoContinueRef = useRef(false);
+  /** 用户 Stop 的 turn message id：其遗留的 pending tool part 不再视为 in-flight */
+  const stoppedTurnMessageIdRef = useRef<string | null>(null);
 
   const consumeUndo = useCallback((toolCallId: string) => {
     const entry = undoRegistryRef.current.get(toolCallId);
@@ -702,12 +732,25 @@ export function useKiroChat({
       };
 
       const failOutput = (code: string, message: string) =>
-        chat.addToolOutput({
-          tool: toolName as never,
-          toolCallId,
-          output: { ok: false, code, message } as ToolOutput,
-          options: { body: requestBody() },
-        });
+        emitToolOutput(toolName, toolCallId, { ok: false, code, message } as ToolOutput);
+
+      // ---- Final Answer Boundary（Streaming UX V3 Phase 1）----
+      // 内部控制信号：不执行、不计入 quota、不进 worklog/audit；直接回填 ok:true 让模型继续输出正文。
+      if (isKiroFinalAnswerToolName(toolName)) {
+        emitToolOutput(toolName, toolCallId, { ok: true, data: {} });
+        return;
+      }
+      // 协议 invariant：boundary 已出现（最后一条 assistant 消息含 begin_final_answer）→
+      // 后续业务 Tool Call 是协议错误，不继续作为正常 Agent 流程执行。
+      const lastAssistant = [...chat.messages].reverse().find((m) => m.role === "assistant");
+      const finalAnswerAlreadyStarted = !!lastAssistant &&
+        ((lastAssistant.parts ?? []) as { type?: string }[]).some(
+          (p) => typeof p.type === "string" && p.type === "tool-begin_final_answer"
+        );
+      if (finalAnswerAlreadyStarted) {
+        failOutput("FINAL_ANSWER_ALREADY_STARTED", "Final Answer 已开始，本轮不再执行新的工具调用。");
+        return;
+      }
 
       // ---- 循环保护 ----
       if (limitReachedRef.current) {
@@ -730,12 +773,7 @@ export function useKiroChat({
               input
             );
           }
-          chat.addToolOutput({
-            tool: toolName as never,
-            toolCallId,
-            output: result as ToolOutput,
-            options: { body: requestBody() },
-          });
+          emitToolOutput(toolName, toolCallId, result as ToolOutput);
         });
         return;
       }
@@ -744,12 +782,7 @@ export function useKiroChat({
       if ((KIRO_MEMORY_TOOL_NAMES as string[]).includes(toolName)) {
         void (async () => {
           const output = await runMemoryTool(toolName, input, toolCallId);
-          chat.addToolOutput({
-            tool: toolName as never,
-            toolCallId,
-            output,
-            options: { body: requestBody() },
-          });
+          emitToolOutput(toolName, toolCallId, output);
         })();
         return;
       }
@@ -837,12 +870,7 @@ export function useKiroChat({
               onAction: () => consumeUndo(toolCallId),
             });
           }
-          chat.addToolOutput({
-            tool: toolName as never,
-            toolCallId,
-            output,
-            options: { body: requestBody() },
-          });
+          emitToolOutput(toolName, toolCallId, output);
         })();
         return;
       }
@@ -907,43 +935,70 @@ export function useKiroChat({
       }
       // 每次执行读取最新 Store（Data Freshness）
       const result = executeKiroReadTool(toolName, input, useAppStore.getState());
-      chat.addToolOutput({
-        tool: toolName as never,
-        toolCallId,
-        output: result as ToolOutput,
-        options: { body: requestBody() },
-      });
+      emitToolOutput(toolName, toolCallId, result as ToolOutput);
     },
     sendAutomaticallyWhen: ({ messages }) =>
       !limitReachedRef.current && lastAssistantMessageIsCompleteWithToolCalls({ messages }),
   });
 
-  // Streaming UX V2：leading provisional 歧义窗口（辅助信号，非 debounce 主路径）。
-  // 当 live turn 存在未 commit 的 leading text 且无 Tool 时，调度一次 gate timer；
-  // deltas 停止后（模型停顿 / 即将发 Tool）由 controller 依据真实时间把 leading commit 为 answer。
+  // Streaming UX V3 Phase 3：Turn Execution Lifecycle 的清除逻辑（submitted/streaming/error →
+  // 续跑已开始 / 请求已结束，awaiting-continuation 标记作废）。
   useEffect(() => {
-    const msgs = chat.messages as UIMessage[];
+    if (chat.status === "submitted" || chat.status === "streaming" || chat.status === "error") {
+      pendingAutoContinueRef.current = false;
+    }
+  }, [chat.status]);
+
+  /** 统一 Tool Output 回填：完成后标记 awaiting-continuation（SDK 将自动续跑；limitReached 不续跑） */
+  const emitToolOutput = useCallback(
+    (tool: string, toolCallId: string, output: unknown) => {
+      if (!limitReachedRef.current) pendingAutoContinueRef.current = true;
+      chat.addToolOutput({
+        tool: tool as never,
+        toolCallId,
+        output,
+        options: { body: requestBody() },
+      });
+    },
+    [chat]
+  );
+
+  // ---- Turn Execution State（Streaming UX V3 Phase 3）----
+  // 真实生命周期（不再用 chat.status === ready 直接判 settled）：
+  // - executing：请求已发出 / 正在流式（parts 仍在到达）
+  // - awaiting-tool-result：status ready 但最后一条 assistant 消息仍有未回填的 Tool part
+  //   （client 工具执行中 / 审批等待中）——前提是该 turn 未被用户 Stop
+  // - awaiting-continuation：tool output 已回填，SDK 自动续跑请求即将/正在发起（消除瞬时 ready）
+  // - settled：真正结束（无 pending tool、无计划续跑、非 executing）
+  const turnExecution = useMemo<KiroTurnExecutionState>(() => {
+    if (chat.status === "submitted" || chat.status === "streaming") return "executing";
+    if (chat.status === "error") return "settled";
+    // ready：
+    if (pendingAutoContinueRef.current) return "awaiting-continuation";
     let lastUserIdx = -1;
-    for (let i = msgs.length - 1; i >= 0; i--) {
-      if (msgs[i].role === "user") {
+    for (let i = chat.messages.length - 1; i >= 0; i--) {
+      if (chat.messages[i].role === "user") {
         lastUserIdx = i;
         break;
       }
     }
-    const live = msgs[msgs.length - 1];
-    if (!live || live.role !== "assistant" || lastUserIdx < 0) return;
-    const commit = liveTurnCommitsRef.current.get(live.id);
-    if (!commit || commit.leadingLane !== null) return;
-    const hasTool = (live.parts ?? []).some(
-      (p) => typeof p.type === "string" && p.type.startsWith("tool-")
-    );
-    const hasLeadingText = (live.parts ?? []).some((p) => p.type === "text");
-    if (hasTool || !hasLeadingText) return;
-    // 一次 gate 内只调度一个 timer；触发后由 controller 依据真实时间决定 commit
-    const timer = window.setTimeout(() => setLiveTurnTick((t) => t + 1), KIRO_LEADING_SETTLE_GATE_MS);
-    return () => window.clearTimeout(timer);
+    const live = chat.messages[chat.messages.length - 1] as UIMessage | undefined;
+    if (live && live.role === "assistant" && chat.messages.length - 1 > lastUserIdx) {
+      const hasPendingToolPart = ((live.parts ?? []) as { type?: string; state?: string }[]).some(
+        (p) =>
+          typeof p.type === "string" &&
+          p.type.startsWith("tool-") &&
+          p.state !== "output-available" &&
+          p.state !== "output-error"
+      );
+      if (hasPendingToolPart) {
+        return stoppedTurnMessageIdRef.current === live.id ? "settled" : "awaiting-tool-result";
+      }
+    }
+    return "settled";
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [chat.messages, chat.status, liveTurnTick]);
+  }, [chat.status, chat.messages]);
+  const turnInFlight = turnExecution !== "settled";
 
   /** 执行 Write Tool：preflight + mutation + Undo 注册 + Toast + addToolOutput */
   const runWriteTool = useCallback(
@@ -956,14 +1011,9 @@ export function useKiroChat({
           onAction: result.action.canUndo ? () => consumeUndo(toolCallId) : undefined,
         });
       }
-      chat.addToolOutput({
-        tool: toolName as never,
-        toolCallId,
-        output: result as ToolOutput,
-        options: { body: requestBody() },
-      });
+      emitToolOutput(toolName, toolCallId, result as ToolOutput);
     },
-    [chat, consumeUndo, pushToast]
+    [chat, consumeUndo, pushToast, emitToolOutput]
   );
 
   // ==================== Computer Agent Task / Approval / Undo Runtime（Part 3） ====================
@@ -1070,14 +1120,9 @@ export function useKiroChat({
         }
         updateTasks();
       }
-      latestChatRef.current.addToolOutput({
-        tool: toolName as never,
-        toolCallId,
-        output: output as ToolOutput,
-        options: { body: requestBody() },
-      });
+      emitToolOutput(toolName, toolCallId, output as ToolOutput);
     },
-    [updateTasks]
+    [updateTasks, emitToolOutput]
   );
 
   /** 执行 Computer Tool Call（onToolCall / approval resume 共用入口） */
@@ -1152,12 +1197,11 @@ export function useKiroChat({
           relativePath: request.relativePath,
         });
         advancePendingApproval();
-        latestChatRef.current.addToolOutput({
-          tool: toolName as never,
-          toolCallId,
-          output: { ok: false, code: "USER_CANCELLED", message: "用户拒绝了此操作。" } as ToolOutput,
-          options: { body: requestBody() },
-        });
+        emitToolOutput(toolName, toolCallId, {
+          ok: false,
+          code: "USER_CANCELLED",
+          message: "用户拒绝了此操作。",
+        } as ToolOutput);
         return;
       }
 
@@ -1613,7 +1657,8 @@ export function useKiroChat({
       const targetText = target ? messageTextOf(target) : "";
       if (target && v === targetText.trim()) return true; // 内容未变：不请求模型
 
-      const inFlight = chat.status === "streaming" || chat.status === "submitted";
+      // Streaming UX V3：真实 turn lifecycle 决定可编辑性（awaiting-tool-result / awaiting-continuation 同样锁定）
+      const inFlight = turnInFlight;
       const suffix = targetIdx >= 0 ? all.slice(targetIdx) : [];
       // target 附件：live → snapshot queue 对应项；restored → restoredAttachmentsRef
       let targetHasAttachments = false;
@@ -1661,6 +1706,8 @@ export function useKiroChat({
       visionPagesRef.current = [];
       viewCacheRef.current.clear();
       liveTurnCommitsRef.current.clear();
+      stoppedTurnMessageIdRef.current = null;
+      pendingAutoContinueRef.current = false;
       // 保留 prefix 之前的 undoRegistry（不 clear）
       chat.setMessages(prefix);
 
@@ -1732,6 +1779,8 @@ export function useKiroChat({
     restoredSourcesRef.current.clear();
     viewCacheRef.current.clear();
     liveTurnCommitsRef.current.clear();
+    stoppedTurnMessageIdRef.current = null;
+    pendingAutoContinueRef.current = false;
     turnSourcesRef.current = [];
     setSources([]);
     visionPagesRef.current = [];
@@ -1768,6 +1817,8 @@ export function useKiroChat({
       restoredSourcesRef.current = sourcesMap;
       viewCacheRef.current.clear();
       liveTurnCommitsRef.current.clear();
+      stoppedTurnMessageIdRef.current = null;
+      pendingAutoContinueRef.current = false;
       readCounterRef.current = 0;
       materialReadCounterRef.current = 0;
       writeCounterRef.current = 0;
@@ -1842,6 +1893,7 @@ export function useKiroChat({
 
   const normalizedError: AIError | null = chat.error ? normalizeAIError(chat.error) : null;
   const streaming = chat.status === "streaming" || chat.status === "submitted";
+
   const activity = useMemo(
     () => deriveActivity(chat.messages as ActivitySourceMessage[], chat.status),
     [chat.messages, chat.status]
@@ -1852,7 +1904,7 @@ export function useKiroChat({
   const messages = useMemo(() => {
     const queue = snapshotQueueRef.current;
     let qi = 0;
-    // Worklog V2：最后一条 user 之后且仍在 streaming 的 assistant 消息 = 当前 Turn in-flight
+    // Worklog V2：最后一条 user 之后、turn 尚未 settled 的 assistant 消息 = 当前 Turn in-flight
     let lastUserIdx = -1;
     for (let i = chat.messages.length - 1; i >= 0; i--) {
       if (chat.messages[i].role === "user") {
@@ -1862,13 +1914,11 @@ export function useKiroChat({
     }
     return chat.messages.map((m, idx) => {
       // 增量缓存：parts/metadata/statusRef 引用未变 → 复用 view
-      //（streaming→ready 时即使 parts 引用不变，statusRef 也会变化，避免缓存返回过期 phase）
+      //（live→settled 时即使 parts 引用不变，statusRef 也会变化，避免缓存返回过期 phase）
       const partsRef = (m.parts ?? []) as unknown;
       const metadataRef = m.metadata ?? null;
-      const currentTurnInFlight = m.role === "assistant" && idx > lastUserIdx && streaming;
-      // Streaming UX V2：liveTurnTick 纳入 live 消息缓存键——provisional 歧义窗口到期后
-      // timer 强制重估，controller 依据真实时间把 leading text commit 为 answer
-      const statusRef: string = currentTurnInFlight ? `live-${liveTurnTick}` : "settled";
+      const currentTurnInFlight = m.role === "assistant" && idx > lastUserIdx && turnInFlight;
+      const statusRef: string = currentTurnInFlight ? "live" : "settled";
       const commit = m.role === "assistant" ? getOrCreateLiveTurnCommit(m.id) : undefined;
       let view = reuseMessageView(viewCacheRef.current, m.id, partsRef, metadataRef, () =>
         toView(m, currentTurnInFlight, commit),
@@ -1971,15 +2021,19 @@ export function useKiroChat({
       return view;
     });
     // tasksState：task 状态变化（undo/approval/complete）需要重算消息绑定
-    // liveTurnTick：provisional 歧义窗口到期重估（Streaming UX V2）
+    // turnExecution：真实 turn lifecycle（Streaming UX V3 Phase 3）
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [chat.messages, streaming, tasksState, liveTurnTick]);
+  }, [chat.messages, turnExecution, tasksState]);
 
   /** Stop：清除 stale approvals（旧 Approval 不能在新会话执行）；awaiting task → cancelled */
   const handleStop = useCallback(() => {
     pendingExecutionsRef.current.clear();
     oneShotApprovalsRef.current = [];
     setPendingApproval(null);
+    // 用户 Stop：该 turn 遗留的 pending tool part 不再视为 in-flight（真 settled）
+    const lastMsg = latestChatRef.current.messages[latestChatRef.current.messages.length - 1] as UIMessage | undefined;
+    stoppedTurnMessageIdRef.current = lastMsg?.role === "assistant" ? lastMsg.id : null;
+    pendingAutoContinueRef.current = false;
     const task = activeTaskRef.current;
     if (task && (task.status === "awaiting_permission" || task.status === "running")) {
       task.status = "cancelled";
@@ -1993,6 +2047,10 @@ export function useKiroChat({
     messages,
     status: chat.status,
     streaming,
+    /** 真实 Turn lifecycle（executing / awaiting-tool-result / awaiting-continuation / settled） */
+    turnExecution,
+    /** 派生：turn 是否仍在进行（turnExecution !== settled）——操作栏 / Worklog 折叠的依据 */
+    turnInFlight,
     error: normalizedError,
     activity,
     /** 本 Turn 的文档来源（Citation 渲染用；不含正文） */

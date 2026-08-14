@@ -123,12 +123,13 @@ for (const vp of [
     // 分式（mfrac）与下标真实渲染
     expect(await msg.locator(".katex .mfrac").count()).toBeGreaterThan(0);
 
-    // Typography：桌面 15px / 移动 14px；h2 ≥ 16px semibold
+    // Typography：Kiro 输出三档字号对全部视口一致（standard=15px，CSS var 驱动）。
+    // 移动端同样必须有 computed-style regression（不是仅 desktop）。
     const bodyFont = await msg.evaluate((el) => {
       const p = el.querySelector("p");
       return p ? getComputedStyle(p).fontSize : "";
     });
-    if (vp.width >= 768) expect(parseFloat(bodyFont)).toBeGreaterThanOrEqual(14.5);
+    expect(parseFloat(bodyFont)).toBeGreaterThanOrEqual(14.5);
     const h2 = msg.locator("h2").first();
     await expect(h2).toHaveText("核心形式");
     const h2Size = await h2.evaluate((el) => parseFloat(getComputedStyle(el).fontSize));

@@ -197,11 +197,13 @@ test("快捷建议双击只提交一次，共享发送所有权立即接管", as
   await expect(page.getByTestId("kiro-message").last()).toContainText("已接收", { timeout: 10000 });
 });
 
-// ==================== Streaming UX V2：分阶段 SSE 回归 ====================
+// ==================== Streaming UX V3：分阶段 SSE 回归 ====================
 
 /**
  * T0 首段文字（provisional，不显示）→ T1 Tool 到达（commit commentary）→
- * T2 Tool output → T3 Final Answer streaming（Worklog 不折叠、cursor 正确）→ T4 完成。
+ * T2 Tool output → T3 begin_final_answer（Final Answer Boundary）→ T4 Final Answer streaming
+ * （Worklog 不折叠、cursor 正确）→ T5 完成（Markdown stable、Worklog 自动折叠）。
+ * 全程 500ms 级等待也不会改变 text lane（无时间启发，只有协议决定通道）。
  */
 test("Agent 流程：leading text 不先以 Final Answer 显示，Tool 后成为 Worklog commentary（无跨 lane 闪现）", async ({ page }) => {
   const LEADING = "我先检查一下工作区文件";
@@ -209,6 +211,14 @@ test("Agent 流程：leading text 不先以 Final Answer 显示，Tool 后成为
 
   const sse = await startSseServer((bodyJson) => {
     requestCount += 1;
+    const hasFinalAnswerBoundary = ((bodyJson.messages ?? []) as {
+      role: string;
+      parts?: { type: string }[];
+    }[]).some(
+      (m) =>
+        m.role === "assistant" &&
+        (m.parts ?? []).some((p) => p.type === "tool-begin_final_answer")
+    );
     const hasToolOutput = ((bodyJson.messages ?? []) as {
       role: string;
       parts?: { type: string; state?: string }[];
@@ -218,7 +228,7 @@ test("Agent 流程：leading text 不先以 Final Answer 显示，Tool 后成为
         (m.parts ?? []).some((p) => p.type.startsWith("tool-") && p.state === "output-available")
     );
     if (!hasToolOutput) {
-      // 请求 1：leading text（gate 内）→ tool call（client 工具由 onToolCall 执行，返回未知工具错误）
+      // 请求 1：leading text（歧义窗口内）→ tool call（client 工具由 onToolCall 执行，返回未知工具错误）
       return [
         {
           events: [
@@ -241,7 +251,23 @@ test("Agent 流程：leading text 不先以 Final Answer 显示，Tool 后成为
         },
       ];
     }
-    // 请求 2：Final Answer 分片流式（每片间隔保持 stream 打开，验证 streaming 语义）
+    if (!hasFinalAnswerBoundary) {
+      // 请求 2：Final Answer Boundary 控制信号（client 直接回填 ok:true → 自动续跑）
+      return [
+        {
+          events: [
+            JSON.stringify({ type: "start", messageId: "mock-agent-1" }),
+            JSON.stringify({ type: "start-step" }),
+            JSON.stringify({ type: "tool-input-start", toolCallId: "call_boundary", toolName: "begin_final_answer" }),
+            JSON.stringify({ type: "tool-input-delta", toolCallId: "call_boundary", inputTextDelta: "{}" }),
+            JSON.stringify({ type: "tool-input-available", toolCallId: "call_boundary", toolName: "begin_final_answer", input: {} }),
+            JSON.stringify({ type: "finish-step" }),
+            JSON.stringify({ type: "finish", finishReason: "tool-calls" }),
+          ],
+        },
+      ];
+    }
+    // 请求 3：Final Answer 分片流式（每片间隔保持 stream 打开，验证 streaming 语义）
     return [
       {
         events: [
@@ -274,7 +300,7 @@ test("Agent 流程：leading text 不先以 Final Answer 显示，Tool 后成为
   await expect(msg.locator(".kiro-markdown")).toHaveCount(0, { timeout: 5000 });
   await expect(msg.locator(".kiro-markdown").getByText(LEADING)).toHaveCount(0);
 
-  // T1：Tool 到达（gate 内）→ leading 成为 Worklog commentary（仅一次，worklog 字体）
+  // T1：Tool 到达 → leading 成为 Worklog commentary（仅一次，worklog 字体）
   const worklog = page.getByTestId("kiro-worklog");
   await expect(worklog).toBeVisible({ timeout: 10000 });
   const commentary = worklog.getByText(LEADING, { exact: true });
@@ -284,15 +310,17 @@ test("Agent 流程：leading text 不先以 Final Answer 显示，Tool 后成为
   await expect(msg.locator(".kiro-markdown").getByText(LEADING)).toHaveCount(0);
   const commentaryFont = await commentary.evaluate((el) => getComputedStyle(el).fontSize);
   expect(parseFloat(commentaryFont)).toBeLessThanOrEqual(12); // 11px worklog 字体，绝非回答字号
-  // Worklog 仍展开（tool 进行中 working/composing → 展开；工具循环的假 done 不折叠）
+  // Worklog 保持展开（工具循环的假 done 不折叠：awaiting-tool-result / awaiting-continuation 仍 in-flight）
   await expect(worklog.locator('[data-state="open"]').first()).toBeVisible({ timeout: 10000 });
-  await expect.poll(() => requestCount).toBe(2); // 客户端确实执行并回传了 tool output → 自动继续
+  await expect.poll(() => requestCount).toBe(3); // tool output 回填 + boundary 回填 → 两次自动续跑
 
   // T3：Final Answer streaming → cursor 出现；Worklog 在首 token 时不折叠
   const answer = msg.locator(".kiro-markdown").first();
   await expect(answer).toContainText("检查完成", { timeout: 10000 });
   await expect(page.getByTestId("kiro-streaming-cursor")).toBeVisible();
   await expect(commentary).toBeVisible(); // answering 阶段 Worklog 保持展开（无首 token 突变）
+  // 整个工具循环 + answering 过程中 Worklog 从未收起再展开（无假 settled bounce）
+  await expect(worklog.locator('[data-state="open"]').first()).toBeVisible();
 
   // T4：完成 → Markdown stable（h2 真实渲染）、cursor 消失、Worklog done 后自动折叠
   await expect(msg.locator("h2")).toHaveText("摘要", { timeout: 10000 });
@@ -306,30 +334,57 @@ test("Agent 流程：leading text 不先以 Final Answer 显示，Tool 后成为
 });
 
 /**
- * 普通无 Tool 聊天：leading 文字在歧义窗口（~100ms）后以回答样式流式出现，
- * 绝不落入 Worklog；完成后整段 Markdown 稳定（无 plain→markdown 突变）。
+ * 普通无 Tool 聊天：begin_final_answer → 文字立即以 Final Answer 流式显示（无 Worklog、
+ * 无时间猜测）；完成后整段 Markdown 稳定（无 plain→markdown 突变）。
  */
-test("普通聊天：无 Tool 时首段文字 gate 后立即以 Final Answer 流式显示（无 Worklog）", async ({ page }) => {
-  const sse = await startSseServer(() => [
-    {
-      events: [
-        JSON.stringify({ type: "start", messageId: "mock-plain-1" }),
-        JSON.stringify({ type: "start-step" }),
-        JSON.stringify({ type: "text-start", id: "plain-text" }),
-      ],
-    },
-    { delay: 80, events: [JSON.stringify({ type: "text-delta", id: "plain-text", delta: "这是普通回答的" })] },
-    { delay: 120, events: [JSON.stringify({ type: "text-delta", id: "plain-text", delta: "第一段，" })] },
-    { delay: 150, events: [JSON.stringify({ type: "text-delta", id: "plain-text", delta: "**强调** 与 `code`。" })] },
-    {
-      delay: 80,
-      events: [
-        JSON.stringify({ type: "text-end", id: "plain-text" }),
-        JSON.stringify({ type: "finish-step" }),
-        JSON.stringify({ type: "finish", finishReason: "stop" }),
-      ],
-    },
-  ]);
+test("普通聊天：begin_final_answer 后首段文字立即以 Final Answer 流式显示（无 Worklog）", async ({ page }) => {
+  const sse = await startSseServer((bodyJson) => {
+    const hasBoundary = ((bodyJson.messages ?? []) as {
+      role: string;
+      parts?: { type: string }[];
+    }[]).some(
+      (m) =>
+        m.role === "assistant" &&
+        (m.parts ?? []).some((p) => p.type === "tool-begin_final_answer")
+    );
+    if (!hasBoundary) {
+      // 请求 1：begin_final_answer 控制信号
+      return [
+        {
+          events: [
+            JSON.stringify({ type: "start", messageId: "mock-plain-1" }),
+            JSON.stringify({ type: "start-step" }),
+            JSON.stringify({ type: "tool-input-start", toolCallId: "call_plain", toolName: "begin_final_answer" }),
+            JSON.stringify({ type: "tool-input-delta", toolCallId: "call_plain", inputTextDelta: "{}" }),
+            JSON.stringify({ type: "tool-input-available", toolCallId: "call_plain", toolName: "begin_final_answer", input: {} }),
+            JSON.stringify({ type: "finish-step" }),
+            JSON.stringify({ type: "finish", finishReason: "tool-calls" }),
+          ],
+        },
+      ];
+    }
+    // 请求 2：Final Answer 分片流式
+    return [
+      {
+        events: [
+          JSON.stringify({ type: "start", messageId: "mock-plain-1" }),
+          JSON.stringify({ type: "start-step" }),
+          JSON.stringify({ type: "text-start", id: "plain-text" }),
+        ],
+      },
+      { delay: 80, events: [JSON.stringify({ type: "text-delta", id: "plain-text", delta: "这是普通回答的" })] },
+      { delay: 120, events: [JSON.stringify({ type: "text-delta", id: "plain-text", delta: "第一段，" })] },
+      { delay: 150, events: [JSON.stringify({ type: "text-delta", id: "plain-text", delta: "**强调** 与 `code`。" })] },
+      {
+        delay: 80,
+        events: [
+          JSON.stringify({ type: "text-end", id: "plain-text" }),
+          JSON.stringify({ type: "finish-step" }),
+          JSON.stringify({ type: "finish", finishReason: "stop" }),
+        ],
+      },
+    ];
+  });
   await page.route("**/api/ai/chat", (route) => route.continue({ url: sse.url }));
 
   await seedAI(page);

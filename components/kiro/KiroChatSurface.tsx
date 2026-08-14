@@ -151,7 +151,8 @@ export function KiroChatSurface({ variant }: { variant: "workspace" | "sidecar" 
           onUndo={chat.consumeUndo}
           onEditUserMessage={chat.editAndResend}
           compact={compact}
-          turnInFlight={chat.streaming}
+          // Streaming UX V3：真实 turn lifecycle（awaiting-tool-result / awaiting-continuation 也视为 in-flight）
+          turnInFlight={chat.turnInFlight}
           sources={chat.sources}
           onReviewComputerTask={setReviewTaskId}
           onUndoComputerTask={(taskId) => void chat.undoTask(taskId)}

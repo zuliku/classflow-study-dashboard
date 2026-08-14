@@ -85,10 +85,10 @@ function rowClasses(block: ToolBlock): string {
 }
 
 /**
- * Kiro Worklog（Density Polish + Streaming UX V2）：
+ * Kiro Worklog（Density Polish + Streaming UX V3）：
  * - 整体 disclosure：Summary（ListTree + 步骤统计）→ 点击折叠/展开
  * - 自动折叠：working/composing 展开；answering 保持（不在 Final Answer 首 token 突变）；
- *   done 且用户未手动操作 → 自动折叠一次（用户手动 toggle 后不再覆盖）
+ *   done（真实 settled，turnExecutionState 保证）且用户未手动操作 → 自动折叠一次
  * - commentary 完整显示（无 line-clamp）；worklog 使用消息可用宽度（无 max-w）
  * - 每个 Tool Row：generic fallback 详情不显示 Chevron（无 disclosure）
  * - Final Answer 分割线无论折叠与否都保留
@@ -102,45 +102,25 @@ export function KiroWorklog({ turn }: { turn: KiroAssistantTurnPresentation }) {
     (block) => block.status === "done" || block.status === "error"
   ).length;
 
-  // 自动折叠（Streaming UX V2 Phase 3）：working/composing 展开；
+  // 自动折叠（Streaming UX V3 Phase 3）：working/composing 展开；
   // answering（Final Answer 首 token）保持当前状态，绝不在首 token 到达时做大幅 layout mutation；
-  // 只有进入 done（Turn 结束）且用户未手动操作时才自动折叠。
-  // 注意：工具循环期间 SDK status 可能瞬时回到 ready（假 done），因此 done 折叠带 150ms 确认，
-  // phase 若弹回 working/composing 则取消折叠并恢复展开（行内状态不随假 done 抖动）。
+  // 只有进入 done（Turn 真正 settled）且用户未手动操作时才自动折叠。
+  // 假 done 已由 useKiroChat 的 turnExecutionState 消除（awaiting-tool-result / awaiting-continuation
+  // 仍视为 in-flight），因此不再需要 150ms timer 补偿。
   const [expanded, setExpanded] = useState(
     turn.phase === "working" || turn.phase === "composing"
   );
   const userToggledRef = useRef(false);
   const prevPhaseRef = useRef(turn.phase);
-  const collapseTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
     const prev = prevPhaseRef.current;
     prevPhaseRef.current = turn.phase;
     if (userToggledRef.current) return;
     if (prev !== "done" && turn.phase === "done") {
-      if (collapseTimerRef.current !== null) window.clearTimeout(collapseTimerRef.current);
-      collapseTimerRef.current = window.setTimeout(() => {
-        collapseTimerRef.current = null;
-        setExpanded(false);
-      }, 150);
-      return;
-    }
-    if (prev === "done" && (turn.phase === "working" || turn.phase === "composing")) {
-      if (collapseTimerRef.current !== null) {
-        window.clearTimeout(collapseTimerRef.current);
-        collapseTimerRef.current = null;
-      }
-      setExpanded(true);
+      setExpanded(false);
     }
   }, [turn.phase]);
-
-  useEffect(
-    () => () => {
-      if (collapseTimerRef.current !== null) window.clearTimeout(collapseTimerRef.current);
-    },
-    []
-  );
 
   const toggleExpanded = () => {
     userToggledRef.current = true;

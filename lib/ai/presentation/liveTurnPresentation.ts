@@ -1,28 +1,31 @@
 /**
- * Kiro Live Turn Presentation Controller（Streaming UX V2）。
+ * Kiro Live Turn Presentation Controller（Streaming UX V3 Phase 1）。
  *
- * 纯 Presentation Model + 单调 lane commit：
- * - 任何已展示给用户的 text 绝不跨视觉通道迁移（Answer ⇄ Commentary 禁止）。
- * - leading text（首个 Tool 之前）：先 provisional（隐藏，UI 显示「正在准备」），
- *   在短暂歧义窗口内发现 Tool → commit commentary；窗口关闭仍未出现 Tool →
- *   commit answer（普通无 Tool 聊天的流式感由此保证）。
- * - trailing text（最后一个 Tool 之后）：沿用 Provisional Lookahead（稳定块 + 第二段已开始 /
- *   单段 done / Turn 结束）→ commit answer；commit 单调，后续新 Tool 不得把已展示文字降级。
- * - answerStreaming 只取决于「被接受为 answer 的 text parts」是否仍有 streaming state，
- *   不再绑定整个 Agent Turn 是否 in-flight。
+ * 纯 Presentation Model + 显式 Final Answer Boundary + 单调 lane commit：
+ *
+ * 【Agent 执行过程 ≠ Final Answer】是核心不变量：
+ * - begin_final_answer（内部控制信号）之前：任何 text = commentary（Worklog），Tool = Worklog Tool Row；
+ * - begin_final_answer 之后：任何 text = Final Answer（永久，不依赖任何时间窗口）；
+ * - reasoning 永远不可见；
+ * - 已 commit 的 lane 永不反向变化。
+ *
+ * Legacy fallback（模型不遵守协议时）：
+ * A. 无 Tool 且无 boundary → live 期间不显示（provisional 隐藏），Turn 真正结束（settled）后
+ *    全部 text 视为 Answer。
+ * B. 有 Tool 且无 boundary → 保留 Provisional Lookahead（稳定块 + 第二段 / 单段 done / settled）
+ *    单调 commit 为 Answer；Tool 之间 / 之前 text 恒为 commentary。
+ *
+ * 禁止任何基于时间的 lane 猜测（不再有 settle gate / timer）。
  *
  * 使用方：useKiroChat 为每个 assistant message 持有一个 LiveTurnCommitState（ref），
- * 每帧 derivation 通过 updateLiveTurnPresentation() 推进；settled 消息复用同一 commit 保证
- * 单调性（fresh state 仅用于测试/静态推导，turnInFlight=false 时同样得到正确结果）。
+ * 每帧 derivation 通过 updateLiveTurnPresentation() 推进；settled 消息复用同一 commit 保证单调性。
  */
 
 import { KIRO_MUTATING_TOOL_NAMES } from "@/lib/ai/tools/mutating";
 import { toolLabel } from "@/lib/ai/tools/formatters";
 import { formatKiroToolActivityDetail, formatKiroToolActivityHeadline } from "@/lib/ai/presentation/toolActivityDetails";
 import { splitKiroStreamingMarkdown } from "@/lib/ai/streaming/markdownBlocks";
-
-/** leading text 的歧义窗口：窗口内发现 Tool → commentary；窗口关闭仍无 Tool → answer */
-export const KIRO_LEADING_SETTLE_GATE_MS = 100;
+import { isKiroFinalAnswerToolName } from "@/lib/ai/tools/finalAnswer";
 
 export type KiroTurnPhase = "working" | "composing" | "answering" | "done";
 
@@ -56,36 +59,23 @@ export interface KiroAssistantTurnPresentation {
   phase: KiroTurnPhase;
 }
 
-/** 文本展示通道：monotonic（一旦 commit 不可反向变化） */
-export type TextLane = "provisional" | "commentary" | "answer";
-
 /**
  * 每个 assistant message 跨渲染持久的 commit 状态。
  * 由 useKiroChat 持有（ref map，message id 为 key）；测试可自行创建并多次调用。
+ * 只保留「单调性」所需的 commit：boundary 本身来自 parts（tool-begin_final_answer），无需额外状态。
  */
 export interface LiveTurnCommitState {
-  /** 首个 Tool 之前的 leading text 已 commit 的 lane（null = 仍在 provisional） */
-  leadingLane: "commentary" | "answer" | null;
-  /** leading provisional 起始时刻（首 token 到达；歧义窗口从此刻起算） */
-  leadingProvisionalSinceMs: number | null;
-  /** trailing answer 是否已 commit（单调） */
+  /** trailing answer 是否已 commit（legacy fallback B：单调） */
   trailingAnswerCommitted: boolean;
-  /** trailing commit 时刻的 lastToolPartIndex：此后所有 text 恒为 answer */
+  /** trailing commit 时刻的 lastBusinessToolPartIndex：此后所有 text 恒为 answer */
   trailingCommitToolIndex: number;
 }
 
 export function createLiveTurnCommitState(): LiveTurnCommitState {
   return {
-    leadingLane: null,
-    leadingProvisionalSinceMs: null,
     trailingAnswerCommitted: false,
     trailingCommitToolIndex: -1,
   };
-}
-
-export interface LiveTurnPresentationOptions {
-  now?: () => number;
-  settleGateMs?: number;
 }
 
 type RawPart =
@@ -193,69 +183,69 @@ function appendCommentary(
 
 /**
  * 推进（或首次建立）一个 assistant message 的 live presentation。
- * commit 状态单调：已 commit 的 lane 永不反向变化。
+ * commit 状态单调：已 commit 的 lane 永不反向变化；boundary 由 parts 中的
+ * tool-begin_final_answer 决定，不依赖任何时间窗口。
  */
 export function updateLiveTurnPresentation(
   commit: LiveTurnCommitState,
   parts: unknown[],
-  turnInFlight: boolean,
-  options?: LiveTurnPresentationOptions
+  turnInFlight: boolean
 ): KiroAssistantTurnPresentation {
-  const now = options?.now ?? Date.now;
-  const settleGateMs = options?.settleGateMs ?? KIRO_LEADING_SETTLE_GATE_MS;
   const rawParts = (parts ?? []) as RawPart[];
 
   let stepIndex = 0;
-  let firstToolPartIndex = -1;
-  let lastToolPartIndex = -1;
-  let lastToolStatus: "working" | "done" | "error" | null = null;
+  let finalAnswerPartIndex = -1;
+  let firstBusinessToolIndex = -1;
+  let lastBusinessToolIndex = -1;
+  let lastBusinessToolStatus: "working" | "done" | "error" | null = null;
 
   const trustedWebSources = collectTrustedWebSources(rawParts);
 
-  // 第一遍：定位第一个 / 最后一个 Tool part 与其 settled 状态
+  // 第一遍：定位 Final Answer Boundary 与业务 Tool 位置（begin_final_answer 是控制信号，不算业务 Tool）
   for (let i = 0; i < rawParts.length; i++) {
     const p = rawParts[i];
     if (p?.type === "step-start") continue;
-    if (isToolPart(p)) {
-      if (firstToolPartIndex < 0) firstToolPartIndex = i;
-      lastToolPartIndex = i;
-      lastToolStatus = toolStatusOf(p);
+    if (!isToolPart(p)) continue;
+    if (isKiroFinalAnswerToolName(toolNameOf(p))) {
+      if (finalAnswerPartIndex < 0) finalAnswerPartIndex = i;
+      continue;
     }
+    if (firstBusinessToolIndex < 0) firstBusinessToolIndex = i;
+    lastBusinessToolIndex = i;
+    lastBusinessToolStatus = toolStatusOf(p);
   }
 
-  const hasTools = lastToolPartIndex >= 0;
-  const hasSettledLastTool = lastToolStatus === "done" || lastToolStatus === "error";
+  const hasBusinessTools = lastBusinessToolIndex >= 0;
+  const hasSettledLastBusinessTool =
+    lastBusinessToolStatus === "done" || lastBusinessToolStatus === "error";
 
-  // ---- Trailing Lookahead（单调）：最后一个 Tool 之后的 text 是否已 commit 为 Final Answer ----
-  // 一旦 commit，trailingCommitToolIndex 之后的所有 text 恒为 answer（新 Tool 不得降级）。
+  // ---- Legacy fallback B：Trailing Lookahead（单调）----
+  // 无 boundary 且存在业务 Tool 时：最后一个业务 Tool 之后的 text 在
+  // 「稳定块 + 第二段已开始 / 单段 done / settled」后 commit 为 Answer，commit 后单调。
   const trailingTextParts =
-    lastToolPartIndex >= 0
+    lastBusinessToolIndex >= 0
       ? rawParts
-          .slice(lastToolPartIndex + 1)
+          .slice(lastBusinessToolIndex + 1)
           .filter((part): part is Extract<RawPart, { type: "text" }> => part?.type === "text")
       : [];
   const trailingText = trailingTextParts.map((part) => part.text ?? "").join("");
 
-  let commitTrailing = commit.trailingAnswerCommitted;
   if (
+    finalAnswerPartIndex < 0 &&
     !commit.trailingAnswerCommitted &&
-    lastToolPartIndex >= 0 &&
-    hasSettledLastTool &&
+    lastBusinessToolIndex >= 0 &&
+    hasSettledLastBusinessTool &&
     trailingText.length > 0
   ) {
-    // 复用 Stable Block Splitter：第一块已稳定 + 第二块已开始 = lookahead 成立
     const split = splitKiroStreamingMarkdown(trailingText, true);
     const hasOneBlockLookahead = split.stableBlocks.length > 0 && split.tail.trim().length > 0;
-    // 单段已完成（不会再出现新段落/新 Tool 的等待理由）
     const trailingTextDone =
       trailingTextParts.length > 0 && trailingTextParts.every((part) => part.state === "done");
     if (hasOneBlockLookahead || trailingTextDone || !turnInFlight) {
-      commitTrailing = true;
       commit.trailingAnswerCommitted = true;
-      commit.trailingCommitToolIndex = lastToolPartIndex;
+      commit.trailingCommitToolIndex = lastBusinessToolIndex;
     }
   }
-  void commitTrailing;
 
   // 第二遍：构建 worklog（commentary / tool）+ 提取 answer（lane-aware）
   const worklog: KiroWorklogBlock[] = [];
@@ -272,6 +262,8 @@ export function updateLiveTurnPresentation(
     if (p.type === "reasoning") continue;
 
     if (isToolPart(p)) {
+      // 控制信号本身不进入 Worklog（无 Tool Row / 无 Action Card）
+      if (isKiroFinalAnswerToolName(toolNameOf(p))) continue;
       worklog.push(buildToolBlock(p, i, stepIndex, trustedWebSources));
       continue;
     }
@@ -280,7 +272,20 @@ export function updateLiveTurnPresentation(
     const textValue = p.text ?? "";
     const isStreaming = p.state === "streaming";
 
-    // ---- 已 commit 的 trailing answer（单调最高优先级）----
+    // ---- 显式 Boundary（协议通道）----
+    if (finalAnswerPartIndex >= 0) {
+      if (i > finalAnswerPartIndex) {
+        // boundary 后：Final Answer（永久）
+        answerTexts.push(textValue);
+        if (isStreaming) answerPartStreaming = true;
+      } else {
+        // boundary 前：永久属于 Worklog
+        appendCommentary(worklog, textValue, isStreaming, stepIndex, i);
+      }
+      continue;
+    }
+
+    // ---- 已 commit 的 trailing answer（legacy 单调最高优先级）----
     // 一旦 trailing commit，trailingCommitToolIndex 之后的所有 text 恒为 answer：
     // 即使之后出现新 Tool「越过」本段，也绝不降级为 commentary。
     if (commit.trailingAnswerCommitted && i > commit.trailingCommitToolIndex) {
@@ -289,39 +294,28 @@ export function updateLiveTurnPresentation(
       continue;
     }
 
-    // ---- leading（首个 Tool 之前）----
-    if (firstToolPartIndex < 0 || i < firstToolPartIndex) {
-      // 已 commit answer（歧义窗口关闭后）→ 恒为 answer
-      if (commit.leadingLane === "answer") {
-        answerTexts.push(textValue);
-        if (isStreaming) answerPartStreaming = true;
-        continue;
-      }
-      // 已出现 Tool → leading text 证明是旁白（commentary）
-      if (hasTools) {
-        commit.leadingLane = "commentary";
-        appendCommentary(worklog, textValue, isStreaming, stepIndex, i);
-        continue;
-      }
-      // 无 Tool：provisional（隐藏）→ 歧义窗口 / Turn 结束 → commit answer
-      if (commit.leadingProvisionalSinceMs === null) {
-        commit.leadingProvisionalSinceMs = now();
-      }
-      const gateElapsed = now() - commit.leadingProvisionalSinceMs >= settleGateMs;
-      if (!turnInFlight || gateElapsed) {
-        commit.leadingLane = "answer";
+    // ---- legacy fallback A：无业务 Tool 且无 boundary ----
+    if (firstBusinessToolIndex < 0) {
+      // live 期间保持 provisional（隐藏，UI 显示「正在准备」）；settled 后全部视为 Answer。
+      if (!turnInFlight) {
         answerTexts.push(textValue);
         if (isStreaming) answerPartStreaming = true;
       }
       continue;
     }
 
-    // ---- trailing（最后一个 Tool 之后、尚未 commit）→ provisional 隐藏 ----
-    if (i > lastToolPartIndex) {
+    // ---- leading（首个业务 Tool 之前）→ 恒为 commentary ----
+    if (i < firstBusinessToolIndex) {
+      appendCommentary(worklog, textValue, isStreaming, stepIndex, i);
       continue;
     }
 
-    // ---- 中间（Tool 之间、未 commit 过）text：恒为 commentary ----
+    // ---- trailing（最后一个业务 Tool 之后、尚未 commit）→ provisional 隐藏 ----
+    if (i > lastBusinessToolIndex) {
+      continue;
+    }
+
+    // ---- 中间（业务 Tool 之间、未 commit 过）text：恒为 commentary ----
     appendCommentary(worklog, textValue, isStreaming, stepIndex, i);
   }
 
@@ -332,7 +326,7 @@ export function updateLiveTurnPresentation(
     phase = "done";
   } else if (answer.length > 0) {
     phase = "answering";
-  } else if (hasTools && worklog.every((b) => b.kind !== "tool" || b.status !== "working")) {
+  } else if (hasBusinessTools && worklog.every((b) => b.kind !== "tool" || b.status !== "working")) {
     phase = "composing";
   } else {
     phase = "working";
@@ -343,8 +337,8 @@ export function updateLiveTurnPresentation(
     answer,
     // answerStreaming 只取决于被接受的 answer text parts 是否仍在 streaming（与 Agent Turn in-flight 解耦）
     answerStreaming: turnInFlight && answerPartStreaming,
-    hasTools,
-    worklogDone: hasTools && (phase === "answering" || phase === "done"),
+    hasTools: hasBusinessTools,
+    worklogDone: hasBusinessTools && (phase === "answering" || phase === "done"),
     phase,
   };
 }
@@ -352,8 +346,8 @@ export function updateLiveTurnPresentation(
 /**
  * 静态推导（每次调用使用 fresh commit）。
  * 供 settled 消息 / 测试使用；live turn 必须使用 updateLiveTurnPresentation 持久 commit。
- * 注意：fresh commit + turnInFlight=true + 无 Tool 时，leading text 处于 provisional（gate 语义），
- * 不会立即出现在 answer 中——live 场景请注入时间并推进 commit。
+ * 注意：fresh commit + turnInFlight=true + 无 Tool 且无 boundary 时，text 处于 provisional
+ * （fallback A），不会出现在 answer 中——live 场景必须等 turn 真正 settled。
  */
 export function deriveKiroAssistantTurn(
   parts: unknown[],
