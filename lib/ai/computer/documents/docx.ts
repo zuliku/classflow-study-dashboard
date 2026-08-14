@@ -1,6 +1,7 @@
 import { KiroDocument, KiroInline } from "@/lib/ai/computer/documents/types";
 import { ResolvedDocumentTheme } from "@/lib/ai/computer/documents/styles/types";
 import { tableColumnCount } from "@/lib/ai/computer/documents/render-normalize";
+import { DOCX_CREATOR, DOCX_RENDERER_MARKER, logKiroRuntimeFingerprint } from "@/lib/ai/computer/runtimeVersion";
 
 /**
  * Document IR → DOCX（Kiro Document Engine V2）。
@@ -25,6 +26,7 @@ function loadDocx(): Promise<Docx> {
 }
 
 export async function renderDocx(doc: KiroDocument): Promise<Uint8Array> {
+  logKiroRuntimeFingerprint();
   const docx = await loadDocx();
   const { resolveDocumentTheme } = await import("./styles/resolve");
   const { normalizeDocumentForRender, sanitizeOpenXmlText } = await import("./render-normalize");
@@ -36,6 +38,10 @@ export async function renderDocx(doc: KiroDocument): Promise<Uint8Array> {
   const children = buildChildren(docx, renderDoc, theme, sanitizeOpenXmlText);
 
   const packed = new Document({
+    // V2.6：稳定 provenance metadata（docProps/core.xml）——新 renderer 输出可与
+    // 旧手写 renderer（Application/creator=ClassFlow Kiro、无 description）明确区分
+    creator: DOCX_CREATOR,
+    description: DOCX_RENDERER_MARKER,
     numbering: {
       config: [
         {
@@ -98,7 +104,25 @@ export async function renderDocx(doc: KiroDocument): Promise<Uint8Array> {
 
   // V2.2：直接 ArrayBuffer（减少一层 Blob round-trip）；下载层仍保留 Blob
   const buffer = await Packer.toArrayBuffer(packed);
-  return new Uint8Array(buffer);
+  const bytes = new Uint8Array(buffer);
+
+  // V2.6 post-render guard：新 renderer 输出如果出现已知旧结构（w:tc→w:r direct child /
+  // w:style→w:numPr direct child）→ 立即失败，绝不把 legacy 结构写进文件系统。
+  // 这建立「新 create_document 永远不能把已知旧结构写进 workspace」的硬 invariant。
+  const { detectLegacyKiroDocx } = await import("./legacy");
+  const detection = await detectLegacyKiroDocx(bytes);
+  if (detection.legacy) {
+    const { ComputerError } = await import("@/lib/ai/computer/errors");
+    throw new ComputerError(
+      "DOCUMENT_RENDER_FAILED",
+      "文档渲染结果包含旧版结构，已阻止写入（directTableRuns=" +
+        detection.directTableRuns +
+        ", invalidStyleNumPr=" +
+        detection.invalidStyleNumPr +
+        "）"
+    );
+  }
+  return bytes;
 }
 
 function buildChildren(

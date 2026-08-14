@@ -17,6 +17,10 @@ import { normalizeRelativeComputerPath } from "@/lib/ai/computer/workspace/resol
 import { getComputerAdapterForAdapterRef } from "@/lib/ai/computer/executor";
 import { inspectDocumentFacts, verifyDocxBytes, verifyRenderedDocx } from "@/lib/ai/computer/documents/verify";
 import { detectLegacyKiroDocx } from "@/lib/ai/computer/documents/legacy";
+import { inspectKiroDocxProvenance } from "@/lib/ai/computer/documents/provenance";
+import { repairLegacyKiroDocx } from "@/lib/ai/computer/documents/legacyRepair";
+
+export const DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 
 export const MAX_ARTIFACT_PREVIEW_BYTES = 20 * 1024 * 1024;
 export const MAX_ARTIFACT_PREVIEW_CHARS = 100_000;
@@ -270,37 +274,51 @@ export async function getArtifactPreview(input: {
 }
 
 /**
- * 共享 DOCX live-bytes resolve（V2.5）：Preview 与 Download 都经过同一链路。
- * legacy detection → 必要时 self-heal migration → verified live bytes。
+ * 共享 DOCX live-bytes resolve（V2.6 canonical resolver）。
+ * 所有 Kiro DOCX Artifact 下载（Task Card / Recent Files / Preview download）都必须经过这里；
+ * 仓库内不允许存在「io.readBytes → Blob」的第二条 DOCX 快捷路径。
  *
- * Migration 安全边界（全部满足才自动重写文件）：
- * - artifact.type === "docx"
- * - artifact.source === "kiro-created"（workspace-existing 用户文件绝不自动重写）
- * - 存在匹配 revision 的 Source IR
- * - detectLegacyKiroDocx(bytes).legacy === true（structural evidence 最高优先）
- * 之后：Source IR → 当前 renderDocx() → verifyRenderedDocx → 写回同一 path → read-back verify。
+ * Decision（绝不 legacy pass-through；verifyDocxBytes 不验证完整 WordprocessingML schema）：
+ * - Case 5  current renderer（结构干净）→ preflight verify → 原样返回
+ * - Level A legacy + matching Source IR（kiro-created 或 package 明确 legacyKiroProducer）
+ *        → 当前 renderer 重渲染 → verifyRenderedDocx → 写回 → read-back verify
+ * - Level B legacy + package 明确旧 Kiro + Source IR 缺失/revision mismatch
+ *        → bounded repair（legacyRepair）→ legacy=false + verifyDocxBytes → 写回 → read-back verify
+ * - Level C legacy 结构 + 未知 producer → 禁止下载（不 pass-through、不自动手术）
  */
-export async function resolveLiveDocxBytes(input: {
+export async function resolveExportableDocxBytes(input: {
   artifactId: string;
   workspaces: KiroWorkspaceMeta[];
-}): Promise<{ bytes: Uint8Array; migrated: boolean }> {
+}): Promise<{ bytes: Uint8Array; migrated: boolean; repaired: boolean }> {
   const { artifact, path, io } = await resolveArtifactLocation(input.artifactId, input.workspaces);
   const stat = await io.stat(path);
   if (!stat || stat.kind !== "file") {
     throw new ComputerError("RESOURCE_NOT_FOUND", "文件不存在");
   }
-  const bytes = await io.readBytes(path);
+  const liveBytes = await io.readBytes(path);
 
   if (artifact.type !== "docx") {
-    return { bytes, migrated: false };
+    return { bytes: liveBytes, migrated: false, repaired: false };
   }
   const source = await getArtifactSource(artifact.id);
-  const hasMatchingSource =
-    artifact.source === "kiro-created" && !!source && source.revision === artifact.revision;
-  const detection = await detectLegacyKiroDocx(bytes);
+  const hasMatchingSource = !!source && source.revision === artifact.revision;
+  const detection = await detectLegacyKiroDocx(liveBytes);
+  const provenance = await inspectKiroDocxProvenance(liveBytes);
 
-  // Legacy Kiro DOCX（structural evidence 最高优先）→ 用匹配 Source IR 重新渲染（self-heal）
-  if (hasMatchingSource && detection.legacy) {
+  // Case 5：结构干净 → preflight runtime verification（损坏不放行下载）
+  if (!detection.legacy) {
+    const verified = hasMatchingSource
+      ? await verifyRenderedDocx(liveBytes, source!.document)
+      : await verifyDocxBytes(liveBytes);
+    if (!verified) {
+      throw new ComputerError("VERIFICATION_FAILED", "文档文件校验失败，请让 Kiro 重新生成。");
+    }
+    return { bytes: liveBytes, migrated: false, repaired: false };
+  }
+
+  // legacy → 永不普通 pass-through
+  // Level A：matching Source IR → 当前 renderer 重渲染（self-heal）
+  if (hasMatchingSource && (artifact.source === "kiro-created" || provenance.legacyKiroProducer)) {
     const { renderDocx } = await import("@/lib/ai/computer/documents/docx");
     const migrated = await renderDocx(source!.document);
     if (!(await verifyRenderedDocx(migrated, source!.document))) {
@@ -309,11 +327,7 @@ export async function resolveLiveDocxBytes(input: {
         "旧版文档自动修复失败，请让 Kiro 重新生成该文档。"
       );
     }
-    await io.writeBytes(
-      path,
-      migrated,
-      "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-    );
+    await io.writeBytes(path, migrated, DOCX_MIME);
     const readBack = await io.readBytes(path);
     if (!(await verifyDocxBytes(readBack))) {
       throw new ComputerError(
@@ -321,30 +335,47 @@ export async function resolveLiveDocxBytes(input: {
         "旧版文档修复后回读校验失败，请让 Kiro 重新生成该文档。"
       );
     }
-    return { bytes: readBack, migrated: true };
+    return { bytes: readBack, migrated: true, repaired: false };
   }
 
-  // 非 legacy / 非 kiro-created：preflight runtime verification（损坏不放行下载）
-  const verified =
-    source && source.revision === artifact.revision
-      ? await verifyRenderedDocx(bytes, source.document)
-      : await verifyDocxBytes(bytes);
-  if (!verified) {
-    throw new ComputerError("VERIFICATION_FAILED", "文档文件校验失败，请让 Kiro 重新生成。");
+  // Level B：package 明确旧 Kiro producer + Source IR 缺失/不匹配 → bounded repair
+  if (provenance.legacyKiroProducer) {
+    const { bytes: repaired, after } = await repairLegacyKiroDocx(liveBytes);
+    if (after.legacy || !(await verifyDocxBytes(repaired))) {
+      throw new ComputerError(
+        "VERIFICATION_FAILED",
+        "旧版文档修复失败（结构仍含旧签名），请让 Kiro 重新生成该文档。"
+      );
+    }
+    await io.writeBytes(path, repaired, DOCX_MIME);
+    const readBack = await io.readBytes(path);
+    if (!(await verifyDocxBytes(readBack))) {
+      throw new ComputerError(
+        "VERIFICATION_FAILED",
+        "旧版文档修复后回读校验失败，请让 Kiro 重新生成该文档。"
+      );
+    }
+    return { bytes: readBack, migrated: false, repaired: true };
   }
-  // V2.5.1：legacy Kiro 文件但缺少匹配 Source IR（无文档源可重渲染）→ 绝不原样导出坏文件，
-  // 明确指引重新生成（此前会绕过 migration 直接下载损坏字节）。
-  if (artifact.source === "kiro-created" && detection.legacy) {
-    throw new ComputerError(
-      "VERIFICATION_FAILED",
-      "该文件是旧版 Kiro 生成的 Word 文档且缺少文档源记录，无法自动修复；请让 Kiro 重新生成该文档。"
-    );
-  }
-  return { bytes, migrated: false };
+
+  // Level C：legacy 结构 + 未知 producer → 禁止下载
+  throw new ComputerError(
+    "VERIFICATION_FAILED",
+    "该 Word 文档结构异常且无法自动修复（未知来源），已阻止下载；请让 Kiro 重新生成。"
+  );
+}
+
+/** V2.5 兼容别名（Preview 等既有调用方）；语义与 canonical resolver 完全一致 */
+export async function resolveLiveDocxBytes(input: {
+  artifactId: string;
+  workspaces: KiroWorkspaceMeta[];
+}): Promise<{ bytes: Uint8Array; migrated: boolean; repaired: boolean }> {
+  return resolveExportableDocxBytes(input);
 }
 
 /** 下载：永远读当前真实文件 bytes（不做缓存/Source IR/旧 bytes 导出）。
- *  DOCX 下载前（V2.1 + V2.5）：resolveLiveDocxBytes（legacy detection → optional migration →
+ *  DOCX 下载前（V2.1 + V2.5 + V2.6）：统一经过 canonical resolver
+ *  resolveExportableDocxBytes（legacy detection → Level A rerender / Level B bounded repair /
  *  runtime verification）——损坏/旧版 DOCX 不允许原样下载。 */
 export async function getArtifactDownloadPayload(input: {
   artifactId: string;
@@ -353,7 +384,7 @@ export async function getArtifactDownloadPayload(input: {
   const { artifact } = await resolveArtifactLocation(input.artifactId, input.workspaces);
   const { bytes } =
     artifact.type === "docx"
-      ? await resolveLiveDocxBytes(input)
+      ? await resolveExportableDocxBytes(input)
       : { bytes: await readLiveBytes(input) };
   return {
     artifact,

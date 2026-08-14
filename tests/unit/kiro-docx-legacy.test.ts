@@ -60,11 +60,11 @@ async function buildLegacyDocxBytes(): Promise<Uint8Array> {
   );
   zip.file(
     "docProps/core.xml",
-    `<?xml version="1.0"?><cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:creator>Kiro</dc:creator></cp:coreProperties>`
+    `<?xml version="1.0"?><cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:creator>ClassFlow Kiro</dc:creator></cp:coreProperties>`
   );
   zip.file(
     "docProps/app.xml",
-    `<?xml version="1.0"?><Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties"><Application>Kiro</Application></Properties>`
+    `<?xml version="1.0"?><Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties"><Application>ClassFlow Kiro</Application></Properties>`
   );
   const legacyCells = Array.from({ length: 24 }, (_, i) =>
     `<w:tc><w:tcPr><w:tcW w:w="2000" w:type="dxa"/></w:tcPr><w:r><w:t>cell${i}</w:t></w:r></w:tc>`
@@ -137,7 +137,7 @@ describe("Legacy DOCX self-heal（resolveLiveDocxBytes）", () => {
     expect(Buffer.from(onDisk).toString("base64")).toBe(Buffer.from(bytes).toString("base64"));
   });
 
-  it("workspace-existing DOCX：即使 legacy=true 也绝不自动重写", async () => {
+  it("workspace-existing + package 明确 legacyKiroProducer → Level B bounded repair（重写文件）", async () => {
     const legacyBytes = await buildLegacyDocxBytes();
     const artifact = await adoptWorkspaceArtifact({
       workspaceId: "ws-legacy",
@@ -148,15 +148,16 @@ describe("Legacy DOCX self-heal（resolveLiveDocxBytes）", () => {
     });
     await sandboxWriteBytes(REF, "user.docx", legacyBytes, "application/vnd.openxmlformats-officedocument.wordprocessingml.document");
 
-    const { bytes, migrated } = await resolveLiveDocxBytes({ artifactId: artifact.id, workspaces: [workspace] });
-    expect(migrated).toBe(false);
-    expect(Buffer.from(bytes).toString("base64")).toBe(Buffer.from(legacyBytes).toString("base64"));
-    // 文件未被改写
+    const { bytes, repaired } = await resolveLiveDocxBytes({ artifactId: artifact.id, workspaces: [workspace] });
+    expect(repaired).toBe(true);
+    expect((await detectLegacyKiroDocx(bytes)).legacy).toBe(false);
+    expect(await verifyDocxBytes(bytes)).toBe(true);
+    // 文件已被修复并写回
     const onDisk = await sandboxReadBytes(REF, "user.docx");
-    expect(Buffer.from(onDisk).toString("base64")).toBe(Buffer.from(legacyBytes).toString("base64"));
+    expect(Buffer.from(onDisk).toString("base64")).toBe(Buffer.from(bytes).toString("base64"));
   });
 
-  it("legacy kiro-created + 无 Source IR → 绝不原样导出（VERIFICATION_FAILED 并指引重新生成）", async () => {
+  it("legacy kiro-created + 无 Source IR + legacyKiroProducer → Level B bounded repair（下载成功）", async () => {
     const legacyBytes = await buildLegacyDocxBytes();
     // kiro-created 但没传 document → 无 Source IR
     const artifact = await registerCreatedArtifact({
@@ -169,12 +170,54 @@ describe("Legacy DOCX self-heal（resolveLiveDocxBytes）", () => {
     expect(await getArtifactSource(artifact.id)).toBeNull();
     await sandboxWriteBytes(REF, "no-source.docx", legacyBytes, "application/vnd.openxmlformats-officedocument.wordprocessingml.document");
 
+    const payload = await getArtifactDownloadPayload({ artifactId: artifact.id, workspaces: [workspace] });
+    expect((await detectLegacyKiroDocx(payload.bytes)).legacy).toBe(false);
+    expect(await verifyDocxBytes(payload.bytes)).toBe(true);
+    // 文件已被修复并写回（下载与磁盘一致）
+    const onDisk = await sandboxReadBytes(REF, "no-source.docx");
+    expect(Buffer.from(onDisk).toString("base64")).toBe(Buffer.from(payload.bytes).toString("base64"));
+  });
+
+  it("legacy 结构 + 未知 producer → Level C 禁止下载（不 pass-through、不自动手术、不改写文件）", async () => {
+    // 与 buildLegacyDocxBytes 同结构，但 docProps 不是 ClassFlow Kiro（外部来源）
+    const zip = new JSZip();
+    zip.file(
+      "docProps/core.xml",
+      `<?xml version="1.0"?><cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:creator>Other Author</dc:creator></cp:coreProperties>`
+    );
+    zip.file(
+      "docProps/app.xml",
+      `<?xml version="1.0"?><Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties"><Application>Word</Application></Properties>`
+    );
+    const cells = Array.from({ length: 4 }, (_, i) =>
+      `<w:tc><w:tcPr><w:tcW w:w="2000" w:type="dxa"/></w:tcPr><w:r><w:t>c${i}</w:t></w:r></w:tc>`
+    ).join("");
+    zip.file(
+      "word/document.xml",
+      `<?xml version="1.0"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body><w:tbl><w:tr>${cells}</w:tr></w:tbl></w:body></w:document>`
+    );
+    zip.file(
+      "word/styles.xml",
+      `<?xml version="1.0"?><w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:style w:type="paragraph" w:styleId="X"><w:name w:val="X"/><w:numPr><w:numId w:val="1"/></w:numPr></w:style></w:styles>`
+    );
+    const unknownBytes = new Uint8Array(await zip.generateAsync({ type: "uint8array" }));
+    expect((await detectLegacyKiroDocx(unknownBytes)).legacy).toBe(true);
+
+    const artifact = await adoptWorkspaceArtifact({
+      workspaceId: "ws-legacy",
+      rootId: "output",
+      relativePath: "external.docx",
+      type: "docx",
+      title: "外部文件",
+    });
+    await sandboxWriteBytes(REF, "external.docx", unknownBytes, "application/vnd.openxmlformats-officedocument.wordprocessingml.document");
+
     await expect(getArtifactDownloadPayload({ artifactId: artifact.id, workspaces: [workspace] })).rejects.toThrowError(
       expect.objectContaining({ code: "VERIFICATION_FAILED" })
     );
     // 文件未被改写
-    const onDisk = await sandboxReadBytes(REF, "no-source.docx");
-    expect(Buffer.from(onDisk).toString("base64")).toBe(Buffer.from(legacyBytes).toString("base64"));
+    const onDisk = await sandboxReadBytes(REF, "external.docx");
+    expect(Buffer.from(onDisk).toString("base64")).toBe(Buffer.from(unknownBytes).toString("base64"));
   });
 
   it("普通 verify 失败（非 legacy signature）→ 不 migration，正常报错", async () => {
