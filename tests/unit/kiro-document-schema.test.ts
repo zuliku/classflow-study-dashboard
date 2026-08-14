@@ -109,6 +109,16 @@ describe("model-facing schema visibility", () => {
     );
   });
 
+  it("model-facing schema 暴露 stylePreset 枚举与 styleHints 受控字段（Document Engine V2）", () => {
+    const json = toJsonSchema(createDocumentSchema);
+    const serialized = JSON.stringify(json);
+    expect(serialized).toContain("academic-cn");
+    expect(serialized).toContain("business-report");
+    for (const hint of ["density", "bodyFont", "bodyFontSizePt", "lineSpacing", "firstLineIndentChars", "titleAlignment", "tableStyle", "pageMarginsCm"]) {
+      expect(serialized).toContain(hint);
+    }
+  });
+
   it("inline schema 结构正确（text 必填；bold/italic 可选）", () => {
     expect(kiroInlineSchema.safeParse({ text: "a" }).success).toBe(true);
     expect(kiroInlineSchema.safeParse({ text: "a", bold: true }).success).toBe(true);

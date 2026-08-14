@@ -1,5 +1,6 @@
 import "fake-indexeddb/auto";
 import { describe, it, expect } from "vitest";
+import JSZip from "jszip";
 import { KiroDocument } from "@/lib/ai/computer/documents/types";
 import { renderMarkdown } from "@/lib/ai/computer/documents/markdown";
 import { renderDocx } from "@/lib/ai/computer/documents/docx";
@@ -60,12 +61,13 @@ describe("docx render + verify", () => {
     expect(ok).toBe(true);
   });
 
-  it("必需 entry 列表完整", () => {
+  it("必需 entry 列表完整（core package parts；numbering 存在时才验证）", () => {
     expect(DOCX_REQUIRED_ENTRIES).toContain("[Content_Types].xml");
+    expect(DOCX_REQUIRED_ENTRIES).toContain("_rels/.rels");
     expect(DOCX_REQUIRED_ENTRIES).toContain("word/document.xml");
     expect(DOCX_REQUIRED_ENTRIES).toContain("word/styles.xml");
-    expect(DOCX_REQUIRED_ENTRIES).toContain("word/numbering.xml");
     expect(DOCX_REQUIRED_ENTRIES).toContain("word/_rels/document.xml.rels");
+    // numbering.xml 是条件 part：存在时必须可解析（由 verifier 全量 XML 校验覆盖）
   });
 
   it("损坏字节 verify 失败", async () => {
@@ -82,6 +84,44 @@ describe("docx render + verify", () => {
     const ok = await verifyDocxBytes(bytes);
     expect(ok).toBe(true);
     expect(await renderDocx(evil)).toBeInstanceOf(Uint8Array);
+  });
+});
+
+describe("DOCX structure regressions（Document Engine V2）", () => {
+  it("每个 w:tc 至少包含一个 w:p（TableCell 内容必须是 block-level document content）", async () => {
+    const bytes = await renderDocx(doc);
+    const zip = await JSZip.loadAsync(bytes);
+    const xml = await zip.file("word/document.xml")?.async("string");
+    expect(xml).toBeDefined();
+    const tcRe = /<w:tc>([\s\S]*?)<\/w:tc>/g;
+    let m: RegExpExecArray | null;
+    let cellCount = 0;
+    while ((m = tcRe.exec(xml!))) {
+      cellCount += 1;
+      expect(m[1]).toContain("<w:p");
+    }
+    expect(cellCount).toBeGreaterThan(0);
+  });
+
+  it("verifier 必须拒绝 malformed styles.xml（不能只 parse word/document.xml）", async () => {
+    const bytes = await renderDocx(doc);
+    const zip = await JSZip.loadAsync(bytes);
+    // 用截断 + 未闭合的 styles.xml 替换（Word 无法读取的 package）
+    const broken = new TextEncoder().encode(
+      '<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:style w:type="paragraph"'
+    );
+    zip.file("word/styles.xml", broken);
+    const repacked = await zip.generateAsync({ type: "uint8array" });
+    expect(await verifyDocxBytes(new Uint8Array(repacked))).toBe(false);
+  });
+
+  it("verifier 必须拒绝 malformed numbering.xml（存在时必须可解析）", async () => {
+    const bytes = await renderDocx(doc);
+    const zip = await JSZip.loadAsync(bytes);
+    const broken = new TextEncoder().encode("<w:numbering><w:abstractNum");
+    zip.file("word/numbering.xml", broken);
+    const repacked = await zip.generateAsync({ type: "uint8array" });
+    expect(await verifyDocxBytes(new Uint8Array(repacked))).toBe(false);
   });
 });
 

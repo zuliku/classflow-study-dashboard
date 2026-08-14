@@ -190,5 +190,8 @@ describe("download payload", () => {
     const docxPayload = await getArtifactDownloadPayload({ artifactId: docx.id, workspaces });
     expect(docxPayload.mimeType).toBe("application/vnd.openxmlformats-officedocument.wordprocessingml.document");
     expect(docxPayload.bytes.byteLength).toBe(bytes.byteLength);
+    // Document Engine V2：download 链（live bytes → payload → bytes）必须通过强化验证
+    const { verifyRenderedDocx } = await import("@/lib/ai/computer/documents/verify");
+    expect(await verifyRenderedDocx(docxPayload.bytes, IR_V1)).toBe(true);
   });
 });

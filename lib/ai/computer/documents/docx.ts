@@ -1,173 +1,327 @@
-import JSZip from "jszip";
 import { KiroDocument, KiroInline } from "@/lib/ai/computer/documents/types";
-import { ComputerError } from "@/lib/ai/computer/errors";
+import { ResolvedDocumentTheme } from "@/lib/ai/computer/documents/styles/types";
 
 /**
- * Document IR → DOCX（OOXML package 由 renderer 全权生成；模型永远不提交 raw OOXML）。
- * 所有用户/模型文本进入 XML 前强制 escape（& < > " '）。
+ * Document IR → DOCX（Kiro Document Engine V2）。
+ *
+ * 使用成熟 `docx` renderer（library-level primitives：Document / Paragraph / TextRun /
+ * Table / TableRow / TableCell / PageBreak / numbering），不再手写 OOXML / 手拼 ZIP。
+ * - renderDocx() 公共 API 保持 Uint8Array（executor / Artifact / Undo / Preview / Download 无需感知替换）
+ * - `docx` 按需动态加载（普通聊天不生成 Word 时避免初始 bundle 负担）
+ * - 浏览器输出路径：Document → Packer.toBlob() → Blob.arrayBuffer() → Uint8Array
+ * - 强 invariant：TableCell children 永远包含 Paragraph（TextRun 绝不作为 TableCell 直接 child）
+ * - bullet / numbered list 使用真正的 DOCX numbering（不把 "•" / "1." 当普通字符拼入）
+ *
+ * 排版全部来自 styles/resolve.ts 的 ResolvedDocumentTheme（renderer 不自行堆 magic number）。
  */
 
-function xmlEscape(text: string): string {
-  return text
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&apos;");
-}
+type Docx = typeof import("docx");
 
-function renderRuns(inline: KiroInline[] | undefined): string {
-  if (!inline || inline.length === 0) return "";
-  return inline
-    .map((run) => {
-      const props: string[] = [];
-      if (run.bold) props.push("<w:b/>");
-      if (run.italic) props.push("<w:i/>");
-      const propsXml = props.length > 0 ? `<w:rPr>${props.join("")}</w:rPr>` : "";
-      return `<w:r>${propsXml}<w:t xml:space="preserve">${xmlEscape(run.text)}</w:t></w:r>`;
-    })
-    .join("");
-}
-
-function styleIdForHeading(level: 1 | 2 | 3): string {
-  return level === 1 ? "Heading1" : level === 2 ? "Heading2" : "Heading3";
-}
-
-function styleIdForBlock(block: { type: string }): string {
-  switch (block.type) {
-    case "quote":
-      return "Quote";
-    case "code":
-      return "CodeBlock";
-    case "bullet-list":
-      return "ListBullet";
-    case "numbered-list":
-      return "ListNumber";
-    default:
-      return "Normal";
-  }
+let docxModulePromise: Promise<Docx> | null = null;
+function loadDocx(): Promise<Docx> {
+  if (!docxModulePromise) docxModulePromise = import("docx") as Promise<Docx>;
+  return docxModulePromise;
 }
 
 export async function renderDocx(doc: KiroDocument): Promise<Uint8Array> {
-  const paragraphs: string[] = [];
+  const docx = await loadDocx();
+  const { resolveDocumentTheme } = await import("./styles/resolve");
+  const theme = resolveDocumentTheme(doc.stylePreset, doc.styleHints);
+
+  const { Document, Packer, AlignmentType, LevelFormat, LineRuleType } = docx;
+  const children = buildChildren(docx, doc, theme);
+
+  const packed = new Document({
+    numbering: {
+      config: [
+        {
+          reference: "kiro-bullet",
+          levels: [
+            {
+              level: 0,
+              format: LevelFormat.BULLET,
+              text: "\u2022",
+              alignment: AlignmentType.LEFT,
+              style: {
+                paragraph: {
+                  indent: {
+                    left: theme.list.indentLeftTwip,
+                    hanging: theme.list.hangingTwip,
+                  },
+                },
+              },
+            },
+          ],
+        },
+        {
+          reference: "kiro-number",
+          levels: [
+            {
+              level: 0,
+              format: LevelFormat.DECIMAL,
+              text: "%1.",
+              alignment: AlignmentType.LEFT,
+              style: {
+                paragraph: {
+                  indent: {
+                    left: theme.list.indentLeftTwip,
+                    hanging: theme.list.hangingTwip,
+                  },
+                },
+              },
+            },
+          ],
+        },
+      ],
+    },
+    sections: [
+      {
+        properties: {
+          page: {
+            size: { width: theme.page.widthTwip, height: theme.page.heightTwip },
+            margin: {
+              top: theme.page.topTwip,
+              right: theme.page.rightTwip,
+              bottom: theme.page.bottomTwip,
+              left: theme.page.leftTwip,
+            },
+          },
+        },
+        children,
+      },
+    ],
+  });
+
+  const blob = await Packer.toBlob(packed);
+  return new Uint8Array(await blob.arrayBuffer());
+}
+
+function buildChildren(docx: Docx, doc: KiroDocument, theme: ResolvedDocumentTheme) {
+  const { Paragraph, TextRun, Table, TableRow, TableCell, PageBreak, AlignmentType, BorderStyle, LineRuleType, WidthType } = docx;
+  const out: InstanceType<typeof Paragraph | typeof Table>[] = [];
+
+  const makeRuns = (
+    inline: KiroInline[] | undefined,
+    overrides?: { bold?: boolean; sizePt?: number; font?: { eastAsia: string; latin: string } }
+  ): InstanceType<typeof TextRun>[] =>
+    (inline ?? []).map(
+      (run) =>
+        new TextRun({
+          text: run.text,
+          bold: overrides?.bold ?? run.bold,
+          italics: run.italic,
+          font: {
+            ascii: overrides?.font?.latin ?? theme.body.latinFont,
+            hAnsi: overrides?.font?.latin ?? theme.body.latinFont,
+            eastAsia: overrides?.font?.eastAsia ?? theme.body.eastAsiaFont,
+          },
+          size: Math.round((overrides?.sizePt ?? theme.body.fontSizePt) * 2),
+        })
+    );
+
+  const bodyAlign = (a: "left" | "center" | "justify") =>
+    a === "justify" ? AlignmentType.JUSTIFIED : a === "center" ? AlignmentType.CENTER : AlignmentType.LEFT;
+
+  const bodySpacing = (spaceBeforePt: number, spaceAfterPt: number, lineSpacing: number) => ({
+    line: Math.round(lineSpacing * 240),
+    lineRule: LineRuleType.AUTO,
+    before: Math.round(spaceBeforePt * 20),
+    after: Math.round(spaceAfterPt * 20),
+  });
+
   if (doc.title) {
-    paragraphs.push(`<w:p><w:pPr><w:pStyle w:val="Title"/></w:pPr>${renderRuns([{ text: doc.title }])}</w:p>`);
+    out.push(
+      new Paragraph({
+        alignment: bodyAlign(theme.title.alignment),
+        spacing: bodySpacing(theme.title.spaceBeforePt, theme.title.spaceAfterPt, 1.5),
+        children: [
+          new TextRun({
+            text: doc.title,
+            bold: theme.title.bold,
+            font: { ascii: theme.title.latinFont, hAnsi: theme.title.latinFont, eastAsia: theme.title.eastAsiaFont },
+            size: theme.title.fontSizePt * 2,
+          }),
+        ],
+      })
+    );
   }
+
   for (const block of doc.blocks) {
     switch (block.type) {
-      case "heading":
-        paragraphs.push(`<w:p><w:pPr><w:pStyle w:val="${styleIdForHeading(block.level)}"/></w:pPr>${renderRuns(block.content)}</w:p>`);
+      case "heading": {
+        const h = block.level === 1 ? theme.heading1 : block.level === 2 ? theme.heading2 : theme.heading3;
+        out.push(
+          new Paragraph({
+            alignment: bodyAlign(h.alignment),
+            spacing: bodySpacing(h.spaceBeforePt, h.spaceAfterPt, h.lineSpacing),
+            children: [
+              new TextRun({
+                text: (block.content ?? []).map((r) => r.text).join(""),
+                bold: h.bold,
+                font: { ascii: h.latinFont, hAnsi: h.latinFont, eastAsia: h.eastAsiaFont },
+                size: h.fontSizePt * 2,
+              }),
+            ],
+          })
+        );
         break;
+      }
       case "paragraph":
-        paragraphs.push(`<w:p><w:pPr><w:pStyle w:val="Normal"/></w:pPr>${renderRuns(block.content)}</w:p>`);
+        out.push(
+          new Paragraph({
+            alignment: bodyAlign(theme.body.alignment),
+            spacing: bodySpacing(theme.body.spaceBeforePt, theme.body.spaceAfterPt, theme.body.lineSpacing),
+            indent:
+              theme.body.firstLineIndentChars > 0
+                ? { firstLineChars: Math.round(theme.body.firstLineIndentChars * 100) }
+                : undefined,
+            children: makeRuns(block.content),
+          })
+        );
         break;
       case "bullet-list":
         for (const item of block.items) {
-          paragraphs.push(`<w:p><w:pPr><w:pStyle w:val="ListBullet"/></w:pPr>${renderRuns(item)}</w:p>`);
+          out.push(
+            new Paragraph({
+              numbering: { reference: "kiro-bullet", level: 0 },
+              alignment: bodyAlign(theme.body.alignment),
+              spacing: bodySpacing(theme.body.spaceBeforePt, theme.body.spaceAfterPt, theme.body.lineSpacing),
+              children: makeRuns(item),
+            })
+          );
         }
         break;
       case "numbered-list":
         for (const item of block.items) {
-          paragraphs.push(`<w:p><w:pPr><w:pStyle w:val="ListNumber"/></w:pPr>${renderRuns(item)}</w:p>`);
+          out.push(
+            new Paragraph({
+              numbering: { reference: "kiro-number", level: 0 },
+              alignment: bodyAlign(theme.body.alignment),
+              spacing: bodySpacing(theme.body.spaceBeforePt, theme.body.spaceAfterPt, theme.body.lineSpacing),
+              children: makeRuns(item),
+            })
+          );
         }
         break;
       case "quote":
-        paragraphs.push(`<w:p><w:pPr><w:pStyle w:val="Quote"/></w:pPr>${renderRuns(block.content)}</w:p>`);
+        out.push(
+          new Paragraph({
+            alignment: bodyAlign(theme.quote.alignment),
+            spacing: bodySpacing(theme.quote.spaceBeforePt, theme.quote.spaceAfterPt, theme.quote.lineSpacing),
+            indent: {
+              left: theme.quote.indentLeftTwip,
+              right: theme.quote.indentRightTwip,
+            },
+            children: makeRuns(block.content, { sizePt: theme.quote.fontSizePt }),
+          })
+        );
         break;
       case "code":
-        paragraphs.push(`<w:p><w:pPr><w:pStyle w:val="CodeBlock"/></w:pPr>${renderRuns([{ text: block.text }])}</w:p>`);
+        out.push(
+          new Paragraph({
+            alignment: AlignmentType.LEFT,
+            spacing: bodySpacing(0, 6, theme.code.lineSpacing),
+            shading: { fill: theme.code.backgroundFill },
+            border: {
+              top: { style: BorderStyle.SINGLE, size: 4, color: "E2E2E2" },
+              bottom: { style: BorderStyle.SINGLE, size: 4, color: "E2E2E2" },
+              left: { style: BorderStyle.SINGLE, size: 4, color: "E2E2E2" },
+              right: { style: BorderStyle.SINGLE, size: 4, color: "E2E2E2" },
+            },
+            children: [
+              new TextRun({
+                text: block.text,
+                font: { ascii: theme.code.font, hAnsi: theme.code.font, eastAsia: theme.code.font },
+                size: theme.code.fontSizePt * 2,
+              }),
+            ],
+          })
+        );
         break;
       case "page-break":
-        paragraphs.push(`<w:p><w:r><w:br w:type="page"/></w:r></w:p>`);
+        out.push(new Paragraph({ children: [new PageBreak()] }));
         break;
       case "table": {
-        const rows: string[] = [];
         const allRows = [block.header, ...block.rows];
-        for (const row of allRows) {
-          const cells = row
-            .map((cell) => `<w:tc><w:tcPr><w:tcW w:w="2000" w:type="dxa"/></w:tcPr>${renderRuns(cell)}</w:tc>`)
-            .join("");
-          rows.push(`<w:tr>${cells}</w:tr>`);
-        }
-        paragraphs.push(`<w:tbl><w:tblPr><w:tblW w:w="0" w:type="auto"/></w:tblPr>${rows.join("")}</w:tbl>`);
+        const colCount = Math.max(1, ...allRows.map((r) => r.length));
+        const widthPct = Math.floor(100 / colCount);
+        const rows = allRows.map(
+          (row, ri) =>
+            new TableRow({
+              children: row.map((cell) => {
+                const isHeader = ri === 0 && block.header.length > 0;
+                return new TableCell({
+                  width: { size: widthPct, type: WidthType.PERCENTAGE },
+                  shading:
+                    isHeader && theme.table.headerShading ? { fill: theme.table.headerShading } : undefined,
+                  borders: tableCellBorders(docx, theme, isHeader),
+                  // 强 invariant：TableCell children 必须包含 Paragraph（block-level content）
+                  children: [
+                    new Paragraph({
+                      alignment: isHeader ? AlignmentType.CENTER : AlignmentType.LEFT,
+                      spacing: bodySpacing(0, 2, 1.2),
+                      children: makeRuns(cell, {
+                        bold: isHeader ? true : undefined,
+                        sizePt: isHeader ? theme.table.headerFontSizePt : theme.table.bodyFontSizePt,
+                      }),
+                    }),
+                  ],
+                });
+              }),
+            })
+        );
+        out.push(
+          new Table({
+            width: { size: 100, type: WidthType.PERCENTAGE },
+            borders: tableBorders(docx, theme),
+            rows,
+          })
+        );
         break;
       }
     }
   }
-
-  const documentXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
-<w:body>${paragraphs.join("")}<w:sectPr><w:pgSz w:w="11906" w:h="16838"/></w:sectPr></w:body>
-</w:document>`;
-
-  const stylesXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
-<w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/></w:style>
-<w:style w:type="paragraph" w:styleId="Title"><w:name w:val="Title"/><w:pPr><w:spacing w:before="240" w:after="240"/></w:pPr><w:rPr><w:b/><w:sz w:val="32"/></w:rPr></w:style>
-<w:style w:type="paragraph" w:styleId="Heading1"><w:name w:val="Heading 1"/><w:pPr><w:spacing w:before="240" w:after="120"/></w:pPr><w:rPr><w:b/><w:sz w:val="28"/></w:rPr></w:style>
-<w:style w:type="paragraph" w:styleId="Heading2"><w:name w:val="Heading 2"/><w:pPr><w:spacing w:before="200" w:after="100"/></w:pPr><w:rPr><w:b/><w:sz w:val="24"/></w:rPr></w:style>
-<w:style w:type="paragraph" w:styleId="Heading3"><w:name w:val="Heading 3"/><w:pPr><w:spacing w:before="160" w:after="80"/></w:pPr><w:rPr><w:b/><w:sz w:val="22"/></w:rPr></w:style>
-<w:style w:type="paragraph" w:styleId="Quote"><w:name w:val="Quote"/><w:rPr><w:i/></w:rPr></w:style>
-<w:style w:type="paragraph" w:styleId="CodeBlock"><w:name w:val="CodeBlock"/><w:rPr><w:sz w:val="18"/></w:rPr></w:style>
-<w:style w:type="paragraph" w:styleId="ListBullet"><w:name w:val="ListBullet"/><w:numPr><w:numId w:val="1"/></w:numPr></w:style>
-<w:style w:type="paragraph" w:styleId="ListNumber"><w:name w:val="ListNumber"/><w:numPr><w:numId w:val="2"/></w:numPr></w:style>
-</w:styles>`;
-
-  const numberingXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<w:numbering xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
-<w:abstractNum w:abstractNumId="0"><w:lvl w:ilvl="0"><w:numFmt w:val="bullet"/><w:lvlText w:val="•"/></w:lvl></w:abstractNum>
-<w:abstractNum w:abstractNumId="1"><w:lvl w:ilvl="0"><w:numFmt w:val="decimal"/><w:lvlText w:val="%1."/></w:lvl></w:abstractNum>
-<w:num w:numId="1"><w:abstractNumId w:val="0"/></w:num>
-<w:num w:numId="2"><w:abstractNumId w:val="1"/></w:num>
-</w:numbering>`;
-
-  const contentTypes = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
-<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
-<Default Extension="xml" ContentType="application/xml"/>
-<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
-<Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/>
-<Override PartName="/word/numbering.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.numbering+xml"/>
-<Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/>
-<Override PartName="/docProps/app.xml" ContentType="application/vnd.openxmlformats-officedocument.extended-properties+xml"/>
-</Types>`;
-
-  const rels = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
-<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>
-<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/>
-<Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/extended-properties" Target="docProps/app.xml"/>
-</Relationships>`;
-
-  const docRels = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
-<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>
-<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/numbering" Target="numbering.xml"/>
-</Relationships>`;
-
-  const coreProps = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/">
-<dc:title>${xmlEscape(doc.title ?? "")}</dc:title>
-<dc:creator>ClassFlow Kiro</dc:creator>
-</cp:coreProperties>`;
-
-  const appProps = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties">
-<Application>ClassFlow Kiro</Application>
-</Properties>`;
-
-  const zip = new JSZip();
-  zip.file("[Content_Types].xml", contentTypes);
-  zip.file("_rels/.rels", rels);
-  zip.file("docProps/core.xml", coreProps);
-  zip.file("docProps/app.xml", appProps);
-  zip.file("word/document.xml", documentXml);
-  zip.file("word/styles.xml", stylesXml);
-  zip.file("word/numbering.xml", numberingXml);
-  zip.file("word/_rels/document.xml.rels", docRels);
-
-  const blob = await zip.generateAsync({ type: "uint8array", compression: "DEFLATE" });
-  return new Uint8Array(blob);
+  return out;
 }
 
-export { ComputerError };
+function tableBorders(docx: Docx, theme: ResolvedDocumentTheme) {
+  const none = { style: docx.BorderStyle.NONE, size: 0, color: "FFFFFF" };
+  switch (theme.table.style) {
+    case "three-line":
+      // 三线表：top / header-bottom（cell 级）/ bottom；无内部竖线
+      return {
+        top: { style: docx.BorderStyle.SINGLE, size: 12, color: "000000" },
+        bottom: { style: docx.BorderStyle.SINGLE, size: 12, color: "000000" },
+        left: none,
+        right: none,
+        insideHorizontal: none,
+        insideVertical: none,
+      };
+    case "grid":
+      return {
+        top: { style: docx.BorderStyle.SINGLE, size: 4, color: "C9C9C9" },
+        bottom: { style: docx.BorderStyle.SINGLE, size: 4, color: "C9C9C9" },
+        left: { style: docx.BorderStyle.SINGLE, size: 4, color: "C9C9C9" },
+        right: { style: docx.BorderStyle.SINGLE, size: 4, color: "C9C9C9" },
+        insideHorizontal: { style: docx.BorderStyle.SINGLE, size: 4, color: "E0E0E0" },
+        insideVertical: { style: docx.BorderStyle.SINGLE, size: 4, color: "E0E0E0" },
+      };
+    default: // clean：顶/底细线 + 内部细横线（表头底纹区分）
+      return {
+        top: { style: docx.BorderStyle.SINGLE, size: 4, color: "D9D9D9" },
+        bottom: { style: docx.BorderStyle.SINGLE, size: 4, color: "D9D9D9" },
+        left: none,
+        right: none,
+        insideHorizontal: { style: docx.BorderStyle.SINGLE, size: 4, color: "E8E8E8" },
+        insideVertical: none,
+      };
+  }
+}
+
+function tableCellBorders(docx: Docx, theme: ResolvedDocumentTheme, isHeader: boolean) {
+  if (theme.table.style !== "three-line" || !isHeader) return undefined;
+  // 三线表：表头行下沿一条细线
+  return {
+    bottom: { style: docx.BorderStyle.SINGLE, size: 6, color: "000000" },
+  };
+}

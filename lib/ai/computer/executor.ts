@@ -55,7 +55,8 @@ import {
 } from "@/lib/ai/computer/filesystem/search";
 import { renderMarkdown } from "@/lib/ai/computer/documents/markdown";
 import { renderDocx } from "@/lib/ai/computer/documents/docx";
-import { verifyMarkdownWritten, verifyDocxBytes, inspectDocumentFacts } from "@/lib/ai/computer/documents/verify";
+import { verifyMarkdownWritten, verifyDocxBytes, verifyRenderedDocx, inspectDocumentFacts } from "@/lib/ai/computer/documents/verify";
+import { mergeDocumentStyleForUpdate } from "@/lib/ai/computer/documents/styles/resolve";
 import { isKiroDocument } from "@/lib/ai/computer/documents/types";
 import {
   registerCreatedArtifact,
@@ -695,6 +696,13 @@ export async function executeKiroComputerTool(request: {
 
       // 每次执行都重读 Registry（Approval resume 时 useKiroChat 会用 frozen input 重跑本函数 → 自然重检 revision/location）
       const { artifact, source: previousSource } = await getEditableArtifactRevisionState(artifactId, expectedRevision);
+
+      // Document Engine V2：effective Document IR = previous style + incoming（style 保持语义）。
+      // commitArtifactRevision 存储 effective merged IR（不是 raw input）；Undo 继续保存 previous Source IR。
+      const effectiveDocument = mergeDocumentStyleForUpdate(
+        (previousSource?.document as Parameters<typeof renderMarkdown>[0]) ?? {},
+        document
+      );
       if (artifact.workspaceId !== ws.id) {
         return {
           kind: "completed",
@@ -780,8 +788,8 @@ export async function executeKiroComputerTool(request: {
       try {
         rendered =
           artifact.type === "markdown"
-            ? { format: "markdown", text: renderMarkdown(document) }
-            : { format: "docx", bytes: await renderDocx(document) };
+            ? { format: "markdown", text: renderMarkdown(effectiveDocument) }
+            : { format: "docx", bytes: await renderDocx(effectiveDocument) };
       } catch {
         return {
           kind: "completed",
@@ -807,7 +815,8 @@ export async function executeKiroComputerTool(request: {
             "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
           );
           const readBack = await adapter.readBytes(artifactPath);
-          if (!(await verifyDocxBytes(readBack))) {
+          // Document Engine V2：package 有效 + Mammoth round-trip 与 Source IR 一致
+          if (!(await verifyRenderedDocx(readBack, effectiveDocument))) {
             throw new ComputerError("VERIFICATION_FAILED", "DOCX 校验失败");
           }
         }
@@ -831,10 +840,10 @@ export async function executeKiroComputerTool(request: {
         return { kind: "completed", output: { ok: false, code: "VERIFICATION_FAILED", message: "文档更新失败" } };
       }
 
-      // 文件验证通过后才 commit（原子 metadata + Source IR；conflict 也回滚文件）
+      // 文件验证通过后才 commit（原子 metadata + effective Source IR；conflict 也回滚文件）
       let updatedArtifact: KiroArtifact;
       try {
-        updatedArtifact = await commitArtifactRevision({ artifactId, expectedRevision, document });
+        updatedArtifact = await commitArtifactRevision({ artifactId, expectedRevision, document: effectiveDocument });
       } catch (err) {
         try {
           await rollbackDocumentFile(adapter, artifactPath, snapshot);
@@ -859,7 +868,7 @@ export async function executeKiroComputerTool(request: {
 
       // runtime facts（review 来自真实 IR 结构；inverse 供 Undo 精确恢复）
       const format = artifact.type === "markdown" ? ("markdown" as const) : ("docx" as const);
-      const facts = inspectDocumentFacts(document, format);
+      const facts = inspectDocumentFacts(effectiveDocument, format);
       const runtime = buildMutationRuntime({
         toolName,
         toolCallId,
@@ -875,7 +884,7 @@ export async function executeKiroComputerTool(request: {
         review: {
           kind: "document",
           title: facts.title,
-          headings: documentHeadings(document),
+          headings: documentHeadings(effectiveDocument),
           paragraphs: facts.paragraphs,
           lists: facts.lists,
           tables: facts.tables,
@@ -1416,7 +1425,8 @@ export async function executeKiroComputerTool(request: {
           "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
         );
         const readBack = await adapter.readBytes(normalized);
-        if (!(await verifyDocxBytes(readBack))) {
+        // Document Engine V2：package 有效 + Mammoth round-trip 与 Source IR 一致
+        if (!(await verifyRenderedDocx(readBack, document))) {
           throw new ComputerError("VERIFICATION_FAILED", "DOCX 校验失败");
         }
         const facts = inspectDocumentFacts(document, "docx");

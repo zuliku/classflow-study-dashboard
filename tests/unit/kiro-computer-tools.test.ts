@@ -11,7 +11,7 @@ import { sandboxDelete, sandboxWriteText, sandboxListDirectory } from "@/lib/ai/
 import { registerCreatedArtifact, adoptWorkspaceArtifact, getArtifact, getArtifactSource } from "@/lib/ai/computer/artifacts/service";
 import { clearWorkspaceKnowledge } from "@/lib/ai/computer/knowledge/db";
 import { KiroDocument } from "@/lib/ai/computer/documents/types";
-import { COMPUTER_DOCUMENT_REVISION_LIMIT_BYTES } from "@/lib/ai/computer/executor";
+import { COMPUTER_DOCUMENT_REVISION_LIMIT_BYTES, getComputerAdapterForAdapterRef } from "@/lib/ai/computer/executor";
 
 const SANDBOX_REF = "sandbox-test-ref";
 
@@ -470,6 +470,116 @@ describe("mutation tools + policy（Part 2 回归 + Part 3 attempt 语义）", (
     if (attempt.runtime?.change.format) {
       expect(attempt.runtime.change.format).toBe("docx");
     }
+  });
+
+  it("create_document：带 stylePreset 的 DOCX → ok/verified + Source IR 保留 style + download payload 通过强化验证", async () => {
+    const c = counters();
+    const styled: KiroDocument = {
+      title: "商业分析报告",
+      blocks: [
+        { type: "heading", level: 1, content: [{ text: "市场概况" }] },
+        { type: "paragraph", content: [{ text: "本报告分析市场规模与增长。" }] },
+        { type: "table", header: [[{ text: "指标" }], [{ text: "数值" }]], rows: [[[{ text: "增速" }], [{ text: "12%" }]]] },
+      ],
+      stylePreset: "business-report",
+      styleHints: { titleAlignment: "center" },
+    };
+    const attempt = await executeKiroComputerTool({
+      toolName: "create_document",
+      toolCallId: "call_doc_styled",
+      toolInput: { path: "report.docx", document: styled },
+      context: ctx(AUTO_SNAPSHOT),
+      counters: c,
+    });
+    expect(attempt.kind).toBe("completed");
+    if (attempt.kind !== "completed") return;
+    expect(attempt.output.ok).toBe(true);
+    const data = (attempt.output as { data?: { path: string; format: string; verified: boolean } }).data!;
+    expect(data.format).toBe("docx");
+    expect(data.verified).toBe(true);
+
+    // Source IR 保留 style（注册的是 effective Document IR）
+    const source = await getArtifactSource((attempt.runtime?.change as { artifactId?: string }).artifactId ?? "");
+    expect(source?.document.stylePreset).toBe("business-report");
+    expect(source?.document.styleHints?.titleAlignment).toBe("center");
+
+    // live bytes → Artifact download payload → verifyRenderedDocx 仍成功
+    const { getArtifactDownloadPayload } = await import("@/lib/ai/computer/artifacts/access");
+    const { verifyRenderedDocx } = await import("@/lib/ai/computer/documents/verify");
+    const payload = await getArtifactDownloadPayload({
+      artifactId: (attempt.runtime?.change as { artifactId?: string }).artifactId ?? "",
+      workspaces: [workspace],
+    });
+    expect(payload.fileName).toBe("report.docx");
+    expect(await verifyRenderedDocx(payload.bytes, styled)).toBe(true);
+  });
+
+  it("update_document：无 style 时保持既有 style；切换 preset 时旧 hints 清空", async () => {
+    const create = await executeKiroComputerTool({
+      toolName: "create_document",
+      toolCallId: "call_upd_create",
+      toolInput: {
+        path: "论文.docx",
+        document: {
+          title: "课程论文",
+          blocks: [{ type: "paragraph", content: [{ text: "第一版" }] }],
+          stylePreset: "academic-cn",
+          styleHints: { pageMarginsCm: { left: 3 } },
+        },
+      },
+      context: ctx(AUTO_SNAPSHOT),
+      counters: counters(),
+    });
+    expect(create.kind).toBe("completed");
+    if (create.kind !== "completed") return;
+    const artifactId = (create.runtime?.change as { artifactId?: string }).artifactId ?? "";
+
+    // 更新 1：不带 style → 保持 academic-cn + 旧 hints
+    const upd1 = await executeKiroComputerTool({
+      toolName: "update_document",
+      toolCallId: "call_upd_1",
+      toolInput: {
+        artifactId,
+        expectedRevision: 1,
+        document: { title: "课程论文", blocks: [{ type: "paragraph", content: [{ text: "第二版" }] }] },
+      },
+      context: ctx(AUTO_SNAPSHOT),
+      counters: counters(),
+    });
+    expect(upd1.kind).toBe("completed");
+    if (upd1.kind !== "completed") return;
+    expect(upd1.output.ok).toBe(true);
+    let source = await getArtifactSource(artifactId);
+    expect(source?.document.stylePreset).toBe("academic-cn");
+    expect(source?.document.styleHints).toEqual({ pageMarginsCm: { left: 3 } });
+
+    // 更新 2：切换 preset（无 hints）→ business-report + 旧 hints 清空
+    const upd2 = await executeKiroComputerTool({
+      toolName: "update_document",
+      toolCallId: "call_upd_2",
+      toolInput: {
+        artifactId,
+        expectedRevision: 2,
+        document: {
+          title: "课程论文",
+          blocks: [{ type: "paragraph", content: [{ text: "第三版" }] }],
+          stylePreset: "business-report",
+        },
+      },
+      context: ctx(AUTO_SNAPSHOT),
+      counters: counters(),
+    });
+    expect(upd2.kind).toBe("completed");
+    if (upd2.kind !== "completed") return;
+    expect(upd2.output.ok).toBe(true);
+    source = await getArtifactSource(artifactId);
+    expect(source?.document.stylePreset).toBe("business-report");
+    expect(source?.document.styleHints).toBeUndefined();
+    // 文件 bytes 仍通过强化验证（round-trip 与 effective IR 一致）
+    const adapter = getComputerAdapterForAdapterRef(SANDBOX_REF);
+    const readBack = await adapter.readBytes("论文.docx");
+    const { verifyRenderedDocx } = await import("@/lib/ai/computer/documents/verify");
+    expect(await verifyRenderedDocx(readBack, source!.document)).toBe(true);
   });
 
   it("调用限制：read > 12 / mutation > 6", async () => {

@@ -119,7 +119,7 @@ export const COMPUTER_MUTATION_TOOLS: ComputerToolDefinition[] = [
   {
     name: "create_document",
     description:
-      "从 KiroDocument IR 创建 .md 或 .docx。document = { title?: string, blocks: [...] }。block 支持 heading / paragraph / bullet-list / numbered-list / table / quote / code / page-break；文件格式由 path 扩展名决定。",
+      "从 KiroDocument IR 创建 .md 或 .docx。document = { title?: string, blocks: [...], stylePreset?, styleHints? }。block 支持 heading / paragraph / bullet-list / numbered-list / table / quote / code / page-break；文件格式由 path 扩展名决定。stylePreset 按任务自动选择：academic-cn（论文/课程作业/研究计划/调研报告/文献综述/实验报告等中文规范文档）或 business-report（商业分析/项目方案/市场报告/竞品分析/可行性分析/创业计划等现代正式报告）。styleHints 只在用户明确提出排版要求时填写（如「正文小四宋体、1.5 倍行距」「标题居中」「页边距全部 2.5cm」）；用户没有排版要求时不要生成 styleHints。",
     schema: createDocumentSchema,
     capability: "document.create",
     mutation: true,
@@ -141,7 +141,7 @@ export const COMPUTER_MUTATION_TOOLS: ComputerToolDefinition[] = [
   {
     name: "update_document",
     description:
-      "更新 Kiro 创建的 Markdown/DOCX Artifact；必须提供当前 expectedRevision。document 使用与 create_document 完全相同的 KiroDocument IR。",
+      "更新 Kiro 创建的 Markdown/DOCX Artifact；必须提供当前 expectedRevision。document 使用与 create_document 完全相同的 KiroDocument IR（含可选 stylePreset/styleHints）。不提供 style 时自动保持既有排版；用户明确要求改排版（如切换 preset / 调整字号）时通过 stylePreset/styleHints 表达。",
     schema: updateDocumentSchema,
     capability: "document.modify",
     mutation: true,
