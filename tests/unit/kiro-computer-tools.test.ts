@@ -597,7 +597,7 @@ describe("mutation tools + policy（Part 2 回归 + Part 3 attempt 语义）", (
       counters: c,
     });
     expect(r.ok).toBe(false);
-    const m = { readCount: 0, mutationCount: 6 };
+    const m = { readCount: 0, mutationCount: 10 }; // V2.7.2：上限 6 → 10
     const r2 = await completedOutput({
       toolName: "create_text_file",
       toolInput: { path: "y.md", content: "" },

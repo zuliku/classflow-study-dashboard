@@ -21,8 +21,8 @@ export interface ComputerAuditEntry {
   toolCallId: string;
   toolName: string;
   capability: ComputerCapability;
-  /** 触发方式：auto（无需审批）/ allow-once / allow-session / allow-workspace / deny / none */
-  decision: ComputerApprovalDecision | "auto" | "none";
+  /** 触发方式：auto（无需审批）/ allow-once / allow-session / allow-workspace / deny / timeout / none */
+  decision: ComputerApprovalDecision | "auto" | "timeout" | "none";
   outcome: "executed" | "denied" | "undone" | "undo_failed" | "failed" | "error";
   workspaceId: string;
   workspaceLabel: string;

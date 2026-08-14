@@ -87,7 +87,9 @@ import { KiroComputerChange } from "@/lib/ai/computer/task";
 import { ComputerInverseOperation } from "@/lib/ai/computer/checkpoints";
 
 export const COMPUTER_READ_LIMIT_PER_TURN = 12;
-export const COMPUTER_MUTATION_LIMIT_PER_TURN = 6;
+// V2.7.2：6 → 10（一次真实任务如「整理工作区/删除多个旧文件」常需连续写操作；
+// 上限仍保证单轮有界，超限拒绝带计数、可审计）
+export const COMPUTER_MUTATION_LIMIT_PER_TURN = 10;
 
 /** V2 Part 2：文档结构化更新上限（保证 exact 回滚/Undo 快照有界） */
 export const COMPUTER_DOCUMENT_REVISION_LIMIT_BYTES = 5 * 1024 * 1024;
@@ -204,7 +206,11 @@ export async function executeKiroComputerTool(request: {
     if (counters.mutationCount >= COMPUTER_MUTATION_LIMIT_PER_TURN) {
       return {
         kind: "completed",
-        output: { ok: false, code: "PERMISSION_DENIED", message: "本轮修改操作已达上限" },
+        output: {
+          ok: false,
+          code: "PERMISSION_DENIED",
+          message: `本轮修改操作已达上限（${COMPUTER_MUTATION_LIMIT_PER_TURN}/${COMPUTER_MUTATION_LIMIT_PER_TURN}），请分步进行或开启新对话`,
+        },
       };
     }
   } else if (counters.readCount >= COMPUTER_READ_LIMIT_PER_TURN) {

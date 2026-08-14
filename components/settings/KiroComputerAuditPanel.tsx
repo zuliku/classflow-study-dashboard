@@ -18,6 +18,7 @@ const DECISION_LABELS: Record<ComputerAuditEntry["decision"], string> = {
   "allow-session": "已允许（本次会话）",
   "allow-workspace": "已允许（此工作区）",
   deny: "已拒绝",
+  timeout: "超时取消",
   none: "撤销",
 };
 

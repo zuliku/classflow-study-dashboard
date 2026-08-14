@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { DefaultChatTransport, lastAssistantMessageIsCompleteWithToolCalls } from "ai";
@@ -19,6 +19,7 @@ import {
   completeTaskStep,
   failTaskStep,
   toolStepLabel,
+  KiroComputerChange,
 } from "@/lib/ai/computer/task";
 import {
   ComputerTaskCheckpoint,
@@ -679,6 +680,20 @@ export function useKiroChat({
   const [computerVersion, setComputerVersion] = useState(0);
 
   const setPendingApproval = useKiroComputerRuntimeStore((s) => s.setPendingApproval);
+  const pendingApproval = useKiroComputerRuntimeStore((s) => s.pendingApproval);
+
+  // V2.7.2：approval 超时自动取消（默认 3 分钟）——审批挂起不能永久阻塞 Tool Call
+  //（用户忽略弹窗 / 页面在后台 / 旧 bundle 死锁等场景下，Kiro 必须最终收到确定结果）。
+  const APPROVAL_TIMEOUT_MS = 3 * 60 * 1000;
+  const approvalTimeoutTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+
+  const clearApprovalTimeout = useCallback((approvalId: string) => {
+    const t = approvalTimeoutTimersRef.current.get(approvalId);
+    if (t) {
+      clearTimeout(t);
+      approvalTimeoutTimersRef.current.delete(approvalId);
+    }
+  }, []);
 
   // ---- History Restore（Part 3）：显示-only Computer Task 事实（无 checkpoint / Undo）----
   const restoredComputerTasksRef = useRef(new Map<string, PersistedComputerTaskView>());
@@ -1125,6 +1140,26 @@ export function useKiroChat({
           });
         } else if (!output.ok) {
           failTaskStep(task, toolCallId);
+          // V2.7.2：失败/拒绝也写 Audit（decision=none, outcome=failed）——所有拒绝路径可诊断，
+          // 避免「删除没生效但无任何记录」的盲区（PERMISSION_DENIED/INVALID_INPUT/上限/异常等）
+          const failedChange = (attempt as { runtime?: { change?: KiroComputerChange } }).runtime?.change;
+          void appendComputerAuditEntry({
+            id: `audit-${crypto.randomUUID()}`,
+            timestamp: new Date().toISOString(),
+            taskId,
+            conversationId: conversationIdRef.current,
+            toolCallId,
+            toolName,
+            capability: failedChange ? capabilityForChange(failedChange) : capabilityForToolName(toolName),
+            decision: "none",
+            outcome: "failed",
+            workspaceId: failedChange?.workspaceId ?? "",
+            workspaceLabel: failedChange?.workspaceLabel ?? "",
+            rootId: failedChange?.rootId,
+            rootLabel: failedChange?.rootLabel,
+            relativePath: failedChange?.relativePath,
+            verification: "failed",
+          });
         } else {
           completeTaskStep(task, toolCallId);
         }
@@ -1197,7 +1232,11 @@ export function useKiroChat({
    * 绝不残留 stale pendingApproval / busy Dialog。
    */
   const handleApprovalDecision = useCallback(
-    async (approvalId: string, decision: ComputerApprovalDecision) => {
+    async (
+      approvalId: string,
+      decision: ComputerApprovalDecision,
+      opts?: { timedOut?: boolean }
+    ) => {
       const pending = pendingExecutionsRef.current.get(approvalId);
       if (!pending) {
         // V2.7 stale approval 防御：ref 中不存在该 request → 推进队列并恢复 UI，绝不残留 Dialog
@@ -1205,13 +1244,14 @@ export function useKiroChat({
         return;
       }
       pendingExecutionsRef.current.delete(approvalId);
+      clearApprovalTimeout(approvalId);
       const { request, toolName, toolCallId, input, frozenSnapshot } = pending;
       const taskId = request.taskId;
 
       // V2.7：决策被接受 → 立即关闭当前 approval / 显示下一条（后台 resume，不阻塞 UI）
       advancePendingApproval();
 
-      if (decision === "deny") {
+      if (decision === "deny" || opts?.timedOut) {
         const task = tasksRef.current.get(taskId);
         if (task) {
           const step = task.steps.find((s) => s.toolCallId === toolCallId);
@@ -1230,7 +1270,7 @@ export function useKiroChat({
           toolCallId,
           toolName,
           capability: request.capability,
-          decision: "deny",
+          decision: opts?.timedOut ? "timeout" : "deny",
           outcome: "denied",
           workspaceId: request.workspaceId,
           workspaceLabel: request.workspaceLabel,
@@ -1241,7 +1281,7 @@ export function useKiroChat({
         emitToolOutput(toolName, toolCallId, {
           ok: false,
           code: "USER_CANCELLED",
-          message: "用户拒绝了此操作。",
+          message: opts?.timedOut ? "审批超时未响应，操作已自动取消。" : "用户拒绝了此操作。",
         } as ToolOutput);
         return;
       }
@@ -1336,8 +1376,24 @@ export function useKiroChat({
         advancePendingApproval();
       }
     },
-    [advancePendingApproval, applyCompletedAttempt, handleApprovalRequired, failTaskStep, updateTasks, emitToolOutput]
+    [advancePendingApproval, applyCompletedAttempt, handleApprovalRequired, failTaskStep, updateTasks, emitToolOutput, clearApprovalTimeout]
   );
+
+  // V2.7.2：approval 超时自动取消（3 分钟）——审批挂起不能永久阻塞 Tool Call
+  //（用户忽略弹窗 / 页面后台 / 旧 bundle 死锁等场景，Kiro 必须最终收到确定结果）。
+  useEffect(() => {
+    if (!pendingApproval) return;
+    if (approvalTimeoutTimersRef.current.has(pendingApproval.id)) return;
+    const timer = setTimeout(() => {
+      approvalTimeoutTimersRef.current.delete(pendingApproval.id);
+      void handleApprovalDecision(pendingApproval.id, "deny", { timedOut: true });
+    }, APPROVAL_TIMEOUT_MS);
+    approvalTimeoutTimersRef.current.set(pendingApproval.id, timer);
+    return () => {
+      clearTimeout(timer);
+      approvalTimeoutTimersRef.current.delete(pendingApproval.id);
+    };
+  }, [pendingApproval, handleApprovalDecision]);
 
   /** Task-level Undo（session runtime only）：reverse order + 每条 verified；失败 → undo_failed */
   const undoTask = useCallback(
@@ -1840,6 +1896,8 @@ export function useKiroChat({
     (keepRestored: boolean) => {
       pendingExecutionsRef.current.clear();
       oneShotApprovalsRef.current = [];
+      for (const t of Array.from(approvalTimeoutTimersRef.current.values())) clearTimeout(t);
+      approvalTimeoutTimersRef.current.clear();
       setPendingApproval(null);
       activeTaskRef.current = null;
       checkpointsRef.current = new Map();
@@ -2117,6 +2175,8 @@ export function useKiroChat({
   const handleStop = useCallback(() => {
     pendingExecutionsRef.current.clear();
     oneShotApprovalsRef.current = [];
+    for (const t of Array.from(approvalTimeoutTimersRef.current.values())) clearTimeout(t);
+    approvalTimeoutTimersRef.current.clear();
     setPendingApproval(null);
     // 用户 Stop：该 turn 遗留的 pending tool part 不再视为 in-flight（真 settled）
     const lastMsg = latestChatRef.current.messages[latestChatRef.current.messages.length - 1] as UIMessage | undefined;
@@ -2172,6 +2232,28 @@ function capabilityForChange(change: {
   if (change.resourceType === "document") return "document.create";
   if (change.resourceType === "directory") return "fs.create";
   return change.operation === "modify" ? "fs.modify" : "fs.create";
+}
+
+/** 失败 Audit 用：无 runtime.change 时按 toolName 映射 capability */
+function capabilityForToolName(toolName: string): ComputerCapability {
+  switch (toolName) {
+    case "create_text_file":
+    case "create_directory":
+      return "fs.create";
+    case "patch_text_file":
+      return "fs.modify";
+    case "delete_file":
+      return "fs.delete";
+    case "rename_file":
+    case "move_file":
+      return "fs.move";
+    case "create_document":
+      return "document.create";
+    case "update_document":
+      return "document.modify";
+    default:
+      return "fs.read";
+  }
 }
 
 /**
@@ -2304,3 +2386,4 @@ function buildWriteApi({
     registerUndo: (id, undo) => registerUndo(id, undo),
   };
 }
+
