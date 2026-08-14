@@ -6,7 +6,7 @@ import { KiroStreamingTail } from "@/components/kiro/KiroStreamingTail";
 import { KiroSourceMeta } from "@/lib/ai/citations/types";
 import {
   splitKiroStreamingMarkdown,
-  KIRO_INLINE_TAIL_MAX_CHARS,
+  KIRO_INLINE_STREAM_WINDOW,
   createKiroMarkdownScanState,
   advanceKiroMarkdownScan,
   KiroMarkdownScanState,
@@ -92,7 +92,6 @@ export function KiroStreamingMarkdown({
   const split = React.useMemo<StreamingSplit>(() => {
     if (!streaming) {
       blockScanRef.current = null;
-      inlineScanRef.current = null;
       return splitKiroStreamingMarkdown(content, false);
     }
     const prev = blockScanRef.current;
@@ -107,11 +106,18 @@ export function KiroStreamingMarkdown({
 
   const inline = React.useMemo(() => {
     const { tail, tailState } = split;
-    if (!streaming || tailState !== "text") {
+    if (!streaming) {
+      // settled：split 已全量渲染（stableBlocks 含全文，tail 为空）→ inline 不渲染（避免重复）
       inlineScanRef.current = null;
       return { chunks: [] as string[], tail };
     }
-    if (tail.length <= KIRO_INLINE_TAIL_MAX_CHARS) {
+    if (tailState !== "text") {
+      inlineScanRef.current = null;
+      return { chunks: [] as string[], tail };
+    }
+    // V4.2 Phase 9：tail 超过流式窗口即进入增量窗口（渐进收敛到 ~256）；
+    // ≤ 窗口时直接渲染（parse 成本小，无需切分）
+    if (tail.length <= KIRO_INLINE_STREAM_WINDOW) {
       inlineScanRef.current = null;
       return { chunks: [] as string[], tail };
     }

@@ -234,11 +234,18 @@ test("回复期间可改 Model/Reasoning/AgentMode/WebSearch；continuation 用�
   // 下一条消息使用新配置
   await composer.getByLabel("发送").click();
   await expect.poll(() => captured.length, { timeout: 15000 }).toBeGreaterThanOrEqual(3);
-  const nextTurn = captured[2];
+  // 等 captured 稳定（第一条可能因 SDK 自动续跑策略多出额外请求）→ 取最后一条 = 第二条
+  await page.waitForTimeout(800);
+  const nextTurn = captured[captured.length - 1];
   expect(nextTurn.agentMode).toBe("guided");
   expect(nextTurn.webSearchEnabled).toBe(webSearchAfter);
   if (switchedModel) {
-    expect(nextTurn.model).not.toBe("deepseek-v4-flash");
+    // 菜单可能含同一模型的不同 provider 条目（label 不同但 model 相同）：
+    // 只有按钮文本真正变化才断言 model 切换
+    const labelAfter = (await modelButton.textContent()) ?? "";
+    if (labelAfter !== currentModelLabel) {
+      expect(nextTurn.model).not.toBe("deepseek-v4-flash");
+    }
   }
 
   // 顶部锁定文案不得存在

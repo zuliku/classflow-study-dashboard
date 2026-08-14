@@ -33,6 +33,15 @@ export interface KiroMarkdownStreamSplit {
 /** 单段 tail 的可变窗口上界：超过后启用安全 chunking */
 export const KIRO_INLINE_TAIL_MAX_CHARS = 2048;
 
+/**
+ * 流式窗口目标上限（V4.2 Phase 9）：streaming 期间 tail 超过该值且存在安全切点时，
+ * 每帧至多把一个「稳定前缀」切为 chunk（React.memo 命中 → 不再逐 token 重 parse），
+ * tail 渐进收敛到 ≈ 该值。未闭合构造（无安全切点）允许 tail 暂时扩大。
+ * 效果：每次 token 的 ReactMarkdown/KaTeX parse 成本与「新增内容」相关，
+ * 而不是与「整个可变 tail」相关（Long Task 减少）。
+ */
+export const KIRO_INLINE_STREAM_WINDOW = 256;
+
 import { bumpStreamPerf, addStreamPerfChars } from "@/lib/ai/perf/streamPerf";
 
 export function splitKiroStreamingMarkdown(
@@ -529,9 +538,9 @@ function extendInlineSafe(
 }
 
 /**
- * 增量推进长单段 inline 窗口（Phase 5）：
+ * 增量推进长单段 inline 窗口（Phase 5 + Phase 9）：
  * - append-only → 只扩展 safe 数组到新增 suffix；再对「窗口起点之后」贪心切 chunk
- * - 已 stable chunk 内容不变（React.memo 命中）；可变区域 ≈ maxChars 有界
+ * - 已 stable chunk 内容不变（React.memo 命中）；可变区域渐进收敛（每帧 ≤1 个窗口 chunk）
  * - 非 append-only / 缩短 → deterministic full reset
  * - 幂等：text.length === prev.prefix.length 时返回 prev
  */
@@ -548,16 +557,45 @@ export function advanceKiroInlineScan(
 
   const { safe, stack, lineStart } = extendInlineSafe(prev, text);
   const { chunks: newChunks, tail } = cutChunksFrom(text, safe, prev.start, prev.maxChars);
+  // Phase 9：流式窗口收敛——每帧至多切出一个窗口 chunk（渐进缩小可变 tail）
+  const windowCut = cutStreamWindow(text, safe, text.length - tail.length, KIRO_INLINE_STREAM_WINDOW);
+  const finalTail = windowCut.tail;
   return {
     prefix: text,
-    chunks: [...prev.chunks, ...newChunks],
-    start: text.length - tail.length,
-    tail,
+    chunks: [...prev.chunks, ...newChunks, ...windowCut.chunks],
+    start: text.length - finalTail.length,
+    tail: finalTail,
     stack,
     safe,
     lineStart,
     maxChars: prev.maxChars,
   };
+}
+
+/**
+ * 流式窗口收敛：tail > windowChars 且前 windowChars 内存在安全切点（且最小进步
+ * ≥ 32 chars）时，切出一个 chunk（内容永久稳定，memo 命中）。每帧最多一个，
+ * 避免一次性插入大量 chunk 的渲染集中。未闭合构造（无安全切点）→ 不切（允许
+ * tail 暂时扩大，构造闭合后自动收敛）。
+ */
+function cutStreamWindow(
+  text: string,
+  safe: boolean[],
+  start: number,
+  windowChars: number
+): { chunks: string[]; tail: string } {
+  const n = text.length;
+  if (n - start <= windowChars) return { chunks: [], tail: text.slice(start) };
+  const probeEnd = Math.min(start + windowChars, n);
+  let end = -1;
+  for (let i = probeEnd; i > start + 32; i--) {
+    if (safe[i]) {
+      end = i;
+      break;
+    }
+  }
+  if (end < 0) return { chunks: [], tail: text.slice(start) };
+  return { chunks: [text.slice(start, end)], tail: text.slice(end) };
 }
 
 /** 从指定 start 起贪心切（start 之前已有 chunk；规则与全量一致） */

@@ -117,6 +117,15 @@ export function isSafeWebUrl(url: string | undefined): url is string {
  */
 export function collectCitedWebSources(content: string, sources?: KiroSourceMeta[]): KiroSourceMeta[] {
   bumpStreamPerf("citationScans");
+  // 测试测量：bumpStreamPerf 在该 import 链的某些 bundle 副本中不生效，直接写入兜底
+  // （严格 test-only：无 window.__kiroStreamPerf 时零成本）
+  // eslint-disable-next-line no-console
+  if (typeof window !== "undefined") {
+    const w = window as unknown as { __kiroStreamPerf?: { citationScans?: number } };
+    if (w.__kiroStreamPerf) {
+      w.__kiroStreamPerf.citationScans = (w.__kiroStreamPerf.citationScans ?? 0) + 1;
+    }
+  }
   if (!content || !sources || sources.length === 0) return [];
   const seen = new Set<string>();
   const out: KiroSourceMeta[] = [];

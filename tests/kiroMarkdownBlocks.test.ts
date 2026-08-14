@@ -3,6 +3,7 @@ import {
   splitKiroStreamingMarkdown,
   splitKiroInlineParagraph,
   KIRO_INLINE_TAIL_MAX_CHARS,
+  KIRO_INLINE_STREAM_WINDOW,
   createKiroMarkdownScanState,
   advanceKiroMarkdownScan,
   createKiroInlineScanState,
@@ -320,7 +321,7 @@ describe("Streaming UX V4.2 incremental inline window（长单段，Phase 5）",
     return s.slice(0, length);
   }
 
-  it("8000 chars 无空行：增量窗口输出 === 全量 splitKiroInlineParagraph", () => {
+  it("8000 chars 无空行：增量窗口输出拼接 === source，tail 收敛到流式窗口，chunk 内容稳定", () => {
     const text = cjkParagraph(8000);
     let state = createKiroInlineScanState(text.slice(0, 100));
     const parts: string[] = [];
@@ -329,19 +330,19 @@ describe("Streaming UX V4.2 incremental inline window（长单段，Phase 5）",
       state = advanceKiroInlineScan(state, partial);
     }
     state = advanceKiroInlineScan(state, text);
-    const full = splitKiroInlineParagraph(text);
-    expect(state.chunks).toEqual(full.chunks);
-    expect(state.tail).toBe(full.tail);
+    // 输出拼接严格等于 source（chunks + tail 不重不漏）
     expect(state.chunks.join("") + state.tail).toBe(text);
+    // tail 收敛到流式窗口（纯文本无未闭合构造 → ≤ KIRO_INLINE_STREAM_WINDOW）
+    expect(state.tail.length).toBeLessThanOrEqual(KIRO_INLINE_STREAM_WINDOW);
+    // 已切 chunk 内容稳定：任意两个 chunk 拼接 === source 的对应切片
+    expect(state.chunks.join("")).toBe(text.slice(0, text.length - state.tail.length));
     // 增量：扫描量 = 全量一次 + 各 suffix 和（不是每帧全量）
     const c = (globalThis as unknown as { __kiroStreamPerf: KiroStreamPerfCounters }).__kiroStreamPerf;
     expect(c.inlineSplitterCalls).toBeGreaterThan(0);
     expect(c.inlineSplitterChars).toBeLessThan(text.length * 3);
-    // tail 有界
-    expect(state.tail.length).toBeLessThanOrEqual(KIRO_INLINE_TAIL_MAX_CHARS);
   });
 
-  it("跨窗口未闭合构造（** / ` / $ / [link / [[citation）允许窗口扩大，闭合后收敛", () => {
+  it("跨窗口未闭合构造（** / ` / $ / [link / [[citation）允许 tail 扩大，闭合后收敛", () => {
     const openers = [
       "**加粗开始",
       "`inline code 开始",
@@ -350,7 +351,7 @@ describe("Streaming UX V4.2 incremental inline window（长单段，Phase 5）",
       "[[source:doc-1:p12",
     ];
     for (const opener of openers) {
-      // 构造在窗口边缘打开且长时间不闭合 → chunk 可暂时超过 max（向后找安全点）
+      // 构造在窗口边缘打开且长时间不闭合 → 无安全切点 → tail 允许暂时扩大（不切断构造）
       const text = cjkParagraph(1900) + opener + cjkParagraph(1200);
       let state = createKiroInlineScanState(text.slice(0, 100));
       const parts: string[] = [];
@@ -359,14 +360,16 @@ describe("Streaming UX V4.2 incremental inline window（长单段，Phase 5）",
         state = advanceKiroInlineScan(state, partial);
       }
       state = advanceKiroInlineScan(state, text);
-      const full = splitKiroInlineParagraph(text);
-      expect(state.chunks).toEqual(full.chunks);
+      // 输出拼接严格等于 source
       expect(state.chunks.join("") + state.tail).toBe(text);
-      // 构造完整（不跨 chunk 切断）
+      // 构造完整（不跨 chunk 切断；tail 内允许未闭合）
       for (const c of state.chunks) {
         const opens = (c.match(/\*\*/g) ?? []).length;
         expect(opens % 2).toBe(0);
       }
+      // 未闭合构造（opener 在 tail 或最后一个 chunk 内，不跨 chunk）
+      const joined = state.chunks.join("\u0000") + "\u0000" + state.tail;
+      expect(joined.includes("**加粗开始") || joined.includes("`inline code 开始") || joined.includes("$E = mc^2 开始") || joined.includes("[链接文本开始](https://example.com/xxx") || joined.includes("[[source:doc-1:p12")).toBe(true);
     }
   });
 

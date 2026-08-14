@@ -87,13 +87,24 @@ async function injectPerf(page: Page) {
   await page.addInitScript(() => {
     const w = window as unknown as {
       __kiroStreamPerf?: object;
-      __kiroPerf?: { visibleTs: number[]; longTasks: number };
+      __kiroPerf?: { visibleTs: number[]; longTasks: number; longTaskDetails: string[] };
     };
     w.__kiroStreamPerf = {};
-    w.__kiroPerf = { visibleTs: [], longTasks: 0 };
+    w.__kiroPerf = { visibleTs: [], longTasks: 0, longTaskDetails: [] as string[] };
     try {
       new PerformanceObserver((list) => {
-        w.__kiroPerf!.longTasks += list.getEntries().length;
+        for (const entry of list.getEntries()) {
+          w.__kiroPerf!.longTasks += 1;
+          const e = entry as unknown as { duration: number; startTime: number; attribution?: { container?: Element | null }[] };
+          const attrs: string[] = [];
+          for (const a of e.attribution ?? []) {
+            const node = a.container ?? null;
+            if (node) attrs.push(`${node.tagName.toLowerCase()}.${String(node.className).slice(0, 40)}`);
+          }
+          w.__kiroPerf!.longTaskDetails.push(
+            `dur=${Math.round(e.duration)}ms start=${Math.round(e.startTime)} ${attrs.join(",")}`
+          );
+        }
       }).observe({ entryTypes: ["longtask"] });
     } catch {
       /* 不支持 longtask：记 0 */
@@ -263,7 +274,7 @@ async function readPerf(page: Page, finalMarkerTs: number): Promise<PerfSnapshot
   const r = await page.evaluate(() => {
     const w = window as unknown as {
       __kiroStreamPerf?: Record<string, number | Record<string, number>>;
-      __kiroPerf?: { visibleTs: number[]; longTasks: number };
+      __kiroPerf?: { visibleTs: number[]; longTasks: number; longTaskDetails: string[] };
     };
     const s = w.__kiroStreamPerf ?? {};
     return {
@@ -278,6 +289,7 @@ async function readPerf(page: Page, finalMarkerTs: number): Promise<PerfSnapshot
       resizeObserverCalls: (s.resizeObserverCalls as number) ?? 0,
       scrollTopWrites: (s.scrollTopWrites as number) ?? 0,
       longTasks: w.__kiroPerf?.longTasks ?? 0,
+      longTaskDetails: w.__kiroPerf?.longTaskDetails ?? [],
       visibleTs: w.__kiroPerf?.visibleTs ?? [],
     };
   });
@@ -291,6 +303,9 @@ async function readPerf(page: Page, finalMarkerTs: number): Promise<PerfSnapshot
   gaps.sort((a, b) => a - b);
   const p95 = gaps.length > 0 ? gaps[Math.min(gaps.length - 1, Math.floor(gaps.length * 0.95))] : 0;
   console.log(`[PERF] visibleTs=${r.visibleTs.length} after=${after.length} gaps=${gaps.length} maxGap=${gaps.length ? gaps[gaps.length - 1] : 0}`);
+  if (r.longTaskDetails.length > 0) {
+    console.log(`[PERF] longTasks=${r.longTaskDetails.join(" | ")}`);
+  }
   return {
     worklogRenders: r.worklogRenders,
     worklogRendersByPhase: r.worklogRendersByPhase,

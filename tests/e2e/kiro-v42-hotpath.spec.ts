@@ -275,13 +275,13 @@ test("V4.2：Citation defer——streaming 期间 collectCitedWebSources 不执�
   const mid = await readCounters(page);
   expect(mid.citationScans - before.citationScans).toBe(0);
 
-  // settled（sentinel 可见）→ 最多触发一次计算（turn 真 settled 时 useMemo 重算 1-2 次；
-  // mock 直连的 server-execute 工具可能使 turn 停在 awaiting——两种都不允许风暴式重复扫描）
+  // settled（sentinel 可见 + assistant 操作栏复制按钮出现 = turn 真 settled）
+  // → 不得风暴式重复扫描（useMemo 依赖稳定后最多 1-3 次；调用时机取决于 render 序列）
   await expect(msg.locator(".kiro-markdown").first()).toContainText("SENTINEL_FINAL_END_7f3k", { timeout: 60000 });
-  await page.waitForTimeout(1500);
+  await expect(msg.getByRole("button", { name: "复制", exact: true })).toBeVisible({ timeout: 15000 });
+  await page.waitForTimeout(800);
   const settled = await readCounters(page);
   expect(settled.citationScans - mid.citationScans).toBeLessThanOrEqual(3);
-  expect(settled.citationScans - mid.citationScans).toBeGreaterThanOrEqual(0);
 
   await sse.close();
 });
