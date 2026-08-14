@@ -107,8 +107,11 @@ function buildChildren(
   theme: ResolvedDocumentTheme,
   sanitize: (text: string) => string
 ) {
-  const { Paragraph, TextRun, Table, TableRow, TableCell, PageBreak, AlignmentType, BorderStyle, LineRuleType, WidthType, TableLayoutType } = docx;
+  const { Paragraph, TextRun, Table, TableRow, TableCell, PageBreak, AlignmentType, BorderStyle, LineRuleType, WidthType, TableLayoutType, ShadingType } = docx;
   const out: InstanceType<typeof Paragraph | typeof Table>[] = [];
+
+  /** 合法 OpenXML shading：必须带 type（w:val），否则 <w:shd w:fill="..."/> 违反 ST_Shd schema */
+  const createShading = (fill: string) => ({ fill, type: ShadingType.CLEAR });
 
   const makeRuns = (
     inline: KiroInline[] | undefined,
@@ -231,7 +234,7 @@ function buildChildren(
           new Paragraph({
             alignment: AlignmentType.LEFT,
             spacing: bodySpacing(0, 6, theme.code.lineSpacing),
-            shading: { fill: theme.code.backgroundFill },
+            shading: createShading(theme.code.backgroundFill),
             border: {
               top: { style: BorderStyle.SINGLE, size: 4, color: "E2E2E2" },
               bottom: { style: BorderStyle.SINGLE, size: 4, color: "E2E2E2" },
@@ -265,7 +268,9 @@ function buildChildren(
                 return new TableCell({
                   width: { size: columnWidths[ci], type: WidthType.DXA },
                   shading:
-                    isHeader && theme.table.headerShading ? { fill: theme.table.headerShading } : undefined,
+                    isHeader && theme.table.headerShading
+                      ? createShading(theme.table.headerShading)
+                      : undefined,
                   borders: tableCellBorders(docx, theme, isHeader),
                   // 强 invariant：TableCell children 必须包含 Paragraph（block-level content）
                   children: [
