@@ -332,6 +332,14 @@ export async function resolveLiveDocxBytes(input: {
   if (!verified) {
     throw new ComputerError("VERIFICATION_FAILED", "文档文件校验失败，请让 Kiro 重新生成。");
   }
+  // V2.5.1：legacy Kiro 文件但缺少匹配 Source IR（无文档源可重渲染）→ 绝不原样导出坏文件，
+  // 明确指引重新生成（此前会绕过 migration 直接下载损坏字节）。
+  if (artifact.source === "kiro-created" && detection.legacy) {
+    throw new ComputerError(
+      "VERIFICATION_FAILED",
+      "该文件是旧版 Kiro 生成的 Word 文档且缺少文档源记录，无法自动修复；请让 Kiro 重新生成该文档。"
+    );
+  }
   return { bytes, migrated: false };
 }
 

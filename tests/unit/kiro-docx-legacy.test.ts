@@ -156,6 +156,27 @@ describe("Legacy DOCX self-heal（resolveLiveDocxBytes）", () => {
     expect(Buffer.from(onDisk).toString("base64")).toBe(Buffer.from(legacyBytes).toString("base64"));
   });
 
+  it("legacy kiro-created + 无 Source IR → 绝不原样导出（VERIFICATION_FAILED 并指引重新生成）", async () => {
+    const legacyBytes = await buildLegacyDocxBytes();
+    // kiro-created 但没传 document → 无 Source IR
+    const artifact = await registerCreatedArtifact({
+      workspaceId: "ws-legacy",
+      rootId: "output",
+      relativePath: "no-source.docx",
+      type: "docx",
+      title: "旧文件",
+    });
+    expect(await getArtifactSource(artifact.id)).toBeNull();
+    await sandboxWriteBytes(REF, "no-source.docx", legacyBytes, "application/vnd.openxmlformats-officedocument.wordprocessingml.document");
+
+    await expect(getArtifactDownloadPayload({ artifactId: artifact.id, workspaces: [workspace] })).rejects.toThrowError(
+      expect.objectContaining({ code: "VERIFICATION_FAILED" })
+    );
+    // 文件未被改写
+    const onDisk = await sandboxReadBytes(REF, "no-source.docx");
+    expect(Buffer.from(onDisk).toString("base64")).toBe(Buffer.from(legacyBytes).toString("base64"));
+  });
+
   it("普通 verify 失败（非 legacy signature）→ 不 migration，正常报错", async () => {
     const artifact = await registerCreatedArtifact({
       workspaceId: "ws-legacy",

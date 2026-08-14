@@ -1287,3 +1287,59 @@ test("V2.5 场景 C：Recent Files 手动删除（二次确认 → 文件消失 
   await page.getByRole("button", { name: "最近文件" }).click();
   await expect(page.locator('[data-testid="kiro-recent-artifact-row"]').filter({ hasText: "manual.txt" })).toHaveCount(0, { timeout: 10000 });
 });
+
+test("V2.5 场景 D：Task Card 文件行也有删除入口（二次确认 → 文件消失）", async ({ page }) => {
+  let requestCount = 0;
+  await page.route("**/api/ai/chat", async (route) => {
+    requestCount += 1;
+    if (requestCount === 1) {
+      await route.fulfill({
+        status: 200,
+        contentType: "text/event-stream",
+        body: toolCallStream("v25d-msg-1", "call_create_taskdel", "create_text_file", {
+          rootId: "root-sandbox",
+          path: "taskdel.txt",
+          content: "从任务卡删除",
+        }),
+      });
+      return;
+    }
+    await route.fulfill({
+      status: 200,
+      contentType: "text/event-stream",
+      body: answerStream("v25d-msg-1", "已创建 taskdel.txt。"),
+    });
+  });
+  await page.addInitScript(({ settings, key }) => {
+    localStorage.setItem("classflow-ai-settings-v1", JSON.stringify({ version: 0, state: settings }));
+    sessionStorage.setItem("classflow-ai-key:deepseek", key);
+  }, { settings: AI_SETTINGS, key: "sk-test-key" });
+
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/");
+  await page.locator("aside").first().getByRole("button", { name: "Kiro" }).click();
+  await page.waitForTimeout(800);
+  const composer = page.getByTestId("kiro-composer");
+  await expect(composer).toBeVisible();
+  await composer.getByRole("button", { name: "Computer" }).click();
+  await expect(composer.getByRole("button", { name: "Computer" })).toHaveAttribute("aria-pressed", "true");
+  const modeMenu = composer.getByRole("button", { name: "权限模式" });
+  await modeMenu.click();
+  await page.getByRole("menuitem", { name: /工作区自动/ }).first().click();
+
+  await composer.getByLabel("Ask Kiro").fill("创建 taskdel.txt");
+  await composer.getByLabel("发送").click();
+  const taskCard = page.locator('[data-testid="kiro-message"]').last().getByTestId("kiro-agent-task-card");
+  await expect(taskCard).toBeVisible({ timeout: 15000 });
+  expect(await readSandboxText(page, "taskdel.txt")).toBe("从任务卡删除");
+
+  // Task Card 行内删除按钮 → 二次确认
+  await taskCard.getByRole("button", { name: "删除 taskdel.txt" }).click();
+  const confirm = page.getByRole("alertdialog");
+  await expect(confirm).toBeVisible();
+  await expect(confirm).toContainText("删除后无法通过 Kiro 撤销");
+  expect(await readSandboxText(page, "taskdel.txt")).toBe("从任务卡删除");
+  await confirm.getByTestId("confirm-dialog-confirm").click();
+
+  await expect.poll(async () => readSandboxText(page, "taskdel.txt")).toBeNull();
+});
