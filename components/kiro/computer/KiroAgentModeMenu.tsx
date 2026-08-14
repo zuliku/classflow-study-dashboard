@@ -7,8 +7,11 @@ import { KiroAgentMode } from "@/lib/ai/computer/types";
 
 const MODE_COPY: Record<KiroAgentMode, { label: string; description: string }> = {
   plan: { label: "计划", description: "只读取和分析，不修改文件" },
-  guided: { label: "受控", description: "可创建；修改前询问" },
-  "workspace-auto": { label: "工作区自动", description: "在授权 Workspace 内自动创建/修改；危险能力仍禁用" },
+  guided: { label: "受控", description: "可创建；修改、移动和删除前询问" },
+  "workspace-auto": {
+    label: "工作区自动",
+    description: "授权 Workspace 内文件操作自动执行；不包含终端、网络与工作区外操作",
+  },
 };
 
 /** Agent Mode 选择（仅 Computer Agent ON 时显示；Composer 只切 preset，细粒度规则在 Settings） */

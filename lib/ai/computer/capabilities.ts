@@ -7,7 +7,12 @@ import {
 /**
  * Agent Mode 默认权限表（V1 usable modes：plan / guided / workspace-auto）。
  * Full Access 不是 Web V1 usable mode。
- * 每个 capability 的 effect 与 Spec §16 完全一致。
+ *
+ * V2.7：Workspace Auto = 对当前已授权、read-write Workspace 内的文件操作充分自动授权
+ * （读取/搜索/创建/修改/移动/重命名/删除/文档创建/文档更新全部 allow）；
+ * 但绝不突破 Workspace sandbox / root scope / read-only root / Browser grant /
+ * PATH_OUTSIDE_SANDBOX 与系统级能力（app/shell/network 恒 deny）。
+ * 显式 deny 规则与 read-only root 仍优先于 mode default（policy pipeline 保证）。
  */
 export const AGENT_MODE_DEFAULTS: Record<
   KiroAgentMode,
@@ -52,8 +57,8 @@ export const AGENT_MODE_DEFAULTS: Record<
     "fs.read": "allow",
     "fs.create": "allow",
     "fs.modify": "allow",
-    "fs.move": "ask",
-    "fs.delete": "ask",
+    "fs.move": "allow",
+    "fs.delete": "allow",
     "document.create": "allow",
     "document.modify": "allow",
     "app.open": "deny",
@@ -64,7 +69,7 @@ export const AGENT_MODE_DEFAULTS: Record<
 };
 
 /** V1 Hard Deny：无论 Agent Mode / 规则如何都拒绝（未来桌面版单独设计后解除）。
- *  fs.delete 已从硬性禁用移除（V2.5：可删除），但被 always-ask invariant 覆盖（见 policy.ts）。 */
+ *  系统级能力；Workspace Auto 的“完全授权”是 Workspace 内 Full Access，不是系统 Full Access。 */
 export const HARD_DENY_CAPABILITIES: ReadonlySet<ComputerCapability> = new Set<ComputerCapability>([
   "app.open",
   "app.reveal",

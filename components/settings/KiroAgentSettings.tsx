@@ -217,7 +217,7 @@ export function KiroAgentSettings() {
           <SettingsRow
             settingId="kiro-agent-mode"
             title="默认权限模式"
-            description="模式决定工作区内允许的操作等级；永不扩大授权目录。"
+            description="模式决定工作区内允许的操作等级；工作区自动模式自动执行创建、修改、移动和删除，但永不扩大授权目录、不含终端/网络等系统能力。"
           >
             <SettingsSegmentedControl<KiroAgentMode>
               value={agentMode}

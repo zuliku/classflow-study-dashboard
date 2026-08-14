@@ -950,7 +950,7 @@ export async function executeKiroComputerTool(request: {
       ? normalizeScopePath(resource.path)
       : normalizeRelativeComputerPath(resource.path).path;
 
-    // ---- V2.5：delete_file（在 generic ask 之前拦截，提供删除专属描述；fs.delete 恒 ask）----
+    // ---- V2.5：delete_file（在 generic ask 之前拦截，提供删除专属描述；V2.7：policy driven，不再恒 ask）----
     if (toolName === "delete_file") {
       const policy = prepareComputerTool({
         mode: turnSnapshot.agentMode,
