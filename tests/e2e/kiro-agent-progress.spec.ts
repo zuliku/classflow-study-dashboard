@@ -457,7 +457,7 @@ test("V4：Progressive Worklog 分阶段真实到达（T0 时 progress 已在 Wo
       ];
     }
     // 请求 3（V4.1）：延迟 3000ms 给 T4/T5 断言窗口 → T6 begin_final_answer（server execute）
-    // → T7 Final Answer 同一响应继续（request 数 4 → 3）
+    // → T7 Final Answer 同一响应继续（request 数 4 → 3）；分片慢速给 cursor 可见窗口
     return [
       {
         delay: 3000,
@@ -471,8 +471,8 @@ test("V4：Progressive Worklog 分阶段真实到达（T0 时 progress 已在 Wo
         ],
       },
       { delay: 60, events: [JSON.stringify({ type: "start-step" }), JSON.stringify({ type: "text-start", id: "final-v4" })] },
-      { delay: 80, events: [JSON.stringify({ type: "text-delta", id: "final-v4", delta: "正在整理：" })] },
-      { delay: 120, events: [JSON.stringify({ type: "text-delta", id: "final-v4", delta: "已完成检查。" })] },
+      { delay: 800, events: [JSON.stringify({ type: "text-delta", id: "final-v4", delta: "正在整理：" })] },
+      { delay: 800, events: [JSON.stringify({ type: "text-delta", id: "final-v4", delta: "已完成检查。" })] },
       {
         delay: 60,
         events: [

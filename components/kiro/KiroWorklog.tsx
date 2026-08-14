@@ -2,27 +2,28 @@
 
 import React, { useRef, useState } from "react";
 import { Check, Loader2, AlertCircle, ChevronDown, ListTree } from "lucide-react";
-import { KiroAssistantTurnPresentation, KiroWorklogBlock } from "@/lib/ai/presentation/turnPresentation";
+import { KiroTurnPhase, KiroWorklogBlock } from "@/lib/ai/presentation/turnPresentation";
+import { bumpStreamPerf, bumpStreamPerfKeyed } from "@/lib/ai/perf/streamPerf";
 import { hasMeaningfulKiroToolDetails } from "@/lib/ai/presentation/toolActivityDetails";
 import { KiroLogoIcon } from "@/components/kiro/KiroLogo";
 import { DisclosureRegion } from "@/components/ui/DisclosureRegion";
 import { cn } from "@/lib/utils";
 
 type ToolBlock = Extract<KiroWorklogBlock, { kind: "tool" }>;
+type CommentaryBlock = Extract<KiroWorklogBlock, { kind: "commentary" }>;
 
 /** Tool Row 视觉 body（button 与普通 div 共享，避免样式漂移） */
 const TOOL_ROW_BODY =
   "flex items-center gap-1.5 px-2 h-7 w-full text-left text-[11px] rounded-lg transition-colors";
 
 /**
- * Tool Row：
- * - expandable（有真实确定性详情）→ 真实 button + aria-expanded + Chevron
- * - 否则 → 普通 div（无 aria-expanded / 无 Chevron / 不可点击）
- * 组件只消费 block.safeDetails（Task 1 已清洗），绝不读取 raw input / raw output。
- * 几何稳定：height/padding/border/background footprint 不随状态切换消失，
- * 状态主要由 icon（spinner/check/alert）与 text color 表达。
+ * Tool Row（V4.2 Hot Path）：React.memo——completed tool 在 Final Answer token
+ * 期间绝不重渲染。comparator 只比较影响显示的可变字段（id/status/headline/label/
+ * safeDetails 逐项），local open disclosure state 不受影响（memo 只跳过 render）。
  */
-function KiroToolRow({ block }: { block: ToolBlock }) {
+const KiroToolRow = React.memo(function KiroToolRow({ block }: { block: ToolBlock }) {
+  bumpStreamPerfKeyed("toolRowRenders", block.id);
+  bumpStreamPerf("toolRowRendersTotal");
   const [open, setOpen] = useState(false);
   const working = block.status === "working";
   const error = block.status === "error";
@@ -79,6 +80,43 @@ function KiroToolRow({ block }: { block: ToolBlock }) {
       )}
     </div>
   );
+}, (prevProps: { block: ToolBlock }, nextProps: { block: ToolBlock }) =>
+  toolBlockEquals(prevProps.block, nextProps.block));
+
+/** Tool block 显示字段逐项比较（数组逐元素 ===；引用变化但内容相同 → 不重渲染） */
+function toolBlockEquals(a: ToolBlock, b: ToolBlock): boolean {
+  if (a === b) return true;
+  if (a.id !== b.id || a.status !== b.status || a.headline !== b.headline || a.label !== b.label) return false;
+  if (a.safeDetails.length !== b.safeDetails.length) return false;
+  for (let i = 0; i < a.safeDetails.length; i++) {
+    if (a.safeDetails[i] !== b.safeDetails[i]) return false;
+  }
+  return true;
+}
+
+/** commentary block 显示字段逐项比较 */
+function commentaryEquals(a: CommentaryBlock, b: CommentaryBlock): boolean {
+  return a === b || (a.id === b.id && a.text === b.text && a.streaming === b.streaming);
+}
+
+/** worklog 数组逐 block 比较（id + 显示字段；worklog 重排 / block 内部变化才触发渲染） */
+function worklogEquals(
+  a: KiroWorklogBlock[],
+  b: KiroWorklogBlock[]
+): boolean {
+  if (a === b) return true;
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    const x = a[i];
+    const y = b[i];
+    if (x.kind !== y.kind || x.id !== y.id) return false;
+    if (x.kind === "commentary" && y.kind === "commentary") {
+      if (!commentaryEquals(x, y)) return false;
+    } else if (x.kind === "tool" && y.kind === "tool" && !toolBlockEquals(x, y)) {
+      return false;
+    }
+  }
+  return true;
 }
 
 /** 几何稳定——所有状态保留同一 border/背景 footprint（透明/半透明差异），字体 weight 不跳变 */
@@ -90,16 +128,27 @@ function rowClasses(block: ToolBlock): string {
 }
 
 /**
- * Kiro Worklog（Density Polish + Streaming UX V3 + V4 + V4.1 Stable）：
+ * Kiro Worklog（Density Polish + Streaming UX V3 + V4 + V4.1 Stable + V4.2 Hot Path）：
  * - 整体 disclosure：Summary（ListTree + 步骤统计）→ 点击折叠/展开
  * - V4.1：当前 Turn 生命周期（working → composing → answering → done）保持当前 expanded 状态，
  *   完成瞬间不强制折叠（无大高度跳动）；历史恢复（初始 done）默认折叠；用户手动操作始终优先
  * - Body 只包含真实 Agent trace：commentary + tool rows（无 milestone / 无 loading pseudo-row /
  *   无入场动画——真实事件到达即出现）
+ * - V4.2：memo + 明确 comparator——props 缩窄为 worklog + phase（不需要 answer / hasTools 等）。
+ *   phase 只影响 Summary 文案与分割线（低频 transition）；worklog 数组逐 block 比较——
+ *   Final Answer token 期间 worklog 内容不变 → 整个 Worklog 不重渲染，completed Tool 不重渲染。
  * - Final Answer 分割线无论折叠与否都保留
  */
-export function KiroWorklog({ turn }: { turn: KiroAssistantTurnPresentation }) {
-  const toolBlocks = turn.worklog.filter(
+export const KiroWorklog = React.memo(function KiroWorklog({
+  worklog,
+  phase,
+}: {
+  worklog: KiroWorklogBlock[];
+  phase: KiroTurnPhase;
+}) {
+  bumpStreamPerf("worklogRenders");
+  bumpStreamPerfKeyed("worklogRendersByPhase", phase);
+  const toolBlocks = worklog.filter(
     (block): block is Extract<KiroWorklogBlock, { kind: "tool" }> => block.kind === "tool"
   );
   const toolCount = toolBlocks.length;
@@ -110,7 +159,7 @@ export function KiroWorklog({ turn }: { turn: KiroAssistantTurnPresentation }) {
   // 当前 Turn：working/composing/answering 保持 expanded；历史恢复（初始 done）默认折叠；
   // 不因 done 瞬时 collapse（避免完成瞬间 layout 跳动）；用户手动操作始终优先。
   const [expanded, setExpanded] = useState(
-    turn.phase === "working" || turn.phase === "composing" || turn.phase === "answering"
+    phase === "working" || phase === "composing" || phase === "answering"
   );
   const userToggledRef = useRef(false);
 
@@ -121,9 +170,9 @@ export function KiroWorklog({ turn }: { turn: KiroAssistantTurnPresentation }) {
 
   // V4：稳定的 Summary——详细进度由 Timeline 展示，Summary 不做高速实时计数
   const summaryLabel =
-    turn.phase === "composing"
+    phase === "composing"
       ? "正在整理回答"
-      : turn.phase === "working"
+      : phase === "working"
         ? "正在执行"
         : `已完成 · ${toolCount} 个步骤`;
 
@@ -151,7 +200,7 @@ export function KiroWorklog({ turn }: { turn: KiroAssistantTurnPresentation }) {
 
       {/* Expanded：commentary / Tool rows 真实时序（无 synthetic row）；collapsed 时结构收起 */}
       <DisclosureRegion open={expanded} innerClassName="pt-1 space-y-1">
-        {turn.worklog.map((block) =>
+        {worklog.map((block) =>
           block.kind === "commentary" ? (
             <p
               key={block.id}
@@ -165,12 +214,20 @@ export function KiroWorklog({ turn }: { turn: KiroAssistantTurnPresentation }) {
         )}
       </DisclosureRegion>
 
-      {/* Final Answer 前的极弱分割线：无论折叠与否都保留 */}
-      {turn.worklog.length > 0 && turn.answer.length > 0 && (
+      {/* Final Answer 前的极弱分割线：无论折叠与否都保留（answering/done 才可能有 answer） */}
+      {worklog.length > 0 && (phase === "answering" || phase === "done") && (
         <div className="border-t border-line-soft my-1.5" aria-hidden="true" />
       )}
     </div>
   );
+}, worklogPropsEqual);
+
+/** KiroWorklog comparator：只有 phase 或 worklog 内容真正变化才重渲染 */
+function worklogPropsEqual(
+  a: { worklog: KiroWorklogBlock[]; phase: KiroTurnPhase },
+  b: { worklog: KiroWorklogBlock[]; phase: KiroTurnPhase }
+): boolean {
+  return a.phase === b.phase && worklogEquals(a.worklog, b.worklog);
 }
 
 /**

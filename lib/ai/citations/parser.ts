@@ -8,6 +8,7 @@
  */
 
 import { KiroCitation, KiroSourceMeta } from "@/lib/ai/citations/types";
+import { bumpStreamPerf } from "@/lib/ai/perf/streamPerf";
 
 const MARKER_RE = /\[\[source:([A-Za-z0-9_-]+)(?::p(\d+)(?:-p(\d+))?)?\]\]/g;
 
@@ -115,6 +116,7 @@ export function isSafeWebUrl(url: string | undefined): url is string {
  * 不校验 page（Web Source 不允许页码）；无引用 → 空数组。
  */
 export function collectCitedWebSources(content: string, sources?: KiroSourceMeta[]): KiroSourceMeta[] {
+  bumpStreamPerf("citationScans");
   if (!content || !sources || sources.length === 0) return [];
   const seen = new Set<string>();
   const out: KiroSourceMeta[] = [];

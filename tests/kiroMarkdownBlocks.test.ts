@@ -1,9 +1,24 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import {
   splitKiroStreamingMarkdown,
   splitKiroInlineParagraph,
   KIRO_INLINE_TAIL_MAX_CHARS,
+  createKiroMarkdownScanState,
+  advanceKiroMarkdownScan,
+  createKiroInlineScanState,
+  advanceKiroInlineScan,
+  KiroMarkdownScanState,
+  KiroInlineScanState,
 } from "@/lib/ai/streaming/markdownBlocks";
+import { KiroStreamPerfCounters } from "@/lib/ai/perf/streamPerf";
+
+/** 注入 perf counter（node 环境 globalThis）——增量测试断言「不重扫 stable prefix」 */
+beforeEach(() => {
+  (globalThis as unknown as { __kiroStreamPerf?: Partial<KiroStreamPerfCounters> }).__kiroStreamPerf = {};
+});
+afterEach(() => {
+  delete (globalThis as unknown as { __kiroStreamPerf?: Partial<KiroStreamPerfCounters> }).__kiroStreamPerf;
+});
 
 describe("splitKiroStreamingMarkdown", () => {
   it("普通两段：第一段稳定，第二段未闭合 → Active Tail（text 态）", () => {
@@ -193,5 +208,183 @@ describe("splitKiroInlineParagraph（长单段安全增量，Streaming UX V3 Pha
     const r = splitKiroInlineParagraph(pathological);
     expect(r.chunks).toEqual([]);
     expect(r.tail).toBe(pathological);
+  });
+});
+
+describe("Streaming UX V4.2 incremental block scan（append-only 只扫新增 suffix）", () => {
+  function cjkParagraph(length: number): string {
+    let s = "";
+    const unit = "这是一段没有空行的超长中文回答内容用于验证安全增量切分";
+    while (s.length < length) s += unit;
+    return s.slice(0, length);
+  }
+
+  /** 按 80 chars 切 chunk 模拟 streaming 到达（末尾可能带部分换行边界） */
+  function chunksOf(text: string, size = 80): string[] {
+    const out: string[] = [];
+    for (let i = 0; i < text.length; i += size) out.push(text.slice(0, Math.min(i + size, text.length)));
+    return out;
+  }
+
+  /** 断言：incremental 结果 === 同 content 的 full split 结果（语义完全一致） */
+  function expectIncrementalEqualsFull(content: string) {
+    let state = createKiroMarkdownScanState(content.slice(0, 1));
+    for (const partial of chunksOf(content).slice(1)) {
+      state = advanceKiroMarkdownScan(state, partial);
+      const full = splitKiroStreamingMarkdown(partial, true);
+      expect(state.stableBlocks).toEqual(full.stableBlocks);
+      expect(state.tail).toBe(full.tail);
+      const stateTailState = state.inFence ? "fence" : state.inDisplayMath ? "math" : "text";
+      expect(stateTailState).toBe(full.tailState);
+    }
+  }
+
+  it("append 100 → 500 → 2000 → 8000：输出拼接 === source，stable 前缀不重扫", () => {
+    const full = cjkParagraph(8000) + "\n\n结尾段落";
+    const lens = [100, 500, 2000, 8000, full.length];
+    let state = createKiroMarkdownScanState(full.slice(0, lens[0]));
+    for (let i = 1; i < lens.length; i++) {
+      state = advanceKiroMarkdownScan(state, full.slice(0, lens[i]));
+    }
+    // 输出拼接严格等于 source（stableBlocks join("\n\n") + tail）
+    expect(state.stableBlocks.join("\n\n") + (state.stableBlocks.length > 0 && state.tail ? "\n\n" : "") + state.tail).toBe(full);
+    expect(state.tail).toBe("结尾段落");
+    // 增量扫描字符量 ≈ 全量一次 + 各 suffix 和（远小于每帧全量重扫的平方级）
+    const c = (globalThis as unknown as { __kiroStreamPerf: KiroStreamPerfCounters }).__kiroStreamPerf;
+    expect(c.splitterCalls).toBe(5); // 1 次 create（全量）+ 4 次增量 advance（只扫 suffix）
+    expect(c.splitterChars).toBeLessThan(full.length * 2);
+  });
+
+  it("跨 chunk 构造（fence/math/bold/code/link/citation）：chunk 恰好到达 marker 时不错误 commit，结果与 full 一致", () => {
+    const texts = [
+      "```ts\nconst a = 1;\n\nconst b = 2;\n```\n\n结束段",
+      "$$\nE = mc^2\n\n还有内容\n$$\n\n结论",
+      "段落一\n\n段落二 **加粗开始",
+      "段落一\n\n段落二 `code 开始",
+      "段落一\n\n段落二 [[source:doc-1:p12",
+      "段落一\n\n段落二 [查看文档](https://example.com/abc",
+      "前言\n\n```s\nline1\n\nline2",
+      "$$\n未闭合公式\n\n继续",
+      "- 列表项\n- 第二项\n\n- 第三项 未完",
+      "## 标题未闭合行",
+      "> 引用行未闭合\n\n后续段落",
+    ];
+    for (const t of texts) expectIncrementalEqualsFull(t);
+  });
+
+  it("fence 跨多 chunk 打开与关闭：tailState 全程与 full 一致，fence 内空行不 flush", () => {
+    const text = "前言\n\n```s\nline1\n\nline2\n\nline3\n```\n\n结束";
+    let state = createKiroMarkdownScanState(text.slice(0, 10));
+    const parts = chunksOf(text, 11);
+    for (const partial of parts.slice(1)) {
+      state = advanceKiroMarkdownScan(state, partial);
+      const full = splitKiroStreamingMarkdown(partial, true);
+      expect(state.stableBlocks).toEqual(full.stableBlocks);
+      expect(state.tail).toBe(full.tail);
+    }
+  });
+
+  it("非 append-only（retry / regenerate / 缩短 / 替换）→ deterministic full reset", () => {
+    const a = cjkParagraph(300) + "\n\n第二段";
+    const b = "全新内容" + cjkParagraph(200) + "\n\n替换段";
+    let state = createKiroMarkdownScanState(a);
+    state = advanceKiroMarkdownScan(state, a + "追加");
+    // 替换：不同前缀 → full reset（结果 === 全量）
+    const replaced = advanceKiroMarkdownScan(state, b);
+    const full = splitKiroStreamingMarkdown(b, true);
+    expect(replaced.stableBlocks).toEqual(full.stableBlocks);
+    expect(replaced.tail).toBe(full.tail);
+    expect(replaced.prefix).toBe(b);
+    // 缩短：full reset
+    const shortened = advanceKiroMarkdownScan(state, a.slice(0, 100));
+    const fullShort = splitKiroStreamingMarkdown(a.slice(0, 100), true);
+    expect(shortened.stableBlocks).toEqual(fullShort.stableBlocks);
+    expect(shortened.tail).toBe(fullShort.tail);
+  });
+
+  it("幂等：相同 content 重复 advance 返回同一状态（React StrictMode 安全）", () => {
+    const text = cjkParagraph(2000) + "\n\n尾段";
+    const state = createKiroMarkdownScanState(text.slice(0, 100));
+    const once = advanceKiroMarkdownScan(state, text);
+    const twice = advanceKiroMarkdownScan(once, text);
+    expect(twice).toBe(once);
+    expect(twice.stableBlocks).toEqual(once.stableBlocks);
+  });
+});
+
+describe("Streaming UX V4.2 incremental inline window（长单段，Phase 5）", () => {
+  function cjkParagraph(length: number): string {
+    let s = "";
+    const unit = "这是一段没有空行的超长中文回答内容用于验证安全增量切分";
+    while (s.length < length) s += unit;
+    return s.slice(0, length);
+  }
+
+  it("8000 chars 无空行：增量窗口输出 === 全量 splitKiroInlineParagraph", () => {
+    const text = cjkParagraph(8000);
+    let state = createKiroInlineScanState(text.slice(0, 100));
+    const parts: string[] = [];
+    for (let i = 100; i < text.length; i += 200) parts.push(text.slice(0, i));
+    for (const partial of parts) {
+      state = advanceKiroInlineScan(state, partial);
+    }
+    state = advanceKiroInlineScan(state, text);
+    const full = splitKiroInlineParagraph(text);
+    expect(state.chunks).toEqual(full.chunks);
+    expect(state.tail).toBe(full.tail);
+    expect(state.chunks.join("") + state.tail).toBe(text);
+    // 增量：扫描量 = 全量一次 + 各 suffix 和（不是每帧全量）
+    const c = (globalThis as unknown as { __kiroStreamPerf: KiroStreamPerfCounters }).__kiroStreamPerf;
+    expect(c.inlineSplitterCalls).toBeGreaterThan(0);
+    expect(c.inlineSplitterChars).toBeLessThan(text.length * 3);
+    // tail 有界
+    expect(state.tail.length).toBeLessThanOrEqual(KIRO_INLINE_TAIL_MAX_CHARS);
+  });
+
+  it("跨窗口未闭合构造（** / ` / $ / [link / [[citation）允许窗口扩大，闭合后收敛", () => {
+    const openers = [
+      "**加粗开始",
+      "`inline code 开始",
+      "$E = mc^2 开始",
+      "[链接文本开始](https://example.com/xxx",
+      "[[source:doc-1:p12",
+    ];
+    for (const opener of openers) {
+      // 构造在窗口边缘打开且长时间不闭合 → chunk 可暂时超过 max（向后找安全点）
+      const text = cjkParagraph(1900) + opener + cjkParagraph(1200);
+      let state = createKiroInlineScanState(text.slice(0, 100));
+      const parts: string[] = [];
+      for (let i = 100; i < text.length; i += 150) parts.push(text.slice(0, i));
+      for (const partial of parts) {
+        state = advanceKiroInlineScan(state, partial);
+      }
+      state = advanceKiroInlineScan(state, text);
+      const full = splitKiroInlineParagraph(text);
+      expect(state.chunks).toEqual(full.chunks);
+      expect(state.chunks.join("") + state.tail).toBe(text);
+      // 构造完整（不跨 chunk 切断）
+      for (const c of state.chunks) {
+        const opens = (c.match(/\*\*/g) ?? []).length;
+        expect(opens % 2).toBe(0);
+      }
+    }
+  });
+
+  it("缩短 / 替换 → full reset（结果与全量一致）", () => {
+    const text = cjkParagraph(4000);
+    let state = createKiroInlineScanState(text.slice(0, 100));
+    state = advanceKiroInlineScan(state, text);
+    const replaced = advanceKiroInlineScan(state, cjkParagraph(3000) + "替换");
+    const full = splitKiroInlineParagraph(cjkParagraph(3000) + "替换");
+    expect(replaced.chunks).toEqual(full.chunks);
+    expect(replaced.tail).toBe(full.tail);
+  });
+
+  it("幂等：重复 advance 返回同一状态", () => {
+    const text = cjkParagraph(3000);
+    const state = createKiroInlineScanState(text.slice(0, 100));
+    const once = advanceKiroInlineScan(state, text);
+    const twice = advanceKiroInlineScan(once, text);
+    expect(twice).toBe(once);
   });
 });

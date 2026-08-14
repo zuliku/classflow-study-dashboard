@@ -33,10 +33,14 @@ export interface KiroMarkdownStreamSplit {
 /** 单段 tail 的可变窗口上界：超过后启用安全 chunking */
 export const KIRO_INLINE_TAIL_MAX_CHARS = 2048;
 
+import { bumpStreamPerf, addStreamPerfChars } from "@/lib/ai/perf/streamPerf";
+
 export function splitKiroStreamingMarkdown(
   content: string,
   streaming: boolean
 ): KiroMarkdownStreamSplit {
+  bumpStreamPerf("splitterCalls");
+  addStreamPerfChars("splitterChars", content.length);
   if (!streaming) {
     return { stableBlocks: content.length > 0 ? [content] : [], tail: "", tailState: "text" };
   }
@@ -193,6 +197,8 @@ export function splitKiroInlineParagraph(
   text: string,
   maxChars: number = KIRO_INLINE_TAIL_MAX_CHARS
 ): { chunks: string[]; tail: string } {
+  bumpStreamPerf("inlineSplitterCalls");
+  addStreamPerfChars("inlineSplitterChars", text.length);
   if (text.length <= maxChars) return { chunks: [], tail: text };
   const safe = inlineSafePositions(text);
   const chunks: string[] = [];
@@ -216,6 +222,370 @@ export function splitKiroInlineParagraph(
         }
       }
       if (end < 0) break; // 病理：全文无安全切点 → 全部留在 tail
+    }
+    chunks.push(text.slice(start, end));
+    start = end;
+  }
+  return { chunks, tail: text.slice(start) };
+}
+
+// ============================================================
+// Streaming UX V4.2：Incremental Markdown Scan State
+// （Phase 4：block scanner 增量；Phase 5：长单段 inline 增量窗口）
+//
+// 规则：
+// - append-only streaming（nextContent.startsWith(prev.prefix)）→ 只扫描新增 suffix；
+//   stable prefix 永不重扫（block：stableBlocks 不再重建；inline：safe 数组增量扩展）
+// - retry / regenerate / edit / history restore / 非 append-only → deterministic full reset
+// - 幂等：nextContent.length === prev.sourceLength 时返回 prev（React StrictMode 安全）
+// - 输出拼接 === source（stableBlocks.join("\n\n") + tail 语义与原 split 完全一致）
+// ============================================================
+
+export interface KiroMarkdownScanState {
+  /** 已消费的 source 前缀（startsWith 比较用） */
+  prefix: string;
+  /** 已稳定 block（与原 split 同语义：不含空行分隔符） */
+  stableBlocks: string[];
+  /** 当前未稳定 tail（可能含 fence/math 内空行） */
+  tail: string;
+  /** tail 中「最后一行」之前的部分（含行分隔 \n；增量拼接起点，避免 O(tail) 重扫） */
+  tailPrefix: string;
+  /** tail 的最后一行（不含 \n；增量扫描起点） */
+  tailLastLine: string;
+  inFence: boolean;
+  inDisplayMath: boolean;
+}
+
+/** 全量建立（首轮 / reset 共用；保持原 splitKiroStreamingMarkdown 语义） */
+export function createKiroMarkdownScanState(content: string): KiroMarkdownScanState {
+  const split = splitKiroStreamingMarkdown(content, true);
+  const tailLastLine = split.tail.slice(split.tail.lastIndexOf("\n") + 1);
+  const tailPrefix = split.tail
+    .slice(0, split.tail.length - tailLastLine.length)
+    .replace(/\n$/, "");
+  return {
+    prefix: content,
+    stableBlocks: split.stableBlocks,
+    tail: split.tail,
+    tailPrefix,
+    tailLastLine,
+    inFence: split.tailState === "fence",
+    inDisplayMath: split.tailState === "math",
+  };
+}
+
+/**
+ * 增量推进（append-only 时只扫描新增 suffix；否则 full reset）。
+ * 每次调用成本 = O(新增 suffix + 新完整行数)；stable prefix 永不重扫。
+ */
+export function advanceKiroMarkdownScan(
+  prev: KiroMarkdownScanState,
+  nextContent: string
+): KiroMarkdownScanState {
+  if (nextContent.length < prev.prefix.length || !nextContent.startsWith(prev.prefix)) {
+    return createKiroMarkdownScanState(nextContent);
+  }
+  if (nextContent.length === prev.prefix.length) return prev;
+  bumpStreamPerf("splitterCalls");
+  addStreamPerfChars("splitterChars", nextContent.length - prev.prefix.length);
+
+  const suffix = nextContent.slice(prev.prefix.length);
+  const working = prev.tailLastLine + suffix;
+  const lastNl = working.lastIndexOf("\n");
+  if (lastNl < 0) {
+    // 仍无完整行：纯 append 到 tail（tailPrefix 不变）
+    return {
+      ...prev,
+      prefix: nextContent,
+      tail: prev.tail + suffix,
+      tailLastLine: working,
+    };
+  }
+
+  const lines = working.slice(0, lastNl).split("\n");
+  const incomplete = working.slice(lastNl + 1);
+  // acc 起始 = prev 的 tail 前缀（未 flush 的完整行们）；flush 时清空——与原 split 的
+  // current 累积语义一致（prev.tailPrefix 不含最后一行，最后一行在 working 里）
+  let acc = prev.tailPrefix;
+  let inFence = prev.inFence;
+  let inDisplayMath = prev.inDisplayMath;
+  const newStable: string[] = [];
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    // 状态切换必须先于边界判断（本行属于新状态）——与原 split 一致
+    if (!inFence && trimmed.startsWith("```")) {
+      inFence = true;
+    } else if (inFence && trimmed.startsWith("```")) {
+      inFence = false;
+    } else if (!inFence && !inDisplayMath && trimmed.startsWith("$$")) {
+      inDisplayMath = true;
+    } else if (!inFence && inDisplayMath && trimmed.startsWith("$$")) {
+      inDisplayMath = false;
+    }
+    if (line.length === 0 && !inFence && !inDisplayMath) {
+      if (acc.length > 0) {
+        newStable.push(acc);
+        acc = "";
+      }
+      continue;
+    }
+    acc = acc.length === 0 ? line : `${acc}\n${line}`;
+  }
+
+  let tail: string;
+  let tailPrefix: string;
+  let tailLastLine: string;
+  if (incomplete === "") {
+    // working 以 \n 结尾 = 尾部空行：fence/math 内按空行累积（acc 补尾 \n），否则 flush
+    if (!inFence && !inDisplayMath) {
+      if (acc.length > 0) {
+        newStable.push(acc);
+        acc = "";
+      }
+    } else if (acc.length > 0) {
+      acc += "\n";
+    }
+    tail = acc;
+    tailPrefix = acc.replace(/\n$/, "");
+    tailLastLine = "";
+  } else {
+    tail = acc.length === 0 ? incomplete : `${acc}\n${incomplete}`;
+    tailPrefix = acc;
+    tailLastLine = incomplete;
+  }
+  return {
+    prefix: nextContent,
+    stableBlocks: [...prev.stableBlocks, ...newStable],
+    tail,
+    tailPrefix,
+    tailLastLine,
+    inFence,
+    inDisplayMath,
+  };
+}
+
+export interface KiroInlineScanState {
+  /** 已消费的 source 前缀 */
+  prefix: string;
+  /** 已稳定 chunk */
+  chunks: string[];
+  /** 当前窗口起点（= 最后一个 chunk 的末尾） */
+  start: number;
+  /** 当前 tail（= source.slice(start)） */
+  tail: string;
+  /** 扫描到 prefix.length 处的未闭合 inline 构造栈 */
+  stack: string[];
+  /** safe[i] = text[0..i) 可安全切分（数组已算到 prefix.length） */
+  safe: boolean[];
+  /** 扫描到 prefix.length 处的当前行首位置（避免每次切点 O(n) lastIndexOf） */
+  lineStart: number;
+  maxChars: number;
+}
+
+/** 全量建立 inline 增量状态（首轮 / reset） */
+export function createKiroInlineScanState(
+  text: string,
+  maxChars: number = KIRO_INLINE_TAIL_MAX_CHARS
+): KiroInlineScanState {
+  bumpStreamPerf("inlineSplitterCalls");
+  addStreamPerfChars("inlineSplitterChars", text.length);
+  const safe = inlineSafePositions(text);
+  const { chunks, tail } = cutChunks(text, safe, maxChars);
+  return {
+    prefix: text,
+    chunks,
+    start: text.length - tail.length,
+    tail,
+    stack: [],
+    safe,
+    lineStart: text.lastIndexOf("\n") + 1,
+    maxChars,
+  };
+}
+
+/** 从起点贪心切 chunk（与 splitKiroInlineParagraph 同规则；start 通常 > 0） */
+function cutChunks(text: string, safe: boolean[], maxChars: number): { chunks: string[]; tail: string } {
+  const chunks: string[] = [];
+  let start = 0;
+  const n = text.length;
+  while (n - start > maxChars) {
+    const windowEnd = Math.min(start + maxChars, n);
+    let end = -1;
+    for (let i = windowEnd; i > start; i--) {
+      if (safe[i]) {
+        end = i;
+        break;
+      }
+    }
+    if (end < 0) {
+      for (let i = windowEnd + 1; i <= n; i++) {
+        if (safe[i]) {
+          end = i;
+          break;
+        }
+      }
+      if (end < 0) break;
+    }
+    chunks.push(text.slice(start, end));
+    start = end;
+  }
+  return { chunks, tail: text.slice(start) };
+}
+
+/** 从 prev 的栈状态继续扩展 safe 数组到 nextText（只扫新增 suffix；stable 前缀不重扫） */
+function extendInlineSafe(
+  prev: KiroInlineScanState,
+  nextText: string
+): { safe: boolean[]; stack: string[]; lineStart: number } {
+  const start = prev.prefix.length;
+  const n = nextText.length;
+  const safe = prev.safe.slice(); // 前段已计算（复制保证不可变；增量段在末尾追加）
+  const stack = [...prev.stack];
+  let lineStart = prev.lineStart;
+  let i = start;
+  const markSafeAt = (boundary: number) => {
+    if (stack.length > 0 || boundary <= 0 || boundary > n) return;
+    const prevCh = nextText[boundary - 1];
+    const cur = boundary < n ? nextText[boundary] : "";
+    const charOk =
+      CJK_RE.test(prevCh) || CJK_RE.test(cur) || /\s/.test(prevCh) || (boundary < n && /\s/.test(cur));
+    if (!charOk) return;
+    const lineHead = nextText.slice(lineStart, boundary).trimStart();
+    if (BLOCK_LINE_RE.test(lineHead)) return;
+    safe[boundary] = true;
+  };
+  while (i < n) {
+    const ch = nextText[i];
+    if (ch === "\n") {
+      lineStart = i + 1;
+      i += 1;
+      markSafeAt(i);
+      continue;
+    }
+    if (ch === "\\") {
+      i += 2;
+      markSafeAt(i);
+      continue;
+    }
+    if (ch === "`") {
+      let run = 0;
+      while (i + run < n && nextText[i + run] === "`") run += 1;
+      const token = run === 1 ? "`" : "``";
+      if (stack[stack.length - 1] === token) stack.pop();
+      else stack.push(token);
+      i += run;
+      markSafeAt(i);
+      continue;
+    }
+    if (ch === "*") {
+      let run = 0;
+      while (i + run < n && nextText[i + run] === "*") run += 1;
+      const token = run === 1 ? "*" : "**";
+      if (stack[stack.length - 1] === token) stack.pop();
+      else stack.push(token);
+      i += run;
+      markSafeAt(i);
+      continue;
+    }
+    if (ch === "$") {
+      let run = 0;
+      while (i + run < n && nextText[i + run] === "$") run += 1;
+      const token = run === 1 ? "$" : "$$";
+      if (stack[stack.length - 1] === token) stack.pop();
+      else stack.push(token);
+      i += run;
+      markSafeAt(i);
+      continue;
+    }
+    if (ch === "[") {
+      stack.push("[");
+      i += 1;
+      markSafeAt(i);
+      continue;
+    }
+    if (ch === "]") {
+      if (stack[stack.length - 1] === "[") stack.pop();
+      i += 1;
+      markSafeAt(i);
+      continue;
+    }
+    if (ch === "(") {
+      stack.push("(");
+      i += 1;
+      markSafeAt(i);
+      continue;
+    }
+    if (ch === ")") {
+      if (stack[stack.length - 1] === "(") stack.pop();
+      i += 1;
+      markSafeAt(i);
+      continue;
+    }
+    i += 1;
+    markSafeAt(i);
+  }
+  return { safe, stack, lineStart };
+}
+
+/**
+ * 增量推进长单段 inline 窗口（Phase 5）：
+ * - append-only → 只扩展 safe 数组到新增 suffix；再对「窗口起点之后」贪心切 chunk
+ * - 已 stable chunk 内容不变（React.memo 命中）；可变区域 ≈ maxChars 有界
+ * - 非 append-only / 缩短 → deterministic full reset
+ * - 幂等：text.length === prev.prefix.length 时返回 prev
+ */
+export function advanceKiroInlineScan(
+  prev: KiroInlineScanState,
+  text: string
+): KiroInlineScanState {
+  if (text.length < prev.prefix.length || !text.startsWith(prev.prefix)) {
+    return createKiroInlineScanState(text, prev.maxChars);
+  }
+  if (text.length === prev.prefix.length) return prev;
+  bumpStreamPerf("inlineSplitterCalls");
+  addStreamPerfChars("inlineSplitterChars", text.length - prev.prefix.length);
+
+  const { safe, stack, lineStart } = extendInlineSafe(prev, text);
+  const { chunks: newChunks, tail } = cutChunksFrom(text, safe, prev.start, prev.maxChars);
+  return {
+    prefix: text,
+    chunks: [...prev.chunks, ...newChunks],
+    start: text.length - tail.length,
+    tail,
+    stack,
+    safe,
+    lineStart,
+    maxChars: prev.maxChars,
+  };
+}
+
+/** 从指定 start 起贪心切（start 之前已有 chunk；规则与全量一致） */
+function cutChunksFrom(
+  text: string,
+  safe: boolean[],
+  start: number,
+  maxChars: number
+): { chunks: string[]; tail: string } {
+  const chunks: string[] = [];
+  const n = text.length;
+  while (n - start > maxChars) {
+    const windowEnd = Math.min(start + maxChars, n);
+    let end = -1;
+    for (let i = windowEnd; i > start; i--) {
+      if (safe[i]) {
+        end = i;
+        break;
+      }
+    }
+    if (end < 0) {
+      for (let i = windowEnd + 1; i <= n; i++) {
+        if (safe[i]) {
+          end = i;
+          break;
+        }
+      }
+      if (end < 0) break;
     }
     chunks.push(text.slice(start, end));
     start = end;

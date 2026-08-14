@@ -67,8 +67,13 @@ export function KiroMessage({
     more.toggle();
   };
 
-  // Final Answer 实际引用的 Web Sources（首次引用顺序、去重）——用于 More → 来源
-  const citedWebSources = React.useMemo(() => collectCitedWebSources(content ?? "", sources), [content, sources]);
+  // Final Answer 实际引用的 Web Sources（首次引用顺序、去重）——用于 More → 来源。
+  // V4.2：streaming / actions 未就绪时不算（Message Actions / More 此时不可用；
+  // 每次 token 全量扫描正文是纯浪费）；Turn settled 后只计算一次并缓存。
+  const citedWebSources = React.useMemo(() => {
+    if (!actionsReady || streaming) return [] as KiroSourceMeta[];
+    return collectCitedWebSources(content ?? "", sources);
+  }, [actionsReady, streaming, content, sources]);
 
   // streaming cursor 只在 Final Answer 真正 streaming 时出现（phase === "answering" 且
   // answer 仍有 streaming text part）；绝不给 commentary / tool row / 已完成的 answer 显示 cursor
@@ -102,8 +107,10 @@ export function KiroMessage({
     <div className="flex gap-3 group" data-testid={testid ?? "kiro-message"}>
       <KiroMark size="sm" className="mt-0.5" />
       <div className="min-w-0 flex-1 space-y-2 pt-0.5">
-        {/* Worklog V2：真实 part 时序（commentary → tool → … → final answer） */}
-        {assistantTurn && assistantTurn.worklog.length > 0 && <KiroWorklog turn={assistantTurn} />}
+        {/* Worklog V2：真实 part 时序（commentary → tool → … → final answer）；V4.2 props 缩窄 */}
+        {assistantTurn && assistantTurn.worklog.length > 0 && (
+          <KiroWorklog worklog={assistantTurn.worklog} phase={assistantTurn.phase} />
+        )}
         {content ? (
           <div>
             {/* Worklog V2 Task 4：Stable Blocks（React.memo 缓存）+ Active Tail（同语义 Markdown） */}

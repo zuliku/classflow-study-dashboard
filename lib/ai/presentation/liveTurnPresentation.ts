@@ -31,6 +31,7 @@ import { formatKiroToolActivityDetail, formatKiroToolActivityHeadline } from "@/
 import { splitKiroStreamingMarkdown } from "@/lib/ai/streaming/markdownBlocks";
 import { isKiroFinalAnswerToolName } from "@/lib/ai/tools/finalAnswer";
 import { resolveToolOutcomeStatus } from "@/lib/ai/presentation/toolOutcome";
+import { bumpStreamPerf, addStreamPerfChars } from "@/lib/ai/perf/streamPerf";
 
 export type KiroTurnPhase = "working" | "composing" | "answering" | "done";
 
@@ -207,6 +208,8 @@ export function updateLiveTurnPresentation(
   parts: unknown[],
   turnInFlight: boolean
 ): KiroAssistantTurnPresentation {
+  bumpStreamPerf("presentationCalls");
+  addStreamPerfChars("presentationParts", (parts ?? []).length);
   const rawParts = (parts ?? []) as RawPart[];
 
   let stepIndex = 0;

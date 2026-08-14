@@ -16,6 +16,7 @@ import { actionSummaryText } from "@/lib/ai/share";
 import { cn } from "@/lib/utils";
 import { RotateCcw, Settings, ChevronDown } from "lucide-react";
 import { useEnterOnAdd } from "@/lib/useEnterOnAdd";
+import { bumpStreamPerf } from "@/lib/ai/perf/streamPerf";
 
 /**
  * Conversation 布局：max-width 820px 居中，纵向文档流。
@@ -97,6 +98,7 @@ export function KiroConversation({
   // 只有确实存在距离差（>2px tolerance）时才赋值，避免无意义重复写 scrollTop
   const rafRef = useRef<number | null>(null);
   const scheduleHeightReconcile = React.useCallback(() => {
+    bumpStreamPerf("resizeObserverCalls");
     if (rafRef.current !== null) return;
     rafRef.current = requestAnimationFrame(() => {
       rafRef.current = null;
@@ -105,6 +107,7 @@ export function KiroConversation({
       if (stickToBottomRef.current) {
         const distance = el.scrollHeight - el.scrollTop - el.clientHeight;
         if (distance > 2) {
+          bumpStreamPerf("scrollTopWrites");
           el.scrollTop = el.scrollHeight;
         }
       }
@@ -135,7 +138,10 @@ export function KiroConversation({
     if (prevConversationKeyRef.current === null) {
       prevConversationKeyRef.current = key;
       const el = scrollRef.current;
-      if (el) el.scrollTop = el.scrollHeight;
+      if (el) {
+        bumpStreamPerf("scrollTopWrites");
+        el.scrollTop = el.scrollHeight;
+      }
       return;
     }
     if (prevConversationKeyRef.current !== key) {
@@ -144,7 +150,10 @@ export function KiroConversation({
       setShowScrollBtn(false);
       const raf = requestAnimationFrame(() => {
         const el = scrollRef.current;
-        if (el) el.scrollTop = el.scrollHeight;
+        if (el) {
+          bumpStreamPerf("scrollTopWrites");
+          el.scrollTop = el.scrollHeight;
+        }
       });
       return () => cancelAnimationFrame(raf);
     }

@@ -47,8 +47,15 @@ export const maxDuration = 60;
 /** smoothStream 中文分词器（module scope 复用；只作用于 text/reasoning cadence） */
 const KIRO_STREAM_SEGMENTER = new Intl.Segmenter("zh", { granularity: "word" });
 
-/** smoothStream 词间间隔（Streaming UX V2 Phase 4：与客户端 24ms throttle 配合形成连续节奏） */
-const KIRO_SMOOTH_STREAM_DELAY_MS = 12;
+/**
+ * smoothStream 词间间隔（Streaming UX V2 Phase 4 12ms → V4.2 light smoothing 4ms）。
+ * V4.2 cadence 证据（本地 SSE 形态 A/B）：burst 大 chunk（300/120ms）p95 gap 135ms；
+ * fine 形态下 12ms vs 5ms 排队 p95 gap 相同（34ms）——12ms 串行排队只增加完成延迟
+ * （8000 字 ≈ 120 chunk × 12ms ≈ 1.4s），对可见节奏无贡献。4ms 保留 chunk 整形
+ * （bursty provider 大段分摊到多帧，避免集中 parse 的 Long Task），客户端 24ms
+ * throttle 仍是唯一 render 合并层。
+ */
+const KIRO_SMOOTH_STREAM_DELAY_MS = 4;
 
 /** 超时 abort → 归一化错误 part；用户主动 Stop 的 abort 原样透传 */
 function guardStream<TOOLS extends ToolSet>(
