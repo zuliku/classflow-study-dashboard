@@ -1050,13 +1050,25 @@ export function useKiroChat({
     setTasksState(tasksRef.current);
   }, []);
 
-  /** 当前 Turn 的主 Task（第一个 Computer tool call 时创建；绑定其 toolCallIds） */
+  /** 当前 Turn 的主 Task（第一个 Computer tool call 时创建；绑定其 toolCallIds）。
+   *  V2.8.1：同一轮对话（同一 User Message）跨 SSE 请求的多个 Computer 工具必须共享同一个 Task——
+   *  即使 activeTaskRef 被 turn 间隙的 finalize 清空，也按 userMessageId 复用已有 Task，
+   *  Task Card 才能聚合展示「删除 N 个文件」的完整变更。 */
   const ensureActiveTask = useCallback((): KiroAgentTask => {
     let task = activeTaskRef.current;
     if (task) return task;
     const lastUser = [...latestChatRef.current.messages].reverse().find((m) => m.role === "user");
+    const userMessageId = lastUser?.id ?? "";
+    // 复用同一 User Message 已存在的 Task（工具链跨请求分裂修复）
+    const existing = userMessageId
+      ? Array.from(tasksRef.current.values()).find((t) => t.userMessageId === userMessageId)
+      : undefined;
+    if (existing) {
+      activeTaskRef.current = existing;
+      return existing;
+    }
     task = createAgentTask({
-      userMessageId: lastUser?.id ?? "",
+      userMessageId,
       conversationId: conversationIdRef.current,
       title: "工作区文件操作",
     });
@@ -1479,11 +1491,14 @@ export function useKiroChat({
     updateTasks();
   }, [updateTasks]);
 
-  // Turn 结束：finalize active task（approval pending 且用户 stop 时，stop 已清 pending + 标 cancelled）
+  // Turn 结束（turnExecution === settled）→ finalize active task。
+  // V2.8.1：工具链跨 SSE 请求的间隙（status 闪 ready）turnExecution 是 awaiting-tool-result /
+  // awaiting-continuation——此时绝不 finalize，保证同一轮多个 Computer 工具共享同一个 Task，
+  // Task Card 聚合展示完整变更（如「删除 N 个文件」）。
   useEffect(() => {
-    if (chat.status === "streaming" || chat.status === "submitted") return;
+    if (turnExecution !== "settled") return;
     finalizeActiveTask();
-  }, [chat.status, finalizeActiveTask]);
+  }, [turnExecution, finalizeActiveTask]);
 
   // Unmount：清除 stale approvals（approval 不能在新会话继续执行）
   useEffect(() => {

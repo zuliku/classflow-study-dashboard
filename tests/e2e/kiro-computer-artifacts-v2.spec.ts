@@ -608,16 +608,13 @@ test("V2 Part 3：Artifact Preview / Download / Recent / Ask Kiro 使用安全�
     expect(serializedRefs).not.toContain(forbidden);
   }
 
-  // ---- Stale record：删文件 → missing → 移除记录 ----
+  // ---- Stale record：删文件 → V2.8 reconciliation：kiro-created + missing → best-effort GC ----
   await deleteSandboxFile(page, "research.md");
   await page.getByRole("button", { name: "最近文件" }).click();
   const recentPanel2 = page.getByRole("dialog", { name: "最近文件" });
   await expect(recentPanel2).toBeVisible();
-  await expect(recentPanel2).toContainText("文件不存在");
-  const removeBtn = recentPanel2.getByRole("button", { name: /移除记录 research.md/ });
-  await expect(removeBtn).toBeVisible();
-  await removeBtn.click();
-  await expect(page.locator('[data-testid="kiro-recent-artifact-row"]').filter({ hasText: "research.md" })).toHaveCount(0);
+  // 打开即 reconciliation：stale kiro-created 记录被 GC，row 自动消失（filesystem 是事实来源）
+  await expect(page.locator('[data-testid="kiro-recent-artifact-row"]').filter({ hasText: "research.md" })).toHaveCount(0, { timeout: 8000 });
   // Artifact metadata + Source 已删（filesystem 未再改动）
   const artifactsAfterStale = await page.evaluate(async () => {
     const db = await new Promise<IDBDatabase | null>((resolve) => {
@@ -2081,8 +2078,10 @@ test("V2.8 场景 L：真实删除全部（path-only delete_file ×2 → 文件�
   // Workspace Auto：全程无 Approval；两份文件真实删除
   const taskCard = page.locator('[data-testid="kiro-message"]').last().getByTestId("kiro-agent-task-card");
   await expect(taskCard).toBeVisible({ timeout: 15000 });
-  // 同轮多 computer 工具会生成多个 task（pre-existing）；Task Card 绑定第一个（删除 本周课表.docx）
+  // V2.8.1：同一轮多工具共享 Task → Task Card 聚合展示两个删除
+  await expect(taskCard).toContainText("已完成 2 项文件更改");
   await expect(taskCard).toContainText("删除 本周课表.docx");
+  await expect(taskCard).toContainText("删除 本周课表-第1周.docx");
   await expect(approval).toHaveCount(0, { timeout: 5000 });
   await expect.poll(async () => readSandboxText(page, "本周课表.docx")).toBeNull();
   await expect.poll(async () => readSandboxText(page, "本周课表-第1周.docx")).toBeNull();
