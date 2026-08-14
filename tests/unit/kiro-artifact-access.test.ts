@@ -194,4 +194,21 @@ describe("download payload", () => {
     const { verifyRenderedDocx } = await import("@/lib/ai/computer/documents/verify");
     expect(await verifyRenderedDocx(docxPayload.bytes, IR_V1)).toBe(true);
   });
+
+  it("DOCX download preflight：损坏 live bytes → VERIFICATION_FAILED（不继续下载）", async () => {
+    const docx = await registerCreatedArtifact({ workspaceId: "ws-a", rootId: "output", relativePath: "bad.docx", type: "docx", document: IR_V1 });
+    // 写入与 Source IR 不一致的损坏文件（malformed styles.xml）
+    const bytes = await renderDocx(IR_V1);
+    const zip = await (await import("jszip")).default.loadAsync(bytes);
+    const broken = new TextEncoder().encode('<w:styles><w:style w:type="paragraph"');
+    zip.file("word/styles.xml", broken);
+    const repacked = new Uint8Array(await zip.generateAsync({ type: "uint8array" }));
+    await sandboxWriteBytes(SANDBOX_A, "bad.docx", repacked, "application/vnd.openxmlformats-officedocument.wordprocessingml.document");
+    await expect(getArtifactDownloadPayload({ artifactId: docx.id, workspaces })).rejects.toThrowError(
+      expect.objectContaining({ code: "VERIFICATION_FAILED" })
+    );
+    // preflight 只 validate，不覆盖文件
+    const io = (await import("@/lib/ai/computer/executor")).getComputerAdapterForAdapterRef(SANDBOX_A);
+    expect((await io.stat("bad.docx"))?.size).toBe(repacked.byteLength);
+  });
 });

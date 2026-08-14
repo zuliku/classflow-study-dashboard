@@ -1,5 +1,10 @@
 import { expect } from "@playwright/test";
 import { test } from "./demoFixtures";
+import { createHash } from "node:crypto";
+import { promises as fsp } from "node:fs";
+import { execFileSync } from "node:child_process";
+import * as os from "node:os";
+import * as path from "node:path";
 
 /**
  * Kiro Computer Agent V2 — Part 1 Offline E2E（确定性，不依赖真实 AI）。
@@ -663,4 +668,181 @@ test("V2 Part 3：Artifact Preview / Download / Recent / Ask Kiro 使用安全�
     }
   });
   expect(artifactsAfterUndo).not.toContain("temp.md");
+});
+
+// ==================== V2.1：真实浏览器下载完整性（P0） ====================
+
+/** 用户真实失败场景的课表 DOCX IR（4 列表格） */
+const SCHEDULE_IR = {
+  title: "本周课表（第1周）",
+  stylePreset: "business-report",
+  blocks: [
+    {
+      type: "table",
+      header: [
+        [{ text: "星期" }],
+        [{ text: "课程" }],
+        [{ text: "时间" }],
+        [{ text: "地点" }],
+      ],
+      rows: [
+        [
+          [{ text: "周一" }],
+          [{ text: "数据结构与算法" }],
+          [{ text: "08:00–09:40" }],
+          [{ text: "计算机楼 102" }],
+        ],
+        [
+          [{ text: "周二" }],
+          [{ text: "概率论与数理统计" }],
+          [{ text: "10:00–11:40" }],
+          [{ text: "教三 305" }],
+        ],
+      ],
+    },
+  ],
+} as const;
+
+/** 浏览器侧读取 Sandbox IndexedDB 的二进制指纹（测试辅助；不进生产代码） */
+async function readSandboxBinaryFingerprint(
+  page: import("@playwright/test").Page,
+  filePath: string
+): Promise<{ size: number; sha256: string } | null> {
+  return page.evaluate(
+    async (p) => {
+      const db = await new Promise<IDBDatabase | null>((resolve) => {
+        const req = indexedDB.open("classflow-kiro-sandbox-v1", 1);
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => resolve(null);
+      });
+      if (!db) return null;
+      try {
+        return await new Promise<{ size: number; sha256: string } | null>((resolve) => {
+          const tx = db.transaction("files", "readonly");
+          const store = tx.objectStore("files");
+          const req = store.get(`sandbox-default\u0000${p}`);
+          req.onsuccess = async () => {
+            const entry = req.result as { bytes?: ArrayBuffer } | undefined;
+            if (!entry || !entry.bytes) {
+              resolve(null);
+              return;
+            }
+            const view = new Uint8Array(entry.bytes);
+            const digest = await crypto.subtle.digest("SHA-256", view);
+            const hex = Array.from(new Uint8Array(digest))
+              .map((b) => b.toString(16).padStart(2, "0"))
+              .join("");
+            resolve({ size: view.byteLength, sha256: hex });
+          };
+          req.onerror = () => resolve(null);
+        });
+      } finally {
+        db.close();
+      }
+    },
+    filePath
+  );
+}
+
+/** Node 侧 SHA-256（下载文件指纹） */
+function sha256Hex(bytes: Buffer): string {
+  return createHash("sha256").update(bytes).digest("hex");
+}
+
+test("V2.1：DOCX 浏览器下载 byte-for-byte 完整性（下载文件 = Sandbox bytes，且通过 DOCX 验证）", async ({ page }) => {
+  let requestCount = 0;
+  await page.route("**/api/ai/chat", async (route) => {
+    requestCount += 1;
+    if (requestCount === 1) {
+      await route.fulfill({
+        status: 200,
+        contentType: "text/event-stream",
+        body: toolCallStream("v21-msg-1", "call_create_schedule", "create_document", {
+          path: "本周课表（第1周）.docx",
+          document: SCHEDULE_IR,
+        }),
+      });
+      return;
+    }
+    await route.fulfill({
+      status: 200,
+      contentType: "text/event-stream",
+      body: answerStream("v21-msg-1", "已生成课表 Word 文档。"),
+    });
+  });
+
+  await page.addInitScript(({ settings, key }) => {
+    localStorage.setItem("classflow-ai-settings-v1", JSON.stringify({ version: 0, state: settings }));
+    sessionStorage.setItem("classflow-ai-key:deepseek", key);
+  }, { settings: AI_SETTINGS, key: "sk-test-key" });
+
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/");
+  await page.locator("aside").first().getByRole("button", { name: "Kiro" }).click();
+  await page.waitForTimeout(800);
+
+  const composer = page.getByTestId("kiro-composer");
+  await expect(composer).toBeVisible();
+  await composer.getByRole("button", { name: "Computer" }).click();
+  await expect(composer.getByRole("button", { name: "Computer" })).toHaveAttribute("aria-pressed", "true");
+  const modeMenu = composer.getByRole("button", { name: "权限模式" });
+  await modeMenu.click();
+  await page.getByRole("menuitem", { name: /工作区自动/ }).first().click();
+  await expect(modeMenu).toContainText("工作区自动");
+
+  // ---- create_document(.docx)：verified + Artifact 登记 ----
+  await composer.getByLabel("Ask Kiro").fill("生成课表 Word");
+  await composer.getByLabel("发送").click();
+  const taskCard = page.locator('[data-testid="kiro-message"]').last().getByTestId("kiro-agent-task-card");
+  await expect(taskCard).toBeVisible({ timeout: 15000 });
+  await expect(taskCard).toContainText("本周课表（第1周）.docx");
+
+  // 下载前：Sandbox live bytes 指纹（浏览器侧 SHA-256）
+  const sandboxFp = await readSandboxBinaryFingerprint(page, "本周课表（第1周）.docx");
+  expect(sandboxFp).not.toBeNull();
+  expect(sandboxFp!.size).toBeGreaterThan(0);
+
+  // ---- 真实浏览器下载：读取磁盘上的下载文件 ----
+  const downloadPromise = page.waitForEvent("download");
+  await taskCard.getByRole("button", { name: "下载 本周课表（第1周）.docx" }).click();
+  const download = await downloadPromise;
+  // 展示层文件名清理（扩展名前无多余空格）
+  expect(download.suggestedFilename()).toBe("本周课表（第1周）.docx");
+  const downloadPath = await download.path();
+  expect(downloadPath).not.toBeNull();
+  const downloaded = await fsp.readFile(downloadPath!);
+  expect(downloaded.byteLength).toBeGreaterThan(0);
+
+  // ---- byte-for-byte 一致性：size + SHA-256 ----
+  expect(downloaded.byteLength).toBe(sandboxFp!.size);
+  expect(sha256Hex(downloaded)).toBe(sandboxFp!.sha256);
+
+  // ---- 下载文件本身通过 DOCX 校验（package + round-trip）----
+  const { verifyDocxBytes, verifyRenderedDocx } = await import("@/lib/ai/computer/documents/verify");
+  const downloadedBytes = new Uint8Array(downloaded);
+  // PK ZIP signature
+  expect(downloadedBytes[0]).toBe(0x50);
+  expect(downloadedBytes[1]).toBe(0x4b);
+  expect(await verifyDocxBytes(downloadedBytes)).toBe(true);
+  expect(await verifyRenderedDocx(downloadedBytes, SCHEDULE_IR as never)).toBe(true);
+
+  // ---- Optional：LibreOffice compatibility smoke（环境无 soffice 则 SKIPPED）----
+  let soffice = false;
+  try {
+    execFileSync("soffice", ["--version"], { stdio: "ignore" });
+    soffice = true;
+  } catch {
+    soffice = false;
+  }
+  if (soffice) {
+    const outDir = await fsp.mkdtemp(path.join(os.tmpdir(), "kiro-docx-smoke-"));
+    execFileSync("soffice", ["--headless", "--convert-to", "pdf", "--outdir", outDir, downloadPath!], {
+      stdio: "ignore",
+      timeout: 60_000,
+    });
+    const pdf = await fsp.readdir(outDir);
+    expect(pdf.some((f) => f.endsWith(".pdf"))).toBe(true);
+  } else {
+    console.log("SKIPPED: soffice not found — LibreOffice compatibility smoke skipped");
+  }
 });

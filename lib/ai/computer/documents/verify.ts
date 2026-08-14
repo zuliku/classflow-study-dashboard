@@ -142,12 +142,17 @@ export const VERIFY_READBACK_MAX_SEGMENT_CHARS = 160;
 /**
  * 强化验证：package 有效 + Mammoth raw-text round-trip 与 Source IR 做 bounded semantic read-back。
  * 不要求二进制 exact match；只验证若干前部非空 text segment 出现在生成文档提取文本中。
+ * 浏览器 / Node 环境自适应（浏览器无 Buffer；与 attachments/docx.ts 同一约定）。
  */
 export async function verifyRenderedDocx(bytes: Uint8Array, source: KiroDocument): Promise<boolean> {
   if (!(await verifyDocxBytes(bytes))) return false;
   try {
     const mammoth = await import("mammoth");
-    const result = await mammoth.extractRawText({ buffer: Buffer.from(bytes) });
+    const options =
+      typeof window === "undefined"
+        ? { buffer: Buffer.from(bytes) }
+        : { arrayBuffer: bytes.slice().buffer as ArrayBuffer };
+    const result = await mammoth.extractRawText(options);
     const extracted = normalizeForCompare(result.value ?? "");
     if (!extracted) return false;
     const segments = collectDocumentPlainText(source);

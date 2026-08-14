@@ -15,7 +15,7 @@ import {
 import { KiroWorkspaceMeta } from "@/lib/ai/computer/types";
 import { normalizeRelativeComputerPath } from "@/lib/ai/computer/workspace/resolver";
 import { getComputerAdapterForAdapterRef } from "@/lib/ai/computer/executor";
-import { inspectDocumentFacts } from "@/lib/ai/computer/documents/verify";
+import { inspectDocumentFacts, verifyDocxBytes, verifyRenderedDocx } from "@/lib/ai/computer/documents/verify";
 
 export const MAX_ARTIFACT_PREVIEW_BYTES = 20 * 1024 * 1024;
 export const MAX_ARTIFACT_PREVIEW_CHARS = 100_000;
@@ -269,7 +269,9 @@ export async function getArtifactPreview(input: {
   };
 }
 
-/** 下载：永远读当前真实文件 bytes（不做缓存/Source IR/旧 bytes 导出） */
+/** 下载：永远读当前真实文件 bytes（不做缓存/Source IR/旧 bytes 导出）。
+ *  DOCX 下载前 preflight（V2.1）：live bytes 重新验证——损坏的 DOCX 不允许继续下载。
+ *  preflight 只 validate，绝不重新 render / 覆盖当前文件（filesystem 仍是真实事实来源）。 */
 export async function getArtifactDownloadPayload(input: {
   artifactId: string;
   workspaces: KiroWorkspaceMeta[];
@@ -280,6 +282,16 @@ export async function getArtifactDownloadPayload(input: {
     throw new ComputerError("RESOURCE_NOT_FOUND", "文件不存在");
   }
   const bytes = await io.readBytes(path);
+  if (artifact.type === "docx") {
+    const source = await getArtifactSource(artifact.id);
+    const verified =
+      source && source.revision === artifact.revision
+        ? await verifyRenderedDocx(bytes, source.document)
+        : await verifyDocxBytes(bytes);
+    if (!verified) {
+      throw new ComputerError("VERIFICATION_FAILED", "文档文件校验失败，请让 Kiro 重新生成。");
+    }
+  }
   return {
     artifact,
     fileName: artifact.displayName,
