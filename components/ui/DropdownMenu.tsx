@@ -59,6 +59,6 @@ export function DropdownMenuItem({
   );
 }
 
-export function DropdownMenuDivider() {
-  return <div role="separator" className="my-1 h-px bg-line-soft" />;
+export function DropdownMenuDivider({ className }: { className?: string }) {
+  return <div role="separator" className={cn("my-1 h-px bg-line-soft", className)} />;
 }

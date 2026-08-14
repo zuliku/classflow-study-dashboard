@@ -103,10 +103,10 @@ export function KiroSessionActions({
         </button>
           <KiroMenuPanel open={more.open} placement="bottom-end">
             {variant === "workspace" ? (
-              <>
-                {/* 新对话 / 历史记录由 Thread Rail 承担；移动端（<md）保留历史 Sheet 入口 */}
+              /* 历史记录仅移动端可见；其专属 divider 与它同响应式可见性——
+                 desktop（>=md）两者都不可见，菜单顶部第一个可见元素恒为「复制全部对话」 */
+              <div className="md:hidden">
                 <KiroMenuItem
-                  className="md:hidden"
                   icon={HistoryIcon}
                   label="历史记录"
                   onClick={() => {
@@ -114,7 +114,8 @@ export function KiroSessionActions({
                     more.close();
                   }}
                 />
-              </>
+                <KiroMenuDivider />
+              </div>
             ) : (
               <>
                 <KiroMenuItem
@@ -131,9 +132,9 @@ export function KiroSessionActions({
                     more.close();
                   }}
                 />
+                <KiroMenuDivider />
               </>
             )}
-            <KiroMenuDivider />
             <KiroMenuItem icon={Copy} label="复制全部对话" disabled={!hasMessages} onClick={copyAll} />
             <KiroMenuItem icon={FileDown} label="导出 Markdown" disabled={!hasMessages} onClick={exportMarkdown} />
             <KiroMenuDivider />

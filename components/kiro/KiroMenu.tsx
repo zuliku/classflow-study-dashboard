@@ -73,6 +73,6 @@ export function KiroMenuItem(props: {
   return <DropdownMenuItem {...props} />;
 }
 
-export function KiroMenuDivider() {
-  return <DropdownMenuDivider />;
+export function KiroMenuDivider({ className }: { className?: string }) {
+  return <DropdownMenuDivider className={className} />;
 }

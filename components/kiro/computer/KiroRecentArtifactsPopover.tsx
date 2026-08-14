@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { FileClock, Eye, Download, MessagesSquare, Trash2 } from "lucide-react";
+import { FileClock, Eye, Download, MessagesSquare, Trash2, Loader2 } from "lucide-react";
 import { useKiroComputerStore } from "@/store/useKiroComputerStore";
 import { useKiroRuntime } from "@/components/kiro/KiroSessionProvider";
 import { useKiroArtifactActions } from "@/hooks/useKiroArtifactActions";
@@ -166,14 +166,22 @@ export function KiroRecentArtifactsPopover() {
             </span>
           </div>
 
-          <div className="min-h-[180px] max-h-[420px] overflow-y-auto">
+          {/* V4.1：内容高度跟随真实文件数量——移除固定 min-height；仅超限滚动 */}
+          <div className="max-h-[min(420px,60dvh)] overflow-y-auto">
             {loading && entries.length === 0 && (
-              <p className="p-3 text-[11px] text-sandrift">加载中…</p>
+              <div className="h-[104px] flex flex-col items-center justify-center gap-2 text-sandrift">
+                <Loader2 className="w-4 h-4 animate-spin shrink-0" aria-hidden="true" />
+                <p className="text-[11px]">加载最近文件…</p>
+              </div>
             )}
             {!loading && entries.length === 0 && (
-              <p className="p-3 text-[11px] text-sandrift leading-relaxed">
-                Kiro 创建或采用的文件会出现在这里
-              </p>
+              <div className="h-[104px] flex flex-col items-center justify-center gap-1.5 px-4">
+                <FileClock className="w-4 h-4 text-sandrift shrink-0" aria-hidden="true" />
+                <p className="text-[11px] font-semibold text-charcoal">暂无最近文件</p>
+                <p className="text-[10px] text-sandrift text-center leading-relaxed">
+                  Kiro 创建或采用的文件会显示在这里
+                </p>
+              </div>
             )}
             {entries.map((entry) => {
               const available = entry.availability === "available";
