@@ -170,13 +170,13 @@ test("V2 Artifact：创建 draft.md → rename → 审批 → 重命名事实 �
   const composer = page.getByTestId("kiro-composer");
   await expect(composer).toBeVisible();
 
-  // ---- Turn 1：Sandbox 引导 + Workspace Auto → create_text_file draft.md ----
+  // ---- Turn 1：Sandbox 引导 + Guided → create_text_file draft.md（create allow）----
   await composer.getByRole("button", { name: "Computer" }).click();
   await expect(composer.getByRole("button", { name: "Computer" })).toHaveAttribute("aria-pressed", "true");
   const modeMenu = composer.getByRole("button", { name: "权限模式" });
   await modeMenu.click();
-  await page.getByRole("menuitem", { name: /工作区自动/ }).first().click();
-  await expect(modeMenu).toContainText("工作区自动");
+  await page.getByRole("menuitem", { name: /受控/ }).first().click();
+  await expect(modeMenu).toContainText("受控");
 
   await composer.getByLabel("Ask Kiro").fill("创建 draft.md");
   await composer.getByLabel("发送").click();
@@ -186,7 +186,7 @@ test("V2 Artifact：创建 draft.md → rename → 审批 → 重命名事实 �
   await expect(taskCard).toContainText("创建 draft.md");
   expect(await readSandboxText(page, "draft.md")).toBe(DRAFT_CONTENT);
 
-  // ---- Turn 2：rename_file（Workspace Auto 仍 ask）→ Approval Dialog ----
+  // ---- Turn 2：rename_file（Guided ask）→ Approval Dialog ----
   await composer.getByLabel("Ask Kiro").fill("把 draft.md 重命名为 final.md");
   await composer.getByLabel("发送").click();
 
@@ -1165,7 +1165,7 @@ test("V2.5 场景 A：legacy Kiro DOCX 下载时自动 self-heal（下载 = curr
   expect(fp!.size).toBe(downloaded.byteLength);
 });
 
-test("V2.5 场景 B：Agent delete_file → 确认后删除（Approval 前文件仍在，允许后消失，Task Card 显示删除）", async ({ page }) => {
+test("V2.5 场景 B（V2.7 Guided）：Agent delete_file → 确认后删除（Approval 前文件仍在，允许后消失，Task Card 显示删除）", async ({ page }) => {
   let requestCount = 0;
   await page.route("**/api/ai/chat", async (route) => {
     requestCount += 1;
@@ -1198,7 +1198,8 @@ test("V2.5 场景 B：Agent delete_file → 确认后删除（Approval 前文件
   await expect(composer.getByRole("button", { name: "Computer" })).toHaveAttribute("aria-pressed", "true");
   const modeMenu = composer.getByRole("button", { name: "权限模式" });
   await modeMenu.click();
-  await page.getByRole("menuitem", { name: /工作区自动/ }).first().click();
+  await page.getByRole("menuitem", { name: /受控/ }).first().click();
+  await expect(modeMenu).toContainText("受控");
 
   await seedSandboxFile(page, "test.txt", { text: "要删除的内容" });
   expect(await readSandboxText(page, "test.txt")).toBe("要删除的内容");
@@ -1206,7 +1207,7 @@ test("V2.5 场景 B：Agent delete_file → 确认后删除（Approval 前文件
   await composer.getByLabel("Ask Kiro").fill("删除 test.txt");
   await composer.getByLabel("发送").click();
 
-  // Approval Dialog（fs.delete always-ask，即使 Workspace Auto）
+  // Approval Dialog（Guided fs.delete = ask）
   const approval = page.getByTestId("kiro-approval-dialog");
   await expect(approval).toBeVisible({ timeout: 15000 });
   await expect(approval).toContainText("删除文件 test.txt");
@@ -1216,10 +1217,11 @@ test("V2.5 场景 B：Agent delete_file → 确认后删除（Approval 前文件
 
   await approval.getByTestId("approval-allow-once").click();
 
-  // 允许后真正删除 + Task Card 显示「删除 test.txt」
+  // 允许后真正删除 + Task Card 显示「删除 test.txt」+ 不再弹同一 Approval
   const taskCard = page.locator('[data-testid="kiro-message"]').last().getByTestId("kiro-agent-task-card");
   await expect(taskCard).toBeVisible({ timeout: 15000 });
   await expect(taskCard).toContainText("删除 test.txt");
+  await expect(page.getByTestId("kiro-approval-dialog")).toHaveCount(0, { timeout: 5000 });
   expect(await readSandboxText(page, "test.txt")).toBeNull();
 });
 
@@ -1378,9 +1380,9 @@ const PROBE_FIXED_EPOCH_MS = 1784070000000;
 function withFixedDate<T>(fn: () => Promise<T>): Promise<T> {
   const RealDate = globalThis.Date;
   const FixedDate = class extends RealDate {
-    constructor(...args: ConstructorParameters<typeof Date>) {
+    constructor(...args: any[]) {
       if (args.length === 0) super(PROBE_FIXED_EPOCH_MS);
-      else super(...(args as [number | string | Date]));
+      else super(args[0] as number | string | Date);
     }
     static now() {
       return PROBE_FIXED_EPOCH_MS;
@@ -1419,7 +1421,7 @@ test("V2.6 探针：Kiro-V26-Word-Probe.docx 三段 SHA 一致（render=Sandbox=
     const FixedDate = class extends RealDate {
       constructor(...args: any[]) {
         if (args.length === 0) super(epoch);
-        else super(...args);
+        else super(args[0] as number | string | Date);
       }
       static now() {
         return epoch;
@@ -1502,7 +1504,8 @@ test("V2.6 探针：Kiro-V26-Word-Probe.docx 三段 SHA 一致（render=Sandbox=
           let binary = "";
           const view = new Uint8Array(entry.bytes);
           for (let i = 0; i < view.byteLength; i += 0x8000) {
-            binary += String.fromCharCode(...view.subarray(i, i + 0x8000));
+            const chunk = view.subarray(i, i + 0x8000);
+            for (let j = 0; j < chunk.byteLength; j++) binary += String.fromCharCode(chunk[j]);
           }
           resolve(btoa(binary));
         };
@@ -1543,4 +1546,391 @@ test("V2.6 探针：Kiro-V26-Word-Probe.docx 三段 SHA 一致（render=Sandbox=
   } catch {
     console.log("SKIPPED: soffice not found — LibreOffice render smoke skipped");
   }
+});
+
+// ==================== V2.7：Workspace Auto Full Workspace Access + Approval Deadlock Fix ====================
+
+/** 单个 SSE 里两个 tool-call（approval queue 测试用） */
+function twoToolCallStream(
+  messageId: string,
+  callA: { id: string; name: string; input: unknown },
+  callB: { id: string; name: string; input: unknown }
+): string {
+  const parts = [
+    { type: "start", messageId },
+    { type: "start-step" },
+    { type: "tool-input-start", toolCallId: callA.id, toolName: callA.name },
+    { type: "tool-input-delta", toolCallId: callA.id, inputTextDelta: JSON.stringify(callA.input) },
+    { type: "tool-input-available", toolCallId: callA.id, toolName: callA.name, input: callA.input },
+    { type: "tool-input-start", toolCallId: callB.id, toolName: callB.name },
+    { type: "tool-input-delta", toolCallId: callB.id, inputTextDelta: JSON.stringify(callB.input) },
+    { type: "tool-input-available", toolCallId: callB.id, toolName: callB.name, input: callB.input },
+    { type: "finish-step" },
+    { type: "finish", finishReason: "tool-calls" },
+  ];
+  return sse(parts.map((p) => JSON.stringify(p)));
+}
+
+test("V2.7 场景 E：Workspace Auto 删除 → 无 Approval（文件消失、task completed、agent 继续 Final Answer）", async ({ page }) => {
+  let requestCount = 0;
+  await page.route("**/api/ai/chat", async (route) => {
+    requestCount += 1;
+    if (requestCount === 1) {
+      await route.fulfill({
+        status: 200,
+        contentType: "text/event-stream",
+        body: toolCallStream("v27e-1", "call_auto_del", "delete_file", { rootId: "root-sandbox", path: "auto-delete.txt" }),
+      });
+      return;
+    }
+    await route.fulfill({
+      status: 200,
+      contentType: "text/event-stream",
+      body: answerStream("v27e-1", "已删除 auto-delete.txt。"),
+    });
+  });
+  await page.addInitScript(({ settings, key }) => {
+    localStorage.setItem("classflow-ai-settings-v1", JSON.stringify({ version: 0, state: settings }));
+    sessionStorage.setItem("classflow-ai-key:deepseek", key);
+  }, { settings: AI_SETTINGS, key: "sk-test-key" });
+
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/");
+  await page.locator("aside").first().getByRole("button", { name: "Kiro" }).click();
+  await page.waitForTimeout(800);
+  const composer = page.getByTestId("kiro-composer");
+  await expect(composer).toBeVisible();
+  await composer.getByRole("button", { name: "Computer" }).click();
+  await expect(composer.getByRole("button", { name: "Computer" })).toHaveAttribute("aria-pressed", "true");
+  const modeMenu = composer.getByRole("button", { name: "权限模式" });
+  await modeMenu.click();
+  await page.getByRole("menuitem", { name: /工作区自动/ }).first().click();
+  await expect(modeMenu).toContainText("工作区自动");
+
+  await seedSandboxFile(page, "auto-delete.txt", { text: "自动删除目标" });
+  expect(await readSandboxText(page, "auto-delete.txt")).toBe("自动删除目标");
+
+  const approval = page.getByTestId("kiro-approval-dialog");
+  await expect(approval).toHaveCount(0);
+
+  await composer.getByLabel("Ask Kiro").fill("删除 auto-delete.txt");
+  await composer.getByLabel("发送").click();
+
+  const taskCard = page.locator('[data-testid="kiro-message"]').last().getByTestId("kiro-agent-task-card");
+  await expect(taskCard).toBeVisible({ timeout: 15000 });
+  await expect(taskCard).toContainText("删除 auto-delete.txt");
+  // Workspace Auto：fs.delete = allow → 全程无 Approval
+  await expect(approval).toHaveCount(0, { timeout: 5000 });
+  await expect.poll(async () => readSandboxText(page, "auto-delete.txt")).toBeNull();
+});
+
+test("V2.7 场景 F：Workspace Auto 移动 → 无 Approval（move_file 直接执行）", async ({ page }) => {
+  let requestCount = 0;
+  await page.route("**/api/ai/chat", async (route) => {
+    requestCount += 1;
+    if (requestCount === 1) {
+      await route.fulfill({
+        status: 200,
+        contentType: "text/event-stream",
+        body: toolCallStream("v27f-1", "call_auto_move", "move_file", {
+          rootId: "root-sandbox",
+          path: "a.txt",
+          destinationRootId: "root-sandbox",
+          destinationPath: "folder/a.txt",
+        }),
+      });
+      return;
+    }
+    await route.fulfill({
+      status: 200,
+      contentType: "text/event-stream",
+      body: answerStream("v27f-1", "已移动 a.txt。"),
+    });
+  });
+  await page.addInitScript(({ settings, key }) => {
+    localStorage.setItem("classflow-ai-settings-v1", JSON.stringify({ version: 0, state: settings }));
+    sessionStorage.setItem("classflow-ai-key:deepseek", key);
+  }, { settings: AI_SETTINGS, key: "sk-test-key" });
+
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/");
+  await page.locator("aside").first().getByRole("button", { name: "Kiro" }).click();
+  await page.waitForTimeout(800);
+  const composer = page.getByTestId("kiro-composer");
+  await expect(composer).toBeVisible();
+  await composer.getByRole("button", { name: "Computer" }).click();
+  await expect(composer.getByRole("button", { name: "Computer" })).toHaveAttribute("aria-pressed", "true");
+  const modeMenu = composer.getByRole("button", { name: "权限模式" });
+  await modeMenu.click();
+  await page.getByRole("menuitem", { name: /工作区自动/ }).first().click();
+
+  await seedSandboxFile(page, "a.txt", { text: "移动目标" });
+  expect(await readSandboxText(page, "a.txt")).toBe("移动目标");
+
+  await composer.getByLabel("Ask Kiro").fill("把 a.txt 移到 folder");
+  await composer.getByLabel("发送").click();
+
+  const taskCard = page.locator('[data-testid="kiro-message"]').last().getByTestId("kiro-agent-task-card");
+  await expect(taskCard).toBeVisible({ timeout: 15000 });
+  await expect(page.getByTestId("kiro-approval-dialog")).toHaveCount(0, { timeout: 5000 });
+  await expect.poll(async () => readSandboxText(page, "folder/a.txt")).toBe("移动目标");
+  expect(await readSandboxText(page, "a.txt")).toBeNull();
+});
+
+test("V2.7 场景 G：Guided「此 Workspace 始终允许」→ 同 Workspace 第二次删除不再弹 Approval", async ({ page }) => {
+  let requestCount = 0;
+  await page.route("**/api/ai/chat", async (route) => {
+    requestCount += 1;
+    if (requestCount === 1) {
+      await route.fulfill({
+        status: 200,
+        contentType: "text/event-stream",
+        body: toolCallStream("v27g-1", "call_g1", "delete_file", { rootId: "root-sandbox", path: "a.txt" }),
+      });
+      return;
+    }
+    if (requestCount === 2) {
+      await route.fulfill({
+        status: 200,
+        contentType: "text/event-stream",
+        body: answerStream("v27g-1", "已删除 a.txt。"),
+      });
+      return;
+    }
+    if (requestCount === 3) {
+      await route.fulfill({
+        status: 200,
+        contentType: "text/event-stream",
+        body: toolCallStream("v27g-2", "call_g2", "delete_file", { rootId: "root-sandbox", path: "b.txt" }),
+      });
+      return;
+    }
+    await route.fulfill({
+      status: 200,
+      contentType: "text/event-stream",
+      body: answerStream("v27g-2", "已删除 b.txt。"),
+    });
+  });
+  await page.addInitScript(({ settings, key }) => {
+    localStorage.setItem("classflow-ai-settings-v1", JSON.stringify({ version: 0, state: settings }));
+    sessionStorage.setItem("classflow-ai-key:deepseek", key);
+  }, { settings: AI_SETTINGS, key: "sk-test-key" });
+
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/");
+  await page.locator("aside").first().getByRole("button", { name: "Kiro" }).click();
+  await page.waitForTimeout(800);
+  const composer = page.getByTestId("kiro-composer");
+  await expect(composer).toBeVisible();
+  await composer.getByRole("button", { name: "Computer" }).click();
+  await expect(composer.getByRole("button", { name: "Computer" })).toHaveAttribute("aria-pressed", "true");
+  const modeMenu = composer.getByRole("button", { name: "权限模式" });
+  await modeMenu.click();
+  await page.getByRole("menuitem", { name: /受控/ }).first().click();
+
+  await seedSandboxFile(page, "a.txt", { text: "A" });
+  await seedSandboxFile(page, "b.txt", { text: "B" });
+
+  // Turn 1：删除 a.txt → approval → allow-workspace
+  await composer.getByLabel("Ask Kiro").fill("删除 a.txt");
+  await composer.getByLabel("发送").click();
+  const approval = page.getByTestId("kiro-approval-dialog");
+  await expect(approval).toBeVisible({ timeout: 15000 });
+  await approval.getByTestId("approval-allow-workspace").click();
+  await expect.poll(async () => readSandboxText(page, "a.txt")).toBeNull();
+
+  // Turn 2：删除 b.txt → 同 Workspace allow rule 生效 → 无 Approval 直接删除
+  await composer.getByLabel("Ask Kiro").fill("删除 b.txt");
+  await composer.getByLabel("发送").click();
+  const taskCard = page.locator('[data-testid="kiro-message"]').last().getByTestId("kiro-agent-task-card");
+  await expect(taskCard).toBeVisible({ timeout: 15000 });
+  await expect(approval).toHaveCount(0, { timeout: 5000 });
+  await expect.poll(async () => readSandboxText(page, "b.txt")).toBeNull();
+});
+
+test("V2.7 场景 H：Approval 队列 → 点 A 后 B 立即显示且按钮可用（busy 不继承）", async ({ page }) => {
+  let requestCount = 0;
+  await page.route("**/api/ai/chat", async (route) => {
+    requestCount += 1;
+    if (requestCount === 1) {
+      await route.fulfill({
+        status: 200,
+        contentType: "text/event-stream",
+        body: twoToolCallStream(
+          "v27h-1",
+          { id: "call_q1", name: "delete_file", input: { rootId: "root-sandbox", path: "q1.txt" } },
+          { id: "call_q2", name: "delete_file", input: { rootId: "root-sandbox", path: "q2.txt" } }
+        ),
+      });
+      return;
+    }
+    await route.fulfill({
+      status: 200,
+      contentType: "text/event-stream",
+      body: answerStream("v27h-1", "已删除。"),
+    });
+  });
+  await page.addInitScript(({ settings, key }) => {
+    localStorage.setItem("classflow-ai-settings-v1", JSON.stringify({ version: 0, state: settings }));
+    sessionStorage.setItem("classflow-ai-key:deepseek", key);
+  }, { settings: AI_SETTINGS, key: "sk-test-key" });
+
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/");
+  await page.locator("aside").first().getByRole("button", { name: "Kiro" }).click();
+  await page.waitForTimeout(800);
+  const composer = page.getByTestId("kiro-composer");
+  await expect(composer).toBeVisible();
+  await composer.getByRole("button", { name: "Computer" }).click();
+  await expect(composer.getByRole("button", { name: "Computer" })).toHaveAttribute("aria-pressed", "true");
+  const modeMenu = composer.getByRole("button", { name: "权限模式" });
+  await modeMenu.click();
+  await page.getByRole("menuitem", { name: /受控/ }).first().click();
+
+  await seedSandboxFile(page, "q1.txt", { text: "Q1" });
+  await seedSandboxFile(page, "q2.txt", { text: "Q2" });
+
+  await composer.getByLabel("Ask Kiro").fill("删除 q1.txt 和 q2.txt");
+  await composer.getByLabel("发送").click();
+
+  const approval = page.getByTestId("kiro-approval-dialog");
+  // Approval A（q1）
+  await expect(approval).toBeVisible({ timeout: 15000 });
+  await expect(approval).toContainText("q1.txt");
+  await approval.getByTestId("approval-allow-once").click();
+
+  // Approval B（q2）立即显示，按钮必须可用（busy reset by request.id）
+  await expect(approval).toBeVisible({ timeout: 15000 });
+  await expect(approval).toContainText("q2.txt");
+  await expect(approval.getByTestId("approval-allow-once")).toBeEnabled();
+  await approval.getByTestId("approval-allow-once").click();
+
+  await expect.poll(async () => readSandboxText(page, "q1.txt")).toBeNull();
+  await expect.poll(async () => readSandboxText(page, "q2.txt")).toBeNull();
+  await expect(approval).toHaveCount(0, { timeout: 5000 });
+});
+
+test("V2.7 场景 I：resume 失败（文件在审批期间消失）→ Dialog 关闭、不卡死、Task 进入错误态", async ({ page }) => {
+  let requestCount = 0;
+  await page.route("**/api/ai/chat", async (route) => {
+    requestCount += 1;
+    if (requestCount === 1) {
+      await route.fulfill({
+        status: 200,
+        contentType: "text/event-stream",
+        body: toolCallStream("v27i-1", "call_gone", "delete_file", { rootId: "root-sandbox", path: "gone.txt" }),
+      });
+      return;
+    }
+    await route.fulfill({
+      status: 200,
+      contentType: "text/event-stream",
+      body: answerStream("v27i-1", "已处理。"),
+    });
+  });
+  await page.addInitScript(({ settings, key }) => {
+    localStorage.setItem("classflow-ai-settings-v1", JSON.stringify({ version: 0, state: settings }));
+    sessionStorage.setItem("classflow-ai-key:deepseek", key);
+  }, { settings: AI_SETTINGS, key: "sk-test-key" });
+
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/");
+  await page.locator("aside").first().getByRole("button", { name: "Kiro" }).click();
+  await page.waitForTimeout(800);
+  const composer = page.getByTestId("kiro-composer");
+  await expect(composer).toBeVisible();
+  await composer.getByRole("button", { name: "Computer" }).click();
+  await expect(composer.getByRole("button", { name: "Computer" })).toHaveAttribute("aria-pressed", "true");
+  const modeMenu = composer.getByRole("button", { name: "权限模式" });
+  await modeMenu.click();
+  await page.getByRole("menuitem", { name: /受控/ }).first().click();
+
+  await seedSandboxFile(page, "gone.txt", { text: "即将消失" });
+
+  await composer.getByLabel("Ask Kiro").fill("删除 gone.txt");
+  await composer.getByLabel("发送").click();
+  const approval = page.getByTestId("kiro-approval-dialog");
+  await expect(approval).toBeVisible({ timeout: 15000 });
+
+  // 审批期间文件被外部移除（模拟 resume 时执行失败）
+  await page.evaluate(() => {
+    void (async () => {
+      const db = await new Promise<IDBDatabase | null>((resolve) => {
+        const req = indexedDB.open("classflow-kiro-sandbox-v1", 1);
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => resolve(null);
+      });
+      if (!db) return;
+      try {
+        return await new Promise<void>((resolve) => {
+          const tx = db.transaction("files", "readwrite");
+          tx.objectStore("files").delete("sandbox-default\u0000gone.txt");
+          tx.oncomplete = () => resolve();
+          tx.onerror = () => resolve();
+        });
+      } finally {
+        db.close();
+      }
+    })();
+  });
+
+  await approval.getByTestId("approval-allow-once").click();
+
+  // Dialog 立即释放（不卡死）
+  await expect(approval).toHaveCount(0, { timeout: 5000 });
+  const taskCard = page.locator('[data-testid="kiro-message"]').last().getByTestId("kiro-agent-task-card");
+  await expect(taskCard).toBeVisible({ timeout: 15000 });
+  // Task 进入错误态（不是 awaiting_permission forever）
+  await expect(taskCard).toContainText("操作未完成", { timeout: 10000 });
+});
+
+test("V2.7 场景 J：审批弹窗打开 → 拒绝 → Dialog 立即关闭、文件保留、Task cancelled", async ({ page }) => {
+  let requestCount = 0;
+  await page.route("**/api/ai/chat", async (route) => {
+    requestCount += 1;
+    if (requestCount === 1) {
+      await route.fulfill({
+        status: 200,
+        contentType: "text/event-stream",
+        body: toolCallStream("v27j-1", "call_stop", "delete_file", { rootId: "root-sandbox", path: "stop.txt" }),
+      });
+      return;
+    }
+    await route.fulfill({
+      status: 200,
+      contentType: "text/event-stream",
+      body: answerStream("v27j-1", "已处理。"),
+    });
+  });
+  await page.addInitScript(({ settings, key }) => {
+    localStorage.setItem("classflow-ai-settings-v1", JSON.stringify({ version: 0, state: settings }));
+    sessionStorage.setItem("classflow-ai-key:deepseek", key);
+  }, { settings: AI_SETTINGS, key: "sk-test-key" });
+
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/");
+  await page.locator("aside").first().getByRole("button", { name: "Kiro" }).click();
+  await page.waitForTimeout(800);
+  const composer = page.getByTestId("kiro-composer");
+  await expect(composer).toBeVisible();
+  await composer.getByRole("button", { name: "Computer" }).click();
+  await expect(composer.getByRole("button", { name: "Computer" })).toHaveAttribute("aria-pressed", "true");
+  const modeMenu = composer.getByRole("button", { name: "权限模式" });
+  await modeMenu.click();
+  await page.getByRole("menuitem", { name: /受控/ }).first().click();
+
+  await seedSandboxFile(page, "stop.txt", { text: "STOP" });
+
+  await composer.getByLabel("Ask Kiro").fill("删除 stop.txt");
+  await composer.getByLabel("发送").click();
+  const approval = page.getByTestId("kiro-approval-dialog");
+  await expect(approval).toBeVisible({ timeout: 15000 });
+
+  // 拒绝：决策被接受 → Dialog 立即关闭；文件保留；Task cancelled
+  await approval.getByTestId("approval-deny").click();
+  await expect(approval).toHaveCount(0, { timeout: 5000 });
+  expect(await readSandboxText(page, "stop.txt")).toBe("STOP");
+  const taskCard = page.locator('[data-testid="kiro-message"]').last().getByTestId("kiro-agent-task-card");
+  await expect(taskCard).toBeVisible({ timeout: 10000 });
+  await expect(taskCard).toContainText("已取消", { timeout: 5000 });
 });

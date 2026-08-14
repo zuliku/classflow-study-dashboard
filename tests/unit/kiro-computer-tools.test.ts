@@ -98,14 +98,14 @@ describe("tool exposure", () => {
     }
   });
 
-  it("不暴露 shell/app/network 工具；delete_file 是 V2.5 受控 Model Tool（仅单文件）", () => {
+  it("不暴露 shell/app/network 工具；delete_file 是 V2.5 Model Tool（仅单文件；V2.7 policy driven）", () => {
     const names = COMPUTER_TOOLS.map((t) => t.name);
-    // V2.5：delete_file 成为 Model Tool（fs.delete always-ask；仅单文件，无目录/递归/批量）
+    // V2.5：delete_file 成为 Model Tool（仅单文件，无目录/递归/批量；V2.7 起权限由 mode policy 决定）
     expect(names).toContain("delete_file");
     expect(names).not.toContain("delete_directory");
     expect(names).not.toContain("run_shell");
     expect(names).not.toContain("launch_application");
-    // V2：rename_file / move_file 是 fs.move（默认 ask），不是 delete
+    // V2：rename_file / move_file 是 fs.move（Workspace Auto allow；Guided ask）
     expect(names).toContain("rename_file");
     expect(names).toContain("move_file");
     expect(names).toContain("update_document");

@@ -80,19 +80,24 @@ describe("delete_file policy", () => {
     expect(await io.stat("x.txt")).not.toBeNull();
   });
 
-  it("Workspace Auto：仍 ask（删除 always-ask，即使 default allow）", async () => {
+  it("Workspace Auto：fs.delete = allow → 直接删除（无 approval、mutation 一次）", async () => {
     await sandboxWriteText(SANDBOX_REF, "y.txt", "内容");
+    const c = counters();
     const attempt = await executeKiroComputerTool({
       toolName: "delete_file",
       toolCallId: "call-del-auto",
       toolInput: { rootId: "output", path: "y.txt" },
       context: ctx(AUTO_SNAPSHOT),
-      counters: counters(),
+      counters: c,
     });
-    expect(attempt.kind).toBe("approval-required");
+    expect(attempt.kind).toBe("completed");
+    if (attempt.kind !== "completed") return;
+    expect(attempt.output.ok).toBe(true);
+    expect(c.mutationCount).toBe(1);
+    expect(await getComputerAdapterForAdapterRef(SANDBOX_REF).stat("y.txt")).toBeNull();
   });
 
-  it("explicit allow rule 也不能让删除静默执行（always-ask invariant）", async () => {
+  it("Guided + explicit allow rule → allow（「此 Workspace 始终允许」真实生效，不弹 approval）", async () => {
     await sandboxWriteText(SANDBOX_REF, "z.txt", "内容");
     const allowRule: ComputerPermissionRule = {
       id: "allow-del",
@@ -106,10 +111,37 @@ describe("delete_file policy", () => {
       toolName: "delete_file",
       toolCallId: "call-del-allow-rule",
       toolInput: { rootId: "output", path: "z.txt" },
-      context: ctx(AUTO_SNAPSHOT, workspace, [allowRule]),
+      context: ctx(snapshot, workspace, [allowRule]), // guided
       counters: counters(),
     });
-    expect(attempt.kind).toBe("approval-required");
+    expect(attempt.kind).toBe("completed");
+    if (attempt.kind !== "completed") return;
+    expect(attempt.output.ok).toBe(true);
+    expect(await getComputerAdapterForAdapterRef(SANDBOX_REF).stat("z.txt")).toBeNull();
+  });
+
+  it("explicit deny > Workspace Auto default allow（用户 deny 最高优先）", async () => {
+    await sandboxWriteText(SANDBOX_REF, "d.txt", "内容");
+    const denyRule: ComputerPermissionRule = {
+      id: "deny-del",
+      workspaceId: "research",
+      rootId: "output",
+      capability: "fs.delete",
+      effect: "deny",
+      scope: "persistent",
+    };
+    const attempt = await executeKiroComputerTool({
+      toolName: "delete_file",
+      toolCallId: "call-del-deny-rule",
+      toolInput: { rootId: "output", path: "d.txt" },
+      context: ctx(AUTO_SNAPSHOT, workspace, [denyRule]),
+      counters: counters(),
+    });
+    expect(attempt.kind).toBe("completed");
+    if (attempt.kind !== "completed") return;
+    expect(attempt.output.ok).toBe(false);
+    expect((attempt.output as { code: string }).code).toBe("PERMISSION_DENIED");
+    expect(await getComputerAdapterForAdapterRef(SANDBOX_REF).stat("d.txt")).not.toBeNull();
   });
 
   it("approval（allow-once）后真正删除：stat null + mutation 计数一次", async () => {
@@ -119,7 +151,7 @@ describe("delete_file policy", () => {
       toolName: "delete_file",
       toolCallId: "call-del-resume",
       toolInput: { rootId: "output", path: "del.txt" },
-      context: ctx(AUTO_SNAPSHOT),
+      context: ctx(snapshot), // guided → ask
       counters: c,
     });
     expect(pending.kind).toBe("approval-required");
@@ -135,7 +167,7 @@ describe("delete_file policy", () => {
       toolName: "delete_file",
       toolCallId: "call-del-resume",
       toolInput: { rootId: "output", path: "del.txt" },
-      context: ctx(AUTO_SNAPSHOT),
+      context: ctx(snapshot),
       counters: c,
       oneShotApprovals: oneShots,
     });
