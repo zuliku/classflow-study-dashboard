@@ -6,6 +6,7 @@ import { inspectKiroDocxProvenance, readDocxDocProps } from "@/lib/ai/computer/d
 import {
   repairDocumentXml,
   repairStylesXml,
+  repairTableStructureXml,
   repairLegacyKiroDocx,
 } from "@/lib/ai/computer/documents/legacyRepair";
 import { renderDocx } from "@/lib/ai/computer/documents/docx";
@@ -93,6 +94,50 @@ describe("repairLegacyKiroDocx（bounded repair，只修两种已确认签名）
     expect((repaired.match(/<w:numPr/g) ?? []).length).toBe(2);
   });
 
+  it("repairTableStructureXml：补 tblPr+tblGrid，列数从实际 cell 推导（3 列），宽度复用 tcW", () => {
+    const xml =
+      '<w:document xmlns:w="x"><w:body><w:tbl><w:tr>' +
+      '<w:tc><w:tcPr><w:tcW w:w="1000" w:type="dxa"/></w:tcPr><w:p><w:r><w:t>A</w:t></w:r></w:p></w:tc>' +
+      '<w:tc><w:tcPr><w:tcW w:w="2000" w:type="dxa"/></w:tcPr><w:p><w:r><w:t>B</w:t></w:r></w:p></w:tc>' +
+      '<w:tc><w:tcPr><w:tcW w:w="3000" w:type="dxa"/></w:tcPr><w:p><w:r><w:t>C</w:t></w:r></w:p></w:tc>' +
+      "</w:tr></w:tbl></w:body></w:document>";
+    const repaired = repairTableStructureXml(xml);
+    expect(repaired).toContain('<w:tblPr><w:tblW w:type="dxa" w:w="6000"/></w:tblPr>');
+    expect(repaired).toContain('<w:tblGrid><w:gridCol w:w="1000"/><w:gridCol w:w="2000"/><w:gridCol w:w="3000"/></w:tblGrid>');
+    // 顺序：tblPr → tblGrid → tr；cell 文本不动
+    expect(repaired.indexOf("<w:tblPr>")).toBeLessThan(repaired.indexOf("<w:tblGrid>"));
+    expect(repaired.indexOf("<w:tblGrid>")).toBeLessThan(repaired.indexOf("<w:tr>"));
+    expect(repaired).toContain(">A</w:t>");
+    expect(repaired).toContain(">C</w:t>");
+  });
+
+  it("repairTableStructureXml：无 tcW → A4 可打印宽均分（sum 恒等，列数不硬编码）", () => {
+    const xml =
+      '<w:document xmlns:w="x"><w:body><w:tbl><w:tr>' +
+      '<w:tc><w:p><w:r><w:t>1</w:t></w:r></w:p></w:tc>' +
+      '<w:tc><w:p><w:r><w:t>2</w:t></w:r></w:p></w:tc>' +
+      '<w:tc><w:p><w:r><w:t>3</w:t></w:r></w:p></w:tc>' +
+      "</w:tr></w:tbl></w:body></w:document>";
+    const repaired = repairTableStructureXml(xml);
+    const gridCols: number[] = [];
+    let gm: RegExpExecArray | null;
+    const gridRe = /<w:gridCol w:w="(\d+)"/g;
+    while ((gm = gridRe.exec(repaired))) gridCols.push(parseInt(gm[1], 10));
+    expect(gridCols.length).toBe(3);
+    const sum = gridCols.reduce((a, b) => a + b, 0);
+    expect(sum).toBe(9298);
+    // 均分：最大最小差 ≤ 1
+    expect(Math.max(...gridCols) - Math.min(...gridCols)).toBeLessThanOrEqual(1);
+  });
+
+  it("repairTableStructureXml：已有合法 tblPr+tblGrid → 不手术；无 tr 的 tbl → 不手术", () => {
+    const legal =
+      '<w:document xmlns:w="x"><w:body><w:tbl><w:tblPr><w:tblW w:type="dxa" w:w="8000"/></w:tblPr><w:tblGrid><w:gridCol w:w="2000"/></w:tblGrid><w:tr><w:tc><w:p><w:r><w:t>A</w:t></w:r></w:p></w:tc></w:tr></w:tbl></w:body></w:document>';
+    expect(repairTableStructureXml(legal)).toBe(legal);
+    const noTr = '<w:document xmlns:w="x"><w:body><w:tbl></w:tbl></w:body></w:document>';
+    expect(repairTableStructureXml(noTr)).toBe(noTr);
+  });
+
   it("完整 package repair：legacy=false、directTableRuns=0、invalidStyleNumPr=0、verifyDocxBytes=true、文本保留", async () => {
     const { buildRealLegacyDocxBytes } = await import("@/scripts/docx-compat/generate-legacy");
     const legacy = await buildRealLegacyDocxBytes();
@@ -100,8 +145,11 @@ describe("repairLegacyKiroDocx（bounded repair，只修两种已确认签名）
     expect(result.repaired).toBe(true);
     expect(result.before.directTableRuns).toBe(24);
     expect(result.before.invalidStyleNumPr).toBe(2);
+    // V2.9：repair 前 tbl 缺少合法 table structure（无 tblPr/tblGrid）——detector 必须识别
+    expect(result.before.malformedTables).toBe(1);
     expect(result.after.directTableRuns).toBe(0);
     expect(result.after.invalidStyleNumPr).toBe(0);
+    expect(result.after.malformedTables).toBe(0);
     expect((await detectLegacyKiroDocx(result.bytes)).legacy).toBe(false);
     expect(await verifyDocxBytes(result.bytes)).toBe(true);
     // 文本全部保留
@@ -113,6 +161,10 @@ describe("repairLegacyKiroDocx（bounded repair，只修两种已确认签名）
     }
     expect(stylesXml).toContain("List0");
     expect(stylesXml).toContain("List1");
+    // V2.9：tbl 现在包含合法 tblPr + tblGrid（列数 = 4，宽度从 tcW 推导 = 2000×4）
+    expect(documentXml ?? "").toContain('<w:tblPr><w:tblW w:type="dxa" w:w="8000"/></w:tblPr>');
+    expect((documentXml?.match(/<w:gridCol/g) ?? []).length).toBe(4);
+    expect(documentXml ?? "").toContain('<w:gridCol w:w="2000"/>');
   });
 
   it("当前 renderer 输出 → repaired=false（不做任何手术）", async () => {
@@ -191,4 +243,5 @@ describe("adopt 不降级 kiro-created identity（V2.6 provenance invariant）",
     expect(second.source).toBe("workspace-existing");
   });
 });
+
 

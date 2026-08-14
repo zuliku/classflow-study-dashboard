@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+﻿import { describe, it, expect } from "vitest";
 import { readFile } from "node:fs/promises";
 import * as path from "node:path";
 import JSZip from "jszip";
@@ -24,11 +24,13 @@ describe("DOCX fixture matrix（生产 renderDocx + runtime integrity）", () =>
 });
 
 describe("V2.6 真实 legacy 形状 fixture（用户最新失败文件结构）", () => {
-  it("06 复刻真实证据：24 direct w:r under w:tc、2 direct w:numPr under w:style、ClassFlow Kiro docProps", async () => {
+  it("06 复刻真实证据：24 direct w:r under w:tc、2 direct w:numPr under w:style、malformed table structure、ClassFlow Kiro docProps", async () => {
     const legacyBytes = await buildRealLegacyDocxBytes();
     const detection = await detectLegacyKiroDocx(legacyBytes);
     expect(detection.directTableRuns).toBe(24);
     expect(detection.invalidStyleNumPr).toBe(2);
+    // V2.9：tbl 缺少合法 tblPr/tblGrid 必须被识别（OpenXmlValidator 会拒绝这种 table）
+    expect(detection.malformedTables).toBe(1);
     expect(detection.legacy).toBe(true);
     const zip = await JSZip.loadAsync(legacyBytes);
     const core = await zip.file("docProps/core.xml")?.async("string");
@@ -37,13 +39,14 @@ describe("V2.6 真实 legacy 形状 fixture（用户最新失败文件结构）"
     expect(app).toContain("<Application>ClassFlow Kiro</Application>");
   });
 
-  it("07 = 06 bounded repair 后：legacy=false、directTableRuns=0、invalidStyleNumPr=0、runtime integrity 通过", async () => {
+  it("07 = 06 bounded repair 后：legacy=false、directTableRuns=0、invalidStyleNumPr=0、malformedTables=0、runtime integrity 通过", async () => {
     const { fileName } = (await generateLegacyFixtures())[1];
     const repaired = new Uint8Array(await readFile(path.join(DOCX_COMPAT_OUT_DIR, fileName)));
     const detection = await detectLegacyKiroDocx(repaired);
     expect(detection.legacy).toBe(false);
     expect(detection.directTableRuns).toBe(0);
     expect(detection.invalidStyleNumPr).toBe(0);
+    expect(detection.malformedTables).toBe(0);
     expect(await verifyDocxBytes(repaired)).toBe(true);
     // 修复后表格文本完整保留（24 个 cell 文本 + 2 个 style name）
     const zip = await JSZip.loadAsync(repaired);
@@ -54,6 +57,9 @@ describe("V2.6 真实 legacy 形状 fixture（用户最新失败文件结构）"
     }
     expect(stylesXml).toContain("List0");
     expect(stylesXml).toContain("List1");
+    // V2.9：07 的 tbl 现在带合法 tblPr + tblGrid（6 行 × 4 列；gridCol 数 = 4）
+    expect(documentXml ?? "").toContain('<w:tblPr><w:tblW w:type="dxa" w:w="8000"/></w:tblPr>');
+    expect((documentXml?.match(/<w:gridCol/g) ?? []).length).toBe(4);
   });
 });
 
@@ -93,3 +99,4 @@ describe("OpenXML shading regression（V2.4 bugfix）", () => {
     expect(shd![0]).toMatch(/w:val="/);
   });
 });
+
