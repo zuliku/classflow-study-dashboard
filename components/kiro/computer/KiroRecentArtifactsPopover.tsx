@@ -19,8 +19,10 @@ import { cn } from "@/lib/utils";
 const TYPE_LABELS: Record<string, string> = { markdown: "Markdown", docx: "Word", text: "文本" };
 
 /**
- * 最近文件（V2 Part 3）：当前 active Workspace 最新 12 个 Artifact。
- * 每次 closed → open 重新 listRecentArtifactEntries（无 background watcher/polling/indexing）。
+ * 最近文件（V2 Part 3 + V2.7.1）：当前 active Workspace 最新 12 个 Artifact。
+ * 打开时立即 listRecentArtifactEntries，并在打开期间轻量轮询（2s）同步文件状态——
+ * Agent delete_file / Task Card 删除等外部删除发生时，已打开的列表也能自动消失，
+ * 不再残留已删除文件（仅打开期间轮询本地 IndexedDB，关闭即停；无全局 watcher）。
  * Ask Kiro 只添加 Manual Context（不自动发送）；绝不切 Workspace / 不请求 Browser 授权。
  */
 export function KiroRecentArtifactsPopover() {
@@ -38,27 +40,33 @@ export function KiroRecentArtifactsPopover() {
   const [loading, setLoading] = useState(false);
   const containerRef = useRef<HTMLDivElement | null>(null);
 
-  const refresh = useCallback(async () => {
-    if (!activeWorkspaceId) {
-      setEntries([]);
-      return;
-    }
-    setLoading(true);
-    try {
-      const list = await listRecentArtifactEntries({
-        workspaceId: activeWorkspaceId,
-        workspaces: useKiroComputerStore.getState().workspaces,
-        limit: 12,
-      });
-      setEntries(list);
-    } finally {
-      setLoading(false);
-    }
-  }, [activeWorkspaceId]);
+  const refresh = useCallback(
+    async (opts?: { silent?: boolean }) => {
+      if (!activeWorkspaceId) {
+        setEntries([]);
+        return;
+      }
+      if (!opts?.silent) setLoading(true);
+      try {
+        const list = await listRecentArtifactEntries({
+          workspaceId: activeWorkspaceId,
+          workspaces: useKiroComputerStore.getState().workspaces,
+          limit: 12,
+        });
+        setEntries(list);
+      } finally {
+        if (!opts?.silent) setLoading(false);
+      }
+    },
+    [activeWorkspaceId]
+  );
 
+  // 打开时立即 refresh + 打开期间 2s 静默轮询（外部删除/移动/创建即时同步；关闭即停）
   useEffect(() => {
     if (!open) return;
     void refresh();
+    const timer = window.setInterval(() => void refresh({ silent: true }), 2000);
+    return () => window.clearInterval(timer);
   }, [open, refresh]);
 
   // 外部点击关闭

@@ -1934,3 +1934,84 @@ test("V2.7 场景 J：审批弹窗打开 → 拒绝 → Dialog 立即关闭、�
   await expect(taskCard).toBeVisible({ timeout: 10000 });
   await expect(taskCard).toContainText("已取消", { timeout: 5000 });
 });
+
+test("V2.7.1 场景 K：Recent Files 打开期间文件被删除 → row 自动消失（轮询同步，无需重开）", async ({ page }) => {
+  await page.addInitScript(({ settings, key }) => {
+    localStorage.setItem("classflow-ai-settings-v1", JSON.stringify({ version: 0, state: settings }));
+    sessionStorage.setItem("classflow-ai-key:deepseek", key);
+  }, { settings: AI_SETTINGS, key: "sk-test-key" });
+
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/");
+  await page.locator("aside").first().getByRole("button", { name: "Kiro" }).click();
+  await page.waitForTimeout(800);
+  const composer = page.getByTestId("kiro-composer");
+  await expect(composer).toBeVisible();
+  await composer.getByRole("button", { name: "Computer" }).click();
+  await expect(composer.getByRole("button", { name: "Computer" })).toHaveAttribute("aria-pressed", "true");
+
+  // seed 文件 + Artifact（模拟 Kiro 创建的文件出现在 Recent Files）
+  const { workspaceId, rootId } = await readSandboxWorkspace(page);
+  expect(workspaceId).not.toBe("");
+  const artifactId = "artifact-poll-k";
+  await seedSandboxFile(page, "poll.txt", { text: "轮询目标" });
+  await seedArtifact(
+    page,
+    {
+      id: artifactId,
+      workspaceId,
+      rootId,
+      relativePath: "poll.txt",
+      type: "text",
+      title: "轮询目标",
+      source: "kiro-created",
+    }
+  );
+
+  // 打开 Recent Files → row 可见
+  await page.getByRole("button", { name: "最近文件" }).click();
+  const row = page.locator('[data-testid="kiro-recent-artifact-row"]').filter({ hasText: "poll.txt" });
+  await expect(row).toBeVisible();
+
+  // popover 保持打开，外部删除文件 + Artifact 记录（模拟 Agent delete_file / Task Card 删除的最终状态）
+  await page.evaluate(
+    async ({ fileKey, artifactId: aid }) => {
+      const open = (name: string, version: number, stores: string[]): Promise<IDBDatabase | null> =>
+        new Promise((resolve) => {
+          const req = indexedDB.open(name, version);
+          req.onupgradeneeded = () => {
+            for (const s of stores) {
+              if (!req.result.objectStoreNames.contains(s)) req.result.createObjectStore(s);
+            }
+          };
+          req.onsuccess = () => resolve(req.result);
+          req.onerror = () => resolve(null);
+        });
+      const db = await open("classflow-kiro-sandbox-v1", 1, ["files"]);
+      if (db) {
+        await new Promise<void>((resolve) => {
+          const tx = db.transaction("files", "readwrite");
+          tx.objectStore("files").delete(fileKey);
+          tx.oncomplete = () => resolve();
+          tx.onerror = () => resolve();
+        });
+        db.close();
+      }
+      const db2 = await open("classflow-kiro-artifacts-v1", 1, ["artifacts", "sources"]);
+      if (db2) {
+        await new Promise<void>((resolve) => {
+          const tx = db2.transaction(["artifacts", "sources"], "readwrite");
+          tx.objectStore("artifacts").delete(aid);
+          tx.objectStore("sources").delete(aid);
+          tx.oncomplete = () => resolve();
+          tx.onerror = () => resolve();
+        });
+        db2.close();
+      }
+    },
+    { fileKey: `sandbox-default\u0000poll.txt`, artifactId }
+  );
+
+  // popover 未关闭：row 在轮询周期内自动消失
+  await expect(row).toHaveCount(0, { timeout: 8000 });
+});
