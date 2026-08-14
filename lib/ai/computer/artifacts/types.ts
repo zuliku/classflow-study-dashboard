@@ -32,4 +32,7 @@ export interface KiroArtifactSourceRecord {
   revision: number;
   document: KiroDocument;
   updatedAt: string;
-}
+  /** V2.5：生成该 Source IR 的 DOCX renderer 版本（旧记录无字段 = legacy/unknown；
+   *  migration 判断以 legacy structural detector 为最高优先，不依赖该字段） */
+  rendererVersion?: number;
+  }

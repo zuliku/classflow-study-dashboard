@@ -16,6 +16,7 @@ import { KiroWorkspaceMeta } from "@/lib/ai/computer/types";
 import { normalizeRelativeComputerPath } from "@/lib/ai/computer/workspace/resolver";
 import { getComputerAdapterForAdapterRef } from "@/lib/ai/computer/executor";
 import { inspectDocumentFacts, verifyDocxBytes, verifyRenderedDocx } from "@/lib/ai/computer/documents/verify";
+import { detectLegacyKiroDocx } from "@/lib/ai/computer/documents/legacy";
 
 export const MAX_ARTIFACT_PREVIEW_BYTES = 20 * 1024 * 1024;
 export const MAX_ARTIFACT_PREVIEW_CHARS = 100_000;
@@ -205,10 +206,9 @@ export async function getArtifactPreview(input: {
     return { kind: "text", artifact, workspaceLabel: workspace.name, rootLabel, text, truncated, size };
   }
 
-  // DOCX：只读 bytes → Mammoth raw text（不渲染 HTML）
-  const bytes = await io.readBytes(path);
-  const { extractDocx } = await import("@/lib/ai/attachments/docx");
-  let extracted: { text: string; truncated: boolean };
+  // DOCX（V2.5）：与 Download 共用 resolveLiveDocxBytes（legacy detection → optional migration → verified bytes）
+  const { bytes } = await resolveLiveDocxBytes({ artifactId: artifact.id, workspaces: input.workspaces });
+  const { extractDocx } = await import("@/lib/ai/attachments/docx");  let extracted: { text: string; truncated: boolean };
   try {
     extracted = await extractDocx(
       new Blob([bytes.slice().buffer as ArrayBuffer], {
@@ -269,29 +269,84 @@ export async function getArtifactPreview(input: {
   };
 }
 
-/** 下载：永远读当前真实文件 bytes（不做缓存/Source IR/旧 bytes 导出）。
- *  DOCX 下载前 preflight（V2.1）：live bytes 重新验证——损坏的 DOCX 不允许继续下载。
- *  preflight 只 validate，绝不重新 render / 覆盖当前文件（filesystem 仍是真实事实来源）。 */
-export async function getArtifactDownloadPayload(input: {
+/**
+ * 共享 DOCX live-bytes resolve（V2.5）：Preview 与 Download 都经过同一链路。
+ * legacy detection → 必要时 self-heal migration → verified live bytes。
+ *
+ * Migration 安全边界（全部满足才自动重写文件）：
+ * - artifact.type === "docx"
+ * - artifact.source === "kiro-created"（workspace-existing 用户文件绝不自动重写）
+ * - 存在匹配 revision 的 Source IR
+ * - detectLegacyKiroDocx(bytes).legacy === true（structural evidence 最高优先）
+ * 之后：Source IR → 当前 renderDocx() → verifyRenderedDocx → 写回同一 path → read-back verify。
+ */
+export async function resolveLiveDocxBytes(input: {
   artifactId: string;
   workspaces: KiroWorkspaceMeta[];
-}): Promise<KiroArtifactDownloadPayload> {
+}): Promise<{ bytes: Uint8Array; migrated: boolean }> {
   const { artifact, path, io } = await resolveArtifactLocation(input.artifactId, input.workspaces);
   const stat = await io.stat(path);
   if (!stat || stat.kind !== "file") {
     throw new ComputerError("RESOURCE_NOT_FOUND", "文件不存在");
   }
   const bytes = await io.readBytes(path);
-  if (artifact.type === "docx") {
-    const source = await getArtifactSource(artifact.id);
-    const verified =
-      source && source.revision === artifact.revision
-        ? await verifyRenderedDocx(bytes, source.document)
-        : await verifyDocxBytes(bytes);
-    if (!verified) {
-      throw new ComputerError("VERIFICATION_FAILED", "文档文件校验失败，请让 Kiro 重新生成。");
-    }
+
+  if (artifact.type !== "docx") {
+    return { bytes, migrated: false };
   }
+  const source = await getArtifactSource(artifact.id);
+  const hasMatchingSource =
+    artifact.source === "kiro-created" && !!source && source.revision === artifact.revision;
+  const detection = await detectLegacyKiroDocx(bytes);
+
+  // Legacy Kiro DOCX（structural evidence 最高优先）→ 用匹配 Source IR 重新渲染（self-heal）
+  if (hasMatchingSource && detection.legacy) {
+    const { renderDocx } = await import("@/lib/ai/computer/documents/docx");
+    const migrated = await renderDocx(source!.document);
+    if (!(await verifyRenderedDocx(migrated, source!.document))) {
+      throw new ComputerError(
+        "VERIFICATION_FAILED",
+        "旧版文档自动修复失败，请让 Kiro 重新生成该文档。"
+      );
+    }
+    await io.writeBytes(
+      path,
+      migrated,
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    );
+    const readBack = await io.readBytes(path);
+    if (!(await verifyDocxBytes(readBack))) {
+      throw new ComputerError(
+        "VERIFICATION_FAILED",
+        "旧版文档修复后回读校验失败，请让 Kiro 重新生成该文档。"
+      );
+    }
+    return { bytes: readBack, migrated: true };
+  }
+
+  // 非 legacy / 非 kiro-created：preflight runtime verification（损坏不放行下载）
+  const verified =
+    source && source.revision === artifact.revision
+      ? await verifyRenderedDocx(bytes, source.document)
+      : await verifyDocxBytes(bytes);
+  if (!verified) {
+    throw new ComputerError("VERIFICATION_FAILED", "文档文件校验失败，请让 Kiro 重新生成。");
+  }
+  return { bytes, migrated: false };
+}
+
+/** 下载：永远读当前真实文件 bytes（不做缓存/Source IR/旧 bytes 导出）。
+ *  DOCX 下载前（V2.1 + V2.5）：resolveLiveDocxBytes（legacy detection → optional migration →
+ *  runtime verification）——损坏/旧版 DOCX 不允许原样下载。 */
+export async function getArtifactDownloadPayload(input: {
+  artifactId: string;
+  workspaces: KiroWorkspaceMeta[];
+}): Promise<KiroArtifactDownloadPayload> {
+  const { artifact } = await resolveArtifactLocation(input.artifactId, input.workspaces);
+  const { bytes } =
+    artifact.type === "docx"
+      ? await resolveLiveDocxBytes(input)
+      : { bytes: await readLiveBytes(input) };
   return {
     artifact,
     fileName: artifact.displayName,
@@ -299,3 +354,17 @@ export async function getArtifactDownloadPayload(input: {
     bytes,
   };
 }
+
+async function readLiveBytes(input: {
+  artifactId: string;
+  workspaces: KiroWorkspaceMeta[];
+}): Promise<Uint8Array> {
+  const { path, io } = await resolveArtifactLocation(input.artifactId, input.workspaces);
+  const stat = await io.stat(path);
+  if (!stat || stat.kind !== "file") {
+    throw new ComputerError("RESOURCE_NOT_FOUND", "文件不存在");
+  }
+  return io.readBytes(path);
+}
+
+/** Preview 的 DOCX 分支：与 Download 共用 resolveLiveDocxBytes（legacy detection → migration → verified bytes） */

@@ -25,6 +25,7 @@ import {
   artifactSourcePut,
 } from "@/lib/ai/computer/artifacts/db";
 import { KiroDocument } from "@/lib/ai/computer/documents/types";
+import { CURRENT_DOCX_RENDERER_VERSION } from "@/lib/ai/computer/documents/legacy";
 import { ComputerError } from "@/lib/ai/computer/errors";
 
 function newArtifactId(): string {
@@ -44,12 +45,13 @@ async function findByLogicalKey(key: string): Promise<KiroArtifact | null> {
   return all.find((a) => logicalKey(a.workspaceId, a.rootId, a.relativePath) === key) ?? null;
 }
 
-async function writeSource(artifactId: string, document: KiroDocument, revision: number): Promise<boolean> {
+async function writeSource(artifactId: string, document: KiroDocument, revision: number, rendererVersion?: number): Promise<boolean> {
   const record: KiroArtifactSourceRecord = {
     artifactId,
     revision,
     document,
     updatedAt: now(),
+    ...(rendererVersion !== undefined ? { rendererVersion } : {}),
   };
   return artifactSourcePut(record);
 }
@@ -92,7 +94,13 @@ async function replaceLogicalIdentity(
   if (!stored) throw new Error("artifact-registry-write-failed");
   // Kiro-owned 文档 IR：只存 markdown/docx（generic text 不存 IR）
   if (input.document && (artifact.type === "markdown" || artifact.type === "docx")) {
-    const ok = await writeSource(artifact.id, input.document, artifact.revision);
+    const ok = await writeSource(
+      artifact.id,
+      input.document,
+      artifact.revision,
+      // V2.5：DOCX Source IR 记录生成它的 renderer 版本（migration 判断仍以 structural detector 为最高优先）
+      artifact.type === "docx" ? CURRENT_DOCX_RENDERER_VERSION : undefined
+    );
     if (!ok) throw new Error("artifact-source-write-failed");
   }
   return artifact;
@@ -304,6 +312,8 @@ export async function commitArtifactRevision(input: {
       revision: s.revision + 1,
       document: input.document,
       updatedAt: now(),
+      // V2.5：docx 更新后 Source IR 记录当前 renderer 版本
+      ...(s.document && s.document === input.document ? {} : { rendererVersion: CURRENT_DOCX_RENDERER_VERSION }),
     }),
   });
   if (outcome !== "committed") {
