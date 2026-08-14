@@ -1,4 +1,4 @@
-import "fake-indexeddb/auto";
+﻿import "fake-indexeddb/auto";
 import { describe, it, expect, beforeEach } from "vitest";
 import { executeKiroComputerTool } from "@/lib/ai/computer/executor";
 import { isValidRenameBasename } from "@/lib/ai/computer/executor";
@@ -309,7 +309,7 @@ describe("relocation approval", () => {
     expect(await sandboxReadText(SANDBOX_A, "draft.md")).toBe("d");
   });
 
-  it("Workspace Auto move approval-required does not consume mutation quota", async () => {
+  it("V2.7+V2.8：Workspace Auto move 直接执行（无 approval；fs.move = allow）", async () => {
     await sandboxWriteText(SANDBOX_A, "notes.md", "n");
     const c = counters();
     const attempt = await executeKiroComputerTool({
@@ -325,8 +325,13 @@ describe("relocation approval", () => {
       counters: c,
       oneShotApprovals: [],
     });
-    expect(attempt.kind).toBe("approval-required");
-    expect(c.mutationCount).toBe(0);
+    expect(attempt.kind).toBe("completed");
+    if (attempt.kind !== "completed") return;
+    expect(attempt.output.ok).toBe(true);
+    expect(c.mutationCount).toBe(1);
+    const { getComputerAdapterForAdapterRef } = await import("@/lib/ai/computer/adapters/factory");
+    expect(await getComputerAdapterForAdapterRef(SANDBOX_A).stat("notes.md")).toBeNull();
+    expect(await sandboxReadText(SANDBOX_B, "notes.md")).toBe("n");
   });
 
   it("approved relocation consumes exactly one mutation quota", async () => {
@@ -373,20 +378,23 @@ it("Guided rename returns approval-required before IO", async () => {    await s
     expect(await sandboxReadText(SANDBOX_A, "draft.md")).toBe("d");
   });
 
-  it("Workspace Auto move still returns approval-required before IO", async () => {
+  it("Guided move returns approval-required before IO", async () => {
     await sandboxWriteText(SANDBOX_A, "notes.md", "n");
-    const attempt = await run("move_file", {
-      path: "notes.md",
-      destinationRootId: "archive",
-      destinationPath: "notes.md",
-    }, counters(), []);
+    const attempt = await executeKiroComputerTool({
+      toolName: "move_file",
+      toolCallId: "call-guided-move",
+      toolInput: { rootId: "output", path: "notes.md", destinationRootId: "archive", destinationPath: "notes.md" },
+      context: ctx(workspace, [], "guided"),
+      counters: counters(),
+      oneShotApprovals: [],
+    });
     expect(attempt.kind).toBe("approval-required");
     if (attempt.kind !== "approval-required") return;
     expect(attempt.request.description).toContain("移动 notes.md → notes.md");
     expect(await sandboxReadText(SANDBOX_A, "notes.md")).toBe("n");
   });
 
-  it("allow-once resumes the exact frozen Tool Call", async () => {
+  it("allow-once resumes the exact frozen Tool Call（Guided）", async () => {
     await sandboxWriteText(SANDBOX_A, "notes.md", "n");
     const oneShots: ComputerOneShotApproval[] = [
       {
@@ -402,7 +410,7 @@ it("Guided rename returns approval-required before IO", async () => {    await s
       toolName: "move_file",
       toolCallId: "call-resume",
       toolInput: { rootId: "output", path: "notes.md", destinationRootId: "archive", destinationPath: "notes.md" },
-      context: ctx(),
+      context: ctx(workspace, [], "guided"),
       counters: counters(),
       oneShotApprovals: oneShots,
     });
@@ -442,7 +450,7 @@ describe("relocation undo / artifact sync", () => {
     expect(inverse.type).toBe("move-back");
     if (inverse.type !== "move-back") return;
     // 直接执行 move-back（与 useKiroChat undoTask 相同语义：verified relocate back + artifact restore）
-    const { getComputerAdapterForAdapterRef } = await import("@/lib/ai/computer/executor");
+    const { getComputerAdapterForAdapterRef } = await import("@/lib/ai/computer/adapters/factory");
     const src = getComputerAdapterForAdapterRef(SANDBOX_B);
     const dst = getComputerAdapterForAdapterRef(SANDBOX_A);
     await relocateFile({ source: src, sourcePath: "notes.md", destination: dst, destinationPath: "notes.md" });
@@ -478,3 +486,4 @@ describe("relocation undo / artifact sync", () => {
     expect(attempt.output.ok).toBe(false);
   });
 });
+

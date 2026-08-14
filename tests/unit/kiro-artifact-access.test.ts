@@ -1,4 +1,4 @@
-import "fake-indexeddb/auto";
+﻿import "fake-indexeddb/auto";
 import { describe, it, expect, beforeEach } from "vitest";
 import {
   getArtifactPreview,
@@ -6,7 +6,7 @@ import {
   listRecentArtifactEntries,
   MAX_ARTIFACT_PREVIEW_BYTES,
 } from "@/lib/ai/computer/artifacts/access";
-import { registerCreatedArtifact, adoptWorkspaceArtifact, removeArtifactRecord } from "@/lib/ai/computer/artifacts/service";
+import { registerCreatedArtifact, adoptWorkspaceArtifact, removeArtifactRecord, findArtifactByLocation } from "@/lib/ai/computer/artifacts/service";
 import { clearSandboxAdapter, sandboxWriteText, sandboxWriteBytes } from "@/lib/ai/computer/adapters/sandbox";
 import { KiroWorkspaceMeta } from "@/lib/ai/computer/types";
 import { KiroDocument } from "@/lib/ai/computer/documents/types";
@@ -70,8 +70,9 @@ describe("recent artifact entries", () => {
     expect(entries.every((e) => e.availability === "available")).toBe(true);
   });
 
-  it("missing file → missing（不静默重建）；grant/adapter 不可访问 → unavailable 而非 missing", async () => {
+  it("V2.8：kiro-created + missing → row 被 GC；workspace-existing + missing → 保持 missing；grant 缺失 → unavailable", async () => {
     await registerCreatedArtifact({ workspaceId: "ws-a", rootId: "output", relativePath: "gone.md", type: "markdown" });
+    await adoptWorkspaceArtifact({ workspaceId: "ws-a", rootId: "output", relativePath: "user-gone.md", type: "markdown", title: "用户文件" });
     await registerCreatedArtifact({ workspaceId: "ws-a", rootId: "browser-root", relativePath: "grant.md", type: "markdown" });
     // browser-root 指向缺失 grant → adapter stat 抛 → unavailable（真实文件可能在电脑里，不能标 missing）
     const grantWorkspaces: KiroWorkspaceMeta[] = [
@@ -84,8 +85,14 @@ describe("recent artifact entries", () => {
       },
     ];
     const entries = await listRecentArtifactEntries({ workspaceId: "ws-a", workspaces: grantWorkspaces });
+    // kiro-created + filesystem missing → best-effort GC，绝不返回可下载/预览 row
     const gone = entries.find((e) => e.artifact.relativePath === "gone.md");
-    expect(gone?.availability).toBe("missing");
+    expect(gone).toBeUndefined();
+    expect(await findArtifactByLocation("ws-a", "output", "gone.md")).toBeNull();
+    // workspace-existing + missing → 保留 missing row（用户可移除记录）
+    const userGone = entries.find((e) => e.artifact.relativePath === "user-gone.md");
+    expect(userGone?.availability).toBe("missing");
+    // grant/adapter 不可访问 → unavailable 而非 missing
     const grant = entries.find((e) => e.artifact.relativePath === "grant.md");
     expect(grant?.availability).toBe("unavailable");
   });
@@ -208,7 +215,10 @@ describe("download payload", () => {
       expect.objectContaining({ code: "VERIFICATION_FAILED" })
     );
     // preflight 只 validate，不覆盖文件
-    const io = (await import("@/lib/ai/computer/executor")).getComputerAdapterForAdapterRef(SANDBOX_A);
+    const io = (await import("@/lib/ai/computer/adapters/factory")).getComputerAdapterForAdapterRef(SANDBOX_A);
     expect((await io.stat("bad.docx"))?.size).toBe(repacked.byteLength);
   });
 });
+
+
+

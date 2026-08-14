@@ -1,4 +1,4 @@
-import { expect } from "@playwright/test";
+﻿import { expect } from "@playwright/test";
 import { test } from "./demoFixtures";
 import { createHash } from "node:crypto";
 import { promises as fsp } from "node:fs";
@@ -2015,3 +2015,82 @@ test("V2.7.1 场景 K：Recent Files 打开期间文件被删除 → row 自动�
   // popover 未关闭：row 在轮询周期内自动消失
   await expect(row).toHaveCount(0, { timeout: 8000 });
 });
+
+test("V2.8 场景 L：真实删除全部（path-only delete_file ×2 → 文件消失 + Recent Files 同步 + 无 Approval）", async ({ page }) => {
+  let requestCount = 0;
+  await page.route("**/api/ai/chat", async (route) => {
+    requestCount += 1;
+    const body = (() => {
+      switch (requestCount) {
+        case 1:
+          // 真实模型行为：只传 path，不传 rootId（single-root Workspace）
+          return toolCallStream("v28-1", "call_del_a", "delete_file", { path: "本周课表.docx" });
+        case 2:
+          return toolCallStream("v28-1", "call_del_b", "delete_file", { path: "本周课表-第1周.docx" });
+        default:
+          return answerStream("v28-1", "已删除全部文件。");
+      }
+    })();
+    await route.fulfill({ status: 200, contentType: "text/event-stream", body });
+  });
+  await page.addInitScript(({ settings, key }) => {
+    localStorage.setItem("classflow-ai-settings-v1", JSON.stringify({ version: 0, state: settings }));
+    sessionStorage.setItem("classflow-ai-key:deepseek", key);
+  }, { settings: AI_SETTINGS, key: "sk-test-key" });
+
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/");
+  await page.locator("aside").first().getByRole("button", { name: "Kiro" }).click();
+  await page.waitForTimeout(800);
+  const composer = page.getByTestId("kiro-composer");
+  await expect(composer).toBeVisible();
+  await composer.getByRole("button", { name: "Computer" }).click();
+  await expect(composer.getByRole("button", { name: "Computer" })).toHaveAttribute("aria-pressed", "true");
+  const modeMenu = composer.getByRole("button", { name: "权限模式" });
+  await modeMenu.click();
+  await page.getByRole("menuitem", { name: /工作区自动/ }).first().click();
+  await expect(modeMenu).toContainText("工作区自动");
+
+  // seed 两个真实文件 + kiro-created Artifact（模型不知道 rootId，从 list_directory 结果反推路径）
+  const { workspaceId, rootId } = await readSandboxWorkspace(page);
+  expect(workspaceId).not.toBe("");
+  for (const [name, id] of [
+    ["本周课表.docx", "artifact-v28-a"],
+    ["本周课表-第1周.docx", "artifact-v28-b"],
+  ] as const) {
+    await seedSandboxFile(page, name, { text: `${name} 内容` });
+    await seedArtifact(page, {
+      id,
+      workspaceId,
+      rootId,
+      relativePath: name,
+      type: "docx",
+      title: name,
+      source: "kiro-created",
+    });
+  }
+  expect(await readSandboxText(page, "本周课表.docx")).toContain("本周课表.docx");
+  expect(await readSandboxText(page, "本周课表-第1周.docx")).toContain("本周课表-第1周.docx");
+
+  const approval = page.getByTestId("kiro-approval-dialog");
+  await expect(approval).toHaveCount(0);
+
+  await composer.getByLabel("Ask Kiro").fill("删除工作区中的所有文件");
+  await composer.getByLabel("发送").click();
+
+  // Workspace Auto：全程无 Approval；两份文件真实删除
+  const taskCard = page.locator('[data-testid="kiro-message"]').last().getByTestId("kiro-agent-task-card");
+  await expect(taskCard).toBeVisible({ timeout: 15000 });
+  // 同轮多 computer 工具会生成多个 task（pre-existing）；Task Card 绑定第一个（删除 本周课表.docx）
+  await expect(taskCard).toContainText("删除 本周课表.docx");
+  await expect(approval).toHaveCount(0, { timeout: 5000 });
+  await expect.poll(async () => readSandboxText(page, "本周课表.docx")).toBeNull();
+  await expect.poll(async () => readSandboxText(page, "本周课表-第1周.docx")).toBeNull();
+
+  // Recent Files 打开：两条 row 全部消失（artifact 已被删除链路清理 / reconciliation GC）
+  await page.getByRole("button", { name: "最近文件" }).click();
+  await expect(page.locator('[data-testid="kiro-recent-artifact-row"]').filter({ hasText: "本周课表.docx" })).toHaveCount(0, { timeout: 8000 });
+  await expect(page.locator('[data-testid="kiro-recent-artifact-row"]').filter({ hasText: "本周课表-第1周.docx" })).toHaveCount(0, { timeout: 8000 });
+});
+
+
