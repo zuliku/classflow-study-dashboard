@@ -3,7 +3,10 @@ import { KiroDocument, KiroInline } from "@/lib/ai/computer/documents/types";
 import { ComputerError } from "@/lib/ai/computer/errors";
 
 /**
- * Document Verification（Document Engine V2）。
+ * Document Verification（Document Engine V2 / V2.2）。
+ * 这是 runtime integrity verification（ZIP / required parts / XML parse / Mammoth round-trip），
+ * 不是 Microsoft Word compatibility verification（那需要微软官方 OpenXmlValidator，
+ * 见 dev-only compatibility gate）。
  * - Markdown：Adapter read-back 与 renderer 输出 exact equal。
  * - DOCX：JSZip 可解析 → 必需 entry 存在 → **所有** XML part 都可解析
  *   （不只是 word/document.xml）→ WordprocessingML root。

@@ -8,6 +8,9 @@ import {
   ToolSet,
   smoothStream,
   isStepCount,
+  wrapLanguageModel,
+  addToolInputExamplesMiddleware,
+  generateText,
 } from "ai";
 import { AI, KIRO_SYSTEM_PROMPT } from "@/lib/ai/config";
 import { KIRO_TOOLS, getKiroToolsForRequest } from "@/lib/ai/tools";
@@ -24,6 +27,7 @@ import {
   buildWorkspaceInstructionsSection,
 } from "@/lib/ai/computer/knowledge/instructions";
 import { validateComputerTurnSnapshot } from "@/lib/ai/computer/snapshot";
+import { shouldRepairToolCall, KIRO_TOOL_CALL_REPAIR_MAX_INPUT_BYTES } from "@/lib/ai/computer/tools/repair";
 import {
   buildKiroModelContext,
   DEFAULT_CONTEXT_BUDGET,
@@ -299,13 +303,65 @@ export async function POST(req: NextRequest) {
     );
 
     const result = streamText({
-      model: resolved.model,
+      // V2.2：inputExamples 统一注入描述（不原生支持 inputExamples 的 provider 也生效）
+      model: wrapLanguageModel({
+        model: resolved.model as Parameters<typeof wrapLanguageModel>[0]["model"],
+        middleware: addToolInputExamplesMiddleware(),
+      }),
       messages: modelMessages,
       system: systemMessage,
       tools: finalAnswerStarted ? {} : tools,
       toolChoice: finalAnswerStarted ? "none" : undefined,
       maxOutputTokens: AI.CHAT_MAX_OUTPUT_TOKENS,
       abortSignal: signal,
+      // V2.2：bounded Tool Call Repair —— 无效 create/update Draft 在进入多步历史前由 server 修正一次，
+      // 成功后走正常绿色「创建文档」链路，而不是红色「执行操作」+ 模型自述 JSON 错误
+      repairToolCall: (() => {
+        const repairedToolCallIds = new Set<string>();
+        return async ({ toolCall, messages, error, inputSchema }) => {
+          if (
+            !shouldRepairToolCall({
+              error,
+              toolName: toolCall.toolName,
+              toolCallId: toolCall.toolCallId,
+              inputSizeBytes: new TextEncoder().encode(toolCall.input).byteLength,
+              alreadyRepaired: repairedToolCallIds,
+            })
+          ) {
+            return null;
+          }
+          repairedToolCallIds.add(toolCall.toolCallId);
+          try {
+            const schema = await inputSchema({ toolName: toolCall.toolName });
+            const repair = await generateText({
+              model: resolved.model as Parameters<typeof generateText>[0]["model"],
+              system:
+                "你是工具调用参数修复器。给定一个校验失败的工具调用与它的 JSON Schema，修正 input JSON 使其完全符合 Schema。" +
+                "只输出修正后的 JSON 对象本身（不要 markdown、不要解释、不要多余文本）。",
+              messages: [
+                ...messages,
+                {
+                  role: "assistant",
+                  content: [{ type: "tool-call", toolCallId: toolCall.toolCallId, toolName: toolCall.toolName, input: toolCall.input }],
+                },
+                {
+                  role: "user",
+                  content: `工具 ${toolCall.toolName} 的输入校验失败。JSON Schema：\n${JSON.stringify(schema)}\n\n请修复并只输出修正后的 JSON。`,
+                },
+              ],
+            });
+            const fixed = JSON.parse(repair.text.trim());
+            return {
+              type: "tool-call" as const,
+              toolCallId: toolCall.toolCallId,
+              toolName: toolCall.toolName,
+              input: JSON.stringify(fixed),
+            };
+          } catch {
+            return null; // 无法修复 → 原始错误正常暴露
+          }
+        };
+      })(),
       // Reasoning effort：verified provider options（default/不支持 → 不发送，保持 provider 默认）。
       // key 与 createOpenAICompatible/createAnthropic 的 name 一致（"classflow-kiro"）。
       providerOptions: reasoningProviderOptions

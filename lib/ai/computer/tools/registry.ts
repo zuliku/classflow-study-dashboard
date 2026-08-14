@@ -26,6 +26,8 @@ export interface ComputerToolDefinition {
   capability: ComputerCapability;
   /** 该 tool 是否 mutation（影响 regenerate guard / 调用限制） */
   mutation: boolean;
+  /** V2.2：模型输入示例（AI SDK inputExamples；不原生支持的 provider 由 addToolInputExamplesMiddleware 注入描述） */
+  inputExamples?: Array<{ input: Record<string, unknown> }>;
 }
 
 export const COMPUTER_READ_TOOLS: ComputerToolDefinition[] = [
@@ -119,10 +121,41 @@ export const COMPUTER_MUTATION_TOOLS: ComputerToolDefinition[] = [
   {
     name: "create_document",
     description:
-      "从 KiroDocument IR 创建 .md 或 .docx。document = { title?: string, blocks: [...], stylePreset?, styleHints? }。block 支持 heading / paragraph / bullet-list / numbered-list / table / quote / code / page-break；文件格式由 path 扩展名决定。stylePreset 按任务自动选择：academic-cn（论文/课程作业/研究计划/调研报告/文献综述/实验报告等中文规范文档）或 business-report（商业分析/项目方案/市场报告/竞品分析/可行性分析/创业计划等现代正式报告）。styleHints 只在用户明确提出排版要求时填写（如「正文小四宋体、1.5 倍行距」「标题居中」「页边距全部 2.5cm」）；用户没有排版要求时不要生成 styleHints。",
+      "从扁平 Document Draft 创建 .md 或 .docx。document = { title?, stylePreset?, styleHints?, blocks: [...] }；block 用纯字符串：heading/paragraph/quote 用 text；bullet-list/numbered-list 用 items: string[]；table 用 header: string[] 与 rows: string[][]（每行与表头列数一致，cell 是纯字符串，不要嵌套 [{text}] 对象）；code 用 text；page-break 无字段。文件格式由 path 扩展名决定。stylePreset 按任务自动选择：academic-cn（论文/课程作业/研究计划/调研报告/文献综述/实验报告等中文规范文档）或 business-report（商业分析/项目方案/市场报告/竞品分析/可行性分析/创业计划等现代正式报告）。styleHints 只在用户明确提出排版要求时填写；用户没有排版要求时不要生成。",
     schema: createDocumentSchema,
     capability: "document.create",
     mutation: true,
+    inputExamples: [
+      {
+        input: {
+          path: "研究总结.docx",
+          document: {
+            title: "研究总结",
+            stylePreset: "academic-cn",
+            blocks: [
+              { type: "heading", level: 1, text: "研究背景" },
+              { type: "paragraph", text: "这里是研究背景。" },
+            ],
+          },
+        },
+      },
+      {
+        input: {
+          path: "本周课表.docx",
+          document: {
+            title: "本周课表",
+            stylePreset: "business-report",
+            blocks: [
+              {
+                type: "table",
+                header: ["星期", "课程", "时间", "地点"],
+                rows: [["周一", "数据结构与算法", "08:00–09:40", "计算机楼 102"]],
+              },
+            ],
+          },
+        },
+      },
+    ],
   },
   {
     name: "rename_file",
@@ -141,10 +174,25 @@ export const COMPUTER_MUTATION_TOOLS: ComputerToolDefinition[] = [
   {
     name: "update_document",
     description:
-      "更新 Kiro 创建的 Markdown/DOCX Artifact；必须提供当前 expectedRevision。document 使用与 create_document 完全相同的 KiroDocument IR（含可选 stylePreset/styleHints）。不提供 style 时自动保持既有排版；用户明确要求改排版（如切换 preset / 调整字号）时通过 stylePreset/styleHints 表达。",
+      "更新 Kiro 创建的 Markdown/DOCX Artifact；必须提供当前 expectedRevision。document 使用与 create_document 完全相同的扁平 Document Draft（含可选 stylePreset/styleHints）。不提供 style 时自动保持既有排版；用户明确要求改排版（如切换 preset / 调整字号）时通过 stylePreset/styleHints 表达。",
     schema: updateDocumentSchema,
     capability: "document.modify",
     mutation: true,
+    inputExamples: [
+      {
+        input: {
+          artifactId: "artifact-xxx",
+          expectedRevision: 1,
+          document: {
+            title: "研究方案",
+            blocks: [
+              { type: "heading", level: 1, text: "引言" },
+              { type: "table", header: ["指标", "数值"], rows: [["增速", "12%"]] },
+            ],
+          },
+        },
+      },
+    ],
   },
 ];
 

@@ -1,5 +1,6 @@
 import { KiroDocument, KiroInline } from "@/lib/ai/computer/documents/types";
 import { ResolvedDocumentTheme } from "@/lib/ai/computer/documents/styles/types";
+import { tableColumnCount } from "@/lib/ai/computer/documents/render-normalize";
 
 /**
  * Document IR → DOCX（Kiro Document Engine V2）。
@@ -26,10 +27,13 @@ function loadDocx(): Promise<Docx> {
 export async function renderDocx(doc: KiroDocument): Promise<Uint8Array> {
   const docx = await loadDocx();
   const { resolveDocumentTheme } = await import("./styles/resolve");
+  const { normalizeDocumentForRender, sanitizeOpenXmlText } = await import("./render-normalize");
   const theme = resolveDocumentTheme(doc.stylePreset, doc.styleHints);
+  // render copy：表格矩形化 + XML 非法字符清理（不修改 Source IR）
+  const renderDoc = normalizeDocumentForRender(doc);
 
   const { Document, Packer, AlignmentType, LevelFormat, LineRuleType } = docx;
-  const children = buildChildren(docx, doc, theme);
+  const children = buildChildren(docx, renderDoc, theme, sanitizeOpenXmlText);
 
   const packed = new Document({
     numbering: {
@@ -92,12 +96,18 @@ export async function renderDocx(doc: KiroDocument): Promise<Uint8Array> {
     ],
   });
 
-  const blob = await Packer.toBlob(packed);
-  return new Uint8Array(await blob.arrayBuffer());
+  // V2.2：直接 ArrayBuffer（减少一层 Blob round-trip）；下载层仍保留 Blob
+  const buffer = await Packer.toArrayBuffer(packed);
+  return new Uint8Array(buffer);
 }
 
-function buildChildren(docx: Docx, doc: KiroDocument, theme: ResolvedDocumentTheme) {
-  const { Paragraph, TextRun, Table, TableRow, TableCell, PageBreak, AlignmentType, BorderStyle, LineRuleType, WidthType } = docx;
+function buildChildren(
+  docx: Docx,
+  doc: KiroDocument,
+  theme: ResolvedDocumentTheme,
+  sanitize: (text: string) => string
+) {
+  const { Paragraph, TextRun, Table, TableRow, TableCell, PageBreak, AlignmentType, BorderStyle, LineRuleType, WidthType, TableLayoutType } = docx;
   const out: InstanceType<typeof Paragraph | typeof Table>[] = [];
 
   const makeRuns = (
@@ -107,7 +117,7 @@ function buildChildren(docx: Docx, doc: KiroDocument, theme: ResolvedDocumentThe
     (inline ?? []).map(
       (run) =>
         new TextRun({
-          text: run.text,
+          text: sanitize(run.text),
           bold: overrides?.bold ?? run.bold,
           italics: run.italic,
           font: {
@@ -156,7 +166,7 @@ function buildChildren(docx: Docx, doc: KiroDocument, theme: ResolvedDocumentThe
             spacing: bodySpacing(h.spaceBeforePt, h.spaceAfterPt, h.lineSpacing),
             children: [
               new TextRun({
-                text: (block.content ?? []).map((r) => r.text).join(""),
+                text: sanitize((block.content ?? []).map((r) => r.text).join("")),
                 bold: h.bold,
                 font: { ascii: h.latinFont, hAnsi: h.latinFont, eastAsia: h.eastAsiaFont },
                 size: h.fontSizePt * 2,
@@ -230,7 +240,7 @@ function buildChildren(docx: Docx, doc: KiroDocument, theme: ResolvedDocumentThe
             },
             children: [
               new TextRun({
-                text: block.text,
+                text: sanitize(block.text),
                 font: { ascii: theme.code.font, hAnsi: theme.code.font, eastAsia: theme.code.font },
                 size: theme.code.fontSizePt * 2,
               }),
@@ -242,16 +252,18 @@ function buildChildren(docx: Docx, doc: KiroDocument, theme: ResolvedDocumentThe
         out.push(new Paragraph({ children: [new PageBreak()] }));
         break;
       case "table": {
-        const allRows = [block.header, ...block.rows];
-        const colCount = Math.max(1, ...allRows.map((r) => r.length));
-        const widthPct = Math.floor(100 / colCount);
-        const rows = allRows.map(
+        const colCount = tableColumnCount(block);
+        const columnWidths = distributeTwip(
+          theme.page.widthTwip - theme.page.leftTwip - theme.page.rightTwip,
+          colCount
+        );
+        const rows = [block.header, ...block.rows].map(
           (row, ri) =>
             new TableRow({
-              children: row.map((cell) => {
+              children: row.map((cell, ci) => {
                 const isHeader = ri === 0 && block.header.length > 0;
                 return new TableCell({
-                  width: { size: widthPct, type: WidthType.PERCENTAGE },
+                  width: { size: columnWidths[ci], type: WidthType.DXA },
                   shading:
                     isHeader && theme.table.headerShading ? { fill: theme.table.headerShading } : undefined,
                   borders: tableCellBorders(docx, theme, isHeader),
@@ -272,7 +284,10 @@ function buildChildren(docx: Docx, doc: KiroDocument, theme: ResolvedDocumentThe
         );
         out.push(
           new Table({
-            width: { size: 100, type: WidthType.PERCENTAGE },
+            // V2.2：单一 printable width → 明确 tblGrid（columnWidths）→ 每列明确 DXA width
+            width: { size: columnWidths.reduce((a, b) => a + b, 0), type: WidthType.DXA },
+            layout: TableLayoutType.FIXED,
+            columnWidths,
             borders: tableBorders(docx, theme),
             rows,
           })
@@ -324,4 +339,19 @@ function tableCellBorders(docx: Docx, theme: ResolvedDocumentTheme, isHeader: bo
   return {
     bottom: { style: docx.BorderStyle.SINGLE, size: 6, color: "000000" },
   };
+}
+
+/**
+ * 把 totalTwip 均分到 columnCount 列，保证 sum(columnWidths) === totalTwip。
+ * 整数余数分配给前 N 列（每列 +1 twip）。
+ */
+export function distributeTwip(totalTwip: number, columnCount: number): number[] {
+  const count = Math.max(1, Math.floor(columnCount));
+  const base = Math.floor(totalTwip / count);
+  const remainder = totalTwip - base * count;
+  const widths: number[] = [];
+  for (let i = 0; i < count; i++) {
+    widths.push(base + (i < remainder ? 1 : 0));
+  }
+  return widths;
 }

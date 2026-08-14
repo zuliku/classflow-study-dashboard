@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { kiroDocumentSchema } from "@/lib/ai/computer/documents/schema";
+import { kiroDocumentDraftSchema } from "@/lib/ai/computer/documents/authoring/schema";
 
 /**
  * Computer Tool 输入 Schema（zod）——所有工具在 Executor 内强制校验。
@@ -66,9 +66,10 @@ export const patchTextFileSchema = z.object({
     .max(20),
 });
 
+/** V2.2：create_document —— 模型写扁平 KiroDocumentDraft（text/items/string 表格），executor 内 normalize 为 canonical */
 export const createDocumentSchema = z.object({
   path: resourcePath,
-  document: kiroDocumentSchema,
+  document: kiroDocumentDraftSchema,
 });
 
 /** V2：rename_file —— newName 只能是 basename（/ \\ . .. NUL/control/Windows reserved 由运行时拒绝） */
@@ -86,11 +87,11 @@ export const moveFileSchema = z.object({
   destinationPath: resourcePath,
 });
 
-/** V2 Part 2：update_document —— 模型只提供 artifactId + expectedRevision + Document IR（无路径/adapterRef/bytes） */
+/** V2 Part 2 + V2.2：update_document —— 模型只提供 artifactId + expectedRevision + 扁平 Draft（无路径/adapterRef/bytes） */
 export const updateDocumentSchema = z.object({
   artifactId: z.string().trim().min(1).max(160),
   expectedRevision: z.number().int().min(1).max(1_000_000),
-  document: kiroDocumentSchema,
+  document: kiroDocumentDraftSchema,
 });
 
 /** V3 Part 1：search_workspace_knowledge —— 本地知识索引候选搜索（正文结论仍需实时读取） */

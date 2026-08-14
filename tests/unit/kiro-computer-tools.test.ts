@@ -426,8 +426,8 @@ describe("mutation tools + policy（Part 2 回归 + Part 3 attempt 语义）", (
         document: {
           title: "研究方案",
           blocks: [
-            { type: "heading", level: 1, content: [{ text: "引言" }] },
-            { type: "paragraph", content: [{ text: "正文" }] },
+            { type: "heading", level: 1, text: "引言" },
+            { type: "paragraph", text: "正文" },
           ],
         },
       },
@@ -456,8 +456,8 @@ describe("mutation tools + policy（Part 2 回归 + Part 3 attempt 语义）", (
         document: {
           title: "研究方案",
           blocks: [
-            { type: "heading", level: 1, content: [{ text: "章节" }] },
-            { type: "paragraph", content: [{ text: "内容" }] },
+            { type: "heading", level: 1, text: "章节" },
+            { type: "paragraph", text: "内容" },
           ],
         },
       },
@@ -474,12 +474,12 @@ describe("mutation tools + policy（Part 2 回归 + Part 3 attempt 语义）", (
 
   it("create_document：带 stylePreset 的 DOCX → ok/verified + Source IR 保留 style + download payload 通过强化验证", async () => {
     const c = counters();
-    const styled: KiroDocument = {
+    const styled = {
       title: "商业分析报告",
       blocks: [
-        { type: "heading", level: 1, content: [{ text: "市场概况" }] },
-        { type: "paragraph", content: [{ text: "本报告分析市场规模与增长。" }] },
-        { type: "table", header: [[{ text: "指标" }], [{ text: "数值" }]], rows: [[[{ text: "增速" }], [{ text: "12%" }]]] },
+        { type: "heading", level: 1, text: "市场概况" },
+        { type: "paragraph", text: "本报告分析市场规模与增长。" },
+        { type: "table", header: ["指标", "数值"], rows: [["增速", "12%"]] },
       ],
       stylePreset: "business-report",
       styleHints: { titleAlignment: "center" },
@@ -498,12 +498,17 @@ describe("mutation tools + policy（Part 2 回归 + Part 3 attempt 语义）", (
     expect(data.format).toBe("docx");
     expect(data.verified).toBe(true);
 
-    // Source IR 保留 style（注册的是 effective Document IR）
+    // Source IR 保留 style（注册的是 normalize 后的 canonical Document IR）
     const source = await getArtifactSource((attempt.runtime?.change as { artifactId?: string }).artifactId ?? "");
     expect(source?.document.stylePreset).toBe("business-report");
     expect(source?.document.styleHints?.titleAlignment).toBe("center");
+    expect(source?.document.blocks[2]).toEqual({
+      type: "table",
+      header: [[{ text: "指标" }], [{ text: "数值" }]],
+      rows: [[[{ text: "增速" }], [{ text: "12%" }]]],
+    });
 
-    // live bytes → Artifact download payload → verifyRenderedDocx 仍成功
+    // live bytes → Artifact download payload → verifyRenderedDocx 仍成功（对比 canonical Source IR）
     const { getArtifactDownloadPayload } = await import("@/lib/ai/computer/artifacts/access");
     const { verifyRenderedDocx } = await import("@/lib/ai/computer/documents/verify");
     const payload = await getArtifactDownloadPayload({
@@ -511,7 +516,7 @@ describe("mutation tools + policy（Part 2 回归 + Part 3 attempt 语义）", (
       workspaces: [workspace],
     });
     expect(payload.fileName).toBe("report.docx");
-    expect(await verifyRenderedDocx(payload.bytes, styled)).toBe(true);
+    expect(await verifyRenderedDocx(payload.bytes, source!.document)).toBe(true);
   });
 
   it("update_document：无 style 时保持既有 style；切换 preset 时旧 hints 清空", async () => {
@@ -522,9 +527,9 @@ describe("mutation tools + policy（Part 2 回归 + Part 3 attempt 语义）", (
         path: "论文.docx",
         document: {
           title: "课程论文",
-          blocks: [{ type: "paragraph", content: [{ text: "第一版" }] }],
+          blocks: [{ type: "paragraph", text: "第一版" }],
           stylePreset: "academic-cn",
-          styleHints: { pageMarginsCm: { left: 3 } },
+          styleHints: { marginLeftCm: 3 },
         },
       },
       context: ctx(AUTO_SNAPSHOT),
@@ -541,7 +546,7 @@ describe("mutation tools + policy（Part 2 回归 + Part 3 attempt 语义）", (
       toolInput: {
         artifactId,
         expectedRevision: 1,
-        document: { title: "课程论文", blocks: [{ type: "paragraph", content: [{ text: "第二版" }] }] },
+        document: { title: "课程论文", blocks: [{ type: "paragraph", text: "第二版" }] },
       },
       context: ctx(AUTO_SNAPSHOT),
       counters: counters(),
@@ -562,7 +567,7 @@ describe("mutation tools + policy（Part 2 回归 + Part 3 attempt 语义）", (
         expectedRevision: 2,
         document: {
           title: "课程论文",
-          blocks: [{ type: "paragraph", content: [{ text: "第三版" }] }],
+          blocks: [{ type: "paragraph", text: "第三版" }],
           stylePreset: "business-report",
         },
       },
@@ -603,18 +608,18 @@ describe("mutation tools + policy（Part 2 回归 + Part 3 attempt 语义）", (
 });
 
 describe("update_document（V2 Part 2）", () => {
-  const IR_V1: KiroDocument = {
+  const IR_V1 = {
     title: "研究方案",
     blocks: [
-      { type: "heading", level: 1, content: [{ text: "引言" }] },
-      { type: "paragraph", content: [{ text: "版本一" }] },
+      { type: "heading", level: 1, text: "引言" },
+      { type: "paragraph", text: "版本一" },
     ],
   };
-  const IR_V2: KiroDocument = {
+  const IR_V2 = {
     title: "研究方案",
     blocks: [
-      { type: "heading", level: 1, content: [{ text: "引言" }] },
-      { type: "paragraph", content: [{ text: "版本二" }] },
+      { type: "heading", level: 1, text: "引言" },
+      { type: "paragraph", text: "版本二" },
     ],
   };
 
@@ -667,7 +672,7 @@ describe("update_document（V2 Part 2）", () => {
     expect(artifact?.revision).toBe(2);
     const source = await getArtifactSource(artifactId);
     expect(source?.revision).toBe(2);
-    expect(source?.document.blocks[1]).toEqual(IR_V2.blocks[1]);
+    expect(source?.document.blocks[1]).toEqual({ type: "paragraph", content: [{ text: "版本二" }] });
   });
 
   it("Guided update_document asks without quota and approved resume consumes one", async () => {
@@ -885,8 +890,8 @@ describe("update_document（V2 Part 2）", () => {
         document: {
           title: "Word 测试",
           blocks: [
-            { type: "heading", level: 1, content: [{ text: "标题" }] },
-            { type: "paragraph", content: [{ text: "Word 正文可读取" }] },
+            { type: "heading", level: 1, text: "标题" },
+            { type: "paragraph", text: "Word 正文可读取" },
           ],
         },
       },

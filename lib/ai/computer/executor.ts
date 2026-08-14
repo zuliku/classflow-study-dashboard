@@ -57,6 +57,7 @@ import { renderMarkdown } from "@/lib/ai/computer/documents/markdown";
 import { renderDocx } from "@/lib/ai/computer/documents/docx";
 import { verifyMarkdownWritten, verifyDocxBytes, verifyRenderedDocx, inspectDocumentFacts } from "@/lib/ai/computer/documents/verify";
 import { mergeDocumentStyleForUpdate } from "@/lib/ai/computer/documents/styles/resolve";
+import { normalizeDocumentDraft } from "@/lib/ai/computer/documents/authoring/normalize";
 import { isKiroDocument } from "@/lib/ai/computer/documents/types";
 import {
   registerCreatedArtifact,
@@ -692,7 +693,9 @@ export async function executeKiroComputerTool(request: {
     if (toolName === "update_document") {
       const artifactId = String(args.artifactId);
       const expectedRevision = Number(args.expectedRevision);
-      const document = args.document as Parameters<typeof renderMarkdown>[0];
+
+      // V2.2：模型写扁平 Draft → deterministic normalize 为 canonical KiroDocument
+      const document = normalizeDocumentDraft(args.document as Parameters<typeof normalizeDocumentDraft>[0]);
 
       // 每次执行都重读 Registry（Approval resume 时 useKiroChat 会用 frozen input 重跑本函数 → 自然重检 revision/location）
       const { artifact, source: previousSource } = await getEditableArtifactRevisionState(artifactId, expectedRevision);
@@ -1345,7 +1348,8 @@ export async function executeKiroComputerTool(request: {
     }
     if (toolName === "create_document") {
       counters.mutationCount += 1;
-      const document = args.document as Parameters<typeof renderMarkdown>[0];
+      // V2.2：模型写扁平 Draft → deterministic normalize 为 canonical KiroDocument（Artifact 存 canonical）
+      const document = normalizeDocumentDraft(args.document as Parameters<typeof normalizeDocumentDraft>[0]);
       if (!isKiroDocument(document)) throw new ComputerError("INVALID_INPUT", "文档 IR 不合法");
       const ext = normalized.split(".").pop()?.toLowerCase();
       if (ext === "md") {

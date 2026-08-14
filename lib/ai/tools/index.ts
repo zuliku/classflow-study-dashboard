@@ -26,13 +26,14 @@ export const KIRO_TOOLS = {
 
 export type KiroToolSet = typeof KIRO_TOOLS;
 
-/** Computer 工具 → AI SDK tool set（schema 注册；client 端同名执行） */
+/** Computer 工具 → AI SDK tool set（schema 注册；client 端同名执行；V2.2：inputExamples 用于指导复杂参数） */
 export function buildComputerToolSet(mode: "plan" | "guided" | "workspace-auto"): ToolSet {
   const set: ToolSet = {};
   for (const def of getComputerToolsForMode(mode)) {
     set[def.name] = tool({
       description: def.description,
       inputSchema: def.schema,
+      ...(def.inputExamples && def.inputExamples.length > 0 ? { inputExamples: def.inputExamples } : {}),
     });
   }
   return set;

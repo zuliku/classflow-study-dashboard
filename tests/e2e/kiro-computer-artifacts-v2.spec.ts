@@ -236,16 +236,16 @@ test("V2 Artifact：创建 draft.md → rename → 审批 → 重命名事实 �
 const IR_V1 = {
   title: "研究方案",
   blocks: [
-    { type: "heading", level: 1, content: [{ text: "引言" }] },
-    { type: "paragraph", content: [{ text: "版本一" }] },
+    { type: "heading", level: 1, text: "引言" },
+    { type: "paragraph", text: "版本一" },
   ],
 };
 
 const IR_V2 = {
   title: "研究方案",
   blocks: [
-    { type: "heading", level: 1, content: [{ text: "引言" }] },
-    { type: "paragraph", content: [{ text: "版本二" }] },
+    { type: "heading", level: 1, text: "引言" },
+    { type: "paragraph", text: "版本二" },
   ],
 };
 
@@ -472,8 +472,8 @@ test("V2 Part 3：Artifact Preview / Download / Recent / Ask Kiro 使用安全�
           document: {
             title: "研究方案",
             blocks: [
-              { type: "heading", level: 1, content: [{ text: "研究背景" }] },
-              { type: "paragraph", content: [{ text: "这是 Artifact UX 测试正文。" }] },
+              { type: "heading", level: 1, text: "研究背景" },
+              { type: "paragraph", text: "这是 Artifact UX 测试正文。" },
             ],
           },
         }),
@@ -672,32 +672,17 @@ test("V2 Part 3：Artifact Preview / Download / Recent / Ask Kiro 使用安全�
 
 // ==================== V2.1：真实浏览器下载完整性（P0） ====================
 
-/** 用户真实失败场景的课表 DOCX IR（4 列表格） */
+/** 用户真实失败场景的课表 DOCX IR（4 列表格；V2.2 扁平 Draft 形式） */
 const SCHEDULE_IR = {
   title: "本周课表（第1周）",
   stylePreset: "business-report",
   blocks: [
     {
       type: "table",
-      header: [
-        [{ text: "星期" }],
-        [{ text: "课程" }],
-        [{ text: "时间" }],
-        [{ text: "地点" }],
-      ],
+      header: ["星期", "课程", "时间", "地点"],
       rows: [
-        [
-          [{ text: "周一" }],
-          [{ text: "数据结构与算法" }],
-          [{ text: "08:00–09:40" }],
-          [{ text: "计算机楼 102" }],
-        ],
-        [
-          [{ text: "周二" }],
-          [{ text: "概率论与数理统计" }],
-          [{ text: "10:00–11:40" }],
-          [{ text: "教三 305" }],
-        ],
+        ["周一", "数据结构与算法", "08:00–09:40", "计算机楼 102"],
+        ["周二", "概率论与数理统计", "10:00–11:40", "教三 305"],
       ],
     },
   ],
@@ -819,12 +804,14 @@ test("V2.1：DOCX 浏览器下载 byte-for-byte 完整性（下载文件 = Sandb
 
   // ---- 下载文件本身通过 DOCX 校验（package + round-trip）----
   const { verifyDocxBytes, verifyRenderedDocx } = await import("@/lib/ai/computer/documents/verify");
+  const { normalizeDocumentDraft } = await import("@/lib/ai/computer/documents/authoring/normalize");
   const downloadedBytes = new Uint8Array(downloaded);
   // PK ZIP signature
   expect(downloadedBytes[0]).toBe(0x50);
   expect(downloadedBytes[1]).toBe(0x4b);
   expect(await verifyDocxBytes(downloadedBytes)).toBe(true);
-  expect(await verifyRenderedDocx(downloadedBytes, SCHEDULE_IR as never)).toBe(true);
+  // round-trip 对比 canonical Source IR（Draft → normalize → renderer）
+  expect(await verifyRenderedDocx(downloadedBytes, normalizeDocumentDraft(SCHEDULE_IR as never))).toBe(true);
 
   // ---- Optional：LibreOffice compatibility smoke（环境无 soffice 则 SKIPPED）----
   let soffice = false;
@@ -845,4 +832,116 @@ test("V2.1：DOCX 浏览器下载 byte-for-byte 完整性（下载文件 = Sandb
   } else {
     console.log("SKIPPED: soffice not found — LibreOffice compatibility smoke skipped");
   }
+});
+
+// ==================== V2.2：Agent Flow Regression（Draft 单次成功 + 语义标签） ====================
+
+test("V2.2 Agent Flow：get_week_schedule → create_document（Draft table，一次成功）→ begin_final_answer", async ({ page }) => {
+  const seenCreateDocumentParts: { toolCallId?: string; state?: string }[] = [];
+  const seenCreateDocumentCallIds = new Set<string>();
+  let requestCount = 0;
+  await page.route("**/api/ai/chat", async (route) => {
+    requestCount += 1;
+    const body = route.request().postDataJSON() as {
+      messages?: { parts?: { type?: string; toolCallId?: string; state?: string; input?: unknown }[] }[];
+    };
+    for (const m of body?.messages ?? []) {
+      for (const p of m.parts ?? []) {
+        if (p.type === "tool-create_document") {
+          // 同一 part 会随 continuation 请求反复出现 → 按 toolCallId 去重计调用次数
+          if (p.toolCallId && !seenCreateDocumentCallIds.has(p.toolCallId)) {
+            seenCreateDocumentCallIds.add(p.toolCallId);
+            seenCreateDocumentParts.push({ toolCallId: p.toolCallId, state: p.state });
+          }
+        }
+      }
+    }
+    if (requestCount === 1) {
+      await route.fulfill({
+        status: 200,
+        contentType: "text/event-stream",
+        body: toolCallStream("af-msg-1", "call_ws", "get_week_schedule", {}),
+      });
+      return;
+    }
+    if (requestCount === 2) {
+      await route.fulfill({
+        status: 200,
+        contentType: "text/event-stream",
+        body: toolCallStream("af-msg-1", "call_doc", "create_document", {
+          path: "课表.docx",
+          document: {
+            title: "本周课表",
+            stylePreset: "business-report",
+            blocks: [
+              { type: "table", header: ["星期", "课程", "时间", "地点"], rows: [["周一", "数据结构与算法", "08:00–09:40", "计算机楼 102"]] },
+            ],
+          },
+        }),
+      });
+      return;
+    }
+    if (requestCount === 3) {
+      await route.fulfill({
+        status: 200,
+        contentType: "text/event-stream",
+        body: toolCallStream("af-msg-1", "call_fa", "begin_final_answer", {}),
+      });
+      return;
+    }
+    await route.fulfill({
+      status: 200,
+      contentType: "text/event-stream",
+      body: answerStream("af-msg-1", "已生成课表 Word 文档。"),
+    });
+  });
+
+  await page.addInitScript(({ settings, key }) => {
+    localStorage.setItem("classflow-ai-settings-v1", JSON.stringify({ version: 0, state: settings }));
+    sessionStorage.setItem("classflow-ai-key:deepseek", key);
+  }, { settings: AI_SETTINGS, key: "sk-test-key" });
+
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/");
+  await page.locator("aside").first().getByRole("button", { name: "Kiro" }).click();
+  await page.waitForTimeout(800);
+
+  const composer = page.getByTestId("kiro-composer");
+  await expect(composer).toBeVisible();
+  await composer.getByRole("button", { name: "Computer" }).click();
+  await expect(composer.getByRole("button", { name: "Computer" })).toHaveAttribute("aria-pressed", "true");
+  const modeMenu = composer.getByRole("button", { name: "权限模式" });
+  await modeMenu.click();
+  await page.getByRole("menuitem", { name: /工作区自动/ }).first().click();
+
+  await composer.getByLabel("Ask Kiro").fill("帮我生成本周课表 Word");
+  await composer.getByLabel("发送").click();
+
+  const taskCard = page.locator('[data-testid="kiro-message"]').last().getByTestId("kiro-agent-task-card");
+  await expect(taskCard).toBeVisible({ timeout: 15000 });
+  await expect(taskCard).toContainText("创建 课表.docx");
+
+  // create_document 只被模型调用一次（无失败重试链）
+  expect(seenCreateDocumentParts.length).toBe(1);
+  // 且该 part 是成功态（output-available，不是 output-error）
+  expect(seenCreateDocumentParts[0]).toMatchObject({ state: "output-available" });
+  expect(seenCreateDocumentParts[0]?.toolCallId).toBeTruthy();
+
+  // Worklog：真实语义标签（查看课表 / 创建文档），不存在「执行操作」
+  const worklog = page.getByTestId("kiro-worklog");
+  await expect(worklog).toBeVisible();
+  await expect(worklog.getByRole("status")).toHaveText("已完成 2 个步骤", { timeout: 10000 });
+  // turn 结束自动折叠 → 展开后检查 tool 行语义标签
+  const summary = worklog.getByRole("button").first();
+  await summary.click();
+  await expect(worklog).toContainText("查看课表");
+  await expect(worklog).toContainText("创建文档");
+  await expect(worklog.getByText("执行操作", { exact: true })).toHaveCount(0);
+  // 不存在模型自述 JSON/结构错误的文字
+  await expect(page.getByText(/JSON|schema|结构错误|Let me fix/i)).toHaveCount(0);
+
+  // Sandbox 已生成文件
+  const fp = await readSandboxBinaryFingerprint(page, "课表.docx");
+  expect(fp).not.toBeNull();
+  expect(fp!.size).toBeGreaterThan(0);
 });

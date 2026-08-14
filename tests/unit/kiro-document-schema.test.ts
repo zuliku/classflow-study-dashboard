@@ -36,7 +36,8 @@ const workspace: KiroWorkspaceMeta = {
 const ctx = () => ({ turnSnapshot: AUTO, liveWorkspaces: [workspace], livePermissionRules: [] });
 const counters = () => ({ readCount: 0, mutationCount: 0 });
 
-const FULL_DOC = {
+/** canonical KiroDocument（内部 Source of Truth；renderer/Artifact 消费；Draft 由 normalize 产出） */
+const CANONICAL_FULL_DOC = {
   title: "研究方案",
   blocks: [
     { type: "heading", level: 1, content: [{ text: "研究背景" }] },
@@ -45,6 +46,22 @@ const FULL_DOC = {
     { type: "numbered-list", items: [[{ text: "第一步" }]] },
     { type: "table", header: [[{ text: "变量" }], [{ text: "含义" }]], rows: [[[{ text: "x" }], [{ text: "值" }]]] },
     { type: "quote", content: [{ text: "引用" }] },
+    { type: "code", language: "stata", text: "reg y x" },
+    { type: "page-break" },
+  ],
+};
+
+/** V2.2：model-facing 输入是扁平 Draft（executor 内 normalize 为 canonical） */
+const FULL_DOC = {
+  title: "研究方案",
+  stylePreset: "academic-cn",
+  blocks: [
+    { type: "heading", level: 1, text: "研究背景" },
+    { type: "paragraph", text: "正文" },
+    { type: "bullet-list", items: ["项一", "项二"] },
+    { type: "numbered-list", items: ["第一步"] },
+    { type: "table", header: ["变量", "含义"], rows: [["x", "值"]] },
+    { type: "quote", text: "引用" },
     { type: "code", language: "stata", text: "reg y x" },
     { type: "page-break" },
   ],
@@ -61,7 +78,7 @@ beforeEach(async () => {
 
 describe("document IR schema source of truth", () => {
   it("合法完整 IR → success（heading/paragraph/lists/table/quote/code/page-break）", () => {
-    expect(kiroDocumentSchema.safeParse(FULL_DOC).success).toBe(true);
+    expect(kiroDocumentSchema.safeParse(CANONICAL_FULL_DOC).success).toBe(true);
   });
 
   it("非法 IR 全部拒绝（sections / level 5 / items 非数组 / header 非数组）", () => {
@@ -78,18 +95,18 @@ describe("document IR schema source of truth", () => {
   });
 
   it("isKiroDocument 薄封装与 schema 一致", () => {
-    expect(isKiroDocument(FULL_DOC)).toBe(true);
+    expect(isKiroDocument(CANONICAL_FULL_DOC)).toBe(true);
     expect(isKiroDocument({ blocks: [{ type: "unknown" }] })).toBe(false);
     expect(isKiroDocument({ title: "x", sections: [] })).toBe(false);
   });
 });
 
 describe("model-facing schema visibility", () => {
-  it("create_document 暴露 document.title/blocks/type（discriminated blocks）而非 opaque unknown", () => {
+  it("create_document 暴露扁平 Draft（document.title/blocks/type + text 字符串）而非 opaque unknown", () => {
     const json = toJsonSchema(createDocumentSchema);
     const props = (json.properties ?? {}) as Record<string, { properties?: Record<string, unknown>; description?: string }>;
     expect(props.document).toBeDefined();
-    expect(props.document.description ?? "").toContain("KiroDocument");
+    expect(props.document.description ?? "").toContain("Draft");
     const docProps = props.document.properties ?? {};
     expect(docProps.blocks).toBeDefined();
     expect(docProps.title).toBeDefined();
@@ -99,9 +116,12 @@ describe("model-facing schema visibility", () => {
       expect(serialized).toContain(blockType);
     }
     expect(serialized).not.toContain('"sections"');
+    // 模型只写字符串：table 是 header string[] / rows string[][]（不再暴露三层 inline 数组）
+    expect(serialized).toContain('"items"');
+    expect(serialized).toContain('"rows"');
   });
 
-  it("update_document 与 create_document 使用同一 KiroDocument schema", () => {
+  it("update_document 与 create_document 使用同一扁平 Draft schema", () => {
     const upd = toJsonSchema(updateDocumentSchema);
     const cre = toJsonSchema(createDocumentSchema);
     expect((upd.properties as Record<string, unknown>).document).toEqual(
@@ -109,14 +129,17 @@ describe("model-facing schema visibility", () => {
     );
   });
 
-  it("model-facing schema 暴露 stylePreset 枚举与 styleHints 受控字段（Document Engine V2）", () => {
+  it("model-facing schema 暴露 stylePreset 枚举与扁平 styleHints 字段（V2.2）", () => {
     const json = toJsonSchema(createDocumentSchema);
     const serialized = JSON.stringify(json);
     expect(serialized).toContain("academic-cn");
     expect(serialized).toContain("business-report");
-    for (const hint of ["density", "bodyFont", "bodyFontSizePt", "lineSpacing", "firstLineIndentChars", "titleAlignment", "tableStyle", "pageMarginsCm"]) {
+    for (const hint of ["density", "bodyFont", "bodyFontSizePt", "lineSpacing", "firstLineIndentChars", "titleAlignment", "titleFontSizePt", "tableStyle", "heading1FontSizePt", "marginLeftCm"]) {
       expect(serialized).toContain(hint);
     }
+    // canonical 嵌套字段不再暴露给模型
+    expect(serialized).not.toContain("pageMarginsCm");
+    expect(serialized).not.toContain("headingSizesPt");
   });
 
   it("inline schema 结构正确（text 必填；bold/italic 可选）", () => {
@@ -210,12 +233,12 @@ describe("create_document DOCX end-to-end runtime", () => {
 });
 
 describe("registry tool schema wiring", () => {
-  it("create_document / update_document 注册的 schema 就是真实 KiroDocument schema", () => {
+  it("create_document / update_document 注册的 schema 就是真实扁平 Draft schema", () => {
     const createDef = COMPUTER_TOOLS.find((t) => t.name === "create_document");
     const updateDef = COMPUTER_TOOLS.find((t) => t.name === "update_document");
     expect(createDef?.schema).toBe(createDocumentSchema);
     expect(updateDef?.schema).toBe(updateDocumentSchema);
-    expect(createDef?.description).toContain("KiroDocument");
+    expect(createDef?.description).toContain("Draft");
     expect(updateDef?.description).toContain("与 create_document 完全相同");
   });
 });

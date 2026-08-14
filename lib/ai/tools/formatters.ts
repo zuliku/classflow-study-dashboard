@@ -71,6 +71,21 @@ export const KIRO_TOOL_LABELS: Record<string, string> = {
   web_search: "搜索网络",
   // Task 16A：Kiro Web Evidence（用户侧显示「阅读网页」，不出现 Tavily Extract）
   read_web_source: "阅读网页",
+  // Computer Agent（V2.2：补齐用户语义标签，避免 fallback「执行操作」）
+  list_workspace_roots: "查看工作区",
+  list_directory: "查看文件",
+  search_files: "查找文件",
+  grep_files: "搜索文件内容",
+  get_file_metadata: "查看文件信息",
+  read_text: "读取文件",
+  inspect_document: "检查文档",
+  create_directory: "创建文件夹",
+  create_text_file: "创建文本文件",
+  patch_text_file: "修改文本文件",
+  create_document: "创建文档",
+  update_document: "更新文档",
+  rename_file: "重命名文件",
+  move_file: "移动文件",
 };
 
 export function toolLabel(toolName: string): string {
