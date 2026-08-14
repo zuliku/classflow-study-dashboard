@@ -1,4 +1,4 @@
-import "fake-indexeddb/auto";
+﻿import "fake-indexeddb/auto";
 import { describe, it, expect } from "vitest";
 import {
   resolveDocumentAuthoringVersion,
@@ -257,7 +257,7 @@ describe("Task 27: text-file binary guard", () => {
     expect(attempt.output.ok).toBe(false);
     expect((attempt.output as { code?: string }).code).toBe("UNSUPPORTED_FILE_TYPE");
     // 未产生文件
-    const adapter = (await import("@/lib/ai/computer/executor")).getComputerAdapterForAdapterRef(REF);
+    const adapter = (await import("@/lib/ai/computer/adapters/factory")).getComputerAdapterForAdapterRef(REF);
     expect(await adapter.stat("report.docx")).toBeNull();
   });
 });
@@ -319,3 +319,4 @@ describe("Task 28: failure fuse", () => {
     expect(advanceDocumentFailureFuse(s3, ok)).toBe(false);
   });
 });
+

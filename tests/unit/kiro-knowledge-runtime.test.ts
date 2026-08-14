@@ -1,4 +1,4 @@
-import "fake-indexeddb/auto";
+﻿import "fake-indexeddb/auto";
 import { describe, it, expect, beforeEach } from "vitest";
 import {
   replaceKnowledgeFile,
@@ -20,7 +20,7 @@ import {
   KiroKnowledgeFileRecord,
   knowledgeFileKey,
 } from "@/lib/ai/computer/knowledge/types";
-import { getComputerAdapterForAdapterRef } from "@/lib/ai/computer/executor";
+import { getComputerAdapterForAdapterRef  } from "@/lib/ai/computer/adapters/factory";
 import { clearSandboxAdapter, sandboxWriteText, sandboxCreateDirectory } from "@/lib/ai/computer/adapters/sandbox";
 import { queryWorkspaceKnowledge } from "@/lib/ai/computer/knowledge/service";
 import { KiroAgentMode, KiroWorkspaceMeta } from "@/lib/ai/computer/types";

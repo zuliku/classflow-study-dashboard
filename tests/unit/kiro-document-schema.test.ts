@@ -1,4 +1,4 @@
-import "fake-indexeddb/auto";
+﻿import "fake-indexeddb/auto";
 import { describe, it, expect, beforeEach } from "vitest";
 import { z, toJSONSchema } from "zod";
 import {
@@ -196,7 +196,7 @@ describe("create_document DOCX end-to-end runtime", () => {
     expect(data.verified).toBe(true);
 
     // adapter 层验证
-    const { getComputerAdapterForAdapterRef } = await import("@/lib/ai/computer/executor");
+    const { getComputerAdapterForAdapterRef } = await import("@/lib/ai/computer/adapters/factory");
     const io = getComputerAdapterForAdapterRef(REF);
     const stat = await io.stat("test.docx");
     expect(stat?.kind).toBe("file");
@@ -253,3 +253,4 @@ describe("registry tool schema wiring", () => {
     expect(createDocumentV2ModelSchema.safeParse({ path: "a.docx", document: canonical }).success).toBe(false);
   });
 });
+

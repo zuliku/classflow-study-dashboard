@@ -1,4 +1,4 @@
-import "fake-indexeddb/auto";
+﻿import "fake-indexeddb/auto";
 import { describe, it, expect, beforeEach } from "vitest";
 import { executeKiroComputerTool } from "@/lib/ai/computer/executor";
 import { getComputerToolsForMode, COMPUTER_TOOLS } from "@/lib/ai/computer/tools/registry";
@@ -11,7 +11,8 @@ import { sandboxDelete, sandboxWriteText, sandboxListDirectory } from "@/lib/ai/
 import { registerCreatedArtifact, adoptWorkspaceArtifact, getArtifact, getArtifactSource } from "@/lib/ai/computer/artifacts/service";
 import { clearWorkspaceKnowledge } from "@/lib/ai/computer/knowledge/db";
 import { KiroDocument } from "@/lib/ai/computer/documents/types";
-import { COMPUTER_DOCUMENT_REVISION_LIMIT_BYTES, getComputerAdapterForAdapterRef } from "@/lib/ai/computer/executor";
+import { COMPUTER_DOCUMENT_REVISION_LIMIT_BYTES } from "@/lib/ai/computer/executor";
+import { getComputerAdapterForAdapterRef } from "@/lib/ai/computer/adapters/factory";
 
 const SANDBOX_REF = "sandbox-test-ref";
 
@@ -1320,3 +1321,4 @@ describe("retrieve text-like consistency（V3 Part 2.1）", () => {
     expect(JSON.stringify(data)).not.toContain("研究方法二进制");
   });
 });
+

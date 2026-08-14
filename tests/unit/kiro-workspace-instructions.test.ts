@@ -1,11 +1,11 @@
-import "fake-indexeddb/auto";
+﻿import "fake-indexeddb/auto";
 import { describe, it, expect, beforeEach } from "vitest";
 import {
   loadWorkspaceInstructionsForTurn,
   normalizeWorkspaceInstructionsForPrompt,
   buildWorkspaceInstructionsSection,
 } from "@/lib/ai/computer/knowledge/instructions";
-import { getComputerAdapterForAdapterRef } from "@/lib/ai/computer/executor";
+import { getComputerAdapterForAdapterRef  } from "@/lib/ai/computer/adapters/factory";
 import { clearSandboxAdapter, sandboxWriteText } from "@/lib/ai/computer/adapters/sandbox";
 import { KiroComputerTurnSnapshot } from "@/lib/ai/contextBudget/types";
 import { ComputerPermissionRule, KiroWorkspaceMeta } from "@/lib/ai/computer/types";
@@ -179,3 +179,4 @@ describe("server normalizer", () => {
     expect(buildWorkspaceInstructionsSection([])).toBe("");
   });
 });
+

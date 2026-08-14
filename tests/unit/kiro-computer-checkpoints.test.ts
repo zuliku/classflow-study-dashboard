@@ -1,4 +1,4 @@
-import "fake-indexeddb/auto";
+﻿import "fake-indexeddb/auto";
 import { describe, it, expect, beforeEach } from "vitest";
 import {
   ComputerTaskCheckpoint,
@@ -7,7 +7,8 @@ import {
   appendInverseToCheckpoint,
   applyInverseToAdapter,
 } from "@/lib/ai/computer/checkpoints";
-import { getComputerAdapterForAdapterRef, executeKiroComputerTool } from "@/lib/ai/computer/executor";
+import { executeKiroComputerTool } from "@/lib/ai/computer/executor";
+import { getComputerAdapterForAdapterRef } from "@/lib/ai/computer/adapters/factory";
 import { ComputerAdapterIO } from "@/lib/ai/computer/executor-types";
 import { KiroComputerTurnSnapshot } from "@/lib/ai/contextBudget/types";
 import { KiroWorkspaceMeta } from "@/lib/ai/computer/types";
@@ -514,3 +515,5 @@ describe("structured document Undo write-count（V2 closeout）", () => {
     expect((await getArtifact(artifactId))?.revision).toBe(1);
   });
 });
+
+

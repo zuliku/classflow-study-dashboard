@@ -9,7 +9,8 @@ import { useKiroComputerStore } from "@/store/useKiroComputerStore";
 import { KiroComputerTurnSnapshot } from "@/lib/ai/contextBudget/types";
 import { ComputerActionFact, ComputerCapability, KiroWorkspaceMeta } from "@/lib/ai/computer/types";
 import { ComputerError } from "@/lib/ai/computer/errors";
-import { executeKiroComputerTool, getComputerAdapterForAdapterRef } from "@/lib/ai/computer/executor";
+import { executeKiroComputerTool } from "@/lib/ai/computer/executor";
+import { getComputerAdapterForAdapterRef } from "@/lib/ai/computer/adapters/factory";
 import { isComputerToolName, ComputerExecutionAttempt } from "@/lib/ai/computer/result";
 import { ComputerApprovalRequest, ComputerApprovalDecision, ComputerOneShotApproval } from "@/lib/ai/computer/approval";
 import {
@@ -2386,4 +2387,5 @@ function buildWriteApi({
     registerUndo: (id, undo) => registerUndo(id, undo),
   };
 }
+
 

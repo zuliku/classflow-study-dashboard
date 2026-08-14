@@ -9,7 +9,7 @@ import {
   KiroWorkspaceRootMeta,
 } from "@/lib/ai/computer/types";
 import { ComputerError } from "@/lib/ai/computer/errors";
-import { normalizeRelativeComputerPath } from "@/lib/ai/computer/workspace/resolver";
+import { normalizeRelativeComputerPath, resolveToolRootId } from "@/lib/ai/computer/workspace/resolver";
 import { prepareComputerTool } from "@/lib/ai/computer/prepare";
 import { COMPUTER_TOOLS } from "@/lib/ai/computer/tools/registry";
 import {
@@ -22,30 +22,7 @@ import {
   buildApprovalRequest,
   oneShotApprovalMatches,
 } from "@/lib/ai/computer/approval";
-import {
-  sandboxListDirectory,
-  sandboxStat,
-  sandboxReadText,
-  sandboxReadBytes,
-  sandboxCreateDirectory,
-  sandboxWriteText,
-  sandboxWriteBytes,
-  sandboxRemove,
-  sandboxMove,
-  sandboxReadTextPrefix,
-} from "@/lib/ai/computer/adapters/sandbox";
-import {
-  browserListDirectory,
-  browserStat,
-  browserReadText,
-  browserReadBytes,
-  browserCreateDirectory,
-  browserWriteText,
-  browserWriteBytes,
-  browserRemove,
-  browserMove,
-  browserReadTextPrefix,
-} from "@/lib/ai/computer/adapters/browser";
+import { getComputerAdapterForAdapterRef } from "@/lib/ai/computer/adapters/factory";
 import {
   applyReadBounds,
   searchFiles,
@@ -108,37 +85,6 @@ export interface ComputerExecutorContext {
 export interface ComputerCounterState {
   readCount: number;
   mutationCount: number;
-}
-
-/** 按 adapterRef 构造统一 IO 接口（browser / sandbox runtime；Part 3 导出供 Undo 复用） */
-export function getComputerAdapterForAdapterRef(adapterRef: string): ComputerAdapterIO {
-  const isSandbox = adapterRef === "sandbox-default" || adapterRef.startsWith("sandbox");
-  if (isSandbox) {
-    return {
-      list: (p) => sandboxListDirectory(adapterRef, p).then((items) => items.map((i) => ({ name: i.name, kind: i.entry.kind, size: i.entry.size }))),
-      stat: (p) => sandboxStat(adapterRef, p).then((e) => (e ? { kind: e.kind, size: e.size, type: e.type } : null)),
-      readText: (p) => sandboxReadText(adapterRef, p),
-      readBytes: (p) => sandboxReadBytes(adapterRef, p),
-      createDirectory: (p) => sandboxCreateDirectory(adapterRef, p),
-      writeText: (p, c, t) => sandboxWriteText(adapterRef, p, c, t),
-      writeBytes: (p, c, t) => sandboxWriteBytes(adapterRef, p, c, t),
-      remove: (p, k) => sandboxRemove(adapterRef, p, k),
-      move: (from, to) => sandboxMove(adapterRef, from, to),
-      readTextPrefix: (p, maxBytes) => sandboxReadTextPrefix(adapterRef, p, maxBytes),
-    };
-  }
-  return {
-    list: (p) => browserListDirectory(adapterRef, p),
-    stat: (p) => browserStat(adapterRef, p),
-    readText: (p) => browserReadText(adapterRef, p),
-    readBytes: (p) => browserReadBytes(adapterRef, p),
-    createDirectory: (p) => browserCreateDirectory(adapterRef, p),
-    writeText: (p, c) => browserWriteText(adapterRef, p, c),
-    writeBytes: (p, c) => browserWriteBytes(adapterRef, p, c),
-    remove: (p, k) => browserRemove(adapterRef, p, k),
-    move: (from, to) => browserMove(adapterRef, from, to),
-    readTextPrefix: (p, maxBytes) => browserReadTextPrefix(adapterRef, p, maxBytes),
-  };
 }
 
 function resolveSnapshotWorkspace(snapshot: KiroComputerTurnSnapshot, liveWorkspaces: KiroWorkspaceMeta[]) {
@@ -557,6 +503,97 @@ export async function executeKiroComputerTool(request: {
       };
     }
 
+    // ---- V2.5+V2.8：delete_file（在 resource 构造之前拦截：root 安全解析 + 两阶段删除语义）----
+    // rootId 可选：single-root Workspace 可省略；multi-root 省略 → ROOT_REQUIRED（绝不默认 roots[0]）。
+    if (toolName === "delete_file") {
+      const normalized = normalizeRelativeComputerPath(String(args.path ?? "")).path;
+      const resolvedRoot = resolveToolRootId({
+        rootId: typeof args.rootId === "string" && args.rootId.trim() ? args.rootId : undefined,
+        snapshotRoots: turnSnapshot.roots,
+        workspace: ws,
+      });
+      const deleteRoot = ws.roots.find((r) => r.id === resolvedRoot.rootId);
+      if (!deleteRoot) throw new ComputerError("ROOT_NOT_FOUND", `工作区根不存在：${resolvedRoot.rootId}`);
+
+      const policy = prepareComputerTool({
+        mode: turnSnapshot.agentMode,
+        rules: livePermissionRules,
+        workspace: ws,
+        capability: "fs.delete",
+        resource: { workspaceId: ws.id, rootId: deleteRoot.id, path: normalized },
+      });
+      if (policy.effect === "deny") {
+        return { kind: "completed", output: { ok: false, code: "PERMISSION_DENIED", message: policy.reason } };
+      }
+      if (policy.effect === "ask") {
+        const matchedOneShot =
+          oneShotApprovals && oneShotApprovals.length > 0
+            ? oneShotApprovals.findIndex((o) =>
+                oneShotApprovalMatches(o, {
+                  toolCallId,
+                  capability: "fs.delete",
+                  workspaceId: ws.id,
+                  rootId: deleteRoot.id,
+                  relativePath: normalized,
+                })
+              )
+            : -1;
+        if (matchedOneShot === -1) {
+          return {
+            kind: "approval-required",
+            request: buildApprovalRequest({
+              id: newApprovalId(),
+              toolCallId,
+              taskId: context.taskId ?? "",
+              capability: "fs.delete",
+              workspaceId: ws.id,
+              workspaceLabel: ws.name,
+              rootId: deleteRoot.id,
+              rootLabel: deleteRoot.label,
+              relativePath: normalized,
+              resourceLabel: normalized.split("/").pop() ?? normalized,
+              description: `删除文件 ${normalized}（删除后无法通过 Kiro 撤销）`,
+            }),
+          };
+        }
+        oneShotApprovals!.splice(matchedOneShot, 1); // 一次消费（resume 时重新评估 policy）
+      }
+
+      // 即将开始真实 filesystem mutation：只在此计数一次
+      counters.mutationCount += 1;
+
+      // 两阶段删除：filesystem core mutation 成功 = 删除成功（ok:true）；
+      // Artifact/Knowledge post-sync 失败 → warning（绝不把成功删除报告成未删除）
+      const deletion = await performFileDeletion({
+        workspace: ws,
+        rootId: deleteRoot.id,
+        relativePath: normalized,
+      });
+
+      // destructive / no Undo（不注册 inverse；Approval 已明确「删除后无法通过 Kiro 撤销」）
+      const runtime = buildMutationRuntime({
+        toolName,
+        toolCallId,
+        operation: "delete",
+        resourceType: "text",
+        snapshot: turnSnapshot,
+        workspaceLabel: ws.name,
+        root: deleteRoot,
+        relativePath: normalized,
+        review: { kind: "create" },
+      });
+      const outputData: Record<string, unknown> = {
+        path: normalized,
+        verified: true,
+        fileDeleted: true,
+        rootId: deleteRoot.id,
+      };
+      if (deletion.warnings && deletion.warnings.length > 0) {
+        outputData.warnings = deletion.warnings;
+      }
+      return { kind: "completed", output: { ok: true, data: outputData }, runtime };
+    }
+
     // 资源工具：workspace/root/path
     const resource: LogicalComputerResource = {
       workspaceId: ws.id,
@@ -956,81 +993,6 @@ export async function executeKiroComputerTool(request: {
       ? normalizeScopePath(resource.path)
       : normalizeRelativeComputerPath(resource.path).path;
 
-    // ---- V2.5：delete_file（在 generic ask 之前拦截，提供删除专属描述；V2.7：policy driven，不再恒 ask）----
-    if (toolName === "delete_file") {
-      const policy = prepareComputerTool({
-        mode: turnSnapshot.agentMode,
-        rules: livePermissionRules,
-        workspace: ws,
-        capability: "fs.delete",
-        resource: { ...resource, path: normalized },
-      });
-      if (policy.effect === "deny") {
-        return { kind: "completed", output: { ok: false, code: "PERMISSION_DENIED", message: policy.reason } };
-      }
-      if (policy.effect === "ask") {
-        const matchedOneShot =
-          oneShotApprovals && oneShotApprovals.length > 0
-            ? oneShotApprovals.findIndex((o) =>
-                oneShotApprovalMatches(o, {
-                  toolCallId,
-                  capability: "fs.delete",
-                  workspaceId: resource.workspaceId,
-                  rootId: resource.rootId,
-                  relativePath: normalized,
-                })
-              )
-            : -1;
-        if (matchedOneShot === -1) {
-          return {
-            kind: "approval-required",
-            request: buildApprovalRequest({
-              id: newApprovalId(),
-              toolCallId,
-              taskId: context.taskId ?? "",
-              capability: "fs.delete",
-              workspaceId: ws.id,
-              workspaceLabel: ws.name,
-              rootId: root.id,
-              rootLabel: root.label,
-              relativePath: normalized,
-              resourceLabel: normalized.split("/").pop() ?? normalized,
-              description: `删除文件 ${normalized}（删除后无法通过 Kiro 撤销）`,
-            }),
-          };
-        }
-        oneShotApprovals!.splice(matchedOneShot, 1); // 一次消费（resume 时重新评估 policy）
-      }
-
-      // 即将开始真实 filesystem mutation：只在此计数一次
-      counters.mutationCount += 1;
-
-      // 共享删除 primitive：stat=file → remove → stat absent verify → Artifact/Source 清理 → knowledge dirty
-      await performFileDeletion({
-        workspace: ws,
-        rootId: root.id,
-        relativePath: normalized,
-      });
-
-      // destructive / no Undo（不注册 inverse；Approval 已明确「删除后无法通过 Kiro 撤销」）
-      const runtime = buildMutationRuntime({
-        toolName,
-        toolCallId,
-        operation: "delete",
-        resourceType: "text",
-        snapshot: turnSnapshot,
-        workspaceLabel: ws.name,
-        root,
-        relativePath: normalized,
-        review: { kind: "create" },
-      });
-      return {
-        kind: "completed",
-        output: { ok: true, data: { path: normalized, verified: true } },
-        runtime,
-      };
-    }
-
     // policy（含 hard deny / read-only / mode default / explicit rules）
     const policy = prepareComputerTool({
       mode: turnSnapshot.agentMode,
@@ -1106,7 +1068,11 @@ export async function executeKiroComputerTool(request: {
     if (toolName === "list_directory") {
       counters.readCount += 1;
       const items = await adapter.list(normalized);
-      return { kind: "completed", output: { ok: true, data: { path: normalized, items } } };
+      // V2.8：返回 root identity——模型把 list_directory 结果带入 delete/move 时无需猜测 rootId
+      return {
+        kind: "completed",
+        output: { ok: true, data: { rootId: root.id, rootLabel: root.label, path: normalized, items } },
+      };
     }
     if (toolName === "search_files") {
       counters.readCount += 1;
@@ -1118,7 +1084,7 @@ export async function executeKiroComputerTool(request: {
           maxDepth: args.maxDepth as number | undefined,
         }
       );
-      return { kind: "completed", output: { ok: true, data: result } };
+      return { kind: "completed", output: { ok: true, data: { rootId: root.id, rootLabel: root.label, ...result } } };
     }
     if (toolName === "grep_files") {
       counters.readCount += 1;
@@ -1130,12 +1096,13 @@ export async function executeKiroComputerTool(request: {
           maxFiles: args.maxFiles as number | undefined,
         }
       );
-      return { kind: "completed", output: { ok: true, data: result } };
+      return { kind: "completed", output: { ok: true, data: { rootId: root.id, rootLabel: root.label, ...result } } };
     }
     if (toolName === "get_file_metadata") {
       counters.readCount += 1;
       const meta = await adapter.stat(normalized);
-      return { kind: "completed", output: { ok: true, data: { path: normalized, meta } } };
+      // V2.8：带 root identity（read → rename/delete 上下文不丢失）
+      return { kind: "completed", output: { ok: true, data: { rootId: root.id, rootLabel: root.label, path: normalized, meta } } };
     }
     if (toolName === "read_text") {
       counters.readCount += 1;
@@ -1145,7 +1112,10 @@ export async function executeKiroComputerTool(request: {
         endLine: args.endLine as number | undefined,
         maxChars: args.maxChars as number | undefined,
       });
-      return { kind: "completed", output: { ok: true, data: { path: normalized, ...bounded } } };
+      return {
+        kind: "completed",
+        output: { ok: true, data: { rootId: root.id, rootLabel: root.label, path: normalized, ...bounded } },
+      };
     }
     if (toolName === "inspect_document") {
       counters.readCount += 1;
@@ -1166,6 +1136,8 @@ export async function executeKiroComputerTool(request: {
           output: {
             ok: true,
             data: {
+              rootId: root.id,
+              rootLabel: root.label,
               format,
               headings: lines.filter((l) => /^#{1,3}\s/.test(l)).length,
               paragraphs: lines.filter((l) => l.trim() && !l.startsWith("#") && !l.startsWith("|")).length,
@@ -1229,6 +1201,8 @@ export async function executeKiroComputerTool(request: {
         output: {
           ok: true,
           data: {
+            rootId: root.id,
+            rootLabel: root.label,
             format,
             ...facts,
             bytes: bytes.byteLength,
@@ -1614,6 +1588,17 @@ export async function executeKiroComputerTool(request: {
       output: { ok: false, code: "PERMISSION_DENIED", message: `未实现的 Computer 工具：${toolName}` },
     };
   } catch (err) {
+    // V2.8 dev diagnostic：delete_file 失败时输出 bounded 记录（区分 INVALID_INPUT /
+    // ROOT_REQUIRED / ROOT_NOT_FOUND / RESOURCE_NOT_FOUND / PERMISSION_DENIED /
+    // VERIFICATION_FAILED / 其它异常）；绝不含 native path / handle / grant / 文件正文
+    if (toolName === "delete_file" && process.env.NODE_ENV === "development") {
+      console.info("[Kiro delete_file failed]");
+      console.info(`code=${err instanceof ComputerError ? err.code : "UNKNOWN"}`);
+      console.info(`rootId=${typeof args?.rootId === "string" ? args.rootId : "(omitted)"}`);
+      console.info(`path=${String(args?.path ?? "")}`);
+      console.info(`workspaceId=${ws.id}`);
+      console.info(`agentMode=${turnSnapshot.agentMode}`);
+    }
     if (err instanceof ComputerError) {
       return { kind: "completed", output: { ok: false, code: err.code, message: err.message } };
     }

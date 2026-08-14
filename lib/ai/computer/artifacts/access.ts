@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Kiro Computer V2 Part 3 — Artifact Access Service。
  * 唯一 live resolve 链：artifactId → Registry → live Workspace → root → 归一化逻辑路径 → adapter → filesystem。
  * Preview / Download 是用户显式 UI Read：无 audit、无 Computer quota、无 Approval；
@@ -14,7 +14,7 @@ import {
 } from "@/lib/ai/computer/artifacts/service";
 import { KiroWorkspaceMeta } from "@/lib/ai/computer/types";
 import { normalizeRelativeComputerPath } from "@/lib/ai/computer/workspace/resolver";
-import { getComputerAdapterForAdapterRef } from "@/lib/ai/computer/executor";
+import { getComputerAdapterForAdapterRef } from "@/lib/ai/computer/adapters/factory";
 import { inspectDocumentFacts, verifyDocxBytes, verifyRenderedDocx } from "@/lib/ai/computer/documents/verify";
 import { detectLegacyKiroDocx } from "@/lib/ai/computer/documents/legacy";
 import { inspectKiroDocxProvenance } from "@/lib/ai/computer/documents/provenance";
@@ -134,7 +134,10 @@ async function statOrUnavailable(
   }
 }
 
-/** 最近 12（当前 Workspace；updatedAt DESC metadata）→ 对 12 条 stat 分类可用性 */
+/** 最近 12（当前 Workspace；updatedAt DESC metadata）→ 对 12 条 stat 分类可用性。
+ *  V2.8 reconciliation：filesystem 是事实来源——Artifact 记录存在但文件已不存在时，
+ *  kiro-created 记录 best-effort GC（metadata garbage collection，非 filesystem mutation），
+ *  绝不返回「可下载/可预览」的行。 */
 export async function listRecentArtifactEntries(input: {
   workspaceId: string;
   workspaces: KiroWorkspaceMeta[];
@@ -162,6 +165,17 @@ export async function listRecentArtifactEntries(input: {
           availability = "available";
         } else {
           availability = "missing";
+          // V2.8：kiro-created 的 stale metadata → best-effort GC（文件已不存在，
+          // 记录不再有效；绝不因此显示可下载/预览）。失败静默（下次轮询重试）。
+          if (artifact.source === "kiro-created") {
+            try {
+              const { removeArtifactRecord } = await import("@/lib/ai/computer/artifacts/service");
+              await removeArtifactRecord(artifact.id);
+            } catch {
+              // GC 失败不阻塞列表
+            }
+            continue; // 不返回该 row
+          }
         }
       } catch {
         availability = "unavailable";
@@ -407,3 +421,4 @@ async function readLiveBytes(input: {
 }
 
 /** Preview 的 DOCX 分支：与 Download 共用 resolveLiveDocxBytes（legacy detection → migration → verified bytes） */
+

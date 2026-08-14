@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import React, { useCallback, useEffect, useState } from "react";
 import { RefreshCw, Trash2, FileText } from "lucide-react";
@@ -12,7 +12,7 @@ import {
   clearWorkspaceKnowledge,
 } from "@/lib/ai/computer/knowledge/service";
 import { KiroKnowledgeWorkspaceState } from "@/lib/ai/computer/knowledge/types";
-import { getComputerAdapterForAdapterRef } from "@/lib/ai/computer/executor";
+import { getComputerAdapterForAdapterRef } from "@/lib/ai/computer/adapters/factory";
 import { prepareComputerTool } from "@/lib/ai/computer/prepare";
 
 function knowledgeStatusLabel(state: KiroKnowledgeWorkspaceState | null): string {
@@ -179,3 +179,4 @@ export function KiroWorkspaceKnowledgePanel({ workspaceId }: { workspaceId: stri
     </SettingsRow>
   );
 }
+
