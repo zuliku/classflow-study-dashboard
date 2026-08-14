@@ -16,12 +16,15 @@ export const KIRO_TOOLS = {
   ...KIRO_READ_TOOLS,
   ...KIRO_WRITE_TOOLS,
   ...KIRO_MEMORY_TOOLS,
-  // Final Answer Boundary（Streaming UX V3）：内部控制信号工具。
-  // Client onToolCall 直接回填 ok:true（不执行、不计数、不进 worklog/audit）；
-  // server 在收到含该信号的续跑请求时关闭业务工具（toolChoice none）。
+  // Final Answer Boundary（Streaming UX V3 + V4.1）：内部控制信号工具。
+  // V4.1：begin_final_answer 是纯 Server control tool——execute 立即成功（无 Browser 状态 /
+  // Workspace / IndexedDB / 用户确认），结果直接随同一 UI stream 到 Browser，
+  // 不再需要 Browser → Server 的额外 roundtrip。不计 quota / 不进 audit / 不属 mutation。
+  // server 在收到含该信号的续跑请求（legacy）或 in-stream step（V4.1）时关闭业务工具。
   [KIRO_FINAL_ANSWER_TOOL_NAME]: tool({
     description: KIRO_FINAL_ANSWER_TOOL_DESCRIPTION,
     inputSchema: z.object({}),
+    execute: async () => ({ ok: true, data: {} }),
   }),
 };
 

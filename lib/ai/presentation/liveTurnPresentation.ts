@@ -53,12 +53,6 @@ export type KiroWorklogBlock =
       toolKind: "read" | "write";
       safeDetails: string[];
       stepIndex: number;
-    }
-  | {
-      /** V4：UI-only completion milestone（由 begin_final_answer 协议信号派生；非模型文字） */
-      kind: "milestone";
-      id: string;
-      stepIndex: number;
     };
 
 export interface KiroAssistantTurnPresentation {
@@ -287,12 +281,9 @@ export function updateLiveTurnPresentation(
     if (p.type === "reasoning") continue;
 
     if (isToolPart(p)) {
-      // 控制信号本身不进入 Worklog（无 Tool Row / 无 Action Card）；
-      // V4：begin_final_answer 派生 UI-only milestone（仅一次，位于最后一个 Tool 之后）
+      // 控制信号本身不进入 Worklog（V4.1：无 milestone / 无 Tool Row / 无 Action Card；
+      // phase 由 boundary 后的 composing 表达）
       if (isKiroFinalAnswerToolName(toolNameOf(p))) {
-        if (i === finalAnswerPartIndex) {
-          worklog.push({ kind: "milestone", id: `milestone-${i}`, stepIndex });
-        }
         continue;
       }
       worklog.push(buildToolBlock(p, i, stepIndex, trustedWebSources));
@@ -363,10 +354,11 @@ export function updateLiveTurnPresentation(
     phase = "done";
   } else if (answer.length > 0) {
     phase = "answering";
-  } else if (worklog.some((b) => b.kind === "milestone")) {
-    // V4：begin_final_answer 已到、Final Answer 未开始 → 正在整理回答
-    phase = "composing";
-  } else if (hasBusinessTools && worklog.every((b) => b.kind !== "tool" || b.status !== "working")) {
+  } else if (
+    // boundary 已到、Final Answer 未开始 → 正在整理回答（V4.1：无 milestone，由 phase 表达）
+    finalAnswerPartIndex >= 0 ||
+    (hasBusinessTools && worklog.every((b) => b.kind !== "tool" || b.status !== "working"))
+  ) {
     phase = "composing";
   } else {
     phase = "working";

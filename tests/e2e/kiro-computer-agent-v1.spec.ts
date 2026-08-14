@@ -274,9 +274,6 @@ test("V4 Computer：commentary 立即显示 → Computer 工具逐个渐进 → 
       (sum, m) => sum + (m.role === "assistant" ? (m.parts ?? []).filter((p) => p.type.startsWith("tool-") && p.state === "output-available").length : 0),
       0
     );
-    const hasBoundaryOutput = ((bodyJson.messages ?? []) as { role: string; parts?: { type: string; state?: string }[] }[]).some(
-      (m) => m.role === "assistant" && (m.parts ?? []).some((p) => p.type === "tool-begin_final_answer" && p.state === "output-available")
-    );
     if (toolOutputCount === 0) {
       return [
         {
@@ -324,26 +321,22 @@ test("V4 Computer：commentary 立即显示 → Computer 工具逐个渐进 → 
         },
       ];
     }
-    if (!hasBoundaryOutput) {
-      return [
-        {
-          delay: 6000,
-          events: [
-            JSON.stringify({ type: "start", messageId: "v4c-1" }),
-            JSON.stringify({ type: "start-step" }),
-            JSON.stringify({ type: "tool-input-start", toolCallId: "call_c_b", toolName: "begin_final_answer" }),
-            JSON.stringify({ type: "tool-input-delta", toolCallId: "call_c_b", inputTextDelta: "{}" }),
-            JSON.stringify({ type: "tool-input-available", toolCallId: "call_c_b", toolName: "begin_final_answer", input: {} }),
-            JSON.stringify({ type: "finish-step" }),
-            JSON.stringify({ type: "finish", finishReason: "tool-calls" }),
-          ],
-        },
-      ];
-    }
+    // 请求 3（V4.1）：begin_final_answer（server execute）+ Final Answer 同一响应
     return [
       {
+        delay: 6000,
         events: [
           JSON.stringify({ type: "start", messageId: "v4c-1" }),
+          JSON.stringify({ type: "start-step" }),
+          JSON.stringify({ type: "tool-input-start", toolCallId: "call_c_b", toolName: "begin_final_answer" }),
+          JSON.stringify({ type: "tool-input-delta", toolCallId: "call_c_b", inputTextDelta: "{}" }),
+          JSON.stringify({ type: "tool-input-available", toolCallId: "call_c_b", toolName: "begin_final_answer", input: {} }),
+          JSON.stringify({ type: "finish-step" }),
+        ],
+      },
+      {
+        delay: 60,
+        events: [
           JSON.stringify({ type: "start-step" }),
           JSON.stringify({ type: "text-start", id: "final-c" }),
           JSON.stringify({ type: "text-delta", id: "final-c", delta: "目录检查完成。" }),
@@ -387,8 +380,8 @@ test("V4 Computer：commentary 立即显示 → Computer 工具逐个渐进 → 
   // T3：progress2 到达
   const progress2 = worklog.getByText(P2, { exact: true });
   await expect(progress2).toBeVisible({ timeout: 8000 });
-  // milestone + Final Answer
-  await expect(worklog.getByTestId("kiro-worklog-milestone")).toContainText("已完成执行", { timeout: 10000 });
+  // V4.1：无 milestone（worklog 只含 commentary + tool）；Final Answer 同响应到达
+  await expect(page.getByTestId("kiro-worklog-milestone")).toHaveCount(0);
   await expect(page.getByTestId("kiro-message").last()).toContainText("目录检查完成", { timeout: 10000 });
 
   await sse.close();

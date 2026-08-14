@@ -409,8 +409,28 @@ export async function POST(req: NextRequest) {
       providerOptions: reasoningProviderOptions
         ? ({ "classflow-kiro": reasoningProviderOptions } as Parameters<typeof streamText>[0]["providerOptions"])
         : undefined,
-      // Task 14：Server execute tool 允许有限多步自动执行；客户端工具调用时 loop 自然暂停等 Client Result
-      stopWhen: isStepCount(5),
+      // Task 14：Server execute tool 允许有限多步自动执行；客户端工具调用时 loop 自然暂停等 Client Result。
+      // V4.1 stopWhen：business-step 上限（boundary 不消耗）——step 数达到上限时，
+      // 若最后一步是 begin_final_answer（boundary），必须允许下一步 Final Answer 生成。
+      stopWhen: (options) => {
+        const { steps } = options;
+        if (steps.length < 5) return false;
+        const lastToolName = steps[steps.length - 1]?.toolCalls?.[0]?.toolName;
+        if (lastToolName === KIRO_FINAL_ANSWER_TOOL_NAME) return false;
+        return true;
+      },
+      // V4.1 prepareStep：历史 step 已出现 begin_final_answer → 下一 step 从协议层关闭全部业务工具
+      //（activeTools: [] + toolChoice: "none"），并限制最多再走 1 个 step（Final text）。
+      // 不依赖 Client second guard 作为主防线。
+      prepareStep: async ({ steps }) => {
+        const boundarySeen = steps.some((s) =>
+          (s.toolCalls ?? []).some((tc) => tc.toolName === KIRO_FINAL_ANSWER_TOOL_NAME)
+        );
+        if (boundarySeen) {
+          return { activeTools: [], toolChoice: "none" as const, stopWhen: isStepCount(1) };
+        }
+        return {};
+      },
       // Worklog V2 Task 3 + Streaming UX V2 Phase 4：按词分块 + 12ms 间隔的流式节奏
       //（单一 cadence owner：client throttle 24ms 只是合并 React 更新，不叠加节流层）
       experimental_transform: smoothStream({

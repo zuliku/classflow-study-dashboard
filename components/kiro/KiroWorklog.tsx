@@ -1,12 +1,11 @@
 "use client";
 
-import React, { useEffect, useRef, useState } from "react";
-import { Check, Loader2, AlertCircle, ChevronDown, ListTree, PartyPopper } from "lucide-react";
+import React, { useRef, useState } from "react";
+import { Check, Loader2, AlertCircle, ChevronDown, ListTree } from "lucide-react";
 import { KiroAssistantTurnPresentation, KiroWorklogBlock } from "@/lib/ai/presentation/turnPresentation";
 import { hasMeaningfulKiroToolDetails } from "@/lib/ai/presentation/toolActivityDetails";
 import { KiroLogoIcon } from "@/components/kiro/KiroLogo";
 import { DisclosureRegion } from "@/components/ui/DisclosureRegion";
-import { useEffectiveReducedMotion } from "@/hooks/useEffectiveReducedMotion";
 import { cn } from "@/lib/utils";
 
 type ToolBlock = Extract<KiroWorklogBlock, { kind: "tool" }>;
@@ -15,42 +14,15 @@ type ToolBlock = Extract<KiroWorklogBlock, { kind: "tool" }>;
 const TOOL_ROW_BODY =
   "flex items-center gap-1.5 px-2 h-7 w-full text-left text-[11px] rounded-lg transition-colors";
 
-/** V4：仅首次入场的极轻动画（opacity 0→1 + translateY 1px→0；token delta 不重播） */
-const ENTER_ANIMATION_CLASS = "kiro-worklog-enter";
-
-/**
- * V4：block 首次出现播放一次入场动画（token delta / status 变化 / history restore 不重播）。
- * 只记录「已出现」的 block id；reduced motion 或 history restore（turn 已 done）不播放。
- */
-function useEnterOnAdd(blockIds: string[], reducedMotion: boolean, enabled: boolean) {
-  const seenRef = useRef<Set<string>>(new Set());
-  const [entered, setEntered] = useState<Set<string>>(new Set());
-  useEffect(() => {
-    if (reducedMotion || !enabled) return;
-    const next = new Set(entered);
-    let changed = false;
-    for (const id of blockIds) {
-      if (!seenRef.current.has(id)) {
-        seenRef.current.add(id);
-        next.add(id);
-        changed = true;
-      }
-    }
-    if (changed) setEntered(next);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [blockIds, reducedMotion, enabled]);
-  return entered;
-}
-
 /**
  * Tool Row：
  * - expandable（有真实确定性详情）→ 真实 button + aria-expanded + Chevron
  * - 否则 → 普通 div（无 aria-expanded / 无 Chevron / 不可点击）
  * 组件只消费 block.safeDetails（Task 1 已清洗），绝不读取 raw input / raw output。
- * V4：几何稳定——height/padding/border/background footprint 不随状态切换消失，
+ * 几何稳定：height/padding/border/background footprint 不随状态切换消失，
  * 状态主要由 icon（spinner/check/alert）与 text color 表达。
  */
-function KiroToolRow({ block, entered }: { block: ToolBlock; entered: boolean }) {
+function KiroToolRow({ block }: { block: ToolBlock }) {
   const [open, setOpen] = useState(false);
   const working = block.status === "working";
   const error = block.status === "error";
@@ -80,7 +52,7 @@ function KiroToolRow({ block, entered }: { block: ToolBlock; entered: boolean })
     </>
   );
 
-  const rowClass = cn(TOOL_ROW_BODY, rowClasses(block), entered && ENTER_ANIMATION_CLASS);
+  const rowClass = cn(TOOL_ROW_BODY, rowClasses(block));
 
   return (
     <div data-testid="kiro-tool-row">
@@ -109,7 +81,7 @@ function KiroToolRow({ block, entered }: { block: ToolBlock; entered: boolean })
   );
 }
 
-/** V4：几何稳定——所有状态保留同一 border/背景 footprint（透明/半透明差异），字体 weight 不跳变 */
+/** 几何稳定——所有状态保留同一 border/背景 footprint（透明/半透明差异），字体 weight 不跳变 */
 function rowClasses(block: ToolBlock): string {
   if (block.status === "error") return "text-danger border border-danger-border/60 bg-danger-bg/40";
   if (block.status === "working") return "text-charcoal border border-line-soft bg-alabaster/50";
@@ -118,13 +90,12 @@ function rowClasses(block: ToolBlock): string {
 }
 
 /**
- * Kiro Worklog（Density Polish + Streaming UX V3 + V4 Progressive）：
+ * Kiro Worklog（Density Polish + Streaming UX V3 + V4 + V4.1 Stable）：
  * - 整体 disclosure：Summary（ListTree + 步骤统计）→ 点击折叠/展开
- * - 自动折叠：working/composing 展开；answering 保持（不在 Final Answer 首 token 突变）；
- *   done（真实 settled，turnExecutionState 保证）且用户未手动操作 → 自动折叠一次
- * - commentary 完整显示（无 line-clamp）；worklog 使用消息可用宽度（无 max-w）
- * - 每个 Tool Row：generic fallback 详情不显示 Chevron（无 disclosure）
- * - V4：block 首次入场动画（useEnterOnAdd）；milestone（✓ 已完成执行）UI-only
+ * - V4.1：当前 Turn 生命周期（working → composing → answering → done）保持当前 expanded 状态，
+ *   完成瞬间不强制折叠（无大高度跳动）；历史恢复（初始 done）默认折叠；用户手动操作始终优先
+ * - Body 只包含真实 Agent trace：commentary + tool rows（无 milestone / 无 loading pseudo-row /
+ *   无入场动画——真实事件到达即出现）
  * - Final Answer 分割线无论折叠与否都保留
  */
 export function KiroWorklog({ turn }: { turn: KiroAssistantTurnPresentation }) {
@@ -135,31 +106,13 @@ export function KiroWorklog({ turn }: { turn: KiroAssistantTurnPresentation }) {
   const completedToolCount = toolBlocks.filter(
     (block) => block.status === "done" || block.status === "error"
   ).length;
-  const reducedMotion = useEffectiveReducedMotion();
-  // history restore（turn 已 done）不播放入场动画；只有 live 推进中的新 block 播放
-  const entered = useEnterOnAdd(
-    turn.worklog.map((b) => b.id),
-    reducedMotion,
-    turn.phase !== "done"
-  );
 
-  // 自动折叠（Streaming UX V3 Phase 3）：working/composing 展开；
-  // answering（Final Answer 首 token）保持当前状态，绝不在首 token 到达时做大幅 layout mutation；
-  // 只有进入 done（Turn 真正 settled）且用户未手动操作时才自动折叠。
+  // 当前 Turn：working/composing/answering 保持 expanded；历史恢复（初始 done）默认折叠；
+  // 不因 done 瞬时 collapse（避免完成瞬间 layout 跳动）；用户手动操作始终优先。
   const [expanded, setExpanded] = useState(
-    turn.phase === "working" || turn.phase === "composing"
+    turn.phase === "working" || turn.phase === "composing" || turn.phase === "answering"
   );
   const userToggledRef = useRef(false);
-  const prevPhaseRef = useRef(turn.phase);
-
-  useEffect(() => {
-    const prev = prevPhaseRef.current;
-    prevPhaseRef.current = turn.phase;
-    if (userToggledRef.current) return;
-    if (prev !== "done" && turn.phase === "done") {
-      setExpanded(false);
-    }
-  }, [turn.phase]);
 
   const toggleExpanded = () => {
     userToggledRef.current = true;
@@ -196,44 +149,19 @@ export function KiroWorklog({ turn }: { turn: KiroAssistantTurnPresentation }) {
         />
       </button>
 
-      {/* Expanded：commentary / Tool rows / milestone 真实时序；collapsed 时结构收起 */}
+      {/* Expanded：commentary / Tool rows 真实时序（无 synthetic row）；collapsed 时结构收起 */}
       <DisclosureRegion open={expanded} innerClassName="pt-1 space-y-1">
-        {turn.worklog.map((block) => {
-          if (block.kind === "commentary") {
-            return (
-              <p
-                key={block.id}
-                className={cn(
-                  "text-[11px] text-sandrift leading-relaxed whitespace-pre-wrap break-words",
-                  entered.has(block.id) && ENTER_ANIMATION_CLASS
-                )}
-              >
-                {block.text}
-              </p>
-            );
-          }
-          if (block.kind === "milestone") {
-            return (
-              <p
-                key={block.id}
-                data-testid="kiro-worklog-milestone"
-                className={cn(
-                  "flex items-center gap-1.5 text-[11px] font-semibold text-success",
-                  entered.has(block.id) && ENTER_ANIMATION_CLASS
-                )}
-              >
-                <PartyPopper className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
-                已完成执行
-              </p>
-            );
-          }
-          return <KiroToolRow key={block.id} block={block} entered={entered.has(block.id)} />;
-        })}
-        {turn.phase === "composing" && (
-          <p className="flex items-center gap-1.5 text-[11px] text-sandrift" aria-hidden="true">
-            <Loader2 className="w-3 h-3 animate-spin text-sandrift shrink-0" aria-hidden="true" />
-            正在整理回答
-          </p>
+        {turn.worklog.map((block) =>
+          block.kind === "commentary" ? (
+            <p
+              key={block.id}
+              className="text-[11px] text-sandrift leading-relaxed whitespace-pre-wrap break-words"
+            >
+              {block.text}
+            </p>
+          ) : (
+            <KiroToolRow key={block.id} block={block} />
+          )
         )}
       </DisclosureRegion>
 

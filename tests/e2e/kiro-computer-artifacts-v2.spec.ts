@@ -879,10 +879,24 @@ test("V2.2 Agent Flow：get_week_schedule → create_document（Draft table，�
       return;
     }
     if (requestCount === 3) {
+      // V4.1：begin_final_answer（server execute）+ Final Answer 同一响应（request 数 4 → 3）
       await route.fulfill({
         status: 200,
         contentType: "text/event-stream",
-        body: toolCallStream("af-msg-1", "call_fa", "begin_final_answer", {}),
+        body: sse([
+          { type: "start", messageId: "af-msg-1" },
+          { type: "start-step" },
+          { type: "tool-input-start", toolCallId: "call_fa", toolName: "begin_final_answer" },
+          { type: "tool-input-delta", toolCallId: "call_fa", inputTextDelta: "{}" },
+          { type: "tool-input-available", toolCallId: "call_fa", toolName: "begin_final_answer", input: {} },
+          { type: "finish-step" },
+          { type: "start-step" },
+          { type: "text-start", id: "t-af" },
+          { type: "text-delta", id: "t-af", delta: "已生成课表 Word 文档。" },
+          { type: "text-end", id: "t-af" },
+          { type: "finish-step" },
+          { type: "finish", finishReason: "stop" },
+        ].map((o) => JSON.stringify(o))),
       });
       return;
     }

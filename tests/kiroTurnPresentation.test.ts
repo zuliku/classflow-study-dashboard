@@ -55,12 +55,9 @@ describe("Final Answer Boundary（显式协议通道）", () => {
       ],
       true
     );
-    expect(p.worklog.map((b) => b.kind)).toEqual(["commentary", "tool", "commentary", "tool", "milestone"]);
+    expect(p.worklog.map((b) => b.kind)).toEqual(["commentary", "tool", "commentary", "tool"]);
     expect(commentaryTexts(p)).toEqual(["我先看看你的作业", "再查一下本周课表"]);
-    // milestone：UI-only，不携带模型文字
-    const milestone = p.worklog.find((b) => b.kind === "milestone");
-    expect(milestone?.kind).toBe("milestone");
-    // boundary 后的 text 是 Final Answer；控制信号本身不进 worklog（只派生 milestone）
+    // boundary 控制信号不进入 worklog（V4.1：无 milestone；phase 表达 composing）
     expect(p.answer).toBe("今天建议先完成数学作业");
     expect(p.answerStreaming).toBe(true);
     expect(p.phase).toBe("answering");
@@ -89,8 +86,8 @@ describe("Final Answer Boundary（显式协议通道）", () => {
     expect(p.answer).toBe("机会成本是……");
     expect(p.answerStreaming).toBe(true);
     expect(p.phase).toBe("answering");
-    // V4：boundary 派生 UI-only milestone（不算 toolCount / 不进 answer）
-    expect(p.worklog.map((b) => b.kind)).toEqual(["milestone"]);
+    // V4.1：boundary 不产生任何 worklog block（无 milestone；direct answer 不显示 Worklog）
+    expect(p.worklog.map((b) => b.kind)).toEqual([]);
     expect(p.hasTools).toBe(false);
   });
 
@@ -106,7 +103,7 @@ describe("Final Answer Boundary（显式协议通道）", () => {
     );
     // boundary 后的所有 text 恒为 Answer；违规 Tool 只作为 worklog 行（透明展示）
     expect(p.answer).toBe("正式回答内容补充说明");
-    expect(p.worklog.map((b) => b.kind)).toEqual(["milestone", "tool"]);
+    expect(p.worklog.map((b) => b.kind)).toEqual(["tool"]);
     expect(p.phase).toBe("done");
   });
 
@@ -202,7 +199,7 @@ describe("V4 Progressive Worklog（pre-boundary commentary 立即展示）", () 
       stepStart(), progress2("done"), stepStart(), tool2("output-available", { output: { ok: true, data: {} } }),
       stepStart(), boundary(),
     ]);
-    expect(s7.worklog.map((b) => b.kind)).toEqual(["commentary", "tool", "commentary", "tool", "milestone"]);
+    expect(s7.worklog.map((b) => b.kind)).toEqual(["commentary", "tool", "commentary", "tool"]);
     expect(s7.answer).toBe("");
     expect(s7.phase).toBe("composing");
     // S8：final text streaming → Final Answer 正常流式
@@ -218,16 +215,15 @@ describe("V4 Progressive Worklog（pre-boundary commentary 立即展示）", () 
     expect(s8.answer).not.toContain("接下来读取");
   });
 
-  it("boundary 控制信号只派生 milestone（不算 toolCount / 不进 answer / UI-only）", () => {
+  it("boundary 控制信号不进入 worklog（V4.1 无 milestone；direct answer worklog 为空）", () => {
     const p = deriveKiroAssistantTurn(
       [boundary(), text("回答", "done")],
       false
     );
-    expect(p.worklog.map((b) => b.kind)).toEqual(["milestone"]);
+    expect(p.worklog.map((b) => b.kind)).toEqual([]);
     expect(p.hasTools).toBe(false);
     expect(p.answer).toBe("回答");
-    // milestone 不含模型文字（serialize 中无 answer 文本）
-    expect(JSON.stringify(p.worklog)).not.toContain("回答");
+    expect(p.phase).toBe("done");
   });
 });
 
@@ -437,9 +433,9 @@ describe("deriveKiroAssistantTurn（静态：fresh commit）基础行为", () =>
     expect(p.answer).toBe("");
   });
 
-  it("boundary 控制信号不进入 worklog / 不算 hasTools（只派生 UI-only milestone）", () => {
+  it("boundary 控制信号不进入 worklog / 不算 hasTools（V4.1 无 milestone）", () => {
     const p = deriveKiroAssistantTurn([boundary(), text("回答", "done")], false);
-    expect(p.worklog.map((b) => b.kind)).toEqual(["milestone"]);
+    expect(p.worklog.map((b) => b.kind)).toEqual([]);
     expect(p.hasTools).toBe(false);
     expect(p.answer).toBe("回答");
   });
@@ -508,4 +504,5 @@ describe("Task 17B：Tool Row headline（流式 web 流程）", () => {
     expect(block?.kind === "tool" && block.label).toBeTruthy();
   });
 });
+
 
