@@ -121,7 +121,13 @@ export async function registerCreatedArtifact(input: {
   return replaceLogicalIdentity(existing, { ...input, source: "kiro-created" });
 }
 
-/** 采纳 Workspace 已有文件（V2 Part 1 不扫描整个 Workspace；后续按需 lazy adopt） */
+/**
+ * 采纳 Workspace 已有文件（V2 Part 1 不扫描整个 Workspace；后续按需 lazy adopt）。
+ *
+ * V2.6 provenance invariant：同一 logical location 已存在 kiro-created Artifact 时，
+ * lazy adopt 绝不能把它降级成 workspace-existing（那会删除旧 identity + Source IR，
+ * 使 legacy self-heal 失去文档源）。kiro-created → 原样返回 existing，不替换 identity。
+ */
 export async function adoptWorkspaceArtifact(input: {
   workspaceId: string;
   rootId: string;
@@ -130,7 +136,15 @@ export async function adoptWorkspaceArtifact(input: {
   title?: string;
 }): Promise<KiroArtifact> {
   const existing = await findByLogicalKey(logicalKey(input.workspaceId, input.rootId, input.relativePath));
-  return replaceLogicalIdentity(existing, { ...input, source: "workspace-existing" });
+  if (existing) {
+    if (existing.source === "kiro-created") {
+      // 绝不降级：保留 identity + Source IR + revision
+      return existing;
+    }
+    // workspace-existing 同路径再次 adopt → 复用 identity（refresh 语义：保持 id 稳定）
+    return existing;
+  }
+  return replaceLogicalIdentity(null, { ...input, source: "workspace-existing" });
 }
 
 export async function getArtifact(id: string): Promise<KiroArtifact | null> {
