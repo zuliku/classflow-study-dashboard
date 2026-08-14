@@ -148,6 +148,34 @@ test("大列表：Panel 不超过 max 边界，只有中间列表滚动，Header
   expect(listOverflow).toBe("auto");
 });
 
+test("关闭 Center 后重开：Composer 不 stale（Header X 与 Escape 两条路径）", async ({ page }) => {
+  // Header X 路径
+  const panel = await openDesktop(page);
+  await panel.getByRole("button", { name: "新建提醒", exact: true }).first().click();
+  const composer = page.getByTestId("reminder-composer");
+  await expect(composer).toHaveAttribute("data-state", "open", { timeout: 5000 });
+  await composer.getByLabel("提醒内容").fill("未保存草稿 X");
+  await panel.getByRole("button", { name: "关闭提醒中心" }).click();
+  await expect(panel).toHaveAttribute("data-state", "exiting");
+  await expect(panel).toHaveCount(0, { timeout: 5000 });
+  // 重新打开：composer 必须关闭（不 stale 旧 editor / draft）
+  await page.getByRole("button", { name: "提醒", exact: true }).click();
+  await expect(panel).toHaveAttribute("data-state", "open", { timeout: 5000 });
+  await expect(page.getByTestId("reminder-composer")).toHaveCount(0);
+
+  // Escape 路径（同一页面再开一轮）
+  await panel.getByRole("button", { name: "新建提醒", exact: true }).first().click();
+  const composer2 = page.getByTestId("reminder-composer");
+  await expect(composer2).toHaveAttribute("data-state", "open", { timeout: 5000 });
+  await composer2.getByLabel("提醒内容").fill("未保存草稿 Esc");
+  await page.keyboard.press("Escape");
+  await expect(panel).toHaveAttribute("data-state", "exiting");
+  await expect(panel).toHaveCount(0, { timeout: 5000 });
+  await page.getByRole("button", { name: "提醒", exact: true }).click();
+  await expect(panel).toHaveAttribute("data-state", "open", { timeout: 5000 });
+  await expect(page.getByTestId("reminder-composer")).toHaveCount(0);
+});
+
 test("Reduced Motion：打开/关闭接近即时（presence 不等待 exit 时长）", async ({ page }) => {
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.setViewportSize(DESKTOP);

@@ -103,6 +103,16 @@ export function ReminderCenter() {
     useAppStore.getState().markAllFiredRemindersRead(formatLocalDateTime(new Date()));
   }, [isOpen]);
 
+  // 关闭整个 Center（Header X / Esc / outside / 任何 close() 路径）→ 结束本次 editor session：
+  // editor 清零 + 清 error + 清 composer 快照——重新打开绝不 stale 旧 Composer / draft。
+  // 不破坏 Panel 自身 170ms exit presence（composer 随 Panel 整体淡出；重开时不闪旧 editor）。
+  useEffect(() => {
+    if (isOpen) return;
+    setEditor(null);
+    setError("");
+    lastEditorRef.current = null;
+  }, [isOpen]);
+
   const todayStr = () => formatLocalDateTime(new Date()).slice(0, 10);
 
   const startCreate = () => {
@@ -284,11 +294,15 @@ export function ReminderCenter() {
             "w-[calc(100vw-24px)] mx-3 min-h-[min(360px,calc(100dvh-24px))] max-h-[calc(100dvh-24px)] rounded-[18px]",
             // Desktop：Sidebar 右侧 400px 浮窗（md icon rail / xl full sidebar），垂直居中
             "md:w-[400px] md:ml-16 xl:ml-56 md:min-h-[min(420px,calc(100dvh-32px))] md:max-h-[min(720px,calc(100dvh-32px))] md:rounded-2xl",
-            // Motion：mobile 轻浮起（translateY）/ desktop 从 Sidebar 展开（translateX）；exit 略快于 enter
+            // Motion（三态非对称）：mobile 轻浮起（translateY）/ desktop 从 Sidebar 展开（translateX）；
+            // entering 用 enter 偏移（-6px / 6px, scale .992/.985），exiting 用更轻的 exit 偏移
+            // （-4px / 4px, scale .994/.99）；enter ~200ms，exit ~160ms（退出略快）
             "transition-[opacity,transform] ease-[var(--ease-emphasized)]",
-            visible
-              ? "opacity-100 translate-y-0 scale-100 md:translate-x-0 !duration-[200ms]"
-              : "opacity-0 translate-y-1.5 scale-[0.985] md:translate-y-0 md:-translate-x-1.5 md:scale-[0.992] !duration-[160ms]"
+            isOpen
+              ? visible
+                ? "opacity-100 translate-y-0 scale-100 md:translate-x-0 !duration-[200ms]"
+                : "opacity-0 translate-y-1.5 scale-[0.985] md:translate-y-0 md:-translate-x-1.5 md:scale-[0.992] !duration-[200ms]"
+              : "opacity-0 translate-y-1 scale-[0.99] md:translate-y-0 md:-translate-x-1 md:scale-[0.994] !duration-[160ms]"
           )}
         >
           {/* Header：Bell + 标题 + 数量 badge | 新建提醒 + 关闭（shrink-0 不滚动） */}
