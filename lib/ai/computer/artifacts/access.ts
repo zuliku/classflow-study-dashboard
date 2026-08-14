@@ -137,7 +137,10 @@ async function statOrUnavailable(
 /** 最近 12（当前 Workspace；updatedAt DESC metadata）→ 对 12 条 stat 分类可用性。
  *  V2.8 reconciliation：filesystem 是事实来源——Artifact 记录存在但文件已不存在时，
  *  kiro-created 记录 best-effort GC（metadata garbage collection，非 filesystem mutation），
- *  绝不返回「可下载/可预览」的行。 */
+ *  绝不返回「可下载/可预览」的行。
+ *  V2.9 反向 reconciliation（bounded，audit 驱动）：最近 Kiro 创建记录（audit）对应路径
+ *  file exists + Artifact missing（旧版本遗留 orphan）→ adopt 为 workspace-existing，
+ *  让已存在文件重新出现在 Recent Files；不做全盘扫描、不误标 kiro-created。 */
 export async function listRecentArtifactEntries(input: {
   workspaceId: string;
   workspaces: KiroWorkspaceMeta[];
@@ -145,6 +148,8 @@ export async function listRecentArtifactEntries(input: {
 }): Promise<KiroRecentArtifactEntry[]> {
   const workspace = input.workspaces.find((w) => w.id === input.workspaceId);
   if (!workspace) return [];
+  // V2.9：反向 reconciliation 先跑（bounded：最近 20 条 audit 的创建记录）
+  await reconcileRecentOrphanFiles(workspace);
   const artifacts = await listRecentArtifactsForWorkspace(input.workspaceId, input.limit ?? 12);
   const entries: KiroRecentArtifactEntry[] = [];
   for (const artifact of artifacts) {
@@ -191,6 +196,50 @@ export async function listRecentArtifactEntries(input: {
     });
   }
   return entries;
+}
+
+/** V2.9：audit 驱动的 bounded orphan 反向 reconciliation（只处理最近 Kiro 创建记录对应的路径）。 */
+const RECONCILE_AUDIT_LIMIT = 20;
+
+async function reconcileRecentOrphanFiles(workspace: KiroWorkspaceMeta): Promise<void> {
+  try {
+    const { getRecentComputerAuditEntries } = await import("@/lib/ai/computer/audit");
+    const { findArtifactByLocation, adoptWorkspaceArtifact } = await import("@/lib/ai/computer/artifacts/service");
+    const audits = await getRecentComputerAuditEntries(RECONCILE_AUDIT_LIMIT);
+    for (const entry of audits) {
+      // 只看本 Workspace 的创建记录（fs.create / document.create，且执行成功）
+      if (entry.workspaceId !== workspace.id) continue;
+      if (entry.outcome !== "executed") continue;
+      if (entry.capability !== "fs.create" && entry.capability !== "document.create") continue;
+      if (!entry.rootId || !entry.relativePath) continue;
+      const root = workspace.roots.find((r) => r.id === entry.rootId);
+      if (!root || root.adapterRef === "") continue;
+      const existing = await findArtifactByLocation(workspace.id, entry.rootId, entry.relativePath);
+      if (existing) continue;
+      const io = getComputerAdapterForAdapterRef(root.adapterRef);
+      const stat = await io.stat(entry.relativePath);
+      if (!stat || stat.kind !== "file") continue;
+      // file exists + Artifact missing → adopt 为 workspace-existing（不伪造 Source IR）
+      try {
+        await adoptWorkspaceArtifact({
+          workspaceId: workspace.id,
+          rootId: entry.rootId,
+          relativePath: entry.relativePath,
+          type: entry.capability === "document.create"
+            ? entry.relativePath.toLowerCase().endsWith(".docx")
+              ? "docx"
+              : "markdown"
+            : entry.relativePath.toLowerCase().endsWith(".md")
+              ? "markdown"
+              : "text",
+        });
+      } catch {
+        // adopt 失败静默（下次轮询重试）
+      }
+    }
+  } catch {
+    // reconciliation 失败不阻塞列表
+  }
 }
 
 function boundText(text: string): { text: string; truncated: boolean } {

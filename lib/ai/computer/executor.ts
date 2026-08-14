@@ -35,11 +35,13 @@ import { renderDocx } from "@/lib/ai/computer/documents/docx";
 import { verifyMarkdownWritten, verifyDocxBytes, verifyRenderedDocx, inspectDocumentFacts } from "@/lib/ai/computer/documents/verify";
 import { mergeDocumentStyleForUpdate } from "@/lib/ai/computer/documents/styles/resolve";
 import { parseDocumentAuthoringInput } from "@/lib/ai/computer/documents/authoring/compat";
+import { CURRENT_DOCUMENT_AUTHORING_VERSION } from "@/lib/ai/computer/documents/authoring/protocol";
 import { isKiroDocument } from "@/lib/ai/computer/documents/types";
 import { isStructuredBinaryPath } from "@/lib/ai/computer/filesystem/fileTypes";
 import { performFileDeletion } from "@/lib/ai/computer/filesystem/deleteFile";
 import {
   registerCreatedArtifact,
+  adoptWorkspaceArtifact,
   findArtifactByLocation,
   updateArtifactLocation,
   getEditableArtifactRevisionState,
@@ -67,6 +69,8 @@ export const COMPUTER_READ_LIMIT_PER_TURN = 12;
 // V2.7.2：6 → 10（一次真实任务如「整理工作区/删除多个旧文件」常需连续写操作；
 // 上限仍保证单轮有界，超限拒绝带计数、可审计）
 export const COMPUTER_MUTATION_LIMIT_PER_TURN = 10;
+
+export const DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 
 /** V2 Part 2：文档结构化更新上限（保证 exact 回滚/Undo 快照有界） */
 export const COMPUTER_DOCUMENT_REVISION_LIMIT_BYTES = 5 * 1024 * 1024;
@@ -1268,11 +1272,34 @@ export async function executeKiroComputerTool(request: {
         });
         artifactId = artifact.id;
       } catch {
-        // 文件已创建并验证，但 metadata 登记失败：不谎称成功，也不删除已生成文件
-        throw new ComputerError(
-          "VERIFICATION_FAILED",
-          "文件已创建并验证，但 Artifact 元数据登记失败；请重新检查工作区文件后再继续。"
-        );
+        // V2.9：事务语义——metadata 登记失败 → 回滚刚创建的文件（绝不留 invisible file）
+        let rollbackOk = false;
+        try {
+          await adapter.remove(normalized, "file");
+          const after = await adapter.stat(normalized);
+          rollbackOk = after === null;
+        } catch {
+          rollbackOk = false;
+        }
+        if (rollbackOk) {
+          return {
+            kind: "completed",
+            output: {
+              ok: false,
+              code: "VERIFICATION_FAILED",
+              message: "文件创建未完成，已回滚，没有留下不可见文件。",
+            },
+          };
+        }
+        return {
+          kind: "completed",
+          output: {
+            ok: false,
+            code: "VERIFICATION_FAILED",
+            message: "文件创建未完成且回滚未完成，文件状态需要重新检查。",
+            data: { fileMayExist: true, artifactRegistered: false },
+          },
+        };
       }
       const runtime = buildMutationRuntime({
         toolName,
@@ -1429,157 +1456,195 @@ export async function executeKiroComputerTool(request: {
       };
     }
     if (toolName === "create_document") {
-      counters.mutationCount += 1;
+      // V2.9 Delivery Integrity：bounded stage diagnostic（dev only；不含正文/raw JSON）
+      const stage = (s: string, code?: string) => {
+        if (process.env.NODE_ENV === "development") {
+          console.info(
+            `[Kiro create_document stage] toolCallId=${toolCallId} stage=${s}` +
+              (code ? ` code=${code}` : "") +
+              ` protocol=${CURRENT_DOCUMENT_AUTHORING_VERSION} workspaceId=${ws.id} rootId=${root.id} path=${normalized}`
+          );
+        }
+      };
+      stage("model-input");
       // V2.3：双兼容 parser（Draft V2 → normalize；Canonical V1 → passthrough；都失败 → bounded INVALID_INPUT）
       const parsedDocument = parseDocumentAuthoringInput(args.document);
       if (!parsedDocument.ok) {
+        stage("runtime-parse", "INVALID_INPUT");
         return { kind: "completed", output: { ok: false, code: "INVALID_INPUT", message: buildDocumentProtocolMismatchMessage(parsedDocument.issues) } };
       }
       const document = parsedDocument.value.document;
       if (!isKiroDocument(document)) throw new ComputerError("INVALID_INPUT", "文档 IR 不合法");
+      stage("runtime-parse");
       const ext = normalized.split(".").pop()?.toLowerCase();
-      if (ext === "md") {
-        const markdown = renderMarkdown(document);
-        const existing = await adapter.stat(normalized);
-        if (existing) throw new ComputerError("RESOURCE_ALREADY_EXISTS", `文件已存在：${normalized}`);
-        await adapter.writeText(normalized, markdown, "text/markdown");
+      if (ext !== "md" && ext !== "docx") {
+        return { kind: "completed", output: { ok: false, code: "UNSUPPORTED_FILE_TYPE", message: "仅支持 .md / .docx 文档" } };
+      }
+
+      // ---- preflight existing（不计数）----
+      // Case A：filesystem + Artifact 都存在 → 正常占用；Case B：filesystem 存在但 Artifact 缺失
+      //（orphan / workspace-existing）→ adopt 恢复可见性（绝不覆盖、不伪造 Source IR）
+      const existingStat = await adapter.stat(normalized);
+      if (existingStat) {
+        stage("preflight", "RESOURCE_ALREADY_EXISTS");
+        const existingArtifact = await findArtifactByLocation(ws.id, root.id, normalized);
+        if (existingArtifact) {
+          return {
+            kind: "completed",
+            output: {
+              ok: false,
+              code: "RESOURCE_ALREADY_EXISTS",
+              message: `文件已存在：${normalized}，请勿重复创建同一路径`,
+              data: { existingFile: true, artifactRegistered: true },
+            },
+          };
+        }
+        let artifactRecovered = false;
+        try {
+          await adoptWorkspaceArtifact({
+            workspaceId: ws.id,
+            rootId: root.id,
+            relativePath: normalized,
+            type: ext === "docx" ? "docx" : "markdown",
+            title: normalized.split("/").pop() ?? normalized,
+          });
+          artifactRecovered = true;
+        } catch {
+          // adopt 失败不阻断错误返回（文件仍存在，Recent Files 会在 reconciliation 时兜底）
+        }
+        return {
+          kind: "completed",
+          output: {
+            ok: false,
+            code: "RESOURCE_ALREADY_EXISTS",
+            message: `文件已存在：${normalized}${artifactRecovered ? "（已恢复为工作区已有文件）" : ""}，请勿重复创建同一路径`,
+            data: { existingFile: true, artifactRecovered },
+          },
+        };
+      }
+
+      // ---- PURE RENDER（不写文件、不计数；任何异常 → 稳定 DOCUMENT_RENDER_FAILED）----
+      let rendered: { format: "markdown"; text: string } | { format: "docx"; bytes: Uint8Array };
+      try {
+        rendered =
+          ext === "md"
+            ? { format: "markdown", text: renderMarkdown(document) }
+            : { format: "docx", bytes: await renderDocx(document) };
+      } catch {
+        stage("render", "DOCUMENT_RENDER_FAILED");
+        return {
+          kind: "completed",
+          output: { ok: false, code: "DOCUMENT_RENDER_FAILED", message: "文档渲染失败，本轮停止文档创建。" },
+        };
+      }
+      stage("render");
+
+      // 即将开始真实 filesystem mutation：只在此计数一次（parse/preflight/render 失败不消耗 quota）
+      counters.mutationCount += 1;
+
+      // ---- write → read-back verify ----
+      if (rendered.format === "markdown") {
+        await adapter.writeText(normalized, rendered.text, "text/markdown");
         const readBack = await adapter.readText(normalized);
-        if (!(await verifyMarkdownWritten(markdown, readBack))) {
+        if (!(await verifyMarkdownWritten(rendered.text, readBack))) {
+          stage("verify", "VERIFICATION_FAILED");
           throw new ComputerError("VERIFICATION_FAILED", "Markdown 校验失败");
         }
-        const facts = inspectDocumentFacts(document, "markdown");
-        // V2：verified 文档登记 Artifact（markdown type + Kiro-owned Document IR）
-        let artifactId: string | undefined;
-        try {
-          const artifact = await registerCreatedArtifact({
-            workspaceId: ws.id,
-            rootId: root.id,
-            relativePath: normalized,
-            type: "markdown",
-            title: facts.title,
-            sourceTaskId: context.taskId,
-            document,
-          });
-          artifactId = artifact.id;
-        } catch {
-          throw new ComputerError(
-            "VERIFICATION_FAILED",
-            "文件已创建并验证，但 Artifact 元数据登记失败；请重新检查工作区文件后再继续。"
-          );
-        }
-        const runtime = buildMutationRuntime({
-          toolName,
-          toolCallId,
-          operation: "create",
-          resourceType: "document",
-          snapshot: turnSnapshot,
-          workspaceLabel: ws.name,
-          root,
-          relativePath: normalized,
-          format: "markdown",
-          size: new TextEncoder().encode(markdown).byteLength,
-          review: {
-            kind: "document",
-            title: facts.title,
-            headings: documentHeadings(document),
-            paragraphs: facts.paragraphs,
-            lists: facts.lists,
-            tables: facts.tables,
-            codeBlocks: facts.codeBlocks,
-            characters: facts.characters,
-          },
-          inverse: {
-            type: "remove-created",
-            workspaceId: ws.id,
-            rootId: root.id,
-            relativePath: normalized,
-            resourceType: "file",
-            artifactId,
-          },
-          artifactId,
-        });
-        return {
-          kind: "completed",
-
-          output: { ok: true, data: { path: normalized, format: "markdown", verified: true } },
-          runtime,
-        };
-      }
-      if (ext === "docx") {
-        const existing = await adapter.stat(normalized);
-        if (existing) throw new ComputerError("RESOURCE_ALREADY_EXISTS", `文件已存在：${normalized}`);
-        const bytes = await renderDocx(document);
-        await adapter.writeBytes(
-          normalized,
-          bytes,
-          "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-        );
+      } else {
+        await adapter.writeBytes(normalized, rendered.bytes, DOCX_MIME);
         const readBack = await adapter.readBytes(normalized);
-        // Document Engine V2：package 有效 + Mammoth round-trip 与 Source IR 一致
         if (!(await verifyRenderedDocx(readBack, document))) {
+          stage("verify", "VERIFICATION_FAILED");
           throw new ComputerError("VERIFICATION_FAILED", "DOCX 校验失败");
         }
-        const facts = inspectDocumentFacts(document, "docx");
-        // V2：verified 文档登记 Artifact（docx type + Kiro-owned Document IR）
-        let artifactId: string | undefined;
-        try {
-          const artifact = await registerCreatedArtifact({
-            workspaceId: ws.id,
-            rootId: root.id,
-            relativePath: normalized,
-            type: "docx",
-            title: facts.title,
-            sourceTaskId: context.taskId,
-            document,
-          });
-          artifactId = artifact.id;
-        } catch {
-          throw new ComputerError(
-            "VERIFICATION_FAILED",
-            "文件已创建并验证，但 Artifact 元数据登记失败；请重新检查工作区文件后再继续。"
-          );
-        }
-        const runtime = buildMutationRuntime({
-          toolName,
-          toolCallId,
-          operation: "create",
-          resourceType: "document",
-          snapshot: turnSnapshot,
-          workspaceLabel: ws.name,
-          root,
+      }
+      stage("write");
+      stage("verify");
+
+      // ---- Artifact 原子登记（metadata + Source IR 同一事务；失败 → 回滚刚创建的文件）----
+      const facts = inspectDocumentFacts(document, rendered.format);
+      let artifactId: string;
+      try {
+        const artifact = await registerCreatedArtifact({
+          workspaceId: ws.id,
+          rootId: root.id,
           relativePath: normalized,
-          format: "docx",
-          size: bytes.byteLength,
-          review: {
-            kind: "document",
-            title: facts.title,
-            headings: documentHeadings(document),
-            paragraphs: facts.paragraphs,
-            lists: facts.lists,
-            tables: facts.tables,
-            codeBlocks: facts.codeBlocks,
-            characters: facts.characters,
-          },
-          inverse: {
-            type: "remove-created",
-            workspaceId: ws.id,
-            rootId: root.id,
-            relativePath: normalized,
-            resourceType: "file",
-            artifactId,
-          },
-          artifactId,
+          type: rendered.format === "docx" ? "docx" : "markdown",
+          title: facts.title,
+          sourceTaskId: context.taskId,
+          document,
         });
-        void markKnowledgeDirtyBestEffort(ws.id);
+        artifactId = artifact.id;
+      } catch {
+        stage("artifact-register", "VERIFICATION_FAILED");
+        // 事务语义：create 前已确认路径不存在 → 回滚本轮刚创建的文件是安全的
+        let rollbackOk = false;
+        try {
+          await adapter.remove(normalized, "file");
+          const after = await adapter.stat(normalized);
+          rollbackOk = after === null;
+        } catch {
+          rollbackOk = false;
+        }
+        if (rollbackOk) {
+          return {
+            kind: "completed",
+            output: {
+              ok: false,
+              code: "VERIFICATION_FAILED",
+              message: "文档创建未完成，已回滚，没有留下不可见文件。",
+            },
+          };
+        }
         return {
           kind: "completed",
-          output: { ok: true, data: { path: normalized, format: "docx", verified: true } },
-          runtime,
+          output: {
+            ok: false,
+            code: "VERIFICATION_FAILED",
+            message: "文档创建未完成且回滚未完成，文件状态需要重新检查。",
+            data: { fileMayExist: true, artifactRegistered: false },
+          },
         };
       }
+      stage("artifact-register");
+
+      const runtime = buildMutationRuntime({
+        toolName,
+        toolCallId,
+        operation: "create",
+        resourceType: "document",
+        snapshot: turnSnapshot,
+        workspaceLabel: ws.name,
+        root,
+        relativePath: normalized,
+        format: rendered.format,
+        size: rendered.format === "docx" ? rendered.bytes.byteLength : new TextEncoder().encode(rendered.text).byteLength,
+        review: {
+          kind: "document",
+          title: facts.title,
+          headings: documentHeadings(document),
+          paragraphs: facts.paragraphs,
+          lists: facts.lists,
+          tables: facts.tables,
+          codeBlocks: facts.codeBlocks,
+          characters: facts.characters,
+        },
+        inverse: {
+          type: "remove-created",
+          workspaceId: ws.id,
+          rootId: root.id,
+          relativePath: normalized,
+          resourceType: "file",
+          artifactId,
+        },
+        artifactId,
+      });
+      if (rendered.format === "docx") void markKnowledgeDirtyBestEffort(ws.id);
+      stage("done");
       return {
         kind: "completed",
-        output: { ok: false, code: "UNSUPPORTED_FILE_TYPE", message: "仅支持 .md / .docx 文档" },
+        output: { ok: true, data: { path: normalized, format: rendered.format, verified: true } },
+        runtime,
       };
     }
 

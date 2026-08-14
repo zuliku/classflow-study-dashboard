@@ -142,6 +142,90 @@ export async function artifactSourceDelete(artifactId: string): Promise<void> {
 }
 
 /**
+ * V2.9（Delivery Integrity）：Kiro structured document 原子创建。
+ * artifacts + sources 在同一个 IndexedDB readwrite transaction 写入；
+ * tx.oncomplete 后重新读取两个 store 并确认：
+ * - metadata.id === source.artifactId
+ * - metadata.revision === source.revision === 1（create 语义）
+ * 任一不一致 → 抛 VERIFICATION_FAILED（不留半注册 Artifact）。
+ */
+export async function artifactDbCreateStructuredArtifact(input: {
+  artifact: KiroArtifact;
+  source: KiroArtifactSourceRecord;
+}): Promise<KiroArtifact> {
+  const db = await openArtifactDb();
+  if (!db) throw new ComputerError("UNSUPPORTED_BROWSER", "当前环境不支持 Artifact Registry（无 IndexedDB）");
+  try {
+    await new Promise<void>((resolve, reject) => {
+      const tx = db.transaction([ARTIFACT_STORE, ARTIFACT_SOURCE_STORE], "readwrite");
+      tx.objectStore(ARTIFACT_STORE).put(input.artifact, input.artifact.id);
+      tx.objectStore(ARTIFACT_SOURCE_STORE).put(input.source, input.source.artifactId);
+      tx.oncomplete = () => resolve();
+      tx.onabort = () => reject(new ComputerError("VERIFICATION_FAILED", "Artifact 创建事务中止"));
+      tx.onerror = () => reject(new ComputerError("VERIFICATION_FAILED", "Artifact 创建事务失败"));
+    });
+    // 事务已提交：双读确认（metadata + source 必须成对存在、revision=1）
+    const [afterArtifact, afterSource] = await Promise.all([
+      artifactDbGet(input.artifact.id),
+      artifactSourceGet(input.artifact.id),
+    ]);
+    if (
+      !afterArtifact ||
+      !afterSource ||
+      afterArtifact.id !== afterSource.artifactId ||
+      afterArtifact.revision !== 1 ||
+      afterSource.revision !== 1
+    ) {
+      // 半注册：清理残留记录（metadata/source 都删，保证原子语义可重试）
+      const cleanupDb = await openArtifactDb();
+      if (cleanupDb) {
+        try {
+          await new Promise<void>((resolve) => {
+            const tx = cleanupDb.transaction([ARTIFACT_STORE, ARTIFACT_SOURCE_STORE], "readwrite");
+            tx.objectStore(ARTIFACT_STORE).delete(input.artifact.id);
+            tx.objectStore(ARTIFACT_SOURCE_STORE).delete(input.artifact.id);
+            tx.oncomplete = () => resolve();
+            tx.onabort = () => resolve();
+            tx.onerror = () => resolve();
+          });
+        } finally {
+          cleanupDb.close();
+        }
+      }
+      throw new ComputerError("VERIFICATION_FAILED", "Artifact 创建后无法确认（metadata/source 不一致）");
+    }
+    return afterArtifact;
+  } finally {
+    db.close();
+  }
+}
+
+/**
+ * V2.9（Delivery Integrity）：generic Artifact（无 Source IR）创建。
+ * 单 artifacts 事务 + oncomplete 后 read-back verify（create 语义 revision=1）。
+ */
+export async function artifactDbCreateArtifact(artifact: KiroArtifact): Promise<KiroArtifact> {
+  const db = await openArtifactDb();
+  if (!db) throw new ComputerError("UNSUPPORTED_BROWSER", "当前环境不支持 Artifact Registry（无 IndexedDB）");
+  try {
+    await new Promise<void>((resolve, reject) => {
+      const tx = db.transaction(ARTIFACT_STORE, "readwrite");
+      tx.objectStore(ARTIFACT_STORE).put(artifact, artifact.id);
+      tx.oncomplete = () => resolve();
+      tx.onabort = () => reject(new ComputerError("VERIFICATION_FAILED", "Artifact 创建事务中止"));
+      tx.onerror = () => reject(new ComputerError("VERIFICATION_FAILED", "Artifact 创建事务失败"));
+    });
+    const after = await artifactDbGet(artifact.id);
+    if (!after || after.id !== artifact.id || after.revision !== 1) {
+      throw new ComputerError("VERIFICATION_FAILED", "Artifact 创建后无法确认");
+    }
+    return after;
+  } finally {
+    db.close();
+  }
+}
+
+/**
  * V2 Part 2：原子 revision 提交（artifacts + sources 同一 readwrite transaction）。
  * - 读取当前 Artifact/Source；任一缺失 → artifact-missing
  * - Artifact.revision 与 Source.revision 都必须等于 expectedRevision（校验乐观锁）

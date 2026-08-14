@@ -11,6 +11,7 @@ import {
   wrapLanguageModel,
   addToolInputExamplesMiddleware,
   generateText,
+  InvalidToolInputError,
 } from "ai";
 import { AI, KIRO_SYSTEM_PROMPT } from "@/lib/ai/config";
 import { KIRO_TOOLS, getKiroToolsForRequest } from "@/lib/ai/tools";
@@ -343,6 +344,13 @@ export async function POST(req: NextRequest) {
       repairToolCall: (() => {
         const repairedToolCallIds = new Set<string>();
         return async ({ toolCall, messages, error, inputSchema }) => {
+          // V2.9 diagnostic（dev only，bounded）：确认「红色失败」是否由 server validation 产生；
+          // 只记录 toolCallId/toolName/是否修复，绝不含 raw input / document 正文
+          if (process.env.NODE_ENV === "development" && error instanceof InvalidToolInputError) {
+            console.info(
+              `[Kiro tool-call repair] toolName=${toolCall.toolName} toolCallId=${toolCall.toolCallId} invalidInput=true`
+            );
+          }
           if (
             !shouldRepairToolCall({
               error,
@@ -375,6 +383,11 @@ export async function POST(req: NextRequest) {
               ],
             });
             const fixed = JSON.parse(repair.text.trim());
+            if (process.env.NODE_ENV === "development") {
+              console.info(
+                `[Kiro tool-call repair] toolName=${toolCall.toolName} toolCallId=${toolCall.toolCallId} repaired=true`
+              );
+            }
             return {
               type: "tool-call" as const,
               toolCallId: toolCall.toolCallId,
@@ -382,6 +395,11 @@ export async function POST(req: NextRequest) {
               input: JSON.stringify(fixed),
             };
           } catch {
+            if (process.env.NODE_ENV === "development") {
+              console.info(
+                `[Kiro tool-call repair] toolName=${toolCall.toolName} toolCallId=${toolCall.toolCallId} repairFailed=true`
+              );
+            }
             return null; // 无法修复 → 原始错误正常暴露
           }
         };

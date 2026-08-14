@@ -70,7 +70,13 @@ export type ComputerExecutionAttempt =
 
 export type ComputerToolResult =
   | { ok: true; data: unknown; actionFact?: ComputerActionFact }
-  | { ok: false; code: string; message: string };
+  | {
+      ok: false;
+      code: string;
+      message: string;
+      /** V2.9：结构化 failure 事实（如 partial-state { fileMayExist, artifactRegistered }）；模型可读但不含内部 token/path 语义 */
+      data?: Record<string, unknown>;
+    };
 
 /** Verified mutation 的 runtime-only 事实：change（review 用）+ inverse（checkpoint 用，可选） */
 export interface ComputerRuntimeMutation {

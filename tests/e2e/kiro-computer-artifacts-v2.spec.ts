@@ -2092,4 +2092,161 @@ test("V2.8 场景 L：真实删除全部（path-only delete_file ×2 → 文件�
   await expect(page.locator('[data-testid="kiro-recent-artifact-row"]').filter({ hasText: "本周课表-第1周.docx" })).toHaveCount(0, { timeout: 8000 });
 });
 
+// ==================== V2.9：Document Delivery Integrity（浏览器全链路） ====================
+
+const DELIVERY_DRAFT = {
+  title: "本周课表",
+  stylePreset: "business-report",
+  blocks: [
+    {
+      type: "table",
+      header: ["星期", "课程", "时间", "地点"],
+      rows: [
+        ["周一", "数据结构与算法", "08:00–09:40", "计算机楼 102"],
+        ["周二", "概率论与数理统计", "10:00–11:40", "教三 305"],
+        ["周三", "操作系统", "14:00–15:40", "计算机楼 208"],
+        ["周四", "学术英语写作", "13:00–14:40", "外语楼 207"],
+        ["周五", "计算机网络", "10:00–11:40", "计算机楼 305"],
+      ],
+    },
+  ],
+};
+
+test("V2.9：本周课表 Word 全链路（create_document → Recent Files 可见 → Preview → Download → verify）", async ({ page }) => {
+  let requestCount = 0;
+  await page.route("**/api/ai/chat", async (route) => {
+    requestCount += 1;
+    if (requestCount === 1) {
+      await route.fulfill({
+        status: 200,
+        contentType: "text/event-stream",
+        body: toolCallStream("v29-1", "call_deliver", "create_document", {
+          rootId: "root-sandbox",
+          path: "本周课表.docx",
+          document: DELIVERY_DRAFT,
+        }),
+      });
+      return;
+    }
+    await route.fulfill({
+      status: 200,
+      contentType: "text/event-stream",
+      body: answerStream("v29-1", "Word 文档已生成。"),
+    });
+  });
+  await page.addInitScript(({ settings, key }) => {
+    localStorage.setItem("classflow-ai-settings-v1", JSON.stringify({ version: 0, state: settings }));
+    sessionStorage.setItem("classflow-ai-key:deepseek", key);
+  }, { settings: AI_SETTINGS, key: "sk-test-key" });
+
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/");
+  await page.locator("aside").first().getByRole("button", { name: "Kiro" }).click();
+  await page.waitForTimeout(800);
+  const composer = page.getByTestId("kiro-composer");
+  await expect(composer).toBeVisible();
+  await composer.getByRole("button", { name: "Computer" }).click();
+  await expect(composer.getByRole("button", { name: "Computer" })).toHaveAttribute("aria-pressed", "true");
+  const modeMenu = composer.getByRole("button", { name: "权限模式" });
+  await modeMenu.click();
+  await page.getByRole("menuitem", { name: /工作区自动/ }).first().click();
+
+  await composer.getByLabel("Ask Kiro").fill("把本周课表生成 Word");
+  await composer.getByLabel("发送").click();
+
+  // Tool Row done + Task change success
+  const taskCard = page.locator('[data-testid="kiro-message"]').last().getByTestId("kiro-agent-task-card");
+  await expect(taskCard).toBeVisible({ timeout: 15000 });
+  await expect(taskCard).toContainText("创建 本周课表.docx");
+  const sandboxFp = await readSandboxBinaryFingerprint(page, "本周课表.docx");
+  expect(sandboxFp).not.toBeNull();
+
+  // Recent Files 稳定可见（打开即 reconciliation + 列表包含）
+  await page.getByRole("button", { name: "最近文件" }).click();
+  const row = page.locator('[data-testid="kiro-recent-artifact-row"]').filter({ hasText: "本周课表.docx" });
+  await expect(row).toBeVisible({ timeout: 8000 });
+
+  // Preview 可打开
+  await row.getByRole("button", { name: "预览 本周课表.docx" }).click();
+  const previewDialog = page.getByTestId("kiro-artifact-preview-dialog");
+  await expect(previewDialog).toBeVisible({ timeout: 10000 });
+  await expect(previewDialog).toContainText("本周课表", { timeout: 10000 });
+  await previewDialog.getByRole("button", { name: "关闭" }).click();
+  await expect(previewDialog).toHaveCount(0);
+
+  // Download bytes > 0 + DOCX runtime verification（preview 会关闭 popover → 重新打开）
+  await page.getByRole("button", { name: "最近文件" }).click();
+  const rowAfter = page.locator('[data-testid="kiro-recent-artifact-row"]').filter({ hasText: "本周课表.docx" });
+  await expect(rowAfter).toBeVisible({ timeout: 8000 });
+  const downloadPromise = page.waitForEvent("download");
+  await rowAfter.getByRole("button", { name: "下载 本周课表.docx" }).click();
+  const download = await downloadPromise;
+  expect(download.suggestedFilename()).toBe("本周课表.docx");
+  const downloadPath = await download.path();
+  expect(downloadPath).not.toBeNull();
+  const downloaded = await fsp.readFile(downloadPath!);
+  expect(downloaded.byteLength).toBeGreaterThan(0);
+  expect(sha256Hex(downloaded)).toBe(sandboxFp!.sha256);
+  const { verifyDocxBytes } = await import("@/lib/ai/computer/documents/verify");
+  expect(await verifyDocxBytes(new Uint8Array(downloaded))).toBe(true);
+});
+
+test("V2.9：同名文件已存在（orphan）→ 不覆盖 + adopt 恢复可见 + Final Answer 不谎称新生成", async ({ page }) => {
+  let requestCount = 0;
+  await page.route("**/api/ai/chat", async (route) => {
+    requestCount += 1;
+    if (requestCount === 1) {
+      await route.fulfill({
+        status: 200,
+        contentType: "text/event-stream",
+        body: toolCallStream("v29b-1", "call_orphan", "create_document", {
+          rootId: "root-sandbox",
+          path: "本周课表.docx",
+          document: DELIVERY_DRAFT,
+        }),
+      });
+      return;
+    }
+    await route.fulfill({
+      status: 200,
+      contentType: "text/event-stream",
+      body: answerStream("v29b-1", "该路径已有文件，未重新生成；文件已恢复显示。"),
+    });
+  });
+  await page.addInitScript(({ settings, key }) => {
+    localStorage.setItem("classflow-ai-settings-v1", JSON.stringify({ version: 0, state: settings }));
+    sessionStorage.setItem("classflow-ai-key:deepseek", key);
+  }, { settings: AI_SETTINGS, key: "sk-test-key" });
+
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/");
+  await page.locator("aside").first().getByRole("button", { name: "Kiro" }).click();
+  await page.waitForTimeout(800);
+  const composer = page.getByTestId("kiro-composer");
+  await expect(composer).toBeVisible();
+  await composer.getByRole("button", { name: "Computer" }).click();
+  await expect(composer.getByRole("button", { name: "Computer" })).toHaveAttribute("aria-pressed", "true");
+  const modeMenu = composer.getByRole("button", { name: "权限模式" });
+  await modeMenu.click();
+  await page.getByRole("menuitem", { name: /工作区自动/ }).first().click();
+
+  // seed orphan：文件存在但无 Artifact（模拟旧版本遗留 invisible/orphan 文件）
+  await seedSandboxFile(page, "本周课表.docx", { text: "已有内容（非本次生成）" });
+  expect(await readSandboxText(page, "本周课表.docx")).toBe("已有内容（非本次生成）");
+
+  await composer.getByLabel("Ask Kiro").fill("把本周课表生成 Word");
+  await composer.getByLabel("发送").click();
+
+  // 失败语义：不谎称成功（Task 无成功 change）；文件未被覆盖
+  const taskCard = page.locator('[data-testid="kiro-message"]').last().getByTestId("kiro-agent-task-card");
+  await expect(taskCard).toBeVisible({ timeout: 15000 });
+  await expect(taskCard).not.toContainText("创建 本周课表.docx");
+  expect(await readSandboxText(page, "本周课表.docx")).toBe("已有内容（非本次生成）");
+
+  // Recent Files：orphan 已被 adopt 恢复可见（available，可下载）
+  await page.getByRole("button", { name: "最近文件" }).click();
+  const row = page.locator('[data-testid="kiro-recent-artifact-row"]').filter({ hasText: "本周课表.docx" });
+  await expect(row).toBeVisible({ timeout: 8000 });
+});
+
 

@@ -16,6 +16,8 @@ import {
   artifactDbAll,
   artifactDbCommitMetadataRevision,
   artifactDbCommitRevision,
+  artifactDbCreateArtifact,
+  artifactDbCreateStructuredArtifact,
   artifactDbDelete,
   artifactDbGet,
   artifactDbPut,
@@ -56,9 +58,14 @@ async function writeSource(artifactId: string, document: KiroDocument, revision:
   return artifactSourcePut(record);
 }
 
-/** 替换同 logical location 的 stale identity：旧 source + metadata 先删除，再建新记录 */
-async function replaceLogicalIdentity(
-  existing: KiroArtifact | null,
+/**
+ * V2.9（Delivery Integrity）：原子创建 Artifact。
+ * - Kiro structured document（markdown/docx + Document IR）→ artifactDbCreateStructuredArtifact
+ *   （metadata + Source IR 同一 transaction + 双读确认，revision=1）
+ * - generic text（无 Source IR）→ artifactDbCreateArtifact（单事务 + read-back verify）
+ * 绝不产生「metadata ✓ / source ✗」的半注册 Artifact。
+ */
+async function createArtifactRecord(
   input: {
     workspaceId: string;
     rootId: string;
@@ -71,10 +78,6 @@ async function replaceLogicalIdentity(
     document?: KiroDocument;
   }
 ): Promise<KiroArtifact> {
-  if (existing) {
-    await artifactSourceDelete(existing.id);
-    await artifactDbDelete(existing.id);
-  }
   const artifact: KiroArtifact = {
     id: newArtifactId(),
     workspaceId: input.workspaceId,
@@ -90,20 +93,19 @@ async function replaceLogicalIdentity(
     createdAt: now(),
     updatedAt: now(),
   };
-  const stored = await artifactDbPut(artifact);
-  if (!stored) throw new Error("artifact-registry-write-failed");
   // Kiro-owned 文档 IR：只存 markdown/docx（generic text 不存 IR）
   if (input.document && (artifact.type === "markdown" || artifact.type === "docx")) {
-    const ok = await writeSource(
-      artifact.id,
-      input.document,
-      artifact.revision,
+    const source: KiroArtifactSourceRecord = {
+      artifactId: artifact.id,
+      revision: 1,
+      document: input.document,
+      updatedAt: now(),
       // V2.5：DOCX Source IR 记录生成它的 renderer 版本（migration 判断仍以 structural detector 为最高优先）
-      artifact.type === "docx" ? CURRENT_DOCX_RENDERER_VERSION : undefined
-    );
-    if (!ok) throw new Error("artifact-source-write-failed");
+      ...(artifact.type === "docx" ? { rendererVersion: CURRENT_DOCX_RENDERER_VERSION } : {}),
+    };
+    return artifactDbCreateStructuredArtifact({ artifact, source });
   }
-  return artifact;
+  return artifactDbCreateArtifact(artifact);
 }
 
 /** Kiro 通过 verified 工具创建的文件（create_text_file / create_document） */
@@ -118,7 +120,13 @@ export async function registerCreatedArtifact(input: {
   document?: KiroDocument;
 }): Promise<KiroArtifact> {
   const existing = await findByLogicalKey(logicalKey(input.workspaceId, input.rootId, input.relativePath));
-  return replaceLogicalIdentity(existing, { ...input, source: "kiro-created" });
+  if (existing) {
+    // 同 logical location 已有旧 identity：先清理旧记录，再原子创建（保持「新文件替换旧」语义；
+    // 清理本身先于创建，避免新旧共存）
+    await artifactSourceDelete(existing.id);
+    await artifactDbDelete(existing.id);
+  }
+  return createArtifactRecord({ ...input, source: "kiro-created" });
 }
 
 /**
@@ -144,7 +152,7 @@ export async function adoptWorkspaceArtifact(input: {
     // workspace-existing 同路径再次 adopt → 复用 identity（refresh 语义：保持 id 稳定）
     return existing;
   }
-  return replaceLogicalIdentity(null, { ...input, source: "workspace-existing" });
+  return createArtifactRecord({ ...input, source: "workspace-existing" });
 }
 
 export async function getArtifact(id: string): Promise<KiroArtifact | null> {
