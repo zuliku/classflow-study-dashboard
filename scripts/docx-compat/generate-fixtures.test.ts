@@ -3,7 +3,9 @@ import { readFile } from "node:fs/promises";
 import * as path from "node:path";
 import JSZip from "jszip";
 import { DOCX_FIXTURES, generateDocxFixtures, DOCX_COMPAT_OUT_DIR } from "./generate-fixtures";
+import { generateLegacyFixtures, buildRealLegacyDocxBytes } from "./generate-legacy";
 import { verifyDocxBytes, verifyRenderedDocx } from "@/lib/ai/computer/documents/verify";
+import { detectLegacyKiroDocx } from "@/lib/ai/computer/documents/legacy";
 import { renderDocx } from "@/lib/ai/computer/documents/docx";
 
 describe("DOCX fixture matrix（生产 renderDocx + runtime integrity）", () => {
@@ -18,6 +20,40 @@ describe("DOCX fixture matrix（生产 renderDocx + runtime integrity）", () =>
       expect(await verifyDocxBytes(bytes)).toBe(true);
       expect(await verifyRenderedDocx(bytes, fixture.document)).toBe(true);
     }
+  });
+});
+
+describe("V2.6 真实 legacy 形状 fixture（用户最新失败文件结构）", () => {
+  it("06 复刻真实证据：24 direct w:r under w:tc、2 direct w:numPr under w:style、ClassFlow Kiro docProps", async () => {
+    const legacyBytes = await buildRealLegacyDocxBytes();
+    const detection = await detectLegacyKiroDocx(legacyBytes);
+    expect(detection.directTableRuns).toBe(24);
+    expect(detection.invalidStyleNumPr).toBe(2);
+    expect(detection.legacy).toBe(true);
+    const zip = await JSZip.loadAsync(legacyBytes);
+    const core = await zip.file("docProps/core.xml")?.async("string");
+    const app = await zip.file("docProps/app.xml")?.async("string");
+    expect(core).toContain("<dc:creator>ClassFlow Kiro</dc:creator>");
+    expect(app).toContain("<Application>ClassFlow Kiro</Application>");
+  });
+
+  it("07 = 06 bounded repair 后：legacy=false、directTableRuns=0、invalidStyleNumPr=0、runtime integrity 通过", async () => {
+    const { fileName } = (await generateLegacyFixtures())[1];
+    const repaired = new Uint8Array(await readFile(path.join(DOCX_COMPAT_OUT_DIR, fileName)));
+    const detection = await detectLegacyKiroDocx(repaired);
+    expect(detection.legacy).toBe(false);
+    expect(detection.directTableRuns).toBe(0);
+    expect(detection.invalidStyleNumPr).toBe(0);
+    expect(await verifyDocxBytes(repaired)).toBe(true);
+    // 修复后表格文本完整保留（24 个 cell 文本 + 2 个 style name）
+    const zip = await JSZip.loadAsync(repaired);
+    const documentXml = await zip.file("word/document.xml")?.async("string");
+    const stylesXml = await zip.file("word/styles.xml")?.async("string");
+    for (const text of ["星期", "课程", "时间", "地点", "数据结构与算法", "计算机网络", "计算机楼 305"]) {
+      expect(documentXml).toContain(text);
+    }
+    expect(stylesXml).toContain("List0");
+    expect(stylesXml).toContain("List1");
   });
 });
 

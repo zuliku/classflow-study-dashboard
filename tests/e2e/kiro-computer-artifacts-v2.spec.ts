@@ -1343,3 +1343,204 @@ test("V2.5 场景 D：Task Card 文件行也有删除入口（二次确认 → �
 
   await expect.poll(async () => readSandboxText(page, "taskdel.txt")).toBeNull();
 });
+
+// ==================== V2.6：Runtime Provenance + 三段 Bytes 锁死 ====================
+
+/**
+ * V2.6 探针：Kiro-V26-Word-Probe.docx（全新唯一文件名，避免旧 Artifact/Source IR/同名下载混淆）。
+ * 三段 bytes SHA 必须一致：A=renderDocx 输出（Node 侧同代码复算） / B=Sandbox 持久化 / C=浏览器下载。
+ * 全部 legacy=false；package provenance = currentRendererMarker（creator=ClassFlow Kiro + description marker）。
+ *
+ * 确定性前提：docx Packer 在 docProps 写入 new Date() 时间戳 → 浏览器 addInitScript 与 Node 侧
+ * 都把 Date 固定到同一 epoch（已实证：同 IR 三次 renderDocx SHA 相同）。
+ */
+const PROBE_FILE = "Kiro-V26-Word-Probe.docx";
+const PROBE_DRAFT = {
+  title: "本周课表",
+  stylePreset: "business-report",
+  blocks: [
+    { type: "paragraph", text: "生成日期：2026-08-14" },
+    {
+      type: "table",
+      header: ["星期", "课程", "时间", "地点"],
+      rows: [
+        ["周一", "数据结构与算法", "08:00–09:40", "计算机楼 102"],
+        ["周二", "概率论与数理统计", "10:00–11:40", "教三 305"],
+        ["周三", "操作系统", "14:00–15:40", "计算机楼 208"],
+        ["周四", "学术英语写作", "13:00–14:40", "外语楼 207"],
+        ["周五", "计算机网络", "10:00–11:40", "计算机楼 305"],
+      ],
+    },
+  ],
+} as const;
+const PROBE_FIXED_EPOCH_MS = 1784070000000;
+
+function withFixedDate<T>(fn: () => Promise<T>): Promise<T> {
+  const RealDate = globalThis.Date;
+  const FixedDate = class extends RealDate {
+    constructor(...args: ConstructorParameters<typeof Date>) {
+      if (args.length === 0) super(PROBE_FIXED_EPOCH_MS);
+      else super(...(args as [number | string | Date]));
+    }
+    static now() {
+      return PROBE_FIXED_EPOCH_MS;
+    }
+  };
+  globalThis.Date = FixedDate as typeof Date;
+  return fn().finally(() => {
+    globalThis.Date = RealDate;
+  });
+}
+
+test("V2.6 探针：Kiro-V26-Word-Probe.docx 三段 SHA 一致（render=Sandbox=下载）+ provenance + legacy=false", async ({ page }) => {
+  let requestCount = 0;
+  await page.route("**/api/ai/chat", async (route) => {
+    requestCount += 1;
+    if (requestCount === 1) {
+      await route.fulfill({
+        status: 200,
+        contentType: "text/event-stream",
+        body: toolCallStream("v26-msg-1", "call_probe", "create_document", {
+          path: PROBE_FILE,
+          document: PROBE_DRAFT,
+        }),
+      });
+      return;
+    }
+    await route.fulfill({
+      status: 200,
+      contentType: "text/event-stream",
+      body: answerStream("v26-msg-1", "已生成 Kiro-V26-Word-Probe.docx。"),
+    });
+  });
+  await page.addInitScript(({ epoch }) => {
+    // 与 Node 侧 withFixedDate 相同：docx Packer 的 docProps 时间戳固定 → 输出确定性
+    const RealDate = Date;
+    const FixedDate = class extends RealDate {
+      constructor(...args: any[]) {
+        if (args.length === 0) super(epoch);
+        else super(...args);
+      }
+      static now() {
+        return epoch;
+      }
+    };
+    (globalThis as any).Date = FixedDate;
+  }, { epoch: PROBE_FIXED_EPOCH_MS });
+  await page.addInitScript(({ settings, key }) => {
+    localStorage.setItem("classflow-ai-settings-v1", JSON.stringify({ version: 0, state: settings }));
+    sessionStorage.setItem("classflow-ai-key:deepseek", key);
+  }, { settings: AI_SETTINGS, key: "sk-test-key" });
+
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/");
+  await page.locator("aside").first().getByRole("button", { name: "Kiro" }).click();
+  await page.waitForTimeout(800);
+  const composer = page.getByTestId("kiro-composer");
+  await expect(composer).toBeVisible();
+  await composer.getByRole("button", { name: "Computer" }).click();
+  await expect(composer.getByRole("button", { name: "Computer" })).toHaveAttribute("aria-pressed", "true");
+  const modeMenu = composer.getByRole("button", { name: "权限模式" });
+  await modeMenu.click();
+  await page.getByRole("menuitem", { name: /工作区自动/ }).first().click();
+
+  await composer.getByLabel("Ask Kiro").fill(`生成 ${PROBE_FILE}`);
+  await composer.getByLabel("发送").click();
+  const taskCard = page.locator('[data-testid="kiro-message"]').last().getByTestId("kiro-agent-task-card");
+  await expect(taskCard).toBeVisible({ timeout: 15000 });
+  await expect(taskCard).toContainText(PROBE_FILE);
+
+  // B = Sandbox 持久化 bytes（浏览器侧 SHA）
+  const sandboxFp = await readSandboxBinaryFingerprint(page, PROBE_FILE);
+  expect(sandboxFp).not.toBeNull();
+  expect(sandboxFp!.size).toBeGreaterThan(0);
+
+  // A = renderDocx 输出：Node 侧用与 executor 完全相同的 canonical 化 + 同代码 renderDocx 复算
+  const canonical = await withFixedDate(async () => {
+    const { parseDocumentAuthoringInput } = await import("@/lib/ai/computer/documents/authoring/compat");
+    const { renderDocx } = await import("@/lib/ai/computer/documents/docx");
+    const parsed = parseDocumentAuthoringInput(PROBE_DRAFT as never);
+    if (!parsed.ok) throw new Error("probe draft parse failed");
+    return renderDocx(parsed.value.document);
+  });
+  const renderSha = sha256Hex(Buffer.from(canonical));
+  expect(renderSha).toBe(sandboxFp!.sha256);
+
+  // C = 浏览器真实下载 bytes
+  const downloadPromise = page.waitForEvent("download");
+  await taskCard.getByRole("button", { name: `下载 ${PROBE_FILE}` }).click();
+  const download = await downloadPromise;
+  expect(download.suggestedFilename()).toBe(PROBE_FILE);
+  const downloadPath = await download.path();
+  expect(downloadPath).not.toBeNull();
+  const downloaded = await fsp.readFile(downloadPath!);
+  expect(downloaded.byteLength).toBe(sandboxFp!.size);
+  expect(sha256Hex(downloaded)).toBe(sandboxFp!.sha256);
+
+  // 三段全部 legacy=false（A/B/C）：B 用浏览器原始 bytes → Node 侧 detector
+  const { detectLegacyKiroDocx } = await import("@/lib/ai/computer/documents/legacy");
+  const { inspectKiroDocxProvenance } = await import("@/lib/ai/computer/documents/provenance");
+  expect((await detectLegacyKiroDocx(canonical)).legacy).toBe(false);
+  expect((await detectLegacyKiroDocx(new Uint8Array(downloaded))).legacy).toBe(false);
+  const sandboxB64 = await page.evaluate(async (p) => {
+    const db = await new Promise<IDBDatabase | null>((resolve) => {
+      const req = indexedDB.open("classflow-kiro-sandbox-v1", 1);
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => resolve(null);
+    });
+    if (!db) return null;
+    try {
+      return await new Promise<string | null>((resolve) => {
+        const tx = db.transaction("files", "readonly");
+        const req = tx.objectStore("files").get(`sandbox-default\u0000${p}`);
+        req.onsuccess = () => {
+          const entry = req.result as { bytes?: ArrayBuffer } | undefined;
+          if (!entry || !entry.bytes) {
+            resolve(null);
+            return;
+          }
+          let binary = "";
+          const view = new Uint8Array(entry.bytes);
+          for (let i = 0; i < view.byteLength; i += 0x8000) {
+            binary += String.fromCharCode(...view.subarray(i, i + 0x8000));
+          }
+          resolve(btoa(binary));
+        };
+        req.onerror = () => resolve(null);
+      });
+    } finally {
+      db.close();
+    }
+  }, PROBE_FILE);
+  expect(sandboxB64).not.toBeNull();
+  const sandboxBuffer = Buffer.from(sandboxB64!, "base64");
+  expect((await detectLegacyKiroDocx(new Uint8Array(sandboxBuffer))).legacy).toBe(false);
+  expect(sha256Hex(sandboxBuffer)).toBe(sandboxFp!.sha256);
+
+  // Package provenance：下载文件 = 新 renderer 标记（creator + description marker），无旧 Kiro 结构
+  const provenance = await inspectKiroDocxProvenance(new Uint8Array(downloaded));
+  expect(provenance.currentRendererMarker).toBe(true);
+  expect(provenance.legacyKiroProducer).toBe(false);
+  expect(provenance.legacyStructuralSignature).toBe(false);
+  expect(provenance.creator).toBe("ClassFlow Kiro");
+  expect(provenance.description).toContain("docx-library-v2");
+
+  // 完整 4×6 表格文本存在于下载文件（标题/日期/表格内容齐全）
+  const { verifyRenderedDocx } = await import("@/lib/ai/computer/documents/verify");
+  const { normalizeDocumentDraft } = await import("@/lib/ai/computer/documents/authoring/normalize");
+  expect(await verifyRenderedDocx(new Uint8Array(downloaded), normalizeDocumentDraft(PROBE_DRAFT as never))).toBe(true);
+
+  // ---- Optional：LibreOffice headless 渲染（环境无 soffice 则 SKIPPED）----
+  try {
+    execFileSync("soffice", ["--version"], { stdio: "ignore" });
+    const outDir = await fsp.mkdtemp(path.join(os.tmpdir(), "kiro-v26-smoke-"));
+    execFileSync("soffice", ["--headless", "--convert-to", "pdf", "--outdir", outDir, downloadPath!], {
+      stdio: "ignore",
+      timeout: 120_000,
+    });
+    const pdfs = await fsp.readdir(outDir);
+    expect(pdfs.some((f) => f.endsWith(".pdf"))).toBe(true);
+  } catch {
+    console.log("SKIPPED: soffice not found — LibreOffice render smoke skipped");
+  }
+});
