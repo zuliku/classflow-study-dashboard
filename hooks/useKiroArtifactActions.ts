@@ -6,11 +6,13 @@ import { useKiroArtifactUiStore } from "@/store/useKiroArtifactUiStore";
 import { useToastStore } from "@/store/useToastStore";
 import { getArtifactPreview, getArtifactDownloadPayload } from "@/lib/ai/computer/artifacts/access";
 import { triggerArtifactDownload } from "@/lib/ai/computer/artifacts/download";
+import { getArtifact } from "@/lib/ai/computer/artifacts/service";
+import { deleteWorkspaceFile } from "@/lib/ai/computer/filesystem/deleteFile";
 
 /**
- * Artifact UI Actions（Preview / Download）。
- * 用户显式 UI Read：不启用 Computer、不改 Artifact metadata、不写 audit、不消耗 Agent quota。
- * 点击瞬间读取 live workspaces（Artifact Access Service 内部强制 grant/sandbox 检查）。
+ * Artifact UI Actions（Preview / Download / Delete）。
+ * 用户显式 UI 操作：不启用 Computer、不消耗 Agent quota。
+ * Delete 走共享 deleteWorkspaceFile（确认 Dialog 即 user gesture；仍完整检查 read-write/grant/path）。
  */
 export function useKiroArtifactActions() {
   const pushToast = useToastStore((s) => s.pushToast);
@@ -37,7 +39,33 @@ export function useKiroArtifactActions() {
     [pushToast]
   );
 
-  return { previewArtifact, downloadArtifact };
+  const deleteArtifact = useCallback(
+    async (artifactId: string): Promise<boolean> => {
+      try {
+        const artifact = await getArtifact(artifactId);
+        if (!artifact) {
+          pushToast({ message: "文件记录不存在。", type: "error" });
+          return false;
+        }
+        const workspaces = useKiroComputerStore.getState().workspaces;
+        await deleteWorkspaceFile({
+          workspaceId: artifact.workspaceId,
+          rootId: artifact.rootId,
+          relativePath: artifact.relativePath,
+          workspaces,
+        });
+        pushToast({ message: `已删除 ${artifact.displayName}` });
+        return true;
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "删除失败";
+        pushToast({ message, type: "error" });
+        return false;
+      }
+    },
+    [pushToast]
+  );
+
+  return { previewArtifact, downloadArtifact, deleteArtifact };
 }
 
 export { getArtifactPreview };

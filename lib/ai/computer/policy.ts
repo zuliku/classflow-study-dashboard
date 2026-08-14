@@ -77,11 +77,12 @@ function modeLabel(mode: KiroAgentMode): string {
 
 /**
  * Policy 求值（Spec §17 优先级）：
- * 1. Hard deny（V1：fs.delete / app.open / app.reveal / shell.execute / network.access）
+ * 1. Hard deny（app.open / app.reveal / shell.execute / network.access）
  * 2. read-only root 的 mutation hard deny（任何模式不能覆盖）
- * 3. matching explicit deny（resource/root/workspace 特异性，最 specific 优先）
- * 4. most-specific matching explicit allow/ask
- * 5. agent-mode default
+ * 3. fs.delete always-ask invariant：explicit allow rule 也不能让删除静默执行
+ * 4. matching explicit deny（resource/root/workspace 特异性，最 specific 优先）
+ * 5. most-specific matching explicit allow/ask
+ * 6. agent-mode default
  *
  * 权限审批永远不能覆盖 sandbox 边界 / read-only root（PATH_OUTSIDE_SANDBOX 由 resolver 单独保证）。
  */
@@ -108,6 +109,10 @@ export function evaluateComputerPolicy(context: PolicyContext): PolicyDecision {
     if (deny) {
       return { effect: "deny", reason: `权限规则拒绝（${deny.id}）`, matchedRuleId: deny.id };
     }
+    // fs.delete always-ask：即使存在 explicit allow rule，删除也必须是用户确认的 ask
+    if (capability === "fs.delete") {
+      return { effect: "ask", reason: "删除属于破坏性操作，每个真实删除都必须用户批准" };
+    }
     const allowOrAsk = matching
       .filter((r) => r.effect !== "deny")
       .sort((a, b) => ruleSpecificity(b) - ruleSpecificity(a))[0];
@@ -120,7 +125,16 @@ export function evaluateComputerPolicy(context: PolicyContext): PolicyDecision {
     }
   }
 
-  // 5. Mode default
+  // 5. fs.delete：模式默认 deny（Plan）优先；否则 always-ask invariant（Guided / Workspace Auto 都必须批准）
+  if (capability === "fs.delete") {
+    const modeDefault = AGENT_MODE_DEFAULTS[mode][capability];
+    if (modeDefault === "deny") {
+      return { effect: "deny", reason: `${modeLabel(mode)} 默认权限` };
+    }
+    return { effect: "ask", reason: "删除属于破坏性操作，每个真实删除都必须用户批准" };
+  }
+
+  // 6. Mode default
   const effect = AGENT_MODE_DEFAULTS[mode][capability];
   return { effect, reason: `${modeLabel(mode)} 默认权限` };
 }

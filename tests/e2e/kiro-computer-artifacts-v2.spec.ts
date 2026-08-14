@@ -945,3 +945,345 @@ test("V2.2 Agent Flow：get_week_schedule → create_document（Draft table，�
   expect(fp).not.toBeNull();
   expect(fp!.size).toBeGreaterThan(0);
 });
+
+// ==================== V2.5：Legacy DOCX Self-Heal + delete_file ====================
+
+/** test-only legacy DOCX（真实错误签名：w:tc → w:r direct child；w:style → w:numPr） */
+async function buildLegacyDocx(): Promise<Uint8Array> {
+  const JSZip = (await import("jszip")).default;
+  const zip = new JSZip();
+  zip.file(
+    "[Content_Types].xml",
+    `<?xml version="1.0"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+<Default Extension="xml" ContentType="application/xml"/>
+<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
+<Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/>
+<Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/>
+<Override PartName="/docProps/app.xml" ContentType="application/vnd.openxmlformats-officedocument.extended-properties+xml"/>
+</Types>`
+  );
+  zip.file(
+    "_rels/.rels",
+    `<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>
+</Relationships>`
+  );
+  zip.file(
+    "word/_rels/document.xml.rels",
+    `<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>
+</Relationships>`
+  );
+  zip.file(
+    "docProps/core.xml",
+    `<?xml version="1.0"?><cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:creator>Kiro</dc:creator></cp:coreProperties>`
+  );
+  zip.file(
+    "docProps/app.xml",
+    `<?xml version="1.0"?><Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties"><Application>Kiro</Application></Properties>`
+  );
+  const legacyCells = Array.from({ length: 24 }, (_, i) =>
+    `<w:tc><w:tcPr><w:tcW w:w="2000" w:type="dxa"/></w:tcPr><w:r><w:t>cell${i}</w:t></w:r></w:tc>`
+  ).join("");
+  zip.file(
+    "word/document.xml",
+    `<?xml version="1.0"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+<w:body><w:tbl><w:tr>${legacyCells}</w:tr></w:tbl></w:body></w:document>`
+  );
+  const legacyStyles = Array.from({ length: 2 }, (_, i) =>
+    `<w:style w:type="paragraph" w:styleId="List${i}"><w:name w:val="List${i}"/><w:numPr><w:numId w:val="1"/></w:numPr></w:style>`
+  ).join("");
+  zip.file(
+    "word/styles.xml",
+    `<?xml version="1.0"?><w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">${legacyStyles}</w:styles>`
+  );
+  return new Uint8Array(await zip.generateAsync({ type: "uint8array" }));
+}
+
+/** 读取当前 sandbox workspace（enable Computer 后从 persist 读取） */
+async function readSandboxWorkspace(page: import("@playwright/test").Page): Promise<{ workspaceId: string; rootId: string }> {
+  return page.evaluate(async () => {
+    const raw = localStorage.getItem("classflow-kiro-computer-v1");
+    const state = raw ? (JSON.parse(raw) as { state?: { workspaces?: { id: string; roots?: { id: string; adapterRef?: string }[] }[] } }).state : undefined;
+    const ws = state?.workspaces?.find((w) => w.roots?.some((r) => r.adapterRef === "sandbox-default"));
+    return { workspaceId: ws?.id ?? "", rootId: ws?.roots?.find((r) => r.adapterRef === "sandbox-default")?.id ?? "root-sandbox" };
+  });
+}
+
+/** 直接向 Sandbox IndexedDB 写入文件（测试辅助；不进生产代码） */
+async function seedSandboxFile(page: import("@playwright/test").Page, path: string, payload: { text?: string; base64?: string }): Promise<void> {
+  const result = await page.evaluate(
+    async (p) => {
+      const bytes = p.payload.base64 !== undefined
+        ? Uint8Array.from(atob(p.payload.base64), (c) => c.charCodeAt(0))
+        : null;
+      const entry = bytes !== null
+        ? { kind: "file", bytes: bytes.buffer, type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" }
+        : { kind: "file", text: p.payload.text ?? "", type: "text/plain" };
+      const db = await new Promise<IDBDatabase | null>((resolve) => {
+        const req = indexedDB.open("classflow-kiro-sandbox-v1", 1);
+        req.onupgradeneeded = () => {
+          if (!req.result.objectStoreNames.contains("files")) req.result.createObjectStore("files");
+        };
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => resolve(null);
+      });
+      if (!db) return { stored: false, bytesLen: bytes?.byteLength ?? -1 };
+      try {
+        await new Promise<void>((resolve) => {
+          const tx = db.transaction("files", "readwrite");
+          tx.objectStore("files").put(entry, `sandbox-default\u0000${p.path}`);
+          tx.oncomplete = () => resolve();
+          tx.onerror = () => resolve();
+        });
+      } finally {
+        db.close();
+      }
+      return { stored: true, bytesLen: bytes?.byteLength ?? -1, b64len: p.payload.base64?.length ?? -1 };
+    },
+    { path, payload }
+  );
+  void result;
+}
+
+/** 直接向 Artifact Registry 写入 record + Source（测试辅助） */
+async function seedArtifact(
+  page: import("@playwright/test").Page,
+  artifact: { id: string; workspaceId: string; rootId: string; relativePath: string; type: string; title: string; source: string },
+  source?: { revision: number; document: unknown; rendererVersion?: number }
+): Promise<void> {
+  await page.evaluate(
+    async (p) => {
+      const db = await new Promise<IDBDatabase | null>((resolve) => {
+        const req = indexedDB.open("classflow-kiro-artifacts-v1", 1);
+        req.onupgradeneeded = () => {
+          if (!req.result.objectStoreNames.contains("artifacts")) req.result.createObjectStore("artifacts");
+          if (!req.result.objectStoreNames.contains("sources")) req.result.createObjectStore("sources");
+        };
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => resolve(null);
+      });
+      if (!db) return;
+      try {
+        await new Promise<void>((resolve) => {
+          const tx = db.transaction(["artifacts", "sources"], "readwrite");
+          const now = new Date().toISOString();
+          tx.objectStore("artifacts").put(
+            {
+              id: p.artifact.id,
+              workspaceId: p.artifact.workspaceId,
+              rootId: p.artifact.rootId,
+              relativePath: p.artifact.relativePath,
+              displayName: p.artifact.relativePath.split("/").pop() ?? p.artifact.relativePath,
+              type: p.artifact.type,
+              title: p.artifact.title,
+              source: p.artifact.source,
+              revision: p.source?.revision ?? 1,
+              createdAt: now,
+              updatedAt: now,
+            },
+            p.artifact.id
+          );
+          if (p.source) {
+            tx.objectStore("sources").put(
+              { artifactId: p.artifact.id, revision: p.source.revision, document: p.source.document, updatedAt: now },
+              p.artifact.id
+            );
+          }
+          tx.oncomplete = () => resolve();
+          tx.onerror = () => resolve();
+        });
+      } finally {
+        db.close();
+      }
+    },
+    { artifact, source }
+  );
+}
+
+test("V2.5 场景 A：legacy Kiro DOCX 下载时自动 self-heal（下载 = current renderer bytes）", async ({ page }) => {
+  await page.addInitScript(({ settings, key }) => {
+    localStorage.setItem("classflow-ai-settings-v1", JSON.stringify({ version: 0, state: settings }));
+    sessionStorage.setItem("classflow-ai-key:deepseek", key);
+  }, { settings: AI_SETTINGS, key: "sk-test-key" });
+
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/");
+  await page.locator("aside").first().getByRole("button", { name: "Kiro" }).click();
+  await page.waitForTimeout(800);
+  const composer = page.getByTestId("kiro-composer");
+  await expect(composer).toBeVisible();
+  await composer.getByRole("button", { name: "Computer" }).click();
+  await expect(composer.getByRole("button", { name: "Computer" })).toHaveAttribute("aria-pressed", "true");
+
+  const { workspaceId, rootId } = await readSandboxWorkspace(page);
+  expect(workspaceId).toBeTruthy();
+
+  // seed legacy DOCX + kiro-created artifact + matching Source IR（revision 1）
+  const legacy = await buildLegacyDocx();
+  const legacyB64 = Buffer.from(legacy).toString("base64");
+  await seedSandboxFile(page, "legacy.docx", { base64: legacyB64 });
+  await seedArtifact(
+    page,
+    { id: "legacy-art-1", workspaceId, rootId, relativePath: "legacy.docx", type: "docx", title: "旧课表", source: "kiro-created" },
+    { revision: 1, document: { title: "本周课表", stylePreset: "business-report", blocks: [{ type: "paragraph", content: [{ text: "旧文档正文" }] }] } }
+  );
+
+  // Recent Files → 下载
+  await page.getByRole("button", { name: "最近文件" }).click();
+  const dlRow = page.locator('[data-testid="kiro-recent-artifact-row"]').filter({ hasText: "legacy.docx" });
+  await expect(dlRow).toBeVisible({ timeout: 10000 });
+  const downloadPromise = page.waitForEvent("download");
+  await dlRow.getByRole("button", { name: "下载 legacy.docx" }).click();
+  const download = await downloadPromise;
+  const downloadPath = await download.path();
+  expect(downloadPath).not.toBeNull();
+  const downloaded = await fsp.readFile(downloadPath!);
+  expect(downloaded.byteLength).toBeGreaterThan(0);
+
+  // 下载字节 = current renderer（非 legacy）：合法 DOCX + 无 direct tc→r
+  const JSZip = (await import("jszip")).default;
+  const zip = await JSZip.loadAsync(downloaded);
+  const documentXml = (await zip.file("word/document.xml")?.async("string")) ?? "";
+  const tcRe = /<w:tc\b[^>]*>([\s\S]*?)<\/w:tc>/g;
+  let m: RegExpExecArray | null;
+  let directRunCells = 0;
+  while ((m = tcRe.exec(documentXml))) {
+    let inner = m[1].replace(/<w:tcPr\b[^>]*?\/?>[\s\S]*?<\/w:tcPr>/g, "");
+    inner = inner.replace(/<w:p\b[^>]*?\/?>[\s\S]*?<\/w:p>/g, "");
+    if (/<w:r\b[^>]*>/.test(inner)) directRunCells += 1;
+  }
+  expect(directRunCells).toBe(0);
+  const { verifyDocxBytes } = await import("@/lib/ai/computer/documents/verify");
+  expect(await verifyDocxBytes(new Uint8Array(downloaded))).toBe(true);
+  // 与 legacy bytes 不同（已被替换）
+  expect(Buffer.from(downloaded).toString("base64")).not.toBe(legacyB64);
+  // Sandbox 原文件已被替换
+  const fp = await readSandboxBinaryFingerprint(page, "legacy.docx");
+  expect(fp).not.toBeNull();
+  expect(fp!.size).toBe(downloaded.byteLength);
+});
+
+test("V2.5 场景 B：Agent delete_file → 确认后删除（Approval 前文件仍在，允许后消失，Task Card 显示删除）", async ({ page }) => {
+  let requestCount = 0;
+  await page.route("**/api/ai/chat", async (route) => {
+    requestCount += 1;
+    if (requestCount === 1) {
+      await route.fulfill({
+        status: 200,
+        contentType: "text/event-stream",
+        body: toolCallStream("v25-msg-1", "call_del_test", "delete_file", { rootId: "root-sandbox", path: "test.txt" }),
+      });
+      return;
+    }
+    await route.fulfill({
+      status: 200,
+      contentType: "text/event-stream",
+      body: answerStream("v25-msg-1", "已删除 test.txt。"),
+    });
+  });
+  await page.addInitScript(({ settings, key }) => {
+    localStorage.setItem("classflow-ai-settings-v1", JSON.stringify({ version: 0, state: settings }));
+    sessionStorage.setItem("classflow-ai-key:deepseek", key);
+  }, { settings: AI_SETTINGS, key: "sk-test-key" });
+
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/");
+  await page.locator("aside").first().getByRole("button", { name: "Kiro" }).click();
+  await page.waitForTimeout(800);
+  const composer = page.getByTestId("kiro-composer");
+  await expect(composer).toBeVisible();
+  await composer.getByRole("button", { name: "Computer" }).click();
+  await expect(composer.getByRole("button", { name: "Computer" })).toHaveAttribute("aria-pressed", "true");
+  const modeMenu = composer.getByRole("button", { name: "权限模式" });
+  await modeMenu.click();
+  await page.getByRole("menuitem", { name: /工作区自动/ }).first().click();
+
+  await seedSandboxFile(page, "test.txt", { text: "要删除的内容" });
+  expect(await readSandboxText(page, "test.txt")).toBe("要删除的内容");
+
+  await composer.getByLabel("Ask Kiro").fill("删除 test.txt");
+  await composer.getByLabel("发送").click();
+
+  // Approval Dialog（fs.delete always-ask，即使 Workspace Auto）
+  const approval = page.getByTestId("kiro-approval-dialog");
+  await expect(approval).toBeVisible({ timeout: 15000 });
+  await expect(approval).toContainText("删除文件 test.txt");
+  await expect(approval).toContainText("删除后无法通过 Kiro 撤销");
+  // 未批准前零 IO：文件仍在
+  expect(await readSandboxText(page, "test.txt")).toBe("要删除的内容");
+
+  await approval.getByTestId("approval-allow-once").click();
+
+  // 允许后真正删除 + Task Card 显示「删除 test.txt」
+  const taskCard = page.locator('[data-testid="kiro-message"]').last().getByTestId("kiro-agent-task-card");
+  await expect(taskCard).toBeVisible({ timeout: 15000 });
+  await expect(taskCard).toContainText("删除 test.txt");
+  expect(await readSandboxText(page, "test.txt")).toBeNull();
+});
+
+test("V2.5 场景 C：Recent Files 手动删除（二次确认 → 文件消失 + row 消失）", async ({ page }) => {
+  let requestCount = 0;
+  await page.route("**/api/ai/chat", async (route) => {
+    requestCount += 1;
+    if (requestCount === 1) {
+      await route.fulfill({
+        status: 200,
+        contentType: "text/event-stream",
+        body: toolCallStream("v25c-msg-1", "call_create_manual", "create_text_file", {
+          rootId: "root-sandbox",
+          path: "manual.txt",
+          content: "手动删除目标",
+        }),
+      });
+      return;
+    }
+    await route.fulfill({
+      status: 200,
+      contentType: "text/event-stream",
+      body: answerStream("v25c-msg-1", "已创建 manual.txt。"),
+    });
+  });
+  await page.addInitScript(({ settings, key }) => {
+    localStorage.setItem("classflow-ai-settings-v1", JSON.stringify({ version: 0, state: settings }));
+    sessionStorage.setItem("classflow-ai-key:deepseek", key);
+  }, { settings: AI_SETTINGS, key: "sk-test-key" });
+
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/");
+  await page.locator("aside").first().getByRole("button", { name: "Kiro" }).click();
+  await page.waitForTimeout(800);
+  const composer = page.getByTestId("kiro-composer");
+  await expect(composer).toBeVisible();
+  await composer.getByRole("button", { name: "Computer" }).click();
+  await expect(composer.getByRole("button", { name: "Computer" })).toHaveAttribute("aria-pressed", "true");
+  const modeMenu = composer.getByRole("button", { name: "权限模式" });
+  await modeMenu.click();
+  await page.getByRole("menuitem", { name: /工作区自动/ }).first().click();
+
+  await composer.getByLabel("Ask Kiro").fill("创建 manual.txt");
+  await composer.getByLabel("发送").click();
+  await expect(page.locator('[data-testid="kiro-message"]').last().getByTestId("kiro-agent-task-card")).toBeVisible({ timeout: 15000 });
+  expect(await readSandboxText(page, "manual.txt")).toBe("手动删除目标");
+
+  // Recent Files → available 行有「删除」按钮
+  await page.getByRole("button", { name: "最近文件" }).click();
+  const row = page.locator('[data-testid="kiro-recent-artifact-row"]').filter({ hasText: "manual.txt" });
+  await expect(row).toBeVisible();
+  const deleteBtn = row.getByRole("button", { name: "删除 manual.txt" });
+  await expect(deleteBtn).toBeVisible();
+  await deleteBtn.click();
+
+  // 二次确认（危险操作；点击确认前文件仍在）
+  const confirm = page.getByRole("alertdialog");
+  await expect(confirm).toBeVisible();
+  await expect(confirm).toContainText("删除后无法通过 Kiro 撤销");
+  expect(await readSandboxText(page, "manual.txt")).toBe("手动删除目标");
+  await confirm.getByTestId("confirm-dialog-confirm").click();
+
+  // 文件消失（异步删除 + 确认对话框先关闭 popover）；重新打开 Recent Files 断言 row 消失
+  await expect.poll(async () => readSandboxText(page, "manual.txt")).toBeNull();
+  await page.getByRole("button", { name: "最近文件" }).click();
+  await expect(page.locator('[data-testid="kiro-recent-artifact-row"]').filter({ hasText: "manual.txt" })).toHaveCount(0, { timeout: 10000 });
+});

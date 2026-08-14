@@ -60,6 +60,7 @@ import { mergeDocumentStyleForUpdate } from "@/lib/ai/computer/documents/styles/
 import { parseDocumentAuthoringInput } from "@/lib/ai/computer/documents/authoring/compat";
 import { isKiroDocument } from "@/lib/ai/computer/documents/types";
 import { isStructuredBinaryPath } from "@/lib/ai/computer/filesystem/fileTypes";
+import { performFileDeletion } from "@/lib/ai/computer/filesystem/deleteFile";
 import {
   registerCreatedArtifact,
   findArtifactByLocation,
@@ -949,6 +950,81 @@ export async function executeKiroComputerTool(request: {
       ? normalizeScopePath(resource.path)
       : normalizeRelativeComputerPath(resource.path).path;
 
+    // ---- V2.5：delete_file（在 generic ask 之前拦截，提供删除专属描述；fs.delete 恒 ask）----
+    if (toolName === "delete_file") {
+      const policy = prepareComputerTool({
+        mode: turnSnapshot.agentMode,
+        rules: livePermissionRules,
+        workspace: ws,
+        capability: "fs.delete",
+        resource: { ...resource, path: normalized },
+      });
+      if (policy.effect === "deny") {
+        return { kind: "completed", output: { ok: false, code: "PERMISSION_DENIED", message: policy.reason } };
+      }
+      if (policy.effect === "ask") {
+        const matchedOneShot =
+          oneShotApprovals && oneShotApprovals.length > 0
+            ? oneShotApprovals.findIndex((o) =>
+                oneShotApprovalMatches(o, {
+                  toolCallId,
+                  capability: "fs.delete",
+                  workspaceId: resource.workspaceId,
+                  rootId: resource.rootId,
+                  relativePath: normalized,
+                })
+              )
+            : -1;
+        if (matchedOneShot === -1) {
+          return {
+            kind: "approval-required",
+            request: buildApprovalRequest({
+              id: newApprovalId(),
+              toolCallId,
+              taskId: context.taskId ?? "",
+              capability: "fs.delete",
+              workspaceId: ws.id,
+              workspaceLabel: ws.name,
+              rootId: root.id,
+              rootLabel: root.label,
+              relativePath: normalized,
+              resourceLabel: normalized.split("/").pop() ?? normalized,
+              description: `删除文件 ${normalized}（删除后无法通过 Kiro 撤销）`,
+            }),
+          };
+        }
+        oneShotApprovals!.splice(matchedOneShot, 1); // 一次消费（resume 时重新评估 policy）
+      }
+
+      // 即将开始真实 filesystem mutation：只在此计数一次
+      counters.mutationCount += 1;
+
+      // 共享删除 primitive：stat=file → remove → stat absent verify → Artifact/Source 清理 → knowledge dirty
+      await performFileDeletion({
+        workspace: ws,
+        rootId: root.id,
+        relativePath: normalized,
+      });
+
+      // destructive / no Undo（不注册 inverse；Approval 已明确「删除后无法通过 Kiro 撤销」）
+      const runtime = buildMutationRuntime({
+        toolName,
+        toolCallId,
+        operation: "delete",
+        resourceType: "text",
+        snapshot: turnSnapshot,
+        workspaceLabel: ws.name,
+        root,
+        relativePath: normalized,
+        review: { kind: "create" },
+      });
+      return {
+        kind: "completed",
+        output: { ok: true, data: { path: normalized, verified: true } },
+        runtime,
+      };
+    }
+
     // policy（含 hard deny / read-only / mode default / explicit rules）
     const policy = prepareComputerTool({
       mode: turnSnapshot.agentMode,
@@ -1646,7 +1722,7 @@ function bytesEqual(a: Uint8Array, b: Uint8Array): boolean {
 function buildMutationRuntime(input: {
   toolName: string;
   toolCallId: string;
-  operation: "create" | "modify" | "move" | "rename";
+  operation: "create" | "modify" | "move" | "rename" | "delete";
   resourceType: "directory" | "text" | "document";
   snapshot: KiroComputerTurnSnapshot;
   workspaceLabel: string;

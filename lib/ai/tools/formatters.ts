@@ -84,6 +84,7 @@ export const KIRO_TOOL_LABELS: Record<string, string> = {
   patch_text_file: "修改文本文件",
   create_document: "创建文档",
   update_document: "更新文档",
+  delete_file: "删除文件",
   rename_file: "重命名文件",
   move_file: "移动文件",
 };

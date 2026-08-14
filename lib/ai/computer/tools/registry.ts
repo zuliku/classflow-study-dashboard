@@ -12,6 +12,7 @@ import {
   createDirectorySchema,
   createTextFileSchema,
   patchTextFileSchema,
+  deleteFileSchema,
   createDocumentRuntimeSchema,
   renameFileSchema,
   moveFileSchema,
@@ -131,6 +132,14 @@ export const COMPUTER_MUTATION_TOOLS: ComputerToolDefinition[] = [
     description: "对现有文本文件进行精确修改（oldText 必须唯一匹配）。仅适用于纯文本文件（.txt / .md / .csv / .json 等）；不得用于修改 DOCX/PDF/XLSX/PPTX（那些必须使用 update_document）。",
     schema: patchTextFileSchema,
     capability: "fs.modify",
+    mutation: true,
+  },
+  {
+    name: "delete_file",
+    description:
+      "删除工作区中的单个文件。属于破坏性操作，执行前必须获得用户确认；不支持目录或递归删除。",
+    schema: deleteFileSchema,
+    capability: "fs.delete",
     mutation: true,
   },
   {

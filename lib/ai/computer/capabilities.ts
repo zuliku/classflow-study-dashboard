@@ -37,7 +37,7 @@ export const AGENT_MODE_DEFAULTS: Record<
     "fs.create": "allow",
     "fs.modify": "ask",
     "fs.move": "ask",
-    "fs.delete": "deny",
+    "fs.delete": "ask",
     "document.create": "allow",
     "document.modify": "ask",
     "app.open": "deny",
@@ -53,7 +53,7 @@ export const AGENT_MODE_DEFAULTS: Record<
     "fs.create": "allow",
     "fs.modify": "allow",
     "fs.move": "ask",
-    "fs.delete": "deny",
+    "fs.delete": "ask",
     "document.create": "allow",
     "document.modify": "allow",
     "app.open": "deny",
@@ -63,9 +63,9 @@ export const AGENT_MODE_DEFAULTS: Record<
   },
 };
 
-/** V1 Hard Deny：无论 Agent Mode / 规则如何都拒绝（未来桌面版单独设计后解除）。 */
+/** V1 Hard Deny：无论 Agent Mode / 规则如何都拒绝（未来桌面版单独设计后解除）。
+ *  fs.delete 已从硬性禁用移除（V2.5：可删除），但被 always-ask invariant 覆盖（见 policy.ts）。 */
 export const HARD_DENY_CAPABILITIES: ReadonlySet<ComputerCapability> = new Set<ComputerCapability>([
-  "fs.delete",
   "app.open",
   "app.reveal",
   "shell.execute",

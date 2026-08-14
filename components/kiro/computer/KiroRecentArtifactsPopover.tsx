@@ -6,6 +6,7 @@ import { useKiroComputerStore } from "@/store/useKiroComputerStore";
 import { useKiroRuntime } from "@/components/kiro/KiroSessionProvider";
 import { useKiroArtifactActions } from "@/hooks/useKiroArtifactActions";
 import { useToastStore } from "@/store/useToastStore";
+import { useConfirmStore } from "@/store/useConfirmStore";
 import {
   listRecentArtifactEntries,
   KiroRecentArtifactEntry,
@@ -28,8 +29,9 @@ export function KiroRecentArtifactsPopover() {
   const computerEnabled = useKiroComputerStore((s) => s.computerEnabled);
   const setComputerEnabled = useKiroComputerStore((s) => s.setComputerEnabled);
   const { addManualContext } = useKiroRuntime();
-  const { previewArtifact, downloadArtifact } = useKiroArtifactActions();
+  const { previewArtifact, downloadArtifact, deleteArtifact } = useKiroArtifactActions();
   const pushToast = useToastStore((s) => s.pushToast);
+  const confirm = useConfirmStore((s) => s.confirm);
 
   const [open, setOpen] = useState(false);
   const [entries, setEntries] = useState<KiroRecentArtifactEntry[]>([]);
@@ -115,6 +117,22 @@ export function KiroRecentArtifactsPopover() {
     await refresh();
   };
 
+  /** 手动删除 available 文件：先二次确认（明确 user gesture），确认后走共享 deleteWorkspaceFile */
+  const requestDelete = (entry: KiroRecentArtifactEntry) => {
+    const displayName = entry.artifact.displayName;
+    confirm({
+      title: `删除「${displayName}」？`,
+      description: "此操作会从当前 Kiro 工作区删除该文件，删除后无法通过 Kiro 撤销。",
+      confirmLabel: "删除文件",
+      danger: true,
+      onConfirm: () => {
+        void deleteArtifact(entry.artifact.id).then((ok) => {
+          if (ok) void refresh();
+        });
+      },
+    });
+  };
+
   return (
     <div ref={containerRef} className="relative">
       <button
@@ -188,6 +206,14 @@ export function KiroRecentArtifactsPopover() {
                         >
                           <MessagesSquare className="w-3.5 h-3.5" />
                           Ask Kiro
+                        </ActionButton>
+                        <ActionButton
+                          label={`删除 ${entry.artifact.displayName}`}
+                          onClick={() => requestDelete(entry)}
+                          danger
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                          删除
                         </ActionButton>
                       </>
                     ) : (

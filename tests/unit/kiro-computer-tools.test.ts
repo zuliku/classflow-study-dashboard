@@ -98,9 +98,10 @@ describe("tool exposure", () => {
     }
   });
 
-  it("不暴露 delete/shell/app/network 工具（delete/undo 只属于 runtime，不是 Model Tool）", () => {
+  it("不暴露 shell/app/network 工具；delete_file 是 V2.5 受控 Model Tool（仅单文件）", () => {
     const names = COMPUTER_TOOLS.map((t) => t.name);
-    expect(names).not.toContain("delete_file");
+    // V2.5：delete_file 成为 Model Tool（fs.delete always-ask；仅单文件，无目录/递归/批量）
+    expect(names).toContain("delete_file");
     expect(names).not.toContain("delete_directory");
     expect(names).not.toContain("run_shell");
     expect(names).not.toContain("launch_application");
@@ -111,7 +112,7 @@ describe("tool exposure", () => {
     expect(names).toContain("search_workspace_knowledge");
     expect(names).toContain("retrieve_workspace_context");
     // Model schema 绝不能加入权限相关参数
-    expect(names.length).toBe(16);
+    expect(names.length).toBe(17);
   });
 
   it("update_document 权限模式：Plan 不暴露 / Guided ask / Workspace Auto allow", () => {

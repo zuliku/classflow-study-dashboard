@@ -29,7 +29,7 @@ export interface KiroAgentTaskStep {
 export interface KiroComputerChange {
   id: string;
   toolCallId: string;
-  operation: "create" | "modify" | "move" | "rename";
+  operation: "create" | "modify" | "move" | "rename" | "delete";
   resourceType: "directory" | "text" | "document";
   workspaceId: string;
   workspaceLabel: string;

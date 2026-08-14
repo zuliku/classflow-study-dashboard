@@ -2118,9 +2118,10 @@ export function useKiroChat({
 /** Computer change 类型 → capability（Audit metadata 用） */
 function capabilityForChange(change: {
   resourceType: "directory" | "text" | "document";
-  operation: "create" | "modify" | "move" | "rename";
+  operation: "create" | "modify" | "move" | "rename" | "delete";
 }): ComputerCapability {
   if (change.operation === "move" || change.operation === "rename") return "fs.move";
+  if (change.operation === "delete") return "fs.delete";
   if (change.resourceType === "document") return "document.create";
   if (change.resourceType === "directory") return "fs.create";
   return change.operation === "modify" ? "fs.modify" : "fs.create";

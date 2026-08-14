@@ -216,6 +216,9 @@ function changeSummary(c: { operation: string; displayName: string; fromRelative
   if (c.operation === "move") {
     return `移动 ${c.fromRelativePath ?? c.displayName} → ${c.relativePath}`;
   }
+  if (c.operation === "delete") {
+    return `删除 ${c.displayName}`;
+  }
   const name = c.operation === "create" ? `创建 ${c.displayName}` : `修改 ${c.displayName}`;
   return c.revision !== undefined ? `${name} · v${c.revision}` : name;
 }

@@ -74,6 +74,12 @@ export const patchTextFileSchema = z.object({
     .max(20),
 });
 
+/** V2.5：delete_file —— 只删除单个文件（不支持目录 / 递归 / root / glob / 批量） */
+export const deleteFileSchema = z.object({
+  rootId: z.string().trim().min(1).max(120),
+  path: resourcePath,
+});
+
 /** V2.3：Model-facing schemas 按 Document Authoring Protocol Version 分离。
  *  - V1 model contract：Canonical KiroDocument（legacy Client）
  *  - V2 model contract：扁平 Draft（当前 Client）
