@@ -9,6 +9,9 @@
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
+    "test:docx:fixtures": "vitest run scripts/docx-compat/generate-fixtures.test.ts",
+    "test:docx:inspect": "vitest run scripts/docx-compat/inspect-package.test.ts",
+    "test:docx:openxml": "node scripts/docx-compat/validate-openxml.mjs",
     "test:e2e": "playwright test"
   },
   "dependencies": {
