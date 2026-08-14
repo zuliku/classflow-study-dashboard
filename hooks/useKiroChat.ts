@@ -93,6 +93,12 @@ import {
 import {
   isKiroFinalAnswerToolName,
 } from "@/lib/ai/tools/finalAnswer";
+import { CURRENT_DOCUMENT_AUTHORING_VERSION } from "@/lib/ai/computer/documents/authoring/protocol";
+import {
+  advanceDocumentFailureFuse,
+  DocumentFailureFuseState,
+} from "@/lib/ai/computer/documents/failureFuse";
+import { resolveToolOutcomeStatus } from "@/lib/ai/presentation/toolOutcome";
 
 /** 每回合工具调用上限：Read ≤ 12，Write ≤ 8 */
 export const MAX_READ_TOOL_CALLS_PER_TURN_UI = 12;
@@ -376,7 +382,9 @@ export function deriveActivity(messages: ActivitySourceMessage[], status: string
     const name = toolNameOf(p);
     const isWrite = (KIRO_MUTATING_TOOL_NAMES as string[]).includes(name);
     const isChangeSet = name === "apply_change_set";
-    if (p.state === "output-available") {
+    // V2.3：统一 outcome helper（output-available + ok:false → error，与 Worklog 同一规则）
+    const outcome = resolveToolOutcomeStatus({ state: p.state, output: p.output });
+    if (outcome === "done") {
       // Change Set：输出中带真实 count（不展示 tool name / JSON）
       if (isChangeSet) {
         const out = p.output as
@@ -392,7 +400,7 @@ export function deriveActivity(messages: ActivitySourceMessage[], status: string
       }
       return { label: toolLabel(name), status: "done" as const, kind: isWrite ? "write" : "read" };
     }
-    if (p.state === "output-error") {
+    if (outcome === "error") {
       if (isChangeSet) {
         return { label: "未执行修改", status: "error" as const, kind: "write" as const, message: p.errorText, count: 0 };
       }
@@ -647,6 +655,8 @@ export function useKiroChat({
       roots: ws
         ? ws.roots.map((r) => ({ id: r.id, label: r.label, access: r.access }))
         : [],
+      // V2.3：Document Authoring Protocol（新 Client 明确发送 2；旧 bundle 缺失 → server 按 legacy V1）
+      documentAuthoringVersion: CURRENT_DOCUMENT_AUTHORING_VERSION,
     };
   };
 
@@ -1132,6 +1142,21 @@ export function useKiroChat({
         ?.computerSnapshot as KiroComputerTurnSnapshot | undefined;
       const frozenSnapshot = snapshot ?? buildComputerSnapshot();
       const taskId = ensureActiveTask().id;
+
+      // V2.3 Client Second Guard：fuse 已触发（stale Server 仍发来 document 工具）→ 不执行 IO
+      if (
+        (toolName === "create_document" || toolName === "update_document") &&
+        documentToolFailureRef.current.blocked
+      ) {
+        const output: ToolOutput = {
+          ok: false,
+          code: "DOCUMENT_CREATION_BLOCKED",
+          message: "本轮文档创建已停止，请不要继续重试。",
+        };
+        applyCompletedAttempt({ kind: "completed", output } as ComputerExecutionAttempt, toolName, toolCallId, taskId);
+        return;
+      }
+
       const attempt = await executeKiroComputerTool({
         toolName,
         toolCallId,
@@ -1150,6 +1175,12 @@ export function useKiroChat({
       if (attempt.kind === "approval-required") {
         handleApprovalRequired(attempt.request, toolName, toolCallId, input, frozenSnapshot);
         return;
+      }
+      // V2.3：推进 fuse（schema 失败最多 1 次 retry；render/verify 硬失败首次即熔断）
+      if (toolName === "create_document" || toolName === "update_document") {
+        if (attempt.kind === "completed" && attempt.output.ok === false) {
+          advanceDocumentFailureFuse(documentToolFailureRef.current, attempt.output);
+        }
       }
       applyCompletedAttempt(attempt, toolName, toolCallId, taskId);
     },
@@ -1479,6 +1510,12 @@ export function useKiroChat({
   // 避免 chat 对象每次 token 变化导致 send 引用变化
   const chatSendMessage = chat.sendMessage;
 
+  // V2.3：Document Failure Fuse（每 Turn 重置；与 read/write counter 同一生命周期）
+  const documentToolFailureRef = useRef<DocumentFailureFuseState>({ schemaFailures: 0, hardFailure: false, blocked: false });
+  const resetDocumentFailureFuse = useCallback(() => {
+    documentToolFailureRef.current = { schemaFailures: 0, hardFailure: false, blocked: false };
+  }, []);
+
   const sendWithAttachments = useCallback(
     async (text: string, turnAttachments: KiroAttachment[]): Promise<boolean> => {
       const v = text.trim();
@@ -1487,6 +1524,7 @@ export function useKiroChat({
       materialReadCounterRef.current = 0;
       writeCounterRef.current = 0;
       limitReachedRef.current = false;
+      resetDocumentFailureFuse();
       visionPagesRef.current = [];
 
       // ---- Scanned PDF Vision（Task 12）：发送时渲染所选页面为 JPEG，再与用户图片合并发送 ----
@@ -1746,6 +1784,7 @@ export function useKiroChat({
     materialReadCounterRef.current = 0;
     writeCounterRef.current = 0;
     limitReachedRef.current = false;
+    resetDocumentFailureFuse();
     void c.regenerate({ body: requestBody() });
   }, [enabled, pushToast]);
 
@@ -1781,10 +1820,11 @@ export function useKiroChat({
     liveTurnCommitsRef.current.clear();
     stoppedTurnMessageIdRef.current = null;
     pendingAutoContinueRef.current = false;
+    resetDocumentFailureFuse();
     turnSourcesRef.current = [];
     setSources([]);
     visionPagesRef.current = [];
-  }, [chat.setMessages, clearComputerSessionState]);
+  }, [chat.setMessages, clearComputerSessionState, resetDocumentFailureFuse]);
 
   /**
    * 恢复历史对话（Task 6 / Part 3）：
@@ -1819,6 +1859,7 @@ export function useKiroChat({
       liveTurnCommitsRef.current.clear();
       stoppedTurnMessageIdRef.current = null;
       pendingAutoContinueRef.current = false;
+      resetDocumentFailureFuse();
       readCounterRef.current = 0;
       materialReadCounterRef.current = 0;
       writeCounterRef.current = 0;

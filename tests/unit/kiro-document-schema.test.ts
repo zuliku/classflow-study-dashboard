@@ -7,7 +7,7 @@ import {
   kiroDocumentBlockSchema,
 } from "@/lib/ai/computer/documents/schema";
 import { isKiroDocument } from "@/lib/ai/computer/documents/types";
-import { createDocumentSchema, updateDocumentSchema } from "@/lib/ai/computer/tools/schemas";
+import { createDocumentV2ModelSchema, updateDocumentV2ModelSchema, createDocumentV1ModelSchema } from "@/lib/ai/computer/tools/schemas";
 import { COMPUTER_TOOLS } from "@/lib/ai/computer/tools/registry";
 import { executeKiroComputerTool } from "@/lib/ai/computer/executor";
 import { verifyDocxBytes } from "@/lib/ai/computer/documents/verify";
@@ -103,7 +103,7 @@ describe("document IR schema source of truth", () => {
 
 describe("model-facing schema visibility", () => {
   it("create_document 暴露扁平 Draft（document.title/blocks/type + text 字符串）而非 opaque unknown", () => {
-    const json = toJsonSchema(createDocumentSchema);
+    const json = toJsonSchema(createDocumentV2ModelSchema);
     const props = (json.properties ?? {}) as Record<string, { properties?: Record<string, unknown>; description?: string }>;
     expect(props.document).toBeDefined();
     expect(props.document.description ?? "").toContain("Draft");
@@ -122,15 +122,15 @@ describe("model-facing schema visibility", () => {
   });
 
   it("update_document 与 create_document 使用同一扁平 Draft schema", () => {
-    const upd = toJsonSchema(updateDocumentSchema);
-    const cre = toJsonSchema(createDocumentSchema);
+    const upd = toJsonSchema(updateDocumentV2ModelSchema);
+    const cre = toJsonSchema(createDocumentV2ModelSchema);
     expect((upd.properties as Record<string, unknown>).document).toEqual(
       (cre.properties as Record<string, unknown>).document
     );
   });
 
   it("model-facing schema 暴露 stylePreset 枚举与扁平 styleHints 字段（V2.2）", () => {
-    const json = toJsonSchema(createDocumentSchema);
+    const json = toJsonSchema(createDocumentV2ModelSchema);
     const serialized = JSON.stringify(json);
     expect(serialized).toContain("academic-cn");
     expect(serialized).toContain("business-report");
@@ -233,12 +233,23 @@ describe("create_document DOCX end-to-end runtime", () => {
 });
 
 describe("registry tool schema wiring", () => {
-  it("create_document / update_document 注册的 schema 就是真实扁平 Draft schema", () => {
+  it("create_document / update_document 注册 runtime schema（document 双兼容由 parser 处理）", () => {
     const createDef = COMPUTER_TOOLS.find((t) => t.name === "create_document");
     const updateDef = COMPUTER_TOOLS.find((t) => t.name === "update_document");
-    expect(createDef?.schema).toBe(createDocumentSchema);
-    expect(updateDef?.schema).toBe(updateDocumentSchema);
-    expect(createDef?.description).toContain("Draft");
-    expect(updateDef?.description).toContain("与 create_document 完全相同");
+    // runtime schema：document 是 z.unknown（专门 parser 双兼容）
+    expect(createDef?.schema.safeParse({ path: "a.docx", document: { any: "thing" } }).success).toBe(true);
+    expect(updateDef?.schema.safeParse({ artifactId: "a", expectedRevision: 1, document: 42 }).success).toBe(true);
+    // model contracts 覆盖 V1 / V2
+    expect(createDef?.modelContracts?.[1]).toBeDefined();
+    expect(createDef?.modelContracts?.[2]).toBeDefined();
+  });
+
+  it("V1 model schema 接受 canonical、拒绝 draft；V2 model schema 相反（协议不震荡）", () => {
+    const canonical = { blocks: [{ type: "paragraph", content: [{ text: "x" }] }] };
+    const draft = { blocks: [{ type: "paragraph", text: "x" }] };
+    expect(createDocumentV1ModelSchema.safeParse({ path: "a.docx", document: canonical }).success).toBe(true);
+    expect(createDocumentV1ModelSchema.safeParse({ path: "a.docx", document: draft }).success).toBe(false);
+    expect(createDocumentV2ModelSchema.safeParse({ path: "a.docx", document: draft }).success).toBe(true);
+    expect(createDocumentV2ModelSchema.safeParse({ path: "a.docx", document: canonical }).success).toBe(false);
   });
 });

@@ -1,5 +1,7 @@
 import { z } from "zod";
+import { kiroDocumentSchema } from "@/lib/ai/computer/documents/schema";
 import { kiroDocumentDraftSchema } from "@/lib/ai/computer/documents/authoring/schema";
+import { isStructuredBinaryPath } from "@/lib/ai/computer/filesystem/fileTypes";
 
 /**
  * Computer Tool 输入 Schema（zod）——所有工具在 Executor 内强制校验。
@@ -49,12 +51,18 @@ export const createDirectorySchema = z.object({
 });
 
 export const createTextFileSchema = z.object({
-  path: resourcePath,
+  path: resourcePath.refine(
+    (p) => !isStructuredBinaryPath(p),
+    "不能创建结构化二进制格式（DOCX/PDF/XLSX/PPTX）；Word 文档必须使用 create_document"
+  ),
   content: z.string().min(0).max(120_000),
 });
 
 export const patchTextFileSchema = z.object({
-  path: resourcePath,
+  path: resourcePath.refine(
+    (p) => !isStructuredBinaryPath(p),
+    "不能修改结构化二进制格式（DOCX/PDF/XLSX/PPTX）；Word 文档必须使用 update_document"
+  ),
   edits: z
     .array(
       z.object({
@@ -66,11 +74,50 @@ export const patchTextFileSchema = z.object({
     .max(20),
 });
 
-/** V2.2：create_document —— 模型写扁平 KiroDocumentDraft（text/items/string 表格），executor 内 normalize 为 canonical */
-export const createDocumentSchema = z.object({
+/** V2.3：Model-facing schemas 按 Document Authoring Protocol Version 分离。
+ *  - V1 model contract：Canonical KiroDocument（legacy Client）
+ *  - V2 model contract：扁平 Draft（当前 Client）
+ *  Browser Runtime 不使用其中任何一个作为唯一 Schema（用 z.unknown() + parseDocumentAuthoringInput 双兼容）。
+ */
+
+export const createDocumentV1ModelSchema = z.object({
+  path: resourcePath,
+  document: kiroDocumentSchema,
+});
+
+export const createDocumentV2ModelSchema = z.object({
   path: resourcePath,
   document: kiroDocumentDraftSchema,
 });
+
+export const updateDocumentV1ModelSchema = z.object({
+  artifactId: z.string().trim().min(1).max(160),
+  expectedRevision: z.number().int().min(1).max(1_000_000),
+  document: kiroDocumentSchema,
+});
+
+export const updateDocumentV2ModelSchema = z.object({
+  artifactId: z.string().trim().min(1).max(160),
+  expectedRevision: z.number().int().min(1).max(1_000_000),
+  document: kiroDocumentDraftSchema,
+});
+
+/** Browser Runtime top-level schema：document 为 z.unknown()——不是放宽安全边界，
+ *  document 必须在 Executor IO 前进入 parseDocumentAuthoringInput() 完成严格双兼容校验。 */
+export const createDocumentRuntimeSchema = z.object({
+  path: resourcePath,
+  document: z.unknown(),
+});
+
+export const updateDocumentRuntimeSchema = z.object({
+  artifactId: z.string().trim().min(1).max(160),
+  expectedRevision: z.number().int().min(1).max(1_000_000),
+  document: z.unknown(),
+});
+
+/** 兼容别名（旧 import 使用 createDocumentSchema / updateDocumentSchema = runtime schema） */
+export const createDocumentSchema = createDocumentRuntimeSchema;
+export const updateDocumentSchema = updateDocumentRuntimeSchema;
 
 /** V2：rename_file —— newName 只能是 basename（/ \\ . .. NUL/control/Windows reserved 由运行时拒绝） */
 export const renameFileSchema = z.object({
@@ -85,13 +132,6 @@ export const moveFileSchema = z.object({
   path: resourcePath,
   destinationRootId: z.string().trim().min(1).max(120),
   destinationPath: resourcePath,
-});
-
-/** V2 Part 2 + V2.2：update_document —— 模型只提供 artifactId + expectedRevision + 扁平 Draft（无路径/adapterRef/bytes） */
-export const updateDocumentSchema = z.object({
-  artifactId: z.string().trim().min(1).max(160),
-  expectedRevision: z.number().int().min(1).max(1_000_000),
-  document: kiroDocumentDraftSchema,
 });
 
 /** V3 Part 1：search_workspace_knowledge —— 本地知识索引候选搜索（正文结论仍需实时读取） */

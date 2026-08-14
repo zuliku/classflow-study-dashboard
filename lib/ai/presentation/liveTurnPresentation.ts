@@ -26,6 +26,7 @@ import { toolLabel } from "@/lib/ai/tools/formatters";
 import { formatKiroToolActivityDetail, formatKiroToolActivityHeadline } from "@/lib/ai/presentation/toolActivityDetails";
 import { splitKiroStreamingMarkdown } from "@/lib/ai/streaming/markdownBlocks";
 import { isKiroFinalAnswerToolName } from "@/lib/ai/tools/finalAnswer";
+import { resolveToolOutcomeStatus } from "@/lib/ai/presentation/toolOutcome";
 
 export type KiroTurnPhase = "working" | "composing" | "answering" | "done";
 
@@ -99,10 +100,12 @@ function toolNameOf(p: { type: string }): string {
   return p.type.slice("tool-".length);
 }
 
-function toolStatusOf(p: { state?: string }): "working" | "done" | "error" {
-  if (p.state === "output-error") return "error";
-  if (p.state === "output-available") return "done";
-  return "working";
+/**
+ * V2.3：Tool 状态 = 统一 outcome helper。
+ * output-available + output.ok === false → error（红色失败），不是绿色 ✓。
+ */
+function toolStatusOf(p: { state?: string; output?: unknown }): "working" | "done" | "error" {
+  return resolveToolOutcomeStatus({ state: p.state, output: p.output });
 }
 
 /** Task 17B：Trusted Web Source Lookup（仅 title / domain 两个安全字段；raw URL/html/rawContent 不进 lookup） */

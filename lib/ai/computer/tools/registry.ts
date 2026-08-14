@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { ComputerCapability, KiroAgentMode } from "@/lib/ai/computer/types";
+import { DocumentAuthoringVersion } from "@/lib/ai/computer/documents/authoring/protocol";
 import {
   listWorkspaceRootsSchema,
   listDirectorySchema,
@@ -11,23 +12,37 @@ import {
   createDirectorySchema,
   createTextFileSchema,
   patchTextFileSchema,
-  createDocumentSchema,
+  createDocumentRuntimeSchema,
   renameFileSchema,
   moveFileSchema,
-  updateDocumentSchema,
+  updateDocumentRuntimeSchema,
+  createDocumentV1ModelSchema,
+  createDocumentV2ModelSchema,
+  updateDocumentV1ModelSchema,
+  updateDocumentV2ModelSchema,
   searchWorkspaceKnowledgeSchema,
   retrieveWorkspaceContextSchema,
 } from "@/lib/ai/computer/tools/schemas";
 
-export interface ComputerToolDefinition {
-  name: string;
+export interface ComputerToolModelContract {
   description: string;
   schema: z.ZodType;
+  inputExamples?: Array<{ input: Record<string, unknown> }>;
+}
+
+export interface ComputerToolDefinition {
+  name: string;
+  /** Browser runtime validation（document 类工具为 runtime schema：z.unknown + 专门 parser） */
+  schema: z.ZodType;
+  /** 默认 description（无 modelContracts 时的 server 暴露值） */
+  description: string;
   capability: ComputerCapability;
   /** 该 tool 是否 mutation（影响 regenerate guard / 调用限制） */
   mutation: boolean;
-  /** V2.2：模型输入示例（AI SDK inputExamples；不原生支持的 provider 由 addToolInputExamplesMiddleware 注入描述） */
+  /** V2.2：默认模型输入示例（AI SDK inputExamples） */
   inputExamples?: Array<{ input: Record<string, unknown> }>;
+  /** V2.3：protocol-specific model contracts（create/update 用；普通工具不配置） */
+  modelContracts?: Partial<Record<DocumentAuthoringVersion, ComputerToolModelContract>>;
 }
 
 export const COMPUTER_READ_TOOLS: ComputerToolDefinition[] = [
@@ -106,14 +121,14 @@ export const COMPUTER_MUTATION_TOOLS: ComputerToolDefinition[] = [
   },
   {
     name: "create_text_file",
-    description: "在工作区创建新文本文件（已存在时拒绝，绝不覆盖）。",
+    description: "在工作区创建新文本文件（已存在时拒绝，绝不覆盖）。仅创建纯文本文件，例如 .txt / .md / .csv / .json 等；不得用于创建 DOCX/PDF/XLSX/PPTX（那些必须使用 create_document）。",
     schema: createTextFileSchema,
     capability: "fs.create",
     mutation: true,
   },
   {
     name: "patch_text_file",
-    description: "对现有文本文件进行精确修改（oldText 必须唯一匹配）。",
+    description: "对现有文本文件进行精确修改（oldText 必须唯一匹配）。仅适用于纯文本文件（.txt / .md / .csv / .json 等）；不得用于修改 DOCX/PDF/XLSX/PPTX（那些必须使用 update_document）。",
     schema: patchTextFileSchema,
     capability: "fs.modify",
     mutation: true,
@@ -122,9 +137,11 @@ export const COMPUTER_MUTATION_TOOLS: ComputerToolDefinition[] = [
     name: "create_document",
     description:
       "从扁平 Document Draft 创建 .md 或 .docx。document = { title?, stylePreset?, styleHints?, blocks: [...] }；block 用纯字符串：heading/paragraph/quote 用 text；bullet-list/numbered-list 用 items: string[]；table 用 header: string[] 与 rows: string[][]（每行与表头列数一致，cell 是纯字符串，不要嵌套 [{text}] 对象）；code 用 text；page-break 无字段。文件格式由 path 扩展名决定。stylePreset 按任务自动选择：academic-cn（论文/课程作业/研究计划/调研报告/文献综述/实验报告等中文规范文档）或 business-report（商业分析/项目方案/市场报告/竞品分析/可行性分析/创业计划等现代正式报告）。styleHints 只在用户明确提出排版要求时填写；用户没有排版要求时不要生成。",
-    schema: createDocumentSchema,
+    // V2.3：Browser Runtime 用 runtime schema（document z.unknown + 专门 parser 双兼容）
+    schema: createDocumentRuntimeSchema,
     capability: "document.create",
     mutation: true,
+    // 默认（无 protocol 时）模型契约 = V2 Draft（当前 Client 的 modelContracts 会覆盖）
     inputExamples: [
       {
         input: {
@@ -156,6 +173,68 @@ export const COMPUTER_MUTATION_TOOLS: ComputerToolDefinition[] = [
         },
       },
     ],
+    modelContracts: {
+      1: {
+        description:
+          "从 KiroDocument IR 创建 .md 或 .docx。document = { title?: string, blocks: [...] }；block 使用 canonical 结构：heading/paragraph/quote 用 content: [{ text: string }]；bullet-list/numbered-list 用 items: [[{ text }], ...]；table 用 header: [[{ text }], ...] 与 rows: [[[{ text }], ...], ...]；code 用 text；page-break 无字段。文件格式由 path 扩展名决定。stylePreset 按任务自动选择：academic-cn 或 business-report；styleHints 只在用户明确提出排版要求时填写。",
+        schema: createDocumentV1ModelSchema,
+        inputExamples: [
+          {
+            input: {
+              path: "本周课表.docx",
+              document: {
+                title: "本周课表",
+                stylePreset: "business-report",
+                blocks: [
+                  { type: "paragraph", content: [{ text: "本周课程安排" }] },
+                  {
+                    type: "table",
+                    header: [[{ text: "星期" }], [{ text: "课程" }], [{ text: "时间" }], [{ text: "地点" }]],
+                    rows: [[[{ text: "周一" }], [{ text: "数据结构与算法" }], [{ text: "08:00–09:40" }], [{ text: "计算机楼 102" }]]],
+                  },
+                ],
+              },
+            },
+          },
+        ],
+      },
+      2: {
+        description:
+          "从扁平 Document Draft 创建 .md 或 .docx。document = { title?, stylePreset?, styleHints?, blocks: [...] }；block 用纯字符串：heading/paragraph/quote 用 text；bullet-list/numbered-list 用 items: string[]；table 用 header: string[] 与 rows: string[][]（每行与表头列数一致，cell 是纯字符串，不要嵌套 [{text}] 对象）；code 用 text；page-break 无字段。文件格式由 path 扩展名决定。stylePreset 按任务自动选择：academic-cn（论文/课程作业/研究计划/调研报告等中文规范文档）或 business-report（商业分析/项目方案/市场报告等现代正式报告）。styleHints 只在用户明确提出排版要求时填写；用户没有排版要求时不要生成。",
+        schema: createDocumentV2ModelSchema,
+        inputExamples: [
+          {
+            input: {
+              path: "研究总结.docx",
+              document: {
+                title: "研究总结",
+                stylePreset: "academic-cn",
+                blocks: [
+                  { type: "heading", level: 1, text: "研究背景" },
+                  { type: "paragraph", text: "这里是研究背景。" },
+                ],
+              },
+            },
+          },
+          {
+            input: {
+              path: "本周课表.docx",
+              document: {
+                title: "本周课表",
+                stylePreset: "business-report",
+                blocks: [
+                  {
+                    type: "table",
+                    header: ["星期", "课程", "时间", "地点"],
+                    rows: [["周一", "数据结构与算法", "08:00–09:40", "计算机楼 102"]],
+                  },
+                ],
+              },
+            },
+          },
+        ],
+      },
+    },
   },
   {
     name: "rename_file",
@@ -175,24 +254,48 @@ export const COMPUTER_MUTATION_TOOLS: ComputerToolDefinition[] = [
     name: "update_document",
     description:
       "更新 Kiro 创建的 Markdown/DOCX Artifact；必须提供当前 expectedRevision。document 使用与 create_document 完全相同的扁平 Document Draft（含可选 stylePreset/styleHints）。不提供 style 时自动保持既有排版；用户明确要求改排版（如切换 preset / 调整字号）时通过 stylePreset/styleHints 表达。",
-    schema: updateDocumentSchema,
+    schema: updateDocumentRuntimeSchema,
     capability: "document.modify",
     mutation: true,
-    inputExamples: [
-      {
-        input: {
-          artifactId: "artifact-xxx",
-          expectedRevision: 1,
-          document: {
-            title: "研究方案",
-            blocks: [
-              { type: "heading", level: 1, text: "引言" },
-              { type: "table", header: ["指标", "数值"], rows: [["增速", "12%"]] },
-            ],
+    modelContracts: {
+      1: {
+        description:
+          "更新 Kiro 创建的 Markdown/DOCX Artifact；必须提供当前 expectedRevision。document 使用与 create_document 相同的 canonical KiroDocument IR（content: [{ text }] 结构）。不提供 style 时自动保持既有排版。",
+        schema: updateDocumentV1ModelSchema,
+        inputExamples: [
+          {
+            input: {
+              artifactId: "artifact-xxx",
+              expectedRevision: 1,
+              document: {
+                title: "研究方案",
+                blocks: [{ type: "paragraph", content: [{ text: "引言" }] }],
+              },
+            },
           },
-        },
+        ],
       },
-    ],
+      2: {
+        description:
+          "更新 Kiro 创建的 Markdown/DOCX Artifact；必须提供当前 expectedRevision。document 使用与 create_document 完全相同的扁平 Document Draft（含可选 stylePreset/styleHints）。不提供 style 时自动保持既有排版；用户明确要求改排版（如切换 preset / 调整字号）时通过 stylePreset/styleHints 表达。",
+        schema: updateDocumentV2ModelSchema,
+        inputExamples: [
+          {
+            input: {
+              artifactId: "artifact-xxx",
+              expectedRevision: 1,
+              document: {
+                title: "研究方案",
+                blocks: [
+                  { type: "heading", level: 1, text: "引言" },
+                  { type: "table", header: ["指标", "数值"], rows: [["增速", "12%"]] },
+                ],
+              },
+            },
+          },
+        ],
+      },
+    },
   },
 ];
 

@@ -81,8 +81,10 @@ export interface KiroComputerTurnSnapshot {
   workspaceId: string | null;
   agentMode: "plan" | "guided" | "workspace-auto";
   roots: Array<{
-    id: string;
-    label: string;
-    access: "read-only" | "read-write";
+  id: string;
+  label: string;
+  access: "read-only" | "read-write";
   }>;
-}
+  /** V2.3：Document Authoring Protocol Version（1 | 2；缺失 = legacy V1）。 */
+  documentAuthoringVersion?: 1 | 2;
+  }

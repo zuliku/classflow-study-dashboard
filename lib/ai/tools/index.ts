@@ -3,12 +3,13 @@ import { z } from "zod";
 import { KIRO_READ_TOOLS } from "@/lib/ai/tools/read/registry";
 import { KIRO_WRITE_TOOLS } from "@/lib/ai/tools/write/registry";
 import { KIRO_MEMORY_TOOLS } from "@/lib/ai/memory/tools";
-import { COMPUTER_TOOLS, getComputerToolsForMode } from "@/lib/ai/computer/tools/registry";
+import { COMPUTER_TOOLS, getComputerToolsForMode, ComputerToolDefinition } from "@/lib/ai/computer/tools/registry";
 import { ComputerActionFact } from "@/lib/ai/computer/types";
 import {
   KIRO_FINAL_ANSWER_TOOL_NAME,
   KIRO_FINAL_ANSWER_TOOL_DESCRIPTION,
 } from "@/lib/ai/tools/finalAnswer";
+import { resolveDocumentAuthoringVersion, DocumentAuthoringVersion } from "@/lib/ai/computer/documents/authoring/protocol";
 
 /** Kiro 全部基础工具（Read + Write + Memory）：Server 提供 schema，Client 按同名执行 */
 export const KIRO_TOOLS = {
@@ -26,22 +27,50 @@ export const KIRO_TOOLS = {
 
 export type KiroToolSet = typeof KIRO_TOOLS;
 
-/** Computer 工具 → AI SDK tool set（schema 注册；client 端同名执行；V2.2：inputExamples 用于指导复杂参数） */
-export function buildComputerToolSet(mode: "plan" | "guided" | "workspace-auto"): ToolSet {
+/**
+ * Computer 工具 → AI SDK tool set（schema 注册；client 端同名执行；V2.2 inputExamples）。
+ * V2.3：Model Contract 按 Document Authoring Protocol Version 协商——
+ * 普通工具保持默认 contract；create_document / update_document 按版本暴露对应 schema/description/examples。
+ * 模型每次只能看到一种文档格式（绝不 text/content 同时暴露）。
+ */
+export function buildComputerToolSet(
+  mode: "plan" | "guided" | "workspace-auto",
+  documentAuthoringVersion?: unknown
+): ToolSet {
+  const version: DocumentAuthoringVersion = resolveDocumentAuthoringVersion(documentAuthoringVersion);
   const set: ToolSet = {};
   for (const def of getComputerToolsForMode(mode)) {
+    const modelContract = def.modelContracts?.[version];
+    const description = modelContract?.description ?? def.description;
+    const schema = modelContract?.schema ?? def.schema;
+    const inputExamples = modelContract?.inputExamples ?? def.inputExamples;
     set[def.name] = tool({
-      description: def.description,
-      inputSchema: def.schema,
-      ...(def.inputExamples && def.inputExamples.length > 0 ? { inputExamples: def.inputExamples } : {}),
+      description,
+      inputSchema: schema,
+      ...(inputExamples && inputExamples.length > 0 ? { inputExamples } : {}),
     });
   }
   return set;
 }
 
+/** 供测试 / route 使用的版本化工具集（与 buildComputerToolSet 同一协商路径） */
+export function computerToolContractForVersion(
+  def: ComputerToolDefinition,
+  documentAuthoringVersion?: unknown
+): { description: string; schema: z.ZodType; inputExamples?: Array<{ input: Record<string, unknown> }> } {
+  const version = resolveDocumentAuthoringVersion(documentAuthoringVersion);
+  const modelContract = def.modelContracts?.[version];
+  return {
+    description: modelContract?.description ?? def.description,
+    schema: modelContract?.schema ?? def.schema,
+    inputExamples: modelContract?.inputExamples ?? def.inputExamples,
+  };
+}
+
 /**
- * 请求级工具域组装（Kiro Computer Agent V1 Part 2）：
+ * 请求级工具域组装（Kiro Computer Agent V1 Part 2 + V2.3 protocol negotiation）：
  * Computer 工具按 turn snapshot 条件加入（Computer OFF → 0 个；plan → 只读；guided/auto → read + mutation）。
+ * documentAuthoringVersion：缺失 → legacy V1（Canonical schema）；2 → Draft schema。
  * server 过滤不是安全边界——Browser Executor 仍独立 policy 求值。
  */
 export function getKiroToolsForRequest(input: {
@@ -49,11 +78,12 @@ export function getKiroToolsForRequest(input: {
     enabled: boolean;
     agentMode: "plan" | "guided" | "workspace-auto";
   };
+  documentAuthoringVersion?: unknown;
 }): ToolSet {
   const base = { ...KIRO_TOOLS } as ToolSet;
   const snap = input.computerSnapshot;
   if (!snap?.enabled) return base;
-  return { ...base, ...buildComputerToolSet(snap.agentMode) };
+  return { ...base, ...buildComputerToolSet(snap.agentMode, input.documentAuthoringVersion) };
 }
 
 export { COMPUTER_TOOLS };

@@ -11,6 +11,7 @@ import {
 import { shouldRepairToolCall, KIRO_TOOL_CALL_REPAIR_MAX_INPUT_BYTES } from "@/lib/ai/computer/tools/repair";
 import { InvalidToolInputError } from "ai";
 import { COMPUTER_TOOLS } from "@/lib/ai/computer/tools/registry";
+import { createDocumentV2ModelSchema, updateDocumentV2ModelSchema } from "@/lib/ai/computer/tools/schemas";
 import { isKiroDocument } from "@/lib/ai/computer/documents/types";
 
 const simpleDraft: KiroDocumentDraft = {
@@ -184,17 +185,19 @@ describe("bounded Tool Call Repair guard", () => {
 });
 
 describe("Tool contract：inputExamples", () => {
-  it("create_document 有两个合法 example；update_document 有一个；全部 safeParse 成功", () => {
+  it("create_document / update_document 的 V2 model contract 各有合法 example；全部 safeParse 成功", () => {
     const create = COMPUTER_TOOLS.find((t) => t.name === "create_document");
     const update = COMPUTER_TOOLS.find((t) => t.name === "update_document");
-    expect(create?.inputExamples?.length ?? 0).toBeGreaterThanOrEqual(2);
-    expect(update?.inputExamples?.length ?? 0).toBeGreaterThanOrEqual(1);
-    for (const example of create?.inputExamples ?? []) {
-      const parsed = create!.schema.safeParse(example.input);
+    const createExamples = create?.modelContracts?.[2]?.inputExamples ?? create?.inputExamples ?? [];
+    const updateExamples = update?.modelContracts?.[2]?.inputExamples ?? update?.inputExamples ?? [];
+    expect(createExamples.length).toBeGreaterThanOrEqual(2);
+    expect(updateExamples.length).toBeGreaterThanOrEqual(1);
+    for (const example of createExamples) {
+      const parsed = createDocumentV2ModelSchema.safeParse(example.input);
       expect(parsed.success).toBe(true);
     }
-    for (const example of update?.inputExamples ?? []) {
-      const parsed = update!.schema.safeParse(example.input);
+    for (const example of updateExamples) {
+      const parsed = updateDocumentV2ModelSchema.safeParse(example.input);
       expect(parsed.success).toBe(true);
     }
   });

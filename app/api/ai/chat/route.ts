@@ -27,6 +27,9 @@ import {
   buildWorkspaceInstructionsSection,
 } from "@/lib/ai/computer/knowledge/instructions";
 import { validateComputerTurnSnapshot } from "@/lib/ai/computer/snapshot";
+import { resolveDocumentAuthoringVersion } from "@/lib/ai/computer/documents/authoring/protocol";
+import { deriveDocumentFailureFuseState } from "@/lib/ai/computer/documents/failureFuse";
+import { KIRO_FINAL_ANSWER_TOOL_NAME } from "@/lib/ai/tools/finalAnswer";
 import { shouldRepairToolCall, KIRO_TOOL_CALL_REPAIR_MAX_INPUT_BYTES } from "@/lib/ai/computer/tools/repair";
 import {
   buildKiroModelContext,
@@ -280,18 +283,26 @@ export async function POST(req: NextRequest) {
 
   try {
     const modelMessages = await convertToModelMessages(plan.messages as never);
-    // Task 14：Server-side web_search（enabled 时追加；Server Key 不下发 Browser）
-    const tools = assembleKiroToolsForRequest({
-      webSearchEnabled: parsed.webSearchConfig?.enabled ?? false,
-      credential: {
-        mode: parsed.webSearchConfig?.credentialMode ?? "server",
-        userApiKey: parsed.webSearchConfig?.apiKey,
-      },
-      // Task 19C2：扫描 Web PDF Vision（Provider 固定 OpenCode Go；19C2 read 工具消费）
-      webPdfVisionConfig: parsed.webPdfVisionConfig,
-      messages: parsed.messages as unknown[],
-      clientTools: getKiroToolsForRequest({ computerSnapshot: computerSnapshot ?? undefined }),
-    });
+      // Task 14：Server-side web_search（enabled 时追加；Server Key 不下发 Browser）
+      const tools = assembleKiroToolsForRequest({
+        webSearchEnabled: parsed.webSearchConfig?.enabled ?? false,
+        credential: {
+          mode: parsed.webSearchConfig?.credentialMode ?? "server",
+          userApiKey: parsed.webSearchConfig?.apiKey,
+        },
+        // Task 19C2：扫描 Web PDF Vision（Provider 固定 OpenCode Go；19C2 read 工具消费）
+        webPdfVisionConfig: parsed.webPdfVisionConfig,
+        messages: parsed.messages as unknown[],
+        clientTools: getKiroToolsForRequest({
+          computerSnapshot: computerSnapshot ?? undefined,
+          // V2.3：Document Authoring Protocol 握手（缺失 → legacy V1；deterministic，不猜）
+          documentAuthoringVersion: resolveDocumentAuthoringVersion(computerSnapshot?.documentAuthoringVersion),
+        }),
+      });
+
+    // V2.3：Document Failure Fuse（server continuation 层主防线）——
+    // 同一 User Turn 第 2 次结构失败或首次渲染/校验硬失败后，不再向模型暴露 create_document / update_document。
+    const documentFailureState = deriveDocumentFailureFuseState(parsed.messages);
 
     // Streaming UX V3：Final Answer Boundary —— 本请求的对话里已出现 begin_final_answer 信号
     //（客户端已回填输出）→ 从协议上关闭全部业务工具（toolChoice none），模型只能输出 Final Answer 正文。
@@ -302,6 +313,14 @@ export async function POST(req: NextRequest) {
         m.parts.some((p) => p?.type === "tool-begin_final_answer")
     );
 
+    // Fuse blocked：从工具集移除文档工具（保留 begin_final_answer，让模型正常结束回答）
+    const finalTools = (() => {
+      if (finalAnswerStarted) return {} as typeof tools;
+      if (!documentFailureState.blocked) return tools;
+      const { [KIRO_FINAL_ANSWER_TOOL_NAME]: keep, ...rest } = tools;
+      return { [KIRO_FINAL_ANSWER_TOOL_NAME]: keep } as typeof tools;
+    })();
+
     const result = streamText({
       // V2.2：inputExamples 统一注入描述（不原生支持 inputExamples 的 provider 也生效）
       model: wrapLanguageModel({
@@ -309,8 +328,12 @@ export async function POST(req: NextRequest) {
         middleware: addToolInputExamplesMiddleware(),
       }),
       messages: modelMessages,
-      system: systemMessage,
-      tools: finalAnswerStarted ? {} : tools,
+      system:
+        documentFailureState.blocked && !finalAnswerStarted
+          ? systemMessage +
+            "\n\n# Document Creation State\n本轮文档创建/更新已因连续结构错误或确定性渲染失败停止。不要再次尝试创建 Word，不要使用 create_text_file 伪造 .docx。简要向用户说明本轮文档创建失败并结束。"
+          : systemMessage,
+      tools: finalTools,
       toolChoice: finalAnswerStarted ? "none" : undefined,
       maxOutputTokens: AI.CHAT_MAX_OUTPUT_TOKENS,
       abortSignal: signal,

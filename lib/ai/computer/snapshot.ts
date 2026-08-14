@@ -22,6 +22,15 @@ export function validateComputerTurnSnapshot(value: unknown): KiroComputerTurnSn
   if (!Array.isArray(v.roots)) return null;
   if (v.roots.length > MAX_ROOTS) return null;
 
+  // V2.3：Document Authoring Protocol Version（1 | 2 合法；缺失 = legacy V1；其它值拒绝快照）
+  if (
+    v.documentAuthoringVersion !== undefined &&
+    v.documentAuthoringVersion !== 1 &&
+    v.documentAuthoringVersion !== 2
+  ) {
+    return null;
+  }
+
   const roots: KiroComputerTurnSnapshot["roots"] = [];
   for (const r of v.roots) {
     if (typeof r !== "object" || r === null) return null;
@@ -38,6 +47,9 @@ export function validateComputerTurnSnapshot(value: unknown): KiroComputerTurnSn
     workspaceId: typeof v.workspaceId === "string" ? v.workspaceId : null,
     agentMode: v.agentMode as KiroAgentMode,
     roots,
+    ...(v.documentAuthoringVersion === 1 || v.documentAuthoringVersion === 2
+      ? { documentAuthoringVersion: v.documentAuthoringVersion }
+      : {}),
   };
 }
 

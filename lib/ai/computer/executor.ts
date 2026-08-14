@@ -57,8 +57,9 @@ import { renderMarkdown } from "@/lib/ai/computer/documents/markdown";
 import { renderDocx } from "@/lib/ai/computer/documents/docx";
 import { verifyMarkdownWritten, verifyDocxBytes, verifyRenderedDocx, inspectDocumentFacts } from "@/lib/ai/computer/documents/verify";
 import { mergeDocumentStyleForUpdate } from "@/lib/ai/computer/documents/styles/resolve";
-import { normalizeDocumentDraft } from "@/lib/ai/computer/documents/authoring/normalize";
+import { parseDocumentAuthoringInput } from "@/lib/ai/computer/documents/authoring/compat";
 import { isKiroDocument } from "@/lib/ai/computer/documents/types";
+import { isStructuredBinaryPath } from "@/lib/ai/computer/filesystem/fileTypes";
 import {
   registerCreatedArtifact,
   findArtifactByLocation,
@@ -154,14 +155,18 @@ function newApprovalId(): string {
   return `approval-${crypto.randomUUID()}`;
 }
 
-/** Document IR 校验失败 → 有界可纠正摘要（最多 3 条；每条含字段路径与期望；绝不 echo 文档正文） */
-function buildDocumentSchemaIssueSummary(issues: ReadonlyArray<{ path: PropertyKey[]; message: string }>): string {
+/**
+ * Document 结构校验失败 → 版本感知的有界错误（V2.3）。
+ * 只给模型「当前 Tool Contract 的字段路径 + 期望类型」（最多 3 条）；
+ * 不提 IR / Canonical / 内部转换（模型只需要遵守当前 Tool Contract，不应自我诊断实现）。
+ */
+function buildDocumentProtocolMismatchMessage(issues: ReadonlyArray<{ path: PropertyKey[]; message: string }>): string {
   const lines: string[] = [];
   for (const issue of issues.slice(0, 3)) {
     const path = issue.path.map((p) => String(p)).join(".");
     lines.push(`${path || "document"}: ${issue.message}`);
   }
-  return `document IR 校验失败：${lines.join("；")}。请读取 inputSchema 修正后重试（最多一次结构修正）。`;
+  return `文档结构不符合当前创建协议：${lines.join("；")}。请严格使用当前 create_document 工具提供的字段格式；最多允许一次结构修正。`;
 }
 
 /**
@@ -208,13 +213,30 @@ export async function executeKiroComputerTool(request: {
     };
   }
 
-  // schema 校验
+  // V2.3：Text-file 工具结构化二进制守卫（runtime 第二层；schema refine 是 model-facing 第一层）。
+  // 返回权威 code UNSUPPORTED_FILE_TYPE —— 模型绝不能用文本工具伪造 DOCX/PDF/XLSX/PPTX。
+  if (
+    (toolName === "create_text_file" || toolName === "patch_text_file") &&
+    typeof (toolInput as { path?: unknown } | null)?.path === "string" &&
+    isStructuredBinaryPath(String((toolInput as { path?: unknown }).path))
+  ) {
+    return {
+      kind: "completed",
+      output: {
+        ok: false,
+        code: "UNSUPPORTED_FILE_TYPE",
+        message: "该格式不能通过文本文件工具创建或修改。Word 文档必须使用 create_document / update_document。",
+      },
+    };
+  }
+
+  // schema 校验（V2.3：document 类工具的 runtime schema 只校验 path/artifactId 外层，
+  // document 由 create/update 分支的 parseDocumentAuthoringInput 严格双兼容校验）
   const parsed = definition.schema.safeParse(toolInput);
   if (!parsed.success) {
-    // P0：Document IR 校验失败时给出有界、可纠正的 issue 摘要（最多 3 条；不 echo 全文/敏感数据）
     const message =
       toolName === "create_document" || toolName === "update_document"
-        ? buildDocumentSchemaIssueSummary(parsed.error.issues)
+        ? buildDocumentProtocolMismatchMessage(parsed.error.issues as { path: PropertyKey[]; message: string }[])
         : "输入不合法";
     return {
       kind: "completed",
@@ -694,8 +716,12 @@ export async function executeKiroComputerTool(request: {
       const artifactId = String(args.artifactId);
       const expectedRevision = Number(args.expectedRevision);
 
-      // V2.2：模型写扁平 Draft → deterministic normalize 为 canonical KiroDocument
-      const document = normalizeDocumentDraft(args.document as Parameters<typeof normalizeDocumentDraft>[0]);
+      // V2.3：双兼容 parser（Draft V2 → normalize；Canonical V1 → passthrough；都失败 → bounded INVALID_INPUT）
+      const parsedDocument = parseDocumentAuthoringInput(args.document);
+      if (!parsedDocument.ok) {
+        return { kind: "completed", output: { ok: false, code: "INVALID_INPUT", message: buildDocumentProtocolMismatchMessage(parsedDocument.issues) } };
+      }
+      const document = parsedDocument.value.document;
 
       // 每次执行都重读 Registry（Approval resume 时 useKiroChat 会用 frozen input 重跑本函数 → 自然重检 revision/location）
       const { artifact, source: previousSource } = await getEditableArtifactRevisionState(artifactId, expectedRevision);
@@ -1348,8 +1374,12 @@ export async function executeKiroComputerTool(request: {
     }
     if (toolName === "create_document") {
       counters.mutationCount += 1;
-      // V2.2：模型写扁平 Draft → deterministic normalize 为 canonical KiroDocument（Artifact 存 canonical）
-      const document = normalizeDocumentDraft(args.document as Parameters<typeof normalizeDocumentDraft>[0]);
+      // V2.3：双兼容 parser（Draft V2 → normalize；Canonical V1 → passthrough；都失败 → bounded INVALID_INPUT）
+      const parsedDocument = parseDocumentAuthoringInput(args.document);
+      if (!parsedDocument.ok) {
+        return { kind: "completed", output: { ok: false, code: "INVALID_INPUT", message: buildDocumentProtocolMismatchMessage(parsedDocument.issues) } };
+      }
+      const document = parsedDocument.value.document;
       if (!isKiroDocument(document)) throw new ComputerError("INVALID_INPUT", "文档 IR 不合法");
       const ext = normalized.split(".").pop()?.toLowerCase();
       if (ext === "md") {
