@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+﻿import { describe, it, expect } from "vitest";
 import {
   deriveKiroAssistantTurn,
   KiroAssistantTurnPresentation,
@@ -55,9 +55,12 @@ describe("Final Answer Boundary（显式协议通道）", () => {
       ],
       true
     );
-    expect(p.worklog.map((b) => b.kind)).toEqual(["commentary", "tool", "commentary", "tool"]);
+    expect(p.worklog.map((b) => b.kind)).toEqual(["commentary", "tool", "commentary", "tool", "milestone"]);
     expect(commentaryTexts(p)).toEqual(["我先看看你的作业", "再查一下本周课表"]);
-    // boundary 后的 text 是 Final Answer；控制信号本身不进 worklog
+    // milestone：UI-only，不携带模型文字
+    const milestone = p.worklog.find((b) => b.kind === "milestone");
+    expect(milestone?.kind).toBe("milestone");
+    // boundary 后的 text 是 Final Answer；控制信号本身不进 worklog（只派生 milestone）
     expect(p.answer).toBe("今天建议先完成数学作业");
     expect(p.answerStreaming).toBe(true);
     expect(p.phase).toBe("answering");
@@ -86,7 +89,8 @@ describe("Final Answer Boundary（显式协议通道）", () => {
     expect(p.answer).toBe("机会成本是……");
     expect(p.answerStreaming).toBe(true);
     expect(p.phase).toBe("answering");
-    expect(p.worklog).toEqual([]);
+    // V4：boundary 派生 UI-only milestone（不算 toolCount / 不进 answer）
+    expect(p.worklog.map((b) => b.kind)).toEqual(["milestone"]);
     expect(p.hasTools).toBe(false);
   });
 
@@ -102,7 +106,7 @@ describe("Final Answer Boundary（显式协议通道）", () => {
     );
     // boundary 后的所有 text 恒为 Answer；违规 Tool 只作为 worklog 行（透明展示）
     expect(p.answer).toBe("正式回答内容补充说明");
-    expect(p.worklog.map((b) => b.kind)).toEqual(["tool"]);
+    expect(p.worklog.map((b) => b.kind)).toEqual(["milestone", "tool"]);
     expect(p.phase).toBe("done");
   });
 
@@ -126,29 +130,29 @@ describe("Final Answer Boundary（显式协议通道）", () => {
   });
 });
 
-describe("Legacy fallback（模型不遵守协议）", () => {
-  it("A1. 无 Tool 且无 boundary：live 期间隐藏（provisional），settled 后全部视为 Answer", () => {
+describe("V4 Progressive Worklog（pre-boundary commentary 立即展示）", () => {
+  it("A1. 无 Tool 且无 boundary：live 立即作为 commentary 展示；settled 后全部恢复为 Answer", () => {
     const { step } = makeLive();
     const parts = [text("你好"), text("！", "streaming")];
-    // live：fallback A 不显示（不猜测，等待 turn 真正结束）
+    // V4 live：execution channel——立即展示为 Worklog commentary（不再隐藏等待 Tool）
     const live = step(parts);
     expect(live.answer).toBe("");
-    expect(live.worklog).toEqual([]);
+    expect(commentaryTexts(live)).toEqual(["你好", "！"]);
     expect(live.phase).toBe("working");
-    // settled：全部 text 视为 Answer
+    // settled：legacy direct-answer fallback——整段 text 恢复为普通 Answer
     const settled = step(parts, false);
     expect(settled.answer).toBe("你好！");
     expect(settled.phase).toBe("done");
     expect(settled.answerStreaming).toBe(false);
   });
 
-  it("A2. slow leading text（任意时长）后出现 Tool → 只作为 commentary，永不进入 Answer", () => {
+  it("A2. slow leading text（任意时长）live 阶段立即显示；Tool 到达后只作为 commentary，永不进入 Answer", () => {
     const { step } = makeLive();
-    // T0：leading text 到达（无 Tool、无 boundary）→ provisional 隐藏
+    // T0：leading text 到达（无 Tool、无 boundary）→ V4：立即 commentary
     const p0 = step([text("我先检查一下工作区文件", "streaming")]);
     expect(p0.answer).toBe("");
-    expect(p0.worklog).toEqual([]);
-    // T1（无论等待多久，>=500ms 也一样）：Tool 到达 → leading 成为 commentary
+    expect(commentaryTexts(p0)).toEqual(["我先检查一下工作区文件"]);
+    // T1（无论等待多久）：Tool 到达 → leading 仍为 commentary（同一 part identity）
     const p1 = step([
       text("我先检查一下工作区文件", "done"),
       toolPart("read_text", "output-available", { output: { ok: true, data: { text: "..." } } }),
@@ -159,6 +163,75 @@ describe("Legacy fallback（模型不遵守协议）", () => {
     expect(p0.answer).toBe("");
   });
 
+  it("S1-S6 staged：progress → tool → done → progress → tool → done（commentary 独立 block，同一 part delta 更新）", () => {
+    const { step } = makeLive();
+    const progress1 = (state = "streaming") => text("我先检查相关文件", state);
+    const progress2 = (state = "streaming") => text("接下来读取最相关的文件", state);
+    const tool1 = (state = "input-available", patch: Record<string, unknown> = {}) =>
+      toolPart("inspect_workspace", state, { input: { path: "." }, ...patch });
+    const tool2 = (state = "input-available", patch: Record<string, unknown> = {}) =>
+      toolPart("read_text", state, { input: { path: "notes.md" }, ...patch });
+
+    // S1：仅 progress1 → worklog = [progress1]
+    const s1 = step([stepStart(), progress1()]);
+    expect(commentaryTexts(s1)).toEqual(["我先检查相关文件"]);
+    // progress1 同一 part 的 delta 追加 → 同一个 block（identity 稳定，不新建）
+    const s1b = step([stepStart(), progress1("done")]);
+    expect(commentaryTexts(s1b)).toEqual(["我先检查相关文件"]);
+    // S2：progress1 + tool1 working → [progress1, tool1]
+    const s2 = step([stepStart(), progress1("done"), stepStart(), tool1()]);
+    expect(commentaryTexts(s2)).toEqual(["我先检查相关文件"]);
+    expect(s2.worklog.map((b) => b.kind)).toEqual(["commentary", "tool"]);
+    expect((s2.worklog[1] as { status: string }).status).toBe("working");
+    // S3：tool1 done
+    const s3 = step([stepStart(), progress1("done"), stepStart(), tool1("output-available", { output: { ok: true, data: {} } })]);
+    expect(s3.worklog.map((b) => b.kind)).toEqual(["commentary", "tool"]);
+    expect((s3.worklog[1] as { status: string }).status).toBe("done");
+    // S4：progress2 → 新 block（不合并进 progress1）
+    const s4 = step([stepStart(), progress1("done"), stepStart(), tool1("output-available", { output: { ok: true, data: {} } }), stepStart(), progress2()]);
+    expect(commentaryTexts(s4)).toEqual(["我先检查相关文件", "接下来读取最相关的文件"]);
+    // S5：tool2 working
+    const s5 = step([stepStart(), progress1("done"), stepStart(), tool1("output-available", { output: { ok: true, data: {} } }), stepStart(), progress2("done"), stepStart(), tool2()]);
+    expect(s5.worklog.map((b) => b.kind)).toEqual(["commentary", "tool", "commentary", "tool"]);
+    expect((s5.worklog[3] as { status: string }).status).toBe("working");
+    // S6：tool2 done → worklog 保持；S7 boundary → milestone 出现、answer 仍空
+    const s6 = step([stepStart(), progress1("done"), stepStart(), tool1("output-available", { output: { ok: true, data: {} } }), stepStart(), progress2("done"), stepStart(), tool2("output-available", { output: { ok: true, data: {} } })]);
+    expect(s6.worklog.map((b) => b.kind)).toEqual(["commentary", "tool", "commentary", "tool"]);
+    const s7 = step([
+      stepStart(), progress1("done"), stepStart(), tool1("output-available", { output: { ok: true, data: {} } }),
+      stepStart(), progress2("done"), stepStart(), tool2("output-available", { output: { ok: true, data: {} } }),
+      stepStart(), boundary(),
+    ]);
+    expect(s7.worklog.map((b) => b.kind)).toEqual(["commentary", "tool", "commentary", "tool", "milestone"]);
+    expect(s7.answer).toBe("");
+    expect(s7.phase).toBe("composing");
+    // S8：final text streaming → Final Answer 正常流式
+    const s8 = step([
+      stepStart(), progress1("done"), stepStart(), tool1("output-available", { output: { ok: true, data: {} } }),
+      stepStart(), progress2("done"), stepStart(), tool2("output-available", { output: { ok: true, data: {} } }),
+      stepStart(), boundary(), stepStart(), text("这是最终回答", "streaming"),
+    ]);
+    expect(s8.answer).toBe("这是最终回答");
+    expect(s8.answerStreaming).toBe(true);
+    // 任何阶段 progress1/progress2 都不出现在 answer
+    expect(s8.answer).not.toContain("我先检查");
+    expect(s8.answer).not.toContain("接下来读取");
+  });
+
+  it("boundary 控制信号只派生 milestone（不算 toolCount / 不进 answer / UI-only）", () => {
+    const p = deriveKiroAssistantTurn(
+      [boundary(), text("回答", "done")],
+      false
+    );
+    expect(p.worklog.map((b) => b.kind)).toEqual(["milestone"]);
+    expect(p.hasTools).toBe(false);
+    expect(p.answer).toBe("回答");
+    // milestone 不含模型文字（serialize 中无 answer 文本）
+    expect(JSON.stringify(p.worklog)).not.toContain("回答");
+  });
+});
+
+describe("Legacy fallback（模型不遵守协议）", () => {
   it("B1. 有 Tool 且无 boundary：live 不误显示 Answer；settled 后 trailing fallback 正确", () => {
     const { step } = makeLive();
     const parts = [
@@ -169,9 +242,9 @@ describe("Legacy fallback（模型不遵守协议）", () => {
       text("今天建议先完成数学作业", "streaming"),
     ];
     const live = step(parts);
-    // 单段 streaming 无 lookahead → provisional（不显示）
+    // V4：pre-boundary trailing 立即作为 commentary 展示（不再 provisional 隐藏）
     expect(live.answer).toBe("");
-    expect(commentaryTexts(live)).toEqual(["我先看看"]);
+    expect(commentaryTexts(live)).toEqual(["我先看看", "今天建议先完成数学作业"]);
     expect(live.phase).toBe("composing");
     // settled → trailing 全部视为 Final Answer fallback
     const settled = step(parts, false);
@@ -198,38 +271,47 @@ describe("Trailing Lookahead（legacy：有 Tool、无 boundary、live）", () =
   const settledSearch = () =>
     toolPart("search_assignments", "output-available", { output: { ok: true, data: { items: [] } } });
 
-  it("CASE 1: settled Tool + 第一段仍在 streaming → provisional（answer 空、不入 commentary、composing）", () => {
+  it("CASE 1: settled Tool + 第一段仍在 streaming → V4：立即作为 commentary 展示（composing、answer 空）", () => {
     const p = deriveKiroAssistantTurn(
       [settledSearch(), text("我先整理一下今天的安排。", "streaming")],
       true
     );
     expect(p.answer).toBe("");
     expect(p.phase).toBe("composing");
-    expect(commentaryTexts(p)).toHaveLength(0);
+    expect(commentaryTexts(p)).toEqual(["我先整理一下今天的安排。"]);
   });
 
-  it("CASE 2: 第一段已形成稳定块但第二段未开始（只有空行）→ 仍 provisional", () => {
+  it("CASE 2: 第一段已形成稳定块但第二段未开始（只有空行）→ V4：仍立即作为 commentary 展示", () => {
     const p = deriveKiroAssistantTurn(
       [settledSearch(), text("第一段已经完整。\n\n", "streaming")],
       true
     );
     expect(p.answer).toBe("");
     expect(p.phase).toBe("composing");
-    expect(commentaryTexts(p)).toHaveLength(0);
+    expect(commentaryTexts(p)).toEqual(["第一段已经完整。\n\n"]);
   });
 
-  it("CASE 3: 第二段已开始 → lookahead 成立，整体 commit Final Answer", () => {
+  it("CASE 3: 第二段已开始 → V4：live 期间 trailing 恒为 commentary；settled 后恢复 Final Answer", () => {
     const trailing = "第一段已经完整。\n\n第二段正在生成";
-    const p = deriveKiroAssistantTurn([settledSearch(), text(trailing, "streaming")], true);
-    expect(p.answer).toBe(trailing);
-    expect(p.phase).toBe("answering");
-    expect(p.answerStreaming).toBe(true);
+    const { step } = makeLive();
+    const live = step([settledSearch(), text(trailing, "streaming")]);
+    expect(live.answer).toBe("");
+    expect(commentaryTexts(live)).toEqual([trailing]);
+    expect(live.phase).toBe("composing");
+    const settled = step([settledSearch(), text(trailing, "done")], false);
+    expect(settled.answer).toBe(trailing);
+    expect(settled.phase).toBe("done");
   });
 
-  it("CASE 4: Tool 后单段且 state=done → 立即 commit（不卡在正在整理结果）", () => {
-    const p = deriveKiroAssistantTurn([settledSearch(), text("最终只有这一段。", "done")], true);
-    expect(p.answer).toBe("最终只有这一段。");
-    expect(p.phase).toBe("answering");
+  it("CASE 4: Tool 后单段且 state=done → V4：live 期间 commentary；settled 后恢复 Answer", () => {
+    const { step } = makeLive();
+    const live = step([settledSearch(), text("最终只有这一段。", "done")]);
+    expect(live.answer).toBe("");
+    expect(commentaryTexts(live)).toEqual(["最终只有这一段。"]);
+    expect(live.phase).toBe("composing");
+    const settled = step([settledSearch(), text("最终只有这一段。", "done")], false);
+    expect(settled.answer).toBe("最终只有这一段。");
+    expect(settled.phase).toBe("done");
   });
 
   it("CASE 5: provisional text 后出现新 Tool → 整段只作为 commentary 出现一次", () => {
@@ -245,19 +327,32 @@ describe("Trailing Lookahead（legacy：有 Tool、无 boundary、live）", () =
     expect(commentaryTexts(p)).toEqual(["让我再确认一下今天可用的时间。"]);
   });
 
-  it("CASE 6: trailing committed 单调：新 Tool 到达不得把已展示 answer 降级为 commentary", () => {
+  it("CASE 6: V4：live 期间 trailing 恒为 commentary（单调）；settled 后恢复 Answer", () => {
     const { step } = makeLive();
-    // trailing 已 commit（第二段已开始）
-    step([settledSearch(), text("第一段。\n\n第二段", "streaming")]);
-    // 新 Tool 到达（越过已展示文字）
-    const p = step([
+    // live：trailing 始终作为 commentary 展示（不 commit 为 answer）
+    const live = step([settledSearch(), text("第一段。\n\n第二段", "streaming")]);
+    expect(live.answer).toBe("");
+    expect(commentaryTexts(live)).toEqual(["第一段。\n\n第二段"]);
+    // 新 Tool 到达：trailing 变 intermediate → 无论 live/settled 恒为 commentary（progress 语义）
+    const withNewTool = step([
       settledSearch(),
       text("第一段。\n\n第二段", "done"),
       toolPart("get_assignment", "output-available", { output: { ok: true, data: { title: "数学作业" } } }),
     ]);
-    expect(p.answer).toBe("第一段。\n\n第二段");
-    expect(commentaryTexts(p)).toEqual([]);
-    expect(p.worklog.map((b) => b.kind)).toEqual(["tool", "tool"]);
+    expect(withNewTool.answer).toBe("");
+    expect(commentaryTexts(withNewTool)).toEqual(["第一段。\n\n第二段"]);
+    expect(withNewTool.worklog.map((b) => b.kind)).toEqual(["tool", "commentary", "tool"]);
+    const settled = step(
+      [
+        settledSearch(),
+        text("第一段。\n\n第二段", "done"),
+        toolPart("get_assignment", "output-available", { output: { ok: true, data: { title: "数学作业" } } }),
+      ],
+      false
+    );
+    expect(settled.answer).toBe("");
+    expect(commentaryTexts(settled)).toEqual(["第一段。\n\n第二段"]);
+    expect(settled.worklog.map((b) => b.kind)).toEqual(["tool", "commentary", "tool"]);
   });
 
   it("CASE 7: Tool 后仍只有一段 provisional 但 turnInFlight=false → flush 成 Final Answer", () => {
@@ -342,9 +437,9 @@ describe("deriveKiroAssistantTurn（静态：fresh commit）基础行为", () =>
     expect(p.answer).toBe("");
   });
 
-  it("boundary 控制信号不进入 worklog / 不算 hasTools", () => {
+  it("boundary 控制信号不进入 worklog / 不算 hasTools（只派生 UI-only milestone）", () => {
     const p = deriveKiroAssistantTurn([boundary(), text("回答", "done")], false);
-    expect(p.worklog).toEqual([]);
+    expect(p.worklog.map((b) => b.kind)).toEqual(["milestone"]);
     expect(p.hasTools).toBe(false);
     expect(p.answer).toBe("回答");
   });
@@ -413,3 +508,4 @@ describe("Task 17B：Tool Row headline（流式 web 流程）", () => {
     expect(block?.kind === "tool" && block.label).toBeTruthy();
   });
 });
+

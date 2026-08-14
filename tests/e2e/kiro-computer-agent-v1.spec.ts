@@ -216,3 +216,180 @@ test("Computer Agent V1：创建 → 审批修改 → 审查 → 撤销 → 历�
   await expect(restoredCard.getByTestId("kiro-task-undo")).toHaveCount(0);
   await expect(restoredCard.getByTestId("kiro-task-review")).toHaveCount(0);
 });
+
+// ==================== V4：Computer Agent 共用 Progressive Worklog（staged） ====================
+
+import http from "node:http";
+
+async function startSseServer(plan: (bodyJson: { messages?: unknown[] }) => { delay?: number; events: string[] }[]) {
+  const server = http.createServer((req, res) => {
+    if (req.method === "OPTIONS") {
+      res.writeHead(204, {
+        "access-control-allow-origin": "*",
+        "access-control-allow-methods": "POST, OPTIONS",
+        "access-control-allow-headers": "content-type, x-request-id, x-experimental-ai-provider, x-ai-session-id",
+        "access-control-max-age": "600",
+      });
+      res.end();
+      return;
+    }
+    let body = "";
+    req.on("data", (chunk) => (body += chunk));
+    req.on("end", () => {
+      let stages: { delay?: number; events: string[] }[];
+      try {
+        stages = plan(JSON.parse(body || "{}"));
+      } catch {
+        stages = [];
+      }
+      res.writeHead(200, {
+        "content-type": "text/event-stream",
+        "cache-control": "no-cache",
+        "access-control-allow-origin": "*",
+      });
+      void (async () => {
+        for (const stage of stages) {
+          if (stage.delay) await new Promise((resolve) => setTimeout(resolve, stage.delay));
+          if (stage.events.length > 0) res.write(sse(stage.events));
+        }
+        res.end();
+      })();
+    });
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const port = (server.address() as { port: number }).port;
+  return { url: `http://127.0.0.1:${port}/sse`, close: async () => { server.closeAllConnections(); await new Promise<void>((r) => server.close(() => r())); } };
+}
+
+/**
+ * Computer 模式 staged：commentary → Computer tool（真实执行）→ commentary →
+ * 第二个 Computer tool → boundary milestone → Final Answer。
+ * 验证 Computer Agent 与普通 Kiro 共用同一 Progressive Worklog。
+ */
+test("V4 Computer：commentary 立即显示 → Computer 工具逐个渐进 → milestone → Final Answer", async ({ page }) => {
+  const P1 = "我先查看目录结构";
+  const P2 = "接下来检查可用信息";
+  const sse = await startSseServer((bodyJson) => {
+    const toolOutputCount = ((bodyJson.messages ?? []) as { role: string; parts?: { type: string; state?: string }[] }[]).reduce(
+      (sum, m) => sum + (m.role === "assistant" ? (m.parts ?? []).filter((p) => p.type.startsWith("tool-") && p.state === "output-available").length : 0),
+      0
+    );
+    const hasBoundaryOutput = ((bodyJson.messages ?? []) as { role: string; parts?: { type: string; state?: string }[] }[]).some(
+      (m) => m.role === "assistant" && (m.parts ?? []).some((p) => p.type === "tool-begin_final_answer" && p.state === "output-available")
+    );
+    if (toolOutputCount === 0) {
+      return [
+        {
+          events: [
+            JSON.stringify({ type: "start", messageId: "v4c-1" }),
+            JSON.stringify({ type: "start-step" }),
+            JSON.stringify({ type: "text-start", id: "c1" }),
+            JSON.stringify({ type: "text-delta", id: "c1", delta: P1 }),
+            JSON.stringify({ type: "text-end", id: "c1" }),
+          ],
+        },
+        {
+          delay: 300,
+          events: [
+            JSON.stringify({ type: "tool-input-start", toolCallId: "call_c_list", toolName: "list_directory" }),
+            JSON.stringify({ type: "tool-input-delta", toolCallId: "call_c_list", inputTextDelta: '{"rootId":"root-sandbox","path":"."}' }),
+            JSON.stringify({ type: "tool-input-available", toolCallId: "call_c_list", toolName: "list_directory", input: { rootId: "root-sandbox", path: "." } }),
+            JSON.stringify({ type: "finish-step" }),
+            JSON.stringify({ type: "finish", finishReason: "tool-calls" }),
+          ],
+        },
+      ];
+    }
+    if (toolOutputCount === 1) {
+      return [
+        {
+          delay: 3000,
+          events: [
+            JSON.stringify({ type: "start", messageId: "v4c-1" }),
+            JSON.stringify({ type: "start-step" }),
+            JSON.stringify({ type: "text-start", id: "c2" }),
+            JSON.stringify({ type: "text-delta", id: "c2", delta: P2 }),
+            JSON.stringify({ type: "text-end", id: "c2" }),
+          ],
+        },
+        {
+          delay: 800,
+          events: [
+            JSON.stringify({ type: "tool-input-start", toolCallId: "call_c_roots", toolName: "list_workspace_roots" }),
+            JSON.stringify({ type: "tool-input-delta", toolCallId: "call_c_roots", inputTextDelta: "{}" }),
+            JSON.stringify({ type: "tool-input-available", toolCallId: "call_c_roots", toolName: "list_workspace_roots", input: {} }),
+            JSON.stringify({ type: "finish-step" }),
+            JSON.stringify({ type: "finish", finishReason: "tool-calls" }),
+          ],
+        },
+      ];
+    }
+    if (!hasBoundaryOutput) {
+      return [
+        {
+          delay: 6000,
+          events: [
+            JSON.stringify({ type: "start", messageId: "v4c-1" }),
+            JSON.stringify({ type: "start-step" }),
+            JSON.stringify({ type: "tool-input-start", toolCallId: "call_c_b", toolName: "begin_final_answer" }),
+            JSON.stringify({ type: "tool-input-delta", toolCallId: "call_c_b", inputTextDelta: "{}" }),
+            JSON.stringify({ type: "tool-input-available", toolCallId: "call_c_b", toolName: "begin_final_answer", input: {} }),
+            JSON.stringify({ type: "finish-step" }),
+            JSON.stringify({ type: "finish", finishReason: "tool-calls" }),
+          ],
+        },
+      ];
+    }
+    return [
+      {
+        events: [
+          JSON.stringify({ type: "start", messageId: "v4c-1" }),
+          JSON.stringify({ type: "start-step" }),
+          JSON.stringify({ type: "text-start", id: "final-c" }),
+          JSON.stringify({ type: "text-delta", id: "final-c", delta: "目录检查完成。" }),
+          JSON.stringify({ type: "text-end", id: "final-c" }),
+          JSON.stringify({ type: "finish-step" }),
+          JSON.stringify({ type: "finish", finishReason: "stop" }),
+        ],
+      },
+    ];
+  });
+  await page.route("**/api/ai/chat", (route) => route.continue({ url: sse.url }));
+  await page.addInitScript(({ settings, key }) => {
+    localStorage.setItem("classflow-ai-settings-v1", JSON.stringify({ version: 0, state: settings }));
+    sessionStorage.setItem("classflow-ai-key:deepseek", key);
+  }, { settings: AI_SETTINGS, key: "sk-test-key" });
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/");
+  await page.locator("aside").first().getByRole("button", { name: "Kiro" }).click();
+  await page.waitForTimeout(800);
+  const composer = page.getByTestId("kiro-composer");
+  await expect(composer).toBeVisible();
+  await composer.getByRole("button", { name: "Computer" }).click();
+  await expect(composer.getByRole("button", { name: "Computer" })).toHaveAttribute("aria-pressed", "true");
+  const modeMenu = composer.getByRole("button", { name: "权限模式" });
+  await modeMenu.click();
+  await page.getByRole("menuitem", { name: /工作区自动/ }).first().click();
+
+  await composer.getByLabel("Ask Kiro").fill("查看工作区目录");
+  await composer.getByLabel("发送").click();
+
+  const worklog = page.getByTestId("kiro-worklog");
+  // T0：commentary 立即显示（Computer Tool 尚未出现）
+  await expect(worklog).toBeVisible({ timeout: 8000 });
+  const progress1 = worklog.getByText(P1, { exact: true });
+  await expect(progress1).toBeVisible({ timeout: 8000 });
+  await expect(worklog.locator('[data-testid="kiro-tool-row"]')).toHaveCount(0);
+  // T1：Computer tool（list_directory）出现并完成
+  const toolRows = worklog.locator('[data-testid="kiro-tool-row"]');
+  await expect(toolRows.first()).toBeVisible({ timeout: 10000 });
+  await expect(toolRows.first().locator(".lucide-check")).toBeVisible({ timeout: 10000 });
+  // T3：progress2 到达
+  const progress2 = worklog.getByText(P2, { exact: true });
+  await expect(progress2).toBeVisible({ timeout: 8000 });
+  // milestone + Final Answer
+  await expect(worklog.getByTestId("kiro-worklog-milestone")).toContainText("已完成执行", { timeout: 10000 });
+  await expect(page.getByTestId("kiro-message").last()).toContainText("目录检查完成", { timeout: 10000 });
+
+  await sse.close();
+});

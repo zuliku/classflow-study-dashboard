@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+﻿import { expect, test } from "@playwright/test";
 
 /**
  * Kiro Chat 核心 E2E（Task 1）：mock /api/ai/chat，
@@ -203,7 +203,7 @@ test("Kiro Read Tool：tool call → 客户端执行 → 自动继续 → 最终
   expect(requests).toBe(2);
 
   // Agent Worklog：完成后保持低噪声摘要；不泄漏原始工具名/JSON。
-  await expect(worklog).toContainText("已完成 1 个步骤");
+  await expect(worklog).toContainText("已完成 · 1 个步骤");
   await expect(worklog.getByText("get_upcoming_assignments")).toHaveCount(0);
 
   // Worklog disclosure（IM2B）：进入 answering 自动折叠 → summary aria-expanded=false；
@@ -457,3 +457,4 @@ test("Kiro Attachment：上传 PDF → 本地解析 ready → 发送 → 附件 
   await expect(page.getByTestId("kiro-sent-attachment")).toContainText("测试讲义.pdf");
   await expect(page.getByTestId("kiro-user-message")).not.toContainText("ClassFlow PDF test document");
 });
+

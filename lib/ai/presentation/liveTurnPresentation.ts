@@ -1,5 +1,5 @@
 /**
- * Kiro Live Turn Presentation Controller（Streaming UX V3 Phase 1）。
+ * Kiro Live Turn Presentation Controller（Streaming UX V3 + V4 Progressive Worklog）。
  *
  * 纯 Presentation Model + 显式 Final Answer Boundary + 单调 lane commit：
  *
@@ -9,9 +9,13 @@
  * - reasoning 永远不可见；
  * - 已 commit 的 lane 永不反向变化。
  *
+ * V4（Progressive Worklog）：begin_final_answer 前 = execution channel——
+ * 模型产生的 execution text 在 live 阶段立即作为 Worklog commentary 展示，
+ * 绝不等待未来 Tool 出现才证明它是 commentary。
+ *
  * Legacy fallback（模型不遵守协议时）：
- * A. 无 Tool 且无 boundary → live 期间不显示（provisional 隐藏），Turn 真正结束（settled）后
- *    全部 text 视为 Answer。
+ * A. 无 Tool 且无 boundary → live 期间立即作为 commentary 展示；Turn 真正结束（settled）后
+ *    整段 text 恢复为普通 Answer（compatibility fallback，不反向影响正常 Agent progress）。
  * B. 有 Tool 且无 boundary → 保留 Provisional Lookahead（稳定块 + 第二段 / 单段 done / settled）
  *    单调 commit 为 Answer；Tool 之间 / 之前 text 恒为 commentary。
  *
@@ -48,6 +52,12 @@ export type KiroWorklogBlock =
       status: "working" | "done" | "error";
       toolKind: "read" | "write";
       safeDetails: string[];
+      stepIndex: number;
+    }
+  | {
+      /** V4：UI-only completion milestone（由 begin_final_answer 协议信号派生；非模型文字） */
+      kind: "milestone";
+      id: string;
       stepIndex: number;
     };
 
@@ -161,7 +171,13 @@ function buildToolBlock(
   };
 }
 
-/** 相邻且属于同一个 step 的 commentary 合并（保持 part 时序） */
+/**
+ * V4：commentary identity 按 text part（而不是 step）。
+ * 同一个真实 text part 的持续 delta → 更新同一个 commentary block；
+ * 新的 text part / 新的 SDK step → 新 block。
+ * id = commentary-${stepIndex}-${partIndex}（AI SDK v7 text part 无稳定 id，
+ * 由 presentation adapter 用 parts 数组位置派生稳定 identity——同一 streaming part 位置不变）。
+ */
 function appendCommentary(
   worklog: KiroWorklogBlock[],
   text: string,
@@ -169,14 +185,17 @@ function appendCommentary(
   stepIndex: number,
   partIndex: number
 ): void {
-  const last = worklog[worklog.length - 1];
-  if (last && last.kind === "commentary" && last.stepIndex === stepIndex) {
-    last.text += text;
-    if (isStreaming) last.streaming = true;
+  const id = `commentary-${stepIndex}-${partIndex}`;
+  const existing = worklog.find(
+    (b): b is Extract<KiroWorklogBlock, { kind: "commentary" }> => b.kind === "commentary" && b.id === id
+  );
+  if (existing) {
+    existing.text += text;
+    if (isStreaming) existing.streaming = true;
   } else {
     worklog.push({
       kind: "commentary",
-      id: `commentary-${partIndex}`,
+      id,
       text,
       streaming: isStreaming,
       stepIndex,
@@ -238,7 +257,10 @@ export function updateLiveTurnPresentation(
     !commit.trailingAnswerCommitted &&
     lastBusinessToolIndex >= 0 &&
     hasSettledLastBusinessTool &&
-    trailingText.length > 0
+    trailingText.length > 0 &&
+    // V4：live 期间 trailing 恒为 execution commentary（begin_final_answer 前 = execution channel）；
+    // 只有 Turn 真正 settled 才把 trailing 恢复为普通 Answer（legacy fallback，不破坏 V4 渐进展示）。
+    !turnInFlight
   ) {
     const split = splitKiroStreamingMarkdown(trailingText, true);
     const hasOneBlockLookahead = split.stableBlocks.length > 0 && split.tail.trim().length > 0;
@@ -265,8 +287,14 @@ export function updateLiveTurnPresentation(
     if (p.type === "reasoning") continue;
 
     if (isToolPart(p)) {
-      // 控制信号本身不进入 Worklog（无 Tool Row / 无 Action Card）
-      if (isKiroFinalAnswerToolName(toolNameOf(p))) continue;
+      // 控制信号本身不进入 Worklog（无 Tool Row / 无 Action Card）；
+      // V4：begin_final_answer 派生 UI-only milestone（仅一次，位于最后一个 Tool 之后）
+      if (isKiroFinalAnswerToolName(toolNameOf(p))) {
+        if (i === finalAnswerPartIndex) {
+          worklog.push({ kind: "milestone", id: `milestone-${i}`, stepIndex });
+        }
+        continue;
+      }
       worklog.push(buildToolBlock(p, i, stepIndex, trustedWebSources));
       continue;
     }
@@ -299,10 +327,13 @@ export function updateLiveTurnPresentation(
 
     // ---- legacy fallback A：无业务 Tool 且无 boundary ----
     if (firstBusinessToolIndex < 0) {
-      // live 期间保持 provisional（隐藏，UI 显示「正在准备」）；settled 后全部视为 Answer。
       if (!turnInFlight) {
+        // settled：compatibility fallback——整段 text 恢复为普通 Answer
         answerTexts.push(textValue);
         if (isStreaming) answerPartStreaming = true;
+      } else {
+        // V4：live 期间立即作为 Worklog commentary 展示（execution channel，不等待 Tool）
+        appendCommentary(worklog, textValue, isStreaming, stepIndex, i);
       }
       continue;
     }
@@ -313,8 +344,11 @@ export function updateLiveTurnPresentation(
       continue;
     }
 
-    // ---- trailing（最后一个业务 Tool 之后、尚未 commit）→ provisional 隐藏 ----
+    // ---- trailing（最后一个业务 Tool 之后、尚未 commit）----
     if (i > lastBusinessToolIndex) {
+      // V4：begin_final_answer 前 = execution channel——trailing 也立即作为 commentary 展示；
+      // trailing commit（lookahead / 单段 done / settled）成立后由上方「已 commit」分支接管为 Answer。
+      appendCommentary(worklog, textValue, isStreaming, stepIndex, i);
       continue;
     }
 
@@ -329,6 +363,9 @@ export function updateLiveTurnPresentation(
     phase = "done";
   } else if (answer.length > 0) {
     phase = "answering";
+  } else if (worklog.some((b) => b.kind === "milestone")) {
+    // V4：begin_final_answer 已到、Final Answer 未开始 → 正在整理回答
+    phase = "composing";
   } else if (hasBusinessTools && worklog.every((b) => b.kind !== "tool" || b.status !== "working")) {
     phase = "composing";
   } else {

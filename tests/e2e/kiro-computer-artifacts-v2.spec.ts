@@ -927,7 +927,7 @@ test("V2.2 Agent Flow：get_week_schedule → create_document（Draft table，�
   // Worklog：真实语义标签（查看课表 / 创建文档），不存在「执行操作」
   const worklog = page.getByTestId("kiro-worklog");
   await expect(worklog).toBeVisible();
-  await expect(worklog.getByRole("status")).toHaveText("已完成 2 个步骤", { timeout: 10000 });
+  await expect(worklog.getByRole("status")).toHaveText("已完成 · 2 个步骤", { timeout: 10000 });
   // turn 结束自动折叠 → 展开后检查 tool 行语义标签
   const summary = worklog.getByRole("button").first();
   await summary.click();

@@ -302,6 +302,22 @@ button:disabled {
   }
 }
 
+/* V4 Progressive Worklog：block 首次入场的极轻动画（120ms；reduced motion 由全局规则收敛） */
+@keyframes kiro-worklog-enter {
+  from {
+    opacity: 0;
+    transform: translateY(2px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.kiro-worklog-enter {
+  animation: kiro-worklog-enter 120ms ease-out both;
+}
+
 /* 尊重系统减弱动效偏好 */
 @media (prefers-reduced-motion: reduce) {
   html:not([data-motion-preference="full"]) *,
