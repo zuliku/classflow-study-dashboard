@@ -168,6 +168,7 @@ export function KiroChatSurface({ variant }: { variant: "workspace" | "sidecar" 
         onRemoveContext={removeContext}
         onSend={chat.send}
         streaming={chat.streaming}
+        turnInFlight={chat.turnInFlight}
         runtimeStatus={chat.status}
         onStop={chat.stop}
         configured={chat.configured}

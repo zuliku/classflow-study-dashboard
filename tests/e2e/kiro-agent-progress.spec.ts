@@ -134,9 +134,8 @@ test("发送后立即接管 UI、锁定本轮上下文，回答到达后解锁",
   await expect(pending).toContainText("正在准备");
   await expect(pending).toHaveAttribute("aria-live", "polite");
   await expect(composer.getByLabel("停止生成")).toBeVisible();
-  await expect(page.getByTestId("kiro-context-bar")).toContainText(
-    "本轮上下文已锁定 · 回复完成后可为下一条调整"
-  );
+  // V4.1：不再展示「本轮上下文已锁定」常驻文案（turn snapshot 冻结是内部机制）
+  await expect(page.getByText("本轮上下文已锁定")).toHaveCount(0);
   expect(requestCount).toBe(1);
   await expect(page.getByText("正在回复", { exact: true })).toHaveCount(0); // 无重复三点 loading
   // 一个 Assistant Turn 只有一个 Kiro Logo（Progress 承担；空 assistant message 不再渲染）
@@ -149,7 +148,7 @@ test("发送后立即接管 UI、锁定本轮上下文，回答到达后解锁",
   // 回答到达 → pending 消退并恢复上下文操作，唯一 Logo 由回答消息承担
   await expect(page.getByTestId("kiro-message").last()).toContainText("DDL 情况", { timeout: 10000 });
   await expect(pending).toHaveCount(0);
-  await expect(page.getByText("本轮上下文已锁定 · 回复完成后可为下一条调整")).toHaveCount(0);
+  await expect(page.getByText("本轮上下文已锁定")).toHaveCount(0);
   await expect(
     page.getByTestId("kiro-conversation").locator('img[src*="kiro-mark"]')
   ).toHaveCount(1);

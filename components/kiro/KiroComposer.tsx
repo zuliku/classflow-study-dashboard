@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import React, { useEffect, useRef, useState } from "react";
 import {
@@ -42,6 +42,7 @@ export function KiroComposer({
   onRemoveContext,
   onSend,
   streaming,
+  turnInFlight,
   runtimeStatus,
   onStop,
   configured,
@@ -80,6 +81,8 @@ export function KiroComposer({
   /** 返回 true = 已提交（扫描 PDF 渲染失败时 false，Prompt 保留） */
   onSend: (text: string) => Promise<boolean> | boolean;
   streaming: boolean;
+  /** Streaming UX V3：真实 turn lifecycle（submitted / streaming / awaiting-tool-result / awaiting-continuation） */
+  turnInFlight: boolean;
   runtimeStatus: "ready" | "submitted" | "streaming" | "error";
   onStop: () => void;
   configured: boolean;
@@ -144,10 +147,16 @@ export function KiroComposer({
     !hasProcessing &&
     !imagesBlocked &&
     !scannedBlocked &&
-    !streaming &&
+    !turnInFlight &&
     !submitting &&
     !preparingVision;
-  const turnLocked = submitting || streaming;
+  // V4.1（Productization）：拆分「当前 Turn scope 锁」与「下一 Turn preference 锁」。
+  // - currentTurnScopeLocked：Agent Turn 尚未真正 settled——保护 Context/Attachment/Workspace/Computer 等
+  //   会改变「当前工作范围」展示的控件
+  // - nextTurnPreferencesLocked：仅发送前快照尚未冻结的短暂 pre-submit 阶段——Model/Reasoning/AgentMode/
+  //   Web Search 在回复生成期间可编辑（只影响下一 Turn；当前 Turn 使用冻结 snapshot）
+  const currentTurnScopeLocked = turnInFlight || submitting;
+  const nextTurnPreferencesLocked = submitting;
 
   useEffect(() => {
     if ((!streaming && runtimeStatus !== "error") || !submittingRef.current) return;
@@ -155,13 +164,14 @@ export function KiroComposer({
     setSubmitting(false);
   }, [runtimeStatus, streaming]);
 
+  // Turn scope 锁定期间关闭 scope 类菜单（Attachment/Context/Material）；
+  // Model 菜单是「下一条 preference」，不在此关闭——回复期间仍可打开。
   useEffect(() => {
-    if (!turnLocked) return;
+    if (!currentTurnScopeLocked) return;
     setAttachOpen(false);
-    setModelOpen(false);
     setPickerOpen(false);
     setMaterialPickerOpen(false);
-  }, [turnLocked]);
+  }, [currentTurnScopeLocked]);
 
   const autoGrow = () => {
     const el = taRef.current;
@@ -234,14 +244,14 @@ export function KiroComposer({
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     setDragOver(false);
-    if (turnLocked) return;
+    if (currentTurnScopeLocked) return;
     const files = Array.from(e.dataTransfer.files ?? []);
     if (files.length > 0) onAddFiles(files);
   };
 
   // 粘贴图片（Ctrl/Cmd+V）
   const handlePaste = (e: React.ClipboardEvent) => {
-    if (turnLocked) return;
+    if (currentTurnScopeLocked) return;
     const items = Array.from(e.clipboardData?.items ?? []);
     const files = items
       .filter((it) => it.kind === "file")
@@ -315,7 +325,7 @@ export function KiroComposer({
           contexts={contexts}
           onRemove={onRemoveContext}
           compact={compact}
-          locked={turnLocked}
+          locked={currentTurnScopeLocked}
           leading={
             computerEnabled ? (
               <>
@@ -323,7 +333,7 @@ export function KiroComposer({
                   workspace={workspace ?? null}
                   isSandbox={workspaceIsSandbox ?? false}
                   grantWarning={grantWarning ?? null}
-                  disabled={turnLocked}
+                  disabled={currentTurnScopeLocked}
                 />
                 {grantWarning && (
                   <span className="text-[9px] font-semibold text-danger truncate">需要重新授权</span>
@@ -355,7 +365,7 @@ export function KiroComposer({
                     onRemove={onRemoveAttachment}
                     onRetry={onRetryAttachment}
                     onSaveToCourse={onSaveAttachmentToCourse}
-                    disabled={turnLocked}
+                    disabled={currentTurnScopeLocked}
                   />
                 ))}
                 {(hasImages && !visionEnabled) || scannedBlocked ? (
@@ -405,7 +415,7 @@ export function KiroComposer({
                 <div ref={attachRef} className="relative">
                   <button
                     onClick={() => {
-                      if (turnLocked) return;
+                      if (currentTurnScopeLocked) return;
                       setAttachOpen((v) => !v);
                       setModelOpen(false);
                       setPickerOpen(false);
@@ -414,7 +424,7 @@ export function KiroComposer({
                     aria-label="添加附件"
                     aria-expanded={attachOpen}
                     aria-haspopup="menu"
-                    disabled={turnLocked}
+                    disabled={currentTurnScopeLocked}
                     title="添加附件"
                     className="w-9 h-9 flex items-center justify-center rounded-xl text-sandrift hover:bg-alabaster hover:text-charcoal transition-colors"
                   >
@@ -446,7 +456,7 @@ export function KiroComposer({
                 <div ref={pickerWrapRef} className="relative">
                   <button
                     onClick={() => {
-                      if (turnLocked) return;
+                      if (currentTurnScopeLocked) return;
                       setPickerOpen((v) => !v);
                       setAttachOpen(false);
                       setModelOpen(false);
@@ -454,7 +464,7 @@ export function KiroComposer({
                     aria-label="选择上下文"
                     aria-expanded={pickerOpen}
                     title="添加 ClassFlow 上下文"
-                    disabled={turnLocked}
+                    disabled={currentTurnScopeLocked}
                     className="w-9 h-9 flex items-center justify-center rounded-xl text-sandrift hover:bg-alabaster hover:text-charcoal transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                   >
                     <AtSign className="w-4 h-4" />
@@ -469,15 +479,15 @@ export function KiroComposer({
                   />
                 </div>
 
-                {/* Task 14：Kiro Search（联网搜索）轻量开关——只切换 enabled；V1 = 自动判断 */}
+                {/* Task 14：Kiro Search（联网搜索）轻量开关——下一 Turn preference：回复期间可切换 */}
                 <button
                   onClick={() => {
-                    if (!turnLocked) setWebSearchEnabled(!webSearchEnabled);
+                    if (!nextTurnPreferencesLocked) setWebSearchEnabled(!webSearchEnabled);
                   }}
                   aria-label="联网搜索"
                   aria-pressed={webSearchEnabled}
-                  title={webSearchEnabled ? "联网搜索：自动" : "联网搜索：关闭"}
-                  disabled={turnLocked}
+                  title={webSearchEnabled ? "联网搜索：自动（下一条消息生效）" : "联网搜索：关闭（下一条消息生效）"}
+                  disabled={nextTurnPreferencesLocked}
                   className={cn(
                     "w-9 h-9 flex items-center justify-center rounded-xl transition-colors",
                     webSearchEnabled
@@ -491,13 +501,13 @@ export function KiroComposer({
                 {/* Kiro Computer Agent V1：Computer toggle（ON = active；无 workspace 时引导授权） */}
                 <button
                   onClick={() => {
-                    if (turnLocked) return;
+                    if (currentTurnScopeLocked) return;
                     onToggleComputer?.(!computerEnabled);
                   }}
                   aria-label="Computer"
                   aria-pressed={computerEnabled}
                   title={computerEnabled ? "Computer Agent：已开启" : "Computer Agent：关闭"}
-                  disabled={turnLocked}
+                  disabled={currentTurnScopeLocked}
                   className={cn(
                     "w-9 h-9 flex items-center justify-center rounded-xl transition-colors",
                     computerEnabled
@@ -510,22 +520,23 @@ export function KiroComposer({
               </div>
 
               <div className="flex items-center gap-2">
-                {/* Kiro Computer Agent V1：Agent Mode（仅 Computer ON）+ Reasoning（capability-driven） */}
+                {/* Kiro Computer Agent V1：Agent Mode（仅 Computer ON）+ Reasoning（capability-driven）——
+                    下一 Turn preference：回复期间可切换（当前 Turn 用 frozen agentMode/reasoningEffort） */}
                 {computerEnabled && agentMode && (
-                  <KiroAgentModeMenu mode={agentMode} onChange={(m) => onSetAgentMode?.(m)} disabled={turnLocked} />
+                  <KiroAgentModeMenu mode={agentMode} onChange={(m) => onSetAgentMode?.(m)} disabled={nextTurnPreferencesLocked} />
                 )}
                 {reasoningCapability && reasoningEffort && (
                   <KiroReasoningMenu
                     capability={reasoningCapability}
                     effort={reasoningEffort}
                     onChange={(e) => onSetReasoningEffort?.(e)}
-                    disabled={turnLocked}
+                    disabled={nextTurnPreferencesLocked}
                   />
                 )}
                 <div ref={modelRef} className="relative">
                   <button
                     onClick={() => {
-                      if (turnLocked) return;
+                      if (nextTurnPreferencesLocked) return;
                       setModelOpen((v) => !v);
                       setAttachOpen(false);
                       setPickerOpen(false);
@@ -533,8 +544,8 @@ export function KiroComposer({
                     aria-label="选择模型"
                     aria-expanded={modelOpen}
                     aria-haspopup="menu"
-                    title="选择模型"
-                    disabled={turnLocked}
+                    title={turnInFlight ? "选择下一条消息使用的模型" : "选择模型"}
+                    disabled={nextTurnPreferencesLocked}
                     className="hidden sm:flex items-center gap-1.5 h-9 px-2.5 rounded-xl text-[11px] font-semibold text-sandrift hover:bg-alabaster hover:text-charcoal transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                   >
                     <ProviderLogo vendor={activeModelVendor} size="sm" />
@@ -548,7 +559,7 @@ export function KiroComposer({
                   )}
                 </div>
 
-                {streaming ? (
+                {turnInFlight ? (
                   <button
                     onClick={onStop}
                     aria-label="停止生成"
@@ -604,3 +615,6 @@ export function KiroComposer({
     </div>
   );
 }
+
+
+

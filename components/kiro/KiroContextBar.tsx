@@ -69,7 +69,8 @@ export function KiroContextBar({
     };
   }, [overflowOpen]);
 
-  if (contexts.length === 0 && !locked && !leading) return null;
+  // locked 只决定现有 Context 是否可以修改，不决定 ContextBar 是否必须存在
+  if (contexts.length === 0 && !leading) return null;
 
   const { visibleAmbient, visibleManual, overflow } = splitKiroContextsForDisplay(contexts, !!compact);
   const allForPopover = [...visibleAmbient, ...visibleManual, ...overflow];
@@ -98,11 +99,6 @@ export function KiroContextBar({
       // 不能用 overflow-hidden：会裁剪 leading（Workspace）与 +N 的 absolute popover
       className={cn("flex flex-wrap items-center gap-1.5 pb-1.5", compact && "px-0.5")}
     >
-      {locked && (
-        <p className="basis-full text-[10px] font-medium text-sandrift" role="status" aria-live="polite">
-          本轮上下文已锁定 · 回复完成后可为下一条调整
-        </p>
-      )}
       {/* Leading：Workspace / Sandbox 指示（先于 ambient/manual context 渲染） */}
       {leading}
       {/* Ambient Capsule：系统自动环境（弱图标 + 极浅底，稳定存在） */}
