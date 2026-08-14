@@ -137,10 +137,23 @@ export const COMPUTER_MUTATION_TOOLS: ComputerToolDefinition[] = [
   {
     name: "delete_file",
     description:
-      "删除工作区中的单个文件。属于破坏性操作，执行前必须获得用户确认；不支持目录或递归删除。",
+      "删除工作区中的单个文件。是否需要用户确认由当前权限模式和权限规则决定。不支持目录、递归、glob。单 root Workspace 可省略 rootId；多 root Workspace 必须使用 list_workspace_roots / list_directory 返回的 rootId。删除成功后如返回 warnings，说明文件已删除但记录同步稍延迟。",
     schema: deleteFileSchema,
     capability: "fs.delete",
     mutation: true,
+    inputExamples: [
+      {
+        input: {
+          path: "本周课表.docx",
+        },
+      },
+      {
+        input: {
+          rootId: "root-xxx",
+          path: "research/report.docx",
+        },
+      },
+    ],
   },
   {
     name: "create_document",

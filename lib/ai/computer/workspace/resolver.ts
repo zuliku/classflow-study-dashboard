@@ -89,3 +89,40 @@ export function normalizeRelativeComputerPath(
 
   return { path: segments.join("/"), segments };
 }
+
+/**
+ * V2.8：Tool rootId 安全解析（delete_file 等 path-only 调用）。
+ *
+ * - Case A：显式 rootId → 校验存在于 Workspace roots（不存在 → ROOT_NOT_FOUND）
+ * - Case B：未提供 rootId + frozen snapshot roots === 1 + live Workspace 仍含该 root
+ *          → 自动选择唯一 root
+ * - Case C：未提供 rootId + roots > 1 → ROOT_REQUIRED（绝不默认删除第一个）
+ */
+export function resolveToolRootId(input: {
+  rootId?: string;
+  snapshotRoots: { id: string }[];
+  workspace: { id: string; roots: { id: string }[] };
+}): { rootId: string; autoResolved: boolean } {
+  const { rootId, snapshotRoots, workspace } = input;
+  if (rootId) {
+    if (!workspace.roots.some((r) => r.id === rootId)) {
+      throw new ComputerError("ROOT_NOT_FOUND", `工作区根不存在：${rootId}`);
+    }
+    return { rootId, autoResolved: false };
+  }
+  if (snapshotRoots.length === 1) {
+    const only = snapshotRoots[0].id;
+    if (workspace.roots.some((r) => r.id === only)) {
+      return { rootId: only, autoResolved: true };
+    }
+    // snapshot 唯一 root 已不在 live Workspace（结构变化）→ 绝不自动猜测，要求显式 rootId
+    throw new ComputerError(
+      "ROOT_REQUIRED",
+      "当前 Workspace 的授权位置已变化，删除文件时必须指定 rootId（使用 list_workspace_roots 获取最新 rootId）。"
+    );
+  }
+  throw new ComputerError(
+    "ROOT_REQUIRED",
+    "当前 Workspace 有多个授权位置，删除文件时必须指定 rootId（使用 list_workspace_roots / list_directory 返回的 rootId）。"
+  );
+}

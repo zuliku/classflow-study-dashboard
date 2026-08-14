@@ -74,9 +74,11 @@ export const patchTextFileSchema = z.object({
     .max(20),
 });
 
-/** V2.5：delete_file —— 只删除单个文件（不支持目录 / 递归 / root / glob / 批量） */
+/** V2.5+V2.8：delete_file —— 只删除单个文件（不支持目录 / 递归 / root / glob / 批量）。
+ *  rootId 可选：single-root Workspace 可省略（自动解析唯一 root）；
+ *  multi-root Workspace 省略 → ROOT_REQUIRED（必须使用 list_workspace_roots / list_directory 返回的 rootId）。 */
 export const deleteFileSchema = z.object({
-  rootId: z.string().trim().min(1).max(120),
+  rootId: z.string().trim().min(1).max(120).optional(),
   path: resourcePath,
 });
 
