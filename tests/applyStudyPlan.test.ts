@@ -87,7 +87,7 @@ describe("applyStudyPlan：正常 Apply", () => {
       store.getState()
     );
     expect(result.ok).toBe(true);
-    if (!result.ok) return;
+    if (!result.ok || result.state !== "created") return;
     expect(result.created.length).toBe(2);
     expect(store.getState().studyBlocks.length).toBe(2);
     for (const b of result.created) {
@@ -174,16 +174,23 @@ describe("applyStudyPlan：任务 stale", () => {
   });
 });
 
-describe("applyStudyPlan：冲突", () => {
-  it("课程冲突（Block 所在日期的生效课程）→ CONFLICT", async () => {
+describe("applyStudyPlan：冲突（Task 5 soft course overlap）", () => {
+  it("课程重叠 → SOFT：默认 needsApproval（0 mutation），allowCourseOverlap 后整批写入", async () => {
     seedState();
     const { store, apply } = await fresh();
     // 本周周一 09:00–10:00 与 08:00–09:40 课程重叠（a2 无 DDL，避免 Deadline 检查先触发）
-    const r = apply.applyStudyPlan({ blocks: [block("a2", mondayStr(0), "09:00", "10:00")] }, store.getState());
-    expect(r.ok).toBe(false);
-    if (r.ok) return;
-    expect(r.code).toBe("CONFLICT");
-    expect(r.details?.reason).toBe("course_conflict");
+    const input = { blocks: [block("a2", mondayStr(0), "09:00", "10:00")] };
+    const r = apply.applyStudyPlan(input, store.getState());
+    expect(r.ok).toBe(true);
+    if (!r.ok || r.state !== "needs-approval") return;
+    expect(r.courseOverlaps).toHaveLength(1);
+    expect(r.courseOverlaps[0].courseName).toBeTruthy();
+    expect(store.getState().studyBlocks.length).toBe(0); // 未确认 → 0 mutation
+
+    const approved = apply.applyStudyPlan(input, store.getState(), { allowCourseOverlap: true });
+    expect(approved.ok).toBe(true);
+    if (!approved.ok || approved.state !== "created") return;
+    expect(store.getState().studyBlocks.length).toBe(1);
   });
 
   it("课程周次按 Block 自身日期计算：非生效周不冲突（不用 UI 当前周）", async () => {
@@ -196,14 +203,15 @@ describe("applyStudyPlan：冲突", () => {
     const week9Monday = mondayStr(7 * 8); // 第 9 周周一：课程生效
     const ok = apply.applyStudyPlan({ blocks: [block("a2", week2Monday, "09:00", "10:00")] }, store.getState());
     expect(ok.ok).toBe(true);
-    if (!ok.ok) return;
+    if (!ok.ok || ok.state !== "created") return;
     expect(store.getState().studyBlocks.length).toBe(1);
     store.getState().deleteStudyBlocksBatch(ok.created.map((b) => b.id));
 
-    const conflict = apply.applyStudyPlan({ blocks: [block("a2", week9Monday, "09:00", "10:00")] }, store.getState());
-    expect(conflict.ok).toBe(false);
-    if (conflict.ok) return;
-    expect(conflict.code).toBe("CONFLICT");
+    const overlap = apply.applyStudyPlan({ blocks: [block("a2", week9Monday, "09:00", "10:00")] }, store.getState());
+    expect(overlap.ok).toBe(true);
+    if (!overlap.ok || overlap.state !== "needs-approval") return;
+    expect(overlap.courseOverlaps).toHaveLength(1);
+    expect(store.getState().studyBlocks.length).toBe(0);
   });
 
   it("固定时段考试冲突 → CONFLICT", async () => {
@@ -279,21 +287,26 @@ describe("applyStudyPlan：冲突", () => {
 });
 
 describe("applyStudyPlan：All-or-None", () => {
-  it("3 个块中第 2 个冲突 → 整个失败，0 个被创建", async () => {
+  it("3 个块中第 2 个与课程重叠 → 未确认时整批 0 创建；确认后整批 3 个写入", async () => {
     seedState();
     const { store, apply } = await fresh();
-    const r = apply.applyStudyPlan(
-      {
-        blocks: [
-          block("a1", dayStr(1), "10:00", "11:00"),
-          block("a2", mondayStr(7), "09:00", "10:00"), // 课程冲突
-          block("a1", dayStr(2), "10:00", "11:00"),
-        ],
-      },
-      store.getState()
-    );
-    expect(r.ok).toBe(false);
-    expect(store.getState().studyBlocks.length).toBe(0);
+    const input = {
+      blocks: [
+        block("a1", dayStr(1), "10:00", "11:00"),
+        block("a2", mondayStr(7), "09:00", "10:00"), // 课程重叠（soft）
+        block("a1", dayStr(2), "10:00", "11:00"),
+      ],
+    };
+    const r = apply.applyStudyPlan(input, store.getState());
+    expect(r.ok).toBe(true);
+    if (!r.ok || r.state !== "needs-approval") return;
+    expect(r.courseOverlaps).toHaveLength(1);
+    expect(store.getState().studyBlocks.length).toBe(0); // 未确认 → 整批 0 创建
+
+    const approved = apply.applyStudyPlan(input, store.getState(), { allowCourseOverlap: true });
+    expect(approved.ok).toBe(true);
+    if (!approved.ok || approved.state !== "created") return;
+    expect(approved.created.length).toBe(3); // 确认后整批写入（all-or-nothing）
   });
 
   it("Double Apply：第二次 → duplicate stale，只保留一份", async () => {
@@ -330,7 +343,7 @@ describe("deleteStudyBlocksBatch：Undo 只删除本次 Apply 的 ID", () => {
       store.getState()
     );
     expect(result.ok).toBe(true);
-    if (!result.ok) return;
+    if (!result.ok || result.state !== "created") return;
     expect(store.getState().studyBlocks.length).toBe(5);
 
     const removed = store.getState().deleteStudyBlocksBatch(result.created.map((b) => b.id));

@@ -149,7 +149,7 @@ describe("Kiro Apply / Undo History Integrity", () => {
       useAppStore.getState()
     );
     expect(result.ok).toBe(true);
-    if (!result.ok) return;
+    if (!result.ok || result.state !== "created") return;
     const createdIds = result.created.map((b) => b.id);
 
     let events = await historyEvents();

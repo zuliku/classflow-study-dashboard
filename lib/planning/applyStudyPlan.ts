@@ -1,8 +1,13 @@
 /**
- * Study Plan Apply Domain（Task 4B）：
+ * Study Plan Apply Domain（Task 4B / Task 5 Part E-F）：
  * Proposal → User Confirm 之后的 Atomic Apply 安全层。纯函数 + Store Batch Action，无 React、无 AI。
  * Preflight 基于调用时最新 Store（Confirm 后必须用 useAppStore.getState() 重新校验）；
  * 任何一项不满足 → 整个 Apply 失败（All-or-None），不部分执行。
+ *
+ * Task 5：StudyBlock ↔ Course 从 Hard Conflict 改为 SOFT OVERLAP——
+ * - 课程重叠不再使 Preflight 失败，而是收集为 courseOverlaps
+ * - 真正的写入需要显式 allowCourseOverlap（Kiro 侧先过 Approval Gate；人工路径不受限）
+ * - StudyBlock ↔ StudyBlock / 考试活动 / 输入格式 仍是硬失败
  */
 
 import { AppState } from "@/store/useAppStore";
@@ -25,6 +30,16 @@ export interface StudyPlanApplyInput {
   blocks: StudyPlanApplyBlockInput[];
 }
 
+/** 单 Block 与课程的软重叠信息（Kiro Approval Gate 展示用） */
+export interface CourseOverlapInfo {
+  blockIndex: number;
+  title: string;
+  date: string;
+  startTime: string;
+  endTime: string;
+  courseName: string;
+}
+
 export type StudyPlanApplyFailureCode = "STALE_PROPOSAL" | "CONFLICT" | "INVALID_INPUT";
 
 export interface StudyPlanApplyFailure {
@@ -34,11 +49,14 @@ export interface StudyPlanApplyFailure {
   details?: { blockIndex?: number; reason?: string };
 }
 
-export type StudyPlanApplyResult =
-  | { ok: true; created: StudyBlock[] }
+export type StudyPlanPreflightResult =
+  | { ok: true; courseOverlaps: CourseOverlapInfo[] }
   | StudyPlanApplyFailure;
 
-export type StudyPlanPreflightResult = { ok: true } | StudyPlanApplyFailure;
+export type StudyPlanApplyResult =
+  | { ok: true; state: "created"; created: StudyBlock[] }
+  | { ok: true; state: "needs-approval"; courseOverlaps: CourseOverlapInfo[] }
+  | StudyPlanApplyFailure;
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -58,10 +76,10 @@ function overlaps(aStart: number, aEnd: number, bStart: number, bEnd: number): b
  * 2. 每个 assignmentId 必须仍存在
  * 3. 任务不得是 submitted / completed（Proposal 视为 stale）
  * 4. 有 DDL 的任务：Block 必须完整结束于 Deadline 之前
- * 5. 课程冲突：按 Block 自身所在日期计算 semester week（不用 UI 当前浏览周）
- * 6. 固定事件冲突：带时间的 Exam/Activity；All-day 整天 blocked；DDL 不是 busy
+ * 5. 课程重叠：soft（收集到 courseOverlaps，不失败；按 Block 自身日期计算 semester week）
+ * 6. 固定事件冲突：带时间的 Exam/Activity；All-day 整天 blocked；DDL 不是 busy（仍为硬失败）
  * 7. 与最新 studyBlocks 重复（同 assignmentId+date+start+end）→ stale
- * 8. 与最新 studyBlocks 重叠
+ * 8. 与最新 studyBlocks 重叠（硬失败）
  * 9. Proposed Blocks 彼此不重叠（projected set 逐步检查）
  */
 export function preflightStudyPlan(input: StudyPlanApplyInput, state: AppState): StudyPlanPreflightResult {
@@ -71,6 +89,7 @@ export function preflightStudyPlan(input: StudyPlanApplyInput, state: AppState):
   }
 
   const projected: { date: string; start: number; end: number }[] = [];
+  const courseOverlaps: CourseOverlapInfo[] = [];
 
   for (let i = 0; i < blocks.length; i++) {
     const b = blocks[i];
@@ -115,8 +134,12 @@ export function preflightStudyPlan(input: StudyPlanApplyInput, state: AppState):
       }
     }
 
-    // 5. 课程冲突：按 Block 自身日期计算 semester week（重要：不使用 UI 当前浏览周）
-    const week = getSemesterWeek(b.date, state.semester);
+    // 5. 课程重叠：SOFT（Task 5）。按 Block 自身日期计算 semester week（重要：不使用 UI 当前浏览周）；
+    //    周次越界时 clamp 到 [1, totalWeeks]，避免「双周」规则在周 0 误判
+    const week = Math.min(
+      Math.max(getSemesterWeek(b.date, state.semester), 1),
+      state.semester.totalWeeks
+    );
     const dow = new Date(`${b.date}T00:00:00`).getDay() || 7;
     for (const sch of state.schedules) {
       if (sch.dayOfWeek !== dow) continue;
@@ -125,11 +148,18 @@ export function preflightStudyPlan(input: StudyPlanApplyInput, state: AppState):
       const se = timeToMinutes(sch.endTime);
       if (ss === null || se === null) continue;
       if (overlaps(s, e, ss, se)) {
-        return fail("CONFLICT", "计划与当前课程时间冲突，未应用任何安排。", "course_conflict");
+        courseOverlaps.push({
+          blockIndex: i,
+          title: b.title,
+          date: b.date,
+          startTime: b.startTime,
+          endTime: b.endTime,
+          courseName: state.courses.find((c) => c.id === sch.courseId)?.name ?? "未知课程",
+        });
       }
     }
 
-    // 6. 固定事件冲突（Exam / Activity interval；All-day 整天 blocked；DDL 不是 busy）
+    // 6. 固定事件冲突（Exam / Activity interval；All-day 整天 blocked；DDL 不是 busy）——仍为硬失败
     for (const m of state.calendarMarks) {
       if (m.date !== b.date) continue;
       if (m.type === "course" || m.type === "ddl") continue;
@@ -157,7 +187,7 @@ export function preflightStudyPlan(input: StudyPlanApplyInput, state: AppState):
       }
     }
 
-    // 8. 与最新 StudyBlock 冲突（Proposal 生成后用户可能手动新增）
+    // 8. 与最新 StudyBlock 冲突（Proposal 生成后用户可能手动新增）——仍为硬失败
     for (const x of state.studyBlocks) {
       if (x.date !== b.date) continue;
       const xs = timeToMinutes(x.startTime);
@@ -178,16 +208,27 @@ export function preflightStudyPlan(input: StudyPlanApplyInput, state: AppState):
     projected.push({ date: b.date, start: s, end: e });
   }
 
-  return { ok: true };
+  return { ok: true, courseOverlaps };
 }
 
 /**
  * Atomic Apply：先对最新 Store Preflight，全部通过后单次 Batch 创建（source="kiro"）。
- * 任何失败：0 mutation。
+ * 任何硬失败：0 mutation。
+ * Task 5 Approval Gate：存在课程重叠且未显式 allowCourseOverlap → 不写入，
+ * 返回 needsApproval（Kiro UI 展示确认 Dialog）；确认后以 allowCourseOverlap=true 重新提交。
+ * 该 Gate 是 deterministic mutation boundary——即使模型忘记提醒，系统也不会静默写入。
  */
-export function applyStudyPlan(input: StudyPlanApplyInput, state: AppState): StudyPlanApplyResult {
+export function applyStudyPlan(
+  input: StudyPlanApplyInput,
+  state: AppState,
+  options?: { allowCourseOverlap?: boolean }
+): StudyPlanApplyResult {
   const preflight = preflightStudyPlan(input, state);
   if (!preflight.ok) return preflight;
+
+  if (preflight.courseOverlaps.length > 0 && options?.allowCourseOverlap !== true) {
+    return { ok: true, state: "needs-approval", courseOverlaps: preflight.courseOverlaps };
+  }
 
   const created = state.addStudyBlocksBatch(
     input.blocks.map((b) => ({
@@ -202,7 +243,7 @@ export function applyStudyPlan(input: StudyPlanApplyInput, state: AppState): Stu
     // 用户确认并不改变 origin：Apply 仍是 Kiro-generated 计划（History event.source=kiro）
     { source: "kiro" }
   );
-  return { ok: true, created };
+  return { ok: true, state: "created" as const, created };
 }
 
 /**

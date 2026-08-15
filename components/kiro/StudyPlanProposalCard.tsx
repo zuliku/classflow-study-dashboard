@@ -13,10 +13,18 @@ import {
   createStudyPlanProposalKey,
   preflightStudyPlan,
   StudyPlanApplyBlockInput,
+  CourseOverlapInfo,
 } from "@/lib/planning/applyStudyPlan";
+import { Dialog } from "@/components/ui/Dialog";
+import { Button } from "@/components/ui/Button";
 import { getSemesterWeek } from "@/lib/semester";
 
 type ApplyState = "idle" | "applying" | "applied" | "stale" | "revoked";
+
+/** Task 5：Kiro batch 课程重叠确认（ephemeral UI transaction，不持久化；一次 batch 只问一次） */
+interface PendingCourseOverlapApproval {
+  overlaps: CourseOverlapInfo[];
+}
 
 /**
  * Kiro Study Plan Proposal Card（事实 UI）：渲染 propose_study_plan 的确定性结果。
@@ -27,6 +35,7 @@ type ApplyState = "idle" | "applying" | "applied" | "stale" | "revoked";
 export function StudyPlanProposalCard({ proposals }: { proposals: StudyPlanProposal[] }) {
   const [dismissed, setDismissed] = useState(false);
   const [applyState, setApplyState] = useState<ApplyState>("idle");
+  const [pendingApproval, setPendingApproval] = useState<PendingCourseOverlapApproval | null>(null);
   const createdIdsRef = useRef<string[]>([]);
   const { planningPreview, setPlanningPreview } = useKiroSession();
   const setActiveTab = useAppStore((s) => s.setActiveTab);
@@ -97,12 +106,19 @@ export function StudyPlanProposalCard({ proposals }: { proposals: StudyPlanPropo
     setPlanningPreview(null);
   };
 
-  /** 执行 Apply（Confirm 回调内读取最新 Store 再 Preflight + 提交） */
-  const runApply = () => {
+  /** 执行 Apply（Confirm 回调内读取最新 Store 再 Preflight + 提交）。
+   *  Task 5 Approval Gate：课程重叠时未显式 allowCourseOverlap → 不写入，进入确认 Dialog；
+   *  确认后以 allowCourseOverlap=true 重新提交（同一 batch 只问一次）。 */
+  const runApply = (options?: { allowCourseOverlap?: boolean }) => {
     const freshState = useAppStore.getState();
-    const result = applyStudyPlan({ blocks: applyBlocks }, freshState);
+    const result = applyStudyPlan({ blocks: applyBlocks }, freshState, options);
     if (!result.ok) {
       failToStale();
+      return;
+    }
+    if (result.state === "needs-approval") {
+      setPendingApproval({ overlaps: result.courseOverlaps });
+      setApplyState("idle");
       return;
     }
     createdIdsRef.current = result.created.map((b) => b.id);
@@ -124,6 +140,13 @@ export function StudyPlanProposalCard({ proposals }: { proposals: StudyPlanPropo
     const preflight = preflightStudyPlan({ blocks: applyBlocks }, state);
     if (!preflight.ok) {
       failToStale();
+      return;
+    }
+
+    // 课程重叠：跳过通用确认，直接进入「仍然安排」Approval Gate（batch 级，只问一次）
+    if (preflight.courseOverlaps.length > 0) {
+      setPendingApproval({ overlaps: preflight.courseOverlaps });
+      setApplyState("idle");
       return;
     }
 
@@ -153,7 +176,7 @@ export function StudyPlanProposalCard({ proposals }: { proposals: StudyPlanPropo
         </div>
       ),
       confirmLabel: "应用计划",
-      onConfirm: runApply,
+      onConfirm: () => runApply(),
       onCancel: () => setApplyState("idle"),
     });
   };
@@ -348,6 +371,60 @@ export function StudyPlanProposalCard({ proposals }: { proposals: StudyPlanPropo
         {renderStatus()}
         {renderActions()}
       </div>
+
+      {/* Task 5 Approval Gate：Kiro batch 与课程重叠 → 写入前必须确认一次（batch 级、all-or-nothing） */}
+      {pendingApproval && (
+        <Dialog
+          open
+          onOpenChange={(next) => {
+            if (!next) setPendingApproval(null);
+          }}
+          overlayId="kiro-course-overlap-approval"
+          stackZ={60}
+          aria-label="任务与课程时间重叠"
+          className="max-w-md"
+        >
+          <div className="p-5 space-y-3">
+            <h3 className="text-base font-bold text-charcoal">任务与课程时间重叠</h3>
+            <p className="text-xs leading-relaxed text-satin-grey">
+              Kiro 的这次安排中有 {pendingApproval.overlaps.length} 项会占用上课时间。请确认是否继续。
+            </p>
+            <div className="rounded-xl border border-line bg-[#F7F5F5] divide-y divide-line-soft">
+              {pendingApproval.overlaps.slice(0, 3).map((o, i) => (
+                <div key={i} className="px-3 py-2.5 space-y-0.5">
+                  <p className="text-xs font-bold text-charcoal">{o.title}</p>
+                  <p className="text-[11px] text-satin-grey">
+                    {format(parseISO(o.date), "M月d日")} {o.startTime}–{o.endTime}
+                  </p>
+                  <p className="text-[11px] font-semibold text-[#936E4C]">
+                    与《{o.courseName}》重叠
+                  </p>
+                </div>
+              ))}
+              {pendingApproval.overlaps.length > 3 && (
+                <p className="px-3 py-2 text-[11px] font-semibold text-sandrift">
+                  还有 {pendingApproval.overlaps.length - 3} 项课程重叠
+                </p>
+              )}
+            </div>
+            <div className="flex justify-end gap-2 pt-1">
+              <Button variant="secondary" size="sm" onClick={() => setPendingApproval(null)}>
+                返回调整
+              </Button>
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={() => {
+                  setPendingApproval(null);
+                  runApply({ allowCourseOverlap: true });
+                }}
+              >
+                仍然安排
+              </Button>
+            </div>
+          </div>
+        </Dialog>
+      )}
     </div>
   );
 }

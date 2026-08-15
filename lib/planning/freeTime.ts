@@ -26,6 +26,11 @@ export interface FreeTimeQuery {
   /** 单天截止时刻覆盖（如 Deadline 当天：最多到 Deadline 时刻；key = "YYYY-MM-DD"） */
   dayCapMinutesByDate?: Record<string, number>;
   minimumSlotMinutes?: number;
+  /**
+   * Task 5：true 时课程时间不再视为 busy（仍排除 StudyBlock / 考试活动）。
+   * 用于 Planner Pass 2（课程时间 = soft constraint，仅在空闲不足时使用）。
+   */
+  includeCourseTime?: boolean;
 }
 
 export interface FreeTimeSlot {
@@ -104,8 +109,8 @@ export function findFreeTime(query: FreeTimeQuery): FreeTimeSlot[] {
 
     const busy: BusyInterval[] = [];
 
-    // 生效课程（当前周 + 星期匹配）
-    if (inSemester) {
+    // 生效课程（当前周 + 星期匹配）；includeCourseTime=true 时课程时间降为 soft（Task 5）
+    if (inSemester && !query.includeCourseTime) {
       for (const s of query.schedules) {
         if (s.dayOfWeek !== dow) continue;
         if (!isScheduleActive(s, week)) continue;
