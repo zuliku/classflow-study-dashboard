@@ -63,13 +63,12 @@ test("Assignment Drawer → Ask Kiro：关闭 Drawer、打开 Sidecar（entry co
   await page.locator("aside").first().getByRole("button", { name: "任务" }).click();
   const row = page.locator('[data-testid="assignment-list"] [data-assignment-id="a1"]');
   await row.click();
-  await expect(page.getByRole("button", { name: "Ask Kiro" }).last()).toBeVisible();
   await expect(page.getByText("计量经济学大作业").first()).toBeVisible();
 
-  // Ask Kiro：Drawer 关闭 + Sidecar 打开 + Context Strip 直接展示 entry token（无展开/收起）
-  // （footer 按钮在 DOM 最后，避免与 Workspace Header / 学习安排区 Ask Kiro 冲突）
-  await page.getByRole("button", { name: "Ask Kiro" }).last().click();
-  // Drawer 已关闭：其内部 Ask Kiro 按钮消失；仅剩 Workspace Header 入口
+  // Ask Kiro（Header More 菜单）：Drawer 关闭 + Sidecar 打开 + Context Strip 直接展示 entry token
+  await page.getByRole("button", { name: "更多操作" }).click();
+  await page.getByRole("menuitem", { name: "Ask Kiro" }).click();
+  // Drawer 已关闭：其内部 Ask Kiro 入口消失；仅剩 Workspace Header 入口
   await expect(page.getByRole("button", { name: "Ask Kiro" })).toHaveCount(1);
   const sidecar = page.getByTestId("kiro-sidecar");
   await expect(sidecar).toBeVisible();

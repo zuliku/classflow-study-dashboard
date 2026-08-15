@@ -254,10 +254,29 @@ function DeadlinePoint({
 }) {
   const { open, setOpen, anchorLeave, cancelClose } = useHoverBridge();
   const ref = useRef<HTMLDivElement | null>(null);
+  const setSelectedAssignmentId = useAppStore((s) => s.setSelectedAssignmentId);
+  const setSelectedCalendarMarkId = useAppStore((s) => s.setSelectedCalendarMarkId);
+  const assignments = useAppStore((s) => s.assignments);
   const color = item.priority ? PRIORITY_DOT[item.priority] : DEFAULT_DOT;
   const dotTop = top + track * 12;
   const weekDay = item.date ? new Date(`${item.date}T00:00:00`).getDay() : 0;
   const dayLabel = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"][weekDay];
+
+  // Click → Full Detail：Assignment DDL / linked DDL → Assignment 详情；
+  // 真正独立 ddl mark（sourceId 无对应 assignment）→ 轻量 DDL 详情。
+  // （Hover preview 保留为 glance；不在这里做编辑。）
+  const handleOpenDetail = () => {
+    if (item.sourceType === "assignment") {
+      const linked = assignments.some((a) => a.id === item.sourceId);
+      if (linked) {
+        setSelectedAssignmentId(item.sourceId);
+        return;
+      }
+      if (item.calendarMarkId) setSelectedCalendarMarkId(item.calendarMarkId);
+      return;
+    }
+    if (item.calendarMarkId) setSelectedCalendarMarkId(item.calendarMarkId);
+  };
 
   return (
     <>
@@ -266,8 +285,9 @@ function DeadlinePoint({
         role="button"
         tabIndex={0}
         aria-label={`${item.title}，${dayLabel} ${item.startTime ?? ""} 截止${item.priority ? `，${PRIORITY_LABEL[item.priority]}` : ""}`}
-        className="absolute z-10 outline-none"
+        className="absolute z-10 cursor-pointer outline-none"
         style={{ left: `${ratio * 100}%`, top: `${dotTop}px`, transform: "translateX(-50%)" }}
+        onClick={handleOpenDetail}
         onMouseEnter={() => {
           cancelClose();
           setOpen(true);
@@ -279,11 +299,12 @@ function DeadlinePoint({
         }}
         onBlur={anchorLeave}
       >
-        <span className="block w-[18px] h-[18px] -m-[5px] flex items-center justify-center cursor-pointer">
+        <span className="block w-[18px] h-[18px] -m-[5px] flex items-center justify-center">
           <span
             className={cn(
-              "block w-2 h-2 rounded-full transition-transform duration-[var(--motion-fast)]",
-              open && "scale-[1.15]"
+              "block w-2 h-2 rounded-full transition-[transform] duration-[var(--motion-snap)]",
+              open && "scale-[1.15]",
+              "active:scale-[.8]"
             )}
             style={{ backgroundColor: color }}
           />

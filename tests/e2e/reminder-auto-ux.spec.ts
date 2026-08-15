@@ -179,16 +179,17 @@ test("D8：编辑 auto → 转 custom；修改 global default 不影响它", asy
   });
   const panel = await openReminderCenter(page);
   await expect(panel.getByText("自动", { exact: true })).toHaveCount(1);
-  // 点击任务 → Assignment Drawer：默认提醒已开启 + auto row
+  // 点击任务 → Assignment Drawer：展开提醒区（默认 collapsed summary）→ 默认提醒已开启 + auto row
   await panel.getByText("编辑任务", { exact: false }).first().click();
-  await expect(page.getByText("默认提醒：已开启", { exact: true })).toBeVisible({ timeout: 8000 });
+  await page.getByTestId("reminder-disclosure-trigger").click();
+  await expect(page.getByTestId("assignment-reminder-section").getByText("默认提醒：已开启", { exact: true })).toBeVisible({ timeout: 8000 });
   await expect(page.getByText("自动", { exact: true })).toHaveCount(1);
   // 编辑 auto（picker 打开后，当前项「提前 1 天」再点一次 = 保存 → user-edit 语义：转 custom + opt-out）
   await page.getByRole("button", { name: /编辑提醒/, exact: false }).first().click();
   const picker = page.getByTestId("assignment-reminder-picker");
   await expect(picker).toBeVisible({ timeout: 5000 });
   await picker.getByRole("button", { name: /提前 1 天/, exact: false }).click();
-  await expect(page.getByText("默认提醒：已关闭", { exact: true })).toBeVisible();
+  await expect(page.getByTestId("assignment-reminder-section").getByText("默认提醒：已关闭", { exact: true })).toBeVisible();
   await expect(page.getByText("自动", { exact: true })).toHaveCount(0);
 
   // 修改 global default 1d -> 3d → 该 custom 时间不变、无新 auto
@@ -213,19 +214,21 @@ test("E：删除 auto → opt-out（Drawer 显示已关闭）→ 重新开启恢
   });
   const panel = await openReminderCenter(page);
   await expect(panel.getByText("自动", { exact: true })).toHaveCount(1);
-  // 点击任务 → Assignment Drawer
+  // 点击任务 → Assignment Drawer：展开提醒区 → 删除 auto（用户删除 → opt-out）
   await panel.getByText("开关任务", { exact: false }).first().click();
-  await expect(page.getByText("默认提醒：已开启", { exact: true })).toBeVisible({ timeout: 8000 });
+  await page.getByTestId("reminder-disclosure-trigger").click();
+  await expect(page.getByTestId("assignment-reminder-section").getByText("默认提醒：已开启", { exact: true })).toBeVisible({ timeout: 8000 });
   // Drawer 内删除 auto（用户删除 → opt-out）
   await page.getByRole("button", { name: /删除提醒/, exact: false }).first().click();
-  await expect(page.getByText("默认提醒：已关闭", { exact: true })).toBeVisible();
+  await expect(page.getByTestId("assignment-reminder-section").getByText("默认提醒：已关闭", { exact: true })).toBeVisible();
   await expect(page.getByText("自动", { exact: true })).toHaveCount(0);
   // 重新开启 → auto 恢复（Drawer 内 scheduled 列表回到 1 条 auto）
   await page.getByRole("button", { name: "重新开启默认提醒", exact: true }).click();
-  await expect(page.getByText("默认提醒：已开启", { exact: true })).toBeVisible();
+  await expect(page.getByTestId("assignment-reminder-section").getByText("默认提醒：已开启", { exact: true })).toBeVisible();
   await expect(page.getByText("自动", { exact: true })).toHaveCount(1);
-  // 关闭 Drawer → 打开 Center → auto 仍存在
+  // 关闭 Drawer → 打开 Center → auto 仍存在（先等 Drawer 完全卸载，避免 exit presence 期间按钮重名）
   await page.keyboard.press("Escape");
+  await expect(page.getByRole("dialog", { name: "任务详情" })).toHaveCount(0);
   await page.getByRole("button", { name: "提醒", exact: true }).click();
   const panel2 = page.getByTestId("reminder-center");
   await expect(panel2).toHaveAttribute("data-state", "open", { timeout: 8000 });
@@ -268,9 +271,10 @@ test("fix1 UI：custom absolute 与 auto 同实际时刻 → UI duplicate guard 
   });
   const panel = await openReminderCenter(page);
   await expect(panel.getByText("自动", { exact: true })).toHaveCount(1);
-  // 打开 Drawer → 自定义时间创建与 auto 相同 triggerAt 的 absolute
+  // 打开 Drawer → 展开提醒区 → 自定义时间创建与 auto 相同 triggerAt 的 absolute
   await panel.getByText("同点任务", { exact: false }).first().click();
-  await expect(page.getByText("默认提醒：已开启", { exact: true })).toBeVisible({ timeout: 8000 });
+  await page.getByTestId("reminder-disclosure-trigger").click();
+  await expect(page.getByTestId("assignment-reminder-section").getByText("默认提醒：已开启", { exact: true })).toBeVisible({ timeout: 8000 });
   const autoTrigger = await page.evaluate(() => {
     const d = JSON.parse(localStorage.getItem("classflow-storage-v2")!).state;
     const r = d.reminders.find((x: { source: string }) => x.source === "auto");
@@ -286,6 +290,7 @@ test("fix1 UI：custom absolute 与 auto 同实际时刻 → UI duplicate guard 
   await expect(picker.getByText("已经存在相同时间的提醒", { exact: true })).toBeVisible();
   // 关闭 Drawer → Center：仍只有 1 个 scheduled（auto），无重复通知
   await page.keyboard.press("Escape");
+  await expect(page.getByRole("dialog", { name: "任务详情" })).toHaveCount(0);
   await page.getByRole("button", { name: "提醒", exact: true }).click();
   const panel2 = page.getByTestId("reminder-center");
   await expect(panel2).toHaveAttribute("data-state", "open", { timeout: 8000 });

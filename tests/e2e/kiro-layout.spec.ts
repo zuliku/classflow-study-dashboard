@@ -100,10 +100,11 @@ test("建议互斥：Assignment Entry 时只显示 Context-aware 建议，EmptyS
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/");
 
-  // 任务 Drawer → Ask Kiro → Sidecar（assignment entry；footer 按钮在 DOM 最后）
+  // 任务 Drawer → More 菜单 Ask Kiro → Sidecar（assignment entry）
   await page.locator("aside").first().getByRole("button", { name: "任务" }).click();
   await page.locator('[data-testid="assignment-list"] [data-assignment-id="a1"]').click();
-  await page.getByRole("button", { name: "Ask Kiro" }).last().click();
+  await page.getByRole("button", { name: "更多操作" }).click();
+  await page.getByRole("menuitem", { name: "Ask Kiro" }).click();
 
   const sidecar = page.getByTestId("kiro-sidecar");
   await expect(sidecar).toBeVisible();

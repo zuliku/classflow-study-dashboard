@@ -223,6 +223,11 @@ button:disabled {
     animation: ux-fade var(--motion-fast) var(--ease-standard) both;
   }
 
+  /* 详情面板内容切换（Task A→B）：新内容进入（旧内容由组件先行淡出 ~60ms） */
+  .ux-detail-swap-in {
+    animation: ux-detail-in 100ms var(--ease-standard) both;
+  }
+
   /* 直接操作成功落位：非常轻的 settle（不放大的动画，仅 opacity 归位） */
   .ux-settle {
     animation: ux-settle-in 200ms var(--ease-standard) both;
@@ -290,6 +295,18 @@ button:disabled {
   }
   to {
     opacity: 1;
+  }
+}
+
+/* 详情面板内容切换进入（Task A→B；4px 上移 + 淡入，100ms） */
+@keyframes ux-detail-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
   }
 }
 

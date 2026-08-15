@@ -51,7 +51,7 @@ async function openTimeline(page: import("@playwright/test").Page) {
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/");
   await page.getByRole("button", { name: "时间表" }).first().click();
-  await expect(page.getByRole("heading", { name: /第 \d+ 周/ })).toBeVisible();
+  await expect(page.getByText(/第 \d+ 周/).first()).toBeVisible();
 }
 
 base("Floating Detail：Marker hover → Portal Popover（不压课程卡、不闪退）", async ({ page }) => {
@@ -97,11 +97,10 @@ base("Floating Detail：Interval hover → Popover；极短 Interval 为 16px ca
   await openTimeline(page);
 
   // Interval 默认无标题常驻
-  const lane = page.getByTestId("timeline-key-lane").first();
-  await expect(lane.getByText("概率论期中考试", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("概率论期中考试", { exact: true })).toHaveCount(0);
 
-  // Hover → Portal Popover
-  await lane.getByRole("button", { name: /概率论期中考试/ }).hover();
+  // Hover → Portal Popover（页面级定位：exam mark 在今天列，跨天运行不受 `.first()` 列限制）
+  await page.getByRole("button", { name: /概率论期中考试/ }).hover();
   const floating = page.getByTestId("floating-timeline-detail");
   await expect(floating).toBeVisible({ timeout: 3000 });
   await expect(floating.getByText("概率论期中考试", { exact: true })).toBeVisible();
@@ -110,14 +109,14 @@ base("Floating Detail：Interval hover → Popover；极短 Interval 为 16px ca
   await page.keyboard.press("Escape");
 
   // 极短 Interval（23:50-23:59）：真实宽度 < 16px → 16px capsule
-  await lane.getByRole("button", { name: /深夜极短活动/ }).hover();
+  await page.getByRole("button", { name: /深夜极短活动/ }).hover();
   const floating2 = page.getByTestId("floating-timeline-detail");
   await expect(floating2).toBeVisible({ timeout: 3000 });
   // Tooltip 仍显示真实时间（不因 capsule 变长）
   await expect(floating2.getByText(/23:50–23:59/)).toBeVisible();
   await page.keyboard.press("Escape");
 
-  const shortBar = lane.getByRole("button", { name: /深夜极短活动/ });
+  const shortBar = page.getByRole("button", { name: /深夜极短活动/ });
   const shortBox = await shortBar.boundingBox();
   expect(shortBox!.width).toBeGreaterThanOrEqual(14); // 16px 左右 capsule
   expect(shortBox!.width).toBeLessThan(40);

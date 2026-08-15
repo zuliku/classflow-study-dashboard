@@ -16,7 +16,7 @@ test("AssignmentDrawer：status/priority 切换 + subtask checkbox + 编辑入�
   const drawer = page.getByRole("dialog", { name: "任务详情" });
   await expect(drawer).toBeVisible();
 
-  // status / priority 为 UISelect，可切换
+  // status / priority 为 compact UISelect，可切换
   await drawer.getByRole("combobox", { name: "任务状态" }).click();
   await page.getByRole("option", { name: "进行中" }).first().click();
   await drawer.getByRole("combobox", { name: "优先级" }).click();
@@ -37,8 +37,10 @@ test("AssignmentDrawer：status/priority 切换 + subtask checkbox + 编辑入�
   await expect(editor.getByRole("heading", { name: "编辑任务" })).toBeVisible();
   await editor.getByRole("button", { name: "关闭" }).click();
 
-  // 完成（footer 主按钮）关闭 Drawer
-  await drawer.getByRole("button", { name: "完成" }).last().click();
+  // 主操作 标记完成 → 状态变为已完成（首屏 Primary Actions；关闭走关闭按钮）
+  await drawer.getByRole("button", { name: "标记完成" }).click();
+  await expect(drawer.getByRole("button", { name: "重新打开" })).toBeVisible();
+  await drawer.getByRole("button", { name: "关闭" }).click();
   await expect(drawer).toHaveCount(0);
 });
 

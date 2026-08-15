@@ -382,6 +382,9 @@ export interface AppState {
   setSelectedCourseId: (id: string | null) => void;
   selectedAssignmentId: string | null;
   setSelectedAssignmentId: (id: string | null) => void;
+  /** 独立 DDL CalendarMark 的轻量详情（Task/DDL Detail Panel：linked mark 仍走 Assignment 详情） */
+  selectedCalendarMarkId: string | null;
+  setSelectedCalendarMarkId: (id: string | null) => void;
   isSearchModalOpen: boolean;
   setSearchModalOpen: (open: boolean) => void;
   /** 设置中心 Modal：侧边栏 / 底部导航 / 命令面板统一入口 */
@@ -656,7 +659,18 @@ export const useAppStore = create<AppState>()(
       selectedCourseId: null,
       setSelectedCourseId: (id) => set({ selectedCourseId: id }),
       selectedAssignmentId: null,
-      setSelectedAssignmentId: (id) => set({ selectedAssignmentId: id }),
+      // Task/DDL Detail：Assignment 与独立 DDL mark 详情互斥（setter 内归一，任何入口都成立）
+      setSelectedAssignmentId: (id) =>
+        set((state) => ({
+          selectedAssignmentId: id,
+          selectedCalendarMarkId: id !== null ? null : state.selectedCalendarMarkId,
+        })),
+      selectedCalendarMarkId: null,
+      setSelectedCalendarMarkId: (id) =>
+        set((state) => ({
+          selectedCalendarMarkId: id,
+          selectedAssignmentId: id !== null ? null : state.selectedAssignmentId,
+        })),
 
       isSearchModalOpen: false,
       setSearchModalOpen: (open) => set({ isSearchModalOpen: open }),
@@ -768,6 +782,7 @@ export const useAppStore = create<AppState>()(
           preferences: DEFAULT_PREFERENCES,
           selectedCourseId: null,
           selectedAssignmentId: null,
+          selectedCalendarMarkId: null,
           selectedConflict: null,
           assignmentSelection: [],
           assignmentPeekId: null,
@@ -1586,7 +1601,11 @@ export const useAppStore = create<AppState>()(
           const reminders = state.reminders.filter(
             (r) => !(r.targetType === "calendarMark" && r.targetId === id)
           );
-          return { calendarMarks, reminders };
+          return {
+            calendarMarks,
+            reminders,
+            selectedCalendarMarkId: state.selectedCalendarMarkId === id ? null : state.selectedCalendarMarkId,
+          };
         }),
 
       // ---- Reminder Actions（Task 7G-A1）----
