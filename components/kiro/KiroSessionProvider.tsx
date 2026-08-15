@@ -144,8 +144,18 @@ export interface StudyRebalancePreview {
 }
 
 /** Runtime：随 Chat 高频变化（主要消费者：Surface / Composer / Conversation） */
+/** Session Chat：useKiroChat + Conversation lifecycle send/stop + V4.6 preflight claim 语义 */
+type KiroSessionChat = ReturnType<typeof useKiroChat> & {
+  send: (text: string) => Promise<boolean>;
+  stop: () => void;
+  /** V4.6：Send 已 claim 但 SDK 尚未接管（preflight 窗口；Send 禁用 + 「正在准备」，Stop 不出现） */
+  preparingSend: boolean;
+  /** V4.6：Turn Intent 已同步冻结（preparing 且已冻结 → 下一 Turn preferences 可编辑） */
+  turnIntentFrozen: boolean;
+};
+
 interface KiroRuntimeValue {
-  chat: ReturnType<typeof useKiroChat>;
+  chat: KiroSessionChat;
   attachments: ReturnType<typeof useKiroAttachments>;
   activeRefs: KiroContextRef[];
   removeContext: (key: string) => void;
@@ -290,6 +300,15 @@ export function KiroSessionProvider({ children }: { children: React.ReactNode })
     // Projects V1.2：Project Instructions 在 Send boundary 冻结（随 Conversation lifecycle 切换）
     projectId: conversationProjectId,
   });
+  // V4.6：SDK 真正接管（turnInFlight 变 true）后释放 claim——preparingSend 只在
+  // 「已 claim 但 SDK 未接管」的 preflight 窗口为 true；turn 结束后不能再让它卡住 UI。
+  const prevTurnInFlightRef = useRef(false);
+  React.useEffect(() => {
+    if (chat.turnInFlight && !prevTurnInFlightRef.current && sendClaimed) {
+      setSendClaimed(false);
+    }
+    prevTurnInFlightRef.current = chat.turnInFlight;
+  }, [chat.turnInFlight, sendClaimed]);
 
   const aiProvider = useAISettingsStore((s) => s.provider);
   const aiModel = useAISettingsStore((s) => s.model);
@@ -921,14 +940,17 @@ export function KiroSessionProvider({ children }: { children: React.ReactNode })
 
   // Task 7A：唯一 sessionChat —— send 绑定 Conversation lifecycle（History 持久化入口）。
   // Runtime / Session 两个 Context 必须暴露同一对象，禁止 runtime.raw send 与 session.sendWithTurn 分叉。
+  // V4.6：不再把 sendClaimed 伪装成 streaming / submitted（那是「发送所有权 / preflight claim」，
+  // 不是「模型正在 streaming」）——preparingSend 显式表达 preflight 窗口，UI 据此禁用 Send /
+  // 显示「正在准备」；Stop 在 preflight 不出现（还没有可停止的 SDK/model request）。
   const sessionChat = useMemo(
     () => ({
       ...chat,
       send: sendWithTurn,
       stop: stopWithTurnRelease,
-      // 同步 claim 覆盖 SDK status 尚未更新的首帧，所有入口立即进入同一 turn lock。
-      streaming: chat.streaming || sendClaimed,
-      status: sendClaimed && chat.status === "ready" ? ("submitted" as const) : chat.status,
+      // preparingSend：sendClaimed 但 SDK 尚未接管（真实 streaming/status 原样透传）
+      preparingSend: sendClaimed && !chat.turnInFlight,
+      turnIntentFrozen: chat.turnIntentFrozen,
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [chat, sendWithTurn, sendClaimed, stopWithTurnRelease]

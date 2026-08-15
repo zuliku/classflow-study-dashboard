@@ -5,7 +5,7 @@ import { Check, Loader2, AlertCircle, ChevronDown, ListTree } from "lucide-react
 import { KiroTurnPhase, KiroWorklogBlock } from "@/lib/ai/presentation/turnPresentation";
 import { bumpStreamPerf, bumpStreamPerfKeyed } from "@/lib/ai/perf/streamPerf";
 import { hasMeaningfulKiroToolDetails } from "@/lib/ai/presentation/toolActivityDetails";
-import { KiroLogoIcon } from "@/components/kiro/KiroLogo";
+import { KiroAssistantShell } from "@/components/kiro/KiroAssistantShell";
 import { DisclosureRegion } from "@/components/ui/DisclosureRegion";
 import { cn } from "@/lib/utils";
 
@@ -233,23 +233,22 @@ function worklogPropsEqual(
 /**
  * 首 token 前占位：Kiro Logo（glow）+ 「正在准备」。
  * Assistant 任一可见 part（content / worklog / action）出现后自动消失，绝不与消息 Logo 同时出现。
+ * V4.6：与 KiroMessage 共用 KiroAssistantShell（geometry 一致），无 animate-enter（transient
+ * system state 不需要 200ms slide/fade——真实事件到达即展示）。
  */
 export function KiroPendingIndicator() {
   return (
-    <div
-      data-testid="kiro-pending"
-      role="status"
-      aria-live="polite"
-      aria-atomic="true"
-      className="flex items-center gap-3 animate-enter"
-    >
-      <span className="w-5 h-5 flex items-center justify-center shrink-0" aria-hidden="true">
-        <KiroLogoIcon className="w-5 h-5 kiro-agent-logo-active kiro-agent-logo-glow" />
-      </span>
-      <div className="flex items-center gap-1.5">
+    <KiroAssistantShell>
+      <div
+        data-testid="kiro-pending"
+        role="status"
+        aria-live="polite"
+        aria-atomic="true"
+        className="flex items-center gap-1.5"
+      >
         <span className="text-xs font-medium text-charcoal">正在准备</span>
         <Loader2 className="w-3.5 h-3.5 animate-spin text-sandrift shrink-0" aria-hidden="true" />
       </div>
-    </div>
+    </KiroAssistantShell>
   );
 }

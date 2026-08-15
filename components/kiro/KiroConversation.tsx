@@ -3,6 +3,8 @@
 import React, { useEffect, useRef, useState } from "react";
 import { KiroMessage, KiroUserMessage } from "@/components/kiro/KiroMessage";
 import { KiroPendingIndicator } from "@/components/kiro/KiroWorklog";
+import { KiroAssistantShell } from "@/components/kiro/KiroAssistantShell";
+import { Loader2, RotateCcw, Settings, ChevronDown } from "lucide-react";
 import { KiroChatMessageView } from "@/hooks/useKiroChat";
 import { KiroSourceMeta } from "@/lib/ai/citations/types";
 import { useKiroSessionMeta } from "@/components/kiro/KiroSessionProvider";
@@ -15,7 +17,6 @@ import { StudyRebalanceProposalCard } from "@/components/kiro/StudyRebalanceProp
 import { TaskBreakdownProposalCard } from "@/components/kiro/TaskBreakdownProposalCard";
 import { actionSummaryText } from "@/lib/ai/share";
 import { cn } from "@/lib/utils";
-import { RotateCcw, Settings, ChevronDown } from "lucide-react";
 import { useEnterOnAdd } from "@/lib/useEnterOnAdd";
 import { bumpStreamPerf } from "@/lib/ai/perf/streamPerf";
 
@@ -68,7 +69,8 @@ export function KiroConversation({
     [messages]
   );
   const conversationScrollKey = currentConversationId ?? messages[0]?.id ?? "new";
-  const enteringMessageIds = useEnterOnAdd(messageIds);
+  // V4.6：live transcript 不使用 message-level entrance 动画（真实事件到达即展示）——
+  // enteringMessageIds 已移除；useEnterOnAdd 仍被 KiroActionCard 使用（其它 UI 列表保留）。
 
   // 最后一条 assistant 消息：其操作栏必须等整个 Turn 结束（turnInFlight false）才显示；
   // 历史 assistant 消息不受当前 Turn 影响
@@ -169,17 +171,11 @@ export function KiroConversation({
     setShowScrollBtn(false);
   };
 
-  // 首 token 前占位：turn in-flight 且当前没有任何可见 Assistant（content / worklog / action / computer task）
+  // 首 token 前占位：turn in-flight 且当前没有任何可见 Assistant（content / worklog / action / computer task）。
+  // V4.6：空 assistant message 存在时由同一 message id 的 row 承担 pending shell（outer 不 remount）；
+  // fallback Pending 只在「尚无 assistant message」时显示（避免双 Logo）。
   const lastMsg = messages[messages.length - 1];
-  const lastMsgIsEmptyAssistant =
-    lastMsg?.role === "assistant" &&
-    !lastMsg.content &&
-    !(lastMsg.assistantTurn?.worklog.length ?? 0) &&
-    !lastMsg.actions?.length &&
-    !lastMsg.historyActions?.length &&
-    !lastMsg.computerTask &&
-    !lastMsg.historyComputerTask;
-  const showPending = turnInFlight && (lastMsg?.role !== "assistant" || lastMsgIsEmptyAssistant);
+  const showPending = turnInFlight && lastMsg?.role !== "assistant";
 
   return (
     // Outer Viewport Wrapper：负责浮层定位；Scroll Container 独立承担滚动（Task 6B-A）
@@ -215,7 +211,6 @@ export function KiroConversation({
                 onEditUserMessage={onEditUserMessage}
                 onReviewComputerTask={onReviewComputerTask}
                 onUndoComputerTask={onUndoComputerTask}
-                entering={enteringMessageIds.has(m.id)}
               />
             ))}
 
@@ -282,7 +277,6 @@ const KiroConversationRow = React.memo(function KiroConversationRow({
   onEditUserMessage,
   onReviewComputerTask,
   onUndoComputerTask,
-  entering,
 }: {
   view: KiroChatMessageView;
   actionsReady: boolean;
@@ -292,7 +286,6 @@ const KiroConversationRow = React.memo(function KiroConversationRow({
   onEditUserMessage: (messageId: string, text: string) => Promise<boolean>;
   onReviewComputerTask?: (taskId: string) => void;
   onUndoComputerTask?: (taskId: string) => void;
-  entering: boolean;
 }) {
   // Hooks 必须在 assistant 占位由空变为可见内容前后保持同一顺序。
   const actionSummaries = React.useMemo(
@@ -310,7 +303,8 @@ const KiroConversationRow = React.memo(function KiroConversationRow({
 
   if (view.role === "user") {
     return (
-      <div className={cn(entering && "animate-enter")}>
+      // V4.6：live transcript 不使用 message-level animate-enter（事件到达即展示）
+      <div>
         <KiroUserMessage
           messageId={view.id}
           content={view.content}
@@ -322,8 +316,9 @@ const KiroConversationRow = React.memo(function KiroConversationRow({
       </div>
     );
   }
-  // 空 assistant（pre-response 占位）：Pending 指示器承担 Logo；
-  // 只要存在任一可见内容（final answer / worklog / action / computer task）就渲染消息行
+  // 空 assistant（pre-response 占位）：同一 message id 的 shell 先显示「正在准备」，
+  // 之后 worklog/content 到达只替换 body——outer shell（KiroMark + 左侧 column）不 remount。
+  // 只要存在任一可见内容（final answer / worklog / action / computer task）就渲染消息行。
   const hasWorklog = (view.assistantTurn?.worklog.length ?? 0) > 0;
   const hasComputerTask = Boolean(view.computerTask || view.historyComputerTask);
   if (
@@ -333,11 +328,19 @@ const KiroConversationRow = React.memo(function KiroConversationRow({
     !view.historyActions?.length &&
     !hasComputerTask
   ) {
-    return null;
+    return (
+      <KiroAssistantShell testid="kiro-assistant-pending">
+        <div className="flex items-center gap-1.5">
+          <span className="text-xs font-medium text-charcoal">正在准备</span>
+          <Loader2 className="w-3.5 h-3.5 animate-spin text-sandrift shrink-0" aria-hidden="true" />
+        </div>
+      </KiroAssistantShell>
+    );
   }
 
   return (
-    <div className={cn(entering && "animate-enter")}>
+    // V4.6：live transcript 不使用 message-level animate-enter（事件到达即展示）
+    <div>
       <KiroMessage
         content={view.content}
         streaming={view.streaming}

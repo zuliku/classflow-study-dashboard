@@ -111,6 +111,8 @@ async function injectPerf(page: Page) {
       toolVisibleTs: 0,
       firstAnswerTs: 0,
     };
+    // V4.6：真实 tool 时间点（addToolOutput 链路）记录
+    (w as unknown as Record<string, unknown>).__kiroTurnPerf = [];
     try {
       new PerformanceObserver((list) => {
         for (const entry of list.getEntries()) {
@@ -863,30 +865,46 @@ test("PERF Frame: first-frame + tool-chain 分解（V4.5 只 profile 不优化�
   const perf = await readPerf(page, sendClickTs);
   const reqs = sse.requests;
   const offset = await page.evaluate(() => Date.now() - performance.now());
-  const toolVisibleDate = perf.toolVisibleTs;
   const firstAnswerDate = perf.firstAnswerTs;
+  // V4.6：真实 tool 时间点（__kiroTurnPerf；不记录 tool 内容）
+  const turnPerfEntries = await page.evaluate(() => {
+    const arr = (window as unknown as { __kiroTurnPerf?: { name: string; at: number }[] }).__kiroTurnPerf;
+    return arr ? arr.map((e) => ({ ...e, at: e.at + (Date.now() - performance.now()) })) : [];
+  });
+  const firstToolReceived = turnPerfEntries.find((e) => e.name === "toolCallReceived");
+  const firstToolComplete = turnPerfEntries.find((e) => e.name === "toolExecutionComplete");
+  const firstAddToolOutput = turnPerfEntries.find((e) => e.name === "addToolOutput");
+  const lastContinuationReq = reqs[reqs.length - 1];
   const breakdown = {
     // sendPreflightMs：Send click → 第一个请求到达（client preflight / SDK send）
     sendPreflightMs: reqs[0] ? reqs[0].arrivalTs - sendClickTs : -1,
     // networkTTFTMs：请求到达 → 第一个 SSE part 写出（mock 侧 ≈ 0）
     networkTTFTMs: reqs[0] ? reqs[0].firstWriteTs - reqs[0].arrivalTs : -1,
     // firstPartToPaintMs：第一个 SSE part → 首个可见 DOM 更新（Tool Row）
-    firstPartToPaintMs: reqs[0] ? toolVisibleDate - reqs[0].firstWriteTs : -1,
-    // toolOutputToContinuationRequestMs：Tool Row 可见 → continuation 请求到达
-    //（= client 工具执行 + addToolOutput + SDK auto-continue send）
-    toolOutputToContinuationRequestMs: reqs[1] ? reqs[1].arrivalTs - toolVisibleDate : -1,
+    firstPartToPaintMs: reqs[0] ? perf.toolVisibleTs - reqs[0].firstWriteTs : -1,
+    // toolExecutionMs：Tool Call received → 执行完成（真实 Tool 执行时间）
+    toolExecutionMs:
+      firstToolReceived && firstToolComplete ? firstToolComplete.at - firstToolReceived.at : -1,
+    // addToolOutput → continuation HTTP request arrival（真实 addToolOutput 时间点）
+    addToolOutputToContinuationRequestMs:
+      firstAddToolOutput && lastContinuationReq ? lastContinuationReq.arrivalTs - firstAddToolOutput.at : -1,
     // continuationNetworkWaitMs：continuation 到达 → 首个 SSE part 写出
-    continuationNetworkWaitMs: reqs[1] ? reqs[1].firstWriteTs - reqs[1].arrivalTs : -1,
+    continuationNetworkWaitMs: lastContinuationReq
+      ? lastContinuationReq.firstWriteTs - lastContinuationReq.arrivalTs
+      : -1,
     // continuationPartToPaintMs：continuation 首 part → 首个 Final Answer 可见
-    continuationPartToPaintMs: reqs[1] ? firstAnswerDate - reqs[1].firstWriteTs : -1,
+    continuationPartToPaintMs: lastContinuationReq
+      ? firstAnswerDate - lastContinuationReq.firstWriteTs
+      : -1,
     requests: reqs.length,
   };
-  console.log(`[PERF][FRAME] sendClick=${sendClickTs} toolVisible=${Math.round(toolVisibleDate)} ` + JSON.stringify(breakdown));
+  console.log(`[PERF][FRAME] sendClick=${sendClickTs} ` + JSON.stringify(breakdown));
   await sse.close();
   // 只 profile：验证链路完整（不做延迟断言；时间域换算允许 ±50ms 抖动）
   expect(breakdown.requests).toBeGreaterThanOrEqual(2);
   expect(breakdown.sendPreflightMs).toBeGreaterThanOrEqual(0);
-  expect(breakdown.toolOutputToContinuationRequestMs).toBeGreaterThan(-50);
+  expect(breakdown.toolExecutionMs).toBeGreaterThanOrEqual(0);
+  expect(breakdown.addToolOutputToContinuationRequestMs).toBeGreaterThan(-50);
 });
 
 test("PERF Throttle: runtime client throttle constant 与预期一致（V4.4.1 A/B 校验）", async ({ page }) => {

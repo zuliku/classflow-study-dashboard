@@ -3,6 +3,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { DefaultChatTransport, lastAssistantMessageIsCompleteWithToolCalls } from "ai";
 import { useChat, UIMessage } from "@ai-sdk/react";
+import { AIProviderId, AICustomConfig } from "@/lib/ai/providers/types";
+import { KiroReasoningEffort } from "@/lib/ai/reasoning/types";
+import { KiroResponsePreference } from "@/lib/ai/responsePreference";
+import { KiroBaseContext } from "@/lib/ai/context/types";
+import { KiroPromptContextRef } from "@/lib/ai/context/contextSelection";
 import { useAppStore } from "@/store/useAppStore";
 import { useAISettingsStore } from "@/store/useAISettingsStore";
 import { useKiroComputerStore } from "@/store/useKiroComputerStore";
@@ -34,7 +39,10 @@ import { appendComputerAuditEntry } from "@/lib/ai/computer/audit";
 import { relocateFile } from "@/lib/ai/computer/filesystem/relocate";
 import { updateArtifactLocation } from "@/lib/ai/computer/artifacts/service";
 import { undoDocumentRevisionRuntime } from "@/lib/ai/computer/documentRevisionUndo";
-import { loadWorkspaceInstructionsForTurn } from "@/lib/ai/computer/knowledge/instructions";
+import {
+  loadWorkspaceInstructionsForTurn,
+  KiroWorkspaceInstructionsContext,
+} from "@/lib/ai/computer/knowledge/instructions";
 import { markWorkspaceKnowledgeDirty } from "@/lib/ai/computer/knowledge/service";
 import { useKiroComputerRuntimeStore } from "@/store/useKiroComputerRuntimeStore";
 import { useKiroPreferencesStore } from "@/store/useKiroPreferencesStore";
@@ -49,6 +57,7 @@ import { normalizeAIError, AIError } from "@/lib/ai/errors";
 import { buildBaseContext } from "@/lib/ai/context/buildBaseContext";
 import { resolveEffectiveReasoningEffort } from "@/lib/ai/reasoning/effective";
 import { resolveContextRefs, refsForPrompt, dedupeContextRefs } from "@/lib/ai/context/contextSelection";
+import { turnPerf, turnPerfPreflightDelay, turnPerfPreflightFail, sleepTurnPerf } from "@/lib/ai/perf/turnPerf";
 import { KiroContextRef } from "@/lib/ai/context/types";
 import { executeKiroReadTool, ReadToolResult } from "@/lib/ai/tools/read/executor";
 import { executeReadMaterial } from "@/lib/ai/tools/read/material";
@@ -68,7 +77,9 @@ import { getKiroProject } from "@/lib/ai/projects/db";
 import { listProjectFiles } from "@/lib/ai/projects/files/db";
 import { toProjectTurnContext } from "@/lib/ai/projects/prompt";
 import { executeReadProjectFile } from "@/lib/ai/tools/read/projectFile";
-import { projectFileSourceId } from "@/lib/ai/citations/sources";
+import { executeReadProjectVisual } from "@/lib/ai/tools/read/projectVisual";
+import { createVisionTurnRuntimeBudget, VisionTurnRuntimeLedger } from "@/lib/ai/attachments/visionTurnRuntimeBudget";
+import { projectFileSourceId, upsertProjectFileSource } from "@/lib/ai/citations/sources";
 import { getActiveModelName } from "@/lib/ai/providers/registry";
 import { executeKiroWriteTool } from "@/lib/ai/tools/write/executor";
 import { isDestructiveWriteTool, KiroUndoEntry, KiroWriteApi, WriteToolResult } from "@/lib/ai/tools/write/types";
@@ -504,6 +515,35 @@ export function deriveActivity(messages: ActivitySourceMessage[], status: string
 
 type ToolOutput = { ok: boolean; code?: string; message?: string; data?: unknown; action?: unknown };
 
+/**
+ * V4.6 Turn Handoff：Send click 瞬间同步冻结的 Turn Intent。
+ * 之后所有异步 preflight（Project / Workspace / Vision）只是 enrichment，
+ * 请求体（provider/model/reasoning/webSearch/computer/context）一律来自这里。
+ */
+export interface KiroTurnIntentSnapshot {
+  provider: AIProviderId;
+  model: string;
+  custom: AICustomConfig;
+  reasoningEffort: KiroReasoningEffort;
+  responsePreference: KiroResponsePreference;
+  webSearch: {
+    enabled: boolean;
+    credentialMode: string;
+    apiKey?: string;
+  };
+  webPdfVision: {
+    enabled: boolean;
+    model?: string;
+    apiKey?: string;
+  };
+  baseContext: KiroBaseContext;
+  contextRefs: KiroPromptContextRef[];
+  computerSnapshot: KiroComputerTurnSnapshot;
+  projectId: string | null;
+  conversationSummary: { text: string; throughMessageId: string } | undefined;
+  memoryIndex: { id: string; title: string; category: string; scope: string; scopeId?: string }[];
+}
+
 /** Pending executable（Part 3）：真正可执行的请求只存在于 useKiroChat refs（runtime store 只存 UI 展示） */
 interface PendingComputerExecution {
   request: ComputerApprovalRequest;
@@ -586,6 +626,8 @@ export function useKiroChat({
   // ---- Scanned PDF Vision（Task 12）：发送时渲染的页面图 manifest（只存 metadata，不含 base64）----
   const [preparingVision, setPreparingVision] = useState(false);
   const visionPagesRef = useRef<{ sourceId: string; page: number; fileName: string; attachmentId: string }[]>([]);
+  // V4.6：Turn Intent 是否已同步冻结（Send click 瞬间；preflight 期间 UI 依此解锁下一 Turn preferences）
+  const [turnIntentFrozen, setTurnIntentFrozen] = useState(false);
 
   /** read_material 成功后把资料注册进本 Turn Source Registry（sourceId = material-<id>，绝不使用 storageKey） */
   const registerMaterialSource = useCallback(
@@ -611,22 +653,18 @@ export function useKiroChat({
     []
   );
 
-  /** V1.3A：read_project_file 成功后注册 Project File Source（sourceId = project-file-<id>，绝不使用 storageKey） */
+  /** V1.3A：read_project_file 成功后注册 Project File Source（sourceId = project-file-<id>，绝不使用 storageKey）。
+   *  V1.3B：upsert + merge（availablePages union，unique + sort asc，绝不产生 duplicate source row）。 */
   const registerProjectFileSource = useCallback((data: { projectFileId: string; name: string; pages?: { page: number }[] }) => {
-    const meta: KiroSourceMeta = {
-      sourceId: projectFileSourceId(data.projectFileId),
-      name: data.name,
-      source: "project-file",
-      availablePages:
-        Array.isArray(data.pages) && data.pages.length > 0 ? data.pages.map((p) => p.page) : undefined,
-    };
-    if (!turnSourcesRef.current.some((s) => s.sourceId === meta.sourceId)) {
-      turnSourcesRef.current = [...turnSourcesRef.current, meta];
-      setSources(turnSourcesRef.current);
-    }
+    turnSourcesRef.current = upsertProjectFileSource(turnSourcesRef.current, data);
+    setSources(turnSourcesRef.current);
   }, []);
 
-  const buildTurnSnapshot = (turnAttachments: KiroAttachment[], projectContext?: KiroProjectTurnContext): Record<string, unknown> => {
+  const buildTurnSnapshot = (
+    intent: KiroTurnIntentSnapshot,
+    turnAttachments: KiroAttachment[],
+    projectContext?: KiroProjectTurnContext
+  ): Record<string, unknown> => {
     const contexts = buildDocumentContexts(turnAttachments);
     const budgeted = budgetAttachments(contexts, DEFAULT_CONTEXT_BUDGET.attachmentBudgetTokens).attachments;
     // 文本文档 Source Registry：availablePages 只取预算后实际发送的页码（模型不能引用不可见页面）
@@ -660,61 +698,38 @@ export function useKiroChat({
     // 冻结本 Turn 的 Source Registry（read_material 之后还会追加 material 来源）
     turnSourcesRef.current = registry;
     setSources(registry);
+    // V4.6：请求体全部来自 frozen Turn Intent（Send click 瞬间），enrichment 只补
+    // projectContext / computerWorkspaceInstructions / vision 等 send-time 物化内容
     return {
-      provider,
-      model,
-      apiKey: getSessionApiKey(provider),
-      customConfig: custom,
-      responsePreference,
+      provider: intent.provider,
+      model: intent.model,
+      apiKey: getSessionApiKey(intent.provider),
+      customConfig: intent.custom,
+      responsePreference: intent.responsePreference,
       // Task 14：联网搜索配置（Server Key 永远不进入 Browser；仅 BYOK 带用户 Key）
-      webSearchConfig: {
-        enabled: webSearchEnabled,
-        credentialMode: webSearchCredentialMode,
-        ...(webSearchCredentialMode === "byok" && getSessionWebSearchApiKey()
-          ? { apiKey: getSessionWebSearchApiKey() }
-          : {}),
-      },
+      webSearchConfig: intent.webSearch,
       // Task 19C1：扫描 Web PDF Vision 配置（Provider 固定 OpenCode Go；不发送 provider/baseURL/transport）。
       // Key 缺失仍可发送 enabled/model（19C2 负责 missing key → Vision unavailable → Tavily fallback）
-      webPdfVisionConfig: {
-        enabled: webPdfVisionEnabled,
-        model: normalizeWebPdfVisionModel(webPdfVisionModel),
-        ...(getSessionWebPdfVisionApiKey()
-          ? { apiKey: getSessionWebPdfVisionApiKey() }
-          : {}),
-      },
-      baseContext: buildBaseContext(),
-      contextRefs: refsForPrompt(
-        dedupeContextRefs(
-          resolveContextRefs(autoRefs, manualRefs, entryRefs, suppressedAutoKeys),
-          useAppStore.getState().currentSemesterWeek
-        )
-      ),
+      webPdfVisionConfig: intent.webPdfVision,
+      baseContext: intent.baseContext,
+      contextRefs: intent.contextRefs,
       attachmentsContext,
       // 扫描 PDF 页面图 manifest（Task 12）：只含 sourceId/page/文件名映射，不含 base64
       visionPages: visionPagesRef.current,
-      conversationSummary: conversationSummary
-        ? { text: conversationSummary.text, throughMessageId: conversationSummary.throughMessageId }
-        : undefined,
+      conversationSummary: intent.conversationSummary,
       // 长期学习记忆 Index（不含 content；memoryEnabled=false 时为空数组）
-      memoryIndex: memory.activeIndex.map((m) => ({
-        id: m.id,
-        title: m.title,
-        category: m.category,
-        scope: m.scope,
-        scopeId: m.scopeId,
-      })),
+      memoryIndex: intent.memoryIndex,
       // Kiro Computer Agent V1：推理投入冻结——Store 保存 requested preference；
       // 发送瞬间按当前 provider/model/custom capability 归一为 effective
       // （与 UI 显示值一致；Server 仍会二次 normalize，此为 trust boundary 之外的防御）。
       reasoningEffort: resolveEffectiveReasoningEffort({
-        provider,
-        model,
-        custom,
-        requested: reasoningEffort,
+        provider: intent.provider,
+        model: intent.model,
+        custom: intent.custom,
+        requested: intent.reasoningEffort,
       }),
       // Computer Turn Snapshot（冻结意图；只含逻辑元数据，live grants/rules 不入请求）
-      computerSnapshot: buildComputerSnapshot(),
+      computerSnapshot: intent.computerSnapshot,
       // Projects V1.2：Project Instructions 随 Turn 冻结（Send boundary 读取；
       // continuation 复用 turnSnapshotRef，streaming 中编辑 Project 只影响下一 Turn）
       projectContext,
@@ -743,8 +758,64 @@ export function useKiroChat({
     };
   };
 
+  // ============================================================
+  // V4.6 Turn Handoff：Turn Intent 同步冻结（Send click 瞬间）
+  //
+  // 原则：用户点击 Send 的那个瞬间就定义了「这一轮使用什么配置」。
+  // captureTurnIntent 必须纯同步（第一个 await 之前）——Project DB / Workspace /
+  // Vision preflight 只是 enrichment，绝不能反过来推迟模型/推理/范围冻结。
+  // 之后 UI 修改 Model / Reasoning / Web Search / Agent Mode 只影响下一 Turn。
+  // ============================================================
+
+  const captureTurnIntent = (): KiroTurnIntentSnapshot => ({
+    provider,
+    model,
+    custom,
+    reasoningEffort,
+    responsePreference,
+    webSearch: {
+      enabled: webSearchEnabled,
+      credentialMode: webSearchCredentialMode,
+      ...(webSearchCredentialMode === "byok" && getSessionWebSearchApiKey()
+        ? { apiKey: getSessionWebSearchApiKey() }
+        : {}),
+    },
+    webPdfVision: {
+      enabled: webPdfVisionEnabled,
+      model: normalizeWebPdfVisionModel(webPdfVisionModel),
+      ...(getSessionWebPdfVisionApiKey() ? { apiKey: getSessionWebPdfVisionApiKey() } : {}),
+    },
+    baseContext: buildBaseContext(),
+    contextRefs: refsForPrompt(
+      dedupeContextRefs(
+        resolveContextRefs(autoRefs, manualRefs, entryRefs, suppressedAutoKeys),
+        useAppStore.getState().currentSemesterWeek
+      )
+    ),
+    computerSnapshot: buildComputerSnapshot(),
+    projectId: projectIdRef.current,
+    conversationSummary: conversationSummary
+      ? { text: conversationSummary.text, throughMessageId: conversationSummary.throughMessageId }
+      : undefined,
+    memoryIndex: memory.activeIndex.map((m) => ({
+      id: m.id,
+      title: m.title,
+      category: m.category,
+      scope: m.scope,
+      scopeId: m.scopeId,
+    })),
+  });
+  // V4.6：captureTurnIntent 经 ref 调用（sendWithAttachments 稳定 callback 读取最新 settings）
+  const captureIntentRef = useRef(captureTurnIntent);
+  captureIntentRef.current = captureTurnIntent;
+
+
   const readCounterRef = useRef(0);
   const documentReadCounterRef = useRef(0);
+  /** V1.3B：当前 User Turn 的 Vision Runtime Ledger（Send boundary 初始化；continuation 共享；下一 Send 重建） */
+  const turnVisionBudgetRef = useRef<VisionTurnRuntimeLedger | null>(null);
+  /** V1.3B：当前 User Turn 文本（read_project_visual 页选择依据；下轮 Send 覆盖） */
+  const latestUserTextRef = useRef("");
   const writeCounterRef = useRef(0);
   const limitReachedRef = useRef(false);
   const undoRegistryRef = useRef(new Map<string, KiroUndoEntry>());
@@ -837,6 +908,9 @@ export function useKiroChat({
         toolCallId: string;
         input: unknown;
       };
+      // V4.6：真实 tool 时间点（test-only；不记录 tool 内容）
+      turnPerf("toolCallReceived", toolCallId);
+      turnPerf("toolExecutionStart", toolCallId);
 
       const failOutput = (code: string, message: string) =>
         emitToolOutput(toolName, toolCallId, { ok: false, code, message } as ToolOutput);
@@ -896,7 +970,51 @@ export function useKiroChat({
           | KiroProjectTurnContext
           | undefined;
         void executeReadProjectFile(input, frozenProjectContext).then((result) => {
-          if (result.ok) {
+          // V1.3B：只有真实 Evidence（text 非空 或 pages 有内容）才注册 Citation；
+          // image / scanned PDF 只返回 visualRequired，不注册（后续 read_project_visual 再注册）
+          if (result.ok && (result.data.text || (result.data.pages && result.data.pages.length > 0))) {
+            registerProjectFileSource({
+              projectFileId: result.data.projectFileId,
+              name: result.data.name,
+              pages: result.data.pages,
+            });
+          }
+          emitToolOutput(toolName, toolCallId, result as ToolOutput);
+        });
+        return;
+      }
+
+      // ---- read_project_visual（V1.3B）：与 read_material/read_project_file 共享重型文档 quota；
+      // 使用 frozen Turn 模型 + frozen project index + 共享 Vision Ledger ----
+      if (toolName === "read_project_visual") {
+        documentReadCounterRef.current += 1;
+        if (documentReadCounterRef.current > MAX_DOCUMENT_READS_PER_TURN) {
+          failOutput("READ_TOOL_LIMIT_REACHED", "已达到本轮资料读取上限。");
+          return;
+        }
+        const snapshot = turnSnapshotRef.current as (Record<string, unknown> & {
+          projectContext?: KiroProjectTurnContext;
+          provider?: string;
+          model?: string;
+          apiKey?: string;
+          customConfig?: unknown;
+        }) | null;
+        const frozenProjectContext = snapshot?.projectContext;
+        const frozenTurn = {
+          provider: snapshot?.provider ?? "opencode-go",
+          model: snapshot?.model ?? "",
+          apiKey: snapshot?.apiKey,
+          customConfig: snapshot?.customConfig,
+        };
+        const ledger = turnVisionBudgetRef.current ?? createVisionTurnRuntimeBudget({});
+        turnVisionBudgetRef.current = ledger;
+        void executeReadProjectVisual(input, {
+          frozenProjectContext,
+          frozenTurn,
+          ledger,
+          latestUserText: latestUserTextRef.current,
+        }).then((result) => {
+          if (result.ok && (result.data.text || (result.data.pages && result.data.pages.length > 0))) {
             registerProjectFileSource({
               projectFileId: result.data.projectFileId,
               name: result.data.name,
@@ -1112,6 +1230,9 @@ export function useKiroChat({
   /** 统一 Tool Output 回填：完成后标记 awaiting-continuation（SDK 将自动续跑；limitReached 不续跑） */
   const emitToolOutput = useCallback(
     (tool: string, toolCallId: string, output: unknown) => {
+      // V4.6：真实 tool 时间点（test-only；不记录 tool 内容）
+      turnPerf("toolExecutionComplete", toolCallId);
+      turnPerf("addToolOutput", toolCallId);
       if (!limitReachedRef.current) pendingAutoContinueRef.current = true;
       chat.addToolOutput({
         tool: tool as never,
@@ -1773,54 +1894,91 @@ export function useKiroChat({
     async (text: string, turnAttachments: KiroAttachment[]): Promise<boolean> => {
       const v = text.trim();
       if (!v || !enabled) return false;
-      // Vision MIME gate（Phase 3.3A）：仅当当前模型 vision=true 且声明了
-      // visionMimeTypes 白名单时校验用户图片；不支持的（如 Grok 下的 WEBP）
-      // 整个 Send 不执行，明确拒绝。非 vision 模型 / 无白名单模型不受影响。
-      const userImages = turnAttachments.filter(
-        (a): a is Extract<KiroAttachment, { source: "local" }> =>
-          a.source === "local" && a.kind === "image" && a.status === "ready"
-      );
-      if (
-        capabilities.vision &&
-        capabilities.visionMimeTypes &&
-        userImages.some((a) => !isVisionMimeSupported(capabilities, a.file.type, a.file.name))
-      ) {
-        const modelName = getActiveModelName({ provider, model, customModel: custom.model });
-        const formats = formatVisionMimeTypes(capabilities.visionMimeTypes);
-        pushToast({
-          message: `${modelName} 当前仅支持 ${formats} 图片，请转换后重试。`,
-          type: "error",
-        });
-        return false; // Prompt 保留，不静默丢图
-      }
       readCounterRef.current = 0;
       documentReadCounterRef.current = 0;
       writeCounterRef.current = 0;
       limitReachedRef.current = false;
       resetDocumentFailureFuse();
       visionPagesRef.current = [];
+      // V1.3B：新 User Turn 重置（真实字节在 vision payload 就绪后初始化；continuation 不得重置）
+      latestUserTextRef.current = v;
+      turnVisionBudgetRef.current = null;
 
-      // ---- Vision 输入准备（共享一次 preparingVision 状态，单一 try/finally）----
-      // 处理顺序（Phase 3.4B）：用户图片优先（用户明确选择的直接视觉输入，不能静默丢弃）
-      // → 统一 Turn 二进制预算 → 扫描 PDF 只用剩余额度。FileList 最终顺序不变：
-      // PDF pages → user images。
-      const scanned = turnAttachments.filter(isScannedAttachment);
-      const pageFiles: File[] = [];
-      const preparedImageFiles: File[] = [];
-      const renderedPageCountByAttachment = new Map<string, number>();
-      const visionPrepPending = scanned.length > 0 || (visionEnabled && userImages.length > 0);
-      if (visionPrepPending) {
+      // ============================================================
+      // V4.6 Turn Handoff：Turn Intent 在第一个 await 之前同步冻结。
+      // Send click 瞬间的 provider/model/reasoning/webSearch/computer/context
+      // = 本轮配置；之后 UI 修改设置只影响下一 Turn。
+      // ============================================================
+      turnPerf("sendClaim");
+      const conversationIdAtSend = conversationIdRef.current;
+      setTurnIntentFrozen(false);
+      const intent = captureIntentRef.current();
+      setTurnIntentFrozen(true);
+      turnPerf("intentFrozen");
+
+      // Vision MIME gate（Phase 3.3A）：以 frozen intent 的模型能力校验
+      const userImages = turnAttachments.filter(
+        (a): a is Extract<KiroAttachment, { source: "local" }> =>
+          a.source === "local" && a.kind === "image" && a.status === "ready"
+      );
+      const intentCapabilities = getModelCapabilities({
+        provider: intent.provider,
+        model: intent.model,
+        custom: intent.custom,
+      });
+      const visionEnabledForIntent = intentCapabilities.vision;
+      if (
+        intentCapabilities.vision &&
+        intentCapabilities.visionMimeTypes &&
+        userImages.some((a) => !isVisionMimeSupported(intentCapabilities, a.file.type, a.file.name))
+      ) {
+        const modelName = getActiveModelName({
+          provider: intent.provider,
+          model: intent.model,
+          customModel: intent.custom.model,
+        });
+        const formats = formatVisionMimeTypes(intentCapabilities.visionMimeTypes);
+        pushToast({
+          message: `${modelName} 当前仅支持 ${formats} 图片，请转换后重试。`,
+          type: "error",
+        });
+        setTurnIntentFrozen(false);
+        return false; // Prompt 保留，不静默丢图
+      }
+
+      // ---- V4.6 并行 preflight：Project / Workspace Instructions / Vision（互相独立）----
+      // prepareVisionPayload 内部保持「用户图片优先 → PDF 剩余预算」的既有依赖语义。
+      let preflightFailed = false;
+      let visionFailed = false;
+
+      /** Vision 输入准备（共享一次 preparingVision 状态，单一 try/finally）：
+       * 用户图片优先（不能静默丢弃）→ 统一 Turn 预算 → 扫描 PDF 只用剩余额度。 */
+      const prepareVisionPayload = async (): Promise<{ pageFiles: File[]; preparedImageFiles: File[] }> => {
+        const delay = turnPerfPreflightDelay("vision");
+        if (delay > 0) await sleepTurnPerf(delay);
+        if (turnPerfPreflightFail("vision")) {
+          pushToast({ message: "图片处理失败，请重新添加或换一张图片后重试。", type: "error" });
+          visionFailed = true;
+          return { pageFiles: [], preparedImageFiles: [] };
+        }
+        const scanned = turnAttachments.filter(isScannedAttachment);
+        const pageFiles: File[] = [];
+        const preparedImageFiles: File[] = [];
+        const renderedPageCountByAttachment = new Map<string, number>();
+        const visionPrepPending = scanned.length > 0 || (visionEnabledForIntent && userImages.length > 0);
+        if (!visionPrepPending) return { pageFiles, preparedImageFiles };
         setPreparingVision(true);
         try {
           // A. 用户图片 Send-time 预处理：失败（decode/编码/超限）→ 整个 Send 不执行
-          if (visionEnabled && userImages.length > 0) {
+          if (visionEnabledForIntent && userImages.length > 0) {
             for (const a of userImages) {
               try {
                 const prepared = await preprocessVisionImage(a.file);
                 preparedImageFiles.push(prepared.file);
               } catch {
                 pushToast({ message: "图片处理失败，请重新添加或换一张图片后重试。", type: "error" });
-                return false; // Prompt 与附件保留
+                visionFailed = true; // Prompt 与附件保留
+                return { pageFiles, preparedImageFiles };
               }
             }
           }
@@ -1830,7 +1988,8 @@ export function useKiroChat({
           const budget = resolveVisionTurnBudget({ userImageBytes });
           if (budget.overBudget) {
             pushToast({ message: "图片总量过大，请减少图片数量后重试。", type: "error" });
-            return false; // 用户图片不能被静默删除
+            visionFailed = true; // 用户图片不能被静默删除
+            return { pageFiles, preparedImageFiles };
           }
 
           // C. 扫描 PDF：在 pdfBudgetBytes 内渲染；每份 scanned PDF 至少 1 页
@@ -1838,7 +1997,8 @@ export function useKiroChat({
             if (budget.pdfBudgetBytes === 0) {
               // budget exhaustion ≠ 文件损坏：明确区分提示
               pushToast({ message: "视觉附件总量过大，请减少图片或扫描 PDF 后重试。", type: "error" });
-              return false;
+              visionFailed = true;
+              return { pageFiles, preparedImageFiles };
             }
             const textCount = buildDocumentContexts(turnAttachments).length;
             const explicit = extractExplicitPages(v).flatMap((r) => {
@@ -1906,60 +2066,112 @@ export function useKiroChat({
             const missingPdf = scanned.some((a) => (renderedPageCountByAttachment.get(a.id) ?? 0) === 0);
             if (missingPdf) {
               pushToast({ message: "视觉附件过多，部分扫描 PDF 无法加入本次请求，请减少附件或指定更少页数。", type: "error" });
-              return false;
+              visionFailed = true;
+              return { pageFiles, preparedImageFiles };
             }
           }
         } finally {
           setPreparingVision(false);
         }
-      }
+        return { pageFiles, preparedImageFiles };
+      };
 
-      // ---- Turn Context Snapshot：本 Turn 内 Prompt Context 冻结（下一 Turn 才刷新） ----
-      // Projects V1.2/1.3A：Send boundary 读取并冻结 Project Instructions + Files index。
-      // 绝不提前在 useEffect preload（loadConversation 后快速 Send 可能丢第一 Turn 指令）。
-      const projectIdNow = projectIdRef.current;
-      let projectContext: KiroProjectTurnContext | undefined;
-      if (projectIdNow) {
-        try {
-          const [projectRecord, projectFiles] = await Promise.all([
-            getKiroProject(projectIdNow),
-            listProjectFiles(projectIdNow),
-          ]);
-          if (!projectRecord) {
+      turnPerf("preflightStart");
+      const [projectContext, computerWorkspaceInstructions, visionPayload] = await Promise.all([
+        // 1) Project Instructions + Files index（Send boundary 读取最新 record；绝不 stale preload）
+        (async (): Promise<KiroProjectTurnContext | undefined> => {
+          const delay = turnPerfPreflightDelay("project");
+          if (delay > 0) await sleepTurnPerf(delay);
+          if (turnPerfPreflightFail("project")) {
             pushToast({ message: "无法加载项目设置，请重试。", type: "error" });
-            return false;
+            preflightFailed = true;
+            return undefined;
           }
-          projectContext = toProjectTurnContext(
-            projectRecord,
-            projectFiles.map((f) => ({
-              id: f.id,
-              name: f.name,
-              kind: f.kind,
-              sizeBytes: f.sizeBytes,
-            }))
-          );
-        } catch {
-          pushToast({ message: "无法加载项目设置，请重试。", type: "error" });
-          return false;
-        }
-      }
-      // V3 Part 1：先冻结 Computer snapshot，再异步经 live Workspace/rules/grant + 精确 fs.read policy
-      // 读取 bounded root-level KIRO.md（绝不重建/切换 Workspace；Server 会再次基于 frozen snapshot 归一化）
-      const baseTurnSnapshot = buildSnapshotRef.current(turnAttachments, projectContext);
-      const frozenComputerSnapshot = baseTurnSnapshot.computerSnapshot as KiroComputerTurnSnapshot | undefined;
-      const computerWorkspaceInstructions =
-        frozenComputerSnapshot && frozenComputerSnapshot.enabled
-          ? await loadWorkspaceInstructionsForTurn({
+          const projectIdNow = intent.projectId;
+          if (!projectIdNow) return undefined;
+          try {
+            const [projectRecord, projectFiles] = await Promise.all([
+              getKiroProject(projectIdNow),
+              listProjectFiles(projectIdNow),
+            ]);
+            if (!projectRecord) {
+              pushToast({ message: "无法加载项目设置，请重试。", type: "error" });
+              preflightFailed = true;
+              return undefined;
+            }
+            return toProjectTurnContext(
+              projectRecord,
+              projectFiles.map((f) => ({
+                id: f.id,
+                name: f.name,
+                kind: f.kind,
+                sizeBytes: f.sizeBytes,
+              }))
+            );
+          } catch {
+            pushToast({ message: "无法加载项目设置，请重试。", type: "error" });
+            preflightFailed = true;
+            return undefined;
+          }
+        })(),
+        // 2) Workspace Instructions：目标 workspace/root identity 用 frozen snapshot；
+        //    live grants/rules 按安全需要读取最新权限事实（Server 会再次基于 frozen snapshot 归一化）
+        (async (): Promise<KiroWorkspaceInstructionsContext | undefined> => {
+          const delay = turnPerfPreflightDelay("workspace");
+          if (delay > 0) await sleepTurnPerf(delay);
+          if (turnPerfPreflightFail("workspace")) {
+            pushToast({ message: "无法读取工作区指令，请重试。", type: "error" });
+            preflightFailed = true;
+            return undefined;
+          }
+          const frozenComputerSnapshot = intent.computerSnapshot;
+          if (!(frozenComputerSnapshot && frozenComputerSnapshot.enabled)) return undefined;
+          try {
+            return await loadWorkspaceInstructionsForTurn({
               snapshot: frozenComputerSnapshot,
               liveWorkspaces: useKiroComputerStore.getState().workspaces,
               livePermissionRules: useKiroComputerStore.getState().permissionRules,
               getAdapter: getComputerAdapterForAdapterRef,
-            })
-          : undefined;
+            });
+          } catch {
+            pushToast({ message: "无法读取工作区指令，请重试。", type: "error" });
+            preflightFailed = true;
+            return undefined;
+          }
+        })(),        // 3) Vision（内部保持用户图片 → PDF 预算的既有依赖；只与 1/2 并行）
+        prepareVisionPayload(),
+      ]);
+      turnPerf("preflightEnd");
+      if (preflightFailed || visionFailed) {
+        setTurnIntentFrozen(false);
+        return false;
+      }
+      // V4.6 preparation generation：preflight 期间 conversation 已切换到另一个会话 → 丢弃结果，不 commit。
+      // 第一条消息的 transient conversation id 在 send 内创建（null → 新 id）属正常，不丢弃。
+      if (
+        conversationIdAtSend != null &&
+        conversationIdRef.current !== conversationIdAtSend
+      ) {
+        turnPerf("preparationDiscarded");
+        setTurnIntentFrozen(false);
+        return false;
+      }
+
+      // ---- Turn Context Snapshot：全部来自 frozen intent + enrichment ----
+      const baseTurnSnapshot = buildSnapshotRef.current(intent, turnAttachments, projectContext);
       turnSnapshotRef.current = {
         ...baseTurnSnapshot,
         ...(computerWorkspaceInstructions ? { computerWorkspaceInstructions } : {}),
       };
+      turnPerf("turnSnapshotCommitted");
+      // V1.3B：Vision Ledger 用「真正进入 FileList」的字节初始化
+      //（user images 优先；scanned attachment pages 从 total/pdf 预算中扣掉；
+      //  后续 read_project_visual 看到的是本 Turn 真实剩余额度）
+      turnVisionBudgetRef.current = createVisionTurnRuntimeBudget({
+        initialUserImageBytes: sumVisionBytes(visionPayload.preparedImageFiles),
+        initialPdfBytes: sumVisionBytes(visionPayload.pageFiles),
+        initialPdfPages: visionPayload.pageFiles.length,
+      });
       // Computer 调用限制 / 新 Turn Task 重置（冻结意图配套；历史 Task 仍保留展示）
       computerCountersRef.current = { readCount: 0, mutationCount: 0 };
       activeTaskRef.current = null;
@@ -1992,19 +2204,24 @@ export function useKiroChat({
 
       // D. composition invariant：最终视觉二进制总字节必须 <= Turn 预算
       //（不应依赖中间 allocator；正常不会触发，但作为组合边界必须有最终 guard）
-      const finalVisionBytes = sumVisionBytes(pageFiles) + sumVisionBytes(preparedImageFiles);
+      const finalVisionBytes =
+        sumVisionBytes(visionPayload.pageFiles) + sumVisionBytes(visionPayload.preparedImageFiles);
       if (!isVisionTurnWithinBudget(finalVisionBytes)) {
         pushToast({ message: "视觉附件总量过大，请减少附件后重试。", type: "error" });
+        setTurnIntentFrozen(false);
         return false;
       }
 
       // 图片：扫描 PDF 页面图（固定在前） + 预处理后的用户图片 → 一个 FileList（deterministic 顺序）
       let files: FileList | undefined;
-      if ((visionEnabled && preparedImageFiles.length > 0) || pageFiles.length > 0) {
+      if (
+        (visionEnabledForIntent && visionPayload.preparedImageFiles.length > 0) ||
+        visionPayload.pageFiles.length > 0
+      ) {
         if (typeof DataTransfer !== "undefined") {
           const dt = new DataTransfer();
-          pageFiles.forEach((f) => dt.items.add(f));
-          preparedImageFiles.forEach((f) => dt.items.add(f));
+          visionPayload.pageFiles.forEach((f: File) => dt.items.add(f));
+          visionPayload.preparedImageFiles.forEach((f: File) => dt.items.add(f));
           files = dt.files;
         }
       }
@@ -2013,9 +2230,10 @@ export function useKiroChat({
         { text: v, files },
         { body: requestBody() }
       );
+      turnPerf("chatSendMessage");
       return true;
     },
-    [chatSendMessage, enabled, visionEnabled, pushToast]
+    [chatSendMessage, enabled, pushToast]
   );
 
   // 普通发送：使用 Composer 当前附件（sendWithAttachments 内部不闭包读取附件，编辑场景可传 []）
@@ -2447,6 +2665,8 @@ export function useKiroChat({
     sources,
     /** 扫描 PDF 页面渲染中（Send 禁用 + 「正在准备扫描 PDF…」） */
     preparingVision,
+    /** V4.6：Send 已 claim 且 Turn Intent 已同步冻结（preflight 进行中；下一 Turn preferences 可编辑） */
+    turnIntentFrozen,
     send,
     retry,
     stop: handleStop,

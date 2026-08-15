@@ -180,6 +180,9 @@ export function KiroChatSurface({ variant }: { variant: "workspace" | "sidecar" 
         onStop={chat.stop}
         configured={chat.configured}
         preparingVision={chat.preparingVision}
+        // V4.6：preflight claim 与 intent 冻结（preparing 期间 Send 禁用 + 「正在准备」；Stop 不出现）
+        preparingSend={chat.preparingSend}
+        turnIntentFrozen={chat.turnIntentFrozen}
         modelOptions={modelOptions}
         activeModelName={activeModelName}
         selectedModelId={model}

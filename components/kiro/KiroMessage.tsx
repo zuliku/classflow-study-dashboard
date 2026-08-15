@@ -3,6 +3,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { FileText, Image as ImageIcon, Copy, Pencil, RefreshCw, MoreHorizontal, Send, Globe2 } from "lucide-react";
 import { KiroMark } from "@/components/kiro/KiroHeader";
+import { KiroAssistantShell } from "@/components/kiro/KiroAssistantShell";
 import { KiroStreamingMarkdown } from "@/components/kiro/KiroStreamingMarkdown";
 import { KiroWorklog } from "@/components/kiro/KiroWorklog";
 import { KiroMenuPanel, KiroMenuItem, KiroMenuDivider, useKiroPopover } from "@/components/kiro/KiroMenu";
@@ -104,13 +105,12 @@ export function KiroMessage({
   const hasActions = !!actionSummaries && actionSummaries.length > 0;
 
   return (
-    <div className="flex gap-3 group" data-testid={testid ?? "kiro-message"}>
-      <KiroMark size="sm" className="mt-0.5" />
-      <div className="min-w-0 flex-1 space-y-2 pt-0.5">
-        {/* Worklog V2：真实 part 时序（commentary → tool → … → final answer）；V4.2 props 缩窄 */}
-        {assistantTurn && assistantTurn.worklog.length > 0 && (
-          <KiroWorklog worklog={assistantTurn.worklog} phase={assistantTurn.phase} />
-        )}
+    // V4.6：统一 KiroAssistantShell（Pending 共用同一 outer——Logo/左侧 column 不 remount）
+    <KiroAssistantShell testid={testid ?? "kiro-message"}>
+      {/* Worklog V2：真实 part 时序（commentary → tool → … → final answer）；V4.2 props 缩窄 */}
+      {assistantTurn && assistantTurn.worklog.length > 0 && (
+        <KiroWorklog worklog={assistantTurn.worklog} phase={assistantTurn.phase} />
+      )}
         {content ? (
           <div>
             {/* Worklog V2 Task 4：Stable Blocks（React.memo 缓存）+ Active Tail（同语义 Markdown） */}
@@ -194,9 +194,8 @@ export function KiroMessage({
             )}
           </div>
         ) : null}
-        {children}
-      </div>
-    </div>
+      {children}
+    </KiroAssistantShell>
   );
 }
 

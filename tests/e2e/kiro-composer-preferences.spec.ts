@@ -221,9 +221,10 @@ test("回复期间可改 Model/Reasoning/AgentMode/WebSearch；continuation 用�
   // tool 执行 → request 2（continuation）→ 断言冻结值
   await expect.poll(() => captured.length, { timeout: 15000 }).toBeGreaterThanOrEqual(2);
   const continuation = captured[1];
-  // 冻结：第一条消息的 snapshot 不变（初始 model / medium / workspace-auto / webSearch 初始值）
+  // 冻结：第一条消息的 snapshot 不变（初始 model / reasoning effective / workspace-auto / webSearch 初始值）。
+  // 注意：V4 Flash 的 supportedEfforts 只有 default/high/max——requested "medium" 归一为 effective "default"。
   expect(continuation.model).toBe("deepseek-v4-flash");
-  expect(continuation.reasoningEffort).toBe("medium");
+  expect(continuation.reasoningEffort).toBe("default");
   expect(continuation.agentMode).toBe("workspace-auto");
   expect(continuation.webSearchEnabled).toBe(initialWebSearch);
 

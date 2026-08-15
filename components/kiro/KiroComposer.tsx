@@ -57,6 +57,8 @@ export function KiroComposer({
   hasProcessing,
   visionEnabled,
   preparingVision,
+  preparingSend,
+  turnIntentFrozen,
   onAddFiles,
   onRemoveAttachment,
   onRetryAttachment,
@@ -99,6 +101,10 @@ export function KiroComposer({
   visionEnabled: boolean;
   /** 扫描 PDF 页面渲染中（Send 禁用 + 提示） */
   preparingVision?: boolean;
+  /** V4.6：Send 已 claim、preflight 进行中（SDK 尚未接管；Send 禁用 + 「正在准备」，Stop 不出现） */
+  preparingSend?: boolean;
+  /** V4.6：Turn Intent 已同步冻结（preparing 且已冻结 → 下一 Turn preferences 可编辑） */
+  turnIntentFrozen?: boolean;
   onAddFiles: (files: File[]) => void;
   onRemoveAttachment: (id: string) => void;
   onRetryAttachment: (id: string) => void;
@@ -148,21 +154,17 @@ export function KiroComposer({
     !imagesBlocked &&
     !scannedBlocked &&
     !turnInFlight &&
+    !preparingSend &&
     !submitting &&
     !preparingVision;
-  // V4.1（Productization）：拆分「当前 Turn scope 锁」与「下一 Turn preference 锁」。
+  // V4.1（Productization）+ V4.6：拆分「当前 Turn scope 锁」与「下一 Turn preference 锁」。
   // - currentTurnScopeLocked：Agent Turn 尚未真正 settled——保护 Context/Attachment/Workspace/Computer 等
-  //   会改变「当前工作范围」展示的控件
-  // - nextTurnPreferencesLocked：仅发送前快照尚未冻结的短暂 pre-submit 阶段——Model/Reasoning/AgentMode/
-  //   Web Search 在回复生成期间可编辑（只影响下一 Turn；当前 Turn 使用冻结 snapshot）
-  const currentTurnScopeLocked = turnInFlight || submitting;
-  const nextTurnPreferencesLocked = submitting;
-
-  useEffect(() => {
-    if ((!streaming && runtimeStatus !== "error") || !submittingRef.current) return;
-    submittingRef.current = false;
-    setSubmitting(false);
-  }, [runtimeStatus, streaming]);
+  //   会改变「当前工作范围」展示的控件（preparing 阶段同样属于当前 Turn 范围）
+  // - nextTurnPreferencesLocked：preparing 且 intent 尚未冻结时锁定 Model/Reasoning/AgentMode/WebSearch；
+  //   intent 已冻结（或 turn 已开始）→ 可编辑（只影响下一 Turn；当前 Turn 使用冻结 snapshot）。
+  //   local submitting 不参与该锁（preparingSend 已覆盖同一窗口；intent 冻结后立即解锁）
+  const currentTurnScopeLocked = turnInFlight || submitting || !!preparingSend;
+  const nextTurnPreferencesLocked = !!preparingSend && !turnIntentFrozen;
 
   // Turn scope 锁定期间关闭 scope 类菜单（Attachment/Context/Material）；
   // Model 菜单是「下一条 preference」，不在此关闭——回复期间仍可打开。
@@ -180,6 +182,9 @@ export function KiroComposer({
     el.style.height = `${Math.min(el.scrollHeight, 156)}px`;
   };
 
+  // V4.6：local submitting 只表达「Composer submit() 正在 await onSend」——由 onSend 的
+  // 返回值决定是否清空 prompt；不再用 runtime streaming/status 反向修改 local submit
+  // ownership（sendClaimed 是 preflight claim，不是模型在 streaming）。
   const submit = async () => {
     if (!canSend || submittingRef.current) return;
     submittingRef.current = true;
@@ -199,6 +204,9 @@ export function KiroComposer({
           taRef.current.focus();
         }
       });
+      // 真实 request 已交给 onSend（chatSendMessage）→ 后续 disable 由 turnInFlight / preparingSend 负责
+      submittingRef.current = false;
+      setSubmitting(false);
     } catch (error) {
       submittingRef.current = false;
       setSubmitting(false);
@@ -584,7 +592,7 @@ export function KiroComposer({
                   >
                     <Square className="w-4 h-4 fill-current" />
                   </button>
-                ) : submitting ? (
+                ) : submitting || preparingSend ? (
                   <button
                     type="button"
                     disabled
