@@ -40,6 +40,7 @@ import { useKiroHandoff } from "@/hooks/useKiroHandoff";
 import { KIRO_ICON } from "@/components/layout/navItems";
 import { useEffectiveReducedMotion } from "@/hooks/useEffectiveReducedMotion";
 import { DetailDisclosure } from "@/components/assignment/detail/DetailDisclosure";
+import { EntityActivitySection } from "@/components/history/EntityActivitySection";
 import { AssignmentDetailHero } from "@/components/assignment/detail/AssignmentDetailHero";
 import { AssignmentDetailActions } from "@/components/assignment/detail/AssignmentDetailActions";
 import { AssignmentDetailExecution } from "@/components/assignment/detail/AssignmentDetailExecution";
@@ -597,6 +598,9 @@ export function AssignmentDrawer() {
               ))}
             </div>
           )}
+
+          {/* 活动记录：secondary context，默认 collapsed，lazy 加载真实 Learning History */}
+          <EntityActivitySection scope="assignment" assignmentId={assignment.id} />
 
           {/* Kiro 帮助：默认 collapsed；Ask Kiro 是辅助能力（Header More 也有入口） */}
           <DetailDisclosure title="Kiro 帮助">

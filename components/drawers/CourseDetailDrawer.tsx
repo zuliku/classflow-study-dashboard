@@ -33,6 +33,7 @@ import { CourseDetailOverview, CourseDraft } from "@/components/course/detail/Co
 import { CourseScheduleSection, ScheduleForm } from "@/components/course/detail/CourseScheduleSection";
 import { CourseTaskSection } from "@/components/course/detail/CourseTaskSection";
 import { CourseMaterialSection } from "@/components/course/detail/CourseMaterialSection";
+import { EntityActivitySection } from "@/components/history/EntityActivitySection";
 
 const OVERLAY_ID = "course-detail-drawer";
 const DAY_LABELS = ["一", "二", "三", "四", "五", "六", "日"];
@@ -554,6 +555,14 @@ export function CourseDetailDrawer() {
             onPreview={handlePreviewMaterial}
             onDelete={handleDeleteMaterial}
             newIds={newMaterialIds}
+          />
+
+          <div className="h-px bg-line-soft" aria-hidden="true" />
+
+          {/* 活动记录：secondary context，默认 collapsed，lazy 加载真实 Learning History */}
+          <EntityActivitySection
+            scope="course"
+            courseId={displayedCourse?.id ?? course.id}
           />
         </div>
       </div>
