@@ -1,6 +1,6 @@
 # Learning Analytics V2 — 学习洞察
 
-> Status: 实现完成（Analytics Engine + Weekly Review + Canonical Kiro Tools + Estimate Calibration + Capacity-Aware Outlook + Adaptive Study Rebalance + Kiro Action Loop）
+> **Status: Feature Complete**（Analytics Engine + Weekly Review + Canonical Kiro Tools + Estimate Calibration + Capacity-Aware Outlook + Adaptive Study Rebalance + Exact Minute Conservation + Kiro Action Loop）
 > 前置依赖：[learning-history-v1.md](./learning-history-v1.md)（History IndexedDB / Recorder / Query / Aggregate）
 
 ## 一、数据源
