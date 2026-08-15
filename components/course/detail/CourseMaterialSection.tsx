@@ -171,6 +171,7 @@ export function CourseMaterialSection({
             <button
               type="button"
               aria-expanded={expanded}
+              data-testid="materials-expand-toggle"
               onClick={() => setExpanded((v) => !v)}
               className="w-full px-1 py-2 text-left text-[11px] font-bold text-satin-grey transition-colors hover:text-charcoal"
             >

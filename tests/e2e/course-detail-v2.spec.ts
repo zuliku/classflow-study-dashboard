@@ -196,7 +196,7 @@ base("F：Course Edit：name/teacher/classroom/credit/description → save → r
   await expect(drawer.getByText("周教授", { exact: true })).toBeVisible();
   await expect(drawer.getByText("计算机楼303", { exact: true }).first()).toBeVisible();
   await expect(drawer.getByText("5 学分", { exact: true })).toBeVisible();
-  await expect(drawer.getByText(/新增 B\+ 树与跳表内容/)).toBeVisible();
+  await expect(drawer.getByText(/新增 B\+ 树与跳表内容/).first()).toBeVisible();
   await expect(drawer.getByTestId("course-edit-form")).toHaveCount(0);
 
   // 空名称 → 阻止保存并显示错误
@@ -213,11 +213,13 @@ base("G：Task row：title + status + deadline；点击 → Assignment Floating 
   await page.addInitScript(seedScript(monday));
   const drawer = await openCourseDrawer(page);
 
-  // 行信息：标题 + 状态 + 截止（已完成 muted；无 DDL 任务显示无截止时间）
+  // 行信息：标题 + 状态 + 截止（无 DDL 任务显示无截止时间；展开后可见已完成行）
   await expect(drawer.getByText("数据结构任务 1", { exact: true })).toBeVisible();
   await expect(drawer.getByText("待完成", { exact: true }).first()).toBeVisible();
-  await expect(drawer.getByText("已完成", { exact: true }).first()).toBeVisible();
+  await expect(drawer.getByText("进行中", { exact: true }).first()).toBeVisible();
   await expect(drawer.getByText("无截止时间", { exact: true }).first()).toBeVisible();
+  await drawer.getByTestId("tasks-expand-toggle").click();
+  await expect(drawer.getByText("已完成", { exact: true }).first()).toBeVisible({ timeout: 5000 });
 
   // 点击 → Assignment Floating Detail（Course 关闭；无第二个 active overlay）
   await drawer.getByText("数据结构任务 1", { exact: true }).click();
@@ -235,7 +237,7 @@ base("H：Material：preview 打开；upload 新增；delete + undo 恢复", asy
   await expect(page.getByRole("dialog", { name: "文件预览" })).toBeVisible({ timeout: 5000 });
   await page.keyboard.press("Escape");
 
-  // upload：真实文件 → 新 row（animate-enter）
+  // upload：真实文件 → 新增（默认前 5 折叠 → 展开后可见新 row）
   await drawer.getByRole("button", { name: "上传资料" }).first().click();
   const fileInput = drawer.locator('input[type="file"]');
   await fileInput.setInputFiles({
@@ -243,7 +245,9 @@ base("H：Material：preview 打开；upload 新增；delete + undo 恢复", asy
     mimeType: "text/plain",
     buffer: Buffer.from("hello classflow"),
   });
-  await expect(drawer.getByText("课堂笔记.txt", { exact: true })).toBeVisible({ timeout: 8000 });
+  await expect(drawer.getByText("课程资料 7 份", { exact: true })).toBeVisible({ timeout: 8000 });
+  await drawer.getByTestId("materials-expand-toggle").click();
+  await expect(drawer.getByText("课堂笔记.txt", { exact: true })).toBeVisible({ timeout: 5000 });
 
   // delete + undo：row 恢复
   await drawer.getByRole("button", { name: /删除资料 课堂笔记/ }).click();
@@ -259,12 +263,12 @@ base("I+J：>5 tasks / >5 materials：默认前 5 + 展开全部", async ({ page
 
   // 任务默认 5 行 + 展开全部 7 项
   await expect(drawer.getByText("数据结构任务 6", { exact: true })).not.toBeVisible();
-  await drawer.getByRole("button", { name: "展开全部 7 项" }).click();
+  await drawer.getByTestId("tasks-expand-toggle").click();
   await expect(drawer.getByText("数据结构任务 7", { exact: true })).toBeVisible({ timeout: 5000 });
 
   // 资料默认 5 行 + 展开全部 6 项
   await expect(drawer.getByText("第6章 讲义.pdf", { exact: true })).not.toBeVisible();
-  await drawer.getByRole("button", { name: "展开全部 6 项" }).click();
+  await drawer.getByTestId("materials-expand-toggle").click();
   await expect(drawer.getByText("第6章 讲义.pdf", { exact: true })).toBeVisible({ timeout: 5000 });
 });
 
@@ -273,7 +277,9 @@ base("K：390×844：无横向溢出；close 可达；schedule form 可用", asy
   await page.addInitScript(seedScript(monday));
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/");
-  await page.getByRole("heading", { name: "数据结构与算法" }).first().click();
+  // 移动端走「课程资料」入口（Overview 课程卡在窄屏有滚动容器，避免点击不稳定）
+  await page.getByRole("button", { name: "课程资料" }).first().click();
+  await page.locator('div[role="button"]').filter({ hasText: "数据结构与算法" }).first().click();
   const drawer = page.getByRole("dialog", { name: "课程详情" });
   await expect(drawer).toBeVisible({ timeout: 8000 });
 

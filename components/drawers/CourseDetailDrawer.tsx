@@ -4,10 +4,10 @@ import React, { useEffect, useRef, useState } from "react";
 import {
   X,
   Plus,
-  BookOpen,
   Trash2,
   FileUp,
   MoreHorizontal,
+  PencilLine,
 } from "lucide-react";
 import { useAppStore } from "@/store/useAppStore";
 import { useToastStore } from "@/store/useToastStore";
@@ -27,8 +27,6 @@ import { Button } from "@/components/ui/Button";
 import { Popover } from "@/components/ui/Popover";
 import { DropdownMenuPanel, DropdownMenuItem, DropdownMenuDivider } from "@/components/ui/DropdownMenu";
 import { useKiroHandoff } from "@/hooks/useKiroHandoff";
-import { KIRO_ICON } from "@/components/layout/navItems";
-import { KiroFlowButton } from "@/components/kiro/KiroFlow";
 import { useEnterOnAdd } from "@/lib/useEnterOnAdd";
 import { useEffectiveReducedMotion } from "@/hooks/useEffectiveReducedMotion";
 import { CourseDetailOverview, CourseDraft } from "@/components/course/detail/CourseDetailOverview";
@@ -97,10 +95,64 @@ export function CourseDetailDrawer() {
   }, [currentCourse?.id]);
   const course = currentCourse ?? staleCourse;
 
-  const courseSchedules = schedules.filter((s) => s.courseId === course?.id);
-  const courseAssignments = assignments.filter((a) => a.courseId === course?.id);
-  const newScheduleIds = useEnterOnAdd(courseSchedules.map((s) => s.id), course?.id);
-  const newMaterialIds = useEnterOnAdd(course?.materials.map((m) => m.id) ?? [], course?.id);
+  // ---- Floating entity swap lifecycle（与 Assignment Floating Detail 同家族）----
+  // closed→open：第一帧即当前实体；open A→open B：先 old fade-out（60ms）再替换；
+  // close：保留 displayed 内容供 exit presence。reduced motion 即时切换。
+  const currentId = currentCourse?.id ?? null;
+  const [prevSelectedId, setPrevSelectedId] = useState(currentId);
+  const [displayedId, setDisplayedId] = useState<string | null>(null);
+  const [swapPhase, setSwapPhase] = useState<"in" | "out">("in");
+
+  if (currentId !== prevSelectedId) {
+    setPrevSelectedId(currentId);
+    const wasOpen = prevSelectedId !== null;
+    if (currentId === null) {
+      // closing：不改变 displayed 内容
+    } else if (!wasOpen) {
+      setDisplayedId(currentId);
+      setSwapPhase("in");
+    } else if (displayedId !== currentId) {
+      setSwapPhase("out");
+    }
+  }
+
+  useEffect(() => {
+    if (currentId === null || swapPhase !== "out") return;
+    if (displayedId === currentId) {
+      setSwapPhase("in");
+      return;
+    }
+    if (reducedMotion) {
+      setDisplayedId(currentId);
+      setSwapPhase("in");
+      return;
+    }
+    const t = window.setTimeout(() => {
+      setDisplayedId(currentId);
+      setSwapPhase("in");
+    }, 60);
+    return () => window.clearTimeout(t);
+  }, [currentId, swapPhase, displayedId, reducedMotion]);
+
+  // 实体切换/关闭：transient UI 一律复位（editing / more / addSlot / error）
+  useEffect(() => {
+    setIsEditing(false);
+    setEditError(null);
+    setMoreOpen(false);
+    setAddSlotOpen(false);
+    setAddSlotAutoFocusKey(0);
+  }, [currentId]);
+
+  const displayedCourse =
+    courses.find((c) => c.id === displayedId) ?? currentCourse ?? staleCourse;
+
+  const courseSchedules = schedules.filter((s) => s.courseId === displayedCourse?.id);
+  const courseAssignments = assignments.filter((a) => a.courseId === displayedCourse?.id);
+  const newScheduleIds = useEnterOnAdd(courseSchedules.map((s) => s.id), displayedCourse?.id);
+  const newMaterialIds = useEnterOnAdd(
+    displayedCourse?.materials.map((m) => m.id) ?? [],
+    displayedCourse?.id
+  );
 
   if (!course) return null;
 
@@ -344,79 +396,60 @@ export function CourseDetailDrawer() {
 
   const stats = formatCourseStats(courseSchedules.length, courseAssignments.length, course.materials.length);
 
+  // Header 与 Body 共享 entity swap lifecycle：静态 shell 控件（More/Close）留在 swap 层外
+  const swapContentClasses = cn(
+    swapPhase === "out"
+      ? "-translate-y-[3px] opacity-0 transition-[opacity,transform] duration-[60ms] ease-[var(--ease-standard)]"
+      : "ux-detail-swap-in"
+  );
+
   return (
     <Drawer
+      presentation="floating"
       open={!!currentCourse}
       onOpenChange={(next) => {
         if (!next) setSelectedCourseId(null);
       }}
       overlayId={OVERLAY_ID}
       aria-label="课程详情"
-      className="w-full sm:w-[560px] xl:w-[600px] max-w-[min(600px,100vw)]"
+      focusRestoreKey={currentId}
     >
-      {/* HEADER：Identity + shell actions（编辑/More/关闭）；删除在 More（confirm 不变） */}
-      <header className="shrink-0 border-b border-line bg-surface">
-        <div className="h-[3px]" style={{ backgroundColor: course.bgHex }} aria-hidden="true" />
-        <div className="flex items-center justify-between gap-3 px-5 pb-4 pt-3.5">
-          <div className="flex min-w-0 items-center gap-3">
-            <div
-              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-line-strong shadow-subtle"
-              style={{ backgroundColor: `${course.bgHex}66` }}
-            >
-              <BookOpen className="h-5 w-5 text-charcoal" />
-            </div>
-            <div className="min-w-0">
-              {course.code && (
-                <span className="font-mono text-[10px] font-semibold text-sandrift">
-                  {course.code}
-                </span>
-              )}
-              <h2 className="truncate text-lg font-bold leading-snug text-charcoal">{course.name}</h2>
-            </div>
+      {/* HEADER：与 Assignment Floating Detail 同 shell —— breadcrumb + 标题 + More / 关闭 */}
+      <header className="shrink-0 border-b border-line bg-[#F7F5F5] px-5 pt-4 pb-3.5">
+        <div className="flex items-start justify-between gap-2">
+          <div
+            key={displayedId ?? "none"}
+            className={cn("min-w-0 flex-1", swapContentClasses)}
+          >
+            <p className="flex items-center gap-1.5 text-xs font-semibold text-sandrift">
+              <span
+                aria-hidden="true"
+                className="w-1.5 h-1.5 rounded-full shrink-0"
+                style={{ backgroundColor: displayedCourse?.borderHex }}
+              />
+              {displayedCourse?.code ? `课程资料 · ${displayedCourse.code}` : "课程资料"}
+            </p>
+            <h2 className="mt-1 break-words text-[19px] font-bold leading-snug text-charcoal">
+              {displayedCourse?.name ?? course.name}
+            </h2>
           </div>
-
-          <div className="flex shrink-0 items-center gap-1.5">
-            {isEditing ? (
-              <>
-                <Button variant="secondary" size="sm" onClick={handleCancelEdit} className="h-7 px-2.5">
-                  取消
-                </Button>
-                <Button variant="primary" size="sm" onClick={handleSaveCourse} className="h-7 px-2.5">
-                  保存
-                </Button>
-              </>
-            ) : (
-              <>
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  onClick={handleStartEdit}
-                  aria-label="编辑课程信息"
-                  className="h-7 px-2.5"
-                >
-                  编辑
-                </Button>
-                <Popover open={moreOpen} onOpenChange={setMoreOpen}>
-                  <IconButton
-                    variant="secondary"
-                    size="sm"
-                    onClick={() => setMoreOpen((v) => !v)}
-                    aria-label="更多操作"
-                    title="更多操作"
-                  >
-                    <MoreHorizontal className="h-4 w-4" />
-                  </IconButton>
-                  <DropdownMenuPanel open={moreOpen} placement="bottom-end" aria-label="更多操作" className="w-44">
-                    <DropdownMenuItem icon={Trash2} label="删除课程" danger onClick={handleDeleteCourse} />
-                    <DropdownMenuDivider />
-                    <DropdownMenuItem
-                      label="Ask Kiro"
-                      onClick={handleAskKiro}
-                    />
-                  </DropdownMenuPanel>
-                </Popover>
-              </>
-            )}
+          <div className="flex shrink-0 items-center gap-1">
+            <Popover open={moreOpen} onOpenChange={setMoreOpen}>
+              <IconButton
+                variant="secondary"
+                size="sm"
+                onClick={() => setMoreOpen((v) => !v)}
+                aria-label="更多操作"
+                title="更多操作"
+              >
+                <MoreHorizontal className="h-4 w-4" />
+              </IconButton>
+              <DropdownMenuPanel open={moreOpen} placement="bottom-end" aria-label="更多操作" className="w-44">
+                <DropdownMenuItem label="Ask Kiro" onClick={handleAskKiro} />
+                <DropdownMenuDivider />
+                <DropdownMenuItem icon={Trash2} label="删除课程" danger onClick={handleDeleteCourse} />
+              </DropdownMenuPanel>
+            </Popover>
             <IconButton
               variant="secondary"
               size="sm"
@@ -430,12 +463,12 @@ export function CourseDetailDrawer() {
         </div>
       </header>
 
-      {/* BODY */}
-      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 pb-[max(1.25rem,env(safe-area-inset-bottom))]">
-        <div className="space-y-6 py-4">
+      {/* BODY：与 Assignment 一致 p-5 space-y-5；按 displayed 实体渲染（swap 层内） */}
+      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))]">
+        <div key={displayedId ?? "none"} className={cn("space-y-5", swapContentClasses)}>
           {/* OVERVIEW */}
           <CourseDetailOverview
-            course={course}
+            course={displayedCourse ?? course}
             stats={stats}
             editing={isEditing}
             draft={draft}
@@ -443,28 +476,36 @@ export function CourseDetailDrawer() {
             error={editError}
           />
 
-          {/* PRIMARY ACTIONS：添加任务 primary；其余 secondary */}
-          <div className="flex flex-wrap items-center gap-1.5">
-            <Button variant="primary" size="sm" onClick={handleQuickAddAssignment} className="h-8 px-3">
-              <Plus className="h-3.5 w-3.5" />
-              添加任务
-            </Button>
-            <Button variant="secondary" size="sm" onClick={handleQuickAddSlot} className="h-8 px-2.5">
-              <Plus className="h-3.5 w-3.5" />
-              添加时段
-            </Button>
-            <Button variant="secondary" size="sm" onClick={handleQuickUploadMaterial} className="h-8 px-2.5">
-              <FileUp className="h-3.5 w-3.5" />
-              上传资料
-            </Button>
-            <KiroFlowButton
-              icon={KIRO_ICON}
-              label="Ask Kiro"
-              size="sm"
-              className="h-8"
-              onClick={handleAskKiro}
-            />
-          </div>
+          {/* PRIMARY ACTIONS：上传资料 primary；编辑态切换为 [保存][取消] */}
+          {isEditing ? (
+            <div className="flex items-center gap-1.5">
+              <Button variant="secondary" size="sm" onClick={handleCancelEdit}>
+                取消
+              </Button>
+              <Button variant="primary" size="sm" onClick={handleSaveCourse}>
+                保存
+              </Button>
+            </div>
+          ) : (
+            <div className="flex flex-wrap items-center gap-1.5">
+              <Button variant="primary" size="sm" onClick={handleQuickUploadMaterial} className="h-8 px-3">
+                <FileUp className="h-3.5 w-3.5" />
+                上传资料
+              </Button>
+              <Button variant="secondary" size="sm" onClick={handleQuickAddAssignment} className="h-8 px-2.5">
+                <Plus className="h-3.5 w-3.5" />
+                添加任务
+              </Button>
+              <Button variant="secondary" size="sm" onClick={handleQuickAddSlot} className="h-8 px-2.5">
+                <Plus className="h-3.5 w-3.5" />
+                添加时段
+              </Button>
+              <Button variant="secondary" size="sm" onClick={handleStartEdit} className="h-8 px-2.5">
+                <PencilLine className="h-3.5 w-3.5" />
+                编辑
+              </Button>
+            </div>
+          )}
 
           {/* SCHEDULE */}
           <CourseScheduleSection
@@ -504,9 +545,10 @@ export function CourseDetailDrawer() {
         </div>
       </div>
 
-      {/* Real File Input（上传资料 quick action 触发） */}
+      {/* Real File Input（上传资料 quick action 触发；id 供既有 E2E 定位） */}
       <input
         ref={materialInputRef}
+        id="real-material-upload"
         type="file"
         multiple
         accept=".pdf,.doc,.docx,.ppt,.pptx,.txt,.md,.png,.jpg,.jpeg,.webp"

@@ -12,6 +12,7 @@ import { MiniCalendar } from "@/components/dashboard/MiniCalendar";
 import { StudyLoadChart } from "@/components/dashboard/StudyLoadChart";
 import { AssignmentTable } from "@/components/dashboard/AssignmentTable";
 import { AssignmentsWorkspace } from "@/components/assignment/AssignmentsWorkspace";
+import { CoursesWorkspace } from "@/components/course/CoursesWorkspace";
 import { GroupCollaborationView } from "@/components/group/GroupCollaborationView";
 import { KiroWorkspace } from "@/components/kiro/KiroWorkspace";
 import { KiroSessionProvider } from "@/components/kiro/KiroSessionProvider";
@@ -43,22 +44,13 @@ import { cardKeyHandler, cn } from "@/lib/utils";
 import { openAssignmentEditor } from "@/lib/uiEvents";
 import { reconcileOrphanBlobs } from "@/lib/fileStorage";
 import { resolveStartupTab } from "@/lib/startup";
-import { formatWeekDateRange, getSemesterWeek } from "@/lib/semester";
-import { deriveNextCourseSession } from "@/lib/courses/nextSession";
+import { formatWeekDateRange } from "@/lib/semester";
 import {
   Plus,
   FileUp,
   ExternalLink,
   CalendarDays,
 } from "lucide-react";
-
-/** 周一至周日标签（Course Workspace 下一节展示用） */
-const WEEKDAY_LABELS = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"];
-
-/** 课程教师/教室：存在才显示，空字段不产生孤立 separator（不显示「待定」类伪值） */
-function courseMetaText(course: { teacher: string; classroom: string }): string {
-  return [course.teacher, course.classroom].filter(Boolean).join(" · ");
-}
 
 export default function Home() {
   const {
@@ -68,7 +60,6 @@ export default function Home() {
     semester,
     currentSemesterWeek,
     schedules,
-    setSelectedCourseId,
     setAddCourseModalOpen,
     setImportScheduleModalOpen,
     setFullTimetableModalOpen,
@@ -190,15 +181,6 @@ export default function Home() {
     if (tab !== s.activeTab) s.setActiveTab(tab);
   }, []);
 
-  // Statistics derived dynamically 100% from Zustand store
-  const totalCredits = courses.reduce((sum, c) => sum + c.credit, 0);
-
-  // Courses Workspace「本周下一节」：基于真实当前教学周（semester + 今天），
-  // 不跟随用户在 Timeline 浏览过的任意周；不在教学周时显示「当前不在教学周」
-  const realSemesterWeek = getSemesterWeek(new Date(), semester);
-  const inTeachingWeek =
-    realSemesterWeek >= 1 && realSemesterWeek <= semester.totalWeeks;
-
   return (
     <KiroSessionProvider>
       {/* Fixed Left Navigation Sidebar */}
@@ -299,190 +281,9 @@ export default function Home() {
 
           {activeTab === "assignments" && <AssignmentsWorkspace />}
 
-          {activeTab === "courses" && (
-            <div className="flex flex-1 min-h-0 flex-col">
-              <WorkspaceHeader
-                title="课程资料"
-                context={`${courses.length} 门课程 · ${totalCredits} 学分`}
-                primaryAction={
-                  <Button variant="primary" size="sm" onClick={() => setAddCourseModalOpen(true)}>
-                    <Plus className="h-3.5 w-3.5" />
-                    <span>添加课程</span>
-                  </Button>
-                }
-                sticky
-              />
-              <div className="flex flex-1 min-h-0 flex-col space-y-4 p-4 pb-24 md:p-6 md:pb-6">
-              {courses.length === 0 ? (
-                <div className="bg-surface border border-line rounded-xl p-10 shadow-subtle flex flex-col items-center justify-center gap-2.5 text-center">
-                  <p className="text-xs font-bold text-charcoal">暂无课程</p>
-                  <p className="text-[11px] text-sandrift">添加第一门课程或导入课表</p>
-                  <button
-                    onClick={() => setAddCourseModalOpen(true)}
-                    className="ux-press mt-1 h-8 px-3 bg-charcoal hover:bg-black text-white text-xs font-bold rounded-lg transition-colors shadow-subtle"
-                  >
-                    <Plus className="w-3.5 h-3.5 inline-block mr-1" />
-                    添加课程
-                  </button>
-                </div>
-              ) : (
-                <div className="bg-surface border border-line rounded-xl shadow-subtle flex flex-col min-h-0">
-                  {/* Desktop 表头（< lg 隐藏；mobile 用 stacked row） */}
-                  <div className="hidden lg:grid grid-cols-12 gap-3 px-4 pt-3 pb-2 border-b border-line-soft text-[11px] font-bold text-sandrift shrink-0">
-                    <span className="col-span-5">课程</span>
-                    <span className="col-span-3">本周下一节</span>
-                    <span className="col-span-2 text-right">未完成任务</span>
-                    <span className="col-span-2 text-right">资料</span>
-                  </div>
-                  <div className="divide-y divide-line-soft">
-                    {courses.map((course) => {
-                      // 「本周下一节」基于真实当前教学周（semester + 今天），
-                      // 不跟随用户在 Timeline 浏览过的任意周
-                      const next = inTeachingWeek
-                        ? deriveNextCourseSession(
-                            course.id,
-                            schedules,
-                            realSemesterWeek,
-                            semester.totalWeeks
-                          )
-                        : null;
-                      const nextCellText = !inTeachingWeek
-                        ? "当前不在教学周"
-                        : next
-                          ? null
-                          : "本周无后续课程";
-                      const incompleteCount = assignments.filter(
-                        (a) => a.courseId === course.id && a.status !== "completed"
-                      ).length;
-                      return (
-                        <div
-                          key={course.id}
-                          role="button"
-                          tabIndex={0}
-                          onClick={() => setSelectedCourseId(course.id)}
-                          onKeyDown={cardKeyHandler(() => setSelectedCourseId(course.id))}
-                          className="group cursor-pointer"
-                        >
-                          {/* Desktop Row：颜色仅作身份（dot），主背景 neutral；hover 无 elevation */}
-                          <div className="hidden lg:grid grid-cols-12 gap-3 items-center relative px-4 py-3 hover:bg-alabaster/50 transition-colors duration-[var(--motion-fast)] ease-[var(--ease-standard)]">
-                            <div className="col-span-5 flex items-center gap-2.5 min-w-0">
-                              <span
-                                aria-hidden="true"
-                                className="w-2 h-2 rounded-full shrink-0"
-                                style={{ backgroundColor: course.borderHex }}
-                              />
-                              <div className="min-w-0">
-                                <div className="flex items-center gap-2 min-w-0">
-                                  <h3 className="text-[13px] font-bold text-charcoal truncate group-hover:text-black transition-colors duration-[var(--motion-fast)]">
-                                    {course.name}
-                                  </h3>
-                                  {course.code ? (
-                                    <span className="text-[11px] font-mono text-sandrift shrink-0">
-                                      {course.code}
-                                    </span>
-                                  ) : null}
-                                </div>
-                                <p className="text-[11px] text-satin-grey truncate mt-0.5">
-                                  {courseMetaText(course)}
-                                </p>
-                              </div>
-                            </div>
-                            <div className="col-span-3 min-w-0">
-                              {next ? (
-                                <>
-                                  <p className="text-xs font-semibold text-charcoal">
-                                    {WEEKDAY_LABELS[next.dayOfWeek - 1]} {next.startTime}
-                                  </p>
-                                  {next.location || course.classroom ? (
-                                    <p className="text-[11px] text-satin-grey truncate mt-0.5">
-                                      {next.location || course.classroom}
-                                    </p>
-                                  ) : null}
-                                </>
-                              ) : (
-                                <p className="text-[11px] text-sandrift">{nextCellText}</p>
-                              )}
-                            </div>
-                            <div className="col-span-2 text-right">
-                              <span
-                                className={cn(
-                                  "text-xs tabular-nums",
-                                  incompleteCount > 0
-                                    ? "font-bold text-charcoal"
-                                    : "font-semibold text-sandrift"
-                                )}
-                              >
-                                {incompleteCount}
-                              </span>
-                            </div>
-                            <div className="col-span-2 text-right pr-14">
-                              <span className="text-xs font-semibold text-satin-grey tabular-nums">
-                                {course.materials.length}
-                              </span>
-                            </div>
-                            {/* Desktop hover：仅「+ 任务」一个动作；其余进 Drawer */}
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                openAssignmentEditor({ courseId: course.id });
-                              }}
-                              className="absolute right-4 top-1/2 -translate-y-1/2 px-2 py-0.5 rounded-lg text-[10px] font-bold text-charcoal bg-white/90 border border-line-strong opacity-0 group-hover:opacity-100 focus-visible:opacity-100 hover:bg-alabaster transition-[opacity,background-color,border-color]"
-                              title="添加任务"
-                            >
-                              + 任务
-                            </button>
-                          </div>
-                          {/* Mobile Stacked Row（紧凑，非大彩卡） */}
-                          <div className="lg:hidden px-4 py-3 hover:bg-alabaster/50 transition-colors duration-[var(--motion-fast)] ease-[var(--ease-standard)]">
-                            <div className="flex items-start gap-2.5">
-                              <span
-                                aria-hidden="true"
-                                className="w-2 h-2 rounded-full shrink-0 mt-1.5"
-                                style={{ backgroundColor: course.borderHex }}
-                              />
-                              <div className="min-w-0 flex-1">
-                                <div className="flex items-center gap-2 min-w-0">
-                                  <h3 className="text-[13px] font-bold text-charcoal truncate">
-                                    {course.name}
-                                  </h3>
-                                  {course.code ? (
-                                    <span className="text-[11px] font-mono text-sandrift shrink-0">
-                                      {course.code}
-                                    </span>
-                                  ) : null}
-                                </div>
-                                <p className="text-[11px] text-satin-grey truncate mt-0.5">
-                                  {courseMetaText(course)}
-                                </p>
-                              </div>
-                            </div>
-                            <div className="flex items-center gap-1.5 pl-[18px] mt-1.5 text-[11px]">
-                              <span
-                                className={
-                                  next ? "font-semibold text-charcoal" : "text-sandrift"
-                                }
-                              >
-                                {next
-                                  ? `下一节 ${WEEKDAY_LABELS[next.dayOfWeek - 1]} ${next.startTime}`
-                                  : nextCellText}
-                              </span>
-                              <span className="text-sandrift">·</span>
-                              <span className="text-sandrift">
-                                {incompleteCount} 个任务 · {course.materials.length} 份资料
-                              </span>
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-              </div>
-            </div>
-          )}
+                    {activeTab === "courses" && <CoursesWorkspace />}
 
-          {activeTab === "kiro" && (
+{activeTab === "kiro" && (
             <div className="flex flex-1 min-h-0 flex-col">
               <WorkspaceHeader title="Kiro" />
               <KiroWorkspace />
