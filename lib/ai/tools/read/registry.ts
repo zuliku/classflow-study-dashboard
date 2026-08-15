@@ -60,7 +60,7 @@ export const KIRO_READ_TOOLS = {
   }),
   propose_study_plan: tool({
     description:
-      "为任务生成学习计划建议（确定性：Deadline 越早越优先，其次优先级；只补预计耗时缺口；30–90 分钟块；overdue 任务不安排）。" +
+      "为任务生成学习计划建议（确定性：Deadline 越早越优先，其次优先级；只补预计耗时缺口；通常生成 30–90 分钟学习块，为精确匹配短任务或不可避免的尾段，最终块可能短于 30 分钟；overdue 任务不安排）。" +
       "这是 READ / PROPOSAL 工具，绝不写入 Store、绝不创建 StudyBlock；结果只是建议，用户确认后未来才会真正写入。" +
       "生成排程建议必须优先使用本工具，不要让模型自己编造时间。",
     inputSchema: KIRO_READ_TOOL_SCHEMAS.propose_study_plan,

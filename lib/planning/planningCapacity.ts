@@ -132,7 +132,12 @@ export function mergePlanningCapacityAllocations(
     totalRemainingRequiredMinutes,
     totalAllocatedMinutes,
     totalShortfallMinutes,
+    /**
+     * @deprecated internal：fallback 的 freeMinutesInWindow 是「Preferred blocks 已占用后」的
+     * expanded 剩余池，不代表 Combined Scenario 的初始总容量；不要让 UI / Kiro 消费。
+     */
     freeMinutesInWindow,
+    /** @deprecated internal（同 freeMinutesInWindow 的语义限制） */
     unusedFreeMinutes: Math.max(freeMinutesInWindow - totalAllocatedMinutes, 0),
     fullyCoveredTasks,
     partiallyCoveredTasks,
