@@ -21,7 +21,7 @@ const MATERIAL_PREVIEW_LIMIT = 2;
 
 /**
  * Course Library Card V4（Task 4）：
- * 三层结构 —— COURSE IDENTITY（rail + header）→ 下节课 context strip → 任务/资料平行 sections → footer。
+ * 三层结构 —— COURSE IDENTITY（identity dot + header）→ 下节课 context strip → 任务/资料平行 sections → footer。
  * - 固定高度（xl 两列统一 312px）：Task/Material preview 数量固定，空态固定高度，保证 Card 内容天然可控
  * - 溢出 → 轻量二级 Popover（tasks bottom-end / materials top-end），不直接进详情
  * - 上传资料始终可见（header + materials popover 共用 Workspace 同一 upload handler）
@@ -81,33 +81,33 @@ export function CourseLibraryCard({
         "group relative flex flex-col bg-surface border border-line rounded-xl",
         "transition-colors duration-[var(--motion-fast)] ease-[var(--ease-standard)]",
         "hover:bg-alabaster/30 hover:border-line-strong",
-        "xl:h-[312px]"
+        "xl:h-[320px]"
       )}
     >
-      {/* 课程色 accent rail：整卡属于同一课程的 parent identity */}
-      <span
-        aria-hidden="true"
-        className="absolute left-0 top-3 bottom-3 w-[3px] rounded-full"
-        style={{ backgroundColor: course.borderHex }}
-      />
-
-      {/* HEADER：课程身份（名称最高层级）+ 始终可见的上传资料 */}
-      <header className="shrink-0 bg-alabaster/20 rounded-t-xl pl-5 pr-4 pt-3.5 pb-2.5">
+      {/* HEADER：课程身份（名称最高层级 + identity dot）+ 始终可见的上传资料 */}
+      <header className="shrink-0 bg-alabaster/20 rounded-t-xl px-4 pt-3.5 pb-2.5">
         <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <button
-              type="button"
-              onClick={onOpenCourse}
-              className="block max-w-full truncate text-[13px] font-bold text-charcoal text-left transition-colors hover:text-black"
-              title="查看课程详情"
-            >
-              {course.name}
-            </button>
-            <div className="flex items-center gap-2 min-w-0">
-              {course.code && (
-                <span className="text-[11px] font-mono text-sandrift truncate">{course.code}</span>
-              )}
-              {meta && <span className="text-[11px] text-satin-grey truncate">{meta}</span>}
+          <div className="flex items-center gap-2 min-w-0">
+            <span
+              aria-hidden="true"
+              className="w-[7px] h-[7px] rounded-full shrink-0"
+              style={{ backgroundColor: course.borderHex }}
+            />
+            <div className="min-w-0">
+              <button
+                type="button"
+                onClick={onOpenCourse}
+                className="block max-w-full truncate text-[13px] font-bold text-charcoal text-left transition-colors hover:text-black"
+                title="查看课程详情"
+              >
+                {course.name}
+              </button>
+              <div className="flex items-center gap-2 min-w-0">
+                {course.code && (
+                  <span className="text-[11px] font-mono text-sandrift truncate">{course.code}</span>
+                )}
+                {meta && <span className="text-[11px] text-satin-grey truncate">{meta}</span>}
+              </div>
             </div>
           </div>
           <button
@@ -132,7 +132,7 @@ export function CourseLibraryCard({
       </header>
 
       {/* 下节课：context strip（低于 Task/Material section 视觉权重） */}
-      <div className="shrink-0 pl-5 pr-4 pt-2.5">
+      <div className="shrink-0 px-4 pt-2.5">
         <p className="text-[11px] text-satin-grey truncate">
           <span className="mr-1.5 font-bold text-sandrift">下节课</span>
           {next ? (
@@ -148,7 +148,7 @@ export function CourseLibraryCard({
       </div>
 
       {/* TASKS：固定 preview section（最多 2 条）+ 溢出 Popover */}
-      <section className="shrink-0 pl-5 pr-4 pt-2.5 mt-2 border-t border-line-soft">
+      <section className="shrink-0 px-4 pt-2.5 mt-2 border-t border-line-soft">
         <div className="flex items-center justify-between gap-2">
           <h4 className="text-[11px] font-bold text-sandrift">任务 {taskRows.length}</h4>
           {overdueCount > 0 && (
@@ -216,7 +216,7 @@ export function CourseLibraryCard({
       </section>
 
       {/* MATERIALS：与 Task 平行的固定 preview section */}
-      <section className="shrink-0 pl-5 pr-4 pt-2.5 mt-2 border-t border-line-soft">
+      <section className="shrink-0 px-4 pt-2.5 mt-2 border-t border-line-soft">
         <h4 className="text-[11px] font-bold text-sandrift">资料 {materials.length}</h4>
 
         {previewMaterials.length === 0 ? (
@@ -290,7 +290,7 @@ export function CourseLibraryCard({
       </section>
 
       {/* FOOTER：低权重动作 */}
-      <footer className="mt-auto shrink-0 flex items-center justify-between pl-5 pr-4 pt-2 pb-2.5 mt-2 border-t border-line-soft">
+      <footer className="mt-auto shrink-0 flex items-center justify-between px-4 pt-2.5 pb-3 mt-2.5 border-t border-line-soft">
         <button
           type="button"
           onClick={onAddTask}
