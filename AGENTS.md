@@ -1,5 +1,11 @@
 # ClassFlow 开发约定
 
+## 提交与推送（2026-08-15 起）
+
+- **任务完成后默认 `git push`**（推送到 `origin/main`），无需用户每次提醒。
+- 推送前检查 `git status` / `git diff`，只提交本任务相关的文件，不提交 secrets。
+- 提交信息遵循仓库风格（`feat(...)` / `fix(...)` / `test(...)` 前缀 + 中文描述）。
+
 ## 本地预览 dev server 常驻
 
 - **`npm run dev` 保持常驻运行**（http://localhost:3000，当前 PID 见任务记录）。
