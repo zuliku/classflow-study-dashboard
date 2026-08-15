@@ -13,15 +13,12 @@ import { Checkbox } from "@/components/ui/Checkbox";
 import {
   Plus,
   CheckSquare,
-
-  Clock,
   User,
-  ChevronRight,
   FolderPlus,
   Trash2,
   Pencil,
   X,
-
+  MoreHorizontal,
 } from "lucide-react";
 import { useAppStore } from "@/store/useAppStore";
 import { useToastStore } from "@/store/useToastStore";
@@ -29,7 +26,6 @@ import { useConfirmStore } from "@/store/useConfirmStore";
 import { UISelect } from "@/components/ui/Select";
 import { format, formatDistanceToNow } from "date-fns";
 import { zhCN } from "date-fns/locale";
-import { cardKeyHandler } from "@/lib/utils";
 import { useEnterOnAdd } from "@/lib/useEnterOnAdd";
 import { useExitPresenceList } from "@/lib/useExitPresenceList";
 import { ExitCollapse } from "@/components/ui/ExitCollapse";
@@ -43,6 +39,8 @@ import { KIRO_ICON } from "@/components/layout/navItems";
 import { KiroFlowButton } from "@/components/kiro/KiroFlow";
 import { cn } from "@/lib/utils";
 import { Dialog } from "@/components/ui/Dialog";
+import { Popover } from "@/components/ui/Popover";
+import { DropdownMenuPanel, DropdownMenuItem } from "@/components/ui/DropdownMenu";
 import { GroupMember } from "@/types";
 
 /** 头像 fallback：无头像时显示姓名首字 */
@@ -139,6 +137,7 @@ export function GroupCollaborationView() {
   const handoff = useKiroHandoff();
 
   const [selectedProjectId, setSelectedProjectId] = useState<string>(groupProjects[0]?.id || "");
+  const [projectMoreOpen, setProjectMoreOpen] = useState(false);
 
   // 弹窗表单状态：null = 关闭
   const [projectForm, setProjectForm] = useState<null | { mode: "create" } | { mode: "edit"; projectId: string }>(null);
@@ -389,330 +388,321 @@ export function GroupCollaborationView() {
       />
 
       <div className="flex flex-1 min-h-0 flex-col space-y-4 p-4 pb-24 md:p-6 md:pb-6">
-      {/* Main Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 items-start">
-        {/* Left: Project List */}
-        <div className="space-y-3">
-          <h3 className="text-xs font-bold text-sandrift uppercase tracking-wider px-1">
-            参与的大作业项目 ({groupProjects.length})
-          </h3>
+      {/* Workspace 两栏：左侧项目列表（Grouped Rows）+ 右侧当前项目详情 */}
+      <div className="flex flex-1 min-h-0 flex-col lg:flex-row gap-4 p-4 pb-24 md:p-6 md:pb-6">
+        {/* Left: Project List（一个 Surface 内 grouped rows；无独立 Card grid） */}
+        <aside className="w-full lg:w-[300px] lg:shrink-0 min-h-0 flex flex-col">
+          <div className="flex items-center justify-between px-1 pb-2">
+            <h3 className="text-xs font-bold text-sandrift">项目</h3>
+            <button
+              type="button"
+              onClick={openCreateProject}
+              className="flex items-center gap-1 rounded-lg px-1.5 py-1 text-[11px] font-bold text-satin-grey transition-colors hover:text-charcoal"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              新建项目
+            </button>
+          </div>
+
           {groupProjects.length === 0 ? (
-            <div className="py-10 text-center space-y-2 bg-surface border border-line rounded-2xl">
+            <div className="bg-surface border border-line rounded-xl px-4 py-8 flex flex-col items-center gap-2 text-center">
               <p className="text-xs font-semibold text-charcoal">还没有小组项目</p>
-              <p className="text-[11px] text-sandrift">创建项目后，可以在这里管理成员和任务分工。</p>
+              <p className="text-[11px] text-sandrift">创建项目来管理成员、任务与分工。</p>
               <Button variant="primary" size="sm" onClick={openCreateProject}>
                 <Plus className="w-3 h-3" />
                 <span>新建项目</span>
               </Button>
             </div>
           ) : (
-            <div className="space-y-2">
+            <div className="bg-surface border border-line rounded-xl divide-y divide-line-soft overflow-y-auto">
               {retainedProjects.map((entry) => {
                 const p = entry.item;
                 const isSelected = activeProject?.id === p.id;
                 const course = courses.find((c) => c.id === p.courseId);
+                const completedCount = p.tasks.filter((t) => t.completed).length;
                 return (
                   <ExitCollapse key={p.id} exiting={entry.exiting}>
-                  <div
-                    onClick={() => setSelectedProjectId(p.id)}
-                    role="button"
-                    tabIndex={0}
-                    onKeyDown={cardKeyHandler(() => setSelectedProjectId(p.id))}
-                    className={`p-4 rounded-2xl border transition-colors duration-[var(--motion-base)] ease-[var(--ease-standard)] cursor-pointer shadow-subtle flex flex-col justify-between ${
-                      newProjectIds.has(p.id) && "animate-enter"
-                    } ${
-                      isSelected
-                        ? "bg-pastel-mint/60 border-stone-beige ring-1 ring-stone-beige"
-                        : "bg-surface border-line hover:bg-alabaster"
-                    }`}
-                  >
-                    <div>
-                      <span className="text-[10px] font-mono px-2 py-0.5 bg-white border border-line-strong rounded text-sandrift">
-                        {course?.name || "通用课题"}
-                      </span>
-                      <h4 className="text-sm font-bold text-charcoal mt-2">{p.title}</h4>
-                    </div>
-                    <div className="mt-3 pt-2.5 border-t border-line-strong/60 flex items-center justify-between text-xs">
-                      <div className="flex items-center space-x-1.5">
-                        <div className="flex -space-x-1.5">
-                          {p.members.map((m) => (
-                            <MemberAvatar key={m.id} member={m} size="w-5 h-5" />
-                          ))}
-                        </div>
-                        <span className="text-[10px] text-sandrift">{p.members.length} 人</span>
-                      </div>
-                      <div className="flex items-center space-x-2">
-                        <span className="text-[10px] font-bold text-charcoal">
-                          {p.tasks.filter((t) => t.completed).length} / {p.tasks.length} · {p.progress}%
-                        </span>
-                        <ChevronRight className="w-3.5 h-3.5 text-sandrift" />
-                      </div>
-                    </div>
-                  </div>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedProjectId(p.id)}
+                      aria-current={isSelected ? "true" : undefined}
+                      className={cn(
+                        "relative w-full px-3.5 py-2.5 text-left transition-colors duration-[var(--motion-fast)] ease-[var(--ease-standard)]",
+                        isSelected
+                          ? "bg-pastel-mint/50 hover:bg-pastel-mint/60"
+                          : "hover:bg-alabaster",
+                        newProjectIds.has(p.id) && "animate-enter"
+                      )}
+                    >
+                      {isSelected && (
+                        <span
+                          aria-hidden="true"
+                          className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-5 rounded-full bg-charcoal"
+                        />
+                      )}
+                      <p className="truncate text-xs font-bold text-charcoal">{p.title}</p>
+                      <p className="mt-0.5 truncate text-[10px] text-sandrift">
+                        {course?.name || "通用课题"} · {completedCount} / {p.tasks.length} · {p.progress}%
+                      </p>
+                    </button>
                   </ExitCollapse>
                 );
               })}
             </div>
           )}
-        </div>
+        </aside>
 
         {/* Right: Project Detail */}
-        {selectedProject && (
-          <div className="lg:col-span-2 space-y-4">
-            {/* Overview */}
-            <div className="bg-surface border border-line rounded-2xl p-4 shadow-subtle space-y-4">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-line-soft pb-3">
-                <div className="min-w-0">
-                  <span className="text-xs font-mono text-sandrift px-2 py-0.5 bg-white rounded border border-line-strong">
-                    {courses.find((c) => c.id === selectedProject.courseId)?.name || "通用课题"}
-                  </span>
-                  <div className="flex items-center space-x-1 mt-1.5">
-                    <h3 className="text-lg font-bold text-charcoal truncate">{selectedProject.title}</h3>
-                    <IconButton
-                      variant="ghost"
+        <div className="flex-1 min-w-0 flex flex-col space-y-4">
+          {selectedProject ? (
+            <>
+              {/* Detail：单 Surface（header / progress / description / members） */}
+              <div className="bg-surface border border-line rounded-xl p-4 space-y-3.5">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="truncate text-[11px] font-semibold text-sandrift">
+                      {courses.find((c) => c.id === selectedProject.courseId)?.name || "通用课题"}
+                    </p>
+                    <h3 className="mt-0.5 truncate text-lg font-bold text-charcoal">
+                      {selectedProject.title}
+                    </h3>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-2">
+                    <span className="text-sm font-extrabold text-charcoal tabular-nums">
+                      {selectedProject.progress}%
+                    </span>
+                    <Button
+                      variant="secondary"
                       size="sm"
                       onClick={openEditProject}
-                      title="编辑项目"
-                      aria-label="编辑项目"
-                      className="h-7 w-7"
+                      className="h-7 px-2.5 text-[11px]"
                     >
-                      <Pencil className="w-3.5 h-3.5" />
-                    </IconButton>
-                    <IconButton
-                      variant="danger"
-                      size="sm"
-                      onClick={handleDeleteProject}
-                      title="删除项目"
-                      aria-label="删除项目"
-                      className="h-7 w-7"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </IconButton>
-                  </div>
-                </div>
-                <div className="text-right">
-                  <span className="text-xs text-sandrift">团队总进度</span>
-                  <div className="text-2xl font-extrabold text-charcoal">{selectedProject.progress}%</div>
-                </div>
-              </div>
-
-              <p className="text-xs text-satin-grey bg-white p-3 rounded-xl border border-line leading-relaxed">
-                {selectedProject.description || "暂无项目说明"}
-              </p>
-
-              <div className="w-full bg-alabaster rounded-full h-2 overflow-hidden">
-                <div
-                  className="bg-success h-2 rounded-full transition-[width] duration-[var(--motion-data)] ease-[var(--ease-emphasized)]"
-                  style={{ width: `${selectedProject.progress}%` }}
-                />
-              </div>
-
-              {/* Members */}
-              <div className="space-y-2 pt-2">
-                <div className="flex items-center justify-between">
-                  <h4 className="text-xs font-bold text-sandrift uppercase tracking-wider">
-                    小组成员 ({selectedProject.members.length})
-                  </h4>
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    onClick={openAddMember}
-                    className="h-7 px-2 text-[11px]"
-                  >
-                    <Plus className="w-3 h-3" />
-                    <span>添加成员</span>
-                  </Button>
-                </div>
-
-                {retainedMembers.length === 0 ? (
-                  <div className="py-6 text-center space-y-2 bg-white border border-line rounded-xl">
-                    <p className="text-[11px] text-sandrift">还没有成员</p>
-                    <Button variant="primary" size="sm" onClick={openAddMember}>
-                      <Plus className="w-3 h-3" />
-                      <span>添加成员</span>
+                      <Pencil className="w-3 h-3" />
+                      编辑
                     </Button>
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
-                    {retainedMembers.map((entry) => {
-                      const m = entry.item;
-                      return (
-                      <ExitCollapse key={m.id} exiting={entry.exiting} className="min-w-0">
-                      <div
-                        className={cn(
-                          "p-2.5 bg-white border border-line rounded-xl flex items-center space-x-2 text-xs group w-full",
-                          newMemberIds.has(m.id) && "animate-enter"
-                        )}
+                    <Popover open={projectMoreOpen} onOpenChange={setProjectMoreOpen}>
+                      <IconButton
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => setProjectMoreOpen((v) => !v)}
+                        aria-label="更多项目操作"
+                        title="更多操作"
                       >
-                        <MemberAvatar member={m} size="w-7 h-7" ring />
-                        <div className="min-w-0 flex-1">
-                          <p className="font-bold text-charcoal truncate">{m.name}</p>
-                          <div className="flex items-center space-x-1.5">
-                            <span
+                        <MoreHorizontal className="w-4 h-4" />
+                      </IconButton>
+                      <DropdownMenuPanel open={projectMoreOpen} placement="bottom-end" aria-label="更多项目操作" className="w-44">
+                        <DropdownMenuItem icon={Trash2} label="删除项目" danger onClick={handleDeleteProject} />
+                      </DropdownMenuPanel>
+                    </Popover>
+                  </div>
+                </div>
+
+                <div className="w-full bg-alabaster rounded-full h-1.5 overflow-hidden">
+                  <div
+                    className="bg-success h-1.5 rounded-full transition-[width] duration-[var(--motion-data)] ease-[var(--ease-emphasized)]"
+                    style={{ width: `${selectedProject.progress}%` }}
+                  />
+                </div>
+
+                <p className="text-xs leading-relaxed text-satin-grey">
+                  {selectedProject.description || "暂无项目说明"}
+                </p>
+
+                {/* Members：grouped rows（非 mini-card grid） */}
+                <div className="pt-1.5">
+                  <div className="flex items-center justify-between px-1 pb-1">
+                    <h4 className="text-[11px] font-bold text-sandrift">
+                      成员 {selectedProject.members.length}
+                    </h4>
+                    <button
+                      type="button"
+                      onClick={openAddMember}
+                      className="flex items-center gap-1 rounded-lg px-1.5 py-1 text-[11px] font-bold text-satin-grey transition-colors hover:text-charcoal"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      添加成员
+                    </button>
+                  </div>
+
+                  {retainedMembers.length === 0 ? (
+                    <button
+                      type="button"
+                      onClick={openAddMember}
+                      className="flex w-full items-center justify-between rounded-lg px-2 py-2 text-left text-[11px] font-semibold text-sandrift transition-colors hover:bg-alabaster hover:text-charcoal"
+                    >
+                      <span>还没有成员</span>
+                      <span className="flex items-center gap-1 font-bold">
+                        <Plus className="w-3.5 h-3.5" />
+                        添加成员
+                      </span>
+                    </button>
+                  ) : (
+                    <div className="divide-y divide-line-soft">
+                      {retainedMembers.map((entry) => {
+                        const m = entry.item;
+                        return (
+                          <ExitCollapse key={m.id} exiting={entry.exiting}>
+                            <div
                               className={cn(
-                                "text-[9px] px-1 rounded",
-                                m.role === "leader"
-                                  ? "bg-stone-beige text-white"
-                                  : "bg-pastel-mint text-satin-grey"
+                                "group flex items-center gap-2.5 px-2 py-2",
+                                newMemberIds.has(m.id) && "animate-enter"
                               )}
                             >
-                              {m.role === "leader" ? "组长" : "组员"}
-                            </span>
-                            {m.major && (
-                              <span className="text-[9px] text-sandrift truncate">{m.major}</span>
+                              <MemberAvatar member={m} size="w-7 h-7" ring />
+                              <div className="min-w-0 flex-1">
+                                <p className="truncate text-xs font-bold text-charcoal">{m.name}</p>
+                                <p className="truncate text-[10px] text-sandrift">
+                                  {m.role === "leader" ? "组长" : "组员"}
+                                  {m.major ? ` · ${m.major}` : ""}
+                                </p>
+                              </div>
+                              <div className="flex shrink-0 items-center gap-0.5 sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100">
+                                <IconButton
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => openEditMember(m)}
+                                  aria-label={`编辑成员 ${m.name}`}
+                                  title="编辑成员"
+                                  className="h-6 w-6"
+                                >
+                                  <Pencil className="w-3 h-3" />
+                                </IconButton>
+                                <IconButton
+                                  variant="danger"
+                                  size="sm"
+                                  onClick={() => handleRemoveMember(m.id)}
+                                  aria-label={`移除成员 ${m.name}`}
+                                  title="移除成员"
+                                  className="h-6 w-6"
+                                >
+                                  <Trash2 className="w-3 h-3" />
+                                </IconButton>
+                              </div>
+                            </div>
+                          </ExitCollapse>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Tasks：grouped rows + toolbar（无 Card grid） */}
+              <div className="bg-surface border border-line rounded-xl p-4 space-y-3">
+                <div className="flex items-center justify-between gap-2">
+                  <h4 className="text-sm font-bold text-charcoal">
+                    任务 {selectedProject.tasks.filter((t) => t.completed).length} / {selectedProject.tasks.length}
+                  </h4>
+                  <div className="flex items-center gap-2">
+                    <SearchField
+                      value={taskSearch}
+                      onChange={(e) => setTaskSearch(e.target.value)}
+                      onClear={() => setTaskSearch("")}
+                      placeholder="检索任务"
+                      aria-label="检索任务"
+                      className="w-28 sm:w-36"
+                    />
+                    <Button
+                      variant="primary"
+                      size="sm"
+                      onClick={openAddTask}
+                      className="h-8"
+                    >
+                      <Plus className="w-3 h-3" />
+                      添加任务
+                    </Button>
+                  </div>
+                </div>
+
+                {retainedTasks.length === 0 ? (
+                  <button
+                    type="button"
+                    onClick={openAddTask}
+                    className="flex w-full items-center justify-between rounded-lg px-2 py-2 text-left text-[11px] font-semibold text-sandrift transition-colors hover:bg-alabaster hover:text-charcoal"
+                  >
+                    <span>
+                      {selectedProject.tasks.length === 0 ? "还没有任务" : "没有匹配的任务"}
+                    </span>
+                    {selectedProject.tasks.length === 0 && (
+                      <span className="flex items-center gap-1 font-bold">
+                        <Plus className="w-3.5 h-3.5" />
+                        添加任务
+                      </span>
+                    )}
+                  </button>
+                ) : (
+                  <div className="divide-y divide-line-soft">
+                    {retainedTasks.map((entry) => {
+                      const task = entry.item;
+                      const assignee = selectedProject.members.find((m) => m.id === task.assigneeId);
+                      const ddlDate = parseLocalDDL(task.ddl);
+                      return (
+                        <ExitCollapse key={task.id} exiting={entry.exiting}>
+                          <div
+                            className={cn(
+                              "group flex items-center gap-2.5 px-2 py-2.5",
+                              newTaskIds.has(task.id) && "animate-enter"
                             )}
+                          >
+                            <Checkbox
+                              checked={task.completed}
+                              onChange={() => toggleGroupTask(selectedProject.id, task.id)}
+                              aria-label={task.completed ? "标记未完成" : "标记完成"}
+                            />
+                            <div className="min-w-0 flex-1">
+                              <p
+                                className={cn(
+                                  "truncate text-xs font-semibold",
+                                  task.completed ? "text-sandrift line-through" : "text-charcoal"
+                                )}
+                              >
+                                {task.title}
+                              </p>
+                              <p className="mt-0.5 truncate text-[10px] text-sandrift">
+                                {assignee?.name ?? "未分配"}
+                                {ddlDate && (
+                                  <>
+                                    {" · "}
+                                    {format(ddlDate, "M月d日 HH:mm", { locale: zhCN })}
+                                    {" · "}
+                                    {formatDistanceToNow(ddlDate, { addSuffix: true, locale: zhCN })}
+                                  </>
+                                )}
+                              </p>
+                            </div>
+                            {assignee ? <MemberAvatar member={assignee} size="w-6 h-6" ring /> : null}
+                            <div className="flex shrink-0 items-center gap-0.5 sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100">
+                              <IconButton
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => openEditTask(task.id)}
+                                aria-label={`编辑任务 ${task.title}`}
+                                title="编辑任务"
+                                className="h-6 w-6"
+                              >
+                                <Pencil className="w-3 h-3" />
+                              </IconButton>
+                              <IconButton
+                                variant="danger"
+                                size="sm"
+                                onClick={() => handleDeleteTask(task.id)}
+                                aria-label={`删除任务 ${task.title}`}
+                                title="删除任务"
+                                className="h-6 w-6"
+                              >
+                                <Trash2 className="w-3 h-3" />
+                              </IconButton>
+                            </div>
                           </div>
-                        </div>
-                        <div className="flex flex-col shrink-0">
-                          <IconButton
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => openEditMember(m)}
-                            aria-label={`编辑成员 ${m.name}`}
-                            title="编辑成员"
-                            className="h-6 w-6 opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
-                          >
-                            <Pencil className="w-3 h-3" />
-                          </IconButton>
-                          <IconButton
-                            variant="danger"
-                            size="sm"
-                            onClick={() => handleRemoveMember(m.id)}
-                            aria-label={`移除成员 ${m.name}`}
-                            title="移除成员"
-                            className="h-6 w-6 opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
-                          >
-                            <Trash2 className="w-3 h-3" />
-                          </IconButton>
-                        </div>
-                      </div>
-                      </ExitCollapse>
+                        </ExitCollapse>
                       );
                     })}
                   </div>
                 )}
               </div>
-            </div>
-
-            {/* Tasks */}
-            <div className="bg-surface border border-line rounded-2xl p-4 shadow-subtle space-y-3">
-              <div className="flex items-center justify-between border-b border-line-soft pb-2.5 gap-2">
-                <h4 className="text-sm font-bold text-charcoal flex items-center gap-1.5">
-                  <CheckSquare className="w-4 h-4 text-sandrift" />
-                  任务清单 ({selectedProject.tasks.filter((t) => t.completed).length} / {selectedProject.tasks.length})
-                </h4>
-                <div className="flex items-center gap-2">
-                  {/* 任务检索 */}
-                  <SearchField
-                    value={taskSearch}
-                    onChange={(e) => setTaskSearch(e.target.value)}
-                    onClear={() => setTaskSearch("")}
-                    placeholder="检索任务"
-                    aria-label="检索任务"
-                    className="w-28 sm:w-36"
-                  />
-                  <Button
-                    variant="primary"
-                    size="sm"
-                    onClick={openAddTask}
-                    className="h-7 px-2.5 text-[11px]"
-                  >
-                    <Plus className="w-3 h-3" />
-                    <span>添加任务</span>
-                  </Button>
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                {retainedTasks.length === 0 ? (
-                  <div className="py-6 text-center space-y-2 bg-white border border-line rounded-xl">
-                    <p className="text-[11px] text-sandrift">
-                      {selectedProject.tasks.length === 0 ? "还没有任务" : "没有匹配的任务"}
-                    </p>
-                    {selectedProject.tasks.length === 0 && (
-                      <Button variant="primary" size="sm" onClick={openAddTask}>
-                        <Plus className="w-3 h-3" />
-                        <span>添加任务</span>
-                      </Button>
-                    )}
-                  </div>
-                ) : (
-                  retainedTasks.map((entry) => {
-                    const task = entry.item;
-                    const assignee = selectedProject.members.find((m) => m.id === task.assigneeId);
-                    const ddlDate = parseLocalDDL(task.ddl);
-                    return (
-                      <ExitCollapse key={task.id} exiting={entry.exiting}>
-                      <div
-                        className={cn(
-                          "p-3 rounded-xl border transition-colors flex items-center justify-between text-xs group",
-                          newTaskIds.has(task.id) && "animate-enter",
-                          task.completed
-                            ? "bg-white border-line"
-                            : "bg-white border-line-strong hover:border-charcoal"
-                        )}
-                      >
-                        <div className="flex items-center space-x-3 min-w-0">
-                          <Checkbox
-                            checked={task.completed}
-                            onChange={() => toggleGroupTask(selectedProject.id, task.id)}
-                            aria-label={task.completed ? "标记未完成" : "标记完成"}
-                          />
-                          <div className="min-w-0">
-                            <span className={cn("font-semibold", task.completed ? "text-satin-grey line-through" : "text-charcoal")}>
-                              {task.title}
-                            </span>
-                            <div className="flex items-center space-x-3 mt-1 text-[10px] text-sandrift">
-                              <span className="flex items-center space-x-1">
-                                <User className="w-3 h-3" />
-                                <span>负责人：{assignee?.name ?? "未分配"}</span>
-                              </span>
-                              {ddlDate && (
-                                <span className="flex items-center space-x-1">
-                                  <Clock className="w-3 h-3" />
-                                  <span>
-                                    {format(ddlDate, "M月d日 HH:mm", { locale: zhCN })}
-                                    {" · "}
-                                    {formatDistanceToNow(ddlDate, { addSuffix: true, locale: zhCN })}
-                                  </span>
-                                </span>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-
-                        <div className="flex items-center space-x-1 shrink-0">
-                          {assignee ? <MemberAvatar member={assignee} size="w-6 h-6" ring /> : null}
-                          <IconButton
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => openEditTask(task.id)}
-                            aria-label={`编辑任务 ${task.title}`}
-                            title="编辑任务"
-                            className="h-6 w-6 opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
-                          >
-                            <Pencil className="w-3 h-3" />
-                          </IconButton>
-                          <IconButton
-                            variant="danger"
-                            size="sm"
-                            onClick={() => handleDeleteTask(task.id)}
-                            aria-label={`删除任务 ${task.title}`}
-                            title="删除任务"
-                            className="h-6 w-6 opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
-                          >
-                            <Trash2 className="w-3 h-3" />
-                          </IconButton>
-                        </div>
-                      </div>
-                      </ExitCollapse>
-                    );
-                  })
-                )}
-              </div>
-            </div>
-          </div>
-        )}
+            </>
+          ) : null}
+        </div>
       </div>
 
       {/* ===== 弹窗表单 ===== */}

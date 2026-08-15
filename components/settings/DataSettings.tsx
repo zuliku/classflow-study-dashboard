@@ -7,15 +7,17 @@ import { useToastStore } from "@/store/useToastStore";
 import { SettingsSection } from "@/components/settings/SettingsSection";
 import { SettingsGroup } from "@/components/settings/SettingsGroup";
 import { SettingsActionRow } from "@/components/settings/SettingsActionRow";
+import { DisclosureRegion } from "@/components/ui/DisclosureRegion";
 import { DataOverview } from "@/components/settings/DataOverview";
 import { DataHealth } from "@/components/settings/DataHealth";
 import { BackupSection } from "@/components/settings/BackupSection";
 import { RestoreSection, RestoreResult } from "@/components/settings/RestoreSection";
 import { DangerZone } from "@/components/settings/DangerZone";
 import { LearningHistorySettings } from "@/components/settings/LearningHistorySettings";
-import { CheckCircle2, AlertTriangle, RefreshCcw } from "lucide-react";
+import { CheckCircle2, AlertTriangle, ChevronDown, RefreshCcw } from "lucide-react";
+import { cn } from "@/lib/utils";
 
-/** 数据与存储中心：本地数据 / 数据状态 / 备份 / 恢复 / 危险操作 */
+/** 数据与存储中心：数据管理 / 学习历史 / 数据诊断（默认收起）/ 危险操作 */
 export function DataSettings() {
   // 选择性订阅：只有业务数据变化才重渲染（不订阅 Modal/activeTab 等 UI 状态）
   const { courses, schedules, assignments, groupProjects } = useAppStore(
@@ -38,8 +40,11 @@ export function DataSettings() {
     [courses, schedules, assignments, groupProjects]
   );
 
-  // 恢复结果：留在 Data & Storage 区内，不制造页面顶部大 Alert
+  // 恢复结果：留在数据管理区内，不制造页面顶部大 Alert
   const [restoreResult, setRestoreResult] = useState<RestoreResult | null>(null);
+
+  // 数据诊断：日常不需要常开（概览计数 / 健康检查），默认收起
+  const [diagnosticsOpen, setDiagnosticsOpen] = useState(false);
 
   // Dev Only：重新载入全模块演示数据（解决旧版预览数据残留，无需 ?preview= URL）
   const reloadDemoData = () => {
@@ -58,56 +63,69 @@ export function DataSettings() {
   };
 
   return (
-    <SettingsSection title="数据与存储" description="本地数据概览、健康检查与备份管理。">
+    <SettingsSection title="数据与存储" description="备份、恢复、学习历史与危险操作管理。">
       <div className="space-y-4" data-testid="settings-data">
-        {/* 数据概览：紧凑 metric（非 Dashboard 大 Stat Card） */}
-        <SettingsGroup title="数据概览">
-          <div className="py-3">
-            <DataOverview counts={counts} />
+        {/* 数据管理：日常真实动作优先 */}
+        <SettingsGroup title="数据管理">
+          <BackupSection />
+          {restoreResult && (
+            <div className="mx-3 mb-3 p-3 bg-pastel-mint/60 border border-line rounded-xl space-y-0.5 text-xs" data-testid="restore-result">
+              <p className="flex items-center gap-1.5 font-bold text-success">
+                <CheckCircle2 className="w-3.5 h-3.5" />
+                恢复完成
+              </p>
+              <p className="text-[11px] text-satin-grey">
+                {restoreResult.courses} 门课程 · {restoreResult.schedules} 个排课时段 ·{" "}
+                {restoreResult.assignments} 项任务 · {restoreResult.materials} 个附件
+              </p>
+              {restoreResult.warnings.map((w) => (
+                <p key={w} className="flex items-start gap-1.5 text-warning font-semibold text-[11px]">
+                  <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                  {w}
+                </p>
+              ))}
+            </div>
+          )}
+          <div className="mx-3 mb-3">
+            <RestoreSection onRestored={setRestoreResult} />
           </div>
         </SettingsGroup>
 
-        {/* 数据状态：完整性检查（信息性质，非设置） */}
-        <SettingsGroup title="数据状态">
-          <div className="py-3">
-            <DataHealth />
-          </div>
-        </SettingsGroup>
-
-        {/* 学习历史（Part 2）：startedAt + 事件数 + 清除；无 Event Viewer */}
+        {/* 学习历史 */}
         <SettingsGroup title="学习历史">
           <LearningHistorySettings />
         </SettingsGroup>
 
-        {/* 恢复结果反馈（留在本区，不制造页面顶部大 Alert） */}
-        {restoreResult && (
-          <div className="p-3 bg-pastel-mint/60 border border-line rounded-xl space-y-0.5 text-xs" data-testid="restore-result">
-            <p className="flex items-center gap-1.5 font-bold text-success">
-              <CheckCircle2 className="w-3.5 h-3.5" />
-              恢复完成
-            </p>
-            <p className="text-[11px] text-satin-grey">
-              {restoreResult.courses} 门课程 · {restoreResult.schedules} 个排课时段 ·{" "}
-              {restoreResult.assignments} 项任务 · {restoreResult.materials} 个附件
-            </p>
-            {restoreResult.warnings.map((w) => (
-              <p key={w} className="flex items-start gap-1.5 text-warning font-semibold text-[11px]">
-                <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
-                {w}
-              </p>
-            ))}
-          </div>
-        )}
-
-        {/* 备份 / 恢复 / 危险操作：统一 SettingsActionRow 布局 */}
-        <SettingsGroup title="备份">
-          <BackupSection />
+        {/* 数据诊断：信息性质（非设置），默认收起 */}
+        <SettingsGroup>
+          <button
+            type="button"
+            onClick={() => setDiagnosticsOpen((v) => !v)}
+            aria-expanded={diagnosticsOpen}
+            className="w-full flex items-center justify-between px-3 py-2.5 text-left"
+          >
+            <span className="text-xs font-bold text-charcoal">数据诊断</span>
+            <ChevronDown
+              className={cn(
+                "w-4 h-4 text-sandrift transition-transform duration-[var(--motion-fast)]",
+                diagnosticsOpen && "rotate-180"
+              )}
+              aria-hidden="true"
+            />
+          </button>
+          <DisclosureRegion open={diagnosticsOpen}>
+            <div className="px-3 pb-3 space-y-1">
+              <div className="py-3">
+                <DataOverview counts={counts} />
+              </div>
+              <div className="py-2">
+                <DataHealth />
+              </div>
+            </div>
+          </DisclosureRegion>
         </SettingsGroup>
 
-        <SettingsGroup title="恢复">
-          <RestoreSection onRestored={setRestoreResult} />
-        </SettingsGroup>
-
+        {/* 危险操作 */}
         <SettingsGroup title="危险操作">
           <DangerZone />
         </SettingsGroup>

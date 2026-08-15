@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { Check, Loader2, Eye, EyeOff, PlugZap, Globe2 } from "lucide-react";
+import { Check, Loader2, Eye, EyeOff, PlugZap, Globe2, ChevronDown } from "lucide-react";
 import { useAISettingsStore } from "@/store/useAISettingsStore";
 import { getSessionApiKey, setSessionApiKey } from "@/lib/ai/sessionKeys";
 import { useAIModelCatalog } from "@/hooks/useAIModelCatalog";
@@ -11,6 +11,7 @@ import { SettingsSection } from "@/components/settings/SettingsSection";
 import { SettingsGroup } from "@/components/settings/SettingsGroup";
 import { SettingsRow } from "@/components/settings/SettingsRow";
 import { SettingsToggle, SettingsSelect, SettingsSegmentedControl, SettingsButton, SettingsInput } from "@/components/settings/SettingsControls";
+import { DisclosureRegion } from "@/components/ui/DisclosureRegion";
 import { KiroMemorySettings } from "@/components/settings/KiroMemorySettings";
 import { useKiroPreferencesStore } from "@/store/useKiroPreferencesStore";
 import { getModelCapabilities } from "@/lib/ai/providers/capabilities";
@@ -87,6 +88,9 @@ export function KiroAISettings() {
   const [apiKeyInput, setApiKeyInput] = useState(getSessionApiKey(provider));
   const [showKey, setShowKey] = useState(false);
   const [showWebSearchKey, setShowWebSearchKey] = useState(false);
+  // Task 3B：能力/高级设置默认收起（常用项优先，技术细节按需展开）
+  const [searchSettingsOpen, setSearchSettingsOpen] = useState(false);
+  const [advancedOpen, setAdvancedOpen] = useState(false);
   const [webSearchApiKeyInput, setWebSearchApiKeyInput] = useState(getSessionWebSearchApiKey());
   const [webPdfVisionApiKeyInput, setWebPdfVisionApiKeyInput] = useState(getSessionWebPdfVisionApiKey());
   const [showWebPdfVisionKey, setShowWebPdfVisionKey] = useState(false);
@@ -193,8 +197,8 @@ export function KiroAISettings() {
       description="配置 Kiro 的 AI 服务与回答行为。API Key 默认仅保存在当前浏览器会话中。"
     >
       <div className="text-xs space-y-4" data-testid="settings-kiro">
-        {/* 总开关 */}
-        <SettingsGroup>
+        {/* Kiro */}
+        <SettingsGroup title="Kiro">
           <SettingsRow
             settingId="ai-enabled"
             title="启用 Kiro"
@@ -277,41 +281,6 @@ export function KiroAISettings() {
                   placeholder="如：my-model"
                   mono
                 />
-              </SettingsRow>
-              <SettingsRow
-                settingId="ai-custom-capabilities"
-                title="模型能力"
-                description="只有你的兼容服务实际支持这些能力时才开启；默认关闭（保守策略）。"
-              >
-                <div className="flex items-center gap-4 text-[11px] font-semibold text-satin-grey">
-                  <label className="flex items-center gap-1.5 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={custom.vision === true}
-                      onChange={(e) => setCustom({ vision: e.target.checked })}
-                      className="w-3.5 h-3.5 rounded accent-charcoal"
-                    />
-                    支持图片输入
-                  </label>
-                  <label className="flex items-center gap-1.5 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={custom.fileParts === true}
-                      onChange={(e) => setCustom({ fileParts: e.target.checked })}
-                      className="w-3.5 h-3.5 rounded accent-charcoal"
-                    />
-                    支持文件输入
-                  </label>
-                  <label className="flex items-center gap-1.5 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={custom.reasoningEffort === true}
-                      onChange={(e) => setCustom({ reasoningEffort: e.target.checked })}
-                      className="w-3.5 h-3.5 rounded accent-charcoal"
-                    />
-                    支持思考程度
-                  </label>
-                </div>
               </SettingsRow>
             </>
           )}
@@ -445,8 +414,8 @@ export function KiroAISettings() {
           </SettingsRow>
         </SettingsGroup>
 
-        {/* ---- Kiro Search（Task 14）：产品层叫 Kiro Search；Tavily 只在 BYOK 配置层出现 ---- */}
-        <SettingsGroup title="联网搜索">
+        {/* ---- 能力：联网搜索（主层只有开关 + summary，细节进「搜索设置」）+ 记忆 ---- */}
+        <SettingsGroup title="能力">
           <SettingsRow
             settingId="kiro-web-search-enabled"
             title="联网搜索"
@@ -459,190 +428,277 @@ export function KiroAISettings() {
             />
           </SettingsRow>
 
-          <SettingsRow settingId="kiro-web-search-service" title="搜索服务" description="Kiro Search 提供实时网页检索能力。">
-            <span className="px-2 py-0.5 rounded-full bg-pastel-mint text-[10px] font-bold text-charcoal shrink-0">
-              Kiro Search
-            </span>
-          </SettingsRow>
-
-          <SettingsRow
-            settingId="kiro-web-search-credential"
-            title="凭据"
-            description="选择搜索凭据来源；使用自己的 API Key 时，Key 仅保存在当前浏览器会话中。"
-          >
-            <SettingsSegmentedControl<"server" | "byok">
-              value={webSearchCredentialMode}
-              onChange={(v) => {
-                setWebSearchCredentialMode(v);
-                setWebSearchTest({ status: "idle" });
-              }}
-              ariaLabel="Kiro Search 凭据"
-              options={[
-                { value: "server", label: "ClassFlow 提供" },
-                { value: "byok", label: "自己的 API Key" },
-              ]}
-            />
-            {webSearchCredentialMode === "server" && serverSearchConfigured === false && (
-              <div className="flex flex-col gap-1.5 w-full">
-                <span className="text-[11px] font-semibold text-danger">
-                  当前服务端未配置搜索凭据，请使用自己的 API Key。
-                </span>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setWebSearchCredentialMode("byok");
-                    setWebSearchTest({ status: "idle" });
-                  }}
-                  className="self-start text-[11px] font-semibold text-sandrift hover:text-charcoal transition-colors"
-                >
-                  使用自己的 API Key
-                </button>
+          {webSearchEnabled && (
+            <>
+              <div className="px-3 -mt-1">
+                <p className="text-[11px] text-sandrift">
+                  {webSearchCredentialMode === "server" ? "ClassFlow 提供" : "使用自己的 API Key"}
+                </p>
               </div>
-            )}
-          </SettingsRow>
-
-          {webSearchCredentialMode === "byok" && (
-            <SettingsRow
-              settingId="kiro-web-search-byok-key"
-              title="Tavily API Key"
-              description="仅保存在当前浏览器会话中（调用时发送到 ClassFlow 服务端转发）。"
-            >
-              <div className="relative w-full">
-                <SettingsInput
-                  type={showWebSearchKey ? "text" : "password"}
-                  value={webSearchApiKeyInput}
-                  onChange={handleWebSearchKeyChange}
-                  placeholder="tvly-..."
-                  ariaLabel="Tavily API Key"
-                  autoComplete="off"
-                  spellCheck={false}
-                  mono
-                  className="pr-9"
-                />
-                <button
-                  onClick={() => setShowWebSearchKey((v) => !v)}
-                  aria-label={showWebSearchKey ? "隐藏 Kiro Search API Key" : "显示 Kiro Search API Key"}
-                  className="absolute right-1.5 top-1/2 -translate-y-1/2 p-1.5 rounded-lg text-sandrift hover:text-charcoal hover:bg-alabaster transition-colors"
-                >
-                  {showWebSearchKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                </button>
-              </div>
-            </SettingsRow>
-          )}
-
-          <SettingsRow
-            settingId="kiro-web-search-test"
-            title="测试搜索连接"
-            description="只发送最小搜索请求验证凭据，不发送对话或 ClassFlow 数据。"
-          >
-            <div className="flex items-center gap-2.5">
-              <SettingsButton variant="accent" onClick={runWebSearchTest} disabled={webSearchTest.status === "testing" || !webSearchEnabled}>
-                {webSearchTest.status === "testing" ? (
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                ) : (
-                  <Globe2 className="w-3.5 h-3.5" />
-                )}
-                测试连接
-              </SettingsButton>
-              {webSearchTest.status === "success" && (
-                <span className="flex items-center gap-1 text-[11px] font-semibold text-success">
-                  <Check className="w-3.5 h-3.5" />
-                  搜索服务可用
-                </span>
-              )}
-              {webSearchTest.status === "error" && (
-                <span className="text-[11px] font-semibold text-danger">{webSearchTest.message}</span>
-              )}
-            </div>
-          </SettingsRow>
-
-          <SettingsRow settingId="kiro-web-search-privacy" title="隐私" description="联网搜索开启时，Kiro 可能将当前搜索查询发送给搜索服务。使用自己的 API Key 时，Key 仅保存在当前浏览器会话中。">
-            <span className="px-2 py-0.5 rounded-full bg-alabaster border border-line text-[10px] font-bold text-satin-grey shrink-0">
-              按需发送
-            </span>
-          </SettingsRow>
-
-          {/* ---- Task 19C1：扫描 Web PDF Vision（设置 + 独立会话 Key；19C2 才消费） ---- */}
-          <SettingsRow
-            settingId="kiro-web-pdf-vision-enabled"
-            title="扫描 PDF 识别"
-            description="仅用于读取联网搜索发现的扫描型 PDF（无文本层页面）。"
-          >
-            <SettingsToggle
-              checked={webPdfVisionEnabled}
-              onChange={setWebPdfVisionEnabled}
-              label="扫描 PDF 识别"
-            />
-          </SettingsRow>
-
-          <SettingsRow
-            settingId="kiro-web-pdf-vision-model"
-            title="Vision 模型"
-            description="用于识别扫描 PDF 页面的 OpenCode Go 视觉模型。"
-          >
-            <SettingsSelect
-              value={webPdfVisionModel}
-              onChange={setWebPdfVisionModel}
-              disabled={!webPdfVisionEnabled}
-              ariaLabel="扫描 PDF Vision 模型"
-              options={getWebPdfVisionModelOptions().map((m) => ({ value: m.id, label: m.name }))}
-            />
-          </SettingsRow>
-
-          <SettingsRow
-            settingId="kiro-web-pdf-vision-key"
-            title="OpenCode Go Vision API Key"
-            description="仅用于读取联网搜索发现的扫描型 PDF。密钥仅保存在当前浏览器会话中。"
-          >
-            <div className="relative w-full">
-              <SettingsInput
-                type={showWebPdfVisionKey ? "text" : "password"}
-                value={webPdfVisionApiKeyInput}
-                onChange={(v) => {
-                  setWebPdfVisionApiKeyInput(v);
-                  setSessionWebPdfVisionApiKey(v);
-                }}
-                placeholder="sk-..."
-                ariaLabel="OpenCode Go Vision API Key"
-                autoComplete="off"
-                spellCheck={false}
-                mono
-                className="pr-9"
-              />
               <button
                 type="button"
-                onClick={() => setShowWebPdfVisionKey((v) => !v)}
-                aria-label={showWebPdfVisionKey ? "隐藏 Vision API Key" : "显示 Vision API Key"}
-                className="absolute right-1.5 top-1/2 -translate-y-1/2 p-1.5 rounded-lg text-sandrift hover:text-charcoal hover:bg-alabaster transition-colors"
+                onClick={() => setSearchSettingsOpen((v) => !v)}
+                aria-expanded={searchSettingsOpen}
+                className="w-full flex items-center justify-between px-3 py-2 text-left text-[11px] font-bold text-satin-grey transition-colors hover:text-charcoal"
               >
-                {showWebPdfVisionKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                搜索设置
+                <ChevronDown
+                  className={cn(
+                    "w-3.5 h-3.5 text-sandrift transition-transform duration-[var(--motion-fast)]",
+                    searchSettingsOpen && "rotate-180"
+                  )}
+                  aria-hidden="true"
+                />
               </button>
+              <DisclosureRegion open={searchSettingsOpen}>
+                <div className="space-y-1">
+                  <SettingsRow settingId="kiro-web-search-service" title="搜索服务" description="Kiro Search 提供实时网页检索能力。">
+                    <span className="px-2 py-0.5 rounded-full bg-pastel-mint text-[10px] font-bold text-charcoal shrink-0">
+                      Kiro Search
+                    </span>
+                  </SettingsRow>
+
+                  <SettingsRow
+                    settingId="kiro-web-search-credential"
+                    title="凭据"
+                    description="选择搜索凭据来源；使用自己的 API Key 时，Key 仅保存在当前浏览器会话中。"
+                  >
+                    <SettingsSegmentedControl<"server" | "byok">
+                      value={webSearchCredentialMode}
+                      onChange={(v) => {
+                        setWebSearchCredentialMode(v);
+                        setWebSearchTest({ status: "idle" });
+                      }}
+                      ariaLabel="Kiro Search 凭据"
+                      options={[
+                        { value: "server", label: "ClassFlow 提供" },
+                        { value: "byok", label: "自己的 API Key" },
+                      ]}
+                    />
+                    {webSearchCredentialMode === "server" && serverSearchConfigured === false && (
+                      <div className="flex flex-col gap-1.5 w-full">
+                        <span className="text-[11px] font-semibold text-danger">
+                          当前服务端未配置搜索凭据，请使用自己的 API Key。
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setWebSearchCredentialMode("byok");
+                            setWebSearchTest({ status: "idle" });
+                          }}
+                          className="self-start text-[11px] font-semibold text-sandrift hover:text-charcoal transition-colors"
+                        >
+                          使用自己的 API Key
+                        </button>
+                      </div>
+                    )}
+                  </SettingsRow>
+
+                  {webSearchCredentialMode === "byok" && (
+                    <SettingsRow
+                      settingId="kiro-web-search-byok-key"
+                      title="Tavily API Key"
+                      description="仅保存在当前浏览器会话中（调用时发送到 ClassFlow 服务端转发）。"
+                    >
+                      <div className="relative w-full">
+                        <SettingsInput
+                          type={showWebSearchKey ? "text" : "password"}
+                          value={webSearchApiKeyInput}
+                          onChange={handleWebSearchKeyChange}
+                          placeholder="tvly-..."
+                          ariaLabel="Tavily API Key"
+                          autoComplete="off"
+                          spellCheck={false}
+                          mono
+                          className="pr-9"
+                        />
+                        <button
+                          onClick={() => setShowWebSearchKey((v) => !v)}
+                          aria-label={showWebSearchKey ? "隐藏 Kiro Search API Key" : "显示 Kiro Search API Key"}
+                          className="absolute right-1.5 top-1/2 -translate-y-1/2 p-1.5 rounded-lg text-sandrift hover:text-charcoal hover:bg-alabaster transition-colors"
+                        >
+                          {showWebSearchKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                        </button>
+                      </div>
+                    </SettingsRow>
+                  )}
+
+                  <SettingsRow
+                    settingId="kiro-web-search-test"
+                    title="测试搜索连接"
+                    description="只发送最小搜索请求验证凭据，不发送对话或 ClassFlow 数据。"
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <SettingsButton variant="accent" onClick={runWebSearchTest} disabled={webSearchTest.status === "testing" || !webSearchEnabled}>
+                        {webSearchTest.status === "testing" ? (
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        ) : (
+                          <Globe2 className="w-3.5 h-3.5" />
+                        )}
+                        测试连接
+                      </SettingsButton>
+                      {webSearchTest.status === "success" && (
+                        <span className="flex items-center gap-1 text-[11px] font-semibold text-success">
+                          <Check className="w-3.5 h-3.5" />
+                          搜索服务可用
+                        </span>
+                      )}
+                      {webSearchTest.status === "error" && (
+                        <span className="text-[11px] font-semibold text-danger">{webSearchTest.message}</span>
+                      )}
+                    </div>
+                  </SettingsRow>
+
+                  <SettingsRow settingId="kiro-web-search-privacy" title="隐私" description="联网搜索开启时，Kiro 可能将当前搜索查询发送给搜索服务。使用自己的 API Key 时，Key 仅保存在当前浏览器会话中。">
+                    <span className="px-2 py-0.5 rounded-full bg-alabaster border border-line text-[10px] font-bold text-satin-grey shrink-0">
+                      按需发送
+                    </span>
+                  </SettingsRow>
+
+                  {/* ---- Task 19C1：扫描 Web PDF Vision（配置收进搜索设置，不再与搜索同级铺满） ---- */}
+                  <SettingsRow
+                    settingId="kiro-web-pdf-vision-enabled"
+                    title="扫描 PDF 识别"
+                    description="仅用于读取联网搜索发现的扫描型 PDF（无文本层页面）。"
+                  >
+                    <SettingsToggle
+                      checked={webPdfVisionEnabled}
+                      onChange={setWebPdfVisionEnabled}
+                      label="扫描 PDF 识别"
+                    />
+                  </SettingsRow>
+
+                  <SettingsRow
+                    settingId="kiro-web-pdf-vision-model"
+                    title="Vision 模型"
+                    description="用于识别扫描 PDF 页面的 OpenCode Go 视觉模型。"
+                  >
+                    <SettingsSelect
+                      value={webPdfVisionModel}
+                      onChange={setWebPdfVisionModel}
+                      disabled={!webPdfVisionEnabled}
+                      ariaLabel="扫描 PDF Vision 模型"
+                      options={getWebPdfVisionModelOptions().map((m) => ({ value: m.id, label: m.name }))}
+                    />
+                  </SettingsRow>
+
+                  <SettingsRow
+                    settingId="kiro-web-pdf-vision-key"
+                    title="OpenCode Go Vision API Key"
+                    description="仅用于读取联网搜索发现的扫描型 PDF。密钥仅保存在当前浏览器会话中。"
+                  >
+                    <div className="relative w-full">
+                      <SettingsInput
+                        type={showWebPdfVisionKey ? "text" : "password"}
+                        value={webPdfVisionApiKeyInput}
+                        onChange={(v) => {
+                          setWebPdfVisionApiKeyInput(v);
+                          setSessionWebPdfVisionApiKey(v);
+                        }}
+                        placeholder="sk-..."
+                        ariaLabel="OpenCode Go Vision API Key"
+                        autoComplete="off"
+                        spellCheck={false}
+                        mono
+                        className="pr-9"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowWebPdfVisionKey((v) => !v)}
+                        aria-label={showWebPdfVisionKey ? "隐藏 Vision API Key" : "显示 Vision API Key"}
+                        className="absolute right-1.5 top-1/2 -translate-y-1/2 p-1.5 rounded-lg text-sandrift hover:text-charcoal hover:bg-alabaster transition-colors"
+                      >
+                        {showWebPdfVisionKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
+                    </div>
+                  </SettingsRow>
+                </div>
+              </DisclosureRegion>
+            </>
+          )}
+
+          {/* ---- 记忆 ---- */}
+          <div className="pt-1">
+            <KiroMemorySettings />
+          </div>
+        </SettingsGroup>
+
+        {/* ---- 高级设置：低频 capability engineering + 隐私说明，按需展开 ---- */}
+        <SettingsGroup>
+          <button
+            type="button"
+            onClick={() => setAdvancedOpen((v) => !v)}
+            aria-expanded={advancedOpen}
+            className="w-full flex items-center justify-between px-3 py-2.5 text-left"
+          >
+            <span className="text-xs font-bold text-charcoal">高级设置</span>
+            <ChevronDown
+              className={cn(
+                "w-4 h-4 text-sandrift transition-transform duration-[var(--motion-fast)]",
+                advancedOpen && "rotate-180"
+              )}
+              aria-hidden="true"
+            />
+          </button>
+          <DisclosureRegion open={advancedOpen}>
+            <div className="px-3 pb-3 space-y-1">
+              {/* 自定义 Provider 能力声明：capability engineering，使用该服务时按需配置 */}
+              {isCustom && (
+                <SettingsRow
+                  settingId="ai-custom-capabilities"
+                  title="模型能力"
+                  description="只有你的兼容服务实际支持这些能力时才开启；默认关闭（保守策略）。"
+                >
+                  <div className="flex items-center gap-4 text-[11px] font-semibold text-satin-grey">
+                    <label className="flex items-center gap-1.5 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={custom.vision === true}
+                        onChange={(e) => setCustom({ vision: e.target.checked })}
+                        className="w-3.5 h-3.5 rounded accent-charcoal"
+                      />
+                      支持图片输入
+                    </label>
+                    <label className="flex items-center gap-1.5 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={custom.fileParts === true}
+                        onChange={(e) => setCustom({ fileParts: e.target.checked })}
+                        className="w-3.5 h-3.5 rounded accent-charcoal"
+                      />
+                      支持文件输入
+                    </label>
+                    <label className="flex items-center gap-1.5 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={custom.reasoningEffort === true}
+                        onChange={(e) => setCustom({ reasoningEffort: e.target.checked })}
+                        className="w-3.5 h-3.5 rounded accent-charcoal"
+                      />
+                      支持思考程度
+                    </label>
+                  </div>
+                </SettingsRow>
+              )}
+
+              {/* ---- 隐私与数据 ---- */}
+              <SettingsRow settingId="kiro-privacy-local" title="本地优先" description="课程、任务、记忆与聊天历史保存在当前浏览器；附件正文存入 IndexedDB。">
+                <span className="px-2 py-0.5 rounded-full bg-alabaster border border-line text-[10px] font-bold text-satin-grey shrink-0">
+                  本地存储
+                </span>
+              </SettingsRow>
+              <SettingsRow settingId="kiro-privacy-api-key" title="API Key" description="仅保存在当前浏览器会话（sessionStorage），不写入本地存储、备份或日志。">
+                <span className="px-2 py-0.5 rounded-full bg-alabaster border border-line text-[10px] font-bold text-satin-grey shrink-0">
+                  会话级
+                </span>
+              </SettingsRow>
+              <SettingsRow settingId="kiro-privacy-context" title="上下文发送" description="发送给 AI 服务的仅包括当前对话、必要的 ClassFlow 上下文与你选择的资料内容。">
+                <span className="px-2 py-0.5 rounded-full bg-alabaster border border-line text-[10px] font-bold text-satin-grey shrink-0">
+                  按需发送
+                </span>
+              </SettingsRow>
             </div>
-          </SettingsRow>
-        </SettingsGroup>
-
-        {/* ---- 记忆 ---- */}
-        <SettingsGroup title="记忆">
-          <KiroMemorySettings />
-        </SettingsGroup>
-
-        {/* ---- 隐私 ---- */}
-        <SettingsGroup title="隐私">
-          <SettingsRow settingId="kiro-privacy-local" title="本地优先" description="课程、任务、记忆与聊天历史保存在当前浏览器；附件正文存入 IndexedDB。">
-            <span className="px-2 py-0.5 rounded-full bg-alabaster border border-line text-[10px] font-bold text-satin-grey shrink-0">
-              本地存储
-            </span>
-          </SettingsRow>
-          <SettingsRow settingId="kiro-privacy-api-key" title="API Key" description="仅保存在当前浏览器会话（sessionStorage），不写入本地存储、备份或日志。">
-            <span className="px-2 py-0.5 rounded-full bg-alabaster border border-line text-[10px] font-bold text-satin-grey shrink-0">
-              会话级
-            </span>
-          </SettingsRow>
-          <SettingsRow settingId="kiro-privacy-context" title="上下文发送" description="发送给 AI 服务的仅包括当前对话、必要的 ClassFlow 上下文与你选择的资料内容。">
-            <span className="px-2 py-0.5 rounded-full bg-alabaster border border-line text-[10px] font-bold text-satin-grey shrink-0">
-              按需发送
-            </span>
-          </SettingsRow>
+          </DisclosureRegion>
         </SettingsGroup>
       </div>
     </SettingsSection>
