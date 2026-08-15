@@ -116,7 +116,8 @@ describe("文本提取", () => {
 
 describe("Vision Capability（真实约束）", () => {
   it("内置模型：registry 明确配置", () => {
-    expect(getModelCapabilities({ provider: "opencode-go", model: "grok-4.5" }).vision).toBe(true);
+    // grok-4.5 已转入 Responses-unsupported（Phase 3.0）→ 未知模型保守 fallback，不再声明 vision
+    expect(getModelCapabilities({ provider: "opencode-go", model: "grok-4.5" }).vision).toBe(false);
     expect(getModelCapabilities({ provider: "opencode-go", model: "kimi-k3" }).vision).toBe(true);
     expect(getModelCapabilities({ provider: "opencode-go", model: "mimo-v2.5" }).vision).toBe(true);
     expect(getModelCapabilities({ provider: "opencode-go", model: "glm-5.2" }).vision).toBe(false);

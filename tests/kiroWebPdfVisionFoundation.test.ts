@@ -23,11 +23,12 @@ import {
 } from "@/lib/ai/web/vision/limits";
 
 describe("Kiro Web PDF Vision — model whitelist", () => {
-  it("A1a. 合法 Vision 模型存在：mimo-v2.5 / kimi-k3 / grok-4.5", () => {
+  it("A1a. 合法 Vision 模型存在：mimo-v2.5 / kimi-k3", () => {
     const ids = getWebPdfVisionModelOptions().map((m) => m.id);
     expect(ids).toContain("mimo-v2.5");
     expect(ids).toContain("kimi-k3");
-    expect(ids).toContain("grok-4.5");
+    // grok-4.5 已转入 Responses-unsupported（Phase 3.0）→ 不再进入 Vision whitelist
+    expect(ids).not.toContain("grok-4.5");
   });
   it("A1b. vision:false 模型（deepseek-v4-flash）不在 whitelist", () => {
     expect(isWebPdfVisionModel("deepseek-v4-flash")).toBe(false);

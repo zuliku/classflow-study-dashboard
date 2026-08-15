@@ -7,7 +7,7 @@ import { normalizeAIError, AIError } from "@/lib/ai/errors";
 import { logProviderError } from "@/lib/ai/providerLog";
 import { getSessionApiKey, setSessionApiKey } from "@/lib/ai/sessionKeys";
 import { DEEPSEEK_MODELS } from "@/lib/ai/providers/deepSeek";
-import { OPENCODE_MODELS, filterRemoteGoModels } from "@/lib/ai/providers/openCodeGo";
+import { OPENCODE_MODELS, OPENCODE_RESPONSES_MODEL_IDS, filterRemoteGoModels } from "@/lib/ai/providers/openCodeGo";
 
 describe("Provider Registry", () => {
   it("DeepSeek：V4 Flash（默认）/ V4 Pro，openai-chat transport", () => {
@@ -21,7 +21,7 @@ describe("Provider Registry", () => {
   it("OpenCode Go：官方双 transport 注册表（openai-chat + anthropic-messages），不含未实现模型", () => {
     const models = getModelsForProvider("opencode-go");
     const ids = models.map((m) => m.id);
-    expect(ids).toContain("grok-4.5");
+    expect(ids).toContain("glm-5.3");
     expect(ids).toContain("glm-5.2");
     expect(ids).toContain("kimi-k3");
     expect(ids).toContain("deepseek-v4-flash");
@@ -35,6 +35,7 @@ describe("Provider Registry", () => {
     expect(ids).toContain("qwen3.6-plus");
     // openai-responses 模型（本轮不实现）不注册
     expect(ids).not.toContain("gpt-5.6-luna");
+    expect(ids).not.toContain("grok-4.5");
     // 每个模型都有合法 transport（不靠黑名单决定可用性）
     expect(models.every((m) => m.transport === "openai-chat" || m.transport === "anthropic-messages")).toBe(true);
     expect(getDefaultModel("opencode-go")).toBe("deepseek-v4-flash");
@@ -42,7 +43,7 @@ describe("Provider Registry", () => {
 
   it("OpenCode transport 划分与官方 endpoint 表一致", () => {
     const byId = new Map(OPENCODE_MODELS.map((m) => [m.id, m.transport]));
-    const chatModels = ["grok-4.5", "glm-5.2", "glm-5.1", "kimi-k3", "kimi-k2.7-code", "kimi-k2.6", "deepseek-v4-pro", "deepseek-v4-flash", "mimo-v2.5", "mimo-v2.5-pro", "hy3"];
+    const chatModels = ["glm-5.3", "glm-5.2", "glm-5.1", "kimi-k3", "kimi-k2.7-code", "kimi-k2.6", "deepseek-v4-pro", "deepseek-v4-flash", "mimo-v2.5", "mimo-v2.5-pro", "hy3"];
     const messagesModels = ["minimax-m3", "minimax-m2.7", "minimax-m2.5", "qwen3.8-max", "qwen3.7-max", "qwen3.7-plus", "qwen3.6-plus"];
     for (const id of chatModels) expect(byId.get(id), id).toBe("openai-chat");
     for (const id of messagesModels) expect(byId.get(id), id).toBe("anthropic-messages");
@@ -60,9 +61,10 @@ describe("Provider Registry", () => {
       seen.add(key);
       last = key;
     }
-    // 厂商首字母序：deepseek(D) < kimi(K) < mimo(M) < minimax(M) < qwen(Q) < tencent(T) < xai(X) < zai(Z)
+    // 厂商首字母序：deepseek(D) < kimi(K) < mimo(M) < minimax(M) < qwen(Q) < tencent(T) < zai(Z)
+    // （xai 的 grok-4.5 已转入 Responses-unsupported，不再进入 supported 列表）
     const unique = Array.from(new Set(vendors.map((v) => v ?? "")));
-    expect(unique).toEqual(["deepseek", "kimi", "mimo", "minimax", "qwen", "tencent", "xai", "zai"]);
+    expect(unique).toEqual(["deepseek", "kimi", "mimo", "minimax", "qwen", "tencent", "zai"]);
     // 组内能力降序：kimi-k3（vision）在 kimi-k2.7-code 前
     const kimiIdx = models.map((m) => m.id);
     expect(kimiIdx.indexOf("kimi-k3")).toBeLessThan(kimiIdx.indexOf("kimi-k2.7-code"));
@@ -93,15 +95,16 @@ describe("Provider Registry", () => {
 
   it("远端模型筛选：已知 ID 保留真实 transport；responses/未知模型过滤，不默认 openai-chat", () => {
     const out = filterRemoteGoModels([
-      { id: "grok-4.5" },
+      { id: "glm-5.3" },
       { id: "minimax-m3" },
       { id: "qwen3.7-plus" },
       { id: "gpt-5.6-luna" }, // openai-responses：本轮不实现 → 过滤
+      { id: "grok-4.5" }, // openai-responses（官方 endpoint 已变更）→ 过滤，不降级 openai-chat
       { id: "some-unknown-model" }, // 未知 → 跳过（远端不返回 transport，绝不猜测）
       { id: "minimax-m3" }, // 去重
     ]);
     expect(out).toEqual([
-      { id: "grok-4.5", transport: "openai-chat" },
+      { id: "glm-5.3", transport: "openai-chat" },
       { id: "minimax-m3", transport: "anthropic-messages" },
       { id: "qwen3.7-plus", transport: "anthropic-messages" },
     ]);
@@ -109,7 +112,46 @@ describe("Provider Registry", () => {
 
   it("OPENCODE_MODELS 中不存在 transport 黑名单/白名单漂移：每个模型 transport 均来自注册表声明", () => {
     expect(OPENCODE_MODELS.some((m) => m.id === "gpt-5.6-luna")).toBe(false);
+    expect(OPENCODE_MODELS.some((m) => m.id === "grok-4.5")).toBe(false);
     expect(OPENCODE_MODELS.every((m) => m.transport === "openai-chat" || m.transport === "anthropic-messages")).toBe(true);
+  });
+});
+
+describe("OpenCode Phase 3.0：Responses-unsupported 与 registry 一致性", () => {
+  it("1. glm-5.3 已注册，transport = openai-chat", () => {
+    const def = OPENCODE_MODELS.find((m) => m.id === "glm-5.3");
+    expect(def?.transport).toBe("openai-chat");
+    expect(def?.vendor).toBe("zai");
+    expect(def?.name).toBe("GLM 5.3");
+    expect(def?.capabilities.reasoning).toBeUndefined(); // 不声明 reasoning → fixed/default
+  });
+
+  it("2. grok-4.5 不在 supported OPENCODE_MODELS，且标记为 Responses-unsupported", () => {
+    expect(OPENCODE_MODELS.some((m) => m.id === "grok-4.5")).toBe(false);
+    expect(OPENCODE_RESPONSES_MODEL_IDS).toContain("grok-4.5");
+  });
+
+  it("3. gpt-5.6-luna 标记为 Responses-unsupported", () => {
+    expect(OPENCODE_RESPONSES_MODEL_IDS).toContain("gpt-5.6-luna");
+    expect(OPENCODE_MODELS.some((m) => m.id === "gpt-5.6-luna")).toBe(false);
+  });
+
+  it("4. filterRemoteGoModels：glm-5.3 / qwen3.8-max 保留；grok / luna 过滤", () => {
+    const out = filterRemoteGoModels([
+      { id: "glm-5.3" },
+      { id: "qwen3.8-max" },
+      { id: "grok-4.5" },
+      { id: "gpt-5.6-luna" },
+    ]);
+    expect(out).toEqual([
+      { id: "glm-5.3", transport: "openai-chat" },
+      { id: "qwen3.8-max", transport: "anthropic-messages" },
+    ]);
+  });
+
+  it("5. 未知远端模型（mimo-v2-omni）在未 verified transport 前过滤", () => {
+    expect(OPENCODE_MODELS.some((m) => m.id === "mimo-v2-omni")).toBe(false);
+    expect(filterRemoteGoModels([{ id: "mimo-v2-omni" }])).toEqual([]);
   });
 });
 

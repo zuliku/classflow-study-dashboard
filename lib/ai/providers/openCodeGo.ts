@@ -2,14 +2,22 @@ import { AI } from "@/lib/ai/config";
 import { AIModelDefinition, AIProviderConfig } from "@/lib/ai/providers/types";
 
 /**
- * OpenCode Go 官方模型注册表（Task 10）：
+ * OpenCode Go 官方模型注册表（Task 10 + Phase 3.0 correctness）：
  * 以官方 endpoint 表为准，每个模型声明真实 transport（openai-chat / anthropic-messages）。
+ *
+ * source-of-truth 规则：
+ * - /v1/models（远端）= availability source（「当前是否可用」）
+ * - 官方 endpoint 表 + 本 verified registry = transport / vendor / capabilities / 展示名 source
  * 本列表是 /models 无法获取时的 fallback，也是远端模型 transport 的唯一来源
  * （远端 /models 只返回 id，不返回 transport；未知模型一律跳过，绝不猜测协议）。
+ *
+ * 注意：grok-4.5 官方当前 endpoint 为 /v1/responses（@ai-sdk/openai），
+ * ClassFlow Runtime 尚未实现 openai-responses transport → 不进入本 supported 列表，
+ * 见 OPENCODE_RESPONSES_MODEL_IDS。
  */
 export const OPENCODE_MODELS: AIModelDefinition[] = [
   // ---- OpenAI Chat Completions（官方 endpoint：/v1/chat/completions）----
-  { id: "grok-4.5", name: "Grok 4.5", provider: "opencode-go", vendor: "xai", transport: "openai-chat", capabilities: { streaming: true, tools: true, vision: true, fileParts: false } },
+  { id: "glm-5.3", name: "GLM 5.3", provider: "opencode-go", vendor: "zai", transport: "openai-chat", capabilities: { streaming: true, tools: true, vision: false, fileParts: false } },
   { id: "glm-5.2", name: "GLM 5.2", provider: "opencode-go", vendor: "zai", transport: "openai-chat", capabilities: { streaming: true, tools: true, vision: false, fileParts: false } },
   { id: "glm-5.1", name: "GLM 5.1", provider: "opencode-go", vendor: "zai", transport: "openai-chat", capabilities: { streaming: true, tools: true, vision: false, fileParts: false } },
   { id: "kimi-k3", name: "Kimi K3", provider: "opencode-go", vendor: "kimi", transport: "openai-chat", capabilities: { streaming: true, tools: true, vision: true, fileParts: false } },
@@ -31,8 +39,13 @@ export const OPENCODE_MODELS: AIModelDefinition[] = [
   { id: "qwen3.6-plus", name: "Qwen3.6 Plus", provider: "opencode-go", vendor: "qwen", transport: "anthropic-messages", capabilities: { streaming: true, tools: true, vision: false, fileParts: false } },
 ];
 
-/** OpenAI Responses transport（官方 endpoint 表存在，但本阶段不实现 → 展示时过滤） */
-export const OPENCODE_RESPONSES_MODEL_IDS = ["gpt-5.6-luna"] as const;
+/**
+ * OpenAI Responses transport 模型（官方 endpoint：/v1/responses → @ai-sdk/openai）：
+ * 模型当前存在，但 ClassFlow Runtime 尚未实现 openai-responses transport（Phase 3.1）。
+ * 本列表表达「存在但不可发送」，展示时过滤，绝不降级为 openai-chat 发送。
+ * 当前至少：Grok 4.5、GPT 5.6 Luna。
+ */
+export const OPENCODE_RESPONSES_MODEL_IDS = ["grok-4.5", "gpt-5.6-luna"] as const;
 
 export const OPENCODE_DEFAULT_MODEL = "deepseek-v4-flash";
 
@@ -46,9 +59,14 @@ export interface RemoteGoModel {
 }
 
 /**
- * 远端模型筛选（Task 10）：
+ * 远端模型筛选（Task 10 + Phase 3.0）：
  * 远端 /models 只返回 id（无 transport）→ transport 唯一来源是本地 OPENCODE_MODELS。
- * 已知 ID → 原样保留其 transport；openai-responses 模型（当前不实现）过滤；未知模型跳过，绝不默认 openai-chat。
+ * 对每个远端 id：
+ * 1. 重复 id → skip
+ * 2. id ∈ OPENCODE_RESPONSES_MODEL_IDS → skip（模型存在，但 Runtime transport 未支持）
+ * 3. 本地 OPENCODE_MODELS 找不到 verified definition → skip（绝不按前缀/厂商猜 transport）
+ * 4. transport 只允许当前 Runtime 已实现的 openai-chat / anthropic-messages → 否则 skip
+ * 5. 输出 id + verified transport
  */
 export function filterRemoteGoModels(raw: { id?: string }[]): RemoteGoModel[] {
   const seen = new Set<string>();
@@ -57,9 +75,9 @@ export function filterRemoteGoModels(raw: { id?: string }[]): RemoteGoModel[] {
     const id = m.id;
     if (!id || seen.has(id)) continue;
     seen.add(id);
+    if ((OPENCODE_RESPONSES_MODEL_IDS as readonly string[]).includes(id)) continue;
     const known = OPENCODE_MODELS.find((d) => d.id === id);
     if (!known) continue;
-    if (known.transport === "openai-responses") continue;
     if (known.transport !== "openai-chat" && known.transport !== "anthropic-messages") continue;
     out.push({ id, transport: known.transport });
   }
