@@ -17,6 +17,10 @@ import { FocusRhythmCard } from "@/components/analytics/FocusRhythmCard";
 import { ExecutionQualityCard } from "@/components/analytics/ExecutionQualityCard";
 import { AnalyticsCoverageNotice } from "@/components/analytics/AnalyticsCoverageNotice";
 import { WeeklyReviewCard } from "@/components/analytics/WeeklyReviewCard";
+import { EstimateCalibrationCard } from "@/components/analytics/EstimateCalibrationCard";
+import { StudyOutlookCard } from "@/components/analytics/StudyOutlookCard";
+import { useStudyOutlook } from "@/hooks/useStudyOutlook";
+import { StudyOutlookHorizon } from "@/lib/outlook/types";
 import { cn } from "@/lib/utils";
 
 function MetricSkeleton() {
@@ -55,6 +59,8 @@ export function LearningAnalyticsView() {
   const reducedMotion = useEffectiveReducedMotion();
   const setActiveTab = useAppStore((s) => s.setActiveTab);
   const { data, loading, error } = useLearningAnalytics(preset);
+  const [outlookHorizon, setOutlookHorizon] = useState<StudyOutlookHorizon>(7);
+  const outlook = useStudyOutlook(outlookHorizon);
 
   const navigate = (tab: "assignments" | "timetable" | "courses") => {
     setActiveTab(tab);
@@ -195,6 +201,24 @@ export function LearningAnalyticsView() {
                 <ExecutionQualityCard execution={data.execution} />
               </>
             )}
+          </>
+        ) : null}
+
+        {/* 学习前瞻 + 估时参考（独立于历史 Snapshot；确定性；不逐卡查询） */}
+        {outlook.error ? (
+          <div className="bg-danger-bg border border-danger-border rounded-2xl p-4 text-xs font-semibold text-danger">
+            学习前瞻加载失败，请稍后重试。
+          </div>
+        ) : outlook.loading && !outlook.data ? (
+          <ChartSkeleton />
+        ) : outlook.data ? (
+          <>
+            <StudyOutlookCard
+              outlook={outlook.data}
+              horizonDays={outlookHorizon}
+              onHorizonChange={setOutlookHorizon}
+            />
+            <EstimateCalibrationCard calibration={outlook.data.estimateCalibration} />
           </>
         ) : null}
       </div>
