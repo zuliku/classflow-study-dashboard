@@ -85,6 +85,9 @@ import { executeKiroWriteTool } from "@/lib/ai/tools/write/executor";
 import { isDestructiveWriteTool, KiroUndoEntry, KiroWriteApi, WriteToolResult } from "@/lib/ai/tools/write/types";
 import { KIRO_WRITE_TOOL_NAMES } from "@/lib/ai/tools/write/registry";
 import { KIRO_WRITE_TOOL_SCHEMAS } from "@/lib/ai/tools/write/schemas";
+import { createKiroWriteApi } from "@/lib/ai/tools/write/api";
+import { isClassFlowMutationTool, VISUAL_PROPOSAL_REQUIRED_CODE, VISUAL_PROPOSAL_REQUIRED_MESSAGE } from "@/lib/ai/visual/guard";
+import { VisualActionProposal } from "@/lib/ai/visual/types";
 import { KIRO_MUTATING_TOOL_NAMES } from "@/lib/ai/tools/mutating";
 import { actionToastMessage, toolLabel } from "@/lib/ai/tools/formatters";
 import { executeChangeSet } from "@/lib/ai/transactions/executor";
@@ -194,6 +197,8 @@ export interface KiroChatMessageView {
   breakdowns?: TaskBreakdownProposal[];
   /** Kiro propose_study_rebalance 的真实结果（Rebalance Proposal Card 事实来源；模型不得生成） */
   rebalanceProposals?: import("@/lib/planning/studyRebalance").StudyRebalanceProposal[];
+  /** Kiro propose_visual_actions 的真实结果（Visual Action Proposal Card 事实来源；模型不得生成） */
+  visualActionProposals?: VisualActionProposal[];
   /** Task 7：User Message 是否可编辑（attachment/history metadata 最终绑定后计算） */
   canEdit?: boolean;
   /** 历史恢复消息只参与整段会话淡入，不播放逐条结构动画。 */
@@ -335,6 +340,7 @@ function toView(
   const proposals: StudyPlanProposal[] = [];
   const breakdowns: TaskBreakdownProposal[] = [];
   const rebalanceProposals: import("@/lib/planning/studyRebalance").StudyRebalanceProposal[] = [];
+  const visualActionProposals: VisualActionProposal[] = [];
   for (const p of parts) {
     if (typeof p.type !== "string" || !p.type.startsWith("tool-")) continue;
     // Streaming UX V3：begin_final_answer 是内部控制信号（不产生 Action Card / Proposal）
@@ -366,6 +372,14 @@ function toView(
       }
       continue;
     }
+    if (toolNameOf(tp) === "propose_visual_actions") {
+      const output = tp.output as ReadToolResult<unknown> | undefined;
+      if (output && output.ok === true) {
+        const data = output.data as { proposal?: VisualActionProposal } | undefined;
+        if (data?.proposal) visualActionProposals.push(data.proposal);
+      }
+      continue;
+    }
     if ((KIRO_MEMORY_TOOL_NAMES as string[]).includes(toolNameOf(tp))) continue;
     const output = tp.output as WriteToolResult | undefined;
     if (output && output.ok === true && output.action) {
@@ -382,6 +396,7 @@ function toView(
     proposals: proposals.length > 0 ? proposals : undefined,
     breakdowns: breakdowns.length > 0 ? breakdowns : undefined,
     rebalanceProposals: rebalanceProposals.length > 0 ? rebalanceProposals : undefined,
+    visualActionProposals: visualActionProposals.length > 0 ? visualActionProposals : undefined,
     restored,
     // 历史恢复消息：禁止重新生成；live 且有 Write Tool Call 的轮次同样禁止
     canRegenerate: !restored && !messageHasWriteToolCalls(m),
@@ -819,6 +834,8 @@ export function useKiroChat({
   const writeCounterRef = useRef(0);
   const limitReachedRef = useRef(false);
   const undoRegistryRef = useRef(new Map<string, KiroUndoEntry>());
+  /** Task B Visual Turn Mutation Guard：当前 User Turn 是否绑定 ready image attachment（Send 时设置；下轮 Send 覆盖） */
+  const turnHasImageRef = useRef(false);
   // Kiro Computer Agent V1：每 Turn 独立的 Computer 调用限制（read <= 12 / mutation <= 6）
   const computerCountersRef = useRef({ readCount: 0, mutationCount: 0 });
 
@@ -1075,6 +1092,11 @@ export function useKiroChat({
 
       // ---- Change Set（Task 8）：多写事务，全部合法才全部提交 ----
       if (toolName === "apply_change_set") {
+        // Task B Visual Turn Mutation Guard：截图来源的写操作必须先 propose_visual_actions
+        if (turnHasImageRef.current) {
+          failOutput(VISUAL_PROPOSAL_REQUIRED_CODE, VISUAL_PROPOSAL_REQUIRED_MESSAGE);
+          return;
+        }
         const parsed = KIRO_WRITE_TOOL_SCHEMAS.apply_change_set.safeParse(input);
         if (!parsed.success) {
           failOutput("INVALID_INPUT", "Change Set 输入不合法。");
@@ -1092,7 +1114,7 @@ export function useKiroChat({
             actions: parsed.data.actions,
             summary: parsed.data.summary,
             state: useAppStore.getState(),
-            api: buildWriteApi({
+            api: createKiroWriteApi({
               toolCallId,
               pushToast,
               registerUndo: (id, undo) => {
@@ -1155,6 +1177,11 @@ export function useKiroChat({
 
       // ---- Write Tools ----
       if ((KIRO_WRITE_TOOL_NAMES as string[]).includes(toolName)) {
+        // Task B Visual Turn Mutation Guard：截图来源的写操作必须先 propose_visual_actions
+        if (turnHasImageRef.current && isClassFlowMutationTool(toolName)) {
+          failOutput(VISUAL_PROPOSAL_REQUIRED_CODE, VISUAL_PROPOSAL_REQUIRED_MESSAGE);
+          return;
+        }
         writeCounterRef.current += 1;
         if (writeCounterRef.current > MAX_WRITE_TOOL_CALLS_PER_TURN) {
           limitReachedRef.current = true;
@@ -1163,7 +1190,7 @@ export function useKiroChat({
         }
 
         // 受限 API：只暴露白名单 action；禁止 setState
-        const api = buildWriteApi({
+        const api = createKiroWriteApi({
           toolCallId,
           pushToast,
           registerUndo: (id, undo) => {
@@ -1283,7 +1310,7 @@ export function useKiroChat({
 
   /** 执行 Write Tool：preflight + mutation + Undo 注册 + Toast + addToolOutput */
   const runWriteTool = useCallback(
-    (toolName: string, toolCallId: string, input: unknown, api: ReturnType<typeof buildWriteApi>) => {
+    (toolName: string, toolCallId: string, input: unknown, api: KiroWriteApi) => {
       const result = executeKiroWriteTool(toolName, input, api, toolCallId);
       if (result.ok) {
         pushToast({
@@ -1927,6 +1954,8 @@ export function useKiroChat({
         custom: intent.custom,
       });
       const visionEnabledForIntent = intentCapabilities.vision;
+      // Task B：本 User Turn 是否带 ready image（Guard 依据；整轮 assistant 保持，下轮 Send 覆盖）
+      turnHasImageRef.current = userImages.length > 0;
       if (
         intentCapabilities.vision &&
         intentCapabilities.visionMimeTypes &&
@@ -2188,7 +2217,11 @@ export function useKiroChat({
                 name: a.name,
                 size: a.size,
                 status: "ready" as const,
-                thumbnail: a.kind === "image" ? undefined : undefined,
+                // Task B：真实缩略图透出（local image ready 后已生成 data URL）
+                thumbnail:
+                  a.kind === "image" && typeof (a as { thumbnail?: string }).thumbnail === "string"
+                    ? (a as { thumbnail: string }).thumbnail
+                    : undefined,
               }
             : {
                 id: a.id,
@@ -2791,69 +2824,6 @@ function isScannedAttachment(a: KiroAttachment): boolean {
   return a.pdfVision?.scanned === true;
 }
 
-/** 构建 Write Executor 的受限 API（白名单，禁止 setState） */
-function buildWriteApi({
-  toolCallId,
-  pushToast,
-  registerUndo,
-  onCancelOutput,
-}: {
-  toolCallId: string;
-  pushToast: (t: { message: string; actionLabel?: string; onAction?: () => void; type?: "success" | "warning" | "error" | "info" }) => void;
-  registerUndo: (toolCallId: string, undo: () => void) => void;
-  onCancelOutput: (message: string) => void;
-}): KiroWriteApi {
-  const s = () => useAppStore.getState();
-  // History source attribution：所有业务 mutation 统一标记 kiro（Adapter Wrapper 层，executor 无需感知）
-  const kiro = { source: "kiro" as const };
-  return {
-    getState: s,
-    addAssignment: (a) => useAppStore.getState().addAssignment(a, kiro),
-    addAssignmentWithId: (a, id) => useAppStore.getState().addAssignmentWithId(a, id, kiro),
-    addScheduleOccurrenceOverride: (o) => useAppStore.getState().addScheduleOccurrenceOverride(o),
-    addScheduleOccurrenceOverrideWithId: (o, id) => useAppStore.getState().addScheduleOccurrenceOverrideWithId(o, id),
-    deleteScheduleOccurrenceOverride: (id) => useAppStore.getState().deleteScheduleOccurrenceOverride(id),
-    restoreScheduleOccurrenceOverride: (o) => useAppStore.getState().restoreScheduleOccurrenceOverride(o),
-    updateAssignment: (a) => useAppStore.getState().updateAssignment(a, kiro),
-    updateAssignmentPatch: (id, patch) => useAppStore.getState().updateAssignmentPatch(id, patch, kiro),
-    deleteAssignment: (id) => useAppStore.getState().deleteAssignment(id, kiro),
-    restoreAssignment: (snapshot) => useAppStore.getState().restoreAssignment(snapshot, kiro),
-    updateAssignmentStatus: (id, status) => useAppStore.getState().updateAssignmentStatus(id, status, kiro),
-    updateAssignmentPriority: (id, priority) => useAppStore.getState().updateAssignmentPriority(id, priority, kiro),
-    updateAssignmentProgress: (id, progress) => useAppStore.getState().updateAssignmentProgress(id, progress, kiro),
-    toggleSubtask: (id, subtaskId) => useAppStore.getState().toggleSubtask(id, subtaskId, kiro),
-    addScheduleSlot: (sl) => useAppStore.getState().addScheduleSlot(sl, kiro),
-    updateSchedule: (sc) => useAppStore.getState().updateSchedule(sc, kiro),
-    deleteSchedule: (id) => useAppStore.getState().deleteSchedule(id, kiro),
-    restoreSchedule: (sc) => useAppStore.getState().restoreSchedule(sc, kiro),
-    excludeWeekFromSchedule: (id, week) => useAppStore.getState().excludeWeekFromSchedule(id, week, kiro),
-    addCourseWithSchedule: (c, slots) => useAppStore.getState().addCourseWithSchedule(c, slots, kiro),
-    updateCourse: (c) => useAppStore.getState().updateCourse(c, kiro),
-    addGroupProject: (p) => useAppStore.getState().addGroupProject(p),
-    updateGroupProject: (id, patch) => useAppStore.getState().updateGroupProject(id, patch),
-    deleteGroupProject: (id) => useAppStore.getState().deleteGroupProject(id),
-    addGroupMember: (id, m) => useAppStore.getState().addGroupMember(id, m),
-    updateGroupMember: (id, m) => useAppStore.getState().updateGroupMember(id, m),
-    deleteGroupMember: (id, memberId) => useAppStore.getState().deleteGroupMember(id, memberId),
-    addGroupTask: (id, t) => useAppStore.getState().addGroupTask(id, t),
-    updateGroupTask: (id, t) => useAppStore.getState().updateGroupTask(id, t),
-    deleteGroupTask: (id, taskId) => useAppStore.getState().deleteGroupTask(id, taskId),
-    toggleGroupTask: (id, taskId) => useAppStore.getState().toggleGroupTask(id, taskId),
-    // Task 7G-A1/B：Reminder 白名单
-    addReminder: (input) => useAppStore.getState().addReminder(input),
-    updateReminder: (id, patch) => useAppStore.getState().updateReminder(id, patch),
-    deleteReminder: (id) => useAppStore.getState().deleteReminder(id),
-    restoreReminder: (r) => useAppStore.getState().restoreReminder(r),
-    reconcileTargetReminders: (targetType, targetId) =>
-      useAppStore.getState().reconcileTargetReminders(targetType, targetId),
-    // Task 5：Focus Session 白名单（canUndo=false）
-    startFocusSession: (input) => useAppStore.getState().startFocusSession(input, kiro),
-    pauseFocusSession: (now) => useAppStore.getState().pauseFocusSession(now, kiro),
-    resumeFocusSession: (now) => useAppStore.getState().resumeFocusSession(now, kiro),
-    finishFocusSession: (now) => useAppStore.getState().finishFocusSession(now, kiro),
-    pushToast,
-    registerUndo: (id, undo) => registerUndo(id, undo),
-  };
-}
+
 
 

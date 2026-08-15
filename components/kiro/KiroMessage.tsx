@@ -285,7 +285,16 @@ export function KiroUserMessage({
                   data-testid="kiro-sent-attachment"
                   className="inline-flex items-center gap-1.5 pl-2 pr-2 h-7 rounded-lg bg-surface border border-line text-[11px] font-semibold text-satin-grey"
                 >
-                  <Icon className="w-3 h-3 text-sandrift shrink-0" />
+                  {/* Task B：发送后的图片 chip 显示真实缩略图（不再只有图标） */}
+                  {a.kind === "image" && a.thumbnail ? (
+                    <img
+                      src={a.thumbnail}
+                      alt=""
+                      className="w-5 h-5 rounded object-cover shrink-0"
+                    />
+                  ) : (
+                    <Icon className="w-3 h-3 text-sandrift shrink-0" />
+                  )}
                   <span className={cn("truncate max-w-[140px]")}>{a.name}</span>
                   {a.tempNotRetained && (
                     <span

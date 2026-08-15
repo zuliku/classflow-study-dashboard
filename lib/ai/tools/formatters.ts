@@ -25,6 +25,8 @@ export const KIRO_TOOL_LABELS: Record<string, string> = {
   search_workspace_knowledge: "搜索工作区知识",
   retrieve_workspace_context: "检索工作区上下文",
   list_reminders: "查看提醒",
+  // Visual Action Intake（Task B）
+  propose_visual_actions: "整理截图修改方案",
   // Write
   create_assignment: "创建任务",
   update_assignment: "修改任务",

@@ -148,6 +148,12 @@ export function KiroComposer({
   // Task 14：Kiro Search（Workspace / Sidecar 共用同一 store，开关共享）
   const webSearchEnabled = useKiroPreferencesStore((s) => s.webSearchEnabled);
   const setWebSearchEnabled = useKiroPreferencesStore((s) => s.setWebSearchEnabled);
+  // Task B：截图隐私提示（首次添加图片轻提示一次；只属于 UI preference）
+  const visualPrivacyNoticeSeen = useKiroPreferencesStore((s) => s.visualAttachmentPrivacyNoticeSeen);
+  const setVisualPrivacyNoticeSeen = useKiroPreferencesStore((s) => s.setVisualAttachmentPrivacyNoticeSeen);
+  useEffect(() => {
+    if (hasImages && !visualPrivacyNoticeSeen) setVisualPrivacyNoticeSeen(true);
+  }, [hasImages, visualPrivacyNoticeSeen, setVisualPrivacyNoticeSeen]);
   const canSend =
     text.trim().length > 0 &&
     !hasProcessing &&
@@ -394,6 +400,22 @@ export function KiroComposer({
                   </span>
                 )}
               </div>
+              {/* Task B：截图就绪 + Vision 支持时提供轻量 intent chips（不是 Mode；点击只是发送提示词） */}
+              {hasImages && visionEnabled && !currentTurnScopeLocked && (
+                <div className="flex items-center gap-1.5 pt-1.5">
+                  {["整理任务与 DDL", "识别课程变动", "处理全部通知"].map((label) => (
+                    <button
+                      key={label}
+                      type="button"
+                      data-testid="visual-suggestion"
+                      onClick={() => void onSend(label)}
+                      className="ux-press flex items-center gap-1.5 rounded-lg border border-line bg-[#F7F5F5] text-[11px] font-semibold text-satin-grey hover:text-charcoal hover:border-line-strong transition-colors px-2 h-6 whitespace-nowrap"
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           )}
 
@@ -631,9 +653,17 @@ export function KiroComposer({
             </button>
           </div>
         ) : attachments.length > 0 ? (
-          <p className={cn("text-[10px] text-sandrift mt-1.5", compact ? "px-0" : "px-0.5")}>
-            文件内容会发送给当前选择的 AI 服务以完成你的请求。
-          </p>
+          <div className={cn("mt-1.5 space-y-1", compact ? "px-0" : "px-0.5")}>
+            <p className="text-[10px] text-sandrift">
+              文件内容会发送给当前选择的 AI 服务以完成你的请求。
+            </p>
+            {/* Task B：首次添加图片轻提示一次（非 Dialog；纯 UI preference） */}
+            {hasImages && !visualPrivacyNoticeSeen && (
+              <p data-testid="visual-privacy-notice" className="text-[10px] text-sandrift">
+                图片仅用于当前 Kiro 对话，不会自动保存到课程资料。
+              </p>
+            )}
+          </div>
         ) : null}
       </div>
     </div>

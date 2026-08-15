@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { TaskBreakdownProposalSchema } from "@/lib/tasks/taskBreakdown";
 import { MAX_SCANNED_PDF_PAGES_PER_TURN } from "@/lib/ai/attachments/limits";
+import { proposeVisualActionsInputSchema } from "@/lib/ai/visual/schemas";
 
 /**
  * Kiro Read Tool 输入 Schema（zod）。
@@ -218,6 +219,14 @@ export const proposeStudyRebalanceSchema = z
   })
   .strict();
 
+/**
+ * Visual Action Intake（Task B）：propose_visual_actions
+ * Proposal Tool（与 propose_study_plan 同类）：绝不写 Store。
+ * 模型必须先 Read Courses / Assignments / Schedules / 临时变更；
+ * 输入只接受真实 entity ID；日期必须是 absolute normalized time。
+ */
+export const proposeVisualActionsSchema = proposeVisualActionsInputSchema;
+
 export const KIRO_READ_TOOL_SCHEMAS = {
   get_current_context: emptyInputSchema,
   get_user_study_profile: emptyInputSchema,
@@ -247,6 +256,7 @@ export const KIRO_READ_TOOL_SCHEMAS = {
   get_learning_analytics: getLearningAnalyticsSchema,
   get_learning_outlook: getLearningOutlookSchema,
   propose_study_rebalance: proposeStudyRebalanceSchema,
+  propose_visual_actions: proposeVisualActionsSchema,
 } as const;
 
 export type KiroReadToolName = keyof typeof KIRO_READ_TOOL_SCHEMAS;

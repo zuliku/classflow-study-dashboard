@@ -41,7 +41,8 @@ export function useKiroAttachments() {
         size: a.size,
         status: a.status,
         error: a.error,
-        thumbnail: a.kind === "image" ? undefined : undefined,
+        // Task B：local image ready 后透出真实缩略图（KiroAttachmentChip 已支持渲染）
+        thumbnail: a.kind === "image" ? a.thumbnail : undefined,
         visionRequired: scanned,
         pageCount: scanned ? a.extracted?.pageCount : undefined,
       };

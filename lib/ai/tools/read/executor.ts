@@ -25,6 +25,10 @@ import { findFreeTime } from "@/lib/planning/freeTime";
 import { proposeStudyPlan } from "@/lib/planning/studyPlanner";
 import { proposeStudyRebalance } from "@/lib/planning/studyRebalance";
 import { KIRO_READ_TOOL_SCHEMAS, KiroReadToolName } from "@/lib/ai/tools/read/schemas";
+import type { AppState } from "@/store/useAppStore";
+import { DEFAULT_PREFERENCES } from "@/lib/preferences";
+import { buildVisualActionProposal } from "@/lib/ai/visual/preflight";
+import { ProposeVisualActionsInput } from "@/lib/ai/visual/schemas";
 
 /**
  * Read Tool Executor：pure / deterministic / no mutations。
@@ -32,7 +36,22 @@ import { KIRO_READ_TOOL_SCHEMAS, KiroReadToolName } from "@/lib/ai/tools/read/sc
  * 工具输出统一 envelope：ok / code / message / candidates。
  */
 
-export type ReadToolErrorCode = "NOT_FOUND" | "INVALID_INPUT" | "AMBIGUOUS" | "OUT_OF_RANGE" | "FILE_MISSING" | "READ_FAILED";
+export type ReadToolErrorCode =
+  | "NOT_FOUND"
+  | "INVALID_INPUT"
+  | "AMBIGUOUS"
+  | "OUT_OF_RANGE"
+  | "FILE_MISSING"
+  | "READ_FAILED"
+  // Visual Action Intake（Task B）：Proposal 结构化失败
+  | "VISUAL_UNSUPPORTED_ACTION"
+  | "VISUAL_ATTACHMENT_MISMATCH"
+  | "VISUAL_DUPLICATE_ASSIGNMENT"
+  | "TRANSACTION_TOO_LARGE"
+  | "TRANSACTION_UNSUPPORTED"
+  | "TRANSACTION_CONTRADICTORY"
+  | "TRANSACTION_INTEGRITY"
+  | "CONFLICT";
 
 export type ReadToolResult<T> =
   | { ok: true; data: T }
@@ -71,6 +90,8 @@ export interface ReadToolState {
   focusSessions?: FocusSession[];
   /** Task 7：一次性停课/调课/补课（optional：旧 fixture 回落 []） */
   scheduleOccurrenceOverrides?: ScheduleOccurrenceOverride[];
+  /** Task B：Visual Proposal preflight 需要（optional：旧 fixture 回落 DEFAULT_PREFERENCES） */
+  preferences?: AppState["preferences"];
 }
 
 const notFound = (message: string): ReadToolResult<never> => ({ ok: false, code: "NOT_FOUND", message });
@@ -595,6 +616,26 @@ export function proposeStudyRebalanceTool(state: ReadToolState, input: unknown):
   };
 }
 
+/** Visual Action Intake（Task B）：Proposal Tool，绝不写 Store；preflight 基于最新真实 Store */
+export function proposeVisualActionsTool(state: ReadToolState, input: unknown): ReadToolResult<unknown> {
+  const parsed = safeParse<ProposeVisualActionsInput>("propose_visual_actions", input);
+  if (!parsed.ok) return parsed;
+  const appState: AppState = {
+    ...(state as unknown as AppState),
+    preferences: state.preferences ?? DEFAULT_PREFERENCES,
+    reminders: state.reminders ?? [],
+  };
+  const result = buildVisualActionProposal(parsed.data, appState);
+  if (!result.ok) {
+    return {
+      ok: false,
+      code: result.code as ReadToolErrorCode,
+      message: result.message,
+    };
+  }
+  return { ok: true, data: { proposal: result.proposal } };
+}
+
 /** propose_task_breakdown 输入形状（与 TaskBreakdownProposal 一致；schema 校验为准） */
 interface TaskBreakdownProposalInput {
   assignmentId: string;
@@ -899,6 +940,7 @@ const EXECUTORS: Record<Exclude<KiroReadToolName, "read_material" | "read_projec
   get_available_time: getAvailableTime,
   propose_study_plan: proposeStudyPlanTool,
   propose_study_rebalance: proposeStudyRebalanceTool,
+  propose_visual_actions: proposeVisualActionsTool,
   get_upcoming_assignments: getUpcomingAssignments,
   search_group_projects: searchGroupProjects,
   get_group_project: getGroupProject,
