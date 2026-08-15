@@ -35,6 +35,13 @@ import {
   clearConversationHistory,
 } from "@/lib/ai/history/db";
 import { KiroConversationRecord, PersistedContextRef, KiroConversationSummary } from "@/lib/ai/history/types";
+import {
+  createKiroProject,
+  updateKiroProject,
+  deleteKiroProjectAndUnassignConversations,
+  assignConversationToProject as assignConversationToProjectDb,
+} from "@/lib/ai/projects/db";
+import { KiroProjectRecord, normalizeProjectName, normalizeProjectDescription } from "@/lib/ai/projects/types";
 import { buildConversationSeed } from "@/lib/ai/history/conversationSeed";
 import {
   CONVERSATION_TRANSITION_IDLE,
@@ -136,6 +143,10 @@ interface KiroSessionMetaValue {
   /** Task 7B：会话切换进行中（stop → 保存 → reset/load）——UI 可禁用切换入口 */
   conversationTransitioning: boolean;
   conversationTransition: ConversationTransitionView;
+  /** Kiro Projects V1：当前 Conversation 所属项目（低频 metadata） */
+  conversationProjectId: string | null;
+  /** 项目数据版本（创建/更新/删除/移动后递增；panel 据此刷新） */
+  projectsVersion: number;
 }
 
 /** Actions：稳定 callbacks（transcript 操作点击时才读取 Ref，不订阅 streaming messages） */
@@ -159,6 +170,11 @@ interface KiroSessionActionsValue {
   copyCurrentTranscript: () => Promise<void>;
   exportCurrentTranscript: () => void;
   getCurrentMessages: () => ReturnType<typeof useKiroChat>["messages"];
+  /** Kiro Projects V1：低频 metadata 操作（只 bump projectsVersion，不触发 streaming rerender） */
+  createProject: (input: { name: string; description?: string }) => Promise<KiroProjectRecord | null>;
+  updateProject: (id: string, patch: { name?: string; description?: string }) => Promise<KiroProjectRecord | null>;
+  deleteProject: (id: string) => Promise<void>;
+  assignConversationToProject: (conversationId: string, projectId: string | null) => Promise<boolean>;
 }
 
 const KiroRuntimeContext = createContext<KiroRuntimeValue | null>(null);
@@ -190,6 +206,10 @@ export function KiroSessionProvider({ children }: { children: React.ReactNode })
   const conversationIdRef = useRef<string | null>(null);
   const conversationTitleRef = useRef<string | null>(null);
   const conversationCreatedAtRef = useRef<string | null>(null);
+  // Kiro Projects V1：当前 Conversation 的 projectId（persistCurrent / transition 使用 ref）
+  const [conversationProjectId, setConversationProjectId] = useState<string | null>(null);
+  const conversationProjectIdRef = useRef<string | null>(null);
+  const [projectsVersion, setProjectsVersion] = useState(0);
   // Task 7B：Conversation Transition Lifecycle（ref 供 async 流读取；state 驱动 UI disable）
   const transitionStateRef = useRef<ConversationTransitionState>(CONVERSATION_TRANSITION_IDLE);
   const [transitionState, setTransitionState] = useState<ConversationTransitionState>(CONVERSATION_TRANSITION_IDLE);
@@ -283,6 +303,8 @@ export function KiroSessionProvider({ children }: { children: React.ReactNode })
         manualRefs: manualRefsRef.current,
         entryRefs: entryRefsRef.current,
         summary: conversationSummaryRef.current,
+        // 关键回归点：sanitizeConversation 重写 Record 时必须保留 projectId
+        projectId: conversationProjectIdRef.current,
       });
       await saveConversation(record);
       refreshHistory();
@@ -342,10 +364,12 @@ export function KiroSessionProvider({ children }: { children: React.ReactNode })
           conversationTitleRef.current = null;
           conversationCreatedAtRef.current = null;
           conversationSummaryRef.current = null;
+          conversationProjectIdRef.current = null;
           setConversationId(null);
           setConversationTitle(null);
           setConversationCreatedAt(null);
           setConversationSummary(null);
+          setConversationProjectId(null);
           setManualRefs([]);
           setEntryRefs([]);
           setSuppressedAutoKeys([]);
@@ -362,10 +386,12 @@ export function KiroSessionProvider({ children }: { children: React.ReactNode })
           conversationTitleRef.current = target.title;
           conversationCreatedAtRef.current = target.createdAt;
           conversationSummaryRef.current = target.summary ?? null;
+          conversationProjectIdRef.current = target.projectId ?? null;
           setConversationId(target.id);
           setConversationTitle(target.title);
           setConversationCreatedAt(target.createdAt);
           setConversationSummary(target.summary ?? null);
+          setConversationProjectId(target.projectId ?? null);
           setManualRefs(restoreRefs(target.manualRefs, "manual"));
           setEntryRefs(restoreRefs(target.entryRefs, "entry"));
           setSuppressedAutoKeys([]);
@@ -749,6 +775,85 @@ export function KiroSessionProvider({ children }: { children: React.ReactNode })
 
   const getCurrentMessages = useCallback(() => chatMessagesRef.current, []);
 
+  // ---- Kiro Projects V1：低频 metadata 操作（只 bump projectsVersion / 相关 state，不订阅 streaming） ----
+  const bumpProjects = useCallback(() => setProjectsVersion((v) => v + 1), []);
+
+  const createProject = useCallback(
+    async (input: { name: string; description?: string }): Promise<KiroProjectRecord | null> => {
+      const name = normalizeProjectName(input.name);
+      const description = normalizeProjectDescription(input.description);
+      if (!name) {
+        pushToast({ message: "项目名称无效（1–50 字）。", type: "error" });
+        return null;
+      }
+      try {
+        const record = await createKiroProject({ name, description });
+        bumpProjects();
+        return record;
+      } catch {
+        pushToast({ message: "项目创建失败，请重试", type: "error" });
+        return null;
+      }
+    },
+    [bumpProjects, pushToast]
+  );
+
+  const updateProject = useCallback(
+    async (id: string, patch: { name?: string; description?: string }): Promise<KiroProjectRecord | null> => {
+      const name = patch.name !== undefined ? normalizeProjectName(patch.name) : undefined;
+      const description = patch.description !== undefined ? normalizeProjectDescription(patch.description) : undefined;
+      if (patch.name !== undefined && !name) {
+        pushToast({ message: "项目名称无效（1–50 字）。", type: "error" });
+        return null;
+      }
+      try {
+        const record = await updateKiroProject(id, { name: name ?? undefined, description });
+        bumpProjects();
+        return record;
+      } catch {
+        pushToast({ message: "项目更新失败，请重试", type: "error" });
+        return null;
+      }
+    },
+    [bumpProjects, pushToast]
+  );
+
+  const deleteProject = useCallback(
+    async (id: string): Promise<void> => {
+      try {
+        await deleteKiroProjectAndUnassignConversations(id);
+        // 当前打开的 Conversation 属于被删项目 → session 关联同步清空（刷新后不回弹）
+        if (conversationProjectIdRef.current === id) {
+          conversationProjectIdRef.current = null;
+          setConversationProjectId(null);
+        }
+        bumpProjects();
+      } catch {
+        pushToast({ message: "项目删除失败，请重试", type: "error" });
+      }
+    },
+    [bumpProjects, pushToast]
+  );
+
+  const assignConversationToProject = useCallback(
+    async (conversationId: string, projectId: string | null): Promise<boolean> => {
+      try {
+        await assignConversationToProjectDb(conversationId, projectId);
+        // 当前打开的 Conversation 被移动 → session 关联同步（projectId 是唯一事实来源）
+        if (conversationIdRef.current === conversationId) {
+          conversationProjectIdRef.current = projectId;
+          setConversationProjectId(projectId);
+        }
+        bumpProjects();
+        return true;
+      } catch {
+        pushToast({ message: "无法移动这条对话，请重试", type: "error" });
+        return false;
+      }
+    },
+    [bumpProjects, pushToast]
+  );
+
   // Task 7A：唯一 sessionChat —— send 绑定 Conversation lifecycle（History 持久化入口）。
   // Runtime / Session 两个 Context 必须暴露同一对象，禁止 runtime.raw send 与 session.sendWithTurn 分叉。
   const sessionChat = useMemo(
@@ -790,6 +895,8 @@ export function KiroSessionProvider({ children }: { children: React.ReactNode })
       hasMessages,
       conversationTransitioning: transitionState.phase !== "idle",
       conversationTransition: toConversationTransitionView(transitionState),
+      conversationProjectId,
+      projectsVersion,
     }),
     [
       conversationId,
@@ -802,6 +909,8 @@ export function KiroSessionProvider({ children }: { children: React.ReactNode })
       lastUserTurnGen,
       hasMessages,
       transitionState,
+      conversationProjectId,
+      projectsVersion,
     ]
   );
 
@@ -825,6 +934,10 @@ export function KiroSessionProvider({ children }: { children: React.ReactNode })
       copyCurrentTranscript,
       exportCurrentTranscript,
       getCurrentMessages,
+      createProject,
+      updateProject,
+      deleteProject,
+      assignConversationToProject,
     }),
     [
       newChat,
@@ -845,6 +958,10 @@ export function KiroSessionProvider({ children }: { children: React.ReactNode })
       copyCurrentTranscript,
       exportCurrentTranscript,
       getCurrentMessages,
+      createProject,
+      updateProject,
+      deleteProject,
+      assignConversationToProject,
     ]
   );
 

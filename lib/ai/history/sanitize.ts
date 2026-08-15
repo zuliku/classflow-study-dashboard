@@ -109,6 +109,8 @@ export function sanitizeConversation(input: {
   manualRefs: KiroContextRef[];
   entryRefs: KiroContextRef[];
   summary?: KiroConversationSummary | null;
+  /** Kiro Project 成员关系（V1）：sanitize 重写 Record 时必须保留，否则会被意外抹掉 */
+  projectId?: string | null;
 }): KiroConversationRecord {
   const messages: PersistedKiroMessage[] = input.messages
     // Worklog V2：assistant 可能 Final Answer 为空但产生 Action Card —— 消息必须保留；
@@ -172,6 +174,8 @@ export function sanitizeConversation(input: {
     manualRefs: toRefs(input.manualRefs),
     entryRefs: toRefs(input.entryRefs),
     summary: input.summary ?? undefined,
+    // projectId 只在有值时写入（旧记录/未归类保持无字段，语义兼容）
+    ...(input.projectId ? { projectId: input.projectId } : {}),
   };
 }
 

@@ -125,6 +125,47 @@ describe("sanitizeConversation", () => {
     expect(rec.messages[0].content.length).toBe(100000);
   });
 
+  it("Kiro Projects V1：projectId 经 sanitize → save → load 全程保留（不因重写被抹掉）", async () => {
+    const rec = sanitizeConversation({
+      id: "c-proj",
+      title: "项目对话",
+      createdAt: "2026-08-01T00:00:00.000Z",
+      provider: "opencode-go",
+      model: "kimi-k3",
+      messages: [viewMessage({ id: "u1", role: "user", content: "你好" })],
+      manualRefs: [],
+      entryRefs: [],
+      projectId: "proj_1",
+    });
+    expect(rec.projectId).toBe("proj_1");
+    await saveConversation(rec);
+    const loaded = await getConversation("c-proj");
+    expect(loaded?.projectId).toBe("proj_1");
+  });
+
+  it("Kiro Projects V1：projectId 为空时不写入字段（旧记录/未归类兼容）", async () => {
+    const rec = sanitizeConversation({
+      id: "c-plain",
+      title: "未归类",
+      createdAt: "2026-08-01T00:00:00.000Z",
+      provider: "p",
+      model: "m",
+      messages: [viewMessage({ id: "u1", role: "user", content: "hi" })],
+      manualRefs: [],
+      entryRefs: [],
+    });
+    expect("projectId" in rec).toBe(false);
+  });
+
+  it("Kiro Projects V1：旧 record 无 projectId → save/load 不崩溃且保持无字段", async () => {
+    const rec = makeRecord({ id: "c-legacy" });
+    expect("projectId" in rec).toBe(false);
+    await saveConversation(rec);
+    const loaded = await getConversation("c-legacy");
+    expect(loaded?.id).toBe("c-legacy");
+    expect(loaded?.projectId).toBeUndefined();
+  });
+
   it("live action → 最小事实数据（heading/title/change，无工具参数）", () => {
     const rec = sanitizeConversation({
       id: "c1",
@@ -189,9 +230,9 @@ describe("IndexedDB CRUD", () => {
 
   it("损坏记录被跳过（不崩溃）", async () => {
     await saveConversation(makeRecord({ id: "c1" }));
-    // 直接写入一条损坏数据
+    // 直接写入一条损坏数据（DB 现为 v3：用缓存连接而非 open v2）
     const db = await new Promise<IDBDatabase>((resolve, reject) => {
-      const req = indexedDB.open(KIRO_HISTORY_DB_NAME, 2);
+      const req = indexedDB.open(KIRO_HISTORY_DB_NAME, 3);
       req.onsuccess = () => resolve(req.result);
       req.onerror = () => reject(req.error);
     });
@@ -200,6 +241,7 @@ describe("IndexedDB CRUD", () => {
       t.objectStore("conversations").put({ id: "bad" });
       t.oncomplete = () => resolve();
     });
+    db.close();
     const list = await listConversations();
     expect(list.map((r) => r.id)).toEqual(["c1"]);
   });

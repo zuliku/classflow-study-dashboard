@@ -117,4 +117,9 @@ export interface KiroConversationRecord {
   entryRefs: PersistedContextRef[];
   /** 旧记录可能没有 summary（正常加载） */
   summary?: KiroConversationSummary;
+  /**
+   * Kiro Project 成员关系（V1）：Conversation 是唯一事实来源，一个对话最多属于一个项目。
+   * 旧记录没有此字段（= 未归类），必须正常工作。
+   */
+  projectId?: string;
 }

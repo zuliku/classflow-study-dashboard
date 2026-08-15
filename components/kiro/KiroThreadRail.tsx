@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { Plus, Search, MoreHorizontal, FileDown, Copy, Trash2, ChevronLeft, History as HistoryIcon } from "lucide-react";
+import { Plus, Search, MoreHorizontal, FileDown, Copy, Trash2, ChevronLeft, History as HistoryIcon, FolderKanban } from "lucide-react";
 import { useKiroSessionMeta, useKiroSessionActions } from "@/components/kiro/KiroSessionProvider";
 import { useToastStore } from "@/store/useToastStore";
 import { useConfirmStore } from "@/store/useConfirmStore";
@@ -53,7 +53,7 @@ function KiroRailPlate({
  * - 历史复用 listConversations + historyVersion + currentConversationId（不复制 History Runtime）
  * - Esc / 点击外部收起；Cmd/Ctrl+Shift+H toggle；不依赖 hover 展开
  */
-export function KiroThreadRail() {
+export function KiroThreadRail({ onOpenProjects }: { onOpenProjects?: () => void }) {
   const meta = useKiroSessionMeta();
   const actions = useKiroSessionActions();
   // Task 7C：Kiro 输出字号（低频 preference，仅 Expanded Rail 提供入口）
@@ -248,6 +248,14 @@ export function KiroThreadRail() {
           >
             <Search className="w-4 h-4" />
           </button>
+          <button
+            onClick={() => onOpenProjects?.()}
+            aria-label="打开项目"
+            title="项目"
+            className="w-9 h-9 flex items-center justify-center rounded-xl text-sandrift hover:bg-alabaster hover:text-charcoal transition-colors"
+          >
+            <FolderKanban className="w-4 h-4" />
+          </button>
           <div className="flex-1" />
           <div className="relative">
             <button
@@ -304,6 +312,16 @@ export function KiroThreadRail() {
                 className="w-full bg-transparent text-xs text-charcoal placeholder-sandrift focus:outline-none"
               />
             </div>
+            {onOpenProjects && (
+              <button
+                onClick={onOpenProjects}
+                aria-label="打开项目"
+                className="w-full flex items-center gap-2 px-2.5 h-7 rounded-lg text-[11px] font-semibold text-satin-grey hover:bg-alabaster hover:text-charcoal transition-colors"
+              >
+                <FolderKanban className="w-3.5 h-3.5 text-sandrift" />
+                项目
+              </button>
+            )}
           </div>
 
           {/* Thread 列表（独立滚动区） */}
