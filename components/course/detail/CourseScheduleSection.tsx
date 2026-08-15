@@ -118,12 +118,20 @@ export function CourseScheduleSection({
     setEditingSlotId(null);
     setEditError(null);
     setAddError(null);
-    const t = window.setTimeout(() => {
-      document
-        .querySelector<HTMLButtonElement>('[data-testid="schedule-add-day"]')
-        ?.focus();
-    }, reducedMotion ? 0 : 80);
-    return () => window.clearTimeout(t);
+    // form 挂载有微小延迟（DisclosureRegion presence）：最多重试 3 次
+    let attempts = 0;
+    let timer = 0;
+    const focusDaySelect = () => {
+      const el = document.querySelector<HTMLButtonElement>('[data-testid="schedule-add-day"]');
+      if (el) {
+        el.focus();
+        return;
+      }
+      attempts += 1;
+      if (attempts < 3) timer = window.setTimeout(focusDaySelect, 80);
+    };
+    timer = window.setTimeout(focusDaySelect, reducedMotion ? 0 : 80);
+    return () => window.clearTimeout(timer);
   }, [autoFocusKey, onAddSlotOpenChange, reducedMotion]);
 
   const openAddForm = () => {
@@ -131,6 +139,16 @@ export function CourseScheduleSection({
     setEditError(null);
     setAddError(null);
     onAddSlotOpenChange(true);
+  };
+
+  /** Disclosure trigger：再次点击收起 Add form（与 编辑 slot 互斥） */
+  const toggleAddForm = () => {
+    if (addSlotOpen) {
+      setAddError(null);
+      onAddSlotOpenChange(false);
+      return;
+    }
+    openAddForm();
   };
 
   const handleSubmitAdd = (e: React.FormEvent) => {
@@ -174,7 +192,7 @@ export function CourseScheduleSection({
   };
 
   return (
-    <div ref={sectionRef} className="space-y-2.5 scroll-mt-4">
+    <div ref={sectionRef} data-testid="course-schedule-section" className="space-y-2.5 scroll-mt-4">
       <div className="flex items-center justify-between gap-2">
         <h3 className="text-sm font-bold text-charcoal">
           上课安排{" "}
@@ -184,7 +202,7 @@ export function CourseScheduleSection({
         </h3>
         <button
           type="button"
-          onClick={openAddForm}
+          onClick={toggleAddForm}
           aria-expanded={addSlotOpen}
           className="ux-press flex items-center gap-1 rounded-lg px-1.5 py-0.5 text-[11px] font-bold text-satin-grey transition-colors hover:text-charcoal"
         >

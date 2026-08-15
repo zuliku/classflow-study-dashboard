@@ -18,14 +18,14 @@ export type CourseCardPopover =
 
 const TASK_PREVIEW_LIMIT = 2;
 const MATERIAL_PREVIEW_LIMIT = 2;
-/** Task / Material preview 区域固定高度（2 × 28px），保证内部基线一致 */
-const PREVIEW_AREA_HEIGHT = "h-14";
+/** preview row 高度（局部 line-height stability；不用于撑高整个 Card） */
+const PREVIEW_ROW_HEIGHT = "h-7";
 
 /**
- * Course Library Card（Task 5 follow-up）：
- * 明确分层 —— Course Header（Level 1）→ 下节课 context row → 任务 / 资料 Sections（Level 2，flex-1 均匀吸收
- * Desktop 剩余高度）→ 固定 Footer。Section preview 区域高度恒定，查看全部触发移入 Section Header，
- * 0/1/2/>2 条内容都不改变 Card 内部基线。
+ * Course Library Card（Task 5 follow-up + Floating UX Closure）：
+ * 明确分层 —— Course Header（Level 1）→ 下节课 context row → 任务 / 资料 Sections（Level 2）→ Footer。
+ * Card 高度由内容决定（content-fit）：不再固定 320px / 不再 stretch 等高等高；
+ * 同一 Grid row 内较矮 Card 由 grid items-center 上下居中。Section 内部正常 top-to-bottom 阅读。
  */
 export function CourseLibraryCard({
   course,
@@ -145,8 +145,8 @@ export function CourseLibraryCard({
         </p>
       </div>
 
-      {/* Level 2 — TASKS（flex-1 吸收 Desktop 剩余高度；preview 区域恒定 56px） */}
-      <section className="flex-1 min-h-[88px] flex flex-col px-4 pt-2.5 pb-2 border-t border-line">
+      {/* Level 2 — TASKS（content-fit；preview 行自然高度，0 条时单行空态） */}
+      <section className="flex flex-col px-4 pt-2.5 pb-2 border-t border-line">
         <div className="flex items-center justify-between gap-2 shrink-0">
           <div className="flex items-center gap-2 min-w-0">
             <h4 className="text-xs font-bold text-charcoal/85 shrink-0">
@@ -191,17 +191,20 @@ export function CourseLibraryCard({
         </div>
 
         {previewTasks.length === 0 ? (
-          <p className={cn(PREVIEW_AREA_HEIGHT, "flex items-center text-[11px] text-sandrift")}>
+          <p className={cn(PREVIEW_ROW_HEIGHT, "flex items-center text-[11px] text-sandrift")}>
             暂无未完成任务
           </p>
         ) : (
-          <div className={cn(PREVIEW_AREA_HEIGHT, "flex flex-col justify-center")}>
+          <div className="flex flex-col">
             {previewTasks.map((row) => (
               <button
                 key={row.id}
                 type="button"
                 onClick={() => onOpenAssignment(row.id)}
-                className="group/task flex h-7 w-full items-center justify-between gap-2 text-left"
+                className={cn(
+                  "group/task flex w-full items-center justify-between gap-2 text-left",
+                  PREVIEW_ROW_HEIGHT
+                )}
                 title="打开任务详情"
               >
                 <span className="min-w-0 truncate text-[11px] font-semibold text-charcoal group-hover/task:text-black">
@@ -221,8 +224,8 @@ export function CourseLibraryCard({
         )}
       </section>
 
-      {/* Level 2 — MATERIALS（与 Task 平行；查看全部触发在 Header 行） */}
-      <section className="flex-1 min-h-[88px] flex flex-col px-4 pt-2.5 pb-2 border-t border-line">
+      {/* Level 2 — MATERIALS（与 Task 平行；content-fit） */}
+      <section className="flex flex-col px-4 pt-2.5 pb-2 border-t border-line">
         <div className="flex items-center justify-between gap-2 shrink-0">
           <h4 className="text-xs font-bold text-charcoal/85 shrink-0">
             资料 · {materials.length}
@@ -268,7 +271,7 @@ export function CourseLibraryCard({
             onClick={onUploadClick}
             disabled={uploading}
             className={cn(
-              PREVIEW_AREA_HEIGHT,
+              PREVIEW_ROW_HEIGHT,
               "flex w-full items-center justify-between text-[11px] font-semibold text-sandrift transition-colors hover:text-charcoal disabled:opacity-60"
             )}
           >
@@ -279,14 +282,15 @@ export function CourseLibraryCard({
             </span>
           </button>
         ) : (
-          <div className={cn(PREVIEW_AREA_HEIGHT, "flex flex-col justify-center")}>
+          <div className="flex flex-col">
             {previewMaterials.map((m) => (
               <button
                 key={m.id}
                 type="button"
                 onClick={() => onPreviewMaterial(m)}
                 className={cn(
-                  "group/mat flex h-7 w-full items-center gap-2 text-left",
+                  "group/mat flex w-full items-center gap-2 text-left",
+                  PREVIEW_ROW_HEIGHT,
                   newMaterialIds.has(m.id) && "animate-enter"
                 )}
                 title="预览资料"
@@ -302,8 +306,8 @@ export function CourseLibraryCard({
         )}
       </section>
 
-      {/* FOOTER — 固定尾部策略：mt-auto + border-t，无竞争 margin */}
-      <footer className="mt-auto shrink-0 h-11 px-4 flex items-center justify-between border-t border-line">
+      {/* FOOTER：content-fit 下紧跟 Materials section（border-t + padding 建立节奏，不制造 flexible spacer） */}
+      <footer className="shrink-0 h-11 px-4 flex items-center justify-between border-t border-line">
         <button
           type="button"
           onClick={onAddTask}

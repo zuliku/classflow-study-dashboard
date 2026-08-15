@@ -91,23 +91,23 @@ async function openCourseDrawer(page: import("@playwright/test").Page) {
   return drawer;
 }
 
-base("A+B：课程 → edge Drawer（aria-modal；宽度 560–600）+ 首屏核心信息与主操作", async ({ page }) => {
+base("A+B：课程 → Floating Course Hub（non-modal；宽度 ~500px）+ 首屏核心信息与主操作", async ({ page }) => {
   const { monday } = dayAnchor();
   await page.addInitScript(seedScript(monday));
   const drawer = await openCourseDrawer(page);
 
-  // edge（blocking）：aria-modal=true
-  await expect(drawer).toHaveAttribute("aria-modal", "true");
+  // floating non-blocking contextual panel：不声明 aria-modal（背景可交互，不冒充 modal）
+  await expect(drawer).not.toHaveAttribute("aria-modal", "true");
 
-  // 等 enter transition settle 后测量宽度（desktop 560–600）
+  // 等 enter transition settle 后测量宽度（约 500px family）
   const panel = drawer;
   await expect(async () => {
     const transform = await panel.evaluate((el) => getComputedStyle(el).transform);
     expect(transform === "none" || transform === "matrix(1, 0, 0, 1, 0, 0)").toBe(true);
   }).toPass({ timeout: 5000 });
   const box = (await panel.boundingBox())!;
-  expect(box.width).toBeGreaterThanOrEqual(540);
-  expect(box.width).toBeLessThanOrEqual(620);
+  expect(box.width).toBeGreaterThanOrEqual(480);
+  expect(box.width).toBeLessThanOrEqual(520);
 
   // 首屏：Identity + Overview + Primary Actions
   await expect(drawer.getByText(/CS-210/).first()).toBeVisible();
@@ -311,4 +311,138 @@ base("K：390×844：无横向溢出；close 可达；schedule form 可用", asy
     () => document.documentElement.scrollWidth > window.innerWidth + 1
   );
   expect(overflow2).toBe(false);
+});
+
+/** settle enter 后读取 panel 几何（跳过 230ms transform/opacity 动画期） */
+async function settledBox(drawer: import("@playwright/test").Locator) {
+  await expect(async () => {
+    const transform = await drawer.evaluate((el) => getComputedStyle(el).transform);
+    expect(transform === "none" || transform === "matrix(1, 0, 0, 1, 0, 0)").toBe(true);
+  }).toPass({ timeout: 5000 });
+  return (await drawer.boundingBox())!;
+}
+
+async function centerOffset(drawer: import("@playwright/test").Locator) {
+  const box = await settledBox(drawer);
+  return Math.abs(box.y + box.height / 2 - 450); // viewport 1440×900 → centerY 450
+}
+
+base("L：Hub 垂直居中 + content-fit 高度（short < long；均非 h-full）", async ({ page }) => {
+  const { monday } = dayAnchor();
+  await page.addInitScript(seedScript(monday));
+  await page.setViewportSize({ width: 1440, height: 900 });
+
+  // 短课程：操作系统（0 任务 / 0 资料 / 1 时段 / 无说明）
+  await page.goto("/");
+  await page.getByRole("button", { name: "课程资料" }).first().click();
+  await page.getByRole("button", { name: "操作系统", exact: true }).click();
+  const drawer = page.getByRole("dialog", { name: "课程详情" });
+  await expect(drawer).toBeVisible({ timeout: 8000 });
+  const shortBox = await settledBox(drawer);
+  // 不是 h-full：高度明显小于 viewport safe inset（content-fit，短内容 Hub 不拉满）
+  expect(shortBox.height).toBeLessThan(900 - 32);
+  expect(shortBox.height).toBeLessThan(700);
+  // 垂直居中（±4px 亚像素容差）
+  expect(await centerOffset(drawer)).toBeLessThanOrEqual(4);
+
+  // 长课程：数据结构与算法（7 任务 / 6 资料）→ 更高
+  await drawer.getByRole("button", { name: "关闭" }).click();
+  await page.getByRole("button", { name: "数据结构与算法", exact: true }).click();
+  await expect(drawer).toBeVisible({ timeout: 8000 });
+  const longBox = await settledBox(drawer);
+  expect(longBox.height).toBeGreaterThan(shortBox.height);
+  expect(await centerOffset(drawer)).toBeLessThanOrEqual(4);
+});
+
+base("M：Long Hub 达 max-height 后 Body 内部滚动（Header/Close 常驻）", async ({ page }) => {
+  const { monday } = dayAnchor();
+  await page.addInitScript(seedScript(monday));
+  const drawer = await openCourseDrawer(page);
+
+  // 展开全部任务 + 资料 + Add Schedule → 内容超过 max-height
+  await drawer.getByTestId("tasks-expand-toggle").click();
+  await drawer.getByTestId("materials-expand-toggle").click();
+  await drawer.getByRole("button", { name: "添加时段" }).first().click();
+  await expect(drawer.getByTestId("schedule-add-form")).toBeVisible({ timeout: 5000 });
+
+  const box = await settledBox(drawer);
+  // panel 高度被 max-height 封顶（viewport safe inset，含亚像素容差）
+  expect(box.height).toBeLessThanOrEqual(900 - 32 + 2);
+  expect(box.y).toBeGreaterThanOrEqual(12);
+  // 垂直居中仍成立
+  expect(await centerOffset(drawer)).toBeLessThanOrEqual(4);
+
+  // Body 内部滚动：scrollHeight > clientHeight；Header/Close 常驻
+  const scroll = await drawer.evaluate((el) => {
+    const body = el.querySelector<HTMLElement>('div[class*="overflow-y-auto"]');
+    return body ? { sh: body.scrollHeight, ch: body.clientHeight } : null;
+  });
+  expect(scroll).not.toBeNull();
+  expect(scroll!.sh).toBeGreaterThan(scroll!.ch);
+  await expect(drawer.getByRole("button", { name: "关闭" })).toBeVisible();
+  await expect(drawer.getByRole("heading", { name: "数据结构与算法" })).toBeVisible();
+
+  // 滚到 Body 底部 → 最后一个展开项可见（panel bottom 不超出 viewport）
+  await drawer.evaluate((el) => {
+    const body = el.querySelector<HTMLElement>('div[class*="overflow-y-auto"]');
+    if (body) body.scrollTop = body.scrollHeight;
+  });
+  await expect(drawer.getByText("第6章 讲义.pdf", { exact: true })).toBeVisible({ timeout: 3000 });
+  const afterScroll = await settledBox(drawer);
+  expect(afterScroll.y + afterScroll.height).toBeLessThanOrEqual(900 - 12);
+});
+
+base("N：动态 disclosure 扩张/收起后仍居中（无跳顶/无 bottom overflow）", async ({ page }) => {
+  const { monday } = dayAnchor();
+  await page.addInitScript(seedScript(monday));
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/");
+  await page.getByRole("button", { name: "课程资料" }).first().click();
+  await page.getByRole("button", { name: "操作系统", exact: true }).click();
+  const drawer = page.getByRole("dialog", { name: "课程详情" });
+  await expect(drawer).toBeVisible({ timeout: 8000 });
+
+  const before = await settledBox(drawer);
+  // 展开 Add Schedule（Section 内 disclosure toggle）→ Hub 变高且仍居中
+  const scheduleToggle = drawer
+    .getByTestId("course-schedule-section")
+    .getByRole("button", { name: "添加时段" });
+  await scheduleToggle.click();
+  await expect(drawer.getByTestId("schedule-add-form")).toBeVisible({ timeout: 5000 });
+  const expanded = await settledBox(drawer);
+  expect(expanded.height).toBeGreaterThan(before.height);
+  expect(Math.abs(expanded.y + expanded.height / 2 - 450)).toBeLessThanOrEqual(4);
+
+  // 再次点击 toggle 收起 → 缩短并回到 center
+  await scheduleToggle.click();
+  await expect(drawer.getByTestId("schedule-add-form")).toHaveCount(0, { timeout: 5000 });
+  const collapsed = await settledBox(drawer);
+  expect(collapsed.height).toBeLessThan(expanded.height);
+  expect(Math.abs(collapsed.y + collapsed.height / 2 - 450)).toBeLessThanOrEqual(4);
+});
+
+base("O：Course Library Card content-fit + 同 row 垂直中心对齐", async ({ page }) => {
+  const { monday } = dayAnchor();
+  await page.addInitScript(seedScript(monday));
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/");
+  await page.getByRole("button", { name: "课程资料" }).first().click();
+  await expect(page.getByRole("heading", { name: "课程资料" })).toBeVisible();
+
+  // c1（2 任务 + 2 资料 preview）应高于 c2（0 任务 / 0 资料）
+  const cardA = page
+    .locator("article")
+    .filter({ has: page.getByRole("button", { name: "数据结构与算法", exact: true }) });
+  const cardB = page
+    .locator("article")
+    .filter({ has: page.getByRole("button", { name: "操作系统", exact: true }) });
+  await expect(cardA).toBeVisible();
+  await expect(cardB).toBeVisible();
+  const boxA = (await cardA.boundingBox())!;
+  const boxB = (await cardB.boundingBox())!;
+
+  // 不是固定/等高：A 明显高于 B
+  expect(boxA.height).toBeGreaterThan(boxB.height + 30);
+  // 同一 grid row：中心 Y 对齐（±4px 容差）
+  expect(Math.abs(boxA.y + boxA.height / 2 - (boxB.y + boxB.height / 2))).toBeLessThanOrEqual(4);
 });

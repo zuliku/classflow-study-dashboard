@@ -38,8 +38,10 @@ const OVERLAY_ID = "course-detail-drawer";
 const DAY_LABELS = ["一", "二", "三", "四", "五", "六", "日"];
 
 /**
- * Course Detail V2 —— Productized Course Hub（orchestration）：
- * - edge Drawer（深度管理实体 ≠ Task floating detail）；加宽至 560/600px
+ * Course Detail —— Floating Course Hub（orchestration）：
+ * - presentation="floating"（non-blocking contextual panel；背景可交互、不声明 aria-modal）
+ * - 水平靠右 + 垂直居中（overlay items-center）；宽度约 500px
+ * - 高度 content-fit：!h-auto + base max-h（desktop 32px / mobile 24px inset），超限 Body 内部滚动
  * - Header：Identity（breadcrumb + 标题）+ [···] [关闭]；编辑在 Body Actions，删除进 More（confirm 语义不变）
  * - Overview（readonly ↔ inline edit）→ Primary Actions → Schedule → Tasks → Materials
  * - Schedule conflict / Material Blob / delete+undo 全部保留原 Domain 语义
@@ -413,9 +415,10 @@ export function CourseDetailDrawer() {
       overlayId={OVERLAY_ID}
       aria-label="课程详情"
       focusRestoreKey={currentId}
-      // 比 Assignment（470px）略宽：Course Schedule 编辑区（周次/星期/时间/教室）需要更多水平空间；
-      // 仍是 floating / bounded / rounded / inset，不回到 edge panel
-      className="sm:w-[500px]"
+      // Floating Course Hub：水平靠右 + 垂直居中（only Course Hub 使用 items-center）
+      overlayClassName="items-center"
+      // 内容驱动高度：!h-auto 覆盖 floating base 的 h-full；max-h 由 base 提供（desktop 32px / mobile 24px inset）
+      className="!h-auto sm:w-[500px]"
     >
       {/* HEADER：与 Assignment Floating Detail 同 shell —— breadcrumb + 标题 + More / 关闭 */}
       <header className="shrink-0 border-b border-line bg-[#F7F5F5] px-5 pt-4 pb-3.5">
@@ -466,8 +469,9 @@ export function CourseDetailDrawer() {
         </div>
       </header>
 
-      {/* BODY：与 Assignment 一致 p-5 space-y-5；按 displayed 实体渲染（swap 层内） */}
-      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))]">
+      {/* BODY：content-fit 下的正确 flex contract —— 自然高度 <= max 时按内容展开；
+          超过 max（parent max-h 封顶）时 flex-shrink + overflow-y-auto 内部滚动 */}
+      <div className="min-h-0 flex-[0_1_auto] overflow-y-auto overscroll-contain p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))]">
         <div key={displayedId ?? "none"} className={cn("space-y-5", swapContentClasses)}>
           {/* OVERVIEW */}
           <CourseDetailOverview
