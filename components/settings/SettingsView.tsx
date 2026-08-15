@@ -319,6 +319,7 @@ function preferenceTitle(key: keyof typeof DEFAULT_PREFERENCES): string {
     enableSingleKeyShortcuts: "单键快捷键",
     contentDensity: "界面密度",
     defaultTaskWorkspaceView: "默认任务视图",
+    defaultDeadlineReminderMinutes: "自动截止提醒提前量",
   };
   return map[key];
 }

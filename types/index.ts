@@ -99,7 +99,8 @@ export type TaskRecurrence = "daily" | "weekly" | "biweekly" | "monthly";
 export type ReminderTargetType = "assignment" | "studyBlock" | "calendarMark" | "standalone";
 export type ReminderTimingMode = "relative" | "absolute";
 export type ReminderStatus = "scheduled" | "fired" | "skipped";
-export type ReminderSource = "manual" | "kiro";
+/** P1：source = manual（用户手建）/ kiro（Kiro 工具）/ auto（Domain 自动 DDL 提醒） */
+export type ReminderSource = "manual" | "kiro" | "auto";
 
 export interface Reminder {
   id: string;
@@ -182,6 +183,11 @@ export interface Assignment {
   recurrenceSeriesId?: string;
   /** 该 occurrence 由哪个上一 occurrence 自动生成（idempotency：一个 occurrence 最多生成一个 child） */
   recurrenceParentId?: string;
+  /**
+   * P1：用户明确关闭该 Assignment 的默认自动 DDL 提醒。
+   * undefined / false：使用默认自动提醒策略；true：不生成 auto Reminder。
+   */
+  autoReminderDisabled?: boolean;
 }
 
 export interface GroupMember {
@@ -223,6 +229,11 @@ export interface CalendarMark {
   /** Timeline V1：固定时段事件（考试/活动）的开始与结束时间；缺失 = all-day 级别 */
   startTime?: string; // "HH:mm"
   endTime?: string; // "HH:mm"
+  /**
+   * P1：用户明确关闭该目标的默认自动 DDL 提醒（仅对真正独立的 type="ddl" mark 有业务意义；
+   * Assignment linked DDL mark 不作为自动提醒 Source of Truth）。
+   */
+  autoReminderDisabled?: boolean;
 }
 
 /** Timeline V1：学习计划（我什么时候准备做某个学习任务） */
@@ -257,6 +268,12 @@ export interface AppPreferences {
   contentDensity: ContentDensity;
   /** Settings V3：每次打开 ClassFlow 时任务工作区默认视图（消费：启动校正 seed assignmentWorkspaceView） */
   defaultTaskWorkspaceView: TaskWorkspaceView;
+  /**
+   * P1：自动 DDL 提醒默认提前分钟数（正数；60 = 1小时 / 1440 = 1天 / 4320 = 3天 / 10080 = 7天）。
+   * 这是稳定的业务用户偏好（非设备 Notification 偏好）；写 relative Reminder.offsetMinutes 时转负数；
+   * 0（到期时）只作为 Domain fallback，不属于 Settings 可选档位。
+   */
+  defaultDeadlineReminderMinutes: 60 | 1440 | 4320 | 10080;
 }
 
 /** 设置中心 section */

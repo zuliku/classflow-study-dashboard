@@ -113,7 +113,7 @@ export function normalizeReminder(raw: unknown): Reminder | null {
     status: r.status as ReminderStatus,
     firedAt: typeof r.firedAt === "string" ? r.firedAt : undefined,
     readAt: typeof r.readAt === "string" ? r.readAt : undefined,
-    source: (r.source === "kiro" ? "kiro" : "manual") as ReminderSource,
+    source: (r.source === "kiro" ? "kiro" : r.source === "auto" ? "auto" : "manual") as ReminderSource,
     createdAt: typeof r.createdAt === "string" ? r.createdAt : "",
     updatedAt: typeof r.updatedAt === "string" ? r.updatedAt : "",
   };

@@ -105,5 +105,7 @@ export function normalizeAssignment(raw: unknown): Assignment {
       typeof a.recurrenceParentId === "string" && a.recurrenceParentId
         ? a.recurrenceParentId
         : undefined,
+    // P1：autoReminderDisabled 仅 true 保留（false / undefined / 缺失 → undefined = 使用默认策略）
+    autoReminderDisabled: a.autoReminderDisabled === true ? true : undefined,
   };
 }

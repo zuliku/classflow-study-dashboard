@@ -1,6 +1,15 @@
 import { AppPreferences, Priority, ContentDensity, StartupView } from "@/types";
 import { TASK_WORKSPACE_VIEWS, TaskWorkspaceView } from "@/lib/tasks/taskViews";
 
+/** P1：自动 DDL 提醒默认提前分钟数固定档位（7天 / 3天 / 1天 / 1小时） */
+export const DEADLINE_REMINDER_MINUTES: readonly AppPreferences["defaultDeadlineReminderMinutes"][] = [
+  10080,
+  4320,
+  1440,
+  60,
+];
+export const DEFAULT_DEADLINE_REMINDER_MINUTES = 1440;
+
 /** 第一版默认偏好 */
 export const DEFAULT_PREFERENCES: AppPreferences = {
   showWeekends: true,
@@ -16,6 +25,8 @@ export const DEFAULT_PREFERENCES: AppPreferences = {
   contentDensity: "comfortable",
   // Settings V3：任务工作区默认视图 = 当前初始值（focus）
   defaultTaskWorkspaceView: "focus",
+  // P1：自动 DDL 提醒默认提前 1 天（1440 分钟）
+  defaultDeadlineReminderMinutes: DEFAULT_DEADLINE_REMINDER_MINUTES,
 };
 
 export const DDL_WARNING_DAYS: readonly AppPreferences["ddlWarningDays"][] = [1, 3, 7];
@@ -79,6 +90,12 @@ export function sanitizePreferences(v: unknown): AppPreferences {
       .some((v) => v.id === src.defaultTaskWorkspaceView)
       ? (src.defaultTaskWorkspaceView as TaskWorkspaceView)
       : DEFAULT_PREFERENCES.defaultTaskWorkspaceView,
+    // P1：自动 DDL 提醒默认提前分钟数——旧数据缺失 / 非法档位安全回落 1440
+    defaultDeadlineReminderMinutes: (
+      DEADLINE_REMINDER_MINUTES as readonly unknown[]
+    ).includes(src.defaultDeadlineReminderMinutes)
+      ? (src.defaultDeadlineReminderMinutes as AppPreferences["defaultDeadlineReminderMinutes"])
+      : DEFAULT_PREFERENCES.defaultDeadlineReminderMinutes,
   };
 }
 
@@ -100,6 +117,7 @@ export const PREFERENCE_SECTIONS: Record<
   enableSingleKeyShortcuts: "interaction",
   contentDensity: "general",
   defaultTaskWorkspaceView: "tasks",
+  defaultDeadlineReminderMinutes: "tasks",
 };
 
 /** 当前与默认不同的偏好键（纯函数，UI 不自行比较） */
