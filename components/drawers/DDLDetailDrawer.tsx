@@ -17,6 +17,7 @@ import { Drawer } from "@/components/ui/Drawer";
 import { IconButton } from "@/components/ui/IconButton";
 import { Button } from "@/components/ui/Button";
 import { cn } from "@/lib/utils";
+import { useEffectiveReducedMotion } from "@/hooks/useEffectiveReducedMotion";
 import { DetailDisclosure } from "@/components/assignment/detail/DetailDisclosure";
 
 const OVERLAY_ID = "ddl-detail-drawer";
@@ -49,7 +50,52 @@ export function DDLDetailDrawer() {
   useEffect(() => {
     if (currentMark) setStaleMark(currentMark);
   }, [currentMark?.id]);
-  const mark = currentMark ?? staleMark;
+
+  // ---- Detail entity swap lifecycle（与 AssignmentDrawer 同一 state machine）----
+  // closed → open：第一帧即当前 mark（不 flash 旧 mark）；open A → open B：shell 保持 + 轻量 swap
+  const currentId = currentMark?.id ?? null;
+  const [prevSelectedId, setPrevSelectedId] = useState(currentId);
+  const [displayedMarkId, setDisplayedMarkId] = useState<string | null>(null);
+  const [swapPhase, setSwapPhase] = useState<"in" | "out">("in");
+
+  if (currentId !== prevSelectedId) {
+    setPrevSelectedId(currentId);
+    const wasOpen = prevSelectedId !== null;
+    if (currentId === null) {
+      // closing：保留 displayed 内容供 exit presence
+    } else if (!wasOpen) {
+      setDisplayedMarkId(currentId);
+      setSwapPhase("in");
+    } else if (displayedMarkId !== currentId) {
+      setSwapPhase("out");
+    }
+  }
+
+  const reducedMotion = useEffectiveReducedMotion();
+  useEffect(() => {
+    if (currentId === null || swapPhase !== "out") return;
+    if (displayedMarkId === currentId) {
+      setSwapPhase("in");
+      return;
+    }
+    if (reducedMotion) {
+      setDisplayedMarkId(currentId);
+      setSwapPhase("in");
+      return;
+    }
+    const t = window.setTimeout(() => {
+      setDisplayedMarkId(currentId);
+      setSwapPhase("in");
+    }, 60);
+    return () => window.clearTimeout(t);
+  }, [currentId, swapPhase, displayedMarkId, reducedMotion]);
+
+  // 实体切换/关闭/重开：reminder 展开状态回到默认
+  useEffect(() => {
+    setReminderOpen(false);
+  }, [currentId]);
+
+  const mark = calendarMarks.find((m) => m.id === displayedMarkId) ?? currentMark ?? staleMark;
 
   // 独立性判定与 Domain 一致：sourceId 精确匹配 assignment → linked（排除）
   const isIndependent =
@@ -108,6 +154,12 @@ export function DDLDetailDrawer() {
     setActiveTab("timetable");
   };
 
+  const swapContentClasses = cn(
+    swapPhase === "out"
+      ? "-translate-y-[3px] opacity-0 transition-[opacity,transform] duration-[60ms] ease-[var(--ease-standard)]"
+      : "ux-detail-swap-in"
+  );
+
   return (
     <Drawer
       presentation="floating"
@@ -118,28 +170,40 @@ export function DDLDetailDrawer() {
       overlayId={OVERLAY_ID}
       aria-label="截止详情"
       data-testid="ddl-detail-panel"
+      focusRestoreKey={currentId}
     >
-      {/* HEADER */}
-      <header className="shrink-0 space-y-2 border-b border-line bg-[#F7F5F5] px-5 pb-3.5 pt-4">
-        <div className="flex items-center justify-between gap-2">
-          <span className="flex min-w-0 items-center gap-1 text-xs font-semibold text-sandrift">
-            <CalendarDays className="h-3.5 w-3.5 shrink-0 text-[#A48F82]" />
-            截止
-          </span>
+      {/* HEADER：截止 breadcrumb + 标题（随 entity swap）+ 静态关闭 */}
+      <header className="shrink-0 border-b border-line bg-[#F7F5F5] px-5 pb-3.5 pt-4">
+        <div className="flex items-start justify-between gap-2">
+          <div
+            key={displayedMarkId ?? "none"}
+            className={cn("min-w-0 flex-1 space-y-2", swapContentClasses)}
+          >
+            <span className="flex min-w-0 items-center gap-1 text-xs font-semibold text-sandrift">
+              <CalendarDays className="h-3.5 w-3.5 shrink-0 text-[#A48F82]" />
+              截止
+            </span>
+            <h2 className="break-words text-[19px] font-bold leading-snug text-charcoal">
+              {mark.title}
+            </h2>
+          </div>
           <IconButton
             variant="secondary"
             size="sm"
             onClick={() => setSelectedCalendarMarkId(null)}
             aria-label="关闭"
+            className="shrink-0"
           >
             <X className="h-4 w-4" />
           </IconButton>
         </div>
-        <h2 className="break-words text-[19px] font-bold leading-snug text-charcoal">{mark.title}</h2>
       </header>
 
-      {/* BODY */}
-      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+      {/* BODY：与 Header entity 内容同层替换（outer shell 保持 mounted） */}
+      <div
+        key={displayedMarkId ?? "none"}
+        className={cn("min-h-0 flex-1 overflow-y-auto overscroll-contain", swapContentClasses)}
+      >
         <div className="space-y-5 p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))]">
           {/* HERO：截止 + 剩余/逾期 + 提醒摘要 */}
           <div className="rounded-2xl border border-line bg-[#F7F5F5] p-4 space-y-3">

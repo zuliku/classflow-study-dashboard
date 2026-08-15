@@ -17,8 +17,10 @@ import { KiroMarkdownTailState } from "@/lib/ai/streaming/markdownBlocks";
  *   （bg/border/圆角/等宽/行高）渲染，闭合瞬间只去掉 fence marker，几何不跳。
  * - "math"：tail 含未闭合 $$ → 使用与 katex-display 相近的块容器
  *   （margin / overflow-x）渲染原文，闭合后由 KaTeX 接管，几何相近。
+ *
+ * V4.3：React.memo——settle 帧 tail 内容不变时不重 parse（zero-stall handoff 的一部分）。
  */
-export function KiroStreamingTail({
+export const KiroStreamingTail = React.memo(function KiroStreamingTail({
   text,
   tailState,
   sources,
@@ -50,7 +52,7 @@ export function KiroStreamingTail({
     );
   }
   return <KiroMarkdown content={text} sources={sources} />;
-}
+});
 
 /** 去掉未闭合构造的首行 marker（``` / $$），内容保持原样，避免把 marker 当正文显示 */
 function stripOpenMarker(markerRe: RegExp, text: string): string {

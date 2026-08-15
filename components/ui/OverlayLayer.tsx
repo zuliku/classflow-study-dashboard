@@ -29,6 +29,11 @@ export interface OverlayLayerProps {
   closeOnBackdrop?: boolean;
   onEscapeKeyDown?: (event: KeyboardEvent) => void;
   className?: string;
+  /**
+   * opt-in：open 期间该 key 变化（如 Detail Panel 实体切换）→ 更新 focus restore 目标
+   * 为最近一次触发切换的可聚焦元素。无该 prop 的 consumer 行为完全不变。
+   */
+  focusRestoreKey?: string | number | null;
   children: (state: OverlayLayerRenderState) => React.ReactNode;
 }
 
@@ -41,10 +46,11 @@ export function OverlayLayer({
   closeOnBackdrop = false,
   onEscapeKeyDown,
   className,
+  focusRestoreKey,
   children,
 }: OverlayLayerProps) {
   const { mounted, visible } = usePresence(open, exitMs);
-  useRestoreFocus(open);
+  useRestoreFocus(open, focusRestoreKey);
 
   // latest refs：Esc/backdrop 回调 identity 变化不触发栈重排
   const onOpenChangeRef = useRef(onOpenChange);

@@ -26,6 +26,18 @@ export interface KiroStreamPerfCounters {
   citationScans: number;
   presentationCalls: number;
   presentationParts: number;
+  /** V4.3 settle：settle 决策次数（reuse 或 full canonical；= streaming=false 帧已渲染） */
+  settleTransitions: number;
+  /** V4.3 settle：完整 canonical full parse 次数 */
+  settleFullParses: number;
+  /** V4.3 settle：safe-reuse 复用的 stable block 数 */
+  settleReusedBlocks: number;
+  /** V4.3 settle：canonical fallback 实际渲染次数 */
+  settleCanonicalFallbacks: number;
+  /** V4.3 settle：settle 帧实际重 parse 的字符量（reuse ≈ 最后 tail；canonical = 全文） */
+  settleParsedChars: number;
+  /** V4.3 settle：canonical full render 的渲染+提交耗时（test-only） */
+  settleDurationMs: number;
 }
 
 declare global {
@@ -53,6 +65,12 @@ function counters(): KiroStreamPerfCounters | null {
     c.citationScans = 0;
     c.presentationCalls = 0;
     c.presentationParts = 0;
+    c.settleFullParses = 0;
+    c.settleTransitions = 0;
+    c.settleReusedBlocks = 0;
+    c.settleCanonicalFallbacks = 0;
+    c.settleParsedChars = 0;
+    c.settleDurationMs = 0;
   }
   return c as KiroStreamPerfCounters;
 }
@@ -67,6 +85,10 @@ export function bumpStreamPerf(
     | "scrollTopWrites"
     | "citationScans"
     | "presentationCalls"
+    | "settleFullParses"
+    | "settleTransitions"
+    | "settleReusedBlocks"
+    | "settleCanonicalFallbacks"
 ): void {
   const c = counters();
   if (!c) return;
@@ -74,12 +96,18 @@ export function bumpStreamPerf(
 }
 
 export function addStreamPerfChars(
-  key: "splitterChars" | "inlineSplitterChars" | "presentationParts",
+  key: "splitterChars" | "inlineSplitterChars" | "presentationParts" | "settleParsedChars",
   chars: number
 ): void {
   const c = counters();
   if (!c) return;
   c[key] += chars;
+}
+
+export function addStreamPerfMillis(key: "settleDurationMs", ms: number): void {
+  const c = counters();
+  if (!c) return;
+  c[key] += ms;
 }
 
 export function bumpStreamPerfKeyed(key: "worklogRendersByPhase" | "toolRowRenders", id: string): void {

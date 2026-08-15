@@ -20,8 +20,122 @@ import { remarkKiroCitation } from "@/lib/ai/citations/remarkCitation";
  * - 不启用 rehype-raw：模型输出中的 HTML 按普通内容处理（无 script/iframe/style）
  * - 链接只允许 http/https/mailto；外链 target=_blank + noopener
  * - 全部样式集中在此，不散落到 KiroMessage
+ *
+ * mode="inline-fragment"（Streaming UX V4.3）：长单段的「安全 inline chunk」渲染。
+ * 只允许 incremental inline scanner 已证明安全（isFragmentSafeChunk）的内容使用：
+ * 只产出 inline 元素（strong / em / code / link / citation / inline math），
+ * 不生成 p / h1 / list / table / blockquote / pre（block 级构造被压成文本节点）。
+ * Outer container 负责 paragraph geometry（多个 fragment 拼接在同一个 <p> 内）。
+ * 不是完整 document renderer——block 输入必须走默认 mode。
  */
-export function KiroMarkdown({ content, sources }: { content: string; sources?: KiroSourceMeta[] }) {
+
+/** 内联元素组件（block / inline-fragment 两种模式共享；sources 供 citation pill 查找） */
+function makeKiroInlineComponents(sources?: KiroSourceMeta[]) {
+  return {
+    strong: ({ children }: { children?: React.ReactNode }) => (
+      <strong className="font-semibold text-charcoal">{children}</strong>
+    ),
+    em: ({ children }: { children?: React.ReactNode }) => <em className="italic">{children}</em>,
+    a: ({ href, children }: { href?: string; children?: React.ReactNode }) => {
+      const safe = typeof href === "string" && /^(https?:|mailto:)/i.test(href);
+      if (!safe) return <span className="text-satin-grey">{children}</span>;
+      return (
+        <a
+          href={href}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-charcoal underline underline-offset-4 decoration-[#CDB9AB] hover:text-black hover:decoration-line-strong"
+        >
+          {children}
+        </a>
+      );
+    },
+    code: ({ children, className }: { children?: React.ReactNode; className?: string }) => {
+      const isBlock = /language-/.test(className ?? "") || String(children).includes("\n");
+      if (isBlock) {
+        return <code className="block font-mono text-[0.84em] leading-[1.65]">{children}</code>;
+      }
+      return (
+        <code className="px-1.5 py-0.5 rounded-md bg-surface-muted font-mono text-[0.86em] text-charcoal break-words">
+          {children}
+        </code>
+      );
+    },
+    // Hotfix：remarkKiroCitation 生成的 span（data-kiro-citation）→ KiroCitation pill；
+    // 普通 span（KaTeX 等）必须原样传递（不把 node 传到 DOM）。
+    span: (props: { node?: unknown; children?: React.ReactNode } & React.HTMLAttributes<HTMLSpanElement>) => {
+      const { node: _node, children, ...rest } = props;
+      const attrs = rest as unknown as Record<string, unknown>;
+      const sourceId = attrs["data-kiro-source-id"];
+      if (attrs["data-kiro-citation"] === "true" && typeof sourceId === "string") {
+        const citation: {
+          sourceId: string;
+          pageStart?: number;
+          pageEnd?: number;
+        } = { sourceId };
+        const pageStart = attrs["data-kiro-page-start"];
+        const pageEnd = attrs["data-kiro-page-end"];
+        if (typeof pageStart === "string" && pageStart) {
+          citation.pageStart = parseInt(pageStart, 10);
+          citation.pageEnd = typeof pageEnd === "string" && pageEnd ? parseInt(pageEnd, 10) : citation.pageStart;
+        }
+        return <KiroCitation citation={citation} sources={sources} />;
+      }
+      return <span {...rest}>{children}</span>;
+    },
+  };
+}
+
+/** 行内渲染的公共 remark/rehype 插件栈（类型保持 ReactMarkdown Options 形状） */
+const kiroRemarkPlugins = [remarkGfm, remarkMath, remarkKiroCitation];
+const kiroRehypePlugins: Parameters<typeof ReactMarkdown>[0]["rehypePlugins"] = [
+  [rehypeKatex, { throwOnError: false, trust: false }],
+];
+
+export function KiroMarkdown({
+  content,
+  sources,
+  mode = "block",
+}: {
+  content: string;
+  sources?: KiroSourceMeta[];
+  /** inline-fragment：仅限 scanner 证明安全的 inline chunk；block 级构造会被压成文本 */
+  mode?: "block" | "inline-fragment";
+}) {
+  const inlineComponents = React.useMemo(() => makeKiroInlineComponents(sources), [sources]);
+  if (mode === "inline-fragment") {
+    return (
+      <ReactMarkdown
+        remarkPlugins={kiroRemarkPlugins}
+        rehypePlugins={kiroRehypePlugins}
+        components={{
+          ...inlineComponents,
+          p: ({ children }) => <>{children}</>,
+          h1: ({ children }) => <span className="font-semibold text-charcoal">{children}</span>,
+          h2: ({ children }) => <span className="font-semibold text-charcoal">{children}</span>,
+          h3: ({ children }) => <span className="font-semibold text-charcoal">{children}</span>,
+          h4: ({ children }) => <span className="font-semibold text-charcoal">{children}</span>,
+          h5: ({ children }) => <span className="font-semibold text-charcoal">{children}</span>,
+          h6: ({ children }) => <span className="font-semibold text-charcoal">{children}</span>,
+          ul: ({ children }) => <>{children}</>,
+          ol: ({ children }) => <>{children}</>,
+          li: ({ children }) => <>{children}</>,
+          blockquote: ({ children }) => <span className="text-satin-grey">{children}</span>,
+          pre: ({ children }) => <>{children}</>,
+          hr: () => null,
+          table: ({ children }) => <>{children}</>,
+          thead: ({ children }) => <>{children}</>,
+          tbody: ({ children }) => <>{children}</>,
+          tr: ({ children }) => <>{children}</>,
+          th: ({ children }) => <>{children}</>,
+          td: ({ children }) => <>{children}</>,
+        }}
+      >
+        {normalizeMathDelimiters(content)}
+      </ReactMarkdown>
+    );
+  }
+
   return (
     <div
       className="kiro-markdown text-charcoal"
@@ -29,8 +143,8 @@ export function KiroMarkdown({ content, sources }: { content: string; sources?: 
       data-testid="kiro-markdown"
     >
       <ReactMarkdown
-        remarkPlugins={[remarkGfm, remarkMath, remarkKiroCitation]}
-        rehypePlugins={[[rehypeKatex, { throwOnError: false, trust: false }]]}
+        remarkPlugins={kiroRemarkPlugins}
+        rehypePlugins={kiroRehypePlugins}
         components={{
           p: ({ children }) => <p className="mb-[0.8em] last:mb-0">{children}</p>,
           h1: ({ children }) => (
@@ -48,8 +162,7 @@ export function KiroMarkdown({ content, sources }: { content: string; sources?: 
               {children}
             </h3>
           ),
-          strong: ({ children }) => <strong className="font-semibold text-charcoal">{children}</strong>,
-          em: ({ children }) => <em className="italic">{children}</em>,
+          ...inlineComponents,
           ul: ({ children }) => (
             <ul className="list-disc pl-5 my-[0.75em] space-y-[0.3em] marker:text-sandrift">{children}</ul>
           ),
@@ -67,31 +180,6 @@ export function KiroMarkdown({ content, sources }: { content: string; sources?: 
             </blockquote>
           ),
           hr: () => <hr className="my-[1em] border-line-soft" />,
-          a: ({ href, children }) => {
-            const safe = typeof href === "string" && /^(https?:|mailto:)/i.test(href);
-            if (!safe) return <span className="text-satin-grey">{children}</span>;
-            return (
-              <a
-                href={href}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-charcoal underline underline-offset-4 decoration-[#CDB9AB] hover:text-black hover:decoration-line-strong"
-              >
-                {children}
-              </a>
-            );
-          },
-          code: ({ children, className }) => {
-            const isBlock = /language-/.test(className ?? "") || String(children).includes("\n");
-            if (isBlock) {
-              return <code className="block font-mono text-[0.84em] leading-[1.65]">{children}</code>;
-            }
-            return (
-              <code className="px-1.5 py-0.5 rounded-md bg-surface-muted font-mono text-[0.86em] text-charcoal break-words">
-                {children}
-              </code>
-            );
-          },
           pre: ({ children }) => (
             <pre className="my-[0.85em] overflow-x-auto rounded-xl bg-alabaster border border-line px-4 py-3.5 text-charcoal">
               {children}
@@ -117,27 +205,6 @@ export function KiroMarkdown({ content, sources }: { content: string; sources?: 
               {children}
             </td>
           ),
-          // Hotfix：remarkKiroCitation 生成的 span（data-kiro-citation）→ KiroCitation pill；
-          // 普通 span（KaTeX 等）必须原样传递（不把 node 传到 DOM）。
-          span: ({ node: _node, children, ...rest }) => {
-            const attrs = rest as Record<string, unknown>;
-            const sourceId = attrs["data-kiro-source-id"];
-            if (attrs["data-kiro-citation"] === "true" && typeof sourceId === "string") {
-              const citation: {
-                sourceId: string;
-                pageStart?: number;
-                pageEnd?: number;
-              } = { sourceId };
-              const pageStart = attrs["data-kiro-page-start"];
-              const pageEnd = attrs["data-kiro-page-end"];
-              if (typeof pageStart === "string" && pageStart) {
-                citation.pageStart = parseInt(pageStart, 10);
-                citation.pageEnd = typeof pageEnd === "string" && pageEnd ? parseInt(pageEnd, 10) : citation.pageStart;
-              }
-              return <KiroCitation citation={citation} sources={sources} />;
-            }
-            return <span {...rest}>{children}</span>;
-          },
         }}
       >
         {normalizeMathDelimiters(content)}

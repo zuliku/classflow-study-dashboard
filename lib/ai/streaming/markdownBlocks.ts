@@ -630,3 +630,192 @@ function cutChunksFrom(
   }
   return { chunks, tail: text.slice(start) };
 }
+
+// ============================================================
+// Streaming UX V4.3：Settle Reuse Classification + Fragment Safety
+//
+// 目标：最后一个 streaming token → streaming=false 这一帧不应重新 parse
+// 「已经正确显示的历史正文」（zero-stall settle）。但 splitter 是轻量 line
+// scanner，不是完整 CommonMark AST parser——只有能「证明块独立」的 stable
+// block 才允许 settle 复用；无法证明 → canonicalize（完整 KiroMarkdown re-parse，
+// 两阶段 handoff：先保留 streaming DOM，再低优先级 canonical fallback）。
+//
+// 自包含（block 间以空行分隔后各自语义独立）的块总是 safe：
+//   - 普通 paragraphs / headings / hr / setext
+//   - fenced code block（scanner 保证 stable block 内 fence 必然闭合）
+//   - display math block（同上）
+//   - 简单单块 list / blockquote（内部无空行 → 与全文 parse 一致）
+//
+// 跨块结构（streaming 分块渲染 ≠ 全文 parse）必须 canonicalize：
+//   - loose list：列表块后接列表 marker / 缩进续行（空行不终结 loose list）
+//   - 列表项内缩进 code / paragraph（≥2 空格续行属于 item）
+//   - blockquote 跨空行合并（> a\n\n> b = 一个 blockquote 两个段落）
+//   - 段落续行：prose 块后接 1-3 空格缩进行（同一段落，独立渲染会丢缩进）
+//   - pipe table（delimiter 边界复杂，保守 canonicalize）
+// ============================================================
+
+/** 块级 marker 检测（list / quote / heading / hr / fence / math） */
+const SETTLE_LIST_MARKER_RE = /^ {0,3}(?:[-*+]|\d{1,3}[.)])(?:\s|$)/;
+const SETTLE_QUOTE_MARKER_RE = /^ {0,3}>/;
+const SETTLE_HEADING_MARKER_RE = /^ {0,3}#{1,6}(?:\s|$)/;
+const SETTLE_FENCE_MARKER_RE = /^ {0,3}`{3,}/;
+const SETTLE_MATH_MARKER_RE = /^ {0,3}\$\$/;
+const SETTLE_HR_RE = /^ {0,3}([-*_])(?:[ \t]*\1){2,}[ \t]*$/;
+/** 列表项续行缩进（≥2 空格或 tab；`- ` 内容列 = 2） */
+const SETTLE_LIST_CONTINUE_INDENT_RE = /^(?: {2,}|\t)/;
+/** 段落续行缩进（1-3 空格；4+ 空格是 indented code，独立渲染等价） */
+const SETTLE_PARA_CONTINUE_INDENT_RE = /^ {1,3}\S/;
+
+/** 取块内第一个 / 最后一个非空行 */
+function firstNonEmptyLine(lines: string[]): string {
+  for (const line of lines) if (line.trim().length > 0) return line;
+  return "";
+}
+function lastNonEmptyLine(lines: string[]): string {
+  for (let i = lines.length - 1; i >= 0; i--) {
+    if (lines[i].trim().length > 0) return lines[i];
+  }
+  return "";
+}
+
+function isProseLine(line: string): boolean {
+  return !(
+    SETTLE_HEADING_MARKER_RE.test(line) ||
+    SETTLE_LIST_MARKER_RE.test(line) ||
+    SETTLE_QUOTE_MARKER_RE.test(line) ||
+    SETTLE_HR_RE.test(line) ||
+    SETTLE_FENCE_MARKER_RE.test(line) ||
+    SETTLE_MATH_MARKER_RE.test(line)
+  );
+}
+
+/** 块内任意行含 `|`（fence / math 内部跳过）→ 保守视为 table-ish */
+function hasRiskyPipe(lines: string[]): boolean {
+  let inFence = false;
+  let inMath = false;
+  for (const line of lines) {
+    const t = line.trim();
+    if (!inFence && !inMath && SETTLE_FENCE_MARKER_RE.test(t)) {
+      inFence = true;
+      continue;
+    }
+    if (inFence && SETTLE_FENCE_MARKER_RE.test(t)) {
+      inFence = false;
+      continue;
+    }
+    if (!inFence && !inMath && SETTLE_MATH_MARKER_RE.test(t)) {
+      inMath = true;
+      continue;
+    }
+    if (!inFence && inMath && SETTLE_MATH_MARKER_RE.test(t)) {
+      inMath = false;
+      continue;
+    }
+    if (!inFence && !inMath && line.includes("|")) return true;
+  }
+  return false;
+}
+
+export interface SettleSafetyResult {
+  /** 存在无法证明独立的结构 → 需要完整 canonical re-parse（settle 两阶段 handoff） */
+  canonicalize: boolean;
+  /** 可 safe-reuse 的块数（settleReusedBlocks 统计用） */
+  safeBlocks: number;
+  /** 参与分类的块总数（stableBlocks + tail） */
+  totalBlocks: number;
+}
+
+/**
+ * Settle Reuse Classification：blocks = 全部 stable blocks（+ 最后 tail 作为末块）。
+ * 返回是否需要 canonical fallback。保守原则：无法证明 safe → canonicalize，
+ * 绝不为了 zero-reparse 牺牲最终 Markdown correctness。
+ */
+export function classifySettleSafety(blocks: string[]): SettleSafetyResult {
+  const n = blocks.length;
+  if (n === 0) return { canonicalize: false, safeBlocks: 0, totalBlocks: 0 };
+  const canonicalize = new Array<boolean>(n).fill(false);
+
+  for (let i = 0; i < n; i++) {
+    const block = blocks[i];
+    if (block.trim().length === 0) continue;
+    const lines = block.split("\n");
+    const first = firstNonEmptyLine(lines);
+    const last = lastNonEmptyLine(lines);
+    const firstTrim = first.trim();
+    const lastTrim = last.trim();
+    // 自包含 fenced code / display math：scanner 保证闭合 → 永为 safe
+    if (
+      (SETTLE_FENCE_MARKER_RE.test(firstTrim) && SETTLE_FENCE_MARKER_RE.test(lastTrim)) ||
+      (SETTLE_MATH_MARKER_RE.test(firstTrim) && SETTLE_MATH_MARKER_RE.test(lastTrim))
+    ) {
+      continue;
+    }
+    // pipe table：保守 canonicalize
+    if (hasRiskyPipe(lines)) {
+      canonicalize[i] = true;
+      continue;
+    }
+    const firstIsList = SETTLE_LIST_MARKER_RE.test(first);
+    const firstIsQuote = SETTLE_QUOTE_MARKER_RE.test(first);
+    const firstListContinue = SETTLE_LIST_CONTINUE_INDENT_RE.test(first);
+    const firstParaContinue = SETTLE_PARA_CONTINUE_INDENT_RE.test(first);
+
+    if (i > 0) {
+      const prevLines = blocks[i - 1].split("\n");
+      const prevHasList = prevLines.some((l) => SETTLE_LIST_MARKER_RE.test(l));
+      const prevHasQuote = prevLines.some((l) => SETTLE_QUOTE_MARKER_RE.test(l));
+      const prevLast = lastNonEmptyLine(prevLines);
+      const prevLastIsProse = isProseLine(prevLast);
+      // loose list / 列表项续行（marker 或 ≥2 空格缩进都继续 item）
+      if (prevHasList && (firstIsList || firstListContinue)) {
+        canonicalize[i - 1] = true;
+        canonicalize[i] = true;
+        continue;
+      }
+      // blockquote 跨空行合并
+      if (prevHasQuote && firstIsQuote) {
+        canonicalize[i - 1] = true;
+        canonicalize[i] = true;
+        continue;
+      }
+      // 段落续行（1-3 空格缩进；独立渲染会丢缩进成为新段）
+      if (prevLastIsProse && firstParaContinue) {
+        canonicalize[i - 1] = true;
+        canonicalize[i] = true;
+        continue;
+      }
+    }
+  }
+
+  let safeBlocks = 0;
+  for (let i = 0; i < n; i++) if (!canonicalize[i]) safeBlocks += 1;
+  return { canonicalize: canonicalize.some(Boolean), safeBlocks, totalBlocks: n };
+}
+
+/** Fragment 模式的 block 级行检测（任何匹配 → 该 chunk 不能进 inline-fragment） */
+const FRAGMENT_BLOCK_LINE_RES = [
+  /^ {0,3}#{1,6}(?:\s|$)/,
+  /^ {0,3}(?:[-*+]|\d{1,3}[.)])(?:\s|$)/,
+  /^ {0,3}>(?:\s|$)/,
+  /^ {0,3}`{3,}/,
+  /^ {0,3}\$\$/,
+  /^ {0,3}([-*_])(?:[ \t]*\1){2,}[ \t]*$/,
+];
+
+/**
+ * inline-fragment 严格输入边界（Streaming UX V4.3）：
+ * 只有 incremental inline scanner 已证明安全的内容才能走 fragment 渲染——
+ * 不包含任何 block 级构造（heading / list / quote / fence / display math / hr / pipe）。
+ * 命中 block 行 → 返回 false，调用方退回 block 模式（正确性优先）。
+ */
+export function isFragmentSafeChunk(text: string): boolean {
+  if (text.length === 0) return true;
+  for (const line of text.split("\n")) {
+    if (line.trim().length === 0) return false;
+    if (line.includes("|")) return false;
+    for (const re of FRAGMENT_BLOCK_LINE_RES) {
+      if (re.test(line.trim())) return false;
+    }
+  }
+  return true;
+}

@@ -10,6 +10,8 @@ import {
   advanceKiroInlineScan,
   KiroMarkdownScanState,
   KiroInlineScanState,
+  classifySettleSafety,
+  isFragmentSafeChunk,
 } from "@/lib/ai/streaming/markdownBlocks";
 import { KiroStreamPerfCounters } from "@/lib/ai/perf/streamPerf";
 
@@ -389,5 +391,95 @@ describe("Streaming UX V4.2 incremental inline window（长单段，Phase 5）",
     const once = advanceKiroInlineScan(state, text);
     const twice = advanceKiroInlineScan(once, text);
     expect(twice).toBe(once);
+  });
+});
+
+describe("Streaming UX V4.3 settleSafety classifier（safe-reuse vs canonicalize）", () => {
+  it("普通回答（标题 / 段落 / 单块列表 / 代码 / 引用）→ safe-reuse", () => {
+    const blocks = [
+      "# 报告标题",
+      "第一段内容",
+      "- 列表项一\n- 列表项二",
+      "```ts\nconst x = 42;\n```",
+      "> 单块引用",
+      "尾段",
+    ];
+    const r = classifySettleSafety(blocks);
+    expect(r.canonicalize).toBe(false);
+    expect(r.safeBlocks).toBe(blocks.length);
+    expect(r.totalBlocks).toBe(blocks.length);
+  });
+
+  it("fence / display math（自包含）永不 canonicalize（fence 内含 | 也不触发）", () => {
+    const r = classifySettleSafety(["```ts\nconst x = a | b;\n```", "$$\nE = mc^2\n$$", "普通段"]);
+    expect(r.canonicalize).toBe(false);
+  });
+
+  it("loose list（列表块后接列表 marker）→ canonicalize", () => {
+    const r = classifySettleSafety(["- 第一项", "- 第二项"]);
+    expect(r.canonicalize).toBe(true);
+    expect(r.safeBlocks).toBe(0);
+  });
+
+  it("列表项缩进续行（≥2 空格）→ canonicalize", () => {
+    const r = classifySettleSafety(["- 第一项", "  续行内容"]);
+    expect(r.canonicalize).toBe(true);
+  });
+
+  it("blockquote 跨空行合并（> a / > b）→ canonicalize", () => {
+    const r = classifySettleSafety(["> 引用一", "> 引用二"]);
+    expect(r.canonicalize).toBe(true);
+  });
+
+  it("段落续行（prose 后接 1-3 空格缩进行）→ canonicalize", () => {
+    const r = classifySettleSafety(["普通段落文字", "  缩进续行"]);
+    expect(r.canonicalize).toBe(true);
+  });
+
+  it("pipe table → canonicalize（正确性优先）", () => {
+    const r = classifySettleSafety(["| 列 A | 列 B |", "|---|---|", "| 1 | 2 |"]);
+    expect(r.canonicalize).toBe(true);
+  });
+
+  it("hr / setext / 单块嵌套结构 → safe", () => {
+    expect(classifySettleSafety(["---"]).canonicalize).toBe(false);
+    expect(classifySettleSafety(["标题行", "==="]).canonicalize).toBe(false);
+    expect(classifySettleSafety(["- 父项\n  - 子项"]).canonicalize).toBe(false);
+  });
+
+  it("列表后接普通段落 / 引用后接列表：不同结构不误伤 → safe", () => {
+    expect(classifySettleSafety(["- 列表项", "普通段落"]).canonicalize).toBe(false);
+    expect(classifySettleSafety(["- 列表项", "> 引用"]).canonicalize).toBe(false);
+    expect(classifySettleSafety(["> 引用", "- 列表"]).canonicalize).toBe(false);
+  });
+
+  it("tail 作为末块参与 adjacency（stable list + tail marker → canonicalize）", () => {
+    const r = classifySettleSafety(["- 稳定列表项", "- 尾部列表项"]);
+    expect(r.canonicalize).toBe(true);
+  });
+
+  it("空 blocks → 无 canonicalize", () => {
+    expect(classifySettleSafety([])).toEqual({ canonicalize: false, safeBlocks: 0, totalBlocks: 0 });
+  });
+});
+
+describe("Streaming UX V4.3 isFragmentSafeChunk（inline-fragment 严格输入边界）", () => {
+  it("纯 inline 内容 → safe", () => {
+    expect(isFragmentSafeChunk("普通文字")).toBe(true);
+    expect(isFragmentSafeChunk("**加粗** 与 `code` 与 $E=mc^2$ 与 [链接](https://a.b)")).toBe(true);
+    expect(isFragmentSafeChunk("引用标记 [[source:doc-1:p12]] 正常")).toBe(true);
+  });
+
+  it("block 级构造 → unsafe", () => {
+    expect(isFragmentSafeChunk("# 标题")).toBe(false);
+    expect(isFragmentSafeChunk("## 二级标题 内容")).toBe(false);
+    expect(isFragmentSafeChunk("- 列表项")).toBe(false);
+    expect(isFragmentSafeChunk("1. 有序项")).toBe(false);
+    expect(isFragmentSafeChunk("> 引用")).toBe(false);
+    expect(isFragmentSafeChunk("```\ncode")).toBe(false);
+    expect(isFragmentSafeChunk("$$\n公式")).toBe(false);
+    expect(isFragmentSafeChunk("---")).toBe(false);
+    expect(isFragmentSafeChunk("a | b")).toBe(false);
+    expect(isFragmentSafeChunk("文本\n")).toBe(false);
   });
 });

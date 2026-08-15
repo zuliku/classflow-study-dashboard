@@ -30,6 +30,8 @@ function sse(lines: string[]): string {
 interface SseStage {
   delay?: number;
   events: string[];
+  /** 本 stage 即将写入 socket 前调用（记录 marker 时间戳） */
+  mark?: () => void;
 }
 
 async function startSseServer(plan: (bodyJson: { messages?: unknown[] }) => SseStage[]) {
@@ -63,6 +65,7 @@ async function startSseServer(plan: (bodyJson: { messages?: unknown[] }) => SseS
           if (stage.delay) {
             await new Promise((resolve) => setTimeout(resolve, stage.delay));
           }
+          if (stage.mark) stage.mark();
           if (stage.events.length > 0) {
             res.write(sse(stage.events));
           }
@@ -87,10 +90,22 @@ async function injectPerf(page: Page) {
   await page.addInitScript(() => {
     const w = window as unknown as {
       __kiroStreamPerf?: object;
-      __kiroPerf?: { visibleTs: number[]; longTasks: number; longTaskDetails: string[] };
+      __kiroPerf?: {
+        visibleTs: number[];
+        longTasks: number;
+        longTaskDetails: string[];
+        toolVisibleTs: number;
+        firstAnswerTs: number;
+      };
     };
     w.__kiroStreamPerf = {};
-    w.__kiroPerf = { visibleTs: [], longTasks: 0, longTaskDetails: [] as string[] };
+    w.__kiroPerf = {
+      visibleTs: [],
+      longTasks: 0,
+      longTaskDetails: [] as string[],
+      toolVisibleTs: 0,
+      firstAnswerTs: 0,
+    };
     try {
       new PerformanceObserver((list) => {
         for (const entry of list.getEntries()) {
@@ -113,6 +128,13 @@ async function injectPerf(page: Page) {
     const record = () => {
       scheduled = false;
       w.__kiroPerf!.visibleTs.push(performance.now());
+      // V4.3 Case G/H：Tool Row / 首个 Final Answer 出现的浏览器时间戳
+      if (!w.__kiroPerf!.toolVisibleTs && document.querySelector('[data-testid="kiro-tool-row"]')) {
+        w.__kiroPerf!.toolVisibleTs = performance.now();
+      }
+      if (!w.__kiroPerf!.firstAnswerTs && document.querySelector('[data-testid="kiro-markdown"]')) {
+        w.__kiroPerf!.firstAnswerTs = performance.now();
+      }
     };
     try {
       new MutationObserver(() => {
@@ -268,13 +290,26 @@ interface PerfSnapshot {
   scrollTopWrites: number;
   longTasks: number;
   p95VisibleGapMs: number;
+  settleFullParses: number;
+  settleReusedBlocks: number;
+  settleCanonicalFallbacks: number;
+  settleParsedChars: number;
+  settleDurationMs: number;
+  toolVisibleTs: number;
+  firstAnswerTs: number;
 }
 
 async function readPerf(page: Page, finalMarkerTs: number): Promise<PerfSnapshot> {
   const r = await page.evaluate(() => {
     const w = window as unknown as {
       __kiroStreamPerf?: Record<string, number | Record<string, number>>;
-      __kiroPerf?: { visibleTs: number[]; longTasks: number; longTaskDetails: string[] };
+      __kiroPerf?: {
+        visibleTs: number[];
+        longTasks: number;
+        longTaskDetails: string[];
+        toolVisibleTs: number;
+        firstAnswerTs: number;
+      };
     };
     const s = w.__kiroStreamPerf ?? {};
     return {
@@ -288,9 +323,16 @@ async function readPerf(page: Page, finalMarkerTs: number): Promise<PerfSnapshot
       inlineSplitterChars: (s.inlineSplitterChars as number) ?? 0,
       resizeObserverCalls: (s.resizeObserverCalls as number) ?? 0,
       scrollTopWrites: (s.scrollTopWrites as number) ?? 0,
+      settleFullParses: (s.settleFullParses as number) ?? 0,
+      settleReusedBlocks: (s.settleReusedBlocks as number) ?? 0,
+      settleCanonicalFallbacks: (s.settleCanonicalFallbacks as number) ?? 0,
+      settleParsedChars: (s.settleParsedChars as number) ?? 0,
+      settleDurationMs: (s.settleDurationMs as number) ?? 0,
       longTasks: w.__kiroPerf?.longTasks ?? 0,
       longTaskDetails: w.__kiroPerf?.longTaskDetails ?? [],
       visibleTs: w.__kiroPerf?.visibleTs ?? [],
+      toolVisibleTs: w.__kiroPerf?.toolVisibleTs ?? 0,
+      firstAnswerTs: w.__kiroPerf?.firstAnswerTs ?? 0,
     };
   });
   // visibleTs 是 performance.now 域（页面导航起算）→ 转换到 Date.now 域再与 marker 比较
@@ -319,6 +361,13 @@ async function readPerf(page: Page, finalMarkerTs: number): Promise<PerfSnapshot
     scrollTopWrites: r.scrollTopWrites,
     longTasks: r.longTasks,
     p95VisibleGapMs: p95,
+    settleFullParses: r.settleFullParses,
+    settleReusedBlocks: r.settleReusedBlocks,
+    settleCanonicalFallbacks: r.settleCanonicalFallbacks,
+    settleParsedChars: r.settleParsedChars,
+    settleDurationMs: r.settleDurationMs,
+    toolVisibleTs: r.toolVisibleTs + offset,
+    firstAnswerTs: r.firstAnswerTs + offset,
   };
 }
 
@@ -419,4 +468,317 @@ test("PERF Case D: markdown-heavy", async ({ page }) => {
   const r = await runCase(page, "D", () => [], markerRef, MARKDOWN_HEAVY, "报告标题");
   await sse.close();
   expect(r.splitterCalls).toBeGreaterThan(0);
+});
+
+// ============================================================
+// V4.3 Case G / H：Phase-aware Streaming（reasoning 不人为延迟）
+//
+// 测量：mock SSE 发出最后 reasoning 事件 → 浏览器 Tool Row / 首个 Final Answer 可见。
+// mock 直连 client（bypass server transform），因此这里验证的是端到端时序不受
+// reasoning 数量影响（reasoning → tool / answer 的 server 侧零 delay 由
+// tests/textOnlySmoothStream.test.ts 单测证明）。
+// ============================================================
+
+const REASONING_DELTAS = 200;
+
+function reasoningStages(messageId: string, reasoningId: string): SseStage[] {
+  const stages: SseStage[] = [
+    { delay: 0, events: [JSON.stringify({ type: "start", messageId }), JSON.stringify({ type: "start-step" })] },
+    { delay: 0, events: [JSON.stringify({ type: "reasoning-start", id: reasoningId })] },
+  ];
+  for (let i = 0; i < REASONING_DELTAS; i++) {
+    stages.push({
+      delay: 1,
+      events: [JSON.stringify({ type: "reasoning-delta", id: reasoningId, delta: `推理内容第${i}步：分析数据源与约束条件，逐步推导结论。` })],
+    });
+  }
+  return stages;
+}
+
+/** Case G：reasoning × 200 → Tool Call（search_assignments）→ 续跑 final answer */
+function reasoningToolPlan(finalText: string) {
+  const markerRef = { lastReasoningTs: 0 };
+  return {
+    plan: (bodyJson: { messages?: unknown[] }) => {
+      const toolOutputCount = ((bodyJson.messages ?? []) as { role: string; parts?: { type: string; state?: string }[] }[]).reduce(
+        (sum, m) =>
+          sum +
+          (m.role === "assistant"
+            ? (m.parts ?? []).filter((p) => p.type.startsWith("tool-") && p.state === "output-available").length
+            : 0),
+        0
+      );
+      if (toolOutputCount === 0) {
+        return [
+          ...reasoningStages("perf-g", "r_g"),
+          { delay: 0, mark: () => { markerRef.lastReasoningTs = Date.now(); }, events: [JSON.stringify({ type: "reasoning-end", id: "r_g" })] },
+          { delay: 0, events: toolInputEvent("call_g0", 0) },
+          { delay: 5, events: [JSON.stringify({ type: "finish-step" }), JSON.stringify({ type: "finish", finishReason: "tool-calls" })] },
+        ];
+      }
+      return [{ events: boundaryFinalHead("perf-g", "final-g") }, ...finalStages("final-g", finalText)];
+    },
+    markerRef,
+  };
+}
+
+/** Case H：reasoning × 200 → begin_final_answer boundary → Final Answer */
+function reasoningFinalPlan(finalText: string) {
+  const markerRef = { lastReasoningTs: 0 };
+  return {
+    plan: (bodyJson: { messages?: unknown[] }) => {
+      const toolOutputCount = ((bodyJson.messages ?? []) as { role: string; parts?: { type: string; state?: string }[] }[]).reduce(
+        (sum, m) =>
+          sum +
+          (m.role === "assistant"
+            ? (m.parts ?? []).filter((p) => p.type.startsWith("tool-") && p.state === "output-available").length
+            : 0),
+        0
+      );
+      if (toolOutputCount === 0) {
+        return [
+          ...reasoningStages("perf-h", "r_h"),
+          { delay: 0, mark: () => { markerRef.lastReasoningTs = Date.now(); }, events: [JSON.stringify({ type: "reasoning-end", id: "r_h" })] },
+          { delay: 0, events: toolInputEvent("call_h0", 0) },
+          { delay: 5, events: [JSON.stringify({ type: "finish-step" }), JSON.stringify({ type: "finish", finishReason: "tool-calls" })] },
+        ];
+      }
+      return [{ events: boundaryFinalHead("perf-h", "final-h") }, ...finalStages("final-h", finalText)];
+    },
+    markerRef,
+  };
+}
+
+/** 等待 Final Answer settle（app 内 test-only counter：streaming=false 帧已渲染并提交） */
+async function waitAnswerSettled(page: Page) {
+  await expect
+    .poll(
+      () =>
+        page.evaluate(
+          () =>
+            (window as unknown as { __kiroStreamPerf?: { settleTransitions?: number } }).__kiroStreamPerf
+              ?.settleTransitions ?? 0
+        ),
+      { timeout: 30000 }
+    )
+    .toBeGreaterThan(0);
+}
+
+async function runReasoningCase(
+  page: Page,
+  caseName: string,
+  plan: () => SseStage[],
+  markerRef: { lastReasoningTs: number },
+  expectText: string,
+  firstText: string
+) {
+  const startedAt = Date.now();
+  await openKiro(page);
+  const msg = page.getByTestId("kiro-message").last();
+  await expect(msg.locator(".kiro-markdown").first()).toContainText(firstText, { timeout: 60000 });
+  await expect(msg.locator(".kiro-markdown").first()).toContainText(SENTINEL, { timeout: 60000 });
+  await waitAnswerSettled(page);
+  const perf = await readPerf(page, markerRef.lastReasoningTs);
+  const reasoningToToolVisibleMs = perf.toolVisibleTs > 0 ? perf.toolVisibleTs - markerRef.lastReasoningTs : -1;
+  const reasoningToAnswerVisibleMs = perf.firstAnswerTs > 0 ? perf.firstAnswerTs - markerRef.lastReasoningTs : -1;
+  console.log(
+    `[PERF][${caseName}] markerTs=${markerRef.lastReasoningTs} ttfvMs=${Date.now() - startedAt} ` +
+      `reasoningToToolVisibleMs=${reasoningToToolVisibleMs} reasoningToAnswerVisibleMs=${reasoningToAnswerVisibleMs} ` +
+      JSON.stringify(perf)
+  );
+  return { case: caseName, reasoningToToolVisibleMs, reasoningToAnswerVisibleMs, ...perf };
+}
+
+test("PERF Case G: reasoning ×200 → Tool（不随 reasoning 数量线性延迟；reasoning 不可见）", async ({ page }) => {
+  const final = "分析完成，总结如下。" + SENTINEL;
+  const ssePlan = reasoningToolPlan(final);
+  const sse = await startSseServer(ssePlan.plan);
+  await page.route("**/api/ai/chat", (route) => route.continue({ url: sse.url }));
+  await injectPerf(page);
+  await seedAI(page);
+  const r = await runReasoningCase(page, "G", () => [], ssePlan.markerRef, final, "分析完成");
+  await sse.close();
+  // 200 × 4ms ≈ 800ms 的人为排队已消除：Tool 应在 reasoning 结束后很快出现
+  expect(r.reasoningToToolVisibleMs).toBeGreaterThan(0);
+  expect(r.reasoningToToolVisibleMs).toBeLessThan(800);
+  // reasoning 内容永远不可见（Worklog / Final Answer 都不出现）
+  await expect(page.getByText("推理内容第")).toHaveCount(0);
+});
+
+test("PERF Case H: reasoning ×200 → Final Answer（首字出现不受 reasoning 数量影响）", async ({ page }) => {
+  const final = "最终结论：任务全部完成，无遗留问题。" + SENTINEL;
+  const ssePlan = reasoningFinalPlan(final);
+  const sse = await startSseServer(ssePlan.plan);
+  await page.route("**/api/ai/chat", (route) => route.continue({ url: sse.url }));
+  await injectPerf(page);
+  await seedAI(page);
+  const r = await runReasoningCase(page, "H", () => [], ssePlan.markerRef, final, "最终结论");
+  await sse.close();
+  expect(r.reasoningToAnswerVisibleMs).toBeGreaterThan(0);
+  // 旧行为 = 200 reasoning chunks × 4ms ≈ 800ms 人为排队；现在应显著低于该上界
+  expect(r.reasoningToAnswerVisibleMs).toBeLessThan(1200);
+  await expect(page.getByText("推理内容第")).toHaveCount(0);
+});
+
+// ============================================================
+// V4.3 Settle 用例（S1-S6）：Zero-stall Settle Handoff
+//
+// 流式中捕获稳定 DOM 节点引用 → settle 后验证 DOM identity 保留（safe-reuse）
+// 或 canonical fallback（S6）。counters：settleFullParses / settleReusedBlocks /
+// settleCanonicalFallbacks / settleParsedChars。
+// ============================================================
+
+const S2_HEADING = "# 报告标题\n\n第一段内容。\n\n## 二级标题\n\n第二段内容。\n\n尾段内容。\n\n" + SENTINEL;
+const S3_FENCE = "前言段落。\n\n```ts\nconst x = 42;\nconst y = x * 2;\n```\n\n结束段落。\n\n" + SENTINEL;
+const S4_MATH = "# 公式\n\n$$\nE = mc^2\n\n$$\n\n正文段落。\n\n" + SENTINEL;
+// S5 引用 doc-1（上传的文本附件 sourceId），pill 才可解析（KiroCitation 无 sources 返回 null）
+const S5_CITATION = "正文包含引用 [[source:doc-1]] 的说明。\n\n第二段内容。\n\n" + SENTINEL;
+const S6_LOOSE_LIST = "前言。\n\n- 列表项一\n\n- 列表项二\n\n- 列表项三\n\n尾段。\n\n" + SENTINEL;
+
+async function runSettleCase(
+  page: Page,
+  caseName: string,
+  plan: () => SseStage[],
+  markerRef: { ts: number },
+  expectText: string,
+  firstText: string,
+  captureSelector: string,
+  prepare?: (page: Page) => Promise<void>
+) {
+  const startedAt = Date.now();
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/");
+  await page.locator("aside").first().getByRole("button", { name: "Kiro" }).click();
+  if (prepare) await prepare(page);
+  await page.getByTestId("kiro-composer").getByLabel("Ask Kiro").fill("生成一份长报告");
+  await page.getByTestId("kiro-composer").getByLabel("发送").click();
+  const msg = page.getByTestId("kiro-message").last();
+  // 1) 流式中：稳定节点出现后捕获 DOM 引用
+  const captured = await page.waitForSelector(captureSelector, { timeout: 30000 });
+  // 2) 等完整正文 + settle（settleTransitions > 0 = streaming=false 帧已渲染）
+  await expect(msg.locator(".kiro-markdown").first()).toContainText(firstText, { timeout: 60000 });
+  await expect(msg).toContainText(SENTINEL, { timeout: 60000 });
+  await waitAnswerSettled(page);
+  // 3) DOM identity 验证（settle 后节点是否仍连接）
+  const connected = await captured.evaluate((el) => (el as Element | null)?.isConnected ?? false);
+  console.log(`[PERF][${caseName}] settleConnected=${connected} streamMs=${Date.now() - markerRef.ts} ttfvMs=${Date.now() - startedAt}`);
+  return { case: caseName, settleConnected: connected };
+}
+
+test("PERF Case S1: 8K 无空行段落 → settle 零 reparse（fragment p DOM identity 保留）", async ({ page }) => {
+  const ssePlan = plainPlan(LONG_NO_NEWLINE);
+  const sse = await startSseServer(ssePlan.plan);
+  await page.route("**/api/ai/chat", (route) => route.continue({ url: sse.url }));
+  await injectPerf(page);
+  await seedAI(page);
+  const r = await runSettleCase(page, "S1", () => [], ssePlan.markerRef, LONG_NO_NEWLINE, LONG_NO_NEWLINE.slice(0, 30), '[data-testid="kiro-inline-fragment-paragraph"]');
+  const perf = await readPerf(page, ssePlan.markerRef.ts);
+  console.log(`[PERF][S1] ` + JSON.stringify(perf));
+  await sse.close();
+  expect(r.settleConnected).toBe(true);
+  expect(perf.settleFullParses).toBe(0);
+  // settle 帧不能重新 parse 完整 8000+ chars（memo 复用 → 0）
+  expect(perf.settleParsedChars).toBeLessThan(1000);
+  expect(perf.inlineSplitterCalls).toBeGreaterThan(0);
+});
+
+test("PERF Case S2: heading + paragraphs → safe-reuse（stable block DOM identity 保留）", async ({ page }) => {
+  const ssePlan = plainPlan(S2_HEADING, 24, 24);
+  const sse = await startSseServer(ssePlan.plan);
+  await page.route("**/api/ai/chat", (route) => route.continue({ url: sse.url }));
+  await injectPerf(page);
+  await seedAI(page);
+  const r = await runSettleCase(page, "S2", () => [], ssePlan.markerRef, S2_HEADING, "报告标题", '[data-testid="kiro-streaming-markdown"] h1');
+  const perf = await readPerf(page, ssePlan.markerRef.ts);
+  console.log(`[PERF][S2] ` + JSON.stringify(perf));
+  await sse.close();
+  expect(r.settleConnected).toBe(true);
+  expect(perf.settleFullParses).toBe(0);
+  expect(perf.settleReusedBlocks).toBeGreaterThanOrEqual(2);
+});
+
+test("PERF Case S3: fenced code + paragraph → 仅 tail finalize，stable pre 不重 render", async ({ page }) => {
+  const ssePlan = plainPlan(S3_FENCE, 24, 24);
+  const sse = await startSseServer(ssePlan.plan);
+  await page.route("**/api/ai/chat", (route) => route.continue({ url: sse.url }));
+  await injectPerf(page);
+  await seedAI(page);
+  const r = await runSettleCase(page, "S3", () => [], ssePlan.markerRef, S3_FENCE, "前言段落", '[data-testid="kiro-streaming-markdown"] pre');
+  const perf = await readPerf(page, ssePlan.markerRef.ts);
+  console.log(`[PERF][S3] ` + JSON.stringify(perf));
+  await sse.close();
+  expect(r.settleConnected).toBe(true);
+  expect(perf.settleFullParses).toBe(0);
+  expect(perf.settleParsedChars).toBeLessThan(1000);
+});
+
+test("PERF Case S4: KaTeX → stable math 不重新 KaTeX render", async ({ page }) => {
+  const ssePlan = plainPlan(S4_MATH, 24, 24);
+  const sse = await startSseServer(ssePlan.plan);
+  await page.route("**/api/ai/chat", (route) => route.continue({ url: sse.url }));
+  await injectPerf(page);
+  await seedAI(page);
+  const r = await runSettleCase(page, "S4", () => [], ssePlan.markerRef, S4_MATH, "公式", '[data-testid="kiro-streaming-markdown"] .katex');
+  const perf = await readPerf(page, ssePlan.markerRef.ts);
+  console.log(`[PERF][S4] ` + JSON.stringify(perf));
+  await sse.close();
+  expect(r.settleConnected).toBe(true);
+  expect(perf.settleFullParses).toBe(0);
+});
+
+test("PERF Case S5: citation → stable citation pill DOM identity 保留", async ({ page }) => {
+  const { buildMinimalPdf } = require("../fixtures/files");
+  const ssePlan = plainPlan(S5_CITATION, 24, 24);
+  const sse = await startSseServer(ssePlan.plan);
+  await page.route("**/api/ai/chat", (route) => route.continue({ url: sse.url }));
+  await injectPerf(page);
+  await seedAI(page);
+  const r = await runSettleCase(
+    page,
+    "S5",
+    () => [],
+    ssePlan.markerRef,
+    S5_CITATION,
+    "正文包含引用",
+    '[data-testid="kiro-streaming-markdown"] [data-testid="kiro-citation"]',
+    async (p) => {
+      // 上传 PDF 附件 → buildTurnSnapshot 注册 doc-1 source → citation pill 可解析
+      const chooserPromise = p.waitForEvent("filechooser");
+      await p.getByTestId("kiro-composer").getByLabel("添加附件").click();
+      await p.getByRole("menuitem", { name: "上传文件" }).click();
+      const chooser = await chooserPromise;
+      await chooser.setFiles({
+        name: "讲义.pdf",
+        mimeType: "application/pdf",
+        buffer: Buffer.from(buildMinimalPdf("讲义正文内容")),
+      });
+      await expect(p.getByTestId("kiro-attachment-chip")).toContainText("PDF", { timeout: 15000 });
+    }
+  );
+  const perf = await readPerf(page, ssePlan.markerRef.ts);
+  console.log(`[PERF][S5] ` + JSON.stringify(perf));
+  await sse.close();
+  expect(r.settleConnected).toBe(true);
+  expect(perf.settleFullParses).toBe(0);
+});
+
+test("PERF Case S6: loose list → canonicalize（两阶段 handoff；最终 DOM 与全文 parse 一致）", async ({ page }) => {
+  const ssePlan = plainPlan(S6_LOOSE_LIST, 24, 24);
+  const sse = await startSseServer(ssePlan.plan);
+  await page.route("**/api/ai/chat", (route) => route.continue({ url: sse.url }));
+  await injectPerf(page);
+  await seedAI(page);
+  const r = await runSettleCase(page, "S6", () => [], ssePlan.markerRef, S6_LOOSE_LIST, "前言", '[data-testid="kiro-streaming-markdown"] ul');
+  // Phase 2 canonical fallback：完整渲染一棵 loose list（streaming 的两棵独立 ul 被替换）
+  const msg = page.getByTestId("kiro-message").last();
+  await expect(msg.locator('[data-testid="kiro-streaming-markdown"] ul')).toHaveCount(1, { timeout: 15000 });
+  await expect(msg.locator('[data-testid="kiro-streaming-markdown"] ul')).toContainText("列表项一");
+  await expect(msg.locator('[data-testid="kiro-streaming-markdown"] ul')).toContainText("列表项三");
+  const perf = await readPerf(page, ssePlan.markerRef.ts);
+  console.log(`[PERF][S6] ` + JSON.stringify(perf));
+  await sse.close();
+  expect(perf.settleCanonicalFallbacks).toBe(1);
+  expect(perf.settleFullParses).toBe(0);
+  // 流式树节点已被 canonical 树替换（非 safe-reuse）
+  expect(r.settleConnected).toBe(false);
 });

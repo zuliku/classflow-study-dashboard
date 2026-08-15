@@ -26,6 +26,22 @@ export interface DrawerProps extends React.HTMLAttributes<HTMLDivElement> {
   overlayClassName?: string;
   /** edge = 现状 full-height；floating = bounded floating panel（默认 edge） */
   presentation?: DrawerPresentation;
+  /**
+   * opt-in：open 期间该 key 变化（实体切换）→ focus restore 跟随最近 trigger。
+   * 无该 prop 的 consumer 行为完全不变。
+   */
+  focusRestoreKey?: string | number | null;
+}
+
+/**
+ * aria-modal 与 presentation 一致：
+ * - edge（blocking modal）→ "true"（保持现状）
+ * - floating（non-blocking contextual panel，背景可交互）→ 不声明 aria-modal（不冒充 modal）
+ */
+export function resolveDrawerAriaModal(
+  presentation: DrawerPresentation
+): "true" | undefined {
+  return presentation === "edge" ? "true" : undefined;
 }
 
 /** 面板 enter/exit 视觉：edge = 右侧滑入；floating = 浮层位移 + 微缩放 */
@@ -73,6 +89,7 @@ export function Drawer({
   onEscapeKeyDown,
   overlayClassName,
   presentation = "edge",
+  focusRestoreKey,
   className,
   children,
   ...props
@@ -86,12 +103,13 @@ export function Drawer({
       exitMs={exitMs}
       closeOnBackdrop={closeOnBackdrop}
       onEscapeKeyDown={onEscapeKeyDown}
+      focusRestoreKey={focusRestoreKey}
       className={cn(resolveDrawerPresentation(presentation, false).overlayClassName, overlayClassName)}
     >
       {({ visible }) => (
         <div
           role="dialog"
-          aria-modal="true"
+          aria-modal={resolveDrawerAriaModal(presentation)}
           className={cn(resolveDrawerPresentation(presentation, visible).panelClassName, className)}
           {...props}
         >
