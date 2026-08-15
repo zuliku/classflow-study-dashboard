@@ -4,6 +4,9 @@ import React, { useState } from "react";
 import { Checkbox } from "@/components/ui/Checkbox";
 import { cn } from "@/lib/utils";
 import { formatEstimatedMinutes } from "@/lib/tasks/taskSemantics";
+import { formatAccumulatedMs } from "@/lib/focus/focusView";
+import { useFocusClock } from "@/hooks/useFocusClock";
+import { FocusSession } from "@/types";
 import {
   DeadlineView,
   StudyScheduleSummary,
@@ -11,6 +14,18 @@ import {
 
 /** 子任务默认直接展示上限；超出部分折叠 */
 const SUBTASKS_INLINE_LIMIT = 4;
+
+/**
+ * 专注行的实时剩余时钟（仅本小子树每秒 tick，不波及 Execution 其余行）。
+ */
+function FocusActiveClock({ session }: { session: FocusSession }) {
+  const { remainingText } = useFocusClock(session);
+  return (
+    <>
+      {session.status === "running" ? `专注中 · 剩余 ${remainingText}` : `已暂停 · 剩余 ${remainingText}`}
+    </>
+  );
+}
 
 /**
  * Assignment Detail Execution（行式 key-value section，替代多张独立卡片）：
@@ -26,6 +41,7 @@ export function AssignmentDetailExecution({
   progress,
   onProgressChange,
   showProgressControl,
+  focusSummary,
 }: {
   deadline: DeadlineView;
   /** 已格式化的预计耗时文案（未估时 → "未估时"） */
@@ -37,6 +53,8 @@ export function AssignmentDetailExecution({
   progress: number;
   onProgressChange: (progress: number) => void;
   showProgressControl: boolean;
+  /** Task Execution Loop：当前任务专注累计（completedCount/totalCompletedMs）与活跃会话（current 专属） */
+  focusSummary: { completedCount: number; totalCompletedMs: number; active: FocusSession | null };
 }) {
   const [subtasksExpanded, setSubtasksExpanded] = useState(false);
   const completedSubtasks = subtasks.filter((s) => s.completed).length;
@@ -72,6 +90,23 @@ export function AssignmentDetailExecution({
               {scheduleSummary.hasBlocks ? "在时间表查看" : "安排"}
             </button>
           </span>
+        </div>
+        <div
+          data-testid="execution-focus-row"
+          className="flex items-center justify-between gap-3 px-3.5 py-2"
+        >
+          <span className="text-[11px] font-semibold text-sandrift">专注</span>
+          {focusSummary.active ? (
+            <span className="text-xs font-semibold text-charcoal">
+              <FocusActiveClock session={focusSummary.active} />
+            </span>
+          ) : focusSummary.completedCount > 0 ? (
+            <span className="text-xs font-semibold text-charcoal">
+              累计 {formatAccumulatedMs(focusSummary.totalCompletedMs)} · {focusSummary.completedCount} 次
+            </span>
+          ) : (
+            <span className="text-xs font-semibold text-satin-grey/70">尚无专注记录</span>
+          )}
         </div>
         {showProgressControl && (
           <div className="px-3.5 py-2">

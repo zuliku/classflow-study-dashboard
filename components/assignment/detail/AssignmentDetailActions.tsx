@@ -6,8 +6,9 @@ import { Button } from "@/components/ui/Button";
 import { cn } from "@/lib/utils";
 
 /**
- * Assignment Detail Primary Actions（首屏高频动作；低频/破坏性操作在 Header More 菜单）。
- * - 已完成 → 重新打开（复用 updateAssignmentStatus，不发明新状态）
+ * Assignment Detail Secondary Actions（Task Execution Loop V1）：
+ * - 开始专注（eligible 且无 active）由 focusSlot 由父级注入（primary slot）
+ * - 标记完成 / 重新打开：统一 secondary（完成态 → 重新打开）
  * - 日程 → Timeline 安排链路；提醒 → 展开 Reminder disclosure；编辑 → openAssignmentEditor
  */
 export function AssignmentDetailActions({
@@ -38,7 +39,7 @@ export function AssignmentDetailActions({
           重新打开
         </Button>
       ) : (
-        <Button variant="primary" size="sm" onClick={onComplete} className="h-8 px-3">
+        <Button variant="secondary" size="sm" onClick={onComplete} className="h-8 px-3">
           <Check className="h-3.5 w-3.5" />
           标记完成
         </Button>

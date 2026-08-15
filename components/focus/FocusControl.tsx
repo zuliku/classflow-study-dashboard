@@ -6,30 +6,9 @@ import { useAppStore } from "@/store/useAppStore";
 import { useToastStore } from "@/store/useToastStore";
 import { FocusSession } from "@/types";
 import { deriveFocusClock } from "@/lib/focus/focusDomain";
+import { FOCUS_ERROR_MESSAGES, FOCUS_PRESETS, formatFocusClock } from "@/lib/focus/focusView";
 import { cn } from "@/lib/utils";
 import { UISelect } from "@/components/ui/Select";
-
-const PRESETS = [15, 25, 30, 45, 60];
-
-const ERROR_MESSAGES: Record<string, string> = {
-  FOCUS_SESSION_ALREADY_ACTIVE: "已有进行中的专注会话",
-  NO_ACTIVE_FOCUS_SESSION: "当前没有进行中的专注",
-  FOCUS_ALREADY_PAUSED: "专注已处于暂停状态",
-  FOCUS_NOT_PAUSED: "专注未处于暂停状态",
-  INVALID_FOCUS_DURATION: "专注时长需为 1–240 的整数",
-  FOCUS_TARGET_NOT_FOUND: "关联的课程或任务不存在",
-  FOCUS_TARGET_MISMATCH: "任务与课程不匹配",
-};
-
-function formatClock(ms: number): string {
-  const totalSeconds = Math.max(0, Math.floor(ms / 1000));
-  const h = Math.floor(totalSeconds / 3600);
-  const m = Math.floor((totalSeconds % 3600) / 60);
-  const s = totalSeconds % 60;
-  const p = (n: number) => String(n).padStart(2, "0");
-  if (h >= 1) return `${h}:${p(m)}:${p(s)}`;
-  return `${p(m)}:${p(s)}`;
-}
 
 /**
  * Overview 总览日历 Header 的低侵入 Focus 入口（Task 4，UI-only）。
@@ -82,10 +61,10 @@ export function FocusControl() {
 
   const now = Date.now();
   const clock = active ? deriveFocusClock(active, now) : null;
-  const remainingText = clock ? formatClock(clock.remainingMs) : "";
+  const remainingText = clock ? formatFocusClock(clock.remainingMs) : "";
 
   const toastError = (code: string) => {
-    pushToast({ type: "warning", message: ERROR_MESSAGES[code] ?? "操作失败，请重试" });
+    pushToast({ type: "warning", message: FOCUS_ERROR_MESSAGES[code] ?? "操作失败，请重试" });
   };
 
   const start = () => {
@@ -181,7 +160,7 @@ export function FocusControl() {
               <div className="space-y-1.5">
                 <p className="text-[10px] font-bold text-sandrift uppercase tracking-wider">专注时间</p>
                 <div className="flex items-center gap-1">
-                  {PRESETS.map((p) => (
+                  {FOCUS_PRESETS.map((p) => (
                     <button
                       key={p}
                       onClick={() => setPlanned(String(p))}

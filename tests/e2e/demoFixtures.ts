@@ -75,7 +75,8 @@ async function seedDemoStorage(page: Page) {
       }
     },
     {
-      version: 3,
+      // 与 store 当前 persist version 保持一致（v7：Schedule Occurrence Override；旧值会被丢弃 → First Run）
+      version: 7,
       state: {
         userProfile: initialUserProfile,
         courses: initialCourses,

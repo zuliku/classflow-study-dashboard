@@ -38,6 +38,7 @@ import { Popover } from "@/components/ui/Popover";
 import { DropdownMenuPanel, DropdownMenuItem, DropdownMenuDivider } from "@/components/ui/DropdownMenu";
 import { useKiroHandoff } from "@/hooks/useKiroHandoff";
 import { KIRO_ICON } from "@/components/layout/navItems";
+import { useMemo } from "react";
 import { useEffectiveReducedMotion } from "@/hooks/useEffectiveReducedMotion";
 import { DetailDisclosure } from "@/components/assignment/detail/DetailDisclosure";
 import { EntityActivitySection } from "@/components/history/EntityActivitySection";
@@ -45,6 +46,11 @@ import { AssignmentDetailHero } from "@/components/assignment/detail/AssignmentD
 import { AssignmentDetailActions } from "@/components/assignment/detail/AssignmentDetailActions";
 import { AssignmentDetailExecution } from "@/components/assignment/detail/AssignmentDetailExecution";
 import { MaterialTypeIcon, MATERIAL_TYPE_LABELS } from "@/components/ui/MaterialTypeIcon";
+import { FocusStartPopover } from "@/components/focus/FocusStartPopover";
+import { AssignmentFocusControl } from "@/components/focus/AssignmentFocusControl";
+import { deriveAssignmentFocusView } from "@/lib/focus/assignmentFocusView";
+import { deriveFocusClock } from "@/lib/focus/focusDomain";
+import { FOCUS_ERROR_MESSAGES, formatAccumulatedMs, formatFocusClock } from "@/lib/focus/focusView";
 
 const OVERLAY_ID = "assignment-drawer";
 
@@ -84,6 +90,11 @@ export function AssignmentDrawer() {
     setAssignmentMaterialIds,
     deleteAssignment,
     restoreAssignment,
+    focusSessions,
+    startFocusSession,
+    pauseFocusSession,
+    resumeFocusSession,
+    finishFocusSession,
   } = useAppStore();
   const pushToast = useToastStore((s) => s.pushToast);
   const handoff = useKiroHandoff();
@@ -98,6 +109,22 @@ export function AssignmentDrawer() {
   const [moreOpen, setMoreOpen] = useState(false);
   // 「提醒」主操作 → 展开 Reminder disclosure
   const [reminderOpen, setReminderOpen] = useState(false);
+  // Task Execution Loop：开始专注 anchored popover 展开态（transient，随实体切换重置）
+  const [focusPickerOpen, setFocusPickerOpen] = useState(false);
+  // Task Execution Loop：本任务最近一次完成专注的会话 id（inline follow-up，不持久化）
+  const [recentCompletedSessionId, setRecentCompletedSessionId] = useState<string | null>(null);
+  // 观察「drawer 可见期间的 active → completed 转换」（自然 timer / recovered / manual 结束均进入）
+  const prevActiveFocusIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    const activeNow =
+      focusSessions.find((s) => s.status === "running" || s.status === "paused") ?? null;
+    const prevId = prevActiveFocusIdRef.current;
+    prevActiveFocusIdRef.current = activeNow?.id ?? null;
+    if (prevId !== null && prevId !== (activeNow?.id ?? null)) {
+      const prev = focusSessions.find((s) => s.id === prevId);
+      if (prev?.status === "completed") setRecentCompletedSessionId(prevId);
+    }
+  }, [focusSessions]);
 
   const currentAssignment = assignments.find((a) => a.id === selectedAssignmentId);
   // 关闭（selected 清空）期间保留最后一次内容渲染，让 Drawer exit presence 生效
@@ -156,10 +183,18 @@ export function AssignmentDrawer() {
     setMaterialPickerOpen(false);
     setAddMenuOpen(false);
     setMoreOpen(false);
+    setFocusPickerOpen(false);
+    setRecentCompletedSessionId(null);
   }, [currentId]);
 
   const assignment =
     assignments.find((a) => a.id === displayedId) ?? currentAssignment ?? staleAssignment;
+
+  // Task Execution Loop：Focus 只读投影（active 关系 + 本任务已完成统计；tick 不在此层）
+  const focusView = useMemo(
+    () => deriveAssignmentFocusView(focusSessions, assignment?.id ?? ""),
+    [focusSessions, assignment?.id]
+  );
 
   if (!assignment) return null;
 
@@ -288,6 +323,72 @@ export function AssignmentDrawer() {
   );
   const completed = assignment.status === "completed";
 
+  // ---- Task Execution Loop：Focus 编排 ----
+  // 开始专注：不传 courseId（Store 由 assignmentId 自动推导 + snapshot）；不自动改任务状态
+  const handleStartFocus = (plannedMinutes: number, note: string) => {
+    const result = startFocusSession({
+      plannedMinutes,
+      assignmentId: assignment.id,
+      note: note || undefined,
+      source: "manual",
+    });
+    if (!result.ok) {
+      pushToast({ type: "warning", message: FOCUS_ERROR_MESSAGES[result.code] ?? "操作失败，请重试" });
+      return;
+    }
+    setFocusPickerOpen(false);
+    setRecentCompletedSessionId(null);
+    pushToast({ message: `开始专注 · ${plannedMinutes} 分钟` });
+  };
+
+  const toastFocusError = (code: string) => {
+    pushToast({ type: "warning", message: FOCUS_ERROR_MESSAGES[code] ?? "操作失败，请重试" });
+  };
+
+  const handlePauseFocus = () => {
+    const r = pauseFocusSession();
+    if (!r.ok) toastFocusError(r.code);
+  };
+
+  const handleResumeFocus = () => {
+    const r = resumeFocusSession();
+    if (!r.ok) toastFocusError(r.code);
+  };
+
+  const handleFinishFocus = () => {
+    const r = finishFocusSession();
+    if (!r.ok) {
+      toastFocusError(r.code);
+      return;
+    }
+    const minutes = Math.max(1, Math.round((r.session.actualActiveMs ?? 0) / 60_000));
+    pushToast({ message: `已结束专注 · 本次 ${minutes} 分钟` });
+    // inline follow-up 由 observer effect 统一置位（manual 结束同样走 active→completed 转换）
+  };
+
+  // 其他专注进行中 → 查看当前专注（B→A swap 复用 content machine，shell 不重挂载）
+  const handleViewCurrentFocus = () => {
+    const active = focusView.active;
+    if (!active) return;
+    if (active.assignmentId && assignments.some((a) => a.id === active.assignmentId)) {
+      setSelectedAssignmentId(active.assignmentId);
+    } else if (active.courseId) {
+      setSelectedAssignmentId(null);
+      setSelectedCourseId(active.courseId);
+    } else {
+      const remaining = formatFocusClock(deriveFocusClock(active, Date.now()).remainingMs);
+      pushToast({ message: `当前专注 · 剩余 ${remaining}` });
+    }
+  };
+
+  const canStartFocus = assignment.status === "todo" || assignment.status === "doing";
+  const recentCompletedSession = recentCompletedSessionId
+    ? (focusSessions.find((s) => s.id === recentCompletedSessionId) ?? null)
+    : null;
+  const recentDuration = recentCompletedSession?.actualActiveMs
+    ? formatAccumulatedMs(recentCompletedSession.actualActiveMs)
+    : null;
+
   // Header（breadcrumb/title）与 Body 共享同一 entity swap lifecycle：
   // 静态 shell 控件（More / Close）留在 swap 层外；entity 内容（course/title + body）同层替换。
   const swapContentClasses = cn(
@@ -393,17 +494,50 @@ export function AssignmentDrawer() {
             onPriorityChange={(p) => updateAssignmentPriority(assignment.id, p)}
           />
 
-          {/* PRIMARY ACTIONS：完成 / 重新打开 / 日程 / 提醒 / 编辑 */}
-          <AssignmentDetailActions
-            completed={completed}
-            onComplete={() => updateAssignmentStatus(assignment.id, "completed")}
-            onReopen={() => updateAssignmentStatus(assignment.id, "todo")}
-            onSchedule={handleViewInTimeline}
-            onReminder={() => setReminderOpen(true)}
-            onEdit={handleEdit}
-          />
+          {/* PRIMARY ACTIONS：Focus slot + 完成/重新打开/日程/提醒/编辑 */}
+          <div className="space-y-1.5">
+            {focusView.relation === "current" && focusView.active ? (
+              <AssignmentFocusControl
+                session={focusView.active}
+                onPause={handlePauseFocus}
+                onResume={handleResumeFocus}
+                onFinish={handleFinishFocus}
+              />
+            ) : focusView.relation === "other" && focusView.active ? (
+              <div
+                data-testid="other-focus-status"
+                className="flex items-center gap-2 rounded-xl border border-line bg-alabaster/70 px-3 py-2"
+              >
+                <span className="min-w-0 truncate text-[11px] font-bold text-satin-grey">
+                  其他专注进行中{focusView.otherLabel ? ` · ${focusView.otherLabel}` : ""}
+                </span>
+                <button
+                  type="button"
+                  onClick={handleViewCurrentFocus}
+                  className="ml-auto shrink-0 text-[11px] font-bold text-charcoal transition-colors hover:text-sandrift"
+                >
+                  查看当前专注
+                </button>
+              </div>
+            ) : canStartFocus ? (
+              <FocusStartPopover
+                open={focusPickerOpen}
+                onOpenChange={setFocusPickerOpen}
+                assignmentTitle={assignment.title}
+                onStart={handleStartFocus}
+              />
+            ) : null}
+            <AssignmentDetailActions
+              completed={completed}
+              onComplete={() => updateAssignmentStatus(assignment.id, "completed")}
+              onReopen={() => updateAssignmentStatus(assignment.id, "todo")}
+              onSchedule={handleViewInTimeline}
+              onReminder={() => setReminderOpen(true)}
+              onEdit={handleEdit}
+            />
+          </div>
 
-          {/* EXECUTION：截止 / 预计耗时 / 学习安排 / 进度 + 子任务 */}
+          {/* EXECUTION：截止 / 预计耗时 / 学习安排 / 专注 / 进度 + 子任务 */}
           <AssignmentDetailExecution
             deadline={deadline}
             estimatedMinutesLabel={
@@ -422,7 +556,50 @@ export function AssignmentDrawer() {
             progress={assignment.progress}
             onProgressChange={(p) => updateAssignmentProgress(assignment.id, p)}
             showProgressControl={!completed}
+            focusSummary={{
+              completedCount: focusView.completedCount,
+              totalCompletedMs: focusView.totalCompletedMs,
+              active: focusView.relation === "current" ? focusView.active : null,
+            }}
           />
+
+          {/* FOLLOW-UP：本次专注完成（inline contextual，仅本任务会话转换或 manual 结束后出现） */}
+          {recentCompletedSession && (
+            <div
+              data-testid="focus-follow-up"
+              className="flex items-center gap-2 rounded-xl border border-line bg-[#F7F5F5]/60 px-3 py-2"
+            >
+              <span className="min-w-0 truncate text-xs font-semibold text-charcoal">
+                本次专注完成{recentDuration ? ` · ${recentDuration}` : ""}
+              </span>
+              <div className="ml-auto flex shrink-0 items-center gap-1">
+                {!completed && (
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    className="h-7 px-2 text-[11px]"
+                    onClick={() => {
+                      updateAssignmentStatus(assignment.id, "completed");
+                      setRecentCompletedSessionId(null);
+                    }}
+                  >
+                    标记完成
+                  </Button>
+                )}
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  className="h-7 px-2 text-[11px]"
+                  onClick={() => {
+                    setRecentCompletedSessionId(null);
+                    setFocusPickerOpen(true);
+                  }}
+                >
+                  继续专注
+                </Button>
+              </div>
+            </div>
+          )}
 
           {/* REMINDER：默认 collapsed summary；展开 = 现有 AssignmentReminderSection（Domain 不变） */}
           <DetailDisclosure
