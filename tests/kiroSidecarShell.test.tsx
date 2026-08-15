@@ -106,6 +106,7 @@ function pointerDrag(handle: Element, moves: { x: number; y: number }[]) {
 beforeEach(() => {
   vi.clearAllMocks();
   useKiroPreferencesStore.setState({ sidecarSize: SIDECAR_DEFAULT_SIZE });
+  useKiroPreferencesStore.setState({ sidecarPosition: { top: 24, right: 24 } });
 });
 
 describe("Sidecar Shell 状态机", () => {
@@ -351,5 +352,164 @@ describe("Single Mount（V2.1）", () => {
     expect(container.querySelectorAll('[data-testid="sidecar-child"]').length).toBe(1);
     act(() => root.unmount());
     container.remove();
+  });
+});
+
+describe("Move handle（Move V1）", () => {
+  const panelTop = (s: ReturnType<typeof setup>) =>
+    Number.parseFloat(s.panel()!.style.getPropertyValue("--kiro-sidecar-top"));
+  const panelRight = (s: ReturnType<typeof setup>) =>
+    Number.parseFloat(s.panel()!.style.getPropertyValue("--kiro-sidecar-right"));
+
+  it("A. handle 存在：testid + aria-hidden（不进 Tab order）", async () => {
+    const s = setup(true);
+    await s.flush();
+    const handle = s.container.querySelector('[data-testid="kiro-sidecar-move-handle"]')!;
+    expect(handle).toBeTruthy();
+    expect(handle.getAttribute("aria-hidden")).toBe("true");
+    expect(handle.hasAttribute("tabindex")).toBe(false);
+    // 响应式隐藏类（mobile 不显示）
+    expect(handle.className).toContain("hidden");
+    s.cleanup();
+  });
+
+  it("B. 初始 position vars = 24px / 24px", async () => {
+    const s = setup(true);
+    await s.flush();
+    expect(panelTop(s)).toBe(24);
+    expect(panelRight(s)).toBe(24);
+    s.cleanup();
+  });
+
+  it("C. move：pointerdown(1000,100) → move(900,150) → right +100 / top +50", async () => {
+    const s = setup(true);
+    await s.flush();
+    const handle = s.container.querySelector('[data-testid="kiro-sidecar-move-handle"]')!;
+    pointerDrag(handle, [
+      { x: 1000, y: 100 },
+      { x: 900, y: 150 },
+    ]);
+    expect(panelRight(s)).toBe(124);
+    expect(panelTop(s)).toBe(74);
+    s.cleanup();
+  });
+
+  it("D. multi-move：最终 = origin + 最终 delta（非逐帧累计）", async () => {
+    const s = setup(true);
+    await s.flush();
+    const handle = s.container.querySelector('[data-testid="kiro-sidecar-move-handle"]')!;
+    // down(1000,100) → (950,120) → (900,150)：最终 delta = (-100, +50)
+    pointerDrag(handle, [
+      { x: 1000, y: 100 },
+      { x: 950, y: 120 },
+      { x: 900, y: 150 },
+    ]);
+    expect(panelRight(s)).toBe(124);
+    expect(panelTop(s)).toBe(74);
+    expect(useKiroPreferencesStore.getState().sidecarPosition).toEqual({ top: 74, right: 124 });
+    s.cleanup();
+  });
+
+  it("E+G. pointermove 后立即 pointerup：store 保存最后一帧位置", async () => {
+    const s = setup(true);
+    await s.flush();
+    const handle = s.container.querySelector('[data-testid="kiro-sidecar-move-handle"]')!;
+    pointerDrag(handle, [
+      { x: 1000, y: 100 },
+      { x: 900, y: 150 },
+    ]);
+    expect(useKiroPreferencesStore.getState().sidecarPosition).toEqual({ top: 74, right: 124 });
+    s.cleanup();
+  });
+
+  it("F. clamp：拖出右上角 → top=24 / right=maxRight（不越安全边界）", async () => {
+    const s = setup(true);
+    await s.flush();
+    const handle = s.container.querySelector('[data-testid="kiro-sidecar-move-handle"]')!;
+    pointerDrag(handle, [
+      { x: 1000, y: 100 },
+      { x: -5000, y: -5000 },
+    ]);
+    const maxRight = 1440 - SIDECAR_DEFAULT_SIZE.width - 24;
+    expect(panelTop(s)).toBe(24);
+    expect(panelRight(s)).toBe(maxRight);
+    s.cleanup();
+  });
+
+  it("F2. clamp：拖出左下角 → top=maxTop / right=24", async () => {
+    const s = setup(true);
+    await s.flush();
+    const handle = s.container.querySelector('[data-testid="kiro-sidecar-move-handle"]')!;
+    pointerDrag(handle, [
+      { x: 1000, y: 100 },
+      { x: 5000, y: 5000 },
+    ]);
+    const maxTop = 900 - SIDECAR_DEFAULT_SIZE.height - 24;
+    expect(panelTop(s)).toBe(maxTop);
+    expect(panelRight(s)).toBe(24);
+    s.cleanup();
+  });
+
+  it("H. 拖拽中 unmount：body userSelect 恢复", async () => {
+    const s = setup(true);
+    await s.flush();
+    const handle = s.container.querySelector('[data-testid="kiro-sidecar-move-handle"]')!;
+    const h = handle as HTMLElement;
+    act(() => {
+      h.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, button: 0, clientX: 1000, clientY: 100, pointerId: 1 }));
+    });
+    expect(document.body.style.userSelect).toBe("none");
+    s.cleanup();
+    expect(document.body.style.userSelect).toBe("");
+    s.cleanup();
+  });
+
+  it("§27a. move 靠左后 left-resize：right edge 不变且 left ≥ 24", async () => {
+    const s = setup(true);
+    await s.flush();
+    // 1) 移动到 right=500（左移 476：down(1000,100) → move(524,100)）
+    const move = s.container.querySelector('[data-testid="kiro-sidecar-move-handle"]')!;
+    pointerDrag(move, [
+      { x: 1000, y: 100 },
+      { x: 524, y: 100 },
+    ]);
+    expect(panelRight(s)).toBe(500);
+    // 2) left-resize 增宽 +200（向左拉：dx=-200 → deltaWidth=+200）
+    const left = s.container.querySelector('[data-sidecar-resize-handle="left"]')!;
+    pointerDrag(left, [
+      { x: 300, y: 300 },
+      { x: 100, y: 300 },
+    ]);
+    // position-aware clamp：width ≤ 1440-500-24=916；origin 620 + 200 = 820 ✓
+    expect(panelRight(s)).toBe(500);
+    expect(
+      Number.parseFloat(s.panel()!.style.getPropertyValue("--kiro-sidecar-width"))
+    ).toBe(SIDECAR_DEFAULT_SIZE.width + 200);
+    // left = 1440 - right - width ≥ 24
+    expect(1440 - 500 - (SIDECAR_DEFAULT_SIZE.width + 200)).toBeGreaterThanOrEqual(24);
+    s.cleanup();
+  });
+
+  it("§27b. move 靠下后 bottom-resize：top edge 不变且 bottom ≤ viewport - 24", async () => {
+    const s = setup(true);
+    await s.flush();
+    // 移到 top=74（dy=+50，避开 760 高度的 bottom bound 116）
+    const move = s.container.querySelector('[data-testid="kiro-sidecar-move-handle"]')!;
+    pointerDrag(move, [
+      { x: 1000, y: 100 },
+      { x: 1000, y: 150 },
+    ]);
+    expect(panelTop(s)).toBe(74);
+    // bottom-resize +100：position-aware height 上限 = 900-74-24 = 802
+    const bottom = s.container.querySelector('[data-sidecar-resize-handle="bottom"]')!;
+    pointerDrag(bottom, [
+      { x: 400, y: 700 },
+      { x: 400, y: 800 },
+    ]);
+    expect(panelTop(s)).toBe(74);
+    const height = Number.parseFloat(s.panel()!.style.getPropertyValue("--kiro-sidecar-height"));
+    expect(height).toBe(802);
+    expect(74 + height).toBeLessThanOrEqual(900 - 24);
+    s.cleanup();
   });
 });

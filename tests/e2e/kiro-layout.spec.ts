@@ -141,49 +141,59 @@ test("Sidecar ContextBar 默认 collapsed；点击展开 chips；Header 不重�
   await expect(bar.getByRole("button", { name: "收起上下文" })).toHaveCount(0);
 });
 
-test("2xl Docked：Sidecar 为整屏 sticky Panel（高度=viewport，宽 424，Composer 底部留白）", async ({ page }) => {
+test("2xl：Sidecar 保持 floating（默认 620×760 · top 24 · 无 docked 覆盖）", async ({ page }) => {
   await seedAI(page);
   await page.setViewportSize({ width: 1600, height: 900 });
   await page.goto("/");
+  await expect(page.getByRole("button", { name: "总览" }).first()).toBeVisible({ timeout: 15000 });
   await openSidecarViaHandoff(page);
 
   const sidecar = page.getByTestId("kiro-sidecar");
-  const box = await sidecar.boundingBox();
-  expect(box!.height).toBe(900);
-  expect(box!.y).toBe(0);
-  expect(box!.width).toBe(424);
-  // Composer 位于 Panel 底部且带 12px 底部留白（输入框不与 Panel 贴边）
-  const composerBox = await page.getByTestId("kiro-composer").boundingBox();
-  const inputBox = await page
-    .getByTestId("kiro-composer")
-    .locator("div.rounded-2xl")
-    .first()
-    .boundingBox();
-  // 输入框底部 = 900 - 12px（pb-3 留白）
-  expect(inputBox!.y + inputBox!.height).toBe(888);
-  // 左右留白：输入框 inset 12px（+1px panel border-l）
-  expect(composerBox!.x - box!.x).toBe(1);
-  expect(inputBox!.x - box!.x).toBe(13);
-  expect(box!.x + box!.width - (inputBox!.x + inputBox!.width)).toBe(12);
+  await expect
+    .poll(async () =>
+      sidecar.evaluate((el) => {
+        const t = getComputedStyle(el).transform;
+        return t === "none" || t === "matrix(1, 0, 0, 1, 0, 0)";
+      })
+    )
+    .toBe(true);
+  const box = (await sidecar.boundingBox())!;
+  // 2xl 无 docked 变体：仍是 floating 默认尺寸 + 右上 inset
+  expect(box.height).toBe(760);
+  expect(box.width).toBe(620);
+  expect(box.y).toBe(24);
+  // Composer 可用
+  await expect(page.getByTestId("kiro-composer")).toBeVisible();
 });
 
-test("Header 对齐：全局 Header 与 Sidecar Header border-bottom 同一水平线（md+/xl+/2xl）", async ({ page }) => {
+test("Sidecar Header：与全局 Header 高度一致（64px）；浮层 top-24（非 docked 0）", async ({ page }) => {
   await seedAI(page);
   for (const width of [1280, 1440, 1536, 1920]) {
     await page.setViewportSize({ width, height: 900 });
     await page.goto("/");
+    await expect(page.getByRole("button", { name: "总览" }).first()).toBeVisible({ timeout: 15000 });
     await openSidecarViaHandoff(page);
 
     const globalHeader = page.locator("header").first();
-    const sidecarHeader = page.getByTestId("kiro-sidecar").locator("div").first();
+    const sidecarHeader = page.getByTestId("kiro-sidecar-header");
+    const sidecar = page.getByTestId("kiro-sidecar");
+    await expect
+      .poll(async () =>
+        sidecar.evaluate((el) => {
+          const t = getComputedStyle(el).transform;
+          return t === "none" || t === "matrix(1, 0, 0, 1, 0, 0)";
+        })
+      )
+      .toBe(true);
     const gBox = await globalHeader.boundingBox();
     const sBox = await sidecarHeader.boundingBox();
-    // 统一 60–64px 视觉高度（含 1px border-b）
+    // 统一 64px 视觉高度（含 1px border-b）
     expect(gBox!.height).toBeGreaterThanOrEqual(64);
     expect(gBox!.height).toBeLessThanOrEqual(66);
     expect(Math.abs(gBox!.height - sBox!.height)).toBeLessThanOrEqual(1);
-    // 关键：border-bottom 同一水平线
-    expect(Math.abs(gBox!.y + gBox!.height - (sBox!.y + sBox!.height))).toBeLessThanOrEqual(1);
+    // Floating 语义：面板从 top-24 开始（header 与全局 header 的 border 有意错位，不再 docked 对齐）
+    const sBox2 = (await sidecar.boundingBox())!;
+    expect(sBox2.y).toBe(24);
   }
 });
 
@@ -197,4 +207,54 @@ test("响应式：768–1279 Sheet / 1280–1535 Overlay 不横向溢出", async
     expect(overflow).toBe(false);
     await expect(page.getByTestId("kiro-composer")).toBeVisible();
   }
+});
+
+test("Move V1 smoke：hover 显示把手 → 拖拽移动 → close/reopen 位置保持", async ({ page }) => {
+  await seedAI(page);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/");
+  // 等 App hydrate（nav 渲染）后再按 Control+K，避免全局快捷键竞态
+  await expect(page.getByRole("button", { name: "总览" }).first()).toBeVisible({ timeout: 15000 });
+  await openSidecarViaHandoff(page);
+
+  const sidecar = page.getByTestId("kiro-sidecar");
+  const handle = page.getByTestId("kiro-sidecar-move-handle");
+  await expect(handle).toBeVisible();
+
+  // hover 顶部中央 → pill 淡入（opacity 1）
+  await handle.hover();
+  await expect
+    .poll(async () =>
+      handle.evaluate((el) => getComputedStyle(el.querySelector("div")!).opacity)
+    )
+    .toBe("1");
+
+  // 拖拽：从右上向左下移动（right/top 变化 → boundingBox 移动）
+  const before = (await sidecar.boundingBox())!;
+  const hb = (await handle.boundingBox())!;
+  await page.mouse.move(hb.x + hb.width / 2, hb.y + hb.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(hb.x + hb.width / 2 - 300, hb.y + hb.height / 2 + 60, { steps: 6 });
+  await page.mouse.up();
+  await expect.poll(async () => (await sidecar.boundingBox())!.x).toBeLessThan(before.x - 200);
+  const moved = (await sidecar.boundingBox())!;
+
+  // close → reopen：位置保持（不 reset）
+  await page.keyboard.press("Escape");
+  await expect(sidecar).toHaveCount(0, { timeout: 5000 });
+  await expect(page.getByRole("button", { name: "总览" }).first()).toBeVisible({ timeout: 15000 });
+  await openSidecarViaHandoff(page);
+  // 等 enter motion settle 后再测量（presence transform 未结束时 boundingBox 会偏移）
+  await expect
+    .poll(async () =>
+      sidecar.evaluate((el) => {
+        const t = getComputedStyle(el).transform;
+        return t === "none" || t === "matrix(1, 0, 0, 1, 0, 0)";
+      })
+    )
+    .toBe(true);
+  await expect.poll(async () => (await sidecar.boundingBox())!.x).toBeLessThan(before.x - 200);
+  const reopened = (await sidecar.boundingBox())!;
+  expect(Math.abs(reopened.x - moved.x)).toBeLessThanOrEqual(2);
+  expect(Math.abs(reopened.y - moved.y)).toBeLessThanOrEqual(2);
 });

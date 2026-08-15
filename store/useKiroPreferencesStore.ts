@@ -21,6 +21,11 @@ import {
   SIDECAR_DEFAULT_SIZE,
   normalizeSidecarSize,
 } from "@/lib/ai/ui/sidecarSize";
+import {
+  SidecarPosition,
+  SIDECAR_DEFAULT_POSITION,
+  normalizeSidecarPosition,
+} from "@/lib/ai/ui/sidecarPosition";
 
 /**
  * Kiro UI / Behavior Preference（独立于业务 useAppStore / useAISettingsStore）：
@@ -43,6 +48,8 @@ interface KiroPreferencesState {
   webPdfVisionModel: string;
   /** Sidecar UX V2：面板尺寸（用户拖拽调整后持久化；首次使用默认值） */
   sidecarSize: SidecarSize;
+  /** Sidecar Move V1：浮动面板位置（top/right；拖拽后持久化；首次使用右上 24px） */
+  sidecarPosition: SidecarPosition;
   setOutputTextSize: (size: KiroOutputTextSize) => void;
   setAutoContextEnabled: (enabled: boolean) => void;
   setResponsePreference: (preference: KiroResponsePreference) => void;
@@ -51,6 +58,7 @@ interface KiroPreferencesState {
   setWebPdfVisionEnabled: (enabled: boolean) => void;
   setWebPdfVisionModel: (model: string) => void;
   setSidecarSize: (size: SidecarSize) => void;
+  setSidecarPosition: (position: SidecarPosition) => void;
 }
 
 export const useKiroPreferencesStore = create<KiroPreferencesState>()(
@@ -64,6 +72,7 @@ export const useKiroPreferencesStore = create<KiroPreferencesState>()(
       webPdfVisionEnabled: true,
       webPdfVisionModel: DEFAULT_WEB_PDF_VISION_MODEL,
       sidecarSize: SIDECAR_DEFAULT_SIZE,
+      sidecarPosition: SIDECAR_DEFAULT_POSITION,
       setOutputTextSize: (size) => set({ outputTextSize: normalizeKiroOutputTextSize(size) }),
       setAutoContextEnabled: (enabled) => set({ autoContextEnabled: enabled }),
       setResponsePreference: (preference) =>
@@ -76,6 +85,8 @@ export const useKiroPreferencesStore = create<KiroPreferencesState>()(
       setWebPdfVisionModel: (model) => set({ webPdfVisionModel: normalizeWebPdfVisionModel(model) }),
       // 结构归一后保存；viewport clamp 由 Shell 在浏览器内执行
       setSidecarSize: (size) => set({ sidecarSize: normalizeSidecarSize(size) }),
+      setSidecarPosition: (position) =>
+        set({ sidecarPosition: normalizeSidecarPosition(position) }),
     }),
     {
       name: "classflow-kiro-preferences-v1",
@@ -91,6 +102,8 @@ export const useKiroPreferencesStore = create<KiroPreferencesState>()(
         webPdfVisionModel: state.webPdfVisionModel,
         // Sidecar UX V2：尺寸持久化（刷新后保留；不进 URL / IndexedDB）
         sidecarSize: state.sidecarSize,
+        // Sidecar Move V1：浮动位置持久化（top/right；key 不变，不建 v2）
+        sidecarPosition: state.sidecarPosition,
       }),
       // 持久化值 hydrate 时同样清洗（旧数据 / 非法值 → 默认）
       merge: (persisted, current) => {
@@ -114,6 +127,8 @@ export const useKiroPreferencesStore = create<KiroPreferencesState>()(
           webPdfVisionModel: normalizeWebPdfVisionModel(p?.webPdfVisionModel),
           // Sidecar UX V2：旧持久化无字段 → 默认尺寸；非法值 → 结构归一
           sidecarSize: normalizeSidecarSize(p?.sidecarSize),
+          // Sidecar Move V1：旧持久化无字段 → 默认右上 24px；非法值 → 归一
+          sidecarPosition: normalizeSidecarPosition(p?.sidecarPosition),
         };
       },
     }
