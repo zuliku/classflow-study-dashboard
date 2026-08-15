@@ -229,8 +229,14 @@ export function ReminderCenter() {
 
         {/* 信息层级：Primary title / Secondary 相对时间 / Tertiary 来源·提前 */}
         <div className="flex-1 min-w-0">
-          <p className={cn("text-xs font-bold truncate", isHistory ? "text-satin-grey" : "text-charcoal")}>
-            {r.title}
+          <p className={cn("flex items-center gap-1.5 text-xs font-bold truncate", isHistory ? "text-satin-grey" : "text-charcoal")}>
+            <span className="truncate">{r.title}</span>
+            {/* P3 provenance：自动提醒轻量标签（克制；manual 不显示；用户编辑后已转 custom） */}
+            {r.source === "auto" && (
+              <span className="shrink-0 px-1 py-px rounded bg-alabaster border border-line text-[9px] font-semibold text-sandrift">
+                自动
+              </span>
+            )}
           </p>
           <p className="text-[10px] text-sandrift mt-0.5 truncate">
             {formatReminderCenterTime(r.triggerAt, formatLocalDateTime(new Date()))}

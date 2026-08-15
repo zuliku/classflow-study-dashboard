@@ -10,6 +10,14 @@ export const DEADLINE_REMINDER_MINUTES: readonly AppPreferences["defaultDeadline
 ];
 export const DEFAULT_DEADLINE_REMINDER_MINUTES = 1440;
 
+/** P3：设置项中文文案（提前 X） */
+export const DEADLINE_REMINDER_LABELS: Record<AppPreferences["defaultDeadlineReminderMinutes"], string> = {
+  10080: "提前 7 天",
+  4320: "提前 3 天",
+  1440: "提前 1 天",
+  60: "提前 1 小时",
+};
+
 /** 第一版默认偏好 */
 export const DEFAULT_PREFERENCES: AppPreferences = {
   showWeekends: true,

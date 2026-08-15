@@ -180,6 +180,28 @@ export function AssignmentReminderSection({ assignment }: { assignment: Assignme
         )}
       </div>
 
+      {/* P3：per-target 默认自动提醒控制（低噪声；opt-out 时提供「重新开启」，调用 P2 semantic action） */}
+      {assignment.status === "todo" || assignment.status === "doing" ? (
+        assignment.autoReminderDisabled === true ? (
+          <div className="flex items-center justify-between gap-2 px-2.5 py-2 bg-[#F7F5F5] border border-line rounded-xl">
+            <span className="text-[10px] text-sandrift">默认提醒：已关闭</span>
+            <button
+              type="button"
+              onClick={() => useAppStore.getState().enableAutomaticReminderForTarget("assignment", assignment.id)}
+              aria-label="重新开启默认提醒"
+              className="text-[10px] font-bold text-charcoal bg-white border border-line rounded-lg px-2 py-1 hover:border-line-strong hover:text-black transition-colors"
+            >
+              重新开启
+            </button>
+          </div>
+        ) : (
+          <div className="flex items-center justify-between gap-2 px-2.5 py-2 bg-[#F7F5F5] border border-line rounded-xl">
+            <span className="text-[10px] text-sandrift">默认提醒：已开启</span>
+            <span className="text-[9px] text-sandrift/80">删除自动提醒可关闭</span>
+          </div>
+        )
+      ) : null}
+
       {scheduled.length > 0 && (
         <div className="space-y-1">
           {scheduled.map((r) => (
@@ -187,8 +209,13 @@ export function AssignmentReminderSection({ assignment }: { assignment: Assignme
               key={r.id}
               className="flex items-center gap-2 p-2.5 bg-[#F7F5F5] border border-line rounded-xl text-xs"
             >
-              <span className="flex-1 min-w-0 font-medium text-charcoal">
-                {formatAssignmentReminderLabel(r)}
+              <span className="flex-1 min-w-0 font-medium text-charcoal flex items-center gap-1.5">
+                <span className="truncate">{formatAssignmentReminderLabel(r)}</span>
+                {r.source === "auto" && (
+                  <span className="shrink-0 px-1 py-px rounded bg-white border border-line text-[9px] font-semibold text-sandrift">
+                    自动
+                  </span>
+                )}
               </span>
               <span className="text-[10px] font-mono text-sandrift shrink-0">
                 {r.triggerAt.slice(5, 10).replace("-", "月")}日 {r.triggerAt.slice(11, 16)}

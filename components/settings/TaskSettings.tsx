@@ -7,7 +7,7 @@ import { SettingsSection } from "@/components/settings/SettingsSection";
 import { SettingsGroup } from "@/components/settings/SettingsGroup";
 import { SettingsRow } from "@/components/settings/SettingsRow";
 import { SettingsToggle, SettingsSelect, SettingsSegmentedControl, SettingsInput } from "@/components/settings/SettingsControls";
-import { DDL_WARNING_DAYS, TASK_PRIORITIES, TASK_STATUSES } from "@/lib/preferences";
+import { DDL_WARNING_DAYS, TASK_PRIORITIES, TASK_STATUSES, DEADLINE_REMINDER_MINUTES, DEADLINE_REMINDER_LABELS, DEFAULT_DEADLINE_REMINDER_MINUTES } from "@/lib/preferences";
 import { getModifiedPreferenceKeys, resetPreferencePatch } from "@/lib/preferences";
 import { PRIMARY_TASK_WORKSPACE_VIEWS } from "@/lib/tasks/taskViews";
 import { MissedReminderPolicy } from "@/types";
@@ -40,6 +40,7 @@ const MISSED_POLICY_OPTIONS: { value: MissedReminderPolicy; label: string }[] = 
 export function TaskSettings({ highlightedId }: { highlightedId?: string }) {
   const preferences = useAppStore((s) => s.preferences);
   const updatePreferences = useAppStore((s) => s.updatePreferences);
+  const setDefaultDeadlineReminderMinutes = useAppStore((s) => s.setDefaultDeadlineReminderMinutes);
   const modified = new Set(getModifiedPreferenceKeys(preferences));
 
   const browserNotificationsEnabled = useReminderPreferencesStore((s) => s.browserNotificationsEnabled);
@@ -201,6 +202,27 @@ export function TaskSettings({ highlightedId }: { highlightedId?: string }) {
         </SettingsGroup>
 
         <SettingsGroup title="提醒">
+          {/* P3：自动 DDL 提醒默认提前量（semantic action：修改后同步重算所有 scheduled auto；custom 不受影响） */}
+          <SettingsRow
+            settingId="deadline-default-reminder"
+            title="任务与 DDL 默认提醒"
+            description="为新建和现有的截止事项自动创建提醒。修改后会同步更新使用默认设置的自动提醒，自定义提醒不受影响。"
+            modified={modified.has("defaultDeadlineReminderMinutes")}
+            onReset={() => setDefaultDeadlineReminderMinutes(DEFAULT_DEADLINE_REMINDER_MINUTES)}
+            resetAriaLabel="将任务与 DDL 默认提醒恢复默认"
+            highlighted={highlightedId === "deadline-default-reminder"}
+          >
+            <SettingsSegmentedControl<number>
+              value={preferences.defaultDeadlineReminderMinutes}
+              onChange={(v) => setDefaultDeadlineReminderMinutes(v)}
+              ariaLabel="任务与 DDL 默认提醒"
+              options={DEADLINE_REMINDER_MINUTES.map((m) => ({
+                value: m,
+                label: DEADLINE_REMINDER_LABELS[m],
+              }))}
+            />
+          </SettingsRow>
+
           {/* 应用内提醒：核心行为，始终开启（无底层开关，不伪造设置） */}
           <SettingsRow
             settingId="in-app-reminders"
