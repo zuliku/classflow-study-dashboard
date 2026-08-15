@@ -518,6 +518,11 @@ export interface AppState {
     patch: Partial<Omit<StudyBlock, "id">>,
     context?: LearningMutationContext
   ) => void;
+  /** Atomic Batch Update（Rebalance Apply / Undo）：单次 set；全部成功或全部不动（null）；只改 date/startTime/endTime */
+  updateStudyBlocksBatch: (
+    updates: { id: string; patch: { date: string; startTime: string; endTime: string } }[],
+    context?: LearningMutationContext
+  ) => { before: StudyBlock[]; after: StudyBlock[] } | null;
   deleteStudyBlock: (id: string, context?: LearningMutationContext) => void;
   /** Batch Delete：返回实际被删除的 Block（Undo 只删除本次 Apply 创建的 ID） */
   deleteStudyBlocksBatch: (ids: string[], context?: LearningMutationContext) => StudyBlock[];
@@ -1566,6 +1571,57 @@ export const useAppStore = create<AppState>()(
           }
           return { studyBlocks: blocks, reminders };
         }),
+      updateStudyBlocksBatch: (updates, context) => {
+        const current = get();
+        // All-or-None：重复 ID 或任何 ID 不存在 → 0 mutation
+        const seen = new Set<string>();
+        for (const u of updates) {
+          if (seen.has(u.id)) return null;
+          seen.add(u.id);
+          if (!current.studyBlocks.some((b) => b.id === u.id)) return null;
+        }
+        const before: StudyBlock[] = [];
+        const after: StudyBlock[] = [];
+        set((state) => {
+          // 先计算 before/after + 真实变化（供 History 与返回值）
+          for (const u of updates) {
+            const prev = state.studyBlocks.find((b) => b.id === u.id)!;
+            before.push({ ...prev });
+            after.push({ ...prev, ...u.patch });
+          }
+          // History（best-effort）：只记录真实变化；同一 batch 共享 resolved context
+          const resolved = resolveLearningMutationContext(context);
+          const env = historyEnvironment(state);
+          const events = before
+            .map((prev, i) => {
+              const next = after[i];
+              return buildStudyBlockUpdatedEvent({ before: prev, after: next, context: resolved, environment: env });
+            })
+            .filter((e): e is NonNullable<typeof e> => e !== null);
+          if (events.length > 0) enqueueLearningHistoryEvents(events);
+          // Reminder：date/startTime 变化 → relative reminders 同步到新锚点（同一次 state 计算）
+          let reminders = state.reminders;
+          for (const u of updates) {
+            const prev = before.find((b) => b.id === u.id)!;
+            const next = after.find((b) => b.id === u.id)!;
+            if (prev.date !== next.date || prev.startTime !== next.startTime) {
+              reminders = reconcileTargetReminders(
+                reminders,
+                "studyBlock",
+                u.id,
+                getReminderTargetAnchor("studyBlock", next),
+                nowLocalString()
+              );
+            }
+          }
+          const byId = new Map(after.map((b) => [b.id, b]));
+          return {
+            studyBlocks: state.studyBlocks.map((b) => byId.get(b.id) ?? b),
+            reminders,
+          };
+        });
+        return { before, after };
+      },
       deleteStudyBlock: (id, context) =>
         set((state) => {
           const target = state.studyBlocks.find((b) => b.id === id);
