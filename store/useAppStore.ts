@@ -94,6 +94,7 @@ import {
   resolveLearningMutationContext,
 } from "@/lib/history/recorder";
 import { resetLearningHistoryForDomainReset } from "@/lib/history/clear";
+import { reconcileStudyBlockCourseOverlapApprovals } from "@/lib/planning/courseOverlapPolicy";
 
 /** History environment（semester 快照用于 week 计算） */
 function historyEnvironment(state: { semester: Semester }): LearningEventEnvironment {
@@ -520,7 +521,20 @@ export interface AppState {
   ) => void;
   /** Atomic Batch Update（Rebalance Apply / Undo）：单次 set；全部成功或全部不动（null）；只改 date/startTime/endTime */
   updateStudyBlocksBatch: (
-    updates: { id: string; patch: { date: string; startTime: string; endTime: string } }[],
+    updates: {
+      id: string;
+      patch: {
+        date: string;
+        startTime: string;
+        endTime: string;
+        /**
+         * Course Overlap Approval 显式值（Constraint V1.1）：
+         * 缺省 → 按 mutation source 对账（manual 自动接受 / kiro 只保留仍有效项）；
+         * 数组 → 直接使用（Rebalance Undo 恢复原 Approval）；null → 清空（Rebalance Apply 移到无重叠位置）。
+         */
+        courseOverlapApprovals?: import("@/lib/planning/courseOverlapPolicy").StudyBlockCourseOverlapApproval[] | null;
+      };
+    }[],
     context?: LearningMutationContext
   ) => { before: StudyBlock[]; after: StudyBlock[] } | null;
   deleteStudyBlock: (id: string, context?: LearningMutationContext) => void;
@@ -1527,6 +1541,8 @@ export const useAppStore = create<AppState>()(
           assignmentId: b.assignmentId,
           courseId: b.courseId,
           source: b.source ?? "manual",
+          // V1.1：Approval Gate 显式批准的课程重叠（Block × Schedule 版本级别；无则 undefined）
+          courseOverlapApprovals: b.courseOverlapApprovals,
         }));
         // 整个 batch 只有一次 state mutation（All-or-None）
         set((state) => {
@@ -1559,6 +1575,21 @@ export const useAppStore = create<AppState>()(
               nowLocalString()
             );
           }
+          // Course Overlap Approval 对账（Constraint Semantics V1.1）：
+          // manual 拖动 → 当前 overlaps 记为明确接受；kiro/system/import → 不创造新 Approval，只保留仍有效项
+          if (prev && next) {
+            const resolved = resolveLearningMutationContext(context);
+            const approvals = reconcileStudyBlockCourseOverlapApprovals({
+              before: prev,
+              after: next,
+              schedules: state.schedules,
+              semester: state.semester,
+              mutationSource: resolved.source,
+              occurredAt: resolved.occurredAt,
+            });
+            const idx = blocks.findIndex((b) => b.id === id);
+            if (idx >= 0) blocks[idx] = { ...blocks[idx], courseOverlapApprovals: approvals };
+          }
           // History：只记录 date/startTime/endTime（及对应 planned minutes）变化；仅 title 变化不记录
           if (prev && next) {
             const event = buildStudyBlockUpdatedEvent({
@@ -1587,7 +1618,23 @@ export const useAppStore = create<AppState>()(
           for (const u of updates) {
             const prev = state.studyBlocks.find((b) => b.id === u.id)!;
             before.push({ ...prev });
-            after.push({ ...prev, ...u.patch });
+            const next = { ...prev, date: u.patch.date, startTime: u.patch.startTime, endTime: u.patch.endTime };
+            // Course Overlap Approval：显式值优先；否则按 mutation source 对账
+            if (Object.prototype.hasOwnProperty.call(u.patch, "courseOverlapApprovals")) {
+              const explicit = u.patch.courseOverlapApprovals;
+              next.courseOverlapApprovals = explicit && explicit.length > 0 ? explicit : undefined;
+            } else {
+              const resolved = resolveLearningMutationContext(context);
+              next.courseOverlapApprovals = reconcileStudyBlockCourseOverlapApprovals({
+                before: prev,
+                after: next,
+                schedules: state.schedules,
+                semester: state.semester,
+                mutationSource: resolved.source,
+                occurredAt: resolved.occurredAt,
+              });
+            }
+            after.push(next);
           }
           // History（best-effort）：只记录真实变化；同一 batch 共享 resolved context
           const resolved = resolveLearningMutationContext(context);

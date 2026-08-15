@@ -13,9 +13,9 @@
 import { AppState } from "@/store/useAppStore";
 import { StudyBlock } from "@/types";
 import { parseLocalDDL } from "@/lib/ddl";
-import { isScheduleActive, timeToMinutes } from "@/lib/schedule";
-import { getSemesterWeek } from "@/lib/semester";
+import { timeToMinutes } from "@/lib/schedule";
 import { FREE_TIME_DAY_END, FREE_TIME_DAY_START } from "@/lib/planning/freeTime";
+import { findCourseOverlapsForStudyBlock } from "@/lib/planning/courseOverlapPolicy";
 
 export interface StudyPlanApplyBlockInput {
   assignmentId: string;
@@ -30,13 +30,16 @@ export interface StudyPlanApplyInput {
   blocks: StudyPlanApplyBlockInput[];
 }
 
-/** 单 Block 与课程的软重叠信息（Kiro Approval Gate 展示用） */
+/** 单 Block 与课程的软重叠信息（Kiro Approval Gate 展示用；含 Schedule 版本标识） */
 export interface CourseOverlapInfo {
   blockIndex: number;
   title: string;
   date: string;
   startTime: string;
   endTime: string;
+  scheduleId: string;
+  courseId: string;
+  scheduleFingerprint: string;
   courseName: string;
 }
 
@@ -134,29 +137,25 @@ export function preflightStudyPlan(input: StudyPlanApplyInput, state: AppState):
       }
     }
 
-    // 5. 课程重叠：SOFT（Task 5）。按 Block 自身日期计算 semester week（重要：不使用 UI 当前浏览周）；
-    //    周次越界时 clamp 到 [1, totalWeeks]，避免「双周」规则在周 0 误判
-    const week = Math.min(
-      Math.max(getSemesterWeek(b.date, state.semester), 1),
-      state.semester.totalWeeks
-    );
-    const dow = new Date(`${b.date}T00:00:00`).getDay() || 7;
-    for (const sch of state.schedules) {
-      if (sch.dayOfWeek !== dow) continue;
-      if (!isScheduleActive(sch, week)) continue;
-      const ss = timeToMinutes(sch.startTime);
-      const se = timeToMinutes(sch.endTime);
-      if (ss === null || se === null) continue;
-      if (overlaps(s, e, ss, se)) {
-        courseOverlaps.push({
-          blockIndex: i,
-          title: b.title,
-          date: b.date,
-          startTime: b.startTime,
-          endTime: b.endTime,
-          courseName: state.courses.find((c) => c.id === sch.courseId)?.name ?? "未知课程",
-        });
-      }
+    // 5. 课程重叠：SOFT（Task 5）。canonical helper（按 Block 自身日期计算 semester week；
+    //    学期范围之外不 clamp；不制造假冲突）
+    const overlapsForBlock = findCourseOverlapsForStudyBlock({
+      block: b,
+      schedules: state.schedules,
+      semester: state.semester,
+    });
+    for (const o of overlapsForBlock) {
+      courseOverlaps.push({
+        blockIndex: i,
+        title: b.title,
+        date: b.date,
+        startTime: b.startTime,
+        endTime: b.endTime,
+        scheduleId: o.scheduleId,
+        courseId: o.courseId,
+        scheduleFingerprint: o.scheduleFingerprint,
+        courseName: state.courses.find((c) => c.id === o.courseId)?.name ?? "未知课程",
+      });
     }
 
     // 6. 固定事件冲突（Exam / Activity interval；All-day 整天 blocked；DDL 不是 busy）——仍为硬失败
@@ -217,11 +216,12 @@ export function preflightStudyPlan(input: StudyPlanApplyInput, state: AppState):
  * Task 5 Approval Gate：存在课程重叠且未显式 allowCourseOverlap → 不写入，
  * 返回 needsApproval（Kiro UI 展示确认 Dialog）；确认后以 allowCourseOverlap=true 重新提交。
  * 该 Gate 是 deterministic mutation boundary——即使模型忘记提醒，系统也不会静默写入。
+ * 批准后：只给实际 overlap 的 Block 保存 courseOverlapApprovals（Block × Schedule 版本级别）。
  */
 export function applyStudyPlan(
   input: StudyPlanApplyInput,
   state: AppState,
-  options?: { allowCourseOverlap?: boolean }
+  options?: { allowCourseOverlap?: boolean; /** test/internal only */ now?: number }
 ): StudyPlanApplyResult {
   const preflight = preflightStudyPlan(input, state);
   if (!preflight.ok) return preflight;
@@ -230,8 +230,17 @@ export function applyStudyPlan(
     return { ok: true, state: "needs-approval", courseOverlaps: preflight.courseOverlaps };
   }
 
+  const approvedAt = options?.now ?? Date.now();
+  // 每个 Block：只有真正 overlap 的才保存 Approval（fresh preflight 数据；Multi-overlap 全部保存）
+  const approvalsByBlock = new Map<number, import("@/lib/planning/courseOverlapPolicy").StudyBlockCourseOverlapApproval[]>();
+  for (const o of preflight.courseOverlaps) {
+    const list = approvalsByBlock.get(o.blockIndex) ?? [];
+    list.push({ scheduleId: o.scheduleId, scheduleFingerprint: o.scheduleFingerprint, approvedAt });
+    approvalsByBlock.set(o.blockIndex, list);
+  }
+
   const created = state.addStudyBlocksBatch(
-    input.blocks.map((b) => ({
+    input.blocks.map((b, i) => ({
       title: b.title,
       date: b.date,
       startTime: b.startTime,
@@ -239,6 +248,7 @@ export function applyStudyPlan(
       assignmentId: b.assignmentId,
       courseId: b.courseId,
       source: "kiro" as const,
+      courseOverlapApprovals: approvalsByBlock.get(i),
     })),
     // 用户确认并不改变 origin：Apply 仍是 Kiro-generated 计划（History event.source=kiro）
     { source: "kiro" }
