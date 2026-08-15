@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+﻿import { describe, it, expect } from "vitest";
 import { LearningAnalyticsSnapshot } from "@/lib/analytics/types";
 import { buildWeeklyReview, weeklyReviewCopy } from "@/lib/analytics/weeklyReview";
 
@@ -11,7 +11,7 @@ function baseSnapshot(overrides: Partial<LearningAnalyticsSnapshot> = {}): Learn
       previous: { from: new Date(2026, 7, 3).getTime(), to: new Date(2026, 7, 9, 23, 59, 59).getTime() },
       trendGrain: "day",
     },
-    coverage: { fullCoverage: true, comparisonAvailable: true, historyStartedAt: new Date(2026, 6, 1).getTime() },
+    coverage: { fullCoverage: true, comparisonAvailable: true, historyStartedAt: new Date(2026, 6, 1).getTime(), planCoverageFull: true, planCoverageStartedAt: new Date(2026, 6, 1).getTime() },
     overview: {
       actualFocusMinutes: 320,
       actualFocusLabel: "5h 20m",
@@ -63,7 +63,7 @@ describe("buildWeeklyReview（纯投影）", () => {
     const review = buildWeeklyReview(snapshot);
 
     expect(review.range).toEqual({ from: snapshot.period.current.from, to: snapshot.period.current.to });
-    expect(review.coverage).toEqual({ fullCoverage: true, comparisonAvailable: true });
+    expect(review.coverage).toEqual({ fullCoverage: true, comparisonAvailable: true, planCoverageFull: true });
 
     // headline 全部来自 overview + rhythm
     expect(review.headline.focusMinutes).toBe(320);
@@ -110,7 +110,7 @@ describe("buildWeeklyReview（纯投影）", () => {
 
   it("comparison 不足 → focusDeltaPercent 原样 null + comparisonUnavailable=true（不制造 0%）", () => {
     const snapshot = baseSnapshot({
-      coverage: { fullCoverage: true, comparisonAvailable: false, historyStartedAt: new Date(2026, 6, 1).getTime() },
+      coverage: { fullCoverage: true, comparisonAvailable: false, historyStartedAt: new Date(2026, 6, 1).getTime(), planCoverageFull: true, planCoverageStartedAt: new Date(2026, 6, 1).getTime() },
       overview: { ...baseSnapshot().overview, focusDeltaPercent: null },
     });
     const review = buildWeeklyReview(snapshot);
@@ -139,7 +139,7 @@ describe("buildWeeklyReview（纯投影）", () => {
     const noCmp = weeklyReviewCopy(
       buildWeeklyReview(
         baseSnapshot({
-          coverage: { fullCoverage: true, comparisonAvailable: false, historyStartedAt: 0 },
+          coverage: { fullCoverage: true, comparisonAvailable: false, historyStartedAt: 0, planCoverageFull: true, planCoverageStartedAt: 0 },
           overview: { ...baseSnapshot().overview, focusDeltaPercent: null },
         })
       )
@@ -155,5 +155,21 @@ describe("buildWeeklyReview（纯投影）", () => {
     );
     const copy = weeklyReviewCopy(review);
     expect(copy.planActualLines).toEqual(["本周暂无已到达开始时间的有效计划"]);
+  });
+
+  it("planCoverageFull=false → 不输出不可靠 Plan ratio，显示计划历史不完整", () => {
+    const review = buildWeeklyReview(
+      baseSnapshot({
+        coverage: {
+          fullCoverage: true,
+          comparisonAvailable: true,
+          historyStartedAt: new Date(2026, 6, 1).getTime(),
+          planCoverageFull: false,
+          planCoverageStartedAt: new Date(2026, 7, 14).getTime(),
+        },
+      })
+    );
+    const copy = weeklyReviewCopy(review);
+    expect(copy.planActualLines).toEqual(["学习计划历史在该区间不完整，暂不计算计划与实际比例。"]);
   });
 });

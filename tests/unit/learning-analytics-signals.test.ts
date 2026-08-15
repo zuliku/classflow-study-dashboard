@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+﻿import { describe, it, expect } from "vitest";
 import { buildLearningSignals } from "@/lib/analytics/signals";
 import { LearningAnalyticsSnapshot } from "@/lib/analytics/types";
 
@@ -10,7 +10,7 @@ function baseSnapshot(overrides: Partial<LearningAnalyticsSnapshot> = {}): Learn
       previous: { from: -100, to: 0 },
       trendGrain: "day",
     },
-    coverage: { fullCoverage: true, comparisonAvailable: true, historyStartedAt: -1000 },
+    coverage: { fullCoverage: true, comparisonAvailable: true, historyStartedAt: -1000, planCoverageFull: true, planCoverageStartedAt: -1000 },
     overview: {
       actualFocusMinutes: 300,
       actualFocusLabel: "5h",
@@ -73,7 +73,7 @@ describe("Learning Signals", () => {
 
   it("comparison 不可用 → 不生成 period change 信号", () => {
     const signals = buildLearningSignals(
-      baseSnapshot({ coverage: { fullCoverage: true, comparisonAvailable: false, historyStartedAt: -1000 } }),
+      baseSnapshot({ coverage: { fullCoverage: true, comparisonAvailable: false, historyStartedAt: -1000, planCoverageFull: true, planCoverageStartedAt: -1000 } }),
       CTX
     );
     expect(signals.find((x) => x.id === "focus-up")).toBeUndefined();
@@ -89,6 +89,16 @@ describe("Learning Signals", () => {
     const s = signals.find((x) => x.id === "plan-actual");
     expect(s?.tone).toBe("positive");
     expect(s?.description).toContain("125%");
+  });
+
+  it("planCoverageFull=false → 不生成 plan-actual 信号（计划分母可能缺失）", () => {
+    const signals = buildLearningSignals(
+      baseSnapshot({
+        coverage: { fullCoverage: true, comparisonAvailable: true, historyStartedAt: -1000, planCoverageFull: false, planCoverageStartedAt: 0 },
+      }),
+      CTX
+    );
+    expect(signals.find((x) => x.id === "plan-actual")).toBeUndefined();
   });
 
   it("计划不足 → 不生成 plan-actual", () => {
