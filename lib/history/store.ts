@@ -130,31 +130,49 @@ export async function setLearningHistoryCoverage(
   await txDone(tx);
 }
 
-/** 首次初始化：写入 historyStartedAt 等 coverage（幂等） */
+/** 首次初始化：写入 historyStartedAt 等 coverage（幂等）+ 老用户 marker 迁移（幂等） */
 export async function ensureLearningHistoryCoverage(): Promise<LearningHistoryCoverage> {
   const existing = await getLearningHistoryCoverage();
-  if (existing) return existing;
-  const coverage: LearningHistoryCoverage = {
-    schemaVersion: LEARNING_HISTORY_SCHEMA_VERSION,
-    historyStartedAt: Date.now(),
-    initializedAt: Date.now(),
-    focusBackfillCompleted: false,
-    backfilledFocusSessions: 0,
-  };
-  await setLearningHistoryCoverage(coverage);
-  return coverage;
+  if (!existing) {
+    const now = Date.now();
+    const coverage: LearningHistoryCoverage = {
+      schemaVersion: LEARNING_HISTORY_SCHEMA_VERSION,
+      historyStartedAt: now,
+      initializedAt: now,
+      focusBackfillCompleted: false,
+      backfilledFocusSessions: 0,
+      // 新用户：单条 + 批量 StudyBlock mutation 从一开始就完整记录
+      studyBlockBatchIntegrityStartedAt: now,
+    };
+    await setLearningHistoryCoverage(coverage);
+    return coverage;
+  }
+  // 老用户迁移：已有 coverage 缺 marker → 以当前时刻补齐（绝不回填旧 batch history）；
+  // 幂等：第二次 ensure 不得更新成新的 Date.now()
+  if (existing.studyBlockBatchIntegrityStartedAt === undefined) {
+    const normalized: LearningHistoryCoverage = {
+      ...existing,
+      studyBlockBatchIntegrityStartedAt: Date.now(),
+    };
+    await setLearningHistoryCoverage(normalized);
+    return normalized;
+  }
+  return existing;
 }
 
 /** 完全清空并重置（reset/restore 语义）：新 historyStartedAt，允许 Focus backfill */
 export async function resetLearningHistoryCoverage(): Promise<LearningHistoryCoverage> {
   await clearLearningHistoryStorage();
   resetDbHandle();
+  const now = Date.now();
   const coverage: LearningHistoryCoverage = {
     schemaVersion: LEARNING_HISTORY_SCHEMA_VERSION,
-    historyStartedAt: Date.now(),
-    initializedAt: Date.now(),
+    historyStartedAt: now,
+    initializedAt: now,
     focusBackfillCompleted: false,
     backfilledFocusSessions: 0,
+    // 数据已清空：新起点同样保证 batch integrity
+    studyBlockBatchIntegrityStartedAt: now,
   };
   await setLearningHistoryCoverage(coverage);
   return coverage;
@@ -164,12 +182,14 @@ export async function resetLearningHistoryCoverage(): Promise<LearningHistoryCov
 export async function clearLearningHistoryForUser(): Promise<void> {
   await clearLearningHistoryStorage();
   resetDbHandle();
+  const now = Date.now();
   await setLearningHistoryCoverage({
     schemaVersion: LEARNING_HISTORY_SCHEMA_VERSION,
-    historyStartedAt: Date.now(),
-    initializedAt: Date.now(),
+    historyStartedAt: now,
+    initializedAt: now,
     focusBackfillCompleted: true,
     backfilledFocusSessions: 0,
     focusBackfillDisabled: true,
+    studyBlockBatchIntegrityStartedAt: now,
   });
 }

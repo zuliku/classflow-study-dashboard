@@ -16,13 +16,20 @@ import { LearningTrendPoint } from "@/lib/analytics/types";
 const PLAN_COLOR = "#CDB9AB";
 const FOCUS_COLOR = "#627566";
 
-/** 学习趋势：计划 vs 实际专注（两组相邻 Bar；完成数仅 Tooltip） */
-export function LearningTrendChart({ points }: { points: LearningTrendPoint[] }) {
+/** 学习趋势：计划 vs 实际专注（两组相邻 Bar；完成数仅 Tooltip）。
+ *  planCoverageFull=false → 隐藏计划序列（避免把 marker 前的 0 解释成"没有计划"） */
+export function LearningTrendChart({
+  points,
+  planCoverageFull = true,
+}: {
+  points: LearningTrendPoint[];
+  planCoverageFull?: boolean;
+}) {
   const reducedMotion = useEffectiveReducedMotion();
   const data = points.map((p) => ({
     key: p.key,
     label: p.label,
-    计划: p.plannedMinutes,
+    计划: planCoverageFull ? p.plannedMinutes : undefined,
     实际专注: p.focusMinutes,
     completed: p.completedAssignments,
   }));
@@ -46,7 +53,9 @@ export function LearningTrendChart({ points }: { points: LearningTrendPoint[] })
               fontSize: "11px",
             }}
           />
-          <Bar dataKey="计划" fill={PLAN_COLOR} radius={[3, 3, 0, 0]} isAnimationActive={!reducedMotion} animationDuration={reducedMotion ? 0 : 400} />
+          {planCoverageFull && (
+            <Bar dataKey="计划" fill={PLAN_COLOR} radius={[3, 3, 0, 0]} isAnimationActive={!reducedMotion} animationDuration={reducedMotion ? 0 : 400} />
+          )}
           <Bar dataKey="实际专注" fill={FOCUS_COLOR} radius={[3, 3, 0, 0]} isAnimationActive={!reducedMotion} animationDuration={reducedMotion ? 0 : 400} />
         </BarChart>
       </ResponsiveContainer>

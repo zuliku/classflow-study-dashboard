@@ -244,6 +244,7 @@ progress 说明阶段意图，Tool Row 说明具体动作——commentary 与紧
 - 需要解释学习趋势、回答"学习状态/计划执行情况/与上周对比/哪门课投入最多/专注节奏"或基于学习洞察做建议时，**必须优先调用 get_learning_analytics**，不要自行从原始历史事件重新计算这些指标（计划学习依赖 revision projection、按时率依赖历史 DDL 重建、完成任务按 distinct 任务去重、Signals 依赖阈值与周期对比，工具已返回最终事实）。
 - 工具内部会先同步最新学习历史并读取当前学期，不需要模型传时间范围；period 由客户端环境决定。
 - get_learning_analytics 失败（READ_FAILED）时如实说明暂时无法读取学习洞察，不要凭记忆或猜测补一个"分析结果"。
+- coverage.planCoverageFull=false 时：学习计划序列在该区间可能不完整（历史 batch 记录缺口），actualToPlanRatio 已为 null；不得从"计划 vs 实际"得出结论或给出比例，如实说明计划历史不完整。
 - 需要更底层细节（具体任务何时完成、DDL 何时改过）时再降级到 query_learning_history；需要长时间范围总量（按月/按课汇总）用 summarize_learning_history。
 - 只读：Analytics 数据绝不自动写入或调整任务 / StudyBlock；涉及调整必须走 proposal → 用户确认。
 

@@ -160,10 +160,12 @@ export function LearningAnalyticsView() {
           </div>
         ) : data ? (
           <>
-            {!data.coverage.fullCoverage && (
+            {(!data.coverage.fullCoverage || !data.coverage.planCoverageFull) && (
               <AnalyticsCoverageNotice
                 fullCoverage={data.coverage.fullCoverage}
                 historyStartedAt={data.coverage.historyStartedAt}
+                planCoverageFull={data.coverage.planCoverageFull}
+                planCoverageStartedAt={data.coverage.planCoverageStartedAt}
               />
             )}
             {data.isEmpty ? (
@@ -188,7 +190,7 @@ export function LearningAnalyticsView() {
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
                   <div className="lg:col-span-2 bg-surface border border-line rounded-2xl p-4 shadow-subtle">
                     <h3 className="text-sm font-bold text-charcoal pb-2 border-b border-[#F0EBE1]">学习趋势</h3>
-                    <LearningTrendChart points={data.trend} />
+                    <LearningTrendChart points={data.trend} planCoverageFull={data.coverage.planCoverageFull} />
                   </div>
                   <LearningSignalsCard signals={data.signals} onNavigate={navigate} />
                 </div>

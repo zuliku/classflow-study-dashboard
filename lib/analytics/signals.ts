@@ -42,8 +42,8 @@ export function buildLearningSignals(
     }
   }
 
-  // 2. 计划 / 实际
-  if (plannedMinutes >= 120 && overview.actualToPlanRatio !== null) {
+  // 2. 计划 / 实际（计划序列不完整时不得输出 ratio 信号）
+  if (snapshot.coverage.planCoverageFull && plannedMinutes >= 120 && overview.actualToPlanRatio !== null) {
     signals.push({
       id: "plan-actual",
       tone: overview.actualToPlanRatio >= 100 ? "positive" : "neutral",

@@ -213,4 +213,12 @@ export interface LearningHistoryCoverage {
   backfilledFocusSessions: number;
   /** 用户主动清空 History 后为 true：不再回填旧 Focus */
   focusBackfillDisabled?: boolean;
+  /**
+   * StudyBlock 批量（addStudyBlocksBatch / deleteStudyBlocksBatch）History 完整记录起点。
+   * 语义：从这个时间开始，StudyBlock single + batch mutations 都有完整 recording。
+   * 老用户首次升级时以 Date.now() 补齐（幂等，绝不回填旧 batch）；
+   * 新用户初始化 / reset / 手动 clear 时 = 当时的 Date.now()。
+   * meta payload evolution：不 bump DB_VERSION / schemaVersion。
+   */
+  studyBlockBatchIntegrityStartedAt?: number;
 }

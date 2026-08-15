@@ -53,6 +53,8 @@ export function buildOverviewFacts(input: {
   completedAssignments: number;
   plannedMinutes: number;
   execution: ExecutionAnalytics;
+  /** false → 计划序列不完整，不输出 actualToPlanRatio（分母可能缺失） */
+  planCoverageFull?: boolean;
 }): LearningAnalyticsSnapshot["overview"] {
   const { period, focusMinutes, previousFocusMinutes, completedAssignments, plannedMinutes, execution } = input;
   const focusDeltaPercent =
@@ -66,7 +68,10 @@ export function buildOverviewFacts(input: {
     completedAssignments,
     plannedMinutes,
     plannedLabel: formatDurationLabel(plannedMinutes),
-    actualToPlanRatio: plannedMinutes > 0 ? Math.round((focusMinutes / plannedMinutes) * 100) : null,
+    actualToPlanRatio:
+      input.planCoverageFull !== false && plannedMinutes > 0
+        ? Math.round((focusMinutes / plannedMinutes) * 100)
+        : null,
     onTimeCount: execution.onTime,
     onTimeEligible: execution.onTimeEligible,
     onTimeRate: execution.onTimeRate,
@@ -257,6 +262,13 @@ export async function buildLearningAnalyticsSnapshot(
   const comparisonAvailableFinal =
     comparisonAvailable && (previousFocus.length > 0 || previousCompletions.length > 0);
 
+  // ---- Coverage（含 plan-specific）----
+  const planCoverageStartedAt = Math.max(
+    historyStartedAt,
+    coverage?.studyBlockBatchIntegrityStartedAt ?? historyStartedAt
+  );
+  const planCoverageFull = currentFrom >= planCoverageStartedAt;
+
   // ---- Overview ----
   const overview = buildOverviewFacts({
     period,
@@ -265,6 +277,8 @@ export async function buildLearningAnalyticsSnapshot(
     completedAssignments: execution.uniqueCompletedAssignments,
     plannedMinutes,
     execution,
+    // 计划分母可能缺失（batch history 在该区间不完整）→ 不输出伪精确 ratio
+    planCoverageFull,
   });
 
   const isEmpty =
@@ -279,6 +293,8 @@ export async function buildLearningAnalyticsSnapshot(
       fullCoverage,
       comparisonAvailable: comparisonAvailableFinal,
       historyStartedAt,
+      planCoverageFull,
+      planCoverageStartedAt,
     },
     overview,
     trend,

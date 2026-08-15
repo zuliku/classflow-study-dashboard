@@ -21,6 +21,8 @@ export interface WeeklyReview {
   coverage: {
     fullCoverage: boolean;
     comparisonAvailable: boolean;
+    /** StudyBlock 计划序列在该 range 内是否完整（不完整 → 不输出 Plan ratio） */
+    planCoverageFull: boolean;
   };
   headline: {
     focusMinutes: number;
@@ -63,6 +65,7 @@ export function buildWeeklyReview(snapshot: LearningAnalyticsSnapshot): WeeklyRe
     coverage: {
       fullCoverage: coverage.fullCoverage,
       comparisonAvailable: coverage.comparisonAvailable,
+      planCoverageFull: coverage.planCoverageFull,
     },
     headline: {
       focusMinutes: overview.actualFocusMinutes,
@@ -119,13 +122,18 @@ export function weeklyReviewCopy(review: WeeklyReview): WeeklyReviewCopy {
   }
 
   const planActualLines: string[] = [];
-  if (headline.plannedMinutes > 0) {
-    planActualLines.push(`计划 ${headline.plannedLabel}`);
-    if (headline.actualToPlanRatio !== null) {
-      planActualLines.push(`实际专注约为计划时长的 ${headline.actualToPlanRatio}%`);
+  if (headline.plannedMinutes > 0 || review.coverage.fullCoverage) {
+    if (!review.coverage.planCoverageFull) {
+      // 计划序列在该区间不完整：不输出不可靠 ratio
+      planActualLines.push("学习计划历史在该区间不完整，暂不计算计划与实际比例。");
+    } else if (headline.plannedMinutes > 0) {
+      planActualLines.push(`计划 ${headline.plannedLabel}`);
+      if (headline.actualToPlanRatio !== null) {
+        planActualLines.push(`实际专注约为计划时长的 ${headline.actualToPlanRatio}%`);
+      }
+    } else if (headline.focusMinutes > 0) {
+      planActualLines.push("本周暂无已到达开始时间的有效计划");
     }
-  } else if (headline.focusMinutes > 0) {
-    planActualLines.push("本周暂无已到达开始时间的有效计划");
   }
 
   const investmentLines: string[] = [];

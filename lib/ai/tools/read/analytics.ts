@@ -60,6 +60,8 @@ function toModelFriendlyOutput(snapshot: Awaited<ReturnType<typeof buildLearning
       fullCoverage: snapshot.coverage.fullCoverage,
       comparisonAvailable: snapshot.coverage.comparisonAvailable,
       historyStartedAt: snapshot.coverage.historyStartedAt,
+      planCoverageFull: snapshot.coverage.planCoverageFull,
+      planCoverageStartedAt: snapshot.coverage.planCoverageStartedAt,
     },
     overview: snapshot.overview,
     trend: snapshot.trend,

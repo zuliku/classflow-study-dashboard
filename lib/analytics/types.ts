@@ -89,6 +89,10 @@ export interface LearningAnalyticsSnapshot {
     fullCoverage: boolean;
     comparisonAvailable: boolean;
     historyStartedAt: number;
+    /** StudyBlock 计划序列在该 range 内是否完整（≥ planCoverageStartedAt 才 true） */
+    planCoverageFull: boolean;
+    /** max(historyStartedAt, studyBlockBatchIntegrityStartedAt) */
+    planCoverageStartedAt: number;
   };
   overview: AnalyticsOverview;
   trend: LearningTrendPoint[];
