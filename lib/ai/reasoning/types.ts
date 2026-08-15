@@ -3,6 +3,12 @@
  * reasoning = 模型推理投入；responsePreference = 最终回答表达深度/篇幅。
  * `default` = 不主动覆盖 provider/model 默认推理行为（非 adaptive）。
  * `max`：DeepSeek V4 官方支持的最高档（reasoning_effort=max），不折叠进 high。
+ *
+ * requested vs effective：
+ * - Store 保存 requested（用户 preference，跨模型切换不重置）；
+ * - 实际生效的是 effective = resolveEffectiveReasoningEffort() 结合当前模型
+ *   capability 归一后的值（UI 显示 / Turn Snapshot 发送 / Server 二次校验）。
+ * requested 不在当前模型 supportedEfforts 中 → effective = "default"。
  */
 export type KiroReasoningEffort = "default" | "low" | "medium" | "high" | "max";
 

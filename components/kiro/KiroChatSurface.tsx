@@ -16,6 +16,7 @@ import { useKiroComputerRuntimeStore } from "@/store/useKiroComputerRuntimeStore
 import { ComputerApprovalDialog } from "@/components/kiro/computer/ComputerApprovalDialog";
 import { KiroChangeReviewDialog } from "@/components/kiro/computer/KiroChangeReviewDialog";
 import { getModelCapabilities } from "@/lib/ai/providers/capabilities";
+import { resolveEffectiveReasoningEffort } from "@/lib/ai/reasoning/effective";
 import { getKiroOutputFontSize } from "@/lib/ai/ui/typography";
 
 /**
@@ -100,6 +101,12 @@ export function KiroChatSurface({ variant }: { variant: "workspace" | "sidecar" 
   const reasoningCapability = useMemo(
     () => getModelCapabilities({ provider, model, custom }).reasoning,
     [provider, model, custom]
+  );
+  // Store 保存 requested preference；Composer 只展示 effective（当前模型 capability 归一后）。
+  // 例如 DeepSeek requested=low → 显示「默认」；Custom requested=max → 显示「默认」。
+  const effectiveReasoningEffort = useMemo(
+    () => resolveEffectiveReasoningEffort({ provider, model, custom, requested: reasoningEffort }),
+    [provider, model, custom, reasoningEffort]
   );
   const workspace = workspaces.find((w) => w.id === activeWorkspaceId) ?? null;
   const workspaceIsSandbox =
@@ -193,7 +200,7 @@ export function KiroChatSurface({ variant }: { variant: "workspace" | "sidecar" 
         agentMode={agentMode}
         onSetAgentMode={setAgentMode}
         reasoningCapability={reasoningCapability}
-        reasoningEffort={reasoningEffort}
+        reasoningEffort={effectiveReasoningEffort}
         onSetReasoningEffort={setReasoningEffort}
         workspace={workspace}
         workspaceIsSandbox={workspaceIsSandbox}

@@ -5,6 +5,7 @@ import {
   resolveReasoningProviderOptions,
   shouldOmitToolChoice,
 } from "@/lib/ai/reasoning/providerOptions";
+import { resolveEffectiveReasoningEffort } from "@/lib/ai/reasoning/effective";
 import { FIXED_REASONING } from "@/lib/ai/reasoning/types";
 import { AIModelDefinition } from "@/lib/ai/providers/types";
 import { DEEPSEEK_MODELS, deepSeekTransformRequestBody } from "@/lib/ai/providers/deepSeek";
@@ -265,5 +266,44 @@ describe("Custom OpenAI passthrough（validateAIChatBody 白名单）", () => {
     expect(parsed.ok).toBe(true);
     if (!parsed.ok) return;
     expect(parsed.reasoningEffort).toBe("default");
+  });
+});
+
+describe("resolveEffectiveReasoningEffort（requested → effective，UI/Turn Snapshot/Server 一致）", () => {
+  const customEnabled = { providerName: "x", baseURL: "https://x.example", model: "my-model", reasoningEffort: true };
+
+  it("1. DeepSeek requested=max → max", () => {
+    expect(resolveEffectiveReasoningEffort({ provider: "deepseek", model: "deepseek-v4-flash", requested: "max" })).toBe("max");
+    expect(resolveEffectiveReasoningEffort({ provider: "deepseek", model: "deepseek-v4-pro", requested: "high" })).toBe("high");
+  });
+
+  it("2. DeepSeek requested=low → default（不制造假档位）", () => {
+    expect(resolveEffectiveReasoningEffort({ provider: "deepseek", model: "deepseek-v4-pro", requested: "low" })).toBe("default");
+    expect(resolveEffectiveReasoningEffort({ provider: "deepseek", model: "deepseek-v4-flash", requested: "medium" })).toBe("default");
+  });
+
+  it("3. OpenCode Go fixed requested=high → default", () => {
+    expect(resolveEffectiveReasoningEffort({ provider: "opencode-go", model: "deepseek-v4-flash", requested: "high" })).toBe("default");
+    expect(resolveEffectiveReasoningEffort({ provider: "opencode-go", model: "grok-4.5", requested: "max" })).toBe("default");
+  });
+
+  it("4. Custom reasoningEffort=true requested=high → high", () => {
+    expect(resolveEffectiveReasoningEffort({ provider: "custom-openai", model: "my-model", custom: customEnabled, requested: "high" })).toBe("high");
+    expect(resolveEffectiveReasoningEffort({ provider: "custom-openai", model: "my-model", custom: customEnabled, requested: "low" })).toBe("low");
+  });
+
+  it("5. Custom reasoningEffort=true requested=max → default（max 不在 effort mechanism 档位）", () => {
+    expect(resolveEffectiveReasoningEffort({ provider: "custom-openai", model: "my-model", custom: customEnabled, requested: "max" })).toBe("default");
+  });
+
+  it("Custom reasoningEffort 未开启（fixed）requested=high → default", () => {
+    expect(
+      resolveEffectiveReasoningEffort({
+        provider: "custom-openai",
+        model: "my-model",
+        custom: { providerName: "x", baseURL: "https://x.example", model: "my-model" },
+        requested: "high",
+      })
+    ).toBe("default");
   });
 });

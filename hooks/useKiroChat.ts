@@ -47,6 +47,7 @@ import { normalizeWebPdfVisionModel } from "@/lib/ai/web/vision/models";
 import { KiroWebSearchResult } from "@/lib/ai/web/types";
 import { normalizeAIError, AIError } from "@/lib/ai/errors";
 import { buildBaseContext } from "@/lib/ai/context/buildBaseContext";
+import { resolveEffectiveReasoningEffort } from "@/lib/ai/reasoning/effective";
 import { resolveContextRefs, refsForPrompt, dedupeContextRefs } from "@/lib/ai/context/contextSelection";
 import { KiroContextRef } from "@/lib/ai/context/types";
 import { executeKiroReadTool, ReadToolResult } from "@/lib/ai/tools/read/executor";
@@ -637,8 +638,15 @@ export function useKiroChat({
         scope: m.scope,
         scopeId: m.scopeId,
       })),
-      // Kiro Computer Agent V1：推理投入冻结（capability-driven；不支持时 server 归一为 default）
-      reasoningEffort,
+      // Kiro Computer Agent V1：推理投入冻结——Store 保存 requested preference；
+      // 发送瞬间按当前 provider/model/custom capability 归一为 effective
+      // （与 UI 显示值一致；Server 仍会二次 normalize，此为 trust boundary 之外的防御）。
+      reasoningEffort: resolveEffectiveReasoningEffort({
+        provider,
+        model,
+        custom,
+        requested: reasoningEffort,
+      }),
       // Computer Turn Snapshot（冻结意图；只含逻辑元数据，live grants/rules 不入请求）
       computerSnapshot: buildComputerSnapshot(),
     };

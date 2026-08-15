@@ -79,6 +79,10 @@ export interface AISettings {
   custom: AICustomConfig;
   /** Kiro 长期学习记忆开关（关闭不读不写，但保留已有记忆） */
   memoryEnabled: boolean;
-  /** 当前推理投入（capability-driven；不支持时 UI 显示固定态，值恒为 default） */
+  /**
+   * 用户请求的推理投入（requested preference）：跨模型切换保留，不随模型变化重置。
+   * 实际生效的是 effective（resolveEffectiveReasoningEffort 结合当前 capability 归一）；
+   * 当前模型不支持 requested 时 effective 为 default，raw Store 值不需要改为 default。
+   */
   reasoningEffort: KiroReasoningEffort;
 }

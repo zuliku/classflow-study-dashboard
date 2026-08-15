@@ -14,6 +14,7 @@ import { SettingsToggle, SettingsSelect, SettingsSegmentedControl, SettingsButto
 import { KiroMemorySettings } from "@/components/settings/KiroMemorySettings";
 import { useKiroPreferencesStore } from "@/store/useKiroPreferencesStore";
 import { getModelCapabilities } from "@/lib/ai/providers/capabilities";
+import { resolveEffectiveReasoningEffort } from "@/lib/ai/reasoning/effective";
 import { KiroReasoningEffort } from "@/lib/ai/reasoning/types";
 import { KiroOutputTextSize } from "@/lib/ai/ui/typography";
 import { KiroResponsePreference } from "@/lib/ai/responsePreference";
@@ -117,8 +118,15 @@ export function KiroAISettings() {
   const isCustom = provider === "custom-openai";
   // 当前模型不在 Catalog（已下线/远端不可用）：提示重新选择，不自动覆盖
   const modelUnavailable = !isCustom && !!model && !models.some((m) => m.id === model);
-  // Reasoning：capability-driven（与 Composer 同一事实来源 useAISettingsStore）
+  // Reasoning：capability-driven（与 Composer 同一事实来源 useAISettingsStore）。
+  // Store 保存 requested preference（跨模型切换保留）；UI 显示 effective（当前模型 capability 归一）。
   const reasoningCapability = getModelCapabilities({ provider, model, custom }).reasoning;
+  const effectiveReasoningEffort = resolveEffectiveReasoningEffort({
+    provider,
+    model,
+    custom,
+    requested: reasoningEffort,
+  });
 
   const handleProviderChange = (p: AIProviderId) => {
     setProvider(p);
@@ -315,7 +323,7 @@ export function KiroAISettings() {
           >
             {reasoningCapability.adjustable ? (
               <SettingsSegmentedControl<KiroReasoningEffort>
-                value={reasoningEffort}
+                value={effectiveReasoningEffort}
                 onChange={setReasoningEffort}
                 options={reasoningCapability.supportedEfforts.map((effort) => ({
                   value: effort,
