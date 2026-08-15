@@ -12,6 +12,31 @@ import { cn, cardKeyHandler } from "@/lib/utils";
 /** Overview「临近 DDL」每页最多 3 条（右栏 Hero 空间内充分利用，分页摘要定位） */
 const UPCOMING_DDL_PAGE_SIZE = 3;
 
+/**
+ * Compact Calendar Date Anchor（Overview Upcoming DDL V1）：
+ * 纯视觉 temporal orientation —— 月份 / 日期 / 星期，来自同一个 parseLocalDDL Date。
+ * decorative：不进入 tab order、无点击语义、无独立 aria-label；a11y 由 Card 组合 aria-label 承担。
+ */
+function DDLDateTile({ date, taskId }: { date: Date; taskId: string }) {
+  return (
+    <div
+      aria-hidden="true"
+      data-testid={`upcoming-ddl-date-${taskId}`}
+      className="shrink-0 w-[46px] h-[56px] rounded-xl border border-line bg-surface flex flex-col items-center justify-center leading-none"
+    >
+      <span className="text-[9px] font-semibold text-sandrift">
+        {format(date, "M月")}
+      </span>
+      <span className="text-[17px] font-bold tabular-nums text-warning leading-none mt-1">
+        {format(date, "d")}
+      </span>
+      <span className="text-[9px] font-semibold text-satin-grey mt-1">
+        {format(date, "EEE", { locale: zhCN })}
+      </span>
+    </div>
+  );
+}
+
 export function UpcomingDDL() {
   const { assignments, courses, setSelectedAssignmentId, setActiveTab, preferences } =
     useAppStore();
@@ -137,29 +162,38 @@ export function UpcomingDDL() {
                 role="button"
                 tabIndex={0}
                 onKeyDown={cardKeyHandler(() => setSelectedAssignmentId(task.id))}
+                aria-label={`${task.title}，${course?.name || "通用课题"}，${format(ddlDate, "M月d日 EEE", { locale: zhCN })} ${format(ddlDate, "HH:mm")}，${relativeTime}`}
                 className={cn(
-                  "group flex flex-col justify-center p-2.5 rounded-lg border border-line bg-[#F7F5F5]",
+                  "group flex items-center gap-3 p-2.5 rounded-lg border border-line bg-[#F7F5F5]",
                   "cursor-pointer transition-colors duration-[var(--motion-fast)] ease-[var(--ease-standard)]",
                   "hover:bg-alabaster hover:border-[#CDB9AB]",
                   fillAvailable && "flex-1 min-h-[72px]"
                 )}
               >
-                <div className="flex items-center justify-between gap-2 min-w-0">
-                  <span className="text-[11px] text-sandrift tabular-nums shrink-0">
-                    {format(ddlDate, "M月d日 · HH:mm")}
-                  </span>
-                  <span className="text-[11px] font-bold text-danger/90 shrink-0 truncate">
-                    {relativeTime}
-                  </span>
+                {/* 左侧 Calendar Date Anchor（decorative；日期事实由同一 ddlDate 承担） */}
+                <DDLDateTile date={ddlDate} taskId={task.id} />
+
+                {/* 中间：Title + Course + Priority（min-w-0 防止长标题推走右侧） */}
+                <div className="min-w-0 flex-1">
+                  <h4 className="text-[13px] font-bold text-charcoal truncate group-hover:text-black leading-5">
+                    {task.title}
+                  </h4>
+                  <div className="flex items-center gap-1.5 min-w-0 mt-0.5">
+                    <span className="text-[11px] text-satin-grey truncate">
+                      {course?.name || "通用课题"}
+                    </span>
+                    {getPriorityMark(task.priority)}
+                  </div>
                 </div>
-                <h4 className="text-[13px] font-bold text-charcoal truncate group-hover:text-black mt-0.5 leading-5">
-                  {task.title}
-                </h4>
-                <div className="flex items-center gap-1.5 min-w-0 mt-0.5">
-                  <span className="text-[11px] text-satin-grey truncate">
-                    {course?.name || "通用课题"}
-                  </span>
-                  {getPriorityMark(task.priority)}
+
+                {/* 右侧：relative urgency（主）+ 精确时间（次） */}
+                <div className="shrink-0 text-right">
+                  <div className="text-[11px] font-bold text-danger/90 truncate">
+                    {relativeTime}
+                  </div>
+                  <div className="text-[10px] text-sandrift tabular-nums mt-0.5">
+                    {format(ddlDate, "HH:mm")}
+                  </div>
                 </div>
               </div>
             );
