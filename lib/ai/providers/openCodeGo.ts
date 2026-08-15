@@ -28,7 +28,27 @@ export const OPENCODE_MODELS: AIModelDefinition[] = [
   // ---- OpenAI Responses（官方 endpoint：/v1/responses → @ai-sdk/openai）----
   // Phase 3.1 正式接入。保守能力声明：vision/fileParts 未经 OpenCode Go proxy 实测不开。
   { id: "grok-4.5", name: "Grok 4.5", provider: "opencode-go", vendor: "xai", transport: "openai-responses", capabilities: { streaming: true, tools: true, vision: false, fileParts: false } },
-  { id: "gpt-5.6-luna", name: "GPT 5.6 Luna", provider: "opencode-go", vendor: "openai", transport: "openai-responses", capabilities: { streaming: true, tools: true, vision: false, fileParts: false } },
+  {
+    id: "gpt-5.6-luna",
+    name: "GPT 5.6 Luna",
+    provider: "opencode-go",
+    vendor: "openai",
+    transport: "openai-responses",
+    capabilities: {
+      streaming: true,
+      tools: true,
+      vision: false,
+      fileParts: false,
+      // Phase 3.2A：GPT 5.6 Luna 是首个经过验证的 OpenCode Go adjustable reasoning 模型。
+      // mechanism=openai-responses-effort（providerOptions.openai.reasoningEffort → reasoning.effort）。
+      // max 未经 live 验证（无 OPENCODE_GO_TEST_API_KEY）→ 不暴露；只保留已验证档位。
+      reasoning: {
+        adjustable: true,
+        supportedEfforts: ["default", "low", "medium", "high"],
+        mechanism: "openai-responses-effort",
+      },
+    },
+  },
   // ---- Anthropic Messages（官方 endpoint：/v1/messages）----
   // V1 保守能力声明：streaming + tools 为强要求；vision/fileParts 未经实测不开
   { id: "minimax-m3", name: "MiniMax M3", provider: "opencode-go", vendor: "minimax", transport: "anthropic-messages", capabilities: { streaming: true, tools: true, vision: false, fileParts: false } },

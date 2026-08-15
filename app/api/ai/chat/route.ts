@@ -21,7 +21,7 @@ import { logProviderError } from "@/lib/ai/providerLog";
 import { buildKiroResponsePreferenceContext } from "@/lib/ai/responsePreference";
 import { resolveLanguageModel, resolveModelDefinition } from "@/lib/ai/providers/resolver";
 import { validateAIChatBody, createTimeoutController } from "@/lib/ai/server";
-import { resolveReasoningProviderOptions, shouldOmitToolChoice } from "@/lib/ai/reasoning/providerOptions";
+import { resolveReasoningProviderOptionsEnvelope, shouldOmitToolChoice } from "@/lib/ai/reasoning/providerOptions";
 import { normalizePromptContextRefs } from "@/lib/ai/context/contextSelection";
 import {
   normalizeWorkspaceInstructionsForPrompt,
@@ -124,7 +124,7 @@ export async function POST(req: NextRequest) {
     model: parsed.model,
     custom: parsed.customConfig,
   });
-  const reasoningProviderOptions = resolveReasoningProviderOptions({
+  const reasoningProviderOptionsEnvelope = resolveReasoningProviderOptionsEnvelope({
     definition: modelDefinition,
     custom: parsed.customConfig,
     effort: parsed.reasoningEffort,
@@ -419,10 +419,9 @@ export async function POST(req: NextRequest) {
         };
       })(),
       // Reasoning effort：verified provider options（default/不支持 → 不发送，保持 provider 默认）。
-      // key 与 createOpenAICompatible/createAnthropic 的 name 一致（"classflow-kiro"）。
-      providerOptions: reasoningProviderOptions
-        ? ({ "classflow-kiro": reasoningProviderOptions } as Parameters<typeof streamText>[0]["providerOptions"])
-        : undefined,
+      // envelope 按 adapter 选择正确 key：chat/messages → "classflow-kiro"；
+      // openai-responses → "openai"（@ai-sdk/openai 4.0.42 Responses 固定读取该 key）。
+      providerOptions: reasoningProviderOptionsEnvelope as Parameters<typeof streamText>[0]["providerOptions"],
       // Task 14：Server execute tool 允许有限多步自动执行；客户端工具调用时 loop 自然暂停等 Client Result。
       // V4.1 stopWhen：business-step 上限（boundary 不消耗）——step 数达到上限时，
       // 若最后一步是 begin_final_answer（boundary），必须允许下一步 Final Answer 生成。

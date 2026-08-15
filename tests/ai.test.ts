@@ -151,7 +151,9 @@ describe("OpenCode Phase 3.1：openai-responses registry 与过滤一致性", ()
     expect(def?.transport).toBe("openai-responses");
     expect(def?.vendor).toBe("openai"); // OpenAI Blossom Logo（浅色主题用黑色版）
     expect(def?.name).toBe("GPT 5.6 Luna");
-    expect(def?.capabilities.reasoning).toBeUndefined();
+    // Phase 3.2A：Luna 是唯一 verified OpenCode adjustable reasoning 模型
+    expect(def?.capabilities.reasoning?.adjustable).toBe(true);
+    expect(def?.capabilities.reasoning?.mechanism).toBe("openai-responses-effort");
   });
 
   it("4. filterRemoteGoModels：glm-5.3 / minimax-m3 / grok-4.5 / gpt-5.6-luna 保留各自 transport；unknown 过滤", () => {

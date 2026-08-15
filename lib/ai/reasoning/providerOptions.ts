@@ -76,6 +76,12 @@ export function resolveReasoningProviderOptions(input: {
         reasoningEffort: effort === "max" ? "max" : "high",
       };
     }
+    case "openai-responses-effort": {
+      // @ai-sdk/openai Responses：providerOptions.openai.reasoningEffort
+      // → request body reasoning.effort（4.0.42 schema：string，无 enum 限制）。
+      // effort 已 normalize（仅 capability 声明的档位到达这里；default 已提前 return）。
+      return { reasoningEffort: effort };
+    }
     case "anthropic-effort":
       // 当前无已验证的 anthropic-messages 可调模型 → 保守不产出
       return undefined;
@@ -104,4 +110,25 @@ export function shouldOmitToolChoice(input: {
     capability.mechanism === "deepseek-thinking" &&
     (effort === "high" || effort === "max")
   );
+}
+
+/**
+ * providerOptions envelope（按 adapter 返回正确 key）：
+ * - openai-chat（@ai-sdk/openai-compatible）/ anthropic-messages（@ai-sdk/anthropic）：
+ *   读取 name 一致的 key "classflow-kiro"
+ * - openai-responses（@ai-sdk/openai 4.0.42 实测）：Responses LanguageModel 固定读取
+ *   providerOptions["openai"]（config.provider 含 azure 时为 "azure"），不读 name。
+ * 返回 undefined = 无 verified reasoning options（default / 不可调）。
+ */
+export function resolveReasoningProviderOptionsEnvelope(input: {
+  definition: AIModelDefinition | null;
+  custom?: AICustomConfig;
+  effort: KiroReasoningEffort;
+}): Record<string, unknown> | undefined {
+  const options = resolveReasoningProviderOptions(input);
+  if (!options) return undefined;
+  if (input.definition?.transport === "openai-responses") {
+    return { openai: options };
+  }
+  return { "classflow-kiro": options };
 }

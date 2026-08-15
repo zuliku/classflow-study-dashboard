@@ -3,12 +3,14 @@ import {
   getReasoningCapability,
   normalizeReasoningEffort,
   resolveReasoningProviderOptions,
+  resolveReasoningProviderOptionsEnvelope,
   shouldOmitToolChoice,
 } from "@/lib/ai/reasoning/providerOptions";
 import { resolveEffectiveReasoningEffort } from "@/lib/ai/reasoning/effective";
 import { FIXED_REASONING } from "@/lib/ai/reasoning/types";
 import { AIModelDefinition } from "@/lib/ai/providers/types";
 import { DEEPSEEK_MODELS, deepSeekTransformRequestBody } from "@/lib/ai/providers/deepSeek";
+import { OPENCODE_MODELS } from "@/lib/ai/providers/openCodeGo";
 import { validateAIChatBody } from "@/lib/ai/server";
 
 const adjustableDef: AIModelDefinition = {
@@ -305,5 +307,70 @@ describe("resolveEffectiveReasoningEffort（requested → effective，UI/Turn Sn
         requested: "high",
       })
     ).toBe("default");
+  });
+});
+
+describe("GPT 5.6 Luna（openai-responses-effort，Phase 3.2A）", () => {
+  const lunaDef = OPENCODE_MODELS.find((m) => m.id === "gpt-5.6-luna")!;
+  const grokDef = OPENCODE_MODELS.find((m) => m.id === "grok-4.5")!;
+
+  it("1. GPT Luna capability：adjustable=true", () => {
+    const cap = getReasoningCapability(lunaDef);
+    expect(cap.adjustable).toBe(true);
+    expect(cap.mechanism).toBe("openai-responses-effort");
+  });
+
+  it("2. supportedEfforts 只含 verified 档位（default/low/medium/high；max 未 live 验证不暴露）", () => {
+    const cap = getReasoningCapability(lunaDef);
+    expect(cap.supportedEfforts).toEqual(["default", "low", "medium", "high"]);
+  });
+
+  it("3. default → provider options undefined", () => {
+    expect(resolveReasoningProviderOptions({ definition: lunaDef, effort: "default" })).toBeUndefined();
+    expect(resolveReasoningProviderOptionsEnvelope({ definition: lunaDef, effort: "default" })).toBeUndefined();
+  });
+
+  it("4. low → { reasoningEffort: low }", () => {
+    expect(resolveReasoningProviderOptions({ definition: lunaDef, effort: "low" })).toEqual({ reasoningEffort: "low" });
+  });
+
+  it("5. high → { reasoningEffort: high }（max 未验证，不写成功测试）", () => {
+    expect(resolveReasoningProviderOptions({ definition: lunaDef, effort: "high" })).toEqual({ reasoningEffort: "high" });
+    expect(resolveReasoningProviderOptions({ definition: lunaDef, effort: "max" })).toBeUndefined();
+  });
+
+  it("envelope：Responses → { openai: ... }（4.0.42 固定读取 openai key）", () => {
+    expect(resolveReasoningProviderOptionsEnvelope({ definition: lunaDef, effort: "high" })).toEqual({
+      openai: { reasoningEffort: "high" },
+    });
+    // 非 Responses（chat/messages adapter）→ classflow-kiro
+    expect(
+      resolveReasoningProviderOptionsEnvelope({
+        definition: null,
+        custom: { providerName: "x", baseURL: "https://x.example", model: "m", reasoningEffort: true },
+        effort: "high",
+      })
+    ).toEqual({ "classflow-kiro": { reasoningEffort: "high" } });
+  });
+
+  it("7. Grok 4.5 仍 fixed（transport 相同 ≠ capability 相同）", () => {
+    const cap = getReasoningCapability(grokDef);
+    expect(cap.adjustable).toBe(false);
+    expect(cap.supportedEfforts).toEqual(["default"]);
+    expect(resolveReasoningProviderOptions({ definition: grokDef, effort: "high" })).toBeUndefined();
+    expect(resolveReasoningProviderOptionsEnvelope({ definition: grokDef, effort: "high" })).toBeUndefined();
+  });
+
+  it("8. OpenCode Go DeepSeek aliases 仍 fixed（不因名字复用 DeepSeek official capability）", () => {
+    for (const id of ["deepseek-v4-flash", "deepseek-v4-pro"]) {
+      const def = OPENCODE_MODELS.find((m) => m.id === id)!;
+      expect(getReasoningCapability(def).adjustable, id).toBe(false);
+    }
+  });
+
+  it("effective：Luna requested=high → high；切 Grok → default；切回仍按 requested 归一", () => {
+    expect(resolveEffectiveReasoningEffort({ provider: "opencode-go", model: "gpt-5.6-luna", requested: "high" })).toBe("high");
+    expect(resolveEffectiveReasoningEffort({ provider: "opencode-go", model: "grok-4.5", requested: "high" })).toBe("default");
+    expect(resolveEffectiveReasoningEffort({ provider: "opencode-go", model: "gpt-5.6-luna", requested: "max" })).toBe("default");
   });
 });

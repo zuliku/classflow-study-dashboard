@@ -21,6 +21,7 @@ export interface ReasoningCapability {
     | "anthropic-effort"
     | "thinking-budget"
     | "deepseek-thinking"
+    | "openai-responses-effort"
     | "fixed";
 }
 
