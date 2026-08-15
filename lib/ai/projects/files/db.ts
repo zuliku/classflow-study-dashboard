@@ -137,6 +137,9 @@ export async function listAllProjectFileStorageKeys(): Promise<string[]> {
 /**
  * 删除 Project：同一 kiro transaction 内删 Project + unassign conversations + 删 project-files metadata；
  * 收集 storageKey，transaction 成功后 best-effort 删 Blob（classflow-files 是另一 DB，无法跨库原子）。
+ *
+ * V1.3A.1 修复：files 删除必须通过 projectId index 限定目标 Project（绝不全表 cursor 无条件删除，
+ * 否则删除 A 会连带删除 B/C 的 Project Files metadata 与 Blob）。
  */
 export async function deleteProjectWithFilesAndUnassignConversations(id: string): Promise<void> {
   const db = await openKiroDB();
@@ -159,13 +162,16 @@ export async function deleteProjectWithFilesAndUnassignConversations(id: string)
     };
     convCursor.onerror = () => reject(convCursor.error);
 
+    // projectId index scoped：只遍历目标 Project 的文件（其它 Project 完全不访问）
     const filesStore = t.objectStore(KIRO_PROJECT_FILES_STORE);
-    const filesCursor = filesStore.openCursor();
+    const filesIndex = filesStore.index("projectId");
+    const filesCursor = filesIndex.openCursor(IDBKeyRange.only(id));
     filesCursor.onsuccess = () => {
       const cursor = filesCursor.result;
       if (!cursor) return;
       const value = cursor.value as KiroProjectFileRecord | undefined;
-      if (value) {
+      // index 限定 + 值级校验（双保险；绝不触碰其它 Project 文件）
+      if (value && value.projectId === id) {
         if (value.storageKey) storageKeysToDelete.push(value.storageKey);
         cursor.delete();
       }

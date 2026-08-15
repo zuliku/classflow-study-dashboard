@@ -14,6 +14,7 @@ import {
 } from "@/lib/ai/storage/kiroDb";
 import {
   createKiroProject,
+  getKiroProject,
   deleteKiroProjectAndUnassignConversations,
 } from "@/lib/ai/projects/db";
 import {
@@ -136,10 +137,11 @@ describe("Project File DB", () => {
     ).rejects.toThrow("PROJECT_FILE_LIMIT_REACHED");
   });
 
-  it("6. 删除 Project → file metadata 消失 + Blob 清理；Conversation 保留且 unassigned", async () => {
+  it("6. 删除 Project → file metadata 消失 + Blob 清理；Conversation 保留且真正 unassign", async () => {
     const p = await createKiroProject({ name: "P" });
     const f = await createProjectFile({ projectId: p.id, name: "a.md", mimeType: "text/markdown", sizeBytes: 3, kind: "text", blob: textBlob("abc") });
-    await saveConversation(makeConversation("c1"));
+    // Conversation 必须真实带 projectId，否则无法证明 unassign 真的执行（V1.3A.1 防假阳性）
+    await saveConversation(makeConversation("c1", { projectId: p.id }));
     await deleteKiroProjectAndUnassignConversations(p.id);
     expect(await listProjectFiles(p.id)).toEqual([]);
     expect(await getProjectFile(f.id)).toBeNull();
@@ -147,6 +149,41 @@ describe("Project File DB", () => {
     const c1 = await getConversation("c1");
     expect(c1).toBeDefined();
     expect("projectId" in (c1 ?? {})).toBe(false);
+  });
+
+  it("6b. V1.3A.1：删除 A 不得触碰 B 的 metadata / Blob / Conversation membership", async () => {
+    const a = await createKiroProject({ name: "A" });
+    const b = await createKiroProject({ name: "B" });
+    const a1 = await createProjectFile({ projectId: a.id, name: "a1.md", mimeType: "text/markdown", sizeBytes: 3, kind: "text", blob: textBlob("AAA1") });
+    const a2 = await createProjectFile({ projectId: a.id, name: "a2.md", mimeType: "text/markdown", sizeBytes: 3, kind: "text", blob: textBlob("AAA2") });
+    const b1 = await createProjectFile({ projectId: b.id, name: "b1.md", mimeType: "text/markdown", sizeBytes: 3, kind: "text", blob: textBlob("BBB1") });
+    const b2 = await createProjectFile({ projectId: b.id, name: "b2.md", mimeType: "text/markdown", sizeBytes: 3, kind: "text", blob: textBlob("BBB2") });
+    await saveConversation(makeConversation("ca", { projectId: a.id }));
+    await saveConversation(makeConversation("cb", { projectId: b.id }));
+
+    await deleteKiroProjectAndUnassignConversations(a.id);
+
+    // A：project 删除、文件 metadata/blob 全清
+    expect(await getKiroProject(a.id)).toBeNull();
+    expect(await getProjectFile(a1.id)).toBeNull();
+    expect(await getProjectFile(a2.id)).toBeNull();
+    expect(await getFileBlob(a1.storageKey)).toBeNull();
+    expect(await getFileBlob(a2.storageKey)).toBeNull();
+    // CA：保留且 unassigned
+    const ca = await getConversation("ca");
+    expect(ca).toBeDefined();
+    expect("projectId" in (ca ?? {})).toBe(false);
+
+    // B：完全不受影响 —— metadata 保留
+    expect(await getProjectFile(b1.id)).not.toBeNull();
+    expect(await getProjectFile(b2.id)).not.toBeNull();
+    expect((await listProjectFiles(b.id)).map((x) => x.id).sort()).toEqual([b1.id, b2.id].sort());
+    // B：Blob 保留（防止只修 metadata filter 却仍误删 Blob）
+    expect(await getFileBlob(b1.storageKey)).not.toBeNull();
+    expect(await getFileBlob(b2.storageKey)).not.toBeNull();
+    expect((await getFileBlob(b1.storageKey))?.text()).resolves.toContain("BBB1");
+    // CB：membership 保持
+    expect((await getConversation("cb"))?.projectId).toBe(b.id);
   });
 });
 

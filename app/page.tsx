@@ -42,7 +42,7 @@ import { useAppStore } from "@/store/useAppStore";
 import { useToastStore } from "@/store/useToastStore";
 import { cardKeyHandler, cn } from "@/lib/utils";
 import { openAssignmentEditor } from "@/lib/uiEvents";
-import { reconcileOrphanBlobs } from "@/lib/fileStorage";
+import { reconcilePersistedFileBlobs } from "@/lib/fileReconcile";
 import { listAllProjectFileStorageKeys } from "@/lib/ai/projects/files/db";
 import { resolveStartupTab } from "@/lib/startup";
 import { formatWeekDateRange } from "@/lib/semester";
@@ -73,22 +73,22 @@ export default function Home() {
     currentSemesterWeek
   )}`;
 
-  // 启动时孤儿 Blob 对账：清理刷新/关闭浏览器后遗留、不再被任何资料引用的 IndexedDB 文件。
-  // validKeys 必须同时包含 Course Material + Kiro Project File 的 storageKey，
-  // 否则 Project File Blob 会被误判为 orphan 删除（V1.3A correctness gate）。
+  // 启动时孤儿 Blob 对账（V1.3A.1 fail-closed）：
+  // Course + Project 引用 key 必须全部枚举成功才执行 GC；
+  // Project key enumeration 失败 → 完全 skip（不删除任何 Blob，避免误删 Project File）。
   useEffect(() => {
-    const validKeys = new Set<string>();
+    const courseKeys = new Set<string>();
     useAppStore.getState().courses.forEach((c) =>
       c.materials.forEach((m) => {
-        if (m.storageKey) validKeys.add(m.storageKey);
+        if (m.storageKey) courseKeys.add(m.storageKey);
       })
     );
-    listAllProjectFileStorageKeys()
-      .then((keys) => {
-        for (const k of keys) validKeys.add(k);
-        return reconcileOrphanBlobs(validKeys);
-      })
-      .catch(() => reconcileOrphanBlobs(validKeys).catch(() => {}));
+    void reconcilePersistedFileBlobs({
+      courseStorageKeys: courseKeys,
+      listProjectStorageKeys: listAllProjectFileStorageKeys,
+    }).catch(() => {
+      // reconcilePersistedFileBlobs 自身已 fail-closed；此处仅兜底未预期异常
+    });
   }, []);
 
   // Dev 自动注入：开发构建 + 首次启动（无持久化数据）→ 自动载入全模块演示数据，
