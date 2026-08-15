@@ -40,6 +40,14 @@ export const MAX_SCANNED_PDF_IMAGE_BYTES_PER_TURN = 8 * 1024 * 1024;
 /** JPEG 质量 */
 export const PDF_VISION_JPEG_QUALITY = 0.82;
 
+/**
+ * 一个 Kiro Turn 所有视觉二进制（用户图片 + 扫描 PDF 页面）总上限（Phase 3.4B）。
+ * 注意：这是编码前的 binary image bytes，不是 HTTP request Content-Length；
+ * 转为 data URL / Base64 后实际 JSON 请求会更大（约 4/3 膨胀）。
+ * 双层约束：PDF 子预算 8 MiB（下方常量）+ 全 Turn 10 MiB。
+ */
+export const MAX_VISION_BINARY_BYTES_PER_TURN = 10 * 1024 * 1024;
+
 // ---- Phase 3.4A：用户直接附加图片的 Send-time 预处理限制 ----
 // 与扫描 PDF Vision 是两套独立业务预算，各自独立调优，不复用。
 

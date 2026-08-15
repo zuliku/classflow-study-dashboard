@@ -63,6 +63,7 @@ import { KiroAttachment, KiroDocumentContext, KiroAttachmentView } from "@/lib/a
 import { getModelCapabilities, isVisionMimeSupported } from "@/lib/ai/providers/capabilities";
 import { formatVisionMimeTypes } from "@/lib/ai/attachments/imageMime";
 import { preprocessVisionImage } from "@/lib/ai/attachments/preprocessImage";
+import { resolveVisionTurnBudget, sumVisionBytes, isVisionTurnWithinBudget } from "@/lib/ai/attachments/visionBudget";
 import { getActiveModelName } from "@/lib/ai/providers/registry";
 import { executeKiroWriteTool } from "@/lib/ai/tools/write/executor";
 import { isDestructiveWriteTool, KiroUndoEntry, KiroWriteApi, WriteToolResult } from "@/lib/ai/tools/write/types";
@@ -1717,17 +1718,45 @@ export function useKiroChat({
       visionPagesRef.current = [];
 
       // ---- Vision 输入准备（共享一次 preparingVision 状态，单一 try/finally）----
-      // 1. Scanned PDF Vision（Task 12）：渲染所选页面为 JPEG
-      // 2. 用户图片 Send-time 预处理（Phase 3.4A）：尺寸/体积归一，不修改 Original File
+      // 处理顺序（Phase 3.4B）：用户图片优先（用户明确选择的直接视觉输入，不能静默丢弃）
+      // → 统一 Turn 二进制预算 → 扫描 PDF 只用剩余额度。FileList 最终顺序不变：
+      // PDF pages → user images。
       const scanned = turnAttachments.filter(isScannedAttachment);
       const pageFiles: File[] = [];
       const preparedImageFiles: File[] = [];
-      let remainingVisionBytes = MAX_SCANNED_PDF_IMAGE_BYTES_PER_TURN;
+      const renderedPageCountByAttachment = new Map<string, number>();
       const visionPrepPending = scanned.length > 0 || (visionEnabled && userImages.length > 0);
       if (visionPrepPending) {
         setPreparingVision(true);
         try {
+          // A. 用户图片 Send-time 预处理：失败（decode/编码/超限）→ 整个 Send 不执行
+          if (visionEnabled && userImages.length > 0) {
+            for (const a of userImages) {
+              try {
+                const prepared = await preprocessVisionImage(a.file);
+                preparedImageFiles.push(prepared.file);
+              } catch {
+                pushToast({ message: "图片处理失败，请重新添加或换一张图片后重试。", type: "error" });
+                return false; // Prompt 与附件保留
+              }
+            }
+          }
+
+          // B. 统一 Turn 预算：用户图片优先，PDF 只拿剩余额度
+          const userImageBytes = sumVisionBytes(preparedImageFiles);
+          const budget = resolveVisionTurnBudget({ userImageBytes });
+          if (budget.overBudget) {
+            pushToast({ message: "图片总量过大，请减少图片数量后重试。", type: "error" });
+            return false; // 用户图片不能被静默删除
+          }
+
+          // C. 扫描 PDF：在 pdfBudgetBytes 内渲染；每份 scanned PDF 至少 1 页
           if (scanned.length > 0) {
+            if (budget.pdfBudgetBytes === 0) {
+              // budget exhaustion ≠ 文件损坏：明确区分提示
+              pushToast({ message: "视觉附件总量过大，请减少图片或扫描 PDF 后重试。", type: "error" });
+              return false;
+            }
             const textCount = buildDocumentContexts(turnAttachments).length;
             const explicit = extractExplicitPages(v).flatMap((r) => {
               const arr: number[] = [];
@@ -1756,6 +1785,7 @@ export function useKiroChat({
                     })
                   );
 
+            let remainingVisionBytes = budget.pdfBudgetBytes;
             for (let i = 0; i < scanned.length; i++) {
               const a = scanned[i];
               const sourceId = `doc-${textCount + i + 1}`;
@@ -1772,13 +1802,15 @@ export function useKiroChat({
                 if (material?.storageKey) blob = await getFileBlob(material.storageKey);
               }
               if (!blob) continue;
-              // 全 Turn 字节预算：每份 PDF 只能使用剩余额度（Task 13）
+              // 统一预算内渲染（renderPdfPages 内部按 maxBytes 保留完整页面）
               const rendered = await renderPdfPages(blob, pages, sourceId, {
                 maxBytes: remainingVisionBytes,
               });
               for (const r of rendered) {
                 pageFiles.push(r.file);
                 remainingVisionBytes -= r.size;
+                renderedPageCountByAttachment.set(a.id, (renderedPageCountByAttachment.get(a.id) ?? 0) + 1);
+                // visionPagesRef 只记录真正进入 FileList 的页面（citation/source 忠实反映模型所见）
                 visionPagesRef.current.push({
                   sourceId,
                   page: r.page,
@@ -1787,22 +1819,11 @@ export function useKiroChat({
                 });
               }
             }
-            if (scanned.length > 0 && visionPagesRef.current.length === 0) {
-              pushToast({ message: "扫描 PDF 页面读取失败，请重新添加文件。", type: "error" });
-              return false; // Prompt 保留
-            }
-          }
-
-          // 用户图片 Send-time 预处理：失败（decode/编码/超限）→ 整个 Send 不执行
-          if (visionEnabled && userImages.length > 0) {
-            for (const a of userImages) {
-              try {
-                const prepared = await preprocessVisionImage(a.file);
-                preparedImageFiles.push(prepared.file);
-              } catch {
-                pushToast({ message: "图片处理失败，请重新添加或换一张图片后重试。", type: "error" });
-                return false; // Prompt 与附件保留
-              }
+            // 每份 scanned PDF 至少 1 页：预算裁掉整份文档时不得静默假装已发送
+            const missingPdf = scanned.some((a) => (renderedPageCountByAttachment.get(a.id) ?? 0) === 0);
+            if (missingPdf) {
+              pushToast({ message: "视觉附件过多，部分扫描 PDF 无法加入本次请求，请减少附件或指定更少页数。", type: "error" });
+              return false;
             }
           }
         } finally {
@@ -1857,6 +1878,14 @@ export function useKiroChat({
         );
       // Task 7：每次 live user send 都 push 一项（即使 []），否则 text-only 与 attachment turn 位置错配
       snapshotQueueRef.current.push(snapshot);
+
+      // D. composition invariant：最终视觉二进制总字节必须 <= Turn 预算
+      //（不应依赖中间 allocator；正常不会触发，但作为组合边界必须有最终 guard）
+      const finalVisionBytes = sumVisionBytes(pageFiles) + sumVisionBytes(preparedImageFiles);
+      if (!isVisionTurnWithinBudget(finalVisionBytes)) {
+        pushToast({ message: "视觉附件总量过大，请减少附件后重试。", type: "error" });
+        return false;
+      }
 
       // 图片：扫描 PDF 页面图（固定在前） + 预处理后的用户图片 → 一个 FileList（deterministic 顺序）
       let files: FileList | undefined;
