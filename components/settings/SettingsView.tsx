@@ -13,9 +13,21 @@ import { DataSettings } from "@/components/settings/DataSettings";
 import { AboutSettings } from "@/components/settings/AboutSettings";
 import { KiroAISettings } from "@/components/settings/KiroAISettings";
 import { KiroAgentSettings } from "@/components/settings/KiroAgentSettings";
-import { searchSettings, SettingDefinition } from "@/lib/settingsRegistry";
+import {
+  searchSettings,
+  SettingDefinition,
+  SettingGate,
+  DisclosureKey,
+  findSettingById,
+  SETTING_IDS,
+} from "@/lib/settingsRegistry";
 import { runRegistryDomValidation } from "@/lib/settingsRegistryValidation";
 import { useAppStore } from "@/store/useAppStore";
+import { useAISettingsStore } from "@/store/useAISettingsStore";
+import { useKiroPreferencesStore } from "@/store/useKiroPreferencesStore";
+import { useKiroComputerStore } from "@/store/useKiroComputerStore";
+import { useReminderPreferencesStore } from "@/store/useReminderPreferencesStore";
+import { useToastStore } from "@/store/useToastStore";
 import { cn } from "@/lib/utils";
 
 interface SettingsViewProps {
@@ -26,6 +38,10 @@ interface SettingsViewProps {
   onClearSearch: () => void;
   /** Cmd/Ctrl+F 聚焦目标：侧栏搜索输入框（只绑定当前可见的那个） */
   searchInputRef: React.Ref<HTMLInputElement>;
+  /** Profile / Semester 上报脏状态（关闭确认用） */
+  onDirtyChange: (section: SettingsSection, dirty: boolean) => void;
+  /** Modal 决定放弃草稿时递增：触发各 section 丢弃本地草稿 */
+  discardToken: number;
 }
 
 /** 绑定 ref 时只保留可见的搜索框（桌面/移动各渲染一个，另一个 display:none 会覆盖 ref） */
@@ -40,18 +56,58 @@ function bindVisibleSearchInput(ref: React.Ref<HTMLInputElement>) {
   };
 }
 
+/** 搜索跳转时的披露请求（key + 序号保证重复跳转也会重新触发） */
+export interface RevealRequest {
+  key: DisclosureKey;
+  seq: number;
+}
+
 /**
  * 设置中心内容（常驻挂载所有 section，Profile/Semester dirty state 不因切换丢失）。
  * 搜索有内容时 Detail 临时切成搜索结果；点击结果 → 切 section + 清空搜索 +
  * 可靠滚动到目标 row（带多帧重试）并短暂高亮。
+ * 条件设置（gate）：目标不可直达时跳到控制设置并提示，绝不产生死跳转；披露目标自动展开。
  */
 export function SettingsView({
   searchQuery,
   setSearchQuery,
   onClearSearch,
   searchInputRef,
+  onDirtyChange,
+  discardToken,
 }: SettingsViewProps) {
   const [section, setSection] = useState<SettingsSection>("general");
+  const viewRootRef = useRef<HTMLDivElement | null>(null);
+
+  // ---- 条件 gate 取值快照（只读；跳转逻辑绝不修改偏好） ----
+  const aiProvider = useAISettingsStore((s) => s.provider);
+  const missedReminderPolicy = useReminderPreferencesStore((s) => s.missedReminderPolicy);
+  const webSearchEnabled = useKiroPreferencesStore((s) => s.webSearchEnabled);
+  const webSearchCredentialMode = useKiroPreferencesStore((s) => s.webSearchCredentialMode);
+  const hasActiveWorkspace = useKiroComputerStore((s) => s.workspaces.length > 0);
+
+  function getGateValue(controlId: string): unknown {
+    switch (controlId) {
+      case SETTING_IDS.kiro.provider:
+        return aiProvider;
+      case SETTING_IDS.tasks.missedReminderPolicy:
+        return missedReminderPolicy;
+      case SETTING_IDS.kiro.webSearchEnabled:
+        return webSearchEnabled;
+      case SETTING_IDS.kiro.webSearchCredential:
+        return webSearchCredentialMode;
+      case SETTING_IDS["kiro-agent"].workspace:
+        return hasActiveWorkspace ? "set" : "";
+      default:
+        return undefined;
+    }
+  }
+
+  function isGateSatisfied(gate: SettingGate): boolean {
+    const value = getGateValue(gate.control);
+    if (gate.requiresValue === undefined) return Boolean(value);
+    return value === gate.requiresValue;
+  }
 
   // 外部请求跳转（如 Kiro「配置 AI 服务」）：切 section 并消费
   const settingsTargetSection = useAppStore((s) => s.settingsTargetSection);
@@ -69,30 +125,55 @@ export function SettingsView({
   );
   const searching = searchQuery.trim().length > 0;
 
-  // 开发期自动校验：Registry ID ↔ 真实 DOM（全部 section 常驻挂载，一次校验全量）
+  // 开发期自动校验：Registry ID ↔ 真实 DOM（全部 section 常驻挂载，一次校验全量；只查 Settings 根）
   React.useEffect(() => {
     if (process.env.NODE_ENV === "development") {
       // 等首帧渲染完成后再校验（React 已提交 DOM）
       requestAnimationFrame(() => {
-        runRegistryDomValidation(document);
+        runRegistryDomValidation(viewRootRef.current ?? document);
       });
     }
   }, []);
 
   // ---- 搜索结果跳转：切 section → 清空搜索 → 目标挂载后滚动 + 高亮 ----
   const [highlightedId, setHighlightedId] = useState<string | null>(null);
+  const [reveal, setReveal] = useState<RevealRequest | null>(null);
   const pendingTargetRef = useRef<string | null>(null);
   const highlightTimer = React.useRef<number | null>(null);
+  const pushToast = useToastStore((s) => s.pushToast);
 
-  const handleJump = (setting: SettingDefinition) => {
+  /** 真正执行跳转：切 section、清搜索、必要时展开 disclosure */
+  const jumpTo = (setting: SettingDefinition) => {
     setSection(setting.section);
     onClearSearch();
     setHighlightedId(null);
     pendingTargetRef.current = setting.id;
+    if (setting.disclosure) {
+      setReveal((prev) => ({ key: setting.disclosure as DisclosureKey, seq: (prev?.seq ?? 0) + 1 }));
+    }
     if (highlightTimer.current) window.clearTimeout(highlightTimer.current);
   };
 
-  // 目标挂载后执行滚动 + 高亮；最多重试 3 帧，仍缺失时 dev warn
+  /** 搜索结果点击：gate 未满足 → 跳控制设置 + 简明提示（绝不修改用户偏好） */
+  const handleJump = (setting: SettingDefinition) => {
+    if (setting.gate && setting.gate.length > 0) {
+      const blocked = setting.gate.find((g) => !isGateSatisfied(g));
+      if (blocked) {
+        const control = findSettingById(blocked.control);
+        if (control) {
+          pushToast({
+            message: `「${setting.title}」需要先调整「${control.title}」。`,
+            type: "info",
+          });
+          jumpTo(control);
+          return;
+        }
+      }
+    }
+    jumpTo(setting);
+  };
+
+  // 目标挂载后执行滚动 + 高亮；最多重试 3 帧，仍缺失时 dev warn（作用域 = Settings 根）
   React.useEffect(() => {
     const targetId = pendingTargetRef.current;
     if (!targetId) return;
@@ -100,7 +181,7 @@ export function SettingsView({
     let raf = 0;
     const attempt = () => {
       tries += 1;
-      const el = document.querySelector(`[data-setting-id="${targetId}"]`);
+      const el = viewRootRef.current?.querySelector(`[data-setting-id="${targetId}"]`) ?? null;
       if (el) {
         pendingTargetRef.current = null;
         el.scrollIntoView({ block: "center", behavior: "smooth" });
@@ -126,13 +207,17 @@ export function SettingsView({
     };
     raf = requestAnimationFrame(attempt);
     return () => cancelAnimationFrame(raf);
-  }, [section, searchQuery]);
+  }, [section, searchQuery, reveal]);
 
   const sectionLabel = (sec: SettingsSection) =>
     [...SETTINGS_NAV, ABOUT_NAV].find((n) => n.id === sec)?.label ?? sec;
 
   return (
-    <div className="flex-1 min-h-0 flex flex-col md:flex-row" data-testid="settings-view">
+    <div
+      ref={viewRootRef}
+      className="flex-1 min-h-0 flex flex-col md:flex-row"
+      data-testid="settings-view"
+    >
       {/* 桌面/平板：左侧设置导航（搜索常驻顶部） */}
       <div className="hidden md:flex md:flex-col md:shrink-0 md:h-full md:w-[220px] md:p-3 md:border-r md:border-line-soft md:overflow-y-auto">
         <label className="relative block mb-2 shrink-0">
@@ -232,10 +317,14 @@ export function SettingsView({
                 <GeneralSettings highlightedId={highlightedId ?? undefined} />
               </div>
               <div className={cn(section === "profile" && "ux-fade")} hidden={section !== "profile"}>
-                <ProfileSettings />
+                <ProfileSettings onDirtyChange={(d) => onDirtyChange("profile", d)} discardToken={discardToken} />
               </div>
               <div className={cn(section === "semester" && "ux-fade")} hidden={section !== "semester"}>
-                <SemesterSettings highlightedId={highlightedId ?? undefined} />
+                <SemesterSettings
+                  highlightedId={highlightedId ?? undefined}
+                  onDirtyChange={(d) => onDirtyChange("semester", d)}
+                  discardToken={discardToken}
+                />
               </div>
               <div className={cn(section === "tasks" && "ux-fade")} hidden={section !== "tasks"}>
                 <TaskSettings highlightedId={highlightedId ?? undefined} />
@@ -244,7 +333,7 @@ export function SettingsView({
                 <FocusSettings />
               </div>
               <div className={cn(section === "kiro" && "ux-fade")} hidden={section !== "kiro"}>
-                <KiroAISettings />
+                <KiroAISettings reveal={reveal} />
               </div>
               <div className={cn(section === "kiro-agent" && "ux-fade")} hidden={section !== "kiro-agent"}>
                 <KiroAgentSettings />

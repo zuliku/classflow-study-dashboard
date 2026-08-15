@@ -17,7 +17,17 @@ const inputCls =
 const inputErrorCls =
   "w-full h-9 px-2.5 bg-[#F7F5F5] border border-danger-border rounded-lg text-charcoal font-semibold focus:outline-none";
 
-export function SemesterSettings({ highlightedId }: { highlightedId?: string }) {
+export function SemesterSettings({
+  highlightedId,
+  onDirtyChange,
+  discardToken,
+}: {
+  highlightedId?: string;
+  /** 脏状态上报（Modal 关闭确认用） */
+  onDirtyChange?: (dirty: boolean) => void;
+  /** Modal 确认放弃草稿时递增：丢弃本地草稿 */
+  discardToken?: number;
+}) {
   const semester = useAppStore((s) => s.semester);
   const setSemester = useAppStore((s) => s.setSemester);
   const preferences = useAppStore((s) => s.preferences);
@@ -50,6 +60,25 @@ export function SemesterSettings({ highlightedId }: { highlightedId?: string }) 
 
   const dirty =
     !hasErrors && (name !== semester.name || startDate !== semester.startDate || totalWeeks !== semester.totalWeeks);
+  // 编辑期间存在任何未保存改动（含非法输入：关闭确认同样保护草稿不丢失）
+  const editingDraft = editing && (name !== semester.name || startDate !== semester.startDate || totalWeeks !== semester.totalWeeks);
+
+  // 脏状态上报（V4.1：Modal 据此决定是否要求显式放弃确认）
+  React.useEffect(() => {
+    onDirtyChange?.(editingDraft);
+  }, [editingDraft, onDirtyChange]);
+
+  // Modal 确认放弃草稿：重置本地草稿
+  React.useEffect(() => {
+    if (discardToken && discardToken > 0) {
+      setName(semester.name);
+      setStartDate(semester.startDate);
+      setTotalWeeks(semester.totalWeeks);
+      setTouched(false);
+      setEditing(false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [discardToken]);
 
   const save = () => {
     if (hasErrors) {

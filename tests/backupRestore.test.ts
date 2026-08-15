@@ -6,6 +6,7 @@ import {
 } from "@/lib/backupRestore";
 import { useAppStore } from "@/store/useAppStore";
 import { ClassFlowBackupData, AppPreferences } from "@/types";
+import { loadAvatarBlob, saveAvatarBlob } from "@/lib/profileAvatar";
 
 /** 构造最小合法备份 data（v1 结构，无 preferences 字段 = legacy） */
 function buildBackupData(): ClassFlowBackupData {
@@ -26,11 +27,14 @@ function backupJSON(data: unknown): string {
   return JSON.stringify({ version: 1, exportedAt: "2026-08-08T00:00:00.000Z", data });
 }
 
-async function makeZip(data: unknown, materials: Record<string, Blob> = {}): Promise<Blob> {
+async function makeZip(data: unknown, materials: Record<string, Blob> = {}, avatar?: Blob): Promise<Blob> {
   const zip = new JSZip();
   zip.file("data.json", backupJSON(data));
   for (const [key, blob] of Object.entries(materials)) {
     zip.file(`materials/${key}`, await blob.arrayBuffer());
+  }
+  if (avatar) {
+    zip.file("avatar/profile-avatar", await avatar.arrayBuffer());
   }
   return new Blob([await zip.generateAsync({ type: "arraybuffer" })], { type: "application/zip" });
 }
@@ -120,6 +124,75 @@ describe("prepareBackupRestore（orchestrator，无副作用）", () => {
     expect(result.ok).toBe(false);
     const store = useAppStore.getState();
     expect(store.courses.some((c) => c.id === "c_bak")).toBe(false);
+  });
+});
+
+describe("commitBackupRestore — 本地头像一致性（V4.1）", () => {
+  const PNG_BYTES = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3, 4]);
+
+  it("ZIP 携带头像 → commit 写入 Blob + metadata 保持；round-trip 后可读回", async () => {
+    const data = buildBackupData();
+    data.userProfile.avatarStorageKey = "profile-avatar";
+    const avatar = new Blob([PNG_BYTES], { type: "image/png" });
+    const zip = await makeZip(data, {}, avatar);
+
+    const prepared = await prepareBackupRestore(toFile(zip, "backup-with-avatar.zip"));
+    expect(prepared.ok).toBe(true);
+    if (!prepared.ok) return;
+    expect(prepared.prepared.avatar).not.toBeNull();
+    expect(prepared.prepared.avatar!.type).toBe("image/png");
+
+    await commitBackupRestore(prepared.prepared, {
+      restoreAppData: (d) => useAppStore.getState().restoreAppData(d),
+    });
+    const after = useAppStore.getState();
+    expect(after.userProfile.avatarStorageKey).toBe("profile-avatar");
+    const restored = await loadAvatarBlob();
+    expect(restored).not.toBeNull();
+    expect(restored!.type).toBe("image/png");
+  });
+
+  it("ZIP 声明头像但缺失 → commit 摘除悬挂引用 + 清理陈旧本地头像", async () => {
+    // 先写一个陈旧头像（恢复前遗留）
+    await saveAvatarBlob(new Blob([PNG_BYTES], { type: "image/png" }));
+
+    const data = buildBackupData();
+    data.userProfile.avatarStorageKey = "profile-avatar";
+    const zip = await makeZip(data, {}); // 无 avatar 条目
+
+    const prepared = await prepareBackupRestore(toFile(zip, "backup-no-avatar.zip"));
+    expect(prepared.ok).toBe(true);
+    if (!prepared.ok) return;
+    expect(prepared.prepared.avatar).toBeNull();
+
+    await commitBackupRestore(prepared.prepared, {
+      restoreAppData: (d) => useAppStore.getState().restoreAppData(d),
+    });
+    const after = useAppStore.getState();
+    // 不留下悬挂引用（绝不复用恢复前的陈旧本地头像）
+    expect(after.userProfile.avatarStorageKey).toBeUndefined();
+    expect(await loadAvatarBlob()).toBeNull();
+  });
+
+  it("JSON 备份声明头像 → prepare 给出 warning；commit 剥离引用且不恢复本地头像", async () => {
+    const data = buildBackupData();
+    data.userProfile.avatarStorageKey = "profile-avatar";
+
+    const prepared = await prepareBackupRestore(
+      toFile(new Blob([backupJSON(data)]), "backup.json")
+    );
+    expect(prepared.ok).toBe(true);
+    if (!prepared.ok) return;
+    expect(prepared.prepared.avatar).toBeNull();
+    expect(
+      prepared.prepared.integrity.warnings.some((w) => w.includes("本地头像"))
+    ).toBe(true);
+
+    await commitBackupRestore(prepared.prepared, {
+      restoreAppData: (d) => useAppStore.getState().restoreAppData(d),
+    });
+    const after = useAppStore.getState();
+    expect(after.userProfile.avatarStorageKey).toBeUndefined();
   });
 });
 

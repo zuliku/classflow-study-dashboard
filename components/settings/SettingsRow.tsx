@@ -34,13 +34,13 @@ export function SettingsRow({
     <div
       data-setting-id={settingId}
       className={[
-        "flex flex-wrap items-center gap-x-4 gap-y-2 min-h-[56px] py-3 border-b border-line-soft last:border-b-0 transition-colors duration-[var(--motion-fast)]",
+        "flex flex-wrap items-center gap-x-4 gap-y-2 min-h-[62px] py-3 border-b border-line-soft last:border-b-0 transition-colors duration-[var(--motion-fast)]",
         highlighted ? "bg-pastel-mint/60" : "",
       ].join(" ")}
     >
       <div className="min-w-[180px] flex-1 basis-[200px]">
         <h4 className="text-xs font-bold text-charcoal break-words">{title}</h4>
-        <p className="text-[10px] text-sandrift mt-0.5 break-words">{description}</p>
+        <p className="text-[11px] leading-[1.5] text-sandrift mt-1 break-words">{description}</p>
       </div>
       <div className="flex max-w-full shrink-0 items-center gap-2 ml-auto">
         {modified && onReset && (

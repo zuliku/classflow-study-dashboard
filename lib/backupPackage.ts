@@ -1,8 +1,22 @@
 import JSZip from "jszip";
-import { ClassFlowBackup, ClassFlowBackupData, Course } from "@/types";
+import { ClassFlowBackup, ClassFlowBackupData, Course, UserProfile } from "@/types";
 import { getFileBlob } from "@/lib/fileStorage";
+import { loadAvatarBlob, detectImageMime, AVATAR_STORAGE_KEY } from "@/lib/profileAvatar";
 import { parseBackupJSON } from "@/lib/backup";
 import { findDataIntegrityIssues, DataIntegrityIssues } from "@/lib/dataIntegrity";
+
+/** ZIP 内头像条目的固定目录（data.json 中 avatarStorageKey 指向该条目） */
+export const AVATAR_ZIP_PATH = `avatar/${AVATAR_STORAGE_KEY}`;
+
+/**
+ * 剥离不可随 JSON 备份携带的头像引用（avatarStorageKey 依赖本地 IndexedDB Blob，
+ * JSON 备份只含纯数据，导出时必须摘除，避免恢复后出现悬挂引用）。
+ * 旧版 avatarUrl（外部 URL / 自包含）保持原样。
+ */
+export function stripUnbackableAvatarRef(profile: UserProfile): UserProfile {
+  if (!profile.avatarStorageKey) return profile;
+  return { ...profile, avatarStorageKey: undefined };
+}
 
 export interface MaterialRef {
   storageKey: string;
@@ -53,6 +67,8 @@ export async function checkMaterialAvailability(
 export interface FullBackupExportResult {
   packedMaterials: number;
   missingMaterials: MaterialRef[];
+  /** 本地头像导出状态：packed = 已包含 / missing = 声明了但本地 Blob 缺失 / none = 未设置 */
+  avatar: "packed" | "missing" | "none";
 }
 
 /** 根据文件名后缀推断 MIME（用于从 ZIP 恢复时重建 Blob 类型） */
@@ -78,13 +94,15 @@ export function mimeFromTitle(title: string): string {
  * 导出完整备份 ZIP：
  * classflow-backup.zip
  * ├── data.json          （ClassFlowBackup 结构）
- * └── materials/<storageKey> （IndexedDB 中的真实文件 Blob）
+ * ├── materials/<storageKey> （IndexedDB 中的真实文件 Blob）
+ * └── avatar/profile-avatar   （本地头像 Blob，可选）
  *
  * 缺失的 Blob 不会导致整个备份失败，仅记录 warning。
  */
 export async function buildFullBackupZip(
   data: ClassFlowBackupData,
-  getBlob: (storageKey: string) => Promise<Blob | null> = getFileBlob
+  getBlob: (storageKey: string) => Promise<Blob | null> = getFileBlob,
+  getAvatarBlob: () => Promise<Blob | null> = loadAvatarBlob
 ): Promise<{ zipBlob: Blob; result: FullBackupExportResult }> {
   const backup: ClassFlowBackup = {
     version: 1,
@@ -115,10 +133,27 @@ export async function buildFullBackupZip(
     }
   }
 
+  // 本地头像：仅当 userProfile 声明 avatarStorageKey 时尝试携带
+  let avatar: FullBackupExportResult["avatar"] = "none";
+  if (data.userProfile.avatarStorageKey) {
+    let avatarBlob: Blob | null = null;
+    try {
+      avatarBlob = await getAvatarBlob();
+    } catch {
+      avatarBlob = null;
+    }
+    if (avatarBlob) {
+      zip.file(AVATAR_ZIP_PATH, await avatarBlob.arrayBuffer());
+      avatar = "packed";
+    } else {
+      avatar = "missing";
+    }
+  }
+
   const zipBlob = new Blob([await zip.generateAsync({ type: "arraybuffer" })], {
     type: "application/zip",
   });
-  return { zipBlob, result: { packedMaterials, missingMaterials } };
+  return { zipBlob, result: { packedMaterials, missingMaterials, avatar } };
 }
 
 export interface ParsedFullBackup {
@@ -127,6 +162,8 @@ export interface ParsedFullBackup {
   materials: Map<string, Blob>;
   /** metadata 声明了 storageKey 但 ZIP 内缺少对应文件 */
   missingMaterials: MaterialRef[];
+  /** 本地头像 Blob（ZIP 的 avatar/ 目录）；metadata 声明但 ZIP 缺失时为 null */
+  avatar: Blob | null;
   /** 数据完整性检查结果（fatal 阻止恢复，warnings 提示） */
   issues: DataIntegrityIssues;
 }
@@ -172,12 +209,23 @@ export async function parseFullBackupFile(file: Blob | ArrayBuffer): Promise<Ful
     }
   }
 
+  // 本地头像：metadata 声明 avatarStorageKey 时尝试从 avatar/ 目录读取（MIME 按字节签名重建）
+  let avatar: Blob | null = null;
+  if (validated.data.userProfile.avatarStorageKey) {
+    const entry = zip.file(AVATAR_ZIP_PATH);
+    if (entry) {
+      const buffer = new Uint8Array(await entry.async("arraybuffer"));
+      avatar = new Blob([buffer], { type: detectImageMime(buffer) });
+    }
+  }
+
   return {
     ok: true,
     parsed: {
       data: validated.data,
       materials,
       missingMaterials,
+      avatar,
       issues: findDataIntegrityIssues(validated.data),
     },
   };

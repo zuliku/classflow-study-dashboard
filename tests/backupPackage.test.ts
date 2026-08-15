@@ -146,3 +146,63 @@ describe("parseFullBackupFile", () => {
     expect(refs.map((r) => r.storageKey)).toEqual(["b", "a", "c"]);
   });
 });
+
+describe("buildFullBackupZip / parseFullBackupFile — 本地头像（V4.1）", () => {
+  const PNG_BYTES = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3, 4]);
+
+  it("声明 avatarStorageKey 且本地有 Blob → ZIP 携带 avatar/ 条目；parse 后按签名重建 MIME", async () => {
+    const data = mkData();
+    data.userProfile.avatarStorageKey = "profile-avatar";
+    const avatarBlob = new Blob([PNG_BYTES], { type: "image/png" });
+
+    const { zipBlob, result } = await buildFullBackupZip(
+      data,
+      async () => null,
+      async () => avatarBlob
+    );
+    expect(result.avatar).toBe("packed");
+
+    const zip = await JSZip.loadAsync(await zipBlob.arrayBuffer());
+    expect(zip.file("avatar/profile-avatar")).toBeTruthy();
+
+    const outcome = await parseFullBackupFile(await zipBlob.arrayBuffer());
+    expect(outcome.ok).toBe(true);
+    if (!outcome.ok) return;
+    expect(outcome.parsed.avatar).not.toBeNull();
+    expect(outcome.parsed.avatar!.type).toBe("image/png");
+    expect(outcome.parsed.data.userProfile.avatarStorageKey).toBe("profile-avatar");
+  });
+
+  it("声明 avatarStorageKey 但本地 Blob 缺失 → avatar: missing，data.json 仍保留引用（恢复侧负责摘除）", async () => {
+    const data = mkData();
+    data.userProfile.avatarStorageKey = "profile-avatar";
+
+    const { result } = await buildFullBackupZip(data, async () => null, async () => null);
+    expect(result.avatar).toBe("missing");
+
+    const zip = await JSZip.loadAsync(await buildFullBackupZip(data, async () => null, async () => null).then((r) => r.zipBlob.arrayBuffer()));
+    expect(zip.file("avatar/profile-avatar")).toBeNull();
+
+    const outcome = await parseFullBackupFile(await zip.generateAsync({ type: "arraybuffer" }));
+    expect(outcome.ok).toBe(true);
+    if (!outcome.ok) return;
+    expect(outcome.parsed.avatar).toBeNull();
+    expect(outcome.parsed.data.userProfile.avatarStorageKey).toBe("profile-avatar");
+  });
+
+  it("未声明 avatarStorageKey → avatar: none，ZIP 无 avatar/ 目录", async () => {
+    const data = mkData();
+    const { result } = await buildFullBackupZip(data, async () => null, async () => null);
+    expect(result.avatar).toBe("none");
+  });
+
+  it("旧版备份（无 avatarStorageKey / 无 avatar/ 条目）→ parse 兼容，avatar = null", async () => {
+    const data = mkData();
+    const { zipBlob } = await buildFullBackupZip(data, async () => null, async () => null);
+    const outcome = await parseFullBackupFile(await zipBlob.arrayBuffer());
+    expect(outcome.ok).toBe(true);
+    if (!outcome.ok) return;
+    expect(outcome.parsed.avatar).toBeNull();
+    expect(outcome.parsed.data.userProfile.avatarStorageKey).toBeUndefined();
+  });
+});

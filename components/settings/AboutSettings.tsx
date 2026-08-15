@@ -16,17 +16,21 @@ export function AboutSettings() {
           </p>
         </div>
         <div className="pt-2 border-t border-line-soft space-y-1.5">
-          <div className="flex justify-between">
-            <span className="text-sandrift">版本</span>
-            <span className="font-mono font-semibold text-charcoal">{APP_VERSION}</span>
+          <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+            <span className="text-sandrift shrink-0">版本</span>
+            <span className="font-mono font-semibold text-charcoal text-right break-words min-w-0">{APP_VERSION}</span>
           </div>
-          <div className="flex justify-between">
-            <span className="text-sandrift">数据</span>
-            <span className="font-semibold text-charcoal">你的 ClassFlow 数据主要保存在当前设备</span>
+          <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+            <span className="text-sandrift shrink-0">数据</span>
+            <span className="font-semibold text-charcoal text-right break-words min-w-0">
+              你的 ClassFlow 数据主要保存在当前设备
+            </span>
           </div>
-          <div className="flex justify-between">
-            <span className="text-sandrift">课程附件</span>
-            <span className="font-semibold text-charcoal">附件保存在当前浏览器中</span>
+          <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+            <span className="text-sandrift shrink-0">课程附件</span>
+            <span className="font-semibold text-charcoal text-right break-words min-w-0">
+              附件保存在当前浏览器中
+            </span>
           </div>
         </div>
         <p className="pt-2 border-t border-line-soft text-[10px] text-sandrift leading-relaxed">

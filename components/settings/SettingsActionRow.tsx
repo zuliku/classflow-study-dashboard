@@ -37,13 +37,13 @@ export function SettingsActionRow({
   return (
     <div
       data-setting-id={settingId}
-      className="flex items-center justify-between gap-4 min-h-[56px] py-3 border-b border-line-soft last:border-b-0"
+      className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 min-h-[62px] py-3 border-b border-line-soft last:border-b-0"
     >
       <div className="min-w-0">
         <p className={cn("text-xs font-bold", variant === "danger" ? "text-danger" : "text-charcoal")}>
           {title}
         </p>
-        <p className="text-[10px] text-satin-grey mt-0.5 break-words">{description}</p>
+        <p className="text-[11px] leading-[1.5] text-satin-grey mt-1 break-words">{description}</p>
       </div>
       <SettingsButton
         variant={variant}

@@ -1,10 +1,11 @@
 /**
- * Profile 本地头像（Settings V4）：
- * - 只接受图片（image/* + 实际类型检查）
+ * Profile 本地头像（Settings V4 / V4.1）：
+ * - 只接受图片（MIME 前缀预过滤 + 解码层权威校验）
  * - 大小上限 5 MB
  * - 读取后降采样（最长边 ≤ 512px）再写入 IndexedDB（独立 DB，不进入课程资料
  *   classflow-files，避免被课程附件的孤儿 Blob 对账清理）
  * - 持久化的是 Blob，不是 blob: URL
+ * - 完整备份（ZIP）可选携带头像 Blob（avatar/ 目录）；恢复时按签名重建 MIME
  */
 
 export const AVATAR_STORAGE_KEY = "profile-avatar";
@@ -19,11 +20,45 @@ type AvatarValidation =
   | { ok: true }
   | { ok: false; reason: "type" | "size" };
 
-/** 只接受图片：mime 前缀 + 实际类型检查（文件签名）。纯函数，可单测。 */
+/**
+ * 快速前置校验：MIME 前缀 + 大小上限。
+ * 注意：MIME 前缀只是预过滤，伪装成 image/* 的无效字节由 validateAvatarDecodable 在解码层拦截。
+ */
 export function validateAvatarFile(file: Blob & { type?: string; name?: string }): AvatarValidation {
   if (!file.type.startsWith("image/")) return { ok: false, reason: "type" };
   if (file.size > AVATAR_MAX_BYTES) return { ok: false, reason: "size" };
   return { ok: true };
+}
+
+/** 真实解码校验：伪装成 image/* 的无效字节在此被拒绝（浏览器环境） */
+export async function validateAvatarDecodable(file: Blob): Promise<boolean> {
+  try {
+    await decodeImage(file);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** 从字节签名识别图片 MIME（备份恢复时重建 Blob 类型；纯函数可单测） */
+export function detectImageMime(bytes: Uint8Array): string {
+  if (bytes.length >= 12) {
+    const head = new TextDecoder().decode(bytes.slice(0, 12));
+    if (head.startsWith("RIFF") && head.slice(8, 12) === "WEBP") return "image/webp";
+  }
+  if (
+    bytes.length >= 8 &&
+    bytes[0] === 0x89 &&
+    bytes[1] === 0x50 &&
+    bytes[2] === 0x4e &&
+    bytes[3] === 0x47
+  ) {
+    return "image/png";
+  }
+  if (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) {
+    return "image/jpeg";
+  }
+  return "application/octet-stream";
 }
 
 function openDB(): Promise<IDBDatabase> {

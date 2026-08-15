@@ -5,7 +5,7 @@ import { Archive, Download, Loader2, AlertTriangle } from "lucide-react";
 import { useAppStore } from "@/store/useAppStore";
 import { useToastStore } from "@/store/useToastStore";
 import { ClassFlowBackup, ClassFlowBackupData } from "@/types";
-import { buildFullBackupZip } from "@/lib/backupPackage";
+import { buildFullBackupZip, stripUnbackableAvatarRef } from "@/lib/backupPackage";
 import { SettingsActionRow } from "@/components/settings/SettingsActionRow";
 
 const localDateStr = () => {
@@ -68,12 +68,16 @@ export function BackupSection() {
       const url = URL.createObjectURL(zipBlob);
       downloadBlob(url, `classflow_full_backup_${localDateStr()}.zip`);
       URL.revokeObjectURL(url);
-      setFeedback({ message: `备份已导出 · ${result.packedMaterials} 个附件` });
+      setFeedback({ message: `备份已导出 · ${result.packedMaterials} 个附件${result.avatar === "packed" ? " · 头像已包含" : ""}` });
+      const warnings: string[] = [];
       if (result.missingMaterials.length > 0) {
-        setFeedback((f) => ({
-          message: f?.message ?? "",
-          warning: `${result.missingMaterials.length} 个资料文件未能加入备份`,
-        }));
+        warnings.push(`${result.missingMaterials.length} 个资料文件未能加入备份`);
+      }
+      if (result.avatar === "missing") {
+        warnings.push("本地头像未能加入备份");
+      }
+      if (warnings.length > 0) {
+        setFeedback((f) => ({ message: f?.message ?? "", warning: warnings.join("；") }));
       }
       pushToast({ message: "备份已导出" });
     } catch {
@@ -88,10 +92,12 @@ export function BackupSection() {
     setIsExportingJson(true);
     setFeedback(null);
     try {
+      // JSON 只含纯数据：本地头像 Blob 无法携带，导出时摘除 avatarStorageKey（避免悬挂引用）
+      const data = backupData();
       const backup: ClassFlowBackup = {
         version: 1,
         exportedAt: new Date().toISOString(),
-        data: backupData(),
+        data: { ...data, userProfile: stripUnbackableAvatarRef(data.userProfile) },
       };
       const dataStr =
         "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(backup, null, 2));

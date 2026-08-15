@@ -10,12 +10,21 @@ import { useProfileAvatar } from "@/hooks/useProfileAvatar";
 import {
   AVATAR_STORAGE_KEY,
   validateAvatarFile,
+  validateAvatarDecodable,
   processAvatarFile,
   saveAvatarBlob,
   deleteAvatarBlob,
 } from "@/lib/profileAvatar";
 
-export function ProfileSettings() {
+export function ProfileSettings({
+  onDirtyChange,
+  discardToken,
+}: {
+  /** 脏状态上报（Modal 关闭确认用） */
+  onDirtyChange?: (dirty: boolean) => void;
+  /** Modal 确认放弃草稿时递增：丢弃本地草稿 */
+  discardToken?: number;
+}) {
   const userProfile = useAppStore((s) => s.userProfile);
   const updateUserProfile = useAppStore((s) => s.updateUserProfile);
   const pushToast = useToastStore((s) => s.pushToast);
@@ -46,10 +55,21 @@ export function ProfileSettings() {
     pickedFile !== null ||
     removeRequested;
 
+  // 脏状态上报（V4.1：Modal 据此决定是否要求显式放弃确认）
+  React.useEffect(() => {
+    onDirtyChange?.(dirty);
+  }, [dirty, onDirtyChange]);
+
+  // Modal 确认放弃草稿：重置本地草稿（含头像预览 URL 回收）
+  React.useEffect(() => {
+    if (discardToken && discardToken > 0) discard();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [discardToken]);
+
   const displayAvatarUrl = avatarPreview || (removeRequested ? "" : persistedAvatarUrl);
   const hasAvatar = displayAvatarUrl.length > 0;
 
-  const handlePickFile = (file: File | null) => {
+  const handlePickFile = async (file: File | null) => {
     setAvatarError("");
     if (!file) return;
     const validation = validateAvatarFile(file);
@@ -59,6 +79,14 @@ export function ProfileSettings() {
       );
       return;
     }
+    // 权威校验：伪装成 image/* 的无效字节在解码层被拒绝（预览前即可反馈）
+    const decodable = await validateAvatarDecodable(file);
+    if (!decodable) {
+      setAvatarError("无法识别该图片文件，请选择有效的 JPG、PNG 或 WebP 图片。");
+      return;
+    }
+    // 替换选择时回收上一个预览 URL，避免会话内 Object URL 泄漏
+    if (avatarPreview) URL.revokeObjectURL(avatarPreview);
     // 预览用会话级 object URL；持久化在保存时写入 IndexedDB（不持久化 blob: URL）
     const url = URL.createObjectURL(file);
     setPickedFile(file);
@@ -190,7 +218,7 @@ export function ProfileSettings() {
               data-testid="profile-avatar-input"
               aria-label="选择头像图片"
               onChange={(e) => {
-                handlePickFile(e.target.files?.[0] ?? null);
+                void handlePickFile(e.target.files?.[0] ?? null);
                 e.target.value = "";
               }}
             />

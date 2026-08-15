@@ -49,8 +49,9 @@ type TestState = { status: "idle" | "testing" } | { status: "success" } | { stat
 /**
  * Kiro 设置（Settings V4）：让 AI 工作的基础配置（AI 服务 / 模型 / API Key / 连接测试）
  * 全部留在普通主区域；只有低频技术配置（自定义能力声明、PDF Vision）收进默认折叠的「高级设置」。
+ * reveal：搜索跳转请求自动展开对应披露区（纯 UI 行为，不修改任何偏好）。
  */
-export function KiroAISettings() {
+export function KiroAISettings({ reveal }: { reveal?: { key: string; seq: number } | null }) {
   const {
     enabled,
     provider,
@@ -94,6 +95,14 @@ export function KiroAISettings() {
   // 能力/高级设置默认收起（常用项优先，技术细节按需展开）
   const [searchSettingsOpen, setSearchSettingsOpen] = useState(false);
   const [advancedOpen, setAdvancedOpen] = useState(false);
+
+  // 搜索跳转请求展开披露区（seq 变化即重新触发；只展开、绝不收起）
+  useEffect(() => {
+    if (!reveal) return;
+    if (reveal.key === "search-settings") setSearchSettingsOpen(true);
+    if (reveal.key === "advanced") setAdvancedOpen(true);
+  }, [reveal]);
+
   const [webSearchApiKeyInput, setWebSearchApiKeyInput] = useState(getSessionWebSearchApiKey());
   const [webPdfVisionApiKeyInput, setWebPdfVisionApiKeyInput] = useState(getSessionWebPdfVisionApiKey());
   const [showWebPdfVisionKey, setShowWebPdfVisionKey] = useState(false);

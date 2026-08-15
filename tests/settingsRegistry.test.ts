@@ -45,6 +45,66 @@ describe("settingsRegistry 搜索", () => {
     expect(result.ok, result.errors.join("; ")).toBe(true);
   });
 
+  it("条件渲染设置声明 conditional，不会被 DOM 校验误判", () => {
+    const conditionalIds = new Set(
+      SETTINGS_REGISTRY.filter((s) => s.conditional).map((s) => s.id)
+    );
+    for (const id of [
+      "ai-custom-name",
+      "ai-custom-url",
+      "ai-custom-model",
+      "ai-custom-capabilities",
+      "missed-reminder-window",
+      "kiro-web-search-credential",
+      "kiro-web-search-byok-key",
+      "kiro-web-search-test",
+      "kiro-web-search-privacy",
+      "kiro-web-search-service",
+      "kiro-web-pdf-vision-enabled",
+      "kiro-web-pdf-vision-model",
+      "kiro-web-pdf-vision-key",
+      "kiro-workspace-knowledge",
+    ]) {
+      expect(conditionalIds.has(id), id).toBe(true);
+    }
+  });
+
+  it("V4.1：conditional 条目必须声明 gate，且 gate 引用真实存在的设置", () => {
+    const byId = new Map(SETTINGS_REGISTRY.map((s) => [s.id, s]));
+    for (const entry of SETTINGS_REGISTRY.filter((s) => s.conditional)) {
+      expect(entry.gate && entry.gate.length > 0, entry.id).toBeTruthy();
+      for (const gate of entry.gate!) {
+        expect(byId.has(gate.control), `${entry.id} → control ${gate.control}`).toBe(true);
+      }
+    }
+  });
+
+  it("V4.1：gate 门控语义正确（偏好依赖 vs 披露依赖）", () => {
+    const byId = new Map(SETTINGS_REGISTRY.map((s) => [s.id, s]));
+    // 偏好依赖：provider / missed policy / web search / workspace
+    expect(byId.get("ai-custom-url")?.gate).toEqual([
+      { control: "ai-provider", requiresValue: "custom-openai" },
+    ]);
+    expect(byId.get("missed-reminder-window")?.gate).toEqual([
+      { control: "missed-reminder-policy", requiresValue: "recent-only" },
+    ]);
+    expect(byId.get("kiro-web-search-service")?.gate).toEqual([
+      { control: "kiro-web-search-enabled", requiresValue: true },
+    ]);
+    expect(byId.get("kiro-web-search-byok-key")?.gate).toEqual([
+      { control: "kiro-web-search-enabled", requiresValue: true },
+      { control: "kiro-web-search-credential", requiresValue: "byok" },
+    ]);
+    expect(byId.get("kiro-workspace-knowledge")?.gate).toEqual([
+      { control: "kiro-agent-workspace" },
+    ]);
+    // 披露依赖：折叠区内目标声明 disclosure
+    expect(byId.get("ai-custom-capabilities")?.disclosure).toBe("advanced");
+    expect(byId.get("kiro-web-search-credential")?.disclosure).toBe("search-settings");
+    expect(byId.get("kiro-web-pdf-vision-enabled")?.disclosure).toBe("advanced");
+    expect(byId.get("ai-custom-url")?.disclosure).toBeUndefined();
+  });
+
   it("输入「截止」→ 任务相关的两个设置", () => {
     const r = searchSettings("截止");
     const titles = r.map((s) => s.title);
@@ -106,30 +166,6 @@ describe("settingsRegistry 搜索", () => {
     expect(byId.get("kiro-privacy-local")?.section).toBe("data");
     expect(byId.get("kiro-privacy-api-key")?.section).toBe("data");
     expect(byId.get("kiro-privacy-context")?.section).toBe("data");
-  });
-
-  it("条件渲染设置声明 conditional，不会被 DOM 校验误判", () => {
-    const conditionalIds = new Set(
-      SETTINGS_REGISTRY.filter((s) => s.conditional).map((s) => s.id)
-    );
-    for (const id of [
-      "ai-custom-name",
-      "ai-custom-url",
-      "ai-custom-model",
-      "ai-custom-capabilities",
-      "missed-reminder-window",
-      "kiro-web-search-credential",
-      "kiro-web-search-byok-key",
-      "kiro-web-search-test",
-      "kiro-web-search-privacy",
-      "kiro-web-search-service",
-      "kiro-web-pdf-vision-enabled",
-      "kiro-web-pdf-vision-model",
-      "kiro-web-pdf-vision-key",
-      "kiro-workspace-knowledge",
-    ]) {
-      expect(conditionalIds.has(id), id).toBe(true);
-    }
   });
 });
 

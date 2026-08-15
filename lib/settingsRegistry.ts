@@ -9,6 +9,16 @@ import { SettingsSection } from "@/types";
  *  - 非 conditional 设置必须在真实 DOM 中存在 data-setting-id 目标
  */
 
+export type DisclosureKey = "search-settings" | "advanced";
+
+/** 条件渲染门控：目标可见性受「控制设置」当前值约束（搜索跳转据此判断能否直达） */
+export interface SettingGate {
+  /** 控制该目标可见性的设置（registry id） */
+  control: string;
+  /** 目标可见时 control 必须等于的值；省略 = control 值 truthy */
+  requiresValue?: unknown;
+}
+
 export interface SettingDefinition {
   id: string;
   section: SettingsSection;
@@ -21,6 +31,10 @@ export interface SettingDefinition {
    * 校验器跳过此类条目，不会把合法的条件渲染误判为 Registry 漂移。
    */
   conditional?: boolean;
+  /** 条件门控（AND 语义）。搜索跳转先检查 gate：不满足 → 跳到第一个未满足的控制设置并提示 */
+  gate?: SettingGate[];
+  /** 目标位于折叠区：跳转时自动展开对应 disclosure（纯 UI 行为，不修改任何偏好） */
+  disclosure?: DisclosureKey;
 }
 
 /** 设置 ID 常量：Registry 与 DOM data-setting-id 的共享事实来源 */
@@ -277,7 +291,8 @@ export const SETTINGS_REGISTRY: SettingDefinition[] = [
     title: "补发时间范围",
     description: "只补发距离当前时间不超过该范围的提醒",
     keywords: ["补发", "1小时", "6小时", "24小时", "window", "reminder"],
-    conditional: true, // 仅 missedReminderPolicy = recent-only 时渲染
+    conditional: true,
+    gate: [{ control: SETTING_IDS.tasks.missedReminderPolicy, requiresValue: "recent-only" }],
   },
   // ---- 专注与学习 ----
   {
@@ -329,7 +344,8 @@ export const SETTINGS_REGISTRY: SettingDefinition[] = [
     title: "服务名称",
     description: "自定义服务的显示名称",
     keywords: ["自定义", "provider", "名称", "name", "服务名称"],
-    conditional: true, // 仅 Provider = custom-openai
+    conditional: true,
+    gate: [{ control: SETTING_IDS.kiro.provider, requiresValue: "custom-openai" }],
   },
   {
     id: SETTING_IDS.kiro.customUrl,
@@ -337,7 +353,8 @@ export const SETTINGS_REGISTRY: SettingDefinition[] = [
     title: "服务地址",
     description: "OpenAI 兼容接口的 Base URL",
     keywords: ["自定义", "base url", "兼容", "openai", "服务地址", "地址"],
-    conditional: true, // 仅 Provider = custom-openai
+    conditional: true,
+    gate: [{ control: SETTING_IDS.kiro.provider, requiresValue: "custom-openai" }],
   },
   {
     id: SETTING_IDS.kiro.customModel,
@@ -345,7 +362,8 @@ export const SETTINGS_REGISTRY: SettingDefinition[] = [
     title: "模型 ID",
     description: "该服务实际使用的模型名称",
     keywords: ["自定义", "模型", "model", "id", "模型 id"],
-    conditional: true, // 仅 Provider = custom-openai
+    conditional: true,
+    gate: [{ control: SETTING_IDS.kiro.provider, requiresValue: "custom-openai" }],
   },
   {
     id: SETTING_IDS.kiro.customCapabilities,
@@ -353,7 +371,9 @@ export const SETTINGS_REGISTRY: SettingDefinition[] = [
     title: "自定义模型能力",
     description: "自定义服务是否支持图片 / 文件输入 / 思考程度",
     keywords: ["自定义", "能力", "图片", "文件", "vision", "file", "capability", "思考"],
-    conditional: true, // 仅 Provider = custom-openai 且展开高级设置
+    conditional: true,
+    gate: [{ control: SETTING_IDS.kiro.provider, requiresValue: "custom-openai" }],
+    disclosure: "advanced", // 位于高级设置折叠区
   },
   {
     id: SETTING_IDS.kiro.reasoningEffort,
@@ -424,7 +444,9 @@ export const SETTINGS_REGISTRY: SettingDefinition[] = [
     title: "搜索服务",
     description: "Kiro Search 提供实时网页检索能力",
     keywords: ["搜索", "服务", "kiro search", "web search"],
-    conditional: true, // 仅联网搜索开启
+    conditional: true,
+    gate: [{ control: SETTING_IDS.kiro.webSearchEnabled, requiresValue: true }],
+    disclosure: "search-settings",
   },
   {
     id: SETTING_IDS.kiro.webSearchCredential,
@@ -432,7 +454,9 @@ export const SETTINGS_REGISTRY: SettingDefinition[] = [
     title: "凭据",
     description: "选择搜索凭据来源；使用自己的 API Key 时，Key 仅保存在当前浏览器会话中",
     keywords: ["凭据", "api key", "byok", "搜索 key", "credential"],
-    conditional: true, // 仅联网搜索开启
+    conditional: true,
+    gate: [{ control: SETTING_IDS.kiro.webSearchEnabled, requiresValue: true }],
+    disclosure: "search-settings",
   },
   {
     id: SETTING_IDS.kiro.webSearchByokKey,
@@ -440,7 +464,12 @@ export const SETTINGS_REGISTRY: SettingDefinition[] = [
     title: "Tavily API Key",
     description: "仅保存在当前浏览器会话中（调用时发送到 ClassFlow 服务端转发）",
     keywords: ["tavily", "api key", "搜索", "密钥"],
-    conditional: true, // 仅联网搜索开启且凭据 = 自己的 API Key
+    conditional: true,
+    gate: [
+      { control: SETTING_IDS.kiro.webSearchEnabled, requiresValue: true },
+      { control: SETTING_IDS.kiro.webSearchCredential, requiresValue: "byok" },
+    ],
+    disclosure: "search-settings",
   },
   {
     id: SETTING_IDS.kiro.webSearchTest,
@@ -448,7 +477,9 @@ export const SETTINGS_REGISTRY: SettingDefinition[] = [
     title: "测试搜索连接",
     description: "只发送最小搜索请求验证凭据，不发送对话或 ClassFlow 数据",
     keywords: ["搜索", "测试", "连接", "凭据"],
-    conditional: true, // 仅联网搜索开启
+    conditional: true,
+    gate: [{ control: SETTING_IDS.kiro.webSearchEnabled, requiresValue: true }],
+    disclosure: "search-settings",
   },
   {
     id: SETTING_IDS.kiro.webSearchPrivacy,
@@ -456,7 +487,9 @@ export const SETTINGS_REGISTRY: SettingDefinition[] = [
     title: "隐私",
     description: "联网搜索开启时，Kiro 可能将当前搜索查询发送给搜索服务",
     keywords: ["搜索", "隐私", "发送", "查询"],
-    conditional: true, // 仅联网搜索开启
+    conditional: true,
+    gate: [{ control: SETTING_IDS.kiro.webSearchEnabled, requiresValue: true }],
+    disclosure: "search-settings",
   },
   {
     id: SETTING_IDS.kiro.webPdfVisionEnabled,
@@ -464,7 +497,9 @@ export const SETTINGS_REGISTRY: SettingDefinition[] = [
     title: "扫描 PDF 识别",
     description: "仅用于读取联网搜索发现的扫描型 PDF（无文本层页面）",
     keywords: ["扫描", "pdf", "vision", "识别", "图片"],
-    conditional: true, // 仅联网搜索开启且展开高级设置
+    conditional: true,
+    gate: [{ control: SETTING_IDS.kiro.webSearchEnabled, requiresValue: true }],
+    disclosure: "advanced",
   },
   {
     id: SETTING_IDS.kiro.webPdfVisionModel,
@@ -472,7 +507,9 @@ export const SETTINGS_REGISTRY: SettingDefinition[] = [
     title: "Vision 模型",
     description: "用于识别扫描 PDF 页面的 OpenCode Go 视觉模型",
     keywords: ["vision", "pdf", "模型", "扫描"],
-    conditional: true, // 仅联网搜索开启且展开高级设置
+    conditional: true,
+    gate: [{ control: SETTING_IDS.kiro.webSearchEnabled, requiresValue: true }],
+    disclosure: "advanced",
   },
   {
     id: SETTING_IDS.kiro.webPdfVisionKey,
@@ -480,7 +517,9 @@ export const SETTINGS_REGISTRY: SettingDefinition[] = [
     title: "OpenCode Go Vision API Key",
     description: "仅用于读取联网搜索发现的扫描型 PDF。密钥仅保存在当前浏览器会话中",
     keywords: ["vision", "api key", "pdf", "密钥"],
-    conditional: true, // 仅联网搜索开启且展开高级设置
+    conditional: true,
+    gate: [{ control: SETTING_IDS.kiro.webSearchEnabled, requiresValue: true }],
+    disclosure: "advanced",
   },
   // ---- Agent 与权限 ----
   {
@@ -510,7 +549,8 @@ export const SETTINGS_REGISTRY: SettingDefinition[] = [
     title: "工作区知识",
     description: "本地文件索引用于查找相关文件候选",
     keywords: ["索引", "知识", "文件", "片段", "index", "knowledge"],
-    conditional: true, // 仅存在当前工作区时渲染
+    conditional: true,
+    gate: [{ control: SETTING_IDS["kiro-agent"].workspace }], // 仅存在当前工作区时渲染
   },
   {
     id: SETTING_IDS["kiro-agent"].permissions,
@@ -564,21 +604,41 @@ export const SETTINGS_REGISTRY: SettingDefinition[] = [
   },
 ];
 
-/** Registry 结构完整性校验（duplicate ID / invalid section）。纯函数，可在任意环境运行。 */
+/** Registry 结构完整性校验（duplicate ID / invalid section / gate & disclosure 引用）。纯函数，可在任意环境运行。 */
 export function validateRegistryIntegrity(): { ok: boolean; errors: string[] } {
   const errors: string[] = [];
   const seen = new Set<string>();
+  const ids = new Set<string>();
   for (const entry of SETTINGS_REGISTRY) {
     if (seen.has(entry.id)) {
       errors.push(`duplicate registry id: ${entry.id}`);
     }
     seen.add(entry.id);
+    ids.add(entry.id);
     if (!entry.section || !SETTINGS_REGISTRY_SECTIONS.has(entry.section)) {
       errors.push(`invalid section "${entry.section}" for registry id: ${entry.id}`);
+    }
+    // 条件渲染必须声明 gate（校验器据此跳过 DOM 检查；无 gate 的 conditional 会退化为不可校验）
+    if (entry.conditional && (!entry.gate || entry.gate.length === 0)) {
+      errors.push(`conditional entry without gate: ${entry.id}`);
+    }
+    // 非条件渲染不得声明 gate（gate 是条件渲染的专属机制）
+    if (!entry.conditional && entry.gate && entry.gate.length > 0) {
+      errors.push(`non-conditional entry with gate: ${entry.id}`);
+    }
+    for (const gate of entry.gate ?? []) {
+      if (!ids.has(gate.control)) {
+        errors.push(`gate control "${gate.control}" not found in registry (entry: ${entry.id})`);
+      }
+    }
+    if (entry.disclosure && !DISCLOSURE_KEYS.has(entry.disclosure)) {
+      errors.push(`invalid disclosure "${entry.disclosure}" for registry id: ${entry.id}`);
     }
   }
   return { ok: errors.length === 0, errors };
 }
+
+const DISCLOSURE_KEYS = new Set<DisclosureKey>(["search-settings", "advanced"]);
 
 const SETTINGS_REGISTRY_SECTIONS = new Set<SettingsSection>([
   "general",
@@ -610,8 +670,15 @@ export function searchSettings(query: string): SettingDefinition[] {
   const q = normalizeQuery(query);
   if (!q) return [];
   return SETTINGS_REGISTRY.filter((s) => {
-    if (s.title.toLowerCase().includes(q)) return true;
-    if (s.description.toLowerCase().includes(q)) return true;
+    // title / description 同样归一化（去空白），与 query 归一化对称，
+    // 否则「扫描 PDF」这类带空格的查询永远无法命中「扫描 PDF 识别」
+    if (normalizeQuery(s.title).includes(q)) return true;
+    if (normalizeQuery(s.description).includes(q)) return true;
     return (s.keywords ?? []).some((k) => normalizeQuery(k).includes(q));
   });
+}
+
+/** 按 id 查找设置定义（gate 控制设置解析用） */
+export function findSettingById(id: string): SettingDefinition | undefined {
+  return SETTINGS_REGISTRY.find((s) => s.id === id);
 }

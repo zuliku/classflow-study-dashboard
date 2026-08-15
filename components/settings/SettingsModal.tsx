@@ -1,9 +1,11 @@
 ﻿"use client";
 
-import React, { useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Settings as SettingsIcon, X } from "lucide-react";
 import { useAppStore } from "@/store/useAppStore";
+import { useConfirmStore } from "@/store/useConfirmStore";
 import { SettingsView } from "@/components/settings/SettingsView";
+import { SettingsSection } from "@/types";
 import { cn } from "@/lib/utils";
 import { Dialog } from "@/components/ui/Dialog";
 
@@ -12,13 +14,34 @@ import { Dialog } from "@/components/ui/Dialog";
  * Header 只保留标题 + 关闭；搜索输入常驻左侧 Sidebar（SettingsView 内），
  * Cmd/Ctrl+F 聚焦搜索框，Modal 打开期间阻止浏览器默认 find。
  * Esc 行为：搜索框有 query 时先清空 query，再按一次才关闭 Modal。
+ * 脏状态保护：Profile / Semester 有未保存草稿时，X / Esc / backdrop 关闭都需要显式确认丢弃；
+ * 确认后通过 discardToken 通知各 section 丢弃本地草稿（不引入全局 settings-dirty store）。
  */
 export function SettingsModal() {
   const isOpen = useAppStore((s) => s.isSettingsModalOpen);
   const setSettingsModalOpen = useAppStore((s) => s.setSettingsModalOpen);
+  const confirmRequest = useConfirmStore((s) => s.confirm);
 
   const [searchQuery, setSearchQuery] = useState("");
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const [dirtySections, setDirtySections] = useState<ReadonlySet<SettingsSection>>(new Set());
+  const [discardToken, setDiscardToken] = useState(0);
+
+  const isDirty = dirtySections.size > 0;
+
+  const handleDirtyChange = useCallback((section: SettingsSection, dirty: boolean) => {
+    setDirtySections((prev) => {
+      const next = new Set(prev);
+      if (dirty) next.add(section);
+      else next.delete(section);
+      return next;
+    });
+  }, []);
+
+  // 打开时清空陈旧脏标记（关闭后 section 已卸载，重开时重新上报）
+  useEffect(() => {
+    if (isOpen) setDirtySections(new Set());
+  }, [isOpen]);
 
   // Cmd/Ctrl+F：聚焦侧栏搜索框（Modal 打开期间拦截浏览器默认 find）
   useEffect(() => {
@@ -50,6 +73,24 @@ export function SettingsModal() {
     }
   }, [isOpen]);
 
+  /** 统一关闭入口：有脏草稿 → 显式确认丢弃；确认后丢弃并关闭 */
+  const requestClose = useCallback(() => {
+    if (dirtySections.size === 0) {
+      setSettingsModalOpen(false);
+      return;
+    }
+    confirmRequest({
+      title: "放弃未保存的更改？",
+      description: "个人资料或学期设置还有未保存的修改，关闭设置后将丢失。",
+      confirmLabel: "放弃更改",
+      onConfirm: () => {
+        // 通知各 section 丢弃本地草稿（Modal 仍在退出动画期间，effect 可执行）
+        setDiscardToken((t) => t + 1);
+        setSettingsModalOpen(false);
+      },
+    });
+  }, [dirtySections, setSettingsModalOpen, confirmRequest]);
+
   return (
     <Dialog
       open={isOpen}
@@ -58,7 +99,7 @@ export function SettingsModal() {
       }}
       overlayId="settings-modal"
       stackZ={50}
-      closeOnBackdrop
+      closeOnBackdrop={!isDirty}
       onEscapeKeyDown={(event) => {
         // 搜索框有 query 时：第一次 Esc 只清空搜索，不关闭 Modal
         if (searchQuery.trim().length > 0) {
@@ -66,7 +107,9 @@ export function SettingsModal() {
           setSearchQuery("");
           return;
         }
-        // 搜索无内容时：允许关闭 Modal（Dialog 默认行为）
+        // 无搜索内容：Esc 走统一关闭入口（脏草稿时弹确认）
+        event.preventDefault();
+        requestClose();
       }}
       aria-label="设置"
       className={cn(
@@ -82,7 +125,7 @@ export function SettingsModal() {
           <h2 className="text-sm font-bold text-charcoal leading-tight">设置</h2>
         </div>
         <button
-          onClick={() => setSettingsModalOpen(false)}
+          onClick={requestClose}
           className="p-1.5 rounded-lg text-sandrift hover:bg-alba hover:text-charcoal transition-colors shrink-0"
           aria-label="关闭"
         >
@@ -96,6 +139,8 @@ export function SettingsModal() {
         setSearchQuery={setSearchQuery}
         onClearSearch={() => setSearchQuery("")}
         searchInputRef={searchInputRef}
+        onDirtyChange={handleDirtyChange}
+        discardToken={discardToken}
       />
     </Dialog>
   );
