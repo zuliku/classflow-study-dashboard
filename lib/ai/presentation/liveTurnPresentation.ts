@@ -352,16 +352,19 @@ export function updateLiveTurnPresentation(
 
   const answer = answerTexts.join("");
 
+  // V4.7：Agent phase 必须单调（working → composing → answering → done）。
+  // composing 有唯一严格含义：【begin_final_answer 已到，Final Answer 第一个 text 尚未出现】。
+  // 不再用「所有业务 Tool 已完成」猜测 Final Answer 即将开始——Tool done（output-available）
+  // 之后仍可能是：addToolOutput → awaiting-continuation → HTTP continuation → 下一条
+  // commentary → 下一 Tool，整个阶段依然属于 execution（working）。
+  // Legacy 无 boundary：只要 turnInFlight 且无 answer commit → working（安全、真实的 fallback；
+  // settled 后由 legacy fallback 恢复 Answer / done）。
   let phase: KiroTurnPhase;
   if (!turnInFlight) {
     phase = "done";
   } else if (answer.length > 0) {
     phase = "answering";
-  } else if (
-    // boundary 已到、Final Answer 未开始 → 正在整理回答（V4.1：无 milestone，由 phase 表达）
-    finalAnswerPartIndex >= 0 ||
-    (hasBusinessTools && worklog.every((b) => b.kind !== "tool" || b.status !== "working"))
-  ) {
+  } else if (finalAnswerPartIndex >= 0) {
     phase = "composing";
   } else {
     phase = "working";

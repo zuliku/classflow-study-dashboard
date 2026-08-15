@@ -176,6 +176,19 @@ export const KiroWorklog = React.memo(function KiroWorklog({
         ? "正在执行"
         : `已完成 · ${toolCount} 个步骤`;
 
+  // V4.7：Header 活跃信号（只切 icon，不新增文案 / body row，不触发额外 render）。
+  // - composing：真正「boundary 已到、Final Answer 首 token 未到」→ spinner + 正在整理回答
+  // - working 但没有任何 active trace（Tool done → awaiting continuation 的 200~800ms gap）：
+  //   最后 Tool = ✓、无 commentary streaming、无 tool working → spinner + 正在执行
+  // - 下一 commentary / Tool working 到达 → 恢复 ListTree（label 恒「正在执行」，不打扰读屏）
+  const hasActiveTrace = worklog.some((block) =>
+    block.kind === "commentary"
+      ? (block as CommentaryBlock).streaming
+      : (block as ToolBlock).status === "working"
+  );
+  const showHeaderSpinner =
+    phase === "composing" || (phase === "working" && worklog.length > 0 && !hasActiveTrace);
+
   return (
     <div data-testid="kiro-worklog" className="space-y-1 min-w-0 w-full">
       {/* Group Summary：整体 disclosure（工作流图标 + 统计 + Chevron） */}
@@ -185,7 +198,11 @@ export const KiroWorklog = React.memo(function KiroWorklog({
         aria-expanded={expanded}
         className="flex w-full items-center gap-1.5 rounded-lg px-1.5 py-1 text-[11px] font-semibold text-sandrift hover:bg-alabaster/60 transition-colors"
       >
-        <ListTree className="w-3.5 h-3.5 text-sandrift shrink-0" aria-hidden="true" />
+        {showHeaderSpinner ? (
+          <Loader2 className="w-3.5 h-3.5 animate-spin text-sandrift shrink-0" aria-hidden="true" />
+        ) : (
+          <ListTree className="w-3.5 h-3.5 text-sandrift shrink-0" aria-hidden="true" />
+        )}
         <span className="truncate" role="status" aria-live="polite" aria-atomic="true">
           {summaryLabel}
         </span>

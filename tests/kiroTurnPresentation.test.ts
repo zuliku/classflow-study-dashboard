@@ -184,16 +184,22 @@ describe("V4 Progressive Worklog（pre-boundary commentary 立即展示）", () 
     const s3 = step([stepStart(), progress1("done"), stepStart(), tool1("output-available", { output: { ok: true, data: {} } })]);
     expect(s3.worklog.map((b) => b.kind)).toEqual(["commentary", "tool"]);
     expect((s3.worklog[1] as { status: string }).status).toBe("done");
+    // V4.7：tool done + turn in-flight + 无 boundary → 仍 working（continuation 仍属 execution）
+    expect(s3.phase).toBe("working");
     // S4：progress2 → 新 block（不合并进 progress1）
     const s4 = step([stepStart(), progress1("done"), stepStart(), tool1("output-available", { output: { ok: true, data: {} } }), stepStart(), progress2()]);
     expect(commentaryTexts(s4)).toEqual(["我先检查相关文件", "接下来读取最相关的文件"]);
+    expect(s4.phase).toBe("working");
     // S5：tool2 working
     const s5 = step([stepStart(), progress1("done"), stepStart(), tool1("output-available", { output: { ok: true, data: {} } }), stepStart(), progress2("done"), stepStart(), tool2()]);
     expect(s5.worklog.map((b) => b.kind)).toEqual(["commentary", "tool", "commentary", "tool"]);
     expect((s5.worklog[3] as { status: string }).status).toBe("working");
-    // S6：tool2 done → worklog 保持；S7 boundary → milestone 出现、answer 仍空
+    expect(s5.phase).toBe("working");
+    // S6：tool2 done → worklog 保持；仍 working（V4.7：只有 boundary 才进 composing）
     const s6 = step([stepStart(), progress1("done"), stepStart(), tool1("output-available", { output: { ok: true, data: {} } }), stepStart(), progress2("done"), stepStart(), tool2("output-available", { output: { ok: true, data: {} } })]);
     expect(s6.worklog.map((b) => b.kind)).toEqual(["commentary", "tool", "commentary", "tool"]);
+    expect(s6.phase).toBe("working");
+    // S7：boundary → composing（唯一触发点；Final Answer 首 token 未到）
     const s7 = step([
       stepStart(), progress1("done"), stepStart(), tool1("output-available", { output: { ok: true, data: {} } }),
       stepStart(), progress2("done"), stepStart(), tool2("output-available", { output: { ok: true, data: {} } }),
@@ -238,10 +244,11 @@ describe("Legacy fallback（模型不遵守协议）", () => {
       text("今天建议先完成数学作业", "streaming"),
     ];
     const live = step(parts);
-    // V4：pre-boundary trailing 立即作为 commentary 展示（不再 provisional 隐藏）
+    // V4：pre-boundary trailing 立即作为 commentary 展示（不再 provisional 隐藏）。
+    // V4.7：Tool done + turn in-flight + 无 boundary → 仍 working（不猜测 Final Answer 即将开始）
     expect(live.answer).toBe("");
     expect(commentaryTexts(live)).toEqual(["我先看看", "今天建议先完成数学作业"]);
-    expect(live.phase).toBe("composing");
+    expect(live.phase).toBe("working");
     // settled → trailing 全部视为 Final Answer fallback
     const settled = step(parts, false);
     expect(settled.answer).toBe("今天建议先完成数学作业");
@@ -267,13 +274,13 @@ describe("Trailing Lookahead（legacy：有 Tool、无 boundary、live）", () =
   const settledSearch = () =>
     toolPart("search_assignments", "output-available", { output: { ok: true, data: { items: [] } } });
 
-  it("CASE 1: settled Tool + 第一段仍在 streaming → V4：立即作为 commentary 展示（composing、answer 空）", () => {
+  it("CASE 1: settled Tool + 第一段仍在 streaming → V4：立即作为 commentary 展示（V4.7：无 boundary → working）", () => {
     const p = deriveKiroAssistantTurn(
       [settledSearch(), text("我先整理一下今天的安排。", "streaming")],
       true
     );
     expect(p.answer).toBe("");
-    expect(p.phase).toBe("composing");
+    expect(p.phase).toBe("working");
     expect(commentaryTexts(p)).toEqual(["我先整理一下今天的安排。"]);
   });
 
@@ -283,7 +290,7 @@ describe("Trailing Lookahead（legacy：有 Tool、无 boundary、live）", () =
       true
     );
     expect(p.answer).toBe("");
-    expect(p.phase).toBe("composing");
+    expect(p.phase).toBe("working");
     expect(commentaryTexts(p)).toEqual(["第一段已经完整。\n\n"]);
   });
 
@@ -293,7 +300,7 @@ describe("Trailing Lookahead（legacy：有 Tool、无 boundary、live）", () =
     const live = step([settledSearch(), text(trailing, "streaming")]);
     expect(live.answer).toBe("");
     expect(commentaryTexts(live)).toEqual([trailing]);
-    expect(live.phase).toBe("composing");
+    expect(live.phase).toBe("working");
     const settled = step([settledSearch(), text(trailing, "done")], false);
     expect(settled.answer).toBe(trailing);
     expect(settled.phase).toBe("done");
@@ -304,7 +311,7 @@ describe("Trailing Lookahead（legacy：有 Tool、无 boundary、live）", () =
     const live = step([settledSearch(), text("最终只有这一段。", "done")]);
     expect(live.answer).toBe("");
     expect(commentaryTexts(live)).toEqual(["最终只有这一段。"]);
-    expect(live.phase).toBe("composing");
+    expect(live.phase).toBe("working");
     const settled = step([settledSearch(), text("最终只有这一段。", "done")], false);
     expect(settled.answer).toBe("最终只有这一段。");
     expect(settled.phase).toBe("done");
@@ -389,7 +396,7 @@ describe("deriveKiroAssistantTurn（静态：fresh commit）基础行为", () =>
     expect(["working", "composing", "answering", "done"]).toContain(p.phase);
   });
 
-  it("Tool 全完成但 final text 未出现且 chat 仍 streaming → composing", () => {
+  it("Tool 全完成但 final text 未出现且 chat 仍 streaming → 无 boundary → working（V4.7）", () => {
     const p = deriveKiroAssistantTurn(
       [
         toolPart("search_assignments", "output-available", { output: { ok: true, data: { items: [] } } }),
@@ -399,7 +406,8 @@ describe("deriveKiroAssistantTurn（静态：fresh commit）基础行为", () =>
       ],
       true
     );
-    expect(p.phase).toBe("composing");
+    // V4.7：Tool done 不证明 Agent 已执行完（continuation / 下一 commentary / 下一 Tool 仍属 execution）
+    expect(p.phase).toBe("working");
     expect(p.answer).toBe("");
     expect(p.worklogDone).toBe(false);
     expect(p.worklog[1]).toMatchObject({ toolName: "update_assignment", toolKind: "write", status: "done" });
@@ -438,6 +446,138 @@ describe("deriveKiroAssistantTurn（静态：fresh commit）基础行为", () =>
     expect(p.worklog.map((b) => b.kind)).toEqual([]);
     expect(p.hasTools).toBe(false);
     expect(p.answer).toBe("回答");
+  });
+});
+
+// ============================================================
+// V4.7 Monotonic Agent Phase（working → composing → answering → done）
+//
+// 核心：composing 只能由 begin_final_answer 触发（Final Answer 首 token 未到）。
+// Tool done（output-available）不证明 Agent 已执行完——continuation / 下一条
+// commentary / 下一 Tool 仍属 execution（working）。
+// ============================================================
+
+/** phase 单调秩（测试 invariant；不放入生产热路径） */
+const PHASE_RANK: Record<string, number> = { working: 0, composing: 1, answering: 2, done: 3 };
+
+function expectMonotonic(phases: string[]): void {
+  for (let i = 1; i < phases.length; i++) {
+    expect(PHASE_RANK[phases[i]]).toBeGreaterThanOrEqual(PHASE_RANK[phases[i - 1]]);
+  }
+}
+
+describe("V4.7 Monotonic Agent Phase", () => {
+  const progress = (t: string, state = "streaming") => text(t, state);
+  const tool = (name: string, state = "input-available", patch: Record<string, unknown> = {}) =>
+    toolPart(name, state, { input: {}, ...patch });
+
+  it("T1. commentary streaming → Tool working：phase === working", () => {
+    const p = deriveKiroAssistantTurn(
+      [stepStart(), text("我先检查相关文件", "streaming"), stepStart(), tool("inspect_workspace")],
+      true
+    );
+    expect(p.phase).toBe("working");
+  });
+
+  it("T2. 同一 Tool output-available + turnInFlight + 无 boundary：phase === working（continuation 仍属 execution）", () => {
+    const p = deriveKiroAssistantTurn(
+      [
+        stepStart(),
+        text("我先检查相关文件", "done"),
+        stepStart(),
+        tool("inspect_workspace", "output-available", { output: { ok: true, data: {} } }),
+      ],
+      true
+    );
+    expect(p.phase).toBe("working");
+  });
+
+  it("T3. 多 Tool 全序列 phase 单调（working → composing → answering → done，绝不回退）", () => {
+    const { step } = makeLive();
+    const phases: string[] = [];
+    // 与真实客户端一致：tool part 原地更新（同一 part 的 state 变化），不累积重复 part
+    const t1 = (state = "input-available", patch: Record<string, unknown> = {}) =>
+      toolPart("search_assignments", state, { input: {}, ...patch });
+    const t2 = (state = "input-available", patch: Record<string, unknown> = {}) =>
+      toolPart("get_week_schedule", state, { input: {}, ...patch });
+    const base = [stepStart(), progress("progress1", "done"), stepStart(), t1("output-available", { output: { ok: true, data: { items: [] } } }), stepStart(), progress("progress2", "done"), stepStart(), t2("output-available", { output: { ok: true, data: { items: [] } } })];
+    phases.push(step([stepStart(), progress("progress1")]).phase); // working（commentary streaming）
+    phases.push(step([stepStart(), progress("progress1", "done"), stepStart(), t1()]).phase); // working（tool working）
+    phases.push(step([stepStart(), progress("progress1", "done"), stepStart(), t1("output-available", { output: { ok: true, data: { items: [] } } })]).phase); // working（tool done，无 boundary）
+    phases.push(step([...base.slice(0, 5), stepStart(), progress("progress2")]).phase); // working（continuation 后 commentary）
+    phases.push(step([...base.slice(0, 7), stepStart(), t2()]).phase); // working（tool2 working）
+    phases.push(step(base).phase); // working（tool2 done，无 boundary）
+    phases.push(step([...base, stepStart(), boundary()]).phase); // composing（唯一触发点）
+    phases.push(step([...base, stepStart(), boundary(), stepStart(), text("最终回答", "streaming")]).phase); // answering
+    phases.push(step([...base, stepStart(), boundary(), stepStart(), text("最终回答", "done")], false).phase); // done
+    // 去重后的 phase 序列必须严格 working → composing → answering → done
+    const deduped = phases.filter((p, i) => i === 0 || p !== phases[i - 1]);
+    expect(deduped).toEqual(["working", "composing", "answering", "done"]);
+    expectMonotonic(phases);
+  });
+
+  it("T4. composing 只能由 boundary 触发：所有 Tool 完成 + 无 boundary + in-flight → working", () => {
+    const p = deriveKiroAssistantTurn(
+      [
+        stepStart(),
+        tool("tool1", "output-available", { output: { ok: true, data: {} } }),
+        stepStart(),
+        tool("tool2", "output-available", { output: { ok: true, data: {} } }),
+      ],
+      true
+    );
+    expect(p.phase).toBe("working");
+  });
+
+  it("T5. 协议违规：boundary → answer streaming → 意外业务 Tool：phase 不回退 working（answer lane 不反向）", () => {
+    const p = deriveKiroAssistantTurn(
+      [boundary(), text("正式回答内容", "streaming"), tool("search_assignments", "input-available", { input: {} })],
+      true
+    );
+    expect(p.answer).toBe("正式回答内容");
+    expect(p.phase).toBe("answering");
+  });
+
+  it("T6. 零 Tool + commentary → boundary → final：working → composing → answering", () => {
+    const { step } = makeLive();
+    const w = step([stepStart(), text("我先确认一下", "streaming")]);
+    expect(w.phase).toBe("working");
+    const c = step([stepStart(), text("我先确认一下", "done"), stepStart(), boundary()]);
+    expect(c.phase).toBe("composing");
+    const a = step([
+      stepStart(),
+      text("我先确认一下", "done"),
+      stepStart(),
+      boundary(),
+      stepStart(),
+      text("回答", "streaming"),
+    ]);
+    expect(a.phase).toBe("answering");
+  });
+
+  it("T7. Tool output ok:false 但 turn 仍 in-flight 且无 boundary → working（error 不提前 composing）", () => {
+    const p = deriveKiroAssistantTurn(
+      [tool("search_assignments", "output-available", { output: { ok: false, code: "X", message: "m" } })],
+      true
+    );
+    expect(p.phase).toBe("working");
+  });
+
+  it("T8. Stop：tool done → awaiting continuation → turnInFlight=false → done（不停留 spinner）", () => {
+    const { step } = makeLive();
+    const live = step([
+      stepStart(),
+      tool("search_assignments", "output-available", { output: { ok: true, data: {} } }),
+    ]);
+    expect(live.phase).toBe("working");
+    const settled = step(
+      [
+        stepStart(),
+        tool("search_assignments", "output-available", { output: { ok: true, data: {} } }),
+      ],
+      false
+    );
+    expect(settled.phase).toBe("done");
   });
 });
 
