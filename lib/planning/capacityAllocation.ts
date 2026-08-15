@@ -18,6 +18,7 @@ import { parseLocalDDL } from "@/lib/ddl";
 import { FreeTimeSlot } from "@/lib/planning/freeTime";
 import { PLAN_MIN_BLOCK_MINUTES, PLAN_PREFERRED_BLOCK_MINUTES } from "@/lib/planning/planningConstants";
 import { getScheduledMinutesBeforeDeadline } from "@/lib/planning/taskPlanningFacts";
+import { partitionStudyDuration } from "@/lib/planning/blockPartition";
 import { ProposedBlock } from "@/lib/planning/studyPlanner";
 import { timeToMinutes } from "@/lib/timeline/timelineGeometry";
 import { minutesToHM } from "@/lib/planning/freeTime";
@@ -150,46 +151,59 @@ function splitPoolByDeadline(
   return { before, after };
 }
 
-/** 从 pool 头部切块（30–90min），消耗 pool；剩余需求未满足时继续切 rest 槽 */
+/**
+ * 从 pool 消耗分钟（V1.3 exact）：先决定 actualConsumed = min(need, slotAvailable)，
+ * 再用 partitionStudyDuration 生成多个 contiguous blocks（remainder-aware，不 overshoot）；
+ * 剩余正数容量全部保留（<30 的内部 fragment 也保留，绝不静默删除）。
+ * 排序：>=preferredMin 的 slot 优先，<preferredMin 的 fragment 最后（稳定原始顺序）。
+ */
 function takeFromSlot(
   pool: FreeTimeSlot[],
   needMinutes: number
 ): { blocks: ProposedBlock[]; minutes: number; pool: FreeTimeSlot[] } {
   const blocks: ProposedBlock[] = [];
   let remaining = needMinutes;
-  // 队列语义：切完一块后把同一 slot 的 rest 重新入队，直到需求满足或池空；
-  // consumed 标记确保已消耗的 slot 不会回到 pool。
-  const queue: FreeTimeSlot[] = pool.map((s) => ({ ...s }));
-  const consumed: boolean[] = new Array(queue.length).fill(false);
-  for (let i = 0; i < queue.length && remaining > 0; i++) {
-    if (consumed[i]) continue;
-    const slot = queue[i];
-    const take = Math.min(
-      slotMinutes(slot),
-      Math.max(PLAN_MIN_BLOCK_MINUTES, Math.min(PLAN_PREFERRED_BLOCK_MINUTES, remaining))
-    );
-    if (take < PLAN_MIN_BLOCK_MINUTES) continue; // 碎片留到最后
-    const startMin = timeToMinutes(slot.startTime) ?? 0;
-    blocks.push({
-      date: slot.date,
-      startTime: slot.startTime,
-      endTime: minutesToHM(startMin + take),
-      minutes: take,
-    });
-    remaining -= take;
-    consumed[i] = true;
-    const slotRest = slotMinutes(slot) - take;
-    if (slotRest >= PLAN_MIN_BLOCK_MINUTES) {
-      queue.push({
+  const queue = pool
+    .map((slot, index) => ({ slot, index }))
+    .sort((a, b) => {
+      const aFrag = slotMinutes(a.slot) < PLAN_MIN_BLOCK_MINUTES ? 1 : 0;
+      const bFrag = slotMinutes(b.slot) < PLAN_MIN_BLOCK_MINUTES ? 1 : 0;
+      if (aFrag !== bFrag) return aFrag - bFrag;
+      return a.index - b.index;
+    })
+    .map((q) => ({ ...q.slot }));
+  const rest: FreeTimeSlot[] = [];
+
+  for (const slot of queue) {
+    if (remaining <= 0) {
+      rest.push(slot);
+      continue;
+    }
+    const avail = slotMinutes(slot);
+    if (avail <= 0) continue;
+    const consume = Math.min(avail, remaining);
+    const parts = partitionStudyDuration(consume);
+    let cursor = timeToMinutes(slot.startTime) ?? 0;
+    for (const part of parts) {
+      blocks.push({
         date: slot.date,
-        startTime: minutesToHM(startMin + take),
+        startTime: minutesToHM(cursor),
+        endTime: minutesToHM(cursor + part),
+        minutes: part,
+      });
+      cursor += part;
+    }
+    remaining -= consume;
+    const slotRest = avail - consume;
+    if (slotRest > 0) {
+      rest.push({
+        date: slot.date,
+        startTime: minutesToHM(cursor),
         endTime: slot.endTime,
         minutes: slotRest,
       });
-      consumed.push(false);
     }
   }
-  const rest = queue.filter((_, i) => !consumed[i]);
   return { blocks, minutes: needMinutes - Math.max(remaining, 0), pool: rest };
 }
 
