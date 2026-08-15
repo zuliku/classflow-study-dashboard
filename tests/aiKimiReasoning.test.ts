@@ -13,6 +13,7 @@ import { z } from "zod";
 import { generateText, convertToModelMessages, tool } from "ai";
 import { resolveLanguageModel } from "@/lib/ai/providers/resolver";
 import { OPENCODE_MODELS } from "@/lib/ai/providers/openCodeGo";
+import { buildKiroModelContext, DEFAULT_CONTEXT_BUDGET } from "@/lib/ai/contextBudget/planner";
 import {
   getReasoningCapability,
   normalizeReasoningEffort,
@@ -233,5 +234,86 @@ describe("Kimi Preserved Thinking（assistant reasoning → continuation）", ()
     expect(assistantMsg).toBeDefined();
     expect(typeof assistantMsg?.reasoning_content).toBe("string");
     expect((assistantMsg?.reasoning_content ?? "").length).toBeGreaterThan(0);
+  });
+});
+
+describe("Production Context Planner gate（Phase 3.5B）", () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  const buildUiConversation = () => [
+    // Turn 1 — completed（含 reasoning sentinel，必须被 planner 剥离）
+    { id: "u0", role: "user" as const, parts: [{ type: "text" as const, text: "旧问题" }] },
+    {
+      id: "a0",
+      role: "assistant" as const,
+      parts: [
+        { type: "reasoning" as const, text: "OLD_SECRET_REASONING_SENTINEL" },
+        { type: "text" as const, text: "旧回答" },
+        { type: "tool-get_week_schedule" as const, toolCallId: "c_old", input: {}, output: { items: [] } },
+      ],
+    },
+    // Turn 2 — current Active Turn（reasoning + tool call + tool result 必须完整）
+    { id: "u1", role: "user" as const, parts: [{ type: "text" as const, text: "当前问题" }] },
+    {
+      id: "a1",
+      role: "assistant" as const,
+      parts: [
+        { type: "reasoning" as const, text: "CURRENT_REASONING_SENTINEL" },
+        {
+          type: "dynamic-tool" as const,
+          state: "output-available" as const,
+          toolCallId: "call_current",
+          toolName: "get_current_time",
+          input: {},
+          output: { now: "2026-08-15 12:00:00" },
+        },
+        { type: "text" as const, text: "正在处理" },
+      ],
+    },
+  ];
+
+  it("I+J+K+L. production pipeline（planner → convertToModelMessages → resolver → provider）最终 HTTP body", async () => {
+    const capture = captureKimiRequests();
+    try {
+      // 真实生产顺序：UIMessage → Model Context Planner → convertToModelMessages → Kimi resolver
+      const plan = buildKiroModelContext({
+        messages: buildUiConversation() as never,
+        budget: DEFAULT_CONTEXT_BUDGET,
+      });
+      const modelMessages = await convertToModelMessages(plan.messages as never);
+      const { model } = await resolveLanguageModel({ provider: "opencode-go", model: "kimi-k3", apiKey: KEY });
+      await generateText({
+        model,
+        messages: modelMessages,
+        tools: {
+          get_current_time: tool({ description: "获取当前本地时间", inputSchema: z.object({}) }),
+        },
+      });
+    } finally {
+      capture.restore();
+    }
+    const body = capture.bodies[0];
+    const serialized = JSON.stringify(body);
+    const messages = body.messages as {
+      role: string;
+      reasoning_content?: string;
+      tool_calls?: unknown[];
+      tool_call_id?: string;
+    }[];
+
+    // I. 当前 Active Turn reasoning 必须存在
+    expect(serialized).toContain("CURRENT_REASONING_SENTINEL");
+    // L. completed reasoning sentinel 必须不存在
+    expect(serialized).not.toContain("OLD_SECRET_REASONING_SENTINEL");
+    // J. tool_calls 存在
+    const assistantMsg = messages.find((m) => m.role === "assistant" && Array.isArray(m.tool_calls) && m.tool_calls.length > 0);
+    expect(assistantMsg).toBeDefined();
+    // K. tool result message 存在（tool role + tool_call_id）
+    const toolMsg = messages.find((m) => m.role === "tool" && typeof m.tool_call_id === "string");
+    expect(toolMsg).toBeDefined();
+    // completed visible text 仍保留
+    expect(serialized).toContain("旧回答");
+    // completed tool JSON 已被剥离（tool-get_week_schedule 的 input/output 不出现）
+    expect(serialized).not.toContain("c_old");
   });
 });

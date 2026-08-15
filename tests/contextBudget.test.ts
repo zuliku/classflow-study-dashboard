@@ -101,6 +101,93 @@ describe("buildKiroModelContext", () => {
   });
 });
 
+describe("Preserved Thinking 通过 Context Planner（Phase 3.5B）", () => {
+  // UIMessage shape 与 aiKimiReasoning.test.ts 一致（当前 AI SDK 原生结构）
+  const reasoning = (t: string) => ({ type: "reasoning", text: t });
+  const dynamicTool = (over: object) => ({
+    type: "dynamic-tool",
+    state: "output-available",
+    toolCallId: "call_current",
+    toolName: "get_current_time",
+    input: {},
+    output: { now: "2026-08-15 12:00:00" },
+    ...over,
+  });
+
+  const buildTwoTurnConv = () => {
+    // Turn 1 — completed
+    const u0 = msg("u0", "user", [text("旧问题")]);
+    const a0 = msg("a0", "assistant", [
+      reasoning("OLD_SECRET_REASONING_SENTINEL"),
+      text("旧回答"),
+      { type: "tool-get_week_schedule", toolCallId: "c_old", input: {}, output: { items: [] } },
+    ]);
+    // Turn 2 — current Active Turn
+    const u1 = msg("u1", "user", [text("当前问题")]);
+    const a1 = msg("a1", "assistant", [
+      reasoning("CURRENT_REASONING_SENTINEL"),
+      dynamicTool({}),
+      text("正在处理"),
+    ]);
+    return [u0, a0, u1, a1] as KiroPlannableMessage[];
+  };
+
+  it("A+B+C. completed reasoning / tool JSON 删除；visible text 保留", () => {
+    const plan = sanitizeMessagesForModel(buildTwoTurnConv(), 6);
+    const a0 = plan.messages.find((m) => m.id === "a0");
+    expect(a0).toBeDefined();
+    expect(a0?.parts.some((p) => p.type === "reasoning")).toBe(false);
+    expect(a0?.parts.some((p) => p.type === "tool-get_week_schedule")).toBe(false);
+    expect(a0?.parts.some((p) => p.type === "text" && p.text === "旧回答")).toBe(true);
+    expect(a0?.parts.every((p) => p.type === "text")).toBe(true);
+  });
+
+  it("D+E+F. current reasoning / tool call / tool result 完整保留（structural equality）", () => {
+    const [u0, a0, u1, a1] = buildTwoTurnConv();
+    const plan = sanitizeMessagesForModel([u0, a0, u1, a1], 6);
+    const currentAssistant = plan.messages.find((m) => m.id === "a1");
+    const currentUser = plan.messages.find((m) => m.id === "u1");
+    // 原引用（或等值）完整保留，不重建/不 text-only
+    expect(currentUser).toEqual(u1);
+    expect(currentAssistant).toEqual(a1);
+    expect(currentAssistant?.parts.some((p) => p.type === "reasoning" && p.text === "CURRENT_REASONING_SENTINEL")).toBe(true);
+    const toolPart = currentAssistant?.parts.find((p) => p.type === "dynamic-tool");
+    expect((toolPart as { toolCallId?: string } | undefined)?.toolCallId).toBe("call_current");
+    expect((toolPart as { state?: string } | undefined)?.state).toBe("output-available");
+  });
+
+  it("D+E+F(normal planner). buildKiroModelContext aggressive=false 仍完整保留 current chain", () => {
+    const plan = buildKiroModelContext({ messages: buildTwoTurnConv(), budget: DEFAULT_CONTEXT_BUDGET });
+    const a1 = plan.messages.find((m) => m.id === "a1");
+    const a0 = plan.messages.find((m) => m.id === "a0");
+    expect(a1?.parts.some((p) => p.type === "reasoning" && p.text === "CURRENT_REASONING_SENTINEL")).toBe(true);
+    expect(a1?.parts.some((p) => p.type === "dynamic-tool")).toBe(true);
+    expect(a0?.parts.every((p) => p.type === "text")).toBe(true); // completed 仍 text-only
+  });
+
+  it("G+H(aggressive planner). 即使 aggressive 也不能破坏当前 Agent protocol", () => {
+    const plan = buildKiroModelContext({ messages: buildTwoTurnConv(), budget: DEFAULT_CONTEXT_BUDGET, aggressive: true });
+    const a1 = plan.messages.find((m) => m.id === "a1");
+    expect(a1).toBeDefined();
+    expect(a1?.parts.some((p) => p.type === "reasoning" && p.text === "CURRENT_REASONING_SENTINEL")).toBe(true);
+    const toolPart = a1?.parts.find((p) => p.type === "dynamic-tool");
+    expect((toolPart as { toolCallId?: string } | undefined)?.toolCallId).toBe("call_current");
+    expect((toolPart as { output?: { now?: string } } | undefined)?.output?.now).toBe("2026-08-15 12:00:00");
+  });
+
+  it("普通（无 reasoning）Agent Tool Loop 行为不变：current tool call/result 保留、completed 剥离", () => {
+    const u0 = msg("u0", "user", [text("旧问题")]);
+    const a0 = msg("a0", "assistant", [{ type: "tool-get_week_schedule", toolCallId: "c_old", input: {}, output: { items: [] } }, text("旧回答")]);
+    const u1 = msg("u1", "user", [text("当前问题")]);
+    const a1 = msg("a1", "assistant", [dynamicTool({ toolCallId: "call_1" }), text("正在处理")]);
+    const plan = sanitizeMessagesForModel([u0, a0, u1, a1], 6);
+    const a1Out = plan.messages.find((m) => m.id === "a1");
+    const a0Out = plan.messages.find((m) => m.id === "a0");
+    expect(a1Out?.parts.some((p) => p.type === "dynamic-tool" && (p as { toolCallId?: string }).toolCallId === "call_1")).toBe(true);
+    expect(a0Out?.parts.every((p) => p.type === "text")).toBe(true);
+  });
+});
+
 describe("budgetAttachments", () => {
   it("总额不超时不截断", () => {
     const r = budgetAttachments([{ name: "a", type: "pdf", text: "短内容" }], 1000);
