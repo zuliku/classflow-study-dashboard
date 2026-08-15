@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { timeToMinutes, timeToDayRatio, intervalToDayGeometry } from "@/lib/timeline/timelineGeometry";
 import { deriveTimelineItems, deriveUnscheduledAssignments } from "@/lib/timeline/deriveTimelineItems";
-import { studyBlockConflict } from "@/components/timeline/TimelineWorkspace";
+import { analyzeStudyBlockPlacement } from "@/lib/timeline/studyBlockPlacement";
 
 describe("timelineGeometry（真正的时间轴）", () => {
   it("06:00 → 25%；12:00 → 50%；18:00 → 75%；23:59 接近 100%", () => {
@@ -110,7 +110,7 @@ describe("deriveTimelineItems（Projection + DDL 去重）", () => {
   });
 });
 
-describe("deriveUnscheduledAssignments + studyBlockConflict", () => {
+describe("deriveUnscheduledAssignments + analyzeStudyBlockPlacement", () => {
   it("已完成或已安排的任务不进待安排", () => {
     const out = deriveUnscheduledAssignments({
       assignments: [
@@ -123,16 +123,25 @@ describe("deriveUnscheduledAssignments + studyBlockConflict", () => {
     expect(out.map((a) => a.id)).toEqual(["a1"]);
   });
 
-  it("Case 9/29：StudyBlock 与课程时间重叠 → 拒绝；与另一 StudyBlock 重叠 → 拒绝", () => {
+  it("Case 9/29（Task 5 新语义）：与课程重叠 = soft（courseOverlaps，非 hard）；与另一 StudyBlock 重叠 = hard", () => {
     const state = {
-      schedules: [{ id: "s1", courseId: "c1", dayOfWeek: 3, startTime: "10:00", endTime: "11:40", weeks: "1-16周" }],
+      schedules: [{ id: "s1", courseId: "c1", dayOfWeek: 3, startTime: "10:00", endTime: "11:40", location: "教101", weeks: "1-16周" }],
       studyBlocks: [
         { id: "sb9", title: "已有计划", date: "2026-08-12", startTime: "19:00", endTime: "20:00", source: "manual" as const },
       ],
+      courses: [{ id: "c1", name: "计算机网络" }],
       currentSemesterWeek: 1,
     };
-    expect(studyBlockConflict({ date: "2026-08-12", startTime: "10:30", endTime: "11:30" }, state)).toEqual({ courseName: expect.stringContaining("课程时间重叠") });
-    expect(studyBlockConflict({ date: "2026-08-12", startTime: "19:30", endTime: "20:30" }, state)).toEqual({ otherTitle: expect.stringContaining("学习计划") });
-    expect(studyBlockConflict({ date: "2026-08-12", startTime: "14:00", endTime: "15:00" }, state)).toBeNull();
+    // 与课程重叠：hardConflict = null，courseOverlaps = 1（soft，允许存在）
+    const courseHit = analyzeStudyBlockPlacement({ date: "2026-08-12", startTime: "10:30", endTime: "11:30" }, state);
+    expect(courseHit.hardConflict).toBeNull();
+    expect(courseHit.courseOverlaps).toHaveLength(1);
+    // 与另一 StudyBlock 重叠：hard
+    const blockHit = analyzeStudyBlockPlacement({ date: "2026-08-12", startTime: "19:30", endTime: "20:30" }, state);
+    expect(blockHit.hardConflict?.title).toBe("已有计划");
+    // 无重叠：干净
+    const clean = analyzeStudyBlockPlacement({ date: "2026-08-12", startTime: "14:00", endTime: "15:00" }, state);
+    expect(clean.hardConflict).toBeNull();
+    expect(clean.courseOverlaps).toEqual([]);
   });
 });

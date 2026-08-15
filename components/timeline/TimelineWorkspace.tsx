@@ -46,6 +46,11 @@ import {
 } from "@/lib/timeline/studyBlockInteraction";
 import { timeToMinutes } from "@/lib/timeline/timelineGeometry";
 import { isScheduleActive } from "@/lib/schedule";
+import {
+  analyzeStudyBlockPlacement,
+  CourseOverlap,
+  courseOverlapSuffix,
+} from "@/lib/timeline/studyBlockPlacement";
 import { Assignment, CalendarMark, CourseSchedule, StudyBlock } from "@/types";
 import { cn } from "@/lib/utils";
 
@@ -64,37 +69,6 @@ const DEFAULT_FILTERS: TimelineFilters = {
   activity: true,
   group: true,
 };
-
-/** 学习计划与课程 / 其他学习计划的时间重叠校验（课程只检查当前教学周真正生效的排课） */
-export function studyBlockConflict(
-  block: { date: string; startTime: string; endTime: string; courseId?: string; id?: string },
-  state: {
-    schedules: { id: string; courseId: string; dayOfWeek: number; startTime: string; endTime: string; weeks: string }[];
-    studyBlocks: StudyBlock[];
-    currentSemesterWeek: number;
-  }
-): { courseName?: string; otherTitle?: string } | null {
-  const s = timeToMinutes(block.startTime) ?? 0;
-  const e = timeToMinutes(block.endTime) ?? s + 60;
-  if (e <= s) return { otherTitle: "结束时间需晚于开始时间" };
-  const dow = new Date(`${block.date}T00:00:00`).getDay() || 7;
-  for (const sch of state.schedules) {
-    if (!isScheduleActive(sch as CourseSchedule, state.currentSemesterWeek)) continue;
-    if (sch.dayOfWeek !== dow) continue;
-    const ss = timeToMinutes(sch.startTime) ?? 0;
-    const se = timeToMinutes(sch.endTime) ?? ss + 60;
-    if (s < se && ss < e) {
-      return { courseName: `课程时间重叠（${sch.startTime}–${sch.endTime}）` };
-    }
-  }
-  for (const b of state.studyBlocks) {
-    if (b.id === block.id || b.date !== block.date) continue;
-    const bs = timeToMinutes(b.startTime) ?? 0;
-    const be = timeToMinutes(b.endTime) ?? bs + 60;
-    if (s < be && bs < e) return { otherTitle: `与学习计划《${b.title}》重叠` };
-  }
-  return null;
-}
 
 /** StudyBlock 与某课程是否同时间重叠（视觉层判断；课程生效周由调用方过滤） */
 function overlapsSchedule(
@@ -177,6 +151,9 @@ export function TimelineWorkspace() {
         candidate: StudyBlock | null;
         pointerOffsetMinutes: number;
         valid: boolean;
+        /** soft：与课程时间重叠（可 drop，warning 视觉） */
+        courseOverlaps: CourseOverlap[];
+        /** hard：StudyBlock ↔ StudyBlock 冲突 */
         conflictMessage?: string;
       };
   const [studyDrag, setStudyDrag] = useState<StudyBlockDragState>({ type: "idle" });
@@ -191,13 +168,14 @@ export function TimelineWorkspace() {
   }, []);
   const studyDragEnabled = preferences.enableScheduleDirectManipulation && finePointer;
 
-  // pointer 坐标 → 候选 StudyBlock（elementFromPoint 找 data-timetable-day 列；15min snap + clamp；冲突复用 studyBlockConflict）
+  // pointer 坐标 → 候选 StudyBlock（elementFromPoint 找 data-timetable-day 列；15min snap + clamp；
+  // placement 统一走 analyzeStudyBlockPlacement：课程 overlap = soft，StudyBlock 冲突 = hard）
   const evaluateStudyCandidate = (
     origin: StudyBlock,
     clientX: number,
     clientY: number,
     offset: number
-  ): { candidate: StudyBlock; conflict: ReturnType<typeof studyBlockConflict> } | null => {
+  ): { candidate: StudyBlock; analysis: ReturnType<typeof analyzeStudyBlockPlacement> } | null => {
     const el = document.elementFromPoint(clientX, clientY);
     const dayCol = el?.closest?.("[data-timetable-day]") as HTMLElement | null;
     if (!dayCol) return null;
@@ -207,8 +185,13 @@ export function TimelineWorkspace() {
     const rect = dayCol.getBoundingClientRect();
     const pointerMinutes = pointerToMinutes(clientY, rect.top, rect.height);
     const candidate = calculateMovedStudyBlock(origin, targetDate, pointerMinutes, offset);
-    const conflict = studyBlockConflict(candidate, { schedules, studyBlocks, currentSemesterWeek });
-    return { candidate, conflict };
+    const analysis = analyzeStudyBlockPlacement(candidate, {
+      schedules,
+      studyBlocks,
+      courses,
+      currentSemesterWeek,
+    });
+    return { candidate, analysis };
   };
 
   // 整个 interaction session（idle→pending→dragging→drop/cancel）共享同一组 listener；
@@ -227,7 +210,7 @@ export function TimelineWorkspace() {
       document.body.dataset.dragActive = "0";
     };
     const toDragging = (
-      result: { candidate: StudyBlock; conflict: ReturnType<typeof studyBlockConflict> } | null,
+      result: { candidate: StudyBlock; analysis: ReturnType<typeof analyzeStudyBlockPlacement> } | null,
       origin: StudyBlock,
       offset: number
     ) => {
@@ -238,8 +221,11 @@ export function TimelineWorkspace() {
             origin,
             candidate: result.candidate,
             pointerOffsetMinutes: offset,
-            valid: !result.conflict,
-            conflictMessage: result.conflict ? (result.conflict.courseName ?? result.conflict.otherTitle) : undefined,
+            valid: !result.analysis.hardConflict,
+            courseOverlaps: result.analysis.courseOverlaps,
+            conflictMessage: result.analysis.hardConflict
+              ? `与学习计划《${result.analysis.hardConflict.title}》重叠`
+              : undefined,
           }
         : {
             type: "dragging",
@@ -247,6 +233,7 @@ export function TimelineWorkspace() {
             candidate: null,
             pointerOffsetMinutes: offset,
             valid: false,
+            courseOverlaps: [],
           };
       setStudyDrag(studyDragRef.current);
     };
@@ -275,7 +262,7 @@ export function TimelineWorkspace() {
       studyDragRef.current = { type: "idle" };
       clearDragActive();
       if (current.type === "dragging" && current.candidate) {
-        const { origin, candidate, valid, conflictMessage } = current;
+        const { origin, candidate, valid, conflictMessage, courseOverlaps } = current;
         if (!valid) {
           pushToast({ type: "error", message: conflictMessage ?? "时间冲突，学习计划未调整" });
         } else if (!isSameStudyBlockPosition(origin, candidate)) {
@@ -285,7 +272,7 @@ export function TimelineWorkspace() {
             endTime: candidate.endTime,
           });
           pushToast({
-            message: "学习计划时间已调整",
+            message: `学习计划时间已调整${courseOverlapSuffix(courseOverlaps)}`,
             actionLabel: "撤销",
             onAction: () => {
               updateStudyBlock(origin.id, {
@@ -332,6 +319,7 @@ export function TimelineWorkspace() {
         y: number;
         candidate: Omit<StudyBlock, "id"> | null;
         valid: boolean;
+        courseOverlaps: CourseOverlap[];
         conflictMessage?: string;
       };
   const [unscheduledDrag, setUnscheduledDrag] = useState<UnscheduledDragState>({ type: "idle" });
@@ -344,7 +332,7 @@ export function TimelineWorkspace() {
     assignment: Assignment,
     clientX: number,
     clientY: number
-  ): { candidate: Omit<StudyBlock, "id">; conflict: ReturnType<typeof studyBlockConflict> } | null => {
+  ): { candidate: Omit<StudyBlock, "id">; analysis: ReturnType<typeof analyzeStudyBlockPlacement> } | null => {
     const el = document.elementFromPoint(clientX, clientY);
     const dayCol = el?.closest?.("[data-timetable-day]") as HTMLElement | null;
     if (!dayCol) return null;
@@ -354,8 +342,13 @@ export function TimelineWorkspace() {
     const rect = dayCol.getBoundingClientRect();
     const pointerMinutes = pointerToMinutes(clientY, rect.top, rect.height);
     const candidate = createQuickStudyBlockCandidate({ assignment, date: targetDate, pointerMinutes });
-    const conflict = studyBlockConflict(candidate, { schedules, studyBlocks, currentSemesterWeek });
-    return { candidate, conflict };
+    const analysis = analyzeStudyBlockPlacement(candidate, {
+      schedules,
+      studyBlocks,
+      courses,
+      currentSemesterWeek,
+    });
+    return { candidate, analysis };
   };
 
   const unscheduledInteractionActive = unscheduledDrag.type !== "idle";
@@ -386,8 +379,11 @@ export function TimelineWorkspace() {
           x: e.clientX,
           y: e.clientY,
           candidate: result?.candidate ?? null,
-          valid: result ? !result.conflict : false,
-          conflictMessage: result?.conflict ? (result.conflict.courseName ?? result.conflict.otherTitle) : undefined,
+          valid: result ? !result.analysis.hardConflict : false,
+          courseOverlaps: result?.analysis.courseOverlaps ?? [],
+          conflictMessage: result?.analysis.hardConflict
+            ? `与学习计划《${result.analysis.hardConflict.title}》重叠`
+            : undefined,
         };
         setUnscheduledDrag(unscheduledDragRef.current);
         return;
@@ -398,8 +394,11 @@ export function TimelineWorkspace() {
         x: e.clientX,
         y: e.clientY,
         candidate: result?.candidate ?? null,
-        valid: result ? !result.conflict : false,
-        conflictMessage: result?.conflict ? (result.conflict.courseName ?? result.conflict.otherTitle) : undefined,
+        valid: result ? !result.analysis.hardConflict : false,
+        courseOverlaps: result?.analysis.courseOverlaps ?? [],
+        conflictMessage: result?.analysis.hardConflict
+          ? `与学习计划《${result.analysis.hardConflict.title}》重叠`
+          : undefined,
       };
       setUnscheduledDrag(unscheduledDragRef.current);
     };
@@ -409,11 +408,11 @@ export function TimelineWorkspace() {
       clearDragActive();
       if (current.type === "dragging" && current.candidate) {
         if (!current.valid) {
-          pushToast({ type: "error", message: current.conflictMessage ?? "与课程时间冲突，未安排" });
+          pushToast({ type: "error", message: current.conflictMessage ?? "与学习计划时间重叠，未安排" });
         } else {
           const createdId = addStudyBlock(current.candidate);
           pushToast({
-            message: "已安排学习时间 · 1 小时",
+            message: `已安排学习时间 · 1 小时${courseOverlapSuffix(current.courseOverlaps)}`,
             actionLabel: "撤销",
             onAction: () => {
               if (createdId) deleteStudyBlock(createdId);
@@ -574,16 +573,18 @@ export function TimelineWorkspace() {
           );
         })}
 
-        {/* IM5A：拖动 Ghost（真实 candidate 几何；valid = mint / invalid = danger；snap 过渡 top） */}
+        {/* IM5A：拖动 Ghost（真实 candidate 几何；三态：clean mint / course overlap warm warning / hard danger；snap 过渡 top） */}
         {studyDrag.type === "dragging" && studyDrag.candidate && studyDrag.candidate.date === date && (
           <div
             data-testid="study-block-ghost"
             className={cn(
               "absolute left-1 right-1 z-[4] rounded-lg border-2 border-dashed px-1.5 py-0.5 flex items-center gap-1 overflow-hidden pointer-events-none",
               "transition-[top,background-color,border-color,opacity] duration-[var(--motion-snap)] ease-[var(--ease-standard)]",
-              studyDrag.valid
-                ? "border-pastel-mint bg-pastel-mint/25"
-                : "border-danger/60 bg-danger-bg/40"
+              !studyDrag.valid
+                ? "border-danger/60 bg-danger-bg/40"
+                : studyDrag.courseOverlaps.length > 0
+                  ? "border-stone-beige bg-[#F3EEE7]/70"
+                  : "border-pastel-mint bg-pastel-mint/25"
             )}
             style={{
               top: `${(((ctx.timeToMinutes(studyDrag.candidate.startTime) ?? 0) - dayStart) / ctx.totalMinutes) * 100}%`,
@@ -597,24 +598,30 @@ export function TimelineWorkspace() {
             <span className="text-[10px] text-sandrift font-medium shrink-0">
               {studyDrag.candidate.startTime}–{studyDrag.candidate.endTime}
             </span>
-            {!studyDrag.valid && (
+            {!studyDrag.valid ? (
               <span className="ml-auto text-[10px] font-bold text-danger shrink-0 truncate max-w-[50%]">
                 {studyDrag.conflictMessage ?? "时间冲突"}
               </span>
-            )}
+            ) : studyDrag.courseOverlaps.length > 0 ? (
+              <span className="ml-auto text-[10px] font-bold text-[#936E4C] shrink-0 truncate max-w-[50%]">
+                与《{studyDrag.courseOverlaps[0].courseName}》重叠
+              </span>
+            ) : null}
           </div>
         )}
 
-        {/* IM5B：Unscheduled Quick Schedule Ghost + 目标日弱高亮（candidate 几何；1h；valid/invalid） */}
+        {/* IM5B：Unscheduled Quick Schedule Ghost + 目标日弱高亮（candidate 几何；1h；三态） */}
         {unscheduledDrag.type === "dragging" && unscheduledDrag.candidate?.date === date && (
           <>
             <div
               aria-hidden="true"
               className={cn(
                 "absolute inset-0 pointer-events-none",
-                unscheduledDrag.valid
-                  ? "bg-pastel-mint/5 ring-1 ring-inset ring-pastel-mint/40"
-                  : "bg-danger-bg/10 ring-1 ring-inset ring-danger/30"
+                !unscheduledDrag.valid
+                  ? "bg-danger-bg/10 ring-1 ring-inset ring-danger/30"
+                  : unscheduledDrag.courseOverlaps.length > 0
+                    ? "bg-[#F3EEE7]/40 ring-1 ring-inset ring-stone-beige/50"
+                    : "bg-pastel-mint/5 ring-1 ring-inset ring-pastel-mint/40"
               )}
             />
             <div
@@ -622,9 +629,11 @@ export function TimelineWorkspace() {
               className={cn(
                 "absolute left-1 right-1 z-[4] rounded-lg border-2 border-dashed px-1.5 py-0.5 flex items-center gap-1 overflow-hidden pointer-events-none",
                 "transition-[top,background-color,border-color,opacity] duration-[var(--motion-snap)] ease-[var(--ease-standard)]",
-                unscheduledDrag.valid
-                  ? "border-pastel-mint bg-pastel-mint/25"
-                  : "border-danger/60 bg-danger-bg/40"
+                !unscheduledDrag.valid
+                  ? "border-danger/60 bg-danger-bg/40"
+                  : unscheduledDrag.courseOverlaps.length > 0
+                    ? "border-stone-beige bg-[#F3EEE7]/70"
+                    : "border-pastel-mint bg-pastel-mint/25"
               )}
               style={{
                 top: `${(((ctx.timeToMinutes(unscheduledDrag.candidate.startTime) ?? 0) - dayStart) / ctx.totalMinutes) * 100}%`,
@@ -638,16 +647,20 @@ export function TimelineWorkspace() {
               <span className="text-[10px] text-sandrift font-medium shrink-0">
                 {unscheduledDrag.candidate.startTime}–{unscheduledDrag.candidate.endTime}
               </span>
-              {!unscheduledDrag.valid && (
+              {!unscheduledDrag.valid ? (
                 <span className="ml-auto text-[10px] font-bold text-danger shrink-0 truncate max-w-[50%]">
                   {unscheduledDrag.conflictMessage ?? "时间冲突"}
                 </span>
-              )}
+              ) : unscheduledDrag.courseOverlaps.length > 0 ? (
+                <span className="ml-auto text-[10px] font-bold text-[#936E4C] shrink-0 truncate max-w-[50%]">
+                  与《{unscheduledDrag.courseOverlaps[0].courseName}》重叠
+                </span>
+              ) : null}
             </div>
           </>
         )}
 
-        {/* Kiro Proposal Ghost（ephemeral；弱于真实 StudyBlock；冲突时标记「计划已过期」） */}
+        {/* Kiro Proposal Ghost（ephemeral；三态：clean「Kiro 建议」/ course overlap warm「与课程重叠」/ StudyBlock hard「计划冲突」） */}
         {ghostBlocks.map((g) => {
           const gs = timeToMinutes(g.startTime);
           const ge = timeToMinutes(g.endTime);
@@ -655,24 +668,43 @@ export function TimelineWorkspace() {
           const vs = Math.max(gs, dayStart);
           const ve = Math.min(ge, dayEnd);
           if (ve <= vs) return null;
-          const gConflict =
-            daySchedules.some((sc) => overlapsSchedule(g, sc)) ||
-            studyBlocks.some((b) => b.date === date && overlapsSchedule(g, b));
+          const gAnalysis = analyzeStudyBlockPlacement(g, {
+            schedules,
+            studyBlocks,
+            courses,
+            currentSemesterWeek,
+          });
+          const gHard = gAnalysis.hardConflict;
+          const gOverlap = gAnalysis.courseOverlaps.length > 0;
+          const gStateLabel = gHard
+            ? "计划冲突"
+            : gOverlap
+              ? "与课程重叠"
+              : "Kiro 建议";
           return (
             <div
               key={g.id}
               data-testid="timeline-ghost-block"
-              title={gConflict ? "计划已过期（与当前课程 / 学习计划冲突）" : `${g.title} · Kiro 建议（未保存）`}
+              title={`${g.title} · ${gStateLabel}（未保存）`}
               className={cn(
                 "absolute left-1 right-1 z-[3] rounded-lg border border-dashed px-1.5 py-0.5 flex items-center gap-1 overflow-hidden pointer-events-none",
-                gConflict
+                gHard
                   ? "border-danger/50 bg-danger-bg/40"
-                  : "border-line-strong bg-pastel-mint/15"
+                  : gOverlap
+                    ? "border-stone-beige bg-[#F3EEE7]/70"
+                    : "border-line-strong bg-pastel-mint/15"
               )}
               style={{ top: `${((vs - dayStart) / ctx.totalMinutes) * 100}%`, height: `${((ve - vs) / ctx.totalMinutes) * 100}%`, minHeight: 6 }}
             >
               <span className="truncate text-[10px] font-semibold text-satin-grey">{g.title}</span>
-              <span className="text-[10px] text-sandrift font-medium shrink-0">Kiro 建议</span>
+              <span
+                className={cn(
+                  "shrink-0 text-[10px] font-medium",
+                  gHard ? "text-danger" : gOverlap ? "text-[#936E4C]" : "text-sandrift"
+                )}
+              >
+                {gStateLabel}
+              </span>
             </div>
           );
         })}
@@ -704,7 +736,6 @@ export function TimelineWorkspace() {
       <CourseTaskMarker
         blocks={blocks}
         schedule={schedule}
-        courseName={course.name}
         hasConflict={hasConflict}
         boundsRef={wrapRef}
       />
@@ -713,12 +744,15 @@ export function TimelineWorkspace() {
 
   // ---- 安排学习计划 ----
   const submitArrange = (a: Assignment | null, date: string, start: string, end: string) => {
-    const conflict = studyBlockConflict(
-      { date, startTime: start, endTime: end, courseId: a?.courseId },
-      { schedules, studyBlocks, currentSemesterWeek }
+    const analysis = analyzeStudyBlockPlacement(
+      { date, startTime: start, endTime: end },
+      { schedules, studyBlocks, courses, currentSemesterWeek }
     );
-    if (conflict) {
-      pushToast({ type: "error", message: conflict.courseName ?? conflict.otherTitle ?? "时间重叠" });
+    if (analysis.hardConflict) {
+      pushToast({
+        type: "error",
+        message: `与学习计划《${analysis.hardConflict.title}》时间重叠`,
+      });
       return;
     }
     addStudyBlock({
@@ -730,7 +764,7 @@ export function TimelineWorkspace() {
       courseId: a?.courseId,
       source: "manual",
     });
-    pushToast({ message: `已安排学习计划：${a?.title ?? "学习计划"}` });
+    pushToast({ message: `已安排学习计划：${a?.title ?? "学习计划"}${courseOverlapSuffix(analysis.courseOverlaps)}` });
     setArrangeFor(null);
   };
 
@@ -979,7 +1013,20 @@ export function TimelineWorkspace() {
       </div>
 
       {/* ---------- 安排学习计划（popover） ---------- */}
-      {arrangeFor && <ArrangeSheet assignment={arrangeFor} weekDates={weekDates} onClose={() => setArrangeFor(null)} onSubmit={submitArrange} />}
+      {arrangeFor && (
+        <ArrangeSheet
+          assignment={arrangeFor}
+          weekDates={weekDates}
+          onClose={() => setArrangeFor(null)}
+          getPlacement={(date, start, end) =>
+            analyzeStudyBlockPlacement(
+              { date, startTime: start, endTime: end },
+              { schedules, studyBlocks, courses, currentSemesterWeek }
+            )
+          }
+          onSubmit={submitArrange}
+        />
+      )}
 
       {/* ---------- 自由学习计划（Quick Create） ---------- */}
       {freeBlockOpen && (
@@ -987,17 +1034,26 @@ export function TimelineWorkspace() {
           assignment={null}
           weekDates={weekDates}
           onClose={() => setFreeBlockOpen(false)}
-          onSubmit={(_a, date, start, end) => {
-            const conflict = studyBlockConflict(
+          getPlacement={(date, start, end) =>
+            analyzeStudyBlockPlacement(
               { date, startTime: start, endTime: end },
-              { schedules, studyBlocks, currentSemesterWeek }
+              { schedules, studyBlocks, courses, currentSemesterWeek }
+            )
+          }
+          onSubmit={(_a, date, start, end) => {
+            const analysis = analyzeStudyBlockPlacement(
+              { date, startTime: start, endTime: end },
+              { schedules, studyBlocks, courses, currentSemesterWeek }
             );
-            if (conflict) {
-              pushToast({ type: "error", message: conflict.courseName ?? conflict.otherTitle ?? "时间重叠" });
+            if (analysis.hardConflict) {
+              pushToast({
+                type: "error",
+                message: `与学习计划《${analysis.hardConflict.title}》时间重叠`,
+              });
               return;
             }
             addStudyBlock({ title: "学习计划", date, startTime: start, endTime: end, source: "manual" });
-            pushToast({ message: "已添加学习计划" });
+            pushToast({ message: `已添加学习计划${courseOverlapSuffix(analysis.courseOverlaps)}` });
             setFreeBlockOpen(false);
           }}
         />
@@ -1054,20 +1110,18 @@ export function TimelineWorkspace() {
 
 /**
  * Course > StudyBlock 的 Task Marker：
- * 课程卡右上角 secondary signal（默认纯 dot；多个 overlap 时 + 轻量 count）。
+ * 课程卡右上角 secondary signal（永远单个 7px dot，数量交给 hover panel）。
  * Hover / Focus / Tap 通过 FloatingTimelineDetail（Portal + collision）显示详情；
- * 点击不导航（stopPropagation 防误开课程 Drawer）。
+ * 点击不导航（stopPropagation 防误开课程 Drawer）。hover 只允许 opacity/ring/color，无 scale。
  */
 function CourseTaskMarker({
   blocks,
   schedule,
-  courseName,
   hasConflict,
   boundsRef,
 }: {
   blocks: StudyBlock[];
   schedule: CourseSchedule;
-  courseName: string;
   hasConflict: boolean;
   boundsRef: React.RefObject<HTMLDivElement | null>;
 }) {
@@ -1126,13 +1180,10 @@ function CourseTaskMarker({
             setOpen(true);
           }}
           onBlur={scheduleClose}
-          className="w-[20px] h-[20px] -m-[1px] flex items-center justify-center gap-0.5 rounded-full cursor-pointer outline-none hover:scale-[1.06] transition-transform duration-[var(--motion-fast)]"
+          className="w-[20px] h-[20px] -m-[1px] flex items-center justify-center rounded-full cursor-pointer outline-none transition-[opacity,box-shadow] duration-[var(--motion-fast)] hover:ring-2 hover:ring-inset hover:ring-[#A87952]/40"
           title="查看重叠的学习任务"
         >
-          <span className="block w-[7px] h-[7px] rounded-full bg-[#A87952] shadow-subtle" />
-          {count > 1 && (
-            <span className="text-[10px] font-bold text-[#A87952] leading-none">{count}</span>
-          )}
+          <span className="block w-[7px] h-[7px] rounded-full bg-[#A87952]" />
         </button>
       </div>
 
@@ -1150,11 +1201,14 @@ function CourseTaskMarker({
           <p className="text-[11px] font-bold text-charcoal">
             学习任务{count > 1 ? ` · ${count}` : ""}
           </p>
+          <p className="text-[10px] font-semibold text-[#936E4C]">
+            与当前课程时间重叠
+          </p>
           {blocks.slice(0, 4).map((b) => (
             <div key={b.id} className="space-y-0.5">
               <p className="text-[10px] font-semibold text-charcoal leading-snug">{b.title}</p>
               <p className="text-[10px] text-satin-grey">
-                {b.startTime}–{b.endTime} · 与《{courseName}》时间重叠
+                {b.startTime}–{b.endTime}
               </p>
             </div>
           ))}
@@ -1206,17 +1260,20 @@ function getSemesterWeekOf(date: Date, semester: { startDate: string; totalWeeks
   return Math.floor(diff / 7) + 1;
 }
 
-/** 安排学习计划小表单（assignment 可选：来自 Shelf 或自由创建） */
+/** 安排学习计划小表单（assignment 可选：来自 Shelf 或自由创建）
+ *  getPlacement：实时分析所选时间（课程重叠 = warning 提示，仍可确认；StudyBlock 硬冲突在提交时拦截） */
 function ArrangeSheet({
   assignment,
   weekDates,
   onClose,
   onSubmit,
+  getPlacement,
 }: {
   assignment: Assignment | null;
   weekDates: string[];
   onClose: () => void;
   onSubmit: (a: Assignment | null, date: string, start: string, end: string) => void;
+  getPlacement?: (date: string, start: string, end: string) => ReturnType<typeof analyzeStudyBlockPlacement>;
 }) {
   const today = new Date();
   const defaultDate = weekDates.includes(format(today, "yyyy-MM-dd")) ? format(today, "yyyy-MM-dd") : weekDates[0];
@@ -1224,6 +1281,8 @@ function ArrangeSheet({
   const [start, setStart] = useState("19:00");
   const [end, setEnd] = useState("20:00");
   const [title, setTitle] = useState(assignment?.title ?? "");
+  const placement = getPlacement?.(date, start, end);
+  const overlapHint = placement?.courseOverlaps[0];
   return (
     <Dialog
       open
@@ -1273,6 +1332,11 @@ function ArrangeSheet({
             <input type="time" value={end} onChange={(e) => setEnd(e.target.value)} className="w-full h-8 bg-[#F7F5F5] border border-line rounded-lg px-1.5 text-[11px] font-semibold text-charcoal focus:outline-none" />
           </label>
         </div>
+        {overlapHint && !placement?.hardConflict && (
+          <p className="text-[11px] font-semibold text-[#936E4C]">
+            ⚠ 与《{overlapHint.courseName}》{overlapHint.startTime}–{overlapHint.endTime} 重叠
+          </p>
+        )}
         <div className="flex justify-end gap-2 pt-1">
           <button onClick={onClose} className="px-3 h-8 rounded-lg text-[11px] font-bold text-satin-grey hover:bg-alabaster transition-colors">取消</button>
           <button
