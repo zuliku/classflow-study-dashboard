@@ -60,6 +60,7 @@ import { executeGetLearningAnalytics } from "@/lib/ai/tools/read/analytics";
 import { MAX_MATERIAL_READS_PER_TURN } from "@/lib/ai/attachments/limits";
 import { KiroAttachment, KiroDocumentContext, KiroAttachmentView } from "@/lib/ai/attachments/types";
 import { getModelCapabilities, isVisionMimeSupported } from "@/lib/ai/providers/capabilities";
+import { formatVisionMimeTypes } from "@/lib/ai/attachments/imageMime";
 import { getActiveModelName } from "@/lib/ai/providers/registry";
 import { executeKiroWriteTool } from "@/lib/ai/tools/write/executor";
 import { isDestructiveWriteTool, KiroUndoEntry, KiroWriteApi, WriteToolResult } from "@/lib/ai/tools/write/types";
@@ -1687,8 +1688,9 @@ export function useKiroChat({
         userImages.some((a) => !isVisionMimeSupported(capabilities, a.file.type, a.file.name))
       ) {
         const modelName = getActiveModelName({ provider, model, customModel: custom.model });
+        const formats = formatVisionMimeTypes(capabilities.visionMimeTypes);
         pushToast({
-          message: `${modelName} 当前仅支持 JPG / PNG 图片，请转换后重试。`,
+          message: `${modelName} 当前仅支持 ${formats} 图片，请转换后重试。`,
           type: "error",
         });
         return false; // Prompt 保留，不静默丢图

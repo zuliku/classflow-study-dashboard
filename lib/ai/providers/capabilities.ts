@@ -4,6 +4,7 @@ import {
   getReasoningCapability,
 } from "@/lib/ai/reasoning/providerOptions";
 import { ReasoningCapability } from "@/lib/ai/reasoning/types";
+import { resolveImageMimeType } from "@/lib/ai/attachments/imageMime";
 
 export interface ResolvedModelCapabilities {
   streaming: boolean;
@@ -57,19 +58,13 @@ export function getModelCapabilities(input: {
  * Vision MIME gate（纯函数，发送前调用）：
  * - vision=false → false
  * - vision=true + visionMimeTypes undefined → true（历史行为，无额外限制）
- * - vision=true + visionMimeTypes 声明 → includes(mimeType)
- * 浏览器 File.type 可能为空：仅在 visionMimeTypes 已声明时按扩展名做有限映射
- * （.jpg/.jpeg → image/jpeg；.png → image/png）。绝不把 .webp 伪装成 JPEG。
+ * - vision=true + visionMimeTypes 声明 → includes(resolvedMime)
+ * MIME 经 resolveImageMimeType 统一归一（标准值 / 扩展名兜底），
+ * 扩展名只负责解析真实 MIME，是否允许仍由模型 whitelist 决定。
  */
 export function isVisionMimeSupported(capability: ResolvedModelCapabilities, mimeType: string | undefined, fileName?: string): boolean {
   if (!capability.vision) return false;
   if (!capability.visionMimeTypes) return true;
-  if (mimeType && capability.visionMimeTypes.includes(mimeType)) return true;
-  // File.type 为空时的有限扩展名兜底（仅当白名单已声明）
-  if (!mimeType && fileName) {
-    const lower = fileName.toLowerCase();
-    if (lower.endsWith(".jpg") || lower.endsWith(".jpeg")) return capability.visionMimeTypes.includes("image/jpeg");
-    if (lower.endsWith(".png")) return capability.visionMimeTypes.includes("image/png");
-  }
-  return false;
+  const resolved = resolveImageMimeType({ mimeType, fileName });
+  return resolved !== undefined && capability.visionMimeTypes.includes(resolved);
 }

@@ -1,16 +1,20 @@
 /**
- * OpenCode Go Chat Vision live smoke（Phase 3.3B）：kimi-k3 / mimo-v2.5。
+ * OpenCode Go Chat Vision live smoke（Phase 3.3B/C）。
  *
  * 只在设置了 OPENCODE_GO_TEST_API_KEY 环境变量时运行（CI 默认跳过）：
  *   $env:OPENCODE_GO_TEST_API_KEY = "sk-..." ; npx vitest run tests/aiOpenCodeGoChatVisionSmoke.test.ts
  *
- * 验证链：ClassFlow resolver → @ai-sdk/openai-compatible → OpenCode Go /v1/chat/completions
- * → Kimi K3 / MiMo V2.5。包括：
- * 1. 纯文本 control
- * 2. PNG / JPEG / WEBP 颜色识别（128x128 纯红色，prompt 强制输出 RED/BLUE）
- * 3. UIMessage → convertToModelMessages round-trip（useChat 真实路径）
+ * 成本策略（Phase 3.3C）：
+ * - 默认（Tier 1，低成本）：只跑 MiMo V2.5（control + PNG 识别 + UIMessage round-trip，
+ *   约 3 个真实请求）。日常开发 smoke 用这个。
+ * - 完整矩阵（Tier 2）：显式设置
+ *     $env:OPENCODE_GO_VISION_FULL_MATRIX = "1"
+ *   才追加 MiMo JPEG/WEBP 与 Kimi K3 全部格式（SDK 升级 / 代理变更 / capability audit 时用）。
+ * 不要默认把全部 Vision 模型都调用一遍。
  *
+ * 验证链：ClassFlow resolver → @ai-sdk/openai-compatible → OpenCode Go /v1/chat/completions。
  * 颜色识别是硬断言：模型必须真的读到图片（仅 text 非空不算通过）。
+ * 已 live-verified：Kimi K3 / MiMo V2.5 的 PNG / JPEG / WEBP 与 UIMessage round-trip（Phase 3.3B）。
  */
 import { describe, it, expect } from "vitest";
 import { streamText, convertToModelMessages } from "ai";
@@ -18,6 +22,7 @@ import { createCanvas } from "@napi-rs/canvas";
 import { resolveLanguageModel } from "@/lib/ai/providers/resolver";
 
 const KEY = process.env.OPENCODE_GO_TEST_API_KEY ?? "";
+const FULL_MATRIX = process.env.OPENCODE_GO_VISION_FULL_MATRIX === "1";
 const describeGo = KEY ? describe : describe.skip;
 const SMOKE_TIMEOUT = 90_000;
 
@@ -69,19 +74,18 @@ async function assertTextOk(modelId: string, content: string, label: string): Pr
   throw new Error(`${label}: 两次尝试均无文本输出`);
 }
 
-function visionMatrix(modelId: string) {
-  describe(`Vision matrix: ${modelId}`, () => {
+/** Tier 1：低成本核心链（control + PNG + UIMessage） */
+function tier1Smoke(modelId: string) {
+  describe(`Vision Tier 1: ${modelId}`, () => {
     it("control：纯文本请求成功", async () => {
       const text = await assertTextOk(modelId, "只回复 OK", `${modelId} control`);
       expect(text.toUpperCase()).toContain("OK");
     }, SMOKE_TIMEOUT);
 
-    for (const format of ["image/png", "image/jpeg", "image/webp"] as const) {
-      it(`${format}：红色识别（必须含 RED）`, async () => {
-        const fixture = makeRedFixture(format);
-        await assertRedRecognized(modelId, fixture.bytes, `${modelId} ${format}`);
-      }, SMOKE_TIMEOUT);
-    }
+    it("image/png：红色识别（必须含 RED）", async () => {
+      const fixture = makeRedFixture("image/png");
+      await assertRedRecognized(modelId, fixture.bytes, `${modelId} image/png`);
+    }, SMOKE_TIMEOUT);
 
     it("UIMessage → convertToModelMessages round-trip：图片不丢失且识别红色", async () => {
       const fixture = makeRedFixture("image/png");
@@ -112,7 +116,25 @@ function visionMatrix(modelId: string) {
   });
 }
 
+/** Tier 2：完整格式矩阵（JPEG/WEBP 与 Kimi 追加覆盖） */
+function tier2Matrix(modelId: string) {
+  describe(`Vision Tier 2 matrix: ${modelId}`, () => {
+    for (const format of ["image/jpeg", "image/webp"] as const) {
+      it(`${format}：红色识别（必须含 RED）`, async () => {
+        const fixture = makeRedFixture(format);
+        await assertRedRecognized(modelId, fixture.bytes, `${modelId} ${format}`);
+      }, SMOKE_TIMEOUT);
+    }
+  });
+}
+
 describeGo("OpenCode Go Chat Vision live smoke（OPENCODE_GO_TEST_API_KEY 存在时运行）", () => {
-  visionMatrix("kimi-k3");
-  visionMatrix("mimo-v2.5");
+  // Tier 1：默认低成本 smoke —— 只跑 MiMo V2.5（用户指定的低成本策略模型）
+  tier1Smoke("mimo-v2.5");
+  // Tier 2：仅显式开启 OPENCODE_GO_VISION_FULL_MATRIX=1 时才追加完整矩阵
+  if (FULL_MATRIX) {
+    tier2Matrix("mimo-v2.5");
+    tier1Smoke("kimi-k3");
+    tier2Matrix("kimi-k3");
+  }
 });
