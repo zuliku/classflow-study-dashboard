@@ -16,11 +16,13 @@
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^4.0.36",
+    "@ai-sdk/openai": "^4.0.42",
     "@ai-sdk/openai-compatible": "^3.0.27",
     "@ai-sdk/react": "^4.0.61",
     "@mozilla/readability": "^0.6.0",
     "@napi-rs/canvas": "^1.0.3",
     "ai": "^7.0.58",
+    "buffer": "^6.0.3",
     "clsx": "^2.1.1",
     "date-fns": "^3.6.0",
     "docx": "^9.7.1",

@@ -13,7 +13,8 @@ export type AIModelVendor =
   | "mimo"
   | "tencent"
   | "minimax"
-  | "qwen";
+  | "qwen"
+  | "openai";
 
 /** 厂商元数据（Logo 本地静态资源，唯一来源） */
 export interface AIModelVendorMeta {
@@ -24,7 +25,7 @@ export interface AIModelVendorMeta {
   logo: string;
 }
 
-/** 传输协议：Task 1 真正实现 openai-chat；其余为后续扩展预留 */
+/** 传输协议：三种 transport 均有 Runtime adapter（openai-chat / openai-responses / anthropic-messages） */
 export type AITransport = "openai-chat" | "openai-responses" | "anthropic-messages";
 
 export interface AIModelDefinition {
@@ -52,7 +53,7 @@ export interface AIModelDefinition {
 
 /** Provider 连接配置（Server Route 使用） */
 export interface AIProviderConfig {
-  /** OpenAI Chat Completions base URL（不含 /chat/completions 后缀） */
+  /** Provider API base URL，具体 endpoint 由 transport adapter 拼接 */
   baseURL: string;
   apiKey?: string;
   /** 仅 Custom：阻止自动跟随 redirect，防 SSRF 跳转 */

@@ -15,6 +15,8 @@ export const AI_PROVIDER_META: Record<AIModelVendor, AIModelVendorMeta> = {
   tencent: { id: "tencent", name: "Tencent · Hunyuan", logo: "/ai-providers/tencent.png" },
   minimax: { id: "minimax", name: "MiniMax", logo: "/ai-providers/minimax.svg" },
   qwen: { id: "qwen", name: "Qwen", logo: "/ai-providers/qwen.svg" },
+  // 项目为浅色主题：使用黑色 Blossom SVG（白底黑标）
+  openai: { id: "openai", name: "OpenAI", logo: "/ai-providers/openai.svg" },
 };
 
 /** 未知厂商的统一 fallback（ProviderLogo 组件兜底） */

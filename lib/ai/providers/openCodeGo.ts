@@ -2,18 +2,15 @@ import { AI } from "@/lib/ai/config";
 import { AIModelDefinition, AIProviderConfig } from "@/lib/ai/providers/types";
 
 /**
- * OpenCode Go 官方模型注册表（Task 10 + Phase 3.0 correctness）：
- * 以官方 endpoint 表为准，每个模型声明真实 transport（openai-chat / anthropic-messages）。
+ * OpenCode Go 官方模型注册表（Task 10 + Phase 3.0/3.1）：
+ * 以官方 endpoint 表为准，每个模型声明真实 transport
+ * （openai-chat / openai-responses / anthropic-messages）。
  *
  * source-of-truth 规则：
  * - /v1/models（远端）= availability source（「当前是否可用」）
  * - 官方 endpoint 表 + 本 verified registry = transport / vendor / capabilities / 展示名 source
  * 本列表是 /models 无法获取时的 fallback，也是远端模型 transport 的唯一来源
  * （远端 /models 只返回 id，不返回 transport；未知模型一律跳过，绝不猜测协议）。
- *
- * 注意：grok-4.5 官方当前 endpoint 为 /v1/responses（@ai-sdk/openai），
- * ClassFlow Runtime 尚未实现 openai-responses transport → 不进入本 supported 列表，
- * 见 OPENCODE_RESPONSES_MODEL_IDS。
  */
 export const OPENCODE_MODELS: AIModelDefinition[] = [
   // ---- OpenAI Chat Completions（官方 endpoint：/v1/chat/completions）----
@@ -28,6 +25,10 @@ export const OPENCODE_MODELS: AIModelDefinition[] = [
   { id: "mimo-v2.5", name: "MiMo V2.5", provider: "opencode-go", vendor: "mimo", transport: "openai-chat", capabilities: { streaming: true, tools: true, vision: true, fileParts: false } },
   { id: "mimo-v2.5-pro", name: "MiMo V2.5 Pro", provider: "opencode-go", vendor: "mimo", transport: "openai-chat", capabilities: { streaming: true, tools: true, vision: false, fileParts: false } },
   { id: "hy3", name: "Hy3", provider: "opencode-go", vendor: "tencent", transport: "openai-chat", capabilities: { streaming: true, tools: true, vision: false, fileParts: false } },
+  // ---- OpenAI Responses（官方 endpoint：/v1/responses → @ai-sdk/openai）----
+  // Phase 3.1 正式接入。保守能力声明：vision/fileParts 未经 OpenCode Go proxy 实测不开。
+  { id: "grok-4.5", name: "Grok 4.5", provider: "opencode-go", vendor: "xai", transport: "openai-responses", capabilities: { streaming: true, tools: true, vision: false, fileParts: false } },
+  { id: "gpt-5.6-luna", name: "GPT 5.6 Luna", provider: "opencode-go", vendor: "openai", transport: "openai-responses", capabilities: { streaming: true, tools: true, vision: false, fileParts: false } },
   // ---- Anthropic Messages（官方 endpoint：/v1/messages）----
   // V1 保守能力声明：streaming + tools 为强要求；vision/fileParts 未经实测不开
   { id: "minimax-m3", name: "MiniMax M3", provider: "opencode-go", vendor: "minimax", transport: "anthropic-messages", capabilities: { streaming: true, tools: true, vision: false, fileParts: false } },
@@ -39,14 +40,6 @@ export const OPENCODE_MODELS: AIModelDefinition[] = [
   { id: "qwen3.6-plus", name: "Qwen3.6 Plus", provider: "opencode-go", vendor: "qwen", transport: "anthropic-messages", capabilities: { streaming: true, tools: true, vision: false, fileParts: false } },
 ];
 
-/**
- * OpenAI Responses transport 模型（官方 endpoint：/v1/responses → @ai-sdk/openai）：
- * 模型当前存在，但 ClassFlow Runtime 尚未实现 openai-responses transport（Phase 3.1）。
- * 本列表表达「存在但不可发送」，展示时过滤，绝不降级为 openai-chat 发送。
- * 当前至少：Grok 4.5、GPT 5.6 Luna。
- */
-export const OPENCODE_RESPONSES_MODEL_IDS = ["grok-4.5", "gpt-5.6-luna"] as const;
-
 export const OPENCODE_DEFAULT_MODEL = "deepseek-v4-flash";
 
 export function getOpenCodeGoConfig(apiKey: string): AIProviderConfig {
@@ -55,18 +48,17 @@ export function getOpenCodeGoConfig(apiKey: string): AIProviderConfig {
 
 export interface RemoteGoModel {
   id: string;
-  transport: "openai-chat" | "anthropic-messages";
+  transport: "openai-chat" | "openai-responses" | "anthropic-messages";
 }
 
 /**
- * 远端模型筛选（Task 10 + Phase 3.0）：
+ * 远端模型筛选（Task 10 + Phase 3.1）：
  * 远端 /models 只返回 id（无 transport）→ transport 唯一来源是本地 OPENCODE_MODELS。
  * 对每个远端 id：
  * 1. 重复 id → skip
- * 2. id ∈ OPENCODE_RESPONSES_MODEL_IDS → skip（模型存在，但 Runtime transport 未支持）
- * 3. 本地 OPENCODE_MODELS 找不到 verified definition → skip（绝不按前缀/厂商猜 transport）
- * 4. transport 只允许当前 Runtime 已实现的 openai-chat / anthropic-messages → 否则 skip
- * 5. 输出 id + verified transport
+ * 2. 本地 OPENCODE_MODELS 找不到 verified definition → skip（绝不按前缀/厂商猜 transport）
+ * 3. transport 只允许当前 Runtime 已实现的 openai-chat / openai-responses / anthropic-messages → 否则 skip
+ * 4. 输出 id + verified transport
  */
 export function filterRemoteGoModels(raw: { id?: string }[]): RemoteGoModel[] {
   const seen = new Set<string>();
@@ -75,10 +67,15 @@ export function filterRemoteGoModels(raw: { id?: string }[]): RemoteGoModel[] {
     const id = m.id;
     if (!id || seen.has(id)) continue;
     seen.add(id);
-    if ((OPENCODE_RESPONSES_MODEL_IDS as readonly string[]).includes(id)) continue;
     const known = OPENCODE_MODELS.find((d) => d.id === id);
     if (!known) continue;
-    if (known.transport !== "openai-chat" && known.transport !== "anthropic-messages") continue;
+    if (
+      known.transport !== "openai-chat" &&
+      known.transport !== "openai-responses" &&
+      known.transport !== "anthropic-messages"
+    ) {
+      continue;
+    }
     out.push({ id, transport: known.transport });
   }
   return out;

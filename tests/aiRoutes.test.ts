@@ -390,10 +390,10 @@ describe("/api/ai/models", () => {
     const data = (await res.json()) as { models: { id: string }[]; source: string };
     expect(data.source).toBe("registry");
     expect(data.models.map((m) => m.id)).toContain("glm-5.3");
-    expect(data.models.map((m) => m.id)).not.toContain("grok-4.5"); // Responses-unsupported
+    expect(data.models.map((m) => m.id)).toContain("grok-4.5"); // Responses 已支持 → 出现在 fallback
   });
 
-  it("opencode-go：远端成功 → transport 原样保留；responses 与未知模型过滤", async () => {
+  it("opencode-go：远端成功 → transport 原样保留；未知模型过滤", async () => {
     fetchMock.mockResolvedValueOnce(
       new Response(
         JSON.stringify({
@@ -417,8 +417,8 @@ describe("/api/ai/models", () => {
     expect(byId.get("glm-5.3")).toBe("openai-chat");
     expect(byId.get("minimax-m3")).toBe("anthropic-messages");
     expect(byId.get("qwen3.7-plus")).toBe("anthropic-messages");
-    expect(byId.has("grok-4.5")).toBe(false); // 官方 endpoint 已变 /v1/responses：过滤，不降级
-    expect(byId.has("gpt-5.6-luna")).toBe(false); // openai-responses：本轮不实现
+    expect(byId.get("grok-4.5")).toBe("openai-responses");
+    expect(byId.get("gpt-5.6-luna")).toBe("openai-responses");
     expect(byId.has("brand-new-model")).toBe(false); // 未知 + 无 transport：跳过，不猜
   });
 });

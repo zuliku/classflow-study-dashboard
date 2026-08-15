@@ -1,13 +1,14 @@
 /**
- * Provider Model Resolver（Task 10）：
+ * Provider Model Resolver（Task 10 + Phase 3.1）：
  * provider/model → AIModelDefinition（transport 唯一来源）→ AI SDK LanguageModel。
  * - openai-chat        → @ai-sdk/openai-compatible
+ * - openai-responses   → @ai-sdk/openai（显式 .responses(modelId)，不依赖自动推断）
  * - anthropic-messages → @ai-sdk/anthropic（OpenCode Go Messages：Bearer authToken，baseURL 不带 /messages）
- * - openai-responses   → 明确 UNSUPPORTED_TRANSPORT（本轮不实现，绝不当 openai-chat 发送）
- * 所有 Runtime Route（chat / test / compact）共用；Tool 语义与 transport 完全解耦。
+ * 三种 transport 均有 Runtime adapter；Tool 语义与 transport 完全解耦。
  */
 
 import { createAnthropic } from "@ai-sdk/anthropic";
+import { createOpenAI } from "@ai-sdk/openai";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { LanguageModel } from "ai";
 import { AIError } from "@/lib/ai/errors";
@@ -96,7 +97,17 @@ export function createLanguageModelFromDefinition(
         : undefined,
     })(definition.id);
   }
-  // openai-responses 及一切未知 transport：明确拒绝，不偷偷降级为 openai-chat
+  if (definition.transport === "openai-responses") {
+    // OpenCode Go Responses（Grok 4.5 / GPT 5.6 Luna）：官方 endpoint /v1/responses。
+    // 显式 .responses(modelId) —— transport 由 registry 声明，Runtime 不自动推断 API。
+    const provider = createOpenAI({
+      name: "classflow-kiro",
+      baseURL: cfg.baseURL,
+      apiKey: cfg.apiKey ?? "",
+    });
+    return provider.responses(definition.id);
+  }
+  // 未知 transport：明确拒绝，不偷偷降级
   throw new AIError("UNSUPPORTED_TRANSPORT");
 }
 

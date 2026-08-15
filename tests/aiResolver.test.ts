@@ -6,6 +6,7 @@ import { OPENCODE_MODELS } from "@/lib/ai/providers/openCodeGo";
 const mocks = vi.hoisted(() => ({
   openAICompatibleFactory: vi.fn(),
   anthropicFactory: vi.fn(),
+  openAIFactory: vi.fn(),
 }));
 
 vi.mock("@ai-sdk/openai-compatible", () => ({
@@ -20,9 +21,18 @@ vi.mock("@ai-sdk/anthropic", () => ({
     return (id: string) => ({ provider: "anthropic", modelId: id });
   },
 }));
+vi.mock("@ai-sdk/openai", () => ({
+  createOpenAI: (opts: unknown) => {
+    mocks.openAIFactory(opts);
+    return {
+      responses: (id: string) => ({ provider: "openai", modelId: id, api: "responses" }),
+    };
+  },
+}));
 
 const openAICompatibleFactory = mocks.openAICompatibleFactory;
 const anthropicFactory = mocks.anthropicFactory;
+const openAIFactory = mocks.openAIFactory;
 
 const providerOf = (m: unknown) => (m as { provider?: string }).provider ?? "";
 const modelIdOf = (m: unknown) => (m as { modelId?: string }).modelId ?? "";
@@ -38,6 +48,18 @@ describe("resolveModelDefinition", () => {
     const def = await resolveModelDefinition({ provider: "opencode-go", model: "minimax-m3" });
     expect(def?.transport).toBe("anthropic-messages");
     expect(def?.vendor).toBe("minimax");
+  });
+
+  it("B2. OpenCode Responses：gpt-5.6-luna → openai-responses", async () => {
+    const def = await resolveModelDefinition({ provider: "opencode-go", model: "gpt-5.6-luna" });
+    expect(def?.transport).toBe("openai-responses");
+    expect(def?.vendor).toBe("openai");
+  });
+
+  it("B3. OpenCode Responses：grok-4.5 → openai-responses", async () => {
+    const def = await resolveModelDefinition({ provider: "opencode-go", model: "grok-4.5" });
+    expect(def?.transport).toBe("openai-responses");
+    expect(def?.vendor).toBe("xai");
   });
 
   it("Custom 固定 openai-chat（不扩展 Anthropic-compatible）", async () => {
@@ -56,6 +78,7 @@ describe("createLanguageModelFromDefinition（Adapter 选择）", () => {
   beforeEach(() => {
     openAICompatibleFactory.mockClear();
     anthropicFactory.mockClear();
+    openAIFactory.mockClear();
   });
   afterEach(() => {
     vi.unstubAllGlobals();
@@ -105,16 +128,45 @@ describe("createLanguageModelFromDefinition（Adapter 选择）", () => {
     expect(args.transformRequestBody).toBeUndefined(); // Anthropic transport 不受 DeepSeek 兼容层影响
   });
 
-  it("E. openai-responses → 明确 UNSUPPORTED_TRANSPORT（不偷偷降级为 openai-chat）", () => {
+  it("F3. openai-responses → @ai-sdk/openai adapter（createOpenAI + 显式 .responses(modelId)）", () => {
+    const m = createLanguageModelFromDefinition(
+      { id: "gpt-5.6-luna", name: "GPT 5.6 Luna", provider: "opencode-go", vendor: null, transport: "openai-responses", capabilities: { streaming: true, tools: true, vision: false, fileParts: false } },
+      { baseURL: "https://opencode.ai/zen/go/v1", apiKey: "sk-go" }
+    );
+    expect(providerOf(m)).toBe("openai");
+    expect(modelIdOf(m)).toBe("gpt-5.6-luna");
+    expect((m as { api?: string }).api).toBe("responses");
+    expect(openAIFactory).toHaveBeenCalledWith({
+      name: "classflow-kiro",
+      baseURL: "https://opencode.ai/zen/go/v1",
+      apiKey: "sk-go",
+    });
+    // Responses 不得调用 openai-compatible / anthropic adapter
+    expect(openAICompatibleFactory).not.toHaveBeenCalled();
+    expect(anthropicFactory).not.toHaveBeenCalled();
+  });
+
+  it("F3b. grok-4.5 同样走 @ai-sdk/openai .responses", () => {
+    const m = createLanguageModelFromDefinition(
+      { id: "grok-4.5", name: "Grok 4.5", provider: "opencode-go", vendor: "xai", transport: "openai-responses", capabilities: { streaming: true, tools: true, vision: false, fileParts: false } },
+      { baseURL: "https://opencode.ai/zen/go/v1", apiKey: "sk-go" }
+    );
+    expect(providerOf(m)).toBe("openai");
+    expect(modelIdOf(m)).toBe("grok-4.5");
+    expect(openAIFactory).toHaveBeenCalledTimes(1);
+    expect(openAICompatibleFactory).not.toHaveBeenCalled();
+  });
+
+  it("F4. 未知 transport → 明确 UNSUPPORTED_TRANSPORT（不偷偷降级）", () => {
     expect(() =>
       createLanguageModelFromDefinition(
-        { id: "gpt-5.6-luna", name: "x", provider: "opencode-go", vendor: null, transport: "openai-responses", capabilities: { streaming: true, tools: true, vision: false, fileParts: false } },
+        { id: "mystery", name: "x", provider: "opencode-go", vendor: null, transport: "magic-transport" as never, capabilities: { streaming: true, tools: true, vision: false, fileParts: false } },
         { baseURL: "https://opencode.ai/zen/go/v1", apiKey: "sk" }
       )
     ).toThrow(AIError);
     try {
       createLanguageModelFromDefinition(
-        { id: "gpt-5.6-luna", name: "x", provider: "opencode-go", vendor: null, transport: "openai-responses", capabilities: { streaming: true, tools: true, vision: false, fileParts: false } },
+        { id: "mystery", name: "x", provider: "opencode-go", vendor: null, transport: "magic-transport" as never, capabilities: { streaming: true, tools: true, vision: false, fileParts: false } },
         { baseURL: "https://opencode.ai/zen/go/v1", apiKey: "sk" }
       );
     } catch (e) {
@@ -128,6 +180,7 @@ describe("resolveLanguageModel（统一入口）", () => {
   beforeEach(() => {
     openAICompatibleFactory.mockClear();
     anthropicFactory.mockClear();
+    openAIFactory.mockClear();
   });
 
   it("Chat 模型 → 完整解析 + OpenAI-compatible LanguageModel", async () => {
@@ -163,6 +216,7 @@ describe("OpenCode 注册表完整性", () => {
     for (const id of [
       "glm-5.3", "glm-5.2", "glm-5.1", "kimi-k3", "kimi-k2.7-code", "kimi-k2.6",
       "deepseek-v4-pro", "deepseek-v4-flash", "mimo-v2.5", "mimo-v2.5-pro", "hy3",
+      "grok-4.5", "gpt-5.6-luna",
       "minimax-m3", "minimax-m2.7", "minimax-m2.5", "qwen3.8-max", "qwen3.7-max", "qwen3.7-plus", "qwen3.6-plus",
     ]) {
       expect(ids.has(id), id).toBe(true);
