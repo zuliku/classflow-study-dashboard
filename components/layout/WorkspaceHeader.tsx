@@ -44,7 +44,7 @@ export function WorkspaceHeader({
       )}
     >
       <div className="min-w-0">
-        <h1 className="truncate text-base font-semibold tracking-tight text-charcoal md:text-lg">
+        <h1 className="truncate text-lg font-semibold tracking-tight text-charcoal">
           {title}
         </h1>
         {context ? (

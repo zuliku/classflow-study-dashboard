@@ -515,7 +515,7 @@ export function AssignmentTable({
               : "hover:bg-alabaster bg-surface border border-line-soft"
             : isOverdueTask
             ? "bg-danger-bg border border-danger-border"
-            : "hover:bg-alabaster bg-surface border border-line-soft"
+            : "rounded-lg hover:bg-alabaster"
         )}
       >
         <div className="flex items-center space-x-3 min-w-0 flex-1">
@@ -545,12 +545,18 @@ export function AssignmentTable({
                 {task.title}
               </h4>
               <span
-                className={`text-[9px] px-1.5 py-0.2 rounded font-bold shrink-0 border ${priorityMeta.bg} ${priorityMeta.text} ${priorityMeta.border}`}
+                className={cn(
+                  "text-[10px] px-1.5 py-0.5 rounded font-bold shrink-0 border",
+                  // compact：medium / low 不套 Badge，退化为低对比文字（与 UpcomingDDL 一致）
+                  isWorkspace || task.priority === "urgent" || task.priority === "high"
+                    ? `${priorityMeta.bg} ${priorityMeta.text} ${priorityMeta.border}`
+                    : "border-transparent bg-transparent text-satin-grey"
+                )}
               >
                 {priorityMeta.label}
               </span>
               {isOverdueTask && (
-                <span className="text-[9px] bg-danger text-white px-1.5 py-0.2 rounded font-extrabold shrink-0">
+                <span className="text-[10px] bg-danger text-white px-1.5 py-0.5 rounded font-extrabold shrink-0">
                   已逾期
                 </span>
               )}
@@ -611,7 +617,7 @@ export function AssignmentTable({
 
         <div className="flex items-center space-x-2 shrink-0 ml-2">
           <div className="w-16 hidden sm:block">
-            <div className="flex justify-between text-[9px] text-sandrift mb-0.5">
+            <div className="flex justify-between text-[11px] text-sandrift mb-0.5">
               <span>进度</span>
               <span className="font-bold text-charcoal">
                 {task.progress}%
@@ -660,7 +666,7 @@ export function AssignmentTable({
   return (
     <div
       className={cn(
-        "bg-surface border border-line rounded-2xl shadow-subtle flex flex-col h-full min-w-0",
+        "bg-surface border border-line rounded-xl shadow-subtle flex flex-col h-full min-w-0",
         // workspace：edge-owned scroll surface（p-0，Header/Filters/List/Footer 分区拥有 padding；scrollbar 贴卡片右缘）
         // compact：保持原卡片 padding 布局
         isWorkspace ? "p-0 justify-start" : "p-4 justify-between space-y-3"
@@ -676,7 +682,7 @@ export function AssignmentTable({
             <h3 className="text-sm font-bold text-charcoal">
               {isWorkspace ? "任务与 DDL" : "任务清单"}
             </h3>
-            <span className="text-[10px] font-semibold text-sandrift bg-[#F7F5F5] px-1.5 py-0.5 rounded border border-line">
+            <span className="text-[10px] font-semibold text-sandrift">
               {isWorkspace
                 ? workspaceViewResult
                   ? workspaceViewResult.items.length
@@ -696,7 +702,7 @@ export function AssignmentTable({
             <button
               onClick={handleAddAssignmentClick}
               aria-expanded={undefined}
-              className="ux-press flex items-center space-x-1 px-3 py-1.5 bg-charcoal hover:bg-black text-white text-xs font-bold rounded-xl transition-colors shadow-subtle shrink-0"
+              className="ux-press flex items-center space-x-1 h-8 px-3 bg-charcoal hover:bg-black text-white text-xs font-bold rounded-lg transition-colors shadow-subtle shrink-0"
             >
               <Plus className="w-3.5 h-3.5" />
               <span>新增任务</span>
@@ -718,7 +724,7 @@ export function AssignmentTable({
 
         {/* Filters Row: Course Filter + (compact: Time Slice Pills | workspace: View Tabs + Search) */}
         <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
-          <div className="flex items-center space-x-1.5 bg-[#F7F5F5] border border-line rounded-xl px-2.5 py-1">
+          <div className="flex items-center space-x-1.5 bg-[#F7F5F5] border border-line rounded-lg h-9 px-2.5">
             <BookOpen className="w-3.5 h-3.5 text-[#A48F82]" />
             <UISelect
               value={courseFilter}
@@ -829,7 +835,7 @@ export function AssignmentTable({
               )}
             </div>
           ) : (
-            <div className="flex flex-wrap items-center gap-1 bg-alabaster p-0.5 rounded-xl border border-line-strong text-[11px] font-medium">
+            <div className="flex flex-wrap items-center gap-1 bg-alabaster p-0.5 rounded-lg border border-line-strong text-[11px] font-medium">
               {[
                 { id: "all", label: "全部" },
                 { id: "overdue", label: "已逾期" },
@@ -969,7 +975,7 @@ export function AssignmentTable({
       {isWorkspace && bulkCount > 0 && (
         <div
           data-testid="assignment-bulk-bar"
-          className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 bg-surface border border-line-strong rounded-2xl shadow-card px-3 py-2 flex items-center gap-2 text-xs ux-inline"
+          className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 bg-surface border border-line-strong rounded-xl shadow-card px-3 py-2 flex items-center gap-2 text-xs ux-inline"
         >
           <span className="font-bold text-charcoal px-1">
             已选 {bulkCount} 项
@@ -1001,7 +1007,7 @@ export function AssignmentTable({
           {bulkDdlOpen ? (
             <span
               data-testid="bulk-ddl-popover"
-              className="fixed bottom-16 left-1/2 -translate-x-1/2 z-50 w-72 bg-surface border border-line-strong rounded-2xl shadow-card p-3 space-y-2.5 text-xs ux-inline"
+              className="fixed bottom-16 left-1/2 -translate-x-1/2 z-50 w-72 bg-surface border border-line-strong rounded-xl shadow-card p-3 space-y-2.5 text-xs ux-inline"
             >
               <div className="flex items-center justify-between">
                 <span className="font-bold text-charcoal">调整截止时间</span>
@@ -1053,7 +1059,7 @@ export function AssignmentTable({
                     应用
                   </button>
                 </div>
-                <p className="text-[9px] text-sandrift">各任务相对日期差保持不变，HH:mm 时间均保留</p>
+                <p className="text-[10px] text-sandrift">各任务相对日期差保持不变，HH:mm 时间均保留</p>
               </div>
             </span>
           ) : (

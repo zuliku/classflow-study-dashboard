@@ -50,14 +50,14 @@ export function StudyLoadChart() {
   return (
     <div
       data-testid="study-load-card"
-      className="bg-surface border border-line rounded-2xl p-4 shadow-subtle flex flex-col justify-between h-full"
+      className="bg-surface border border-line rounded-xl p-4 shadow-subtle flex flex-col justify-between h-full"
     >
       {/* Header */}
-      <div className="flex items-center justify-between pb-2.5 border-b border-[#F0EBE1] shrink-0">
+      <div className="flex items-center justify-between pb-2.5 border-b border-line-soft shrink-0">
         <h3 className="text-sm font-bold text-charcoal">
           本周课程负荷
         </h3>
-        <span className="text-[10px] font-semibold text-sandrift bg-[#F7F5F5] px-2 py-1 rounded-lg border border-line">
+        <span className="text-[10px] font-semibold text-sandrift">
           {weekLoad.isInSemester
             ? `第 ${weekLoad.week} 周 · 按实际课表统计`
             : "本周不在教学周内"}
@@ -96,7 +96,7 @@ export function StudyLoadChart() {
       </div>
 
       {/* 最忙辅助信息（仅教学周内有值） */}
-      <p className="text-[10px] text-sandrift mt-2 shrink-0">
+      <p className="text-[11px] text-sandrift mt-2 shrink-0">
         {weekLoad.busiestDay
           ? `最忙：${weekLoad.busiestDay.day} · ${weekLoad.busiestDay.hours}h`
           : "本周暂无课程安排"}
@@ -128,7 +128,7 @@ export function StudyLoadChart() {
               tickLine={false}
             />
             <YAxis
-              tick={{ fontSize: 9, fill: "#A48F82" }}
+              tick={{ fontSize: 10, fill: "#A48F82" }}
               axisLine={false}
               tickLine={false}
               unit="h"
@@ -142,7 +142,7 @@ export function StudyLoadChart() {
               dataKey="hours"
               radius={[4, 4, 0, 0]}
               isAnimationActive={!reducedMotion}
-              animationDuration={reducedMotion ? 0 : 450}
+              animationDuration={reducedMotion ? 0 : 300}
               animationEasing="ease-out"
             >
               {weekLoad.days.map((d, index) => (
@@ -158,7 +158,7 @@ export function StudyLoadChart() {
                 formatter={(value: number | string) =>
                   Number(value) > 0 ? String(Number(value)) : ""
                 }
-                style={{ fill: "#A48F82", fontSize: 9, fontWeight: 600 }}
+                style={{ fill: "#A48F82", fontSize: 10, fontWeight: 600 }}
               />
             </Bar>
           </BarChart>

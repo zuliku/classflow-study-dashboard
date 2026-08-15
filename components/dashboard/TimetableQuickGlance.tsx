@@ -208,7 +208,7 @@ function GlanceChip({
         onClick={onClick}
         aria-label={label}
         className={cn(
-          "flex items-center gap-1.5 h-7 px-2 rounded-lg border border-line-soft bg-transparent",
+          "flex items-center gap-1.5 h-8 px-2 rounded-lg border border-line-soft bg-transparent",
           "text-[11px] font-bold text-charcoal",
           "hover:bg-alabaster hover:border-line transition-colors duration-[var(--motion-fast)]",
           "focus-visible:bg-alabaster focus-visible:border-line focus:outline-none"

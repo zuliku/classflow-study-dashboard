@@ -50,48 +50,69 @@ export function UpcomingDDL() {
   const safePage = paged.currentPage;
   const showPagination = upcomingAssignments.length > UPCOMING_DDL_PAGE_SIZE;
 
-  const getPriorityBadge = (priority: string) => {
+  // 优先级：仅 urgent / high 使用明显 Badge；medium / low 退化为小圆点（文字提示）
+  const getPriorityMark = (priority: string) => {
     switch (priority) {
       case "urgent":
         return (
-          <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-danger-bg text-danger border border-danger-border shrink-0">
+          <span className="shrink-0 px-1.5 py-px rounded text-[10px] font-bold bg-danger-bg text-danger border border-danger-border leading-4">
             紧急
           </span>
         );
       case "high":
         return (
-          <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-warning-bg text-warning border border-warning-border shrink-0">
+          <span className="shrink-0 px-1.5 py-px rounded text-[10px] font-bold bg-warning-bg text-warning border border-warning-border leading-4">
             高优
           </span>
         );
       case "medium":
         return (
-          <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-alabaster text-charcoal border border-stone-beige shrink-0">
-            中优
-          </span>
+          <span
+            aria-hidden="true"
+            title="中优先"
+            className="shrink-0 w-1.5 h-1.5 rounded-full bg-stone-beige"
+          />
         );
       default:
         return (
-          <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-pastel-mint text-charcoal border border-pastel-mint shrink-0">
-            普通
-          </span>
+          <span
+            aria-hidden="true"
+            title="低优先"
+            className="shrink-0 w-1.5 h-1.5 rounded-full bg-ashy-beige"
+          />
         );
     }
   };
 
+  // 按日期分组的展示结构（保持 ddl 升序）：日期分组头 + 内部 Row（无每行 Card）
+  const grouped = useMemo(() => {
+    const groups: { key: string; label: string; items: typeof pagedItems }[] = [];
+    for (const task of pagedItems) {
+      const ddlDate = parseLocalDDL(task.ddl) ?? new Date();
+      const key = format(ddlDate, "yyyy-MM-dd");
+      const last = groups[groups.length - 1];
+      if (last && last.key === key) {
+        last.items.push(task);
+      } else {
+        groups.push({ key, label: format(ddlDate, "M月d日 EEE", { locale: zhCN }), items: [task] });
+      }
+    }
+    return groups;
+  }, [pagedItems]);
+
   return (
     <div
       data-testid="upcoming-ddl-card"
-      className="bg-surface border border-line rounded-2xl p-3.5 shadow-subtle flex flex-col space-y-2.5 min-h-0 h-full"
+      className="bg-surface border border-line rounded-xl p-3.5 shadow-subtle flex flex-col min-h-0 h-full"
     >
       {/* Card Header */}
-      <div className="flex items-center justify-between border-b border-[#F0EBE1] pb-2 shrink-0">
+      <div className="flex items-center justify-between border-b border-line-soft pb-2 shrink-0">
         <div className="flex items-center space-x-2">
           <Clock className="w-4 h-4 text-danger" />
-          <h3 className="text-xs font-bold text-charcoal tracking-tight">
+          <h3 className="text-sm font-bold text-charcoal tracking-tight">
             临近 DDL
           </h3>
-          <span className="text-[10px] font-semibold text-sandrift bg-[#F7F5F5] px-1.5 py-0.5 rounded border border-line">
+          <span className="text-[10px] font-semibold text-sandrift">
             {paged.totalItems} 项待办
           </span>
         </div>
@@ -104,94 +125,83 @@ export function UpcomingDDL() {
         </button>
       </div>
 
-      {/* DDL Task Items List：flex 列 + 每条 min-h-[56px] 硬下限（任何情况下不被压扁重叠）；
-          空间充足时 flex-1 轻微增长；不足时只溢出到容器内而不压缩文字 */}
-      <div className="flex-1 min-h-0 flex flex-col gap-1.5">
-        {pagedItems.length === 0 ? (
-          <div className="flex-1 flex flex-col items-center justify-center text-xs text-sandrift space-y-1">
+      {/* DDL Task Rows：日期分组 + Row 语言（hover bg，无每行 Card） */}
+      <div className="flex-1 min-h-0 overflow-y-auto scrollbar-none space-y-1 py-1.5">
+        {grouped.length === 0 ? (
+          <div className="flex-1 flex flex-col items-center justify-center text-xs text-sandrift space-y-1 min-h-24">
             <CheckCircle2 className="w-6 h-6 text-success" />
             <p>暂无临近 DDL</p>
           </div>
         ) : (
-          pagedItems.map((task) => {
-            const course = courses.find((c) => c.id === task.courseId);
-            const ddlDate = parseLocalDDL(task.ddl) ?? new Date();
-            const dateDisplay = format(ddlDate, "M月d日 EEE", { locale: zhCN });
-            const relativeTime = formatDistanceToNow(ddlDate, {
-              addSuffix: true,
-              locale: zhCN,
-            });
+          grouped.map((group) => (
+            <div key={group.key} className="shrink-0">
+              <p className="text-[11px] font-bold text-sandrift px-2 pt-0.5 pb-0.5">
+                {group.label}
+              </p>
+              <div className="space-y-px">
+                {group.items.map((task) => {
+                  const course = courses.find((c) => c.id === task.courseId);
+                  const ddlDate = parseLocalDDL(task.ddl) ?? new Date();
+                  const relativeTime = formatDistanceToNow(ddlDate, {
+                    addSuffix: true,
+                    locale: zhCN,
+                  });
 
-            return (
-              <div
-                key={task.id}
-                onClick={() => setSelectedAssignmentId(task.id)}
-                className="p-2 bg-[#F7F5F5] hover:bg-alabaster border border-line hover:border-[#CDB9AB] rounded-xl transition-colors duration-[var(--motion-fast)] ease-[var(--ease-standard)] cursor-pointer flex items-center justify-between group min-h-[56px] flex-1"
-              >
-                <div className="flex items-center space-x-2.5 min-w-0 flex-1">
-                  <div className="w-8 h-8 rounded-lg bg-white border border-line-strong flex flex-col items-center justify-center shrink-0 text-center">
-                    <span className="text-[8px] font-bold text-sandrift leading-none">
-                      {format(ddlDate, "M月")}
-                    </span>
-                    <span className="text-[11px] font-extrabold text-charcoal leading-none mt-0.5">
-                      {format(ddlDate, "d")}
-                    </span>
-                  </div>
-
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-1.5 min-w-0">
-                      <h4 className="text-xs font-bold text-charcoal truncate group-hover:text-black">
-                        {task.title}
-                      </h4>
-                      {getPriorityBadge(task.priority)}
+                  return (
+                    <div
+                      key={task.id}
+                      onClick={() => setSelectedAssignmentId(task.id)}
+                      className="flex items-start gap-2.5 px-2 py-1.5 rounded-lg hover:bg-alabaster/50 cursor-pointer group transition-colors duration-[var(--motion-fast)] ease-[var(--ease-standard)]"
+                    >
+                      <span className="text-[11px] tabular-nums text-sandrift font-semibold shrink-0 w-11 leading-5 pt-px">
+                        {format(ddlDate, "HH:mm")}
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <h4 className="text-xs font-bold text-charcoal truncate group-hover:text-black leading-5">
+                          {task.title}
+                        </h4>
+                        <div className="flex items-center gap-1.5 min-w-0 mt-0.5">
+                          <span className="text-[10px] text-satin-grey truncate">
+                            {course?.name || "通用课题"}
+                          </span>
+                          {getPriorityMark(task.priority)}
+                        </div>
+                      </div>
+                      <span className="text-[10px] font-bold text-danger/90 shrink-0 pt-px leading-5">
+                        {relativeTime}
+                      </span>
                     </div>
-                    <p className="text-[10px] text-satin-grey truncate mt-0.5">
-                      {course?.name || "通用课题"}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="text-right shrink-0 ml-2">
-                  <span className="text-[10px] font-bold text-danger block">
-                    {relativeTime}
-                  </span>
-                  {/* 窄右栏（<2xl）隐藏具体日期行：Calendar 已展示日期，避免文字挤压 */}
-                  <span className="text-[9px] text-sandrift block mt-0.5 hidden 2xl:block">
-                    {dateDisplay}
-                  </span>
-                </div>
+                  );
+                })}
               </div>
-            );
-          })
+            </div>
+          ))
         )}
       </div>
 
-      {/* 轻量 Footer（恒显保证高度稳定；仅 >4 项时显示分页按钮） */}
+      {/* 轻量 Footer（恒显保证高度稳定；仅 >3 项时显示分页按钮） */}
       <div
         data-testid="upcoming-ddl-pagination"
-        className="pt-2 border-t border-[#F0EBE1] flex items-center justify-between shrink-0"
+        className="pt-2 border-t border-line-soft flex items-center justify-between shrink-0"
       >
         <span className="text-[11px] text-sandrift">
-          共 {paged.totalItems} 项
+          {showPagination ? `${safePage} / ${totalPages}` : `共 ${paged.totalItems} 项`}
         </span>
         {showPagination && (
-          <span className="inline-flex items-center gap-2">
+          <span className="inline-flex items-center gap-1">
             <button
               onClick={() => setCurrentPage(safePage - 1)}
               disabled={safePage <= 1}
               aria-label="上一页"
-              className="w-7 h-7 flex items-center justify-center rounded-lg text-sandrift hover:bg-alabaster hover:text-charcoal transition-colors disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-sandrift"
+              className="w-6 h-6 flex items-center justify-center rounded-md text-sandrift hover:bg-alabaster hover:text-charcoal transition-colors disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-sandrift"
             >
               <ChevronLeft className="w-3.5 h-3.5" />
             </button>
-            <span className="min-w-[40px] text-center text-[11px] font-mono text-satin-grey">
-              {safePage} / {totalPages}
-            </span>
             <button
               onClick={() => setCurrentPage(safePage + 1)}
               disabled={safePage >= totalPages}
               aria-label="下一页"
-              className="w-7 h-7 flex items-center justify-center rounded-lg text-sandrift hover:bg-alabaster hover:text-charcoal transition-colors disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-sandrift"
+              className="w-6 h-6 flex items-center justify-center rounded-md text-sandrift hover:bg-alabaster hover:text-charcoal transition-colors disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-sandrift"
             >
               <ChevronRight className="w-3.5 h-3.5" />
             </button>

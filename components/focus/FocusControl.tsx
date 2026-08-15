@@ -150,7 +150,7 @@ export function FocusControl() {
         onClick={() => setOpen((v) => !v)}
         data-testid="focus-control"
         className={cn(
-          "flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-lg font-bold transition-colors",
+          "flex items-center gap-1 text-[11px] h-8 px-2 rounded-lg font-bold transition-colors",
           active
             ? active.status === "running"
               ? "bg-pastel-mint hover:bg-pastel-mint text-charcoal"

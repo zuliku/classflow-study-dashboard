@@ -213,7 +213,7 @@ export default function Home() {
                 <div className="flex flex-1 min-h-0 flex-col p-4 pb-24 md:p-6 md:pb-6">
                 <div
                   data-testid="getting-started"
-                  className="bg-surface border border-line rounded-2xl p-8 shadow-subtle space-y-4 text-center"
+                  className="bg-surface border border-line rounded-xl p-6 shadow-subtle space-y-4 text-center"
                 >
                   <div>
                     <h2 className="text-lg font-bold text-charcoal">欢迎使用 ClassFlow</h2>
@@ -222,27 +222,27 @@ export default function Home() {
                   <div className="flex flex-wrap items-center justify-center gap-2.5">
                     <button
                       onClick={() => setImportScheduleModalOpen(true)}
-                      className="ux-press flex items-center gap-1.5 px-4 py-2 bg-charcoal hover:bg-black text-white text-xs font-bold rounded-xl transition-colors shadow-subtle"
+                      className="ux-press flex items-center gap-1.5 h-9 px-4 bg-charcoal hover:bg-black text-white text-xs font-bold rounded-lg transition-colors shadow-subtle"
                     >
                       <FileUp className="w-3.5 h-3.5" />
                       导入课表
                     </button>
                     <button
                       onClick={() => setAddCourseModalOpen(true)}
-                      className="ux-press flex items-center gap-1.5 px-4 py-2 bg-pastel-mint hover:bg-pastel-mint text-charcoal text-xs font-bold rounded-xl transition-colors"
+                      className="ux-press flex items-center gap-1.5 h-9 px-4 bg-pastel-mint hover:bg-pastel-mint text-charcoal text-xs font-bold rounded-lg transition-colors"
                     >
                       <Plus className="w-3.5 h-3.5" />
                       添加第一门课程
                     </button>
                     <button
                       onClick={() => setSettingsModalOpen(true)}
-                      className="ux-press flex items-center gap-1.5 px-4 py-2 bg-white border border-line-strong text-charcoal text-xs font-bold rounded-xl transition-colors hover:bg-alabaster"
+                      className="ux-press flex items-center gap-1.5 h-9 px-4 bg-transparent border border-line text-satin-grey text-xs font-bold rounded-lg transition-colors hover:bg-alabaster hover:text-charcoal"
                     >
-                      <CalendarDays className="w-3.5 h-3.5 text-[#A48F82]" />
+                      <CalendarDays className="w-3.5 h-3.5 text-sandrift" />
                       设置当前学期
                     </button>
                   </div>
-                  <p className="text-[10px] text-sandrift">
+                  <p className="text-[11px] text-sandrift">
                     也可以直接新建任务或浏览课表，随时可以从设置中调整
                   </p>
                 </div>
@@ -253,14 +253,14 @@ export default function Home() {
                   < xl 自然流式堆叠，不强制视口高度） */}
               <section className="min-h-0 shrink-0 p-4 pb-24 md:p-6 md:pb-6 xl:h-[calc(100dvh-4.0625rem)] [@media(max-height:720px)]:!pt-2 [@media(max-height:720px)]:!pb-4">
                 {/* 三卡 Grid：xl 时 h-full 填满 Hero Section；三卡同顶同底（items-stretch） */}
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 items-stretch h-full min-h-0">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 items-stretch h-full min-h-0">
                 <div className="lg:col-span-2 flex flex-col min-h-0">
                   <TimetableGrid density="compact" fillAvailableHeight headerActions={<TimetableQuickGlance />} />
                 </div>
                 {/* 右栏：DDL 吸收剩余高度（flex-1），Calendar 固定稳定高度（不随月份/内容变化）
                     右栏总高恒等于左侧课表 → 三卡同顶同底
                     高度受限（≤800px 视口）：Agenda 隐藏 + Calendar shell 缩短，空间让给 DDL */}
-                <div className="flex flex-col h-full min-h-0 gap-5">
+                <div className="flex flex-col h-full min-h-0 gap-4">
                   <div className="flex-1 min-h-0">
                     <UpcomingDDL />
                   </div>
@@ -272,7 +272,7 @@ export default function Home() {
               </section>
 
               {/* Overview Secondary Section：完全位于首屏 fold 以下，滚动后才可见 */}
-              <section className="grid gap-5 items-stretch shrink-0 grid-cols-[repeat(auto-fit,minmax(520px,1fr))] px-4 pb-24 md:px-6 md:pb-6">
+              <section className="grid gap-4 items-stretch shrink-0 grid-cols-[repeat(auto-fit,minmax(520px,1fr))] px-4 pb-24 md:px-6 md:pb-6">
                 <div className="md:min-h-[460px]" data-testid="overview-load-wrap">
                   <StudyLoadChart />
                 </div>

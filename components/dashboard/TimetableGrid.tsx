@@ -433,16 +433,16 @@ export function TimetableGrid({
       className={
         variant === "embedded"
           ? "flex flex-col flex-1 min-h-0 w-full"
-          : "bg-surface border border-line rounded-2xl p-4 shadow-subtle flex flex-col justify-between h-full w-full"
+          : "bg-surface border border-line rounded-xl p-4 shadow-subtle flex flex-col justify-between h-full w-full"
       }
     >
       {/* Header */}
       {showHeader && (
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-2.5 border-b border-[#F0EBE1] gap-2 shrink-0">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-2.5 border-b border-line-soft gap-2 shrink-0">
         <div className="flex items-center space-x-2">
           <h2 className="text-sm font-bold text-charcoal">本周课表</h2>
           {/* Semester Week Picker */}
-          <div className="flex items-center space-x-1 bg-alabaster border border-line-strong rounded-lg px-2 py-0.5 text-xs font-semibold text-charcoal">
+          <div className="flex items-center h-8 bg-alabaster border border-line-strong rounded-lg px-2 text-xs font-semibold text-charcoal">
             <button
               onClick={() => setCurrentSemesterWeek(currentSemesterWeek - 1)}
               disabled={currentSemesterWeek <= 1}
@@ -473,7 +473,7 @@ export function TimetableGrid({
 
           <button
             onClick={handleOpenFullTimetable}
-            className="group flex items-center space-x-1 text-xs text-sandrift hover:text-charcoal transition-colors bg-[#F7F5F5] hover:bg-alabaster px-2 py-1 rounded-lg border border-line self-start sm:self-auto font-medium"
+            className="group flex items-center space-x-1 h-8 text-xs text-sandrift hover:text-charcoal transition-colors bg-[#F7F5F5] hover:bg-alabaster px-2.5 rounded-lg border border-line font-medium"
           >
             <span>查看课表</span>
             <ExternalLink className="w-3.5 h-3.5 transition-transform duration-[var(--motion-fast)] group-hover:translate-x-px" />
@@ -497,7 +497,7 @@ export function TimetableGrid({
               setSelectedConflict(firstConflict);
               setConflictModalOpen(true);
             }}
-            className="px-2.5 py-1 bg-danger text-white rounded-lg font-bold text-[10px] hover:bg-danger/85 transition-colors shrink-0"
+            className="px-2.5 py-1 bg-danger text-white rounded-lg font-bold text-[11px] hover:bg-danger/85 transition-colors shrink-0"
           >
             查看冲突
           </button>
@@ -728,7 +728,7 @@ export function TimetableGrid({
                                   }
                                 }}
                                 onPointerDown={(e) => e.stopPropagation()}
-                                className="text-[8px] bg-danger text-white px-1 py-0.2 rounded font-bold shrink-0 ml-1 hover:bg-danger/85 transition-colors"
+                                className="text-[10px] bg-danger text-white px-1.5 py-0.5 rounded font-bold shrink-0 ml-1 hover:bg-danger/85 transition-colors"
                                 title="查看冲突"
                               >
                                 冲突
@@ -737,14 +737,14 @@ export function TimetableGrid({
                           </div>
 
                           {/* 2. Teacher Info */}
-                          <div className="flex items-center text-[9.5px] sm:text-[10px] opacity-85 space-x-1 font-medium leading-none">
+                          <div className="flex items-center text-[10px] sm:text-[11px] opacity-85 space-x-1 font-medium leading-none">
                             <User className="w-2.5 h-2.5 shrink-0 opacity-70" />
                             <span className="truncate">{course.teacher}</span>
                           </div>
                         </div>
 
                         {/* Bottom Row: Location Badge */}
-                        <div className="flex items-center text-[9.5px] sm:text-[10px] opacity-90 pt-0.5 border-t border-black/5 font-medium leading-none mt-0.5">
+                        <div className="flex items-center text-[10px] sm:text-[11px] opacity-90 pt-0.5 border-t border-black/5 font-medium leading-none mt-0.5">
                           <MapPin className="w-2.5 h-2.5 mr-1 shrink-0 opacity-75" />
                           <span className="truncate">{sched.location}</span>
                         </div>
@@ -834,7 +834,7 @@ export function TimetableGrid({
                                 {courses.find((crs) => crs.id === c.courseId)?.name ?? ""}
                               </h4>
                               {invalid && (
-                                <p className="text-[9px] font-bold text-danger leading-none mt-0.5 truncate">
+                                <p className="text-[10px] font-bold text-danger leading-none mt-0.5 truncate">
                                   与《{conflictCourseName(interaction.conflict, c.id)}》冲突
                                 </p>
                               )}
@@ -858,7 +858,7 @@ export function TimetableGrid({
                                 transform: above ? "translateY(-100%)" : "none",
                               }}
                             >
-                              <span className="px-1.5 py-0.5 rounded-md bg-charcoal text-white text-[9px] font-semibold whitespace-nowrap shadow-card">
+                              <span className="px-1.5 py-0.5 rounded-md bg-charcoal text-white text-[10px] font-semibold whitespace-nowrap shadow-card">
                                 {wd.label} · {c.startTime}–{c.endTime}
                               </span>
                              </div>

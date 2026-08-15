@@ -268,7 +268,7 @@ export function Sidebar() {
 
       {/* Bottom Profile Card（Icon Rail 下隐藏，仅 Desktop 显示） */}
       <div className="space-y-2 hidden xl:block">
-        <div className="bg-alabaster/70 border border-line-strong rounded-2xl p-3 space-y-2.5 shadow-subtle">
+        <div className="bg-surface/50 border border-line rounded-xl p-2.5 space-y-2">
           <div className="flex items-center space-x-2.5">
             {/* 头像 fallback：无 avatarUrl 时显示首字/User 图标 */}
             {userProfile.avatarUrl ? (
@@ -291,22 +291,22 @@ export function Sidebar() {
               </div>
               {userProfile.college || userProfile.grade ? (
                 <>
-                  <p className="text-[10px] text-satin-grey truncate">
+                  <p className="text-[11px] text-satin-grey truncate">
                     {userProfile.college}
                   </p>
-                  <p className="text-[10px] text-sandrift truncate">
+                  <p className="text-[11px] text-sandrift truncate">
                     {userProfile.grade}
                   </p>
                 </>
               ) : (
-                <p className="text-[10px] text-sandrift truncate">完善个人资料</p>
+                <p className="text-[11px] text-sandrift truncate">完善个人资料</p>
               )}
             </div>
           </div>
 
           {/* Credit Progress */}
-          <div className="space-y-1 pt-1 border-t border-line-strong/60">
-            <div className="flex justify-between items-center text-[10px]">
+          <div className="space-y-1 pt-1 border-t border-line-soft">
+            <div className="flex justify-between items-center text-[11px]">
               <span className="text-satin-grey">本学期学分进度</span>
               <span className="font-semibold text-charcoal">
                 {userProfile.completedCredits} / {userProfile.totalCredits} 学分
