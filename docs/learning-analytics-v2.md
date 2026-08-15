@@ -186,6 +186,16 @@ Kiro 不得从 raw events 自行重算 UI Analytics metric。Analytics 数据只
 - **Kiro Tool**：`propose_study_rebalance`（schema `{ horizonDays?: 7|14 }`，READ / PROPOSAL，Browser 执行当前 state，输出 summary/moves/reasons，bounded；不新增直接 Write Tool；不塞进 apply_change_set）。Guidance：调整已有计划 → `get_learning_outlook` → `propose_study_rebalance` → 仍有缺口 → `propose_study_plan`；具体移动时间必须来自工具，禁止模型文本自拟。
 - **UI**：`StudyRebalanceProposalCard`（移动 N 个时段 · 缺口 before→after；每 move 显示 原→新 位置 + 自然语言原因（不显示算法术语）；[预览调整]/[应用调整]/[重新生成]；Confirm 文案「将移动 N 个已有 Kiro 学习时段。不会修改任务、截止时间或你手动安排的学习计划」）。Ghost Preview：独立 `studyRebalancePreview`（ephemeral，不入 Zustand/localStorage/History；proposalKey 指纹）；Timeline 原块弱化（opacity + dashed）+ 目标 ghost；关闭完全恢复。Outlook Card 在 `firstCapacityShortfall != null` 或有 `scheduled_after_deadline` 时显示弱操作 [优化已有计划]。
 
+## 十五C、Course Overlap Approval（V1.1：Persisted Intent + Schedule-version-aware）
+
+- **问题**：Approval 只存在于 React state → Apply 后消失 → Domain 无法区分「用户主动批准的课程重叠」与「课程后来调课导致的新冲突」。
+- **持久化**：`StudyBlock.courseOverlapApprovals?: { scheduleId; scheduleFingerprint; approvedAt }[]`（Block × Schedule 版本级别；不存 boolean；optional，旧数据兼容；Backup 原样透传，旧备份合法不伪造）。
+- **Fingerprint**（`lib/planning/courseOverlapPolicy.ts`）：包含 scheduleId/courseId/dayOfWeek/startTime/endTime/weeks/excludedWeeks（排序+稳定序列化）；**不含 location/名称/颜色**（不影响时间冲突语义）。时间/星期/周次/excludedWeeks 变化 → 旧 Approval 自动失效；location 变化 → 继续有效。
+- **Canonical helper**：`findCourseOverlapsForStudyBlock`（按 block.date 计算教学周；学期范围外不 clamp → 无假冲突）→ `isCourseOverlapApproved`（scheduleId + fingerprint 都匹配）→ `findUnapprovedCourseOverlaps`（当前重叠 − 有效批准；Rebalance 消费此 API）。`reconcileStudyBlockCourseOverlapApprovals`：explicitApprovals 优先；**manual 时间变化 → 当前 overlaps 自动记为明确接受**（用户直接拖动到课程 = 明确操作，不再弹二次确认）；**kiro/system/import 无权创造新 Approval**（只保留仍存在 + fingerprint 一致 + 目标仍重叠的旧项）。
+- **Study Plan Apply**：Approval Gate 保持（needs-approval → 0 mutation）；批准后只给实际 overlap 的 Block 保存 Approval（Multi-overlap 全部保存；fresh preflight 数据）；`source` 仍为 kiro。
+- **Rebalance**：`course_conflict` 只对「未批准」重叠触发（approved overlap 不被搬走）；fingerprint 失效后重新识别；target 两阶段搜索对 course_conflict 强制「非课程时间」。Apply 显式清空/写入 approvals；**Undo 恢复原时间 + 原 Approval**（Undo stale 指纹同时比较时间与 Approval 状态，不覆盖后续用户意图）。
+- **边界**：Free Time Engine 不因 Approval 改变（课程永远 busy；Approval 只表示该 Block 可留在那里）；新 Proposal 仍需逐次确认；不提供全局「允许课程冲突」设置；History Schema 不升级（approval 是 current-state intent，不进 `study_block.updated` 事件）。
+
 ## 十六、Known Limitations- 跨午夜专注会话不拆分（归因到 `startedAt` 日）。
 - 按时率只统计 DDL 可重建的任务（history coverage 前的任务不猜）。
 - `semester` 无 previous 对比（学期期初开始记录历史时对比不完整属预期）。
