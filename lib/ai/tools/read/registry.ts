@@ -126,6 +126,11 @@ export const KIRO_READ_TOOLS = {
       "优先：宽泛问题（我最近学习怎么样？这周学了多久？哪门课投入最多？）。默认最近 28 天，最长 366 天。注意 coverage.fullCoverage=false 时说明历史不完整。",
     inputSchema: KIRO_READ_TOOL_SCHEMAS.summarize_learning_history,
   }),
+  get_learning_analytics: tool({
+    description:
+      "返回与 ClassFlow 学习洞察页面同源的确定性 Analytics Snapshot，包括实际专注、完成任务、计划与实际、按时完成、课程投入、专注节奏、period comparison 与 Learning Signals。需要解释学习趋势或基于学习洞察做建议时优先使用，不要自行从原始历史重新计算。",
+    inputSchema: KIRO_READ_TOOL_SCHEMAS.get_learning_analytics,
+  }),
 };
 
 export const KIRO_READ_TOOL_NAMES = Object.keys(KIRO_READ_TOOLS) as (keyof typeof KIRO_READ_TOOLS)[];

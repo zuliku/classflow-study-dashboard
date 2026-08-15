@@ -165,6 +165,17 @@ export const summarizeLearningHistorySchema = z.object({
   groupBy: z.enum(["none", "day", "semester-week", "course"]).optional(),
 });
 
+/**
+ * Canonical Analytics Tool：返回与「学习洞察」页面同源的确定性 Analytics Snapshot。
+ * 不允许模型传 now / from / to / historyStartedAt：period 由客户端当前真实环境（本地时钟 + 当前学期）决定。
+ * strict：未知键直接拒绝（模型不能偷传时间参数）。
+ */
+export const getLearningAnalyticsSchema = z
+  .object({
+    preset: z.enum(["week", "4weeks", "semester"]).default("week"),
+  })
+  .strict();
+
 export const KIRO_READ_TOOL_SCHEMAS = {
   get_current_context: emptyInputSchema,
   get_user_study_profile: emptyInputSchema,
@@ -189,6 +200,7 @@ export const KIRO_READ_TOOL_SCHEMAS = {
   get_focus_status: emptyInputSchema,
   query_learning_history: queryLearningHistorySchema,
   summarize_learning_history: summarizeLearningHistorySchema,
+  get_learning_analytics: getLearningAnalyticsSchema,
 } as const;
 
 export type KiroReadToolName = keyof typeof KIRO_READ_TOOL_SCHEMAS;
