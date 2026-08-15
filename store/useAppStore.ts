@@ -61,6 +61,64 @@ import {
   AutoReconcileMode,
   reconcileAllAutomaticDeadlineReminders,
 } from "@/lib/reminders/autoDeadlineReminder";
+import {
+  buildAssignmentCreatedEvent,
+  deriveAssignmentTransitionEvents,
+} from "@/lib/history/assignmentEvents";
+import {
+  buildStudyBlockCreatedEvent,
+  buildStudyBlockDeletedEvent,
+  buildStudyBlockUpdatedEvent,
+} from "@/lib/history/studyBlockEvents";
+import {
+  buildFocusCompletedEvent,
+  buildFocusPausedEvent,
+  buildFocusResumedEvent,
+  buildFocusStartedEvent,
+} from "@/lib/history/focusEvents";
+import {
+  buildCourseCreatedEvent,
+  buildCourseDeletedEvent,
+  buildCourseUpdatedEvent,
+  buildScheduleCreatedEvent,
+  buildScheduleDeletedEvent,
+  buildScheduleUpdatedEvent,
+  buildSemesterUpdatedEvent,
+} from "@/lib/history/courseScheduleEvents";
+import {
+  LearningEventEnvironment,
+  LearningMutationContext,
+  ResolvedLearningMutationContext,
+  buildLearningHistoryEvent,
+  enqueueLearningHistoryEvents,
+  resolveLearningMutationContext,
+} from "@/lib/history/recorder";
+import { resetLearningHistoryForDomainReset } from "@/lib/history/clear";
+
+/** History environment（semester 快照用于 week 计算） */
+function historyEnvironment(state: { semester: Semester }): LearningEventEnvironment {
+  return { semester: state.semester };
+}
+
+/** assignment.deleted / assignment.restored 通用构造（data 仅 title 快照） */
+function buildAssignmentLifecycleEvent(
+  type: "assignment.deleted" | "assignment.restored",
+  assignment: Assignment,
+  context: ResolvedLearningMutationContext,
+  state: { semester: Semester }
+) {
+  return buildLearningHistoryEvent({
+    type,
+    entityType: "assignment",
+    entityId: assignment.id,
+    data: { titleSnapshot: assignment.title },
+    context,
+    environment: historyEnvironment(state),
+    courseId: assignment.courseId,
+    assignmentId: assignment.id,
+    assignmentTitleSnapshot: assignment.title,
+  });
+}
 
 /** Task 7G-A1：Reminder 时间戳统一本地墙钟 */
 const nowLocalString = () => formatLocalDateTime(new Date());
@@ -119,18 +177,25 @@ function reconcileAllAuto(
 /**
  * Task 7F + 7G：完成 Assignment 的统一 Domain 行为：
  * recurrence spawn（若适用）+ 清除该任务的 scheduled reminders。
+ * spawnedAssignment：recurrence 生成的 child（History source=system 记录用）。
  */
 function handleAssignmentCompleted(
   assignments: Assignment[],
   calendarMarks: CalendarMark[],
   reminders: Reminder[],
   completed: Assignment
-): { assignments: Assignment[]; calendarMarks: CalendarMark[]; reminders: Reminder[] } {
+): {
+  assignments: Assignment[];
+  calendarMarks: CalendarMark[];
+  reminders: Reminder[];
+  spawnedAssignment?: Assignment;
+} {
   const spawned = spawnRecurringChild(assignments, calendarMarks, completed);
   return {
     assignments: spawned ? spawned.assignments : assignments,
     calendarMarks: spawned ? spawned.calendarMarks : calendarMarks,
     reminders: clearScheduledAssignmentReminders(reminders, completed.id),
+    spawnedAssignment: spawned?.child,
   };
 }
 
@@ -154,7 +219,7 @@ function spawnRecurringChild(
   assignments: Assignment[],
   calendarMarks: CalendarMark[],
   completed: Assignment
-): { assignments: Assignment[]; calendarMarks: CalendarMark[] } | null {
+): { assignments: Assignment[]; calendarMarks: CalendarMark[]; child: Assignment } | null {
   const draft = buildNextRecurringAssignment(completed);
   if (!draft) return null;
   if (assignments.some((a) => a.recurrenceParentId === completed.id)) return null;
@@ -163,6 +228,7 @@ function spawnRecurringChild(
   return {
     assignments: [...assignments, child],
     calendarMarks: mark ? [...calendarMarks, mark] : calendarMarks,
+    child,
   };
 }
 
@@ -306,7 +372,7 @@ export interface AppState {
   updatePreferences: (patch: Partial<AppPreferences>) => void;
 
   semester: Semester;
-  setSemester: (semester: Semester) => void;
+  setSemester: (semester: Semester, context?: LearningMutationContext) => void;
   currentSemesterWeek: number;
   setCurrentSemesterWeek: (week: number) => void;
   resetToCurrentWeek: () => void;
@@ -368,20 +434,29 @@ export interface AppState {
   /** 创建课程（含排课），返回新课程 id */
   addCourseWithSchedule: (
     course: Omit<Course, "id" | "materials">,
-    scheduleSlots: Omit<CourseSchedule, "id" | "courseId">[]
+    scheduleSlots: Omit<CourseSchedule, "id" | "courseId">[],
+    context?: LearningMutationContext
   ) => string;
-  updateCourse: (course: Course) => void;
-  deleteCourse: (courseId: string) => void;
+  updateCourse: (course: Course, context?: LearningMutationContext) => void;
+  deleteCourse: (courseId: string, context?: LearningMutationContext) => void;
   /** 创建单个排课，返回新排课 id */
-  addScheduleSlot: (schedule: Omit<CourseSchedule, "id">) => string;
-  updateSchedule: (schedule: CourseSchedule) => void;
-  deleteSchedule: (scheduleId: string) => CourseSchedule | null;
-  /** 撤销删除：恢复原 Schedule（保留原 ID） */
-  restoreSchedule: (schedule: CourseSchedule) => void;
-  excludeWeekFromSchedule: (scheduleId: string, week: number) => void;
+  addScheduleSlot: (schedule: Omit<CourseSchedule, "id">, context?: LearningMutationContext) => string;
+  updateSchedule: (schedule: CourseSchedule, context?: LearningMutationContext) => void;
+  deleteSchedule: (
+    scheduleId: string,
+    context?: LearningMutationContext
+  ) => CourseSchedule | null;
+  /** 撤销删除：恢复原 Schedule（保留原 ID）；History 追加 created restored=true */
+  restoreSchedule: (schedule: CourseSchedule, context?: LearningMutationContext) => void;
+  excludeWeekFromSchedule: (
+    scheduleId: string,
+    week: number,
+    context?: LearningMutationContext
+  ) => void;
   importSchedules: (
     newCourses: Course[],
-    newSchedules: CourseSchedule[]
+    newSchedules: CourseSchedule[],
+    context?: LearningMutationContext
   ) => void;
 
   // Material Actions
@@ -395,35 +470,49 @@ export interface AppState {
   restoreCourseMaterial: (courseId: string, material: Material) => void;
 
   // Assignment Actions
-  /** 创建任务，返回新任务 id */
-  addAssignment: (assignment: Omit<Assignment, "id">) => string;
-  updateAssignment: (updatedAssignment: Assignment) => void;
+  /** 创建任务，返回新任务 id（History context 可选；UI 默认 manual） */
+  addAssignment: (assignment: Omit<Assignment, "id">, context?: LearningMutationContext) => string;
+  updateAssignment: (updatedAssignment: Assignment, context?: LearningMutationContext) => void;
   /** Task V2：字段级 patch（未来 Kiro update_task 的稳定 Domain API；DDL mark 三态同步内置） */
-  updateAssignmentPatch: (id: string, patch: Partial<Omit<Assignment, "id">>) => void;
+  updateAssignmentPatch: (
+    id: string,
+    patch: Partial<Omit<Assignment, "id">>,
+    context?: LearningMutationContext
+  ) => void;
   updateAssignmentStatus: (
     id: string,
-    status: Assignment["status"]
+    status: Assignment["status"],
+    context?: LearningMutationContext
   ) => void;
   updateAssignmentPriority: (
     id: string,
-    priority: Assignment["priority"]
+    priority: Assignment["priority"],
+    context?: LearningMutationContext
   ) => void;
-  updateAssignmentProgress: (id: string, progress: number) => void;
-  toggleSubtask: (assignmentId: string, subtaskId: string) => void;
+  updateAssignmentProgress: (id: string, progress: number, context?: LearningMutationContext) => void;
+  toggleSubtask: (
+    assignmentId: string,
+    subtaskId: string,
+    context?: LearningMutationContext
+  ) => void;
   /** Task 6A：设置任务关联的课程资料 ID（仅保留所属 Course 中真实存在的 ID，跨课程引用被清洗） */
   setAssignmentMaterialIds: (assignmentId: string, materialIds: string[]) => void;
   /** 删除任务：返回完整依赖快照（Assignment + DDL mark + StudyBlocks + 关联 Reminder），供一次撤销恢复 */
-  deleteAssignment: (id: string) => AssignmentDeleteSnapshot | null;
-  /** 撤销删除：按快照原样恢复（原 ID / 原时间 / 原状态全部保持；按 ID 幂等） */
-  restoreAssignment: (snapshot: AssignmentDeleteSnapshot) => void;
+  deleteAssignment: (id: string, context?: LearningMutationContext) => AssignmentDeleteSnapshot | null;
+  /** 撤销删除：按快照原样恢复（原 ID / 原时间 / 原状态全部保持；按 ID 幂等）；History 追加 restored，不删除 deleted */
+  restoreAssignment: (snapshot: AssignmentDeleteSnapshot, context?: LearningMutationContext) => void;
 
   // Timeline V1：StudyBlock Actions
   /** 创建学习计划，返回新 id */
-  addStudyBlock: (block: Omit<StudyBlock, "id">) => string;
+  addStudyBlock: (block: Omit<StudyBlock, "id">, context?: LearningMutationContext) => string;
   /** Atomic Batch：一次性生成全部 ID，单次 set；全量成功或全量失败（Kiro Study Plan Apply） */
   addStudyBlocksBatch: (blocks: Omit<StudyBlock, "id">[]) => StudyBlock[];
-  updateStudyBlock: (id: string, patch: Partial<Omit<StudyBlock, "id">>) => void;
-  deleteStudyBlock: (id: string) => void;
+  updateStudyBlock: (
+    id: string,
+    patch: Partial<Omit<StudyBlock, "id">>,
+    context?: LearningMutationContext
+  ) => void;
+  deleteStudyBlock: (id: string, context?: LearningMutationContext) => void;
   /** Batch Delete：返回实际被删除的 Block（Undo 只删除本次 Apply 创建的 ID） */
   deleteStudyBlocksBatch: (ids: string[]) => StudyBlock[];
 
@@ -472,18 +561,19 @@ export interface AppState {
     note?: string;
     source?: FocusSession["source"];
     now?: number;
-  }) => FocusMutationResult;
+  }, context?: LearningMutationContext) => FocusMutationResult;
   /** 暂停唯一 active Session（已 paused → FOCUS_ALREADY_PAUSED） */
-  pauseFocusSession: (now?: number) => FocusMutationResult;
+  pauseFocusSession: (now?: number, context?: LearningMutationContext) => FocusMutationResult;
   /** 恢复唯一 paused Session（非 paused → FOCUS_NOT_PAUSED） */
-  resumeFocusSession: (now?: number) => FocusMutationResult;
+  resumeFocusSession: (now?: number, context?: LearningMutationContext) => FocusMutationResult;
   /** manual 结束唯一 active Session（无 active → NO_ACTIVE_FOCUS_SESSION） */
-  finishFocusSession: (now?: number) => FocusMutationResult;
+  finishFocusSession: (now?: number, context?: LearningMutationContext) => FocusMutationResult;
   /** 结算指定 running Session（timer / recovered 自然结束；重复完成 → FOCUS_NOT_PAUSED 之外的失败码） */
   completeFocusSession: (
     sessionId: string,
     reason: "timer" | "recovered",
-    now?: number
+    now?: number,
+    context?: LearningMutationContext
   ) => FocusMutationResult;
 
   // Group Project Actions
@@ -530,14 +620,23 @@ export const useAppStore = create<AppState>()(
           preferences: sanitizePreferences({ ...state.preferences, ...patch }),
         })),
       semester: createDefaultSemester(),
-      setSemester: (semester) =>
-        set((state) => ({
-          semester,
-          currentSemesterWeek: Math.min(
-            Math.max(state.currentSemesterWeek, 1),
-            semester.totalWeeks
-          ),
-        })),
+      setSemester: (semester, context) =>
+        set((state) => {
+          const event = buildSemesterUpdatedEvent({
+            before: state.semester,
+            after: semester,
+            context: resolveLearningMutationContext(context),
+            environment: historyEnvironment(state),
+          });
+          if (event) enqueueLearningHistoryEvents([event]);
+          return {
+            semester,
+            currentSemesterWeek: Math.min(
+              Math.max(state.currentSemesterWeek, 1),
+              semester.totalWeeks
+            ),
+          };
+        }),
       currentSemesterWeek: 1,
       setCurrentSemesterWeek: (week) =>
         set((state) => ({
@@ -617,6 +716,8 @@ export const useAppStore = create<AppState>()(
       clearLearningData: () => {
         // 同步清空 IndexedDB 附件 Blob（fire-and-forget）
         clearAllFileBlobs().catch(() => {});
+        // History：业务数据整体清空 → 重置 History（新 historyStartedAt；FocusSession 也清空 → 允许 backfill）
+        resetLearningHistoryForDomainReset();
         // 清空业务数据；保留 userProfile / semester / preferences
         set({
           courses: [],
@@ -648,6 +749,8 @@ export const useAppStore = create<AppState>()(
       resetEntireApp: () => {
         // 同步清空 IndexedDB 中保存的文件 Blob（fire-and-forget）
         clearAllFileBlobs().catch(() => {});
+        // History：回到干净 First Run → 重置 History（允许 Focus backfill；无旧数据可回填）
+        resetLearningHistoryForDomainReset();
         // 真正 First Run State：空白个人资料 + 空业务数据 + 默认偏好，无任何演示数据
         set({
           userProfile: EMPTY_USER_PROFILE,
@@ -678,7 +781,10 @@ export const useAppStore = create<AppState>()(
         });
       },
 
-      restoreAppData: (data) =>
+      restoreAppData: (data) => {
+        // History：Backup 不含 History → 先重置旧 History（避免旧 History + Backup Data 混合）；
+        // 允许 completed Focus backfill（restore 后 Runtime 会跑）
+        resetLearningHistoryForDomainReset();
         set((state) => {
           const assignments = data.assignments.map(normalizeAssignment);
           const calendarMarks = linkLegacyDDLMarks(data.assignments, data.calendarMarks);
@@ -717,9 +823,10 @@ export const useAppStore = create<AppState>()(
               data.semester.totalWeeks
             ),
           };
-        }),
+        });
+      },
 
-      addCourseWithSchedule: (courseData, scheduleSlots) => {
+      addCourseWithSchedule: (courseData, scheduleSlots, context) => {
         const courseId = createId("c");
         const newCourse: Course = {
           ...courseData,
@@ -733,19 +840,40 @@ export const useAppStore = create<AppState>()(
           courseId,
         }));
 
-        set((state) => ({
-          courses: [...state.courses, newCourse],
-          schedules: [...state.schedules, ...newSchedules],
-        }));
+        set((state) => {
+          const resolved = resolveLearningMutationContext(context);
+          enqueueLearningHistoryEvents([
+            buildCourseCreatedEvent({ course: newCourse, context: resolved, environment: historyEnvironment(state) }),
+            ...newSchedules.map((s) =>
+              buildScheduleCreatedEvent({ schedule: s, context: resolved, environment: historyEnvironment(state) })
+            ),
+          ]);
+          return {
+            courses: [...state.courses, newCourse],
+            schedules: [...state.schedules, ...newSchedules],
+          };
+        });
         return courseId;
       },
 
-      updateCourse: (updatedCourse) =>
-        set((state) => ({
-          courses: state.courses.map((c) => (c.id === updatedCourse.id ? updatedCourse : c)),
-        })),
+      updateCourse: (updatedCourse, context) =>
+        set((state) => {
+          const prev = state.courses.find((c) => c.id === updatedCourse.id);
+          const event = prev
+            ? buildCourseUpdatedEvent({
+                before: prev,
+                after: updatedCourse,
+                context: resolveLearningMutationContext(context),
+                environment: historyEnvironment(state),
+              })
+            : null;
+          if (event) enqueueLearningHistoryEvents([event]);
+          return {
+            courses: state.courses.map((c) => (c.id === updatedCourse.id ? updatedCourse : c)),
+          };
+        }),
 
-      deleteCourse: (courseId) => {
+      deleteCourse: (courseId, context) => {
         const current = get();
         const cascade = collectCourseDeleteCascade(current, courseId);
         if (!cascade) return;
@@ -754,6 +882,16 @@ export const useAppStore = create<AppState>()(
         cascade.course.materials.forEach((m) => {
           if (m.storageKey) deleteFileBlob(m.storageKey).catch(() => {});
         });
+
+        // History：course.deleted + schedule.deleted×N + assignment.deleted×N + study_block.deleted×N
+        const resolved = resolveLearningMutationContext(context);
+        const env = historyEnvironment(current);
+        enqueueLearningHistoryEvents([
+          buildCourseDeletedEvent({ course: cascade.course, context: resolved, environment: env }),
+          ...cascade.schedules.map((s) => buildScheduleDeletedEvent({ schedule: s, context: resolved, environment: env })),
+          ...cascade.assignments.map((a) => buildAssignmentLifecycleEvent("assignment.deleted", a, resolved, current)),
+          ...cascade.studyBlocks.map((b) => buildStudyBlockDeletedEvent({ block: b, context: resolved, environment: env })),
+        ]);
 
         // 2. 一次 set 完成完整级联删除（Course + schedules + assignments + groupProjects +
         //    DDL marks + course/assignment-owned StudyBlocks + 受影响 Reminder）
@@ -771,45 +909,112 @@ export const useAppStore = create<AppState>()(
         });
       },
 
-      addScheduleSlot: (scheduleData) => {
+      addScheduleSlot: (scheduleData, context) => {
         const newSchedule: CourseSchedule = {
           ...scheduleData,
           id: createId("s"),
         };
-        set((state) => ({ schedules: [...state.schedules, newSchedule] }));
+        set((state) => {
+          enqueueLearningHistoryEvents([
+            buildScheduleCreatedEvent({
+              schedule: newSchedule,
+              context: resolveLearningMutationContext(context),
+              environment: historyEnvironment(state),
+            }),
+          ]);
+          return { schedules: [...state.schedules, newSchedule] };
+        });
         return newSchedule.id;
       },
 
-      updateSchedule: (updatedSchedule) =>
-        set((state) => ({
-          schedules: state.schedules.map((s) => (s.id === updatedSchedule.id ? updatedSchedule : s)),
-        })),
+      updateSchedule: (updatedSchedule, context) =>
+        set((state) => {
+          const prev = state.schedules.find((s) => s.id === updatedSchedule.id);
+          const changed =
+            !!prev &&
+            (prev.dayOfWeek !== updatedSchedule.dayOfWeek ||
+              prev.startTime !== updatedSchedule.startTime ||
+              prev.endTime !== updatedSchedule.endTime ||
+              prev.location !== updatedSchedule.location ||
+              prev.weeks !== updatedSchedule.weeks ||
+              (prev.excludedWeeks ?? []).join(",") !== (updatedSchedule.excludedWeeks ?? []).join(","));
+          if (changed) {
+            enqueueLearningHistoryEvents([
+              buildScheduleUpdatedEvent({
+                schedule: updatedSchedule,
+                context: resolveLearningMutationContext(context),
+                environment: historyEnvironment(state),
+              }),
+            ]);
+          }
+          return {
+            schedules: state.schedules.map((s) => (s.id === updatedSchedule.id ? updatedSchedule : s)),
+          };
+        }),
 
-      deleteSchedule: (scheduleId) => {
+      deleteSchedule: (scheduleId, context) => {
         const current = get();
         const target = current.schedules.find((s) => s.id === scheduleId) || null;
+        if (target) {
+          enqueueLearningHistoryEvents([
+            buildScheduleDeletedEvent({
+              schedule: target,
+              context: resolveLearningMutationContext(context),
+              environment: historyEnvironment(current),
+            }),
+          ]);
+        }
         set({ schedules: current.schedules.filter((s) => s.id !== scheduleId) });
         return target;
       },
 
-      restoreSchedule: (schedule) =>
-        set((state) => ({ schedules: [...state.schedules, schedule] })),
+      restoreSchedule: (schedule, context) =>
+        set((state) => {
+          enqueueLearningHistoryEvents([
+            buildScheduleCreatedEvent({
+              schedule,
+              context: resolveLearningMutationContext(context),
+              environment: historyEnvironment(state),
+              restored: true,
+            }),
+          ]);
+          return { schedules: [...state.schedules, schedule] };
+        }),
 
-      excludeWeekFromSchedule: (scheduleId, week) =>
-        set((state) => ({
-          schedules: state.schedules.map((s) => {
+      excludeWeekFromSchedule: (scheduleId, week, context) =>
+        set((state) => {
+          const target = state.schedules.find((s) => s.id === scheduleId);
+          const schedules = state.schedules.map((s) => {
             if (s.id !== scheduleId) return s;
             const currentEx = s.excludedWeeks || [];
             if (currentEx.includes(week)) return s;
             return { ...s, excludedWeeks: [...currentEx, week] };
-          }),
-        })),
+          });
+          const after = schedules.find((s) => s.id === scheduleId);
+          if (target && after && (target.excludedWeeks ?? []).join(",") !== (after.excludedWeeks ?? []).join(",")) {
+            enqueueLearningHistoryEvents([
+              buildScheduleUpdatedEvent({
+                schedule: after,
+                context: resolveLearningMutationContext(context),
+                environment: historyEnvironment(state),
+              }),
+            ]);
+          }
+          return { schedules };
+        }),
 
-      importSchedules: (newCourses, newSchedules) =>
-        set((state) => ({
-          courses: [...state.courses, ...newCourses],
-          schedules: [...state.schedules, ...newSchedules],
-        })),
+      importSchedules: (newCourses, newSchedules, context) =>
+        set((state) => {
+          const resolved = resolveLearningMutationContext(context ?? { source: "import" });
+          enqueueLearningHistoryEvents([
+            ...newCourses.map((c) => buildCourseCreatedEvent({ course: c, context: resolved, environment: historyEnvironment(state) })),
+            ...newSchedules.map((s) => buildScheduleCreatedEvent({ schedule: s, context: resolved, environment: historyEnvironment(state) })),
+          ]);
+          return {
+            courses: [...state.courses, ...newCourses],
+            schedules: [...state.schedules, ...newSchedules],
+          };
+        }),
 
       addCourseMaterial: (courseId, materialData) => {
         const today = new Date();
@@ -866,7 +1071,7 @@ export const useAppStore = create<AppState>()(
           ),
         })),
 
-      addAssignment: (assignmentData) => {
+      addAssignment: (assignmentData, context) => {
         const newId = createId("a");
         const newAssignment: Assignment = normalizeAssignment({
           ...assignmentData,
@@ -887,12 +1092,21 @@ export const useAppStore = create<AppState>()(
             reminders: state.reminders,
             preferences: state.preferences,
           });
+          // History：assignment.created（UI 默认 manual；Kiro/system/import 由 context 指定）
+          const resolved = resolveLearningMutationContext(context);
+          enqueueLearningHistoryEvents([
+            buildAssignmentCreatedEvent({
+              assignment: newAssignment,
+              context: resolved,
+              environment: historyEnvironment(state),
+            }),
+          ]);
           return { assignments, calendarMarks, reminders };
         });
         return newId;
       },
 
-      updateAssignment: (updatedAssignment) =>
+      updateAssignment: (updatedAssignment, context) =>
         set((state) => {
           const next = normalizeAssignment(updatedAssignment);
           const oldAssignment = state.assignments.find((a) => a.id === next.id);
@@ -969,6 +1183,7 @@ export const useAppStore = create<AppState>()(
           }
 
           // Task 7F：completion-driven recurrence —— 本次从非完成 → 完成且为重复任务 → 生成下一次
+          let spawnedChild: Assignment | undefined;
           if (
             oldAssignment &&
             oldAssignment.status !== "completed" &&
@@ -983,6 +1198,7 @@ export const useAppStore = create<AppState>()(
             newAssignments = applied.assignments;
             newCalendarMarks = applied.calendarMarks;
             newReminders = applied.reminders;
+            spawnedChild = applied.spawnedAssignment;
           }
 
           // P2：统一自动 DDL 提醒 reconcile（eligible → 生成/保留；ineligible / opt-out / 已过 → 移除；
@@ -993,6 +1209,29 @@ export const useAppStore = create<AppState>()(
             reminders: newReminders,
             preferences: state.preferences,
           });
+
+          // History：assignment transition（status/completed/reopened/DDL/estimate/priority）
+          if (oldAssignment) {
+            const resolved = resolveLearningMutationContext(context);
+            const events = deriveAssignmentTransitionEvents({
+              before: oldAssignment,
+              after: next,
+              context: resolved,
+              completionTrigger: "update",
+              environment: historyEnvironment(state),
+            });
+            if (spawnedChild) {
+              // recurrence child：source=system
+              events.push(
+                buildAssignmentCreatedEvent({
+                  assignment: spawnedChild,
+                  context: { ...resolved, source: "system" },
+                  environment: historyEnvironment(state),
+                })
+              );
+            }
+            enqueueLearningHistoryEvents(events);
+          }
 
           return {
             assignments: newAssignments,
@@ -1005,10 +1244,10 @@ export const useAppStore = create<AppState>()(
        * Task V2：字段级 patch（未来 Kiro update_task 的稳定 Domain API）。
        * 只改给定字段；DDL CalendarMark 三态同步由内部统一逻辑处理。
        */
-      updateAssignmentPatch: (id, patch) => {
+      updateAssignmentPatch: (id, patch, context) => {
         const current = get().assignments.find((a) => a.id === id);
         if (!current) return;
-        get().updateAssignment({ ...current, ...patch, id });
+        get().updateAssignment({ ...current, ...patch, id }, context);
       },
 
       /**
@@ -1023,7 +1262,7 @@ export const useAppStore = create<AppState>()(
         get().updateAssignment({ ...current, materialIds: valid.length > 0 ? valid : undefined });
       },
 
-      updateAssignmentStatus: (id, status) =>
+      updateAssignmentStatus: (id, status, context) =>
         set((state) => {
           const target = state.assignments.find((a) => a.id === id);
           const isComp = status === "completed";
@@ -1035,6 +1274,7 @@ export const useAppStore = create<AppState>()(
           let calendarMarks = state.calendarMarks;
           let reminders = state.reminders;
           // Task 7F + 7G：completion → recurrence spawn + 清除 scheduled reminders
+          let spawnedChild: Assignment | undefined;
           if (completedNow && target) {
             const applied = handleAssignmentCompleted(assignments, calendarMarks, reminders, {
               ...target,
@@ -1044,9 +1284,32 @@ export const useAppStore = create<AppState>()(
             assignments = applied.assignments;
             calendarMarks = applied.calendarMarks;
             reminders = applied.reminders;
+            spawnedChild = applied.spawnedAssignment;
           }
           // P2：submitted/completed → scheduled auto 移除；回到 todo/doing（eligible）→ 按当前默认重建
           reminders = reconcileAllAuto({ assignments, calendarMarks, reminders, preferences: state.preferences });
+          // History
+          if (target) {
+            const resolved = resolveLearningMutationContext(context);
+            const after = assignments.find((a) => a.id === id)!;
+            const events = deriveAssignmentTransitionEvents({
+              before: target,
+              after,
+              context: resolved,
+              completionTrigger: "status",
+              environment: historyEnvironment(state),
+            });
+            if (spawnedChild) {
+              events.push(
+                buildAssignmentCreatedEvent({
+                  assignment: spawnedChild,
+                  context: { ...resolved, source: "system" },
+                  environment: historyEnvironment(state),
+                })
+              );
+            }
+            enqueueLearningHistoryEvents(events);
+          }
           return { assignments, calendarMarks, reminders };
         }),
 
@@ -1057,7 +1320,7 @@ export const useAppStore = create<AppState>()(
           ),
         })),
 
-      updateAssignmentProgress: (id, progress) =>
+      updateAssignmentProgress: (id, progress, context) =>
         set((state) => {
           const target = state.assignments.find((a) => a.id === id);
           let assignments = state.assignments.map((a) => {
@@ -1070,18 +1333,41 @@ export const useAppStore = create<AppState>()(
           let reminders = state.reminders;
           // Task 7F + 7G：进度拉满 → completed（Drawer 滑杆 / Kiro set_assignment_progress）
           const updated = assignments.find((a) => a.id === id);
+          let spawnedChild: Assignment | undefined;
           if (target && updated && target.status !== "completed" && updated.status === "completed") {
             const applied = handleAssignmentCompleted(assignments, calendarMarks, reminders, updated);
             assignments = applied.assignments;
             calendarMarks = applied.calendarMarks;
             reminders = applied.reminders;
+            spawnedChild = applied.spawnedAssignment;
           }
           // P2：统一自动 DDL 提醒 reconcile
           reminders = reconcileAllAuto({ assignments, calendarMarks, reminders, preferences: state.preferences });
+          // History
+          if (target && updated) {
+            const resolved = resolveLearningMutationContext(context);
+            const events = deriveAssignmentTransitionEvents({
+              before: target,
+              after: updated,
+              context: resolved,
+              completionTrigger: "progress",
+              environment: historyEnvironment(state),
+            });
+            if (spawnedChild) {
+              events.push(
+                buildAssignmentCreatedEvent({
+                  assignment: spawnedChild,
+                  context: { ...resolved, source: "system" },
+                  environment: historyEnvironment(state),
+                })
+              );
+            }
+            enqueueLearningHistoryEvents(events);
+          }
           return { assignments, calendarMarks, reminders };
         }),
 
-      toggleSubtask: (assignmentId, subtaskId) =>
+      toggleSubtask: (assignmentId, subtaskId, context) =>
         set((state) => {
           const target = state.assignments.find((a) => a.id === assignmentId);
           let assignments = state.assignments.map((a) => {
@@ -1099,18 +1385,41 @@ export const useAppStore = create<AppState>()(
           let reminders = state.reminders;
           // Task 7F + 7G：完成最后一个子任务 → 同样 spawn + 清除 scheduled reminders
           const updated = assignments.find((a) => a.id === assignmentId);
+          let spawnedChild: Assignment | undefined;
           if (target && updated && target.status !== "completed" && updated.status === "completed") {
             const applied = handleAssignmentCompleted(assignments, calendarMarks, reminders, updated);
             assignments = applied.assignments;
             calendarMarks = applied.calendarMarks;
             reminders = applied.reminders;
+            spawnedChild = applied.spawnedAssignment;
           }
           // P2：统一自动 DDL 提醒 reconcile
           reminders = reconcileAllAuto({ assignments, calendarMarks, reminders, preferences: state.preferences });
+          // History
+          if (target && updated) {
+            const resolved = resolveLearningMutationContext(context);
+            const events = deriveAssignmentTransitionEvents({
+              before: target,
+              after: updated,
+              context: resolved,
+              completionTrigger: "subtasks",
+              environment: historyEnvironment(state),
+            });
+            if (spawnedChild) {
+              events.push(
+                buildAssignmentCreatedEvent({
+                  assignment: spawnedChild,
+                  context: { ...resolved, source: "system" },
+                  environment: historyEnvironment(state),
+                })
+              );
+            }
+            enqueueLearningHistoryEvents(events);
+          }
           return { assignments, calendarMarks, reminders };
         }),
 
-      deleteAssignment: (id) => {
+      deleteAssignment: (id, context) => {
         const current = get();
         const snapshot = collectAssignmentDeleteSnapshot(current, id);
         if (!snapshot) return null;
@@ -1122,16 +1431,44 @@ export const useAppStore = create<AppState>()(
           selectedAssignmentId: state.selectedAssignmentId === id ? null : state.selectedAssignmentId,
         }));
 
+        // History：assignment.deleted + cascade study_block.deleted ×N（fired/skipped 历史不在此列）
+        const resolved = resolveLearningMutationContext(context);
+        enqueueLearningHistoryEvents([
+          buildAssignmentLifecycleEvent("assignment.deleted", snapshot.assignment, resolved, current),
+          ...snapshot.studyBlocks.map((b) =>
+            buildStudyBlockDeletedEvent({
+              block: b,
+              context: resolved,
+              environment: historyEnvironment(current),
+            })
+          ),
+        ]);
+
         return snapshot;
       },
 
-      restoreAssignment: (snapshot) =>
-        set((state) => ({
-          ...restoreAssignmentDeleteSnapshot(state, snapshot),
-        })),
+      restoreAssignment: (snapshot, context) =>
+        set((state) => {
+          // History：assignment.restored + 恢复的 study blocks → study_block.created restored=true
+          const resolved = resolveLearningMutationContext(context);
+          enqueueLearningHistoryEvents([
+            buildAssignmentLifecycleEvent("assignment.restored", snapshot.assignment, resolved, state),
+            ...snapshot.studyBlocks.map((b) =>
+              buildStudyBlockCreatedEvent({
+                block: b,
+                context: resolved,
+                environment: historyEnvironment(state),
+                restored: true,
+              })
+            ),
+          ]);
+          return {
+            ...restoreAssignmentDeleteSnapshot(state, snapshot),
+          };
+        }),
 
       // ---- Timeline V1：StudyBlock（学习计划）----
-      addStudyBlock: (blockData) => {
+      addStudyBlock: (blockData, context) => {
         const block: StudyBlock = {
           id: createId("sb"),
           title: blockData.title,
@@ -1142,7 +1479,16 @@ export const useAppStore = create<AppState>()(
           courseId: blockData.courseId,
           source: blockData.source ?? "manual",
         };
-        set((state) => ({ studyBlocks: [block, ...state.studyBlocks] }));
+        set((state) => {
+          enqueueLearningHistoryEvents([
+            buildStudyBlockCreatedEvent({
+              block,
+              context: resolveLearningMutationContext(context),
+              environment: historyEnvironment(state),
+            }),
+          ]);
+          return { studyBlocks: [block, ...state.studyBlocks] };
+        });
         return block.id;
       },
       addStudyBlocksBatch: (blocksData) => {
@@ -1160,7 +1506,7 @@ export const useAppStore = create<AppState>()(
         set((state) => ({ studyBlocks: [...created, ...state.studyBlocks] }));
         return created;
       },
-      updateStudyBlock: (id, patch) =>
+      updateStudyBlock: (id, patch, context) =>
         set((state) => {
           const prev = state.studyBlocks.find((b) => b.id === id);
           const blocks = state.studyBlocks.map((b) => (b.id === id ? { ...b, ...patch } : b));
@@ -1176,14 +1522,36 @@ export const useAppStore = create<AppState>()(
               nowLocalString()
             );
           }
+          // History：只记录 date/startTime/endTime（及对应 planned minutes）变化；仅 title 变化不记录
+          if (prev && next) {
+            const event = buildStudyBlockUpdatedEvent({
+              before: prev,
+              after: next,
+              context: resolveLearningMutationContext(context),
+              environment: historyEnvironment(state),
+            });
+            if (event) enqueueLearningHistoryEvents([event]);
+          }
           return { studyBlocks: blocks, reminders };
         }),
-      deleteStudyBlock: (id) =>
-        set((state) => ({
-          studyBlocks: state.studyBlocks.filter((b) => b.id !== id),
-          // Task 7G-A1：target 删除 → 关联 Reminder 一并删除（无 orphan）
-          reminders: state.reminders.filter((r) => !(r.targetType === "studyBlock" && r.targetId === id)),
-        })),
+      deleteStudyBlock: (id, context) =>
+        set((state) => {
+          const target = state.studyBlocks.find((b) => b.id === id);
+          if (target) {
+            enqueueLearningHistoryEvents([
+              buildStudyBlockDeletedEvent({
+                block: target,
+                context: resolveLearningMutationContext(context),
+                environment: historyEnvironment(state),
+              }),
+            ]);
+          }
+          return {
+            studyBlocks: state.studyBlocks.filter((b) => b.id !== id),
+            // Task 7G-A1：target 删除 → 关联 Reminder 一并删除（无 orphan）
+            reminders: state.reminders.filter((r) => !(r.targetType === "studyBlock" && r.targetId === id)),
+          };
+        }),
       deleteStudyBlocksBatch: (ids) => {
         const current = get();
         const idSet = new Set(ids);
@@ -1481,7 +1849,7 @@ export const useAppStore = create<AppState>()(
 
       // ---- Focus Session Actions（Task 2）----
 
-      startFocusSession: (input) => {
+      startFocusSession: (input, context) => {
         const now = input.now ?? Date.now();
         if (
           !Number.isInteger(input.plannedMinutes) ||
@@ -1534,11 +1902,22 @@ export const useAppStore = create<AppState>()(
           createdAt: now,
           updatedAt: now,
         };
-        set((state) => ({ focusSessions: [...state.focusSessions, session] }));
+        set((state) => {
+          // History：focus.started（source = context 优先，否则 session.source；occurredAt = 事件时间 now）
+          const resolved = resolveLearningMutationContext({
+            ...(context ?? {}),
+            source: context?.source ?? (session.source as "manual" | "kiro"),
+            occurredAt: context?.occurredAt ?? now,
+          });
+          enqueueLearningHistoryEvents([
+            buildFocusStartedEvent({ session, context: resolved, environment: historyEnvironment(state) }),
+          ]);
+          return { focusSessions: [...state.focusSessions, session] };
+        });
         return { ok: true, session };
       },
 
-      pauseFocusSession: (now) => {
+      pauseFocusSession: (now, context) => {
         const t = now ?? Date.now();
         const state = get();
         // active = running 或 paused（paused 再次 pause 必须给出 FOCUS_ALREADY_PAUSED，而非「找不到」）
@@ -1549,26 +1928,36 @@ export const useAppStore = create<AppState>()(
         if (active.status === "paused") return { ok: false, code: "FOCUS_ALREADY_PAUSED" };
         const session = pauseFocusSessionRecord(active, t);
         if (session.status !== "paused") return { ok: false, code: "FOCUS_ALREADY_PAUSED" };
-        set((s) => ({
-          focusSessions: s.focusSessions.map((x) => (x.id === session.id ? session : x)),
-        }));
+        set((s) => {
+          enqueueLearningHistoryEvents([
+            buildFocusPausedEvent({ session, context: resolveLearningMutationContext({ ...(context ?? {}), occurredAt: context?.occurredAt ?? t }), environment: historyEnvironment(s) }),
+          ]);
+          return {
+            focusSessions: s.focusSessions.map((x) => (x.id === session.id ? session : x)),
+          };
+        });
         return { ok: true, session };
       },
 
-      resumeFocusSession: (now) => {
+      resumeFocusSession: (now, context) => {
         const t = now ?? Date.now();
         const state = get();
         const paused = state.focusSessions.find((s) => s.status === "paused");
         if (!paused) return { ok: false, code: "FOCUS_NOT_PAUSED" };
         const session = resumeFocusSessionRecord(paused, t);
         if (session.status !== "running") return { ok: false, code: "FOCUS_NOT_PAUSED" };
-        set((s) => ({
-          focusSessions: s.focusSessions.map((x) => (x.id === session.id ? session : x)),
-        }));
+        set((s) => {
+          enqueueLearningHistoryEvents([
+            buildFocusResumedEvent({ session, context: resolveLearningMutationContext({ ...(context ?? {}), occurredAt: context?.occurredAt ?? t }), environment: historyEnvironment(s) }),
+          ]);
+          return {
+            focusSessions: s.focusSessions.map((x) => (x.id === session.id ? session : x)),
+          };
+        });
         return { ok: true, session };
       },
 
-      finishFocusSession: (now) => {
+      finishFocusSession: (now, context) => {
         const t = now ?? Date.now();
         const state = get();
         // active = running 或 paused：paused 会话的 actualActiveMs 由 finishFocusSessionRecord 按真实 active 时间结算
@@ -1577,13 +1966,22 @@ export const useAppStore = create<AppState>()(
         );
         if (!active) return { ok: false, code: "NO_ACTIVE_FOCUS_SESSION" };
         const session = finishFocusSessionRecord(active, t);
-        set((s) => ({
-          focusSessions: s.focusSessions.map((x) => (x.id === session.id ? session : x)),
-        }));
+        set((s) => {
+          const event = buildFocusCompletedEvent({
+            session,
+            endReason: "manual",
+            context: resolveLearningMutationContext({ ...(context ?? {}), occurredAt: context?.occurredAt ?? t }),
+            environment: historyEnvironment(s),
+          });
+          if (event) enqueueLearningHistoryEvents([event]);
+          return {
+            focusSessions: s.focusSessions.map((x) => (x.id === session.id ? session : x)),
+          };
+        });
         return { ok: true, session };
       },
 
-      completeFocusSession: (sessionId, reason, now) => {
+      completeFocusSession: (sessionId, reason, now, context) => {
         const t = now ?? Date.now();
         const state = get();
         const target = state.focusSessions.find((s) => s.id === sessionId);
@@ -1592,9 +1990,22 @@ export const useAppStore = create<AppState>()(
           return { ok: false, code: "NO_ACTIVE_FOCUS_SESSION" };
         }
         const session = completeFocusSessionRecord(target, reason, t);
-        set((s) => ({
-          focusSessions: s.focusSessions.map((x) => (x.id === session.id ? session : x)),
-        }));
+        set((s) => {
+          // timer / recovered 自然结束 → source=system（用户操作由 finishFocusSession 覆盖）
+          const event = buildFocusCompletedEvent({
+            session,
+            endReason: reason,
+            context: resolveLearningMutationContext({
+              ...(context ?? { source: "system" }),
+              occurredAt: context?.occurredAt ?? t,
+            }),
+            environment: historyEnvironment(s),
+          });
+          if (event) enqueueLearningHistoryEvents([event]);
+          return {
+            focusSessions: s.focusSessions.map((x) => (x.id === session.id ? session : x)),
+          };
+        });
         return { ok: true, session };
       },
 

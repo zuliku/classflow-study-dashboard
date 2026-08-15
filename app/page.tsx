@@ -29,6 +29,7 @@ import { AddAssignmentModal } from "@/components/modals/AddAssignmentModal";
 import { FilePreviewModal } from "@/components/modals/FilePreviewModal";
 import { ToastViewport } from "@/components/ui/ToastViewport";
 import { ReminderRuntime } from "@/components/reminders/ReminderRuntime";
+import { LearningHistoryRuntime } from "@/components/history/LearningHistoryRuntime";
 import { ReminderViewport } from "@/components/reminders/ReminderViewport";
 import { ReminderCenter } from "@/components/reminders/ReminderCenter";
 import { FocusRuntime } from "@/components/focus/FocusRuntime";
@@ -590,6 +591,7 @@ export default function Home() {
       <ToastViewport />
       {/* Reminder Local Runtime + 站内通知（独立于 KiroSession；不依赖 Kiro Provider） */}
       <ReminderRuntime />
+<LearningHistoryRuntime />
       <ReminderViewport />
       <ReminderCenter />
       <FocusRuntime />

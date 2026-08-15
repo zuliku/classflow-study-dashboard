@@ -2358,24 +2358,26 @@ function buildWriteApi({
   onCancelOutput: (message: string) => void;
 }): KiroWriteApi {
   const s = () => useAppStore.getState();
+  // History source attribution：所有业务 mutation 统一标记 kiro（Adapter Wrapper 层，executor 无需感知）
+  const kiro = { source: "kiro" as const };
   return {
     getState: s,
-    addAssignment: (a) => useAppStore.getState().addAssignment(a),
-    updateAssignment: (a) => useAppStore.getState().updateAssignment(a),
-    updateAssignmentPatch: (id, patch) => useAppStore.getState().updateAssignmentPatch(id, patch),
-    deleteAssignment: (id) => useAppStore.getState().deleteAssignment(id),
-    restoreAssignment: (snapshot) => useAppStore.getState().restoreAssignment(snapshot),
-    updateAssignmentStatus: (id, status) => useAppStore.getState().updateAssignmentStatus(id, status),
-    updateAssignmentPriority: (id, priority) => useAppStore.getState().updateAssignmentPriority(id, priority),
-    updateAssignmentProgress: (id, progress) => useAppStore.getState().updateAssignmentProgress(id, progress),
-    toggleSubtask: (id, subtaskId) => useAppStore.getState().toggleSubtask(id, subtaskId),
-    addScheduleSlot: (sl) => useAppStore.getState().addScheduleSlot(sl),
-    updateSchedule: (sc) => useAppStore.getState().updateSchedule(sc),
-    deleteSchedule: (id) => useAppStore.getState().deleteSchedule(id),
-    restoreSchedule: (sc) => useAppStore.getState().restoreSchedule(sc),
-    excludeWeekFromSchedule: (id, week) => useAppStore.getState().excludeWeekFromSchedule(id, week),
-    addCourseWithSchedule: (c, slots) => useAppStore.getState().addCourseWithSchedule(c, slots),
-    updateCourse: (c) => useAppStore.getState().updateCourse(c),
+    addAssignment: (a) => useAppStore.getState().addAssignment(a, kiro),
+    updateAssignment: (a) => useAppStore.getState().updateAssignment(a, kiro),
+    updateAssignmentPatch: (id, patch) => useAppStore.getState().updateAssignmentPatch(id, patch, kiro),
+    deleteAssignment: (id) => useAppStore.getState().deleteAssignment(id, kiro),
+    restoreAssignment: (snapshot) => useAppStore.getState().restoreAssignment(snapshot, kiro),
+    updateAssignmentStatus: (id, status) => useAppStore.getState().updateAssignmentStatus(id, status, kiro),
+    updateAssignmentPriority: (id, priority) => useAppStore.getState().updateAssignmentPriority(id, priority, kiro),
+    updateAssignmentProgress: (id, progress) => useAppStore.getState().updateAssignmentProgress(id, progress, kiro),
+    toggleSubtask: (id, subtaskId) => useAppStore.getState().toggleSubtask(id, subtaskId, kiro),
+    addScheduleSlot: (sl) => useAppStore.getState().addScheduleSlot(sl, kiro),
+    updateSchedule: (sc) => useAppStore.getState().updateSchedule(sc, kiro),
+    deleteSchedule: (id) => useAppStore.getState().deleteSchedule(id, kiro),
+    restoreSchedule: (sc) => useAppStore.getState().restoreSchedule(sc, kiro),
+    excludeWeekFromSchedule: (id, week) => useAppStore.getState().excludeWeekFromSchedule(id, week, kiro),
+    addCourseWithSchedule: (c, slots) => useAppStore.getState().addCourseWithSchedule(c, slots, kiro),
+    updateCourse: (c) => useAppStore.getState().updateCourse(c, kiro),
     addGroupProject: (p) => useAppStore.getState().addGroupProject(p),
     updateGroupProject: (id, patch) => useAppStore.getState().updateGroupProject(id, patch),
     deleteGroupProject: (id) => useAppStore.getState().deleteGroupProject(id),
@@ -2394,10 +2396,10 @@ function buildWriteApi({
     reconcileTargetReminders: (targetType, targetId) =>
       useAppStore.getState().reconcileTargetReminders(targetType, targetId),
     // Task 5：Focus Session 白名单（canUndo=false）
-    startFocusSession: (input) => useAppStore.getState().startFocusSession(input),
-    pauseFocusSession: (now) => useAppStore.getState().pauseFocusSession(now),
-    resumeFocusSession: (now) => useAppStore.getState().resumeFocusSession(now),
-    finishFocusSession: (now) => useAppStore.getState().finishFocusSession(now),
+    startFocusSession: (input) => useAppStore.getState().startFocusSession(input, kiro),
+    pauseFocusSession: (now) => useAppStore.getState().pauseFocusSession(now, kiro),
+    resumeFocusSession: (now) => useAppStore.getState().resumeFocusSession(now, kiro),
+    finishFocusSession: (now) => useAppStore.getState().finishFocusSession(now, kiro),
     pushToast,
     registerUndo: (id, undo) => registerUndo(id, undo),
   };
