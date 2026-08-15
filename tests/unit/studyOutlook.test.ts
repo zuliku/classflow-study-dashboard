@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+﻿import { describe, it, expect } from "vitest";
 import { buildStudyOutlook } from "@/lib/outlook/studyOutlook";
 import { StudyOutlookBuildInput } from "@/lib/outlook/types";
 import { EstimateCalibration } from "@/lib/analytics/estimateCalibration";
@@ -129,7 +129,7 @@ describe("Study Outlook", () => {
     const out = buildStudyOutlook(input);
     const t = out.tasks[0];
     // 有至少一段可用时间（周一 12:00–21:00 及更晚日期）
-    expect(t.availableMinutesBeforeDeadline).toBeGreaterThan(0);
+    expect(t.rawFreeMinutesBeforeDeadline).toBeGreaterThan(0);
     // 验证 Monday 的全部可用时间都落在课程外：直接验证 free slots 不含 08:00-12:00
     const mondayDate = date(mondayOffset);
     const slots = findFreeTime({ start: NOW, end: new Date(NOW.getTime() + (mondayOffset + 1) * 86400000), semester: SEMESTER, currentSemesterWeek: 1, schedules, calendarMarks: [], studyBlocks: [] });
@@ -227,15 +227,15 @@ describe("Study Outlook", () => {
 
     // 共享容量：240 需求 vs 180 可分配
     expect(out.summary.workload.remainingKnownMinutes).toBe(240);
-    expect(out.summary.workload.allocatableMinutes).toBe(180);
-    expect(out.summary.workload.shortfallMinutes).toBe(60);
+    expect(out.summary.workload.preferredAllocatedMinutes).toBe(180);
+    expect(out.summary.workload.preferredShortfallMinutes).toBe(60);
     // 至少一个任务 capacityComplete=false
     expect(out.tasks.filter((t) => t.capacityComplete === false).length).toBe(1);
     expect(out.tasks.filter((t) => t.capacityComplete === true).length).toBe(1);
     // raw free（无竞争）与 shared allocated 不同：raw 对每个任务都是 180
     for (const t of out.tasks) {
-      expect(t.availableMinutesBeforeDeadline).toBe(180);
-      expect(t.capacityAllocatedMinutes).not.toBe(t.availableMinutesBeforeDeadline);
+      expect(t.rawFreeMinutesBeforeDeadline).toBe(180);
+      expect(t.capacityAllocatedMinutes).not.toBe(t.rawFreeMinutesBeforeDeadline);
     }
     // firstCapacityShortfall 存在且 affected 只含 capacityComplete=false 的任务
     expect(out.firstCapacityShortfall).not.toBeNull();

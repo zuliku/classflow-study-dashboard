@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from "vitest";
+﻿import { describe, it, expect, beforeEach } from "vitest";
 import { executeGetLearningOutlook } from "@/lib/ai/tools/read/outlook";
 import { executeKiroReadTool } from "@/lib/ai/tools/read/executor";
 import { getLearningOutlookSchema } from "@/lib/ai/tools/read/schemas";
@@ -171,8 +171,8 @@ describe("get_learning_outlook（canonical tool）", () => {
 
     // workload：需求 240 vs 可分配 180 vs 缺口 60
     expect(out.summary.workload.remainingKnownMinutes).toBe(240);
-    expect(out.summary.workload.allocatableMinutes).toBe(180);
-    expect(out.summary.workload.shortfallMinutes).toBe(60);
+    expect(out.summary.workload.preferredAllocatedMinutes).toBe(180);
+    expect(out.summary.workload.preferredShortfallMinutes).toBe(60);
     expect(typeof out.summary.workload.unusedFreeMinutes).toBe("number");
 
     // 每个任务带 capacity facts

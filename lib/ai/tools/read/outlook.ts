@@ -34,7 +34,7 @@ function toModelFriendlyOutput(outlook: ReturnType<typeof buildStudyOutlook>) {
       scheduledMinutesBeforeDeadline: t.scheduledMinutesBeforeDeadline,
       unscheduledMinutes: t.unscheduledMinutes,
       // raw 空闲（无竞争）与共享容量事实分离：Preferred 容量结论只看 capacity* 字段
-      rawFreeMinutesBeforeDeadline: t.availableMinutesBeforeDeadline,
+      rawFreeMinutesBeforeDeadline: t.rawFreeMinutesBeforeDeadline,
       capacityAllocatedMinutes: t.capacityAllocatedMinutes,
       capacityShortfallMinutes: t.capacityShortfallMinutes,
       capacityComplete: t.capacityComplete,

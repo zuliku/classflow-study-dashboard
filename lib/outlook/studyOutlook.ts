@@ -174,7 +174,7 @@ export function buildStudyOutlook(input: StudyOutlookBuildInput): StudyOutlook {
       estimatedMinutes: a.estimatedMinutes ?? null,
       scheduledMinutesBeforeDeadline: healthResult.scheduledMinutesBeforeDeadline,
       unscheduledMinutes: healthResult.unscheduledMinutes ?? null,
-      availableMinutesBeforeDeadline: a.ddl ? rawFreeBeforeDeadline : null,
+      rawFreeMinutesBeforeDeadline: a.ddl ? rawFreeBeforeDeadline : null,
       // Preferred（非课程时间）容量
       capacityAllocatedMinutes: isEligible(alloc) ? alloc!.allocatedMinutes : null,
       capacityShortfallMinutes: isEligible(alloc) ? alloc!.shortfallMinutes : null,
@@ -353,9 +353,6 @@ export function buildStudyOutlook(input: StudyOutlookBuildInput): StudyOutlook {
       scheduledMinutes: tasks.reduce((s, t) => s + t.scheduledMinutesBeforeDeadline, 0),
       remainingKnownMinutes: tasks.reduce((s, t) => s + (t.unscheduledMinutes ?? 0), 0),
       freeMinutes: totalFreeMinutes,
-      // @deprecated → preferred*
-      allocatableMinutes: capacity.summary.preferredAllocatedMinutes,
-      shortfallMinutes: capacity.summary.preferredShortfallMinutes,
       unusedFreeMinutes: capacity.preferred.unusedFreeMinutes,
       // V1.2：两层容量
       preferredAllocatedMinutes: capacity.summary.preferredAllocatedMinutes,

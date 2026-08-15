@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Study Outlook（未来 7 / 14 天确定性学习前瞻）类型。
  * 语义边界：Analytics = 过去发生了什么；Outlook = 基于当前状态，未来可能需要怎么安排。
  * 不使用 LLM；deriveAssignmentHealth + findFreeTime 复用既有确定性引擎。
@@ -33,11 +33,8 @@ export interface OutlookTask {
   scheduledMinutesBeforeDeadline: number;
   /** max(estimated - scheduled, 0)；无估时 → null */
   unscheduledMinutes: number | null;
-  /**
-   * 「如果没有其它任务竞争，截止前存在多少空闲分钟」（raw，非共享容量）。
-   * @deprecated 容量结论请使用 capacityAllocatedMinutes / capacityShortfallMinutes / capacityComplete
-   */
-  availableMinutesBeforeDeadline: number | null;
+  /** 「如果没有其它任务竞争，截止前存在多少空闲分钟」（raw，非共享容量；容量结论看 capacity* 字段） */
+  rawFreeMinutesBeforeDeadline: number | null;
   /** Preferred 共享容量分配（非课程时间；Capacity Allocator 输出；无估时 / 无 DDL / overdue → null） */
   capacityAllocatedMinutes: number | null;
   capacityShortfallMinutes: number | null;
@@ -92,10 +89,7 @@ export interface StudyOutlookSummary {
     remainingKnownMinutes: number;
     /** 整个 horizon 的 raw free capacity（未做 deadline 竞争） */
     freeMinutes: number;
-    /** @deprecated 请使用 preferredAllocatedMinutes（非课程时间容量） */
-    allocatableMinutes: number;
-    /** @deprecated 请使用 preferredShortfallMinutes */
-    shortfallMinutes: number;
+
     unusedFreeMinutes: number;
     /** V1.2：Preferred（非课程时间）容量 */
     preferredAllocatedMinutes: number;
