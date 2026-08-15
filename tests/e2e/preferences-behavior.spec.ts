@@ -13,7 +13,7 @@ async function openSettings(page: Page) {
 }
 
 async function gotoInteraction(page: Page) {
-  await page.getByRole("navigation", { name: "设置导航" }).getByRole("button", { name: "交互与快捷键" }).click();
+  await page.getByRole("navigation", { name: "设置导航" }).getByRole("button", { name: "通用" }).click();
 }
 
 async function gotoGeneral(page: Page) {
@@ -143,21 +143,27 @@ test("DDL drag：关闭 → 拖动不发生、点击正常；打开 → 拖动�
   await expect(page.getByTestId("ddl-move-feedback")).toBeVisible();
 });
 
-test("ddlWarningDays：1 天 → 临近 DDL 只显示 1 条；7 天 → 5 条", async ({ page }) => {
+test("ddlWarningDays：窗口偏好驱动临近 DDL 数量（7 天 → 5 条；1 天 → 明显更少）", async ({ page }) => {
   await openSettings(page);
   await page.getByRole("navigation", { name: "设置导航" }).getByRole("button", { name: "任务" }).click();
 
+  // 1 天窗口：具体数量随运行时刻变化（date-fns v3 differenceInDays 为截断语义，
+  // 晚间运行时 2 天后 18:00 的 DDL 也会落入 1 天窗口），因此断言「明显少于 7 天窗口」。
   await page.getByRole("button", { name: "1 天", exact: true }).click();
   await expect(page.getByRole("button", { name: "1 天", exact: true })).toHaveAttribute("aria-pressed", "true");
 
   await gotoOverview(page);
-  // differenceInDays 为「经过整天数」：1 天窗口内仅「明天 23:59」这一条（2 天后 18:00 diff=2）
-  await expect(page.getByTestId("upcoming-ddl-card").getByText("1 项待办")).toBeVisible();
+  const card = page.getByTestId("upcoming-ddl-card");
+  await expect(card).toBeVisible();
+  const count1d = Number((await card.getByText(/\d+ 项待办/).textContent())?.replace(" 项待办", "") ?? 0);
+  expect(count1d).toBeGreaterThanOrEqual(1);
+  expect(count1d).toBeLessThan(5);
 
   await openSettings(page);
   await page.getByRole("navigation", { name: "设置导航" }).getByRole("button", { name: "任务" }).click();
   await page.getByRole("button", { name: "7 天", exact: true }).click();
   await gotoOverview(page);
+  // 7 天窗口：全部 5 个未完成 DDL 都在窗口内（任意时刻截断 diff ≤ 7）
   await expect(page.getByTestId("upcoming-ddl-card").getByText("5 项待办")).toBeVisible();
 });
 

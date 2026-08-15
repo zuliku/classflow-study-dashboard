@@ -347,7 +347,7 @@ export function CommandCenter() {
                           {it.label}
                           {disabled && (
                             <span className="block text-[9px] text-sandrift mt-0.5">
-                              可在 设置 → 交互与快捷键 中开启
+                              可在 设置 → 通用 中开启
                             </span>
                           )}
                         </span>

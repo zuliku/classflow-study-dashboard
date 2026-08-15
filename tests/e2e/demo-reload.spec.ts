@@ -8,7 +8,7 @@ test("settings dev demo reload button", async ({ page }) => {
   await expect(page.getByTestId("settings-view")).toBeVisible();
   await page
     .getByRole("navigation", { name: "设置导航" })
-    .getByRole("button", { name: "数据与存储" })
+    .getByRole("button", { name: "数据与隐私" })
     .click();
   await expect(page.getByTestId("dev-demo-reload")).toBeVisible();
   await expect(page.getByTestId("data-overview")).toContainText("0");

@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useMemo, useRef, useState } from "react";
+import { Search } from "lucide-react";
 import { SettingsSection } from "@/types";
 import { SettingsNav, SETTINGS_NAV, ABOUT_NAV } from "@/components/settings/SettingsNav";
 import { GeneralSettings } from "@/components/settings/GeneralSettings";
@@ -8,42 +9,49 @@ import { ProfileSettings } from "@/components/settings/ProfileSettings";
 import { SemesterSettings } from "@/components/settings/SemesterSettings";
 import { TaskSettings } from "@/components/settings/TaskSettings";
 import { FocusSettings } from "@/components/settings/FocusSettings";
-import { InteractionSettings } from "@/components/settings/InteractionSettings";
 import { DataSettings } from "@/components/settings/DataSettings";
 import { AboutSettings } from "@/components/settings/AboutSettings";
 import { KiroAISettings } from "@/components/settings/KiroAISettings";
 import { KiroAgentSettings } from "@/components/settings/KiroAgentSettings";
 import { searchSettings, SettingDefinition } from "@/lib/settingsRegistry";
-import {
-  getModifiedPreferenceKeys,
-  getModifiedSections,
-  PREFERENCE_SECTIONS,
-  DEFAULT_PREFERENCES,
-  resetPreferencePatch,
-} from "@/lib/preferences";
+import { runRegistryDomValidation } from "@/lib/settingsRegistryValidation";
 import { useAppStore } from "@/store/useAppStore";
-import { useToastStore } from "@/store/useToastStore";
-import { RotateCcw } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface SettingsViewProps {
-  /** SettingsModal Header 的搜索输入（空 = 未搜索） */
+  /** SettingsModal 持有的搜索 query（空 = 未搜索） */
   searchQuery: string;
+  setSearchQuery: (query: string) => void;
+  /** 从搜索结果跳转到某设置后：清空搜索 */
   onClearSearch: () => void;
-  /** 从搜索结果跳转到某设置：切 section + 高亮 row */
-  jumpToSetting: (setting: SettingDefinition) => void;
+  /** Cmd/Ctrl+F 聚焦目标：侧栏搜索输入框（只绑定当前可见的那个） */
+  searchInputRef: React.Ref<HTMLInputElement>;
+}
+
+/** 绑定 ref 时只保留可见的搜索框（桌面/移动各渲染一个，另一个 display:none 会覆盖 ref） */
+function bindVisibleSearchInput(ref: React.Ref<HTMLInputElement>) {
+  return (el: HTMLInputElement | null) => {
+    if (!el || el.offsetParent !== null) {
+      if (typeof ref === "function") ref(el);
+      else if (ref && typeof ref === "object" && "current" in ref) {
+        (ref as React.MutableRefObject<HTMLInputElement | null>).current = el;
+      }
+    }
+  };
 }
 
 /**
  * 设置中心内容（常驻挂载所有 section，Profile/Semester dirty state 不因切换丢失）。
- * 搜索有内容时 Detail 临时切成搜索结果；「已修改」视图按 section 分组展示非默认偏好。
+ * 搜索有内容时 Detail 临时切成搜索结果；点击结果 → 切 section + 清空搜索 +
+ * 可靠滚动到目标 row（带多帧重试）并短暂高亮。
  */
-export function SettingsView({ searchQuery, onClearSearch, jumpToSetting }: SettingsViewProps) {
+export function SettingsView({
+  searchQuery,
+  setSearchQuery,
+  onClearSearch,
+  searchInputRef,
+}: SettingsViewProps) {
   const [section, setSection] = useState<SettingsSection>("general");
-  const [showModified, setShowModified] = useState(false);
-  const preferences = useAppStore((s) => s.preferences);
-  const resetPreferences = useAppStore((s) => s.resetPreferences);
-  const pushToast = useToastStore((s) => s.pushToast);
 
   // 外部请求跳转（如 Kiro「配置 AI 服务」）：切 section 并消费
   const settingsTargetSection = useAppStore((s) => s.settingsTargetSection);
@@ -51,67 +59,112 @@ export function SettingsView({ searchQuery, onClearSearch, jumpToSetting }: Sett
   React.useEffect(() => {
     if (settingsTargetSection) {
       setSection(settingsTargetSection);
-      setShowModified(false);
       setSettingsTargetSection(null);
     }
   }, [settingsTargetSection, setSettingsTargetSection]);
 
-  const modifiedKeys = useMemo(() => getModifiedPreferenceKeys(preferences), [preferences]);
-  const modifiedSections = useMemo(
-    () => getModifiedSections(preferences),
-    [preferences]
-  );
   const searchResults = useMemo(
     () => (searchQuery.trim() ? searchSettings(searchQuery) : []),
     [searchQuery]
   );
   const searching = searchQuery.trim().length > 0;
 
-  // 从结果跳转：切 section + 触发 row 高亮（SettingsRow 通过 highlightedId 短暂闪烁）
+  // 开发期自动校验：Registry ID ↔ 真实 DOM（全部 section 常驻挂载，一次校验全量）
+  React.useEffect(() => {
+    if (process.env.NODE_ENV === "development") {
+      // 等首帧渲染完成后再校验（React 已提交 DOM）
+      requestAnimationFrame(() => {
+        runRegistryDomValidation(document);
+      });
+    }
+  }, []);
+
+  // ---- 搜索结果跳转：切 section → 清空搜索 → 目标挂载后滚动 + 高亮 ----
   const [highlightedId, setHighlightedId] = useState<string | null>(null);
+  const pendingTargetRef = useRef<string | null>(null);
   const highlightTimer = React.useRef<number | null>(null);
+
   const handleJump = (setting: SettingDefinition) => {
     setSection(setting.section);
-    setShowModified(false);
     onClearSearch();
-    setHighlightedId(setting.id);
+    setHighlightedId(null);
+    pendingTargetRef.current = setting.id;
     if (highlightTimer.current) window.clearTimeout(highlightTimer.current);
-    highlightTimer.current = window.setTimeout(() => setHighlightedId(null), 700);
-    requestAnimationFrame(() => {
-      document
-        .querySelector(`[data-setting-id="${setting.id}"]`)
-        ?.scrollIntoView({ block: "center", behavior: "smooth" });
-    });
   };
 
-  // 已修改视图：按 section 分组
-  const modifiedGroups = useMemo(() => {
-    const groups = new Map<
-      "general" | "semester" | "tasks" | "interaction",
-      { key: keyof typeof DEFAULT_PREFERENCES; default: unknown; current: unknown }[]
-    >();
-    for (const key of modifiedKeys) {
-      const sec = PREFERENCE_SECTIONS[key];
-      const arr = groups.get(sec) ?? [];
-      arr.push({ key, default: DEFAULT_PREFERENCES[key], current: preferences[key] });
-      groups.set(sec, arr);
-    }
-    return groups;
-  }, [modifiedKeys, preferences]);
+  // 目标挂载后执行滚动 + 高亮；最多重试 3 帧，仍缺失时 dev warn
+  React.useEffect(() => {
+    const targetId = pendingTargetRef.current;
+    if (!targetId) return;
+    let tries = 0;
+    let raf = 0;
+    const attempt = () => {
+      tries += 1;
+      const el = document.querySelector(`[data-setting-id="${targetId}"]`);
+      if (el) {
+        pendingTargetRef.current = null;
+        el.scrollIntoView({ block: "center", behavior: "smooth" });
+        // DOM 级高亮：不依赖 row 是否接收 highlighted prop（搜索跳转一律可用）
+        el.classList.add("bg-pastel-mint/60");
+        setHighlightedId(targetId);
+        if (highlightTimer.current) window.clearTimeout(highlightTimer.current);
+        highlightTimer.current = window.setTimeout(() => {
+          el.classList.remove("bg-pastel-mint/60");
+          setHighlightedId(null);
+        }, 900);
+        return;
+      }
+      if (tries < 3) {
+        raf = requestAnimationFrame(attempt);
+        return;
+      }
+      if (process.env.NODE_ENV === "development") {
+        // eslint-disable-next-line no-console
+        console.warn(`[SettingsRegistry] jump target not found in DOM: ${targetId}`);
+      }
+      pendingTargetRef.current = null;
+    };
+    raf = requestAnimationFrame(attempt);
+    return () => cancelAnimationFrame(raf);
+  }, [section, searchQuery]);
 
   const sectionLabel = (sec: SettingsSection) =>
     [...SETTINGS_NAV, ABOUT_NAV].find((n) => n.id === sec)?.label ?? sec;
 
   return (
     <div className="flex-1 min-h-0 flex flex-col md:flex-row" data-testid="settings-view">
-      {/* 桌面/平板：左侧设置导航 */}
-      <div className="hidden md:flex md:flex-col md:shrink-0 md:h-full md:w-[200px] md:p-3 md:border-r md:border-line-soft md:overflow-y-auto">
-        <SettingsNav active={section} onSelect={setSection} modifiedSections={modifiedSections} />
+      {/* 桌面/平板：左侧设置导航（搜索常驻顶部） */}
+      <div className="hidden md:flex md:flex-col md:shrink-0 md:h-full md:w-[220px] md:p-3 md:border-r md:border-line-soft md:overflow-y-auto">
+        <label className="relative block mb-2 shrink-0">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-sandrift pointer-events-none" />
+          <input
+            ref={bindVisibleSearchInput(searchInputRef)}
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="搜索设置"
+            aria-label="搜索设置"
+            className="w-full h-8 pl-8 pr-2.5 bg-[#F7F5F5] border border-line rounded-lg text-xs text-charcoal placeholder-sandrift focus:outline-none focus:border-line-strong focus:bg-white transition-colors duration-[var(--motion-fast)]"
+          />
+        </label>
+        <SettingsNav active={section} onSelect={setSection} />
       </div>
 
-      {/* Mobile：横向可滚动 section tabs */}
-      <div className="md:hidden shrink-0 px-4 pt-3 pb-2 overflow-x-auto border-b border-line-soft">
-        <div className="flex items-center gap-1 w-max pb-1">
+      {/* Mobile：搜索 + 横向可滚动 section tabs */}
+      <div className="md:hidden shrink-0 px-4 pt-3 pb-2 space-y-2 border-b border-line-soft">
+        <label className="relative block">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-sandrift pointer-events-none" />
+          <input
+            ref={bindVisibleSearchInput(searchInputRef)}
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="搜索设置"
+            aria-label="搜索设置"
+            className="w-full h-8 pl-8 pr-2.5 bg-[#F7F5F5] border border-line rounded-lg text-xs text-charcoal placeholder-sandrift focus:outline-none focus:border-line-strong focus:bg-white transition-colors duration-[var(--motion-fast)]"
+          />
+        </label>
+        <div className="flex items-center gap-1 w-max max-w-full pb-1 overflow-x-auto scrollbar-none">
           {[...SETTINGS_NAV, ABOUT_NAV].map((item) => {
             const Icon = item.icon;
             const isActive = section === item.id;
@@ -129,175 +182,89 @@ export function SettingsView({ searchQuery, onClearSearch, jumpToSetting }: Sett
               >
                 <Icon className="w-3.5 h-3.5" />
                 {item.label}
-                {(modifiedSections as ReadonlySet<SettingsSection>).has(item.id) && (
-                  <span className="w-1 h-1 rounded-full bg-charcoal" aria-hidden="true" />
-                )}
               </button>
             );
           })}
         </div>
       </div>
 
-      {/* 右侧 Workspace：Toolbar（全部设置 / 已修改 N）+ Detail Pane（唯一主要滚动区） */}
-      <div className="flex-1 min-w-0 min-h-0 flex flex-col" data-testid="settings-workspace">
-        {/* 顶部工具条：全部设置 / 已修改 N */}
-        <div
-          data-testid="settings-toolbar"
-          className="shrink-0 px-4 md:px-5 pt-2 md:pt-3 md:pb-3 flex items-center justify-between"
-        >
-          <ToolbarTabs showModified={showModified} setShowModified={setShowModified} modifiedCount={modifiedKeys.length} />
-        </div>
-
+      {/* 右侧 Workspace：Detail Pane（唯一主要滚动区） */}
+      <div className="flex-1 min-w-0 min-h-0 flex flex-col">
         {/* Detail Pane：唯一滚动区；所有 section 常驻挂载 */}
-        <div className="flex-1 min-w-0 min-h-0 overflow-y-auto p-4 md:pt-0 md:px-5 md:pb-5" data-testid="settings-detail">
-        {/* ---- 搜索模式：Detail 临时切成搜索结果 ---- */}
-        {searching ? (
-          <div data-testid="settings-search-results">
-            <p className="text-[11px] font-bold text-sandrift mb-2">
-              搜索结果 · {searchResults.length}
-            </p>
-            {searchResults.length === 0 ? (
-              <p className="py-8 text-center text-xs text-sandrift">未找到匹配的设置</p>
-            ) : (
-              (() => {
-                // 按 section 分组；每项显示「section › 设置名」路径，点击跳转对应 section + 滚动 + 高亮
-                const groups = new Map<SettingsSection, SettingDefinition[]>();
-                for (const r of searchResults) {
-                  const arr = groups.get(r.section) ?? [];
-                  arr.push(r);
-                  groups.set(r.section, arr);
-                }
-                return Array.from(groups.entries()).map(([sec, items]) => (
-                  <GroupedList key={sec} label={sectionLabel(sec)}>
-                    {items.map((s) => (
-                      <button
-                        key={s.id}
-                        onClick={() => handleJump(s)}
-                        className="w-full px-3 py-2.5 text-left hover:bg-alabaster transition-colors duration-[var(--motion-fast)]"
-                      >
-                        <p className="text-xs font-bold text-charcoal">{s.title}</p>
-                        <p className="text-[11px] text-sandrift mt-0.5">{s.description}</p>
-                      </button>
-                    ))}
-                  </GroupedList>
-                ));
-              })()
-            )}
-          </div>
-        ) : showModified && modifiedKeys.length > 0 ? (
-          /* ---- 已修改视图：只显示非默认偏好，按 section 分组 ---- */
-          <div data-testid="settings-modified">
-            <div className="flex items-center justify-between mb-3">
-              <p className="text-[11px] font-bold text-sandrift">
-                已修改 · {modifiedKeys.length}
+        <div className="flex-1 min-w-0 min-h-0 overflow-y-auto p-4 md:pt-4 md:px-5 md:pb-5" data-testid="settings-detail">
+          {searching ? (
+            <div data-testid="settings-search-results">
+              <p className="text-[11px] font-bold text-sandrift mb-2">
+                搜索结果 · {searchResults.length}
               </p>
-              <button
-                onClick={() => {
-                  resetPreferences();
-                  pushToast({ message: "已恢复所有默认设置" });
-                }}
-                className="flex items-center gap-1 text-[11px] font-semibold text-sandrift hover:text-charcoal transition-colors"
-              >
-                <RotateCcw className="w-3 h-3" />
-                恢复所有默认设置
-              </button>
+              {searchResults.length === 0 ? (
+                <p className="py-8 text-center text-xs text-sandrift">未找到匹配的设置</p>
+              ) : (
+                (() => {
+                  // 按 section 分组；每项显示「section › 设置名」路径，点击跳转对应 section + 滚动 + 高亮
+                  const groups = new Map<SettingsSection, SettingDefinition[]>();
+                  for (const r of searchResults) {
+                    const arr = groups.get(r.section) ?? [];
+                    arr.push(r);
+                    groups.set(r.section, arr);
+                  }
+                  return Array.from(groups.entries()).map(([sec, items]) => (
+                    <GroupedList key={sec} label={sectionLabel(sec)}>
+                      {items.map((s) => (
+                        <button
+                          key={s.id}
+                          onClick={() => handleJump(s)}
+                          className="w-full px-3 py-2.5 text-left hover:bg-alabaster transition-colors duration-[var(--motion-fast)]"
+                        >
+                          <p className="text-xs font-bold text-charcoal">{s.title}</p>
+                          <p className="text-[11px] text-sandrift mt-0.5">{s.description}</p>
+                        </button>
+                      ))}
+                    </GroupedList>
+                  ));
+                })()
+              )}
             </div>
-            {Array.from(modifiedGroups.entries()).map(([sec, items]) => (
-              <GroupedList key={sec} label={sectionLabel(sec)}>
-                {items.map((it) => (
-                  <div
-                    key={it.key}
-                    className="px-3 py-2.5 flex items-center justify-between gap-3 text-xs"
-                  >
-                    <div className="min-w-0">
-                      <p className="font-bold text-charcoal">{preferenceTitle(it.key)}</p>
-                      <p className="text-[11px] text-satin-grey mt-0.5 truncate">
-                        {formatPreferenceValue(it.key, it.default as never)} →{" "}
-                        {formatPreferenceValue(it.key, it.current as never)}
-                      </p>
-                    </div>
-                    <button
-                      onClick={() => useAppStore.getState().updatePreferences(resetPreferencePatch(it.key))}
-                      aria-label={`将${preferenceTitle(it.key)}恢复默认`}
-                      title="恢复默认"
-                      className="p-1.5 rounded-lg text-sandrift hover:bg-alabaster hover:text-charcoal transition-colors shrink-0"
-                    >
-                      <RotateCcw className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                ))}
-              </GroupedList>
-            ))}
-          </div>
-        ) : (
-          /* ---- 常规 section 内容（常驻挂载） ---- */
-          <>
-            <div className={cn(section === "general" && "ux-fade")} hidden={section !== "general"}>
-              <GeneralSettings highlightedId={highlightedId ?? undefined} />
-            </div>
-            <div className={cn(section === "profile" && "ux-fade")} hidden={section !== "profile"}>
-              <ProfileSettings />
-            </div>
-            <div className={cn(section === "semester" && "ux-fade")} hidden={section !== "semester"}>
-              <SemesterSettings highlightedId={highlightedId ?? undefined} />
-            </div>
-            <div className={cn(section === "tasks" && "ux-fade")} hidden={section !== "tasks"}>
-              <TaskSettings highlightedId={highlightedId ?? undefined} />
-            </div>
-            <div className={cn(section === "focus" && "ux-fade")} hidden={section !== "focus"}>
-              <FocusSettings />
-            </div>
-            <div className={cn(section === "interaction" && "ux-fade")} hidden={section !== "interaction"}>
-              <InteractionSettings highlightedId={highlightedId ?? undefined} />
-            </div>
-            <div className={cn(section === "kiro" && "ux-fade")} hidden={section !== "kiro"}>
-              <KiroAISettings />
-            </div>
-            <div className={cn(section === "kiro-agent" && "ux-fade")} hidden={section !== "kiro-agent"}>
-              <KiroAgentSettings />
-            </div>
-            <div className={cn(section === "data" && "ux-fade")} hidden={section !== "data"}>
-              <DataSettings />
-            </div>
-            <div className={cn(section === "about" && "ux-fade")} hidden={section !== "about"}>
-              <AboutSettings />
-            </div>
-          </>
-        )}
-      </div>
+          ) : (
+            /* ---- 常规 section 内容（常驻挂载） ---- */
+            <>
+              <div className={cn(section === "general" && "ux-fade")} hidden={section !== "general"}>
+                <GeneralSettings highlightedId={highlightedId ?? undefined} />
+              </div>
+              <div className={cn(section === "profile" && "ux-fade")} hidden={section !== "profile"}>
+                <ProfileSettings />
+              </div>
+              <div className={cn(section === "semester" && "ux-fade")} hidden={section !== "semester"}>
+                <SemesterSettings highlightedId={highlightedId ?? undefined} />
+              </div>
+              <div className={cn(section === "tasks" && "ux-fade")} hidden={section !== "tasks"}>
+                <TaskSettings highlightedId={highlightedId ?? undefined} />
+              </div>
+              <div className={cn(section === "focus" && "ux-fade")} hidden={section !== "focus"}>
+                <FocusSettings />
+              </div>
+              <div className={cn(section === "kiro" && "ux-fade")} hidden={section !== "kiro"}>
+                <KiroAISettings />
+              </div>
+              <div className={cn(section === "kiro-agent" && "ux-fade")} hidden={section !== "kiro-agent"}>
+                <KiroAgentSettings />
+              </div>
+              <div className={cn(section === "data" && "ux-fade")} hidden={section !== "data"}>
+                <DataSettings />
+              </div>
+              <div className={cn(section === "about" && "ux-fade")} hidden={section !== "about"}>
+                <AboutSettings />
+              </div>
+            </>
+          )}
+        </div>
       </div>
     </div>
   );
 }
 
 /**
- * 已修改入口（Settings V3 IA）：低视觉权重。
- * 无修改时完全不显示；有修改时是一个克制的 ghost 文本按钮（可切换 全部设置 / 已修改）。
- */
-function ToolbarTabs({
-  showModified,
-  setShowModified,
-  modifiedCount,
-}: {
-  showModified: boolean;
-  setShowModified: React.Dispatch<React.SetStateAction<boolean>>;
-  modifiedCount: number;
-}) {
-  if (modifiedCount === 0) return null;
-  return (
-    <button
-      onClick={() => setShowModified((v) => !v)}
-      aria-pressed={showModified}
-      className="flex items-center gap-1 text-[11px] font-semibold text-sandrift hover:text-charcoal transition-colors focus-visible:outline-2 focus-visible:outline-charcoal/30"
-    >
-      {showModified ? "← 全部设置" : `已修改 ${modifiedCount}`}
-    </button>
-  );
-}
-
-/**
- * Grouped Settings List（Task 2 Settings 产品化）：
- * 搜索结果 / 已修改视图共用的「Section label + 一个 grouped surface + divider rows」。
+ * Grouped Settings List：搜索结果共用的「Section label + 一个 grouped surface + divider rows」。
  * 每项无独立 Card 边框，hover 只改背景。
  */
 function GroupedList({ label, children }: { label: string; children: React.ReactNode }) {
@@ -310,66 +277,3 @@ function GroupedList({ label, children }: { label: string; children: React.React
     </div>
   );
 }
-
-function preferenceTitle(key: keyof typeof DEFAULT_PREFERENCES): string {
-  const map: Record<keyof typeof DEFAULT_PREFERENCES, string> = {
-    showWeekends: "显示周末",
-    ddlWarningDays: "临近截止提醒",
-    defaultDDLTime: "默认截止时间",
-    enableScheduleDirectManipulation: "课表直接操作",
-    enableDDLDirectManipulation: "DDL 直接操作",
-    motionPreference: "动效偏好",
-    startupView: "默认打开位置",
-    defaultTaskPriority: "默认优先级",
-    defaultTaskStatus: "默认状态",
-    enableSingleKeyShortcuts: "单键快捷键",
-    contentDensity: "界面密度",
-    defaultTaskWorkspaceView: "默认任务视图",
-    defaultDeadlineReminderMinutes: "自动截止提醒提前量",
-  };
-  return map[key];
-}
-
-function formatPreferenceValue(key: keyof typeof DEFAULT_PREFERENCES, v: never): string {
-  switch (key) {
-    case "ddlWarningDays":
-      return `${v} 天`;
-    case "motionPreference":
-      return v === "system" ? "跟随系统" : v === "full" ? "完整动效" : "减少动效";
-    case "startupView":
-      return v === "overview"
-        ? "总览"
-        : v === "timetable"
-        ? "课表"
-        : v === "assignments"
-        ? "任务"
-        : "上次使用的位置";
-    case "defaultTaskPriority":
-      return v === "urgent" ? "紧急" : v === "high" ? "高" : v === "medium" ? "中" : "低";
-    case "defaultTaskStatus":
-      return v === "doing" ? "进行中" : "待完成";
-    case "contentDensity":
-      return v === "compact" ? "紧凑" : "舒适";
-    case "defaultTaskWorkspaceView":
-      return v === "focus"
-        ? "聚焦"
-        : v === "today"
-          ? "今天"
-          : v === "upcoming"
-            ? "即将截止"
-            : v === "unscheduled"
-              ? "待安排"
-              : v === "archive"
-                ? "已归档"
-                : "全部";
-    case "showWeekends":
-    case "enableScheduleDirectManipulation":
-    case "enableDDLDirectManipulation":
-    case "enableSingleKeyShortcuts":
-      return v ? "开" : "关";
-    default:
-      return String(v);
-  }
-}
-
-void null;

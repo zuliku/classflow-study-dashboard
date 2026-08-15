@@ -6,6 +6,7 @@ import { useAppStore } from "@/store/useAppStore";
 import { useReminderCenterStore } from "@/store/useReminderCenterStore";
 import { hasUnreadFiredReminders } from "@/lib/reminders/reminderCenterView";
 import { useEffectiveReducedMotion } from "@/hooks/useEffectiveReducedMotion";
+import { useProfileAvatar } from "@/hooks/useProfileAvatar";
 import { cn } from "@/lib/utils";
 import {
   MAIN_NAV_ITEMS,
@@ -20,6 +21,7 @@ export function Sidebar() {
   const reminders = useAppStore((s) => s.reminders);
   const hasUnread = hasUnreadFiredReminders(reminders);
   const reducedMotion = useEffectiveReducedMotion();
+  const profileAvatarUrl = useProfileAvatar();
 
   const creditPercentage =
     userProfile.totalCredits > 0
@@ -270,10 +272,10 @@ export function Sidebar() {
       <div className="space-y-2 hidden xl:block">
         <div className="bg-surface/50 border border-line rounded-xl p-2.5 space-y-2">
           <div className="flex items-center space-x-2.5">
-            {/* 头像 fallback：无 avatarUrl 时显示首字/User 图标 */}
-            {userProfile.avatarUrl ? (
+            {/* 头像 fallback：无头像时显示首字/User 图标 */}
+            {profileAvatarUrl ? (
               <img
-                src={userProfile.avatarUrl}
+                src={profileAvatarUrl}
                 alt={userProfile.name || "用户"}
                 className="w-8 h-8 rounded-full object-cover border border-[#CDB9AB] shrink-0"
               />

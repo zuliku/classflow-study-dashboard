@@ -107,22 +107,22 @@ export function sanitizePreferences(v: unknown): AppPreferences {
   };
 }
 
-/** 偏好 → 所属设置 section（用于导航 modified dot 与已修改分组） */
+/** 偏好 → 所属设置 section（Settings V4：交互偏好已并入通用） */
 export const PREFERENCE_SECTIONS: Record<
   keyof AppPreferences,
-  "general" | "semester" | "tasks" | "interaction"
+  "general" | "semester" | "tasks"
 > = {
   showWeekends: "semester",
   ddlWarningDays: "tasks",
   defaultDDLTime: "tasks",
-  enableScheduleDirectManipulation: "interaction",
-  enableDDLDirectManipulation: "interaction",
+  enableScheduleDirectManipulation: "general",
+  enableDDLDirectManipulation: "general",
   // Settings V3 IA：全局产品行为（界面密度/动效）归入通用
   motionPreference: "general",
   startupView: "general",
   defaultTaskPriority: "tasks",
   defaultTaskStatus: "tasks",
-  enableSingleKeyShortcuts: "interaction",
+  enableSingleKeyShortcuts: "general",
   contentDensity: "general",
   defaultTaskWorkspaceView: "tasks",
   defaultDeadlineReminderMinutes: "tasks",
@@ -133,18 +133,6 @@ export function getModifiedPreferenceKeys(preferences: AppPreferences): (keyof A
   return (Object.keys(DEFAULT_PREFERENCES) as (keyof AppPreferences)[]).filter(
     (k) => preferences[k] !== DEFAULT_PREFERENCES[k]
   );
-}
-
-/** 存在非默认偏好的 section 集合（导航 modified dot / 已修改分组） */
-export function getModifiedSections(
-  preferences: AppPreferences
-): Set<"general" | "semester" | "tasks" | "interaction"> {
-  const sections = new Set<"general" | "semester" | "tasks" | "interaction">();
-  for (const key of getModifiedPreferenceKeys(preferences)) {
-    const sec = PREFERENCE_SECTIONS[key];
-    if (sec) sections.add(sec);
-  }
-  return sections;
 }
 
 /** 单项恢复默认的 patch（纯函数；调用方 updatePreferences(patch) 即可） */

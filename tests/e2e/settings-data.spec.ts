@@ -37,7 +37,7 @@ async function openDataSettings(page: Page) {
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/");
   await page.getByRole("button", { name: "设置" }).first().click();
-  await page.getByRole("navigation", { name: "设置导航" }).getByRole("button", { name: "数据与存储" }).click();
+  await page.getByRole("navigation", { name: "设置导航" }).getByRole("button", { name: "数据与隐私" }).click();
   await expect(page.getByTestId("settings-data")).toBeVisible();
 }
 
@@ -88,6 +88,6 @@ test("选择备份 → 恢复 → UI 数据更新 → reload 后保持", async (
   // reload 后保持
   await page.reload();
   await page.getByRole("button", { name: "设置" }).first().click();
-  await page.getByRole("navigation", { name: "设置导航" }).getByRole("button", { name: "数据与存储" }).click();
+  await page.getByRole("navigation", { name: "设置导航" }).getByRole("button", { name: "数据与隐私" }).click();
   await expect(page.getByTestId("overview-课程")).toContainText("2");
 });

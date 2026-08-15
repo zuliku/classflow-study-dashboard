@@ -2,10 +2,10 @@ import { expect, Page } from "@playwright/test";
 import { test } from "./demoFixtures";
 
 /**
- * Settings V3 Task 4 — Reminder / Focus / Kiro Settings Productization E2E：
+ * Settings V4 — Reminder / Focus / Kiro Settings Productization E2E：
  * - Reminder：应用内提醒（静态真实状态）+ 浏览器通知权限状态真实反映（granted/denied/default，不伪造）
  * - Focus：专注与学习 section 存在且展示真实行为说明（无伪造开关）
- * - Kiro：模型/回答/记忆/隐私分组结构；输出字号与记忆开关仍可用（同 store）
+ * - Kiro：AI 服务基础配置在主区域直接可用；能力/回答分组齐全；高级设置默认折叠
  */
 
 async function openSettings(page: Page) {
@@ -56,22 +56,30 @@ test("专注与学习：section 展示真实行为说明，无伪造开关", asy
   await expect(page.getByTestId("settings-focus").getByRole("switch")).toHaveCount(0);
 });
 
-test("Kiro 与 AI：模型/回答/记忆/隐私分组齐全，输出字号与记忆开关仍可用", async ({ page }) => {
+test("Kiro：AI 服务基础配置在主区域直接可见；能力/回答分组齐全；高级设置默认折叠", async ({ page }) => {
   await openSettings(page);
-  await page.getByTestId("settings-view").getByRole("button", { name: "Kiro 与 AI", exact: true }).click();
+  await page.getByTestId("settings-view").getByRole("button", { name: "Kiro", exact: true }).click();
   const kiro = page.getByTestId("settings-kiro");
   await expect(kiro).toBeVisible();
 
-  // 分组结构：唯一文本的组标题（「模型」与 row 标题撞名，改用组内 row 验证；
-  // 「隐私」同时是隐私组标题与联网搜索组内的一行文案）
-  await expect(kiro.getByText("回答", { exact: true })).toBeVisible();
-  await expect(kiro.getByText("记忆", { exact: true })).toBeVisible();
-  await expect(kiro.getByText("隐私", { exact: true }).first()).toBeVisible();
-  // 联网搜索组（Task 14）
+  // V4 分组结构：Kiro / AI 服务 / 模型与回答 / Kiro 能力 / 高级设置
+  await expect(kiro.getByText("AI 服务", { exact: true }).first()).toBeVisible();
+  await expect(kiro.getByText("模型与回答", { exact: true })).toBeVisible();
+  await expect(kiro.getByText("Kiro 能力", { exact: true })).toBeVisible();
+  await expect(kiro.getByText("高级设置", { exact: true })).toBeVisible();
+  // 高级设置默认折叠
+  await expect(kiro.getByRole("button", { name: "高级设置" })).toHaveAttribute("aria-expanded", "false");
+  // 联网搜索组（Task 14）——先确保开关为开，再展开「搜索设置」以验证连接测试按钮
   await expect(kiro.getByText("联网搜索", { exact: true }).first()).toBeVisible();
-  await expect(kiro.getByRole("switch", { name: "联网搜索" })).toBeVisible();
-  // 模型组：AI 服务 / API Key / 连接状态 rows 均存在
+  const webToggle = kiro.getByRole("switch", { name: "联网搜索" });
+  await expect(webToggle).toBeVisible();
+  if ((await webToggle.getAttribute("aria-checked")) !== "true") {
+    await webToggle.click();
+  }
+  await expect(webToggle).toHaveAttribute("aria-checked", "true");
+  // AI 服务组：AI 服务 / API Key / 连接状态 rows 均存在（无需展开高级设置）
   await expect(kiro.locator('[data-setting-id="ai-provider"]')).toBeVisible();
+  await expect(kiro.locator('[data-setting-id="ai-model"]')).toBeVisible();
   await expect(kiro.locator('[data-setting-id="ai-api-key"]')).toBeVisible();
   await expect(kiro.locator('[data-setting-id="ai-connection-status"]')).toBeVisible();
 
@@ -89,7 +97,43 @@ test("Kiro 与 AI：模型/回答/记忆/隐私分组齐全，输出字号与记
   await memoryToggle.click();
   await expect(memoryToggle).toHaveAttribute("aria-checked", "true");
 
-  // 连接状态：模型组与联网搜索组各有「测试连接」按钮（严格模式用 first）
+  // 连接状态：AI 服务组与联网搜索组各有「测试连接」按钮（展开搜索设置后）
+  await kiro.getByRole("button", { name: "搜索设置" }).click();
   await expect(kiro.getByRole("button", { name: "测试连接" }).first()).toBeVisible();
   await expect(kiro.getByRole("button", { name: "测试连接" })).toHaveCount(2);
+});
+
+test("Kiro：自定义 OpenAI 兼容服务的连接配置无需展开高级设置", async ({ page }) => {
+  await openSettings(page);
+  await page.getByTestId("settings-view").getByRole("button", { name: "Kiro", exact: true }).click();
+  const kiro = page.getByTestId("settings-kiro");
+  await expect(kiro).toBeVisible();
+
+  // 选择自定义 OpenAI 兼容服务
+  const providerSelect = kiro.getByRole("combobox", { name: "AI 服务" });
+  await providerSelect.click();
+  await page.getByRole("listbox", { name: "AI 服务" }).getByRole("option", { name: "自定义 OpenAI 兼容服务" }).click();
+
+  // 基础连接配置直接可见：服务名称 / 服务地址 / 模型 ID / API Key / 测试连接
+  await expect(kiro.locator('[data-setting-id="ai-custom-name"]')).toBeVisible();
+  await expect(kiro.locator('[data-setting-id="ai-custom-url"]')).toBeVisible();
+  await expect(kiro.locator('[data-setting-id="ai-custom-model"]')).toBeVisible();
+  await expect(kiro.locator('[data-setting-id="ai-api-key"]')).toBeVisible();
+  await expect(kiro.locator('[data-setting-id="ai-connection-status"]')).toBeVisible();
+
+  // 高级设置仍折叠，且能力声明在高级设置内
+  await expect(kiro.getByRole("button", { name: "高级设置" })).toHaveAttribute("aria-expanded", "false");
+  await kiro.getByRole("button", { name: "高级设置" }).click();
+  await expect(kiro.locator('[data-setting-id="ai-custom-capabilities"]')).toBeVisible();
+});
+
+test("数据与隐私：隐私组展示本地数据边界（真实行为说明）", async ({ page }) => {
+  await openSettings(page);
+  await page.getByTestId("settings-view").getByRole("button", { name: "数据与隐私", exact: true }).click();
+  const data = page.getByTestId("settings-data");
+  await expect(data).toBeVisible();
+  await expect(data.getByText("隐私", { exact: true })).toBeVisible();
+  await expect(data.locator('[data-setting-id="kiro-privacy-local"]')).toBeVisible();
+  await expect(data.locator('[data-setting-id="kiro-privacy-api-key"]')).toBeVisible();
+  await expect(data.locator('[data-setting-id="kiro-privacy-context"]')).toBeVisible();
 });

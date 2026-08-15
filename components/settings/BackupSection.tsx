@@ -105,6 +105,7 @@ export function BackupSection() {
   return (
     <div data-testid="backup-section">
       <SettingsActionRow
+        settingId="backup-full"
         title="完整备份"
         description="包含课程、任务、设置与课程资料文件"
         variant="primary"
@@ -120,6 +121,7 @@ export function BackupSection() {
         actionMinWidth="min-w-[104px]"
       />
       <SettingsActionRow
+        settingId="backup-json"
         title="仅数据备份"
         description="不包含课程资料文件"
         icon={

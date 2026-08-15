@@ -1,11 +1,19 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 import { useAppStore } from "@/store/useAppStore";
 import { useToastStore } from "@/store/useToastStore";
 import { SettingsSection } from "@/components/settings/SettingsSection";
 import { SettingsSaveBar } from "@/components/settings/SettingsSaveBar";
 import { SettingsInput } from "@/components/settings/SettingsControls";
+import { useProfileAvatar } from "@/hooks/useProfileAvatar";
+import {
+  AVATAR_STORAGE_KEY,
+  validateAvatarFile,
+  processAvatarFile,
+  saveAvatarBlob,
+  deleteAvatarBlob,
+} from "@/lib/profileAvatar";
 
 export function ProfileSettings() {
   const userProfile = useAppStore((s) => s.userProfile);
@@ -13,43 +21,121 @@ export function ProfileSettings() {
   const pushToast = useToastStore((s) => s.pushToast);
 
   const [name, setName] = useState(userProfile.name);
-  const [avatarUrl, setAvatarUrl] = useState(userProfile.avatarUrl);
   const [studentId, setStudentId] = useState(userProfile.studentId);
   const [college, setCollege] = useState(userProfile.college);
   const [grade, setGrade] = useState(userProfile.grade);
   const [completedCredits, setCompletedCredits] = useState(userProfile.completedCredits);
   const [totalCredits, setTotalCredits] = useState(userProfile.totalCredits);
 
+  // ---- 头像：本地文件选择 + 降采样 + IndexedDB 持久化 ----
+  const [pickedFile, setPickedFile] = useState<File | null>(null);
+  const [avatarPreview, setAvatarPreview] = useState<string>("");
+  const [removeRequested, setRemoveRequested] = useState(false);
+  const [avatarError, setAvatarError] = useState("");
+  const [saving, setSaving] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const persistedAvatarUrl = useProfileAvatar();
+
   const dirty =
     name !== userProfile.name ||
-    avatarUrl !== userProfile.avatarUrl ||
     studentId !== userProfile.studentId ||
     college !== userProfile.college ||
     grade !== userProfile.grade ||
     completedCredits !== userProfile.completedCredits ||
-    totalCredits !== userProfile.totalCredits;
+    totalCredits !== userProfile.totalCredits ||
+    pickedFile !== null ||
+    removeRequested;
 
-  const save = () => {
-    updateUserProfile({
-      name,
-      avatarUrl: avatarUrl.trim(),
-      college,
-      grade,
-      studentId,
-      completedCredits: Number(completedCredits) || 0,
-      totalCredits: Number(totalCredits) || 0,
-    });
-    pushToast({ message: "设置已保存" });
+  const displayAvatarUrl = avatarPreview || (removeRequested ? "" : persistedAvatarUrl);
+  const hasAvatar = displayAvatarUrl.length > 0;
+
+  const handlePickFile = (file: File | null) => {
+    setAvatarError("");
+    if (!file) return;
+    const validation = validateAvatarFile(file);
+    if (!validation.ok) {
+      setAvatarError(
+        validation.reason === "type" ? "请选择图片文件（JPG、PNG、WebP 等）。" : "图片不能超过 5 MB。"
+      );
+      return;
+    }
+    // 预览用会话级 object URL；持久化在保存时写入 IndexedDB（不持久化 blob: URL）
+    const url = URL.createObjectURL(file);
+    setPickedFile(file);
+    setAvatarPreview(url);
+    setRemoveRequested(false);
+  };
+
+  const clearAvatarDrafts = () => {
+    if (avatarPreview) URL.revokeObjectURL(avatarPreview);
+    setAvatarPreview("");
+    setPickedFile(null);
+    setRemoveRequested(false);
+    setAvatarError("");
+  };
+
+  const save = async () => {
+    if (saving) return;
+    setSaving(true);
+    setAvatarError("");
+    try {
+      if (pickedFile) {
+        const blob = await processAvatarFile(pickedFile);
+        await saveAvatarBlob(blob);
+        updateUserProfile({
+          name,
+          avatarStorageKey: AVATAR_STORAGE_KEY,
+          avatarUrl: "",
+          college,
+          grade,
+          studentId,
+          completedCredits: Number(completedCredits) || 0,
+          totalCredits: Number(totalCredits) || 0,
+        });
+      } else if (removeRequested) {
+        // 移除头像：清理本地 Blob（失败不阻塞资料保存，但提示）
+        try {
+          await deleteAvatarBlob();
+        } catch {
+          pushToast({ message: "头像已移除，但本地缓存清理失败。", type: "error" });
+        }
+        updateUserProfile({
+          name,
+          avatarStorageKey: undefined,
+          avatarUrl: "",
+          college,
+          grade,
+          studentId,
+          completedCredits: Number(completedCredits) || 0,
+          totalCredits: Number(totalCredits) || 0,
+        });
+      } else {
+        updateUserProfile({
+          name,
+          college,
+          grade,
+          studentId,
+          completedCredits: Number(completedCredits) || 0,
+          totalCredits: Number(totalCredits) || 0,
+        });
+      }
+      clearAvatarDrafts();
+      pushToast({ message: "设置已保存" });
+    } catch {
+      pushToast({ message: "头像保存失败，请重试。", type: "error" });
+    } finally {
+      setSaving(false);
+    }
   };
 
   const discard = () => {
     setName(userProfile.name);
-    setAvatarUrl(userProfile.avatarUrl);
     setStudentId(userProfile.studentId);
     setCollege(userProfile.college);
     setGrade(userProfile.grade);
     setCompletedCredits(userProfile.completedCredits);
     setTotalCredits(userProfile.totalCredits);
+    clearAvatarDrafts();
   };
 
   const creditPercent =
@@ -59,41 +145,55 @@ export function ProfileSettings() {
     <div className="space-y-6" data-testid="settings-profile">
       <SettingsSection title="基本资料" description="你的身份信息，用于学习卡片与课表展示。">
         <div className="space-y-4 text-xs">
-          {/* 头像：预览 + URL 修改（无本地文件上传） */}
-          <div className="flex items-center gap-3">
-            {avatarUrl ? (
+          {/* 头像：本地图片选择（无 URL 输入） */}
+          <div className="flex items-center gap-4" data-setting-id="profile-avatar">
+            {hasAvatar ? (
               <img
-                src={avatarUrl}
+                src={displayAvatarUrl}
                 alt={name || "用户"}
-                className="w-12 h-12 rounded-full object-cover border border-line-strong shrink-0"
+                className="w-14 h-14 rounded-full object-cover border border-line-strong shrink-0"
               />
             ) : (
-              <span className="w-12 h-12 rounded-full bg-pastel-mint border border-line-strong flex items-center justify-center text-base font-bold text-charcoal shrink-0">
+              <span className="w-14 h-14 rounded-full bg-pastel-mint border border-line-strong flex items-center justify-center text-lg font-bold text-charcoal shrink-0">
                 {name ? name.slice(0, 1) : "用"}
               </span>
             )}
             <div className="flex-1 min-w-0 space-y-1.5">
-              <div className="flex items-center justify-between">
-                <p className="font-bold text-charcoal">头像</p>
-                {avatarUrl && (
+              <p className="font-bold text-charcoal">头像</p>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  className="px-2.5 py-1.5 bg-white border border-line text-charcoal text-[11px] font-bold rounded-xl transition-colors hover:bg-alabaster"
+                >
+                  更换头像
+                </button>
+                {(pickedFile || removeRequested || (userProfile.avatarStorageKey !== undefined) || userProfile.avatarUrl) && (
                   <button
-                    onClick={() => setAvatarUrl("")}
-                    className="text-[10px] font-semibold text-sandrift hover:text-danger transition-colors"
+                    onClick={() => {
+                      clearAvatarDrafts();
+                      setRemoveRequested(true);
+                    }}
+                    disabled={saving}
+                    className="text-[11px] font-semibold text-sandrift hover:text-danger transition-colors disabled:opacity-50"
                   >
-                    清除头像
+                    移除头像
                   </button>
                 )}
               </div>
-              <SettingsInput
-                id="settings-profile-avatar-url"
-                type="url"
-                value={avatarUrl}
-                onChange={setAvatarUrl}
-                placeholder="头像图片 URL（可留空）"
-                ariaLabel="头像地址"
-                className="text-[11px]"
-              />
+              {avatarError && <p className="text-[10px] font-bold text-danger">{avatarError}</p>}
             </div>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              data-testid="profile-avatar-input"
+              aria-label="选择头像图片"
+              onChange={(e) => {
+                handlePickFile(e.target.files?.[0] ?? null);
+                e.target.value = "";
+              }}
+            />
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -114,6 +214,10 @@ export function ProfileSettings() {
               <SettingsInput id="settings-profile-grade" value={grade} onChange={setGrade} required />
             </div>
           </div>
+
+          <p className="text-[10px] text-sandrift leading-relaxed">
+            这些资料保存在当前设备，用于 ClassFlow 内的学习信息展示。
+          </p>
         </div>
       </SettingsSection>
 
@@ -160,7 +264,7 @@ export function ProfileSettings() {
         </div>
       </SettingsSection>
 
-      <SettingsSaveBar dirty={dirty} onSave={save} onDiscard={discard} />
+      <SettingsSaveBar dirty={dirty} onSave={() => void save()} onDiscard={discard} saving={saving} />
     </div>
   );
 }

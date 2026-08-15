@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import { FolderOpen, HardDrive, ShieldAlert, MonitorUp, Trash2 } from "lucide-react";
+import { FolderOpen, HardDrive, ShieldAlert, Trash2 } from "lucide-react";
 import { useKiroComputerStore } from "@/store/useKiroComputerStore";
 import { useConfirmStore } from "@/store/useConfirmStore";
 import { useToastStore } from "@/store/useToastStore";
@@ -12,7 +12,6 @@ import { SettingsRow } from "@/components/settings/SettingsRow";
 import { SettingsToggle, SettingsSegmentedControl } from "@/components/settings/SettingsControls";
 import { Button } from "@/components/ui/Button";
 import { IconButton } from "@/components/ui/IconButton";
-import { cn } from "@/lib/utils";
 import {
   chooseBrowserWorkspaceDirectory,
   queryBrowserGrant,
@@ -27,21 +26,20 @@ import {
 } from "@/lib/ai/computer/workspace/management";
 import { removeArtifactsForWorkspace } from "@/lib/ai/computer/artifacts/service";
 import { clearWorkspaceKnowledge } from "@/lib/ai/computer/knowledge/db";
-import { sandboxAdapterCapabilities } from "@/lib/ai/computer/adapters/sandbox";
 import { KiroComputerAuditPanel } from "@/components/settings/KiroComputerAuditPanel";
 import { KiroWorkspaceKnowledgePanel } from "@/components/settings/KiroWorkspaceKnowledgePanel";
 
 const MODE_OPTIONS: { value: KiroAgentMode; label: string }[] = [
-  { value: "plan", label: "计划" },
-  { value: "guided", label: "受控" },
-  { value: "workspace-auto", label: "工作区自动" },
+  { value: "plan", label: "仅规划" },
+  { value: "guided", label: "每次确认" },
+  { value: "workspace-auto", label: "授权范围内自动" },
 ];
 
 function isSandboxAdapterRef(ref: string): boolean {
   return ref === "sandbox-default" || ref.startsWith("sandbox");
 }
 
-/** Kiro Agent 设置（独立于 Kiro 与 AI）：Computer Agent 控制平面 */
+/** Agent 与权限（Settings V4）：用户优先理解「能不能操作 / 能操作哪里 / 自动到什么程度」 */
 export function KiroAgentSettings() {
   const {
     computerEnabled,
@@ -52,7 +50,6 @@ export function KiroAgentSettings() {
     setActiveWorkspaceId,
     setAgentMode,
     addWorkspace,
-    updateWorkspace,
   } = useKiroComputerStore();
 
   const confirmRequest = useConfirmStore((s) => s.confirm);
@@ -85,10 +82,10 @@ export function KiroAgentSettings() {
     };
   }, [workspaces]);
 
-  /** 添加位置（显式用户手势）：支持 Chromium 选真实文件夹；否则仅 Sandbox 路径 */
+  /** 添加位置（显式用户手势）：支持 Chromium 选真实文件夹；否则仅内置工作区路径 */
   const handleAddBrowserLocation = async () => {
     if (!supportsFileSystemAccess()) {
-      setError("当前浏览器不支持本地文件夹授权，请使用 Kiro Sandbox。");
+      setError("当前浏览器不支持本地文件夹授权，请使用 Kiro 内置工作区。");
       return;
     }
     setAddingLocation(true);
@@ -120,7 +117,7 @@ export function KiroAgentSettings() {
     }
   };
 
-  /** 显式使用 Kiro Sandbox（canonical：已存在则复用，绝不产生重复 Sandbox） */
+  /** 显式使用 Kiro 内置工作区（canonical：已存在则复用，绝不产生重复） */
   const handleUseSandbox = () => {
     useKiroComputerStore.getState().ensureDefaultSandboxWorkspace();
     setGrantStatus((s) => ({ ...s, "sandbox-default": "granted" }));
@@ -134,7 +131,7 @@ export function KiroAgentSettings() {
     }
     // 首次开启无 workspace：必须引导授权，不能直接启用
     if (workspaces.length === 0) {
-      setError("请先添加授权位置（本地文件夹或 Kiro Sandbox）。");
+      setError("请先添加可访问的位置（本地文件夹或 Kiro 内置工作区）。");
       return;
     }
     if (!activeWorkspaceId) {
@@ -146,7 +143,7 @@ export function KiroAgentSettings() {
   /**
    * 删除 Workspace（Settings 显式操作；不是 Agent capability）：
    * 先清 Artifact metadata/source → 快照 remaining → 逻辑删除 → 对 removed 的 unique adapterRef：
-   * 仍被引用则不动；Sandbox → clearSandboxAdapter；Browser → forgetBrowserWorkspaceGrant。
+   * 仍被引用则不动；内置工作区 → clearSandboxAdapter；Browser → forgetBrowserWorkspaceGrant。
    * 清理失败：Workspace metadata 保持删除，只提示缓存未清理。
    */
   const deleteWorkspace = async (ws: KiroWorkspaceMeta) => {
@@ -187,9 +184,9 @@ export function KiroAgentSettings() {
   const handleDeleteWorkspace = (ws: KiroWorkspaceMeta) => {
     const isSandboxWs = ws.roots.some((r) => isSandboxAdapterRef(r.adapterRef));
     confirmRequest({
-      title: isSandboxWs ? "删除 Kiro Sandbox？" : "移除本地工作区？",
+      title: isSandboxWs ? "删除 Kiro 内置工作区？" : "移除本地工作区？",
       description: isSandboxWs
-        ? "此操作会删除该 Sandbox 在当前浏览器中保存的文件和工作区记录，无法撤销。"
+        ? "此操作会删除该内置工作区在当前浏览器中保存的文件和工作区记录，无法撤销。"
         : "ClassFlow 将忘记这个文件夹的授权记录，但不会删除电脑上的任何文件。",
       confirmLabel: isSandboxWs ? "删除" : "移除",
       danger: true,
@@ -199,37 +196,41 @@ export function KiroAgentSettings() {
 
   return (
     <SettingsSection
-      title="Kiro Agent"
-      description="Computer Agent 控制平面：工作区授权、默认权限模式与安全边界。"
+      title="Agent 与权限"
+      description="Kiro 能操作哪些文件、自动执行到什么程度，以及当前可以访问的位置。"
     >
       <div className="text-xs space-y-4" data-testid="settings-kiro-agent">
-        <SettingsGroup title="Computer Agent">
+        <SettingsGroup title="文件操作">
           <SettingsRow
             settingId="kiro-computer-enabled"
-            title="Computer Agent"
-            description="开启后 Kiro 可在授权工作区内读取、创建和受控修改文件；危险系统能力仍保持禁用。"
+            title="允许 Kiro 操作文件"
+            description="开启后 Kiro 可在授权的工作区内读取、创建和受控修改文件；危险系统能力仍保持禁用。"
           >
-            <SettingsToggle checked={computerEnabled} onChange={handleToggleEnabled} label="Computer Agent" />
+            <SettingsToggle
+              checked={computerEnabled}
+              onChange={handleToggleEnabled}
+              label="允许 Kiro 操作文件"
+            />
           </SettingsRow>
 
           {error && <p className="px-1 text-[10px] font-semibold text-danger">{error}</p>}
 
           <SettingsRow
             settingId="kiro-agent-mode"
-            title="默认权限模式"
-            description="模式决定工作区内允许的操作等级；工作区自动模式自动执行创建、修改、移动和删除，但永不扩大授权目录、不含终端/网络等系统能力。"
+            title="自动执行级别"
+            description="决定工作区内允许的操作等级；「授权范围内自动」自动执行创建、修改、移动和删除，但永不扩大授权目录、不含终端/网络等系统能力。"
           >
             <SettingsSegmentedControl<KiroAgentMode>
               value={agentMode}
               onChange={setAgentMode}
               options={MODE_OPTIONS}
-              ariaLabel="默认权限模式"
+              ariaLabel="自动执行级别"
             />
           </SettingsRow>
 
           <SettingsRow
             settingId="kiro-agent-workspace"
-            title="当前 Workspace"
+            title="当前工作区"
             description={activeWorkspace ? activeWorkspace.name : "尚未配置工作区"}
           >
             <span className="text-[11px] font-bold text-charcoal">
@@ -239,7 +240,7 @@ export function KiroAgentSettings() {
         </SettingsGroup>
 
         <SettingsGroup
-          title="授权位置"
+          title="可访问的位置"
           action={
             <div
               className="flex items-center gap-1.5 flex-wrap"
@@ -252,7 +253,7 @@ export function KiroAgentSettings() {
               {!hasCanonicalSandbox && (
                 <Button variant="ghost" size="sm" onClick={handleUseSandbox}>
                   <HardDrive className="w-3 h-3" />
-                  使用 Kiro Sandbox
+                  使用 Kiro 内置工作区
                 </Button>
               )}
             </div>
@@ -327,30 +328,21 @@ export function KiroAgentSettings() {
           </div>
         </SettingsGroup>
 
-        <SettingsGroup title="安全与能力">
-          {/* V3 Part 1：Workspace Knowledge（current Workspace 紧凑状态/动作） */}
-          {activeWorkspace && <KiroWorkspaceKnowledgePanel workspaceId={activeWorkspace.id} />}
+        <SettingsGroup title="权限与安全">
           <SettingsRow
             settingId="kiro-agent-permissions"
-            title="活动与安全"
-            description="V1 不包含：删除文件、执行命令（shell / PowerShell / cmd）、启动应用、MCP、任意网络访问、Full Access 模式。"
+            title="安全边界"
+            description="Kiro 不会执行：删除文件、运行命令（终端 / PowerShell）、启动应用、MCP、任意网络访问或 Full Access 模式。"
           >
             <span className="text-[11px] text-satin-grey shrink-0">
               <ShieldAlert className="w-3.5 h-3.5 inline mr-1 text-sandrift" />
               受限沙箱
             </span>
           </SettingsRow>
+          {/* V3 Part 1：工作区知识（current Workspace 紧凑状态/动作） */}
+          {activeWorkspace && <KiroWorkspaceKnowledgePanel workspaceId={activeWorkspace.id} />}
           {/* Part 3：Computer Audit（最近活动；只清 audit metadata） */}
           <KiroComputerAuditPanel />
-          <SettingsRow
-            title="桌面能力"
-            description="Full Access、终端与系统级操作属于未来桌面版（Tauri）能力。"
-          >
-            <span className="text-[11px] text-sandrift shrink-0">
-              <MonitorUp className="w-3.5 h-3.5 inline mr-1" />
-              桌面版后续支持
-            </span>
-          </SettingsRow>
         </SettingsGroup>
       </div>
     </SettingsSection>

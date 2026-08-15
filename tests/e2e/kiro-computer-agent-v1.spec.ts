@@ -170,7 +170,7 @@ test("Computer Agent V1：创建 → 审批修改 → 审查 → 撤销 → 历�
   const approval = page.getByTestId("kiro-approval-dialog");
   await expect(approval).toBeVisible({ timeout: 15000 });
   await expect(approval).toContainText("修改文件 notes.md");
-  await expect(approval).toContainText("Kiro Sandbox");
+  await expect(approval).toContainText("Kiro 内置工作区");
   expect(await readSandboxText(page, "notes.md")).toBe(NOTE_CONTENT);
 
   await approval.getByTestId("approval-allow-once").click();

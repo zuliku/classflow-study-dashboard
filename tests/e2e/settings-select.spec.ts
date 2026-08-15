@@ -81,7 +81,7 @@ test("Data & Storage：action 按钮仍可触发原行为（备份/恢复/危险
   await openSettingsAt(page);
   await page
     .getByRole("navigation", { name: "设置导航" })
-    .getByRole("button", { name: "数据与存储" })
+    .getByRole("button", { name: "数据与隐私" })
     .click();
   await expect(page.getByTestId("settings-data")).toBeVisible();
 
@@ -151,7 +151,7 @@ test("模型菜单内部滚动不关闭，滚动后的选项仍可选择；外�
   await page.goto("/");
   await page.getByRole("button", { name: "设置" }).first().click();
   await expect(page.getByTestId("settings-view")).toBeVisible();
-  await page.getByRole("navigation", { name: "设置导航" }).getByRole("button", { name: "Kiro 与 AI" }).click();
+  await page.getByRole("navigation", { name: "设置导航" }).getByRole("button", { name: "Kiro" }).click();
   await page.waitForTimeout(400);
 
   const modelTrigger = page.getByRole("combobox", { name: "模型", exact: true });

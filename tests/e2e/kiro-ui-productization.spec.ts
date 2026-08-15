@@ -1,4 +1,4 @@
-﻿import { expect, Page } from "@playwright/test";
+import { expect, Page } from "@playwright/test";
 import { test } from "./demoFixtures";
 
 /**
@@ -262,7 +262,7 @@ test("Recent Activity：full-width 布局 + flat list + 清除按钮 + empty sta
 
   await page.getByRole("button", { name: "设置" }).first().click();
   await expect(page.getByTestId("settings-view")).toBeVisible();
-  await page.getByRole("navigation", { name: "设置导航" }).getByRole("button", { name: "Kiro Agent" }).click();
+  await page.getByRole("navigation", { name: "设置导航" }).getByRole("button", { name: "Agent 与权限" }).click();
   await expect(page.getByTestId("settings-kiro-agent")).toBeVisible();
 
   const panel = page.getByTestId("kiro-computer-audit-panel");
@@ -287,7 +287,7 @@ test("Recent Activity empty：full-width block 内显示紧凑空状态", async 
   await page.goto("/");
   await page.getByRole("button", { name: "设置" }).first().click();
   await expect(page.getByTestId("settings-view")).toBeVisible();
-  await page.getByRole("navigation", { name: "设置导航" }).getByRole("button", { name: "Kiro Agent" }).click();
+  await page.getByRole("navigation", { name: "设置导航" }).getByRole("button", { name: "Agent 与权限" }).click();
   await expect(page.getByTestId("settings-kiro-agent")).toBeVisible();
   const panel = page.getByTestId("kiro-computer-audit-panel");
   await expect(panel.getByText("暂无活动记录")).toBeVisible();

@@ -70,9 +70,9 @@ test("Task 7D：输出字号 - Rail More 与 Settings 实时同步（同一 stor
   await expect(railGroup.getByRole("button", { name: "大字号" })).toHaveAttribute("aria-pressed", "true");
   await expect(railGroup).toBeVisible();
 
-  // Settings → Kiro 与 AI → 输出字号 = 大（同一 useKiroPreferencesStore）
+  // Settings → Kiro → 输出字号 = 大（同一 useKiroPreferencesStore）
   await page.locator("aside").first().getByRole("button", { name: "设置" }).click();
-  await page.getByRole("navigation", { name: "设置导航" }).getByRole("button", { name: "Kiro 与 AI" }).click();
+  await page.getByRole("navigation", { name: "设置导航" }).getByRole("button", { name: "Kiro" }).click();
   const settingsGroup = page.getByRole("group", { name: "Kiro 输出字号" });
   await expect(settingsGroup).toBeVisible();
   await expect(settingsGroup.getByRole("button", { name: "大", exact: true })).toHaveAttribute("aria-pressed", "true");

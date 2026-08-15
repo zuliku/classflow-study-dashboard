@@ -74,7 +74,7 @@ async function openKiro(page: Page) {
 
 async function openMemoryManagerFromSettings(page: Page) {
   await page.locator("aside").first().getByRole("button", { name: "设置" }).click();
-  await page.getByRole("navigation", { name: "设置导航" }).getByRole("button", { name: "Kiro 与 AI" }).click();
+  await page.getByRole("navigation", { name: "设置导航" }).getByRole("button", { name: "Kiro" }).click();
   const kiroSection = page.getByTestId("settings-kiro");
   await expect(kiroSection).toBeVisible();
   await kiroSection.getByRole("button", { name: "管理" }).click();

@@ -87,6 +87,7 @@ export function RestoreSection({
         id="restore-file-input"
       />
       <SettingsActionRow
+        settingId="restore-data"
         title="从 ClassFlow 备份恢复"
         description="支持 .zip / .json，选择后先预览再确认恢复"
         icon={

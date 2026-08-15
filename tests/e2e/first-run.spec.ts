@@ -1,4 +1,4 @@
-﻿import { test, expect, Page } from "@playwright/test";
+import { test, expect, Page } from "@playwright/test";
 
 /**
  * First Run E2E：生产初始状态（无演示数据）——真实空工作区。
@@ -71,7 +71,7 @@ test("Data Settings：清空学习数据后课程消失、个人资料保留", a
   await expect(page.getByText("设置已保存").first()).toBeVisible();
 
   // 清空学习数据
-  await page.getByRole("navigation", { name: "设置导航" }).getByRole("button", { name: "数据与存储" }).click();
+  await page.getByRole("navigation", { name: "设置导航" }).getByRole("button", { name: "数据与隐私" }).click();
   const clearBtn = page.getByTestId("danger-learning");
   await clearBtn.scrollIntoViewIfNeeded();
   await clearBtn.click();

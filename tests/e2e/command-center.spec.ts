@@ -89,11 +89,11 @@ test("单键快捷键关闭：N/? 不触发，Cmd+K 与 Cmd+, 仍生效", async 
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/");
 
-  // 设置 → 交互与快捷键 → 关闭单键快捷键
+  // 设置 → 通用 → 关闭单键快捷键
   await page.getByRole("button", { name: "设置" }).first().click();
   await page
     .getByRole("navigation", { name: "设置导航" })
-    .getByRole("button", { name: "交互与快捷键" })
+    .getByRole("button", { name: "通用" })
     .click();
   await page.getByRole("switch", { name: "启用单键快捷键" }).click();
   await expect(page.getByRole("switch", { name: "启用单键快捷键" })).toHaveAttribute(
@@ -140,8 +140,9 @@ test("Course Context：选中课程后显示上下文命令，新建任务带入
   await page.goto("/");
 
   // 课程 Tab 打开「微观经济学」Course Drawer → selectedCourseId 生效
+  // （课程卡为原生 button；用精确可访问名匹配，避免命中同名任务按钮）
   await page.getByRole("button", { name: "课程资料" }).first().click();
-  await page.locator('div[role="button"]').filter({ hasText: "微观经济学" }).first().click();
+  await page.getByRole("button", { name: "微观经济学", exact: true }).click();
   await expect(page.getByRole("button", { name: "关闭" }).first()).toBeVisible();
 
   await openPalette(page);

@@ -28,6 +28,8 @@ export type ContentDensity = "comfortable" | "compact";
 export interface UserProfile {
   name: string;
   avatarUrl: string;
+  /** 本地头像（IndexedDB Blob）的 storage key；优先于 avatarUrl。仅保存在当前设备 */
+  avatarStorageKey?: string;
   college: string;
   grade: string;
   studentId: string;
@@ -325,7 +327,6 @@ export type SettingsSection =
   | "semester"
   | "tasks"
   | "focus"
-  | "interaction"
   | "kiro"
   | "kiro-agent"
   | "data"

@@ -1,9 +1,13 @@
 import { describe, it, expect } from "vitest";
-import { searchSettings, SETTINGS_REGISTRY } from "@/lib/settingsRegistry";
+import {
+  searchSettings,
+  SETTINGS_REGISTRY,
+  SETTING_IDS,
+  validateRegistryIntegrity,
+} from "@/lib/settingsRegistry";
 import {
   DEFAULT_PREFERENCES,
   getModifiedPreferenceKeys,
-  getModifiedSections,
   resetPreferencePatch,
   PREFERENCE_SECTIONS,
 } from "@/lib/preferences";
@@ -20,6 +24,27 @@ describe("settingsRegistry 搜索", () => {
     expect(new Set(ids).size).toBe(ids.length);
   });
 
+  it("SETTING_IDS 与 Registry 是同一事实来源（无重复、无漂移）", () => {
+    const registryIds = new Set(SETTINGS_REGISTRY.map((s) => s.id));
+    const constantIds: string[] = [];
+    const walk = (obj: Record<string, unknown>) => {
+      for (const v of Object.values(obj)) {
+        if (typeof v === "string") constantIds.push(v);
+        else if (v && typeof v === "object") walk(v as Record<string, unknown>);
+      }
+    };
+    walk(SETTING_IDS as unknown as Record<string, unknown>);
+    expect(constantIds.length).toBeGreaterThan(0);
+    for (const id of constantIds) {
+      expect(registryIds.has(id), `SETTING_IDS.${id} 不在 Registry 中`).toBe(true);
+    }
+  });
+
+  it("Registry 结构完整性：ID 唯一、section 有效", () => {
+    const result = validateRegistryIntegrity();
+    expect(result.ok, result.errors.join("; ")).toBe(true);
+  });
+
   it("输入「截止」→ 任务相关的两个设置", () => {
     const r = searchSettings("截止");
     const titles = r.map((s) => s.title);
@@ -34,7 +59,7 @@ describe("settingsRegistry 搜索", () => {
     );
   });
 
-  it("输入「备份」→ 数据与存储的设置", () => {
+  it("输入「备份」→ 数据与隐私的设置", () => {
     const r = searchSettings("备份");
     expect(r.map((s) => s.title)).toEqual(
       expect.arrayContaining(["完整备份", "仅数据备份", "恢复数据"])
@@ -60,31 +85,65 @@ describe("settingsRegistry 搜索", () => {
     expect(searchSettings("ddl 提醒").length).toBeGreaterThan(0);
   });
 
-  it("Settings V3 Task 5：真实设置全部可搜索（profile 字段 / custom / 连接状态）", () => {
+  it("Settings V4：真实设置全部可搜索（profile 字段 / 头像 / 快捷键 / 工作区 / API Key）", () => {
     expect(searchSettings("姓名").some((s) => s.id === "profile-name")).toBe(true);
     expect(searchSettings("学号").some((s) => s.id === "profile-student-id")).toBe(true);
     expect(searchSettings("学院").some((s) => s.id === "profile-college")).toBe(true);
     expect(searchSettings("年级").some((s) => s.id === "profile-grade")).toBe(true);
     expect(searchSettings("学分").some((s) => s.id === "profile-credits")).toBe(true);
-    expect(searchSettings("自定义").some((s) => s.id === "ai-custom-name")).toBe(true);
+    expect(searchSettings("头像").some((s) => s.id === "profile-avatar")).toBe(true);
+    expect(searchSettings("快捷键").some((s) => s.id === "single-key-shortcuts")).toBe(true);
+    expect(searchSettings("工作区").some((s) => s.id === "kiro-agent-workspace")).toBe(true);
+    expect(searchSettings("API Key").some((s) => s.id === "ai-api-key")).toBe(true);
     expect(searchSettings("连接").some((s) => s.id === "ai-connection-status")).toBe(true);
+  });
+
+  it("Settings V4 IA：直接操作 / 快捷键属于 general；隐私行属于 data", () => {
+    const byId = new Map(SETTINGS_REGISTRY.map((s) => [s.id, s]));
+    expect(byId.get("schedule-direct-manipulation")?.section).toBe("general");
+    expect(byId.get("ddl-direct-manipulation")?.section).toBe("general");
+    expect(byId.get("single-key-shortcuts")?.section).toBe("general");
+    expect(byId.get("kiro-privacy-local")?.section).toBe("data");
+    expect(byId.get("kiro-privacy-api-key")?.section).toBe("data");
+    expect(byId.get("kiro-privacy-context")?.section).toBe("data");
+  });
+
+  it("条件渲染设置声明 conditional，不会被 DOM 校验误判", () => {
+    const conditionalIds = new Set(
+      SETTINGS_REGISTRY.filter((s) => s.conditional).map((s) => s.id)
+    );
+    for (const id of [
+      "ai-custom-name",
+      "ai-custom-url",
+      "ai-custom-model",
+      "ai-custom-capabilities",
+      "missed-reminder-window",
+      "kiro-web-search-credential",
+      "kiro-web-search-byok-key",
+      "kiro-web-search-test",
+      "kiro-web-search-privacy",
+      "kiro-web-search-service",
+      "kiro-web-pdf-vision-enabled",
+      "kiro-web-pdf-vision-model",
+      "kiro-web-pdf-vision-key",
+      "kiro-workspace-knowledge",
+    ]) {
+      expect(conditionalIds.has(id), id).toBe(true);
+    }
   });
 });
 
 describe("modified preference 检测", () => {
   it("默认偏好 → 无修改", () => {
     expect(getModifiedPreferenceKeys(DEFAULT_PREFERENCES)).toEqual([]);
-    expect(getModifiedSections(DEFAULT_PREFERENCES).size).toBe(0);
   });
 
-  it("单项修改 → 返回对应键与 section", () => {
+  it("单项修改 → 返回对应键", () => {
     const prefs = { ...DEFAULT_PREFERENCES, defaultDDLTime: "21:00" };
     expect(getModifiedPreferenceKeys(prefs)).toEqual(["defaultDDLTime"]);
-    expect(getModifiedSections(prefs).has("tasks")).toBe(true);
-    expect(getModifiedSections(prefs).has("interaction")).toBe(false);
   });
 
-  it("多项修改 → 全部返回，section 去重", () => {
+  it("多项修改 → 全部返回", () => {
     const prefs = {
       ...DEFAULT_PREFERENCES,
       showWeekends: false,
@@ -93,10 +152,6 @@ describe("modified preference 检测", () => {
     };
     const keys = getModifiedPreferenceKeys(prefs);
     expect(keys).toHaveLength(3);
-    const sections = getModifiedSections(prefs);
-    expect(sections.has("semester")).toBe(true);
-    expect(sections.has("tasks")).toBe(true);
-    expect(sections.has("general")).toBe(true); // Settings V3 IA：动效偏好归入通用
   });
 
   it("resetPreferencePatch 单项恢复默认", () => {
@@ -105,9 +160,12 @@ describe("modified preference 检测", () => {
     expect(resetPreferencePatch("showWeekends")).toEqual({ showWeekends: true });
   });
 
-  it("PREFERENCE_SECTIONS 覆盖所有偏好键", () => {
+  it("PREFERENCE_SECTIONS 覆盖所有偏好键且 section 有效（V4：交互并入通用）", () => {
+    const validSections = new Set(["general", "semester", "tasks"]);
     for (const key of Object.keys(DEFAULT_PREFERENCES)) {
-      expect(PREFERENCE_SECTIONS[key as keyof typeof DEFAULT_PREFERENCES]).toBeDefined();
+      const sec = PREFERENCE_SECTIONS[key as keyof typeof DEFAULT_PREFERENCES];
+      expect(sec).toBeDefined();
+      expect(validSections.has(sec), `${key} → ${sec}`).toBe(true);
     }
   });
 });

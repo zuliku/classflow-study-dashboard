@@ -46,7 +46,10 @@ const REASONING_EFFORT_LABELS: Record<KiroReasoningEffort, string> = {
 
 type TestState = { status: "idle" | "testing" } | { status: "success" } | { status: "error"; message: string };
 
-/** Kiro / AI 服务设置：Provider / 模型 / API Key（sessionStorage）/ 自定义服务 / 测试连接 */
+/**
+ * Kiro 设置（Settings V4）：让 AI 工作的基础配置（AI 服务 / 模型 / API Key / 连接测试）
+ * 全部留在普通主区域；只有低频技术配置（自定义能力声明、PDF Vision）收进默认折叠的「高级设置」。
+ */
 export function KiroAISettings() {
   const {
     enabled,
@@ -88,7 +91,7 @@ export function KiroAISettings() {
   const [apiKeyInput, setApiKeyInput] = useState(getSessionApiKey(provider));
   const [showKey, setShowKey] = useState(false);
   const [showWebSearchKey, setShowWebSearchKey] = useState(false);
-  // Task 3B：能力/高级设置默认收起（常用项优先，技术细节按需展开）
+  // 能力/高级设置默认收起（常用项优先，技术细节按需展开）
   const [searchSettingsOpen, setSearchSettingsOpen] = useState(false);
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [webSearchApiKeyInput, setWebSearchApiKeyInput] = useState(getSessionWebSearchApiKey());
@@ -193,11 +196,11 @@ export function KiroAISettings() {
 
   return (
     <SettingsSection
-      title="Kiro 与 AI"
-      description="配置 Kiro 的 AI 服务与回答行为。API Key 默认仅保存在当前浏览器会话中。"
+      title="Kiro"
+      description="配置 Kiro 使用的 AI 服务与回答行为。API Key 默认仅保存在当前浏览器会话中。"
     >
       <div className="text-xs space-y-4" data-testid="settings-kiro">
-        {/* Kiro */}
+        {/* ---- Kiro ---- */}
         <SettingsGroup title="Kiro">
           <SettingsRow
             settingId="ai-enabled"
@@ -208,12 +211,12 @@ export function KiroAISettings() {
           </SettingsRow>
         </SettingsGroup>
 
-        {/* ---- 模型 ---- */}
-        <SettingsGroup title="模型">
+        {/* ---- AI 服务：provider / credential / connection（让 Kiro 工作的基础配置，不进高级设置） ---- */}
+        <SettingsGroup title="AI 服务">
           <SettingsRow
             settingId="ai-provider"
             title="AI 服务"
-            description="选择模型来源，配置保存在本地（不含 API Key）。"
+            description="选择 Kiro 使用的模型服务，配置保存在本地（不含 API Key）。"
           >
             <SettingsSelect
               value={provider}
@@ -249,7 +252,7 @@ export function KiroAISettings() {
             <>
               <SettingsRow
                 settingId="ai-custom-name"
-                title="Provider 名称"
+                title="服务名称"
                 description="仅用于识别，如「本地网关」。"
               >
                 <SettingsInput
@@ -260,8 +263,8 @@ export function KiroAISettings() {
               </SettingsRow>
               <SettingsRow
                 settingId="ai-custom-url"
-                title="Base URL"
-                description="https:// 开头，兼容 OpenAI Chat Completions；私网地址会被拒绝。"
+                title="服务地址"
+                description="OpenAI 兼容接口的 Base URL；https:// 开头，私网地址会被拒绝。"
               >
                 <SettingsInput
                   value={custom.baseURL}
@@ -272,8 +275,8 @@ export function KiroAISettings() {
               </SettingsRow>
               <SettingsRow
                 settingId="ai-custom-model"
-                title="Model ID"
-                description="手动填写该服务支持的模型 ID。"
+                title="模型 ID"
+                description="该服务实际使用的模型名称。"
               >
                 <SettingsInput
                   value={custom.model}
@@ -284,26 +287,6 @@ export function KiroAISettings() {
               </SettingsRow>
             </>
           )}
-
-          <SettingsRow
-            settingId="ai-reasoning-effort"
-            title="思考程度"
-            description="控制支持该能力的模型在回答前投入的推理计算。"
-          >
-            {reasoningCapability.adjustable ? (
-              <SettingsSegmentedControl<KiroReasoningEffort>
-                value={effectiveReasoningEffort}
-                onChange={setReasoningEffort}
-                options={reasoningCapability.supportedEfforts.map((effort) => ({
-                  value: effort,
-                  label: REASONING_EFFORT_LABELS[effort],
-                }))}
-                ariaLabel="思考程度"
-              />
-            ) : (
-              <span className="text-[11px] font-semibold text-sandrift">当前模型不可调</span>
-            )}
-          </SettingsRow>
 
           <SettingsRow
             settingId="ai-api-key"
@@ -360,23 +343,26 @@ export function KiroAISettings() {
           </SettingsRow>
         </SettingsGroup>
 
-        {/* ---- 回答 ---- */}
-        <SettingsGroup title="回答">
+        {/* ---- 模型与回答：model behavior（模型选择在「AI 服务」组，不重复） ---- */}
+        <SettingsGroup title="模型与回答">
           <SettingsRow
-            settingId="kiro-output-text-size"
-            title="输出字号"
-            description="调整 Kiro 回复正文、公式、代码与表格的显示大小。"
+            settingId="ai-reasoning-effort"
+            title="思考程度"
+            description="控制支持该能力的模型在回答前投入的推理计算。"
           >
-            <SettingsSegmentedControl<KiroOutputTextSize>
-              value={outputTextSize}
-              onChange={setOutputTextSize}
-              ariaLabel="Kiro 输出字号"
-              options={[
-                { value: "small", label: "小" },
-                { value: "standard", label: "标准" },
-                { value: "large", label: "大" },
-              ]}
-            />
+            {reasoningCapability.adjustable ? (
+              <SettingsSegmentedControl<KiroReasoningEffort>
+                value={effectiveReasoningEffort}
+                onChange={setReasoningEffort}
+                options={reasoningCapability.supportedEfforts.map((effort) => ({
+                  value: effort,
+                  label: REASONING_EFFORT_LABELS[effort],
+                }))}
+                ariaLabel="思考程度"
+              />
+            ) : (
+              <span className="text-[11px] font-semibold text-sandrift">当前模型不可调</span>
+            )}
           </SettingsRow>
 
           <SettingsRow
@@ -402,6 +388,26 @@ export function KiroAISettings() {
           </SettingsRow>
 
           <SettingsRow
+            settingId="kiro-output-text-size"
+            title="输出字号"
+            description="调整 Kiro 回复正文、公式、代码与表格的显示大小。"
+          >
+            <SettingsSegmentedControl<KiroOutputTextSize>
+              value={outputTextSize}
+              onChange={setOutputTextSize}
+              ariaLabel="Kiro 输出字号"
+              options={[
+                { value: "small", label: "小" },
+                { value: "standard", label: "标准" },
+                { value: "large", label: "大" },
+              ]}
+            />
+          </SettingsRow>
+        </SettingsGroup>
+
+        {/* ---- Kiro 能力：上下文 / 联网搜索（主层开关 + summary，细节进「搜索设置」）/ 记忆 ---- */}
+        <SettingsGroup title="Kiro 能力">
+          <SettingsRow
             settingId="kiro-auto-context"
             title="自动环境上下文"
             description="根据当前页面、时间范围和选中对象，自动为 Kiro 带入相关上下文。关闭后仍可通过 @ 手动添加课程、任务和资料。"
@@ -412,10 +418,7 @@ export function KiroAISettings() {
               label="自动环境上下文"
             />
           </SettingsRow>
-        </SettingsGroup>
 
-        {/* ---- 能力：联网搜索（主层只有开关 + summary，细节进「搜索设置」）+ 记忆 ---- */}
-        <SettingsGroup title="能力">
           <SettingsRow
             settingId="kiro-web-search-enabled"
             title="联网搜索"
@@ -554,64 +557,6 @@ export function KiroAISettings() {
                       按需发送
                     </span>
                   </SettingsRow>
-
-                  {/* ---- Task 19C1：扫描 Web PDF Vision（配置收进搜索设置，不再与搜索同级铺满） ---- */}
-                  <SettingsRow
-                    settingId="kiro-web-pdf-vision-enabled"
-                    title="扫描 PDF 识别"
-                    description="仅用于读取联网搜索发现的扫描型 PDF（无文本层页面）。"
-                  >
-                    <SettingsToggle
-                      checked={webPdfVisionEnabled}
-                      onChange={setWebPdfVisionEnabled}
-                      label="扫描 PDF 识别"
-                    />
-                  </SettingsRow>
-
-                  <SettingsRow
-                    settingId="kiro-web-pdf-vision-model"
-                    title="Vision 模型"
-                    description="用于识别扫描 PDF 页面的 OpenCode Go 视觉模型。"
-                  >
-                    <SettingsSelect
-                      value={webPdfVisionModel}
-                      onChange={setWebPdfVisionModel}
-                      disabled={!webPdfVisionEnabled}
-                      ariaLabel="扫描 PDF Vision 模型"
-                      options={getWebPdfVisionModelOptions().map((m) => ({ value: m.id, label: m.name }))}
-                    />
-                  </SettingsRow>
-
-                  <SettingsRow
-                    settingId="kiro-web-pdf-vision-key"
-                    title="OpenCode Go Vision API Key"
-                    description="仅用于读取联网搜索发现的扫描型 PDF。密钥仅保存在当前浏览器会话中。"
-                  >
-                    <div className="relative w-full">
-                      <SettingsInput
-                        type={showWebPdfVisionKey ? "text" : "password"}
-                        value={webPdfVisionApiKeyInput}
-                        onChange={(v) => {
-                          setWebPdfVisionApiKeyInput(v);
-                          setSessionWebPdfVisionApiKey(v);
-                        }}
-                        placeholder="sk-..."
-                        ariaLabel="OpenCode Go Vision API Key"
-                        autoComplete="off"
-                        spellCheck={false}
-                        mono
-                        className="pr-9"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setShowWebPdfVisionKey((v) => !v)}
-                        aria-label={showWebPdfVisionKey ? "隐藏 Vision API Key" : "显示 Vision API Key"}
-                        className="absolute right-1.5 top-1/2 -translate-y-1/2 p-1.5 rounded-lg text-sandrift hover:text-charcoal hover:bg-alabaster transition-colors"
-                      >
-                        {showWebPdfVisionKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                      </button>
-                    </div>
-                  </SettingsRow>
                 </div>
               </DisclosureRegion>
             </>
@@ -623,7 +568,7 @@ export function KiroAISettings() {
           </div>
         </SettingsGroup>
 
-        {/* ---- 高级设置：低频 capability engineering + 隐私说明，按需展开 ---- */}
+        {/* ---- 高级设置：低频技术配置，默认折叠 ---- */}
         <SettingsGroup>
           <button
             type="button"
@@ -681,22 +626,67 @@ export function KiroAISettings() {
                 </SettingsRow>
               )}
 
-              {/* ---- 隐私与数据 ---- */}
-              <SettingsRow settingId="kiro-privacy-local" title="本地优先" description="课程、任务、记忆与聊天历史保存在当前浏览器；附件正文存入 IndexedDB。">
-                <span className="px-2 py-0.5 rounded-full bg-alabaster border border-line text-[10px] font-bold text-satin-grey shrink-0">
-                  本地存储
-                </span>
-              </SettingsRow>
-              <SettingsRow settingId="kiro-privacy-api-key" title="API Key" description="仅保存在当前浏览器会话（sessionStorage），不写入本地存储、备份或日志。">
-                <span className="px-2 py-0.5 rounded-full bg-alabaster border border-line text-[10px] font-bold text-satin-grey shrink-0">
-                  会话级
-                </span>
-              </SettingsRow>
-              <SettingsRow settingId="kiro-privacy-context" title="上下文发送" description="发送给 AI 服务的仅包括当前对话、必要的 ClassFlow 上下文与你选择的资料内容。">
-                <span className="px-2 py-0.5 rounded-full bg-alabaster border border-line text-[10px] font-bold text-satin-grey shrink-0">
-                  按需发送
-                </span>
-              </SettingsRow>
+              {/* ---- Task 19C1：扫描 Web PDF Vision（低频技术配置，收进高级设置） ---- */}
+              {webSearchEnabled && (
+                <>
+                  <SettingsRow
+                    settingId="kiro-web-pdf-vision-enabled"
+                    title="扫描 PDF 识别"
+                    description="仅用于读取联网搜索发现的扫描型 PDF（无文本层页面）。"
+                  >
+                    <SettingsToggle
+                      checked={webPdfVisionEnabled}
+                      onChange={setWebPdfVisionEnabled}
+                      label="扫描 PDF 识别"
+                    />
+                  </SettingsRow>
+
+                  <SettingsRow
+                    settingId="kiro-web-pdf-vision-model"
+                    title="Vision 模型"
+                    description="用于识别扫描 PDF 页面的 OpenCode Go 视觉模型。"
+                  >
+                    <SettingsSelect
+                      value={webPdfVisionModel}
+                      onChange={setWebPdfVisionModel}
+                      disabled={!webPdfVisionEnabled}
+                      ariaLabel="扫描 PDF Vision 模型"
+                      options={getWebPdfVisionModelOptions().map((m) => ({ value: m.id, label: m.name }))}
+                    />
+                  </SettingsRow>
+
+                  <SettingsRow
+                    settingId="kiro-web-pdf-vision-key"
+                    title="OpenCode Go Vision API Key"
+                    description="仅用于读取联网搜索发现的扫描型 PDF。密钥仅保存在当前浏览器会话中。"
+                  >
+                    <div className="relative w-full">
+                      <SettingsInput
+                        type={showWebPdfVisionKey ? "text" : "password"}
+                        value={webPdfVisionApiKeyInput}
+                        onChange={(v) => {
+                          setWebPdfVisionApiKeyInput(v);
+                          setSessionWebPdfVisionApiKey(v);
+                        }}
+                        placeholder="sk-..."
+                        ariaLabel="OpenCode Go Vision API Key"
+                        autoComplete="off"
+                        spellCheck={false}
+                        mono
+                        className="pr-9"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowWebPdfVisionKey((v) => !v)}
+                        aria-label={showWebPdfVisionKey ? "隐藏 Vision API Key" : "显示 Vision API Key"}
+                        className="absolute right-1.5 top-1/2 -translate-y-1/2 p-1.5 rounded-lg text-sandrift hover:text-charcoal hover:bg-alabaster transition-colors"
+                      >
+                        {showWebPdfVisionKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
+                    </div>
+                  </SettingsRow>
+                </>
+              )}
             </div>
           </DisclosureRegion>
         </SettingsGroup>

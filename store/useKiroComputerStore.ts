@@ -108,11 +108,11 @@ export const useKiroComputerStore = create<KiroComputerState>()(
             ...s.workspaces,
             {
               id,
-              name: "Kiro Sandbox",
+              name: "Kiro 内置工作区",
               roots: [
                 {
                   id: "root-sandbox",
-                  label: "Sandbox（当前浏览器）",
+                  label: "Kiro 内置工作区（当前浏览器）",
                   access: "read-write",
                   adapterRef: DEFAULT_SANDBOX_ADAPTER_REF,
                 },

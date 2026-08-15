@@ -20,6 +20,7 @@ export function SettingsActionRow({
   onAction,
   actionTestid,
   actionMinWidth,
+  settingId,
 }: {
   title: string;
   description: string;
@@ -30,9 +31,14 @@ export function SettingsActionRow({
   actionTestid?: string;
   /** 动作列最小宽度（Data & Storage 组用，右缘对齐；不全局强制） */
   actionMinWidth?: string;
+  /** 稳定 id（搜索跳转 / Registry DOM 校验用），对应 Settings Registry 的 id */
+  settingId?: string;
 }) {
   return (
-    <div className="flex items-center justify-between gap-4 min-h-[56px] py-3 border-b border-line-soft last:border-b-0">
+    <div
+      data-setting-id={settingId}
+      className="flex items-center justify-between gap-4 min-h-[56px] py-3 border-b border-line-soft last:border-b-0"
+    >
       <div className="min-w-0">
         <p className={cn("text-xs font-bold", variant === "danger" ? "text-danger" : "text-charcoal")}>
           {title}

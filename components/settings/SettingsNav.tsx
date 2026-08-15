@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { Home, User, Calendar, ListTodo, Timer, MousePointerClick, ShieldCheck, Database, Info } from "lucide-react";
+import { Home, User, Calendar, ListTodo, Timer, ShieldCheck, Database, Info } from "lucide-react";
 import { SettingsSection } from "@/types";
 import { cn } from "@/lib/utils";
 import { KIRO_ICON } from "@/components/layout/navItems";
@@ -16,10 +16,9 @@ export const SETTINGS_NAV: {
   { id: "semester", label: "学期与课表", icon: Calendar },
   { id: "tasks", label: "任务与提醒", icon: ListTodo },
   { id: "focus", label: "专注与学习", icon: Timer },
-  { id: "interaction", label: "交互与快捷键", icon: MousePointerClick },
-  { id: "kiro", label: "Kiro 与 AI", icon: KIRO_ICON },
-  { id: "kiro-agent", label: "Kiro Agent", icon: ShieldCheck },
-  { id: "data", label: "数据与存储", icon: Database },
+  { id: "kiro", label: "Kiro", icon: KIRO_ICON },
+  { id: "kiro-agent", label: "Agent 与权限", icon: ShieldCheck },
+  { id: "data", label: "数据与隐私", icon: Database },
 ];
 
 export const ABOUT_NAV = { id: "about" as const, label: "关于", icon: Info };
@@ -27,16 +26,13 @@ export const ABOUT_NAV = { id: "about" as const, label: "关于", icon: Info };
 interface SettingsNavProps {
   active: SettingsSection;
   onSelect: (section: SettingsSection) => void;
-  /** 存在非默认偏好的 section（显示克制的小圆点） */
-  modifiedSections: ReadonlySet<SettingsSection>;
 }
 
 /** 桌面/平板：左侧纵向导航；当前项使用 pastel-mint / charcoal selected language */
-export function SettingsNav({ active, onSelect, modifiedSections }: SettingsNavProps) {
+export function SettingsNav({ active, onSelect }: SettingsNavProps) {
   const renderItem = (item: { id: SettingsSection; label: string; icon: React.ElementType }) => {
     const Icon = item.icon;
     const isActive = active === item.id;
-    const modified = modifiedSections.has(item.id);
     return (
       <button
         key={item.id}
@@ -51,8 +47,6 @@ export function SettingsNav({ active, onSelect, modifiedSections }: SettingsNavP
       >
         <Icon className="w-4 h-4 shrink-0" />
         <span className="truncate flex-1 text-left">{item.label}</span>
-        {/* 已修改小圆点（克制，无数字 badge） */}
-        {modified && <span className="w-1.5 h-1.5 rounded-full bg-charcoal shrink-0" aria-hidden="true" />}
       </button>
     );
   };
