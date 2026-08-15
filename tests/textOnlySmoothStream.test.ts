@@ -283,7 +283,8 @@ describe("textOnlySmoothStream V4.4（Adaptive Cadence & Bounded Smoothing）", 
     // 总人工 lag 有界（两次 burst，第二次几乎无 shaping）
     expect(elapsedMs).toBeLessThan(KIRO_MAX_SMOOTHING_LAG_MS * 2 + 300);
     expect(stats?.catchUpActivations ?? 0).toBeGreaterThanOrEqual(1);
-    expect(stats?.maxSmoothingDebtMs ?? 0).toBeLessThanOrEqual(KIRO_MAX_SMOOTHING_LAG_MS);
+    // actual-timer 记账：最后一个 sleep 可能轻微越过预算（4ms 请求实际 6-15ms）
+    expect(stats?.maxSmoothingDebtMs ?? 0).toBeLessThanOrEqual(KIRO_MAX_SMOOTHING_LAG_MS + 15);
   });
 
   it("12. execution 阶段 lifecycle 最高优先级：progress 最后字符 → Tool 紧密衔接", async () => {
@@ -296,5 +297,119 @@ describe("textOnlySmoothStream V4.4（Adaptive Cadence & Bounded Smoothing）", 
     expect(toolTs - textTs).toBeLessThan(2);
     expect(stats?.progressTextDelayMs ?? 0).toBeLessThan(5);
     expect(stats?.toolFlushDelayMs ?? 0).toBeLessThan(5);
+  });
+
+  // ============================================================
+  // V4.4.1：Global Lag 回归（backpressure 污染 debt accounting）
+  //
+  // 关键指标：Provider/source enqueue 时间戳 → downstream emit 时间戳 的独立 lag，
+  // 不依赖 transform 内部 debt stats（stats 本身可能算错）。
+  // 目标 invariant：人工 smoothing backlog 不能随 queued burst 数量线性增长。
+  // ============================================================
+
+  /** 输出中累计长度首次达到 target 的 emit 时间戳（delta 边界定位） */
+  function boundaryEmitTs(out: TimedPart[], targetLen: number): number {
+    let cum = 0;
+    for (const t of out) {
+      if (t.part.type !== "text-delta") continue;
+      cum += (t.part as { text: string }).text.length;
+      if (cum >= targetLen) return t.ts;
+    }
+    return -1;
+  }
+
+  it("V4.4.1-1 连续 queued 3-burst：global lag 必须 bounded（不随 burst 数量线性增长）", async () => {
+    const burstA = cjkText(300);
+    const burstB = cjkText(300);
+    const burstC = cjkText(300);
+    const sourceEnqueues: number[] = [];
+    const { out } = await runTransform({}, async (push) => {
+      await push(BOUNDARY_TOOL);
+      await push(part("text-delta", { id: "tq", text: burstA }));
+      sourceEnqueues.push(performance.now());
+      await push(part("text-delta", { id: "tq", text: burstB }));
+      sourceEnqueues.push(performance.now());
+      await push(part("text-delta", { id: "tq", text: burstC }));
+      sourceEnqueues.push(performance.now());
+    });
+    // 从 source timestamp（绝对域）独立计算 lag（不读 stats）
+    const lagA = boundaryEmitTs(out, 300) - sourceEnqueues[0];
+    const lagB = boundaryEmitTs(out, 600) - sourceEnqueues[1];
+    const lagC = boundaryEmitTs(out, 900) - sourceEnqueues[2];
+    console.log(`[V4.4.1] 3-burst lagA=${Math.round(lagA)} lagB=${Math.round(lagB)} lagC=${Math.round(lagC)}`);
+    // 内容完整
+    expect(out.filter((t) => t.part.type === "text-delta").map((t) => (t.part as { text: string }).text).join("")).toBe(
+      burstA + burstB + burstC
+    );
+    // 首 burst 允许 ≤ maxLag 的 shaping（含 actual-timer 误差）
+    expect(lagA).toBeLessThanOrEqual(KIRO_MAX_SMOOTHING_LAG_MS + 60);
+    // 后续 burst 不得再叠加完整 shaping（bug 行为：B/C 各再 +≈maxLag 线性增长）
+    expect(lagB - lagA).toBeLessThan(30);
+    expect(lagC - lagB).toBeLessThan(30);
+    expect(lagC).toBeLessThanOrEqual(KIRO_MAX_SMOOTHING_LAG_MS + 90);
+  });
+
+  it("V4.4.1-2 连续 queued 10-burst（3000 chars）：global lag bounded，文本完全一致", async () => {
+    const bursts = Array.from({ length: 10 }, () => cjkText(300));
+    const total = bursts.join("");
+    let firstEnqueue = 0;
+    const { out } = await runTransform({}, async (push) => {
+      await push(BOUNDARY_TOOL);
+      firstEnqueue = performance.now();
+      for (const b of bursts) {
+        await push(part("text-delta", { id: "tq10", text: b }));
+      }
+    });
+    const deltas = out.filter((t) => t.part.type === "text-delta");
+    expect(deltas.map((t) => (t.part as { text: string }).text).join("")).toBe(total);
+    const lastEmit = deltas[deltas.length - 1].ts;
+    const globalArtificialLagMs = lastEmit - firstEnqueue;
+    console.log(`[V4.4.1] 10-burst globalLag=${Math.round(globalArtificialLagMs)}ms`);
+    // 目标修复后：不能接近 10 × 48ms = 480ms（线性 backlog）；允许 scheduler/stream 误差
+    expect(globalArtificialLagMs).toBeLessThan(250);
+  });
+
+  it("V4.4.1-3 长停顿（真实 idle）才能重置 debt：burst → 200ms idle → burst 恢复完整预算", async () => {
+    const burstA = cjkText(300);
+    const burstB = cjkText(300);
+    const sourceEnqueues: number[] = [];
+    const { out, stats } = await runTransform({}, async (push) => {
+      await push(BOUNDARY_TOOL);
+      await push(part("text-delta", { id: "tq3", text: burstA }));
+      sourceEnqueues.push(performance.now());
+      await push(part("text-delta", { id: "tq3", text: burstB }), 200); // 真实 idle 200ms
+      sourceEnqueues.push(performance.now());
+    });
+    const lagA = boundaryEmitTs(out, 300) - sourceEnqueues[0];
+    const lagB = boundaryEmitTs(out, 600) - sourceEnqueues[1];
+    console.log(`[V4.4.1] idle-reset lagA=${Math.round(lagA)} lagB=${Math.round(lagB)}`);
+    // idle 200ms ≥ runResetGapMs → B 重新获得完整 shaping 预算（lag 从 B 自身 arrival 起算 ≈ ≤ maxLag）
+    expect(lagA).toBeLessThanOrEqual(KIRO_MAX_SMOOTHING_LAG_MS + 60);
+    expect(lagB).toBeLessThanOrEqual(KIRO_MAX_SMOOTHING_LAG_MS + 60);
+    expect(stats?.maxSmoothingDebtMs ?? 0).toBeLessThanOrEqual(KIRO_MAX_SMOOTHING_LAG_MS + 15);
+  });
+
+  it("V4.4.1-4 maxLag=24 定标：queued 3-burst 的 global lag invariant 同样成立（更少人为延迟）", async () => {
+    const burstA = cjkText(300);
+    const burstB = cjkText(300);
+    const burstC = cjkText(300);
+    const sourceEnqueues: number[] = [];
+    const { out } = await runTransform({ maxSmoothingLagMs: 24 }, async (push) => {
+      await push(BOUNDARY_TOOL);
+      await push(part("text-delta", { id: "tq24", text: burstA }));
+      sourceEnqueues.push(performance.now());
+      await push(part("text-delta", { id: "tq24", text: burstB }));
+      sourceEnqueues.push(performance.now());
+      await push(part("text-delta", { id: "tq24", text: burstC }));
+      sourceEnqueues.push(performance.now());
+    });
+    const lagA = boundaryEmitTs(out, 300) - sourceEnqueues[0];
+    const lagB = boundaryEmitTs(out, 600) - sourceEnqueues[1];
+    const lagC = boundaryEmitTs(out, 900) - sourceEnqueues[2];
+    console.log(`[V4.4.1] maxLag24 lagA=${Math.round(lagA)} lagB=${Math.round(lagB)} lagC=${Math.round(lagC)}`);
+    expect(lagA).toBeLessThanOrEqual(24 + 60);
+    expect(lagB - lagA).toBeLessThan(30);
+    expect(lagC - lagB).toBeLessThan(30);
+    expect(lagC).toBeLessThanOrEqual(24 + 90);
   });
 });

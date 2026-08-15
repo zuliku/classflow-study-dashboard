@@ -164,6 +164,24 @@ async function openKiro(page: Page) {
   await page.getByTestId("kiro-composer").getByLabel("发送").click();
 }
 
+/**
+ * V4.4.1：验证页面 runtime 的 client throttle 常量确实等于预期值
+ *（NEXT_PUBLIC env 需要 dev server 重启/重新构建才生效；不能假设 shell env 生效）。
+ * 未设置 KIRO_EXPECTED_CLIENT_THROTTLE_MS 时只记录。
+ */
+async function verifyClientThrottle(page: Page, testName: string) {
+  const runtime = await page.evaluate(
+    () => (window as unknown as { __kiroClientThrottleMs?: number }).__kiroClientThrottleMs ?? -1
+  );
+  const expectedRaw = process.env.KIRO_EXPECTED_CLIENT_THROTTLE_MS;
+  console.log(`[PERF][${testName}] runtimeClientThrottleMs=${runtime} expected=${expectedRaw ?? "default"}`);
+  if (expectedRaw != null && expectedRaw !== "") {
+    expect(runtime).toBe(Number(expectedRaw));
+  } else {
+    expect([16, 20, 24]).toContain(runtime);
+  }
+}
+
 function toolInputEvent(callId: string, idx: number) {
   return [
     { type: "tool-input-start", toolCallId: callId, toolName: "search_assignments" },
@@ -643,7 +661,8 @@ async function runSettleCase(
   expectText: string,
   firstText: string,
   captureSelector: string,
-  prepare?: (page: Page) => Promise<void>
+  prepare?: (page: Page) => Promise<void>,
+  capture?: (page: Page) => Promise<import("@playwright/test").JSHandle>
 ) {
   const startedAt = Date.now();
   await page.setViewportSize({ width: 1440, height: 900 });
@@ -654,7 +673,9 @@ async function runSettleCase(
   await page.getByTestId("kiro-composer").getByLabel("发送").click();
   const msg = page.getByTestId("kiro-message").last();
   // 1) 流式中：稳定节点出现后捕获 DOM 引用
-  const captured = await page.waitForSelector(captureSelector, { timeout: 30000 });
+  const captured = capture
+    ? await capture(page)
+    : await page.waitForSelector(captureSelector, { timeout: 30000 });
   // 2) 等完整正文 + settle（settleTransitions > 0 = streaming=false 帧已渲染）
   await expect(msg.locator(".kiro-markdown").first()).toContainText(firstText, { timeout: 60000 });
   await expect(msg).toContainText(SENTINEL, { timeout: 60000 });
@@ -753,6 +774,23 @@ test("PERF Case S5: citation → stable citation pill DOM identity 保留", asyn
         buffer: Buffer.from(buildMinimalPdf("讲义正文内容")),
       });
       await expect(p.getByTestId("kiro-attachment-chip")).toContainText("PDF", { timeout: 15000 });
+    },
+    async (p) => {
+      // 等第一个 stable block flush（出现第二个 kiro-markdown 稳定块）后再捕获其 citation，
+      // 避免捕获到仍属于 Active Tail 的 citation（tail flush 时会被替换）
+      await p.waitForFunction(
+        () =>
+          document.querySelectorAll(
+            '[data-testid="kiro-streaming-markdown"] [data-testid="kiro-markdown"]'
+          ).length >= 2,
+        { timeout: 30000 }
+      );
+      return p.evaluateHandle(() => {
+        const md = document.querySelectorAll(
+          '[data-testid="kiro-streaming-markdown"] [data-testid="kiro-markdown"]'
+        );
+        return md[0]?.querySelector('[data-testid="kiro-citation"]') ?? null;
+      });
     }
   );
   const perf = await readPerf(page, ssePlan.markerRef.ts);
@@ -783,4 +821,12 @@ test("PERF Case S6: loose list → canonicalize（两阶段 handoff；最终 DOM
   expect(perf.settleFullParses).toBe(0);
   // 流式树节点已被 canonical 树替换（非 safe-reuse）
   expect(replaced).toBe(false);
+});
+
+test("PERF Throttle: runtime client throttle constant 与预期一致（V4.4.1 A/B 校验）", async ({ page }) => {
+  await injectPerf(page);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/");
+  await page.locator("aside").first().getByRole("button", { name: "Kiro" }).click();
+  await verifyClientThrottle(page, "THROTTLE");
 });

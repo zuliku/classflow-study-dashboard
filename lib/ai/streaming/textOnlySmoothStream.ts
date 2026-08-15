@@ -17,8 +17,14 @@ import { ProviderMetadata, StreamTextTransform, TextStreamPart, ToolSet } from "
  *    - 小 delta（≤ nativeDeltaChars）→ native pass-through，不二次慢放
  *    - 大 burst → 词级 shaping 但人工 lag 不超过 maxSmoothingLagMs，超出即 catch-up
  *      （增大 chunk 到 catchUpChunkChars、取消 delay）
- *    - debt = max(0, debt + spent - inputGap)：Provider 真实间隔偿还人工 debt；
- *      Provider 停顿 ≥ runResetGapMs → 新 run，debt 归零（burst 获得完整 shaping 预算）
+ *    - debt = max(0, debt + actualSleep - pipelineIdle)：只有「真正 idle 的时间」
+ *      才偿还 smoothing debt——idle 以 lastTransformCompletedAt 为基准（transform
+ *      调用结束 → 下一次 text 到达），绝不用 transform start-to-start 当作 Provider
+ *      间隔（TransformStream backpressure 会推迟下一次 invocation，自己的 sleep 会
+ *      伪装成 Provider idle）。pipelineIdle ≥ runResetGapMs → 新 run，debt 归零。
+ *    - V4.4.1：sleep 按真实 wall-clock 计（performance.now 前后差），debt/maxDebt
+ *      反映真实人工延迟，而不是请求的 timer 参数（Node/Browser scheduler 可能
+ *      4ms → 实际 6/8/15ms）
  * 3. 无尾随 sleep：最后一个 segment 发出后不 sleep，lifecycle / tool / text-end 立即继续
  * 4. Provider metadata 保真：拆段时 metadata 只附到该 delta 派生的最后一个 segment
  *    （AI SDK 客户端 upsertTextContentPart 是 last-wins 合并契约，语义等价不重复；
@@ -26,12 +32,21 @@ import { ProviderMetadata, StreamTextTransform, TextStreamPart, ToolSet } from "
  *
  * 不引入任何新 timer 架构（无 setInterval / 全局队列 / rAF / typewriter）。
  * 实现为最小 Text-only smoother：把同一 TransformStream 拆双通道会破坏 ordering/backpressure 证明。
+ *
+ * 注意：pipelineIdle 可能仍包含下游 backpressure 贡献的空闲，绝不把它命名为/解释为
+ * Provider arrival interval——真实 Provider arrival timing 只在 benchmark source 侧记录。
  */
 
 /** 单个 delta 不超过该字符数 → final-answer 阶段也 native pass-through */
 export const KIRO_NATIVE_DELTA_CHARS = 40;
-/** 人工 smoothing 最大滞后预算（V4.4 baseline，由 benchmark 决定 32/48/64 最终值） */
-export const KIRO_MAX_SMOOTHING_LAG_MS = 48;
+/**
+ * 人工 smoothing 最大滞后预算（V4.4.1 定标结论：48 → 24）。
+ * 真实 DeepSeek replay（同一 capture 跑 24/32/48）完成延迟 spread 仅 5ms——
+ * 细流下 shaping 基本不触发，maxLag 只影响 burst 头部 pacing 窗口；
+ * 24ms = 恰好一个 client throttle 帧，burst 保护（catch-up 128-char chunking）不变，
+ * 人工延迟最小。synthetic 3-burst invariant 在 24 下同样成立（见 unit tests）。
+ */
+export const KIRO_MAX_SMOOTHING_LAG_MS = 24;
 /** catch-up 模式的大块字符数（frame-friendly，避免一次 300~1000 字一坨跳出） */
 export const KIRO_CATCH_UP_CHUNK_CHARS = 128;
 /** Provider 停顿超过该间隔视为新 run（debt 归零） */
@@ -98,7 +113,8 @@ export function textOnlySmoothStream<TOOLS extends ToolSet>({
     let type: "text-delta" | undefined;
     let providerMetadata: ProviderMetadata | undefined;
     let phase: TextOnlySmoothPhase = "execution";
-    let lastInputAt = 0;
+    /** 上一次 transform 调用处理完成时刻（debt 偿还的 idle 基准；不是 Provider arrival） */
+    let lastTransformCompletedAt = 0;
     let smoothingDebtMs = 0;
 
     const stats: TextOnlySmoothStats = {
@@ -152,12 +168,12 @@ export function textOnlySmoothStream<TOOLS extends ToolSet>({
       }
     };
 
-    /** 每 delta 入场：按真实输入间隔偿还 debt；长停顿 → 新 run 归零 */
-    const accountDebt = (inputGapMs: number) => {
-      if (inputGapMs > runResetGapMs) {
+    /** 每 delta 入场：只有真实 pipeline idle 才偿还 debt；长 idle → 新 run 归零 */
+    const accountDebt = (pipelineIdleMs: number) => {
+      if (pipelineIdleMs > runResetGapMs) {
         smoothingDebtMs = 0;
       } else {
-        smoothingDebtMs = Math.max(0, smoothingDebtMs - inputGapMs);
+        smoothingDebtMs = Math.max(0, smoothingDebtMs - pipelineIdleMs);
       }
       debtSamples += 1;
       stats.avgSmoothingDebtMs =
@@ -165,9 +181,15 @@ export function textOnlySmoothStream<TOOLS extends ToolSet>({
       if (smoothingDebtMs > stats.maxSmoothingDebtMs) stats.maxSmoothingDebtMs = smoothingDebtMs;
     };
 
+    /** debt 增加后立即更新 max（不依赖下一次 accountDebt） */
+    const addDebt = (ms: number) => {
+      smoothingDebtMs += ms;
+      if (smoothingDebtMs > stats.maxSmoothingDebtMs) stats.maxSmoothingDebtMs = smoothingDebtMs;
+    };
+
     /**
-     * final-answer 自适应 shaping：词级 4ms 只花在预算内；预算耗尽 → catch-up 大块无 delay。
-     * 无尾随 sleep：最后一个 segment 发出后立即返回（lifecycle 不等人工队列）。
+     * final-answer 自适应 shaping：词级 4ms 只花在真实时间预算内（spent 按 actual
+     * wall-clock 累计）；预算耗尽 → catch-up 大块无 delay。无尾随 sleep。
      */
     const emitShaped = async (
       controller: TransformStreamDefaultController<TextStreamPart<TOOLS>>
@@ -196,9 +218,12 @@ export function textOnlySmoothStream<TOOLS extends ToolSet>({
           } else {
             const delay = Math.min(delayInMs, budgetMs - spentMs);
             if (delay > 0) {
+              // V4.4.1：测量真实 sleep 时长（scheduler 可能 4ms → 6/8/15ms）
+              const started = performance.now();
               await sleep(delay);
-              spentMs += delay;
-              smoothingDebtMs += delay;
+              const actual = performance.now() - started;
+              spentMs += actual;
+              addDebt(actual);
             }
           }
         }
@@ -225,14 +250,18 @@ export function textOnlySmoothStream<TOOLS extends ToolSet>({
           }
           controller.enqueue(chunk);
           stats.toolFlushDelayMs += performance.now() - t0;
+          lastTransformCompletedAt = performance.now();
           return;
         }
         // ---- text-delta ----
-        const inputGapMs = lastInputAt > 0 ? now - lastInputAt : 0;
-        lastInputAt = now;
+        // V4.4.1：idle 基准 = 上次 transform 处理完成 → 本次真正开始（TransformStream
+        // backpressure 会推迟 invocation，绝不用 start-to-start 当 Provider 间隔；
+        // 自己的 sleep 不进入 idle，debt 只能被真实空闲偿还）
+        const pipelineIdleMs =
+          lastTransformCompletedAt > 0 ? now - lastTransformCompletedAt : 0;
         stats.providerTextDeltas += 1;
         stats.providerTextChars += chunk.text.length;
-        accountDebt(inputGapMs);
+        accountDebt(pipelineIdleMs);
 
         if (buffer.length > 0 && chunk.id !== id) {
           flushBuffer(controller);
@@ -249,14 +278,17 @@ export function textOnlySmoothStream<TOOLS extends ToolSet>({
           const t0 = now;
           emitNative(controller);
           stats.progressTextDelayMs += performance.now() - t0;
+          lastTransformCompletedAt = performance.now();
           return;
         }
         if (buffer.length <= nativeDeltaChars) {
           // 细流：不二次慢放
           emitNative(controller);
+          lastTransformCompletedAt = performance.now();
           return;
         }
         await emitShaped(controller);
+        lastTransformCompletedAt = performance.now();
       },
       flush(controller) {
         // stream close：残留 buffer 不丢失
