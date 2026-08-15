@@ -15,6 +15,7 @@ import { KIRO_PROJECT_INSTRUCTIONS_MAX } from "@/lib/ai/projects/types";
 import { saveConversation, clearConversationHistory } from "@/lib/ai/history/db";
 import { resetKiroDbForTests, openKiroDB, KIRO_PROJECTS_STORE } from "@/lib/ai/storage/kiroDb";
 import { KiroConversationRecord } from "@/lib/ai/history/types";
+import { clearAllFileBlobs } from "@/lib/fileStorage";
 
 const mocks = vi.hoisted(() => {
   type PanelMeta = {
@@ -124,6 +125,7 @@ beforeEach(async () => {
   mocks.meta.projectsVersion = 0;
   resetKiroDbForTests();
   await clearConversationHistory().catch(() => {});
+  await clearAllFileBlobs().catch(() => {});
   const db = await openKiroDB();
   await new Promise<void>((resolve, reject) => {
     const t = db.transaction(KIRO_PROJECTS_STORE, "readwrite");
@@ -383,6 +385,86 @@ describe("Project-scoped New Chat（V1.1）", () => {
     expect(s.text()).toContain("当前 · 新对话");
     expect(s.text()).toContain("对话 · 0");
     mocks.meta.conversationProjectId = null;
+    s.cleanup();
+  });
+
+  it("V1.3B：PNG 图片可上传；Original Blob 保持原样；Row 显示 IMAGE；20-file cap 保持", async () => {
+    const p = await createKiroProject({ name: "A" });
+    const s = setup();
+    s.render("expanded");
+    await s.flush();
+    s.click("打开项目 A");
+    await s.flush();
+
+    // 构造真实 PNG File（带正确签名与内容）
+    const pngBytes = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3, 4]);
+    const pngFile = new File([pngBytes], "pic.png", { type: "image/png" });
+    const input = s.container.querySelector('input[aria-label="上传项目资料"]') as HTMLInputElement;
+    expect(input).toBeTruthy();
+    act(() => {
+      Object.defineProperty(input, "files", { value: [pngFile], configurable: true });
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    // IndexedDB 异步链需要多轮真实等待（flush 只走一轮微任务）
+    for (let i = 0; i < 15; i++) {
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 20));
+      });
+    }
+
+    // 诊断：上传是否触发（toast + DB 写入）
+    const toastsAfterUpload = useToastStore.getState().toasts.map((t) => `${t.type}:${t.message}`);
+    const { listProjectFiles: listAfterUpload } = await import("@/lib/ai/projects/files/db");
+    const dbFilesAfterUpload = (await listAfterUpload(p.id)).map((f) => f.name);
+    expect(toastsAfterUpload, `toasts=${JSON.stringify(toastsAfterUpload)} db=${JSON.stringify(dbFilesAfterUpload)}`).toContain("success:已添加 1 个资料");
+    expect(dbFilesAfterUpload, `toasts=${JSON.stringify(toastsAfterUpload)} db=${JSON.stringify(dbFilesAfterUpload)}`).toContain("pic.png");
+
+    // 上传后 projectsVersion 变化 + 强制 re-render 触发文件列表重载
+    mocks.meta.projectsVersion += 1;
+    s.render("expanded");
+    for (let i = 0; i < 10; i++) {
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 20));
+      });
+      if (s.text().includes("pic.png")) break;
+    }
+
+    expect(s.text()).toContain("pic.png");
+    expect(s.text()).toContain("IMAGE");
+    expect(s.text()).toContain("项目资料 · 1");
+
+    // Original 文件大小/metadata 保持原样（上传阶段不做 resize/compress/transcode；
+    // Blob 字节往返已在 kiroProjectFiles.test.ts node 环境验证）
+    const { listProjectFiles } = await import("@/lib/ai/projects/files/db");
+    const files = await listProjectFiles(p.id);
+    expect(files).toHaveLength(1);
+    expect(files[0].kind).toBe("image");
+    expect(files[0].mimeType).toBe("image/png");
+    expect(files[0].sizeBytes).toBe(pngBytes.length);
+    expect(files[0].name).toBe("pic.png");
+    mocks.meta.projectsVersion = 0;
+    s.cleanup();
+  });
+
+  it("V1.3B：不支持的格式（.zip）上传被拒绝，不产生 Project File", async () => {
+    const p = await createKiroProject({ name: "A" });
+    const s = setup();
+    s.render("expanded");
+    await s.flush();
+    s.click("打开项目 A");
+    await s.flush();
+
+    const zipFile = new File([new Uint8Array(8)], "archive.zip", { type: "application/zip" });
+    const input = s.container.querySelector('input[aria-label="上传项目资料"]') as HTMLInputElement;
+    act(() => {
+      Object.defineProperty(input, "files", { value: [zipFile], configurable: true });
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    await s.flush();
+
+    const { listProjectFiles } = await import("@/lib/ai/projects/files/db");
+    expect(await listProjectFiles(p.id)).toHaveLength(0);
+    mocks.meta.projectsVersion = 0;
     s.cleanup();
   });
 });

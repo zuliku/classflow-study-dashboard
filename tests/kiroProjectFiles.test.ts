@@ -334,7 +334,7 @@ describe("read_project_file executor", () => {
 });
 
 describe("Prompt Project File Index", () => {
-  it("normalize 只保留 safe files metadata（丢弃 storageKey/apiKey/text/description）", () => {
+  it("normalize 只保留 safe files metadata（丢弃 storageKey/apiKey/text/description；image 合法）", () => {
     const ctx = normalizeProjectTurnContext({
       id: "proj-a",
       name: "P",
@@ -342,13 +342,15 @@ describe("Prompt Project File Index", () => {
       files: [
         { id: "pf_1", name: "A.pdf", kind: "pdf", sizeBytes: 100, storageKey: "file_secret", apiKey: "sk-x", text: "SECRET_TEXT", description: "d" },
         { id: "pf_2", name: "B.docx", kind: "docx", sizeBytes: 200 },
-        { id: "pf_3", name: "bad", kind: "image", sizeBytes: 5 },
+        { id: "pf_3", name: "bad", kind: "video", sizeBytes: 5 },
+        { id: "pf_4", name: "pic.png", kind: "image", sizeBytes: 300 },
       ],
     });
     expect(ctx?.instructions).toBe("PROJECT_RULE");
     expect(ctx?.files).toEqual([
       { id: "pf_1", name: "A.pdf", kind: "pdf", sizeBytes: 100 },
       { id: "pf_2", name: "B.docx", kind: "docx", sizeBytes: 200 },
+      { id: "pf_4", name: "pic.png", kind: "image", sizeBytes: 300 },
     ]);
     const json = JSON.stringify(ctx);
     expect(json).not.toContain("file_secret");
@@ -383,7 +385,7 @@ describe("Prompt Project File Index", () => {
     expect(ctx?.files).toHaveLength(20);
   });
 
-  it("prompt section：index-only，含文件名不含正文 sentinel", () => {
+  it("prompt section：index-only，含文件名不含正文 sentinel；IMAGE 提示 read_project_visual", () => {
     const s = buildProjectContextSection({
       id: "proj-a",
       name: "论文研究",
@@ -391,12 +393,17 @@ describe("Prompt Project File Index", () => {
       files: [
         { id: "pf_123", name: "比赛细则.pdf", kind: "pdf", sizeBytes: 100 },
         { id: "pf_456", name: "研究框架.docx", kind: "docx", sizeBytes: 200 },
+        { id: "pf_789", name: "示意图.png", kind: "image", sizeBytes: 300 },
       ],
     });
     expect(s).toContain("PROJECT_RULE");
     expect(s).toContain("比赛细则.pdf");
     expect(s).toContain("研究框架.docx");
+    expect(s).toContain("示意图.png");
+    expect(s).toContain("IMAGE");
     expect(s).toContain("read_project_file");
+    expect(s).toContain("read_project_visual");
+    expect(s).toContain("possiblyScanned / visualRequired");
     expect(s).toContain("不代表正文已读取");
     expect(s).not.toContain("FILE_BODY_SENTINEL");
     expect(s).not.toContain("storageKey");

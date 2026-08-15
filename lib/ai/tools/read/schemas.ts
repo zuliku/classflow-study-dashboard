@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { TaskBreakdownProposalSchema } from "@/lib/tasks/taskBreakdown";
+import { MAX_SCANNED_PDF_PAGES_PER_TURN } from "@/lib/ai/attachments/limits";
 
 /**
  * Kiro Read Tool 输入 Schema（zod）。
@@ -106,6 +107,19 @@ export const readMaterialSchema = z.object({
 export const readProjectFileSchema = z
   .object({
     projectFileId: z.string().trim().min(1).max(120),
+  })
+  .strict();
+
+/** V1.3B：read_project_visual schema —— 只接受 projectFileId + 可选 pages；
+ *  不接受 projectId/storageKey/path/url/provider/model/apiKey（全部来自 frozen Turn Context） */
+export const readProjectVisualSchema = z
+  .object({
+    projectFileId: z.string().trim().min(1).max(120),
+    pages: z
+      .array(z.number().int().min(1).max(10000))
+      .min(1)
+      .max(MAX_SCANNED_PDF_PAGES_PER_TURN)
+      .optional(),
   })
   .strict();
 
@@ -224,6 +238,7 @@ export const KIRO_READ_TOOL_SCHEMAS = {
   get_material_metadata: getMaterialMetadataSchema,
   read_material: readMaterialSchema,
   read_project_file: readProjectFileSchema,
+  read_project_visual: readProjectVisualSchema,
   propose_task_breakdown: proposeTaskBreakdownSchema,
   list_reminders: listRemindersSchema,
   get_focus_status: emptyInputSchema,

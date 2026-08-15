@@ -90,7 +90,7 @@ export interface KiroProjectTurnContext {
 export interface KiroProjectFileIndexEntry {
   id: string;
   name: string;
-  kind: "text" | "pdf" | "docx";
+  kind: "text" | "pdf" | "docx" | "image";
   sizeBytes: number;
 }
 

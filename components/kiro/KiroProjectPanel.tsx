@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { FolderKanban, ChevronLeft, X, Plus, Pencil, Trash2, ChevronsLeft, ArrowLeft } from "lucide-react";
+import { FolderKanban, ChevronLeft, X, Plus, Pencil, Trash2, ChevronsLeft, ArrowLeft, Image as ImageIcon } from "lucide-react";
 import { useKiroSessionMeta, useKiroSessionActions } from "@/components/kiro/KiroSessionProvider";
 import { useConfirmStore } from "@/store/useConfirmStore";
 import { useToastStore } from "@/store/useToastStore";
@@ -205,8 +205,9 @@ export function KiroProjectPanel({
     const accepted: File[] = [];
     for (const file of Array.from(files)) {
       const routed = routeAttachment(file);
-      if (!routed.ok || routed.kind === "image") {
-        pushToast({ message: "项目资料暂支持 PDF、DOCX、TXT 和 Markdown。", type: "error" });
+      // V1.3B：image 允许（PNG/JPEG/WEBP 原样保存；读取时才 preprocess）
+      if (!routed.ok) {
+        pushToast({ message: "项目资料暂支持 PDF、DOCX、TXT、Markdown 和 PNG/JPEG/WEBP 图片。", type: "error" });
         continue;
       }
       if (accepted.length >= quotaLeft) break;
@@ -521,7 +522,7 @@ export function KiroProjectPanel({
                       ref={fileInputRef}
                       type="file"
                       multiple
-                      accept=".pdf,.docx,.txt,.md,.markdown"
+                      accept=".pdf,.docx,.txt,.md,.markdown,.png,.jpg,.jpeg,.webp"
                       aria-label="上传项目资料"
                       className="hidden"
                       onChange={(e) => {
@@ -536,11 +537,15 @@ export function KiroProjectPanel({
                     <div className="mt-0.5 space-y-0.5">
                       {projectFiles.map((f) => (
                         <div key={f.id} className="flex items-center gap-2 px-1.5 py-1 rounded-lg group/file">
-                          <FileTextIcon />
+                          {f.kind === "image" ? (
+                            <ImageIcon className="w-3.5 h-3.5 shrink-0 text-sandrift" />
+                          ) : (
+                            <FileTextIcon />
+                          )}
                           <span className="min-w-0 flex-1">
                             <span className="block text-[11px] font-semibold text-charcoal truncate">{f.name}</span>
                             <span className="block text-[9px] text-sandrift">
-                              {f.kind.toUpperCase()} · {formatBytes(f.sizeBytes)}
+                              {f.kind === "image" ? "IMAGE" : f.kind.toUpperCase()} · {formatBytes(f.sizeBytes)}
                             </span>
                           </span>
                           <button

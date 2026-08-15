@@ -1,15 +1,18 @@
 /**
- * read_project_file（Browser Client 执行，V1.3A）：
+ * read_project_file（Browser Client 执行，V1.3A + V1.3B）：
  * 读取当前 Kiro Project 中明确指定资料的正文。
  * 安全 invariant：
  * - 必须存在 frozenProjectContext（当前 Turn 冻结的 Project Context）
  * - projectFileId 必须在 frozen index 中（否则 NOT_FOUND）
  * - record.projectId === frozenProjectContext.id 双重检查（阻止跨 Project 读取）
  * - storageKey 绝不进入 Tool Output
- * - scanned PDF：possiblyScanned=true + note，不做 Vision / OCR
+ * - image（V1.3B）：返回 visualRequired=true + note，不做文本提取、不注册 Citation
+ * - scanned PDF（V1.3B）：返回 possiblyScanned=true + pageCount + visualRequired=true，
+ *   不做 Vision；工具链 read_project_file → read_project_visual
  */
 import { z } from "zod";
-import { getProjectFile, getProjectFileBlob } from "@/lib/ai/projects/files/db";
+import { getProjectFileBlob } from "@/lib/ai/projects/files/db";
+import { resolveProjectFileForTurn } from "@/lib/ai/projects/files/access";
 import { extractAttachment } from "@/lib/ai/attachments";
 import { extractCacheKey } from "@/lib/ai/attachments/cache";
 import { KiroProjectTurnContext } from "@/lib/ai/contextBudget/types";
@@ -23,11 +26,14 @@ const schema = z
 export type ReadProjectFileResult = {
   projectFileId: string;
   name: string;
-  kind: "text" | "pdf" | "docx";
+  kind: "text" | "pdf" | "docx" | "image";
   text: string;
   truncated: boolean;
   pages?: { page: number; text: string }[];
+  pageCount?: number;
   possiblyScanned?: boolean;
+  /** V1.3B：需要 read_project_visual 才能获得内容（image / scanned PDF） */
+  visualRequired?: boolean;
   note?: string;
 };
 
@@ -41,24 +47,27 @@ export async function executeReadProjectFile(
   }
   const { projectFileId } = parsed.data;
 
-  if (!frozenProjectContext) {
-    return { ok: false, code: "NOT_FOUND", message: "当前对话不属于 Kiro 项目。" };
+  // 共享 access guard（frozen index + metadata 存在 + 跨项目双重检查）
+  const access = await resolveProjectFileForTurn({ projectFileId, projectContext: frozenProjectContext });
+  if (!access.ok) {
+    return { ok: false, code: access.code, message: access.message };
   }
-  // 1. frozen index 检查：只能读取当前 Turn 索引中存在的文件
-  const indexEntry = (frozenProjectContext.files ?? []).find((f) => f.id === projectFileId);
-  if (!indexEntry) {
-    return { ok: false, code: "NOT_FOUND", message: "该项目资料不在当前会话可用索引中。" };
-  }
+  const { record } = access;
 
-  // 2. metadata + 跨项目双重检查（即使 IndexedDB 存在其他 Project 的文件也拒绝）
-  let record;
-  try {
-    record = await getProjectFile(projectFileId);
-  } catch {
-    return { ok: false, code: "NOT_FOUND", message: "无法读取该项目资料。" };
-  }
-  if (!record || record.projectId !== frozenProjectContext.id) {
-    return { ok: false, code: "NOT_FOUND", message: "无法读取该项目资料。" };
+  // V1.3B：image 不做文本提取 —— 明确指向 read_project_visual；无正文所以不注册 Citation Source
+  if (record.kind === "image") {
+    return {
+      ok: true,
+      data: {
+        projectFileId,
+        name: record.name,
+        kind: "image",
+        text: "",
+        truncated: false,
+        visualRequired: true,
+        note: "这是图片资料，需要使用 read_project_visual 读取视觉内容。",
+      },
+    };
   }
 
   // 3. Blob → 提取（复用 extraction cache）
@@ -76,7 +85,7 @@ export async function executeReadProjectFile(
   }
   const doc = extracted.extracted;
 
-  // 4. scanned PDF：明确提示，不自动 Vision / OCR
+  // V1.3B：scanned PDF —— 明确 possiblyScanned + pageCount + visualRequired；不自动 Vision
   if (doc.possiblyScanned) {
     return {
       ok: true,
@@ -86,8 +95,10 @@ export async function executeReadProjectFile(
         kind: record.kind,
         text: "",
         truncated: false,
+        pageCount: doc.pageCount,
         possiblyScanned: true,
-        note: "这份 PDF 主要由扫描图片组成，当前 Project Files 版本暂不读取其图像正文。",
+        visualRequired: true,
+        note: "这份 PDF 主要由扫描图片组成，请使用 read_project_visual 读取指定页面的视觉内容。",
       },
     };
   }
@@ -101,6 +112,7 @@ export async function executeReadProjectFile(
       text: doc.text,
       truncated: doc.truncated,
       pages: doc.pages,
+      pageCount: doc.pageCount,
     },
   };
 }

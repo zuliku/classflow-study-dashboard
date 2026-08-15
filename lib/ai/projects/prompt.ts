@@ -48,7 +48,7 @@ export function normalizeProjectTurnContext(value: unknown): KiroProjectTurnCont
       const f = raw as Record<string, unknown>;
       const fid = typeof f.id === "string" ? f.id.trim().slice(0, FILE_ID_MAX) : "";
       const fname = typeof f.name === "string" ? f.name.trim().slice(0, FILE_NAME_MAX) : "";
-      const kind = f.kind === "text" || f.kind === "pdf" || f.kind === "docx" ? f.kind : undefined;
+      const kind = f.kind === "text" || f.kind === "pdf" || f.kind === "docx" || f.kind === "image" ? f.kind : undefined;
       const sizeBytes = typeof f.sizeBytes === "number" && Number.isFinite(f.sizeBytes) && f.sizeBytes >= 0
         ? Math.floor(f.sizeBytes)
         : undefined;
@@ -75,7 +75,7 @@ export function toProjectTurnContext(
     .filter(
       (f) =>
         f && typeof f.id === "string" && typeof f.name === "string" &&
-        (f.kind === "text" || f.kind === "pdf" || f.kind === "docx") &&
+        (f.kind === "text" || f.kind === "pdf" || f.kind === "docx" || f.kind === "image") &&
         Number.isFinite(f.sizeBytes) && f.sizeBytes >= 0
     )
     .map((f) => ({
@@ -110,8 +110,11 @@ export function buildProjectContextSection(context: KiroProjectTurnContext | und
       .map((f) => `- ${f.id} · ${f.name} · ${f.kind.toUpperCase()}`)
       .join("\n");
     lines.push(
-      `## 项目资料\n${rows}\n\n这里只提供项目资料索引，不代表正文已读取。` +
-        `需要具体内容时必须调用 read_project_file；不得仅根据文件名声称文件正文内容。`
+      `## 项目资料\n${rows}\n\n这里只提供项目资料索引，不代表正文已读取；` +
+        `不得仅根据文件名声称文件正文内容。读取规则：` +
+        `TXT/MD/DOCX 使用 read_project_file 读取正文；` +
+        `PDF 先使用 read_project_file，若结果说明 possiblyScanned / visualRequired 再使用 read_project_visual 读取页面图像；` +
+        `IMAGE 使用 read_project_visual 读取视觉内容。`
     );
   }
   return `\n\n${lines.join("\n\n")}`;

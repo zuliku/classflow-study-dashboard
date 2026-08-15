@@ -52,3 +52,39 @@ export function projectFileSourceId(projectFileId: string): string {
   const safe = projectFileId.replace(/[^A-Za-z0-9_-]/g, "").slice(0, 40);
   return `project-file-${safe || "file"}`;
 }
+
+/**
+ * V1.3B：Project File Source upsert + merge。
+ * 同一 sourceId（project-file-<id>）多次注册（read_project_file → read_project_visual；
+ * 或 visual 多次）时 availablePages 做 union（unique + sort asc），绝不产生 duplicate source row。
+ * 纯函数（useKiroChat / 测试共用）。
+ */
+export function upsertProjectFileSource(
+  sources: KiroSourceMeta[],
+  data: { projectFileId: string; name: string; pages?: { page: number }[] }
+): KiroSourceMeta[] {
+  const sourceId = projectFileSourceId(data.projectFileId);
+  const incoming = Array.isArray(data.pages)
+    ? Array.from(new Set(data.pages.map((p) => p.page))).sort((a, b) => a - b)
+    : undefined;
+  const existing = sources.find((s) => s.sourceId === sourceId);
+  if (!existing) {
+    return [
+      ...sources,
+      {
+        sourceId,
+        name: data.name,
+        source: "project-file",
+        availablePages: incoming && incoming.length > 0 ? incoming : undefined,
+      },
+    ];
+  }
+  const merged = incoming
+    ? Array.from(new Set([...(existing.availablePages ?? []), ...incoming])).sort((a, b) => a - b)
+    : existing.availablePages;
+  return sources.map((s) =>
+    s.sourceId === sourceId
+      ? { ...s, name: data.name, availablePages: merged && merged.length > 0 ? merged : undefined }
+      : s
+  );
+}

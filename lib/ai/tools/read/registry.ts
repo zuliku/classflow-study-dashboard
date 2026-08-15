@@ -99,6 +99,11 @@ export const KIRO_READ_TOOLS = {
       "读取当前 Kiro 项目中明确指定资料的正文。只能读取当前 Turn 的项目资料索引中存在的 projectFileId。PDF/DOCX/TXT/Markdown 使用本地提取；扫描型 PDF 会明确说明暂不读取图像正文。不要无差别遍历全部项目资料；需要正文时按需读取。",
     inputSchema: KIRO_READ_TOOL_SCHEMAS.read_project_file,
   }),
+  read_project_visual: tool({
+    description:
+      "读取当前 Kiro 项目中图片或扫描 PDF 的视觉内容。图片可直接读取；PDF 应先调用 read_project_file，仅当结果表明 possiblyScanned 时再使用本工具。不要用它代替普通文本 PDF 读取。",
+    inputSchema: KIRO_READ_TOOL_SCHEMAS.read_project_visual,
+  }),
   propose_task_breakdown: tool({
     description:
       "提交任务拆解 + 估时建议（结构化 Proposal，AI 推理 + 严格 schema；不是 Markdown 列表）。" +

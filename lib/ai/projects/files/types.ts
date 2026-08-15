@@ -3,7 +3,7 @@
  * Kiro Project File ≠ Computer Workspace file：这里是 Project 知识文档，
  * Workspace 是 Agent filesystem capability/sandbox，两个概念不耦合。
  */
-export type KiroProjectFileKind = "text" | "pdf" | "docx";
+export type KiroProjectFileKind = "text" | "pdf" | "docx" | "image";
 
 export interface KiroProjectFileRecord {
   id: string;
