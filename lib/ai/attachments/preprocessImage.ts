@@ -67,31 +67,32 @@ export function needsVisionImagePreprocess(input: {
 }
 
 export interface VisionEncodeAttempt {
-  /** 相对当前（已包含到 maxDimension 的）画布的缩放系数 */
-  scale: number;
+  /** 相对「包含到 maxDimension 的 base 尺寸」的绝对缩放系数（非相对上一轮） */
+  scaleFromBase: number;
   /** 有损格式质量；PNG 忽略 */
   quality: number;
 }
 
 export interface VisionEncodePlan {
   targetMime: string;
-  /** 第一个 attempt 使用包含尺寸；后续 attempt 逐级缩小 */
+  /** 第一个 attempt 使用包含尺寸；后续 attempt 相对 base 逐级缩小 */
   attempts: VisionEncodeAttempt[];
 }
 
 /**
- * 确定性 / bounded 编码计划（最多 3 次）：
- * - JPEG / WEBP：首次质量 .86，第二次 scale .85 + quality .78，第三次 scale .85 + quality .72
- * - PNG：无损（无质量参数），scale 1.0 → .82 → .82
+ * 确定性 / bounded 编码计划（最多 3 次，scaleFromBase 相对 base 绝对递减）：
+ * - JPEG / WEBP：scaleFromBase 1 → .85 → .7225；quality .86 → .78 → .72
+ * - PNG：无损（无质量参数），scaleFromBase 1 → .82 → .6724
+ * 每次 attempt 尺寸 = base × scaleFromBase，确保第三次 < 第二次（真正逐级收敛）。
  */
 export function visionEncodePlan(input: { mime: string }): VisionEncodePlan {
   if (input.mime === "image/png") {
     return {
       targetMime: "image/png",
       attempts: [
-        { scale: 1, quality: 0 },
-        { scale: 0.82, quality: 0 },
-        { scale: 0.82, quality: 0 },
+        { scaleFromBase: 1, quality: 0 },
+        { scaleFromBase: 0.82, quality: 0 },
+        { scaleFromBase: 0.82 * 0.82, quality: 0 },
       ],
     };
   }
@@ -99,15 +100,24 @@ export function visionEncodePlan(input: { mime: string }): VisionEncodePlan {
   return {
     targetMime: input.mime,
     attempts: [
-      { scale: 1, quality: input.mime === "image/webp" ? USER_VISION_WEBP_QUALITY : USER_VISION_JPEG_QUALITY },
-      { scale: 0.85, quality: 0.78 },
-      { scale: 0.85, quality: 0.72 },
+      { scaleFromBase: 1, quality: input.mime === "image/webp" ? USER_VISION_WEBP_QUALITY : USER_VISION_JPEG_QUALITY },
+      { scaleFromBase: 0.85, quality: 0.78 },
+      { scaleFromBase: 0.85 * 0.85, quality: 0.72 },
     ],
   };
 }
 
 /** 解码器注入点（node 单测用；浏览器默认走 Image + object URL） */
 export type VisionImageDimensionsProvider = (file: File) => Promise<{ width: number; height: number }>;
+
+/** 编码器注入点（node 单测用；浏览器默认 canvas.toBlob） */
+export type VisionImageEncoder = (input: {
+  blob: Blob;
+  mime: string;
+  width: number;
+  height: number;
+  quality: number;
+}) => Promise<Blob>;
 
 /** 浏览器默认解码：Image + URL.createObjectURL（保证 revoke） */
 export const decodeVisionImageDimensions: VisionImageDimensionsProvider = async (file) => {
@@ -186,13 +196,14 @@ export function encodeVisionImageBlob(input: {
  */
 export async function preprocessVisionImage(
   file: File,
-  opts?: { getDimensions?: VisionImageDimensionsProvider }
+  opts?: { getDimensions?: VisionImageDimensionsProvider; encode?: VisionImageEncoder }
 ): Promise<PreparedVisionImage> {
   const mime = resolveImageMimeType({ mimeType: file.type, fileName: file.name });
   if (!mime) {
     throw new VisionImagePreprocessError("不支持的图片格式");
   }
   const getDimensions = opts?.getDimensions ?? decodeVisionImageDimensions;
+  const encode = opts?.encode ?? encodeVisionImageBlob;
   let dimensions: { width: number; height: number };
   try {
     dimensions = await getDimensions(file);
@@ -225,7 +236,7 @@ export async function preprocessVisionImage(
     };
   }
 
-  // 像素级处理：canvas pipeline（浏览器）
+  // 像素级处理：canvas pipeline（浏览器；encode 可注入测试）
   const plan = visionEncodePlan({ mime });
   const base = calculateContainedImageSize({ width, height, maxDimension: MAX_USER_VISION_DIMENSION });
   let lastBlob: Blob | null = null;
@@ -233,9 +244,9 @@ export async function preprocessVisionImage(
   let lastHeight = base.height;
   for (let i = 0; i < plan.attempts.length; i++) {
     const attempt = plan.attempts[i];
-    const w = Math.max(1, Math.round(base.width * attempt.scale));
-    const h = Math.max(1, Math.round(base.height * attempt.scale));
-    const blob = await encodeVisionImageBlob({ blob: file, mime: plan.targetMime, width: w, height: h, quality: attempt.quality });
+    const w = Math.max(1, Math.round(base.width * attempt.scaleFromBase));
+    const h = Math.max(1, Math.round(base.height * attempt.scaleFromBase));
+    const blob = await encode({ blob: file, mime: plan.targetMime, width: w, height: h, quality: attempt.quality });
     lastBlob = blob;
     lastWidth = w;
     lastHeight = h;

@@ -62,26 +62,30 @@ describe("needsVisionImagePreprocess", () => {
 });
 
 describe("visionEncodePlan（bounded / deterministic / 保 MIME）", () => {
-  it("JPEG 保持 image/jpeg；首次质量 USER_VISION_JPEG_QUALITY；最多 3 次收敛", () => {
+  it("JPEG 保持 image/jpeg；scaleFromBase 1 → .85 → .7225；quality .86 → .78 → .72", () => {
     const plan = visionEncodePlan({ mime: "image/jpeg" });
     expect(plan.targetMime).toBe("image/jpeg");
     expect(plan.attempts).toHaveLength(3);
-    expect(plan.attempts[0]).toEqual({ scale: 1, quality: USER_VISION_JPEG_QUALITY });
-    expect(plan.attempts[1]).toEqual({ scale: 0.85, quality: 0.78 });
-    expect(plan.attempts[2]).toEqual({ scale: 0.85, quality: 0.72 });
+    expect(plan.attempts[0]).toEqual({ scaleFromBase: 1, quality: USER_VISION_JPEG_QUALITY });
+    expect(plan.attempts[1]).toEqual({ scaleFromBase: 0.85, quality: 0.78 });
+    expect(plan.attempts[2]).toEqual({ scaleFromBase: 0.85 * 0.85, quality: 0.72 });
+    // 真正逐级收敛：第三次 < 第二次
+    expect(plan.attempts[2].scaleFromBase).toBeLessThan(plan.attempts[1].scaleFromBase);
   });
 
-  it("10. WEBP 保持 image/webp；首次质量 USER_VISION_WEBP_QUALITY", () => {
+  it("WEBP 保持 image/webp；scaleFromBase 1 → .85 → .7225；首次质量 USER_VISION_WEBP_QUALITY", () => {
     const plan = visionEncodePlan({ mime: "image/webp" });
     expect(plan.targetMime).toBe("image/webp");
-    expect(plan.attempts[0]).toEqual({ scale: 1, quality: USER_VISION_WEBP_QUALITY });
+    expect(plan.attempts.map((a) => a.scaleFromBase)).toEqual([1, 0.85, 0.85 * 0.85]);
+    expect(plan.attempts[0]).toEqual({ scaleFromBase: 1, quality: USER_VISION_WEBP_QUALITY });
   });
 
-  it("9. PNG 不转换为 JPEG：targetMime=image/png，无损（quality 0），逐级降尺寸", () => {
+  it("PNG 不转换为 JPEG：targetMime=image/png，无损（quality 0），scaleFromBase 1 → .82 → .6724", () => {
     const plan = visionEncodePlan({ mime: "image/png" });
     expect(plan.targetMime).toBe("image/png");
-    expect(plan.attempts.map((a) => a.scale)).toEqual([1, 0.82, 0.82]);
+    expect(plan.attempts.map((a) => a.scaleFromBase)).toEqual([1, 0.82, 0.82 * 0.82]);
     expect(plan.attempts.every((a) => a.quality === 0)).toBe(true);
+    expect(plan.attempts[2].scaleFromBase).toBeLessThan(plan.attempts[1].scaleFromBase);
   });
 });
 
@@ -130,5 +134,96 @@ describe("preprocessVisionImage（小图：仅 MIME normalization，不重编码
     expect(file.name).toBe("photo.webp");
     expect(prepared.file).not.toBe(file);
     expect(prepared.file.name).toBe("photo.webp");
+  });
+});
+
+describe("preprocessVisionImage encode loop（fake encoder 注入，Phase 3.4A.1）", () => {
+  // 4032×3024 + 3MB → 触发 canvas pipeline；base（contain 到 2048）= 2048×1536
+  const BIG_DIMS = async () => ({ width: 4032, height: 3024 });
+  const bigFile = (name: string, type: string) => new File([new Uint8Array(3 * 1024 * 1024)], name, { type });
+
+  interface EncoderCall {
+    mime: string;
+    width: number;
+    height: number;
+    quality: number;
+  }
+
+  const makeEncoder = (sizes: number[]) => {
+    const calls: EncoderCall[] = [];
+    return {
+      calls,
+      encode: async (input: { blob: Blob; mime: string; width: number; height: number; quality: number }): Promise<Blob> => {
+        calls.push({ mime: input.mime, width: input.width, height: input.height, quality: input.quality });
+        const size = sizes[Math.min(calls.length - 1, sizes.length - 1)] ?? sizes[sizes.length - 1];
+        return new Blob([new Uint8Array(size)], { type: input.mime });
+      },
+    };
+  };
+
+  it("JPEG：三次真实递减尺寸（2048×1536 → 1741×1306 → 1480×1110），quality .86/.78/.72", async () => {
+    const enc = makeEncoder([3 * 1024 * 1024, 2.5 * 1024 * 1024, 1.5 * 1024 * 1024]);
+    const prepared = await preprocessVisionImage(bigFile("photo.jpg", "image/jpeg"), { getDimensions: BIG_DIMS, encode: enc.encode });
+    expect(enc.calls).toHaveLength(3);
+    expect(enc.calls.map((c) => c.mime)).toEqual(["image/jpeg", "image/jpeg", "image/jpeg"]);
+    expect(enc.calls[0]).toMatchObject({ width: 2048, height: 1536, quality: USER_VISION_JPEG_QUALITY });
+    expect(enc.calls[1]).toMatchObject({ width: 1741, height: 1306, quality: 0.78 });
+    expect(enc.calls[2]).toMatchObject({ width: 1480, height: 1110, quality: 0.72 });
+    // 核心：第三次必须小于第二次（不再相等）
+    expect(enc.calls[2].width).toBeLessThan(enc.calls[1].width);
+    expect(enc.calls[2].height).toBeLessThan(enc.calls[1].height);
+    // metadata 对应实际成功的第三次输出
+    expect(prepared.outputWidth).toBe(1480);
+    expect(prepared.outputHeight).toBe(1110);
+    expect(prepared.file.type).toBe("image/jpeg");
+  });
+
+  it("WEBP：MIME 始终 image/webp，首次质量 USER_VISION_WEBP_QUALITY，第三次 < 第二次", async () => {
+    const enc = makeEncoder([3 * 1024 * 1024, 2.5 * 1024 * 1024, 1.5 * 1024 * 1024]);
+    const prepared = await preprocessVisionImage(bigFile("photo.webp", "image/webp"), { getDimensions: BIG_DIMS, encode: enc.encode });
+    expect(enc.calls).toHaveLength(3);
+    expect(enc.calls.every((c) => c.mime === "image/webp")).toBe(true);
+    expect(enc.calls[0].quality).toBe(USER_VISION_WEBP_QUALITY);
+    expect(enc.calls[2].width).toBeLessThan(enc.calls[1].width);
+    expect(prepared.file.type).toBe("image/webp");
+  });
+
+  it("PNG：scaleFromBase 1 → .82 → .6724，第三次 < 第二次，全部 image/png，quality 不参与", async () => {
+    const enc = makeEncoder([3 * 1024 * 1024, 2.5 * 1024 * 1024, 1.5 * 1024 * 1024]);
+    const prepared = await preprocessVisionImage(bigFile("photo.png", "image/png"), { getDimensions: BIG_DIMS, encode: enc.encode });
+    expect(enc.calls).toHaveLength(3);
+    expect(enc.calls.every((c) => c.mime === "image/png")).toBe(true);
+    expect(enc.calls.every((c) => c.quality === 0)).toBe(true); // PNG 无损，无质量参数
+    expect(enc.calls[0]).toMatchObject({ width: 2048, height: 1536 });
+    expect(enc.calls[1]).toMatchObject({ width: Math.round(2048 * 0.82), height: Math.round(1536 * 0.82) });
+    expect(enc.calls[2]).toMatchObject({ width: Math.round(2048 * 0.82 * 0.82), height: Math.round(1536 * 0.82 * 0.82) });
+    expect(enc.calls[2].width).toBeLessThan(enc.calls[1].width); // 回归：修复前二者相等
+    expect(prepared.file.type).toBe("image/png");
+  });
+
+  it("early stop：首次即达标 → encode 只调用 1 次", async () => {
+    const enc = makeEncoder([1.5 * 1024 * 1024]);
+    const prepared = await preprocessVisionImage(bigFile("photo.jpg", "image/jpeg"), { getDimensions: BIG_DIMS, encode: enc.encode });
+    expect(enc.calls).toHaveLength(1);
+    expect(prepared.outputWidth).toBe(2048);
+    expect(prepared.outputHeight).toBe(1536);
+  });
+
+  it("第二次成功：只调用 2 次，outputWidth/Height 对应 attempt 2（1741×1306）", async () => {
+    const enc = makeEncoder([3 * 1024 * 1024, 1.5 * 1024 * 1024]);
+    const prepared = await preprocessVisionImage(bigFile("photo.jpg", "image/jpeg"), { getDimensions: BIG_DIMS, encode: enc.encode });
+    expect(enc.calls).toHaveLength(2);
+    expect(prepared.outputWidth).toBe(1741);
+    expect(prepared.outputHeight).toBe(1306);
+    expect(prepared.resized).toBe(true);
+    expect(prepared.reencoded).toBe(true);
+  });
+
+  it("bounded failure：三次全超限 → throw VisionImagePreprocessError，且 encode 恰好 3 次（无第 4 次）", async () => {
+    const enc = makeEncoder([3 * 1024 * 1024]);
+    await expect(
+      preprocessVisionImage(bigFile("photo.png", "image/png"), { getDimensions: BIG_DIMS, encode: enc.encode })
+    ).rejects.toBeInstanceOf(VisionImagePreprocessError);
+    expect(enc.calls).toHaveLength(3);
   });
 });
