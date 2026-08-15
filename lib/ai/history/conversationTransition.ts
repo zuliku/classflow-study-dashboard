@@ -11,7 +11,18 @@
  * 一次只允许一个 transition：pending 存在时拒绝第二次请求（无 queue）。
  */
 
-export type PendingConversationTransition = { type: "new" } | { type: "load"; id: string } | null;
+/**
+ * 目标 Conversation transition：
+ * - { type: "new"; projectId: string | null }：
+ *   global New Chat → projectId: null（未归类）；
+ *   Project-scoped New Chat（Projects V1.1）→ projectId = 目标项目。
+ *   projectId 显式必填（null = 无项目），绝不使用 undefined 造成双重“无项目”语义。
+ * - { type: "load"; id: string }：打开历史 Conversation。
+ */
+export type PendingConversationTransition =
+  | { type: "new"; projectId: string | null }
+  | { type: "load"; id: string }
+  | null;
 
 export type ConversationTransitionPhase = "idle" | "stopping" | "saving" | "switching";
 

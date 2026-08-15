@@ -11,7 +11,8 @@ import {
  * 状态机必须保证：stop 完成 → 保存旧会话（pending 保留，conversationId 仍在）→ 才 reset/load。
  */
 
-const NEW = { type: "new" as const };
+const NEW = { type: "new" as const, projectId: null as string | null };
+const NEW_PROJ_A = { type: "new" as const, projectId: "proj-a" as string };
 const LOAD_B = { type: "load" as const, id: "conv-b" };
 
 function mk(phase: ConversationTransitionState["phase"], pending: ConversationTransitionState["pending"]): ConversationTransitionState {
@@ -98,6 +99,47 @@ describe("conversationTransitionReducer", () => {
     ).toEqual(CONVERSATION_TRANSITION_IDLE);
   });
 
+  it("9. Project New（V1.1）：ready 请求 → pending 完整保留 projectId", () => {
+    const s = conversationTransitionReducer(CONVERSATION_TRANSITION_IDLE, {
+      type: "request",
+      transition: NEW_PROJ_A,
+      streaming: false,
+    });
+    expect(s.phase).toBe("switching");
+    expect(s.pending).toEqual({ type: "new", projectId: "proj-a" });
+  });
+
+  it("10. Project New：streaming → stopping → saving 全程 pending.projectId 不丢失", () => {
+    let s = conversationTransitionReducer(CONVERSATION_TRANSITION_IDLE, {
+      type: "request",
+      transition: NEW_PROJ_A,
+      streaming: true,
+    });
+    expect(s.phase).toBe("stopping");
+    expect(s.pending).toEqual(NEW_PROJ_A);
+    s = conversationTransitionReducer(s, { type: "stopped" });
+    expect(s.phase).toBe("saving");
+    // 旧 conversation flushSave 期间目标 projectId 必须完整保留
+    expect(s.pending).toEqual(NEW_PROJ_A);
+    s = conversationTransitionReducer(s, { type: "done" });
+    expect(s).toEqual(CONVERSATION_TRANSITION_IDLE);
+  });
+
+  it("11. Project New 与 Global New 是不同的 pending（projectId 不串）", () => {
+    const a = conversationTransitionReducer(CONVERSATION_TRANSITION_IDLE, {
+      type: "request",
+      transition: NEW_PROJ_A,
+      streaming: true,
+    });
+    const g = conversationTransitionReducer(CONVERSATION_TRANSITION_IDLE, {
+      type: "request",
+      transition: NEW,
+      streaming: true,
+    });
+    expect(a.pending).toEqual({ type: "new", projectId: "proj-a" });
+    expect(g.pending).toEqual({ type: "new", projectId: null });
+  });
+
   it("8. 完整流：streaming + New Chat → stop → save → done → 下一 transition 可正常开始", () => {
     let s = conversationTransitionReducer(CONVERSATION_TRANSITION_IDLE, {
       type: "request",
@@ -123,5 +165,11 @@ describe("toConversationTransitionView", () => {
     [mk("switching", NEW), { phase: "loading", target: "new" }],
   ] as const)("projects %j to public view %j", (state, expected) => {
     expect(toConversationTransitionView(state)).toEqual(expected);
+  });
+
+  it("12. Project New 的 public view 不暴露 projectId（target 仍为 new）", () => {
+    const v = toConversationTransitionView(mk("switching", NEW_PROJ_A));
+    expect(v).toEqual({ phase: "loading", target: "new" });
+    expect(JSON.stringify(v)).not.toContain("proj-a");
   });
 });

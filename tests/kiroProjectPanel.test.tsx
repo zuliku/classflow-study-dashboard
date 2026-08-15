@@ -15,20 +15,30 @@ import { saveConversation, clearConversationHistory } from "@/lib/ai/history/db"
 import { resetKiroDbForTests, openKiroDB, KIRO_PROJECTS_STORE } from "@/lib/ai/storage/kiroDb";
 import { KiroConversationRecord } from "@/lib/ai/history/types";
 
-const mocks = vi.hoisted(() => ({
-  meta: {
+const mocks = vi.hoisted(() => {
+  type PanelMeta = {
+    currentConversationId: string | null;
+    conversationProjectId: string | null;
+    projectsVersion: number;
+    conversationTransitioning: boolean;
+  };
+  const meta: PanelMeta = {
     currentConversationId: null,
     conversationProjectId: null,
     projectsVersion: 0,
     conversationTransitioning: false,
-  },
-  actions: {
-    createProject: vi.fn(),
-    updateProject: vi.fn(),
-    deleteProject: vi.fn(),
-    assignConversationToProject: vi.fn(),
-  },
-}));
+  };
+  return {
+    meta,
+    actions: {
+      createProject: vi.fn(),
+      updateProject: vi.fn(),
+      deleteProject: vi.fn(),
+      assignConversationToProject: vi.fn(),
+      newChatInProject: vi.fn(),
+    },
+  };
+});
 
 vi.mock("@/components/kiro/KiroSessionProvider", () => ({
   useKiroSessionMeta: () => mocks.meta,
@@ -262,6 +272,57 @@ describe("添加 / 移出 Conversation", () => {
     await s.flush();
     s.click("从项目移出 对话 c1");
     expect(mocks.actions.assignConversationToProject).toHaveBeenCalledWith("c1", null);
+    s.cleanup();
+  });
+});
+
+describe("Project-scoped New Chat（V1.1）", () => {
+  it("Detail「在此项目中新建对话」→ actions.newChatInProject(projectId)；Panel 保持打开", async () => {
+    const p = await createKiroProject({ name: "A" });
+    const s = setup();
+    s.render("expanded");
+    await s.flush();
+    s.click("打开项目 A");
+    await s.flush();
+    s.click("在此项目中新建对话");
+    expect(mocks.actions.newChatInProject).toHaveBeenCalledWith(p.id);
+    // Panel 不关闭：仍在 detail 且未调用 onSetMode(closed/collapsed)
+    expect(s.onSetMode).not.toHaveBeenCalled();
+    expect(s.container.querySelector('[aria-label="在此项目中新建对话"]')).toBeTruthy();
+    s.cleanup();
+  });
+
+  it("transitioning=true：新对话按钮 disabled", async () => {
+    const p = await createKiroProject({ name: "A" });
+    mocks.meta.conversationTransitioning = true;
+    const s = setup();
+    s.render("expanded");
+    await s.flush();
+    s.click("打开项目 A");
+    await s.flush();
+    const btn = s.container.querySelector('[aria-label="在此项目中新建对话"]') as HTMLButtonElement;
+    expect(btn.disabled).toBe(true);
+    act(() => btn.click());
+    expect(mocks.actions.newChatInProject).not.toHaveBeenCalled();
+    mocks.meta.conversationTransitioning = false;
+    s.cleanup();
+  });
+
+  it("transient 当前项目：无 conversationId 时 Project A 仍显示当前状态", async () => {
+    const p = await createKiroProject({ name: "A" });
+    mocks.meta.conversationProjectId = p.id;
+    mocks.meta.currentConversationId = null;
+    const s = setup();
+    s.render("expanded");
+    await s.flush();
+    // List：Project A 显示「当前项目」
+    expect(s.text()).toContain("当前项目");
+    s.click("打开项目 A");
+    await s.flush();
+    // Detail：transient 提示出现，且不计入「对话 · N」
+    expect(s.text()).toContain("当前 · 新对话");
+    expect(s.text()).toContain("对话 · 0");
+    mocks.meta.conversationProjectId = null;
     s.cleanup();
   });
 });

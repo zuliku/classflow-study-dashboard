@@ -211,7 +211,9 @@ export function KiroProjectPanel({
   );
 
   const projectRow = (p: KiroProjectRecord) => {
-    const isCurrent = meta.currentConversationId !== null && meta.conversationProjectId === p.id;
+    // V1.1：conversationProjectId 即表达「当前 Session Project」；
+    // transient（尚未发送第一条消息、无 conversationId）同样正确显示
+    const isCurrentProject = meta.conversationProjectId === p.id;
     return (
       <div
         key={p.id}
@@ -230,7 +232,11 @@ export function KiroProjectPanel({
         <span className="min-w-0 flex-1">
           <span className="block text-xs font-semibold text-charcoal truncate">
             {p.name}
-            {isCurrent && <span className="ml-1.5 text-[9px] font-bold text-charcoal bg-pastel-mint/70 rounded-full px-1.5 py-0.5">当前对话</span>}
+            {isCurrentProject && (
+              <span className="ml-1.5 text-[9px] font-bold text-charcoal bg-pastel-mint/70 rounded-full px-1.5 py-0.5">
+                当前项目
+              </span>
+            )}
           </span>
           <span className="block text-[10px] text-sandrift truncate">
             {p.description ?? `${p.name} 项目`} · {formatHistoryTime(p.updatedAt)}
@@ -355,18 +361,43 @@ export function KiroProjectPanel({
                 {selectedProject?.description ? (
                   <p className="text-[11px] text-satin-grey px-1.5 pb-1 leading-relaxed">{selectedProject.description}</p>
                 ) : null}
-                <div className="flex items-center justify-between px-1.5 pt-1 pb-0.5">
+                <div className="flex items-center justify-between gap-1.5 px-1.5 pt-1 pb-0.5">
                   <p className="text-[10px] font-semibold text-sandrift">对话 · {detailConversations.length}</p>
-                  <button
-                    onClick={() => setView("add")}
-                    aria-label="添加历史对话"
-                    className="flex items-center gap-1 px-2 h-6 rounded-lg text-[10px] font-bold text-charcoal bg-pastel-mint/70 hover:bg-pastel-mint transition-colors"
-                  >
-                    <Plus className="w-3 h-3" />
-                    添加历史对话
-                  </button>
+                  <div className="flex items-center gap-1">
+                    {/* V1.1：Project-scoped 新对话（primary）；Panel 保持打开 */}
+                    <button
+                      onClick={() => {
+                        if (!selectedProjectId || transitioning) return;
+                        actions.newChatInProject(selectedProjectId);
+                      }}
+                      disabled={transitioning}
+                      aria-label="在此项目中新建对话"
+                      className="flex items-center gap-1 px-2 h-6 rounded-lg text-[10px] font-bold text-charcoal bg-pastel-mint hover:bg-pastel-mint transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      <Plus className="w-3 h-3" />
+                      新对话
+                    </button>
+                    <button
+                      onClick={() => setView("add")}
+                      disabled={transitioning}
+                      aria-label="添加历史对话"
+                      className="flex items-center gap-1 px-2 h-6 rounded-lg text-[10px] font-semibold text-satin-grey bg-alabaster hover:bg-alabaster hover:text-charcoal transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      添加历史
+                    </button>
+                  </div>
                 </div>
-                {detailConversations.length === 0 ? (
+                {/* V1.1：transient 当前项目提示（尚未发送第一条消息；不计入 对话 · N） */}
+                {meta.conversationProjectId === selectedProjectId && meta.currentConversationId === null ? (
+                  <div
+                    role="status"
+                    aria-label="当前项目新对话提示"
+                    className="px-1.5 py-1.5 mb-0.5 text-[10px] font-semibold text-charcoal bg-pastel-mint/50 rounded-lg"
+                  >
+                    当前 · 新对话（发送第一条消息后才会保存）
+                  </div>
+                ) : null}
+                {detailConversations.length === 0 && !(meta.conversationProjectId === selectedProjectId && meta.currentConversationId === null) ? (
                   <div className="flex flex-col items-center gap-1 py-7 text-center">
                     <p className="text-xs font-semibold text-satin-grey">这个项目还没有对话</p>
                     <button

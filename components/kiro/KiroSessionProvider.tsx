@@ -70,6 +70,8 @@ interface KiroSessionValue {
   removeContext: (key: string) => void;
   addManualContext: (ref: KiroContextRef) => void;
   newChat: () => void;
+  /** Projects V1.1：Project-scoped 新对话 */
+  newChatInProject: (projectId: string) => void;
   // Conversation History（本地 IndexedDB）
   currentConversationId: string | null;
   conversationTitle: string | null;
@@ -168,6 +170,8 @@ interface KiroSessionMetaValue {
 /** Actions：稳定 callbacks（transcript 操作点击时才读取 Ref，不订阅 streaming messages） */
 interface KiroSessionActionsValue {
   newChat: () => void;
+  /** Projects V1.1：Project-scoped 新对话（transient Conversation 从创建即带 projectId） */
+  newChatInProject: (projectId: string) => void;
   loadConversation: (id: string) => void;
   deleteConversation: (id: string) => void;
   renameConversation: (id: string, title: string) => void;
@@ -377,17 +381,21 @@ export function KiroSessionProvider({ children }: { children: React.ReactNode })
       try {
         await flushSave();
         if (transition.type === "new") {
+          // Projects V1.1：global New → projectId null；Project New → 目标项目。
+          // 旧 conversation 的 flushSave 在上述调用中已完成（仍用旧 projectId），
+          // 此处才切换 projectId —— streaming 中切换绝不串项目。
+          const nextProjectId = transition.projectId;
           chat.newChat();
           conversationIdRef.current = null;
           conversationTitleRef.current = null;
           conversationCreatedAtRef.current = null;
           conversationSummaryRef.current = null;
-          conversationProjectIdRef.current = null;
+          conversationProjectIdRef.current = nextProjectId;
           setConversationId(null);
           setConversationTitle(null);
           setConversationCreatedAt(null);
           setConversationSummary(null);
-          setConversationProjectId(null);
+          setConversationProjectId(nextProjectId);
           setManualRefs([]);
           setEntryRefs([]);
           setSuppressedAutoKeys([]);
@@ -586,8 +594,17 @@ export function KiroSessionProvider({ children }: { children: React.ReactNode })
   }, []);
 
   const newChat = useCallback(() => {
-    requestConversationTransition({ type: "new" });
+    // 全局新对话：永远未归类（projectId: null），保持既有语义
+    requestConversationTransition({ type: "new", projectId: null });
   }, [requestConversationTransition]);
+
+  /** Projects V1.1：Project-scoped 新对话（transient Conversation 从一开始就带 projectId） */
+  const newChatInProject = useCallback(
+    (projectId: string) => {
+      requestConversationTransition({ type: "new", projectId });
+    },
+    [requestConversationTransition]
+  );
 
   const openSidecar = useCallback(() => {
     setSidecarOpen(true);
@@ -935,6 +952,7 @@ export function KiroSessionProvider({ children }: { children: React.ReactNode })
   const actionsValue = useMemo<KiroSessionActionsValue>(
     () => ({
       newChat,
+      newChatInProject,
       loadConversation,
       deleteConversation,
       renameConversation,
@@ -959,6 +977,7 @@ export function KiroSessionProvider({ children }: { children: React.ReactNode })
     }),
     [
       newChat,
+      newChatInProject,
       loadConversation,
       deleteConversation,
       renameConversation,
@@ -991,6 +1010,7 @@ export function KiroSessionProvider({ children }: { children: React.ReactNode })
     removeContext,
     addManualContext,
     newChat,
+    newChatInProject,
     currentConversationId: conversationId,
     conversationTitle,
     conversationCreatedAt,

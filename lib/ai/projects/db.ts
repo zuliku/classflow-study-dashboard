@@ -111,27 +111,49 @@ export async function deleteKiroProjectAndUnassignConversations(id: string): Pro
   });
 }
 
-/** 成员关系单一事实源：conversation.projectId（null = 移出项目） */
+/** 成员关系单一事实源：conversation.projectId（null = 移出项目）。
+ *  V1.1 integrity：projectId 非空时必须验证 Project 存在（同一 transaction，
+ *  防止 conversation.projectId 指向不存在的 Project）。 */
 export async function assignConversationToProject(conversationId: string, projectId: string | null): Promise<void> {
   const db = await openKiroDB();
   return new Promise((resolve, reject) => {
-    const t = db.transaction(KIRO_CONVERSATIONS_STORE, "readwrite");
-    const store = t.objectStore(KIRO_CONVERSATIONS_STORE);
-    const get = store.get(conversationId);
-    get.onsuccess = () => {
-      const existing = get.result as KiroConversationRecord | undefined;
-      if (!existing) {
-        reject(new Error("CONVERSATION_NOT_FOUND"));
-        return;
-      }
-      const updated: KiroConversationRecord = projectId
-        ? { ...existing, projectId }
-        : Object.fromEntries(Object.entries(existing).filter(([k]) => k !== "projectId")) as KiroConversationRecord;
-      const put = store.put(updated);
-      put.onsuccess = () => resolve();
-      put.onerror = () => reject(put.error);
+    const t = db.transaction([KIRO_PROJECTS_STORE, KIRO_CONVERSATIONS_STORE], "readwrite");
+    const projStore = t.objectStore(KIRO_PROJECTS_STORE);
+    const convStore = t.objectStore(KIRO_CONVERSATIONS_STORE);
+
+    const update = () => {
+      const get = convStore.get(conversationId);
+      get.onsuccess = () => {
+        const existing = get.result as KiroConversationRecord | undefined;
+        if (!existing) {
+          reject(new Error("CONVERSATION_NOT_FOUND"));
+          return;
+        }
+        const updated: KiroConversationRecord = projectId
+          ? { ...existing, projectId }
+          : (Object.fromEntries(Object.entries(existing).filter(([k]) => k !== "projectId")) as KiroConversationRecord);
+        const put = convStore.put(updated);
+        put.onsuccess = () => resolve();
+        put.onerror = () => reject(put.error);
+      };
+      get.onerror = () => reject(get.error);
     };
-    get.onerror = () => reject(get.error);
+
+    if (projectId !== null) {
+      // 校验 Project 存在：不存在则整个 transaction 失败（不写一半）
+      const projGet = projStore.get(projectId);
+      projGet.onsuccess = () => {
+        if (!projGet.result) {
+          t.abort();
+          reject(new Error("PROJECT_NOT_FOUND"));
+          return;
+        }
+        update();
+      };
+      projGet.onerror = () => reject(projGet.error);
+    } else {
+      update();
+    }
   });
 }
 

@@ -125,6 +125,23 @@ describe("Conversation membership（单一事实源 = conversation.projectId）"
     const p = await createKiroProject({ name: "P" });
     await expect(assignConversationToProject("nope", p.id)).rejects.toBeTruthy();
   });
+
+  it("7b. V1.1：不存在 Project → assign reject PROJECT_NOT_FOUND，Conversation 不写一半", async () => {
+    await saveConversation(makeConversation("c1"));
+    await expect(assignConversationToProject("c1", "missing-project")).rejects.toThrow("PROJECT_NOT_FOUND");
+    // transaction 未写一半：record 保持原状（无 projectId）
+    const rec = await getConversation("c1");
+    expect(rec).toBeDefined();
+    expect("projectId" in (rec ?? {})).toBe(false);
+  });
+
+  it("7c. V1.1：移出（null）不需要 Project 存在", async () => {
+    const p = await createKiroProject({ name: "P" });
+    await saveConversation(makeConversation("c1"));
+    await assignConversationToProject("c1", p.id);
+    await assignConversationToProject("c1", null);
+    expect("projectId" in ((await getConversation("c1")) ?? {})).toBe(false);
+  });
 });
 
 describe("删除项目", () => {
