@@ -517,3 +517,16 @@ html[data-motion-effective="reduced"] .kiro-rail-plate .kiro-ring {
   animation: none;
   opacity: 0.6;
 }
+
+/* Course Library Desktop 两行占满可视工作区（Task 5 follow-up）：
+   2 列 × 2 行恰好铺满首屏，第 5 张起向下自然滚动。
+   row height = max(320px, (100% - 1rem gap) / 2)：全屏两行铺满；
+   低高度窗口保持 320px 下限，不把内容压扁（此时自然出现滚动）。 */
+@media (min-width: 1280px) {
+  .course-library-grid {
+    height: 100%;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-auto-rows: max(320px, calc((100% - 1rem) / 2));
+    align-items: stretch;
+  }
+}

@@ -155,7 +155,7 @@ export function CoursesWorkspace() {
             </div>
           </div>
         ) : (
-          <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 items-start">
+          <div className="grid grid-cols-1 gap-4 course-library-grid">
             {courses.map((course) => {
               const next = inTeachingWeek
                 ? deriveNextCourseSession(course.id, schedules, realSemesterWeek, semester.totalWeeks)
