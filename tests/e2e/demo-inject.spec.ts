@@ -22,12 +22,12 @@ test("dev auto-inject fires when webdriver is spoofed off", async ({ page }) => 
   });
   expect(diag).toEqual({
     marker: "1",
-    assignments: 15,
-    courses: 5,
-    schedules: 5,
-    studyBlocks: 6,
-    groupProjects: 2,
-    calendarMarks: 12,
+    assignments: 30,
+    courses: 10,
+    schedules: 16,
+    studyBlocks: 13,
+    groupProjects: 3,
+    calendarMarks: 29,
   });
 });
 

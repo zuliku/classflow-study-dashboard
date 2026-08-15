@@ -16,8 +16,8 @@ test("settings dev demo reload button", async ({ page }) => {
   page.on("dialog", (d) => d.accept());
   await page.getByTestId("dev-demo-reload").getByRole("button", { name: "重新载入" }).click();
   await expect(page.getByText("已重新载入完整演示数据").first()).toBeVisible();
-  await expect(page.getByTestId("overview-任务")).toContainText("15");
-  await expect(page.getByTestId("overview-课程")).toContainText("5");
-  await expect(page.getByTestId("overview-资料")).toContainText("9");
-  await expect(page.getByTestId("overview-项目")).toContainText("2");
+  await expect(page.getByTestId("overview-任务")).toContainText("30");
+  await expect(page.getByTestId("overview-课程")).toContainText("10");
+  await expect(page.getByTestId("overview-资料")).toContainText("23");
+  await expect(page.getByTestId("overview-项目")).toContainText("3");
 });
