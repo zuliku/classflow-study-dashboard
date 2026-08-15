@@ -232,4 +232,33 @@ describe("proposeStudyPlan", () => {
       if (b.date === date(0)) expect(b.startTime >= "12:00").toBe(true);
     }
   });
+
+  it("missing estimate：estimatedMinutes 缺失/<=0 → 不占用 free-time；completeCoverage=false；reasons 含 missing_estimate", () => {
+    // 无估时任务 + 有估时任务混排：无估时任务不得消耗 Free Time Pool（后者的 block 不受影响）
+    const a1 = mk("a1", { ddl: iso(new Date(NOW.getTime() + 1 * 86400000), 23, 59), estimatedMinutes: undefined });
+    const a2 = mk("a2", { ddl: iso(new Date(NOW.getTime() + 1 * 86400000), 23, 59), estimatedMinutes: 120 });
+    const r = proposeStudyPlan({
+      assignments: [a1, a2], studyBlocks: [], semester: SEMESTER, currentSemesterWeek: 1,
+      schedules: [], calendarMarks: [], fromDate: date(0), toDate: date(1), now: NOW,
+    });
+    const m1 = r.items.find((i) => i.assignmentId === "a1")!;
+    expect(m1.proposedBlocks).toEqual([]);
+    expect(m1.proposedMinutes).toBe(0);
+    expect(m1.completeCoverage).toBe(false);
+    expect(m1.estimatedMinutes).toBeNull();
+    expect(m1.reasons).toContain("missing_estimate");
+    // a2 完整拿到 120min（a1 没有偷走任何槽位）
+    const m2 = r.items.find((i) => i.assignmentId === "a2")!;
+    expect(m2.proposedMinutes).toBe(120);
+    expect(m2.completeCoverage).toBe(true);
+
+    // estimatedMinutes = 0 同样视为 missing
+    const a3 = mk("a3", { ddl: iso(new Date(NOW.getTime() + 2 * 86400000), 23, 59), estimatedMinutes: 0 });
+    const r2 = proposeStudyPlan({
+      assignments: [a3], studyBlocks: [], semester: SEMESTER, currentSemesterWeek: 1,
+      schedules: [], calendarMarks: [], fromDate: date(0), toDate: date(2), now: NOW,
+    });
+    expect(r2.items[0].completeCoverage).toBe(false);
+    expect(r2.items[0].reasons).toContain("missing_estimate");
+  });
 });

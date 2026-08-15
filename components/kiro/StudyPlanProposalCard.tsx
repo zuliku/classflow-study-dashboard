@@ -2,7 +2,7 @@
 
 import React, { useMemo, useRef, useState } from "react";
 import { format, parseISO } from "date-fns";
-import { CalendarClock, Check, Eye, RefreshCcw, X } from "lucide-react";
+import { CalendarClock, Check, Eye, RefreshCcw, Sparkles, X } from "lucide-react";
 import { useAppStore } from "@/store/useAppStore";
 import { useToastStore } from "@/store/useToastStore";
 import { useConfirmStore } from "@/store/useConfirmStore";
@@ -312,7 +312,19 @@ export function StudyPlanProposalCard({ proposals }: { proposals: StudyPlanPropo
         {proposals.map((p) => (
           <div key={p.assignmentId} className="space-y-1">
             <p className="text-[11px] font-semibold text-charcoal leading-snug">{p.title}</p>
-            {p.proposedBlocks.length === 0 ? (
+            {p.reasons.includes("missing_estimate") ? (
+              <div className="flex flex-wrap items-center gap-1.5">
+                <p className="text-[10px] text-sandrift">缺少预计耗时，暂无法自动安排。</p>
+                <button
+                  type="button"
+                  onClick={() => handoffPrompt("帮我根据任务内容估算预计耗时，并先给出建议，不要直接修改。")}
+                  className="text-[10px] font-bold text-sandrift bg-transparent border border-line rounded-lg px-2 py-0.5 hover:text-charcoal hover:border-line-strong transition-colors inline-flex items-center gap-1"
+                >
+                  <Sparkles className="w-3 h-3" />
+                  让 Kiro 帮我估时
+                </button>
+              </div>
+            ) : p.proposedBlocks.length === 0 ? (
               <p className="text-[10px] text-sandrift">已按现有学习计划排满，无需新增。</p>
             ) : (
               <>

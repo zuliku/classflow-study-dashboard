@@ -164,6 +164,24 @@ export function proposeStudyPlan(input: ProposeStudyPlanInput): ProposeStudyPlan
   for (const a of sorted) {
     const existing = scheduledBeforeDeadline(a, studyBlocks);
     const estimated = a.estimatedMinutes ?? 0;
+
+    // 缺少预计耗时（undefined / null / <=0）：不是"已安排充分"——
+    // 不占用 Free Time Pool，明确标记 missing_estimate，绝不 completeCoverage。
+    if (estimated <= 0) {
+      items.push({
+        assignmentId: a.id,
+        title: a.title,
+        courseId: a.courseId,
+        proposedBlocks: [],
+        estimatedMinutes: null,
+        scheduledMinutes: existing,
+        proposedMinutes: 0,
+        completeCoverage: false,
+        reasons: ["missing_estimate"],
+      });
+      continue;
+    }
+
     const need = Math.max(estimated - existing, 0);
 
     if (need === 0) {
