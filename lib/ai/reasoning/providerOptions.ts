@@ -62,10 +62,11 @@ export function resolveReasoningProviderOptions(input: {
 
   switch (capability.mechanism) {
     case "effort": {
-      // @ai-sdk/openai-compatible: { reasoningEffort?: string }（openai-compatible 传输层）
-      const value =
-        effort === "low" ? "low" : effort === "high" ? "high" : "medium";
-      return { reasoningEffort: value };
+      // OpenAI-compatible chat/completions：reasoningEffort 字符串直通
+      // （@ai-sdk/openai-compatible 传输层 → request body reasoning_effort）。
+      // effort 已由 capability 归一：Custom（default/low/medium/high）与
+      // Kimi K3（default/low/high/max）都安全——max 不再被折叠成 medium。
+      return { reasoningEffort: effort };
     }
     case "deepseek-thinking": {
       // DeepSeek V4 官方 Thinking Mode（OpenAI-format）：

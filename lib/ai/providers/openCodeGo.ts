@@ -19,7 +19,28 @@ export const OPENCODE_MODELS: AIModelDefinition[] = [
   { id: "glm-5.1", name: "GLM 5.1", provider: "opencode-go", vendor: "zai", transport: "openai-chat", capabilities: { streaming: true, tools: true, vision: false, fileParts: false } },
   // kimi-k3 / mimo-v2.5 Vision：Phase 3.3B live 验证（PNG/JPEG/WEBP 颜色识别全通过，
   // 经生产 resolver → @ai-sdk/openai-compatible → OpenCode Go chat/completions）
-  { id: "kimi-k3", name: "Kimi K3", provider: "opencode-go", vendor: "kimi", transport: "openai-chat", capabilities: { streaming: true, tools: true, vision: true, fileParts: false, visionMimeTypes: ["image/jpeg", "image/png", "image/webp"] } },
+  {
+    id: "kimi-k3",
+    name: "Kimi K3",
+    provider: "opencode-go",
+    vendor: "kimi",
+    transport: "openai-chat",
+    capabilities: {
+      streaming: true,
+      tools: true,
+      vision: true,
+      fileParts: false,
+      visionMimeTypes: ["image/jpeg", "image/png", "image/webp"],
+      // Phase 3.5A：Kimi K3 reasoning（OpenAI-compatible reasoning_effort 直通，
+      // 复用 mechanism "effort"，capability 归一下 max 不再折叠成 medium）。
+      // 产品档位：默认（不覆盖 provider 默认）/ 低 / 高 / 极高；不暴露 medium。
+      reasoning: {
+        adjustable: true,
+        supportedEfforts: ["default", "low", "high", "max"],
+        mechanism: "effort",
+      },
+    },
+  },
   { id: "kimi-k2.7-code", name: "Kimi K2.7 Code", provider: "opencode-go", vendor: "kimi", transport: "openai-chat", capabilities: { streaming: true, tools: true, vision: false, fileParts: false } },
   { id: "kimi-k2.6", name: "Kimi K2.6", provider: "opencode-go", vendor: "kimi", transport: "openai-chat", capabilities: { streaming: true, tools: true, vision: false, fileParts: false } },
   { id: "deepseek-v4-pro", name: "DeepSeek V4 Pro", provider: "opencode-go", vendor: "deepseek", transport: "openai-chat", capabilities: { streaming: true, tools: true, vision: false, fileParts: false } },
