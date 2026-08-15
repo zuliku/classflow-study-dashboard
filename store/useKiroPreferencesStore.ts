@@ -16,6 +16,11 @@ import {
   DEFAULT_WEB_PDF_VISION_MODEL,
   normalizeWebPdfVisionModel,
 } from "@/lib/ai/web/vision/models";
+import {
+  SidecarSize,
+  SIDECAR_DEFAULT_SIZE,
+  normalizeSidecarSize,
+} from "@/lib/ai/ui/sidecarSize";
 
 /**
  * Kiro UI / Behavior Preference（独立于业务 useAppStore / useAISettingsStore）：
@@ -36,6 +41,8 @@ interface KiroPreferencesState {
   /** Task 19C1：扫描 Web PDF Vision（设置；Key 绝不进入 Store） */
   webPdfVisionEnabled: boolean;
   webPdfVisionModel: string;
+  /** Sidecar UX V2：面板尺寸（用户拖拽调整后持久化；首次使用默认值） */
+  sidecarSize: SidecarSize;
   setOutputTextSize: (size: KiroOutputTextSize) => void;
   setAutoContextEnabled: (enabled: boolean) => void;
   setResponsePreference: (preference: KiroResponsePreference) => void;
@@ -43,6 +50,7 @@ interface KiroPreferencesState {
   setWebSearchCredentialMode: (mode: KiroWebSearchCredentialMode) => void;
   setWebPdfVisionEnabled: (enabled: boolean) => void;
   setWebPdfVisionModel: (model: string) => void;
+  setSidecarSize: (size: SidecarSize) => void;
 }
 
 export const useKiroPreferencesStore = create<KiroPreferencesState>()(
@@ -55,6 +63,7 @@ export const useKiroPreferencesStore = create<KiroPreferencesState>()(
       webSearchCredentialMode: "server",
       webPdfVisionEnabled: true,
       webPdfVisionModel: DEFAULT_WEB_PDF_VISION_MODEL,
+      sidecarSize: SIDECAR_DEFAULT_SIZE,
       setOutputTextSize: (size) => set({ outputTextSize: normalizeKiroOutputTextSize(size) }),
       setAutoContextEnabled: (enabled) => set({ autoContextEnabled: enabled }),
       setResponsePreference: (preference) =>
@@ -65,6 +74,8 @@ export const useKiroPreferencesStore = create<KiroPreferencesState>()(
       setWebPdfVisionEnabled: (enabled) => set({ webPdfVisionEnabled: enabled }),
       // Store 内永远不保存任意 model id（非法 → 默认 mimo-v2.5）
       setWebPdfVisionModel: (model) => set({ webPdfVisionModel: normalizeWebPdfVisionModel(model) }),
+      // 结构归一后保存；viewport clamp 由 Shell 在浏览器内执行
+      setSidecarSize: (size) => set({ sidecarSize: normalizeSidecarSize(size) }),
     }),
     {
       name: "classflow-kiro-preferences-v1",
@@ -78,6 +89,8 @@ export const useKiroPreferencesStore = create<KiroPreferencesState>()(
         // Task 19C1：持久化设置（API Key 绝不进入 partialize）
         webPdfVisionEnabled: state.webPdfVisionEnabled,
         webPdfVisionModel: state.webPdfVisionModel,
+        // Sidecar UX V2：尺寸持久化（刷新后保留；不进 URL / IndexedDB）
+        sidecarSize: state.sidecarSize,
       }),
       // 持久化值 hydrate 时同样清洗（旧数据 / 非法值 → 默认）
       merge: (persisted, current) => {
@@ -99,6 +112,8 @@ export const useKiroPreferencesStore = create<KiroPreferencesState>()(
           webPdfVisionEnabled:
             typeof p?.webPdfVisionEnabled === "boolean" ? p.webPdfVisionEnabled : true,
           webPdfVisionModel: normalizeWebPdfVisionModel(p?.webPdfVisionModel),
+          // Sidecar UX V2：旧持久化无字段 → 默认尺寸；非法值 → 结构归一
+          sidecarSize: normalizeSidecarSize(p?.sidecarSize),
         };
       },
     }

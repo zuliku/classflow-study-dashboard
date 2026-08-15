@@ -521,9 +521,15 @@ export function KiroComposer({
 
               <div className="flex items-center gap-2">
                 {/* Kiro Computer Agent V1：Agent Mode（仅 Computer ON）+ Reasoning（capability-driven）——
-                    下一 Turn preference：回复期间可切换（当前 Turn 用 frozen agentMode/reasoningEffort） */}
+                    下一 Turn preference：回复期间可切换（当前 Turn 用 frozen agentMode/reasoningEffort）。
+                    compact（Sidecar）：一级栏只显示图标，文字进二级 popover */}
                 {computerEnabled && agentMode && (
-                  <KiroAgentModeMenu mode={agentMode} onChange={(m) => onSetAgentMode?.(m)} disabled={nextTurnPreferencesLocked} />
+                  <KiroAgentModeMenu
+                    mode={agentMode}
+                    onChange={(m) => onSetAgentMode?.(m)}
+                    disabled={nextTurnPreferencesLocked}
+                    iconOnly={compact}
+                  />
                 )}
                 {reasoningCapability && reasoningEffort && (
                   <KiroReasoningMenu
@@ -531,6 +537,7 @@ export function KiroComposer({
                     effort={reasoningEffort}
                     onChange={(e) => onSetReasoningEffort?.(e)}
                     disabled={nextTurnPreferencesLocked}
+                    iconOnly={compact}
                   />
                 )}
                 <div ref={modelRef} className="relative">
@@ -546,11 +553,20 @@ export function KiroComposer({
                     aria-haspopup="menu"
                     title={turnInFlight ? "选择下一条消息使用的模型" : "选择模型"}
                     disabled={nextTurnPreferencesLocked}
-                    className="hidden sm:flex items-center gap-1.5 h-9 px-2.5 rounded-xl text-[11px] font-semibold text-sandrift hover:bg-alabaster hover:text-charcoal transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                    className={cn(
+                      "flex items-center h-9 rounded-xl transition-colors disabled:opacity-40 disabled:cursor-not-allowed",
+                      compact
+                        ? "w-9 justify-center text-sandrift hover:bg-alabaster hover:text-charcoal"
+                        : "gap-1.5 px-2.5 text-[11px] font-semibold text-sandrift hover:bg-alabaster hover:text-charcoal"
+                    )}
                   >
                     <ProviderLogo vendor={activeModelVendor} size="sm" />
-                    <span className="truncate max-w-[140px]">{activeModelName}</span>
-                    <ChevronDown className="w-3 h-3 shrink-0" />
+                    {!compact && (
+                      <>
+                        <span className="truncate max-w-[140px]">{activeModelName}</span>
+                        <ChevronDown className="w-3 h-3 shrink-0" />
+                      </>
+                    )}
                   </button>
                   {modelOpen && (
                     <div className="absolute bottom-full right-0 mb-1.5 w-60 bg-surface border border-line-strong rounded-2xl shadow-card z-40 ux-inline">

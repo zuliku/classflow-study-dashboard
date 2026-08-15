@@ -4,6 +4,7 @@ import React from "react";
 import { Popover } from "@/components/ui/Popover";
 import { DropdownMenuPanel, DropdownMenuItem } from "@/components/ui/DropdownMenu";
 import { KiroReasoningEffort, ReasoningCapability } from "@/lib/ai/reasoning/types";
+import { cn } from "@/lib/utils";
 
 const EFFORT_LABELS: Record<KiroReasoningEffort, string> = {
   default: "默认",
@@ -23,11 +24,14 @@ export function KiroReasoningMenu({
   effort,
   onChange,
   disabled,
+  iconOnly,
 }: {
   capability: ReasoningCapability;
   effort: KiroReasoningEffort;
   onChange: (effort: KiroReasoningEffort) => void;
   disabled?: boolean;
+  /** Sidecar/compact：一级栏只显示图标，文字进二级 popover */
+  iconOnly?: boolean;
 }) {
   const [open, setOpen] = React.useState(false);
   if (!capability.adjustable || capability.supportedEfforts.length <= 1) return null;
@@ -39,11 +43,14 @@ export function KiroReasoningMenu({
         aria-label="思考程度"
         aria-expanded={open}
         disabled={disabled}
-        title="思考程度"
-        className="hidden sm:flex items-center gap-1 h-9 px-2.5 rounded-xl text-[11px] font-semibold text-sandrift hover:bg-alabaster hover:text-charcoal transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+        title={`思考程度：${effort === "default" ? "默认" : EFFORT_LABELS[effort]}`}
+        className={cn(
+          "flex items-center h-9 rounded-xl text-[11px] font-semibold text-sandrift hover:bg-alabaster hover:text-charcoal transition-colors disabled:opacity-40 disabled:cursor-not-allowed",
+          iconOnly ? "w-9 justify-center" : "gap-1 px-2.5"
+        )}
       >
         <BrainIcon />
-        思考 {effort === "default" ? "默认" : EFFORT_LABELS[effort]}
+        {!iconOnly && `思考 ${effort === "default" ? "默认" : EFFORT_LABELS[effort]}`}
       </button>
       {/* Composer 位于页面底部 → 向上展开，避免越出 viewport */}
       <DropdownMenuPanel open={open} placement="top-end" aria-label="思考程度" className="w-40 p-1">
