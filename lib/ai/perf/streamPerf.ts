@@ -38,6 +38,16 @@ export interface KiroStreamPerfCounters {
   settleParsedChars: number;
   /** V4.3 settle：canonical full render 的渲染+提交耗时（test-only） */
   settleDurationMs: number;
+  /** V4.5 promotion：block 组件 mount 次数 */
+  blockMounts: number;
+  /** V4.5 promotion：block 组件 unmount 次数 */
+  blockUnmounts: number;
+  /** V4.5 promotion：block 组件 render 次数 */
+  blockRenders: number;
+  /** V4.5 promotion：active → stable 转换次数（正常应为 memo skip = 0 render） */
+  blockPromotions: number;
+  /** V4.5 promotion：promotion 帧实际重 parse 的字符量（目标 ≈ 0） */
+  promotionParsedChars: number;
 }
 
 declare global {
@@ -71,6 +81,11 @@ function counters(): KiroStreamPerfCounters | null {
     c.settleCanonicalFallbacks = 0;
     c.settleParsedChars = 0;
     c.settleDurationMs = 0;
+    c.blockMounts = 0;
+    c.blockUnmounts = 0;
+    c.blockRenders = 0;
+    c.blockPromotions = 0;
+    c.promotionParsedChars = 0;
   }
   return c as KiroStreamPerfCounters;
 }
@@ -89,6 +104,11 @@ export function bumpStreamPerf(
     | "settleTransitions"
     | "settleReusedBlocks"
     | "settleCanonicalFallbacks"
+    | "blockMounts"
+    | "blockUnmounts"
+    | "blockRenders"
+    | "blockPromotions"
+    | "promotionParsedChars"
 ): void {
   const c = counters();
   if (!c) return;
@@ -96,7 +116,7 @@ export function bumpStreamPerf(
 }
 
 export function addStreamPerfChars(
-  key: "splitterChars" | "inlineSplitterChars" | "presentationParts" | "settleParsedChars",
+  key: "splitterChars" | "inlineSplitterChars" | "presentationParts" | "settleParsedChars" | "promotionParsedChars",
   chars: number
 ): void {
   const c = counters();

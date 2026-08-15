@@ -68,16 +68,22 @@ export function splitKiroStreamingMarkdown(
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
     const trimmed = line.trim();
-
-    // 状态切换必须先于边界判断（本行属于新状态）
-    if (!inFence && trimmed.startsWith("```")) {
-      inFence = true;
-    } else if (inFence && trimmed.startsWith("```")) {
-      inFence = false;
-    } else if (!inFence && !inDisplayMath && trimmed.startsWith("$$")) {
-      inDisplayMath = true;
-    } else if (!inFence && inDisplayMath && trimmed.startsWith("$$")) {
-      inDisplayMath = false;
+    // V4.5 修复：最后一行（可能未完成，无结尾换行）的 fence/math marker 不立即 toggle——
+    // 行被跨 chunk 切分时（per-char provider deltas / 小 chunk），partial marker 的
+    // premature toggle 会导致完整行到达时反向误 toggle（opener 误关 / closer 误开）。
+    // 完整行由 advanceKiroMarkdownScan 重新评估；settle 时由调用方对最终行做一次评估。
+    const isLastLine = i === lines.length - 1;
+    if (!isLastLine) {
+      // 状态切换必须先于边界判断（本行属于新状态）
+      if (!inFence && trimmed.startsWith("```")) {
+        inFence = true;
+      } else if (inFence && trimmed.startsWith("```")) {
+        inFence = false;
+      } else if (!inFence && !inDisplayMath && trimmed.startsWith("$$")) {
+        inDisplayMath = true;
+      } else if (!inFence && inDisplayMath && trimmed.startsWith("$$")) {
+        inDisplayMath = false;
+      }
     }
 
     if (line.length === 0 && !inFence && !inDisplayMath) {

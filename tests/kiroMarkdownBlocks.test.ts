@@ -313,6 +313,44 @@ describe("Streaming UX V4.2 incremental block scan（append-only 只扫新增 su
     expect(twice).toBe(once);
     expect(twice.stableBlocks).toEqual(once.stableBlocks);
   });
+
+  it("V4.5 回归：fence/math marker 被跨 chunk 切分时不误 toggle（incremental === full）", () => {
+    // 4-char chunk 会把 opener "```ts" 与 closer "```" 切分到多个 chunk——
+    // 修复前 partial marker 的 premature toggle 导致 opener 误关 / closer 误开
+    const texts = [
+      "```ts\nconst x = 1;\n```\n\n结束段落",
+      "$$\nE = mc^2\n$$\n\n结束段落",
+      "```\nconst a = 1;\n```\n\n尾段",
+      "```ts\ncode\n```\n后续内容\n\n第二段",
+    ];
+    for (const t of texts) {
+      let state = createKiroMarkdownScanState(t.slice(0, 4));
+      for (let i = 8; i <= t.length; i += 4) {
+        state = advanceKiroMarkdownScan(state, t.slice(0, i));
+      }
+      const full = splitKiroStreamingMarkdown(t, true);
+      expect(state.stableBlocks).toEqual(full.stableBlocks);
+      expect(state.tail).toBe(full.tail);
+      const stateTailState = state.inFence ? "fence" : state.inDisplayMath ? "math" : "text";
+      expect(stateTailState).toBe(full.tailState);
+    }
+  });
+
+  it("V4.5 回归：partial opener 不 premature toggle；完整行到达才打开", () => {
+    // create 只含 partial "```t"（无结尾换行）→ 延迟 toggle，视为 text
+    let state = createKiroMarkdownScanState("```t");
+    expect(state.inFence).toBe(false);
+    expect(state.tail).toBe("```t");
+    // 完整行 "```ts"（换行到达）→ 打开
+    state = advanceKiroMarkdownScan(state, "```ts\n");
+    expect(state.inFence).toBe(true);
+    expect(state.tail).toBe("```ts\n");
+    // 闭合 "```" 行完整（换行到达）→ 关闭；随后的空行 flush 整个 fence block
+    state = advanceKiroMarkdownScan(state, "```ts\ncode\n```\n");
+    expect(state.inFence).toBe(false);
+    expect(state.stableBlocks).toEqual(["```ts\ncode\n```"]);
+    expect(state.tail).toBe("");
+  });
 });
 
 describe("Streaming UX V4.2 incremental inline window（长单段，Phase 5）", () => {

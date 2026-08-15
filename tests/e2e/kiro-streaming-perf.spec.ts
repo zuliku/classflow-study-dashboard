@@ -35,6 +35,7 @@ interface SseStage {
 }
 
 async function startSseServer(plan: (bodyJson: { messages?: unknown[] }) => SseStage[]) {
+  const requests: { arrivalTs: number; firstWriteTs: number }[] = [];
   const server = http.createServer((req, res) => {
     if (req.method === "OPTIONS") {
       res.writeHead(204, {
@@ -60,6 +61,8 @@ async function startSseServer(plan: (bodyJson: { messages?: unknown[] }) => SseS
         "cache-control": "no-cache",
         "access-control-allow-origin": "*",
       });
+      const rec = { arrivalTs: Date.now(), firstWriteTs: 0 };
+      requests.push(rec);
       void (async () => {
         for (const stage of stages) {
           if (stage.delay) {
@@ -67,6 +70,7 @@ async function startSseServer(plan: (bodyJson: { messages?: unknown[] }) => SseS
           }
           if (stage.mark) stage.mark();
           if (stage.events.length > 0) {
+            if (rec.firstWriteTs === 0) rec.firstWriteTs = Date.now();
             res.write(sse(stage.events));
           }
         }
@@ -78,6 +82,7 @@ async function startSseServer(plan: (bodyJson: { messages?: unknown[] }) => SseS
   const port = (server.address() as { port: number }).port;
   return {
     url: `http://127.0.0.1:${port}/sse`,
+    requests,
     close: async () => {
       server.closeAllConnections();
       await new Promise<void>((resolve) => server.close(() => resolve()));
@@ -315,6 +320,11 @@ interface PerfSnapshot {
   settleDurationMs: number;
   toolVisibleTs: number;
   firstAnswerTs: number;
+  blockMounts: number;
+  blockUnmounts: number;
+  blockRenders: number;
+  blockPromotions: number;
+  promotionParsedChars: number;
 }
 
 async function readPerf(page: Page, finalMarkerTs: number): Promise<PerfSnapshot> {
@@ -346,6 +356,11 @@ async function readPerf(page: Page, finalMarkerTs: number): Promise<PerfSnapshot
       settleCanonicalFallbacks: (s.settleCanonicalFallbacks as number) ?? 0,
       settleParsedChars: (s.settleParsedChars as number) ?? 0,
       settleDurationMs: (s.settleDurationMs as number) ?? 0,
+      blockMounts: (s.blockMounts as number) ?? 0,
+      blockUnmounts: (s.blockUnmounts as number) ?? 0,
+      blockRenders: (s.blockRenders as number) ?? 0,
+      blockPromotions: (s.blockPromotions as number) ?? 0,
+      promotionParsedChars: (s.promotionParsedChars as number) ?? 0,
       longTasks: w.__kiroPerf?.longTasks ?? 0,
       longTaskDetails: w.__kiroPerf?.longTaskDetails ?? [],
       visibleTs: w.__kiroPerf?.visibleTs ?? [],
@@ -384,6 +399,11 @@ async function readPerf(page: Page, finalMarkerTs: number): Promise<PerfSnapshot
     settleCanonicalFallbacks: r.settleCanonicalFallbacks,
     settleParsedChars: r.settleParsedChars,
     settleDurationMs: r.settleDurationMs,
+    blockMounts: r.blockMounts,
+    blockUnmounts: r.blockUnmounts,
+    blockRenders: r.blockRenders,
+    blockPromotions: r.blockPromotions,
+    promotionParsedChars: r.promotionParsedChars,
     toolVisibleTs: r.toolVisibleTs + offset,
     firstAnswerTs: r.firstAnswerTs + offset,
   };
@@ -823,10 +843,388 @@ test("PERF Case S6: loose list → canonicalize（两阶段 handoff；最终 DOM
   expect(replaced).toBe(false);
 });
 
+test("PERF Frame: first-frame + tool-chain 分解（V4.5 只 profile 不优化）", async ({ page }) => {
+  // 2 Tool + 短 Final（同 Case A 形态）
+  const final = "今天完成了作业检查，结果一切正常。" + SENTINEL;
+  const ssePlan = agentPlanWithFinal(2, final);
+  const sse = await startSseServer(ssePlan.plan);
+  await page.route("**/api/ai/chat", (route) => route.continue({ url: sse.url }));
+  await injectPerf(page);
+  await seedAI(page);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/");
+  await page.locator("aside").first().getByRole("button", { name: "Kiro" }).click();
+  await page.getByTestId("kiro-composer").getByLabel("Ask Kiro").fill("生成一份长报告");
+  const sendClickTs = Date.now();
+  await page.getByTestId("kiro-composer").getByLabel("发送").click();
+  const msg = page.getByTestId("kiro-message").last();
+  await expect(msg).toContainText(SENTINEL, { timeout: 60000 });
+  await waitAnswerSettled(page);
+  const perf = await readPerf(page, sendClickTs);
+  const reqs = sse.requests;
+  const offset = await page.evaluate(() => Date.now() - performance.now());
+  const toolVisibleDate = perf.toolVisibleTs;
+  const firstAnswerDate = perf.firstAnswerTs;
+  const breakdown = {
+    // sendPreflightMs：Send click → 第一个请求到达（client preflight / SDK send）
+    sendPreflightMs: reqs[0] ? reqs[0].arrivalTs - sendClickTs : -1,
+    // networkTTFTMs：请求到达 → 第一个 SSE part 写出（mock 侧 ≈ 0）
+    networkTTFTMs: reqs[0] ? reqs[0].firstWriteTs - reqs[0].arrivalTs : -1,
+    // firstPartToPaintMs：第一个 SSE part → 首个可见 DOM 更新（Tool Row）
+    firstPartToPaintMs: reqs[0] ? toolVisibleDate - reqs[0].firstWriteTs : -1,
+    // toolOutputToContinuationRequestMs：Tool Row 可见 → continuation 请求到达
+    //（= client 工具执行 + addToolOutput + SDK auto-continue send）
+    toolOutputToContinuationRequestMs: reqs[1] ? reqs[1].arrivalTs - toolVisibleDate : -1,
+    // continuationNetworkWaitMs：continuation 到达 → 首个 SSE part 写出
+    continuationNetworkWaitMs: reqs[1] ? reqs[1].firstWriteTs - reqs[1].arrivalTs : -1,
+    // continuationPartToPaintMs：continuation 首 part → 首个 Final Answer 可见
+    continuationPartToPaintMs: reqs[1] ? firstAnswerDate - reqs[1].firstWriteTs : -1,
+    requests: reqs.length,
+  };
+  console.log(`[PERF][FRAME] sendClick=${sendClickTs} toolVisible=${Math.round(toolVisibleDate)} ` + JSON.stringify(breakdown));
+  await sse.close();
+  // 只 profile：验证链路完整（不做延迟断言；时间域换算允许 ±50ms 抖动）
+  expect(breakdown.requests).toBeGreaterThanOrEqual(2);
+  expect(breakdown.sendPreflightMs).toBeGreaterThanOrEqual(0);
+  expect(breakdown.toolOutputToContinuationRequestMs).toBeGreaterThan(-50);
+});
+
 test("PERF Throttle: runtime client throttle constant 与预期一致（V4.4.1 A/B 校验）", async ({ page }) => {
   await injectPerf(page);
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/");
   await page.locator("aside").first().getByRole("button", { name: "Kiro" }).click();
   await verifyClientThrottle(page, "THROTTLE");
+});
+
+// ============================================================
+// V4.5 Promotion-Stable Markdown DOM
+//
+// 核心 invariant：Active Tail → Stable Block 的 promotion 不得 remount /
+// 重新 parse 已经展示的正文。P1 证明普通段落 remount；P2 证明 8K 段落
+// promotion 后不允许再次 KiroMarkdown(full 8000)。
+// ============================================================
+
+function cjkText(length: number): string {
+  const unit = "这是一段没有空行的超长中文内容用于验证自适应切分与有界整形";
+  let s = "";
+  while (s.length < length) s += unit;
+  return s.slice(0, length);
+}
+
+const P1_PARAGRAPH = "这是第一段正在流式输出的文字，这段内容会持续一段时间，直到遇到空行才结束。";
+const P1_TEXT = P1_PARAGRAPH + "\n\n这是第二段。" + SENTINEL;
+
+/** 8K 长段 + 空行 + 第二段（promotion 时刻 = blank line 所在的 chunk 写入） */
+const P2_PARAGRAPH = cjkText(8000);
+const P2_TEXT = P2_PARAGRAPH + "\n\n第二段开始。" + SENTINEL;
+
+/**
+ * promotion fixture plan：blank line 所在的 chunk 写入时打 promotion 时间戳 marker。
+ * blankCharIndex = 第一段长度（\n\n 的起点）。extraMarkers 可追加其他关键帧 marker。
+ */
+function promotionPlan(
+  finalText: string,
+  chunkSize: number,
+  delay: number,
+  blankCharIndex: number,
+  extraMarkers?: { at: number; name: string }[]
+) {
+  const markerRef: Record<string, number> & { promotionTs: number } = { promotionTs: 0 };
+  for (const m of extraMarkers ?? []) markerRef[m.name] = 0;
+  return {
+    plan: () => {
+      const stages: SseStage[] = [];
+      let written = 0;
+      for (let i = 0; i < finalText.length; i += chunkSize) {
+        const chunk = finalText.slice(i, i + chunkSize);
+        const marks: (() => void)[] = [];
+        if (markerRef.promotionTs === 0 && written < blankCharIndex && written + chunk.length >= blankCharIndex) {
+          marks.push(() => {
+            markerRef.promotionTs = Date.now();
+          });
+        }
+        for (const m of extraMarkers ?? []) {
+          if (markerRef[m.name] === 0 && written < m.at && written + chunk.length >= m.at) {
+            marks.push(() => {
+              markerRef[m.name] = Date.now();
+            });
+          }
+        }
+        stages.push({
+          delay,
+          events: [JSON.stringify({ type: "text-delta", id: "p-final", delta: chunk })],
+          ...(marks.length > 0 ? { mark: () => marks.forEach((fn) => fn()) } : {}),
+        });
+        written += chunk.length;
+      }
+      stages.push({
+        events: [
+          JSON.stringify({ type: "text-end", id: "p-final" }),
+          JSON.stringify({ type: "finish-step" }),
+          JSON.stringify({ type: "finish", finishReason: "stop" }),
+        ],
+      });
+      return [{ events: boundaryFinalHead("perf-p", "p-final") }, ...stages];
+    },
+    markerRef,
+  };
+}
+
+/** promotion 窗口（blank line 写入 → +600ms）内的 >50ms Long Task 过滤 */
+async function promotionWindowLongTasks(page: Page, promotionTs: number): Promise<string[]> {
+  const offset = await page.evaluate(() => Date.now() - performance.now());
+  const perfTs = promotionTs - offset;
+  return page.evaluate(({ start, end }) => {
+    const w = window as unknown as { __kiroPerf?: { longTaskDetails?: string[] } };
+    const out: string[] = [];
+    for (const line of w.__kiroPerf?.longTaskDetails ?? []) {
+      const m = /dur=(\d+)ms start=(\d+)/.exec(line);
+      if (m && Number(m[2]) >= start && Number(m[2]) <= end) out.push(line);
+    }
+    return out;
+  }, { start: perfTs - 100, end: perfTs + 600 });
+}
+
+test("PERF Case P1: 普通段落 promotion → DOM identity 保持（不 remount）", async ({ page }) => {
+  const ssePlan = promotionPlan(P1_TEXT, 6, 30, P1_PARAGRAPH.length);
+  const sse = await startSseServer(ssePlan.plan);
+  await page.route("**/api/ai/chat", (route) => route.continue({ url: sse.url }));
+  await injectPerf(page);
+  await seedAI(page);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/");
+  await page.locator("aside").first().getByRole("button", { name: "Kiro" }).click();
+  await page.getByTestId("kiro-composer").getByLabel("Ask Kiro").fill("生成报告");
+  await page.getByTestId("kiro-composer").getByLabel("发送").click();
+
+  // 流式 active 阶段（第一段尚未完整输出）捕获段落 DOM node
+  await page.waitForFunction(
+    (headLen) => {
+      const el = document.querySelector('[data-testid="kiro-streaming-markdown"] .kiro-markdown');
+      if (!el) return false;
+      const t = el.textContent ?? "";
+      return t.length >= 10 && t.length < headLen;
+    },
+    P1_PARAGRAPH.length,
+    { timeout: 30000 }
+  );
+  const captured = await page.evaluateHandle(() =>
+    document.querySelector('[data-testid="kiro-streaming-markdown"] .kiro-markdown')
+  );
+
+  // 等完整正文 + settle（promotion 必然已发生）
+  const msg = page.getByTestId("kiro-message").last();
+  await expect(msg).toContainText(SENTINEL, { timeout: 60000 });
+  await waitAnswerSettled(page);
+  const connected = await captured.evaluate((el) => (el as Element | null)?.isConnected ?? false);
+  const perf = await readPerf(page, ssePlan.markerRef.promotionTs);
+  console.log(`[PERF][P1] promotionConnected=${connected} promotionTs=${ssePlan.markerRef.promotionTs} ` + JSON.stringify(perf));
+  await sse.close();
+  // V4.5 invariant：active 段落 promotion 后必须是同一个 DOM node
+  expect(connected).toBe(true);
+  // promotion 的 re-parse 至多一次最终渲染（段落末段与空行同 chunk 到达），
+  // 有界于该 block 长度；绝不随 promotion 数量线性累积全文
+  expect(perf.promotionParsedChars).toBeLessThanOrEqual(P1_PARAGRAPH.length);
+});
+
+test("PERF Case P2: 8K 段落 promotion → 不重新 parse 全文（outer DOM 保持）", async ({ page }) => {
+  const ssePlan = promotionPlan(P2_TEXT, 80, 12, P2_PARAGRAPH.length);
+  const sse = await startSseServer(ssePlan.plan);
+  await page.route("**/api/ai/chat", (route) => route.continue({ url: sse.url }));
+  await injectPerf(page);
+  await seedAI(page);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/");
+  await page.locator("aside").first().getByRole("button", { name: "Kiro" }).click();
+  await page.getByTestId("kiro-composer").getByLabel("Ask Kiro").fill("生成报告");
+  await page.getByTestId("kiro-composer").getByLabel("发送").click();
+
+  // 流式 active 阶段：fragment paragraph（inline chunks 已形成）出现后捕获
+  await page.waitForSelector('[data-testid="kiro-inline-fragment-paragraph"]', { timeout: 30000 });
+  const captured = await page.evaluateHandle(() =>
+    document.querySelector('[data-testid="kiro-inline-fragment-paragraph"]')
+  );
+  // 等 8K 段落接近完成（还剩 ~100 chars）再快照 counters——把测量窗口收紧到
+  // promotion + 第二段 + settle 帧，避免把 streaming 的 RO/scroll 计入
+  await page.waitForFunction(
+    (minLen) => {
+      const el = document.querySelector('[data-testid="kiro-inline-fragment-paragraph"]');
+      return el && (el.textContent?.length ?? 0) >= minLen;
+    },
+    P2_PARAGRAPH.length - 100,
+    { timeout: 30000 }
+  );
+  const beforePromotion = await page.evaluate(() => {
+    const w = window as unknown as { __kiroStreamPerf?: Record<string, number> };
+    const s = w.__kiroStreamPerf ?? {};
+    return {
+      ro: (s.resizeObserverCalls as number) ?? 0,
+      scroll: (s.scrollTopWrites as number) ?? 0,
+    };
+  });
+
+  const msg = page.getByTestId("kiro-message").last();
+  await expect(msg).toContainText(SENTINEL, { timeout: 60000 });
+  await waitAnswerSettled(page);
+  const connected = await captured.evaluate((el) => (el as Element | null)?.isConnected ?? false);
+  const perf = await readPerf(page, ssePlan.markerRef.promotionTs);
+  const promotionLongTasks = await promotionWindowLongTasks(page, ssePlan.markerRef.promotionTs);
+  const afterPromotion = await page.evaluate(() => {
+    const w = window as unknown as { __kiroStreamPerf?: Record<string, number> };
+    const s = w.__kiroStreamPerf ?? {};
+    return {
+      ro: (s.resizeObserverCalls as number) ?? 0,
+      scroll: (s.scrollTopWrites as number) ?? 0,
+    };
+  });
+  console.log(
+    `[PERF][P2] promotionConnected=${connected} roDelta=${afterPromotion.ro - beforePromotion.ro} ` +
+      `scrollDelta=${afterPromotion.scroll - beforePromotion.scroll} promotionLongTasks=${JSON.stringify(promotionLongTasks)} ` +
+      JSON.stringify(perf)
+  );
+  await sse.close();
+  // outer DOM identity（fragment paragraph 不因 promotion 重建）
+  expect(connected).toBe(true);
+  // promotion 帧不得重新 parse 8000 chars（目标 ≈ 0 或最后 mutable window）
+  expect(perf.promotionParsedChars).toBeLessThan(1000);
+  // promotion 窗口不得出现新的 >50ms Long Task
+  expect(promotionLongTasks).toHaveLength(0);
+  // promotion 不产生明显 layout 突变（RO/scroll 增量有界）
+  expect(afterPromotion.ro - beforePromotion.ro).toBeLessThan(8);
+  expect(afterPromotion.scroll - beforePromotion.scroll).toBeLessThan(8);
+});
+
+/** P3-P6 共用：打开 Kiro → 流式 → 按条件捕获 outer block → 等完整正文 → 验证 identity */
+async function runPromotionIdentityCase(
+  page: Page,
+  caseName: string,
+  ssePlan: { markerRef: Record<string, number> & { promotionTs: number }; plan: (b: { messages?: unknown[] }) => SseStage[] },
+  expectText: string,
+  captureWait: () => Promise<import("@playwright/test").JSHandle>
+) {
+  const sse = await startSseServer(ssePlan.plan);
+  await page.route("**/api/ai/chat", (route) => route.continue({ url: sse.url }));
+  await injectPerf(page);
+  await seedAI(page);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/");
+  await page.locator("aside").first().getByRole("button", { name: "Kiro" }).click();
+  await page.getByTestId("kiro-composer").getByLabel("Ask Kiro").fill("生成报告");
+  await page.getByTestId("kiro-composer").getByLabel("发送").click();
+  const captured = await captureWait();
+  const msg = page.getByTestId("kiro-message").last();
+  await expect(msg).toContainText(expectText, { timeout: 60000 });
+  await waitAnswerSettled(page);
+  const connected = await captured.evaluate((el) => (el as Element | null)?.isConnected ?? false);
+  const perf = await readPerf(page, ssePlan.markerRef.promotionTs);
+  console.log(`[PERF][${caseName}] outerConnected=${connected} promotionTs=${ssePlan.markerRef.promotionTs} ` + JSON.stringify(perf));
+  await sse.close();
+  return { connected, perf };
+}
+
+test("PERF Case P3: 256-char inline threshold 跨越 → outer block identity 保持（inner swap 仅测量）", async ({ page }) => {
+  const paragraph = cjkText(300);
+  const ssePlan = promotionPlan(
+    paragraph + "\n\n第二段。" + SENTINEL,
+    6,
+    24,
+    paragraph.length,
+    [{ at: 256, name: "thresholdTs" }]
+  );
+  const { connected, perf } = await runPromotionIdentityCase(page, "P3", ssePlan, SENTINEL, async () => {
+    // 跨越阈值前捕获 outer block（文本 230~250）
+    await page.waitForFunction(
+      (range: number[]) => {
+        const el = document.querySelector("[data-kiro-stream-block-id]");
+        const len = el?.textContent?.length ?? 0;
+        return len >= range[0] && len <= range[1];
+      },
+      [230, 250] as number[],
+      { timeout: 30000 }
+    );
+    return page.evaluateHandle(() => document.querySelector("[data-kiro-stream-block-id]"));
+  });
+  // 阈值跨越窗口的 >50ms Long Task（256-char 结构切换是否产生长任务）
+  const thresholdTasks = await promotionWindowLongTasks(page, ssePlan.markerRef.thresholdTs);
+  console.log(`[PERF][P3] thresholdLongTasks=${JSON.stringify(thresholdTasks)}`);
+  expect(connected).toBe(true);
+  expect(thresholdTasks).toHaveLength(0);
+});
+
+test("PERF Case P4: 普通 tight list promotion → outer block identity 保持", async ({ page }) => {
+  const listBlock = "- 列表项一\n- 列表项二";
+  const ssePlan = promotionPlan(listBlock + "\n\n结束段落。" + SENTINEL, 4, 24, listBlock.length);
+  const { connected, perf } = await runPromotionIdentityCase(page, "P4", ssePlan, SENTINEL, async () => {
+    await page.waitForFunction(
+      (minLen) => {
+        const el = document.querySelector("[data-kiro-stream-block-id]");
+        return el && (el.textContent?.length ?? 0) >= minLen;
+      },
+      10,
+      { timeout: 30000 }
+    );
+    return page.evaluateHandle(() => document.querySelector("[data-kiro-stream-block-id]"));
+  });
+  expect(connected).toBe(true);
+  // 最终 correctness：列表与 KiroMarkdown 一致（两项在同一 ul）
+  await expect(page.getByTestId("kiro-message").last().locator('[data-testid="kiro-streaming-markdown"] ul li')).toHaveCount(2);
+});
+
+test("PERF Case P5: fence 闭合 + promotion → outer 保持，inner 只允许一次语义替换", async ({ page }) => {
+  const fenceBlock = "```ts\nconst x = 1;\n```";
+  const ssePlan = promotionPlan(fenceBlock + "\n\n结束段落。" + SENTINEL, 4, 24, fenceBlock.length);
+  const { connected, perf } = await runPromotionIdentityCase(page, "P5", ssePlan, SENTINEL, async () => {
+    // fence 未闭合（fallback code-tail）时捕获其 outer block
+    await page.waitForSelector('[data-testid="kiro-streaming-code-tail"]', { timeout: 30000 });
+    return page.evaluateHandle(() =>
+      document.querySelector('[data-testid="kiro-streaming-code-tail"]')?.closest("[data-kiro-stream-block-id]") ?? null
+    );
+  });
+  expect(connected).toBe(true);
+  // 闭合后正式 code block 正常渲染（inner semantic transition 完成）
+  await expect(page.getByTestId("kiro-message").last().locator('[data-testid="kiro-streaming-markdown"] pre code')).toContainText("const x = 1;");
+  // 闭合 + promotion 不产生 block remount：2 个真实 block（fence + 尾段）× StrictMode 双挂载 = 4；
+  // 若有 remount 会超过 4
+  expect(perf.blockMounts).toBeLessThanOrEqual(4);
+});
+
+test("PERF Case P6: math 闭合 + promotion → outer 保持，inner 只允许一次语义替换", async ({ page }) => {
+  const mathBlock = "$$\nE = mc^2\n$$";
+  const ssePlan = promotionPlan(mathBlock + "\n\n结束段落。" + SENTINEL, 4, 24, mathBlock.length);
+  const { connected, perf } = await runPromotionIdentityCase(page, "P6", ssePlan, SENTINEL, async () => {
+    await page.waitForSelector('[data-testid="kiro-streaming-math-tail"]', { timeout: 30000 });
+    return page.evaluateHandle(() =>
+      document.querySelector('[data-testid="kiro-streaming-math-tail"]')?.closest("[data-kiro-stream-block-id]") ?? null
+    );
+  });
+  expect(connected).toBe(true);
+  // 闭合后 KaTeX 正式渲染
+  await expect(page.getByTestId("kiro-message").last().locator('[data-testid="kiro-streaming-markdown"] .katex').first()).toBeVisible();
+  // 2 个真实 block（math + 尾段）× StrictMode 双挂载 = 4；remount 会超过
+  expect(perf.blockMounts).toBeLessThanOrEqual(4);
+});
+
+test("PERF Case P8: canonical loose list 不被 promotion identity 阻止", async ({ page }) => {
+  const ssePlan = plainPlan(S6_LOOSE_LIST, 24, 24);
+  const sse = await startSseServer(ssePlan.plan);
+  await page.route("**/api/ai/chat", (route) => route.continue({ url: sse.url }));
+  await injectPerf(page);
+  await seedAI(page);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/");
+  await page.locator("aside").first().getByRole("button", { name: "Kiro" }).click();
+  await page.getByTestId("kiro-composer").getByLabel("Ask Kiro").fill("生成报告");
+  await page.getByTestId("kiro-composer").getByLabel("发送").click();
+  const msg = page.getByTestId("kiro-message").last();
+  await expect(msg).toContainText(SENTINEL, { timeout: 60000 });
+  await waitAnswerSettled(page);
+  await expect(msg.locator('[data-testid="kiro-streaming-markdown"] ul')).toHaveCount(1, { timeout: 15000 });
+  const perf = await readPerf(page, ssePlan.markerRef.ts);
+  console.log(`[PERF][P8] ` + JSON.stringify(perf));
+  await sse.close();
+  // 流式 block promotion 正常发生（每个列表项 block active→stable）
+  expect(perf.blockPromotions).toBeGreaterThanOrEqual(1);
+  // canonical fallback 仍触发（不被 promotion identity 阻止）
+  expect(perf.settleCanonicalFallbacks).toBe(1);
 });

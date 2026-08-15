@@ -112,17 +112,17 @@ test("长历史恢复：Summary + 旧消息完整 + 继续对话", async ({ page
     });
   });
   await seedAI(page);
-  await page.setViewportSize({ width: 1440, height: 900 });
-  await page.goto("/");
-
-  // 直接向 IndexedDB seed 一条带 Summary 的长对话（模拟 Task 7 已压缩的历史）
-  await page.evaluate(() => {
+  // 直接向 IndexedDB seed 一条带 Summary 的长对话（模拟 Task 7 已压缩的历史）。
+  // 必须在 app JS 之前执行（addInitScript）：app 以更高版本（v4）打开 classflow-kiro 后，
+  // 这里固定 version:2 的 open 会触发 VersionError（promise 永不 resolve → GC 报错）。
+  // init script 的 version-change 事务会阻塞 app 的连接，app 随后从 v2 升级到 v4。
+  await page.addInitScript(() => {
     const messages: { id: string; role: "user" | "assistant"; content: string }[] = [];
     for (let i = 0; i < 20; i++) {
       messages.push({ id: `u${i}`, role: "user", content: `第 ${i} 轮问题：帮我看看本周安排` });
       messages.push({ id: `a${i}`, role: "assistant", content: `第 ${i} 轮回答：好的，本周有若干任务。` });
     }
-    return new Promise<void>((resolve) => {
+    (window as unknown as Record<string, unknown>).__kiroSeedLongConversation = new Promise<void>((resolve) => {
       const req = indexedDB.open("classflow-kiro", 2);
       req.onupgradeneeded = () => {
         if (!req.result.objectStoreNames.contains("conversations")) {
@@ -154,6 +154,8 @@ test("长历史恢复：Summary + 旧消息完整 + 继续对话", async ({ page
       };
     });
   });
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/");
 
   // 打开 Kiro → Thread Rail → 打开长对话
   await page.locator("aside").first().getByRole("button", { name: "Kiro" }).click();
