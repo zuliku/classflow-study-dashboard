@@ -19,7 +19,7 @@ function fail(code: OutlookToolErrorCode, message: string): ReadToolResult<unkno
   return { ok: false, code, message };
 }
 
-/** 输出裁剪：只保留 model-friendly 的 summary / tasks / bottleneckDays / calibration */
+/** 输出裁剪：只保留 model-friendly 的 summary / tasks / bottleneckDays / capacityForecast / calibration */
 function toModelFriendlyOutput(outlook: ReturnType<typeof buildStudyOutlook>) {
   return {
     horizonDays: outlook.horizonDays,
@@ -33,12 +33,18 @@ function toModelFriendlyOutput(outlook: ReturnType<typeof buildStudyOutlook>) {
       estimatedMinutes: t.estimatedMinutes,
       scheduledMinutesBeforeDeadline: t.scheduledMinutesBeforeDeadline,
       unscheduledMinutes: t.unscheduledMinutes,
-      availableMinutesBeforeDeadline: t.availableMinutesBeforeDeadline,
+      // raw 空闲（无竞争）与共享容量事实分离：容量结论只看 capacity* 字段
+      rawFreeMinutesBeforeDeadline: t.availableMinutesBeforeDeadline,
+      capacityAllocatedMinutes: t.capacityAllocatedMinutes,
+      capacityShortfallMinutes: t.capacityShortfallMinutes,
+      capacityComplete: t.capacityComplete,
       health: t.health,
       reasons: t.reasons,
       estimateCalibration: t.estimateCalibration,
     })),
     bottleneckDays: outlook.bottleneckDays,
+    capacityForecast: outlook.capacityForecast,
+    firstCapacityShortfall: outlook.firstCapacityShortfall,
     estimateCalibration: {
       status: outlook.estimateCalibration.status,
       sampleCount: outlook.estimateCalibration.sampleCount,

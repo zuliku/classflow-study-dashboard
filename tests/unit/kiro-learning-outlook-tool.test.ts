@@ -141,4 +141,58 @@ describe("get_learning_outlook（canonical tool）", () => {
     const ctx = executeKiroReadTool("get_current_context", {}, state as never);
     expect(ctx.ok).toBe(true);
   });
+
+  it("Part 4：输出含共享容量 facts / capacityForecast / firstCapacityShortfall；不暴露 projectedBlocks", async () => {
+    // 制造容量竞争：今天全天 busy + 明天只剩 180min；A=120 B=120
+    const pad2 = (n: number) => String(n).padStart(2, "0");
+    const dayStr = (offset: number) => {
+      const d = new Date(Date.now() + offset * 86400000);
+      return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+    };
+    useAppStore.setState({
+      semester: SEMESTER as never,
+      currentSemesterWeek: 1,
+      assignments: [
+        mk("a1", { ddl: iso(new Date(Date.now() + 1 * 86400000)), estimatedMinutes: 120 }),
+        mk("a2", { ddl: iso(new Date(Date.now() + 1 * 86400000)), estimatedMinutes: 120 }),
+      ],
+      studyBlocks: [],
+      schedules: [],
+      calendarMarks: [
+        { id: "cm0", date: dayStr(0), type: "exam", title: "全天考试", startTime: "00:00", endTime: "23:59" },
+        { id: "cm1", date: dayStr(1), type: "exam", title: "考试", startTime: "08:00", endTime: "18:00" },
+      ],
+      courses: [],
+    });
+    const b = await executeGetLearningOutlook({ horizonDays: 7 });
+    expect(b.ok).toBe(true);
+    if (!b.ok) return;
+    const out = b.data as any;
+
+    // workload：需求 240 vs 可分配 180 vs 缺口 60
+    expect(out.summary.workload.remainingKnownMinutes).toBe(240);
+    expect(out.summary.workload.allocatableMinutes).toBe(180);
+    expect(out.summary.workload.shortfallMinutes).toBe(60);
+    expect(typeof out.summary.workload.unusedFreeMinutes).toBe("number");
+
+    // 每个任务带 capacity facts
+    for (const t of out.tasks as { capacityAllocatedMinutes: number | null; capacityShortfallMinutes: number | null; capacityComplete: boolean | null }[]) {
+      expect(typeof t.capacityAllocatedMinutes).toBe("number");
+      expect(typeof t.capacityShortfallMinutes).toBe("number");
+      expect(typeof t.capacityComplete).toBe("boolean");
+    }
+    expect((out.tasks as { capacityComplete: boolean | null }[]).filter((t) => t.capacityComplete === false).length).toBe(1);
+
+    // capacityForecast + firstCapacityShortfall
+    expect(Array.isArray(out.capacityForecast)).toBe(true);
+    expect(out.capacityForecast.length).toBe(1);
+    expect(out.capacityForecast[0].cumulativeShortfallMinutes).toBe(60);
+    expect(out.firstCapacityShortfall).not.toBeNull();
+    expect(out.firstCapacityShortfall.shortfallMinutes).toBe(60);
+
+    // bounded：不暴露 projected slots（Proposal 阶段才需要）
+    const taskKeys = Object.keys(out.tasks[0]);
+    expect(taskKeys).not.toContain("projectedBlocks");
+    expect(taskKeys).not.toContain("proposedBlocks");
+  });
 });

@@ -42,9 +42,21 @@ export function StudyOutlookCard({
   onHorizonChange: (h: StudyOutlookHorizon) => void;
 }) {
   const { handoffPrompt } = useKiroSessionActions();
-  const { summary, tasks, bottleneckDays } = outlook;
+  const { summary, tasks, bottleneckDays, firstCapacityShortfall } = outlook;
   const top = tasks.slice(0, 5);
   const attentionCount = summary.counts.atRisk + summary.counts.attention;
+
+  const fmt = (minutes: number) => {
+    const h = Math.floor(minutes / 60);
+    const m = minutes % 60;
+    if (h === 0) return `${m}m`;
+    return m === 0 ? `${h}h` : `${h}h${String(m).padStart(2, "0")}m`;
+  };
+  const shortfall = summary.workload.shortfallMinutes;
+  const hasMissing = summary.counts.missingEstimate > 0;
+  const affectedTitles = (firstCapacityShortfall?.affectedAssignmentIds ?? [])
+    .map((id) => tasks.find((t) => t.assignmentId === id)?.title)
+    .filter((t): t is string => !!t);
 
   return (
     <div className="bg-surface border border-line rounded-2xl shadow-subtle" data-testid="study-outlook-card">
@@ -75,9 +87,40 @@ export function StudyOutlookCard({
           {summary.counts.totalDue > 0
             ? `${summary.counts.totalDue} 个截止任务${attentionCount > 0 ? ` · ${attentionCount} 个需注意` : ""}`
             : `未来 ${horizonDays} 天暂无截止任务`}
-          {summary.counts.missingEstimate > 0 && ` · ${summary.counts.missingEstimate} 个缺估时`}
         </p>
+        {/* 容量事实：需求 / 可安排 / 缺口（共享容量，非 raw free 相加） */}
+        {summary.counts.totalDue > 0 && (
+          <p className="text-[11px] mt-1" data-testid="outlook-capacity-line">
+            {shortfall > 0 ? (
+              <span className="text-[#9B5B57]">
+                尚需安排 {fmt(summary.workload.remainingKnownMinutes)} · 可安排{" "}
+                {fmt(summary.workload.allocatableMinutes)} · 缺口 {fmt(shortfall)}
+              </span>
+            ) : (
+              <span className="text-[#627566]">未来容量可覆盖当前已知需求</span>
+            )}
+            {hasMissing && (
+              <span className="text-sandrift">
+                {" "}
+                · 另有 {summary.counts.missingEstimate} 个任务缺少预计耗时，未计入容量判断
+              </span>
+            )}
+          </p>
+        )}
       </div>
+
+      {firstCapacityShortfall && shortfall > 0 && (
+        <div className="px-4 py-2 bg-[#9B5B57]/5 border-b border-line-soft">
+          <p className="text-[10px] text-[#9B5B57] leading-relaxed" data-testid="outlook-shortfall-strip">
+            最早容量缺口：{formatDeadline(firstCapacityShortfall.deadline)} 前约缺{" "}
+            {fmt(firstCapacityShortfall.shortfallMinutes)}
+            {affectedTitles.length > 0 &&
+              ` · 涉及 ${affectedTitles.slice(0, 2).join("、")}${
+                affectedTitles.length > 2 ? ` 等 ${affectedTitles.length} 个任务` : ""
+              }`}
+          </p>
+        </div>
+      )}
 
       {tasks.length === 0 ? (
         <div className="px-4 py-6 text-center">
@@ -135,6 +178,8 @@ export function StudyOutlookCard({
 function OutlookTaskRow({ task, onEstimate }: { task: OutlookTask; onEstimate: () => void }) {
   const health = HEALTH_COPY[task.health];
   const missingEstimate = task.reasons.includes("missing_estimate");
+  const scheduledAfterDeadline = task.reasons.includes("scheduled_after_deadline");
+  const unscheduled = task.unscheduledMinutes ?? 0;
   return (
     <div className="px-4 py-2.5 space-y-1">
       <div className="flex items-center justify-between gap-2">
@@ -156,16 +201,27 @@ function OutlookTaskRow({ task, onEstimate }: { task: OutlookTask; onEstimate: (
               估算任务
             </button>
           </>
-        ) : (
+        ) : task.health === "overdue" ? (
+          <>{formatDeadline(task.deadline)} · 已逾期，不占用未来容量</>
+        ) : task.capacityComplete === null ? (
+          <>{formatDeadline(task.deadline)} · 信息不足</>
+        ) : task.capacityComplete ? (
           <>
             {formatDeadline(task.deadline)}
-            {task.unscheduledMinutes !== null && task.unscheduledMinutes > 0 && (
-              <span className="text-[#9B5B57]"> · 尚缺 {Math.round(task.unscheduledMinutes)}min</span>
-            )}
-            {task.unscheduledMinutes !== null && task.unscheduledMinutes === 0 && (
-              <span className="text-[#627566]"> · 已覆盖</span>
+            {unscheduled > 0 ? (
+              <span className="text-[#627566]"> · 尚需安排 {Math.round(unscheduled)}min · 当前容量可覆盖</span>
+            ) : (
+              <span className="text-[#627566]"> · 已安排覆盖</span>
             )}
           </>
+        ) : (
+          <>
+            {formatDeadline(task.deadline)} · 尚需安排 {Math.round(unscheduled)}min · 预计仍缺{" "}
+            {Math.round(task.capacityShortfallMinutes ?? 0)}min
+          </>
+        )}
+        {scheduledAfterDeadline && (
+          <span className="text-sandrift"> · Deadline 后仍有已安排时段</span>
         )}
       </p>
     </div>

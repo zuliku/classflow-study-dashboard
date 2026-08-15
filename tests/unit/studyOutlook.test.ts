@@ -209,4 +209,76 @@ describe("Study Outlook", () => {
     const t2 = out.tasks.find((t) => t.assignmentId === "a2")!;
     expect(t2.estimateCalibration).toBeUndefined();
   });
+
+  it("Portfolio shortfall：A=120 B=120 共享 180min → 一个任务 capacityComplete=false；raw free != shared allocated", () => {
+    // 用 calendarMarks 限制未来容量：今天 all-day exam（0 free）+ 明天 exam 08:00-18:00（只剩 180min）
+    const calendarMarks: CalendarMark[] = [
+      { id: "cm0", date: date(0), type: "exam", title: "全天考试", startTime: "00:00", endTime: "23:59" },
+      { id: "cm1", date: date(1), type: "exam", title: "考试", startTime: "08:00", endTime: "18:00" },
+    ];
+    const input = baseInput({
+      assignments: [
+        mk("a1", { ddl: iso(new Date(NOW.getTime() + 1 * 86400000)), estimatedMinutes: 120 }),
+        mk("a2", { ddl: iso(new Date(NOW.getTime() + 1 * 86400000)), estimatedMinutes: 120 }),
+      ],
+      calendarMarks,
+    });
+    const out = buildStudyOutlook(input);
+
+    // 共享容量：240 需求 vs 180 可分配
+    expect(out.summary.workload.remainingKnownMinutes).toBe(240);
+    expect(out.summary.workload.allocatableMinutes).toBe(180);
+    expect(out.summary.workload.shortfallMinutes).toBe(60);
+    // 至少一个任务 capacityComplete=false
+    expect(out.tasks.filter((t) => t.capacityComplete === false).length).toBe(1);
+    expect(out.tasks.filter((t) => t.capacityComplete === true).length).toBe(1);
+    // raw free（无竞争）与 shared allocated 不同：raw 对每个任务都是 180
+    for (const t of out.tasks) {
+      expect(t.availableMinutesBeforeDeadline).toBe(180);
+      expect(t.capacityAllocatedMinutes).not.toBe(t.availableMinutesBeforeDeadline);
+    }
+    // firstCapacityShortfall 存在且 affected 只含 capacityComplete=false 的任务
+    expect(out.firstCapacityShortfall).not.toBeNull();
+    expect(out.firstCapacityShortfall!.shortfallMinutes).toBe(60);
+    const affected = out.firstCapacityShortfall!.affectedAssignmentIds;
+    expect(affected.length).toBe(1);
+    // capacityForecast：一个 checkpoint（同 DDL），cumulative shortfall = 60
+    expect(out.capacityForecast.length).toBe(1);
+    expect(out.capacityForecast[0].cumulativeShortfallMinutes).toBe(60);
+    expect(out.capacityForecast[0].dueAssignmentIds.length).toBe(2);
+  });
+
+  it("capacityForecast：按 Deadline 升序 checkpoint；早截止任务不把晚截止容量算进累计", () => {
+    const calendarMarks: CalendarMark[] = [
+      { id: "cm0", date: date(0), type: "exam", title: "全天考试", startTime: "00:00", endTime: "23:59" },
+      { id: "cm1", date: date(1), type: "exam", title: "考试", startTime: "08:00", endTime: "18:00" },
+    ];
+    const input = baseInput({
+      assignments: [
+        mk("a1", { ddl: iso(new Date(NOW.getTime() + 1 * 86400000)), estimatedMinutes: 240 }), // 明天，缺口大
+        mk("a2", { ddl: iso(new Date(NOW.getTime() + 5 * 86400000)), estimatedMinutes: 60 }), // 周五
+      ],
+      calendarMarks,
+    });
+    const out = buildStudyOutlook(input);
+    expect(out.capacityForecast.length).toBe(2);
+    expect(out.capacityForecast[0].deadline.slice(0, 10)).toBe(date(1));
+    expect(out.capacityForecast[0].cumulativeRequiredMinutes).toBe(240);
+    // a1 明天 deadline 前只有 180min 可用 → 累计缺口 60
+    expect(out.capacityForecast[0].cumulativeShortfallMinutes).toBe(60);
+    expect(out.firstCapacityShortfall?.deadline.slice(0, 10)).toBe(date(1));
+    expect(out.firstCapacityShortfall?.affectedAssignmentIds).toEqual(["a1"]);
+  });
+
+  it("scheduled_after_deadline：Deadline 后 StudyBlock 不计 coverage，但保留 reason 提示", () => {
+    const input = baseInput({
+      assignments: [mk("a1", { ddl: iso(new Date(NOW.getTime() + 2 * 86400000)), estimatedMinutes: 120 })],
+      studyBlocks: [block("b1", "a1", 3, "19:00", "20:00")], // Deadline 之后
+    });
+    const out = buildStudyOutlook(input);
+    const t = out.tasks[0];
+    expect(t.scheduledMinutesBeforeDeadline).toBe(0);
+    expect(t.unscheduledMinutes).toBe(120);
+    expect(t.reasons).toContain("scheduled_after_deadline");
+  });
 });

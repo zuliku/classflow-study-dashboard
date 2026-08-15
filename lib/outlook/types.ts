@@ -33,8 +33,15 @@ export interface OutlookTask {
   scheduledMinutesBeforeDeadline: number;
   /** max(estimated - scheduled, 0)；无估时 → null */
   unscheduledMinutes: number | null;
-  /** now → min(deadline, horizonEnd) 范围内可用的 free minutes；无 DDL → null */
+  /**
+   * 「如果没有其它任务竞争，截止前存在多少空闲分钟」（raw，非共享容量）。
+   * @deprecated 容量结论请使用 capacityAllocatedMinutes / capacityShortfallMinutes / capacityComplete
+   */
   availableMinutesBeforeDeadline: number | null;
+  /** 共享容量分配结果（Capacity Allocator 输出；无估时 / 无 DDL / overdue → null） */
+  capacityAllocatedMinutes: number | null;
+  capacityShortfallMinutes: number | null;
+  capacityComplete: boolean | null;
   health: OutlookHealth;
   reasons: string[];
   /** 只读参考 metadata（绝不自动写入 / 不改变 health 判定） */
@@ -46,6 +53,18 @@ export interface OutlookDayLoad {
   plannedStudyMinutes: number;
   freeMinutesRemaining: number;
   dueTaskCount: number;
+  /** 该日 projected 分配分钟（Capacity Allocator 的 forecast blocks） */
+  projectedAllocationMinutes: number;
+  capacityPressure: "normal" | "busy" | "shortfall";
+}
+
+/** 按 Deadline 升序的 cumulative capacity checkpoint */
+export interface CapacityCheckpoint {
+  deadline: string;
+  dueAssignmentIds: string[];
+  cumulativeRequiredMinutes: number;
+  cumulativeAllocatedMinutes: number;
+  cumulativeShortfallMinutes: number;
 }
 
 export interface StudyOutlookSummary {
@@ -65,7 +84,12 @@ export interface StudyOutlookSummary {
     estimatedMinutesKnown: number;
     scheduledMinutes: number;
     remainingKnownMinutes: number;
+    /** 整个 horizon 的 raw free capacity（未做 deadline 竞争） */
     freeMinutes: number;
+    /** 真正经过 Deadline 竞争后的可分配总量 */
+    allocatableMinutes: number;
+    shortfallMinutes: number;
+    unusedFreeMinutes: number;
   };
 }
 
@@ -75,6 +99,14 @@ export interface StudyOutlook {
   /** 按优先级排序（最多 8 条） */
   tasks: OutlookTask[];
   bottleneckDays: OutlookDayLoad[];
+  /** 按 Deadline 升序的 cumulative capacity forecast（只含 eligible 任务） */
+  capacityForecast: CapacityCheckpoint[];
+  /** 首次 cumulative shortage 的 checkpoint；无缺口 → null */
+  firstCapacityShortfall: {
+    deadline: string;
+    shortfallMinutes: number;
+    affectedAssignmentIds: string[];
+  } | null;
   estimateCalibration: EstimateCalibration;
 }
 

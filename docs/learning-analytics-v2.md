@@ -1,6 +1,6 @@
 # Learning Analytics V2 — 学习洞察
 
-> Status: 实现完成（Analytics Engine + Weekly Review + Canonical Kiro Tools + Estimate Calibration + Study Outlook + Kiro Action Loop）
+> Status: 实现完成（Analytics Engine + Weekly Review + Canonical Kiro Tools + Estimate Calibration + Capacity-Aware Study Outlook + Kiro Action Loop）
 > 前置依赖：[learning-history-v1.md](./learning-history-v1.md)（History IndexedDB / Recorder / Query / Aggregate）
 
 ## 一、数据源
@@ -140,7 +140,23 @@ Kiro 不得从 raw events 自行重算 UI Analytics metric。Analytics 数据只
 - **UI**：`StudyOutlookCard`（未来 7/14 切换、健康标签复用 TaskHealth 语义文案、缺估时行「缺少预计耗时…」+ [估算任务]、[让 Kiro 帮我规划]）；`useStudyOutlook` hook：只订阅所需字段 + History 变更订阅 + generation token。
 - **Planner missing-estimate 修复**：`proposeStudyPlan` 对 `estimatedMinutes` 缺失/≤0 返回 `completeCoverage:false + reasons:["missing_estimate"]`，不占用 Free Time Pool；Proposal Card 显示「缺少预计耗时，暂无法自动安排。」+ [让 Kiro 帮我估时]（弱操作）。「没有估时」≠「已安排充分」。
 
-## 十四、Kiro 只读工具职责（Part 3 全景）
+## 十三B、Capacity-Aware Outlook（Part 4：共享容量真相）
+
+- **问题**：旧 Outlook 每个任务独立把同一 free slot 视为"可用"（shared capacity double-counting）。修复后所有容量结论来自 canonical allocator。
+- **Canonical Capacity Allocation Engine**（`lib/planning/capacityAllocation.ts`，纯函数）：
+  - 输入 = 一份共享 `freeSlots` + assignments + studyBlocks；**单一池**，Task A 消耗后 Task B 只能用剩余容量；绝不逐任务重读完整 slots。
+  - 排序：Deadline 早 → Priority 高 → **stable `assignment.id.localeCompare()` tie-break**（不依赖输入数组顺序）；Deadline 是第一约束（urgent 不能跨更早 deadline 抢容量）。
+  - eligible = todo/doing + 有效 DDL + estimate > 0；`missing_estimate` / `no_deadline` / `overdue` 分类保留但不消费容量（`includeNoDeadline` 选项供 Planner 兼容：无 DDL 任务排最后参与分配）。
+  - 块 30–90min（`planningConstants` 共享）；`remainingRequired = estimate - scheduledBeforeDeadline`（`taskPlanningFacts` 共享 helper，不重复实现）。
+  - 输出：每任务 allocated/shortfall/completeCoverage/projectedBlocks（**仅供 forecast**，绝不写 Store）+ portfolio totals（totalRemaining / totalAllocated / totalShortfall / freeMinutesInWindow / unusedFreeMinutes / 覆盖计数）。
+  - **Existing StudyBlock 不 double deduct**：findFreeTime 已把全部 existing blocks 视为 busy，这里只从 remaining 扣除 scheduled。
+- **StudyPlanner 重构**：`proposeStudyPlan = findFreeTime → allocateStudyCapacity → 映射 StudyPlanProposal`（输出兼容：missing_estimate / existing_schedule_respected / fits_before_deadline 语义不变）。**Canonical invariant**：同一 state/window/now 下，Outlook 的 allocation 与 planner 的 proposal 对相同 eligible tasks 的 blocks / minutes / completeCoverage 完全一致（有测试）。
+- **Outlook Task 字段**：`availableMinutesBeforeDeadline`（raw，无竞争，`@deprecated`）与 `capacityAllocatedMinutes` / `capacityShortfallMinutes` / `capacityComplete`（共享容量事实）分离；`scheduled_after_deadline` reason（Deadline 后自己的 block 不 cover，但真实占用 free time，只提示不移动）。
+- **Portfolio**：`workload.allocatableMinutes`（竞争后真正可分配）≠ `freeMinutes`（raw horizon 容量）；`shortfallMinutes` / `unusedFreeMinutes`；`capacityForecast`（按 Deadline 升序的 cumulative checkpoints）+ `firstCapacityShortfall`（首次缺口及其 affected 任务，≤2 展示 +N）。
+- **UI**：header 容量行「尚需安排 X · 可安排 Y · 缺口 Z」（缺口为 0 → 「未来容量可覆盖当前已知需求」）；缺估时 → 「另有 N 个任务缺少预计耗时，未计入容量判断」（绝不宣称全部可覆盖）；任务行区分「尚需安排 Xmin · 当前容量可覆盖 / 预计仍缺 Ymin / 已安排覆盖 / 已逾期不占用未来容量」；最早容量缺口 attention strip。不显示 projected block 细节（那是 Proposal/Timetable 的职责）。
+- **Kiro**：`get_learning_outlook` 输出新增 workload.allocatableMinutes/shortfallMinutes/unusedFreeMinutes、任务 capacity* 字段、capacityForecast、firstCapacityShortfall；**不暴露 projectedBlocks**；guidance 强制使用 portfolio shared-capacity 结论（不得把 rawFree 相加独立判断）。schema 未变 → 本轮 0 次真实 DeepSeek 请求。
+
+## 十四、Kiro 只读工具职责（Part 3/4 全景）
 
 | 工具 | 回答 |
 | --- | --- |
@@ -165,5 +181,6 @@ Kiro 不得从 raw events 自行重算 UI Analytics metric。Analytics 数据只
 - Coverage 不足时不显示 delta / 对比信号；`historyStartedAt` 早于所选范围才显示对比。
 - 「投入」≠「效率」：不输出任何效率/评分类结论。
 - Calibration 只观察「已记录专注」（Focus 未开启的学习时间不体现）；不自动校准估时、不改变 TaskHealth / Planner 判定。
-- Outlook 的 `availableMinutesBeforeDeadline` 基于 Free Time Engine（08:00–21:00 窗口、当前教学周课表、已有 StudyBlock），非用户真实可用时间承诺。
-- 本轮不做：AI 自动周报 / 定时周报 / Push / 综合分数 / Streak / Goals / Achievements / Cloud / Export / PDF / 预测 / 自动修改 StudyBlock / 自动修改 estimatedMinutes / 新的 Planning Algorithm /「使用校准估时生成 Proposal」（下一阶段候选）。
+- Outlook 的 free capacity 基于 Free Time Engine（08:00–21:00 窗口、当前教学周课表、已有 StudyBlock），非用户真实可用时间承诺；capacity forecast 是确定性 schedule capacity，不是完成结果预测。
+- Capacity 只统计有估时 + 有效 DDL 的 active 任务；missing estimate / no deadline / overdue 不进入未来分配（缺估时单独提示）。
+- 本轮不做：AI 自动周报 / 定时周报 / Push / 综合分数 / Streak / Goals / Achievements / Cloud / Export / PDF / 预测 / 自动修改 StudyBlock / 自动移动 Deadline 后 Block / 自动修改 estimatedMinutes / 新的 Planning Algorithm /「使用校准估时生成 Proposal」（下一阶段候选）。

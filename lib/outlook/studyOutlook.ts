@@ -1,12 +1,14 @@
 /**
- * Study Outlook（Analytics V2 · Part 3）确定性前瞻引擎（纯函数，无 AI）。
- * 只读取 current state + 预构建 calibration；复用 deriveAssignmentHealth / findFreeTime。
+ * Study Outlook（Analytics V2 · Part 3/4）确定性前瞻引擎（纯函数，无 AI）。
+ * 只读取 current state + 预构建 calibration；复用 deriveAssignmentHealth / findFreeTime /
+ * Capacity Allocator（与 Study Planner 共用同一共享容量算法）。
  * Outlook 不写任何数据；calibration 只作为 task 的只读参考 metadata。
  */
 
 import { parseLocalDDL } from "@/lib/ddl";
 import { findFreeTime, FreeTimeSlot } from "@/lib/planning/freeTime";
 import { deriveAssignmentHealth } from "@/lib/tasks/taskHealth";
+import { allocateStudyCapacity } from "@/lib/planning/capacityAllocation";
 import {
   OutlookTask,
   StudyOutlook,
@@ -14,6 +16,7 @@ import {
   StudyOutlookSummary,
   OutlookTaskEstimateCalibration,
   OutlookHealth,
+  CapacityCheckpoint,
 } from "@/lib/outlook/types";
 
 export const OUTLOOK_MAX_TASKS = 8;
@@ -64,8 +67,7 @@ function pickCalibrationRef(
   return { source: "global", medianRatio: cal.medianRatio, sampleCount: cal.sampleCount };
 }
 
-export function buildStudyOutlook(input: StudyOutlookBuildInput): StudyOutlook {
-  const { assignments, studyBlocks, schedules, calendarMarks, semester, currentSemesterWeek, horizonDays, now, calibration } = input;
+export function buildStudyOutlook(input: StudyOutlookBuildInput): StudyOutlook {  const { assignments, studyBlocks, schedules, calendarMarks, semester, currentSemesterWeek, horizonDays, now, calibration } = input;
 
   const horizonEnd = new Date(now.getTime() + horizonDays * 86400000);
   horizonEnd.setHours(23, 59, 59, 999);
@@ -100,11 +102,28 @@ export function buildStudyOutlook(input: StudyOutlookBuildInput): StudyOutlook {
     return d ? d.getTime() : null;
   };
 
-  // 3. 每个任务：health（复用 deriveAssignmentHealth）+ available free minutes（now → min(ddl, horizonEnd)）
+  // 3. 共享容量分配（与 Study Planner 同一算法：单一池，任务间竞争；只算 eligible）
+  const allocation = allocateStudyCapacity({
+    assignments: selected,
+    studyBlocks,
+    freeSlots,
+    fromDate: dateStrOf(now),
+    toDate: dateStrOf(horizonEnd),
+    now,
+  });
+  const allocByAssignment = new Map(allocation.tasks.map((t) => [t.assignmentId, t]));
+  const allocBlockByDate = new Map<string, number>();
+  for (const t of allocation.tasks) {
+    for (const b of t.projectedBlocks) {
+      allocBlockByDate.set(b.date, (allocBlockByDate.get(b.date) ?? 0) + b.minutes);
+    }
+  }
+
+  // 4. 每个任务：health（复用 deriveAssignmentHealth）+ raw free minutes + 共享容量 facts
   const tasks: OutlookTask[] = selected.map((a) => {
     const deadlineMs = deadlineOf(a.ddl ?? null);
     const availableEnd = deadlineMs !== null ? Math.min(deadlineMs, horizonEnd.getTime()) : horizonEnd.getTime();
-    const availableBeforeDeadline = freeSlots
+    const rawFreeBeforeDeadline = freeSlots
       .filter((slot) => {
         // slot 的精确结束时刻（秒级 0：与 parseLocalDDL 的精确 ms 直接比较，DDL 当天 end<=DDL 时刻视为可用）
         const slotEnd = localDateStrToMs(slot.date, ...parseTime(slot.endTime), 0);
@@ -117,8 +136,19 @@ export function buildStudyOutlook(input: StudyOutlookBuildInput): StudyOutlook {
       assignment: a,
       studyBlocks,
       now,
-      availableMinutesBeforeDeadline: a.ddl ? availableBeforeDeadline : undefined,
+      availableMinutesBeforeDeadline: a.ddl ? rawFreeBeforeDeadline : undefined,
     });
+
+    const alloc = allocByAssignment.get(a.id);
+    const capacityComplete =
+      alloc && alloc.classification === "eligible"
+        ? alloc.completeCoverage
+        : null;
+    const reasons: string[] = [...healthResult.reasons];
+    // Deadline 后仍有自己的 StudyBlock：不影响 coverage，但占用真实 free time（提示用）
+    if (a.ddl && hasStudyBlocksAfterDeadline(a, studyBlocks)) {
+      if (!reasons.includes("scheduled_after_deadline")) reasons.push("scheduled_after_deadline");
+    }
 
     return {
       assignmentId: a.id,
@@ -129,9 +159,14 @@ export function buildStudyOutlook(input: StudyOutlookBuildInput): StudyOutlook {
       estimatedMinutes: a.estimatedMinutes ?? null,
       scheduledMinutesBeforeDeadline: healthResult.scheduledMinutesBeforeDeadline,
       unscheduledMinutes: healthResult.unscheduledMinutes ?? null,
-      availableMinutesBeforeDeadline: a.ddl ? availableBeforeDeadline : null,
+      availableMinutesBeforeDeadline: a.ddl ? rawFreeBeforeDeadline : null,
+      capacityAllocatedMinutes:
+        alloc && alloc.classification === "eligible" ? alloc.allocatedMinutes : null,
+      capacityShortfallMinutes:
+        alloc && alloc.classification === "eligible" ? alloc.shortfallMinutes : null,
+      capacityComplete,
       health: healthResult.state,
-      reasons: healthResult.reasons,
+      reasons,
       estimateCalibration: pickCalibrationRef(input, a.courseId ?? null, a.estimatedMinutes ?? null),
     };
   });
@@ -174,6 +209,49 @@ export function buildStudyOutlook(input: StudyOutlookBuildInput): StudyOutlook {
   for (const slot of freeSlots) {
     freeByDate.set(slot.date, (freeByDate.get(slot.date) ?? 0) + slotMinutes(slot));
   }
+
+  // 6. Cumulative Deadline Forecast（只含 eligible：有估时 + 有效 DDL + active）
+  const eligibleTasks = tasks.filter((t) => t.capacityComplete !== null);
+  const forecastDeadlines = Array.from(
+    new Set(eligibleTasks.map((t) => t.deadline).filter((d): d is string => !!d))
+  ).sort((a, b) => deadlineOf(a)! - deadlineOf(b)!);
+  const capacityForecast: CapacityCheckpoint[] = forecastDeadlines.map((dl) => {
+    const dueIds = eligibleTasks
+      .filter((t) => t.deadline && t.deadline <= dl)
+      .map((t) => t.assignmentId);
+    const cumulativeRequiredMinutes = dueIds.reduce(
+      (s, id) => s + (tasks.find((t) => t.assignmentId === id)?.unscheduledMinutes ?? 0),
+      0
+    );
+    const cumulativeAllocatedMinutes = dueIds.reduce(
+      (s, id) => s + (tasks.find((t) => t.assignmentId === id)?.capacityAllocatedMinutes ?? 0),
+      0
+    );
+    return {
+      deadline: dl,
+      dueAssignmentIds: dueIds,
+      cumulativeRequiredMinutes,
+      cumulativeAllocatedMinutes,
+      cumulativeShortfallMinutes: Math.max(cumulativeRequiredMinutes - cumulativeAllocatedMinutes, 0),
+    };
+  });
+  const firstShortfall = capacityForecast.find((c) => c.cumulativeShortfallMinutes > 0);
+  const firstCapacityShortfall = firstShortfall
+    ? {
+        deadline: firstShortfall.deadline,
+        shortfallMinutes: firstShortfall.cumulativeShortfallMinutes,
+        affectedAssignmentIds: tasks
+          .filter(
+            (t) =>
+              t.capacityComplete === false &&
+              t.deadline !== null &&
+              t.deadline <= firstShortfall.deadline
+          )
+          .map((t) => t.assignmentId),
+      }
+    : null;
+  const firstShortfallDate = firstShortfall ? firstShortfall.deadline.slice(0, 10) : null;
+
   const bottleneckDays = days
     .filter((d) => d.due >= 2 || d.planned >= 240)
     .map((d) => ({
@@ -181,9 +259,13 @@ export function buildStudyOutlook(input: StudyOutlookBuildInput): StudyOutlook {
       plannedStudyMinutes: d.planned,
       freeMinutesRemaining: freeByDate.get(d.date) ?? 0,
       dueTaskCount: d.due,
+      projectedAllocationMinutes: allocBlockByDate.get(d.date) ?? 0,
+      capacityPressure: (firstShortfallDate !== null && d.date >= firstShortfallDate
+        ? "shortfall"
+        : "busy") as "shortfall" | "busy",
     }));
 
-  // 6. Summary
+  // 7. Summary
   const counts = {
     totalDue: tasks.length,
     overdue: tasks.filter((t) => t.health === "overdue").length,
@@ -203,13 +285,43 @@ export function buildStudyOutlook(input: StudyOutlookBuildInput): StudyOutlook {
       scheduledMinutes: tasks.reduce((s, t) => s + t.scheduledMinutesBeforeDeadline, 0),
       remainingKnownMinutes: tasks.reduce((s, t) => s + (t.unscheduledMinutes ?? 0), 0),
       freeMinutes: totalFreeMinutes,
+      allocatableMinutes: allocation.totalAllocatedMinutes,
+      shortfallMinutes: allocation.totalShortfallMinutes,
+      unusedFreeMinutes: allocation.unusedFreeMinutes,
     },
   };
 
-  return { horizonDays, summary, tasks: topTasks, bottleneckDays, estimateCalibration: calibration };
+  return {
+    horizonDays,
+    summary,
+    tasks: topTasks,
+    bottleneckDays,
+    capacityForecast,
+    firstCapacityShortfall,
+    estimateCalibration: calibration,
+  };
 }
 
 function parseTime(t: string): [number, number] {
   const [h, m] = t.split(":").map(Number);
   return [h ?? 0, m ?? 0];
+}
+
+/** Deadline 之后仍存在自己的 StudyBlock（不影响 coverage；仅提示） */
+function hasStudyBlocksAfterDeadline(
+  assignment: import("@/types").Assignment,
+  studyBlocks: import("@/types").StudyBlock[]
+): boolean {
+  if (!assignment.ddl) return false;
+  const dl = parseLocalDDL(assignment.ddl);
+  if (!dl) return false;
+  const dlDate = assignment.ddl.slice(0, 10);
+  const dlMinutes = dl.getHours() * 60 + dl.getMinutes();
+  return studyBlocks.some((b) => {
+    if (b.assignmentId !== assignment.id) return false;
+    if (b.date > dlDate) return true;
+    if (b.date < dlDate) return false;
+    const end = Number(b.endTime.split(":")[0]) * 60 + Number(b.endTime.split(":")[1]);
+    return end > dlMinutes;
+  });
 }
