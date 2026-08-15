@@ -9,12 +9,13 @@ import { AIModelDefinition, AICustomConfig } from "@/lib/ai/providers/types";
  * 能力驱动的 Reasoning Provider 映射（server-only 消费）。
  * 客户端只能发送 reasoningEffort；providerOptions 一律由 server 构建，绝不信任客户端。
  *
- * 保守策略（Part 1）：
- * - 内置 Provider（deepseek / opencode-go）：未对具体模型验证 reasoning 兼容前，
- *   capability 一律 fixed（default only）。
+ * 保守策略（Part 1 + Reasoning Phase 2）：
+ * - DeepSeek official：明确声明 reasoning capability（deepseek-thinking）。
+ *   default → thinking disabled（历史稳定行为）；high/max → thinking enabled + reasoning_effort。
+ * - OpenCode Go（代理 Provider）：对具体模型的 reasoning/tool calling 兼容行为未逐模型验证前，
+ *   capability 一律 fixed（default only），绝不根据模型名推断。
  * - Custom OpenAI：仅当 custom.reasoningEffort === true（用户显式声明）才标记可调，
  *   mechanism = "effort"（@ai-sdk/openai-compatible 支持 reasoningEffort 字符串）。
- * - DeepSeek official：transform 强制 thinking disabled（tool calling 兼容），永不可调。
  */
 
 /** 从模型定义解析 ReasoningCapability（未声明 → fixed） */
@@ -66,6 +67,15 @@ export function resolveReasoningProviderOptions(input: {
         effort === "low" ? "low" : effort === "high" ? "high" : "medium";
       return { reasoningEffort: value };
     }
+    case "deepseek-thinking": {
+      // DeepSeek V4 官方 Thinking Mode（OpenAI-format）：
+      // thinking: { type: "enabled" } + reasoning_effort（官方有效档位 high / max）。
+      // effort 已经 normalize（low/medium 不在 supportedEfforts → default → 已提前 return）。
+      return {
+        thinking: { type: "enabled" },
+        reasoningEffort: effort === "max" ? "max" : "high",
+      };
+    }
     case "anthropic-effort":
       // 当前无已验证的 anthropic-messages 可调模型 → 保守不产出
       return undefined;
@@ -74,4 +84,24 @@ export function resolveReasoningProviderOptions(input: {
     case "fixed":
       return undefined;
   }
+}
+
+/**
+ * DeepSeek Thinking Mode 不接受 tool_choice（不满足约束可能返回 400）。
+ * Final Answer Boundary 已通过 finalTools={} / activeTools=[] 关闭全部工具，
+ * 此时只依赖空 tools，不再额外发送 toolChoice:"none"。
+ * 仅 DeepSeek 官方 + high/max（normalize 后）返回 true；其他 Provider 行为不变。
+ */
+export function shouldOmitToolChoice(input: {
+  definition: AIModelDefinition | null;
+  custom?: AICustomConfig;
+  effort: KiroReasoningEffort;
+}): boolean {
+  const capability = getReasoningCapability(input.definition, input.custom);
+  const effort = normalizeReasoningEffort(capability, input.effort);
+  return (
+    input.definition?.provider === "deepseek" &&
+    capability.mechanism === "deepseek-thinking" &&
+    (effort === "high" || effort === "max")
+  );
 }

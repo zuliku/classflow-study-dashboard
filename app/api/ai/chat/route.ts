@@ -21,7 +21,7 @@ import { logProviderError } from "@/lib/ai/providerLog";
 import { buildKiroResponsePreferenceContext } from "@/lib/ai/responsePreference";
 import { resolveLanguageModel, resolveModelDefinition } from "@/lib/ai/providers/resolver";
 import { validateAIChatBody, createTimeoutController } from "@/lib/ai/server";
-import { resolveReasoningProviderOptions } from "@/lib/ai/reasoning/providerOptions";
+import { resolveReasoningProviderOptions, shouldOmitToolChoice } from "@/lib/ai/reasoning/providerOptions";
 import { normalizePromptContextRefs } from "@/lib/ai/context/contextSelection";
 import {
   normalizeWorkspaceInstructionsForPrompt,
@@ -125,6 +125,13 @@ export async function POST(req: NextRequest) {
     custom: parsed.customConfig,
   });
   const reasoningProviderOptions = resolveReasoningProviderOptions({
+    definition: modelDefinition,
+    custom: parsed.customConfig,
+    effort: parsed.reasoningEffort,
+  });
+  // DeepSeek Thinking Mode 不接受 tool_choice（high/max 时通过空 tools/activeTools 关闭工具，
+  // 不再发送 toolChoice:"none"）；其他 Provider 保持现有行为。
+  const omitToolChoice = shouldOmitToolChoice({
     definition: modelDefinition,
     custom: parsed.customConfig,
     effort: parsed.reasoningEffort,
@@ -343,7 +350,7 @@ export async function POST(req: NextRequest) {
             "\n\n# Document Creation State\n本轮文档创建/更新已因连续结构错误或确定性渲染失败停止。不要再次尝试创建 Word，不要使用 create_text_file 伪造 .docx。简要向用户说明本轮文档创建失败并结束。"
           : systemMessage,
       tools: finalTools,
-      toolChoice: finalAnswerStarted ? "none" : undefined,
+      toolChoice: finalAnswerStarted && !omitToolChoice ? "none" : undefined,
       maxOutputTokens: AI.CHAT_MAX_OUTPUT_TOKENS,
       abortSignal: signal,
       // V2.2：bounded Tool Call Repair —— 无效 create/update Draft 在进入多步历史前由 server 修正一次，
@@ -434,7 +441,10 @@ export async function POST(req: NextRequest) {
           (s.toolCalls ?? []).some((tc) => tc.toolName === KIRO_FINAL_ANSWER_TOOL_NAME)
         );
         if (boundarySeen) {
-          return { activeTools: [], toolChoice: "none" as const, stopWhen: isStepCount(1) };
+          // DeepSeek Thinking Mode：boundary 后只用空 activeTools 关闭工具，不发送 tool_choice
+          return omitToolChoice
+            ? { activeTools: [], stopWhen: isStepCount(1) }
+            : { activeTools: [], toolChoice: "none" as const, stopWhen: isStepCount(1) };
         }
         return {};
       },

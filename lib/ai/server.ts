@@ -22,7 +22,14 @@ export function validateAIChatBody(body: unknown): {
   provider: "opencode-go" | "deepseek" | "custom-openai";
   model: string;
   apiKey: string;
-  customConfig?: { providerName: string; baseURL: string; model: string };
+  customConfig?: {
+    providerName: string;
+    baseURL: string;
+    model: string;
+    vision?: boolean;
+    fileParts?: boolean;
+    reasoningEffort?: boolean;
+  };
   messages?: unknown;
   timeoutMs?: number;
   /** Intelligence V2 Task 1：回答偏好（可安全 fallback；非法/缺失 → dense，不报错） */
@@ -63,6 +70,10 @@ export function validateAIChatBody(body: unknown): {
       providerName: typeof custom.providerName === "string" ? custom.providerName : "",
       baseURL: typeof custom.baseURL === "string" ? custom.baseURL : "",
       model: typeof custom.model === "string" ? custom.model : "",
+      // 高级能力声明只接受 boolean === true（绝不信任任意 raw custom object）
+      vision: custom.vision === true,
+      fileParts: custom.fileParts === true,
+      reasoningEffort: custom.reasoningEffort === true,
     },
     messages: b.messages,
     timeoutMs: typeof b.timeoutMs === "number" && b.timeoutMs > 0 ? b.timeoutMs : undefined,

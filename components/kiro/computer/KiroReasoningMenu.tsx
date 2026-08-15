@@ -10,6 +10,7 @@ const EFFORT_LABELS: Record<KiroReasoningEffort, string> = {
   low: "低",
   medium: "中",
   high: "高",
+  max: "极高",
 };
 
 /**

@@ -3,9 +3,12 @@ import {
   getReasoningCapability,
   normalizeReasoningEffort,
   resolveReasoningProviderOptions,
+  shouldOmitToolChoice,
 } from "@/lib/ai/reasoning/providerOptions";
 import { FIXED_REASONING } from "@/lib/ai/reasoning/types";
 import { AIModelDefinition } from "@/lib/ai/providers/types";
+import { DEEPSEEK_MODELS, deepSeekTransformRequestBody } from "@/lib/ai/providers/deepSeek";
+import { validateAIChatBody } from "@/lib/ai/server";
 
 const adjustableDef: AIModelDefinition = {
   id: "custom-m",
@@ -25,6 +28,9 @@ const adjustableDef: AIModelDefinition = {
     },
   },
 };
+
+const deepseekFlash = DEEPSEEK_MODELS.find((m) => m.id === "deepseek-v4-flash")!;
+const deepseekPro = DEEPSEEK_MODELS.find((m) => m.id === "deepseek-v4-pro")!;
 
 describe("reasoning capability", () => {
   it("缺失 reasoning capability → fixed（default only）", () => {
@@ -55,11 +61,20 @@ describe("reasoning capability", () => {
     ).toBeUndefined();
   });
 
-  it("DeepSeek official = fixed（transform 强制 thinking disabled 兼容）", () => {
-    // deepseek provider 无 reasoning capability → fixed
-    const cap = getReasoningCapability(null); // deepseek 定义不声明 reasoning
+  it("OpenCode Go（代理 Provider）= fixed（不按模型名猜能力）", () => {
+    // opencode-go 的 deepseek-v4-pro 不声明 reasoning → fixed
+    const goDef = {
+      id: "deepseek-v4-pro",
+      name: "DeepSeek V4 Pro",
+      provider: "opencode-go",
+      vendor: "deepseek",
+      transport: "openai-chat",
+      capabilities: { streaming: true, tools: true, vision: false, fileParts: false },
+    } as AIModelDefinition;
+    const cap = getReasoningCapability(goDef);
     expect(cap.adjustable).toBe(false);
-    expect(resolveReasoningProviderOptions({ definition: null, custom: undefined, effort: "high" })).toBeUndefined();
+    expect(resolveReasoningProviderOptions({ definition: goDef, effort: "max" })).toBeUndefined();
+    expect(shouldOmitToolChoice({ definition: goDef, effort: "max" })).toBe(false);
   });
 
   it("Custom OpenAI：仅 reasoningEffort===true 可调", () => {
@@ -76,5 +91,179 @@ describe("reasoning capability", () => {
     expect(options).toEqual({ reasoningEffort: "medium" });
     expect(resolveReasoningProviderOptions({ definition: adjustableDef, custom: { providerName: "x", baseURL: "https://x.example", model: "m", reasoningEffort: true }, effort: "low" })).toEqual({ reasoningEffort: "low" });
     expect(resolveReasoningProviderOptions({ definition: adjustableDef, custom: { providerName: "x", baseURL: "https://x.example", model: "m", reasoningEffort: true }, effort: "high" })).toEqual({ reasoningEffort: "high" });
+  });
+});
+
+describe("DeepSeek V4 Thinking Mode（deepseek-thinking）", () => {
+  // Test 1：capability 声明
+  it("V4 Flash / V4 Pro 声明 default / high / max（无 low / medium）", () => {
+    for (const def of [deepseekFlash, deepseekPro]) {
+      const cap = getReasoningCapability(def);
+      expect(cap.adjustable).toBe(true);
+      expect(cap.supportedEfforts).toEqual(["default", "high", "max"]);
+      expect(cap.mechanism).toBe("deepseek-thinking");
+    }
+  });
+
+  // Test 2：default → 无 provider override；transform fallback thinking disabled
+  it("default → undefined；transform 后 thinking.type = disabled", () => {
+    expect(
+      resolveReasoningProviderOptions({ definition: deepseekFlash, effort: "default" })
+    ).toBeUndefined();
+    const body = deepSeekTransformRequestBody({ messages: [], thinking: undefined });
+    expect(body.thinking).toEqual({ type: "disabled" });
+    // 无 thinking 字段（旧请求形状）同样 fallback disabled
+    const body2 = deepSeekTransformRequestBody({ messages: [] });
+    expect((body2.thinking as { type: string }).type).toBe("disabled");
+  });
+
+  // Test 2b：low / medium 不制造假档位 → 归一为 default
+  it("low / medium → 归一为 default（官方映射为 high，不展示假档位）", () => {
+    expect(normalizeReasoningEffort(getReasoningCapability(deepseekPro), "low")).toBe("default");
+    expect(normalizeReasoningEffort(getReasoningCapability(deepseekPro), "medium")).toBe("default");
+    expect(resolveReasoningProviderOptions({ definition: deepseekPro, effort: "low" })).toBeUndefined();
+  });
+
+  // Test 3：high → thinking enabled + reasoningEffort high；transform 不得覆盖
+  it("high → thinking.enabled + reasoningEffort=high，transform 不覆盖", () => {
+    const options = resolveReasoningProviderOptions({ definition: deepseekPro, effort: "high" });
+    expect(options).toEqual({ thinking: { type: "enabled" }, reasoningEffort: "high" });
+    const body = deepSeekTransformRequestBody({ ...(options as object), tools: [], messages: [] });
+    expect(body.thinking).toEqual({ type: "enabled" });
+    expect(body.reasoningEffort).toBe("high");
+  });
+
+  // Test 4：max → thinking enabled + reasoningEffort max
+  it("max → thinking.enabled + reasoningEffort=max", () => {
+    const options = resolveReasoningProviderOptions({ definition: deepseekFlash, effort: "max" });
+    expect(options).toEqual({ thinking: { type: "enabled" }, reasoningEffort: "max" });
+    const body = deepSeekTransformRequestBody({ ...(options as object), messages: [] });
+    expect(body.thinking).toEqual({ type: "enabled" });
+    expect(body.reasoningEffort).toBe("max");
+  });
+
+  it("任意客户端注入的非法 thinking → transform 拒绝，fallback disabled", () => {
+    const body = deepSeekTransformRequestBody({
+      messages: [],
+      thinking: { type: "evil" },
+    });
+    expect(body.thinking).toEqual({ type: "disabled" });
+  });
+
+  it("thinking enabled → transform 移除 tool_choice（AI SDK 默认 auto 也不发送）", () => {
+    const body = deepSeekTransformRequestBody({
+      messages: [],
+      thinking: { type: "enabled" },
+      tool_choice: "auto",
+      tools: [{ type: "function", function: { name: "x" } }],
+    });
+    expect("tool_choice" in body).toBe(false);
+    expect((body.thinking as { type: string }).type).toBe("enabled");
+    expect(body.tools).toHaveLength(1);
+    // thinking disabled（默认路径）：保持现有行为，不干预 tool_choice
+    const body2 = deepSeekTransformRequestBody({ messages: [], thinking: { type: "disabled" }, tool_choice: "auto" });
+    expect(body2.tool_choice).toBe("auto");
+  });
+
+  // Test 5：tool schema 根节点 fix 仍然正常
+  it("tool schema 根节点 type:object fix 仍然生效", () => {
+    const body = deepSeekTransformRequestBody({
+      tools: [
+        {
+          type: "function",
+          function: {
+            name: "create_reminder",
+            description: "创建提醒",
+            parameters: { properties: { text: { type: "string" } } },
+          },
+        },
+      ],
+      messages: [],
+    });
+    const params = (body.tools as { function: { parameters: Record<string, unknown> } }[])[0].function.parameters;
+    expect(params.type).toBe("object");
+    // 已有根 type 的 schema 不被修改
+    const body2 = deepSeekTransformRequestBody({
+      tools: [
+        {
+          type: "function",
+          function: {
+            name: "ok",
+            description: "ok",
+            parameters: { type: "object", properties: { a: { type: "string" } } },
+          },
+        },
+      ],
+      messages: [],
+    });
+    const params2 = (body2.tools as { function: { parameters: Record<string, unknown> } }[])[0].function.parameters;
+    expect(params2.type).toBe("object");
+    expect(Object.keys(params2).sort()).toEqual(["properties", "type"].sort());
+  });
+});
+
+describe("shouldOmitToolChoice（DeepSeek Thinking Mode tool_choice 兼容）", () => {
+  it("DeepSeek + high/max → true", () => {
+    expect(shouldOmitToolChoice({ definition: deepseekPro, effort: "high" })).toBe(true);
+    expect(shouldOmitToolChoice({ definition: deepseekFlash, effort: "max" })).toBe(true);
+  });
+  it("DeepSeek + default → false（thinking disabled，保持现有行为）", () => {
+    expect(shouldOmitToolChoice({ definition: deepseekPro, effort: "default" })).toBe(false);
+  });
+  it("非 DeepSeek / 未知模型 → false", () => {
+    expect(shouldOmitToolChoice({ definition: null, effort: "high" })).toBe(false);
+    expect(shouldOmitToolChoice({ definition: adjustableDef, custom: { providerName: "x", baseURL: "https://x", model: "m", reasoningEffort: true }, effort: "high" })).toBe(false);
+  });
+});
+
+describe("Custom OpenAI passthrough（validateAIChatBody 白名单）", () => {
+  const base = {
+    provider: "custom-openai",
+    model: "my-model",
+    apiKey: "sk-test",
+  };
+
+  // Test 6：reasoningEffort:true 必须贯通
+  it("reasoningEffort=true → 解析结果保留 true", () => {
+    const parsed = validateAIChatBody({
+      ...base,
+      customConfig: { providerName: "x", baseURL: "https://x.example", model: "my-model", reasoningEffort: true },
+    });
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) return;
+    expect(parsed.customConfig).toEqual({
+      providerName: "x",
+      baseURL: "https://x.example",
+      model: "my-model",
+      vision: false,
+      fileParts: false,
+      reasoningEffort: true,
+    });
+  });
+
+  it("reasoningEffort=false / 非 boolean → 不贯通（保守）", () => {
+    const parsedFalse = validateAIChatBody({ ...base, customConfig: { providerName: "x", baseURL: "https://x", model: "m", reasoningEffort: false } });
+    expect(parsedFalse.ok && parsedFalse.customConfig?.reasoningEffort).toBe(false);
+    const parsedBad = validateAIChatBody({ ...base, customConfig: { providerName: "x", baseURL: "https://x", model: "m", reasoningEffort: "yes" } });
+    expect(parsedBad.ok && parsedBad.customConfig?.reasoningEffort).toBe(false);
+  });
+
+  it("Custom + reasoningEffort=true → getReasoningCapability 可调，providerOptions 正常生成", () => {
+    const parsed = validateAIChatBody({
+      ...base,
+      reasoningEffort: "high",
+      customConfig: { providerName: "x", baseURL: "https://x.example", model: "my-model", reasoningEffort: true },
+    });
+    if (!parsed.ok) throw new Error("parse failed");
+    expect(getReasoningCapability(null, parsed.customConfig).adjustable).toBe(true);
+    expect(resolveReasoningProviderOptions({ definition: null, custom: parsed.customConfig, effort: parsed.reasoningEffort })).toEqual({ reasoningEffort: "high" });
+  });
+
+  // Test 7：非法 reasoning → default
+  it("非法 reasoningEffort → default", () => {
+    const parsed = validateAIChatBody({ ...base, reasoningEffort: "ultra" });
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) return;
+    expect(parsed.reasoningEffort).toBe("default");
   });
 });
