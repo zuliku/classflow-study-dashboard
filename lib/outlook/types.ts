@@ -38,10 +38,16 @@ export interface OutlookTask {
    * @deprecated 容量结论请使用 capacityAllocatedMinutes / capacityShortfallMinutes / capacityComplete
    */
   availableMinutesBeforeDeadline: number | null;
-  /** 共享容量分配结果（Capacity Allocator 输出；无估时 / 无 DDL / overdue → null） */
+  /** Preferred 共享容量分配（非课程时间；Capacity Allocator 输出；无估时 / 无 DDL / overdue → null） */
   capacityAllocatedMinutes: number | null;
   capacityShortfallMinutes: number | null;
   capacityComplete: boolean | null;
+  /** V1.2：放宽课程约束后额外可分配分钟（Preferred 之外） */
+  courseFallbackAllocatedMinutes: number | null;
+  /** V1.2：Combined（Preferred + soft fallback）容量事实 */
+  combinedCapacityAllocatedMinutes: number | null;
+  combinedCapacityShortfallMinutes: number | null;
+  combinedCapacityComplete: boolean | null;
   health: OutlookHealth;
   reasons: string[];
   /** 只读参考 metadata（绝不自动写入 / 不改变 health 判定） */
@@ -53,9 +59,9 @@ export interface OutlookDayLoad {
   plannedStudyMinutes: number;
   freeMinutesRemaining: number;
   dueTaskCount: number;
-  /** 该日 projected 分配分钟（Capacity Allocator 的 forecast blocks） */
+  /** 该日 projected 分配分钟（Combined forecast blocks） */
   projectedAllocationMinutes: number;
-  capacityPressure: "normal" | "busy" | "shortfall";
+  capacityPressure: "normal" | "busy" | "preferred-shortfall" | "hard-shortfall";
 }
 
 /** 按 Deadline 升序的 cumulative capacity checkpoint */
@@ -86,10 +92,19 @@ export interface StudyOutlookSummary {
     remainingKnownMinutes: number;
     /** 整个 horizon 的 raw free capacity（未做 deadline 竞争） */
     freeMinutes: number;
-    /** 真正经过 Deadline 竞争后的可分配总量 */
+    /** @deprecated 请使用 preferredAllocatedMinutes（非课程时间容量） */
     allocatableMinutes: number;
+    /** @deprecated 请使用 preferredShortfallMinutes */
     shortfallMinutes: number;
     unusedFreeMinutes: number;
+    /** V1.2：Preferred（非课程时间）容量 */
+    preferredAllocatedMinutes: number;
+    preferredShortfallMinutes: number;
+    /** V1.2：放宽课程约束后额外可安排的分钟（≠ 课程重叠分钟） */
+    additionalAllocatedWithCourseTime: number;
+    /** V1.2：Combined（Preferred + soft fallback）容量 */
+    combinedAllocatedMinutes: number;
+    combinedShortfallMinutes: number;
   };
 }
 
@@ -99,10 +114,18 @@ export interface StudyOutlook {
   /** 按优先级排序（最多 8 条） */
   tasks: OutlookTask[];
   bottleneckDays: OutlookDayLoad[];
-  /** 按 Deadline 升序的 cumulative capacity forecast（只含 eligible 任务） */
+  /** 按 Deadline 升序的 cumulative capacity forecast（Preferred；只含 eligible 任务） */
   capacityForecast: CapacityCheckpoint[];
-  /** 首次 cumulative shortage 的 checkpoint；无缺口 → null */
+  /** 首次 Preferred cumulative shortage 的 checkpoint；无缺口 → null */
   firstCapacityShortfall: {
+    deadline: string;
+    shortfallMinutes: number;
+    affectedAssignmentIds: string[];
+  } | null;
+  /** V1.2：Combined（soft fallback 后）的 cumulative forecast */
+  combinedCapacityForecast: CapacityCheckpoint[];
+  /** V1.2：soft fallback 后仍不足的首次缺口；无 → null */
+  firstCombinedCapacityShortfall: {
     deadline: string;
     shortfallMinutes: number;
     affectedAssignmentIds: string[];

@@ -52,7 +52,6 @@ export function StudyOutlookCard({
     if (h === 0) return `${m}m`;
     return m === 0 ? `${h}h` : `${h}h${String(m).padStart(2, "0")}m`;
   };
-  const shortfall = summary.workload.shortfallMinutes;
   const hasMissing = summary.counts.missingEstimate > 0;
   const affectedTitles = (firstCapacityShortfall?.affectedAssignmentIds ?? [])
     .map((id) => tasks.find((t) => t.assignmentId === id)?.title)
@@ -92,16 +91,22 @@ export function StudyOutlookCard({
             ? `${summary.counts.totalDue} 个截止任务${attentionCount > 0 ? ` · ${attentionCount} 个需注意` : ""}`
             : `未来 ${horizonDays} 天暂无截止任务`}
         </p>
-        {/* 容量事实：需求 / 可安排 / 缺口（共享容量，非 raw free 相加） */}
+        {/* 容量事实：Preferred（非课程时间）vs Combined（soft fallback 后）三层状态 */}
         {summary.counts.totalDue > 0 && (
           <p className="text-[11px] mt-1" data-testid="outlook-capacity-line">
-            {shortfall > 0 ? (
-              <span className="text-[#9B5B57]">
-                尚需安排 {fmt(summary.workload.remainingKnownMinutes)} · 可安排{" "}
-                {fmt(summary.workload.allocatableMinutes)} · 缺口 {fmt(shortfall)}
+            {summary.workload.preferredShortfallMinutes === 0 ? (
+              <span className="text-[#627566]">尚需安排 {fmt(summary.workload.remainingKnownMinutes)} · 非课程时间可覆盖</span>
+            ) : summary.workload.combinedShortfallMinutes === 0 ? (
+              <span className="text-[#A87952]">
+                尚需安排 {fmt(summary.workload.remainingKnownMinutes)} · 非课程时间尚缺{" "}
+                {fmt(summary.workload.preferredShortfallMinutes)} · 可通过课程重叠方案覆盖
               </span>
             ) : (
-              <span className="text-[#627566]">未来容量可覆盖当前已知需求</span>
+              <span className="text-[#9B5B57]">
+                尚需安排 {fmt(summary.workload.remainingKnownMinutes)} · 普通时间尚缺{" "}
+                {fmt(summary.workload.preferredShortfallMinutes)} · 放宽课程约束后仍缺{" "}
+                {fmt(summary.workload.combinedShortfallMinutes)}
+              </span>
             )}
             {hasMissing && (
               <span className="text-sandrift">
@@ -113,7 +118,7 @@ export function StudyOutlookCard({
         )}
       </div>
 
-      {firstCapacityShortfall && shortfall > 0 && (
+      {firstCapacityShortfall && summary.workload.preferredShortfallMinutes > 0 && (
         <div className="px-4 py-2 bg-[#9B5B57]/5 border-b border-line-soft">
           <p className="text-[10px] text-[#9B5B57] leading-relaxed" data-testid="outlook-shortfall-strip">
             最早容量缺口：{formatDeadline(firstCapacityShortfall.deadline)} 前约缺{" "}
@@ -233,10 +238,14 @@ function OutlookTaskRow({ task, onEstimate }: { task: OutlookTask; onEstimate: (
               <span className="text-[#627566]"> · 已安排覆盖</span>
             )}
           </>
+        ) : task.combinedCapacityComplete === true ? (
+          <>
+            {formatDeadline(task.deadline)} · 尚需安排 {Math.round(unscheduled)}min · 非课程时间不足 · 可通过课程重叠方案覆盖
+          </>
         ) : (
           <>
             {formatDeadline(task.deadline)} · 尚需安排 {Math.round(unscheduled)}min · 预计仍缺{" "}
-            {Math.round(task.capacityShortfallMinutes ?? 0)}min
+            {Math.round(task.combinedCapacityShortfallMinutes ?? task.capacityShortfallMinutes ?? 0)}min
           </>
         )}
         {scheduledAfterDeadline && (

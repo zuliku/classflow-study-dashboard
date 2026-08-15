@@ -8,7 +8,7 @@
 import { parseLocalDDL } from "@/lib/ddl";
 import { findFreeTime, FreeTimeSlot } from "@/lib/planning/freeTime";
 import { deriveAssignmentHealth } from "@/lib/tasks/taskHealth";
-import { allocateStudyCapacity } from "@/lib/planning/capacityAllocation";
+import { buildPlanningCapacity } from "@/lib/planning/planningCapacity";
 import {
   OutlookTask,
   StudyOutlook,
@@ -102,18 +102,32 @@ export function buildStudyOutlook(input: StudyOutlookBuildInput): StudyOutlook {
     return d ? d.getTime() : null;
   };
 
-  // 3. 共享容量分配（与 Study Planner 同一算法：单一池，任务间竞争；只算 eligible）
-  const allocation = allocateStudyCapacity({
-    assignments: selected,
-    studyBlocks,
-    freeSlots,
-    fromDate: dateStrOf(now),
-    toDate: dateStrOf(horizonEnd),
-    now,
-  });
-  const allocByAssignment = new Map(allocation.tasks.map((t) => [t.assignmentId, t]));
+  // 3. Canonical Planning Capacity（V1.2：Preferred 非课程时间 + Combined soft fallback；只算 eligible）
+  const capacity = buildPlanningCapacity(
+    {
+      assignments: selected,
+      studyBlocks,
+      schedules,
+      calendarMarks,
+      semester,
+      currentSemesterWeek,
+      fromDate: dateStrOf(now),
+      toDate: dateStrOf(horizonEnd),
+      now,
+    },
+    { includeNoDeadline: false }
+  );
+  const preferredByAssignment = new Map(
+    capacity.preferred.tasks.map((t) => [t.assignmentId, t])
+  );
+  const combinedByAssignment = new Map(
+    capacity.combined.tasks.map((t) => [t.assignmentId, t])
+  );
+  const fallbackByAssignment = new Map(
+    (capacity.courseFallback?.tasks ?? []).map((t) => [t.assignmentId, t])
+  );
   const allocBlockByDate = new Map<string, number>();
-  for (const t of allocation.tasks) {
+  for (const t of capacity.combined.tasks) {
     for (const b of t.projectedBlocks) {
       allocBlockByDate.set(b.date, (allocBlockByDate.get(b.date) ?? 0) + b.minutes);
     }
@@ -139,11 +153,12 @@ export function buildStudyOutlook(input: StudyOutlookBuildInput): StudyOutlook {
       availableMinutesBeforeDeadline: a.ddl ? rawFreeBeforeDeadline : undefined,
     });
 
-    const alloc = allocByAssignment.get(a.id);
-    const capacityComplete =
-      alloc && alloc.classification === "eligible"
-        ? alloc.completeCoverage
-        : null;
+    const alloc = preferredByAssignment.get(a.id);
+    const combined = combinedByAssignment.get(a.id);
+    const fallback = fallbackByAssignment.get(a.id);
+    const isEligible = (t: typeof alloc | undefined) =>
+      t !== undefined && t.classification === "eligible";
+    const capacityComplete = isEligible(alloc) ? alloc!.completeCoverage : null;
     const reasons: string[] = [...healthResult.reasons];
     // Deadline 后仍有自己的 StudyBlock：不影响 coverage，但占用真实 free time（提示用）
     if (a.ddl && hasStudyBlocksAfterDeadline(a, studyBlocks)) {
@@ -160,11 +175,16 @@ export function buildStudyOutlook(input: StudyOutlookBuildInput): StudyOutlook {
       scheduledMinutesBeforeDeadline: healthResult.scheduledMinutesBeforeDeadline,
       unscheduledMinutes: healthResult.unscheduledMinutes ?? null,
       availableMinutesBeforeDeadline: a.ddl ? rawFreeBeforeDeadline : null,
-      capacityAllocatedMinutes:
-        alloc && alloc.classification === "eligible" ? alloc.allocatedMinutes : null,
-      capacityShortfallMinutes:
-        alloc && alloc.classification === "eligible" ? alloc.shortfallMinutes : null,
+      // Preferred（非课程时间）容量
+      capacityAllocatedMinutes: isEligible(alloc) ? alloc!.allocatedMinutes : null,
+      capacityShortfallMinutes: isEligible(alloc) ? alloc!.shortfallMinutes : null,
       capacityComplete,
+      // V1.2：soft fallback 与 combined
+      courseFallbackAllocatedMinutes:
+        isEligible(fallback) && fallback!.allocatedMinutes > 0 ? fallback!.allocatedMinutes : null,
+      combinedCapacityAllocatedMinutes: isEligible(combined) ? combined!.allocatedMinutes : null,
+      combinedCapacityShortfallMinutes: isEligible(combined) ? combined!.shortfallMinutes : null,
+      combinedCapacityComplete: isEligible(combined) ? combined!.completeCoverage : null,
       health: healthResult.state,
       reasons,
       estimateCalibration: pickCalibrationRef(input, a.courseId ?? null, a.estimatedMinutes ?? null),
@@ -252,6 +272,50 @@ export function buildStudyOutlook(input: StudyOutlookBuildInput): StudyOutlook {
     : null;
   const firstShortfallDate = firstShortfall ? firstShortfall.deadline.slice(0, 10) : null;
 
+  // V1.2：Combined（soft fallback 后）的 cumulative forecast
+  const eligibleCombinedTasks = tasks.filter((t) => t.combinedCapacityComplete !== null);
+  const combinedForecastDeadlines = Array.from(
+    new Set(eligibleCombinedTasks.map((t) => t.deadline).filter((d): d is string => !!d))
+  ).sort((a, b) => deadlineOf(a)! - deadlineOf(b)!);
+  const combinedCapacityForecast: CapacityCheckpoint[] = combinedForecastDeadlines.map((dl) => {
+    const dueIds = eligibleCombinedTasks
+      .filter((t) => t.deadline && t.deadline <= dl)
+      .map((t) => t.assignmentId);
+    const cumulativeRequiredMinutes = dueIds.reduce(
+      (s, id) => s + (tasks.find((t) => t.assignmentId === id)?.unscheduledMinutes ?? 0),
+      0
+    );
+    const cumulativeAllocatedMinutes = dueIds.reduce(
+      (s, id) => s + (tasks.find((t) => t.assignmentId === id)?.combinedCapacityAllocatedMinutes ?? 0),
+      0
+    );
+    return {
+      deadline: dl,
+      dueAssignmentIds: dueIds,
+      cumulativeRequiredMinutes,
+      cumulativeAllocatedMinutes,
+      cumulativeShortfallMinutes: Math.max(cumulativeRequiredMinutes - cumulativeAllocatedMinutes, 0),
+    };
+  });
+  const firstCombinedShortfall = combinedCapacityForecast.find((c) => c.cumulativeShortfallMinutes > 0);
+  const firstCombinedCapacityShortfall = firstCombinedShortfall
+    ? {
+        deadline: firstCombinedShortfall.deadline,
+        shortfallMinutes: firstCombinedShortfall.cumulativeShortfallMinutes,
+        affectedAssignmentIds: tasks
+          .filter(
+            (t) =>
+              t.combinedCapacityComplete === false &&
+              t.deadline !== null &&
+              t.deadline <= firstCombinedShortfall.deadline
+          )
+          .map((t) => t.assignmentId),
+      }
+    : null;
+  const firstCombinedShortfallDate = firstCombinedShortfall
+    ? firstCombinedShortfall.deadline.slice(0, 10)
+    : null;
+
   const bottleneckDays = days
     .filter((d) => d.due >= 2 || d.planned >= 240)
     .map((d) => ({
@@ -260,9 +324,13 @@ export function buildStudyOutlook(input: StudyOutlookBuildInput): StudyOutlook {
       freeMinutesRemaining: freeByDate.get(d.date) ?? 0,
       dueTaskCount: d.due,
       projectedAllocationMinutes: allocBlockByDate.get(d.date) ?? 0,
-      capacityPressure: (firstShortfallDate !== null && d.date >= firstShortfallDate
-        ? "shortfall"
-        : "busy") as "shortfall" | "busy",
+      capacityPressure: (
+        firstCombinedShortfallDate !== null && d.date >= firstCombinedShortfallDate
+          ? "hard-shortfall"
+          : firstShortfallDate !== null && d.date >= firstShortfallDate
+            ? "preferred-shortfall"
+            : "busy"
+      ) as "busy" | "preferred-shortfall" | "hard-shortfall",
     }));
 
   // 7. Summary
@@ -285,9 +353,16 @@ export function buildStudyOutlook(input: StudyOutlookBuildInput): StudyOutlook {
       scheduledMinutes: tasks.reduce((s, t) => s + t.scheduledMinutesBeforeDeadline, 0),
       remainingKnownMinutes: tasks.reduce((s, t) => s + (t.unscheduledMinutes ?? 0), 0),
       freeMinutes: totalFreeMinutes,
-      allocatableMinutes: allocation.totalAllocatedMinutes,
-      shortfallMinutes: allocation.totalShortfallMinutes,
-      unusedFreeMinutes: allocation.unusedFreeMinutes,
+      // @deprecated → preferred*
+      allocatableMinutes: capacity.summary.preferredAllocatedMinutes,
+      shortfallMinutes: capacity.summary.preferredShortfallMinutes,
+      unusedFreeMinutes: capacity.preferred.unusedFreeMinutes,
+      // V1.2：两层容量
+      preferredAllocatedMinutes: capacity.summary.preferredAllocatedMinutes,
+      preferredShortfallMinutes: capacity.summary.preferredShortfallMinutes,
+      additionalAllocatedWithCourseTime: capacity.summary.additionalAllocatedWithCourseTime,
+      combinedAllocatedMinutes: capacity.summary.combinedAllocatedMinutes,
+      combinedShortfallMinutes: capacity.summary.combinedShortfallMinutes,
     },
   };
 
@@ -298,6 +373,8 @@ export function buildStudyOutlook(input: StudyOutlookBuildInput): StudyOutlook {
     bottleneckDays,
     capacityForecast,
     firstCapacityShortfall,
+    combinedCapacityForecast,
+    firstCombinedCapacityShortfall,
     estimateCalibration: calibration,
   };
 }

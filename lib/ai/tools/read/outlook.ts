@@ -33,11 +33,16 @@ function toModelFriendlyOutput(outlook: ReturnType<typeof buildStudyOutlook>) {
       estimatedMinutes: t.estimatedMinutes,
       scheduledMinutesBeforeDeadline: t.scheduledMinutesBeforeDeadline,
       unscheduledMinutes: t.unscheduledMinutes,
-      // raw 空闲（无竞争）与共享容量事实分离：容量结论只看 capacity* 字段
+      // raw 空闲（无竞争）与共享容量事实分离：Preferred 容量结论只看 capacity* 字段
       rawFreeMinutesBeforeDeadline: t.availableMinutesBeforeDeadline,
       capacityAllocatedMinutes: t.capacityAllocatedMinutes,
       capacityShortfallMinutes: t.capacityShortfallMinutes,
       capacityComplete: t.capacityComplete,
+      // V1.2：soft fallback 与 combined 容量
+      courseFallbackAllocatedMinutes: t.courseFallbackAllocatedMinutes,
+      combinedCapacityAllocatedMinutes: t.combinedCapacityAllocatedMinutes,
+      combinedCapacityShortfallMinutes: t.combinedCapacityShortfallMinutes,
+      combinedCapacityComplete: t.combinedCapacityComplete,
       health: t.health,
       reasons: t.reasons,
       estimateCalibration: t.estimateCalibration,
@@ -45,6 +50,8 @@ function toModelFriendlyOutput(outlook: ReturnType<typeof buildStudyOutlook>) {
     bottleneckDays: outlook.bottleneckDays,
     capacityForecast: outlook.capacityForecast,
     firstCapacityShortfall: outlook.firstCapacityShortfall,
+    combinedCapacityForecast: outlook.combinedCapacityForecast,
+    firstCombinedCapacityShortfall: outlook.firstCombinedCapacityShortfall,
     estimateCalibration: {
       status: outlook.estimateCalibration.status,
       sampleCount: outlook.estimateCalibration.sampleCount,
