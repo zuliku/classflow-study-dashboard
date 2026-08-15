@@ -1036,11 +1036,12 @@ export const useAppStore = create<AppState>()(
         const pad2 = (n: number) => String(n).padStart(2, "0");
         const uploadDate = `${today.getFullYear()}-${pad2(today.getMonth() + 1)}-${pad2(today.getDate())}`;
         // Task 6B-B：返回创建的 Material（调用方（如 Task Upload）可直接拿到 id 自动关联）
+        // 真实语义：无 size 数据存空字符串，不生成「1.5 MB」类假大小
         const material: Material = {
           id: createId("m"),
           title: materialData.title,
           type: materialData.type,
-          size: materialData.size || "1.5 MB",
+          size: materialData.size || "",
           uploadDate,
           storageKey: materialData.storageKey,
           url: materialData.url,

@@ -109,7 +109,7 @@ export function FilePreviewModal() {
                 {material.title}
               </h3>
               <p className="text-[10px] text-sandrift">
-                {material.size || "1.5 MB"} · 上传于 {material.uploadDate}
+                {material.size ? `${material.size} · ` : ""}上传于 {material.uploadDate}
               </p>
             </div>
           </div>

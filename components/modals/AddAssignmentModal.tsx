@@ -18,6 +18,7 @@ import { Field } from "@/components/ui/Field";
 import { Button } from "@/components/ui/Button";
 import { IconButton } from "@/components/ui/IconButton";
 import { UISelect, SelectOption } from "@/components/ui/Select";
+import { FormSection } from "@/components/ui/FormSection";
 import { onOpenAssignmentEditor } from "@/lib/uiEvents";
 
 import { getNewTaskDefaults } from "@/lib/taskDefaults";
@@ -109,7 +110,7 @@ export function AddAssignmentModal() {
         setPriority(defaults.priority);
         setStatus(defaults.status);
         setProgress(0);
-        setTagsStr("作业, 个人任务");
+        setTagsStr("");
         setDescription("");
         setSubtasks([]);
         setRecurrence("none");
@@ -156,7 +157,8 @@ export function AddAssignmentModal() {
       .map((st) => ({ id: st.id, title: st.title.trim(), completed: st.completed }));
 
     const baseFields = {
-      courseId: courseId || courses[0]?.id || "c_1",
+      // 无课程时存空字符串，Assignment UI 已有「通用」fallback 语义（不制造 c_1）
+      courseId: courseId || courses[0]?.id || "",
       title,
       description,
       ddl: fullDdl,
@@ -197,10 +199,10 @@ export function AddAssignmentModal() {
       overlayId="add-assignment-modal"
       stackZ={50}
       aria-label="添加任务"
-      className="max-w-lg max-h-[90dvh]"
+      className="max-w-lg max-h-[90dvh] flex flex-col"
     >
         {/* Header */}
-        <div className="p-4 px-6 border-b border-[#F0EBE1] bg-[#F7F5F5] flex items-center justify-between">
+        <div className="shrink-0 p-4 px-6 border-b border-line bg-[#F7F5F5] flex items-center justify-between">
           <div className="flex items-center space-x-2">
             <ClipboardList className="w-4 h-4 text-[#A48F82]" />
             <h3 className="text-base font-bold text-charcoal">
@@ -216,174 +218,184 @@ export function AddAssignmentModal() {
           </button>
         </div>
 
-        {/* Form */}
-        <form onSubmit={handleSubmit} className="p-5 space-y-4 overflow-y-auto text-xs">
-          <Field label="任务名称" required htmlFor="assignment-title">
-            <Input
-              id="assignment-title"
-              type="text"
-              placeholder="如：计量经济学实证报告"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              autoFocus
-              required
-            />
-          </Field>
+        {/* Form：Header / Body(scroll) / Footer 三段式，长表单 footer 不滚走 */}
+        <form onSubmit={handleSubmit} className="flex-1 min-h-0 flex flex-col">
+          <div className="flex-1 min-h-0 overflow-y-auto p-5 space-y-5 text-xs">
+            {/* 基本信息 */}
+            <FormSection title="基本信息">
+              <Field label="任务名称" required htmlFor="assignment-title">
+                <Input
+                  id="assignment-title"
+                  type="text"
+                  placeholder="如：计量经济学实证报告"
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  autoFocus
+                  required
+                />
+              </Field>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <Field label="关联课程">
-              <UISelect
-                value={courseId}
-                onChange={(v) => setCourseId(v)}
-                ariaLabel="关联课程"
-                options={courses.map((c) => ({ value: c.id, label: `${c.name} (${c.code})` }))}
-              />
-            </Field>
-
-            <Field label="优先级">
-              <UISelect<Priority>
-                value={priority}
-                onChange={setPriority}
-                ariaLabel="优先级"
-                options={[
-                  { value: "urgent", label: "紧急" },
-                  { value: "high", label: "高优先级" },
-                  { value: "medium", label: "中优先级" },
-                  { value: "low", label: "低优先级" },
-                ]}
-              />
-            </Field>
-          </div>
-
-          {/* DDL Date & Time Picker（Task V2：可选；未启用 = 无截止日期） */}
-          <div className="p-3 bg-alabaster/60 border border-line-strong rounded-xl space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="flex items-center font-bold text-charcoal text-[11px]">
-                <Clock className="w-3.5 h-3.5 mr-1 text-[#A48F82]" /> 截止时间 (DDL)
-              </span>
-              <Checkbox
-                checked={ddlEnabled}
-                onChange={(checked) => {
-                  setDdlEnabled(checked);
-                  // Task 7F：关闭 DDL 必须同步清空重复规则（避免提交非法组合）
-                  if (!checked) setRecurrence("none");
-                }}
-                aria-label="设置截止时间"
-              />
-            </div>
-            {ddlEnabled ? (
-              <>
-                <div className="grid grid-cols-2 gap-2">
-                  <Input
-                    type="date"
-                    value={ddlDate}
-                    onChange={(e) => setDdlDate(e.target.value)}
-                    className="bg-white border-line-strong font-mono"
-                    required
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <Field label="关联课程">
+                  <UISelect
+                    value={courseId}
+                    onChange={(v) => setCourseId(v)}
+                    ariaLabel="关联课程"
+                    options={courses.map((c) => ({ value: c.id, label: `${c.name} (${c.code})` }))}
                   />
-                  <Input
-                    type="time"
-                    value={ddlTime}
-                    onChange={(e) => setDdlTime(e.target.value)}
-                    className="bg-white border-line-strong font-mono"
-                    required
+                </Field>
+
+                <Field label="优先级">
+                  <UISelect<Priority>
+                    value={priority}
+                    onChange={setPriority}
+                    ariaLabel="优先级"
+                    options={[
+                      { value: "urgent", label: "紧急" },
+                      { value: "high", label: "高优先级" },
+                      { value: "medium", label: "中优先级" },
+                      { value: "low", label: "低优先级" },
+                    ]}
                   />
-                </div>
-                {/* Task 7F：重复规则（仅 DDL 启用时显示；完成当前任务后自动生成下一次） */}
-                <div className="flex items-center justify-between gap-2 pt-1">
-                  <span id="task-recurrence-label" className="text-[11px] font-bold text-sandrift">
-                    重复
+                </Field>
+              </div>
+            </FormSection>
+
+            {/* 时间：DDL 保留 inset surface（有 enabled/disabled 状态），无 shadow */}
+            <FormSection title="时间">
+              <div className="p-3 bg-[#F7F5F5] border border-line rounded-xl space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="flex items-center font-bold text-charcoal text-[11px]">
+                    <Clock className="w-3.5 h-3.5 mr-1 text-[#A48F82]" /> 截止时间
                   </span>
-                  <UISelect<TaskRecurrence | "none">
-                    value={recurrence}
-                    onChange={setRecurrence}
-                    ariaLabel="重复"
-                    options={RECURRENCE_OPTIONS}
-                    triggerClassName="min-w-[120px]"
+                  <Checkbox
+                    checked={ddlEnabled}
+                    onChange={(checked) => {
+                      setDdlEnabled(checked);
+                      // Task 7F：关闭 DDL 必须同步清空重复规则（避免提交非法组合）
+                      if (!checked) setRecurrence("none");
+                    }}
+                    aria-label="设置截止时间"
                   />
                 </div>
-              </>
-            ) : (
-              <p className="text-[11px] text-sandrift">未设置截止日期，任务仍可正常创建与安排。</p>
-            )}
-          </div>
+                {ddlEnabled ? (
+                  <>
+                    <div className="grid grid-cols-2 gap-2">
+                      <Input
+                        type="date"
+                        value={ddlDate}
+                        onChange={(e) => setDdlDate(e.target.value)}
+                        className="bg-white border-line-strong font-mono"
+                        required
+                      />
+                      <Input
+                        type="time"
+                        value={ddlTime}
+                        onChange={(e) => setDdlTime(e.target.value)}
+                        className="bg-white border-line-strong font-mono"
+                        required
+                      />
+                    </div>
+                    {/* Task 7F：重复规则（仅 DDL 启用时显示；完成当前任务后自动生成下一次） */}
+                    <div className="flex items-center justify-between gap-2 pt-1">
+                      <span id="task-recurrence-label" className="text-[11px] font-bold text-sandrift">
+                        重复
+                      </span>
+                      <UISelect<TaskRecurrence | "none">
+                        value={recurrence}
+                        onChange={setRecurrence}
+                        ariaLabel="重复"
+                        options={RECURRENCE_OPTIONS}
+                        triggerClassName="min-w-[120px]"
+                      />
+                    </div>
+                  </>
+                ) : (
+                  <p className="text-[11px] text-sandrift">未设置截止日期，任务仍可正常创建与安排。</p>
+                )}
+              </div>
 
-          {/* 预计耗时（分钟，可选） */}
-          <Field label="预计耗时" description="可选，单位为分钟">
-            <Input
-              type="number"
-              min={1}
-              value={estimatedMinutes}
-              onChange={(e) => setEstimatedMinutes(e.target.value)}
-              placeholder="如：120"
-              aria-label="预计耗时（分钟）"
-              className="font-mono"
-            />
-          </Field>
+              {/* 预计耗时（分钟，可选） */}
+              <Field label="预计耗时" description="可选，单位为分钟">
+                <Input
+                  type="number"
+                  min={1}
+                  value={estimatedMinutes}
+                  onChange={(e) => setEstimatedMinutes(e.target.value)}
+                  placeholder="如：120"
+                  aria-label="预计耗时（分钟）"
+                  className="font-mono"
+                />
+              </Field>
+            </FormSection>
 
-          {/* Subtasks checklist */}
-          <div className="space-y-2 pt-1">
-            <div className="flex items-center justify-between">
-              <label className="text-[11px] font-bold text-charcoal">子任务拆解 ({subtasks.length})</label>
-              <Button
-                type="button"
-                variant="accent"
-                size="sm"
-                onClick={handleAddSubtask}
-                className="h-7 px-2.5 text-[11px]"
-              >
-                <Plus className="w-3 h-3" />
-                <span>添加子任务</span>
-              </Button>
-            </div>
-
-            <div className="space-y-1.5">
-              {subtasks.map((st, idx) => (
-                <div key={st.id || idx} className="flex items-center gap-2">
-                  <Input
-                    type="text"
-                    placeholder={`子步骤 #${idx + 1}（如：收集案例数据）`}
-                    value={st.title}
-                    onChange={(e) => handleSubtaskChange(idx, e.target.value)}
-                    className="flex-1"
-                  />
-                  <IconButton
-                    variant="danger"
+            {/* 详细信息 */}
+            <FormSection title="详细信息">
+              {/* Subtasks checklist */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-[11px] font-bold text-charcoal">子任务拆解 ({subtasks.length})</label>
+                  <Button
+                    type="button"
+                    variant="accent"
                     size="sm"
-                    onClick={() => handleRemoveSubtask(idx)}
-                    aria-label="删除子任务"
-                    title="删除子任务"
-                    className="h-8 w-8"
+                    onClick={handleAddSubtask}
+                    className="h-7 px-2.5 text-[11px]"
                   >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </IconButton>
+                    <Plus className="w-3 h-3" />
+                    <span>添加子任务</span>
+                  </Button>
                 </div>
-              ))}
-            </div>
+
+                <div className="space-y-1.5">
+                  {subtasks.map((st, idx) => (
+                    <div key={st.id || idx} className="flex items-center gap-2">
+                      <Input
+                        type="text"
+                        placeholder={`子步骤 #${idx + 1}（如：收集案例数据）`}
+                        value={st.title}
+                        onChange={(e) => handleSubtaskChange(idx, e.target.value)}
+                        className="flex-1"
+                      />
+                      <IconButton
+                        variant="danger"
+                        size="sm"
+                        onClick={() => handleRemoveSubtask(idx)}
+                        aria-label="删除子任务"
+                        title="删除子任务"
+                        className="h-8 w-8"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </IconButton>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Tags */}
+              <Field label="标签" description="使用逗号分隔">
+                <Input
+                  type="text"
+                  placeholder="如：个人作业、回归模型、PPT"
+                  value={tagsStr}
+                  onChange={(e) => setTagsStr(e.target.value)}
+                />
+              </Field>
+
+              {/* Description */}
+              <Field label="任务要求与说明">
+                <Textarea
+                  rows={3}
+                  placeholder="补充任务要求、提交格式等"
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                />
+              </Field>
+            </FormSection>
           </div>
 
-          {/* Tags */}
-          <Field label="标签" description="使用逗号分隔">
-            <Input
-              type="text"
-              placeholder="如：个人作业、回归模型、PPT"
-              value={tagsStr}
-              onChange={(e) => setTagsStr(e.target.value)}
-            />
-          </Field>
-
-          {/* Description */}
-          <Field label="任务要求与说明">
-            <Textarea
-              rows={3}
-              placeholder="补充任务要求、提交格式等"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-            />
-          </Field>
-
-          {/* Actions */}
-          <div className="flex justify-end gap-2 pt-2 border-t border-[#F0EBE1]">
+          {/* Footer：稳定不随滚动 */}
+          <div className="shrink-0 flex justify-end gap-2 px-5 py-3 border-t border-line-soft">
             <Button
               type="button"
               variant="secondary"
