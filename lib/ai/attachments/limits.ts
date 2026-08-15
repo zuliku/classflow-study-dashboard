@@ -23,8 +23,8 @@ export const MAX_DOCUMENT_READS_PER_TURN = 5;
 /** @deprecated 兼容别名：重型文档读取统一使用 MAX_DOCUMENT_READS_PER_TURN */
 export const MAX_MATERIAL_READS_PER_TURN = MAX_DOCUMENT_READS_PER_TURN;
 
-/** 提取器版本（缓存失效用）：v2 起缓存 pageCount / possiblyScanned（扫描件标记不可丢失） */
-export const EXTRACTOR_VERSION = 2;
+/** 提取器版本（缓存失效用）：v3 起缓存真实 truncated 状态（绝不从 text.length 推导） */
+export const EXTRACTOR_VERSION = 3;
 
 // ---- Task 12：扫描 PDF Vision fallback 限制 ----
 

@@ -13,6 +13,8 @@ const DB_VERSION = 1;
 export interface ExtractCacheEntry {
   text: string;
   pages?: { page: number; text: string }[];
+  /** V1.3C.1：提取过程的真实截断事实（required；绝不从 text.length 推导） */
+  truncated: boolean;
   /** PDF 总页数（Task 12：扫描件 Vision fallback 需要） */
   pageCount?: number;
   /** 扫描型 PDF 标记（必须缓存，避免旧 cache 把扫描件读成空文本却丢失标记） */
@@ -44,7 +46,20 @@ export async function getExtractCache(key: string): Promise<ExtractCacheEntry | 
     return await new Promise((resolve, reject) => {
       const tx = db.transaction(STORE_NAME, "readonly");
       const req = tx.objectStore(STORE_NAME).get(key);
-      req.onsuccess = () => resolve((req.result as ExtractCacheEntry) ?? null);
+      req.onsuccess = () => {
+        const entry = req.result as ExtractCacheEntry | undefined;
+        // V1.3C.1：防御校验 —— version 必须匹配、truncated 必须为 boolean；
+        // 不满足 → 视为 cache miss（绝不把 undefined truncated 解释成 false）。
+        if (
+          !entry ||
+          entry.extractorVersion !== EXTRACTOR_VERSION ||
+          typeof entry.truncated !== "boolean"
+        ) {
+          resolve(null);
+          return;
+        }
+        resolve(entry);
+      };
       req.onerror = () => reject(req.error);
     });
   } catch {

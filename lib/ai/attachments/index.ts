@@ -36,7 +36,8 @@ export async function extractAttachment(
       extracted: {
         text: cached.text,
         pages: cached.pages,
-        truncated: cached.text.length >= 100_000,
+        // V1.3C.1：恢复真实 truncated 事实（PDF 页边界截断时 text.length < 100k 但 truncated=true）
+        truncated: cached.truncated,
         pageCount: cached.pageCount,
         possiblyScanned: cached.possiblyScanned,
       },
@@ -53,6 +54,8 @@ export async function extractAttachment(
     await setExtractCache(cacheKey, {
       text: extracted.text,
       pages: extracted.pages,
+      // V1.3C.1：保存提取过程的真实截断事实，绝不重新计算
+      truncated: extracted.truncated,
       pageCount: extracted.pageCount,
       possiblyScanned: extracted.possiblyScanned,
       extractedAt: new Date().toISOString(),

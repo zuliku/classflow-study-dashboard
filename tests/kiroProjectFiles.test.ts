@@ -42,6 +42,8 @@ import {
 import { executeReadProjectFile } from "@/lib/ai/tools/read/projectFile";
 import { normalizeProjectTurnContext, buildProjectContextSection } from "@/lib/ai/projects/prompt";
 import { KiroProjectTurnContext } from "@/lib/ai/contextBudget/types";
+import { getExtractCache, setExtractCache, extractCacheKey } from "@/lib/ai/attachments/cache";
+import { EXTRACTOR_VERSION } from "@/lib/ai/attachments/limits";
 
 function makeConversation(id: string, over: Partial<KiroConversationRecord> = {}): KiroConversationRecord {
   return {
@@ -412,5 +414,60 @@ describe("Prompt Project File Index", () => {
   it("无 files → 不产生项目资料块", () => {
     const s = buildProjectContextSection({ id: "a", name: "P", instructions: "R" });
     expect(s).not.toContain("## 项目资料");
+  });
+});
+
+describe("V1.3C.1：cache-hit 后 truncated 保真（executeReadProjectFile）", () => {
+  it("预置 v3 truncated entry（92k/truncated=true）→ 读取命中 cache → 仍 truncated=true，不按 length 猜", async () => {
+    const p = await createKiroProject({ name: "P" });
+    const f = await createProjectFile({ projectId: p.id, name: "long.pdf", mimeType: "application/pdf", sizeBytes: 12, kind: "pdf", blob: textBlob("x") });
+    // 模拟首次提取：页边界截断（text=92k < 100k 但 truncated=true）已写入 v3 cache
+    await setExtractCache(
+      extractCacheKey({ name: f.storageKey, size: f.sizeBytes, lastModified: 0 }),
+      {
+        text: "x".repeat(92_000),
+        pages: [
+          { page: 1, text: "x".repeat(60_000) },
+          { page: 2, text: "x".repeat(32_000) },
+        ],
+        truncated: true,
+        pageCount: 3,
+        possiblyScanned: false,
+        extractedAt: new Date().toISOString(),
+        extractorVersion: EXTRACTOR_VERSION,
+      }
+    );
+    const ctx: KiroProjectTurnContext = { id: p.id, name: "P", files: [{ id: f.id, name: f.name, kind: "pdf", sizeBytes: f.sizeBytes }] };
+    const r = await executeReadProjectFile({ projectFileId: f.id }, ctx);
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.data.truncated).toBe(true);
+      expect(r.data.pages?.map((pg) => pg.page)).toEqual([1, 2]);
+      expect(r.data.text.length).toBe(92_000);
+    }
+  });
+
+  it("短 PDF 短文本 + truncated=false cache entry → 命中后仍 false", async () => {
+    const p = await createKiroProject({ name: "P" });
+    const f = await createProjectFile({ projectId: p.id, name: "short.pdf", mimeType: "application/pdf", sizeBytes: 12, kind: "pdf", blob: textBlob("x") });
+    await setExtractCache(
+      extractCacheKey({ name: f.storageKey, size: f.sizeBytes, lastModified: 0 }),
+      {
+        text: "Hello Report",
+        pages: [{ page: 1, text: "Hello Report" }],
+        truncated: false,
+        pageCount: 1,
+        possiblyScanned: false,
+        extractedAt: new Date().toISOString(),
+        extractorVersion: EXTRACTOR_VERSION,
+      }
+    );
+    const ctx: KiroProjectTurnContext = { id: p.id, name: "P", files: [{ id: f.id, name: f.name, kind: "pdf", sizeBytes: f.sizeBytes }] };
+    const r = await executeReadProjectFile({ projectFileId: f.id }, ctx);
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.data.truncated).toBe(false);
+      expect(r.data.text).toBe("Hello Report");
+    }
   });
 });
