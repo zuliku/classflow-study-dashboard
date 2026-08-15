@@ -42,6 +42,11 @@ export interface AIModelDefinition {
     vision: boolean;
     fileParts: boolean;
     pdf?: boolean;
+    /**
+     * 该模型 vision 明确支持的图片 MIME 白名单（如 Grok: JPEG/PNG）。
+     * undefined = 无额外 ClassFlow MIME 限制，保持历史行为；绝不从 vendor/model 名推断。
+     */
+    visionMimeTypes?: string[];
     /** 显式声明的推理可调能力；缺失 = fixed（绝不由模型名/厂商/transport 推断） */
     reasoning?: ReasoningCapability;
   };

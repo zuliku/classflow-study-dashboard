@@ -100,3 +100,68 @@ describe("OpenAI Responses reasoning request body（@ai-sdk/openai 4.0.42）", (
     expect(bodies[0].body.reasoning).toEqual({ effort: "medium", summary: "detailed" });
   });
 });
+
+describe("OpenAI Responses image request body（Phase 3.3A，@ai-sdk/openai 4.0.42）", () => {
+  // 1x1 透明 PNG（合法 base64 fixture，无需网络）
+  const PNG_BASE64 =
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
+
+  const captureImageRequest = (modelId: string) => {
+    const bodies: { url: string; body: Record<string, unknown> }[] = [];
+    const spy: typeof fetch = async (input, init) => {
+      const body = (init as RequestInit | undefined)?.body;
+      bodies.push({
+        url: String(input),
+        body: typeof body === "string" ? (JSON.parse(body) as Record<string, unknown>) : {},
+      });
+      return new Response(JSON.stringify(FAKE_BODY), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    };
+    const model = createOpenAI({
+      name: "classflow-kiro",
+      baseURL: "https://fake.example/v1",
+      apiKey: "test-key",
+      fetch: spy,
+    }).responses(modelId);
+    return { bodies, model };
+  };
+
+  it("grok-4.5：user 图片 part → 请求走 /responses，图片不被丢失，body 含 input_image base64", async () => {
+    const { bodies, model } = captureImageRequest("grok-4.5");
+    const bytes = Uint8Array.from(atob(PNG_BASE64), (c) => c.charCodeAt(0));
+    await generateText({
+      model,
+      messages: [
+        {
+          role: "user",
+          content: [
+            { type: "text", text: "图片主体是什么颜色？" },
+            { type: "image", image: bytes },
+          ],
+        },
+      ],
+    });
+    expect(bodies.length).toBe(1);
+    expect(bodies[0].url).toContain("/responses");
+    const body = bodies[0].body;
+    const input = (body.input as { role: string; content: unknown[] }[])[0];
+    expect(input.role).toBe("user");
+    const content = input.content as { type: string; image_url?: string }[];
+    // 图片必须进入请求体（以 @ai-sdk/openai 实际输出为准，不手写猜测）
+    expect(content.some((c) => c.type === "input_image")).toBe(true);
+    const imagePart = content.find((c) => c.type === "input_image");
+    expect(imagePart?.image_url).toContain("data:image/png;base64,");
+  });
+
+  it("store:false 作为 base provider option 真实进入请求体", async () => {
+    const { bodies, model } = captureImageRequest("grok-4.5");
+    await generateText({
+      model,
+      messages: [{ role: "user", content: "hi" }],
+      providerOptions: { openai: { store: false } } as never,
+    });
+    expect(bodies[0].body.store).toBe(false);
+  });
+});

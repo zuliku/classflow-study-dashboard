@@ -6,7 +6,6 @@ import {
   convertToModelMessages,
   TextStreamPart,
   ToolSet,
-  smoothStream,
   isStepCount,
   wrapLanguageModel,
   addToolInputExamplesMiddleware,
@@ -21,7 +20,7 @@ import { logProviderError } from "@/lib/ai/providerLog";
 import { buildKiroResponsePreferenceContext } from "@/lib/ai/responsePreference";
 import { resolveLanguageModel, resolveModelDefinition } from "@/lib/ai/providers/resolver";
 import { validateAIChatBody, createTimeoutController } from "@/lib/ai/server";
-import { resolveReasoningProviderOptionsEnvelope, shouldOmitToolChoice } from "@/lib/ai/reasoning/providerOptions";
+import { resolveProviderOptionsEnvelope, shouldOmitToolChoice } from "@/lib/ai/reasoning/providerOptions";
 import { normalizePromptContextRefs } from "@/lib/ai/context/contextSelection";
 import {
   normalizeWorkspaceInstructionsForPrompt,
@@ -32,6 +31,7 @@ import { COMPUTER_MUTATION_LIMIT_PER_TURN } from "@/lib/ai/computer/executor";
 import { resolveDocumentAuthoringVersion } from "@/lib/ai/computer/documents/authoring/protocol";
 import { deriveDocumentFailureFuseState } from "@/lib/ai/computer/documents/failureFuse";
 import { KIRO_FINAL_ANSWER_TOOL_NAME } from "@/lib/ai/tools/finalAnswer";
+import { textOnlySmoothStream } from "@/lib/ai/streaming/textOnlySmoothStream";
 import { shouldRepairToolCall, KIRO_TOOL_CALL_REPAIR_MAX_INPUT_BYTES } from "@/lib/ai/computer/tools/repair";
 import {
   buildKiroModelContext,
@@ -48,7 +48,7 @@ export const maxDuration = 60;
 const KIRO_STREAM_SEGMENTER = new Intl.Segmenter("zh", { granularity: "word" });
 
 /**
- * smoothStream 词间间隔（Streaming UX V2 Phase 4 12ms → V4.2 light smoothing 4ms）。
+ * Text-only smoothing 词间间隔（Streaming UX V4.3：只作用于 text，reasoning 立即透传）。
  * V4.2 cadence 证据（本地 SSE 形态 A/B）：burst 大 chunk（300/120ms）p95 gap 135ms；
  * fine 形态下 12ms vs 5ms 排队 p95 gap 相同（34ms）——12ms 串行排队只增加完成延迟
  * （8000 字 ≈ 120 chunk × 12ms ≈ 1.4s），对可见节奏无贡献。4ms 保留 chunk 整形
@@ -124,10 +124,14 @@ export async function POST(req: NextRequest) {
     model: parsed.model,
     custom: parsed.customConfig,
   });
-  const reasoningProviderOptionsEnvelope = resolveReasoningProviderOptionsEnvelope({
+  const providerOptionsEnvelope = resolveProviderOptionsEnvelope({
     definition: modelDefinition,
     custom: parsed.customConfig,
     effort: parsed.reasoningEffort,
+    // OpenCode Go Responses（@ai-sdk/openai 默认 store:true）：图片请求不保存服务端
+    // request/response 历史（xAI Vision 官方建议）；ClassFlow 用自己的 message replay，
+    // 不依赖 previousResponseId。与 reasoning 合并到同一个 envelope。
+    base: modelDefinition?.transport === "openai-responses" ? { store: false } : undefined,
   });
   // DeepSeek Thinking Mode 不接受 tool_choice（high/max 时通过空 tools/activeTools 关闭工具，
   // 不再发送 toolChoice:"none"）；其他 Provider 保持现有行为。
@@ -418,10 +422,9 @@ export async function POST(req: NextRequest) {
           }
         };
       })(),
-      // Reasoning effort：verified provider options（default/不支持 → 不发送，保持 provider 默认）。
-      // envelope 按 adapter 选择正确 key：chat/messages → "classflow-kiro"；
-      // openai-responses → "openai"（@ai-sdk/openai 4.0.42 Responses 固定读取该 key）。
-      providerOptions: reasoningProviderOptionsEnvelope as Parameters<typeof streamText>[0]["providerOptions"],
+      // Provider options：envelope 按 adapter 选择正确 key（chat/messages → "classflow-kiro"；
+      // openai-responses → "openai"），base options（store:false）与 reasoning 已合并。
+      providerOptions: providerOptionsEnvelope as Parameters<typeof streamText>[0]["providerOptions"],
       // Task 14：Server execute tool 允许有限多步自动执行；客户端工具调用时 loop 自然暂停等 Client Result。
       // V4.1 stopWhen：business-step 上限（boundary 不消耗）——step 数达到上限时，
       // 若最后一步是 begin_final_answer（boundary），必须允许下一步 Final Answer 生成。
@@ -447,9 +450,11 @@ export async function POST(req: NextRequest) {
         }
         return {};
       },
-      // Worklog V2 Task 3 + Streaming UX V2 Phase 4：按词分块 + 12ms 间隔的流式节奏
-      //（单一 cadence owner：client throttle 24ms 只是合并 React 更新，不叠加节流层）
-      experimental_transform: smoothStream({
+      // Worklog V2 Task 3 + Streaming UX V2 Phase 4 + V4.3：按词分块 + 4ms 间隔的流式节奏，
+      // 只作用于 text（Final Answer / commentary）。reasoning 立即透传（Kiro 不渲染 reasoning，
+      // 不人为慢放 Thinking → Tool / Final Answer 的过渡）。单一 cadence owner：
+      // client throttle 24ms 只是合并 React 更新，不叠加节流层。
+      experimental_transform: textOnlySmoothStream({
         chunking: KIRO_STREAM_SEGMENTER,
         delayInMs: KIRO_SMOOTH_STREAM_DELAY_MS,
       }),

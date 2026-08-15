@@ -4,7 +4,8 @@ import { extractTextFile, truncateText, normalizeLineEndings } from "@/lib/ai/at
 import { extractDocx } from "@/lib/ai/attachments/docx";
 import { extractPdf } from "@/lib/ai/attachments/pdf";
 import { extractAttachment } from "@/lib/ai/attachments";
-import { getModelCapabilities } from "@/lib/ai/providers/capabilities";
+import { getModelCapabilities, isVisionMimeSupported } from "@/lib/ai/providers/capabilities";
+import { FIXED_REASONING } from "@/lib/ai/reasoning/types";
 import { KIRO_SYSTEM_PROMPT } from "@/lib/ai/config";
 import { buildMinimalPdf, buildMinimalDocx } from "@/tests/fixtures/files";
 import { executeReadMaterial } from "@/lib/ai/tools/read/material";
@@ -116,7 +117,8 @@ describe("文本提取", () => {
 
 describe("Vision Capability（真实约束）", () => {
   it("内置模型：registry 明确配置", () => {
-    // grok-4.5 已转入 Responses-unsupported（Phase 3.0）→ 未知模型保守 fallback，不再声明 vision
+    // grok-4.5：Responses 已正式支持（Phase 3.1+），vision 仍处于 capability gate
+    // （Phase 3.3A live probe 未通过 → vision=false，不暴露）
     expect(getModelCapabilities({ provider: "opencode-go", model: "grok-4.5" }).vision).toBe(false);
     expect(getModelCapabilities({ provider: "opencode-go", model: "kimi-k3" }).vision).toBe(true);
     expect(getModelCapabilities({ provider: "opencode-go", model: "mimo-v2.5" }).vision).toBe(true);
@@ -135,6 +137,59 @@ describe("Vision Capability（真实约束）", () => {
 
   it("未知模型：保守 false", () => {
     expect(getModelCapabilities({ provider: "opencode-go", model: "brand-new" }).vision).toBe(false);
+  });
+});
+
+describe("Vision MIME gate（isVisionMimeSupported，Phase 3.3A）", () => {
+  // Grok 式白名单：vision=true + visionMimeTypes=[jpeg, png]
+  const grokLike = {
+    streaming: true,
+    tools: true,
+    vision: true,
+    fileParts: false,
+    pdf: false,
+    visionMimeTypes: ["image/jpeg", "image/png"],
+    reasoning: FIXED_REASONING,
+  };
+  const noWhitelist = { ...grokLike, visionMimeTypes: undefined };
+  const nonVision = { ...grokLike, vision: false };
+
+  it("vision=false → false（无论 MIME）", () => {
+    expect(isVisionMimeSupported(nonVision, "image/jpeg")).toBe(false);
+    expect(isVisionMimeSupported(nonVision, "image/png", "a.png")).toBe(false);
+  });
+
+  it("vision=true + 无白名单 → true（历史行为，无额外限制）", () => {
+    expect(isVisionMimeSupported(noWhitelist, "image/webp")).toBe(true);
+    expect(isVisionMimeSupported(noWhitelist, "image/jpeg")).toBe(true);
+    expect(isVisionMimeSupported(noWhitelist, "image/png")).toBe(true);
+  });
+
+  it("白名单：JPEG/PNG → true；WEBP 及其余 → false", () => {
+    expect(isVisionMimeSupported(grokLike, "image/jpeg")).toBe(true);
+    expect(isVisionMimeSupported(grokLike, "image/png")).toBe(true);
+    expect(isVisionMimeSupported(grokLike, "image/webp")).toBe(false);
+    expect(isVisionMimeSupported(grokLike, "image/gif")).toBe(false);
+    expect(isVisionMimeSupported(grokLike, "image/svg+xml")).toBe(false);
+  });
+
+  it("扫描 PDF 页面图（image/jpeg）→ Grok 式白名单通过（PDF pipeline 不受影响）", () => {
+    expect(isVisionMimeSupported(grokLike, "image/jpeg")).toBe(true);
+  });
+
+  it("File.type 为空：扩展名有限兜底 .jpg/.jpeg/.png；.webp 不伪装", () => {
+    expect(isVisionMimeSupported(grokLike, undefined, "photo.jpg")).toBe(true);
+    expect(isVisionMimeSupported(grokLike, undefined, "photo.jpeg")).toBe(true);
+    expect(isVisionMimeSupported(grokLike, undefined, "photo.png")).toBe(true);
+    expect(isVisionMimeSupported(grokLike, undefined, "photo.webp")).toBe(false);
+    expect(isVisionMimeSupported(grokLike, undefined, "photo.gif")).toBe(false);
+    expect(isVisionMimeSupported(grokLike, undefined, "noext")).toBe(false);
+  });
+
+  it("visionMimeTypes 贯通：registry 未声明 → undefined（无额外限制）", () => {
+    expect(getModelCapabilities({ provider: "opencode-go", model: "kimi-k3" }).visionMimeTypes).toBeUndefined();
+    expect(getModelCapabilities({ provider: "opencode-go", model: "mimo-v2.5" }).visionMimeTypes).toBeUndefined();
+    expect(getModelCapabilities({ provider: "custom-openai", model: "x", custom: { providerName: "", baseURL: "", model: "x", vision: true } }).visionMimeTypes).toBeUndefined();
   });
 });
 

@@ -56,9 +56,11 @@ import {
   executeQueryLearningHistory,
   executeSummarizeLearningHistory,
 } from "@/lib/ai/tools/read/history";
+import { executeGetLearningAnalytics } from "@/lib/ai/tools/read/analytics";
 import { MAX_MATERIAL_READS_PER_TURN } from "@/lib/ai/attachments/limits";
 import { KiroAttachment, KiroDocumentContext, KiroAttachmentView } from "@/lib/ai/attachments/types";
-import { getModelCapabilities } from "@/lib/ai/providers/capabilities";
+import { getModelCapabilities, isVisionMimeSupported } from "@/lib/ai/providers/capabilities";
+import { getActiveModelName } from "@/lib/ai/providers/registry";
 import { executeKiroWriteTool } from "@/lib/ai/tools/write/executor";
 import { isDestructiveWriteTool, KiroUndoEntry, KiroWriteApi, WriteToolResult } from "@/lib/ai/tools/write/types";
 import { KIRO_WRITE_TOOL_NAMES } from "@/lib/ai/tools/write/registry";
@@ -823,6 +825,15 @@ export function useKiroChat({
             toolName === "query_learning_history"
               ? await executeQueryLearningHistory(input)
               : await executeSummarizeLearningHistory(input);
+          emitToolOutput(toolName, toolCallId, result as ToolOutput);
+        })();
+        return;
+      }
+
+      // ---- Canonical Analytics（Part 2）：Browser 异步执行，与 UI 同源；只读 ----
+      if (toolName === "get_learning_analytics") {
+        void (async () => {
+          const result = await executeGetLearningAnalytics(input);
           emitToolOutput(toolName, toolCallId, result as ToolOutput);
         })();
         return;
@@ -1663,6 +1674,25 @@ export function useKiroChat({
     async (text: string, turnAttachments: KiroAttachment[]): Promise<boolean> => {
       const v = text.trim();
       if (!v || !enabled) return false;
+      // Vision MIME gate（Phase 3.3A）：仅当当前模型 vision=true 且声明了
+      // visionMimeTypes 白名单时校验用户图片；不支持的（如 Grok 下的 WEBP）
+      // 整个 Send 不执行，明确拒绝。非 vision 模型 / 无白名单模型不受影响。
+      const userImages = turnAttachments.filter(
+        (a): a is Extract<KiroAttachment, { source: "local" }> =>
+          a.source === "local" && a.kind === "image" && a.status === "ready"
+      );
+      if (
+        capabilities.vision &&
+        capabilities.visionMimeTypes &&
+        userImages.some((a) => !isVisionMimeSupported(capabilities, a.file.type, a.file.name))
+      ) {
+        const modelName = getActiveModelName({ provider, model, customModel: custom.model });
+        pushToast({
+          message: `${modelName} 当前仅支持 JPG / PNG 图片，请转换后重试。`,
+          type: "error",
+        });
+        return false; // Prompt 保留，不静默丢图
+      }
       readCounterRef.current = 0;
       materialReadCounterRef.current = 0;
       writeCounterRef.current = 0;

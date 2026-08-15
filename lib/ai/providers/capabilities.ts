@@ -11,6 +11,8 @@ export interface ResolvedModelCapabilities {
   vision: boolean;
   fileParts: boolean;
   pdf: boolean;
+  /** 该模型 vision 的 MIME 白名单；undefined = 无额外限制（历史行为） */
+  visionMimeTypes?: string[];
   /** capability-driven reasoning（未声明 = fixed） */
   reasoning: ReasoningCapability;
 }
@@ -46,6 +48,28 @@ export function getModelCapabilities(input: {
     vision: def.capabilities.vision,
     fileParts: def.capabilities.fileParts,
     pdf: def.capabilities.pdf === true,
+    visionMimeTypes: def.capabilities.visionMimeTypes,
     reasoning: def.capabilities.reasoning ?? getReasoningCapability(null, input.custom),
   };
+}
+
+/**
+ * Vision MIME gate（纯函数，发送前调用）：
+ * - vision=false → false
+ * - vision=true + visionMimeTypes undefined → true（历史行为，无额外限制）
+ * - vision=true + visionMimeTypes 声明 → includes(mimeType)
+ * 浏览器 File.type 可能为空：仅在 visionMimeTypes 已声明时按扩展名做有限映射
+ * （.jpg/.jpeg → image/jpeg；.png → image/png）。绝不把 .webp 伪装成 JPEG。
+ */
+export function isVisionMimeSupported(capability: ResolvedModelCapabilities, mimeType: string | undefined, fileName?: string): boolean {
+  if (!capability.vision) return false;
+  if (!capability.visionMimeTypes) return true;
+  if (mimeType && capability.visionMimeTypes.includes(mimeType)) return true;
+  // File.type 为空时的有限扩展名兜底（仅当白名单已声明）
+  if (!mimeType && fileName) {
+    const lower = fileName.toLowerCase();
+    if (lower.endsWith(".jpg") || lower.endsWith(".jpeg")) return capability.visionMimeTypes.includes("image/jpeg");
+    if (lower.endsWith(".png")) return capability.visionMimeTypes.includes("image/png");
+  }
+  return false;
 }

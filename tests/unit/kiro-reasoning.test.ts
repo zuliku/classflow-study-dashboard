@@ -3,7 +3,7 @@ import {
   getReasoningCapability,
   normalizeReasoningEffort,
   resolveReasoningProviderOptions,
-  resolveReasoningProviderOptionsEnvelope,
+  resolveProviderOptionsEnvelope,
   shouldOmitToolChoice,
 } from "@/lib/ai/reasoning/providerOptions";
 import { resolveEffectiveReasoningEffort } from "@/lib/ai/reasoning/effective";
@@ -327,7 +327,7 @@ describe("GPT 5.6 Luna / Grok 4.5（openai-responses-effort，Phase 3.2A/B）", 
 
   it("3. default → provider options undefined", () => {
     expect(resolveReasoningProviderOptions({ definition: lunaDef, effort: "default" })).toBeUndefined();
-    expect(resolveReasoningProviderOptionsEnvelope({ definition: lunaDef, effort: "default" })).toBeUndefined();
+    expect(resolveProviderOptionsEnvelope({ definition: lunaDef, effort: "default" })).toBeUndefined();
   });
 
   it("4. low → { reasoningEffort: low, forceReasoning: true }", () => {
@@ -339,13 +339,23 @@ describe("GPT 5.6 Luna / Grok 4.5（openai-responses-effort，Phase 3.2A/B）", 
     expect(resolveReasoningProviderOptions({ definition: lunaDef, effort: "max" })).toBeUndefined();
   });
 
-  it("envelope：Responses → { openai: ... }（4.0.42 固定读取 openai key）", () => {
-    expect(resolveReasoningProviderOptionsEnvelope({ definition: lunaDef, effort: "high" })).toEqual({
+  it("envelope：Responses → { openai: ... }（4.0.42 固定读取 openai key）；base 与 reasoning 合并", () => {
+    expect(resolveProviderOptionsEnvelope({ definition: lunaDef, effort: "high" })).toEqual({
       openai: { reasoningEffort: "high", forceReasoning: true },
+    });
+    // base（如 Responses store:false）与 reasoning 合并到同一个 envelope，不产生第二个 providerOptions
+    expect(
+      resolveProviderOptionsEnvelope({ definition: lunaDef, effort: "high", base: { store: false } })
+    ).toEqual({
+      openai: { store: false, reasoningEffort: "high", forceReasoning: true },
+    });
+    // 仅 base、无 reasoning → 仍然输出（store:false 独立生效）
+    expect(resolveProviderOptionsEnvelope({ definition: lunaDef, effort: "default", base: { store: false } })).toEqual({
+      openai: { store: false },
     });
     // 非 Responses（chat/messages adapter）→ classflow-kiro
     expect(
-      resolveReasoningProviderOptionsEnvelope({
+      resolveProviderOptionsEnvelope({
         definition: null,
         custom: { providerName: "x", baseURL: "https://x.example", model: "m", reasoningEffort: true },
         effort: "high",
@@ -363,8 +373,8 @@ describe("GPT 5.6 Luna / Grok 4.5（openai-responses-effort，Phase 3.2A/B）", 
     expect(resolveReasoningProviderOptions({ definition: grokDef, effort: "medium" })).toEqual({ reasoningEffort: "medium", forceReasoning: true });
     expect(resolveReasoningProviderOptions({ definition: grokDef, effort: "high" })).toEqual({ reasoningEffort: "high", forceReasoning: true });
     expect(resolveReasoningProviderOptions({ definition: grokDef, effort: "max" })).toBeUndefined();
-    expect(resolveReasoningProviderOptionsEnvelope({ definition: grokDef, effort: "high" })).toEqual({
-      openai: { reasoningEffort: "high", forceReasoning: true },
+    expect(resolveProviderOptionsEnvelope({ definition: grokDef, effort: "high", base: { store: false } })).toEqual({
+      openai: { store: false, reasoningEffort: "high", forceReasoning: true },
     });
   });
 

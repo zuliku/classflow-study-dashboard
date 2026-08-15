@@ -117,22 +117,28 @@ export function shouldOmitToolChoice(input: {
 }
 
 /**
- * providerOptions envelope（按 adapter 返回正确 key）：
+ * providerOptions envelope（按 adapter 返回正确 key，并合并 base options）：
  * - openai-chat（@ai-sdk/openai-compatible）/ anthropic-messages（@ai-sdk/anthropic）：
  *   读取 name 一致的 key "classflow-kiro"
  * - openai-responses（@ai-sdk/openai 4.0.42 实测）：Responses LanguageModel 固定读取
  *   providerOptions["openai"]（config.provider 含 azure 时为 "azure"），不读 name。
- * 返回 undefined = 无 verified reasoning options（default / 不可调）。
+ * - Responses base options（如 Grok store:false——xAI 建议图片请求不保存服务端历史；
+ *   ClassFlow 用自己的 message replay，不依赖 previousResponseId）与 reasoning 合并
+ *   到同一个 envelope，绝不产生两个 providerOptions。
+ * 返回 undefined = 无 verified options（default / 不可调 / 无 base options）。
  */
-export function resolveReasoningProviderOptionsEnvelope(input: {
+export function resolveProviderOptionsEnvelope(input: {
   definition: AIModelDefinition | null;
   custom?: AICustomConfig;
   effort: KiroReasoningEffort;
+  /** adapter base options（如 Responses store:false），与 reasoning 合并 */
+  base?: Record<string, unknown>;
 }): Record<string, unknown> | undefined {
   const options = resolveReasoningProviderOptions(input);
-  if (!options) return undefined;
+  const combined = { ...(input.base ?? {}), ...(options ?? {}) };
+  if (Object.keys(combined).length === 0) return undefined;
   if (input.definition?.transport === "openai-responses") {
-    return { openai: options };
+    return { openai: combined };
   }
-  return { "classflow-kiro": options };
+  return { "classflow-kiro": combined };
 }

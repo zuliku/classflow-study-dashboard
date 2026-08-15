@@ -20,6 +20,7 @@ import { streamText, convertToModelMessages, toUIMessageStream, readUIMessageStr
 import { createOpenAI } from "@ai-sdk/openai";
 import { resolveLanguageModel } from "@/lib/ai/providers/resolver";
 import { AI } from "@/lib/ai/config";
+import { createCanvas } from "@napi-rs/canvas";
 
 const KEY = process.env.OPENCODE_GO_TEST_API_KEY ?? "";
 const describeGo = KEY ? describe : describe.skip;
@@ -346,6 +347,137 @@ describeGo("Grok 4.5 reasoning probe（Phase 3.2B，OPENCODE_GO_TEST_API_KEY 存
       providerOptions: { openai: { reasoningEffort: "high", forceReasoning: true } } as never,
     });
     const text = await collectText(r2);
+    expect(text.trim().length).toBeGreaterThan(0);
+  }, SMOKE_TIMEOUT * 2);
+});
+
+describeGo("Grok 4.5 Vision smoke（Phase 3.3A，OPENCODE_GO_TEST_API_KEY 存在时运行）", () => {
+  // 已知 blocker（2026-08 实测）：OpenCode Go 对 grok-4.5 的 image 请求返回
+  // HTTP 200 + response.failed（response.error=null，代理吞掉上游错误详情）。
+  // 请求体为标准 input_image + data:image/png;base64（本地 capture 已验证），
+  // 纯文本请求正常 → 代理/上游当前不支持 Grok 图片输入。
+  // 这些测试作为未来修复后的探针保留；在代理支持前会失败（符合预期），
+  // 通过后即可按 Phase 3.3A 文档把 grok-4.5 vision 打开。
+  // 确定性 fixture：16x16 红色方块（@napi-rs/canvas 本地生成，无网络变量）
+  const redPng = (() => {
+    const c = createCanvas(16, 16);
+    const ctx = c.getContext("2d");
+    ctx.fillStyle = "#ff0000";
+    ctx.fillRect(0, 0, 16, 16);
+    return c.toBuffer("image/png");
+  })();
+  const redJpeg = (() => {
+    const c = createCanvas(16, 16);
+    const ctx = c.getContext("2d");
+    ctx.fillStyle = "#ff0000";
+    ctx.fillRect(0, 0, 16, 16);
+    return c.toBuffer("image/jpeg");
+  })();
+
+  const captureModel = (capture: { urls: string[]; bodies: Record<string, unknown>[] }): LanguageModel =>
+    createOpenAI({
+      name: "classflow-kiro",
+      baseURL: AI.OPENCODE_BASE_URL,
+      apiKey: KEY,
+      fetch: async (input, init) => {
+        const body = (init as RequestInit | undefined)?.body;
+        capture.urls.push(String(input));
+        if (typeof body === "string") {
+          try {
+            capture.bodies.push(JSON.parse(body) as Record<string, unknown>);
+          } catch {
+            // ignore
+          }
+        }
+        return fetch(input, init);
+      },
+    }).responses("grok-4.5");
+
+  const collectText = async (result: ReturnType<typeof streamText>) => {
+    let text = "";
+    for await (const part of result.fullStream) {
+      if (part.type === "text-delta") text += part.text;
+    }
+    return text;
+  };
+
+  it("Vision A：grok + 红色 PNG → /responses 成功，body 含 input_image + store=false，text 非空", async () => {
+    const capture = { urls: [] as string[], bodies: [] as Record<string, unknown>[] };
+    const model = captureModel(capture);
+    const text = await collectText(
+      streamText({
+        model,
+        messages: [
+          {
+            role: "user",
+            content: [
+              { type: "text", text: "图片主体是什么颜色？只回答颜色名称。" },
+              { type: "image", image: new Uint8Array(redPng) },
+            ],
+          },
+        ],
+        maxOutputTokens: 128,
+        providerOptions: { openai: { store: false } } as never,
+      })
+    );
+    expect(capture.urls[0]).toContain("/responses");
+    expect(capture.bodies[0].store).toBe(false);
+    const input = capture.bodies[0].input as { content: { type: string }[] }[];
+    expect(input[0].content.some((c) => c.type === "input_image")).toBe(true);
+    expect(text.trim().length).toBeGreaterThan(0);
+  }, SMOKE_TIMEOUT * 2);
+
+  it("Vision B：grok + 红色 JPEG → /responses 成功，text 非空", async () => {
+    const capture = { urls: [] as string[], bodies: [] as Record<string, unknown>[] };
+    const model = captureModel(capture);
+    const text = await collectText(
+      streamText({
+        model,
+        messages: [
+          {
+            role: "user",
+            content: [
+              { type: "text", text: "图片主体是什么颜色？只回答颜色名称。" },
+              { type: "image", image: new Uint8Array(redJpeg) },
+            ],
+          },
+        ],
+        maxOutputTokens: 128,
+        providerOptions: { openai: { store: false } } as never,
+      })
+    );
+    expect(capture.bodies[0].store).toBe(false);
+    const input = capture.bodies[0].input as { content: { type: string; image_url?: string }[] }[];
+    const imagePart = input[0].content.find((c) => c.type === "input_image");
+    expect(imagePart?.image_url).toContain("data:image/jpeg;base64,");
+    expect(text.trim().length).toBeGreaterThan(0);
+  }, SMOKE_TIMEOUT * 2);
+
+  it("Vision C：UIMessage → convertToModelMessages round-trip 后图片仍进入 Responses 请求（真实 Kiro 路径）", async () => {
+    const capture = { urls: [] as string[], bodies: [] as Record<string, unknown>[] };
+    const model = captureModel(capture);
+    // UI file part 形状：url = data URL（useChat 上传路径的序列化形式）
+    const uiMessages = [
+      {
+        id: "u1",
+        role: "user",
+        parts: [
+          { type: "text", text: "图片主体是什么颜色？只回答颜色名称。" },
+          { type: "file", mimeType: "image/png", filename: "red.png", url: `data:image/png;base64,${Buffer.from(redPng).toString("base64")}` },
+        ],
+      },
+    ];
+    const modelMessages = await convertToModelMessages(uiMessages as never);
+    const text = await collectText(
+      streamText({
+        model,
+        messages: modelMessages,
+        maxOutputTokens: 128,
+        providerOptions: { openai: { store: false } } as never,
+      })
+    );
+    const input = capture.bodies[0].input as { content: { type: string }[] }[];
+    expect(input[0].content.some((c) => c.type === "input_image")).toBe(true);
     expect(text.trim().length).toBeGreaterThan(0);
   }, SMOKE_TIMEOUT * 2);
 });
