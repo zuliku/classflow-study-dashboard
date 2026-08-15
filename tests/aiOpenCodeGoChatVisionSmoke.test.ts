@@ -20,6 +20,7 @@ import { describe, it, expect } from "vitest";
 import { streamText, convertToModelMessages } from "ai";
 import { createCanvas } from "@napi-rs/canvas";
 import { resolveLanguageModel } from "@/lib/ai/providers/resolver";
+import { preprocessVisionImage } from "@/lib/ai/attachments/preprocessImage";
 
 const KEY = process.env.OPENCODE_GO_TEST_API_KEY ?? "";
 const FULL_MATRIX = process.env.OPENCODE_GO_VISION_FULL_MATRIX === "1";
@@ -112,6 +113,35 @@ function tier1Smoke(modelId: string) {
         if (part.type === "text-delta") text += part.text;
       }
       expect(text.toUpperCase().includes("RED"), `UIMessage round-trip 未识别红色（text="${text.slice(0, 80)}"）`).toBe(true);
+    }, SMOKE_TIMEOUT);
+
+    it("Phase 3.4A：preprocessVisionImage（MIME normalization 路径）后的图片 → MiMo 仍识别红色", async () => {
+      const fixture = makeRedFixture("image/png");
+      // 模拟浏览器 File：小图 + 空 File.type（Send-time 预处理只做 MIME normalization，不重编码）
+      const original = new File([fixture.bytes.buffer as ArrayBuffer], "red.png", { type: "" });
+      // node 无浏览器 Image 解码：注入固定尺寸（128×128，小于 2048 上限 → 走 normalization-only 路径）
+      const prepared = await preprocessVisionImage(original, { getDimensions: async () => ({ width: 128, height: 128 }) });
+      expect(prepared.file.type).toBe("image/png");
+      expect(prepared.reencoded).toBe(false);
+      const { model } = await resolveLanguageModel({ provider: "opencode-go", model: modelId, apiKey: KEY });
+      const result = streamText({
+        model,
+        messages: [
+          {
+            role: "user",
+            content: [
+              { type: "text", text: PROMPT },
+              { type: "image", image: new Uint8Array(await prepared.file.arrayBuffer()) },
+            ],
+          },
+        ],
+        maxOutputTokens: 512,
+      });
+      let text = "";
+      for await (const part of result.fullStream) {
+        if (part.type === "text-delta") text += part.text;
+      }
+      expect(text.toUpperCase().includes("RED"), `preprocessed 图片未识别红色（text="${text.slice(0, 80)}"）`).toBe(true);
     }, SMOKE_TIMEOUT);
   });
 }

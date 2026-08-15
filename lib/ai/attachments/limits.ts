@@ -39,3 +39,18 @@ export const MAX_SCANNED_PDF_IMAGE_BYTES_PER_TURN = 8 * 1024 * 1024;
 
 /** JPEG 质量 */
 export const PDF_VISION_JPEG_QUALITY = 0.82;
+
+// ---- Phase 3.4A：用户直接附加图片的 Send-time 预处理限制 ----
+// 与扫描 PDF Vision 是两套独立业务预算，各自独立调优，不复用。
+
+/** 用户图片发送前最长边（px）：超出则等比缩小（禁止 upscale / crop） */
+export const MAX_USER_VISION_DIMENSION = 2048;
+
+/** 单张用户图片发送体积上限（字节）：超出则 canvas 重编码收敛 */
+export const MAX_USER_VISION_IMAGE_BYTES = 2 * 1024 * 1024;
+
+/** JPEG 重编码质量（首次尝试） */
+export const USER_VISION_JPEG_QUALITY = 0.86;
+
+/** WEBP 重编码质量（首次尝试） */
+export const USER_VISION_WEBP_QUALITY = 0.86;

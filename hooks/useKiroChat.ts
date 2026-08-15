@@ -57,10 +57,12 @@ import {
   executeSummarizeLearningHistory,
 } from "@/lib/ai/tools/read/history";
 import { executeGetLearningAnalytics } from "@/lib/ai/tools/read/analytics";
+import { executeGetLearningOutlook } from "@/lib/ai/tools/read/outlook";
 import { MAX_MATERIAL_READS_PER_TURN } from "@/lib/ai/attachments/limits";
 import { KiroAttachment, KiroDocumentContext, KiroAttachmentView } from "@/lib/ai/attachments/types";
 import { getModelCapabilities, isVisionMimeSupported } from "@/lib/ai/providers/capabilities";
 import { formatVisionMimeTypes } from "@/lib/ai/attachments/imageMime";
+import { preprocessVisionImage } from "@/lib/ai/attachments/preprocessImage";
 import { getActiveModelName } from "@/lib/ai/providers/registry";
 import { executeKiroWriteTool } from "@/lib/ai/tools/write/executor";
 import { isDestructiveWriteTool, KiroUndoEntry, KiroWriteApi, WriteToolResult } from "@/lib/ai/tools/write/types";
@@ -115,11 +117,14 @@ export const MAX_READ_TOOL_CALLS_PER_TURN_UI = 12;
 export const MAX_WRITE_TOOL_CALLS_PER_TURN = 8;
 
 /**
- * 客户端流式节流（Streaming UX V2 Phase 4）：
- * server smoothStream 按词 ~12ms 送达；客户端每 24ms 合并一次 React 更新，
+ * 客户端流式节流（Streaming UX V2 Phase 4 + V4.4 A/B）：
+ * server smoothing 按需送达；客户端每 throttleMs 合并一次 React 更新，
  * 避免逐 token 重渲染 + 50ms 成块跳字。单一 cadence owner（不叠第三层节流）。
+ * V4.4：NEXT_PUBLIC_KIRO_CLIENT_THROTTLE_MS 允许 dev A/B（24/20/16），默认 24。
  */
-export const KIRO_CLIENT_STREAM_THROTTLE_MS = 24;
+export const KIRO_CLIENT_STREAM_THROTTLE_MS = Number(
+  process.env.NEXT_PUBLIC_KIRO_CLIENT_THROTTLE_MS ?? 24
+);
 
 /**
  * Turn Execution Lifecycle（Streaming UX V3 Phase 3）：
@@ -835,6 +840,15 @@ export function useKiroChat({
       if (toolName === "get_learning_analytics") {
         void (async () => {
           const result = await executeGetLearningAnalytics(input);
+          emitToolOutput(toolName, toolCallId, result as ToolOutput);
+        })();
+        return;
+      }
+
+      // ---- Canonical Outlook（Part 3）：Browser 异步执行，与 UI 同源；只读 ----
+      if (toolName === "get_learning_outlook") {
+        void (async () => {
+          const result = await executeGetLearningOutlook(input);
           emitToolOutput(toolName, toolCallId, result as ToolOutput);
         })();
         return;
@@ -1702,75 +1716,94 @@ export function useKiroChat({
       resetDocumentFailureFuse();
       visionPagesRef.current = [];
 
-      // ---- Scanned PDF Vision（Task 12）：发送时渲染所选页面为 JPEG，再与用户图片合并发送 ----
+      // ---- Vision 输入准备（共享一次 preparingVision 状态，单一 try/finally）----
+      // 1. Scanned PDF Vision（Task 12）：渲染所选页面为 JPEG
+      // 2. 用户图片 Send-time 预处理（Phase 3.4A）：尺寸/体积归一，不修改 Original File
       const scanned = turnAttachments.filter(isScannedAttachment);
       const pageFiles: File[] = [];
+      const preparedImageFiles: File[] = [];
       let remainingVisionBytes = MAX_SCANNED_PDF_IMAGE_BYTES_PER_TURN;
-      if (scanned.length > 0) {
+      const visionPrepPending = scanned.length > 0 || (visionEnabled && userImages.length > 0);
+      if (visionPrepPending) {
         setPreparingVision(true);
         try {
-          const textCount = buildDocumentContexts(turnAttachments).length;
-          const explicit = extractExplicitPages(v).flatMap((r) => {
-            const arr: number[] = [];
-            for (let p = r.start; p <= r.end; p++) arr.push(p);
-            return arr;
-          });
-          const allocations =
-            scanned.length > 1
-              ? allocateVisionPages(
-                  scanned.map((a) => ({
-                    pageCount:
-                      a.source === "local"
-                        ? (a.extracted?.pageCount ?? 1)
-                        : (a.pdfVision?.pageCount ?? 1),
-                    explicitPages: explicit,
-                  })),
-                  MAX_SCANNED_PDF_PAGES_PER_TURN
-                )
-              : scanned.map((a) =>
-                  selectScannedPdfPages({
-                    userText: v,
-                    pageCount:
-                      a.source === "local"
-                        ? (a.extracted?.pageCount ?? 1)
-                        : (a.pdfVision?.pageCount ?? 1),
-                  })
-                );
-
-          for (let i = 0; i < scanned.length; i++) {
-            const a = scanned[i];
-            const sourceId = `doc-${textCount + i + 1}`;
-            const pages = allocations[i].pages;
-            if (pages.length === 0) continue;
-            let blob: Blob | null = null;
-            if (a.source === "local") {
-              blob = a.file;
-            } else {
-              const material = useAppStore
-                .getState()
-                .courses.find((c) => c.id === a.courseId)
-                ?.materials.find((m) => m.id === a.materialId);
-              if (material?.storageKey) blob = await getFileBlob(material.storageKey);
-            }
-            if (!blob) continue;
-            // 全 Turn 字节预算：每份 PDF 只能使用剩余额度（Task 13）
-            const rendered = await renderPdfPages(blob, pages, sourceId, {
-              maxBytes: remainingVisionBytes,
+          if (scanned.length > 0) {
+            const textCount = buildDocumentContexts(turnAttachments).length;
+            const explicit = extractExplicitPages(v).flatMap((r) => {
+              const arr: number[] = [];
+              for (let p = r.start; p <= r.end; p++) arr.push(p);
+              return arr;
             });
-            for (const r of rendered) {
-              pageFiles.push(r.file);
-              remainingVisionBytes -= r.size;
-              visionPagesRef.current.push({
-                sourceId,
-                page: r.page,
-                fileName: r.file.name,
-                attachmentId: a.id,
+            const allocations =
+              scanned.length > 1
+                ? allocateVisionPages(
+                    scanned.map((a) => ({
+                      pageCount:
+                        a.source === "local"
+                          ? (a.extracted?.pageCount ?? 1)
+                          : (a.pdfVision?.pageCount ?? 1),
+                      explicitPages: explicit,
+                    })),
+                    MAX_SCANNED_PDF_PAGES_PER_TURN
+                  )
+                : scanned.map((a) =>
+                    selectScannedPdfPages({
+                      userText: v,
+                      pageCount:
+                        a.source === "local"
+                          ? (a.extracted?.pageCount ?? 1)
+                          : (a.pdfVision?.pageCount ?? 1),
+                    })
+                  );
+
+            for (let i = 0; i < scanned.length; i++) {
+              const a = scanned[i];
+              const sourceId = `doc-${textCount + i + 1}`;
+              const pages = allocations[i].pages;
+              if (pages.length === 0) continue;
+              let blob: Blob | null = null;
+              if (a.source === "local") {
+                blob = a.file;
+              } else {
+                const material = useAppStore
+                  .getState()
+                  .courses.find((c) => c.id === a.courseId)
+                  ?.materials.find((m) => m.id === a.materialId);
+                if (material?.storageKey) blob = await getFileBlob(material.storageKey);
+              }
+              if (!blob) continue;
+              // 全 Turn 字节预算：每份 PDF 只能使用剩余额度（Task 13）
+              const rendered = await renderPdfPages(blob, pages, sourceId, {
+                maxBytes: remainingVisionBytes,
               });
+              for (const r of rendered) {
+                pageFiles.push(r.file);
+                remainingVisionBytes -= r.size;
+                visionPagesRef.current.push({
+                  sourceId,
+                  page: r.page,
+                  fileName: r.file.name,
+                  attachmentId: a.id,
+                });
+              }
+            }
+            if (scanned.length > 0 && visionPagesRef.current.length === 0) {
+              pushToast({ message: "扫描 PDF 页面读取失败，请重新添加文件。", type: "error" });
+              return false; // Prompt 保留
             }
           }
-          if (scanned.length > 0 && visionPagesRef.current.length === 0) {
-            pushToast({ message: "扫描 PDF 页面读取失败，请重新添加文件。", type: "error" });
-            return false; // Prompt 保留
+
+          // 用户图片 Send-time 预处理：失败（decode/编码/超限）→ 整个 Send 不执行
+          if (visionEnabled && userImages.length > 0) {
+            for (const a of userImages) {
+              try {
+                const prepared = await preprocessVisionImage(a.file);
+                preparedImageFiles.push(prepared.file);
+              } catch {
+                pushToast({ message: "图片处理失败，请重新添加或换一张图片后重试。", type: "error" });
+                return false; // Prompt 与附件保留
+              }
+            }
           }
         } finally {
           setPreparingVision(false);
@@ -1825,16 +1858,13 @@ export function useKiroChat({
       // Task 7：每次 live user send 都 push 一项（即使 []），否则 text-only 与 attachment turn 位置错配
       snapshotQueueRef.current.push(snapshot);
 
-      // 图片：扫描 PDF 页面图（固定在前） + 用户图片 → 一个 FileList（deterministic 顺序）
-      const imageFiles = turnAttachments
-        .filter((a): a is Extract<KiroAttachment, { source: "local" }> => a.source === "local" && a.kind === "image" && a.status === "ready")
-        .map((a) => a.file);
+      // 图片：扫描 PDF 页面图（固定在前） + 预处理后的用户图片 → 一个 FileList（deterministic 顺序）
       let files: FileList | undefined;
-      if ((visionEnabled && imageFiles.length > 0) || pageFiles.length > 0) {
+      if ((visionEnabled && preparedImageFiles.length > 0) || pageFiles.length > 0) {
         if (typeof DataTransfer !== "undefined") {
           const dt = new DataTransfer();
           pageFiles.forEach((f) => dt.items.add(f));
-          imageFiles.forEach((f) => dt.items.add(f));
+          preparedImageFiles.forEach((f) => dt.items.add(f));
           files = dt.files;
         }
       }
