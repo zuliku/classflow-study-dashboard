@@ -69,16 +69,29 @@ export interface KiroTurnContextSnapshot {
    *  只含逻辑信息；绝不包含 adapterRef / native handle / 路径 / permission token。
    *  live grants/rules 保持 runtime state，不冻结进请求。 */
   computerSnapshot?: KiroComputerTurnSnapshot;
-  /** Project Instructions（V1.2）：Send boundary 冻结的项目级工作偏好。
-   *  只含 id/name/instructions；不含 description/createdAt/updatedAt。 */
+  /** Project Turn Context（V1.2 + V1.3A）：Send boundary 冻结的项目级工作上下文。
+   *  只含 id/name/instructions + 冻结的 files 索引（仅安全 metadata）。
+   *  不含 description/createdAt/updatedAt/storageKey/正文/Blob。 */
   projectContext?: KiroProjectTurnContext;
 }
 
-/** Project Turn Context（V1.2）：唯一事实来源 = Project Record，冻结进 Turn Snapshot */
+/** Project Turn Context（V1.2 + V1.3A）：唯一事实来源 = Project Record + project-files；
+ *  冻结进 Turn Snapshot。只含 id/name/instructions/files index；
+ *  绝不含 description/createdAt/updatedAt/storageKey/Blob/正文。 */
 export interface KiroProjectTurnContext {
   id: string;
   name: string;
   instructions?: string;
+  /** V1.3A：项目资料索引（index-only；正文必须经 read_project_file 按需读取） */
+  files?: KiroProjectFileIndexEntry[];
+}
+
+/** 项目资料索引条目（进入 Prompt / 冻结快照；storageKey 永远不进入） */
+export interface KiroProjectFileIndexEntry {
+  id: string;
+  name: string;
+  kind: "text" | "pdf" | "docx";
+  sizeBytes: number;
 }
 
 /**

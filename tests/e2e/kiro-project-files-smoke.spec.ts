@@ -59,11 +59,11 @@ async function fileBlobTexts(page: import("@playwright/test").Page): Promise<Rec
     });
     const tx = db.transaction("files", "readonly");
     const store = tx.objectStore("files");
-    const keys = (await new Promise((resolve, reject) => {
+    const keys = await new Promise<string[]>((resolve, reject) => {
       const r = store.getAllKeys();
-      r.onsuccess = () => resolve(r.result as IDBValidKey[]);
+      r.onsuccess = () => resolve(r.result as unknown as string[]);
       r.onerror = () => reject(r.error);
-    })) as string[];
+    });
     const blobs = await new Promise<Blob[]>((resolve, reject) => {
       const r = store.getAll();
       r.onsuccess = () => resolve(r.result as Blob[]);

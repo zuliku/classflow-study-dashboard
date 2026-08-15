@@ -334,13 +334,13 @@ describe("read_project_file executor", () => {
 });
 
 describe("Prompt Project File Index", () => {
-  it("normalize 只保留 safe files metadata（丢弃 storageKey/apiKey/description）", () => {
+  it("normalize 只保留 safe files metadata（丢弃 storageKey/apiKey/text/description）", () => {
     const ctx = normalizeProjectTurnContext({
       id: "proj-a",
       name: "P",
       instructions: "PROJECT_RULE",
       files: [
-        { id: "pf_1", name: "A.pdf", kind: "pdf", sizeBytes: 100, storageKey: "file_secret", apiKey: "sk-x", description: "d" },
+        { id: "pf_1", name: "A.pdf", kind: "pdf", sizeBytes: 100, storageKey: "file_secret", apiKey: "sk-x", text: "SECRET_TEXT", description: "d" },
         { id: "pf_2", name: "B.docx", kind: "docx", sizeBytes: 200 },
         { id: "pf_3", name: "bad", kind: "image", sizeBytes: 5 },
       ],
@@ -353,6 +353,28 @@ describe("Prompt Project File Index", () => {
     const json = JSON.stringify(ctx);
     expect(json).not.toContain("file_secret");
     expect(json).not.toContain("sk-x");
+    expect(json).not.toContain("SECRET_TEXT");
+  });
+
+  it("contract：typed KiroProjectTurnContext（files index）→ normalize 保留 files[0]，section 可见文件名", () => {
+    const context: KiroProjectTurnContext = {
+      id: "proj-a",
+      name: "A",
+      instructions: "RULE",
+      files: [
+        {
+          id: "pf-a",
+          name: "notes.md",
+          kind: "text",
+          sizeBytes: 123,
+        },
+      ],
+    };
+    const normalized = normalizeProjectTurnContext(context);
+    expect(normalized?.files).toEqual([{ id: "pf-a", name: "notes.md", kind: "text", sizeBytes: 123 }]);
+    expect(normalized?.instructions).toBe("RULE");
+    const s = buildProjectContextSection(context);
+    expect(s).toContain("notes.md");
   });
 
   it("files 超过 20 → slice；非法条目丢弃", () => {
