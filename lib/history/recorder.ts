@@ -93,16 +93,44 @@ export function buildLearningHistoryEvent(
 
 let historyQueue: Promise<unknown> = Promise.resolve();
 
+// ---------- Reactive Subscription（Analytics V2）----------
+type LearningHistoryListener = () => void;
+
+const listeners = new Set<LearningHistoryListener>();
+
+/** 订阅 History 变更（append / reset 真正完成后通知）；返回取消函数。禁止 polling。 */
+export function subscribeLearningHistoryChanges(listener: LearningHistoryListener): () => void {
+  listeners.add(listener);
+  return () => {
+    listeners.delete(listener);
+  };
+}
+
+function notifyLearningHistoryChanged(): void {
+  for (const listener of Array.from(listeners)) {
+    try {
+      listener();
+    } catch (err) {
+      if (process.env.NODE_ENV !== "production") {
+        // eslint-disable-next-line no-console
+        console.warn("[learning-history] listener failed", err);
+      }
+    }
+  }
+}
+
 /**
  * 追加事件（best effort）：
  * - 按调用顺序串行写入（mutation 顺序稳定）
  * - 失败不抛给业务（dev console.warn / prod silent）
+ * - 写入完成后通知订阅者（Analytics reactive refresh）
  */
 export function enqueueLearningHistoryEvents(events: LearningHistoryEvent[]): void {
   if (events.length === 0) return;
   historyQueue = historyQueue.then(async () => {
     try {
       await appendLearningHistoryEvents(events);
+      notifyLearningHistoryChanged();
     } catch (err) {
       if (process.env.NODE_ENV !== "production") {
         // eslint-disable-next-line no-console
@@ -120,6 +148,7 @@ export function enqueueLearningHistoryReset(resetFn: () => Promise<void>): void 
   historyQueue = historyQueue.then(async () => {
     try {
       await resetFn();
+      notifyLearningHistoryChanged();
     } catch (err) {
       if (process.env.NODE_ENV !== "production") {
         // eslint-disable-next-line no-console
