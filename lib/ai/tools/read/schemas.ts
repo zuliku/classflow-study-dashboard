@@ -119,6 +119,52 @@ export const listRemindersSchema = z.object({
 });
 
 /** Read Tool 输入 schema 注册表（tool name → zod schema；server/client 共用） */
+export const queryLearningHistorySchema = z.object({
+  from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "格式应为 YYYY-MM-DD").optional(),
+  to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "格式应为 YYYY-MM-DD").optional(),
+  eventTypes: z
+    .array(
+      z.enum([
+        "assignment.created",
+        "assignment.status_changed",
+        "assignment.completed",
+        "assignment.reopened",
+        "assignment.deadline_changed",
+        "assignment.estimate_changed",
+        "assignment.priority_changed",
+        "assignment.deleted",
+        "assignment.restored",
+        "study_block.created",
+        "study_block.updated",
+        "study_block.deleted",
+        "focus.started",
+        "focus.paused",
+        "focus.resumed",
+        "focus.completed",
+        "course.created",
+        "course.updated",
+        "course.deleted",
+        "schedule.created",
+        "schedule.updated",
+        "schedule.deleted",
+        "semester.updated",
+      ])
+    )
+    .max(23)
+    .optional(),
+  courseId: z.string().trim().min(1).max(120).optional(),
+  assignmentId: z.string().trim().min(1).max(120).optional(),
+  source: z.enum(["manual", "kiro", "system", "import"]).optional(),
+  limit: z.number().int().min(1).max(200).optional(),
+});
+
+export const summarizeLearningHistorySchema = z.object({
+  from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "格式应为 YYYY-MM-DD").optional(),
+  to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "格式应为 YYYY-MM-DD").optional(),
+  courseId: z.string().trim().min(1).max(120).optional(),
+  groupBy: z.enum(["none", "day", "semester-week", "course"]).optional(),
+});
+
 export const KIRO_READ_TOOL_SCHEMAS = {
   get_current_context: emptyInputSchema,
   get_user_study_profile: emptyInputSchema,
@@ -141,6 +187,8 @@ export const KIRO_READ_TOOL_SCHEMAS = {
   propose_task_breakdown: proposeTaskBreakdownSchema,
   list_reminders: listRemindersSchema,
   get_focus_status: emptyInputSchema,
+  query_learning_history: queryLearningHistorySchema,
+  summarize_learning_history: summarizeLearningHistorySchema,
 } as const;
 
 export type KiroReadToolName = keyof typeof KIRO_READ_TOOL_SCHEMAS;

@@ -114,6 +114,18 @@ export const KIRO_READ_TOOLS = {
       "查看当前 Focus 专注会话状态。无进行中的会话 → active:false；有 → 返回剩余/已专注时间（由 ClassFlow 计算，不要自己推算时间）、关联任务或课程与备注。",
     inputSchema: KIRO_READ_TOOL_SCHEMAS.get_focus_status,
   }),
+  query_learning_history: tool({
+    description:
+      "查询本地学习历史原始事件（任务创建/完成/重开/DDL 变更、学习计划、专注完成、课程/课表变更等），支持按时间/事件类型/课程/任务/来源筛选。只读本地历史，不读取当前状态。" +
+      "优先：具体问题（我上周完成了哪些任务？什么时候改过某课的 DDL？）使用本工具。默认最近 30 天，最长 90 天；更长范围请用 summarize_learning_history。",
+    inputSchema: KIRO_READ_TOOL_SCHEMAS.query_learning_history,
+  }),
+  summarize_learning_history: tool({
+    description:
+      "汇总本地学习历史（专注完成分钟数、任务创建/完成/重开、学习计划、课程/课表变化），支持按天/教学周/课程分组。返回确定性汇总，不要自己遍历事件计算。" +
+      "优先：宽泛问题（我最近学习怎么样？这周学了多久？哪门课投入最多？）。默认最近 28 天，最长 366 天。注意 coverage.fullCoverage=false 时说明历史不完整。",
+    inputSchema: KIRO_READ_TOOL_SCHEMAS.summarize_learning_history,
+  }),
 };
 
 export const KIRO_READ_TOOL_NAMES = Object.keys(KIRO_READ_TOOLS) as (keyof typeof KIRO_READ_TOOLS)[];

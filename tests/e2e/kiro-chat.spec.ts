@@ -206,9 +206,11 @@ test("Kiro Read Tool：tool call → 客户端执行 → 自动继续 → 最终
   await expect(worklog).toContainText("已完成 · 1 个步骤");
   await expect(worklog.getByText("get_upcoming_assignments")).toHaveCount(0);
 
-  // Worklog disclosure（IM2B）：进入 answering 自动折叠 → summary aria-expanded=false；
-  // 点击展开 → true + tool row 真实详情可见（expandable 才有 Chevron/disclosure）
+  // Worklog disclosure（IM2B + V4.1）：完成瞬间不自动折叠（保持 expanded，避免 layout 跳动）；
+  // 用户手动可折叠/展开；tool row 真实详情可见（expandable 才有 Chevron/disclosure）
   const summary = worklog.getByRole("button").first();
+  await expect(summary).toHaveAttribute("aria-expanded", "true");
+  await summary.click();
   await expect(summary).toHaveAttribute("aria-expanded", "false");
   await summary.click();
   await expect(summary).toHaveAttribute("aria-expanded", "true");

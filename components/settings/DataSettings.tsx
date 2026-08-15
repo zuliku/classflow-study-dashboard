@@ -12,6 +12,7 @@ import { DataHealth } from "@/components/settings/DataHealth";
 import { BackupSection } from "@/components/settings/BackupSection";
 import { RestoreSection, RestoreResult } from "@/components/settings/RestoreSection";
 import { DangerZone } from "@/components/settings/DangerZone";
+import { LearningHistorySettings } from "@/components/settings/LearningHistorySettings";
 import { CheckCircle2, AlertTriangle, RefreshCcw } from "lucide-react";
 
 /** 数据与存储中心：本地数据 / 数据状态 / 备份 / 恢复 / 危险操作 */
@@ -71,6 +72,11 @@ export function DataSettings() {
           <div className="py-3">
             <DataHealth />
           </div>
+        </SettingsGroup>
+
+        {/* 学习历史（Part 2）：startedAt + 事件数 + 清除；无 Event Viewer */}
+        <SettingsGroup title="学习历史">
+          <LearningHistorySettings />
         </SettingsGroup>
 
         {/* 恢复结果反馈（留在本区，不制造页面顶部大 Alert） */}

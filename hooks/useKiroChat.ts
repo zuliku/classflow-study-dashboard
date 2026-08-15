@@ -51,6 +51,10 @@ import { resolveContextRefs, refsForPrompt, dedupeContextRefs } from "@/lib/ai/c
 import { KiroContextRef } from "@/lib/ai/context/types";
 import { executeKiroReadTool, ReadToolResult } from "@/lib/ai/tools/read/executor";
 import { executeReadMaterial } from "@/lib/ai/tools/read/material";
+import {
+  executeQueryLearningHistory,
+  executeSummarizeLearningHistory,
+} from "@/lib/ai/tools/read/history";
 import { MAX_MATERIAL_READS_PER_TURN } from "@/lib/ai/attachments/limits";
 import { KiroAttachment, KiroDocumentContext, KiroAttachmentView } from "@/lib/ai/attachments/types";
 import { getModelCapabilities } from "@/lib/ai/providers/capabilities";
@@ -801,6 +805,18 @@ export function useKiroChat({
           }
           emitToolOutput(toolName, toolCallId, result as ToolOutput);
         });
+        return;
+      }
+
+      // ---- Learning History（Part 2）：Browser 异步执行 IndexedDB 查询；只读 ----
+      if (toolName === "query_learning_history" || toolName === "summarize_learning_history") {
+        void (async () => {
+          const result =
+            toolName === "query_learning_history"
+              ? await executeQueryLearningHistory(input)
+              : await executeSummarizeLearningHistory(input);
+          emitToolOutput(toolName, toolCallId, result as ToolOutput);
+        })();
         return;
       }
 
