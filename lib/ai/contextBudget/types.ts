@@ -69,6 +69,16 @@ export interface KiroTurnContextSnapshot {
    *  只含逻辑信息；绝不包含 adapterRef / native handle / 路径 / permission token。
    *  live grants/rules 保持 runtime state，不冻结进请求。 */
   computerSnapshot?: KiroComputerTurnSnapshot;
+  /** Project Instructions（V1.2）：Send boundary 冻结的项目级工作偏好。
+   *  只含 id/name/instructions；不含 description/createdAt/updatedAt。 */
+  projectContext?: KiroProjectTurnContext;
+}
+
+/** Project Turn Context（V1.2）：唯一事实来源 = Project Record，冻结进 Turn Snapshot */
+export interface KiroProjectTurnContext {
+  id: string;
+  name: string;
+  instructions?: string;
 }
 
 /**

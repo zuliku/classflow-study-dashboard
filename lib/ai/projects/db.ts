@@ -38,12 +38,17 @@ export async function getKiroProject(id: string): Promise<KiroProjectRecord | nu
   });
 }
 
-export async function createKiroProject(input: { name: string; description?: string }): Promise<KiroProjectRecord> {
+export async function createKiroProject(input: {
+  name: string;
+  description?: string;
+  instructions?: string;
+}): Promise<KiroProjectRecord> {
   const now = new Date().toISOString();
   const record: KiroProjectRecord = {
     id: createProjectId(),
     name: input.name,
     description: input.description,
+    instructions: input.instructions,
     createdAt: now,
     updatedAt: now,
   };
@@ -56,7 +61,10 @@ export async function createKiroProject(input: { name: string; description?: str
   });
 }
 
-export async function updateKiroProject(id: string, patch: { name?: string; description?: string }): Promise<KiroProjectRecord> {
+export async function updateKiroProject(
+  id: string,
+  patch: { name?: string; description?: string; instructions?: string }
+): Promise<KiroProjectRecord> {
   const db = await openKiroDB();
   return new Promise((resolve, reject) => {
     const t = db.transaction(KIRO_PROJECTS_STORE, "readwrite");
@@ -72,6 +80,13 @@ export async function updateKiroProject(id: string, patch: { name?: string; desc
         ...existing,
         name: patch.name ?? existing.name,
         description: patch.description !== undefined ? patch.description : existing.description,
+        // instructions："" = 显式清空（→ undefined）；undefined = 未提供（保留现有）
+        instructions:
+          patch.instructions !== undefined
+            ? patch.instructions === ""
+              ? undefined
+              : patch.instructions
+            : existing.instructions,
         updatedAt: new Date().toISOString(),
       };
       const put = store.put(updated);

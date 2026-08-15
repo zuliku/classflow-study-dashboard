@@ -11,6 +11,7 @@ import { KiroProjectPanel, ProjectPanelMode } from "@/components/kiro/KiroProjec
 import { useConfirmStore } from "@/store/useConfirmStore";
 import { useToastStore } from "@/store/useToastStore";
 import { createKiroProject, assignConversationToProject } from "@/lib/ai/projects/db";
+import { KIRO_PROJECT_INSTRUCTIONS_MAX } from "@/lib/ai/projects/types";
 import { saveConversation, clearConversationHistory } from "@/lib/ai/history/db";
 import { resetKiroDbForTests, openKiroDB, KIRO_PROJECTS_STORE } from "@/lib/ai/storage/kiroDb";
 import { KiroConversationRecord } from "@/lib/ai/history/types";
@@ -199,21 +200,79 @@ describe("List → Detail 与项目操作", () => {
     s.setInput("项目名称", "新项目");
     s.click("保存");
     await s.flush();
-    expect(mocks.actions.createProject).toHaveBeenCalledWith({ name: "新项目", description: "" });
+    expect(mocks.actions.createProject).toHaveBeenCalledWith({ name: "新项目", description: "", instructions: "" });
     s.cleanup();
   });
 
-  it("编辑项目：form 预填；保存调用 updateProject", async () => {
-    const p = await createKiroProject({ name: "项目 A", description: "旧描述" });
+  it("创建项目：可填写项目指令", async () => {
+    mocks.actions.createProject.mockResolvedValue({ id: "proj_new", name: "新项目", createdAt: "", updatedAt: "" });
+    const s = setup();
+    s.render("expanded");
+    await s.flush();
+    s.click("新建项目");
+    s.setInput("项目名称", "新项目");
+    s.setInput("项目指令", "回答优先使用中文");
+    s.click("保存");
+    await s.flush();
+    expect(mocks.actions.createProject).toHaveBeenCalledWith({
+      name: "新项目",
+      description: "",
+      instructions: "回答优先使用中文",
+    });
+    s.cleanup();
+  });
+
+  it("编辑项目：form 预填（含 instructions）；保存调用 updateProject；清空指令可保存", async () => {
+    const p = await createKiroProject({ name: "项目 A", description: "旧描述", instructions: "旧指令" });
     mocks.actions.updateProject.mockResolvedValue({ ...p, name: "项目 A2" });
     const s = setup();
     s.render("expanded");
     await s.flush();
     s.click(`编辑项目 项目 A`);
+    // 预填
+    const instInput = s.container.querySelector('[aria-label="项目指令"]') as HTMLTextAreaElement;
+    expect(instInput.value).toBe("旧指令");
+    // 修改名称并清空指令 → 保存
     s.setInput("项目名称", "项目 A2");
+    s.setInput("项目指令", "");
     s.click("保存");
     await s.flush();
-    expect(mocks.actions.updateProject).toHaveBeenCalledWith(p.id, { name: "项目 A2", description: "旧描述" });
+    expect(mocks.actions.updateProject).toHaveBeenCalledWith(p.id, {
+      name: "项目 A2",
+      description: "旧描述",
+      instructions: "",
+    });
+    s.cleanup();
+  });
+
+  it("项目指令 textarea 受 maxLength 限制", async () => {
+    const s = setup();
+    s.render("expanded");
+    await s.flush();
+    s.click("新建项目");
+    const inst = s.container.querySelector('[aria-label="项目指令"]') as HTMLTextAreaElement;
+    expect(inst.maxLength).toBe(KIRO_PROJECT_INSTRUCTIONS_MAX);
+    s.cleanup();
+  });
+
+  it("Detail：Instructions section（未设置 / 已设置 + 编辑入口）", async () => {
+    const p1 = await createKiroProject({ name: "无指令项目" });
+    const p2 = await createKiroProject({ name: "有指令项目", instructions: "回答使用中文" });
+    const s = setup();
+    s.render("expanded");
+    await s.flush();
+    // 未设置
+    s.click("打开项目 无指令项目");
+    await s.flush();
+    expect(s.text()).toContain("未设置项目指令");
+    expect(s.container.querySelector('[aria-label="添加项目指令"]')).toBeTruthy();
+    // 已设置
+    s.click("返回项目列表");
+    await s.flush();
+    s.click("打开项目 有指令项目");
+    await s.flush();
+    expect(s.text()).toContain("回答使用中文");
+    expect(s.container.querySelector('[aria-label="编辑项目指令"]')).toBeTruthy();
     s.cleanup();
   });
 

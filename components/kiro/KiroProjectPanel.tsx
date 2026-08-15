@@ -6,7 +6,7 @@ import { useKiroSessionMeta, useKiroSessionActions } from "@/components/kiro/Kir
 import { useConfirmStore } from "@/store/useConfirmStore";
 import { useToastStore } from "@/store/useToastStore";
 import { usePresence } from "@/lib/usePresence";
-import { KiroProjectRecord, KIRO_PROJECT_NAME_MAX, KIRO_PROJECT_DESCRIPTION_MAX } from "@/lib/ai/projects/types";
+import { KiroProjectRecord, KIRO_PROJECT_NAME_MAX, KIRO_PROJECT_DESCRIPTION_MAX, KIRO_PROJECT_INSTRUCTIONS_MAX } from "@/lib/ai/projects/types";
 import { listKiroProjects, listProjectConversations } from "@/lib/ai/projects/db";
 import { listConversations } from "@/lib/ai/history/db";
 import { KiroConversationRecord } from "@/lib/ai/history/types";
@@ -49,6 +49,7 @@ export function KiroProjectPanel({
   const [formOpen, setFormOpen] = useState<"create" | KiroProjectRecord["id"] | null>(null);
   const [formName, setFormName] = useState("");
   const [formDescription, setFormDescription] = useState("");
+  const [formInstructions, setFormInstructions] = useState("");
 
   const expanded = mode === "expanded";
   const { mounted, visible } = usePresence(mode !== "closed", 160);
@@ -111,23 +112,33 @@ export function KiroProjectPanel({
   const startCreate = () => {
     setFormName("");
     setFormDescription("");
+    setFormInstructions("");
     setFormOpen("create");
   };
   const startEdit = (p: KiroProjectRecord) => {
     setFormName(p.name);
     setFormDescription(p.description ?? "");
+    setFormInstructions(p.instructions ?? "");
     setFormOpen(p.id);
   };
   const submitForm = async () => {
     if (formOpen === "create") {
-      const record = await actions.createProject({ name: formName, description: formDescription });
+      const record = await actions.createProject({
+        name: formName,
+        description: formDescription,
+        instructions: formInstructions,
+      });
       if (record) {
         setFormOpen(null);
         setView("detail");
         setSelectedProjectId(record.id);
       }
     } else if (formOpen) {
-      const record = await actions.updateProject(formOpen, { name: formName, description: formDescription });
+      const record = await actions.updateProject(formOpen, {
+        name: formName,
+        description: formDescription,
+        instructions: formInstructions,
+      });
       if (record) setFormOpen(null);
     }
   };
@@ -309,6 +320,19 @@ export function KiroProjectPanel({
                   rows={2}
                   className="w-full px-2 py-1.5 rounded-lg text-[11px] text-charcoal placeholder-sandrift bg-[#F7F5F5] border border-line focus:outline-none resize-none"
                 />
+                <div>
+                  <label className="block text-[10px] font-semibold text-sandrift mb-1">项目指令</label>
+                  <textarea
+                    value={formInstructions}
+                    onChange={(e) => setFormInstructions(e.target.value)}
+                    placeholder="例如：回答优先使用中文；引用资料时注明来源；学习计划按周拆分。"
+                    aria-label="项目指令"
+                    maxLength={KIRO_PROJECT_INSTRUCTIONS_MAX}
+                    rows={4}
+                    className="w-full px-2 py-1.5 rounded-lg text-[11px] text-charcoal placeholder-sandrift bg-[#F7F5F5] border border-line focus:outline-none resize-none leading-relaxed"
+                  />
+                  <p className="text-[9px] text-sandrift mt-0.5">Kiro 在此项目中的工作偏好。不会授予额外权限。</p>
+                </div>
                 <div className="flex items-center justify-end gap-1.5">
                   <button
                     onClick={() => setFormOpen(null)}
@@ -361,6 +385,26 @@ export function KiroProjectPanel({
                 {selectedProject?.description ? (
                   <p className="text-[11px] text-satin-grey px-1.5 pb-1 leading-relaxed">{selectedProject.description}</p>
                 ) : null}
+                {/* Projects V1.2：Instructions 紧凑展示（不永久铺满面板；可编辑） */}
+                <div className="px-1.5 pb-1">
+                  <div className="flex items-center justify-between gap-1">
+                    <p className="text-[10px] font-semibold text-sandrift">项目指令</p>
+                    <button
+                      onClick={() => selectedProject && startEdit(selectedProject)}
+                      aria-label={selectedProject?.instructions ? "编辑项目指令" : "添加项目指令"}
+                      className="text-[10px] font-bold text-charcoal bg-alabaster hover:bg-pastel-mint rounded-md px-1.5 h-5 transition-colors"
+                    >
+                      {selectedProject?.instructions ? "编辑" : "添加"}
+                    </button>
+                  </div>
+                  {selectedProject?.instructions ? (
+                    <p className="text-[10px] text-satin-grey leading-relaxed mt-0.5 max-h-24 overflow-y-auto whitespace-pre-wrap break-words rounded-md bg-alabaster/60 px-2 py-1.5">
+                      {selectedProject.instructions}
+                    </p>
+                  ) : (
+                    <p className="text-[10px] text-sandrift mt-0.5">未设置项目指令</p>
+                  )}
+                </div>
                 <div className="flex items-center justify-between gap-1.5 px-1.5 pt-1 pb-0.5">
                   <p className="text-[10px] font-semibold text-sandrift">对话 · {detailConversations.length}</p>
                   <div className="flex items-center gap-1">

@@ -21,6 +21,11 @@ import {
   listProjectConversations,
 } from "@/lib/ai/projects/db";
 import {
+  KiroProjectRecord,
+  KIRO_PROJECT_INSTRUCTIONS_MAX,
+  normalizeProjectInstructions,
+} from "@/lib/ai/projects/types";
+import {
   saveConversation,
   getConversation,
   clearConversationHistory,
@@ -171,6 +176,52 @@ describe("删除项目", () => {
     for (const p of projects) {
       expect((await listProjectConversations(p.id)).some((c) => c.id === "old")).toBe(false);
     }
+  });
+});
+
+describe("Project Instructions（V1.2）", () => {
+  it("create 带 instructions；get/list 完整保留", async () => {
+    const p = await createKiroProject({ name: "P", instructions: "回答优先使用中文" });
+    expect(p.instructions).toBe("回答优先使用中文");
+    expect((await getKiroProject(p.id))?.instructions).toBe("回答优先使用中文");
+  });
+
+  it("update instructions；清空（空字符串）可保存为 undefined", async () => {
+    const p = await createKiroProject({ name: "P" });
+    const u1 = await updateKiroProject(p.id, { instructions: "新指令" });
+    expect(u1.instructions).toBe("新指令");
+    // 显式清空
+    const u2 = await updateKiroProject(p.id, { instructions: "" });
+    expect(u2.instructions).toBeUndefined();
+    expect((await getKiroProject(p.id))?.instructions).toBeUndefined();
+  });
+
+  it("4000 字合法；4001 字非法（normalize 返回 null）", () => {
+    expect(normalizeProjectInstructions("x".repeat(KIRO_PROJECT_INSTRUCTIONS_MAX))).toHaveLength(KIRO_PROJECT_INSTRUCTIONS_MAX);
+    expect(normalizeProjectInstructions("x".repeat(KIRO_PROJECT_INSTRUCTIONS_MAX + 1))).toBeNull();
+  });
+
+  it("normalize：空 / undefined → undefined；trim 生效", () => {
+    expect(normalizeProjectInstructions(undefined)).toBeUndefined();
+    expect(normalizeProjectInstructions("")).toBeUndefined();
+    expect(normalizeProjectInstructions("   ")).toBeUndefined();
+    expect(normalizeProjectInstructions("  你好  ")).toBe("你好");
+  });
+
+  it("旧 Project 无 instructions：正常读取", async () => {
+    const p = await createKiroProject({ name: "legacy" });
+    expect(p.instructions).toBeUndefined();
+    expect((await getKiroProject(p.id))?.instructions).toBeUndefined();
+  });
+
+  it("编辑 instructions 不触碰 Conversation.updatedAt（Project metadata 操作 ≠ 聊天行为）", async () => {
+    const p = await createKiroProject({ name: "P" });
+    await saveConversation(makeConversation("c1"));
+    await assignConversationToProject("c1", p.id);
+    const before = (await getConversation("c1"))?.updatedAt;
+    await new Promise((r) => setTimeout(r, 5));
+    await updateKiroProject(p.id, { instructions: "新指令" });
+    expect((await getConversation("c1"))?.updatedAt).toBe(before);
   });
 });
 

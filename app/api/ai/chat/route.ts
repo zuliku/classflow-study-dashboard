@@ -20,6 +20,7 @@ import { logProviderError } from "@/lib/ai/providerLog";
 import { buildKiroResponsePreferenceContext } from "@/lib/ai/responsePreference";
 import { resolveLanguageModel, resolveModelDefinition } from "@/lib/ai/providers/resolver";
 import { validateAIChatBody, createTimeoutController } from "@/lib/ai/server";
+import { normalizeProjectTurnContext, buildProjectInstructionsSection } from "@/lib/ai/projects/prompt";
 import { resolveProviderOptionsEnvelope, shouldOmitToolChoice } from "@/lib/ai/reasoning/providerOptions";
 import { normalizePromptContextRefs } from "@/lib/ai/context/contextSelection";
 import {
@@ -298,12 +299,20 @@ export async function POST(req: NextRequest) {
   // Intelligence V2 Task 1：Server 生成的受信任回答偏好 Context（只输出归一后的 enum，绝不信任 raw value）
   const trustedBasePrompt = KIRO_SYSTEM_PROMPT + buildKiroResponsePreferenceContext(parsed.responsePreference);
 
+  // Projects V1.2：Server Trust Boundary —— projectContext 是浏览器 IndexedDB 派生的用户数据，
+  // 必须重新 normalize/bound（丢弃未知字段、hard slice），再生成 Prompt section。
+  // description 永远不进 Prompt；安全语义由 buildProjectInstructionsSection 内置。
+  const projectTurnContext = normalizeProjectTurnContext(
+    (body as Record<string, unknown>).projectContext
+  );
+  const projectInstructionsSection = buildProjectInstructionsSection(projectTurnContext);
+
   const systemMessage = baseContext
     ? `${trustedBasePrompt}\n\n# 当前 ClassFlow 上下文\n${JSON.stringify({
         baseContext,
         contextRefs,
-      })}${memorySection}${attachmentSection(plan.attachmentContext)}${visionPagesSection}${computerWorkspaceContext}${workspaceInstructionsSection}${artifactContextNotice}`
-    : trustedBasePrompt + memorySection + attachmentSection(plan.attachmentContext) + visionPagesSection + computerWorkspaceContext + workspaceInstructionsSection + artifactContextNotice;
+      })}${projectInstructionsSection}${memorySection}${attachmentSection(plan.attachmentContext)}${visionPagesSection}${computerWorkspaceContext}${workspaceInstructionsSection}${artifactContextNotice}`
+    : trustedBasePrompt + projectInstructionsSection + memorySection + attachmentSection(plan.attachmentContext) + visionPagesSection + computerWorkspaceContext + workspaceInstructionsSection + artifactContextNotice;
 
   try {
     const modelMessages = await convertToModelMessages(plan.messages as never);

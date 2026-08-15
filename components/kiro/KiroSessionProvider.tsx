@@ -41,7 +41,13 @@ import {
   deleteKiroProjectAndUnassignConversations,
   assignConversationToProject as assignConversationToProjectDb,
 } from "@/lib/ai/projects/db";
-import { KiroProjectRecord, normalizeProjectName, normalizeProjectDescription } from "@/lib/ai/projects/types";
+import {
+  KiroProjectRecord,
+  normalizeProjectName,
+  normalizeProjectDescription,
+  normalizeProjectInstructions,
+  KIRO_PROJECT_INSTRUCTIONS_MAX,
+} from "@/lib/ai/projects/types";
 import { buildConversationSeed } from "@/lib/ai/history/conversationSeed";
 import {
   CONVERSATION_TRANSITION_IDLE,
@@ -191,8 +197,8 @@ interface KiroSessionActionsValue {
   exportCurrentTranscript: () => void;
   getCurrentMessages: () => ReturnType<typeof useKiroChat>["messages"];
   /** Kiro Projects V1：低频 metadata 操作（只 bump projectsVersion，不触发 streaming rerender） */
-  createProject: (input: { name: string; description?: string }) => Promise<KiroProjectRecord | null>;
-  updateProject: (id: string, patch: { name?: string; description?: string }) => Promise<KiroProjectRecord | null>;
+  createProject: (input: { name: string; description?: string; instructions?: string }) => Promise<KiroProjectRecord | null>;
+  updateProject: (id: string, patch: { name?: string; description?: string; instructions?: string }) => Promise<KiroProjectRecord | null>;
   deleteProject: (id: string) => Promise<void>;
   assignConversationToProject: (conversationId: string, projectId: string | null) => Promise<boolean>;
 }
@@ -279,6 +285,8 @@ export function KiroSessionProvider({ children }: { children: React.ReactNode })
     attachments: attachments.attachments,
     conversationSummary,
     conversationId,
+    // Projects V1.2：Project Instructions 在 Send boundary 冻结（随 Conversation lifecycle 切换）
+    projectId: conversationProjectId,
   });
 
   const aiProvider = useAISettingsStore((s) => s.provider);
@@ -814,15 +822,20 @@ export function KiroSessionProvider({ children }: { children: React.ReactNode })
   const bumpProjects = useCallback(() => setProjectsVersion((v) => v + 1), []);
 
   const createProject = useCallback(
-    async (input: { name: string; description?: string }): Promise<KiroProjectRecord | null> => {
+    async (input: { name: string; description?: string; instructions?: string }): Promise<KiroProjectRecord | null> => {
       const name = normalizeProjectName(input.name);
       const description = normalizeProjectDescription(input.description);
+      const instructions = normalizeProjectInstructions(input.instructions);
       if (!name) {
         pushToast({ message: "项目名称无效（1–50 字）。", type: "error" });
         return null;
       }
+      if (instructions === null) {
+        pushToast({ message: `项目指令不能超过 ${KIRO_PROJECT_INSTRUCTIONS_MAX} 字。`, type: "error" });
+        return null;
+      }
       try {
-        const record = await createKiroProject({ name, description });
+        const record = await createKiroProject({ name, description, instructions });
         bumpProjects();
         return record;
       } catch {
@@ -834,15 +847,26 @@ export function KiroSessionProvider({ children }: { children: React.ReactNode })
   );
 
   const updateProject = useCallback(
-    async (id: string, patch: { name?: string; description?: string }): Promise<KiroProjectRecord | null> => {
+    async (id: string, patch: { name?: string; description?: string; instructions?: string }): Promise<KiroProjectRecord | null> => {
       const name = patch.name !== undefined ? normalizeProjectName(patch.name) : undefined;
       const description = patch.description !== undefined ? normalizeProjectDescription(patch.description) : undefined;
+      const instructions = patch.instructions !== undefined ? normalizeProjectInstructions(patch.instructions) : undefined;
       if (patch.name !== undefined && !name) {
         pushToast({ message: "项目名称无效（1–50 字）。", type: "error" });
         return null;
       }
+      if (instructions === null) {
+        pushToast({ message: `项目指令不能超过 ${KIRO_PROJECT_INSTRUCTIONS_MAX} 字。`, type: "error" });
+        return null;
+      }
       try {
-        const record = await updateKiroProject(id, { name: name ?? undefined, description });
+        const record = await updateKiroProject(id, {
+          name: name ?? undefined,
+          description,
+          // 显式提供时：空 → ""（清空哨兵）；未提供 → undefined（保留现有）
+          instructions:
+            patch.instructions !== undefined ? (instructions ?? "") : undefined,
+        });
         bumpProjects();
         return record;
       } catch {

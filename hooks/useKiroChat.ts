@@ -6,7 +6,7 @@ import { useChat, UIMessage } from "@ai-sdk/react";
 import { useAppStore } from "@/store/useAppStore";
 import { useAISettingsStore } from "@/store/useAISettingsStore";
 import { useKiroComputerStore } from "@/store/useKiroComputerStore";
-import { KiroComputerTurnSnapshot } from "@/lib/ai/contextBudget/types";
+import { KiroComputerTurnSnapshot, KiroProjectTurnContext } from "@/lib/ai/contextBudget/types";
 import { ComputerActionFact, ComputerCapability, KiroWorkspaceMeta } from "@/lib/ai/computer/types";
 import { ComputerError } from "@/lib/ai/computer/errors";
 import { executeKiroComputerTool } from "@/lib/ai/computer/executor";
@@ -64,6 +64,8 @@ import { getModelCapabilities, isVisionMimeSupported } from "@/lib/ai/providers/
 import { formatVisionMimeTypes } from "@/lib/ai/attachments/imageMime";
 import { preprocessVisionImage } from "@/lib/ai/attachments/preprocessImage";
 import { resolveVisionTurnBudget, sumVisionBytes, isVisionTurnWithinBudget } from "@/lib/ai/attachments/visionBudget";
+import { getKiroProject } from "@/lib/ai/projects/db";
+import { toProjectTurnContext } from "@/lib/ai/projects/prompt";
 import { getActiveModelName } from "@/lib/ai/providers/registry";
 import { executeKiroWriteTool } from "@/lib/ai/tools/write/executor";
 import { isDestructiveWriteTool, KiroUndoEntry, KiroWriteApi, WriteToolResult } from "@/lib/ai/tools/write/types";
@@ -521,6 +523,7 @@ export function useKiroChat({
   attachments,
   conversationSummary,
   conversationId,
+  projectId,
 }: {
   autoRefs: KiroContextRef[];
   manualRefs: KiroContextRef[];
@@ -531,6 +534,8 @@ export function useKiroChat({
   conversationSummary?: KiroConversationSummary | null;
   /** Part 3：当前会话 id（Task/Audit 记录用；useKiroChat 不拥有会话生命周期） */
   conversationId?: string | null;
+  /** Projects V1.2：当前 Conversation 所属 Project（null = 未归类）；Send boundary 读取并冻结 Project Instructions */
+  projectId?: string | null;
 }) {
   const enabled = useAISettingsStore((s) => s.enabled);
   const provider = useAISettingsStore((s) => s.provider);
@@ -553,6 +558,9 @@ export function useKiroChat({
   // Part 3：会话 id 供 Task/Audit 使用（KiroSessionProvider 传入；ref 避免重建 callback）
   const conversationIdRef = useRef<string | null>(conversationId ?? null);
   conversationIdRef.current = conversationId ?? null;
+  // Projects V1.2：当前 Project id（Send boundary 读取；ref 避免 callback 重建）
+  const projectIdRef = useRef<string | null>(projectId ?? null);
+  projectIdRef.current = projectId ?? null;
 
   const capabilities = getModelCapabilities({ provider, model, custom });
   const visionEnabled = capabilities.vision;
@@ -600,7 +608,7 @@ export function useKiroChat({
     []
   );
 
-  const buildTurnSnapshot = (turnAttachments: KiroAttachment[]): Record<string, unknown> => {
+  const buildTurnSnapshot = (turnAttachments: KiroAttachment[], projectContext?: KiroProjectTurnContext): Record<string, unknown> => {
     const contexts = buildDocumentContexts(turnAttachments);
     const budgeted = budgetAttachments(contexts, DEFAULT_CONTEXT_BUDGET.attachmentBudgetTokens).attachments;
     // 文本文档 Source Registry：availablePages 只取预算后实际发送的页码（模型不能引用不可见页面）
@@ -689,6 +697,9 @@ export function useKiroChat({
       }),
       // Computer Turn Snapshot（冻结意图；只含逻辑元数据，live grants/rules 不入请求）
       computerSnapshot: buildComputerSnapshot(),
+      // Projects V1.2：Project Instructions 随 Turn 冻结（Send boundary 读取；
+      // continuation 复用 turnSnapshotRef，streaming 中编辑 Project 只影响下一 Turn）
+      projectContext,
     };
   };
 
@@ -1863,9 +1874,26 @@ export function useKiroChat({
       }
 
       // ---- Turn Context Snapshot：本 Turn 内 Prompt Context 冻结（下一 Turn 才刷新） ----
+      // Projects V1.2：Send boundary 读取并冻结 Project Instructions。
+      // 绝不提前在 useEffect preload（loadConversation 后快速 Send 可能丢第一 Turn 指令）。
+      const projectIdNow = projectIdRef.current;
+      let projectContext: KiroProjectTurnContext | undefined;
+      if (projectIdNow) {
+        try {
+          const projectRecord = await getKiroProject(projectIdNow);
+          if (!projectRecord) {
+            pushToast({ message: "无法加载项目设置，请重试。", type: "error" });
+            return false;
+          }
+          projectContext = toProjectTurnContext(projectRecord);
+        } catch {
+          pushToast({ message: "无法加载项目设置，请重试。", type: "error" });
+          return false;
+        }
+      }
       // V3 Part 1：先冻结 Computer snapshot，再异步经 live Workspace/rules/grant + 精确 fs.read policy
       // 读取 bounded root-level KIRO.md（绝不重建/切换 Workspace；Server 会再次基于 frozen snapshot 归一化）
-      const baseTurnSnapshot = buildSnapshotRef.current(turnAttachments);
+      const baseTurnSnapshot = buildSnapshotRef.current(turnAttachments, projectContext);
       const frozenComputerSnapshot = baseTurnSnapshot.computerSnapshot as KiroComputerTurnSnapshot | undefined;
       const computerWorkspaceInstructions =
         frozenComputerSnapshot && frozenComputerSnapshot.enabled
