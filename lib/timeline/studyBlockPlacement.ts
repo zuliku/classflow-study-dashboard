@@ -45,7 +45,16 @@ function overlaps(aStart: number, aEnd: number, bStart: number, bEnd: number): b
 export function analyzeStudyBlockPlacement(
   block: { id?: string; date: string; startTime: string; endTime: string },
   state: {
-    schedules: CourseSchedule[];
+    /** 支持 CourseSchedule 或该周 effective occurrences（Task 7：已解析的一次性调课） */
+    schedules: {
+      id: string;
+      courseId: string;
+      dayOfWeek: number;
+      startTime: string;
+      endTime: string;
+      weeks?: string;
+      excludedWeeks?: number[];
+    }[];
     studyBlocks: StudyBlock[];
     courses: { id: string; name: string }[];
     currentSemesterWeek: number;
@@ -58,7 +67,7 @@ export function analyzeStudyBlockPlacement(
   const courseOverlaps: CourseOverlap[] = [];
   for (const sch of state.schedules) {
     if (sch.dayOfWeek !== dow) continue;
-    if (!isScheduleActive(sch, state.currentSemesterWeek)) continue;
+    if (!isScheduleActive(sch as CourseSchedule, state.currentSemesterWeek)) continue;
     const ss = timeToMinutes(sch.startTime) ?? 0;
     const se = timeToMinutes(sch.endTime) ?? ss + 60;
     if (overlaps(s, e, ss, se)) {

@@ -7,6 +7,7 @@ import { useToastStore } from "@/store/useToastStore";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import { getWeekDateRange, formatWeekDateRange, getSemesterWeek } from "@/lib/semester";
+import { resolveCourseOccurrencesForWeek } from "@/lib/scheduleOccurrences";
 import { findScheduleConflicts } from "@/lib/conflicts";
 import { isScheduleActive, timeToMinutes } from "@/lib/schedule";
 import { getNowIndicatorPosition } from "@/lib/timeline/nowIndicator";
@@ -117,6 +118,7 @@ export function TimetableGrid({
   const {
     courses,
     schedules,
+    scheduleOccurrenceOverrides,
     semester,
     currentSemesterWeek,
     setCurrentSemesterWeek,
@@ -152,8 +154,14 @@ export function TimetableGrid({
   const dayEndMinutes = TIMETABLE_DAY_END_MINUTES; // 21:00 (Includes evening classes)
   const totalMinutes = dayEndMinutes - dayStartMinutes; // 780 minutes total
 
-  // Filter schedules active in currentSemesterWeek using unified isScheduleActive logic
-  const activeSchedules = schedules.filter((s) => isScheduleActive(s, currentSemesterWeek));
+  // Task 7：当前教学周的有效课程 = base + move + extra occurrences（唯一 Source of Truth：
+  // cancel 消失 / move 显示目标位 / extra 出现；isScheduleActive 由 resolver 统一尊重）
+  const activeSchedules = resolveCourseOccurrencesForWeek({
+    schedules,
+    overrides: scheduleOccurrenceOverrides,
+    week: currentSemesterWeek,
+    totalWeeks: semester.totalWeeks,
+  });
 
   // 今天 / 当前周（今天列 tint + 实时 Now Indicator）
   const todayStr = format(new Date(), "yyyy-MM-dd");
@@ -310,6 +318,9 @@ export function TimetableGrid({
 
   const handleCardPointerDown = (e: React.PointerEvent, sched: CourseSchedule) => {
     if (!editingEnabled || e.pointerType === "touch") return;
+    // Task 7：moved / extra 一次性 occurrence 不可直接编辑（编辑会改变 recurring schedule）；
+    // 仅 base occurrence 支持拖拽/缩放
+    if ((sched as { source?: string }).source && (sched as { source?: string }).source !== "base") return;
     pendingRef.current = { origin: sched, startX: e.clientX, startY: e.clientY };
     dragOffsetRef.current = getPointerMinutes(e.clientY) - timeToMinutesSafe(sched.startTime);
     try {
@@ -363,6 +374,8 @@ export function TimetableGrid({
   const handleResizePointerDown = (e: React.PointerEvent, sched: CourseSchedule) => {
     e.stopPropagation();
     if (!editingEnabled || e.pointerType === "touch") return;
+    // Task 7：moved / extra 一次性 occurrence 不可直接编辑
+    if ((sched as { source?: string }).source && (sched as { source?: string }).source !== "base") return;
     e.preventDefault();
     const candidate = calculateResizedSchedule(sched, getPointerMinutes(e.clientY));
     const { valid, conflict } = validateScheduleCandidate(candidate, schedules, sched.id);
@@ -405,8 +418,23 @@ export function TimetableGrid({
   // ---- 提交 / 取消 ----
   const commitInteraction = (it: Interaction & { type: "move" | "resize" }) => {
     if (it.valid) {
+      // Task 7：base occurrence 的编辑写回其 recurring schedule（保持 weeks/excludedWeeks 等字段）；
+      // moved / extra occurrence 已禁止直接编辑（handleCardPointerDown 拦截）
+      const originBase = schedules.find(
+        (s) =>
+          s.id === ((it.origin as { baseScheduleId?: string }).baseScheduleId ?? it.origin.id)
+      );
+      const originBaseId = originBase ?? null;
+      const next = originBase
+        ? {
+            ...originBase,
+            dayOfWeek: it.candidate.dayOfWeek,
+            startTime: it.candidate.startTime,
+            endTime: it.candidate.endTime,
+          }
+        : it.candidate;
       // 有效：立即写 Store，并给出可撤销 Toast（恢复 origin，同一 id，全部字段）
-      updateSchedule(it.candidate);
+      updateSchedule(next);
       // 落位 settle：只给刚提交的卡片一个极轻的 opacity 归位
       setSettleId(it.candidate.id);
       if (settleTimerRef.current) window.clearTimeout(settleTimerRef.current);
@@ -414,7 +442,18 @@ export function TimetableGrid({
       pushToast({
         message: "课程时间已调整",
         actionLabel: "撤销",
-        onAction: () => updateSchedule(it.origin),
+        onAction: () => {
+          if (originBaseId) {
+            updateSchedule({
+              ...originBaseId,
+              dayOfWeek: it.origin.dayOfWeek,
+              startTime: it.origin.startTime,
+              endTime: it.origin.endTime,
+            });
+          } else {
+            updateSchedule(it.origin);
+          }
+        },
       });
     } else {
       // 冲突：不写 Store，回到 origin（opacity 由卡片自身过渡平滑恢复，不做 shake）
@@ -749,8 +788,8 @@ export function TimetableGrid({
                           <span className="truncate">{sched.location}</span>
                         </div>
 
-                        {/* Resize Handle：仅工作区显示，hover/focus/拖拽中才明显 */}
-                        {editingEnabled && (
+                        {/* Resize Handle：仅工作区显示（moved/extra 一次性 occurrence 不显示），hover/focus/拖拽中才明显 */}
+                        {editingEnabled && (!(sched as { source?: string }).source || (sched as { source?: string }).source === "base") && (
                           <button
                             data-testid="resize-handle"
                             aria-label="调整课程结束时间"

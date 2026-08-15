@@ -39,6 +39,7 @@ export function CoursesWorkspace() {
     schedules,
     assignments,
     semester,
+    scheduleOccurrenceOverrides,
     setSelectedCourseId,
     setSelectedAssignmentId,
     setAddCourseModalOpen,
@@ -158,7 +159,14 @@ export function CoursesWorkspace() {
           <div className="grid grid-cols-1 gap-4 xl:grid-cols-2 xl:items-center">
             {courses.map((course) => {
               const next = inTeachingWeek
-                ? deriveNextCourseSession(course.id, schedules, realSemesterWeek, semester.totalWeeks)
+                ? deriveNextCourseSession(
+                    course.id,
+                    schedules,
+                    realSemesterWeek,
+                    semester.totalWeeks,
+                    new Date(),
+                    scheduleOccurrenceOverrides
+                  )
                 : null;
               const nextCellText = !inTeachingWeek
                 ? "当前不在教学周"

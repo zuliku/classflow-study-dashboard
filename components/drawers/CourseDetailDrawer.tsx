@@ -64,6 +64,9 @@ export function CourseDetailDrawer() {
     addCourseMaterial,
     deleteCourseMaterial,
     restoreCourseMaterial,
+    scheduleOccurrenceOverrides,
+    deleteScheduleOccurrenceOverride,
+    restoreScheduleOccurrenceOverride,
   } = useAppStore();
   const pushToast = useToastStore((s) => s.pushToast);
   const handoff = useKiroHandoff();
@@ -525,6 +528,18 @@ export function CourseDetailDrawer() {
           <CourseScheduleSection
             schedules={courseSchedules}
             courseClassroom={course.classroom}
+            courseName={course.name}
+            overrides={scheduleOccurrenceOverrides.filter((o) => o.courseId === course.id)}
+            onDeleteOverride={(overrideId) => {
+              const removed = deleteScheduleOccurrenceOverride(overrideId);
+              if (removed) {
+                pushToast({
+                  message: "已移除临时调整",
+                  actionLabel: "撤销",
+                  onAction: () => restoreScheduleOccurrenceOverride(removed),
+                });
+              }
+            }}
             addSlotOpen={addSlotOpen}
             onAddSlotOpenChange={setAddSlotOpen}
             autoFocusKey={addSlotAutoFocusKey}

@@ -2,8 +2,9 @@
 
 import React, { useEffect, useRef, useState } from "react";
 import { PencilLine, Plus, Trash2, X } from "lucide-react";
-import { CourseSchedule } from "@/types";
+import { CourseSchedule, ScheduleOccurrenceOverride } from "@/types";
 import { WEEK_RANGE_PRESETS } from "@/lib/schedule";
+import { describeScheduleOccurrenceOverride } from "@/lib/scheduleOccurrences";
 import { UISelect } from "@/components/ui/Select";
 import { DisclosureRegion } from "@/components/ui/DisclosureRegion";
 import { Input } from "@/components/ui/Input";
@@ -64,6 +65,9 @@ function WeeksSelect({ value, onChange }: { value: string; onChange: (weeks: str
 export function CourseScheduleSection({
   schedules,
   courseClassroom,
+  courseName,
+  overrides,
+  onDeleteOverride,
   addSlotOpen,
   onAddSlotOpenChange,
   autoFocusKey,
@@ -75,6 +79,11 @@ export function CourseScheduleSection({
 }: {
   schedules: CourseSchedule[];
   courseClassroom: string;
+  /** Task 7：课程名（临时调整描述用） */
+  courseName?: string;
+  /** Task 7：一次性停课/调课/补课（低权重展示；不当作永久排课） */
+  overrides?: ScheduleOccurrenceOverride[];
+  onDeleteOverride?: (overrideId: string) => void;
   addSlotOpen: boolean;
   onAddSlotOpenChange: (open: boolean) => void;
   /** >0 变化时：展开 Add form 并 focus 第一个字段（Quick Action 联动） */
@@ -411,9 +420,36 @@ export function CourseScheduleSection({
                     <Trash2 className="h-3.5 w-3.5" />
                   </button>
                 </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+      {/* Task 7：临时调整（一次性停课/调课/补课；低权重，不当作永久排课） */}
+      {overrides && overrides.length > 0 && (
+        <div className="pt-1">
+          <p className="text-[11px] font-bold text-sandrift">临时调整</p>
+          <div className="divide-y divide-line-soft">
+            {overrides.map((o) => (
+              <div key={o.id} className="flex items-center justify-between gap-2 px-1 py-1.5">
+                <p className="min-w-0 truncate text-[11px] text-satin-grey">
+                  {describeScheduleOccurrenceOverride(o, courseName)}
+                </p>
+                {onDeleteOverride && (
+                  <button
+                    type="button"
+                    onClick={() => onDeleteOverride(o.id)}
+                    className="shrink-0 rounded-lg p-1 text-sandrift transition-colors hover:bg-danger-bg hover:text-danger"
+                    aria-label="移除临时调整"
+                    title="移除临时调整"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
               </div>
-            );
-          })}
+            ))}
+          </div>
         </div>
       )}
     </div>

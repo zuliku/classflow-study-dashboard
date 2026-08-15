@@ -6,6 +6,7 @@ import {
   CourseSchedule,
   GroupProject,
   Reminder,
+  ScheduleOccurrenceOverride,
   Semester,
   UserProfile,
   StudyBlock,
@@ -186,11 +187,32 @@ export function validateBackup(raw: unknown): BackupValidationResult {
   if (data.reminders !== undefined && !validateReminders(data.reminders)) {
     return { ok: false, error: "提醒数据 (reminders) 格式异常，无法恢复" };
   }
+  // Task 7：Schedule Occurrence Override 可选（旧备份缺失合法 → 恢复 []；存在则必须合法）
+  if (
+    data.scheduleOccurrenceOverrides !== undefined &&
+    !validateScheduleOccurrenceOverrides(data.scheduleOccurrenceOverrides)
+  ) {
+    return { ok: false, error: "临时调整数据 (scheduleOccurrenceOverrides) 格式异常，无法恢复" };
+  }
 
   return {
     ok: true,
     data: data as unknown as ClassFlowBackupData,
   };
+}
+
+function validateScheduleOccurrenceOverrides(v: unknown): v is ScheduleOccurrenceOverride[] {
+  return (
+    Array.isArray(v) &&
+    v.every(
+      (o) =>
+        isPlainObject(o) &&
+        isNonEmptyString(o.id) &&
+        (o.kind === "cancel" || o.kind === "move" || o.kind === "extra") &&
+        isNonEmptyString(o.courseId) &&
+        typeof o.week === "number"
+    )
+  );
 }
 
 /** 解析 JSON 文本并校验备份结构 */

@@ -79,6 +79,46 @@ export interface CourseSchedule {
   excludedWeeks?: number[]; // [5] means week 5 is excluded/canceled (调课/停课)
 }
 
+/**
+ * 某一教学周对 recurring CourseSchedule 的一次性例外（Visual Intake 基础设施）：
+ * - cancel：该周原 occurrence 消失
+ * - move：该周原 occurrence 消失 + 目标位置出现一次（hide original + render target 一体表达）
+ * - extra：该周额外出现一次（无 baseScheduleId）
+ * recurring schedule 本身永不改变；同一 baseScheduleId + week 只允许一个 active override。
+ */
+export type ScheduleOccurrenceOverride =
+  | {
+      id: string;
+      kind: "cancel";
+      courseId: string;
+      baseScheduleId: string;
+      week: number;
+      source?: "manual" | "kiro";
+    }
+  | {
+      id: string;
+      kind: "move";
+      courseId: string;
+      baseScheduleId: string;
+      week: number;
+      dayOfWeek: number;
+      startTime: string;
+      endTime: string;
+      location: string;
+      source?: "manual" | "kiro";
+    }
+  | {
+      id: string;
+      kind: "extra";
+      courseId: string;
+      week: number;
+      dayOfWeek: number;
+      startTime: string;
+      endTime: string;
+      location: string;
+      source?: "manual" | "kiro";
+    };
+
 export interface ScheduleConflict {
   scheduleA: CourseSchedule;
   scheduleB: CourseSchedule;
@@ -308,6 +348,8 @@ export interface ClassFlowBackupData {
   reminders?: Reminder[];
   /** Task 2：Focus Session（旧备份可缺失 → 恢复为 []） */
   focusSessions?: FocusSession[];
+  /** Task 7：一次性停课/调课/补课（旧备份可缺失 → 恢复为 []；不强制破坏性 bump backup version） */
+  scheduleOccurrenceOverrides?: ScheduleOccurrenceOverride[];
 }
 
 /** 本地数据备份文件结构 (v1) */

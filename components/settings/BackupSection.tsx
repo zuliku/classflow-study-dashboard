@@ -37,6 +37,7 @@ export function BackupSection() {
     preferences,
     reminders,
     focusSessions,
+    scheduleOccurrenceOverrides,
   } = state;
   const pushToast = useToastStore((s) => s.pushToast);
 
@@ -55,6 +56,7 @@ export function BackupSection() {
     preferences,
     reminders,
     focusSessions,
+    scheduleOccurrenceOverrides,
   });
 
   const exportFull = async () => {

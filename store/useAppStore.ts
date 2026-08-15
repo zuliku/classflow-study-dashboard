@@ -20,6 +20,7 @@ import {
   AppPreferences,
   SettingsSection,
   StudyBlock,
+  ScheduleOccurrenceOverride,
 } from "@/types";
 import { createDefaultSemester, getSemesterWeek } from "@/lib/semester";
 import { getLocalDDLDate, parseLocalDDL } from "@/lib/ddl";
@@ -29,6 +30,7 @@ import { TaskWorkspaceView } from "@/lib/tasks/taskViews";
 import { deleteFileBlob, clearAllFileBlobs } from "@/lib/fileStorage";
 import { isLegacyDDLMarkForAssignment, linkLegacyDDLMarks } from "@/lib/calendarMark";
 import { createId } from "@/lib/utils";
+import { validateScheduleOccurrenceOverride } from "@/lib/scheduleOccurrences";
 import { calculateGroupProjectProgress, formatLocalDate, normalizeGroupProject } from "@/lib/groupProject";
 import { DEFAULT_PREFERENCES, sanitizePreferences } from "@/lib/preferences";
 import { buildNextRecurringAssignment } from "@/lib/tasks/taskRecurrence";
@@ -272,6 +274,8 @@ interface PersistedAppState {
   reminders?: Reminder[];
   /** Task 2：Focus Session（旧数据可缺失 → []） */
   focusSessions?: FocusSession[];
+  /** Task 7：Schedule Occurrence Override（一次性停课/调课/补课；旧数据可缺失 → []） */
+  scheduleOccurrenceOverrides?: ScheduleOccurrenceOverride[];
 }
 
 /** 旧版（无显式 version）持久化数据：可能混入瞬时 UI 状态，迁移时仅取白名单字段 */
@@ -289,6 +293,56 @@ interface LegacyPersistedStateV0 {
   studyBlocks?: unknown;
   reminders?: unknown;
   focusSessions?: unknown;
+  scheduleOccurrenceOverrides?: unknown;
+}
+
+type ScheduleOccurrenceOverrideInput = {
+  kind: "cancel" | "move" | "extra";
+  courseId: string;
+  baseScheduleId?: string;
+  week: number;
+  dayOfWeek?: number;
+  startTime?: string;
+  endTime?: string;
+  location?: string;
+  source?: "manual" | "kiro";
+};
+
+/** Task 7：按 kind 构建 override（输入字段已在 validateScheduleOccurrenceOverride 校验） */
+function buildScheduleOccurrenceOverride(
+  input: ScheduleOccurrenceOverrideInput,
+  id: string
+): ScheduleOccurrenceOverride {
+  const source = input.source ?? "manual";
+  switch (input.kind) {
+    case "cancel":
+      return { kind: "cancel", id, courseId: input.courseId, baseScheduleId: input.baseScheduleId!, week: input.week, source };
+    case "move":
+      return {
+        kind: "move",
+        id,
+        courseId: input.courseId,
+        baseScheduleId: input.baseScheduleId!,
+        week: input.week,
+        dayOfWeek: input.dayOfWeek!,
+        startTime: input.startTime!,
+        endTime: input.endTime!,
+        location: input.location ?? "",
+        source,
+      };
+    case "extra":
+      return {
+        kind: "extra",
+        id,
+        courseId: input.courseId,
+        week: input.week,
+        dayOfWeek: input.dayOfWeek!,
+        startTime: input.startTime!,
+        endTime: input.endTime!,
+        location: input.location ?? "",
+        source,
+      };
+  }
 }
 
 const TIME_SLICES: TimeSliceFilter[] = ["all", "overdue", "today", "3days", "7days", "completed"];
@@ -351,6 +405,10 @@ function sanitizePersistedState(persisted: unknown): PersistedAppState {
     // v6：Focus Session（旧数据缺失 → []；非法条目丢弃）
     focusSessions: Array.isArray(legacy.focusSessions)
       ? (legacy.focusSessions as FocusSession[]).map(normalizeFocusSession).filter((f): f is FocusSession => f !== null)
+      : [],
+    // v7：Schedule Occurrence Override（旧数据缺失 → []；backward compatible，不触碰既有 schedules）
+    scheduleOccurrenceOverrides: Array.isArray(legacy.scheduleOccurrenceOverrides)
+      ? (legacy.scheduleOccurrenceOverrides as ScheduleOccurrenceOverride[])
       : [],
   };
 }
@@ -423,6 +481,8 @@ export interface AppState {
   groupProjects: GroupProject[];
   /** Timeline V1：学习计划 */
   studyBlocks: StudyBlock[];
+  /** Task 7：一次性停课/调课/补课（recurring schedule 的周级例外；不改变 base schedule） */
+  scheduleOccurrenceOverrides: ScheduleOccurrenceOverride[];
 
   // Actions
   updateUserProfile: (profile: Partial<UserProfile>) => void;
@@ -457,6 +517,20 @@ export interface AppState {
     week: number,
     context?: LearningMutationContext
   ) => void;
+
+  // Task 7：Schedule Occurrence Override（一次性停课/调课/补课）
+  /** 创建 override（先经 validateScheduleOccurrenceOverride：唯一性 + 该周 effective 冲突检查） */
+  addScheduleOccurrenceOverride: (
+    override: ScheduleOccurrenceOverrideInput
+  ) => { ok: true; id: string } | { ok: false; code: string; message: string };
+  /** 删除 override（返回被删对象供撤销） */
+  deleteScheduleOccurrenceOverride: (overrideId: string) => ScheduleOccurrenceOverride | null;
+  /** 撤销删除：恢复原 override（原 ID） */
+  restoreScheduleOccurrenceOverride: (override: ScheduleOccurrenceOverride) => void;
+  /** 原子替换：同 baseScheduleId+week 的 active override 先删后建（ID 新生成；Delete old + create replacement） */
+  replaceScheduleOccurrenceOverride: (
+    override: ScheduleOccurrenceOverrideInput
+  ) => { ok: true; id: string } | { ok: false; code: string; message: string };
   importSchedules: (
     newCourses: Course[],
     newSchedules: CourseSchedule[],
@@ -728,6 +802,7 @@ export const useAppStore = create<AppState>()(
       studyBlocks: [],
       reminders: [],
       focusSessions: [],
+      scheduleOccurrenceOverrides: [],
 
       updateUserProfile: (profile) =>
         set((state) => ({
@@ -764,6 +839,7 @@ export const useAppStore = create<AppState>()(
           studyBlocks: [],
           reminders: [],
           focusSessions: [],
+          scheduleOccurrenceOverrides: [],
           currentSemesterWeek: Math.min(
             Math.max(getSemesterWeek(new Date(), get().semester), 1),
             get().semester.totalWeeks
@@ -798,6 +874,7 @@ export const useAppStore = create<AppState>()(
           studyBlocks: [],
           reminders: [],
           focusSessions: [],
+          scheduleOccurrenceOverrides: [],
           semester: createDefaultSemester(),
           currentSemesterWeek: 1,
           assignmentTimeSlice: "all",
@@ -854,6 +931,10 @@ export const useAppStore = create<AppState>()(
             reminders,
             focusSessions: Array.isArray(data.focusSessions)
               ? data.focusSessions.map(normalizeFocusSession).filter((f): f is FocusSession => f !== null)
+              : [],
+            // Task 7：旧备份缺失 → []（不破坏旧数据恢复）
+            scheduleOccurrenceOverrides: Array.isArray(data.scheduleOccurrenceOverrides)
+              ? data.scheduleOccurrenceOverrides
               : [],
             currentSemesterWeek: Math.min(
               Math.max(state.currentSemesterWeek, 1),
@@ -931,7 +1012,7 @@ export const useAppStore = create<AppState>()(
         ]);
 
         // 2. 一次 set 完成完整级联删除（Course + schedules + assignments + groupProjects +
-        //    DDL marks + course/assignment-owned StudyBlocks + 受影响 Reminder）
+        //    DDL marks + course/assignment-owned StudyBlocks + 受影响 Reminder + Task 7 临时调整）
         set((state) => {
           const next = removeCourseDeleteCascade(state, cascade);
           const deletedAssignmentIds = new Set(cascade.assignments.map((a) => a.id));
@@ -1001,7 +1082,13 @@ export const useAppStore = create<AppState>()(
             }),
           ]);
         }
-        set({ schedules: current.schedules.filter((s) => s.id !== scheduleId) });
+        set({
+          schedules: current.schedules.filter((s) => s.id !== scheduleId),
+          // Task 7：删除 recurring schedule → 其 cancel/move override 同步删除（extra 无 baseScheduleId 不受影响）
+          scheduleOccurrenceOverrides: current.scheduleOccurrenceOverrides.filter(
+            (o) => o.kind === "extra" || o.baseScheduleId !== scheduleId
+          ),
+        });
         return target;
       },
 
@@ -1017,6 +1104,70 @@ export const useAppStore = create<AppState>()(
           ]);
           return { schedules: [...state.schedules, schedule] };
         }),
+
+      // ---- Task 7：Schedule Occurrence Override ----
+      addScheduleOccurrenceOverride: (input) => {
+        const state = get();
+        const validation = validateScheduleOccurrenceOverride(input, {
+          schedules: state.schedules,
+          overrides: state.scheduleOccurrenceOverrides,
+          totalWeeks: state.semester.totalWeeks,
+          courses: state.courses,
+        });
+        if (!validation.ok) return validation;
+        const override = buildScheduleOccurrenceOverride(input, createId("occ"));
+        set({ scheduleOccurrenceOverrides: [...state.scheduleOccurrenceOverrides, override] });
+        return { ok: true, id: override.id };
+      },
+
+      deleteScheduleOccurrenceOverride: (overrideId) => {
+        const current = get();
+        const target = current.scheduleOccurrenceOverrides.find((o) => o.id === overrideId) ?? null;
+        if (target) {
+          set({
+            scheduleOccurrenceOverrides: current.scheduleOccurrenceOverrides.filter(
+              (o) => o.id !== overrideId
+            ),
+          });
+        }
+        return target;
+      },
+
+      restoreScheduleOccurrenceOverride: (override) =>
+        set((state) => ({
+          scheduleOccurrenceOverrides: state.scheduleOccurrenceOverrides.some((o) => o.id === override.id)
+            ? state.scheduleOccurrenceOverrides
+            : [...state.scheduleOccurrenceOverrides, override],
+        })),
+
+      replaceScheduleOccurrenceOverride: (input) => {
+        // 原子替换：删除同 baseScheduleId+week 的旧 active override，再创建新 override（单次 set）
+        const state = get();
+        const validation = validateScheduleOccurrenceOverride(input, {
+          schedules: state.schedules,
+          // 校验时不把将替换的旧 override 算作重复 → 先排除同 slot 的旧 override
+          overrides: state.scheduleOccurrenceOverrides.filter(
+            (o) =>
+              o.kind === "extra" ||
+              input.kind === "extra" ||
+              !(o.week === input.week && (o as { baseScheduleId?: string }).baseScheduleId === input.baseScheduleId)
+          ),
+          totalWeeks: state.semester.totalWeeks,
+          courses: state.courses,
+        });
+        if (!validation.ok) return validation;
+        const override = buildScheduleOccurrenceOverride(input, createId("occ"));
+        const replaced = state.scheduleOccurrenceOverrides.filter(
+          (o) =>
+            !(
+              o.kind !== "extra" &&
+              o.week === override.week &&
+              (o as { baseScheduleId?: string }).baseScheduleId === (override as { baseScheduleId?: string }).baseScheduleId
+            )
+        );
+        set({ scheduleOccurrenceOverrides: [...replaced, override] });
+        return { ok: true, id: override.id };
+      },
 
       excludeWeekFromSchedule: (scheduleId, week, context) =>
         set((state) => {
@@ -2327,7 +2478,8 @@ export const useAppStore = create<AppState>()(
       // v3 → v4：Task V2 —— Assignment ddl 可选 + estimatedMinutes（normalizeAssignment 归一；旧数据 ddl 原值保留）
       // v4 → v5：Task 7G-A1 —— Reminder（旧数据缺失 → []；sanitize 丢弃非法条目）
       // v5 → v6：Task 2 —— Focus Session（旧数据缺失 → []；sanitize 丢弃非法条目）
-      version: 6,
+      // v6 → v7：Task 7 —— Schedule Occurrence Override（旧数据缺失 → []；backward compatible）
+      version: 7,
       storage: createJSONStorage(() => localStorage),
       partialize: (state): PersistedAppState => ({
         userProfile: state.userProfile,
@@ -2343,6 +2495,7 @@ export const useAppStore = create<AppState>()(
         preferences: state.preferences,
         reminders: state.reminders,
         focusSessions: state.focusSessions,
+        scheduleOccurrenceOverrides: state.scheduleOccurrenceOverrides,
       }),
       migrate: (persistedState) => sanitizePersistedState(persistedState),
       // zustand 在存储为空时也会调用 merge（migratedState=undefined），

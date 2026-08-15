@@ -45,13 +45,13 @@ import {
   createQuickStudyBlockCandidate,
 } from "@/lib/timeline/studyBlockInteraction";
 import { timeToMinutes } from "@/lib/timeline/timelineGeometry";
-import { isScheduleActive } from "@/lib/schedule";
 import { findCourseOverlapsForStudyBlock, isCourseOverlapApproved } from "@/lib/planning/courseOverlapPolicy";
 import {
   analyzeStudyBlockPlacement,
   CourseOverlap,
   courseOverlapSuffix,
 } from "@/lib/timeline/studyBlockPlacement";
+import { resolveCourseOccurrencesForWeek } from "@/lib/scheduleOccurrences";
 import { Assignment, CalendarMark, CourseSchedule, StudyBlock } from "@/types";
 import { cn } from "@/lib/utils";
 
@@ -115,6 +115,7 @@ export function TimelineWorkspace() {
     deleteStudyBlock,
     updateStudyBlock,
     addCalendarMark,
+    scheduleOccurrenceOverrides,
   } = useAppStore();
   const pushToast = useToastStore((s) => s.pushToast);
   const handoff = useKiroHandoff();
@@ -189,7 +190,7 @@ export function TimelineWorkspace() {
     const pointerMinutes = pointerToMinutes(clientY, rect.top, rect.height);
     const candidate = calculateMovedStudyBlock(origin, targetDate, pointerMinutes, offset);
     const analysis = analyzeStudyBlockPlacement(candidate, {
-      schedules,
+      schedules: weekSchedules,
       studyBlocks,
       courses,
       currentSemesterWeek,
@@ -346,7 +347,7 @@ export function TimelineWorkspace() {
     const pointerMinutes = pointerToMinutes(clientY, rect.top, rect.height);
     const candidate = createQuickStudyBlockCandidate({ assignment, date: targetDate, pointerMinutes });
     const analysis = analyzeStudyBlockPlacement(candidate, {
-      schedules,
+      schedules: weekSchedules,
       studyBlocks,
       courses,
       currentSemesterWeek,
@@ -481,6 +482,18 @@ export function TimelineWorkspace() {
     [assignments, studyBlocks]
   );
 
+  // Task 7：当前浏览周的 effective occurrences（cancel 消失 / move 目标位 / extra 出现）
+  const weekSchedules = useMemo(
+    () =>
+      resolveCourseOccurrencesForWeek({
+        schedules,
+        overrides: scheduleOccurrenceOverrides,
+        week: currentSemesterWeek,
+        totalWeeks: semester.totalWeeks,
+      }),
+    [schedules, scheduleOccurrenceOverrides, currentSemesterWeek, semester.totalWeeks]
+  );
+
   // ---- StudyBlock 层（Grid 内弱时间块；Course > StudyBlock：重叠时不绘制 Card）----
   const studyLayer = (ctx: {
     dayOfWeek: number;
@@ -490,10 +503,8 @@ export function TimelineWorkspace() {
   }) => {
     if (!filters.studyBlocks) return null;
     const date = weekDates[ctx.dayOfWeek - 1];
-    // 只与「当前教学周真正生效」的课程比较（单双周 / excludedWeeks / 调停课一致）
-    const daySchedules = schedules.filter(
-      (s) => s.dayOfWeek === ctx.dayOfWeek && isScheduleActive(s, currentSemesterWeek)
-    );
+    // 只与「当前教学周真正生效」的课程比较（Task 7：effective occurrences 含一次性调课）
+    const daySchedules = weekSchedules.filter((s) => s.dayOfWeek === ctx.dayOfWeek);
     const dayBlocks = studyBlocks.filter((b) => b.date === date);
     const dayStart = ctx.dayStartMinutes;
     const dayEnd = ctx.dayStartMinutes + ctx.totalMinutes;
@@ -526,7 +537,7 @@ export function TimelineWorkspace() {
           // V1.1：当前仍有效的课程重叠批准 → 小型 secondary label（非醒目警告）
           const validApprovalCount = findCourseOverlapsForStudyBlock({
             block: b,
-            schedules,
+      schedules: weekSchedules,
             semester,
           }).filter((o) => isCourseOverlapApproved(b, o)).length;
           return (
@@ -692,7 +703,7 @@ export function TimelineWorkspace() {
           const ve = Math.min(ge, dayEnd);
           if (ve <= vs) return null;
           const gAnalysis = analyzeStudyBlockPlacement(g, {
-            schedules,
+      schedules: weekSchedules,
             studyBlocks,
             courses,
             currentSemesterWeek,
@@ -743,7 +754,7 @@ export function TimelineWorkspace() {
           if (ve <= vs) return null;
           const tAnalysis = analyzeStudyBlockPlacement(
             { date: m.to.date, startTime: m.to.startTime, endTime: m.to.endTime },
-            { schedules, studyBlocks, courses, currentSemesterWeek }
+            { schedules: weekSchedules, studyBlocks, courses, currentSemesterWeek }
           );
           const tHard = tAnalysis.hardConflict;
           const tOverlap = tAnalysis.courseOverlaps.length > 0;
@@ -813,7 +824,7 @@ export function TimelineWorkspace() {
   const submitArrange = (a: Assignment | null, date: string, start: string, end: string) => {
     const analysis = analyzeStudyBlockPlacement(
       { date, startTime: start, endTime: end },
-      { schedules, studyBlocks, courses, currentSemesterWeek }
+      { schedules: weekSchedules, studyBlocks, courses, currentSemesterWeek }
     );
     if (analysis.hardConflict) {
       pushToast({
@@ -1088,7 +1099,7 @@ export function TimelineWorkspace() {
           getPlacement={(date, start, end) =>
             analyzeStudyBlockPlacement(
               { date, startTime: start, endTime: end },
-              { schedules, studyBlocks, courses, currentSemesterWeek }
+              { schedules: weekSchedules, studyBlocks, courses, currentSemesterWeek }
             )
           }
           onSubmit={submitArrange}
@@ -1104,13 +1115,13 @@ export function TimelineWorkspace() {
           getPlacement={(date, start, end) =>
             analyzeStudyBlockPlacement(
               { date, startTime: start, endTime: end },
-              { schedules, studyBlocks, courses, currentSemesterWeek }
+              { schedules: weekSchedules, studyBlocks, courses, currentSemesterWeek }
             )
           }
           onSubmit={(_a, date, start, end) => {
             const analysis = analyzeStudyBlockPlacement(
               { date, startTime: start, endTime: end },
-              { schedules, studyBlocks, courses, currentSemesterWeek }
+              { schedules: weekSchedules, studyBlocks, courses, currentSemesterWeek }
             );
             if (analysis.hardConflict) {
               pushToast({

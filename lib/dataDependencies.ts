@@ -11,6 +11,7 @@ import {
   CourseSchedule,
   GroupProject,
   Reminder,
+  ScheduleOccurrenceOverride,
   StudyBlock,
 } from "@/types";
 import { isDDLMarkForAssignment, isLegacyDDLMarkForAssignment } from "@/lib/calendarMark";
@@ -23,6 +24,8 @@ export interface DependencyCollections {
   groupProjects: GroupProject[];
   studyBlocks: StudyBlock[];
   reminders: Reminder[];
+  /** Task 7：一次性停课/调课/补课 */
+  scheduleOccurrenceOverrides?: ScheduleOccurrenceOverride[];
 }
 
 // ---------- Assignment ----------
@@ -114,6 +117,8 @@ export interface CourseDeleteCascade {
   /** block.courseId === courseId OR block.assignmentId ∈ deletedAssignmentIds（两条件都要保留，覆盖历史/部分链接数据） */
   studyBlocks: StudyBlock[];
   reminders: Reminder[];
+  /** Task 7：该课程的全部 scheduleOccurrenceOverrides（cancel/move/extra 都随课程删除） */
+  scheduleOccurrenceOverrides: ScheduleOccurrenceOverride[];
 }
 
 export function collectCourseDeleteCascade(
@@ -145,7 +150,10 @@ export function collectCourseDeleteCascade(
       (r.targetType === "studyBlock" && r.targetId !== undefined && deletedStudyBlockIds.has(r.targetId)) ||
       (r.targetType === "calendarMark" && r.targetId !== undefined && deletedCalendarMarkIds.has(r.targetId))
   );
-  return { course, schedules, assignments, calendarMarks, groupProjects, studyBlocks, reminders };
+  const scheduleOccurrenceOverrides = (state.scheduleOccurrenceOverrides ?? []).filter(
+    (o) => o.courseId === courseId
+  );
+  return { course, schedules, assignments, calendarMarks, groupProjects, studyBlocks, reminders, scheduleOccurrenceOverrides };
 }
 
 export function removeCourseDeleteCascade(
@@ -153,7 +161,14 @@ export function removeCourseDeleteCascade(
   cascade: CourseDeleteCascade
 ): Pick<
   DependencyCollections,
-  "courses" | "schedules" | "assignments" | "calendarMarks" | "groupProjects" | "studyBlocks" | "reminders"
+  | "courses"
+  | "schedules"
+  | "assignments"
+  | "calendarMarks"
+  | "groupProjects"
+  | "studyBlocks"
+  | "reminders"
+  | "scheduleOccurrenceOverrides"
 > {
   const courseIds = new Set([cascade.course.id]);
   const scheduleIds = new Set(cascade.schedules.map((s) => s.id));
@@ -162,6 +177,7 @@ export function removeCourseDeleteCascade(
   const projectIds = new Set(cascade.groupProjects.map((gp) => gp.id));
   const blockIds = new Set(cascade.studyBlocks.map((b) => b.id));
   const reminderIds = new Set(cascade.reminders.map((r) => r.id));
+  const overrideIds = new Set(cascade.scheduleOccurrenceOverrides.map((o) => o.id));
   return {
     courses: state.courses.filter((c) => !courseIds.has(c.id)),
     schedules: state.schedules.filter((s) => !scheduleIds.has(s.id)),
@@ -170,5 +186,39 @@ export function removeCourseDeleteCascade(
     groupProjects: state.groupProjects.filter((gp) => !projectIds.has(gp.id)),
     studyBlocks: (state.studyBlocks ?? []).filter((b) => !blockIds.has(b.id)),
     reminders: (state.reminders ?? []).filter((r) => !reminderIds.has(r.id)),
+    scheduleOccurrenceOverrides: (state.scheduleOccurrenceOverrides ?? []).filter(
+      (o) => !overrideIds.has(o.id)
+    ),
+  };
+}
+
+/** Undo Course Delete：按原对象原样插回（保留原 ID；幂等） */
+export function restoreCourseDeleteCascade(
+  state: DependencyCollections,
+  cascade: CourseDeleteCascade
+): Pick<
+  DependencyCollections,
+  | "courses"
+  | "schedules"
+  | "assignments"
+  | "calendarMarks"
+  | "groupProjects"
+  | "studyBlocks"
+  | "reminders"
+  | "scheduleOccurrenceOverrides"
+> {
+  const insert = <T extends { id: string }>(list: T[], items: T[]): T[] => [
+    ...list,
+    ...items.filter((x) => !list.some((y) => y.id === x.id)),
+  ];
+  return {
+    courses: insert(state.courses, [cascade.course]),
+    schedules: insert(state.schedules, cascade.schedules),
+    assignments: insert(state.assignments, cascade.assignments),
+    calendarMarks: insert(state.calendarMarks, cascade.calendarMarks),
+    groupProjects: insert(state.groupProjects, cascade.groupProjects),
+    studyBlocks: insert(state.studyBlocks, cascade.studyBlocks),
+    reminders: insert(state.reminders, cascade.reminders),
+    scheduleOccurrenceOverrides: insert(state.scheduleOccurrenceOverrides ?? [], cascade.scheduleOccurrenceOverrides),
   };
 }

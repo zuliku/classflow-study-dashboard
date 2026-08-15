@@ -9,11 +9,13 @@ import {
   GroupProject,
   Material,
   Reminder,
+  ScheduleOccurrenceOverride,
   StudyBlock,
 } from "@/types";
 import { parseLocalDDL, getLocalDDLDate, getLocalDDLTime } from "@/lib/ddl";
 import { getSemesterWeek, getWeekDateRange } from "@/lib/semester";
-import { isScheduleActive, timeToMinutes } from "@/lib/schedule";
+import { timeToMinutes } from "@/lib/schedule";
+import { resolveCourseOccurrencesForWeek } from "@/lib/scheduleOccurrences";
 import { deriveTaskWorkspace } from "@/lib/tasks/taskViews";
 import { deriveAssignmentHealth } from "@/lib/tasks/taskHealth";
 import { parseTaskBreakdownProposal } from "@/lib/tasks/taskBreakdown";
@@ -67,6 +69,8 @@ export interface ReadToolState {
   reminders?: Reminder[];
   /** Task 5：Focus Session（optional：旧 fixture 无需改造；执行时回落 []） */
   focusSessions?: FocusSession[];
+  /** Task 7：一次性停课/调课/补课（optional：旧 fixture 回落 []） */
+  scheduleOccurrenceOverrides?: ScheduleOccurrenceOverride[];
 }
 
 const notFound = (message: string): ReadToolResult<never> => ({ ok: false, code: "NOT_FOUND", message });
@@ -183,6 +187,19 @@ export function getCourse(state: ReadToolState, input: unknown): ReadToolResult<
       weeks: s.weeks,
     }));
 
+  // Task 7：一次性停课/调课/补课（recurring schedule 的周级例外；temporary，不改变 base）
+  const temporaryChanges = (state.scheduleOccurrenceOverrides ?? [])
+    .filter((o) => o.courseId === course.id)
+    .map((o) => ({
+      kind: o.kind,
+      week: o.week,
+      baseScheduleId: o.kind === "extra" ? undefined : o.baseScheduleId,
+      dayOfWeek: o.kind === "cancel" ? undefined : o.dayOfWeek,
+      startTime: o.kind === "cancel" ? undefined : o.startTime,
+      endTime: o.kind === "cancel" ? undefined : o.endTime,
+      location: o.kind === "cancel" ? undefined : o.location,
+    }));
+
   return {
     ok: true,
     data: {
@@ -194,6 +211,7 @@ export function getCourse(state: ReadToolState, input: unknown): ReadToolResult<
       credit: course.credit,
       description: course.description,
       scheduleSummary: schedules,
+      temporaryChanges,
       materials: course.materials.map(materialMeta),
     },
   };
@@ -208,31 +226,38 @@ export function getWeekSchedule(state: ReadToolState, input: unknown): ReadToolR
   }
 
   const weekStart = getWeekDateRange(state.semester, week)[0];
-  const isInSemester = week >= 1 && week <= state.semester.totalWeeks;
-  const activeSchedules = isInSemester
-    ? state.schedules
-        .filter(
-          (s) =>
-            (parsed.data.courseId ? s.courseId === parsed.data.courseId : true) &&
-            isScheduleActive(s, week)
-        )
-        .sort((a, b) => a.dayOfWeek - b.dayOfWeek || (timeToMinutes(a.startTime) ?? 0) - (timeToMinutes(b.startTime) ?? 0))
-    : [];
+  // Task 7：该周 effective occurrences（cancel 消失 / move 目标位 / extra 出现）
+  const activeSchedules = resolveCourseOccurrencesForWeek({
+    schedules: state.schedules,
+    overrides: state.scheduleOccurrenceOverrides ?? [],
+    week,
+    totalWeeks: state.semester.totalWeeks,
+  })
+    .filter((o) => (parsed.data.courseId ? o.courseId === parsed.data.courseId : true))
+    .sort(
+      (a, b) =>
+        a.dayOfWeek - b.dayOfWeek ||
+        (timeToMinutes(a.startTime) ?? 0) - (timeToMinutes(b.startTime) ?? 0)
+    );
 
   return {
     ok: true,
     data: {
       week,
       weekStartDate: format(weekStart, "yyyy-MM-dd"),
-      entries: activeSchedules.map((s) => ({
-        scheduleId: s.id,
-        courseId: s.courseId,
-        courseName: courseName(state, s.courseId),
-        dayOfWeek: s.dayOfWeek,
-        startTime: s.startTime,
-        endTime: s.endTime,
-        location: s.location,
-        weeks: s.weeks,
+      entries: activeSchedules.map((o) => ({
+        scheduleId: o.baseScheduleId ?? o.occurrenceId,
+        courseId: o.courseId,
+        courseName: courseName(state, o.courseId),
+        dayOfWeek: o.dayOfWeek,
+        startTime: o.startTime,
+        endTime: o.endTime,
+        location: o.location,
+        source: o.source,
+        overrideId: o.overrideId,
+        weeks: o.baseScheduleId
+          ? state.schedules.find((s) => s.id === o.baseScheduleId)?.weeks
+          : undefined,
       })),
     },
   };
@@ -860,8 +885,8 @@ export function getMaterialMetadata(state: ReadToolState, input: unknown): ReadT
 
 // ---------- 统一入口 ----------
 
-/** 同步执行的 Read Tools（read_material / read_project_file / history / analytics / outlook 为异步重量级工具，独立处理） */
-const EXECUTORS: Record<Exclude<KiroReadToolName, "read_material" | "read_project_file" | "query_learning_history" | "summarize_learning_history" | "get_learning_analytics" | "get_learning_outlook">, (state: ReadToolState, input: unknown) => ReadToolResult<unknown>> = {
+/** 同步执行的 Read Tools（read_material / read_project_file / read_project_visual / history / analytics / outlook 为异步重量级工具，独立处理） */
+const EXECUTORS: Record<Exclude<KiroReadToolName, "read_material" | "read_project_file" | "read_project_visual" | "query_learning_history" | "summarize_learning_history" | "get_learning_analytics" | "get_learning_outlook">, (state: ReadToolState, input: unknown) => ReadToolResult<unknown>> = {
   get_current_context: getCurrentContext,
   get_user_study_profile: getUserStudyProfile,
   search_courses: searchCourses,
@@ -897,6 +922,7 @@ export function executeKiroReadTool(
   if (
     toolName === "read_material" ||
     toolName === "read_project_file" ||
+    toolName === "read_project_visual" ||
     toolName === "query_learning_history" ||
     toolName === "summarize_learning_history" ||
     toolName === "get_learning_analytics" ||
@@ -904,7 +930,7 @@ export function executeKiroReadTool(
   ) {
     return { ok: false, code: "INVALID_INPUT", message: `${toolName} 需要异步执行。` };
   }
-  const executor = EXECUTORS[toolName as Exclude<KiroReadToolName, "read_material" | "read_project_file" | "query_learning_history" | "summarize_learning_history" | "get_learning_analytics" | "get_learning_outlook">];
+  const executor = EXECUTORS[toolName as Exclude<KiroReadToolName, "read_material" | "read_project_file" | "read_project_visual" | "query_learning_history" | "summarize_learning_history" | "get_learning_analytics" | "get_learning_outlook">];
   if (!executor) {
     return { ok: false, code: "INVALID_INPUT", message: `未知工具：${toolName}` };
   }
