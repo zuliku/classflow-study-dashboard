@@ -1,9 +1,12 @@
 /**
- * Adaptive Study Rebalance Engine（Analytics V2 · Part 5）。
+ * Adaptive Study Rebalance Engine（Analytics V2 · Part 5 / Task 6）。
  * Move-only：只移动已有 source=kiro 的 StudyBlock（assignmentId/courseId/title/duration/source/id 全不变，
  * 只改 date/startTime/endTime）；绝不删除/新增/拆分/合并 Block，绝不移动 manual 计划。
  *
- * - Hard issues（after_deadline / course_conflict / fixed_event_conflict）优先于 capacity_relief
+ * Task 6：Course overlap = SOFT（合法存在，不自动"修复"）——
+ * - course_conflict 不再是 hard issue：已有课程重叠的 block 不会仅因此被搬走（可能来自人工拖放或已确认的 Kiro 写入）
+ * - target 选择两阶段：Pass 1 仅非课程时间（preferred）；Pass 2 只有 Pass 1 无解时才允许课程重叠（fallback）
+ * - hard issues 只剩 after_deadline / fixed_event_conflict；capacity_relief 不变
  * - capacity_relief 必须经 canonical allocateStudyCapacity 模拟验证：shortfallAfter < shortfallBefore 才允许
  * - Minimal churn：接受一个 move 后立即更新 simulated state 并重新评估，满足目标即停止
  * - Deterministic greedy；不做全局优化求解
@@ -18,6 +21,7 @@ import { isScheduleActive } from "@/lib/schedule";
 import { getSemesterWeek } from "@/lib/semester";
 import { timeToMinutes } from "@/lib/timeline/timelineGeometry";
 import { StudyOutlookHorizon } from "@/lib/outlook/types";
+import { findUnapprovedCourseOverlaps } from "@/lib/planning/courseOverlapPolicy";
 
 export type StudyRebalanceReason =
   | "after_deadline"
@@ -127,24 +131,30 @@ function blockOverlapsTimeRange(
   return overlap(s, e, startMinutes, endMinutes);
 }
 
-/** Block 是否与当前教学周生效课程冲突 */
-function courseConflict(
-  block: StudyBlock,
+/**
+ * Position 是否与当前教学周生效课程重叠（soft condition，仅用于 preference / fallback 过滤；
+ * 不构成 hard issue。周次按 position 自身日期计算，与 Apply preflight 一致）。
+ */
+function positionHasCourseOverlap(
+  pos: StudyRebalancePosition,
   schedules: CourseSchedule[],
-  semester: Semester,
-  currentSemesterWeek: number
+  semester: Semester
 ): boolean {
-  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(block.date);
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(pos.date);
   if (!m) return false;
-  const dow = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])).getDay() === 0 ? 7 : new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])).getDay();
-  const week = Math.min(Math.max(getSemesterWeek(new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])), semester), 1), semester.totalWeeks);
-  return schedules.some((s) => {
-    if (s.dayOfWeek !== dow) return false;
-    if (!isScheduleActive(s, week)) return false;
-    const ss = timeToMinutes(s.startTime);
-    const se = timeToMinutes(s.endTime);
+  const date = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+  const dow = date.getDay() === 0 ? 7 : date.getDay();
+  const week = Math.min(Math.max(getSemesterWeek(date, semester), 1), semester.totalWeeks);
+  const s = timeToMinutes(pos.startTime);
+  const e = timeToMinutes(pos.endTime);
+  if (s === null || e === null) return false;
+  return schedules.some((sch) => {
+    if (sch.dayOfWeek !== dow) return false;
+    if (!isScheduleActive(sch, week)) return false;
+    const ss = timeToMinutes(sch.startTime);
+    const se = timeToMinutes(sch.endTime);
     if (ss === null || se === null || se <= ss) return false;
-    return blockOverlapsTimeRange(block, block.date, ss, se);
+    return overlap(s, e, ss, se);
   });
 }
 
@@ -189,6 +199,7 @@ function computeShortfall(
 ): number {
   const freeSlots = findFreeTime({
     start: input.now,
+    now: input.now,
     end: horizonEnd,
     semester: input.semester,
     currentSemesterWeek: input.currentSemesterWeek,
@@ -215,6 +226,7 @@ function firstShortfallDeadline(
 ): { deadlineMs: number; deadline: string } | null {
   const freeSlots = findFreeTime({
     start: input.now,
+    now: input.now,
     end: horizonEnd,
     semester: input.semester,
     currentSemesterWeek: input.currentSemesterWeek,
@@ -250,12 +262,14 @@ function firstShortfallDeadline(
  * 为目标 duration 寻找最优放置（deterministic preference）：
  * 1. 最小日期距离  2. 同日优先  3. 时间差最小  4. 更早时间优先  5. stable (date,start)
  * 候选在 slot 内按 30min 网格滑动（完整容纳 duration），保证"靠近原时间"可被选中。
+ * positionFilter（可选）：只接受满足额外条件的候选（如 Pass 2 仅接受课程重叠位置）。
  */
 function findBestPlacement(
   slots: FreeTimeSlot[],
   durationMinutes: number,
   original: StudyRebalancePosition,
-  constraints: { endBeforeMs: number | null; startAfterMs: number | null }
+  constraints: { endBeforeMs: number | null; startAfterMs: number | null },
+  positionFilter?: (pos: StudyRebalancePosition) => boolean
 ): StudyRebalancePosition | null {
   const GRID = 30;
   const candidates: { pos: StudyRebalancePosition; dateDistance: number; timeDiff: number }[] = [];
@@ -270,6 +284,7 @@ function findBestPlacement(
         startTime: minutesToHM(start),
         endTime: minutesToHM(start + durationMinutes),
       };
+      if (positionFilter && !positionFilter(pos)) continue;
       const endMs = posEndMs(pos);
       const startMs = posStartMs(pos);
       if (constraints.endBeforeMs !== null && !Number.isNaN(endMs) && endMs > constraints.endBeforeMs) continue;
@@ -289,6 +304,48 @@ function findBestPlacement(
     return `${a.pos.date}|${a.pos.startTime}`.localeCompare(`${b.pos.date}|${b.pos.startTime}`);
   });
   return candidates[0].pos;
+}
+
+/**
+ * 两阶段 target 搜索（Task 6）：
+ * Pass 1 — Preferred：canonical free time（课程视为 busy → 天然无课程重叠）。
+ * Pass 2 — Fallback：仅当 Pass 1 无解时，允许课程重叠（StudyBlock / Exam / Activity 仍 busy；
+ * 08:00–21:00 窗口与 DDL 约束由 findFreeTime / constraints 保证）。
+ * Course overlap 是 preference 而非 correctness。
+ * V1.1：course_conflict 的 hard issue 只能落在「非课程时间」target（avoidCourseTime=true 跳过 Fallback）。
+ */
+function findRebalanceTarget(
+  block: StudyBlock,
+  input: StudyRebalanceInput,
+  simulatedBlocks: StudyBlock[],
+  constraints: { endBeforeMs: number | null; startAfterMs: number | null },
+  now: Date,
+  horizonEnd: Date,
+  options?: { avoidCourseTime?: boolean }
+): StudyRebalancePosition | null {
+  const baseQuery = {
+    start: now,
+    now: input.now,
+    end: horizonEnd,
+    semester: input.semester,
+    currentSemesterWeek: input.currentSemesterWeek,
+    schedules: input.schedules,
+    calendarMarks: input.calendarMarks,
+    studyBlocks: simulatedBlocks.filter((b) => b.id !== block.id),
+  };
+  const freeSlots = findFreeTime(baseQuery);
+  const preferred = findBestPlacement(freeSlots, blockMinutes(block), positionOf(block), constraints);
+  if (preferred) return preferred;
+  if (options?.avoidCourseTime) return null;
+
+  const expanded = findFreeTime({ ...baseQuery, includeCourseTime: true });
+  return findBestPlacement(
+    expanded,
+    blockMinutes(block),
+    positionOf(block),
+    constraints,
+    (pos) => positionHasCourseOverlap(pos, input.schedules, input.semester)
+  );
 }
 
 function dateOffset(date: string): number {
@@ -335,7 +392,7 @@ export function proposeStudyRebalance(input: StudyRebalanceInput): StudyRebalanc
   const shortfallBefore = computeShortfall(input, studyBlocks, horizonEnd);
   let shortfallAfter = shortfallBefore;
 
-  // ---- 3. 检测 hard issues ----
+  // ---- 3. 检测 hard issues（Task 6：Course overlap 不再是 hard issue）----
   interface CandidateIssue {
     block: StudyBlock;
     reason: StudyRebalanceReason;
@@ -345,10 +402,17 @@ export function proposeStudyRebalance(input: StudyRebalanceInput): StudyRebalanc
     const assignment = b.assignmentId ? assignmentById.get(b.assignmentId) : undefined;
     if (afterDeadline(b, assignment)) {
       hardIssues.push({ block: b, reason: "after_deadline" });
-    } else if (courseConflict(b, input.schedules, input.semester, input.currentSemesterWeek)) {
-      hardIssues.push({ block: b, reason: "course_conflict" });
     } else if (fixedEventConflict(b, input.calendarMarks)) {
       hardIssues.push({ block: b, reason: "fixed_event_conflict" });
+    } else if (
+      findUnapprovedCourseOverlaps({
+        block: b,
+        schedules: input.schedules,
+        semester: input.semester,
+      }).length > 0
+    ) {
+      // V1.1：只有「未批准」的课程重叠才是 hard issue（有效 Approval 被尊重，不因此搬走）
+      hardIssues.push({ block: b, reason: "course_conflict" });
     }
   }
   // deterministic 顺序：reason rank → blockId
@@ -407,24 +471,21 @@ export function proposeStudyRebalance(input: StudyRebalanceInput): StudyRebalanc
     void assignment;
   };
 
-  // ---- 5. Hard issues 优先（minimal churn：解决后即停）----
+  // ---- 5. Hard issues 优先（minimal churn：解决后即停；target 两阶段：非课程时间优先）----
   for (const issue of hardIssues) {
     if (movedIds.has(issue.block.id)) continue;
     const assignment = issue.block.assignmentId ? assignmentById.get(issue.block.assignmentId) : undefined;
     const endBeforeMs = ddlMsOf(assignment);
-    const slots = findFreeTime({
-      start: now,
-      end: horizonEnd,
-      semester: input.semester,
-      currentSemesterWeek: input.currentSemesterWeek,
-      schedules: input.schedules,
-      calendarMarks: input.calendarMarks,
-      studyBlocks: simulatedBlocks.filter((b) => b.id !== issue.block.id),
-    });
-    const to = findBestPlacement(slots, blockMinutes(issue.block), positionOf(issue.block), {
-      endBeforeMs,
-      startAfterMs: null,
-    });
+    const to = findRebalanceTarget(
+      issue.block,
+      input,
+      simulatedBlocks,
+      { endBeforeMs, startAfterMs: null },
+      now,
+      horizonEnd,
+      // course_conflict 必须落到非课程时间（否则只是把未批准重叠搬去另一个重叠）
+      { avoidCourseTime: issue.reason === "course_conflict" }
+    );
     if (!to) {
       reasons.push(
         issue.reason === "after_deadline" ? "unresolved_after_deadline" : "unresolved_conflict"
@@ -446,19 +507,14 @@ export function proposeStudyRebalance(input: StudyRebalanceInput): StudyRebalanc
       if (shortfallAfter <= 0) break; // minimal churn：缺口解决即停
       const assignment = block.assignmentId ? assignmentById.get(block.assignmentId) : undefined;
       const endBeforeMs = ddlMsOf(assignment);
-      const slots = findFreeTime({
-        start: now,
-        end: horizonEnd,
-        semester: input.semester,
-        currentSemesterWeek: input.currentSemesterWeek,
-        schedules: input.schedules,
-        calendarMarks: input.calendarMarks,
-        studyBlocks: simulatedBlocks.filter((b) => b.id !== block.id),
-      });
-      const to = findBestPlacement(slots, blockMinutes(block), positionOf(block), {
-        endBeforeMs,
-        startAfterMs: shortfallInfo ? shortfallInfo.deadlineMs : null,
-      });
+      const to = findRebalanceTarget(
+        block,
+        input,
+        simulatedBlocks,
+        { endBeforeMs, startAfterMs: shortfallInfo ? shortfallInfo.deadlineMs : null },
+        now,
+        horizonEnd
+      );
       if (!to) continue;
       // 模拟验证：接受该 move 后 shortfall 必须下降
       const trialBlocks = [...simulatedBlocks.filter((b) => b.id !== block.id)];

@@ -11,15 +11,24 @@ import {
   applyStudyRebalance,
   createStudyRebalanceProposalKey,
   preflightStudyRebalance,
+  RebalanceCourseOverlapInfo,
   RebalanceMoveInput,
+  StudyRebalanceApprovalSnapshot,
   undoStudyRebalance,
 } from "@/lib/planning/applyStudyRebalance";
+import { Dialog } from "@/components/ui/Dialog";
+import { Button } from "@/components/ui/Button";
+import {
+  CourseOverlapApprovalList,
+  CourseOverlapDisplayItem,
+} from "@/components/kiro/CourseOverlapApprovalContent";
 
 type ApplyState = "idle" | "applying" | "applied" | "stale" | "revoked";
 
+/** 旧 payload 可能仍带 course_conflict（Task 6 前生成）→ 不再生成新 reason，显示为 soft 文案 */
 const REASON_COPY: Record<StudyRebalanceReason, string> = {
   after_deadline: "原计划晚于截止时间",
-  course_conflict: "与课程时间冲突",
+  course_conflict: "与课程时间重叠（未确认）",
   fixed_event_conflict: "与考试/活动冲突",
   capacity_relief: "释放较早时间容量",
 };
@@ -33,7 +42,8 @@ const fmtDay = (date: string) => {
 /**
  * Kiro Study Rebalance Proposal Card（事实 UI）：渲染 propose_study_rebalance 的确定性结果。
  * Move-only：只移动已有 Kiro StudyBlock；Preview → Confirm → fresh Preflight → Atomic Apply → Undo。
- * 所有校验逻辑在 applyStudyRebalance.ts；组件只编排流程。
+ * Task 6：Course overlap = soft —— preflight 返回 courseOverlaps 时直接进入批量确认 Dialog
+ * （不重复连续弹两个 Dialog），确认后整批一次写入；Undo 不要求课程重叠确认。
  */
 export function StudyRebalanceProposalCard({
   proposals,
@@ -42,7 +52,11 @@ export function StudyRebalanceProposalCard({
 }) {
   const [dismissed, setDismissed] = useState(false);
   const [applyState, setApplyState] = useState<ApplyState>("idle");
+  const [pendingApproval, setPendingApproval] = useState<RebalanceCourseOverlapInfo[] | null>(null);
   const appliedMovesRef = useRef<RebalanceMoveInput[] | null>(null);
+  /** Apply 前的 Approval 快照 + Apply 后的状态（Undo 精确恢复 / stale 指纹；V1.1） */
+  const originalApprovalsRef = useRef<StudyRebalanceApprovalSnapshot | null>(null);
+  const afterApprovalsRef = useRef<StudyRebalanceApprovalSnapshot | null>(null);
   const { studyRebalancePreview, setStudyRebalancePreview, handoffPrompt } = useKiroSession();
   const setActiveTab = useAppStore((s) => s.setActiveTab);
   const pushToast = useToastStore((s) => s.pushToast);
@@ -65,15 +79,23 @@ export function StudyRebalanceProposalCard({
 
   if (dismissed || !proposal || moves.length === 0) return null;
 
-  const runApply = () => {
+  /** 执行 Apply（Confirm 后 fresh preflight + 提交；课程重叠需 allowCourseOverlap） */
+  const runApply = (options?: { allowCourseOverlap?: boolean }) => {
     const freshState = useAppStore.getState();
-    const result = applyStudyRebalance(moveInputs, freshState);
+    const result = applyStudyRebalance(moveInputs, freshState, options);
     if (!result.ok) {
       setApplyState("stale");
       setStudyRebalancePreview(null);
       return;
     }
+    if (result.state === "needs-approval") {
+      setPendingApproval(result.courseOverlaps);
+      setApplyState("idle");
+      return;
+    }
     appliedMovesRef.current = moveInputs;
+    originalApprovalsRef.current = result.originalApprovals ?? null;
+    afterApprovalsRef.current = result.afterApprovals ?? null;
     setApplyState("applied");
     setStudyRebalancePreview(null);
     pushToast({
@@ -93,6 +115,12 @@ export function StudyRebalanceProposalCard({
       setApplyState("stale");
       return;
     }
+    // 课程重叠：直接进入批量确认 Dialog（承担 Apply confirmation，不重复弹两个 Dialog）
+    if (preflight.courseOverlaps.length > 0) {
+      setPendingApproval(preflight.courseOverlaps);
+      setApplyState("idle");
+      return;
+    }
     confirmRequest({
       title: "应用学习计划调整",
       description: (
@@ -103,21 +131,27 @@ export function StudyRebalanceProposalCard({
         </p>
       ),
       confirmLabel: "应用调整",
-      onConfirm: runApply,
+      onConfirm: () => runApply(),
       onCancel: () => setApplyState("idle"),
     });
   };
 
-  /** Undo：undoStudyRebalance 确认当前状态仍 == after fingerprint；否则 STALE 提示 */
+  /** Undo：undoStudyRebalance 确认当前状态仍 == after fingerprint（时间 + Approval）；否则 STALE 提示 */
   const handleUndo = () => {
     const movesRef = appliedMovesRef.current;
     if (!movesRef || movesRef.length === 0) return;
-    const result = applyUndo(movesRef);
+    const result = applyUndo(
+      movesRef,
+      originalApprovalsRef.current ?? undefined,
+      afterApprovalsRef.current ?? undefined
+    );
     if (!result.ok) {
       pushToast({ message: "学习计划之后又发生了变化，无法安全撤销本次调整。", type: "error" });
       return;
     }
     appliedMovesRef.current = null;
+    originalApprovalsRef.current = null;
+    afterApprovalsRef.current = null;
     setApplyState("revoked");
   };
 
@@ -253,7 +287,9 @@ export function StudyRebalanceProposalCard({
               <ArrowRight className="w-3 h-3 inline mx-1 text-sandrift" />
               {fmtDay(m.to.date)} {fmtTime(m.to.startTime)}–{fmtTime(m.to.endTime)}
             </p>
-            <p className="text-[10px] text-sandrift">原因：{REASON_COPY[m.reason]}</p>
+            <p className="text-[10px] text-sandrift">
+              原因：{REASON_COPY[m.reason] ?? "原安排与课程时间重叠"}
+            </p>
           </div>
         ))}
       </div>
@@ -262,11 +298,75 @@ export function StudyRebalanceProposalCard({
         {renderStatus()}
         {renderActions()}
       </div>
+
+      {/* Task 6 Approval Gate：Rebalance 与课程重叠 → 写入前批量确认一次（all-or-nothing） */}
+      {pendingApproval && (
+        <Dialog
+          open
+          onOpenChange={(next) => {
+            if (!next) setPendingApproval(null);
+          }}
+          overlayId="kiro-rebalance-course-overlap-approval"
+          stackZ={60}
+          aria-label="学习计划调整与课程时间重叠"
+          className="max-w-md"
+        >
+          <div className="p-5 space-y-3">
+            <h3 className="text-base font-bold text-charcoal">学习计划调整与课程时间重叠</h3>
+            <p className="text-xs leading-relaxed text-satin-grey">
+              Kiro 的这次调整中有 {pendingApproval.length} 个学习时段会与课程时间重叠。
+              确认后将一次性应用全部调整。
+            </p>
+            <p className="text-[11px] leading-relaxed text-sandrift">
+              选择「仍然调整」后，ClassFlow 会将当前课程重叠视为你已确认的例外。
+              <br />
+              如果之后课程时间发生变化，会重新检查。
+            </p>
+            <CourseOverlapApprovalList
+              items={pendingApproval.map(
+                (o): CourseOverlapDisplayItem => ({
+                  key: `${o.moveIndex}-${o.blockId}`,
+                  title: o.title,
+                  date: o.date,
+                  startTime: o.startTime,
+                  endTime: o.endTime,
+                  courseName: o.courseName,
+                })
+              )}
+            />
+            <div className="flex justify-end gap-2 pt-1">
+              <Button variant="secondary" size="sm" onClick={() => setPendingApproval(null)}>
+                返回调整
+              </Button>
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={() => {
+                  setPendingApproval(null);
+                  runApply({ allowCourseOverlap: true });
+                }}
+              >
+                仍然调整
+              </Button>
+            </div>
+          </div>
+        </Dialog>
+      )}
     </div>
   );
 }
 
-/** Undo：经 undoStudyRebalance（fresh fingerprint 校验）；返回结果供 toast 分支 */
-function applyUndo(moves: RebalanceMoveInput[]) {
-  return undoStudyRebalance(moves, useAppStore.getState());
+/** Undo：经 undoStudyRebalance（fresh fingerprint 校验，含 Approval 快照恢复）；返回结果供 toast 分支 */
+function applyUndo(
+  moves: RebalanceMoveInput[],
+  originalApprovals?: StudyRebalanceApprovalSnapshot,
+  afterApprovals?: StudyRebalanceApprovalSnapshot
+) {
+  return undoStudyRebalance(
+    moves,
+    useAppStore.getState(),
+    originalApprovals || afterApprovals
+      ? { originalApprovals: originalApprovals ?? {}, afterApprovals: afterApprovals ?? {} }
+      : undefined
+  );
 }

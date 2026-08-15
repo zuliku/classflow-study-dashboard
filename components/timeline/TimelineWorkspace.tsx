@@ -46,6 +46,7 @@ import {
 } from "@/lib/timeline/studyBlockInteraction";
 import { timeToMinutes } from "@/lib/timeline/timelineGeometry";
 import { isScheduleActive } from "@/lib/schedule";
+import { findCourseOverlapsForStudyBlock, isCourseOverlapApproved } from "@/lib/planning/courseOverlapPolicy";
 import {
   analyzeStudyBlockPlacement,
   CourseOverlap,
@@ -522,6 +523,12 @@ export function TimelineWorkspace() {
           const showMeta = heightPct >= 3.4;
           const isDraggingThis = studyDrag.type === "dragging" && studyDrag.origin.id === b.id;
           const isRebalanced = rebalanceMoveIds.has(b.id);
+          // V1.1：当前仍有效的课程重叠批准 → 小型 secondary label（非醒目警告）
+          const validApprovalCount = findCourseOverlapsForStudyBlock({
+            block: b,
+            schedules,
+            semester,
+          }).filter((o) => isCourseOverlapApproved(b, o)).length;
           return (
             <div
               key={b.id}
@@ -558,6 +565,14 @@ export function TimelineWorkspace() {
               style={{ top: `${topPct}%`, height: `${heightPct}%`, minHeight: touchesEdge ? undefined : 6 }}
             >
               <span className="truncate text-[10px] font-semibold text-satin-grey">{b.title}</span>
+              {validApprovalCount > 0 && (
+                <span
+                  className="shrink-0 text-[9px] text-sandrift bg-white/70 border border-line rounded px-1 py-px"
+                  title="已确认与课程时间重叠（课程时间变化后会重新检查）"
+                >
+                  已确认课程重叠
+                </span>
+              )}
               {showMeta && (
                 <>
                   <span className="text-[10px] text-sandrift font-medium shrink-0">
@@ -717,7 +732,8 @@ export function TimelineWorkspace() {
           );
         })}
 
-        {/* Rebalance Target Ghost（Part 5：move 目标位置；ephemeral） */}
+        {/* Rebalance Target Ghost（Part 5/6：move 目标位置；ephemeral 三态：
+            无重叠 neutral「移动目标」/ 课程重叠 warm「与课程重叠」/ 最新状态已硬冲突 danger「调整建议已过期」） */}
         {rebalanceTargets.map((m) => {
           const gs = timeToMinutes(m.to.startTime);
           const ge = timeToMinutes(m.to.endTime);
@@ -725,16 +741,37 @@ export function TimelineWorkspace() {
           const vs = Math.max(gs, dayStart);
           const ve = Math.min(ge, dayEnd);
           if (ve <= vs) return null;
+          const tAnalysis = analyzeStudyBlockPlacement(
+            { date: m.to.date, startTime: m.to.startTime, endTime: m.to.endTime },
+            { schedules, studyBlocks, courses, currentSemesterWeek }
+          );
+          const tHard = tAnalysis.hardConflict;
+          const tOverlap = tAnalysis.courseOverlaps.length > 0;
+          const tLabel = tHard ? "调整建议已过期" : tOverlap ? "与课程重叠" : "移动目标";
           return (
             <div
               key={`rebalance-${m.blockId}`}
               data-testid="timeline-rebalance-ghost"
-              title={`${m.title} · 移动目标（未保存）`}
-              className="absolute left-1 right-1 z-[3] rounded-lg border border-dashed border-[#A48F82] bg-[#F3EEE7]/70 px-1.5 py-0.5 flex items-center gap-1 overflow-hidden pointer-events-none"
+              title={`${m.title} · ${tLabel}（未保存）`}
+              className={cn(
+                "absolute left-1 right-1 z-[3] rounded-lg border border-dashed px-1.5 py-0.5 flex items-center gap-1 overflow-hidden pointer-events-none",
+                tHard
+                  ? "border-danger/50 bg-danger-bg/40"
+                  : tOverlap
+                    ? "border-stone-beige bg-[#F3EEE7]/70"
+                    : "border-line-strong bg-pastel-mint/15"
+              )}
               style={{ top: `${((vs - dayStart) / ctx.totalMinutes) * 100}%`, height: `${((ve - vs) / ctx.totalMinutes) * 100}%`, minHeight: 6 }}
             >
               <span className="truncate text-[10px] font-semibold text-satin-grey">{m.title}</span>
-              <span className="shrink-0 text-[10px] font-medium text-sandrift">移动目标</span>
+              <span
+                className={cn(
+                  "shrink-0 text-[10px] font-medium",
+                  tHard ? "text-danger" : tOverlap ? "text-[#936E4C]" : "text-sandrift"
+                )}
+              >
+                {tLabel}
+              </span>
             </div>
           );
         })}

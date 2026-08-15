@@ -17,6 +17,10 @@ import {
 } from "@/lib/planning/applyStudyPlan";
 import { Dialog } from "@/components/ui/Dialog";
 import { Button } from "@/components/ui/Button";
+import {
+  CourseOverlapApprovalList,
+  CourseOverlapDisplayItem,
+} from "@/components/kiro/CourseOverlapApprovalContent";
 import { getSemesterWeek } from "@/lib/semester";
 
 type ApplyState = "idle" | "applying" | "applied" | "stale" | "revoked";
@@ -389,24 +393,23 @@ export function StudyPlanProposalCard({ proposals }: { proposals: StudyPlanPropo
             <p className="text-xs leading-relaxed text-satin-grey">
               Kiro 的这次安排中有 {pendingApproval.overlaps.length} 项会占用上课时间。请确认是否继续。
             </p>
-            <div className="rounded-xl border border-line bg-[#F7F5F5] divide-y divide-line-soft">
-              {pendingApproval.overlaps.slice(0, 3).map((o, i) => (
-                <div key={i} className="px-3 py-2.5 space-y-0.5">
-                  <p className="text-xs font-bold text-charcoal">{o.title}</p>
-                  <p className="text-[11px] text-satin-grey">
-                    {format(parseISO(o.date), "M月d日")} {o.startTime}–{o.endTime}
-                  </p>
-                  <p className="text-[11px] font-semibold text-[#936E4C]">
-                    与《{o.courseName}》重叠
-                  </p>
-                </div>
-              ))}
-              {pendingApproval.overlaps.length > 3 && (
-                <p className="px-3 py-2 text-[11px] font-semibold text-sandrift">
-                  还有 {pendingApproval.overlaps.length - 3} 项课程重叠
-                </p>
+            <p className="text-[11px] leading-relaxed text-sandrift">
+              选择「仍然安排」后，ClassFlow 会将当前课程重叠视为你已确认的例外。
+              <br />
+              如果之后课程时间发生变化，会重新检查。
+            </p>
+            <CourseOverlapApprovalList
+              items={pendingApproval.overlaps.map(
+                (o): CourseOverlapDisplayItem => ({
+                  key: `${o.blockIndex}-${o.title}`,
+                  title: o.title,
+                  date: o.date,
+                  startTime: o.startTime,
+                  endTime: o.endTime,
+                  courseName: o.courseName,
+                })
               )}
-            </div>
+            />
             <div className="flex justify-end gap-2 pt-1">
               <Button variant="secondary" size="sm" onClick={() => setPendingApproval(null)}>
                 返回调整
