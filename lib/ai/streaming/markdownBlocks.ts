@@ -723,6 +723,8 @@ export interface SettleSafetyResult {
   safeBlocks: number;
   /** 参与分类的块总数（stableBlocks + tail） */
   totalBlocks: number;
+  /** canonicalize 触发原因（test/diagnostic；production 零成本） */
+  reasons: string[];
 }
 
 /**
@@ -732,8 +734,15 @@ export interface SettleSafetyResult {
  */
 export function classifySettleSafety(blocks: string[]): SettleSafetyResult {
   const n = blocks.length;
-  if (n === 0) return { canonicalize: false, safeBlocks: 0, totalBlocks: 0 };
+  if (n === 0) return { canonicalize: false, safeBlocks: 0, totalBlocks: 0, reasons: [] };
   const canonicalize = new Array<boolean>(n).fill(false);
+  const reasons = new Set<string>();
+
+  const markBoth = (i: number, reason: string) => {
+    canonicalize[i - 1] = true;
+    canonicalize[i] = true;
+    reasons.add(reason);
+  };
 
   for (let i = 0; i < n; i++) {
     const block = blocks[i];
@@ -753,6 +762,7 @@ export function classifySettleSafety(blocks: string[]): SettleSafetyResult {
     // pipe table：保守 canonicalize
     if (hasRiskyPipe(lines)) {
       canonicalize[i] = true;
+      reasons.add("table-pipe");
       continue;
     }
     const firstIsList = SETTLE_LIST_MARKER_RE.test(first);
@@ -768,20 +778,17 @@ export function classifySettleSafety(blocks: string[]): SettleSafetyResult {
       const prevLastIsProse = isProseLine(prevLast);
       // loose list / 列表项续行（marker 或 ≥2 空格缩进都继续 item）
       if (prevHasList && (firstIsList || firstListContinue)) {
-        canonicalize[i - 1] = true;
-        canonicalize[i] = true;
+        markBoth(i, firstIsList ? "loose-list" : "list-indent-continuation");
         continue;
       }
       // blockquote 跨空行合并
       if (prevHasQuote && firstIsQuote) {
-        canonicalize[i - 1] = true;
-        canonicalize[i] = true;
+        markBoth(i, "quote-merge");
         continue;
       }
       // 段落续行（1-3 空格缩进；独立渲染会丢缩进成为新段）
       if (prevLastIsProse && firstParaContinue) {
-        canonicalize[i - 1] = true;
-        canonicalize[i] = true;
+        markBoth(i, "para-indent-continuation");
         continue;
       }
     }
@@ -789,7 +796,12 @@ export function classifySettleSafety(blocks: string[]): SettleSafetyResult {
 
   let safeBlocks = 0;
   for (let i = 0; i < n; i++) if (!canonicalize[i]) safeBlocks += 1;
-  return { canonicalize: canonicalize.some(Boolean), safeBlocks, totalBlocks: n };
+  return {
+    canonicalize: canonicalize.some(Boolean),
+    safeBlocks,
+    totalBlocks: n,
+    reasons: Array.from(reasons),
+  };
 }
 
 /** Fragment 模式的 block 级行检测（任何匹配 → 该 chunk 不能进 inline-fragment） */

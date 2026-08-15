@@ -459,7 +459,19 @@ describe("Streaming UX V4.3 settleSafety classifier（safe-reuse vs canonicalize
   });
 
   it("空 blocks → 无 canonicalize", () => {
-    expect(classifySettleSafety([])).toEqual({ canonicalize: false, safeBlocks: 0, totalBlocks: 0 });
+    expect(classifySettleSafety([])).toEqual({ canonicalize: false, safeBlocks: 0, totalBlocks: 0, reasons: [] });
+  });
+});
+
+describe("Streaming UX V4.4 settleSafety trigger reasons（canonical fallback 归因）", () => {
+  it("loose list / table / quote merge / para indent 各自给出触发原因", () => {
+    expect(classifySettleSafety(["- 第一项", "- 第二项"]).reasons).toEqual(["loose-list"]);
+    expect(classifySettleSafety(["| a | b |", "|---|---|"]).reasons).toEqual(["table-pipe"]);
+    expect(classifySettleSafety(["> 引用一", "> 引用二"]).reasons).toEqual(["quote-merge"]);
+    expect(classifySettleSafety(["普通段落", "  缩进续行"]).reasons).toEqual(["para-indent-continuation"]);
+    expect(classifySettleSafety(["- 列表", "  续行"]).reasons).toEqual(["list-indent-continuation"]);
+    // safe：无原因
+    expect(classifySettleSafety(["# 标题", "段落"]).reasons).toEqual([]);
   });
 });
 

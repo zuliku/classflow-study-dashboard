@@ -662,7 +662,7 @@ async function runSettleCase(
   // 3) DOM identity 验证（settle 后节点是否仍连接）
   const connected = await captured.evaluate((el) => (el as Element | null)?.isConnected ?? false);
   console.log(`[PERF][${caseName}] settleConnected=${connected} streamMs=${Date.now() - markerRef.ts} ttfvMs=${Date.now() - startedAt}`);
-  return { case: caseName, settleConnected: connected };
+  return { case: caseName, settleConnected: connected, captured };
 }
 
 test("PERF Case S1: 8K 无空行段落 → settle 零 reparse（fragment p DOM identity 保留）", async ({ page }) => {
@@ -703,7 +703,7 @@ test("PERF Case S3: fenced code + paragraph → 仅 tail finalize，stable pre �
   await page.route("**/api/ai/chat", (route) => route.continue({ url: sse.url }));
   await injectPerf(page);
   await seedAI(page);
-  const r = await runSettleCase(page, "S3", () => [], ssePlan.markerRef, S3_FENCE, "前言段落", '[data-testid="kiro-streaming-markdown"] pre');
+  const r = await runSettleCase(page, "S3", () => [], ssePlan.markerRef, S3_FENCE, "前言段落", '[data-testid="kiro-streaming-markdown"] .kiro-markdown pre');
   const perf = await readPerf(page, ssePlan.markerRef.ts);
   console.log(`[PERF][S3] ` + JSON.stringify(perf));
   await sse.close();
@@ -774,11 +774,13 @@ test("PERF Case S6: loose list → canonicalize（两阶段 handoff；最终 DOM
   await expect(msg.locator('[data-testid="kiro-streaming-markdown"] ul')).toHaveCount(1, { timeout: 15000 });
   await expect(msg.locator('[data-testid="kiro-streaming-markdown"] ul')).toContainText("列表项一");
   await expect(msg.locator('[data-testid="kiro-streaming-markdown"] ul')).toContainText("列表项三");
+  // 流式树节点已被 canonical 树替换（identity 检查必须在 phase-2 提交后执行）
+  const replaced = await r.captured.evaluate((el) => (el as Element | null)?.isConnected ?? false);
   const perf = await readPerf(page, ssePlan.markerRef.ts);
-  console.log(`[PERF][S6] ` + JSON.stringify(perf));
+  console.log(`[PERF][S6] settleConnected=${r.settleConnected} canonicalReplaced=${!replaced} ` + JSON.stringify(perf));
   await sse.close();
   expect(perf.settleCanonicalFallbacks).toBe(1);
   expect(perf.settleFullParses).toBe(0);
   // 流式树节点已被 canonical 树替换（非 safe-reuse）
-  expect(r.settleConnected).toBe(false);
+  expect(replaced).toBe(false);
 });

@@ -31,7 +31,13 @@ import { COMPUTER_MUTATION_LIMIT_PER_TURN } from "@/lib/ai/computer/executor";
 import { resolveDocumentAuthoringVersion } from "@/lib/ai/computer/documents/authoring/protocol";
 import { deriveDocumentFailureFuseState } from "@/lib/ai/computer/documents/failureFuse";
 import { KIRO_FINAL_ANSWER_TOOL_NAME } from "@/lib/ai/tools/finalAnswer";
-import { textOnlySmoothStream } from "@/lib/ai/streaming/textOnlySmoothStream";
+import {
+  textOnlySmoothStream,
+  KIRO_NATIVE_DELTA_CHARS,
+  KIRO_MAX_SMOOTHING_LAG_MS,
+  KIRO_CATCH_UP_CHUNK_CHARS,
+  KIRO_RUN_RESET_GAP_MS,
+} from "@/lib/ai/streaming/textOnlySmoothStream";
 import { shouldRepairToolCall, KIRO_TOOL_CALL_REPAIR_MAX_INPUT_BYTES } from "@/lib/ai/computer/tools/repair";
 import {
   buildKiroModelContext,
@@ -44,16 +50,14 @@ import { estimateTokens } from "@/lib/ai/contextBudget/estimate";
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
-/** smoothStream 中文分词器（module scope 复用；只作用于 text/reasoning cadence） */
+/** smoothStream 中文分词器（module scope 复用；只作用于 final-answer text shaping） */
 const KIRO_STREAM_SEGMENTER = new Intl.Segmenter("zh", { granularity: "word" });
 
 /**
- * Text-only smoothing 词间间隔（Streaming UX V4.3：只作用于 text，reasoning 立即透传）。
- * V4.2 cadence 证据（本地 SSE 形态 A/B）：burst 大 chunk（300/120ms）p95 gap 135ms；
- * fine 形态下 12ms vs 5ms 排队 p95 gap 相同（34ms）——12ms 串行排队只增加完成延迟
- * （8000 字 ≈ 120 chunk × 12ms ≈ 1.4s），对可见节奏无贡献。4ms 保留 chunk 整形
- * （bursty provider 大段分摊到多帧，避免集中 parse 的 Long Task），客户端 24ms
- * throttle 仍是唯一 render 合并层。
+ * Final-answer 词间 shaping 间隔（Streaming UX V4.2 4ms baseline → V4.4 保留）。
+ * V4.4 起不再对每个词无条件 sleep：小 delta 直接 native pass-through，
+ * 大 burst 的人工 lag 被 KIRO_MAX_SMOOTHING_LAG_MS 封顶（budget 内 4ms/词，
+ * 超出进入 catch-up 大块无 delay）；client 24ms throttle 仍是唯一 render 合并层。
  */
 const KIRO_SMOOTH_STREAM_DELAY_MS = 4;
 
@@ -450,13 +454,21 @@ export async function POST(req: NextRequest) {
         }
         return {};
       },
-      // Worklog V2 Task 3 + Streaming UX V2 Phase 4 + V4.3：按词分块 + 4ms 间隔的流式节奏，
-      // 只作用于 text（Final Answer / commentary）。reasoning 立即透传（Kiro 不渲染 reasoning，
-      // 不人为慢放 Thinking → Tool / Final Answer 的过渡）。单一 cadence owner：
-      // client throttle 24ms 只是合并 React 更新，不叠加节流层。
+      // Worklog V2 Task 3 + Streaming UX V2 Phase 4 + V4.3 + V4.4：
+      // Text-only Adaptive Smoothing——
+      // - reasoning：立即透传（不人为慢放 Thinking → Tool / Final Answer）
+      // - execution（progress/commentary，begin_final_answer 前）：native 透传，快而干脆
+      // - final-answer：小 delta native、大 burst bounded shaping（≤48ms 人工 lag，超出 catch-up）
+      // - tool / lifecycle：最高优先级，不等人工 text queue
+      // 单一 cadence owner：client throttle 24ms 只是合并 React 更新，不叠加节流层。
       experimental_transform: textOnlySmoothStream({
         chunking: KIRO_STREAM_SEGMENTER,
         delayInMs: KIRO_SMOOTH_STREAM_DELAY_MS,
+        nativeDeltaChars: KIRO_NATIVE_DELTA_CHARS,
+        maxSmoothingLagMs: KIRO_MAX_SMOOTHING_LAG_MS,
+        catchUpChunkChars: KIRO_CATCH_UP_CHUNK_CHARS,
+        runResetGapMs: KIRO_RUN_RESET_GAP_MS,
+        finalAnswerToolName: KIRO_FINAL_ANSWER_TOOL_NAME,
       }),
     });
 
