@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import React, { useState } from "react";
 import { Plus } from "lucide-react";
@@ -50,8 +50,8 @@ export function CourseTaskSection({
     <div className="space-y-2.5">
       <div className="flex items-center justify-between gap-2">
         <h3 className="text-sm font-bold text-charcoal">
-          相关任务
-          <span className="ml-1.5 text-[11px] font-semibold text-sandrift">
+          相关任务{" "}
+          <span className="text-[11px] font-semibold text-sandrift">
             {assignments.length} 个
           </span>
         </h3>

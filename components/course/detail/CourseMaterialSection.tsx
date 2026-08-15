@@ -40,8 +40,8 @@ export function CourseMaterialSection({
     <div className="space-y-2.5">
       <div className="flex items-center justify-between gap-2">
         <h3 className="text-sm font-bold text-charcoal">
-          课程资料
-          <span className="ml-1.5 text-[11px] font-semibold text-sandrift">
+          课程资料{" "}
+          <span className="text-[11px] font-semibold text-sandrift">
             {materials.length} 份
           </span>
         </h3>

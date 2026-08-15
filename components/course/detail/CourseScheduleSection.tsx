@@ -177,8 +177,8 @@ export function CourseScheduleSection({
     <div ref={sectionRef} className="space-y-2.5 scroll-mt-4">
       <div className="flex items-center justify-between gap-2">
         <h3 className="text-sm font-bold text-charcoal">
-          上课安排
-          <span className="ml-1.5 text-[11px] font-semibold text-sandrift">
+          上课安排{" "}
+          <span className="text-[11px] font-semibold text-sandrift">
             {schedules.length} 个时段
           </span>
         </h3>

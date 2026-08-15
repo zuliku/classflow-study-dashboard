@@ -63,7 +63,9 @@ function seedScript(monday: string) {
         ],
         schedules: [
           { id: "s1", courseId: "c1", dayOfWeek: 1, startTime: "08:00", endTime: "09:40", location: "计算机楼102", weeks: "1-16周" },
-          { id: "s2", courseId: "c2", dayOfWeek: 1, startTime: "08:30", endTime: "10:00", location: "计算机楼201", weeks: "1-16周" },
+          // c2 与 c1 同日但时间不重叠（避免课表卡片视觉重叠影响点击）；
+          // E 的冲突场景由「新增 周一 08:30-10:00 与 c1 自身 08:00-09:40 重叠」覆盖
+          { id: "s2", courseId: "c2", dayOfWeek: 1, startTime: "14:00", endTime: "15:40", location: "计算机楼201", weeks: "1-16周" },
         ],
         assignments: ${JSON.stringify(tasks)},
         calendarMarks: [],
@@ -81,7 +83,9 @@ function seedScript(monday: string) {
 async function openCourseDrawer(page: import("@playwright/test").Page) {
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/");
-  await page.getByRole("heading", { name: "数据结构与算法" }).first().click();
+  // 经「课程资料」工作区的课程名 button 进入（Overview 课表卡有 drag 吞 click 路径，避免不稳定）
+  await page.getByRole("button", { name: "课程资料" }).first().click();
+  await page.getByRole("button", { name: "数据结构与算法", exact: true }).click();
   const drawer = page.getByRole("dialog", { name: "课程详情" });
   await expect(drawer).toBeVisible({ timeout: 8000 });
   return drawer;
@@ -277,9 +281,12 @@ base("K：390×844：无横向溢出；close 可达；schedule form 可用", asy
   await page.addInitScript(seedScript(monday));
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/");
-  // 移动端走「课程资料」入口（Overview 课程卡在窄屏有滚动容器，避免点击不稳定）
-  await page.getByRole("button", { name: "课程资料" }).first().click();
-  await page.locator('div[role="button"]').filter({ hasText: "数据结构与算法" }).first().click();
+  // 移动端 Overview 的 本周课表 schedule-card 是稳定入口（底部导航把 课程资料 收进 更多）
+  await page
+    .locator('[data-testid="schedule-card"]')
+    .filter({ hasText: "数据结构与算法" })
+    .first()
+    .click();
   const drawer = page.getByRole("dialog", { name: "课程详情" });
   await expect(drawer).toBeVisible({ timeout: 8000 });
 
