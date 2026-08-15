@@ -198,7 +198,9 @@ export function applyStudyPlan(input: StudyPlanApplyInput, state: AppState): Stu
       assignmentId: b.assignmentId,
       courseId: b.courseId,
       source: "kiro" as const,
-    }))
+    })),
+    // 用户确认并不改变 origin：Apply 仍是 Kiro-generated 计划（History event.source=kiro）
+    { source: "kiro" }
   );
   return { ok: true, created };
 }

@@ -158,11 +158,12 @@ export function StudyPlanProposalCard({ proposals }: { proposals: StudyPlanPropo
     });
   };
 
-  /** Undo：只删除本次 Apply 创建的 StudyBlock IDs，不影响此前已有 Block */
+  /** Undo：只删除本次 Apply 创建的 StudyBlock IDs，不影响此前已有 Block；
+   *  删除动作本身是用户主动操作 → History event.source=manual（append-only，不删 created 事件） */
   const handleUndo = () => {
     const ids = createdIdsRef.current;
     if (ids.length === 0) return;
-    useAppStore.getState().deleteStudyBlocksBatch(ids);
+    useAppStore.getState().deleteStudyBlocksBatch(ids, { source: "manual" });
     createdIdsRef.current = [];
     setApplyState("revoked");
     setPlanningPreview(null);

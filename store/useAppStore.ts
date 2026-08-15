@@ -509,7 +509,10 @@ export interface AppState {
   /** 创建学习计划，返回新 id */
   addStudyBlock: (block: Omit<StudyBlock, "id">, context?: LearningMutationContext) => string;
   /** Atomic Batch：一次性生成全部 ID，单次 set；全量成功或全量失败（Kiro Study Plan Apply） */
-  addStudyBlocksBatch: (blocks: Omit<StudyBlock, "id">[]) => StudyBlock[];
+  addStudyBlocksBatch: (
+    blocks: Omit<StudyBlock, "id">[],
+    context?: LearningMutationContext
+  ) => StudyBlock[];
   updateStudyBlock: (
     id: string,
     patch: Partial<Omit<StudyBlock, "id">>,
@@ -517,7 +520,7 @@ export interface AppState {
   ) => void;
   deleteStudyBlock: (id: string, context?: LearningMutationContext) => void;
   /** Batch Delete：返回实际被删除的 Block（Undo 只删除本次 Apply 创建的 ID） */
-  deleteStudyBlocksBatch: (ids: string[]) => StudyBlock[];
+  deleteStudyBlocksBatch: (ids: string[], context?: LearningMutationContext) => StudyBlock[];
 
   // CalendarMark Actions（Timeline V1：考试 / 活动等独立日程）
   /** 创建日程标记（exam / activity 等），返回新 id */
@@ -1329,12 +1332,14 @@ export const useAppStore = create<AppState>()(
           return { assignments, calendarMarks, reminders };
         }),
 
-      updateAssignmentPriority: (id, priority) =>
-        set((state) => ({
-          assignments: state.assignments.map((a) =>
-            a.id === id ? { ...a, priority } : a
-          ),
-        })),
+      updateAssignmentPriority: (id, priority, context) => {
+        // 委托 updateAssignmentPatch（→ updateAssignment → deriveAssignmentTransitionEvents）：
+        // 复用既有 priority change / no-op suppression / History recording，不手写第二套事件生成器
+        const current = get().assignments.find((a) => a.id === id);
+        if (!current) return;
+        if (current.priority === priority) return; // no-op：不产生事件
+        get().updateAssignmentPatch(id, { priority }, context);
+      },
 
       updateAssignmentProgress: (id, progress, context) =>
         set((state) => {
@@ -1507,7 +1512,7 @@ export const useAppStore = create<AppState>()(
         });
         return block.id;
       },
-      addStudyBlocksBatch: (blocksData) => {
+      addStudyBlocksBatch: (blocksData, context) => {
         const created: StudyBlock[] = blocksData.map((b) => ({
           id: createId("sb"),
           title: b.title,
@@ -1519,7 +1524,18 @@ export const useAppStore = create<AppState>()(
           source: b.source ?? "manual",
         }));
         // 整个 batch 只有一次 state mutation（All-or-None）
-        set((state) => ({ studyBlocks: [...created, ...state.studyBlocks] }));
+        set((state) => {
+          // History（best-effort；failure 不影响 state mutation）：
+          // 同一 batch 共享 resolved context（同一 occurredAt / source），sequence 保序
+          const resolved = resolveLearningMutationContext(context);
+          const env = historyEnvironment(state);
+          enqueueLearningHistoryEvents(
+            created.map((block) =>
+              buildStudyBlockCreatedEvent({ block, context: resolved, environment: env })
+            )
+          );
+          return { studyBlocks: [...created, ...state.studyBlocks] };
+        });
         return created;
       },
       updateStudyBlock: (id, patch, context) =>
@@ -1568,15 +1584,27 @@ export const useAppStore = create<AppState>()(
             reminders: state.reminders.filter((r) => !(r.targetType === "studyBlock" && r.targetId === id)),
           };
         }),
-      deleteStudyBlocksBatch: (ids) => {
+      deleteStudyBlocksBatch: (ids, context) => {
         const current = get();
         const idSet = new Set(ids);
         const removed = current.studyBlocks.filter((b) => idSet.has(b.id));
         if (removed.length === 0) return [];
-        set({
-          studyBlocks: current.studyBlocks.filter((b) => !idSet.has(b.id)),
-          // Task 7G-A1：批量删除同样级联清理关联 Reminder
-          reminders: current.reminders.filter((r) => !(r.targetType === "studyBlock" && r.targetId && idSet.has(r.targetId))),
+        set((state) => {
+          // History（best-effort）：只记录真实删除项；同一 batch 共享 resolved context
+          const resolved = resolveLearningMutationContext(context);
+          const env = historyEnvironment(state);
+          enqueueLearningHistoryEvents(
+            removed.map((block) =>
+              buildStudyBlockDeletedEvent({ block, context: resolved, environment: env })
+            )
+          );
+          return {
+            studyBlocks: state.studyBlocks.filter((b) => !idSet.has(b.id)),
+            // Task 7G-A1：批量删除同样级联清理关联 Reminder
+            reminders: state.reminders.filter(
+              (r) => !(r.targetType === "studyBlock" && r.targetId && idSet.has(r.targetId))
+            ),
+          };
         });
         return removed;
       },
