@@ -3,6 +3,10 @@
  * Proposal 创建时即对当前真实 Store 执行 Change Set preflight（当前真实可执行方案），
  * 并生成 previewFingerprint（normalized actions + before + 实体标识）。
  * 任何 preflight 失败 → 不产出「可应用」Proposal，返回 structured failure 由 Kiro 继续解释/询问。
+ *
+ * V1.1 Trust Hardening：
+ * - sourceAttachmentIds 只来自 Runtime（useKiroChat 冻结的 Turn snapshot），模型无法提供；
+ * - 每条 Action 的 kind/title/subtitle 由 formatVisualPreparedAction 从真实 Preflight Facts 生成。
  */
 import { AppState } from "@/store/useAppStore";
 import { createId } from "@/lib/utils";
@@ -17,10 +21,10 @@ import {
 } from "@/lib/ai/transactions/types";
 import {
   VISUAL_PROPOSAL_ALLOWED_TOOL_CHECK,
-  VISUAL_KIND_OF_TOOL,
   VisualActionProposal,
   VisualProposalAction,
 } from "@/lib/ai/visual/types";
+import { formatVisualPreparedAction } from "@/lib/ai/visual/format";
 import { ProposeVisualActionsInput } from "@/lib/ai/visual/schemas";
 
 export type VisualProposalBuildResult =
@@ -44,21 +48,26 @@ function findDuplicateAssignment(state: AppState, input: Record<string, unknown>
   );
 }
 
+export interface BuildVisualActionProposalOptions {
+  /** Runtime 冻结的当前 User Turn ready image IDs（Source of Truth；模型无法提供） */
+  sourceAttachmentIds: readonly string[];
+}
+
 /**
  * 构建 VisualActionProposal：
  * 1. whitelist 检查（V1 白名单；destructive / 课程 / 小组 / 提醒一律拒绝）
- * 2. attachment 引用一致性
- * 3. 明显重复（course+title+ddl 完全一致）→ 让模型改为 update
- * 4. Change Set preflight（reserved IDs 由本层预留并存入 Proposal）
+ * 2. 明显重复（course+title+ddl 完全一致）→ 让模型改为 update
+ * 3. Change Set preflight（reserved IDs 由本层预留并存入 Proposal）
+ * 4. display = formatVisualPreparedAction(preview, state)（Preflight Facts）
  * 5. fingerprint
  * 全程 0 Store mutation。
  */
 export function buildVisualActionProposal(
   input: ProposeVisualActionsInput,
-  state: AppState
+  state: AppState,
+  options: BuildVisualActionProposalOptions
 ): VisualProposalBuildResult {
   const actions: ChangeSetActionInput[] = [];
-  const displayByActionId: Record<string, { kind: VisualProposalAction["display"]["kind"]; title: string; subtitle?: string }> = {};
 
   for (let i = 0; i < input.actions.length; i++) {
     const a = input.actions[i];
@@ -70,13 +79,6 @@ export function buildVisualActionProposal(
         i
       );
     }
-    if (!input.attachmentIds.includes(a.attachmentId)) {
-      return fail(
-        "VISUAL_ATTACHMENT_MISMATCH",
-        `第 ${i + 1} 项操作的依据图片不在本次截图中。`,
-        i
-      );
-    }
     if (tool === "create_assignment" && findDuplicateAssignment(state, a.change.input as Record<string, unknown>)) {
       return fail(
         "VISUAL_DUPLICATE_ASSIGNMENT",
@@ -85,11 +87,6 @@ export function buildVisualActionProposal(
       );
     }
     actions.push({ tool: tool as TransactionSafeToolName, input: a.change.input });
-    displayByActionId[actions.length - 1] = {
-      kind: VISUAL_KIND_OF_TOOL[tool] ?? "assignment-update",
-      title: a.displayTitle,
-      subtitle: a.displaySubtitle,
-    };
   }
 
   // 客户端事务层一次性预留 create 实体 ID（Preflight → Re-preflight → Commit 同一 ID）
@@ -104,16 +101,18 @@ export function buildVisualActionProposal(
     };
   }
 
-  const proposalActions: VisualProposalAction[] = input.actions.map((a, i) => ({
+  const proposalActions: VisualProposalAction[] = preflight.preview.map((view, i) => ({
     id: createId("vp"),
     change: actions[i],
-    evidence: { attachmentId: a.attachmentId, text: a.evidence },
-    display: displayByActionId[i],
+    evidence: { text: input.actions[i].evidence },
+    // V1.1：display 完全由真实 Preflight Facts 推导（模型无任何字段可改写 UI 文案）
+    display: formatVisualPreparedAction(view, state),
   }));
 
   const proposal: VisualActionProposal = {
     id: createId("vprop"),
-    sourceAttachmentIds: [...input.attachmentIds],
+    // V1.1：source 只来自 Runtime（绝不是 model input）
+    sourceAttachmentIds: [...options.sourceAttachmentIds],
     summary: input.summary,
     actions: proposalActions,
     createdAt: Date.now(),

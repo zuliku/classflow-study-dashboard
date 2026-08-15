@@ -835,7 +835,11 @@ export function useKiroChat({
   const limitReachedRef = useRef(false);
   const undoRegistryRef = useRef(new Map<string, KiroUndoEntry>());
   /** Task B Visual Turn Mutation Guard：当前 User Turn 是否绑定 ready image attachment（Send 时设置；下轮 Send 覆盖） */
-  const turnHasImageRef = useRef(false);
+  /** Task B V1.1：当前 User Turn Send 时冻结的 ready image attachment IDs（Runtime Source of Truth）。
+   *  - Guard 依据：length > 0 即本轮包含图片来源（直接写操作 → VISUAL_PROPOSAL_REQUIRED）
+   *  - propose_visual_actions 的 sourceAttachmentIds 只从这里取（模型无法提供）
+   *  - 生命周期：新 User Turn 冻结新 snapshot / reset / session transition 时替换；continuation 期间不清空 */
+  const turnImageAttachmentIdsRef = useRef<string[]>([]);
   // Kiro Computer Agent V1：每 Turn 独立的 Computer 调用限制（read <= 12 / mutation <= 6）
   const computerCountersRef = useRef({ readCount: 0, mutationCount: 0 });
 
@@ -1093,7 +1097,7 @@ export function useKiroChat({
       // ---- Change Set（Task 8）：多写事务，全部合法才全部提交 ----
       if (toolName === "apply_change_set") {
         // Task B Visual Turn Mutation Guard：截图来源的写操作必须先 propose_visual_actions
-        if (turnHasImageRef.current) {
+        if (turnImageAttachmentIdsRef.current.length > 0) {
           failOutput(VISUAL_PROPOSAL_REQUIRED_CODE, VISUAL_PROPOSAL_REQUIRED_MESSAGE);
           return;
         }
@@ -1178,7 +1182,7 @@ export function useKiroChat({
       // ---- Write Tools ----
       if ((KIRO_WRITE_TOOL_NAMES as string[]).includes(toolName)) {
         // Task B Visual Turn Mutation Guard：截图来源的写操作必须先 propose_visual_actions
-        if (turnHasImageRef.current && isClassFlowMutationTool(toolName)) {
+        if (turnImageAttachmentIdsRef.current.length > 0 && isClassFlowMutationTool(toolName)) {
           failOutput(VISUAL_PROPOSAL_REQUIRED_CODE, VISUAL_PROPOSAL_REQUIRED_MESSAGE);
           return;
         }
@@ -1239,7 +1243,9 @@ export function useKiroChat({
         return;
       }
       // 每次执行读取最新 Store（Data Freshness）
-      const result = executeKiroReadTool(toolName, input, useAppStore.getState());
+      const result = executeKiroReadTool(toolName, input, useAppStore.getState(), {
+        visualSourceAttachmentIds: turnImageAttachmentIdsRef.current,
+      });
       emitToolOutput(toolName, toolCallId, result as ToolOutput);
     },
     sendAutomaticallyWhen: ({ messages }) =>
@@ -1955,7 +1961,7 @@ export function useKiroChat({
       });
       const visionEnabledForIntent = intentCapabilities.vision;
       // Task B：本 User Turn 是否带 ready image（Guard 依据；整轮 assistant 保持，下轮 Send 覆盖）
-      turnHasImageRef.current = userImages.length > 0;
+      turnImageAttachmentIdsRef.current = userImages.map((a) => a.id);
       if (
         intentCapabilities.vision &&
         intentCapabilities.visionMimeTypes &&

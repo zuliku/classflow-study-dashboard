@@ -45,6 +45,9 @@ export function VisualActionProposalCard({ proposal }: { proposal: VisualActionP
   const [dismissed, setDismissed] = useState(false);
   const [applyState, setApplyState] = useState<ApplyState>("idle");
   const [expandedEvidence, setExpandedEvidence] = useState<string | null>(null);
+  // V1.1：同步 ownership 锁（不依赖 React render 更新时序；applied 后 UI 保持 applied，锁只防并发入口）
+  const applyingRef = useRef(false);
+  // V1.1：one-shot Undo（Card Undo 与 Toast Undo 共享；执行后清空，杜绝重复补偿）
   const undoRef = useRef<(() => void) | null>(null);
   const pushToast = useToastStore((s) => s.pushToast);
   const handoffPrompt = useKiroSession().handoffPrompt;
@@ -52,37 +55,48 @@ export function VisualActionProposalCard({ proposal }: { proposal: VisualActionP
   if (dismissed) return null;
 
   const handleApply = async () => {
-    if (applyState === "applying") return;
+    if (applyingRef.current) return;
+    applyingRef.current = true;
     setApplyState("applying");
-    const result = await executeVisualActionProposal({ proposal, pushToast });
-    if (result.ok) {
-      undoRef.current = result.undo;
-      setApplyState("applied");
-      pushToast({
-        message: `已应用 ${result.count} 项修改`,
-        actionLabel: "撤销",
-        onAction: handleUndo,
-      });
-      return;
+    try {
+      const result = await executeVisualActionProposal({ proposal, pushToast });
+      if (result.ok) {
+        undoRef.current = result.undo;
+        setApplyState("applied");
+        pushToast({
+          message: `已应用 ${result.count} 项修改`,
+          actionLabel: "撤销",
+          onAction: handleUndo,
+        });
+        return;
+      }
+      if (result.stale) {
+        setApplyState("stale");
+        return;
+      }
+      // 其他失败（commit 异常已回滚等）：保持可重试，错误由 toast 说明
+      setApplyState("idle");
+      pushToast({ message: result.message, type: "error" });
+    } catch {
+      // V1.1：executor 意外 throw 不能把 UI 卡在「正在应用…」；回滚仍由 Change Set executor 负责
+      setApplyState("idle");
+      pushToast({ message: "应用失败，没有留下部分修改。", type: "error" });
+    } finally {
+      // Ref 只负责同步 ownership；UI lifecycle 由 applyState 决定（applied/stale 不回退 idle）
+      applyingRef.current = false;
     }
-    if (result.stale) {
-      setApplyState("stale");
-      return;
-    }
-    // 其他失败（commit 异常已回滚等）：保持可重试，错误由 toast 说明
-    setApplyState("idle");
-    pushToast({ message: result.message, type: "error" });
   };
 
+  /** V1.1：one-shot——Card Undo 与 Toast Undo 共用同一 undoRef，执行后立即清空 */
   const handleUndo = () => {
-    if (undoRef.current) {
-      try {
-        undoRef.current();
-      } catch {
-        /* Undo 异常不阻断 UI */
-      }
+    const undo = undoRef.current;
+    if (!undo) return;
+    undoRef.current = null;
+    try {
+      undo();
+    } finally {
+      setApplyState("revoked");
     }
-    setApplyState("revoked");
   };
 
   const handleReanalyze = () => {
@@ -149,8 +163,9 @@ export function VisualActionProposalCard({ proposal }: { proposal: VisualActionP
       <>
         <button
           onClick={() => setDismissed(true)}
+          disabled={applyState === "applying"}
           data-testid="visual-cancel"
-          className="flex items-center gap-1.5 px-3 h-8 rounded-lg text-[11px] font-bold text-satin-grey bg-transparent border border-line hover:text-charcoal hover:border-line-strong transition-colors"
+          className="flex items-center gap-1.5 px-3 h-8 rounded-lg text-[11px] font-bold text-satin-grey bg-transparent border border-line hover:text-charcoal hover:border-line-strong transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
         >
           取消
         </button>
@@ -160,7 +175,7 @@ export function VisualActionProposalCard({ proposal }: { proposal: VisualActionP
           data-testid="visual-apply"
           className="flex items-center gap-1.5 px-3 h-8 rounded-lg text-[11px] font-bold text-white bg-charcoal hover:bg-black disabled:opacity-60 transition-colors"
         >
-          应用全部修改
+          {applyState === "applying" ? "正在应用…" : "应用全部修改"}
         </button>
       </>
     );
@@ -182,7 +197,8 @@ export function VisualActionProposalCard({ proposal }: { proposal: VisualActionP
         <button
           onClick={() => setDismissed(true)}
           aria-label="关闭"
-          className="p-1 rounded-lg text-sandrift hover:bg-alabaster hover:text-charcoal transition-colors"
+          disabled={applyState === "applying"}
+          className="p-1 rounded-lg text-sandrift hover:bg-alabaster hover:text-charcoal transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
         >
           <X className="w-3.5 h-3.5" />
         </button>

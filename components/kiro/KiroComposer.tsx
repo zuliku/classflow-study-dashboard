@@ -141,6 +141,8 @@ export function KiroComposer({
   const dropRef = useRef<HTMLDivElement | null>(null);
 
   const hasImages = attachments.some((a) => a.kind === "image");
+  // V1.1：建议 chips 只在「真实 ready」的图片存在时出现（processing 图片不算）
+  const hasReadyImages = attachments.some((a) => a.kind === "image" && a.status === "ready");
   const imagesBlocked = hasImages && !visionEnabled;
   // 扫描型 PDF 需要 Vision 模型（Task 12）：非 Vision 模型阻止发送，绝不静默丢图
   const needsScannedVision = attachments.some((a) => a.visionRequired === true);
@@ -148,12 +150,9 @@ export function KiroComposer({
   // Task 14：Kiro Search（Workspace / Sidecar 共用同一 store，开关共享）
   const webSearchEnabled = useKiroPreferencesStore((s) => s.webSearchEnabled);
   const setWebSearchEnabled = useKiroPreferencesStore((s) => s.setWebSearchEnabled);
-  // Task B：截图隐私提示（首次添加图片轻提示一次；只属于 UI preference）
+  // Task B V1.1：截图隐私提示改为显式 dismiss（不再自动标记；用户没点「知道了」就下次继续提示）
   const visualPrivacyNoticeSeen = useKiroPreferencesStore((s) => s.visualAttachmentPrivacyNoticeSeen);
   const setVisualPrivacyNoticeSeen = useKiroPreferencesStore((s) => s.setVisualAttachmentPrivacyNoticeSeen);
-  useEffect(() => {
-    if (hasImages && !visualPrivacyNoticeSeen) setVisualPrivacyNoticeSeen(true);
-  }, [hasImages, visualPrivacyNoticeSeen, setVisualPrivacyNoticeSeen]);
   const canSend =
     text.trim().length > 0 &&
     !hasProcessing &&
@@ -400,15 +399,24 @@ export function KiroComposer({
                   </span>
                 )}
               </div>
-              {/* Task B：截图就绪 + Vision 支持时提供轻量 intent chips（不是 Mode；点击只是发送提示词） */}
-              {hasImages && visionEnabled && !currentTurnScopeLocked && (
+              {/* Task B V1.1：截图就绪（ready + vision + 无 processing）+ 输入为空时显示 intent chips。
+                  点击只填 prompt（不直接 Send；发送必须走 canonical submit() 的 canSend/vision gate/防重复） */}
+              {hasReadyImages && visionEnabled && !hasProcessing && !currentTurnScopeLocked && text.trim().length === 0 && (
                 <div className="flex items-center gap-1.5 pt-1.5">
                   {["整理任务与 DDL", "识别课程变动", "处理全部通知"].map((label) => (
                     <button
                       key={label}
                       type="button"
                       data-testid="visual-suggestion"
-                      onClick={() => void onSend(label)}
+                      onClick={() => {
+                        setText(label);
+                        requestAnimationFrame(() => {
+                          if (taRef.current) {
+                            taRef.current.focus();
+                            autoGrow();
+                          }
+                        });
+                      }}
                       className="ux-press flex items-center gap-1.5 rounded-lg border border-line bg-[#F7F5F5] text-[11px] font-semibold text-satin-grey hover:text-charcoal hover:border-line-strong transition-colors px-2 h-6 whitespace-nowrap"
                     >
                       {label}
@@ -657,10 +665,21 @@ export function KiroComposer({
             <p className="text-[10px] text-sandrift">
               文件内容会发送给当前选择的 AI 服务以完成你的请求。
             </p>
-            {/* Task B：首次添加图片轻提示一次（非 Dialog；纯 UI preference） */}
+            {/* Task B V1.1：首次添加图片轻提示，显式「知道了」后才不再显示（非 Dialog） */}
             {hasImages && !visualPrivacyNoticeSeen && (
-              <p data-testid="visual-privacy-notice" className="text-[10px] text-sandrift">
-                图片仅用于当前 Kiro 对话，不会自动保存到课程资料。
+              <p
+                data-testid="visual-privacy-notice"
+                className="flex items-center gap-2 text-[10px] text-sandrift"
+              >
+                <span>图片仅用于当前 Kiro 对话，不会自动保存到课程资料。</span>
+                <button
+                  type="button"
+                  data-testid="visual-privacy-dismiss"
+                  onClick={() => setVisualPrivacyNoticeSeen(true)}
+                  className="flex items-center gap-0.5 px-1.5 h-5 rounded-md text-[10px] font-bold text-satin-grey bg-alabaster border border-line-soft hover:text-charcoal hover:border-line-strong transition-colors"
+                >
+                  知道了
+                </button>
               </p>
             )}
           </div>

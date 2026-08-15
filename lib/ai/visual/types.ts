@@ -38,9 +38,9 @@ export interface VisualProposalAction {
   change: ChangeSetActionInput;
   /** 模型从截图读到、促成该 Action 的最短事实（120–160 chars 上限；不保存整张 OCR） */
   evidence: {
-    attachmentId: string;
     text: string;
   };
+  /** Preflight Facts 推导的展示（kind/title/subtitle 全部由 PreparedActionView + state 生成，模型不得决定） */
   display: {
     kind: VisualActionKind;
     title: string;

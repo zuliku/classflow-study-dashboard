@@ -49,35 +49,25 @@ type State = ReturnType<typeof makeState>;
 
 const proposalInput = (over?: Partial<Parameters<typeof proposeVisualActionsTool>[1] & object>) => ({
   summary: "从截图整理出 3 项修改",
-  attachmentIds: ["att_1"],
   actions: [
     {
       evidence: "实验报告请在下周一晚上10点前提交",
-      attachmentId: "att_1",
-      kind: "assignment-create",
-      displayTitle: "实验报告",
-      displaySubtitle: "数据结构与算法 · 8月17日 22:00",
       change: { tool: "create_assignment", input: { courseId: "c1", title: "数据结构实验报告", ddl: "2026-08-17T22:00:00", estimatedMinutes: 90 } },
     },
     {
       evidence: "本周三的数据结构课调到周六下午两点",
-      attachmentId: "att_1",
-      kind: "schedule-move",
-      displayTitle: "临时调课",
-      displaySubtitle: "数据结构与算法 · 第 2 周 · 周三 → 周六 14:00",
       change: { tool: "move_schedule_occurrence", input: { scheduleId: "s1", week: 2, dayOfWeek: 6, startTime: "14:00", endTime: "15:40", location: "教101" } },
     },
     {
       evidence: "实验报告提交时间改为 8月20日 23:59",
-      attachmentId: "att_1",
-      kind: "ddl-update",
-      displayTitle: "调整截止时间",
-      displaySubtitle: "实验报告 · 8月20日 23:59",
       change: { tool: "set_assignment_ddl", input: { assignmentId: "a1", ddl: "2026-08-20T23:59:00" } },
     },
   ],
   ...over,
 });
+
+/** V1.1：propose_visual_actions 必须带 Runtime trusted source（frozen turn image IDs） */
+const SOURCE = { visualSourceAttachmentIds: ["att-real-1"] as const };
 
 const toolState = (state: State) => state as unknown as ReadToolState;
 
@@ -168,12 +158,12 @@ describe("Visual Action Proposal：创建", () => {
   it("合法 resolved actions → 生成 Proposal；0 Store mutation", () => {
     const state = makeState();
     const before = JSON.stringify(state);
-    const res = proposeVisualActionsTool(toolState(state), proposalInput());
+    const res = proposeVisualActionsTool(toolState(state), proposalInput(), SOURCE);
     expect(res.ok).toBe(true);
     if (!res.ok) return;
     const proposal = (res.data as { proposal: VisualActionProposal }).proposal;
     expect(proposal.actions).toHaveLength(3);
-    expect(proposal.sourceAttachmentIds).toEqual(["att_1"]);
+    expect(proposal.sourceAttachmentIds).toEqual(["att-real-1"]);
     expect(proposal.previewFingerprint.length).toBeGreaterThan(0);
     expect(proposal.reservedIds).toHaveLength(3);
     expect(proposal.actions[0].change.tool).toBe("create_assignment");
@@ -189,13 +179,11 @@ describe("Visual Action Proposal：创建", () => {
         actions: [
           {
             evidence: "新任务",
-            attachmentId: "att_1",
-            kind: "assignment-create",
-            displayTitle: "幽灵课任务",
             change: { tool: "create_assignment", input: { courseId: "ghost", title: "幽灵课任务" } },
           },
         ],
-      } as never)
+      } as never),
+      SOURCE
     );
     expect(res.ok).toBe(false);
     if (res.ok) return;
@@ -210,13 +198,11 @@ describe("Visual Action Proposal：创建", () => {
         actions: [
           {
             evidence: "删除任务",
-            attachmentId: "att_1",
-            kind: "assignment-update",
-            displayTitle: "删除任务",
             change: { tool: "delete_assignment", input: { assignmentId: "a1" } },
           },
         ],
-      } as never)
+      } as never),
+      SOURCE
     );
     expect(res.ok).toBe(false);
     if (res.ok) return;
@@ -231,13 +217,11 @@ describe("Visual Action Proposal：创建", () => {
         actions: [
           {
             evidence: "新课程",
-            attachmentId: "att_1",
-            kind: "assignment-update",
-            displayTitle: "新课程",
             change: { tool: "create_course", input: { name: "计网实验" } },
           },
         ],
-      } as never)
+      } as never),
+      SOURCE
     );
     expect(res.ok).toBe(false);
     if (res.ok) return;
@@ -251,12 +235,10 @@ describe("Visual Action Proposal：创建", () => {
       proposalInput({
         actions: Array.from({ length: 9 }, (_, i) => ({
           evidence: `任务${i}`,
-          attachmentId: "att_1",
-          kind: "assignment-create",
-          displayTitle: `任务${i}`,
           change: { tool: "create_assignment", input: { courseId: "c1", title: `任务${i}` } },
         })),
-      } as never)
+      } as never),
+      SOURCE
     );
     expect(res.ok).toBe(false);
     if (res.ok) return;
@@ -271,13 +253,11 @@ describe("Visual Action Proposal：创建", () => {
         actions: [
           {
             evidence: "很长的截图原文".repeat(30),
-            attachmentId: "att_1",
-            kind: "assignment-create",
-            displayTitle: "任务",
             change: { tool: "create_assignment", input: { courseId: "c1", title: "任务" } },
           },
         ],
-      } as never)
+      } as never),
+      SOURCE
     );
     expect(res.ok).toBe(false);
     if (res.ok) return;
@@ -292,13 +272,11 @@ describe("Visual Action Proposal：创建", () => {
         actions: [
           {
             evidence: "实验报告请在17号交",
-            attachmentId: "att_1",
-            kind: "assignment-create",
-            displayTitle: "实验报告",
             change: { tool: "create_assignment", input: { courseId: "c1", title: "实验报告", ddl: "2026-08-17T22:00:00" } },
           },
         ],
-      } as never)
+      } as never),
+      SOURCE
     );
     expect(res.ok).toBe(false);
     if (res.ok) return;
@@ -317,13 +295,11 @@ describe("Visual Action Proposal：创建", () => {
         actions: [
           {
             evidence: "调到周六下午两点",
-            attachmentId: "att_1",
-            kind: "schedule-move",
-            displayTitle: "临时调课",
             change: { tool: "move_schedule_occurrence", input: { scheduleId: "s1", week: 2, dayOfWeek: 6, startTime: "14:00", endTime: "15:40" } },
           },
         ],
-      } as never)
+      } as never),
+      SOURCE
     );
     expect(res.ok).toBe(false);
     if (res.ok) return;
@@ -334,7 +310,7 @@ describe("Visual Action Proposal：创建", () => {
 describe("Visual Action Proposal：fingerprint / stale", () => {
   it("同一状态 → 不 stale；数据变化（DDL 修改）→ stale", () => {
     const state = makeState();
-    const built = buildVisualActionProposal(proposalInput() as never, state);
+    const built = buildVisualActionProposal(proposalInput() as never, state, { sourceAttachmentIds: ["att-real-1"] });
     expect(built.ok).toBe(true);
     if (!built.ok) return;
     const { proposal } = built;
@@ -353,7 +329,7 @@ describe("Visual Action Proposal：fingerprint / stale", () => {
 
   it("无关实体变化（c2 课程名）→ 不 stale", () => {
     const state = makeState();
-    const built = buildVisualActionProposal(proposalInput() as never, state);
+    const built = buildVisualActionProposal(proposalInput() as never, state, { sourceAttachmentIds: ["att-real-1"] });
     expect(built.ok).toBe(true);
     if (!built.ok) return;
     const changed = makeState();
@@ -369,7 +345,7 @@ describe("Visual Action Proposal：Apply", () => {
   it("混合方案（create + move occurrence + update ddl）→ 全部原子提交；一次 Undo 全部恢复", async () => {
     const state = makeState();
     const before = JSON.stringify(state);
-    const built = buildVisualActionProposal(proposalInput() as never, state);
+    const built = buildVisualActionProposal(proposalInput() as never, state, { sourceAttachmentIds: ["att-real-1"] });
     expect(built.ok).toBe(true);
     if (!built.ok) return;
     const api = new FakeApi(state);
@@ -395,7 +371,7 @@ describe("Visual Action Proposal：Apply", () => {
 
   it("Apply 前数据变化 → stale，0 mutation", async () => {
     const state = makeState();
-    const built = buildVisualActionProposal(proposalInput() as never, state);
+    const built = buildVisualActionProposal(proposalInput() as never, state, { sourceAttachmentIds: ["att-real-1"] });
     expect(built.ok).toBe(true);
     if (!built.ok) return;
     // Apply 前 a1 的 DDL 被其他途径修改
@@ -420,7 +396,7 @@ describe("Visual Action Proposal：Apply", () => {
 
   it("Apply 不再次弹 generic confirm（confirm 调用即返回 true；无二次确认 UI）", async () => {
     const state = makeState();
-    const built = buildVisualActionProposal(proposalInput() as never, state);
+    const built = buildVisualActionProposal(proposalInput() as never, state, { sourceAttachmentIds: ["att-real-1"] });
     expect(built.ok).toBe(true);
     if (!built.ok) return;
     const api = new FakeApi(state);
@@ -442,7 +418,7 @@ describe("Visual Action Proposal：Apply", () => {
 
 describe("Visual Turn Mutation Guard", () => {
   it("图片回合：直接调用写工具 → 必须拒绝（VISUAL_PROPOSAL_REQUIRED）", () => {
-    // Guard 由 useKiroChat onToolCall 分支调用 isClassFlowMutationTool + turnHasImageRef；
+    // Guard 由 useKiroChat onToolCall 分支按 turnImageAttachmentIdsRef.length > 0 触发；
     // 这里验证 deterministic 判定函数
     expect(isClassFlowMutationTool("create_assignment")).toBe(true);
     expect(isClassFlowMutationTool("move_schedule")).toBe(true);
@@ -457,5 +433,146 @@ describe("Visual Turn Mutation Guard", () => {
     expect(isClassFlowMutationTool("begin_final_answer")).toBe(false);
     expect(isClassFlowMutationTool("computer_create_text_file")).toBe(false);
     expect(isClassFlowMutationTool("save_memory")).toBe(false);
+  });
+});
+
+describe("V1.1 Trusted Visual Source", () => {
+  it("无 trusted source → VISUAL_SOURCE_REQUIRED，0 Proposal", () => {
+    const state = makeState();
+    const res = proposeVisualActionsTool(toolState(state), proposalInput(), {});
+    expect(res.ok).toBe(false);
+    if (res.ok) return;
+    expect(res.code).toBe("VISUAL_SOURCE_REQUIRED");
+    expect(res.message).toContain("没有可用的图片来源");
+  });
+
+  it("模型不能 spoof attachment：schema 中不存在 attachmentIds/attachmentId → strict 拒绝", () => {
+    const state = makeState();
+    const spoofed = {
+      summary: "从截图整理出 3 项修改",
+      attachmentIds: ["att-spoof"],
+      actions: [
+        {
+          evidence: "实验报告请在下周一晚上10点前提交",
+          attachmentId: "att-spoof",
+          change: { tool: "create_assignment", input: { courseId: "c1", title: "任务" } },
+        },
+      ],
+    };
+    const res = proposeVisualActionsTool(toolState(state), spoofed as never, SOURCE);
+    expect(res.ok).toBe(false);
+    if (res.ok) return;
+    expect(res.code).toBe("INVALID_INPUT");
+  });
+
+  it("模型不能提供 kind/displayTitle/displaySubtitle：strict 拒绝", () => {
+    const state = makeState();
+    const spoofed = {
+      summary: "从截图整理出 1 项修改",
+      actions: [
+        {
+          evidence: "事实",
+          kind: "schedule-cancel",
+          displayTitle: "伪造标题",
+          displaySubtitle: "伪造副标题",
+          change: { tool: "cancel_schedule_occurrence", input: { scheduleId: "s1", week: 3 } },
+        },
+      ],
+    };
+    const res = proposeVisualActionsTool(toolState(state), spoofed as never, SOURCE);
+    expect(res.ok).toBe(false);
+    if (res.ok) return;
+    expect(res.code).toBe("INVALID_INPUT");
+  });
+
+  it("Proposal source = Runtime 冻结 IDs（模型无输入渠道）", () => {
+    const state = makeState();
+    const res = proposeVisualActionsTool(
+      toolState(state),
+      proposalInput(),
+      { visualSourceAttachmentIds: ["att_real_1", "att_real_2", "att_real_3"] }
+    );
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    const proposal = (res.data as { proposal: VisualActionProposal }).proposal;
+    expect(proposal.sourceAttachmentIds).toEqual(["att_real_1", "att_real_2", "att_real_3"]);
+  });
+});
+
+describe("V1.1 Preflight-Owned Fact UI", () => {
+  it("create_assignment display 完全来自真实 Preview（title/course/DDL）", () => {
+    const state = makeState();
+    const res = proposeVisualActionsTool(toolState(state), proposalInput(), SOURCE);
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    const proposal = (res.data as { proposal: VisualActionProposal }).proposal;
+    const create = proposal.actions.find((a) => a.change.tool === "create_assignment");
+    expect(create?.display.kind).toBe("assignment-create");
+    expect(create?.display.title).toBe("数据结构实验报告");
+    // 模型没有任何字段可以把 DDL 写成别的
+    expect(create?.display.subtitle).toContain("数据结构与算法");
+    expect(create?.display.subtitle).toContain("8月17日 22:00");
+  });
+
+  it("move_schedule_occurrence display：第 N 周 · 周三 10:00 → 周六 14:00（与真实 mutation 一致）", () => {
+    const state = makeState();
+    const res = proposeVisualActionsTool(toolState(state), proposalInput(), SOURCE);
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    const proposal = (res.data as { proposal: VisualActionProposal }).proposal;
+    const move = proposal.actions.find((a) => a.change.tool === "move_schedule_occurrence");
+    expect(move?.display.kind).toBe("schedule-move");
+    expect(move?.display.title).toBe("数据结构与算法");
+    expect(move?.display.subtitle).toBe("第 2 周 · 周三 10:00 → 周六 14:00");
+  });
+
+  it("set_assignment_ddl display：before → after（真实新旧 DDL）", () => {
+    const state = makeState();
+    const res = proposeVisualActionsTool(toolState(state), proposalInput(), SOURCE);
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    const proposal = (res.data as { proposal: VisualActionProposal }).proposal;
+    const ddl = proposal.actions.find((a) => a.change.tool === "set_assignment_ddl");
+    expect(ddl?.display.kind).toBe("ddl-update");
+    expect(ddl?.display.title).toBe("实验报告");
+    expect(ddl?.display.subtitle).toBe("8月17日 22:00 → 8月20日 23:59");
+  });
+
+  it("cancel / extra / permanent display 语义正确（永久调整明确标注）", () => {
+    const state = makeState();
+    const res = proposeVisualActionsTool(
+      toolState(state),
+      {
+        summary: "从截图整理出 3 项修改",
+        actions: [
+          { evidence: "本周三停课", change: { tool: "cancel_schedule_occurrence", input: { scheduleId: "s1", week: 3 } } },
+          { evidence: "周日补课", change: { tool: "create_extra_schedule_occurrence", input: { courseId: "c2", week: 6, dayOfWeek: 7, startTime: "19:00", endTime: "20:40" } } },
+          { evidence: "以后都改到周五下午", change: { tool: "move_schedule", input: { scheduleId: "s1", dayOfWeek: 5, startTime: "16:00" } } },
+        ],
+      } as never,
+      SOURCE
+    );
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    const proposal = (res.data as { proposal: VisualActionProposal }).proposal;
+    const cancel = proposal.actions[0];
+    expect(cancel.display.kind).toBe("schedule-cancel");
+    expect(cancel.display.subtitle).toContain("第 3 周 · 周三 10:00–11:40 · 停课");
+    const extra = proposal.actions[1];
+    expect(extra.display.kind).toBe("schedule-extra");
+    expect(extra.display.subtitle).toContain("第 6 周 · 周日 19:00–20:40 · 临时补课");
+    const permanent = proposal.actions[2];
+    expect(permanent.display.kind).toBe("schedule-permanent-update");
+    expect(permanent.display.subtitle).toContain("永久调整排课");
+    expect(permanent.display.subtitle).toContain("周三 10:00 → 周五 16:00");
+  });
+
+  it("evidence 仍来自模型（Vision extraction），且只描述原因", () => {
+    const state = makeState();
+    const res = proposeVisualActionsTool(toolState(state), proposalInput(), SOURCE);
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    const proposal = (res.data as { proposal: VisualActionProposal }).proposal;
+    expect(proposal.actions[0].evidence.text).toBe("实验报告请在下周一晚上10点前提交");
   });
 });

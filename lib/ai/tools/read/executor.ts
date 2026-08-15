@@ -43,15 +43,21 @@ export type ReadToolErrorCode =
   | "OUT_OF_RANGE"
   | "FILE_MISSING"
   | "READ_FAILED"
-  // Visual Action Intake（Task B）：Proposal 结构化失败
+  // Visual Action Intake（Task B / V1.1）：Proposal 结构化失败
+  | "VISUAL_SOURCE_REQUIRED"
   | "VISUAL_UNSUPPORTED_ACTION"
-  | "VISUAL_ATTACHMENT_MISMATCH"
   | "VISUAL_DUPLICATE_ASSIGNMENT"
   | "TRANSACTION_TOO_LARGE"
   | "TRANSACTION_UNSUPPORTED"
   | "TRANSACTION_CONTRADICTORY"
   | "TRANSACTION_INTEGRITY"
   | "CONFLICT";
+
+/** Turn-level trusted context（V1.1）：只给真正需要的工具；普通 Read Tools 完全忽略 */
+export interface ReadToolExecutionContext {
+  /** 当前 User Turn Send 时冻结的 ready image attachment IDs（Runtime Source of Truth） */
+  visualSourceAttachmentIds?: readonly string[];
+}
 
 export type ReadToolResult<T> =
   | { ok: true; data: T }
@@ -617,7 +623,19 @@ export function proposeStudyRebalanceTool(state: ReadToolState, input: unknown):
 }
 
 /** Visual Action Intake（Task B）：Proposal Tool，绝不写 Store；preflight 基于最新真实 Store */
-export function proposeVisualActionsTool(state: ReadToolState, input: unknown): ReadToolResult<unknown> {
+export function proposeVisualActionsTool(
+  state: ReadToolState,
+  input: unknown,
+  context?: ReadToolExecutionContext
+): ReadToolResult<unknown> {
+  const sourceAttachmentIds = context?.visualSourceAttachmentIds ?? [];
+  if (sourceAttachmentIds.length === 0) {
+    return {
+      ok: false,
+      code: "VISUAL_SOURCE_REQUIRED",
+      message: "当前用户消息没有可用的图片来源，不能创建截图操作方案。",
+    };
+  }
   const parsed = safeParse<ProposeVisualActionsInput>("propose_visual_actions", input);
   if (!parsed.ok) return parsed;
   const appState: AppState = {
@@ -625,7 +643,7 @@ export function proposeVisualActionsTool(state: ReadToolState, input: unknown): 
     preferences: state.preferences ?? DEFAULT_PREFERENCES,
     reminders: state.reminders ?? [],
   };
-  const result = buildVisualActionProposal(parsed.data, appState);
+  const result = buildVisualActionProposal(parsed.data, appState, { sourceAttachmentIds });
   if (!result.ok) {
     return {
       ok: false,
@@ -927,7 +945,7 @@ export function getMaterialMetadata(state: ReadToolState, input: unknown): ReadT
 // ---------- 统一入口 ----------
 
 /** 同步执行的 Read Tools（read_material / read_project_file / read_project_visual / history / analytics / outlook 为异步重量级工具，独立处理） */
-const EXECUTORS: Record<Exclude<KiroReadToolName, "read_material" | "read_project_file" | "read_project_visual" | "query_learning_history" | "summarize_learning_history" | "get_learning_analytics" | "get_learning_outlook">, (state: ReadToolState, input: unknown) => ReadToolResult<unknown>> = {
+const EXECUTORS: Record<Exclude<KiroReadToolName, "read_material" | "read_project_file" | "read_project_visual" | "query_learning_history" | "summarize_learning_history" | "get_learning_analytics" | "get_learning_outlook">, (state: ReadToolState, input: unknown, context?: ReadToolExecutionContext) => ReadToolResult<unknown>> = {
   get_current_context: getCurrentContext,
   get_user_study_profile: getUserStudyProfile,
   search_courses: searchCourses,
@@ -955,11 +973,13 @@ const EXECUTORS: Record<Exclude<KiroReadToolName, "read_material" | "read_projec
 /**
  * Client Read Tool Executor：唯一执行入口。
  * pure / deterministic / no mutations / no toast / no confirm / no setState。
+ * context（V1.1）是 Turn-level trusted context，只有 propose_visual_actions 消费。
  */
 export function executeKiroReadTool(
   toolName: string,
   input: unknown,
-  state: ReadToolState
+  state: ReadToolState,
+  context?: ReadToolExecutionContext
 ): ReadToolResult<unknown> {
   if (
     toolName === "read_material" ||
@@ -976,7 +996,7 @@ export function executeKiroReadTool(
   if (!executor) {
     return { ok: false, code: "INVALID_INPUT", message: `未知工具：${toolName}` };
   }
-  return executor(state, input);
+  return executor(state, input, context);
 }
 
 /** 循环保护：每用户回合最多读取次数 */
