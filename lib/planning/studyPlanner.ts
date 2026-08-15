@@ -1,16 +1,18 @@
 /**
  * Study Plan Proposal Engine（纯函数，无 AI、无 React、绝不写 Store）。
- * 与 Capacity Allocator 共用同一底层分配算法：
- * findFreeTime → allocateStudyCapacity → 映射为 StudyPlanProposal（proposal-first）。
- * deterministic：按 Deadline 早 → 优先级高 → stable id 排序；只补 estimated - existing 的缺口；
- * 块长 30–90min；只占用 Free Time Engine 给出的空闲槽；课程永远不被移动。
+ * 消费 Canonical Planning Capacity Engine（buildPlanningCapacity）：
+ *   Preferred Pass（非课程时间）→ 有真实缺口才进入 Soft Fallback（+课程时间，其余仍 hard busy）
+ *   Final Proposal = capacity.combined（课程 fallback 只是预测；写入前仍走 Approval Gate）
+ * deterministic：Deadline 早 → 优先级高 → stable id；只补 estimated - existing 的缺口；
+ * 块长 30–90min；无 multi-task global dayCap（Deadline 由 allocator per-assignment 处理）；
+ * 课程永远不被移动。
  */
 
 import { Assignment, CalendarMark, CourseSchedule, Semester, StudyBlock } from "@/types";
 import { parseLocalDDL } from "@/lib/ddl";
-import { findFreeTime, FreeTimeSlot } from "@/lib/planning/freeTime";
-import { allocateStudyCapacity, CapacityTaskAllocation } from "@/lib/planning/capacityAllocation";
-import { timeToMinutes } from "@/lib/timeline/timelineGeometry";
+import { CapacityTaskAllocation } from "@/lib/planning/capacityAllocation";
+import { buildPlanningCapacity } from "@/lib/planning/planningCapacity";
+import { findCourseOverlapsForStudyBlock } from "@/lib/planning/courseOverlapPolicy";
 
 export interface ProposedBlock {
   date: string; // "YYYY-MM-DD"
@@ -29,6 +31,12 @@ export interface StudyPlanProposal {
   proposedMinutes: number;
   completeCoverage: boolean;
   reasons: string[];
+  /** V1.2：非课程时间分配的分钟（Preview/解释用；Apply 仍以 fresh preflight 为准） */
+  preferredProposedMinutes: number;
+  /** V1.2：放宽课程约束后额外分配的分钟（≠ 课程重叠分钟） */
+  courseFallbackProposedMinutes: number;
+  /** V1.2：最终 blocks 中是否真的存在课程重叠（需 Approval Gate；由 findCourseOverlapsForStudyBlock 判断） */
+  requiresCourseOverlapApproval: boolean;
 }
 
 export interface ProposeStudyPlanInput {
@@ -48,8 +56,26 @@ export interface ProposeStudyPlanResult {
   reasons: string[];
 }
 
-/** CapacityTaskAllocation → 兼容的 StudyPlanProposal（保持 Proposal 语义） */
-export function toStudyPlanProposal(t: CapacityTaskAllocation): StudyPlanProposal {
+/** 最终 blocks 是否真正与课程重叠（Approval Gate 的 Preview 依据；Apply 仍会 fresh 判定） */
+function blockRequiresCourseApproval(
+  t: CapacityTaskAllocation,
+  input: ProposeStudyPlanInput
+): boolean {
+  return t.projectedBlocks.some((b) =>
+    findCourseOverlapsForStudyBlock({
+      block: b,
+      schedules: input.schedules,
+      semester: input.semester,
+    }).length > 0
+  );
+}
+
+/** CapacityTaskAllocation → 兼容的 StudyPlanProposal（保持 Proposal 语义 + V1.2 fallback metadata） */
+export function toStudyPlanProposal(
+  t: CapacityTaskAllocation,
+  input: ProposeStudyPlanInput,
+  preferredByAssignment: Map<string, CapacityTaskAllocation> | null
+): StudyPlanProposal {
   let reasons: string[];
   if (t.classification === "missing_estimate") {
     reasons = ["missing_estimate"];
@@ -60,6 +86,12 @@ export function toStudyPlanProposal(t: CapacityTaskAllocation): StudyPlanProposa
       ? ["fits_before_deadline"]
       : ["fits_before_deadline", "insufficient_free_time"];
   }
+  const preferred = preferredByAssignment?.get(t.assignmentId);
+  const preferredProposedMinutes = preferred?.allocatedMinutes ?? t.allocatedMinutes;
+  const courseFallbackProposedMinutes = Math.max(
+    t.allocatedMinutes - preferredProposedMinutes,
+    0
+  );
   return {
     assignmentId: t.assignmentId,
     title: t.title,
@@ -70,11 +102,14 @@ export function toStudyPlanProposal(t: CapacityTaskAllocation): StudyPlanProposa
     proposedMinutes: t.allocatedMinutes,
     completeCoverage: t.completeCoverage,
     reasons,
+    preferredProposedMinutes,
+    courseFallbackProposedMinutes,
+    requiresCourseOverlapApproval: blockRequiresCourseApproval(t, input),
   };
 }
 
 export function proposeStudyPlan(input: ProposeStudyPlanInput): ProposeStudyPlanResult {
-  const { assignments, studyBlocks, now } = input;
+  const { assignments, now } = input;
   const reasons: string[] = ["deadline_first", "existing_schedule_respected"];
 
   // 1. 过滤可规划任务：active（todo/doing），排除已提交/已完成；overdue 不安排
@@ -82,38 +117,15 @@ export function proposeStudyPlan(input: ProposeStudyPlanInput): ProposeStudyPlan
     (a) => (a.status === "todo" || a.status === "doing") && (!a.ddl || parseLocalDDL(a.ddl)! > now)
   );
 
-  // 2. 空闲池：fromDate..toDate，Deadline 当天截止到 Deadline 时刻
-  const from = new Date(`${input.fromDate}T00:00:00`);
-  const to = new Date(`${input.toDate}T23:59:59`);
-  const dayCapMinutesByDate: Record<string, number> = {};
-  for (const a of planable) {
-    if (!a.ddl) continue;
-    const deadline = parseLocalDDL(a.ddl)!;
-    const dlDate = a.ddl!.slice(0, 10);
-    if (dlDate >= input.fromDate && dlDate <= input.toDate) {
-      const cap = deadline.getHours() * 60 + deadline.getMinutes();
-      dayCapMinutesByDate[dlDate] = Math.min(dayCapMinutesByDate[dlDate] ?? 24 * 60, cap);
-    }
-  }
-  const freeTimeQuery = {
-    start: from,
-    now: input.now,
-    end: to,
-    semester: input.semester,
-    currentSemesterWeek: input.currentSemesterWeek,
-    schedules: input.schedules,
-    calendarMarks: input.calendarMarks,
-    studyBlocks: input.studyBlocks,
-    dayCapMinutesByDate,
-  };
-  const pool = findFreeTime(freeTimeQuery);
-
-  // 3. Pass 1：只用 Free Time（课程时间不可用）
-  const pass1 = allocateStudyCapacity(
+  // 2. Canonical Planning Capacity（Planner 模式：no_deadline 也参与）
+  const capacity = buildPlanningCapacity(
     {
       assignments: planable,
-      studyBlocks,
-      freeSlots: pool,
+      studyBlocks: input.studyBlocks,
+      schedules: input.schedules,
+      calendarMarks: input.calendarMarks,
+      semester: input.semester,
+      currentSemesterWeek: input.currentSemesterWeek,
       fromDate: input.fromDate,
       toDate: input.toDate,
       now,
@@ -121,48 +133,17 @@ export function proposeStudyPlan(input: ProposeStudyPlanInput): ProposeStudyPlan
     { includeNoDeadline: true }
   );
 
-  // 4. Pass 2（Task 5）：空闲不足时才允许课程时间（soft constraint）。
-  //    extra = 含课程时间的候选 − 与 Pass 1 空闲槽重叠的部分（防止同一时间被两次消耗）
-  //    池拼接 = free 优先 + course-only 补充 → 分配器从头部消费，天然 Free time 优先。
-  const eligibleShortfall =
-    pass1.totalShortfallMinutes -
-    pass1.tasks
-      .filter((t) => t.classification !== "eligible")
-      .reduce((s, t) => s + t.shortfallMinutes, 0);
-  let allocation = pass1;
-  if (eligibleShortfall > 0) {
-    const expanded = findFreeTime({ ...freeTimeQuery, includeCourseTime: true });
-    const extra = expanded.filter(
-      (slot) => !pool.some((p) => slotOverlaps(p, slot))
-    );
-    const pass2 = allocateStudyCapacity(
-      {
-        assignments: planable,
-        studyBlocks,
-        freeSlots: [...pool, ...extra],
-        fromDate: input.fromDate,
-        toDate: input.toDate,
-        now,
-      },
-      { includeNoDeadline: true }
-    );
-    allocation = pass2;
-    if (pass2.totalAllocatedMinutes > pass1.totalAllocatedMinutes) {
-      reasons.push("course_overlap_used_as_fallback");
-    }
-  }
+  // 3. Final Proposal = combined（fallback 只是预测，不是授权）
+  const preferredByAssignment = new Map(
+    capacity.preferred.tasks.map((t) => [t.assignmentId, t])
+  );
+  const items = capacity.combined.tasks.map((t) =>
+    toStudyPlanProposal(t, input, preferredByAssignment)
+  );
 
-  const items = allocation.tasks.map(toStudyPlanProposal);
+  if (capacity.summary.courseFallbackUsed) {
+    reasons.push("course_overlap_used_as_fallback");
+  }
   if (planable.length === 0) reasons.push("no_planable_tasks");
   return { items, reasons };
-}
-
-/** 两个空闲槽是否时间重叠（同日期 + 半开区间） */
-function slotOverlaps(a: FreeTimeSlot, b: FreeTimeSlot): boolean {
-  if (a.date !== b.date) return false;
-  const as = timeToMinutes(a.startTime) ?? 0;
-  const ae = timeToMinutes(a.endTime) ?? as;
-  const bs = timeToMinutes(b.startTime) ?? 0;
-  const be = timeToMinutes(b.endTime) ?? bs;
-  return as < be && bs < ae;
 }
