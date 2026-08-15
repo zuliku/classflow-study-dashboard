@@ -186,6 +186,16 @@ export const getLearningOutlookSchema = z
   })
   .strict();
 
+/**
+ * Rebalance Proposal Tool：只移动已有 Kiro StudyBlock（move-only）。
+ * READ / PROPOSAL：绝不写 Store；manual StudyBlock 不会被移动。
+ */
+export const proposeStudyRebalanceSchema = z
+  .object({
+    horizonDays: z.union([z.literal(7), z.literal(14)]).default(7),
+  })
+  .strict();
+
 export const KIRO_READ_TOOL_SCHEMAS = {
   get_current_context: emptyInputSchema,
   get_user_study_profile: emptyInputSchema,
@@ -212,6 +222,7 @@ export const KIRO_READ_TOOL_SCHEMAS = {
   summarize_learning_history: summarizeLearningHistorySchema,
   get_learning_analytics: getLearningAnalyticsSchema,
   get_learning_outlook: getLearningOutlookSchema,
+  propose_study_rebalance: proposeStudyRebalanceSchema,
 } as const;
 
 export type KiroReadToolName = keyof typeof KIRO_READ_TOOL_SCHEMAS;

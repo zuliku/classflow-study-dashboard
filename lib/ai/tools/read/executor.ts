@@ -21,6 +21,7 @@ import { resolveAssignmentMaterials } from "@/lib/tasks/taskMaterials";
 import { deriveFocusClock } from "@/lib/focus/focusDomain";
 import { findFreeTime } from "@/lib/planning/freeTime";
 import { proposeStudyPlan } from "@/lib/planning/studyPlanner";
+import { proposeStudyRebalance } from "@/lib/planning/studyRebalance";
 import { KIRO_READ_TOOL_SCHEMAS, KiroReadToolName } from "@/lib/ai/tools/read/schemas";
 
 /**
@@ -530,6 +531,45 @@ export function proposeTaskBreakdownTool(state: ReadToolState, input: unknown): 
   };
 }
 
+/** propose_study_rebalance：Browser 客户端执行（当前 Zustand state），READ / PROPOSAL，绝不写 Store */
+export function proposeStudyRebalanceTool(state: ReadToolState, input: unknown): ReadToolResult<unknown> {
+  const parsed = safeParse<{ horizonDays?: 7 | 14 }>("propose_study_rebalance", input);
+  if (!parsed.ok) return parsed;
+  const horizonDays = parsed.data.horizonDays ?? 7;
+
+  const proposal = proposeStudyRebalance({
+    assignments: state.assignments,
+    studyBlocks: state.studyBlocks,
+    schedules: state.schedules,
+    calendarMarks: state.calendarMarks,
+    semester: state.semester,
+    currentSemesterWeek: state.currentSemesterWeek,
+    horizonDays,
+    now: new Date(),
+  });
+
+  return {
+    ok: true,
+    data: {
+      proposal: {
+        horizonDays: proposal.horizonDays,
+        moves: proposal.moves.map((m) => ({
+          blockId: m.blockId,
+          assignmentId: m.assignmentId,
+          title: m.title,
+          courseId: m.courseId,
+          minutes: m.minutes,
+          reason: m.reason,
+          from: m.from,
+          to: m.to,
+        })),
+        summary: proposal.summary,
+        reasons: proposal.reasons,
+      },
+    },
+  };
+}
+
 /** propose_task_breakdown 输入形状（与 TaskBreakdownProposal 一致；schema 校验为准） */
 interface TaskBreakdownProposalInput {
   assignmentId: string;
@@ -833,6 +873,7 @@ const EXECUTORS: Record<Exclude<KiroReadToolName, "read_material" | "query_learn
   get_assignment_health: getAssignmentHealth,
   get_available_time: getAvailableTime,
   propose_study_plan: proposeStudyPlanTool,
+  propose_study_rebalance: proposeStudyRebalanceTool,
   get_upcoming_assignments: getUpcomingAssignments,
   search_group_projects: searchGroupProjects,
   get_group_project: getGroupProject,

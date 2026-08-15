@@ -136,6 +136,11 @@ export const KIRO_READ_TOOLS = {
       "返回未来 7/14 天的确定性学习前瞻（与学习洞察页同源）：截止任务与 Deadline Health（safe/attention/at-risk/overdue/unscheduled/unknown）、已安排/缺口分钟、截止前可用空闲、缺少估时任务、每日瓶颈与估时校准参考。规划下周/查看未来负荷优先使用本工具，不要自己推算空闲时间或缺口。",
     inputSchema: KIRO_READ_TOOL_SCHEMAS.get_learning_outlook,
   }),
+  propose_study_rebalance: tool({
+    description:
+      "对已有 Kiro-generated StudyBlock 生成只移动、不新增/删除的学习计划重排建议。用于修复 Deadline 后安排、课程/活动冲突或通过移动较晚截止任务释放早期稀缺容量。本工具只是 Proposal，绝不修改 Store；manual StudyBlock 不会被移动。",
+    inputSchema: KIRO_READ_TOOL_SCHEMAS.propose_study_rebalance,
+  }),
 };
 
 export const KIRO_READ_TOOL_NAMES = Object.keys(KIRO_READ_TOOLS) as (keyof typeof KIRO_READ_TOOLS)[];
