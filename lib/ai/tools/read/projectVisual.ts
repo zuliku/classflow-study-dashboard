@@ -31,7 +31,6 @@ import { VisionTurnRuntimeLedger } from "@/lib/ai/attachments/visionTurnRuntimeB
 import { KiroProjectTurnContext } from "@/lib/ai/contextBudget/types";
 import {
   extractProjectVisualEvidence,
-  ProjectVisualEvidenceItem,
 } from "@/lib/ai/vision/projectEvidence";
 
 const schema = z
@@ -44,6 +43,43 @@ const schema = z
       .optional(),
   })
   .strict();
+
+/**
+ * V1.3B.1：显式页码 canonicalization（纯函数，Node 可测）。
+ * 1. 只保留 1 <= page <= pageCount
+ * 2. dedupe（duplicate 不算内容缺失）
+ * 3. sort ascending
+ * 4. 按 min(remainingPageBudget, MAX_SCANNED_PDF_PAGES_PER_TURN) 截断
+ *
+ * truncated 语义 = 「想读取的有效内容有部分没进入 Evidence」：
+ * - duplicate 不算 truncation
+ * - 越界页被丢弃 → truncated=true
+ * - 预算裁剪 → truncated=true
+ * - 完全满足（哪怕剩余额度没用满）→ truncated=false
+ */
+export function normalizeRequestedProjectPdfPages(input: {
+  requested: number[];
+  pageCount: number;
+  remainingPageBudget: number;
+  maxPages?: number;
+}): { pages: number[]; truncated: boolean } {
+  const pageCount = Math.max(1, input.pageCount);
+  const max = Math.max(1, Math.min(input.maxPages ?? MAX_SCANNED_PDF_PAGES_PER_TURN, Math.max(1, input.remainingPageBudget)));
+  const uniqueRequested = new Set<number>(input.requested);
+  const valid: number[] = [];
+  const seen = new Set<number>();
+  for (const p of input.requested) {
+    if (p >= 1 && p <= pageCount && !seen.has(p)) {
+      seen.add(p);
+      valid.push(p);
+    }
+  }
+  valid.sort((a, b) => a - b);
+  const clipped = valid.length > max;
+  const droppedOutOfRange = valid.length < uniqueRequested.size;
+  const pages = valid.slice(0, max);
+  return { pages, truncated: clipped || droppedOutOfRange };
+}
 
 export interface ReadProjectVisualTurnModel {
   provider: string;
@@ -194,6 +230,24 @@ export async function executeReadProjectVisual(
   }
 
   // ================= PDF =================
+  // V1.3B.1：明确 kind gate —— read_project_visual 只支持 image / pdf(scanned)；
+  // text/docx 在读取 Blob / extract / preprocess / rasterize / budget reservation / route 之前立即拒绝。
+  if (record.kind !== "pdf") {
+    return {
+      ok: false,
+      code: "NOT_VISUAL_FILE",
+      message: "该项目资料是文本类文档，请使用 read_project_file 读取正文。",
+    };
+  }
+  // V1.3B.1：PDF rasterizer 输出固定 JPEG —— 在 getBlob/extract/rasterize/ledger reservation 之前
+  // 校验当前 frozen model 是否支持 JPEG（Server 双 guard；此处避免无意义工作与预算消费）。
+  if (!isVisionMimeSupported(capabilities, "image/jpeg", "project-pdf-page.jpg")) {
+    return {
+      ok: false,
+      code: "VISION_FORMAT_UNSUPPORTED",
+      message: "当前模型无法读取扫描 PDF 使用的 JPEG 页面。",
+    };
+  }
   const blob = await getBlob(record.storageKey);
   if (!blob) {
     return { ok: false, code: "FILE_MISSING", message: "该项目资料文件已不存在，请重新上传。" };
@@ -225,14 +279,17 @@ export async function executeReadProjectVisual(
   const rendered = await opts.ledger.runPdfRasterizationExclusive(async (rem) => {
     let pageNumbers: number[];
     let selTruncated = false;
+    let invalidSelection = false;
     if (explicitPages) {
-      // dedupe / sort / 越界页丢弃（clamp 会伪造「100 页」→ 禁止）；按剩余页额度截断
-      const seen = new Set<number>();
-      pageNumbers = explicitPages
-        .filter((p) => p >= 1 && p <= pageCount)
-        .filter((p) => !seen.has(p) && seen.add(p))
-        .slice(0, Math.min(rem.pdfPages, MAX_SCANNED_PDF_PAGES_PER_TURN));
-      selTruncated = pageNumbers.length < explicitPages.length || pageNumbers.length < Math.min(rem.pdfPages, MAX_SCANNED_PDF_PAGES_PER_TURN);
+      const sel = normalizeRequestedProjectPdfPages({
+        requested: explicitPages,
+        pageCount,
+        remainingPageBudget: rem.pdfPages,
+      });
+      pageNumbers = sel.pages;
+      selTruncated = sel.truncated;
+      // 全部越界 → 不是预算问题；明确 INVALID_INPUT（不误报 VISION_BUDGET_EXHAUSTED）
+      invalidSelection = pageNumbers.length === 0;
     } else {
       const sel = selectScannedPdfPages({
         userText: opts.latestUserText,
@@ -242,15 +299,23 @@ export async function executeReadProjectVisual(
       pageNumbers = sel.pages;
       selTruncated = sel.truncated;
     }
-    if (pageNumbers.length === 0) return { pages: [], truncated: selTruncated };
+    if (pageNumbers.length === 0) return { pages: [], truncated: selTruncated, invalid: invalidSelection };
     const out = await (opts.deps?.renderPages ?? renderPdfPages)(blob, pageNumbers, `project-file-${projectFileId}`, {
       maxBytes: Math.min(rem.pdfBytes, rem.totalBytes),
     });
     return {
       pages: out.map((p) => ({ page: p.page, size: p.size, file: p.file })),
       truncated: selTruncated || out.length < pageNumbers.length,
+      invalid: false,
     };
   });
+  if (rendered.invalid) {
+    return {
+      ok: false,
+      code: "INVALID_INPUT",
+      message: `请求的页码均超出该 PDF 的页码范围（1-${pageCount}）。`,
+    };
+  }
   if (rendered.pages.length === 0) {
     return { ok: false, code: "VISION_BUDGET_EXHAUSTED", message: "剩余视觉预算不足以渲染该 PDF 页面。" };
   }
@@ -269,10 +334,20 @@ export async function executeReadProjectVisual(
     if (evidence.ok === false) return evidenceFail(evidence);
     return { ok: false, code: "VISION_EXTRACT_FAILED", message: "视觉内容提取失败。" };
   }
-  const items = evidence.items as (ProjectVisualEvidenceItem & { page?: number })[];
-  const pages = items
-    .filter((it) => it.page !== undefined)
-    .map((it) => ({ page: it.page as number, text: it.text }));
+  // V1.3B.1：successful evidence 必须严格属于 rendered pages；未知 page 丢弃；
+  // 去重（第一个胜出）；输出顺序按 rendered page 顺序（不依赖 Provider completion order）。
+  const renderedPageNumbers = rendered.pages.map((p) => p.page);
+  const evidenceByPage = new Map<number, string>();
+  for (const it of evidence.items) {
+    if (it.page === undefined) continue;
+    if (!renderedPageNumbers.includes(it.page)) continue;
+    if (!evidenceByPage.has(it.page)) evidenceByPage.set(it.page, it.text);
+  }
+  const pages = renderedPageNumbers
+    .filter((p) => evidenceByPage.has(p))
+    .map((p) => ({ page: p, text: evidenceByPage.get(p) as string }));
+  // partial extraction：rendered 页数与成功 evidence 页数不一致 → 截断（不能只依赖 rendered.truncated）
+  const partialExtraction = pages.length < renderedPageNumbers.length;
   return {
     ok: true,
     data: {
@@ -282,7 +357,7 @@ export async function executeReadProjectVisual(
       text: pages.length > 0 ? pages.map((p) => `第 ${p.page} 页：${p.text}`).join("\n") : "",
       pages,
       visualTranscribed: true,
-      truncated: rendered.truncated || pages.length < items.length,
+      truncated: rendered.truncated || partialExtraction,
     },
   };
 }

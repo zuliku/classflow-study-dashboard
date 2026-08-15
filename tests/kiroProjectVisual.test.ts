@@ -16,7 +16,7 @@ import { createProjectFile } from "@/lib/ai/projects/files/db";
 import { clearAllFileBlobs, getFileBlob } from "@/lib/fileStorage";
 import { clearConversationHistory } from "@/lib/ai/history/db";
 import { executeReadProjectFile } from "@/lib/ai/tools/read/projectFile";
-import { executeReadProjectVisual } from "@/lib/ai/tools/read/projectVisual";
+import { executeReadProjectVisual, normalizeRequestedProjectPdfPages } from "@/lib/ai/tools/read/projectVisual";
 import { createVisionTurnRuntimeBudget } from "@/lib/ai/attachments/visionTurnRuntimeBudget";
 import { KiroProjectTurnContext } from "@/lib/ai/contextBudget/types";
 import { buildScannedPdf } from "@/tests/fixtures/files";
@@ -40,6 +40,7 @@ const imageBlob = (size: number, mime = "image/png") => {
 
 const noEvidence = { ok: true as const, items: [] };
 const scannedBlob = () => new Blob([buildScannedPdf().buffer as ArrayBuffer], { type: "application/pdf" });
+const visionTurn = { provider: "opencode-go", model: "mimo-v2.5", apiKey: "sk-test" };
 
 const visionContextOf = (projectId: string, file: { id: string; name: string; kind: "text" | "pdf" | "docx" | "image"; sizeBytes: number }): KiroProjectTurnContext =>
   makeContext(projectId, "P", [file]);
@@ -88,8 +89,6 @@ describe("read_project_file（V1.3B image / scanned 语义）", () => {
 });
 
 describe("read_project_visual", () => {
-  const visionTurn = { provider: "opencode-go", model: "mimo-v2.5", apiKey: "sk-test" };
-
   async function setupImage(projectId: string, name = "pic.png", mime = "image/png", size = 64) {
     return createProjectFile({ projectId, name, mimeType: mime, sizeBytes: size, kind: "image", blob: imageBlob(size, mime) });
   }
@@ -310,6 +309,293 @@ describe("read_project_visual", () => {
     expect(r.ok).toBe(true);
     if (r.ok) {
       expect(r.data.pages).toEqual([{ page: 3, text: "P3_OK" }]);
+    }
+  });
+});
+
+describe("normalizeRequestedProjectPdfPages（V1.3B.1 canonicalization）", () => {
+  it("1. [12] / pageCount=30 / remaining=6 → [12]，truncated=false（不再误标）", () => {
+    const r = normalizeRequestedProjectPdfPages({ requested: [12], pageCount: 30, remainingPageBudget: 6 });
+    expect(r).toEqual({ pages: [12], truncated: false });
+  });
+
+  it("2. [5,2,5] → [2,5]，truncated=false（duplicate 不算内容缺失）", () => {
+    const r = normalizeRequestedProjectPdfPages({ requested: [5, 2, 5], pageCount: 30, remainingPageBudget: 6 });
+    expect(r).toEqual({ pages: [2, 5], truncated: false });
+  });
+
+  it("3. [2,100] / pageCount=30 → [2]，truncated=true（越界页被丢弃）", () => {
+    const r = normalizeRequestedProjectPdfPages({ requested: [2, 100], pageCount: 30, remainingPageBudget: 6 });
+    expect(r).toEqual({ pages: [2], truncated: true });
+  });
+
+  it("4. [1,2,3,4] / remaining=2 → [1,2]，truncated=true（预算裁剪）", () => {
+    const r = normalizeRequestedProjectPdfPages({ requested: [1, 2, 3, 4], pageCount: 30, remainingPageBudget: 2 });
+    expect(r).toEqual({ pages: [1, 2], truncated: true });
+  });
+
+  it("5. [100] / pageCount=30 → pages=[]（全越界；调用方应返回 INVALID_INPUT 而非预算错误）", () => {
+    const r = normalizeRequestedProjectPdfPages({ requested: [100], pageCount: 30, remainingPageBudget: 6 });
+    expect(r.pages).toEqual([]);
+  });
+
+  it("完全满足（剩余额度没用满）→ truncated=false", () => {
+    const r = normalizeRequestedProjectPdfPages({ requested: [3, 4], pageCount: 30, remainingPageBudget: 6 });
+    expect(r).toEqual({ pages: [3, 4], truncated: false });
+  });
+});
+
+describe("read_project_visual（V1.3B.1 kind / gate 硬化）", () => {
+  it("TXT 项目资料 → NOT_VISUAL_FILE，getBlob/extract/render/evidence 全部 0 调用，Ledger 不变", async () => {
+    const p = await createKiroProject({ name: "P" });
+    const f = await createProjectFile({ projectId: p.id, name: "notes.md", mimeType: "text/markdown", sizeBytes: 12, kind: "text", blob: new Blob(["abc"]) });
+    const ledger = createVisionTurnRuntimeBudget({});
+    const extractEvidence = vi.fn(async () => noEvidence);
+    const getBlob = vi.fn();
+    const extract = vi.fn();
+    const renderPages = vi.fn();
+    const r = await executeReadProjectVisual(
+      { projectFileId: f.id },
+      {
+        frozenProjectContext: visionContextOf(p.id, { id: f.id, name: f.name, kind: "text", sizeBytes: f.sizeBytes }),
+        frozenTurn: visionTurn,
+        ledger,
+        deps: { extractEvidence, getBlob: getBlob as never, extract: extract as never, renderPages: renderPages as never },
+      }
+    );
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.code).toBe("NOT_VISUAL_FILE");
+    expect(getBlob).toHaveBeenCalledTimes(0);
+    expect(extract).toHaveBeenCalledTimes(0);
+    expect(renderPages).toHaveBeenCalledTimes(0);
+    expect(extractEvidence).toHaveBeenCalledTimes(0);
+    expect(ledger.remaining()).toEqual({ totalBytes: 10 * MIB, pdfBytes: 8 * MIB, pdfPages: 6 });
+  });
+
+  it("DOCX 项目资料 → NOT_VISUAL_FILE，全部 0 调用", async () => {
+    const p = await createKiroProject({ name: "P" });
+    const f = await createProjectFile({ projectId: p.id, name: "doc.docx", mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document", sizeBytes: 12, kind: "docx", blob: new Blob(["x"]) });
+    const ledger = createVisionTurnRuntimeBudget({});
+    const extractEvidence = vi.fn(async () => noEvidence);
+    const getBlob = vi.fn();
+    const r = await executeReadProjectVisual(
+      { projectFileId: f.id },
+      {
+        frozenProjectContext: visionContextOf(p.id, { id: f.id, name: f.name, kind: "docx", sizeBytes: f.sizeBytes }),
+        frozenTurn: visionTurn,
+        ledger,
+        deps: { extractEvidence, getBlob: getBlob as never },
+      }
+    );
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.code).toBe("NOT_VISUAL_FILE");
+    expect(getBlob).toHaveBeenCalledTimes(0);
+    expect(extractEvidence).toHaveBeenCalledTimes(0);
+  });
+
+  it("JPEG 不受支持（fake caps [png,webp]）→ VISION_FORMAT_UNSUPPORTED；Blob/rasterize/evidence/预算全 0 副作用", async () => {
+    const p = await createKiroProject({ name: "P" });
+    const f = await createProjectFile({ projectId: p.id, name: "scan.pdf", mimeType: "application/pdf", sizeBytes: 10, kind: "pdf", blob: scannedBlob() });
+    const ledger = createVisionTurnRuntimeBudget({});
+    const extractEvidence = vi.fn(async () => noEvidence);
+    const getBlob = vi.fn();
+    const extract = vi.fn();
+    const renderPages = vi.fn();
+    const getCapabilities = vi.fn(() => ({
+      streaming: true,
+      tools: true,
+      vision: true,
+      fileParts: false,
+      pdf: false,
+      visionMimeTypes: ["image/png", "image/webp"],
+      reasoning: "fixed" as const,
+    })) as unknown as typeof import("@/lib/ai/providers/capabilities").getModelCapabilities;
+    const r = await executeReadProjectVisual(
+      { projectFileId: f.id },
+      {
+        frozenProjectContext: visionContextOf(p.id, { id: f.id, name: f.name, kind: "pdf", sizeBytes: f.sizeBytes }),
+        frozenTurn: visionTurn,
+        ledger,
+        deps: { extractEvidence, getBlob: getBlob as never, extract: extract as never, renderPages: renderPages as never, getCapabilities },
+      }
+    );
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.code).toBe("VISION_FORMAT_UNSUPPORTED");
+    expect(getBlob).toHaveBeenCalledTimes(0);
+    expect(extract).toHaveBeenCalledTimes(0);
+    expect(renderPages).toHaveBeenCalledTimes(0);
+    expect(extractEvidence).toHaveBeenCalledTimes(0);
+    // Ledger 完全不消费
+    expect(ledger.remaining()).toEqual({ totalBytes: 10 * MIB, pdfBytes: 8 * MIB, pdfPages: 6 });
+  });
+
+  it("显式 pages=[12] → truncated=false（单页请求 100% 满足，不得因剩余额度误标）", async () => {
+    const p = await createKiroProject({ name: "P" });
+    const f = await createProjectFile({ projectId: p.id, name: "scan.pdf", mimeType: "application/pdf", sizeBytes: 10, kind: "pdf", blob: scannedBlob() });
+    const ledger = createVisionTurnRuntimeBudget({});
+    const renderPages = vi.fn(async (_blob: Blob, pageNumbers: number[], _sourceId: string, _opts?: { maxBytes?: number }) => [{ page: 12, file: new File(["x"], "p12.jpg", { type: "image/jpeg" }), width: 1, height: 1, size: 10 }]);
+    const extractEvidence = vi.fn(async (_input: import("@/lib/ai/vision/projectEvidence").ProjectVisualEvidenceInput) => ({ ok: true as const, items: [{ page: 12, text: "P12" }] }));
+    const extract = vi.fn(async () => ({ ok: true as const, extracted: { text: "", truncated: false, pageCount: 30, possiblyScanned: true } }));
+    const r = await executeReadProjectVisual(
+      { projectFileId: f.id, pages: [12] },
+      {
+        frozenProjectContext: visionContextOf(p.id, { id: f.id, name: f.name, kind: "pdf", sizeBytes: f.sizeBytes }),
+        frozenTurn: visionTurn,
+        ledger,
+        deps: { extractEvidence, renderPages, extract },
+      }
+    );
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.data.pages).toEqual([{ page: 12, text: "P12" }]);
+      expect(r.data.truncated).toBe(false);
+    }
+  });
+
+  it("全越界 pages=[100] → INVALID_INPUT（不是 VISION_BUDGET_EXHAUSTED），rasterizer/Provider 0 调用", async () => {
+    const p = await createKiroProject({ name: "P" });
+    const f = await createProjectFile({ projectId: p.id, name: "scan.pdf", mimeType: "application/pdf", sizeBytes: 10, kind: "pdf", blob: scannedBlob() });
+    const ledger = createVisionTurnRuntimeBudget({});
+    const renderPages = vi.fn();
+    const extractEvidence = vi.fn(async () => noEvidence);
+    const extract = vi.fn(async () => ({ ok: true as const, extracted: { text: "", truncated: false, pageCount: 30, possiblyScanned: true } }));
+    const r = await executeReadProjectVisual(
+      { projectFileId: f.id, pages: [100] },
+      {
+        frozenProjectContext: visionContextOf(p.id, { id: f.id, name: f.name, kind: "pdf", sizeBytes: f.sizeBytes }),
+        frozenTurn: visionTurn,
+        ledger,
+        deps: { extractEvidence, renderPages, extract },
+      }
+    );
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.code).toBe("INVALID_INPUT");
+    expect(renderPages).toHaveBeenCalledTimes(0);
+    expect(extractEvidence).toHaveBeenCalledTimes(0);
+    expect(ledger.remaining()).toEqual({ totalBytes: 10 * MIB, pdfBytes: 8 * MIB, pdfPages: 6 });
+  });
+
+  it("预算裁剪 [1,2,3,4] 剩 2 页 → pages=[1,2]，truncated=true", async () => {
+    const p = await createKiroProject({ name: "P" });
+    const f = await createProjectFile({ projectId: p.id, name: "scan.pdf", mimeType: "application/pdf", sizeBytes: 10, kind: "pdf", blob: scannedBlob() });
+    const ledger = createVisionTurnRuntimeBudget({ initialPdfPages: 4 });
+    const renderPages = vi.fn(async (_blob: Blob, pageNumbers: number[], _sourceId: string, _opts?: { maxBytes?: number }) => [{ page: 1, file: new File(["x"], "p1.jpg", { type: "image/jpeg" }), width: 1, height: 1, size: 10 }, { page: 2, file: new File(["x"], "p2.jpg", { type: "image/jpeg" }), width: 1, height: 1, size: 10 }]);
+    const extractEvidence = vi.fn(async (_input: import("@/lib/ai/vision/projectEvidence").ProjectVisualEvidenceInput) => ({ ok: true as const, items: [{ page: 1, text: "P1" }, { page: 2, text: "P2" }] }));
+    const extract = vi.fn(async () => ({ ok: true as const, extracted: { text: "", truncated: false, pageCount: 30, possiblyScanned: true } }));
+    const r = await executeReadProjectVisual(
+      { projectFileId: f.id, pages: [1, 2, 3, 4] },
+      {
+        frozenProjectContext: visionContextOf(p.id, { id: f.id, name: f.name, kind: "pdf", sizeBytes: f.sizeBytes }),
+        frozenTurn: visionTurn,
+        ledger,
+        deps: { extractEvidence, renderPages, extract },
+      }
+    );
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.data.pages).toEqual([{ page: 1, text: "P1" }, { page: 2, text: "P2" }]);
+      expect(r.data.truncated).toBe(true);
+    }
+  });
+
+  it("partial extraction：rendered [3,4] + evidence 仅 [3] → pages=[3]，truncated=true", async () => {
+    const p = await createKiroProject({ name: "P" });
+    const f = await createProjectFile({ projectId: p.id, name: "scan.pdf", mimeType: "application/pdf", sizeBytes: 10, kind: "pdf", blob: scannedBlob() });
+    const ledger = createVisionTurnRuntimeBudget({});
+    const renderPages = vi.fn(async (_blob: Blob, _pageNumbers: number[], _sourceId: string, _opts?: { maxBytes?: number }) => [
+      { page: 3, file: new File(["x"], "p3.jpg", { type: "image/jpeg" }), width: 1, height: 1, size: 10 },
+      { page: 4, file: new File(["x"], "p4.jpg", { type: "image/jpeg" }), width: 1, height: 1, size: 10 },
+    ]);
+    const extractEvidence = vi.fn(async (_input: import("@/lib/ai/vision/projectEvidence").ProjectVisualEvidenceInput) => ({ ok: true as const, items: [{ page: 3, text: "P3_OK" }] }));
+    const extract = vi.fn(async () => ({ ok: true as const, extracted: { text: "", truncated: false, pageCount: 30, possiblyScanned: true } }));
+    const r = await executeReadProjectVisual(
+      { projectFileId: f.id, pages: [3, 4] },
+      {
+        frozenProjectContext: visionContextOf(p.id, { id: f.id, name: f.name, kind: "pdf", sizeBytes: f.sizeBytes }),
+        frozenTurn: visionTurn,
+        ledger,
+        deps: { extractEvidence, renderPages, extract },
+      }
+    );
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.data.pages).toEqual([{ page: 3, text: "P3_OK" }]);
+      expect(r.data.truncated).toBe(true);
+    }
+  });
+
+  it("full extraction：rendered [3,4] + evidence [3,4] → truncated=false（剩余额度没用满不算截断）", async () => {
+    const p = await createKiroProject({ name: "P" });
+    const f = await createProjectFile({ projectId: p.id, name: "scan.pdf", mimeType: "application/pdf", sizeBytes: 10, kind: "pdf", blob: scannedBlob() });
+    const ledger = createVisionTurnRuntimeBudget({});
+    const renderPages = vi.fn(async (_blob: Blob, _pageNumbers: number[], _sourceId: string, _opts?: { maxBytes?: number }) => [
+      { page: 3, file: new File(["x"], "p3.jpg", { type: "image/jpeg" }), width: 1, height: 1, size: 10 },
+      { page: 4, file: new File(["x"], "p4.jpg", { type: "image/jpeg" }), width: 1, height: 1, size: 10 },
+    ]);
+    const extractEvidence = vi.fn(async (_input: import("@/lib/ai/vision/projectEvidence").ProjectVisualEvidenceInput) => ({ ok: true as const, items: [{ page: 3, text: "P3" }, { page: 4, text: "P4" }] }));
+    const extract = vi.fn(async () => ({ ok: true as const, extracted: { text: "", truncated: false, pageCount: 30, possiblyScanned: true } }));
+    const r = await executeReadProjectVisual(
+      { projectFileId: f.id, pages: [3, 4] },
+      {
+        frozenProjectContext: visionContextOf(p.id, { id: f.id, name: f.name, kind: "pdf", sizeBytes: f.sizeBytes }),
+        frozenTurn: visionTurn,
+        ledger,
+        deps: { extractEvidence, renderPages, extract },
+      }
+    );
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.data.pages).toEqual([{ page: 3, text: "P3" }, { page: 4, text: "P4" }]);
+      expect(r.data.truncated).toBe(false);
+    }
+  });
+
+  it("未知 page（route 异常返回 999）→ 丢弃，不进 Tool Output", async () => {
+    const p = await createKiroProject({ name: "P" });
+    const f = await createProjectFile({ projectId: p.id, name: "scan.pdf", mimeType: "application/pdf", sizeBytes: 10, kind: "pdf", blob: scannedBlob() });
+    const ledger = createVisionTurnRuntimeBudget({});
+    const renderPages = vi.fn(async (_blob: Blob, _pageNumbers: number[], _sourceId: string, _opts?: { maxBytes?: number }) => [
+      { page: 3, file: new File(["x"], "p3.jpg", { type: "image/jpeg" }), width: 1, height: 1, size: 10 },
+    ]);
+    const extractEvidence = vi.fn(async (_input: import("@/lib/ai/vision/projectEvidence").ProjectVisualEvidenceInput) => ({ ok: true as const, items: [{ page: 3, text: "P3" }, { page: 999, text: "GHOST" }] }));
+    const extract = vi.fn(async () => ({ ok: true as const, extracted: { text: "", truncated: false, pageCount: 30, possiblyScanned: true } }));
+    const r = await executeReadProjectVisual(
+      { projectFileId: f.id, pages: [3] },
+      {
+        frozenProjectContext: visionContextOf(p.id, { id: f.id, name: f.name, kind: "pdf", sizeBytes: f.sizeBytes }),
+        frozenTurn: visionTurn,
+        ledger,
+        deps: { extractEvidence, renderPages, extract },
+      }
+    );
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.data.pages).toEqual([{ page: 3, text: "P3" }]);
+      expect(JSON.stringify(r.data)).not.toContain("GHOST");
+    }
+  });
+
+  it("evidence duplicate page（route 异常返回两次 page 3）→ 只保留一个，输出按 rendered 顺序", async () => {
+    const p = await createKiroProject({ name: "P" });
+    const f = await createProjectFile({ projectId: p.id, name: "scan.pdf", mimeType: "application/pdf", sizeBytes: 10, kind: "pdf", blob: scannedBlob() });
+    const ledger = createVisionTurnRuntimeBudget({});
+    const renderPages = vi.fn(async (_blob: Blob, _pageNumbers: number[], _sourceId: string, _opts?: { maxBytes?: number }) => [
+      { page: 3, file: new File(["x"], "p3.jpg", { type: "image/jpeg" }), width: 1, height: 1, size: 10 },
+    ]);
+    const extractEvidence = vi.fn(async (_input: import("@/lib/ai/vision/projectEvidence").ProjectVisualEvidenceInput) => ({ ok: true as const, items: [{ page: 3, text: "FIRST" }, { page: 3, text: "SECOND" }] }));
+    const extract = vi.fn(async () => ({ ok: true as const, extracted: { text: "", truncated: false, pageCount: 30, possiblyScanned: true } }));
+    const r = await executeReadProjectVisual(
+      { projectFileId: f.id, pages: [3] },
+      {
+        frozenProjectContext: visionContextOf(p.id, { id: f.id, name: f.name, kind: "pdf", sizeBytes: f.sizeBytes }),
+        frozenTurn: visionTurn,
+        ledger,
+        deps: { extractEvidence, renderPages, extract },
+      }
+    );
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.data.pages).toEqual([{ page: 3, text: "FIRST" }]);
     }
   });
 });

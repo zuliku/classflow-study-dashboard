@@ -88,12 +88,13 @@ describe("internal vision extract route", () => {
     expect(fetchMock).toHaveBeenCalledTimes(0);
   });
 
-  it(">6 files → 拒绝（第 7 个被忽略 + 校验按 6 个仍合法则不 400…实际 7 个直接拒绝）", async () => {
+  it(">6 files → INVALID_REQUEST（明确拒绝，不静默裁掉第 7 个）", async () => {
     const files = Array.from({ length: 7 }, (_, i) => ({ name: `f${i}.png`, type: "image/png" as const, size: 64 }));
     const res = await post(makeForm({ files }));
-    // 7th file 直接 break → 6 个文件仍在预算内 → ok（server 只接收前 6 个）
     const json = await res.json();
-    expect(json.ok).toBe(true);
+    expect(json.ok).toBe(false);
+    expect(json.code).toBe("INVALID_REQUEST");
+    expect(fetchMock).toHaveBeenCalledTimes(0);
   });
 
   it("单文件 >2MiB → VISION_BUDGET_EXHAUSTED", async () => {
@@ -146,6 +147,30 @@ describe("internal vision extract route", () => {
     const json = await res.json();
     expect(json.ok).toBe(true);
     expect(json.items).toEqual([{ page: 3, text: "EVIDENCE_123" }, { page: 4, text: "EVIDENCE_123" }]);
+  });
+
+  it("pages 与文件数量不匹配 → INVALID_REQUEST（严格一一对应，不默默 undefined）", async () => {
+    const res = await post(makeForm({ pages: JSON.stringify([3, 4]), files: [{ name: "p3.jpg", type: "image/jpeg", size: 64 }] }));
+    const json = await res.json();
+    expect(json.ok).toBe(false);
+    expect(json.code).toBe("INVALID_REQUEST");
+    expect(fetchMock).toHaveBeenCalledTimes(0);
+  });
+
+  it("duplicate pages → INVALID_REQUEST（Client 已 canonicalize，Server 不猜用户想法）", async () => {
+    const res = await post(makeForm({ pages: JSON.stringify([3, 3]), files: [{ name: "p3.jpg", type: "image/jpeg", size: 64 }, { name: "p3b.jpg", type: "image/jpeg", size: 64 }] }));
+    const json = await res.json();
+    expect(json.ok).toBe(false);
+    expect(json.code).toBe("INVALID_REQUEST");
+    expect(fetchMock).toHaveBeenCalledTimes(0);
+  });
+
+  it("pages 含非法值（0 / 10001）→ 长度校验失败 → INVALID_REQUEST", async () => {
+    const res = await post(makeForm({ pages: JSON.stringify([3, 10001]), files: [{ name: "p3.jpg", type: "image/jpeg", size: 64 }, { name: "p4.jpg", type: "image/jpeg", size: 64 }] }));
+    const json = await res.json();
+    expect(json.ok).toBe(false);
+    expect(json.code).toBe("INVALID_REQUEST");
+    expect(fetchMock).toHaveBeenCalledTimes(0);
   });
 });
 

@@ -99,7 +99,7 @@ export async function POST(req: NextRequest) {
     try {
       const parsed = JSON.parse(rawPages);
       if (Array.isArray(parsed)) {
-        pageNumbers = parsed.filter((p): p is number => typeof p === "number" && Number.isInteger(p) && p >= 1 && p <= 10000).slice(0, MAX_FILES);
+        pageNumbers = parsed.filter((p): p is number => typeof p === "number" && Number.isInteger(p) && p >= 1 && p <= 10000);
       }
     } catch {
       pageNumbers = [];
@@ -107,14 +107,31 @@ export async function POST(req: NextRequest) {
   }
 
   // ---- Server 二次限制 ----
+  // V1.3B.1：存在第 MAX_FILES+1 个文件（file-6）→ 明确拒绝，绝不静默裁掉
+  if (form.get(`file-${MAX_FILES}`) !== null) {
+    return Response.json({ ok: false, code: "INVALID_REQUEST", message: `最多支持 ${MAX_FILES} 张图片。` }, { status: 400 });
+  }
   const files: { file: File; page?: number }[] = [];
   for (let i = 0; i < MAX_FILES; i++) {
     const f = form.get(`file-${i}`);
     if (!(f instanceof File)) break;
-    files.push({ file: f, page: pageNumbers[i] });
+    files.push({ file: f });
   }
   if (files.length === 0) {
     return Response.json({ ok: false, code: "INVALID_REQUEST", message: "没有收到图片。" }, { status: 400 });
+  }
+  // V1.3B.1：pages 字段一旦存在必须与文件严格一一对应（否则文件/页码错位）；
+  // duplicate page 说明请求不符合内部 contract（Client 已 canonicalize），明确拒绝，不猜用户想法。
+  if (rawPages) {
+    if (pageNumbers.length !== files.length) {
+      return Response.json({ ok: false, code: "INVALID_REQUEST", message: "页码映射与图片数量不一致。" }, { status: 400 });
+    }
+    if (new Set(pageNumbers).size !== pageNumbers.length) {
+      return Response.json({ ok: false, code: "INVALID_REQUEST", message: "页码存在重复。" }, { status: 400 });
+    }
+    files.forEach((entry, i) => {
+      entry.page = pageNumbers[i];
+    });
   }
   let totalBytes = 0;
   for (const { file } of files) {
