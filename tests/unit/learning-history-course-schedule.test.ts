@@ -255,13 +255,16 @@ describe("Course / Schedule Store Integration", () => {
     store.getState().restoreSchedule(target);
     await (await import("@/lib/history/recorder")).flushLearningHistoryQueue();
     const db = await import("@/lib/history/store").then((m) => m.openLearningHistoryDB());
-    const events = await new Promise<{ type: string; data: { restored?: boolean } }[]>((resolve, reject) => {
+    const events = await new Promise<{ type: string; entityId: string; data: { restored?: boolean }; sequence: number }[]>((resolve, reject) => {
       const tx = db.transaction("events", "readonly");
       const req = tx.objectStore("events").index("occurredAt").getAll();
-      req.onsuccess = () => resolve(req.result as { type: string; data: { restored?: boolean } }[]);
+      req.onsuccess = () => resolve(req.result as { type: string; entityId: string; data: { restored?: boolean }; sequence: number }[]);
       req.onerror = () => reject(req.error);
     });
-    const created = events.filter((e) => e.type === "schedule.created");
+    // 只按本 schedule 的 entityId 过滤（避免与其他并行测试共享 DB 的全局 count 竞态）
+    const created = events
+      .filter((e) => e.type === "schedule.created" && e.entityId === scheduleId)
+      .sort((a, b) => a.sequence - b.sequence);
     expect(created).toHaveLength(2);
     expect(created[1].data.restored).toBe(true);
   });
