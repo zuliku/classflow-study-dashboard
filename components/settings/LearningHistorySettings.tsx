@@ -70,10 +70,10 @@ export function LearningHistorySettings() {
         loading
           ? "加载中…"
           : count === null
-            ? "用于学习统计与 Kiro 学习洞察。"
+            ? "用于学习洞察（工作区与 Kiro）。"
             : count === 0
               ? "0 条历史事件 · 从今天起重新记录"
-              : `${formatDate(coverage?.historyStartedAt ?? Date.now())} 起记录 · ${count.toLocaleString()} 条历史事件 · 用于学习统计与 Kiro 学习洞察。`
+              : `${formatDate(coverage?.historyStartedAt ?? Date.now())} 起记录 · ${count.toLocaleString()} 条历史事件 · 用于学习洞察（工作区与 Kiro）。`
       }
       icon={<History className="w-3.5 h-3.5 text-[#A48F82]" />}
       actionLabel={clearing ? "清除中…" : "清除学习历史"}

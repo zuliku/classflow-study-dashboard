@@ -39,7 +39,7 @@ export const WORKSPACE_NAV_ITEMS: NavItem[] = [
   { id: "timetable", label: "时间表", icon: CalendarDays, section: "main" },
   { id: "assignments", label: "任务与 DDL", icon: ClipboardCheck, section: "main" },
   { id: "courses", label: "课程资料", icon: FolderKanban, section: "main" },
-  { id: "analytics", label: "学习统计", icon: BarChart3, section: "main" },
+  { id: "analytics", label: "学习洞察", icon: BarChart3, section: "main" },
   { id: "group", label: "小组协作", icon: Users2, section: "main" },
   { id: "kiro", label: "Kiro", icon: KIRO_ICON, section: "ai" },
 ];
@@ -67,7 +67,7 @@ export const BOTTOM_NAV_MAIN: NavItem[] = [
 /** 更多菜单：课程/分析/小组为 workspace tab；提醒/设置是 action（面板 / Modal） */
 export const BOTTOM_NAV_MORE: (NavItem | GlobalAction)[] = [
   { id: "courses", label: "课程", icon: FolderKanban },
-  { id: "analytics", label: "学习统计", icon: BarChart3 },
+  { id: "analytics", label: "学习洞察", icon: BarChart3 },
   { id: "group", label: "小组协作", icon: Users2 },
   { id: "reminders", label: "提醒", icon: Bell },
   { id: "settings", label: "设置", icon: Settings },

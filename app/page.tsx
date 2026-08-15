@@ -17,8 +17,10 @@ import { KiroWorkspace } from "@/components/kiro/KiroWorkspace";
 import { KiroSessionProvider } from "@/components/kiro/KiroSessionProvider";
 import { TimelineWorkspace } from "@/components/timeline/TimelineWorkspace";
 import { SettingsModal } from "@/components/settings/SettingsModal";
+import { LearningAnalyticsView } from "@/components/analytics/LearningAnalyticsView";
 import { CourseDetailDrawer } from "@/components/drawers/CourseDetailDrawer";
 import { AssignmentDrawer } from "@/components/drawers/AssignmentDrawer";
+import { DDLDetailDrawer } from "@/components/drawers/DDLDetailDrawer";
 import { CommandCenter } from "@/components/command/CommandCenter";
 import { GlobalShortcutController } from "@/components/command/GlobalShortcutController";
 import { AddCourseModal } from "@/components/modals/AddCourseModal";
@@ -37,8 +39,6 @@ import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { PageTransition } from "@/components/ui/PageTransition";
 import { useAppStore } from "@/store/useAppStore";
 import { useToastStore } from "@/store/useToastStore";
-import { useEffectiveReducedMotion } from "@/hooks/useEffectiveReducedMotion";
-import { computeWeekCourseLoad } from "@/lib/studyLoad";
 import { cardKeyHandler, cn } from "@/lib/utils";
 import { openAssignmentEditor } from "@/lib/uiEvents";
 import { reconcileOrphanBlobs } from "@/lib/fileStorage";
@@ -51,17 +51,6 @@ import {
   ExternalLink,
   CalendarDays,
 } from "lucide-react";
-import {
-  PieChart,
-  Pie,
-  Cell,
-  Tooltip,
-  ResponsiveContainer,
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-} from "recharts";
 
 export default function Home() {
   const {
@@ -84,9 +73,6 @@ export default function Home() {
     currentSemesterWeek
   )}`;
 
-  // 本周课程时长：按当前教学周实际生效课表实算（endTime - startTime）
-  const weekCourseLoad = computeWeekCourseLoad(schedules, semester);
-
   // 启动时孤儿 Blob 对账：清理刷新/关闭浏览器后遗留、不再被任何资料引用的 IndexedDB 文件
   useEffect(() => {
     const validKeys = new Set<string>();
@@ -97,8 +83,6 @@ export default function Home() {
     );
     reconcileOrphanBlobs(validKeys).catch(() => {});
   }, []);
-
-  const reducedMotion = useEffectiveReducedMotion();
 
   // Dev 自动注入：开发构建 + 首次启动（无持久化数据）→ 自动载入全模块演示数据，
   // 无需 ?preview= URL 即可查看所有模块。用户主动清空数据后不再注入（marker 保留）。
@@ -203,28 +187,7 @@ export default function Home() {
   const compactCourses = contentDensity === "compact";
 
   // Statistics derived dynamically 100% from Zustand store
-  const totalTasks = assignments.length;
-  const completedTasks = assignments.filter((a) => a.status === "completed").length;
-  const doingTasks = assignments.filter((a) => a.status === "doing").length;
-  const todoTasks = assignments.filter((a) => a.status === "todo").length;
-
-  const completionRate = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
   const totalCredits = courses.reduce((sum, c) => sum + c.credit, 0);
-
-  // Status Pie Data derived from real counts
-  const statusPieData = [
-    { name: "已完成", value: completedTasks, color: "#627566" },
-    { name: "进行中", value: doingTasks, color: "#CDB9AB" },
-    { name: "待完成", value: todoTasks, color: "#A48F82" },
-  ].filter((item) => item.value > 0 || totalTasks === 0);
-
-  // Priority Bar Data derived from real counts
-  const priorityPieData = [
-    { name: "紧急", value: assignments.filter((a) => a.priority === "urgent").length, color: "#9B5B57" },
-    { name: "高优先", value: assignments.filter((a) => a.priority === "high").length, color: "#A87952" },
-    { name: "中优先", value: assignments.filter((a) => a.priority === "medium").length, color: "#CDB9AB" },
-    { name: "低优先", value: assignments.filter((a) => a.priority === "low").length, color: "#627566" },
-  ];
 
   return (
     <KiroSessionProvider>
@@ -434,143 +397,7 @@ export default function Home() {
 
           {activeTab === "group" && <GroupCollaborationView />}
 
-          {activeTab === "analytics" && (
-            <div className="flex flex-1 min-h-0 flex-col">
-              <WorkspaceHeader title="学习统计" context={`本学期 · 第 ${currentSemesterWeek} 周`} sticky />
-              <div className="flex flex-1 min-h-0 flex-col space-y-4 p-4 pb-24 md:p-6 md:pb-6">
-
-              {/* 无数据：不生成假图 */}
-              {assignments.length === 0 && schedules.length === 0 ? (
-                <div className="bg-surface border border-line rounded-2xl p-10 shadow-subtle flex items-center justify-center">
-                  <p className="text-xs text-sandrift">暂无可分析的学习数据</p>
-                </div>
-              ) : (<>
-              {/* Metric Summary Cards Derived Dynamically */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="p-4 bg-surface border border-line rounded-2xl shadow-subtle space-y-1">
-                  <span className="text-xs font-semibold text-sandrift">任务完成率</span>
-                  <div className="text-2xl font-extrabold text-success">{completionRate}%</div>
-                  <p className="text-[10px] text-success font-medium">
-                    已完成 {completedTasks} / {totalTasks} 项任务
-                  </p>
-                </div>
-                <div className="p-4 bg-surface border border-line rounded-2xl shadow-subtle space-y-1">
-                  <span className="text-xs font-semibold text-sandrift">在读课程</span>
-                  <div className="text-2xl font-extrabold text-charcoal">{courses.length} 门</div>
-                  <p className="text-[10px] text-sandrift">共 {totalCredits} 学分</p>
-                </div>
-                <div className="p-4 bg-surface border border-line rounded-2xl shadow-subtle space-y-1">
-                  <span className="text-xs font-semibold text-sandrift">本周课程时长</span>
-                  <div className="text-2xl font-extrabold text-charcoal">
-                    {weekCourseLoad.totalHours} h
-                  </div>
-                  <p className="text-[10px] text-success font-medium">
-                    {weekCourseLoad.isInSemester
-                      ? `第 ${weekCourseLoad.week} 周 · 按实际课表统计`
-                      : "本周不在教学周内"}
-                  </p>
-                </div>
-              </div>
-
-              {/* Visual Distribution Charts */}
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                {/* 1. Assignment Status Distribution Pie */}
-                <div className="bg-surface border border-line rounded-2xl p-4 shadow-subtle flex flex-col justify-between">
-                  <h3 className="text-sm font-bold text-charcoal pb-2 border-b border-[#F0EBE1]">
-                    任务状态
-                  </h3>
-                  <div className="h-56 w-full flex items-center justify-center my-2">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <PieChart>
-                        <Pie
-                          data={statusPieData}
-                          cx="50%"
-                          cy="50%"
-                          innerRadius={55}
-                          outerRadius={85}
-                          paddingAngle={4}
-                          dataKey="value"
-                          isAnimationActive={!reducedMotion}
-                          animationBegin={reducedMotion ? 0 : 140}
-                          animationDuration={reducedMotion ? 0 : 500}
-                          animationEasing="ease-out"
-                        >
-                          {statusPieData.map((entry, index) => (
-                            <Cell key={`cell-${index}`} fill={entry.color} />
-                          ))}
-                        </Pie>
-                        <Tooltip
-                          contentStyle={{
-                            backgroundColor: "#313032",
-                            borderRadius: "10px",
-                            color: "#FFF",
-                            fontSize: "11px",
-                          }}
-                        />
-                      </PieChart>
-                    </ResponsiveContainer>
-                  </div>
-                  <div className="flex justify-around text-xs pt-2 border-t border-[#F0EBE1]">
-                    {statusPieData.map((d) => (
-                      <div key={d.name} className="flex items-center space-x-1.5">
-                        <span
-                          className="w-2.5 h-2.5 rounded-full"
-                          style={{ backgroundColor: d.color }}
-                        />
-                        <span className="text-satin-grey">{d.name}:</span>
-                        <span className="font-bold text-charcoal">{d.value} 项</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                {/* 2. Assignment Priority Breakdown */}
-                <div className="bg-surface border border-line rounded-2xl p-4 shadow-subtle flex flex-col justify-between">
-                  <h3 className="text-sm font-bold text-charcoal pb-2 border-b border-[#F0EBE1]">
-                    任务优先级分布
-                  </h3>
-                  <div className="h-56 w-full flex items-center justify-center my-2">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={priorityPieData} margin={{ top: 10, right: 10, left: -25, bottom: 0 }}>
-                        <XAxis dataKey="name" tick={{ fontSize: 10, fill: "#A48F82" }} axisLine={false} tickLine={false} />
-                        <YAxis tick={{ fontSize: 9, fill: "#A48F82" }} axisLine={false} tickLine={false} />
-                        <Tooltip
-                          contentStyle={{
-                            backgroundColor: "#313032",
-                            borderRadius: "10px",
-                            color: "#FFF",
-                            fontSize: "11px",
-                          }}
-                        />
-                        <Bar
-                          dataKey="value"
-                          radius={[6, 6, 0, 0]}
-                          isAnimationActive={!reducedMotion}
-                          animationBegin={reducedMotion ? 0 : 140}
-                          animationDuration={reducedMotion ? 0 : 500}
-                          animationEasing="ease-out"
-                        >
-                          {priorityPieData.map((entry, index) => (
-                            <Cell key={`cell-${index}`} fill={entry.color} />
-                          ))}
-                        </Bar>
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </div>
-                  <p className="text-[11px] text-sandrift text-center pt-2 border-t border-[#F0EBE1]">
-                    临近截止的紧急任务
-                  </p>
-                </div>
-              </div>
-
-              {/* 3. Study Load Bar Chart */}
-              <div className="w-full">
-                <StudyLoadChart />
-              </div>
-              </>)}
-              </div>
-            </div>
-          )}
+          {activeTab === "analytics" && <LearningAnalyticsView />}
         </PageTransition>
         </main>
       </div>
@@ -578,6 +405,7 @@ export default function Home() {
       {/* Global Drawers & Modals */}
       <CourseDetailDrawer />
       <AssignmentDrawer />
+      <DDLDetailDrawer />
       <CommandCenter />
       <GlobalShortcutController />
       <SettingsModal />
