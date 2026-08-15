@@ -820,8 +820,8 @@ export function getMaterialMetadata(state: ReadToolState, input: unknown): ReadT
 
 // ---------- 统一入口 ----------
 
-/** 同步执行的 Read Tools（read_material / history / analytics 为异步重量级工具，独立处理） */
-const EXECUTORS: Record<Exclude<KiroReadToolName, "read_material" | "query_learning_history" | "summarize_learning_history" | "get_learning_analytics">, (state: ReadToolState, input: unknown) => ReadToolResult<unknown>> = {
+/** 同步执行的 Read Tools（read_material / history / analytics / outlook 为异步重量级工具，独立处理） */
+const EXECUTORS: Record<Exclude<KiroReadToolName, "read_material" | "query_learning_history" | "summarize_learning_history" | "get_learning_analytics" | "get_learning_outlook">, (state: ReadToolState, input: unknown) => ReadToolResult<unknown>> = {
   get_current_context: getCurrentContext,
   get_user_study_profile: getUserStudyProfile,
   search_courses: searchCourses,
@@ -857,11 +857,12 @@ export function executeKiroReadTool(
     toolName === "read_material" ||
     toolName === "query_learning_history" ||
     toolName === "summarize_learning_history" ||
-    toolName === "get_learning_analytics"
+    toolName === "get_learning_analytics" ||
+    toolName === "get_learning_outlook"
   ) {
     return { ok: false, code: "INVALID_INPUT", message: `${toolName} 需要异步执行。` };
   }
-  const executor = EXECUTORS[toolName as Exclude<KiroReadToolName, "read_material" | "query_learning_history" | "summarize_learning_history" | "get_learning_analytics">];
+  const executor = EXECUTORS[toolName as Exclude<KiroReadToolName, "read_material" | "query_learning_history" | "summarize_learning_history" | "get_learning_analytics" | "get_learning_outlook">];
   if (!executor) {
     return { ok: false, code: "INVALID_INPUT", message: `未知工具：${toolName}` };
   }

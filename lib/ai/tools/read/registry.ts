@@ -131,6 +131,11 @@ export const KIRO_READ_TOOLS = {
       "返回与 ClassFlow 学习洞察页面同源的确定性 Analytics Snapshot，包括实际专注、完成任务、计划与实际、按时完成、课程投入、专注节奏、period comparison 与 Learning Signals。需要解释学习趋势或基于学习洞察做建议时优先使用，不要自行从原始历史重新计算。",
     inputSchema: KIRO_READ_TOOL_SCHEMAS.get_learning_analytics,
   }),
+  get_learning_outlook: tool({
+    description:
+      "返回未来 7/14 天的确定性学习前瞻（与学习洞察页同源）：截止任务与 Deadline Health（safe/attention/at-risk/overdue/unscheduled/unknown）、已安排/缺口分钟、截止前可用空闲、缺少估时任务、每日瓶颈与估时校准参考。规划下周/查看未来负荷优先使用本工具，不要自己推算空闲时间或缺口。",
+    inputSchema: KIRO_READ_TOOL_SCHEMAS.get_learning_outlook,
+  }),
 };
 
 export const KIRO_READ_TOOL_NAMES = Object.keys(KIRO_READ_TOOLS) as (keyof typeof KIRO_READ_TOOLS)[];

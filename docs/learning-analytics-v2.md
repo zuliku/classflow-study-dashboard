@@ -1,6 +1,6 @@
 # Learning Analytics V2 — 学习洞察
 
-> Status: 实现完成（Analytics Engine + Weekly Review + Canonical Kiro Analytics Tool + Kiro Action Loop）
+> Status: 实现完成（Analytics Engine + Weekly Review + Canonical Kiro Tools + Estimate Calibration + Study Outlook + Kiro Action Loop）
 > 前置依赖：[learning-history-v1.md](./learning-history-v1.md)（History IndexedDB / Recorder / Query / Aggregate）
 
 ## 一、数据源
@@ -112,19 +112,58 @@ Kiro 不得从 raw events 自行重算 UI Analytics metric。Analytics 数据只
 - **Signal → 问 Kiro**（`LearningSignalsCard`）：每条 Signal 保留原 domain action（如查看任务）+ 弱操作「问 Kiro」；prompt 只表达 intent（deadline / plan-actual / course-concentration / focus-rhythm / focus-up / focus-down 各有固定文案），**不嵌入 Analytics JSON / 数字快照**（Kiro 收到后会调用 `get_learning_analytics` 取最新事实，避免 stale 数字）。
 - **Weekly Review → Kiro**（`WeeklyReviewCard`）：
   - 「让 Kiro 深入复盘」→ `handoffPrompt("基于我本周的学习洞察，帮我做一次简洁复盘…不要给学习力评分。")` → 推荐 `get_learning_analytics({preset:"week"})` → 需要具体历史时 `query_learning_history`。
-  - 「规划下周」→ `handoffPrompt("结合我本周的学习洞察和未来 7 天任务…")` → `get_learning_analytics` → `get_upcoming_assignments` → 需要时 `get_assignment_health` → 正式排期走 `propose_study_plan`（仍是 READ / PROPOSAL）。
+  - 「规划下周」→ `handoffPrompt("结合我本周的学习洞察和未来 7 天任务…")` → `get_learning_analytics` + `get_learning_outlook({7})` → 需要具体任务时 `get_assignment_health` → 正式排期走 `propose_study_plan`（仍是 READ / PROPOSAL）。
   - 复用 `KiroSessionActionsContext.handoffPrompt`（`useKiroSessionActions()`），不实现第二套 Kiro Chat Runtime；不自动注入 Analytics context、不在每轮聊天构建 snapshot。
 - **Planning 不变式**：`propose_study_plan` 是 proposal-first；Apply 前 StudyBlock 无副作用（Ghost Preview 是 ephemeral），用户确认后才写入。
 
-## 十二、Kiro History Tools
+## 十二、Estimate Calibration（估时参考）
 
-`lib/ai/tools/read/history.ts` 不变（query 默认 30d / hard 90d / ≤200 条；summarize 默认 28d / hard 366d；浏览器 IndexedDB 直连）。Analytics V2 **不新增任何 AI 调用**（Weekly Review 是 deterministic；只有用户点击 Ask Kiro / 规划 / 主动询问才调模型）。
+- `lib/analytics/estimateCalibration.ts`：只消费 `assignment.created / estimate_changed / completed / reopened` + `focus.completed`（`assignmentId != null`）。
+- **Episode 重建**：起点 = created 或 reopened；episode 内累积同 assignmentId 的 `actualActiveMs`；completed 关闭 episode 并重建「完成时生效的估时」（created → estimate_changed.data.after 依次覆盖）。reopened 开启新 episode（旧 focus 不重复累计）。
+- **Eligible sample**：完成时估时 > 0、已记录专注 ≥15min、created/估时历史可靠重建、completion 在 coverage 内。缺估时 / 缺专注 / 缺 created 一律排除，不猜。
+- **ratio = trackedFocusMinutes / estimatedMinutesAtCompletion**；文案纪律：「已记录专注约为当时预计耗时的 X×」（绝不称"任务实际耗时"）。
+- **稳健统计**：median（非 mean）；只纳入 0.25 ≤ ratio ≤ 4（其余计入 `excludedOutliers`，原始 History 不动）。
+- **阈值**：global sample ≥5 → `ready`；course 同课 ≥3 → course-specific（course 优先，fallback global）。`interpretation`：<0.8 below / 0.8–1.2 aligned / >1.2 above（描述性分类）。
+- **严禁自动校准**：不写 `estimatedMinutes`、TaskHealth 不静默使用校准值、StudyPlanner 不静默使用校准值。只观察 / 提醒 / 辅助 Kiro 建议。
+- **UI**：`EstimateCalibrationCard`（样本 ≥5 才展示数字；不足时显示"继续积累…"）；[问 Kiro] prompt 只带 intent。
 
-## 十三、Known Limitations
+## 十三、Study Outlook（未来 7 / 14 天学习前瞻）
+
+- 独立模块 `lib/outlook/`（types + studyOutlook）；语义边界：Analytics = 过去，Outlook = 基于当前状态的未来安排需求。不塞进 `LearningAnalyticsSnapshot`。
+- **数据源**：当前 Zustand state（assignments / studyBlocks / schedules / calendarMarks / courses / semester / currentSemesterWeek）+ 预构建 EstimateCalibration（只读参考）；复用 `deriveAssignmentHealth` / `findFreeTime`；无 LLM。
+- **Horizon**：7 / 14（Kiro Tool 同样只允许 7/14，`.strict()`）。
+- **Task selection**：todo/doing；DDL 在 horizon 内或已 overdue；无 DDL 单独计 `noDeadline`；completed/submitted 排除。
+- **每个任务**：health（复用 TaskHealth 六态）、scheduled/unscheduled 分钟、`availableMinutesBeforeDeadline`（now → min(deadline, horizonEnd) 内 free slots）、reasons、`estimateCalibration` metadata（course → global，只读）。
+- **Summary**：counts（totalDue/overdue/atRisk/attention/unscheduled/safe/unknown/missingEstimate/noDeadline）+ workload（known/scheduled/remaining/free minutes）。
+- **Bottleneck day**（确定性定义）：dueTaskCount ≥2 或 plannedStudyMinutes ≥240；无"压力指数"。
+- **排序**：overdue → at-risk → attention → unscheduled → unknown → safe；同状态 DDL 早优先；最多 8 条（UI Top 5）。
+- **UI**：`StudyOutlookCard`（未来 7/14 切换、健康标签复用 TaskHealth 语义文案、缺估时行「缺少预计耗时…」+ [估算任务]、[让 Kiro 帮我规划]）；`useStudyOutlook` hook：只订阅所需字段 + History 变更订阅 + generation token。
+- **Planner missing-estimate 修复**：`proposeStudyPlan` 对 `estimatedMinutes` 缺失/≤0 返回 `completeCoverage:false + reasons:["missing_estimate"]`，不占用 Free Time Pool；Proposal Card 显示「缺少预计耗时，暂无法自动安排。」+ [让 Kiro 帮我估时]（弱操作）。「没有估时」≠「已安排充分」。
+
+## 十四、Kiro 只读工具职责（Part 3 全景）
+
+| 工具 | 回答 |
+| --- | --- |
+| `get_learning_analytics` | 回顾过去：学习状态/计划执行/与上周对比/哪门课投入最多/专注节奏/基于洞察的建议 |
+| `get_learning_outlook` | 查看未来：7/14 天任务负荷、健康状态、估时缺失、规划缺口、瓶颈日 |
+| `get_assignment_health` | 深入检查某一个具体任务的 Deadline Health |
+| `propose_study_plan` | 正式生成学习计划 Proposal（proposal-first，用户确认后才写入） |
+| `summarize_learning_history` | 较底层历史总量（过去两个月完成多少任务、按月/按课汇总） |
+| `query_learning_history` | 具体历史事实（何时改过 DDL、上周具体完成哪些任务） |
+
+推荐流程：「我下周忙吗？」→ `get_learning_outlook`；「这个概率论作业来得及吗？」→ `get_assignment_health`；「帮我排一下下周」→ `get_learning_outlook` → 必要时 `get_assignment_health` → `propose_study_plan`。
+
+## 十五、Kiro History Tools
+
+`lib/ai/tools/read/history.ts` 不变（query 默认 30d / hard 90d / ≤200 条；summarize 默认 28d / hard 366d；浏览器 IndexedDB 直连）。Analytics V2 **不新增任何 AI 自动调用**（Weekly Review / Outlook / Calibration 全部 deterministic；只有用户点击 Ask Kiro / 规划 / 主动询问才调模型）。
+
+## 十六、Known Limitations
 
 - 跨午夜专注会话不拆分（归因到 `startedAt` 日）。
 - 按时率只统计 DDL 可重建的任务（history coverage 前的任务不猜）。
 - `semester` 无 previous 对比（学期期初开始记录历史时对比不完整属预期）。
 - Coverage 不足时不显示 delta / 对比信号；`historyStartedAt` 早于所选范围才显示对比。
 - 「投入」≠「效率」：不输出任何效率/评分类结论。
-- 本轮不做：AI 自动周报 / 定时周报 / Push / 综合分数 / Streak / Goals / Achievements / Cloud / Export / PDF / 预测 / 自动修改 StudyBlock / 新的 Planning Algorithm。
+- Calibration 只观察「已记录专注」（Focus 未开启的学习时间不体现）；不自动校准估时、不改变 TaskHealth / Planner 判定。
+- Outlook 的 `availableMinutesBeforeDeadline` 基于 Free Time Engine（08:00–21:00 窗口、当前教学周课表、已有 StudyBlock），非用户真实可用时间承诺。
+- 本轮不做：AI 自动周报 / 定时周报 / Push / 综合分数 / Streak / Goals / Achievements / Cloud / Export / PDF / 预测 / 自动修改 StudyBlock / 自动修改 estimatedMinutes / 新的 Planning Algorithm /「使用校准估时生成 Proposal」（下一阶段候选）。

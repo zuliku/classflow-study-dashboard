@@ -176,6 +176,16 @@ export const getLearningAnalyticsSchema = z
   })
   .strict();
 
+/**
+ * Canonical Outlook Tool：未来 7 / 14 天确定性学习前瞻。
+ * 只允许 7 / 14（不要自定义任意范围）；period 由客户端当前真实环境决定。
+ */
+export const getLearningOutlookSchema = z
+  .object({
+    horizonDays: z.union([z.literal(7), z.literal(14)]).default(7),
+  })
+  .strict();
+
 export const KIRO_READ_TOOL_SCHEMAS = {
   get_current_context: emptyInputSchema,
   get_user_study_profile: emptyInputSchema,
@@ -201,6 +211,7 @@ export const KIRO_READ_TOOL_SCHEMAS = {
   query_learning_history: queryLearningHistorySchema,
   summarize_learning_history: summarizeLearningHistorySchema,
   get_learning_analytics: getLearningAnalyticsSchema,
+  get_learning_outlook: getLearningOutlookSchema,
 } as const;
 
 export type KiroReadToolName = keyof typeof KIRO_READ_TOOL_SCHEMAS;

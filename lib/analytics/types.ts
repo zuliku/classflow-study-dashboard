@@ -108,6 +108,7 @@ export interface AnalyticsProjectionEvent {
   sequence: number;
   courseId?: string;
   courseNameSnapshot?: string;
+  assignmentId?: string;
   assignmentTitleSnapshot?: string;
   data: unknown;
 }
