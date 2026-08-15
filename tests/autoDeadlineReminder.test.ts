@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { CalendarMark, Reminder } from "@/types";
 import {
+  applyAutoReconcileResult,
   buildAutoDeadlineReminder,
   hasAutoReminderHandledAnchor,
   hasAutoReminderSameTriggerConflict,
@@ -14,7 +15,7 @@ import {
   resolveDDLCalendarMarkAnchor,
 } from "@/lib/reminders/autoDeadlineReminder";
 import { DEFAULT_PREFERENCES, sanitizePreferences, DEADLINE_REMINDER_MINUTES } from "@/lib/preferences";
-import { normalizeReminder } from "@/lib/reminders/reminderDomain";
+import { normalizeReminder, evaluateMissedReminder } from "@/lib/reminders/reminderDomain";
 import { normalizeAssignment } from "@/lib/tasks/taskSemantics";
 
 const NOW = "2026-08-15T10:00:00";
@@ -307,5 +308,113 @@ describe("normalizeAssignment / CalendarMark 字段", () => {
     expect(normalizeAutoDeadlineLead(0)).toBe(1440);
     expect(normalizeAutoDeadlineLead(10080)).toBe(10080);
     expect(normalizeAutoDeadlineLead(60)).toBe(60);
+  });
+});
+
+describe("P3 fix 5：ordinary reconcile 不因时间流逝重新降级已有 auto（preserve-schedule）", () => {
+  // T0：now = 8/1，DDL = 8/11，default 7d → scheduled auto trigger 8/4（offset -10080）
+  const overdue = mkAutoReminder({
+    id: "auto1",
+    title: "交报告",
+    offsetMinutes: -10080,
+    triggerAt: "2026-08-04T10:00:00",
+  });
+
+  it("T1：now = 8/6 普通 reconcile（hydrate 语义）→ 保留 offsetMinutes/triggerAt/status=scheduled", () => {
+    const r = reconcileAutoDeadlineReminder({
+      targetType: "assignment",
+      targetId: "a1",
+      title: "交报告",
+      anchor: "2026-08-11T10:00:00",
+      requestedLead: 10080,
+      now: "2026-08-06T10:00:00",
+      reminders: [overdue],
+    });
+    expect(r.staleAutoIds).toEqual([]);
+    expect(r.refreshAutoIds).toEqual([]);
+    expect(r.proposal).toBeNull();
+    const out = applyAutoReconcileResult([overdue], r, "2026-08-06T10:00:00");
+    expect(out).toHaveLength(1);
+    // 绝不能变为 3d / 1d / 1h / due
+    expect(out[0].offsetMinutes).toBe(-10080);
+    expect(out[0].triggerAt).toBe("2026-08-04T10:00:00");
+    expect(out[0].status).toBe("scheduled");
+  });
+
+  it("T1：explicit global default 7d → 3d（recompute-schedule）→ 允许按新默认重算到 3d", () => {
+    const r = reconcileAutoDeadlineReminder({
+      targetType: "assignment",
+      targetId: "a1",
+      title: "交报告",
+      anchor: "2026-08-11T10:00:00",
+      requestedLead: 4320,
+      now: "2026-08-06T10:00:00",
+      reminders: [overdue],
+      mode: "recompute-schedule",
+    });
+    expect(r.staleAutoIds).toEqual([]);
+    expect(r.refreshAutoIds).toEqual([
+      { id: "auto1", offsetMinutes: -4320, triggerAt: "2026-08-08T10:00:00", title: "交报告" },
+    ]);
+  });
+
+  it("missed policy 可见性：triggerAt <= now 的 scheduled auto 能被 evaluateMissedReminder 识别为 overdue", () => {
+    expect(
+      evaluateMissedReminder({ reminder: overdue, now: "2026-08-06T10:00:00", policy: "deliver", windowHours: 6 })
+    ).toBe("deliver");
+    // 已过期 2 天 > window 6h → recent-only 下 skip（仍由 Runtime policy 处理，不默默移动）
+    expect(
+      evaluateMissedReminder({ reminder: overdue, now: "2026-08-06T10:00:00", policy: "recent-only", windowHours: 6 })
+    ).toBe("skip");
+  });
+
+  it("recompute 重建后的新 triggerAt 同样执行 same-trigger suppression（不 refresh 成重复 auto）", () => {
+    const manual = mkAutoReminder({
+      id: "m1",
+      title: "手动 3 天",
+      source: "manual",
+      offsetMinutes: -4320,
+      triggerAt: "2026-08-08T10:00:00",
+    });
+    const r = reconcileAutoDeadlineReminder({
+      targetType: "assignment",
+      targetId: "a1",
+      title: "交报告",
+      anchor: "2026-08-11T10:00:00",
+      requestedLead: 4320,
+      now: "2026-08-06T10:00:00",
+      reminders: [overdue, manual],
+      mode: "recompute-schedule",
+    });
+    expect(r.refreshAutoIds).toEqual([]);
+    expect(r.staleAutoIds).toEqual(["auto1"]);
+    const out = applyAutoReconcileResult([overdue, manual], r, "2026-08-06T10:00:00");
+    expect(out).toHaveLength(1);
+    expect(out[0].id).toBe("m1");
+  });
+
+  it("preserve 模式下同 trigger 的 manual/Kiro 同样立即 suppression（对最终 trigger 检查）", () => {
+    for (const source of ["manual", "kiro"] as const) {
+      const nonAuto = mkAutoReminder({
+        id: `m-${source}`,
+        source,
+        offsetMinutes: -10080,
+        triggerAt: "2026-08-04T10:00:00",
+      });
+      const r = reconcileAutoDeadlineReminder({
+        targetType: "assignment",
+        targetId: "a1",
+        title: "交报告",
+        anchor: "2026-08-11T10:00:00",
+        requestedLead: 10080,
+        now: "2026-08-06T10:00:00",
+        reminders: [overdue, nonAuto],
+      });
+      expect(r.staleAutoIds).toEqual(["auto1"]);
+      expect(r.refreshAutoIds).toEqual([]);
+      const out = applyAutoReconcileResult([overdue, nonAuto], r, "2026-08-06T10:00:00");
+      expect(out).toHaveLength(1);
+      expect(out[0].id).toBe(`m-${source}`);
+    }
   });
 });

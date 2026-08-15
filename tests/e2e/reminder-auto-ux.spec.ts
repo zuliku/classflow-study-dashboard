@@ -293,11 +293,10 @@ test("fix1 UI：custom absolute 与 auto 同实际时刻 → UI duplicate guard 
 });
 
 test("fix4：独立 DDL mark 删除 auto → Timeline 显示已关闭 → 重新开启恢复 exactly one auto", async ({ page }) => {
-  const today = new Date();
-  const p = (n: number) => String(n).padStart(2, "0");
-  const todayStr = `${today.getFullYear()}-${p(today.getMonth() + 1)}-${p(today.getDate())}`;
-  // 今天 + 3 小时后（未来时间 → DeadlinePoint 渲染 + auto 生成）
+  // 跨午夜安全：date 和 time 都从同一个 later 时刻提取（避免「今天日期 + 明天时间」组合出过去时间）
   const later = new Date(Date.now() + 3 * 3600000);
+  const p = (n: number) => String(n).padStart(2, "0");
+  const todayStr = `${later.getFullYear()}-${p(later.getMonth() + 1)}-${p(later.getDate())}`;
   const laterTime = `${p(later.getHours())}:${p(later.getMinutes())}`;
   await seed(page, {
     calendarMarks: [{ id: "cm1", date: todayStr, type: "ddl", title: "交项目报告", startTime: laterTime }],

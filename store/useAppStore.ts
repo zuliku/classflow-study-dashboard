@@ -57,7 +57,10 @@ import {
   reconcileTargetReminders,
   resolveReminderTriggerAt,
 } from "@/lib/reminders/reminderDomain";
-import { reconcileAllAutomaticDeadlineReminders } from "@/lib/reminders/autoDeadlineReminder";
+import {
+  AutoReconcileMode,
+  reconcileAllAutomaticDeadlineReminders,
+} from "@/lib/reminders/autoDeadlineReminder";
 
 /** Task 7G-A1：Reminder 时间戳统一本地墙钟 */
 const nowLocalString = () => formatLocalDateTime(new Date());
@@ -90,13 +93,18 @@ function clearScheduledAssignmentReminders(reminders: Reminder[], assignmentId: 
   );
 }
 
-/** P2：全量自动 DDL 提醒 reconcile（幂等；policy 唯一来源 = autoDeadlineReminder Domain） */
-function reconcileAllAuto(state: {
-  assignments: Assignment[];
-  calendarMarks: CalendarMark[];
-  reminders: Reminder[];
-  preferences: AppPreferences;
-}): Reminder[] {
+/** P2：全量自动 DDL 提醒 reconcile（幂等；policy 唯一来源 = autoDeadlineReminder Domain）。
+ * mode 默认 preserve-schedule：普通 reconcile 不因 now 前进而移动既有 scheduled auto；
+ * 仅显式重算路径（global default / re-enable / reset preferences）传 recompute-schedule。 */
+function reconcileAllAuto(
+  state: {
+    assignments: Assignment[];
+    calendarMarks: CalendarMark[];
+    reminders: Reminder[];
+    preferences: AppPreferences;
+  },
+  mode: AutoReconcileMode = "preserve-schedule"
+): Reminder[] {
   return reconcileAllAutomaticDeadlineReminders({
     assignments: state.assignments,
     calendarMarks: state.calendarMarks,
@@ -104,6 +112,7 @@ function reconcileAllAuto(state: {
     requestedLead: state.preferences.defaultDeadlineReminderMinutes,
     defaultDDLTime: state.preferences.defaultDDLTime,
     now: nowLocalString(),
+    mode,
   });
 }
 
@@ -600,7 +609,7 @@ export const useAppStore = create<AppState>()(
             calendarMarks: state.calendarMarks,
             reminders: state.reminders,
             preferences,
-          });
+          }, "recompute-schedule");
           return { preferences, reminders };
         });
       },
@@ -1391,6 +1400,7 @@ export const useAppStore = create<AppState>()(
             requestedLead: state.preferences.defaultDeadlineReminderMinutes,
             defaultDDLTime: state.preferences.defaultDDLTime,
             now: nowLocalString(),
+            mode: "recompute-schedule",
           });
           return { assignments, calendarMarks, reminders: [...reconciled, ...handledHistory] };
         }),
@@ -1402,12 +1412,13 @@ export const useAppStore = create<AppState>()(
             ...state.preferences,
             defaultDeadlineReminderMinutes: minutes,
           });
+          // P2 §11：显式 global-default 变化 → recompute-schedule（全部 scheduled auto 按新默认重算）
           const reminders = reconcileAllAuto({
             assignments: state.assignments,
             calendarMarks: state.calendarMarks,
             reminders: state.reminders,
             preferences,
-          });
+          }, "recompute-schedule");
           return { preferences, reminders };
         }),
       markReminderFired: (id, firedAt) =>

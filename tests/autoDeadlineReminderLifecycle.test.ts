@@ -1,6 +1,7 @@
 ﻿import { describe, it, expect, vi, beforeEach } from "vitest";
 import { Assignment, CalendarMark, Reminder } from "@/types";
 import { reconcileAllAutomaticDeadlineReminders } from "@/lib/reminders/autoDeadlineReminder";
+import { evaluateMissedReminder } from "@/lib/reminders/reminderDomain";
 
 /**
  * P2：Automatic Deadline Reminder Lifecycle + Persistence（真实 Store）。
@@ -907,5 +908,144 @@ describe("persistence / hydrate / backup", () => {
     // 再次 restore（重复导入）不重复
     store.getState().restoreAppData(backupData);
     expect(scheduledAutos(store.getState().reminders, "assignment", id)).toHaveLength(1);
+  });
+});
+
+describe("P3 fix 5：已 persisted 的 scheduled auto 跨 hydrate 不因时间流逝降级", () => {
+  it("T0 模拟 persisted（DDL +5d、default 7d、auto trigger -2d 已到期）→ T1 hydrate 保留原 schedule；explicit 7d→3d 才重算", async () => {
+    const autoTrigger = dayOffset(-2, 10, 0);
+    seedState({
+      assignments: [{ id: "a1", courseId: "c1", title: "任务", description: "", ddl: dayOffset(5), priority: "medium", status: "todo", progress: 0, tags: [] }],
+      reminders: [{
+        id: "auto1",
+        title: "任务",
+        targetType: "assignment",
+        targetId: "a1",
+        timingMode: "relative",
+        offsetMinutes: -10080,
+        triggerAt: autoTrigger,
+        status: "scheduled",
+        source: "auto",
+        createdAt: localStr(new Date()),
+        updatedAt: localStr(new Date()),
+      }],
+      preferences: { defaultDeadlineReminderMinutes: 10080 },
+    });
+    // T1：hydrate / ordinary reconcile（anchor 未变、无 explicit recompute）
+    const store = await freshStore();
+    const auto = store.getState().reminders.find((r: Reminder) => r.id === "auto1")!;
+    expect(auto.offsetMinutes).toBe(-10080);
+    expect(auto.triggerAt).toBe(autoTrigger);
+    expect(auto.status).toBe("scheduled");
+    expect(scheduledAutos(store.getState().reminders, "assignment", "a1")).toHaveLength(1);
+    // 不产生第二条（无降级重建）
+    expect(store.getState().reminders.filter((r: Reminder) => r.source === "auto" && r.status === "scheduled")).toHaveLength(1);
+    // Runtime / policy 层可见性：triggerAt <= now → missed policy 能识别（deliver）
+    expect(
+      evaluateMissedReminder({ reminder: auto, now: localStr(new Date()), policy: "deliver", windowHours: 6 })
+    ).toBe("deliver");
+    // 同 scenario + explicit global default 7d -> 3d → 允许重算到当前 default 3d
+    store.getState().setDefaultDeadlineReminderMinutes(4320);
+    const after = store.getState().reminders.find((r: Reminder) => r.id === "auto1")!;
+    expect(after.offsetMinutes).toBe(-4320);
+    expect(after.triggerAt).toBe(dayOffset(2, 10, 0));
+    expect(after.status).toBe("scheduled");
+  });
+
+  it("title-only 同步不改 trigger（preserve 下 title 独立刷新）", async () => {
+    seedState({
+      assignments: [{ id: "a1", courseId: "c1", title: "旧标题", description: "", ddl: dayOffset(5), priority: "medium", status: "todo", progress: 0, tags: [] }],
+      reminders: [{
+        id: "auto1",
+        title: "旧标题",
+        targetType: "assignment",
+        targetId: "a1",
+        timingMode: "relative",
+        offsetMinutes: -1440,
+        triggerAt: dayOffset(4, 10, 0),
+        status: "scheduled",
+        source: "auto",
+        createdAt: localStr(new Date()),
+        updatedAt: localStr(new Date()),
+      }],
+    });
+    const store = await freshStore();
+    const a = store.getState().assignments.find((x: Assignment) => x.id === "a1")!;
+    store.getState().updateAssignment({ ...a, title: "新标题" });
+    const after = store.getState().reminders.find((r: Reminder) => r.id === "auto1")!;
+    expect(after.title).toBe("新标题");
+    expect(after.offsetMinutes).toBe(-1440);
+    expect(after.triggerAt).toBe(dayOffset(4, 10, 0));
+  });
+});
+
+describe("P3 fix 4：global default refresh 后的 same-trigger suppression（对最终 triggerAt 检查）", () => {
+  it("auto 1d（day9）+ manual absolute day7 → 1d→3d：auto 不 refresh 成重复；manual 保留；未 opt-out；删 manual 后恢复 3d", async () => {
+    seedState();
+    const store = await freshStore();
+    const id = store.getState().addAssignment(mkAssignment({ ddl: dayOffset(10) }));
+    expect(scheduledAutos(store.getState().reminders, "assignment", id)[0].offsetMinutes).toBe(-1440);
+    const manualId = store.getState().addReminder({
+      title: "手动 3 天",
+      targetType: "assignment",
+      targetId: id,
+      timingMode: "absolute",
+      triggerAt: dayOffset(7, 10, 0),
+      source: "manual",
+    })!;
+    // 1d -> 3d（refresh 后新 trigger 与 manual 相同 → suppression/remove，不 refresh 成重复 auto）
+    store.getState().setDefaultDeadlineReminderMinutes(4320);
+    const reminders = store.getState().reminders;
+    expect(reminders.find((r: Reminder) => r.id === manualId)).toBeTruthy();
+    expect(reminders.find((r: Reminder) => r.id === manualId)!.source).toBe("manual");
+    expect(scheduledAutos(reminders, "assignment", id)).toHaveLength(0);
+    expect(store.getState().assignments.find((a: Assignment) => a.id === id)!.autoReminderDisabled).toBeUndefined();
+    // 删除 suppressing manual → 合法 reconcile（title change）→ auto 恢复为当前 default 3d
+    store.getState().deleteReminder(manualId);
+    const a = store.getState().assignments.find((x: Assignment) => x.id === id)!;
+    store.getState().updateAssignment({ ...a, title: "改名任务" });
+    const autos = scheduledAutos(store.getState().reminders, "assignment", id);
+    expect(autos).toHaveLength(1);
+    expect(autos[0].offsetMinutes).toBe(-4320);
+    expect(autos[0].triggerAt).toBe(dayOffset(7, 10, 0));
+    expect(store.getState().assignments.find((x: Assignment) => x.id === id)!.autoReminderDisabled).toBeUndefined();
+  });
+
+  it("Kiro relative 同 3d trigger 同理（1d→3d 后 auto 移除、kiro 保留、未 opt-out）", async () => {
+    seedState();
+    const store = await freshStore();
+    const id = store.getState().addAssignment(mkAssignment({ ddl: dayOffset(10) }));
+    const kiroId = store.getState().addReminder({
+      title: "Kiro 3 天",
+      targetType: "assignment",
+      targetId: id,
+      timingMode: "relative",
+      offsetMinutes: -4320,
+      triggerAt: "",
+      source: "kiro",
+    })!;
+    store.getState().setDefaultDeadlineReminderMinutes(4320);
+    const reminders = store.getState().reminders;
+    expect(reminders.find((r: Reminder) => r.id === kiroId)).toBeTruthy();
+    expect(scheduledAutos(reminders, "assignment", id)).toHaveLength(0);
+    expect(store.getState().assignments.find((a: Assignment) => a.id === id)!.autoReminderDisabled).toBeUndefined();
+  });
+
+  it("manual relative 同 3d trigger 同理（trigger 归一 epoch 比较）", async () => {
+    seedState();
+    const store = await freshStore();
+    const id = store.getState().addAssignment(mkAssignment({ ddl: dayOffset(10) }));
+    store.getState().addReminder({
+      title: "手动 3 天 relative",
+      targetType: "assignment",
+      targetId: id,
+      timingMode: "relative",
+      offsetMinutes: -4320,
+      triggerAt: "",
+      source: "manual",
+    });
+    store.getState().setDefaultDeadlineReminderMinutes(4320);
+    expect(scheduledAutos(store.getState().reminders, "assignment", id)).toHaveLength(0);
+    expect(store.getState().assignments.find((a: Assignment) => a.id === id)!.autoReminderDisabled).toBeUndefined();
   });
 });

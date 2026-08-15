@@ -225,18 +225,31 @@ export function hasAutoReminderHandledAnchor(
 }
 
 /**
+ * auto 调度生命周期 mode：
+ * - preserve-schedule：普通 reconciliation（hydration / 无关 mutation / title 同步 / 通用不变量修复）。
+ *   已存在且 anchor 匹配的 scheduled auto「一旦创建，仅仅因为 now 向前推进，不能改变它的 triggerAt」：
+ *   保留原 offsetMinutes / triggerAt（即使已到期，由 Reminder Runtime 走 deliver/skip/missed policy），
+ *   title 独立同步。不重新应用 lead degradation。
+ * - recompute-schedule：显式重算路径（global default 显式变化 / 显式 re-enable / 重置偏好）。
+ *   按当前 requestedLead + 降级 ladder 重建（DDL 已过 → 移除，不复活）。
+ */
+export type AutoReconcileMode = "preserve-schedule" | "recompute-schedule";
+
+/**
  * 纯 reconciliation contract（§13，P2 接线入口）：
  * 输入 target 的 anchor / requestedLead / now / 当前 reminders，输出：
  * - proposal：应创建的 auto Reminder（null = 不应创建）
- * - staleAutoIds：当前 scheduled auto 中「反推 anchor 已与当前 anchor 不一致」的 id
- *   （anchor 变化后的旧 auto；P2 结合现有 reconcileTargetReminders 处理更新/删除）
+ * - staleAutoIds：当前 scheduled auto 中「不应继续存在」的 id
+ *   （anchor 变化 / same-trigger suppression / recompute 下 DDL 已过）
+ * - refreshAutoIds：应保留但需更新（offset/triggerAt/title）的 scheduled auto
  *
  * 决策顺序：
  * 1. 无 anchor → 不创建；所有 scheduled auto 标 stale
  * 2. 已存在 scheduled auto：
- *    - anchor 匹配当前 → 保留（唯一性，不重复创建）
+ *    - anchor 匹配当前 → 幸存者：preserve 保留原 schedule（仅 title 同步）；
+ *      recompute 按当前默认重建。最终 triggerAt 与任意 scheduled 非 auto 相同 → 移除（suppression）
  *    - anchor 不匹配 → stale（旧截止事项的 auto）
- * 3. 无 scheduled auto：
+ * 3. 无 scheduled auto（或全部 stale）：
  *    - 历史 auto（fired/skipped）已处理当前 anchor → 不重建
  *    - DDL <= now（降级无档位）→ 不创建
  *    - 非 auto scheduled 同 triggerAt → 临时 suppression（不创建，不等于 opt-out）
@@ -251,8 +264,18 @@ export function reconcileAutoDeadlineReminder(input: {
   requestedLead: AutoDeadlineLeadMinutes;
   now: string;
   reminders: Reminder[];
+  mode?: AutoReconcileMode;
 }): AutoReminderReconcileResult {
-  const { targetType, targetId, title, anchor, requestedLead, now, reminders } = input;
+  const {
+    targetType,
+    targetId,
+    title,
+    anchor,
+    requestedLead,
+    now,
+    reminders,
+    mode = "preserve-schedule",
+  } = input;
   const targetReminders = reminders.filter(
     (r) => r.targetType === targetType && r.targetId === targetId
   );
@@ -266,52 +289,66 @@ export function reconcileAutoDeadlineReminder(input: {
   }
 
   // 2. 已存在 scheduled auto：
-  //    - anchor 匹配的幸存者：按当前默认重算（§11；降级 ladder 由 resolve 统一处理）——不重复创建
+  //    - anchor 匹配的幸存者：按 mode 决定最终 schedule（preserve = 原样；recompute = 当前默认重建）
   //    - anchor 不匹配 / 被 same-trigger suppression：stale 删除；若全部 stale → fall through 创建新 auto
-  //    §16：非 auto scheduled 同 triggerAt → 移除对应 auto（避免重复通知，不设置 opt-out）
+  //    §16：无论哪种 mode，same-trigger 检查针对「最终将要写入的 triggerAt」
+  //    （recompute 重建后的新 triggerAt 同样执行 suppression；不设置 opt-out）
   let staleAutoIds: string[] = [];
   if (scheduledAuto.length > 0) {
     const matching = scheduledAuto.filter((r) => {
       const inferred = inferAutoReminderAnchor(r);
       return inferred !== null && anchorsEqual(inferred, anchor);
     });
-    const suppressed = matching.filter((r) =>
-      hasAutoReminderSameTriggerConflict(targetReminders, targetType, targetId, r.triggerAt)
-    );
     staleAutoIds = scheduledAuto
-      .filter((r) => !matching.includes(r) || suppressed.includes(r))
+      .filter((r) => !matching.includes(r))
       .map((r) => r.id);
-    const survivors = matching.filter((r) => !suppressed.includes(r));
-    if (survivors.length > 0) {
-      const lead = resolveAutoDeadlineLead({ requestedLead, ddl: anchor, now });
-      if (lead === null) {
-        // DDL 已过 → 幸存者也不该存在（不复活）
-        return {
-          proposal: null,
-          staleAutoIds: [...staleAutoIds, ...survivors.map((r) => r.id)],
-          refreshAutoIds: [],
-        };
+    const kept: { r: Reminder; offsetMinutes: number; triggerAt: string }[] = [];
+    for (const r of matching) {
+      // 非法 relative auto（缺 offsetMinutes）→ 不可保留
+      if (typeof r.offsetMinutes !== "number" || !Number.isFinite(r.offsetMinutes)) {
+        staleAutoIds = [...staleAutoIds, r.id];
+        continue;
       }
+      let finalOffsetMinutes = r.offsetMinutes;
+      let finalTriggerAt = r.triggerAt;
+      if (mode === "recompute-schedule") {
+        const lead = resolveAutoDeadlineLead({ requestedLead, ddl: anchor, now });
+        if (lead === null) {
+          // DDL 已过 → recompute 下幸存者也不该存在（不复活）
+          staleAutoIds = [...staleAutoIds, r.id];
+          continue;
+        }
+        const rebuilt = buildAutoDeadlineReminder({
+          targetType,
+          targetId,
+          title,
+          anchor,
+          leadMinutes: lead,
+        });
+        if (!rebuilt) {
+          staleAutoIds = [...staleAutoIds, r.id];
+          continue;
+        }
+        finalOffsetMinutes = rebuilt.offsetMinutes;
+        finalTriggerAt = rebuilt.triggerAt;
+      }
+      // 对最终 triggerAt 做 same-trigger suppression（manual/Kiro/custom 优先，auto 移除）
+      if (hasAutoReminderSameTriggerConflict(targetReminders, targetType, targetId, finalTriggerAt)) {
+        staleAutoIds = [...staleAutoIds, r.id];
+        continue;
+      }
+      kept.push({ r, offsetMinutes: finalOffsetMinutes, triggerAt: finalTriggerAt });
+    }
+    if (kept.length > 0) {
       const refreshAutoIds: { id: string; offsetMinutes: number; triggerAt: string; title: string }[] = [];
-      for (const r of survivors) {
-        const rebuilt = buildAutoDeadlineReminder({ targetType, targetId, title, anchor, leadMinutes: lead });
-        if (
-          rebuilt &&
-          (rebuilt.offsetMinutes !== r.offsetMinutes ||
-            rebuilt.triggerAt !== r.triggerAt ||
-            rebuilt.title !== r.title)
-        ) {
-          refreshAutoIds.push({
-            id: r.id,
-            offsetMinutes: rebuilt.offsetMinutes,
-            triggerAt: rebuilt.triggerAt,
-            title: rebuilt.title,
-          });
+      for (const { r, offsetMinutes, triggerAt } of kept) {
+        if (offsetMinutes !== r.offsetMinutes || triggerAt !== r.triggerAt || title !== r.title) {
+          refreshAutoIds.push({ id: r.id, offsetMinutes, triggerAt, title });
         }
       }
       return { proposal: null, staleAutoIds, refreshAutoIds };
     }
-    // 全部 stale（anchor 全变）：删旧 → 继续下方创建逻辑（apply 时先删旧再建新）
+    // 全部 stale（anchor 全变 / same-trigger suppression / recompute 无档位）：删旧 → 继续下方创建逻辑（apply 时先删旧再建新）
   }
 
   // 3a. 历史 auto 已处理当前 anchor → 不重建
@@ -412,8 +449,9 @@ export function reconcileAllAutomaticDeadlineReminders(input: {
   requestedLead: AutoDeadlineLeadMinutes;
   defaultDDLTime: string;
   now: string;
+  mode?: AutoReconcileMode;
 }): Reminder[] {
-  const { assignments, calendarMarks, reminders, requestedLead, defaultDDLTime, now } = input;
+  const { assignments, calendarMarks, reminders, requestedLead, defaultDDLTime, now, mode } = input;
   let out = reminders;
   const assignmentIds = new Set(assignments.map((a) => a.id));
 
@@ -427,6 +465,7 @@ export function reconcileAllAutomaticDeadlineReminders(input: {
       requestedLead,
       now,
       reminders: out,
+      mode,
     });
     out = applyAutoReconcileResult(out, result, now);
   }
@@ -443,6 +482,7 @@ export function reconcileAllAutomaticDeadlineReminders(input: {
       requestedLead,
       now,
       reminders: out,
+      mode,
     });
     out = applyAutoReconcileResult(out, result, now);
   }
