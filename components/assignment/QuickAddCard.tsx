@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 import { X, ChevronDown, Clock } from "lucide-react";
 import { useAppStore } from "@/store/useAppStore";
 import { useToastStore } from "@/store/useToastStore";
@@ -14,10 +14,12 @@ import { getNewTaskDefaults } from "@/lib/taskDefaults";
 import { cn } from "@/lib/utils";
 
 /**
- * Quick Add V2：任务工作区的快速捕获入口（Inline Card）。
- * - Capture Layer：标题 + 课程 + 可选 Deadline（默认无 DDL，不造明天截止）+ 创建
+ * Quick Add V3：任务工作区的快速捕获入口（Capture Surface，非 Inline Form Card）。
+ * - Capture Layer：标题（最强视觉）+ 创建；低权重 metadata 行：课程 / 截止时间 / 更多
  * - Progressive Detail：「更多」展开 Priority / 预计耗时 / Description
  * - 「更多详情」→ 打开 Full Editor（AddAssignmentModal）
+ * - Escape 关闭（内部 Select / 原生 date picker 的 Escape 由各自组件优先消费，不会误关）
+ * - 创建后：清空标题 + 焦点回到标题输入
  * 提交直接走 Store Domain Action（无 DDL 不创建 CalendarMark；estimatedMinutes 由 normalize 清洗）。
  */
 export function QuickAddCard({
@@ -32,6 +34,7 @@ export function QuickAddCard({
 
   const defaults = getNewTaskDefaults(preferences);
   const [title, setTitle] = useState("");
+  const titleRef = useRef<HTMLInputElement | null>(null);
   const [courseId, setCourseId] = useState(
     defaultCourseId && courses.some((c) => c.id === defaultCourseId)
       ? defaultCourseId
@@ -76,6 +79,7 @@ export function QuickAddCard({
     setDdlEnabled(false);
     setMoreOpen(false);
     setSubmitting(false);
+    titleRef.current?.focus();
   };
 
   const handleOpenFullEditor = () => {
@@ -86,21 +90,37 @@ export function QuickAddCard({
     <form
       onSubmit={handleSubmit}
       data-testid="quick-add-card"
-      className="bg-[#F7F5F5] border border-line-strong rounded-2xl p-3.5 space-y-3 shadow-subtle"
+      onKeyDown={(e) => {
+        // 仅 Escape 关闭 Quick Add 本体；内部 UISelect / 原生 date picker 的 Escape
+        // 由组件自身优先消费（select 在 window capture 拦截），不会误关
+        if (e.key === "Escape") {
+          e.preventDefault();
+          onClose();
+        }
+      }}
+      className="bg-[#F7F5F5] border border-line rounded-xl p-3 space-y-2.5"
     >
-      {/* Capture Layer */}
-      <div className="flex items-center justify-between gap-2">
+      {/* Capture Layer：标题最强 + 创建 */}
+      <div className="flex items-center gap-2">
         <label className="sr-only" htmlFor="quick-add-title">
           要完成什么？
         </label>
         <input
+          ref={titleRef}
           id="quick-add-title"
           autoFocus
           value={title}
           onChange={(e) => setTitle(e.target.value)}
           placeholder="要完成什么？"
-          className="flex-1 min-w-0 h-9 px-3 bg-white border border-line-strong rounded-xl text-xs font-semibold text-charcoal focus:outline-none focus:border-charcoal placeholder:text-sandrift"
+          className="flex-1 min-w-0 h-10 px-1 bg-transparent rounded-lg text-sm font-bold text-charcoal focus:outline-none placeholder:text-sandrift placeholder:font-semibold"
         />
+        <button
+          type="submit"
+          disabled={!canSubmit}
+          className="ux-press shrink-0 h-8 px-3.5 rounded-lg text-[11px] font-bold text-white bg-charcoal hover:bg-black disabled:opacity-40 transition-colors"
+        >
+          创建
+        </button>
         <button
           type="button"
           onClick={onClose}
@@ -111,14 +131,15 @@ export function QuickAddCard({
         </button>
       </div>
 
+      {/* Metadata Layer：低权重，不与标题竞争 */}
       <div className="flex flex-wrap items-center gap-2">
-              <UISelect
-                value={courseId}
-                onChange={(v) => setCourseId(v)}
-                ariaLabel="关联课程"
-                options={courses.map((c) => ({ value: c.id, label: c.name }))}
-                triggerClassName="h-8 bg-white border-line-strong text-[11px] font-semibold max-w-[180px]"
-              />
+        <UISelect
+          value={courseId}
+          onChange={(v) => setCourseId(v)}
+          ariaLabel="关联课程"
+          options={courses.map((c) => ({ value: c.id, label: c.name }))}
+          triggerClassName="h-8 bg-white border-line-strong text-[11px] font-semibold max-w-[180px]"
+        />
 
         {ddlEnabled ? (
           <div className="flex items-center gap-1.5">
@@ -157,21 +178,10 @@ export function QuickAddCard({
         )}
 
         <button
-          type="submit"
-          disabled={!canSubmit}
-          className="ml-auto h-8 px-4 rounded-lg text-[11px] font-bold text-white bg-charcoal hover:bg-black disabled:opacity-40 transition-colors"
-        >
-          创建
-        </button>
-      </div>
-
-      {/* Progressive Detail */}
-      <div className="pt-1 border-t border-line-soft">
-        <button
           type="button"
           onClick={() => setMoreOpen((v) => !v)}
           aria-expanded={moreOpen}
-          className="flex items-center gap-1 text-[11px] font-semibold text-sandrift hover:text-charcoal transition-colors"
+          className="ml-auto flex items-center gap-1 px-2 py-1.5 rounded-lg text-[11px] font-semibold text-sandrift hover:text-charcoal hover:bg-alabaster transition-colors"
         >
           <ChevronDown
             className={cn(
@@ -182,50 +192,51 @@ export function QuickAddCard({
           />
           更多
         </button>
-
-        <DisclosureRegion open={moreOpen} innerClassName="mt-2.5 grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <div className="space-y-1">
-            <label className="text-[10px] font-bold text-sandrift">优先级</label>
-            <UISelect<Priority>
-              value={priority}
-              onChange={setPriority}
-              ariaLabel="优先级"
-              options={[
-                { value: "urgent", label: "紧急" },
-                { value: "high", label: "高" },
-                { value: "medium", label: "中" },
-                { value: "low", label: "低" },
-              ]}
-              triggerClassName="h-8 bg-white border-line-strong text-[11px] font-semibold"
-            />
-          </div>
-          <div className="space-y-1">
-            <label className="text-[10px] font-bold text-sandrift">预计耗时（分钟）</label>
-            <input
-              type="number"
-              min={1}
-              value={estimatedMinutes}
-              onChange={(e) => setEstimatedMinutes(e.target.value)}
-              placeholder="可选"
-              aria-label="预计耗时（分钟）"
-              className="w-full h-8 px-2.5 bg-white border border-line-strong rounded-lg text-[11px] font-mono text-charcoal focus:outline-none placeholder:text-sandrift"
-            />
-          </div>
-          <div className="space-y-1 sm:col-span-2">
-            <label className="text-[10px] font-bold text-sandrift">描述</label>
-            <textarea
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              rows={2}
-              placeholder="可选"
-              className="w-full px-2.5 py-2 bg-white border border-line-strong rounded-lg text-[11px] text-charcoal focus:outline-none placeholder:text-sandrift resize-none"
-            />
-          </div>
-        </DisclosureRegion>
       </div>
 
+      {/* Progressive Detail */}
+      <DisclosureRegion open={moreOpen} innerClassName="pt-2 border-t border-line-soft grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div className="space-y-1">
+          <label className="text-[10px] font-bold text-sandrift">优先级</label>
+          <UISelect<Priority>
+            value={priority}
+            onChange={setPriority}
+            ariaLabel="优先级"
+            options={[
+              { value: "urgent", label: "紧急" },
+              { value: "high", label: "高" },
+              { value: "medium", label: "中" },
+              { value: "low", label: "低" },
+            ]}
+            triggerClassName="h-8 bg-white border-line-strong text-[11px] font-semibold"
+          />
+        </div>
+        <div className="space-y-1">
+          <label className="text-[10px] font-bold text-sandrift">预计耗时（分钟）</label>
+          <input
+            type="number"
+            min={1}
+            value={estimatedMinutes}
+            onChange={(e) => setEstimatedMinutes(e.target.value)}
+            placeholder="可选"
+            aria-label="预计耗时（分钟）"
+            className="w-full h-8 px-2.5 bg-white border border-line-strong rounded-lg text-[11px] font-mono text-charcoal focus:outline-none placeholder:text-sandrift"
+          />
+        </div>
+        <div className="space-y-1 sm:col-span-2">
+          <label className="text-[10px] font-bold text-sandrift">描述</label>
+          <textarea
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            rows={2}
+            placeholder="可选"
+            className="w-full px-2.5 py-2 bg-white border border-line-strong rounded-lg text-[11px] text-charcoal focus:outline-none placeholder:text-sandrift resize-none"
+          />
+        </div>
+      </DisclosureRegion>
+
       {/* Secondary：进入 Full Editor */}
-      <div className="flex items-center justify-end">
+      <div className="flex items-center justify-end pt-1">
         <button
           type="button"
           onClick={handleOpenFullEditor}

@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -553,7 +553,7 @@ export function TimelineWorkspace() {
               <span className="truncate text-[10px] font-semibold text-satin-grey">{b.title}</span>
               {showMeta && (
                 <>
-                  <span className="text-[9px] text-sandrift font-medium shrink-0">
+                  <span className="text-[10px] text-sandrift font-medium shrink-0">
                     {formatCompactMinutes(durationMinutes)}
                   </span>
                   <button
@@ -594,11 +594,11 @@ export function TimelineWorkspace() {
             <span className="truncate text-[10px] font-semibold text-satin-grey">
               {studyDrag.candidate.title}
             </span>
-            <span className="text-[9px] text-sandrift font-medium shrink-0">
+            <span className="text-[10px] text-sandrift font-medium shrink-0">
               {studyDrag.candidate.startTime}–{studyDrag.candidate.endTime}
             </span>
             {!studyDrag.valid && (
-              <span className="ml-auto text-[9px] font-bold text-danger shrink-0 truncate max-w-[50%]">
+              <span className="ml-auto text-[10px] font-bold text-danger shrink-0 truncate max-w-[50%]">
                 {studyDrag.conflictMessage ?? "时间冲突"}
               </span>
             )}
@@ -635,11 +635,11 @@ export function TimelineWorkspace() {
               <span className="truncate text-[10px] font-semibold text-satin-grey">
                 {unscheduledDrag.candidate.title}
               </span>
-              <span className="text-[9px] text-sandrift font-medium shrink-0">
+              <span className="text-[10px] text-sandrift font-medium shrink-0">
                 {unscheduledDrag.candidate.startTime}–{unscheduledDrag.candidate.endTime}
               </span>
               {!unscheduledDrag.valid && (
-                <span className="ml-auto text-[9px] font-bold text-danger shrink-0 truncate max-w-[50%]">
+                <span className="ml-auto text-[10px] font-bold text-danger shrink-0 truncate max-w-[50%]">
                   {unscheduledDrag.conflictMessage ?? "时间冲突"}
                 </span>
               )}
@@ -672,7 +672,7 @@ export function TimelineWorkspace() {
               style={{ top: `${((vs - dayStart) / ctx.totalMinutes) * 100}%`, height: `${((ve - vs) / ctx.totalMinutes) * 100}%`, minHeight: 6 }}
             >
               <span className="truncate text-[10px] font-semibold text-satin-grey">{g.title}</span>
-              <span className="text-[9px] text-sandrift font-medium shrink-0">Kiro 建议</span>
+              <span className="text-[10px] text-sandrift font-medium shrink-0">Kiro 建议</span>
             </div>
           );
         })}
@@ -1044,7 +1044,7 @@ export function TimelineWorkspace() {
         <p className="text-[11px] font-bold text-charcoal truncate max-w-[220px]">
           {unscheduledDrag.assignment.title}
         </p>
-        <p className="text-[9px] text-sandrift">快速安排 · 1 小时</p>
+        <p className="text-[10px] text-sandrift">快速安排 · 1 小时</p>
       </div>
     )}
     </div>
@@ -1131,7 +1131,7 @@ function CourseTaskMarker({
         >
           <span className="block w-[7px] h-[7px] rounded-full bg-[#A87952] shadow-subtle" />
           {count > 1 && (
-            <span className="text-[9px] font-bold text-[#A87952] leading-none">{count}</span>
+            <span className="text-[10px] font-bold text-[#A87952] leading-none">{count}</span>
           )}
         </button>
       </div>
@@ -1153,7 +1153,7 @@ function CourseTaskMarker({
           {blocks.slice(0, 4).map((b) => (
             <div key={b.id} className="space-y-0.5">
               <p className="text-[10px] font-semibold text-charcoal leading-snug">{b.title}</p>
-              <p className="text-[9px] text-satin-grey">
+              <p className="text-[10px] text-satin-grey">
                 {b.startTime}–{b.endTime} · 与《{courseName}》时间重叠
               </p>
             </div>

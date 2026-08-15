@@ -87,7 +87,7 @@ export function TimelineUnscheduledShelf({
                 <GripVertical className="w-3 h-3 text-sandrift shrink-0" aria-hidden="true" />
               )}
               <span className="truncate">{a.title}</span>
-              <span className="text-[9px] text-sandrift font-medium shrink-0">{ddlText(a)}</span>
+              <span className="text-[10px] text-sandrift font-medium shrink-0">{ddlText(a)}</span>
               <button
                 onPointerDown={(e) => e.stopPropagation()}
                 onClick={(e) => {
@@ -99,7 +99,7 @@ export function TimelineUnscheduledShelf({
                 className="flex items-center gap-0.5 p-1 rounded text-sandrift hover:text-charcoal hover:bg-alabaster transition-colors shrink-0"
               >
                 <CalendarPlus className="w-3 h-3" />
-                <span className="text-[9px] font-bold">安排</span>
+                <span className="text-[10px] font-bold">安排</span>
               </button>
             </span>
           );

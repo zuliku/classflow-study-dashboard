@@ -179,7 +179,7 @@ export function TimelineKeyLane({
                     </span>
                   ))}
                   {allDays.length > 2 && (
-                    <span className="block text-[9px] font-bold text-sandrift pl-1">+{allDays.length - 2}</span>
+                    <span className="block text-[10px] font-bold text-sandrift pl-1">+{allDays.length - 2}</span>
                   )}
                 </div>
               )}

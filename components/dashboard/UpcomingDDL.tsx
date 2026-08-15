@@ -7,6 +7,7 @@ import { format, formatDistanceToNow, differenceInDays } from "date-fns";
 import { zhCN } from "date-fns/locale";
 import { parseLocalDDL } from "@/lib/ddl";
 import { paginate } from "@/lib/pagination";
+import { cn, cardKeyHandler } from "@/lib/utils";
 
 /** Overview「临近 DDL」每页最多 3 条（右栏 Hero 空间内充分利用，分页摘要定位） */
 const UPCOMING_DDL_PAGE_SIZE = 3;
@@ -70,7 +71,7 @@ export function UpcomingDDL() {
           <span
             aria-hidden="true"
             title="中优先"
-            className="shrink-0 w-1.5 h-1.5 rounded-full bg-stone-beige"
+            className="shrink-0 w-1.5 h-1.5 rounded-full bg-stone-beige self-center"
           />
         );
       default:
@@ -78,27 +79,15 @@ export function UpcomingDDL() {
           <span
             aria-hidden="true"
             title="低优先"
-            className="shrink-0 w-1.5 h-1.5 rounded-full bg-ashy-beige"
+            className="shrink-0 w-1.5 h-1.5 rounded-full bg-ashy-beige self-center"
           />
         );
     }
   };
 
-  // 按日期分组的展示结构（保持 ddl 升序）：日期分组头 + 内部 Row（无每行 Card）
-  const grouped = useMemo(() => {
-    const groups: { key: string; label: string; items: typeof pagedItems }[] = [];
-    for (const task of pagedItems) {
-      const ddlDate = parseLocalDDL(task.ddl) ?? new Date();
-      const key = format(ddlDate, "yyyy-MM-dd");
-      const last = groups[groups.length - 1];
-      if (last && last.key === key) {
-        last.items.push(task);
-      } else {
-        groups.push({ key, label: format(ddlDate, "M月d日 EEE", { locale: zhCN }), items: [task] });
-      }
-    }
-    return groups;
-  }, [pagedItems]);
+  // 每页 3 张独立任务卡：满页时在可用高度内均分（flex-1 + min-h 下限），
+  // 少于 3 张时保持自然高度顶部排列，不无限拉高
+  const fillAvailable = pagedItems.length === UPCOMING_DDL_PAGE_SIZE;
 
   return (
     <div
@@ -125,57 +114,56 @@ export function UpcomingDDL() {
         </button>
       </div>
 
-      {/* DDL Task Rows：日期分组 + Row 语言（hover bg，无每行 Card） */}
-      <div className="flex-1 min-h-0 overflow-y-auto scrollbar-none space-y-1 py-1.5">
-        {grouped.length === 0 ? (
+      {/* DDL Task Cards：每页 3 张；卡片无 shadow、无嵌套小卡 */}
+      <div className="flex-1 min-h-0 overflow-y-auto scrollbar-none flex flex-col gap-2 py-1.5">
+        {pagedItems.length === 0 ? (
           <div className="flex-1 flex flex-col items-center justify-center text-xs text-sandrift space-y-1 min-h-24">
             <CheckCircle2 className="w-6 h-6 text-success" />
             <p>暂无临近 DDL</p>
           </div>
         ) : (
-          grouped.map((group) => (
-            <div key={group.key} className="shrink-0">
-              <p className="text-[11px] font-bold text-sandrift px-2 pt-0.5 pb-0.5">
-                {group.label}
-              </p>
-              <div className="space-y-px">
-                {group.items.map((task) => {
-                  const course = courses.find((c) => c.id === task.courseId);
-                  const ddlDate = parseLocalDDL(task.ddl) ?? new Date();
-                  const relativeTime = formatDistanceToNow(ddlDate, {
-                    addSuffix: true,
-                    locale: zhCN,
-                  });
+          pagedItems.map((task) => {
+            const course = courses.find((c) => c.id === task.courseId);
+            const ddlDate = parseLocalDDL(task.ddl) ?? new Date();
+            const relativeTime = formatDistanceToNow(ddlDate, {
+              addSuffix: true,
+              locale: zhCN,
+            });
 
-                  return (
-                    <div
-                      key={task.id}
-                      onClick={() => setSelectedAssignmentId(task.id)}
-                      className="flex items-start gap-2.5 px-2 py-1.5 rounded-lg hover:bg-alabaster/50 cursor-pointer group transition-colors duration-[var(--motion-fast)] ease-[var(--ease-standard)]"
-                    >
-                      <span className="text-[11px] tabular-nums text-sandrift font-semibold shrink-0 w-11 leading-5 pt-px">
-                        {format(ddlDate, "HH:mm")}
-                      </span>
-                      <div className="min-w-0 flex-1">
-                        <h4 className="text-xs font-bold text-charcoal truncate group-hover:text-black leading-5">
-                          {task.title}
-                        </h4>
-                        <div className="flex items-center gap-1.5 min-w-0 mt-0.5">
-                          <span className="text-[10px] text-satin-grey truncate">
-                            {course?.name || "通用课题"}
-                          </span>
-                          {getPriorityMark(task.priority)}
-                        </div>
-                      </div>
-                      <span className="text-[10px] font-bold text-danger/90 shrink-0 pt-px leading-5">
-                        {relativeTime}
-                      </span>
-                    </div>
-                  );
-                })}
+            return (
+              <div
+                key={task.id}
+                onClick={() => setSelectedAssignmentId(task.id)}
+                role="button"
+                tabIndex={0}
+                onKeyDown={cardKeyHandler(() => setSelectedAssignmentId(task.id))}
+                className={cn(
+                  "group flex flex-col justify-center p-2.5 rounded-lg border border-line bg-[#F7F5F5]",
+                  "cursor-pointer transition-colors duration-[var(--motion-fast)] ease-[var(--ease-standard)]",
+                  "hover:bg-alabaster hover:border-[#CDB9AB]",
+                  fillAvailable && "flex-1 min-h-[72px]"
+                )}
+              >
+                <div className="flex items-center justify-between gap-2 min-w-0">
+                  <span className="text-[11px] text-sandrift tabular-nums shrink-0">
+                    {format(ddlDate, "M月d日 · HH:mm")}
+                  </span>
+                  <span className="text-[11px] font-bold text-danger/90 shrink-0 truncate">
+                    {relativeTime}
+                  </span>
+                </div>
+                <h4 className="text-[13px] font-bold text-charcoal truncate group-hover:text-black mt-0.5 leading-5">
+                  {task.title}
+                </h4>
+                <div className="flex items-center gap-1.5 min-w-0 mt-0.5">
+                  <span className="text-[11px] text-satin-grey truncate">
+                    {course?.name || "通用课题"}
+                  </span>
+                  {getPriorityMark(task.priority)}
+                </div>
               </div>
-            </div>
-          ))
+            );
+          })
         )}
       </div>
 

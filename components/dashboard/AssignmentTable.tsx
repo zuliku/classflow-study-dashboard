@@ -567,7 +567,7 @@ export function AssignmentTable({
                 (wsMeta.health === "at-risk" || wsMeta.health === "attention") && (
                   <span
                     className={cn(
-                      "text-[9px] px-1.5 py-0.2 rounded font-bold shrink-0 border",
+                      "text-[10px] px-1.5 py-0.5 rounded font-bold shrink-0 border",
                       healthViewMeta(wsMeta.health).className
                     )}
                   >
@@ -797,7 +797,7 @@ export function AssignmentTable({
                       label: (
                         <span className="flex items-center gap-1">
                           {view.label}
-                          <span className="text-[9px] font-bold text-sandrift/80">
+                          <span className="text-[10px] font-bold text-sandrift/80">
                             {workspaceViewResult?.counts[view.id] ?? 0}
                           </span>
                         </span>
@@ -824,7 +824,7 @@ export function AssignmentTable({
                         className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-left font-semibold text-charcoal hover:bg-alabaster transition-colors"
                       >
                         查看已归档
-                        <span className="ml-auto text-[9px] font-bold text-sandrift">
+                        <span className="ml-auto text-[10px] font-bold text-sandrift">
                           {workspaceViewResult?.counts.archive ?? 0}
                         </span>
                       </button>

@@ -579,7 +579,7 @@ export function MiniCalendar() {
       {/* Selected Date Agenda：横向 Compact Event Grid（4 列/页，仅类型 + 图标；详情走 Drawer）
           视口高度 ≤800px 时整体隐藏（标题 + 数量 + 卡片全部），同时 Calendar shell 在外层缩短，
           把空间让给 UpcomingDDL（避免 DDL 三行被压扁重叠） */}
-      <div className="pt-2 border-t border-line-soft shrink-0 [@media(max-height:800px)]:hidden">
+      <div className="pt-1.5 pb-1 border-t border-line-soft shrink-0 [@media(max-height:800px)]:hidden">
         <div className="flex justify-between items-center text-xs">
           <span className="font-bold text-charcoal">
             {isSelectedInSemester
@@ -618,14 +618,14 @@ export function MiniCalendar() {
           </span>
         </div>
 
-        {/* Compact Event Grid：高度恒定（一行 h-14），不随数量变化 */}
+        {/* Compact Event Grid：高度恒定（一行 h-12），不随数量变化 */}
         <div
           key={selectedDateStr}
           data-testid="agenda-grid"
-          className="ux-agenda-enter grid grid-cols-4 gap-1.5 mt-1.5 min-h-[56px]"
+          className="ux-agenda-enter grid grid-cols-4 gap-1.5 mt-1 min-h-[48px]"
         >
           {pagedCells.length === 0 ? (
-            <div className="col-span-4 h-14 flex items-center justify-center gap-2 text-[10px] text-sandrift">
+            <div className="col-span-4 h-12 flex items-center justify-center gap-2 text-[10px] text-sandrift">
               <span>暂无安排</span>
               <button
                 onClick={handleQuickAddAssignment}
@@ -679,7 +679,7 @@ export function MiniCalendar() {
                     cell.kind === "ddl" && draggable ? "拖动调整截止日期" : undefined
                   }
                   className={cn(
-                    "h-14 rounded-lg border flex flex-col items-center justify-center gap-1 transition-colors duration-[var(--motion-fast)] ease-[var(--ease-standard)]",
+                    "h-12 rounded-lg border flex flex-col items-center justify-center gap-0.5 transition-colors duration-[var(--motion-fast)] ease-[var(--ease-standard)]",
                     cell.kind === "course" && "cursor-pointer hover:opacity-90",
                     cell.kind === "ddl" && [
                       "bg-danger-bg border-danger-border text-danger cursor-pointer",
@@ -695,7 +695,7 @@ export function MiniCalendar() {
                     touchAction: cell.kind === "ddl" && ddlDragEnabled ? "none" : "auto",
                   }}
                 >
-                  <Icon className="w-4 h-4 shrink-0" />
+                  <Icon className="w-3.5 h-3.5 shrink-0" />
                   <span className="text-[10px] font-bold leading-none">{cell.label}</span>
                 </button>
               );
