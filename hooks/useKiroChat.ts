@@ -78,6 +78,7 @@ import { listProjectFiles } from "@/lib/ai/projects/files/db";
 import { toProjectTurnContext } from "@/lib/ai/projects/prompt";
 import { executeReadProjectFile } from "@/lib/ai/tools/read/projectFile";
 import { executeReadProjectVisual } from "@/lib/ai/tools/read/projectVisual";
+import { executeSearchProjectFile } from "@/lib/ai/tools/read/projectFileSearch";
 import { createVisionTurnRuntimeBudget, VisionTurnRuntimeLedger } from "@/lib/ai/attachments/visionTurnRuntimeBudget";
 import { projectFileSourceId, upsertProjectFileSource } from "@/lib/ai/citations/sources";
 import { getActiveModelName } from "@/lib/ai/providers/registry";
@@ -834,7 +835,6 @@ export function useKiroChat({
   const writeCounterRef = useRef(0);
   const limitReachedRef = useRef(false);
   const undoRegistryRef = useRef(new Map<string, KiroUndoEntry>());
-  /** Task B Visual Turn Mutation Guard：当前 User Turn 是否绑定 ready image attachment（Send 时设置；下轮 Send 覆盖） */
   /** Task B V1.1：当前 User Turn Send 时冻结的 ready image attachment IDs（Runtime Source of Truth）。
    *  - Guard 依据：length > 0 即本轮包含图片来源（直接写操作 → VISUAL_PROPOSAL_REQUIRED）
    *  - propose_visual_actions 的 sourceAttachmentIds 只从这里取（模型无法提供）
@@ -1047,6 +1047,32 @@ export function useKiroChat({
         return;
       }
 
+      // ---- search_project_file（V1.4）：与 read 系列共享重型文档 quota；frozen project index；
+      // 只注册真实 Evidence 页（TXT/DOCX 无页码 → 不设 availablePages；matches 为空 → 不注册）----
+      if (toolName === "search_project_file") {
+        documentReadCounterRef.current += 1;
+        if (documentReadCounterRef.current > MAX_DOCUMENT_READS_PER_TURN) {
+          failOutput("READ_TOOL_LIMIT_REACHED", "已达到本轮资料读取上限。");
+          return;
+        }
+        const snapshot = turnSnapshotRef.current as (Record<string, unknown> & {
+          projectContext?: KiroProjectTurnContext;
+        }) | null;
+        const frozenProjectContext = snapshot?.projectContext;
+        void executeSearchProjectFile(input, { frozenProjectContext }).then((result) => {
+          if (result.ok && result.data.matches.length > 0) {
+            registerProjectFileSource({
+              projectFileId: result.data.projectFileId,
+              name: result.data.name,
+              // PDF：实际返回的匹配页；TXT/DOCX：无页码（注册 source 但不伪造 availablePages）
+              pages: result.data.kind === "pdf" ? (result.data.matches as { page: number }[]) : undefined,
+            });
+          }
+          emitToolOutput(toolName, toolCallId, result as ToolOutput);
+        });
+        return;
+      }
+
       // ---- Learning History（Part 2）：Browser 异步执行 IndexedDB 查询；只读 ----
       if (toolName === "query_learning_history" || toolName === "summarize_learning_history") {
         void (async () => {
@@ -1242,7 +1268,7 @@ export function useKiroChat({
         failOutput("READ_TOOL_LIMIT_REACHED", "已达到本轮读取上限，请换个问法。");
         return;
       }
-      // 每次执行读取最新 Store（Data Freshness）
+      // 每次执行读取最新 Store（Data Freshness）；Turn-level trusted context（V1.1：frozen image IDs）
       const result = executeKiroReadTool(toolName, input, useAppStore.getState(), {
         visualSourceAttachmentIds: turnImageAttachmentIdsRef.current,
       });
@@ -1960,8 +1986,8 @@ export function useKiroChat({
         custom: intent.custom,
       });
       const visionEnabledForIntent = intentCapabilities.vision;
-      // Task B：本 User Turn 是否带 ready image（Guard 依据；整轮 assistant 保持，下轮 Send 覆盖）
-      turnImageAttachmentIdsRef.current = userImages.map((a) => a.id);
+        // Task B V1.1：冻结本 Turn 真实 ready image IDs（Guard 与 propose_visual_actions 共用同一事实；下轮 Send 覆盖）
+        turnImageAttachmentIdsRef.current = userImages.map((a) => a.id);
       if (
         intentCapabilities.vision &&
         intentCapabilities.visionMimeTypes &&

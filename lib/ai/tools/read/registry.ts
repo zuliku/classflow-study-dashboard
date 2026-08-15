@@ -96,8 +96,13 @@ export const KIRO_READ_TOOLS = {
   }),
   read_project_file: tool({
     description:
-      "读取当前 Kiro 项目中明确指定资料的正文。只能读取当前 Turn 的项目资料索引中存在的 projectFileId。PDF/DOCX/TXT/Markdown 使用本地提取；扫描型 PDF 会明确说明暂不读取图像正文。不要无差别遍历全部项目资料；需要正文时按需读取。",
+      "读取当前 Kiro 项目中明确指定资料的正文。只能读取当前 Turn 的项目资料索引中存在的 projectFileId。PDF/DOCX/TXT/Markdown 使用本地提取；扫描型 PDF 会明确说明暂不读取图像正文。PDF 可带 pages 精确读取指定页正文（长文档后半部分使用）。不要无差别遍历全部项目资料；需要正文时按需读取。",
     inputSchema: KIRO_READ_TOOL_SCHEMAS.read_project_file,
+  }),
+  search_project_file: tool({
+    description:
+      "在当前 Kiro Project 的指定资料全文中进行本地关键词检索。适用于长文档、read_project_file 返回 truncated=true，或需要定位某个概念/章节/数据所在位置时。PDF 返回匹配页码与片段；TXT/DOCX 返回匹配片段。这是词法检索而非语义搜索，优先使用简洁、具有区分度的关键词。不要无差别搜索所有 Project Files。",
+    inputSchema: KIRO_READ_TOOL_SCHEMAS.search_project_file,
   }),
   read_project_visual: tool({
     description:

@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { TaskBreakdownProposalSchema } from "@/lib/tasks/taskBreakdown";
-import { MAX_SCANNED_PDF_PAGES_PER_TURN } from "@/lib/ai/attachments/limits";
+import { MAX_SCANNED_PDF_PAGES_PER_TURN, MAX_PROJECT_PDF_TEXT_PAGES_PER_READ } from "@/lib/ai/attachments/limits";
 import { proposeVisualActionsInputSchema } from "@/lib/ai/visual/schemas";
 
 /**
@@ -104,10 +104,24 @@ export const readMaterialSchema = z.object({
 });
 
 /** V1.3A：read_project_file schema —— 只接受 projectFileId（Project 身份来自 frozen Turn Context，
- *  不接受 projectId/storageKey/path/url） */
+ *  不接受 projectId/storageKey/path/url）。V1.4：可选 pages（仅 PDF 定向正文读取）。 */
 export const readProjectFileSchema = z
   .object({
     projectFileId: z.string().trim().min(1).max(120),
+    pages: z
+      .array(z.number().int().min(1).max(10000))
+      .min(1)
+      .max(MAX_PROJECT_PDF_TEXT_PAGES_PER_READ)
+      .optional(),
+  })
+  .strict();
+
+/** V1.4：search_project_file schema —— 本地词法全文检索（单文件）；不接受 projectId/storageKey/path/url */
+export const searchProjectFileSchema = z
+  .object({
+    projectFileId: z.string().trim().min(1).max(120),
+    query: z.string().trim().min(1).max(200),
+    maxResults: z.number().int().min(1).max(8).default(5).optional(),
   })
   .strict();
 
@@ -247,6 +261,7 @@ export const KIRO_READ_TOOL_SCHEMAS = {
   get_material_metadata: getMaterialMetadataSchema,
   read_material: readMaterialSchema,
   read_project_file: readProjectFileSchema,
+  search_project_file: searchProjectFileSchema,
   read_project_visual: readProjectVisualSchema,
   propose_task_breakdown: proposeTaskBreakdownSchema,
   list_reminders: listRemindersSchema,

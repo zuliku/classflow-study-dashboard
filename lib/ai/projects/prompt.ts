@@ -115,7 +115,9 @@ export function buildProjectContextSection(context: KiroProjectTurnContext | und
         `TXT/MD/DOCX 使用 read_project_file 读取正文；` +
         `PDF 优先使用 read_project_file 读取文本；若结果说明 possiblyScanned / visualRequired 再使用 read_project_visual 读取页面图像；` +
         `若用户询问图表、示意图、页面图片、版式或图形关系，可对普通 PDF 使用 read_project_visual，但应先定位明确页码再读取；` +
-        `IMAGE 使用 read_project_visual 读取视觉内容。`
+        `IMAGE 使用 read_project_visual 读取视觉内容。` +
+        `对于较长或被截断的 Project 文档，需要定位特定章节、概念、数据时先使用 search_project_file；` +
+        `PDF 搜索返回页码后，可使用 read_project_file(pages) 精确读取正文，需要图表/版式时再使用 read_project_visual(pages)。`
     );
   }
   return `\n\n${lines.join("\n\n")}`;

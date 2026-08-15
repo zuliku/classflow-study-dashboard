@@ -26,6 +26,23 @@ export const MAX_MATERIAL_READS_PER_TURN = MAX_DOCUMENT_READS_PER_TURN;
 /** 提取器版本（缓存失效用）：v3 起缓存真实 truncated 状态（绝不从 text.length 推导） */
 export const EXTRACTOR_VERSION = 3;
 
+// ---- V1.4：Project File 本地词法检索 / PDF 定向页读取 ----
+
+/** 单个命中 snippet 上限（围绕匹配位置：前 ~400 + 匹配区 + 后 ~700） */
+export const MAX_PROJECT_SEARCH_SNIPPET_CHARS = 1200;
+
+/** 单次 search_project_file 最多返回命中数 */
+export const MAX_PROJECT_SEARCH_RESULTS = 8;
+
+/** search_project_file 总输出字符预算（即使 8 hits × 1200 也须经过总预算） */
+export const MAX_PROJECT_SEARCH_TOTAL_CHARS = 8_000;
+
+/** read_project_file(pages) 单次最多 PDF 页数 */
+export const MAX_PROJECT_PDF_TEXT_PAGES_PER_READ = 8;
+
+/** read_project_file(pages) 定向正文总字符预算（单页超限时保留该页前段并标 truncated） */
+export const MAX_PROJECT_TARGETED_TEXT_CHARS = 30_000;
+
 // ---- Task 12：扫描 PDF Vision fallback 限制 ----
 
 /** 每个 Turn 最多发送的扫描 PDF 页面图像数 */
