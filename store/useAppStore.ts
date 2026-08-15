@@ -1240,23 +1240,63 @@ export const useAppStore = create<AppState>()(
           updatedAt: now,
         });
         if (!reminder) return null;
-        set((s) => ({ reminders: [...s.reminders, reminder] }));
+        set((s) => {
+          const reminders = [...s.reminders, reminder];
+          // P3 fix 1：same-trigger invariant 在 mutation 后立即成立——
+          // 新增非-auto scheduled 后立即对该 target 做自动提醒 reconcile
+          // （同最终 triggerAt 的 auto 被 suppression；standalone/studyBlock 无 auto policy）
+          if (reminder.targetType === "assignment" || reminder.targetType === "calendarMark") {
+            return {
+              reminders: reconcileAllAuto({
+                assignments: s.assignments,
+                calendarMarks: s.calendarMarks,
+                reminders,
+                preferences: s.preferences,
+              }),
+            };
+          }
+          return { reminders };
+        });
         return reminder.id;
       },
       updateReminder: (id, patch) =>
-        set((state) => ({
-          reminders: state.reminders.map((r) =>
+        set((state) => {
+          const target = state.reminders.find((r) => r.id === id);
+          const reminders = state.reminders.map((r) =>
             r.id === id ? { ...r, ...patch, updatedAt: nowLocalString() } : r
-          ),
-        })),
+          );
+          // P3 fix 1：内部修改非-auto scheduled 后同样立即 reconcile（same-trigger invariant）
+          if (
+            target &&
+            target.status === "scheduled" &&
+            (target.targetType === "assignment" || target.targetType === "calendarMark")
+          ) {
+            return {
+              reminders: reconcileAllAuto({
+                assignments: state.assignments,
+                calendarMarks: state.calendarMarks,
+                reminders,
+                preferences: state.preferences,
+              }),
+            };
+          }
+          return { reminders };
+        }),
       deleteReminder: (id) =>
         set((state) => ({ reminders: state.reminders.filter((r) => r.id !== id) })),
-      // P2 §13：用户主动删除 source="auto" 的 scheduled Reminder = 该 target 关闭默认自动提醒
-      // （opt-out 跟随 Source Entity；manual/kiro 删除无影响；内部 Domain reconcile 绝不触发此语义）
+      // P3 fix 2：用户主动删除任何 source="auto" 的 Reminder（scheduled/fired/skipped 历史），
+      // 只要 target 是 assignment/calendarMark，都 = 该 target 关闭默认自动提醒（durable opt-out）。
+      // 删除 auto history 不能导致同一未到期 DDL 重新复活提醒。
+      // 内部 Domain cleanup / cascade delete / restore 不走 ByUser opt-out；manual/kiro 历史删除不写 opt-out。
       deleteReminderByUser: (id) =>
         set((state) => {
           const target = state.reminders.find((r) => r.id === id);
-          if (!target || target.source !== "auto" || target.status !== "scheduled" || !target.targetId) {
+          if (
+            !target ||
+            target.source !== "auto" ||
+            !target.targetId ||
+            (target.targetType !== "assignment" && target.targetType !== "calendarMark")
+          ) {
             return { reminders: state.reminders.filter((r) => r.id !== id) };
           }
           let assignments = state.assignments;
@@ -1276,17 +1316,25 @@ export const useAppStore = create<AppState>()(
             reminders: state.reminders.filter((r) => r.id !== id),
           };
         }),
-      // P2 §14：用户编辑 source="auto" 的 Reminder → 转自定义（source=manual）+ 关闭该 target 默认自动提醒；
-      // 保留编辑器最终选择的 relative/absolute 与同一 ID（in place 更新）
+      // P3 fix 1：用户编辑后（含 non-auto 编辑）立即 reconcile——同最终 triggerAt 的 auto 被 suppression
       updateReminderByUser: (id, patch) =>
         set((state) => {
           const target = state.reminders.find((r) => r.id === id);
           if (!target || target.source !== "auto") {
-            return {
-              reminders: state.reminders.map((r) =>
-                r.id === id ? { ...r, ...patch, updatedAt: nowLocalString() } : r
-              ),
-            };
+            const reminders = state.reminders.map((r) =>
+              r.id === id ? { ...r, ...patch, updatedAt: nowLocalString() } : r
+            );
+            if (target && (target.targetType === "assignment" || target.targetType === "calendarMark")) {
+              return {
+                reminders: reconcileAllAuto({
+                  assignments: state.assignments,
+                  calendarMarks: state.calendarMarks,
+                  reminders,
+                  preferences: state.preferences,
+                }),
+              };
+            }
+            return { reminders };
           }
           let assignments = state.assignments;
           let calendarMarks = state.calendarMarks;
@@ -1389,11 +1437,26 @@ export const useAppStore = create<AppState>()(
           ),
         })),
       restoreReminder: (reminder) =>
-        set((state) => ({
-          reminders: state.reminders.some((r) => r.id === reminder.id)
+        set((state) => {
+          const reminders = state.reminders.some((r) => r.id === reminder.id)
             ? state.reminders
-            : [...state.reminders, reminder],
-        })),
+            : [...state.reminders, reminder];
+          // P3 fix 1：恢复 scheduled 非-auto reminder 后立即 reconcile（same-trigger invariant）
+          if (
+            reminder.status === "scheduled" &&
+            (reminder.targetType === "assignment" || reminder.targetType === "calendarMark")
+          ) {
+            return {
+              reminders: reconcileAllAuto({
+                assignments: state.assignments,
+                calendarMarks: state.calendarMarks,
+                reminders,
+                preferences: state.preferences,
+              }),
+            };
+          }
+          return { reminders };
+        }),
       reconcileTargetReminders: (targetType, targetId) =>
         set((state) => ({
           reminders: reconcileTargetReminders(

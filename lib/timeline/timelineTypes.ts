@@ -32,4 +32,6 @@ export interface TimelineItem {
   priority?: "urgent" | "high" | "medium" | "low";
   /** 副信息（hover 详情；如地点 / 课程名） */
   subtitle?: string;
+  /** 独立 CalendarMark 的 mark id（P3 fix 4：ddl mark 的 per-target 提醒控制定位；assignment item 无此字段） */
+  calendarMarkId?: string;
 }

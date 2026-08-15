@@ -6,6 +6,33 @@ import { TimelineItem } from "@/lib/timeline/timelineTypes";
 import { timeToDayRatio, intervalToDayGeometry } from "@/lib/timeline/timelineGeometry";
 import { Priority } from "@/types";
 import { FloatingTimelineDetail } from "@/components/timeline/FloatingTimelineDetail";
+import { useAppStore } from "@/store/useAppStore";
+
+/** P3 fix 4：独立 DDL CalendarMark 的默认提醒恢复入口（仅真正独立 mark；linked mark 不出现第二套控制） */
+function CalendarMarkAutoReminderControl({ calendarMarkId }: { calendarMarkId?: string }) {
+  const calendarMarks = useAppStore((s) => s.calendarMarks);
+  const assignments = useAppStore((s) => s.assignments);
+  const enableAutomaticReminderForTarget = useAppStore((s) => s.enableAutomaticReminderForTarget);
+  if (!calendarMarkId) return null;
+  const mark = calendarMarks.find((m) => m.id === calendarMarkId);
+  if (!mark || mark.type !== "ddl") return null;
+  // 独立判定与 Domain 一致：sourceId 精确 relation 匹配任一 assignment → linked（排除）
+  if (mark.sourceId && assignments.some((a) => a.id === mark.sourceId)) return null;
+  if (mark.autoReminderDisabled !== true) return null;
+  return (
+    <div className="flex items-center justify-between gap-2 pt-0.5">
+      <span className="text-[10px] text-sandrift">默认提醒：已关闭</span>
+      <button
+        type="button"
+        onClick={() => enableAutomaticReminderForTarget("calendarMark", mark.id)}
+        aria-label="重新开启默认提醒"
+        className="text-[10px] font-bold text-charcoal bg-white border border-line rounded-lg px-2 py-0.5 hover:border-line-strong transition-colors"
+      >
+        重新开启
+      </button>
+    </div>
+  );
+}
 
 const MAX_TRACKS = 2;
 /** Short Interval 视觉最小宽度（px；真实时间长度不变，Semantic Geometry 与 Visual Affordance 分离） */
@@ -284,6 +311,8 @@ function DeadlinePoint({
               {PRIORITY_LABEL[item.priority]}
             </p>
           )}
+          {/* P3 fix 4：独立 DDL CalendarMark 的默认提醒恢复入口（仅真正独立 mark；linked mark 无第二套控制） */}
+          <CalendarMarkAutoReminderControl calendarMarkId={item.calendarMarkId} />
         </div>
       </FloatingTimelineDetail>
     </>

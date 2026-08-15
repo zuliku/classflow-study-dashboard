@@ -292,11 +292,21 @@ export function reconcileAutoDeadlineReminder(input: {
           refreshAutoIds: [],
         };
       }
-      const refreshAutoIds: { id: string; offsetMinutes: number; triggerAt: string }[] = [];
+      const refreshAutoIds: { id: string; offsetMinutes: number; triggerAt: string; title: string }[] = [];
       for (const r of survivors) {
         const rebuilt = buildAutoDeadlineReminder({ targetType, targetId, title, anchor, leadMinutes: lead });
-        if (rebuilt && (rebuilt.offsetMinutes !== r.offsetMinutes || rebuilt.triggerAt !== r.triggerAt)) {
-          refreshAutoIds.push({ id: r.id, offsetMinutes: rebuilt.offsetMinutes, triggerAt: rebuilt.triggerAt });
+        if (
+          rebuilt &&
+          (rebuilt.offsetMinutes !== r.offsetMinutes ||
+            rebuilt.triggerAt !== r.triggerAt ||
+            rebuilt.title !== r.title)
+        ) {
+          refreshAutoIds.push({
+            id: r.id,
+            offsetMinutes: rebuilt.offsetMinutes,
+            triggerAt: rebuilt.triggerAt,
+            title: rebuilt.title,
+          });
         }
       }
       return { proposal: null, staleAutoIds, refreshAutoIds };
@@ -336,8 +346,11 @@ export function reconcileAutoDeadlineReminder(input: {
 export interface AutoReminderReconcileResult {
   proposal: AutoDeadlineReminderProposal | null;
   staleAutoIds: string[];
-  /** 现有 scheduled auto 应按当前 requestedLead 更新（offset/triggerAt 变化才出现） */
-  refreshAutoIds: { id: string; offsetMinutes: number; triggerAt: string }[];
+  /**
+   * 现有 scheduled auto 应按当前 requestedLead 更新（offset/triggerAt 变化才出现）；
+   * title 跟随 Source Entity（anchor 不变时 title 变化同样触发 refresh）
+   */
+  refreshAutoIds: { id: string; offsetMinutes: number; triggerAt: string; title: string }[];
 }
 
 /** 把单个 reconcile 结果应用到 reminders（删 stale + 更新 refresh + 加 proposal） */
@@ -352,7 +365,13 @@ export function applyAutoReconcileResult(
     .map((r) => {
       const refresh = result.refreshAutoIds.find((x) => x.id === r.id);
       if (!refresh) return r;
-      return { ...r, offsetMinutes: refresh.offsetMinutes, triggerAt: refresh.triggerAt, updatedAt: now };
+      return {
+        ...r,
+        title: refresh.title,
+        offsetMinutes: refresh.offsetMinutes,
+        triggerAt: refresh.triggerAt,
+        updatedAt: now,
+      };
     });
   if (result.proposal) {
     out = [

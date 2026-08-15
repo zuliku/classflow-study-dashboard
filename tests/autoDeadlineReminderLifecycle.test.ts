@@ -1,5 +1,6 @@
 ﻿import { describe, it, expect, vi, beforeEach } from "vitest";
 import { Assignment, CalendarMark, Reminder } from "@/types";
+import { reconcileAllAutomaticDeadlineReminders } from "@/lib/reminders/autoDeadlineReminder";
 
 /**
  * P2：Automatic Deadline Reminder Lifecycle + Persistence（真实 Store）。
@@ -9,6 +10,11 @@ import { Assignment, CalendarMark, Reminder } from "@/types";
  */
 
 const KEY = "classflow-storage-v2";
+
+function localStr(d: Date): string {
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+}
 
 /** 相对 today 的天偏移（本地墙钟） */
 function dayOffset(offset: number, hour = 10, minute = 0): string {
@@ -566,6 +572,224 @@ describe("global preference 重算", () => {
     const store = await freshStore();
     store.getState().setDefaultDeadlineReminderMinutes(999);
     expect(store.getState().preferences.defaultDeadlineReminderMinutes).toBe(1440);
+  });
+});
+
+describe("P3 fix 1：same-trigger invariant 在 mutation 后立即成立", () => {
+  it("A. existing auto relative + add absolute manual 同最终 trigger → 立即 suppression（无需额外 reconcile）", async () => {
+    seedState();
+    const store = await freshStore();
+    const id = store.getState().addAssignment(mkAssignment({ ddl: dayOffset(5) }));
+    expect(scheduledAutos(store.getState().reminders, "assignment", id)).toHaveLength(1);
+    const auto = scheduledAutos(store.getState().reminders, "assignment", id)[0];
+    // 新增 final triggerAt 与 auto 完全相同的 absolute manual（auto.triggerAt = 提前 1 天时刻）
+    const manualId = store.getState().addReminder({
+      title: "手动同点 absolute",
+      targetType: "assignment",
+      targetId: id,
+      timingMode: "absolute",
+      triggerAt: auto.triggerAt,
+      source: "manual",
+    })!;
+    // mutation 返回后立即成立：只有 manual scheduled；auto 已 suppression；未 opt-out
+    const reminders = store.getState().reminders;
+    expect(reminders.filter((r: Reminder) => r.status === "scheduled" && r.id === manualId)).toHaveLength(1);
+    expect(scheduledAutos(reminders, "assignment", id)).toHaveLength(0);
+    expect(store.getState().assignments.find((a: Assignment) => a.id === id)!.autoReminderDisabled).toBeUndefined();
+  });
+
+  it("B. existing auto + kiro/manual same trigger 同理（relative 同 offset）", async () => {
+    seedState();
+    const store = await freshStore();
+    const id = store.getState().addAssignment(mkAssignment({ ddl: dayOffset(5) }));
+    expect(scheduledAutos(store.getState().reminders, "assignment", id)).toHaveLength(1);
+    const manualId = store.getState().addReminder({
+      title: "Kiro 同点",
+      targetType: "assignment",
+      targetId: id,
+      timingMode: "relative",
+      offsetMinutes: -1440,
+      triggerAt: "",
+      source: "kiro",
+    })!;
+    expect(store.getState().reminders.find((r: Reminder) => r.id === manualId)).toBeTruthy();
+    expect(scheduledAutos(store.getState().reminders, "assignment", id)).toHaveLength(0);
+  });
+
+  it("C. different trigger 仍 coexist", async () => {
+    seedState();
+    const store = await freshStore();
+    const id = store.getState().addAssignment(mkAssignment({ ddl: dayOffset(5) }));
+    const manualId = store.getState().addReminder({
+      title: "手动 3 小时",
+      targetType: "assignment",
+      targetId: id,
+      timingMode: "relative",
+      offsetMinutes: -180,
+      triggerAt: "",
+      source: "manual",
+    })!;
+    expect(scheduledAutos(store.getState().reminders, "assignment", id)).toHaveLength(1);
+    expect(store.getState().reminders.find((r: Reminder) => r.id === manualId)).toBeTruthy();
+  });
+
+  it("D. 删除 same-trigger manual 后再执行合法 target reconcile → auto 恢复且未 opt-out", async () => {
+    seedState();
+    const store = await freshStore();
+    const id = store.getState().addAssignment(mkAssignment({ ddl: dayOffset(5) }));
+    const auto = scheduledAutos(store.getState().reminders, "assignment", id)[0];
+    const manualId = store.getState().addReminder({
+      title: "手动同点",
+      targetType: "assignment",
+      targetId: id,
+      timingMode: "absolute",
+      triggerAt: auto.triggerAt,
+      source: "manual",
+    })!;
+    expect(scheduledAutos(store.getState().reminders, "assignment", id)).toHaveLength(0);
+    // 删除 suppressing manual（内部删除，不触发 reconcile）→ 执行合法 target reconcile（title update）
+    store.getState().deleteReminder(manualId);
+    const a = store.getState().assignments.find((x: Assignment) => x.id === id)!;
+    store.getState().updateAssignment({ ...a, title: "改名任务" });
+    const autos = scheduledAutos(store.getState().reminders, "assignment", id);
+    expect(autos).toHaveLength(1);
+    expect(store.getState().assignments.find((x: Assignment) => x.id === id)!.autoReminderDisabled).toBeUndefined();
+  });
+
+  it("编辑 manual 到 auto 同 trigger → 立即 suppression（updateReminderByUser non-auto 分支）", async () => {
+    seedState();
+    const store = await freshStore();
+    const id = store.getState().addAssignment(mkAssignment({ ddl: dayOffset(5) }));
+    const auto = scheduledAutos(store.getState().reminders, "assignment", id)[0];
+    // 先建一条不同 trigger 的 manual，再编辑到 auto 的 triggerAt
+    const manualId = store.getState().addReminder({
+      title: "待编辑",
+      targetType: "assignment",
+      targetId: id,
+      timingMode: "absolute",
+      triggerAt: dayOffset(2, 10, 0),
+      source: "manual",
+    })!;
+    store.getState().updateReminderByUser(manualId, { timingMode: "absolute", triggerAt: auto.triggerAt });
+    expect(scheduledAutos(store.getState().reminders, "assignment", id)).toHaveLength(0);
+    expect(store.getState().reminders.find((r: Reminder) => r.id === manualId)).toBeTruthy();
+  });
+});
+
+describe("P3 fix 2：删除 auto history = durable opt-out（不复活）", () => {
+  it("auto 1d fired → 用户删除 fired history → 后续 reconcile 不重新生成 + opt=true", async () => {
+    seedState();
+    const store = await freshStore();
+    const id = store.getState().addAssignment(mkAssignment({ ddl: dayOffset(5) }));
+    const auto = scheduledAutos(store.getState().reminders, "assignment", id)[0];
+    // fired（针对当前 DDL 已处理）
+    store.getState().markReminderFired(auto.id, auto.triggerAt);
+    // 用户删除 fired history（非内部清理）
+    store.getState().deleteReminderByUser(auto.id);
+    expect(store.getState().assignments.find((a: Assignment) => a.id === id)!.autoReminderDisabled).toBe(true);
+    expect(store.getState().reminders.some((r: Reminder) => r.id === auto.id)).toBe(false);
+    // 后续多种 reconcile 都不复活（DDL 仍未来）
+    store.getState().setDefaultDeadlineReminderMinutes(4320);
+    expect(scheduledAutos(store.getState().reminders, "assignment", id)).toHaveLength(0);
+    const a = store.getState().assignments.find((x: Assignment) => x.id === id)!;
+    store.getState().updateAssignment({ ...a, title: "改名" });
+    expect(scheduledAutos(store.getState().reminders, "assignment", id)).toHaveLength(0);
+    // reload 语义（hydrate backfill）同样不复活
+    const persisted = JSON.parse(localStorage.getItem(KEY)!).state;
+    localStorage.setItem(KEY, JSON.stringify({ version: 6, state: persisted }));
+    const store2 = await freshStore();
+    expect(scheduledAutos(store2.getState().reminders, "assignment", id)).toHaveLength(0);
+    expect(store2.getState().assignments.find((a: Assignment) => a.id === id)!.autoReminderDisabled).toBe(true);
+  });
+
+  it("calendarMark 独立 mark：用户删除 auto（scheduled）→ opt-out 写入 mark", async () => {
+    seedState();
+    const store = await freshStore();
+    const markId = store.getState().addCalendarMark({ date: dayOffset(5).slice(0, 10), type: "ddl", title: "交报告" });
+    const auto = scheduledAutos(store.getState().reminders, "calendarMark", markId)[0];
+    store.getState().deleteReminderByUser(auto.id);
+    expect(store.getState().calendarMarks.find((m: CalendarMark) => m.id === markId)!.autoReminderDisabled).toBe(true);
+    expect(scheduledAutos(store.getState().reminders, "calendarMark", markId)).toHaveLength(0);
+  });
+
+  it("内部删除 fired auto（cascade/restore 路径）不写 opt-out；manual history 删除不写 opt-out", async () => {
+    const store = await freshStore();
+    const id = store.getState().addAssignment(mkAssignment({ ddl: dayOffset(5) }));
+    const auto = scheduledAutos(store.getState().reminders, "assignment", id)[0];
+    store.getState().markReminderFired(auto.id, auto.triggerAt);
+    // 内部删除（deleteReminder 非 ByUser）→ 不 opt-out
+    store.getState().deleteReminder(auto.id);
+    expect(store.getState().assignments.find((a: Assignment) => a.id === id)!.autoReminderDisabled).toBeUndefined();
+    // manual fired 历史删除 → 不 opt-out
+    const manualId = store.getState().addReminder({
+      title: "手动历史",
+      targetType: "assignment",
+      targetId: id,
+      timingMode: "relative",
+      offsetMinutes: -180,
+      triggerAt: "",
+      source: "manual",
+    })!;
+    store.getState().markReminderFired(manualId, dayOffset(5, 9, 0));
+    store.getState().deleteReminderByUser(manualId);
+    expect(store.getState().assignments.find((a: Assignment) => a.id === id)!.autoReminderDisabled).toBeUndefined();
+  });
+});
+
+describe("P3 fix 3：auto title 跟随 Source Entity（anchor 不变）", () => {
+  it("Assignment title A->B → 同一 auto id title 变 B；manual title 不动", async () => {
+    seedState();
+    const store = await freshStore();
+    const id = store.getState().addAssignment(mkAssignment({ title: "任务 A", ddl: dayOffset(5) }));
+    const auto = scheduledAutos(store.getState().reminders, "assignment", id)[0];
+    expect(auto.title).toBe("任务 A");
+    const manualId = store.getState().addReminder({
+      title: "手动标题",
+      targetType: "assignment",
+      targetId: id,
+      timingMode: "relative",
+      offsetMinutes: -180,
+      triggerAt: "",
+      source: "manual",
+    })!;
+    // title 变化（anchor 不变）→ 任意合法 reconcile（updateAssignment）
+    const a = store.getState().assignments.find((x: Assignment) => x.id === id)!;
+    store.getState().updateAssignment({ ...a, title: "任务 B" });
+    const after = store.getState().reminders.find((r: Reminder) => r.id === auto.id)!;
+    expect(after.id).toBe(auto.id);
+    expect(after.title).toBe("任务 B");
+    expect(after.triggerAt).toBe(auto.triggerAt); // triggerAt/offset 不因 title 改变
+    expect(after.offsetMinutes).toBe(auto.offsetMinutes);
+    expect(store.getState().reminders.find((r: Reminder) => r.id === manualId)!.title).toBe("手动标题");
+  });
+
+  it("reconcileAllAutomaticDeadlineReminders（纯函数）title refresh：mark title 变化（Domain contract）", async () => {
+    const mark = { id: "m1", date: dayOffset(5).slice(0, 10), type: "ddl" as const, title: "旧标题" };
+    // mark 无 startTime → anchor = date + defaultDDLTime(23:59) → auto triggerAt = dayOffset(4, 23, 59)
+    const auto: Reminder = {
+      id: "auto1",
+      title: "旧标题",
+      targetType: "calendarMark",
+      targetId: "m1",
+      timingMode: "relative",
+      offsetMinutes: -1440,
+      triggerAt: dayOffset(4, 23, 59),
+      status: "scheduled",
+      source: "auto",
+      createdAt: localStr(new Date()),
+      updatedAt: localStr(new Date()),
+    };
+    const out = reconcileAllAutomaticDeadlineReminders({
+      assignments: [],
+      calendarMarks: [{ ...mark, title: "新标题" }],
+      reminders: [auto],
+      requestedLead: 1440,
+      defaultDDLTime: "23:59",
+      now: localStr(new Date()),
+    });
+    const after = out.find((r: Reminder) => r.id === "auto1")!;
+    expect(after.title).toBe("新标题");
+    expect(after.offsetMinutes).toBe(-1440);
   });
 });
 

@@ -92,11 +92,24 @@ describe("hasAssignmentReminderDuplicate", () => {
     ).toBe(false);
   });
 
-  it("relative 与 absolute 即使同一实际时刻也不视为重复（语义不同）", () => {
+  it("P3 fix 1：relative 与 absolute 最终 triggerAt 相同 → 视为重复（同实际通知时刻）", () => {
+    // relative -60 的 triggerAt（最终时刻）22:00；absolute 同时刻 → duplicate
     const reminders = [mkReminder("r1", { timingMode: "relative", offsetMinutes: -60, triggerAt: "2026-08-15T22:00:00" })];
     expect(
       hasAssignmentReminderDuplicate(reminders, "a1", { timingMode: "absolute", triggerAt: "2026-08-15T22:00:00" })
+    ).toBe(true);
+    // 不同最终时刻 → 不重复
+    expect(
+      hasAssignmentReminderDuplicate(reminders, "a1", { timingMode: "absolute", triggerAt: "2026-08-15T23:00:00" })
     ).toBe(false);
+  });
+
+  it("P3 fix 1：relative vs relative：anchor+offset 解析后的最终时刻相同 → 重复", () => {
+    const reminders = [mkReminder("r1", { timingMode: "relative", offsetMinutes: 0, triggerAt: "2026-08-15T22:00:00" })];
+    // schedule：anchor 23:00 + offset -60 → 最终 22:00，与 r1 的 22:00 相同
+    expect(
+      hasAssignmentReminderDuplicate(reminders, "a1", { timingMode: "relative", offsetMinutes: -60, triggerAt: "2026-08-15T23:00:00" })
+    ).toBe(true);
   });
 });
 

@@ -59,9 +59,15 @@ interface SeedInput {
 }
 
 async function seed(page: Page, input: SeedInput) {
+  const now = new Date();
+  const dow = now.getDay() === 0 ? 7 : now.getDay();
+  const monday = new Date(now);
+  monday.setDate(now.getDate() - (dow - 1));
+  const p = (n: number) => String(n).padStart(2, "0");
   const state = {
     userProfile: { name: "P3 测试", avatarUrl: "", college: "", grade: "", studentId: "", completedCredits: 0, totalCredits: 0 },
-    semester: { id: "s", name: "测试学期", startDate: "2026-01-01", totalWeeks: 16 },
+    // 动态学期：本周一开学（Timeline 当前周含今天）
+    semester: { id: "s", name: "测试学期", startDate: `${monday.getFullYear()}-${p(monday.getMonth() + 1)}-${p(monday.getDate())}`, totalWeeks: 16 },
     courses: [],
     schedules: [],
     assignments: input.assignments ?? [],
@@ -254,6 +260,67 @@ test("G15：settings 1d -> 3d → 所有 auto 更新、manual/custom 不变", as
   await expect(panel2.getByText(/提前 3 天/, { exact: false })).toHaveCount(2);
   await expect(panel2.getByText(/提前 3 小时/, { exact: false })).toHaveCount(1);
   await expect(panel2.getByText(/提前 1 天/, { exact: false })).toHaveCount(0);
+});
+
+test("fix1 UI：custom absolute 与 auto 同实际时刻 → UI duplicate guard 拦截，Center 只有 1 个 scheduled", async ({ page }) => {
+  await seed(page, {
+    assignments: [mkAssignment({ id: "a1", title: "同点任务", ddl: daysFromNow(5) })],
+  });
+  const panel = await openReminderCenter(page);
+  await expect(panel.getByText("自动", { exact: true })).toHaveCount(1);
+  // 打开 Drawer → 自定义时间创建与 auto 相同 triggerAt 的 absolute
+  await panel.getByText("同点任务", { exact: false }).first().click();
+  await expect(page.getByText("默认提醒：已开启", { exact: true })).toBeVisible({ timeout: 8000 });
+  const autoTrigger = await page.evaluate(() => {
+    const d = JSON.parse(localStorage.getItem("classflow-storage-v2")!).state;
+    const r = d.reminders.find((x: { source: string }) => x.source === "auto");
+    return r.triggerAt as string;
+  });
+  await page.getByRole("button", { name: "添加", exact: true }).first().click();
+  await page.getByRole("button", { name: "自定义时间…", exact: true }).click();
+  const picker = page.getByTestId("assignment-reminder-picker");
+  await picker.getByLabel("提醒日期").fill(autoTrigger.slice(0, 10));
+  await picker.getByLabel("提醒时间").fill(autoTrigger.slice(11, 16));
+  await picker.getByRole("button", { name: "保存", exact: true }).click();
+  // UI duplicate guard（与 Domain 同 trigger 语义一致）阻止创建
+  await expect(picker.getByText("已经存在相同时间的提醒", { exact: true })).toBeVisible();
+  // 关闭 Drawer → Center：仍只有 1 个 scheduled（auto），无重复通知
+  await page.keyboard.press("Escape");
+  await page.getByRole("button", { name: "提醒", exact: true }).click();
+  const panel2 = page.getByTestId("reminder-center");
+  await expect(panel2).toHaveAttribute("data-state", "open", { timeout: 8000 });
+  await expect(panel2.getByText("自动", { exact: true })).toHaveCount(1);
+});
+
+test("fix4：独立 DDL mark 删除 auto → Timeline 显示已关闭 → 重新开启恢复 exactly one auto", async ({ page }) => {
+  const today = new Date();
+  const p = (n: number) => String(n).padStart(2, "0");
+  const todayStr = `${today.getFullYear()}-${p(today.getMonth() + 1)}-${p(today.getDate())}`;
+  // 今天 + 3 小时后（未来时间 → DeadlinePoint 渲染 + auto 生成）
+  const later = new Date(Date.now() + 3 * 3600000);
+  const laterTime = `${p(later.getHours())}:${p(later.getMinutes())}`;
+  await seed(page, {
+    calendarMarks: [{ id: "cm1", date: todayStr, type: "ddl", title: "交项目报告", startTime: laterTime }],
+  });
+  const panel = await openReminderCenter(page);
+  await expect(panel.getByText("交项目报告", { exact: false }).first()).toBeVisible();
+  await expect(panel.getByText("自动", { exact: true })).toHaveCount(1);
+  // 删除 auto（用户删除 → opt-out）；关闭 Center 后切 Timeline
+  await panel.locator('button[aria-label="删除提醒 交项目报告"]').first().click();
+  await expect(panel.getByText("交项目报告", { exact: false })).toHaveCount(0, { timeout: 5000 });
+  await page.keyboard.press("Escape");
+  // Timeline：hover 独立 DDL mark → 默认提醒：已关闭 + 重新开启
+  await page.getByRole("button", { name: "时间表", exact: true }).click();
+  const deadlinePoint = page.getByRole("button", { name: /交项目报告.*截止/ });
+  await deadlinePoint.first().hover();
+  await expect(page.getByText("默认提醒：已关闭", { exact: true })).toBeVisible({ timeout: 8000 });
+  await page.getByRole("button", { name: "重新开启默认提醒", exact: true }).click();
+  await expect(page.getByText("默认提醒：已关闭", { exact: true })).toHaveCount(0);
+  // 回到 Center：auto 恢复 exactly one
+  await page.getByRole("button", { name: "提醒", exact: true }).click();
+  const panel2 = page.getByTestId("reminder-center");
+  await expect(panel2).toHaveAttribute("data-state", "open", { timeout: 8000 });
+  await expect(panel2.getByText("自动", { exact: true })).toHaveCount(1);
 });
 
 test("hydration：legacy-like state（future DDL + linked mark + 无 auto）→ 恰好 1 条 auto", async ({ page }) => {

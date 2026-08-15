@@ -75,6 +75,8 @@ export function deriveTimelineItems(input: DeriveTimelineInput): TimelineItem[] 
       date: m.date,
       startTime: m.startTime,
       endTime: m.endTime,
+      // P3 fix 4：独立 ddl mark 携带 mark id（per-target 默认提醒控制定位）
+      calendarMarkId: m.type === "ddl" ? m.id : undefined,
     });
   }
 

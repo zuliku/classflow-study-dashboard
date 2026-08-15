@@ -40,11 +40,11 @@ export interface ReminderScheduleInput {
 }
 
 /**
- * 防重复（UI 层）：
- * - relative 与 relative：同 offsetMinutes 即重复
- * - absolute 与 absolute：triggerAt 完全一致即重复
- * - relative 与 absolute：即使同一实际时刻也不视为重复（语义不同：relative 跟随 DDL）
- * excludeReminderId：编辑时排除自己。
+ * 防重复（UI 层，P3 fix 1：与 Domain same-trigger 语义一致）：
+ * 按「最终解析后的本地 triggerAt」比较（epoch）——relative 与 absolute 若最终时刻相同
+ * 同样属于重复实际通知（不再只比较 timingMode）。
+ * 注意：schedule 输入中 relative 的 triggerAt 是 anchor（preset 传 DDL）；已有 Reminder 的
+ * triggerAt 是最终值（resolve 后）。excludeReminderId：编辑时排除自己。
  */
 export function hasAssignmentReminderDuplicate(
   reminders: Reminder[],
@@ -52,16 +52,23 @@ export function hasAssignmentReminderDuplicate(
   schedule: ReminderScheduleInput,
   excludeReminderId?: string
 ): boolean {
+  // schedule：relative 需按 anchor + offset resolve 到最终时刻
+  const scheduleFinal =
+    schedule.timingMode === "relative"
+      ? resolveReminderTriggerAt({
+          timingMode: "relative",
+          triggerAt: schedule.triggerAt,
+          offsetMinutes: schedule.offsetMinutes,
+        })
+      : schedule.triggerAt;
+  const target = scheduleFinal ? parseLocalDDL(scheduleFinal) : null;
+  if (!target) return false;
   return reminders.some((r) => {
     if (r.targetType !== "assignment" || r.targetId !== assignmentId) return false;
     if (r.status !== "scheduled" || r.id === excludeReminderId) return false;
-    if (schedule.timingMode === "relative" && r.timingMode === "relative") {
-      return (r.offsetMinutes ?? 0) === (schedule.offsetMinutes ?? 0);
-    }
-    if (schedule.timingMode === "absolute" && r.timingMode === "absolute") {
-      return r.triggerAt === schedule.triggerAt;
-    }
-    return false;
+    const rt = parseLocalDDL(r.triggerAt);
+    if (!rt) return false;
+    return rt.getTime() === target.getTime();
   });
 }
 
