@@ -156,7 +156,8 @@ export function ReminderCenter() {
       return;
     }
     if (editor?.mode === "edit" && editor.reminder.status === "scheduled") {
-      useAppStore.getState().updateReminder(editor.reminder.id, { title, note: draft.note.trim() || undefined, triggerAt });
+      // P2 §14：用户编辑（含 auto 转自定义 + target opt-out 由 ByUser 语义处理）
+      useAppStore.getState().updateReminderByUser(editor.reminder.id, { title, note: draft.note.trim() || undefined, triggerAt });
     } else {
       const id = useAppStore.getState().addReminder({
         title,
@@ -176,7 +177,8 @@ export function ReminderCenter() {
   };
 
   const handleDelete = (id: string) => {
-    useAppStore.getState().deleteReminder(id);
+    // P2 §13：用户删除（auto → 该 target opt-out 由 ByUser 语义处理）
+    useAppStore.getState().deleteReminderByUser(id);
   };
 
   const handleOpenItem = (r: Reminder) => {

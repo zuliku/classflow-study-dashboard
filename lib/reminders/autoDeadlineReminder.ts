@@ -10,6 +10,7 @@
  */
 
 import {
+  Assignment,
   AssignmentStatus,
   CalendarMark,
   Reminder,
@@ -17,6 +18,7 @@ import {
 } from "@/types";
 import { combineLocalDateTime, parseLocalDDL } from "@/lib/ddl";
 import { formatLocalDateTime, resolveReminderTriggerAt } from "@/lib/reminders/reminderDomain";
+import { createId } from "@/lib/utils";
 
 /** 自动提醒提前分钟数固定档位（Settings 可选：7天 / 3天 / 1天 / 1小时） */
 export type AutoDeadlineLeadMinutes = 60 | 1440 | 4320 | 10080;
@@ -160,8 +162,10 @@ export function hasScheduledAutoReminderForTarget(
 }
 
 /**
- * 同 target + 同最终 triggerAt 去重（§10，含非 auto scheduled Reminder）：
+ * 同 target + 同最终 triggerAt 去重（§10/§16，仅针对非 auto scheduled Reminder）：
  * 比较基于规范化后的本地墙钟时间（epoch），避免 "12:00" vs "12:00:00" 格式差异误判。
+ * - 创建前检查：非 auto scheduled 同 triggerAt → 临时 suppression（不创建 auto）
+ * - 已存在 auto 的 suppression：非 auto scheduled 同 triggerAt → 移除对应 auto
  * 解析失败 → 保守视为冲突（不创建）。
  */
 export function hasAutoReminderSameTriggerConflict(
@@ -174,7 +178,7 @@ export function hasAutoReminderSameTriggerConflict(
   if (!target) return true;
   return reminders.some((r) => {
     if (r.targetType !== targetType || r.targetId !== targetId) return false;
-    if (r.status !== "scheduled") return false;
+    if (r.status !== "scheduled" || r.source === "auto") return false;
     const t = parseLocalDDL(r.triggerAt);
     if (!t) return false;
     return t.getTime() === target.getTime();
@@ -247,7 +251,7 @@ export function reconcileAutoDeadlineReminder(input: {
   requestedLead: AutoDeadlineLeadMinutes;
   now: string;
   reminders: Reminder[];
-}): { proposal: AutoDeadlineReminderProposal | null; staleAutoIds: string[] } {
+}): AutoReminderReconcileResult {
   const { targetType, targetId, title, anchor, requestedLead, now, reminders } = input;
   const targetReminders = reminders.filter(
     (r) => r.targetType === targetType && r.targetId === targetId
@@ -258,30 +262,57 @@ export function reconcileAutoDeadlineReminder(input: {
 
   // 1. 无 anchor（DDL 删除 / 无有效时间）：不创建；遗留 scheduled auto 为 stale
   if (!anchor) {
-    return { proposal: null, staleAutoIds: scheduledAuto.map((r) => r.id) };
+    return { proposal: null, staleAutoIds: scheduledAuto.map((r) => r.id), refreshAutoIds: [] };
   }
 
-  // 2. 已存在 scheduled auto：anchor 匹配 → 保留；不匹配 → stale（唯一性：不重复创建）
+  // 2. 已存在 scheduled auto：
+  //    - anchor 匹配的幸存者：按当前默认重算（§11；降级 ladder 由 resolve 统一处理）——不重复创建
+  //    - anchor 不匹配 / 被 same-trigger suppression：stale 删除；若全部 stale → fall through 创建新 auto
+  //    §16：非 auto scheduled 同 triggerAt → 移除对应 auto（避免重复通知，不设置 opt-out）
+  let staleAutoIds: string[] = [];
   if (scheduledAuto.length > 0) {
     const matching = scheduledAuto.filter((r) => {
       const inferred = inferAutoReminderAnchor(r);
       return inferred !== null && anchorsEqual(inferred, anchor);
     });
-    return {
-      proposal: null,
-      staleAutoIds: scheduledAuto.filter((r) => !matching.includes(r)).map((r) => r.id),
-    };
+    const suppressed = matching.filter((r) =>
+      hasAutoReminderSameTriggerConflict(targetReminders, targetType, targetId, r.triggerAt)
+    );
+    staleAutoIds = scheduledAuto
+      .filter((r) => !matching.includes(r) || suppressed.includes(r))
+      .map((r) => r.id);
+    const survivors = matching.filter((r) => !suppressed.includes(r));
+    if (survivors.length > 0) {
+      const lead = resolveAutoDeadlineLead({ requestedLead, ddl: anchor, now });
+      if (lead === null) {
+        // DDL 已过 → 幸存者也不该存在（不复活）
+        return {
+          proposal: null,
+          staleAutoIds: [...staleAutoIds, ...survivors.map((r) => r.id)],
+          refreshAutoIds: [],
+        };
+      }
+      const refreshAutoIds: { id: string; offsetMinutes: number; triggerAt: string }[] = [];
+      for (const r of survivors) {
+        const rebuilt = buildAutoDeadlineReminder({ targetType, targetId, title, anchor, leadMinutes: lead });
+        if (rebuilt && (rebuilt.offsetMinutes !== r.offsetMinutes || rebuilt.triggerAt !== r.triggerAt)) {
+          refreshAutoIds.push({ id: r.id, offsetMinutes: rebuilt.offsetMinutes, triggerAt: rebuilt.triggerAt });
+        }
+      }
+      return { proposal: null, staleAutoIds, refreshAutoIds };
+    }
+    // 全部 stale（anchor 全变）：删旧 → 继续下方创建逻辑（apply 时先删旧再建新）
   }
 
   // 3a. 历史 auto 已处理当前 anchor → 不重建
   if (hasAutoReminderHandledAnchor(targetReminders, targetType, targetId, anchor)) {
-    return { proposal: null, staleAutoIds: [] };
+    return { proposal: null, staleAutoIds, refreshAutoIds: [] };
   }
 
   // 3b. 降级（DDL <= now → null，不产生已过去的默认提醒）
   const lead = resolveAutoDeadlineLead({ requestedLead, ddl: anchor, now });
   if (lead === null) {
-    return { proposal: null, staleAutoIds: [] };
+    return { proposal: null, staleAutoIds, refreshAutoIds: [] };
   }
 
   const proposal = buildAutoDeadlineReminder({
@@ -291,12 +322,111 @@ export function reconcileAutoDeadlineReminder(input: {
     anchor,
     leadMinutes: lead,
   });
-  if (!proposal) return { proposal: null, staleAutoIds: [] };
+  if (!proposal) return { proposal: null, staleAutoIds, refreshAutoIds: [] };
 
   // 3c. same-time suppression：非 auto scheduled 同 triggerAt → 不创建（临时，不等于 opt-out）
   if (hasAutoReminderSameTriggerConflict(targetReminders, targetType, targetId, proposal.triggerAt)) {
-    return { proposal: null, staleAutoIds: [] };
+    return { proposal: null, staleAutoIds, refreshAutoIds: [] };
   }
 
-  return { proposal, staleAutoIds: [] };
+  return { proposal, staleAutoIds, refreshAutoIds: [] };
+}
+
+/** 单个 target 的 reconcile 结果（§11：anchor 匹配的现有 scheduled auto 按当前默认重算） */
+export interface AutoReminderReconcileResult {
+  proposal: AutoDeadlineReminderProposal | null;
+  staleAutoIds: string[];
+  /** 现有 scheduled auto 应按当前 requestedLead 更新（offset/triggerAt 变化才出现） */
+  refreshAutoIds: { id: string; offsetMinutes: number; triggerAt: string }[];
+}
+
+/** 把单个 reconcile 结果应用到 reminders（删 stale + 更新 refresh + 加 proposal） */
+export function applyAutoReconcileResult(
+  reminders: Reminder[],
+  result: AutoReminderReconcileResult,
+  now: string
+): Reminder[] {
+  const staleIds = new Set(result.staleAutoIds);
+  let out = reminders
+    .filter((r) => !staleIds.has(r.id))
+    .map((r) => {
+      const refresh = result.refreshAutoIds.find((x) => x.id === r.id);
+      if (!refresh) return r;
+      return { ...r, offsetMinutes: refresh.offsetMinutes, triggerAt: refresh.triggerAt, updatedAt: now };
+    });
+  if (result.proposal) {
+    out = [
+      ...out,
+      {
+        id: createId("r"),
+        title: result.proposal.title,
+        targetType: result.proposal.targetType,
+        targetId: result.proposal.targetId,
+        timingMode: "relative",
+        offsetMinutes: result.proposal.offsetMinutes,
+        triggerAt: result.proposal.triggerAt,
+        status: "scheduled",
+        source: "auto",
+        createdAt: now,
+        updatedAt: now,
+      },
+    ];
+  }
+  return out;
+}
+
+/**
+ * P2：全量自动 DDL 提醒 reconcile（幂等，纯函数）：
+ * 对每个 Assignment（eligible：合法 DDL + todo/doing + 未 opt-out）与
+ * 每个独立 DDL CalendarMark（type=ddl + 无 assignment 精确 relation + 未 opt-out）
+ * 按当前全局默认提前量 + 降级 ladder 收敛到「Domain 应有状态」：
+ * - 至多 1 条 scheduled auto（anchor 匹配）
+ * - opt-out / submitted / completed / DDL 删除 → scheduled auto 移除
+ * - 同 anchor 已 fired/skipped → 不重建；anchor 变化 → 可重建
+ * - manual/kiro 同 triggerAt → 临时 suppression（不 opt-out）
+ * - 历史（fired/skipped）与 manual/kiro/custom 绝不修改
+ */
+export function reconcileAllAutomaticDeadlineReminders(input: {
+  assignments: Assignment[];
+  calendarMarks: CalendarMark[];
+  reminders: Reminder[];
+  requestedLead: AutoDeadlineLeadMinutes;
+  defaultDDLTime: string;
+  now: string;
+}): Reminder[] {
+  const { assignments, calendarMarks, reminders, requestedLead, defaultDDLTime, now } = input;
+  let out = reminders;
+  const assignmentIds = new Set(assignments.map((a) => a.id));
+
+  for (const a of assignments) {
+    const anchor = isAssignmentAutoReminderEligible(a) ? (a.ddl ?? null) : null;
+    const result = reconcileAutoDeadlineReminder({
+      targetType: "assignment",
+      targetId: a.id,
+      title: a.title,
+      anchor,
+      requestedLead,
+      now,
+      reminders: out,
+    });
+    out = applyAutoReconcileResult(out, result, now);
+  }
+
+  for (const m of calendarMarks) {
+    const anchor = isIndependentDDLCalendarMark(m, assignmentIds)
+      ? resolveDDLCalendarMarkAnchor(m, defaultDDLTime)
+      : null;
+    const result = reconcileAutoDeadlineReminder({
+      targetType: "calendarMark",
+      targetId: m.id,
+      title: m.title,
+      anchor,
+      requestedLead,
+      now,
+      reminders: out,
+    });
+    out = applyAutoReconcileResult(out, result, now);
+  }
+
+  return out;
 }

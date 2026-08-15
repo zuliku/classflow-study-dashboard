@@ -57,6 +57,7 @@ import {
   reconcileTargetReminders,
   resolveReminderTriggerAt,
 } from "@/lib/reminders/reminderDomain";
+import { reconcileAllAutomaticDeadlineReminders } from "@/lib/reminders/autoDeadlineReminder";
 
 /** Task 7G-A1：Reminder 时间戳统一本地墙钟 */
 const nowLocalString = () => formatLocalDateTime(new Date());
@@ -87,6 +88,23 @@ function clearScheduledAssignmentReminders(reminders: Reminder[], assignmentId: 
   return reminders.filter(
     (r) => !(r.targetType === "assignment" && r.targetId === assignmentId && r.status === "scheduled")
   );
+}
+
+/** P2：全量自动 DDL 提醒 reconcile（幂等；policy 唯一来源 = autoDeadlineReminder Domain） */
+function reconcileAllAuto(state: {
+  assignments: Assignment[];
+  calendarMarks: CalendarMark[];
+  reminders: Reminder[];
+  preferences: AppPreferences;
+}): Reminder[] {
+  return reconcileAllAutomaticDeadlineReminders({
+    assignments: state.assignments,
+    calendarMarks: state.calendarMarks,
+    reminders: state.reminders,
+    requestedLead: state.preferences.defaultDeadlineReminderMinutes,
+    defaultDDLTime: state.preferences.defaultDDLTime,
+    now: nowLocalString(),
+  });
 }
 
 /**
@@ -425,6 +443,14 @@ export interface AppState {
   restoreReminder: (reminder: Reminder) => void;
   /** target 时间变化后同步 relative reminders（absolute / fired 不动；anchor 消失 → scheduled relative 移除） */
   reconcileTargetReminders: (targetType: ReminderTargetType, targetId: string) => void;
+  /** P2：原子更新全局默认自动提醒提前量（合法档位 60/1440/4320/10080；非法由 sanitize 回落）并重算全部 scheduled auto */
+  setDefaultDeadlineReminderMinutes: (minutes: number) => void;
+  /** P2：用户删除 Reminder —— 删除 source="auto" 的 scheduled 视为该 target 关闭默认自动提醒（opt-out 跟随 Source Entity） */
+  deleteReminderByUser: (id: string) => void;
+  /** P2：用户编辑 Reminder —— 编辑 source="auto" 转成自定义（source=manual）并关闭该 target 的默认自动提醒 */
+  updateReminderByUser: (id: string, patch: Partial<Omit<Reminder, "id">>) => void;
+  /** P2：重新启用目标默认自动提醒（清除 opt-out 并按当前 policy 重新生成；不恢复旧 snapshot） */
+  enableAutomaticReminderForTarget: (targetType: ReminderTargetType, targetId: string) => void;
 
   // Focus Session Actions（Task 2：全局最多一个 running / paused Session）
   /** 业务数据：Focus Session（持久化） */
@@ -566,7 +592,17 @@ export const useAppStore = create<AppState>()(
 
       resetPreferences: () => {
         // 只恢复偏好，不影响课程/任务/个人资料/学期
-        set({ preferences: DEFAULT_PREFERENCES });
+        set((state) => {
+          const preferences = DEFAULT_PREFERENCES;
+          // P2：默认自动提醒提前量恢复 1 天 → 按现有「修改 global default 会重算 auto」语义处理
+          const reminders = reconcileAllAuto({
+            assignments: state.assignments,
+            calendarMarks: state.calendarMarks,
+            reminders: state.reminders,
+            preferences,
+          });
+          return { preferences, reminders };
+        });
       },
 
       clearLearningData: () => {
@@ -634,35 +670,45 @@ export const useAppStore = create<AppState>()(
       },
 
       restoreAppData: (data) =>
-        set((state) => ({
-          userProfile: data.userProfile,
-          semester: data.semester,
-          courses: data.courses,
-          schedules: data.schedules,
-          assignments: data.assignments.map(normalizeAssignment),
-          // 备份恢复为安全位置：唯一可确定的 legacy mark 自动补 sourceId
-          calendarMarks: linkLegacyDDLMarks(data.assignments, data.calendarMarks),
-          // 备份恢复同样归一 GroupProject（v1 备份 → v2 schema）
-          groupProjects: data.groupProjects.map(normalizeGroupProject),
-          // Timeline V1：学习计划（旧备份缺失 → []）
-          studyBlocks: Array.isArray(data.studyBlocks) ? data.studyBlocks : [],
-          // preferences：旧备份（v1 data 无该字段）缺失时保留当前偏好，不做覆盖
-          preferences: data.preferences
+        set((state) => {
+          const assignments = data.assignments.map(normalizeAssignment);
+          const calendarMarks = linkLegacyDDLMarks(data.assignments, data.calendarMarks);
+          const preferences = data.preferences
             ? sanitizePreferences(data.preferences)
-            : state.preferences,
-          // Task 7G-A1：Reminder（旧备份缺失 → []；非法条目丢弃）
-          reminders: Array.isArray(data.reminders)
+            : state.preferences;
+          const restoredReminders = Array.isArray(data.reminders)
             ? data.reminders.map(normalizeReminder).filter((r): r is Reminder => r !== null)
-            : [],
-          // Task 2：Focus Session（旧备份缺失 → []）
-          focusSessions: Array.isArray(data.focusSessions)
-            ? data.focusSessions.map(normalizeFocusSession).filter((f): f is FocusSession => f !== null)
-            : [],
-          currentSemesterWeek: Math.min(
-            Math.max(state.currentSemesterWeek, 1),
-            data.semester.totalWeeks
-          ),
-        })),
+            : [];
+          // P2：restore 后按 restored entities/preferences 做一次幂等 reconcile/backfill
+          // （重复导入 / reload 不产生重复 auto；history 与 manual/kiro 原样保留）
+          const reminders = reconcileAllAutomaticDeadlineReminders({
+            assignments,
+            calendarMarks,
+            reminders: restoredReminders,
+            requestedLead: preferences.defaultDeadlineReminderMinutes,
+            defaultDDLTime: preferences.defaultDDLTime,
+            now: nowLocalString(),
+          });
+          return {
+            userProfile: data.userProfile,
+            semester: data.semester,
+            courses: data.courses,
+            schedules: data.schedules,
+            assignments,
+            calendarMarks,
+            groupProjects: data.groupProjects.map(normalizeGroupProject),
+            studyBlocks: Array.isArray(data.studyBlocks) ? data.studyBlocks : [],
+            preferences,
+            reminders,
+            focusSessions: Array.isArray(data.focusSessions)
+              ? data.focusSessions.map(normalizeFocusSession).filter((f): f is FocusSession => f !== null)
+              : [],
+            currentSemesterWeek: Math.min(
+              Math.max(state.currentSemesterWeek, 1),
+              data.semester.totalWeeks
+            ),
+          };
+        }),
 
       addCourseWithSchedule: (courseData, scheduleSlots) => {
         const courseId = createId("c");
@@ -822,10 +868,18 @@ export const useAppStore = create<AppState>()(
         const mark = buildAssignmentDDLMark(newAssignment);
         const marks: CalendarMark[] = mark ? [mark] : [];
 
-        set((state) => ({
-          assignments: [newAssignment, ...state.assignments],
-          calendarMarks: [...state.calendarMarks, ...marks],
-        }));
+        set((state) => {
+          const assignments = [newAssignment, ...state.assignments];
+          const calendarMarks = [...state.calendarMarks, ...marks];
+          // P2：新建未来 DDL → 按全局默认生成 auto Reminder（linked mark 不产生第二条）
+          const reminders = reconcileAllAuto({
+            assignments,
+            calendarMarks,
+            reminders: state.reminders,
+            preferences: state.preferences,
+          });
+          return { assignments, calendarMarks, reminders };
+        });
         return newId;
       },
 
@@ -850,6 +904,17 @@ export const useAppStore = create<AppState>()(
               next.id,
               hasDdl ? next.ddl ?? null : null,
               nowLocalString()
+            );
+            // P2 §5：DDL 变化（无→有 / 有→新值 / 有→无）→ scheduled auto 先移除，
+            // 由下方统一 reconcile 按当前全局默认重新计算（不机械保持降级 offset）
+            newReminders = newReminders.filter(
+              (r) =>
+                !(
+                  r.targetType === "assignment" &&
+                  r.targetId === next.id &&
+                  r.source === "auto" &&
+                  r.status === "scheduled"
+                )
             );
           }
 
@@ -911,10 +976,19 @@ export const useAppStore = create<AppState>()(
             newReminders = applied.reminders;
           }
 
-          return {
+          // P2：统一自动 DDL 提醒 reconcile（eligible → 生成/保留；ineligible / opt-out / 已过 → 移除；
+          // completed 清除的 reminders 不会重建；spawn 的 child 获得自己的 auto）
+          const finalReminders = reconcileAllAuto({
             assignments: newAssignments,
             calendarMarks: newCalendarMarks,
             reminders: newReminders,
+            preferences: state.preferences,
+          });
+
+          return {
+            assignments: newAssignments,
+            calendarMarks: newCalendarMarks,
+            reminders: finalReminders,
           };
         }),
 
@@ -962,6 +1036,8 @@ export const useAppStore = create<AppState>()(
             calendarMarks = applied.calendarMarks;
             reminders = applied.reminders;
           }
+          // P2：submitted/completed → scheduled auto 移除；回到 todo/doing（eligible）→ 按当前默认重建
+          reminders = reconcileAllAuto({ assignments, calendarMarks, reminders, preferences: state.preferences });
           return { assignments, calendarMarks, reminders };
         }),
 
@@ -991,6 +1067,8 @@ export const useAppStore = create<AppState>()(
             calendarMarks = applied.calendarMarks;
             reminders = applied.reminders;
           }
+          // P2：统一自动 DDL 提醒 reconcile
+          reminders = reconcileAllAuto({ assignments, calendarMarks, reminders, preferences: state.preferences });
           return { assignments, calendarMarks, reminders };
         }),
 
@@ -1018,6 +1096,8 @@ export const useAppStore = create<AppState>()(
             calendarMarks = applied.calendarMarks;
             reminders = applied.reminders;
           }
+          // P2：统一自动 DDL 提醒 reconcile
+          reminders = reconcileAllAuto({ assignments, calendarMarks, reminders, preferences: state.preferences });
           return { assignments, calendarMarks, reminders };
         }),
 
@@ -1109,15 +1189,28 @@ export const useAppStore = create<AppState>()(
       },
       addCalendarMark: (markData) => {
         const mark: CalendarMark = { id: createId("cm"), ...markData };
-        set((state) => ({ calendarMarks: [...state.calendarMarks, mark] }));
+        set((state) => {
+          const calendarMarks = [...state.calendarMarks, mark];
+          // P2：独立 DDL CalendarMark → 按默认自动生成 auto（linked mark 由 sourceId relation 排除）
+          const reminders = reconcileAllAuto({
+            assignments: state.assignments,
+            calendarMarks,
+            reminders: state.reminders,
+            preferences: state.preferences,
+          });
+          return { calendarMarks, reminders };
+        });
         return mark.id;
       },
       deleteCalendarMark: (id) =>
-        set((state) => ({
-          calendarMarks: state.calendarMarks.filter((m) => m.id !== id),
-          // Task 7G-A1：target 删除 → 关联 Reminder 一并删除
-          reminders: state.reminders.filter((r) => !(r.targetType === "calendarMark" && r.targetId === id)),
-        })),
+        set((state) => {
+          const calendarMarks = state.calendarMarks.filter((m) => m.id !== id);
+          // Task 7G-A1：target 删除 → 关联 Reminder 一并删除（fired 历史随 target 删除，既有语义）
+          const reminders = state.reminders.filter(
+            (r) => !(r.targetType === "calendarMark" && r.targetId === id)
+          );
+          return { calendarMarks, reminders };
+        }),
 
       // ---- Reminder Actions（Task 7G-A1）----
       addReminder: (input) => {
@@ -1158,6 +1251,117 @@ export const useAppStore = create<AppState>()(
         })),
       deleteReminder: (id) =>
         set((state) => ({ reminders: state.reminders.filter((r) => r.id !== id) })),
+      // P2 §13：用户主动删除 source="auto" 的 scheduled Reminder = 该 target 关闭默认自动提醒
+      // （opt-out 跟随 Source Entity；manual/kiro 删除无影响；内部 Domain reconcile 绝不触发此语义）
+      deleteReminderByUser: (id) =>
+        set((state) => {
+          const target = state.reminders.find((r) => r.id === id);
+          if (!target || target.source !== "auto" || target.status !== "scheduled" || !target.targetId) {
+            return { reminders: state.reminders.filter((r) => r.id !== id) };
+          }
+          let assignments = state.assignments;
+          let calendarMarks = state.calendarMarks;
+          if (target.targetType === "assignment") {
+            assignments = state.assignments.map((a) =>
+              a.id === target.targetId ? { ...a, autoReminderDisabled: true } : a
+            );
+          } else if (target.targetType === "calendarMark") {
+            calendarMarks = state.calendarMarks.map((m) =>
+              m.id === target.targetId ? { ...m, autoReminderDisabled: true } : m
+            );
+          }
+          return {
+            assignments,
+            calendarMarks,
+            reminders: state.reminders.filter((r) => r.id !== id),
+          };
+        }),
+      // P2 §14：用户编辑 source="auto" 的 Reminder → 转自定义（source=manual）+ 关闭该 target 默认自动提醒；
+      // 保留编辑器最终选择的 relative/absolute 与同一 ID（in place 更新）
+      updateReminderByUser: (id, patch) =>
+        set((state) => {
+          const target = state.reminders.find((r) => r.id === id);
+          if (!target || target.source !== "auto") {
+            return {
+              reminders: state.reminders.map((r) =>
+                r.id === id ? { ...r, ...patch, updatedAt: nowLocalString() } : r
+              ),
+            };
+          }
+          let assignments = state.assignments;
+          let calendarMarks = state.calendarMarks;
+          if (target.targetId) {
+            if (target.targetType === "assignment") {
+              assignments = state.assignments.map((a) =>
+                a.id === target.targetId ? { ...a, autoReminderDisabled: true } : a
+              );
+            } else if (target.targetType === "calendarMark") {
+              calendarMarks = state.calendarMarks.map((m) =>
+                m.id === target.targetId ? { ...m, autoReminderDisabled: true } : m
+              );
+            }
+          }
+          return {
+            assignments,
+            calendarMarks,
+            reminders: state.reminders.map((r) =>
+              r.id === id
+                ? { ...r, ...patch, source: "manual", updatedAt: nowLocalString() }
+                : r
+            ),
+          };
+        }),
+      // P2 §15：重新启用目标默认自动提醒（清除 opt-out → 按当前 anchor/status/now/全局默认重新生成；
+      // 不恢复旧 snapshot；fired/skipped 历史保留且同 anchor 不重复，但「明确重新启用」允许新生成）
+      enableAutomaticReminderForTarget: (targetType, targetId) =>
+        set((state) => {
+          if (targetType !== "assignment" && targetType !== "calendarMark") return {};
+          let assignments = state.assignments;
+          let calendarMarks = state.calendarMarks;
+          if (targetType === "assignment") {
+            assignments = state.assignments.map((a) =>
+              a.id === targetId ? { ...a, autoReminderDisabled: undefined } : a
+            );
+          } else {
+            calendarMarks = state.calendarMarks.map((m) =>
+              m.id === targetId ? { ...m, autoReminderDisabled: undefined } : m
+            );
+          }
+          // 明确重新启用：绕过「同 anchor 历史已处理」防重建（该 target 的 fired/skipped auto 暂不参与判定）
+          const handledHistory = state.reminders.filter(
+            (r) =>
+              r.targetType === targetType &&
+              r.targetId === targetId &&
+              r.source === "auto" &&
+              r.status !== "scheduled"
+          );
+          const base = state.reminders.filter((r) => !handledHistory.includes(r));
+          const reconciled = reconcileAllAutomaticDeadlineReminders({
+            assignments,
+            calendarMarks,
+            reminders: base,
+            requestedLead: state.preferences.defaultDeadlineReminderMinutes,
+            defaultDDLTime: state.preferences.defaultDDLTime,
+            now: nowLocalString(),
+          });
+          return { assignments, calendarMarks, reminders: [...reconciled, ...handledHistory] };
+        }),
+      // P2 §11：原子更新全局默认自动提醒提前量（非法值由 sanitizePreferences 回落）并重算全部 scheduled auto；
+      // 只更新 source="auto"；manual/kiro/custom 与 fired/skipped 历史绝不修改
+      setDefaultDeadlineReminderMinutes: (minutes) =>
+        set((state) => {
+          const preferences = sanitizePreferences({
+            ...state.preferences,
+            defaultDeadlineReminderMinutes: minutes,
+          });
+          const reminders = reconcileAllAuto({
+            assignments: state.assignments,
+            calendarMarks: state.calendarMarks,
+            reminders: state.reminders,
+            preferences,
+          });
+          return { preferences, reminders };
+        }),
       markReminderFired: (id, firedAt) =>
         set((state) => ({
           reminders: state.reminders.map((r) =>
@@ -1523,14 +1727,25 @@ export const useAppStore = create<AppState>()(
 // 启动校正：当前教学周不持久化（避免历史周次过期），
 // 每次打开按真实日期计算并 clamp 到 [1, semester.totalWeeks]。
 // Settings V3：任务工作区视图不持久化，每次打开按「默认任务视图」偏好 seed。
+// P2：首次上线 backfill + 每次 hydrate 的一次性幂等自动提醒 reconcile
+//（用户无需打开 Reminder Center；重复 hydrate/reload 不产生重复 auto）。
 {
   const state = useAppStore.getState();
   const week = Math.min(
     Math.max(getSemesterWeek(new Date(), state.semester), 1),
     state.semester.totalWeeks
   );
+  const reminders = reconcileAllAutomaticDeadlineReminders({
+    assignments: state.assignments,
+    calendarMarks: state.calendarMarks,
+    reminders: state.reminders,
+    requestedLead: state.preferences.defaultDeadlineReminderMinutes,
+    defaultDDLTime: state.preferences.defaultDDLTime,
+    now: nowLocalString(),
+  });
   useAppStore.setState({
     currentSemesterWeek: week,
     assignmentWorkspaceView: state.preferences.defaultTaskWorkspaceView,
+    reminders,
   });
 }

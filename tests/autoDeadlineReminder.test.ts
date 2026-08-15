@@ -227,7 +227,7 @@ describe("Proposal / uniqueness / suppression", () => {
     expect(r.staleAutoIds).toEqual([]);
   });
 
-  it("scheduled auto 的 anchor 与当前不一致 → stale（anchor 变化的旧 auto）", () => {
+  it("scheduled auto 的 anchor 与当前不一致 → stale（anchor 变化的旧 auto）+ 按当前默认重建", () => {
     const old = mkAutoReminder({ id: "auto1", offsetMinutes: -1440, triggerAt: "2026-08-10T10:00:00" });
     const r = reconcileAutoDeadlineReminder({
       targetType: "assignment",
@@ -238,8 +238,9 @@ describe("Proposal / uniqueness / suppression", () => {
       now: NOW,
       reminders: [old],
     });
-    expect(r.proposal).toBeNull();
     expect(r.staleAutoIds).toEqual(["auto1"]);
+    expect(r.proposal).not.toBeNull();
+    expect(r.proposal?.triggerAt).toBe("2026-08-19T10:00:00");
   });
 });
 

@@ -14,9 +14,10 @@ function seedState(extra?: { reminders?: unknown[]; assignments?: unknown[] }) {
     courses: [{ id: "c1", name: "统计学", code: "STAT", teacher: "", classroom: "", credit: 3, bgHex: "#E3E6E0", borderHex: "#D0D5CC", textHex: "#313032", description: "", materials: [] }],
     schedules: [],
     assignments: extra?.assignments ?? [
-      { id: "a1", courseId: "c1", title: "周作业", description: "", ddl: "2026-08-15T23:00:00", priority: "medium", status: "todo", progress: 0, tags: [], recurrence: "weekly", recurrenceSeriesId: "rs_1" },
+      // ddl 用过去时间：避免 P2 hydrate backfill 依赖真实时钟生成 auto（保持断言确定）
+      { id: "a1", courseId: "c1", title: "周作业", description: "", ddl: "2020-08-15T23:00:00", priority: "medium", status: "todo", progress: 0, tags: [], recurrence: "weekly", recurrenceSeriesId: "rs_1" },
     ],
-    calendarMarks: [{ id: "cm1", date: "2026-08-15", type: "ddl", title: "周作业", sourceId: "a1" }],
+    calendarMarks: [{ id: "cm1", date: "2020-08-15", type: "ddl", title: "周作业", sourceId: "a1" }],
     groupProjects: [],
     studyBlocks: [],
     assignmentTimeSlice: "all",
@@ -59,7 +60,7 @@ describe("Reminder Store 关键链路", () => {
     const id = store.getState().addReminder(mkInput({}));
     expect(id).toBeTruthy();
     const r = store.getState().reminders.find((x: Reminder) => x.id === id)!;
-    expect(r.triggerAt).toBe("2026-08-15T22:00:00");
+    expect(r.triggerAt).toBe("2020-08-15T22:00:00");
     expect(r.status).toBe("scheduled");
     expect(JSON.parse(localStorage.getItem(KEY)!).state.reminders).toHaveLength(1);
   });
@@ -74,7 +75,8 @@ describe("Reminder Store 关键链路", () => {
     store.getState().updateAssignment({ ...a, ddl: "2026-08-18T20:00:00" });
 
     const reminders = store.getState().reminders;
-    expect(reminders.find((r: Reminder) => r.timingMode === "relative")!.triggerAt).toBe("2026-08-18T19:00:00");
+    // P2：DDL 变化 → 只精确匹配 manual relative（auto 会被按默认重建，不参与本断言）
+    expect(reminders.find((r: Reminder) => r.timingMode === "relative" && r.source === "manual")!.triggerAt).toBe("2026-08-18T19:00:00");
     expect(reminders.find((r: Reminder) => r.timingMode === "absolute")!.triggerAt).toBe("2026-08-20T09:30:00");
   });
 

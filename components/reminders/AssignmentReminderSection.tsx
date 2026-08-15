@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import React, { useState } from "react";
 import { Bell, Check, PencilLine, Plus, Trash2, X } from "lucide-react";
@@ -86,7 +86,7 @@ export function AssignmentReminderSection({ assignment }: { assignment: Assignme
     if (!ddlValid) return;
     const state = useAppStore.getState();
     if (editingId) {
-      state.updateReminder(editingId, {
+      state.updateReminderByUser(editingId, {
         title: assignment.title,
         timingMode: "relative",
         offsetMinutes,
@@ -132,7 +132,7 @@ export function AssignmentReminderSection({ assignment }: { assignment: Assignme
     }
     const state = useAppStore.getState();
     if (editingId) {
-      state.updateReminder(editingId, {
+      state.updateReminderByUser(editingId, {
         title: assignment.title,
         timingMode: "absolute",
         offsetMinutes: undefined,
@@ -153,7 +153,7 @@ export function AssignmentReminderSection({ assignment }: { assignment: Assignme
   };
 
   const handleDelete = (id: string) => {
-    useAppStore.getState().deleteReminder(id);
+    useAppStore.getState().deleteReminderByUser(id);
     if (editingId === id) closePicker();
   };
 

@@ -25,7 +25,8 @@ function seedState(extra?: { reminders?: unknown[] }) {
     courses: [{ id: "c1", name: "统计学", code: "STAT", teacher: "", classroom: "", credit: 3, bgHex: "#E3E6E0", borderHex: "#D0D5CC", textHex: "#313032", description: "", materials: [] }],
     schedules: [],
     assignments: [
-      { id: "a1", courseId: "c1", title: "统计学作业", description: "", ddl: dayOffset(5), priority: "medium", status: "todo", progress: 0, tags: [] },
+      // a1 显式 opt-out：避免 P2 hydrate backfill 生成 auto 干扰 Kiro reminder 断言
+      { id: "a1", courseId: "c1", title: "统计学作业", description: "", ddl: dayOffset(5), priority: "medium", status: "todo", progress: 0, tags: [], autoReminderDisabled: true },
       { id: "a-done", courseId: "c1", title: "已完成任务", description: "", ddl: dayOffset(3), priority: "medium", status: "completed", progress: 100, tags: [] },
       { id: "a-noddl", courseId: "c1", title: "无截止任务", description: "", priority: "medium", status: "todo", progress: 0, tags: [] },
     ],
