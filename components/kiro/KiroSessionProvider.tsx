@@ -200,6 +200,8 @@ interface KiroSessionActionsValue {
   createProject: (input: { name: string; description?: string; instructions?: string }) => Promise<KiroProjectRecord | null>;
   updateProject: (id: string, patch: { name?: string; description?: string; instructions?: string }) => Promise<KiroProjectRecord | null>;
   deleteProject: (id: string) => Promise<void>;
+  /** V1.3A：Project Files 等低频变化后让 Panel 重新加载（只 bump version） */
+  refreshProjects: () => void;
   assignConversationToProject: (conversationId: string, projectId: string | null) => Promise<boolean>;
 }
 
@@ -880,6 +882,7 @@ export function KiroSessionProvider({ children }: { children: React.ReactNode })
   const deleteProject = useCallback(
     async (id: string): Promise<void> => {
       try {
+        // V1.3A：同一 kiro transaction 删除 Project + unassign conversations + 删 project-files metadata
         await deleteKiroProjectAndUnassignConversations(id);
         // 当前打开的 Conversation 属于被删项目 → session 关联同步清空（刷新后不回弹）
         if (conversationProjectIdRef.current === id) {
@@ -893,6 +896,9 @@ export function KiroSessionProvider({ children }: { children: React.ReactNode })
     },
     [bumpProjects, pushToast]
   );
+
+  /** V1.3A：Project Files 等低频变化后让 Panel 重新加载 */
+  const refreshProjects = useCallback(() => bumpProjects(), [bumpProjects]);
 
   const assignConversationToProject = useCallback(
     async (conversationId: string, projectId: string | null): Promise<boolean> => {
@@ -997,6 +1003,7 @@ export function KiroSessionProvider({ children }: { children: React.ReactNode })
       createProject,
       updateProject,
       deleteProject,
+      refreshProjects,
       assignConversationToProject,
     }),
     [
@@ -1022,6 +1029,7 @@ export function KiroSessionProvider({ children }: { children: React.ReactNode })
       createProject,
       updateProject,
       deleteProject,
+      refreshProjects,
       assignConversationToProject,
     ]
   );

@@ -46,3 +46,9 @@ export function materialSourceId(materialId: string): string {
   const safe = materialId.replace(/[^A-Za-z0-9_-]/g, "").slice(0, 40);
   return `material-${safe || "file"}`;
 }
+
+/** V1.3A：read_project_file sourceId（project-file-<projectFileId>；绝不使用 storageKey） */
+export function projectFileSourceId(projectFileId: string): string {
+  const safe = projectFileId.replace(/[^A-Za-z0-9_-]/g, "").slice(0, 40);
+  return `project-file-${safe || "file"}`;
+}

@@ -10,6 +10,7 @@ import {
   KIRO_PROJECTS_STORE,
   KIRO_CONVERSATIONS_STORE,
   KIRO_MEMORIES_STORE,
+  KIRO_PROJECT_FILES_STORE,
 } from "@/lib/ai/storage/kiroDb";
 import {
   listKiroProjects,
@@ -225,7 +226,7 @@ describe("Project Instructions（V1.2）", () => {
   });
 });
 
-describe("IndexedDB v2 → v3 migration", () => {
+describe("IndexedDB v2 → v4 migration", () => {
   function openDbAtVersion(version: number): Promise<IDBDatabase> {
     return new Promise((resolve, reject) => {
       const req = indexedDB.open(KIRO_DB_NAME, version);
@@ -244,8 +245,8 @@ describe("IndexedDB v2 → v3 migration", () => {
     });
   }
 
-  it("v2 数据保留；v3 增量补 projects store + conversations.projectId index", async () => {
-    // 模拟用户从 v2 升级：先删库（清掉 beforeEach 已建好的 v3），再以 v2 建库写旧数据
+  it("v2 数据保留；一路增量升到 v4（projects / project-files / indexes 全部就位）", async () => {
+    // 模拟用户从 v2 升级：先删库（清掉 beforeEach 已建好的 v4），再以 v2 建库写旧数据
     await closeKiroDbForTests();
     resetKiroDbForTests();
     await indexedDB.deleteDatabase(KIRO_DB_NAME);
@@ -260,11 +261,11 @@ describe("IndexedDB v2 → v3 migration", () => {
     });
     v2.close();
 
-    // 2. 重新打开 → v3 增量升级
+    // 2. 重新打开 → v4 增量升级
     await closeKiroDbForTests();
     resetKiroDbForTests();
     const db = await openKiroDB();
-    expect(db.version).toBe(3);
+    expect(db.version).toBe(4);
     expect(db.objectStoreNames.contains(KIRO_PROJECTS_STORE)).toBe(true);
     expect(db.objectStoreNames.contains(KIRO_CONVERSATIONS_STORE)).toBe(true);
     expect(db.objectStoreNames.contains(KIRO_MEMORIES_STORE)).toBe(true);
@@ -273,6 +274,8 @@ describe("IndexedDB v2 → v3 migration", () => {
     expect(convStore.indexNames.contains("projectId")).toBe(true);
     const projStore = db.transaction(KIRO_PROJECTS_STORE, "readonly").objectStore(KIRO_PROJECTS_STORE);
     expect(projStore.indexNames.contains("updatedAt")).toBe(true);
+    // v4：project-files store 就位
+    expect(db.objectStoreNames.contains(KIRO_PROJECT_FILES_STORE)).toBe(true);
 
     // 3. 旧 conversations / memories 完整保留
     expect((await getConversation("legacy-conv"))?.title).toBe("对话 legacy-conv");
@@ -289,15 +292,16 @@ describe("IndexedDB v2 → v3 migration", () => {
     expect((await getKiroProject(p.id))?.name).toBe("迁移后项目");
   });
 
-  it("全新 DB 直接开 v3：三个 store 全部就位", async () => {
+  it("全新 DB 直接开 v4：全部 store 就位", async () => {
     await closeKiroDbForTests();
     resetKiroDbForTests();
     await indexedDB.deleteDatabase(KIRO_DB_NAME);
     resetKiroDbForTests();
     const db = await openKiroDB();
-    expect(db.version).toBe(3);
+    expect(db.version).toBe(4);
     expect(db.objectStoreNames.contains(KIRO_PROJECTS_STORE)).toBe(true);
     expect(db.objectStoreNames.contains(KIRO_CONVERSATIONS_STORE)).toBe(true);
     expect(db.objectStoreNames.contains(KIRO_MEMORIES_STORE)).toBe(true);
+    expect(db.objectStoreNames.contains(KIRO_PROJECT_FILES_STORE)).toBe(true);
   });
 });

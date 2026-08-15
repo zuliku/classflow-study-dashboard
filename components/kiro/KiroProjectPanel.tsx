@@ -7,7 +7,14 @@ import { useConfirmStore } from "@/store/useConfirmStore";
 import { useToastStore } from "@/store/useToastStore";
 import { usePresence } from "@/lib/usePresence";
 import { KiroProjectRecord, KIRO_PROJECT_NAME_MAX, KIRO_PROJECT_DESCRIPTION_MAX, KIRO_PROJECT_INSTRUCTIONS_MAX } from "@/lib/ai/projects/types";
+import { KiroProjectFileRecord, MAX_PROJECT_FILES_PER_PROJECT } from "@/lib/ai/projects/files/types";
 import { listKiroProjects, listProjectConversations } from "@/lib/ai/projects/db";
+import {
+  listProjectFiles,
+  createProjectFile,
+  deleteProjectFile,
+} from "@/lib/ai/projects/files/db";
+import { routeAttachment } from "@/lib/ai/attachments/router";
 import { listConversations } from "@/lib/ai/history/db";
 import { KiroConversationRecord } from "@/lib/ai/history/types";
 import { formatHistoryTime } from "@/lib/ai/history/sanitize";
@@ -50,6 +57,10 @@ export function KiroProjectPanel({
   const [formName, setFormName] = useState("");
   const [formDescription, setFormDescription] = useState("");
   const [formInstructions, setFormInstructions] = useState("");
+  // V1.3A：Project Files（Detail 按需加载；上传/删除后 refreshProjects 触发重载）
+  const [projectFiles, setProjectFiles] = useState<KiroProjectFileRecord[]>([]);
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const expanded = mode === "expanded";
   const { mounted, visible } = usePresence(mode !== "closed", 160);
@@ -82,6 +93,22 @@ export function KiroProjectPanel({
       })
       .catch(() => {
         if (!cancelled) pushToast({ message: "对话列表加载失败，请重试", type: "error" });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [expanded, view, selectedProjectId, meta.projectsVersion, pushToast]);
+
+  // V1.3A：Detail 按需加载 Project Files
+  useEffect(() => {
+    if (!expanded || view !== "detail" || !selectedProjectId) return;
+    let cancelled = false;
+    listProjectFiles(selectedProjectId)
+      .then((list) => {
+        if (!cancelled) setProjectFiles(list);
+      })
+      .catch(() => {
+        if (!cancelled) pushToast({ message: "项目资料加载失败，请重试", type: "error" });
       });
     return () => {
       cancelled = true;
@@ -163,6 +190,78 @@ export function KiroProjectPanel({
   const moveConversation = async (conversationId: string, projectId: string | null, label: string) => {
     const ok = await actions.assignConversationToProject(conversationId, projectId);
     if (ok) pushToast({ message: label });
+  };
+
+  // ---- V1.3A：Project Files 上传 / 删除 ----
+  const formatBytes = (bytes: number) => {
+    if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+    if (bytes >= 1024) return `${Math.round(bytes / 1024)} KB`;
+    return `${bytes} B`;
+  };
+
+  const handleUploadFiles = async (files: FileList | null) => {
+    if (!files || files.length === 0 || !selectedProjectId || uploading) return;
+    const quotaLeft = MAX_PROJECT_FILES_PER_PROJECT - projectFiles.length;
+    const accepted: File[] = [];
+    for (const file of Array.from(files)) {
+      const routed = routeAttachment(file);
+      if (!routed.ok || routed.kind === "image") {
+        pushToast({ message: "项目资料暂支持 PDF、DOCX、TXT 和 Markdown。", type: "error" });
+        continue;
+      }
+      if (accepted.length >= quotaLeft) break;
+      accepted.push(file);
+    }
+    if (accepted.length === 0) return;
+    if (accepted.length < Array.from(files).length) {
+      pushToast({ message: `项目最多保存 ${MAX_PROJECT_FILES_PER_PROJECT} 个资料，已添加可容纳的文件。` });
+    }
+    setUploading(true);
+    try {
+      let added = 0;
+      for (const file of accepted) {
+        const routed = routeAttachment(file);
+        if (!routed.ok) continue;
+        await createProjectFile({
+          projectId: selectedProjectId,
+          name: file.name,
+          mimeType: file.type,
+          sizeBytes: file.size,
+          kind: routed.kind as KiroProjectFileRecord["kind"],
+          blob: file,
+        });
+        added++;
+      }
+      actions.refreshProjects();
+      if (added > 0) pushToast({ message: `已添加 ${added} 个资料` });
+    } catch (err) {
+      const message = (err as { message?: string })?.message;
+      if (message === "PROJECT_FILE_LIMIT_REACHED") {
+        pushToast({ message: `项目最多保存 ${MAX_PROJECT_FILES_PER_PROJECT} 个资料。`, type: "error" });
+      } else {
+        pushToast({ message: "资料上传失败，请重试", type: "error" });
+      }
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const requestDeleteFile = (f: KiroProjectFileRecord) => {
+    confirmRequest({
+      title: "删除项目资料？",
+      description: "这不会删除你的聊天记录，但 Kiro 将无法再读取该资料。",
+      confirmLabel: "删除",
+      danger: true,
+      onConfirm: () => {
+        void deleteProjectFile(f.id)
+          .then(() => {
+            actions.refreshProjects();
+            pushToast({ message: "已删除资料" });
+          })
+          .catch(() => pushToast({ message: "资料删除失败，请重试", type: "error" }));
+      },
+      onCancel: () => {},
+    });
   };
 
   const transitioning = meta.conversationTransitioning;
@@ -405,6 +504,57 @@ export function KiroProjectPanel({
                     <p className="text-[10px] text-sandrift mt-0.5">未设置项目指令</p>
                   )}
                 </div>
+                {/* V1.3A：项目资料（index-only；正文经 read_project_file 按需读取） */}
+                <div className="px-1.5 pb-1">
+                  <div className="flex items-center justify-between gap-1">
+                    <p className="text-[10px] font-semibold text-sandrift">项目资料 · {projectFiles.length}</p>
+                    <button
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={uploading || projectFiles.length >= MAX_PROJECT_FILES_PER_PROJECT}
+                      aria-label="添加项目资料"
+                      className="flex items-center gap-0.5 px-1.5 h-5 rounded-md text-[10px] font-bold text-charcoal bg-alabaster hover:bg-pastel-mint transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      <Plus className="w-3 h-3" />
+                      添加资料
+                    </button>
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      multiple
+                      accept=".pdf,.docx,.txt,.md,.markdown"
+                      aria-label="上传项目资料"
+                      className="hidden"
+                      onChange={(e) => {
+                        void handleUploadFiles(e.target.files);
+                        e.target.value = "";
+                      }}
+                    />
+                  </div>
+                  {projectFiles.length === 0 ? (
+                    <p className="text-[10px] text-sandrift mt-0.5">暂无项目资料</p>
+                  ) : (
+                    <div className="mt-0.5 space-y-0.5">
+                      {projectFiles.map((f) => (
+                        <div key={f.id} className="flex items-center gap-2 px-1.5 py-1 rounded-lg group/file">
+                          <FileTextIcon />
+                          <span className="min-w-0 flex-1">
+                            <span className="block text-[11px] font-semibold text-charcoal truncate">{f.name}</span>
+                            <span className="block text-[9px] text-sandrift">
+                              {f.kind.toUpperCase()} · {formatBytes(f.sizeBytes)}
+                            </span>
+                          </span>
+                          <button
+                            onClick={() => requestDeleteFile(f)}
+                            aria-label={`删除项目资料 ${f.name}`}
+                            className="p-1 rounded-md text-sandrift hover:bg-alabaster hover:text-danger transition-colors opacity-0 group-hover/file:opacity-100"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
                 <div className="flex items-center justify-between gap-1.5 px-1.5 pt-1 pb-0.5">
                   <p className="text-[10px] font-semibold text-sandrift">对话 · {detailConversations.length}</p>
                   <div className="flex items-center gap-1">
@@ -544,3 +694,15 @@ export function KiroProjectPanel({
     </div>
   );
 }
+
+function FileTextIcon() {
+  return (
+    <svg className="w-3.5 h-3.5 text-sandrift shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+      <polyline points="14 2 14 8 20 8" />
+      <line x1="16" y1="13" x2="8" y2="13" />
+      <line x1="16" y1="17" x2="8" y2="17" />
+    </svg>
+  );
+}
+

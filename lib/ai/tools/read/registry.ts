@@ -94,6 +94,11 @@ export const KIRO_READ_TOOLS = {
       "读取课程资料的正文内容（PDF/DOCX/TXT 本地提取；图片无文本）。扫描 PDF 会明确说明。只读取明确指定的资料，不要无差别读取全部附件。",
     inputSchema: KIRO_READ_TOOL_SCHEMAS.read_material,
   }),
+  read_project_file: tool({
+    description:
+      "读取当前 Kiro 项目中明确指定资料的正文。只能读取当前 Turn 的项目资料索引中存在的 projectFileId。PDF/DOCX/TXT/Markdown 使用本地提取；扫描型 PDF 会明确说明暂不读取图像正文。不要无差别遍历全部项目资料；需要正文时按需读取。",
+    inputSchema: KIRO_READ_TOOL_SCHEMAS.read_project_file,
+  }),
   propose_task_breakdown: tool({
     description:
       "提交任务拆解 + 估时建议（结构化 Proposal，AI 推理 + 严格 schema；不是 Markdown 列表）。" +

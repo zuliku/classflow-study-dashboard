@@ -11,6 +11,7 @@ import {
 } from "@/lib/ai/storage/kiroDb";
 import { KiroProjectRecord, createProjectId } from "@/lib/ai/projects/types";
 import { KiroConversationRecord } from "@/lib/ai/history/types";
+import { deleteProjectWithFilesAndUnassignConversations } from "@/lib/ai/projects/files/db";
 
 export async function listKiroProjects(): Promise<KiroProjectRecord[]> {
   const db = await openKiroDB();
@@ -98,32 +99,12 @@ export async function updateKiroProject(
 }
 
 /**
- * 删除项目 + 清空关联 conversations.projectId（同一 transaction）。
- * Conversation 本身完整保留（回到未归类）。
+ * 删除项目 + 清空关联 conversations.projectId + 删除 project-files metadata
+ * （V1.3A：同一 kiro transaction；Blob 清理 best-effort）。
+ * Conversation 本身完整保留（回到未归类）；Project Files 属于 Project → 一并删除。
  */
 export async function deleteKiroProjectAndUnassignConversations(id: string): Promise<void> {
-  const db = await openKiroDB();
-  return new Promise((resolve, reject) => {
-    const t = db.transaction([KIRO_PROJECTS_STORE, KIRO_CONVERSATIONS_STORE], "readwrite");
-    t.objectStore(KIRO_PROJECTS_STORE).delete(id);
-    const convStore = t.objectStore(KIRO_CONVERSATIONS_STORE);
-    const cursorReq = convStore.openCursor();
-    cursorReq.onsuccess = () => {
-      const cursor = cursorReq.result;
-      if (!cursor) return;
-      const value = cursor.value as KiroConversationRecord | undefined;
-      if (value && value.projectId === id) {
-        // 删除属性（而非设为 undefined：undefined 仍会保留 key，导致 "projectId" in record === true）
-        const cleaned = Object.fromEntries(Object.entries(value).filter(([k]) => k !== "projectId"));
-        cursor.update(cleaned);
-      }
-      cursor.continue();
-    };
-    cursorReq.onerror = () => reject(cursorReq.error);
-    t.oncomplete = () => resolve();
-    t.onerror = () => reject(t.error);
-    t.onabort = () => reject(t.error);
-  });
+  await deleteProjectWithFilesAndUnassignConversations(id);
 }
 
 /** 成员关系单一事实源：conversation.projectId（null = 移出项目）。

@@ -37,6 +37,7 @@ const mocks = vi.hoisted(() => {
       deleteProject: vi.fn(),
       assignConversationToProject: vi.fn(),
       newChatInProject: vi.fn(),
+      refreshProjects: vi.fn(),
     },
   };
 });

@@ -101,6 +101,14 @@ export const readMaterialSchema = z.object({
   materialId: z.string().trim().min(1).max(120),
 });
 
+/** V1.3A：read_project_file schema —— 只接受 projectFileId（Project 身份来自 frozen Turn Context，
+ *  不接受 projectId/storageKey/path/url） */
+export const readProjectFileSchema = z
+  .object({
+    projectFileId: z.string().trim().min(1).max(120),
+  })
+  .strict();
+
 /** 任务拆解 + 估时 Proposal 输入（模型生成结构化建议；与 TaskBreakdownProposal 同 schema） */
 export const proposeTaskBreakdownSchema = TaskBreakdownProposalSchema;
 
@@ -215,6 +223,7 @@ export const KIRO_READ_TOOL_SCHEMAS = {
   get_calendar_range: getCalendarRangeSchema,
   get_material_metadata: getMaterialMetadataSchema,
   read_material: readMaterialSchema,
+  read_project_file: readProjectFileSchema,
   propose_task_breakdown: proposeTaskBreakdownSchema,
   list_reminders: listRemindersSchema,
   get_focus_status: emptyInputSchema,

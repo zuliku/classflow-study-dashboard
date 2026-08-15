@@ -17,8 +17,11 @@ export const MAX_EXTRACTED_CHARS = 100_000;
 /** 当前 Turn 附件总文本上限 */
 export const MAX_ATTACHMENT_CONTEXT_CHARS = 160_000;
 
-/** read_material 单回合调用上限（重量级工具单独限制） */
-export const MAX_MATERIAL_READS_PER_TURN = 5;
+/** 重型本地文档读取（read_material + read_project_file 共享）单回合上限 */
+export const MAX_DOCUMENT_READS_PER_TURN = 5;
+
+/** @deprecated 兼容别名：重型文档读取统一使用 MAX_DOCUMENT_READS_PER_TURN */
+export const MAX_MATERIAL_READS_PER_TURN = MAX_DOCUMENT_READS_PER_TURN;
 
 /** 提取器版本（缓存失效用）：v2 起缓存 pageCount / possiblyScanned（扫描件标记不可丢失） */
 export const EXTRACTOR_VERSION = 2;

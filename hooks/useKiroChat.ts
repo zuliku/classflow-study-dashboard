@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { DefaultChatTransport, lastAssistantMessageIsCompleteWithToolCalls } from "ai";
@@ -58,14 +58,17 @@ import {
 } from "@/lib/ai/tools/read/history";
 import { executeGetLearningAnalytics } from "@/lib/ai/tools/read/analytics";
 import { executeGetLearningOutlook } from "@/lib/ai/tools/read/outlook";
-import { MAX_MATERIAL_READS_PER_TURN } from "@/lib/ai/attachments/limits";
+import { MAX_DOCUMENT_READS_PER_TURN } from "@/lib/ai/attachments/limits";
 import { KiroAttachment, KiroDocumentContext, KiroAttachmentView } from "@/lib/ai/attachments/types";
 import { getModelCapabilities, isVisionMimeSupported } from "@/lib/ai/providers/capabilities";
 import { formatVisionMimeTypes } from "@/lib/ai/attachments/imageMime";
 import { preprocessVisionImage } from "@/lib/ai/attachments/preprocessImage";
 import { resolveVisionTurnBudget, sumVisionBytes, isVisionTurnWithinBudget } from "@/lib/ai/attachments/visionBudget";
 import { getKiroProject } from "@/lib/ai/projects/db";
+import { listProjectFiles } from "@/lib/ai/projects/files/db";
 import { toProjectTurnContext } from "@/lib/ai/projects/prompt";
+import { executeReadProjectFile } from "@/lib/ai/tools/read/projectFile";
+import { projectFileSourceId } from "@/lib/ai/citations/sources";
 import { getActiveModelName } from "@/lib/ai/providers/registry";
 import { executeKiroWriteTool } from "@/lib/ai/tools/write/executor";
 import { isDestructiveWriteTool, KiroUndoEntry, KiroWriteApi, WriteToolResult } from "@/lib/ai/tools/write/types";
@@ -608,6 +611,21 @@ export function useKiroChat({
     []
   );
 
+  /** V1.3A：read_project_file 成功后注册 Project File Source（sourceId = project-file-<id>，绝不使用 storageKey） */
+  const registerProjectFileSource = useCallback((data: { projectFileId: string; name: string; pages?: { page: number }[] }) => {
+    const meta: KiroSourceMeta = {
+      sourceId: projectFileSourceId(data.projectFileId),
+      name: data.name,
+      source: "project-file",
+      availablePages:
+        Array.isArray(data.pages) && data.pages.length > 0 ? data.pages.map((p) => p.page) : undefined,
+    };
+    if (!turnSourcesRef.current.some((s) => s.sourceId === meta.sourceId)) {
+      turnSourcesRef.current = [...turnSourcesRef.current, meta];
+      setSources(turnSourcesRef.current);
+    }
+  }, []);
+
   const buildTurnSnapshot = (turnAttachments: KiroAttachment[], projectContext?: KiroProjectTurnContext): Record<string, unknown> => {
     const contexts = buildDocumentContexts(turnAttachments);
     const budgeted = budgetAttachments(contexts, DEFAULT_CONTEXT_BUDGET.attachmentBudgetTokens).attachments;
@@ -726,7 +744,7 @@ export function useKiroChat({
   };
 
   const readCounterRef = useRef(0);
-  const materialReadCounterRef = useRef(0);
+  const documentReadCounterRef = useRef(0);
   const writeCounterRef = useRef(0);
   const limitReachedRef = useRef(false);
   const undoRegistryRef = useRef(new Map<string, KiroUndoEntry>());
@@ -849,8 +867,8 @@ export function useKiroChat({
 
       // ---- read_material（重量级，单独限制）----
       if (toolName === "read_material") {
-        materialReadCounterRef.current += 1;
-        if (materialReadCounterRef.current > MAX_MATERIAL_READS_PER_TURN) {
+        documentReadCounterRef.current += 1;
+        if (documentReadCounterRef.current > MAX_DOCUMENT_READS_PER_TURN) {
           failOutput("READ_TOOL_LIMIT_REACHED", "已达到本轮资料读取上限。");
           return;
         }
@@ -861,6 +879,29 @@ export function useKiroChat({
               result.data as { materialId?: string; title?: string; pages?: { page: number }[] },
               input
             );
+          }
+          emitToolOutput(toolName, toolCallId, result as ToolOutput);
+        });
+        return;
+      }
+
+      // ---- read_project_file（V1.3A）：与 read_material 共享重型文档 quota；frozen index + 跨项目双重检查 ----
+      if (toolName === "read_project_file") {
+        documentReadCounterRef.current += 1;
+        if (documentReadCounterRef.current > MAX_DOCUMENT_READS_PER_TURN) {
+          failOutput("READ_TOOL_LIMIT_REACHED", "已达到本轮资料读取上限。");
+          return;
+        }
+        const frozenProjectContext = turnSnapshotRef.current?.projectContext as
+          | KiroProjectTurnContext
+          | undefined;
+        void executeReadProjectFile(input, frozenProjectContext).then((result) => {
+          if (result.ok) {
+            registerProjectFileSource({
+              projectFileId: result.data.projectFileId,
+              name: result.data.name,
+              pages: result.data.pages,
+            });
           }
           emitToolOutput(toolName, toolCallId, result as ToolOutput);
         });
@@ -1753,7 +1794,7 @@ export function useKiroChat({
         return false; // Prompt 保留，不静默丢图
       }
       readCounterRef.current = 0;
-      materialReadCounterRef.current = 0;
+      documentReadCounterRef.current = 0;
       writeCounterRef.current = 0;
       limitReachedRef.current = false;
       resetDocumentFailureFuse();
@@ -1874,18 +1915,29 @@ export function useKiroChat({
       }
 
       // ---- Turn Context Snapshot：本 Turn 内 Prompt Context 冻结（下一 Turn 才刷新） ----
-      // Projects V1.2：Send boundary 读取并冻结 Project Instructions。
+      // Projects V1.2/1.3A：Send boundary 读取并冻结 Project Instructions + Files index。
       // 绝不提前在 useEffect preload（loadConversation 后快速 Send 可能丢第一 Turn 指令）。
       const projectIdNow = projectIdRef.current;
       let projectContext: KiroProjectTurnContext | undefined;
       if (projectIdNow) {
         try {
-          const projectRecord = await getKiroProject(projectIdNow);
+          const [projectRecord, projectFiles] = await Promise.all([
+            getKiroProject(projectIdNow),
+            listProjectFiles(projectIdNow),
+          ]);
           if (!projectRecord) {
             pushToast({ message: "无法加载项目设置，请重试。", type: "error" });
             return false;
           }
-          projectContext = toProjectTurnContext(projectRecord);
+          projectContext = toProjectTurnContext(
+            projectRecord,
+            projectFiles.map((f) => ({
+              id: f.id,
+              name: f.name,
+              kind: f.kind,
+              sizeBytes: f.sizeBytes,
+            }))
+          );
         } catch {
           pushToast({ message: "无法加载项目设置，请重试。", type: "error" });
           return false;
@@ -2074,7 +2126,7 @@ export function useKiroChat({
       return;
     }
     readCounterRef.current = 0;
-    materialReadCounterRef.current = 0;
+    documentReadCounterRef.current = 0;
     writeCounterRef.current = 0;
     limitReachedRef.current = false;
     resetDocumentFailureFuse();
@@ -2103,7 +2155,7 @@ export function useKiroChat({
     clearComputerSessionState(false);
     chat.setMessages([]);
     readCounterRef.current = 0;
-    materialReadCounterRef.current = 0;
+    documentReadCounterRef.current = 0;
     writeCounterRef.current = 0;
     limitReachedRef.current = false;
     undoRegistryRef.current.clear();
@@ -2156,7 +2208,7 @@ export function useKiroChat({
       pendingAutoContinueRef.current = false;
       resetDocumentFailureFuse();
       readCounterRef.current = 0;
-      materialReadCounterRef.current = 0;
+      documentReadCounterRef.current = 0;
       writeCounterRef.current = 0;
       limitReachedRef.current = false;
       undoRegistryRef.current.clear();

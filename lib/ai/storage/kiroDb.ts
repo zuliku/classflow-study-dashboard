@@ -1,17 +1,19 @@
 /**
- * Kiro 统一 IndexedDB（classflow-kiro v3）。
+ * Kiro 统一 IndexedDB（classflow-kiro v4）。
  * v1：conversations（History）
  * v2：+ memories（长期学习记忆）
  * v3：+ projects（Kiro 项目）；conversations 增量补 projectId index
+ * v4：+ project-files（Kiro Project 持久化文档 metadata；Blob 在 classflow-files）
  * 升级采用增量 onupgradeneeded（只补建缺失 store/index，绝不 deleteDatabase 重建）。
  */
 
 export const KIRO_DB_NAME = "classflow-kiro";
-export const KIRO_DB_VERSION = 3;
+export const KIRO_DB_VERSION = 4;
 
 export const KIRO_CONVERSATIONS_STORE = "conversations";
 export const KIRO_MEMORIES_STORE = "memories";
 export const KIRO_PROJECTS_STORE = "projects";
+export const KIRO_PROJECT_FILES_STORE = "project-files";
 
 let dbPromise: Promise<IDBDatabase> | null = null;
 
@@ -45,6 +47,12 @@ export function openKiroDB(): Promise<IDBDatabase> {
         if (!store.indexNames.contains("projectId")) {
           store.createIndex("projectId", "projectId", { unique: false });
         }
+      }
+      // v4 → project-files（Project 文档 metadata；Blob 存 classflow-files，keyPath=storageKey）
+      if (!db.objectStoreNames.contains(KIRO_PROJECT_FILES_STORE)) {
+        const store = db.createObjectStore(KIRO_PROJECT_FILES_STORE, { keyPath: "id" });
+        store.createIndex("projectId", "projectId", { unique: false });
+        store.createIndex("createdAt", "createdAt", { unique: false });
       }
     };
     request.onsuccess = () => resolve(request.result);
