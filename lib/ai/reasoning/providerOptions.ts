@@ -79,8 +79,12 @@ export function resolveReasoningProviderOptions(input: {
     case "openai-responses-effort": {
       // @ai-sdk/openai Responses：providerOptions.openai.reasoningEffort
       // → request body reasoning.effort（4.0.42 schema：string，无 enum 限制）。
+      // forceReasoning：SDK 的 isReasoningModel 启发式只识别 gpt-*/o* 前缀，
+      // 对代理模型（如 grok-4.5）会误判为非 reasoning model 而丢弃 reasoning 块；
+      // capability 声明本身是「这是 reasoning model」的权威来源，经官方
+      // forceReasoning 选项传递给 SDK（对 Luna 无害，Luna 本来即 reasoning model）。
       // effort 已 normalize（仅 capability 声明的档位到达这里；default 已提前 return）。
-      return { reasoningEffort: effort };
+      return { reasoningEffort: effort, forceReasoning: true };
     }
     case "anthropic-effort":
       // 当前无已验证的 anthropic-messages 可调模型 → 保守不产出

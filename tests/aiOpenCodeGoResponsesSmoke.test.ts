@@ -16,7 +16,7 @@
  */
 import { describe, it, expect } from "vitest";
 import { z } from "zod";
-import { streamText, convertToModelMessages, tool, LanguageModel } from "ai";
+import { streamText, convertToModelMessages, toUIMessageStream, readUIMessageStream, tool, LanguageModel, UIMessage } from "ai";
 import { createOpenAI } from "@ai-sdk/openai";
 import { resolveLanguageModel } from "@/lib/ai/providers/resolver";
 import { AI } from "@/lib/ai/config";
@@ -130,7 +130,7 @@ describeGo("OpenCode Go Responses 真实 smoke（OPENCODE_GO_TEST_API_KEY 存在
       model,
       messages: [{ role: "user", content: "只回复两个字母：OK" }],
       maxOutputTokens: 128,
-      providerOptions: { openai: { reasoningEffort: "low" } } as never,
+      providerOptions: { openai: { reasoningEffort: "low", forceReasoning: true } } as never,
     });
     let text = "";
     for await (const part of result.fullStream) {
@@ -156,7 +156,7 @@ describeGo("OpenCode Go Responses 真实 smoke（OPENCODE_GO_TEST_API_KEY 存在
       messages: [{ role: "user", content: userMsg }],
       tools: getTimeTool,
       maxOutputTokens: 256,
-      providerOptions: { openai: { reasoningEffort: "high" } } as never,
+      providerOptions: { openai: { reasoningEffort: "high", forceReasoning: true } } as never,
     });
     const content = await r1.content;
     const calls = content.filter((p) => p.type === "tool-call") as {
@@ -188,7 +188,7 @@ describeGo("OpenCode Go Responses 真实 smoke（OPENCODE_GO_TEST_API_KEY 存在
       messages: modelMessages,
       tools: {},
       maxOutputTokens: 256,
-      providerOptions: { openai: { reasoningEffort: "high" } } as never,
+      providerOptions: { openai: { reasoningEffort: "high", forceReasoning: true } } as never,
     });
     let text = "";
     for await (const part of r2.fullStream) {
@@ -203,7 +203,7 @@ describeGo("OpenCode Go Responses 真实 smoke（OPENCODE_GO_TEST_API_KEY 存在
       model,
       messages: [{ role: "user", content: "只回复两个字母：OK" }],
       maxOutputTokens: 128,
-      providerOptions: { openai: { reasoningEffort: "max" } } as never,
+      providerOptions: { openai: { reasoningEffort: "max", forceReasoning: true } } as never,
     });
     let text = "";
     for await (const part of result.fullStream) {
@@ -211,4 +211,141 @@ describeGo("OpenCode Go Responses 真实 smoke（OPENCODE_GO_TEST_API_KEY 存在
     }
     expect(text.trim().length).toBeGreaterThan(0);
   }, SMOKE_TIMEOUT);
+});
+
+describeGo("Grok 4.5 reasoning probe（Phase 3.2B，OPENCODE_GO_TEST_API_KEY 存在时运行）", () => {
+  // 官方边界：low / medium / high（默认 high，不能关闭）。
+  // 全部通过后才允许把 grok-4.5 改为 adjustable（见 lib/ai/providers/openCodeGo.ts）。
+  const grokModel = (capture: { urls: string[]; bodies: Record<string, unknown>[] }): LanguageModel =>
+    createOpenAI({
+      name: "classflow-kiro",
+      baseURL: AI.OPENCODE_BASE_URL,
+      apiKey: KEY,
+      fetch: async (input, init) => {
+        const body = (init as RequestInit | undefined)?.body;
+        capture.urls.push(String(input));
+        if (typeof body === "string") {
+          try {
+            capture.bodies.push(JSON.parse(body) as Record<string, unknown>);
+          } catch {
+            // ignore
+          }
+        }
+        return fetch(input, init);
+      },
+    }).responses("grok-4.5");
+
+  const collectText = async (result: ReturnType<typeof streamText>) => {
+    let text = "";
+    for await (const part of result.fullStream) {
+      if (part.type === "text-delta") text += part.text;
+    }
+    return text;
+  };
+
+  it("Smoke A：grok-4.5 基础 Responses 正常（control，无 reasoning override）", async () => {
+    const capture = { urls: [] as string[], bodies: [] as Record<string, unknown>[] };
+    const model = grokModel(capture);
+    const text = await collectText(
+      streamText({ model, messages: [{ role: "user", content: "只回复两个字母：OK" }], maxOutputTokens: 64 })
+    );
+    expect(capture.urls[0]).toContain("/responses");
+    expect(text.trim().length).toBeGreaterThan(0);
+  }, SMOKE_TIMEOUT);
+
+  it("Smoke B：reasoning=low → outbound reasoning.effort=low，记录 summary 形状", async () => {
+    const capture = { urls: [] as string[], bodies: [] as Record<string, unknown>[] };
+    const model = grokModel(capture);
+    const text = await collectText(
+      streamText({
+        model,
+        messages: [{ role: "user", content: "只回复两个字母：OK" }],
+        maxOutputTokens: 64,
+        // 与生产映射一致：openai-responses-effort → reasoningEffort + forceReasoning
+        providerOptions: { openai: { reasoningEffort: "low", forceReasoning: true } } as never,
+      })
+    );
+    const reasoning = capture.bodies[0].reasoning as { effort?: string; summary?: string } | undefined;
+    // 关键兼容点：SDK 4.0.42 会生成 effort + 自动 summary:"detailed"，Go proxy 必须接受
+    expect(reasoning?.effort).toBe("low");
+    console.info(`[grok probe] outbound reasoning = ${JSON.stringify(reasoning)}`);
+    expect(text.trim().length).toBeGreaterThan(0);
+  }, SMOKE_TIMEOUT);
+
+  it("Smoke C：reasoning=medium 与 high 均无 400", async () => {
+    for (const effort of ["medium", "high"] as const) {
+      const capture = { urls: [] as string[], bodies: [] as Record<string, unknown>[] };
+      const model = grokModel(capture);
+      const text = await collectText(
+        streamText({
+          model,
+          messages: [{ role: "user", content: "只回复两个字母：OK" }],
+          maxOutputTokens: 64,
+          providerOptions: { openai: { reasoningEffort: effort, forceReasoning: true } } as never,
+        })
+      );
+      expect((capture.bodies[0].reasoning as { effort?: string }).effort, effort).toBe(effort);
+      expect(text.trim().length, effort).toBeGreaterThan(0);
+    }
+  }, SMOKE_TIMEOUT * 2);
+
+  it("Smoke D：reasoning=high + 真实 client-tool continuation（UIMessage 路径，保留 reasoning parts）", async () => {
+    const { model } = await resolveLanguageModel({ provider: "opencode-go", model: "grok-4.5", apiKey: KEY });
+    const getTimeTool = {
+      get_current_time: tool({
+        description: "获取当前本地时间",
+        inputSchema: z.object({}),
+      }),
+    };
+    const userMsg = "现在是几点？必须调用 get_current_time 工具获取时间后再回答";
+    const userUIMessage = { id: "u1", role: "user" as const, parts: [{ type: "text" as const, text: userMsg }] };
+
+    // 真实 Kiro 路径：Responses stream → toUIMessageStream → UIMessage（含 reasoning parts / providerMetadata）
+    const r1 = streamText({
+      model,
+      messages: [{ role: "user", content: userMsg }],
+      tools: getTimeTool,
+      maxOutputTokens: 256,
+      providerOptions: { openai: { reasoningEffort: "high", forceReasoning: true } } as never,
+    });
+    const uiStream = toUIMessageStream({
+      stream: r1.stream,
+      originalMessages: [userUIMessage] as never,
+    });
+    let assistantMessage: UIMessage | undefined;
+    for await (const m of readUIMessageStream({ stream: uiStream })) {
+      assistantMessage = m;
+    }
+    expect(assistantMessage).toBeDefined();
+    const assistant = assistantMessage as UIMessage;
+    const toolParts = ((assistantMessage?.parts ?? []) as { type?: string; toolCallId?: string; toolName?: string; input?: unknown }[]).filter(
+      (p) => p.type === "dynamic-tool" || p.type?.startsWith("tool-")
+    );
+    expect(toolParts.length).toBeGreaterThan(0);
+
+    // client 回填 JSON-safe tool output → convertToModelMessages → continuation
+    const parts = assistant.parts.map((p) => {
+      const tp = p as { type?: string; toolCallId?: string; toolName?: string; input?: unknown };
+      if (tp.type === "dynamic-tool" || tp.type?.startsWith("tool-")) {
+        return {
+          ...tp,
+          state: "output-available",
+          output: { now: "2026-08-15 12:00:00" }, // JSON-safe plain object
+        };
+      }
+      return p;
+    });
+    const modelMessages = await convertToModelMessages(
+      [userUIMessage, { id: assistant.id, role: "assistant" as const, parts }] as never
+    );
+    const r2 = await streamText({
+      model,
+      messages: modelMessages,
+      tools: {},
+      maxOutputTokens: 256,
+      providerOptions: { openai: { reasoningEffort: "high", forceReasoning: true } } as never,
+    });
+    const text = await collectText(r2);
+    expect(text.trim().length).toBeGreaterThan(0);
+  }, SMOKE_TIMEOUT * 2);
 });

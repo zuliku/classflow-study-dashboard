@@ -52,17 +52,17 @@ function captureResponsesRequest() {
 }
 
 describe("OpenAI Responses reasoning request body（@ai-sdk/openai 4.0.42）", () => {
-  it("providerOptions.openai.reasoningEffort=high → body.reasoning.effort = high（无残留字段）", async () => {
+  it("providerOptions.openai{reasoningEffort:high,forceReasoning} → body.reasoning.effort = high（无残留字段）", async () => {
     const { bodies, model } = captureResponsesRequest();
     await generateText({
       model,
       messages: [{ role: "user", content: "hi" }],
-      providerOptions: { openai: { reasoningEffort: "high" } } as never,
+      providerOptions: { openai: { reasoningEffort: "high", forceReasoning: true } } as never,
     });
     expect(bodies.length).toBe(1);
     expect(bodies[0].url).toContain("/responses");
     const body = bodies[0].body;
-    // 序列化正确位置：reasoning.effort
+    // 序列化正确位置：reasoning.effort（forceReasoning 是 SDK 内部标志，不进请求体）
     expect(body.reasoning).toEqual({ effort: "high", summary: "detailed" });
     // 不得残留在错误位置
     expect("reasoningEffort" in body).toBe(false);
@@ -74,7 +74,7 @@ describe("OpenAI Responses reasoning request body（@ai-sdk/openai 4.0.42）", (
     await generateText({
       model,
       messages: [{ role: "user", content: "hi" }],
-      providerOptions: { "classflow-kiro": { reasoningEffort: "high" } } as never,
+      providerOptions: { "classflow-kiro": { reasoningEffort: "high", forceReasoning: true } } as never,
     });
     const body = bodies[0].body;
     expect("reasoning" in body).toBe(false);
@@ -85,8 +85,18 @@ describe("OpenAI Responses reasoning request body（@ai-sdk/openai 4.0.42）", (
     await generateText({
       model,
       messages: [{ role: "user", content: "hi" }],
-      providerOptions: { openai: { reasoningEffort: "low" } } as never,
+      providerOptions: { openai: { reasoningEffort: "low", forceReasoning: true } } as never,
     });
     expect(bodies[0].body.reasoning).toEqual({ effort: "low", summary: "detailed" });
+  });
+
+  it("无 forceReasoning：SDK 对 gpt-5.6-luna 本身识别为 reasoning model → reasoning 仍生效", async () => {
+    const { bodies, model } = captureResponsesRequest();
+    await generateText({
+      model,
+      messages: [{ role: "user", content: "hi" }],
+      providerOptions: { openai: { reasoningEffort: "medium" } } as never,
+    });
+    expect(bodies[0].body.reasoning).toEqual({ effort: "medium", summary: "detailed" });
   });
 });

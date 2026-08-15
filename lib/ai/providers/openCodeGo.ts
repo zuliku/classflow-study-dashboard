@@ -27,7 +27,28 @@ export const OPENCODE_MODELS: AIModelDefinition[] = [
   { id: "hy3", name: "Hy3", provider: "opencode-go", vendor: "tencent", transport: "openai-chat", capabilities: { streaming: true, tools: true, vision: false, fileParts: false } },
   // ---- OpenAI Responses（官方 endpoint：/v1/responses → @ai-sdk/openai）----
   // Phase 3.1 正式接入。保守能力声明：vision/fileParts 未经 OpenCode Go proxy 实测不开。
-  { id: "grok-4.5", name: "Grok 4.5", provider: "opencode-go", vendor: "xai", transport: "openai-responses", capabilities: { streaming: true, tools: true, vision: false, fileParts: false } },
+  {
+    id: "grok-4.5",
+    name: "Grok 4.5",
+    provider: "opencode-go",
+    vendor: "xai",
+    transport: "openai-responses",
+    capabilities: {
+      streaming: true,
+      tools: true,
+      vision: false,
+      fileParts: false,
+      // Phase 3.2B：Grok 4.5 reasoning 经真实 OpenCode Go live smoke 验证
+      // （low/medium/high + summary:"detailed" 均 200，含 client-tool continuation）。
+      // 官方边界：low/medium/high，默认 high，不能关闭 → default=不发送 override。
+      // 需要 forceReasoning（SDK id 启发式不识别 grok-*）。
+      reasoning: {
+        adjustable: true,
+        supportedEfforts: ["default", "low", "medium", "high"],
+        mechanism: "openai-responses-effort",
+      },
+    },
+  },
   {
     id: "gpt-5.6-luna",
     name: "GPT 5.6 Luna",
@@ -39,9 +60,11 @@ export const OPENCODE_MODELS: AIModelDefinition[] = [
       tools: true,
       vision: false,
       fileParts: false,
-      // Phase 3.2A：GPT 5.6 Luna 是首个经过验证的 OpenCode Go adjustable reasoning 模型。
+      // Phase 3.2A：GPT 5.6 Luna 是首个启用 reasoning 的 OpenCode Go 模型。
       // mechanism=openai-responses-effort（providerOptions.openai.reasoningEffort → reasoning.effort）。
-      // max 未经 live 验证（无 OPENCODE_GO_TEST_API_KEY）→ 不暴露；只保留已验证档位。
+      // SDK/request-shape verified（request-body capture 测试）；OpenCode Go live smoke
+      // 由 gated 测试（OPENCODE_GO_TEST_API_KEY）验证。
+      // max 未经 live 验证 → 不暴露；只保留已验证档位。
       reasoning: {
         adjustable: true,
         supportedEfforts: ["default", "low", "medium", "high"],

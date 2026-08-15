@@ -143,7 +143,9 @@ describe("OpenCode Phase 3.1：openai-responses registry 与过滤一致性", ()
     expect(def?.vendor).toBe("xai");
     expect(def?.name).toBe("Grok 4.5");
     expect(def?.capabilities.vision).toBe(false); // 保守：未实测多模态兼容
-    expect(def?.capabilities.reasoning).toBeUndefined(); // reasoning 保持 fixed
+    // Phase 3.2B：Grok reasoning 经 live smoke 验证 → adjustable（default/low/medium/high）
+    expect(def?.capabilities.reasoning?.adjustable).toBe(true);
+    expect(def?.capabilities.reasoning?.mechanism).toBe("openai-responses-effort");
   });
 
   it("3. gpt-5.6-luna 已注册，transport = openai-responses", () => {

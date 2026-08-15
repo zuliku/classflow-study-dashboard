@@ -310,7 +310,7 @@ describe("resolveEffectiveReasoningEffort（requested → effective，UI/Turn Sn
   });
 });
 
-describe("GPT 5.6 Luna（openai-responses-effort，Phase 3.2A）", () => {
+describe("GPT 5.6 Luna / Grok 4.5（openai-responses-effort，Phase 3.2A/B）", () => {
   const lunaDef = OPENCODE_MODELS.find((m) => m.id === "gpt-5.6-luna")!;
   const grokDef = OPENCODE_MODELS.find((m) => m.id === "grok-4.5")!;
 
@@ -330,18 +330,18 @@ describe("GPT 5.6 Luna（openai-responses-effort，Phase 3.2A）", () => {
     expect(resolveReasoningProviderOptionsEnvelope({ definition: lunaDef, effort: "default" })).toBeUndefined();
   });
 
-  it("4. low → { reasoningEffort: low }", () => {
-    expect(resolveReasoningProviderOptions({ definition: lunaDef, effort: "low" })).toEqual({ reasoningEffort: "low" });
+  it("4. low → { reasoningEffort: low, forceReasoning: true }", () => {
+    expect(resolveReasoningProviderOptions({ definition: lunaDef, effort: "low" })).toEqual({ reasoningEffort: "low", forceReasoning: true });
   });
 
-  it("5. high → { reasoningEffort: high }（max 未验证，不写成功测试）", () => {
-    expect(resolveReasoningProviderOptions({ definition: lunaDef, effort: "high" })).toEqual({ reasoningEffort: "high" });
+  it("5. high → { reasoningEffort: high, forceReasoning: true }（max 未验证，不写成功测试）", () => {
+    expect(resolveReasoningProviderOptions({ definition: lunaDef, effort: "high" })).toEqual({ reasoningEffort: "high", forceReasoning: true });
     expect(resolveReasoningProviderOptions({ definition: lunaDef, effort: "max" })).toBeUndefined();
   });
 
   it("envelope：Responses → { openai: ... }（4.0.42 固定读取 openai key）", () => {
     expect(resolveReasoningProviderOptionsEnvelope({ definition: lunaDef, effort: "high" })).toEqual({
-      openai: { reasoningEffort: "high" },
+      openai: { reasoningEffort: "high", forceReasoning: true },
     });
     // 非 Responses（chat/messages adapter）→ classflow-kiro
     expect(
@@ -353,12 +353,19 @@ describe("GPT 5.6 Luna（openai-responses-effort，Phase 3.2A）", () => {
     ).toEqual({ "classflow-kiro": { reasoningEffort: "high" } });
   });
 
-  it("7. Grok 4.5 仍 fixed（transport 相同 ≠ capability 相同）", () => {
+  it("7. Grok 4.5：live verified（Phase 3.2B）→ adjustable，同 mechanism 复用", () => {
     const cap = getReasoningCapability(grokDef);
-    expect(cap.adjustable).toBe(false);
-    expect(cap.supportedEfforts).toEqual(["default"]);
-    expect(resolveReasoningProviderOptions({ definition: grokDef, effort: "high" })).toBeUndefined();
-    expect(resolveReasoningProviderOptionsEnvelope({ definition: grokDef, effort: "high" })).toBeUndefined();
+    expect(cap.adjustable).toBe(true);
+    expect(cap.mechanism).toBe("openai-responses-effort");
+    expect(cap.supportedEfforts).toEqual(["default", "low", "medium", "high"]);
+    // 与 Luna 同一映射（无 Grok-specific envelope / mechanism）
+    expect(resolveReasoningProviderOptions({ definition: grokDef, effort: "low" })).toEqual({ reasoningEffort: "low", forceReasoning: true });
+    expect(resolveReasoningProviderOptions({ definition: grokDef, effort: "medium" })).toEqual({ reasoningEffort: "medium", forceReasoning: true });
+    expect(resolveReasoningProviderOptions({ definition: grokDef, effort: "high" })).toEqual({ reasoningEffort: "high", forceReasoning: true });
+    expect(resolveReasoningProviderOptions({ definition: grokDef, effort: "max" })).toBeUndefined();
+    expect(resolveReasoningProviderOptionsEnvelope({ definition: grokDef, effort: "high" })).toEqual({
+      openai: { reasoningEffort: "high", forceReasoning: true },
+    });
   });
 
   it("8. OpenCode Go DeepSeek aliases 仍 fixed（不因名字复用 DeepSeek official capability）", () => {
@@ -368,9 +375,10 @@ describe("GPT 5.6 Luna（openai-responses-effort，Phase 3.2A）", () => {
     }
   });
 
-  it("effective：Luna requested=high → high；切 Grok → default；切回仍按 requested 归一", () => {
+  it("effective：Luna/Grok requested=high → high；OpenCode DeepSeek → default；max → default", () => {
     expect(resolveEffectiveReasoningEffort({ provider: "opencode-go", model: "gpt-5.6-luna", requested: "high" })).toBe("high");
-    expect(resolveEffectiveReasoningEffort({ provider: "opencode-go", model: "grok-4.5", requested: "high" })).toBe("default");
-    expect(resolveEffectiveReasoningEffort({ provider: "opencode-go", model: "gpt-5.6-luna", requested: "max" })).toBe("default");
+    expect(resolveEffectiveReasoningEffort({ provider: "opencode-go", model: "grok-4.5", requested: "high" })).toBe("high");
+    expect(resolveEffectiveReasoningEffort({ provider: "opencode-go", model: "grok-4.5", requested: "max" })).toBe("default");
+    expect(resolveEffectiveReasoningEffort({ provider: "opencode-go", model: "deepseek-v4-flash", requested: "high" })).toBe("default");
   });
 });
