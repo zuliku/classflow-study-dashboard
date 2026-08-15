@@ -16,10 +16,10 @@ import { createProjectFile } from "@/lib/ai/projects/files/db";
 import { clearAllFileBlobs, getFileBlob } from "@/lib/fileStorage";
 import { clearConversationHistory } from "@/lib/ai/history/db";
 import { executeReadProjectFile } from "@/lib/ai/tools/read/projectFile";
-import { executeReadProjectVisual, normalizeRequestedProjectPdfPages } from "@/lib/ai/tools/read/projectVisual";
+import { executeReadProjectVisual, normalizeRequestedProjectPdfPages, resolveProjectPdfVisualPages } from "@/lib/ai/tools/read/projectVisual";
 import { createVisionTurnRuntimeBudget } from "@/lib/ai/attachments/visionTurnRuntimeBudget";
 import { KiroProjectTurnContext } from "@/lib/ai/contextBudget/types";
-import { buildScannedPdf } from "@/tests/fixtures/files";
+import { buildScannedPdf, buildMinimalPdf } from "@/tests/fixtures/files";
 import { extractProjectVisualEvidence } from "@/lib/ai/vision/projectEvidence";
 import { upsertProjectFileSource, projectFileSourceId } from "@/lib/ai/citations/sources";
 import { KiroSourceMeta } from "@/lib/ai/citations/types";
@@ -247,11 +247,12 @@ describe("read_project_visual", () => {
     expect(renderPages.mock.calls[0][1]).toEqual([2, 5]);
   });
 
-  it("普通 text PDF → NOT_VISUAL_FILE，endpoint 0 calls", async () => {
+  it("普通 text PDF 无 page hint → PAGE_SELECTION_REQUIRED（V1.3C 不再 NOT_VISUAL_FILE），endpoint 0 calls", async () => {
     const p = await createKiroProject({ name: "P" });
     const f = await createProjectFile({ projectId: p.id, name: "text.pdf", mimeType: "application/pdf", sizeBytes: 10, kind: "pdf", blob: scannedBlob() });
     const ledger = createVisionTurnRuntimeBudget({});
     const extractEvidence = vi.fn(async () => noEvidence);
+    const renderPages = vi.fn();
     // 注入非 scanned 的 extract 结果（模拟 text-layer PDF）
     const extract = vi.fn(async () => ({ ok: true as const, extracted: { text: "plain", truncated: false, pageCount: 3 } }));
     const r = await executeReadProjectVisual(
@@ -260,12 +261,14 @@ describe("read_project_visual", () => {
         frozenProjectContext: visionContextOf(p.id, { id: f.id, name: f.name, kind: "pdf", sizeBytes: f.sizeBytes }),
         frozenTurn: visionTurn,
         ledger,
-        deps: { extractEvidence, extract },
+        deps: { extractEvidence, extract, renderPages: renderPages as never },
       }
     );
     expect(r.ok).toBe(false);
-    if (!r.ok) expect(r.code).toBe("NOT_VISUAL_FILE");
+    if (!r.ok) expect(r.code).toBe("PAGE_SELECTION_REQUIRED");
+    expect(renderPages).toHaveBeenCalledTimes(0);
     expect(extractEvidence).toHaveBeenCalledTimes(0);
+    expect(ledger.remaining()).toEqual({ totalBytes: 10 * MIB, pdfBytes: 8 * MIB, pdfPages: 6 });
   });
 
   it("shared PDF page cap：attachment 已用 4 pages → Project 最多 2（不足时 VISION_PDF_PAGE_LIMIT_REACHED）", async () => {
@@ -596,6 +599,248 @@ describe("read_project_visual（V1.3B.1 kind / gate 硬化）", () => {
     expect(r.ok).toBe(true);
     if (r.ok) {
       expect(r.data.pages).toEqual([{ page: 3, text: "FIRST" }]);
+    }
+  });
+});
+
+describe("read_project_visual（V1.3C text-layer PDF）", () => {
+  const textPdfExtract = () => vi.fn(async () => ({ ok: true as const, extracted: { text: "plain text", truncated: false, pageCount: 20 } }));
+
+  async function setupTextPdf(name = "report.pdf") {
+    const p = await createKiroProject({ name: "P" });
+    return createProjectFile({ projectId: p.id, name, mimeType: "application/pdf", sizeBytes: 10, kind: "pdf", blob: scannedBlob() });
+  }
+
+  it("显式 Tool pages=[8] → rasterize [8]，truncated=false", async () => {
+    const f = await setupTextPdf();
+    const ledger = createVisionTurnRuntimeBudget({});
+    const renderPages = vi.fn(async (_blob: Blob, pageNumbers: number[], _sourceId: string, _opts?: { maxBytes?: number }) => [{ page: 8, file: new File(["x"], "p8.jpg", { type: "image/jpeg" }), width: 1, height: 1, size: 10 }]);
+    const extractEvidence = vi.fn(async (_input: import("@/lib/ai/vision/projectEvidence").ProjectVisualEvidenceInput) => ({ ok: true as const, items: [{ page: 8, text: "CHART_P8" }] }));
+    const r = await executeReadProjectVisual(
+      { projectFileId: f.id, pages: [8] },
+      {
+        frozenProjectContext: visionContextOf(f.projectId, { id: f.id, name: f.name, kind: "pdf", sizeBytes: f.sizeBytes }),
+        frozenTurn: visionTurn,
+        ledger,
+        deps: { extractEvidence, renderPages, extract: textPdfExtract() },
+      }
+    );
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(renderPages.mock.calls[0][1]).toEqual([8]);
+      expect(r.data.pages).toEqual([{ page: 8, text: "CHART_P8" }]);
+      expect(r.data.truncated).toBe(false);
+    }
+  });
+
+  it("User Text page hint（Tool 不传 pages）：「帮我分析第 12 页的折线图」→ [12]", async () => {
+    const f = await setupTextPdf();
+    const ledger = createVisionTurnRuntimeBudget({});
+    const renderPages = vi.fn(async (_blob: Blob, pageNumbers: number[], _sourceId: string, _opts?: { maxBytes?: number }) => [{ page: 12, file: new File(["x"], "p12.jpg", { type: "image/jpeg" }), width: 1, height: 1, size: 10 }]);
+    const extractEvidence = vi.fn(async (_input: import("@/lib/ai/vision/projectEvidence").ProjectVisualEvidenceInput) => ({ ok: true as const, items: [{ page: 12, text: "LINE_CHART" }] }));
+    const r = await executeReadProjectVisual(
+      { projectFileId: f.id },
+      {
+        frozenProjectContext: visionContextOf(f.projectId, { id: f.id, name: f.name, kind: "pdf", sizeBytes: f.sizeBytes }),
+        frozenTurn: visionTurn,
+        ledger,
+        latestUserText: "帮我分析第 12 页的折线图",
+        deps: { extractEvidence, renderPages, extract: textPdfExtract() },
+      }
+    );
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.data.pages).toEqual([{ page: 12, text: "LINE_CHART" }]);
+    expect(renderPages.mock.calls[0][1]).toEqual([12]);
+  });
+
+  it("User Text range：「比较第 4-6 页的三张图」→ [4,5,6]，truncated=false", async () => {
+    const f = await setupTextPdf();
+    const ledger = createVisionTurnRuntimeBudget({});
+    const renderPages = vi.fn(async (_blob: Blob, pageNumbers: number[], _sourceId: string, _opts?: { maxBytes?: number }) => [{ page: 4, file: new File(["x"], "p4.jpg", { type: "image/jpeg" }), width: 1, height: 1, size: 10 }, { page: 5, file: new File(["x"], "p5.jpg", { type: "image/jpeg" }), width: 1, height: 1, size: 10 }, { page: 6, file: new File(["x"], "p6.jpg", { type: "image/jpeg" }), width: 1, height: 1, size: 10 }]);
+    const extractEvidence = vi.fn(async (_input: import("@/lib/ai/vision/projectEvidence").ProjectVisualEvidenceInput) => ({ ok: true as const, items: [{ page: 4, text: "A" }, { page: 5, text: "B" }, { page: 6, text: "C" }] }));
+    const r = await executeReadProjectVisual(
+      { projectFileId: f.id },
+      {
+        frozenProjectContext: visionContextOf(f.projectId, { id: f.id, name: f.name, kind: "pdf", sizeBytes: f.sizeBytes }),
+        frozenTurn: visionTurn,
+        ledger,
+        latestUserText: "比较第 4-6 页的三张图",
+        deps: { extractEvidence, renderPages, extract: textPdfExtract() },
+      }
+    );
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.data.pages?.map((p) => p.page)).toEqual([4, 5, 6]);
+      expect(r.data.truncated).toBe(false);
+    }
+  });
+
+  it("User Text range + 预算只剩 2 页 → [4,5]，truncated=true", async () => {
+    const f = await setupTextPdf();
+    const ledger = createVisionTurnRuntimeBudget({ initialPdfPages: 4 });
+    const renderPages = vi.fn(async (_blob: Blob, pageNumbers: number[], _sourceId: string, _opts?: { maxBytes?: number }) => [{ page: 4, file: new File(["x"], "p4.jpg", { type: "image/jpeg" }), width: 1, height: 1, size: 10 }, { page: 5, file: new File(["x"], "p5.jpg", { type: "image/jpeg" }), width: 1, height: 1, size: 10 }]);
+    const extractEvidence = vi.fn(async (_input: import("@/lib/ai/vision/projectEvidence").ProjectVisualEvidenceInput) => ({ ok: true as const, items: [{ page: 4, text: "A" }, { page: 5, text: "B" }] }));
+    const r = await executeReadProjectVisual(
+      { projectFileId: f.id },
+      {
+        frozenProjectContext: visionContextOf(f.projectId, { id: f.id, name: f.name, kind: "pdf", sizeBytes: f.sizeBytes }),
+        frozenTurn: visionTurn,
+        ledger,
+        latestUserText: "比较第 4-6 页的三张图",
+        deps: { extractEvidence, renderPages, extract: textPdfExtract() },
+      }
+    );
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.data.pages?.map((p) => p.page)).toEqual([4, 5]);
+      expect(r.data.truncated).toBe(true);
+    }
+  });
+
+  it("shared PDF page cap：本 Turn 已用 5 页 → [8,9] 只能 [8]，truncated=true", async () => {
+    const f = await setupTextPdf();
+    const ledger = createVisionTurnRuntimeBudget({ initialPdfPages: 5 });
+    const renderPages = vi.fn(async (_blob: Blob, pageNumbers: number[], _sourceId: string, _opts?: { maxBytes?: number }) => [{ page: 8, file: new File(["x"], "p8.jpg", { type: "image/jpeg" }), width: 1, height: 1, size: 10 }]);
+    const extractEvidence = vi.fn(async (_input: import("@/lib/ai/vision/projectEvidence").ProjectVisualEvidenceInput) => ({ ok: true as const, items: [{ page: 8, text: "P8" }] }));
+    const r = await executeReadProjectVisual(
+      { projectFileId: f.id, pages: [8, 9] },
+      {
+        frozenProjectContext: visionContextOf(f.projectId, { id: f.id, name: f.name, kind: "pdf", sizeBytes: f.sizeBytes }),
+        frozenTurn: visionTurn,
+        ledger,
+        deps: { extractEvidence, renderPages, extract: textPdfExtract() },
+      }
+    );
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.data.pages?.map((p) => p.page)).toEqual([8]);
+      expect(r.data.truncated).toBe(true);
+    }
+  });
+
+  it("partial evidence：rendered [8,9] + Worker 仅成功 8 → pages=[8]，truncated=true", async () => {
+    const f = await setupTextPdf();
+    const ledger = createVisionTurnRuntimeBudget({});
+    const renderPages = vi.fn(async (_blob: Blob, _pageNumbers: number[], _sourceId: string, _opts?: { maxBytes?: number }) => [
+      { page: 8, file: new File(["x"], "p8.jpg", { type: "image/jpeg" }), width: 1, height: 1, size: 10 },
+      { page: 9, file: new File(["x"], "p9.jpg", { type: "image/jpeg" }), width: 1, height: 1, size: 10 },
+    ]);
+    const extractEvidence = vi.fn(async (_input: import("@/lib/ai/vision/projectEvidence").ProjectVisualEvidenceInput) => ({ ok: true as const, items: [{ page: 8, text: "P8_OK" }] }));
+    const r = await executeReadProjectVisual(
+      { projectFileId: f.id, pages: [8, 9] },
+      {
+        frozenProjectContext: visionContextOf(f.projectId, { id: f.id, name: f.name, kind: "pdf", sizeBytes: f.sizeBytes }),
+        frozenTurn: visionTurn,
+        ledger,
+        deps: { extractEvidence, renderPages, extract: textPdfExtract() },
+      }
+    );
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.data.pages).toEqual([{ page: 8, text: "P8_OK" }]);
+      expect(r.data.truncated).toBe(true);
+    }
+  });
+
+  it("scanned PDF 无 page hint 仍默认读取（V1.3C 不改变 scanned 行为）", async () => {
+    const p = await createKiroProject({ name: "P" });
+    const f = await createProjectFile({ projectId: p.id, name: "scan.pdf", mimeType: "application/pdf", sizeBytes: 10, kind: "pdf", blob: scannedBlob() });
+    const ledger = createVisionTurnRuntimeBudget({});
+    const renderPages = vi.fn(async (_blob: Blob, pageNumbers: number[], _sourceId: string, _opts?: { maxBytes?: number }) => pageNumbers.map((page) => ({ page, file: new File(["x"], `p${page}.jpg`, { type: "image/jpeg" }), width: 1, height: 1, size: 10 })));
+    const extractEvidence = vi.fn(async (_input: import("@/lib/ai/vision/projectEvidence").ProjectVisualEvidenceInput) => ({ ok: true as const, items: [{ page: 1, text: "P1" }] }));
+    const extract = vi.fn(async () => ({ ok: true as const, extracted: { text: "", truncated: false, pageCount: 30, possiblyScanned: true } }));
+    const r = await executeReadProjectVisual(
+      { projectFileId: f.id },
+      {
+        frozenProjectContext: visionContextOf(p.id, { id: f.id, name: f.name, kind: "pdf", sizeBytes: f.sizeBytes }),
+        frozenTurn: visionTurn,
+        ledger,
+        deps: { extractEvidence, renderPages, extract },
+      }
+    );
+    expect(r.ok).toBe(true);
+    // scanned 默认策略：无页码 → 前 min(6, pageCount) 页
+    expect(renderPages.mock.calls[0][1]).toEqual([1, 2, 3, 4, 5, 6]);
+  });
+
+  it("非 Vision 模型 + text PDF → VISION_MODEL_REQUIRED，endpoint 0 calls", async () => {
+    const f = await setupTextPdf();
+    const ledger = createVisionTurnRuntimeBudget({});
+    const extractEvidence = vi.fn(async () => noEvidence);
+    const r = await executeReadProjectVisual(
+      { projectFileId: f.id, pages: [8] },
+      {
+        frozenProjectContext: visionContextOf(f.projectId, { id: f.id, name: f.name, kind: "pdf", sizeBytes: f.sizeBytes }),
+        frozenTurn: { provider: "deepseek", model: "deepseek-v4-flash", apiKey: "sk-x" },
+        ledger,
+        deps: { extractEvidence },
+      }
+    );
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.code).toBe("VISION_MODEL_REQUIRED");
+    expect(extractEvidence).toHaveBeenCalledTimes(0);
+  });
+});
+
+describe("resolveProjectPdfVisualPages（V1.3C 纯 helper）", () => {
+  it("explicit 始终最高优先级（两种 mode 一致）", () => {
+    expect(resolveProjectPdfVisualPages({ mode: "text-layer", explicitPages: [8], pageCount: 20, remainingPageBudget: 6 })).toEqual({ ok: true, pages: [8], truncated: false });
+    expect(resolveProjectPdfVisualPages({ mode: "scanned", explicitPages: [8], pageCount: 20, remainingPageBudget: 6 })).toEqual({ ok: true, pages: [8], truncated: false });
+  });
+
+  it("scanned 无 hint → 默认前 N 页", () => {
+    const r = resolveProjectPdfVisualPages({ mode: "scanned", pageCount: 30, remainingPageBudget: 6 });
+    expect(r).toEqual({ ok: true, pages: [1, 2, 3, 4, 5, 6], truncated: true });
+  });
+
+  it("text-layer 无 hint → PAGE_SELECTION_REQUIRED", () => {
+    const r = resolveProjectPdfVisualPages({ mode: "text-layer", pageCount: 20, remainingPageBudget: 6 });
+    expect(r).toEqual({ ok: false, code: "PAGE_SELECTION_REQUIRED" });
+  });
+
+  it("text-layer 有 user page hint → 允许；全越界 → INVALID_INPUT", () => {
+    const r = resolveProjectPdfVisualPages({ mode: "text-layer", latestUserText: "第 12 页的图", pageCount: 20, remainingPageBudget: 6 });
+    expect(r).toEqual({ ok: true, pages: [12], truncated: false });
+    const bad = resolveProjectPdfVisualPages({ mode: "text-layer", latestUserText: "第 99 页的图", pageCount: 20, remainingPageBudget: 6 });
+    expect(bad).toEqual({ ok: false, code: "INVALID_INPUT" });
+  });
+});
+
+describe("read_project_file（V1.3C note）", () => {
+  it("普通 text PDF（buildMinimalPdf）→ note 含视觉提示；visualRequired 不设；含 pages/pageCount", async () => {
+    const p = await createKiroProject({ name: "P" });
+    const f = await createProjectFile({ projectId: p.id, name: "report.pdf", mimeType: "application/pdf", sizeBytes: 10, kind: "pdf", blob: new Blob([buildMinimalPdf("Hello Chart Report").buffer as ArrayBuffer], { type: "application/pdf" }) });
+    const r = await executeReadProjectFile({ projectFileId: f.id }, visionContextOf(p.id, { id: f.id, name: f.name, kind: "pdf", sizeBytes: f.sizeBytes }));
+    expect(r.ok, JSON.stringify(r)).toBe(true);
+    if (r.ok) {
+      expect(r.data.possiblyScanned).not.toBe(true);
+      expect(r.data.visualRequired).toBeUndefined();
+      expect(r.data.text).toContain("Hello");
+      expect(r.data.pages?.length).toBeGreaterThan(0);
+      expect(r.data.pageCount).toBeGreaterThan(0);
+      expect(r.data.note).toContain("read_project_visual");
+      expect(r.data.note).toContain("指定相关页码");
+    }
+  });
+
+  it("TXT → 不出现 PDF 视觉提示 note", async () => {
+    const p = await createKiroProject({ name: "P" });
+    const f = await createProjectFile({ projectId: p.id, name: "notes.md", mimeType: "text/markdown", sizeBytes: 3, kind: "text", blob: new Blob(["abc"], { type: "text/markdown" }) });
+    const r = await executeReadProjectFile({ projectFileId: f.id }, visionContextOf(p.id, { id: f.id, name: f.name, kind: "text", sizeBytes: f.sizeBytes }));
+    expect(r.ok, JSON.stringify(r)).toBe(true);
+    if (r.ok) {
+      expect(r.data.note).toBeUndefined();
+    }
+  });
+
+  it("scanned PDF → 仍 visualRequired=true（V1.3C 不改变 scanned 语义）", async () => {
+    const p = await createKiroProject({ name: "P" });
+    const f = await createProjectFile({ projectId: p.id, name: "scan.pdf", mimeType: "application/pdf", sizeBytes: 10, kind: "pdf", blob: scannedBlob() });
+    const r = await executeReadProjectFile({ projectFileId: f.id }, visionContextOf(p.id, { id: f.id, name: f.name, kind: "pdf", sizeBytes: f.sizeBytes }));
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.data.possiblyScanned).toBe(true);
+      expect(r.data.visualRequired).toBe(true);
     }
   });
 });

@@ -23,7 +23,7 @@ import { resolveProjectFileForTurn } from "@/lib/ai/projects/files/access";
 import { extractAttachment } from "@/lib/ai/attachments";
 import { extractCacheKey } from "@/lib/ai/attachments/cache";
 import { preprocessVisionImage } from "@/lib/ai/attachments/preprocessImage";
-import { renderPdfPages, selectScannedPdfPages } from "@/lib/ai/attachments/pdfVision";
+import { renderPdfPages, selectScannedPdfPages, extractExplicitPages } from "@/lib/ai/attachments/pdfVision";
 import { MAX_SCANNED_PDF_PAGES_PER_TURN } from "@/lib/ai/attachments/limits";
 import { getModelCapabilities, isVisionMimeSupported } from "@/lib/ai/providers/capabilities";
 import { resolveImageMimeType } from "@/lib/ai/attachments/imageMime";
@@ -43,6 +43,64 @@ const schema = z
       .optional(),
   })
   .strict();
+
+/**
+ * V1.3C：统一 PDF 页选择（纯函数，Node 可测）。
+ * - Tool explicit pages 始终最高优先级：走 normalizeRequestedProjectPdfPages（V1.3B.1 canonicalization 复用）
+ * - scanned：保持 V1.3B 默认策略（无页码也可 selectScannedPdfPages 默认页）
+ * - text-layer：禁止默认扫前 N 页；只接受 Tool pages 或 User Text 中的明确页码；
+ *   无任何 page hint → PAGE_SELECTION_REQUIRED（让 Kiro read_project_file → 定位页 → 再 Visual）
+ */
+export type ProjectPdfVisualMode = "scanned" | "text-layer";
+
+export type ProjectPdfVisualPageSelection =
+  | { ok: true; pages: number[]; truncated: boolean }
+  | { ok: false; code: "PAGE_SELECTION_REQUIRED" | "INVALID_INPUT" };
+
+export function resolveProjectPdfVisualPages(input: {
+  mode: ProjectPdfVisualMode;
+  explicitPages?: number[];
+  latestUserText?: string;
+  pageCount: number;
+  remainingPageBudget: number;
+}): ProjectPdfVisualPageSelection {
+  const pageCount = Math.max(1, input.pageCount);
+  // A. Tool explicit pages 最高优先级（与 scanned/text-layer 无关）
+  if (input.explicitPages && input.explicitPages.length > 0) {
+    const sel = normalizeRequestedProjectPdfPages({
+      requested: input.explicitPages,
+      pageCount,
+      remainingPageBudget: input.remainingPageBudget,
+    });
+    if (sel.pages.length === 0) return { ok: false, code: "INVALID_INPUT" };
+    return { ok: true, pages: sel.pages, truncated: sel.truncated };
+  }
+  // B. scanned：保持默认策略（无页码 → 默认前 N 页；有页码表达 → 优先）
+  if (input.mode === "scanned") {
+    const sel = selectScannedPdfPages({
+      userText: input.latestUserText,
+      pageCount,
+      maxPages: Math.min(Math.max(1, input.remainingPageBudget), MAX_SCANNED_PDF_PAGES_PER_TURN),
+    });
+    return { ok: true, pages: sel.pages, truncated: sel.truncated };
+  }
+  // C. text-layer：只接受明确页码（Tool pages 已处理 → 此处只能来自 User Text）
+  const ranges = extractExplicitPages(input.latestUserText ?? "");
+  if (ranges.length === 0) {
+    return { ok: false, code: "PAGE_SELECTION_REQUIRED" };
+  }
+  const requested: number[] = [];
+  for (const r of ranges) {
+    for (let p = r.start; p <= r.end; p++) requested.push(p);
+  }
+  const sel = normalizeRequestedProjectPdfPages({
+    requested,
+    pageCount,
+    remainingPageBudget: input.remainingPageBudget,
+  });
+  if (sel.pages.length === 0) return { ok: false, code: "INVALID_INPUT" };
+  return { ok: true, pages: sel.pages, truncated: sel.truncated };
+}
 
 /**
  * V1.3B.1：显式页码 canonicalization（纯函数，Node 可测）。
@@ -106,6 +164,7 @@ export type ReadProjectVisualErrorCode =
   | "VISION_FORMAT_UNSUPPORTED"
   | "VISION_BUDGET_EXHAUSTED"
   | "VISION_PDF_PAGE_LIMIT_REACHED"
+  | "PAGE_SELECTION_REQUIRED"
   | "NOT_VISUAL_FILE"
   | "VISION_EXTRACT_FAILED"
   | "EXTRACT_FAILED";
@@ -260,10 +319,9 @@ export async function executeReadProjectVisual(
     return { ok: false, code: "EXTRACT_FAILED", message: "该项目资料读取失败，请重新上传。" };
   }
   const doc = extracted.extracted;
-  // 普通 text PDF：本阶段不做图表视觉（不请求 Provider）
-  if (!doc.possiblyScanned) {
-    return { ok: false, code: "NOT_VISUAL_FILE", message: "这份 PDF 是普通文本 PDF，请使用 read_project_file 读取正文。" };
-  }
+  // V1.3C：text-layer PDF 不再硬拒绝 —— 两种 mode 都允许 rasterize + Vision，
+  // 仅 page selection policy 不同（text-layer 禁止默认扫前 N 页）。
+  const pdfMode: ProjectPdfVisualMode = doc.possiblyScanned ? "scanned" : "text-layer";
   const pageCount = Math.max(1, doc.pageCount ?? 1);
 
   // ---- 预算 pre-check（reservation 前，不消耗）----
@@ -277,39 +335,32 @@ export async function executeReadProjectVisual(
 
   // ---- async-exclusive：页选择 + rasterize（按实际 rendered pages/bytes 扣减）----
   const rendered = await opts.ledger.runPdfRasterizationExclusive(async (rem) => {
-    let pageNumbers: number[];
-    let selTruncated = false;
-    let invalidSelection = false;
-    if (explicitPages) {
-      const sel = normalizeRequestedProjectPdfPages({
-        requested: explicitPages,
-        pageCount,
-        remainingPageBudget: rem.pdfPages,
-      });
-      pageNumbers = sel.pages;
-      selTruncated = sel.truncated;
-      // 全部越界 → 不是预算问题；明确 INVALID_INPUT（不误报 VISION_BUDGET_EXHAUSTED）
-      invalidSelection = pageNumbers.length === 0;
-    } else {
-      const sel = selectScannedPdfPages({
-        userText: opts.latestUserText,
-        pageCount,
-        maxPages: Math.min(rem.pdfPages, MAX_SCANNED_PDF_PAGES_PER_TURN),
-      });
-      pageNumbers = sel.pages;
-      selTruncated = sel.truncated;
-    }
-    if (pageNumbers.length === 0) return { pages: [], truncated: selTruncated, invalid: invalidSelection };
-    const out = await (opts.deps?.renderPages ?? renderPdfPages)(blob, pageNumbers, `project-file-${projectFileId}`, {
+    const sel = resolveProjectPdfVisualPages({
+      mode: pdfMode,
+      explicitPages,
+      latestUserText: opts.latestUserText,
+      pageCount,
+      remainingPageBudget: rem.pdfPages,
+    });
+    if (!sel.ok) return { pages: [], truncated: false, selectionError: sel.code };
+    if (sel.pages.length === 0) return { pages: [], truncated: sel.truncated, selectionError: null };
+    const out = await (opts.deps?.renderPages ?? renderPdfPages)(blob, sel.pages, `project-file-${projectFileId}`, {
       maxBytes: Math.min(rem.pdfBytes, rem.totalBytes),
     });
     return {
       pages: out.map((p) => ({ page: p.page, size: p.size, file: p.file })),
-      truncated: selTruncated || out.length < pageNumbers.length,
-      invalid: false,
+      truncated: sel.truncated || out.length < sel.pages.length,
+      selectionError: null,
     };
   });
-  if (rendered.invalid) {
+  if (rendered.selectionError === "PAGE_SELECTION_REQUIRED") {
+    return {
+      ok: false,
+      code: "PAGE_SELECTION_REQUIRED",
+      message: "普通 PDF 已有文本层。请先使用 read_project_file 定位相关页，再用 pages 指定需要视觉查看的页面。",
+    };
+  }
+  if (rendered.selectionError === "INVALID_INPUT") {
     return {
       ok: false,
       code: "INVALID_INPUT",

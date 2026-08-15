@@ -113,6 +113,11 @@ export async function executeReadProjectFile(
       truncated: doc.truncated,
       pages: doc.pages,
       pageCount: doc.pageCount,
+      // V1.3C：普通 text PDF 的视觉提示（仅 PDF；TXT/DOCX 不出现）。
+      // 不设 visualRequired —— text PDF 视觉读取是 optional capability，不是必需。
+      ...(record.kind === "pdf"
+        ? { note: "正文已从文本层读取；如需分析图表、示意图、图片或页面布局，可使用 read_project_visual 并指定相关页码。" }
+        : {}),
     },
   };
 }

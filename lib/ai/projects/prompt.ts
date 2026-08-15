@@ -113,7 +113,8 @@ export function buildProjectContextSection(context: KiroProjectTurnContext | und
       `## 项目资料\n${rows}\n\n这里只提供项目资料索引，不代表正文已读取；` +
         `不得仅根据文件名声称文件正文内容。读取规则：` +
         `TXT/MD/DOCX 使用 read_project_file 读取正文；` +
-        `PDF 先使用 read_project_file，若结果说明 possiblyScanned / visualRequired 再使用 read_project_visual 读取页面图像；` +
+        `PDF 优先使用 read_project_file 读取文本；若结果说明 possiblyScanned / visualRequired 再使用 read_project_visual 读取页面图像；` +
+        `若用户询问图表、示意图、页面图片、版式或图形关系，可对普通 PDF 使用 read_project_visual，但应先定位明确页码再读取；` +
         `IMAGE 使用 read_project_visual 读取视觉内容。`
     );
   }

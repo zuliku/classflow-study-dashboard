@@ -101,7 +101,7 @@ export const KIRO_READ_TOOLS = {
   }),
   read_project_visual: tool({
     description:
-      "读取当前 Kiro 项目中图片或扫描 PDF 的视觉内容。图片可直接读取；PDF 应先调用 read_project_file，仅当结果表明 possiblyScanned 时再使用本工具。不要用它代替普通文本 PDF 读取。",
+      "读取当前 Kiro 项目中的图片或 PDF 页面视觉内容。图片可直接读取。扫描 PDF 可用于读取图像正文。普通 PDF 应优先使用 read_project_file 读取文本；仅在需要理解图表、图片、示意图或页面布局时使用本工具，并指定明确页码。不要用 Vision 替代普通 PDF 文本读取。",
     inputSchema: KIRO_READ_TOOL_SCHEMAS.read_project_visual,
   }),
   propose_task_breakdown: tool({
@@ -150,6 +150,18 @@ export const KIRO_READ_TOOLS = {
     description:
       "对已有 Kiro-generated StudyBlock 生成只移动、不新增/删除的学习计划重排建议。用于修复 Deadline 后安排、课程/活动冲突或通过移动较晚截止任务释放早期稀缺容量。本工具只是 Proposal，绝不修改 Store；manual StudyBlock 不会被移动。",
     inputSchema: KIRO_READ_TOOL_SCHEMAS.propose_study_rebalance,
+  }),
+  propose_visual_actions: tool({
+    description:
+      "当当前用户回合包含截图（图片附件）且用户希望根据截图更新 ClassFlow 时，把截图中的通知整理为可预览的修改方案（Visual Action Intake）。" +
+      "调用前必须先用 Read Tools 解析真实数据：查找课程（课程简称如「计网」先用 search_courses/get_course 做唯一匹配，歧义先询问用户，不要猜）、读取任务、排课与临时变更（get_week_schedule 的 source/overrideId）。" +
+      "输入只接受真实 entity ID（courseId/scheduleId/assignmentId），不接受名称猜测；所有日期必须是绝对本地时间（如 2026-08-20T22:00、week=3、dayOfWeek=6），禁止把「明天/下周三」写进 action。" +
+      "支持动作白名单：create_assignment / update_assignment / set_assignment_ddl / set_assignment_priority / cancel_schedule_occurrence / move_schedule_occurrence / create_extra_schedule_occurrence；" +
+      "仅当截图明确「以后/从下周起/统一」才允许 move_schedule / update_schedule 永久修改；" +
+      "一次性调整（本周/这周/明天/第 N 周）必须用 occurrence override 类动作。" +
+      "禁止：delete_*、create_course、小组/提醒/专注相关动作。" +
+      "这是 READ / PROPOSAL 工具：绝不写 Store；结果只是方案，用户一次确认后才会原子执行。",
+    inputSchema: KIRO_READ_TOOL_SCHEMAS.propose_visual_actions,
   }),
 };
 
