@@ -298,7 +298,7 @@ export function KiroAgentSettings() {
                       <p className="text-[10px] text-sandrift truncate">{metadata}</p>
                     </div>
                     {ws.id === activeWorkspaceId ? (
-                      <span className="text-[9px] font-bold text-charcoal bg-pastel-mint px-1.5 py-0.5 rounded shrink-0">
+                      <span className="text-[10px] font-bold text-charcoal bg-pastel-mint px-1.5 py-0.5 rounded shrink-0">
                         当前
                       </span>
                     ) : (

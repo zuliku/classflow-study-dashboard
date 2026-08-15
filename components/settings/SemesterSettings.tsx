@@ -100,7 +100,7 @@ export function SemesterSettings({ highlightedId }: { highlightedId?: string }) 
                 style={{ width: `${overviewProgress}%` }}
               />
             </div>
-            <div className="flex justify-between text-[9px] text-sandrift font-mono">
+            <div className="flex justify-between text-[10px] text-sandrift font-mono">
               <span>第 1 周</span>
               {inSemester && <span className="font-bold text-charcoal">第 {currentWeek} 周</span>}
               <span>第 {semester.totalWeeks} 周</span>

@@ -115,7 +115,7 @@ export function SettingsModal() {
                 >
                   <Search className="w-3.5 h-3.5" />
                   搜索设置
-                  <kbd className="hidden md:inline-block bg-alabaster text-charcoal text-[9px] font-mono px-1 py-0.5 rounded border border-line-strong">
+                  <kbd className="hidden md:inline-block bg-alabaster text-charcoal text-[10px] font-mono px-1 py-0.5 rounded border border-line-strong">
                     ⌘F
                   </kbd>
                 </button>

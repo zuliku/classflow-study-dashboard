@@ -153,7 +153,7 @@ export function SettingsView({ searchQuery, onClearSearch, jumpToSetting }: Sett
         {/* ---- 搜索模式：Detail 临时切成搜索结果 ---- */}
         {searching ? (
           <div data-testid="settings-search-results">
-            <p className="text-[10px] font-bold text-sandrift uppercase tracking-wider mb-2">
+            <p className="text-[11px] font-bold text-sandrift mb-2">
               搜索结果 · {searchResults.length}
             </p>
             {searchResults.length === 0 ? (
@@ -168,23 +168,18 @@ export function SettingsView({ searchQuery, onClearSearch, jumpToSetting }: Sett
                   groups.set(r.section, arr);
                 }
                 return Array.from(groups.entries()).map(([sec, items]) => (
-                  <div key={sec} className="mb-4">
-                    <div className="space-y-1">
-                      {items.map((s) => (
-                        <button
-                          key={s.id}
-                          onClick={() => handleJump(s)}
-                          className="w-full p-3 bg-[#F7F5F5] border border-line rounded-xl text-left hover:bg-alabaster transition-colors"
-                        >
-                          <p className="text-[9px] font-bold text-sandrift uppercase tracking-wider">
-                            {sectionLabel(sec)} ›
-                          </p>
-                          <p className="text-xs font-bold text-charcoal mt-0.5">{s.title}</p>
-                          <p className="text-[10px] text-sandrift mt-0.5">{s.description}</p>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
+                  <GroupedList key={sec} label={sectionLabel(sec)}>
+                    {items.map((s) => (
+                      <button
+                        key={s.id}
+                        onClick={() => handleJump(s)}
+                        className="w-full px-3 py-2.5 text-left hover:bg-alabaster transition-colors duration-[var(--motion-fast)]"
+                      >
+                        <p className="text-xs font-bold text-charcoal">{s.title}</p>
+                        <p className="text-[11px] text-sandrift mt-0.5">{s.description}</p>
+                      </button>
+                    ))}
+                  </GroupedList>
                 ));
               })()
             )}
@@ -192,8 +187,8 @@ export function SettingsView({ searchQuery, onClearSearch, jumpToSetting }: Sett
         ) : showModified && modifiedKeys.length > 0 ? (
           /* ---- 已修改视图：只显示非默认偏好，按 section 分组 ---- */
           <div data-testid="settings-modified">
-            <div className="flex items-center justify-between mb-2">
-              <p className="text-[10px] font-bold text-sandrift uppercase tracking-wider">
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-[11px] font-bold text-sandrift">
                 已修改 · {modifiedKeys.length}
               </p>
               <button
@@ -208,35 +203,30 @@ export function SettingsView({ searchQuery, onClearSearch, jumpToSetting }: Sett
               </button>
             </div>
             {Array.from(modifiedGroups.entries()).map(([sec, items]) => (
-              <div key={sec} className="mb-4">
-                <p className="text-[10px] font-bold text-sandrift uppercase tracking-wider mb-1.5">
-                  {sectionLabel(sec)}
-                </p>
-                <div className="space-y-1">
-                  {items.map((it) => (
-                    <div
-                      key={it.key}
-                      className="p-3 bg-[#F7F5F5] border border-line rounded-xl flex items-center justify-between gap-3 text-xs"
-                    >
-                      <div className="min-w-0">
-                        <p className="font-bold text-charcoal">{preferenceTitle(it.key)}</p>
-                        <p className="text-[10px] text-satin-grey mt-0.5 truncate">
-                          {formatPreferenceValue(it.key, it.default as never)} →{" "}
-                          {formatPreferenceValue(it.key, it.current as never)}
-                        </p>
-                      </div>
-                      <button
-                        onClick={() => useAppStore.getState().updatePreferences(resetPreferencePatch(it.key))}
-                        aria-label={`将${preferenceTitle(it.key)}恢复默认`}
-                        title="恢复默认"
-                        className="p-1.5 rounded-lg text-sandrift hover:bg-alabaster hover:text-charcoal transition-colors shrink-0"
-                      >
-                        <RotateCcw className="w-3.5 h-3.5" />
-                      </button>
+              <GroupedList key={sec} label={sectionLabel(sec)}>
+                {items.map((it) => (
+                  <div
+                    key={it.key}
+                    className="px-3 py-2.5 flex items-center justify-between gap-3 text-xs"
+                  >
+                    <div className="min-w-0">
+                      <p className="font-bold text-charcoal">{preferenceTitle(it.key)}</p>
+                      <p className="text-[11px] text-satin-grey mt-0.5 truncate">
+                        {formatPreferenceValue(it.key, it.default as never)} →{" "}
+                        {formatPreferenceValue(it.key, it.current as never)}
+                      </p>
                     </div>
-                  ))}
-                </div>
-              </div>
+                    <button
+                      onClick={() => useAppStore.getState().updatePreferences(resetPreferencePatch(it.key))}
+                      aria-label={`将${preferenceTitle(it.key)}恢复默认`}
+                      title="恢复默认"
+                      className="p-1.5 rounded-lg text-sandrift hover:bg-alabaster hover:text-charcoal transition-colors shrink-0"
+                    >
+                      <RotateCcw className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                ))}
+              </GroupedList>
             ))}
           </div>
         ) : (
@@ -302,6 +292,22 @@ function ToolbarTabs({
     >
       {showModified ? "← 全部设置" : `已修改 ${modifiedCount}`}
     </button>
+  );
+}
+
+/**
+ * Grouped Settings List（Task 2 Settings 产品化）：
+ * 搜索结果 / 已修改视图共用的「Section label + 一个 grouped surface + divider rows」。
+ * 每项无独立 Card 边框，hover 只改背景。
+ */
+function GroupedList({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="mb-4">
+      <p className="text-xs font-bold text-sandrift px-1 mb-1.5">{label}</p>
+      <div className="bg-[#F7F5F5] border border-line rounded-xl divide-y divide-line-soft">
+        {children}
+      </div>
+    </div>
   );
 }
 
