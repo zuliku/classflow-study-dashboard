@@ -11,6 +11,7 @@ import { AIError, AI_ERROR_MESSAGES } from "@/lib/ai/errors";
 import { KiroActionCard, actionToCardProps, KiroActionCardVariant } from "@/components/kiro/KiroActionCard";
 import { KiroAgentTaskCard } from "@/components/kiro/computer/KiroAgentTaskCard";
 import { StudyPlanProposalCard } from "@/components/kiro/StudyPlanProposalCard";
+import { StudyRebalanceProposalCard } from "@/components/kiro/StudyRebalanceProposalCard";
 import { TaskBreakdownProposalCard } from "@/components/kiro/TaskBreakdownProposalCard";
 import { actionSummaryText } from "@/lib/ai/share";
 import { cn } from "@/lib/utils";
@@ -380,6 +381,10 @@ const KiroConversationRow = React.memo(function KiroConversationRow({
         {/* Study Plan Proposal Card（真实 ToolResult 事实 UI；仅 live 轮次，历史恢复不渲染） */}
         {view.proposals && view.proposals.length > 0 && !view.streaming && (
           <StudyPlanProposalCard proposals={view.proposals} />
+        )}
+        {/* Study Rebalance Proposal Card（Part 5；真实 ToolResult 事实 UI；仅 live 轮次） */}
+        {view.rebalanceProposals && view.rebalanceProposals.length > 0 && !view.streaming && (
+          <StudyRebalanceProposalCard proposals={view.rebalanceProposals} />
         )}
         {/* Task Breakdown Proposal Card（真实 ToolResult 事实 UI；仅 live 轮次） */}
         {view.breakdowns && view.breakdowns.length > 0 && !view.streaming && (

@@ -118,14 +118,31 @@ export const MAX_READ_TOOL_CALLS_PER_TURN_UI = 12;
 export const MAX_WRITE_TOOL_CALLS_PER_TURN = 8;
 
 /**
- * 客户端流式节流（Streaming UX V2 Phase 4 + V4.4 A/B）：
+ * 客户端流式节流（Streaming UX V2 Phase 4 + V4.4/V4.4.1 定标）：
  * server smoothing 按需送达；客户端每 throttleMs 合并一次 React 更新，
  * 避免逐 token 重渲染 + 50ms 成块跳字。单一 cadence owner（不叠第三层节流）。
- * V4.4：NEXT_PUBLIC_KIRO_CLIENT_THROTTLE_MS 允许 dev A/B（24/20/16），默认 24。
+ * V4.4.1 定标结论：24ms 保留为 production default；
+ * NEXT_PUBLIC_KIRO_CLIENT_THROTTLE_MS 仅允许 dev A/B（16/20/24），
+ * 非法值（NaN/越界/0/负数）一律回落 24。
  */
-export const KIRO_CLIENT_STREAM_THROTTLE_MS = Number(
-  process.env.NEXT_PUBLIC_KIRO_CLIENT_THROTTLE_MS ?? 24
-);
+function resolveClientThrottleMs(): number {
+  const raw = process.env.NEXT_PUBLIC_KIRO_CLIENT_THROTTLE_MS;
+  if (raw == null || raw === "") return 24;
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n <= 0) return 24;
+  if (n !== 16 && n !== 20 && n !== 24) return 24;
+  return n;
+}
+
+export const KIRO_CLIENT_STREAM_THROTTLE_MS = resolveClientThrottleMs();
+
+// V4.4.1：dev/test 验证 runtime constant 是否真的生效（test-only global 存在时才暴露）
+if (typeof window !== "undefined") {
+  const g = window as unknown as { __kiroStreamPerf?: unknown; __kiroClientThrottleMs?: number };
+  if (g.__kiroStreamPerf !== undefined) {
+    g.__kiroClientThrottleMs = KIRO_CLIENT_STREAM_THROTTLE_MS;
+  }
+}
 
 /**
  * Turn Execution Lifecycle（Streaming UX V3 Phase 3）：
@@ -159,6 +176,8 @@ export interface KiroChatMessageView {
   proposals?: StudyPlanProposal[];
   /** Kiro propose_task_breakdown 的真实结果（Task Breakdown Proposal Card 事实来源；模型不得生成） */
   breakdowns?: TaskBreakdownProposal[];
+  /** Kiro propose_study_rebalance 的真实结果（Rebalance Proposal Card 事实来源；模型不得生成） */
+  rebalanceProposals?: import("@/lib/planning/studyRebalance").StudyRebalanceProposal[];
   /** Task 7：User Message 是否可编辑（attachment/history metadata 最终绑定后计算） */
   canEdit?: boolean;
   /** 历史恢复消息只参与整段会话淡入，不播放逐条结构动画。 */
@@ -299,6 +318,7 @@ function toView(
   const actions: KiroActionResultView[] = [];
   const proposals: StudyPlanProposal[] = [];
   const breakdowns: TaskBreakdownProposal[] = [];
+  const rebalanceProposals: import("@/lib/planning/studyRebalance").StudyRebalanceProposal[] = [];
   for (const p of parts) {
     if (typeof p.type !== "string" || !p.type.startsWith("tool-")) continue;
     // Streaming UX V3：begin_final_answer 是内部控制信号（不产生 Action Card / Proposal）
@@ -320,6 +340,16 @@ function toView(
       }
       continue;
     }
+    if (toolNameOf(tp) === "propose_study_rebalance") {
+      const output = tp.output as ReadToolResult<unknown> | undefined;
+      if (output && output.ok === true) {
+        const data = output.data as
+          | { proposal?: import("@/lib/planning/studyRebalance").StudyRebalanceProposal }
+          | undefined;
+        if (data?.proposal) rebalanceProposals.push(data.proposal);
+      }
+      continue;
+    }
     if ((KIRO_MEMORY_TOOL_NAMES as string[]).includes(toolNameOf(tp))) continue;
     const output = tp.output as WriteToolResult | undefined;
     if (output && output.ok === true && output.action) {
@@ -335,6 +365,7 @@ function toView(
     actions: actions.length > 0 ? actions : undefined,
     proposals: proposals.length > 0 ? proposals : undefined,
     breakdowns: breakdowns.length > 0 ? breakdowns : undefined,
+    rebalanceProposals: rebalanceProposals.length > 0 ? rebalanceProposals : undefined,
     restored,
     // 历史恢复消息：禁止重新生成；live 且有 Write Tool Call 的轮次同样禁止
     canRegenerate: !restored && !messageHasWriteToolCalls(m),

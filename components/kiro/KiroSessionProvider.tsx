@@ -102,6 +102,9 @@ interface KiroSessionValue {
   /** Kiro Planning Proposal Ghost Preview（UI-only，不持久化；刷新即消失） */
   planningPreview: KiroPlanningPreview | null;
   setPlanningPreview: (p: KiroPlanningPreview | null) => void;
+  /** Kiro Rebalance Ghost Preview（Part 5；UI-only，不持久化） */
+  studyRebalancePreview: StudyRebalancePreview | null;
+  setStudyRebalancePreview: (p: StudyRebalancePreview | null) => void;
 }
 
 /** Ghost StudyBlock（ephemeral：不写入 Store / localStorage） */
@@ -115,6 +118,19 @@ export interface KiroPlanningPreview {
     endTime: string;
     title: string;
     assignmentId?: string;
+    courseId?: string;
+  }[];
+}
+
+/** Rebalance Ghost Preview（Part 5）：ephemeral；原位置弱化 + 目标 ghost */
+export interface StudyRebalancePreview {
+  proposalKey: string;
+  moves: {
+    blockId: string;
+    from: { date: string; startTime: string; endTime: string };
+    to: { date: string; startTime: string; endTime: string };
+    title: string;
+    assignmentId: string;
     courseId?: string;
   }[];
 }
@@ -197,6 +213,8 @@ export function KiroSessionProvider({ children }: { children: React.ReactNode })
   const [lastUserTurnGen, setLastUserTurnGen] = useState(0);
   // Ghost Preview（Task 4A）：UI-only，不持久化
   const [planningPreview, setPlanningPreview] = useState<KiroPlanningPreview | null>(null);
+  // Rebalance Ghost Preview（Part 5）：UI-only，不持久化；与 planningPreview 独立 shape
+  const [studyRebalancePreview, setStudyRebalancePreview] = useState<StudyRebalancePreview | null>(null);
 
   // Conversation History（Task 6）：只存本地 IndexedDB；不进入 useAppStore（属 AI Session 数据）
   const [conversationId, setConversationId] = useState<string | null>(null);
@@ -999,6 +1017,8 @@ export function KiroSessionProvider({ children }: { children: React.ReactNode })
     conversationTransitioning: transitionState.phase !== "idle",
     conversationTransition: toConversationTransitionView(transitionState),
     planningPreview,
+    studyRebalancePreview,
+    setStudyRebalancePreview,
     setPlanningPreview,
   };
 

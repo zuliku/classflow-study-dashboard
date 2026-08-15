@@ -119,6 +119,8 @@ export function TimelineWorkspace() {
   const handoff = useKiroHandoff();
   // Ghost Preview（Kiro Planning Proposal；ephemeral，不写 Store / localStorage）
   const { planningPreview } = useKiroSession();
+  // Rebalance Ghost Preview（Part 5）：原位置弱化 + 目标 ghost
+  const { studyRebalancePreview } = useKiroSession();
 
   const [filters, setFilters] = useState<TimelineFilters>(DEFAULT_FILTERS);
   const [quickOpen, setQuickOpen] = useState(false);
@@ -496,6 +498,9 @@ export function TimelineWorkspace() {
     const dayEnd = ctx.dayStartMinutes + ctx.totalMinutes;
     // Kiro Proposal Ghost：ephemeral 预览（防御性冲突检查 → 标记「计划已过期」而非压课程）
     const ghostBlocks = (planningPreview?.blocks ?? []).filter((g) => g.date === date);
+    // Rebalance Ghost Preview（Part 5）：被移动的块（原位置弱化）+ 目标 ghost
+    const rebalanceMoveIds = new Set((studyRebalancePreview?.moves ?? []).map((m) => m.blockId));
+    const rebalanceTargets = (studyRebalancePreview?.moves ?? []).filter((m) => m.to.date === date);
     return (
       <>
         {dayBlocks.map((b) => {
@@ -516,6 +521,7 @@ export function TimelineWorkspace() {
           // 高度不足的短块：只显示 Title，不放 duration / delete
           const showMeta = heightPct >= 3.4;
           const isDraggingThis = studyDrag.type === "dragging" && studyDrag.origin.id === b.id;
+          const isRebalanced = rebalanceMoveIds.has(b.id);
           return (
             <div
               key={b.id}
@@ -544,6 +550,8 @@ export function TimelineWorkspace() {
                 "absolute left-1 right-1 z-[2] rounded-lg border border-dashed border-line-soft bg-pastel-mint/20 px-1.5 py-0.5 flex items-center gap-1 overflow-hidden group",
                 "transition-opacity duration-[var(--motion-fast)]",
                 isDraggingThis && "opacity-50",
+                // Rebalance Preview：被移动的块弱化 + dashed outline（不改真实数据）
+                isRebalanced && "opacity-35 border-dashed border-[#A48F82]",
                 studyDragEnabled && !isDraggingThis && "cursor-grab",
                 isDraggingThis && "cursor-grabbing"
               )}
@@ -705,6 +713,28 @@ export function TimelineWorkspace() {
               >
                 {gStateLabel}
               </span>
+            </div>
+          );
+        })}
+
+        {/* Rebalance Target Ghost（Part 5：move 目标位置；ephemeral） */}
+        {rebalanceTargets.map((m) => {
+          const gs = timeToMinutes(m.to.startTime);
+          const ge = timeToMinutes(m.to.endTime);
+          if (gs === null || ge === null) return null;
+          const vs = Math.max(gs, dayStart);
+          const ve = Math.min(ge, dayEnd);
+          if (ve <= vs) return null;
+          return (
+            <div
+              key={`rebalance-${m.blockId}`}
+              data-testid="timeline-rebalance-ghost"
+              title={`${m.title} · 移动目标（未保存）`}
+              className="absolute left-1 right-1 z-[3] rounded-lg border border-dashed border-[#A48F82] bg-[#F3EEE7]/70 px-1.5 py-0.5 flex items-center gap-1 overflow-hidden pointer-events-none"
+              style={{ top: `${((vs - dayStart) / ctx.totalMinutes) * 100}%`, height: `${((ve - vs) / ctx.totalMinutes) * 100}%`, minHeight: 6 }}
+            >
+              <span className="truncate text-[10px] font-semibold text-satin-grey">{m.title}</span>
+              <span className="shrink-0 text-[10px] font-medium text-sandrift">移动目标</span>
             </div>
           );
         })}
