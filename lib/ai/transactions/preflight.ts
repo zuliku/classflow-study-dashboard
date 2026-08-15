@@ -53,10 +53,36 @@ const FIELD_OF_TOOL: Record<TransactionSafeToolName, string | null> = {
   assign_group_task: "assignee",
   set_group_task_ddl: "ddl",
   toggle_group_task: null,
+  // Task 7 Change Set V2：create（重复 create 由 duplicate id 检查覆盖）
+  create_assignment: null,
+  cancel_schedule_occurrence: null,
+  move_schedule_occurrence: null,
+  create_extra_schedule_occurrence: null,
 };
 
+/** Task 7：客户端事务层为 create 操作预留实体 ID（Preflight → Re-preflight → Commit 同一 ID）。
+ *  按 action 下标预留（actions 数组顺序稳定 → 两次 preflight ID 一致）。 */
+export function reserveCreateIds(actions: ChangeSetActionInput[]): (string | undefined)[] {
+  const CREATE_PREFIX: Partial<Record<string, string>> = {
+    create_assignment: "a",
+    cancel_schedule_occurrence: "occ",
+    move_schedule_occurrence: "occ",
+    create_extra_schedule_occurrence: "occ",
+  };
+  return actions.map((a) => {
+    const prefix = CREATE_PREFIX[a.tool];
+    if (!prefix) return undefined;
+    // 与 createId 同分布（crypto.randomUUID），保证与其它实体 ID 不冲突
+    const rnd =
+      globalThis.crypto && typeof globalThis.crypto.randomUUID === "function"
+        ? globalThis.crypto.randomUUID()
+        : `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`;
+    return `${prefix}_${rnd}`;
+  });
+}
+
 export function preflightChangeSet(
-  input: { actions: ChangeSetActionInput[] },
+  input: { actions: ChangeSetActionInput[]; reservedIds?: (string | undefined)[] },
   state: AppState
 ): ChangeSetPreflightResult {
   if (!Array.isArray(input.actions) || input.actions.length === 0) {
@@ -75,6 +101,7 @@ export function preflightChangeSet(
   let projected: AppState = state;
   const prepared: PreparedWriteAction[] = [];
   const seenFields = new Map<string, string>();
+  const reservedIds = input.reservedIds ?? reserveCreateIds(input.actions);
 
   for (let i = 0; i < input.actions.length; i++) {
     const action = input.actions[i];
@@ -87,7 +114,9 @@ export function preflightChangeSet(
       };
     }
 
-    const prep = prepareKiroWriteTool(action.tool, action.input, projected);
+    const prep = prepareKiroWriteTool(action.tool, action.input, projected, {
+      reservedId: reservedIds[i],
+    });
     if (!prep.ok) {
       return { ok: false, failedActionIndex: i, code: prep.code, message: prep.message, details: prep.details };
     }

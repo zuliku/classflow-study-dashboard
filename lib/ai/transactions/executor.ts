@@ -12,7 +12,7 @@ import {
   ChangeSetExecuteResult,
   ChangeSetSuccess,
 } from "@/lib/ai/transactions/types";
-import { preflightChangeSet, changeSetRequiresConfirm, changeSetConfirmText } from "@/lib/ai/transactions/preflight";
+import { preflightChangeSet, changeSetRequiresConfirm, changeSetConfirmText, reserveCreateIds } from "@/lib/ai/transactions/preflight";
 
 export interface ConfirmRequestLike {
   title: string;
@@ -33,16 +33,25 @@ export interface ExecuteChangeSetInput {
   toolCallId: string;
   /** 需要确认时调用（内部用 Promise 等待用户决定） */
   confirm: (req: ConfirmRequestLike) => Promise<boolean>;
+  /**
+   * Task 7：确认模式（内部 caller option，不进 LLM Tool schema）。
+   * preapproved-visual-proposal：Visual Proposal Card 已明确点击「应用全部修改」——
+   * 不重复弹 generic confirm（bulk/normal 直接执行）；destructive 一律拒绝。
+   */
+  confirmationMode?: import("@/lib/ai/transactions/types").ChangeSetConfirmationMode;
 }
 
 /**
  * 执行 Change Set。确认后 / 执行前会基于最新 Store 重新 Preflight。
  */
 export async function executeChangeSet(input: ExecuteChangeSetInput): Promise<ChangeSetExecuteResult> {
-  const { actions, summary, api, toolCallId } = input;
+  const { actions, summary, api, toolCallId, confirmationMode = "normal" } = input;
+
+  // Task 7：create 操作的实体 ID 只预留一次 → Preflight / Re-preflight / Commit 使用同一批 ID
+  const reservedIds = reserveCreateIds(actions);
 
   // 1. Preflight（projected）
-  const preflight = preflightChangeSet({ actions }, input.state);
+  const preflight = preflightChangeSet({ actions, reservedIds }, input.state);
   if (!preflight.ok) {
     return {
       ok: false,
@@ -54,7 +63,17 @@ export async function executeChangeSet(input: ExecuteChangeSetInput): Promise<Ch
   }
 
   // 2. Risk → Confirm
-  if (changeSetRequiresConfirm(preflight.risk)) {
+  if (confirmationMode === "preapproved-visual-proposal") {
+    // Visual Proposal 已确认：跳过 generic confirm；destructive 永远拒绝（Task B V1 无 destructive）
+    if (preflight.risk === "destructive") {
+      return {
+        ok: false,
+        code: "TRANSACTION_PREFLIGHT_FAILED",
+        message: "该修改包含高风险操作（删除类），不能通过视觉提案预批准执行。",
+        applied: 0,
+      };
+    }
+  } else if (changeSetRequiresConfirm(preflight.risk)) {
     const lines = changeSetConfirmText(preflight.preview);
     const confirmed = await input.confirm({
       title: `Kiro 准备执行 ${preflight.preview.length} 项修改`,
@@ -69,7 +88,7 @@ export async function executeChangeSet(input: ExecuteChangeSetInput): Promise<Ch
 
   // 3. Re-preflight：以最新 Store 重新校验（确认期间数据可能已变化）
   const freshState = api.getState();
-  const re = preflightChangeSet({ actions }, freshState);
+  const re = preflightChangeSet({ actions, reservedIds }, freshState);
   if (!re.ok) {
     return {
       ok: false,

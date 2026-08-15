@@ -9,6 +9,7 @@
 import {
   AppState,
 } from "@/store/useAppStore";
+import { Assignment } from "@/types";
 import { KiroWriteApi, WriteToolResult } from "@/lib/ai/tools/write/types";
 import { KIRO_WRITE_TOOL_SCHEMAS } from "@/lib/ai/tools/write/schemas";
 import {
@@ -21,6 +22,11 @@ import {
   TIMETABLE_DAY_END_MINUTES,
 } from "@/lib/timetableInteraction";
 import { timeToMinutes } from "@/lib/schedule";
+import { createId } from "@/lib/utils";
+import { normalizeAssignment } from "@/lib/tasks/taskSemantics";
+import { buildAssignmentDDLMark } from "@/store/useAppStore";
+import { reconcileAllAutomaticDeadlineReminders } from "@/lib/reminders/autoDeadlineReminder";
+import { validateScheduleOccurrenceOverride } from "@/lib/scheduleOccurrences";
 import {
   collectAssignmentDeleteSnapshot,
   removeAssignmentDeleteSnapshot,
@@ -576,9 +582,151 @@ function prepareToggleGroupTask(toolName: TransactionSafeToolName, input: unknow
     });
 }
 
+// ---------- Task 7 Change Set V2：Create 预检（reserved-ID 事务化） ----------
+
+/** create_assignment 投影（与 store addAssignment 完全一致：linked DDL mark + auto reminder reconcile） */
+function projectCreateAssignment(state: AppState, assignmentData: Omit<Assignment, "id">, id: string): AppState {
+  const newAssignment: Assignment = normalizeAssignment({ ...assignmentData, id });
+  const mark = buildAssignmentDDLMark(newAssignment);
+  const calendarMarks = mark ? [...state.calendarMarks, mark] : state.calendarMarks;
+  const assignments = [newAssignment, ...state.assignments];
+  const reminders = reconcileAllAutomaticDeadlineReminders({
+    assignments,
+    calendarMarks,
+    reminders: state.reminders,
+    requestedLead: state.preferences.defaultDeadlineReminderMinutes,
+    defaultDDLTime: state.preferences.defaultDDLTime,
+    now: new Date().toISOString(),
+  });
+  return { ...state, assignments, calendarMarks, reminders };
+}
+
+function prepareCreateAssignment(toolName: TransactionSafeToolName, input: unknown, state: AppState, fail: Fail, options?: { reservedId?: string }): PreparedWriteResult {
+  const parsed = safeParse<{ courseId: string; title: string; description?: string; ddl?: string; estimatedMinutes?: number; priority?: string; status?: string; progress?: number; tags?: string[] }>(toolName, input);
+  if (!parsed.ok) return parsed;
+  const { courseId, title, description, ddl, estimatedMinutes, priority, status, progress, tags } = parsed.data;
+  if (!state.courses.some((c) => c.id === courseId)) return notFound("未找到对应课程。");
+  if (state.assignments.some((a) => a.id === (options?.reservedId ?? ""))) {
+    return invalidInput("重复的预留任务 ID。");
+  }
+  const reservedId = options?.reservedId ?? createId("a");
+  const prefs = state.preferences;
+  const assignmentData: Omit<Assignment, "id"> = {
+    courseId,
+    title,
+    description: description ?? "",
+    ddl,
+    estimatedMinutes,
+    priority: (priority ?? prefs.defaultTaskPriority) as never,
+    status: (status ?? prefs.defaultTaskStatus) as never,
+    progress: progress ?? 0,
+    tags: tags ?? [],
+  };
+  const view: PreparedActionView = {
+    tool: toolName,
+    entityType: "assignment",
+    entityId: reservedId,
+    title,
+    operation: "create",
+    after: assignmentData,
+  };
+  return makeAction(
+    state,
+    view,
+    (s) => projectCreateAssignment(s, assignmentData, reservedId),
+    (api, callId) => {
+      api.addAssignmentWithId(assignmentData, reservedId, { source: "kiro" });
+      return { undo: () => api.deleteAssignment(reservedId) };
+    }
+  );
+}
+
+/** 三个一次性排课 override 的通用 create 预检（cancel/move/extra；reserved-ID） */
+function prepareCreateScheduleOccurrenceOverride(toolName: TransactionSafeToolName, input: unknown, state: AppState, fail: Fail, options?: { reservedId?: string }): PreparedWriteResult {
+  const parsed = safeParse<{
+    scheduleId?: string;
+    courseId?: string;
+    week: number;
+    dayOfWeek?: number;
+    startTime?: string;
+    endTime?: string;
+    location?: string;
+  }>(toolName, input);
+  if (!parsed.ok) return parsed;
+  const { week, dayOfWeek, startTime, endTime, location } = parsed.data;
+  const kind: "cancel" | "move" | "extra" =
+    toolName === "cancel_schedule_occurrence" ? "cancel" : toolName === "move_schedule_occurrence" ? "move" : "extra";
+  const baseSchedule =
+    kind !== "extra" ? state.schedules.find((s) => s.id === parsed.data.scheduleId) : undefined;
+  if (kind !== "extra" && !baseSchedule) return notFound("未找到对应排课时段。");
+  const courseId = (kind !== "extra" ? baseSchedule!.courseId : parsed.data.courseId) ?? "";
+  if (kind === "extra" && !state.courses.some((c) => c.id === courseId)) return notFound("未找到对应课程。");
+  const inputData: {
+    kind: "cancel" | "move" | "extra";
+    courseId: string;
+    baseScheduleId?: string;
+    week: number;
+    dayOfWeek?: number;
+    startTime?: string;
+    endTime?: string;
+    location?: string;
+    source: "manual" | "kiro";
+  } = {
+    kind,
+    courseId,
+    baseScheduleId: kind !== "extra" ? baseSchedule!.id : undefined,
+    week,
+    dayOfWeek,
+    startTime,
+    endTime,
+    location: location ?? (kind !== "extra" ? baseSchedule!.location : ""),
+    source: "kiro",
+  };
+  const validation = validateScheduleOccurrenceOverride(inputData, {
+    schedules: state.schedules,
+    overrides: state.scheduleOccurrenceOverrides,
+    totalWeeks: state.semester.totalWeeks,
+    courses: state.courses,
+  });
+  if (!validation.ok) return conflict(validation.message);
+  const reservedId = options?.reservedId ?? createId("occ");
+  const after = {
+    kind,
+    week,
+    ...(kind !== "cancel" ? { dayOfWeek, startTime, endTime, location: inputData.location } : {}),
+    ...(kind !== "extra" ? { scheduleId: baseSchedule!.id } : { courseId }),
+  };
+  const view: PreparedActionView = {
+    tool: toolName,
+    entityType: "schedule",
+    entityId: reservedId,
+    title: `${state.courses.find((c) => c.id === courseId)?.name ?? "课程"} 第 ${week} 周${kind === "cancel" ? "停课" : kind === "move" ? "调课" : "补课"}`,
+    operation: "create",
+    after,
+  };
+  return makeAction(
+    state,
+    view,
+    (s) => {
+      // 投影：追加 override（与 store addScheduleOccurrenceOverride 同校验已在上面完成）
+      const override = {
+        ...inputData,
+        id: reservedId,
+        ...(kind === "move" || kind === "extra" ? { dayOfWeek: inputData.dayOfWeek!, startTime: inputData.startTime!, endTime: inputData.endTime! } : {}),
+      } as never;
+      return { ...s, scheduleOccurrenceOverrides: [...s.scheduleOccurrenceOverrides, override] };
+    },
+    (api, callId) => {
+      const r = api.addScheduleOccurrenceOverrideWithId(inputData, reservedId);
+      if (!r.ok) return null; // 运行时校验失败 → 事务层回滚
+      return { undo: () => api.deleteScheduleOccurrenceOverride(reservedId) };
+    }
+  );
+}
+
 // ---------- 统一入口 ----------
 
-const PREPARERS: Record<TransactionSafeToolName, (toolName: TransactionSafeToolName, input: unknown, state: AppState, fail: Fail) => PreparedWriteResult> = {
+const PREPARERS: Record<TransactionSafeToolName, (toolName: TransactionSafeToolName, input: unknown, state: AppState, fail: Fail, options?: { reservedId?: string }) => PreparedWriteResult> = {
   update_assignment: prepareUpdateAssignment,
   set_assignment_ddl: prepareSetAssignmentDDL,
   set_assignment_priority: prepareSetAssignmentPriority,
@@ -598,11 +746,29 @@ const PREPARERS: Record<TransactionSafeToolName, (toolName: TransactionSafeToolN
   assign_group_task: prepareAssignGroupTask,
   set_group_task_ddl: prepareSetGroupTaskDDL,
   toggle_group_task: prepareToggleGroupTask,
+  // Task 7 Change Set V2：create（reserved-ID；options.reservedId 由事务层传入）
+  create_assignment: prepareCreateAssignment,
+  cancel_schedule_occurrence: prepareCreateScheduleOccurrenceOverride,
+  move_schedule_occurrence: prepareCreateScheduleOccurrenceOverride,
+  create_extra_schedule_occurrence: prepareCreateScheduleOccurrenceOverride,
 };
 
-/** 共享 Write Preflight：对给定 state 校验 + 投影 + commit（Single 与 Transaction 同一规则） */
-export function prepareKiroWriteTool(toolName: string, input: unknown, state: AppState): PreparedWriteResult {
+/** 共享 Write Preflight：对给定 state 校验 + 投影 + commit（Single 与 Transaction 同一规则）。
+ *  options.reservedId：仅事务层传入（create 操作保证 Preflight → Re-preflight → Commit 同一实体 ID）；
+ *  Single 执行路径不传（内部 createId）。 */
+export function prepareKiroWriteTool(
+  toolName: string,
+  input: unknown,
+  state: AppState,
+  options?: { reservedId?: string }
+): PreparedWriteResult {
   const preparer = PREPARERS[toolName as TransactionSafeToolName];
   if (!preparer) return { ok: false, code: "UNSUPPORTED", message: `该工具不支持事务化执行：${toolName}` };
-  return preparer(toolName as TransactionSafeToolName, input, state, () => ({ ok: false, code: "UNKNOWN", message: "" }));
+  return preparer(
+    toolName as TransactionSafeToolName,
+    input,
+    state,
+    () => ({ ok: false, code: "UNKNOWN", message: "" }),
+    options
+  );
 }

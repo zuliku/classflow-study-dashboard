@@ -263,6 +263,28 @@ export const pauseFocusSessionSchema = z.object({});
 export const resumeFocusSessionSchema = z.object({});
 export const finishFocusSessionSchema = z.object({});
 
+/** Task 7：一次性停课/调课/补课（只影响指定教学周，不修改 recurring schedule） */
+export const cancelScheduleOccurrenceSchema = z.object({
+  scheduleId: z.string().trim().min(1).max(120),
+  week: z.number().int().min(1).max(30),
+});
+export const moveScheduleOccurrenceSchema = z.object({
+  scheduleId: z.string().trim().min(1).max(120),
+  week: z.number().int().min(1).max(30),
+  dayOfWeek: z.number().int().min(1).max(7),
+  startTime: z.string().trim().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
+  endTime: z.string().trim().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
+  location: z.string().trim().max(200).optional(),
+});
+export const createExtraScheduleOccurrenceSchema = z.object({
+  courseId: z.string().trim().min(1).max(120),
+  week: z.number().int().min(1).max(30),
+  dayOfWeek: z.number().int().min(1).max(7),
+  startTime: z.string().trim().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
+  endTime: z.string().trim().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
+  location: z.string().trim().max(200).optional(),
+});
+
 /** Write Tool 输入 schema 注册表（tool name → zod schema） */
 export const KIRO_WRITE_TOOL_SCHEMAS = {
   create_assignment: createAssignmentSchema,
@@ -279,6 +301,9 @@ export const KIRO_WRITE_TOOL_SCHEMAS = {
   update_schedule: updateScheduleSchema,
   exclude_schedule_week: excludeScheduleWeekSchema,
   delete_schedule: deleteScheduleSchema,
+  cancel_schedule_occurrence: cancelScheduleOccurrenceSchema,
+  move_schedule_occurrence: moveScheduleOccurrenceSchema,
+  create_extra_schedule_occurrence: createExtraScheduleOccurrenceSchema,
   create_course: createCourseSchema,
   update_course: updateCourseSchema,
   create_group_project: createGroupProjectSchema,

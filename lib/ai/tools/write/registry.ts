@@ -62,6 +62,22 @@ export const KIRO_WRITE_TOOLS = {
     description: "排除某教学周（调课/停课），该周不再显示此课。",
     inputSchema: KIRO_WRITE_TOOL_SCHEMAS.exclude_schedule_week,
   }),
+  cancel_schedule_occurrence: tool({
+    description:
+      "停掉指定教学周的某一次课程（只影响该周，其他周不受影响，不修改每周固定排课）。" +
+      "区分：exclude_schedule_week 是长期排除；本工具是某周的一次性停课。",
+    inputSchema: KIRO_WRITE_TOOL_SCHEMAS.cancel_schedule_occurrence,
+  }),
+  move_schedule_occurrence: tool({
+    description:
+      "把指定教学周的某一次课程临时调到新的星期与时间（只移动该周一次，其他周不受影响，不修改每周固定排课）。" +
+      "区分：move_schedule 是永久改课表；本工具是某周的一次性调课。location 缺省继承原排课地点。",
+    inputSchema: KIRO_WRITE_TOOL_SCHEMAS.move_schedule_occurrence,
+  }),
+  create_extra_schedule_occurrence: tool({
+    description: "在指定教学周额外补一次课（补课；只出现该周一次，不修改每周固定排课）。",
+    inputSchema: KIRO_WRITE_TOOL_SCHEMAS.create_extra_schedule_occurrence,
+  }),
   delete_schedule: tool({
     description: "删除单个排课（高风险，需要用户确认）。",
     inputSchema: KIRO_WRITE_TOOL_SCHEMAS.delete_schedule,

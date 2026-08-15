@@ -126,6 +126,47 @@ function buildAssignmentLifecycleEvent(
 /** Task 7G-A1：Reminder 时间戳统一本地墙钟 */
 const nowLocalString = () => formatLocalDateTime(new Date());
 
+/**
+ * Task 7 Change Set V2：reserved-ID 创建任务（与 addAssignment 完全一致：linked DDL mark +
+ * auto reminder reconcile + history；仅 ID 由事务层预留，保证 Preflight → Re-preflight → Commit 一致）
+ */
+function createAssignmentWithId(
+  set: (partial: object) => void,
+  assignmentData: Omit<Assignment, "id">,
+  id: string,
+  context?: LearningMutationContext
+): string {
+  const newAssignment: Assignment = normalizeAssignment({
+    ...assignmentData,
+    id,
+  });
+  // Task V2：仅当 Assignment 有合法 DDL 才创建 linked CalendarMark（无 DDL 不建空 date mark）
+  const mark = buildAssignmentDDLMark(newAssignment);
+  const marks: CalendarMark[] = mark ? [mark] : [];
+  set((state: AppState) => {
+    const assignments = [newAssignment, ...state.assignments];
+    const calendarMarks = [...state.calendarMarks, ...marks];
+    // P2：新建未来 DDL → 按全局默认生成 auto Reminder（linked mark 不产生第二条）
+    const reminders = reconcileAllAuto({
+      assignments,
+      calendarMarks,
+      reminders: state.reminders,
+      preferences: state.preferences,
+    });
+    // History：assignment.created（UI 默认 manual；Kiro/system/import 由 context 指定）
+    const resolved = resolveLearningMutationContext(context);
+    enqueueLearningHistoryEvents([
+      buildAssignmentCreatedEvent({
+        assignment: newAssignment,
+        context: resolved,
+        environment: historyEnvironment(state),
+      }),
+    ]);
+    return { assignments, calendarMarks, reminders };
+  });
+  return id;
+}
+
 /** Reminder target 的当前时间锚点（相对创建/更新时实时解析；无合法 anchor → null） */
 function findTargetAnchor(
   state: { assignments: Assignment[]; studyBlocks: StudyBlock[]; calendarMarks: CalendarMark[] },
@@ -203,7 +244,7 @@ function handleAssignmentCompleted(
 }
 
 /** Task V2：根据 Assignment 有效 DDL 构建 linked CalendarMark（addAssignment 与 recurrence spawn 共用同一 helper） */
-function buildAssignmentDDLMark(assignment: Assignment): CalendarMark | null {
+export function buildAssignmentDDLMark(assignment: Assignment): CalendarMark | null {
   if (!hasTaskDeadline(assignment)) return null;
   return {
     id: createId("cm"),
@@ -523,6 +564,11 @@ export interface AppState {
   addScheduleOccurrenceOverride: (
     override: ScheduleOccurrenceOverrideInput
   ) => { ok: true; id: string } | { ok: false; code: string; message: string };
+  /** Task 7 Change Set V2：reserved-ID 创建 override（仅事务层使用） */
+  addScheduleOccurrenceOverrideWithId: (
+    override: ScheduleOccurrenceOverrideInput,
+    id: string
+  ) => { ok: true; id: string } | { ok: false; code: string; message: string };
   /** 删除 override（返回被删对象供撤销） */
   deleteScheduleOccurrenceOverride: (overrideId: string) => ScheduleOccurrenceOverride | null;
   /** 撤销删除：恢复原 override（原 ID） */
@@ -550,6 +596,12 @@ export interface AppState {
   // Assignment Actions
   /** 创建任务，返回新任务 id（History context 可选；UI 默认 manual） */
   addAssignment: (assignment: Omit<Assignment, "id">, context?: LearningMutationContext) => string;
+  /** Task 7 Change Set V2：reserved-ID 创建（仅事务层使用；Preflight → Re-preflight → Commit 同一实体 ID） */
+  addAssignmentWithId: (
+    assignment: Omit<Assignment, "id">,
+    id: string,
+    context?: LearningMutationContext
+  ) => string;
   updateAssignment: (updatedAssignment: Assignment, context?: LearningMutationContext) => void;
   /** Task V2：字段级 patch（未来 Kiro update_task 的稳定 Domain API；DDL mark 三态同步内置） */
   updateAssignmentPatch: (
@@ -1120,6 +1172,20 @@ export const useAppStore = create<AppState>()(
         return { ok: true, id: override.id };
       },
 
+      addScheduleOccurrenceOverrideWithId: (input, id) => {
+        const state = get();
+        const validation = validateScheduleOccurrenceOverride(input, {
+          schedules: state.schedules,
+          overrides: state.scheduleOccurrenceOverrides,
+          totalWeeks: state.semester.totalWeeks,
+          courses: state.courses,
+        });
+        if (!validation.ok) return validation;
+        const override = buildScheduleOccurrenceOverride(input, id);
+        set({ scheduleOccurrenceOverrides: [...state.scheduleOccurrenceOverrides, override] });
+        return { ok: true, id: override.id };
+      },
+
       deleteScheduleOccurrenceOverride: (overrideId) => {
         const current = get();
         const target = current.scheduleOccurrenceOverrides.find((o) => o.id === overrideId) ?? null;
@@ -1260,40 +1326,12 @@ export const useAppStore = create<AppState>()(
           ),
         })),
 
-      addAssignment: (assignmentData, context) => {
-        const newId = createId("a");
-        const newAssignment: Assignment = normalizeAssignment({
-          ...assignmentData,
-          id: newId,
-        });
+      addAssignment: (assignmentData, context) =>
+        createAssignmentWithId(set, assignmentData, createId("a"), context),
 
-        // Task V2：仅当 Assignment 有合法 DDL 才创建 linked CalendarMark（无 DDL 不建空 date mark）
-        const mark = buildAssignmentDDLMark(newAssignment);
-        const marks: CalendarMark[] = mark ? [mark] : [];
-
-        set((state) => {
-          const assignments = [newAssignment, ...state.assignments];
-          const calendarMarks = [...state.calendarMarks, ...marks];
-          // P2：新建未来 DDL → 按全局默认生成 auto Reminder（linked mark 不产生第二条）
-          const reminders = reconcileAllAuto({
-            assignments,
-            calendarMarks,
-            reminders: state.reminders,
-            preferences: state.preferences,
-          });
-          // History：assignment.created（UI 默认 manual；Kiro/system/import 由 context 指定）
-          const resolved = resolveLearningMutationContext(context);
-          enqueueLearningHistoryEvents([
-            buildAssignmentCreatedEvent({
-              assignment: newAssignment,
-              context: resolved,
-              environment: historyEnvironment(state),
-            }),
-          ]);
-          return { assignments, calendarMarks, reminders };
-        });
-        return newId;
-      },
+      // Task 7 Change Set V2：reserved-ID 创建（仅事务层使用；Preflight → Re-preflight → Commit 同一实体 ID）
+      addAssignmentWithId: (assignmentData, id, context) =>
+        createAssignmentWithId(set, assignmentData, id, context),
 
       updateAssignment: (updatedAssignment, context) =>
         set((state) => {

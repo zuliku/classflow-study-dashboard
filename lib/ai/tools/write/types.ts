@@ -25,6 +25,9 @@ export const KIRO_WRITE_RISKS: Record<string, KiroWriteRisk> = {
   resize_schedule: "normal",
   update_schedule: "normal",
   exclude_schedule_week: "normal",
+  cancel_schedule_occurrence: "normal",
+  move_schedule_occurrence: "normal",
+  create_extra_schedule_occurrence: "normal",
   delete_schedule: "destructive",
   create_course: "normal",
   update_course: "normal",
@@ -157,6 +160,17 @@ export interface KiroWriteApi {
   deleteSchedule: (id: string) => CourseSchedule | null;
   restoreSchedule: (s: CourseSchedule) => void;
   excludeWeekFromSchedule: (scheduleId: string, week: number) => void;
+  /** Task 7 Change Set V2：reserved-ID 创建（事务层使用） */
+  addAssignmentWithId: (
+    a: Omit<Assignment, "id">,
+    id: string,
+    context?: { source: "kiro" }
+  ) => string;
+  /** Task 7：一次性停课/调课/补课（事务层与独立执行共用；WithId 变体保留 reserved ID） */
+  addScheduleOccurrenceOverride: AppState["addScheduleOccurrenceOverride"];
+  addScheduleOccurrenceOverrideWithId: AppState["addScheduleOccurrenceOverrideWithId"];
+  deleteScheduleOccurrenceOverride: AppState["deleteScheduleOccurrenceOverride"];
+  restoreScheduleOccurrenceOverride: AppState["restoreScheduleOccurrenceOverride"];
 
   addCourseWithSchedule: (
     c: Omit<Course, "id" | "materials">,

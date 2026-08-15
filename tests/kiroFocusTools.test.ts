@@ -46,6 +46,11 @@ function buildApi(store: { getState: () => any }): KiroWriteApi {
   const s = () => store.getState();
   return {
     getState: s,
+    addAssignmentWithId: (a, id) => id,
+    addScheduleOccurrenceOverride: () => ({ ok: true, id: "occ_t" }),
+    addScheduleOccurrenceOverrideWithId: (o, id) => ({ ok: true, id }),
+    deleteScheduleOccurrenceOverride: () => null,
+    restoreScheduleOccurrenceOverride: () => {},
     addAssignment: (a) => store.getState().addAssignment(a),
     updateAssignment: (a) => store.getState().updateAssignment(a),
     updateAssignmentPatch: (id, patch) => store.getState().updateAssignmentPatch(id, patch),

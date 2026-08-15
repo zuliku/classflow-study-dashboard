@@ -674,6 +674,86 @@ function focusErrorMessage(code: string): string {
   return map[code] ?? "操作失败。";
 }
 
+// ---------- Task 7：一次性停课/调课/补课（独立执行路径；Change Set 内走 prepare 保留 ID） ----------
+
+function cancelScheduleOccurrence(api: KiroWriteApi, input: unknown, toolCallId: string): WriteToolResult<unknown> {
+  const parsed = safeParse<{ scheduleId: string; week: number }>("cancel_schedule_occurrence", input);
+  if (!parsed.ok) return parsed;
+  const { scheduleId, week } = parsed.data;
+  const schedule = api.getState().schedules.find((s) => s.id === scheduleId);
+  if (!schedule) return notFound("未找到对应排课时段。");
+  const r = api.addScheduleOccurrenceOverride({
+    kind: "cancel",
+    courseId: schedule.courseId,
+    baseScheduleId: scheduleId,
+    week,
+    source: "kiro",
+  });
+  if (!r.ok) return conflict(r.message);
+  api.registerUndo(toolCallId, () => {
+    api.deleteScheduleOccurrenceOverride(r.id);
+  });
+  return {
+    ok: true,
+    data: { id: r.id },
+    action: { tool: "cancel_schedule_occurrence", entityType: "schedule", entityId: r.id, title: `${api.getState().courses.find((c) => c.id === schedule.courseId)?.name ?? "课程"} 第 ${week} 周停课`, operation: "create", after: { scheduleId, week }, canUndo: true },
+  };
+}
+
+function moveScheduleOccurrence(api: KiroWriteApi, input: unknown, toolCallId: string): WriteToolResult<unknown> {
+  const parsed = safeParse<{ scheduleId: string; week: number; dayOfWeek: number; startTime: string; endTime: string; location?: string }>("move_schedule_occurrence", input);
+  if (!parsed.ok) return parsed;
+  const { scheduleId, week, dayOfWeek, startTime, endTime, location } = parsed.data;
+  const schedule = api.getState().schedules.find((s) => s.id === scheduleId);
+  if (!schedule) return notFound("未找到对应排课时段。");
+  const r = api.addScheduleOccurrenceOverride({
+    kind: "move",
+    courseId: schedule.courseId,
+    baseScheduleId: scheduleId,
+    week,
+    dayOfWeek,
+    startTime,
+    endTime,
+    location: location ?? schedule.location,
+    source: "kiro",
+  });
+  if (!r.ok) return conflict(r.message);
+  api.registerUndo(toolCallId, () => {
+    api.deleteScheduleOccurrenceOverride(r.id);
+  });
+  return {
+    ok: true,
+    data: { id: r.id },
+    action: { tool: "move_schedule_occurrence", entityType: "schedule", entityId: r.id, title: `${api.getState().courses.find((c) => c.id === schedule.courseId)?.name ?? "课程"} 第 ${week} 周调课`, operation: "create", after: { scheduleId, week, dayOfWeek, startTime, endTime, location: location ?? schedule.location }, canUndo: true },
+  };
+}
+
+function createExtraScheduleOccurrence(api: KiroWriteApi, input: unknown, toolCallId: string): WriteToolResult<unknown> {
+  const parsed = safeParse<{ courseId: string; week: number; dayOfWeek: number; startTime: string; endTime: string; location?: string }>("create_extra_schedule_occurrence", input);
+  if (!parsed.ok) return parsed;
+  const { courseId, week, dayOfWeek, startTime, endTime, location } = parsed.data;
+  if (!api.getState().courses.some((c) => c.id === courseId)) return notFound("未找到对应课程。");
+  const r = api.addScheduleOccurrenceOverride({
+    kind: "extra",
+    courseId,
+    week,
+    dayOfWeek,
+    startTime,
+    endTime,
+    location: location ?? "",
+    source: "kiro",
+  });
+  if (!r.ok) return conflict(r.message);
+  api.registerUndo(toolCallId, () => {
+    api.deleteScheduleOccurrenceOverride(r.id);
+  });
+  return {
+    ok: true,
+    data: { id: r.id },
+    action: { tool: "create_extra_schedule_occurrence", entityType: "schedule", entityId: r.id, title: `${api.getState().courses.find((c) => c.id === courseId)?.name ?? "课程"} 第 ${week} 周补课`, operation: "create", after: { courseId, week, dayOfWeek, startTime, endTime, location: location ?? "" }, canUndo: true },
+  };
+}
+
 // ---------- 统一入口 ----------
 
 const EXECUTORS: Record<KiroWriteToolName, (api: KiroWriteApi, input: unknown, toolCallId: string) => WriteToolResult<unknown>> = {
@@ -690,6 +770,9 @@ const EXECUTORS: Record<KiroWriteToolName, (api: KiroWriteApi, input: unknown, t
   resize_schedule: viaPrepare("resize_schedule"),
   update_schedule: viaPrepare("update_schedule"),
   exclude_schedule_week: viaPrepare("exclude_schedule_week"),
+  cancel_schedule_occurrence: cancelScheduleOccurrence,
+  move_schedule_occurrence: moveScheduleOccurrence,
+  create_extra_schedule_occurrence: createExtraScheduleOccurrence,
   delete_schedule: viaPrepare("delete_schedule"),
   create_course: createCourse,
   update_course: viaPrepare("update_course"),

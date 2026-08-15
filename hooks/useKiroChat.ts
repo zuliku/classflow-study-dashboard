@@ -2589,6 +2589,11 @@ function buildWriteApi({
   return {
     getState: s,
     addAssignment: (a) => useAppStore.getState().addAssignment(a, kiro),
+    addAssignmentWithId: (a, id) => useAppStore.getState().addAssignmentWithId(a, id, kiro),
+    addScheduleOccurrenceOverride: (o) => useAppStore.getState().addScheduleOccurrenceOverride(o),
+    addScheduleOccurrenceOverrideWithId: (o, id) => useAppStore.getState().addScheduleOccurrenceOverrideWithId(o, id),
+    deleteScheduleOccurrenceOverride: (id) => useAppStore.getState().deleteScheduleOccurrenceOverride(id),
+    restoreScheduleOccurrenceOverride: (o) => useAppStore.getState().restoreScheduleOccurrenceOverride(o),
     updateAssignment: (a) => useAppStore.getState().updateAssignment(a, kiro),
     updateAssignmentPatch: (id, patch) => useAppStore.getState().updateAssignmentPatch(id, patch, kiro),
     deleteAssignment: (id) => useAppStore.getState().deleteAssignment(id, kiro),
