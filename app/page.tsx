@@ -43,7 +43,7 @@ import { cardKeyHandler, cn } from "@/lib/utils";
 import { openAssignmentEditor } from "@/lib/uiEvents";
 import { reconcileOrphanBlobs } from "@/lib/fileStorage";
 import { resolveStartupTab } from "@/lib/startup";
-import { formatWeekDateRange } from "@/lib/semester";
+import { formatWeekDateRange, getSemesterWeek } from "@/lib/semester";
 import { deriveNextCourseSession } from "@/lib/courses/nextSession";
 import {
   Plus,
@@ -54,6 +54,11 @@ import {
 
 /** 周一至周日标签（Course Workspace 下一节展示用） */
 const WEEKDAY_LABELS = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"];
+
+/** 课程教师/教室：存在才显示，空字段不产生孤立 separator（不显示「待定」类伪值） */
+function courseMetaText(course: { teacher: string; classroom: string }): string {
+  return [course.teacher, course.classroom].filter(Boolean).join(" · ");
+}
 
 export default function Home() {
   const {
@@ -188,6 +193,12 @@ export default function Home() {
   // Statistics derived dynamically 100% from Zustand store
   const totalCredits = courses.reduce((sum, c) => sum + c.credit, 0);
 
+  // Courses Workspace「本周下一节」：基于真实当前教学周（semester + 今天），
+  // 不跟随用户在 Timeline 浏览过的任意周；不在教学周时显示「当前不在教学周」
+  const realSemesterWeek = getSemesterWeek(new Date(), semester);
+  const inTeachingWeek =
+    realSemesterWeek >= 1 && realSemesterWeek <= semester.totalWeeks;
+
   return (
     <KiroSessionProvider>
       {/* Fixed Left Navigation Sidebar */}
@@ -319,13 +330,27 @@ export default function Home() {
                   {/* Desktop 表头（< lg 隐藏；mobile 用 stacked row） */}
                   <div className="hidden lg:grid grid-cols-12 gap-3 px-4 pt-3 pb-2 border-b border-line-soft text-[11px] font-bold text-sandrift shrink-0">
                     <span className="col-span-5">课程</span>
-                    <span className="col-span-3">下一节</span>
+                    <span className="col-span-3">本周下一节</span>
                     <span className="col-span-2 text-right">未完成任务</span>
                     <span className="col-span-2 text-right">资料</span>
                   </div>
                   <div className="divide-y divide-line-soft">
                     {courses.map((course) => {
-                      const next = deriveNextCourseSession(course.id, schedules, currentSemesterWeek);
+                      // 「本周下一节」基于真实当前教学周（semester + 今天），
+                      // 不跟随用户在 Timeline 浏览过的任意周
+                      const next = inTeachingWeek
+                        ? deriveNextCourseSession(
+                            course.id,
+                            schedules,
+                            realSemesterWeek,
+                            semester.totalWeeks
+                          )
+                        : null;
+                      const nextCellText = !inTeachingWeek
+                        ? "当前不在教学周"
+                        : next
+                          ? null
+                          : "本周无后续课程";
                       const incompleteCount = assignments.filter(
                         (a) => a.courseId === course.id && a.status !== "completed"
                       ).length;
@@ -351,12 +376,14 @@ export default function Home() {
                                   <h3 className="text-[13px] font-bold text-charcoal truncate group-hover:text-black transition-colors duration-[var(--motion-fast)]">
                                     {course.name}
                                   </h3>
-                                  <span className="text-[11px] font-mono text-sandrift shrink-0">
-                                    {course.code}
-                                  </span>
+                                  {course.code ? (
+                                    <span className="text-[11px] font-mono text-sandrift shrink-0">
+                                      {course.code}
+                                    </span>
+                                  ) : null}
                                 </div>
                                 <p className="text-[11px] text-satin-grey truncate mt-0.5">
-                                  {course.teacher} · {course.classroom}
+                                  {courseMetaText(course)}
                                 </p>
                               </div>
                             </div>
@@ -366,12 +393,14 @@ export default function Home() {
                                   <p className="text-xs font-semibold text-charcoal">
                                     {WEEKDAY_LABELS[next.dayOfWeek - 1]} {next.startTime}
                                   </p>
-                                  <p className="text-[11px] text-satin-grey truncate mt-0.5">
-                                    {next.location || course.classroom}
-                                  </p>
+                                  {next.location || course.classroom ? (
+                                    <p className="text-[11px] text-satin-grey truncate mt-0.5">
+                                      {next.location || course.classroom}
+                                    </p>
+                                  ) : null}
                                 </>
                               ) : (
-                                <p className="text-[11px] text-sandrift">本周无后续课程</p>
+                                <p className="text-[11px] text-sandrift">{nextCellText}</p>
                               )}
                             </div>
                             <div className="col-span-2 text-right">
@@ -416,12 +445,14 @@ export default function Home() {
                                   <h3 className="text-[13px] font-bold text-charcoal truncate">
                                     {course.name}
                                   </h3>
-                                  <span className="text-[11px] font-mono text-sandrift shrink-0">
-                                    {course.code}
-                                  </span>
+                                  {course.code ? (
+                                    <span className="text-[11px] font-mono text-sandrift shrink-0">
+                                      {course.code}
+                                    </span>
+                                  ) : null}
                                 </div>
                                 <p className="text-[11px] text-satin-grey truncate mt-0.5">
-                                  {course.teacher} · {course.classroom}
+                                  {courseMetaText(course)}
                                 </p>
                               </div>
                             </div>
@@ -433,7 +464,7 @@ export default function Home() {
                               >
                                 {next
                                   ? `下一节 ${WEEKDAY_LABELS[next.dayOfWeek - 1]} ${next.startTime}`
-                                  : "本周无后续课程"}
+                                  : nextCellText}
                               </span>
                               <span className="text-sandrift">·</span>
                               <span className="text-sandrift">
