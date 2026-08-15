@@ -92,6 +92,64 @@ function slotBeforeDeadline(slot: FreeTimeSlot, deadlineMs: number): boolean {
   return slotEnd !== null && slotEnd <= dlMinutes;
 }
 
+const pad2HM = (n: number) => String(n).padStart(2, "0");
+
+function slotStartMinutes(slot: FreeTimeSlot): number | null {
+  return timeToMinutes(slot.startTime);
+}
+
+function slotEndMinutes(slot: FreeTimeSlot): number | null {
+  return timeToMinutes(slot.endTime);
+}
+
+/**
+ * 按 deadline 把 pool 拆成 [deadline 前（可截断）, deadline 后（保留给更晚任务）]。
+ * 跨 deadline 的整槽拆成两段：前段 endTime = deadline 时刻，后段 startTime = deadline 时刻。
+ * 这是 per-assignment deadline 的唯一截断点（Planner 不再使用全局 dayCap）。
+ */
+function splitPoolByDeadline(
+  pool: FreeTimeSlot[],
+  deadlineMs: number
+): { before: FreeTimeSlot[]; after: FreeTimeSlot[] } {
+  const before: FreeTimeSlot[] = [];
+  const after: FreeTimeSlot[] = [];
+  for (const slot of pool) {
+    if (slotBeforeDeadline(slot, deadlineMs)) {
+      before.push(slot);
+      continue;
+    }
+    const dl = new Date(deadlineMs);
+    const dlDate = `${dl.getFullYear()}-${String(dl.getMonth() + 1).padStart(2, "0")}-${String(dl.getDate()).padStart(2, "0")}`;
+    if (slot.date > dlDate) {
+      after.push(slot);
+      continue;
+    }
+    // 同一天且 slot.end > deadline：截断
+    const s = slotStartMinutes(slot);
+    const e = slotEndMinutes(slot);
+    const dlMinutes = dl.getHours() * 60 + dl.getMinutes();
+    if (s === null || e === null || dlMinutes <= s) {
+      after.push(slot);
+      continue;
+    }
+    before.push({
+      date: slot.date,
+      startTime: slot.startTime,
+      endTime: minutesToHM(dlMinutes),
+      minutes: dlMinutes - s,
+    });
+    if (e > dlMinutes) {
+      after.push({
+        date: slot.date,
+        startTime: minutesToHM(dlMinutes),
+        endTime: slot.endTime,
+        minutes: e - dlMinutes,
+      });
+    }
+  }
+  return { before, after };
+}
+
 /** 从 pool 头部切块（30–90min），消耗 pool；剩余需求未满足时继续切 rest 槽 */
 function takeFromSlot(
   pool: FreeTimeSlot[],
@@ -209,9 +267,12 @@ export function allocateStudyCapacity(
 
     const deadlineMs =
       classification === "no_deadline" ? Infinity : parseLocalDDL(assignment.ddl!)!.getTime();
-    const usable = pool.filter((s) => slotBeforeDeadline(s, deadlineMs));
-    const { blocks, minutes, pool: nextPool } = takeFromSlot(usable, remainingRequiredMinutes);
-    pool = [...nextPool, ...pool.filter((s) => !slotBeforeDeadline(s, deadlineMs))];
+    // Per-assignment deadline：把跨越 deadline 的整槽「截断」为 [前段, 后段]，
+    // 前段供本任务使用（取 deadline 时刻），后段保留给更晚 deadline 的任务。
+    // （V1.2：删除 Planner 全局 dayCap 后，这是 per-assignment 的唯一截断点）
+    const { before, after } = splitPoolByDeadline(pool, deadlineMs);
+    const { blocks, minutes, pool: nextBefore } = takeFromSlot(before, remainingRequiredMinutes);
+    pool = [...nextBefore, ...after];
     const shortfall = Math.max(remainingRequiredMinutes - minutes, 0);
     tasks.push({
       assignmentId: assignment.id,
