@@ -10,7 +10,7 @@ test("AssignmentDrawer：status/priority 切换 + subtask checkbox + 编辑入�
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto("/");
   // 从任务工作区打开 Assignment Drawer（Overview 标题存在既有点击不稳定问题）
-  await page.getByRole("button", { name: "任务工作区" }).first().click();
+  await page.getByRole("button", { name: "任务与 DDL" }).first().click();
   await expect(page.getByRole("heading", { name: "任务与 DDL" })).toBeVisible();
   await page.getByTestId("assignment-list").getByText("计量经济学大作业（第3章）").click();
   const drawer = page.getByRole("dialog", { name: "任务详情" });
@@ -53,11 +53,11 @@ test("CourseDetailDrawer：编辑态修改字段 + 保存 → 回 view mode 数�
   // edge（blocking）Drawer：aria-modal 保持 true（shared primitive 无回归）
   await expect(drawer).toHaveAttribute("aria-modal", "true");
 
-  // 进入编辑态 → 修改教师 → 保存
+  // 进入编辑态 → 修改教师 → 保存（Header [取消] [保存]）
   await drawer.getByRole("button", { name: "编辑课程信息" }).click();
   const teacherInput = drawer.getByPlaceholder("授课教师");
   await teacherInput.fill("测试新老师");
-  await drawer.getByRole("button", { name: "保存修改" }).click();
+  await drawer.getByRole("button", { name: "保存", exact: true }).click();
 
   // 回 view mode：教师数据已更新
   await expect(drawer.getByText("测试新老师")).toBeVisible();

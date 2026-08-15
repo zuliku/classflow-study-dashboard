@@ -110,7 +110,7 @@ base("A+B：课程 → edge Drawer（aria-modal；宽度 560–600）+ 首屏核
   expect(box.width).toBeLessThanOrEqual(620);
 
   // 首屏：Identity + Overview + Primary Actions
-  await expect(drawer.getByText("CS-210", { exact: true })).toBeVisible();
+  await expect(drawer.getByText(/CS-210/).first()).toBeVisible();
   await expect(drawer.getByRole("heading", { name: "数据结构与算法" })).toBeVisible();
   await expect(drawer.getByText("李教授", { exact: true })).toBeVisible();
   await expect(drawer.getByText("计算机楼102", { exact: true }).first()).toBeVisible();
@@ -290,13 +290,13 @@ base("K：390×844：无横向溢出；close 可达；schedule form 可用", asy
   const drawer = page.getByRole("dialog", { name: "课程详情" });
   await expect(drawer).toBeVisible({ timeout: 8000 });
 
-  // 无横向溢出；drawer 全宽
+  // 无横向溢出；drawer 全宽（亚像素容差）
   const overflow = await page.evaluate(
     () => document.documentElement.scrollWidth > window.innerWidth + 1
   );
   expect(overflow).toBe(false);
   const box = (await drawer.boundingBox())!;
-  expect(box.width).toBeLessThanOrEqual(390);
+  expect(box.width).toBeLessThanOrEqual(390.5);
 
   // close 可达
   await expect(drawer.getByRole("button", { name: "关闭" })).toBeVisible();

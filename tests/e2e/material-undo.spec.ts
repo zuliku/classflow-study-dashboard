@@ -1,12 +1,11 @@
-import { expect, Page } from "@playwright/test";
+﻿import { expect, Page } from "@playwright/test";
 import { test } from "./demoFixtures";
 
 /** 打开课程 Drawer 并上传一个资料 */
 async function openCourseAndUpload(page: Page, fileName: string) {
   await page.goto("/");
   await page.getByRole("button", { name: "课程资料" }).first().click();
-  const courseCard = page.locator('div[role="button"]').filter({ hasText: "微观经济学" }).first();
-  await courseCard.click();
+  await page.getByRole("button", { name: "微观经济学", exact: true }).click();
   const input = page.locator("#real-material-upload");
   await input.setInputFiles({
     name: fileName,
@@ -41,8 +40,7 @@ test("删除资料 → 撤销 → 刷新后仍可预览", async ({ page }) => {
   // 刷新浏览器，数据仍持久化
   await page.reload();
   await page.getByRole("button", { name: "课程资料" }).first().click();
-  const courseCard = page.locator('div[role="button"]').filter({ hasText: "微观经济学" }).first();
-  await courseCard.click();
+  await page.getByRole("button", { name: "微观经济学", exact: true }).click();
   await expect(page.getByText("E2E测试讲义.pdf")).toBeVisible();
 
   // 再次打开预览（IndexedDB Blob 仍存在）：文件预览弹窗内嵌 PDF iframe
@@ -81,7 +79,6 @@ test("删除资料不撤销 → Toast 到期后 Blob 被真正清理", async ({ 
   // 刷新后资料不再出现
   await page.reload();
   await page.getByRole("button", { name: "课程资料" }).first().click();
-  const courseCard = page.locator('div[role="button"]').filter({ hasText: "微观经济学" }).first();
-  await courseCard.click();
+  await page.getByRole("button", { name: "微观经济学", exact: true }).click();
   await expect(page.getByText("E2E待清理.pdf")).toHaveCount(0);
 });

@@ -10,16 +10,12 @@ import {
   Plus,
   Check,
   Upload,
-  FileText,
-  Presentation,
-  Link2,
-  FileImage,
   MoreHorizontal,
   Trash2,
 } from "lucide-react";
 import { useAppStore } from "@/store/useAppStore";
 import { useToastStore } from "@/store/useToastStore";
-import { Priority, AssignmentStatus, Material, Assignment } from "@/types";
+import { Priority, AssignmentStatus, Assignment } from "@/types";
 import { formatEstimatedMinutes } from "@/lib/tasks/taskSemantics";
 import { resolveAssignmentMaterials } from "@/lib/tasks/taskMaterials";
 import { uploadCourseMaterials } from "@/lib/materialUpload";
@@ -47,6 +43,7 @@ import { DetailDisclosure } from "@/components/assignment/detail/DetailDisclosur
 import { AssignmentDetailHero } from "@/components/assignment/detail/AssignmentDetailHero";
 import { AssignmentDetailActions } from "@/components/assignment/detail/AssignmentDetailActions";
 import { AssignmentDetailExecution } from "@/components/assignment/detail/AssignmentDetailExecution";
+import { MaterialTypeIcon, MATERIAL_TYPE_LABELS } from "@/components/ui/MaterialTypeIcon";
 
 const OVERLAY_ID = "assignment-drawer";
 
@@ -57,29 +54,6 @@ const QUICK_PROMPTS: { label: string; prompt: string }[] = [
   { label: "检查风险", prompt: "检查这个任务能否按时完成，并说明原因。" },
   { label: "安排时间", prompt: "帮我安排这个任务的学习时间。" },
 ];
-
-/** Task 6A：资料类型图标与标签（仅展示，不改 Material Domain） */
-const MATERIAL_TYPE_LABELS: Record<Material["type"], string> = {
-  pdf: "PDF",
-  ppt: "PPT",
-  doc: "DOC",
-  link: "链接",
-  image: "图片",
-};
-
-function MaterialTypeIcon({ type, className }: { type: Material["type"]; className?: string }) {
-  switch (type) {
-    case "pdf":
-    case "doc":
-      return <FileText className={`w-3.5 h-3.5 shrink-0 text-[#A48F82] ${className ?? ""}`} />;
-    case "ppt":
-      return <Presentation className={`w-3.5 h-3.5 shrink-0 text-[#A48F82] ${className ?? ""}`} />;
-    case "link":
-      return <Link2 className={`w-3.5 h-3.5 shrink-0 text-[#A48F82] ${className ?? ""}`} />;
-    case "image":
-      return <FileImage className={`w-3.5 h-3.5 shrink-0 text-[#A48F82] ${className ?? ""}`} />;
-  }
-}
 
 /**
  * Assignment Detail Panel（Task/DDL Detail Panel UX Refresh）：

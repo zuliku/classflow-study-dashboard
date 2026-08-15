@@ -40,7 +40,7 @@ const DAY_LABELS = ["一", "二", "三", "四", "五", "六", "日"];
 /**
  * Course Detail V2 —— Productized Course Hub（orchestration）：
  * - edge Drawer（深度管理实体 ≠ Task floating detail）；加宽至 560/600px
- * - Header：Identity（code + name）+ [编辑] [···] [关闭]；删除进 More（confirm 语义不变）
+ * - Header：Identity（breadcrumb + 标题）+ [···] [关闭]；编辑在 Body Actions，删除进 More（confirm 语义不变）
  * - Overview（readonly ↔ inline edit）→ Primary Actions → Schedule → Tasks → Materials
  * - Schedule conflict / Material Blob / delete+undo 全部保留原 Domain 语义
  */
@@ -413,6 +413,9 @@ export function CourseDetailDrawer() {
       overlayId={OVERLAY_ID}
       aria-label="课程详情"
       focusRestoreKey={currentId}
+      // 比 Assignment（470px）略宽：Course Schedule 编辑区（周次/星期/时间/教室）需要更多水平空间；
+      // 仍是 floating / bounded / rounded / inset，不回到 edge panel
+      className="sm:w-[500px]"
     >
       {/* HEADER：与 Assignment Floating Detail 同 shell —— breadcrumb + 标题 + More / 关闭 */}
       <header className="shrink-0 border-b border-line bg-[#F7F5F5] px-5 pt-4 pb-3.5">
@@ -500,7 +503,13 @@ export function CourseDetailDrawer() {
                 <Plus className="h-3.5 w-3.5" />
                 添加时段
               </Button>
-              <Button variant="secondary" size="sm" onClick={handleStartEdit} className="h-8 px-2.5">
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={handleStartEdit}
+                aria-label="编辑课程信息"
+                className="h-8 px-2.5"
+              >
                 <PencilLine className="h-3.5 w-3.5" />
                 编辑
               </Button>
