@@ -8,6 +8,7 @@
 
 import { Assignment, Reminder, StudyBlock } from "@/types";
 import { parseLocalDDL } from "@/lib/ddl";
+import { formatEstimatedMinutes } from "@/lib/tasks/taskSemantics";
 import { formatAssignmentReminderLabel } from "@/lib/reminders/assignmentReminderView";
 
 export interface DeadlineView {
@@ -131,10 +132,11 @@ export function formatReminderSummaryText(summary: ReminderSummary): string {
 /** 学习安排 collapsed 摘要文案：未安排学习时间 / 已安排 2 小时 · 2 个时段 */
 export function formatScheduleSummaryText(summary: StudyScheduleSummary, estimatedMinutes?: number): string {
   if (!summary.hasBlocks) return "未安排学习时间";
-  const total = summary.minutes >= 60 ? `${Math.round(summary.minutes / 60)} 小时` : `${summary.minutes} 分钟`;
+  const total = formatEstimatedMinutes(summary.minutes) ?? `${summary.minutes} 分钟`;
   const base = `已安排 ${total} · ${summary.blockCount} 个时段`;
   if (estimatedMinutes) {
-    return `${base} / 预计 ${estimatedMinutes >= 60 ? `${Math.round(estimatedMinutes / 60)} 小时` : `${estimatedMinutes} 分钟`}`;
+    const est = formatEstimatedMinutes(estimatedMinutes);
+    return `${base} / 预计 ${est ?? `${estimatedMinutes} 分钟`}`;
   }
   return base;
 }

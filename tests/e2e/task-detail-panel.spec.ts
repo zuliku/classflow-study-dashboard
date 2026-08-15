@@ -50,10 +50,12 @@ function seedScript(monday: string, opts?: { reducedMotion?: boolean }) {
         calendarMarks: [
           { id: "cm-linked", date: "${dateStr(0)}", type: "ddl", title: "置信区间作业", sourceId: "a1" },
           { id: "cm1", date: laterDate, type: "ddl", title: "交项目报告", startTime: laterTime },
+          { id: "cm2", date: "${dateStr(1)}", type: "ddl", title: "交结课报告", startTime: "12:00" },
         ],
         groupProjects: [],
         studyBlocks: [
-          { id: "b1", title: "置信区间作业", date: "${dateStr(0)}", startTime: "19:00", endTime: "20:00", assignmentId: "a1", source: "manual" },
+          // 90 分钟时段：验证详情时长显示准确（1 小时 30 分，不 round 成 2 小时）
+          { id: "b1", title: "置信区间作业", date: "${dateStr(0)}", startTime: "19:00", endTime: "20:30", assignmentId: "a1", source: "manual" },
         ],
         assignmentTimeSlice: "all",
         preferences: { showWeekends: true, ddlWarningDays: 3, defaultDDLTime: "23:59", enableScheduleDirectManipulation: true, enableDDLDirectManipulation: true, motionPreference: "${opts?.reducedMotion ? "reduced" : "system"}", startupView: "overview", defaultTaskPriority: "medium", defaultTaskStatus: "todo", enableSingleKeyShortcuts: true, contentDensity: "comfortable", defaultTaskWorkspaceView: "focus", defaultDeadlineReminderMinutes: 1440 },
@@ -82,6 +84,8 @@ base("A：Timeline 点击 Assignment → floating panel 有界打开，首屏核
   await expect(dialog).toBeVisible({ timeout: 8000 });
   const panel = page.getByTestId("assignment-detail-panel");
   await expect(panel).toBeVisible();
+  // floating 是 non-blocking contextual panel：不声明 aria-modal（不冒充 modal）
+  await expect(dialog).not.toHaveAttribute("aria-modal", "true");
   // 等 enter 动画（230ms transform/opacity）settle 后再测量几何
   await expect(async () => {
     const transform = await panel.evaluate((el) => getComputedStyle(el).transform);
@@ -211,6 +215,13 @@ base("F：reduced motion 下面板正常开合（不依赖动画完成）", asyn
   await expect(panel).toBeVisible({ timeout: 8000 });
   await page.keyboard.press("Escape");
   await expect(panel).toHaveCount(0, { timeout: 8000 });
+
+  // reduced motion 下 A→B：立即 entity swap（不做 60ms fade-out，也不残留 stale id）
+  await page.getByRole("button", { name: /置信区间作业.*截止/ }).click();
+  await expect(panel).toBeVisible({ timeout: 8000 });
+  await page.getByRole("button", { name: /假设检验作业.*截止/ }).click();
+  await expect(panel.getByRole("heading", { name: "假设检验作业" })).toBeVisible({ timeout: 2000 });
+  await expect(panel.getByRole("heading", { name: "置信区间作业" })).toHaveCount(0, { timeout: 200 });
 });
 
 base("G：响应式 390×844 与 768×1024：无横向溢出、面板不超 viewport、关闭永远可见", async ({ page }) => {
@@ -249,4 +260,151 @@ base("G：响应式 390×844 与 768×1024：无横向溢出、面板不超 view
     () => document.documentElement.scrollWidth > window.innerWidth + 1
   );
   expect(overflow2).toBe(false);
+});
+
+base("A2：close A → open B：fresh reopen 第一帧即 B，绝不 flash A", async ({ page }) => {
+  const { monday } = dayAnchor();
+  await page.addInitScript(seedScript(monday));
+  await openTimeline(page);
+
+  // open A → close
+  await page.getByRole("button", { name: /置信区间作业.*截止/ }).click();
+  const panel = page.getByTestId("assignment-detail-panel");
+  await expect(panel).toBeVisible({ timeout: 8000 });
+  await page.keyboard.press("Escape");
+  await expect(panel).toHaveCount(0, { timeout: 8000 });
+
+  // 重新打开 B：进入阶段第一帧不得出现 A（fresh reopen 不做 swap-out；
+  // 若实现回退为「先渲染旧 displayedId 再 60ms swap」，此处会捕获 A）
+  await page.getByRole("button", { name: /假设检验作业.*截止/ }).click();
+  await expect(panel.getByRole("heading", { name: "置信区间作业" })).toHaveCount(0, { timeout: 50 });
+  await expect(panel.getByRole("heading", { name: "假设检验作业" })).toBeVisible({ timeout: 2000 });
+  // Header 与 Body 同实体：B 的标题与 hero 同时可见，A 的标题从未出现
+  await expect(panel.getByRole("heading", { name: "假设检验作业" })).toHaveCount(1);
+});
+
+base("B2：切换任务后 transient state reset（Reminder 默认 collapsed；More/资料 picker 复位）", async ({ page }) => {
+  const { monday } = dayAnchor();
+  await page.addInitScript(seedScript(monday));
+  await openTimeline(page);
+
+  // open A → 展开 Reminder + 打开 More
+  await page.getByRole("button", { name: /置信区间作业.*截止/ }).click();
+  const panel = page.getByTestId("assignment-detail-panel");
+  await expect(panel).toBeVisible({ timeout: 8000 });
+  const reminderTrigger = page.getByTestId("reminder-disclosure-trigger");
+  await reminderTrigger.click();
+  await expect(reminderTrigger).toHaveAttribute("aria-expanded", "true");
+  await panel.getByRole("button", { name: "更多操作" }).click();
+  await expect(panel.getByRole("menuitem", { name: "Ask Kiro" })).toBeVisible();
+
+  // switch B：transient 全部复位（More 关闭；Reminder collapsed）
+  await page.mouse.move(20, 20);
+  await page.getByRole("button", { name: /假设检验作业.*截止/ }).click();
+  await expect(panel.getByRole("heading", { name: "假设检验作业" })).toBeVisible({ timeout: 2000 });
+  await expect(page.getByTestId("reminder-disclosure-trigger")).toHaveAttribute("aria-expanded", "false");
+  await expect(panel.getByRole("menuitem", { name: "Ask Kiro" })).toHaveCount(0);
+});
+
+base("C2：click Full Detail 立即关闭 hover preview（不等 mouseleave）", async ({ page }) => {
+  const { monday } = dayAnchor();
+  await page.addInitScript(seedScript(monday));
+  await openTimeline(page);
+
+  // hover → preview visible
+  const point = page.getByRole("button", { name: /置信区间作业.*截止/ });
+  await point.hover();
+  const preview = page.getByTestId("floating-timeline-detail");
+  await expect(preview).toBeVisible({ timeout: 3000 });
+
+  // click → full detail 进入，preview 立即消失（不得同时可见）
+  await point.click();
+  await expect(page.getByTestId("assignment-detail-panel")).toBeVisible({ timeout: 8000 });
+  await expect(page.getByTestId("floating-timeline-detail")).toHaveCount(0, { timeout: 1000 });
+});
+
+base("D2：A→B 切换后关闭，focus 回到 B 的 trigger（最近切换实体）", async ({ page }) => {
+  const { monday } = dayAnchor();
+  await page.addInitScript(seedScript(monday));
+  await openTimeline(page);
+
+  await page.getByRole("button", { name: /置信区间作业.*截止/ }).click();
+  const panel = page.getByTestId("assignment-detail-panel");
+  await expect(panel).toBeVisible({ timeout: 8000 });
+  // 面板打开时点击 B → 实体切换（shell 不关闭）
+  await page.getByRole("button", { name: /假设检验作业.*截止/ }).click();
+  await expect(panel.getByRole("heading", { name: "假设检验作业" })).toBeVisible({ timeout: 2000 });
+
+  await page.keyboard.press("Escape");
+  await expect(panel).toHaveCount(0, { timeout: 8000 });
+  const focused = await page.evaluate(() => {
+    const el = document.activeElement as HTMLElement | null;
+    return el?.getAttribute("aria-label") ?? "";
+  });
+  expect(focused).toContain("假设检验作业");
+});
+
+base("E2：keyboard Enter 激活 deadline → Full Detail 打开（preview 不残留）", async ({ page }) => {
+  const { monday } = dayAnchor();
+  await page.addInitScript(seedScript(monday));
+  await openTimeline(page);
+
+  const point = page.getByRole("button", { name: /置信区间作业.*截止/ });
+  await point.focus();
+  // focus 会打开 hover preview；Enter 激活 full detail 且 preview 关闭
+  await page.keyboard.press("Enter");
+  await expect(page.getByTestId("assignment-detail-panel")).toBeVisible({ timeout: 8000 });
+  await expect(page.getByTestId("floating-timeline-detail")).toHaveCount(0, { timeout: 1000 });
+  await expect(
+    page.getByRole("dialog", { name: "任务详情" }).getByRole("heading", { name: "置信区间作业" })
+  ).toBeVisible();
+});
+
+base("F2：独立 DDL A→B：outer shell 同一节点，内容就地替换", async ({ page }) => {
+  const { monday } = dayAnchor();
+  await page.addInitScript(seedScript(monday));
+  await openTimeline(page);
+
+  await page.getByRole("button", { name: /交项目报告.*截止/ }).click();
+  const panel = page.getByTestId("ddl-detail-panel");
+  await expect(panel).toBeVisible({ timeout: 8000 });
+  const shellHandle = await panel.evaluateHandle((node) => node);
+
+  await page.mouse.move(20, 20);
+  await page.getByRole("button", { name: /交结课报告.*截止/ }).click();
+  const stillSame = await shellHandle.evaluate(
+    (node) => node === document.querySelector('[data-testid="ddl-detail-panel"]')
+  );
+  expect(stillSame).toBe(true);
+  await expect(panel.getByRole("heading", { name: "交结课报告" })).toBeVisible({ timeout: 2000 });
+  await expect(panel.getByRole("heading", { name: "交项目报告" })).toHaveCount(0);
+});
+
+base("G2：close DDL A → open DDL B：第一帧无 A", async ({ page }) => {
+  const { monday } = dayAnchor();
+  await page.addInitScript(seedScript(monday));
+  await openTimeline(page);
+
+  await page.getByRole("button", { name: /交项目报告.*截止/ }).click();
+  const panel = page.getByTestId("ddl-detail-panel");
+  await expect(panel).toBeVisible({ timeout: 8000 });
+  await page.keyboard.press("Escape");
+  await expect(panel).toHaveCount(0, { timeout: 8000 });
+
+  await page.getByRole("button", { name: /交结课报告.*截止/ }).click();
+  await expect(panel.getByRole("heading", { name: "交项目报告" })).toHaveCount(0, { timeout: 50 });
+  await expect(panel.getByRole("heading", { name: "交结课报告" })).toBeVisible({ timeout: 2000 });
+});
+
+base("H：学习安排时长显示准确（90 分钟 → 1 小时 30 分）", async ({ page }) => {
+  const { monday } = dayAnchor();
+  await page.addInitScript(seedScript(monday));
+  await openTimeline(page);
+
+  await page.getByRole("button", { name: /置信区间作业.*截止/ }).click();
+  const dialog = page.getByRole("dialog", { name: "任务详情" });
+  await expect(dialog).toBeVisible({ timeout: 8000 });
+  // Execution 学习安排行 + Hero 摘要都使用准确时长
+  await expect(dialog.getByText("1 小时 30 分 · 1 个时段", { exact: true })).toBeVisible();
+  await expect(dialog.getByText("已安排 1 小时 30 分 · 1 个时段", { exact: true })).toBeVisible();
 });

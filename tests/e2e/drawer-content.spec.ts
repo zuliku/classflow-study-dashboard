@@ -50,6 +50,8 @@ test("CourseDetailDrawer：编辑态修改字段 + 保存 → 回 view mode 数�
   await page.getByRole("heading", { name: "微观经济学" }).first().click();
   const drawer = page.getByRole("dialog", { name: "课程详情" });
   await expect(drawer).toBeVisible();
+  // edge（blocking）Drawer：aria-modal 保持 true（shared primitive 无回归）
+  await expect(drawer).toHaveAttribute("aria-modal", "true");
 
   // 进入编辑态 → 修改教师 → 保存
   await drawer.getByRole("button", { name: "编辑课程信息" }).click();

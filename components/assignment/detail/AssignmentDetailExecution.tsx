@@ -3,6 +3,7 @@
 import React, { useState } from "react";
 import { Checkbox } from "@/components/ui/Checkbox";
 import { cn } from "@/lib/utils";
+import { formatEstimatedMinutes } from "@/lib/tasks/taskSemantics";
 import {
   DeadlineView,
   StudyScheduleSummary,
@@ -60,7 +61,7 @@ export function AssignmentDetailExecution({
           <span className="flex min-w-0 items-center gap-2">
             <span className="truncate text-xs font-semibold text-charcoal">
               {scheduleSummary.hasBlocks
-                ? `${scheduleSummary.minutes >= 60 ? Math.round(scheduleSummary.minutes / 60) : scheduleSummary.minutes}${scheduleSummary.minutes >= 60 ? " 小时" : " 分钟"} · ${scheduleSummary.blockCount} 个时段`
+                ? `${formatEstimatedMinutes(scheduleSummary.minutes) ?? `${scheduleSummary.minutes} 分钟`} · ${scheduleSummary.blockCount} 个时段`
                 : "未安排"}
             </span>
             <button

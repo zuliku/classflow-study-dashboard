@@ -1,10 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { resolveDrawerPresentation } from "@/components/ui/Drawer";
+import { resolveDrawerAriaModal, resolveDrawerPresentation } from "@/components/ui/Drawer";
 
 /**
  * Drawer primitive 回归护栏（Task/DDL Detail Panel UX Refresh）：
  * 1. 默认 edge presentation 的 class 契约完全不变（CourseDrawer 等 consumer 视觉零回归）
  * 2. floating presentation 是有界浮层（viewport inset + 470px + rounded + full border）
+ * 3. aria-modal 与 presentation 一致：edge=true（现状）；floating 不冒充 modal
  */
 describe("Drawer presentation class contract", () => {
   it("edge（默认）：overlay + panel class 与重构前完全一致", () => {
@@ -57,5 +58,10 @@ describe("Drawer presentation class contract", () => {
     const enter = resolveDrawerPresentation("floating", true);
     expect(enter.panelClassName).toContain("!duration-[230ms]");
     expect(enter.panelClassName).toContain("ease-[var(--ease-emphasized)]");
+  });
+
+  it("aria-modal 与 presentation 一致：edge=true（保持现状）；floating 不声明（不冒充 modal）", () => {
+    expect(resolveDrawerAriaModal("edge")).toBe("true");
+    expect(resolveDrawerAriaModal("floating")).toBeUndefined();
   });
 });

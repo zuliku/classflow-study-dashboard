@@ -187,9 +187,21 @@ describe("Vision MIME gate（isVisionMimeSupported，Phase 3.3A）", () => {
   });
 
   it("visionMimeTypes 贯通：registry 未声明 → undefined（无额外限制）", () => {
-    expect(getModelCapabilities({ provider: "opencode-go", model: "kimi-k3" }).visionMimeTypes).toBeUndefined();
-    expect(getModelCapabilities({ provider: "opencode-go", model: "mimo-v2.5" }).visionMimeTypes).toBeUndefined();
+    // Phase 3.3B：kimi-k3 / mimo-v2.5 已 live 验证 PNG/JPEG/WEBP
+    expect(getModelCapabilities({ provider: "opencode-go", model: "kimi-k3" }).visionMimeTypes).toEqual(["image/jpeg", "image/png", "image/webp"]);
+    expect(getModelCapabilities({ provider: "opencode-go", model: "mimo-v2.5" }).visionMimeTypes).toEqual(["image/jpeg", "image/png", "image/webp"]);
     expect(getModelCapabilities({ provider: "custom-openai", model: "x", custom: { providerName: "", baseURL: "", model: "x", vision: true } }).visionMimeTypes).toBeUndefined();
+  });
+
+  it("kimi-k3 / mimo-v2.5：JPEG/PNG/WEBP 全部通过 MIME gate；扫描 PDF（JPEG）通过", () => {
+    for (const model of ["kimi-k3", "mimo-v2.5"]) {
+      const cap = getModelCapabilities({ provider: "opencode-go", model });
+      expect(isVisionMimeSupported(cap, "image/jpeg"), model).toBe(true);
+      expect(isVisionMimeSupported(cap, "image/png"), model).toBe(true);
+      expect(isVisionMimeSupported(cap, "image/webp"), model).toBe(true);
+      expect(isVisionMimeSupported(cap, "image/gif"), model).toBe(false);
+      expect(isVisionMimeSupported(cap, undefined, "photo.webp"), model).toBe(false); // 空 type 扩展名兜底不伪造 webp
+    }
   });
 });
 

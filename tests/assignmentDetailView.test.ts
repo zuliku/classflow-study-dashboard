@@ -179,4 +179,25 @@ describe("formatScheduleSummaryText", () => {
     expect(formatScheduleSummaryText(s)).toBe("已安排 2 小时 · 2 个时段");
     expect(formatScheduleSummaryText(s, 180)).toBe("已安排 2 小时 · 2 个时段 / 预计 3 小时");
   });
+
+  it("时长准确：30→30 分钟 / 60→1 小时 / 90→1 小时 30 分 / 120→2 小时（不 round 出错误小时）", () => {
+    const mk = (minutes: number) => {
+      const end = new Date(2026, 7, 16, 0, 0, 0);
+      end.setMinutes(minutes);
+      return summarizeStudySchedule([
+        {
+          id: "b1",
+          title: "t",
+          date: "2026-08-16",
+          startTime: "00:00",
+          endTime: `${String(end.getHours()).padStart(2, "0")}:${String(end.getMinutes()).padStart(2, "0")}`,
+          source: "manual",
+        },
+      ]);
+    };
+    expect(formatScheduleSummaryText(mk(30))).toBe("已安排 30 分钟 · 1 个时段");
+    expect(formatScheduleSummaryText(mk(60))).toBe("已安排 1 小时 · 1 个时段");
+    expect(formatScheduleSummaryText(mk(90))).toBe("已安排 1 小时 30 分 · 1 个时段");
+    expect(formatScheduleSummaryText(mk(120))).toBe("已安排 2 小时 · 1 个时段");
+  });
 });

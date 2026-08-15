@@ -7,6 +7,7 @@ import { timeToDayRatio, intervalToDayGeometry } from "@/lib/timeline/timelineGe
 import { Priority } from "@/types";
 import { FloatingTimelineDetail } from "@/components/timeline/FloatingTimelineDetail";
 import { useAppStore } from "@/store/useAppStore";
+import { cardKeyHandler } from "@/lib/utils";
 
 /** P3 fix 4：独立 DDL CalendarMark 的默认提醒恢复入口（仅真正独立 mark；linked mark 不出现第二套控制） */
 function CalendarMarkAutoReminderControl({ calendarMarkId }: { calendarMarkId?: string }) {
@@ -265,7 +266,9 @@ function DeadlinePoint({
   // Click → Full Detail：Assignment DDL / linked DDL → Assignment 详情；
   // 真正独立 ddl mark（sourceId 无对应 assignment）→ 轻量 DDL 详情。
   // （Hover preview 保留为 glance；不在这里做编辑。）
+  // 打开 Full Detail 时立即关闭 hover preview（不等 mouseleave；keyboard 激活同样处理）。
   const handleOpenDetail = () => {
+    setOpen(false);
     if (item.sourceType === "assignment") {
       const linked = assignments.some((a) => a.id === item.sourceId);
       if (linked) {
@@ -288,6 +291,7 @@ function DeadlinePoint({
         className="absolute z-10 cursor-pointer outline-none"
         style={{ left: `${ratio * 100}%`, top: `${dotTop}px`, transform: "translateX(-50%)" }}
         onClick={handleOpenDetail}
+        onKeyDown={cardKeyHandler(handleOpenDetail)}
         onMouseEnter={() => {
           cancelClose();
           setOpen(true);
