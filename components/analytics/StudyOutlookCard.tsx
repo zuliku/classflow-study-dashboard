@@ -1,7 +1,7 @@
-"use client";
+﻿"use client";
 
 import React from "react";
-import { CalendarClock, Sparkles, ChevronRight } from "lucide-react";
+import { CalendarClock, Sparkles } from "lucide-react";
 import { OutlookHealth, OutlookTask, StudyOutlook, StudyOutlookHorizon } from "@/lib/outlook/types";
 import { useKiroSessionActions } from "@/components/kiro/KiroSessionProvider";
 import { cn } from "@/lib/utils";
@@ -162,6 +162,7 @@ export function StudyOutlookCard({
         </div>
       )}
 
+      {/* Kiro 入口收敛：最多一个优化入口 + 一个规划入口（不堆按钮） */}
       <div className="px-4 py-3 border-t border-line-soft flex flex-wrap items-center gap-2">
         {rebalanceSuggestion && (
           <button
@@ -185,14 +186,6 @@ export function StudyOutlookCard({
         >
           <Sparkles className="w-3.5 h-3.5 text-[#A48F82]" />
           让 Kiro 帮我规划
-        </button>
-        <button
-          type="button"
-          onClick={() => handoffPrompt("结合未来 14 天学习前瞻，帮我整理最近的学习安排。")}
-          className="text-[10px] font-bold text-sandrift bg-transparent border border-line rounded-lg px-2 py-1.5 hover:text-charcoal hover:border-line-strong transition-colors inline-flex items-center gap-0.5"
-        >
-          深入前瞻
-          <ChevronRight className="w-3 h-3" />
         </button>
       </div>
     </div>

@@ -1,10 +1,10 @@
-/**
- * Study Plan Apply Domain（Task 4B / Task 5 Part E-F）：
+﻿/**
+ * Study Plan Apply Domain：
  * Proposal → User Confirm 之后的 Atomic Apply 安全层。纯函数 + Store Batch Action，无 React、无 AI。
  * Preflight 基于调用时最新 Store（Confirm 后必须用 useAppStore.getState() 重新校验）；
  * 任何一项不满足 → 整个 Apply 失败（All-or-None），不部分执行。
  *
- * Task 5：StudyBlock ↔ Course 从 Hard Conflict 改为 SOFT OVERLAP——
+ * StudyBlock ↔ Course 从 Hard Conflict 改为 SOFT OVERLAP——
  * - 课程重叠不再使 Preflight 失败，而是收集为 courseOverlaps
  * - 真正的写入需要显式 allowCourseOverlap（Kiro 侧先过 Approval Gate；人工路径不受限）
  * - StudyBlock ↔ StudyBlock / 考试活动 / 输入格式 仍是硬失败
@@ -137,7 +137,7 @@ export function preflightStudyPlan(input: StudyPlanApplyInput, state: AppState):
       }
     }
 
-    // 5. 课程重叠：SOFT（Task 5）。canonical helper（按 Block 自身日期计算 semester week；
+    // 5. 课程重叠：SOFT。canonical helper（按 Block 自身日期计算 semester week；
     //    学期范围之外不 clamp；不制造假冲突）
     const overlapsForBlock = findCourseOverlapsForStudyBlock({
       block: b,
@@ -213,7 +213,7 @@ export function preflightStudyPlan(input: StudyPlanApplyInput, state: AppState):
 /**
  * Atomic Apply：先对最新 Store Preflight，全部通过后单次 Batch 创建（source="kiro"）。
  * 任何硬失败：0 mutation。
- * Task 5 Approval Gate：存在课程重叠且未显式 allowCourseOverlap → 不写入，
+ * 存在课程重叠且未显式 allowCourseOverlap → 不写入，
  * 返回 needsApproval（Kiro UI 展示确认 Dialog）；确认后以 allowCourseOverlap=true 重新提交。
  * 该 Gate 是 deterministic mutation boundary——即使模型忘记提醒，系统也不会静默写入。
  * 批准后：只给实际 overlap 的 Block 保存 courseOverlapApprovals（Block × Schedule 版本级别）。

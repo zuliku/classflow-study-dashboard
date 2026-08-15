@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Canonical Shared Capacity Allocation Engine（Analytics V2 · Part 4）。
  * 职责：在一个共享 Free Time Pool 中，回答「这些任务的剩余需求最多能被安排多少」。
  *

@@ -1,11 +1,11 @@
 ﻿/**
- * Study Rebalance Apply Domain（Analytics V2 · Part 5 / Task 6）。
+ * Study Rebalance Apply Domain。
  * Proposal → User Confirm 之后的 Atomic Move 安全层。纯函数 + Store Batch Action，无 React、无 AI。
  * - Move 只改 date/startTime/endTime；ID / assignment / course / title / duration / source 全不变
  * - Original fingerprint：Apply 前必须确认当前 block 仍完全等于 Proposal 的 from（用户手动拖动 → STALE）
  * - 双 preflight（dialog 前 + confirm 后，与 StudyPlan Apply 一致）
  * - All-or-None：任何 move 不合法 → 0 mutation
- * - Task 6：Course overlap = SOFT —— preflight 收集 courseOverlaps 而不失败；
+ * - Course overlap = SOFT —— preflight 收集 courseOverlaps 而不失败；
  *   真正写入需显式 allowCourseOverlap（Kiro UI 先过 batch approval gate）
  * - Undo：必须确认当前状态 == Apply 后的 after fingerprint；否则 STALE（不覆盖用户后续修改）。
  *   Undo 回原位置不要求课程重叠确认（用户已明确点击 Undo；from 可能本身是课程重叠位）
@@ -249,7 +249,7 @@ export function preflightStudyRebalance(
 
 /**
  * Atomic Apply（fresh preflight 后单次 batch update，source=kiro；ID 保持不变）。
- * Task 6 Approval Gate：存在课程重叠且未显式 allowCourseOverlap → 0 mutation，
+ * 存在课程重叠且未显式 allowCourseOverlap → 0 mutation，
  * 返回 state="needs-approval"（Kiro UI 展示确认 Dialog）；确认后整批一次写入。
  * V1.1：批准后 target 允许课程重叠 → 该 Block 保存 courseOverlapApprovals（fresh preflight 数据）；
  * 原 Approval 快照返回给 UI，供 Undo 精确恢复。

@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Course Overlap Policy（Planning Constraint Semantics V1.1）。
  * 唯一课程重叠判定 + Schedule-version-aware Approval 语义：
  * - 课程重叠是 soft constraint：用户显式批准后成为 persisted intent（Block × Schedule 版本级别）

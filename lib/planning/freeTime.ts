@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Free Time Engine（纯函数，无 React、无 AI）。
  * 在 08:00–21:00 规划窗口内计算空闲时段：
  * - Busy：当前教学周生效的课程（isScheduleActive）、带时间的 Exam/Activity、已有 StudyBlock
@@ -27,12 +27,12 @@ export interface FreeTimeQuery {
   dayCapMinutesByDate?: Record<string, number>;
   minimumSlotMinutes?: number;
   /**
-   * Task 5：true 时课程时间不再视为 busy（仍排除 StudyBlock / 考试活动）。
+   * true 时课程时间不再视为 busy（仍排除 StudyBlock / 考试活动）。
    * 用于 Planner Pass 2（课程时间 = soft constraint，仅在空闲不足时使用）。
    */
   includeCourseTime?: boolean;
   /**
-   * Task 6：today-capping 基准时间（「今天不返回过去时间」用）。默认真实 now；
+   * today-capping 基准时间（「今天不返回过去时间」用）。默认真实 now；
    * 规划/测试传入与业务一致的 now 可保证确定性（产品语义不变）。
    */
   now?: Date;
@@ -114,7 +114,7 @@ export function findFreeTime(query: FreeTimeQuery): FreeTimeSlot[] {
 
     const busy: BusyInterval[] = [];
 
-    // 生效课程（当前周 + 星期匹配）；includeCourseTime=true 时课程时间降为 soft（Task 5）
+    // 生效课程（当前周 + 星期匹配）；includeCourseTime=true 时课程时间降为 soft
     if (inSemester && !query.includeCourseTime) {
       for (const s of query.schedules) {
         if (s.dayOfWeek !== dow) continue;

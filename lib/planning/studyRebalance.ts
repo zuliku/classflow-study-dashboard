@@ -1,9 +1,9 @@
-/**
- * Adaptive Study Rebalance Engine（Analytics V2 · Part 5 / Task 6）。
+﻿/**
+ * Adaptive Study Rebalance Engine。
  * Move-only：只移动已有 source=kiro 的 StudyBlock（assignmentId/courseId/title/duration/source/id 全不变，
  * 只改 date/startTime/endTime）；绝不删除/新增/拆分/合并 Block，绝不移动 manual 计划。
  *
- * Task 6：Course overlap = SOFT（合法存在，不自动"修复"）——
+ * Course overlap = SOFT（合法存在，不自动"修复"）——
  * - course_conflict 不再是 hard issue：已有课程重叠的 block 不会仅因此被搬走（可能来自人工拖放或已确认的 Kiro 写入）
  * - target 选择两阶段：Pass 1 仅非课程时间（preferred）；Pass 2 只有 Pass 1 无解时才允许课程重叠（fallback）
  * - hard issues 只剩 after_deadline / fixed_event_conflict；capacity_relief 不变
@@ -307,7 +307,7 @@ function findBestPlacement(
 }
 
 /**
- * 两阶段 target 搜索（Task 6）：
+ * 两阶段 target 搜索：
  * Pass 1 — Preferred：canonical free time（课程视为 busy → 天然无课程重叠）。
  * Pass 2 — Fallback：仅当 Pass 1 无解时，允许课程重叠（StudyBlock / Exam / Activity 仍 busy；
  * 08:00–21:00 窗口与 DDL 约束由 findFreeTime / constraints 保证）。
@@ -392,7 +392,7 @@ export function proposeStudyRebalance(input: StudyRebalanceInput): StudyRebalanc
   const shortfallBefore = computeShortfall(input, studyBlocks, horizonEnd);
   let shortfallAfter = shortfallBefore;
 
-  // ---- 3. 检测 hard issues（Task 6：Course overlap 不再是 hard issue）----
+  // ---- 3. 检测 hard issues（Course overlap 不再是 hard issue）----
   interface CandidateIssue {
     block: StudyBlock;
     reason: StudyRebalanceReason;

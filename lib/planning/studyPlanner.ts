@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Study Plan Proposal Engine（纯函数，无 AI、无 React、绝不写 Store）。
  * 消费 Canonical Planning Capacity Engine（buildPlanningCapacity）：
  *   Preferred Pass（非课程时间）→ 有真实缺口才进入 Soft Fallback（+课程时间，其余仍 hard busy）
