@@ -196,6 +196,17 @@ Kiro 不得从 raw events 自行重算 UI Analytics metric。Analytics 数据只
 - **Rebalance**：`course_conflict` 只对「未批准」重叠触发（approved overlap 不被搬走）；fingerprint 失效后重新识别；target 两阶段搜索对 course_conflict 强制「非课程时间」。Apply 显式清空/写入 approvals；**Undo 恢复原时间 + 原 Approval**（Undo stale 指纹同时比较时间与 Approval 状态，不覆盖后续用户意图）。
 - **边界**：Free Time Engine 不因 Approval 改变（课程永远 busy；Approval 只表示该 Block 可留在那里）；新 Proposal 仍需逐次确认；不提供全局「允许课程冲突」设置；History Schema 不升级（approval 是 current-state intent，不进 `study_block.updated` 事件）。
 
+## 十五D、两层规划容量（V1.2：Preferred + Course Soft Fallback）
+
+- **Canonical Planning Capacity Engine**（`lib/planning/planningCapacity.ts`）：Planner / Outlook 唯一容量入口。
+  - **Preferred Pass**：`findFreeTime(includeCourseTime: false)` → `allocateStudyCapacity`（非课程时间能安排多少）。
+  - **Soft Fallback Pass**：只有 `getAllocatableShortfall`（只统计当前模式真正参与的任务：planner = eligible + no_deadline；outlook = eligible）> 0 才运行；Preferred projected blocks 转成函数内临时 StudyBlocks（绝不写 Store/History/UI）再以 expanded capacity 只补剩余需求——**不做 interval subtraction**，不破坏「free + course」连续区间（sandwich bug 修复）；Exam/Activity/已有 StudyBlock/past time/Deadline 后段仍 hard。
+  - **Combined** = `mergePlanningCapacityAllocations`（allocated/blocks 相加；remainingRequired 保持 Preferred 原始需求；shortfall = max(orig − combined, 0)；courseFallbackUsed 仅当额外分配 > 0）。
+  - **无 multi-task global dayCap**：Deadline 由 allocator per-assignment 处理（`splitPoolByDeadline` 把跨 deadline 整槽截断为前后两段，后段保留给更晚 deadline 任务）→ 同日不同 DDL 正确（A 10:00 / B 20:00 都 complete）。
+- **Planner**：最终 Proposal = `capacity.combined`（Preferred 足够时 100% 非课程时间；不足才加 fallback）；每 item 带 `preferredProposedMinutes` / `courseFallbackProposedMinutes` / `requiresCourseOverlapApproval`（真实 overlap 由 `findCourseOverlapsForStudyBlock` 判断）；`reasons += course_overlap_used_as_fallback`（仅实际使用）；Apply / Approval Gate / Undo / History 不变。
+- **Outlook**：任务保留 Preferred `capacity*` 字段（语义不变），新增 `courseFallbackAllocatedMinutes` / `combinedCapacity*`；summary 新增 `preferredAllocatedMinutes / preferredShortfallMinutes / additionalAllocatedWithCourseTime / combinedAllocatedMinutes / combinedShortfallMinutes`（`allocatableMinutes / shortfallMinutes` 保留为 deprecated alias）；`firstCapacityShortfall` = Preferred（Rebalance 仍看它），新增 `firstCombinedCapacityShortfall` + `combinedCapacityForecast`（soft fallback 后仍不足才是真正不可覆盖）；`capacityPressure` 扩为 normal / busy / preferred-shortfall / hard-shortfall。
+- **UI / Kiro 三层文案**：Preferred 足够 →「非课程时间可覆盖」；Preferred 不足 Combined 足够 →「非课程时间尚缺 X · 可通过课程重叠方案覆盖」（ochre，不红）；Combined 仍不足 →「放宽课程约束后仍缺 X」（attention）。课程重叠只是可选方案，**不是已授权**；写入前仍走 Approval Gate。Kiro guidance 同步三层用语。
+
 ## 十六、Known Limitations- 跨午夜专注会话不拆分（归因到 `startedAt` 日）。
 - 按时率只统计 DDL 可重建的任务（history coverage 前的任务不猜）。
 - `semester` 无 previous 对比（学期期初开始记录历史时对比不完整属预期）。

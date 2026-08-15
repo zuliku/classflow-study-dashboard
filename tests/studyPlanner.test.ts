@@ -1,7 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { proposeStudyPlan } from "@/lib/planning/studyPlanner";
-import { allocateStudyCapacity } from "@/lib/planning/capacityAllocation";
-import { findFreeTime } from "@/lib/planning/freeTime";
+import { buildPlanningCapacity } from "@/lib/planning/planningCapacity";
 import { Assignment, CalendarMark, CourseSchedule, Semester, StudyBlock } from "@/types";
 
 /**
@@ -38,62 +37,53 @@ const noMarks: CalendarMark[] = [];
 const noSchedules: CourseSchedule[] = [];
 
 describe("Capacity Allocator ↔ Study Planner Canonical Invariant", () => {
-  it("竞争场景：planner proposal 与 allocation forecast 完全一致（含 blocks）", () => {
+  it("V1.2 canonical：buildPlanningCapacity(...).combined === proposeStudyPlan（含 course fallback）", () => {
+    // 课程覆盖今天 10:00-12:00 → 多任务需竞争 + 可能触发 fallback
     const assignments = [
       mk("a1", { ddl: iso(new Date(NOW.getTime() + 1 * 86400000)), estimatedMinutes: 120 }),
       mk("a2", { ddl: iso(new Date(NOW.getTime() + 1 * 86400000)), estimatedMinutes: 120 }),
     ];
-    const pool = findFreeTime({
-      start: NOW,
-      now: NOW,
-      end: new Date(NOW.getTime() + 1 * 86400000),
-      semester: SEMESTER,
-      currentSemesterWeek: 1,
-      schedules: noSchedules,
-      calendarMarks: noMarks,
-      studyBlocks: noBlocks,
-    });
-    // 用 marks 把今天锁死，让明天只剩 180min？不 —— 直接对同一 findFreeTime 结果分配即可
-    const allocation = allocateStudyCapacity({
-      assignments, studyBlocks: noBlocks, freeSlots: pool,
-      fromDate: date(0), toDate: date(1), now: NOW,
-    });
+    const dowOfToday = new Date(NOW).getDay() === 0 ? 7 : new Date(NOW).getDay();
+    const schedules: CourseSchedule[] = [
+      { id: "s1", courseId: "c2", dayOfWeek: dowOfToday, startTime: "10:00", endTime: "12:00", location: "", weeks: "1-16周" },
+    ];
+    const capacity = buildPlanningCapacity({
+      assignments, studyBlocks: noBlocks, schedules, calendarMarks: noMarks,
+      semester: SEMESTER, currentSemesterWeek: 1, fromDate: date(0), toDate: date(1), now: NOW,
+    }, { includeNoDeadline: true });
     const planner = proposeStudyPlan({
       assignments, studyBlocks: noBlocks, semester: SEMESTER, currentSemesterWeek: 1,
-      schedules: noSchedules, calendarMarks: noMarks, fromDate: date(0), toDate: date(1), now: NOW,
+      schedules, calendarMarks: noMarks, fromDate: date(0), toDate: date(1), now: NOW,
     });
 
-    for (const a of allocation.tasks) {
-      const p = planner.items.find((i) => i.assignmentId === a.assignmentId)!;
-      expect(p.proposedMinutes).toBe(a.allocatedMinutes);
-      expect(p.completeCoverage).toBe(a.completeCoverage);
-      expect(p.proposedBlocks).toEqual(a.projectedBlocks);
-      expect(p.scheduledMinutes).toBe(a.alreadyScheduledMinutes);
+    for (const t of capacity.combined.tasks) {
+      const p = planner.items.find((i) => i.assignmentId === t.assignmentId)!;
+      expect(p.proposedMinutes).toBe(t.allocatedMinutes);
+      expect(p.completeCoverage).toBe(t.completeCoverage);
+      expect(p.proposedBlocks).toEqual(t.projectedBlocks);
+      expect(p.scheduledMinutes).toBe(t.alreadyScheduledMinutes);
+    }
+    // fallback metadata 与 summary 一致
+    if (capacity.summary.courseFallbackUsed) {
+      expect(planner.reasons).toContain("course_overlap_used_as_fallback");
+      for (const item of planner.items) {
+        expect(item.preferredProposedMinutes + item.courseFallbackProposedMinutes).toBe(item.proposedMinutes);
+      }
     }
   });
 
   it("existing plan：两者都只补缺口（remaining = estimate - scheduled）", () => {
     const a = mk("a1", { ddl: iso(new Date(NOW.getTime() + 3 * 86400000)), estimatedMinutes: 180 });
     const blocks = [block("b1", "a1", 1, "19:00", "20:00")]; // 60
-    const pool = findFreeTime({
-      start: NOW,
-      now: NOW,
-      end: new Date(NOW.getTime() + 3 * 86400000),
-      semester: SEMESTER,
-      currentSemesterWeek: 1,
-      schedules: noSchedules,
-      calendarMarks: noMarks,
-      studyBlocks: blocks,
-    });
-    const allocation = allocateStudyCapacity({
-      assignments: [a], studyBlocks: blocks, freeSlots: pool,
-      fromDate: date(0), toDate: date(3), now: NOW,
-    });
+    const capacity = buildPlanningCapacity({
+      assignments: [a], studyBlocks: blocks, schedules: noSchedules, calendarMarks: noMarks,
+      semester: SEMESTER, currentSemesterWeek: 1, fromDate: date(0), toDate: date(3), now: NOW,
+    }, { includeNoDeadline: true });
     const planner = proposeStudyPlan({
       assignments: [a], studyBlocks: blocks, semester: SEMESTER, currentSemesterWeek: 1,
       schedules: noSchedules, calendarMarks: noMarks, fromDate: date(0), toDate: date(3), now: NOW,
     });
-    const ta = allocation.tasks[0];
+    const ta = capacity.combined.tasks[0];
     const pa = planner.items[0];
     expect(ta.remainingRequiredMinutes).toBe(120);
     expect(pa.proposedMinutes).toBe(ta.allocatedMinutes);
@@ -105,25 +95,15 @@ describe("Capacity Allocator ↔ Study Planner Canonical Invariant", () => {
   it("missing estimate：两边都保持 completeCoverage=false + missing_estimate；allocator 不消费容量", () => {
     const a1 = mk("a1", { ddl: iso(new Date(NOW.getTime() + 1 * 86400000)) });
     const a2 = mk("a2", { ddl: iso(new Date(NOW.getTime() + 1 * 86400000)), estimatedMinutes: 60 });
-    const pool = findFreeTime({
-      start: NOW,
-      now: NOW,
-      end: new Date(NOW.getTime() + 1 * 86400000),
-      semester: SEMESTER,
-      currentSemesterWeek: 1,
-      schedules: noSchedules,
-      calendarMarks: noMarks,
-      studyBlocks: noBlocks,
-    });
-    const allocation = allocateStudyCapacity({
-      assignments: [a1, a2], studyBlocks: noBlocks, freeSlots: pool,
-      fromDate: date(0), toDate: date(1), now: NOW,
-    });
+    const capacity = buildPlanningCapacity({
+      assignments: [a1, a2], studyBlocks: noBlocks, schedules: noSchedules, calendarMarks: noMarks,
+      semester: SEMESTER, currentSemesterWeek: 1, fromDate: date(0), toDate: date(1), now: NOW,
+    }, { includeNoDeadline: true });
     const planner = proposeStudyPlan({
       assignments: [a1, a2], studyBlocks: noBlocks, semester: SEMESTER, currentSemesterWeek: 1,
       schedules: noSchedules, calendarMarks: noMarks, fromDate: date(0), toDate: date(1), now: NOW,
     });
-    const allocA1 = allocation.tasks.find((t) => t.assignmentId === "a1")!;
+    const allocA1 = capacity.combined.tasks.find((t) => t.assignmentId === "a1")!;
     const planA1 = planner.items.find((i) => i.assignmentId === "a1")!;
     expect(allocA1.classification).toBe("missing_estimate");
     expect(allocA1.allocatedMinutes).toBe(0);

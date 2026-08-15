@@ -3,8 +3,8 @@ import http from "node:http";
 import { test as demoTest } from "./demoFixtures";
 
 /**
- * Capacity-Aware Outlook E2E（Analytics V2 · Part 4）：
- * 1. 容量 UI：A=120 + B=120、共享 180min → 尚需安排 4h · 可安排 3h · 缺口 1h；一个任务容量不足
+ * Capacity-Aware Outlook E2E（Analytics V2 · Part 4 / V1.2）：
+ * 1. 容量 UI：A=120 + B=120、共享 180min → 尚需安排 4h · 普通时间尚缺 1h · 放宽课程约束后仍缺 1h；一个任务容量不足
  * 2. 让 Kiro 帮我规划：get_learning_outlook → propose_study_plan（真实引擎）→ Proposal ≤180min
  */
 
@@ -157,19 +157,19 @@ async function openAnalytics(page: Page) {
   await page.waitForTimeout(1500);
 }
 
-demoTest("容量 UI：需求 4h / 可安排 3h / 缺口 1h；一个任务容量不足；最早容量缺口条", async ({ page }) => {
+demoTest("容量 UI：需求 4h / 普通时间尚缺 1h / 放宽课程约束后仍缺 1h；一个任务容量不足；最早容量缺口条", async ({ page }) => {
   await seedCapacityState(page);
   await openAnalytics(page);
 
   const card = page.getByTestId("study-outlook-card");
   await expect(card).toBeVisible({ timeout: 10000 });
 
-  // 共享容量事实（不是 raw free 相加）
+  // 无课程 schedule → combined == preferred：显示「放宽课程约束后仍缺」
   await expect(card.getByTestId("outlook-capacity-line")).toContainText("尚需安排 4h");
-  await expect(card.getByTestId("outlook-capacity-line")).toContainText("可安排 3h");
-  await expect(card.getByTestId("outlook-capacity-line")).toContainText("缺口 1h");
+  await expect(card.getByTestId("outlook-capacity-line")).toContainText("普通时间尚缺 1h");
+  await expect(card.getByTestId("outlook-capacity-line")).toContainText("放宽课程约束后仍缺 1h");
 
-  // 一个任务容量不足（预计仍缺 60min），另一个容量可覆盖
+  // 一个任务容量不足（combined 仍缺 60min），另一个容量可覆盖
   await expect(card.getByText(/预计仍缺 60min/).first()).toBeVisible();
   await expect(card.getByText(/当前容量可覆盖/).first()).toBeVisible();
 
