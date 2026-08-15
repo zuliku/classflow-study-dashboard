@@ -53,12 +53,11 @@ test("全模块演示数据可见性：总览/时间表/任务/课程资料/统�
   await page.getByRole("button", { name: "关闭" }).first().click();
   await page.waitForTimeout(600);
 
-  // ---- 学习统计 ----
-  await page.getByRole("button", { name: "学习统计" }).first().click();
+  // ---- 学习洞察 ----
+  await page.getByRole("button", { name: "学习洞察" }).first().click();
   await page.waitForTimeout(600);
-  await expect(visibleText(page, /任务完成率/)).toBeVisible();
-  await expect(visibleText(page, /5 门/)).toBeVisible();
-  await expect(visibleText(page, /本周课程时长/)).toBeVisible();
+  await expect(visibleText(page, /学习洞察会随着使用逐渐形成/)).toBeVisible();
+  await expect(visibleText(page, /完成任务、安排学习计划或进行专注后/)).toBeVisible();
 
   // ---- 小组协作 ----
   await page.getByRole("button", { name: "小组协作" }).first().click();

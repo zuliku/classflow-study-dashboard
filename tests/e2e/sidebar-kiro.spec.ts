@@ -12,7 +12,7 @@ test("Full Sidebar (xl)：Kiro 位于小组协作之后，使用正式 Logo，�
   await page.goto("/");
 
   const aside = page.locator("aside").first();
-  // 顺序：学习统计 → 小组协作 → Kiro → 设置
+  // 顺序：学习洞察 → 小组协作 → Kiro → 设置
   const labels = await aside.locator('[data-testid="nav-label"]').allTextContents();
   const mainIdx = labels.indexOf("小组协作");
   const kiroIdx = labels.indexOf("Kiro");
@@ -20,7 +20,7 @@ test("Full Sidebar (xl)：Kiro 位于小组协作之后，使用正式 Logo，�
   expect(mainIdx).toBeGreaterThanOrEqual(0);
   expect(kiroIdx).toBeGreaterThan(mainIdx);
   expect(settingsIdx).toBeGreaterThan(kiroIdx);
-  expect(labels.indexOf("学习统计")).toBeLessThan(mainIdx);
+  expect(labels.indexOf("学习洞察")).toBeLessThan(mainIdx);
 
   // Kiro entry：正式 Logo img + 高度 44px Featured 容器
   const kiroBtn = aside.getByRole("button", { name: "Kiro" });

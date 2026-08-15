@@ -46,8 +46,8 @@ test("其他页面空态：课程/课表/分析均为真实空状态", async ({ 
   await expect(page.getByText("添加第一门课程或导入课表")).toBeVisible();
 
   // 分析页
-  await page.getByRole("button", { name: "学习统计" }).first().click();
-  await expect(page.getByText("暂无可分析的学习数据")).toBeVisible();
+  await page.getByRole("button", { name: "学习洞察" }).first().click();
+  await expect(page.getByText("学习洞察会随着使用逐渐形成")).toBeVisible();
 
   // 课表页（Timeline V1：空网格布局，无课程数据泄漏）
   await page.getByRole("button", { name: "时间表" }).first().click();
