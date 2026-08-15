@@ -57,6 +57,10 @@ export function StudyOutlookCard({
   const affectedTitles = (firstCapacityShortfall?.affectedAssignmentIds ?? [])
     .map((id) => tasks.find((t) => t.assignmentId === id)?.title)
     .filter((t): t is string => !!t);
+  // Rebalance handoff 条件：存在容量缺口 或 有 scheduled_after_deadline 的任务
+  const rebalanceSuggestion =
+    firstCapacityShortfall !== null ||
+    tasks.some((t) => t.reasons.includes("scheduled_after_deadline"));
 
   return (
     <div className="bg-surface border border-line rounded-2xl shadow-subtle" data-testid="study-outlook-card">
@@ -154,6 +158,21 @@ export function StudyOutlookCard({
       )}
 
       <div className="px-4 py-3 border-t border-line-soft flex flex-wrap items-center gap-2">
+        {rebalanceSuggestion && (
+          <button
+            type="button"
+            data-testid="outlook-rebalance-handoff"
+            onClick={() =>
+              handoffPrompt(
+                "结合当前学习前瞻，检查已有 Kiro 学习计划是否可以通过移动时段改善。请先生成重排建议，不要直接修改。"
+              )
+            }
+            className="ux-press inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-line-strong text-charcoal text-[11px] font-bold rounded-xl hover:bg-alabaster transition-colors"
+          >
+            <Sparkles className="w-3.5 h-3.5 text-[#A48F82]" />
+            优化已有计划
+          </button>
+        )}
         <button
           type="button"
           onClick={() => handoffPrompt(PLAN_OUTLOOK_PROMPT)}

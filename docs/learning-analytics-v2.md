@@ -1,6 +1,6 @@
 # Learning Analytics V2 — 学习洞察
 
-> Status: 实现完成（Analytics Engine + Weekly Review + Canonical Kiro Tools + Estimate Calibration + Capacity-Aware Study Outlook + Kiro Action Loop）
+> Status: 实现完成（Analytics Engine + Weekly Review + Canonical Kiro Tools + Estimate Calibration + Capacity-Aware Outlook + Adaptive Study Rebalance + Kiro Action Loop）
 > 前置依赖：[learning-history-v1.md](./learning-history-v1.md)（History IndexedDB / Recorder / Query / Aggregate）
 
 ## 一、数据源
@@ -173,9 +173,20 @@ Kiro 不得从 raw events 自行重算 UI Analytics metric。Analytics 数据只
 
 `lib/ai/tools/read/history.ts` 不变（query 默认 30d / hard 90d / ≤200 条；summarize 默认 28d / hard 366d；浏览器 IndexedDB 直连）。Analytics V2 **不新增任何 AI 自动调用**（Weekly Review / Outlook / Calibration 全部 deterministic；只有用户点击 Ask Kiro / 规划 / 主动询问才调模型）。
 
-## 十六、Known Limitations
+## 十五B、Adaptive Study Rebalance（Part 5：Move-only 重排）
 
-- 跨午夜专注会话不拆分（归因到 `startedAt` 日）。
+- **职责**：`propose_study_rebalance` = 移动"已经存在的 Kiro 学习时段"；`propose_study_plan` = 增加"缺少的学习时长"。Rebalance 绝不新建/删除/拆分/合并 Block；`assignmentId / courseId / title / duration / source / StudyBlock.id` 全不变，只改 `date / startTime / endTime`（保持 ID：History 产生 `study_block.updated`、Reminder targetId 有效、Undo 简单、Analytics revision 正确重放、不制造假 create/delete 生命周期）。
+- **可移动范围（V1）**：未来（scheduledStart > now）+ `source === "kiro"` + assignment 存在且 todo/doing；**manual StudyBlock 永远 protected**（用户明确意图，不因算法认为"不优"而移动；无 includeManual 选项）。
+- **检测问题**（hard 优先于 soft）：`after_deadline`（block end > DDL）→ `course_conflict`（与生效课程冲突）→ `fixed_event_conflict`（考试/活动）→ `capacity_relief`（软优化）。
+- **capacity_relief 必须模拟验证**：shortfall 一律用 canonical `allocateStudyCapacity`（与 Outlook/Planner 同口径，禁止自写 sum(free)-sum(need)）；移动候选经 trial 重算，只有 `shortfallAfter < shortfallBefore` 才接受；不做无收益 move（不为"看起来均匀"）。
+- **放置偏好**（deterministic）：最小日期距离 → 同日优先 → 时间差最小 → 更早时间优先 → stable (date,start) tie-break；候选在 slot 内 30min 网格滑动（完整容纳原 duration）；after_deadline 只能选 DDL 前；capacity_relief 必须移到 firstCapacityShortfall.deadline 之后且 ≤ 自己 DDL。**Minimal churn**：接受一个 move 立即更新 simulated state 重算，目标达成即停止。
+- **Free Time 口径**：protectedBlocks = 全部 current blocks − 正在模拟的 movable blocks（其旧位置释放）；manual 永远 busy；移动中的 block 自己的旧位置也可作为候选。
+- **Atomic Batch Update**：`updateStudyBlocksBatch(updates, context?)`（单次 Zustand mutation；重复 ID / 缺失 ID → null 0 mutation；每真实变化产生 `study_block.updated`（no-op 不产生）；relative Reminder 随 date/startTime 同步到新锚点，同一次 state 计算完成）。
+- **Apply / Undo Domain**（`applyStudyRebalance.ts`）：`preflightStudyRebalance`（身份：source=kiro + 当前位置 == from fingerprint；目标合法：duration 不变 / 08:00–21:00 / end ≤ DDL / 无课程·活动·受保护块·move 间冲突；All-or-None）→ 双 preflight（dialog 前 + confirm 后）→ `applyStudyRebalance`（source=kiro，ID 不变）→ `undoStudyRebalance`（必须确认当前状态 == after fingerprint，否则 STALE「学习计划之后又发生了变化，无法安全撤销本次调整」；source=manual）。Apply/Undo 的 `study_block.updated` 两条都保留（append-only）。
+- **Kiro Tool**：`propose_study_rebalance`（schema `{ horizonDays?: 7|14 }`，READ / PROPOSAL，Browser 执行当前 state，输出 summary/moves/reasons，bounded；不新增直接 Write Tool；不塞进 apply_change_set）。Guidance：调整已有计划 → `get_learning_outlook` → `propose_study_rebalance` → 仍有缺口 → `propose_study_plan`；具体移动时间必须来自工具，禁止模型文本自拟。
+- **UI**：`StudyRebalanceProposalCard`（移动 N 个时段 · 缺口 before→after；每 move 显示 原→新 位置 + 自然语言原因（不显示算法术语）；[预览调整]/[应用调整]/[重新生成]；Confirm 文案「将移动 N 个已有 Kiro 学习时段。不会修改任务、截止时间或你手动安排的学习计划」）。Ghost Preview：独立 `studyRebalancePreview`（ephemeral，不入 Zustand/localStorage/History；proposalKey 指纹）；Timeline 原块弱化（opacity + dashed）+ 目标 ghost；关闭完全恢复。Outlook Card 在 `firstCapacityShortfall != null` 或有 `scheduled_after_deadline` 时显示弱操作 [优化已有计划]。
+
+## 十六、Known Limitations- 跨午夜专注会话不拆分（归因到 `startedAt` 日）。
 - 按时率只统计 DDL 可重建的任务（history coverage 前的任务不猜）。
 - `semester` 无 previous 对比（学期期初开始记录历史时对比不完整属预期）。
 - Coverage 不足时不显示 delta / 对比信号；`historyStartedAt` 早于所选范围才显示对比。
