@@ -32,6 +32,9 @@ export function FocusStartPopover({
 
   useEffect(() => {
     if (!open) {
+      // V1.1：每个 picker session 独立 —— 关闭即重置（时长回默认 30、备注清空、错误清除）；
+      // 不持久化用户上次选择（A→B / 继续专注 / 重开均为 30）
+      setPlanned("30");
       setError(null);
       setNote("");
     }
@@ -84,6 +87,7 @@ export function FocusStartPopover({
                   key={p}
                   type="button"
                   onClick={() => setPlanned(String(p))}
+                  aria-pressed={planned === String(p)}
                   className={cn(
                     "h-7 rounded-lg px-2 text-[11px] font-bold transition-colors",
                     planned === String(p)
@@ -111,7 +115,8 @@ export function FocusStartPopover({
           <input
             type="text"
             value={note}
-            onChange={(e) => setNote(e.target.value)}
+            onChange={(e) => setNote(e.target.value.slice(0, 200))}
+            maxLength={200}
             placeholder="备注（可选）"
             aria-label="专注备注"
             className="h-8 w-full rounded-lg border border-line-strong bg-surface px-2 text-xs text-charcoal outline-none placeholder:text-satin-grey/60 focus:border-charcoal"

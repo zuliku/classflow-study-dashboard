@@ -20,6 +20,7 @@ import {
   queryLearningHistory,
 } from "@/lib/history/query";
 import { formatEstimatedMinutes } from "@/lib/tasks/taskSemantics";
+import { formatFocusDurationMs } from "@/lib/focus/focusView";
 
 export type ActivityScope = "assignment" | "course";
 export type ActivityTone = "neutral" | "positive" | "warning";
@@ -256,10 +257,11 @@ function buildRow(event: LearningHistoryEvent, scope: ActivityScope): ActivityRo
       return row(event, "移除学习安排", undefined, "study", "warning");
     case "focus.completed": {
       const d = event.data as { actualActiveMs?: number };
+      // 统一 Focus duration 口径（V1.1）：与 Follow-up / Execution / Toast 同一 formatter
       const minutes =
-        typeof d.actualActiveMs === "number" && Number.isFinite(d.actualActiveMs)
-          ? formatEstimatedMinutes(Math.max(1, Math.round(d.actualActiveMs / 60000)))
-          : undefined;
+        typeof d.actualActiveMs === "number"
+          ? formatFocusDurationMs(d.actualActiveMs)
+          : null;
       return row(event, "完成专注", minutes ?? undefined, "focus", "positive");
     }
     case "course.created":

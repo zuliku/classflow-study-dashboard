@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { FocusSession } from "@/types";
 import { deriveAssignmentFocusView } from "@/lib/focus/assignmentFocusView";
-import { formatAccumulatedMs, formatFocusClock } from "@/lib/focus/focusView";
+import { formatFocusClock, formatFocusDurationMs } from "@/lib/focus/focusView";
 
 const T0 = 1_000_000;
 
@@ -194,20 +194,34 @@ describe("deriveAssignmentFocusView", () => {
   });
 });
 
-describe("formatAccumulatedMs", () => {
-  it("不足 1 小时 → N 分钟", () => {
-    expect(formatAccumulatedMs(25 * 60_000)).toBe("25 分钟");
+describe("formatFocusDurationMs（V1.1 口径：正数至少 1 分钟，与 Activity 一致）", () => {
+  it("0 / 负值 / NaN / Infinity → null", () => {
+    expect(formatFocusDurationMs(0)).toBeNull();
+    expect(formatFocusDurationMs(-1)).toBeNull();
+    expect(formatFocusDurationMs(Number.NaN)).toBeNull();
+    expect(formatFocusDurationMs(Number.POSITIVE_INFINITY)).toBeNull();
+  });
+  it("正数但不足 1 分钟 → 1 分钟（禁止 0 分钟）", () => {
+    expect(formatFocusDurationMs(1)).toBe("1 分钟");
+    expect(formatFocusDurationMs(20_000)).toBe("1 分钟");
+    expect(formatFocusDurationMs(29_000)).toBe("1 分钟");
+    expect(formatFocusDurationMs(31_000)).toBe("1 分钟");
+    expect(formatFocusDurationMs(89_000)).toBe("1 分钟");
+  });
+  it("91s → 2 分钟（round）", () => {
+    expect(formatFocusDurationMs(91_000)).toBe("2 分钟");
   });
   it("整小时 → N 小时", () => {
-    expect(formatAccumulatedMs(120 * 60_000)).toBe("2 小时");
+    expect(formatFocusDurationMs(60 * 60_000)).toBe("1 小时");
+    expect(formatFocusDurationMs(120 * 60_000)).toBe("2 小时");
   });
   it("跨小时 → N 小时 M 分", () => {
-    expect(formatAccumulatedMs(85 * 60_000 + 30_000)).toBe("1 小时 26 分");
+    expect(formatFocusDurationMs(90 * 60_000)).toBe("1 小时 30 分");
+    expect(formatFocusDurationMs(85 * 60_000 + 30_000)).toBe("1 小时 26 分");
   });
-  it("0 / 负值 / NaN → null", () => {
-    expect(formatAccumulatedMs(0)).toBeNull();
-    expect(formatAccumulatedMs(-1)).toBeNull();
-    expect(formatAccumulatedMs(Number.NaN)).toBeNull();
+  it("与 Activity 旧口径一致：1/60/90 分钟输出不变", () => {
+    expect(formatFocusDurationMs(60_000)).toBe("1 分钟");
+    expect(formatFocusDurationMs(25 * 60_000)).toBe("25 分钟");
   });
 });
 

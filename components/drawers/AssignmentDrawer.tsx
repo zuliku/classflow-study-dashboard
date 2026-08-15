@@ -49,8 +49,12 @@ import { MaterialTypeIcon, MATERIAL_TYPE_LABELS } from "@/components/ui/Material
 import { FocusStartPopover } from "@/components/focus/FocusStartPopover";
 import { AssignmentFocusControl } from "@/components/focus/AssignmentFocusControl";
 import { deriveAssignmentFocusView } from "@/lib/focus/assignmentFocusView";
+import {
+  ObservedAssignmentFocus,
+  reconcileObservedAssignmentFocus,
+} from "@/lib/focus/assignmentFocusTransition";
 import { deriveFocusClock } from "@/lib/focus/focusDomain";
-import { FOCUS_ERROR_MESSAGES, formatAccumulatedMs, formatFocusClock } from "@/lib/focus/focusView";
+import { FOCUS_ERROR_MESSAGES, formatFocusClock, formatFocusDurationMs } from "@/lib/focus/focusView";
 
 const OVERLAY_ID = "assignment-drawer";
 
@@ -113,18 +117,12 @@ export function AssignmentDrawer() {
   const [focusPickerOpen, setFocusPickerOpen] = useState(false);
   // Task Execution Loop：本任务最近一次完成专注的会话 id（inline follow-up，不持久化）
   const [recentCompletedSessionId, setRecentCompletedSessionId] = useState<string | null>(null);
-  // 观察「drawer 可见期间的 active → completed 转换」（自然 timer / recovered / manual 结束均进入）
-  const prevActiveFocusIdRef = useRef<string | null>(null);
-  useEffect(() => {
-    const activeNow =
-      focusSessions.find((s) => s.status === "running" || s.status === "paused") ?? null;
-    const prevId = prevActiveFocusIdRef.current;
-    prevActiveFocusIdRef.current = activeNow?.id ?? null;
-    if (prevId !== null && prevId !== (activeNow?.id ?? null)) {
-      const prev = focusSessions.find((s) => s.id === prevId);
-      if (prev?.status === "completed") setRecentCompletedSessionId(prevId);
-    }
-  }, [focusSessions]);
+  // Task Execution Loop V1.1：Follow-up 实体归属 —— 只观察「当前实体自己的 active Focus」。
+  // observedFocusRef 由纯函数 reconcileObservedAssignmentFocus 驱动（不建 store）：
+  // - armed 条件 = currentId 且 active.assignmentId === currentId
+  // - 结算 = observed session completed 且当前实体未变
+  // - 实体切换/关闭 → 立即 disarm（currentId 是 ownership boundary，不依赖视觉 stale 内容）
+  const observedFocusRef = useRef<ObservedAssignmentFocus | null>(null);
 
   const currentAssignment = assignments.find((a) => a.id === selectedAssignmentId);
   // 关闭（selected 清空）期间保留最后一次内容渲染，让 Drawer exit presence 生效
@@ -186,6 +184,18 @@ export function AssignmentDrawer() {
     setFocusPickerOpen(false);
     setRecentCompletedSessionId(null);
   }, [currentId]);
+
+  // Follow-up observation reconcile：currentId 为 ownership boundary（含 60ms swap 期间），
+  // focusSessions 更新或实体切换都重算；completedSessionId 只可能属于当前实体
+  useEffect(() => {
+    const { nextObserved, completedSessionId } = reconcileObservedAssignmentFocus({
+      currentAssignmentId: currentId,
+      observed: observedFocusRef.current,
+      focusSessions,
+    });
+    observedFocusRef.current = nextObserved;
+    if (completedSessionId) setRecentCompletedSessionId(completedSessionId);
+  }, [focusSessions, currentId]);
 
   const assignment =
     assignments.find((a) => a.id === displayedId) ?? currentAssignment ?? staleAssignment;
@@ -361,9 +371,14 @@ export function AssignmentDrawer() {
       toastFocusError(r.code);
       return;
     }
-    const minutes = Math.max(1, Math.round((r.session.actualActiveMs ?? 0) / 60_000));
-    pushToast({ message: `已结束专注 · 本次 ${minutes} 分钟` });
-    // inline follow-up 由 observer effect 统一置位（manual 结束同样走 active→completed 转换）
+    pushToast({
+      message: `已结束专注 · 本次 ${formatFocusDurationMs(r.session.actualActiveMs) ?? "1 分钟"}`,
+    });
+    // manual finish 明确发生在当前 Task Control：direct set follow-up（deterministic）；
+    // observer 随后对同一 session 幂等结算（同一 id state，不重复/闪烁）
+    if (r.session.assignmentId === assignment.id) {
+      setRecentCompletedSessionId(r.session.id);
+    }
   };
 
   // 其他专注进行中 → 查看当前专注（B→A swap 复用 content machine，shell 不重挂载）
@@ -385,8 +400,11 @@ export function AssignmentDrawer() {
   const recentCompletedSession = recentCompletedSessionId
     ? (focusSessions.find((s) => s.id === recentCompletedSessionId) ?? null)
     : null;
-  const recentDuration = recentCompletedSession?.actualActiveMs
-    ? formatAccumulatedMs(recentCompletedSession.actualActiveMs)
+  // V1.1 defensive guard：即使 transient state 意外残留，follow-up 也绝不渲染到其他实体
+  const followUpSession =
+    recentCompletedSession?.assignmentId === assignment.id ? recentCompletedSession : null;
+  const recentDuration = followUpSession?.actualActiveMs
+    ? formatFocusDurationMs(followUpSession.actualActiveMs)
     : null;
 
   // Header（breadcrumb/title）与 Body 共享同一 entity swap lifecycle：
@@ -563,8 +581,9 @@ export function AssignmentDrawer() {
             }}
           />
 
-          {/* FOLLOW-UP：本次专注完成（inline contextual，仅本任务会话转换或 manual 结束后出现） */}
-          {recentCompletedSession && (
+          {/* FOLLOW-UP：本次专注完成（inline contextual，仅当前实体的会话转换或 manual 结束后出现；
+              render 前有 assignmentId 实体 guard） */}
+          {followUpSession && (
             <div
               data-testid="focus-follow-up"
               className="flex items-center gap-2 rounded-xl border border-line bg-[#F7F5F5]/60 px-3 py-2"

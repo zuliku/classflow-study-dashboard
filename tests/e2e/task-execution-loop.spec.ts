@@ -179,3 +179,51 @@ test("E：completed 任务（无 active 专注）不显示开始专注", async (
   await expect(drawer.getByTestId("assignment-focus-control")).toHaveCount(0);
   await expect(drawer.getByTestId("execution-focus-row")).toContainText("尚无专注记录");
 });
+
+test("F：KILLER —— A 的 Focus 完成绝不污染 B（cross-task completion regression）", async ({ page }) => {
+  await page.clock.install();
+  const a = await openAssignmentDrawer(page, "计量经济学大作业（第3章）");
+  // A 开始 2 分钟 Focus
+  await a.getByTestId("focus-start-trigger").click();
+  const popover = a.getByTestId("focus-start-popover");
+  await expect(popover).toBeVisible();
+  await popover.getByLabel("自定义时长（分钟）").fill("2");
+  await popover.getByRole("button", { name: "开始专注", exact: true }).click();
+  await expect(a.getByTestId("assignment-focus-control")).toContainText(/专注中 · 剩余 0[12]:\d\d/);
+  // 关闭 A，打开 B
+  await a.getByRole("button", { name: "关闭" }).click();
+  await expect(a).toHaveCount(0);
+  const b = await openAssignmentDrawer(page, "市场营销案例汇报");
+  await expect(b.getByTestId("other-focus-status")).toContainText(/其他专注进行中 · 计量经济学大作业/);
+
+  // A 的 timer 到期完成（FocusRuntime 唯一 owner）
+  await page.clock.fastForward(130_000);
+  await expect(page.getByText("专注完成，休息一下吧").first()).toBeVisible({ timeout: 8000 });
+
+  // B 必须干净：other-focus-status 消失、开始专注恢复、绝无 A 的 follow-up
+  await expect(b.getByTestId("other-focus-status")).toHaveCount(0);
+  await expect(b.getByTestId("focus-start-trigger")).toBeVisible();
+  await expect(b.getByTestId("focus-follow-up")).toHaveCount(0);
+  await expect(b.getByText("本次专注完成", { exact: false })).toHaveCount(0);
+});
+
+test("G：picker 每轮 session 默认 30（选 60 → 关闭 → 重开 → 30）", async ({ page }) => {
+  const drawer = await openAssignmentDrawer(page, "微观经济学课后习题（第5章）");
+  await drawer.getByTestId("focus-start-trigger").click();
+  const popover = drawer.getByTestId("focus-start-popover");
+  await expect(popover).toBeVisible();
+  // 首次默认 30
+  await expect(popover.getByLabel("自定义时长（分钟）")).toHaveValue("30");
+  await expect(popover.getByRole("button", { name: "30 分" })).toHaveAttribute("aria-pressed", "true");
+  // 选 60
+  await popover.getByRole("button", { name: "60 分" }).click();
+  await expect(popover.getByLabel("自定义时长（分钟）")).toHaveValue("60");
+  // 点标题（outside）关闭 → 重开 → 30
+  await drawer.getByRole("heading", { name: "微观经济学课后习题（第5章）" }).click();
+  await expect(popover).toHaveCount(0);
+  await drawer.getByTestId("focus-start-trigger").click();
+  await expect(popover).toBeVisible();
+  await expect(popover.getByLabel("自定义时长（分钟）")).toHaveValue("30");
+  await expect(popover.getByRole("button", { name: "30 分" })).toHaveAttribute("aria-pressed", "true");
+  await expect(popover.getByRole("button", { name: "60 分" })).toHaveAttribute("aria-pressed", "false");
+});

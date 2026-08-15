@@ -4,7 +4,7 @@ import React, { useState } from "react";
 import { Checkbox } from "@/components/ui/Checkbox";
 import { cn } from "@/lib/utils";
 import { formatEstimatedMinutes } from "@/lib/tasks/taskSemantics";
-import { formatAccumulatedMs } from "@/lib/focus/focusView";
+import { formatFocusDurationMs } from "@/lib/focus/focusView";
 import { useFocusClock } from "@/hooks/useFocusClock";
 import { FocusSession } from "@/types";
 import {
@@ -102,7 +102,7 @@ export function AssignmentDetailExecution({
             </span>
           ) : focusSummary.completedCount > 0 ? (
             <span className="text-xs font-semibold text-charcoal">
-              累计 {formatAccumulatedMs(focusSummary.totalCompletedMs)} · {focusSummary.completedCount} 次
+              累计 {formatFocusDurationMs(focusSummary.totalCompletedMs)} · {focusSummary.completedCount} 次
             </span>
           ) : (
             <span className="text-xs font-semibold text-satin-grey/70">尚无专注记录</span>
