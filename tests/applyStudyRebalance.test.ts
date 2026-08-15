@@ -247,6 +247,120 @@ describe("applyStudyRebalance / undoStudyRebalance", () => {
   });
 });
 
+describe("applyStudyRebalance：Task 6 Course soft-overlap", () => {
+  function seedWithCourseOverTarget() {
+    seed({ ddl: `${dayStr(6)}T23:59:00` });
+    const dow = new Date(`${dayStr(4)}T00:00:00`).getDay() === 0 ? 7 : new Date(`${dayStr(4)}T00:00:00`).getDay();
+    useAppStore.setState({
+      schedules: [
+        { id: "sch1", courseId: "c2", dayOfWeek: dow, startTime: "08:00", endTime: "21:00", location: "", weeks: "1-16周" } as never,
+      ],
+    });
+  }
+
+  it("A：target 与 Course overlap → preflight ok + courseOverlaps=1（soft，不失败）", () => {
+    seedWithCourseOverTarget();
+    const p = preflightStudyRebalance([move()], useAppStore.getState());
+    expect(p.ok).toBe(true);
+    if (!p.ok) return;
+    expect(p.courseOverlaps).toHaveLength(1);
+    expect(p.courseOverlaps[0]).toMatchObject({
+      blockId: "sb1",
+      date: dayStr(4),
+      startTime: "19:00",
+      endTime: "20:00",
+      courseName: "未知课程",
+    });
+  });
+
+  it("B：apply 未确认 → state=needs-approval + 0 mutation", () => {
+    seedWithCourseOverTarget();
+    const r = applyStudyRebalance([move()], useAppStore.getState());
+    expect(r.ok).toBe(true);
+    if (!r.ok || r.state !== "needs-approval") return;
+    expect(r.courseOverlaps).toHaveLength(1);
+    expect(useAppStore.getState().studyBlocks[0].date).toBe(dayStr(3)); // 0 mutation
+  });
+
+  it("C：allowCourseOverlap → 整批 atomic apply", () => {
+    seedWithCourseOverTarget();
+    const r = applyStudyRebalance([move()], useAppStore.getState(), { allowCourseOverlap: true });
+    expect(r.ok).toBe(true);
+    if (!r.ok || r.state !== "applied") return;
+    expect(useAppStore.getState().studyBlocks[0].date).toBe(dayStr(4));
+  });
+
+  it("D：target 与受保护 StudyBlock 重叠 → 仍 hard fail（StudyBlock 是硬约束）", () => {
+    seed({ ddl: `${dayStr(6)}T23:59:00` });
+    useAppStore.setState({
+      studyBlocks: [
+        useAppStore.getState().studyBlocks[0],
+        { id: "other", title: "已有计划", date: dayStr(4), startTime: "19:00", endTime: "20:00", assignmentId: "a1", courseId: "c1", source: "manual" } as never,
+      ],
+    });
+    const r = applyStudyRebalance([move()], useAppStore.getState());
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.code).toBe("CONFLICT");
+    expect(r.details?.reason).toBe("occupancy");
+    expect(useAppStore.getState().studyBlocks.find((b) => b.id === "sb1")!.date).toBe(dayStr(3));
+  });
+
+  it("E：target 与 Exam overlap → 仍 hard fail", () => {
+    seed({ ddl: `${dayStr(6)}T23:59:00` });
+    useAppStore.setState({
+      calendarMarks: [
+        { id: "cm1", date: dayStr(4), type: "exam", title: "考试", startTime: "18:00", endTime: "21:00" } as never,
+      ],
+    });
+    const r = applyStudyRebalance([move()], useAppStore.getState());
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.code).toBe("CONFLICT");
+    expect(r.details?.reason).toBe("occupancy");
+  });
+
+  it("F：Undo 回到 Course-overlap 的 from → 成功，不要求再次确认", () => {
+    seedWithCourseOverTarget();
+    // 先把 block 移到课程重叠位（用户已确认的合法状态）：Apply with allow → V1.1 写入 approvals
+    const applied = applyStudyRebalance([move()], useAppStore.getState(), { allowCourseOverlap: true });
+    expect(applied.ok).toBe(true);
+    if (!applied.ok || applied.state !== "applied") return;
+    expect(useAppStore.getState().studyBlocks[0].date).toBe(dayStr(4));
+    // from 位置本身也覆盖课程（seed 课程全天覆盖 Thu 与 Fri）→ Undo 不应被课程挡住；
+    // V1.1：Undo 需携带 Apply 时的 originalApprovals 快照以精确恢复
+    const undone = undoStudyRebalance([move()], useAppStore.getState(), {
+      originalApprovals: applied.originalApprovals,
+      afterApprovals: applied.afterApprovals,
+    });
+    expect(undone.ok).toBe(true);
+    if (!undone.ok || undone.state !== "applied") return;
+    expect(useAppStore.getState().studyBlocks[0].date).toBe(dayStr(3));
+  });
+  it("§39 V1.3：20min 短 Block 可被 Rebalance 移动且 duration 保持（<30 不是非法）", () => {
+    seed({ ddl: `${dayStr(6)}T23:59:00` }, { date: dayStr(3), startTime: "19:00", endTime: "19:20", source: "kiro" });
+    const move20: RebalanceMoveInput = {
+      blockId: "sb1",
+      from: { date: dayStr(3), startTime: "19:00", endTime: "19:20" },
+      to: { date: dayStr(4), startTime: "19:00", endTime: "19:20" },
+    };
+    const applied = applyStudyRebalance([move20], useAppStore.getState());
+    expect(applied.ok).toBe(true);
+    if (!applied.ok || applied.state !== "applied") return;
+    const after = useAppStore.getState().studyBlocks[0];
+    expect(after.date).toBe(dayStr(4));
+    expect(after.startTime).toBe("19:00");
+    expect(after.endTime).toBe("19:20"); // duration 20min 保持
+    // undo 恢复
+    const undone = undoStudyRebalance([move20], useAppStore.getState(), {
+      originalApprovals: applied.originalApprovals,
+      afterApprovals: applied.afterApprovals,
+    });
+    expect(undone.ok).toBe(true);
+    expect(useAppStore.getState().studyBlocks[0].endTime).toBe("19:20");
+  });
+});
+
 describe("Rebalance 与 History projection revision 语义（§82）", () => {
   const ev = (type: string, entityId: string, occurredAt: number, data: Record<string, unknown>) => ({
     type,

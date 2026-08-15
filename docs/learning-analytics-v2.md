@@ -207,6 +207,15 @@ Kiro 不得从 raw events 自行重算 UI Analytics metric。Analytics 数据只
 - **Outlook**：任务保留 Preferred `capacity*` 字段（语义不变），新增 `courseFallbackAllocatedMinutes` / `combinedCapacity*`；summary 新增 `preferredAllocatedMinutes / preferredShortfallMinutes / additionalAllocatedWithCourseTime / combinedAllocatedMinutes / combinedShortfallMinutes`（`allocatableMinutes / shortfallMinutes` 保留为 deprecated alias）；`firstCapacityShortfall` = Preferred（Rebalance 仍看它），新增 `firstCombinedCapacityShortfall` + `combinedCapacityForecast`（soft fallback 后仍不足才是真正不可覆盖）；`capacityPressure` 扩为 normal / busy / preferred-shortfall / hard-shortfall。
 - **UI / Kiro 三层文案**：Preferred 足够 →「非课程时间可覆盖」；Preferred 不足 Combined 足够 →「非课程时间尚缺 X · 可通过课程重叠方案覆盖」（ochre，不红）；Combined 仍不足 →「放宽课程约束后仍缺 X」（attention）。课程重叠只是可选方案，**不是已授权**；写入前仍走 Approval Gate。Kiro guidance 同步三层用语。
 
+## 十五E、Exact Minute Conservation（V1.3：精确切块 + 分钟守恒）
+
+- **P0 Bug**：旧 `takeFromSlot` 在 remaining=10 时 `max(MIN_BLOCK, remaining)` 强制 30min block → sum(blocks) ≠ allocatedMinutes 且 Pool 少 30 但 allocated 只 +10（shared capacity accounting violation）。
+- **`lib/planning/blockPartition.ts`**：`partitionStudyDuration(minutes)` remainder-aware 纯函数（sum 精确、每块 >0 且 ≤90、连续容量充足且 ≥30 时避免微型尾块）：20→[20]、91→[61,30]、100→[70,30]、120→[90,30]、180→[90,90]、181→[90,61,30]。`blockDurationMinutes` 校验块几何与 minutes 一致。
+- **`takeFromSlot` 重写**：`actualConsumed = min(need, slotAvailable)` → partition → 一个 slot 可生成多个 contiguous blocks；剩余正数容量全部保留（<30 内部 fragment 不静默删除，仅供 allocator 内部，不改变 `get_available_time` 公共语义）；`>=30` slots 优先、fragment 最后（稳定顺序）。
+- **MIN_BLOCK 语义**：`PLAN_MIN_BLOCK_MINUTES` 是 normal/preferred minimum，不是 correctness hard minimum（分钟守恒 > 避免短块）；任务估时任意正整数合法（不把编辑器改 30 步进、不 round estimate）。
+- **Conservation Invariants**（sweep 测试 1..360）：每任务 `sum(blocks.minutes) === allocatedMinutes ≤ remainingRequired`；Portfolio `freeMinutesInWindow = totalAllocated + unusedFreeMinutes`（真实 pool 为准）；`mergePlanningCapacityAllocations` 的 combined `freeMinutesInWindow / unusedFreeMinutes` 标记 deprecated internal（fallback 语义不表示 combined 初始容量，UI/Kiro 不消费）。
+- **一致性链**：100min Proposal → Apply → Store blocks 合计 100 → History `plannedMinutes` 合计 100 → Analytics projection 100（统一）；`requiresCourseOverlapApproval` 不受块长影响（<30 块落课程同样走 Approval Gate）；Rebalance 支持 <30 短块且保持 duration（GRID 只是搜索粒度，无 MIN 硬约束）；Kiro propose_study_plan description / guidance 措辞更新（「通常 30–90 分钟块，短任务或不可避免尾段可能 <30」）。
+
 ## 十六、Known Limitations- 跨午夜专注会话不拆分（归因到 `startedAt` 日）。
 - 按时率只统计 DDL 可重建的任务（history coverage 前的任务不猜）。
 - `semester` 无 previous 对比（学期期初开始记录历史时对比不完整属预期）。

@@ -14,6 +14,12 @@ async function historyEvents() {
   return collectLearningHistoryEvents(resolveLearningHistoryQuery({}));
 }
 
+function durationMin(startTime: string, endTime: string): number {
+  const [sh, sm] = startTime.split(":").map(Number);
+  const [eh, em] = endTime.split(":").map(Number);
+  return eh * 60 + em - (sh * 60 + sm);
+}
+
 function mkBlock(idSuffix: string, patch: Record<string, unknown> = {}) {
   return {
     title: `批量计划 ${idSuffix}`,
@@ -215,6 +221,89 @@ describe("Kiro Apply / Undo History Integrity", () => {
     // 修复前：batch 无 History → plannedMinutes 漏掉；修复后计入 60min
     expect(snapshot.overview.plannedMinutes).toBeGreaterThanOrEqual(60);
     expect(snapshot.coverage.planCoverageFull).toBe(true);
+  });
+
+  it("V1.3 100min exact：propose → Apply → Store blocks 合计 100 → History plannedMinutes 合计 100 → Analytics projection 100", async () => {
+    const storeMod = await import("@/lib/history/store");
+    await storeMod.clearLearningHistoryStorage();
+    const past = Date.now() - 60 * 86400000;
+    await storeMod.setLearningHistoryCoverage({
+      schemaVersion: 1,
+      historyStartedAt: past,
+      initializedAt: past,
+      focusBackfillCompleted: true,
+      backfilledFocusSessions: 0,
+      studyBlockBatchIntegrityStartedAt: past,
+    });
+    useAppStore.setState({
+      assignments: [
+        {
+          id: "a1", courseId: "c1", title: "任务A", description: "", priority: "medium",
+          status: "todo", progress: 0, tags: [], estimatedMinutes: 100,
+        } as never,
+      ],
+      studyBlocks: [],
+    });
+
+    // propose（明天 18:00-21:00 free，need 100 → exact 100）
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const pad2 = (n: number) => String(n).padStart(2, "0");
+    const dayStr = `${tomorrow.getFullYear()}-${pad2(tomorrow.getMonth() + 1)}-${pad2(tomorrow.getDate())}`;
+    const planner = await import("@/lib/planning/studyPlanner");
+    const plan = planner.proposeStudyPlan({
+      assignments: useAppStore.getState().assignments,
+      studyBlocks: [],
+      semester: useAppStore.getState().semester,
+      currentSemesterWeek: 1,
+      schedules: [],
+      calendarMarks: [],
+      fromDate: dayStr,
+      toDate: dayStr,
+      now: new Date(tomorrow.getFullYear(), tomorrow.getMonth(), tomorrow.getDate(), 8, 0, 0),
+    });
+    const item = plan.items[0];
+    expect(item.proposedMinutes).toBe(100);
+    expect(item.proposedBlocks.reduce((s, b) => s + b.minutes, 0)).toBe(100);
+
+    // Apply（100min Proposal → Store 精确 100）
+    const applyMod = await import("@/lib/planning/applyStudyPlan");
+    const applied = applyMod.applyStudyPlan(
+      {
+        blocks: item.proposedBlocks.map((b) => ({
+          assignmentId: "a1",
+          title: item.title,
+          courseId: "c1",
+          date: b.date,
+          startTime: b.startTime,
+          endTime: b.endTime,
+        })),
+      },
+      useAppStore.getState()
+    );
+    expect(applied.ok).toBe(true);
+    if (!applied.ok || applied.state !== "created") return;
+    const storeTotal = useAppStore
+      .getState()
+      .studyBlocks.reduce((s, b) => s + durationMin(b.startTime, b.endTime), 0);
+    expect(storeTotal).toBe(100);
+
+    // History：study_block.created plannedMinutes 合计 100
+    const events = await historyEvents();
+    const createdEvents = events.filter((e) => e.type === "study_block.created");
+    const historyTotal = createdEvents.reduce(
+      (s, e) => s + ((e.data as { plannedMinutes?: number }).plannedMinutes ?? 0),
+      0
+    );
+    expect(historyTotal).toBe(100);
+
+    // Analytics projection：计划在 coverage 内 → plannedMinutes 100
+    const snapshot = await buildLearningAnalyticsSnapshot({
+      preset: "week",
+      semester: useAppStore.getState().semester,
+      now: new Date(tomorrow.getFullYear(), tomorrow.getMonth(), tomorrow.getDate(), 22, 0, 0).getTime(),
+    });
+    expect(snapshot.overview.plannedMinutes).toBe(100);
   });
 
   it("Analytics：plan coverage 不完整（batch marker 晚于 range 起点）→ actualToPlanRatio=null + 计划序列不完整", async () => {
