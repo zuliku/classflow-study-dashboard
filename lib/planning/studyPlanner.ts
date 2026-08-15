@@ -97,6 +97,7 @@ export function proposeStudyPlan(input: ProposeStudyPlanInput): ProposeStudyPlan
   }
   const freeTimeQuery = {
     start: from,
+    now: input.now,
     end: to,
     semester: input.semester,
     currentSemesterWeek: input.currentSemesterWeek,

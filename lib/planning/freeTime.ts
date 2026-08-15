@@ -31,6 +31,11 @@ export interface FreeTimeQuery {
    * 用于 Planner Pass 2（课程时间 = soft constraint，仅在空闲不足时使用）。
    */
   includeCourseTime?: boolean;
+  /**
+   * Task 6：today-capping 基准时间（「今天不返回过去时间」用）。默认真实 now；
+   * 规划/测试传入与业务一致的 now 可保证确定性（产品语义不变）。
+   */
+  now?: Date;
 }
 
 export interface FreeTimeSlot {
@@ -90,7 +95,7 @@ export function findFreeTime(query: FreeTimeQuery): FreeTimeSlot[] {
   const end = new Date(query.end);
   if (end.getTime() <= start.getTime()) return [];
 
-  const now = new Date();
+  const now = query.now ?? new Date();
   const todayStr = dateStrOf(now);
   const nowMinutes = now.getHours() * 60 + now.getMinutes();
 

@@ -45,6 +45,7 @@ describe("Capacity Allocator ↔ Study Planner Canonical Invariant", () => {
     ];
     const pool = findFreeTime({
       start: NOW,
+      now: NOW,
       end: new Date(NOW.getTime() + 1 * 86400000),
       semester: SEMESTER,
       currentSemesterWeek: 1,
@@ -76,6 +77,7 @@ describe("Capacity Allocator ↔ Study Planner Canonical Invariant", () => {
     const blocks = [block("b1", "a1", 1, "19:00", "20:00")]; // 60
     const pool = findFreeTime({
       start: NOW,
+      now: NOW,
       end: new Date(NOW.getTime() + 3 * 86400000),
       semester: SEMESTER,
       currentSemesterWeek: 1,
@@ -105,6 +107,7 @@ describe("Capacity Allocator ↔ Study Planner Canonical Invariant", () => {
     const a2 = mk("a2", { ddl: iso(new Date(NOW.getTime() + 1 * 86400000)), estimatedMinutes: 60 });
     const pool = findFreeTime({
       start: NOW,
+      now: NOW,
       end: new Date(NOW.getTime() + 1 * 86400000),
       semester: SEMESTER,
       currentSemesterWeek: 1,
