@@ -246,6 +246,8 @@ export interface StudyBlock {
   assignmentId?: string;
   courseId?: string;
   source?: "manual" | "kiro";
+  /** 课程软重叠的显式批准（Block × Schedule 版本级别；optional，旧数据兼容） */
+  courseOverlapApprovals?: import("@/lib/planning/courseOverlapPolicy").StudyBlockCourseOverlapApproval[];
 }
 
 /** 应用偏好（稳定用户偏好，持久化；Task 2 接入业务模块） */
