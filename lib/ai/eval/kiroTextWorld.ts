@@ -140,6 +140,12 @@ export const KIRO_TEXT_SEED_REFS: Record<string, KiroPromptContextRef[]> = {
   ],
   "create-reminder": [{ kind: "assignment", id: "a_ds_lab", label: "数据结构实验报告" }],
   "start-focus": [{ kind: "course", id: "c_stat", label: "统计学" }],
+  // Eval 收口：用户表达「这周这几个作业」依赖已选实体 → contextRefs 成为真实 source-of-truth
+  "multi-assignment-week-plan": [
+    { kind: "assignment", id: "a_ds_lab", label: "数据结构实验报告" },
+    { kind: "assignment", id: "a_measure", label: "计量作业" },
+    { kind: "assignment", id: "a_cn_proj", label: "计网课程设计" },
+  ],
 };
 
 /**

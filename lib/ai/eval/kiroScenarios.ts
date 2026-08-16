@@ -145,8 +145,8 @@ export const KIRO_EVAL_SCENARIOS: KiroEvalScenario[] = [
   {
     id: "batch-ddl-change",
     category: "write",
-    userMessage: "把这两个任务的 DDL 都改到周五。",
-    contextAssumptions: ["当前没有真实 assignmentId", "两个任务名称可以被搜索定位"],
+    userMessage: "把数据结构实验报告和计量作业的 DDL 都改到周五。",
+    contextAssumptions: ["当前没有真实 assignmentId", "用户明确提供两个任务名称", "两个任务名称可以被搜索唯一定位"],
     requiredTools: ["search_assignments", "apply_change_set"],
     allowedTools: [],
     forbiddenTools: ["set_assignment_ddl"],

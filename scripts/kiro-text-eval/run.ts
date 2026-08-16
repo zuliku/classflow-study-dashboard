@@ -99,6 +99,8 @@ export interface KiroTextEvalRunSnapshot {
   toolTrace: KiroTextToolTraceEntry[];
   lastWriteEvent?: KiroTextWriteEvent;
   rounds: number;
+  /** Eval V1.1.2：boundary 后出现的业务工具（协议违规；不执行） */
+  postBoundaryBusinessToolCalls: string[];
 }
 
 export interface KiroTextAgentRun extends KiroTextEvalRunSnapshot {
@@ -300,6 +302,7 @@ export async function runKiroTextScenario(input: {
       toolTrace: [],
       lastWriteEvent: undefined,
       rounds: 0,
+      postBoundaryBusinessToolCalls: [],
       runtimeError: { type: "provider", message: msg.slice(0, MAX_RUNTIME_ERROR_CHARS) },
     };
   }
@@ -332,6 +335,7 @@ export async function runKiroTextScenario(input: {
   let finalAnswer = "";
   let rounds = 0;
   let boundarySeen = false;
+  let postBoundaryBusinessToolCalls: string[] = [];
 
   const emitToolResult = (tc: RawToolCall, output: unknown, entry: KiroTextToolTraceEntry) => {
     toolTrace.push(entry);
@@ -385,12 +389,28 @@ export async function runKiroTextScenario(input: {
         // Case C：有 Tool 事件 → 按原始事件顺序执行/回填
         const toolResultByCallId = new Map<string, TextUiMessage["parts"][number]>();
         const writeApi = createKiroTextWorldApi(world);
+        // Eval V1.1.2：boundary 后的业务工具 = FINAL_ANSWER_PROTOCOL_VIOLATION（记录且不执行）
+        let postBoundary = boundarySeen;
         for (const ev of classified.toolEvents) {
           if (ev.kind !== "tool") continue;
           const tc: RawToolCall = { toolCallId: ev.toolCallId, toolName: ev.toolName, input: ev.input };
           const { toolName, input } = tc;
           if (toolName === KIRO_FINAL_ANSWER_TOOL_NAME) {
+            postBoundary = true;
             toolResultByCallId.set(ev.toolCallId, emitToolResult(tc, { ok: true, data: {} }, { tool: toolName, result: "ok" }));
+            continue;
+          }
+          if (postBoundary) {
+            // 协议违规：Final Answer 已开始，业务工具不得执行（生产客户端第二道防线等价）
+            postBoundaryBusinessToolCalls.push(toolName);
+            toolResultByCallId.set(
+              ev.toolCallId,
+              emitToolResult(
+                tc,
+                { ok: false, code: "FINAL_ANSWER_PROTOCOL_VIOLATION", message: "Final Answer 已开始，业务工具不可执行。" },
+                { tool: toolName, result: "error", input: input as Record<string, unknown> }
+              )
+            );
             continue;
           }
           if (MEMORY_TOOLS.has(toolName)) {
@@ -480,6 +500,7 @@ export async function runKiroTextScenario(input: {
         toolTrace,
         lastWriteEvent,
         rounds,
+        postBoundaryBusinessToolCalls,
         runtimeError: { type: streamErr.kind, message: streamErr.error.slice(0, MAX_RUNTIME_ERROR_CHARS) },
       };
     }
@@ -500,7 +521,7 @@ export async function runKiroTextScenario(input: {
     break; // Case E：无 Tool、无 text → settled empty（scoring 判 finalEmpty）
   }
 
-  return { scenarioId: scenario.id, finalAnswer, toolTrace, lastWriteEvent, rounds };
+  return { scenarioId: scenario.id, finalAnswer, toolTrace, lastWriteEvent, rounds, postBoundaryBusinessToolCalls };
 }
 
 export function resolveTextEvalScenarios(): {
@@ -569,6 +590,7 @@ export async function runKiroTextBenchmark(): Promise<{ report: KiroTextReport; 
         toolTrace: run.toolTrace,
         finalAnswer: run.finalAnswer,
         lastWriteEvent: run.lastWriteEvent,
+        postBoundaryBusinessToolCalls: run.postBoundaryBusinessToolCalls,
         runtimeError: run.runtimeError,
       });
       results.push(scored);
@@ -579,7 +601,7 @@ export async function runKiroTextBenchmark(): Promise<{ report: KiroTextReport; 
         scenarioId: scenario.id,
         outcome: "fail",
         toolMetrics: { requiredHit: 0, requiredTotal: 0, forbiddenHits: [], unexpectedTools: [], toolOverused: false, duplicateReads: [], totalCalls: 0 },
-        writeSafety: { unresolvedEntityWrites: [], transactionBypass: false, falseSuccessClaim: false, proposalFalseAppliedClaim: false },
+        writeSafety: { unresolvedEntityWrites: [], transactionBypass: false, falseSuccessClaim: false, proposalFalseAppliedClaim: false, postBoundaryBusinessToolCalls: [] },
         finalEmpty: true,
         failures: [],
         runtimeError,
