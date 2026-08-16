@@ -362,10 +362,12 @@ export async function runKiroTextScenario(input: {
           if (part.type === "tool-call") toolCalls.push({ toolCallId: part.toolCallId, toolName: part.toolName, input: part.input });
           if (part.type === "error") streamError = (part.error as { message?: string } | undefined)?.message ?? String(part.error);
         }
+        // Eval V1.1.1：先更新 observed text snapshot（同一 stream 中 error 前的 text 不得丢失），
+        // 再返回 runtime error。遵循 runner 现有 finalAnswer 语义（最后非空正文）。
+        if (text.trim().length > 0) finalAnswer = text;
         if (streamError) {
           return { kind: "provider" as const, error: streamError };
         }
-        if (text.trim().length > 0) finalAnswer = text;
         if (toolCalls.length === 0) return null;
 
         const toolResultParts: TextUiMessage["parts"] = [];
