@@ -735,3 +735,191 @@ html[data-motion-effective="reduced"] .sidebar-profile-header-row,
 html[data-motion-effective="reduced"] .sidebar-profile-credits {
   transition: none !important;
 }
+/* ============================================================
+   Kiro Motion System V1 —— Kiro-scoped Motion Grammar
+   Workspace / Sidecar 各自 timing scope（由 KiroChatSurface root class 注入）。
+   Motion follows state：只消费已有 UI state，不创建业务状态、不阻塞业务。
+   ============================================================ */
+:root {
+  /* 默认值（scope class 未挂载时安全兜底；真实值由 scope 覆盖） */
+  --kiro-motion-control: 120ms;
+  --kiro-motion-structure: 150ms;
+  --kiro-motion-spatial: 220ms;
+  --kiro-motion-popover-enter: 140ms;
+  --kiro-motion-popover-exit: 120ms;
+  --kiro-motion-intro: 320ms;
+  --kiro-motion-composer-intro: 220ms;
+  --kiro-motion-offset: 3px;
+}
+
+.kiro-motion-workspace {
+  --kiro-motion-control: 120ms;
+  --kiro-motion-structure: 150ms;
+  --kiro-motion-spatial: 220ms;
+  --kiro-motion-popover-enter: 140ms;
+  --kiro-motion-popover-exit: 120ms;
+  --kiro-motion-intro: 320ms;
+  --kiro-motion-composer-intro: 220ms;
+  --kiro-motion-offset: 3px;
+}
+
+.kiro-motion-sidecar {
+  --kiro-motion-control: 100ms;
+  --kiro-motion-structure: 130ms;
+  --kiro-motion-spatial: 180ms;
+  --kiro-motion-popover-enter: 120ms;
+  --kiro-motion-popover-exit: 100ms;
+  --kiro-motion-intro: 250ms;
+  --kiro-motion-composer-intro: 130ms;
+  --kiro-motion-offset: 2px;
+}
+
+@layer utilities {
+  /* L1 control：小控件状态微反馈（color / border / 轻 transform），无 opacity 闪烁 */
+  .kiro-control-motion {
+    transition:
+      color var(--kiro-motion-control) var(--ease-standard),
+      background-color var(--kiro-motion-control) var(--ease-standard),
+      border-color var(--kiro-motion-control) var(--ease-standard),
+      transform var(--kiro-motion-control) var(--ease-standard);
+  }
+
+  /* L2 structure settle：完整结构首次落位（opacity .88→1 + 上移 3px，不 scale） */
+  .kiro-structure-settle {
+    animation: kiro-structure-in var(--kiro-motion-structure) var(--ease-standard) both;
+  }
+
+  @keyframes kiro-structure-in {
+    from {
+      opacity: 0.88;
+      transform: translateY(var(--kiro-motion-offset));
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  /* Popover surface（kiro profile）：source-aware 位移 + 轻 scale .985→1；
+     默认面板关闭时 exit 快于 enter，open 时进入时长生效 */
+  .kiro-popover-motion {
+    transition:
+      opacity var(--kiro-motion-popover-exit) var(--ease-standard),
+      transform var(--kiro-motion-popover-exit) var(--ease-standard);
+  }
+  .kiro-popover-motion[data-kiro-open="true"] {
+    transition-duration: var(--kiro-motion-popover-enter), var(--kiro-motion-popover-enter);
+  }
+
+  /* 选中态微 settle（model / agent / reasoning check） */
+  .kiro-check-settle {
+    animation: kiro-check-in var(--kiro-motion-control) var(--ease-standard) both;
+  }
+  @keyframes kiro-check-in {
+    from {
+      opacity: 0.4;
+      transform: scale(0.82);
+    }
+    to {
+      opacity: 1;
+      transform: scale(1);
+    }
+  }
+
+  /* Empty intro：单次 choreography（stagger 由 --kiro-stagger-index 驱动；无 setTimeout） */
+  .kiro-empty-logo-intro {
+    animation: kiro-empty-logo-in var(--kiro-motion-intro) var(--ease-emphasized) both;
+  }
+  .kiro-empty-title-intro {
+    animation: kiro-empty-fade-in var(--kiro-motion-intro) var(--ease-standard) both;
+    animation-delay: 60ms;
+  }
+  .kiro-empty-subtitle-intro {
+    animation: kiro-empty-fade-in var(--kiro-motion-intro) var(--ease-standard) both;
+    animation-delay: 110ms;
+  }
+  .kiro-empty-suggestion-intro {
+    animation: kiro-empty-fade-in var(--kiro-motion-intro) var(--ease-standard) both;
+    animation-delay: calc(150ms + var(--kiro-stagger-index, 0) * 32ms);
+  }
+
+  @keyframes kiro-empty-logo-in {
+    from {
+      opacity: 0;
+      transform: translateY(4px) scale(0.96);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+  }
+  @keyframes kiro-empty-fade-in {
+    from {
+      opacity: 0;
+      transform: translateY(4px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  /* Empty 退场（Contextual Handoff）：semantic close 立即 inert；视觉 ~150ms */
+  .kiro-empty-exit {
+    animation: kiro-empty-out 150ms var(--ease-standard) both;
+  }
+  @keyframes kiro-empty-out {
+    from {
+      opacity: 1;
+      transform: translateY(0);
+    }
+    to {
+      opacity: 0;
+      transform: translateY(-4px);
+    }
+  }
+
+  /* Composer intro：仅本轮 Empty Intro claim 时挂载一次；不禁 pointer interaction */
+  .kiro-composer-intro {
+    animation: kiro-composer-in var(--kiro-motion-composer-intro) var(--ease-standard) both;
+  }
+  @keyframes kiro-composer-in {
+    from {
+      opacity: 0;
+      transform: translateY(6px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  /* Scroll-to-bottom presence：enter 140ms / exit 100ms */
+  .kiro-scroll-control-enter {
+    transition:
+      opacity 140ms var(--ease-standard),
+      transform 140ms var(--ease-standard);
+  }
+  .kiro-scroll-control-exit {
+    transition:
+      opacity 100ms var(--ease-standard),
+      transform 100ms var(--ease-standard);
+  }
+}
+
+/* Reduced Motion：Kiro motion 全部瞬时（最终态直达，无 translate/scale/stagger） */
+html[data-motion-effective="reduced"] .kiro-structure-settle,
+html[data-motion-effective="reduced"] .kiro-empty-logo-intro,
+html[data-motion-effective="reduced"] .kiro-empty-title-intro,
+html[data-motion-effective="reduced"] .kiro-empty-subtitle-intro,
+html[data-motion-effective="reduced"] .kiro-empty-suggestion-intro,
+html[data-motion-effective="reduced"] .kiro-empty-exit,
+html[data-motion-effective="reduced"] .kiro-composer-intro,
+html[data-motion-effective="reduced"] .kiro-check-settle {
+  animation: none !important;
+}
+html[data-motion-effective="reduced"] .kiro-popover-motion,
+html[data-motion-effective="reduced"] .kiro-scroll-control-enter,
+html[data-motion-effective="reduced"] .kiro-scroll-control-exit {
+  transition: none !important;
+}

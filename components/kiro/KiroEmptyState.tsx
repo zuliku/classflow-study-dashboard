@@ -15,11 +15,14 @@ export function KiroEmptyState({
   onSuggestion,
   compact,
   contextSuggestions,
+  playIntro = false,
 }: {
   onSuggestion: (text: string) => void;
   compact?: boolean;
   /** Entry Context 建议节点（无消息时渲染在标题下方） */
   contextSuggestions?: React.ReactNode;
+  /** Motion V1：本轮 empty generation 播放单次 intro（logo/title/subtitle/suggestions stagger） */
+  playIntro?: boolean;
 }) {
   const courses = useAppStore((s) => s.courses);
   const assignments = useAppStore((s) => s.assignments);
@@ -47,38 +50,59 @@ export function KiroEmptyState({
         compact ? "justify-start px-3 pt-10" : "justify-center px-4 py-8"
       )}
     >
-      <KiroMark size={compact ? "md" : "lg"} />
-      <h2 className={compact ? "text-base font-bold text-charcoal mt-4" : "text-lg font-bold text-charcoal mt-5"}>
+      <div data-kiro-empty-logo className={cn(playIntro && "kiro-empty-logo-intro")}>
+        <KiroMark size={compact ? "md" : "lg"} />
+      </div>
+      <h2
+        data-kiro-empty-title
+        className={cn(
+          "text-base font-bold text-charcoal mt-4",
+          compact ? "" : "text-lg mt-5",
+          playIntro && "kiro-empty-title-intro"
+        )}
+      >
         今天想先处理什么？
       </h2>
       {!compact && (
-        <p className="text-xs text-sandrift mt-1.5 max-w-xs">
+        <p
+          data-kiro-empty-subtitle
+          className={cn("text-xs text-sandrift mt-1.5 max-w-xs", playIntro && "kiro-empty-subtitle-intro")}
+        >
           基于你的课表、任务与课程资料
         </p>
       )}
 
-      {contextSuggestions ? (
-        <div className={cn("w-full max-w-md", compact ? "mt-5" : "mt-7")}>{contextSuggestions}</div>
-      ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-7 w-full max-w-md">
-          {suggestions.map((s) => {
-            const Icon = s.icon;
-            return (
-              <button
-                key={s.label}
-                onClick={() => onSuggestion(s.label)}
-                className="ux-press flex items-start gap-2.5 p-3 bg-surface border border-line rounded-xl text-left hover:bg-alabaster hover:border-line-strong transition-colors duration-[var(--motion-fast)] group"
-              >
-                <Icon className="w-4 h-4 text-sandrift group-hover:text-charcoal shrink-0 mt-0.5" />
-                <span className="min-w-0">
-                  <span className="block text-xs font-bold text-charcoal">{s.label}</span>
-                  <span className="block text-[10px] text-sandrift mt-0.5 leading-relaxed">{s.desc}</span>
-                </span>
-              </button>
-            );
-          })}
-        </div>
-      )}
+      <div data-kiro-empty-suggestions>
+        {contextSuggestions ? (
+          <div className={cn("w-full max-w-md", playIntro && "kiro-empty-suggestion-intro", compact ? "mt-5" : "mt-7")}>
+            {contextSuggestions}
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-7 w-full max-w-md">
+            {suggestions.map((s, index) => {
+              const Icon = s.icon;
+              return (
+                <button
+                  key={s.label}
+                  data-kiro-empty-suggestion
+                  style={{ "--kiro-stagger-index": index } as React.CSSProperties}
+                  onClick={() => onSuggestion(s.label)}
+                  className={cn(
+                    "ux-press flex items-start gap-2.5 p-3 bg-surface border border-line rounded-xl text-left hover:bg-alabaster hover:border-line-strong transition-colors duration-[var(--motion-fast)] group",
+                    playIntro && "kiro-empty-suggestion-intro"
+                  )}
+                >
+                  <Icon className="w-4 h-4 text-sandrift group-hover:text-charcoal shrink-0 mt-0.5" />
+                  <span className="min-w-0">
+                    <span className="block text-xs font-bold text-charcoal">{s.label}</span>
+                    <span className="block text-[10px] text-sandrift mt-0.5 leading-relaxed">{s.desc}</span>
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

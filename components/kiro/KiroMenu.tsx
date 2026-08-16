@@ -56,7 +56,7 @@ export function KiroMenuPanel({
   children: React.ReactNode;
 }) {
   return (
-    <DropdownMenuPanel open={open} placement={placement} className={className}>
+    <DropdownMenuPanel open={open} placement={placement} motionProfile="kiro" className={className}>
       {children}
     </DropdownMenuPanel>
   );
