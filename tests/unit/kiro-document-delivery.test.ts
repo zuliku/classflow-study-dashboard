@@ -33,7 +33,7 @@ function ctx() {
   return { turnSnapshot: snapshot, liveWorkspaces: [workspace], livePermissionRules: [] };
 }
 function counters() {
-  return { readCount: 0, mutationCount: 0 };
+  return { readCount: 0, mutationCount: 0, terminalCount: 0 };
 }
 
 const WEEKLY_DRAFT = {

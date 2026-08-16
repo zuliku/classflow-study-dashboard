@@ -130,6 +130,7 @@ describe("Native Adapter IO（factory 路由 + memory bridge）", () => {
         readText: async () => {
           throw "string error";
         },
+        readBytes: async () => new Uint8Array(0),
         readTextPrefix: async () => ({ text: "", truncated: false }),
         createDirectory: async () => "created",
         writeText: async () => {},
@@ -262,6 +263,82 @@ describe("reauthorizeNativeWorkspaceRoot", () => {
     expect(
       useKiroComputerStore.getState().workspaces.find((w) => w.id === ws!.id)?.roots[0].adapterRef
     ).toBe(next!.roots[0].adapterRef);
+  });
+});
+
+describe("V1.1（0.2）：reauthorize 后清理旧 grant", () => {
+  it("单引用：reauthorize → 旧 grant forgotten（Store 先更新，再检查引用）", async () => {
+    const ws = await authorizeNativeWorkspaceFolder();
+    expect(ws).not.toBeNull();
+    const oldRef = ws!.roots[0].adapterRef;
+    const oldGrant = oldRef.slice("native:".length);
+    expect((ctl.grants as Map<string, unknown>).has(oldGrant)).toBe(true);
+    await reauthorizeNativeWorkspaceRoot(ws!, ws!.roots[0].id);
+    // 旧 grant 映射被 forget
+    expect((ctl.grants as Map<string, unknown>).has(oldGrant)).toBe(false);
+    // 新 grant 生效
+    const stored = useKiroComputerStore.getState().workspaces.find((w) => w.id === ws!.id);
+    expect(stored?.roots[0].adapterRef).not.toBe(oldRef);
+  });
+
+  it("多引用（shared grant）：reauthorize 一个 root → 旧 grant 保留", async () => {
+    // 两个 workspace 共享同一 grant
+    const wsA = await authorizeNativeWorkspaceFolder(); // grant_mock_1
+    expect(wsA).not.toBeNull();
+    useKiroComputerStore.getState().addWorkspace({
+      id: "ws-shared",
+      name: "共享",
+      roots: [{ id: "r-s", label: "共享", access: "read-write", adapterRef: wsA!.roots[0].adapterRef }],
+      createdAt: "2026-01-01T00:00:00Z",
+      updatedAt: "2026-01-01T00:00:00Z",
+    });
+    await reauthorizeNativeWorkspaceRoot(wsA!, wsA!.roots[0].id);
+    // 旧 grant 仍被 ws-shared 引用 → 不得 forget
+    expect((ctl.grants as Map<string, unknown>).has("grant_mock_1")).toBe(true);
+  });
+
+  it("取消新 picker → 原 adapterRef / 原 grant 全部不变", async () => {
+    const ws = await authorizeNativeWorkspaceFolder();
+    expect(ws).not.toBeNull();
+    const oldRef = ws!.roots[0].adapterRef;
+    ctl.cancelNextPick();
+    const unchanged = await reauthorizeNativeWorkspaceRoot(ws!, ws!.roots[0].id);
+    expect(unchanged).toBeNull();
+    expect(
+      useKiroComputerStore.getState().workspaces.find((w) => w.id === ws!.id)?.roots[0].adapterRef
+    ).toBe(oldRef);
+    expect((ctl.grants as Map<string, unknown>).has("grant_mock_1")).toBe(true);
+  });
+});
+
+describe("V1.1（0.4）：bridge error message 二次脱敏（固定文案；不把 bridge message 发给模型）", () => {
+  it("bridge 抛 IO_ERROR + 含绝对路径的 message → ComputerError 不含 C:/Users/.../secret.txt", async () => {
+    // 篡改 mock：readText 抛结构化错误但 message 携带绝对路径
+    const bridge = window.classflowDesktop as {
+      filesystem: { readText: (i: unknown) => Promise<unknown> };
+    };
+    bridge.filesystem.readText = async () => {
+      throw { code: "IO_ERROR", message: "EPERM C:\\Users\\Alice\\secret.txt" };
+    };
+    const io = getComputerAdapterForAdapterRef("native:grant_mock_1");
+    const err = await io.readText("a.txt").catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(ComputerError);
+    const message = (err as ComputerError).message;
+    expect(message).toBe("本地文件操作失败"); // 固定 ClassFlow 文案
+    expect(message).not.toContain("C:");
+    expect(message).not.toContain("Users");
+    expect(message).not.toContain("Alice");
+    expect(message).not.toContain("secret.txt");
+    expect(message).not.toContain("EPERM");
+  });
+
+  it("NOT_FOUND / PERMISSION_DENIED 等也使用固定文案", async () => {
+    const io = getComputerAdapterForAdapterRef("native:grant_mock_1");
+    const notFound = await io.readText("ghost.txt").catch((e: unknown) => e);
+    expect((notFound as ComputerError).message).toBe("文件或目录不存在");
+    ctl.revokeGrant("grant_mock_1");
+    const denied = await io.readText("x.txt").catch((e: unknown) => e);
+    expect((denied as ComputerError).message).toBe("本地授权已被拒绝");
   });
 });
 

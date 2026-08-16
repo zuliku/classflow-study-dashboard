@@ -82,6 +82,11 @@ import { executeSearchProjectFile } from "@/lib/ai/tools/read/projectFileSearch"
 import { createVisionTurnRuntimeBudget, VisionTurnRuntimeLedger } from "@/lib/ai/attachments/visionTurnRuntimeBudget";
 import { createVisualProposalRuntime } from "@/lib/ai/visual/receipt";
 import { clearLiveImageSources } from "@/lib/ai/attachments/liveImageRegistry";
+import {
+  getClassFlowDesktopTerminalBridge,
+  isNativeAdapterRef,
+} from "@/lib/desktop/bridge";
+import { cancelAllActiveTerminalExecutions } from "@/lib/ai/computer/terminal/executor";
 import { projectFileSourceId, upsertProjectFileSource } from "@/lib/ai/citations/sources";
 import { getActiveModelName } from "@/lib/ai/providers/registry";
 import { executeKiroWriteTool } from "@/lib/ai/tools/write/executor";
@@ -780,6 +785,10 @@ export function useKiroChat({
         : [],
       // V2.3：Document Authoring Protocol（新 Client 明确发送 2；旧 bundle 缺失 → server 按 legacy V1）
       documentAuthoringVersion: CURRENT_DOCUMENT_AUTHORING_VERSION,
+      // Desktop Terminal V1：preference + runtime availability（冻结于 Send；绝不包含 grantId/adapterRef）
+      terminalEnabled: cs.terminalEnabled,
+      terminalAvailable: getClassFlowDesktopTerminalBridge() !== null,
+      hasNativeRoot: ws ? ws.roots.some((r) => isNativeAdapterRef(r.adapterRef)) : false,
     };
   };
 
@@ -863,7 +872,7 @@ export function useKiroChat({
     }
   }, []);
   // Kiro Computer Agent V1：每 Turn 独立的 Computer 调用限制（read <= 12 / mutation <= 6）
-  const computerCountersRef = useRef({ readCount: 0, mutationCount: 0 });
+  const computerCountersRef = useRef({ readCount: 0, mutationCount: 0, terminalCount: 0 });
 
   // ---- Computer Agent Task Runtime（Part 3）：Task 绑定 owning assistant message 的 toolCallIds ----
   const [tasksState, setTasksState] = useState<Map<string, KiroAgentTask>>(new Map());
@@ -1673,6 +1682,10 @@ export function useKiroChat({
           rootId: request.rootId,
           rootLabel: request.rootLabel,
           relativePath: request.relativePath,
+          // Desktop Terminal V1：deny 也记录命令预览（≤500；无 grantId / absolute path）
+          ...(request.commandPreview !== undefined ? { commandPreview: request.commandPreview } : {}),
+          ...(request.shell !== undefined ? { shell: request.shell } : {}),
+          ...(request.terminalRisk !== undefined ? { risk: request.terminalRisk } : {}),
         });
         emitToolOutput(toolName, toolCallId, {
           ok: false,
@@ -1690,11 +1703,16 @@ export function useKiroChat({
           workspaceId: request.workspaceId,
           rootId: request.rootId,
           relativePath: request.relativePath,
+          ...(request.fingerprint !== undefined ? { fingerprint: request.fingerprint } : {}),
         });
       } else if (decision === "allow-session") {
-        useKiroComputerStore.getState().upsertPermissionRule(sessionRuleForRequest(request));
+        if (request.allowedDecisions.includes("allow-session")) {
+          useKiroComputerStore.getState().upsertPermissionRule(sessionRuleForRequest(request));
+        }
       } else if (decision === "allow-workspace") {
-        useKiroComputerStore.getState().upsertPermissionRule(workspaceRuleForRequest(request));
+        if (request.allowedDecisions.includes("allow-workspace")) {
+          useKiroComputerStore.getState().upsertPermissionRule(workspaceRuleForRequest(request));
+        }
       }
 
       try {
@@ -2307,7 +2325,7 @@ export function useKiroChat({
         initialPdfPages: visionPayload.pageFiles.length,
       });
       // Computer 调用限制 / 新 Turn Task 重置（冻结意图配套；历史 Task 仍保留展示）
-      computerCountersRef.current = { readCount: 0, mutationCount: 0 };
+      computerCountersRef.current = { readCount: 0, mutationCount: 0, terminalCount: 0 };
       activeTaskRef.current = null;
 
       // 附件快照绑定到该 User Turn（发送后 Composer 清空，旧消息不受影响）
@@ -2504,7 +2522,7 @@ export function useKiroChat({
       checkpointsRef.current = new Map();
       tasksRef.current = new Map();
       setTasksState(new Map());
-      computerCountersRef.current = { readCount: 0, mutationCount: 0 };
+      computerCountersRef.current = { readCount: 0, mutationCount: 0, terminalCount: 0 };
       if (!keepRestored) restoredComputerTasksRef.current = new Map();
     },
     [setPendingApproval]
@@ -2792,7 +2810,8 @@ export function useKiroChat({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chat.messages, turnExecution, tasksState]);
 
-  /** Stop：清除 stale approvals（旧 Approval 不能在新会话执行）；awaiting task → cancelled */
+  /** Stop：清除 stale approvals（旧 Approval 不能在新会话执行）；awaiting task → cancelled；
+   *  Desktop Terminal V1：立即 cancel 所有活跃 terminal process tree（bridge.cancel；每个 execution 一次） */
   const handleStop = useCallback(() => {
     pendingExecutionsRef.current.clear();
     oneShotApprovalsRef.current = [];
@@ -2809,6 +2828,7 @@ export function useKiroChat({
       task.completedAt = new Date().toISOString();
       updateTasks();
     }
+    void cancelAllActiveTerminalExecutions();
     void chat.stop();
   }, [chat, setPendingApproval, updateTasks]);
 
@@ -2856,11 +2876,13 @@ export function useKiroChat({
 
 /** Computer change 类型 → capability（Audit metadata 用） */
 function capabilityForChange(change: {
-  resourceType: "directory" | "text" | "document";
-  operation: "create" | "modify" | "move" | "rename" | "delete";
+  resourceType: "directory" | "text" | "document" | "terminal";
+  operation: "create" | "modify" | "move" | "rename" | "delete" | "execute";
 }): ComputerCapability {
   if (change.operation === "move" || change.operation === "rename") return "fs.move";
   if (change.operation === "delete") return "fs.delete";
+  // Desktop Terminal V1：terminal 变更 → shell.execute
+  if (change.resourceType === "terminal" || change.operation === "execute") return "shell.execute";
   if (change.resourceType === "document") return "document.create";
   if (change.resourceType === "directory") return "fs.create";
   return change.operation === "modify" ? "fs.modify" : "fs.create";

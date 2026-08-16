@@ -1,4 +1,4 @@
-﻿import "fake-indexeddb/auto";
+import "fake-indexeddb/auto";
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { executeKiroComputerTool } from "@/lib/ai/computer/executor";
 import { getComputerAdapterForAdapterRef } from "@/lib/ai/computer/adapters/factory";
@@ -38,7 +38,7 @@ function ctx(snap: KiroComputerTurnSnapshot = snapshot, ws: KiroWorkspaceMeta = 
   return { turnSnapshot: snap, liveWorkspaces: [ws], livePermissionRules: rs };
 }
 function counters() {
-  return { readCount: 0, mutationCount: 0 };
+  return { readCount: 0, mutationCount: 0, terminalCount: 0 };
 }
 const AUTO_SNAPSHOT: KiroComputerTurnSnapshot = { ...snapshot, agentMode: "workspace-auto" };
 
@@ -52,6 +52,7 @@ describe("delete_file policy", () => {
     const attempt = await executeKiroComputerTool({
       toolName: "delete_file",
       toolCallId: "call-del-pathonly",
+      oneShotApprovals: [{ approvalId: "a", toolCallId: "call-del-pathonly", capability: "fs.delete", workspaceId: "research", rootId: "output", relativePath: "rootless.txt" }],
       toolInput: { path: "rootless.txt" },
       context: ctx(AUTO_SNAPSHOT),
       counters: counters(),
@@ -121,7 +122,7 @@ describe("delete_file policy", () => {
     expect(await io.stat("x.txt")).not.toBeNull();
   });
 
-  it("Workspace Auto：fs.delete = allow → 直接删除（无 approval、mutation 一次）", async () => {
+  it("Workspace Auto：fs.delete = ask（Desktop Terminal V1 收紧）→ 先 approval，允许后删除", async () => {
     await sandboxWriteText(SANDBOX_REF, "y.txt", "内容");
     const c = counters();
     const attempt = await executeKiroComputerTool({
@@ -131,9 +132,31 @@ describe("delete_file policy", () => {
       context: ctx(AUTO_SNAPSHOT),
       counters: c,
     });
-    expect(attempt.kind).toBe("completed");
-    if (attempt.kind !== "completed") return;
-    expect(attempt.output.ok).toBe(true);
+    // 删除即使在 Workspace Auto 也必须 ask（0 mutation；文件仍在）
+    expect(attempt.kind).toBe("approval-required");
+    expect(c.mutationCount).toBe(0);
+    expect(await getComputerAdapterForAdapterRef(SANDBOX_REF).stat("y.txt")).not.toBeNull();
+    // allow-once → 真正删除
+    const resume = await executeKiroComputerTool({
+      toolName: "delete_file",
+      toolCallId: "call-del-auto",
+      toolInput: { rootId: "output", path: "y.txt" },
+      context: ctx(AUTO_SNAPSHOT),
+      counters: c,
+      oneShotApprovals: [
+        {
+          approvalId: "ap-1",
+          toolCallId: "call-del-auto",
+          capability: "fs.delete",
+          workspaceId: "research",
+          rootId: "output",
+          relativePath: "y.txt",
+        },
+      ],
+    });
+    expect(resume.kind).toBe("completed");
+    if (resume.kind !== "completed") return;
+    expect(resume.output.ok).toBe(true);
     expect(c.mutationCount).toBe(1);
     expect(await getComputerAdapterForAdapterRef(SANDBOX_REF).stat("y.txt")).toBeNull();
   });
@@ -348,10 +371,10 @@ describe("registry：delete_file 工具定义", () => {
     expect(getComputerToolsForMode("plan").some((t) => t.name === "delete_file")).toBe(false);
   });
 
-  it("V2.8：delete_file description 不再声称必须用户确认；提供 single-root inputExample", async () => {
+  it("V2.8/V1.1：delete_file description 表达「按权限模式决定确认」；提供 single-root inputExample", async () => {
     const { getComputerToolsForMode } = await import("@/lib/ai/computer/tools/registry");
     const def = getComputerToolsForMode("workspace-auto").find((t) => t.name === "delete_file");
-    expect(def?.description).not.toContain("必须获得用户确认");
+    expect(def?.description).toContain("确认");
     expect(def?.description).toContain("rootId");
     expect(def?.inputExamples?.some((e) => e.input.path === "本周课表.docx" && e.input.rootId === undefined)).toBe(true);
   });
@@ -373,6 +396,7 @@ describe("V2.8 删除结果语义（filesystem 是成功判据）", () => {
       const attempt = await executeKiroComputerTool({
         toolName: "delete_file",
         toolCallId: "call-del-cf",
+        oneShotApprovals: [{ approvalId: "a", toolCallId: "call-del-cf", capability: "fs.delete", workspaceId: "research", rootId: "output", relativePath: "cleanup-fail.txt" }],
         toolInput: { rootId: "output", path: "cleanup-fail.txt" },
         context: ctx(AUTO_SNAPSHOT),
         counters: counters(),
@@ -400,6 +424,7 @@ describe("V2.8 删除结果语义（filesystem 是成功判据）", () => {
       const attempt = await executeKiroComputerTool({
         toolName: "delete_file",
         toolCallId: "call-del-kf",
+        oneShotApprovals: [{ approvalId: "a", toolCallId: "call-del-kf", capability: "fs.delete", workspaceId: "research", rootId: "output", relativePath: "k-fail.txt" }],
         toolInput: { rootId: "output", path: "k-fail.txt" },
         context: ctx(AUTO_SNAPSHOT),
         counters: counters(),
@@ -427,6 +452,7 @@ describe("V2.8 删除结果语义（filesystem 是成功判据）", () => {
         toolInput: { rootId: "output", path: "io-fail.txt" },
         context: ctx(AUTO_SNAPSHOT),
         counters: counters(),
+        oneShotApprovals: [{ approvalId: "a", toolCallId: "call-del-io", capability: "fs.delete", workspaceId: "research", rootId: "output", relativePath: "io-fail.txt" }],
       });
       expect(attempt.kind).toBe("completed");
       if (attempt.kind !== "completed") return;

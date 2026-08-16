@@ -29,8 +29,8 @@ export interface KiroAgentTaskStep {
 export interface KiroComputerChange {
   id: string;
   toolCallId: string;
-  operation: "create" | "modify" | "move" | "rename" | "delete";
-  resourceType: "directory" | "text" | "document";
+  operation: "create" | "modify" | "move" | "rename" | "delete" | "execute";
+  resourceType: "directory" | "text" | "document" | "terminal";
   workspaceId: string;
   workspaceLabel: string;
   rootId: string;
@@ -112,6 +112,8 @@ export function toolStepLabel(toolName: string): string {
       return "正在移动文件";
     case "update_document":
       return "正在更新文档";
+    case "run_terminal_command":
+      return "正在运行终端命令";
     default:
       return "正在执行操作";
   }
@@ -125,7 +127,9 @@ export function isComputerMutationTool(toolName: string): boolean {
     toolName === "create_document" ||
     toolName === "rename_file" ||
     toolName === "move_file" ||
-    toolName === "update_document"
+    toolName === "update_document" ||
+    // Desktop Terminal V1：side-effectful（regenerate / replay guard 不能自动重放）
+    toolName === "run_terminal_command"
   );
 }
 

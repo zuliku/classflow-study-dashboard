@@ -124,7 +124,7 @@ describe("executor approval behavior", () => {
   const AUTO: KiroComputerTurnSnapshot = { ...snapshot, agentMode: "workspace-auto" };
 
   it("session rule 满足 ask → 执行（无需 one-shot）", async () => {
-    const c = { readCount: 0, mutationCount: 0 };
+    const c = { readCount: 0, mutationCount: 0, terminalCount: 0 };
     await executeKiroComputerTool({
       toolName: "create_text_file",
       toolCallId: "call_seed",
@@ -147,7 +147,7 @@ describe("executor approval behavior", () => {
   });
 
   it("workspace rule（persistent）满足同 capability 其它路径 → 执行", async () => {
-    const c = { readCount: 0, mutationCount: 0 };
+    const c = { readCount: 0, mutationCount: 0, terminalCount: 0 };
     await executeKiroComputerTool({
       toolName: "create_text_file",
       toolCallId: "call_seed2",
@@ -170,7 +170,7 @@ describe("executor approval behavior", () => {
   });
 
   it("explicit deny 不能 approval（即使有规则 + one-shot）", async () => {
-    const c = { readCount: 0, mutationCount: 0 };
+    const c = { readCount: 0, mutationCount: 0, terminalCount: 0 };
     const deny: ComputerPermissionRule = {
       id: "hard-deny",
       effect: "deny",
@@ -203,7 +203,7 @@ describe("executor approval behavior", () => {
   });
 
   it("hard deny capability 在任何模式下都是 deny（不能 approval）", async () => {
-    const c = { readCount: 0, mutationCount: 0 };
+    const c = { readCount: 0, mutationCount: 0, terminalCount: 0 };
     // fs.delete 是 hard deny：即使规则允许 + one-shot，executor 侧没有对应工具；
     // policy 层验证 deny 恒生效
     const attempt = await executeKiroComputerTool({

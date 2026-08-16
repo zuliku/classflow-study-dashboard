@@ -22,9 +22,16 @@ export interface ComputerApprovalRequest {
   resourceLabel: string;
   description: string;
   allowedDecisions: ComputerApprovalDecision[];
+  /** Desktop Terminal V1：allow-once 精确绑定（shell/rootId/cwd/command fingerprint） */
+  fingerprint?: string;
+  /** 终端命令预览（≤500；Audit deny 路径记录用；不存完整命令/输出） */
+  commandPreview?: string;
+  shell?: "powershell" | "cmd";
+  /** Terminal risk（normal/destructive/privileged；blocked 不会走到 approval） */
+  terminalRisk?: "normal" | "destructive" | "privileged";
 }
 
-/** allow-once：exact 匹配（toolCallId + capability + workspace + root + relativePath），一次消费 */
+/** allow-once：exact 匹配（toolCallId + capability + workspace + root + relativePath [+ fingerprint]），一次消费 */
 export interface ComputerOneShotApproval {
   approvalId: string;
   toolCallId: string;
@@ -32,6 +39,8 @@ export interface ComputerOneShotApproval {
   workspaceId: string;
   rootId?: string;
   relativePath?: string;
+  /** Desktop Terminal V1：terminal approval 必须指纹精确匹配 */
+  fingerprint?: string;
 }
 
 export const COMPUTER_APPROVAL_DECISIONS: ComputerApprovalDecision[] = [
@@ -80,6 +89,11 @@ export function buildApprovalRequest(input: {
   relativePath?: string;
   resourceLabel: string;
   description: string;
+  fingerprint?: string;
+  commandPreview?: string;
+  shell?: "powershell" | "cmd";
+  risk?: "normal" | "destructive" | "privileged";
+  allowedDecisions?: ComputerApprovalDecision[];
 }): ComputerApprovalRequest {
   return {
     id: input.id,
@@ -94,16 +108,20 @@ export function buildApprovalRequest(input: {
     relativePath: input.relativePath,
     resourceLabel: input.resourceLabel,
     description: input.description,
-    allowedDecisions: COMPUTER_APPROVAL_DECISIONS,
+    allowedDecisions: input.allowedDecisions ?? COMPUTER_APPROVAL_DECISIONS,
+    ...(input.fingerprint !== undefined ? { fingerprint: input.fingerprint } : {}),
+    ...(input.commandPreview !== undefined ? { commandPreview: input.commandPreview } : {}),
+    ...(input.shell !== undefined ? { shell: input.shell } : {}),
+    ...(input.risk !== undefined ? { terminalRisk: input.risk } : {}),
   };
 }
 
-/** allow-once exact match（同 toolCall/capability/workspace/root/path 才匹配；不匹配其它文件/调用/工作区） */
+/** allow-once exact match（同 toolCall/capability/workspace/root/path 才匹配；terminal 额外指纹精确匹配） */
 export function oneShotApprovalMatches(
   oneShot: ComputerOneShotApproval,
   request: Pick<
     ComputerApprovalRequest,
-    "toolCallId" | "capability" | "workspaceId" | "rootId" | "relativePath"
+    "toolCallId" | "capability" | "workspaceId" | "rootId" | "relativePath" | "fingerprint"
   >
 ): boolean {
   if (oneShot.toolCallId !== request.toolCallId) return false;
@@ -111,6 +129,10 @@ export function oneShotApprovalMatches(
   if (oneShot.workspaceId !== request.workspaceId) return false;
   if ((oneShot.rootId ?? undefined) !== (request.rootId ?? undefined)) return false;
   if ((oneShot.relativePath ?? undefined) !== (request.relativePath ?? undefined)) return false;
+  // Desktop Terminal V1：任何一侧有 fingerprint → 必须精确匹配（allow-once 不能批准其它命令）
+  if (oneShot.fingerprint !== undefined || request.fingerprint !== undefined) {
+    if (oneShot.fingerprint !== request.fingerprint) return false;
+  }
   return true;
 }
 

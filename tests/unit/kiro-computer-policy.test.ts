@@ -54,24 +54,30 @@ describe("agent mode defaults", () => {
     expect(prep("guided", "fs.delete", { rootId: "output", path: "a.md" }).effect).toBe("ask");
   });
 
-  it("workspace-auto：read/create/modify/move/delete 全部 allow（V2.7 Workspace 内 Full Access）", () => {
+  it("workspace-auto：read/create/modify/move allow；fs.delete = ask（Desktop Terminal V1 收紧）", () => {
     expect(prep("workspace-auto", "fs.read", { rootId: "output", path: "a.md" }).effect).toBe("allow");
     expect(prep("workspace-auto", "fs.create", { rootId: "output", path: "a.md" }).effect).toBe("allow");
     expect(prep("workspace-auto", "fs.modify", { rootId: "output", path: "a.md" }).effect).toBe("allow");
     expect(prep("workspace-auto", "fs.move", { rootId: "output", path: "a.md" }).effect).toBe("allow");
-    expect(prep("workspace-auto", "fs.delete", { rootId: "output", path: "a.md" }).effect).toBe("allow");
+    expect(prep("workspace-auto", "fs.delete", { rootId: "output", path: "a.md" }).effect).toBe("ask");
     expect(prep("workspace-auto", "document.create", { rootId: "output", path: "a.docx" }).effect).toBe("allow");
     expect(prep("workspace-auto", "document.modify", { rootId: "output", path: "a.docx" }).effect).toBe("allow");
   });
 });
 
 describe("hard deny", () => {
-  it("V1 hard deny 无视 agent mode（仅系统级能力；fs.delete 不是 hard deny）", () => {
+  it("Desktop Terminal V1：hard deny = app.open/app.reveal/network.access；shell.execute 不再是 hard deny（受 Policy/Risk Gate 控制）", () => {
     for (const mode of ["plan", "guided", "workspace-auto"] as KiroAgentMode[]) {
-      for (const cap of ["app.open", "app.reveal", "shell.execute", "network.access"] as const) {
+      for (const cap of ["app.open", "app.reveal", "network.access"] as const) {
         expect(prep(mode, cap, { rootId: "output", path: "a.md" }).effect).toBe("deny");
       }
     }
+  });
+
+  it("shell.execute 模式默认值：Plan deny / Guided ask / Workspace Auto allow（Risk Gate 再收紧）", () => {
+    expect(prep("plan", "shell.execute", { rootId: "output", path: "" }).effect).toBe("deny");
+    expect(prep("guided", "shell.execute", { rootId: "output", path: "" }).effect).toBe("ask");
+    expect(prep("workspace-auto", "shell.execute", { rootId: "output", path: "" }).effect).toBe("allow");
   });
 
   it("read-only root：mutation hard deny（任何 mode；Workspace Auto 也不放开）", () => {

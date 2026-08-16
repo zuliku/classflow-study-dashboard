@@ -254,6 +254,10 @@ function changeSummary(c: { operation: string; displayName: string; fromRelative
   if (c.operation === "delete") {
     return `删除 ${c.displayName}`;
   }
+  // Desktop Terminal V1：命令执行（displayName = 命令预览）
+  if (c.operation === "execute") {
+    return `运行 ${c.displayName}`;
+  }
   const name = c.operation === "create" ? `创建 ${c.displayName}` : `修改 ${c.displayName}`;
   return c.revision !== undefined ? `${name} · v${c.revision}` : name;
 }

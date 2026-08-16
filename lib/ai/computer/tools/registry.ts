@@ -23,6 +23,7 @@ import {
   updateDocumentV2ModelSchema,
   searchWorkspaceKnowledgeSchema,
   retrieveWorkspaceContextSchema,
+  runTerminalCommandSchema,
 } from "@/lib/ai/computer/tools/schemas";
 
 export interface ComputerToolModelContract {
@@ -137,7 +138,7 @@ export const COMPUTER_MUTATION_TOOLS: ComputerToolDefinition[] = [
   {
     name: "delete_file",
     description:
-      "删除工作区中的单个文件。是否需要用户确认由当前权限模式和权限规则决定。不支持目录、递归、glob。单 root Workspace 可省略 rootId；多 root Workspace 必须使用 list_workspace_roots / list_directory 返回的 rootId。删除成功后如返回 warnings，说明文件已删除但记录同步稍延迟。",
+      "删除工作区中的单个文件。是否需要用户确认由当前权限模式和权限规则决定（授权范围内自动模式下删除仍会请求确认）。不支持目录、递归、glob。单 root Workspace 可省略 rootId；多 root Workspace 必须使用 list_workspace_roots / list_directory 返回的 rootId。删除成功后如返回 warnings，说明文件已删除但记录同步稍延迟。",
     schema: deleteFileSchema,
     capability: "fs.delete",
     mutation: true,
@@ -152,6 +153,25 @@ export const COMPUTER_MUTATION_TOOLS: ComputerToolDefinition[] = [
           rootId: "root-xxx",
           path: "research/report.docx",
         },
+      },
+    ],
+  },
+  {
+    name: "run_terminal_command",
+    description:
+      "在当前授权的桌面本地工作区中运行 PowerShell 或命令提示符命令（command runner，非交互终端）。用于需要真实 CLI 的操作：git（status/diff/log/add/commit）、npm/pnpm install/test/run、Python 脚本、pytest、构建与格式化（tsc/eslint/prettier）、编译器、工作区内的开发任务。默认工作目录 = 当前授权 Workspace Root（cwd 为相对路径）。普通文件读取/修改请优先使用结构化文件工具（read_text/create_text_file/patch_text_file 等），它们有更严格的沙箱与撤销能力。执行时间默认 30 秒（最多 120 秒）。删除类命令（Remove-Item/del/git clean/git reset --hard 等）与系统级命令会请求用户确认；需要管理员权限或使用 -EncodedCommand 等隐藏执行方式的命令会被拒绝。不要通过终端绕过文件权限、用户确认或路径限制，不要自行请求提权，不要用长命令拼接多个不相关的危险操作来规避审批。",
+    schema: runTerminalCommandSchema,
+    capability: "shell.execute",
+    mutation: true,
+    inputExamples: [
+      {
+        input: { shell: "powershell", cwd: "", command: "git status" },
+      },
+      {
+        input: { shell: "powershell", cwd: "frontend", command: "npm test" },
+      },
+      {
+        input: { shell: "cmd", cwd: "", command: "python script.py" },
       },
     ],
   },

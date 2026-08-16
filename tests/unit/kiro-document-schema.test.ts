@@ -1,4 +1,4 @@
-﻿import "fake-indexeddb/auto";
+import "fake-indexeddb/auto";
 import { describe, it, expect, beforeEach } from "vitest";
 import { z, toJSONSchema } from "zod";
 import {
@@ -34,7 +34,7 @@ const workspace: KiroWorkspaceMeta = {
 };
 
 const ctx = () => ({ turnSnapshot: AUTO, liveWorkspaces: [workspace], livePermissionRules: [] });
-const counters = () => ({ readCount: 0, mutationCount: 0 });
+const counters = () => ({ readCount: 0, mutationCount: 0, terminalCount: 0 });
 
 /** canonical KiroDocument（内部 Source of Truth；renderer/Artifact 消费；Draft 由 normalize 产出） */
 const CANONICAL_FULL_DOC = {

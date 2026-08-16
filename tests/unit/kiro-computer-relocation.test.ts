@@ -1,4 +1,4 @@
-﻿import "fake-indexeddb/auto";
+import "fake-indexeddb/auto";
 import { describe, it, expect, beforeEach } from "vitest";
 import { executeKiroComputerTool } from "@/lib/ai/computer/executor";
 import { isValidRenameBasename } from "@/lib/ai/computer/executor";
@@ -57,7 +57,7 @@ function ctx(ws: KiroWorkspaceMeta = workspace, rules: ComputerPermissionRule[] 
 }
 
 function counters() {
-  return { readCount: 0, mutationCount: 0 };
+  return { readCount: 0, mutationCount: 0, terminalCount: 0 };
 }
 
 async function clean() {

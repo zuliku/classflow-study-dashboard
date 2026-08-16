@@ -27,7 +27,15 @@ export type ComputerErrorCode =
   | "ARTIFACT_NOT_FOUND"
   | "ARTIFACT_NOT_EDITABLE"
   | "ARTIFACT_REVISION_CONFLICT"
-  | "ARTIFACT_UNSUPPORTED_OPERATION";
+  | "ARTIFACT_UNSUPPORTED_OPERATION"
+  // Desktop Terminal V1（固定文案；绝不携带 bridge 原始异常 / 路径）
+  | "TERMINAL_UNAVAILABLE"
+  | "TERMINAL_PERMISSION_DENIED"
+  | "TERMINAL_TIMEOUT"
+  | "TERMINAL_EXECUTION_FAILED"
+  | "TERMINAL_CANCELLED"
+  | "TERMINAL_COMMAND_BLOCKED"
+  | "TERMINAL_NATIVE_WORKSPACE_REQUIRED";
 
 export class ComputerError extends Error {
   readonly code: ComputerErrorCode;

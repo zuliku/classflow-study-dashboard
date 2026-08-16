@@ -6,6 +6,8 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import {
   isClassFlowDesktopRuntime,
   getClassFlowDesktopBridge,
+  getClassFlowDesktopTerminalBridge,
+  hasClassFlowDesktopTerminal,
   isValidNativeGrantId,
   isNativeAdapterRef,
   nativeGrantIdFromAdapterRef,
@@ -50,6 +52,42 @@ describe("isClassFlowDesktopRuntime / getClassFlowDesktopBridge", () => {
       filesystem: { list: () => {} },
     };
     expect(isClassFlowDesktopRuntime()).toBe(false);
+  });
+
+  it("V1.1（0.1）：filesystem 缺 readBytes → bridge invalid（isClassFlowDesktopRuntime false）", () => {
+    // 完整方法集（含 readBytes）→ valid
+    installMemoryDesktopBridgeMock();
+    expect(isClassFlowDesktopRuntime()).toBe(true);
+    delete (window as unknown as Record<string, unknown>).classflowDesktop;
+    // 去掉 readBytes → invalid
+    const full = installMemoryDesktopBridgeMock();
+    const b = window.classflowDesktop as unknown as { filesystem: Record<string, unknown> };
+    delete b.filesystem.readBytes;
+    expect(isClassFlowDesktopRuntime()).toBe(false);
+    expect(getClassFlowDesktopBridge()).toBeNull();
+    // filesystem-only（无 terminal）仍 valid（V1.1：terminal 是 optional capability）
+    delete (window as unknown as Record<string, unknown>).classflowDesktop;
+    installMemoryDesktopBridgeMock();
+    delete (window.classflowDesktop as { terminal?: unknown }).terminal;
+    expect(isClassFlowDesktopRuntime()).toBe(true);
+    expect(hasClassFlowDesktopTerminal()).toBe(false);
+  });
+
+  it("V1.1：terminal bridge 检测（version=1 完整 → 可用；version=2 / 缺 execute / 缺 cancel → 不可用）", () => {
+    installMemoryDesktopBridgeMock();
+    expect(hasClassFlowDesktopTerminal()).toBe(true);
+    expect(getClassFlowDesktopTerminalBridge()?.version).toBe(1);
+    // version=2 → 不可用
+    (window.classflowDesktop as { terminal: { version: number } }).terminal.version = 2;
+    expect(hasClassFlowDesktopTerminal()).toBe(false);
+    // 缺 execute
+    (window.classflowDesktop as { terminal: { version: number; execute?: unknown } }).terminal.version = 1;
+    delete (window.classflowDesktop as { terminal: { execute?: unknown } }).terminal.execute;
+    expect(hasClassFlowDesktopTerminal()).toBe(false);
+    // 缺 cancel
+    (window.classflowDesktop as { terminal: { execute: unknown; cancel?: unknown } }).terminal.execute = async () => ({});
+    delete (window.classflowDesktop as { terminal: { cancel?: unknown } }).terminal.cancel;
+    expect(hasClassFlowDesktopTerminal()).toBe(false);
   });
 });
 

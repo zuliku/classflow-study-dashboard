@@ -101,6 +101,46 @@ export interface ClassFlowDesktopBridgeV1 {
   version: typeof CLASSFLOW_DESKTOP_BRIDGE_VERSION;
   platform: ClassFlowDesktopPlatform;
   filesystem: ClassFlowDesktopFilesystemBridgeV1;
+  /**
+   * Optional Capability（V1.1）：Terminal Bridge。
+   * Desktop Runtime 可以只有 filesystem（filesystem-only → 依旧 valid；terminal 不可用）。
+   * Terminal 自己拥有 version: 1（版本协商独立于 Bridge version）。
+   */
+  terminal?: ClassFlowDesktopTerminalBridgeV1;
+}
+
+export type ClassFlowDesktopTerminalShell = "powershell" | "cmd";
+
+/**
+ * Desktop Terminal Bridge V1（Command Runner；不是 interactive PTY）。
+ *
+ * 安全契约（详见 docs/desktop-filesystem-bridge.md §Terminal）：
+ * - 只接受 grantId + relative cwd；绝不接受 absolute cwd（Runtime 负责 grantId → native root 映射）。
+ * - Runtime MUST：每次执行验证 grant granted；cwd canonicalize 后必须位于 granted root 内；
+ *   cancel/timeout 必须终止整个 process tree；stdout/stderr bounded；non-interactive；
+ *   不 elevation / 不管理员 / 不开 shell window；错误不含 absolute path / stack。
+ */
+export interface ClassFlowDesktopTerminalBridgeV1 {
+  version: 1;
+  execute(input: {
+    /** opaque execution id（Web 生成；cancel 用） */
+    executionId: string;
+    shell: ClassFlowDesktopTerminalShell;
+    grantId: string;
+    /** relative cwd（"" = root） */
+    cwd: string;
+    command: string;
+    timeoutMs: number;
+  }): Promise<{
+    exitCode: number | null;
+    stdout: string;
+    stderr: string;
+    timedOut: boolean;
+    durationMs: number;
+    stdoutTruncated: boolean;
+    stderrTruncated: boolean;
+  }>;
+  cancel(input: { executionId: string }): Promise<void>;
 }
 
 declare global {

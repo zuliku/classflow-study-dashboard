@@ -110,4 +110,14 @@ export interface KiroComputerTurnSnapshot {
   }>;
   /** V2.3：Document Authoring Protocol Version（1 | 2；缺失 = legacy V1）。 */
   documentAuthoringVersion?: 1 | 2;
+  /**
+   * Desktop Terminal V1（runtime facts，冻结于 Send 边界）：
+   * terminalEnabled = 用户偏好（持久化）；terminalAvailable = Desktop Terminal Bridge 存在
+   * （live runtime）；hasNativeRoot = 冻结 Workspace 至少一个 native:<grant> root。
+   * 三者同时满足才向模型暴露 run_terminal_command（server tool list 条件过滤）。
+   * 绝不包含 grantId / adapterRef / absolute path。
+   */
+  terminalEnabled?: boolean;
+  terminalAvailable?: boolean;
+  hasNativeRoot?: boolean;
   }

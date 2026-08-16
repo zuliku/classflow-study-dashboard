@@ -18,7 +18,11 @@ import {
   forgetBrowserWorkspaceGrant,
   BrowserGrantStatus,
 } from "@/lib/ai/computer/workspace/grants";
-import { isNativeAdapterRef, isClassFlowDesktopRuntime } from "@/lib/desktop/bridge";
+import {
+  isNativeAdapterRef,
+  isClassFlowDesktopRuntime,
+  hasClassFlowDesktopTerminal,
+} from "@/lib/desktop/bridge";
 import {
   authorizeLocalFolder,
   resolveWorkspaceRootAvailability,
@@ -69,15 +73,20 @@ export function KiroAgentSettings() {
     computerEnabled,
     activeWorkspaceId,
     agentMode,
+    terminalEnabled,
     workspaces,
     setComputerEnabled,
     setActiveWorkspaceId,
     setAgentMode,
+    setTerminalEnabled,
     addWorkspace,
   } = useKiroComputerStore();
 
   const confirmRequest = useConfirmStore((s) => s.confirm);
   const pushToast = useToastStore((s) => s.pushToast);
+
+  // Desktop Terminal V1：仅在 Desktop runtime + terminal bridge 可用时显示（网页版完全不出现）
+  const desktopTerminalAvailable = isClassFlowDesktopRuntime() && hasClassFlowDesktopTerminal();
 
   const [grantStatus, setGrantStatus] = useState<Record<string, BrowserGrantStatus>>({});
   // Native V1：root 运行时可用性（runtime facts；不持久化）
@@ -180,6 +189,21 @@ export function KiroAgentSettings() {
     setComputerEnabled(true);
   };
 
+  /** Desktop Terminal V1：开启需显式确认（终端拥有比普通文件工具更高的系统权限） */
+  const handleToggleTerminal = (enabled: boolean) => {
+    if (!enabled) {
+      setTerminalEnabled(false);
+      return;
+    }
+    confirmRequest({
+      title: "允许 Kiro 使用终端？",
+      description:
+        "终端命令可能修改文件、安装依赖、运行程序，或访问工作区之外的系统资源。在「授权范围内自动」模式下，普通命令可能无需再次确认；删除等危险操作仍会请求你的许可。",
+      confirmLabel: "允许",
+      onConfirm: () => setTerminalEnabled(true),
+    });
+  };
+
   /**
    * 删除 Workspace（Settings 显式操作；不是 Agent capability）：
    * 先清 Artifact metadata/source → 快照 remaining → 逻辑删除 → 对 removed 的 unique adapterRef：
@@ -264,7 +288,7 @@ export function KiroAgentSettings() {
           <SettingsRow
             settingId="kiro-agent-mode"
             title="自动执行级别"
-            description="决定工作区内允许的操作等级；「授权范围内自动」自动执行创建、修改、移动和删除，但永不扩大授权目录、不含终端/网络等系统能力。"
+            description="决定工作区内允许的操作等级；「授权范围内自动」自动执行创建、修改和移动，可自动运行普通终端命令，但删除及高风险命令仍会请求确认，且永不扩大授权目录、不含网络/系统级能力。"
           >
             <SettingsSegmentedControl<KiroAgentMode>
               value={agentMode}
@@ -273,6 +297,21 @@ export function KiroAgentSettings() {
               ariaLabel="自动执行级别"
             />
           </SettingsRow>
+
+          {/* Desktop Terminal V1：仅 Desktop runtime + terminal bridge 可用时显示（网页版完全不出现） */}
+          {desktopTerminalAvailable && (
+            <SettingsRow
+              settingId="kiro-terminal-enabled"
+              title="允许 Kiro 使用终端"
+              description="允许 Kiro 运行 PowerShell 或命令提示符。「授权范围内自动」模式下普通命令可自动执行；删除等危险操作仍会请求确认。"
+            >
+              <SettingsToggle
+                checked={terminalEnabled}
+                onChange={handleToggleTerminal}
+                label="允许 Kiro 使用终端"
+              />
+            </SettingsRow>
+          )}
 
           <SettingsRow
             settingId="kiro-agent-workspace"

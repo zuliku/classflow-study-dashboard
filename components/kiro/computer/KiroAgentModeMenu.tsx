@@ -11,9 +11,13 @@ const MODE_COPY: Record<KiroAgentMode, { label: string; description: string }> =
   guided: { label: "受控", description: "可创建；修改、移动和删除前询问" },
   "workspace-auto": {
     label: "工作区自动",
-    description: "授权 Workspace 内文件操作自动执行；不包含终端、网络与工作区外操作",
+    description: "授权范围内自动执行文件操作和普通终端命令；删除等危险操作仍需确认",
   },
 };
+
+/** Desktop Terminal V1（Part 8/19）：Workspace Auto 在聊天框中用 danger token 警示（只改图标/文字，不染红整个聊天框） */
+const AUTO_DANGER_CLASSES = "text-danger bg-danger/5 border-danger/25";
+const AUTO_OPEN_DANGER_CLASSES = "bg-danger/10 text-danger border-danger/30";
 
 /** Agent Mode 选择（仅 Computer Agent ON 时显示；Composer 只切 preset，细粒度规则在 Settings） */
 export function KiroAgentModeMenu({
@@ -29,6 +33,7 @@ export function KiroAgentModeMenu({
   iconOnly?: boolean;
 }) {
   const [open, setOpen] = React.useState(false);
+  const isAuto = mode === "workspace-auto";
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <button
@@ -38,9 +43,17 @@ export function KiroAgentModeMenu({
         disabled={disabled}
         title={MODE_COPY[mode].label + "：" + MODE_COPY[mode].description}
         data-mode-open={open}
+        data-mode-danger={isAuto ? "1" : undefined}
         className={cn(
           "flex items-center h-9 rounded-xl text-[11px] font-semibold transition-colors disabled:opacity-40 disabled:cursor-not-allowed",
-          iconOnly ? cn("w-9 justify-center", open ? "bg-alabaster text-charcoal" : "text-sandrift hover:bg-alabaster hover:text-charcoal") : cn("gap-1 px-2.5", open ? "bg-alabaster text-charcoal border border-line-strong" : "text-sandrift border border-transparent hover:bg-alabaster hover:text-charcoal")
+          // Workspace Auto：icon + text 使用 danger semantic token（轻 red tint；不闪烁/不动画）
+          isAuto
+            ? iconOnly
+              ? cn("w-9 justify-center", open ? AUTO_OPEN_DANGER_CLASSES : cn("text-danger hover:bg-danger/5", AUTO_DANGER_CLASSES))
+              : cn("gap-1 px-2.5", open ? AUTO_OPEN_DANGER_CLASSES : cn("text-danger", AUTO_DANGER_CLASSES))
+            : iconOnly
+              ? cn("w-9 justify-center", open ? "bg-alabaster text-charcoal" : "text-sandrift hover:bg-alabaster hover:text-charcoal")
+              : cn("gap-1 px-2.5", open ? "bg-alabaster text-charcoal border border-line-strong" : "text-sandrift border border-transparent hover:bg-alabaster hover:text-charcoal")
         )}
       >
         <ShieldCheckIcon />

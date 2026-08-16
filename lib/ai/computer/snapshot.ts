@@ -50,6 +50,10 @@ export function validateComputerTurnSnapshot(value: unknown): KiroComputerTurnSn
     ...(v.documentAuthoringVersion === 1 || v.documentAuthoringVersion === 2
       ? { documentAuthoringVersion: v.documentAuthoringVersion }
       : {}),
+    // Desktop Terminal V1：只接受 boolean（缺失 = false）；非法值 → 视为 false（不拒绝快照）
+    ...(typeof v.terminalEnabled === "boolean" ? { terminalEnabled: v.terminalEnabled } : {}),
+    ...(typeof v.terminalAvailable === "boolean" ? { terminalAvailable: v.terminalAvailable } : {}),
+    ...(typeof v.hasNativeRoot === "boolean" ? { hasNativeRoot: v.hasNativeRoot } : {}),
   };
 }
 

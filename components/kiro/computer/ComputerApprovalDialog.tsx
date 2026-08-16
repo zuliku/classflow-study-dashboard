@@ -69,7 +69,9 @@ export function ComputerApprovalDialog({
             <ShieldAlert className="w-4 h-4 text-charcoal" aria-hidden="true" />
           </span>
           <div className="min-w-0 flex-1">
-            <h2 className="text-sm font-bold text-charcoal">Kiro 请求文件权限</h2>
+            <h2 className="text-sm font-bold text-charcoal">
+              {request?.capability === "shell.execute" ? "Kiro 想运行终端命令" : "Kiro 请求文件权限"}
+            </h2>
             {request && (
               <p className="text-xs font-semibold text-satin-grey mt-1 leading-relaxed">
                 {request.description}
@@ -80,20 +82,43 @@ export function ComputerApprovalDialog({
 
         {request && (
           <div className="rounded-xl border border-line bg-[#F7F5F5] p-3 space-y-1.5">
-            <p className="text-[11px] text-charcoal font-bold">
-              {request.resourceLabel}
-            </p>
-            <p className="text-[10px] text-sandrift">
-              {request.workspaceLabel}
-              {request.rootLabel ? ` / ${request.rootLabel}` : ""}
-            </p>
-            <p className="text-[10px] text-sandrift">
-              {request.capability === "fs.modify" || request.capability === "document.modify"
-                ? "修改操作"
-                : request.capability === "fs.create" || request.capability === "document.create"
-                  ? "创建操作"
-                  : "文件操作"}
-            </p>
+            {request.capability === "shell.execute" ? (
+              <>
+                {/* Desktop Terminal V1：shell / cwd / 命令默认可见（绝不藏在「查看详情」） */}
+                <p className="text-[11px] text-charcoal font-bold">
+                  {request.shell === "cmd" ? "命令提示符" : "PowerShell"}
+                  {request.relativePath ? ` · 工作目录 /${request.relativePath}` : " · 工作目录 /"}
+                </p>
+                <p className="text-[10px] text-sandrift">{request.workspaceLabel}</p>
+                <pre className="whitespace-pre-wrap break-words font-mono text-[11px] leading-relaxed text-charcoal bg-white border border-line rounded-lg px-2 py-1.5 max-h-40 overflow-y-auto">
+                  {request.commandPreview ?? request.resourceLabel}
+                </pre>
+                {request.terminalRisk === "destructive" && (
+                  <p className="text-[10px] font-semibold text-danger">
+                    此命令可能删除或不可逆修改文件。
+                  </p>
+                )}
+              </>
+            ) : (
+              <>
+                <p className="text-[11px] text-charcoal font-bold">
+                  {request.resourceLabel}
+                </p>
+                <p className="text-[10px] text-sandrift">
+                  {request.workspaceLabel}
+                  {request.rootLabel ? ` / ${request.rootLabel}` : ""}
+                </p>
+                <p className="text-[10px] text-sandrift">
+                  {request.capability === "fs.modify" || request.capability === "document.modify"
+                    ? "修改操作"
+                    : request.capability === "fs.create" || request.capability === "document.create"
+                      ? "创建操作"
+                      : request.capability === "fs.delete"
+                        ? "删除操作"
+                        : "文件操作"}
+                </p>
+              </>
+            )}
           </div>
         )}
 

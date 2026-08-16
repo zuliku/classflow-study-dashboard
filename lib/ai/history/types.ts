@@ -66,8 +66,8 @@ export interface PersistedComputerTaskView {
   title: string;
   status: "completed" | "failed" | "cancelled" | "undone" | "undo_failed";
   changes: Array<{
-    operation: "create" | "modify" | "move" | "rename" | "delete";
-    resourceType: "directory" | "text" | "document";
+    operation: "create" | "modify" | "move" | "rename" | "delete" | "execute";
+    resourceType: "directory" | "text" | "document" | "terminal";
     displayName: string;
     workspaceLabel: string;
     rootLabel: string;

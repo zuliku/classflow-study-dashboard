@@ -76,15 +76,19 @@ function modeLabel(mode: KiroAgentMode): string {
 }
 
 /**
- * Policy 求值（Spec §17 优先级；V2.7：fs.delete 回归普通 pipeline）：
- * 1. Hard deny（app.open / app.reveal / shell.execute / network.access）
+ * Policy 求值（Spec §17 优先级；V2.7 + Desktop Terminal V1）：
+ * 1. Hard deny（app.open / app.reveal / network.access）
  * 2. read-only root 的 mutation hard deny（任何模式不能覆盖）
  * 3. matching explicit deny（resource/root/workspace 特异性，最 specific 优先）
  * 4. most-specific matching explicit allow/ask
- * 5. agent-mode default（Workspace Auto 对 workspace 内 mutation 全 allow；Plan deny；Guided ask）
+ * 5. agent-mode default（Workspace Auto 对 workspace 内 create/modify/move allow；
+ *    fs.delete 默认 ask（Desktop Terminal V1 收紧：删除操作即使在 Workspace Auto 也要确认）；
+ *    shell.execute：Plan deny / Guided ask / Workspace Auto allow（Terminal Risk Gate 再收紧）；
+ *    Plan deny；Guided ask）
  *
- * fs.delete 不再有 always-ask invariant：explicit allow rule（含「此 Workspace 始终允许」）
- * 与 workspace-auto 模式默认都能让删除自动执行；explicit deny / read-only root 永远优先。
+ * fs.delete：workspace-auto 默认 ask；explicit allow rule 仍可放行（用户明确配置优先）。
+ * shell.execute：Terminal Executor 额外施加 Terminal Risk Gate（destructive/privileged → ask；
+ * blocked → deny），并禁止显式规则在非 workspace-auto 模式下授予永久 shell 权限。
  * 权限审批永远不能覆盖 sandbox 边界 / read-only root（PATH_OUTSIDE_SANDBOX 由 resolver 单独保证）。
  */
 export function evaluateComputerPolicy(context: PolicyContext): PolicyDecision {

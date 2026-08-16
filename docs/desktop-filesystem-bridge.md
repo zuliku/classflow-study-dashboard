@@ -179,3 +179,68 @@ Web 已执行 `normalizeRelativeComputerPath()`（第一边界），但 **Runtim
    knowledge / audit —— 全部由 Web 侧 Native Adapter 自动复用。
 
 验证入口：Web 仓库 `tests/e2e/kiro-computer-native-v1.spec.ts`（memory bridge 全链路）。
+
+---
+
+# Terminal Bridge V1（Optional Capability）
+
+## 1. 架构边界：Filesystem Sandbox ≠ Process Sandbox
+
+- **Filesystem Adapter**：ClassFlow 能严格约束 `root + relative path`（resolver + bridge 双边界）。
+- **Terminal**：虽然 `cwd` 在 Workspace 内，命令本身理论上可能访问系统其它位置——
+  Terminal 是 **Privileged Desktop Capability**。
+- **UI/文档绝不声称「终端只能访问这个文件夹」**；除非未来 Desktop Runtime 实现 OS 级 process isolation。
+
+## 2. Injection
+
+```ts
+window.classflowDesktop = {
+  version: 1,
+  platform: "windows",
+  filesystem: { /* V1 保持 */ },
+  terminal?: {
+    version: 1,
+    execute(input): Promise<{ exitCode, stdout, stderr, timedOut, durationMs, stdoutTruncated, stderrTruncated }>,
+    cancel(input): Promise<void>,
+  },
+};
+```
+
+- `terminal` 是 **optional**：filesystem-only Desktop Runtime 依旧 valid（Files ✓ / Terminal ❌）。
+- Terminal 自己拥有 `version: 1`；`CLASSFLOW_DESKTOP_BRIDGE_VERSION` 保持 1。
+
+## 3. execute / cancel Contract
+
+```ts
+execute({ executionId, shell: "powershell" | "cmd", grantId, cwd, command, timeoutMs })
+cancel({ executionId })
+```
+
+- `executionId`：Web 生成（opaque；cancel 用）。
+- `cwd`：**relative only**（"" = root）；Runtime 负责 `grantId → native root` → `root + cwd`。
+- `command`：1–8192 chars；`timeoutMs`：1000–120000（Web 已 clamp；Runtime 必须 enforce）。
+
+## 4. Desktop Runtime MUST（Terminal）
+
+- 每次执行验证 grant 仍 granted；`cwd` canonicalize 后必须位于 granted root（拒绝 escape / symlink / junction）。
+- `process working directory = resolved cwd`。
+- **cancel / timeout 必须终止整个 process tree**（不是只 kill powershell.exe / cmd.exe；
+  node/npm/python 等子进程也必须终止）。
+- stdout/stderr **bounded**（Runtime 先 bound；Web 再执行第二层 bound + ANSI strip）。
+- 返回 `timedOut` 明确事实；绝不返回 PID / absolute path / environment。
+- non-interactive（PowerShell 推荐 `-NoLogo -NoProfile -NonInteractive`；CMD 推荐 `/d /s /c`）。
+- 不 elevation、不管理员、不开 shell window、不以后台 detached 方式运行。
+- 结构化错误（PERMISSION_DENIED / TIMEOUT / CANCELLED / EXECUTION_FAILED / INVALID_OPERATION），
+  错误中绝不包含 absolute path / username / stack。
+
+## 5. Web 侧行为（无需 Runtime 参与）
+
+- `run_terminal_command`（唯一 terminal 工具；无 run_powershell/run_cmd）：
+  仅在 `terminalEnabled + bridge 可用 + native root` 同时满足时暴露给模型（server tool list 条件过滤）。
+- Policy：Plan deny / Guided ask / Workspace Auto normal allow。
+- Terminal Risk Gate（runtime 判定）：destructive/privileged → ask；blocked（EncodedCommand/runas/
+  Start-Process -Verb RunAs/空命令）→ deny。
+- Approval：只提供 deny / allow-once；fingerprint = shell/rootId/cwd/command 精确绑定。
+- Stop Kiro → `cancel(executionId)`（每个活跃 execution 一次）。
+- 结构化 `delete_file` 在 Workspace Auto 也要求确认（与终端删除类命令一致）。
+

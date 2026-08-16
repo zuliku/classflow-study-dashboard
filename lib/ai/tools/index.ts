@@ -74,19 +74,35 @@ export function computerToolContractForVersion(
  * 请求级工具域组装（Kiro Computer Agent V1 Part 2 + V2.3 protocol negotiation）：
  * Computer 工具按 turn snapshot 条件加入（Computer OFF → 0 个；plan → 只读；guided/auto → read + mutation）。
  * documentAuthoringVersion：缺失 → legacy V1（Canonical schema）；2 → Draft schema。
+ * Desktop Terminal V1（Part 14）：run_terminal_command 只在前三者同时满足时暴露——
+ * terminalEnabled（偏好）+ terminalAvailable（Desktop Terminal Bridge）+ hasNativeRoot（冻结 workspace）。
+ * 普通 Web：server-facing tool list 本身不存在 terminal（不是暴露后 runtime deny）。
  * server 过滤不是安全边界——Browser Executor 仍独立 policy 求值。
  */
 export function getKiroToolsForRequest(input: {
   computerSnapshot?: {
     enabled: boolean;
     agentMode: "plan" | "guided" | "workspace-auto";
+    terminalEnabled?: boolean;
+    terminalAvailable?: boolean;
+    hasNativeRoot?: boolean;
   };
   documentAuthoringVersion?: unknown;
 }): ToolSet {
   const base = { ...KIRO_TOOLS } as ToolSet;
   const snap = input.computerSnapshot;
   if (!snap?.enabled) return base;
-  return { ...base, ...buildComputerToolSet(snap.agentMode, input.documentAuthoringVersion) };
+  const set = { ...base, ...buildComputerToolSet(snap.agentMode, input.documentAuthoringVersion) };
+  if (
+    !(
+      snap.terminalEnabled === true &&
+      snap.terminalAvailable === true &&
+      snap.hasNativeRoot === true
+    )
+  ) {
+    delete (set as Record<string, unknown>)["run_terminal_command"];
+  }
+  return set;
 }
 
 export { COMPUTER_TOOLS };

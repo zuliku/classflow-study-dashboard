@@ -12,8 +12,12 @@ import { ClassFlowDesktopBridgeV1 } from "@/lib/desktop/types";
 export function installMemoryDesktopBridgeMock() {
   const grants = new Map<string, { displayName: string; access: string; granted: boolean }>();
   const files = new Map<string, { kind: string; bytes: Uint8Array | null; type?: string }>();
-  const calls: Record<string, number> = { pick: 0, list: 0, stat: 0, readText: 0, readBytes: 0, readTextPrefix: 0, createDirectory: 0, writeText: 0, writeBytes: 0, remove: 0, move: 0, forgetGrant: 0, getGrantStatus: 0 };
+  const calls: Record<string, number> = { pick: 0, list: 0, stat: 0, readText: 0, readBytes: 0, readTextPrefix: 0, createDirectory: 0, writeText: 0, writeBytes: 0, remove: 0, move: 0, forgetGrant: 0, getGrantStatus: 0, terminalExecute: 0, terminalCancel: 0 };
   const cancelled = { value: false };
+  const holdNextTerminal = { value: false };
+  const pendingTerminal: { resolve: null | ((r: unknown) => void); command: string; isPending: boolean } = { resolve: null, command: "", isPending: false };
+  let lastTerminalInput: null | Record<string, unknown> = null;
+  let terminalResultHook: null | ((input: { command: string }) => unknown) = null;
   let seq = 0;
 
   const key = (grantId: string, path: string) => grantId + "::" + (path || "").replace(/\/+$/, "");
@@ -156,6 +160,80 @@ export function installMemoryDesktopBridgeMock() {
     version: 1,
     platform: "windows",
     filesystem: filesystem as unknown as ClassFlowDesktopBridgeV1["filesystem"],
+    terminal: {
+      version: 1,
+      async execute(input: {
+        executionId: string;
+        shell: string;
+        grantId: string;
+        cwd: string;
+        command: string;
+        timeoutMs: number;
+      }): Promise<{
+        exitCode: number | null;
+        stdout: string;
+        stderr: string;
+        timedOut: boolean;
+        durationMs: number;
+        stdoutTruncated: boolean;
+        stderrTruncated: boolean;
+      }> {
+        calls.terminalExecute += 1;
+        lastTerminalInput = {
+          executionId: input.executionId,
+          shell: input.shell,
+          grantId: input.grantId,
+          cwd: input.cwd,
+          command: input.command,
+          timeoutMs: input.timeoutMs,
+        };
+        const canned = () =>
+          (terminalResultHook
+            ? terminalResultHook({ command: input.command })
+            : {
+                exitCode: 0,
+                stdout: "OK " + input.command,
+                stderr: "",
+                timedOut: false,
+                durationMs: 100,
+                stdoutTruncated: false,
+                stderrTruncated: false,
+              }) as {
+            exitCode: number | null;
+            stdout: string;
+            stderr: string;
+            timedOut: boolean;
+            durationMs: number;
+            stdoutTruncated: boolean;
+            stderrTruncated: boolean;
+          };
+        if (holdNextTerminal.value) {
+          holdNextTerminal.value = false;
+          pendingTerminal.command = input.command;
+          pendingTerminal.isPending = true;
+          return new Promise((resolve) => {
+            pendingTerminal.resolve = resolve as (r: unknown) => void;
+          });
+        }
+        return canned();
+      },
+      async cancel(input: { executionId: string }) {
+        calls.terminalCancel += 1;
+        if (pendingTerminal.isPending && pendingTerminal.resolve) {
+          pendingTerminal.isPending = false;
+          pendingTerminal.resolve({
+            exitCode: null,
+            stdout: "",
+            stderr: "cancelled",
+            timedOut: false,
+            durationMs: 0,
+            stdoutTruncated: false,
+            stderrTruncated: false,
+          });
+          pendingTerminal.resolve = null;
+        }
+      },
+    },
   };
 
   (window as unknown as Record<string, unknown>).classflowDesktop = bridge;
@@ -179,5 +257,27 @@ export function installMemoryDesktopBridgeMock() {
     },
     opCount: (op: string) => calls[op] || 0,
     fileExists: (grantId: string, path: string) => files.has(grantId + "::" + (path || "").replace(/\/+$/, "")),
+    // Desktop Terminal V1 控制
+    lastTerminalInput: () => lastTerminalInput,
+    setTerminalResultHook: (hook: null | ((input: { command: string }) => unknown)) => {
+      terminalResultHook = hook;
+    },
+    holdNextTerminal,
+    pendingTerminal,
+    releasePendingTerminal: () => {
+      if (pendingTerminal.isPending && pendingTerminal.resolve) {
+        pendingTerminal.isPending = false;
+        pendingTerminal.resolve({
+          exitCode: 0,
+          stdout: "released " + pendingTerminal.command,
+          stderr: "",
+          timedOut: false,
+          durationMs: 100,
+          stdoutTruncated: false,
+          stderrTruncated: false,
+        });
+        pendingTerminal.resolve = null;
+      }
+    },
   };
 }

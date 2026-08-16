@@ -30,6 +30,13 @@ export interface ComputerAuditEntry {
   rootLabel?: string;
   relativePath?: string;
   verification?: "passed" | "failed";
+  /** Desktop Terminal V1（可选）：shell / risk / 命令预览（≤500）/ 结果事实。绝不记录 grantId / absolute path / 完整输出 */
+  shell?: "powershell" | "cmd";
+  risk?: "normal" | "destructive" | "privileged" | "blocked";
+  commandPreview?: string;
+  exitCode?: number;
+  durationMs?: number;
+  timedOut?: boolean;
 }
 
 function openAuditDb(): Promise<IDBDatabase | null> {

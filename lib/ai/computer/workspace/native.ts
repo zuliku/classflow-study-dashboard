@@ -152,6 +152,8 @@ export async function authorizeLocalFolder(): Promise<KiroWorkspaceMeta | null> 
 /**
  * Native root 重新授权：新 picker 完成后用新 grant 替换该 root 的 adapterRef。
  * 不假设选择同一个真实路径；用户明确完成选择后才替换。取消 → 原授权不变。
+ * V1.1（0.2）：先更新 Store，再检查旧 adapterRef 是否仍被其它 Workspace/Root 引用；
+ * 无引用才 forget 旧 grant（shared 引用绝不清理）。
  */
 export async function reauthorizeNativeWorkspaceRoot(
   workspace: KiroWorkspaceMeta,
@@ -159,8 +161,9 @@ export async function reauthorizeNativeWorkspaceRoot(
 ): Promise<KiroWorkspaceMeta | null> {
   const root = workspace.roots.find((r) => r.id === rootId);
   if (!root || !isNativeAdapterRef(root.adapterRef)) return null;
+  const oldAdapterRef = root.adapterRef;
   const grant = await pickNativeWorkspaceDirectory(root.access);
-  if (!grant) return null;
+  if (!grant) return null; // 取消 → 原 adapterRef / 原 grant 全部不变
   const next: KiroWorkspaceMeta = {
     ...workspace,
     roots: workspace.roots.map((r) =>
@@ -169,6 +172,13 @@ export async function reauthorizeNativeWorkspaceRoot(
     updatedAt: new Date().toISOString(),
   };
   useKiroComputerStore.getState().updateWorkspace(workspace.id, { roots: next.roots });
+  // V1.1：Store 更新完成后再清理旧 grant（先引用检查；shared 引用绝不 forget）
+  const stillReferenced = useKiroComputerStore
+    .getState()
+    .workspaces.some((w) => w.roots.some((r) => r.adapterRef === oldAdapterRef));
+  if (!stillReferenced) {
+    await forgetNativeWorkspaceGrant(oldAdapterRef);
+  }
   return next;
 }
 

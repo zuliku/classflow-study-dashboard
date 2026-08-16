@@ -30,10 +30,30 @@ export function getClassFlowDesktopBridge(): ClassFlowDesktopBridgeV1 | null {
   if (bridge.version !== CLASSFLOW_DESKTOP_BRIDGE_VERSION) return null; // 未知版本：不做猜测兼容
   const fs = bridge.filesystem;
   if (!fs || typeof fs !== "object") return null;
-  // 核心表面方法缺失 → 视为不完整 Bridge（不可用）
-  const required = ["pickDirectory", "getGrantStatus", "forgetGrant", "list", "stat", "readText", "readTextPrefix", "createDirectory", "writeText", "writeBytes", "remove", "move"] as const;
+  // 核心表面方法缺失 → 视为不完整 Bridge（不可用；readBytes 必须在列——0.1 修复）
+  const required = ["pickDirectory", "getGrantStatus", "forgetGrant", "list", "stat", "readText", "readBytes", "readTextPrefix", "createDirectory", "writeText", "writeBytes", "remove", "move"] as const;
   if (!required.every((m) => typeof (fs as unknown as Record<string, unknown>)[m] === "function")) return null;
   return bridge;
+}
+
+/**
+ * Terminal Bridge（V1，optional capability）：
+ * Desktop Runtime 可以只有 filesystem（Native Folder V1 保持 valid）——
+ * terminal 缺失绝不使整个 Bridge invalid。
+ */
+export function getClassFlowDesktopTerminalBridge(): import("@/lib/desktop/types").ClassFlowDesktopTerminalBridgeV1 | null {
+  const bridge = getClassFlowDesktopBridge();
+  if (!bridge) return null;
+  const terminal = bridge.terminal;
+  if (!terminal || typeof terminal !== "object") return null;
+  if (terminal.version !== 1) return null;
+  if (typeof terminal.execute !== "function" || typeof terminal.cancel !== "function") return null;
+  return terminal;
+}
+
+/** Terminal Bridge 是否可用（SSR safe） */
+export function hasClassFlowDesktopTerminal(): boolean {
+  return getClassFlowDesktopTerminalBridge() !== null;
 }
 
 /**

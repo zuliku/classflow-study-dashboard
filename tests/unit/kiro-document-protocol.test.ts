@@ -1,4 +1,4 @@
-﻿import "fake-indexeddb/auto";
+import "fake-indexeddb/auto";
 import { describe, it, expect } from "vitest";
 import {
   resolveDocumentAuthoringVersion,
@@ -250,7 +250,7 @@ describe("Task 27: text-file binary guard", () => {
       toolCallId: "c1",
       toolInput: { path: "report.docx", content: "fake word" },
       context: { turnSnapshot: snap, liveWorkspaces: [ws], livePermissionRules: [] },
-      counters: { readCount: 0, mutationCount: 0 },
+      counters: { readCount: 0, mutationCount: 0, terminalCount: 0 },
     });
     expect(attempt.kind).toBe("completed");
     if (attempt.kind !== "completed") return;

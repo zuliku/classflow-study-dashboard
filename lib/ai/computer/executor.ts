@@ -22,6 +22,7 @@ import {
   buildApprovalRequest,
   oneShotApprovalMatches,
 } from "@/lib/ai/computer/approval";
+import { executeKiroTerminalCommand } from "@/lib/ai/computer/terminal/executor";
 import { getComputerAdapterForAdapterRef } from "@/lib/ai/computer/adapters/factory";
 import {
   applyReadBounds,
@@ -89,6 +90,8 @@ export interface ComputerExecutorContext {
 export interface ComputerCounterState {
   readCount: number;
   mutationCount: number;
+  /** Desktop Terminal V1：独立预算（git status ≠ filesystem read；npm test ≠ mutation） */
+  terminalCount: number;
 }
 
 function resolveSnapshotWorkspace(snapshot: KiroComputerTurnSnapshot, liveWorkspaces: KiroWorkspaceMeta[]) {
@@ -149,6 +152,20 @@ export async function executeKiroComputerTool(request: {
       kind: "completed",
       output: { ok: false, code: "PERMISSION_DENIED", message: `未知 Computer 工具：${toolName}` },
     };
+  }
+
+  // Desktop Terminal V1：独立预算（terminalCount；不走 filesystem read/mutation 计数）
+  if (toolName === "run_terminal_command") {
+    return executeKiroTerminalCommand({
+      toolCallId,
+      toolInput: (toolInput ?? {}) as Record<string, unknown>,
+      snapshot: turnSnapshot,
+      liveWorkspaces,
+      livePermissionRules,
+      counters: counters as ComputerCounterState,
+      oneShotApprovals: oneShotApprovals ?? [],
+      taskId: context.taskId ?? "",
+    });
   }
 
   // 调用限制（独立于总工具计数；ask 不消耗，resume 执行时才计入）

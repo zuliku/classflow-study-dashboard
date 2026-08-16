@@ -29,25 +29,47 @@ export function nativeAdapterCapabilities(): ComputerAdapterCapabilities {
   };
 }
 
-/** Bridge 结构化错误 → 现有 ComputerErrorCode（绝不透传 Desktop Runtime 内部异常/路径/stack） */
+/**
+ * V1.1（0.4）：bridge.message 是「不受信任」的输入（理论上可能包含 absolute path / UNC / username /
+ * OS stack / EPERM path）。Web 侧作为第二道边界：
+ * - 生产 ComputerError 使用 ClassFlow 固定文案（绝不把 bridge.message 发给模型）。
+ * - bridge.message 只进入 dev console，且先 sanitize（移除 drive path / UNC / file:// / stack 样式文本）。
+ */
+
+/** 识别并移除路径/堆栈样式的敏感片段（保守正则；不假设 Desktop Runtime 已脱敏） */
+export function sanitizeBridgeDebugMessage(message: string): string {
+  return message
+    .replace(/[A-Za-z]:\\[^\s;,)\]]{1,300}/g, "[path]")
+    .replace(/\\\\[^\s;,)\]]{1,200}/g, "[unc]")
+    .replace(/file:\/\/\/?[^\s;,)\]]{1,300}/g, "[url]")
+    .replace(/at\s+[^\n]{1,120}/g, "[stack]")
+    .replace(/\s{2,}/g, " ")
+    .slice(0, 200);
+}
+
+/** Bridge 结构化错误 → 现有 ComputerErrorCode（固定 ClassFlow 文案；绝不透传 Runtime 内部异常/路径/stack） */
 function mapBridgeError(err: unknown, fallback: ComputerError["code"]): never {
   const e = err as { code?: unknown; message?: unknown } | null | undefined;
   const code = e?.code;
-  const message =
-    typeof e?.message === "string" ? e.message.slice(0, 160) : undefined;
+  const rawMessage = typeof e?.message === "string" ? e.message : "";
+  // dev-only debug channel（sanitize 后；绝不进入模型 / Tool Result / Audit 文案）
+  if (rawMessage) {
+    // eslint-disable-next-line no-console
+    console.debug("[kiro:native] bridge error", sanitizeBridgeDebugMessage(rawMessage));
+  }
   switch (code as DesktopBridgeErrorCode | undefined) {
     case "NOT_FOUND":
-      throw new ComputerError("RESOURCE_NOT_FOUND", message ?? "文件或目录不存在");
+      throw new ComputerError("RESOURCE_NOT_FOUND", "文件或目录不存在");
     case "ALREADY_EXISTS":
-      throw new ComputerError("RESOURCE_ALREADY_EXISTS", message ?? "目标已存在");
+      throw new ComputerError("RESOURCE_ALREADY_EXISTS", "目标已存在");
     case "PERMISSION_DENIED":
-      throw new ComputerError("PERMISSION_DENIED", message ?? "没有权限访问该位置");
+      throw new ComputerError("PERMISSION_DENIED", "没有权限访问该位置");
     case "DIRECTORY_NOT_EMPTY":
-      throw new ComputerError("VERIFICATION_FAILED", message ?? "目录非空，无法删除");
+      throw new ComputerError("VERIFICATION_FAILED", "目录非空，无法删除");
     case "INVALID_OPERATION":
-      throw new ComputerError("INVALID_INPUT", message ?? "操作无效");
+      throw new ComputerError("INVALID_INPUT", "操作无效");
     case "IO_ERROR":
-      throw new ComputerError(fallback, message ?? "本地文件读写失败");
+      throw new ComputerError(fallback, "本地文件操作失败");
     default:
       // 非结构化错误（bridge 违反 contract）→ 也走同一映射，绝不把原始异常暴露给模型
       throw new ComputerError(fallback, "本地文件操作失败");

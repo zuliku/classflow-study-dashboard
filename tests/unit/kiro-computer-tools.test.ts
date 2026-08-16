@@ -1,4 +1,4 @@
-﻿import "fake-indexeddb/auto";
+import "fake-indexeddb/auto";
 import { describe, it, expect, beforeEach } from "vitest";
 import { executeKiroComputerTool } from "@/lib/ai/computer/executor";
 import { getComputerToolsForMode, COMPUTER_TOOLS } from "@/lib/ai/computer/tools/registry";
@@ -43,7 +43,7 @@ function ctx(snap: KiroComputerTurnSnapshot = snapshot, ws: KiroWorkspaceMeta = 
 }
 
 function counters() {
-  return { readCount: 0, mutationCount: 0 };
+  return { readCount: 0, mutationCount: 0, terminalCount: 0 };
 }
 
 /** mutation 直接执行路径（workspace-auto） */
@@ -112,8 +112,13 @@ describe("tool exposure", () => {
     expect(names).toContain("update_document");
     expect(names).toContain("search_workspace_knowledge");
     expect(names).toContain("retrieve_workspace_context");
+    // Desktop Terminal V1：唯一 terminal 工具是 run_terminal_command（无 run_powershell/run_cmd/execute_shell）
+    expect(names).toContain("run_terminal_command");
+    expect(names).not.toContain("run_powershell");
+    expect(names).not.toContain("run_cmd");
+    expect(names).not.toContain("execute_shell");
     // Model schema 绝不能加入权限相关参数
-    expect(names.length).toBe(17);
+    expect(names.length).toBe(18);
   });
 
   it("update_document 权限模式：Plan 不暴露 / Guided ask / Workspace Auto allow", () => {
@@ -590,7 +595,7 @@ describe("mutation tools + policy（Part 2 回归 + Part 3 attempt 语义）", (
   });
 
   it("调用限制：read > 12 / mutation > 6", async () => {
-    const c = { readCount: 12, mutationCount: 0 };
+    const c = { readCount: 12, mutationCount: 0, terminalCount: 0 };
     const r = await completedOutput({
       toolName: "read_text",
       toolInput: { path: "x.md" },
@@ -598,7 +603,7 @@ describe("mutation tools + policy（Part 2 回归 + Part 3 attempt 语义）", (
       counters: c,
     });
     expect(r.ok).toBe(false);
-    const m = { readCount: 0, mutationCount: 10 }; // V2.7.2：上限 6 → 10
+    const m = { readCount: 0, mutationCount: 10, terminalCount: 0 }; // V2.7.2：上限 6 → 10
     const r2 = await completedOutput({
       toolName: "create_text_file",
       toolInput: { path: "y.md", content: "" },

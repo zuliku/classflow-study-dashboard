@@ -1,4 +1,4 @@
-﻿import "fake-indexeddb/auto";
+import "fake-indexeddb/auto";
 import { describe, it, expect, beforeEach } from "vitest";
 import {
   ComputerTaskCheckpoint,
@@ -36,7 +36,7 @@ const workspace: KiroWorkspaceMeta = {
 };
 
 const ctx = () => ({ turnSnapshot: AUTO, liveWorkspaces: [workspace], livePermissionRules: [] });
-const counters = () => ({ readCount: 0, mutationCount: 0 });
+const counters = () => ({ readCount: 0, mutationCount: 0, terminalCount: 0 });
 
 async function runTool(toolName: string, toolInput: unknown, c = counters()) {
   return executeKiroComputerTool({
