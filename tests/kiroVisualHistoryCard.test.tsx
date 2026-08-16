@@ -60,7 +60,7 @@ describe("VisualActionProposalHistoryCard（display-only）", () => {
     expect(text()).toContain("1 项待确认");
     expect(text()).toContain("1 项暂无法处理");
     expect(text()).toContain("2 张图片");
-    expect(text()).toContain("仅供回看，不可执行");
+    expect(text()).toContain("当时未执行修改 · 仅供回看");
     expect(text()).toContain("新建任务：作业");
     cleanup();
   });
@@ -84,6 +84,56 @@ describe("VisualActionProposalHistoryCard（display-only）", () => {
   it("imageCount=0 时不显示「0 张图片」", () => {
     const { text, cleanup } = renderCard(makeSnapshot({ imageCount: 0 }));
     expect(text()).not.toContain("0 张图片");
+    cleanup();
+  });
+});
+
+describe("VisualActionProposalHistoryCard V1.5.1（wording / partial receipt）", () => {
+  it("无 receipt：显示「识别出的修改」；绝不出现「可应用修改」", () => {
+    const { text, cleanup } = renderCard(makeSnapshot());
+    expect(text()).toContain("识别出的修改");
+    expect(text()).not.toContain("可应用修改");
+    expect(text()).toContain("当时未执行修改 · 仅供回看");
+    cleanup();
+  });
+
+  it("partial applied receipt：section「操作记录」+ 行级 当时已应用/当时未应用 + footer 未应用计数", () => {
+    const { container, text, cleanup } = renderCard(
+      makeSnapshot({
+        receipt: { status: "applied", count: 1, appliedAt: 100, appliedActionIndexes: [0] },
+      })
+    );
+    expect(text()).toContain("操作记录");
+    expect(text()).not.toContain("可应用修改");
+    expect(text()).toContain("当时已应用 1 项修改");
+    expect(text()).toContain("1 项当时未应用");
+    const rowStates = Array.from(container.querySelectorAll('[data-testid="visual-history-row-state"]')) as HTMLSpanElement[];
+    expect(rowStates).toHaveLength(2);
+    expect(rowStates[0].textContent).toContain("当时已应用");
+    expect(rowStates[1].textContent).toContain("当时未应用");
+    cleanup();
+  });
+
+  it("partial revoked receipt：footer「当时已应用后撤销」+ 行级 revoked/never-applied 正确", () => {
+    const { text, container, cleanup } = renderCard(
+      makeSnapshot({
+        receipt: { status: "revoked", count: 1, appliedAt: 100, revokedAt: 200, appliedActionIndexes: [1] },
+      })
+    );
+    expect(text()).toContain("当时已应用后撤销 1 项修改");
+    expect(text()).toContain("1 项当时未应用");
+    const rowStates = Array.from(container.querySelectorAll('[data-testid="visual-history-row-state"]')) as HTMLSpanElement[];
+    expect(rowStates[0].textContent).toContain("当时未应用");
+    expect(rowStates[1].textContent).toContain("当时已应用");
+    cleanup();
+  });
+
+  it("full applied（无 indexes = 当时全部应用）→ 无「未应用」计数", () => {
+    const { text, cleanup } = renderCard(
+      makeSnapshot({ receipt: { status: "applied", count: 2, appliedAt: 100 } })
+    );
+    expect(text()).toContain("当时已应用 2 项修改");
+    expect(text()).not.toContain("当时未应用");
     cleanup();
   });
 });

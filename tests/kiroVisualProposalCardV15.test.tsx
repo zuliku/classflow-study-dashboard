@@ -239,7 +239,7 @@ describe("VisualActionProposalCard V1.5：Header / Source Strip / Badge", () => 
     cleanup();
   });
 
-  it("Source Strip：live 来源缩略图 + 查看原图 → 打开 Preview Dialog；Esc 关闭", () => {
+  it("Source Strip：live 来源缩略图（全部展示）+ 查看原图 → Source Gallery；Esc 关闭", () => {
     const file1 = new File([new Uint8Array([1])], "1.png", { type: "image/png" });
     const file2 = new File([new Uint8Array([2])], "2.png", { type: "image/png" });
     const sources = [
@@ -247,21 +247,104 @@ describe("VisualActionProposalCard V1.5：Header / Source Strip / Badge", () => 
       { id: "img-2", file: file2, name: "2.png", thumbnail: "data:image/png;base64,BBB" },
     ];
     const { container, cleanup } = renderCard(makeProposal(), sources as never);
+    // C：所有来源都有可发现表达（2/2 全部展示，不静默截断）
     expect(container.querySelectorAll('[data-testid="visual-source-thumb"]')).toHaveLength(2);
     expect(container.textContent).toContain("查看原图");
-    // 点击缩略图 → Preview Dialog（Portal 到 document.body；img src = object URL）
+    // 点击缩略图 → Source Gallery（Portal；计数 1 / 2；含 ←/→）
     act(() => {
-      (container.querySelector('[data-testid="visual-source-thumb"]') as HTMLButtonElement).click();
+      (container.querySelectorAll('[data-testid="visual-source-thumb"]')[1] as HTMLButtonElement).click();
     });
     const preview = document.body.querySelector('[data-testid="kiro-image-preview"]');
     expect(preview).toBeTruthy();
-    expect(preview!.querySelector("img")).toBeTruthy();
+    expect(preview!.textContent).toContain("2 / 2");
+    expect(document.body.querySelector('[data-testid="kiro-image-preview-image"]')).toBeTruthy();
+    // Gallery 上一张 → 1 / 2
+    act(() => {
+      (document.body.querySelector('[data-testid="kiro-image-preview-prev"]') as HTMLButtonElement).click();
+    });
+    expect(preview!.textContent).toContain("1 / 2");
     // Esc 关闭
     act(() => {
       window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
     });
     expect(document.body.querySelector('[data-testid="kiro-image-preview"]')).toBeNull();
     cleanup();
+  });
+
+  it("B：唯一来源（1 张）→ Action Evidence 内允许「查看原图」", () => {
+    const file1 = new File([new Uint8Array([1])], "1.png", { type: "image/png" });
+    const sources = [{ id: "img-1", file: file1, name: "1.png", thumbnail: "data:image/png;base64,AAA" }];
+    const { container, cleanup } = renderCard(makeProposal(), sources as never);
+    // 展开第一条 evidence
+    const toggle = Array.from(container.querySelectorAll("button")).find((b) => (b.textContent ?? "").includes("依据"));
+    act(() => {
+      toggle!.click();
+    });
+    // strip 1 个 + row 1 个 = 共 2 个「查看原图」
+    const viewOriginal = Array.from(container.querySelectorAll("button")).filter((b) =>
+      (b.textContent ?? "").includes("查看原图")
+    );
+    expect(viewOriginal).toHaveLength(2);
+    cleanup();
+  });
+
+  it("B：2+ 来源 → Action Evidence 内不显示「查看原图」（禁止默认 source[0] 错误归因）", () => {
+    const file1 = new File([new Uint8Array([1])], "1.png", { type: "image/png" });
+    const file2 = new File([new Uint8Array([2])], "2.png", { type: "image/png" });
+    const sources = [
+      { id: "img-1", file: file1, name: "1.png", thumbnail: "data:image/png;base64,AAA" },
+      { id: "img-2", file: file2, name: "2.png", thumbnail: "data:image/png;base64,BBB" },
+    ];
+    const { container, cleanup } = renderCard(makeProposal(), sources as never);
+    // 展开全部 evidence
+    const toggles = Array.from(container.querySelectorAll("button")).filter((b) =>
+      (b.textContent ?? "").includes("依据")
+    );
+    act(() => {
+      toggles.forEach((t) => t.click());
+    });
+    // 只有顶部 Source Strip 有「查看原图」（1 个）；Action row 不得声称第 1 张就是依据
+    const viewOriginal = Array.from(container.querySelectorAll("button")).filter((b) =>
+      (b.textContent ?? "").includes("查看原图")
+    );
+    expect(viewOriginal).toHaveLength(1);
+    expect(container.querySelector('[data-testid="visual-source-open"]')).toBeTruthy();
+    cleanup();
+  });
+
+  it("revoked（partial）→ 行级「已撤销 / 未应用」+ footer「已撤销 2 项修改 · 1 项未应用」", async () => {
+    mocks.executor.executeVisualActionProposal.mockResolvedValue({
+      ok: true,
+      count: 2,
+      appliedActionIndexes: [0, 1],
+      undo: () => {},
+    });
+    const card = renderCard();
+    const selects = Array.from(card.container.querySelectorAll('[data-testid="visual-action-select"]')) as HTMLButtonElement[];
+    act(() => {
+      selects[2].click(); // 不选第 3 项
+    });
+    await act(async () => {
+      (card.container.querySelector('[data-testid="visual-apply"]') as HTMLButtonElement).click();
+      await Promise.resolve();
+    });
+    mocks.bump();
+    card.render();
+    // Undo → revoked
+    await act(async () => {
+      (card.container.querySelector('[data-testid="visual-undo"]') as HTMLButtonElement).click();
+    });
+    mocks.bump();
+    card.render();
+    expect(card.text()).toContain("已撤销 2 项修改");
+    expect(card.text()).toContain("1 项未应用");
+    // 行级事实保留（撤销不丢失行级差异）
+    const rowStates = Array.from(card.container.querySelectorAll('[data-testid="visual-row-applied"]')) as HTMLSpanElement[];
+    expect(rowStates).toHaveLength(3);
+    expect(rowStates[0].textContent).toBe("已撤销");
+    expect(rowStates[1].textContent).toBe("已撤销");
+    expect(rowStates[2].textContent).toBe("未应用");
+    card.cleanup();
   });
 
   it("来源缺失（历史恢复 / 无 live File）→ 纯文本降级「来源 · 2 张图片」；不渲染缩略图；不报错", () => {

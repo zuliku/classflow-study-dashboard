@@ -225,7 +225,8 @@ export function KiroUserMessage({
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState("");
   const [submitting, setSubmitting] = useState(false);
-  const [previewFile, setPreviewFile] = useState<File | null>(null);
+  // V1.5.1：预览携带真实文件名（Dialog 标题用 attachment.name，不再统一显示「原图」）
+  const [previewSource, setPreviewSource] = useState<{ file: File; name: string } | null>(null);
   const taRef = useRef<HTMLTextAreaElement | null>(null);
 
   const copy = async () => {
@@ -300,7 +301,7 @@ export function KiroUserMessage({
                       <button
                         type="button"
                         data-testid="kiro-sent-image-preview"
-                        onClick={() => setPreviewFile(liveSource!.file)}
+                        onClick={() => setPreviewSource({ file: liveSource!.file, name: a.name })}
                         aria-label={`查看原图 ${a.name}`}
                         title="查看原图"
                         className="w-5 h-5 rounded overflow-hidden border border-line-soft shrink-0 focus:outline-none focus:ring-2 focus:ring-charcoal/20"
@@ -398,9 +399,9 @@ export function KiroUserMessage({
           </>
         )}
       </div>
-      {/* V1.5：sent live 图片大图预览（runtime File；历史恢复无 File → 不渲染） */}
-      {previewFile && (
-        <KiroImagePreviewDialog file={previewFile} name="原图" onClose={() => setPreviewFile(null)} />
+      {/* V1.5：sent live 图片大图预览（runtime File；历史恢复无 File → 不渲染；标题用真实文件名） */}
+      {previewSource && (
+        <KiroImagePreviewDialog source={previewSource} onClose={() => setPreviewSource(null)} />
       )}
     </div>
   );

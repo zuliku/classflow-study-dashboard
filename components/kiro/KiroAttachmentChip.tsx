@@ -226,7 +226,10 @@ export function KiroAttachmentChip({
 
       {/* V1.5：live 大图预览（runtime File；Esc/Backdrop/Close 关闭；关闭时 revoke object URL） */}
       {previewFile && (
-        <KiroImagePreviewDialog file={previewFile} name={attachment.name} onClose={() => setPreviewFile(null)} />
+        <KiroImagePreviewDialog
+          source={{ file: previewFile, name: attachment.name }}
+          onClose={() => setPreviewFile(null)}
+        />
       )}
     </span>
   );

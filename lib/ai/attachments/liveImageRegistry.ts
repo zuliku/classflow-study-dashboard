@@ -37,6 +37,17 @@ export function registerLiveImageSource(source: LiveImageSource): void {
   });
 }
 
+/**
+ * V1.5.1：只更新「已经存在」的 entry（async thumbnail 完成时调用）。
+ * entry 不存在（已被 remove 移除 / 已被 conversation clear 清空）→ no-op，
+ * 绝对不重新创建 entry —— 这是 ghost source 竞态的硬保证。
+ */
+export function updateLiveImageSourceThumbnail(id: string, thumbnail: string | undefined): void {
+  const entry = sources.get(id);
+  if (!entry) return;
+  entry.thumbnail = typeof thumbnail === "string" ? thumbnail : undefined;
+}
+
 export function unregisterLiveImageSource(id: string): void {
   sources.delete(id);
 }

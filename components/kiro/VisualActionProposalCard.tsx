@@ -65,8 +65,8 @@ export function VisualActionProposalCard({
   const [selectedIds, setSelectedIds] = useState<Set<string>>(
     () => new Set(proposal.actions.map((a) => a.id))
   );
-  const [previewFile, setPreviewFile] = useState<File | null>(null);
-  const [previewName, setPreviewName] = useState<string>("");
+  // V1.5.1：Preview 是 Source Gallery（多来源核对）；index = 用户点击的缩略图
+  const [previewIndex, setPreviewIndex] = useState<number | null>(null);
   // V1.1：同步 ownership 锁（不依赖 React render 更新时序；只防并发点击，durable status 在 Runtime）
   const applyingRef = useRef(false);
   const [applying, setApplying] = useState(false);
@@ -102,7 +102,10 @@ export function VisualActionProposalCard({
   const allSelected = executableCount > 0 && selectedCount === executableCount;
   const idleSelectable = runtimeState == null && !applying && !pendingOnly;
   const showSelectAll = idleSelectable && executableCount >= 3;
-  const appliedIndexes = runtimeState?.status === "applied" ? runtimeState.appliedActionIndexes : undefined;
+  const appliedIndexes =
+    (runtimeState?.status === "applied" || runtimeState?.status === "revoked")
+      ? runtimeState.appliedActionIndexes
+      : undefined;
   const appliedIdSet = useMemo(
     () =>
       appliedIndexes
@@ -199,9 +202,8 @@ export function VisualActionProposalCard({
     setSelectedIds(new Set(all ? proposal.actions.map((a) => a.id) : []));
   };
 
-  const openPreview = (file: File, name: string) => {
-    setPreviewFile(file);
-    setPreviewName(name);
+  const openPreview = (index: number) => {
+    setPreviewIndex(index);
   };
 
   /** V1.5：临时/永久 badge —— 只由 display.kind + 真实 week 确定性生成（模型无字段可改文案） */
@@ -267,13 +269,16 @@ export function VisualActionProposalCard({
     const expanded = expandedEvidence === a.id;
     const badge = badgeFor(a);
     const checked = selectedIds.has(a.id);
-    // V1.5：applied 后行级展示事实（appliedIndexes 缺省 = 全部应用）
-    const rowApplied = runtimeState?.status === "applied" && (appliedIdSet === null || appliedIdSet.has(a.id));
+    // V1.5：applied/revoked 后行级展示事实（appliedIndexes 缺省 = 全部应用；
+    // revoked 后仍保留行级差异：当时应用的行显示「已撤销」，未选的行显示「未应用」）
+    const hasRowFacts = runtimeState?.status === "applied" || runtimeState?.status === "revoked";
+    const rowApplied = hasRowFacts && (appliedIdSet === null || appliedIdSet.has(a.id));
+    const rowMarkerText = runtimeState?.status === "revoked" ? "已撤销" : "已应用";
     return (
       <div key={a.id} className="py-1.5 first:pt-0 last:pb-0">
         <div className="flex items-start gap-2">
-          {/* Selection / 应用标记 slot：idle → Checkbox；applied → 已应用 / 未应用；其余 → 占位 */}
-          {runtimeState?.status === "applied" ? (
+          {/* Selection / 应用标记 slot：idle → Checkbox；applied/revoked → 行级事实；其余 → 占位 */}
+          {hasRowFacts ? (
             <span className="mt-px w-5 h-5 shrink-0 flex items-center justify-center">
               {rowApplied ? (
                 <Check className="w-3.5 h-3.5 text-[#627566]" />
@@ -325,7 +330,7 @@ export function VisualActionProposalCard({
                   {badge.text}
                 </span>
               )}
-              {runtimeState?.status === "applied" && (
+              {hasRowFacts && (
                 <span
                   data-testid="visual-row-applied"
                   className={cn(
@@ -333,7 +338,7 @@ export function VisualActionProposalCard({
                     rowApplied ? "text-[#627566]" : "text-sandrift"
                   )}
                 >
-                  {rowApplied ? "已应用" : "未应用"}
+                  {rowApplied ? rowMarkerText : "未应用"}
                 </span>
               )}
             </div>
@@ -351,11 +356,13 @@ export function VisualActionProposalCard({
             {expanded && (
               <div className="mt-1 flex flex-wrap items-center gap-2 bg-alabaster/60 border border-line-soft rounded-lg px-2 py-1.5">
                 <p className="text-[10px] text-satin-grey leading-snug">“{a.evidence.text}”</p>
-                {/* V1.5：轻量「查看原图」审计入口（不假装高亮/框选截图区域；无坐标时不提供定位） */}
-                {previewableCount > 0 && (
+                {/* V1.5.1：来源唯一（1 张截图）时才显示行级「查看原图」——
+                    多来源时 ClassFlow 不知道这条 Action 来自第几张图，
+                    禁止默认打开 source[0]（错误归因）；改由顶部 Source Strip 浏览全部来源 */}
+                {previewableCount === 1 && (
                   <button
                     type="button"
-                    onClick={() => openPreview(resolvedSources[0].file, resolvedSources[0].name)}
+                    onClick={() => openPreview(0)}
                     className="text-[10px] font-semibold text-charcoal underline underline-offset-2 decoration-line-strong hover:text-black"
                   >
                     查看原图
@@ -392,9 +399,12 @@ export function VisualActionProposalCard({
       );
     }
     if (runtimeState?.status === "revoked") {
+      const appliedCount = appliedIdSet === null ? executableCount : appliedIdSet.size;
+      const unselectedCount = executableCount - appliedCount;
       return (
         <span className="mr-auto text-[10px] font-semibold text-sandrift">
-          已撤销 {runtimeState.count ?? executableCount} 项修改，恢复到应用前状态。
+          已撤销 {runtimeState.count ?? executableCount} 项修改
+          {unselectedCount > 0 && <span> · {unselectedCount} 项未应用</span>}
           {clarificationCount > 0 && <span> · {clarificationCount} 项仍待确认</span>}
         </span>
       );
@@ -543,19 +553,20 @@ export function VisualActionProposalCard({
             {headerSecondary()}
             {headerSub() && <span className="text-sandrift"> · {headerSub()}</span>}
           </p>
-          {/* V1.5 Source Strip：点击缩略图 → 大图预览；来源缺失 → 纯文本降级（不报错） */}
+          {/* V1.5 Source Strip：点击缩略图 → Source Gallery（多图核对）；来源缺失 → 纯文本降级（不报错） */}
           {imageCount > 0 && (
             <div data-testid="visual-proposal-source" className="mt-1.5 flex items-center gap-1.5">
               <span className="text-[10px] font-semibold text-sandrift">来源</span>
               {previewableCount > 0 ? (
                 <>
-                  <div className="flex items-center gap-1">
-                    {resolvedSources.slice(0, 4).map((s) => (
+                  {/* V1.5.1：展示全部来源（一 Turn ≤ 5 张）；移动端允许 wrap；绝不静默截断 */}
+                  <div className="flex flex-wrap items-center gap-1">
+                    {resolvedSources.map((s, i) => (
                       <button
                         key={s.id}
                         type="button"
                         data-testid="visual-source-thumb"
-                        onClick={() => openPreview(s.file, s.name)}
+                        onClick={() => openPreview(i)}
                         aria-label={`查看原图 ${s.name}`}
                         title="查看原图"
                         className="w-7 h-7 rounded-lg border border-line-soft overflow-hidden focus:outline-none focus:ring-2 focus:ring-charcoal/20"
@@ -573,7 +584,7 @@ export function VisualActionProposalCard({
                   <button
                     type="button"
                     data-testid="visual-source-open"
-                    onClick={() => openPreview(resolvedSources[0].file, resolvedSources[0].name)}
+                    onClick={() => openPreview(0)}
                     className="text-[10px] font-semibold text-sandrift hover:text-charcoal underline underline-offset-2 decoration-line-strong transition-colors"
                   >
                     查看原图
@@ -647,9 +658,15 @@ export function VisualActionProposalCard({
         {renderActions()}
       </div>
 
-      {/* V1.5：大图预览（runtime File；关闭时 revoke object URL；绝不写入历史） */}
-      {previewFile && (
-        <KiroImagePreviewDialog file={previewFile} name={previewName} onClose={() => setPreviewFile(null)} />
+      {/* V1.5.1：Source Gallery（runtime File；Esc/Backdrop/Close 关闭；关闭时 revoke object URL；
+          Gallery 只做来源核对，绝不声称某 Action 与某张图存在精确 mapping） */}
+      {previewIndex !== null && resolvedSources.length > 0 && (
+        <KiroImagePreviewDialog
+          source={resolvedSources[Math.min(previewIndex, resolvedSources.length - 1)]}
+          sources={resolvedSources}
+          initialIndex={Math.min(previewIndex, resolvedSources.length - 1)}
+          onClose={() => setPreviewIndex(null)}
+        />
       )}
     </div>
   );

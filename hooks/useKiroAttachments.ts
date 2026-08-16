@@ -19,6 +19,7 @@ import { createStorageKey, saveFileBlob, getFileBlob } from "@/lib/fileStorage";
 import {
   registerLiveImageSource,
   unregisterLiveImageSource,
+  updateLiveImageSourceThumbnail,
 } from "@/lib/ai/attachments/liveImageRegistry";
 
 let seq = 0;
@@ -87,6 +88,15 @@ export function useKiroAttachments() {
       }
       setAttachments((prev) => [...prev, ...pending.map((p) => p.base)]);
 
+      // V1.5.1：所有 image File 必须在任何 image await 之前完成 initial registration
+      //（注册只发生在「该附件确实已进入本 Turn 列表」之后；Remove → unregister / Conversation
+      //  clear → clearLiveImageSources 之后，async thumbnail 的 update 只会 no-op，
+      //  不可能让被移除 / 旧会话的图片重新进入 Registry）
+      for (const { id, base, routed } of pending) {
+        if (!routed.ok || routed.kind !== "image") continue;
+        registerLiveImageSource({ id, file: base.file, name: base.name });
+      }
+
       for (const { id, base, routed } of pending) {
         if (!routed.ok) continue;
         const patch = (partial: Partial<KiroLocalAttachment>) =>
@@ -97,16 +107,12 @@ export function useKiroAttachments() {
         if (routed.kind === "image") {
           try {
             const thumb = await createImageThumbnail(base.file);
-            // V1.5：原始 File 进入 runtime-only registry（live preview / Proposal Source Strip 用；
-            // 绝不进入历史持久层；Conversation 切换时由 useKiroChat 清空）
-            registerLiveImageSource({
-              id,
-              file: base.file,
-              name: base.name,
-              thumbnail: thumb || undefined,
-            });
+            // 只更新已存在 entry；被移除 / 会话已切换 → no-op（绝不复活 ghost source）
+            updateLiveImageSourceThumbnail(id, thumb || undefined);
             patch({ status: "ready", thumbnail: thumb || undefined });
           } catch {
+            // thumbnail 失败 → 从 runtime registry 移除（不留无图来源）
+            unregisterLiveImageSource(id);
             patch({ status: "error", error: "无法生成预览。" });
           }
           continue;

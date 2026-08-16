@@ -110,8 +110,10 @@ export function VisualActionProposalHistoryCard({ proposal }: { proposal: Persis
 
       {executableCount > 0 && (
         <div>
+          {/* V1.5.1：History 是 display-only —— 不再说「可应用修改」（避免暗示当前仍可执行）；
+              有 Receipt 时表述为「操作记录」（描述当时发生过什么） */}
           <p className="text-[10px] font-semibold text-sandrift mb-1">
-            可应用修改 · {executableCount}
+            {hadReceipt ? "操作记录" : "识别出的修改"} · {executableCount}
             {hadReceipt && unappliedCount > 0 && <span className="text-sandrift"> · 当时未应用 {unappliedCount}</span>}
           </p>
           <div className="divide-y divide-line-soft">
@@ -212,7 +214,8 @@ export function VisualActionProposalHistoryCard({ proposal }: { proposal: Persis
             {clarificationCount > 0 && <span> · {clarificationCount} 项仍待确认</span>}
           </p>
         ) : (
-          <p className="text-[10px] font-semibold text-sandrift">仅供回看，不可执行</p>
+          // V1.5.1：无 receipt → 「当时未执行修改 · 仅供回看」（绝不让用户觉得历史卡片仍可应用）
+          <p className="text-[10px] font-semibold text-sandrift">当时未执行修改 · 仅供回看</p>
         )}
       </div>
     </div>

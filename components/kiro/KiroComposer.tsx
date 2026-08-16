@@ -327,7 +327,10 @@ export function KiroComposer({
       }}
       onDragLeave={() => setDragOver(false)}
       onDrop={handleDrop}
-      className={cn("shrink-0 relative", compact && "px-3 pb-3")}
+      // z-20：surface 的 focus-within transform（morph）会创建内部 stacking context，
+      // 若不在此给 Composer 建立高于 EmptyState（z-10）的层，Attachment/Context 等 popup（z-40）
+      // 会被空态遮罩拦截点击（V1.5.1 交互回归修复）
+      className={cn("shrink-0 relative z-20", compact && "px-3 pb-3")}
       data-testid="kiro-composer"
     >
       {/* 拖拽提示：覆盖 Composer Surface（不覆盖整个 Workspace），轻量 */}
