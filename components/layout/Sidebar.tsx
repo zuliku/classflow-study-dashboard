@@ -103,6 +103,20 @@ export function Sidebar() {
   // 用户交互后才启用 transform transition；reduced motion 始终直接定位
   const plateAnimated = interactedRef.current && !reducedMotion;
 
+  // Navigation Area 滚动：仅在内容真实溢出（低高度 viewport）时启用 overflow-y-auto；
+  // 常态 overflow-visible → rail tooltip（left-full）不被裁剪（V2 baseline 语义）。
+  const navAreaRef = useRef<HTMLDivElement | null>(null);
+  const [navScrollable, setNavScrollable] = useState(false);
+  useLayoutEffect(() => {
+    const el = navAreaRef.current;
+    if (!el) return;
+    const check = () => setNavScrollable(el.scrollHeight > el.clientHeight + 1);
+    check();
+    const ro = new ResizeObserver(check);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
   /** Nav 行共用工具提示（始终 mounted；manual morph 期间 CSS 强制隐藏） */
   const tooltip = (label: string) => (
     <span
@@ -119,11 +133,6 @@ export function Sidebar() {
     </span>
   );
 
-  /** Nav 行固定 Icon Slot：折叠/展开图标 X 坐标恒定（label 以 max-width 裁剪，不参与居中切换） */
-  const iconSlot = (children: React.ReactNode) => (
-    <span className="w-5 shrink-0 flex items-center justify-center">{children}</span>
-  );
-
   return (
     <aside
       className={cn(
@@ -137,8 +146,14 @@ export function Sidebar() {
       data-viewport-resolved={resolved}
       onTransitionEnd={handleShellTransitionEnd}
     >
-      {/* Navigation Area：flex-1 / min-h-0 / overflow-y-auto（低高度 viewport 不挤压 Profile） */}
-      <div className="flex-1 min-h-0 overflow-y-auto space-y-3 scrollbar-none">
+      {/* Navigation Area：flex-1 / min-h-0；仅溢出时滚动（常态不裁剪 rail tooltip） */}
+      <div
+        ref={navAreaRef}
+        className={cn(
+          "flex-1 min-h-0 space-y-3 scrollbar-none",
+          navScrollable ? "overflow-y-auto" : "overflow-visible"
+        )}
+      >
         {/* Brand Logo：Full Logo ↔ Mark 同容器 crossfade（始终 mounted；绝对定位互不挤压） */}
         <div
           className="sidebar-logo relative h-10 w-full overflow-hidden cursor-pointer"
@@ -198,23 +213,20 @@ export function Sidebar() {
                 }}
                 aria-label={item.label}
                 aria-current={isActive ? "page" : undefined}
-                className={cn(
-                  "relative w-full flex items-center px-3 py-2 rounded-xl text-xs font-medium transition-colors duration-[var(--motion-base)] ease-[var(--ease-standard)] group text-left",
+                className={cn("sidebar-nav-row relative w-full py-2 rounded-xl text-xs font-medium transition-colors duration-[var(--motion-base)] ease-[var(--ease-standard)] group text-left",
                   isActive
                     ? "text-charcoal font-semibold"
                     : "text-satin-grey hover:bg-alabaster hover:text-charcoal"
                 )}
               >
-                {iconSlot(
-                  <Icon
-                    className={cn(
-                      "w-4 h-4 shrink-0 transition-colors duration-[var(--motion-base)]",
-                      isActive ? "text-charcoal" : "text-sandrift group-hover:text-charcoal"
-                    )}
-                  />
-                )}
+                <Icon
+                  className={cn(
+                    "w-4 h-4 shrink-0 transition-colors duration-[var(--motion-base)]",
+                    isActive ? "text-charcoal" : "text-sandrift group-hover:text-charcoal"
+                  )}
+                />
                 {/* Label：始终 mounted；折叠 = opacity/max-width 裁剪（Rail Morph） */}
-                <span data-testid="nav-label" className="sidebar-label flex-1 min-w-0 ml-2.5 text-left">
+                <span data-testid="nav-label" className="sidebar-label flex-1 min-w-0 text-left">
                   {item.label}
                 </span>
                 {tooltip(item.label)}
@@ -253,12 +265,12 @@ export function Sidebar() {
                 <span
                   className={cn(
                     "relative m-[1.5px] w-[calc(100%-3px)] h-11 rounded-[11px] bg-[#F7F5F5]",
-                    "flex items-center px-3 text-xs font-semibold transition-colors duration-[var(--motion-base)]",
+                    "sidebar-nav-row sidebar-nav-row-kiro text-xs font-semibold transition-colors duration-[var(--motion-base)]",
                     isActive ? "bg-surface text-charcoal" : "text-charcoal"
                   )}
                 >
-                  {iconSlot(<Icon className="w-5 h-5 shrink-0" />)}
-                  <span data-testid="nav-label" className="sidebar-label flex-1 min-w-0 ml-2.5 truncate">
+                  <Icon className="w-5 h-5 shrink-0" />
+                  <span data-testid="nav-label" className="sidebar-label flex-1 min-w-0 truncate">
                     {item.label}
                   </span>
                   {tooltip(item.label)}
@@ -281,15 +293,14 @@ export function Sidebar() {
                 }
                 aria-label={item.label}
                 aria-expanded={isReminders ? reminderCenterOpen : undefined}
-                className={cn(
-                  "relative w-full flex items-center px-3 py-2 rounded-xl text-xs font-medium transition-colors duration-[var(--motion-base)] ease-[var(--ease-standard)] group text-left",
+                className={cn("sidebar-nav-row relative w-full py-2 rounded-xl text-xs font-medium transition-colors duration-[var(--motion-base)] ease-[var(--ease-standard)] group text-left",
                   isReminders && reminderCenterOpen
                     ? "bg-alabaster text-charcoal"
                     : "text-satin-grey hover:bg-alabaster hover:text-charcoal"
                 )}
               >
-                {/* Icon Slot：unread 圆点锚定 Bell 图标（Expanded/Collapsed 无需重新定位） */}
-                <span className="relative w-5 shrink-0 flex items-center justify-center">
+                {/* Bell 图标 + unread 圆点（锚定图标，折叠/展开无需重新定位） */}
+                <span className="relative flex items-center justify-center shrink-0">
                   <Icon className="w-4 h-4 shrink-0 transition-colors duration-[var(--motion-base)] text-sandrift group-hover:text-charcoal" />
                   {isReminders && hasUnread && (
                     <span
@@ -299,7 +310,7 @@ export function Sidebar() {
                     />
                   )}
                 </span>
-                <span data-testid="nav-label" className="sidebar-label flex-1 min-w-0 ml-2.5 truncate">
+                <span data-testid="nav-label" className="sidebar-label flex-1 min-w-0 truncate">
                   {item.label}
                 </span>
                 {tooltip(item.label)}

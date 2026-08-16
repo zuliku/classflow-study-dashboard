@@ -1,4 +1,4 @@
-﻿@import "katex/dist/katex.min.css";
+@import "katex/dist/katex.min.css";
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -519,9 +519,11 @@ html[data-motion-effective="reduced"] .kiro-rail-plate .kiro-ring {
 }
 
 
-/* ============ App Chrome V2.1 — Sidebar Rail Morph ============ */
+
+/* ============ App Chrome V2.1 / V2.1.1 — Sidebar Rail Morph + Static Geometry ============ */
 /* 几何由 [data-collapsed] 决定；choreography 由 [data-motion-active] + [data-motion-direction]
-   决定；非手动 morph（hydration / 断点 / reduced-motion）一律瞬时切换。 */
+   决定；非手动 morph（hydration / 断点 / reduced-motion）一律瞬时切换。
+   V2.1.1：先修静态最终几何（STATIC FINAL GEOMETRY FIRST），动画在两个正确布局之间插值。 */
 
 /* Sidebar Shell：仅手动 morph 播放 width transition */
 .sidebar-shell {
@@ -530,6 +532,33 @@ html[data-motion-effective="reduced"] .kiro-rail-plate .kiro-ring {
   transition-timing-function: var(--ease-emphasized);
 }
 .sidebar-shell[data-motion-active="false"] {
+  transition: none;
+}
+
+/* Nav Row 几何（V2 baseline Expanded / Rail-centered Collapsed）：
+   aside p-3.5 → inner 36px。
+   Collapsed：padding-inline 10px + gap 0 → 16px icon 精确居中（10+16+10=36）；
+   Expanded：padding-inline 12px + gap 10px（V2 原视觉：px-3 + gap-2.5）。
+   gap/padding 是 morph 的一部分；隐藏内容（label max-width 0）绝不残留 margin。 */
+.sidebar-nav-row {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  padding-inline: 12px;
+  gap: 10px;
+  transition-property: padding, gap;
+  transition-duration: var(--motion-panel);
+  transition-timing-function: var(--ease-emphasized);
+}
+[data-collapsed="true"] .sidebar-nav-row {
+  padding-inline: 10px;
+  gap: 0;
+}
+/* Kiro inner：icon 20px，collapsed 需 6px 侧 padding（6+20+6=32 ≤ inner 33px） */
+[data-collapsed="true"] .sidebar-nav-row-kiro {
+  padding-inline: 6px;
+}
+[data-motion-active="false"] .sidebar-nav-row {
   transition: none;
 }
 
@@ -569,8 +598,13 @@ html[data-motion-effective="reduced"] .kiro-rail-plate .kiro-ring {
   transition-delay: 80ms, 80ms, 0ms;
 }
 
-/* Logo Crossfade：Full Logo 与 Mark 始终 mounted（同容器绝对定位），仅 opacity/translate 切换 */
+/* Logo Crossfade：Full Logo 与 Mark 始终 mounted（同容器绝对定位），仅 opacity/translate 切换。
+   Full Logo 尺寸回归 V2 baseline：/logo.png 952×213，max-w-180 + auto 高 → 180×40（不再 max-h-8 缩小）。 */
 .sidebar-logo-full {
+  max-width: 180px;
+  max-height: 40px;
+  width: auto;
+  height: auto;
   opacity: 1;
   transform: translate(-50%, -50%) translateX(0);
   transition-property: opacity, transform;
@@ -578,6 +612,8 @@ html[data-motion-effective="reduced"] .kiro-rail-plate .kiro-ring {
   transition-timing-function: var(--ease-standard);
 }
 .sidebar-logo-mark {
+  width: 32px;
+  height: 32px;
   opacity: 0;
   transform: translate(-50%, -50%);
   transition-property: opacity;
@@ -601,8 +637,12 @@ html[data-motion-effective="reduced"] .kiro-rail-plate .kiro-ring {
 [data-motion-active="true"][data-motion-direction="expand"] .sidebar-logo-full { transition-delay: 60ms; }
 [data-motion-active="true"][data-motion-direction="expand"] .sidebar-logo-mark { transition-delay: 0ms; }
 
-/* Profile Card Single-DOM Morph：Surface 收束（背景/边框/padding 过渡） */
+/* Profile Card Single-DOM Morph：
+   - Surface：Expanded p-2.5（10px）；Collapsed padding 6px 2px（inner 36 - 4 = 32px = Avatar）
+   - Header Row：gap 10px（Expanded）/ 0 + 居中（Collapsed）
+   - Avatar Slot：固定 32×32（flex 0 0 32px），img width/height 100% + max-width:none（不被 Tailwind preflight 压扁） */
 .sidebar-profile-surface {
+  padding: 10px;
   transition-property: background-color, border-color, padding;
   transition-duration: var(--motion-panel);
   transition-timing-function: var(--ease-emphasized);
@@ -610,10 +650,41 @@ html[data-motion-effective="reduced"] .kiro-rail-plate .kiro-ring {
 [data-collapsed="true"] .sidebar-profile-surface {
   background-color: transparent;
   border-color: transparent;
-  padding: 6px 12px;
+  padding: 6px 2px;
 }
 [data-motion-active="false"] .sidebar-profile-surface {
   transition: none;
+}
+.sidebar-profile-header-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  transition-property: gap;
+  transition-duration: var(--motion-panel);
+  transition-timing-function: var(--ease-emphasized);
+}
+[data-collapsed="true"] .sidebar-profile-header-row {
+  gap: 0;
+  justify-content: center;
+}
+[data-motion-active="false"] .sidebar-profile-header-row {
+  transition: none;
+}
+.sidebar-profile-avatar-slot {
+  width: 32px;
+  height: 32px;
+  min-width: 32px;
+  flex: 0 0 32px;
+  aspect-ratio: 1;
+  overflow: hidden;
+}
+.sidebar-profile-avatar-slot img {
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  object-fit: cover;
+  border-radius: 9999px;
+  display: block;
 }
 
 /* Profile Credits：max-height 0 + 上移 + 淡出 */
@@ -654,11 +725,13 @@ html[data-motion-effective="reduced"] .kiro-rail-plate .kiro-ring {
 
 /* Reduced Motion：全部瞬时切换 */
 html[data-motion-effective="reduced"] .sidebar-shell,
+html[data-motion-effective="reduced"] .sidebar-nav-row,
 html[data-motion-effective="reduced"] .sidebar-label,
 html[data-motion-effective="reduced"] .sidebar-profile-identity,
 html[data-motion-effective="reduced"] .sidebar-logo-full,
 html[data-motion-effective="reduced"] .sidebar-logo-mark,
 html[data-motion-effective="reduced"] .sidebar-profile-surface,
+html[data-motion-effective="reduced"] .sidebar-profile-header-row,
 html[data-motion-effective="reduced"] .sidebar-profile-credits {
   transition: none !important;
 }

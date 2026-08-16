@@ -38,10 +38,10 @@ export function SidebarProfileCard({ collapsed }: { collapsed: boolean }) {
     <img
       src={profileAvatarUrl}
       alt={userProfile.name || "用户"}
-      className="w-8 h-8 rounded-full object-cover border border-[#CDB9AB] shrink-0"
+      className="border border-[#CDB9AB]"
     />
   ) : (
-    <span className="w-8 h-8 rounded-full bg-pastel-mint border border-line-strong flex items-center justify-center text-[11px] font-bold text-charcoal shrink-0">
+    <span className="w-full h-full bg-pastel-mint border border-line-strong rounded-full flex items-center justify-center text-[11px] font-bold text-charcoal">
       {userProfile.name ? userProfile.name.slice(0, 1) : "用"}
     </span>
   );
@@ -54,15 +54,15 @@ export function SidebarProfileCard({ collapsed }: { collapsed: boolean }) {
         aria-label="打开个人资料"
         className={cn(
           "sidebar-profile-surface group relative w-full flex flex-col items-stretch",
-          "rounded-xl border border-line bg-surface/50 p-2.5 text-left",
+          "rounded-xl border border-line bg-surface/50 text-left",
           "hover:bg-surface hover:border-line-strong transition-colors",
           "focus-visible:outline-2 focus-visible:outline-charcoal/30"
         )}
       >
-        {/* Header Row：Avatar 始终 mounted；Identity 随 label morph 收束 */}
-        <span className="flex items-center">
-          {avatar}
-          <span className="sidebar-profile-identity ml-2.5 flex-1 min-w-0">
+        {/* Header Row：Avatar Slot 固定 32×32（折叠时也保持真圆）；Identity 随 label morph 收束 */}
+        <span className="sidebar-profile-header-row">
+          <span className="sidebar-profile-avatar-slot rounded-full">{avatar}</span>
+          <span className="sidebar-profile-identity flex-1 min-w-0">
             <span className="flex items-center justify-between">
               <span className="text-xs font-semibold text-charcoal truncate">
                 {userProfile.name || "未设置姓名"}
