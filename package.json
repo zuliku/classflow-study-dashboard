@@ -12,6 +12,8 @@
     "test:docx:fixtures": "vitest run scripts/docx-compat/generate-fixtures.test.ts",
     "test:docx:inspect": "vitest run scripts/docx-compat/inspect-package.test.ts",
     "test:docx:openxml": "node scripts/docx-compat/validate-openxml.mjs",
+    "eval:kiro:text": "vitest run tests/kiroTextEval.test.ts",
+    "eval:kiro:text:live": "vitest run scripts/kiro-text-eval/run.test.ts",
     "eval:visual": "vitest run tests/visualIntakeEval.test.ts",
     "eval:visual:fixtures": "vitest run scripts/visual-intake-eval/fixtures.test.ts",
     "eval:visual:live": "vitest run scripts/visual-intake-eval/run.test.ts",

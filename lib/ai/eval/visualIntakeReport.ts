@@ -234,7 +234,7 @@ function pct(n: number, d: number): number | null {
 
 export function buildVisualEvalReport(input: {
   scenarios: VisualEvalScenarioResult[];
-  meta: Omit<VisualEvalReportMeta, "scenarioCount" | "gitSha"> & { scenarioCount?: number; gitSha?: string };
+  meta: Omit<VisualEvalReportMeta, "scenarioCount" | "gitSha" | "runtimeParity"> & { scenarioCount?: number; gitSha?: string };
   /** Eval V1.2.1：requested scenario identity（Validity 结构性检查；缺省回落为 results IDs） */
   requestedScenarioIds?: string[];
   /** Eval V1.2.1：canonical full suite identity（缺省回落为 requested） */

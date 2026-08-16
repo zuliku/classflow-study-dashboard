@@ -1,10 +1,11 @@
 /**
- * Visual Intake Eval V1.1 —— Live Vision Benchmark Runner（Layer B，production parity）。
- * 只在显式配置 KIRO_VISUAL_EVAL_PROVIDER / KIRO_VISUAL_EVAL_MODEL / KIRO_VISUAL_EVAL_API_KEY 时运行。
- * 复用生产代码：KIRO_SYSTEM_PROMPT / buildClassFlowContextSection / buildVisualEvalToolSet /
+ * Visual Intake Eval V1.2 —— Live Vision Benchmark Runner（Layer B，production parity）。
+ * 正式 baseline 固定：provider=opencode-go / model=mimo-v2.5（VISUAL_BASELINE）。
+ * 只需环境变量 KIRO_VISUAL_EVAL_API_KEY（provider/model 由代码 profile 固定，不做任意切换）。
+ * 复用生产代码：KIRO_SYSTEM_PROMPT / buildClassFlowContextSection / getKiroToolsForRequest({})（完整生产工具面）/
  * executeKiroReadTool / 生产 Visual Guard（isClassFlowMutationTool + VISUAL_PROPOSAL_REQUIRED_*）。
  * 不复制 useKiroChat；不通过 UI/Playwright 驱动。
- * 输出 .tmp/visual-intake-eval/<provider>__<model>/report.json + report.md；绝不记录 API Key / reasoning / CoT。
+ * 输出 .tmp/visual-intake-eval/opencode-go__mimo-v2.5/report.json + report.md；绝不记录 API Key / reasoning / CoT。
  */
 import { streamText, convertToModelMessages } from "ai";
 import { getKiroToolsForRequest } from "@/lib/ai/tools";
@@ -41,14 +42,18 @@ import { normalizeAIError } from "@/lib/ai/errors";
 import { mkdirSync, writeFileSync } from "fs";
 import { join } from "path";
 
+/** 正式 Visual Baseline Profile（固定；不做模型任意切换） */
+export const VISUAL_BASELINE = {
+  provider: "opencode-go",
+  model: "mimo-v2.5",
+} as const;
+
 export const VISUAL_EVAL_ENV = {
-  provider: process.env.KIRO_VISUAL_EVAL_PROVIDER ?? "",
-  model: process.env.KIRO_VISUAL_EVAL_MODEL ?? "",
   apiKey: process.env.KIRO_VISUAL_EVAL_API_KEY ?? "",
 };
 
 export function visualEvalEnabled(): boolean {
-  return Boolean(VISUAL_EVAL_ENV.provider && VISUAL_EVAL_ENV.model && VISUAL_EVAL_ENV.apiKey);
+  return Boolean(VISUAL_EVAL_ENV.apiKey);
 }
 
 /** file part 的 data（{type:"base64",base64} 或 {type:"url",url: URL|string}）→ Uint8Array（image part 用） */
@@ -70,10 +75,9 @@ export const VISUAL_EVAL_MAX_READ_CALLS = 12;
 export const VISUAL_EVAL_MAX_WRITE_ATTEMPTS = 8;
 
 /**
- * Eval Toolset = 生产基础工具域（Read + Write + Memory + begin_final_answer）：
- * 与普通 Visual Intake Turn（Computer OFF / Web Search OFF）完全一致 —— 直接复用
- * getKiroToolsForRequest({})，绝不隐藏生产 Tool（如 Reminder / Memory）。
- * begin_final_answer 保持生产 name/description/schema；Eval manual loop 只做执行适配。
+ * Eval Toolset = 完整生产工具域（Read + Write + Memory + begin_final_answer）：
+ * 与生产 Visual Intake Turn（Computer OFF / Web Search OFF）完全一致 —— 直接复用
+ * getKiroToolsForRequest({})，绝不隐藏生产 Tool（包括 Reminder / Memory）。
  */
 export function buildVisualEvalToolSet() {
   return getKiroToolsForRequest({});
@@ -429,9 +433,11 @@ export async function runVisualEvalScenario(input: {
   };
 }
 
-/** 运行（过滤后的）全部场景（1 run / scenario）；按 provider/model 分目录写 report */
+/** 运行（过滤后的）全部场景（1 run / scenario）；按固定 baseline provider/model 分目录写 report */
 export async function runVisualIntakeBenchmark(): Promise<{ report: VisualEvalReport; modelDir: string }> {
-  const { provider, model, apiKey } = VISUAL_EVAL_ENV;
+  const provider = VISUAL_BASELINE.provider;
+  const model = VISUAL_BASELINE.model;
+  const apiKey = VISUAL_EVAL_ENV.apiKey;
   const results: VisualEvalScenarioResult[] = [];
   const filter = resolveEvalScenarioFilter();
   const scenarios = filter
