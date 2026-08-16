@@ -95,6 +95,11 @@ test("Thread Header：不再显示 Kiro Logo / 名称 / AI Workspace；标题 = 
   // Empty State 大号 Logo（40px）
   await page.getByLabel("新对话").click();
   const emptyMark = page.getByTestId("kiro-empty").locator('img[src="/kiro/kiro-mark.png"]');
+  // Motion V1：empty intro 的 logo 有 0.96→1 进入缩放；等 settle 后测量
+  await expect(async () => {
+    const w = (await emptyMark.boundingBox())!.width;
+    expect(w).toBeGreaterThan(39.5);
+  }).toPass({ timeout: 2000 });
   const eBox = await emptyMark.boundingBox();
   expect(eBox!.width).toBeCloseTo(40, 0);
 });
@@ -146,10 +151,10 @@ test("Sidebar Kiro Active：无左侧黑线（active = 浅 Soft Plate + 常驻�
     .poll(() => ring.evaluate((el) => parseFloat(getComputedStyle(el).opacity)))
     .toBeGreaterThan(0.7);
 
-  // 普通导航保留左侧黑线
+  // 普通导航保留左侧黑线（App Chrome V2：滑动指示 plate 在 nav 区域，非按钮内嵌）
   const overviewBtn = page.locator("aside").first().getByRole("button", { name: "总览" });
   await overviewBtn.click();
-  await expect(overviewBtn.locator("span.rounded-full.bg-charcoal")).toHaveCount(1);
+  await expect(page.locator("aside").first().locator("span.rounded-full.bg-charcoal")).toHaveCount(1);
 });
 
 /** 覆盖持久化动效偏好（reload 后 pre-paint bootstrap 与 store 一并生效） */

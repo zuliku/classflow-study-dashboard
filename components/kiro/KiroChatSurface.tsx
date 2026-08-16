@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo } from "react";
+import React, { useMemo, useRef } from "react";
 import { useAppStore } from "@/store/useAppStore";
 import { useAISettingsStore } from "@/store/useAISettingsStore";
 import { useKiroRuntime, useKiroSessionMeta, useKiroSessionActions } from "@/components/kiro/KiroSessionProvider";
@@ -32,8 +32,17 @@ export function KiroChatSurface({ variant }: { variant: "workspace" | "sidecar" 
   const { claimEmptyIntro } = useKiroSessionActions();
   const compact = variant === "sidecar";
 
-  // Motion V1：Empty Intro claim（每 generation 每 surface 一次；渲染期 claim，无 StrictMode 环境安全）
-  const playIntro = chat.messages.length === 0 ? claimEmptyIntro(variant, emptyIntroGeneration) : false;
+  // Motion V1：Empty Intro claim（每 generation 每 surface 一次）。
+  // 渲染期缓存 claim 结果 —— 同 generation 内后续 re-render 返回相同值，intro 类不闪失；
+  // new chat → generation 递增 → 缓存失效 → 可再次 claim。
+  const introClaimRef = useRef<{ generation: number; value: boolean }>({ generation: -1, value: false });
+  const playIntro = (() => {
+    if (chat.messages.length > 0) return false;
+    if (introClaimRef.current.generation === emptyIntroGeneration) return introClaimRef.current.value;
+    const value = claimEmptyIntro(variant, emptyIntroGeneration);
+    introClaimRef.current = { generation: emptyIntroGeneration, value };
+    return value;
+  })();
 
   // Computer Agent Part 3：审批对话框 + 更改审查（runtime store 只存展示状态）
   const pendingApproval = useKiroComputerRuntimeStore((s) => s.pendingApproval);

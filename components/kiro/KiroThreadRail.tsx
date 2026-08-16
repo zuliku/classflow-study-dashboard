@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { usePresence } from "@/lib/usePresence";
 import { Plus, Search, MoreHorizontal, FileDown, Copy, Trash2, ChevronLeft, History as HistoryIcon } from "lucide-react";
 import { KIRO_PROJECT_ICON } from "@/components/kiro/kiroProjectIcon";
 import { useKiroSessionMeta, useKiroSessionActions } from "@/components/kiro/KiroSessionProvider";
@@ -68,6 +69,10 @@ export function KiroThreadRail({ onOpenProjects }: { onOpenProjects?: () => void
   const [records, setRecords] = useState<KiroConversationRecord[]>([]);
   const [moreOpen, setMoreOpen] = useState(false);
   const railRef = useRef<HTMLDivElement | null>(null);
+  // Motion V1：collapsed / expanded 两层 presence —— 只挂载 active 层（退场动画后 unmount），
+  // shell 本体始终同一 DOM（anchored width morph）
+  const collapsedPresence = usePresence(!expanded, 160);
+  const expandedPresence = usePresence(expanded, 220);
   const searchRef = useRef<HTMLInputElement | null>(null);
   const collapseAfterTransitionRef = useRef(false);
 
@@ -209,11 +214,34 @@ export function KiroThreadRail({ onOpenProjects }: { onOpenProjects?: () => void
     <div
       ref={railRef}
       data-testid="kiro-thread-rail"
-      className="hidden md:flex absolute left-3 top-20 z-20"
+      className="hidden md:block absolute left-3 top-20 z-20"
     >
-      {!expanded ? (
-        /* ---------- Collapsed Rail（52px） ---------- */
-        <div className="w-[52px] rounded-2xl bg-surface border border-line shadow-subtle flex flex-col items-center py-3 gap-1.5 max-h-[calc(100dvh-140px)]">
+      {/* Motion V1：ONE persistent shell（52 ↔ 216/232 anchored morph；chat geometry 不动）。
+          Logo/controls 两层 usePresence crossfade；无 setTimeout choreography。 */}
+      <div
+        data-testid="kiro-thread-rail-shell"
+        data-state={expanded ? "expanded" : "collapsed"}
+        className={cn(
+          "relative rounded-2xl bg-surface border border-line shadow-card overflow-hidden",
+          "w-[52px] data-[state=expanded]:w-[216px] lg:data-[state=expanded]:w-[232px]",
+          "data-[state=expanded]:max-h-[calc(100dvh-120px)]",
+          "transition-[width] duration-[var(--kiro-motion-spatial,220ms)] ease-[var(--ease-standard)]"
+        )}
+      >
+        {/* Collapsed layer：in-flow（collapsed）→ expand 时 absolute 脱离流（不撑高 shell）+ 立即失交互 */}
+        {collapsedPresence.mounted && (
+          <div
+            data-layer="collapsed"
+            aria-hidden={expanded}
+            className={cn(
+              "flex flex-col items-center py-3 gap-1.5",
+              expanded && "absolute inset-y-0 left-0 w-[52px] pointer-events-none",
+              "transition-[opacity,transform] ease-[var(--ease-standard)]",
+              !expanded && !collapsedPresence.visible
+                ? "opacity-0 -translate-x-[3px] duration-[80ms]"
+                : "opacity-100 translate-x-0 duration-[var(--kiro-motion-structure,150ms)] delay-[140ms]"
+            )}
+          >
           <button
             onClick={() => expand()}
             aria-label="展开对话"
@@ -267,18 +295,34 @@ export function KiroThreadRail({ onOpenProjects }: { onOpenProjects?: () => void
             >
               <MoreHorizontal className="w-4 h-4" />
             </button>
-            {moreMenu('right-end')}
+            {moreMenu("right-end")}
           </div>
-        </div>
-      ) : (
-        /* ---------- Expanded Rail（Overlay，不重排聊天宽度；max-height 防溢出） ---------- */
-        <div
-          role="dialog"
-          aria-label="对话"
-          className="w-[216px] lg:w-[232px] max-h-[calc(100dvh-120px)] rounded-2xl bg-surface border border-line shadow-card flex flex-col overflow-hidden animate-enter"
-        >
+          </div>
+        )}
+
+        {/* Expanded layer（in-flow；进入时 header→controls→history 递进；退出立即 inert） */}
+        {expandedPresence.mounted && (
+          <div
+            role="dialog"
+            aria-label="对话"
+            data-layer="expanded"
+            aria-hidden={!expanded}
+            className={cn(
+              "flex flex-col overflow-hidden",
+              "transition-[opacity,transform] ease-[var(--ease-standard)]",
+              expanded
+                ? "opacity-100 translate-x-0 duration-[var(--kiro-motion-structure,150ms)]"
+                : "opacity-0 -translate-x-[3px] pointer-events-none duration-[var(--kiro-motion-popover-exit,120ms)]"
+            )}
+          >
           {/* Header：Soft Plate Logo + Kiro + 收起（bg-surface 极浅底，不压 Logo 原色） */}
-          <div className="shrink-0 flex items-center justify-between gap-2 px-2.5 py-2.5 border-b border-line bg-surface">
+          <div
+            className={cn(
+              "shrink-0 flex items-center justify-between gap-2 px-2.5 py-2.5 border-b border-line bg-surface",
+              "transition-opacity ease-[var(--ease-standard)]",
+              expanded ? "opacity-100 duration-[var(--kiro-motion-structure,150ms)] delay-[55ms]" : "opacity-0"
+            )}
+          >
             <div className="flex items-center gap-2 min-w-0 group/plate">
               <KiroRailPlate size="sm" active />
               <span className="text-xs font-semibold text-charcoal">Kiro</span>
@@ -293,7 +337,13 @@ export function KiroThreadRail({ onOpenProjects }: { onOpenProjects?: () => void
           </div>
 
           {/* + 新对话 / 搜索（固定区） */}
-          <div className="shrink-0 space-y-1.5 px-2.5 pt-2.5 pb-2">
+          <div
+            className={cn(
+              "shrink-0 space-y-1.5 px-2.5 pt-2.5 pb-2",
+              "transition-opacity ease-[var(--ease-standard)]",
+              expanded ? "opacity-100 duration-[var(--kiro-motion-structure,150ms)] delay-[75ms]" : "opacity-0"
+            )}
+          >
             <button
               onClick={newChat}
               disabled={meta.conversationTransitioning}
@@ -325,8 +375,14 @@ export function KiroThreadRail({ onOpenProjects }: { onOpenProjects?: () => void
             )}
           </div>
 
-          {/* Thread 列表（独立滚动区） */}
-          <div className="flex-1 min-h-0 overflow-y-auto px-2 pb-2 space-y-0.5">
+          {/* Thread 列表（独立滚动区；进入时最后出现，不逐 row stagger） */}
+          <div
+            className={cn(
+              "flex-1 min-h-0 overflow-y-auto px-2 pb-2 space-y-0.5",
+              "transition-opacity ease-[var(--ease-standard)]",
+              expanded ? "opacity-100 duration-[var(--kiro-motion-structure,150ms)] delay-[95ms]" : "opacity-0"
+            )}
+          >
             <p className="text-[10px] font-semibold text-sandrift px-1.5 pt-1 pb-1">
               {showAll ? "全部历史" : "最近"}
             </p>
@@ -368,11 +424,12 @@ export function KiroThreadRail({ onOpenProjects }: { onOpenProjects?: () => void
               >
                 <MoreHorizontal className="w-4 h-4" />
               </button>
-              {moreMenu('top-end')}
+              {moreMenu("top-end")}
             </div>
           </div>
-        </div>
-      )}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

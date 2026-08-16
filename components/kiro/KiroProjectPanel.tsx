@@ -65,6 +65,9 @@ export function KiroProjectPanel({
 
   const expanded = mode === "expanded";
   const { mounted, visible } = usePresence(mode !== "closed", 160);
+  // Motion V1：expanded / collapsed 两层 presence（shell 同一 DOM anchored width morph）
+  const expandedPresence = usePresence(expanded, 200);
+  const collapsedPresence = usePresence(!expanded, 160);
 
   const openView = useCallback(
     (v: ProjectView, projectId?: string) => {
@@ -383,24 +386,87 @@ export function KiroProjectPanel({
   return (
     <div
       data-testid="kiro-project-panel"
-      className="hidden md:block absolute right-3 top-20 z-20 transition-[width] duration-200 ease-standard"
-      style={{ width: expanded ? 296 : 52 }}
+      className="hidden md:block absolute right-3 top-20 z-20"
     >
+      {/* Motion V1：ONE persistent shell（52 ↔ 296/304 anchored morph；right edge 不动） */}
       <div
+        data-testid="kiro-project-panel-shell"
+        data-state={expanded ? "expanded" : "collapsed"}
         className={cn(
-          "transition-[opacity,transform] duration-[var(--motion-panel)] ease-standard",
-          visible ? "opacity-100 translate-x-0" : "opacity-0 translate-x-2"
+          "relative rounded-2xl bg-surface border border-line shadow-card overflow-hidden",
+          "w-[52px] data-[state=expanded]:w-[296px] lg:data-[state=expanded]:w-[304px]",
+          "data-[state=expanded]:max-h-[calc(100dvh-112px)]",
+          // closed exit：整体轻淡出（visible 由 mode!=="closed" presence 驱动）
+          "transition-[width,opacity] duration-[var(--kiro-motion-spatial,220ms)] ease-[var(--ease-standard)]",
+          visible ? "opacity-100" : "opacity-0"
         )}
       >
-        {expanded ? (
-          /* ---------- Expanded Panel（296/lg 304px） ---------- */
+        {collapsedPresence.mounted && (
+          /* ---------- Collapsed Rail（52px；expand 时 absolute 脱离流，不撑高 shell） ---------- */
+          <div
+            data-layer="collapsed"
+            aria-hidden={expanded}
+            className={cn(
+              "w-[52px] flex flex-col items-center py-3 gap-1.5",
+              expanded && "absolute inset-y-0 left-0 pointer-events-none",
+              "transition-[opacity,transform] ease-[var(--ease-standard)]",
+              !expanded && !collapsedPresence.visible
+                ? "opacity-0 translate-x-[3px] duration-[80ms]"
+                : "opacity-100 translate-x-0 duration-[var(--kiro-motion-structure,150ms)] delay-[140ms]"
+            )}
+          >
+            <button
+              onClick={() => onSetMode("expanded")}
+              aria-label="项目"
+              aria-expanded={false}
+              title="项目"
+              className="w-9 h-9 flex items-center justify-center rounded-xl text-sandrift hover:bg-alabaster hover:text-charcoal transition-colors"
+            >
+              <KIRO_PROJECT_ICON className="w-4 h-4" />
+            </button>
+            <div className="w-5 h-px bg-line-soft my-0.5" />
+            <button
+              onClick={() => onSetMode("closed")}
+              aria-label="关闭项目"
+              title="关闭项目"
+              className="w-9 h-9 flex items-center justify-center rounded-xl text-sandrift hover:bg-alabaster hover:text-charcoal transition-colors"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        )}
+
+        {expandedPresence.mounted && (
+          /* ---------- Expanded Panel（296/lg 304px；进入时 header→body 递进，退出立即 inert） ---------- */
           <div
             role="dialog"
             aria-label="项目"
-            className="w-[296px] lg:w-[304px] max-h-[calc(100dvh-112px)] h-fit rounded-2xl bg-surface border border-line shadow-card flex flex-col overflow-hidden"
+            data-layer="expanded"
+            aria-hidden={!expanded}
+            className={cn(
+              "flex flex-col overflow-hidden",
+              "transition-[opacity,transform] ease-[var(--ease-standard)]",
+              expanded
+                ? "opacity-100 translate-x-0 duration-[var(--kiro-motion-structure,150ms)]"
+                : "opacity-0 translate-x-2 pointer-events-none duration-[var(--kiro-motion-popover-exit,120ms)]"
+            )}
           >
-            {header}
-
+            <div
+              className={cn(
+                "shrink-0",
+                "transition-opacity ease-[var(--ease-standard)]",
+                expanded ? "opacity-100 duration-[var(--kiro-motion-structure,150ms)] delay-[55ms]" : "opacity-0"
+              )}
+            >
+              {header}
+            </div>
+            <div
+              className={cn(
+                "flex-1 min-h-0 flex flex-col overflow-hidden",
+                "transition-opacity ease-[var(--ease-standard)]",
+                expanded ? "opacity-100 duration-[var(--kiro-motion-structure,150ms)] delay-[90ms]" : "opacity-0"
+              )}
+            >
             {formOpen ? (
               <div className="p-2.5 space-y-2 border-b border-line">
                 <input
@@ -673,27 +739,6 @@ export function KiroProjectPanel({
               </div>
             )}
           </div>
-        ) : (
-          /* ---------- Collapsed Rail（52px） ---------- */
-          <div className="w-[52px] rounded-2xl bg-surface border border-line shadow-subtle flex flex-col items-center py-3 gap-1.5">
-            <button
-              onClick={() => onSetMode("expanded")}
-              aria-label="项目"
-              aria-expanded={false}
-              title="项目"
-              className="w-9 h-9 flex items-center justify-center rounded-xl text-sandrift hover:bg-alabaster hover:text-charcoal transition-colors"
-            >
-              <KIRO_PROJECT_ICON className="w-4 h-4" />
-            </button>
-            <div className="w-5 h-px bg-line-soft my-0.5" />
-            <button
-              onClick={() => onSetMode("closed")}
-              aria-label="关闭项目"
-              title="关闭项目"
-              className="w-9 h-9 flex items-center justify-center rounded-xl text-sandrift hover:bg-alabaster hover:text-charcoal transition-colors"
-            >
-              <X className="w-4 h-4" />
-            </button>
           </div>
         )}
       </div>
