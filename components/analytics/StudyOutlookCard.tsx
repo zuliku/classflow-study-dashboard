@@ -62,7 +62,7 @@ export function StudyOutlookCard({
     tasks.some((t) => t.reasons.includes("scheduled_after_deadline"));
 
   return (
-    <div className="bg-surface border border-line rounded-2xl shadow-subtle" data-testid="study-outlook-card">
+    <div className="w-full min-w-0 bg-surface border border-line rounded-2xl shadow-subtle" data-testid="study-outlook-card">
       <div className="px-4 pt-4 pb-3 border-b border-line-soft">
         <div className="flex items-center justify-between">
           <h3 className="flex items-center gap-1.5 text-sm font-bold text-charcoal">

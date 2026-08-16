@@ -35,7 +35,10 @@ export function LearningSignalsCard({
   if (signals.length === 0) {
     // V3.1：紧凑 Level 3 contextual state（不制造高卡空洞）
     return (
-      <div className="bg-alabaster/50 border border-line rounded-xl px-3.5 py-3 h-fit self-start" data-testid="learning-signals-card">
+      <div
+      className="w-full min-w-0 bg-alabaster/50 border border-line rounded-xl px-3.5 py-3 h-fit self-start"
+      data-testid="learning-signals-card"
+    >
         <h3 className="text-[11px] font-bold text-charcoal">值得注意</h3>
         <p className="text-[10px] text-sandrift mt-0.5">目前没有明显需要调整的信号</p>
       </div>

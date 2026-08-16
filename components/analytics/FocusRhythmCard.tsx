@@ -17,7 +17,10 @@ const BUCKET_ICON: Record<string, typeof Moon> = {
 export function FocusRhythmCard({ rhythm }: { rhythm: FocusRhythm }) {
   const maxMinutes = Math.max(...rhythm.byTimeOfDay.map((b) => b.minutes), 1);
   return (
-    <div className="bg-surface border border-line rounded-2xl p-4 h-fit" data-testid="focus-rhythm-card">
+    <div
+      className="w-full min-w-0 bg-surface border border-line rounded-2xl p-4 h-fit"
+      data-testid="focus-rhythm-card"
+    >
       <h3 className="text-sm font-bold text-charcoal">专注节奏</h3>
       <div className="space-y-1.5 pt-3">
         {rhythm.byTimeOfDay.map((b) => {

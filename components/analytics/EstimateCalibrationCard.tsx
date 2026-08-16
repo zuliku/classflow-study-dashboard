@@ -23,7 +23,7 @@ export function EstimateCalibrationCard({ calibration }: { calibration: Estimate
 
   if (calibration.status !== "ready" || calibration.medianRatio === null) {
     return (
-      <div className="bg-surface border border-line rounded-2xl p-4">
+    <div className="w-full min-w-0 bg-surface border border-line rounded-2xl p-4" data-testid="estimate-calibration-card">
         <h3 className="flex items-center gap-1.5 text-sm font-bold text-charcoal pb-2 border-b border-[#F0EBE1]">
           <Scale className="w-4 h-4 text-[#A48F82]" />
           估时参考
@@ -40,7 +40,7 @@ export function EstimateCalibrationCard({ calibration }: { calibration: Estimate
   const interpretation = INTERPRETATION_COPY[calibration.interpretation ?? ""] ?? "";
 
   return (
-    <div className="bg-surface border border-line rounded-2xl p-4">
+    <div className="w-full min-w-0 bg-surface border border-line rounded-2xl p-4" data-testid="estimate-calibration-card">
       <h3 className="flex items-center gap-1.5 text-sm font-bold text-charcoal pb-2 border-b border-[#F0EBE1]">
         <Scale className="w-4 h-4 text-[#A48F82]" />
         估时参考

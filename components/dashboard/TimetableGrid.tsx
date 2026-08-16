@@ -782,8 +782,18 @@ export function TimetableGrid({
                           </div>
                         </div>
 
-                        {/* Bottom Row: Location Badge */}
+                        {/* Bottom Row: Extra Marker + Location Badge（+ 必须是行内最左元素；
+                            仅 source === "extra" 的补课 occurrence 显示；moved/base 不显示） */}
                         <div className="flex items-center text-[10px] sm:text-[11px] opacity-90 pt-0.5 border-t border-black/5 font-medium leading-none mt-0.5">
+                          {sched.source === "extra" && (
+                            <span
+                              title="补课"
+                              className="text-[11px] font-extrabold leading-none shrink-0 opacity-80 mr-1"
+                            >
+                              <span aria-hidden="true">+</span>
+                              <span className="sr-only">补课</span>
+                            </span>
+                          )}
                           <MapPin className="w-2.5 h-2.5 mr-1 shrink-0 opacity-75" />
                           <span className="truncate">{sched.location}</span>
                         </div>

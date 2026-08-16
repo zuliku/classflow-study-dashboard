@@ -37,6 +37,10 @@ function ChartSkeleton() {
   return <div className="h-64 w-full rounded-xl bg-alabaster animate-pulse" />;
 }
 
+/** B2/B9：双并列信息 Card 的统一列几何（Desktop 50/50；Tablet/Mobile 单列）。
+ *  Loading Skeleton 与 Loaded 共用同一常量（避免横向 layout shift）。 */
+export const ANALYTICS_PAIRED_GRID = "grid grid-cols-1 lg:grid-cols-2 gap-4 items-start";
+
 function EmptyState() {
   return (
     <div className="bg-surface border border-line rounded-2xl p-10 shadow-subtle flex flex-col items-center justify-center text-center gap-1.5">
@@ -156,11 +160,12 @@ export function LearningAnalyticsView() {
           {loading ? (
             <>
               <AnalyticsSummaryStripSkeleton />
-              <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,2fr)_minmax(280px,0.8fr)] gap-4 items-start">
+              {/* Loading Skeleton 与 Loaded 使用同一 Paired Grid（避免横向 layout shift） */}
+              <div className={ANALYTICS_PAIRED_GRID}>
                 <ChartSkeleton />
                 <div className="h-40 w-full rounded-xl bg-alabaster animate-pulse" />
               </div>
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
+              <div className={ANALYTICS_PAIRED_GRID}>
                 <div className="h-52 w-full rounded-xl bg-alabaster animate-pulse" />
                 <div className="h-40 w-full rounded-xl bg-alabaster animate-pulse" />
               </div>
@@ -201,8 +206,8 @@ export function LearningAnalyticsView() {
                     </div>
                   )}
 
-                  {/* 学习趋势（唯一主视觉）+ 值得注意 */}
-                  <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,2fr)_minmax(280px,0.8fr)] gap-4 items-start">
+                  {/* 学习趋势（唯一主视觉）+ 值得注意 —— 统一 Paired Grid（50/50；层级由标题/图表/顺序表达） */}
+                  <div className={ANALYTICS_PAIRED_GRID}>
                     <div className="bg-surface border border-line rounded-2xl p-4 shadow-subtle">
                       <h3 className="text-sm font-bold text-charcoal pb-2 border-b border-[#F0EBE1]">
                         学习趋势
@@ -222,7 +227,7 @@ export function LearningAnalyticsView() {
                         专注记录在该区间不完整，以下为已记录部分
                       </p>
                     )}
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
+                    <div className={ANALYTICS_PAIRED_GRID}>
                       <CourseInvestmentCard
                         investment={presentCourseInvestment(data.courseInvestment, courseNameById)}
                         onOpenCourse={(courseId) => {
@@ -259,7 +264,7 @@ export function LearningAnalyticsView() {
           ) : outlook.data ? (
             <section>
               <h2 className="text-[13px] font-bold text-charcoal mb-3">下一步</h2>
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
+              <div className={ANALYTICS_PAIRED_GRID}>
                 <StudyOutlookCard
                   outlook={outlook.data}
                   horizonDays={outlookHorizon}
