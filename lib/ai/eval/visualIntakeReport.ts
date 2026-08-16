@@ -37,10 +37,11 @@ export interface VisualEvalFinding {
 }
 
 /**
- * Eval V1.2：Benchmark Validity —— 「这次评测运行本身是否可信」。
- * - validity.ok = 所有请求的 Scenario 都产生了有效的模型业务结果（runtimeErrorCount === 0）
- * - filtered run 可以 ok=true，但 baselineEligible=false（不能代表完整 suite baseline）
- * - full + 0 runtime error → baselineEligible=true
+ * Eval V1.2 + V1.2.1：Benchmark Validity —— 「这次评测运行本身是否可信」。
+ * - ok = 零 runtime error && 零结构性问题（missing/duplicate/unexpected results）
+ * - coverage 是 selection mode（filtered 是 canonical fact），不是数量关系：
+ *   显式列出全部 20 个 ID 仍是 filtered（targeted selection invocation），baselineEligible=false
+ * - baselineEligible = ok && !filtered && requested Set === canonical full-suite Set（identity，不是 length）
  */
 export interface VisualEvalValidity {
   ok: boolean;
@@ -50,6 +51,10 @@ export interface VisualEvalValidity {
   providerErrorScenarios: string[];
   harnessErrorScenarios: string[];
   unknownErrorScenarios: string[];
+  /** Eval V1.2.1：结构性检查（requested vs results 的 scenario identity） */
+  missingScenarioResults: string[];
+  duplicateScenarioResults: string[];
+  unexpectedScenarioResults: string[];
   coverage: "full" | "filtered";
   baselineEligible: boolean;
   violations: string[];
@@ -57,28 +62,54 @@ export interface VisualEvalValidity {
 
 export function evaluateVisualEvalValidity(input: {
   scenarios: VisualEvalScenarioResult[];
-  requestedScenarioCount: number;
-  fullSuiteScenarioCount: number;
+  requestedScenarioIds: string[];
+  fullSuiteScenarioIds: string[];
+  filtered: boolean;
 }): VisualEvalValidity {
   const providerErrorScenarios = input.scenarios.filter((s) => s.runtimeError?.type === "provider").map((s) => s.scenarioId);
   const harnessErrorScenarios = input.scenarios.filter((s) => s.runtimeError?.type === "harness").map((s) => s.scenarioId);
   const unknownErrorScenarios = input.scenarios.filter((s) => s.runtimeError?.type === "unknown").map((s) => s.scenarioId);
   const runtimeErrorCount = providerErrorScenarios.length + harnessErrorScenarios.length + unknownErrorScenarios.length;
-  const coverage = input.requestedScenarioCount >= input.fullSuiteScenarioCount ? "full" : "filtered";
+
+  // 结构性检查：requested Set vs result IDs（identity，绝不按数量推断）
+  const requestedSet = new Set(input.requestedScenarioIds);
+  const resultIds = input.scenarios.map((s) => s.scenarioId);
+  const seen = new Set<string>();
+  const duplicateScenarioResults: string[] = [];
+  for (const id of resultIds) {
+    if (seen.has(id)) duplicateScenarioResults.push(id);
+    seen.add(id);
+  }
+  const missingScenarioResults = input.requestedScenarioIds.filter((id) => !seen.has(id));
+  const unexpectedScenarioResults = Array.from(seen).filter((id) => !requestedSet.has(id));
+
+  const coverage = input.filtered ? "filtered" : "full";
   const violations: string[] = [];
   if (providerErrorScenarios.length > 0) violations.push(`provider errors: ${providerErrorScenarios.join(",")}`);
   if (harnessErrorScenarios.length > 0) violations.push(`harness errors: ${harnessErrorScenarios.join(",")}`);
   if (unknownErrorScenarios.length > 0) violations.push(`unknown errors: ${unknownErrorScenarios.join(",")}`);
+  if (missingScenarioResults.length > 0) violations.push(`missing results: ${missingScenarioResults.join(",")}`);
+  if (duplicateScenarioResults.length > 0) violations.push(`duplicate results: ${duplicateScenarioResults.join(",")}`);
+  if (unexpectedScenarioResults.length > 0) violations.push(`unexpected results: ${unexpectedScenarioResults.join(",")}`);
+  const structurallyComplete = missingScenarioResults.length === 0 && duplicateScenarioResults.length === 0 && unexpectedScenarioResults.length === 0;
+  // baselineEligible：完整 suite 的 identity 完全一致（显式全量 ID filter → filtered → false）
+  const fullSuiteSet = new Set(input.fullSuiteScenarioIds);
+  const exactFullSuite = !input.filtered &&
+    input.requestedScenarioIds.length === input.fullSuiteScenarioIds.length &&
+    input.requestedScenarioIds.every((id) => fullSuiteSet.has(id));
   return {
-    ok: runtimeErrorCount === 0,
-    requestedScenarioCount: input.requestedScenarioCount,
+    ok: runtimeErrorCount === 0 && structurallyComplete,
+    requestedScenarioCount: input.requestedScenarioIds.length,
     evaluatedScenarioCount: input.scenarios.length,
     runtimeErrorCount,
     providerErrorScenarios,
     harnessErrorScenarios,
     unknownErrorScenarios,
+    missingScenarioResults,
+    duplicateScenarioResults,
+    unexpectedScenarioResults,
     coverage,
-    baselineEligible: runtimeErrorCount === 0 && coverage === "full",
+    baselineEligible: runtimeErrorCount === 0 && structurallyComplete && exactFullSuite,
     violations,
   };
 }
@@ -181,6 +212,10 @@ function pct(n: number, d: number): number | null {
 export function buildVisualEvalReport(input: {
   scenarios: VisualEvalScenarioResult[];
   meta: Omit<VisualEvalReportMeta, "scenarioCount" | "gitSha"> & { scenarioCount?: number; gitSha?: string };
+  /** Eval V1.2.1：requested scenario identity（Validity 结构性检查；缺省回落为 results IDs） */
+  requestedScenarioIds?: string[];
+  /** Eval V1.2.1：canonical full suite identity（缺省回落为 requested） */
+  fullSuiteScenarioIds?: string[];
 }): VisualEvalReport {
   const { scenarios, meta } = input;
   // Eval V1.2：质量指标只聚合有效模型业务结果（runtime error 不算 Action FN / Recall 下降）
@@ -241,8 +276,9 @@ export function buildVisualEvalReport(input: {
     },
     validity: evaluateVisualEvalValidity({
       scenarios,
-      requestedScenarioCount: meta.scenarioCount ?? scenarios.length,
-      fullSuiteScenarioCount: meta.fullSuiteScenarioCount ?? meta.scenarioCount ?? scenarios.length,
+      requestedScenarioIds: input.requestedScenarioIds ?? scenarios.map((s) => s.scenarioId),
+      fullSuiteScenarioIds: input.fullSuiteScenarioIds ?? input.requestedScenarioIds ?? scenarios.map((s) => s.scenarioId),
+      filtered: meta.filtered === true,
     }),
     summary: {
       pass: qualityScenarios.filter((s) => s.outcome === "pass").length,
@@ -298,6 +334,10 @@ export function renderVisualEvalMarkdown(report: VisualEvalReport): string {
   if (report.validity.providerErrorScenarios.length > 0) lines.push(`- Provider: ${report.validity.providerErrorScenarios.join(", ")}`);
   if (report.validity.harnessErrorScenarios.length > 0) lines.push(`- Harness: ${report.validity.harnessErrorScenarios.join(", ")}`);
   if (report.validity.unknownErrorScenarios.length > 0) lines.push(`- Unknown: ${report.validity.unknownErrorScenarios.join(", ")}`);
+  // Eval V1.2.1：结构性检查（仅非空时显示）
+  if (report.validity.missingScenarioResults.length > 0) lines.push(`- Missing results: ${report.validity.missingScenarioResults.join(", ")}`);
+  if (report.validity.duplicateScenarioResults.length > 0) lines.push(`- Duplicate results: ${report.validity.duplicateScenarioResults.join(", ")}`);
+  if (report.validity.unexpectedScenarioResults.length > 0) lines.push(`- Unexpected results: ${report.validity.unexpectedScenarioResults.join(", ")}`);
   if (!report.validity.ok) {
     lines.push("");
     lines.push("Validity violations:");

@@ -6,14 +6,8 @@
  * 不复制 useKiroChat；不通过 UI/Playwright 驱动。
  * 输出 .tmp/visual-intake-eval/<provider>__<model>/report.json + report.md；绝不记录 API Key / reasoning / CoT。
  */
-import { streamText, convertToModelMessages, tool } from "ai";
-import { z } from "zod";
-import { KIRO_READ_TOOLS } from "@/lib/ai/tools/read/registry";
-import { KIRO_WRITE_TOOLS } from "@/lib/ai/tools/write/registry";
-import {
-  KIRO_FINAL_ANSWER_TOOL_NAME,
-  KIRO_FINAL_ANSWER_TOOL_DESCRIPTION,
-} from "@/lib/ai/tools/finalAnswer";
+import { streamText, convertToModelMessages } from "ai";
+import { getKiroToolsForRequest } from "@/lib/ai/tools";
 import { KIRO_SYSTEM_PROMPT } from "@/lib/ai/config";
 import { buildClassFlowContextSection } from "@/lib/ai/prompts/classFlowContextSection";
 import { resolveLanguageModel } from "@/lib/ai/providers/resolver";
@@ -76,21 +70,13 @@ export const VISUAL_EVAL_MAX_READ_CALLS = 12;
 export const VISUAL_EVAL_MAX_WRITE_ATTEMPTS = 8;
 
 /**
- * Eval 专用 Toolset（Visual Intake Benchmark 范围）：
- * = 生产 Read Tools（含 propose_visual_actions）+ 生产 Write Tools（Reminder 三件除外——
- *   create_reminder 是根级 discriminatedUnion schema，序列化无根 type:"object"，部分上游（如 Kimi K3）会整体拒绝；
- *   生产保持不动，Eval 范围也不涉及 Reminder）+ begin_final_answer。
- * Write Tools 仍全部暴露给模型，生产 Visual Guard 负责拦截（Direct Write Attempt 记录）。 */
+ * Eval Toolset = 生产基础工具域（Read + Write + Memory + begin_final_answer）：
+ * 与普通 Visual Intake Turn（Computer OFF / Web Search OFF）完全一致 —— 直接复用
+ * getKiroToolsForRequest({})，绝不隐藏生产 Tool（如 Reminder / Memory）。
+ * begin_final_answer 保持生产 name/description/schema；Eval manual loop 只做执行适配。
+ */
 export function buildVisualEvalToolSet() {
-  const { create_reminder, update_reminder, delete_reminder, ...writeTools } = KIRO_WRITE_TOOLS;
-  return {
-    ...KIRO_READ_TOOLS,
-    ...writeTools,
-    [KIRO_FINAL_ANSWER_TOOL_NAME]: tool({
-      description: KIRO_FINAL_ANSWER_TOOL_DESCRIPTION,
-      inputSchema: z.object({}),
-    }),
-  };
+  return getKiroToolsForRequest({});
 }
 
 /** Eval V1.2：runtime error message 安全归一化 + hard bound（绝不落 raw provider body / key / stack） */
@@ -99,6 +85,46 @@ export function safeRuntimeErrorMessage(err: unknown): { code?: string; message:
   return {
     ...(normalized?.code ? { code: normalized.code } : {}),
     message: (normalized?.message ?? "未知运行时错误").slice(0, 300),
+  };
+}
+
+/** Eval V1.2.1：Runtime Failure 必须保留失败前已观察到的 Safety / Tool facts（绝不默认置空） */
+export interface VisualEvalRunSnapshot {
+  finalAnswer: string;
+  toolTrace: ToolTraceEntry[];
+  directWriteAttempts: string[];
+  proposalData: VisualEvalAgentRun["proposalData"];
+  proposalAttempt: VisualProposalAttempt | null;
+  preflightRejectedCode?: string;
+  rounds: number;
+}
+
+/** 模型 resolve / 截图 render 之前的失败：确实没有任何观察事实 */
+export const EMPTY_VISUAL_EVAL_RUN_SNAPSHOT: VisualEvalRunSnapshot = {
+  finalAnswer: "",
+  toolTrace: [],
+  directWriteAttempts: [],
+  proposalData: null,
+  proposalAttempt: null,
+  rounds: 0,
+};
+
+export function buildRuntimeFailureRun(input: {
+  scenarioId: string;
+  type: "provider" | "harness" | "unknown";
+  safeError: { code?: string; message: string };
+  snapshot: VisualEvalRunSnapshot;
+}): VisualEvalAgentRun {
+  return {
+    scenarioId: input.scenarioId,
+    finalAnswer: input.snapshot.finalAnswer,
+    toolTrace: [...input.snapshot.toolTrace],
+    directWriteAttempts: [...input.snapshot.directWriteAttempts],
+    proposalData: input.snapshot.proposalData,
+    proposalAttempt: input.snapshot.proposalAttempt,
+    preflightRejectedCode: input.snapshot.preflightRejectedCode,
+    rounds: input.snapshot.rounds,
+    runtimeError: { type: input.type, ...(input.safeError.code ? { code: input.safeError.code } : {}), message: input.safeError.message },
   };
 }
 
@@ -139,11 +165,26 @@ interface RawToolCall {
   input: unknown;
 }
 
-/** KIRO_VISUAL_EVAL_SCENARIOS 过滤（逗号分隔真实 scenario ID；未知 ID → INVALID_EVAL_SCENARIO_ID） */
+/** 纯函数：解析逗号分隔 Scenario ID（保留 first occurrence 去重；空 → []） */
+export function parseEvalScenarioFilter(raw: string): string[] {
+  const ids: string[] = [];
+  const seen = new Set<string>();
+  for (const s of raw.split(",")) {
+    const id = s.trim();
+    if (!id) continue;
+    if (seen.has(id)) continue;
+    seen.add(id);
+    ids.push(id);
+  }
+  return ids;
+}
+
+/** KIRO_VISUAL_EVAL_SCENARIOS 过滤（逗号分隔真实 scenario ID；未知 ID → INVALID_EVAL_SCENARIO_ID；
+ *  重复 ID 去重（保留 first occurrence）；执行顺序始终按 canonical suite 定义顺序） */
 export function resolveEvalScenarioFilter(): string[] | null {
   const raw = process.env.KIRO_VISUAL_EVAL_SCENARIOS ?? "";
   if (!raw.trim()) return null;
-  const ids = raw.split(",").map((s) => s.trim()).filter(Boolean);
+  const ids = parseEvalScenarioFilter(raw);
   const known = new Set(VISUAL_INTAKE_EVAL_SCENARIOS.map((s) => s.id));
   for (const id of ids) {
     if (!known.has(id)) throw new Error(`INVALID_EVAL_SCENARIO_ID: ${id}`);
@@ -176,15 +217,17 @@ export async function runVisualEvalScenario(input: {
 
   // Eval V1.2：Runtime Error 在明确边界分类（provider = model resolve/stream；harness = screenshot/executor；
   // 无法归类 → unknown）；message 经 normalizeAIError 安全归一化 + hard bound。
-  const runtimeFail = (type: "provider" | "harness" | "unknown", safe: { code?: string; message: string }): VisualEvalAgentRun => ({
-    scenarioId: scenario.id,
-    finalAnswer: "",
-    toolTrace: [],
-    directWriteAttempts: [],
-    proposalData: null,
-    proposalAttempt: null,
-    rounds: 0,
-    runtimeError: { type, ...(safe.code ? { code: safe.code } : {}), message: safe.message },
+  // Eval V1.2.1：失败必须 snapshot 当前已观察状态（toolTrace / direct writes / proposalAttempt 绝不默认置空）。
+  const failure = (type: "provider" | "harness" | "unknown", safe: { code?: string; message: string }, snapshot: VisualEvalRunSnapshot): VisualEvalAgentRun =>
+    buildRuntimeFailureRun({ scenarioId: scenario.id, type, safeError: safe, snapshot });
+  const snapshotNow = (): VisualEvalRunSnapshot => ({
+    finalAnswer,
+    toolTrace,
+    directWriteAttempts,
+    proposalData,
+    proposalAttempt,
+    preflightRejectedCode,
+    rounds,
   });
 
   let lm: Awaited<ReturnType<typeof resolveLanguageModel>>["model"];
@@ -194,18 +237,18 @@ export async function runVisualEvalScenario(input: {
     lm = resolved.model;
     definition = resolved.definition;
   } catch (err) {
-    return runtimeFail("provider", safeRuntimeErrorMessage(err));
+    return failure("provider", safeRuntimeErrorMessage(err), EMPTY_VISUAL_EVAL_RUN_SNAPSHOT);
   }
   const caps = getModelCapabilities({ provider: provider as AIProviderId, model });
   if (!caps.vision || !definition.capabilities.vision) {
-    return runtimeFail("harness", { message: "Selected model does not support vision." });
+    return failure("harness", { message: "Selected model does not support vision." }, EMPTY_VISUAL_EVAL_RUN_SNAPSHOT);
   }
 
   let png: Buffer;
   try {
     ({ png } = renderScreenshot(scenario.screenshot));
   } catch (err) {
-    return runtimeFail("harness", safeRuntimeErrorMessage(err));
+    return failure("harness", safeRuntimeErrorMessage(err), EMPTY_VISUAL_EVAL_RUN_SNAPSHOT);
   }
   // 本 Turn 图片（synthetic runtime attachment id；Guard 依据 = 图片来源存在）
   const turnImageAttachmentIds = ["eval_att_1"];
@@ -269,18 +312,8 @@ export async function runVisualEvalScenario(input: {
       finalAnswer = text;
 
       if (streamError) {
-        // 区分 provider 错误与模型业务空响应：stream 级错误 → provider 层，直接结束该 scenario
-        return {
-          scenarioId: scenario.id,
-          finalAnswer: text,
-          toolTrace,
-          directWriteAttempts,
-          proposalData,
-          proposalAttempt,
-          preflightRejectedCode,
-          rounds,
-          runtimeError: { type: "provider", ...safeRuntimeErrorMessage(streamError) },
-        };
+        // 区分 provider 错误与模型业务空响应：stream 级错误 → provider 层，保留此前已观察的 Safety / Tool facts
+        return failure("provider", safeRuntimeErrorMessage(streamError), snapshotNow());
       }
 
     if (toolCalls.length === 0) {
@@ -328,8 +361,10 @@ export async function runVisualEvalScenario(input: {
           timezone,
         });
       } catch (err) {
-        // Eval V1.2：Eval 确定性 executor 自身异常 → harness 层（不是模型业务错误）
-        return runtimeFail("harness", safeRuntimeErrorMessage(err));
+        // Eval V1.2.1：executor 异常前先把当前 Tool 记录进 trace（harness 在哪个 Tool 失败可见；
+        // 普通 Read Tool 不会被 isClassFlowMutationTool 误记成 Safety violation），随后保留全部已观察状态
+        toolTrace.push({ tool: toolName, result: "error" });
+        return failure("harness", safeRuntimeErrorMessage(err), snapshotNow());
       }
       toolTrace.push({ tool: toolName, result: out.ok ? "ok" : "error" });
       if (toolName === "propose_visual_actions") {
@@ -378,8 +413,8 @@ export async function runVisualEvalScenario(input: {
     if (toolCalls.some((t) => t.toolName === "begin_final_answer")) break;
     }
   } catch (err) {
-    // Eval V1.2：model stream 层异常 → provider 层（安全归一化；绝不落 raw body / key）
-    return runtimeFail("provider", safeRuntimeErrorMessage(err));
+    // Eval V1.2：model stream 层异常 → provider 层（安全归一化；保留此前已观察的 Safety / Tool facts）
+    return failure("provider", safeRuntimeErrorMessage(err), snapshotNow());
   }
 
   return {
@@ -444,16 +479,19 @@ export async function runVisualIntakeBenchmark(): Promise<{ report: VisualEvalRe
     }
   }
 
-  // Eval V1.2：report 元数据显式携带 full suite / filtered（不硬编码 20）
+  // Eval V1.2：report 元数据显式携带 full suite / filtered / scenario identity（不硬编码 20）
+  const fullSuiteScenarioIds = VISUAL_INTAKE_EVAL_SCENARIOS.map((s) => s.id);
   const report = buildVisualEvalReport({
     scenarios: results,
     meta: {
       timestamp: new Date().toISOString(),
       provider,
       model,
-      fullSuiteScenarioCount: VISUAL_INTAKE_EVAL_SCENARIOS.length,
+      fullSuiteScenarioCount: fullSuiteScenarioIds.length,
       filtered: filter !== null,
     },
+    requestedScenarioIds: scenarios.map((s) => s.id),
+    fullSuiteScenarioIds,
   });
 
   writeFileSync(join(dir, "report.json"), JSON.stringify(report, null, 2), "utf8");
@@ -462,8 +500,9 @@ export async function runVisualIntakeBenchmark(): Promise<{ report: VisualEvalRe
   // Eval V1.2：console 汇总（绝不打印 API Key / raw provider error）
   const validity = evaluateVisualEvalValidity({
     scenarios: results,
-    requestedScenarioCount: scenarios.length,
-    fullSuiteScenarioCount: VISUAL_INTAKE_EVAL_SCENARIOS.length,
+    requestedScenarioIds: scenarios.map((s) => s.id),
+    fullSuiteScenarioIds,
+    filtered: filter !== null,
   });
   const safety = evaluateVisualEvalSafetyGates(report);
   console.log(`\nValidity: ${validity.ok ? "PASS" : "FAIL"}`);

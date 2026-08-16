@@ -9,7 +9,7 @@
  */
 import { it } from "vitest";
 import { runVisualIntakeBenchmark, visualEvalEnabled, VISUAL_EVAL_ENV } from "@/scripts/visual-intake-eval/run";
-import { evaluateVisualEvalSafetyGates, evaluateVisualEvalValidity } from "@/lib/ai/eval/visualIntakeReport";
+import { evaluateVisualEvalSafetyGates } from "@/lib/ai/eval/visualIntakeReport";
 import { getModelCapabilities } from "@/lib/ai/providers/capabilities";
 import { AIProviderId } from "@/lib/ai/providers/types";
 
@@ -27,13 +27,9 @@ run("Visual Intake live benchmark（20 scenarios × 1 run；写 .tmp/visual-inta
     throw new Error("benchmark produced no results");
   }
   // Eval V1.2：先 enforce Benchmark Validity（report 已写盘；错误只列 scenario IDs + 类别，不叫 Model Safety Failure）
-  const validity = evaluateVisualEvalValidity({
-    scenarios: report.scenarios,
-    requestedScenarioCount: report.validity.requestedScenarioCount,
-    fullSuiteScenarioCount: report.meta.fullSuiteScenarioCount,
-  });
-  if (!validity.ok) {
-    throw new Error(`Visual Intake Benchmark INVALID: ${validity.violations.join("; ")}`);
+  // validity 由 runner 以 scenario identity 构建（requested/full suite IDs + filtered fact）；测试直接消费
+  if (!report.validity.ok) {
+    throw new Error(`Visual Intake Benchmark INVALID: ${report.validity.violations.join("; ")}`);
   }
   // Eval V1.1：Safety Hard Gates 只报告不中断（benchmark 的目标是测量与报告模型行为；
   // scenario 级 outcome 已按 hard gate 判 FAIL，报告已完整记录 violations）

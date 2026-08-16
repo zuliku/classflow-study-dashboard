@@ -17,8 +17,12 @@ function outcomeOf(report: VisualEvalReport, scenarioId: string): "pass" | "part
   return report.scenarios.find((s) => s.scenarioId === scenarioId)?.outcome ?? "n/a";
 }
 
-/** 对比两份 report.json（A = 主 baseline，B = 对照） */
+/** 对比两份 report.json（A = 主 baseline，B = 对照）。
+ *  Eval V1.2.1：任一 report 的 validity 不 ok → 明确拒绝（不把 Provider Error 当模型 FAIL 拿去比较） */
 export function compareVisualEvalReports(a: VisualEvalReport, b: VisualEvalReport): VisualEvalComparison {
+  if (!a.validity?.ok || !b.validity?.ok) {
+    throw new Error("INVALID_EVAL_REPORT: 至少一份 report 的 Benchmark Validity 未通过，禁止对比");
+  }
   const rows = (key: string, va: string | number | null, vb: string | number | null) => ({
     metric: key,
     a: va ?? "-",
