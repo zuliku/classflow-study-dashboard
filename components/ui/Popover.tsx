@@ -109,11 +109,21 @@ export function PopoverPanel({
         motionProfile === "default" &&
           (visible
             ? "opacity-100 translate-x-0 translate-y-0 !duration-[140ms] ux-inline"
-            : cn("opacity-0 pointer-events-none !duration-[120ms] ux-inline", PLACEMENT_ENTER_OFFSET[placement])),
+            : cn(
+                "opacity-0 !duration-[120ms] ux-inline",
+                // 仅 exit 阻塞 pointer（enter 是唯一 interaction owner，2 帧内可交互）
+                !open && "pointer-events-none",
+                PLACEMENT_ENTER_OFFSET[placement]
+              )),
         motionProfile === "kiro" &&
           (visible
             ? "opacity-100 translate-x-0 translate-y-0 scale-100"
-            : cn("opacity-0 pointer-events-none", PLACEMENT_ENTER_OFFSET[placement], "scale-[0.985]")),
+            : cn(
+                "opacity-0",
+                !open && "pointer-events-none",
+                PLACEMENT_ENTER_OFFSET[placement],
+                "scale-[0.985]"
+              )),
         className
       )}
       {...props}
