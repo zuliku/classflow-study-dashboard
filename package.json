@@ -17,6 +17,8 @@
     "eval:visual": "vitest run tests/visualIntakeEval.test.ts",
     "eval:visual:fixtures": "vitest run scripts/visual-intake-eval/fixtures.test.ts",
     "eval:visual:live": "vitest run scripts/visual-intake-eval/run.test.ts",
+    "eval:visual:promote": "vitest run scripts/visual-intake-eval/promote.test.ts",
+    "eval:visual:compare": "vitest run scripts/visual-intake-eval/compare-v13.test.ts",
     "test:e2e": "playwright test"
   },
   "dependencies": {

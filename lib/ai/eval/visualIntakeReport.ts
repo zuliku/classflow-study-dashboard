@@ -5,6 +5,7 @@
  */
 import { execSync } from "child_process";
 import { VisualEvalScenarioResult } from "@/lib/ai/eval/visualIntakeScoring";
+import { buildCurrentVisualEvalContract, VisualEvalContractDescriptor } from "@/lib/ai/eval/visualIntakeContract";
 
 export type VisualEvalFindingType =
   | "vision-extraction"
@@ -118,6 +119,8 @@ export function evaluateVisualEvalValidity(input: {
 
 export interface VisualEvalReport {
   meta: VisualEvalReportMeta;
+  /** Eval V1.3：Benchmark Contract（canonical helper 生成；comparison 的 comparability 依据） */
+  contract: VisualEvalContractDescriptor;
   validity: VisualEvalValidity;
   summary: {
     pass: number;
@@ -312,9 +315,13 @@ export function buildVisualEvalReport(input: {
     meta: {
       ...meta,
       scenarioCount: scenarios.length,
-      gitSha: tryGitSha(),
+      // 显式 gitSha（测试/来源追溯）优先；缺省自动取当前仓库 SHA
+      gitSha: meta.gitSha ?? tryGitSha(),
+      // 生产同构 Eval Harness 的 canonical fact（正式 baseline 恒为 production）
       runtimeParity: "production",
     },
+    // Eval V1.3：Runner 不自己拼 fingerprint —— canonical helper 统一生成
+    contract: buildCurrentVisualEvalContract(),
     validity: evaluateVisualEvalValidity({
       scenarios,
       requestedScenarioIds: input.requestedScenarioIds ?? scenarios.map((s) => s.scenarioId),
