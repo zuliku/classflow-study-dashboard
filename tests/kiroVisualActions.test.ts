@@ -171,7 +171,7 @@ describe("Visual Action Proposal：创建", () => {
     const proposal = (res.data as { proposal: VisualActionProposal }).proposal;
     expect(proposal.actions).toHaveLength(3);
     expect(proposal.sourceAttachmentIds).toEqual(["att-real-1"]);
-    expect(proposal.previewFingerprint.length).toBeGreaterThan(0);
+    expect(proposal.previewFingerprint?.length ?? 0).toBeGreaterThan(0);
     expect(proposal.reservedIds).toHaveLength(3);
     expect(proposal.actions[0].change.tool).toBe("create_assignment");
     expect(proposal.actions[0].evidence.text).toContain("实验报告");
