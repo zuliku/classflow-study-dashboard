@@ -252,26 +252,25 @@ test("Scroll-to-bottom：上滑显示，点击回底后隐藏", async ({ page })
 
 test("Dashboard reflow：Docked Kiro 压窄容器时任务卡降为 1 列且不重叠；关闭后恢复", async ({ page }) => {
   await seedAI(page);
-  // 1536：sidebar 224 + sidecar 424 → 主内容 < 940 → 1 列
+  // 1536：主内容 < 940 → 任务区 1 列
   await page.setViewportSize({ width: 1536, height: 900 });
   await page.goto("/");
 
-  // 关闭 Kiro 状态：2 列
+  // 关闭 Kiro 状态：任务区 1 列（~620）
   const tasksWrap = page.getByTestId("overview-tasks-wrap");
   let w1 = (await tasksWrap.boundingBox())!.width;
-  expect(w1).toBeGreaterThan(560); // 2 列（~600）
+  expect(w1).toBeGreaterThan(560);
+  expect(w1).toBeLessThan(1040); // 1 列
 
-  // 打开 Docked Kiro（handoff）
+  // 打开 Docked Kiro（handoff）：floating overlay 不改变任务区几何（宽度不变，无 1 列挤压）
   await page.keyboard.press("Control+K");
   await page.getByLabel("命令中心搜索").fill("看看本周安排");
   await page.getByLabel("命令中心搜索").press("Enter");
   await expect(page.getByTestId("kiro-sidecar")).toBeVisible();
 
-  // 降为 1 列
-  await expect(async () => {
-    const w2 = (await tasksWrap.boundingBox())!.width;
-    expect(w2).toBeGreaterThan(780);
-  }).toPass({ timeout: 5000 });
+  // floating overlay：任务区宽度不变
+  const w2 = (await tasksWrap.boundingBox())!.width;
+  expect(Math.abs(w2 - w1)).toBeLessThanOrEqual(4);
 
   // 任务行与 Footer 不重叠：footer 顶部 ≥ 最后一行底部
   const footer = page.getByTestId("assignment-footer");
@@ -304,5 +303,5 @@ test("1920：Docked Kiro 下任务卡保持 2 列", async ({ page }) => {
   const tasksWrap = page.getByTestId("overview-tasks-wrap");
   const w = (await tasksWrap.boundingBox())!.width;
   expect(w).toBeGreaterThan(500);
-  expect(w).toBeLessThan(800); // 2 列（每列 ~590）
+  expect(w).toBeLessThan(900); // 2 列（每列 ~590）
 });

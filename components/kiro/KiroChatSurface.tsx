@@ -153,7 +153,7 @@ export function KiroChatSurface({ variant }: { variant: "workspace" | "sidecar" 
     >
       {/* Motion V1：main content stage —— Empty 为 absolute presence overlay（exit 不占 flex 布局，
           Conversation 第一条消息立即 mount；不给 Conversation 加 key / 不加 entrance animation） */}
-      <div className="relative flex-1 min-h-0">
+      <div className="relative flex-1 min-h-0 flex flex-col">
         <KiroEmptyExperience
           open={!hasMessages}
           compact={compact}
