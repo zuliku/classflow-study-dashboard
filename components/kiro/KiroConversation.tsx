@@ -190,8 +190,8 @@ export function KiroConversation({
         ref={scrollRef}
         onScroll={onScroll}
         className="h-full overflow-y-auto"
-        // overflow-anchor: none —— 受控 reconcile 与 Browser scroll anchoring 不打架
-        style={{ overflowAnchor: "none" }}
+        // scrollbar-gutter stable：滚动条恒驻右侧（出现/消失不挤占内容 → 不抖动）
+        style={{ overflowAnchor: "none", scrollbarGutter: "stable" }}
       >
         <div ref={contentRef} className={cn("max-w-[820px] mx-auto py-3 pb-12", compact ? "px-3" : "px-1")}>
           <div key={conversationScrollKey} className="space-y-5 ux-fade">

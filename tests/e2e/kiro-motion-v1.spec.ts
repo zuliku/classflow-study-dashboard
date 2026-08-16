@@ -130,7 +130,7 @@ base("Thread Rail anchored morph：同一 shell DOM、width 52↔216/232、聊�
   expect(await shell.evaluate((el) => (el as HTMLElement & { __motionProbe?: string }).__motionProbe === "same-shell")).toBe(true);
 });
 
-base("Project Panel anchored morph：right edge 不动、聊天不移动", async ({ page }) => {
+base("Project Panel anchored morph：right edge 不动、聊天区让位（滚动条不被遮挡）", async ({ page }) => {
   await seedAI(page);
   await openKiro(page);
 
@@ -152,6 +152,14 @@ base("Project Panel anchored morph：right edge 不动、聊天不移动", async
     expect(Math.abs(b.x + b.width - rightEdgeBefore)).toBeLessThanOrEqual(2);
   }).toPass({ timeout: 3000 });
 
+  // 聊天区右侧让位：Composer 右缘不越过面板左缘（滚动条不被浮层遮挡）
+  await expect(async () => {
+    const composer = page.getByTestId("kiro-composer");
+    const cb = (await composer.boundingBox())!;
+    const pb = (await shell.boundingBox())!;
+    expect(cb.x + cb.width).toBeLessThanOrEqual(pb.x - 4);
+  }).toPass({ timeout: 3000 });
+
   // 收起 → 同一 shell，52px
   await page.getByLabel("收起项目").click();
   await expect(shell).toHaveAttribute("data-state", "collapsed");
@@ -160,15 +168,6 @@ base("Project Panel anchored morph：right edge 不动、聊天不移动", async
     expect(Math.abs(w - 52)).toBeLessThanOrEqual(2);
   }).toPass({ timeout: 3000 });
   expect(await shell.evaluate((el) => (el as HTMLElement & { __motionProbe?: string }).__motionProbe === "same-shell")).toBe(true);
-
-  // 再展开：聊天不动
-  await page.getByLabel("项目", { exact: true }).click();
-  await expect(shell).toHaveAttribute("data-state", "expanded");
-  const composer = page.getByTestId("kiro-composer");
-  const before = await composer.boundingBox();
-  await page.waitForTimeout(400);
-  const after = await composer.boundingBox();
-  expect(Math.abs(after!.x - before!.x)).toBeLessThanOrEqual(2);
 });
 
 base("Reduced Motion：Empty 无 intro 动画类、功能可用；Rail 立即最终几何", async ({ page }) => {

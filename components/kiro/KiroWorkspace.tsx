@@ -7,6 +7,7 @@ import { KiroChatSurface } from "@/components/kiro/KiroChatSurface";
 import { KiroHistoryPanel } from "@/components/kiro/KiroHistoryPanel";
 import { KiroThreadRail } from "@/components/kiro/KiroThreadRail";
 import { KiroProjectPanel, ProjectPanelMode } from "@/components/kiro/KiroProjectPanel";
+import { cn } from "@/lib/utils";
 
 /**
  * Kiro Workspace（Codex-style Agent Workspace）：
@@ -33,8 +34,16 @@ export function KiroWorkspace() {
       <KiroThreadRail onOpenProjects={() => setProjectPanelMode("expanded")} />
 
       {/* 主内容区：md 下为 Rail 预留左侧空间（lg+ 聊天居中不受影响）；
-          移动端 pb-24 为固定底部导航（BottomNav，h-14 + safe-area）预留空间，避免遮挡 Composer 发送按钮 */}
-      <div className="flex-1 min-w-0 flex flex-col px-4 md:pr-6 md:pl-[72px] lg:px-6 pt-4 md:pt-6 pb-24 md:pb-6">
+          移动端 pb-24 为固定底部导航（BottomNav，h-14 + safe-area）预留空间，避免遮挡 Composer 发送按钮。
+          Project Panel expanded 时预留右侧宽度（滚动条不被浮层遮挡） */}
+      <div
+        className={cn(
+          "flex-1 min-w-0 flex flex-col px-4 md:pl-[72px] lg:px-6 pt-4 md:pt-6 pb-24 md:pb-6",
+          projectPanelMode === "expanded"
+            ? "md:pr-[324px] lg:pr-[332px]"
+            : "md:pr-6"
+        )}
+      >
         <KiroHeader onNewChat={newChat} onOpenHistory={() => setHistoryOpen(true)} />
         <KiroChatSurface variant="workspace" />
       </div>

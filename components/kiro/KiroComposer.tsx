@@ -365,12 +365,12 @@ export function KiroComposer({
         />
 
         {/* Composer Surface：Attachment Shelf（次级层） + Prompt + Toolbar（主层）。
-            Motion V1：focus 轻上浮 -1px（禁 -2/-3/-4 与 scale；send 后不回跳） */}
+            focus 仅保留 border 变色（无阴影 / 无浮起，输入时画面稳定） */}
         <div
           className={cn(
             "bg-surface border border-line-strong rounded-2xl shadow-subtle",
-            "focus-within:border-sandrift focus-within:shadow-md focus-within:-translate-y-px",
-            "transition-[border-color,box-shadow,transform] duration-[var(--kiro-motion-control,var(--motion-fast))] ease-[var(--ease-standard)]",
+            "focus-within:border-sandrift",
+            "transition-[border-color] duration-[var(--kiro-motion-control,var(--motion-fast))] ease-[var(--ease-standard)]",
             introActive && "kiro-composer-intro"
           )}
         >

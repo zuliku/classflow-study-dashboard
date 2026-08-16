@@ -410,7 +410,8 @@ export function KiroProjectPanel({
               "w-[52px] flex flex-col items-center py-3 gap-1.5",
               expanded && "absolute inset-y-0 left-0 pointer-events-none",
               "transition-[opacity,transform] ease-[var(--ease-standard)]",
-              !expanded && !collapsedPresence.visible
+              // expanded 或退出中 → 立即淡出（无 delay）；collapsed 可见态延迟进入
+              expanded || !collapsedPresence.visible
                 ? "opacity-0 translate-x-[3px] duration-[80ms]"
                 : "opacity-100 translate-x-0 duration-[var(--kiro-motion-structure,150ms)] delay-[140ms]"
             )}
@@ -437,7 +438,7 @@ export function KiroProjectPanel({
         )}
 
         {expandedPresence.mounted && (
-          /* ---------- Expanded Panel（296/lg 304px；进入时 header→body 递进，退出立即 inert） ---------- */
+          /* ---------- Expanded Panel（296/lg 304px；进入时 header→body 递进，退出时 absolute 脱离流不撑高） ---------- */
           <div
             role="dialog"
             aria-label="项目"
@@ -445,6 +446,7 @@ export function KiroProjectPanel({
             aria-hidden={!expanded}
             className={cn(
               "flex flex-col overflow-hidden",
+              !expanded && "absolute inset-0",
               "transition-[opacity,transform] ease-[var(--ease-standard)]",
               expanded
                 ? "opacity-100 translate-x-0 duration-[var(--kiro-motion-structure,150ms)]"
