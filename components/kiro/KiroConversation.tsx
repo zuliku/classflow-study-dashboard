@@ -398,7 +398,7 @@ const KiroConversationRow = React.memo(function KiroConversationRow({
         {view.visualActionProposals && view.visualActionProposals.length > 0 && !view.streaming && (
           <div className="space-y-2.5 pt-1">
             {view.visualActionProposals.map((p) => (
-              <VisualActionProposalCard key={p.id} proposal={p} />
+              <VisualActionProposalCard key={p.id} proposal={p} restored={view.restored} />
             ))}
           </div>
         )}

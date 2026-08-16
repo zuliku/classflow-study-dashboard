@@ -87,7 +87,8 @@ import { isDestructiveWriteTool, KiroUndoEntry, KiroWriteApi, WriteToolResult } 
 import { KIRO_WRITE_TOOL_NAMES } from "@/lib/ai/tools/write/registry";
 import { KIRO_WRITE_TOOL_SCHEMAS } from "@/lib/ai/tools/write/schemas";
 import { createKiroWriteApi } from "@/lib/ai/tools/write/api";
-import { isClassFlowMutationTool, VISUAL_PROPOSAL_REQUIRED_CODE, VISUAL_PROPOSAL_REQUIRED_MESSAGE } from "@/lib/ai/visual/guard";
+import { isClassFlowMutationTool, visualProposalRequired, VISUAL_PROPOSAL_REQUIRED_CODE, VISUAL_PROPOSAL_REQUIRED_MESSAGE } from "@/lib/ai/visual/guard";
+import { isVisualPendingCancel, VisualPendingContinuation } from "@/lib/ai/visual/continuation";
 import { VisualActionProposal } from "@/lib/ai/visual/types";
 import { KIRO_MUTATING_TOOL_NAMES } from "@/lib/ai/tools/mutating";
 import { actionToastMessage, toolLabel } from "@/lib/ai/tools/formatters";
@@ -749,6 +750,9 @@ export function useKiroChat({
       // Projects V1.2：Project Instructions 随 Turn 冻结（Send boundary 读取；
       // continuation 复用 turnSnapshotRef，streaming 中编辑 Project 只影响下一 Turn）
       projectContext,
+      // Task B V1.2：Visual Pending Continuation（澄清链）随 Turn 冻结；
+      // server 会重新 normalize/bound 后注入 Prompt section（只提供事实，不授权写入）
+      visualPendingContinuation: activeVisualPendingContinuationRef.current,
     };
   };
 
@@ -840,6 +844,12 @@ export function useKiroChat({
    *  - propose_visual_actions 的 sourceAttachmentIds 只从这里取（模型无法提供）
    *  - 生命周期：新 User Turn 冻结新 snapshot / reset / session transition 时替换；continuation 期间不清空 */
   const turnImageAttachmentIdsRef = useRef<string[]>([]);
+  /** Task B V1.2：活跃的 Visual Pending Continuation（澄清链；点击「继续处理」建立，新 Proposal 生成 / 用户放弃时清除）。
+   *  活跃期间即使无新图片，直接 mutation 仍被 Guard 拦截。 */
+  const activeVisualPendingContinuationRef = useRef<VisualPendingContinuation | null>(null);
+  const setVisualPendingContinuation = useCallback((c: VisualPendingContinuation | null) => {
+    activeVisualPendingContinuationRef.current = c;
+  }, []);
   // Kiro Computer Agent V1：每 Turn 独立的 Computer 调用限制（read <= 12 / mutation <= 6）
   const computerCountersRef = useRef({ readCount: 0, mutationCount: 0 });
 
@@ -1123,8 +1133,13 @@ export function useKiroChat({
 
       // ---- Change Set（Task 8）：多写事务，全部合法才全部提交 ----
       if (toolName === "apply_change_set") {
-        // Task B Visual Turn Mutation Guard：截图来源的写操作必须先 propose_visual_actions
-        if (turnImageAttachmentIdsRef.current.length > 0) {
+        // Task B Visual Turn Mutation Guard：截图来源 / 澄清链的写操作必须先 propose_visual_actions
+        if (
+          visualProposalRequired(
+            turnImageAttachmentIdsRef.current,
+            activeVisualPendingContinuationRef.current !== null
+          )
+        ) {
           failOutput(VISUAL_PROPOSAL_REQUIRED_CODE, VISUAL_PROPOSAL_REQUIRED_MESSAGE);
           return;
         }
@@ -1208,8 +1223,14 @@ export function useKiroChat({
 
       // ---- Write Tools ----
       if ((KIRO_WRITE_TOOL_NAMES as string[]).includes(toolName)) {
-        // Task B Visual Turn Mutation Guard：截图来源的写操作必须先 propose_visual_actions
-        if (turnImageAttachmentIdsRef.current.length > 0 && isClassFlowMutationTool(toolName)) {
+        // Task B V1.2 Visual Turn Mutation Guard：截图来源 / 澄清链的写操作必须先 propose_visual_actions
+        if (
+          isClassFlowMutationTool(toolName) &&
+          visualProposalRequired(
+            turnImageAttachmentIdsRef.current,
+            activeVisualPendingContinuationRef.current !== null
+          )
+        ) {
           failOutput(VISUAL_PROPOSAL_REQUIRED_CODE, VISUAL_PROPOSAL_REQUIRED_MESSAGE);
           return;
         }
@@ -1269,10 +1290,15 @@ export function useKiroChat({
         failOutput("READ_TOOL_LIMIT_REACHED", "已达到本轮读取上限，请换个问法。");
         return;
       }
-      // 每次执行读取最新 Store（Data Freshness）；Turn-level trusted context（V1.1：frozen image IDs）
+      // 每次执行读取最新 Store（Data Freshness）；Turn-level trusted context（V1.1：frozen image IDs；V1.2：澄清链活跃）
       const result = executeKiroReadTool(toolName, input, useAppStore.getState(), {
         visualSourceAttachmentIds: turnImageAttachmentIdsRef.current,
+        visualContinuationActive: activeVisualPendingContinuationRef.current !== null,
       });
+      // V1.2：propose_visual_actions 成功生成新 Proposal → 澄清链结束（进入 Proposal-owned 状态）
+      if (toolName === "propose_visual_actions" && result.ok && activeVisualPendingContinuationRef.current) {
+        activeVisualPendingContinuationRef.current = null;
+      }
       emitToolOutput(toolName, toolCallId, result as ToolOutput);
     },
     sendAutomaticallyWhen: ({ messages }) =>
@@ -2007,6 +2033,10 @@ export function useKiroChat({
       const visionEnabledForIntent = intentCapabilities.vision;
         // Task B V1.1：冻结本 Turn 真实 ready image IDs（Guard 与 propose_visual_actions 共用同一事实；下轮 Send 覆盖）
         turnImageAttachmentIdsRef.current = userImages.map((a) => a.id);
+        // Task B V1.2：用户明确放弃澄清链（算了/不用了…）→ 结束 continuation guard，恢复普通写策略
+        if (activeVisualPendingContinuationRef.current && isVisualPendingCancel(v)) {
+          activeVisualPendingContinuationRef.current = null;
+        }
       if (
         intentCapabilities.vision &&
         intentCapabilities.visionMimeTypes &&
@@ -2765,6 +2795,8 @@ export function useKiroChat({
     undoTask,
     /** Computer Task 状态版本（历史保存 signal：undo/approval 后变化） */
     computerVersion,
+    /** Task B V1.2：Visual Pending Continuation 生命周期（「继续处理」建立；新 Proposal / 放弃时清除） */
+    setVisualPendingContinuation,
   };
 }
 

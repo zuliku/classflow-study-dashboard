@@ -5,8 +5,15 @@ import { buildVisualActionProposal, checkVisualProposalStale } from "@/lib/ai/vi
 import { executeVisualActionProposal } from "@/lib/ai/visual/executor";
 import {
   isClassFlowMutationTool,
+  visualProposalRequired,
   VISUAL_PROPOSAL_REQUIRED_CODE,
 } from "@/lib/ai/visual/guard";
+import {
+  buildVisualPendingContinuation,
+  isVisualPendingCancel,
+  normalizeVisualPendingContinuation,
+} from "@/lib/ai/visual/continuation";
+import { proposeVisualActionsInputSchema } from "@/lib/ai/visual/schemas";
 import { KiroWriteApi } from "@/lib/ai/tools/write/types";
 import { VisualActionProposal } from "@/lib/ai/visual/types";
 
@@ -574,5 +581,283 @@ describe("V1.1 Preflight-Owned Fact UI", () => {
     if (!res.ok) return;
     const proposal = (res.data as { proposal: VisualActionProposal }).proposal;
     expect(proposal.actions[0].evidence.text).toBe("实验报告请在下周一晚上10点前提交");
+  });
+});
+
+/** V1.2：mixed 输入（2 executable + 1 ambiguous + 1 unsupported） */
+const mixedInput = () => ({
+  summary: "从截图整理出 3 项",
+  actions: [proposalInput().actions[0], proposalInput().actions[1]],
+  pendingItems: [
+    { reason: "ambiguous-entity" as const, evidence: "王老师那门课改到周六下午", description: "无法唯一确定对应课程" },
+    { reason: "unsupported-action" as const, evidence: "把通知转发到班群", description: "当前不支持发送外部消息" },
+  ],
+});
+
+describe("V1.2 Partial Proposals：schema", () => {
+  const base = (over: object) => ({ summary: "从截图整理出", actions: [], ...over });
+
+  it("executable only（actions=2, pending=0）→ valid", () => {
+    const parsed = proposeVisualActionsInputSchema.safeParse(
+      base({ actions: [proposalInput().actions[0], proposalInput().actions[1]] })
+    );
+    expect(parsed.success).toBe(true);
+  });
+
+  it("mixed（actions=2, pending=1）→ valid", () => {
+    const parsed = proposeVisualActionsInputSchema.safeParse(
+      base({
+        actions: [proposalInput().actions[0], proposalInput().actions[1]],
+        pendingItems: [{ reason: "ambiguous-entity", evidence: "王老师那门课改到周六下午", description: "无法唯一确定对应课程" }],
+      })
+    );
+    expect(parsed.success).toBe(true);
+  });
+
+  it("pending only（actions=0, pending=2）→ valid", () => {
+    const parsed = proposeVisualActionsInputSchema.safeParse(
+      base({
+        pendingItems: [
+          { reason: "ambiguous-entity", evidence: "英语作业周三交", description: "无法唯一确定对应课程" },
+          { reason: "unsupported-action", evidence: "把通知转发到班群", description: "当前不支持发送外部消息" },
+        ],
+      })
+    );
+    expect(parsed.success).toBe(true);
+  });
+
+  it("empty（actions=0, pending=0）→ invalid（refinement）", () => {
+    const parsed = proposeVisualActionsInputSchema.safeParse(base({}));
+    expect(parsed.success).toBe(false);
+  });
+
+  it("pending 携带 change/tool/input → strict reject；unknown reason → reject", () => {
+    const withChange = proposeVisualActionsInputSchema.safeParse(
+      base({
+        pendingItems: [{ reason: "ambiguous-entity", evidence: "x", description: "y", change: { tool: "create_assignment", input: {} } }],
+      })
+    );
+    expect(withChange.success).toBe(false);
+    const unknownReason = proposeVisualActionsInputSchema.safeParse(
+      base({ pendingItems: [{ reason: "low-confidence", evidence: "x", description: "y" }] })
+    );
+    expect(unknownReason.success).toBe(false);
+  });
+});
+
+describe("V1.2 Partial Proposals：Runtime", () => {
+  it("mixed build：actions=2 / pending=2；reservedIds+fingerprint 只来自 executable", () => {
+    const state = makeState();
+    const res = proposeVisualActionsTool(toolState(state), mixedInput() as never, SOURCE);
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    const proposal = (res.data as { proposal: VisualActionProposal }).proposal;
+    expect(proposal.actions).toHaveLength(2);
+    expect(proposal.pendingItems).toHaveLength(2);
+    expect(proposal.pendingItems[0].reason).toBe("ambiguous-entity");
+    expect(proposal.pendingItems[1].reason).toBe("unsupported-action");
+    expect(proposal.pendingItems[0].evidence.text).toContain("王老师");
+    expect(proposal.pendingItems[0].description).toContain("无法唯一确定");
+    expect(proposal.pendingItems[0].id).toMatch(/^vpending_/);
+    // pending 不参与 reservedIds / fingerprint
+    expect(proposal.reservedIds).toHaveLength(2);
+    expect(proposal.previewFingerprint).toBeTruthy();
+  });
+
+  it("pending-only build：Proposal 可生成；无 fingerprint；executor 拒绝 Apply", async () => {
+    const state = makeState();
+    const res = proposeVisualActionsTool(
+      toolState(state),
+      {
+        summary: "从截图发现 2 项需要确认",
+        actions: [],
+        pendingItems: [
+          { reason: "missing-information", evidence: "周六下午补课", description: "截图中没有看到具体时间" },
+        ],
+      } as never,
+      SOURCE
+    );
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    const proposal = (res.data as { proposal: VisualActionProposal }).proposal;
+    expect(proposal.actions).toHaveLength(0);
+    expect(proposal.pendingItems).toHaveLength(1);
+    expect(proposal.previewFingerprint).toBeUndefined();
+    expect(proposal.reservedIds).toHaveLength(0);
+    // Apply 防御：pending-only 不可执行
+    const api = new FakeApi(state);
+    const exec = await executeVisualActionProposal({
+      proposal,
+      state,
+      api: api as unknown as KiroWriteApi,
+      confirm: async () => true,
+    });
+    expect(exec.ok).toBe(false);
+    if (exec.ok) return;
+    expect(exec.code).toBe("VISUAL_PROPOSAL_EMPTY");
+    expect(exec.applied).toBe(0);
+  });
+
+  it("mixed Apply：只执行 actions；pending 0 mutation", async () => {
+    const state = makeState();
+    const built = buildVisualActionProposal(mixedInput() as never, state, { sourceAttachmentIds: ["att-real-1"] });
+    expect(built.ok).toBe(true);
+    if (!built.ok) return;
+    const api = new FakeApi(state);
+    const res = await executeVisualActionProposal({
+      proposal: built.proposal,
+      state,
+      api: api as unknown as KiroWriteApi,
+      confirm: async () => true,
+    });
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    expect(res.applied).toBe(2);
+    // actions 已写入
+    expect((state as any).assignments.some((a: any) => a.title === "数据结构实验报告")).toBe(true);
+    expect((state as any).scheduleOccurrenceOverrides).toHaveLength(1);
+    // pending 永远不会产生写操作：Store 中没有与 pending 相关的变化
+    expect((state as any).reminders).toHaveLength(0);
+    expect((state as any).groupProjects).toHaveLength(0);
+    expect((state as any).courses).toHaveLength(2);
+  });
+
+  it("Atomic Failure：2 executable + 1 pending，其中 executable 硬冲突 → 整体 preflight 失败（不保留 A）", () => {
+    const state = makeState();
+    // 把 s2 移到周六 14:00 制造与 move_schedule_occurrence 目标的硬冲突
+    (state as any).schedules = (state as any).schedules.map((s: any) =>
+      s.id === "s2" ? { ...s, dayOfWeek: 6 } : s
+    );
+    const res = proposeVisualActionsTool(
+      toolState(state),
+      {
+        summary: "mixed",
+        actions: [proposalInput().actions[0], proposalInput().actions[1]],
+        pendingItems: [{ reason: "ambiguous-entity", evidence: "x", description: "y" }],
+      } as never,
+      SOURCE
+    );
+    expect(res.ok).toBe(false);
+    if (res.ok) return;
+    expect(res.code).toBe("CONFLICT");
+  });
+
+  it("unsupported mixed：2 executable + 1 unsupported → Apply 正常", async () => {
+    const state = makeState();
+    const res = proposeVisualActionsTool(
+      toolState(state),
+      {
+        summary: "mixed",
+        actions: [proposalInput().actions[0], proposalInput().actions[1]],
+        pendingItems: [{ reason: "unsupported-action", evidence: "把通知转发到班群", description: "当前不支持发送外部消息" }],
+      } as never,
+      SOURCE
+    );
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    const api = new FakeApi(state);
+    const exec = await executeVisualActionProposal({
+      proposal: (res.data as { proposal: VisualActionProposal }).proposal,
+      state,
+      api: api as unknown as KiroWriteApi,
+      confirm: async () => true,
+    });
+    expect(exec.ok).toBe(true);
+    expect(exec.applied).toBe(2);
+  });
+
+  it("Undo 只撤销 actions；pending 保持不变（proposal 对象不变）", async () => {
+    const state = makeState();
+    const before = JSON.stringify(state);
+    const built = buildVisualActionProposal(mixedInput() as never, state, { sourceAttachmentIds: ["att-real-1"] });
+    expect(built.ok).toBe(true);
+    if (!built.ok) return;
+    const pendingSnapshot = JSON.stringify(built.proposal.pendingItems);
+    const api = new FakeApi(state);
+    const res = await executeVisualActionProposal({
+      proposal: built.proposal,
+      state,
+      api: api as unknown as KiroWriteApi,
+      confirm: async () => true,
+    });
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    api.undos.get(built.proposal.id)!();
+    expect(JSON.stringify(state)).toBe(before);
+    expect(JSON.stringify(built.proposal.pendingItems)).toBe(pendingSnapshot);
+  });
+});
+
+describe("V1.2 Visual Pending Continuation", () => {
+  it("buildVisualPendingContinuation：过滤 unsupported；携带 sourceProposalId + pending facts", () => {
+    const built = buildVisualActionProposal(mixedInput() as never, makeState(), { sourceAttachmentIds: ["att-real-1"] });
+    expect(built.ok).toBe(true);
+    if (!built.ok) return;
+    const continuation = buildVisualPendingContinuation(built.proposal);
+    expect(continuation).not.toBeNull();
+    expect(continuation?.sourceProposalId).toBe(built.proposal.id);
+    expect(continuation?.pendingItems).toHaveLength(1); // 只留 ambiguous-entity
+    expect(continuation?.pendingItems[0].reason).toBe("ambiguous-entity");
+    expect(continuation?.pendingItems[0].evidence).toContain("王老师");
+  });
+
+  it("unsupported-only → 无可澄清项 → null", () => {
+    const res = proposeVisualActionsTool(
+      toolState(makeState()),
+      {
+        summary: "unsupported only",
+        actions: [],
+        pendingItems: [{ reason: "unsupported-action", evidence: "把通知转发到班群", description: "当前不支持" }],
+      } as never,
+      SOURCE
+    );
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    const continuation = buildVisualPendingContinuation((res.data as { proposal: VisualActionProposal }).proposal);
+    expect(continuation).toBeNull();
+  });
+
+  it("normalizeVisualPendingContinuation：bounds / enum / 丢弃未知字段", () => {
+    const norm = normalizeVisualPendingContinuation({
+      sourceProposalId: "vprop_1",
+      pendingItemIds: ["a", "b"],
+      pendingItems: [
+        { id: "vp_1", reason: "ambiguous-entity", evidence: "x", description: "y", change: { tool: "create_assignment" } },
+        { id: "vp_2", reason: "low-confidence", evidence: "x", description: "y" },
+        { id: "vp_3", reason: "missing-information", evidence: "z", description: "w" },
+      ],
+    });
+    expect(norm).not.toBeNull();
+    expect(norm?.pendingItems).toHaveLength(2); // 非法 reason 被丢弃
+    expect((norm?.pendingItems[0] as any).change).toBeUndefined();
+  });
+
+  it("isVisualPendingCancel：放弃表达识别；普通文本不受影响", () => {
+    expect(isVisualPendingCancel("算了，不处理这个了")).toBe(true);
+    expect(isVisualPendingCancel("先不处理了吧")).toBe(true);
+    expect(isVisualPendingCancel("帮我创建一个明晚的复习任务")).toBe(false);
+  });
+
+  it("visualProposalRequired：image IDs 或 continuation 任一成立 → 需要 Proposal", () => {
+    expect(visualProposalRequired([], false)).toBe(false); // 普通文字 Turn
+    expect(visualProposalRequired(["att_1"], false)).toBe(true); // 图片 Turn
+    expect(visualProposalRequired([], true)).toBe(true); // 澄清链 Turn（无新图片）
+  });
+
+  it("澄清链 Turn 无图片也可 propose（visualContinuationActive 通过）", () => {
+    const state = makeState();
+    const res = proposeVisualActionsTool(
+      toolState(state),
+      {
+        summary: "澄清后的方案",
+        actions: [proposalInput().actions[1]],
+      } as never,
+      { visualContinuationActive: true }
+    );
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    const proposal = (res.data as { proposal: VisualActionProposal }).proposal;
+    expect(proposal.sourceAttachmentIds).toEqual([]); // 无新图片 → source 为空
+    expect(proposal.actions).toHaveLength(1);
   });
 });

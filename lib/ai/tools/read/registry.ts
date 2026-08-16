@@ -165,6 +165,10 @@ export const KIRO_READ_TOOLS = {
       "仅当截图明确「以后/从下周起/统一」才允许 move_schedule / update_schedule 永久修改；" +
       "一次性调整（本周/这周/明天/第 N 周）必须用 occurrence override 类动作。" +
       "禁止：delete_*、create_course、小组/提醒/专注相关动作。" +
+      "actions 与 pendingItems 可以同时存在：actions = 已具备完整真实 entity ID / 绝对时间 / 完整 mutation 信息、可以安全进入 Preflight 的事项；" +
+      "pendingItems = 已从图片识别到、但因实体歧义（ambiguous-entity）、关键信息缺失（missing-information）或当前不支持（unsupported-action）而不能写入的事项。" +
+      "如果某个可执行动作依赖某个 pending 事实，则整个依赖链都必须作为 pendingItems；不要把真实冲突/事务失败/stale 写成 pending。" +
+      "截图只有模糊内容时允许 actions 为空（pending-only），但 actions 与 pendingItems 不能同时为空。" +
       "这是 READ / PROPOSAL 工具：绝不写 Store；结果只是方案，用户一次确认后才会原子执行。",
     inputSchema: KIRO_READ_TOOL_SCHEMAS.propose_visual_actions,
   }),

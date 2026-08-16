@@ -64,6 +64,7 @@ import { shouldCompact, DEFAULT_CONTEXT_BUDGET } from "@/lib/ai/contextBudget/pl
 import { buildTranscriptText, buildTranscriptMarkdown, copyTextToClipboard, downloadMarkdownFile } from "@/lib/ai/share";
 import { useToastStore } from "@/store/useToastStore";
 import { KiroArtifactPreviewDialogHost } from "@/components/kiro/computer/KiroArtifactPreviewDialogHost";
+import { VisualPendingContinuation } from "@/lib/ai/visual/continuation";
 
 export type KiroSuggestionsKind = "assignment" | "course" | "group-project" | "week" | "generic";
 
@@ -104,6 +105,8 @@ interface KiroSessionValue {
   openForWeek: (week: number) => void;
   handoffPrompt: (prompt: string) => void;
   handoffAssignmentPrompt: (id: string, prompt: string) => void;
+  /** Task B V1.2：继续处理 Visual Pending 事项（先同步建立 continuation，再发送用户可见 prompt） */
+  handoffVisualPendingContinuation: (continuation: VisualPendingContinuation, prompt: string) => void;
   /** Task 7B：会话切换进行中 */
   conversationTransitioning: boolean;
   conversationTransition: ConversationTransitionView;
@@ -202,6 +205,7 @@ interface KiroSessionActionsValue {
   openForWeek: (week: number) => void;
   handoffPrompt: (prompt: string) => void;
   handoffAssignmentPrompt: (id: string, prompt: string) => void;
+  handoffVisualPendingContinuation: (continuation: VisualPendingContinuation, prompt: string) => void;
   /** 点击时读取当前 transcript（不订阅 messages） */
   copyCurrentTranscript: () => Promise<void>;
   exportCurrentTranscript: () => void;
@@ -745,6 +749,21 @@ export function KiroSessionProvider({ children }: { children: React.ReactNode })
     [sendWithTurn]
   );
 
+  /** Task B V1.2：Visual Pending Continuation handoff —— send 前同步建立 continuation（Guard + Prompt section 同源） */
+  const handoffVisualPendingContinuation = useCallback(
+    (continuation: VisualPendingContinuation, prompt: string) => {
+      chatRef.current.setVisualPendingContinuation(continuation);
+      setSidecarOpen(true);
+      void sendWithTurn(prompt).then((ok) => {
+        if (!ok) return;
+        suggestionsGenRef.current += 1;
+        setSuggestionsKind("generic");
+        setLastUserTurnGen(suggestionsGenRef.current);
+      });
+    },
+    [sendWithTurn]
+  );
+
   /** 原子 Assignment Handoff：显式 ref 先进入 send snapshot，避免 React state 提交竞态。 */
   const handoffAssignmentPrompt = useCallback(
     (id: string, prompt: string) => {
@@ -1019,6 +1038,7 @@ export function KiroSessionProvider({ children }: { children: React.ReactNode })
       openForWeek,
       handoffPrompt,
       handoffAssignmentPrompt,
+      handoffVisualPendingContinuation,
       copyCurrentTranscript,
       exportCurrentTranscript,
       getCurrentMessages,
@@ -1045,6 +1065,7 @@ export function KiroSessionProvider({ children }: { children: React.ReactNode })
       openForWeek,
       handoffPrompt,
       handoffAssignmentPrompt,
+      handoffVisualPendingContinuation,
       copyCurrentTranscript,
       exportCurrentTranscript,
       getCurrentMessages,
@@ -1088,6 +1109,7 @@ export function KiroSessionProvider({ children }: { children: React.ReactNode })
     openForWeek,
     handoffPrompt,
     handoffAssignmentPrompt,
+    handoffVisualPendingContinuation,
     conversationTransitioning: transitionState.phase !== "idle",
     conversationTransition: toConversationTransitionView(transitionState),
     planningPreview,

@@ -299,6 +299,14 @@ progress 说明阶段意图，Tool Row 说明具体动作——commentary 与紧
   4. 一次性调整（本周/这周/明天/第 N 周）→ occurrence override 类动作；明确「以后/从下周起/统一」才使用永久排课修改；
   5. 把整理结果通过 propose_visual_actions 生成用户可预览的方案；
   6. 不要直接调用任何 ClassFlow 写工具（本轮包含图片时客户端会强制拒绝直接写入）；等用户确认后由方案本身原子执行。
+- 当截图同时包含已经明确可执行的信息和仍需澄清的信息时（Mixed Screenshot）：
+  - 不要因为一项歧义而阻塞所有独立的明确事项；
+  - 已经拥有真实 entity ID、明确绝对时间、完整 mutation 信息的独立事项放入 actions；
+  - 存在实体歧义、关键字段缺失或当前 Visual Intake 不支持的事项放入 pendingItems；
+  - pendingItems 永远不产生写操作（不携带任何 change/tool/input）；
+  - 如果某个可执行动作依赖一个 pending 事实，则它也必须保持 pending（整个依赖链不得拆开执行）；
+  - 不要把真实冲突、事务失败或 stale 猜测成 pending；这些由系统 Preflight 决定。
+  - 如果截图还有其他完全独立且明确的事项，可以先将明确事项放入 Visual Proposal，同时把歧义项记录为 pending，不必为了一个 pending 阻塞所有独立事项。
 - 当回答直接依据用户提供的文档（# 用户提供的文件内容）或 read_material 返回的资料正文时，应使用 ClassFlow 提供的来源标记。
 - 分页 PDF 引用对应页码：[[source:<sourceId>:p<page>]]
 - 连续多页：[[source:<sourceId>:p<start>-p<end>]]

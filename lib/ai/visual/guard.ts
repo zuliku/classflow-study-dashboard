@@ -15,3 +15,11 @@ export const VISUAL_PROPOSAL_REQUIRED_MESSAGE =
 export function isClassFlowMutationTool(toolName: string): boolean {
   return (KIRO_WRITE_TOOL_NAMES as string[]).includes(toolName) || toolName === "apply_change_set";
 }
+
+/**
+ * V1.2：Visual chain 是否要求所有 ClassFlow mutation 先走 Proposal。
+ * = 当前 Turn 有 trusted image IDs || 存在活跃的 Visual Pending Continuation（澄清链）。
+ */
+export function visualProposalRequired(imageAttachmentIds: readonly string[], continuationActive: boolean): boolean {
+  return imageAttachmentIds.length > 0 || continuationActive;
+}

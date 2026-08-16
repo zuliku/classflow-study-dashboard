@@ -8,6 +8,8 @@ import {
   CalendarPlus,
   Check,
   ChevronDown,
+  CircleHelp,
+  CircleSlash,
   Image as ImageIcon,
   Pencil,
   Plus,
@@ -17,9 +19,11 @@ import {
 import { useKiroSession } from "@/components/kiro/KiroSessionProvider";
 import { useToastStore } from "@/store/useToastStore";
 import { executeVisualActionProposal } from "@/lib/ai/visual/executor";
+import { buildVisualPendingContinuation } from "@/lib/ai/visual/continuation";
 import {
   VisualActionKind,
   VisualActionProposal,
+  VisualPendingItem,
 } from "@/lib/ai/visual/types";
 
 type ApplyState = "idle" | "applying" | "applied" | "stale" | "revoked";
@@ -36,12 +40,18 @@ const KIND_META: Record<VisualActionKind, { icon: React.ComponentType<{ classNam
 };
 
 /**
- * Visual Action Intake Proposal Card（事实 UI）：
- * 渲染 propose_visual_actions 的确定性结果；用户一次确认（应用全部修改）后，
- * 客户端直接调用 executeVisualActionProposal（Change Set V2 preapproved 模式，不再弹 generic confirm）。
- * idle → applying → applied / stale / revoked；stale 走 handoffPrompt 重新分析（UI 不自行重算）。
+ * Visual Action Intake Proposal Card（V1.2 Mixed）：事实 UI。
+ * executable rows 完全由 Preflight Facts 驱动；pending 只展示澄清/不支持事项（0 mutation）。
+ * 所有 count 从 proposal 数据推导（不缓存三份）；pending-only 无 Apply；Applied 后 Receipt 保留 pending。
  */
-export function VisualActionProposalCard({ proposal }: { proposal: VisualActionProposal }) {
+export function VisualActionProposalCard({
+  proposal,
+  restored = false,
+}: {
+  proposal: VisualActionProposal;
+  /** V1.2：历史只读快照 → 隐藏「继续处理」（无法可靠恢复 continuation provenance） */
+  restored?: boolean;
+}) {
   const [dismissed, setDismissed] = useState(false);
   const [applyState, setApplyState] = useState<ApplyState>("idle");
   const [expandedEvidence, setExpandedEvidence] = useState<string | null>(null);
@@ -50,7 +60,17 @@ export function VisualActionProposalCard({ proposal }: { proposal: VisualActionP
   // V1.1：one-shot Undo（Card Undo 与 Toast Undo 共享；执行后清空，杜绝重复补偿）
   const undoRef = useRef<(() => void) | null>(null);
   const pushToast = useToastStore((s) => s.pushToast);
-  const handoffPrompt = useKiroSession().handoffPrompt;
+  const { handoffPrompt, handoffVisualPendingContinuation } = useKiroSession();
+
+  // V1.2：count 全部由数据推导
+  const executableCount = proposal.actions.length;
+  const clarificationItems = proposal.pendingItems.filter((p) => p.reason !== "unsupported-action");
+  const clarificationCount = clarificationItems.length;
+  const unsupportedCount = proposal.pendingItems.length - clarificationCount;
+  const totalCount = executableCount + proposal.pendingItems.length;
+  const hasPending = proposal.pendingItems.length > 0;
+  const pendingOnly = executableCount === 0;
+  const imageCount = proposal.sourceAttachmentIds.length;
 
   if (dismissed) return null;
 
@@ -103,12 +123,61 @@ export function VisualActionProposalCard({ proposal }: { proposal: VisualActionP
     handoffPrompt("请根据最新 ClassFlow 数据重新检查刚才截图中的通知。");
   };
 
+  /** V1.2：继续处理 pending —— 结构化 continuation + 正常用户 prompt（不重新送截图；不直接执行任何写操作） */
+  const handleContinuePending = () => {
+    const continuation = buildVisualPendingContinuation(proposal);
+    if (!continuation) return;
+    handoffVisualPendingContinuation(
+      continuation,
+      `继续处理刚才截图里剩下的 ${continuation.pendingItems.length} 项。`
+    );
+  };
+
+  const headerText = () => {
+    if (pendingOnly) {
+      return clarificationCount > 0
+        ? `从截图发现 ${totalCount} 项需要确认`
+        : `从截图发现 ${totalCount} 项当前暂无法处理`;
+    }
+    return `从截图整理出 ${totalCount} 项`;
+  };
+
+  const headerSub = () => {
+    const parts: string[] = [];
+    if (executableCount > 0) parts.push(`${executableCount} 项可应用`);
+    if (clarificationCount > 0) parts.push(`${clarificationCount} 项待确认`);
+    if (unsupportedCount > 0) parts.push(`${unsupportedCount} 项暂无法处理`);
+    if (imageCount > 0) parts.push(`${imageCount} 张图片`);
+    return parts.join(" · ");
+  };
+
+  const renderPendingRow = (p: VisualPendingItem) => {
+    return (
+      <div key={p.id} className="py-1.5 first:pt-0 last:pb-0">
+        <div className="flex items-start gap-2">
+          <span className="mt-px w-5 h-5 shrink-0 rounded-md bg-alabaster border border-line-soft flex items-center justify-center">
+            {p.reason === "unsupported-action" ? (
+              <CircleSlash className="w-3 h-3 text-sandrift" />
+            ) : (
+              <CircleHelp className="w-3 h-3 text-sandrift" />
+            )}
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="text-[11px] font-semibold text-charcoal leading-snug">“{p.evidence.text}”</p>
+            <p className="text-[10px] text-satin-grey mt-0.5 leading-snug">{p.description}</p>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   const renderStatus = () => {
     if (applyState === "applied") {
       return (
         <span className="mr-auto flex items-center gap-1 text-[10px] font-semibold text-[#627566]">
           <Check className="w-3 h-3" />
-          已应用 {proposal.actions.length} 项修改
+          已应用 {executableCount} 项修改
+          {clarificationCount > 0 && <span className="text-sandrift">· {clarificationCount} 项仍待确认</span>}
         </span>
       );
     }
@@ -116,19 +185,30 @@ export function VisualActionProposalCard({ proposal }: { proposal: VisualActionP
       return (
         <span className="mr-auto text-[10px] font-semibold text-danger">
           方案已过期：ClassFlow 中的课程或任务已经发生变化。
+          {clarificationCount > 0 && <span className="text-sandrift">· {clarificationCount} 项仍待确认</span>}
         </span>
       );
     }
     if (applyState === "revoked") {
       return (
         <span className="mr-auto text-[10px] font-semibold text-sandrift">
-          已撤销 {proposal.actions.length} 项修改，恢复到应用前状态。
+          已撤销 {executableCount} 项修改，恢复到应用前状态。
+          {clarificationCount > 0 && <span> · {clarificationCount} 项仍待确认</span>}
         </span>
+      );
+    }
+    if (applyState === "applying") {
+      return (
+        <span className="mr-auto text-[10px] text-sandrift">正在应用…</span>
       );
     }
     return (
       <span className="mr-auto text-[10px] text-sandrift">
-        {applyState === "applying" ? "正在应用…" : "未写入任何修改"}
+        {pendingOnly
+          ? "不会写入任何修改"
+          : hasPending
+            ? "待确认或暂不支持的内容不会随本次修改写入。"
+            : "未写入任何修改"}
       </span>
     );
   };
@@ -136,28 +216,97 @@ export function VisualActionProposalCard({ proposal }: { proposal: VisualActionP
   const renderActions = () => {
     if (applyState === "applied") {
       return (
-        <button
-          onClick={handleUndo}
-          data-testid="visual-undo"
-          className="flex items-center gap-1.5 px-3 h-8 rounded-lg text-[11px] font-bold text-charcoal bg-pastel-mint hover:bg-pastel-mint transition-colors"
-        >
-          撤销
-        </button>
+        <>
+          <button
+            onClick={handleUndo}
+            data-testid="visual-undo"
+            className="flex items-center gap-1.5 px-3 h-8 rounded-lg text-[11px] font-bold text-charcoal bg-pastel-mint hover:bg-pastel-mint transition-colors"
+          >
+            撤销
+          </button>
+          {clarificationCount > 0 && !restored && (
+            <button
+              onClick={handleContinuePending}
+              data-testid="visual-continue"
+              className="flex items-center gap-1.5 px-3 h-8 rounded-lg text-[11px] font-bold text-white bg-charcoal hover:bg-black transition-colors"
+            >
+              继续处理 {clarificationCount} 项
+            </button>
+          )}
+        </>
       );
     }
     if (applyState === "stale") {
       return (
-        <button
-          onClick={handleReanalyze}
-          data-testid="visual-reanalyze"
-          className="flex items-center gap-1.5 px-3 h-8 rounded-lg text-[11px] font-bold text-charcoal bg-pastel-mint hover:bg-pastel-mint transition-colors"
-        >
-          重新分析
-        </button>
+        <>
+          {executableCount > 0 && (
+            <button
+              onClick={handleReanalyze}
+              data-testid="visual-reanalyze"
+              className="flex items-center gap-1.5 px-3 h-8 rounded-lg text-[11px] font-bold text-charcoal bg-pastel-mint hover:bg-pastel-mint transition-colors"
+            >
+              重新分析
+            </button>
+          )}
+          {clarificationCount > 0 && !restored && (
+            <button
+              onClick={handleContinuePending}
+              data-testid="visual-continue"
+              className="flex items-center gap-1.5 px-3 h-8 rounded-lg text-[11px] font-bold text-white bg-charcoal hover:bg-black transition-colors"
+            >
+              继续处理 {clarificationCount} 项
+            </button>
+          )}
+        </>
       );
     }
     if (applyState === "revoked") {
+      // V1.2：revoked 后仍可继续 pending（澄清与 Undo 互不耦合）
+      if (clarificationCount > 0 && !restored) {
+        return (
+          <button
+            onClick={handleContinuePending}
+            data-testid="visual-continue"
+            className="flex items-center gap-1.5 px-3 h-8 rounded-lg text-[11px] font-bold text-charcoal bg-pastel-mint hover:bg-pastel-mint transition-colors"
+          >
+            继续处理 {clarificationCount} 项
+          </button>
+        );
+      }
       return null;
+    }
+    // idle
+    if (pendingOnly) {
+      if (clarificationCount > 0 && !restored) {
+        return (
+          <>
+            <button
+              onClick={() => setDismissed(true)}
+              data-testid="visual-cancel"
+              className="flex items-center gap-1.5 px-3 h-8 rounded-lg text-[11px] font-bold text-satin-grey bg-transparent border border-line hover:text-charcoal hover:border-line-strong transition-colors"
+            >
+              取消
+            </button>
+            <button
+              onClick={handleContinuePending}
+              data-testid="visual-continue"
+              className="flex items-center gap-1.5 px-3 h-8 rounded-lg text-[11px] font-bold text-white bg-charcoal hover:bg-black transition-colors"
+            >
+              继续处理 {clarificationCount} 项
+            </button>
+          </>
+        );
+      }
+      // unsupported-only：无 Apply、无继续处理
+      return (
+        <button
+          onClick={() => setDismissed(true)}
+          data-testid="visual-close"
+          className="flex items-center gap-1.5 px-3 h-8 rounded-lg text-[11px] font-bold text-satin-grey bg-transparent border border-line hover:text-charcoal hover:border-line-strong transition-colors"
+        >
+          关闭
+        </button>
+      );
     }
     return (
       <>
@@ -175,7 +324,7 @@ export function VisualActionProposalCard({ proposal }: { proposal: VisualActionP
           data-testid="visual-apply"
           className="flex items-center gap-1.5 px-3 h-8 rounded-lg text-[11px] font-bold text-white bg-charcoal hover:bg-black disabled:opacity-60 transition-colors"
         >
-          {applyState === "applying" ? "正在应用…" : "应用全部修改"}
+          {applyState === "applying" ? "正在应用…" : hasPending ? `应用 ${executableCount} 项修改` : "应用全部修改"}
         </button>
       </>
     );
@@ -189,9 +338,9 @@ export function VisualActionProposalCard({ proposal }: { proposal: VisualActionP
       <div className="flex items-center justify-between">
         <p className="flex items-center gap-1.5 text-[11px] font-bold text-charcoal">
           <ImageIcon className="w-3.5 h-3.5 text-[#A48F82]" />
-          从截图整理出 {proposal.actions.length} 项修改
+          {headerText()}
           <span className="text-[10px] font-semibold text-sandrift">
-            · {proposal.sourceAttachmentIds.length} 张图片
+            {headerSub() ? ` · ${headerSub()}` : ""}
           </span>
         </p>
         <button
@@ -204,42 +353,69 @@ export function VisualActionProposalCard({ proposal }: { proposal: VisualActionP
         </button>
       </div>
 
-      <div className="divide-y divide-line-soft">
-        {proposal.actions.map((a) => {
-          const meta = KIND_META[a.display.kind] ?? KIND_META["assignment-update"];
-          const MetaIcon = meta.icon;
-          const expanded = expandedEvidence === a.id;
-          return (
-            <div key={a.id} className="py-1.5 first:pt-0 last:pb-0">
-              <div className="flex items-start gap-2">
-                <span className="mt-px w-5 h-5 shrink-0 rounded-md bg-alabaster border border-line-soft flex items-center justify-center">
-                  <MetaIcon className="w-3 h-3 text-sandrift" />
-                </span>
-                <div className="min-w-0 flex-1">
-                  <p className="text-[11px] font-semibold text-charcoal leading-snug">{a.display.title}</p>
-                  <p className="text-[10px] text-satin-grey mt-0.5 leading-snug">
-                    {a.display.subtitle ? a.display.subtitle : meta.label}
-                  </p>
-                  {/* Evidence：默认隐藏，低权重展开（不把截图原文撑长） */}
-                  <button
-                    type="button"
-                    onClick={() => setExpandedEvidence(expanded ? null : a.id)}
-                    className="mt-1 inline-flex items-center gap-1 text-[10px] font-semibold text-sandrift hover:text-charcoal transition-colors"
-                  >
-                    依据
-                    <ChevronDown className={`w-3 h-3 transition-transform ${expanded ? "rotate-180" : ""}`} />
-                  </button>
-                  {expanded && (
-                    <p className="mt-1 text-[10px] text-satin-grey leading-snug bg-alabaster/60 border border-line-soft rounded-lg px-2 py-1.5">
-                      “{a.evidence.text}”
-                    </p>
-                  )}
+      {/* V1.2 Section：可应用修改（真实 Preflight Facts） */}
+      {executableCount > 0 && (
+        <div>
+          <p className="text-[10px] font-semibold text-sandrift mb-1">可应用修改 · {executableCount}</p>
+          <div className="divide-y divide-line-soft">
+            {proposal.actions.map((a) => {
+              const meta = KIND_META[a.display.kind] ?? KIND_META["assignment-update"];
+              const MetaIcon = meta.icon;
+              const expanded = expandedEvidence === a.id;
+              return (
+                <div key={a.id} className="py-1.5 first:pt-0 last:pb-0">
+                  <div className="flex items-start gap-2">
+                    <span className="mt-px w-5 h-5 shrink-0 rounded-md bg-alabaster border border-line-soft flex items-center justify-center">
+                      <MetaIcon className="w-3 h-3 text-sandrift" />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[11px] font-semibold text-charcoal leading-snug">{a.display.title}</p>
+                      <p className="text-[10px] text-satin-grey mt-0.5 leading-snug">
+                        {a.display.subtitle ? a.display.subtitle : meta.label}
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => setExpandedEvidence(expanded ? null : a.id)}
+                        className="mt-1 inline-flex items-center gap-1 text-[10px] font-semibold text-sandrift hover:text-charcoal transition-colors"
+                      >
+                        依据
+                        <ChevronDown className={`w-3 h-3 transition-transform ${expanded ? "rotate-180" : ""}`} />
+                      </button>
+                      {expanded && (
+                        <p className="mt-1 text-[10px] text-satin-grey leading-snug bg-alabaster/60 border border-line-soft rounded-lg px-2 py-1.5">
+                          “{a.evidence.text}”
+                        </p>
+                      )}
+                    </div>
+                  </div>
                 </div>
-              </div>
-            </div>
-          );
-        })}
-      </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* V1.2 Section：需要确认（ambiguous-entity / missing-information；warm neutral，不是 danger） */}
+      {clarificationCount > 0 && (
+        <div>
+          <p className="text-[10px] font-semibold text-sandrift mb-1">需要确认 · {clarificationCount}</p>
+          <div className="divide-y divide-line-soft">
+            {clarificationItems.map((p) => renderPendingRow(p))}
+          </div>
+        </div>
+      )}
+
+      {/* V1.2 Section：暂无法处理（unsupported-action；capability limit，不是系统异常） */}
+      {unsupportedCount > 0 && (
+        <div>
+          <p className="text-[10px] font-semibold text-sandrift mb-1">暂无法处理 · {unsupportedCount}</p>
+          <div className="divide-y divide-line-soft">
+            {proposal.pendingItems
+              .filter((p) => p.reason === "unsupported-action")
+              .map((p) => renderPendingRow(p))}
+          </div>
+        </div>
+      )}
 
       <div className="flex items-center gap-2 pt-1 border-t border-line-soft">
         {renderStatus()}

@@ -22,6 +22,7 @@ import {
 import {
   VISUAL_PROPOSAL_ALLOWED_TOOL_CHECK,
   VisualActionProposal,
+  VisualPendingItem,
   VisualProposalAction,
 } from "@/lib/ai/visual/types";
 import { formatVisualPreparedAction } from "@/lib/ai/visual/format";
@@ -54,12 +55,13 @@ export interface BuildVisualActionProposalOptions {
 }
 
 /**
- * 构建 VisualActionProposal：
- * 1. whitelist 检查（V1 白名单；destructive / 课程 / 小组 / 提醒一律拒绝）
+ * 构建 VisualActionProposal（V1.2 mixed / pending-only）：
+ * 1. normalize executable actions（whitelist 检查；destructive / 课程 / 小组 / 提醒一律拒绝）
  * 2. 明显重复（course+title+ddl 完全一致）→ 让模型改为 update
- * 3. Change Set preflight（reserved IDs 由本层预留并存入 Proposal）
+ * 3. 仅当 actions.length > 0：Change Set preflight（整体原子；reserved IDs 只来自 executable）
  * 4. display = formatVisualPreparedAction(preview, state)（Preflight Facts）
- * 5. fingerprint
+ * 5. normalize pendingItems（Runtime 创建 ID；Pending 永远不携带执行能力）
+ * 6. fingerprint（仅 executable；pending-only 不伪造）
  * 全程 0 Store mutation。
  */
 export function buildVisualActionProposal(
@@ -89,24 +91,38 @@ export function buildVisualActionProposal(
     actions.push({ tool: tool as TransactionSafeToolName, input: a.change.input });
   }
 
-  // 客户端事务层一次性预留 create 实体 ID（Preflight → Re-preflight → Commit 同一 ID）
-  const reservedIds = reserveCreateIds(actions);
-  const preflight = preflightChangeSet({ actions, reservedIds }, state);
-  if (!preflight.ok) {
-    return {
-      ok: false,
-      code: preflight.code,
-      message: preflight.message,
-      failedActionIndex: preflight.failedActionIndex,
-    };
+  // executable subset 整体 Preflight（V1.2：pending-only 时不调用空 Change Set）
+  let proposalActions: VisualProposalAction[] = [];
+  let reservedIds: (string | undefined)[] = [];
+  let previewFingerprint: string | undefined;
+  if (actions.length > 0) {
+    // 客户端事务层一次性预留 create 实体 ID（Preflight → Re-preflight → Commit 同一 ID）
+    reservedIds = reserveCreateIds(actions);
+    const preflight = preflightChangeSet({ actions, reservedIds }, state);
+    if (!preflight.ok) {
+      return {
+        ok: false,
+        code: preflight.code,
+        message: preflight.message,
+        failedActionIndex: preflight.failedActionIndex,
+      };
+    }
+    proposalActions = preflight.preview.map((view, i) => ({
+      id: createId("vp"),
+      change: actions[i],
+      evidence: { text: input.actions[i].evidence },
+      // V1.1：display 完全由真实 Preflight Facts 推导（模型无任何字段可改写 UI 文案）
+      display: formatVisualPreparedAction(view, state),
+    }));
+    previewFingerprint = computeVisualProposalFingerprint(preflight.preview);
   }
 
-  const proposalActions: VisualProposalAction[] = preflight.preview.map((view, i) => ({
-    id: createId("vp"),
-    change: actions[i],
-    evidence: { text: input.actions[i].evidence },
-    // V1.1：display 完全由真实 Preflight Facts 推导（模型无任何字段可改写 UI 文案）
-    display: formatVisualPreparedAction(view, state),
+  // V1.2：normalize pendingItems（Runtime ID；Pending 永远不产生写操作）
+  const pendingItems: VisualPendingItem[] = (input.pendingItems ?? []).map((p) => ({
+    id: createId("vpending"),
+    reason: p.reason,
+    evidence: { text: p.evidence },
+    description: p.description,
   }));
 
   const proposal: VisualActionProposal = {
@@ -115,8 +131,9 @@ export function buildVisualActionProposal(
     sourceAttachmentIds: [...options.sourceAttachmentIds],
     summary: input.summary,
     actions: proposalActions,
+    pendingItems,
     createdAt: Date.now(),
-    previewFingerprint: computeVisualProposalFingerprint(preflight.preview),
+    ...(previewFingerprint !== undefined ? { previewFingerprint } : {}),
     reservedIds,
   };
 
@@ -145,8 +162,12 @@ export interface VisualProposalStaleCheck {
   reason?: string;
 }
 
-/** Apply 前基于最新 Store 的 stale 检查（re-preflight + fingerprint 重算）；0 mutation */
+/** Apply 前基于最新 Store 的 stale 检查（re-preflight + fingerprint 重算）；0 mutation。
+ *  V1.2：pending-only（actions.length === 0）没有 Apply，防御性返回不 stale。 */
 export function checkVisualProposalStale(proposal: VisualActionProposal, state: AppState): VisualProposalStaleCheck {
+  if (proposal.actions.length === 0) {
+    return { stale: false };
+  }
   const actions = proposal.actions.map((a) => a.change);
   const re = preflightChangeSet({ actions, reservedIds: proposal.reservedIds }, state);
   if (!re.ok) {

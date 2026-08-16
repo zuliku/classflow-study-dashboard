@@ -57,6 +57,8 @@ export type ReadToolErrorCode =
 export interface ReadToolExecutionContext {
   /** 当前 User Turn Send 时冻结的 ready image attachment IDs（Runtime Source of Truth） */
   visualSourceAttachmentIds?: readonly string[];
+  /** V1.2：Visual Pending Continuation 活跃（澄清链 Turn 无新图片也可 propose；Guard 同源） */
+  visualContinuationActive?: boolean;
 }
 
 export type ReadToolResult<T> =
@@ -630,7 +632,8 @@ export function proposeVisualActionsTool(
   context?: ReadToolExecutionContext
 ): ReadToolResult<unknown> {
   const sourceAttachmentIds = context?.visualSourceAttachmentIds ?? [];
-  if (sourceAttachmentIds.length === 0) {
+  // V1.2：澄清链 Turn（无新图片但 continuation 活跃）同样允许生成 Proposal（source 为空数组）
+  if (sourceAttachmentIds.length === 0 && context?.visualContinuationActive !== true) {
     return {
       ok: false,
       code: "VISUAL_SOURCE_REQUIRED",

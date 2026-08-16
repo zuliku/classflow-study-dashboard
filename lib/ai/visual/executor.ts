@@ -35,6 +35,17 @@ export async function executeVisualActionProposal(
   const { proposal } = input;
   const state = input.state ?? useAppStore.getState();
 
+  // V1.2：pending-only Proposal 没有可执行内容，防御性拒绝 Apply（UI 不应展示 Apply）
+  if (proposal.actions.length === 0) {
+    return {
+      ok: false,
+      stale: undefined,
+      code: "VISUAL_PROPOSAL_EMPTY",
+      message: "这份截图方案没有可应用的修改。",
+      applied: 0,
+    };
+  }
+
   // 1. stale 检查（re-preflight + fingerprint 重算；0 mutation）
   const staleCheck = checkVisualProposalStale(proposal, state);
   if (staleCheck.stale) {

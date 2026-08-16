@@ -47,6 +47,10 @@ import {
 } from "@/lib/ai/contextBudget/planner";
 import { KiroPlannableMessage } from "@/lib/ai/contextBudget/types";
 import { estimateTokens } from "@/lib/ai/contextBudget/estimate";
+import {
+  normalizeVisualPendingContinuation,
+  buildVisualPendingContinuationSection,
+} from "@/lib/ai/visual/continuation";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -307,12 +311,19 @@ export async function POST(req: NextRequest) {
   );
   const projectInstructionsSection = buildProjectInstructionsSection(projectTurnContext);
 
+  // Task B V1.2：Visual Pending Continuation —— 同样重新 normalize/bound 后注入 Prompt section
+  // （只提供澄清事实；明确不授权直接写入）
+  const visualPendingContinuation = normalizeVisualPendingContinuation(
+    (body as Record<string, unknown>).visualPendingContinuation
+  );
+  const visualPendingContinuationSection = buildVisualPendingContinuationSection(visualPendingContinuation);
+
   const systemMessage = baseContext
     ? `${trustedBasePrompt}\n\n# 当前 ClassFlow 上下文\n${JSON.stringify({
         baseContext,
         contextRefs,
-      })}${projectInstructionsSection}${memorySection}${attachmentSection(plan.attachmentContext)}${visionPagesSection}${computerWorkspaceContext}${workspaceInstructionsSection}${artifactContextNotice}`
-    : trustedBasePrompt + projectInstructionsSection + memorySection + attachmentSection(plan.attachmentContext) + visionPagesSection + computerWorkspaceContext + workspaceInstructionsSection + artifactContextNotice;
+      })}${projectInstructionsSection}${visualPendingContinuationSection}${memorySection}${attachmentSection(plan.attachmentContext)}${visionPagesSection}${computerWorkspaceContext}${workspaceInstructionsSection}${artifactContextNotice}`
+    : trustedBasePrompt + projectInstructionsSection + visualPendingContinuationSection + memorySection + attachmentSection(plan.attachmentContext) + visionPagesSection + computerWorkspaceContext + workspaceInstructionsSection + artifactContextNotice;
 
   try {
     const modelMessages = await convertToModelMessages(plan.messages as never);
