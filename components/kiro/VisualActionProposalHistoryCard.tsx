@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import {
   ArrowRightLeft,
   Ban,
@@ -8,6 +8,7 @@ import {
   CalendarPlus,
   Check,
   ChevronDown,
+  Circle,
   CircleHelp,
   CircleSlash,
   Image as ImageIcon,
@@ -17,13 +18,15 @@ import {
 } from "lucide-react";
 import { PersistedVisualProposalView } from "@/lib/ai/history/types";
 import { VisualActionKind } from "@/lib/ai/visual/types";
+import { cn } from "@/lib/utils";
 
 /**
- * Visual Action Intake V1.3：历史只读 Proposal 快照 Card（display-only）。
+ * Visual Action Intake V1.3 + V1.5：历史只读 Proposal 快照 Card（display-only）。
  * - props 是 PersistedVisualProposalView（类型上不可能变成 VisualActionProposal）
  * - 0 Mutation Entry Point：无 Apply / Undo / Continue / Reanalyze / Cancel / Close
  * - Evidence 可展开查看（安全 display fact）；不尝试打开原截图（Local Blob 不保留）
- * - 不显示 applied/revoked/stale（History 没有可靠记录）
+ * - V1.5：receipt.appliedActionIndexes 投影行级「当时已应用 / 当时未应用」
+ *   （缺省 = 当时全部应用）；只描述「当时发生过什么」，绝不声称当前状态
  */
 const KIND_META: Record<VisualActionKind, { icon: React.ComponentType<{ className?: string }>; label: string }> = {
   "assignment-create": { icon: Plus, label: "新建任务" },
@@ -43,6 +46,20 @@ export function VisualActionProposalHistoryCard({ proposal }: { proposal: Persis
   const unsupportedCount = proposal.pendingItems.length - clarificationCount;
   const totalCount = executableCount + proposal.pendingItems.length;
   const imageCount = proposal.imageCount;
+
+  // V1.5：receipt 投影 —— appliedIndexes 缺省 = 当时全部应用
+  const appliedIdSet = useMemo(() => {
+    const indexes = proposal.receipt?.appliedActionIndexes;
+    if (!indexes) return null;
+    const set = new Set<number>();
+    for (const i of indexes) {
+      if (Number.isInteger(i) && i >= 0 && i < proposal.actions.length) set.add(i);
+    }
+    return set;
+  }, [proposal.receipt, proposal.actions.length]);
+  const appliedCount = appliedIdSet === null ? executableCount : appliedIdSet.size;
+  const unappliedCount = executableCount - appliedCount;
+  const hadReceipt = proposal.receipt?.status === "applied" || proposal.receipt?.status === "revoked";
 
   const headerText = () => {
     if (proposal.origin === "clarification") {
@@ -93,12 +110,16 @@ export function VisualActionProposalHistoryCard({ proposal }: { proposal: Persis
 
       {executableCount > 0 && (
         <div>
-          <p className="text-[10px] font-semibold text-sandrift mb-1">可应用修改 · {executableCount}</p>
+          <p className="text-[10px] font-semibold text-sandrift mb-1">
+            可应用修改 · {executableCount}
+            {hadReceipt && unappliedCount > 0 && <span className="text-sandrift"> · 当时未应用 {unappliedCount}</span>}
+          </p>
           <div className="divide-y divide-line-soft">
             {proposal.actions.map((a, i) => {
               const meta = KIND_META[a.kind] ?? KIND_META["assignment-update"];
               const MetaIcon = meta.icon;
               const expanded = expandedEvidence === `h-${i}`;
+              const rowApplied = hadReceipt && (appliedIdSet === null || appliedIdSet.has(i));
               return (
                 <div key={`h-${i}`} className="py-1.5 first:pt-0 last:pb-0">
                   <div className="flex items-start gap-2">
@@ -106,7 +127,23 @@ export function VisualActionProposalHistoryCard({ proposal }: { proposal: Persis
                       <MetaIcon className="w-3 h-3 text-sandrift" />
                     </span>
                     <div className="min-w-0 flex-1">
-                      <p className="text-[11px] font-semibold text-charcoal leading-snug">{a.title}</p>
+                      <div className="flex items-center gap-1.5">
+                        <p className="min-w-0 flex-1 text-[11px] font-semibold text-charcoal leading-snug truncate">
+                          {a.title}
+                        </p>
+                        {hadReceipt && (
+                          <span
+                            data-testid="visual-history-row-state"
+                            className={cn(
+                              "shrink-0 flex items-center gap-0.5 text-[9px] font-bold",
+                              rowApplied ? "text-[#627566]" : "text-sandrift"
+                            )}
+                          >
+                            {rowApplied ? <Check className="w-2.5 h-2.5" /> : <Circle className="w-2 h-2" />}
+                            {rowApplied ? "当时已应用" : "当时未应用"}
+                          </span>
+                        )}
+                      </div>
                       <p className="text-[10px] text-satin-grey mt-0.5 leading-snug">
                         {a.subtitle ? a.subtitle : meta.label}
                       </p>
@@ -159,17 +196,19 @@ export function VisualActionProposalHistoryCard({ proposal }: { proposal: Persis
       )}
 
       <div className="pt-1 border-t border-line-soft">
-        {/* V1.4：Durable Execution Receipt（描述「当时发生过什么」；绝不声称当前 ClassFlow 状态） */}
+        {/* V1.4/V1.5：Durable Execution Receipt（描述「当时发生过什么」；绝不声称当前 ClassFlow 状态） */}
         {proposal.receipt?.status === "applied" ? (
           <p className="flex items-center gap-1 text-[10px] font-semibold text-[#627566]">
             <Check className="w-3 h-3" />
-            当时已应用 {proposal.receipt.count} 项修改
+            当时已应用 {appliedCount} 项修改
+            {unappliedCount > 0 && <span className="text-sandrift">· {unappliedCount} 项当时未应用</span>}
             {clarificationCount > 0 && <span className="text-sandrift">· {clarificationCount} 项仍待确认</span>}
           </p>
         ) : proposal.receipt?.status === "revoked" ? (
           <p className="flex items-center gap-1 text-[10px] font-semibold text-sandrift">
             <Check className="w-3 h-3" />
-            当时已应用后撤销 {proposal.receipt.count} 项修改
+            当时已应用后撤销 {appliedCount} 项修改
+            {unappliedCount > 0 && <span> · {unappliedCount} 项当时未应用</span>}
             {clarificationCount > 0 && <span> · {clarificationCount} 项仍待确认</span>}
           </p>
         ) : (

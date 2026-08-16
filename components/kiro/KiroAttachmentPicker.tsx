@@ -50,8 +50,8 @@ export function KiroAttachmentPicker({
     {
       id: "image",
       icon: ImageIcon,
-      label: "添加图片",
-      desc: "JPG / PNG / WEBP",
+      label: "添加聊天截图或图片",
+      desc: "班群通知、作业或调课截图 · JPG / PNG / WEBP",
       action: () => pickFiles("image/png,image/jpeg,image/webp,.jpg,.jpeg,.png,.webp", onFiles, imageRef),
     },
     {

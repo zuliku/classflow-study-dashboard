@@ -139,3 +139,73 @@ describe("sanitizeVisualProposalReceipt（History boundary）", () => {
     expect("reservedIds" in r!).toBe(false);
   });
 });
+
+describe("V1.5：Selective Apply Receipt（appliedActionIndexes）", () => {
+  it("recordApplied 带 indexes → runtime 持有 + snapshot 投影（纯展示整数；无 undo）", () => {
+    const rt = createVisualProposalRuntime();
+    rt.recordApplied({ proposalId: "p1", count: 2, appliedActionIndexes: [0, 2], undo: () => {} });
+    expect(rt.getState("p1")?.appliedActionIndexes).toEqual([0, 2]);
+    const snapshot = rt.receiptSnapshot();
+    expect(snapshot.get("p1")?.appliedActionIndexes).toEqual([0, 2]);
+    // snapshot 里绝对没有 undo / change / tool 信息
+    const json = JSON.stringify(snapshot.get("p1"));
+    expect(json).not.toContain("undo");
+    expect(json).not.toContain("change");
+    expect(json).not.toContain("tool");
+    expect(json).not.toContain("reserved");
+    expect(json).not.toContain("fingerprint");
+    expect(json).not.toContain("sourceAttachment");
+  });
+
+  it("旧调用（无 indexes）→ appliedActionIndexes undefined（= 当时全部应用）", () => {
+    const rt = createVisualProposalRuntime();
+    rt.recordApplied({ proposalId: "p1", count: 3, undo: () => {} });
+    expect(rt.getState("p1")?.appliedActionIndexes).toBeUndefined();
+    expect(rt.receiptSnapshot().get("p1")?.appliedActionIndexes).toBeUndefined();
+  });
+
+  it("Undo 后 indexes 保留（描述「当时应用了哪些」；revoked 不丢失投影）", () => {
+    const rt = createVisualProposalRuntime();
+    rt.recordApplied({ proposalId: "p1", count: 2, appliedActionIndexes: [0, 1], undo: () => {} });
+    expect(rt.consumeUndo("p1").ok).toBe(true);
+    const snapshot = rt.receiptSnapshot();
+    expect(snapshot.get("p1")?.status).toBe("revoked");
+    expect(snapshot.get("p1")?.appliedActionIndexes).toEqual([0, 1]);
+  });
+
+  it("sanitize：合法 indexes 投影（range checked against actionCount）", () => {
+    expect(
+      sanitizeVisualProposalReceipt({ status: "applied", count: 2, appliedAt: 100, appliedActionIndexes: [0, 3] }, 4)
+    ).toEqual({ status: "applied", count: 2, appliedAt: 100, appliedActionIndexes: [0, 3] });
+  });
+
+  it("sanitize：非整数 / 负数 / 越界 / 重复 / count 不一致 / 非数组 → 整体拒绝", () => {
+    const base = { status: "applied", count: 2, appliedAt: 100 } as const;
+    expect(sanitizeVisualProposalReceipt({ ...base, appliedActionIndexes: [0, 1.5] }, 4)).toBeUndefined();
+    expect(sanitizeVisualProposalReceipt({ ...base, appliedActionIndexes: [-1, 0] }, 4)).toBeUndefined();
+    expect(sanitizeVisualProposalReceipt({ ...base, appliedActionIndexes: [0, 9] }, 4)).toBeUndefined(); // 越界
+    expect(sanitizeVisualProposalReceipt({ ...base, appliedActionIndexes: [0, 0] }, 4)).toBeUndefined(); // 重复
+    expect(sanitizeVisualProposalReceipt({ ...base, appliedActionIndexes: [0] }, 4)).toBeUndefined(); // 与 count 不一致
+    expect(sanitizeVisualProposalReceipt({ ...base, appliedActionIndexes: "x" }, 4)).toBeUndefined();
+    expect(sanitizeVisualProposalReceipt({ ...base, appliedActionIndexes: ["0"] }, 4)).toBeUndefined();
+    // 空数组 = 非法（count>0 却什么都没应用）
+    expect(sanitizeVisualProposalReceipt({ ...base, appliedActionIndexes: [] }, 4)).toBeUndefined();
+  });
+
+  it("sanitize：无 actionCount 参照时仍 bound（0..9999 防御）", () => {
+    expect(
+      sanitizeVisualProposalReceipt({ status: "applied", count: 1, appliedAt: 1, appliedActionIndexes: [5000] })
+    ).toEqual({ status: "applied", count: 1, appliedAt: 1, appliedActionIndexes: [5000] });
+    expect(
+      sanitizeVisualProposalReceipt({ status: "applied", count: 1, appliedAt: 1, appliedActionIndexes: [10000] })
+    ).toBeUndefined();
+  });
+
+  it("sanitize：旧 receipt（无 indexes 字段）行为不变", () => {
+    expect(sanitizeVisualProposalReceipt({ status: "applied", count: 2, appliedAt: 100 }, 4)).toEqual({
+      status: "applied",
+      count: 2,
+      appliedAt: 100,
+    });
+  });
+});

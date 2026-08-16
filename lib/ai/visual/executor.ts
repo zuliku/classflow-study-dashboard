@@ -11,15 +11,33 @@ import { KiroWriteApi } from "@/lib/ai/tools/write/types";
 import { createKiroWriteApi } from "@/lib/ai/tools/write/api";
 import { executeChangeSet } from "@/lib/ai/transactions/executor";
 import { VisualActionProposal } from "@/lib/ai/visual/types";
-import { checkVisualProposalStale } from "@/lib/ai/visual/preflight";
+import {
+  buildVisualProposalExecutionPlan,
+  VISUAL_SELECTION_DEPENDENCY_CHANGED_CODE,
+} from "@/lib/ai/visual/executionPlan";
 
 export type ExecuteVisualActionProposalResult =
-  | { ok: true; applied: number; count: number; undo: () => void }
+  | {
+      ok: true;
+      applied: number;
+      count: number;
+      /** V1.5：本次真正应用的 action ids（runtime-only identity；Undo 只撤销这批） */
+      appliedActionIds: string[];
+      /** V1.5：本次应用的 action 在 proposal.actions 中的 original index（display projection 用） */
+      appliedActionIndexes: number[];
+      undo: () => void;
+    }
   | { ok: false; stale: true; code: "VISUAL_PROPOSAL_STALE"; message: string; applied: number }
   | { ok: false; stale?: undefined; code: string; message: string; applied: number };
 
 export interface ExecuteVisualActionProposalInput {
   proposal: VisualActionProposal;
+  /**
+   * V1.5 Selective Apply：用户勾选的 action ids。
+   * 默认 undefined = 全部 executable actions（旧调用与测试完全兼容）。
+   * 内部永远走 buildVisualProposalExecutionPlan（FULL stale 检查不可绕过）。
+   */
+  selectedActionIds?: string[];
   /** 默认 useAppStore.getState()（Apply 时最新 Store） */
   state?: AppState;
   /** 默认 createKiroWriteApi（内部捕获 grouped Undo 返回给调用方） */
@@ -46,14 +64,27 @@ export async function executeVisualActionProposal(
     };
   }
 
-  // 1. stale 检查（re-preflight + fingerprint 重算；0 mutation）
-  const staleCheck = checkVisualProposalStale(proposal, state);
-  if (staleCheck.stale) {
+  // V1.5：Selective Apply —— 执行计划（FULL stale 检查 + subset 语义校验；全程 0 mutation）
+  const plan = buildVisualProposalExecutionPlan({
+    proposal,
+    selectedActionIds: input.selectedActionIds ?? proposal.actions.map((a) => a.id),
+    state,
+  });
+  if (!plan.ok) {
+    if (plan.code === "VISUAL_PROPOSAL_STALE") {
+      return {
+        ok: false,
+        stale: true,
+        code: "VISUAL_PROPOSAL_STALE",
+        message: "这组修改所依据的数据已经变化，需要重新检查。",
+        applied: 0,
+      };
+    }
     return {
       ok: false,
-      stale: true,
-      code: "VISUAL_PROPOSAL_STALE",
-      message: "这组修改所依据的数据已经变化，需要重新检查。",
+      stale: undefined,
+      code: plan.code === VISUAL_SELECTION_DEPENDENCY_CHANGED_CODE ? VISUAL_SELECTION_DEPENDENCY_CHANGED_CODE : plan.code,
+      message: plan.message,
       applied: 0,
     };
   }
@@ -72,7 +103,8 @@ export async function executeVisualActionProposal(
     });
 
   const result = await executeChangeSet({
-    actions: proposal.actions.map((a) => a.change),
+    actions: plan.actions,
+    reservedIds: plan.reservedIds,
     summary: proposal.summary,
     state,
     api,
@@ -99,6 +131,9 @@ export async function executeVisualActionProposal(
     ok: true,
     applied: result.applied,
     count: result.changeSet.count,
+    // V1.5：本次真正应用的 action（runtime identity；subset 原子语义不变）
+    appliedActionIds: plan.selectedIndexes.map((i) => proposal.actions[i].id),
+    appliedActionIndexes: [...plan.selectedIndexes],
     undo: () => {
       if (capturedUndo) capturedUndo();
     },

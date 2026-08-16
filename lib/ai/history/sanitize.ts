@@ -52,7 +52,7 @@ export function toPersistedVisualProposal(
     evidence: (p.evidence?.text ?? "").slice(0, MAX_PERSISTED_VISUAL_EVIDENCE),
     description: p.description.slice(0, MAX_PERSISTED_VISUAL_PENDING_DESCRIPTION),
   }));
-  const safeReceipt = sanitizeVisualProposalReceipt(receipt);
+  const safeReceipt = sanitizeVisualProposalReceipt(receipt, actions.length);
   return {
     id: proposal.id,
     summary: proposal.summary.slice(0, MAX_PERSISTED_VISUAL_SUMMARY),

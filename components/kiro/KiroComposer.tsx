@@ -403,7 +403,7 @@ export function KiroComposer({
                   点击只填 prompt（不直接 Send；发送必须走 canonical submit() 的 canSend/vision gate/防重复） */}
               {hasReadyImages && visionEnabled && !hasProcessing && !currentTurnScopeLocked && text.trim().length === 0 && (
                 <div className="flex items-center gap-1.5 pt-1.5">
-                  {["整理任务与 DDL", "识别课程变动", "处理全部通知"].map((label) => (
+                  {["处理截图通知", "整理任务与 DDL", "识别课程变动"].map((label) => (
                     <button
                       key={label}
                       type="button"

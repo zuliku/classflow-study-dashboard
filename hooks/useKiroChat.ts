@@ -81,6 +81,7 @@ import { executeReadProjectVisual } from "@/lib/ai/tools/read/projectVisual";
 import { executeSearchProjectFile } from "@/lib/ai/tools/read/projectFileSearch";
 import { createVisionTurnRuntimeBudget, VisionTurnRuntimeLedger } from "@/lib/ai/attachments/visionTurnRuntimeBudget";
 import { createVisualProposalRuntime } from "@/lib/ai/visual/receipt";
+import { clearLiveImageSources } from "@/lib/ai/attachments/liveImageRegistry";
 import { projectFileSourceId, upsertProjectFileSource } from "@/lib/ai/citations/sources";
 import { getActiveModelName } from "@/lib/ai/providers/registry";
 import { executeKiroWriteTool } from "@/lib/ai/tools/write/executor";
@@ -906,7 +907,7 @@ export function useKiroChat({
   /** Runtime API（有限状态机；绝无 setState(any)） */
   const visualProposalRuntime = {
     getState: (proposalId: string) => visualProposalRuntimeRef.current.getState(proposalId),
-    recordApplied: (input: { proposalId: string; count: number; undo: () => void }) => {
+    recordApplied: (input: { proposalId: string; count: number; undo: () => void; appliedActionIndexes?: number[] }) => {
       visualProposalRuntimeRef.current.recordApplied(input);
       bumpVisualProposalVersion();
     },
@@ -2524,6 +2525,8 @@ export function useKiroChat({
     restoredVisualProposalsRef.current.clear();
     // Visual Intake V1.4：Conversation isolation —— 新会话清空 Proposal 执行能力（含 undo closure）
     visualProposalRuntimeRef.current.clear();
+    // Visual Intake V1.5：live image File 只活在当前 Conversation runtime（与 Proposal runtime 同 boundary）
+    clearLiveImageSources();
     setVisualProposalVersion(0);
     viewCacheRef.current.clear();
     liveTurnCommitsRef.current.clear();
@@ -2569,6 +2572,8 @@ export function useKiroChat({
       restoredVisualProposalsRef.current = visualProposalHistoryMap;
       // Visual Intake V1.4：Load 历史只恢复 display receipt —— 绝不注册 undo / 构造 executable
       visualProposalRuntimeRef.current.clear();
+      // Visual Intake V1.5：历史恢复没有 live File（tempNotRetained；预览自然降级）
+      clearLiveImageSources();
       setVisualProposalVersion(0);
       viewCacheRef.current.clear();
       liveTurnCommitsRef.current.clear();

@@ -20,6 +20,12 @@ export interface VisualProposalReceiptView {
   count: number;
   appliedAt: number;
   revokedAt?: number;
+  /**
+   * Visual Intake V1.5（display projection）：当时真正应用的 action 在
+   * proposal.actions 中的 original index（bounded / 非负整数 / 去重 / range checked）。
+   * 旧记录没有该字段 = 全部应用；绝不包含 tool/input/entity replay information。
+   */
+  appliedActionIndexes?: number[];
 }
 
 export interface VisualProposalRuntimeEntry {
@@ -27,6 +33,8 @@ export interface VisualProposalRuntimeEntry {
   count?: number;
   appliedAt?: number;
   revokedAt?: number;
+  /** V1.5：runtime-only identity（Card 行级「已应用/未应用」标记；不进 History 原始形态，投影为 indexes） */
+  appliedActionIndexes?: number[];
   /** Runtime-only：永不进入 receiptSnapshot / History / ChatView persistence shape */
   undo?: () => void;
 }
@@ -37,8 +45,13 @@ export type VisualProposalUndoOutcome =
 
 export interface VisualProposalRuntime {
   getState(proposalId: string): VisualProposalRuntimeEntry | undefined;
-  /** Apply 成功：status=applied + count + appliedAt + undo closure */
-  recordApplied(input: { proposalId: string; count: number; undo: () => void }): void;
+  /** Apply 成功：status=applied + count + appliedAt + undo closure（V1.5：可带 appliedActionIndexes） */
+  recordApplied(input: {
+    proposalId: string;
+    count: number;
+    undo: () => void;
+    appliedActionIndexes?: number[];
+  }): void;
   /** Apply stale（re-preflight 判断；不持久化） */
   markStale(proposalId: string): void;
   /**
@@ -60,11 +73,14 @@ export function createVisualProposalRuntime(): VisualProposalRuntime {
       return entries.get(proposalId);
     },
 
-    recordApplied(input: { proposalId: string; count: number; undo: () => void }): void {
+    recordApplied(input: { proposalId: string; count: number; undo: () => void; appliedActionIndexes?: number[] }): void {
       entries.set(input.proposalId, {
         status: "applied",
         count: Math.max(0, Math.floor(input.count)),
         appliedAt: Date.now(),
+        ...(input.appliedActionIndexes !== undefined
+          ? { appliedActionIndexes: [...input.appliedActionIndexes] }
+          : {}),
         undo: input.undo,
       });
     },
@@ -103,6 +119,9 @@ export function createVisualProposalRuntime(): VisualProposalRuntime {
             count: entry.count ?? 0,
             appliedAt: entry.appliedAt ?? 0,
             ...(entry.revokedAt !== undefined ? { revokedAt: entry.revokedAt } : {}),
+            ...(entry.appliedActionIndexes !== undefined && entry.appliedActionIndexes.length > 0
+              ? { appliedActionIndexes: [...entry.appliedActionIndexes] }
+              : {}),
           });
         }
       }
@@ -132,9 +151,14 @@ export function buildConversationPersistenceSignature(input: {
  * - status 只允许 applied / revoked
  * - count 为合理非负整数（≤ 10000）
  * - appliedAt / revokedAt 必须 finite 且 revokedAt >= appliedAt
+ * - V1.5 appliedActionIndexes：optional 数组；每项必须是非负整数且 < actionCount（range checked）；
+ *   去重保序；非法数组整体丢弃（降级为「全部应用」，不落坏数据）
  * 非法输入 → undefined（不落库；保持旧记录兼容）。
  */
-export function sanitizeVisualProposalReceipt(raw: unknown): VisualProposalReceiptView | undefined {
+export function sanitizeVisualProposalReceipt(
+  raw: unknown,
+  actionCount?: number
+): VisualProposalReceiptView | undefined {
   if (!raw || typeof raw !== "object") return undefined;
   const v = raw as Record<string, unknown>;
   if (v.status !== "applied" && v.status !== "revoked") return undefined;
@@ -150,10 +174,35 @@ export function sanitizeVisualProposalReceipt(raw: unknown): VisualProposalRecei
   if (count === undefined || appliedAt === undefined) return undefined;
   if (count > 10_000) return undefined;
   if (v.status === "revoked" && (revokedAt === undefined || revokedAt < appliedAt)) return undefined;
+
+  let appliedActionIndexes: number[] | undefined;
+  if (v.appliedActionIndexes !== undefined) {
+    const rawIndexes = v.appliedActionIndexes;
+    const maxIndex = actionCount !== undefined && Number.isInteger(actionCount) && actionCount > 0
+      ? actionCount - 1
+      : 9999; // 无 actions 参照时仍 bound 到 0..9999（防御超长数组）
+    const seen = new Set<number>();
+    const out: number[] = [];
+    if (Array.isArray(rawIndexes)) {
+      for (const it of rawIndexes.slice(0, 64)) {
+        if (typeof it !== "number" || !Number.isInteger(it) || it < 0 || it > maxIndex) return undefined;
+        if (seen.has(it)) return undefined;
+        seen.add(it);
+        out.push(it);
+      }
+      // 数组整体合法才投影（非法 → 整个 receipt 也不落库，避免「部分应用」被误读为其他含义）
+      if (out.length !== count) return undefined;
+      if (out.length > 0) appliedActionIndexes = out;
+    } else {
+      return undefined;
+    }
+  }
+
   return {
     status: v.status,
     count,
     appliedAt,
     ...(revokedAt !== undefined ? { revokedAt } : {}),
+    ...(appliedActionIndexes !== undefined ? { appliedActionIndexes } : {}),
   };
 }

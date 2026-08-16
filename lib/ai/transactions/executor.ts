@@ -39,6 +39,13 @@ export interface ExecuteChangeSetInput {
    * 不重复弹 generic confirm（bulk/normal 直接执行）；destructive 一律拒绝。
    */
   confirmationMode?: import("@/lib/ai/transactions/types").ChangeSetConfirmationMode;
+  /**
+   * Visual Intake V1.5：internal caller-only —— Selective Apply 的确定性 identity。
+   * 默认 reserveCreateIds(actions)（现有调用行为完全不变）。
+   * 绝不暴露给 LLM schema / Tool input / 持久化；模型永远无法提供 reserved ID。
+   * 长度必须与 actions 一致（由调用方保证；preflight 只取下标对齐项）。
+   */
+  reservedIds?: (string | undefined)[];
 }
 
 /**
@@ -48,7 +55,17 @@ export async function executeChangeSet(input: ExecuteChangeSetInput): Promise<Ch
   const { actions, summary, api, toolCallId, confirmationMode = "normal" } = input;
 
   // Task 7：create 操作的实体 ID 只预留一次 → Preflight / Re-preflight / Commit 使用同一批 ID
-  const reservedIds = reserveCreateIds(actions);
+  // Visual Intake V1.5：Selective Apply 传入与执行计划对齐的 reservedIds（caller-only；默认行为不变）
+  const reservedIds = input.reservedIds ?? reserveCreateIds(actions);
+  if (reservedIds.length !== actions.length) {
+    // 防御：长度不对齐会破坏 create ID 的 Preflight→Commit 一致性，绝不静默降级
+    return {
+      ok: false,
+      code: "TRANSACTION_PREFLIGHT_FAILED",
+      message: "修改计划校验失败（reserved ID 与操作数不一致），没有执行任何修改。",
+      applied: 0,
+    };
+  }
 
   // 1. Preflight（projected）
   const preflight = preflightChangeSet({ actions, reservedIds }, input.state);

@@ -16,6 +16,10 @@ import { extractCacheKey } from "@/lib/ai/attachments/cache";
 import { MAX_ATTACHMENTS_PER_TURN } from "@/lib/ai/attachments/limits";
 import { createImageThumbnail } from "@/lib/ai/attachments/image";
 import { createStorageKey, saveFileBlob, getFileBlob } from "@/lib/fileStorage";
+import {
+  registerLiveImageSource,
+  unregisterLiveImageSource,
+} from "@/lib/ai/attachments/liveImageRegistry";
 
 let seq = 0;
 const nextId = () => `att_${++seq}_${Date.now().toString(36)}`;
@@ -93,6 +97,14 @@ export function useKiroAttachments() {
         if (routed.kind === "image") {
           try {
             const thumb = await createImageThumbnail(base.file);
+            // V1.5：原始 File 进入 runtime-only registry（live preview / Proposal Source Strip 用；
+            // 绝不进入历史持久层；Conversation 切换时由 useKiroChat 清空）
+            registerLiveImageSource({
+              id,
+              file: base.file,
+              name: base.name,
+              thumbnail: thumb || undefined,
+            });
             patch({ status: "ready", thumbnail: thumb || undefined });
           } catch {
             patch({ status: "error", error: "无法生成预览。" });
@@ -180,6 +192,7 @@ export function useKiroAttachments() {
   );
 
   const remove = useCallback((id: string) => {
+    unregisterLiveImageSource(id);
     setAttachments((prev) => prev.filter((a) => a.id !== id));
   }, []);
 

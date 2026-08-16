@@ -17,6 +17,7 @@ import { StudyRebalanceProposalCard } from "@/components/kiro/StudyRebalanceProp
 import { TaskBreakdownProposalCard } from "@/components/kiro/TaskBreakdownProposalCard";
 import { VisualActionProposalCard } from "@/components/kiro/VisualActionProposalCard";
 import { VisualActionProposalHistoryCard } from "@/components/kiro/VisualActionProposalHistoryCard";
+import { resolveLiveImageSources } from "@/lib/ai/attachments/liveImageRegistry";
 import { actionSummaryText } from "@/lib/ai/share";
 import { cn } from "@/lib/utils";
 import { useEnterOnAdd } from "@/lib/useEnterOnAdd";
@@ -400,7 +401,13 @@ const KiroConversationRow = React.memo(function KiroConversationRow({
         {view.visualActionProposals && view.visualActionProposals.length > 0 && !view.streaming && (
           <div className="space-y-2.5 pt-1">
             {view.visualActionProposals.map((p) => (
-              <VisualActionProposalCard key={p.id} proposal={p} />
+              // V1.5：Conversation 层解析 live 来源（sourceAttachmentIds → runtime File lookup；
+              // Card 不扫描全局 Store；历史恢复后 registry 为空 → 自然降级）
+              <VisualActionProposalCard
+                key={p.id}
+                proposal={p}
+                sourceAttachments={resolveLiveImageSources(p.sourceAttachmentIds)}
+              />
             ))}
           </div>
         )}

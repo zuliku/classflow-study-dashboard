@@ -111,7 +111,12 @@ interface KiroSessionValue {
   /** Visual Intake V1.4：Proposal 执行 Lifecycle（Conversation-owned 有限状态机 API） */
   visualProposalRuntime: {
     getState: (proposalId: string) => import("@/lib/ai/visual/receipt").VisualProposalRuntimeEntry | undefined;
-    recordApplied: (input: { proposalId: string; count: number; undo: () => void }) => void;
+    recordApplied: (input: {
+      proposalId: string;
+      count: number;
+      undo: () => void;
+      appliedActionIndexes?: number[];
+    }) => void;
     markStale: (proposalId: string) => void;
     consumeUndo: (proposalId: string) => import("@/lib/ai/visual/receipt").VisualProposalUndoOutcome;
   };

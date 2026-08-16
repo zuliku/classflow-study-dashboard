@@ -118,12 +118,15 @@ export interface PersistedVisualProposalView {
    * Visual Intake V1.4：Durable Execution Receipt（display-only；描述「当时发生过什么」）。
    * 只有 applied / revoked（stale/idle/applying 不持久化）；绝不包含 undo/change/tool/input/
    * reservedIds/fingerprint/entity replay IDs。旧记录无此字段正常加载。
+   * V1.5：appliedActionIndexes 为当时应用的 action index 投影（bounded / 去重 / range checked；
+   * 缺省 = 当时全部应用）。
    */
   receipt?: {
     status: "applied" | "revoked";
     count: number;
     appliedAt: number;
     revokedAt?: number;
+    appliedActionIndexes?: number[];
   };
 }
 

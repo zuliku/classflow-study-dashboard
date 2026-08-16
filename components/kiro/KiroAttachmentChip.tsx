@@ -6,6 +6,8 @@ import { FileText, Image as ImageIcon, Loader2, MoreHorizontal, X, BookmarkPlus,
 import { KiroAttachmentView } from "@/lib/ai/attachments/types";
 import { useAppStore } from "@/store/useAppStore";
 import { computeFloatingPosition } from "@/lib/contextMenuPosition";
+import { resolveLiveImageSource } from "@/lib/ai/attachments/liveImageRegistry";
+import { KiroImagePreviewDialog } from "@/components/kiro/KiroImagePreviewDialog";
 import { cn } from "@/lib/utils";
 
 /** 稳定文件类型标签（UI 层由 kind/扩展名推导，不改数据模型） */
@@ -78,6 +80,9 @@ export function KiroAttachmentChip({
   const failed = attachment.status === "error" || attachment.status === "unsupported";
   const scanned = attachment.visionRequired === true;
   const Icon = isImage ? ImageIcon : FileText;
+  // V1.5：live local image → runtime File 可预览（历史恢复 / 已移除 → 无 File，降级为静态缩略图）
+  const liveSource = isImage && !isMaterial ? resolveLiveImageSource(attachment.id) : undefined;
+  const [previewFile, setPreviewFile] = React.useState<File | null>(null);
 
   const meta =
     attachment.status === "processing"
@@ -111,11 +116,23 @@ export function KiroAttachmentChip({
       )}
     >
       {isImage && attachment.thumbnail ? (
-        <img
-          src={attachment.thumbnail}
-          alt=""
-          className="w-7 h-7 rounded-lg object-cover border border-line-soft shrink-0"
-        />
+        liveSource ? (
+          <button
+            type="button"
+            data-testid="kiro-attachment-thumb-preview"
+            onClick={() => setPreviewFile(liveSource.file)}
+            disabled={disabled}
+            aria-label={`查看原图 ${attachment.name}`}
+            title="查看原图"
+            className="w-7 h-7 rounded-lg overflow-hidden border border-line-soft shrink-0 focus:outline-none focus:ring-2 focus:ring-charcoal/20"
+          >
+            <img src={attachment.thumbnail} alt="" className="w-full h-full object-cover" />
+          </button>
+        ) : (
+          <span className="w-7 h-7 rounded-lg border border-line-soft overflow-hidden shrink-0">
+            <img src={attachment.thumbnail} alt="" className="w-full h-full object-cover" />
+          </span>
+        )
       ) : (
         <span className="w-7 h-7 rounded-lg bg-alabaster border border-line-soft flex items-center justify-center shrink-0">
           {attachment.status === "processing" ? (
@@ -206,6 +223,11 @@ export function KiroAttachmentChip({
       >
         <X className="w-3 h-3" />
       </button>
+
+      {/* V1.5：live 大图预览（runtime File；Esc/Backdrop/Close 关闭；关闭时 revoke object URL） */}
+      {previewFile && (
+        <KiroImagePreviewDialog file={previewFile} name={attachment.name} onClose={() => setPreviewFile(null)} />
+      )}
     </span>
   );
 }

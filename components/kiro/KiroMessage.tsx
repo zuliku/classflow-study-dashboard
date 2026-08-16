@@ -10,6 +10,8 @@ import { KiroMenuPanel, KiroMenuItem, KiroMenuDivider, useKiroPopover } from "@/
 import { KiroSourcesMenuView } from "@/components/kiro/KiroSourcesMenuView";
 import { useToastStore } from "@/store/useToastStore";
 import { KiroAttachmentView } from "@/lib/ai/attachments/types";
+import { resolveLiveImageSource } from "@/lib/ai/attachments/liveImageRegistry";
+import { KiroImagePreviewDialog } from "@/components/kiro/KiroImagePreviewDialog";
 import { KiroSourceMeta } from "@/lib/ai/citations/types";
 import { collectCitedWebSources } from "@/lib/ai/citations/parser";
 import { UserMessageEditBlockReason } from "@/lib/ai/history/messageEditing";
@@ -223,6 +225,7 @@ export function KiroUserMessage({
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [previewFile, setPreviewFile] = useState<File | null>(null);
   const taRef = useRef<HTMLTextAreaElement | null>(null);
 
   const copy = async () => {
@@ -282,6 +285,9 @@ export function KiroUserMessage({
           <div className="flex flex-wrap justify-end gap-1.5">
             {attachments.map((a) => {
               const Icon = a.kind === "image" ? ImageIcon : FileText;
+              // V1.5：live 本地图片 → 点击查看原图（runtime File）；历史恢复（tempNotRetained）→ 不可预览
+              const liveSource = a.kind === "image" && a.source === "local" ? resolveLiveImageSource(a.id) : undefined;
+              const previewable = liveSource != null;
               return (
                 <span
                   key={a.id}
@@ -290,18 +296,31 @@ export function KiroUserMessage({
                 >
                   {/* Task B：发送后的图片 chip 显示真实缩略图（不再只有图标） */}
                   {a.kind === "image" && a.thumbnail ? (
-                    <img
-                      src={a.thumbnail}
-                      alt=""
-                      className="w-5 h-5 rounded object-cover shrink-0"
-                    />
+                    previewable ? (
+                      <button
+                        type="button"
+                        data-testid="kiro-sent-image-preview"
+                        onClick={() => setPreviewFile(liveSource!.file)}
+                        aria-label={`查看原图 ${a.name}`}
+                        title="查看原图"
+                        className="w-5 h-5 rounded overflow-hidden border border-line-soft shrink-0 focus:outline-none focus:ring-2 focus:ring-charcoal/20"
+                      >
+                        <img src={a.thumbnail} alt="" className="w-full h-full object-cover" />
+                      </button>
+                    ) : (
+                      <img
+                        src={a.thumbnail}
+                        alt=""
+                        className="w-5 h-5 rounded object-cover shrink-0"
+                      />
+                    )
                   ) : (
                     <Icon className="w-3 h-3 text-sandrift shrink-0" />
                   )}
                   <span className={cn("truncate max-w-[140px]")}>{a.name}</span>
                   {a.tempNotRetained && (
                     <span
-                      title="这份临时附件没有保存在本机历史中，请重新添加文件。"
+                      title="原始图片未保存在对话历史中"
                       className="text-[9px] font-bold text-sandrift bg-alabaster border border-line-soft rounded px-1 py-px shrink-0"
                     >
                       临时附件未保留
@@ -379,6 +398,10 @@ export function KiroUserMessage({
           </>
         )}
       </div>
+      {/* V1.5：sent live 图片大图预览（runtime File；历史恢复无 File → 不渲染） */}
+      {previewFile && (
+        <KiroImagePreviewDialog file={previewFile} name="原图" onClose={() => setPreviewFile(null)} />
+      )}
     </div>
   );
 }
