@@ -13,7 +13,7 @@ export function ExecutionQualityCard({ execution }: { execution: ExecutionAnalyt
         ? `样本不足 · 目前有 ${execution.onTimeEligible} 个可判断任务`
         : `${execution.onTime} / ${execution.onTimeEligible} 个可判断任务按时完成`;
   return (
-    <div className="bg-surface border border-line rounded-2xl p-4 shadow-subtle">
+    <div className="bg-surface border border-line rounded-2xl p-4">
       <h3 className="flex items-center gap-1.5 text-sm font-bold text-charcoal pb-2 border-b border-[#F0EBE1]">
         <ClipboardCheck className="w-4 h-4 text-[#A48F82]" />
         执行情况

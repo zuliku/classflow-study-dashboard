@@ -2,35 +2,55 @@
 
 import React from "react";
 import { Info } from "lucide-react";
+import { AnalyticsReliability } from "@/lib/analytics/types";
 
-/** Coverage 提示（低干扰；整体 History 不完整 或 计划序列不完整时出现） */
+/**
+ * Analytics V3 Coverage Notice（低关注，非 banner）：
+ * 文案由真实 coverage 状态驱动，明确列出「哪些数据受影响」：
+ * - assignment 不完整 → 任务相关指标只表达已记录
+ * - plan 不完整 → 计划执行相关指标暂不显示
+ * - focus backfill 存在（无法证明完整起点）→ 只说「已有专注记录仍计入」，不声称完整
+ */
 export function AnalyticsCoverageNotice({
-  fullCoverage,
+  assignmentReliability,
+  planReliability,
+  focusReliability,
+  focusBackfilled,
   historyStartedAt,
-  planCoverageFull,
-  planCoverageStartedAt,
 }: {
-  fullCoverage: boolean;
+  assignmentReliability: AnalyticsReliability;
+  planReliability: AnalyticsReliability;
+  focusReliability: AnalyticsReliability;
+  focusBackfilled: boolean;
   historyStartedAt: number;
-  planCoverageFull: boolean;
-  planCoverageStartedAt: number;
 }) {
   const fmt = (ts: number) => {
     const d = new Date(ts);
     const p = (n: number) => String(n).padStart(2, "0");
     return `${d.getFullYear()}/${p(d.getMonth() + 1)}/${p(d.getDate())}`;
   };
-  // 整体不完整 → 原提示；整体完整但计划序列不完整 → 计划专项提示（不说"数据错误"）
-  const note = !fullCoverage
-    ? `历史数据自 ${fmt(historyStartedAt)} 起完整记录，当前所选区间的部分指标可能不完整。`
-    : !planCoverageFull
-      ? `学习计划的完整历史自 ${fmt(planCoverageStartedAt)} 起记录；此前 Kiro 批量生成的学习计划可能未被完整记录。`
-      : null;
-  if (!note) return null;
+
+  const parts: string[] = [];
+  if (assignmentReliability === "partial") {
+    parts.push(`任务记录仅从 ${fmt(historyStartedAt)} 起完整，更早区间只显示已记录内容`);
+  }
+  if (planReliability === "partial") {
+    parts.push(`学习计划在该区间记录不完整，计划执行相关指标暂不显示`);
+  }
+  if (focusReliability === "partial") {
+    parts.push(`专注记录在该区间不完整`);
+  } else if (focusBackfilled) {
+    parts.push(`已有专注记录仍会正常计入统计`);
+  }
+  if (parts.length === 0) return null;
+
   return (
-    <div className="flex items-start gap-2 px-3 py-2 bg-alabaster/60 border border-line rounded-xl text-[11px] text-sandrift">
+    <div
+      data-testid="analytics-coverage-notice"
+      className="flex items-start gap-2 px-3 py-2 bg-alabaster/60 border border-line rounded-xl text-[11px] text-sandrift"
+    >
       <Info className="w-3.5 h-3.5 shrink-0 mt-0.5" />
-      <p>{note}</p>
+      <p>部分历史记录不完整 · {parts.join("；")}</p>
     </div>
   );
 }

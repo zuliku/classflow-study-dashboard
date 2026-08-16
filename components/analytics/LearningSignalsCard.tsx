@@ -34,9 +34,9 @@ export function LearningSignalsCard({
 
   if (signals.length === 0) {
     return (
-      <div className="bg-surface border border-line rounded-2xl p-4 shadow-subtle">
-        <h3 className="text-sm font-bold text-charcoal pb-2 border-b border-[#F0EBE1]">学习信号</h3>
-        <div className="py-6 text-center">
+      <div className="bg-surface border border-line rounded-2xl p-4 h-fit self-start">
+        <h3 className="text-sm font-bold text-charcoal">值得注意</h3>
+        <div className="pt-3 pb-2 text-center">
           <Clock className="w-6 h-6 text-sandrift mx-auto mb-1.5" />
           <p className="text-[11px] text-sandrift">数据积累后会在这里展示可解释的学习信号</p>
         </div>
@@ -44,9 +44,9 @@ export function LearningSignalsCard({
     );
   }
   return (
-    <div className="bg-surface border border-line rounded-2xl p-4 shadow-subtle">
-      <h3 className="text-sm font-bold text-charcoal pb-2 border-b border-[#F0EBE1]">学习信号</h3>
-      <div className="divide-y divide-line-soft">
+    <div className="bg-surface border border-line rounded-2xl p-4 h-fit self-start" data-testid="learning-signals-card">
+      <h3 className="text-sm font-bold text-charcoal">值得注意</h3>
+      <div className="divide-y divide-line-soft pt-2">
         {signals.map((signal) => {
           const Icon = TONE_STYLE[signal.tone].icon;
           const kiroPrompt = SIGNAL_KIRO_PROMPTS[signal.id] ?? undefined;

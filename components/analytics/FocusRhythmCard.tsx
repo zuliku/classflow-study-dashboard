@@ -3,6 +3,7 @@
 import React from "react";
 import { Moon, Sunrise, Sun, MoonStar, CalendarDays } from "lucide-react";
 import { FocusRhythm } from "@/lib/analytics/types";
+import { formatAnalyticsDuration } from "@/lib/analytics/presentation";
 import { cn } from "@/lib/utils";
 
 const BUCKET_ICON: Record<string, typeof Moon> = {
@@ -12,13 +13,13 @@ const BUCKET_ICON: Record<string, typeof Moon> = {
   晚间: MoonStar,
 };
 
-/** 专注节奏：时段分布 + active days / avg session / longest */
+/** 专注节奏：时段分布 + active days / avg session / longest（V3 中文 duration，Level 2 surface） */
 export function FocusRhythmCard({ rhythm }: { rhythm: FocusRhythm }) {
   const maxMinutes = Math.max(...rhythm.byTimeOfDay.map((b) => b.minutes), 1);
   return (
-    <div className="bg-surface border border-line rounded-2xl p-4 shadow-subtle">
-      <h3 className="text-sm font-bold text-charcoal pb-2 border-b border-[#F0EBE1]">专注节奏</h3>
-      <div className="space-y-1.5 pt-2">
+    <div className="bg-surface border border-line rounded-2xl p-4 h-fit" data-testid="focus-rhythm-card">
+      <h3 className="text-sm font-bold text-charcoal">专注节奏</h3>
+      <div className="space-y-1.5 pt-3">
         {rhythm.byTimeOfDay.map((b) => {
           const Icon = BUCKET_ICON[b.bucket] ?? Moon;
           const active = rhythm.dominantTimeOfDay === b.bucket && b.minutes > 0;
@@ -32,28 +33,22 @@ export function FocusRhythmCard({ rhythm }: { rhythm: FocusRhythm }) {
                   style={{ width: `${Math.max((b.minutes / maxMinutes) * 100, 2)}%` }}
                 />
               </div>
-              <span className="w-14 text-right text-[10px] text-sandrift shrink-0">
-                {formatMin(b.minutes)}{b.sessions > 0 ? ` · ${b.sessions} 次` : ""}
+              <span className="w-[74px] text-right text-[10px] text-sandrift shrink-0">
+                {formatAnalyticsDuration(b.minutes, "compact")}
+                {b.sessions > 0 ? ` · ${b.sessions} 次` : ""}
               </span>
             </div>
           );
         })}
       </div>
-      <div className="flex items-center gap-3 pt-2 mt-2 border-t border-[#F0EBE1] text-[10px] text-sandrift">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 pt-3 mt-3 border-t border-line-soft text-[10px] text-sandrift">
         <span className="flex items-center gap-1">
           <CalendarDays className="w-3 h-3" />
           活跃 {rhythm.activeDays} 天
         </span>
-        <span>平均 {rhythm.averageSessionMinutes ?? 0} 分钟/次</span>
-        <span>最长 {formatMin(rhythm.longestSessionMinutes)}</span>
+        <span>平均 {rhythm.averageSessionMinutes !== null ? `${rhythm.averageSessionMinutes} 分钟/次` : "—"}</span>
+        <span>最长 {formatAnalyticsDuration(rhythm.longestSessionMinutes)}</span>
       </div>
     </div>
   );
-}
-
-function formatMin(minutes: number): string {
-  const h = Math.floor(minutes / 60);
-  const m = minutes % 60;
-  if (h === 0) return `${m}m`;
-  return `${h}h${m > 0 ? ` ${m}m` : ""}`;
 }
