@@ -26,6 +26,54 @@ describe("normalizeLocalSearchText", () => {
   });
 });
 
+describe("V1.4.1 multi-term matching / ranking", () => {
+  it("1. phrase absent 但多词分散：policy/adoption/technology → 必须命中（term fallback）", () => {
+    const text = normalizeLocalSearchText("policy incentives can increase household adoption of low carbon technology");
+    const scored = scoreLocalSearch(text, tokenizeLocalSearchQuery("policy adoption technology"));
+    expect(scored.length).toBeGreaterThan(0);
+  });
+
+  it("2. coverage ranking：多词同上下文 > 单词", () => {
+    const a = normalizeLocalSearchText("policy only");
+    const b = normalizeLocalSearchText("policy information is relevant for household adoption of clean technology");
+    const q = tokenizeLocalSearchQuery("policy adoption technology");
+    const bestA = scoreLocalSearch(a, q)[0]?.score ?? 0;
+    const bestB = scoreLocalSearch(b, q)[0]?.score ?? 0;
+    expect(bestB).toBeGreaterThan(bestA);
+  });
+
+  it("3. 中文 multi-term（无空格连续短语）：政策 低碳 技术 采纳 → 命中", () => {
+    const doc = "低碳生产技术的推广会显著提高农户的技术采纳意愿，政策宣传也会影响其认知。";
+    const r = searchLocalText(doc, "政策 低碳 技术 采纳", { maxResults: 5 });
+    expect(r.matches.length).toBeGreaterThan(0);
+  });
+
+  it("4. 中文标点分隔 query：政策认知、技术采纳 → 命中（即使原文无连续完整短语）", () => {
+    const doc = "技术采纳受到农户政策认知影响";
+    const r = searchLocalText(doc, "政策认知、技术采纳", { maxResults: 5 });
+    expect(r.matches.length).toBeGreaterThan(0);
+  });
+
+  it("5. exact phrase 仍最高：连续「政策认知」明显高于分散出现", () => {
+    const exact = normalizeLocalSearchText("政策认知影响技术采纳");
+    const scattered = normalizeLocalSearchText("政策问题影响认知，再谈技术，最后讲采纳");
+    const q = tokenizeLocalSearchQuery("政策认知");
+    const bestExact = scoreLocalSearch(exact, q)[0]?.score ?? 0;
+    const bestScattered = scoreLocalSearch(scattered, q)[0]?.score ?? 0;
+    expect(bestExact).toBeGreaterThanOrEqual(10_000);
+    expect(bestExact).toBeGreaterThan(bestScattered);
+  });
+
+  it("6. near-duplicate suppression：同一段 policy 高频重复 → 不返回 8 个几乎相同 snippet", () => {
+    const doc = "policy policy policy policy policy policy policy policy policy policy policy policy policy " +
+      "其他无关内容填充其他无关内容填充其他无关内容填充其他无关内容填充" +
+      "policy policy policy policy policy policy policy policy policy policy";
+    const r = searchLocalText(doc, "policy", { maxResults: 8 });
+    // 200 chars 去重窗口内只保留一个 → 高频重复不会铺满 8 个
+    expect(r.matches.length).toBeLessThan(8);
+  });
+});
+
 describe("tokenizeLocalSearchQuery", () => {
   it("保留完整短语 + 最多 8 个 terms", () => {
     const q = tokenizeLocalSearchQuery("农户 政策认知 技术 采纳 行为 影响 显著 采用 采纳 额外");
@@ -85,13 +133,16 @@ describe("searchLocalText", () => {
     expect(r.matchCount).toBeGreaterThanOrEqual(r.matches.length);
   });
 
-  it("300 段文本：总 snippet chars ≤ 总预算；matchCount 不因 maxResults 截断而失真", () => {
+  it("300 段文本：总 snippet chars ≤ 总预算；matchCount 反映去重后候选数（V1.4.1 suppression 语义）", () => {
     const doc = Array.from({ length: 300 }, (_, i) => `page ${i + 1} common phrase content ${i}`).join("\n");
     const r = searchLocalText(doc, "common phrase", { maxResults: 8 });
     expect(r.matches.length).toBeLessThanOrEqual(MAX_PROJECT_SEARCH_RESULTS);
     const total = r.matches.reduce((s, m) => s + m.text.length, 0);
     expect(total).toBeLessThanOrEqual(MAX_PROJECT_SEARCH_TOTAL_CHARS);
-    expect(r.matchCount).toBe(300);
+    // 每段相距 <200 chars → 去重后候选显著少于 300（≈ 段数 × 段间距/200）
+    expect(r.matchCount).toBeGreaterThan(0);
+    expect(r.matchCount).toBeLessThan(300);
+    expect(r.truncated).toBe(true);
   });
 
   it("无匹配 → matches=[]，不报错", () => {
@@ -122,6 +173,20 @@ describe("searchPdfText（真实多页 PDF；bounded memory）", () => {
     const total = r.matches.reduce((s, m) => s + m.text.length, 0);
     expect(total).toBeLessThanOrEqual(MAX_PROJECT_SEARCH_TOTAL_CHARS);
     expect(r.truncated).toBe(true);
+  });
+
+  it("PDF 多 term page ranking：page 10（policy+adoption+technology 同上下文）排在 page 2（仅 policy）前", async () => {
+    const pages = ["intro page", "policy information only", "methodology", "data", "results"];
+    while (pages.length < 10) pages.push("intermediate content");
+    pages.push("technology adoption behavior is influenced by policy communication");
+    const pdf = buildMultiPageTextPdf(pages);
+    const blob = new Blob([pdf.buffer as ArrayBuffer], { type: "application/pdf" });
+    const r = await searchPdfText(blob, "policy adoption technology", { maxResults: 8 });
+    expect(r.matches.length).toBeGreaterThanOrEqual(2);
+    // page 11（1-based）含三个 term 同一局部上下文 → 必须排在最前
+    expect(r.matches[0].page).toBe(11);
+    const pagesInOrder = r.matches.map((m) => m.page);
+    expect(pagesInOrder.indexOf(11)).toBeLessThan(pagesInOrder.indexOf(2));
   });
 
   it("无匹配 → matches=[]", async () => {
