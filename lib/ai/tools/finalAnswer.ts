@@ -24,6 +24,45 @@ export function isKiroFinalAnswerToolName(toolName: string): boolean {
   return toolName === KIRO_FINAL_ANSWER_TOOL_NAME;
 }
 
+/** ordered stream event（Eval runner 与 lane attribution 用；test-only / eval-only） */
+export type KiroRoundEvent =
+  | { kind: "text"; text: string }
+  | { kind: "tool"; toolCallId: string; toolName: string; input: unknown };
+
+export interface KiroRoundLaneClassification {
+  commentaryText: string;
+  finalText: string;
+  boundarySeenAfterRound: boolean;
+  toolEvents: KiroRoundEvent[];
+}
+
+/**
+ * Eval V1.1.2：按真实 ordered stream 事件做 lane attribution（与生产 Final Answer Boundary 一致）：
+ * - boundary（begin_final_answer）之前的 text 恒为 commentary；
+ * - boundary 之后的 text 恒为 Final Answer；
+ * - begin_final_answer 本身是 tool event（控制信号，不产生文本）。
+ * 不做任何时间 / round / “有没有 Tool” 猜测。
+ */
+export function classifyKiroRoundEvents(input: {
+  events: KiroRoundEvent[];
+  boundarySeenBeforeRound: boolean;
+}): KiroRoundLaneClassification {
+  let boundary = input.boundarySeenBeforeRound;
+  let commentary = "";
+  let finalText = "";
+  const toolEvents: KiroRoundEvent[] = [];
+  for (const ev of input.events) {
+    if (ev.kind === "text") {
+      if (boundary) finalText += ev.text;
+      else commentary += ev.text;
+    } else {
+      if (isKiroFinalAnswerToolName(ev.toolName)) boundary = true;
+      toolEvents.push(ev);
+    }
+  }
+  return { commentaryText: commentary, finalText, boundarySeenAfterRound: boundary, toolEvents };
+}
+
 /**
  * 是否应 arm「SDK 自动续跑」标记（V4.7.2 真实验证回归）。
  * business tool output（read/write）→ 期望 SDK 自动续跑 → true；

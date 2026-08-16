@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Kiro Text Eval V1.1 —— Offline Contract + Golden Scoring Tests（永远可运行，不调用外部 AI API）。
  * 覆盖：World/oracle integrity、sequential provenance（写前快照）、Change Set nested IDs、
  * Final Answer Boundary、control quota、runtime validity 隔离、false-success matcher 否定回归。
@@ -31,7 +31,8 @@ import {
 import { collectEntityIdsFromOutput, extractMutationEntityReferences, isStandaloneReminder, parseScenarioFilter, resolveTextEvalScenarios, runKiroTextScenario } from "@/scripts/kiro-text-eval/run";
 import { KIRO_WRITE_TOOL_NAMES } from "@/lib/ai/tools/write/registry";
 import { resolveAssignmentMaterials } from "@/lib/tasks/taskMaterials";
-import { kiroFinalAnswerBoundarySeen, kiroFinalAnswerAfterBoundaryControl, KIRO_FINAL_ANSWER_TOOL_NAME } from "@/lib/ai/tools/finalAnswer";
+import { kiroFinalAnswerBoundarySeen, kiroFinalAnswerAfterBoundaryControl, KIRO_FINAL_ANSWER_TOOL_NAME, KiroRoundEvent, classifyKiroRoundEvents } from "@/lib/ai/tools/finalAnswer";
+import { deriveKiroAssistantTurn } from "@/lib/ai/presentation/liveTurnPresentation";
 
 // Runner 级测试：mock streamText / resolver，验证 runtime failure 的 evidence 保留
 vi.mock("ai", async (importOriginal) => {
@@ -562,9 +563,22 @@ describe("Kiro Text Runner Runtime Evidence（Eval V1.1：runtime failure 不抹
     expect(run.finalAnswer).toBe("");
   });
 
-  it("V1.1.1：stream error 前已观察 text 保留（snapshot 先于 error return）", async () => {
+  it("E1：pre-boundary text → provider error → finalAnswer 为空（commentary 不污染 Final lane）", async () => {
     streamTextMock.mockImplementationOnce((() => ({
       fullStream: (async function* () {
+        yield { type: "text-delta", text: "已经成功创建。" };
+        yield { type: "error", error: { message: "HTTP 502" } };
+      })() as never,
+    })) as never);
+    const run = await runKiroTextScenario({ scenario: SCENARIO_BY_ID.get("create-reminder")!, apiKey: "sk-test" });
+    expect(run.runtimeError?.type).toBe("provider");
+    expect(run.finalAnswer).toBe("");
+  });
+
+  it("E2：begin_final_answer → final text → provider error → finalAnswer 保留", async () => {
+    streamTextMock.mockImplementationOnce((() => ({
+      fullStream: (async function* () {
+        yield { type: "tool-call", toolCallId: "c1", toolName: "begin_final_answer", input: {} };
         yield { type: "text-delta", text: "已经成功创建。" };
         yield { type: "error", error: { message: "HTTP 502" } };
       })() as never,
@@ -700,3 +714,184 @@ describe("Kiro Text Safety Truthfulness（Eval V1.1.1）", () => {
     }
   });
 });
+
+describe("Kiro Text Runner Final Answer Attribution（Eval V1.1.2）", () => {
+  const streamTextMock = vi.mocked(streamText);
+  const resolveMock = vi.mocked(resolveLanguageModel);
+  const scenario = SCENARIO_BY_ID.get("today-task-list")!;
+
+  const stream = (parts: unknown[]) =>
+    (() => ({
+      fullStream: (async function* () {
+        for (const p of parts) yield p;
+      })() as never,
+    })) as never;
+
+  beforeEach(() => {
+    streamTextMock.mockReset();
+    resolveMock.mockReset();
+    resolveMock.mockResolvedValue({ model: { modelId: "m" } as never, definition: {} as never });
+  });
+
+  it("R1：commentary → business tool 不得提前 break；进入 Round 2 拿到真实 final", async () => {
+    streamTextMock
+      .mockImplementationOnce(stream([
+        { type: "text-delta", text: "我先检查一下今天任务。" },
+        { type: "tool-call", toolCallId: "c1", toolName: "search_assignments", input: { scope: "today" } },
+      ]))
+      .mockImplementationOnce(stream([
+        { type: "tool-call", toolCallId: "c2", toolName: "begin_final_answer", input: {} },
+        { type: "text-delta", text: "今天最需要先处理统计学作业。" },
+      ]));
+    const run = await runKiroTextScenario({ scenario, apiKey: "sk-test" });
+    expect(run.toolTrace.map((t) => t.tool)).toContain("search_assignments");
+    expect(run.finalAnswer).toContain("统计学作业");
+    expect(run.finalAnswer).not.toContain("我先检查一下");
+  });
+
+  it("R2：commentary → tool → commentary → tool → boundary → final（final 纯净）", async () => {
+    streamTextMock
+      .mockImplementationOnce(stream([
+        { type: "text-delta", text: "先看看任务。" },
+        { type: "tool-call", toolCallId: "c1", toolName: "search_assignments", input: { scope: "today" } },
+      ]))
+      .mockImplementationOnce(stream([
+        { type: "text-delta", text: "找到任务了，再检查风险。" },
+        { type: "tool-call", toolCallId: "c2", toolName: "get_assignment_health", input: { assignmentId: "a1" } },
+      ]))
+      .mockImplementationOnce(stream([
+        { type: "tool-call", toolCallId: "c3", toolName: "begin_final_answer", input: {} },
+      ]))
+      .mockImplementationOnce(stream([
+        { type: "text-delta", text: "今天最需要先处理统计学作业。" },
+      ]));
+    const run = await runKiroTextScenario({ scenario, apiKey: "sk-test" });
+    expect(run.toolTrace.map((t) => t.tool)).toEqual(["search_assignments", "get_assignment_health", "begin_final_answer"]);
+    expect(run.finalAnswer).toBe("今天最需要先处理统计学作业。");
+    expect(run.finalAnswer).not.toContain("先看看任务");
+    expect(run.finalAnswer).not.toContain("找到任务了");
+  });
+
+  it("R3：commentary + boundary 同一 response → 下一轮 final-only continuation", async () => {
+    streamTextMock
+      .mockImplementationOnce(stream([
+        { type: "text-delta", text: "信息已经足够。" },
+        { type: "tool-call", toolCallId: "c1", toolName: "begin_final_answer", input: {} },
+      ]))
+      .mockImplementationOnce(stream([
+        { type: "text-delta", text: "正式答案。" },
+      ]));
+    const run = await runKiroTextScenario({ scenario, apiKey: "sk-test" });
+    expect(run.finalAnswer).toBe("正式答案。");
+    expect(run.finalAnswer).not.toContain("信息已经足够");
+  });
+
+  it("R4：boundary + final 同一 response → 同一 stream 完成，不得要求额外轮次", async () => {
+    streamTextMock.mockImplementationOnce(stream([
+      { type: "tool-call", toolCallId: "c1", toolName: "begin_final_answer", input: {} },
+      { type: "text-delta", text: "正式答案。" },
+    ]));
+    const run = await runKiroTextScenario({ scenario, apiKey: "sk-test" });
+    expect(streamTextMock).toHaveBeenCalledTimes(1);
+    expect(run.finalAnswer).toBe("正式答案。");
+  });
+
+  it("R5：commentary + boundary + final 同一 stream → lane 正确，不得拼接", async () => {
+    streamTextMock.mockImplementationOnce(stream([
+      { type: "text-delta", text: "我已经整理好信息。" },
+      { type: "tool-call", toolCallId: "c1", toolName: "begin_final_answer", input: {} },
+      { type: "text-delta", text: "正式结论是……" },
+    ]));
+    const run = await runKiroTextScenario({ scenario, apiKey: "sk-test" });
+    expect(run.finalAnswer).toBe("正式结论是……");
+    expect(run.finalAnswer).not.toContain("我已经整理好信息");
+  });
+
+  it("R6：direct answer（无 tool 无 boundary 自然 stop）→ legacy fallback 保留", async () => {
+    streamTextMock.mockImplementationOnce(stream([
+      { type: "text-delta", text: "直接回答：今天任务已完成。" },
+    ]));
+    const run = await runKiroTextScenario({ scenario, apiKey: "sk-test" });
+    expect(run.toolTrace).toHaveLength(0);
+    expect(run.finalAnswer).toBe("直接回答：今天任务已完成。");
+  });
+
+  it("R7：pre-boundary text → provider error → finalAnswer 为空", async () => {
+    streamTextMock.mockImplementationOnce(stream([
+      { type: "text-delta", text: "先看看任务。" },
+      { type: "error", error: { message: "HTTP 502" } },
+    ]));
+    const run = await runKiroTextScenario({ scenario, apiKey: "sk-test" });
+    expect(run.runtimeError?.type).toBe("provider");
+    expect(run.finalAnswer).toBe("");
+  });
+
+  it("R8：boundary → final text → provider error → finalAnswer 保留", async () => {
+    streamTextMock.mockImplementationOnce(stream([
+      { type: "tool-call", toolCallId: "c1", toolName: "begin_final_answer", input: {} },
+      { type: "text-delta", text: "最终结论已保留。" },
+      { type: "error", error: { message: "HTTP 502" } },
+    ]));
+    const run = await runKiroTextScenario({ scenario, apiKey: "sk-test" });
+    expect(run.runtimeError?.type).toBe("provider");
+    expect(run.finalAnswer).toContain("最终结论已保留");
+  });
+
+  it("R9：text → tool → text → tool 的 assistant parts 顺序保持 Provider 原始顺序", async () => {
+    streamTextMock
+      .mockImplementationOnce(stream([
+        { type: "text-delta", text: "A。" },
+        { type: "tool-call", toolCallId: "c1", toolName: "search_assignments", input: { scope: "today" } },
+        { type: "text-delta", text: "B。" },
+        { type: "tool-call", toolCallId: "c2", toolName: "get_assignment_health", input: { assignmentId: "a1" } },
+      ]))
+      .mockImplementationOnce(stream([
+        { type: "text-delta", text: "完成。" },
+      ]));
+    await runKiroTextScenario({ scenario, apiKey: "sk-test" });
+    const secondCall = streamTextMock.mock.calls[1];
+    const messages = (secondCall?.[0] as { messages?: { role: string; content?: { type: string; text?: string; toolName?: string }[] }[] })?.messages ?? [];
+    const assistantMsg = messages.find((m) => m.role === "assistant");
+    const order = assistantMsg?.content?.map((p) => (p.type === "text" ? `text:${p.text}` : `tool:${p.toolName}`)) ?? [];
+    expect(order).toEqual(["text:A。", "tool:search_assignments", "text:B。", "tool:get_assignment_health"]);
+  });
+
+  it("R10：business Tool 最终无 boundary → 不因首段 commentary 提前结束（settled fallback）", async () => {
+    streamTextMock
+      .mockImplementationOnce(stream([
+        { type: "text-delta", text: "先看看。" },
+        { type: "tool-call", toolCallId: "c1", toolName: "search_assignments", input: { scope: "today" } },
+      ]))
+      .mockImplementationOnce(stream([
+        { type: "text-delta", text: "任务已检查完毕。" },
+      ]));
+    const run = await runKiroTextScenario({ scenario, apiKey: "sk-test" });
+    expect(run.finalAnswer).toContain("任务已检查完毕");
+    expect(run.finalAnswer).not.toContain("先看看");
+  });
+});
+
+describe("Kiro Text Lane Attribution 生产 parity（Eval V1.1.2 §25）", () => {
+  it("同一 ordered input：Eval helper 与生产 deriveKiroAssistantTurn 的 final lane 一致", () => {
+    const events: KiroRoundEvent[] = [
+      { kind: "text", text: "我已经整理好信息。" },
+      { kind: "tool", toolCallId: "c1", toolName: "begin_final_answer", input: {} },
+      { kind: "text", text: "正式结论是……" },
+    ];
+    const classified = classifyKiroRoundEvents({ events, boundarySeenBeforeRound: false });
+    // 生产 presentation：boundary 前 text = commentary，boundary 后 text = final answer
+    const presentation = deriveKiroAssistantTurn(
+      [
+        { type: "text", text: "我已经整理好信息。" },
+        { type: "tool-begin_final_answer", toolCallId: "c1", toolName: "begin_final_answer", input: {}, state: "input-available" },
+        { type: "text", text: "正式结论是……" },
+      ],
+      false
+    );
+    expect(presentation.answer).toContain("正式结论是……");
+    expect(presentation.answer).not.toContain("我已经整理好信息");
+    expect(classified.finalText).toBe(presentation.answer);
+    expect(classified.commentaryText).toBe("我已经整理好信息。");
+  });
+});
+

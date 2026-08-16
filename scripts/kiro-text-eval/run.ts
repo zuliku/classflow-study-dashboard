@@ -29,6 +29,9 @@ import { executeChangeSet } from "@/lib/ai/transactions/executor";
 import { ChangeSetActionInput } from "@/lib/ai/transactions/types";
 import {
   KIRO_FINAL_ANSWER_TOOL_NAME,
+  KiroRoundEvent,
+  classifyKiroRoundEvents,
+  isKiroFinalAnswerToolName,
   kiroFinalAnswerBoundarySeen,
 } from "@/lib/ai/tools/finalAnswer";
 import { KIRO_EVAL_SCENARIOS, KiroEvalScenario } from "@/lib/ai/eval/kiroScenarios";
@@ -345,6 +348,7 @@ export async function runKiroTextScenario(input: {
   for (; rounds < KIRO_TEXT_MAX_ROUNDS; rounds++) {
     // Final Answer Boundary（生产 prepareStep 等价）：boundary 后关闭全部业务工具，只走 Final text
     const tools = boundarySeen ? {} : getKiroToolsForRequest({});
+    let roundLanes: ReturnType<typeof classifyKiroRoundEvents> | null = null;
     const streamErr = await (async () => {
       try {
         const result = streamText({
@@ -354,34 +358,43 @@ export async function runKiroTextScenario(input: {
           tools,
           maxOutputTokens: AI.CHAT_MAX_OUTPUT_TOKENS,
         });
-        const toolCalls: RawToolCall[] = [];
-        let text = "";
+        // Eval V1.1.2：按真实到达顺序收集 ordered round events（相邻 text-delta 合并；tool 间隔则分开）
+        const roundEvents: KiroRoundEvent[] = [];
         let streamError: string | null = null;
         for await (const part of result.fullStream) {
-          if (part.type === "text-delta") text += part.text;
-          if (part.type === "tool-call") toolCalls.push({ toolCallId: part.toolCallId, toolName: part.toolName, input: part.input });
-          if (part.type === "error") streamError = (part.error as { message?: string } | undefined)?.message ?? String(part.error);
+          if (part.type === "text-delta") {
+            const last = roundEvents[roundEvents.length - 1];
+            if (last && last.kind === "text") last.text += part.text;
+            else roundEvents.push({ kind: "text", text: part.text });
+          } else if (part.type === "tool-call") {
+            roundEvents.push({ kind: "tool", toolCallId: part.toolCallId, toolName: part.toolName, input: part.input });
+          } else if (part.type === "error") {
+            streamError = (part.error as { message?: string } | undefined)?.message ?? String(part.error);
+          }
         }
-        // Eval V1.1.1：先更新 observed text snapshot（同一 stream 中 error 前的 text 不得丢失），
-        // 再返回 runtime error。遵循 runner 现有 finalAnswer 语义（最后非空正文）。
-        if (text.trim().length > 0) finalAnswer = text;
+        // Lane attribution：boundary 前 text = commentary；boundary 后 text = final
+        const classified = classifyKiroRoundEvents({ events: roundEvents, boundarySeenBeforeRound: boundarySeen });
+        roundLanes = classified;
+        boundarySeen = classified.boundarySeenAfterRound;
+        // lane-aware snapshot：只有 Final lane 的已观察 text 才进入 finalAnswer（commentary 永不进入）
+        if (classified.finalText.trim().length > 0) finalAnswer += classified.finalText;
         if (streamError) {
           return { kind: "provider" as const, error: streamError };
         }
-        if (toolCalls.length === 0) return null;
 
-        const toolResultParts: TextUiMessage["parts"] = [];
+        // Case C：有 Tool 事件 → 按原始事件顺序执行/回填
+        const toolResultByCallId = new Map<string, TextUiMessage["parts"][number]>();
         const writeApi = createKiroTextWorldApi(world);
-
-        for (const tc of toolCalls) {
+        for (const ev of classified.toolEvents) {
+          if (ev.kind !== "tool") continue;
+          const tc: RawToolCall = { toolCallId: ev.toolCallId, toolName: ev.toolName, input: ev.input };
           const { toolName, input } = tc;
           if (toolName === KIRO_FINAL_ANSWER_TOOL_NAME) {
-            boundarySeen = true;
-            toolResultParts.push(emitToolResult(tc, { ok: true, data: {} }, { tool: toolName, result: "ok" }));
+            toolResultByCallId.set(ev.toolCallId, emitToolResult(tc, { ok: true, data: {} }, { tool: toolName, result: "ok" }));
             continue;
           }
           if (MEMORY_TOOLS.has(toolName)) {
-            toolResultParts.push(emitToolResult(tc, { ok: true, data: { id: "mem_eval" } }, { tool: toolName, result: "ok", input: input as Record<string, unknown> }));
+            toolResultByCallId.set(ev.toolCallId, emitToolResult(tc, { ok: true, data: { id: "mem_eval" } }, { tool: toolName, result: "ok", input: input as Record<string, unknown> }));
             continue;
           }
           if (toolName === "apply_change_set" || (KIRO_WRITE_TOOL_NAMES as string[]).includes(toolName)) {
@@ -406,7 +419,7 @@ export async function runKiroTextScenario(input: {
               });
               const ok = res.ok;
               lastWriteEvent = { tool: toolName, ok, input: input as Record<string, unknown> };
-              toolResultParts.push(emitToolResult(
+              toolResultByCallId.set(ev.toolCallId, emitToolResult(
                 tc,
                 ok
                   ? { ok: true, data: { count: res.changeSet.count }, action: { tool: toolName, entityType: "change-set", entityId: tc.toolCallId, title: res.changeSet.summary, operation: "update", canUndo: true } }
@@ -417,7 +430,7 @@ export async function runKiroTextScenario(input: {
             }
             const out = executeKiroWriteTool(toolName as KiroWriteToolName, input, writeApi, tc.toolCallId);
             lastWriteEvent = { tool: toolName, ok: out.ok, input: input as Record<string, unknown> };
-            toolResultParts.push(emitToolResult(tc, out, { tool: toolName, result: out.ok ? "ok" : "error", input: input as Record<string, unknown>, unresolvedEntityInputs: finalUnresolved }));
+            toolResultByCallId.set(ev.toolCallId, emitToolResult(tc, out, { tool: toolName, result: out.ok ? "ok" : "error", input: input as Record<string, unknown>, unresolvedEntityInputs: finalUnresolved }));
             continue;
           }
           // Read / Proposal Tools（真实确定性 executor；固定时钟）
@@ -434,23 +447,26 @@ export async function runKiroTextScenario(input: {
             }
             const ids = out.ok ? collectEntityIdsFromOutput(out.data) : [];
             for (const id of ids) resolvedEntityIds.add(id);
-            toolResultParts.push(emitToolResult(tc, out, { tool: toolName, result: out.ok ? "ok" : "error", input: input as Record<string, unknown>, outputEntityIds: ids }));
+            toolResultByCallId.set(ev.toolCallId, emitToolResult(tc, out, { tool: toolName, result: out.ok ? "ok" : "error", input: input as Record<string, unknown>, outputEntityIds: ids }));
             continue;
           }
           const out = executeKiroReadTool(toolName, input, world, { now: fixedNow, timezone: KIRO_TEXT_TIMEZONE });
           const ids = out.ok ? collectEntityIdsFromOutput(out.data) : [];
           for (const id of ids) resolvedEntityIds.add(id);
-          toolResultParts.push(emitToolResult(tc, out, { tool: toolName, result: out.ok ? "ok" : "error", input: input as Record<string, unknown>, outputEntityIds: ids }));
+          toolResultByCallId.set(ev.toolCallId, emitToolResult(tc, out, { tool: toolName, result: out.ok ? "ok" : "error", input: input as Record<string, unknown>, outputEntityIds: ids }));
         }
 
+        // assistantParts 按 Provider 原始顺序重建（text 事件保持原位，tool 事件 materialize 为 dynamic-tool）
         const assistantParts: TextUiMessage["parts"] = [];
-        if (text.trim().length > 0) assistantParts.push({ type: "text", text });
-        assistantParts.push(...toolResultParts);
-        messages = [...messages, { id: `a${rounds}`, role: "assistant", parts: assistantParts }];
-        if (boundarySeen && finalAnswer.trim().length > 0) {
-          // boundary + 已有 Final text（同 stream 或前一 step）→ 结束
-          return null;
+        for (const ev of roundEvents) {
+          if (ev.kind === "text") {
+            if (ev.text.trim().length > 0) assistantParts.push({ type: "text", text: ev.text });
+          } else {
+            const part = toolResultByCallId.get(ev.toolCallId);
+            if (part) assistantParts.push(part);
+          }
         }
+        messages = [...messages, { id: `a${rounds}`, role: "assistant", parts: assistantParts }];
         return null;
       } catch (err) {
         return { kind: "harness" as const, error: `HARNESS_THROW: ${safeRuntimeErrorMessage(err).message}` };
@@ -467,8 +483,21 @@ export async function runKiroTextScenario(input: {
         runtimeError: { type: streamErr.kind, message: streamErr.error.slice(0, MAX_RUNTIME_ERROR_CHARS) },
       };
     }
-    // 无 tool call 且已有 final text → 完成；否则继续（boundary 后无文本会再走 final-only step）
-    if (finalAnswer.trim().length > 0) break;
+
+    // ---------- Stop Semantics（Eval V1.1.2；生产协议驱动） ----------
+    const c = roundLanes!;
+    const hasBusinessTool = c.toolEvents.some((t) => t.kind === "tool" && !isKiroFinalAnswerToolName(t.toolName));
+    if (hasBusinessTool) continue; // Case C：已执行 Tool → 下一轮 continuation
+    if (boundarySeen) {
+      if (c.finalText.trim().length > 0) break; // Case A：boundary + Final text → done
+      continue; // Case B：boundary 已到但无 Final text → 再走 final-only 轮
+    }
+    if (c.commentaryText.trim().length > 0) {
+      // Case D：无 Tool、无 boundary、有 text、自然 stop → legacy direct-answer settled fallback
+      finalAnswer = c.commentaryText;
+      break;
+    }
+    break; // Case E：无 Tool、无 text → settled empty（scoring 判 finalEmpty）
   }
 
   return { scenarioId: scenario.id, finalAnswer, toolTrace, lastWriteEvent, rounds };
