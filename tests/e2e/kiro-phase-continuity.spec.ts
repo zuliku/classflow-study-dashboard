@@ -1,16 +1,19 @@
-import { expect, Page } from "@playwright/test";
+﻿import { expect, Page } from "@playwright/test";
 import { test } from "./demoFixtures";
 import http from "node:http";
 
 /**
- * Kiro Streaming UX V4.7：Monotonic Agent Phase & Tool-Loop Continuity
+ * Kiro Streaming UX V4.7 / V4.7.1：Monotonic Agent Phase & Tool-Loop Continuity
  *
  * P1：continuation gap 期间 Header 保持「正在执行」（+ spinner），绝不闪「正在整理回答」
  * P2：boundary gap 是唯一出现「正在整理回答」的窗口
  * P3：3 Tool 全程 Header 文案 timeline——「正在整理回答」只出现一次（boundary 后）
  * P4：Tool Row working → done 的 outer DOM identity 保持
+ * L1（V4.7.1）：3500ms continuation delay 不提前 settled（3s 时仍 in-flight；到达后正常继续）
+ * P5（V4.7.1）：3500ms continuation gap 期间 Header 文案 / Stop / Send / Assistant actions 正确
  *
  * deterministic staged SSE：tool 输出回传后，continuation 响应带人为 gap。
+ * V4.7.1：无 arbitrary continuation timeout —— 慢 continuation 期间状态由事件决定。
  */
 
 const AI_SETTINGS = {
@@ -34,7 +37,15 @@ interface RequestRec {
   toolOutputCount: number;
 }
 
-function startToolLoopServer(toolCount: number, gapMs: number) {
+/**
+ * startToolLoopServer(toolCount, gapMs, continuationGapMs?, finalAnswerGapMs?)
+ * - gapMs：每轮内容（commentary/tool 或 boundary）到达前的延迟 —— 即「上一动作 → 下一内容」的 continuation gap
+ * - continuationGapMs：最终轮 boundary 前的延迟（覆盖 gapMs；L1/P5 用于制造长 tool→continuation gap）
+ * - finalAnswerGapMs：boundary → final text 的延迟（composing 窗口；默认 = continuationGapMs ?? gapMs）
+ */
+function startToolLoopServer(toolCount: number, gapMs: number, continuationGapMs?: number, finalAnswerGapMs?: number) {
+  const finalContDelay = continuationGapMs ?? gapMs;
+  const finalAnswerDelay = finalAnswerGapMs ?? finalContDelay;
   const requests: RequestRec[] = [];
   const server = http.createServer((req, res) => {
     if (req.method === "OPTIONS") {
@@ -46,16 +57,22 @@ function startToolLoopServer(toolCount: number, gapMs: number) {
     req.on("data", (c) => (body += c));
     req.on("end", () => {
       let outputCount = 0;
+      let boundaryEmitted = false;
       try {
-        const parsed = JSON.parse(body || "{}") as { messages?: { role: string; parts?: { type: string; state?: string }[] }[] };
-        outputCount = (parsed.messages ?? []).reduce(
-          (sum, m) =>
-            sum +
-            (m.role === "assistant"
-              ? (m.parts ?? []).filter((p) => p.type.startsWith("tool-") && p.state === "output-available").length
-              : 0),
-          0
-        );
+        const parsed = JSON.parse(body || "{}") as {
+          messages?: { role: string; parts?: { type: string; state?: string; toolName?: string }[] }[];
+        };
+        const messages = parsed.messages ?? [];
+        // 只统计当前 turn（最后一个 user 之后）已输出的 business tool；boundary 不算
+        let lastUserIdx = -1;
+        for (let i = 0; i < messages.length; i++) {
+          if (messages[i].role === "user") lastUserIdx = i;
+        }
+        const currentParts = messages.slice(lastUserIdx + 1).flatMap((m) => m.parts ?? []);
+        outputCount = currentParts.filter(
+          (p) => p.type.startsWith("tool-") && p.state === "output-available" && !p.toolName?.startsWith("begin_")
+        ).length;
+        boundaryEmitted = currentParts.some((p) => p.type === "tool-begin_final_answer" && p.state === "output-available");
       } catch {
         /* 忽略 */
       }
@@ -89,18 +106,26 @@ function startToolLoopServer(toolCount: number, gapMs: number) {
         ]);
         return;
       }
-      // 最后一轮：boundary + [gapMs] + final text
+      // boundary 单独一回合（真实 Provider 结构：finish tool-calls → client emit → SDK 自动续跑）
+      if (!boundaryEmitted) {
+        send([
+          { delay: finalContDelay, events: [
+            JSON.stringify({ type: "start", messageId: "ph-1" }),
+            JSON.stringify({ type: "start-step" }),
+            JSON.stringify({ type: "tool-input-start", toolCallId: "call_ph_b", toolName: "begin_final_answer" }),
+            JSON.stringify({ type: "tool-input-delta", toolCallId: "call_ph_b", inputTextDelta: "{}" }),
+            JSON.stringify({ type: "tool-input-available", toolCallId: "call_ph_b", toolName: "begin_final_answer", input: {} }),
+            JSON.stringify({ type: "finish-step" }),
+            JSON.stringify({ type: "finish", finishReason: "tool-calls" }),
+          ] },
+        ]);
+        return;
+      }
+      // final answer（boundary 已回填）
       send([
-        { delay: gapMs, events: [
+        { delay: finalAnswerDelay, events: [
           JSON.stringify({ type: "start", messageId: "ph-1" }),
           JSON.stringify({ type: "start-step" }),
-          JSON.stringify({ type: "tool-input-start", toolCallId: "call_ph_b", toolName: "begin_final_answer" }),
-          JSON.stringify({ type: "tool-input-delta", toolCallId: "call_ph_b", inputTextDelta: "{}" }),
-          JSON.stringify({ type: "tool-input-available", toolCallId: "call_ph_b", toolName: "begin_final_answer", input: {} }),
-          JSON.stringify({ type: "finish-step" }),
-          JSON.stringify({ type: "start-step" }),
-        ] },
-        { delay: gapMs, events: [
           JSON.stringify({ type: "text-start", id: "ph-f" }),
           JSON.stringify({ type: "text-delta", id: "ph-f", delta: "最终回答完成。" }),
           JSON.stringify({ type: "text-end", id: "ph-f" }),
@@ -301,3 +326,87 @@ test("P4: Tool Row working → done 的 outer DOM identity 保持", async ({ pag
   expect(connected).toBe(true);
   expect(doneIcon).toBe(1);
 });
+
+/** 等待当前 turn 第一个 Tool Row 变 done（✓） */
+async function waitForToolDone(page: Page) {
+  await expect(page.locator('[data-testid="kiro-tool-row"]').first()).toContainText("查找任务", { timeout: 15000 });
+  await page.waitForFunction(
+    () => {
+      const rows = document.querySelectorAll('[data-testid="kiro-tool-row"]');
+      if (rows.length === 0) return false;
+      const last = rows[rows.length - 1];
+      return last.querySelector("svg")?.getAttribute("class")?.includes("text-success") === true;
+    },
+    { timeout: 15000 }
+  );
+}
+
+/**
+ * L1（V4.7.1）：Tool output 已 addToolOutput → continuation request 人为 delay 3500ms。
+ * 关键：3s 处（旧 arbitrary timer 的触发点）不得 settled —— 3.5s 期间 turn 保持 in-flight；
+ * continuation 到达后正常继续。证明删除 3s timer 后慢 continuation 不会误结束 Turn。
+ */
+test("L1: 3500ms continuation delay 不提前 settled；continuation 到达后正常继续", async ({ page }) => {
+  const sse = await startToolLoopServer(1, 50, 3500, 50);
+  await page.route("**/api/ai/chat", (route) => route.continue({ url: sse.url }));
+  await page.addInitScript(({ settings, key }) => {
+    localStorage.setItem("classflow-ai-settings-v1", JSON.stringify({ version: 0, state: settings }));
+    sessionStorage.setItem("classflow-ai-key:deepseek", key);
+  }, { settings: AI_SETTINGS, key: "sk-test-key" });
+  await openKiro(page);
+  const composer = page.getByTestId("kiro-composer");
+  await composer.getByLabel("Ask Kiro").fill("检查任务");
+  await composer.getByLabel("发送").click();
+  await waitForToolDone(page);
+  // 3.2s（旧 3s timer 触发点之后）—— turn 必须仍 in-flight
+  await page.waitForTimeout(3200);
+  await expect(composer.getByLabel("停止生成")).toBeVisible({ timeout: 1000 });
+  await expect(composer.getByLabel("发送")).toHaveCount(0);
+  expect(await headerLabel(page)).toBe("正在执行");
+  // continuation 到达（≈+3.5s）→ boundary + final 正常完成 → 真正 settled
+  await expect(page.getByTestId("kiro-message").last()).toContainText("最终回答完成", { timeout: 15000 });
+  // 输入被清空后 Send 存在但 disabled —— 证明 turn 已 settled（Composer 回到 idle）
+  await expect(composer.getByLabel("发送")).toBeVisible({ timeout: 15000 });
+  await expect(composer.getByLabel("停止生成")).toHaveCount(0);
+  await composer.getByLabel("Ask Kiro").fill("再检查一次");
+  await expect(composer.getByLabel("发送")).toBeEnabled();
+  await sse.close();
+});
+
+/**
+ * P5（V4.7.1）：3500ms continuation gap 的 UI 行为——
+ * 1000 / 2500 / 3200ms 三处：Header 正在执行；turn in-flight（Stop 可见）；
+ * Send 不重新可用；最后 Assistant action toolbar（复制/更多）不提前出现。
+ */
+test("P5: 3500ms continuation gap——Header 正在执行 / Send 不可用 / Assistant actions 不提前出现", async ({ page }) => {
+  const sse = await startToolLoopServer(1, 50, 3500, 50);
+  await page.route("**/api/ai/chat", (route) => route.continue({ url: sse.url }));
+  await page.addInitScript(({ settings, key }) => {
+    localStorage.setItem("classflow-ai-settings-v1", JSON.stringify({ version: 0, state: settings }));
+    sessionStorage.setItem("classflow-ai-key:deepseek", key);
+  }, { settings: AI_SETTINGS, key: "sk-test-key" });
+  await openKiro(page);
+  const composer = page.getByTestId("kiro-composer");
+  await composer.getByLabel("Ask Kiro").fill("检查任务");
+  await composer.getByLabel("发送").click();
+  await waitForToolDone(page);
+  const lastAssistant = page.locator('[data-testid="kiro-message"]').last();
+  let prev = 0;
+  for (const at of [1000, 2500, 3200]) {
+    await page.waitForTimeout(at - prev);
+    prev = at;
+    expect(await headerLabel(page)).toBe("正在执行");
+    await expect(composer.getByLabel("停止生成")).toBeVisible();
+    await expect(composer.getByLabel("发送")).toHaveCount(0);
+    await expect(lastAssistant.locator('[aria-label="复制"]')).toHaveCount(0);
+    await expect(lastAssistant.locator('[aria-label="消息更多操作"]')).toHaveCount(0);
+  }
+  // continuation 到达 → 正常完成（boundary gap 保持短窗口，composing 逻辑不变）
+  await expect(page.getByTestId("kiro-message").last()).toContainText("最终回答完成", { timeout: 15000 });
+  await expect(composer.getByLabel("发送")).toBeVisible({ timeout: 15000 });
+  await expect(composer.getByLabel("停止生成")).toHaveCount(0);
+  await composer.getByLabel("Ask Kiro").fill("再检查一次");
+  await expect(composer.getByLabel("发送")).toBeEnabled();
+  await sse.close();
+});
+

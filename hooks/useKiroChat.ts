@@ -910,8 +910,9 @@ export function useKiroChat({
   //   但在续跑请求（status→submitted）真正开始前 status 会瞬时保持 ready。
   //   用 pendingAutoContinueRef 覆盖该窗口（SDK 保证会自动续跑；limitReached 时不续跑）。
   // - status 回到 submitted/streaming 或 error → 清除标记（续跑已开始 / 请求已结束）。
+  // - V4.7.1：明确不使用 arbitrary timeout。慢 continuation（>3s）期间必须保持 in-flight；
+  //   状态由事件（SDK status / Stop / reset / load）决定，不由时间猜测。
   const pendingAutoContinueRef = useRef(false);
-  const pendingAutoContinueAtRef = useRef(0);
   /** 用户 Stop 的 turn message id：其遗留的 pending tool part 不再视为 in-flight */
   const stoppedTurnMessageIdRef = useRef<string | null>(null);
 
@@ -1313,27 +1314,13 @@ export function useKiroChat({
     }
   }, [chat.status]);
 
-  /** V4.7 安全网：awaiting-continuation 超时强制 settle 的刷新信号（见 emitToolOutput） */
-  const [continuationSettleBump, setContinuationSettleBump] = useState(0);
-
   /** 统一 Tool Output 回填：完成后标记 awaiting-continuation（SDK 将自动续跑；limitReached 不续跑） */
   const emitToolOutput = useCallback(
     (tool: string, toolCallId: string, output: unknown) => {
       // V4.6：真实 tool 时间点（test-only；不记录 tool 内容）
       turnPerf("toolExecutionComplete", toolCallId);
       turnPerf("addToolOutput", toolCallId);
-      if (!limitReachedRef.current) {
-        pendingAutoContinueRef.current = true;
-        pendingAutoContinueAtRef.current = performance.now();
-        // V4.7 安全网：SDK 自动续跑被异常丢弃（addToolOutput 后无新请求）时，
-        // 3s 后强制脱离 awaiting-continuation，避免 turn 永久卡在「停止生成」。
-        window.setTimeout(() => {
-          if (pendingAutoContinueRef.current && performance.now() - pendingAutoContinueAtRef.current >= 3000) {
-            pendingAutoContinueRef.current = false;
-            setContinuationSettleBump((v) => v + 1);
-          }
-        }, 3000);
-      }
+      if (!limitReachedRef.current) pendingAutoContinueRef.current = true;
       chat.addToolOutput({
         tool: tool as never,
         toolCallId,
@@ -1355,11 +1342,7 @@ export function useKiroChat({
     if (chat.status === "submitted" || chat.status === "streaming") return "executing";
     if (chat.status === "error") return "settled";
     // ready：
-    if (pendingAutoContinueRef.current) {
-      // V4.7 安全网：SDK 自动续跑迟迟未发起（异常丢弃）→ 3s 后按无续跑处理（settled 判定走下方）
-      if (performance.now() - pendingAutoContinueAtRef.current < 3000) return "awaiting-continuation";
-      pendingAutoContinueRef.current = false;
-    }
+    if (pendingAutoContinueRef.current) return "awaiting-continuation";
     let lastUserIdx = -1;
     for (let i = chat.messages.length - 1; i >= 0; i--) {
       if (chat.messages[i].role === "user") {
@@ -1382,7 +1365,7 @@ export function useKiroChat({
     }
     return "settled";
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [chat.status, chat.messages, continuationSettleBump]);
+  }, [chat.status, chat.messages]);
   const turnInFlight = turnExecution !== "settled";
 
   /** 执行 Write Tool：preflight + mutation + Undo 注册 + Toast + addToolOutput */
