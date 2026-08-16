@@ -222,7 +222,9 @@ export function KiroThreadRail({ onOpenProjects }: { onOpenProjects?: () => void
         data-testid="kiro-thread-rail-shell"
         data-state={expanded ? "expanded" : "collapsed"}
         className={cn(
-          "relative rounded-2xl bg-surface border border-line shadow-card overflow-hidden",
+          "relative rounded-2xl bg-surface border border-line shadow-card",
+          // width morph 期间裁剪层内容；More 菜单打开时需溢出 shell（否则 52px 外壳把菜单裁掉）
+          moreOpen ? "overflow-visible" : "overflow-hidden",
           "w-[52px] data-[state=expanded]:w-[216px] lg:data-[state=expanded]:w-[232px]",
           "data-[state=expanded]:max-h-[calc(100dvh-120px)]",
           "transition-[width] duration-[var(--kiro-motion-spatial,220ms)] ease-[var(--ease-standard)]"
