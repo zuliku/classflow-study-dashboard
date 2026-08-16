@@ -1,7 +1,8 @@
 "use client";
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { FolderKanban, ChevronLeft, X, Plus, Pencil, Trash2, ChevronsLeft, ArrowLeft, Image as ImageIcon } from "lucide-react";
+import { ChevronLeft, X, Plus, Pencil, Trash2, ChevronsLeft, ArrowLeft, Image as ImageIcon } from "lucide-react";
+import { KIRO_PROJECT_ICON } from "@/components/kiro/kiroProjectIcon";
 import { useKiroSessionMeta, useKiroSessionActions } from "@/components/kiro/KiroSessionProvider";
 import { useConfirmStore } from "@/store/useConfirmStore";
 import { useToastStore } from "@/store/useToastStore";
@@ -273,7 +274,7 @@ export function KiroProjectPanel({
         <>
           <div className="flex items-center gap-2 min-w-0">
             <span className="w-6 h-6 flex items-center justify-center rounded-lg bg-pastel-mint text-charcoal">
-              <FolderKanban className="w-3.5 h-3.5" />
+              <KIRO_PROJECT_ICON className="w-3.5 h-3.5" />
             </span>
             <span className="text-xs font-semibold text-charcoal">项目</span>
           </div>
@@ -338,7 +339,7 @@ export function KiroProjectPanel({
         className="w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-left hover:bg-alabaster transition-colors cursor-pointer group"
       >
         <span className="w-6 h-6 shrink-0 flex items-center justify-center rounded-lg bg-alabaster text-sandrift">
-          <FolderKanban className="w-3.5 h-3.5" />
+          <KIRO_PROJECT_ICON className="w-3.5 h-3.5" />
         </span>
         <span className="min-w-0 flex-1">
           <span className="block text-xs font-semibold text-charcoal truncate">
@@ -465,7 +466,7 @@ export function KiroProjectPanel({
                 </button>
                 {projects.length === 0 ? (
                   <div className="flex flex-col items-center gap-1 py-8 text-center">
-                    <FolderKanban className="w-5 h-5 text-sandrift" />
+                    <KIRO_PROJECT_ICON className="w-5 h-5 text-sandrift" />
                     <p className="text-xs font-semibold text-satin-grey mt-1">还没有项目</p>
                     <p className="text-[11px] text-sandrift">用项目整理相关的 Kiro 对话。</p>
                     <button
@@ -682,7 +683,7 @@ export function KiroProjectPanel({
               title="项目"
               className="w-9 h-9 flex items-center justify-center rounded-xl text-sandrift hover:bg-alabaster hover:text-charcoal transition-colors"
             >
-              <FolderKanban className="w-4 h-4" />
+              <KIRO_PROJECT_ICON className="w-4 h-4" />
             </button>
             <div className="w-5 h-px bg-line-soft my-0.5" />
             <button

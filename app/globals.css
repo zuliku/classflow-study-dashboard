@@ -517,3 +517,148 @@ html[data-motion-effective="reduced"] .kiro-rail-plate .kiro-ring {
   animation: none;
   opacity: 0.6;
 }
+
+
+/* ============ App Chrome V2.1 — Sidebar Rail Morph ============ */
+/* 几何由 [data-collapsed] 决定；choreography 由 [data-motion-active] + [data-motion-direction]
+   决定；非手动 morph（hydration / 断点 / reduced-motion）一律瞬时切换。 */
+
+/* Sidebar Shell：仅手动 morph 播放 width transition */
+.sidebar-shell {
+  transition-property: width;
+  transition-duration: var(--motion-panel);
+  transition-timing-function: var(--ease-emphasized);
+}
+.sidebar-shell[data-motion-active="false"] {
+  transition: none;
+}
+
+/* Nav / Profile Label：始终 mounted，永不 display:none。
+   折叠 = opacity 0 + translateX(-4px) + max-width 0（文字随宽度自然裁剪）；
+   展开 = 反向。绝不 scale 文字。 */
+.sidebar-label,
+.sidebar-profile-identity {
+  display: inline-block;
+  max-width: 200px;
+  opacity: 1;
+  transform: translateX(0);
+  white-space: nowrap;
+  overflow: hidden;
+  transition-property: opacity, transform, max-width;
+  transition-duration: var(--motion-fast), var(--motion-fast), var(--motion-panel);
+  transition-timing-function: var(--ease-standard), var(--ease-standard), var(--ease-emphasized);
+}
+[data-collapsed="true"] .sidebar-label,
+[data-collapsed="true"] .sidebar-profile-identity {
+  opacity: 0;
+  transform: translateX(-4px);
+  max-width: 0;
+}
+[data-motion-active="false"] .sidebar-label,
+[data-motion-active="false"] .sidebar-profile-identity {
+  transition: none;
+}
+/* Collapse：文字先淡出（0ms），宽度随 Shell 收束（40ms 后开始）；
+   Expand：宽度先释放，文字延迟 80ms 淡入（先有几何再有内容）。 */
+[data-motion-active="true"][data-motion-direction="collapse"] .sidebar-label,
+[data-motion-active="true"][data-motion-direction="collapse"] .sidebar-profile-identity {
+  transition-delay: 0ms, 0ms, 40ms;
+}
+[data-motion-active="true"][data-motion-direction="expand"] .sidebar-label,
+[data-motion-active="true"][data-motion-direction="expand"] .sidebar-profile-identity {
+  transition-delay: 80ms, 80ms, 0ms;
+}
+
+/* Logo Crossfade：Full Logo 与 Mark 始终 mounted（同容器绝对定位），仅 opacity/translate 切换 */
+.sidebar-logo-full {
+  opacity: 1;
+  transform: translate(-50%, -50%) translateX(0);
+  transition-property: opacity, transform;
+  transition-duration: var(--motion-fast);
+  transition-timing-function: var(--ease-standard);
+}
+.sidebar-logo-mark {
+  opacity: 0;
+  transform: translate(-50%, -50%);
+  transition-property: opacity;
+  transition-duration: var(--motion-fast);
+  transition-timing-function: var(--ease-standard);
+}
+[data-collapsed="true"] .sidebar-logo-full {
+  opacity: 0;
+  transform: translate(-50%, -50%) translateX(-4px);
+}
+[data-collapsed="true"] .sidebar-logo-mark {
+  opacity: 1;
+}
+[data-motion-active="false"] .sidebar-logo-full,
+[data-motion-active="false"] .sidebar-logo-mark {
+  transition: none;
+}
+/* Collapse：Full Logo 先淡出，Mark 延迟 80ms 出现；Expand：Mark 先淡出，Full Logo 延迟 60ms */
+[data-motion-active="true"][data-motion-direction="collapse"] .sidebar-logo-full { transition-delay: 0ms; }
+[data-motion-active="true"][data-motion-direction="collapse"] .sidebar-logo-mark { transition-delay: 80ms; }
+[data-motion-active="true"][data-motion-direction="expand"] .sidebar-logo-full { transition-delay: 60ms; }
+[data-motion-active="true"][data-motion-direction="expand"] .sidebar-logo-mark { transition-delay: 0ms; }
+
+/* Profile Card Single-DOM Morph：Surface 收束（背景/边框/padding 过渡） */
+.sidebar-profile-surface {
+  transition-property: background-color, border-color, padding;
+  transition-duration: var(--motion-panel);
+  transition-timing-function: var(--ease-emphasized);
+}
+[data-collapsed="true"] .sidebar-profile-surface {
+  background-color: transparent;
+  border-color: transparent;
+  padding: 6px 12px;
+}
+[data-motion-active="false"] .sidebar-profile-surface {
+  transition: none;
+}
+
+/* Profile Credits：max-height 0 + 上移 + 淡出 */
+.sidebar-profile-credits {
+  max-height: 64px;
+  opacity: 1;
+  transform: translateY(0);
+  overflow: hidden;
+  transition-property: opacity, transform, max-height;
+  transition-duration: var(--motion-fast), var(--motion-fast), var(--motion-panel);
+  transition-timing-function: var(--ease-standard), var(--ease-standard), var(--ease-emphasized);
+}
+[data-collapsed="true"] .sidebar-profile-credits {
+  max-height: 0;
+  opacity: 0;
+  transform: translateY(-3px);
+}
+[data-motion-active="false"] .sidebar-profile-credits {
+  transition: none;
+}
+[data-motion-active="true"][data-motion-direction="collapse"] .sidebar-profile-credits {
+  transition-delay: 0ms, 0ms, 40ms;
+}
+[data-motion-active="true"][data-motion-direction="expand"] .sidebar-profile-credits {
+  transition-delay: 80ms, 80ms, 0ms;
+}
+
+/* Profile Tooltip：仅在 collapsed 稳定态可 hover 显示；manual morph 期间强制隐藏 */
+.sidebar-profile-tooltip {
+  display: none;
+}
+[data-collapsed="true"] .sidebar-profile-tooltip {
+  display: block;
+}
+[data-motion-active="true"] .sidebar-tooltip {
+  opacity: 0 !important;
+}
+
+/* Reduced Motion：全部瞬时切换 */
+html[data-motion-effective="reduced"] .sidebar-shell,
+html[data-motion-effective="reduced"] .sidebar-label,
+html[data-motion-effective="reduced"] .sidebar-profile-identity,
+html[data-motion-effective="reduced"] .sidebar-logo-full,
+html[data-motion-effective="reduced"] .sidebar-logo-mark,
+html[data-motion-effective="reduced"] .sidebar-profile-surface,
+html[data-motion-effective="reduced"] .sidebar-profile-credits {
+  transition: none !important;
+}

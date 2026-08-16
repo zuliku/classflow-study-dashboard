@@ -1,7 +1,8 @@
 "use client";
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { Plus, Search, MoreHorizontal, FileDown, Copy, Trash2, ChevronLeft, History as HistoryIcon, FolderKanban } from "lucide-react";
+import { Plus, Search, MoreHorizontal, FileDown, Copy, Trash2, ChevronLeft, History as HistoryIcon } from "lucide-react";
+import { KIRO_PROJECT_ICON } from "@/components/kiro/kiroProjectIcon";
 import { useKiroSessionMeta, useKiroSessionActions } from "@/components/kiro/KiroSessionProvider";
 import { useToastStore } from "@/store/useToastStore";
 import { useConfirmStore } from "@/store/useConfirmStore";
@@ -254,7 +255,7 @@ export function KiroThreadRail({ onOpenProjects }: { onOpenProjects?: () => void
             title="项目"
             className="w-9 h-9 flex items-center justify-center rounded-xl text-sandrift hover:bg-alabaster hover:text-charcoal transition-colors"
           >
-            <FolderKanban className="w-4 h-4" />
+            <KIRO_PROJECT_ICON className="w-4 h-4" />
           </button>
           <div className="flex-1" />
           <div className="relative">
@@ -318,7 +319,7 @@ export function KiroThreadRail({ onOpenProjects }: { onOpenProjects?: () => void
                 aria-label="打开项目"
                 className="w-full flex items-center gap-2 px-2.5 h-7 rounded-lg text-[11px] font-semibold text-satin-grey hover:bg-alabaster hover:text-charcoal transition-colors"
               >
-                <FolderKanban className="w-3.5 h-3.5 text-sandrift" />
+                <KIRO_PROJECT_ICON className="w-3.5 h-3.5 text-sandrift" />
                 项目
               </button>
             )}

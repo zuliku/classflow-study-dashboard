@@ -30,11 +30,10 @@ test("Sidebar ≥1280：展开 → 收起 → 展开；宽度 224/64，标签与
   expect(expandedBox!.width).toBeCloseTo(224, 0);
   await expect(page.getByTestId("nav-label").first()).toBeVisible();
 
-  // 收起 → 64px，标签隐藏，tooltip 出现
+  // 收起 → 64px，标签隐藏，tooltip 出现（等待 morph 完成后的最终几何）
   await page.getByTestId("sidebar-collapse-toggle").click();
   await expect(sidebar).toHaveAttribute("data-collapsed", "true");
-  const collapsedBox = await sidebar.boundingBox();
-  expect(collapsedBox!.width).toBeCloseTo(64, 0);
+  await expect.poll(async () => (await sidebar.boundingBox())!.width, { timeout: 5000 }).toBeLessThan(65);
   await expect(page.getByTestId("nav-label").first()).toBeHidden();
   await expect(page.getByTestId("nav-tooltip").first()).toBeVisible();
 
@@ -45,6 +44,7 @@ test("Sidebar ≥1280：展开 → 收起 → 展开；宽度 224/64，标签与
   // 再展开 → 恢复
   await page.getByTestId("sidebar-collapse-toggle").click();
   await expect(sidebar).toHaveAttribute("data-collapsed", "false");
+  await expect.poll(async () => (await sidebar.boundingBox())!.width, { timeout: 5000 }).toBeGreaterThan(220);
   await expect(page.getByTestId("nav-label").first()).toBeVisible();
 });
 
@@ -81,7 +81,7 @@ test("Profile Card：展开显示姓名/学院/学分进度；点击 → 设置�
 
   const card = page.getByRole("button", { name: "打开个人资料" });
   await expect(card).toBeVisible();
-  await expect(card.getByText("张同学")).toBeVisible();
+  await expect(card.getByText("张同学", { exact: true })).toBeVisible();
   await expect(card.getByText("经济与管理学院")).toBeVisible();
   await expect(card.getByText("本学期学分进度")).toBeVisible();
   await expect(card.getByText(/64 \/ 80 学分/)).toBeVisible();
@@ -97,11 +97,12 @@ test("Profile Card：折叠态仅头像，tooltip 含姓名；点击行为一致
   await page.goto("/");
   await page.getByTestId("sidebar-collapse-toggle").click();
 
-  const avatarEntry = page.getByRole("button", { name: /张同学 · 个人资料/ });
+  // single-DOM morph：同一按钮，collapsed 下只呈现头像 + tooltip（含姓名）
+  const avatarEntry = page.getByRole("button", { name: "打开个人资料" });
   await expect(avatarEntry).toBeVisible();
-  // hover → tooltip（姓名 · 个人资料）
   await avatarEntry.hover();
   await expect(avatarEntry.getByRole("tooltip")).toBeVisible();
+  await expect(avatarEntry.getByRole("tooltip")).toContainText("张同学");
 
   await avatarEntry.click();
   await expect(page.getByRole("dialog", { name: "设置" })).toBeVisible();

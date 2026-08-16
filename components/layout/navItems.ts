@@ -2,7 +2,7 @@ import {
   LayoutDashboard,
   CalendarDays,
   ClipboardCheck,
-  FolderKanban,
+  Library,
   BarChart3,
   Users2,
   Bell,
@@ -38,7 +38,8 @@ export const WORKSPACE_NAV_ITEMS: NavItem[] = [
   { id: "overview", label: "总览", icon: LayoutDashboard, section: "main" },
   { id: "timetable", label: "时间表", icon: CalendarDays, section: "main" },
   { id: "assignments", label: "任务与 DDL", icon: ClipboardCheck, section: "main" },
-  { id: "courses", label: "课程资料", icon: FolderKanban, section: "main" },
+  // 课程资料 = Learning Resource Library（PDF/DOCX/PPT 与课程文件集合）
+  { id: "courses", label: "课程资料", icon: Library, section: "main" },
   { id: "analytics", label: "学习洞察", icon: BarChart3, section: "main" },
   { id: "group", label: "小组协作", icon: Users2, section: "main" },
   { id: "kiro", label: "Kiro", icon: KIRO_ICON, section: "ai" },
@@ -64,9 +65,10 @@ export const BOTTOM_NAV_MAIN: NavItem[] = [
   { id: "kiro", label: "Kiro", icon: KIRO_ICON },
 ];
 
-/** 更多菜单：课程/分析/小组为 workspace tab；提醒/设置是 action（面板 / Modal） */
+/** 更多菜单：课程/分析/小组为 workspace tab；提醒/设置是 action（面板 / Modal）。
+ *  课程资料图标与 WORKSPACE_NAV_ITEMS 同源（Library）。 */
 export const BOTTOM_NAV_MORE: (NavItem | GlobalAction)[] = [
-  { id: "courses", label: "课程", icon: FolderKanban },
+  { id: "courses", label: "课程", icon: Library },
   { id: "analytics", label: "学习洞察", icon: BarChart3 },
   { id: "group", label: "小组协作", icon: Users2 },
   { id: "reminders", label: "提醒", icon: Bell },
