@@ -178,7 +178,8 @@ async function seedLearningHistory(page: Page) {
           schemaVersion: 1,
           historyStartedAt,
           initializedAt: historyStartedAt,
-          focusBackfillCompleted: true,
+          studyBlockBatchIntegrityStartedAt: historyStartedAt,
+          focusBackfillCompleted: false,
           backfilledFocusSessions: 0,
         },
       });
@@ -202,16 +203,17 @@ demoTest("本周指标：专注/完成任务/计划/按时率 + 对比 + 信号"
   await openAnalytics(page);
 
   // 本周范围：coverage 从上周一开始 → 全量覆盖，无提示
-  await expect(page.getByText(/历史数据自/)).toHaveCount(0);
+  await expect(page.getByTestId("analytics-coverage-notice")).toHaveCount(0);
 
-  // 实际专注 75m + ↑ 25%（对比上周 60m）
-  await expect(visibleText(page, /1h 15m/)).toBeVisible();
+  // 实际专注 75m + ↑ 25%（对比上周 60m）——V3 中文 duration
+  await expect(visibleText(page, /1 小时 15 分/)).toBeVisible();
   await expect(visibleText(page, /↑ 25%/)).toBeVisible();
 
-  // 完成任务 / 计划学习 / 按时完成
+  // 完成任务 / 计划执行 / 按时完成（V3：计划执行为 ratio + 实际/计划）
   await expect(visibleText(page, /完成任务/)).toBeVisible();
   await expect(page.getByText("1 项", { exact: true }).first()).toBeVisible();
-  await expect(page.getByText("1h", { exact: true }).first()).toBeVisible();
+  await expect(visibleText(page, /125%/)).toBeVisible(); // 75 / 60
+  await expect(visibleText(page, /实际 1 小时 15 分 \/ 计划 1 小时/)).toBeVisible();
   await expect(visibleText(page, /按时完成/)).toBeVisible();
   await expect(visibleText(page, /100%/)).toBeVisible();
   await expect(visibleText(page, /样本不足 · 1 个可判断任务/)).toBeVisible();
@@ -233,9 +235,9 @@ demoTest("近 4 周 range：coverage 提示出现、对比/信号消失", async 
   await page.getByRole("button", { name: "近 4 周" }).click();
   await page.waitForTimeout(800);
 
-  // current.from（28d 前）早于 historyStartedAt → 提示可见
-  await expect(visibleText(page, /历史数据自/)).toBeVisible();
-  await expect(visibleText(page, /可能不完整/)).toBeVisible();
+  // current.from（28d 前）早于 historyStartedAt → 提示可见（V3 文案）
+  await expect(visibleText(page, /部分历史记录不完整/)).toBeVisible();
+  await expect(visibleText(page, /记录不完整/)).toBeVisible();
 
   // comparison 不可用 → 无 delta、无信号
   await expect(visibleText(page, /↑ 25%/)).toHaveCount(0);
@@ -244,14 +246,14 @@ demoTest("近 4 周 range：coverage 提示出现、对比/信号消失", async 
   // 切回本周 → 提示消失
   await page.getByRole("button", { name: "本周" }).click();
   await page.waitForTimeout(800);
-  await expect(page.getByText(/历史数据自/)).toHaveCount(0);
+  await expect(page.getByTestId("analytics-coverage-notice")).toHaveCount(0);
 });
 
 demoTest("空历史（本周）→ 无任何假指标/假图", async ({ page }) => {
   await openAnalytics(page);
 
   // Fresh app：coverage 初始化为今天 → 本周视图提示不完整（真实行为）
-  await expect(visibleText(page, /历史数据自/)).toBeVisible();
+  await expect(visibleText(page, /部分历史记录不完整/)).toBeVisible();
 
   await expect(visibleText(page, /学习洞察会随着使用逐渐形成/)).toBeVisible();
   await expect(page.locator(".recharts-surface")).toHaveCount(0);
@@ -275,8 +277,8 @@ demoTest("完成任务 → 洞察实时更新（订阅链路）", async ({ page 
   await expect(drawer.getByRole("button", { name: "重新打开" })).toBeVisible();
   await drawer.getByRole("button", { name: "关闭" }).click();
 
-  // 回到洞察：完成任务 1 项（live 刷新）
+  // 回到洞察：完成任务 live 刷新（V3：fresh app 本周区间记录不完整 → 「已记录 1 项」）
   await page.getByRole("button", { name: "学习洞察" }).first().click();
-  await expect(page.getByText("1 项", { exact: true }).first()).toBeVisible({ timeout: 10000 });
+  await expect(visibleText(page, /已记录 1 项/)).toBeVisible({ timeout: 10000 });
   await expect(page.getByText(/学习洞察会随着使用逐渐形成/)).toHaveCount(0);
 });

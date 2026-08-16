@@ -284,7 +284,9 @@ export async function buildLearningAnalyticsSnapshot(
   // Focus：与 assignment 同起点（focus.completed 同属 Learning History）；
   // backfill 存在也不能证明完整起点（不声称 complete 之前的区间）
   const focusReliability: AnalyticsReliability = currentFrom >= historyStartedAt ? "complete" : "partial";
-  const focusBackfilled = coverage?.focusBackfillCompleted === true;
+  // 只有「真实回填了旧会话」才提示「已有专注记录仍计入统计」（空回填不制造噪音）
+  const focusBackfilled =
+    coverage?.focusBackfillCompleted === true && (coverage?.backfilledFocusSessions ?? 0) > 0;
 
   // ---- Planned minutes（current 周期）----
   const plannedMinutes = currentPlans.reduce((s, p) => s + p.plannedMinutes, 0);

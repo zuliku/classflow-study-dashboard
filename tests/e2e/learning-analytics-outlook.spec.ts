@@ -131,9 +131,8 @@ demoTest("学习前瞻 UI：demo 全部缺估时 → 5 个截止任务 · 5 个�
   const card = page.getByTestId("study-outlook-card");
   await expect(card).toBeVisible({ timeout: 10000 });
 
-  // summary：5 个截止任务（a1..a5 均在 7 天内）· 5 个缺估时（demo 无 estimatedMinutes）
+  // summary：5 个截止任务（a1..a5 均在 7 天内）；缺估时语义由行级文案承担
   await expect(card.getByText(/5 个截止任务/)).toBeVisible();
-  await expect(card.getByText(/5 个缺估时/)).toBeVisible();
 
   // 缺估时行：文案 + 估算任务弱操作（不做大红色警报）
   await expect(card.getByText("缺少预计耗时，暂无法判断安排是否充足。").first()).toBeVisible();

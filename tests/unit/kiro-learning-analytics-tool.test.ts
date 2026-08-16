@@ -49,10 +49,17 @@ function realNowFixture() {
     d.setHours(hour, minute, 0, 0);
     return d.getTime();
   };
-  const atToday = (hour: number, minute = 0) => {
-    const d = new Date(now);
-    d.setHours(hour, minute, 0, 0);
-    return d.getTime();
+  // 本周期事件必须落在「当前时刻之前」：早于固定小时运行时不把未来事件算进本周。
+  // 取 now-Δ，跨午夜时回退到今天 00:01（仍早于 now）。
+  const safeToday = (hoursAgo: number) => {
+    const t = now.getTime() - hoursAgo * 3600000;
+    const d = new Date(t);
+    if (localDate(d) !== localDate(now)) {
+      const f = new Date(now);
+      f.setHours(0, 1, 0, 0);
+      return f.getTime();
+    }
+    return t;
   };
   const pad2 = (n: number) => String(n).padStart(2, "0");
   const localDate = (d: Date) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
@@ -61,6 +68,15 @@ function realNowFixture() {
     startDate: localDate(new Date(monday.getTime() - 28 * DAY)), // 4 周前开学：semester range 覆盖全部事件
   };
   const ddlFuture = localDate(new Date(Date.now() + 5 * DAY));
+
+  // this-week study block 时间（创建后 30min 开始，保证 created < start ≤ now）
+  const blockCreatedAt = safeToday(4);
+  const blockStartMs = blockCreatedAt + 30 * 60000;
+  const blockStart = new Date(blockStartMs);
+  const blockEnd = new Date(blockStartMs + 60 * 60000);
+  const hm = (d: Date) => `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+  const blockStartTime = hm(blockStart);
+  const blockEndTime = hm(blockEnd);
 
   const events: LearningHistoryEvent[] = [
     // prev week：focus 60min（last Tue 10:00）
@@ -77,24 +93,29 @@ function realNowFixture() {
       data: { ddl: `${localDate(new Date(atLastWeek(4, 0, 0)))}T23:59:00` },
     }),
     mkEvent("assignment.completed", atLastWeek(4, 15, 0), "prev-a1", { assignmentId: "prev-a1", courseId: "c2" }),
-    // this week：focus 75min（today 上午）
-    mkEvent("focus.completed", atToday(9, 30), "wk-f1", {
+    // this week：focus 75min（now-3h，保证已发生）
+    mkEvent("focus.completed", safeToday(3), "wk-f1", {
       courseId: "c1",
       courseNameSnapshot: "数据结构与算法",
-      data: { actualActiveMs: 4500000, startedAt: atToday(9, 30), plannedMinutes: 75 },
+      data: { actualActiveMs: 4500000, startedAt: safeToday(3), plannedMinutes: 75 },
     }),
-    // this week：assignment created/completed（today，ddl +5d → onTime）
-    mkEvent("assignment.created", atToday(8, 0), "wk-a1", {
+    // this week：assignment created/completed（now-2h / now-1h，ddl +5d → onTime）
+    mkEvent("assignment.created", safeToday(2), "wk-a1", {
       assignmentId: "wk-a1",
       courseId: "c1",
       courseNameSnapshot: "数据结构与算法",
       data: { ddl: `${ddlFuture}T23:59:00` },
     }),
-    mkEvent("assignment.completed", atToday(11, 0), "wk-a1", { assignmentId: "wk-a1", courseId: "c1" }),
-    // this week：study block（today 00:30，created 00:00 → 成熟 60min）
-    mkEvent("study_block.created", atToday(0, 0), "wk-p1", {
+    mkEvent("assignment.completed", safeToday(1), "wk-a1", { assignmentId: "wk-a1", courseId: "c1" }),
+    // this week：study block（now-4h 创建，start = 创建后 30min → 已成熟 60min）
+    mkEvent("study_block.created", blockCreatedAt, "wk-p1", {
       courseId: "c1",
-      data: { date: localDate(now), startTime: "00:30", endTime: "01:30", plannedMinutes: 60 },
+      data: {
+        date: localDate(new Date(blockCreatedAt)),
+        startTime: blockStartTime,
+        endTime: blockEndTime,
+        plannedMinutes: 60,
+      },
     }),
   ];
   return { events, semester: SEMESTER, now: now.getTime(), monday: monday.getTime() };

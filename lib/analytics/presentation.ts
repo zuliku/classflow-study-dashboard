@@ -129,7 +129,10 @@ export function presentOnTimeMetric(
   }
   return {
     value: `${onTimeRate}%`,
-    detail: `${onTimeCount} / ${onTimeEligible} 个可判断任务按时完成`,
+    detail:
+      onTimeEligible < 3
+        ? `样本不足 · ${onTimeEligible} 个可判断任务`
+        : `${onTimeCount} / ${onTimeEligible} 个可判断任务按时完成`,
     reliability: "complete",
   };
 }
