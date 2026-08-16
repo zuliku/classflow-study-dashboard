@@ -1,13 +1,19 @@
 /**
  * Visual Intake Eval V1.1 —— Live Vision Benchmark Runner（Layer B，production parity）。
  * 只在显式配置 KIRO_VISUAL_EVAL_PROVIDER / KIRO_VISUAL_EVAL_MODEL / KIRO_VISUAL_EVAL_API_KEY 时运行。
- * 复用生产代码：KIRO_SYSTEM_PROMPT / buildClassFlowContextSection / getKiroToolsForRequest /
+ * 复用生产代码：KIRO_SYSTEM_PROMPT / buildClassFlowContextSection / buildVisualEvalToolSet /
  * executeKiroReadTool / 生产 Visual Guard（isClassFlowMutationTool + VISUAL_PROPOSAL_REQUIRED_*）。
  * 不复制 useKiroChat；不通过 UI/Playwright 驱动。
  * 输出 .tmp/visual-intake-eval/<provider>__<model>/report.json + report.md；绝不记录 API Key / reasoning / CoT。
  */
-import { streamText, convertToModelMessages } from "ai";
-import { getKiroToolsForRequest } from "@/lib/ai/tools";
+import { streamText, convertToModelMessages, tool } from "ai";
+import { z } from "zod";
+import { KIRO_READ_TOOLS } from "@/lib/ai/tools/read/registry";
+import { KIRO_WRITE_TOOLS } from "@/lib/ai/tools/write/registry";
+import {
+  KIRO_FINAL_ANSWER_TOOL_NAME,
+  KIRO_FINAL_ANSWER_TOOL_DESCRIPTION,
+} from "@/lib/ai/tools/finalAnswer";
 import { KIRO_SYSTEM_PROMPT } from "@/lib/ai/config";
 import { buildClassFlowContextSection } from "@/lib/ai/prompts/classFlowContextSection";
 import { resolveLanguageModel } from "@/lib/ai/providers/resolver";
@@ -51,9 +57,41 @@ export function visualEvalEnabled(): boolean {
   return Boolean(VISUAL_EVAL_ENV.provider && VISUAL_EVAL_ENV.model && VISUAL_EVAL_ENV.apiKey);
 }
 
+/** file part 的 data（{type:"base64",base64} 或 {type:"url",url: URL|string}）→ Uint8Array（image part 用） */
+export function filePartToImageBytes(data: unknown): Uint8Array {
+  const d = data as { type?: string; base64?: string; url?: unknown } | null;
+  if (d?.type === "base64" && d.base64) {
+    return new Uint8Array(Buffer.from(d.base64, "base64"));
+  }
+  if (d?.type === "url") {
+    const href = d.url instanceof URL ? d.url.href : String(d.url);
+    const b64 = href.slice(href.indexOf(",") + 1);
+    return new Uint8Array(Buffer.from(b64, "base64"));
+  }
+  return new Uint8Array(0);
+}
+
 export const VISUAL_EVAL_MAX_ROUNDS = 6;
 export const VISUAL_EVAL_MAX_READ_CALLS = 12;
 export const VISUAL_EVAL_MAX_WRITE_ATTEMPTS = 8;
+
+/**
+ * Eval 专用 Toolset（Visual Intake Benchmark 范围）：
+ * = 生产 Read Tools（含 propose_visual_actions）+ 生产 Write Tools（Reminder 三件除外——
+ *   create_reminder 是根级 discriminatedUnion schema，序列化无根 type:"object"，部分上游（如 Kimi K3）会整体拒绝；
+ *   生产保持不动，Eval 范围也不涉及 Reminder）+ begin_final_answer。
+ * Write Tools 仍全部暴露给模型，生产 Visual Guard 负责拦截（Direct Write Attempt 记录）。 */
+export function buildVisualEvalToolSet() {
+  const { create_reminder, update_reminder, delete_reminder, ...writeTools } = KIRO_WRITE_TOOLS;
+  return {
+    ...KIRO_READ_TOOLS,
+    ...writeTools,
+    [KIRO_FINAL_ANSWER_TOOL_NAME]: tool({
+      description: KIRO_FINAL_ANSWER_TOOL_DESCRIPTION,
+      inputSchema: z.object({}),
+    }),
+  };
+}
 
 /** Eval V1.2：runtime error message 安全归一化 + hard bound（绝不落 raw provider body / key / stack） */
 export function safeRuntimeErrorMessage(err: unknown): { code?: string; message: string } {
@@ -196,13 +234,25 @@ export async function runVisualEvalScenario(input: {
 
   try {
     for (; rounds < VISUAL_EVAL_MAX_ROUNDS; rounds++) {
-      const result = streamText({
-        model: lm,
-        system,
-        messages: await convertToModelMessages(messages as never),
-        tools: getKiroToolsForRequest({}),
-        maxOutputTokens: 1024,
-      });
+    // 能力感知：fileParts:false 的模型（如 Kimi K3）需要 image part（生产 Vision 链同为 image part）
+    const converted = await convertToModelMessages(messages as never);
+    let modelMessages = converted as unknown as { role: string; content: Array<Record<string, unknown>> }[];
+    if (!definition.capabilities.fileParts) {
+      modelMessages = converted.map((m) => ({
+        ...m,
+        content: (m.content as Array<Record<string, unknown>>).map((p) => {
+          if (p.type !== "file") return p;
+          return { type: "image", image: filePartToImageBytes(p.data), mediaType: p.mediaType };
+        }),
+      }));
+    }
+    const result = streamText({
+      model: lm,
+      system,
+      messages: modelMessages as never,
+      tools: buildVisualEvalToolSet(),
+      maxOutputTokens: 1024,
+    });
 
       const toolCalls: RawToolCall[] = [];
       let text = "";

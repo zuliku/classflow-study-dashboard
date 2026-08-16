@@ -51,6 +51,7 @@ import {
   normalizeVisualPendingContinuation,
   buildVisualPendingContinuationSection,
 } from "@/lib/ai/visual/continuation";
+import { buildClassFlowContextSection } from "@/lib/ai/prompts/classFlowContextSection";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -319,10 +320,7 @@ export async function POST(req: NextRequest) {
   const visualPendingContinuationSection = buildVisualPendingContinuationSection(visualPendingContinuation);
 
   const systemMessage = baseContext
-    ? `${trustedBasePrompt}\n\n# 当前 ClassFlow 上下文\n${JSON.stringify({
-        baseContext,
-        contextRefs,
-      })}${projectInstructionsSection}${visualPendingContinuationSection}${memorySection}${attachmentSection(plan.attachmentContext)}${visionPagesSection}${computerWorkspaceContext}${workspaceInstructionsSection}${artifactContextNotice}`
+    ? `${trustedBasePrompt}${buildClassFlowContextSection(baseContext, contextRefs)}${projectInstructionsSection}${visualPendingContinuationSection}${memorySection}${attachmentSection(plan.attachmentContext)}${visionPagesSection}${computerWorkspaceContext}${workspaceInstructionsSection}${artifactContextNotice}`
     : trustedBasePrompt + projectInstructionsSection + visualPendingContinuationSection + memorySection + attachmentSection(plan.attachmentContext) + visionPagesSection + computerWorkspaceContext + workspaceInstructionsSection + artifactContextNotice;
 
   try {

@@ -13,6 +13,7 @@
     "test:docx:inspect": "vitest run scripts/docx-compat/inspect-package.test.ts",
     "test:docx:openxml": "node scripts/docx-compat/validate-openxml.mjs",
     "eval:visual": "vitest run tests/visualIntakeEval.test.ts",
+    "eval:visual:fixtures": "vitest run scripts/visual-intake-eval/fixtures.test.ts",
     "eval:visual:live": "vitest run scripts/visual-intake-eval/run.test.ts",
     "test:e2e": "playwright test"
   },

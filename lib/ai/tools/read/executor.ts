@@ -63,6 +63,9 @@ export interface ReadToolExecutionContext {
    * 澄清链 Turn 无新图片时，Proposal 来源授权必须由真实 continuation 数据支撑。
    */
   visualPendingContinuation?: VisualPendingContinuation | null;
+  /** Eval V1.1：deterministic clock override（Evaluator 用固定时间；生产不传 = 运行时真实时钟） */
+  now?: Date;
+  timezone?: string;
 }
 
 export type ReadToolResult<T> =
@@ -154,8 +157,10 @@ function materialMeta(m: Material) {
 
 // ---------- 13 个 Read Tool ----------
 
-export function getCurrentContext(state: ReadToolState): ReadToolResult<unknown> {
-  const now = new Date();
+export function getCurrentContext(state: ReadToolState, _input: unknown, context?: ReadToolExecutionContext): ReadToolResult<unknown> {
+  // Eval V1.1：deterministic clock override（Evaluator 传固定 now/timezone；生产不传 → 运行时真实时钟）
+  const now = context?.now ?? new Date();
+  const timezone = context?.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone ?? "local";
   return {
     ok: true,
     data: {
@@ -163,7 +168,7 @@ export function getCurrentContext(state: ReadToolState): ReadToolResult<unknown>
       currentWeek: state.currentSemesterWeek,
       semesterName: state.semester.name,
       now: format(now, "yyyy-MM-dd HH:mm EEEE", { locale: zhCN }),
-      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "local",
+      timezone,
       selectedCourse: state.selectedCourseId
         ? (() => {
             const c = findCourse(state, state.selectedCourseId);
