@@ -74,10 +74,10 @@ test("Computer controls：Sandbox 引导 → 状态同步（Composer ↔ Setting
   await expect(workspaceRows.first().getByRole("button", { name: /删除工作区/ })).toBeVisible();
   // canonical Sandbox 已存在 → 不再显示「使用 Kiro 内置工作区」（杜绝重复创建）
   await expect(page.getByRole("button", { name: "使用 Kiro 内置工作区" })).toHaveCount(0);
-  // Task A：添加本地位置 位于授权位置 header action 区，不在 Workspace row 内
+  // Task A：添加本地文件夹 位于授权位置 header action 区，不在 Workspace row 内
   const authActions = page.getByTestId("kiro-authorization-actions");
-  await expect(authActions.getByRole("button", { name: "添加本地位置" })).toBeVisible();
-  await expect(workspaceRows.first().getByRole("button", { name: "添加本地位置" })).toHaveCount(0);
+  await expect(authActions.getByRole("button", { name: "添加本地文件夹" })).toBeVisible();
+  await expect(workspaceRows.first().getByRole("button", { name: "添加本地文件夹" })).toHaveCount(0);
 
   // 7. Settings → Kiro：思考程度可调（deepseek-v4-flash 支持 thinking；与 Composer 同一 store）
   await page.getByRole("navigation", { name: "设置导航" }).getByRole("button", { name: "Kiro" }).click();

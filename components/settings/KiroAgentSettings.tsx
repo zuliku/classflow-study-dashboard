@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import { FolderOpen, HardDrive, ShieldAlert, Trash2 } from "lucide-react";
+import { FolderOpen, HardDrive, ShieldAlert, Trash2, RefreshCw } from "lucide-react";
 import { useKiroComputerStore } from "@/store/useKiroComputerStore";
 import { useConfirmStore } from "@/store/useConfirmStore";
 import { useToastStore } from "@/store/useToastStore";
@@ -13,12 +13,19 @@ import { SettingsToggle, SettingsSegmentedControl } from "@/components/settings/
 import { Button } from "@/components/ui/Button";
 import { IconButton } from "@/components/ui/IconButton";
 import {
-  chooseBrowserWorkspaceDirectory,
   queryBrowserGrant,
   supportsFileSystemAccess,
   forgetBrowserWorkspaceGrant,
   BrowserGrantStatus,
 } from "@/lib/ai/computer/workspace/grants";
+import { isNativeAdapterRef, isClassFlowDesktopRuntime } from "@/lib/desktop/bridge";
+import {
+  authorizeLocalFolder,
+  resolveWorkspaceRootAvailability,
+  reauthorizeNativeWorkspaceRoot,
+  forgetNativeWorkspaceGrant,
+  WorkspaceRootAvailability,
+} from "@/lib/ai/computer/workspace/native";
 import { clearSandboxAdapter } from "@/lib/ai/computer/adapters/sandbox";
 import {
   adapterRefStillReferenced,
@@ -39,6 +46,23 @@ function isSandboxAdapterRef(ref: string): boolean {
   return ref === "sandbox-default" || ref.startsWith("sandbox");
 }
 
+/** Native root 状态文案（runtime facts；不在 UI 暴露 adapterRef / grantId / native 术语） */
+function nativeRootStatusLabel(avail: WorkspaceRootAvailability): {
+  label: string;
+  tone: "ok" | "warn" | "muted";
+} {
+  switch (avail) {
+    case "available":
+      return { label: "已授权", tone: "ok" };
+    case "permission-required":
+      return { label: "需要重新授权", tone: "warn" };
+    case "missing-grant":
+      return { label: "未授权", tone: "warn" };
+    case "runtime-unavailable":
+      return { label: "仅桌面版可访问", tone: "muted" };
+  }
+}
+
 /** Agent 与权限（Settings V4）：用户优先理解「能不能操作 / 能操作哪里 / 自动到什么程度」 */
 export function KiroAgentSettings() {
   const {
@@ -56,64 +80,80 @@ export function KiroAgentSettings() {
   const pushToast = useToastStore((s) => s.pushToast);
 
   const [grantStatus, setGrantStatus] = useState<Record<string, BrowserGrantStatus>>({});
+  // Native V1：root 运行时可用性（runtime facts；不持久化）
+  const [rootAvailability, setRootAvailability] = useState<Record<string, WorkspaceRootAvailability>>({});
   const [addingLocation, setAddingLocation] = useState(false);
+  const [reauthorizingRoot, setReauthorizingRoot] = useState<string | null>(null);
   const [error, setError] = useState("");
 
   const activeWorkspace = workspaces.find((w) => w.id === activeWorkspaceId) ?? null;
   const hasCanonicalSandbox = workspaces.some(isDefaultSandboxWorkspace);
 
-  // 启动 + workspaces 变化时查询各 root 的授权状态
+  // 启动 + workspaces 变化时查询各 root 的授权/可用性状态
   useEffect(() => {
     let alive = true;
     const statuses: Record<string, BrowserGrantStatus> = {};
-    const refs = new Set<string>();
+    const avail: Record<string, WorkspaceRootAvailability> = {};
+    const browserRefs = new Set<string>();
+    const rootRefs: { ref: string; root: KiroWorkspaceMeta["roots"][number] }[] = [];
     for (const w of workspaces) {
-      for (const r of w.roots) refs.add(r.adapterRef);
+      for (const r of w.roots) {
+        rootRefs.push({ ref: r.adapterRef, root: r });
+        if (!isNativeAdapterRef(r.adapterRef) && !isSandboxAdapterRef(r.adapterRef)) {
+          browserRefs.add(r.adapterRef);
+        }
+      }
     }
-    void Promise.all(
-      Array.from(refs).map(async (ref) => {
-        statuses[ref] = await queryBrowserGrant(ref);
-      })
-    ).then(() => {
-      if (alive) setGrantStatus(statuses);
+    void Promise.all([
+      Promise.all(
+        Array.from(browserRefs).map(async (ref) => {
+          statuses[ref] = await queryBrowserGrant(ref);
+        })
+      ),
+      Promise.all(
+        rootRefs.map(async ({ ref, root }) => {
+          avail[ref] = await resolveWorkspaceRootAvailability(root);
+        })
+      ),
+    ]).then(() => {
+      if (alive) {
+        setGrantStatus(statuses);
+        setRootAvailability(avail);
+      }
     });
     return () => {
       alive = false;
     };
   }, [workspaces]);
 
-  /** 添加位置（显式用户手势）：支持 Chromium 选真实文件夹；否则仅内置工作区路径 */
-  const handleAddBrowserLocation = async () => {
-    if (!supportsFileSystemAccess()) {
+  /** 添加位置（显式用户手势）：Desktop Runtime → Native picker；否则 Chromium → Browser picker */
+  const handleAddLocation = async () => {
+    if (!isClassFlowDesktopRuntime() && !supportsFileSystemAccess()) {
       setError("当前浏览器不支持本地文件夹授权，请使用 Kiro 内置工作区。");
       return;
     }
     setAddingLocation(true);
     setError("");
     try {
-      const grant = await chooseBrowserWorkspaceDirectory();
-      if (!grant) return; // 用户取消 → 保持现状（不自动启用 Computer）
-      const now = new Date().toISOString();
-      const ws: KiroWorkspaceMeta = {
-        id: `ws-${crypto.randomUUID()}`,
-        name: grant.label,
-        roots: [
-          {
-            id: "root-1",
-            label: grant.label,
-            access: "read-write",
-            adapterRef: grant.adapterRef,
-          },
-        ],
-        createdAt: now,
-        updatedAt: now,
-      };
-      addWorkspace(ws);
-      setActiveWorkspaceId(ws.id);
-      setComputerEnabled(true);
-      setGrantStatus((s) => ({ ...s, [grant.adapterRef]: "granted" }));
+      const ws = await authorizeLocalFolder();
+      if (!ws) return; // 用户取消 → 保持现状（不自动启用 Computer）
+      setRootAvailability((s) => ({ ...s }));
+      pushToast({ message: `已添加《${ws.name}》` });
     } finally {
       setAddingLocation(false);
+    }
+  };
+
+  /** Native root 重新授权（新 picker 完成后替换 adapterRef；不假设同一路径） */
+  const handleReauthorizeNativeRoot = async (ws: KiroWorkspaceMeta, rootId: string) => {
+    setReauthorizingRoot(rootId);
+    setError("");
+    try {
+      const next = await reauthorizeNativeWorkspaceRoot(ws, rootId);
+      if (!next) return; // 取消 → 原授权不变
+      pushToast({ message: "已重新授权本地文件夹" });
+    } finally {
+      setReauthorizingRoot(null);
     }
   };
 
@@ -169,6 +209,9 @@ export function KiroAgentSettings() {
       try {
         if (isSandboxAdapterRef(ref)) {
           await clearSandboxAdapter(ref);
+        } else if (isNativeAdapterRef(ref)) {
+          // Native V1：只忘记授权映射（绝不删除真实目录内容）；Bridge 缺失时 no-op
+          await forgetNativeWorkspaceGrant(ref);
         } else {
           await forgetBrowserWorkspaceGrant(ref);
         }
@@ -183,11 +226,14 @@ export function KiroAgentSettings() {
 
   const handleDeleteWorkspace = (ws: KiroWorkspaceMeta) => {
     const isSandboxWs = ws.roots.some((r) => isSandboxAdapterRef(r.adapterRef));
+    const isNativeWs = ws.roots.some((r) => isNativeAdapterRef(r.adapterRef));
     confirmRequest({
-      title: isSandboxWs ? "删除 Kiro 内置工作区？" : "移除本地工作区？",
+      title: isSandboxWs ? "删除 Kiro 内置工作区？" : "移除本地文件夹授权？",
       description: isSandboxWs
         ? "此操作会删除该内置工作区在当前浏览器中保存的文件和工作区记录，无法撤销。"
-        : "ClassFlow 将忘记这个文件夹的授权记录，但不会删除电脑上的任何文件。",
+        : isNativeWs
+          ? "ClassFlow 将忘记这个文件夹的授权，但不会删除电脑上的任何文件。"
+          : "ClassFlow 将忘记这个文件夹的授权记录，但不会删除电脑上的任何文件。",
       confirmLabel: isSandboxWs ? "删除" : "移除",
       danger: true,
       onConfirm: () => void deleteWorkspace(ws),
@@ -246,9 +292,9 @@ export function KiroAgentSettings() {
               className="flex items-center gap-1.5 flex-wrap"
               data-testid="kiro-authorization-actions"
             >
-              <Button variant="secondary" size="sm" onClick={handleAddBrowserLocation} disabled={addingLocation}>
+              <Button variant="secondary" size="sm" onClick={handleAddLocation} disabled={addingLocation}>
                 <FolderOpen className="w-3 h-3" />
-                {addingLocation ? "授权中…" : "添加本地位置"}
+                {addingLocation ? "授权中…" : "添加本地文件夹"}
               </Button>
               {!hasCanonicalSandbox && (
                 <Button variant="ghost" size="sm" onClick={handleUseSandbox}>
@@ -274,6 +320,12 @@ export function KiroAgentSettings() {
                       .join(" · ")}`
                   : ws.roots
                       .map((root) => {
+                        if (isNativeAdapterRef(root.adapterRef)) {
+                          // Native V1：runtime 状态（仅桌面版可访问 / 已授权 / 需要重新授权）
+                          const avail = rootAvailability[root.adapterRef] ?? "available";
+                          const s = nativeRootStatusLabel(avail);
+                          return `本地文件夹 · ${s.label}${avail === "available" ? ` · ${root.access === "read-write" ? "读写" : "只读"}` : ""}`;
+                        }
                         const status = grantStatus[root.adapterRef] ?? "missing";
                         const grantLabel =
                           status === "granted" ? "已授权" : status === "missing" ? "未授权" : "需要重新授权";
@@ -298,6 +350,28 @@ export function KiroAgentSettings() {
                       <p className="text-[11px] font-bold text-charcoal truncate">{ws.name}</p>
                       <p className="text-[10px] text-sandrift truncate">{metadata}</p>
                     </div>
+                    {/* Native V1：需要重新授权时提供明确入口（新 grant 替换；取消则原授权不变） */}
+                    {ws.roots.some(
+                      (r) =>
+                        isNativeAdapterRef(r.adapterRef) &&
+                        (rootAvailability[r.adapterRef] === "permission-required" ||
+                          rootAvailability[r.adapterRef] === "missing-grant")
+                    ) && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="shrink-0"
+                        data-testid="kiro-native-reauthorize"
+                        disabled={reauthorizingRoot !== null}
+                        onClick={() => {
+                          const nativeRoot = ws.roots.find((r) => isNativeAdapterRef(r.adapterRef));
+                          if (nativeRoot) void handleReauthorizeNativeRoot(ws, nativeRoot.id);
+                        }}
+                      >
+                        <RefreshCw className="w-3 h-3" />
+                        {reauthorizingRoot !== null ? "授权中…" : "重新授权"}
+                      </Button>
+                    )}
                     {ws.id === activeWorkspaceId ? (
                       <span className="text-[10px] font-bold text-charcoal bg-pastel-mint px-1.5 py-0.5 rounded shrink-0">
                         当前
