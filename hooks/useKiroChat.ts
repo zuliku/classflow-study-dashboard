@@ -1354,7 +1354,12 @@ export function useKiroChat({
       // V4.6：真实 tool 时间点（test-only；不记录 tool 内容）
       turnPerf("toolExecutionComplete", toolCallId);
       turnPerf("addToolOutput", toolCallId);
-      if (!limitReachedRef.current) pendingAutoContinueRef.current = true;
+      // begin_final_answer 是内部控制信号：真实 Provider（如 DeepSeek）常把 boundary + Final Answer
+      // 放在同一响应并以 stop 结束 —— SDK 对 stop 响应不回填后不自动续跑，若挂起 awaiting-continuation
+      // 标记会让 turn 永久 in-flight。boundary 的语义是「正文即将开始」，不 arm 续跑标记：
+      // - boundary 单独一回合（finish tool-calls）→ SDK 仍会自行续跑（与标记无关）
+      // - boundary + final 同一响应（finish stop）→ 不回填后不续跑 → 正确 settle
+      if (!limitReachedRef.current && !isKiroFinalAnswerToolName(tool)) pendingAutoContinueRef.current = true;
       chat.addToolOutput({
         tool: tool as never,
         toolCallId,

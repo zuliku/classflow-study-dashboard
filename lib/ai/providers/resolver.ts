@@ -14,7 +14,7 @@ import { LanguageModel } from "ai";
 import { AIError } from "@/lib/ai/errors";
 import { AIProviderId, AICustomConfig, AIModelDefinition, AIProviderConfig } from "@/lib/ai/providers/types";
 import { DEEPSEEK_MODELS, deepSeekTransformRequestBody } from "@/lib/ai/providers/deepSeek";
-import { OPENCODE_MODELS, fetchOpenCodeGoModels } from "@/lib/ai/providers/openCodeGo";
+import { OPENCODE_MODELS, fetchOpenCodeGoModels, openCodeGoTransformRequestBody } from "@/lib/ai/providers/openCodeGo";
 import { getProviderConfig } from "@/lib/ai/providers/registry";
 
 export interface ResolveModelInput {
@@ -72,21 +72,25 @@ export function createLanguageModelFromDefinition(
   cfg: AIProviderConfig
 ): LanguageModel {
   if (definition.transport === "anthropic-messages") {
-    // OpenCode Go Messages：Bearer token（authToken），baseURL 由 Provider 自行拼接 /messages
+    // OpenCode Go Messages：真实验证（V4.7.2 real smoke）确认 /v1/messages 接受 x-api-key；
+    // Bearer authToken 会返回 401 Missing API key。baseURL 由 Provider 自行拼接 /messages。
     return createAnthropic({
       name: "classflow-kiro",
       baseURL: cfg.baseURL,
-      authToken: cfg.apiKey ?? "",
+      apiKey: cfg.apiKey ?? "",
     })(definition.id);
   }
   if (definition.transport === "openai-chat") {
     // DeepSeek V4：V4 默认 thinking=on，与 tool calling 不兼容 → 显式禁用（仅 DeepSeek 官方 transport）
+    // OpenCode Go chat/completions：tool schema 根节点校验严格 → 补 type:"object"（见 openCodeGo.ts）
     const deepSeekCompat = definition.provider === "deepseek";
+    const openCodeGoCompat = definition.provider === "opencode-go";
     return createOpenAICompatible({
       name: "classflow-kiro",
       baseURL: cfg.baseURL,
       apiKey: cfg.apiKey ?? "",
       ...(deepSeekCompat ? { transformRequestBody: deepSeekTransformRequestBody } : {}),
+      ...(openCodeGoCompat ? { transformRequestBody: openCodeGoTransformRequestBody } : {}),
       // Custom Provider：不自动跟随 redirect，避免 SSRF 跳转到私网地址
       fetch: cfg.noRedirect
         ? (input, init) =>

@@ -108,6 +108,40 @@ export const OPENCODE_MODELS: AIModelDefinition[] = [
 
 export const OPENCODE_DEFAULT_MODEL = "deepseek-v4-flash";
 
+/**
+ * OpenCode Go chat/completions 对 tool 参数 schema 校验严格（与 DeepSeek 官方一致）：
+ * z.discriminatedUnion 等 zod 结构经 AI SDK 转换后根节点无 type / type 非 "object" 会被 400 拒绝
+ * （真实验证：create_reminder 曾触发 "schema must be a JSON Schema of 'type: "object"', got 'type: null'"）。
+ * 与 DeepSeek 兼容层同一规则：只对「缺少根 type 且明显是 object 结构」的 schema 补 type:"object"，
+ * 不改字段/校验语义，不触碰工具定义（客户端 zod 校验不受影响）。
+ */
+function ensureObjectRootSchema(schema: unknown): unknown {
+  if (!schema || typeof schema !== "object") return schema;
+  const s = schema as Record<string, unknown>;
+  if (s.type === "object") return schema;
+  const looksLikeObject = s.properties !== undefined || Array.isArray(s.anyOf) || Array.isArray(s.oneOf);
+  if (!looksLikeObject) return schema;
+  return { ...s, type: "object" };
+}
+
+export function openCodeGoTransformRequestBody(body: Record<string, unknown>): Record<string, unknown> {
+  const tools = Array.isArray(body.tools)
+    ? body.tools.map((t) => {
+        if (!t || typeof t !== "object") return t;
+        const toolObj = t as Record<string, unknown>;
+        const fn =
+          typeof toolObj.function === "object" && toolObj.function !== null
+            ? (toolObj.function as Record<string, unknown>)
+            : null;
+        if (!fn || typeof fn.parameters !== "object" || fn.parameters === null) return t;
+        const fixed = ensureObjectRootSchema(fn.parameters);
+        if (fixed === fn.parameters) return t;
+        return { ...toolObj, function: { ...fn, parameters: fixed } };
+      })
+    : body.tools;
+  return { ...body, tools };
+}
+
 export function getOpenCodeGoConfig(apiKey: string): AIProviderConfig {
   return { baseURL: AI.OPENCODE_BASE_URL, apiKey };
 }
