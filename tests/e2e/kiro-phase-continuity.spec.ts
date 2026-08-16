@@ -342,6 +342,125 @@ async function waitForToolDone(page: Page) {
 }
 
 /**
+ * V4.7.2 real-provider 回归：boundary + Final Answer 在同一响应（finish stop）——
+ * 真实 DeepSeek 行为。boundary 输出不得 arm awaiting-continuation，否则 turn 永久卡在-flight。
+ */
+function startBoundarySameResponseServer(toolCount: number, gapMs: number) {
+  const server = http.createServer((req, res) => {
+    if (req.method === "OPTIONS") {
+      res.writeHead(204);
+      res.end();
+      return;
+    }
+    let body = "";
+    req.on("data", (c) => (body += c));
+    req.on("end", () => {
+      let outputCount = 0;
+      let boundaryEmitted = false;
+      try {
+        const parsed = JSON.parse(body || "{}") as {
+          messages?: { role: string; parts?: { type: string; state?: string; toolName?: string }[] }[];
+        };
+        const messages = parsed.messages ?? [];
+        let lastUserIdx = -1;
+        for (let i = 0; i < messages.length; i++) {
+          if (messages[i].role === "user") lastUserIdx = i;
+        }
+        const currentParts = messages.slice(lastUserIdx + 1).flatMap((m) => m.parts ?? []);
+        outputCount = currentParts.filter(
+          (p) => p.type.startsWith("tool-") && p.state === "output-available" && !p.toolName?.startsWith("begin_")
+        ).length;
+        boundaryEmitted = currentParts.some((p) => p.type === "tool-begin_final_answer" && p.state === "output-available");
+      } catch {
+        /* 忽略 */
+      }
+      res.writeHead(200, {
+        "content-type": "text/event-stream",
+        "cache-control": "no-cache",
+        "access-control-allow-origin": "*",
+      });
+      const send = (stages: { delay?: number; events: string[] }[]) => {
+        void (async () => {
+          for (const st of stages) {
+            if (st.delay) await new Promise((r) => setTimeout(r, st.delay));
+            if (st.events.length > 0) res.write(sse(st.events));
+          }
+          res.end();
+        })();
+      };
+      if (outputCount < toolCount) {
+        const idx = outputCount + 1;
+        send([
+          { delay: gapMs, events: [JSON.stringify({ type: "start", messageId: "c2-1" }), JSON.stringify({ type: "start-step" }), JSON.stringify({ type: "text-start", id: `c2t${idx}` }), JSON.stringify({ type: "text-delta", id: `c2t${idx}`, delta: `第 ${idx} 步检查中` }), JSON.stringify({ type: "text-end", id: `c2t${idx}` })] },
+          { delay: 0, events: [
+            JSON.stringify({ type: "tool-input-start", toolCallId: `c2_call_${idx}`, toolName: "search_assignments" }),
+            JSON.stringify({ type: "tool-input-delta", toolCallId: `c2_call_${idx}`, inputTextDelta: '{"scope":"today"}' }),
+            JSON.stringify({ type: "tool-input-available", toolCallId: `c2_call_${idx}`, toolName: "search_assignments", input: { scope: "today" } }),
+            JSON.stringify({ type: "finish-step" }),
+            JSON.stringify({ type: "finish", finishReason: "tool-calls" }),
+          ] },
+        ]);
+        return;
+      }
+      if (!boundaryEmitted) {
+        // boundary + Final Answer 同一响应（finish stop）——真实 DeepSeek 行为
+        send([
+          { delay: gapMs, events: [
+            JSON.stringify({ type: "start", messageId: "c2-1" }),
+            JSON.stringify({ type: "start-step" }),
+            JSON.stringify({ type: "tool-input-start", toolCallId: "c2_b", toolName: "begin_final_answer" }),
+            JSON.stringify({ type: "tool-input-delta", toolCallId: "c2_b", inputTextDelta: "{}" }),
+            JSON.stringify({ type: "tool-input-available", toolCallId: "c2_b", toolName: "begin_final_answer", input: {} }),
+            JSON.stringify({ type: "finish-step" }),
+            JSON.stringify({ type: "start-step" }),
+            JSON.stringify({ type: "text-start", id: "c2-f" }),
+            JSON.stringify({ type: "text-delta", id: "c2-f", delta: "最终回答完成。" }),
+            JSON.stringify({ type: "text-end", id: "c2-f" }),
+            JSON.stringify({ type: "finish-step" }),
+            JSON.stringify({ type: "finish", finishReason: "stop" }),
+          ] },
+        ]);
+        return;
+      }
+      send([{ delay: 0, events: [] }]);
+    });
+  });
+  return new Promise<{ url: string; close: () => Promise<void> }>((resolve) => {
+    server.listen(0, "127.0.0.1", () => {
+      const port = (server.address() as { port: number }).port;
+      resolve({
+        url: `http://127.0.0.1:${port}/sse`,
+        close: async () => {
+          server.closeAllConnections();
+          await new Promise<void>((r) => server.close(() => r()));
+        },
+      });
+    });
+  });
+}
+
+test("C2: boundary + Final 同一响应（finish stop）→ turn 正确 settle，不得卡 awaiting-continuation", async ({ page }) => {
+  const sse = await startBoundarySameResponseServer(1, 50);
+  await page.route("**/api/ai/chat", (route) => route.continue({ url: sse.url }));
+  await page.addInitScript(({ settings, key }) => {
+    localStorage.setItem("classflow-ai-settings-v1", JSON.stringify({ version: 0, state: settings }));
+    sessionStorage.setItem("classflow-ai-key:deepseek", key);
+  }, { settings: AI_SETTINGS, key: "sk-test-key" });
+  await openKiro(page);
+  const composer = page.getByTestId("kiro-composer");
+  await composer.getByLabel("Ask Kiro").fill("检查任务");
+  await composer.getByLabel("发送").click();
+  await waitForToolDone(page);
+  // 关键断言：boundary+final 同响应（stop）后 turn 必须 settle（Send 回到 idle）
+  await expect(page.getByTestId("kiro-message").last()).toContainText("最终回答完成", { timeout: 60000 });
+  await expect(composer.getByLabel("发送")).toBeVisible({ timeout: 60000 });
+  await expect(composer.getByLabel("停止生成")).toHaveCount(0);
+  await composer.getByLabel("Ask Kiro").fill("确认");
+  await expect(composer.getByLabel("发送")).toBeEnabled();
+  await sse.close();
+});
+
+/**
  * L1（V4.7.1）：Tool output 已 addToolOutput → continuation request 人为 delay 3500ms。
  * 关键：3s 处（旧 arbitrary timer 的触发点）不得 settled —— 3.5s 期间 turn 保持 in-flight；
  * continuation 到达后正常继续。证明删除 3s timer 后慢 continuation 不会误结束 Turn。

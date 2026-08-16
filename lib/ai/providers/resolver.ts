@@ -3,7 +3,7 @@
  * provider/model → AIModelDefinition（transport 唯一来源）→ AI SDK LanguageModel。
  * - openai-chat        → @ai-sdk/openai-compatible
  * - openai-responses   → @ai-sdk/openai（显式 .responses(modelId)，不依赖自动推断）
- * - anthropic-messages → @ai-sdk/anthropic（OpenCode Go Messages：Bearer authToken，baseURL 不带 /messages）
+ * - anthropic-messages → @ai-sdk/anthropic（OpenCode Go Messages：apiKey → x-api-key，baseURL 不带 /messages）
  * 三种 transport 均有 Runtime adapter；Tool 语义与 transport 完全解耦。
  */
 

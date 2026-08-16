@@ -114,7 +114,28 @@ describe("createLanguageModelFromDefinition（Adapter 选择）", () => {
     expect(customArgs.transformRequestBody).toBeUndefined();
   });
 
-  it("F2. anthropic-messages → Anthropic adapter（Bearer authToken，baseURL 不含 /messages）", () => {
+  it("F1c. OpenCode Go chat：注入 tool-schema root transform，且不叠 DeepSeek thinking transform", () => {
+    createLanguageModelFromDefinition(
+      { id: "deepseek-v4-flash", name: "x", provider: "opencode-go", vendor: "deepseek", transport: "openai-chat", capabilities: { streaming: true, tools: true, vision: false, fileParts: false } },
+      { baseURL: "https://opencode.ai/zen/go/v1", apiKey: "sk-go" }
+    );
+    const ocArgs = (openAICompatibleFactory.mock.calls[0] as unknown[])[0] as { transformRequestBody?: (body: Record<string, unknown>) => Record<string, unknown> };
+    expect(typeof ocArgs.transformRequestBody).toBe("function");
+    // OpenCode transform 只修 tool schema 根，不注入 DeepSeek thinking
+    const body = ocArgs.transformRequestBody?.({ model: "deepseek-v4-flash", messages: [], tools: [] });
+    expect(body?.thinking).toBeUndefined();
+    expect(body?.tools).toEqual([]);
+    // DeepSeek direct：仍只使用 deepSeekTransformRequestBody（thinking disabled），不叠 OpenCode transform
+    createLanguageModelFromDefinition(
+      { id: "deepseek-v4-flash", name: "x", provider: "deepseek", vendor: "deepseek", transport: "openai-chat", capabilities: { streaming: true, tools: true, vision: false, fileParts: false } },
+      { baseURL: "https://api.deepseek.com", apiKey: "sk-1" }
+    );
+    const dsArgs = (openAICompatibleFactory.mock.calls[1] as unknown[])[0] as { transformRequestBody?: (body: Record<string, unknown>) => Record<string, unknown> };
+    const dsBody = dsArgs.transformRequestBody?.({ model: "deepseek-v4-flash", messages: [], tools: [] });
+    expect(dsBody?.thinking).toEqual({ type: "disabled" });
+  });
+
+  it("F2. anthropic-messages → Anthropic adapter（x-api-key / apiKey，baseURL 不含 /messages）", () => {
     const m = createLanguageModelFromDefinition(
       { id: "minimax-m3", name: "x", provider: "opencode-go", vendor: null, transport: "anthropic-messages", capabilities: { streaming: true, tools: true, vision: false, fileParts: false } },
       { baseURL: "https://opencode.ai/zen/go/v1", apiKey: "sk-go" }
@@ -123,8 +144,9 @@ describe("createLanguageModelFromDefinition（Adapter 选择）", () => {
     expect(modelIdOf(m)).toBe("minimax-m3");
     const args = (anthropicFactory.mock.calls[0] as unknown[])[0] as { baseURL?: string; authToken?: string; apiKey?: string; transformRequestBody?: unknown };
     expect(args.baseURL).toBe("https://opencode.ai/zen/go/v1");
-    expect(args.authToken).toBe("sk-go");
-    expect(args.apiKey).toBeUndefined();
+    // V4.7.2 真实验证：OpenCode Go /v1/messages 接受 x-api-key（apiKey），Bearer authToken 返回 401
+    expect(args.apiKey).toBe("sk-go");
+    expect(args.authToken).toBeUndefined();
     expect(args.transformRequestBody).toBeUndefined(); // Anthropic transport 不受 DeepSeek 兼容层影响
   });
 
@@ -193,7 +215,7 @@ describe("resolveLanguageModel（统一入口）", () => {
     expect(modelIdOf(resolved.model)).toBe("deepseek-v4-flash");
   });
 
-  it("Messages 模型 → Anthropic LanguageModel（authToken）", async () => {
+  it("Messages 模型 → Anthropic LanguageModel（apiKey → x-api-key）", async () => {
     const resolved = await resolveLanguageModel({
       provider: "opencode-go",
       model: "minimax-m3",
@@ -201,6 +223,9 @@ describe("resolveLanguageModel（统一入口）", () => {
     });
     expect(resolved.definition.transport).toBe("anthropic-messages");
     expect(providerOf(resolved.model)).toBe("anthropic");
+    const args = (anthropicFactory.mock.calls[0] as unknown[])[0] as { apiKey?: string; authToken?: string };
+    expect(args.apiKey).toBe("sk-go");
+    expect(args.authToken).toBeUndefined();
   });
 
   it("未知模型 → AIError MODEL_UNAVAILABLE", async () => {

@@ -127,6 +127,7 @@ import {
 } from "@/lib/ai/presentation/liveTurnPresentation";
 import {
   isKiroFinalAnswerToolName,
+  shouldArmAutoContinuation,
 } from "@/lib/ai/tools/finalAnswer";
 import { CURRENT_DOCUMENT_AUTHORING_VERSION } from "@/lib/ai/computer/documents/authoring/protocol";
 import {
@@ -1359,7 +1360,7 @@ export function useKiroChat({
       // 标记会让 turn 永久 in-flight。boundary 的语义是「正文即将开始」，不 arm 续跑标记：
       // - boundary 单独一回合（finish tool-calls）→ SDK 仍会自行续跑（与标记无关）
       // - boundary + final 同一响应（finish stop）→ 不回填后不续跑 → 正确 settle
-      if (!limitReachedRef.current && !isKiroFinalAnswerToolName(tool)) pendingAutoContinueRef.current = true;
+      if (shouldArmAutoContinuation(tool, limitReachedRef.current)) pendingAutoContinueRef.current = true;
       chat.addToolOutput({
         tool: tool as never,
         toolCallId,

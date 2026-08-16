@@ -23,3 +23,55 @@ export const KIRO_FINAL_ANSWER_TOOL_DESCRIPTION =
 export function isKiroFinalAnswerToolName(toolName: string): boolean {
   return toolName === KIRO_FINAL_ANSWER_TOOL_NAME;
 }
+
+/**
+ * 是否应 arm「SDK 自动续跑」标记（V4.7.2 真实验证回归）。
+ * business tool output（read/write）→ 期望 SDK 自动续跑 → true；
+ * begin_final_answer 是内部控制信号：
+ * - boundary + Final Answer 在同一 stop 响应中返回时，SDK 不回填后不自动续跑，
+ *   若 arm 标记会让 turn 永久停在 awaiting-continuation → false；
+ * - boundary 单独 tool-call 响应（finish tool-calls）时 SDK 仍按 complete tool calls 自行续跑，
+ *   与标记无关。
+ * limitReached → 不续跑 → false。
+ */
+export function shouldArmAutoContinuation(toolName: string, limitReached: boolean): boolean {
+  if (limitReached) return false;
+  if (isKiroFinalAnswerToolName(toolName)) return false;
+  return true;
+}
+
+// ---------------- Final Answer Boundary Step Policy（Production Route + Text Eval 共用） ----------------
+
+export interface KiroFinalAnswerStepLike {
+  toolCalls?: ReadonlyArray<{ toolName: string }>;
+}
+
+/** 历史 step 是否已出现 begin_final_answer（Final Answer Boundary） */
+export function kiroFinalAnswerBoundarySeen(steps: ReadonlyArray<KiroFinalAnswerStepLike>): boolean {
+  return steps.some((s) => (s.toolCalls ?? []).some((tc) => tc.toolName === KIRO_FINAL_ANSWER_TOOL_NAME));
+}
+
+/** Boundary 后最多再走 N 个 step（Final text）的 stopWhen（boundary 本身不消耗 business quota） */
+export function kiroFinalAnswerMaxStepsStopWhen(
+  maxFinalSteps = 1
+): (options: { steps: unknown[] }) => boolean {
+  return (options) => options.steps.length >= maxFinalSteps;
+}
+
+export interface KiroFinalAnswerStepControl {
+  activeTools: [];
+  toolChoice?: "none";
+  stopWhen: (options: { steps: unknown[] }) => boolean;
+}
+
+/**
+ * Boundary 后的 step 控制（纯规则）：关闭全部业务工具 + 最多再走 N 步（Final text）。
+ * omitToolChoice：DeepSeek Thinking Mode 只关 activeTools，不发送 tool_choice（生产行为）。
+ */
+export function kiroFinalAnswerAfterBoundaryControl(omitToolChoice: boolean, maxFinalSteps = 1): KiroFinalAnswerStepControl {
+  return {
+    activeTools: [],
+    ...(omitToolChoice ? {} : { toolChoice: "none" as const }),
+    stopWhen: kiroFinalAnswerMaxStepsStopWhen(maxFinalSteps),
+  };
+}
