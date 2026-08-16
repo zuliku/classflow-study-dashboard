@@ -61,7 +61,66 @@ interface DDLMoveFeedbackState {
   targetDate: string;
 }
 
+/** Agenda 可见性决策（hysteresis；纯函数便于测试）：
+ *  visible 时：containerHeight < required → hide
+ *  hidden 时：containerHeight >= required + hysteresis → show */
+export function shouldShowAgenda(input: {
+  visible: boolean;
+  containerHeight: number;
+  requiredHeight: number;
+  hysteresis?: number;
+}): boolean {
+  const h = input.hysteresis ?? AGENDA_SHOW_HYSTERESIS_PX;
+  if (input.visible) {
+    return input.containerHeight >= input.requiredHeight;
+  }
+  return input.containerHeight >= input.requiredHeight + h;
+}
+
 const FEEDBACK_MS = 5000;
+
+// ---- Layout Hotfix：Agenda 自适应（container-height 判断；不再用 viewport max-height）----
+// 最小日期行高（px）：空间不足时缩到此值；空间充足时由 1fr 均分扩展。
+// 实测校准（2026-08）：6 行月份 required = 370（32 padding + 36 gaps + header 40 + weekday 24 +
+// 6×22+20 日期格 + agenda 86）；基础 shell 380 → 容器 ~378 ≥ 370 → 手机/平板 6 行月份 Agenda 仍显示
+// （既有 mobile DDL cell 测试语义保持）；315 短 shell → 313 < 349（5 行也放不下）→ 正确隐藏。
+const MIN_DATE_ROW_HEIGHT = 22;
+// 日期格行间 gap（grid gap-1 = 4px）
+const GRID_ROW_GAP_PX = 4;
+// Card root 垂直 padding（p-4 = 16×2）
+const CARD_PADDING_VERTICAL_PX = 32;
+// space-y-3 的 section gap（Agenda visible 时 3 段 / hidden 时 2 段）
+const SECTION_GAP_PX = 12;
+// Agenda 恢复阈值 hysteresis：容器高度由外层 Shell 固定（不随 Agenda 状态变化）——
+// 不存在 show/hide 反馈回路，8px 足够覆盖 ResizeObserver 测量抖动（±1-2px），
+// 且能保证所有 shell 档位（378/388/408/418）在变高后都能重新显示 Agenda。
+const AGENDA_SHOW_HYSTERESIS_PX = 8;
+// 未测量前的兜底 chrome 高度（首次渲染 / Agenda 隐藏期间使用）
+const FALLBACK_HEADER_PX = 44;
+const FALLBACK_WEEKDAY_PX = 24;
+const FALLBACK_AGENDA_PX = 88;
+
+/** Agenda visible 所需的最小容器高度（weekRows-aware；纯函数便于测试）：
+ *  padding + sections + header + weekday + 日期格（rows×min + gaps）+ agenda natural。
+ *  Agenda 隐藏 / 恢复共用同一 requiredHeight（阈值差由调用方 hysteresis 提供）。 */
+export function computeAgendaRequiredHeight(input: {
+  weekRows: number;
+  headerHeight: number;
+  weekdayHeight: number;
+  agendaHeight: number;
+}): number {
+  const { weekRows, headerHeight, weekdayHeight, agendaHeight } = input;
+  const dateRows =
+    weekRows * MIN_DATE_ROW_HEIGHT + Math.max(0, weekRows - 1) * GRID_ROW_GAP_PX;
+  return (
+    CARD_PADDING_VERTICAL_PX +
+    3 * SECTION_GAP_PX +
+    headerHeight +
+    weekdayHeight +
+    dateRows +
+    agendaHeight
+  );
+}
 
 export function MiniCalendar() {
   const {
@@ -79,12 +138,69 @@ export function MiniCalendar() {
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState(new Date());
 
-  const monthStart = startOfMonth(currentMonth);
-  const monthEnd = endOfMonth(monthStart);
+  // ---- Layout Hotfix：container-height 驱动的 Agenda 可见性 ----
+  // 判断依据是 MiniCalendar 自身可用高度（Sidebar/Header/Browser chrome/Overview 布局都会改变它），
+  // 不再使用 window.innerHeight / @media(max-height:800px)。
+  const cardRef = useRef<HTMLDivElement | null>(null);
+  const headerRef = useRef<HTMLDivElement | null>(null);
+  const weekdayRef = useRef<HTMLDivElement | null>(null);
+  const agendaRef = useRef<HTMLDivElement | null>(null);
+  const [containerHeight, setContainerHeight] = useState<number | null>(null);
+  const [agendaVisible, setAgendaVisible] = useState(true);
+  const [measured, setMeasured] = useState({
+    header: FALLBACK_HEADER_PX,
+    weekday: FALLBACK_WEEKDAY_PX,
+    agenda: FALLBACK_AGENDA_PX,
+  });
+
+  // 容器高度：真实 DOM 测量（Shell 高度由外层布局决定；Agenda 显示状态不影响容器高度）
+  useEffect(() => {
+    const el = cardRef.current;
+    if (!el) return;
+    const apply = () => setContainerHeight(el.clientHeight);
+    apply();
+    const ro = new ResizeObserver(apply);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  const monthKey = format(currentMonth, "yyyy-MM");
+
+  // 实测 Header / Weekday / Agenda natural 高度（Agenda 隐藏期间沿用最后一次测量值；
+  // 月份切换（weekRows 变化）后重新测量）
+  useEffect(() => {
+    const h = headerRef.current?.offsetHeight;
+    const w = weekdayRef.current?.offsetHeight;
+    const a = agendaRef.current?.offsetHeight;
+    if (h) setMeasured((m) => (m.header === h ? m : { ...m, header: h }));
+    if (w) setMeasured((m) => (m.weekday === w ? m : { ...m, weekday: w }));
+    if (a) setMeasured((m) => (m.agenda === a ? m : { ...m, agenda: a }));
+  }, [monthKey, agendaVisible]);
+
+  const monthStart = startOfMonth(currentMonth);  const monthEnd = endOfMonth(monthStart);
   const startDate = startOfWeek(monthStart, { weekStartsOn: 1 });
   const endDate = endOfWeek(monthEnd, { weekStartsOn: 1 });
 
   const days = eachDayOfInterval({ start: startDate, end: endDate });
+  const weekRows = days.length / 7;
+
+  // ---- Layout Hotfix：weekRows-aware required height + hysteresis ----
+  const agendaRequiredHeight = computeAgendaRequiredHeight({
+    weekRows,
+    headerHeight: measured.header,
+    weekdayHeight: measured.weekday,
+    agendaHeight: measured.agenda,
+  });
+  useEffect(() => {
+    if (containerHeight === null) return;
+    const next = shouldShowAgenda({
+      visible: agendaVisible,
+      containerHeight,
+      requiredHeight: agendaRequiredHeight,
+    });
+    if (next !== agendaVisible) setAgendaVisible(next);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [containerHeight, agendaRequiredHeight, agendaVisible]);
 
   // 月份切换方向：上一月 -6px 进入，下一月 +6px 进入（仅网格，卡片不动）
   const prevMonthRef = useRef(currentMonth);
@@ -95,8 +211,6 @@ export function MiniCalendar() {
       prevMonthRef.current = currentMonth;
     }
   }, [currentMonth]);
-
-  const monthKey = format(currentMonth, "yyyy-MM");
 
   const handlePrevMonth = () => setCurrentMonth(subMonths(currentMonth, 1));
   const handleNextMonth = () => setCurrentMonth(addMonths(currentMonth, 1));
@@ -394,11 +508,15 @@ export function MiniCalendar() {
 
   return (
     <div
+      ref={cardRef}
       data-testid="calendar-card"
+      data-week-rows={weekRows}
+      data-agenda-required={Math.round(agendaRequiredHeight)}
+      data-agenda-visible={agendaVisible ? "1" : "0"}
       className="bg-surface border border-line rounded-xl p-4 shadow-subtle space-y-3 flex flex-col min-h-0 h-full"
     >
       {/* Header */}
-      <div className="flex items-center justify-between pb-2 border-b border-line-soft">
+      <div ref={headerRef} className="flex items-center justify-between pb-2 border-b border-line-soft">
         <div className="flex items-center space-x-2">
           <CalendarIcon className="w-4 h-4 text-[#A48F82]" />
           <h3 key={monthKey} className="ux-fade text-sm font-bold text-charcoal">
@@ -434,7 +552,7 @@ export function MiniCalendar() {
       </div>
 
       {/* Weekday Row */}
-      <div className="grid grid-cols-7 text-center text-[11px] font-bold text-sandrift">
+      <div ref={weekdayRef} className="grid grid-cols-7 text-center text-[11px] font-bold text-sandrift">
         {["一", "二", "三", "四", "五", "六", "日"].map((d) => (
           <div key={d} className="py-1">
             {d}
@@ -443,21 +561,24 @@ export function MiniCalendar() {
       </div>
 
       {/* Calendar Grid（日期格 = DDL drop target；共享 Selection Indicator 位于 z-0）。
-          自然纵向结构（不垂直居中）：固定高度 Calendar 内 Header/Weekday/Grid/Agenda 紧凑均衡 */}
-      <div className="shrink-0">
+          Layout Hotfix：wrapper 为弹性区域（flex-1 min-h-0，不再 shrink-0）——
+          Agenda hidden 时释放的 70–90px 按比例回流给日期格（grid-template-rows 1fr 均分），
+          不是只拉高最后一行、也不是留下空白。 */}
+      <div data-testid="calendar-grid-area" className="flex-1 min-h-0 overflow-hidden">
       <div
         ref={containerRef}
         data-selected-date={selectedDateKey}
         key={monthKey}
         className={cn(
-          "relative grid grid-cols-7 gap-1 text-xs",
+          "relative grid grid-cols-7 gap-1 text-xs h-full",
           monthDir !== 0 && "ux-month-enter"
         )}
-        style={
-          monthDir !== 0
+        style={{
+          gridTemplateRows: `repeat(${weekRows}, minmax(${MIN_DATE_ROW_HEIGHT}px, 1fr))`,
+          ...(monthDir !== 0
             ? ({ "--enter-x": monthDir === 1 ? "6px" : "-6px" } as React.CSSProperties)
-            : undefined
-        }
+            : undefined),
+        }}
       >
         {/* 共享选中滑块：黑色背景只属于它；只过渡 transform/width/height/opacity */}
         <div
@@ -501,7 +622,9 @@ export function MiniCalendar() {
               data-indicator-key={dateStr}
               onClick={() => setSelectedDate(day)}
               className={cn(
-                "relative z-10 h-8 rounded-xl flex flex-col items-center justify-center",
+                // Layout Hotfix：日期格高度动态（h-full + min-height），由 grid-template-rows 1fr 均分；
+                // 不再固定 h-8（否则 Agenda 隐藏后释放空间无法被利用）
+                "relative z-10 h-full min-h-[22px] rounded-xl flex flex-col items-center justify-center",
                 // 选中背景由共享 Indicator 承担；按钮只处理前景色（120–140ms 过渡，先于滑块到位）
                 "transition-colors duration-[var(--motion-fast)] ease-[var(--ease-standard)]",
                 // 日期格取消全局 button:active 缩放，避免「格子缩一下 + 滑块移动」双重抖动
@@ -576,10 +699,16 @@ export function MiniCalendar() {
         </div>
       )}
 
-      {/* Selected Date Agenda：横向 Compact Event Grid（4 列/页，仅类型 + 图标；详情走 Drawer）
-          视口高度 ≤800px 时整体隐藏（标题 + 数量 + 卡片全部），同时 Calendar shell 在外层缩短，
-          把空间让给 UpcomingDDL（避免 DDL 三行被压扁重叠） */}
-      <div className="pt-1.5 pb-1 border-t border-line-soft shrink-0 [@media(max-height:800px)]:hidden">
+      {/* Selected Date Agenda：横向 Compact Event Grid（4 列/页，仅类型 + 图标；详情走 Drawer）。
+          Layout Hotfix：可见性由 MiniCalendar 容器真实高度 + weekRows + hysteresis 决定
+          （不再用 @media(max-height:800px)）。隐藏时整个区块（标题/数量/分页/卡片/空态）
+          都不占布局空间，空间回流给 Calendar Grid。 */}
+      {agendaVisible && (
+      <div
+        ref={agendaRef}
+        data-testid="calendar-agenda"
+        className="pt-1.5 pb-1 border-t border-line-soft shrink-0"
+      >
         <div className="flex justify-between items-center text-xs">
           <span className="font-bold text-charcoal">
             {isSelectedInSemester
@@ -703,6 +832,7 @@ export function MiniCalendar() {
           )}
         </div>
       </div>
+      )}
 
       {/* DDL Move Feedback：局部轻量反馈（撤销 + 修改时间），不破坏全局 Toast */}
       {feedback && (
