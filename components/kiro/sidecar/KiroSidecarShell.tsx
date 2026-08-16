@@ -111,11 +111,15 @@ export function KiroSidecarShell({ open, children }: { open: boolean; children: 
 
   // ---- Resize（position-aware clamp） ----
 
+  // Motion V1：geometry 交互期间降权内部 motion（intro/settle/popover transforms 近瞬时）
+  const [geometryInteracting, setGeometryInteracting] = useState(false);
+
   /** pointerdown：snapshot 当次 drag 开始时的可见尺寸（不是不断变化的 draft） */
   const beginResize = () => {
     if (interactionRef.current !== "idle") return;
     interactionRef.current = "resize";
     resizeOriginRef.current = size;
+    setGeometryInteracting(true);
   };
 
   /**
@@ -150,6 +154,7 @@ export function KiroSidecarShell({ open, children }: { open: boolean; children: 
     resizeOriginRef.current = null;
     latestDraftRef.current = null;
     setDraft(null);
+    setGeometryInteracting(false);
   };
 
   // ---- Move（top/right；delta 相对 drag 起点） ----
@@ -158,6 +163,7 @@ export function KiroSidecarShell({ open, children }: { open: boolean; children: 
     if (interactionRef.current !== "idle") return;
     interactionRef.current = "move";
     moveOriginRef.current = position;
+    setGeometryInteracting(true);
   };
 
   const applyMove = (delta: { deltaX: number; deltaY: number }) => {
@@ -186,6 +192,7 @@ export function KiroSidecarShell({ open, children }: { open: boolean; children: 
     moveOriginRef.current = null;
     latestDraftPositionRef.current = null;
     setDraftPosition(null);
+    setGeometryInteracting(false);
   };
 
   if (!mounted) return null;
@@ -194,6 +201,7 @@ export function KiroSidecarShell({ open, children }: { open: boolean; children: 
     <div
       data-testid="kiro-sidecar"
       data-state={open ? "open" : "closed"}
+      data-geometry-interacting={geometryInteracting || undefined}
       role="dialog"
       aria-label="Kiro 侧边聊天"
       aria-hidden={!open}

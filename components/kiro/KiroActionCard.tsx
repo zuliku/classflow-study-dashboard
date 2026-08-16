@@ -51,7 +51,8 @@ export function KiroActionCard({ variant, heading, title, change, bullets, foote
       data-testid="kiro-action-card"
       className={cn(
         "max-w-md rounded-2xl bg-[#F7F5F5] border border-line p-3.5 space-y-2.5",
-        entering && "animate-enter"
+        // Motion V1：live 首次结构落位（kiro-structure-settle）；history 静态
+        entering && "kiro-structure-settle"
       )}
     >
       <div className="flex items-center gap-2">

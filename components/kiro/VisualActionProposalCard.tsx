@@ -540,7 +540,7 @@ export function VisualActionProposalCard({
   return (
     <div
       data-testid="visual-action-proposal"
-      className="mt-2.5 bg-surface border border-line-strong rounded-2xl shadow-card p-3.5 space-y-3 animate-enter"
+      className="mt-2.5 bg-surface border border-line-strong rounded-2xl shadow-card p-3.5 space-y-3 kiro-structure-settle"
     >
       {/* V1.5：操作预览 —— 主身份（来源/数量为 Secondary；不再与来源混成一句 AI 文本） */}
       <div className="flex items-start justify-between gap-2">

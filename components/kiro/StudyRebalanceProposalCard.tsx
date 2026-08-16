@@ -252,7 +252,7 @@ export function StudyRebalanceProposalCard({
   return (
     <div
       data-testid="study-rebalance-proposal"
-      className="mt-2.5 bg-surface border border-line-strong rounded-2xl shadow-card p-3.5 space-y-3 animate-enter"
+      className="mt-2.5 bg-surface border border-line-strong rounded-2xl shadow-card p-3.5 space-y-3 kiro-structure-settle"
     >
       <div className="flex items-center justify-between">
         <p className="flex items-center gap-1.5 text-[11px] font-bold text-charcoal">

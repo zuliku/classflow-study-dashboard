@@ -940,3 +940,17 @@ html[data-motion-effective="reduced"] .kiro-send-activate {
   transition: none !important;
   animation: none !important;
 }
+
+/* Motion V1：Sidecar geometry 交互期间内部装饰性 motion 近瞬时（hover/streaming/scroll 正常） */
+[data-geometry-interacting] .kiro-structure-settle,
+[data-geometry-interacting] .kiro-empty-logo-intro,
+[data-geometry-interacting] .kiro-empty-title-intro,
+[data-geometry-interacting] .kiro-empty-subtitle-intro,
+[data-geometry-interacting] .kiro-empty-suggestion-intro,
+[data-geometry-interacting] .kiro-composer-intro,
+[data-geometry-interacting] .kiro-popover-motion,
+[data-geometry-interacting] .kiro-scroll-control-enter,
+[data-geometry-interacting] .kiro-scroll-control-exit {
+  animation: none !important;
+  transition-duration: 0.01ms !important;
+}
