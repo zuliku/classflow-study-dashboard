@@ -14,12 +14,12 @@ import { uploadCourseMaterials } from "@/lib/materialUpload";
 import { previewMaterial, openAssignmentEditor } from "@/lib/uiEvents";
 import { deriveNextCourseSession } from "@/lib/courses/nextSession";
 import { getSemesterWeek } from "@/lib/semester";
-import { parseLocalDDL } from "@/lib/ddl";
 import { useEnterOnAdd } from "@/lib/useEnterOnAdd";
 import {
   sortCourseAssignments,
   buildCourseTaskRow,
 } from "@/lib/courseDetailView";
+import { buildCourseLibraryTaskView } from "@/lib/courses/courseLibraryView";
 
 /** 课程教师/教室：存在才显示，空字段不产生孤立 separator */
 function courseMetaText(course: { teacher: string; classroom: string }): string {
@@ -103,26 +103,16 @@ export function CoursesWorkspace() {
   const allMaterialIds = courses.flatMap((c) => c.materials.map((m) => m.id));
   const newMaterialIds = useEnterOnAdd(allMaterialIds);
 
-  // 任务行派生：复用 courseDetailView 排序（未完成优先）与状态/截止展示
+  // 任务行派生（V5 单次循环）：复用 courseDetailView 排序/状态/截止 + courseLibraryView attention 投影。
+  // attention/overdue/total 来自同一 rows 数组（submitted 旧 DDL 不误算逾期；submitted/completed 不算待处理）。
   const now = new Date();
+  const taskViewByCourse = new Map<string, ReturnType<typeof buildCourseLibraryTaskView>>();
   const taskRowsByCourse = new Map<string, ReturnType<typeof buildCourseTaskRow>[]>();
   for (const course of courses) {
     const courseAssignments = assignments.filter((a) => a.courseId === course.id);
-    taskRowsByCourse.set(
-      course.id,
-      sortCourseAssignments(courseAssignments).map((a) => buildCourseTaskRow(a, now))
-    );
-  }
-  const overdueCountByCourse = new Map<string, number>();
-  for (const course of courses) {
-    overdueCountByCourse.set(
-      course.id,
-      assignments.filter((a) => {
-        if (a.courseId !== course.id || a.status === "completed") return false;
-        const ddl = parseLocalDDL(a.ddl);
-        return ddl ? ddl.getTime() < now.getTime() : false;
-      }).length
-    );
+    const rows = sortCourseAssignments(courseAssignments).map((a) => buildCourseTaskRow(a, now));
+    taskRowsByCourse.set(course.id, rows);
+    taskViewByCourse.set(course.id, buildCourseLibraryTaskView(rows));
   }
 
   return (
@@ -156,7 +146,7 @@ export function CoursesWorkspace() {
             </div>
           </div>
         ) : (
-          <div className="grid grid-cols-1 gap-4 xl:grid-cols-2 xl:items-center">
+          <div className="grid grid-cols-1 gap-4 xl:grid-cols-2 items-stretch">
             {courses.map((course) => {
               const next = inTeachingWeek
                 ? deriveNextCourseSession(
@@ -181,8 +171,8 @@ export function CoursesWorkspace() {
                   next={next}
                   nextCellText={nextCellText}
                   meta={courseMetaText(course)}
-                  overdueCount={overdueCountByCourse.get(course.id) ?? 0}
                   taskRows={taskRowsByCourse.get(course.id) ?? []}
+                  taskView={taskViewByCourse.get(course.id) ?? buildCourseLibraryTaskView([])}
                   materials={course.materials}
                   newMaterialIds={newMaterialIds}
                   uploading={uploadingCourseId === course.id}

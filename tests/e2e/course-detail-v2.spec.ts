@@ -421,30 +421,31 @@ base("N：动态 disclosure 扩张/收起后仍居中（无跳顶/无 bottom ove
   expect(Math.abs(collapsed.y + collapsed.height / 2 - 450)).toBeLessThanOrEqual(4);
 });
 
-base("O：Course Library Card content-fit + 同 row 垂直中心对齐", async ({ page }) => {
+base("O：Course Library V5 —— 同一 Grid row 等高（top/bottom/height 对齐，非固定 320）", async ({ page }) => {
   const { monday } = dayAnchor();
   await page.addInitScript(seedScript(monday));
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/");
   await page.getByRole("button", { name: "课程资料" }).first().click();
-  await expect(page.getByRole("heading", { name: "课程资料" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "课程资料", exact: true })).toBeVisible();
 
-  // c1（2 任务 + 2 资料 preview）应高于 c2（0 任务 / 0 资料）
-  const cardA = page
-    .locator("article")
-    .filter({ has: page.getByRole("button", { name: "数据结构与算法", exact: true }) });
-  const cardB = page
-    .locator("article")
-    .filter({ has: page.getByRole("button", { name: "操作系统", exact: true }) });
+  // c1（6 资料 + 7 任务）与 c2（0 / 0）同一 row → items-stretch 等高
+  const cardA = page.getByTestId("course-library-card-c1");
+  const cardB = page.getByTestId("course-library-card-c2");
   await expect(cardA).toBeVisible();
   await expect(cardB).toBeVisible();
   const boxA = (await cardA.boundingBox())!;
   const boxB = (await cardB.boundingBox())!;
 
-  // 不是固定/等高：A 明显高于 B
-  expect(boxA.height).toBeGreaterThan(boxB.height + 30);
-  // 同一 grid row：中心 Y 对齐（±4px 容差）
-  expect(Math.abs(boxA.y + boxA.height / 2 - (boxB.y + boxB.height / 2))).toBeLessThanOrEqual(4);
+  // same top / same height / same bottom（V5 core contract，±2px subpixel）
+  expect(Math.abs(boxA.y - boxB.y)).toBeLessThanOrEqual(2);
+  expect(Math.abs(boxA.height - boxB.height)).toBeLessThanOrEqual(2);
+  expect(Math.abs(boxA.y + boxA.height - (boxB.y + boxB.height))).toBeLessThanOrEqual(2);
+
+  // 不是全局固定高度（无 320 固定值；className 无 fixed height token）
+  const clsA = (await cardA.getAttribute("class")) ?? "";
+  expect(clsA).not.toMatch(/h-\[(320|312|300|340)px\]|min-h-\[(320|312|300|340)px\]/);
+  expect(boxA.height).not.toBe(320);
 });
 
 /**
