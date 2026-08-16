@@ -5,7 +5,6 @@ import { useAppStore } from "@/store/useAppStore";
 import { AnalyticsRangePreset, LearningAnalyticsSnapshot } from "@/lib/analytics/types";
 import { useLearningAnalytics } from "@/hooks/useLearningAnalytics";
 import { useEffectiveReducedMotion } from "@/hooks/useEffectiveReducedMotion";
-import { AnalyticsRangeSelector } from "@/components/analytics/AnalyticsRangeSelector";
 import {
   AnalyticsSummaryStrip,
   AnalyticsSummaryStripSkeleton,
@@ -31,7 +30,8 @@ import {
   presentPlanMetric,
 } from "@/lib/analytics/presentation";
 import { cn } from "@/lib/utils";
-import { ChevronRight } from "lucide-react";
+import { WorkspaceHeader } from "@/components/layout/WorkspaceHeader";
+import { AnalyticsWorkspaceViewBar } from "@/components/analytics/AnalyticsWorkspaceViewBar";
 
 function ChartSkeleton() {
   return <div className="h-64 w-full rounded-xl bg-alabaster animate-pulse" />;
@@ -132,39 +132,20 @@ export function LearningAnalyticsView() {
 
   return (
     <div className="flex flex-1 min-h-0 flex-col">
-      {/* Header：与 Body 同 max-width 对齐（V3 宽屏不再贴边） */}
-      <div className="shrink-0 border-b border-line">
-        <div
-          data-testid="analytics-header-inner"
-          className="w-full max-w-[1500px] mx-auto flex items-center justify-between px-6 pt-5 pb-3 gap-3 flex-wrap"
-        >
-          <div>
-            <h1 className="text-base font-bold text-charcoal">学习洞察</h1>
-            <p className="text-[11px] text-sandrift mt-0.5">从学习历史中理解你的投入与节奏</p>
-          </div>
-          {/* V3.1：周回顾是独立 workflow action（与 range selector 视觉分离，非第四种 selection） */}
-          <div className="flex w-full md:w-auto items-center justify-between gap-2">
-            <AnalyticsRangeSelector value={preset} onChange={changePreset} />
-            <button
-              type="button"
-              aria-pressed={reviewExpanded}
-              aria-expanded={reviewExpanded}
-              onClick={toggleWeeklyReview}
-              data-testid="weekly-review-action"
-              className={cn(
-                "shrink-0 inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-bold whitespace-nowrap transition-colors duration-[var(--motion-fast)]",
-                reviewExpanded
-                  ? "text-sandrift bg-alabaster border border-line-strong"
-                  : "text-sandrift bg-transparent border border-line hover:text-charcoal hover:border-line-strong"
-              )}
-            >
-              {reviewExpanded ? "收起周回顾" : "周回顾"}
-              <ChevronRight
-                className={cn("w-3 h-3 transition-transform duration-[var(--motion-fast)]", reviewExpanded && "rotate-90")}
-              />
-            </button>
-          </div>
-        </div>
+      {/* App Chrome V2.3：WorkspaceHeader + AnalyticsWorkspaceViewBar（与 Body 同 max-width 版心对齐） */}
+      <div className="shrink-0">
+        <WorkspaceHeader
+          title="学习洞察"
+          context="从学习历史中理解你的投入与节奏"
+          innerClassName="max-w-[1500px] mx-auto"
+        />
+        <AnalyticsWorkspaceViewBar
+          preset={preset}
+          onPresetChange={changePreset}
+          reviewExpanded={reviewExpanded}
+          onWeeklyReviewToggle={toggleWeeklyReview}
+          innerClassName="max-w-[1500px] mx-auto"
+        />
       </div>
 
       <div className="flex-1 min-h-0 overflow-y-auto">

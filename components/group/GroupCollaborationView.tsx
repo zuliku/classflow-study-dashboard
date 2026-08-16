@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import React, { useState, useEffect } from "react";
 
@@ -387,20 +387,20 @@ export function GroupCollaborationView() {
         sticky
       />
 
-      <div className="flex flex-1 min-h-0 flex-col space-y-4 p-4 pb-24 md:p-6 md:pb-6">
-      {/* Workspace 两栏：左侧项目列表（Grouped Rows）+ 右侧当前项目详情 */}
       <div className="flex flex-1 min-h-0 flex-col lg:flex-row gap-4 p-4 pb-24 md:p-6 md:pb-6">
         {/* Left: Project List（一个 Surface 内 grouped rows；无独立 Card grid） */}
         <aside className="w-full lg:w-[300px] lg:shrink-0 min-h-0 flex flex-col">
           <div className="flex items-center justify-between px-1 pb-2">
             <h3 className="text-xs font-bold text-sandrift">项目</h3>
+            {/* 本地便捷入口（App Chrome V2.3）：Header Primary「新建项目」为权威入口，此处降为 icon-only */}
             <button
               type="button"
               onClick={openCreateProject}
-              className="flex items-center gap-1 rounded-lg px-1.5 py-1 text-[11px] font-bold text-satin-grey transition-colors hover:text-charcoal"
+              aria-label="新建项目"
+              title="新建项目"
+              className="rounded-lg p-1 text-sandrift transition-colors hover:bg-alabaster hover:text-charcoal focus-visible:outline-2 focus-visible:outline-charcoal/30"
             >
-              <Plus className="w-3.5 h-3.5" />
-              新建项目
+              <Plus className="w-4 h-4" />
             </button>
           </div>
 
@@ -870,7 +870,6 @@ export function GroupCollaborationView() {
             </Button>
           </div>
         </GroupModal>
-    </div>
     </div>
   );
 }
