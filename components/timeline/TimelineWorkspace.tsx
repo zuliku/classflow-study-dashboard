@@ -2,9 +2,6 @@
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
-  ChevronLeft,
-  ChevronRight,
-  SlidersHorizontal,
   Plus,
   MoreHorizontal,
   FileUp,
@@ -25,7 +22,11 @@ import { KiroFlowButton } from "@/components/kiro/KiroFlow";
 import { useKiroSession } from "@/components/kiro/KiroSessionProvider";
 import { WorkspaceHeader } from "@/components/layout/WorkspaceHeader";
 import { IconButton } from "@/components/ui/IconButton";
-import { Popover, PopoverPanel } from "@/components/ui/Popover";
+import { Popover } from "@/components/ui/Popover";
+import {
+  TimelineWorkspaceViewBar,
+  TimelineFilterOption,
+} from "@/components/timeline/TimelineWorkspaceViewBar";
 import { Dialog } from "@/components/ui/Dialog";
 import {
   DropdownMenuPanel,
@@ -132,6 +133,38 @@ export function TimelineWorkspace() {
   const [freeBlockOpen, setFreeBlockOpen] = useState(false);
   const [markOpen, setMarkOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement | null>(null);
+
+  // ---- App Chrome V2.2：Popover mutual exclusion（Filter / Quick / More 三向互斥） ----
+  const openFilterOnly = () => {
+    setQuickOpen(false);
+    setMoreOpen(false);
+    setFilterOpen(true);
+  };
+  const openQuickOnly = () => {
+    setFilterOpen(false);
+    setMoreOpen(false);
+    setQuickOpen(true);
+  };
+  const openMoreOnly = () => {
+    setFilterOpen(false);
+    setQuickOpen(false);
+    setMoreOpen(true);
+  };
+  const toggleFilter = () => (filterOpen ? setFilterOpen(false) : openFilterOnly());
+  const toggleQuick = () => (quickOpen ? setQuickOpen(false) : openQuickOnly());
+  const toggleMore = () => (moreOpen ? setMoreOpen(false) : openMoreOnly());
+
+  // Filter 选项与 active 态（任一可切换项偏离默认 → trigger active dot）
+  const filterOptions: TimelineFilterOption[] = [
+    { key: "studyBlocks", label: "学习计划", checked: filters.studyBlocks },
+    { key: "ddl", label: "DDL", checked: filters.ddl },
+    { key: "exam", label: "考试", checked: filters.exam },
+    { key: "activity", label: "活动", checked: filters.activity },
+    { key: "group", label: "小组节点", checked: filters.group },
+  ];
+  const filterActive = filterOptions.some(
+    (opt) => opt.checked !== DEFAULT_FILTERS[opt.key as keyof TimelineFilters]
+  );
 
   const weekDays = useMemo(
     () => getWeekDateRange(semester, currentSemesterWeek),
@@ -858,204 +891,140 @@ export function TimelineWorkspace() {
     setMarkOpen(false);
   };
 
+
   const isToday = (dateStr: string) => dateStr === todayStr;
+
+  // ---- App Chrome V2.2：WorkspaceHeader actions（Ask Kiro / More）+ primaryAction（新建） ----
+  const headerActions = (
+    <>
+      <KiroFlowButton
+        icon={KIRO_ICON}
+        label="Ask Kiro"
+        size="sm"
+        className="h-8"
+        labelClassName="hidden md:inline"
+        onClick={() => handoff.openForWeek(currentSemesterWeek)}
+      />
+      {/* More → DropdownMenu（导入课表 / 全屏 / 时间表设置） */}
+      <Popover open={moreOpen} onOpenChange={setMoreOpen}>
+        <IconButton
+          variant="ghost"
+          size="sm"
+          onClick={toggleMore}
+          aria-label="更多操作"
+          aria-expanded={moreOpen}
+          title="更多"
+        >
+          <MoreHorizontal className="w-4 h-4" />
+        </IconButton>
+        <DropdownMenuPanel open={moreOpen} placement="bottom-end" aria-label="更多操作">
+          <DropdownMenuItem
+            icon={FileUp}
+            label="导入课表"
+            onClick={() => { setMoreOpen(false); setImportScheduleModalOpen(true); }}
+          />
+          <DropdownMenuItem
+            icon={ExternalLink}
+            label="全屏查看"
+            onClick={() => { setMoreOpen(false); setFullTimetableModalOpen(true); }}
+          />
+          <DropdownMenuDivider />
+          <DropdownMenuItem
+            icon={SettingsIcon}
+            label="时间表设置"
+            onClick={() => {
+              setMoreOpen(false);
+              useAppStore.getState().setSettingsTargetSection?.("semester");
+              useAppStore.getState().setSettingsModalOpen(true);
+            }}
+          />
+        </DropdownMenuPanel>
+      </Popover>
+    </>
+  );
+
+  // ---- App Chrome V2.2：新建（primaryAction；菜单沿用原有 handlers，不复制 create menu） ----
+  const primaryAction = (
+    <Popover open={quickOpen} onOpenChange={setQuickOpen}>
+      <IconButton
+        variant="primary"
+        size="sm"
+        onClick={toggleQuick}
+        aria-label="新建"
+        aria-expanded={quickOpen}
+        title="新建"
+      >
+        <Plus className="w-4 h-4" />
+      </IconButton>
+      <DropdownMenuPanel open={quickOpen} placement="bottom-end" aria-label="新建" className="w-52">
+        <DropdownMenuItem
+          icon={GraduationCap}
+          label="新建课程"
+          onClick={() => { setQuickOpen(false); setAddCourseModalOpen(true); }}
+        />
+        <DropdownMenuItem
+          icon={BookOpenCheck}
+          label="学习计划"
+          onClick={() => { setQuickOpen(false); setFreeBlockOpen(true); }}
+        />
+        <DropdownMenuItem
+          icon={ListChecks}
+          label="新建任务"
+          onClick={() => {
+            setQuickOpen(false);
+            import("@/lib/uiEvents").then(({ openAssignmentEditor }) => openAssignmentEditor({}));
+          }}
+        />
+        <DropdownMenuItem
+          icon={CalendarClock}
+          label="考试 / 日程"
+          onClick={() => { setQuickOpen(false); setMarkOpen(true); }}
+        />
+      </DropdownMenuPanel>
+    </Popover>
+  );
 
   return (
     <div className="flex flex-1 min-h-0 flex-col">
-    {/* Timeline Workspace Header（App Shell Structural；周切换/Filter/+ /Ask Kiro/More 留在 Local Toolbar） */}
-    <WorkspaceHeader
-      title="时间表"
-      context={`第 ${currentSemesterWeek} 周 · ${formatWeekDateRange(semester, currentSemesterWeek)}`}
-      sticky
-    />
-    {/* body：主卡 flex-1 吸收剩余空间；shelf shrink-0；section spacing 由父容器 gap-4 统一控制 */}
-    <div className="flex flex-1 min-h-0 flex-col gap-4 p-4 pb-24 md:p-6 md:pb-6">
-    <div
-      ref={wrapRef}
-      data-testid="timeline-workspace"
-      className="flex flex-1 min-h-0 flex-col bg-surface border border-line rounded-2xl shadow-subtle overflow-hidden"
-    >
-      {/* ---------- Local Toolbar（周导航 | Actions；Week Meta 已上移 Workspace Header，不再重复） ---------- */}
-      <div className="shrink-0 px-3 py-2 border-b border-line flex items-center justify-between gap-2">
-        {/* Group A：Week Navigation（‹ › 今天坐标稳定） */}
-        <div className="flex items-center gap-1 min-w-0">
-          <button
-            onClick={() => setCurrentSemesterWeek(currentSemesterWeek - 1)}
-            disabled={currentSemesterWeek <= 1}
-            aria-label="上一周"
-            title="上一周"
-            className="w-7 h-7 flex items-center justify-center rounded-lg text-sandrift hover:bg-alabaster hover:text-charcoal transition-colors disabled:opacity-30"
-          >
-            <ChevronLeft className="w-4 h-4" />
-          </button>
-          <button
-            onClick={() => setCurrentSemesterWeek(currentSemesterWeek + 1)}
-            disabled={currentSemesterWeek >= semester.totalWeeks}
-            aria-label="下一周"
-            title="下一周"
-            className="w-7 h-7 flex items-center justify-center rounded-lg text-sandrift hover:bg-alabaster hover:text-charcoal transition-colors disabled:opacity-30"
-          >
-            <ChevronRight className="w-4 h-4" />
-          </button>
-          {/* 今天：降权 neutral（当前周 subtle/disabled；非当前周增强） */}
-          <button
-            onClick={() => setCurrentSemesterWeek(Math.min(Math.max(getSemesterWeekOf(new Date(), semester), 1), semester.totalWeeks))}
-            disabled={isCurrentWeek}
-            title={isCurrentWeek ? "已在当前周" : "回到本周"}
-            className={cn(
-              "h-7 px-2.5 rounded-lg text-[11px] font-bold transition-colors",
-              isCurrentWeek
-                ? "text-sandrift/70 cursor-default"
-                : "text-charcoal bg-alabaster hover:bg-line-soft"
-            )}
-          >
-            今天
-          </button>
-        </div>
-
-        {/* Group B：Timeline Actions（单一 flex 容器，逻辑间距用 margin 表达） */}
-        <div className="flex items-center gap-0.5 shrink-0">
-          {/* 筛选 → Control Popover（全局 primitive；role=group + checkbox） */}
-          <Popover open={filterOpen} onOpenChange={setFilterOpen}>
-            <IconButton
-              variant="ghost"
-              size="sm"
-              onClick={() => {
-                setFilterOpen((v) => !v);
-                setQuickOpen(false);
-                setMoreOpen(false);
-              }}
-              aria-label="筛选"
-              aria-expanded={filterOpen}
-              title="筛选"
-            >
-              <SlidersHorizontal className="w-4 h-4" />
-            </IconButton>
-            <PopoverPanel
-              open={filterOpen}
-              placement="bottom-end"
-              role="group"
-              aria-label="时间表筛选"
-              className="w-44 p-1.5 space-y-0.5"
-            >
-                <p className="px-1.5 pb-1 text-[10px] font-bold text-sandrift">显示</p>
-                <FilterToggle label="课程" checked disabled hint="时间表骨架，恒显示" />
-                <FilterToggle
-                  label="学习计划"
-                  checked={filters.studyBlocks}
-                  onChange={(v) => setFilters((f) => ({ ...f, studyBlocks: v }))}
-                />
-                <FilterToggle
-                  label="DDL"
-                  checked={filters.ddl}
-                  onChange={(v) => setFilters((f) => ({ ...f, ddl: v }))}
-                />
-                <FilterToggle
-                  label="考试"
-                  checked={filters.exam}
-                  onChange={(v) => setFilters((f) => ({ ...f, exam: v }))}
-                />
-                <FilterToggle
-                  label="活动"
-                  checked={filters.activity}
-                  onChange={(v) => setFilters((f) => ({ ...f, activity: v }))}
-                />
-                <FilterToggle
-                  label="小组节点"
-                  checked={filters.group}
-                  onChange={(v) => setFilters((f) => ({ ...f, group: v }))}
-                />
-              </PopoverPanel>
-          </Popover>
-
-          {/* Quick Create +（主 Create Action）→ DropdownMenu */}
-          <Popover open={quickOpen} onOpenChange={setQuickOpen}>
-            <IconButton
-              variant="primary"
-              size="sm"
-              onClick={() => { setQuickOpen((v) => !v); setFilterOpen(false); setMoreOpen(false); }}
-              aria-label="新建"
-              aria-expanded={quickOpen}
-              title="新建"
-            >
-              <Plus className="w-4 h-4" />
-            </IconButton>
-            <DropdownMenuPanel open={quickOpen} placement="bottom-end" aria-label="新建" className="w-52">
-                <DropdownMenuItem
-                  icon={GraduationCap}
-                  label="新建课程"
-                  onClick={() => { setQuickOpen(false); setAddCourseModalOpen(true); }}
-                />
-                <DropdownMenuItem
-                  icon={BookOpenCheck}
-                  label="学习计划"
-                  onClick={() => { setQuickOpen(false); setFreeBlockOpen(true); }}
-                />
-                <DropdownMenuItem
-                  icon={ListChecks}
-                  label="新建任务"
-                  onClick={() => {
-                    setQuickOpen(false);
-                    import("@/lib/uiEvents").then(({ openAssignmentEditor }) => openAssignmentEditor({}));
-                  }}
-                />
-                <DropdownMenuItem
-                  icon={CalendarClock}
-                  label="考试 / 日程"
-                  onClick={() => { setQuickOpen(false); setMarkOpen(true); }}
-                />
-              </DropdownMenuPanel>
-          </Popover>
-
-          {/* Ask Kiro（Secondary Featured，与 Create 组间隔 6px） */}
-          <KiroFlowButton
-            icon={KIRO_ICON}
-            label="Ask Kiro"
-            size="sm"
-            className="h-8 ml-1.5"
-            onClick={() => handoff.openForWeek(currentSemesterWeek)}
-          />
-          {/* More → DropdownMenu */}
-          <Popover open={moreOpen} onOpenChange={setMoreOpen} className="ml-0.5">
-            <IconButton
-              variant="ghost"
-              size="sm"
-              onClick={() => { setMoreOpen((v) => !v); setFilterOpen(false); setQuickOpen(false); }}
-              aria-label="更多操作"
-              aria-expanded={moreOpen}
-              title="更多"
-            >
-              <MoreHorizontal className="w-4 h-4" />
-            </IconButton>
-            <DropdownMenuPanel open={moreOpen} placement="bottom-end" aria-label="更多操作">
-                <DropdownMenuItem
-                  icon={FileUp}
-                  label="导入课表"
-                  onClick={() => { setMoreOpen(false); setImportScheduleModalOpen(true); }}
-                />
-                <DropdownMenuItem
-                  icon={ExternalLink}
-                  label="全屏查看"
-                  onClick={() => { setMoreOpen(false); setFullTimetableModalOpen(true); }}
-                />
-                <DropdownMenuDivider />
-                <DropdownMenuItem
-                  icon={SettingsIcon}
-                  label="时间表设置"
-                  onClick={() => {
-                    setMoreOpen(false);
-                    useAppStore.getState().setSettingsTargetSection?.("semester");
-                    useAppStore.getState().setSettingsModalOpen(true);
-                  }}
-                />
-              </DropdownMenuPanel>
-          </Popover>
-        </div>
+      {/* Sticky Chrome：单一 sticky 容器承载 WorkspaceHeader + ViewBar（无 magic offset） */}
+      <div className="sticky top-0 z-20 shrink-0">
+        <WorkspaceHeader
+          title="时间表"
+          context={`第 ${currentSemesterWeek} 周 · ${formatWeekDateRange(semester, currentSemesterWeek)}`}
+          actions={headerActions}
+          primaryAction={primaryAction}
+        />
+        <TimelineWorkspaceViewBar
+          currentSemesterWeek={currentSemesterWeek}
+          totalWeeks={semester.totalWeeks}
+          isCurrentWeek={isCurrentWeek}
+          onPrevWeek={() => setCurrentSemesterWeek(currentSemesterWeek - 1)}
+          onNextWeek={() => setCurrentSemesterWeek(currentSemesterWeek + 1)}
+          onToday={() =>
+            setCurrentSemesterWeek(
+              Math.min(Math.max(getSemesterWeekOf(new Date(), semester), 1), semester.totalWeeks)
+            )
+          }
+          filterOptions={filterOptions}
+          filterActive={filterActive}
+          filterOpen={filterOpen}
+          onFilterToggle={toggleFilter}
+          onFilterClose={() => setFilterOpen(false)}
+          onFilterChange={(key, value) =>
+            setFilters((f) => ({ ...f, [key as keyof TimelineFilters]: value }))
+          }
+        />
       </div>
 
-      {/* ---------- 主体：Weekday Header（唯一一份）+ Key Timeline + Course Grid ---------- */}
+      {/* body：主卡 flex-1 吸收剩余空间；shelf shrink-0；section spacing 由父容器 gap-4 统一控制 */}
+      <div className="flex flex-1 min-h-0 flex-col gap-4 p-4 pb-24 md:p-6 md:pb-6">
+      <div
+        ref={wrapRef}
+        data-testid="timeline-workspace"
+        className="flex flex-1 min-h-0 flex-col bg-surface border border-line rounded-2xl shadow-subtle overflow-hidden"
+      >      {/* ---------- 主体：Weekday Header（唯一一份）+ Key Timeline + Course Grid ---------- */}
       <div className="flex-1 min-h-0 flex flex-col overflow-x-auto">
-        <div className="min-w-[640px] w-full flex flex-col flex-1 min-h-0 px-3 pt-1.5">
+        <div className="min-w-[640px] w-full flex flex-col flex-1 min-h-0 px-3 pt-2.5">
           {/* Weekday Header（与 Key Lane / Grid 共用 56px 时间 gutter） */}
           <div
             className="grid border-b border-line-soft pb-1 text-center text-xs shrink-0"
@@ -1296,39 +1265,6 @@ function CourseTaskMarker({
         </div>
       </FloatingTimelineDetail>
     </>
-  );
-}
-
-function FilterToggle({
-  label,
-  checked,
-  onChange,
-  disabled,
-  hint,
-}: {
-  label: string;
-  checked: boolean;
-  onChange?: (v: boolean) => void;
-  disabled?: boolean;
-  hint?: string;
-}) {
-  return (
-    <label
-      className={cn(
-        "flex items-center gap-2 px-1.5 py-1.5 rounded-lg text-[11px] font-semibold text-charcoal cursor-pointer hover:bg-alabaster transition-colors",
-        disabled && "cursor-default opacity-80"
-      )}
-      title={hint}
-    >
-      <input
-        type="checkbox"
-        checked={checked}
-        disabled={disabled}
-        onChange={(e) => onChange?.(e.target.checked)}
-        className="w-3.5 h-3.5 rounded accent-charcoal"
-      />
-      {label}
-    </label>
   );
 }
 

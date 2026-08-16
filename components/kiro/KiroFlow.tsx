@@ -17,6 +17,7 @@ export function KiroFlowButton({
   onClick,
   size = "md",
   className,
+  labelClassName,
 }: {
   icon: React.ComponentType<{ className?: string }>;
   label: string;
@@ -24,11 +25,14 @@ export function KiroFlowButton({
   /** sm：h-8 紧凑（Ask Kiro 小按钮）；md：h-10（主入口） */
   size?: "sm" | "md";
   className?: string;
+  /** label 响应式控制（如窄屏隐藏文字只留图标；aria 名称仍来自 label） */
+  labelClassName?: string;
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
+      aria-label={label}
       className={cn(
         "relative rounded-lg overflow-hidden group text-left transition-colors duration-[var(--motion-base)]",
         className
@@ -50,7 +54,7 @@ export function KiroFlowButton({
         )}
       >
         <Icon className={size === "sm" ? "w-3.5 h-3.5 shrink-0" : "w-4 h-4 shrink-0"} />
-        <span className="truncate">{label}</span>
+        <span className={cn("truncate", labelClassName)}>{label}</span>
       </span>
     </button>
   );
