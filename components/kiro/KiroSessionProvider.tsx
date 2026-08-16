@@ -69,6 +69,8 @@ import { buildConversationPersistenceSignature } from "@/lib/ai/visual/receipt";
 
 export type KiroSuggestionsKind = "assignment" | "course" | "group-project" | "week" | "generic";
 
+import { claimEmptyIntroOnce } from "@/lib/kiro/motion/emptyIntro";
+
 interface KiroSessionValue {
   // Chat runtime（唯一）
   chat: ReturnType<typeof useKiroChat>;
@@ -199,6 +201,8 @@ interface KiroSessionMetaValue {
   conversationProjectId: string | null;
   /** 项目数据版本（创建/更新/删除/移动后递增；panel 据此刷新） */
   projectsVersion: number;
+  /** Motion V1：empty intro generation（每次「新空白对话」完成后 +1；UI session lifecycle，不持久化） */
+  emptyIntroGeneration: number;
 }
 
 /** Actions：稳定 callbacks（transcript 操作点击时才读取 Ref，不订阅 streaming messages） */
@@ -232,6 +236,12 @@ interface KiroSessionActionsValue {
   /** V1.3A：Project Files 等低频变化后让 Panel 重新加载（只 bump version） */
   refreshProjects: () => void;
   assignConversationToProject: (conversationId: string, projectId: string | null) => Promise<boolean>;
+  /**
+   * Motion V1：claim 本轮 empty intro。
+   * workspace / sidecar 各自对同一 generation 只能 claim 一次（切 Tab 不重播、历史会话不播放）；
+   * new chat（含 project new chat）→ generation 递增 → 可再次 claim。
+   */
+  claimEmptyIntro: (surface: "workspace" | "sidecar", generation: number) => boolean;
 }
 
 const KiroRuntimeContext = createContext<KiroRuntimeValue | null>(null);
@@ -252,6 +262,9 @@ export function KiroSessionProvider({ children }: { children: React.ReactNode })
   const [suggestionsKind, setSuggestionsKind] = useState<KiroSuggestionsKind | null>(null);
   const suggestionsGenRef = useRef(0);
   const [lastUserTurnGen, setLastUserTurnGen] = useState(0);
+  // Motion V1：Empty Intro generation（每次「新空白对话」完成后 +1）+ 每 surface 已 claim 的 generation
+  const [emptyIntroGeneration, setEmptyIntroGeneration] = useState(0);
+  const emptyIntroSeenRef = useRef({ workspace: -1, sidecar: -1 });
   // Ghost Preview（Task 4A）：UI-only，不持久化
   const [planningPreview, setPlanningPreview] = useState<KiroPlanningPreview | null>(null);
   // Rebalance Ghost Preview（Part 5）：UI-only，不持久化；与 planningPreview 独立 shape
@@ -453,6 +466,8 @@ export function KiroSessionProvider({ children }: { children: React.ReactNode })
           // 此处才切换 projectId —— streaming 中切换绝不串项目。
           const nextProjectId = transition.projectId;
           chat.newChat();
+          // Motion V1：新空白对话完成 → empty intro generation +1（workspace/sidecar 下一轮可各 claim 一次）
+          setEmptyIntroGeneration((v) => v + 1);
           conversationIdRef.current = null;
           conversationTitleRef.current = null;
           conversationCreatedAtRef.current = null;
@@ -1054,6 +1069,7 @@ export function KiroSessionProvider({ children }: { children: React.ReactNode })
       conversationTransition: toConversationTransitionView(transitionState),
       conversationProjectId,
       projectsVersion,
+      emptyIntroGeneration,
     }),
     [
       conversationId,
@@ -1068,6 +1084,7 @@ export function KiroSessionProvider({ children }: { children: React.ReactNode })
       transitionState,
       conversationProjectId,
       projectsVersion,
+      emptyIntroGeneration,
     ]
   );
 
@@ -1098,6 +1115,8 @@ export function KiroSessionProvider({ children }: { children: React.ReactNode })
       deleteProject,
       refreshProjects,
       assignConversationToProject,
+      claimEmptyIntro: (surface, generation) =>
+        claimEmptyIntroOnce(emptyIntroSeenRef.current, surface, generation),
     }),
     [
       newChat,

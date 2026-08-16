@@ -76,6 +76,7 @@ export function KiroComposer({
   workspace,
   workspaceIsSandbox,
   grantWarning,
+  introActive = false,
 }: {
   contexts: KiroContextRef[];
   onAddContext: (ref: KiroContextRef) => void;
@@ -125,6 +126,8 @@ export function KiroComposer({
   workspace?: KiroWorkspaceMeta | null;
   workspaceIsSandbox?: boolean;
   grantWarning?: string | null;
+  /** Motion V1：本轮 Empty Intro claim 成功后 Composer 轻进入（workspace/sidecar 各自 timing scope） */
+  introActive?: boolean;
 }) {
   const [text, setText] = useState("");
   const [attachOpen, setAttachOpen] = useState(false);
@@ -356,8 +359,16 @@ export function KiroComposer({
           }
         />
 
-        {/* Composer Surface：Attachment Shelf（次级层） + Prompt + Toolbar（主层） */}
-        <div className="bg-surface border border-line-strong rounded-2xl shadow-subtle focus-within:border-sandrift focus-within:shadow-subtle transition-[border-color,box-shadow] duration-[var(--motion-fast)]">
+        {/* Composer Surface：Attachment Shelf（次级层） + Prompt + Toolbar（主层）。
+            Motion V1：focus 轻上浮 -1px（禁 -2/-3/-4 与 scale；send 后不回跳） */}
+        <div
+          className={cn(
+            "bg-surface border border-line-strong rounded-2xl shadow-subtle",
+            "focus-within:border-sandrift focus-within:shadow-md focus-within:-translate-y-px",
+            "transition-[border-color,box-shadow,transform] duration-[var(--kiro-motion-control,var(--motion-fast))] ease-[var(--ease-standard)]",
+            introActive && "kiro-composer-intro"
+          )}
+        >
           {/* Attachment Shelf：无附件时完全不存在 */}
           {attachments.length > 0 && (
             <div

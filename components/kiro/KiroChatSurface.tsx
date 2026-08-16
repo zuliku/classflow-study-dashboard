@@ -3,10 +3,10 @@
 import React, { useMemo } from "react";
 import { useAppStore } from "@/store/useAppStore";
 import { useAISettingsStore } from "@/store/useAISettingsStore";
-import { useKiroRuntime, useKiroSessionMeta } from "@/components/kiro/KiroSessionProvider";
+import { useKiroRuntime, useKiroSessionMeta, useKiroSessionActions } from "@/components/kiro/KiroSessionProvider";
+import { KiroEmptyExperience } from "@/components/kiro/motion/KiroEmptyExperience";
 import { useAIModelCatalog } from "@/hooks/useAIModelCatalog";
 import { getActiveModelVendor } from "@/lib/ai/providers/registry";
-import { KiroEmptyState } from "@/components/kiro/KiroEmptyState";
 import { KiroConversation } from "@/components/kiro/KiroConversation";
 import { KiroComposer } from "@/components/kiro/KiroComposer";
 import { KiroContextSuggestions } from "@/components/kiro/KiroContextSuggestions";
@@ -18,6 +18,7 @@ import { KiroChangeReviewDialog } from "@/components/kiro/computer/KiroChangeRev
 import { getModelCapabilities } from "@/lib/ai/providers/capabilities";
 import { resolveEffectiveReasoningEffort } from "@/lib/ai/reasoning/effective";
 import { getKiroOutputFontSize } from "@/lib/ai/ui/typography";
+import { cn } from "@/lib/utils";
 
 /**
  * Kiro Chat Surface：Workspace 与 Sidecar 共用的完整对话面。
@@ -27,8 +28,12 @@ import { getKiroOutputFontSize } from "@/lib/ai/ui/typography";
 export function KiroChatSurface({ variant }: { variant: "workspace" | "sidecar" }) {
   const runtime = useKiroRuntime();
   const { chat, attachments, activeRefs, removeContext, addManualContext } = runtime;
-  const { suggestionsKind, suggestionsGen, lastUserTurnGen } = useKiroSessionMeta();
+  const { suggestionsKind, suggestionsGen, lastUserTurnGen, emptyIntroGeneration } = useKiroSessionMeta();
+  const { claimEmptyIntro } = useKiroSessionActions();
   const compact = variant === "sidecar";
+
+  // Motion V1：Empty Intro claim（每 generation 每 surface 一次；渲染期 claim，无 StrictMode 环境安全）
+  const playIntro = chat.messages.length === 0 ? claimEmptyIntro(variant, emptyIntroGeneration) : false;
 
   // Computer Agent Part 3：审批对话框 + 更改审查（runtime store 只存展示状态）
   const pendingApproval = useKiroComputerRuntimeStore((s) => s.pendingApproval);
@@ -140,36 +145,45 @@ export function KiroChatSurface({ variant }: { variant: "workspace" | "sidecar" 
 
   return (
     <div
-      className="relative flex-1 min-h-0 flex flex-col"
+      className={cn(
+        "relative flex-1 min-h-0 flex flex-col",
+        variant === "workspace" ? "kiro-motion-workspace" : "kiro-motion-sidecar"
+      )}
       style={{ "--kiro-output-font-size": `${outputFontSize}px` } as React.CSSProperties}
     >
-      {!hasMessages ? (
-        <KiroEmptyState
-          onSuggestion={chat.send}
+      {/* Motion V1：main content stage —— Empty 为 absolute presence overlay（exit 不占 flex 布局，
+          Conversation 第一条消息立即 mount；不给 Conversation 加 key / 不加 entrance animation） */}
+      <div className="relative flex-1 min-h-0">
+        <KiroEmptyExperience
+          open={!hasMessages}
           compact={compact}
+          playIntro={playIntro}
+          onSuggestion={chat.send}
           contextSuggestions={emptyContextSuggestions}
         />
-      ) : (
-        <KiroConversation
-          messages={chat.messages}
-          error={chat.error}
-          onRetry={chat.retry}
-          onOpenSettings={openKiroSettings}
-          onUndo={chat.consumeUndo}
-          onEditUserMessage={chat.editAndResend}
-          compact={compact}
-          // Streaming UX V3：真实 turn lifecycle（awaiting-tool-result / awaiting-continuation 也视为 in-flight）
-          turnInFlight={chat.turnInFlight}
-          sources={chat.sources}
-          onReviewComputerTask={setReviewTaskId}
-          onUndoComputerTask={(taskId) => void chat.undoTask(taskId)}
-        />
-      )}
+        {hasMessages && (
+          <KiroConversation
+            messages={chat.messages}
+            error={chat.error}
+            onRetry={chat.retry}
+            onOpenSettings={openKiroSettings}
+            onUndo={chat.consumeUndo}
+            onEditUserMessage={chat.editAndResend}
+            compact={compact}
+            // Streaming UX V3：真实 turn lifecycle（awaiting-tool-result / awaiting-continuation 也视为 in-flight）
+            turnInFlight={chat.turnInFlight}
+            sources={chat.sources}
+            onReviewComputerTask={setReviewTaskId}
+            onUndoComputerTask={(taskId) => void chat.undoTask(taskId)}
+          />
+        )}
+      </div>
 
       {variant === "sidecar" && hasMessages && hasContextSuggestions && <KiroContextSuggestions compact />}
 
       <KiroComposer
         compact={compact}
+        introActive={playIntro}
         contexts={activeRefs}
         onAddContext={addManualContext}
         onRemoveContext={removeContext}
