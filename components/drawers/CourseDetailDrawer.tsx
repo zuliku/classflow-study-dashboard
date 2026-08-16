@@ -19,6 +19,7 @@ import { isValidTimeRange } from "@/lib/schedule";
 import { findScheduleConflicts } from "@/lib/conflicts";
 import { openAssignmentEditor, previewMaterial } from "@/lib/uiEvents";
 import { formatCourseStats } from "@/lib/courseDetailView";
+import { isCourseEntityInteractive, resolveMaterialUploadTarget } from "@/lib/courseDetailOwnership";
 
 import { cn } from "@/lib/utils";
 import { Drawer } from "@/components/ui/Drawer";
@@ -74,7 +75,8 @@ export function CourseDetailDrawer() {
   const reducedMotion = useEffectiveReducedMotion();
 
   const [isEditing, setIsEditing] = useState(false);
-  const [isUploading, setIsUploading] = useState(false);
+  // 上传状态按「目标课程」归属（entity-local truth）：A 上传进行中切到 B，B 不显示上传中
+  const [uploadingCourseId, setUploadingCourseId] = useState<string | null>(null);
   const [moreOpen, setMoreOpen] = useState(false);
   // Add Schedule form 默认 CLOSED；Quick Action 通过 autoFocusKey 联动展开+聚焦
   const [addSlotOpen, setAddSlotOpen] = useState(false);
@@ -82,6 +84,9 @@ export function CourseDetailDrawer() {
 
   const scheduleSectionRef = useRef<HTMLDivElement | null>(null);
   const materialInputRef = useRef<HTMLInputElement | null>(null);
+  const bodyRef = useRef<HTMLDivElement | null>(null);
+  // Async upload target：点击「上传资料」时 capture 的 courseId，整个 Promise 生命周期固定
+  const materialUploadTargetCourseIdRef = useRef<string | null>(null);
 
   // Course Edit draft（Header [取消] [保存]；验证：name 非空 / credit 有限正数）
   const [draft, setDraft] = useState<CourseDraft>({
@@ -99,7 +104,6 @@ export function CourseDetailDrawer() {
   useEffect(() => {
     if (currentCourse) setStaleCourse(currentCourse);
   }, [currentCourse?.id]);
-  const course = currentCourse ?? staleCourse;
 
   // ---- Floating entity swap lifecycle（与 Assignment Floating Detail 同家族）----
   // closed→open：第一帧即当前实体；open A→open B：先 old fade-out（60ms）再替换；
@@ -149,6 +153,19 @@ export function CourseDetailDrawer() {
     setAddSlotAutoFocusKey(0);
   }, [currentId]);
 
+  // Entity Ownership（V1 closure）：
+  // - Selection Entity = currentCourse/currentId：只负责 open/close、swap 驱动、focus restore
+  // - Displayed Entity = displayedCourse/displayedId：Header / Overview / stats / schedule /
+  //   tasks / materials / activity / 全部 mutation target 的唯一来源
+  // - swap-out 与 close presence 期间：旧实体内容仅视觉退场 → non-interactive（inert + pointer-events-none）
+  const entityInteractive = isCourseEntityInteractive(currentId, displayedId, swapPhase);
+  useEffect(() => {
+    const el = bodyRef.current;
+    if (!el) return;
+    if (entityInteractive) el.removeAttribute("inert");
+    else el.setAttribute("inert", "");
+  }, [entityInteractive]);
+
   const displayedCourse =
     courses.find((c) => c.id === displayedId) ?? currentCourse ?? staleCourse;
 
@@ -160,16 +177,17 @@ export function CourseDetailDrawer() {
     displayedCourse?.id
   );
 
-  if (!course) return null;
+  if (!displayedCourse) return null;
 
-  // ---- Course Edit ----
+  // ---- Course Edit（只允许 interactive 的 displayed entity；draft 来自 displayed snapshot）----
   const handleStartEdit = () => {
+    if (!entityInteractive) return;
     setDraft({
-      name: course.name,
-      teacher: course.teacher,
-      classroom: course.classroom,
-      credit: course.credit,
-      description: course.description,
+      name: displayedCourse.name,
+      teacher: displayedCourse.teacher,
+      classroom: displayedCourse.classroom,
+      credit: displayedCourse.credit,
+      description: displayedCourse.description,
     });
     setEditError(null);
     setIsEditing(true);
@@ -181,6 +199,7 @@ export function CourseDetailDrawer() {
   };
 
   const handleSaveCourse = () => {
+    if (!entityInteractive) return;
     if (!draft.name.trim()) {
       setEditError("课程名称不能为空");
       return;
@@ -190,7 +209,7 @@ export function CourseDetailDrawer() {
       return;
     }
     updateCourse({
-      ...course,
+      ...displayedCourse,
       name: draft.name.trim(),
       teacher: draft.teacher,
       classroom: draft.classroom,
@@ -202,13 +221,15 @@ export function CourseDetailDrawer() {
     pushToast({ message: "课程已更新" });
   };
 
-  // 快捷操作：添加任务（自动预选当前课程）
+  // 快捷操作：添加任务（自动预选当前 displayed 课程）
   const handleQuickAddAssignment = () => {
-    openAssignmentEditor({ courseId: course.id });
+    if (!entityInteractive) return;
+    openAssignmentEditor({ courseId: displayedCourse.id });
   };
 
   // 快捷操作：展开 Add Schedule form + 滚动 + focus（由 section 的 autoFocusKey 联动）
   const handleQuickAddSlot = () => {
+    if (!entityInteractive) return;
     setAddSlotAutoFocusKey((k) => k + 1);
     scheduleSectionRef.current?.scrollIntoView({
       behavior: reducedMotion ? "auto" : "smooth",
@@ -216,15 +237,18 @@ export function CourseDetailDrawer() {
     });
   };
 
-  // 快捷操作：触发资料上传文件选择
+  // 快捷操作：触发资料上传文件选择。capture 点击时的 displayed 课程作为 async 上传 target
   const handleQuickUploadMaterial = () => {
+    if (!entityInteractive) return;
+    materialUploadTargetCourseIdRef.current = displayedCourse.id;
     materialInputRef.current?.click();
   };
 
-  // Ask Kiro：固定课程 Entry Context → 关闭 Drawer → 打开 Sidecar
+  // Ask Kiro：固定 displayed 课程 Entry Context → 关闭 Drawer → 打开 Sidecar
   const handleAskKiro = () => {
+    if (!entityInteractive) return;
     setMoreOpen(false);
-    handoff.openForCourse(course.id);
+    handoff.openForCourse(displayedCourse.id);
     setSelectedCourseId(null);
   };
 
@@ -234,15 +258,19 @@ export function CourseDetailDrawer() {
     setSelectedAssignmentId(assignmentId);
   };
 
+  // Delete Course：capture 用户点下 Delete 时的 displayed 实体；
+  // confirm 生命周期内 selection 变化也不改变删除目标
   const handleDeleteCourse = () => {
+    if (!entityInteractive) return;
     setMoreOpen(false);
+    const target = displayedCourse;
     confirmRequest({
       title: "删除课程？",
-      description: `课程《${course.name}》的排课、相关任务和本地资料也会一并删除，此操作无法撤销。`,
+      description: `课程《${target.name}》的排课、相关任务和本地资料也会一并删除，此操作无法撤销。`,
       confirmLabel: "删除课程",
       danger: true,
       onConfirm: () => {
-        deleteCourse(course.id);
+        deleteCourse(target.id);
         setSelectedCourseId(null);
         pushToast({ message: "课程已删除" });
       },
@@ -288,17 +316,18 @@ export function CourseDetailDrawer() {
   const slotConflictSuffix = (editing: boolean) =>
     editing ? "，已阻止保存。可取消编辑后调整时间或周次。" : "，已阻止添加。";
 
-  /** 新增时段：返回错误文案（null = 成功） */
+  /** 新增时段：返回错误文案（null = 成功）；target 恒为 displayed 实体 */
   const handleAddSlot = (form: ScheduleForm): string | null => {
+    if (!entityInteractive) return null;
     const error = validateSlot(form);
     if (error) return error;
     const candidate: CourseSchedule = {
       id: "__candidate__",
-      courseId: course.id,
+      courseId: displayedCourse.id,
       dayOfWeek: form.dayOfWeek,
       startTime: form.startTime,
       endTime: form.endTime,
-      location: form.location || course.classroom,
+      location: form.location || displayedCourse.classroom,
       weeks: form.weeks,
     };
     const conflicts = findCandidateConflicts(candidate);
@@ -306,18 +335,19 @@ export function CourseDetailDrawer() {
       return formatConflictMessage(conflicts, candidate.id) + slotConflictSuffix(false);
     }
     addScheduleSlot({
-      courseId: course.id,
+      courseId: displayedCourse.id,
       dayOfWeek: form.dayOfWeek,
       startTime: form.startTime,
       endTime: form.endTime,
-      location: form.location || course.classroom,
+      location: form.location || displayedCourse.classroom,
       weeks: form.weeks,
     });
     return null;
   };
 
-  /** 编辑时段：返回错误文案（null = 成功） */
+  /** 编辑时段：返回错误文案（null = 成功）；只能更新 displayed 实体的 slot */
   const handleUpdateSlot = (id: string, form: ScheduleForm): string | null => {
+    if (!entityInteractive) return null;
     const sched = courseSchedules.find((s) => s.id === id);
     if (!sched) return null;
     const error = validateSlot(form);
@@ -351,14 +381,21 @@ export function CourseDetailDrawer() {
   };
 
   // Real File Upload Handler: File → IndexedDB 保存 Blob → 生成 storageKey → Zustand 只存 metadata
+  // target = 点击「上传资料」时 capture 的课程（async 生命周期固定；resolve 时 displayed 已变也不改目标）
   const handleRealFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
 
-    setIsUploading(true);
+    const targetCourseId = resolveMaterialUploadTarget(
+      materialUploadTargetCourseIdRef.current,
+      displayedCourse.id
+    );
+    if (!targetCourseId) return;
+
+    setUploadingCourseId(targetCourseId);
     try {
       const { succeeded, failed } = await uploadCourseMaterials({
-        courseId: course.id,
+        courseId: targetCourseId,
         files: Array.from(files),
         addMaterial: addCourseMaterial,
       });
@@ -369,14 +406,17 @@ export function CourseDetailDrawer() {
         pushToast({ type: "error", message: `《${name}》保存失败，请重试` });
       }
     } finally {
-      setIsUploading(false);
+      // 只清 input / uploading 状态；不改变 target semantic、不中断 Promise
+      setUploadingCourseId(null);
       e.target.value = "";
     }
   };
 
-  // 删除资料：先移除 metadata，Blob 在撤销窗口结束后再删
+  // 删除资料：先移除 metadata，Blob 在撤销窗口结束后再删；courseId 恒为 displayed 实体
   const handleDeleteMaterial = (mat: Material) => {
-    const removed = deleteCourseMaterial(course.id, mat.id);
+    if (!entityInteractive) return;
+    const targetCourseId = displayedCourse.id;
+    const removed = deleteCourseMaterial(targetCourseId, mat.id);
     if (!removed) return;
     let undone = false;
     pushToast({
@@ -385,7 +425,7 @@ export function CourseDetailDrawer() {
       actionLabel: "撤销",
       onAction: () => {
         undone = true;
-        restoreCourseMaterial(course.id, removed);
+        restoreCourseMaterial(targetCourseId, removed);
       },
       onDismiss: () => {
         if (!undone && removed.storageKey) {
@@ -400,7 +440,11 @@ export function CourseDetailDrawer() {
     previewMaterial(mat);
   };
 
-  const stats = formatCourseStats(courseSchedules.length, courseAssignments.length, course.materials.length);
+  const stats = formatCourseStats(
+    courseSchedules.length,
+    courseAssignments.length,
+    displayedCourse.materials.length
+  );
 
   // Header 与 Body 共享 entity swap lifecycle：静态 shell 控件（More/Close）留在 swap 层外
   const swapContentClasses = cn(
@@ -429,18 +473,19 @@ export function CourseDetailDrawer() {
         <div className="flex items-start justify-between gap-2">
           <div
             key={displayedId ?? "none"}
+            data-displayed-course-id={displayedCourse.id}
             className={cn("min-w-0 flex-1", swapContentClasses)}
           >
             <p className="flex items-center gap-1.5 text-xs font-semibold text-sandrift">
               <span
                 aria-hidden="true"
                 className="w-1.5 h-1.5 rounded-full shrink-0"
-                style={{ backgroundColor: displayedCourse?.borderHex }}
+                style={{ backgroundColor: displayedCourse.borderHex }}
               />
-              {displayedCourse?.code ? `课程资料 · ${displayedCourse.code}` : "课程资料"}
+              {displayedCourse.code ? `课程资料 · ${displayedCourse.code}` : "课程资料"}
             </p>
             <h2 className="mt-1 break-words text-[19px] font-bold leading-snug text-charcoal">
-              {displayedCourse?.name ?? course.name}
+              {displayedCourse.name}
             </h2>
           </div>
           <div className="flex shrink-0 items-center gap-1">
@@ -448,6 +493,7 @@ export function CourseDetailDrawer() {
               <IconButton
                 variant="secondary"
                 size="sm"
+                disabled={!entityInteractive}
                 onClick={() => setMoreOpen((v) => !v)}
                 aria-label="更多操作"
                 title="更多操作"
@@ -474,12 +520,22 @@ export function CourseDetailDrawer() {
       </header>
 
       {/* BODY：content-fit 下的正确 flex contract —— 自然高度 <= max 时按内容展开；
-          超过 max（parent max-h 封顶）时 flex-shrink + overflow-y-auto 内部滚动 */}
-      <div className="min-h-0 flex-[0_1_auto] overflow-y-auto overscroll-contain p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))]">
+          超过 max（parent max-h 封顶）时 flex-shrink + overflow-y-auto 内部滚动。
+          非 interactive（swap-out / close presence）：inert + pointer-events-none，
+          旧实体内容仅供视觉退场，mouse 与 Tab/Enter 均不可操作 */}
+      <div
+        ref={bodyRef}
+        data-testid="course-detail-body"
+        data-displayed-course-id={displayedCourse.id}
+        className={cn(
+          "min-h-0 flex-[0_1_auto] overflow-y-auto overscroll-contain p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))]",
+          !entityInteractive && "pointer-events-none"
+        )}
+      >
         <div key={displayedId ?? "none"} className={cn("space-y-5", swapContentClasses)}>
           {/* OVERVIEW */}
           <CourseDetailOverview
-            course={displayedCourse ?? course}
+            course={displayedCourse}
             stats={stats}
             editing={isEditing}
             draft={draft}
@@ -527,9 +583,9 @@ export function CourseDetailDrawer() {
           {/* SCHEDULE */}
           <CourseScheduleSection
             schedules={courseSchedules}
-            courseClassroom={course.classroom}
-            courseName={course.name}
-            overrides={scheduleOccurrenceOverrides.filter((o) => o.courseId === course.id)}
+            courseClassroom={displayedCourse.classroom}
+            courseName={displayedCourse.name}
+            overrides={scheduleOccurrenceOverrides.filter((o) => o.courseId === displayedCourse.id)}
             onDeleteOverride={(overrideId) => {
               const removed = deleteScheduleOccurrenceOverride(overrideId);
               if (removed) {
@@ -564,8 +620,8 @@ export function CourseDetailDrawer() {
 
           {/* MATERIALS */}
           <CourseMaterialSection
-            materials={course.materials}
-            uploading={isUploading}
+            materials={displayedCourse.materials}
+            uploading={uploadingCourseId === displayedCourse.id}
             onUploadClick={handleQuickUploadMaterial}
             onPreview={handlePreviewMaterial}
             onDelete={handleDeleteMaterial}
@@ -575,10 +631,7 @@ export function CourseDetailDrawer() {
           <div className="h-px bg-line-soft" aria-hidden="true" />
 
           {/* 活动记录：secondary context，默认 collapsed，lazy 加载真实 Learning History */}
-          <EntityActivitySection
-            scope="course"
-            courseId={displayedCourse?.id ?? course.id}
-          />
+          <EntityActivitySection scope="course" courseId={displayedCourse.id} />
         </div>
       </div>
 

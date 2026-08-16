@@ -75,7 +75,8 @@ base("Floating Detail：Marker hover → Portal Popover（不压课程卡、不�
   await expect(floating).toBeVisible({ timeout: 3000 });
   await expect(floating.getByText("学习任务")).toBeVisible();
   await expect(floating.getByText(/重叠任务/)).toBeVisible();
-  await expect(floating.getByText(/与《数据结构》时间重叠/)).toBeVisible();
+  // 4542102 起文案为通用「与当前课程时间重叠」（不再内插课程名）
+  await expect(floating.getByText(/与当前课程时间重叠/)).toBeVisible();
 
   // 在 body 直属（portal）→ 不受 overflow 容器裁剪
   const inBody = await floating.evaluate((el) => el.parentElement === document.body);
