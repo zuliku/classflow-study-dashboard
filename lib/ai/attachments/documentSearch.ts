@@ -19,15 +19,128 @@ import {
 /** 最多切分 terms（防止 query 过长导致扫描成本失控） */
 export const MAX_LOCAL_SEARCH_TERMS = 8;
 
-// ---------- normalize / tokenize ----------
+// ---------- normalize / offset mapping（SEARCH VIEW 单一事实来源，V1.4.3） ----------
 
-/** 纯函数：NFKC + Latin lowercase + collapse whitespace（中文 substring 天然保留） */
+/** normalized checkpoint 间隔：offset remap 只从最近 checkpoint 局部重扫（避免 dense per-char map） */
+export const NORMALIZED_SEARCH_CHECKPOINT_INTERVAL = 512;
+
+export interface NormalizedCheckpoint {
+  /** 该 checkpoint 对应 normalized 文本的第几个字符 */
+  normOffset: number;
+  /** 对应 source 偏移（下一个待处理 code point 的位置） */
+  sourceOffset: number;
+  /** 是否已 emit 过非空白字符（trim-start 状态） */
+  started: boolean;
+  /** 上一个 emit 的 normalized 字符是否为 collapse 后的空格 */
+  prevWasWs: boolean;
+}
+
+export interface NormalizedSourceView {
+  normalized: string;
+  /** source 原文（remap 与 snippet 用；buildNormalizedSourceView 持有引用，不复制） */
+  source: string;
+  /** 稀疏 checkpoints：mapping 用（不做 dense per-char 索引） */
+  checkpoints: NormalizedCheckpoint[];
+}
+
+/** 单字符 normalize（code point 安全）：NFKC + lowercase；返回 normalized 结果与 source 消耗长度 */
+function normalizeOneChar(source: string, sourcePos: number): { char: string; sourceEnd: number } {
+  const cp = source.codePointAt(sourcePos);
+  if (cp === undefined) return { char: "", sourceEnd: sourcePos };
+  const raw = String.fromCodePoint(cp);
+  return { char: raw.normalize("NFKC").toLowerCase(), sourceEnd: sourcePos + raw.length };
+}
+
+function isSpaceChar(ch: string): boolean {
+  return /\s/.test(ch);
+}
+
+/**
+ * 构建 SEARCH VIEW（唯一 normalize 实现；normalizeLocalSearchText 与其共用）：
+ * NFKC + lowercase + collapse whitespace + trim，同时记录稀疏 checkpoints 供 source remap。
+ * 复杂度 O(n)；内存 O(n / interval)（20MiB 文本 ≈ 4 万 checkpoint，瞬态）。
+ */
+export function buildNormalizedSourceView(source: string): NormalizedSourceView {
+  const normalized: string[] = [];
+  const checkpoints: NormalizedCheckpoint[] = [];
+  let normOffset = 0;
+  let srcPos = 0;
+  let started = false;
+  let prevWasWs = false;
+  checkpoints.push({ normOffset: 0, sourceOffset: 0, started: false, prevWasWs: false });
+  while (srcPos < source.length) {
+    const { char, sourceEnd } = normalizeOneChar(source, srcPos);
+    srcPos = sourceEnd;
+    if (isSpaceChar(char)) {
+      if (started && !prevWasWs) {
+        normalized.push(" ");
+        prevWasWs = true;
+        normOffset++;
+        if (normOffset % NORMALIZED_SEARCH_CHECKPOINT_INTERVAL === 0) {
+          checkpoints.push({ normOffset, sourceOffset: srcPos, started, prevWasWs });
+        }
+      }
+      continue;
+    }
+    normalized.push(char);
+    started = true;
+    prevWasWs = false;
+    normOffset++;
+    if (normOffset % NORMALIZED_SEARCH_CHECKPOINT_INTERVAL === 0) {
+      checkpoints.push({ normOffset, sourceOffset: srcPos, started, prevWasWs });
+    }
+  }
+  const joined = normalized.join("");
+  // trim-end：末尾 collapse 出的空格不保留（与既有 normalizeLocalSearchText 语义一致）
+  const finalText = joined.endsWith(" ") ? joined.slice(0, -1) : joined;
+  return { normalized: finalText, source, checkpoints };
+}
+
+/** 纯函数：NFKC + Latin lowercase + collapse whitespace（SEARCH VIEW；由 buildNormalizedSourceView 实现） */
 export function normalizeLocalSearchText(text: string): string {
-  return text
-    .normalize("NFKC")
-    .toLowerCase()
-    .replace(/\s+/g, " ")
-    .trim();
+  return buildNormalizedSourceView(text).normalized;
+}
+
+/**
+ * normalized offset → source offset（仅对少量目标调用）。
+ * 从最近 checkpoint 局部重扫（≤ interval 长度），不重新扫描全文：
+ * 复杂度 O(interval × targets)，与 normalizeLocalSearchText 共用同一规则（单一事实来源）。
+ */
+export function mapNormalizedOffsetToSource(view: NormalizedSourceView, normOffset: number): number {
+  if (normOffset <= 0) return view.checkpoints[0].sourceOffset;
+  if (normOffset >= view.normalized.length) return view.source.length;
+  // binary search：最近 checkpoint（≤ normOffset）
+  const cks = view.checkpoints;
+  let lo = 0;
+  let hi = cks.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (cks[mid].normOffset <= normOffset) lo = mid + 1;
+    else hi = mid;
+  }
+  const ck = cks[lo - 1];
+  let emitted = ck.normOffset;
+  let srcPos = ck.sourceOffset;
+  let started = ck.started;
+  let prevWasWs = ck.prevWasWs;
+  while (srcPos < view.source.length && emitted <= normOffset) {
+    const charStart = srcPos;
+    const { char, sourceEnd } = normalizeOneChar(view.source, srcPos);
+    srcPos = sourceEnd;
+    if (isSpaceChar(char)) {
+      if (started && !prevWasWs) {
+        if (emitted === normOffset) return charStart;
+        emitted++;
+        prevWasWs = true;
+      }
+      continue;
+    }
+    if (emitted === normOffset) return charStart;
+    emitted++;
+    started = true;
+    prevWasWs = false;
+  }
+  return view.source.length;
 }
 
 /** 术语切分（ES5 兼容：无 Unicode property escapes）：按空白 + 常见中英文标点切分。
@@ -170,21 +283,40 @@ export function scoreLocalSearch(text: string, query: { phrase: string; terms: s
 }
 
 
-// ---------- snippet ----------
+// ---------- snippet（V1.4.3：source-faithful Evidence） ----------
 
-/** 围绕命中位置的 bounded snippet（前 ~1/3 + 匹配区 + 后 ~2/3；总长 ≤ snippetChars） */
-export function buildLocalSearchSnippet(text: string, match: LocalSearchMatch, snippetChars = MAX_PROJECT_SEARCH_SNIPPET_CHARS): string {
-  const total = Math.max(1, snippetChars);
+/**
+ * 围绕真实 source match range 的 bounded snippet（前 ~1/3 + 匹配区 + 后 ~2/3）。
+ * - 内容来自 sourceText 原文（保留大小写/标点/Unicode/换行；绝不再 collapse）
+ * - 向前扩展到换行或句末标点边界（. 。！？!?；; 与 \n）
+ * - 最终 length ≤ maxChars；越界处加省略号
+ */
+export function buildSourceEvidenceSnippet(input: {
+  sourceText: string;
+  sourceStart: number;
+  sourceEnd: number;
+  maxChars?: number;
+}): string {
+  const total = Math.max(1, input.maxChars ?? MAX_PROJECT_SEARCH_SNIPPET_CHARS);
   const before = Math.floor(total / 3);
   const after = total - before;
-  let start = Math.max(0, match.index - before);
-  let end = Math.min(text.length, match.index + match.matchLength + after);
-  // 允许片段向前扩展到句子边界（. ！？；\n）
-  const sentenceBreak = text.lastIndexOf("\n", match.index);
-  if (sentenceBreak > start && sentenceBreak < match.index) start = sentenceBreak + 1;
-  const snippet = text.slice(start, end);
+  const source = input.sourceText;
+  let start = Math.max(0, input.sourceStart - before);
+  const end = Math.min(source.length, input.sourceEnd + after);
+  const lineBreak = source.lastIndexOf("\n", input.sourceStart);
+  if (lineBreak >= start && lineBreak < input.sourceStart) {
+    start = lineBreak + 1;
+  } else {
+    let punct = -1;
+    for (const p of ["。", "！", "？", "；", ".", "!", "?", ";"]) {
+      const idx = source.lastIndexOf(p, input.sourceStart);
+      if (idx > punct) punct = idx;
+    }
+    if (punct >= start && punct < input.sourceStart) start = punct + 1;
+  }
+  const snippet = source.slice(start, end);
   const prefix = start > 0 ? "…" : "";
-  const suffix = end < text.length ? "…" : "";
+  const suffix = end < source.length ? "…" : "";
   return `${prefix}${snippet}${suffix}`.slice(0, total);
 }
 
@@ -198,7 +330,12 @@ export interface LocalTextSearchResult {
   truncated: boolean;
 }
 
-/** 全文词法搜索（纯函数；bounded output） */
+/**
+ * 全文词法搜索（纯函数；bounded output）。
+ * V1.4.3：matching/ranking 在 SEARCH VIEW（normalized）上进行；
+ * Evidence snippet 通过 sparse checkpoint remap 到 source 原文生成（大小写/Unicode/换行保真）。
+ * 预算按最终 source snippet 长度计算。
+ */
 export function searchLocalText(
   rawText: string,
   query: string,
@@ -207,13 +344,22 @@ export function searchLocalText(
   const maxResults = Math.max(1, Math.min(options?.maxResults ?? MAX_PROJECT_SEARCH_RESULTS, MAX_PROJECT_SEARCH_RESULTS));
   const snippetChars = options?.snippetChars ?? MAX_PROJECT_SEARCH_SNIPPET_CHARS;
   const totalChars = Math.max(1, options?.totalChars ?? MAX_PROJECT_SEARCH_TOTAL_CHARS);
-  const normalized = normalizeLocalSearchText(rawText);
-  const scored = scoreLocalSearch(normalized, tokenizeLocalSearchQuery(query));
+  const view = buildNormalizedSourceView(rawText);
+  const scored = scoreLocalSearch(view.normalized, tokenizeLocalSearchQuery(query));
   const matchCount = scored.length;
+  // 按 normalized offset 排序后一次性 remap（每个目标只做 ≤ interval 的局部重扫）
+  const targets = scored.slice(0, maxResults).sort((a, b) => a.index - b.index);
   const matches: { index: number; text: string }[] = [];
   let used = 0;
-  for (const m of scored.slice(0, maxResults)) {
-    const snippet = buildLocalSearchSnippet(normalized, m, snippetChars);
+  for (const m of targets) {
+    const sourceStart = mapNormalizedOffsetToSource(view, m.index);
+    const sourceEnd = mapNormalizedOffsetToSource(view, m.index + m.matchLength);
+    const snippet = buildSourceEvidenceSnippet({
+      sourceText: rawText,
+      sourceStart,
+      sourceEnd,
+      maxChars: snippetChars,
+    });
     if (used + snippet.length > totalChars) break;
     matches.push({ index: m.index, text: snippet });
     used += snippet.length;
@@ -239,8 +385,8 @@ export interface PdfSearchResult {
 interface PdfPageCandidate {
   page: number;
   score: number;
-  normalizedText: string;
-  match: LocalSearchMatch;
+  /** V1.4.3：source-faithful bounded snippet（候选不保存整页双份文本） */
+  snippet: string;
 }
 
 /** 全页扫描：逐页搜索，保留 top-N candidates（不提前 break；内存只随 N 增长） */
@@ -284,13 +430,23 @@ export async function searchPdfText(
       }
       // V1.4.2：逐页累计非空白字符数（只累加一个 number；bounded memory）
       nonWhitespaceTextChars += pageText.replace(/\s+/g, "").length;
-      const normalized = normalizeLocalSearchText(pageText);
-      if (!normalized) continue;
-      const scored = scoreLocalSearch(normalized, q);
+      // V1.4.3：matching 用 SEARCH VIEW；snippet 立即从本页 sourceText 生成（保真且不长期保存整页双份文本）
+      const view = buildNormalizedSourceView(pageText);
+      if (!view.normalized) continue;
+      const scored = scoreLocalSearch(view.normalized, q);
       if (scored.length === 0) continue;
       totalMatchCount += scored.length;
-      // 每页只取最佳命中进入候选池（页面级 Evidence 粒度）
-      pushCandidate({ page: i, score: scored[0].score, normalizedText: normalized, match: scored[0] });
+      const best = scored[0];
+      const sourceStart = mapNormalizedOffsetToSource(view, best.index);
+      const sourceEnd = mapNormalizedOffsetToSource(view, best.index + best.matchLength);
+      const snippet = buildSourceEvidenceSnippet({
+        sourceText: pageText,
+        sourceStart,
+        sourceEnd,
+        maxChars: snippetChars,
+      });
+      // 每页只取最佳命中进入候选池（页面级 Evidence 粒度）；ranking 只看 score/page，不看 snippet
+      pushCandidate({ page: i, score: best.score, snippet });
     }
   } finally {
     const cleanup = (doc as unknown as { destroy?: () => Promise<void> }).destroy;
@@ -302,14 +458,13 @@ export async function searchPdfText(
     nonWhitespaceTextChars,
   });
 
-  // 按候选生成 bounded snippets（受 maxResults + total chars 双预算）
+  // 按候选生成 bounded snippets（受 maxResults + total chars 双预算；预算按最终 source snippet 长度）
   const matches: PdfSearchMatch[] = [];
   let used = 0;
   for (const c of topCandidates) {
-    const snippet = buildLocalSearchSnippet(c.normalizedText, c.match, snippetChars);
-    if (used + snippet.length > totalChars) break;
-    matches.push({ page: c.page, text: snippet });
-    used += snippet.length;
+    if (used + c.snippet.length > totalChars) break;
+    matches.push({ page: c.page, text: c.snippet });
+    used += c.snippet.length;
   }
   return {
     matches,

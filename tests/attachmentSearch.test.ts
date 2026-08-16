@@ -7,10 +7,12 @@ import {
   normalizeLocalSearchText,
   tokenizeLocalSearchQuery,
   scoreLocalSearch,
-  buildLocalSearchSnippet,
+  buildSourceEvidenceSnippet,
   searchLocalText,
   searchPdfText,
   extractPdfPagesText,
+  buildNormalizedSourceView,
+  mapNormalizedOffsetToSource,
 } from "@/lib/ai/attachments/documentSearch";
 import {
   MAX_PROJECT_SEARCH_SNIPPET_CHARS,
@@ -114,13 +116,92 @@ describe("scoreLocalSearch（deterministic）", () => {
   });
 });
 
-describe("buildLocalSearchSnippet", () => {
-  it("总长 ≤ MAX_PROJECT_SEARCH_SNIPPET_CHARS；含匹配区域", () => {
-    const text = "x".repeat(5000) + "THE_MATCH" + "y".repeat(5000);
-    const scored = scoreLocalSearch(normalizeLocalSearchText(text), tokenizeLocalSearchQuery("THE_MATCH"));
-    const snippet = buildLocalSearchSnippet(normalizeLocalSearchText(text), scored[0]);
-    expect(snippet.length).toBeLessThanOrEqual(MAX_PROJECT_SEARCH_SNIPPET_CHARS);
-    expect(snippet).toContain("the_match");
+describe("buildSourceEvidenceSnippet（V1.4.3 source-faithful）", () => {
+  it("总长 ≤ maxChars；保留 source 原文（大小写/空白不归一）", () => {
+    const source = "x".repeat(3000) + "The Treatment Effect is ATT." + "y".repeat(3000);
+    const view = buildNormalizedSourceView(source);
+    const scored = scoreLocalSearch(view.normalized, tokenizeLocalSearchQuery("treatment effect"));
+    const sStart = mapNormalizedOffsetToSource(view, scored[0].index);
+    const sEnd = mapNormalizedOffsetToSource(view, scored[0].index + scored[0].matchLength);
+    const snippet = buildSourceEvidenceSnippet({ sourceText: source, sourceStart: sStart, sourceEnd: sEnd, maxChars: 1200 });
+    expect(snippet.length).toBeLessThanOrEqual(1200);
+    expect(snippet).toContain("Treatment Effect");
+  });
+});
+
+describe("V1.4.3 source-faithful Evidence", () => {
+  it("大小写保真：DiD 原文保留，query 仍 case-insensitive 命中", () => {
+    const doc = "We use Difference-in-Differences (DiD) to estimate ATT.";
+    const r = searchLocalText(doc, "difference-in-differences", { maxResults: 5 });
+    expect(r.matches.length).toBeGreaterThan(0);
+    expect(r.matches[0].text).toContain("Difference-in-Differences");
+    expect(r.matches[0].text).toContain("(DiD)");
+    expect(r.matches[0].text).toContain("ATT");
+    expect(r.matches[0].text).not.toContain("(did)");
+  });
+
+  it("全角 / NFKC：query abc123 命中，Evidence 返回全角原文 ＡＢＣ１２３", () => {
+    const doc = "模型版本：ＡＢＣ１２３";
+    const r = searchLocalText(doc, "abc123", { maxResults: 5 });
+    expect(r.matches.length).toBeGreaterThan(0);
+    expect(r.matches[0].text).toContain("ＡＢＣ１２３");
+    expect(r.matches[0].text).not.toContain("abc123");
+  });
+
+  it("whitespace fidelity：换行与原始空白保留", () => {
+    const doc = "Results\n\nThe ATT   estimate is 4.2%.\nNext section";
+    const r = searchLocalText(doc, "att estimate", { maxResults: 5 });
+    expect(r.matches.length).toBeGreaterThan(0);
+    expect(r.matches[0].text).toContain("ATT   estimate");
+    expect(r.matches[0].text).toContain("\n");
+    expect(r.matches[0].text).not.toContain("results the att estimate");
+  });
+
+  it("中文 Evidence：标点与换行保留", () => {
+    const doc = "政策认知显著影响技术采纳。\n第二段讨论低碳生产。";
+    const r = searchLocalText(doc, "政策认知 技术采纳", { maxResults: 5 });
+    expect(r.matches.length).toBeGreaterThan(0);
+    expect(r.matches[0].text).toContain("。");
+    expect(r.matches[0].text).toContain("政策认知");
+    expect(r.matches[0].text).toContain("技术采纳");
+  });
+
+  it("normalization length change：ligature ﬀ → ff 命中，Evidence 保留 ﬀ", () => {
+    const doc = "oﬀice treatment";
+    const r = searchLocalText(doc, "office", { maxResults: 5 });
+    expect(r.matches.length).toBeGreaterThan(0);
+    expect(r.matches[0].text).toContain("oﬀice");
+  });
+
+  it("Evidence bounded：每个 match ≤1200，总和 ≤8000（按 source snippet 计）", () => {
+    const doc = Array.from({ length: 60 }, (_, i) => `Paragraph ${i + 1}: the ATT estimate paragraph body content ${i}`).join("\n\n");
+    const r = searchLocalText(doc, "ATT estimate", { maxResults: 8 });
+    for (const m of r.matches) {
+      expect(m.text.length).toBeLessThanOrEqual(MAX_PROJECT_SEARCH_SNIPPET_CHARS);
+    }
+    const total = r.matches.reduce((s, m) => s + m.text.length, 0);
+    expect(total).toBeLessThanOrEqual(MAX_PROJECT_SEARCH_TOTAL_CHARS);
+  });
+
+  it("multi-term ranking 不回归：coverage 排序保持", () => {
+    const a = normalizeLocalSearchText("policy only");
+    const b = normalizeLocalSearchText("policy information is relevant for household adoption of clean technology");
+    const q = tokenizeLocalSearchQuery("policy adoption technology");
+    const bestA = scoreLocalSearch(a, q)[0]?.score ?? 0;
+    const bestB = scoreLocalSearch(b, q)[0]?.score ?? 0;
+    expect(bestB).toBeGreaterThan(bestA);
+  });
+
+  it("mapNormalizedOffsetToSource 稀疏映射正确（全角 3 字符）", () => {
+    const view = buildNormalizedSourceView("模型版本：ＡＢＣ１２３");
+    // NFKC 把全角冒号一并归一为半角
+    expect(view.normalized).toBe("模型版本:abc123");
+    // normalized "abc" 起始 offset 应映射回全角 "Ａ" 的 source 位置
+    const start = mapNormalizedOffsetToSource(view, view.normalized.indexOf("abc"));
+    expect(view.source[start]).toBe("Ａ");
+    // 归一化前（全角）3 个 source 字符 → 3 个 normalized 字符
+    const end = mapNormalizedOffsetToSource(view, view.normalized.indexOf("abc") + 3);
+    expect(view.source.slice(start, end)).toBe("ＡＢＣ");
   });
 });
 
@@ -162,7 +243,8 @@ describe("searchPdfText（真实多页 PDF；bounded memory）", () => {
     const r = await searchPdfText(blob, "LONG_DOCUMENT_TAIL_SENTINEL", { maxResults: 5 });
     expect(r.matches.length).toBeGreaterThan(0);
     expect(r.matches[0].page).toBe(150);
-    expect(r.matches[0].text).toContain("long_document_tail_sentinel");
+    // V1.4.3：Evidence 保持 source 原文大小写
+    expect(r.matches[0].text).toContain("LONG_DOCUMENT_TAIL_SENTINEL");
   });
 
   it("高频率词跨多页：matches ≤ maxResults，总 chars ≤ 预算", async () => {

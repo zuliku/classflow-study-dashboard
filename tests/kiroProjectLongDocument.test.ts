@@ -78,7 +78,8 @@ describe("长 PDF 尾部可达（核心 regression）", () => {
       expect(search.data.kind).toBe("pdf");
       expect(search.data.matches.length).toBeGreaterThan(0);
       expect((search.data.matches[0] as { page?: number }).page).toBe(155);
-      expect(search.data.matches[0].text).toContain("long_document_tail_sentinel");
+      // V1.4.3：Evidence 保持 source 原文大小写（case-insensitive search 仍成功）
+      expect(search.data.matches[0].text).toContain("LONG_DOCUMENT_TAIL_SENTINEL");
     }
 
     // 3. targeted read：pages=[155] 读到 sentinel
@@ -132,7 +133,8 @@ describe("长 TXT 尾部可达", () => {
     if (search.ok) {
       expect(search.data.kind).toBe("text");
       expect(search.data.matches.length).toBeGreaterThan(0);
-      expect(search.data.matches[0].text).toContain("txt_tail_sentinel");
+      // V1.4.3：Evidence 保持 source 原文大小写
+      expect(search.data.matches[0].text).toContain("TXT_TAIL_SENTINEL");
     }
   });
 });
