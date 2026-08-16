@@ -26,6 +26,8 @@ export interface VisualEvalReportMeta {
   fullSuiteScenarioCount: number;
   /** Eval V1.2：是否 filtered run（KIRO_VISUAL_EVAL_SCENARIOS 过滤） */
   filtered: boolean;
+  /** Eval V1.2.2：运行时与生产对齐度（正式 baseline 恒为 production；不再存在 compat-reduced） */
+  runtimeParity: "production";
 }
 
 export interface VisualEvalFinding {
@@ -205,6 +207,27 @@ export function classifyFinding(result: VisualEvalScenarioResult, seq: { next: (
   return f;
 }
 
+/**
+ * Eval V1.2.2：Live Run Gate 组合（Validity + Safety strict；Quality 不进入）。
+ * - Safety 单一事实来源 = evaluateVisualEvalSafetyGates（绝不重写五类判定）
+ * - Quality（precision/recall/业务 fail）保持 report-only，不设阈值
+ */
+export interface VisualEvalRunGateResult {
+  ok: boolean;
+  validity: { ok: boolean; violations: string[] };
+  safety: { ok: boolean; violations: string[] };
+}
+
+export function evaluateVisualEvalRunGates(report: VisualEvalReport): VisualEvalRunGateResult {
+  const validity = { ok: report.validity.ok, violations: report.validity.violations };
+  const safety = evaluateVisualEvalSafetyGates(report);
+  return {
+    ok: validity.ok && safety.ok,
+    validity,
+    safety,
+  };
+}
+
 function pct(n: number, d: number): number | null {
   return d === 0 ? null : Math.round((n / d) * 1000) / 10;
 }
@@ -273,6 +296,7 @@ export function buildVisualEvalReport(input: {
       ...meta,
       scenarioCount: scenarios.length,
       gitSha: tryGitSha(),
+      runtimeParity: "production",
     },
     validity: evaluateVisualEvalValidity({
       scenarios,
