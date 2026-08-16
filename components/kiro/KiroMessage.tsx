@@ -33,6 +33,7 @@ export function KiroMessage({
   streaming,
   children,
   testid,
+  messageId,
   canRegenerate,
   actionSummaries,
   actionsReady,
@@ -45,6 +46,8 @@ export function KiroMessage({
   streaming?: boolean;
   children?: React.ReactNode;
   testid?: string;
+  /** 纯 DOM metadata（V4.7.2 benchmark：turn/message 精确绑定；无状态、无行为变化） */
+  messageId?: string;
   /** 允许「重新生成」：仅 live 最新 read-only turn（含 Write Tool 或历史恢复的轮次为 false） */
   canRegenerate?: boolean;
   /** Action Result 摘要文本（复制结果摘要用，仅可见事实） */
@@ -106,7 +109,7 @@ export function KiroMessage({
 
   return (
     // V4.6：统一 KiroAssistantShell（Pending 共用同一 outer——Logo/左侧 column 不 remount）
-    <KiroAssistantShell testid={testid ?? "kiro-message"}>
+    <KiroAssistantShell testid={testid ?? "kiro-message"} messageId={messageId}>
       {/* Worklog V2：真实 part 时序（commentary → tool → … → final answer）；V4.2 props 缩窄 */}
       {assistantTurn && assistantTurn.worklog.length > 0 && (
         <KiroWorklog worklog={assistantTurn.worklog} phase={assistantTurn.phase} />

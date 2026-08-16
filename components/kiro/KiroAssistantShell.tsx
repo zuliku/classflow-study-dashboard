@@ -12,12 +12,19 @@ import { KiroMark } from "@/components/kiro/KiroHeader";
 export function KiroAssistantShell({
   children,
   testid,
+  messageId,
 }: {
   children: React.ReactNode;
   testid?: string;
+  /** 纯 DOM metadata（V4.7.2 benchmark：turn/message 精确绑定；无状态、无行为变化） */
+  messageId?: string;
 }) {
   return (
-    <div className="flex gap-3 group" data-testid={testid ?? "kiro-assistant-shell"}>
+    <div
+      className="flex gap-3 group"
+      data-testid={testid ?? "kiro-assistant-shell"}
+      data-message-id={messageId ?? undefined}
+    >
       <KiroMark size="sm" className="mt-0.5" />
       <div className="min-w-0 flex-1 space-y-2 pt-0.5">{children}</div>
     </div>
