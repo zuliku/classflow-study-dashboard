@@ -22,6 +22,10 @@ export interface VisualEvalReportMeta {
   model: string;
   scenarioCount: number;
   gitSha?: string;
+  /** Eval V1.2：完整 suite 场景数（来自 VISUAL_INTAKE_EVAL_SCENARIOS.length；不硬编码 20） */
+  fullSuiteScenarioCount: number;
+  /** Eval V1.2：是否 filtered run（KIRO_VISUAL_EVAL_SCENARIOS 过滤） */
+  filtered: boolean;
 }
 
 export interface VisualEvalFinding {
@@ -32,12 +36,64 @@ export interface VisualEvalFinding {
   message: string;
 }
 
+/**
+ * Eval V1.2：Benchmark Validity —— 「这次评测运行本身是否可信」。
+ * - validity.ok = 所有请求的 Scenario 都产生了有效的模型业务结果（runtimeErrorCount === 0）
+ * - filtered run 可以 ok=true，但 baselineEligible=false（不能代表完整 suite baseline）
+ * - full + 0 runtime error → baselineEligible=true
+ */
+export interface VisualEvalValidity {
+  ok: boolean;
+  requestedScenarioCount: number;
+  evaluatedScenarioCount: number;
+  runtimeErrorCount: number;
+  providerErrorScenarios: string[];
+  harnessErrorScenarios: string[];
+  unknownErrorScenarios: string[];
+  coverage: "full" | "filtered";
+  baselineEligible: boolean;
+  violations: string[];
+}
+
+export function evaluateVisualEvalValidity(input: {
+  scenarios: VisualEvalScenarioResult[];
+  requestedScenarioCount: number;
+  fullSuiteScenarioCount: number;
+}): VisualEvalValidity {
+  const providerErrorScenarios = input.scenarios.filter((s) => s.runtimeError?.type === "provider").map((s) => s.scenarioId);
+  const harnessErrorScenarios = input.scenarios.filter((s) => s.runtimeError?.type === "harness").map((s) => s.scenarioId);
+  const unknownErrorScenarios = input.scenarios.filter((s) => s.runtimeError?.type === "unknown").map((s) => s.scenarioId);
+  const runtimeErrorCount = providerErrorScenarios.length + harnessErrorScenarios.length + unknownErrorScenarios.length;
+  const coverage = input.requestedScenarioCount >= input.fullSuiteScenarioCount ? "full" : "filtered";
+  const violations: string[] = [];
+  if (providerErrorScenarios.length > 0) violations.push(`provider errors: ${providerErrorScenarios.join(",")}`);
+  if (harnessErrorScenarios.length > 0) violations.push(`harness errors: ${harnessErrorScenarios.join(",")}`);
+  if (unknownErrorScenarios.length > 0) violations.push(`unknown errors: ${unknownErrorScenarios.join(",")}`);
+  return {
+    ok: runtimeErrorCount === 0,
+    requestedScenarioCount: input.requestedScenarioCount,
+    evaluatedScenarioCount: input.scenarios.length,
+    runtimeErrorCount,
+    providerErrorScenarios,
+    harnessErrorScenarios,
+    unknownErrorScenarios,
+    coverage,
+    baselineEligible: runtimeErrorCount === 0 && coverage === "full",
+    violations,
+  };
+}
+
 export interface VisualEvalReport {
   meta: VisualEvalReportMeta;
+  validity: VisualEvalValidity;
   summary: {
     pass: number;
     partial: number;
     fail: number;
+    /** Eval V1.2：runtime error scenario 数（不进入 pass/partial/fail） */
+    runtimeErrors: number;
+    /** Eval V1.2：质量指标样本量（有效模型结果场景数） */
+    qualityScenarioCount: number;
     actionPrecision: number | null;
     actionRecall: number | null;
     entityAccuracy: number | null;
@@ -127,6 +183,8 @@ export function buildVisualEvalReport(input: {
   meta: Omit<VisualEvalReportMeta, "scenarioCount" | "gitSha"> & { scenarioCount?: number; gitSha?: string };
 }): VisualEvalReport {
   const { scenarios, meta } = input;
+  // Eval V1.2：质量指标只聚合有效模型业务结果（runtime error 不算 Action FN / Recall 下降）
+  const qualityScenarios = scenarios.filter((s) => !s.runtimeError);
   let tp = 0, fp = 0, fn = 0;
   let entAcc = 0, entTot = 0, timeAcc = 0, timeTot = 0;
   let pendCorr = 0, pendWrong = 0;
@@ -135,7 +193,7 @@ export function buildVisualEvalReport(input: {
   const inventedTime: string[] = [];
   const wrongTool: string[] = [];
   let pendingMutationCapability = 0;
-  for (const r of scenarios) {
+  for (const r of qualityScenarios) {
     tp += r.metrics.actionTP;
     fp += r.metrics.actionFP;
     fn += r.metrics.actionFN;
@@ -145,6 +203,9 @@ export function buildVisualEvalReport(input: {
     timeTot += r.metrics.timeTotal;
     pendCorr += r.metrics.pendingCorrect;
     pendWrong += r.metrics.pendingWrong;
+  }
+  // Safety 聚合基于全部 scenario（runtime error 前已观察到的 direct write 等 Safety 事实不丢失）
+  for (const r of scenarios) {
     if (r.safety.directWriteAttempts.length > 0) directWrite.push(r.scenarioId);
     if (r.safety.unsafeReasons.includes("wrong-entity-proposal")) wrongEntity.push(r.scenarioId);
     if (r.safety.unsafeReasons.includes("invented-or-wrong-time")) inventedTime.push(r.scenarioId);
@@ -155,7 +216,7 @@ export function buildVisualEvalReport(input: {
   const unsafeScenarioIds = Array.from(new Set([...wrongEntity, ...inventedTime, ...wrongTool]));
   // Findings 全局统一编号 + 排序（P0 > P1 > P2 > P3，同优先级按 scenarioId）
   let seq = 0;
-  const findings = scenarios
+  const findings = qualityScenarios
     .flatMap((r) => classifyFinding(r, { next: () => ++seq }))
     .sort((a, b) => {
       const pa = { P0: 0, P1: 1, P2: 2, P3: 3 }[a.priority];
@@ -171,16 +232,24 @@ export function buildVisualEvalReport(input: {
     wrongToolProposals: wrongTool,
     pendingMutationCapability,
   };
+  const runtimeErrors = scenarios.filter((s) => s.runtimeError).length;
   const report: VisualEvalReport = {
     meta: {
       ...meta,
       scenarioCount: scenarios.length,
       gitSha: tryGitSha(),
     },
+    validity: evaluateVisualEvalValidity({
+      scenarios,
+      requestedScenarioCount: meta.scenarioCount ?? scenarios.length,
+      fullSuiteScenarioCount: meta.fullSuiteScenarioCount ?? meta.scenarioCount ?? scenarios.length,
+    }),
     summary: {
-      pass: scenarios.filter((s) => s.outcome === "pass").length,
-      partial: scenarios.filter((s) => s.outcome === "partial").length,
-      fail: scenarios.filter((s) => s.outcome === "fail").length,
+      pass: qualityScenarios.filter((s) => s.outcome === "pass").length,
+      partial: qualityScenarios.filter((s) => s.outcome === "partial").length,
+      fail: qualityScenarios.filter((s) => s.outcome === "fail").length,
+      runtimeErrors,
+      qualityScenarioCount: qualityScenarios.length,
       actionPrecision: pct(tp, tp + fp),
       actionRecall: pct(tp, tp + fn),
       entityAccuracy: pct(entAcc, entTot),
@@ -209,13 +278,31 @@ function tryGitSha(): string | undefined {
 export function renderVisualEvalMarkdown(report: VisualEvalReport): string {
   const { summary, meta } = report;
   const lines: string[] = [];
-  lines.push("# Visual Intake Eval V1 — Report");
+  lines.push(`# Visual Intake Eval V1 — Report`);
   lines.push("");
   lines.push(`- timestamp: ${meta.timestamp}`);
   lines.push(`- provider: ${meta.provider}`);
   lines.push(`- model: ${meta.model}`);
   lines.push(`- scenarios: ${meta.scenarioCount}`);
   if (meta.gitSha) lines.push(`- git SHA: ${meta.gitSha}`);
+  lines.push("");
+  lines.push("## Benchmark Validity");
+  lines.push("");
+  lines.push(report.validity.ok ? "PASS" : "FAIL");
+  lines.push("");
+  lines.push(`- Coverage: ${report.validity.coverage}`);
+  lines.push(`- Requested scenarios: ${report.validity.requestedScenarioCount}`);
+  lines.push(`- Evaluated scenarios: ${report.validity.evaluatedScenarioCount}`);
+  lines.push(`- Runtime errors: ${report.validity.runtimeErrorCount}`);
+  lines.push(`- Baseline eligible: ${report.validity.baselineEligible ? "yes" : "no"}`);
+  if (report.validity.providerErrorScenarios.length > 0) lines.push(`- Provider: ${report.validity.providerErrorScenarios.join(", ")}`);
+  if (report.validity.harnessErrorScenarios.length > 0) lines.push(`- Harness: ${report.validity.harnessErrorScenarios.join(", ")}`);
+  if (report.validity.unknownErrorScenarios.length > 0) lines.push(`- Unknown: ${report.validity.unknownErrorScenarios.join(", ")}`);
+  if (!report.validity.ok) {
+    lines.push("");
+    lines.push("Validity violations:");
+    for (const v of report.validity.violations) lines.push(`- ${v}`);
+  }
   lines.push("");
   lines.push(`## Baseline Summary`);
   lines.push("");
@@ -224,6 +311,9 @@ export function renderVisualEvalMarkdown(report: VisualEvalReport): string {
   lines.push(`PASS      ${summary.pass}`);
   lines.push(`PARTIAL   ${summary.partial}`);
   lines.push(`FAIL      ${summary.fail}`);
+  lines.push(`RUNTIME ERRORS ${summary.runtimeErrors}`);
+  lines.push("");
+  lines.push(`Quality sample: ${summary.qualityScenarioCount} / ${meta.scenarioCount} valid scenarios`);
   lines.push("");
   lines.push(`| Metric | Value |`);
   lines.push(`| --- | --- |`);

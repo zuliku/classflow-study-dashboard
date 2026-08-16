@@ -28,9 +28,16 @@ import {
   VisualIntakeEvalScenario,
 } from "@/lib/ai/eval/visualIntakeScenarios";
 import { scoreVisualIntakeScenario, ToolTraceEntry, VisualEvalScenarioResult, VisualProposalAttempt } from "@/lib/ai/eval/visualIntakeScoring";
-import { buildVisualEvalReport, renderVisualEvalMarkdown, VisualEvalReport } from "@/lib/ai/eval/visualIntakeReport";
+import {
+  buildVisualEvalReport,
+  renderVisualEvalMarkdown,
+  VisualEvalReport,
+  evaluateVisualEvalSafetyGates,
+  evaluateVisualEvalValidity,
+} from "@/lib/ai/eval/visualIntakeReport";
 import { renderScreenshot } from "@/scripts/visual-intake-eval/renderScreenshot";
 import { proposeVisualActionsInputSchema } from "@/lib/ai/visual/schemas";
+import { normalizeAIError } from "@/lib/ai/errors";
 import { mkdirSync, writeFileSync } from "fs";
 import { join } from "path";
 
@@ -48,6 +55,15 @@ export const VISUAL_EVAL_MAX_ROUNDS = 6;
 export const VISUAL_EVAL_MAX_READ_CALLS = 12;
 export const VISUAL_EVAL_MAX_WRITE_ATTEMPTS = 8;
 
+/** Eval V1.2：runtime error message 安全归一化 + hard bound（绝不落 raw provider body / key / stack） */
+export function safeRuntimeErrorMessage(err: unknown): { code?: string; message: string } {
+  const normalized = normalizeAIError(err);
+  return {
+    ...(normalized?.code ? { code: normalized.code } : {}),
+    message: (normalized?.message ?? "未知运行时错误").slice(0, 300),
+  };
+}
+
 export interface VisualEvalAgentRun {
   scenarioId: string;
   finalAnswer: string;
@@ -58,7 +74,7 @@ export interface VisualEvalAgentRun {
   proposalAttempt: VisualProposalAttempt | null;
   preflightRejectedCode?: string;
   rounds: number;
-  runtimeError?: { type: "provider" | "harness" | "unknown"; message: string };
+  runtimeError?: { type: "provider" | "harness" | "unknown"; code?: string; message: string };
 }
 
 /** 最小 UIMessage 形状（与生产 client continuation 一致：assistant dynamic-tool part 携带 input+output） */
@@ -67,7 +83,7 @@ export interface EvalUiMessage {
   role: "user" | "assistant";
   parts: (
     | { type: "text"; text: string }
-    | { type: "image"; image: Uint8Array }
+    | { type: "file"; mediaType: string; filename?: string; url: string }
     | {
         type: "dynamic-tool";
         state: "output-available";
@@ -120,23 +136,45 @@ export async function runVisualEvalScenario(input: {
   const timezone = input.timezone ?? VISUAL_EVAL_TIMEZONE;
   const fixedNow = new Date(nowIso);
 
-  const { model: lm, definition } = await resolveLanguageModel({
-    provider: provider as AIProviderId,
-    model,
-    apiKey,
+  // Eval V1.2：Runtime Error 在明确边界分类（provider = model resolve/stream；harness = screenshot/executor；
+  // 无法归类 → unknown）；message 经 normalizeAIError 安全归一化 + hard bound。
+  const runtimeFail = (type: "provider" | "harness" | "unknown", safe: { code?: string; message: string }): VisualEvalAgentRun => ({
+    scenarioId: scenario.id,
+    finalAnswer: "",
+    toolTrace: [],
+    directWriteAttempts: [],
+    proposalData: null,
+    proposalAttempt: null,
+    rounds: 0,
+    runtimeError: { type, ...(safe.code ? { code: safe.code } : {}), message: safe.message },
   });
+
+  let lm: Awaited<ReturnType<typeof resolveLanguageModel>>["model"];
+  let definition: Awaited<ReturnType<typeof resolveLanguageModel>>["definition"];
+  try {
+    const resolved = await resolveLanguageModel({ provider: provider as AIProviderId, model, apiKey });
+    lm = resolved.model;
+    definition = resolved.definition;
+  } catch (err) {
+    return runtimeFail("provider", safeRuntimeErrorMessage(err));
+  }
   const caps = getModelCapabilities({ provider: provider as AIProviderId, model });
   if (!caps.vision || !definition.capabilities.vision) {
-    throw new Error("Selected model does not support vision.");
+    return runtimeFail("harness", { message: "Selected model does not support vision." });
   }
 
-  const { png } = renderScreenshot(scenario.screenshot);
+  let png: Buffer;
+  try {
+    ({ png } = renderScreenshot(scenario.screenshot));
+  } catch (err) {
+    return runtimeFail("harness", safeRuntimeErrorMessage(err));
+  }
   // 本 Turn 图片（synthetic runtime attachment id；Guard 依据 = 图片来源存在）
   const turnImageAttachmentIds = ["eval_att_1"];
 
   const userParts = [
     { type: "text" as const, text: scenario.userPrompt },
-    { type: "image" as const, image: new Uint8Array(png) },
+    { type: "file" as const, mediaType: "image/png", filename: "screenshot.png", url: `data:image/png;base64,${png.toString("base64")}` },
   ];
 
   let messages: EvalUiMessage[] = [
@@ -156,43 +194,44 @@ export async function runVisualEvalScenario(input: {
   let writeAttempts = 0;
   let rounds = 0;
 
-  for (; rounds < VISUAL_EVAL_MAX_ROUNDS; rounds++) {
-    const result = streamText({
-      model: lm,
-      system,
-      messages: await convertToModelMessages(messages as never),
-      tools: getKiroToolsForRequest({}),
-      maxOutputTokens: 1024,
-    });
+  try {
+    for (; rounds < VISUAL_EVAL_MAX_ROUNDS; rounds++) {
+      const result = streamText({
+        model: lm,
+        system,
+        messages: await convertToModelMessages(messages as never),
+        tools: getKiroToolsForRequest({}),
+        maxOutputTokens: 1024,
+      });
 
-    const toolCalls: RawToolCall[] = [];
-    let text = "";
-    let streamError: string | null = null;
-    for await (const part of result.fullStream) {
-      if (part.type === "text-delta") text += part.text;
-      if (part.type === "tool-call") {
-        toolCalls.push({ toolCallId: part.toolCallId, toolName: part.toolName, input: part.input });
+      const toolCalls: RawToolCall[] = [];
+      let text = "";
+      let streamError: string | null = null;
+      for await (const part of result.fullStream) {
+        if (part.type === "text-delta") text += part.text;
+        if (part.type === "tool-call") {
+          toolCalls.push({ toolCallId: part.toolCallId, toolName: part.toolName, input: part.input });
+        }
+        if (part.type === "error") {
+          streamError = (part.error as { message?: string } | null)?.message ?? String(part.error);
+        }
       }
-      if (part.type === "error") {
-        streamError = (part.error as { message?: string } | null)?.message ?? String(part.error);
-      }
-    }
-    finalAnswer = text;
+      finalAnswer = text;
 
-    if (streamError) {
-      // 区分 provider 错误与模型业务空响应：stream 级错误 → harness/provider 层，直接结束该 scenario
-      return {
-        scenarioId: scenario.id,
-        finalAnswer: text,
-        toolTrace,
-        directWriteAttempts,
-        proposalData,
-        proposalAttempt,
-        preflightRejectedCode,
-        rounds,
-        runtimeError: { type: "provider", message: streamError },
-      };
-    }
+      if (streamError) {
+        // 区分 provider 错误与模型业务空响应：stream 级错误 → provider 层，直接结束该 scenario
+        return {
+          scenarioId: scenario.id,
+          finalAnswer: text,
+          toolTrace,
+          directWriteAttempts,
+          proposalData,
+          proposalAttempt,
+          preflightRejectedCode,
+          rounds,
+          runtimeError: { type: "provider", ...safeRuntimeErrorMessage(streamError) },
+        };
+      }
 
     if (toolCalls.length === 0) {
       // assistant 直接回答（澄清提问 / no-action 结论 / final）；空响应也在此结束
@@ -231,11 +270,17 @@ export async function runVisualEvalScenario(input: {
 
       // Read / Proposal Tools（生产确定性 executor；deterministic clock 与 Base Context 同一「现在」）
       readCalls += 1;
-      const out = executeKiroReadTool(toolName, input, world, {
-        visualSourceAttachmentIds: turnImageAttachmentIds,
-        now: fixedNow,
-        timezone,
-      });
+      let out: ReturnType<typeof executeKiroReadTool>;
+      try {
+        out = executeKiroReadTool(toolName, input, world, {
+          visualSourceAttachmentIds: turnImageAttachmentIds,
+          now: fixedNow,
+          timezone,
+        });
+      } catch (err) {
+        // Eval V1.2：Eval 确定性 executor 自身异常 → harness 层（不是模型业务错误）
+        return runtimeFail("harness", safeRuntimeErrorMessage(err));
+      }
       toolTrace.push({ tool: toolName, result: out.ok ? "ok" : "error" });
       if (toolName === "propose_visual_actions") {
         // Eval V1.1：先用生产 schema 校验模型意图（即使 executor 随后 preflight 拒绝 / 失败，
@@ -281,6 +326,10 @@ export async function runVisualEvalScenario(input: {
     if (preflightRejectedCode) break;
     // begin_final_answer：模型已结束工具阶段 → 结束 scenario loop
     if (toolCalls.some((t) => t.toolName === "begin_final_answer")) break;
+    }
+  } catch (err) {
+    // Eval V1.2：model stream 层异常 → provider 层（安全归一化；绝不落 raw body / key）
+    return runtimeFail("provider", safeRuntimeErrorMessage(err));
   }
 
   return {
@@ -327,9 +376,8 @@ export async function runVisualIntakeBenchmark(): Promise<{ report: VisualEvalRe
       results.push(scored);
       console.log(`${scenario.id.padEnd(32)} ${scored.outcome.toUpperCase().padEnd(7)} ${scored.failures.slice(0, 2).join("; ")}`);
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      const isProvider = /401|403|429|5\d\d|rate|timeout|abort/i.test(msg);
-      const runtimeError = { type: (isProvider ? "provider" : "harness") as "provider" | "harness", message: msg };
+      // Eval V1.2：无法在明确边界归类的意外异常 → unknown（安全归一化 message）
+      const runtimeError = { type: "unknown" as const, ...safeRuntimeErrorMessage(err) };
       results.push({
         scenarioId: scenario.id,
         outcome: "fail",
@@ -339,20 +387,38 @@ export async function runVisualIntakeBenchmark(): Promise<{ report: VisualEvalRe
         toolTrace: [],
         metrics: { actionTP: 0, actionFP: 0, actionFN: 0, entityAccurate: 0, entityTotal: 0, timeAccurate: 0, timeTotal: 0, pendingCorrect: 0, pendingWrong: 0 },
         safety: { directWriteAttempts: [], unsafeProposal: false, unsafeReasons: [] },
-        failures: [`${runtimeError.type} failure: ${msg}`],
+        failures: [`${runtimeError.type} runtime failure: ${runtimeError.message}`],
         runtimeError,
       });
-      console.log(`${scenario.id.padEnd(32)} ${runtimeError.type.toUpperCase()}  ${msg.slice(0, 120)}`);
+      console.log(`${scenario.id.padEnd(32)} ${runtimeError.type.toUpperCase()}  ${runtimeError.message.slice(0, 120)}`);
     }
   }
 
+  // Eval V1.2：report 元数据显式携带 full suite / filtered（不硬编码 20）
   const report = buildVisualEvalReport({
     scenarios: results,
-    meta: { timestamp: new Date().toISOString(), provider, model },
+    meta: {
+      timestamp: new Date().toISOString(),
+      provider,
+      model,
+      fullSuiteScenarioCount: VISUAL_INTAKE_EVAL_SCENARIOS.length,
+      filtered: filter !== null,
+    },
   });
 
   writeFileSync(join(dir, "report.json"), JSON.stringify(report, null, 2), "utf8");
   writeFileSync(join(dir, "report.md"), renderVisualEvalMarkdown(report), "utf8");
   console.log(`\nReport written to ${dir}/report.json + report.md`);
+  // Eval V1.2：console 汇总（绝不打印 API Key / raw provider error）
+  const validity = evaluateVisualEvalValidity({
+    scenarios: results,
+    requestedScenarioCount: scenarios.length,
+    fullSuiteScenarioCount: VISUAL_INTAKE_EVAL_SCENARIOS.length,
+  });
+  const safety = evaluateVisualEvalSafetyGates(report);
+  console.log(`\nValidity: ${validity.ok ? "PASS" : "FAIL"}`);
+  console.log(`Safety: ${safety.ok ? "PASS" : "FAIL"}`);
+  console.log(`Quality scenarios: ${report.summary.qualityScenarioCount}/${scenarios.length}`);
+  console.log(`Baseline eligible: ${validity.baselineEligible ? "yes" : "no"}`);
   return { report, modelDir: dir };
 }

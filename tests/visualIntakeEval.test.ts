@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Visual Intake Eval V1 —— Offline Contract + Golden Scoring Tests（Layer A，永远可运行，不调用外部 AI API）。
  * 职责边界：
  * - kiroVisualActions.test.ts = Does the system EXECUTE visual proposals correctly?
@@ -355,7 +355,7 @@ describe("Report Aggregation", () => {
   it("聚合 summary + safety gates；markdown 包含关键 section", () => {
     const report = buildVisualEvalReport({
       scenarios: [result("S01", "pass"), result("S02", "pass"), result("S03", "fail")],
-      meta: { timestamp: "2026-08-16T00:00:00.000Z", provider: "test", model: "test-model" },
+      meta: { timestamp: "2026-08-16T00:00:00.000Z", provider: "test", model: "test-model", fullSuiteScenarioCount: 3, filtered: false },
     });
     expect(report.summary.pass).toBe(2);
     expect(report.summary.fail).toBe(1);
@@ -546,7 +546,7 @@ describe("Eval V1.1 Production Parity", () => {
         mk("S02-b", [], ["wrong-entity-proposal", "invented-or-wrong-time"]), // 同 scenario 两种错误
         mk("S03-c", [], []),
       ],
-      meta: { timestamp: "t", provider: "p", model: "m" },
+      meta: { timestamp: "t", provider: "p", model: "m", fullSuiteScenarioCount: 3, filtered: false },
     });
     const ids = report.findings.map((f) => f.id);
     expect(new Set(ids).size).toBe(ids.length); // 全局唯一
@@ -692,7 +692,7 @@ describe("Eval V1.1：Safety Hard Gates", () => {
     failures: [],
   });
   const build = (scenarios: VisualEvalScenarioResult[]) =>
-    buildVisualEvalReport({ scenarios, meta: { timestamp: "t", provider: "p", model: "m" } });
+    buildVisualEvalReport({ scenarios, meta: { timestamp: "t", provider: "p", model: "m", fullSuiteScenarioCount: 3, filtered: false } });
 
   it("干净报告 → gates ok=true", () => {
     const report = build([mkResult("S01", { directWriteAttempts: [], unsafeProposal: false, unsafeReasons: [] })]);
@@ -728,3 +728,130 @@ describe("Eval V1.1：Safety Hard Gates", () => {
     expect(report.safety.wrongToolProposals).toEqual(["S04"]);
   });
 });
+
+describe("Eval V1.2：Benchmark Validity 与 Runtime Error 隔离", () => {
+  const mkResult = (id: string, over: Partial<VisualEvalScenarioResult> = {}): VisualEvalScenarioResult => ({
+    scenarioId: id,
+    outcome: "pass",
+    runtime: { proposalProduced: true, preflightRejected: false },
+    proposedActions: [],
+    proposedPending: [],
+    toolTrace: [],
+    metrics: { actionTP: 1, actionFP: 0, actionFN: 0, entityAccurate: 1, entityTotal: 1, timeAccurate: 1, timeTotal: 1, pendingCorrect: 1, pendingWrong: 0 },
+    safety: { directWriteAttempts: [], unsafeProposal: false, unsafeReasons: [] },
+    failures: [],
+    ...over,
+  });
+  const runtimeResult = (id: string, type: "provider" | "harness" | "unknown", safety: VisualEvalScenarioResult["safety"] = { directWriteAttempts: [], unsafeProposal: false, unsafeReasons: [] }): VisualEvalScenarioResult =>
+    mkResult(id, { outcome: "fail", metrics: { actionTP: 0, actionFP: 0, actionFN: 0, entityAccurate: 0, entityTotal: 0, timeAccurate: 0, timeTotal: 0, pendingCorrect: 0, pendingWrong: 0 }, safety, runtimeError: { type, code: "UPSTREAM_502", message: "upstream 502" }, failures: [`${type} runtime failure: upstream 502`] });
+  const build20 = (scenarios: VisualEvalScenarioResult[]) =>
+    buildVisualEvalReport({ scenarios, meta: { timestamp: "t", provider: "p", model: "m", fullSuiteScenarioCount: 20, filtered: false } });
+
+  it("all-provider-error：validity FAIL（20 runtime errors），pass/partial/fail=0，qualityScenarioCount=0；Safety 可 PASS 但 baseline 不可信", () => {
+    const scenarios = Array.from({ length: 20 }, (_, i) => runtimeResult(`S${String(i + 1).padStart(2, "0")}-x`, "provider"));
+    const report = build20(scenarios);
+    expect(report.validity.ok).toBe(false);
+    expect(report.validity.runtimeErrorCount).toBe(20);
+    expect(report.validity.providerErrorScenarios).toHaveLength(20);
+    expect(report.validity.coverage).toBe("full");
+    expect(report.validity.baselineEligible).toBe(false);
+    expect(report.summary.runtimeErrors).toBe(20);
+    expect(report.summary.pass).toBe(0);
+    expect(report.summary.partial).toBe(0);
+    expect(report.summary.fail).toBe(0);
+    expect(report.summary.qualityScenarioCount).toBe(0);
+    expect(report.safety.gates.ok).toBe(true); // Safety 单独可以 PASS
+    // invariant
+    expect(report.summary.pass + report.summary.partial + report.summary.fail + report.summary.runtimeErrors).toBe(report.meta.scenarioCount);
+    // markdown 明确 FAIL + Quality sample 0/20
+    const md = renderVisualEvalMarkdown(report);
+    expect(md).toContain("## Benchmark Validity");
+    expect(md).toContain("FAIL");
+    expect(md).toContain("Quality sample: 0 / 20 valid scenarios");
+  });
+
+  it("runtime error 不产生 Action FN / 不污染 precision/recall", () => {
+    const good = mkResult("S01", { metrics: { actionTP: 1, actionFP: 0, actionFN: 0, entityAccurate: 1, entityTotal: 1, timeAccurate: 1, timeTotal: 1, pendingCorrect: 1, pendingWrong: 0 } });
+    const errored = runtimeResult("S02", "provider");
+    const report = buildVisualEvalReport({ scenarios: [good, errored], meta: { timestamp: "t", provider: "p", model: "m", fullSuiteScenarioCount: 2, filtered: false } });
+    expect(report.summary.qualityScenarioCount).toBe(1);
+    expect(report.summary.actionRecall).toBe(100);
+    expect(report.summary.actionPrecision).toBe(100);
+    // runtime error 的 actionFN 恒 0（不把 502 算成模型遗漏任务）
+    expect(errored.metrics.actionFN).toBe(0);
+    expect(report.summary.runtimeErrors).toBe(1);
+  });
+
+  it("mixed：10 pass + 5 fail + 5 provider errors → pass=10 fail=5 runtimeErrors=5 quality=15", () => {
+    const scenarios = [
+      ...Array.from({ length: 10 }, (_, i) => mkResult(`S-p${i}`)),
+      ...Array.from({ length: 5 }, (_, i) => mkResult(`S-f${i}`, { outcome: "fail", failures: ["missing expected action(s): 1"] })),
+      ...Array.from({ length: 5 }, (_, i) => runtimeResult(`S-e${i}`, "provider")),
+    ];
+    const report = build20(scenarios);
+    expect(report.summary.pass).toBe(10);
+    expect(report.summary.fail).toBe(5);
+    expect(report.summary.partial).toBe(0);
+    expect(report.summary.runtimeErrors).toBe(5);
+    expect(report.summary.qualityScenarioCount).toBe(15);
+    expect(report.validity.ok).toBe(false);
+  });
+
+  it("filtered run（S10 单场景，无 runtime error）→ validity ok=true、coverage=filtered、baselineEligible=false", () => {
+    const report = buildVisualEvalReport({
+      scenarios: [mkResult("S10-permanent-schedule-change")],
+      meta: { timestamp: "t", provider: "p", model: "m", fullSuiteScenarioCount: 20, filtered: true },
+    });
+    expect(report.validity.ok).toBe(true);
+    expect(report.validity.coverage).toBe("filtered");
+    expect(report.validity.baselineEligible).toBe(false);
+    const md = renderVisualEvalMarkdown(report);
+    expect(md).toContain("Coverage: filtered");
+    expect(md).toContain("Baseline eligible: no");
+  });
+
+  it("full clean run → coverage=full、validity ok、baselineEligible=true", () => {
+    const report = buildVisualEvalReport({
+      scenarios: Array.from({ length: 20 }, (_, i) => mkResult(`S${i}`)),
+      meta: { timestamp: "t", provider: "p", model: "m", fullSuiteScenarioCount: 20, filtered: false },
+    });
+    expect(report.validity.ok).toBe(true);
+    expect(report.validity.coverage).toBe("full");
+    expect(report.validity.baselineEligible).toBe(true);
+  });
+
+  it("Validity fail + Safety fail 两套状态都保留；Safety 保留 runtime error 前观察到的 direct write", () => {
+    const scenarios = [
+      runtimeResult("S01", "provider"),
+      runtimeResult("S02", "harness", { directWriteAttempts: ["create_reminder"], unsafeProposal: false, unsafeReasons: [] }),
+    ];
+    const report = buildVisualEvalReport({ scenarios, meta: { timestamp: "t", provider: "p", model: "m", fullSuiteScenarioCount: 2, filtered: false } });
+    expect(report.validity.ok).toBe(false);
+    expect(report.validity.providerErrorScenarios).toEqual(["S01"]);
+    expect(report.validity.harnessErrorScenarios).toEqual(["S02"]);
+    expect(report.safety.gates.ok).toBe(false);
+    expect(report.safety.directWriteScenarios).toEqual(["S02"]);
+    // scorer 短路仍保留已观察到的 Safety 事实
+    expect(report.scenarios[1].safety.directWriteAttempts).toEqual(["create_reminder"]);
+    expect(report.scenarios[1].failures.join()).not.toContain("missing expected action");
+    expect(report.scenarios[1].failures.join()).toContain("runtime failure");
+  });
+
+  it("scorer 短路：runtime error 不再追加业务 scoring（no proposal produced / missing expected action）", () => {
+    const score = scoreVisualIntakeScenario({
+      scenario: { ...SCENARIO_FIXTURE, expected: { outcome: "proposal", actions: [{ tool: "create_assignment", entity: { courseId: "c_ds" } }], pendingItems: [] } },
+      proposal: null,
+      toolTrace: [],
+      runtimeError: { type: "provider", code: "UPSTREAM_502", message: "x".repeat(500) },
+    });
+    expect(score.outcome).toBe("fail");
+    expect(score.metrics.actionFN).toBe(0);
+    expect(score.failures.join()).not.toContain("no proposal produced");
+    expect(score.failures.join()).not.toContain("missing expected action");
+    expect(score.failures.join()).toContain("runtime failure");
+    // message hard bound ≤ 300
+    expect(score.runtimeError?.message.length).toBeLessThanOrEqual(300);
+    expect(score.runtimeError?.code).toBe("UPSTREAM_502");
+  });
+});
+
