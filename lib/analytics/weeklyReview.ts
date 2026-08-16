@@ -23,6 +23,9 @@ export interface WeeklyReview {
     comparisonAvailable: boolean;
     /** StudyBlock 计划序列在该 range 内是否完整（不完整 → 不输出 Plan ratio） */
     planCoverageFull: boolean;
+    /** V3.1：任务 / 专注的 metric-level reliability（partial → 不输出伪精确结论） */
+    assignmentReliability: "complete" | "partial" | "unavailable";
+    focusReliability: "complete" | "partial" | "unavailable";
   };
   headline: {
     focusMinutes: number;
@@ -66,6 +69,8 @@ export function buildWeeklyReview(snapshot: LearningAnalyticsSnapshot): WeeklyRe
       fullCoverage: coverage.fullCoverage,
       comparisonAvailable: coverage.comparisonAvailable,
       planCoverageFull: coverage.planCoverageFull,
+      assignmentReliability: coverage.assignmentReliability,
+      focusReliability: coverage.focusReliability,
     },
     headline: {
       focusMinutes: overview.actualFocusMinutes,
@@ -146,10 +151,15 @@ export function weeklyReviewCopy(review: WeeklyReview): WeeklyReviewCopy {
   }
 
   const deadlineLines: string[] = [];
-  if (headline.onTimeRate !== null && headline.completedAssignments > 0) {
-    deadlineLines.push(`按时完成 ${headline.onTimeRate}%`);
+  if (review.coverage.assignmentReliability === "complete") {
+    if (headline.onTimeRate !== null && headline.completedAssignments > 0) {
+      deadlineLines.push(`按时完成 ${headline.onTimeRate}%`);
+    } else {
+      deadlineLines.push("暂无可靠截止时间可判断");
+    }
   } else {
-    deadlineLines.push("暂无可靠截止时间可判断");
+    // V3.1：任务历史不完整时禁止从记录样本推出按时率结论
+    deadlineLines.push("任务历史不完整，暂不判断按时率");
   }
 
   const changeLines: string[] = [];

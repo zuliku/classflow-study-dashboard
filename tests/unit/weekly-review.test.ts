@@ -63,7 +63,13 @@ describe("buildWeeklyReview（纯投影）", () => {
     const review = buildWeeklyReview(snapshot);
 
     expect(review.range).toEqual({ from: snapshot.period.current.from, to: snapshot.period.current.to });
-    expect(review.coverage).toEqual({ fullCoverage: true, comparisonAvailable: true, planCoverageFull: true });
+    expect(review.coverage).toEqual({
+    fullCoverage: true,
+    comparisonAvailable: true,
+    planCoverageFull: true,
+    assignmentReliability: "complete",
+    focusReliability: "complete",
+  });
 
     // headline 全部来自 overview + rhythm
     expect(review.headline.focusMinutes).toBe(320);
@@ -175,5 +181,25 @@ describe("buildWeeklyReview（纯投影）", () => {
     );
     const copy = weeklyReviewCopy(review);
     expect(copy.planActualLines).toEqual(["学习计划历史在该区间不完整，暂不计算计划与实际比例。"]);
+  });
+
+  it("assignmentReliability=partial → 不输出按时率结论（V3.1：禁止样本推断）", () => {
+    const review = buildWeeklyReview(
+      baseSnapshot({
+        coverage: {
+          fullCoverage: true,
+          comparisonAvailable: true,
+          historyStartedAt: new Date(2026, 7, 16).getTime(),
+          planCoverageFull: true,
+          planCoverageStartedAt: new Date(2026, 6, 1).getTime(),
+          assignmentReliability: "partial",
+          planReliability: "complete",
+          focusReliability: "complete",
+          focusBackfilled: false,
+        },
+      })
+    );
+    const copy = weeklyReviewCopy(review);
+    expect(copy.deadlineLines).toEqual(["任务历史不完整，暂不判断按时率"]);
   });
 });

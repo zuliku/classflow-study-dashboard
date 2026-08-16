@@ -78,7 +78,6 @@ describe("AnalyticsSummaryStrip", () => {
     );
     expect(h.container.textContent).toContain("该区间记录不完整");
     expect(h.container.textContent).toContain("已记录 3 项");
-    expect(h.container.getAttribute("data-testid")).toBeNull();
     h.cleanup();
   });
 
@@ -96,6 +95,48 @@ describe("AnalyticsSummaryStrip", () => {
     expect(h.container.textContent).toContain("82%");
     expect(h.container.textContent).toContain("实际 2 小时 3 分 / 计划 2 小时 30 分");
     h.cleanup();
+  });
+
+  it("E：detail 不使用 truncate（可信度信息必须可读）+ title 保留完整文本", () => {
+    const h = render(
+      <AnalyticsSummaryStrip
+        metrics={[
+          {
+            label: "计划执行",
+            view: {
+              value: "—",
+              detail: "实际 3 小时 12 分 / 计划 3 小时 55 分",
+              reliability: "partial",
+            },
+          },
+        ]}
+      />
+    );
+    const detail = h.container.querySelector('[data-testid="summary-detail-计划执行"]')!;
+    expect(detail.className).not.toContain("truncate");
+    expect(detail.getAttribute("title")).toContain("3 小时 12 分");
+    h.cleanup();
+  });
+
+  it("F：loaded 与 Skeleton 共用同一 divider helper（无加载几何位移）", () => {
+    const loaded = render(
+      <AnalyticsSummaryStrip
+        metrics={[1, 2, 3, 4].map((i) => ({
+          label: `指标${i}`,
+          view: { value: "—", reliability: "partial" as const },
+        }))}
+      />
+    );
+    const skeleton = render(<AnalyticsSummaryStripSkeleton />);
+    const cellsLoaded = loaded.container.querySelectorAll('[data-testid="analytics-summary-strip"] > div');
+    const cellsSkeleton = skeleton.container.querySelectorAll('[data-testid="analytics-summary-strip"] > div');
+    expect(cellsLoaded.length).toBe(4);
+    expect(cellsSkeleton.length).toBe(4);
+    for (let i = 0; i < 4; i += 1) {
+      expect(cellsLoaded[i].className).toBe(cellsSkeleton[i].className);
+    }
+    loaded.cleanup();
+    skeleton.cleanup();
   });
 });
 

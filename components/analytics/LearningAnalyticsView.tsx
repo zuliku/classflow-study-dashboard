@@ -24,12 +24,14 @@ import { StudyOutlookHorizon } from "@/lib/outlook/types";
 import {
   presentCompletedMetric,
   presentCourseInvestment,
+  presentExecutionQuality,
   presentFocusMetric,
   presentOnTimeMetric,
   presentPlanExecutionMetric,
   presentPlanMetric,
 } from "@/lib/analytics/presentation";
 import { cn } from "@/lib/utils";
+import { ChevronRight } from "lucide-react";
 
 function ChartSkeleton() {
   return <div className="h-64 w-full rounded-xl bg-alabaster animate-pulse" />;
@@ -56,6 +58,7 @@ export function LearningAnalyticsView() {
   const reviewRef = useRef<HTMLDivElement | null>(null);
   const reducedMotion = useEffectiveReducedMotion();
   const setActiveTab = useAppStore((s) => s.setActiveTab);
+  const setSelectedCourseId = useAppStore((s) => s.setSelectedCourseId);
   const courses = useAppStore((s) => s.courses);
   const { data, loading, error } = useLearningAnalytics(preset);
   const [outlookHorizon, setOutlookHorizon] = useState<StudyOutlookHorizon>(7);
@@ -67,8 +70,12 @@ export function LearningAnalyticsView() {
     setActiveTab(tab);
   };
 
-  /** 周回顾：切到 week preset + 展开 + 滚动到卡片（尊重 reduced-motion） */
-  const openWeeklyReview = () => {
+  /** 周回顾：toggle 语义（V3.1）——已展开且仍在 week 时收起；否则切 week + 展开 + scroll */
+  const toggleWeeklyReview = () => {
+    if (preset === "week" && reviewExpanded) {
+      setReviewExpanded(false);
+      return;
+    }
     setPreset("week");
     setReviewExpanded(true);
     requestAnimationFrame(() => {
@@ -135,21 +142,27 @@ export function LearningAnalyticsView() {
             <h1 className="text-base font-bold text-charcoal">学习洞察</h1>
             <p className="text-[11px] text-sandrift mt-0.5">从学习历史中理解你的投入与节奏</p>
           </div>
-          <div className="flex items-center gap-2">
+          {/* V3.1：周回顾是独立 workflow action（与 range selector 视觉分离，非第四种 selection） */}
+          <div className="flex w-full md:w-auto items-center justify-between gap-2">
+            <AnalyticsRangeSelector value={preset} onChange={changePreset} />
             <button
               type="button"
               aria-pressed={reviewExpanded}
-              onClick={openWeeklyReview}
+              aria-expanded={reviewExpanded}
+              onClick={toggleWeeklyReview}
+              data-testid="weekly-review-action"
               className={cn(
-                "px-3 py-1.5 rounded-lg text-[11px] font-bold whitespace-nowrap transition-colors duration-[var(--motion-fast)]",
+                "shrink-0 inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-bold whitespace-nowrap transition-colors duration-[var(--motion-fast)]",
                 reviewExpanded
-                  ? "bg-alabaster text-charcoal border border-line-strong"
-                  : "bg-transparent text-sandrift border border-line hover:text-charcoal hover:border-line-strong"
+                  ? "text-sandrift bg-alabaster border border-line-strong"
+                  : "text-sandrift bg-transparent border border-line hover:text-charcoal hover:border-line-strong"
               )}
             >
-              周回顾
+              {reviewExpanded ? "收起周回顾" : "周回顾"}
+              <ChevronRight
+                className={cn("w-3 h-3 transition-transform duration-[var(--motion-fast)]", reviewExpanded && "rotate-90")}
+              />
             </button>
-            <AnalyticsRangeSelector value={preset} onChange={changePreset} />
           </div>
         </div>
       </div>
@@ -177,23 +190,21 @@ export function LearningAnalyticsView() {
             </div>
           ) : data ? (
             <>
-              {data.coverage.assignmentReliability !== "complete" ||
-              data.coverage.planReliability !== "complete" ||
-              data.coverage.focusReliability !== "complete" ||
-              data.coverage.focusBackfilled ? (
-                <AnalyticsCoverageNotice
-                  assignmentReliability={data.coverage.assignmentReliability}
-                  planReliability={data.coverage.planReliability}
-                  focusReliability={data.coverage.focusReliability}
-                  focusBackfilled={data.coverage.focusBackfilled}
-                  historyStartedAt={data.coverage.historyStartedAt}
-                />
-              ) : null}
+              <AnalyticsCoverageNotice
+                facts={{
+                  assignmentReliability: data.coverage.assignmentReliability,
+                  planReliability: data.coverage.planReliability,
+                  focusReliability: data.coverage.focusReliability,
+                  focusBackfilled: data.coverage.focusBackfilled,
+                  historyStartedAt: data.coverage.historyStartedAt,
+                  planCoverageStartedAt: data.coverage.planCoverageStartedAt,
+                }}
+              />
               {data.isEmpty ? (
                 <>
                   <EmptyState />
                   {reviewExpanded && (
-                    <div ref={reviewRef}>
+                    <div ref={reviewRef} className="scroll-mt-4">
                       <WeeklyReviewCard snapshot={data} />
                     </div>
                   )}
@@ -204,7 +215,7 @@ export function LearningAnalyticsView() {
                   <AnalyticsSummaryStrip metrics={summaryMetrics(data)} />
 
                   {reviewExpanded && (
-                    <div ref={reviewRef}>
+                    <div ref={reviewRef} className="scroll-mt-4">
                       <WeeklyReviewCard snapshot={data} />
                     </div>
                   )}
@@ -225,18 +236,32 @@ export function LearningAnalyticsView() {
                   {/* 投入与节奏（Distribution；Course/Rhythm 各自 content-fit，不强制等高） */}
                   <section>
                     <h2 className="text-[13px] font-bold text-charcoal mb-3">投入与节奏</h2>
+                    {data.coverage.focusReliability === "partial" && (
+                      <p className="text-[10px] text-satin-grey mb-3 -mt-1">
+                        专注记录在该区间不完整，以下为已记录部分
+                      </p>
+                    )}
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
                       <CourseInvestmentCard
                         investment={presentCourseInvestment(data.courseInvestment, courseNameById)}
+                        onOpenCourse={(courseId) => {
+                          if (courseNameById[courseId]) setSelectedCourseId(courseId);
+                        }}
                       />
                       <FocusRhythmCard rhythm={data.focusRhythm} />
                     </div>
                   </section>
 
-                  {/* 执行情况 */}
+                  {/* 执行情况（reliability-aware：partial 只显示已记录，不显示伪精确按时率） */}
                   <section>
                     <h2 className="text-[13px] font-bold text-charcoal mb-3">执行情况</h2>
-                    <ExecutionQualityCard execution={data.execution} />
+                    <ExecutionQualityCard
+                      view={presentExecutionQuality(
+                        data.execution,
+                        data.coverage.assignmentReliability,
+                        data.coverage.focusReliability
+                      )}
+                    />
                   </section>
                 </>
               )}

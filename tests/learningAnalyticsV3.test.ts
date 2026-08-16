@@ -6,6 +6,7 @@ import {
 import {
   formatAnalyticsDuration,
   presentCompletedMetric,
+  presentExecutionQuality,
   presentFocusMetric,
   presentOnTimeMetric,
   presentPlanExecutionMetric,
@@ -14,6 +15,9 @@ import {
   resolveCourseInvestmentName,
   formatTrendBucketLabel,
   formatTrendTooltip,
+  buildCoverageFactLines,
+  buildCoverageSummary,
+  summaryCellDividerClasses,
 } from "@/lib/analytics/presentation";
 import {
   buildLearningAnalyticsSnapshot,
@@ -281,9 +285,10 @@ describe("Trend labels", () => {
     expect(formatTrendBucketLabel(weekPeriod(), "2026-08-23")).toBe("8/23 周日");
     expect(formatTrendBucketLabel(fourWeekPeriod(), "2026-08-10")).toBe("8/10");
     expect(formatTrendBucketLabel(semesterPeriod(), "w3")).toBe("第3周");
-    // tooltip 保留完整日期
-    expect(formatTrendTooltip(weekPeriod(), "2026-08-17")).toContain("2026/8/17");
-    expect(formatTrendTooltip(semesterPeriod(), "w3")).toBe("第3周");
+    // tooltip 保留完整日期/范围（V3.1）
+    expect(formatTrendTooltip(weekPeriod(), "2026-08-17")).toBe("8月17日 周一");
+    expect(formatTrendTooltip(fourWeekPeriod(), "2026-08-10")).toBe("8月10日–8月16日");
+    expect(formatTrendTooltip(semesterPeriod(), "w3")).toBe("第3周 · 8月17日–8月23日");
   });
 });
 
@@ -301,5 +306,145 @@ describe("Chinese duration formatter", () => {
     for (const s of [formatAnalyticsDuration(88), formatAnalyticsDuration(88, "compact")]) {
       expect(s).not.toMatch(/[hm]/);
     }
+  });
+});
+
+describe("Execution Quality reliability（V3.1）", () => {
+  const exec = {
+    uniqueCompletedAssignments: 3,
+    reopenedAssignments: 1,
+    onTime: 2,
+    late: 1,
+    onTimeEligible: 3,
+    onTimeRate: 67,
+    activeDays: 4,
+    avgFocusSessionMinutes: 42,
+  };
+
+  it("A：partial assignment → on-time 恒为 —（即使 raw rate 存在）", () => {
+    const v = presentExecutionQuality(exec, "partial", "complete");
+    expect(v.onTime.value).toBe("—");
+    expect(v.onTime.detail).toContain("任务历史不完整");
+    expect(v.onTime.reliability).toBe("partial");
+  });
+
+  it("B：partial assignment + completed>0 → 已记录 N 项；=0 → —", () => {
+    const v = presentExecutionQuality(exec, "partial", "complete");
+    expect(v.completed.value).toBe("已记录 3 项");
+    expect(v.completed.detail).toContain("不完整");
+    expect(v.reopened.value).toBe("已记录 1 项");
+    const zero = presentExecutionQuality(
+      { ...exec, uniqueCompletedAssignments: 0, reopenedAssignments: 0 },
+      "partial",
+      "complete"
+    );
+    expect(zero.completed.value).toBe("—");
+    expect(zero.reopened.value).toBe("—");
+  });
+
+  it("C：partial focus + activeDays>0 → 已记录 N 天；avg 已记录", () => {
+    const v = presentExecutionQuality(exec, "complete", "partial");
+    expect(v.activeDays.value).toBe("已记录 4 天");
+    expect(v.avgFocusSession.value).toBe("已记录平均 42 分钟/次");
+    const zero = presentExecutionQuality(
+      { ...exec, activeDays: 0, avgFocusSessionMinutes: null },
+      "complete",
+      "partial"
+    );
+    expect(zero.activeDays.value).toBe("—");
+    expect(zero.avgFocusSession.value).toBe("—");
+  });
+
+  it("D：complete → 正常精确值", () => {
+    const v = presentExecutionQuality(exec, "complete", "complete");
+    expect(v.completed.value).toBe("3 项");
+    expect(v.reopened.value).toBe("1 项");
+    expect(v.onTime.value).toBe("67%");
+    expect(v.activeDays.value).toBe("4 天");
+    expect(v.avgFocusSession.value).toBe("42 分钟/次");
+  });
+});
+
+describe("Summary divider contract（V3.1）", () => {
+  it("F：2×2 时 index 1/3 左分隔、2/3 顶分隔；desktop 除首格外全左分隔", () => {
+    const c1 = summaryCellDividerClasses(1);
+    expect(c1).toMatch(/(^|\s)border-l(\s|$)/);
+    expect(c1).not.toMatch(/(^|\s)border-t(\s|$)/);
+    const c2 = summaryCellDividerClasses(2);
+    expect(c2).toMatch(/(^|\s)border-t(\s|$)/);
+    expect(c2).not.toMatch(/(^|\s)border-l(\s|$)/);
+    expect(c2).toContain("lg:border-l");
+    expect(c2).toContain("lg:border-t-0");
+    const c3 = summaryCellDividerClasses(3);
+    expect(c3).toMatch(/(^|\s)border-l(\s|$)/);
+    expect(c3).toMatch(/(^|\s)border-t(\s|$)/);
+    expect(c3).toContain("lg:border-t-0");
+    const c0 = summaryCellDividerClasses(0);
+    expect(c0).not.toMatch(/(^|\s)border-l(\s|$)/);
+    expect(c0).not.toMatch(/(^|\s)border-t(\s|$)/);
+  });
+});
+
+describe("Coverage facts（V3.1 progressive disclosure）", () => {
+  const base = {
+    assignmentReliability: "partial" as const,
+    planReliability: "partial" as const,
+    focusReliability: "partial" as const,
+    focusBackfilled: false,
+    historyStartedAt: new Date(2026, 7, 16).getTime(),
+    planCoverageStartedAt: new Date(2026, 7, 16).getTime(),
+  };
+
+  it("G：有任一不完整 → collapsed summary；全 complete → null", () => {
+    expect(buildCoverageSummary(base)).toEqual({
+      title: "部分历史记录不完整",
+      hint: "部分指标仅展示已记录内容",
+    });
+    expect(
+      buildCoverageSummary({
+        ...base,
+        assignmentReliability: "complete",
+        planReliability: "complete",
+        focusReliability: "complete",
+        focusBackfilled: false,
+      })
+    ).toBeNull();
+  });
+
+  it("H：展开只显示真实受影响的 metric", () => {
+    const lines = buildCoverageFactLines(base);
+    expect(lines).toHaveLength(3);
+    expect(lines[0]).toContain("任务记录：自 8月16日 起完整");
+    expect(lines[1]).toContain("学习计划：自 8月16日 起完整");
+    expect(lines[2]).toContain("专注记录");
+    // 只有 plan partial → 只有一行
+    const onlyPlan = buildCoverageFactLines({
+      ...base,
+      assignmentReliability: "complete",
+      focusReliability: "complete",
+    });
+    expect(onlyPlan).toHaveLength(1);
+    expect(onlyPlan[0]).toContain("学习计划");
+  });
+
+  it("I：focus partial 不制造具体起点；backfill 无 partial 时单独说明", () => {
+    const lines = buildCoverageFactLines({ ...base, assignmentReliability: "complete", planReliability: "complete" });
+    expect(lines).toEqual(["专注记录：当前区间可能不完整"]);
+    const backfilled = buildCoverageFactLines({
+      ...base,
+      assignmentReliability: "complete",
+      planReliability: "complete",
+      focusReliability: "complete",
+      focusBackfilled: true,
+    });
+    expect(backfilled).toEqual(["已有专注记录仍会正常计入统计"]);
+  });
+});
+
+describe("Trend tooltip context（V3.1）", () => {
+  it("week → 8月17日 周一；4weeks → 周范围；semester → 第N周 + 日期范围", () => {
+    expect(formatTrendTooltip(weekPeriod(), "2026-08-17")).toBe("8月17日 周一");
+    expect(formatTrendTooltip(fourWeekPeriod(), "2026-08-10")).toBe("8月10日–8月16日");
+    expect(formatTrendTooltip(semesterPeriod(), "w3")).toBe("第3周 · 8月17日–8月23日");
   });
 });

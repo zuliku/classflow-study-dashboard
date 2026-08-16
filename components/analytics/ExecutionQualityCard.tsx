@@ -2,42 +2,40 @@
 
 import React from "react";
 import { ClipboardCheck } from "lucide-react";
-import { ExecutionAnalytics } from "@/lib/analytics/types";
+import { ExecutionQualityView } from "@/lib/analytics/presentation";
 
-/** 执行情况：完成任务 / 重开 / 按时率 / 活跃天数 */
-export function ExecutionQualityCard({ execution }: { execution: ExecutionAnalytics }) {
-  const onTimeText =
-    execution.onTimeEligible === 0
-      ? "暂无可靠截止时间可判断"
-      : execution.onTimeEligible < 3
-        ? `样本不足 · 目前有 ${execution.onTimeEligible} 个可判断任务`
-        : `${execution.onTime} / ${execution.onTimeEligible} 个可判断任务按时完成`;
+/**
+ * 执行情况（V3.1）：3 个 primary 列（完成任务 / 重新打开 / 按时完成）+ secondary footer
+ * （活跃天数 · 平均专注）。全部值来自 presentExecutionQuality（reliability-aware：
+ * partial 只显示「已记录」，按时率在任务历史不完整时恒为 —）。
+ */
+export function ExecutionQualityCard({ view }: { view: ExecutionQualityView }) {
   return (
-    <div className="bg-surface border border-line rounded-2xl p-4">
-      <h3 className="flex items-center gap-1.5 text-sm font-bold text-charcoal pb-2 border-b border-[#F0EBE1]">
+    <div className="bg-surface border border-line rounded-2xl p-4" data-testid="execution-quality-card">
+      <h3 className="flex items-center gap-1.5 text-sm font-bold text-charcoal">
         <ClipboardCheck className="w-4 h-4 text-[#A48F82]" />
         执行情况
       </h3>
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-3">
-        <div>
-          <p className="text-[10px] font-semibold text-sandrift">完成任务</p>
-          <p className="text-xl font-extrabold text-charcoal">{execution.uniqueCompletedAssignments}</p>
-        </div>
-        <div>
-          <p className="text-[10px] font-semibold text-sandrift">重新开启</p>
-          <p className="text-xl font-extrabold text-charcoal">{execution.reopenedAssignments}</p>
-        </div>
-        <div>
-          <p className="text-[10px] font-semibold text-sandrift">按时完成</p>
-          <p className="text-xl font-extrabold text-charcoal">
-            {execution.onTimeRate !== null ? `${execution.onTimeRate}%` : "—"}
-          </p>
-          <p className="text-[9px] text-sandrift mt-0.5">{onTimeText}</p>
-        </div>
-        <div>
-          <p className="text-[10px] font-semibold text-sandrift">专注活跃天数</p>
-          <p className="text-xl font-extrabold text-charcoal">{execution.activeDays}</p>
-        </div>
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-3">
+        {[view.completed, view.reopened, view.onTime].map((m) => (
+          <div key={m.label} data-testid={`execution-${m.label}`}>
+            <p className="text-[10px] font-semibold text-sandrift">{m.label}</p>
+            <p className="text-xl font-extrabold text-charcoal leading-tight">{m.value}</p>
+            {m.detail && (
+              <p className="text-[9px] text-satin-grey mt-0.5 leading-snug line-clamp-2">{m.detail}</p>
+            )}
+          </div>
+        ))}
+      </div>
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 pt-3 mt-3 border-t border-line-soft text-[10px] text-sandrift">
+        <span>
+          {view.activeDays.label} {view.activeDays.value}
+        </span>
+        <span>
+          {view.avgFocusSession.label} {view.avgFocusSession.value}
+        </span>
+        {view.activeDays.detail && <span className="text-satin-grey/80">{view.activeDays.detail}</span>}
+        {view.avgFocusSession.detail && <span className="text-satin-grey/80">{view.avgFocusSession.detail}</span>}
       </div>
     </div>
   );

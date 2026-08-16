@@ -12,8 +12,15 @@ const NEUTRAL_COLOR = "#C7BCB2";
  * 课程投入（V3）：显示名已由 presentCourseInvestment 解析
  * （snapshot → current name → 已删除课程 → 未关联课程；Top5 + 其他）。
  * Level 2 surface；「其他」/「未关联课程」用 neutral tone。
+ * onOpenCourse（可选）：存在课程 id 的非聚合行可点击打开 Floating Course Hub。
  */
-export function CourseInvestmentCard({ investment }: { investment: CourseInvestmentView[] }) {
+export function CourseInvestmentCard({
+  investment,
+  onOpenCourse,
+}: {
+  investment: CourseInvestmentView[];
+  onOpenCourse?: (courseId: string) => void;
+}) {
   if (investment.length === 0) {
     return (
       <div className="bg-surface border border-line rounded-2xl p-4 h-fit">
@@ -31,18 +38,26 @@ export function CourseInvestmentCard({ investment }: { investment: CourseInvestm
       <div className="space-y-2.5 pt-3">
         {investment.map((item, index) => {
           const neutral = item.isOther || item.courseName === "未关联课程";
+          const clickable = onOpenCourse && item.courseId !== null && !item.isOther;
           return (
             <div key={item.courseId ?? `other-${index}`} className="space-y-0.5">
               <div className="flex items-center justify-between gap-2">
-                <span
-                  className={cn(
-                    "text-[11px] font-semibold truncate",
-                    neutral ? "text-sandrift" : "text-charcoal"
-                  )}
+                <button
+                  type="button"
+                  disabled={!clickable}
+                  onClick={() => {
+                    if (clickable) onOpenCourse(item.courseId as string);
+                  }}
                   title={item.courseName}
+                  className={cn(
+                    "text-[11px] font-semibold truncate text-left",
+                    clickable
+                      ? "text-charcoal hover:text-black underline-offset-2 hover:underline cursor-pointer"
+                      : cn("cursor-default", neutral ? "text-sandrift" : "text-charcoal")
+                  )}
                 >
                   {item.courseName}
-                </span>
+                </button>
                 <span className="text-[10px] text-sandrift shrink-0">
                   {formatAnalyticsDuration(item.minutes)} · {Math.round(item.share * 100)}%
                 </span>

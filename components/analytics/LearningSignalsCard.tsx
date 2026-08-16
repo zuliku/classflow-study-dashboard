@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { TrendingUp, Target, CalendarCheck2, Clock, Sparkles } from "lucide-react";
+import { TrendingUp, Target, CalendarCheck2, Sparkles, ChevronRight } from "lucide-react";
 import { LearningSignal, LearningSignalTone } from "@/lib/analytics/types";
 import { useKiroSessionActions } from "@/components/kiro/KiroSessionProvider";
 import { cn } from "@/lib/utils";
@@ -33,13 +33,11 @@ export function LearningSignalsCard({
   const { handoffPrompt } = useKiroSessionActions();
 
   if (signals.length === 0) {
+    // V3.1：紧凑 Level 3 contextual state（不制造高卡空洞）
     return (
-      <div className="bg-surface border border-line rounded-2xl p-4 h-fit self-start">
-        <h3 className="text-sm font-bold text-charcoal">值得注意</h3>
-        <div className="pt-3 pb-2 text-center">
-          <Clock className="w-6 h-6 text-sandrift mx-auto mb-1.5" />
-          <p className="text-[11px] text-sandrift">数据积累后会在这里展示可解释的学习信号</p>
-        </div>
+      <div className="bg-alabaster/50 border border-line rounded-xl px-3.5 py-3 h-fit self-start" data-testid="learning-signals-card">
+        <h3 className="text-[11px] font-bold text-charcoal">值得注意</h3>
+        <p className="text-[10px] text-sandrift mt-0.5">目前没有明显需要调整的信号</p>
       </div>
     );
   }
@@ -57,21 +55,22 @@ export function LearningSignalsCard({
                 {signal.title}
               </p>
               <p className="text-[11px] text-satin-grey leading-relaxed">{signal.description}</p>
-              <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+              <div className="flex flex-wrap items-center gap-2 pt-0.5">
                 {signal.action && onNavigate && (
                   <button
                     type="button"
                     onClick={() => onNavigate(signal.action!.targetTab)}
-                    className="text-[10px] font-bold text-charcoal bg-white border border-line rounded-lg px-2 py-1 hover:border-line-strong transition-colors"
+                    className="inline-flex items-center gap-0.5 text-[11px] font-bold text-charcoal hover:text-black transition-colors"
                   >
                     {signal.action.label}
+                    <ChevronRight className="w-3 h-3" />
                   </button>
                 )}
                 {kiroPrompt && (
                   <button
                     type="button"
                     onClick={() => handoffPrompt(kiroPrompt)}
-                    className="text-[10px] font-bold text-sandrift bg-transparent border border-line rounded-lg px-2 py-1 hover:text-charcoal hover:border-line-strong transition-colors inline-flex items-center gap-1"
+                    className="inline-flex items-center gap-1 text-[10px] font-bold text-sandrift hover:text-charcoal transition-colors"
                   >
                     <Sparkles className="w-3 h-3" />
                     问 Kiro
