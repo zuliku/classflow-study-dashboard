@@ -67,6 +67,47 @@ export const VISUAL_EVAL_WORLD: ReadToolState = {
   },
 };
 
+/**
+ * 固定 Eval 时钟（Eval V1.1）：所有「现在」来自同一常量，绝不使用 new Date()。
+ * 2026-08-16T01:00:00.000Z = 2026-08-16 09:00 Asia/Shanghai（周日，week 2 的最后一天）。
+ * 必须与 VISUAL_EVAL_WORLD.currentSemesterWeek=2 一致。
+ */
+export const VISUAL_EVAL_NOW = "2026-08-16T01:00:00.000Z";
+export const VISUAL_EVAL_TIMEZONE = "Asia/Shanghai";
+
+/** Eval 的固定生产式 Base Context（形状与生产 chat 请求体 baseContext 一致） */
+export const VISUAL_EVAL_BASE_CONTEXT: Record<string, unknown> = {
+  version: 1,
+  now: VISUAL_EVAL_NOW,
+  timezone: VISUAL_EVAL_TIMEZONE,
+  activeTab: VISUAL_EVAL_WORLD.activeTab,
+  semester: {
+    id: VISUAL_EVAL_WORLD.semester.id,
+    name: VISUAL_EVAL_WORLD.semester.name,
+    startDate: VISUAL_EVAL_WORLD.semester.startDate,
+    totalWeeks: VISUAL_EVAL_WORLD.semester.totalWeeks,
+    currentWeek: VISUAL_EVAL_WORLD.currentSemesterWeek,
+  },
+  profile: {
+    name: VISUAL_EVAL_WORLD.userProfile.name,
+    college: VISUAL_EVAL_WORLD.userProfile.college,
+    grade: VISUAL_EVAL_WORLD.userProfile.grade,
+  },
+  ui: {
+    selectedCourseId: null,
+    selectedAssignmentId: null,
+    highlightedAssignmentId: null,
+    assignmentWorkspaceView: "focus",
+  },
+  summary: {
+    courseCount: VISUAL_EVAL_WORLD.courses.length,
+    scheduleCount: VISUAL_EVAL_WORLD.schedules.length,
+    assignmentCount: VISUAL_EVAL_WORLD.assignments.length,
+    groupProjectCount: VISUAL_EVAL_WORLD.groupProjects.length,
+    studyBlockCount: VISUAL_EVAL_WORLD.studyBlocks.length,
+  },
+};
+
 // ---------------- Scenario Contract ----------------
 
 export type VisualEvalCategory =
@@ -126,7 +167,8 @@ export interface VisualIntakeEvalScenario {
   userPrompt: string;
   expected: {
     outcome: VisualEvalOutcome;
-    /** outcome=proposal/pending-only：与 Proposal 内容比较；outcome=preflight-rejection：与 Tool Trace 比较 */
+    /** outcome=proposal/pending-only：与 Proposal 内容比较；
+     *  outcome=preflight-rejection：与 schema-valid Proposal Attempt 比较（Tool Trace 只用于 tool-policy/safety） */
     actions: ExpectedVisualAction[];
     pendingItems: ExpectedPendingItem[];
     forbiddenTools?: string[];
@@ -298,9 +340,11 @@ export const VISUAL_INTAKE_EVAL_SCENARIOS: VisualIntakeEvalScenario[] = [
     userPrompt: "处理一下这些通知",
     expected: {
       // 周五 14:00 已被计网（s_cn）占用 → Runtime preflight 必 CONFLICT。
-      // 本场景验证：模型必须选择 recurring 工具（move_schedule），不得用 occurrence override 或捏造方案。
+      // 模型必须通过 propose_visual_actions 提交 schema-valid 意图（Proposal Attempt 存在 + CONFLICT 即 pass）；
+      // expected.actions 为空：本场景工具选择不可观测（recurring 与 occurrence 都会冲突），
+      // 由 forbiddenTools 禁止 occurrence 类绕过。
       outcome: "preflight-rejection",
-      actions: [{ tool: "move_schedule", entity: { scheduleId: "s_ds" } }],
+      actions: [],
       pendingItems: [],
       forbiddenTools: ["move_schedule_occurrence", "cancel_schedule_occurrence", "create_extra_schedule_occurrence", "create_assignment"],
     },
@@ -472,9 +516,10 @@ export const VISUAL_INTAKE_EVAL_SCENARIOS: VisualIntakeEvalScenario[] = [
     userPrompt: "处理一下这些通知",
     expected: {
       // 周五 14:00 已有计网（s_cn）→ Runtime preflight 必须 CONFLICT（0 Proposal mutation）。
-      // 模型可以选择 move_schedule_occurrence（合理意图），但不能把冲突降级成 pending 或绕过。
+      // 模型必须通过 propose_visual_actions 提交 schema-valid 意图（Proposal Attempt + CONFLICT 即 pass；
+      // 工具选择不可观测——两种工具都会冲突），不能把冲突降级成 pending 或绕过。
       outcome: "preflight-rejection",
-      actions: [{ tool: "move_schedule_occurrence", entity: { scheduleId: "s_ds" }, fields: { week: 2, dayOfWeek: 5, startTime: "14:00" } }],
+      actions: [],
       pendingItems: [],
     },
   },
