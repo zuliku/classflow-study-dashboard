@@ -12,7 +12,7 @@ import {
   searchPdfText,
   extractPdfPagesText,
   buildNormalizedSourceView,
-  mapNormalizedOffsetToSource,
+  mapNormalizedRangeToSource,
 } from "@/lib/ai/attachments/documentSearch";
 import {
   MAX_PROJECT_SEARCH_SNIPPET_CHARS,
@@ -121,9 +121,8 @@ describe("buildSourceEvidenceSnippet（V1.4.3 source-faithful）", () => {
     const source = "x".repeat(3000) + "The Treatment Effect is ATT." + "y".repeat(3000);
     const view = buildNormalizedSourceView(source);
     const scored = scoreLocalSearch(view.normalized, tokenizeLocalSearchQuery("treatment effect"));
-    const sStart = mapNormalizedOffsetToSource(view, scored[0].index);
-    const sEnd = mapNormalizedOffsetToSource(view, scored[0].index + scored[0].matchLength);
-    const snippet = buildSourceEvidenceSnippet({ sourceText: source, sourceStart: sStart, sourceEnd: sEnd, maxChars: 1200 });
+    const range = mapNormalizedRangeToSource(view, { start: scored[0].index, end: scored[0].index + scored[0].matchLength });
+    const snippet = buildSourceEvidenceSnippet({ sourceText: source, sourceStart: range.sourceStart, sourceEnd: range.sourceEnd, maxChars: 1200 });
     expect(snippet.length).toBeLessThanOrEqual(1200);
     expect(snippet).toContain("Treatment Effect");
   });
@@ -192,16 +191,30 @@ describe("V1.4.3 source-faithful Evidence", () => {
     expect(bestB).toBeGreaterThan(bestA);
   });
 
-  it("mapNormalizedOffsetToSource 稀疏映射正确（全角 3 字符）", () => {
+  it("mapNormalizedRangeToSource 稀疏映射正确（全角 3 字符 + expansion + composition）", () => {
     const view = buildNormalizedSourceView("模型版本：ＡＢＣ１２３");
     // NFKC 把全角冒号一并归一为半角
     expect(view.normalized).toBe("模型版本:abc123");
     // normalized "abc" 起始 offset 应映射回全角 "Ａ" 的 source 位置
-    const start = mapNormalizedOffsetToSource(view, view.normalized.indexOf("abc"));
-    expect(view.source[start]).toBe("Ａ");
-    // 归一化前（全角）3 个 source 字符 → 3 个 normalized 字符
-    const end = mapNormalizedOffsetToSource(view, view.normalized.indexOf("abc") + 3);
-    expect(view.source.slice(start, end)).toBe("ＡＢＣ");
+    const start = view.normalized.indexOf("abc");
+    const range = mapNormalizedRangeToSource(view, { start, end: start + 3 });
+    expect(view.source.slice(range.sourceStart, range.sourceEnd)).toBe("ＡＢＣ");
+  });
+
+  it("expansion range：normalized [1,2]（ﬀ 的第二个 f）→ source span 覆盖整个 ﬀ", () => {
+    const view = buildNormalizedSourceView("oﬀice");
+    expect(view.normalized).toBe("office");
+    const range = mapNormalizedRangeToSource(view, { start: 1, end: 2 });
+    expect(view.source.slice(range.sourceStart, range.sourceEnd)).toBe("ﬀ");
+    expect(range.sourceStart).not.toBe(range.sourceEnd);
+  });
+
+  it("composition range：e+◌́ 组合为 é → 单个 canonical 字符映射回两个 source cp", () => {
+    const view = buildNormalizedSourceView("Cafe\u0301");
+    expect(view.normalized).toBe("café");
+    const idx = view.normalized.indexOf("é");
+    const range = mapNormalizedRangeToSource(view, { start: idx, end: idx + 1 });
+    expect(view.source.slice(range.sourceStart, range.sourceEnd)).toBe("e\u0301");
   });
 });
 
@@ -272,6 +285,14 @@ describe("searchPdfText（真实多页 PDF；bounded memory）", () => {
     expect(pagesInOrder.indexOf(11)).toBeLessThan(pagesInOrder.indexOf(2));
   });
 
+  it("PDF Evidence：expansion 在目标前 → Treatment Effect 保真命中（V1.4.3.1）", async () => {
+    const pdf = buildMultiPageTextPdf(["oﬀice notes The Treatment Effect is ATT"]);
+    const blob = new Blob([pdf.buffer as ArrayBuffer], { type: "application/pdf" });
+    const r = await searchPdfText(blob, "treatment effect", { maxResults: 5 });
+    expect(r.matches.length).toBeGreaterThan(0);
+    expect(r.matches[0].text).toContain("Treatment Effect");
+  });
+
   it("无匹配 → matches=[]", async () => {
     const pdf = buildMultiPageTextPdf(["alpha", "beta"]);
     const blob = new Blob([pdf.buffer as ArrayBuffer], { type: "application/pdf" });
@@ -296,6 +317,82 @@ describe("classifyPdfTextLayer（V1.4.2 canonical）", () => {
       expect(r.possiblyScanned).toBe(c.scanned);
       expect(r.hasUsableTextLayer).toBe(!c.scanned);
     }
+  });
+});
+
+describe("V1.4.3.1 offset mapping / parity / relevance", () => {
+  const referenceNormalize = (s: string) => s.normalize("NFKC").toLowerCase().replace(/\s+/g, " ").trim();
+
+  it("A. expansion 在目标前：oﬀice 前置后 Treatment Effect 不漂移", () => {
+    const doc = "oﬀice notes. The Treatment Effect is ATT.";
+    const r = searchLocalText(doc, "treatment effect", { maxResults: 5 });
+    expect(r.matches.length).toBeGreaterThan(0);
+    expect(r.matches[0].text).toContain("The Treatment Effect");
+  });
+
+  it("B. canonical combining sequence：Cafe\u0301 → café parity + 命中", () => {
+    const doc = "Cafe\u0301 Results";
+    const r = searchLocalText(doc, "café results", { maxResults: 5 });
+    expect(r.matches.length).toBeGreaterThan(0);
+    expect(normalizeLocalSearchText(doc)).toBe(referenceNormalize(doc));
+  });
+
+  it("C. TXT relevance order：后部高相关 candidate 必须排第一", () => {
+    const doc =
+      "policy only at the very beginning of the document " +
+      "x".repeat(500) +
+      " policy adoption technology appear together later";
+    const r = searchLocalText(doc, "policy adoption technology", { maxResults: 5 });
+    expect(r.matches.length).toBeGreaterThan(0);
+    expect(r.matches[0].text).toContain("policy adoption technology");
+    expect(r.matches[0].text).not.toContain("policy only");
+  });
+
+  it("normalization parity matrix", () => {
+    const cases = ["ＡＢＣ１２３", "oﬀice", "Cafe\u0301", "\u212B", "  A\t\nB  ", "政策认知　技术采纳", "ﬁnancial ﬂow", "Στοιχεία"];
+    for (const input of cases) {
+      expect(normalizeLocalSearchText(input)).toBe(referenceNormalize(input));
+    }
+  });
+
+  it("mapping：目标位于 expansion 之后（累计偏移不漂移）", () => {
+    const doc = "prefix ﬀ middle Treatment Effect suffix";
+    const r = searchLocalText(doc, "treatment effect", { maxResults: 5 });
+    expect(r.matches.length).toBeGreaterThan(0);
+    expect(r.matches[0].text).toContain("Treatment Effect");
+  });
+
+  it("mapping：多个 expansion 之后的目标", () => {
+    const doc = "ＡＢＣ ﬀ Cafe\u0301 ... FINAL_TARGET";
+    const r = searchLocalText(doc, "final_target", { maxResults: 5 });
+    expect(r.matches.length).toBeGreaterThan(0);
+    expect(r.matches[0].text).toContain("FINAL_TARGET");
+  });
+
+  it("mapping：surrogate pair 之前的目标（不切在 pair 中间）", () => {
+    const doc = "😀 Intro — Treatment Effect";
+    const r = searchLocalText(doc, "treatment effect", { maxResults: 5 });
+    expect(r.matches.length).toBeGreaterThan(0);
+    expect(r.matches[0].text).toContain("Treatment Effect");
+  });
+
+  it("TXT total-budget 按 relevance 消费：高相关 candidate 排第一（不受文档位置影响）", () => {
+    const low = ("policy only content ".repeat(60)).slice(0, 1500);
+    const high = "policy adoption technology at the tail " + "z".repeat(600);
+    const doc = low + high;
+    const r = searchLocalText(doc, "policy adoption technology", { maxResults: 8, snippetChars: 400, totalChars: 800 });
+    expect(r.matches.length).toBeGreaterThan(0);
+    // 第一条必须是后部高相关 Evidence（exact phrase 10_000 起跳；窗口回扩可能含前文，但匹配区必须在尾部）
+    expect(r.matches[0].text).toContain("policy adoption technology");
+    expect(r.matches[0].text).toContain("at the tail");
+  });
+
+  it("checkpoint 之后 expansion：>512 normalized chars 后仍有组合/扩张且目标可达", () => {
+    const filler = "普通文本内容".repeat(140); // >512 normalized chars
+    const doc = filler + " ＡＢＣ ﬀ Cafe\u0301 ... CHECKPOINT_TAIL_TARGET";
+    const r = searchLocalText(doc, "checkpoint_tail_target", { maxResults: 5 });
+    expect(r.matches.length).toBeGreaterThan(0);
+    expect(r.matches[0].text).toContain("CHECKPOINT_TAIL_TARGET");
   });
 });
 

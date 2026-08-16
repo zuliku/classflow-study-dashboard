@@ -19,75 +19,144 @@ import {
 /** 最多切分 terms（防止 query 过长导致扫描成本失控） */
 export const MAX_LOCAL_SEARCH_TERMS = 8;
 
-// ---------- normalize / offset mapping（SEARCH VIEW 单一事实来源，V1.4.3） ----------
+// ---------- normalize / offset mapping（SEARCH VIEW 单一事实来源，V1.4.3.1） ----------
 
 /** normalized checkpoint 间隔：offset remap 只从最近 checkpoint 局部重扫（避免 dense per-char map） */
 export const NORMALIZED_SEARCH_CHECKPOINT_INTERVAL = 512;
 
+/**
+ * 组合符号（canonical combining class > 0）范围：段边界判定用。
+ * 「starter + 后续组合符号」构成一个 NFC block —— 块内 NFKC 精确、跨块不交互，
+ * 因此逐块 normalize 后 concat === 整串 NFKC（canonical parity）。
+ */
+const COMBINING_MARK_RE =
+  /[\u0300-\u036F\u0483-\u0489\u0591-\u05BD\u05BF\u05C1\u05C2\u05C4\u05C5\u05C7\u0610-\u061A\u064B-\u065F\u0670\u06D6-\u06DC\u06DF-\u06E4\u06E7\u06E8\u06EA-\u06ED\u0711\u0730-\u074A\u07A6-\u07B0\u07EB-\u07F3\u0816-\u0819\u081B-\u0823\u0825-\u0827\u0829-\u082D\u0859-\u085B\u08D3-\u08E1\u08E3-\u08FF\u0900-\u0902\u093A\u093C\u0941-\u0948\u094D\u0951-\u0957\u0962\u0963\u0981\u09BC\u09C1-\u09C4\u09CD\u09E2\u09E3\u0A01\u0A02\u0A3C\u0A41\u0A42\u0A47\u0A48\u0A4B-\u0A4D\u0A51\u0A70\u0A71\u0A75\u0A81\u0A82\u0ABC\u0AC1-\u0AC5\u0AC7\u0AC8\u0ACD\u0AE2\u0AE3\u0B01\u0B3C\u0B3F\u0B41-\u0B44\u0B4D\u0B56\u0B62\u0B63\u0B82\u0BC0\u0BCD\u0C00\u0C04\u0C3E-\u0C40\u0C46-\u0C48\u0C4A-\u0C4D\u0C55\u0C56\u0C62\u0C63\u0C81\u0CBC\u0CBF\u0CC6\u0CCC\u0CCD\u0CE2\u0CE3\u0D00\u0D01\u0D3B\u0D3C\u0D41-\u0D44\u0D4D\u0D62\u0D63\u0DCA\u0DD2-\u0DD4\u0DD6\u0E31\u0E34-\u0E3A\u0E47-\u0E4E\u0EB1\u0EB4-\u0EB9\u0EBB\u0EBC\u0EC8-\u0ECD\u0F18\u0F19\u0F35\u0F37\u0F39\u0F71-\u0F7E\u0F80-\u0F84\u0F86\u0F87\u0F8D-\u0F97\u0F99-\u0FBC\u0FC6\u102D-\u1030\u1032-\u1037\u1039\u103A\u103D\u103E\u1058\u1059\u105E-\u1060\u1071-\u1074\u1082\u1085\u1086\u108D\u109D\u135D-\u135F\u1712-\u1714\u1732-\u1734\u1752\u1753\u1772\u1773\u17B4\u17B5\u17B7-\u17BD\u17C6\u17C9-\u17D3\u17DD\u180B-\u180D\u18A9\u1920-\u1922\u1927\u1928\u1932\u1939-\u193B\u1A17\u1A18\u1A1B\u1A56\u1A58-\u1A5E\u1A60\u1A62\u1A65-\u1A6C\u1A73-\u1A7C\u1A7F\u1AB0-\u1ABE\u1B00-\u1B03\u1B34\u1B36-\u1B3A\u1B3C\u1B42\u1B6B-\u1B73\u1B80\u1B81\u1BA2-\u1BA5\u1BA8\u1BA9\u1BAB-\u1BAD\u1BE6\u1BE8-\u1BE9\u1BED\u1BEF-\u1BF1\u1C2C-\u1C33\u1C36\u1C37\u1CD0-\u1CD2\u1CD4-\u1CE0\u1CE2-\u1CE8\u1CED\u1CF4\u1CF8\u1CF9\u1DC0-\u1DFF\u20D0-\u20F0\u2CEF-\u2CF1\u2D7F\u2DE0-\u2DFF\u302A-\u302D\u3099\u309A\uA66F\uA674-\uA67D\uA69E\uA69F\uA6F0\uA6F1\uA802\uA806\uA80B\uA825\uA826\uA8C4\uA8E0-\uA8F1\uA926-\uA92D\uA947-\uA951\uA980-\uA982\uA9B3\uA9B6-\uA9B9\uA9BC\uA9E5\uAA29-\uAA2E\uAA31\uAA32\uAA35\uAA36\uAA43\uAA4C\uAA7C\uAAB0\uAAB2-\uAAB4\uAAB7\uAAB8\uAABE\uAABF\uAAC1\uAAEC\uAAED\uAAF6\uABE5\uABE8\uABED\uFB1E\uFE00-\uFE0F\uFE20-\uFE2F\uFF9E\uFF9F]/;
+
 export interface NormalizedCheckpoint {
-  /** 该 checkpoint 对应 normalized 文本的第几个字符 */
+  /** checkpoint 处已产生的 canonical 字符数（UTF-16 units） */
   normOffset: number;
-  /** 对应 source 偏移（下一个待处理 code point 的位置） */
+  /** 对应 source 偏移（UTF-16 units；checkpoint 位于安全段边界） */
   sourceOffset: number;
   /** 是否已 emit 过非空白字符（trim-start 状态） */
   started: boolean;
-  /** 上一个 emit 的 normalized 字符是否为 collapse 后的空格 */
+  /** 上一个 emit 的 canonical 字符是否为 collapse 后的空格 */
   prevWasWs: boolean;
 }
 
 export interface NormalizedSourceView {
   normalized: string;
-  /** source 原文（remap 与 snippet 用；buildNormalizedSourceView 持有引用，不复制） */
+  /** source 原文（remap 与 snippet 用；持有引用，不复制） */
   source: string;
   /** 稀疏 checkpoints：mapping 用（不做 dense per-char 索引） */
   checkpoints: NormalizedCheckpoint[];
-}
-
-/** 单字符 normalize（code point 安全）：NFKC + lowercase；返回 normalized 结果与 source 消耗长度 */
-function normalizeOneChar(source: string, sourcePos: number): { char: string; sourceEnd: number } {
-  const cp = source.codePointAt(sourcePos);
-  if (cp === undefined) return { char: "", sourceEnd: sourcePos };
-  const raw = String.fromCodePoint(cp);
-  return { char: raw.normalize("NFKC").toLowerCase(), sourceEnd: sourcePos + raw.length };
 }
 
 function isSpaceChar(ch: string): boolean {
   return /\s/.test(ch);
 }
 
+/** 段内 spans：每个 canonical code point（UTF-16 长度）→ 来源 source span。
+ *  组合（e+◌́→é）时后续 cp 扩展最后一个 span 的 srcEnd；分解（ﬀ→ff）时新字符归属当前 cp。
+ *  段很小（starter + 组合符号），spans 为段内 dense、段间 sparse。 */
+interface SegmentSpan {
+  canonStart: number;
+  canonUnits: number;
+  srcStart: number;
+  srcEnd: number;
+}
+
+/** 对段内 canonical 相对偏移 rel 查找所属 span（span.canonStart <= rel < canonStart+units） */
+function spanForCanonOffset(spans: SegmentSpan[], rel: number): SegmentSpan | null {
+  for (const s of spans) {
+    if (rel >= s.canonStart && rel < s.canonStart + s.canonUnits) return s;
+  }
+  return null;
+}
+
+function buildSegmentSpans(segText: string, segSrcStart: number): { spans: SegmentSpan[]; canonLength: number } {
+  const spans: SegmentSpan[] = [];
+  let prefix = "";
+  let prefixCanon = "";
+  let cumLen = 0;
+  let lastSpan: SegmentSpan | null = null;
+  let localPos = 0;
+  while (localPos < segText.length) {
+    const cpStart = localPos;
+    const cpChar = String.fromCodePoint(segText.codePointAt(localPos) ?? 0);
+    localPos += cpChar.length;
+    prefix += cpChar;
+    prefixCanon = prefix.normalize("NFKC").toLowerCase();
+    const newLen = prefixCanon.length;
+    const srcStart = segSrcStart + cpStart;
+    const srcEnd = segSrcStart + localPos;
+    if (newLen > cumLen) {
+      // 新 canonical 字符出现：[cumLen, newLen) 归属当前 source cp
+      let pos = cumLen;
+      while (pos < newLen) {
+        const canonCp = prefixCanon.codePointAt(pos) ?? 0;
+        const units = String.fromCodePoint(canonCp).length;
+        lastSpan = { canonStart: pos, canonUnits: units, srcStart, srcEnd };
+        spans.push(lastSpan);
+        pos += units;
+      }
+    } else if (newLen === cumLen && lastSpan) {
+      // 组合：扩展最后一个 span 的 srcEnd（é 跨 e 与 ◌́）
+      lastSpan.srcEnd = srcEnd;
+    }
+    cumLen = newLen;
+  }
+  return { spans, canonLength: cumLen };
+}
+
 /**
  * 构建 SEARCH VIEW（唯一 normalize 实现；normalizeLocalSearchText 与其共用）：
- * NFKC + lowercase + collapse whitespace + trim，同时记录稀疏 checkpoints 供 source remap。
- * 复杂度 O(n)；内存 O(n / interval)（20MiB 文本 ≈ 4 万 checkpoint，瞬态）。
+ * 按 NFC block（starter + 组合符号）分段，逐段 NFKC → concat，等于整串 NFKC（canonical parity）。
+ * 记录稀疏 checkpoints（位于安全段边界；相邻大致 bounded）。复杂度 O(n)；内存 O(n / interval)。
  */
 export function buildNormalizedSourceView(source: string): NormalizedSourceView {
   const normalized: string[] = [];
   const checkpoints: NormalizedCheckpoint[] = [];
-  let normOffset = 0;
+  let canonOffset = 0;
   let srcPos = 0;
   let started = false;
   let prevWasWs = false;
   checkpoints.push({ normOffset: 0, sourceOffset: 0, started: false, prevWasWs: false });
   while (srcPos < source.length) {
-    const { char, sourceEnd } = normalizeOneChar(source, srcPos);
-    srcPos = sourceEnd;
-    if (isSpaceChar(char)) {
+    const cpChar = String.fromCodePoint(source.codePointAt(srcPos) ?? 0);
+    if (isSpaceChar(cpChar)) {
+      // 空白 run：整体消费；仅在 started && !prevWasWs 时 emit 一个 collapse 空格
+      const runStart = srcPos;
+      while (srcPos < source.length && isSpaceChar(String.fromCodePoint(source.codePointAt(srcPos) ?? 0))) {
+        srcPos += String.fromCodePoint(source.codePointAt(srcPos) ?? 0).length;
+      }
       if (started && !prevWasWs) {
         normalized.push(" ");
         prevWasWs = true;
-        normOffset++;
-        if (normOffset % NORMALIZED_SEARCH_CHECKPOINT_INTERVAL === 0) {
-          checkpoints.push({ normOffset, sourceOffset: srcPos, started, prevWasWs });
-        }
+        canonOffset++;
       }
       continue;
     }
-    normalized.push(char);
+    // 非空白 segment：starter + 后续组合符号（NFC block）
+    const segStart = srcPos;
+    let segText = "";
+    const starter = String.fromCodePoint(source.codePointAt(srcPos) ?? 0);
+    segText += starter;
+    srcPos += starter.length;
+    while (srcPos < source.length) {
+      const ch = String.fromCodePoint(source.codePointAt(srcPos) ?? 0);
+      if (!COMBINING_MARK_RE.test(ch)) break;
+      segText += ch;
+      srcPos += ch.length;
+    }
+    const { canonLength } = buildSegmentSpans(segText, segStart);
+    const segCanon = segText.normalize("NFKC").toLowerCase();
+    normalized.push(segCanon);
     started = true;
     prevWasWs = false;
-    normOffset++;
-    if (normOffset % NORMALIZED_SEARCH_CHECKPOINT_INTERVAL === 0) {
-      checkpoints.push({ normOffset, sourceOffset: srcPos, started, prevWasWs });
+    canonOffset += canonLength;
+    // checkpoint：仅在安全段边界、且距上一个 checkpoint ≥ interval 时记录
+    if (canonOffset - checkpoints[checkpoints.length - 1].normOffset >= NORMALIZED_SEARCH_CHECKPOINT_INTERVAL) {
+      checkpoints.push({ normOffset: canonOffset, sourceOffset: srcPos, started, prevWasWs });
     }
   }
   const joined = normalized.join("");
@@ -101,46 +170,108 @@ export function normalizeLocalSearchText(text: string): string {
   return buildNormalizedSourceView(text).normalized;
 }
 
+export interface SourceRange {
+  /** start inclusive */
+  sourceStart: number;
+  /** end exclusive */
+  sourceEnd: number;
+}
+
 /**
- * normalized offset → source offset（仅对少量目标调用）。
- * 从最近 checkpoint 局部重扫（≤ interval 长度），不重新扫描全文：
- * 复杂度 O(interval × targets)，与 normalizeLocalSearchText 共用同一规则（单一事实来源）。
+ * canonical range → source range（仅对 ≤ maxResults 个目标调用）。
+ * 从最近 checkpoint 局部重扫（≤ interval），逐 canonical 单位推进；命中单位内部用段内 spans 精确拆分。
+ * start/end 均为 UTF-16 units；返回的 source 边界永远是合法 code point 边界（不会切在 surrogate pair 中间）。
  */
-export function mapNormalizedOffsetToSource(view: NormalizedSourceView, normOffset: number): number {
-  if (normOffset <= 0) return view.checkpoints[0].sourceOffset;
-  if (normOffset >= view.normalized.length) return view.source.length;
-  // binary search：最近 checkpoint（≤ normOffset）
+export function mapNormalizedRangeToSource(
+  view: NormalizedSourceView,
+  range: { start: number; end: number }
+): SourceRange {
+  const source = view.source;
+  if (range.start <= 0 && range.end <= 0) {
+    return { sourceStart: 0, sourceEnd: 0 };
+  }
+  // binary search：最近 checkpoint（≤ start）
   const cks = view.checkpoints;
   let lo = 0;
   let hi = cks.length;
   while (lo < hi) {
     const mid = (lo + hi) >> 1;
-    if (cks[mid].normOffset <= normOffset) lo = mid + 1;
+    if (cks[mid].normOffset <= range.start) lo = mid + 1;
     else hi = mid;
   }
   const ck = cks[lo - 1];
-  let emitted = ck.normOffset;
+  let canonOffset = ck.normOffset;
   let srcPos = ck.sourceOffset;
   let started = ck.started;
   let prevWasWs = ck.prevWasWs;
-  while (srcPos < view.source.length && emitted <= normOffset) {
-    const charStart = srcPos;
-    const { char, sourceEnd } = normalizeOneChar(view.source, srcPos);
-    srcPos = sourceEnd;
-    if (isSpaceChar(char)) {
+  let sourceStart = 0;
+  let sourceEnd = source.length;
+  let startFound = range.start <= 0;
+  if (startFound) sourceStart = ck.sourceOffset;
+  let endFound = range.end <= 0;
+
+  while (srcPos < source.length && !(startFound && endFound)) {
+    const cpChar = String.fromCodePoint(source.codePointAt(srcPos) ?? 0);
+    if (isSpaceChar(cpChar)) {
+      const runStart = srcPos;
+      while (srcPos < source.length && isSpaceChar(String.fromCodePoint(source.codePointAt(srcPos) ?? 0))) {
+        srcPos += String.fromCodePoint(source.codePointAt(srcPos) ?? 0).length;
+      }
       if (started && !prevWasWs) {
-        if (emitted === normOffset) return charStart;
-        emitted++;
+        // canonical 空格：source span = 整个空白 run
+        if (!startFound && canonOffset === range.start) {
+          sourceStart = runStart;
+          startFound = true;
+        }
+        canonOffset++;
+        if (!endFound && canonOffset === range.end) {
+          sourceEnd = srcPos; // run end
+          endFound = true;
+        }
         prevWasWs = true;
       }
       continue;
     }
-    if (emitted === normOffset) return charStart;
-    emitted++;
+    // 非空白 segment：starter + 后续组合符号（与 build 阶段同一分段逻辑）
+    const segStart = srcPos;
+    let segText = "";
+    const starter = String.fromCodePoint(source.codePointAt(srcPos) ?? 0);
+    segText += starter;
+    srcPos += starter.length;
+    while (srcPos < source.length) {
+      const ch = String.fromCodePoint(source.codePointAt(srcPos) ?? 0);
+      if (!COMBINING_MARK_RE.test(ch)) break;
+      segText += ch;
+      srcPos += ch.length;
+    }
+    const { spans, canonLength } = buildSegmentSpans(segText, segStart);
+    if (!startFound) {
+      const rel = range.start - canonOffset;
+      if (rel >= 0 && rel < canonLength) {
+        const span = spanForCanonOffset(spans, rel);
+        sourceStart = span ? span.srcStart : srcPos;
+        startFound = true;
+      }
+    }
+    if (!endFound) {
+      const relEnd = range.end - canonOffset;
+      if (relEnd >= 0 && relEnd <= canonLength) {
+        if (relEnd < canonLength) {
+          const span = spanForCanonOffset(spans, relEnd);
+          sourceEnd = span ? span.srcEnd : srcPos;
+        } else {
+          sourceEnd = srcPos; // 段尾（= 下一个 unit 起点）
+        }
+        endFound = true;
+      }
+    }
+    canonOffset += canonLength;
     started = true;
     prevWasWs = false;
   }
-  return view.source.length;
+  if (!startFound) sourceStart = source.length;
+  if (!endFound) sourceEnd = source.length;
+  return { sourceStart, sourceEnd };
 }
 
 /** 术语切分（ES5 兼容：无 Unicode property escapes）：按空白 + 常见中英文标点切分。
@@ -334,7 +465,8 @@ export interface LocalTextSearchResult {
  * 全文词法搜索（纯函数；bounded output）。
  * V1.4.3：matching/ranking 在 SEARCH VIEW（normalized）上进行；
  * Evidence snippet 通过 sparse checkpoint remap 到 source 原文生成（大小写/Unicode/换行保真）。
- * 预算按最终 source snippet 长度计算。
+ * V1.4.3.1：结果按 relevance（rank）顺序输出；remap 仅内部按 offset 排序，完成后恢复 rank 序；
+ * 预算（maxResults / total chars）严格按 relevance 消费。
  */
 export function searchLocalText(
   rawText: string,
@@ -347,21 +479,29 @@ export function searchLocalText(
   const view = buildNormalizedSourceView(rawText);
   const scored = scoreLocalSearch(view.normalized, tokenizeLocalSearchQuery(query));
   const matchCount = scored.length;
-  // 按 normalized offset 排序后一次性 remap（每个目标只做 ≤ interval 的局部重扫）
-  const targets = scored.slice(0, maxResults).sort((a, b) => a.index - b.index);
+  // 保持 relevance（rank）顺序；mapping 内部按 offset 排序，完成后按 rank 恢复
+  const ranked = scored.slice(0, maxResults);
+  const mappedByRank: { index: number; range: SourceRange }[] = new Array(ranked.length);
+  ranked
+    .map((m, rank) => ({ m, rank }))
+    .sort((a, b) => a.m.index - b.m.index)
+    .forEach(({ m, rank }) => {
+      mappedByRank[rank] = {
+        index: m.index,
+        range: mapNormalizedRangeToSource(view, { start: m.index, end: m.index + m.matchLength }),
+      };
+    });
   const matches: { index: number; text: string }[] = [];
   let used = 0;
-  for (const m of targets) {
-    const sourceStart = mapNormalizedOffsetToSource(view, m.index);
-    const sourceEnd = mapNormalizedOffsetToSource(view, m.index + m.matchLength);
+  for (const entry of mappedByRank) {
     const snippet = buildSourceEvidenceSnippet({
       sourceText: rawText,
-      sourceStart,
-      sourceEnd,
+      sourceStart: entry.range.sourceStart,
+      sourceEnd: entry.range.sourceEnd,
       maxChars: snippetChars,
     });
     if (used + snippet.length > totalChars) break;
-    matches.push({ index: m.index, text: snippet });
+    matches.push({ index: entry.index, text: snippet });
     used += snippet.length;
   }
   return { matches, matchCount, truncated: matches.length < matchCount };
@@ -437,12 +577,11 @@ export async function searchPdfText(
       if (scored.length === 0) continue;
       totalMatchCount += scored.length;
       const best = scored[0];
-      const sourceStart = mapNormalizedOffsetToSource(view, best.index);
-      const sourceEnd = mapNormalizedOffsetToSource(view, best.index + best.matchLength);
+      const range = mapNormalizedRangeToSource(view, { start: best.index, end: best.index + best.matchLength });
       const snippet = buildSourceEvidenceSnippet({
         sourceText: pageText,
-        sourceStart,
-        sourceEnd,
+        sourceStart: range.sourceStart,
+        sourceEnd: range.sourceEnd,
         maxChars: snippetChars,
       });
       // 每页只取最佳命中进入候选池（页面级 Evidence 粒度）；ranking 只看 score/page，不看 snippet
