@@ -9,6 +9,7 @@ import {
   AnalyticsPeriod,
   AnalyticsProjectionEvent,
   AnalyticsRangePreset,
+  AnalyticsReliability,
   CourseInvestment,
   ExecutionAnalytics,
   FocusRhythm,
@@ -23,6 +24,7 @@ import { aggregateFocusAnalytics, extractFocusFacts } from "@/lib/analytics/focu
 import { buildLearningSignals } from "@/lib/analytics/signals";
 import { collectLearningHistoryEvents, resolveLearningHistoryQuery, sortLearningHistoryEvents } from "@/lib/history/query";
 import { getLearningHistoryCoverage } from "@/lib/history/store";
+import { formatAnalyticsDuration, formatTrendBucketLabel } from "@/lib/analytics/presentation";
 
 /** 事件 → projection 最小视图 */
 function toProjectionEvent(e: {
@@ -78,35 +80,106 @@ export function buildOverviewFacts(input: {
   };
 }
 
+/** 中文时长（V3 统一口径；与 presentation.formatAnalyticsDuration 同源） */
 export function formatDurationLabel(minutes: number): string {
-  if (minutes <= 0) return "0m";
-  const h = Math.floor(minutes / 60);
-  const m = minutes % 60;
-  if (h === 0) return `${m}m`;
-  if (m === 0) return `${h}h`;
-  return `${h}h ${m}m`;
+  return formatAnalyticsDuration(minutes, "full");
 }
 
-export function buildTrendPoints(
-  period: AnalyticsPeriod,
-  focusByKey: Map<string, number>,
-  planByKey: Map<string, number>,
-  completedByKey: Map<string, number>
-): LearningTrendPoint[] {
-  // 按 trendGrain 生成连续 bucket（day=日期键；week=ISO-ish 周起点；semester-week=wN）
-  const keySet = new Set<string>();
-  for (const k of Array.from(focusByKey.keys())) keySet.add(k);
-  for (const k of Array.from(planByKey.keys())) keySet.add(k);
-  for (const k of Array.from(completedByKey.keys())) keySet.add(k);
-  return Array.from(Array.from(keySet))
-    .map((key) => ({
-      key,
-      label: key,
-      focusMinutes: focusByKey.get(key) ?? 0,
-      plannedMinutes: planByKey.get(key) ?? 0,
-      completedAssignments: completedByKey.get(key) ?? 0,
-    }))
-    .sort((a, b) => a.key.localeCompare(b.key));
+/** 解析周期趋势 bucket 的 UI label（canonical key 只用于数据） */
+export function trendBucketLabel(period: AnalyticsPeriod, key: string): string {
+  return formatTrendBucketLabel(period, key);
+}
+
+const DAY_MS = 86400000;
+
+function startOfLocalDay(ts: number): number {
+  const d = new Date(ts);
+  d.setHours(0, 0, 0, 0);
+  return d.getTime();
+}
+
+function localDateOf(ts: number): string {
+  const d = new Date(ts);
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+}
+
+function mondayOfLocalWeek(ts: number): number {
+  const d = new Date(startOfLocalDay(ts));
+  const dow = d.getDay() === 0 ? 7 : d.getDay();
+  d.setDate(d.getDate() - (dow - 1));
+  return d.getTime();
+}
+
+export interface TrendBucket {
+  key: string;
+  from: number;
+  to: number;
+}
+
+/**
+ * Canonical continuous buckets（Analytics V3）：
+ * 由 Analytics Period 生成，事件只填值；某天/某周无事件不删除 bucket。
+ * - week：current.from（周一 00:00）→ now，每天一个
+ * - 4weeks：覆盖 [current.from, now] 的连续周（按本地周一锚定）
+ * - semester：第 1 周 → 当前教学周（不生成未来周）
+ */
+export function generateTrendBuckets(period: AnalyticsPeriod): TrendBucket[] {
+  const { current } = period;
+  const buckets: TrendBucket[] = [];
+
+  if (period.trendGrain === "day") {
+    const start = startOfLocalDay(current.from);
+    for (let t = start; t <= current.to; t += DAY_MS) {
+      buckets.push({ key: localDateOf(t), from: t, to: Math.min(t + DAY_MS - 1, current.to) });
+    }
+    return buckets;
+  }
+
+  if (period.trendGrain === "week") {
+    let t = mondayOfLocalWeek(current.from);
+    while (t <= current.to) {
+      buckets.push({ key: localDateOf(t), from: t, to: Math.min(t + 7 * DAY_MS - 1, current.to) });
+      t += 7 * DAY_MS;
+    }
+    return buckets;
+  }
+
+  // semester-week：第 1 周 → 当前教学周（semester 预设下 current.from = 学期开始日）
+  const semesterStart = current.from;
+  const currentWeek = Math.max(1, Math.floor((current.to - semesterStart) / (7 * DAY_MS)) + 1);
+  for (let w = 1; w <= currentWeek; w += 1) {
+    const from = semesterStart + (w - 1) * 7 * DAY_MS;
+    buckets.push({ key: `w${w}`, from, to: Math.min(from + 7 * DAY_MS - 1, current.to) });
+  }
+  return buckets;
+}
+
+/**
+ * Continuous trend points：canonical buckets + 事件填充。
+ * per-bucket reliability：bucket.from 早于该 metric 的 coverage 起点 → null（unknown，禁止补 0）。
+ */
+export function buildTrendPoints(input: {
+  period: AnalyticsPeriod;
+  focusByKey: Map<string, number>;
+  planByKey: Map<string, number>;
+  completedByKey: Map<string, number>;
+  /** focus / assignment 的可靠起点（historyStartedAt） */
+  focusCoverageFrom: number;
+  /** plan 的可靠起点（planCoverageStartedAt） */
+  planCoverageFrom: number;
+}): LearningTrendPoint[] {
+  const { period, focusByKey, planByKey, completedByKey, focusCoverageFrom, planCoverageFrom } = input;
+  return generateTrendBuckets(period).map((bucket) => ({
+    key: bucket.key,
+    label: trendBucketLabel(period, bucket.key),
+    focusMinutes:
+      bucket.from >= focusCoverageFrom ? (focusByKey.get(bucket.key) ?? 0) : null,
+    plannedMinutes:
+      bucket.from >= planCoverageFrom ? (planByKey.get(bucket.key) ?? 0) : null,
+    completedAssignments:
+      bucket.from >= focusCoverageFrom ? (completedByKey.get(bucket.key) ?? 0) : null,
+  }));
 }
 
 export async function buildLearningAnalyticsSnapshot(
@@ -199,10 +272,24 @@ export async function buildLearningAnalyticsSnapshot(
     avgFocusSessionMinutes: focusAgg.averageSessionMinutes,
   };
 
+  // ---- Coverage（含 plan-specific + V3 metric-level reliability；先于 trend 计算）----
+  const planCoverageStartedAt = Math.max(
+    historyStartedAt,
+    coverage?.studyBlockBatchIntegrityStartedAt ?? historyStartedAt
+  );
+  const planCoverageFull = currentFrom >= planCoverageStartedAt;
+
+  const assignmentReliability: AnalyticsReliability = currentFrom >= historyStartedAt ? "complete" : "partial";
+  const planReliability: AnalyticsReliability = currentFrom >= planCoverageStartedAt ? "complete" : "partial";
+  // Focus：与 assignment 同起点（focus.completed 同属 Learning History）；
+  // backfill 存在也不能证明完整起点（不声称 complete 之前的区间）
+  const focusReliability: AnalyticsReliability = currentFrom >= historyStartedAt ? "complete" : "partial";
+  const focusBackfilled = coverage?.focusBackfillCompleted === true;
+
   // ---- Planned minutes（current 周期）----
   const plannedMinutes = currentPlans.reduce((s, p) => s + p.plannedMinutes, 0);
 
-  // ---- Trend（计划 vs 实际，按天/周/教学周聚合）----
+  // ---- Trend（计划 vs 实际，按天/周/教学周聚合；canonical continuous buckets）----
   const focusByKey = new Map<string, number>();
   const planByKey = new Map<string, number>();
   const completedByKey = new Map<string, number>();
@@ -221,22 +308,36 @@ export async function buildLearningAnalyticsSnapshot(
     completedByKey.set(key, (completedByKey.get(key) ?? 0) + 1);
   }
 
-  const trend = buildTrendPoints(period, focusByKey, planByKey, completedByKey);
+  const trend = buildTrendPoints({
+    period,
+    focusByKey,
+    planByKey,
+    completedByKey,
+    focusCoverageFrom: historyStartedAt,
+    planCoverageFrom: planCoverageStartedAt,
+  });
 
   // ---- Course investment ----
-  const courseAgg = new Map<string, { minutes: number; sessions: number; name: string }>();
+  // identity：courseId 存在 ≠ 未关联课程。snapshot 优先（取该 courseId 最近一个非空 snapshot）；
+  // 真 unlinked（courseId undefined）聚合为唯一一条「未关联课程」。
+  const courseAgg = new Map<string, { minutes: number; sessions: number; latestSnapshot: string | null; latestAt: number }>();
   for (const f of currentFocus) {
     const id = f.courseId ?? "__unlinked__";
-    const v = courseAgg.get(id) ?? { minutes: 0, sessions: 0, name: f.courseNameSnapshot ?? "未关联课程" };
+    const v = courseAgg.get(id) ?? { minutes: 0, sessions: 0, latestSnapshot: null, latestAt: 0 };
     v.minutes += Math.round(f.actualActiveMs / 60000);
     v.sessions += 1;
+    if (f.courseNameSnapshot && f.startedAt >= v.latestAt) {
+      v.latestSnapshot = f.courseNameSnapshot;
+      v.latestAt = f.startedAt;
+    }
     courseAgg.set(id, v);
   }
   const totalCourseMinutes = Array.from(courseAgg.values()).reduce((s, v) => s + v.minutes, 0);
   const ranked = Array.from(courseAgg.entries())
     .map(([courseId, v]) => ({
       courseId: courseId === "__unlinked__" ? null : courseId,
-      courseName: v.name,
+      // 未关联课程：确定语义；linked 课程：snapshot 或 null（由 presentation 用 current name 兜底）
+      courseName: courseId === "__unlinked__" ? "未关联课程" : v.latestSnapshot,
       minutes: v.minutes,
       sessions: v.sessions,
       share: totalCourseMinutes > 0 ? v.minutes / totalCourseMinutes : 0,
@@ -261,13 +362,6 @@ export async function buildLearningAnalyticsSnapshot(
   // comparisonAvailable 由 history 覆盖决定（previous.from >= startedAt）；事件为空时也视为不可比
   const comparisonAvailableFinal =
     comparisonAvailable && (previousFocus.length > 0 || previousCompletions.length > 0);
-
-  // ---- Coverage（含 plan-specific）----
-  const planCoverageStartedAt = Math.max(
-    historyStartedAt,
-    coverage?.studyBlockBatchIntegrityStartedAt ?? historyStartedAt
-  );
-  const planCoverageFull = currentFrom >= planCoverageStartedAt;
 
   // ---- Overview ----
   const overview = buildOverviewFacts({
@@ -295,6 +389,10 @@ export async function buildLearningAnalyticsSnapshot(
       historyStartedAt,
       planCoverageFull,
       planCoverageStartedAt,
+      assignmentReliability,
+      planReliability,
+      focusReliability,
+      focusBackfilled,
     },
     overview,
     trend,
@@ -331,10 +429,4 @@ function grainKeyForStart(
   const target = new Date(ts);
   const week = Math.floor((target.getTime() - start.getTime()) / (7 * 86400000)) + 1;
   return `w${Math.max(week, 1)}`;
-}
-
-function localDateOf(ts: number): string {
-  const d = new Date(ts);
-  const p = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
 }

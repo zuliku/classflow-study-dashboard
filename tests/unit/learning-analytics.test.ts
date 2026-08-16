@@ -112,11 +112,11 @@ describe("Learning Analytics Snapshot（本周）", () => {
 
     // overview
     expect(snapshot.overview.actualFocusMinutes).toBe(300);
-    expect(snapshot.overview.actualFocusLabel).toBe("5h");
+    expect(snapshot.overview.actualFocusLabel).toBe("5 小时");
     expect(snapshot.overview.focusDeltaPercent).toBeNull(); // previous 无数据
     expect(snapshot.overview.completedAssignments).toBe(4);
     expect(snapshot.overview.plannedMinutes).toBe(285);
-    expect(snapshot.overview.plannedLabel).toBe("4h 45m");
+    expect(snapshot.overview.plannedLabel).toBe("4 小时 45 分");
     expect(snapshot.overview.actualToPlanRatio).toBe(105);
     expect(snapshot.overview.onTimeEligible).toBe(3); // a2 无 DDL 不计
     expect(snapshot.overview.onTimeCount).toBe(2); // a1, a4 onTime；a3 late
@@ -130,7 +130,7 @@ describe("Learning Analytics Snapshot（本周）", () => {
     expect(snapshot.execution.activeDays).toBe(4);
     expect(snapshot.execution.avgFocusSessionMinutes).toBe(50);
 
-    // course investment
+    // course investment（courseId 存在 + snapshot 存在 → snapshot 名）
     expect(snapshot.courseInvestment).toHaveLength(2);
     expect(snapshot.courseInvestment[0].courseName).toBe("数据结构与算法");
     expect(snapshot.courseInvestment[0].minutes).toBe(195);
@@ -145,7 +145,7 @@ describe("Learning Analytics Snapshot（本周）", () => {
     expect(snapshot.focusRhythm.dominantTimeOfDay).toBe("上午");
     expect(snapshot.focusRhythm.byTimeOfDay.find((b) => b.bucket === "晚间")!.minutes).toBe(120);
 
-    // trend（day grain；8 天连续 bucket）
+    // trend（day grain；canonical 连续 bucket = 周一 08-17 → 周日 08-23，7 天）
     expect(snapshot.trend.map((p) => p.key)).toEqual([
       "2026-08-17",
       "2026-08-18",
@@ -153,6 +153,7 @@ describe("Learning Analytics Snapshot（本周）", () => {
       "2026-08-20",
       "2026-08-21",
       "2026-08-22",
+      "2026-08-23",
     ]);
     const d17 = snapshot.trend.find((p) => p.key === "2026-08-17")!;
     expect(d17.focusMinutes).toBe(105);
@@ -165,10 +166,22 @@ describe("Learning Analytics Snapshot（本周）", () => {
     expect(d20.completedAssignments).toBe(1); // a4
     const d22 = snapshot.trend.find((p) => p.key === "2026-08-22")!;
     expect(d22.plannedMinutes).toBe(45);
+    // 无事件日（今天 08-23）：coverage complete → 0（不是 null）
+    const d23 = snapshot.trend.find((p) => p.key === "2026-08-23")!;
+    expect(d23.focusMinutes).toBe(0);
+    expect(d23.plannedMinutes).toBe(0);
+    expect(d23.completedAssignments).toBe(0);
+    // UI label：M/d + 星期（不是 raw ISO）
+    expect(snapshot.trend[0].label).toBe("8/17 周一");
+    expect(snapshot.trend[6].label).toBe("8/23 周日");
 
-    // coverage
+    // coverage（V3 metric-level）
     expect(snapshot.coverage.fullCoverage).toBe(true);
     expect(snapshot.coverage.comparisonAvailable).toBe(false); // previous 无事件
+    expect(snapshot.coverage.assignmentReliability).toBe("complete");
+    expect(snapshot.coverage.planReliability).toBe("complete");
+    expect(snapshot.coverage.focusReliability).toBe("complete");
+    expect(snapshot.coverage.focusBackfilled).toBe(true);
 
     // signals：无 period change（比较不可用）；max 3
     expect(snapshot.signals.map((s) => s.id)).toEqual(["plan-actual", "deadline", "course-concentration"]);

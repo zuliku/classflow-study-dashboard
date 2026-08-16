@@ -19,17 +19,28 @@ export interface AnalyticsPeriod {
   trendGrain: "day" | "week" | "semester-week";
 }
 
+/**
+ * Metric-level reliability（Analytics V3 Truth）：
+ * - complete：该区间进入可靠记录起点之后
+ * - partial：区间早于可靠记录起点（只可表达「已记录」，不可表达「完整总数 / 0」）
+ * - unavailable：无法形成该指标（如无样本、计划比率在 partial 下不可算）
+ */
+export type AnalyticsReliability = "complete" | "partial" | "unavailable";
+
 export interface LearningTrendPoint {
   key: string;
+  /** UI label（week：8/10 周一；4weeks：7/20；semester：第1周）；完整日期在 tooltip */
   label: string;
-  focusMinutes: number;
-  plannedMinutes: number;
-  completedAssignments: number;
+  /** null = 该 bucket 处于记录起点之前（unknown），禁止补 0 */
+  focusMinutes: number | null;
+  plannedMinutes: number | null;
+  completedAssignments: number | null;
 }
 
 export interface CourseInvestment {
   courseId: string | null;
-  courseName: string;
+  /** 最近一个非空 snapshot；null = 无 snapshot（由 presentation 用 current name / 已删除课程 兜底） */
+  courseName: string | null;
   minutes: number;
   sessions: number;
   share: number; // 0..1
@@ -93,6 +104,12 @@ export interface LearningAnalyticsSnapshot {
     planCoverageFull: boolean;
     /** max(historyStartedAt, studyBlockBatchIntegrityStartedAt) */
     planCoverageStartedAt: number;
+    /** V3：metric-level reliability（Unknown ≠ Zero） */
+    assignmentReliability: AnalyticsReliability;
+    planReliability: AnalyticsReliability;
+    focusReliability: AnalyticsReliability;
+    /** Focus backfill 是否执行过（旧会话已回填；无完整起点证明时 UI 不声称「完整」） */
+    focusBackfilled: boolean;
   };
   overview: AnalyticsOverview;
   trend: LearningTrendPoint[];

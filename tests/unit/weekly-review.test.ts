@@ -1,4 +1,4 @@
-﻿import { describe, it, expect } from "vitest";
+import { describe, it, expect } from "vitest";
 import { LearningAnalyticsSnapshot } from "@/lib/analytics/types";
 import { buildWeeklyReview, weeklyReviewCopy } from "@/lib/analytics/weeklyReview";
 
@@ -11,7 +11,7 @@ function baseSnapshot(overrides: Partial<LearningAnalyticsSnapshot> = {}): Learn
       previous: { from: new Date(2026, 7, 3).getTime(), to: new Date(2026, 7, 9, 23, 59, 59).getTime() },
       trendGrain: "day",
     },
-    coverage: { fullCoverage: true, comparisonAvailable: true, historyStartedAt: new Date(2026, 6, 1).getTime(), planCoverageFull: true, planCoverageStartedAt: new Date(2026, 6, 1).getTime() },
+    coverage: { fullCoverage: true, comparisonAvailable: true, historyStartedAt: new Date(2026, 6, 1).getTime(), planCoverageFull: true, planCoverageStartedAt: new Date(2026, 6, 1).getTime(), assignmentReliability: "complete", planReliability: "complete", focusReliability: "complete", focusBackfilled: false },
     overview: {
       actualFocusMinutes: 320,
       actualFocusLabel: "5h 20m",
@@ -110,7 +110,7 @@ describe("buildWeeklyReview（纯投影）", () => {
 
   it("comparison 不足 → focusDeltaPercent 原样 null + comparisonUnavailable=true（不制造 0%）", () => {
     const snapshot = baseSnapshot({
-      coverage: { fullCoverage: true, comparisonAvailable: false, historyStartedAt: new Date(2026, 6, 1).getTime(), planCoverageFull: true, planCoverageStartedAt: new Date(2026, 6, 1).getTime() },
+      coverage: { fullCoverage: true, comparisonAvailable: false, historyStartedAt: new Date(2026, 6, 1).getTime(), planCoverageFull: true, planCoverageStartedAt: new Date(2026, 6, 1).getTime(), assignmentReliability: "complete", planReliability: "complete", focusReliability: "complete", focusBackfilled: false },
       overview: { ...baseSnapshot().overview, focusDeltaPercent: null },
     });
     const review = buildWeeklyReview(snapshot);
@@ -133,13 +133,13 @@ describe("buildWeeklyReview（纯投影）", () => {
     const copy = weeklyReviewCopy(review);
     expect(copy.headlineLines).toEqual(["本周投入：5h 20m 专注", "完成 5 项任务", "4 天有专注记录"]);
     expect(copy.planActualLines).toEqual(["计划 7h", "实际专注约为计划时长的 76%"]);
-    expect(copy.investmentLines).toEqual(["《概率论》2h 14m · 本周专注时间的 42%"]);
+    expect(copy.investmentLines).toEqual(["《概率论》2 小时 14 分 · 本周专注时间的 42%"]);
     expect(copy.changeLines).toEqual(["较上周同期 +12% 专注时间"]);
 
     const noCmp = weeklyReviewCopy(
       buildWeeklyReview(
         baseSnapshot({
-          coverage: { fullCoverage: true, comparisonAvailable: false, historyStartedAt: 0, planCoverageFull: true, planCoverageStartedAt: 0 },
+          coverage: { fullCoverage: true, comparisonAvailable: false, historyStartedAt: 0, planCoverageFull: true, planCoverageStartedAt: 0, assignmentReliability: "complete", planReliability: "complete", focusReliability: "complete", focusBackfilled: false },
           overview: { ...baseSnapshot().overview, focusDeltaPercent: null },
         })
       )
@@ -166,6 +166,10 @@ describe("buildWeeklyReview（纯投影）", () => {
           historyStartedAt: new Date(2026, 6, 1).getTime(),
           planCoverageFull: false,
           planCoverageStartedAt: new Date(2026, 7, 14).getTime(),
+          assignmentReliability: "complete",
+          planReliability: "partial",
+          focusReliability: "complete",
+          focusBackfilled: false,
         },
       })
     );
