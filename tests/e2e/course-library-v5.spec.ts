@@ -75,6 +75,7 @@ function seedScript(monday: string) {
           ${JSON.stringify(mkCourse("c2", "操作系统", "#F0EBE1", "#C9A227", []))},
           ${JSON.stringify(mkCourse("c3", "概率论与数理统计", "#F3E8E6", "#A87952", []))},
           ${JSON.stringify(mkCourse("c4", "数据库系统", "#E8EDF3", "#5B7C9B", [{ id: "m4", title: "MySQL 实战讲义.pdf" }]))},
+          ${JSON.stringify(mkCourse("c5", "学术英语写作", "#EDE8F0", "#7B5B9B", []))},
         ],
         schedules: [],
         assignments: [
@@ -85,6 +86,8 @@ function seedScript(monday: string) {
           ${JSON.stringify(mkTask("a5", "c3", "置信区间推导", iso(1, 20, 0), "doing"))},
           ${JSON.stringify(mkTask("a6", "c4", "数据库实验四", iso(4, 20, 0), "todo"))},
           ${JSON.stringify(mkTask("a7", "c4", "已完成任务", iso(-3, 20, 0), "completed"))},
+          ${JSON.stringify(mkTask("a8", "c5", "第一周写作作业", iso(-5, 20, 0), "completed"))},
+          ${JSON.stringify(mkTask("a9", "c5", "第二周写作作业", iso(-6, 20, 0), "completed"))},
         ],
         calendarMarks: [],
         groupProjects: [],
@@ -213,6 +216,28 @@ base("Actions smoke：标题 → Course Hub；任务行 → Assignment Detail；
   const editor = page.getByRole("dialog", { name: "添加任务" });
   await expect(editor).toBeVisible({ timeout: 8000 });
   await expect(editor.getByRole("combobox", { name: "课程" })).toContainText("高级数据结构与算法设计及复杂度分析");
+});
+
+base("V5.1：completed-only 课程 → 待处理 0 + 全部 2 项 → Popover 两个已完成任务可见", async ({ page }) => {
+  const { monday } = dayAnchor();
+  await page.addInitScript(seedScript(monday));
+  await openLibrary(page);
+
+  const c5 = page.getByTestId("course-library-card-c5");
+  await expect(c5).toBeVisible();
+  await expect(c5.getByText("待处理 0", { exact: true })).toBeVisible();
+  await expect(c5.getByText("暂无待处理任务", { exact: true })).toBeVisible();
+  await expect(c5.getByText("全部 2 项", { exact: true })).toBeVisible();
+
+  // 点击 → Popover 展示完整列表（两个 completed 任务可见）
+  await c5.getByRole("button", { name: /全部 2 项/ }).click();
+  await expect(page.getByText("第一周写作作业", { exact: true })).toBeVisible({ timeout: 5000 });
+  await expect(page.getByText("第二周写作作业", { exact: true })).toBeVisible();
+  await page.keyboard.press("Escape");
+
+  // 1 todo + 1 submitted 的 c1 也必须有完整入口（V5.1 回归）
+  const c1 = page.getByTestId("course-library-card-c1");
+  await expect(c1.getByText("全部 3 项", { exact: true })).toBeVisible();
 });
 
 base("390×844：无横向 overflow；header/上传/待处理/资料可见；无 footer", async ({ page }) => {

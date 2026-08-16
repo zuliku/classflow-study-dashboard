@@ -84,7 +84,10 @@ export function CourseLibraryCard({
   const previewMaterials = materials.slice(0, MATERIAL_PREVIEW_LIMIT);
 
   const headerMeta = [course.code, meta].filter(Boolean).join(" · ");
-  const showAllTasks = totalCount > TASK_PREVIEW_LIMIT;
+  // V5.1：入口可见性 = 完整列表中存在未出现在首屏 preview 的任务
+  // （不能按 totalCount > 2 判断——1 todo + 1 submitted 时 submitted 会无法访问）
+  const hiddenTaskCount = totalCount - previewTasks.length;
+  const showAllTasks = hiddenTaskCount > 0;
   const showAllMaterials = materials.length > MATERIAL_PREVIEW_LIMIT;
 
   return (

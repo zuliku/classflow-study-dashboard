@@ -165,6 +165,82 @@ describe("CourseLibraryCard V5 copy", () => {
     h.cleanup();
   });
 
+  it("V5.1：2 todo → preview 2 → 无全部入口（不冗余）", () => {
+    const h = renderCard({
+      taskRows: [mkRow({ id: "a1", status: "todo" }), mkRow({ id: "a2", status: "doing" })],
+    });
+    expect(h.container.textContent).not.toContain("全部");
+    h.cleanup();
+  });
+
+  it("V5.1：3 todo → 全部 3 项（preview 只显示 2）", () => {
+    const h = renderCard({
+      taskRows: [
+        mkRow({ id: "a1", status: "todo" }),
+        mkRow({ id: "a2", status: "doing" }),
+        mkRow({ id: "a3", status: "todo", title: "第三条" }),
+      ],
+    });
+    const text = h.container.textContent ?? "";
+    expect(text).toContain("全部 3 项");
+    expect(text).not.toContain("第三条"); // preview 只显示前 2
+    h.cleanup();
+  });
+
+  it("V5.1：1 todo + 1 submitted → 全部 2 项（submitted 可访问入口）", () => {
+    const h = renderCard({
+      taskRows: [
+        mkRow({ id: "a1", status: "todo", title: "待办任务" }),
+        mkRow({ id: "a2", status: "submitted", title: "已提交任务" }),
+      ],
+    });
+    const text = h.container.textContent ?? "";
+    expect(text).toContain("待处理 1");
+    expect(text).toContain("待办任务"); // preview 中的 todo
+    expect(text).not.toContain("已提交任务"); // 不在 preview
+    expect(text).toContain("全部 2 项");
+    h.cleanup();
+  });
+
+  it("V5.1：completed only（1 项）→ 待处理 0 + 全部 1 项", () => {
+    const h = renderCard({
+      taskRows: [mkRow({ id: "a1", status: "completed", title: "已完成任务" })],
+    });
+    const text = h.container.textContent ?? "";
+    expect(text).toContain("待处理 0");
+    expect(text).toContain("暂无待处理任务");
+    expect(text).toContain("全部 1 项");
+    expect(text).not.toContain("已完成任务"); // preview 不显示 completed
+    h.cleanup();
+  });
+
+  it("V5.1：2 submitted only → 全部 2 项", () => {
+    const h = renderCard({
+      taskRows: [
+        mkRow({ id: "a1", status: "submitted" }),
+        mkRow({ id: "a2", status: "submitted" }),
+      ],
+    });
+    const text = h.container.textContent ?? "";
+    expect(text).toContain("待处理 0");
+    expect(text).toContain("全部 2 项");
+    h.cleanup();
+  });
+
+  it("V5.1：2 todo + 1 completed → 全部 3 项", () => {
+    const h = renderCard({
+      taskRows: [
+        mkRow({ id: "a1", status: "todo" }),
+        mkRow({ id: "a2", status: "doing" }),
+        mkRow({ id: "a3", status: "completed" }),
+      ],
+    });
+    const text = h.container.textContent ?? "";
+    expect(text).toContain("待处理 2");
+    expect(text).toContain("全部 3 项");
+    h.cleanup();
+  });
+
   it("footer 完全移除（无 + 任务 / 课程详情）；Add 在 Task Section", () => {
     const h = renderCard({ taskRows: [mkRow({ id: "a1", status: "todo" })] });
     expect(h.container.querySelector("footer")).toBeNull();
