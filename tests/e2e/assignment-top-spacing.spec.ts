@@ -76,3 +76,17 @@ test("QuickAdd 开关不影响顶部间距（同一 28px 基准）", async ({ pa
   const gapOpened = opened.quickAddBox!.y - opened.sticky!.y - opened.sticky!.height;
   expect(Math.abs(gapClosed - gapOpened)).toBeLessThanOrEqual(1);
 });
+
+test("Workspace 列表内部 top inset：首条任务行距卡片上边框 ≈16px（外层间距不变）", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await openAssignments(page);
+  const inset = await page.evaluate(() => {
+    const card = document
+      .querySelector('[data-testid="assignment-list"]')!
+      .parentElement!.getBoundingClientRect();
+    const firstRow = document.querySelector('[data-testid="assignment-list"] > div')!;
+    const rowBox = firstRow.getBoundingClientRect();
+    return rowBox.top - card.top;
+  });
+  expect(Math.abs(inset - 16)).toBeLessThanOrEqual(2); // pt-4（首行自身 padding 前）
+});

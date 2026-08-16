@@ -699,16 +699,19 @@ export function AssignmentTable({
       </div>
       )}
 
-      {/* Task List：compact = 可伸缩内容区（flex-1 min-h-0）+ 分页；workspace = 完整滚动工作区 */}
+      {/* Task List：compact = 可伸缩内容区（flex-1 min-h-0）+ 分页；workspace = 完整滚动工作区
+          Layout Hotfix：workspace 列表区由 pt-* 承担首行顶部 inset（不再用 mt-1 margin 叠加），
+          首条任务卡与卡片上边框之间有清晰的 12–16px 呼吸空间；compact 保持原 mt-1 布局 */}
       <div
         data-testid="assignment-list"
         data-density={isWorkspace ? contentDensity : undefined}
         tabIndex={isWorkspace ? 0 : undefined}
         onKeyDown={isWorkspace ? handleListKeyDown : undefined}
         className={cn(
-          "divide-y divide-line-soft mt-1 flex-1 min-h-0 space-y-1",
-          isWorkspace &&
-            "overflow-y-auto px-4 [scrollbar-gutter:stable] overscroll-contain outline-none focus-visible:ring-2 focus-visible:ring-line-strong"
+          "divide-y divide-line-soft flex-1 min-h-0 space-y-1",
+          isWorkspace
+            ? "mt-0 overflow-y-auto px-4 pt-4 pb-1 [scrollbar-gutter:stable] overscroll-contain outline-none focus-visible:ring-2 focus-visible:ring-line-strong"
+            : "mt-1"
         )}
       >
         {/* 空态判断按模式取正确数据源：workspace = 视图派生结果；compact = 分页结果 */}
