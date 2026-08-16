@@ -24,6 +24,31 @@ export function isKiroFinalAnswerToolName(toolName: string): boolean {
   return toolName === KIRO_FINAL_ANSWER_TOOL_NAME;
 }
 
+/**
+ * P0 Hotfix：begin_final_answer 是否已在【当前 User Turn】出现。
+ * 只扫描最后一个 role === "user" 之后的 assistant messages —— 历史 Turn 的 boundary
+ * 绝不跨 User Turn 泄漏（否则新 User Turn 的 Business Tools 会被永久关闭）。
+ * 参考 deriveDocumentFailureFuseState 的 turn scoping；不做任何 timer / id / status heuristic。
+ */
+export function kiroFinalAnswerBoundarySeenInCurrentTurn(
+  messages: ReadonlyArray<{ role?: string; parts?: ReadonlyArray<{ type?: string }> }>
+): boolean {
+  let lastUserIndex = -1;
+  for (let i = messages.length - 1; i >= 0; i--) {
+    if (messages[i]?.role === "user") {
+      lastUserIndex = i;
+      break;
+    }
+  }
+  if (lastUserIndex < 0) return false;
+  for (let i = lastUserIndex + 1; i < messages.length; i++) {
+    const m = messages[i];
+    if (m?.role !== "assistant" || !Array.isArray(m.parts)) continue;
+    if (m.parts.some((p) => p?.type === `tool-${KIRO_FINAL_ANSWER_TOOL_NAME}`)) return true;
+  }
+  return false;
+}
+
 /** ordered stream event（Eval runner 与 lane attribution 用；test-only / eval-only） */
 export type KiroRoundEvent =
   | { kind: "text"; text: string }

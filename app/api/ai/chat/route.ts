@@ -31,7 +31,7 @@ import { validateComputerTurnSnapshot } from "@/lib/ai/computer/snapshot";
 import { COMPUTER_MUTATION_LIMIT_PER_TURN } from "@/lib/ai/computer/executor";
 import { resolveDocumentAuthoringVersion } from "@/lib/ai/computer/documents/authoring/protocol";
 import { deriveDocumentFailureFuseState } from "@/lib/ai/computer/documents/failureFuse";
-import { KIRO_FINAL_ANSWER_TOOL_NAME, kiroFinalAnswerBoundarySeen, kiroFinalAnswerAfterBoundaryControl } from "@/lib/ai/tools/finalAnswer";
+import { KIRO_FINAL_ANSWER_TOOL_NAME, kiroFinalAnswerBoundarySeen, kiroFinalAnswerAfterBoundaryControl, kiroFinalAnswerBoundarySeenInCurrentTurn } from "@/lib/ai/tools/finalAnswer";
 import {
   textOnlySmoothStream,
   KIRO_NATIVE_DELTA_CHARS,
@@ -342,14 +342,11 @@ export async function POST(req: NextRequest) {
     // 同一 User Turn 第 2 次结构失败或首次渲染/校验硬失败后，不再向模型暴露 create_document / update_document。
     const documentFailureState = deriveDocumentFailureFuseState(parsed.messages);
 
-    // Streaming UX V3：Final Answer Boundary —— 本请求的对话里已出现 begin_final_answer 信号
+    // Streaming UX V3：Final Answer Boundary —— 本请求的【当前 User Turn】已出现 begin_final_answer 信号
     //（客户端已回填输出）→ 从协议上关闭全部业务工具（toolChoice none），模型只能输出 Final Answer 正文。
-    const finalAnswerStarted = (parsed.messages as { role?: string; parts?: { type?: string }[] }[]).some(
-      (m) =>
-        m?.role === "assistant" &&
-        Array.isArray(m.parts) &&
-        m.parts.some((p) => p?.type === "tool-begin_final_answer")
-    );
+    // P0 Hotfix：只扫描最后一个 User 之后的 assistant messages；历史 Turn 的 boundary 绝不跨 Turn 泄漏，
+    // 否则后续新 User Turn 的 Business Tools 会被永久关闭（用户现场「我查一下…」直接结束）。
+    const finalAnswerStarted = kiroFinalAnswerBoundarySeenInCurrentTurn(parsed.messages);
 
     // Fuse blocked：从工具集移除文档工具（保留 begin_final_answer，让模型正常结束回答）
     const finalTools = (() => {

@@ -461,6 +461,56 @@ test("C2: boundary + Final 同一响应（finish stop）→ turn 正确 settle�
 });
 
 /**
+ * P0 Hotfix：Final Answer Boundary 不得跨 User Turn 泄漏。
+ * Turn 1 完成 boundary 协议后，Turn 2 新 User 的请求必须重新携带 Business Tools（不能 tools={} / toolChoice none）。
+ */
+test("P0: 多 Turn Agent——Turn 1 boundary 后，Turn 2 新 User 必须重新获得 Business Tools", async ({ page }) => {
+  const sse = await startBoundarySameResponseServer(1, 50);
+  await page.route("**/api/ai/chat", (route) => route.continue({ url: sse.url }));
+  await page.addInitScript(({ settings, key }) => {
+    localStorage.setItem("classflow-ai-settings-v1", JSON.stringify({ version: 0, state: settings }));
+    sessionStorage.setItem("classflow-ai-key:deepseek", key);
+  }, { settings: AI_SETTINGS, key: "sk-test-key" });
+  await openKiro(page);
+  const composer = page.getByTestId("kiro-composer");
+  const requestBodies: Record<string, unknown>[] = [];
+  page.on("request", (r) => {
+    if (r.url().includes("/api/ai/chat") && r.method() === "POST") {
+      try {
+        const j = r.postDataJSON() as Record<string, unknown> | null;
+        if (j) requestBodies.push(j);
+      } catch {
+        /* 忽略 */
+      }
+    }
+  });
+  // Turn 1：tool → boundary + final（同一 stop 响应）→ settled
+  await composer.getByLabel("Ask Kiro").fill("看看最近任务");
+  await composer.getByLabel("发送").click();
+  await waitForToolDone(page);
+  await expect(page.getByTestId("kiro-message").last()).toContainText("最终回答完成", { timeout: 60000 });
+  await expect(composer.getByLabel("发送")).toBeVisible({ timeout: 60000 });
+  await expect(composer.getByLabel("停止生成")).toHaveCount(0);
+  const afterTurn1 = requestBodies.length;
+  expect(afterTurn1).toBeGreaterThan(0);
+  // Turn 2：新 User —— 服务器必须重新暴露 Business Tools（finalAnswerStarted=false → tools 非空）
+  await composer.getByLabel("Ask Kiro").fill("最近的任务是哪个");
+  await composer.getByLabel("发送").click();
+  // Turn 2 的 Tool 真实执行（第二个 Tool Row 出现 → Business Tool 重新可用；不是「Tool 调用：xxx」正文模拟）
+  await expect(page.locator('[data-testid="kiro-tool-row"]').nth(1)).toContainText("查找任务", { timeout: 60000 });
+  await expect(page.getByTestId("kiro-message").last()).toContainText("最终回答完成", { timeout: 60000 });
+  await expect(composer.getByLabel("发送")).toBeVisible({ timeout: 60000 });
+  await expect(composer.getByLabel("停止生成")).toHaveCount(0);
+  // Turn 3：再次新 User —— 每个新 User Turn 都必须重新获得 Business Tools（不只允许多一次）
+  await composer.getByLabel("Ask Kiro").fill("再看看未来几天的安排");
+  await composer.getByLabel("发送").click();
+  await expect(page.locator('[data-testid="kiro-tool-row"]').nth(2)).toContainText("查找任务", { timeout: 60000 });
+  await expect(page.getByTestId("kiro-message").last()).toContainText("最终回答完成", { timeout: 60000 });
+  await expect(composer.getByLabel("发送")).toBeVisible({ timeout: 60000 });
+  await sse.close();
+});
+
+/**
  * L1（V4.7.1）：Tool output 已 addToolOutput → continuation request 人为 delay 3500ms。
  * 关键：3s 处（旧 arbitrary timer 的触发点）不得 settled —— 3.5s 期间 turn 保持 in-flight；
  * continuation 到达后正常继续。证明删除 3s timer 后慢 continuation 不会误结束 Turn。
