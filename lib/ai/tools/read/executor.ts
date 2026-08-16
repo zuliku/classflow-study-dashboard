@@ -29,6 +29,7 @@ import type { AppState } from "@/store/useAppStore";
 import { DEFAULT_PREFERENCES } from "@/lib/preferences";
 import { buildVisualActionProposal } from "@/lib/ai/visual/preflight";
 import { ProposeVisualActionsInput } from "@/lib/ai/visual/schemas";
+import { VisualPendingContinuation } from "@/lib/ai/visual/continuation";
 
 /**
  * Read Tool Executor：pure / deterministic / no mutations。
@@ -53,12 +54,15 @@ export type ReadToolErrorCode =
   | "TRANSACTION_INTEGRITY"
   | "CONFLICT";
 
-/** Turn-level trusted context（V1.1）：只给真正需要的工具；普通 Read Tools 完全忽略 */
+/** Turn-level trusted context（V1.1/V1.2.1）：只给真正需要的工具；普通 Read Tools 完全忽略 */
 export interface ReadToolExecutionContext {
   /** 当前 User Turn Send 时冻结的 ready image attachment IDs（Runtime Source of Truth） */
   visualSourceAttachmentIds?: readonly string[];
-  /** V1.2：Visual Pending Continuation 活跃（澄清链 Turn 无新图片也可 propose；Guard 同源） */
-  visualContinuationActive?: boolean;
+  /**
+   * V1.2.1：活跃的 Visual Pending Continuation（完整数据，不是 boolean 权限位）。
+   * 澄清链 Turn 无新图片时，Proposal 来源授权必须由真实 continuation 数据支撑。
+   */
+  visualPendingContinuation?: VisualPendingContinuation | null;
 }
 
 export type ReadToolResult<T> =
@@ -632,8 +636,9 @@ export function proposeVisualActionsTool(
   context?: ReadToolExecutionContext
 ): ReadToolResult<unknown> {
   const sourceAttachmentIds = context?.visualSourceAttachmentIds ?? [];
-  // V1.2：澄清链 Turn（无新图片但 continuation 活跃）同样允许生成 Proposal（source 为空数组）
-  if (sourceAttachmentIds.length === 0 && context?.visualContinuationActive !== true) {
+  const continuation = context?.visualPendingContinuation ?? null;
+  // V1.2.1：授权必须由真实数据支撑——当前图片 IDs 或完整 trusted continuation（不再是 boolean 权限位）
+  if (sourceAttachmentIds.length === 0 && !continuation) {
     return {
       ok: false,
       code: "VISUAL_SOURCE_REQUIRED",
@@ -647,7 +652,7 @@ export function proposeVisualActionsTool(
     preferences: state.preferences ?? DEFAULT_PREFERENCES,
     reminders: state.reminders ?? [],
   };
-  const result = buildVisualActionProposal(parsed.data, appState, { sourceAttachmentIds });
+  const result = buildVisualActionProposal(parsed.data, appState, { sourceAttachmentIds, continuation });
   if (!result.ok) {
     return {
       ok: false,

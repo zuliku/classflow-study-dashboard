@@ -106,7 +106,7 @@ interface KiroSessionValue {
   handoffPrompt: (prompt: string) => void;
   handoffAssignmentPrompt: (id: string, prompt: string) => void;
   /** Task B V1.2：继续处理 Visual Pending 事项（先同步建立 continuation，再发送用户可见 prompt） */
-  handoffVisualPendingContinuation: (continuation: VisualPendingContinuation, prompt: string) => void;
+  handoffVisualPendingContinuation: (continuation: VisualPendingContinuation, prompt: string) => Promise<boolean>;
   /** Task 7B：会话切换进行中 */
   conversationTransitioning: boolean;
   conversationTransition: ConversationTransitionView;
@@ -205,7 +205,7 @@ interface KiroSessionActionsValue {
   openForWeek: (week: number) => void;
   handoffPrompt: (prompt: string) => void;
   handoffAssignmentPrompt: (id: string, prompt: string) => void;
-  handoffVisualPendingContinuation: (continuation: VisualPendingContinuation, prompt: string) => void;
+  handoffVisualPendingContinuation: (continuation: VisualPendingContinuation, prompt: string) => Promise<boolean>;
   /** 点击时读取当前 transcript（不订阅 messages） */
   copyCurrentTranscript: () => Promise<void>;
   exportCurrentTranscript: () => void;
@@ -479,6 +479,9 @@ export function KiroSessionProvider({ children }: { children: React.ReactNode })
    */
   const requestConversationTransition = useCallback(
     (transition: Exclude<PendingConversationTransition, null>) => {
+      // Task B V1.2.1：Conversation identity 切换（new / load / delete / reset）→ 旧 continuation 必须失效。
+      // guard 与 prompt context 绝不跨会话携带（「Conversation 只能有一个 active continuation」+ 隔离硬不变量）
+      chatRef.current.setVisualPendingContinuation(null);
       applyTransition({ type: "request", transition, streaming: chatRef.current.streaming });
       const s = transitionStateRef.current;
       if (s.pending !== transition) return; // 被拒绝（已有 pending）
@@ -749,17 +752,31 @@ export function KiroSessionProvider({ children }: { children: React.ReactNode })
     [sendWithTurn]
   );
 
-  /** Task B V1.2：Visual Pending Continuation handoff —— send 前同步建立 continuation（Guard + Prompt section 同源） */
+  /**
+   * Task B V1.2.1：Visual Pending Continuation handoff —— send 前同步建立 continuation（Guard + Prompt section 同源）；
+   * 返回 Promise<boolean>：send 失败/throw 时按 sourceProposalId compare-and-clear 回滚（不残留幽灵 continuation，
+   * 也不会误删之后新建立的 continuation）。
+   */
   const handoffVisualPendingContinuation = useCallback(
-    (continuation: VisualPendingContinuation, prompt: string) => {
-      chatRef.current.setVisualPendingContinuation(continuation);
+    async (continuation: VisualPendingContinuation, prompt: string): Promise<boolean> => {
+      const chatNow = chatRef.current;
+      chatNow.setVisualPendingContinuation(continuation);
       setSidecarOpen(true);
-      void sendWithTurn(prompt).then((ok) => {
-        if (!ok) return;
+      try {
+        const ok = await sendWithTurn(prompt);
+        if (!ok) {
+          // send rejected / preflight failed → 仅当 active 仍属于该 sourceProposalId 时清理
+          chatNow.clearVisualPendingContinuationIfOwnedBy(continuation.sourceProposalId);
+          return false;
+        }
         suggestionsGenRef.current += 1;
         setSuggestionsKind("generic");
         setLastUserTurnGen(suggestionsGenRef.current);
-      });
+        return true;
+      } catch {
+        chatNow.clearVisualPendingContinuationIfOwnedBy(continuation.sourceProposalId);
+        return false;
+      }
     },
     [sendWithTurn]
   );

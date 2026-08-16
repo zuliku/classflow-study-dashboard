@@ -57,6 +57,9 @@ export function VisualActionProposalCard({
   const [expandedEvidence, setExpandedEvidence] = useState<string | null>(null);
   // V1.1：同步 ownership 锁（不依赖 React render 更新时序；applied 后 UI 保持 applied，锁只防并发入口）
   const applyingRef = useRef(false);
+  // V1.2.1：Continue 同步防双击（与 applyingRef 同一模式；不允许两次 handoff 产生两个相同 User Turn）
+  const continuingRef = useRef(false);
+  const [continuing, setContinuing] = useState(false);
   // V1.1：one-shot Undo（Card Undo 与 Toast Undo 共享；执行后清空，杜绝重复补偿）
   const undoRef = useRef<(() => void) | null>(null);
   const pushToast = useToastStore((s) => s.pushToast);
@@ -123,14 +126,23 @@ export function VisualActionProposalCard({
     handoffPrompt("请根据最新 ClassFlow 数据重新检查刚才截图中的通知。");
   };
 
-  /** V1.2：继续处理 pending —— 结构化 continuation + 正常用户 prompt（不重新送截图；不直接执行任何写操作） */
-  const handleContinuePending = () => {
+  /** V1.2/V1.2.1：继续处理 pending —— 结构化 continuation + 正常用户 prompt（不重新送截图；不直接执行任何写操作）。
+   *  同步防双击；handoff 失败（send rejected）→ continuation 已由 provider compare-and-clear 回滚，Card 保持可操作。 */
+  const handleContinuePending = async () => {
+    if (continuingRef.current) return;
     const continuation = buildVisualPendingContinuation(proposal);
     if (!continuation) return;
-    handoffVisualPendingContinuation(
-      continuation,
-      `继续处理刚才截图里剩下的 ${continuation.pendingItems.length} 项。`
-    );
+    continuingRef.current = true;
+    setContinuing(true);
+    try {
+      await handoffVisualPendingContinuation(
+        continuation,
+        `继续处理刚才截图里剩下的 ${continuation.pendingItems.length} 项。`
+      );
+    } finally {
+      continuingRef.current = false;
+      setContinuing(false);
+    }
   };
 
   const headerText = () => {
@@ -138,6 +150,10 @@ export function VisualActionProposalCard({
       return clarificationCount > 0
         ? `从截图发现 ${totalCount} 项需要确认`
         : `从截图发现 ${totalCount} 项当前暂无法处理`;
+    }
+    // V1.2.1：澄清链生成的 Proposal B 保留来源链（展示为「根据刚才的确认…」）
+    if (proposal.continuationSource) {
+      return `根据刚才的确认整理出 ${totalCount} 项修改`;
     }
     return `从截图整理出 ${totalCount} 项`;
   };
@@ -213,6 +229,25 @@ export function VisualActionProposalCard({
     );
   };
 
+  /** V1.2.1：统一「继续处理 N 项」按钮（防双击；发送期间 disabled + 文案切换） */
+  const renderContinueButton = (primary: boolean) => {
+    if (clarificationCount === 0 || restored) return null;
+    return (
+      <button
+        onClick={handleContinuePending}
+        disabled={continuing}
+        data-testid="visual-continue"
+        className={
+          primary
+            ? "flex items-center gap-1.5 px-3 h-8 rounded-lg text-[11px] font-bold text-white bg-charcoal hover:bg-black disabled:opacity-60 transition-colors"
+            : "flex items-center gap-1.5 px-3 h-8 rounded-lg text-[11px] font-bold text-charcoal bg-pastel-mint hover:bg-pastel-mint disabled:opacity-60 transition-colors"
+        }
+      >
+        {continuing ? "正在继续…" : `继续处理 ${clarificationCount} 项`}
+      </button>
+    );
+  };
+
   const renderActions = () => {
     if (applyState === "applied") {
       return (
@@ -224,15 +259,7 @@ export function VisualActionProposalCard({
           >
             撤销
           </button>
-          {clarificationCount > 0 && !restored && (
-            <button
-              onClick={handleContinuePending}
-              data-testid="visual-continue"
-              className="flex items-center gap-1.5 px-3 h-8 rounded-lg text-[11px] font-bold text-white bg-charcoal hover:bg-black transition-colors"
-            >
-              继续处理 {clarificationCount} 项
-            </button>
-          )}
+          {renderContinueButton(true)}
         </>
       );
     }
@@ -248,36 +275,17 @@ export function VisualActionProposalCard({
               重新分析
             </button>
           )}
-          {clarificationCount > 0 && !restored && (
-            <button
-              onClick={handleContinuePending}
-              data-testid="visual-continue"
-              className="flex items-center gap-1.5 px-3 h-8 rounded-lg text-[11px] font-bold text-white bg-charcoal hover:bg-black transition-colors"
-            >
-              继续处理 {clarificationCount} 项
-            </button>
-          )}
+          {renderContinueButton(true)}
         </>
       );
     }
     if (applyState === "revoked") {
       // V1.2：revoked 后仍可继续 pending（澄清与 Undo 互不耦合）
-      if (clarificationCount > 0 && !restored) {
-        return (
-          <button
-            onClick={handleContinuePending}
-            data-testid="visual-continue"
-            className="flex items-center gap-1.5 px-3 h-8 rounded-lg text-[11px] font-bold text-charcoal bg-pastel-mint hover:bg-pastel-mint transition-colors"
-          >
-            继续处理 {clarificationCount} 项
-          </button>
-        );
-      }
-      return null;
+      return renderContinueButton(false);
     }
     // idle
     if (pendingOnly) {
-      if (clarificationCount > 0 && !restored) {
+      if (clarificationCount > 0) {
         return (
           <>
             <button
@@ -287,13 +295,7 @@ export function VisualActionProposalCard({
             >
               取消
             </button>
-            <button
-              onClick={handleContinuePending}
-              data-testid="visual-continue"
-              className="flex items-center gap-1.5 px-3 h-8 rounded-lg text-[11px] font-bold text-white bg-charcoal hover:bg-black transition-colors"
-            >
-              继续处理 {clarificationCount} 项
-            </button>
+            {renderContinueButton(true)}
           </>
         );
       }

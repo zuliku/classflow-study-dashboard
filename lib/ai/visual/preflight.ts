@@ -25,6 +25,7 @@ import {
   VisualPendingItem,
   VisualProposalAction,
 } from "@/lib/ai/visual/types";
+import { VisualPendingContinuation } from "@/lib/ai/visual/continuation";
 import { formatVisualPreparedAction } from "@/lib/ai/visual/format";
 import { ProposeVisualActionsInput } from "@/lib/ai/visual/schemas";
 
@@ -52,6 +53,23 @@ function findDuplicateAssignment(state: AppState, input: Record<string, unknown>
 export interface BuildVisualActionProposalOptions {
   /** Runtime 冻结的当前 User Turn ready image IDs（Source of Truth；模型无法提供） */
   sourceAttachmentIds: readonly string[];
+  /** V1.2.1：澄清链 continuation（继承截图 lineage + continuationSource 来源链） */
+  continuation?: VisualPendingContinuation | null;
+}
+
+/** V1.2.1：source 合并规则 = 当前图片 IDs + continuation 继承 IDs（全部 Runtime-owned；去重保序） */
+function mergeSourceAttachmentIds(
+  current: readonly string[],
+  inherited: readonly string[] | undefined
+): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const id of [...current, ...(inherited ?? [])]) {
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    out.push(id);
+  }
+  return out;
 }
 
 /**
@@ -127,11 +145,20 @@ export function buildVisualActionProposal(
 
   const proposal: VisualActionProposal = {
     id: createId("vprop"),
-    // V1.1：source 只来自 Runtime（绝不是 model input）
-    sourceAttachmentIds: [...options.sourceAttachmentIds],
+    // V1.1/V1.2.1：source 只来自 Runtime（当前图片 + continuation 继承；绝不是 model input）
+    sourceAttachmentIds: mergeSourceAttachmentIds(options.sourceAttachmentIds, options.continuation?.sourceAttachmentIds),
     summary: input.summary,
     actions: proposalActions,
     pendingItems,
+    // V1.2.1：澄清链来源（additive；普通截图 Proposal 不设置）
+    ...(options.continuation
+      ? {
+          continuationSource: {
+            sourceProposalId: options.continuation.sourceProposalId,
+            pendingItemIds: [...options.continuation.pendingItemIds],
+          },
+        }
+      : {}),
     createdAt: Date.now(),
     ...(previewFingerprint !== undefined ? { previewFingerprint } : {}),
     reservedIds,

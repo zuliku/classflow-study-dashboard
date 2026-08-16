@@ -832,9 +832,21 @@ describe("V1.2 Visual Pending Continuation", () => {
     expect((norm?.pendingItems[0] as any).change).toBeUndefined();
   });
 
-  it("isVisualPendingCancel：放弃表达识别；普通文本不受影响", () => {
-    expect(isVisualPendingCancel("算了，不处理这个了")).toBe(true);
-    expect(isVisualPendingCancel("先不处理了吧")).toBe(true);
+  it("isVisualPendingCancel：standalone intent 精确匹配（不误杀含业务信息的澄清输入）", () => {
+    // true：独立放弃表达（允许尾部标点/语气词）
+    expect(isVisualPendingCancel("算了")).toBe(true);
+    expect(isVisualPendingCancel("算了吧。")).toBe(true);
+    expect(isVisualPendingCancel("不用了")).toBe(true);
+    expect(isVisualPendingCancel("不用了。")).toBe(true);
+    expect(isVisualPendingCancel("先不处理吧")).toBe(true);
+    expect(isVisualPendingCancel("下次再说")).toBe(true);
+    expect(isVisualPendingCancel("取消这个")).toBe(true);
+    // false：包含业务信息 → 不能清掉 continuation
+    expect(isVisualPendingCancel("不用了，直接按计算机网络处理")).toBe(false);
+    expect(isVisualPendingCancel("这门不用了，另一项继续")).toBe(false);
+    expect(isVisualPendingCancel("算了，还是按周六下午两点处理")).toBe(false);
+    expect(isVisualPendingCancel("不用改时间，只改课程")).toBe(false);
+    // 普通文本不受影响
     expect(isVisualPendingCancel("帮我创建一个明晚的复习任务")).toBe(false);
   });
 
@@ -844,20 +856,93 @@ describe("V1.2 Visual Pending Continuation", () => {
     expect(visualProposalRequired([], true)).toBe(true); // 澄清链 Turn（无新图片）
   });
 
-  it("澄清链 Turn 无图片也可 propose（visualContinuationActive 通过）", () => {
+  it("澄清链 Turn 无图片也可 propose（授权由完整 continuation 数据支撑，不是 boolean）", () => {
     const state = makeState();
+    const continuation = {
+      sourceProposalId: "vprop_A",
+      pendingItemIds: ["P1"],
+      pendingItems: [
+        { id: "P1", reason: "ambiguous-entity" as const, evidence: "王老师那门课改到周六下午", description: "无法唯一确定对应课程" },
+      ],
+      sourceAttachmentIds: ["att-real-1"],
+    };
     const res = proposeVisualActionsTool(
       toolState(state),
       {
         summary: "澄清后的方案",
         actions: [proposalInput().actions[1]],
       } as never,
-      { visualContinuationActive: true }
+      { visualPendingContinuation: continuation }
     );
     expect(res.ok).toBe(true);
     if (!res.ok) return;
     const proposal = (res.data as { proposal: VisualActionProposal }).proposal;
-    expect(proposal.sourceAttachmentIds).toEqual([]); // 无新图片 → source 为空
+    // V1.2.1：source 继承自 continuation（原截图 lineage），并携带 continuationSource
+    expect(proposal.sourceAttachmentIds).toEqual(["att-real-1"]);
+    expect(proposal.continuationSource).toEqual({ sourceProposalId: "vprop_A", pendingItemIds: ["P1"] });
     expect(proposal.actions).toHaveLength(1);
+  });
+});
+
+describe("V1.2.1 Continuation Ownership & Provenance", () => {
+  it("buildVisualPendingContinuation 继承 sourceAttachmentIds（Runtime-only lineage）", () => {
+    const built = buildVisualActionProposal(mixedInput() as never, makeState(), {
+      sourceAttachmentIds: ["att-real-1"],
+    });
+    expect(built.ok).toBe(true);
+    if (!built.ok) return;
+    const continuation = buildVisualPendingContinuation(built.proposal);
+    expect(continuation).not.toBeNull();
+    expect(continuation?.sourceAttachmentIds).toEqual(["att-real-1"]);
+  });
+
+  it("normalize：sourceAttachmentIds dedupe / bound / 未知字段忽略", () => {
+    const norm = normalizeVisualPendingContinuation({
+      sourceProposalId: "vprop_A",
+      sourceAttachmentIds: ["att_a", " att_a ", "att_b", "att_b", 123, "x".repeat(200), "att_c"],
+      pendingItems: [{ id: "P1", reason: "ambiguous-entity", evidence: "e", description: "d", change: { tool: "x" } }],
+    });
+    expect(norm).not.toBeNull();
+    expect(norm?.sourceAttachmentIds).toEqual(["att_a", "att_b", "x".repeat(80), "att_c"]); // trim + dedupe + 非法丢弃 + 超长 bound
+    expect((norm?.pendingItems[0] as any).change).toBeUndefined(); // 未知字段忽略
+    // 超长 ID 被 bound 到 80
+    const long = normalizeVisualPendingContinuation({
+      sourceProposalId: "vprop_A",
+      sourceAttachmentIds: ["x".repeat(200)],
+      pendingItems: [{ id: "P1", reason: "ambiguous-entity", evidence: "e", description: "d" }],
+    });
+    expect(long?.sourceAttachmentIds[0].length).toBe(80);
+  });
+
+  it("普通截图 Proposal（无 continuation）→ continuationSource undefined", () => {
+    const state = makeState();
+    const res = proposeVisualActionsTool(toolState(state), proposalInput(), SOURCE);
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    const proposal = (res.data as { proposal: VisualActionProposal }).proposal;
+    expect(proposal.continuationSource).toBeUndefined();
+    expect(proposal.sourceAttachmentIds).toEqual(["att-real-1"]);
+  });
+
+  it("Proposal B（continuation）+ 新图片 → source 合并（dedupe 保序）", () => {
+    const state = makeState();
+    const continuation = {
+      sourceProposalId: "vprop_A",
+      pendingItemIds: ["P1"],
+      pendingItems: [
+        { id: "P1", reason: "missing-information" as const, evidence: "周六下午补课", description: "没有具体时间" },
+      ],
+      sourceAttachmentIds: ["att_a"],
+    };
+    const res = proposeVisualActionsTool(
+      toolState(state),
+      { summary: "合并来源", actions: [proposalInput().actions[0]] } as never,
+      { visualSourceAttachmentIds: ["att_b"], visualPendingContinuation: continuation }
+    );
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    const proposal = (res.data as { proposal: VisualActionProposal }).proposal;
+    expect(proposal.sourceAttachmentIds).toEqual(["att_b", "att_a"]);
+    expect(proposal.continuationSource).toEqual({ sourceProposalId: "vprop_A", pendingItemIds: ["P1"] });
   });
 });

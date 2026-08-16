@@ -21,6 +21,8 @@ export interface VisualPendingContinuation {
   sourceProposalId: string;
   pendingItemIds: string[];
   pendingItems: VisualPendingContinuationItem[];
+  /** V1.2.1：继承原 Proposal 的截图来源（Runtime-only lineage；绝不来自模型输入） */
+  sourceAttachmentIds: string[];
 }
 
 /** 从 Proposal 构建 continuation（unsupported 不可澄清 → 过滤；无澄清项 → null） */
@@ -40,23 +42,34 @@ export function buildVisualPendingContinuation(
     sourceProposalId: proposal.id,
     pendingItemIds: items.map((i) => i.id),
     pendingItems: items,
+    // V1.2.1：继承 trusted Proposal 的截图来源（Runtime-only）
+    sourceAttachmentIds: [...proposal.sourceAttachmentIds],
   };
 }
 
-/** 用户明确放弃 pending chain 的轻量识别（只用于结束 continuation guard，不拦截其他输入） */
-const VISUAL_PENDING_CANCEL_PATTERNS: readonly string[] = [
+/**
+ * V1.2.1：用户明确放弃 pending chain 的 standalone-intent 识别。
+ * 不做 includes() 子串匹配（会误杀「不用了，直接按计算机网络处理」这类仍含业务信息的澄清输入）。
+ * normalize：去首尾空白 → 去尾部标点/语气词（。！!？?~～，,.;；）→ 去尾部「吧」→ 全集精确匹配。
+ */
+const VISUAL_PENDING_CANCEL_PHRASES: ReadonlySet<string> = new Set<string>([
   "算了",
+  "先算了",
   "不用了",
   "先不处理",
   "不处理了",
-  "先算了吧",
   "下次再说",
   "别管了",
   "取消这个",
-];
+]);
 
 export function isVisualPendingCancel(text: string): boolean {
-  return VISUAL_PENDING_CANCEL_PATTERNS.some((p) => text.includes(p));
+  const normalized = text
+    .trim()
+    .replace(/[。！!？?~～，,.;；\s]+$/g, "")
+    .replace(/吧$/g, "")
+    .trim();
+  return VISUAL_PENDING_CANCEL_PHRASES.has(normalized);
 }
 
 // ---------------- Server-side（route.ts）：normalize + Prompt section ----------------
@@ -64,6 +77,8 @@ export function isVisualPendingCancel(text: string): boolean {
 const MAX_CONTINUATION_ITEMS = 8;
 const MAX_CONTINUATION_EVIDENCE = 160;
 const MAX_CONTINUATION_DESCRIPTION = 120;
+const MAX_SOURCE_ATTACHMENT_IDS = 8;
+const MAX_ATTACHMENT_ID_LENGTH = 80;
 
 const REASON_SET: ReadonlySet<string> = new Set<string>([
   "ambiguous-entity",
@@ -73,6 +88,21 @@ const REASON_SET: ReadonlySet<string> = new Set<string>([
 
 const slice = (v: unknown, max: number): string =>
   typeof v === "string" ? v.trim().slice(0, max) : "";
+
+/** V1.2.1：sourceAttachmentIds 重新 normalize/bound（string only、trim、限长、去重、上限 8；不信任客户端 payload） */
+function normalizeSourceAttachmentIds(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const id of raw.slice(0, MAX_SOURCE_ATTACHMENT_IDS)) {
+    if (typeof id !== "string") continue;
+    const cleaned = id.trim().slice(0, MAX_ATTACHMENT_ID_LENGTH);
+    if (!cleaned || seen.has(cleaned)) continue;
+    seen.add(cleaned);
+    out.push(cleaned);
+  }
+  return out;
+}
 
 /** Server Trust Boundary：重新 normalize/bound（丢弃未知字段、hard slice、enum 校验） */
 export function normalizeVisualPendingContinuation(raw: unknown): VisualPendingContinuation | null {
@@ -104,6 +134,7 @@ export function normalizeVisualPendingContinuation(raw: unknown): VisualPendingC
     sourceProposalId,
     pendingItemIds: pendingItems.map((i) => i.id),
     pendingItems,
+    sourceAttachmentIds: normalizeSourceAttachmentIds(src.sourceAttachmentIds),
   };
 }
 

@@ -79,6 +79,11 @@ export interface VisualActionProposal {
   actions: VisualProposalAction[];
   /** V1.2：Runtime normalize 后始终存在（无 pending 时为 []），便于 Card 简化 */
   pendingItems: VisualPendingItem[];
+  /** V1.2.1（additive）：澄清链生成的 Proposal B 保留来源链（Runtime-owned；普通截图 Proposal 为 undefined） */
+  continuationSource?: {
+    sourceProposalId: string;
+    pendingItemIds: string[];
+  };
   createdAt: number;
   /**
    * 创建 Proposal 时基于 preflight preview（normalized actions + before + 实体标识）生成；

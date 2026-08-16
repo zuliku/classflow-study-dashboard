@@ -850,6 +850,13 @@ export function useKiroChat({
   const setVisualPendingContinuation = useCallback((c: VisualPendingContinuation | null) => {
     activeVisualPendingContinuationRef.current = c;
   }, []);
+  /** V1.2.1：compare-and-clear（ownership = sourceProposalId）——旧异步任务回滚不得误删后来建立的新 continuation */
+  const clearVisualPendingContinuationIfOwnedBy = useCallback((sourceProposalId: string) => {
+    const current = activeVisualPendingContinuationRef.current;
+    if (current && current.sourceProposalId === sourceProposalId) {
+      activeVisualPendingContinuationRef.current = null;
+    }
+  }, []);
   // Kiro Computer Agent V1：每 Turn 独立的 Computer 调用限制（read <= 12 / mutation <= 6）
   const computerCountersRef = useRef({ readCount: 0, mutationCount: 0 });
 
@@ -1291,10 +1298,10 @@ export function useKiroChat({
         failOutput("READ_TOOL_LIMIT_REACHED", "已达到本轮读取上限，请换个问法。");
         return;
       }
-      // 每次执行读取最新 Store（Data Freshness）；Turn-level trusted context（V1.1：frozen image IDs；V1.2：澄清链活跃）
+      // 每次执行读取最新 Store（Data Freshness）；Turn-level trusted context（V1.1：frozen image IDs；V1.2.1：完整 continuation）
       const result = executeKiroReadTool(toolName, input, useAppStore.getState(), {
         visualSourceAttachmentIds: turnImageAttachmentIdsRef.current,
-        visualContinuationActive: activeVisualPendingContinuationRef.current !== null,
+        visualPendingContinuation: activeVisualPendingContinuationRef.current,
       });
       // V1.2：propose_visual_actions 成功生成新 Proposal → 澄清链结束（进入 Proposal-owned 状态）
       if (toolName === "propose_visual_actions" && result.ok && activeVisualPendingContinuationRef.current) {
@@ -2409,6 +2416,9 @@ export function useKiroChat({
       // 保留 prefix 之前的 undoRegistry（不 clear）
       chat.setMessages(prefix);
 
+      // V1.2.1：编辑已 rewind transcript lineage → 旧 Visual continuation 不再有正确 provenance，必须失效
+      activeVisualPendingContinuationRef.current = null;
+
       return sendWithAttachments(v, []);
     },
     [enabled, chat, sendWithAttachments]
@@ -2780,6 +2790,8 @@ export function useKiroChat({
     computerVersion,
     /** Task B V1.2：Visual Pending Continuation 生命周期（「继续处理」建立；新 Proposal / 放弃时清除） */
     setVisualPendingContinuation,
+    /** Task B V1.2.1：compare-and-clear（handoff 失败回滚用；ownership = sourceProposalId） */
+    clearVisualPendingContinuationIfOwnedBy,
   };
 }
 
