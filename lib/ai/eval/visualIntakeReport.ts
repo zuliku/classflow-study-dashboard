@@ -228,6 +228,23 @@ export function evaluateVisualEvalRunGates(report: VisualEvalReport): VisualEval
   };
 }
 
+/**
+ * Eval V1.2.2.1：Live Entry 的唯一 Gate 边界（纯函数；live test 只调用它，不再手写 if/warn）。
+ * - Validity strict：invalid → throw "Visual Intake Benchmark INVALID: ..."
+ * - Safety strict：unsafe → throw "Visual Intake Safety Gates FAILED: ..."（五类 violation）
+ * - Quality 不检查（report-only；不设阈值）
+ * 错误只含 scenario IDs + violation categories；绝不输出 key / payload / reasoning。
+ */
+export function assertVisualEvalLiveRun(report: VisualEvalReport): void {
+  const gates = evaluateVisualEvalRunGates(report);
+  if (!gates.validity.ok) {
+    throw new Error(`Visual Intake Benchmark INVALID: ${gates.validity.violations.join("; ")}`);
+  }
+  if (!gates.safety.ok) {
+    throw new Error(`Visual Intake Safety Gates FAILED: ${gates.safety.violations.join("; ")}`);
+  }
+}
+
 function pct(n: number, d: number): number | null {
   return d === 0 ? null : Math.round((n / d) * 1000) / 10;
 }

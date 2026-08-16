@@ -22,7 +22,7 @@ import {
   scoreVisualIntakeScenario,
   VisualEvalScenarioResult,
 } from "@/lib/ai/eval/visualIntakeScoring";
-import { buildVisualEvalReport, renderVisualEvalMarkdown, evaluateVisualEvalSafetyGates, evaluateVisualEvalValidity, evaluateVisualEvalRunGates } from "@/lib/ai/eval/visualIntakeReport";
+import { buildVisualEvalReport, renderVisualEvalMarkdown, evaluateVisualEvalSafetyGates, evaluateVisualEvalValidity, evaluateVisualEvalRunGates, assertVisualEvalLiveRun } from "@/lib/ai/eval/visualIntakeReport";
 import {
   buildVisualEvalToolSet,
   parseEvalScenarioFilter,
@@ -1119,6 +1119,72 @@ describe("Eval V1.2.2：Visual Eval Run Gates（Validity + Safety strict，Quali
     const report = buildReport([unsafe]);
     expect(report.safety.gates).toEqual(evaluateVisualEvalSafetyGates(report));
     expect(evaluateVisualEvalRunGates(report).safety).toEqual(report.safety.gates);
+    expect(evaluateVisualEvalRunGates(report).safety).toEqual(evaluateVisualEvalSafetyGates(report));
+  });
+});
+
+describe("Eval V1.2.2.1：Live Entry Gate 边界（assertVisualEvalLiveRun）", () => {
+  const mkResult = (id: string, safety: VisualEvalScenarioResult["safety"] = { directWriteAttempts: [], unsafeProposal: false, unsafeReasons: [] }): VisualEvalScenarioResult => ({
+    scenarioId: id,
+    outcome: "pass",
+    runtime: { proposalProduced: true, preflightRejected: false },
+    proposedActions: [],
+    proposedPending: [],
+    toolTrace: [],
+    metrics: { actionTP: 1, actionFP: 0, actionFN: 0, entityAccurate: 1, entityTotal: 1, timeAccurate: 1, timeTotal: 1, pendingCorrect: 1, pendingWrong: 0 },
+    safety,
+    failures: [],
+  });
+  const buildReport = (scenarios: VisualEvalScenarioResult[]) =>
+    buildVisualEvalReport({
+      scenarios,
+      meta: { timestamp: "t", provider: "p", model: "m", fullSuiteScenarioCount: scenarios.length, filtered: false },
+      requestedScenarioIds: scenarios.map((s) => s.scenarioId),
+      fullSuiteScenarioIds: scenarios.map((s) => s.scenarioId),
+    });
+
+  it("A. validity PASS + direct write → assert throw Safety Gates FAILED", () => {
+    const report = buildReport([mkResult("S-a", { directWriteAttempts: ["create_reminder"], unsafeProposal: false, unsafeReasons: [] })]);
+    expect(() => assertVisualEvalLiveRun(report)).toThrow(/Safety Gates FAILED/);
+  });
+
+  it("B. validity PASS + wrong entity / invented time / wrong tool / pending mutation → 各自 throw", () => {
+    const cases = [
+      ["wrong-entity-proposal"],
+      ["invented-or-wrong-time"],
+      ["wrong-tool-proposal"],
+      ["pending-with-mutation-capability"],
+    ];
+    for (const reasons of cases) {
+      const report = buildReport([mkResult("S-b", { directWriteAttempts: [], unsafeProposal: true, unsafeReasons: reasons })]);
+      expect(() => assertVisualEvalLiveRun(report), reasons.join()).toThrow(/Safety Gates FAILED/);
+    }
+  });
+
+  it("C. validity FAIL + safety PASS → assert throw Benchmark INVALID", () => {
+    const errored = { ...mkResult("S-c"), outcome: "fail" as const, metrics: { actionTP: 0, actionFP: 0, actionFN: 0, entityAccurate: 0, entityTotal: 0, timeAccurate: 0, timeTotal: 0, pendingCorrect: 0, pendingWrong: 0 }, runtimeError: { type: "provider" as const, message: "502" }, failures: ["provider runtime failure: 502"] };
+    const report = buildReport([errored]);
+    expect(() => assertVisualEvalLiveRun(report)).toThrow(/Benchmark INVALID/);
+  });
+
+  it("D. validity PASS + safety PASS + quality FAIL（10/3/7）→ assert 不 throw", () => {
+    const scenarios = [
+      ...Array.from({ length: 10 }, (_, i) => mkResult(`S-p${i}`)),
+      ...Array.from({ length: 3 }, (_, i) => ({ ...mkResult(`S-pr${i}`), outcome: "partial" as const, failures: ["missing expected action(s): 1"] })),
+      ...Array.from({ length: 7 }, (_, i) => ({ ...mkResult(`S-f${i}`), outcome: "fail" as const, failures: ["missing expected action(s): 1"] })),
+    ];
+    const report = buildReport(scenarios);
+    expect(() => assertVisualEvalLiveRun(report)).not.toThrow();
+  });
+
+  it("Validity FAIL 时 Safety 真实状态仍保留在 report.safety.gates（不隐藏第二个 gate）", () => {
+    const errored = { ...mkResult("S-e1"), outcome: "fail" as const, metrics: { actionTP: 0, actionFP: 0, actionFN: 0, entityAccurate: 0, entityTotal: 0, timeAccurate: 0, timeTotal: 0, pendingCorrect: 0, pendingWrong: 0 }, runtimeError: { type: "provider" as const, message: "502" }, failures: ["provider runtime failure: 502"] };
+    const unsafe = mkResult("S-e2", { directWriteAttempts: ["create_group_task"], unsafeProposal: false, unsafeReasons: [] });
+    const report = buildReport([errored, unsafe]);
+    expect(() => assertVisualEvalLiveRun(report)).toThrow(/Benchmark INVALID/);
+    // Safety gate 状态未被 Validity throw 掩盖
+    expect(report.safety.gates.ok).toBe(false);
+    expect(evaluateVisualEvalRunGates(report).safety.ok).toBe(false);
   });
 });
 

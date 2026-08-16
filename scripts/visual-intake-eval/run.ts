@@ -1,11 +1,11 @@
 /**
- * Visual Intake Eval V1.2 —— Live Vision Benchmark Runner（Layer B，production parity）。
- * 正式 baseline 固定：provider=opencode-go / model=mimo-v2.5（VISUAL_BASELINE）。
- * 只需环境变量 KIRO_VISUAL_EVAL_API_KEY（provider/model 由代码 profile 固定，不做任意切换）。
+ * Visual Intake Eval —— Live Vision Benchmark Runner（Layer B，production parity）。
+ * 通用生产同构 Runner：provider/model/apiKey 由 KIRO_VISUAL_EVAL_* 环境变量指定
+ * （正式 baseline 的 promotion/snapshot/provenance 属后续 Eval V1.3）。
  * 复用生产代码：KIRO_SYSTEM_PROMPT / buildClassFlowContextSection / getKiroToolsForRequest({})（完整生产工具面）/
  * executeKiroReadTool / 生产 Visual Guard（isClassFlowMutationTool + VISUAL_PROPOSAL_REQUIRED_*）。
  * 不复制 useKiroChat；不通过 UI/Playwright 驱动。
- * 输出 .tmp/visual-intake-eval/opencode-go__mimo-v2.5/report.json + report.md；绝不记录 API Key / reasoning / CoT。
+ * 输出 .tmp/visual-intake-eval/<provider>__<model>/report.json + report.md；绝不记录 API Key / reasoning / CoT。
  */
 import { streamText, convertToModelMessages } from "ai";
 import { getKiroToolsForRequest } from "@/lib/ai/tools";
@@ -42,18 +42,19 @@ import { normalizeAIError } from "@/lib/ai/errors";
 import { mkdirSync, writeFileSync } from "fs";
 import { join } from "path";
 
-/** 正式 Visual Baseline Profile（固定；不做模型任意切换） */
-export const VISUAL_BASELINE = {
-  provider: "opencode-go",
-  model: "mimo-v2.5",
-} as const;
-
+/**
+ * 通用生产同构 Live Eval Runner：provider / model / apiKey 全部由环境变量指定
+ * （正式 baseline 的 promotion/snapshot/provenance 属于后续 Eval V1.3，不在此硬编码）。
+ */
 export const VISUAL_EVAL_ENV = {
+  provider: process.env.KIRO_VISUAL_EVAL_PROVIDER ?? "",
+  model: process.env.KIRO_VISUAL_EVAL_MODEL ?? "",
   apiKey: process.env.KIRO_VISUAL_EVAL_API_KEY ?? "",
 };
 
+/** provider / model / apiKey 三者完整才运行（Runner 必须知道本次评估哪个模型） */
 export function visualEvalEnabled(): boolean {
-  return Boolean(VISUAL_EVAL_ENV.apiKey);
+  return Boolean(VISUAL_EVAL_ENV.provider && VISUAL_EVAL_ENV.model && VISUAL_EVAL_ENV.apiKey);
 }
 
 /** file part 的 data（{type:"base64",base64} 或 {type:"url",url: URL|string}）→ Uint8Array（image part 用） */
@@ -433,10 +434,10 @@ export async function runVisualEvalScenario(input: {
   };
 }
 
-/** 运行（过滤后的）全部场景（1 run / scenario）；按固定 baseline provider/model 分目录写 report */
+/** 运行（过滤后的）全部场景（1 run / scenario）；按环境变量指定 provider/model 分目录写 report */
 export async function runVisualIntakeBenchmark(): Promise<{ report: VisualEvalReport; modelDir: string }> {
-  const provider = VISUAL_BASELINE.provider;
-  const model = VISUAL_BASELINE.model;
+  const provider = VISUAL_EVAL_ENV.provider;
+  const model = VISUAL_EVAL_ENV.model;
   const apiKey = VISUAL_EVAL_ENV.apiKey;
   const results: VisualEvalScenarioResult[] = [];
   const filter = resolveEvalScenarioFilter();
