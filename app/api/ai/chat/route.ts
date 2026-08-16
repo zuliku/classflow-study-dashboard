@@ -31,7 +31,7 @@ import { validateComputerTurnSnapshot } from "@/lib/ai/computer/snapshot";
 import { COMPUTER_MUTATION_LIMIT_PER_TURN } from "@/lib/ai/computer/executor";
 import { resolveDocumentAuthoringVersion } from "@/lib/ai/computer/documents/authoring/protocol";
 import { deriveDocumentFailureFuseState } from "@/lib/ai/computer/documents/failureFuse";
-import { KIRO_FINAL_ANSWER_TOOL_NAME } from "@/lib/ai/tools/finalAnswer";
+import { KIRO_FINAL_ANSWER_TOOL_NAME, kiroFinalAnswerBoundarySeen, kiroFinalAnswerAfterBoundaryControl } from "@/lib/ai/tools/finalAnswer";
 import {
   textOnlySmoothStream,
   KIRO_NATIVE_DELTA_CHARS,
@@ -52,6 +52,7 @@ import {
   buildVisualPendingContinuationSection,
 } from "@/lib/ai/visual/continuation";
 import { buildClassFlowContextSection } from "@/lib/ai/prompts/classFlowContextSection";
+import { buildKiroMemoryIndexSection } from "@/lib/ai/prompts/memoryIndexSection";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -204,12 +205,7 @@ export async function POST(req: NextRequest) {
     ? (b.visionPages as { sourceId?: string; page?: number; fileName?: string }[])
     : [];
 
-  const memorySection =
-    memoryIndex.length > 0
-      ? `\n\n# 用户长期学习记忆（Index；不代表当前 ClassFlow 业务状态）\n${memoryIndex
-          .map((m, i) => `- ${i + 1}. ${m.title ?? "未命名"}（${m.category ?? ""} · ${m.scope ?? "global"}${m.scopeId ? " · " + m.scopeId : ""}）`)
-          .join("\n")}\n需要完整内容时调用 search_memories。`
-      : "";
+  const memorySection = buildKiroMemoryIndexSection(memoryIndex);
 
   const visionPagesSection =
     visionPages.length > 0
@@ -459,16 +455,11 @@ export async function POST(req: NextRequest) {
       },
       // V4.1 prepareStep：历史 step 已出现 begin_final_answer → 下一 step 从协议层关闭全部业务工具
       //（activeTools: [] + toolChoice: "none"），并限制最多再走 1 个 step（Final text）。
-      // 不依赖 Client second guard 作为主防线。
+      // 不依赖 Client second guard 作为主防线。规则与 Text Eval 共用（lib/ai/tools/finalAnswer.ts）。
       prepareStep: async ({ steps }) => {
-        const boundarySeen = steps.some((s) =>
-          (s.toolCalls ?? []).some((tc) => tc.toolName === KIRO_FINAL_ANSWER_TOOL_NAME)
-        );
-        if (boundarySeen) {
+        if (kiroFinalAnswerBoundarySeen(steps)) {
           // DeepSeek Thinking Mode：boundary 后只用空 activeTools 关闭工具，不发送 tool_choice
-          return omitToolChoice
-            ? { activeTools: [], stopWhen: isStepCount(1) }
-            : { activeTools: [], toolChoice: "none" as const, stopWhen: isStepCount(1) };
+          return kiroFinalAnswerAfterBoundaryControl(!!omitToolChoice);
         }
         return {};
       },

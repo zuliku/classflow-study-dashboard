@@ -46,15 +46,19 @@ import { join } from "path";
  * 通用生产同构 Live Eval Runner：provider / model / apiKey 全部由环境变量指定
  * （正式 baseline 的 promotion/snapshot/provenance 属于后续 Eval V1.3，不在此硬编码）。
  */
+/** 正式 Visual Baseline Profile（固定；不做模型任意切换；key 由 env 提供） */
+export const VISUAL_BASELINE = {
+  provider: "opencode-go",
+  model: "mimo-v2.5",
+} as const;
+
 export const VISUAL_EVAL_ENV = {
-  provider: process.env.KIRO_VISUAL_EVAL_PROVIDER ?? "",
-  model: process.env.KIRO_VISUAL_EVAL_MODEL ?? "",
   apiKey: process.env.KIRO_VISUAL_EVAL_API_KEY ?? "",
 };
 
-/** provider / model / apiKey 三者完整才运行（Runner 必须知道本次评估哪个模型） */
+/** 正式 baseline 只要求 key（provider/model 由 VISUAL_BASELINE 代码 profile 固定） */
 export function visualEvalEnabled(): boolean {
-  return Boolean(VISUAL_EVAL_ENV.provider && VISUAL_EVAL_ENV.model && VISUAL_EVAL_ENV.apiKey);
+  return Boolean(VISUAL_EVAL_ENV.apiKey);
 }
 
 /** file part 的 data（{type:"base64",base64} 或 {type:"url",url: URL|string}）→ Uint8Array（image part 用） */
@@ -435,9 +439,10 @@ export async function runVisualEvalScenario(input: {
 }
 
 /** 运行（过滤后的）全部场景（1 run / scenario）；按环境变量指定 provider/model 分目录写 report */
+/** 运行（过滤后的）全部场景（1 run / scenario）；按固定 baseline provider/model 分目录写 report */
 export async function runVisualIntakeBenchmark(): Promise<{ report: VisualEvalReport; modelDir: string }> {
-  const provider = VISUAL_EVAL_ENV.provider;
-  const model = VISUAL_EVAL_ENV.model;
+  const provider = VISUAL_BASELINE.provider;
+  const model = VISUAL_BASELINE.model;
   const apiKey = VISUAL_EVAL_ENV.apiKey;
   const results: VisualEvalScenarioResult[] = [];
   const filter = resolveEvalScenarioFilter();

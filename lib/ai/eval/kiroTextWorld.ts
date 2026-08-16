@@ -49,7 +49,7 @@ export const KIRO_TEXT_EVAL_WORLD: KiroTextWorldState = {
   assignments: [
     { id: "a_react", courseId: "c_stat", title: "统计学复习", description: "复习第 1-3 章", ddl: "2026-08-16T22:00:00", priority: "urgent", status: "todo", progress: 0, tags: [] },
     { id: "a_prob", courseId: "c_math", title: "概率论作业", description: "习题 4.1-4.5", ddl: "2026-08-16T23:59:00", priority: "high", status: "doing", progress: 40, tags: [] },
-    { id: "a_ds_lab", courseId: "c_ds", title: "数据结构实验报告", description: "链表实验", ddl: "2026-08-18T22:00:00", priority: "medium", status: "todo", progress: 0, tags: [] },
+    { id: "a_ds_lab", courseId: "c_ds", title: "数据结构实验报告", description: "链表实验", ddl: "2026-08-18T22:00:00", priority: "medium", status: "todo", progress: 0, tags: [], materialIds: ["m_pdf"] },
     { id: "a_measure", courseId: "c_stat", title: "计量作业", description: "回归分析练习", ddl: "2026-08-19T23:59:00", priority: "medium", status: "todo", progress: 0, tags: [] },
     { id: "a_cn_proj", courseId: "c_cn", title: "计网课程设计", description: "组网方案", ddl: "2026-08-20T23:59:00", priority: "low", status: "todo", progress: 0, tags: [] },
     { id: "a_math_ch4", courseId: "c_math", title: "高数第四章作业", description: "", ddl: "2026-08-20T23:59:00", priority: "medium", status: "todo", progress: 0, tags: [] },
@@ -123,17 +123,21 @@ export const KIRO_TEXT_BASE_CONTEXT: Record<string, unknown> = {
   },
 };
 
-/** Memory Index（baseContext 注入；save-memory 场景的「记住偏好」语义上下文） */
+/** Memory Index（baseContext 注入；与 save-study-preference-memory 场景请求不重复） */
 export const KIRO_TEXT_MEMORY_INDEX: Array<{ id: string; title: string; category: string; scope: string }> = [
-  { id: "mem_1", title: "晚上不喜欢安排数学", category: "schedule-preference", scope: "global" },
+  { id: "mem_1", title: "周末喜欢集中复习", category: "study-habit", scope: "global" },
 ];
 
-/** Scenario → 种子 contextRefs（对应 contract 的 contextAssumptions「当前 contextRefs 已提供唯一 xxx」） */
+/** Scenario → 种子 contextRefs（对应 contract 的 contextAssumptions「当前 contextRefs 已提供唯一 xxx」；
+ *  material kind 提供 courseId + materialId 双 trusted provenance） */
 export const KIRO_TEXT_SEED_REFS: Record<string, KiroPromptContextRef[]> = {
   "assignment-health": [{ kind: "assignment", id: "a_math_ch4", label: "高数第四章作业" }],
   "pdf-task-breakdown": [{ kind: "assignment", id: "a_ds_lab", label: "数据结构实验报告" }],
   "course-material-list": [{ kind: "course", id: "c_ds", label: "数据结构与算法" }],
-  "material-requirements-summary": [{ kind: "course", id: "c_ds", label: "数据结构与算法" }],
+  "material-requirements-summary": [
+    { kind: "course", id: "c_ds", label: "数据结构与算法" },
+    { kind: "material", id: "m_pdf", label: "实验指导.pdf" },
+  ],
   "create-reminder": [{ kind: "assignment", id: "a_ds_lab", label: "数据结构实验报告" }],
   "start-focus": [{ kind: "course", id: "c_stat", label: "统计学" }],
 };
