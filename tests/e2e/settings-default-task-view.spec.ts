@@ -17,7 +17,7 @@ async function openWorkspace(page: Page) {
 test("默认任务视图未修改 → 任务工作区默认激活「聚焦」", async ({ page }) => {
   await openWorkspace(page);
   const focusTab = page.getByTestId("assignments-tab").getByRole("button", { name: /^聚焦/ });
-  await expect(focusTab).toHaveClass(/bg-white/);
+  await expect(focusTab).toHaveAttribute("aria-pressed", "true");
 });
 
 test("默认任务视图 = 今天 → reload 后任务工作区默认激活「今天」", async ({ page }) => {
@@ -41,7 +41,7 @@ test("默认任务视图 = 今天 → reload 后任务工作区默认激活「�
   // 3. 打开任务工作区：默认视图应为「今天」（启动校正消费 preference）
   await openWorkspace(page);
   const todayTab = page.getByTestId("assignments-tab").getByRole("button", { name: /^今天/ });
-  await expect(todayTab).toHaveClass(/bg-white/);
+  await expect(todayTab).toHaveAttribute("aria-pressed", "true");
   const focusTab = page.getByTestId("assignments-tab").getByRole("button", { name: /^聚焦/ });
-  await expect(focusTab).not.toHaveClass(/bg-white/);
+  await expect(focusTab).not.toHaveAttribute("aria-pressed", "true");
 });

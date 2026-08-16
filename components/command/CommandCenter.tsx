@@ -19,6 +19,7 @@ import { NavTab, TimeSliceFilter } from "@/types";
 import { createAssignmentActions } from "@/lib/assignmentActions";
 import { useToastStore } from "@/store/useToastStore";
 import { useConfirmStore } from "@/store/useConfirmStore";
+import { useReminderCenterStore } from "@/store/useReminderCenterStore";
 import { useKiroHandoff } from "@/hooks/useKiroHandoff";
 import { KIRO_ICON } from "@/components/layout/navItems";
 
@@ -48,6 +49,7 @@ export function CommandCenter() {
     setAssignmentTimeSlice,
     resetToCurrentWeek,
     setSettingsModalOpen,
+    setAssignmentWorkspaceView,
   } = useAppStore(
     useShallow((s) => ({
       isSearchModalOpen: s.isSearchModalOpen,
@@ -72,6 +74,7 @@ export function CommandCenter() {
       setAssignmentTimeSlice: s.setAssignmentTimeSlice,
       resetToCurrentWeek: s.resetToCurrentWeek,
       setSettingsModalOpen: s.setSettingsModalOpen,
+      setAssignmentWorkspaceView: s.setAssignmentWorkspaceView,
     }))
   );
 
@@ -81,6 +84,7 @@ export function CommandCenter() {
 
   const pushToast = useToastStore((s) => s.pushToast);
   const confirmRequest = useConfirmStore((s) => s.confirm);
+  const openReminderCenter = useReminderCenterStore((s) => s.open);
   const handoff = useKiroHandoff();
   const singleKeyEnabled = useAppStore((s) => s.preferences.enableSingleKeyShortcuts);
   const contentDensity = useAppStore((s) => s.preferences.contentDensity);
@@ -142,6 +146,8 @@ export function CommandCenter() {
       assignmentActions,
       setActiveTab: (t: NavTab) => setActiveTab(t),
       setSettingsModalOpen: (o: boolean) => setSettingsModalOpen(o),
+      setAssignmentWorkspaceView: (v) => setAssignmentWorkspaceView(v),
+      openReminderCenter: () => openReminderCenter(),
       setSelectedCourseId: (id: string | null) => setSelectedCourseId(id),
       setSelectedAssignmentId: (id: string | null) => setSelectedAssignmentId(id),
       setAddCourseModalOpen: (o: boolean) => setAddCourseModalOpen(o),
@@ -151,7 +157,7 @@ export function CommandCenter() {
       resetToCurrentWeek: () => resetToCurrentWeek(),
       close: () => setSearchModalOpen(false),
     }),
-    [activeTab, selectedCourseId, selectedAssignmentId, highlightedAssignmentId, assignmentSelection, courses, assignments, semester, currentSemesterWeek, assignmentActions, setActiveTab, setSelectedCourseId, setSelectedAssignmentId, setAddCourseModalOpen, setImportScheduleModalOpen, setFullTimetableModalOpen, setAssignmentTimeSlice, resetToCurrentWeek, setSearchModalOpen, setSettingsModalOpen]
+    [activeTab, selectedCourseId, selectedAssignmentId, highlightedAssignmentId, assignmentSelection, courses, assignments, semester, currentSemesterWeek, assignmentActions, setActiveTab, setSelectedCourseId, setSelectedAssignmentId, setAddCourseModalOpen, setImportScheduleModalOpen, setFullTimetableModalOpen, setAssignmentTimeSlice, resetToCurrentWeek, setSearchModalOpen, setSettingsModalOpen, setAssignmentWorkspaceView, openReminderCenter]
   );
 
   const items = useMemo(() => buildPalette(query, ctx), [query, ctx]);

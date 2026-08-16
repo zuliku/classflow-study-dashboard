@@ -22,8 +22,10 @@ test("Task 1 Header：任务与 DDL heading + 新增任务 按钮可见；点击
   await page.getByRole("button", { name: "任务工作区" }).first().click();
 
   await expect(page.getByRole("heading", { name: "任务与 DDL" })).toBeVisible();
-  // 按钮在 quickAdd 打开后文案变为「收起」
-  const addButton = page.getByRole("button", { name: /新增任务|收起/ });
+  // 按钮在 quickAdd 打开后文案变为「收起」（限定 workspace 内，避免匹配侧栏折叠按钮）
+  const addButton = page
+    .getByTestId("assignments-tab")
+    .getByRole("button", { name: /新增任务|收起/ });
   await expect(addButton).toBeVisible();
 
   // 点击 → inline QuickAddCard visible；Header aria-expanded=true
@@ -49,7 +51,7 @@ test("Task 1 Header：任务与 DDL heading + 新增任务 按钮可见；点击
   await expect(card.getByLabel("预计耗时（分钟）")).toBeVisible();
 
   // 关闭 Quick Add → Header aria-expanded=false，card 最终 unmount
-  await page.getByRole("button", { name: "收起" }).click();
+  await addButton.click();
   await expect(addButton).toHaveAttribute("aria-expanded", "false");
   await expect(page.getByTestId("quick-add-card")).toHaveCount(0);
 });
@@ -212,7 +214,7 @@ test("Command Center 显示工作区上下文命令（标记当前任务完成�
 
   await page.keyboard.press("Control+k");
   await expect(page.getByTestId("command-center")).toBeVisible();
-  await expect(page.getByText("上下文操作")).toBeVisible();
+  await expect(page.getByText("当前", { exact: true })).toBeVisible();
   await expect(
     page.getByTestId("command-results").getByText("标记当前任务完成")
   ).toBeVisible();

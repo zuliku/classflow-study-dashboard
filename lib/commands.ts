@@ -2,16 +2,12 @@ import type { ElementType } from "react";
 import {
   Plus,
   BookOpen,
-  FolderKanban,
   FileUp,
-  LayoutDashboard,
-  CalendarDays,
-  ClipboardCheck,
-  BarChart3,
-  Users2,
   Settings,
   RotateCcw,
   CalendarRange,
+  ClipboardCheck,
+  Bell,
   CheckCircle2,
   Play,
   Flag,
@@ -20,14 +16,24 @@ import {
 import { NavTab, Course, Assignment, Semester, TimeSliceFilter, Priority } from "@/types";
 import type { AssignmentActions } from "@/lib/assignmentActions";
 import { openAssignmentEditor } from "@/lib/uiEvents";
-import { KIRO_ICON } from "@/components/layout/navItems";
+import {
+  WORKSPACE_NAV_ITEMS,
+  KIRO_ICON,
+} from "@/components/layout/navItems";
+import { TASK_WORKSPACE_VIEWS, TaskWorkspaceView } from "@/lib/tasks/taskViews";
 
 /**
  * Command Registry：Command Center / Context Menu / 键盘快捷键 共用的唯一动作源。
  * 不要为三处各写一套动作实现。
+ *
+ * App Chrome V2（单一事实源）：
+ * - Navigation Commands ← WORKSPACE_NAV_ITEMS（Sidebar / BottomNav / Command Center 共用 id/label/icon）
+ * - Task View Commands ← TASK_WORKSPACE_VIEWS（ViewBar / Command Center / Kiro scope 共用）
+ * - Global Action metadata（提醒 / 设置）由 navItems 的 GLOBAL_NAV_ACTIONS 派生
+ * 动作实现仍通过宿主 context/store action 注入（metadata 不直接依赖 Zustand）。
  */
 
-export type CommandGroup = "context" | "create" | "navigate" | "action" | "search";
+export type CommandGroup = "context" | "views" | "navigate" | "create" | "action" | "search";
 
 export interface CommandContext {
   activeTab: NavTab;
@@ -44,6 +50,10 @@ export interface CommandContext {
   // 动作（由宿主注入，避免 lib 依赖 store）
   setActiveTab: (tab: NavTab) => void;
   setSettingsModalOpen: (open: boolean) => void;
+  /** 任务视图命令：切工作区 + 切换视图（原子） */
+  setAssignmentWorkspaceView: (view: TaskWorkspaceView) => void;
+  /** 打开 Reminder Center 面板 */
+  openReminderCenter: () => void;
   setSelectedCourseId: (id: string | null) => void;
   setSelectedAssignmentId: (id: string | null) => void;
   setAddCourseModalOpen: (open: boolean) => void;
@@ -68,17 +78,21 @@ export interface AppCommand {
   run: (ctx: CommandContext) => void;
 }
 
-export const NAV_GROUPS: { id: NavTab; label: string }[] = [
-  { id: "overview", label: "总览" },
-  { id: "timetable", label: "课表" },
-  { id: "assignments", label: "任务" },
-  { id: "courses", label: "课程" },
-  { id: "kiro", label: "Kiro" },
-  { id: "analytics", label: "分析" },
-  { id: "group", label: "小组" },
-];
+/** 导航命令的补充关键词（label 已含工作区全名；这里保留旧版搜索习惯词） */
+const NAV_KEYWORDS: Record<NavTab, string[]> = {
+  overview: ["总览", "首页"],
+  timetable: ["时间表", "课表"],
+  assignments: ["任务", "ddl"],
+  courses: ["课程"],
+  analytics: ["分析", "学习洞察"],
+  group: ["小组"],
+  kiro: ["kiro", "ai"],
+};
 
-/** 第一版命令集（顺序即空查询展示顺序：快速操作 → 导航） */
+/**
+ * 第一版命令集（顺序即空查询展示顺序：创建 → 前往 → 视图 → 操作）。
+ * 事实源：WORKSPACE_NAV_ITEMS（导航）+ TASK_WORKSPACE_VIEWS（任务视图）。
+ */
 export function getCommands(): AppCommand[] {
   return [
   // ---- Create ----
@@ -86,37 +100,40 @@ export function getCommands(): AppCommand[] {
   { id: "create-task", label: "新建任务", keywords: ["任务", "todo"], group: "create", shortcut: "N", icon: Plus, run: (ctx) => { openAssignmentEditor({}); ctx.close(); } },
     { id: "create-course", label: "新建课程", keywords: ["课程", "add"], group: "create", icon: BookOpen, run: (ctx) => { ctx.setAddCourseModalOpen(true); ctx.close(); } },
     { id: "import-schedule", label: "导入课表", keywords: ["导入", "课表", "import"], group: "create", icon: FileUp, run: (ctx) => { ctx.setImportScheduleModalOpen(true); ctx.close(); } },
-    // ---- Navigate（工作区 Tab） ----
-    ...NAV_GROUPS.map((g) => ({
-      id: `nav-${g.id}`,
-      label: `前往${g.label}`,
-      keywords: [g.label],
+    // ---- Navigate（工作区 Tab：与 Sidebar / BottomNav 共享同一 metadata） ----
+    ...WORKSPACE_NAV_ITEMS.map((item) => ({
+      id: `nav-${item.id}`,
+      label: `前往${item.label}`,
+      keywords: [item.label, ...(NAV_KEYWORDS[item.id] ?? [])],
       group: "navigate" as CommandGroup,
-      icon: navIcon(g.id),
+      icon: item.icon,
       run: (ctx: CommandContext) => {
-        ctx.setActiveTab(g.id);
+        ctx.setActiveTab(item.id);
+        ctx.close();
+      },
+    })),
+    // ---- Views（任务工作区视图：与 ViewBar / Kiro scope 共享同一事实源） ----
+    ...TASK_WORKSPACE_VIEWS.map((view) => ({
+      id: `view-${view.id}`,
+      label: `任务与 DDL → ${view.label}`,
+      keywords: [view.label, "任务", "视图", "ddl"],
+      group: "views" as CommandGroup,
+      icon: ClipboardCheck,
+      run: (ctx: CommandContext) => {
+        // 原子：切工作区 + 切换视图 + 关闭
+        ctx.setActiveTab("assignments");
+        ctx.setAssignmentWorkspaceView(view.id);
         ctx.close();
       },
     })),
     // ---- Global Action ----
     { id: "open-settings", label: "打开设置", keywords: ["设置", "settings", "偏好"], group: "action", icon: Settings, run: (ctx) => { ctx.setSettingsModalOpen(true); ctx.close(); } },
+    { id: "open-reminders", label: "打开提醒", keywords: ["提醒", "通知", "reminder", "bell"], group: "action", icon: Bell, run: (ctx) => { ctx.openReminderCenter(); ctx.close(); } },
     // ---- Action ----
     { id: "today-assignments", label: "前往今日任务", keywords: ["今日", "任务", "today"], group: "action", icon: ClipboardCheck, run: (ctx) => { ctx.setActiveTab("assignments"); ctx.setAssignmentTimeSlice("today"); ctx.close(); } },
     { id: "reset-week", label: "回到本周", keywords: ["本周", "周次", "reset"], group: "action", icon: RotateCcw, run: (ctx) => { ctx.resetToCurrentWeek(); ctx.setActiveTab("timetable"); ctx.close(); } },
     { id: "open-full-timetable", label: "打开完整课表", keywords: ["全屏", "课表", "完整"], group: "action", icon: CalendarRange, run: (ctx) => { ctx.setActiveTab("timetable"); ctx.setFullTimetableModalOpen(true); ctx.close(); } },
   ];
-}
-
-function navIcon(tab: NavTab): ElementType {
-  switch (tab) {
-    case "overview": return LayoutDashboard;
-    case "timetable": return CalendarDays;
-    case "assignments": return ClipboardCheck;
-    case "courses": return FolderKanban;
-    case "kiro": return KIRO_ICON;
-    case "analytics": return BarChart3;
-    case "group": return Users2;
-  }
 }
 
 // ---- 搜索匹配（不引入 fuzzy 库：normalize + startsWith/includes + keywords） ----
@@ -171,11 +188,12 @@ export interface PaletteItem {
 }
 
 const GROUP_LABEL: Record<CommandGroup, string> = {
-  context: "上下文操作",
+  context: "当前",
+  views: "视图",
+  navigate: "前往",
   create: "创建",
-  navigate: "导航",
   action: "操作",
-  search: "搜索",
+  search: "搜索结果",
 };
 
 export const GROUP_LABELS = GROUP_LABEL;
@@ -313,13 +331,20 @@ export function getAssignmentContextCommands(
   return commands;
 }
 
-/** 查询结果分组顺序：上下文操作最前（实体匹配优先），随后导航/创建/操作/实体搜索 */
-const QUERY_GROUP_ORDER: CommandGroup[] = ["context", "navigate", "create", "action", "search"];
+/** 查询结果分组顺序：上下文操作最前（实体匹配优先），随后前往/视图/创建/操作/实体搜索 */
+const QUERY_GROUP_ORDER: CommandGroup[] = ["context", "navigate", "views", "create", "action", "search"];
+
+/** 空查询视图命令：只展示高频主视图（低频 at-risk/archive 由查询命中） */
+const EMPTY_QUERY_VIEW_IDS = new Set(
+  TASK_WORKSPACE_VIEWS.filter((v) => v.id !== "at-risk" && v.id !== "archive").map(
+    (v) => `view-${v.id}`
+  )
+);
 
 /**
  * 构建 Command Center 结果列表：
- * - 空查询：上下文操作（存在时）→ 快速操作（create + action）→ 导航（全部可浏览，非空白）
- * - 有查询：命令 + 课程 + 任务 合一
+ * - 空查询：上下文操作 → 创建 → 前往 → 高频视图 → 全局操作（不展示大量低价值结果）
+ * - 有查询：命令 + 课程 + 任务 合一（视图命令全部可命中）
  */
 export function buildPalette(query: string, ctx: CommandContext): PaletteItem[] {
   const q = normalizeQuery(query);
@@ -336,75 +361,8 @@ export function buildPalette(query: string, ctx: CommandContext): PaletteItem[] 
       : []
   );
 
-  if (!q) {
-    // 1. 上下文操作（选中课程/任务；无对应上下文则不渲染该标题）
-    for (const cmd of getContextCommands(ctx)) {
-      items.push({
-        key: `cmd-${cmd.id}`,
-        kind: "command",
-        group: cmd.group,
-        contextScope: cmd.contextScope,
-        label: cmd.label,
-        icon: cmd.icon,
-        run: () => cmd.run(ctx),
-      });
-    }
-    for (const cmd of getAssignmentContextCommands(ctx, contextIds)) {
-      items.push({
-        key: `ctx-${cmd.id}`,
-        kind: "command",
-        group: "context",
-        contextScope: cmd.contextScope ?? "workspace",
-        label: cmd.label,
-        icon: cmd.icon,
-        run: () => cmd.run(ctx),
-      });
-    }
-    // 2. 快速操作（create + action）
-    for (const cmd of getCommands()) {
-      if (cmd.when && !cmd.when(ctx)) continue;
-      if (cmd.group === "navigate") continue;
-      items.push({
-        key: `cmd-${cmd.id}`,
-        kind: "command",
-        group: cmd.group,
-        label: cmd.label,
-        shortcut: cmd.shortcut,
-        icon: cmd.icon,
-        run: () => cmd.run(ctx),
-      });
-    }
-    // 3. 导航
-    for (const cmd of getCommands()) {
-      if (cmd.when && !cmd.when(ctx)) continue;
-      if (cmd.group !== "navigate") continue;
-      items.push({
-        key: `cmd-${cmd.id}`,
-        kind: "command",
-        group: cmd.group,
-        label: cmd.label,
-        shortcut: cmd.shortcut,
-        icon: cmd.icon,
-        run: () => cmd.run(ctx),
-      });
-    }
-    return items;
-  }
-
-  const groupRank = (g: CommandGroup) => {
-    const idx = QUERY_GROUP_ORDER.indexOf(g);
-    return idx === -1 ? 99 : idx;
-  };
-
-  const allCommands = [
-    ...getCommands().filter((c) => {
-      if (c.when && !c.when(ctx)) return false;
-      return commandMatches(c, q);
-    }),
-    ...getContextCommands(ctx).filter((c) => commandMatches(c, q)),
-  ].sort((a, b) => groupRank(a.group) - groupRank(b.group));
-
-  for (const cmd of allCommands) {
+  const pushCommand = (cmd: AppCommand) => {
+    if (cmd.when && !cmd.when(ctx)) return;
     items.push({
       key: `cmd-${cmd.id}`,
       kind: "command",
@@ -415,6 +373,36 @@ export function buildPalette(query: string, ctx: CommandContext): PaletteItem[] 
       icon: cmd.icon,
       run: () => cmd.run(ctx),
     });
+  };
+
+  if (!q) {
+    // 1. 上下文操作（选中课程/任务；无对应上下文则不渲染该标题）
+    for (const cmd of getContextCommands(ctx)) pushCommand(cmd);
+    for (const cmd of getAssignmentContextCommands(ctx, contextIds)) pushCommand(cmd);
+    // 2-5. 创建 → 前往 → 高频视图 → 全局操作
+    const EMPTY_GROUP_ORDER: CommandGroup[] = ["create", "navigate", "views", "action"];
+    for (const group of EMPTY_GROUP_ORDER) {
+      for (const cmd of getCommands()) {
+        if (cmd.group !== group) continue;
+        if (group === "views" && !EMPTY_QUERY_VIEW_IDS.has(cmd.id)) continue;
+        pushCommand(cmd);
+      }
+    }
+    return items;
+  }
+
+  const groupRank = (g: CommandGroup) => {
+    const idx = QUERY_GROUP_ORDER.indexOf(g);
+    return idx === -1 ? 99 : idx;
+  };
+
+  const allCommands = [
+    ...getCommands().filter((c) => commandMatches(c, q)),
+    ...getContextCommands(ctx).filter((c) => commandMatches(c, q)),
+  ].sort((a, b) => groupRank(a.group) - groupRank(b.group));
+
+  for (const cmd of allCommands) {
+    pushCommand(cmd);
   }
 
   for (const c of ctx.courses) {

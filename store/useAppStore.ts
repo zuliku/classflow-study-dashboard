@@ -317,6 +317,8 @@ interface PersistedAppState {
   focusSessions?: FocusSession[];
   /** Task 7：Schedule Occurrence Override（一次性停课/调课/补课；旧数据可缺失 → []） */
   scheduleOccurrenceOverrides?: ScheduleOccurrenceOverride[];
+  /** App Chrome V2：桌面侧栏折叠偏好（旧数据缺失 → false = 展开） */
+  sidebarCollapsed?: boolean;
 }
 
 /** 旧版（无显式 version）持久化数据：可能混入瞬时 UI 状态，迁移时仅取白名单字段 */
@@ -335,6 +337,7 @@ interface LegacyPersistedStateV0 {
   reminders?: unknown;
   focusSessions?: unknown;
   scheduleOccurrenceOverrides?: unknown;
+  sidebarCollapsed?: unknown;
 }
 
 type ScheduleOccurrenceOverrideInput = {
@@ -435,6 +438,8 @@ function sanitizePersistedState(persisted: unknown): PersistedAppState {
     lastWorkspaceTab: NAV_TABS.includes(legacy.lastWorkspaceTab as NavTab)
       ? (legacy.lastWorkspaceTab as NavTab)
       : "overview",
+    // App Chrome V2：桌面侧栏折叠偏好（缺失/非法 → 展开；<1280 由布局强制 rail）
+    sidebarCollapsed: legacy.sidebarCollapsed === true,
     // v3：preferences 稳定偏好，缺失/部分/非法均逐字段回落默认值
     preferences: sanitizePreferences(legacy.preferences),
     // v4：Timeline V1 学习计划（旧数据缺失 → []）
@@ -493,6 +498,9 @@ export interface AppState {
   /** 外部请求打开的设置 section（如 Kiro「配置 AI 服务」）；SettingsView 消费后清空 */
   settingsTargetSection: SettingsSection | null;
   setSettingsTargetSection: (section: SettingsSection | null) => void;
+  /** App Chrome V2：桌面端（≥1280）侧栏用户手动折叠状态（持久化；<1280 强制 icon rail） */
+  sidebarCollapsed: boolean;
+  setSidebarCollapsed: (collapsed: boolean) => void;
   /** Command Center 子视图：默认命令面板；? 打开快捷键指南 */
   searchModalView: "palette" | "guide";
   setSearchModalView: (view: "palette" | "guide") => void;
@@ -826,6 +834,8 @@ export const useAppStore = create<AppState>()(
       setSettingsModalOpen: (open) => set({ isSettingsModalOpen: open }),
       settingsTargetSection: null,
       setSettingsTargetSection: (section) => set({ settingsTargetSection: section }),
+      sidebarCollapsed: false,
+      setSidebarCollapsed: (collapsed) => set({ sidebarCollapsed: collapsed }),
       searchModalView: "palette",
       setSearchModalView: (view) => set({ searchModalView: view }),
       highlightedAssignmentId: null,
@@ -2534,6 +2544,7 @@ export const useAppStore = create<AppState>()(
         reminders: state.reminders,
         focusSessions: state.focusSessions,
         scheduleOccurrenceOverrides: state.scheduleOccurrenceOverrides,
+        sidebarCollapsed: state.sidebarCollapsed,
       }),
       migrate: (persistedState) => sanitizePersistedState(persistedState),
       // zustand 在存储为空时也会调用 merge（migratedState=undefined），

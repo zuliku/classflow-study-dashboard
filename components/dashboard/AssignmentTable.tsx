@@ -12,8 +12,6 @@ import {
   BookOpen,
   X,
   CalendarPlus,
-  MoreHorizontal,
-  Search,
 } from "lucide-react";
 import { useAppStore } from "@/store/useAppStore";
 import { useToastStore } from "@/store/useToastStore";
@@ -25,7 +23,6 @@ import { useExitPresenceList } from "@/lib/useExitPresenceList";
 import { ExitCollapse } from "@/components/ui/ExitCollapse";
 import { cn, getPriorityMeta } from "@/lib/utils";
 import { UISelect } from "@/components/ui/Select";
-import { DropdownMenuPanel } from "@/components/ui/DropdownMenu";
 import { isToday, differenceInDays } from "date-fns";
 import { parseLocalDDL, getLocalDDLDate } from "@/lib/ddl";
 import { formatEstimatedMinutes } from "@/lib/tasks/taskSemantics";
@@ -42,19 +39,15 @@ import {
 } from "@/lib/assignmentSelection";
 import { AssignmentPeekPanel } from "@/components/assignment/AssignmentPeekPanel";
 import { AssignmentContextMenu, ContextMenuCommand } from "@/components/assignment/AssignmentContextMenu";
-import { QuickAddCard } from "@/components/assignment/QuickAddCard";
-import { DisclosureRegion } from "@/components/ui/DisclosureRegion";
-import { SearchField } from "@/components/ui/SearchField";
-import { SegmentedControl } from "@/components/ui/SegmentedControl";
-import { deriveTaskWorkspace, PRIMARY_TASK_WORKSPACE_VIEWS, TaskHealthPlanningInput } from "@/lib/tasks/taskViews";
 import { healthViewMeta } from "@/lib/tasks/taskHealthView";
 import { useKiroHandoff } from "@/hooks/useKiroHandoff";
-import { KIRO_ICON } from "@/components/layout/navItems";
-import { KiroFlowButton } from "@/components/kiro/KiroFlow";
+import type { AssignmentWorkspaceController } from "@/hooks/useAssignmentWorkspaceController";
 
 export interface AssignmentTableProps {
   /** compact：Overview 只读点击式；workspace：Assignments Tab 的键盘优先工作区 */
   mode?: "compact" | "workspace";
+  /** App Chrome V2：workspace 模式共享控制器（视图/筛选/搜索由 ViewBar 与列表共用） */
+  workspaceController?: AssignmentWorkspaceController;
   /** Task 1：workspace Quick Add 受控（由 AssignmentsWorkspace Header 主按钮驱动） */
   workspaceQuickAddOpen?: boolean;
   onWorkspaceQuickAddOpenChange?: (open: boolean) => void;
@@ -72,10 +65,12 @@ const COMPACT_PAGE_SIZE = 5;
 
 export function AssignmentTable({
   mode = "compact",
+  workspaceController,
   workspaceQuickAddOpen,
   onWorkspaceQuickAddOpenChange,
 }: AssignmentTableProps) {
   const isWorkspace = mode === "workspace";
+  const controller = isWorkspace ? workspaceController : null;
 
   // Task 1：workspace Quick Add 受控（Header 主按钮）；compact 保持内部状态
   const quickAddOpen = isWorkspace ? (workspaceQuickAddOpen ?? false) : false;
@@ -90,13 +85,7 @@ export function AssignmentTable({
     setActiveTab,
     assignmentTimeSlice,
     setAssignmentTimeSlice,
-    assignmentWorkspaceView,
-    setAssignmentWorkspaceView,
     studyBlocks,
-    schedules,
-    calendarMarks,
-    semester,
-    currentSemesterWeek,
   } = useAppStore();
   const pushToast = useToastStore((s) => s.pushToast);
   const confirmRequest = useConfirmStore((s) => s.confirm);
@@ -113,23 +102,18 @@ export function AssignmentTable({
   const contentDensity = useAppStore((s) => s.preferences.contentDensity);
   const compactDensity = contentDensity === "compact";
 
-  const [courseFilter, setCourseFilter] = useState<string>("all");
-  const [searchQuery, setSearchQuery] = useState("");
-  // Part B：Focus 内「仅看有风险」轻量筛选（非第六个 Tab）
-  const [riskOnly, setRiskOnly] = useState(false);
-  // Part B：「···」More 菜单（低频入口：已归档）
-  const [moreOpen, setMoreOpen] = useState(false);
-  const moreMenuRef = useRef<HTMLDivElement | null>(null);
+  // compact：课程筛选（workspace 模式的 courseFilter 由 ViewBar 控制器持有）
+  const [localCourseFilter, setLocalCourseFilter] = useState<string>("all");
+  const courseFilter = isWorkspace ? (controller?.courseFilter ?? "all") : localCourseFilter;
+  const setCourseFilter = (v: string) => {
+    if (isWorkspace) controller?.setCourseFilter(v);
+    else setLocalCourseFilter(v);
+  };
   const newTaskIds = useEnterOnAdd(assignments.map((a) => a.id));
 
   const today = new Date();
 
-  // Health 所需规划数据（workspace 视图派生用；At Risk 视图与行内 Health 提示依赖）
-  const planningInput: TaskHealthPlanningInput | null = isWorkspace
-    ? { schedules, calendarMarks, semester, currentSemesterWeek }
-    : null;
-
-  // 课程筛选（compact / workspace 共用；workspace 的 Search / View 在其后叠加）
+  // 课程筛选（compact / workspace 共用）
   const courseFiltered = assignments.filter(
     (item) => courseFilter === "all" || item.courseId === courseFilter
   );
@@ -157,32 +141,16 @@ export function AssignmentTable({
     }
   });
 
-  // Workspace V2：视图派生（view + courseFilter + Health）+ 文本搜索 + Focus 风险筛选
-  const workspaceViewResult = isWorkspace
-    ? deriveTaskWorkspace(courseFiltered, studyBlocks, assignmentWorkspaceView, today, planningInput ?? undefined)
-    : null;
-  const workspaceItems = (() => {
-    if (!workspaceViewResult) return [];
-    let items = workspaceViewResult.items;
-    // Part B：Focus 内轻量 Risk Filter（仅看有风险；不新增第六个 Tab）
-    if (riskOnly && assignmentWorkspaceView === "focus") {
-      items = items.filter(
-        (it) => it.meta.health === "at-risk" || it.meta.overdue
-      );
-    }
-    const q = searchQuery.trim().toLowerCase();
-    if (!q) return items;
-    return items.filter((it) => {
-      if (it.task.title.toLowerCase().includes(q)) return true;
-      const course = courses.find((c) => c.id === it.task.courseId);
-      return course?.name.toLowerCase().includes(q) ?? false;
-    });
-  })();
+  // Workspace V2：视图派生 + 筛选 + 搜索由控制器统一完成（ViewBar 与列表共享，避免二次 derive）
+  const workspaceItems = isWorkspace ? (controller?.items ?? []) : [];
+  const workspaceResetKey = isWorkspace
+    ? `${controller?.view}|${controller?.courseFilter}|${controller?.searchQuery}|${controller?.riskOnly}`
+    : "";
 
   const filteredIds = useMemo(
     () => (isWorkspace ? workspaceItems.map((it) => it.task.id) : filteredAssignments.map((a) => a.id)),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [isWorkspace, workspaceViewResult, searchQuery, courseFilter, assignments]
+    [isWorkspace, workspaceItems, courseFilter, assignments]
   );
   const filteredIdsKey = filteredIds.join(",");
 
@@ -191,7 +159,7 @@ export function AssignmentTable({
   const retainedWorkspaceList = useExitPresenceList({
     items: workspaceItems,
     getId: (it) => it.task.id,
-    resetKey: `${assignmentWorkspaceView}|${courseFilter}|${searchQuery}|${riskOnly}`,
+    resetKey: workspaceResetKey,
   });
 
   // 筛选变化 → 清理隐藏的 selection / highlight（保留可见项）
@@ -284,29 +252,6 @@ export function AssignmentTable({
   const [bulkDdlOpen, setBulkDdlOpen] = useState(false);
   const [bulkDdlDate, setBulkDdlDate] = useState("");
   const [bulkShiftDays, setBulkShiftDays] = useState("");
-
-  // More 菜单：outside click / Esc 关闭（非 modal，不拦截页面交互）
-  useEffect(() => {
-    if (!moreOpen) return;
-    const onPointerDown = (e: PointerEvent) => {
-      if (!moreMenuRef.current?.contains(e.target as Node)) setMoreOpen(false);
-    };
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setMoreOpen(false);
-    };
-    document.addEventListener("pointerdown", onPointerDown);
-    window.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("pointerdown", onPointerDown);
-      window.removeEventListener("keydown", onKey);
-    };
-  }, [moreOpen]);
-
-  // 离开 Focus 视图时复位风险筛选；切视图时关闭 More 菜单
-  useEffect(() => {
-    if (assignmentWorkspaceView !== "focus") setRiskOnly(false);
-    setMoreOpen(false);
-  }, [assignmentWorkspaceView]);
 
   const handleListKeyDown = (e: React.KeyboardEvent) => {
     if (e.target !== e.currentTarget) return;
@@ -472,7 +417,7 @@ export function AssignmentTable({
   // ---- IM4A：行渲染（workspace 与 compact 共用；ExitRow 只用于 workspace mutation exit） ----
   const renderAssignmentRow = (task: Assignment) => {
     const wsMeta = isWorkspace
-      ? workspaceViewResult?.items.find((it) => it.task.id === task.id)?.meta
+      ? workspaceItems.find((it) => it.task.id === task.id)?.meta
       : undefined;
     const course = courses.find((c) => c.id === task.courseId);
     const priorityMeta = getPriorityMeta(task.priority);
@@ -672,23 +617,15 @@ export function AssignmentTable({
         isWorkspace ? "p-0 justify-start" : "p-4 justify-between space-y-3"
       )}
     >
-      {/* Header & Controls */}
-      <div className={cn("space-y-3 border-b border-[#F0EBE1]", isWorkspace ? "px-4 pt-4 pb-3" : "pb-3")}>
-        {/* Task 1：workspace 模式标题/主创建/Ask Kiro 已上移到 AssignmentsWorkspace Header；
-            compact 保留原有 任务清单 标题区 */}
-        {!isWorkspace && (
+      {/* Compact Header & Filters：workspace 模式的标题/主创建/视图/筛选/搜索已上移至
+          AssignmentsWorkspace 的 Sticky Chrome（WorkspaceHeader + ViewBar），compact Overview 保持原样 */}
+      {!isWorkspace && (
+      <div className="space-y-3 pb-3 border-b border-[#F0EBE1]">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
           <div className="flex items-center space-x-2">
-            <h3 className="text-sm font-bold text-charcoal">
-              {isWorkspace ? "任务与 DDL" : "任务清单"}
-            </h3>
+            <h3 className="text-sm font-bold text-charcoal">任务清单</h3>
             <span className="text-[10px] font-semibold text-sandrift">
-              {isWorkspace
-                ? workspaceViewResult
-                  ? workspaceViewResult.items.length
-                  : 0
-                : filteredAssignments.length}{" "}
-              项任务
+              {filteredAssignments.length} 项任务
             </span>
             {overdueCount > 0 && (
               <span className="text-[10px] font-bold text-danger bg-danger-bg px-2 py-0.5 rounded-full border border-danger-border flex items-center gap-1">
@@ -709,20 +646,8 @@ export function AssignmentTable({
             </button>
           </div>
         </div>
-        )}
 
-        {/* Quick Add V2（workspace inline；compact 不显示）——受控自 AssignmentsWorkspace Header；
-            DisclosureRegion 负责结构性展开/收起（presence + unmount；draft state 在 QuickAddCard 内保持） */}
-        {isWorkspace && (
-          <DisclosureRegion open={quickAddOpen}>
-            <QuickAddCard
-              defaultCourseId={courseFilter !== "all" ? courseFilter : undefined}
-              onClose={() => setQuickAddOpen(false)}
-            />
-          </DisclosureRegion>
-        )}
-
-        {/* Filters Row: Course Filter + (compact: Time Slice Pills | workspace: View Tabs + Search) */}
+        {/* Filters Row: Course Filter + Time Slice Pills（compact 专属） */}
         <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
           <div className="flex items-center space-x-1.5 bg-[#F7F5F5] border border-line rounded-lg h-9 px-2.5">
             <BookOpen className="w-3.5 h-3.5 text-[#A48F82]" />
@@ -730,7 +655,7 @@ export function AssignmentTable({
               value={courseFilter}
               onChange={(v) => {
                 setCourseFilter(v);
-                if (!isWorkspace) setCompactPage(1); // 筛选变化回第一页
+                setCompactPage(1); // 筛选变化回第一页
               }}
               ariaLabel="课程筛选"
               options={[
@@ -742,130 +667,37 @@ export function AssignmentTable({
             />
           </div>
 
-          {isWorkspace ? (
-            <div className="flex items-center gap-2 flex-wrap min-w-0 max-w-full">
-              {/* Part B：Focus 内轻量 Risk Filter（有风险时显示；不新增第六个 Tab） */}
-              {assignmentWorkspaceView === "focus" && (workspaceViewResult?.counts["at-risk"] ?? 0) > 0 && (
+          <div className="flex flex-wrap items-center gap-1 bg-alabaster p-0.5 rounded-lg border border-line-strong text-[11px] font-medium">
+            {[
+              { id: "all", label: "全部" },
+              { id: "overdue", label: "已逾期" },
+              { id: "today", label: "今日截止" },
+              { id: "3days", label: "3天内截止" },
+              { id: "7days", label: "7天内截止" },
+              { id: "completed", label: "已完成归档" },
+            ].map((slice) => {
+              const isActive = assignmentTimeSlice === slice.id;
+              return (
                 <button
-                  onClick={() => setRiskOnly((v) => !v)}
-                  data-testid="focus-risk-filter"
-                  aria-pressed={riskOnly}
-                  className={`flex items-center gap-1 px-2.5 py-1 rounded-xl border text-[11px] font-semibold transition-colors ${
-                    riskOnly
-                      ? "bg-danger-bg border-danger-border text-danger font-bold"
-                      : "bg-[#F7F5F5] border-line text-satin-grey hover:text-charcoal"
+                  key={slice.id}
+                  onClick={() => {
+                    setAssignmentTimeSlice(slice.id as TimeSliceFilter);
+                    setCompactPage(1); // 筛选变化回第一页
+                  }}
+                  className={`px-2.5 py-0.5 rounded-lg transition-colors duration-[var(--motion-fast)] ease-[var(--ease-standard)] ${
+                    isActive
+                      ? "bg-white text-charcoal font-bold shadow-subtle"
+                      : "text-satin-grey hover:text-charcoal"
                   }`}
                 >
-                  <AlertTriangle className="w-3 h-3" />
-                  有风险 {workspaceViewResult?.counts["at-risk"]}
+                  {slice.label}
                 </button>
-              )}
-
-              {/* Search → 全局 SearchField（筛选语义不变） */}
-              <SearchField
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="搜索任务…"
-                aria-label="搜索任务"
-                className="min-w-[150px]"
-              />
-
-              {assignmentWorkspaceView === "archive" ? (
-                /* Archive：临时状态入口（不新增永久 Tab） */
-                <div className="flex items-center gap-1 bg-alabaster p-0.5 rounded-xl border border-line-strong text-[11px] font-medium">
-                  <span className="flex items-center gap-1 px-2.5 py-0.5 font-bold text-charcoal">
-                    已归档 {workspaceViewResult?.counts.archive ?? 0}
-                  </span>
-                  <button
-                    onClick={() => setAssignmentWorkspaceView("all")}
-                    className="px-2.5 py-0.5 rounded-lg text-satin-grey hover:text-charcoal hover:bg-white transition-colors"
-                  >
-                    ← 返回全部
-                  </button>
-                </div>
-              ) : (
-                <>
-                  {/* View Control Cluster：Segmented 拥有剩余空间（flex-1 + 内部横向滚动）；More 恒 shrink-0 */}
-                  <div className="flex items-stretch gap-1.5 min-w-0 max-w-full">
-                  <SegmentedControl
-                    value={assignmentWorkspaceView}
-                    onChange={setAssignmentWorkspaceView}
-                    ariaLabel="任务视图"
-                    className="flex-1 min-w-0 overflow-x-auto scrollbar-none"
-                    options={PRIMARY_TASK_WORKSPACE_VIEWS.map((view) => ({
-                      value: view.id,
-                      label: (
-                        <span className="flex items-center gap-1">
-                          {view.label}
-                          <span className="text-[10px] font-bold text-sandrift/80">
-                            {workspaceViewResult?.counts[view.id] ?? 0}
-                          </span>
-                        </span>
-                      ),
-                    }))}
-                  />
-
-                  {/* More：低频入口（已归档等）——与 Segmented 同高（self-stretch）、正方形 icon action */}
-                  <div className="relative self-stretch flex shrink-0" ref={moreMenuRef}>
-                    <button
-                      onClick={() => setMoreOpen((v) => !v)}
-                      aria-label="更多视图"
-                      aria-expanded={moreOpen}
-                      className="m-auto w-8 h-8 flex items-center justify-center rounded-lg bg-alabaster border border-line-strong text-satin-grey hover:text-charcoal hover:bg-white transition-colors"
-                    >
-                      <MoreHorizontal className="w-4 h-4" />
-                    </button>
-                    <DropdownMenuPanel open={moreOpen} placement="bottom-end" aria-label="更多视图" className="w-40 p-1">
-                      <button
-                        onClick={() => {
-                          setAssignmentWorkspaceView("archive");
-                          setMoreOpen(false);
-                        }}
-                        className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-left font-semibold text-charcoal hover:bg-alabaster transition-colors"
-                      >
-                        查看已归档
-                        <span className="ml-auto text-[10px] font-bold text-sandrift">
-                          {workspaceViewResult?.counts.archive ?? 0}
-                        </span>
-                      </button>
-                    </DropdownMenuPanel>
-                  </div>
-                  </div>
-                </>
-              )}
-            </div>
-          ) : (
-            <div className="flex flex-wrap items-center gap-1 bg-alabaster p-0.5 rounded-lg border border-line-strong text-[11px] font-medium">
-              {[
-                { id: "all", label: "全部" },
-                { id: "overdue", label: "已逾期" },
-                { id: "today", label: "今日截止" },
-                { id: "3days", label: "3天内截止" },
-                { id: "7days", label: "7天内截止" },
-                { id: "completed", label: "已完成归档" },
-              ].map((slice) => {
-                const isActive = assignmentTimeSlice === slice.id;
-                return (
-                  <button
-                    key={slice.id}
-                    onClick={() => {
-                      setAssignmentTimeSlice(slice.id as TimeSliceFilter);
-                      if (!isWorkspace) setCompactPage(1); // 筛选变化回第一页
-                    }}
-                    className={`px-2.5 py-0.5 rounded-lg transition-colors duration-[var(--motion-fast)] ease-[var(--ease-standard)] ${
-                      isActive
-                        ? "bg-white text-charcoal font-bold shadow-subtle"
-                        : "text-satin-grey hover:text-charcoal"
-                    }`}
-                  >
-                    {slice.label}
-                  </button>
-                );
-              })}
-            </div>
-          )}
+              );
+            })}
+          </div>
         </div>
       </div>
+      )}
 
       {/* Task List：compact = 可伸缩内容区（flex-1 min-h-0）+ 分页；workspace = 完整滚动工作区 */}
       <div

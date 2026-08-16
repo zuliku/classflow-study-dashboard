@@ -7,13 +7,18 @@ import { Button } from "@/components/ui/Button";
 import { AssignmentTable } from "@/components/dashboard/AssignmentTable";
 import { KiroFlowButton } from "@/components/kiro/KiroFlow";
 import { KIRO_ICON } from "@/components/layout/navItems";
+import { DisclosureRegion } from "@/components/ui/DisclosureRegion";
+import { QuickAddCard } from "@/components/assignment/QuickAddCard";
+import { AssignmentWorkspaceViewBar } from "@/components/assignment/AssignmentWorkspaceViewBar";
+import { useAssignmentWorkspaceController } from "@/hooks/useAssignmentWorkspaceController";
 import { useAppStore } from "@/store/useAppStore";
 import { useKiroHandoff } from "@/hooks/useKiroHandoff";
 
 /**
- * Assignments Workspace（UI Productization Task 1）：
- * 职责 ONLY —— WorkspaceHeader + Header actions + Quick Add open state + AssignmentTable workspace。
- * Task View 业务（视图/筛选/键盘导航/Peek/Bulk）全部留在 AssignmentTable。
+ * Assignments Workspace（App Chrome V2）：
+ * Sticky Chrome = WorkspaceHeader + AssignmentWorkspaceViewBar（外层 sticky，无 magic offset）；
+ * Quick Add 位于 Chrome 之下、内容之上；AssignmentTable 收缩为 list/selection/keyboard/rows。
+ * 视图/筛选/搜索状态由 useAssignmentWorkspaceController 统一管理（ViewBar 与 Table 共享）。
  */
 export function AssignmentsWorkspace() {
   const [quickAddOpen, setQuickAddOpen] = useState(false);
@@ -22,6 +27,7 @@ export function AssignmentsWorkspace() {
   const currentSemesterWeek = useAppStore((s) => s.currentSemesterWeek);
   const incompleteCount = assignments.filter((a) => a.status !== "completed").length;
   const handoff = useKiroHandoff();
+  const controller = useAssignmentWorkspaceController();
 
   const headerActions = (
     <>
@@ -69,16 +75,29 @@ export function AssignmentsWorkspace() {
 
   return (
     <div className="flex flex-1 min-h-0 flex-col" data-testid="assignments-tab">
-      <WorkspaceHeader
-        title="任务与 DDL"
-        context={`${incompleteCount} 项未完成`}
-        actions={headerActions}
-        primaryAction={primaryAction}
-        sticky
-      />
+      {/* Sticky Chrome：单一 sticky 容器承载 Header + ViewBar（无独立 top offset） */}
+      <div className="sticky top-0 z-20 shrink-0">
+        <WorkspaceHeader
+          title="任务与 DDL"
+          context={`${incompleteCount} 项未完成`}
+          actions={headerActions}
+          primaryAction={primaryAction}
+        />
+        <AssignmentWorkspaceViewBar controller={controller} />
+      </div>
+
       <div className="flex flex-1 min-h-0 flex-col space-y-4 p-4 pb-24 md:p-6 md:pb-6">
+        {/* Quick Add：Chrome 之下、内容之上（原卡片内 Inline Card 迁移） */}
+        <DisclosureRegion open={quickAddOpen}>
+          <QuickAddCard
+            defaultCourseId={controller.courseFilter !== "all" ? controller.courseFilter : undefined}
+            onClose={() => setQuickAddOpen(false)}
+          />
+        </DisclosureRegion>
+
         <AssignmentTable
           mode="workspace"
+          workspaceController={controller}
           workspaceQuickAddOpen={quickAddOpen}
           onWorkspaceQuickAddOpenChange={setQuickAddOpen}
         />

@@ -127,12 +127,12 @@ test("空查询可浏览：打开即显示快速操作与导航分组", async ({
   await openPalette(page);
 
   await expect(page.getByTestId("command-results").getByText("新建任务")).toBeVisible();
-  await expect(page.getByTestId("command-results").getByText("前往课表")).toBeVisible();
+  await expect(page.getByTestId("command-results").getByText("前往时间表")).toBeVisible();
   await expect(page.getByTestId("command-results").getByText("打开设置")).toBeVisible();
   // 快捷键提示可见（桌面）
   await expect(page.getByTestId("command-results").getByText("N")).toBeVisible();
-  // 未选中任何实体：不显示「上下文操作」标题
-  await expect(page.getByText("上下文操作")).toHaveCount(0);
+  // 未选中任何实体：不显示「当前」标题
+  await expect(page.getByText("当前", { exact: true })).toHaveCount(0);
 });
 
 test("Course Context：选中课程后显示上下文命令，新建任务带入课程", async ({ page }) => {
@@ -146,7 +146,7 @@ test("Course Context：选中课程后显示上下文命令，新建任务带入
   await expect(page.getByRole("button", { name: "关闭" }).first()).toBeVisible();
 
   await openPalette(page);
-  await expect(page.getByText("上下文操作")).toBeVisible();
+  await expect(page.getByText("当前", { exact: true })).toBeVisible();
   const results = page.getByTestId("command-results");
   await expect(results.getByText("为《微观经济学》新建任务")).toBeVisible();
 
@@ -175,7 +175,7 @@ test("Assignment Context：选中任务后显示编辑命令，打开的是编�
   await expect(page.getByRole("button", { name: "关闭" }).first()).toBeVisible();
 
   await openPalette(page);
-  await expect(page.getByText("上下文操作")).toBeVisible();
+  await expect(page.getByText("当前", { exact: true })).toBeVisible();
   await expect(
     page.getByTestId("command-results").getByText("编辑「计量经济学大作业（第3章）」")
   ).toBeVisible();

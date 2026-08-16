@@ -1,12 +1,14 @@
 import { describe, it, expect, vi } from "vitest";
 import {
   buildPalette,
+  getCommands,
   getContextCommands,
   getAssignmentContextCommands,
   getSelectedCourse,
   getSelectedAssignment,
   CommandContext,
 } from "@/lib/commands";
+import { KIRO_ICON } from "@/components/layout/navItems";
 import { Course, Assignment } from "@/types";
 
 const course = (id: string, name: string): Course => ({
@@ -65,6 +67,8 @@ function makeCtx(overrides: Partial<CommandContext> = {}): CommandContext {
     },
     setActiveTab: () => {},
     setSettingsModalOpen: () => {},
+    setAssignmentWorkspaceView: () => {},
+    openReminderCenter: () => {},
     setSelectedCourseId: () => {},
     setSelectedAssignmentId: () => {},
     setAddCourseModalOpen: () => {},
@@ -158,7 +162,7 @@ describe("Assignment Context Commands（when 启用）", () => {
 });
 
 describe("空查询展示顺序", () => {
-  it("Context 在 Create 之前；无上下文时不显示「上下文操作」标题", () => {
+  it("Context 在 Create 之前；无上下文时不显示「当前」标题", () => {
     const withCourse = buildPalette("", makeCtx({ selectedCourseId: "c1" }));
     const ctxIdx = withCourse.findIndex((i) => i.group === "context");
     const createIdx = withCourse.findIndex((i) => i.group === "create");
@@ -167,6 +171,70 @@ describe("空查询展示顺序", () => {
 
     const none = buildPalette("", makeCtx());
     expect(none.some((i) => i.group === "context")).toBe(false);
+  });
+
+  it("App Chrome V2：空查询顺序 = 创建 → 前往 → 高频视图 → 操作；视图只含主视图", () => {
+    const items = buildPalette("", makeCtx());
+    const groupOrder = items.map((i) => i.group);
+    const firstOf = (g: string) => groupOrder.indexOf(g as never);
+    expect(firstOf("create")).toBeGreaterThanOrEqual(0);
+    expect(firstOf("navigate")).toBeGreaterThan(firstOf("create"));
+    expect(firstOf("views")).toBeGreaterThan(firstOf("navigate"));
+    expect(firstOf("action")).toBeGreaterThan(firstOf("views"));
+
+    // 高频视图（5 个主视图）在空查询展示；低频 at-risk / archive 只按查询命中
+    const viewLabels = items.filter((i) => i.group === "views").map((i) => i.label);
+    expect(viewLabels).toEqual([
+      "任务与 DDL → 聚焦",
+      "任务与 DDL → 今天",
+      "任务与 DDL → 即将截止",
+      "任务与 DDL → 待安排",
+      "任务与 DDL → 全部",
+    ]);
+    const all = buildPalette("已归档", makeCtx());
+    expect(all.some((i) => i.label === "任务与 DDL → 已归档")).toBe(true);
+  });
+
+  it("App Chrome V2：导航命令与 Sidebar 共享同一事实源（label/icon 一致）", () => {
+    const navCommands = getCommands().filter((c) => c.group === "navigate");
+    const labels = navCommands.map((c) => c.label);
+    // Sidebar 文案（WORKSPACE_NAV_ITEMS）：总览/时间表/任务与 DDL/课程资料/学习洞察/小组协作/Kiro
+    expect(labels).toEqual([
+      "前往总览",
+      "前往时间表",
+      "前往任务与 DDL",
+      "前往课程资料",
+      "前往学习洞察",
+      "前往小组协作",
+      "前往Kiro",
+    ]);
+    // 旧搜索习惯词保留：课表 → 时间表命令
+    expect(buildPalette("课表", makeCtx()).some((i) => i.key === "cmd-nav-timetable")).toBe(true);
+    // Kiro 导航命令使用品牌图标（navItems.KIRO_ICON）
+    const kiroCmd = navCommands.find((c) => c.id === "nav-kiro");
+    expect(kiroCmd?.icon).toBe(KIRO_ICON);
+  });
+
+  it("App Chrome V2：视图命令原子执行（切工作区 + 切视图 + 关闭）", () => {
+    const calls: string[] = [];
+    const ctx = makeCtx({
+      setActiveTab: (t) => calls.push(`tab:${t}`),
+      setAssignmentWorkspaceView: (v) => calls.push(`view:${v}`),
+      close: () => calls.push("close"),
+    });
+    const viewCmd = getCommands().find((c) => c.id === "view-today")!;
+    viewCmd.run(ctx);
+    expect(calls).toEqual(["tab:assignments", "view:today", "close"]);
+  });
+
+  it("App Chrome V2：全局操作含 打开设置 与 打开提醒", () => {
+    const items = buildPalette("", makeCtx());
+    expect(items.some((i) => i.label === "打开设置")).toBe(true);
+    expect(items.some((i) => i.label === "打开提醒")).toBe(true);
+    const opened: string[] = [];
+    const ctx = makeCtx({ openReminderCenter: () => opened.push("reminders") });
+    getCommands().find((c) => c.id === "open-reminders")!.run(ctx);
+    expect(opened).toEqual(["reminders"]);
   });
 });
 
