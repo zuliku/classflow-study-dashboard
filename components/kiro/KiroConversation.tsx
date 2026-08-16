@@ -16,6 +16,7 @@ import { StudyPlanProposalCard } from "@/components/kiro/StudyPlanProposalCard";
 import { StudyRebalanceProposalCard } from "@/components/kiro/StudyRebalanceProposalCard";
 import { TaskBreakdownProposalCard } from "@/components/kiro/TaskBreakdownProposalCard";
 import { VisualActionProposalCard } from "@/components/kiro/VisualActionProposalCard";
+import { VisualActionProposalHistoryCard } from "@/components/kiro/VisualActionProposalHistoryCard";
 import { actionSummaryText } from "@/lib/ai/share";
 import { cn } from "@/lib/utils";
 import { useEnterOnAdd } from "@/lib/useEnterOnAdd";
@@ -330,7 +331,7 @@ const KiroConversationRow = React.memo(function KiroConversationRow({
     !hasComputerTask
   ) {
     return (
-      <KiroAssistantShell testid="kiro-assistant-pending">
+      <KiroAssistantShell testid="kiro-assistant-pending" messageId={view.id}>
         <div className="flex items-center gap-1.5">
           <span className="text-xs font-medium text-charcoal">正在准备</span>
           <Loader2 className="w-3.5 h-3.5 animate-spin text-sandrift shrink-0" aria-hidden="true" />
@@ -343,6 +344,7 @@ const KiroConversationRow = React.memo(function KiroConversationRow({
     // V4.6：live transcript 不使用 message-level animate-enter（事件到达即展示）
     <div>
       <KiroMessage
+        messageId={view.id}
         content={view.content}
         streaming={view.streaming}
         canRegenerate={view.canRegenerate}
@@ -394,11 +396,19 @@ const KiroConversationRow = React.memo(function KiroConversationRow({
         {view.breakdowns && view.breakdowns.length > 0 && !view.streaming && (
           <TaskBreakdownProposalCard proposals={view.breakdowns} />
         )}
-        {/* Visual Action Intake Proposal Card（真实 ToolResult 事实 UI） */}
+        {/* Visual Action Intake Proposal Card（真实 ToolResult 事实 UI；仅 live Proposal） */}
         {view.visualActionProposals && view.visualActionProposals.length > 0 && !view.streaming && (
           <div className="space-y-2.5 pt-1">
             {view.visualActionProposals.map((p) => (
-              <VisualActionProposalCard key={p.id} proposal={p} restored={view.restored} />
+              <VisualActionProposalCard key={p.id} proposal={p} />
+            ))}
+          </div>
+        )}
+        {/* Visual Intake V1.3：历史只读 Proposal 快照（display-only；绝不交叉到 live Card） */}
+        {view.historyVisualActionProposals && view.historyVisualActionProposals.length > 0 && (
+          <div className="space-y-2.5 pt-1">
+            {view.historyVisualActionProposals.map((p) => (
+              <VisualActionProposalHistoryCard key={p.id} proposal={p} />
             ))}
           </div>
         )}

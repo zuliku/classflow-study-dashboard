@@ -6,6 +6,9 @@
 
 export type PersistedRole = "user" | "assistant";
 
+/** Visual Action kind（display union；type-only import 不产生 runtime cycle） */
+import type { VisualActionKind } from "@/lib/ai/visual/types";
+
 export interface PersistedContextRef {
   kind: "course" | "assignment" | "group-project" | "material" | "week";
   entityId?: string;
@@ -85,6 +88,34 @@ export interface PersistedComputerTaskView {
   completedAt?: string;
 }
 
+/**
+ * Visual Action Intake V1.3：历史只读 Proposal 快照（display-only）。
+ * 只保存安全展示事实；严禁：change/tool/input/reservedIds/previewFingerprint/
+ * sourceAttachmentIds/sourceProposalId/pendingItemIds/continuation runtime/undo/Store state/Blob。
+ * 类型上绝不可能转换回 VisualActionProposal（不共享可执行字段）。
+ */
+export interface PersistedVisualProposalView {
+  id: string;
+  summary: string;
+  /** 仅用于 UI 表示来源；不保存 attachment IDs（历史 Local image Blob 已不保留） */
+  imageCount: number;
+  /** 普通截图 / 澄清链生成（continuation lineage 只降级为 display fact） */
+  origin: "screenshot" | "clarification";
+  actions: Array<{
+    kind: VisualActionKind;
+    title: string;
+    subtitle?: string;
+    /** 截图中促成该操作的短事实 */
+    evidence: string;
+  }>;
+  pendingItems: Array<{
+    reason: "ambiguous-entity" | "missing-information" | "unsupported-action";
+    evidence: string;
+    description: string;
+  }>;
+  createdAt: number;
+}
+
 export interface PersistedKiroMessage {
   id: string;
   role: PersistedRole;
@@ -95,6 +126,8 @@ export interface PersistedKiroMessage {
   sources?: PersistedSourceMeta[];
   /** Computer Task 展示事实（Part 3；display-only，恢复后不能 Undo） */
   computerTask?: PersistedComputerTaskView;
+  /** Visual Action Intake V1.3：历史只读 Proposal 快照（display-only；恢复后不可执行） */
+  visualProposals?: PersistedVisualProposalView[];
 }
 
 /** Conversation Summary（Task 7）：内部 Model Context，不代表当前 ClassFlow 数据 */

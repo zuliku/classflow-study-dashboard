@@ -43,14 +43,12 @@ const KIND_META: Record<VisualActionKind, { icon: React.ComponentType<{ classNam
  * Visual Action Intake Proposal Card（V1.2 Mixed）：事实 UI。
  * executable rows 完全由 Preflight Facts 驱动；pending 只展示澄清/不支持事项（0 mutation）。
  * 所有 count 从 proposal 数据推导（不缓存三份）；pending-only 无 Apply；Applied 后 Receipt 保留 pending。
+ * V1.3：本组件只用于 LIVE Proposal；历史只读快照使用 VisualActionProposalHistoryCard（display-only）。
  */
 export function VisualActionProposalCard({
   proposal,
-  restored = false,
 }: {
   proposal: VisualActionProposal;
-  /** V1.2：历史只读快照 → 隐藏「继续处理」（无法可靠恢复 continuation provenance） */
-  restored?: boolean;
 }) {
   const [dismissed, setDismissed] = useState(false);
   const [applyState, setApplyState] = useState<ApplyState>("idle");
@@ -231,7 +229,7 @@ export function VisualActionProposalCard({
 
   /** V1.2.1：统一「继续处理 N 项」按钮（防双击；发送期间 disabled + 文案切换） */
   const renderContinueButton = (primary: boolean) => {
-    if (clarificationCount === 0 || restored) return null;
+    if (clarificationCount === 0) return null;
     return (
       <button
         onClick={handleContinuePending}

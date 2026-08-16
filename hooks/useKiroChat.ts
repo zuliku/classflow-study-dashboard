@@ -97,7 +97,7 @@ import { useKiroMemory } from "@/hooks/useKiroMemory";
 import { hasExplicitMemoryIntent } from "@/lib/ai/memory/manager";
 import { KIRO_MEMORY_TOOL_NAMES, KIRO_MEMORY_TOOL_SCHEMAS } from "@/lib/ai/memory/tools";
 import { MAX_MEMORIES } from "@/lib/ai/memory/types";
-import { PersistedActionView, PersistedAttachmentView, KiroConversationRecord, KiroConversationSummary, PersistedSourceMeta, PersistedComputerTaskView } from "@/lib/ai/history/types";
+import { PersistedActionView, PersistedAttachmentView, KiroConversationRecord, KiroConversationSummary, PersistedSourceMeta, PersistedComputerTaskView, PersistedVisualProposalView } from "@/lib/ai/history/types";
 import {
   getUserMessageEditBlockReason,
   messageHasMutatingToolCalls,
@@ -201,6 +201,8 @@ export interface KiroChatMessageView {
   rebalanceProposals?: import("@/lib/planning/studyRebalance").StudyRebalanceProposal[];
   /** Kiro propose_visual_actions 的真实结果（Visual Action Proposal Card 事实来源；模型不得生成） */
   visualActionProposals?: VisualActionProposal[];
+  /** Visual Intake V1.3：历史恢复的只读 Proposal 快照（display-only；绝不可执行） */
+  historyVisualActionProposals?: PersistedVisualProposalView[];
   /** Task 7：User Message 是否可编辑（attachment/history metadata 最终绑定后计算） */
   canEdit?: boolean;
   /** 历史恢复消息只参与整段会话淡入，不播放逐条结构动画。 */
@@ -893,6 +895,8 @@ export function useKiroChat({
   const restoredActionsRef = useRef(new Map<string, PersistedActionView[]>());
   const restoredAttachmentsRef = useRef(new Map<string, PersistedAttachmentView[]>());
   const restoredSourcesRef = useRef(new Map<string, KiroSourceMeta[]>());
+  // Visual Intake V1.3：历史只读 Proposal 快照（display-only；绝不重建 VisualActionProposal）
+  const restoredVisualProposalsRef = useRef(new Map<string, PersistedVisualProposalView[]>());
 
   // Message View 增量缓存：parts/metadata 引用未变 → 复用 view 对象（streaming 时旧消息不重算）
   const viewCacheRef = useRef(
@@ -2488,6 +2492,7 @@ export function useKiroChat({
     restoredActionsRef.current.clear();
     restoredAttachmentsRef.current.clear();
     restoredSourcesRef.current.clear();
+    restoredVisualProposalsRef.current.clear();
     viewCacheRef.current.clear();
     liveTurnCommitsRef.current.clear();
     stoppedTurnMessageIdRef.current = null;
@@ -2510,11 +2515,13 @@ export function useKiroChat({
       const attachmentsMap = new Map<string, PersistedAttachmentView[]>();
       const sourcesMap = new Map<string, KiroSourceMeta[]>();
       const computerTasksMap = new Map<string, PersistedComputerTaskView>();
+      const visualProposalHistoryMap = new Map<string, PersistedVisualProposalView[]>();
       const restored: UIMessage[] = record.messages.map((pm) => {
         if (pm.attachments && pm.attachments.length > 0) attachmentsMap.set(pm.id, pm.attachments);
         if (pm.actions && pm.actions.length > 0) actionsMap.set(pm.id, pm.actions);
         if (pm.sources && pm.sources.length > 0) sourcesMap.set(pm.id, pm.sources);
         if (pm.computerTask) computerTasksMap.set(pm.id, pm.computerTask);
+        if (pm.visualProposals && pm.visualProposals.length > 0) visualProposalHistoryMap.set(pm.id, pm.visualProposals);
         return {
           id: pm.id,
           role: pm.role,
@@ -2527,6 +2534,7 @@ export function useKiroChat({
       restoredActionsRef.current = actionsMap;
       restoredAttachmentsRef.current = attachmentsMap;
       restoredSourcesRef.current = sourcesMap;
+      restoredVisualProposalsRef.current = visualProposalHistoryMap;
       viewCacheRef.current.clear();
       liveTurnCommitsRef.current.clear();
       stoppedTurnMessageIdRef.current = null;
@@ -2675,6 +2683,12 @@ export function useKiroChat({
       const restoredActs = restoredActionsRef.current.get(m.id);
       if (restoredActs && restoredActs.length > 0) {
         view = { ...view, historyActions: restoredActs };
+        needsAttach = true;
+      }
+      // Visual Intake V1.3：历史只读 Proposal 快照（display-only；绝不重建 executable type）
+      const restoredVisualProps = restoredVisualProposalsRef.current.get(m.id);
+      if (restoredVisualProps && restoredVisualProps.length > 0) {
+        view = { ...view, historyVisualActionProposals: restoredVisualProps };
         needsAttach = true;
       }
       // Computer Agent Task（Part 3）：live task 绑定 owning assistant message（toolCallIds 相交）；
