@@ -45,15 +45,17 @@ export function KiroReasoningMenu({
         disabled={disabled}
         title={`思考程度：${effort === "default" ? "默认" : EFFORT_LABELS[effort]}`}
         className={cn(
-          "flex items-center h-9 rounded-xl text-[11px] font-semibold text-sandrift hover:bg-alabaster hover:text-charcoal transition-colors disabled:opacity-40 disabled:cursor-not-allowed",
-          iconOnly ? "w-9 justify-center" : "gap-1 px-2.5"
+          "flex items-center h-9 rounded-xl text-[11px] font-semibold transition-colors disabled:opacity-40 disabled:cursor-not-allowed",
+          iconOnly
+            ? cn("w-9 justify-center", open ? "bg-alabaster text-charcoal" : "text-sandrift hover:bg-alabaster hover:text-charcoal")
+            : cn("gap-1 px-2.5", open ? "bg-alabaster text-charcoal border border-line-strong" : "text-sandrift border border-transparent hover:bg-alabaster hover:text-charcoal")
         )}
       >
         <BrainIcon />
         {!iconOnly && `思考 ${effort === "default" ? "默认" : EFFORT_LABELS[effort]}`}
       </button>
       {/* Composer 位于页面底部 → 向上展开，避免越出 viewport */}
-      <DropdownMenuPanel open={open} placement="top-end" aria-label="思考程度" className="w-40 p-1">
+      <DropdownMenuPanel open={open} placement="top-end" motionProfile="kiro" aria-label="思考程度" className="w-40 p-1">
         {capability.supportedEfforts.map((e) => (
           <DropdownMenuItem
             key={e}
@@ -63,7 +65,7 @@ export function KiroReasoningMenu({
                   {e === "default" ? "默认" : EFFORT_LABELS[e]}
                 </span>
                 {e === effort && (
-                  <svg className="w-3 h-3 text-charcoal shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <svg className="w-3 h-3 text-charcoal shrink-0 kiro-check-settle" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M20 6 9 17l-5-5" />
                   </svg>
                 )}

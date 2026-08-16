@@ -4,8 +4,6 @@ import React, { useEffect, useRef, useState } from "react";
 import {
   Plus,
   AtSign,
-  ArrowUp,
-  Square,
   ChevronDown,
   Settings,
   Check,
@@ -14,6 +12,7 @@ import {
   Globe2,
   Cpu,
 } from "lucide-react";
+import { KiroSendControl } from "@/components/kiro/KiroSendControl";
 import { KiroContextBar } from "@/components/kiro/KiroContextBar";
 import { KiroContextPicker } from "@/components/kiro/KiroContextPicker";
 import { KiroAttachmentPicker } from "@/components/kiro/KiroAttachmentPicker";
@@ -29,6 +28,7 @@ import { KiroReasoningEffort, ReasoningCapability } from "@/lib/ai/reasoning/typ
 import { KiroAgentModeMenu } from "@/components/kiro/computer/KiroAgentModeMenu";
 import { KiroReasoningMenu } from "@/components/kiro/computer/KiroReasoningMenu";
 import { KiroWorkspacePicker } from "@/components/kiro/computer/KiroWorkspacePicker";
+import { PopoverPanel } from "@/components/ui/Popover";
 import { cn } from "@/lib/utils";
 
 /**
@@ -309,7 +309,9 @@ export function KiroComposer({
           >
             <ProviderLogo vendor={m.vendor} size="md" />
             <span className="min-w-0 flex-1 truncate">{m.label}</span>
-            {m.value === selectedModelId && <Check className="w-4 h-4 text-charcoal shrink-0" />}
+            {m.value === selectedModelId && (
+              <Check className="w-4 h-4 text-charcoal shrink-0 kiro-check-settle" />
+            )}
           </button>
         ))
       )}
@@ -480,16 +482,16 @@ export function KiroComposer({
                     <Plus className="w-4 h-4" />
                   </button>
                   {attachOpen && (
-                    <div className="absolute bottom-full left-0 mb-1.5 w-60 max-h-[min(320px,60dvh)] overflow-y-auto bg-surface border border-line-strong rounded-2xl shadow-card z-40 ux-inline">
+                    <PopoverPanel open placement="top-start" motionProfile="kiro" className="w-60">
                       <KiroAttachmentPicker
                         onClose={() => setAttachOpen(false)}
                         onFiles={onAddFiles}
                         onMaterials={() => setMaterialPickerOpen(true)}
                       />
-                    </div>
+                    </PopoverPanel>
                   )}
                   {materialPickerOpen && (
-                    <div className="absolute bottom-full left-0 mb-1.5 w-72 max-h-[min(320px,60dvh)] overflow-y-auto bg-surface border border-line-strong rounded-2xl shadow-card z-40 ux-inline">
+                    <PopoverPanel open placement="top-start" motionProfile="kiro" className="w-72">
                       <KiroMaterialPicker
                         onClose={() => setMaterialPickerOpen(false)}
                         onPick={(ref) => {
@@ -498,7 +500,7 @@ export function KiroComposer({
                           setAttachOpen(false);
                         }}
                       />
-                    </div>
+                    </PopoverPanel>
                   )}
                 </div>
 
@@ -602,58 +604,46 @@ export function KiroComposer({
                     aria-haspopup="menu"
                     title={turnInFlight ? "选择下一条消息使用的模型" : "选择模型"}
                     disabled={nextTurnPreferencesLocked}
+                    data-model-open={modelOpen}
                     className={cn(
                       "flex items-center h-9 rounded-xl transition-colors disabled:opacity-40 disabled:cursor-not-allowed",
                       compact
-                        ? "w-9 justify-center text-sandrift hover:bg-alabaster hover:text-charcoal"
-                        : "gap-1.5 px-2.5 text-[11px] font-semibold text-sandrift hover:bg-alabaster hover:text-charcoal"
+                        ? cn("w-9 justify-center", modelOpen ? "bg-alabaster text-charcoal" : "text-sandrift hover:bg-alabaster hover:text-charcoal")
+                        : cn(
+                            "gap-1.5 px-2.5 text-[11px] font-semibold",
+                            modelOpen
+                              ? "bg-alabaster text-charcoal border border-line-strong"
+                              : "text-sandrift border border-transparent hover:bg-alabaster hover:text-charcoal"
+                          )
                     )}
                   >
                     <ProviderLogo vendor={activeModelVendor} size="sm" />
                     {!compact && (
                       <>
                         <span className="truncate max-w-[140px]">{activeModelName}</span>
-                        <ChevronDown className="w-3 h-3 shrink-0" />
+                        <ChevronDown
+                          className={cn(
+                            "w-3 h-3 shrink-0 transition-transform duration-[var(--kiro-motion-control,var(--motion-fast))] ease-[var(--ease-standard)]",
+                            modelOpen && "rotate-180"
+                          )}
+                        />
                       </>
                     )}
                   </button>
                   {modelOpen && (
-                    <div className="absolute bottom-full right-0 mb-1.5 w-60 bg-surface border border-line-strong rounded-2xl shadow-card z-40 ux-inline">
+                    <PopoverPanel open placement="top-end" motionProfile="kiro" className="w-60">
                       {modelMenu}
-                    </div>
+                    </PopoverPanel>
                   )}
                 </div>
 
-                {turnInFlight ? (
-                  <button
-                    onClick={onStop}
-                    aria-label="停止生成"
-                    title="停止生成"
-                    className="ux-press w-9 h-9 flex items-center justify-center rounded-full bg-charcoal text-white hover:bg-black transition-colors"
-                  >
-                    <Square className="w-4 h-4 fill-current" />
-                  </button>
-                ) : submitting || preparingSend ? (
-                  <button
-                    type="button"
-                    disabled
-                    aria-label="正在准备"
-                    title="正在准备"
-                    className="w-9 h-9 flex items-center justify-center rounded-full bg-charcoal text-white opacity-80 cursor-wait"
-                  >
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                  </button>
-                ) : (
-                  <button
-                    onClick={submit}
-                    disabled={!canSend}
-                    aria-label="发送"
-                    title="发送"
-                    className="ux-press w-9 h-9 flex items-center justify-center rounded-full bg-charcoal text-white hover:bg-black transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-                  >
-                    <ArrowUp className="w-4 h-4" />
-                  </button>
-                )}
+                <KiroSendControl
+                  canSend={canSend}
+                  preparing={submitting || !!preparingSend}
+                  inFlight={turnInFlight}
+                  onSend={submit}
+                  onStop={onStop}
+                />
               </div>
             </div>
           </div>

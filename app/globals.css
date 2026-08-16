@@ -905,6 +905,21 @@ html[data-motion-effective="reduced"] .sidebar-profile-credits {
       opacity 100ms var(--ease-standard),
       transform 100ms var(--ease-standard);
   }
+
+  /* Send Control 激活（canSend false→true）：opacity .4→1 + scale .96→1，~120ms，仅 boolean 变化 */
+  .kiro-send-activate {
+    animation: kiro-send-in var(--kiro-motion-control, 120ms) var(--ease-standard) both;
+  }
+  @keyframes kiro-send-in {
+    from {
+      opacity: 0.4;
+      transform: scale(0.96);
+    }
+    to {
+      opacity: 1;
+      transform: scale(1);
+    }
+  }
 }
 
 /* Reduced Motion：Kiro motion 全部瞬时（最终态直达，无 translate/scale/stagger） */
@@ -920,6 +935,8 @@ html[data-motion-effective="reduced"] .kiro-check-settle {
 }
 html[data-motion-effective="reduced"] .kiro-popover-motion,
 html[data-motion-effective="reduced"] .kiro-scroll-control-enter,
-html[data-motion-effective="reduced"] .kiro-scroll-control-exit {
+html[data-motion-effective="reduced"] .kiro-scroll-control-exit,
+html[data-motion-effective="reduced"] .kiro-send-activate {
   transition: none !important;
+  animation: none !important;
 }

@@ -4,6 +4,7 @@ import React from "react";
 import { Popover } from "@/components/ui/Popover";
 import { DropdownMenuPanel, DropdownMenuItem } from "@/components/ui/DropdownMenu";
 import { KiroWorkspaceMeta } from "@/lib/ai/computer/types";
+import { cn } from "@/lib/utils";
 
 /** 状态图标（本地/Sandbox/警告） */
 function LocalIcon() {
@@ -57,13 +58,19 @@ export function KiroWorkspacePicker({
         aria-label="工作区"
         aria-expanded={open}
         disabled={disabled}
-        className="inline-flex items-center gap-1.5 pl-2 pr-1.5 h-7 rounded-full bg-pastel-mint/55 border border-line-soft text-[11px] font-semibold text-satin-grey hover:bg-pastel-mint/75 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+        data-workspace-open={open}
+        className={cn(
+          "inline-flex items-center gap-1.5 pl-2 pr-1.5 h-7 rounded-full border text-[11px] font-semibold transition-colors disabled:opacity-40 disabled:cursor-not-allowed",
+          open
+            ? "bg-pastel-mint/75 border-line-strong text-charcoal"
+            : "bg-pastel-mint/55 border-line-soft text-satin-grey hover:bg-pastel-mint/75"
+        )}
       >
         {isSandbox ? <SandboxIcon /> : <LocalIcon />}
         <span className="truncate max-w-[140px]">{workspace.name}</span>
         <span className="text-[9px] font-bold text-sandrift">{isSandbox ? "Sandbox" : "本地"}</span>
       </button>
-      <DropdownMenuPanel open={open} placement="bottom-start" aria-label="工作区" className="w-56 p-1.5">
+      <DropdownMenuPanel open={open} placement="bottom-start" motionProfile="kiro" aria-label="工作区" className="w-56 p-1.5">
         <p className="px-2 py-1 text-[10px] font-bold text-sandrift">当前 Workspace</p>
         <div className="px-2 pb-1 flex items-center gap-1.5 text-[11px] font-semibold text-charcoal">
           {isSandbox ? <SandboxIcon /> : <LocalIcon />}

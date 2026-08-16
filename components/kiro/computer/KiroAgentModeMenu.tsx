@@ -37,16 +37,17 @@ export function KiroAgentModeMenu({
         aria-expanded={open}
         disabled={disabled}
         title={MODE_COPY[mode].label + "：" + MODE_COPY[mode].description}
+        data-mode-open={open}
         className={cn(
-          "flex items-center h-9 rounded-xl text-[11px] font-semibold text-sandrift hover:bg-alabaster hover:text-charcoal transition-colors disabled:opacity-40 disabled:cursor-not-allowed",
-          iconOnly ? "w-9 justify-center" : "gap-1 px-2.5"
+          "flex items-center h-9 rounded-xl text-[11px] font-semibold transition-colors disabled:opacity-40 disabled:cursor-not-allowed",
+          iconOnly ? cn("w-9 justify-center", open ? "bg-alabaster text-charcoal" : "text-sandrift hover:bg-alabaster hover:text-charcoal") : cn("gap-1 px-2.5", open ? "bg-alabaster text-charcoal border border-line-strong" : "text-sandrift border border-transparent hover:bg-alabaster hover:text-charcoal")
         )}
       >
         <ShieldCheckIcon />
         {!iconOnly && MODE_COPY[mode].label}
       </button>
       {/* Composer 位于页面底部 → 向上展开，避免越出 viewport */}
-      <DropdownMenuPanel open={open} placement="top-end" aria-label="权限模式" className="w-56 p-1">
+      <DropdownMenuPanel open={open} placement="top-end" motionProfile="kiro" aria-label="权限模式" className="w-56 p-1">
         {(Object.keys(MODE_COPY) as KiroAgentMode[]).map((m) => (
           <div key={m} className="px-1 py-0.5">
             <DropdownMenuItem
@@ -54,7 +55,7 @@ export function KiroAgentModeMenu({
                 <span className="flex flex-col gap-0.5 min-w-0">
                   <span className="flex items-center gap-1.5">
                     <span className={m === mode ? "text-charcoal font-bold" : ""}>{MODE_COPY[m].label}</span>
-                    {m === mode && <CheckIcon />}
+                    {m === mode && <CheckIcon className="kiro-check-settle" />}
                   </span>
                   <span className="text-[9px] font-normal text-sandrift">{MODE_COPY[m].description}</span>
                 </span>
@@ -80,9 +81,9 @@ function ShieldCheckIcon() {
   );
 }
 
-function CheckIcon() {
+function CheckIcon({ className }: { className?: string }) {
   return (
-    <svg className="w-3 h-3 text-charcoal shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+    <svg className={cn("w-3 h-3 text-charcoal shrink-0", className)} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
       <path d="M20 6 9 17l-5-5" />
     </svg>
   );

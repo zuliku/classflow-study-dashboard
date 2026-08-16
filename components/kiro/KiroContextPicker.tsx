@@ -193,7 +193,7 @@ export function KiroContextPicker({
         {list}
       </div>
 
-      {/* Desktop：absolute 弹层（<md 隐藏） */}
+      {/* Desktop：absolute 弹层（<md 隐藏）；Motion V1：kiro structure/popover timing + 2–3px offset */}
       <div
         ref={desktopPanelRef}
         role="dialog"
@@ -201,10 +201,10 @@ export function KiroContextPicker({
         data-state={open ? "open" : "closed"}
         aria-hidden={!open}
         className={cn(
-          "hidden md:block absolute bottom-full left-0 mb-2 w-80 max-h-[min(420px,60dvh)] overflow-y-auto bg-surface border border-line-strong rounded-2xl shadow-card p-3 z-40 transition-[opacity,transform] ease-[var(--ease-standard)]",
+          "hidden md:block absolute bottom-full left-0 mb-2 w-80 max-h-[min(420px,60dvh)] overflow-y-auto bg-surface border border-line-strong rounded-2xl shadow-card p-3 z-40 transition-[opacity,transform] ease-[var(--ease-standard)] origin-bottom-left",
           visible
-            ? "duration-[var(--motion-panel)] translate-y-0 opacity-100"
-            : "duration-[160ms] translate-y-1.5 opacity-0 pointer-events-none"
+            ? "duration-[var(--kiro-motion-popover-enter,var(--motion-panel))] translate-y-0 opacity-100 scale-100"
+            : "duration-[var(--kiro-motion-popover-exit,160ms)] translate-y-1 opacity-0 pointer-events-none scale-[0.985]"
         )}
       >
         {list}
