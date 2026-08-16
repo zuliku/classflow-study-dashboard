@@ -101,7 +101,7 @@ export const KIRO_READ_TOOLS = {
   }),
   search_project_file: tool({
     description:
-      "在当前 Kiro Project 的指定资料全文中进行本地关键词检索。适用于长文档、read_project_file 返回 truncated=true，或需要定位某个概念/章节/数据所在位置时。PDF 返回匹配页码与片段；TXT/DOCX 返回匹配片段。这是词法检索而非语义搜索，优先使用简洁、具有区分度的关键词。不要无差别搜索所有 Project Files。",
+      "在当前 Kiro Project 的指定资料全文中进行本地关键词检索。适用于长文档、read_project_file 返回 truncated=true，或需要定位某个概念/章节/数据所在位置时。PDF 返回匹配页码与片段；TXT/DOCX 返回匹配片段。这是词法检索而非语义搜索，优先使用简洁、具有区分度的关键词。扫描型或没有可用文本层的 PDF 无法进行关键词检索，工具会明确返回 NOT_SEARCHABLE；此时应使用 read_project_visual，而不能把零命中解释为正文不存在。不要无差别搜索所有 Project Files。",
     inputSchema: KIRO_READ_TOOL_SCHEMAS.search_project_file,
   }),
   read_project_visual: tool({

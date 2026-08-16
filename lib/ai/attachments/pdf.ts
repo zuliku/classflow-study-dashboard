@@ -25,8 +25,24 @@ export async function loadPdfJs(): Promise<PdfJsModule> {
 }
 
 /**
+ * Canonical PDF text-layer classifier（V1.4.2）：read / search 共用同一判定，避免语义漂移。
+ * 规则：
+ * - 非空白文本 chars === 0 → 无可用文本层（任何页数；1–2 页扫描通知页也算 scanned）
+ * - pageCount >= 3 且 chars < 40 → 视为扫描件（保持既有启发式）
+ * - 其余（1–2 页短文本，如「考试时间：8月20日 14:00」）→ 正常 text PDF
+ */
+export function classifyPdfTextLayer(input: {
+  pageCount: number;
+  nonWhitespaceTextChars: number;
+}): { possiblyScanned: boolean; hasUsableTextLayer: boolean } {
+  const chars = Math.max(0, input.nonWhitespaceTextChars);
+  const possiblyScanned = chars === 0 || (input.pageCount >= 3 && chars < 40);
+  return { possiblyScanned, hasUsableTextLayer: !possiblyScanned };
+}
+
+/**
  * PDF 文本提取：只做 text PDF（不做视觉还原 / 多栏 / annotation）。
- * 提取结果接近空 → 判断为扫描件（possiblyScanned）。
+ * 提取结果接近空 → 判断为扫描件（possiblyScanned，经 canonical classifier）。
  */
 export async function extractPdf(file: Blob): Promise<ExtractedDocument & { possiblyScanned: boolean }> {
   // 动态加载：Browser 用标准 build；Node（测试）用 legacy build
@@ -41,6 +57,7 @@ export async function extractPdf(file: Blob): Promise<ExtractedDocument & { poss
   const doc = await pdfjs.getDocument({ data, ...nodeInit }).promise;
   try {
     const pages: { page: number; text: string }[] = [];
+    let nonWhitespaceTextChars = 0;
     for (let i = 1; i <= doc.numPages; i++) {
       const page = await doc.getPage(i);
       const content = await page.getTextContent();
@@ -49,17 +66,21 @@ export async function extractPdf(file: Blob): Promise<ExtractedDocument & { poss
         .join(" ")
         .replace(/\s+/g, " ");
       pages.push({ page: i, text: pageText });
+      nonWhitespaceTextChars += pageText.replace(/\s+/g, "").length;
       page.cleanup();
     }
     const all = pages.map((p) => `【第 ${p.page} 页】\n${p.text}`).join("\n\n");
     const normalized = normalizeLineEndings(all).trim();
-    const combined = normalizeLineEndings(pages.map((p) => p.text).join("\n\n")).trim();
-    // 扫描件判断：多页文档几乎无文本才标记（单页短文本属于正常）
-    const possiblyScanned = doc.numPages >= 3 && combined.replace(/\s+/g, "").length < 40;
+    // V1.4.2：统一 canonical classifier（read / search 同源；不再维护两套 heuristic）
+    const { possiblyScanned } = classifyPdfTextLayer({
+      pageCount: doc.numPages,
+      nonWhitespaceTextChars,
+    });
     if (possiblyScanned) {
       return { text: "", pages: [], truncated: false, pageCount: doc.numPages, possiblyScanned: true };
     }
     const limited = truncateWithPages(pages, MAX_EXTRACTED_CHARS);
+    void normalized;
     return {
       text: limited.text,
       pages: limited.pages,

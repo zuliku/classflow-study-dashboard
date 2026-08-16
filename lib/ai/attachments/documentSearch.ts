@@ -9,7 +9,7 @@
  *   内存不随 pageCount 线性增长；绝不提前 break（后部可能有更好的 exact match）
  * - extractPdfPagesText：PDF 定向页正文（read_project_file(pages) 用；绝不调用 extractPdf 前缀截断）
  */
-import { loadPdfJs } from "@/lib/ai/attachments/pdf";
+import { loadPdfJs, classifyPdfTextLayer } from "@/lib/ai/attachments/pdf";
 import {
   MAX_PROJECT_SEARCH_SNIPPET_CHARS,
   MAX_PROJECT_SEARCH_RESULTS,
@@ -232,6 +232,8 @@ export interface PdfSearchResult {
   matches: PdfSearchMatch[];
   matchCount: number;
   truncated: boolean;
+  /** V1.4.2：文本层可用性（executor 据此区分「无文本层」与「无匹配」；不进 Tool Output） */
+  textLayer: { pageCount: number; possiblyScanned: boolean };
 }
 
 interface PdfPageCandidate {
@@ -251,7 +253,7 @@ export async function searchPdfText(
   const snippetChars = options?.snippetChars ?? MAX_PROJECT_SEARCH_SNIPPET_CHARS;
   const totalChars = Math.max(1, options?.totalChars ?? MAX_PROJECT_SEARCH_TOTAL_CHARS);
   const q = tokenizeLocalSearchQuery(query);
-  if (!q.phrase) return { matches: [], matchCount: 0, truncated: false };
+  if (!q.phrase) return { matches: [], matchCount: 0, truncated: false, textLayer: { pageCount: 0, possiblyScanned: false } };
 
   const pdfjs = await loadPdfJs();
   const data = new Uint8Array(await file.arrayBuffer());
@@ -261,6 +263,7 @@ export async function searchPdfText(
 
   const topCandidates: PdfPageCandidate[] = [];
   let totalMatchCount = 0;
+  let nonWhitespaceTextChars = 0;
   const pushCandidate = (c: PdfPageCandidate) => {
     topCandidates.push(c);
     topCandidates.sort((a, b) => b.score - a.score || a.page - b.page);
@@ -279,6 +282,8 @@ export async function searchPdfText(
       } finally {
         page.cleanup();
       }
+      // V1.4.2：逐页累计非空白字符数（只累加一个 number；bounded memory）
+      nonWhitespaceTextChars += pageText.replace(/\s+/g, "").length;
       const normalized = normalizeLocalSearchText(pageText);
       if (!normalized) continue;
       const scored = scoreLocalSearch(normalized, q);
@@ -291,6 +296,11 @@ export async function searchPdfText(
     const cleanup = (doc as unknown as { destroy?: () => Promise<void> }).destroy;
     if (cleanup) await cleanup();
   }
+  // V1.4.2：canonical classifier（与 extractPdf 同源判定）
+  const { possiblyScanned } = classifyPdfTextLayer({
+    pageCount: doc.numPages,
+    nonWhitespaceTextChars,
+  });
 
   // 按候选生成 bounded snippets（受 maxResults + total chars 双预算）
   const matches: PdfSearchMatch[] = [];
@@ -301,7 +311,12 @@ export async function searchPdfText(
     matches.push({ page: c.page, text: snippet });
     used += snippet.length;
   }
-  return { matches, matchCount: totalMatchCount, truncated: matches.length < topCandidates.length || matches.length < totalMatchCount };
+  return {
+    matches,
+    matchCount: totalMatchCount,
+    truncated: matches.length < topCandidates.length || matches.length < totalMatchCount,
+    textLayer: { pageCount: doc.numPages, possiblyScanned },
+  };
 }
 
 // ---------- PDF 定向页正文（read_project_file(pages)） ----------

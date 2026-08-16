@@ -228,6 +228,51 @@ describe("search_project_file 边界", () => {
   });
 });
 
+describe("V1.4.2：scanned PDF search 语义", () => {
+  it("扫描 PDF（1 页零文本）→ NOT_SEARCHABLE（不是 matches=[]）", async () => {
+    const p = await createKiroProject({ name: "P" });
+    const f = await createProjectFile({ projectId: p.id, name: "scan1.pdf", mimeType: "application/pdf", sizeBytes: 10, kind: "pdf", blob: new Blob([buildMultiPageTextPdf([" "]).buffer as ArrayBuffer], { type: "application/pdf" }) });
+    const ctx = ctxOf(p.id, { id: f.id, name: f.name, kind: "pdf", sizeBytes: f.sizeBytes });
+    const r = await executeSearchProjectFile({ projectFileId: f.id, query: "考试时间" }, { frozenProjectContext: ctx });
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.code).toBe("NOT_SEARCHABLE");
+      expect(r.message).toContain("read_project_visual");
+    }
+  });
+
+  it("扫描 PDF（2 页零文本）→ NOT_SEARCHABLE", async () => {
+    const p = await createKiroProject({ name: "P" });
+    const f = await createProjectFile({ projectId: p.id, name: "scan2.pdf", mimeType: "application/pdf", sizeBytes: 10, kind: "pdf", blob: new Blob([buildMultiPageTextPdf([" ", " "]).buffer as ArrayBuffer], { type: "application/pdf" }) });
+    const ctx = ctxOf(p.id, { id: f.id, name: f.name, kind: "pdf", sizeBytes: f.sizeBytes });
+    const r = await executeSearchProjectFile({ projectFileId: f.id, query: "x" }, { frozenProjectContext: ctx });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.code).toBe("NOT_SEARCHABLE");
+  });
+
+  it("普通 text PDF 无匹配 → ok:true matches:[]（绝不 NOT_SEARCHABLE）", async () => {
+    const p = await createKiroProject({ name: "P" });
+    const f = await createProjectFile({ projectId: p.id, name: "agriculture.pdf", mimeType: "application/pdf", sizeBytes: 10, kind: "pdf", blob: new Blob([buildMultiPageTextPdf(["This document discusses agriculture."]).buffer as ArrayBuffer], { type: "application/pdf" }) });
+    const ctx = ctxOf(p.id, { id: f.id, name: f.name, kind: "pdf", sizeBytes: f.sizeBytes });
+    const r = await executeSearchProjectFile({ projectFileId: f.id, query: "quantum" }, { frozenProjectContext: ctx });
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.data.matches).toEqual([]);
+      expect(r.data.matchCount).toBe(0);
+      expect(r.data.truncated).toBe(false);
+    }
+  });
+
+  it("1 页短文本 PDF：search 正常命中（不误判扫描件）", async () => {
+    const p = await createKiroProject({ name: "P" });
+    const f = await createProjectFile({ projectId: p.id, name: "ddl.pdf", mimeType: "application/pdf", sizeBytes: 10, kind: "pdf", blob: new Blob([buildMultiPageTextPdf(["DDL: 2026-08-20"]).buffer as ArrayBuffer], { type: "application/pdf" }) });
+    const ctx = ctxOf(p.id, { id: f.id, name: f.name, kind: "pdf", sizeBytes: f.sizeBytes });
+    const r = await executeSearchProjectFile({ projectFileId: f.id, query: "DDL" }, { frozenProjectContext: ctx });
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.data.matches.length).toBeGreaterThan(0);
+  });
+});
+
 describe("Citation：search / targeted / visual 合并为单 source", () => {
   it("search 137 + text 137,138 + visual 205 → availablePages [137,138,205] 单 row", () => {
     let sources: KiroSourceMeta[] = [];

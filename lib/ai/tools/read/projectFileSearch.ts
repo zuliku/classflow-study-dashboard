@@ -102,6 +102,15 @@ export async function executeSearchProjectFile(
       // 全页扫描（绕过 100k prefix cache；逐页 cleanup；不提前 break）
       const searchPdf = opts.deps?.searchPdf ?? searchPdfText;
       const r = await searchPdf(blob, query, { maxResults });
+      // V1.4.2：无可用文本层（scanned / zero-text）→ 明确 NOT_SEARCHABLE，
+      // 绝不能把「无法搜索」表示成「全文没有该 query」
+      if (r.textLayer.possiblyScanned) {
+        return {
+          ok: false,
+          code: "NOT_SEARCHABLE",
+          message: "这份 PDF 没有可用文本层，无法进行关键词全文检索。请使用 read_project_file 查看页面信息，并使用 read_project_visual 按页读取视觉内容。",
+        };
+      }
       return {
         ok: true,
         data: {

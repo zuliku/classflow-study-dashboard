@@ -19,7 +19,7 @@ import { executeReadProjectFile } from "@/lib/ai/tools/read/projectFile";
 import { executeReadProjectVisual, normalizeRequestedProjectPdfPages, resolveProjectPdfVisualPages } from "@/lib/ai/tools/read/projectVisual";
 import { createVisionTurnRuntimeBudget } from "@/lib/ai/attachments/visionTurnRuntimeBudget";
 import { KiroProjectTurnContext } from "@/lib/ai/contextBudget/types";
-import { buildScannedPdf, buildMinimalPdf } from "@/tests/fixtures/files";
+import { buildScannedPdf, buildMinimalPdf, buildMultiPageTextPdf } from "@/tests/fixtures/files";
 import { extractProjectVisualEvidence } from "@/lib/ai/vision/projectEvidence";
 import { upsertProjectFileSource, projectFileSourceId } from "@/lib/ai/citations/sources";
 import { KiroSourceMeta } from "@/lib/ai/citations/types";
@@ -761,6 +761,28 @@ describe("read_project_visual（V1.3C text-layer PDF）", () => {
     expect(r.ok).toBe(true);
     // scanned 默认策略：无页码 → 前 min(6, pageCount) 页
     expect(renderPages.mock.calls[0][1]).toEqual([1, 2, 3, 4, 5, 6]);
+  });
+
+  it("V1.4.2：1 页零文本 PDF → scanned mode（无 pages 无 hint 也默认选 page 1，不 PAGE_SELECTION_REQUIRED）", async () => {
+    const p = await createKiroProject({ name: "P" });
+    const f = await createProjectFile({ projectId: p.id, name: "scan1.pdf", mimeType: "application/pdf", sizeBytes: 10, kind: "pdf", blob: new Blob([buildMultiPageTextPdf([" "]).buffer as ArrayBuffer], { type: "application/pdf" }) });
+    const ledger = createVisionTurnRuntimeBudget({});
+    const renderPages = vi.fn(async (_blob: Blob, pageNumbers: number[], _sourceId: string, _opts?: { maxBytes?: number }) => pageNumbers.map((page) => ({ page, file: new File(["x"], `p${page}.jpg`, { type: "image/jpeg" }), width: 1, height: 1, size: 10 })));
+    const extractEvidence = vi.fn(async (_input: import("@/lib/ai/vision/projectEvidence").ProjectVisualEvidenceInput) => ({ ok: true as const, items: [{ page: 1, text: "P1" }] }));
+    const r = await executeReadProjectVisual(
+      { projectFileId: f.id },
+      {
+        frozenProjectContext: visionContextOf(p.id, { id: f.id, name: f.name, kind: "pdf", sizeBytes: f.sizeBytes }),
+        frozenTurn: visionTurn,
+        ledger,
+        deps: { extractEvidence, renderPages },
+      }
+    );
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.data.pages).toEqual([{ page: 1, text: "P1" }]);
+    }
+    expect(renderPages.mock.calls[0][1]).toEqual([1]);
   });
 
   it("非 Vision 模型 + text PDF → VISION_MODEL_REQUIRED，endpoint 0 calls", async () => {

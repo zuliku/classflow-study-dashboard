@@ -44,6 +44,7 @@ import { normalizeProjectTurnContext, buildProjectContextSection } from "@/lib/a
 import { KiroProjectTurnContext } from "@/lib/ai/contextBudget/types";
 import { getExtractCache, setExtractCache, extractCacheKey } from "@/lib/ai/attachments/cache";
 import { EXTRACTOR_VERSION } from "@/lib/ai/attachments/limits";
+import { buildMultiPageTextPdf } from "@/tests/fixtures/files";
 
 function makeConversation(id: string, over: Partial<KiroConversationRecord> = {}): KiroConversationRecord {
   return {
@@ -414,6 +415,47 @@ describe("Prompt Project File Index", () => {
   it("无 files → 不产生项目资料块", () => {
     const s = buildProjectContextSection({ id: "a", name: "P", instructions: "R" });
     expect(s).not.toContain("## 项目资料");
+  });
+});
+
+describe("V1.4.2：零文本 PDF 文本层判定（read_project_file）", () => {
+  it("1 页零文本 PDF → possiblyScanned=true + visualRequired=true + pageCount=1", async () => {
+    const p = await createKiroProject({ name: "P" });
+    const f = await createProjectFile({ projectId: p.id, name: "scan1.pdf", mimeType: "application/pdf", sizeBytes: 10, kind: "pdf", blob: new Blob([buildMultiPageTextPdf([" "]).buffer as ArrayBuffer], { type: "application/pdf" }) });
+    const ctx: KiroProjectTurnContext = { id: p.id, name: "P", files: [{ id: f.id, name: f.name, kind: "pdf", sizeBytes: f.sizeBytes }] };
+    const r = await executeReadProjectFile({ projectFileId: f.id }, ctx);
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.data.possiblyScanned).toBe(true);
+      expect(r.data.visualRequired).toBe(true);
+      expect(r.data.pageCount).toBe(1);
+      expect(r.data.text).toBe("");
+    }
+  });
+
+  it("2 页零文本 PDF → possiblyScanned=true + visualRequired=true", async () => {
+    const p = await createKiroProject({ name: "P" });
+    const f = await createProjectFile({ projectId: p.id, name: "scan2.pdf", mimeType: "application/pdf", sizeBytes: 10, kind: "pdf", blob: new Blob([buildMultiPageTextPdf([" ", " "]).buffer as ArrayBuffer], { type: "application/pdf" }) });
+    const ctx: KiroProjectTurnContext = { id: p.id, name: "P", files: [{ id: f.id, name: f.name, kind: "pdf", sizeBytes: f.sizeBytes }] };
+    const r = await executeReadProjectFile({ projectFileId: f.id }, ctx);
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.data.possiblyScanned).toBe(true);
+      expect(r.data.visualRequired).toBe(true);
+      expect(r.data.pageCount).toBe(2);
+    }
+  });
+
+  it("1 页短文本 PDF → possiblyScanned=false（不误判扫描件）", async () => {
+    const p = await createKiroProject({ name: "P" });
+    const f = await createProjectFile({ projectId: p.id, name: "ddl.pdf", mimeType: "application/pdf", sizeBytes: 10, kind: "pdf", blob: new Blob([buildMultiPageTextPdf(["DDL: 2026-08-20"]).buffer as ArrayBuffer], { type: "application/pdf" }) });
+    const ctx: KiroProjectTurnContext = { id: p.id, name: "P", files: [{ id: f.id, name: f.name, kind: "pdf", sizeBytes: f.sizeBytes }] };
+    const r = await executeReadProjectFile({ projectFileId: f.id }, ctx);
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.data.possiblyScanned).not.toBe(true);
+      expect(r.data.text).toContain("DDL");
+    }
   });
 });
 

@@ -17,7 +17,8 @@ import {
   MAX_PROJECT_SEARCH_TOTAL_CHARS,
   MAX_PROJECT_SEARCH_RESULTS,
 } from "@/lib/ai/attachments/limits";
-import { buildMultiPageTextPdf } from "@/tests/fixtures/files";
+import { buildMultiPageTextPdf, buildScannedPdf } from "@/tests/fixtures/files";
+import { classifyPdfTextLayer } from "@/lib/ai/attachments/pdf";
 
 describe("normalizeLocalSearchText", () => {
   it("NFKC + lowercase + collapse whitespace；中文 substring 保留", () => {
@@ -195,6 +196,59 @@ describe("searchPdfText（真实多页 PDF；bounded memory）", () => {
     const r = await searchPdfText(blob, "gamma_delta");
     expect(r.matches).toEqual([]);
     expect(r.matchCount).toBe(0);
+  });
+});
+
+describe("classifyPdfTextLayer（V1.4.2 canonical）", () => {
+  const cases: { pages: number; chars: number; scanned: boolean }[] = [
+    { pages: 1, chars: 0, scanned: true },
+    { pages: 2, chars: 0, scanned: true },
+    { pages: 1, chars: 20, scanned: false },
+    { pages: 2, chars: 30, scanned: false },
+    { pages: 3, chars: 30, scanned: true },
+    { pages: 3, chars: 100, scanned: false },
+  ];
+  it("规则矩阵：零文本任何页数 → scanned；1–2 页短文本 → text；3+ 页 <40 → scanned", () => {
+    for (const c of cases) {
+      const r = classifyPdfTextLayer({ pageCount: c.pages, nonWhitespaceTextChars: c.chars });
+      expect(r.possiblyScanned).toBe(c.scanned);
+      expect(r.hasUsableTextLayer).toBe(!c.scanned);
+    }
+  });
+});
+
+describe("searchPdfText text-layer metadata（V1.4.2）", () => {
+  it("扫描 PDF（3 页零文本）→ textLayer.possiblyScanned=true", async () => {
+    const blob = new Blob([buildScannedPdf().buffer as ArrayBuffer], { type: "application/pdf" });
+    const r = await searchPdfText(blob, "anything", { maxResults: 5 });
+    expect(r.textLayer.possiblyScanned).toBe(true);
+    expect(r.textLayer.pageCount).toBe(3);
+    expect(r.matches).toEqual([]);
+  });
+
+  it("普通 text PDF → textLayer.possiblyScanned=false（即使 query 无匹配）", async () => {
+    const pdf = buildMultiPageTextPdf(["This document discusses agriculture."]);
+    const blob = new Blob([pdf.buffer as ArrayBuffer], { type: "application/pdf" });
+    const r = await searchPdfText(blob, "quantum", { maxResults: 5 });
+    expect(r.textLayer.possiblyScanned).toBe(false);
+    expect(r.matches).toEqual([]);
+    expect(r.matchCount).toBe(0);
+  });
+
+  it("1 页零文本 PDF → scanned（V1.4.2 修复：单页扫描通知页）", async () => {
+    const pdf = buildMultiPageTextPdf([" "]);
+    const blob = new Blob([pdf.buffer as ArrayBuffer], { type: "application/pdf" });
+    const r = await searchPdfText(blob, "x", { maxResults: 5 });
+    expect(r.textLayer.possiblyScanned).toBe(true);
+    expect(r.textLayer.pageCount).toBe(1);
+  });
+
+  it("1 页短文本 PDF → text-layer（不误判扫描件）", async () => {
+    const pdf = buildMultiPageTextPdf(["DDL: 2026-08-20"]);
+    const blob = new Blob([pdf.buffer as ArrayBuffer], { type: "application/pdf" });
+    const r = await searchPdfText(blob, "DDL", { maxResults: 5 });
+    expect(r.textLayer.possiblyScanned).toBe(false);
+    expect(r.matches.length).toBeGreaterThan(0);
   });
 });
 
