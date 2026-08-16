@@ -26,8 +26,6 @@ import {
   VisualPendingItem,
 } from "@/lib/ai/visual/types";
 
-type ApplyState = "idle" | "applying" | "applied" | "stale" | "revoked";
-
 /** 语义图标 + 分组行标签（与 StudyPlan / Action Card 同一 visual family） */
 const KIND_META: Record<VisualActionKind, { icon: React.ComponentType<{ className?: string }>; label: string }> = {
   "assignment-create": { icon: Plus, label: "新建任务" },
@@ -40,10 +38,11 @@ const KIND_META: Record<VisualActionKind, { icon: React.ComponentType<{ classNam
 };
 
 /**
- * Visual Action Intake Proposal Card（V1.2 Mixed）：事实 UI。
+ * Visual Action Intake Proposal Card（V1.2 Mixed + V1.4 Runtime-owned）：事实 UI。
  * executable rows 完全由 Preflight Facts 驱动；pending 只展示澄清/不支持事项（0 mutation）。
  * 所有 count 从 proposal 数据推导（不缓存三份）；pending-only 无 Apply；Applied 后 Receipt 保留 pending。
- * V1.3：本组件只用于 LIVE Proposal；历史只读快照使用 VisualActionProposalHistoryCard（display-only）。
+ * V1.4：执行 Lifecycle 由 Conversation Runtime 拥有（visualProposalRuntime）；
+ * Card 只保留 applying/continuing 等 transient UI 状态。remount 后 applied/revoked/stale 仍正确显示。
  */
 export function VisualActionProposalCard({
   proposal,
@@ -51,17 +50,18 @@ export function VisualActionProposalCard({
   proposal: VisualActionProposal;
 }) {
   const [dismissed, setDismissed] = useState(false);
-  const [applyState, setApplyState] = useState<ApplyState>("idle");
   const [expandedEvidence, setExpandedEvidence] = useState<string | null>(null);
-  // V1.1：同步 ownership 锁（不依赖 React render 更新时序；applied 后 UI 保持 applied，锁只防并发入口）
+  // V1.1：同步 ownership 锁（不依赖 React render 更新时序；只防并发点击，durable status 在 Runtime）
   const applyingRef = useRef(false);
+  const [applying, setApplying] = useState(false);
   // V1.2.1：Continue 同步防双击（与 applyingRef 同一模式；不允许两次 handoff 产生两个相同 User Turn）
   const continuingRef = useRef(false);
   const [continuing, setContinuing] = useState(false);
-  // V1.1：one-shot Undo（Card Undo 与 Toast Undo 共享；执行后清空，杜绝重复补偿）
-  const undoRef = useRef<(() => void) | null>(null);
   const pushToast = useToastStore((s) => s.pushToast);
-  const { handoffPrompt, handoffVisualPendingContinuation } = useKiroSession();
+  const { handoffPrompt, handoffVisualPendingContinuation, visualProposalRuntime } = useKiroSession();
+
+  // V1.4：durable lifecycle 来自 Conversation Runtime（undefined = idle；applied/revoked/stale 均可跨 remount 保持）
+  const runtimeState = visualProposalRuntime.getState(proposal.id);
 
   // V1.2：count 全部由数据推导
   const executableCount = proposal.actions.length;
@@ -78,46 +78,46 @@ export function VisualActionProposalCard({
   const handleApply = async () => {
     if (applyingRef.current) return;
     applyingRef.current = true;
-    setApplyState("applying");
+    setApplying(true);
     try {
       const result = await executeVisualActionProposal({ proposal, pushToast });
       if (result.ok) {
-        undoRef.current = result.undo;
-        setApplyState("applied");
+        // V1.4：execution capability 交给 Conversation Runtime（undo closure 只活在 runtime）
+        visualProposalRuntime.recordApplied({
+          proposalId: proposal.id,
+          count: result.count,
+          undo: result.undo,
+        });
         pushToast({
           message: `已应用 ${result.count} 项修改`,
           actionLabel: "撤销",
-          onAction: handleUndo,
+          onAction: () => {
+            const outcome = visualProposalRuntime.consumeUndo(proposal.id);
+            if (!outcome.ok) pushToast({ message: outcome.message, type: "error" });
+          },
         });
         return;
       }
       if (result.stale) {
-        setApplyState("stale");
+        // V1.4：stale 也由 Runtime 拥有（remount 后仍显示「方案已过期」）
+        visualProposalRuntime.markStale(proposal.id);
         return;
       }
       // 其他失败（commit 异常已回滚等）：保持可重试，错误由 toast 说明
-      setApplyState("idle");
       pushToast({ message: result.message, type: "error" });
     } catch {
       // V1.1：executor 意外 throw 不能把 UI 卡在「正在应用…」；回滚仍由 Change Set executor 负责
-      setApplyState("idle");
       pushToast({ message: "应用失败，没有留下部分修改。", type: "error" });
     } finally {
-      // Ref 只负责同步 ownership；UI lifecycle 由 applyState 决定（applied/stale 不回退 idle）
       applyingRef.current = false;
+      setApplying(false);
     }
   };
 
-  /** V1.1：one-shot——Card Undo 与 Toast Undo 共用同一 undoRef，执行后立即清空 */
+  /** V1.4：one-shot Undo —— Card 与 Toast 共用 Runtime（claim + execute；只能成功一次） */
   const handleUndo = () => {
-    const undo = undoRef.current;
-    if (!undo) return;
-    undoRef.current = null;
-    try {
-      undo();
-    } finally {
-      setApplyState("revoked");
-    }
+    const outcome = visualProposalRuntime.consumeUndo(proposal.id);
+    if (!outcome.ok) pushToast({ message: outcome.message, type: "error" });
   };
 
   const handleReanalyze = () => {
@@ -186,16 +186,17 @@ export function VisualActionProposalCard({
   };
 
   const renderStatus = () => {
-    if (applyState === "applied") {
+    // V1.4：durable status 来自 Runtime（applied / revoked / stale）；applying 是 transient
+    if (runtimeState?.status === "applied") {
       return (
         <span className="mr-auto flex items-center gap-1 text-[10px] font-semibold text-[#627566]">
           <Check className="w-3 h-3" />
-          已应用 {executableCount} 项修改
+          已应用 {runtimeState.count ?? executableCount} 项修改
           {clarificationCount > 0 && <span className="text-sandrift">· {clarificationCount} 项仍待确认</span>}
         </span>
       );
     }
-    if (applyState === "stale") {
+    if (runtimeState?.status === "stale") {
       return (
         <span className="mr-auto text-[10px] font-semibold text-danger">
           方案已过期：ClassFlow 中的课程或任务已经发生变化。
@@ -203,15 +204,15 @@ export function VisualActionProposalCard({
         </span>
       );
     }
-    if (applyState === "revoked") {
+    if (runtimeState?.status === "revoked") {
       return (
         <span className="mr-auto text-[10px] font-semibold text-sandrift">
-          已撤销 {executableCount} 项修改，恢复到应用前状态。
+          已撤销 {runtimeState.count ?? executableCount} 项修改，恢复到应用前状态。
           {clarificationCount > 0 && <span> · {clarificationCount} 项仍待确认</span>}
         </span>
       );
     }
-    if (applyState === "applying") {
+    if (applying) {
       return (
         <span className="mr-auto text-[10px] text-sandrift">正在应用…</span>
       );
@@ -247,7 +248,8 @@ export function VisualActionProposalCard({
   };
 
   const renderActions = () => {
-    if (applyState === "applied") {
+    // V1.4：由 Runtime status 驱动（remount 后 applied/revoked/stale 仍正确）
+    if (runtimeState?.status === "applied") {
       return (
         <>
           <button
@@ -261,7 +263,7 @@ export function VisualActionProposalCard({
         </>
       );
     }
-    if (applyState === "stale") {
+    if (runtimeState?.status === "stale") {
       return (
         <>
           {executableCount > 0 && (
@@ -277,11 +279,11 @@ export function VisualActionProposalCard({
         </>
       );
     }
-    if (applyState === "revoked") {
+    if (runtimeState?.status === "revoked") {
       // V1.2：revoked 后仍可继续 pending（澄清与 Undo 互不耦合）
       return renderContinueButton(false);
     }
-    // idle
+    // idle（runtime undefined / applying transient）
     if (pendingOnly) {
       if (clarificationCount > 0) {
         return (
@@ -312,7 +314,7 @@ export function VisualActionProposalCard({
       <>
         <button
           onClick={() => setDismissed(true)}
-          disabled={applyState === "applying"}
+          disabled={applying}
           data-testid="visual-cancel"
           className="flex items-center gap-1.5 px-3 h-8 rounded-lg text-[11px] font-bold text-satin-grey bg-transparent border border-line hover:text-charcoal hover:border-line-strong transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
         >
@@ -320,11 +322,11 @@ export function VisualActionProposalCard({
         </button>
         <button
           onClick={handleApply}
-          disabled={applyState === "applying"}
+          disabled={applying}
           data-testid="visual-apply"
           className="flex items-center gap-1.5 px-3 h-8 rounded-lg text-[11px] font-bold text-white bg-charcoal hover:bg-black disabled:opacity-60 transition-colors"
         >
-          {applyState === "applying" ? "正在应用…" : hasPending ? `应用 ${executableCount} 项修改` : "应用全部修改"}
+          {applying ? "正在应用…" : hasPending ? `应用 ${executableCount} 项修改` : "应用全部修改"}
         </button>
       </>
     );
@@ -346,7 +348,7 @@ export function VisualActionProposalCard({
         <button
           onClick={() => setDismissed(true)}
           aria-label="关闭"
-          disabled={applyState === "applying"}
+          disabled={applying}
           className="p-1 rounded-lg text-sandrift hover:bg-alabaster hover:text-charcoal transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
         >
           <X className="w-3.5 h-3.5" />

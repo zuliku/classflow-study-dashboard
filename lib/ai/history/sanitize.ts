@@ -14,6 +14,7 @@ import {
   PersistedVisualProposalView,
 } from "@/lib/ai/history/types";
 import { VisualActionProposal } from "@/lib/ai/visual/types";
+import { sanitizeVisualProposalReceipt, VisualProposalReceiptView } from "@/lib/ai/visual/receipt";
 import { KiroContextRef } from "@/lib/ai/context/types";
 import type { AppState } from "@/store/useAppStore";
 import { KiroAgentTask } from "@/lib/ai/computer/task";
@@ -31,11 +32,15 @@ export const MAX_PERSISTED_VISUAL_ACTIONS = 8;
 export const MAX_PERSISTED_VISUAL_PENDING = 8;
 
 /**
- * Visual Action Intake V1.3：live Proposal → 历史只读展示快照。
+ * Visual Action Intake V1.3 + V1.4：live Proposal → 历史只读展示快照。
  * 只复制安全展示事实；change/tool/input/reservedIds/previewFingerprint/
  * sourceAttachmentIds/sourceProposalId/pendingItemIds 绝不进入 History。
+ * V1.4：receipt（applied/revoked display facts）经 History boundary 独立校验后投影。
  */
-export function toPersistedVisualProposal(proposal: VisualActionProposal): PersistedVisualProposalView {
+export function toPersistedVisualProposal(
+  proposal: VisualActionProposal,
+  receipt?: unknown
+): PersistedVisualProposalView {
   const actions = (proposal.actions ?? []).slice(0, MAX_PERSISTED_VISUAL_ACTIONS).map((a) => ({
     kind: a.display.kind,
     title: a.display.title.slice(0, MAX_PERSISTED_VISUAL_ACTION_TITLE),
@@ -47,6 +52,7 @@ export function toPersistedVisualProposal(proposal: VisualActionProposal): Persi
     evidence: (p.evidence?.text ?? "").slice(0, MAX_PERSISTED_VISUAL_EVIDENCE),
     description: p.description.slice(0, MAX_PERSISTED_VISUAL_PENDING_DESCRIPTION),
   }));
+  const safeReceipt = sanitizeVisualProposalReceipt(receipt);
   return {
     id: proposal.id,
     summary: proposal.summary.slice(0, MAX_PERSISTED_VISUAL_SUMMARY),
@@ -57,6 +63,7 @@ export function toPersistedVisualProposal(proposal: VisualActionProposal): Persi
     actions,
     pendingItems,
     createdAt: typeof proposal.createdAt === "number" ? proposal.createdAt : Date.now(),
+    ...(safeReceipt ? { receipt: safeReceipt } : {}),
   };
 }
 
@@ -152,6 +159,8 @@ export function sanitizeConversation(input: {
   summary?: KiroConversationSummary | null;
   /** Kiro Project 成员关系（V1）：sanitize 重写 Record 时必须保留，否则会被意外抹掉 */
   projectId?: string | null;
+  /** Visual Intake V1.4：Runtime receipt 快照（只含展示事实，绝无 undo）；live Proposal 合并用 */
+  visualProposalReceipts?: ReadonlyMap<string, VisualProposalReceiptView> | null;
 }): KiroConversationRecord {
   const messages: PersistedKiroMessage[] = input.messages
     // Worklog V2：assistant 可能 Final Answer 为空但产生 Action Card —— 消息必须保留；
@@ -187,9 +196,12 @@ export function sanitizeConversation(input: {
         liveActions.length > 0 || (m.historyActions ?? []).length > 0
           ? [...liveActions, ...(m.historyActions ?? [])]
           : undefined;
-      // Visual Intake V1.3：live Proposal → 只读快照；恢复的历史快照原样透传（display-only）
+      // Visual Intake V1.3 + V1.4：live Proposal → 只读快照（合并 Runtime receipt 展示事实）；
+      // 恢复的历史快照原样透传（display-only）
       const visualProposals = [
-        ...(m.visualActionProposals ?? []).map(toPersistedVisualProposal),
+        ...(m.visualActionProposals ?? []).map((p) =>
+          toPersistedVisualProposal(p, input.visualProposalReceipts?.get(p.id))
+        ),
         ...(m.historyVisualActionProposals ?? []),
       ];
       return {

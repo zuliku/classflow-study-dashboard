@@ -80,6 +80,7 @@ import { executeReadProjectFile } from "@/lib/ai/tools/read/projectFile";
 import { executeReadProjectVisual } from "@/lib/ai/tools/read/projectVisual";
 import { executeSearchProjectFile } from "@/lib/ai/tools/read/projectFileSearch";
 import { createVisionTurnRuntimeBudget, VisionTurnRuntimeLedger } from "@/lib/ai/attachments/visionTurnRuntimeBudget";
+import { createVisualProposalRuntime } from "@/lib/ai/visual/receipt";
 import { projectFileSourceId, upsertProjectFileSource } from "@/lib/ai/citations/sources";
 import { getActiveModelName } from "@/lib/ai/providers/registry";
 import { executeKiroWriteTool } from "@/lib/ai/tools/write/executor";
@@ -897,6 +898,28 @@ export function useKiroChat({
   const restoredSourcesRef = useRef(new Map<string, KiroSourceMeta[]>());
   // Visual Intake V1.3：历史只读 Proposal 快照（display-only；绝不重建 VisualActionProposal）
   const restoredVisualProposalsRef = useRef(new Map<string, PersistedVisualProposalView[]>());
+  // Visual Intake V1.4：Proposal 执行 Lifecycle（Conversation-owned；undo closure 只在 runtime）
+  const visualProposalRuntimeRef = useRef(createVisualProposalRuntime());
+  const [visualProposalVersion, setVisualProposalVersion] = useState(0);
+  const bumpVisualProposalVersion = () => setVisualProposalVersion((v) => v + 1);
+  /** Runtime API（有限状态机；绝无 setState(any)） */
+  const visualProposalRuntime = {
+    getState: (proposalId: string) => visualProposalRuntimeRef.current.getState(proposalId),
+    recordApplied: (input: { proposalId: string; count: number; undo: () => void }) => {
+      visualProposalRuntimeRef.current.recordApplied(input);
+      bumpVisualProposalVersion();
+    },
+    markStale: (proposalId: string) => {
+      visualProposalRuntimeRef.current.markStale(proposalId);
+      bumpVisualProposalVersion();
+    },
+    consumeUndo: (proposalId: string) => {
+      const outcome = visualProposalRuntimeRef.current.consumeUndo(proposalId);
+      if (outcome.ok) bumpVisualProposalVersion();
+      return outcome;
+    },
+  };
+  const getVisualProposalReceiptSnapshot = () => visualProposalRuntimeRef.current.receiptSnapshot();
 
   // Message View 增量缓存：parts/metadata 引用未变 → 复用 view 对象（streaming 时旧消息不重算）
   const viewCacheRef = useRef(
@@ -2493,6 +2516,9 @@ export function useKiroChat({
     restoredAttachmentsRef.current.clear();
     restoredSourcesRef.current.clear();
     restoredVisualProposalsRef.current.clear();
+    // Visual Intake V1.4：Conversation isolation —— 新会话清空 Proposal 执行能力（含 undo closure）
+    visualProposalRuntimeRef.current.clear();
+    setVisualProposalVersion(0);
     viewCacheRef.current.clear();
     liveTurnCommitsRef.current.clear();
     stoppedTurnMessageIdRef.current = null;
@@ -2535,6 +2561,9 @@ export function useKiroChat({
       restoredAttachmentsRef.current = attachmentsMap;
       restoredSourcesRef.current = sourcesMap;
       restoredVisualProposalsRef.current = visualProposalHistoryMap;
+      // Visual Intake V1.4：Load 历史只恢复 display receipt —— 绝不注册 undo / 构造 executable
+      visualProposalRuntimeRef.current.clear();
+      setVisualProposalVersion(0);
       viewCacheRef.current.clear();
       liveTurnCommitsRef.current.clear();
       stoppedTurnMessageIdRef.current = null;
@@ -2806,6 +2835,11 @@ export function useKiroChat({
     setVisualPendingContinuation,
     /** Task B V1.2.1：compare-and-clear（handoff 失败回滚用；ownership = sourceProposalId） */
     clearVisualPendingContinuationIfOwnedBy,
+    /** Visual Intake V1.4：Proposal 执行 Lifecycle（Conversation-owned；有限状态机 API） */
+    visualProposalRuntime,
+    visualProposalVersion,
+    /** 同步 Receipt 快照（只含展示事实，绝无 undo；persist/pagehide 用） */
+    getVisualProposalReceiptSnapshot,
   };
 }
 

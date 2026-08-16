@@ -114,6 +114,17 @@ export interface PersistedVisualProposalView {
     description: string;
   }>;
   createdAt: number;
+  /**
+   * Visual Intake V1.4：Durable Execution Receipt（display-only；描述「当时发生过什么」）。
+   * 只有 applied / revoked（stale/idle/applying 不持久化）；绝不包含 undo/change/tool/input/
+   * reservedIds/fingerprint/entity replay IDs。旧记录无此字段正常加载。
+   */
+  receipt?: {
+    status: "applied" | "revoked";
+    count: number;
+    appliedAt: number;
+    revokedAt?: number;
+  };
 }
 
 export interface PersistedKiroMessage {

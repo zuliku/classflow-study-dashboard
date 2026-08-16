@@ -6,6 +6,7 @@ import {
   Ban,
   CalendarClock,
   CalendarPlus,
+  Check,
   ChevronDown,
   CircleHelp,
   CircleSlash,
@@ -158,7 +159,22 @@ export function VisualActionProposalHistoryCard({ proposal }: { proposal: Persis
       )}
 
       <div className="pt-1 border-t border-line-soft">
-        <p className="text-[10px] font-semibold text-sandrift">仅供回看，不可执行</p>
+        {/* V1.4：Durable Execution Receipt（描述「当时发生过什么」；绝不声称当前 ClassFlow 状态） */}
+        {proposal.receipt?.status === "applied" ? (
+          <p className="flex items-center gap-1 text-[10px] font-semibold text-[#627566]">
+            <Check className="w-3 h-3" />
+            当时已应用 {proposal.receipt.count} 项修改
+            {clarificationCount > 0 && <span className="text-sandrift">· {clarificationCount} 项仍待确认</span>}
+          </p>
+        ) : proposal.receipt?.status === "revoked" ? (
+          <p className="flex items-center gap-1 text-[10px] font-semibold text-sandrift">
+            <Check className="w-3 h-3" />
+            当时已应用后撤销 {proposal.receipt.count} 项修改
+            {clarificationCount > 0 && <span> · {clarificationCount} 项仍待确认</span>}
+          </p>
+        ) : (
+          <p className="text-[10px] font-semibold text-sandrift">仅供回看，不可执行</p>
+        )}
       </div>
     </div>
   );

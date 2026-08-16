@@ -65,6 +65,7 @@ import { buildTranscriptText, buildTranscriptMarkdown, copyTextToClipboard, down
 import { useToastStore } from "@/store/useToastStore";
 import { KiroArtifactPreviewDialogHost } from "@/components/kiro/computer/KiroArtifactPreviewDialogHost";
 import { VisualPendingContinuation } from "@/lib/ai/visual/continuation";
+import { buildConversationPersistenceSignature } from "@/lib/ai/visual/receipt";
 
 export type KiroSuggestionsKind = "assignment" | "course" | "group-project" | "week" | "generic";
 
@@ -107,6 +108,15 @@ interface KiroSessionValue {
   handoffAssignmentPrompt: (id: string, prompt: string) => void;
   /** Task B V1.2：继续处理 Visual Pending 事项（先同步建立 continuation，再发送用户可见 prompt） */
   handoffVisualPendingContinuation: (continuation: VisualPendingContinuation, prompt: string) => Promise<boolean>;
+  /** Visual Intake V1.4：Proposal 执行 Lifecycle（Conversation-owned 有限状态机 API） */
+  visualProposalRuntime: {
+    getState: (proposalId: string) => import("@/lib/ai/visual/receipt").VisualProposalRuntimeEntry | undefined;
+    recordApplied: (input: { proposalId: string; count: number; undo: () => void }) => void;
+    markStale: (proposalId: string) => void;
+    consumeUndo: (proposalId: string) => import("@/lib/ai/visual/receipt").VisualProposalUndoOutcome;
+  };
+  /** V1.4：Proposal lifecycle 版本（rerender / persistence invalidation signal） */
+  visualProposalVersion: number;
   /** Task 7B：会话切换进行中 */
   conversationTransitioning: boolean;
   conversationTransition: ConversationTransitionView;
@@ -344,7 +354,15 @@ export function KiroSessionProvider({ children }: { children: React.ReactNode })
     const chatNow = chatRef.current;
     const messages = chatNow.messages;
     if (messages.length === 0 || chatNow.streaming) return;
-    const snapshot = `${id}|${messages.length}|${messages[messages.length - 1]?.content.length ?? 0}|${chatNow.status}|${chatNow.computerVersion ?? 0}`;
+    // V1.4：signature 包含 visualProposalVersion —— Apply/Undo 未改变 message 内容也必须重新落盘
+    const snapshot = buildConversationPersistenceSignature({
+      id,
+      messageCount: messages.length,
+      lastContentLength: messages[messages.length - 1]?.content.length ?? 0,
+      status: chatNow.status,
+      computerVersion: chatNow.computerVersion ?? 0,
+      visualProposalVersion: chatNow.visualProposalVersion ?? 0,
+    });
     if (snapshot === lastSavedSnapshotRef.current) return; // 无变化不重复写
     lastSavedSnapshotRef.current = snapshot;
     try {
@@ -360,6 +378,8 @@ export function KiroSessionProvider({ children }: { children: React.ReactNode })
         summary: conversationSummaryRef.current,
         // 关键回归点：sanitizeConversation 重写 Record 时必须保留 projectId
         projectId: conversationProjectIdRef.current,
+        // Visual Intake V1.4：Runtime receipt 快照（同步 ref 读取；绝无 undo）
+        visualProposalReceipts: chatNow.getVisualProposalReceiptSnapshot(),
       });
       await saveConversation(record);
       refreshHistory();
@@ -377,6 +397,15 @@ export function KiroSessionProvider({ children }: { children: React.ReactNode })
       void persistCurrent();
     }, 300);
   }, [persistCurrent]);
+
+  // Visual Intake V1.4：Apply/Undo 发生在 turn settled 之后 —— version 变化必须主动落盘
+  const lastVisualProposalVersionRef = useRef(0);
+  React.useEffect(() => {
+    const v = chat.visualProposalVersion ?? 0;
+    if (v === lastVisualProposalVersionRef.current) return;
+    lastVisualProposalVersionRef.current = v;
+    scheduleSave();
+  }, [chat.visualProposalVersion, scheduleSave]);
 
   const flushSave = useCallback(async () => {
     if (saveTimerRef.current) {
@@ -1127,6 +1156,9 @@ export function KiroSessionProvider({ children }: { children: React.ReactNode })
     handoffPrompt,
     handoffAssignmentPrompt,
     handoffVisualPendingContinuation,
+    // Visual Intake V1.4：Proposal 执行 Lifecycle（Conversation-owned）
+    visualProposalRuntime: sessionChat.visualProposalRuntime,
+    visualProposalVersion: sessionChat.visualProposalVersion ?? 0,
     conversationTransitioning: transitionState.phase !== "idle",
     conversationTransition: toConversationTransitionView(transitionState),
     planningPreview,
