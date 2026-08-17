@@ -313,7 +313,9 @@ test("移除 Native Workspace：forgetGrant 被调用；真实文件保留", asy
   await row.getByRole("button", { name: "删除工作区 论文资料" }).click();
   await page.getByRole("button", { name: "移除" }).click();
   await expect(page.getByTestId("kiro-workspace-row").filter({ hasText: "论文资料" })).toHaveCount(0);
-  // forgetGrant 被调用；真实文件仍在（只删授权映射）
-  expect(await mockCalls(page, "forgetGrant")).toBeGreaterThan(0);
+  // forgetGrant 被调用（cleanup 是异步尾；poll 避免与行消失竞态）；真实文件仍在（只删授权映射）
+  await expect
+    .poll(() => mockCalls(page, "forgetGrant"), { timeout: 10000 })
+    .toBeGreaterThan(0);
   expect(await mockFileExists(page, "毕业论文.md")).toBe(true);
 });

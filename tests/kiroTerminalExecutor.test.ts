@@ -390,6 +390,8 @@ describe("classifyTerminalCommandRisk（纯函数）", () => {
 
   it("destructive：PowerShell 别名 / CMD / git 不可逆", () => {
     expect(classifyTerminalCommandRisk("Remove-Item x.txt", "powershell")).toBe("destructive");
+    expect(classifyTerminalCommandRisk("Clear-Item temp.txt", "powershell")).toBe("destructive");
+    expect(classifyTerminalCommandRisk("Clear-Content temp.txt", "powershell")).toBe("destructive");
     expect(classifyTerminalCommandRisk("rm -rf x", "powershell")).toBe("destructive");
     expect(classifyTerminalCommandRisk("del x.txt", "cmd")).toBe("destructive");
     expect(classifyTerminalCommandRisk("rd /s /q x", "cmd")).toBe("destructive");
@@ -397,6 +399,11 @@ describe("classifyTerminalCommandRisk（纯函数）", () => {
     expect(classifyTerminalCommandRisk("git reset --hard HEAD", "powershell")).toBe("destructive");
     expect(classifyTerminalCommandRisk("git checkout -- .", "powershell")).toBe("destructive");
     expect(classifyTerminalCommandRisk("git restore .", "powershell")).toBe("destructive");
+  });
+
+  it("Clear-Item 不扩大 Clear-* 范围：Clear-Host 保持 normal", () => {
+    expect(classifyTerminalCommandRisk("Clear-Host", "powershell")).toBe("normal");
+    expect(classifyTerminalCommandRisk("cls", "cmd")).toBe("normal");
   });
 
   it("命令链任一 segment 命中 → 整条升级", () => {
@@ -465,6 +472,21 @@ describe("V1.0.1 Policy 回归（nested shell / inline interpreter / cross-shell
     const { attempt } = await run({ toolInput: input({ command }) });
     expect(attempt.kind).toBe("approval-required");
     expect(ctl.opCount("terminalExecute")).toBe(0);
+  });
+
+  it("Workspace Auto：Clear-Item → approval-required（bridge execute = 0）", async () => {
+    const { attempt } = await run({ toolInput: input({ command: "Clear-Item temp.txt" }) });
+    expect(attempt.kind).toBe("approval-required");
+    expect(ctl.opCount("terminalExecute")).toBe(0);
+  });
+
+  it("Workspace Auto：Clear-Host（普通）→ 直接执行", async () => {
+    const before = ctl.opCount("terminalExecute");
+    const { attempt } = await run({ toolInput: input({ command: "Clear-Host" }) });
+    expect(attempt.kind).toBe("completed");
+    if (attempt.kind !== "completed") return;
+    expect(attempt.output.ok).toBe(true);
+    expect(ctl.opCount("terminalExecute")).toBe(before + 1);
   });
 
   it("Guided：非 blocked 一律 approval-required（含 nested shell）", async () => {

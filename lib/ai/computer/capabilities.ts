@@ -90,7 +90,7 @@ export const HARD_DENY_CAPABILITIES: ReadonlySet<ComputerCapability> = new Set<C
   "network.access",
 ]);
 
-/** V1 允许模型使用的 capability（Part 1 不暴露任何 Computer File Tools 给模型，但 policy 引擎预置全部）。 */
+/** 被视为文件系统 mutation 的 capability 集合。 */
 export const MUTATION_CAPABILITIES: ReadonlySet<ComputerCapability> = new Set<ComputerCapability>([
   "fs.create",
   "fs.modify",

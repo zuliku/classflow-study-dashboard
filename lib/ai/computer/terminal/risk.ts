@@ -43,6 +43,7 @@ const PS_DESTRUCTIVE_ALIASES: Record<string, string> = {
 const CROSS_SHELL_DESTRUCTIVE_PATTERNS = [
   /\bremove-item\b/,
   /\bclear-content\b/,
+  /\bclear-item\b/,
   /\bremove-itemproperty\b/,
   /\bdel\b/,
   /\berase\b/,
