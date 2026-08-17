@@ -39,7 +39,7 @@ function ChartSkeleton() {
 
 /** B2/B9：双并列信息 Card 的统一列几何（Desktop 50/50；Tablet/Mobile 单列）。
  *  Loading Skeleton 与 Loaded 共用同一常量（避免横向 layout shift）。 */
-export const ANALYTICS_PAIRED_GRID = "grid grid-cols-1 lg:grid-cols-2 gap-4 items-start";
+export const ANALYTICS_PAIRED_GRID = "grid grid-cols-1 lg:grid-cols-2 gap-4 items-stretch";
 
 function EmptyState() {
   return (

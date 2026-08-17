@@ -23,7 +23,7 @@ export function CourseInvestmentCard({
 }) {
   if (investment.length === 0) {
     return (
-      <div className="w-full min-w-0 bg-surface border border-line rounded-2xl p-4 h-fit">
+      <div className="w-full min-w-0 bg-surface border border-line rounded-2xl p-4">
         <h3 className="text-sm font-bold text-charcoal">课程投入</h3>
         <div className="pt-3 pb-2 text-center">
           <p className="text-[11px] text-sandrift">完成专注后这里会展示各课程投入</p>
@@ -33,7 +33,7 @@ export function CourseInvestmentCard({
   }
   const maxMinutes = Math.max(...investment.map((i) => i.minutes), 1);
   return (
-    <div className="bg-surface border border-line rounded-2xl p-4 h-fit" data-testid="course-investment-card">
+    <div className="bg-surface border border-line rounded-2xl p-4" data-testid="course-investment-card">
       <h3 className="text-sm font-bold text-charcoal">课程投入</h3>
       <div className="space-y-2.5 pt-3">
         {investment.map((item, index) => {

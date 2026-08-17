@@ -18,7 +18,7 @@ export function FocusRhythmCard({ rhythm }: { rhythm: FocusRhythm }) {
   const maxMinutes = Math.max(...rhythm.byTimeOfDay.map((b) => b.minutes), 1);
   return (
     <div
-      className="w-full min-w-0 bg-surface border border-line rounded-2xl p-4 h-fit"
+      className="w-full min-w-0 bg-surface border border-line rounded-2xl p-4"
       data-testid="focus-rhythm-card"
     >
       <h3 className="text-sm font-bold text-charcoal">专注节奏</h3>

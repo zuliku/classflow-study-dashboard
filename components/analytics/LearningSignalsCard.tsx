@@ -33,10 +33,10 @@ export function LearningSignalsCard({
   const { handoffPrompt } = useKiroSessionActions();
 
   if (signals.length === 0) {
-    // V3.1：紧凑 Level 3 contextual state（不制造高卡空洞）
+    // V3.1：紧凑 Level 3 contextual state（不制造高卡空洞）；圆角与主卡一致
     return (
       <div
-      className="w-full min-w-0 bg-alabaster/50 border border-line rounded-xl px-3.5 py-3 h-fit self-start"
+      className="w-full min-w-0 bg-alabaster/50 border border-line rounded-2xl px-3.5 py-3 h-fit self-start"
       data-testid="learning-signals-card"
     >
         <h3 className="text-[11px] font-bold text-charcoal">值得注意</h3>
@@ -45,7 +45,10 @@ export function LearningSignalsCard({
     );
   }
   return (
-    <div className="bg-surface border border-line rounded-2xl p-4 h-fit self-start" data-testid="learning-signals-card">
+    <div
+      className="w-full min-w-0 bg-surface border border-line rounded-2xl p-4 flex flex-col"
+      data-testid="learning-signals-card"
+    >
       <h3 className="text-sm font-bold text-charcoal">值得注意</h3>
       <div className="divide-y divide-line-soft pt-2">
         {signals.map((signal) => {
