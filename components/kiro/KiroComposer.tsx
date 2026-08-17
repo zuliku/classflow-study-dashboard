@@ -1,0 +1,697 @@
+﻿"use client";
+
+import React, { useEffect, useRef, useState } from "react";
+import {
+  Plus,
+  AtSign,
+  ChevronDown,
+  Settings,
+  Check,
+  Sparkles,
+  Loader2,
+  Globe2,
+  Cpu,
+} from "lucide-react";
+import { KiroSendControl } from "@/components/kiro/KiroSendControl";
+import { KiroContextBar } from "@/components/kiro/KiroContextBar";
+import { KiroContextPicker } from "@/components/kiro/KiroContextPicker";
+import { KiroAttachmentPicker } from "@/components/kiro/KiroAttachmentPicker";
+import { KiroMaterialPicker } from "@/components/kiro/KiroMaterialPicker";
+import { KiroAttachmentChip } from "@/components/kiro/KiroAttachmentChip";
+import { ProviderLogo } from "@/components/kiro/ProviderLogo";
+import { KiroContextRef } from "@/lib/ai/context/types";
+import { KiroAttachmentView } from "@/lib/ai/attachments/types";
+import { AIModelVendor } from "@/lib/ai/providers/types";
+import { useKiroPreferencesStore } from "@/store/useKiroPreferencesStore";
+import { KiroAgentMode, KiroWorkspaceMeta } from "@/lib/ai/computer/types";
+import { KiroReasoningEffort, ReasoningCapability } from "@/lib/ai/reasoning/types";
+import { KiroAgentModeMenu } from "@/components/kiro/computer/KiroAgentModeMenu";
+import { KiroReasoningMenu } from "@/components/kiro/computer/KiroReasoningMenu";
+import { KiroWorkspacePicker } from "@/components/kiro/computer/KiroWorkspacePicker";
+import { PopoverPanel } from "@/components/ui/Popover";
+import { cn } from "@/lib/utils";
+
+/**
+ * Kiro Composer（Task 4）：真实发送入口 + 附件（上传/拖拽/粘贴/课程资料/保存）。
+ * - 文档：选择后本地解析 → ready 才能发送
+ * - 图片：vision 模型以原生 image part 发送；非 vision 模型在发送前阻止
+ */
+export function KiroComposer({
+  contexts,
+  onAddContext,
+  onRemoveContext,
+  onSend,
+  streaming,
+  turnInFlight,
+  runtimeStatus,
+  onStop,
+  configured,
+  modelOptions,
+  activeModelName,
+  selectedModelId,
+  modelUnavailable,
+  activeModelVendor,
+  onSelectModel,
+  onOpenSettings,
+  attachments,
+  hasProcessing,
+  visionEnabled,
+  preparingVision,
+  preparingSend,
+  turnIntentFrozen,
+  onAddFiles,
+  onRemoveAttachment,
+  onRetryAttachment,
+  onSaveAttachmentToCourse,
+  onAddMaterial,
+  compact,
+  // Kiro Computer Agent V1：Computer 模式控制（owner = KiroChatSurface 订阅 stores）
+  computerEnabled,
+  onToggleComputer,
+  agentMode,
+  onSetAgentMode,
+  reasoningCapability,
+  reasoningEffort,
+  onSetReasoningEffort,
+  workspace,
+  workspaceIsSandbox,
+  grantWarning,
+  introActive = false,
+}: {
+  contexts: KiroContextRef[];
+  onAddContext: (ref: KiroContextRef) => void;
+  onRemoveContext: (key: string) => void;
+  /** 返回 true = 已提交（扫描 PDF 渲染失败时 false，Prompt 保留） */
+  onSend: (text: string) => Promise<boolean> | boolean;
+  streaming: boolean;
+  /** Streaming UX V3：真实 turn lifecycle（submitted / streaming / awaiting-tool-result / awaiting-continuation） */
+  turnInFlight: boolean;
+  runtimeStatus: "ready" | "submitted" | "streaming" | "error";
+  onStop: () => void;
+  configured: boolean;
+  modelOptions: { value: string; label: string; vendor: AIModelVendor | null }[];
+  activeModelName: string;
+  selectedModelId: string;
+  /** 当前选中模型不在 Catalog（已下线/不可用）：提示重新选择，不自动覆盖 */
+  modelUnavailable?: boolean;
+  activeModelVendor: AIModelVendor | null;
+  onSelectModel: (id: string) => void;
+  onOpenSettings: () => void;
+  attachments: KiroAttachmentView[];
+  hasProcessing: boolean;
+  visionEnabled: boolean;
+  /** 扫描 PDF 页面渲染中（Send 禁用 + 提示） */
+  preparingVision?: boolean;
+  /** V4.6：Send 已 claim、preflight 进行中（SDK 尚未接管；Send 禁用 + 「正在准备」，Stop 不出现） */
+  preparingSend?: boolean;
+  /** V4.6：Turn Intent 已同步冻结（preparing 且已冻结 → 下一 Turn preferences 可编辑） */
+  turnIntentFrozen?: boolean;
+  onAddFiles: (files: File[]) => void;
+  onRemoveAttachment: (id: string) => void;
+  onRetryAttachment: (id: string) => void;
+  onSaveAttachmentToCourse: (id: string, courseId: string) => void;
+  onAddMaterial: (ref: { courseId: string; courseName: string; materialId: string; title: string; type: string }) => void;
+  /** sidecar：更紧凑的密度 */
+  compact?: boolean;
+  /** Computer Agent ON（active 样式 + workspace strip + agent mode） */
+  computerEnabled?: boolean;
+  /** Computer toggle（无 workspace 时由 owner 引导授权流程，不直接启用） */
+  onToggleComputer?: (enabled: boolean) => void;
+  agentMode?: KiroAgentMode;
+  onSetAgentMode?: (mode: KiroAgentMode) => void;
+  /** capability-driven reasoning（fixed 时 Composer 不显示 chip） */
+  reasoningCapability?: ReasoningCapability;
+  reasoningEffort?: KiroReasoningEffort;
+  onSetReasoningEffort?: (effort: KiroReasoningEffort) => void;
+  workspace?: KiroWorkspaceMeta | null;
+  workspaceIsSandbox?: boolean;
+  grantWarning?: string | null;
+  /** Motion V1：本轮 Empty Intro claim 成功后 Composer 轻进入（workspace/sidecar 各自 timing scope） */
+  introActive?: boolean;
+}) {
+  const [text, setText] = useState("");
+  const [attachOpen, setAttachOpen] = useState(false);
+  const [modelOpen, setModelOpen] = useState(false);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [materialPickerOpen, setMaterialPickerOpen] = useState(false);
+  const [dragOver, setDragOver] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const submittingRef = useRef(false);
+  const taRef = useRef<HTMLTextAreaElement | null>(null);
+  const attachRef = useRef<HTMLDivElement | null>(null);
+  const modelRef = useRef<HTMLDivElement | null>(null);
+  const pickerWrapRef = useRef<HTMLDivElement | null>(null);
+  const dropRef = useRef<HTMLDivElement | null>(null);
+
+  const hasImages = attachments.some((a) => a.kind === "image");
+  // V1.1：建议 chips 只在「真实 ready」的图片存在时出现（processing 图片不算）
+  const hasReadyImages = attachments.some((a) => a.kind === "image" && a.status === "ready");
+  const imagesBlocked = hasImages && !visionEnabled;
+  // 扫描型 PDF 需要 Vision 模型（Task 12）：非 Vision 模型阻止发送，绝不静默丢图
+  const needsScannedVision = attachments.some((a) => a.visionRequired === true);
+  const scannedBlocked = needsScannedVision && !visionEnabled;
+  // Task 14：Kiro Search（Workspace / Sidecar 共用同一 store，开关共享）
+  const webSearchEnabled = useKiroPreferencesStore((s) => s.webSearchEnabled);
+  const setWebSearchEnabled = useKiroPreferencesStore((s) => s.setWebSearchEnabled);
+  // Task B V1.1：截图隐私提示改为显式 dismiss（不再自动标记；用户没点「知道了」就下次继续提示）
+  const visualPrivacyNoticeSeen = useKiroPreferencesStore((s) => s.visualAttachmentPrivacyNoticeSeen);
+  const setVisualPrivacyNoticeSeen = useKiroPreferencesStore((s) => s.setVisualAttachmentPrivacyNoticeSeen);
+  const canSend =
+    text.trim().length > 0 &&
+    !hasProcessing &&
+    !imagesBlocked &&
+    !scannedBlocked &&
+    !turnInFlight &&
+    !preparingSend &&
+    !submitting &&
+    !preparingVision;
+  // V4.1（Productization）+ V4.6：拆分「当前 Turn scope 锁」与「下一 Turn preference 锁」。
+  // - currentTurnScopeLocked：Agent Turn 尚未真正 settled——保护 Context/Attachment/Workspace/Computer 等
+  //   会改变「当前工作范围」展示的控件（preparing 阶段同样属于当前 Turn 范围）
+  // - nextTurnPreferencesLocked：preparing 且 intent 尚未冻结时锁定 Model/Reasoning/AgentMode/WebSearch；
+  //   intent 已冻结（或 turn 已开始）→ 可编辑（只影响下一 Turn；当前 Turn 使用冻结 snapshot）。
+  //   local submitting 不参与该锁（preparingSend 已覆盖同一窗口；intent 冻结后立即解锁）
+  const currentTurnScopeLocked = turnInFlight || submitting || !!preparingSend;
+  const nextTurnPreferencesLocked = !!preparingSend && !turnIntentFrozen;
+
+  // Turn scope 锁定期间关闭 scope 类菜单（Attachment/Context/Material）；
+  // Model 菜单是「下一条 preference」，不在此关闭——回复期间仍可打开。
+  useEffect(() => {
+    if (!currentTurnScopeLocked) return;
+    setAttachOpen(false);
+    setPickerOpen(false);
+    setMaterialPickerOpen(false);
+  }, [currentTurnScopeLocked]);
+
+  const autoGrow = () => {
+    const el = taRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${Math.min(el.scrollHeight, 156)}px`;
+  };
+
+  // V4.6：local submitting 只表达「Composer submit() 正在 await onSend」——由 onSend 的
+  // 返回值决定是否清空 prompt；不再用 runtime streaming/status 反向修改 local submit
+  // ownership（sendClaimed 是 preflight claim，不是模型在 streaming）。
+  const submit = async () => {
+    if (!canSend || submittingRef.current) return;
+    submittingRef.current = true;
+    setSubmitting(true);
+    try {
+      const ok = await onSend(text.trim());
+      // 只有真正提交（含扫描 PDF 渲染成功）后才清空；失败保留用户 Prompt
+      if (!ok) {
+        submittingRef.current = false;
+        setSubmitting(false);
+        return;
+      }
+      setText("");
+      requestAnimationFrame(() => {
+        if (taRef.current) {
+          taRef.current.style.height = "auto";
+          taRef.current.focus();
+        }
+      });
+      // 真实 request 已交给 onSend（chatSendMessage）→ 后续 disable 由 turnInFlight / preparingSend 负责
+      submittingRef.current = false;
+      setSubmitting(false);
+    } catch (error) {
+      submittingRef.current = false;
+      setSubmitting(false);
+      throw error;
+    }
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      submit();
+    }
+  };
+
+  // Esc / 点击外部关闭菜单
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setAttachOpen(false);
+        setModelOpen(false);
+        setPickerOpen(false);
+        setMaterialPickerOpen(false);
+      }
+    };
+    const onPointerDown = (e: PointerEvent) => {
+      const t = e.target as Node;
+      if (attachRef.current && !attachRef.current.contains(t)) setAttachOpen(false);
+      if (modelRef.current && !modelRef.current.contains(t)) setModelOpen(false);
+      if (pickerWrapRef.current && !pickerWrapRef.current.contains(t)) {
+        setPickerOpen(false);
+        setMaterialPickerOpen(false);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    document.addEventListener("pointerdown", onPointerDown);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      document.removeEventListener("pointerdown", onPointerDown);
+    };
+  }, []);
+
+  // 拖拽添加文件（Desktop）
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setDragOver(false);
+    if (currentTurnScopeLocked) return;
+    const files = Array.from(e.dataTransfer.files ?? []);
+    if (files.length > 0) onAddFiles(files);
+  };
+
+  // 粘贴图片（Ctrl/Cmd+V）
+  const handlePaste = (e: React.ClipboardEvent) => {
+    if (currentTurnScopeLocked) return;
+    const items = Array.from(e.clipboardData?.items ?? []);
+    const files = items
+      .filter((it) => it.kind === "file")
+      .map((it) => it.getAsFile())
+      .filter((f): f is File => f != null);
+    if (files.length > 0) {
+      e.preventDefault();
+      onAddFiles(files);
+    }
+  };
+
+  const modelMenu = (
+    // 唯一真实滚动容器：支持滚轮/触控板，但视觉隐藏 scrollbar（避免与外层 popup 双滚动条）
+    <div
+      role="menu"
+      aria-label="选择模型"
+      className="py-1 max-h-[min(320px,55vh)] overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+    >
+      {modelUnavailable && (
+        <p className="px-3 py-2 text-[11px] font-semibold text-danger border-b border-line-soft mb-1">
+          当前模型已不可用，请重新选择。
+        </p>
+      )}
+      {modelOptions.length === 0 ? (
+        <p className="px-3 py-2 text-xs text-sandrift">请先在设置中填写模型 ID。</p>
+      ) : (
+        modelOptions.map((m) => (
+          <button
+            key={m.value}
+            role="menuitem"
+            onClick={() => {
+              onSelectModel(m.value);
+              setModelOpen(false);
+            }}
+            className={cn(
+              "w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-left text-xs font-semibold transition-colors",
+              m.value === selectedModelId ? "text-charcoal bg-pastel-mint" : "text-satin-grey hover:bg-alabaster"
+            )}
+          >
+            <ProviderLogo vendor={m.vendor} size="md" />
+            <span className="min-w-0 flex-1 truncate">{m.label}</span>
+            {m.value === selectedModelId && (
+              <Check className="w-4 h-4 text-charcoal shrink-0 kiro-check-settle" />
+            )}
+          </button>
+        ))
+      )}
+    </div>
+  );
+
+  return (
+    <div
+      ref={dropRef}
+      onDragOver={(e) => {
+        e.preventDefault();
+        setDragOver(true);
+      }}
+      onDragLeave={() => setDragOver(false)}
+      onDrop={handleDrop}
+      // z-20：surface 的 focus-within transform（morph）会创建内部 stacking context，
+      // 若不在此给 Composer 建立高于 EmptyState（z-10）的层，Attachment/Context 等 popup（z-40）
+      // 会被空态遮罩拦截点击（V1.5.1 交互回归修复）
+      className={cn("shrink-0 relative z-20", compact && "px-3 pb-3")}
+      data-testid="kiro-composer"
+    >
+      {/* 拖拽提示：覆盖 Composer Surface（不覆盖整个 Workspace），轻量 */}
+      {dragOver && (
+        <div className="absolute inset-0 z-40 rounded-2xl border-2 border-dashed border-line-strong bg-surface/90 backdrop-blur-[1px] flex items-center justify-center pointer-events-none">
+          <span className="text-xs font-bold text-charcoal">释放以添加到 Kiro</span>
+        </div>
+      )}
+
+      <div className="max-w-[820px] mx-auto">
+        {/* Context Bar：Composer 外上方，明确 Kiro 正在使用的数据范围（Workspace/Sandbox 经 leading slot 同层） */}
+        <KiroContextBar
+          contexts={contexts}
+          onRemove={onRemoveContext}
+          compact={compact}
+          locked={currentTurnScopeLocked}
+          leading={
+            computerEnabled ? (
+              <>
+                <KiroWorkspacePicker
+                  workspace={workspace ?? null}
+                  isSandbox={workspaceIsSandbox ?? false}
+                  grantWarning={grantWarning ?? null}
+                  disabled={currentTurnScopeLocked}
+                />
+                {grantWarning && (
+                  <span className="text-[9px] font-semibold text-danger truncate">需要重新授权</span>
+                )}
+              </>
+            ) : undefined
+          }
+        />
+
+        {/* Composer Surface：Attachment Shelf（次级层） + Prompt + Toolbar（主层）。
+            focus 仅保留 border 变色（无阴影 / 无浮起，输入时画面稳定） */}
+        <div
+          className={cn(
+            "bg-surface border border-line-strong rounded-2xl shadow-subtle",
+            "focus-within:border-sandrift",
+            "transition-[border-color] duration-[var(--kiro-motion-control,var(--motion-fast))] ease-[var(--ease-standard)]",
+            introActive && "kiro-composer-intro"
+          )}
+        >
+          {/* Attachment Shelf：无附件时完全不存在 */}
+          {attachments.length > 0 && (
+            <div
+              className={cn(
+                "bg-alabaster/40 border-b border-line-soft rounded-t-2xl",
+                compact ? "px-2.5 py-1.5" : "px-3 py-2"
+              )}
+            >
+              {/* Tray：单行横向滚动，附件再多也不撑高 Composer */}
+              <div
+                className="flex items-center gap-1.5 overflow-x-auto kiro-attachment-tray"
+                data-testid="kiro-attachments"
+              >
+                {attachments.map((a) => (
+                  <KiroAttachmentChip
+                    key={a.id}
+                    attachment={a}
+                    onRemove={onRemoveAttachment}
+                    onRetry={onRetryAttachment}
+                    onSaveToCourse={onSaveAttachmentToCourse}
+                    disabled={currentTurnScopeLocked}
+                  />
+                ))}
+                {(hasImages && !visionEnabled) || scannedBlocked ? (
+                  <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-warning px-1.5 whitespace-nowrap">
+                    {scannedBlocked ? "扫描型 PDF 需要支持图片理解的模型" : "当前模型不支持图片理解"}
+                    <button
+                      onClick={() => setModelOpen(true)}
+                      className="underline underline-offset-2 decoration-line-strong hover:text-charcoal"
+                    >
+                      切换模型
+                    </button>
+                  </span>
+                ) : null}
+                {preparingVision && (
+                  <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-sandrift px-1.5 whitespace-nowrap">
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                    正在准备扫描 PDF…
+                  </span>
+                )}
+              </div>
+              {/* Task B V1.1：截图就绪（ready + vision + 无 processing）+ 输入为空时显示 intent chips。
+                  点击只填 prompt（不直接 Send；发送必须走 canonical submit() 的 canSend/vision gate/防重复） */}
+              {hasReadyImages && visionEnabled && !hasProcessing && !currentTurnScopeLocked && text.trim().length === 0 && (
+                <div className="flex items-center gap-1.5 pt-1.5">
+                  {["处理截图通知", "整理任务与 DDL", "识别课程变动"].map((label) => (
+                    <button
+                      key={label}
+                      type="button"
+                      data-testid="visual-suggestion"
+                      onClick={() => {
+                        setText(label);
+                        requestAnimationFrame(() => {
+                          if (taRef.current) {
+                            taRef.current.focus();
+                            autoGrow();
+                          }
+                        });
+                      }}
+                      className="ux-press flex items-center gap-1.5 rounded-lg border border-line bg-[#F7F5F5] text-[11px] font-semibold text-satin-grey hover:text-charcoal hover:border-line-strong transition-colors px-2 h-6 whitespace-nowrap"
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Prompt + Toolbar：统一内部 gutter，prompt 区保持最干净 */}
+          <div className={cn(compact ? "px-2.5 pt-2 pb-2" : "px-3 pt-2.5 pb-2.5")}>
+            <textarea
+              ref={taRef}
+              value={text}
+              onChange={(e) => {
+                setText(e.target.value);
+                autoGrow();
+              }}
+              onKeyDown={handleKeyDown}
+              onPaste={handlePaste}
+              rows={1}
+              placeholder="Ask Kiro…"
+              aria-label="Ask Kiro"
+              className={cn(
+                "w-full resize-none bg-transparent text-sm text-charcoal placeholder-sandrift focus:outline-none leading-relaxed",
+                // Computer Agent ON：输入区稳定最低高度（desktop 64 / compact 44），不随 context strip 压缩
+                computerEnabled && (compact ? "min-h-[44px]" : "min-h-[64px]")
+              )}
+            />
+
+            <div className="flex items-center justify-between gap-2 pt-1.5">
+              <div className="flex items-center gap-0.5">
+                <div ref={attachRef} className="relative">
+                  <button
+                    onClick={() => {
+                      if (currentTurnScopeLocked) return;
+                      setAttachOpen((v) => !v);
+                      setModelOpen(false);
+                      setPickerOpen(false);
+                      setMaterialPickerOpen(false);
+                    }}
+                    aria-label="添加附件"
+                    aria-expanded={attachOpen}
+                    aria-haspopup="menu"
+                    disabled={currentTurnScopeLocked}
+                    title="添加附件"
+                    className="w-9 h-9 flex items-center justify-center rounded-xl text-sandrift hover:bg-alabaster hover:text-charcoal transition-colors"
+                  >
+                    <Plus className="w-4 h-4" />
+                  </button>
+                  {attachOpen && (
+                    <PopoverPanel open placement="top-start" motionProfile="kiro" className="w-60">
+                      <KiroAttachmentPicker
+                        onClose={() => setAttachOpen(false)}
+                        onFiles={onAddFiles}
+                        onMaterials={() => setMaterialPickerOpen(true)}
+                      />
+                    </PopoverPanel>
+                  )}
+                  {materialPickerOpen && (
+                    <PopoverPanel open placement="top-start" motionProfile="kiro" className="w-72">
+                      <KiroMaterialPicker
+                        onClose={() => setMaterialPickerOpen(false)}
+                        onPick={(ref) => {
+                          onAddMaterial(ref);
+                          setMaterialPickerOpen(false);
+                          setAttachOpen(false);
+                        }}
+                      />
+                    </PopoverPanel>
+                  )}
+                </div>
+
+                <div ref={pickerWrapRef} className="relative">
+                  <button
+                    onClick={() => {
+                      if (currentTurnScopeLocked) return;
+                      setPickerOpen((v) => !v);
+                      setAttachOpen(false);
+                      setModelOpen(false);
+                    }}
+                    aria-label="选择上下文"
+                    aria-expanded={pickerOpen}
+                    title="添加 ClassFlow 上下文"
+                    disabled={currentTurnScopeLocked}
+                    className="w-9 h-9 flex items-center justify-center rounded-xl text-sandrift hover:bg-alabaster hover:text-charcoal transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    <AtSign className="w-4 h-4" />
+                  </button>
+                  <KiroContextPicker
+                    open={pickerOpen}
+                    onClose={() => setPickerOpen(false)}
+                    onPick={(ref) => {
+                      onAddContext(ref);
+                      setPickerOpen(false);
+                    }}
+                  />
+                </div>
+
+                {/* Task 14：Kiro Search（联网搜索）轻量开关——下一 Turn preference：回复期间可切换 */}
+                <button
+                  onClick={() => {
+                    if (!nextTurnPreferencesLocked) setWebSearchEnabled(!webSearchEnabled);
+                  }}
+                  aria-label="联网搜索"
+                  aria-pressed={webSearchEnabled}
+                  title={webSearchEnabled ? "联网搜索：自动（下一条消息生效）" : "联网搜索：关闭（下一条消息生效）"}
+                  disabled={nextTurnPreferencesLocked}
+                  className={cn(
+                    "w-9 h-9 flex items-center justify-center rounded-xl transition-colors",
+                    webSearchEnabled
+                      ? "text-charcoal bg-pastel-mint/60 hover:bg-pastel-mint"
+                      : "text-sandrift hover:bg-alabaster hover:text-charcoal"
+                  )}
+                >
+                  <Globe2 className="w-4 h-4" />
+                </button>
+
+                {/* Kiro Computer Agent V1：Computer toggle（ON = active；无 workspace 时引导授权） */}
+                <button
+                  onClick={() => {
+                    if (currentTurnScopeLocked) return;
+                    onToggleComputer?.(!computerEnabled);
+                  }}
+                  aria-label="Computer"
+                  aria-pressed={computerEnabled}
+                  title={computerEnabled ? "Computer Agent：已开启" : "Computer Agent：关闭"}
+                  disabled={currentTurnScopeLocked}
+                  className={cn(
+                    "w-9 h-9 flex items-center justify-center rounded-xl transition-colors",
+                    computerEnabled
+                      ? "text-charcoal bg-pastel-mint/60 hover:bg-pastel-mint"
+                      : "text-sandrift hover:bg-alabaster hover:text-charcoal"
+                  )}
+                >
+                  <Cpu className="w-4 h-4" />
+                </button>
+              </div>
+
+              <div className="flex items-center gap-2">
+                {/* Kiro Computer Agent V1：Agent Mode（仅 Computer ON）+ Reasoning（capability-driven）——
+                    下一 Turn preference：回复期间可切换（当前 Turn 用 frozen agentMode/reasoningEffort）。
+                    compact（Sidecar）：一级栏只显示图标，文字进二级 popover */}
+                {computerEnabled && agentMode && (
+                  <KiroAgentModeMenu
+                    mode={agentMode}
+                    onChange={(m) => onSetAgentMode?.(m)}
+                    disabled={nextTurnPreferencesLocked}
+                    iconOnly={compact}
+                  />
+                )}
+                {reasoningCapability && reasoningEffort && (
+                  <KiroReasoningMenu
+                    capability={reasoningCapability}
+                    effort={reasoningEffort}
+                    onChange={(e) => onSetReasoningEffort?.(e)}
+                    disabled={nextTurnPreferencesLocked}
+                    iconOnly={compact}
+                  />
+                )}
+                <div ref={modelRef} className="relative">
+                  <button
+                    onClick={() => {
+                      if (nextTurnPreferencesLocked) return;
+                      setModelOpen((v) => !v);
+                      setAttachOpen(false);
+                      setPickerOpen(false);
+                    }}
+                    aria-label="选择模型"
+                    aria-expanded={modelOpen}
+                    aria-haspopup="menu"
+                    title={turnInFlight ? "选择下一条消息使用的模型" : "选择模型"}
+                    disabled={nextTurnPreferencesLocked}
+                    data-model-open={modelOpen}
+                    className={cn(
+                      "flex items-center h-9 rounded-xl transition-colors disabled:opacity-40 disabled:cursor-not-allowed",
+                      compact
+                        ? cn("w-9 justify-center", modelOpen ? "bg-alabaster text-charcoal" : "text-sandrift hover:bg-alabaster hover:text-charcoal")
+                        : cn(
+                            "gap-1.5 px-2.5 text-[11px] font-semibold",
+                            modelOpen
+                              ? "bg-alabaster text-charcoal border border-line-strong"
+                              : "text-sandrift border border-transparent hover:bg-alabaster hover:text-charcoal"
+                          )
+                    )}
+                  >
+                    <ProviderLogo vendor={activeModelVendor} size="sm" />
+                    {!compact && (
+                      <>
+                        <span className="truncate max-w-[140px]">{activeModelName}</span>
+                        <ChevronDown
+                          className={cn(
+                            "w-3 h-3 shrink-0 transition-transform duration-[var(--kiro-motion-control,var(--motion-fast))] ease-[var(--ease-standard)]",
+                            modelOpen && "rotate-180"
+                          )}
+                        />
+                      </>
+                    )}
+                  </button>
+                  {modelOpen && (
+                    <PopoverPanel open placement="top-end" motionProfile="kiro" className="w-60">
+                      {modelMenu}
+                    </PopoverPanel>
+                  )}
+                </div>
+
+                <KiroSendControl
+                  canSend={canSend}
+                  preparing={submitting || !!preparingSend}
+                  inFlight={turnInFlight}
+                  onSend={submit}
+                  onStop={onStop}
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Composer 下方只保留真正需要用户注意的状态 */}
+        {!configured ? (
+          <div className={cn("flex items-center justify-between gap-2 mt-2", compact ? "px-0" : "px-0.5")}>
+            <p className="text-[11px] text-sandrift">先连接一个 AI 服务即可开始使用 Kiro。</p>
+            <button
+              onClick={onOpenSettings}
+              className="flex items-center gap-1 px-2.5 h-8 rounded-lg text-[11px] font-bold text-charcoal bg-pastel-mint hover:bg-pastel-mint transition-colors"
+            >
+              <Settings className="w-3.5 h-3.5" />
+              配置 AI 服务
+            </button>
+          </div>
+        ) : attachments.length > 0 ? (
+          <div className={cn("mt-1.5 space-y-1", compact ? "px-0" : "px-0.5")}>
+            <p className="text-[10px] text-sandrift">
+              文件内容会发送给当前选择的 AI 服务以完成你的请求。
+            </p>
+            {/* Task B V1.1：首次添加图片轻提示，显式「知道了」后才不再显示（非 Dialog） */}
+            {hasImages && !visualPrivacyNoticeSeen && (
+              <p
+                data-testid="visual-privacy-notice"
+                className="flex items-center gap-2 text-[10px] text-sandrift"
+              >
+                <span>图片仅用于当前 Kiro 对话，不会自动保存到课程资料。</span>
+                <button
+                  type="button"
+                  data-testid="visual-privacy-dismiss"
+                  onClick={() => setVisualPrivacyNoticeSeen(true)}
+                  className="flex items-center gap-0.5 px-1.5 h-5 rounded-md text-[10px] font-bold text-satin-grey bg-alabaster border border-line-soft hover:text-charcoal hover:border-line-strong transition-colors"
+                >
+                  知道了
+                </button>
+              </p>
+            )}
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+
+

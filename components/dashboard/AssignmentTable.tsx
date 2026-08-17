@@ -1,0 +1,941 @@
+﻿"use client";
+
+import React, { useState, useEffect, useMemo, useRef } from "react";
+import {
+  ChevronRight,
+  ChevronLeft,
+  Plus,
+  AlertTriangle,
+  CheckCircle2,
+  Edit2,
+  Trash2,
+  BookOpen,
+  X,
+  CalendarPlus,
+} from "lucide-react";
+import { useAppStore } from "@/store/useAppStore";
+import { useToastStore } from "@/store/useToastStore";
+import { useConfirmStore } from "@/store/useConfirmStore";
+import { TimeSliceFilter, Priority, Assignment } from "@/types";
+import { openAssignmentEditor } from "@/lib/uiEvents";
+import { useEnterOnAdd } from "@/lib/useEnterOnAdd";
+import { useExitPresenceList } from "@/lib/useExitPresenceList";
+import { ExitCollapse } from "@/components/ui/ExitCollapse";
+import { cn, getPriorityMeta } from "@/lib/utils";
+import { UISelect } from "@/components/ui/Select";
+import { isToday, differenceInDays } from "date-fns";
+import { parseLocalDDL, getLocalDDLDate } from "@/lib/ddl";
+import { formatEstimatedMinutes } from "@/lib/tasks/taskSemantics";
+import { RECURRENCE_LABELS } from "@/lib/tasks/taskRecurrence";
+import { createAssignmentActions } from "@/lib/assignmentActions";
+import { getAssignmentContextCommands } from "@/lib/commands";
+import { paginate } from "@/lib/pagination";
+import {
+  toggleSelection,
+  rangeSelection,
+  selectAllVisible,
+  sanitizeSelection,
+  sanitizeHighlight,
+} from "@/lib/assignmentSelection";
+import { AssignmentPeekPanel } from "@/components/assignment/AssignmentPeekPanel";
+import { AssignmentContextMenu, ContextMenuCommand } from "@/components/assignment/AssignmentContextMenu";
+import { healthViewMeta } from "@/lib/tasks/taskHealthView";
+import { useKiroHandoff } from "@/hooks/useKiroHandoff";
+import type { AssignmentWorkspaceController } from "@/hooks/useAssignmentWorkspaceController";
+
+export interface AssignmentTableProps {
+  /** compact：Overview 只读点击式；workspace：Assignments Tab 的键盘优先工作区 */
+  mode?: "compact" | "workspace";
+  /** App Chrome V2：workspace 模式共享控制器（视图/筛选/搜索由 ViewBar 与列表共用） */
+  workspaceController?: AssignmentWorkspaceController;
+  /** Task 1：workspace Quick Add 受控（由 AssignmentsWorkspace Header 主按钮驱动） */
+  workspaceQuickAddOpen?: boolean;
+  onWorkspaceQuickAddOpenChange?: (open: boolean) => void;
+}
+
+const PRIORITY_OPTIONS: { value: Priority; label: string }[] = [
+  { value: "urgent", label: "紧急" },
+  { value: "high", label: "高" },
+  { value: "medium", label: "中" },
+  { value: "low", label: "低" },
+];
+
+/** compact 模式每页任务数（超出后分页，不内部滚动） */
+const COMPACT_PAGE_SIZE = 5;
+
+export function AssignmentTable({
+  mode = "compact",
+  workspaceController,
+  workspaceQuickAddOpen,
+  onWorkspaceQuickAddOpenChange,
+}: AssignmentTableProps) {
+  const isWorkspace = mode === "workspace";
+  const controller = isWorkspace ? workspaceController : null;
+
+  // Task 1：workspace Quick Add 受控（Header 主按钮）；compact 保持内部状态
+  const quickAddOpen = isWorkspace ? (workspaceQuickAddOpen ?? false) : false;
+  const setQuickAddOpen = (open: boolean) => {
+    if (isWorkspace) onWorkspaceQuickAddOpenChange?.(open);
+  };
+
+  const {
+    assignments,
+    courses,
+    updateAssignmentStatus,
+    setActiveTab,
+    assignmentTimeSlice,
+    setAssignmentTimeSlice,
+    studyBlocks,
+  } = useAppStore();
+  const pushToast = useToastStore((s) => s.pushToast);
+  const confirmRequest = useConfirmStore((s) => s.confirm);
+  const handoff = useKiroHandoff();
+
+  const highlightedAssignmentId = useAppStore((s) => s.highlightedAssignmentId);
+  const setHighlightedAssignmentId = useAppStore((s) => s.setHighlightedAssignmentId);
+  const assignmentSelection = useAppStore((s) => s.assignmentSelection);
+  const setAssignmentSelection = useAppStore((s) => s.setAssignmentSelection);
+  const assignmentPeekId = useAppStore((s) => s.assignmentPeekId);
+  const setAssignmentPeekId = useAppStore((s) => s.setAssignmentPeekId);
+  // 单键快捷键开关：关闭后 J/K/X/Space 失效，方向键/Enter/Cmd+A/Esc 保留
+  const singleKeyEnabled = useAppStore((s) => s.preferences.enableSingleKeyShortcuts);
+  const contentDensity = useAppStore((s) => s.preferences.contentDensity);
+  const compactDensity = contentDensity === "compact";
+
+  // compact：课程筛选（workspace 模式的 courseFilter 由 ViewBar 控制器持有）
+  const [localCourseFilter, setLocalCourseFilter] = useState<string>("all");
+  const courseFilter = isWorkspace ? (controller?.courseFilter ?? "all") : localCourseFilter;
+  const setCourseFilter = (v: string) => {
+    if (isWorkspace) controller?.setCourseFilter(v);
+    else setLocalCourseFilter(v);
+  };
+  const newTaskIds = useEnterOnAdd(assignments.map((a) => a.id));
+
+  const today = new Date();
+
+  // 课程筛选（compact / workspace 共用）
+  const courseFiltered = assignments.filter(
+    (item) => courseFilter === "all" || item.courseId === courseFilter
+  );
+
+  // compact：TimeSlice 筛选（Task V2 后保持原逻辑，compact Overview 不动）
+  const filteredAssignments = courseFiltered.filter((item) => {
+    if (assignmentTimeSlice === "all" || assignmentTimeSlice === "completed") {
+      return assignmentTimeSlice === "completed" ? item.status === "completed" : true;
+    }
+    const ddlDate = parseLocalDDL(item.ddl);
+    if (!ddlDate) return false;
+    const diff = differenceInDays(ddlDate, today);
+
+    switch (assignmentTimeSlice) {
+      case "overdue":
+        return item.status !== "completed" && diff < 0 && !isToday(ddlDate);
+      case "today":
+        return isToday(ddlDate);
+      case "3days":
+        return item.status !== "completed" && diff >= 0 && diff <= 3;
+      case "7days":
+        return item.status !== "completed" && diff >= 0 && diff <= 7;
+      default:
+        return true;
+    }
+  });
+
+  // Workspace V2：视图派生 + 筛选 + 搜索由控制器统一完成（ViewBar 与列表共享，避免二次 derive）
+  const workspaceItems = isWorkspace ? (controller?.items ?? []) : [];
+  const workspaceResetKey = isWorkspace
+    ? `${controller?.view}|${controller?.courseFilter}|${controller?.searchQuery}|${controller?.riskOnly}`
+    : "";
+
+  const filteredIds = useMemo(
+    () => (isWorkspace ? workspaceItems.map((it) => it.task.id) : filteredAssignments.map((a) => a.id)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [isWorkspace, workspaceItems, courseFilter, assignments]
+  );
+  const filteredIdsKey = filteredIds.join(",");
+
+  // IM4A：Exit-only 列表保留——仅真实数据 mutation（完成/删除导致离开当前视图）触发 Row 退出；
+  // View/筛选/搜索/风险过滤 变化（resetKey）直接同步新列表，不播放大面积退出
+  const retainedWorkspaceList = useExitPresenceList({
+    items: workspaceItems,
+    getId: (it) => it.task.id,
+    resetKey: workspaceResetKey,
+  });
+
+  // 筛选变化 → 清理隐藏的 selection / highlight（保留可见项）
+  useEffect(() => {
+    setAssignmentSelection(sanitizeSelection(assignmentSelection, filteredIds));
+    setHighlightedAssignmentId(sanitizeHighlight(highlightedAssignmentId, filteredIds));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filteredIdsKey]);
+
+  // ---- Compact 分页（纯展示状态，不写入 store） ----
+  // workspace 模式保持完整列表（键盘导航/多选语义不截断）
+  const [compactPage, setCompactPage] = useState(1);
+  const compactPaged = useMemo(() => {
+    if (isWorkspace) return null;
+    return paginate(filteredAssignments, compactPage, COMPACT_PAGE_SIZE);
+  }, [isWorkspace, filteredAssignments, compactPage]);
+  // 渲染用 clamp 后的安全页号（数据变化导致总页数减少时自动回退，绝不出现 第 2 / 1 页）
+  const pagedAssignments = compactPaged?.items ?? filteredAssignments;
+  const compactTotalPages = compactPaged?.totalPages ?? 1;
+  const compactSafePage = compactPaged?.currentPage ?? 1;
+
+  // 桌面（Peek 仅 >=1024px）
+  const [desktop, setDesktop] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia("(min-width: 1024px)");
+    const apply = () => setDesktop(mq.matches);
+    apply();
+    mq.addEventListener("change", apply);
+    return () => mq.removeEventListener("change", apply);
+  }, []);
+
+  // 动作工厂：Context Menu / Bulk Bar / Command Center 同一实现
+  const actions = useMemo(
+    () =>
+      createAssignmentActions({
+        getAssignments: () => useAppStore.getState().assignments,
+        updateAssignment: (a) => useAppStore.getState().updateAssignment(a),
+        setSelectedAssignmentId: (id) => useAppStore.getState().setSelectedAssignmentId(id),
+        deleteAssignment: (id) => useAppStore.getState().deleteAssignment(id),
+        restoreAssignment: (snapshot) => useAppStore.getState().restoreAssignment(snapshot),
+        pushToast: (t) => pushToast(t),
+        confirm: (r) => confirmRequest(r),
+      }),
+    [pushToast, confirmRequest]
+  );
+
+  const handleAddAssignmentClick = () => {
+    if (isWorkspace) {
+      // Quick Add V2：Header 下方 Inline Card（全屏编辑走「更多详情」）——由 AssignmentsWorkspace Header 驱动
+      setQuickAddOpen(!quickAddOpen);
+      return;
+    }
+    openAssignmentEditor(courseFilter !== "all" ? { courseId: courseFilter } : {});
+  };
+
+  const handleEditClick = (e: React.MouseEvent, assignmentId: string) => {
+    e.stopPropagation();
+    openAssignmentEditor({ assignmentId });
+  };
+
+  const overdueCount = assignments.filter((a) => {
+    if (a.status === "completed") return false;
+    const ddlDate = parseLocalDDL(a.ddl);
+    if (!ddlDate) return false;
+    return differenceInDays(ddlDate, today) < 0 && !isToday(ddlDate);
+  }).length;
+
+  // ---- Workspace：highlight / 键盘导航 / selection / peek / context menu ----
+
+  const anchorRef = useRef<string | null>(null);
+
+  const moveHighlight = (dir: 1 | -1) => {
+    if (filteredIds.length === 0) return;
+    const idx = highlightedAssignmentId ? filteredIds.indexOf(highlightedAssignmentId) : -1;
+    let next = idx === -1 ? (dir === 1 ? 0 : filteredIds.length - 1) : idx + dir;
+    if (next < 0) next = filteredIds.length - 1;
+    if (next >= filteredIds.length) next = 0;
+    const nextId = filteredIds[next];
+    setHighlightedAssignmentId(nextId);
+    // Peek 打开时跟随 highlight 连续预览（不关闭重开）
+    if (assignmentPeekId) setAssignmentPeekId(nextId);
+  };
+
+  const [ctxMenu, setCtxMenu] = useState<{
+    anchorX: number;
+    anchorY: number;
+    ids: string[];
+    highlightedId: string | null;
+  } | null>(null);
+  const [bulkDdlOpen, setBulkDdlOpen] = useState(false);
+  const [bulkDdlDate, setBulkDdlDate] = useState("");
+  const [bulkShiftDays, setBulkShiftDays] = useState("");
+
+  const handleListKeyDown = (e: React.KeyboardEvent) => {
+    if (e.target !== e.currentTarget) return;
+    const k = e.key;
+
+    // 单键快捷键关闭：只保留标准可访问键盘操作（方向键 / Enter / Cmd+A / Esc）
+    if (!singleKeyEnabled) {
+      if (k === "ArrowDown" || k === "ArrowUp") {
+        e.preventDefault();
+        moveHighlight(k === "ArrowDown" ? 1 : -1);
+      } else if (k === "Enter") {
+        if (ctxMenu) {
+          setCtxMenu(null);
+          return;
+        }
+        if (!highlightedAssignmentId) return;
+        e.preventDefault();
+        setAssignmentPeekId(null);
+        actions.openDrawer(highlightedAssignmentId);
+      } else if ((e.ctrlKey || e.metaKey) && k === "a") {
+        e.preventDefault();
+        setAssignmentSelection(selectAllVisible(filteredIds));
+      } else if (k === "Escape") {
+        if (ctxMenu) {
+          setCtxMenu(null);
+        } else if (assignmentPeekId) {
+          setAssignmentPeekId(null);
+        } else if (assignmentSelection.length > 0) {
+          setAssignmentSelection([]);
+        } else {
+          setHighlightedAssignmentId(null);
+          (e.currentTarget as HTMLElement).blur();
+        }
+      }
+      return;
+    }
+
+    if (k === "ArrowDown" || k === "j" || k === "J") {
+      e.preventDefault();
+      moveHighlight(1);
+    } else if (k === "ArrowUp" || k === "k" || k === "K") {
+      e.preventDefault();
+      moveHighlight(-1);
+    } else if (k === "Enter") {
+      if (ctxMenu) {
+        setCtxMenu(null);
+        return;
+      }
+      if (!highlightedAssignmentId) return;
+      e.preventDefault();
+      setAssignmentPeekId(null);
+      actions.openDrawer(highlightedAssignmentId);
+    } else if (k === " ") {
+      if (!desktop || !highlightedAssignmentId) return;
+      e.preventDefault();
+      setAssignmentPeekId(
+        assignmentPeekId === highlightedAssignmentId ? null : highlightedAssignmentId
+      );
+    } else if (k === "x" || k === "X") {
+      if (!highlightedAssignmentId) return;
+      e.preventDefault();
+      anchorRef.current = highlightedAssignmentId;
+      setAssignmentSelection(toggleSelection(assignmentSelection, highlightedAssignmentId));
+    } else if ((e.ctrlKey || e.metaKey) && k === "a") {
+      e.preventDefault();
+      setAssignmentSelection(selectAllVisible(filteredIds));
+    } else if (k === "Escape") {
+      if (ctxMenu) {
+        setCtxMenu(null);
+      } else if (assignmentPeekId) {
+        setAssignmentPeekId(null);
+      } else if (assignmentSelection.length > 0) {
+        setAssignmentSelection([]);
+      } else {
+        setHighlightedAssignmentId(null);
+        (e.currentTarget as HTMLElement).blur();
+      }
+    }
+  };
+
+  const handleRowClick = (e: React.MouseEvent, taskId: string) => {
+    if (isWorkspace && e.shiftKey) {
+      e.preventDefault();
+      const anchor = anchorRef.current ?? highlightedAssignmentId ?? taskId;
+      setAssignmentSelection(rangeSelection(filteredIds, anchor, taskId));
+      anchorRef.current = taskId;
+      setHighlightedAssignmentId(taskId);
+      return;
+    }
+    anchorRef.current = taskId;
+    setHighlightedAssignmentId(taskId);
+    if (isWorkspace) setAssignmentPeekId(null);
+    actions.openDrawer(taskId);
+  };
+
+  const handleRowContextMenu = (e: React.MouseEvent, taskId: string) => {
+    if (!isWorkspace) return;
+    e.preventDefault();
+    setHighlightedAssignmentId(taskId);
+    const ids = assignmentSelection.includes(taskId) ? assignmentSelection : [taskId];
+    // 记录 Viewport 锚点（clientX/clientY）；菜单定位在 AssignmentContextMenu 内
+    // 按真实尺寸 computeContextMenuPosition（翻转 / clamp），不做 magic 偏移
+    setCtxMenu({
+      anchorX: e.clientX,
+      anchorY: e.clientY,
+      ids,
+      highlightedId: taskId,
+    });
+  };
+
+  // Context Menu 项来自 Command Registry（打开/编辑/完成/进行中/优先级/删除）
+  const menuCtx = useMemo(() => {
+    if (!ctxMenu) return null;
+    return {
+      assignmentActions: actions,
+      highlightedAssignmentId: ctxMenu.highlightedId,
+      // 菜单场景无 entity 上下文：不触发「编辑」dedupe，菜单保持完整动作
+      selectedAssignmentId: null,
+      close: () => setCtxMenu(null),
+    } as Parameters<typeof getAssignmentContextCommands>[0];
+  }, [ctxMenu, actions]);
+
+  const menuCommands = useMemo<ContextMenuCommand[]>(() => {
+    if (!ctxMenu || !menuCtx) return [];
+    return getAssignmentContextCommands(menuCtx, ctxMenu.ids).map(
+      (cmd): ContextMenuCommand => ({
+        ...cmd,
+        run: () => cmd.run(menuCtx as never),
+      })
+    );
+  }, [ctxMenu, menuCtx]);
+
+  // 菜单目标任务中是否已有 DDL（决定「清除截止时间」显示）
+  const ctxHasDdl = useMemo(() => {
+    if (!ctxMenu) return false;
+    return ctxMenu.ids.some((id) => assignments.find((a) => a.id === id)?.ddl);
+  }, [ctxMenu, assignments]);
+
+  const bulkCount = assignmentSelection.length;
+  const applyBulkDDL = () => {
+    if (!bulkDdlDate) return;
+    actions.setDDLDate(assignmentSelection, bulkDdlDate);
+    setBulkDdlOpen(false);
+    setBulkDdlDate("");
+  };
+  const applyBulkShift = () => {
+    const days = Number(bulkShiftDays);
+    if (!Number.isFinite(days) || days === 0) return;
+    actions.shiftDDL(assignmentSelection, days);
+    setBulkDdlOpen(false);
+    setBulkShiftDays("");
+  };
+  const applyCtxDDL = (date: string | null) => {
+    if (!ctxMenu) return;
+    if (date === null) {
+      actions.clearDDLDate(ctxMenu.ids);
+    } else if (date) {
+      actions.setDDLDate(ctxMenu.ids, date);
+    }
+    setCtxMenu(null);
+  };
+
+  // ---- IM4A：行渲染（workspace 与 compact 共用；ExitRow 只用于 workspace mutation exit） ----
+  const renderAssignmentRow = (task: Assignment) => {
+    const wsMeta = isWorkspace
+      ? workspaceItems.find((it) => it.task.id === task.id)?.meta
+      : undefined;
+    const course = courses.find((c) => c.id === task.courseId);
+    const priorityMeta = getPriorityMeta(task.priority);
+    const hasDdl = !!task.ddl && parseLocalDDL(task.ddl) !== null;
+    const formattedDate = hasDdl ? getLocalDDLDate(task.ddl) : "无截止日期";
+    const isCompleted = task.status === "completed";
+
+    const ddlDate = parseLocalDDL(task.ddl);
+    const isOverdueTask =
+      !!ddlDate &&
+      !isCompleted &&
+      differenceInDays(ddlDate, today) < 0 &&
+      !isToday(ddlDate);
+
+    const isNew = newTaskIds.has(task.id);
+    const isHighlighted = isWorkspace && highlightedAssignmentId === task.id;
+    const isSelected = isWorkspace && assignmentSelection.includes(task.id);
+
+    return (
+      <div
+        onClick={(e) => handleRowClick(e, task.id)}
+        onContextMenu={(e) => handleRowContextMenu(e, task.id)}
+        onMouseEnter={() => {
+          if (isWorkspace) setHighlightedAssignmentId(task.id);
+        }}
+        role="button"
+        tabIndex={-1}
+        data-assignment-id={task.id}
+        className={cn(
+          isWorkspace && compactDensity ? "p-2" : "p-3",
+          "rounded-xl transition-colors duration-[var(--motion-fast)] ease-[var(--ease-standard)] cursor-pointer flex items-center justify-between group",
+          isNew && "animate-enter",
+          isWorkspace
+            ? isSelected
+              ? "bg-pastel-mint border border-line-strong"
+              : isOverdueTask
+              ? "bg-danger-bg border border-danger-border"
+              : isHighlighted
+              ? "bg-alabaster/80 ring-1 ring-inset ring-line-strong border border-transparent"
+              : "hover:bg-alabaster bg-surface border border-line-soft"
+            : isOverdueTask
+            ? "bg-danger-bg border border-danger-border"
+            : "rounded-lg hover:bg-alabaster"
+        )}
+      >
+        <div className="flex items-center space-x-3 min-w-0 flex-1">
+          <input
+            type="checkbox"
+            checked={isCompleted}
+            onChange={(e) => {
+              e.stopPropagation();
+              updateAssignmentStatus(
+                task.id,
+                e.target.checked ? "completed" : "doing"
+              );
+            }}
+            onClick={(e) => e.stopPropagation()}
+            className="w-4 h-4 rounded text-charcoal border-[#CDB9AB] focus:ring-0 cursor-pointer shrink-0"
+          />
+
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center space-x-2">
+              <h4
+                className={`text-xs font-bold truncate ${
+                  isCompleted
+                    ? "line-through text-sandrift"
+                    : "text-charcoal group-hover:text-black"
+                }`}
+              >
+                {task.title}
+              </h4>
+              <span
+                className={cn(
+                  "text-[10px] px-1.5 py-0.5 rounded font-bold shrink-0 border",
+                  // compact：medium / low 不套 Badge，退化为低对比文字（与 UpcomingDDL 一致）
+                  isWorkspace || task.priority === "urgent" || task.priority === "high"
+                    ? `${priorityMeta.bg} ${priorityMeta.text} ${priorityMeta.border}`
+                    : "border-transparent bg-transparent text-satin-grey"
+                )}
+              >
+                {priorityMeta.label}
+              </span>
+              {isOverdueTask && (
+                <span className="text-[10px] bg-danger text-white px-1.5 py-0.5 rounded font-extrabold shrink-0">
+                  已逾期
+                </span>
+              )}
+              {/* Health 异常提示（仅 at-risk / attention；safe 等正常任务保持干净） */}
+              {isWorkspace &&
+                wsMeta?.health &&
+                !isOverdueTask &&
+                (wsMeta.health === "at-risk" || wsMeta.health === "attention") && (
+                  <span
+                    className={cn(
+                      "text-[10px] px-1.5 py-0.5 rounded font-bold shrink-0 border",
+                      healthViewMeta(wsMeta.health).className
+                    )}
+                  >
+                    {healthViewMeta(wsMeta.health).label}
+                  </span>
+                )}
+            </div>
+
+            <div className="flex items-center space-x-2 text-[10px] text-sandrift mt-1">
+              <span className="truncate font-semibold">{course?.name || "通用"}</span>
+              <span>·</span>
+              <span className={hasDdl ? "" : "text-satin-grey/70"}>截止: {formattedDate}</span>
+              {task.estimatedMinutes && isWorkspace && (
+                <>
+                  <span>·</span>
+                  <span>预计 {formatEstimatedMinutes(task.estimatedMinutes)}</span>
+                </>
+              )}
+              {/* Task 7F：重复任务弱标记（仅 workspace 完整模式） */}
+              {isWorkspace && task.recurrence && (
+                <>
+                  <span>·</span>
+                  <span className="text-satin-grey/70">
+                    {RECURRENCE_LABELS[task.recurrence]}
+                  </span>
+                </>
+              )}
+              {isWorkspace && wsMeta && wsMeta.studyBlockCount > 0 && (
+                <>
+                  <span>·</span>
+                  <span className="font-semibold text-success/90">
+                    已计划 {formatEstimatedMinutes(wsMeta.scheduledMinutes)}
+                  </span>
+                </>
+              )}
+              {task.subtasks && task.subtasks.length > 0 && (
+                <>
+                  <span>·</span>
+                  <span>
+                    子任务: {task.subtasks.filter((st) => st.completed).length} / {task.subtasks.length}
+                  </span>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+
+        <div className="flex items-center space-x-2 shrink-0 ml-2">
+          <div className="w-16 hidden sm:block">
+            <div className="flex justify-between text-[11px] text-sandrift mb-0.5">
+              <span>进度</span>
+              <span className="font-bold text-charcoal">
+                {task.progress}%
+              </span>
+            </div>
+            <div className="w-full bg-alabaster rounded-full h-1 overflow-hidden">
+              <div
+                className="bg-success h-1 rounded-full transition-[width] duration-[var(--motion-data)] ease-[var(--ease-emphasized)]"
+                style={{ width: `${task.progress}%` }}
+              />
+            </div>
+          </div>
+
+          {/* workspace：操作按钮 hover 可见（键盘 highlight 后用 Context Menu / 快捷键） */}
+          <button
+            onClick={(e) => handleEditClick(e, task.id)}
+            className={cn(
+              "p-1.5 rounded-lg text-sandrift hover:bg-alba hover:text-charcoal transition-colors",
+              isWorkspace && "opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity"
+            )}
+            title="编辑任务"
+          >
+            <Edit2 className="w-3.5 h-3.5" />
+          </button>
+
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              actions.remove([task.id]);
+            }}
+            className={cn(
+              "p-1.5 rounded-lg text-danger hover:bg-danger-bg transition-colors",
+              isWorkspace && "opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity"
+            )}
+            title="删除任务"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+          </button>
+
+          <ChevronRight className="w-3.5 h-3.5 text-sandrift group-hover:text-charcoal transition-colors" />
+        </div>
+      </div>
+    );
+  };
+
+  return (
+    <div
+      className={cn(
+        "bg-surface border border-line rounded-xl shadow-subtle flex flex-col h-full min-w-0",
+        // workspace：edge-owned scroll surface（p-0，Header/Filters/List/Footer 分区拥有 padding；scrollbar 贴卡片右缘）
+        // compact：保持原卡片 padding 布局
+        isWorkspace ? "p-0 justify-start" : "p-4 justify-between space-y-3"
+      )}
+    >
+      {/* Compact Header & Filters：workspace 模式的标题/主创建/视图/筛选/搜索已上移至
+          AssignmentsWorkspace 的 Sticky Chrome（WorkspaceHeader + ViewBar），compact Overview 保持原样 */}
+      {!isWorkspace && (
+      <div className="space-y-3 pb-3.5 border-b border-[#F0EBE1]">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <div className="flex items-center space-x-2">
+            <h3 className="text-sm font-bold text-charcoal">任务清单</h3>
+            <span className="text-[10px] font-semibold text-sandrift">
+              {filteredAssignments.length} 项任务
+            </span>
+            {overdueCount > 0 && (
+              <span className="text-[10px] font-bold text-danger bg-danger-bg px-2 py-0.5 rounded-full border border-danger-border flex items-center gap-1">
+                <AlertTriangle className="w-3 h-3" />
+                {overdueCount} 项已逾期
+              </span>
+            )}
+          </div>
+
+          <div className="flex items-center space-x-2 shrink-0">
+            <button
+              onClick={handleAddAssignmentClick}
+              aria-expanded={undefined}
+              className="ux-press flex items-center space-x-1 h-8 px-3 bg-charcoal hover:bg-black text-white text-xs font-bold rounded-lg transition-colors shadow-subtle shrink-0"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>新增任务</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Filters Row: Course Filter + Time Slice Pills（compact 专属） */}
+        <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+          <div className="flex items-center space-x-1.5 bg-[#F7F5F5] border border-line rounded-lg h-9 px-2.5">
+            <BookOpen className="w-3.5 h-3.5 text-[#A48F82]" />
+            <UISelect
+              value={courseFilter}
+              onChange={(v) => {
+                setCourseFilter(v);
+                setCompactPage(1); // 筛选变化回第一页
+              }}
+              ariaLabel="课程筛选"
+              options={[
+                { value: "all", label: `全部课程 (${assignments.length})` },
+                ...courses.map((c) => ({ value: c.id, label: c.name })),
+              ]}
+              triggerClassName="bg-transparent border-0 h-7 px-1 min-w-[120px] text-xs font-semibold max-w-[160px]"
+              itemClassName="h-8"
+            />
+          </div>
+
+          <div className="flex flex-wrap items-center gap-1 bg-alabaster p-0.5 rounded-lg border border-line-strong text-[11px] font-medium">
+            {[
+              { id: "all", label: "全部" },
+              { id: "overdue", label: "已逾期" },
+              { id: "today", label: "今日截止" },
+              { id: "3days", label: "3天内截止" },
+              { id: "7days", label: "7天内截止" },
+              { id: "completed", label: "已完成归档" },
+            ].map((slice) => {
+              const isActive = assignmentTimeSlice === slice.id;
+              return (
+                <button
+                  key={slice.id}
+                  onClick={() => {
+                    setAssignmentTimeSlice(slice.id as TimeSliceFilter);
+                    setCompactPage(1); // 筛选变化回第一页
+                  }}
+                  className={`px-2.5 py-0.5 rounded-lg transition-colors duration-[var(--motion-fast)] ease-[var(--ease-standard)] ${
+                    isActive
+                      ? "bg-white text-charcoal font-bold shadow-subtle"
+                      : "text-satin-grey hover:text-charcoal"
+                  }`}
+                >
+                  {slice.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+      )}
+
+      {/* Task List：compact = 可伸缩内容区（flex-1 min-h-0）+ 分页；workspace = 完整滚动工作区
+          Layout Hotfix：workspace 列表区由 pt-* 承担首行顶部 inset（不再用 mt-1 margin 叠加），
+          首条任务卡与卡片上边框之间有清晰的 12–16px 呼吸空间；compact 保持原 mt-1 布局 */}
+      <div
+        data-testid="assignment-list"
+        data-density={isWorkspace ? contentDensity : undefined}
+        tabIndex={isWorkspace ? 0 : undefined}
+        onKeyDown={isWorkspace ? handleListKeyDown : undefined}
+        className={cn(
+          "divide-y divide-line-soft flex-1 min-h-0 space-y-1",
+          isWorkspace
+            ? "mt-0 overflow-y-auto px-4 pt-4 pb-1 [scrollbar-gutter:stable] overscroll-contain outline-none focus-visible:ring-2 focus-visible:ring-line-strong"
+            : "mt-1"
+        )}
+      >
+        {/* 空态判断按模式取正确数据源：workspace = 视图派生结果；compact = 分页结果 */}
+        {(isWorkspace ? workspaceItems.length : pagedAssignments.length) === 0 ? (
+          // compact：空状态填满 Header/Filters 与 Footer 之间的完整内容区（真正垂直居中，非 py 假居中）；
+          // workspace：保持原有内边距样式
+          isWorkspace ? (
+            <div className="py-10 text-center text-xs text-sandrift space-y-1">
+              <CheckCircle2 className="w-8 h-8 mx-auto text-success" />
+              <p>该视图暂无任务</p>
+            </div>
+          ) : (
+            <div
+              data-testid="assignment-empty"
+              className="h-full flex flex-col items-center justify-center gap-2.5 text-center"
+            >
+              <CheckCircle2 className="w-9 h-9 text-success" />
+              <p className="text-xs text-sandrift">该筛选条件下暂无任务</p>
+            </div>
+          )
+        ) : (
+          isWorkspace
+            ? retainedWorkspaceList.map((entry) => {
+                const task = entry.item.task;
+                return (
+                  <ExitCollapse key={task.id} exiting={entry.exiting}>
+                    {renderAssignmentRow(task)}
+                  </ExitCollapse>
+                );
+              })
+            : pagedAssignments.map((task) => (
+                <div key={task.id}>{renderAssignmentRow(task)}</div>
+              ))
+        )}
+      </div>
+
+      {/* Footer：compact = 三段式 grid（左计数 / 中分页恒居中 / 右进入工作区）；workspace = 键盘提示 */}
+      <div
+        data-testid={isWorkspace ? undefined : "assignment-footer"}
+        className={cn(
+          "shrink-0 text-xs",
+          isWorkspace
+            ? "mx-4 mb-4 pt-2 border-t border-[#F0EBE1] flex justify-between items-center"
+            : "pt-3 pb-1.5 border-t border-[#F0EBE1] grid grid-cols-[1fr_auto_1fr] items-center"
+        )}
+      >
+        {isWorkspace ? (
+          <>
+            <span className="text-[11px] text-sandrift">
+              {singleKeyEnabled
+                ? "J/K 移动 · Space 预览 · X 选择 · Enter 打开 · 右键更多"
+                : "↑/↓ 移动 · Enter 打开 · 右键更多"}
+            </span>
+            <span />
+          </>
+        ) : (
+          <>
+            <span className="text-[11px] text-sandrift justify-self-start">
+              共 {compactPaged?.totalItems ?? filteredAssignments.length} 项任务
+            </span>
+            {/* 中间列：分页器永远位于卡片真正水平中心，不随左右文案宽度漂移 */}
+            {compactTotalPages > 1 && (
+              <span className="inline-flex items-center gap-2">
+                <button
+                  onClick={() => setCompactPage(compactSafePage - 1)}
+                  disabled={compactSafePage <= 1}
+                  aria-label="上一页"
+                  className="w-7 h-7 flex items-center justify-center rounded-lg text-sandrift hover:bg-alabaster hover:text-charcoal transition-colors disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-sandrift"
+                >
+                  <ChevronLeft className="w-3.5 h-3.5" />
+                </button>
+                <span className="min-w-[40px] text-center text-[11px] font-mono text-satin-grey">
+                  {compactSafePage} / {compactTotalPages}
+                </span>
+                <button
+                  onClick={() => setCompactPage(compactSafePage + 1)}
+                  disabled={compactSafePage >= compactTotalPages}
+                  aria-label="下一页"
+                  className="w-7 h-7 flex items-center justify-center rounded-lg text-sandrift hover:bg-alabaster hover:text-charcoal transition-colors disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-sandrift"
+                >
+                  <ChevronRight className="w-3.5 h-3.5" />
+                </button>
+              </span>
+            )}
+            <button
+              onClick={() => setActiveTab("assignments")}
+              className="font-bold text-charcoal hover:underline justify-self-end"
+            >
+              任务工作区 →
+            </button>
+          </>
+        )}
+      </div>
+
+      {/* ---- Workspace：Bulk Action Bar（有选择才出现） ---- */}
+      {isWorkspace && bulkCount > 0 && (
+        <div
+          data-testid="assignment-bulk-bar"
+          className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 bg-surface border border-line-strong rounded-xl shadow-card px-3 py-2 flex items-center gap-2 text-xs ux-inline"
+        >
+          <span className="font-bold text-charcoal px-1">
+            已选 {bulkCount} 项
+          </span>
+          <span className="w-px h-4 bg-line-strong" />
+          <button
+            onClick={() => actions.markCompleted(assignmentSelection)}
+            className="px-2 py-1 rounded-lg font-bold text-charcoal bg-pastel-mint hover:bg-pastel-mint transition-colors"
+          >
+            完成
+          </button>
+          <button
+            onClick={() => actions.markDoing(assignmentSelection)}
+            className="px-2 py-1 rounded-lg font-semibold text-satin-grey hover:bg-alabaster transition-colors"
+          >
+            进行中
+          </button>
+          <UISelect<Priority | "">
+            value=""
+            onChange={(v) => {
+              if (v) actions.setPriority(assignmentSelection, v);
+            }}
+            ariaLabel="修改优先级"
+            placeholder="优先级"
+            options={PRIORITY_OPTIONS}
+            triggerClassName="h-7 px-2 text-[11px] font-semibold text-satin-grey min-w-[92px]"
+            itemClassName="h-8"
+          />
+          {bulkDdlOpen ? (
+            <span
+              data-testid="bulk-ddl-popover"
+              className="fixed bottom-16 left-1/2 -translate-x-1/2 z-50 w-72 bg-surface border border-line-strong rounded-xl shadow-card p-3 space-y-2.5 text-xs ux-inline"
+            >
+              <div className="flex items-center justify-between">
+                <span className="font-bold text-charcoal">调整截止时间</span>
+                <button
+                  onClick={() => setBulkDdlOpen(false)}
+                  className="p-1 rounded-lg text-sandrift hover:bg-alabaster transition-colors"
+                  aria-label="关闭"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+              {/* 模式一：指定日期（保留各自原时间） */}
+              <div className="space-y-1">
+                <p className="text-[10px] font-bold text-sandrift">指定日期</p>
+                <div className="flex items-center gap-1.5">
+                  <input
+                    type="date"
+                    value={bulkDdlDate}
+                    onChange={(e) => setBulkDdlDate(e.target.value)}
+                    className="flex-1 px-1.5 py-1 rounded-lg bg-white border border-line text-[11px] font-mono focus:outline-none"
+                    aria-label="指定日期"
+                  />
+                  <button
+                    onClick={applyBulkDDL}
+                    disabled={!bulkDdlDate}
+                    className="px-2.5 py-1 rounded-lg font-bold text-white bg-charcoal hover:bg-black disabled:opacity-50 transition-colors"
+                  >
+                    应用
+                  </button>
+                </div>
+              </div>
+              {/* 模式二：整体提前/延后 N 天 */}
+              <div className="space-y-1 pt-2 border-t border-line-soft">
+                <p className="text-[10px] font-bold text-sandrift">整体平移</p>
+                <div className="flex items-center gap-1.5">
+                  <input
+                    type="number"
+                    value={bulkShiftDays}
+                    onChange={(e) => setBulkShiftDays(e.target.value)}
+                    placeholder="如 2 或 -1"
+                    className="flex-1 px-1.5 py-1 rounded-lg bg-white border border-line text-[11px] font-mono focus:outline-none"
+                    aria-label="平移天数"
+                  />
+                  <button
+                    onClick={applyBulkShift}
+                    disabled={!Number.isFinite(Number(bulkShiftDays)) || Number(bulkShiftDays) === 0}
+                    className="px-2.5 py-1 rounded-lg font-bold text-white bg-charcoal hover:bg-black disabled:opacity-50 transition-colors"
+                  >
+                    应用
+                  </button>
+                </div>
+                <p className="text-[10px] text-sandrift">各任务相对日期差保持不变，HH:mm 时间均保留</p>
+              </div>
+            </span>
+          ) : (
+            <button
+              onClick={() => setBulkDdlOpen(true)}
+              className="flex items-center gap-1 px-2 py-1 rounded-lg font-semibold text-satin-grey hover:bg-alabaster transition-colors"
+            >
+              <CalendarPlus className="w-3.5 h-3.5" />
+              调整DDL
+            </button>
+          )}
+          <button
+            onClick={() => actions.remove(assignmentSelection)}
+            className="px-2 py-1 rounded-lg font-bold text-danger hover:bg-danger-bg transition-colors"
+          >
+            删除
+          </button>
+          <button
+            onClick={() => setAssignmentSelection([])}
+            className="p-1 rounded-lg text-sandrift hover:bg-alabaster transition-colors"
+            aria-label="清除选择"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
+
+      {/* ---- Workspace：Context Menu（Portal + fixed；非 modal，不拦截页面交互） ---- */}
+      {isWorkspace && ctxMenu && menuCtx && (
+        <AssignmentContextMenu
+          anchor={ctxMenu}
+          commands={menuCommands}
+          hasDdl={ctxHasDdl}
+          onRun={(cmd) => cmd.run()}
+          onApplyDDL={applyCtxDDL}
+          onClose={() => setCtxMenu(null)}
+        />
+      )}
+
+      {/* ---- Workspace：Assignment Peek（Desktop >=1024） ---- */}
+      {isWorkspace && desktop && <AssignmentPeekPanel />}
+    </div>
+  );
+}

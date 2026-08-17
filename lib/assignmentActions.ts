@@ -1,0 +1,129 @@
+import { Assignment, CalendarMark, Priority } from "@/types";
+import {
+  bulkApplyDDLDate,
+  bulkApplyPriority,
+  bulkApplyStatus,
+  bulkClearDDL,
+  bulkShiftDDL,
+} from "@/lib/assignmentSelection";
+import { openAssignmentEditor } from "@/lib/uiEvents";
+import { AssignmentDeleteSnapshot } from "@/lib/dataDependencies";
+
+/** Task 7G-C：删除任务 = 完整依赖快照（Assignment + DDL mark + StudyBlocks + 关联 Reminder），供一次撤销恢复 */
+export type DeleteResult = AssignmentDeleteSnapshot;
+
+/** Command Registry 与 Context Menu / Bulk Bar 共用的赋值动作集合 */
+export interface AssignmentActions {
+  openDrawer: (id: string) => void;
+  editDrawer: (id: string) => void;
+  markCompleted: (ids: string[]) => void;
+  markDoing: (ids: string[]) => void;
+  setPriority: (ids: string[], priority: Priority) => void;
+  setDDLDate: (ids: string[], targetDate: string) => void;
+  /** 清除截止时间（ddl → undefined） */
+  clearDDLDate: (ids: string[]) => void;
+  /** 整体平移：提前/延后 N 天（负数为提前） */
+  shiftDDL: (ids: string[], days: number) => void;
+  remove: (ids: string[]) => void;
+}
+
+export interface AssignmentActionApi {
+  getAssignments: () => Assignment[];
+  updateAssignment: (a: Assignment) => void;
+  setSelectedAssignmentId: (id: string | null) => void;
+  deleteAssignment: (id: string) => DeleteResult | null;
+  restoreAssignment: (snapshot: DeleteResult) => void;
+  pushToast: (toast: {
+    message: string;
+    actionLabel?: string;
+    onAction?: () => void;
+    type?: "success" | "warning" | "error" | "info";
+  }) => void;
+  confirm?: (request: {
+    title: string;
+    description: string;
+    confirmLabel: string;
+    danger?: boolean;
+    onConfirm: () => void;
+  }) => void;
+}
+
+/**
+ * 批量动作工厂（唯一实现，Command Center / Context Menu / Bulk Bar 共用）：
+ * - 状态/优先级/DDL：按 id 取当前任务，用纯函数构造新对象后逐项 updateAssignment
+ *   （同一 id，CalendarMark 由 store 的 updateAssignment 自动同步）
+ * - 删除：deleteAssignment 收集 assignment+marks，经 ConfirmDialog 确认后执行；
+ *   Toast 撤销时 restoreAssignment 完整恢复（Assignment + CalendarMark + sourceId）
+ */
+export function createAssignmentActions(api: AssignmentActionApi): AssignmentActions {
+  const {
+    getAssignments,
+    updateAssignment,
+    setSelectedAssignmentId,
+    deleteAssignment,
+    restoreAssignment,
+    pushToast,
+  } = api;
+
+  const targets = (ids: string[]): Assignment[] =>
+    getAssignments().filter((a) => ids.includes(a.id));
+
+  /**
+   * 批量 DDL 修改（指定日期 / 整体平移）：
+   * 记录修改前的原 assignment，应用后给出撤销 Toast；
+   * 撤销时逐项 updateAssignment(original) → 同一 id 恢复原 ddl，
+   * CalendarMark 由 store 的 updateAssignment 自动同步回原日期（sourceId 保留，不重复）。
+   */
+  const applyDDL = (ids: string[], transform: (as: Assignment[]) => Assignment[]) => {
+    const originals = targets(ids);
+    if (originals.length === 0) return;
+    transform(originals).forEach(updateAssignment);
+    pushToast({
+      message: `${originals.length} 项任务截止时间已调整`,
+      actionLabel: "撤销",
+      onAction: () => originals.forEach(updateAssignment),
+    });
+  };
+
+  const remove = (ids: string[]) => {
+    if (ids.length === 0) return;
+    const doDelete = () => {
+      const removed = ids
+        .map((id) => deleteAssignment(id))
+        .filter((r): r is DeleteResult => r != null);
+      pushToast({
+        message: `${removed.length} 项任务已删除`,
+        actionLabel: "撤销",
+        onAction: () => {
+          removed.forEach((r) => restoreAssignment(r));
+        },
+      });
+    };
+    if (api.confirm) {
+      api.confirm({
+        title: `删除 ${ids.length} 项任务？`,
+        description: "任务及其学习安排与提醒将一并删除，删除后可通过「撤销」恢复。",
+        confirmLabel: "删除任务",
+        danger: true,
+        onConfirm: doDelete,
+      });
+    } else {
+      doDelete();
+    }
+  };
+
+  return {
+    openDrawer: (id) => setSelectedAssignmentId(id),
+    editDrawer: (id) => {
+      // 统一事件入口（lib/uiEvents），不手写事件名
+      openAssignmentEditor({ assignmentId: id });
+    },
+    markCompleted: (ids) => bulkApplyStatus(targets(ids), "completed").forEach(updateAssignment),
+    markDoing: (ids) => bulkApplyStatus(targets(ids), "doing").forEach(updateAssignment),
+    setPriority: (ids, priority) => bulkApplyPriority(targets(ids), priority).forEach(updateAssignment),
+    setDDLDate: (ids, targetDate) => applyDDL(ids, (as) => bulkApplyDDLDate(as, targetDate)),
+    clearDDLDate: (ids) => applyDDL(ids, (as) => bulkClearDDL(as)),
+    shiftDDL: (ids, days) => applyDDL(ids, (as) => bulkShiftDDL(as, days)),
+    remove,
+  };
+}

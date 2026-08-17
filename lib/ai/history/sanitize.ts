@@ -1,0 +1,269 @@
+/**
+ * Kiro Conversation History — sanitize / title / stale context 校验。
+ * sanitizeConversation：把 Chat View 转成安全 Persistence Model（不含任何敏感数据）。
+ */
+
+import { KiroChatMessageView } from "@/hooks/useKiroChat";
+import { actionToCardProps } from "@/components/kiro/KiroActionCard";
+import {
+  KiroConversationRecord,
+  KiroConversationSummary,
+  PersistedComputerTaskView,
+  PersistedContextRef,
+  PersistedKiroMessage,
+  PersistedVisualProposalView,
+} from "@/lib/ai/history/types";
+import { VisualActionProposal } from "@/lib/ai/visual/types";
+import { sanitizeVisualProposalReceipt, VisualProposalReceiptView } from "@/lib/ai/visual/receipt";
+import { KiroContextRef } from "@/lib/ai/context/types";
+import type { AppState } from "@/store/useAppStore";
+import { KiroAgentTask } from "@/lib/ai/computer/task";
+
+/** 单条消息内容上限（极宽但有限，防止异常历史卡死 UI） */
+export const MAX_PERSISTED_MESSAGE_CONTENT = 100_000;
+
+/** Visual Proposal 历史快照的独立 hard bounds（即使 live schema 已限制，History boundary 仍独立 bounded） */
+export const MAX_PERSISTED_VISUAL_SUMMARY = 80;
+export const MAX_PERSISTED_VISUAL_ACTION_TITLE = 160;
+export const MAX_PERSISTED_VISUAL_ACTION_SUBTITLE = 200;
+export const MAX_PERSISTED_VISUAL_EVIDENCE = 160;
+export const MAX_PERSISTED_VISUAL_PENDING_DESCRIPTION = 160;
+export const MAX_PERSISTED_VISUAL_ACTIONS = 8;
+export const MAX_PERSISTED_VISUAL_PENDING = 8;
+
+/**
+ * Visual Action Intake V1.3 + V1.4：live Proposal → 历史只读展示快照。
+ * 只复制安全展示事实；change/tool/input/reservedIds/previewFingerprint/
+ * sourceAttachmentIds/sourceProposalId/pendingItemIds 绝不进入 History。
+ * V1.4：receipt（applied/revoked display facts）经 History boundary 独立校验后投影。
+ */
+export function toPersistedVisualProposal(
+  proposal: VisualActionProposal,
+  receipt?: unknown
+): PersistedVisualProposalView {
+  const actions = (proposal.actions ?? []).slice(0, MAX_PERSISTED_VISUAL_ACTIONS).map((a) => ({
+    kind: a.display.kind,
+    title: a.display.title.slice(0, MAX_PERSISTED_VISUAL_ACTION_TITLE),
+    ...(a.display.subtitle ? { subtitle: a.display.subtitle.slice(0, MAX_PERSISTED_VISUAL_ACTION_SUBTITLE) } : {}),
+    evidence: (a.evidence?.text ?? "").slice(0, MAX_PERSISTED_VISUAL_EVIDENCE),
+  }));
+  const pendingItems = (proposal.pendingItems ?? []).slice(0, MAX_PERSISTED_VISUAL_PENDING).map((p) => ({
+    reason: p.reason,
+    evidence: (p.evidence?.text ?? "").slice(0, MAX_PERSISTED_VISUAL_EVIDENCE),
+    description: p.description.slice(0, MAX_PERSISTED_VISUAL_PENDING_DESCRIPTION),
+  }));
+  const safeReceipt = sanitizeVisualProposalReceipt(receipt, actions.length);
+  return {
+    id: proposal.id,
+    summary: proposal.summary.slice(0, MAX_PERSISTED_VISUAL_SUMMARY),
+    // 只保存图片数量（UI 展示「来自 2 张图片」）；attachment IDs 不成为未来执行 lineage
+    imageCount: Array.isArray(proposal.sourceAttachmentIds) ? proposal.sourceAttachmentIds.length : 0,
+    // clarification lineage 只降级为 display fact（不保存 sourceProposalId/pendingItemIds）
+    origin: proposal.continuationSource ? "clarification" : "screenshot",
+    actions,
+    pendingItems,
+    createdAt: typeof proposal.createdAt === "number" ? proposal.createdAt : Date.now(),
+    ...(safeReceipt ? { receipt: safeReceipt } : {}),
+  };
+}
+
+function clampContent(text: string): string {
+  if (text.length <= MAX_PERSISTED_MESSAGE_CONTENT) return text;
+  return text.slice(0, MAX_PERSISTED_MESSAGE_CONTENT);
+}
+
+/** Computer Task（live 或 restored）→ 持久化展示视图（只存最小事实；不存 review/checkpoint/beforeText） */
+export function toPersistedComputerTask(
+  task: KiroAgentTask | undefined,
+  restored: PersistedComputerTaskView | undefined
+): PersistedComputerTaskView | undefined {
+  const source = task ?? restored;
+  if (!source) return undefined;
+  const status = source.status === "completed" || source.status === "failed" || source.status === "cancelled" || source.status === "undone" || source.status === "undo_failed"
+    ? source.status
+    : "completed";
+  return {
+    taskId: "taskId" in source ? source.taskId : source.id,
+    title: source.title,
+    status,
+    changes: source.changes.map((c) => ({
+      operation: c.operation,
+      resourceType: c.resourceType,
+      displayName: c.displayName,
+      workspaceLabel: c.workspaceLabel,
+      rootLabel: c.rootLabel,
+      relativePath: c.relativePath,
+      artifactId: c.artifactId,
+      fromRootId: c.fromRootId,
+      fromRootLabel: c.fromRootLabel,
+      fromRelativePath: c.fromRelativePath,
+      format: c.format,
+      size: c.size,
+      changeCount: c.changeCount,
+      revision: c.revision,
+      verification: c.verification,
+    })),
+    startedAt: source.startedAt,
+    completedAt: source.completedAt,
+  };
+}
+
+/** 附件 → 持久化视图（local 临时文件标记未保留；material 保留安全引用） */
+function toPersistedAttachments(
+  attachments: KiroChatMessageView["attachments"]
+): PersistedKiroMessage["attachments"] {
+  if (!attachments || attachments.length === 0) return undefined;
+  return attachments.map((a) =>
+    a.source === "local"
+      ? {
+          id: a.id,
+          source: "local" as const,
+          kind: a.kind,
+          name: a.name,
+          size: a.size,
+          tempNotRetained: true,
+        }
+      : {
+          id: a.id,
+          source: "material" as const,
+          kind: a.kind,
+          name: a.name,
+          courseId: a.courseId,
+          materialId: a.materialId,
+          courseName: a.courseName,
+        }
+  );
+}
+
+/** 生成会话标题（本地 deterministic，不调模型）：第一条 User Message 取前 ~30 字 */
+export function buildAutoTitle(firstUserText: string): string {
+  const MAX = 30;
+  const cleaned = firstUserText.replace(/\s+/g, " ").trim();
+  if (cleaned.length <= MAX) return cleaned;
+  return `${cleaned.slice(0, MAX)}……`;
+}
+
+/**
+ * sanitize：Chat View → Persistence Model。
+ * 不保存：API Key / File / Blob / storageKey / tool arguments / 内部输出 / provider raw response。
+ */
+export function sanitizeConversation(input: {
+  id: string;
+  title: string;
+  createdAt: string;
+  provider: string;
+  model: string;
+  messages: KiroChatMessageView[];
+  manualRefs: KiroContextRef[];
+  entryRefs: KiroContextRef[];
+  summary?: KiroConversationSummary | null;
+  /** Kiro Project 成员关系（V1）：sanitize 重写 Record 时必须保留，否则会被意外抹掉 */
+  projectId?: string | null;
+  /** Visual Intake V1.4：Runtime receipt 快照（只含展示事实，绝无 undo）；live Proposal 合并用 */
+  visualProposalReceipts?: ReadonlyMap<string, VisualProposalReceiptView> | null;
+}): KiroConversationRecord {
+  const messages: PersistedKiroMessage[] = input.messages
+    // Worklog V2：assistant 可能 Final Answer 为空但产生 Action Card —— 消息必须保留；
+    // Part 3：Computer Task（仅展示事实）同理必须保留；
+    // Visual Intake V1.3：纯 Proposal（Final Answer 为空）同样必须保留；
+    // 旁白（assistantTurn.worklog）不进入历史
+    .filter(
+      (m) =>
+        m.role === "user" ||
+        m.content.length > 0 ||
+        (m.actions?.length ?? 0) > 0 ||
+        (m.historyActions?.length ?? 0) > 0 ||
+        Boolean(m.computerTask || m.historyComputerTask) ||
+        (m.visualActionProposals?.length ?? 0) > 0 ||
+        (m.historyVisualActionProposals?.length ?? 0) > 0
+    )
+    .map((m) => {
+      // live action（可 undo）→ 最小事实数据；恢复的历史 action 原样透传（canUndo 恒 false）
+      const liveActions = (m.actions ?? []).map((a) => {
+        const p = actionToCardProps(a.action);
+        return {
+          toolCallId: a.toolCallId,
+          variant: p.variant,
+          heading: p.heading,
+          title: p.title,
+          change: p.change ?? null,
+          bullets: p.bullets,
+          footer: p.footer,
+          details: p.details,
+        };
+      });
+      const actions =
+        liveActions.length > 0 || (m.historyActions ?? []).length > 0
+          ? [...liveActions, ...(m.historyActions ?? [])]
+          : undefined;
+      // Visual Intake V1.3 + V1.4：live Proposal → 只读快照（合并 Runtime receipt 展示事实）；
+      // 恢复的历史快照原样透传（display-only）
+      const visualProposals = [
+        ...(m.visualActionProposals ?? []).map((p) =>
+          toPersistedVisualProposal(p, input.visualProposalReceipts?.get(p.id))
+        ),
+        ...(m.historyVisualActionProposals ?? []),
+      ];
+      return {
+        id: m.id,
+        role: m.role,
+        content: clampContent(m.content),
+        attachments: toPersistedAttachments(m.attachments),
+        actions,
+        // Citation 来源最小元数据（不含正文；旧消息无 sources 则不写）
+        sources: m.sources && m.sources.length > 0 ? m.sources : undefined,
+        // Computer Task 展示事实（Part 3；无 review/checkpoint/beforeText）
+        computerTask: toPersistedComputerTask(m.computerTask, m.historyComputerTask),
+        ...(visualProposals.length > 0 ? { visualProposals } : {}),
+      };
+    });
+
+  // V2 Part 3：Artifact Context 是 session-ephemeral（path/revision 只是当前会话快照）；
+  // durable identity 在 Artifact Registry，不写入 Kiro 对话历史
+  const toRefs = (refs: KiroContextRef[]): PersistedContextRef[] =>
+    refs
+      .filter((r) => r.kind !== "artifact")
+      .map((r) => ({ kind: r.kind as PersistedContextRef["kind"], entityId: r.entityId, label: r.label }));
+
+  return {
+    id: input.id,
+    title: input.title,
+    createdAt: input.createdAt,
+    updatedAt: new Date().toISOString(),
+    provider: input.provider,
+    model: input.model,
+    messages,
+    manualRefs: toRefs(input.manualRefs),
+    entryRefs: toRefs(input.entryRefs),
+    summary: input.summary ?? undefined,
+    // projectId 只在有值时写入（旧记录/未归类保持无字段，语义兼容）
+    ...(input.projectId ? { projectId: input.projectId } : {}),
+  };
+}
+
+/** 恢复 Context Ref 前校验实体是否仍存在；week 恒有效（时间范围语义） */
+export function filterValidContextRefs(
+  refs: PersistedContextRef[],
+  state: Pick<AppState, "courses" | "assignments" | "groupProjects">
+): PersistedContextRef[] {
+  return refs.filter((r) => {
+    if (r.kind === "week") return true;
+    if (r.kind === "course") return state.courses.some((c) => c.id === r.entityId);
+    if (r.kind === "assignment") return state.assignments.some((a) => a.id === r.entityId);
+    if (r.kind === "group-project") return state.groupProjects.some((p) => p.id === r.entityId);
+    if (r.kind === "material")
+      return state.courses.some((c) => c.materials.some((m) => m.id === r.entityId));
+    return false;
+  });
+}
+
+/** 时间显示：今天 HH:mm / 昨天 / M月d日 */
+export function formatHistoryTime(iso: string, now: Date = new Date()): string {
+  const d = new Date(iso);
+  const pad2 = (n: number) => String(n).padStart(2, "0");
+  const dayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const t = d.getTime();
+  if (t >= dayStart) return `今天 ${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+  if (t >= dayStart - 86400000) return "昨天";
+  return `${d.getMonth() + 1} 月 ${d.getDate()} 日`;
+}

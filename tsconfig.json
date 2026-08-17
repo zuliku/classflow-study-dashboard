@@ -1,0 +1,31 @@
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "lib": ["DOM", "DOM.Iterable", "ESNext"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "jsx": "react-jsx",
+    "strict": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "allowJs": true,
+    "types": ["node"],
+    "paths": {
+      "@/*": ["./*"]
+    }
+  },
+  "include": [
+    "src/renderer/**/*",
+    "src/preload/**/*",
+    "app/**/*",
+    "components/**/*",
+    "lib/**/*",
+    "store/**/*",
+    "hooks/**/*",
+    "types/**/*"
+  ],
+  "exclude": ["node_modules", "out", "dist", "tests", "scripts", "test-results", ".tmp"]
+}

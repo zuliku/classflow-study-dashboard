@@ -1,0 +1,163 @@
+﻿"use client";
+
+import React, { useEffect } from "react";
+import { AlertTriangle, X, Trash2 } from "lucide-react";
+import { useAppStore } from "@/store/useAppStore";
+
+
+import { cn } from "@/lib/utils";
+import { Dialog } from "@/components/ui/Dialog";
+
+
+
+
+export function ConflictResolutionModal() {
+  const {
+    isConflictModalOpen,
+    setConflictModalOpen,
+    selectedConflict,
+    courses,
+    currentSemesterWeek,
+    deleteSchedule,
+    excludeWeekFromSchedule,
+  } = useAppStore();
+
+  if (!selectedConflict) return null;
+
+  const { scheduleA, scheduleB, dayOfWeek, timeRange } = selectedConflict;
+  const courseA = courses.find((c) => c.id === scheduleA.courseId);
+  const courseB = courses.find((c) => c.id === scheduleB.courseId);
+
+  const dayNames = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"];
+  const dayName = dayNames[dayOfWeek - 1];
+
+  const handleResolveSkipA = () => {
+    excludeWeekFromSchedule(scheduleA.id, currentSemesterWeek);
+    setConflictModalOpen(false);
+  };
+
+  const handleResolveSkipB = () => {
+    excludeWeekFromSchedule(scheduleB.id, currentSemesterWeek);
+    setConflictModalOpen(false);
+  };
+
+  const handleDeleteA = () => {
+    deleteSchedule(scheduleA.id);
+    setConflictModalOpen(false);
+  };
+
+  const handleDeleteB = () => {
+    deleteSchedule(scheduleB.id);
+    setConflictModalOpen(false);
+  };
+
+  return (
+    <Dialog
+      open={isConflictModalOpen}
+      onOpenChange={(next) => {
+        if (!next) setConflictModalOpen(false);
+      }}
+      overlayId="conflict-modal"
+      stackZ={50}
+      aria-label="课程时间重叠"
+      className="max-w-md max-h-[85dvh]"
+    >
+        {/* Header */}
+        <div className="p-4 px-6 border-b border-danger-border bg-danger-bg flex items-center justify-between">
+          <div className="flex items-center space-x-2 text-danger">
+            <AlertTriangle className="w-5 h-5 shrink-0" />
+            <h3 className="text-base font-bold">课程时间重叠</h3>
+          </div>
+          <button
+            onClick={() => setConflictModalOpen(false)}
+            className="p-1.5 rounded-lg text-danger hover:bg-danger-border transition-colors"
+            aria-label="关闭"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        {/* Content */}
+        <div className="p-6 space-y-4 text-xs overflow-y-auto">
+          <p className="text-satin-grey">
+            以下两门课程在第 {currentSemesterWeek} 周时间重叠（{dayName} {timeRange}）：
+          </p>
+
+          {/* Conflicting Courses Cards */}
+          <div className="space-y-2">
+            {/* Course A */}
+            <div
+              className="p-3 rounded-xl border flex items-center justify-between"
+              style={{ backgroundColor: `${courseA?.bgHex || "#E3E6E0"}60`, borderColor: courseA?.borderHex || "#D0D5CC" }}
+            >
+              <div>
+                <span className="font-bold text-charcoal text-xs">{courseA?.name || "课程 A"}</span>
+                <p className="text-[10px] text-satin-grey mt-0.5">
+                  教室：{scheduleA.location} · 教师：{courseA?.teacher}
+                </p>
+              </div>
+              <div className="flex space-x-1">
+                <button
+                  onClick={handleResolveSkipA}
+                  className="px-2 py-1 text-[10px] bg-white border border-line-strong rounded-lg text-charcoal hover:bg-alabaster font-medium"
+                  title="本周停课"
+                >
+                  本周停课
+                </button>
+                <button
+                  onClick={handleDeleteA}
+                  className="p-1.5 text-danger hover:bg-danger-bg rounded-lg"
+                  title="删除该排课"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
+
+            {/* Course B */}
+            <div
+              className="p-3 rounded-xl border flex items-center justify-between"
+              style={{ backgroundColor: `${courseB?.bgHex || "#F0EBE1"}60`, borderColor: courseB?.borderHex || "#CDB9AB" }}
+            >
+              <div>
+                <span className="font-bold text-charcoal text-xs">{courseB?.name || "课程 B"}</span>
+                <p className="text-[10px] text-satin-grey mt-0.5">
+                  教室：{scheduleB.location} · 教师：{courseB?.teacher}
+                </p>
+              </div>
+              <div className="flex space-x-1">
+                <button
+                  onClick={handleResolveSkipB}
+                  className="px-2 py-1 text-[10px] bg-white border border-line-strong rounded-lg text-charcoal hover:bg-alabaster font-medium"
+                  title="本周停课"
+                >
+                  本周停课
+                </button>
+                <button
+                  onClick={handleDeleteB}
+                  className="p-1.5 text-danger hover:bg-danger-bg rounded-lg"
+                  title="删除该排课"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div className="p-3 bg-[#F7F5F5] border border-line rounded-xl text-[11px] text-sandrift space-y-1">
+            <p>「本周停课」仅跳过本周；删除将移除该排课。</p>
+          </div>
+
+          {/* Footer */}
+          <div className="flex justify-end pt-2 border-t border-[#F0EBE1]">
+            <button
+              onClick={() => setConflictModalOpen(false)}
+              className="px-4 py-2 text-xs font-medium text-white bg-charcoal rounded-xl hover:bg-black"
+            >
+              取消
+            </button>
+          </div>
+        </div>
+      </Dialog>
+  );
+}

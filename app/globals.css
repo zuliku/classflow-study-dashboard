@@ -1,0 +1,969 @@
+@import "katex/dist/katex.min.css";
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: #F7F5F5;
+  --alabaster: #F0EBE1;
+  --stone-beige: #CDB9AB;
+  --dark-charcoal: #313032;
+  --mozzarella: #EFECEA;
+  --alba: #E3DDD2;
+  --sandrift: #A48F82;
+  --pastel-mint: #E3E6E0;
+  --ashy-beige: #CCCBC4;
+  --satin-grey: #676266;
+
+  /* 桌面版自绘标题栏高度（TitleBar / Sidebar 高度基准） */
+  --titlebar-h: 26px;
+
+  /* 语义层 */
+  --surface: #F4F2EF;
+  --surface-soft: #F0EBE1;
+  --surface-muted: #E3E6E0;
+  --line: rgba(205, 185, 171, 0.45);
+  --line-soft: rgba(205, 185, 171, 0.22);
+  --line-strong: rgba(205, 185, 171, 0.72);
+  --danger: #9B5B57;
+  --danger-bg: #F2E8E6;
+  --danger-border: #D9BCB8;
+  --warning: #936E4C;
+  --warning-bg: #F1EAE1;
+  --warning-border: #DFD2C2;
+  --success: #627566;
+  --success-bg: #E7ECE6;
+  --success-border: #C8D3C7;
+
+  /* Motion tokens */
+  --motion-fast: 140ms;
+  --motion-base: 200ms;
+  --motion-panel: 230ms;
+  --motion-page: 180ms;
+  --motion-data: 200ms;
+  --motion-select: 140ms;
+  --motion-snap: 90ms;
+  --ease-standard: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ease-emphasized: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+body {
+  background-color: var(--background);
+  color: var(--dark-charcoal);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* 桌面版：窗口级滚动收敛到应用内部（TitleBar + 内容区），避免页面级滚动条叠加 */
+html,
+body,
+#root {
+  height: 100%;
+}
+body {
+  overflow: hidden;
+}
+
+/* Custom minimal scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #CCCBC4;
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #A48F82;
+}
+
+/* Attachment Tray：单行横向滚动，滚动条极弱（视觉隐藏，仍可滚动） */
+.kiro-attachment-tray {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+/* 通用隐藏滚动条（保持滚动能力，不显示轨道/滑块）：Dropdown 等浮层使用 */
+.scrollbar-none {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+
+.kiro-attachment-tray::-webkit-scrollbar {
+  height: 3px;
+}
+
+.kiro-attachment-tray::-webkit-scrollbar-thumb {
+  background: transparent;
+}
+
+/* Now Indicator 末端圆点：极轻呼吸 + 柔和外发光（克制，不闪烁） */
+.kiro-now-dot {
+  box-shadow: 0 0 5px rgba(164, 143, 130, 0.35);
+  animation: kiro-now-dot-breathe 3.2s ease-in-out infinite;
+}
+
+@keyframes kiro-now-dot-breathe {
+  0%,
+  100% {
+    opacity: 0.65;
+    box-shadow: 0 0 3px rgba(164, 143, 130, 0.25);
+  }
+  50% {
+    opacity: 1;
+    box-shadow: 0 0 6px rgba(164, 143, 130, 0.4);
+  }
+}
+
+html[data-motion-effective="reduced"] .kiro-now-dot {
+  animation: none;
+  opacity: 1;
+}
+
+/* 当前正在上课的课程卡：克制外框高亮（深于课程边框的强调色，轻微呼吸） */
+.kiro-now-course {
+  box-shadow: 0 0 0 2px rgba(49, 48, 50, 0.32);
+  animation: kiro-now-course-breathe 3.2s ease-in-out infinite;
+}
+
+@keyframes kiro-now-course-breathe {
+  0%,
+  100% {
+    box-shadow: 0 0 0 1.5px rgba(49, 48, 50, 0.26);
+  }
+  50% {
+    box-shadow: 0 0 0 2px rgba(49, 48, 50, 0.38);
+  }
+}
+
+html[data-motion-effective="reduced"] .kiro-now-course {
+  animation: none;
+  box-shadow: 0 0 0 2px rgba(49, 48, 50, 0.32);
+}
+
+.kiro-attachment-tray:hover::-webkit-scrollbar-thumb {
+  background: #E4E0D8;
+}
+
+/* Keyboard focus: 可见焦点环，禁用状态下不显示 */
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+[role="button"]:focus-visible {
+  outline: 2px solid rgba(49, 48, 50, 0.55);
+  outline-offset: 2px;
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+/* 按下反馈：只对显式 .ux-press 的独立操作按钮做轻缩放。
+   空间稳定型控件（日期格 / 导航 / 拖拽面 / Resize handle / 周月切换几何控件）一律不缩放。 */
+.ux-press:active:not(:disabled) {
+  transform: scale(0.98);
+}
+
+/* 统一过渡与动效工具类 */
+@layer utilities {
+  /* 遮罩：仅透明度过渡（介于 panel enter/exit 之间，不拖尾） */
+  .ux-overlay {
+    transition: opacity var(--motion-base) var(--ease-standard);
+  }
+
+  /* Drawer 面板：右侧滑入 + 透明度 */
+  .ux-drawer-panel {
+    transition:
+      opacity var(--motion-panel) var(--ease-standard),
+      transform var(--motion-panel) var(--ease-standard);
+  }
+
+  /* Modal 面板：轻缩放 + 上移 + 透明度 */
+  .ux-modal-panel {
+    transition:
+      opacity var(--motion-base) var(--ease-standard),
+      transform var(--motion-base) var(--ease-standard);
+  }
+
+  /* 内联面板 / Dropdown：轻微位移 + 透明度 */
+  .ux-inline {
+    transition:
+      opacity var(--motion-fast) var(--ease-standard),
+      transform var(--motion-fast) var(--ease-standard);
+  }
+
+  /* 进入动画（列表新增等） */
+  .animate-enter {
+    animation: ux-enter var(--motion-base) var(--ease-standard) both;
+  }
+
+  /* 页面 Tab 切换：opacity-only（无 translateY，避免动画期 scroll overflow / 布局抖动） */
+  .ux-page {
+    animation: ux-page-in var(--motion-page) var(--ease-standard) both;
+  }
+
+  /* 周次切换：方向由 --enter-y 控制（±6px） */
+  .ux-week-enter {
+    animation: ux-week-in 180ms var(--ease-standard) both;
+  }
+
+  /* 月份切换：方向由 --enter-x 控制（±6px） */
+  .ux-month-enter {
+    animation: ux-month-in 180ms var(--ease-standard) both;
+  }
+
+  /* Agenda 内容切换：3px 上移 */
+  .ux-agenda-enter {
+    animation: ux-agenda-in 160ms var(--ease-standard) both;
+  }
+
+  /* 简单淡入（月份标题等） */
+  .ux-fade {
+    animation: ux-fade var(--motion-fast) var(--ease-standard) both;
+  }
+
+  /* 详情面板内容切换（Task A→B）：新内容进入（旧内容由组件先行淡出 ~60ms） */
+  .ux-detail-swap-in {
+    animation: ux-detail-in 100ms var(--ease-standard) both;
+  }
+
+  /* 直接操作成功落位：非常轻的 settle（不放大的动画，仅 opacity 归位） */
+  .ux-settle {
+    animation: ux-settle-in 200ms var(--ease-standard) both;
+  }
+}
+
+@keyframes ux-enter {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* 页面 Tab 切换：opacity-only（避免 translateY 在动画期产生 transient scroll overflow，
+   与 scrollbar-gutter: stable 共同保证切换时 layout width 稳定） */
+@keyframes ux-page-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes ux-week-in {
+  from {
+    opacity: 0;
+    transform: translateY(var(--enter-y, 6px));
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes ux-month-in {
+  from {
+    opacity: 0;
+    transform: translateX(var(--enter-x, 6px));
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes ux-agenda-in {
+  from {
+    opacity: 0;
+    transform: translateY(3px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes ux-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* 详情面板内容切换进入（Task A→B；4px 上移 + 淡入，100ms） */
+@keyframes ux-detail-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes ux-settle-in {
+  from {
+    opacity: 0.94;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* 尊重系统减弱动效偏好 */
+@media (prefers-reduced-motion: reduce) {
+  html:not([data-motion-preference="full"]) *,
+  html:not([data-motion-preference="full"]) *::before,
+  html:not([data-motion-preference="full"]) *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Effective motion is resolved before the body paints and kept current by the app hook. */
+html[data-motion-effective="reduced"] *,
+html[data-motion-effective="reduced"] *::before,
+html[data-motion-effective="reduced"] *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+  scroll-behavior: auto !important;
+}
+
+/* Kiro Math（KaTeX，Task 7C）：只作用于 Kiro 输出 scope（.kiro-markdown），不污染全局。
+   inline math 与正文协调（1.05em）；display math 上下间距稳定 + 超宽横向滚动（不撑破 Sidecar）。 */
+.kiro-markdown .katex {
+  font-size: 1.05em;
+}
+
+.kiro-markdown .katex-display {
+  margin: 0.95em 0 1.05em;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 0.1em 0 0.18em;
+  scrollbar-width: thin;
+}
+
+.kiro-markdown .katex-display > .katex {
+  font-size: 1.06em;
+}
+
+.kiro-markdown .katex-display::-webkit-scrollbar {
+  height: 4px;
+}
+
+/* 非法 / 流式中未完成公式：退化为可读 source（throwOnError: false），用 ClassFlow danger 提示 */
+.katex-error {
+  color: var(--danger);
+}
+
+/* Kiro Featured Entry：品牌色 perimeter sweep（低饱和：暖金 / 浅绿 / 灰蓝）。
+   实现：动画 conic 渐变角度（@property --flow-angle），元素保持静止——任意时刻完整覆盖边框环，
+   从几何上杜绝缺口（不再旋转放大层，规避 overflow-clip + transform 下垂直边带不绘制的浏览器行为）。
+   无透明段且基底高亮（0.9）：整环始终清晰可见，亮色头部沿环流动。 */
+@property --flow-angle {
+  syntax: "<angle>";
+  initial-value: 0deg;
+  inherits: false;
+}
+
+.kiro-ring {
+  background: conic-gradient(
+    from var(--flow-angle),
+    rgba(240, 208, 176, 0.9),
+    rgba(240, 208, 176, 1) 40deg,
+    rgba(176, 208, 208, 1) 100deg,
+    rgba(160, 176, 224, 1) 160deg,
+    rgba(240, 208, 176, 1) 220deg,
+    rgba(240, 208, 176, 0.9) 260deg,
+    rgba(240, 208, 176, 0.9)
+  );
+}
+
+@keyframes flow-angle-spin {
+  to {
+    --flow-angle: 360deg;
+  }
+}
+
+.kiro-ring-animated {
+  animation: flow-angle-spin 7s linear infinite;
+}
+
+/* 主 Sidebar Kiro Featured：常驻流光稍快（4.5s），元素静止、渐变角度动画 */
+.kiro-featured-flow {
+  animation: flow-angle-spin 4.5s linear infinite;
+}
+
+/* Reduced Motion：关闭动画，保留静态品牌细边 */
+html[data-motion-effective="reduced"] .kiro-ring-animated,
+html[data-motion-effective="reduced"] .kiro-featured-flow {
+  animation: none;
+}
+
+/* Kiro Agent Progress：Logo 作为 Loading 动效主体（透明 PNG → drop-shadow 沿轮廓，非 box-shadow）
+   thinking：缓慢呼吸（opacity 不低于 0.8）+ 轻 glow；reading/composing：glow；acting：稍强 glow。
+   done：静态（仅 .kiro-agent-logo-active 的轻 drop-shadow 提升对比度）。 */
+.kiro-agent-logo-active {
+  filter: drop-shadow(0 0 3px rgba(225, 187, 137, 0.26))
+    drop-shadow(0 0 6px rgba(158, 185, 166, 0.18))
+    drop-shadow(0 0 8px rgba(143, 159, 198, 0.15));
+}
+
+.kiro-agent-logo-thinking {
+  animation: kiro-breathe 2.6s ease-in-out infinite;
+}
+
+.kiro-agent-logo-glow {
+  animation: kiro-agent-glow 2.8s ease-in-out infinite;
+}
+
+.kiro-agent-logo-glow-strong {
+  animation: kiro-agent-glow-strong 2.8s ease-in-out infinite;
+}
+
+.kiro-agent-logo-glow-soft {
+  animation: kiro-agent-glow-soft 3.2s ease-in-out infinite;
+}
+
+@keyframes kiro-breathe {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.8;
+  }
+}
+
+@keyframes kiro-agent-glow {
+  0%,
+  100% {
+    filter: drop-shadow(0 0 3px rgba(225, 187, 137, 0.22))
+      drop-shadow(0 0 6px rgba(158, 185, 166, 0.14))
+      drop-shadow(0 0 8px rgba(143, 159, 198, 0.12));
+  }
+  50% {
+    filter: drop-shadow(0 0 4px rgba(225, 187, 137, 0.36))
+      drop-shadow(0 0 9px rgba(158, 185, 166, 0.24))
+      drop-shadow(0 0 12px rgba(143, 159, 198, 0.2));
+  }
+}
+
+@keyframes kiro-agent-glow-strong {
+  0%,
+  100% {
+    filter: drop-shadow(0 0 3px rgba(225, 187, 137, 0.26))
+      drop-shadow(0 0 6px rgba(158, 185, 166, 0.18))
+      drop-shadow(0 0 8px rgba(143, 159, 198, 0.16));
+  }
+  50% {
+    filter: drop-shadow(0 0 5px rgba(225, 187, 137, 0.42))
+      drop-shadow(0 0 11px rgba(158, 185, 166, 0.28))
+      drop-shadow(0 0 14px rgba(143, 159, 198, 0.24));
+  }
+}
+
+@keyframes kiro-agent-glow-soft {
+  0%,
+  100% {
+    filter: drop-shadow(0 0 3px rgba(225, 187, 137, 0.2))
+      drop-shadow(0 0 6px rgba(158, 185, 166, 0.12))
+      drop-shadow(0 0 8px rgba(143, 159, 198, 0.1));
+  }
+  50% {
+    filter: drop-shadow(0 0 3px rgba(225, 187, 137, 0.3))
+      drop-shadow(0 0 8px rgba(158, 185, 166, 0.2))
+      drop-shadow(0 0 10px rgba(143, 159, 198, 0.16));
+  }
+}
+
+/* Reduced Motion：关闭 breathe / glow 动画，保留静态轻 drop-shadow（状态文字照常更新） */
+html[data-motion-effective="reduced"] .kiro-agent-logo-thinking,
+html[data-motion-effective="reduced"] .kiro-agent-logo-glow,
+html[data-motion-effective="reduced"] .kiro-agent-logo-glow-strong,
+html[data-motion-effective="reduced"] .kiro-agent-logo-glow-soft {
+  animation: none;
+}
+
+/* Thread Rail Soft Plate（方案 A）：Logo 浅色底座 + 常驻弱品牌流光（比主 Sidebar 更弱）。
+   Idle 0.45 → hover 0.7 → active 0.85；不使用任何 shadow。 */
+.kiro-rail-plate .kiro-ring {
+  opacity: 0.45;
+  animation: flow-angle-spin 7s linear infinite;
+}
+
+.group\/plate:hover .kiro-rail-plate .kiro-ring,
+.group\/plate:focus-visible .kiro-rail-plate .kiro-ring {
+  opacity: 0.7;
+}
+
+.kiro-rail-plate-active .kiro-ring {
+  opacity: 0.85;
+}
+
+html[data-motion-effective="reduced"] .kiro-rail-plate .kiro-ring {
+  animation: none;
+  opacity: 0.6;
+}
+
+
+
+/* ============ App Chrome V2.1 / V2.1.1 — Sidebar Rail Morph + Static Geometry ============ */
+/* 几何由 [data-collapsed] 决定；choreography 由 [data-motion-active] + [data-motion-direction]
+   决定；非手动 morph（hydration / 断点 / reduced-motion）一律瞬时切换。
+   V2.1.1：先修静态最终几何（STATIC FINAL GEOMETRY FIRST），动画在两个正确布局之间插值。 */
+
+/* Sidebar Shell：仅手动 morph 播放 width transition */
+.sidebar-shell {
+  transition-property: width;
+  transition-duration: var(--motion-panel);
+  transition-timing-function: var(--ease-emphasized);
+}
+.sidebar-shell[data-motion-active="false"] {
+  transition: none;
+}
+
+/* Nav Row 几何（V2 baseline Expanded / Rail-centered Collapsed）：
+   aside p-3.5 → inner 36px。
+   Collapsed：padding-inline 10px + gap 0 → 16px icon 精确居中（10+16+10=36）；
+   Expanded：padding-inline 12px + gap 10px（V2 原视觉：px-3 + gap-2.5）。
+   gap/padding 是 morph 的一部分；隐藏内容（label max-width 0）绝不残留 margin。 */
+.sidebar-nav-row {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  padding-inline: 12px;
+  gap: 10px;
+  transition-property: padding, gap;
+  transition-duration: var(--motion-panel);
+  transition-timing-function: var(--ease-emphasized);
+}
+[data-collapsed="true"] .sidebar-nav-row {
+  padding-inline: 10px;
+  gap: 0;
+}
+/* Kiro inner：icon 20px，collapsed 需 6px 侧 padding（6+20+6=32 ≤ inner 33px） */
+[data-collapsed="true"] .sidebar-nav-row-kiro {
+  padding-inline: 6px;
+}
+[data-motion-active="false"] .sidebar-nav-row {
+  transition: none;
+}
+
+/* Nav / Profile Label：始终 mounted，永不 display:none。
+   折叠 = opacity 0 + translateX(-4px) + max-width 0（文字随宽度自然裁剪）；
+   展开 = 反向。绝不 scale 文字。 */
+.sidebar-label,
+.sidebar-profile-identity {
+  display: inline-block;
+  max-width: 200px;
+  opacity: 1;
+  transform: translateX(0);
+  white-space: nowrap;
+  overflow: hidden;
+  transition-property: opacity, transform, max-width;
+  transition-duration: var(--motion-fast), var(--motion-fast), var(--motion-panel);
+  transition-timing-function: var(--ease-standard), var(--ease-standard), var(--ease-emphasized);
+}
+[data-collapsed="true"] .sidebar-label,
+[data-collapsed="true"] .sidebar-profile-identity {
+  opacity: 0;
+  transform: translateX(-4px);
+  max-width: 0;
+}
+[data-motion-active="false"] .sidebar-label,
+[data-motion-active="false"] .sidebar-profile-identity {
+  transition: none;
+}
+/* Collapse：文字先淡出（0ms），宽度随 Shell 收束（40ms 后开始）；
+   Expand：宽度先释放，文字延迟 80ms 淡入（先有几何再有内容）。 */
+[data-motion-active="true"][data-motion-direction="collapse"] .sidebar-label,
+[data-motion-active="true"][data-motion-direction="collapse"] .sidebar-profile-identity {
+  transition-delay: 0ms, 0ms, 40ms;
+}
+[data-motion-active="true"][data-motion-direction="expand"] .sidebar-label,
+[data-motion-active="true"][data-motion-direction="expand"] .sidebar-profile-identity {
+  transition-delay: 80ms, 80ms, 0ms;
+}
+
+/* Logo Crossfade：Full Logo 与 Mark 始终 mounted（同容器绝对定位），仅 opacity/translate 切换。
+   Full Logo 尺寸回归 V2 baseline：/logo.png 952×213，max-w-180 + auto 高 → 180×40（不再 max-h-8 缩小）。 */
+.sidebar-logo-full {
+  max-width: 180px;
+  max-height: 40px;
+  width: auto;
+  height: auto;
+  opacity: 1;
+  transform: translate(-50%, -50%) translateX(0);
+  transition-property: opacity, transform;
+  transition-duration: var(--motion-fast);
+  transition-timing-function: var(--ease-standard);
+}
+.sidebar-logo-mark {
+  width: 32px;
+  height: 32px;
+  opacity: 0;
+  transform: translate(-50%, -50%);
+  transition-property: opacity;
+  transition-duration: var(--motion-fast);
+  transition-timing-function: var(--ease-standard);
+}
+[data-collapsed="true"] .sidebar-logo-full {
+  opacity: 0;
+  transform: translate(-50%, -50%) translateX(-4px);
+}
+[data-collapsed="true"] .sidebar-logo-mark {
+  opacity: 1;
+}
+[data-motion-active="false"] .sidebar-logo-full,
+[data-motion-active="false"] .sidebar-logo-mark {
+  transition: none;
+}
+/* Collapse：Full Logo 先淡出，Mark 延迟 80ms 出现；Expand：Mark 先淡出，Full Logo 延迟 60ms */
+[data-motion-active="true"][data-motion-direction="collapse"] .sidebar-logo-full { transition-delay: 0ms; }
+[data-motion-active="true"][data-motion-direction="collapse"] .sidebar-logo-mark { transition-delay: 80ms; }
+[data-motion-active="true"][data-motion-direction="expand"] .sidebar-logo-full { transition-delay: 60ms; }
+[data-motion-active="true"][data-motion-direction="expand"] .sidebar-logo-mark { transition-delay: 0ms; }
+
+/* Profile Card Single-DOM Morph：
+   - Surface：Expanded p-2.5（10px）；Collapsed padding 6px 2px（inner 36 - 4 = 32px = Avatar）
+   - Header Row：gap 10px（Expanded）/ 0 + 居中（Collapsed）
+   - Avatar Slot：固定 32×32（flex 0 0 32px），img width/height 100% + max-width:none（不被 Tailwind preflight 压扁） */
+.sidebar-profile-surface {
+  padding: 10px;
+  transition-property: background-color, border-color, padding;
+  transition-duration: var(--motion-panel);
+  transition-timing-function: var(--ease-emphasized);
+}
+[data-collapsed="true"] .sidebar-profile-surface {
+  background-color: transparent;
+  border-color: transparent;
+  padding: 6px 2px;
+}
+[data-motion-active="false"] .sidebar-profile-surface {
+  transition: none;
+}
+.sidebar-profile-header-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  transition-property: gap;
+  transition-duration: var(--motion-panel);
+  transition-timing-function: var(--ease-emphasized);
+}
+[data-collapsed="true"] .sidebar-profile-header-row {
+  gap: 0;
+  justify-content: center;
+}
+[data-motion-active="false"] .sidebar-profile-header-row {
+  transition: none;
+}
+.sidebar-profile-avatar-slot {
+  width: 32px;
+  height: 32px;
+  min-width: 32px;
+  flex: 0 0 32px;
+  aspect-ratio: 1;
+  overflow: hidden;
+}
+.sidebar-profile-avatar-slot img {
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  object-fit: cover;
+  border-radius: 9999px;
+  display: block;
+}
+
+/* Profile Credits：max-height 0 + 上移 + 淡出 */
+.sidebar-profile-credits {
+  max-height: 64px;
+  opacity: 1;
+  transform: translateY(0);
+  overflow: hidden;
+  transition-property: opacity, transform, max-height;
+  transition-duration: var(--motion-fast), var(--motion-fast), var(--motion-panel);
+  transition-timing-function: var(--ease-standard), var(--ease-standard), var(--ease-emphasized);
+}
+[data-collapsed="true"] .sidebar-profile-credits {
+  max-height: 0;
+  opacity: 0;
+  transform: translateY(-3px);
+}
+[data-motion-active="false"] .sidebar-profile-credits {
+  transition: none;
+}
+[data-motion-active="true"][data-motion-direction="collapse"] .sidebar-profile-credits {
+  transition-delay: 0ms, 0ms, 40ms;
+}
+[data-motion-active="true"][data-motion-direction="expand"] .sidebar-profile-credits {
+  transition-delay: 80ms, 80ms, 0ms;
+}
+
+/* Profile Tooltip：仅在 collapsed 稳定态可 hover 显示；manual morph 期间强制隐藏 */
+.sidebar-profile-tooltip {
+  display: none;
+}
+[data-collapsed="true"] .sidebar-profile-tooltip {
+  display: block;
+}
+[data-motion-active="true"] .sidebar-tooltip {
+  opacity: 0 !important;
+}
+
+/* Reduced Motion：全部瞬时切换 */
+html[data-motion-effective="reduced"] .sidebar-shell,
+html[data-motion-effective="reduced"] .sidebar-nav-row,
+html[data-motion-effective="reduced"] .sidebar-label,
+html[data-motion-effective="reduced"] .sidebar-profile-identity,
+html[data-motion-effective="reduced"] .sidebar-logo-full,
+html[data-motion-effective="reduced"] .sidebar-logo-mark,
+html[data-motion-effective="reduced"] .sidebar-profile-surface,
+html[data-motion-effective="reduced"] .sidebar-profile-header-row,
+html[data-motion-effective="reduced"] .sidebar-profile-credits {
+  transition: none !important;
+}
+/* ============================================================
+   Kiro Motion System V1 —— Kiro-scoped Motion Grammar
+   Workspace / Sidecar 各自 timing scope（由 KiroChatSurface root class 注入）。
+   Motion follows state：只消费已有 UI state，不创建业务状态、不阻塞业务。
+   ============================================================ */
+:root {
+  /* 默认值（scope class 未挂载时安全兜底；真实值由 scope 覆盖） */
+  --kiro-motion-control: 120ms;
+  --kiro-motion-structure: 150ms;
+  --kiro-motion-spatial: 220ms;
+  --kiro-motion-popover-enter: 140ms;
+  --kiro-motion-popover-exit: 120ms;
+  --kiro-motion-intro: 320ms;
+  --kiro-motion-composer-intro: 220ms;
+  --kiro-motion-offset: 3px;
+}
+
+.kiro-motion-workspace {
+  --kiro-motion-control: 120ms;
+  --kiro-motion-structure: 150ms;
+  --kiro-motion-spatial: 220ms;
+  --kiro-motion-popover-enter: 140ms;
+  --kiro-motion-popover-exit: 120ms;
+  --kiro-motion-intro: 320ms;
+  --kiro-motion-composer-intro: 220ms;
+  --kiro-motion-offset: 3px;
+}
+
+.kiro-motion-sidecar {
+  --kiro-motion-control: 100ms;
+  --kiro-motion-structure: 130ms;
+  --kiro-motion-spatial: 180ms;
+  --kiro-motion-popover-enter: 120ms;
+  --kiro-motion-popover-exit: 100ms;
+  --kiro-motion-intro: 250ms;
+  --kiro-motion-composer-intro: 130ms;
+  --kiro-motion-offset: 2px;
+}
+
+@layer utilities {
+  /* L1 control：小控件状态微反馈（color / border / 轻 transform），无 opacity 闪烁 */
+  .kiro-control-motion {
+    transition:
+      color var(--kiro-motion-control) var(--ease-standard),
+      background-color var(--kiro-motion-control) var(--ease-standard),
+      border-color var(--kiro-motion-control) var(--ease-standard),
+      transform var(--kiro-motion-control) var(--ease-standard);
+  }
+
+  /* L2 structure settle：完整结构首次落位（opacity .88→1 + 上移 3px，不 scale） */
+  .kiro-structure-settle {
+    animation: kiro-structure-in var(--kiro-motion-structure) var(--ease-standard) both;
+  }
+
+  @keyframes kiro-structure-in {
+    from {
+      opacity: 0.88;
+      transform: translateY(var(--kiro-motion-offset));
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  /* Popover surface（kiro profile）：source-aware 位移 + 轻 scale .985→1；
+     默认面板关闭时 exit 快于 enter，open 时进入时长生效 */
+  .kiro-popover-motion {
+    transition:
+      opacity var(--kiro-motion-popover-exit) var(--ease-standard),
+      transform var(--kiro-motion-popover-exit) var(--ease-standard);
+  }
+  .kiro-popover-motion[data-kiro-open="true"] {
+    transition-duration: var(--kiro-motion-popover-enter), var(--kiro-motion-popover-enter);
+  }
+
+  /* 选中态微 settle（model / agent / reasoning check） */
+  .kiro-check-settle {
+    animation: kiro-check-in var(--kiro-motion-control) var(--ease-standard) both;
+  }
+  @keyframes kiro-check-in {
+    from {
+      opacity: 0.4;
+      transform: scale(0.82);
+    }
+    to {
+      opacity: 1;
+      transform: scale(1);
+    }
+  }
+
+  /* Empty intro：单次 choreography（stagger 由 --kiro-stagger-index 驱动；无 setTimeout） */
+  .kiro-empty-logo-intro {
+    animation: kiro-empty-logo-in var(--kiro-motion-intro) var(--ease-emphasized) both;
+  }
+  .kiro-empty-title-intro {
+    animation: kiro-empty-fade-in var(--kiro-motion-intro) var(--ease-standard) both;
+    animation-delay: 60ms;
+  }
+  .kiro-empty-subtitle-intro {
+    animation: kiro-empty-fade-in var(--kiro-motion-intro) var(--ease-standard) both;
+    animation-delay: 110ms;
+  }
+  .kiro-empty-suggestion-intro {
+    animation: kiro-empty-fade-in var(--kiro-motion-intro) var(--ease-standard) both;
+    animation-delay: calc(150ms + var(--kiro-stagger-index, 0) * 32ms);
+  }
+
+  @keyframes kiro-empty-logo-in {
+    from {
+      opacity: 0;
+      transform: translateY(4px) scale(0.96);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+  }
+  @keyframes kiro-empty-fade-in {
+    from {
+      opacity: 0;
+      transform: translateY(4px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  /* Empty 退场（Contextual Handoff）：semantic close 立即 inert；视觉 ~150ms */
+  .kiro-empty-exit {
+    animation: kiro-empty-out 150ms var(--ease-standard) both;
+  }
+  @keyframes kiro-empty-out {
+    from {
+      opacity: 1;
+      transform: translateY(0);
+    }
+    to {
+      opacity: 0;
+      transform: translateY(-4px);
+    }
+  }
+
+  /* Composer intro：仅本轮 Empty Intro claim 时挂载一次；不禁 pointer interaction */
+  .kiro-composer-intro {
+    animation: kiro-composer-in var(--kiro-motion-composer-intro) var(--ease-standard) both;
+  }
+  @keyframes kiro-composer-in {
+    from {
+      opacity: 0;
+      transform: translateY(6px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  /* Scroll-to-bottom presence：enter 140ms / exit 100ms */
+  .kiro-scroll-control-enter {
+    transition:
+      opacity 140ms var(--ease-standard),
+      transform 140ms var(--ease-standard);
+  }
+  .kiro-scroll-control-exit {
+    transition:
+      opacity 100ms var(--ease-standard),
+      transform 100ms var(--ease-standard);
+  }
+
+  /* Send Control 激活（canSend false→true）：opacity .4→1 + scale .96→1，~120ms，仅 boolean 变化 */
+  .kiro-send-activate {
+    animation: kiro-send-in var(--kiro-motion-control, 120ms) var(--ease-standard) both;
+  }
+  @keyframes kiro-send-in {
+    from {
+      opacity: 0.4;
+      transform: scale(0.96);
+    }
+    to {
+      opacity: 1;
+      transform: scale(1);
+    }
+  }
+}
+
+/* Reduced Motion：Kiro motion 全部瞬时（最终态直达，无 translate/scale/stagger） */
+html[data-motion-effective="reduced"] .kiro-structure-settle,
+html[data-motion-effective="reduced"] .kiro-empty-logo-intro,
+html[data-motion-effective="reduced"] .kiro-empty-title-intro,
+html[data-motion-effective="reduced"] .kiro-empty-subtitle-intro,
+html[data-motion-effective="reduced"] .kiro-empty-suggestion-intro,
+html[data-motion-effective="reduced"] .kiro-empty-exit,
+html[data-motion-effective="reduced"] .kiro-composer-intro,
+html[data-motion-effective="reduced"] .kiro-check-settle {
+  animation: none !important;
+}
+html[data-motion-effective="reduced"] .kiro-popover-motion,
+html[data-motion-effective="reduced"] .kiro-scroll-control-enter,
+html[data-motion-effective="reduced"] .kiro-scroll-control-exit,
+html[data-motion-effective="reduced"] .kiro-send-activate {
+  transition: none !important;
+  animation: none !important;
+}
+
+/* Motion V1：Sidecar geometry 交互期间内部装饰性 motion 近瞬时（hover/streaming/scroll 正常） */
+[data-geometry-interacting] .kiro-structure-settle,
+[data-geometry-interacting] .kiro-empty-logo-intro,
+[data-geometry-interacting] .kiro-empty-title-intro,
+[data-geometry-interacting] .kiro-empty-subtitle-intro,
+[data-geometry-interacting] .kiro-empty-suggestion-intro,
+[data-geometry-interacting] .kiro-composer-intro,
+[data-geometry-interacting] .kiro-popover-motion,
+[data-geometry-interacting] .kiro-scroll-control-enter,
+[data-geometry-interacting] .kiro-scroll-control-exit {
+  animation: none !important;
+  transition-duration: 0.01ms !important;
+}

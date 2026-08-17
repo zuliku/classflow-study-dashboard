@@ -1,0 +1,39 @@
+name: DOCX OpenXML Compatibility Gate
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  docx-openxml:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate DOCX fixtures (production renderDocx)
+        run: npm run test:docx:fixtures
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Restore OpenXmlValidator
+        run: dotnet restore scripts/openxml-validator/OpenXmlValidator.csproj
+
+      - name: Run OpenXmlValidator gate (01-05 + 07-repaired must be 0 errors; 06-legacy-real must fail)
+        run: npm run test:docx:openxml
+
+      - name: LibreOffice headless render smoke (05 + 07-repaired must produce PDF)
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq libreoffice-writer > /dev/null
+          node scripts/docx-compat/render-libreoffice.mjs
