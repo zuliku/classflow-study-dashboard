@@ -6,12 +6,12 @@ import { WorkspaceHeader } from "@/components/layout/WorkspaceHeader";
 import { Button } from "@/components/ui/Button";
 import { BottomNav } from "@/components/layout/BottomNav";
 import { TimetableGrid } from "@/components/dashboard/TimetableGrid";
+import { buildOverviewStudyBlockLayers } from "@/components/dashboard/overviewStudyBlockLayers";
 import { TimetableQuickGlance } from "@/components/dashboard/TimetableQuickGlance";
 import { UpcomingDDL } from "@/components/dashboard/UpcomingDDL";
 import { MiniCalendar } from "@/components/dashboard/MiniCalendar";
 import { StudyLoadChart } from "@/components/dashboard/StudyLoadChart";
 import { AssignmentTable } from "@/components/dashboard/AssignmentTable";
-import { TodayStudyPlanCard } from "@/components/dashboard/TodayStudyPlanCard";
 import { AssignmentsWorkspace } from "@/components/assignment/AssignmentsWorkspace";
 import { CoursesWorkspace } from "@/components/course/CoursesWorkspace";
 import { GroupCollaborationView } from "@/components/group/GroupCollaborationView";
@@ -62,6 +62,7 @@ export default function Home() {
     semester,
     currentSemesterWeek,
     schedules,
+    studyBlocks,
     setAddCourseModalOpen,
     setImportScheduleModalOpen,
     setFullTimetableModalOpen,
@@ -264,7 +265,16 @@ export default function Home() {
                 {/* 三卡 Grid：xl 时 h-full 填满 Hero Section；三卡同顶同底（items-stretch） */}
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 items-stretch h-full min-h-0">
                 <div className="lg:col-span-2 flex flex-col min-h-0">
-                  <TimetableGrid density="compact" fillAvailableHeight headerActions={<TimetableQuickGlance />} />
+                  <TimetableGrid
+                    density="compact"
+                    fillAvailableHeight
+                    headerActions={<TimetableQuickGlance />}
+                    extraLayers={buildOverviewStudyBlockLayers({
+                      studyBlocks,
+                      semester,
+                      currentSemesterWeek,
+                    })}
+                  />
                 </div>
                 {/* 右栏：DDL 吸收剩余高度（flex-1），Calendar 固定稳定高度（不随月份/内容变化）
                     右栏总高恒等于左侧课表 → 三卡同顶同底
@@ -287,9 +297,6 @@ export default function Home() {
                 </div>
                 <div className="md:min-h-[460px] min-w-0" data-testid="overview-tasks-wrap">
                   <AssignmentTable mode="compact" />
-                </div>
-                <div className="md:min-h-[460px] min-w-0" data-testid="overview-plan-wrap">
-                  <TodayStudyPlanCard />
                 </div>
               </section>
                 </>
