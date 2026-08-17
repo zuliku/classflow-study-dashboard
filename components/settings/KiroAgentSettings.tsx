@@ -288,7 +288,7 @@ export function KiroAgentSettings() {
           <SettingsRow
             settingId="kiro-agent-mode"
             title="自动执行级别"
-            description="决定工作区内允许的操作等级；「授权范围内自动」自动执行创建、修改和移动，可自动运行普通终端命令，但删除及高风险命令仍会请求确认，且永不扩大授权目录、不含网络/系统级能力。"
+            description="决定工作区内允许的操作等级；「授权范围内自动」可自动执行创建、修改、移动和普通终端命令；删除及识别到的高风险命令仍会请求确认。终端命令本身可能访问工作区之外的系统资源。"
           >
             <SettingsSegmentedControl<KiroAgentMode>
               value={agentMode}
