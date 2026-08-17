@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { CourseSchedule, Semester } from "@/types";
+import { CourseSchedule, ScheduleOccurrenceOverride, Semester } from "@/types";
 import { computeWeekCourseLoad } from "@/lib/studyLoad";
 
 const semester: Semester = {
@@ -99,5 +99,52 @@ describe("computeWeekCourseLoad", () => {
     const load = computeWeekCourseLoad(schedules, semester, 1);
     expect(load.days[0].count).toBe(1);
     expect(load.days[0].hours).toBe(0);
+  });
+});
+
+describe("computeWeekCourseLoad + schedule overrides（补课/调课/停课计入实际负荷）", () => {
+  const baseSchedules: CourseSchedule[] = [
+    sched({ id: "s1", dayOfWeek: 1, startTime: "08:00", endTime: "09:40" }), // 1.67h 周一
+    sched({ id: "s2", dayOfWeek: 2, startTime: "14:00", endTime: "15:40" }), // 1.67h 周二
+  ];
+
+  it("extra 补课计入当周负荷（时长 + 节数）", () => {
+    const overrides: ScheduleOccurrenceOverride[] = [
+      { id: "o-extra", kind: "extra", courseId: "c1", week: 3, dayOfWeek: 3, startTime: "18:00", endTime: "19:40", location: "教室", source: "manual" },
+    ];
+    const load = computeWeekCourseLoad(baseSchedules, semester, 3, overrides);
+    // 周一 1.7 + 周二 1.7 + 补课周三 1.7 = 5.1h / 3 节
+    expect(load.days[0].hours).toBe(1.7);
+    expect(load.days[2]).toEqual({ day: "周三", hours: 1.7, count: 1 });
+    expect(load.totalHours).toBe(5.1);
+    expect(load.totalSessions).toBe(3);
+  });
+
+  it("cancel 停课不计入当周负荷（该周节数减少）", () => {
+    const overrides: ScheduleOccurrenceOverride[] = [
+      { id: "o-cancel", kind: "cancel", courseId: "c1", baseScheduleId: "s1", week: 3, source: "manual" },
+    ];
+    const load = computeWeekCourseLoad(baseSchedules, semester, 3, overrides);
+    expect(load.days[0]).toEqual({ day: "周一", hours: 0, count: 0 });
+    expect(load.totalHours).toBe(1.7);
+    expect(load.totalSessions).toBe(1);
+  });
+
+  it("move 调课计入目标位（原位置不计入）", () => {
+    const overrides: ScheduleOccurrenceOverride[] = [
+      { id: "o-move", kind: "move", courseId: "c1", baseScheduleId: "s1", week: 3, dayOfWeek: 5, startTime: "16:00", endTime: "17:40", location: "教室", source: "manual" },
+    ];
+    const load = computeWeekCourseLoad(baseSchedules, semester, 3, overrides);
+    expect(load.days[0]).toEqual({ day: "周一", hours: 0, count: 0 });
+    expect(load.days[4]).toEqual({ day: "周五", hours: 1.7, count: 1 });
+    expect(load.totalSessions).toBe(2); // 周二 base + 周五 move
+  });
+
+  it("无 overrides 时行为不变（纯 base 统计向后兼容）", () => {
+    const load = computeWeekCourseLoad(baseSchedules, semester, 3);
+    expect(load.days[0].hours).toBe(1.7);
+    expect(load.totalSessions).toBe(2);
+    const withEmpty = computeWeekCourseLoad(baseSchedules, semester, 3, []);
+    expect(withEmpty).toEqual(load);
   });
 });

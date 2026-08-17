@@ -39,10 +39,11 @@ function ChartTooltip({ active, payload }: { active?: boolean; payload?: Tooltip
 
 export function StudyLoadChart() {
   const reducedMotion = useEffectiveReducedMotion();
-  const { schedules, semester } = useAppStore();
+  const { schedules, scheduleOccurrenceOverrides, semester } = useAppStore();
 
   const today = new Date();
-  const weekLoad = computeWeekCourseLoad(schedules, semester);
+  // 补课 / 调课 / 停课计入实际负荷（与课表同一 resolver；extra 计入、cancel 不计入、move 在目标位）
+  const weekLoad = computeWeekCourseLoad(schedules, semester, undefined, scheduleOccurrenceOverrides);
   const todayIndex = (today.getDay() + 6) % 7; // 周一=0 ... 周日=6
   const maxDayHours = Math.max(...weekLoad.days.map((d) => d.hours), 0);
   const yAxisMax = Math.max(6, Math.ceil(maxDayHours + 1));

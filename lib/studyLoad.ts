@@ -1,7 +1,7 @@
-import { CourseSchedule } from "@/types";
+import { CourseSchedule, ScheduleOccurrenceOverride } from "@/types";
 import { Semester } from "@/types";
 import { getSemesterWeek } from "@/lib/semester";
-import { isScheduleActive } from "@/lib/schedule";
+import { resolveCourseOccurrencesForWeek } from "@/lib/scheduleOccurrences";
 
 const DAY_LABELS = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"];
 
@@ -36,13 +36,21 @@ export interface WeekCourseLoad {
 }
 
 /**
- * 根据学期周次实际生效的 schedule（isScheduleActive 唯一入口），
- * 用 endTime - startTime 计算周一至周日每天的课程时长、节数与本周总时长。
+ * 根据学期周次实际生效的课程统计周一至周日的时长/节数。
+ *
+ * 唯一事实源 = resolveCourseOccurrencesForWeek（与课表 / 冲突检测同一 resolver）：
+ * - base：按周生效（weeks / 单双周 / excludedWeeks 尊重）
+ * - extra 补课：计入当周
+ * - move 调课：计入目标位（原位置不再计入）
+ * - cancel 停课：当周不计入
+ *
+ * overrides 缺省为空 → 行为与纯 base 课表一致（向后兼容）。
  */
 export function computeWeekCourseLoad(
   schedules: CourseSchedule[],
   semester: Semester,
-  week?: number
+  week?: number,
+  overrides: ScheduleOccurrenceOverride[] = []
 ): WeekCourseLoad {
   const currentWeek = week ?? getSemesterWeek(new Date(), semester);
   const isInSemester = currentWeek >= 1 && currentWeek <= semester.totalWeeks;
@@ -59,15 +67,20 @@ export function computeWeekCourseLoad(
 
   if (!isInSemester) return empty();
 
+  const occurrences = resolveCourseOccurrencesForWeek({
+    schedules,
+    overrides,
+    week: currentWeek,
+    totalWeeks: semester.totalWeeks,
+  });
+
   const days: WeekDayLoad[] = DAY_LABELS.map((day, idx) => {
-    const daySchedules = schedules.filter(
-      (s) => s.dayOfWeek === idx + 1 && isScheduleActive(s, currentWeek)
-    );
-    const hours = daySchedules.reduce(
-      (sum, s) => sum + (toHours(s.endTime) - toHours(s.startTime)),
+    const dayOccurrences = occurrences.filter((o) => o.dayOfWeek === idx + 1);
+    const hours = dayOccurrences.reduce(
+      (sum, o) => sum + (toHours(o.endTime) - toHours(o.startTime)),
       0
     );
-    return { day, hours: round1(hours), count: daySchedules.length };
+    return { day, hours: round1(hours), count: dayOccurrences.length };
   });
 
   const totalHours = round1(days.reduce((sum, d) => sum + d.hours, 0));
