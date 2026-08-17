@@ -15,9 +15,10 @@ export function installMemoryDesktopBridgeMock() {
   const calls: Record<string, number> = { pick: 0, list: 0, stat: 0, readText: 0, readBytes: 0, readTextPrefix: 0, createDirectory: 0, writeText: 0, writeBytes: 0, remove: 0, move: 0, forgetGrant: 0, getGrantStatus: 0, terminalExecute: 0, terminalCancel: 0 };
   const cancelled = { value: false };
   const holdNextTerminal = { value: false };
-  const pendingTerminal: { resolve: null | ((r: unknown) => void); command: string; isPending: boolean } = { resolve: null, command: "", isPending: false };
+  const pendingTerminal: { resolve: null | ((r: unknown) => void); reject: null | ((e: unknown) => void); command: string; isPending: boolean } = { resolve: null, reject: null, command: "", isPending: false };
   let lastTerminalInput: null | Record<string, unknown> = null;
   let terminalResultHook: null | ((input: { command: string }) => unknown) = null;
+  let terminalRejectCode: null | string = null;
   let seq = 0;
 
   const key = (grantId: string, path: string) => grantId + "::" + (path || "").replace(/\/+$/, "");
@@ -187,6 +188,12 @@ export function installMemoryDesktopBridgeMock() {
           command: input.command,
           timeoutMs: input.timeoutMs,
         };
+        // V1.0.1：bridge reject fixture（结构化 reject；timeout 永远 resolve 不 reject）
+        if (terminalRejectCode) {
+          const code = terminalRejectCode;
+          terminalRejectCode = null;
+          throw { code, message: "C:\\Users\\Alice\\secret.txt raw" };
+        }
         const canned = () =>
           (terminalResultHook
             ? terminalResultHook({ command: input.command })
@@ -211,26 +218,21 @@ export function installMemoryDesktopBridgeMock() {
           holdNextTerminal.value = false;
           pendingTerminal.command = input.command;
           pendingTerminal.isPending = true;
-          return new Promise((resolve) => {
+          return new Promise((resolve, reject) => {
             pendingTerminal.resolve = resolve as (r: unknown) => void;
+            pendingTerminal.reject = reject;
           });
         }
         return canned();
       },
       async cancel(input: { executionId: string }) {
         calls.terminalCancel += 1;
-        if (pendingTerminal.isPending && pendingTerminal.resolve) {
+        // V1.0.1 Handoff 冻结：cancel 后 execute promise 必须 reject CANCELLED（不是 resolve exitCode=null）
+        if (pendingTerminal.isPending && pendingTerminal.reject) {
           pendingTerminal.isPending = false;
-          pendingTerminal.resolve({
-            exitCode: null,
-            stdout: "",
-            stderr: "cancelled",
-            timedOut: false,
-            durationMs: 0,
-            stdoutTruncated: false,
-            stderrTruncated: false,
-          });
+          pendingTerminal.reject({ code: "CANCELLED", message: "cancelled by user" });
           pendingTerminal.resolve = null;
+          pendingTerminal.reject = null;
         }
       },
     },
@@ -262,6 +264,9 @@ export function installMemoryDesktopBridgeMock() {
     setTerminalResultHook: (hook: null | ((input: { command: string }) => unknown)) => {
       terminalResultHook = hook;
     },
+    setTerminalRejectCode: (code: null | string) => {
+      terminalRejectCode = code;
+    },
     holdNextTerminal,
     pendingTerminal,
     releasePendingTerminal: () => {
@@ -277,6 +282,7 @@ export function installMemoryDesktopBridgeMock() {
           stderrTruncated: false,
         });
         pendingTerminal.resolve = null;
+        pendingTerminal.reject = null;
       }
     },
   };

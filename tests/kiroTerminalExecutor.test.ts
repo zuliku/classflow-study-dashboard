@@ -19,6 +19,7 @@ type Ctl = {
   opCount: (op: string) => number;
   lastTerminalInput: () => { shell: string; cwd: string; command: string; grantId: string; timeoutMs: number } | null;
   setTerminalResultHook: (hook: null | ((input: { command: string }) => unknown)) => void;
+  setTerminalRejectCode: (code: null | string) => void;
 };
 let ctl: Ctl;
 
@@ -375,11 +376,16 @@ describe("预算", () => {
 });
 
 describe("classifyTerminalCommandRisk（纯函数）", () => {
-  it("normal：git status / npm test / Get-ChildItem", () => {
+  it("normal：git status / npm test / Get-ChildItem / script 文件执行", () => {
     expect(classifyTerminalCommandRisk("git status", "powershell")).toBe("normal");
+    expect(classifyTerminalCommandRisk("git diff", "powershell")).toBe("normal");
     expect(classifyTerminalCommandRisk("npm test", "cmd")).toBe("normal");
+    expect(classifyTerminalCommandRisk("npm run build", "powershell")).toBe("normal");
     expect(classifyTerminalCommandRisk("Get-ChildItem .", "powershell")).toBe("normal");
     expect(classifyTerminalCommandRisk("python script.py", "powershell")).toBe("normal");
+    expect(classifyTerminalCommandRisk("node script.js", "powershell")).toBe("normal");
+    expect(classifyTerminalCommandRisk("pytest", "powershell")).toBe("normal");
+    expect(classifyTerminalCommandRisk("tsc", "powershell")).toBe("normal");
   });
 
   it("destructive：PowerShell 别名 / CMD / git 不可逆", () => {
@@ -399,6 +405,37 @@ describe("classifyTerminalCommandRisk（纯函数）", () => {
     expect(classifyTerminalCommandRisk("git status | Remove-Item x", "powershell")).toBe("destructive");
   });
 
+  it("V1.0.1 cross-shell：outer shell 不匹配也检测另一套 destructive patterns", () => {
+    // PowerShell outer + cmd /c del（quoted 内容仍被扫描）
+    expect(classifyTerminalCommandRisk('cmd /c "del temp.txt"', "powershell")).toBe("destructive");
+    expect(classifyTerminalCommandRisk('cmd /c "rd /s /q x"', "powershell")).toBe("destructive");
+    expect(classifyTerminalCommandRisk('cmd /c "git clean -fd"', "powershell")).toBe("destructive");
+    // CMD outer + powershell Remove-Item
+    expect(classifyTerminalCommandRisk('powershell -Command "Remove-Item temp.txt"', "cmd")).toBe("destructive");
+    expect(classifyTerminalCommandRisk('powershell -Command "Clear-Content x.txt"', "cmd")).toBe("destructive");
+    // 同 shell 嵌套同样命中
+    expect(classifyTerminalCommandRisk('powershell -Command "Remove-Item x"', "powershell")).toBe("destructive");
+    expect(classifyTerminalCommandRisk('pwsh -Command "Remove-Item x"', "powershell")).toBe("destructive");
+  });
+
+  it("V1.0.1 nested shell：出现 cmd/powershell/pwsh 调用 → 至少 privileged", () => {
+    expect(classifyTerminalCommandRisk('cmd /c "echo hello"', "powershell")).toBe("privileged");
+    expect(classifyTerminalCommandRisk('cmd /k echo hi', "powershell")).toBe("privileged");
+    expect(classifyTerminalCommandRisk('powershell -Command "Get-ChildItem"', "cmd")).toBe("privileged");
+    expect(classifyTerminalCommandRisk('pwsh -Command "Get-ChildItem"', "cmd")).toBe("privileged");
+    expect(classifyTerminalCommandRisk('powershell.exe -Command "Get-ChildItem"', "cmd")).toBe("privileged");
+  });
+
+  it("V1.0.1 inline interpreter：python -c / node -e / ruby -e / perl -e → 至少 privileged", () => {
+    expect(classifyTerminalCommandRisk('python -c "import os; os.remove(\'x\')"', "powershell")).toBe("privileged");
+    expect(classifyTerminalCommandRisk('python3 -c "print(1)"', "cmd")).toBe("privileged");
+    expect(classifyTerminalCommandRisk('py -c "print(1)"', "powershell")).toBe("privileged");
+    expect(classifyTerminalCommandRisk('node -e "require(\'fs\').unlinkSync(\'x\')"', "cmd")).toBe("privileged");
+    expect(classifyTerminalCommandRisk('node --eval "console.log(1)"', "powershell")).toBe("privileged");
+    expect(classifyTerminalCommandRisk('ruby -e "puts 1"', "powershell")).toBe("privileged");
+    expect(classifyTerminalCommandRisk('perl -e "print 1"', "powershell")).toBe("privileged");
+  });
+
   it("privileged：taskkill / reg delete / Stop-Process", () => {
     expect(classifyTerminalCommandRisk("taskkill /PID 1", "cmd")).toBe("privileged");
     expect(classifyTerminalCommandRisk("reg delete HKLM\\x /f", "cmd")).toBe("privileged");
@@ -406,11 +443,99 @@ describe("classifyTerminalCommandRisk（纯函数）", () => {
     expect(classifyTerminalCommandRisk("shutdown /s", "cmd")).toBe("privileged");
   });
 
-  it("blocked：EncodedCommand / runas / Start-Process -Verb RunAs", () => {
+  it("blocked：EncodedCommand / runas / Start-Process -Verb RunAs；优先级 blocked > destructive", () => {
     expect(classifyTerminalCommandRisk("powershell -EncodedCommand QUJD", "powershell")).toBe("blocked");
-    expect(classifyTerminalCommandRisk("powershell -enc QUJD", "powershell")).toBe("blocked");
+    expect(classifyTerminalCommandRisk("powershell -enc QUJD; Remove-Item x", "powershell")).toBe("blocked");
     expect(classifyTerminalCommandRisk("runas /user:admin cmd", "cmd")).toBe("blocked");
     expect(classifyTerminalCommandRisk("Start-Process notepad -Verb RunAs", "powershell")).toBe("blocked");
     expect(classifyTerminalCommandRisk("", "powershell")).toBe("blocked");
+    expect(classifyTerminalCommandRisk("   ", "cmd")).toBe("blocked");
+  });
+});
+
+describe("V1.0.1 Policy 回归（nested shell / inline interpreter / cross-shell → approval）", () => {
+  it.each([
+    ['cmd /c "echo hi"'],
+    ['cmd /c "del temp.txt"'],
+    ['powershell -Command "Get-ChildItem"'],
+    ['powershell -Command "Remove-Item x"'],
+    ['python -c "print(1)"'],
+    ['node -e "console.log(1)"'],
+  ])("Workspace Auto：%s → approval-required（bridge execute = 0）", async (command) => {
+    const { attempt } = await run({ toolInput: input({ command }) });
+    expect(attempt.kind).toBe("approval-required");
+    expect(ctl.opCount("terminalExecute")).toBe(0);
+  });
+
+  it("Guided：非 blocked 一律 approval-required（含 nested shell）", async () => {
+    const { attempt } = await run({
+      snapshot: snapshot({ agentMode: "guided" }),
+      toolInput: input({ command: 'cmd /c "echo hello"' }),
+    });
+    expect(attempt.kind).toBe("approval-required");
+  });
+
+  it("Blocked：任何 mode 直接拒绝（含 Workspace Auto）", async () => {
+    const { attempt } = await run({ toolInput: input({ command: "runas /user:admin cmd" }) });
+    expect(attempt.kind).toBe("completed");
+    if (attempt.kind !== "completed") return;
+    expect(failCode(attempt)).toBe("TERMINAL_COMMAND_BLOCKED");
+    expect(ctl.opCount("terminalExecute")).toBe(0);
+  });
+});
+
+describe("V1.0.1 Bridge Error Contract（resolve/reject 语义冻结）", () => {
+  it("resolve exitCode=1（正常完成，非 EXECUTION_FAILED）→ completed + exitCode=1", async () => {
+    ctl.setTerminalResultHook(() => ({
+      exitCode: 1,
+      stdout: "error",
+      stderr: "exit 1",
+      timedOut: false,
+      durationMs: 50,
+      stdoutTruncated: false,
+      stderrTruncated: false,
+    }));
+    const { attempt } = await run();
+    expect(attempt.kind).toBe("completed");
+    if (attempt.kind !== "completed") return;
+    expect(attempt.output.ok).toBe(true);
+    expect((attempt.output.data as { exitCode: number }).exitCode).toBe(1);
+  });
+
+  it("resolve timedOut=true（timeout 不是 reject）→ completed + timedOut=true", async () => {
+    ctl.setTerminalResultHook(() => ({
+      exitCode: null,
+      stdout: "partial",
+      stderr: "",
+      timedOut: true,
+      durationMs: 30000,
+      stdoutTruncated: false,
+      stderrTruncated: false,
+    }));
+    const { attempt } = await run();
+    expect(attempt.kind).toBe("completed");
+    if (attempt.kind !== "completed") return;
+    expect(attempt.output.ok).toBe(true);
+    expect((attempt.output.data as { timedOut: boolean }).timedOut).toBe(true);
+  });
+
+  it.each([
+    ["PERMISSION_DENIED", "TERMINAL_PERMISSION_DENIED"],
+    ["CANCELLED", "TERMINAL_CANCELLED"],
+    ["EXECUTION_FAILED", "TERMINAL_EXECUTION_FAILED"],
+    ["INVALID_OPERATION", "TERMINAL_EXECUTION_FAILED"],
+  ])("reject %s → %s（固定文案；raw message 不泄漏）", async (rejectCode, expectedCode) => {
+    ctl.setTerminalRejectCode(rejectCode);
+    const { attempt } = await run();
+    expect(attempt.kind).toBe("completed");
+    if (attempt.kind !== "completed") return;
+    expect(attempt.output.ok).toBe(false);
+    expect(failCode(attempt)).toBe(expectedCode);
+    const message = (attempt.output as { message: string }).message;
+    expect(message).not.toContain("C:\\");
+    expect(message).not.toContain("Users");
+    expect(message).not.toContain("Alice");
+    expect(message).not.toContain("secret.txt");
+    expect(message).not.toContain("raw");
   });
 });

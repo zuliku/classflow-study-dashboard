@@ -30,7 +30,7 @@ import { getClassFlowDesktopTerminalBridge } from "@/lib/desktop/bridge";
 import { nativeGrantIdFromAdapterRef, isNativeAdapterRef } from "@/lib/desktop/bridge";
 import {
   ClassFlowDesktopTerminalShell,
-  DesktopBridgeError,
+  DesktopTerminalBridgeError,
 } from "@/lib/desktop/types";
 import { classifyTerminalCommandRisk, TerminalCommandRisk } from "@/lib/ai/computer/terminal/risk";
 import { appendComputerAuditEntry } from "@/lib/ai/computer/audit";
@@ -100,23 +100,30 @@ function resolveSnapshotWorkspace(snapshot: KiroComputerTurnSnapshot, liveWorksp
   return ws;
 }
 
-/** Desktop Bridge 终端错误 → ComputerError（固定文案；绝不透传原始异常/路径） */
-function mapTerminalBridgeError(err: unknown): never {
-  const e = err as Partial<DesktopBridgeError> | null | undefined;
+/**
+ * V1.0.1 Handoff 冻结：Terminal Bridge Error Contract 唯一映射。
+ * resolve：exit 0 / nonzero / timeout（timedOut=true）；reject：PERMISSION_DENIED / CANCELLED /
+ * EXECUTION_FAILED / INVALID_OPERATION。绝不透传 bridge message；dev console 保持 sanitized。
+ */
+function terminalBridgeErrorToComputerError(err: unknown): ComputerError {
+  const e = err as Partial<DesktopTerminalBridgeError> | null | undefined;
   const code = e?.code;
   const raw = typeof e?.message === "string" ? e.message : "";
   if (raw) {
-    // dev-only（sanitize 后）
+    // dev-only（sanitize 后；绝不进入 Tool Result / Audit 文案）
     // eslint-disable-next-line no-console
     console.debug("[kiro:terminal] bridge error", raw.replace(/[A-Za-z]:\\[^\s;,)\]]{1,300}/g, "[path]").slice(0, 200));
   }
   switch (code) {
     case "PERMISSION_DENIED":
-      throw new ComputerError("TERMINAL_PERMISSION_DENIED", TERMINAL_FIXED_MESSAGES.TERMINAL_PERMISSION_DENIED);
+      return new ComputerError("TERMINAL_PERMISSION_DENIED", TERMINAL_FIXED_MESSAGES.TERMINAL_PERMISSION_DENIED);
+    case "CANCELLED":
+      return new ComputerError("TERMINAL_CANCELLED", TERMINAL_FIXED_MESSAGES.TERMINAL_CANCELLED);
     case "INVALID_OPERATION":
-      throw new ComputerError("TERMINAL_EXECUTION_FAILED", TERMINAL_FIXED_MESSAGES.TERMINAL_EXECUTION_FAILED);
+    case "EXECUTION_FAILED":
     default:
-      throw new ComputerError("TERMINAL_EXECUTION_FAILED", TERMINAL_FIXED_MESSAGES.TERMINAL_EXECUTION_FAILED);
+      // 未结构化 / 未知 reject 同样归一化（绝不把原始异常暴露给模型）
+      return new ComputerError("TERMINAL_EXECUTION_FAILED", TERMINAL_FIXED_MESSAGES.TERMINAL_EXECUTION_FAILED);
   }
 }
 
@@ -301,7 +308,12 @@ export async function executeKiroTerminalCommand(
           rootLabel: root.label,
           relativePath: cwd,
           resourceLabel: terminalCommandPreview(command),
-          description: `${shell === "powershell" ? "PowerShell" : "命令提示符"}：${terminalCommandPreview(command)}${askForRisk ? "（此命令可能删除或不可逆修改文件。）" : ""}`,
+          description:
+            risk === "destructive"
+              ? `${shell === "powershell" ? "PowerShell" : "命令提示符"}：${terminalCommandPreview(command)}（此命令可能删除或不可逆修改文件。）`
+              : risk === "privileged"
+                ? `${shell === "powershell" ? "PowerShell" : "命令提示符"}：${terminalCommandPreview(command)}（此命令会启动额外的命令解释器或执行高权限/系统级操作。）`
+                : `${shell === "powershell" ? "PowerShell" : "命令提示符"}：${terminalCommandPreview(command)}`,
           fingerprint,
           allowedDecisions: ["deny", "allow-once"],
           commandPreview: terminalCommandPreview(command),
@@ -336,7 +348,8 @@ export async function executeKiroTerminalCommand(
       unregisterActiveTerminalExecution(executionId);
     }
   } catch (err) {
-    mapTerminalBridgeError(err);
+    const mapped = terminalBridgeErrorToComputerError(err);
+    return fail({ ok: false, code: mapped.code, message: mapped.message });
   }
 
   // ---- output bounds（Web 第二层）+ ANSI strip ----

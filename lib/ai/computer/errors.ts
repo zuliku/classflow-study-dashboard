@@ -31,6 +31,8 @@ export type ComputerErrorCode =
   // Desktop Terminal V1（固定文案；绝不携带 bridge 原始异常 / 路径）
   | "TERMINAL_UNAVAILABLE"
   | "TERMINAL_PERMISSION_DENIED"
+  // V1.0.1 Handoff：timeout 不是 Bridge reject——timedOut=true 属于结构化结果；
+  // TERMINAL_TIMEOUT 保留为 reserved（Web 无独立异常使用；Desktop Agent 不得实现 TIMEOUT reject）
   | "TERMINAL_TIMEOUT"
   | "TERMINAL_EXECUTION_FAILED"
   | "TERMINAL_CANCELLED"

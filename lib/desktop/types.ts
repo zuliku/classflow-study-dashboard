@@ -112,7 +112,29 @@ export interface ClassFlowDesktopBridgeV1 {
 export type ClassFlowDesktopTerminalShell = "powershell" | "cmd";
 
 /**
+ * Terminal Bridge V1 Error Contract（Handoff 冻结；Desktop Runtime 只实现这 4 种 reject code）。
+ * - 绝不 reject TIMEOUT：timeout 属于 process execution outcome（resolve timedOut=true），
+ *   不是 Bridge transport failure。
+ * - 错误对象绝不包含 absolute path / username / stack / raw OS error。
+ */
+export type DesktopTerminalBridgeErrorCode =
+  | "PERMISSION_DENIED"
+  | "CANCELLED"
+  | "EXECUTION_FAILED"
+  | "INVALID_OPERATION";
+
+export interface DesktopTerminalBridgeError {
+  code: DesktopTerminalBridgeErrorCode;
+  message?: string;
+}
+
+/**
  * Desktop Terminal Bridge V1（Command Runner；不是 interactive PTY）。
+ *
+ * execute 语义（V1.0.1 冻结）：
+ * - resolve：normal exit（exitCode=0）／ non-zero exit（exitCode=N）／ timeout（timedOut=true, exitCode=null）
+ * - reject：permission/grant failure（PERMISSION_DENIED）／ 用户取消（CANCELLED）／
+ *   runner 基础设施失败如 PowerShell 可执行文件缺失（EXECUTION_FAILED）／ 非法 bridge 操作（INVALID_OPERATION）
  *
  * 安全契约（详见 docs/desktop-filesystem-bridge.md §Terminal）：
  * - 只接受 grantId + relative cwd；绝不接受 absolute cwd（Runtime 负责 grantId → native root 映射）。

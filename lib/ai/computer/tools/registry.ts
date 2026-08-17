@@ -159,7 +159,7 @@ export const COMPUTER_MUTATION_TOOLS: ComputerToolDefinition[] = [
   {
     name: "run_terminal_command",
     description:
-      "在当前授权的桌面本地工作区中运行 PowerShell 或命令提示符命令（command runner，非交互终端）。用于需要真实 CLI 的操作：git（status/diff/log/add/commit）、npm/pnpm install/test/run、Python 脚本、pytest、构建与格式化（tsc/eslint/prettier）、编译器、工作区内的开发任务。默认工作目录 = 当前授权 Workspace Root（cwd 为相对路径）。普通文件读取/修改请优先使用结构化文件工具（read_text/create_text_file/patch_text_file 等），它们有更严格的沙箱与撤销能力。执行时间默认 30 秒（最多 120 秒）。删除类命令（Remove-Item/del/git clean/git reset --hard 等）与系统级命令会请求用户确认；需要管理员权限或使用 -EncodedCommand 等隐藏执行方式的命令会被拒绝。不要通过终端绕过文件权限、用户确认或路径限制，不要自行请求提权，不要用长命令拼接多个不相关的危险操作来规避审批。",
+      "在当前授权的桌面本地工作区中运行 PowerShell 或命令提示符命令（command runner，非交互终端）。用于需要真实 CLI 的操作：git（status/diff/log/add/commit）、npm/pnpm install/test/run、Python 脚本、pytest、构建与格式化（tsc/eslint/prettier）、编译器、工作区内的开发任务。默认工作目录 = 当前授权 Workspace Root（cwd 为相对路径）。普通文件读取/修改请优先使用结构化文件工具（read_text/create_text_file/patch_text_file 等），它们有更严格的沙箱与撤销能力。执行时间默认 30 秒（最多 120 秒）。ClassFlow 会识别常见删除、不可逆、系统级、嵌套 Shell 与内联任意代码操作并请求确认；普通自动执行的脚本本身仍可能具有副作用。不要通过终端绕过文件权限、用户确认或路径限制，不要自行请求提权，不要用长命令拼接多个不相关的危险操作来规避审批。",
     schema: runTerminalCommandSchema,
     capability: "shell.execute",
     mutation: true,

@@ -182,6 +182,76 @@ Web 已执行 `normalizeRelativeComputerPath()`（第一边界），但 **Runtim
 
 ---
 
+# 冻结状态（FROZEN FOR DESKTOP HANDOFF）
+
+**Contract status: FROZEN FOR DESKTOP HANDOFF**
+
+Web contract（版本保持 1 / V1 / V1，本轮只做 clarification + hardening，不做 version bump）：
+- Desktop Bridge V1（`version: 1`）
+- Filesystem Bridge V1
+- Terminal Bridge V1
+
+冻结含义：Desktop Runtime 实现者**不应修改** Kiro Tool schemas / Computer policy /
+Agent mode semantics / Approval semantics / workspace metadata shape。
+Desktop Runtime 只实现 `window.classflowDesktop`。
+
+冻结不代表永远不升级：未来如需 PTY / interactive stdin / WSL / shell streaming /
+OS-level process sandbox / admin actions / app.open / app.reveal，必须通过**新的 optional
+capability** 或**明确版本升级**引入；不得偷偷修改 V1 semantics。
+
+## Desktop Handoff Checklist（Desktop Agent 只需完成以下）
+
+**FILESYSTEM**：pickDirectory / getGrantStatus / forgetGrant / list / stat / readText /
+readBytes / readTextPrefix / createDirectory / writeText / writeBytes / remove / move。
+
+**TERMINAL**：execute / cancel。
+
+并满足：grant opaque、relative path only、canonical sandbox、symlink/junction/reparse 防护、
+原子文件写入、non-interactive shell、no elevation、process-tree timeout、process-tree cancel、
+bounded stdout/stderr、结构化错误、无 absolute path 泄漏。
+
+## Terminal Error Contract（交接表；TS 与本文档必须一致）
+
+| Situation                        | Runtime behavior                             |
+| -------------------------------- | -------------------------------------------- |
+| exit 0                           | resolve `exitCode=0`                         |
+| exit nonzero                     | resolve `exitCode=N`                         |
+| timeout                          | resolve `timedOut=true` / `exitCode=null`     |
+| user cancel（Stop）              | **reject** `{ code: "CANCELLED" }`            |
+| permission / grant failure       | **reject** `{ code: "PERMISSION_DENIED" }`    |
+| runner infrastructure failure    | **reject** `{ code: "EXECUTION_FAILED" }`     |
+| invalid bridge operation         | **reject** `{ code: "INVALID_OPERATION" }`    |
+
+- **timeout 永不 reject**（属于 process execution outcome；`DesktopTerminalBridgeErrorCode`
+  不包含 TIMEOUT）。
+- **cancel 永不 resolve** `exitCode=null` 表达（必须 reject CANCELLED）。
+- `EXECUTION_FAILED` 只表示 runner 无法启动/管理（如 PowerShell 可执行文件缺失）；
+  command 本身 exitCode=1 是正常 resolve。
+- 错误对象绝不包含 absolute path / username / stack / raw OS error。
+
+Desktop Runtime 行为示意（pseudo-code；不要实现真实 Node/Electron 代码）：
+
+```text
+execute({ executionId, shell, grantId, cwd, command, timeoutMs }):
+  validate grant(grantId)            # 否则 reject PERMISSION_DENIED
+  resolveAndCanonicalize(root, cwd)  # 否则 reject PERMISSION_DENIED / INVALID_OPERATION
+  try:
+    process = spawn(shell, non-interactive, cwd=resolvedCwd, no elevation)
+    result = runBounded(process, timeoutMs)      # stdout/stderr bounded
+    if result.timeout:
+      killTree(process)
+      return { exitCode: null, timedOut: true, stdout, stderr, durationMs, ... }
+    return { exitCode: process.exitCode, timedOut: false, ... }
+  catch infrastructureError:        # spawn 失败 / 运行时基础设施故障
+    throw { code: "EXECUTION_FAILED" }
+
+cancel(executionId):
+  killTree(executionId)              # 终止整个 process tree
+  execute promise rejects { code: "CANCELLED" }
+```
+
+---
+
 # Terminal Bridge V1（Optional Capability）
 
 ## 1. 架构边界：Filesystem Sandbox ≠ Process Sandbox
@@ -230,7 +300,8 @@ cancel({ executionId })
 - 返回 `timedOut` 明确事实；绝不返回 PID / absolute path / environment。
 - non-interactive（PowerShell 推荐 `-NoLogo -NoProfile -NonInteractive`；CMD 推荐 `/d /s /c`）。
 - 不 elevation、不管理员、不开 shell window、不以后台 detached 方式运行。
-- 结构化错误（PERMISSION_DENIED / TIMEOUT / CANCELLED / EXECUTION_FAILED / INVALID_OPERATION），
+- 结构化 reject 仅限 `PERMISSION_DENIED / CANCELLED / EXECUTION_FAILED / INVALID_OPERATION`
+  （timeout 是 resolve 结果，不是 reject——见上方交接表），
   错误中绝不包含 absolute path / username / stack。
 
 ## 5. Web 侧行为（无需 Runtime 参与）

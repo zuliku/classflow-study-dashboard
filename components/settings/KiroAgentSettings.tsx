@@ -198,7 +198,7 @@ export function KiroAgentSettings() {
     confirmRequest({
       title: "允许 Kiro 使用终端？",
       description:
-        "终端命令可能修改文件、安装依赖、运行程序，或访问工作区之外的系统资源。在「授权范围内自动」模式下，普通命令可能无需再次确认；删除等危险操作仍会请求你的许可。",
+        "终端命令可能修改文件、安装依赖、运行程序，或访问工作区之外的系统资源。在「授权范围内自动」模式下，普通命令可能无需再次确认；识别到的删除、高风险或任意内联代码命令仍会请求许可。自动执行的脚本本身可能修改文件或访问工作区外资源。",
       confirmLabel: "允许",
       onConfirm: () => setTerminalEnabled(true),
     });
@@ -303,7 +303,7 @@ export function KiroAgentSettings() {
             <SettingsRow
               settingId="kiro-terminal-enabled"
               title="允许 Kiro 使用终端"
-              description="允许 Kiro 运行 PowerShell 或命令提示符。「授权范围内自动」模式下普通命令可自动执行；删除等危险操作仍会请求确认。"
+              description="允许 Kiro 运行 PowerShell 或命令提示符。「授权范围内自动」模式下普通命令可自动执行；识别到的删除、高风险或任意内联代码命令仍会请求确认。"
             >
               <SettingsToggle
                 checked={terminalEnabled}

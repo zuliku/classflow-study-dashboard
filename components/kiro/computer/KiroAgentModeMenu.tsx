@@ -11,7 +11,7 @@ const MODE_COPY: Record<KiroAgentMode, { label: string; description: string }> =
   guided: { label: "受控", description: "可创建；修改、移动和删除前询问" },
   "workspace-auto": {
     label: "工作区自动",
-    description: "授权范围内自动执行文件操作和普通终端命令；删除等危险操作仍需确认",
+    description: "授权范围内可自动执行文件操作和普通终端命令；识别到的删除及高风险命令仍需确认",
   },
 };
 

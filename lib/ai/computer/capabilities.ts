@@ -5,13 +5,18 @@ import {
 } from "@/lib/ai/computer/types";
 
 /**
- * Agent Mode 默认权限表（V1 usable modes：plan / guided / workspace-auto）。
- * Full Access 不是 Web V1 usable mode。
+ * Agent Mode 默认权限表（Current behavior；plan / guided / workspace-auto）。
+ * Full Access 不是 usable mode。
  *
- * V2.7：Workspace Auto = 对当前已授权、read-write Workspace 内的文件操作充分自动授权
- * （读取/搜索/创建/修改/移动/重命名/删除/文档创建/文档更新全部 allow）；
- * 但绝不突破 Workspace sandbox / root scope / read-only root / Browser grant /
- * PATH_OUTSIDE_SANDBOX 与系统级能力（app/shell/network 恒 deny）。
+ * Current behavior（Desktop Terminal V1.0.1 冻结）：
+ * - Plan：read-only（read/search/list allow）；所有 mutation + shell deny。
+ * - Guided：create（fs/document）allow；modify / move / delete ask；shell ask。
+ * - Workspace Auto：read / create / modify / move / document allow；**fs.delete = ask**
+ *   （删除操作即使在 Workspace Auto 也要求确认）；shell.execute = allow（普通命令自动执行），
+ *   但 Terminal Risk Gate 会把 destructive / privileged 升级为 ask、blocked 直接 deny。
+ * - Hard Deny（任何 mode / 规则不能覆盖）：app.open / app.reveal / network.access。
+ * - shell.execute **不再是** hard deny：受 Desktop runtime / 用户 terminalEnabled 偏好 /
+ *   workspace native root / policy / Terminal Risk Gate / approval 全链控制。
  * 显式 deny 规则与 read-only root 仍优先于 mode default（policy pipeline 保证）。
  */
 export const AGENT_MODE_DEFAULTS: Record<
@@ -59,7 +64,7 @@ export const AGENT_MODE_DEFAULTS: Record<
     "fs.create": "allow",
     "fs.modify": "allow",
     "fs.move": "allow",
-    // Desktop Terminal V1（0.3/Part 10）：删除类操作即使在 Workspace Auto 也必须 ask——
+    // Current behavior：删除类操作即使在 Workspace Auto 也必须 ask——
     // 结构化 delete_file 与终端删除类命令一律需要用户确认
     "fs.delete": "ask",
     "document.create": "allow",
@@ -74,13 +79,10 @@ export const AGENT_MODE_DEFAULTS: Record<
 };
 
 /**
- * V1 Hard Deny：无论 Agent Mode / 规则如何都拒绝。
- * Desktop Terminal V1：shell.execute 从 Hard Deny 移除——这是对「直接 ClassFlow Tool」的
- * hard deny 语义解除（run_terminal_command 是受 Policy/Risk Gate/Approval 控制的工具）。
- * 注意：Shell 命令本身理论上可以间接访问网络 / 进程 / 系统其它位置，
- * 因此不再声称「network absolutely impossible」这种不真实的保证——
- * 剩余 hard deny：app.open / app.reveal / network.access。
- * Workspace Auto 的“授权范围”是 Workspace 内 Full Access，不是系统 Full Access。
+ * Hard Deny（Current behavior）：无论 Agent Mode / 规则如何都拒绝。
+ * shell.execute 不在其中（受 Desktop runtime / terminalEnabled / native root / policy /
+ * Risk Gate / approval 全链控制）；但 Shell 本身理论上可以间接访问网络 / 进程 / 系统其它位置，
+ * 因此不声称「network absolutely impossible」。剩余 hard deny：app.open / app.reveal / network.access。
  */
 export const HARD_DENY_CAPABILITIES: ReadonlySet<ComputerCapability> = new Set<ComputerCapability>([
   "app.open",
