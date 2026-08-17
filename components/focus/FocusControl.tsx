@@ -13,11 +13,14 @@ import { UISelect } from "@/components/ui/Select";
 /**
  * Overview 总览日历 Header 的低侵入 Focus 入口（Task 4，UI-only）。
  * - Idle：[开始专注] → anchored popover（presets + 自定义时长 + 关联对象 + 备注）
- * - Running：[● 24:36 · 专注中]（每秒本地刷新显示，只读 deriveFocusClock，不写 Store）
- * - Paused：[Ⅱ 24:36 · 已暂停]（倒计时冻结）
+ * - Running：[24:36 · 专注中]（每秒本地刷新显示，只读 deriveFocusClock，不写 Store）
+ * - Paused：[24:36 · 已暂停]（倒计时冻结）
  * - 提前结束：finishFocusSession() + 轻量 Toast（不播完成音 / 不发系统通知）
+ *
+ * compact（Desktop MiniCalendar Header 窄空间）：只保留主状态图标
+ * （Play / Timer / Pause），隐藏文字与 chevron；点击行为不变（打开 Popover）。
  */
-export function FocusControl() {
+export function FocusControl({ compact = false }: { compact?: boolean }) {
   const focusSessions = useAppStore((s) => s.focusSessions);
   const assignments = useAppStore((s) => s.assignments);
   const courses = useAppStore((s) => s.courses);
@@ -117,10 +120,11 @@ export function FocusControl() {
   const snapshotLabel =
     active?.assignmentTitleSnapshot ?? active?.courseNameSnapshot ?? activeAssignment?.title ?? "未关联";
 
+  // 状态由左侧主图标（Play/Timer/Pause）表达；label 不再重复 ● / Ⅱ
   const buttonLabel = active
     ? active.status === "running"
-      ? `● ${remainingText} · 专注中`
-      : `Ⅱ ${remainingText} · 已暂停`
+      ? `${remainingText} · 专注中`
+      : `${remainingText} · 已暂停`
     : "开始专注";
 
   return (
@@ -129,7 +133,8 @@ export function FocusControl() {
         onClick={() => setOpen((v) => !v)}
         data-testid="focus-control"
         className={cn(
-          "flex items-center gap-1 text-[11px] h-8 px-2 rounded-lg font-bold transition-colors",
+          "flex items-center gap-1 text-[11px] h-8 rounded-lg font-bold transition-colors",
+          compact ? "w-8 justify-center px-0" : "px-2",
           active
             ? active.status === "running"
               ? "bg-pastel-mint hover:bg-pastel-mint text-charcoal"
@@ -139,15 +144,15 @@ export function FocusControl() {
       >
         {active ? (
           active.status === "running" ? (
-            <Timer className="w-3 h-3" />
+            <Timer className={compact ? "w-3.5 h-3.5" : "w-3 h-3"} />
           ) : (
-            <Pause className="w-3 h-3" />
+            <Pause className={compact ? "w-3.5 h-3.5" : "w-3 h-3"} />
           )
         ) : (
-          <Play className="w-3 h-3" />
+          <Play className={compact ? "w-3.5 h-3.5" : "w-3 h-3"} />
         )}
-        {buttonLabel}
-        <ChevronDown className="w-2.5 h-2.5 opacity-60" />
+        {!compact && buttonLabel}
+        {!compact && <ChevronDown className="w-2.5 h-2.5 opacity-60" />}
       </button>
 
       {open && (

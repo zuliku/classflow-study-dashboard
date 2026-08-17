@@ -506,6 +506,30 @@ export function MiniCalendar() {
   const agendaSafePage = agendaPaged.currentPage;
   const showAgendaPagination = agendaCells.length > 4;
 
+  // ---- Desktop Header Compact Controls V1 ----
+  // 基于 Header 真实容器宽度切换（非 viewport breakpoint）；带 hysteresis 防抖动。
+  const COMPACT_HEADER_THRESHOLD = 520;
+  const COMPACT_HEADER_HYSTERESIS = 16;
+  const [headerWidth, setHeaderWidth] = useState(0);
+  const [compactHeaderControls, setCompactHeaderControls] = useState(false);
+  useEffect(() => {
+    const el = headerRef.current;
+    if (!el) return;
+    const measure = () => setHeaderWidth(el.getBoundingClientRect().width);
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  useEffect(() => {
+    if (headerWidth <= 0) return;
+    setCompactHeaderControls((prev) => {
+      if (!prev && headerWidth < COMPACT_HEADER_THRESHOLD) return true;
+      if (prev && headerWidth >= COMPACT_HEADER_THRESHOLD + COMPACT_HEADER_HYSTERESIS) return false;
+      return prev;
+    });
+  }, [headerWidth]);
+
   return (
     <div
       ref={cardRef}
@@ -515,22 +539,35 @@ export function MiniCalendar() {
       data-agenda-visible={agendaVisible ? "1" : "0"}
       className="bg-surface border border-line rounded-xl p-4 shadow-subtle space-y-3 flex flex-col min-h-0 h-full"
     >
-      {/* Header */}
-      <div ref={headerRef} className="flex items-center justify-between pb-2 border-b border-line-soft">
-        <div className="flex items-center space-x-2">
-          <CalendarIcon className="w-4 h-4 text-[#A48F82]" />
-          <h3 key={monthKey} className="ux-fade text-sm font-bold text-charcoal">
+      {/* Header：年月 min-w-0 不主动 truncate；右侧 controls shrink-0（compact 释放空间） */}
+      <div
+        ref={headerRef}
+        className="flex items-center justify-between gap-2 pb-2 border-b border-line-soft"
+      >
+        <div className="flex items-center space-x-2 min-w-0">
+          <CalendarIcon className="w-4 h-4 text-[#A48F82] shrink-0" />
+          <h3 key={monthKey} className="ux-fade text-sm font-bold text-charcoal whitespace-nowrap">
             {format(currentMonth, "yyyy年 M月", { locale: zhCN })}
           </h3>
         </div>
 
-        <div className="flex items-center space-x-1">
-          <FocusControl />
+        <div className="flex items-center gap-1 shrink-0">
+          <FocusControl compact={compactHeaderControls} />
           <button
             onClick={handleResetToday}
-            className="text-[11px] bg-alabaster hover:bg-alba text-charcoal h-8 px-2 rounded-lg font-bold transition-colors mr-1"
+            aria-label="回到今天"
+            title="回到今天"
+            className={
+              compactHeaderControls
+                ? "w-8 h-8 flex items-center justify-center rounded-lg bg-alabaster hover:bg-alba text-charcoal transition-colors"
+                : "text-[11px] bg-alabaster hover:bg-alba text-charcoal h-8 px-2 rounded-lg font-bold transition-colors mr-1"
+            }
           >
-            回到今天
+            {compactHeaderControls ? (
+              <CalendarDays className="w-3.5 h-3.5" />
+            ) : (
+              "回到今天"
+            )}
           </button>
           <button
             onClick={handlePrevMonth}

@@ -14,6 +14,7 @@ export default defineConfig({
       "tests/terminalToolExposure*.test.ts",
       "tests/terminalCapabilityPrompt*.test.ts",
       "tests/scheduleConflictSameCourse.test.ts",
+      "tests/focusControlCompact.test.tsx",
     ],
   },
 });
