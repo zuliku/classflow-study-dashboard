@@ -145,7 +145,7 @@ describe("Schedule Occurrence Override：Store / Persist / Backup", () => {
     expect(rep.ok).toBe(true);
     const all = store.getState().scheduleOccurrenceOverrides;
     expect(all).toHaveLength(1);
-    expect(all[0].dayOfWeek).toBe(5);
+    expect((all[0] as Extract<ScheduleOccurrenceOverride, { kind: "move" }>).dayOfWeek).toBe(5);
   });
 
   it("move 与另一课程冲突 → 拒绝创建；与自身 original 重叠 → 允许", async () => {

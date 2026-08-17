@@ -1,5 +1,6 @@
 ﻿import { describe, it, expect } from "vitest";
 import { proposeStudyRebalance } from "@/lib/planning/studyRebalance";
+import { buildCourseOverlapScheduleFingerprint } from "@/lib/planning/courseOverlapPolicy";
 import { Assignment, CalendarMark, CourseSchedule, Semester, StudyBlock } from "@/types";
 
 const NOW = new Date(2026, 7, 10, 9, 0, 0); // 周一
@@ -83,20 +84,98 @@ describe("Study Rebalance Engine", () => {
     expect(r.reasons).toContain("manual_or_inactive_blocks_protected");
   });
 
-  it("§71 course_conflict：Kiro Block 周二 10–11，之后新增课程周二 10–12 → 移到周三 10–11", () => {
+  it("§71a V1.1：已有 Kiro StudyBlock 与课程重叠（未批准）→ course_conflict hard issue → 移到非课程日", () => {
     const a = mkA("a1", { ddl: iso(new Date(NOW.getTime() + 6 * 86400000), 20, 0), estimatedMinutes: 120 });
     const block = mkBlock("b1", 2, "10:00", "11:00"); // 周三
     const dowOfBlock = new Date(NOW.getTime() + 2 * 86400000).getDay() === 0 ? 7 : new Date(NOW.getTime() + 2 * 86400000).getDay();
-    // 课程覆盖整天 → 同日无解 → 必须移到另一天
+    // 课程覆盖整天 → block 与课程重叠（无 Approval → unapproved conflict）
     const schedules: CourseSchedule[] = [
       { id: "s1", courseId: "c2", dayOfWeek: dowOfBlock, startTime: "08:00", endTime: "21:00", location: "", weeks: "1-16周" },
     ];
     const r = proposeStudyRebalance(baseInput({ assignments: [a], studyBlocks: [block], schedules }));
     expect(r.moves).toHaveLength(1);
+    expect(r.moves[0].reason).toBe("course_conflict");
+    // 必须移到非课程日（不得把未批准重叠搬去另一个重叠）
+    expect(r.moves[0].to.date).not.toBe(date(2));
+  });
+
+  it("§59 approved：Block ↔ S1 已显式批准且 schedule 未变 → 不因 course_conflict 移动", () => {
+    const a = mkA("a1", { ddl: iso(new Date(NOW.getTime() + 6 * 86400000), 20, 0), estimatedMinutes: 120 });
+    const dowOfBlock = new Date(NOW.getTime() + 2 * 86400000).getDay() === 0 ? 7 : new Date(NOW.getTime() + 2 * 86400000).getDay();
+    const s1: CourseSchedule = { id: "s1", courseId: "c2", dayOfWeek: dowOfBlock, startTime: "08:00", endTime: "21:00", location: "", weeks: "1-16周" };
+    const block = mkBlock("b1", 2, "10:00", "11:00", {
+      courseOverlapApprovals: [
+        { scheduleId: "s1", scheduleFingerprint: buildCourseOverlapScheduleFingerprint(s1), approvedAt: 1 },
+      ],
+    });
+    const r = proposeStudyRebalance(baseInput({ assignments: [a], studyBlocks: [block], schedules: [s1] }));
+    expect(r.moves).toHaveLength(0);
+  });
+
+  it("§58 schedule 时间变化 → fingerprint 失效 → 重新识别 course_conflict", () => {
+    const a = mkA("a1", { ddl: iso(new Date(NOW.getTime() + 6 * 86400000), 20, 0), estimatedMinutes: 120 });
+    const dowOfBlock = new Date(NOW.getTime() + 2 * 86400000).getDay() === 0 ? 7 : new Date(NOW.getTime() + 2 * 86400000).getDay();
+    // 批准时课程 10:00–11:00
+    const oldS1: CourseSchedule = { id: "s1", courseId: "c2", dayOfWeek: dowOfBlock, startTime: "10:00", endTime: "11:00", location: "", weeks: "1-16周" };
+    // 之后课程改为 10:30–11:30（仍与 block 10:00–11:00 重叠，但 fingerprint 变了）
+    const newS1: CourseSchedule = { ...oldS1, startTime: "10:30", endTime: "11:30" };
+    const block = mkBlock("b1", 2, "10:00", "11:00", {
+      courseOverlapApprovals: [
+        { scheduleId: "s1", scheduleFingerprint: buildCourseOverlapScheduleFingerprint(oldS1), approvedAt: 1 },
+      ],
+    });
+    const r = proposeStudyRebalance(baseInput({ assignments: [a], studyBlocks: [block], schedules: [newS1] }));
+    expect(r.moves).toHaveLength(1);
+    expect(r.moves[0].reason).toBe("course_conflict");
+  });
+
+  it("§71b Case 2：因 fixed_event 必须移动，免费日 vs 课程日都可达 → 优先免费日（preference）", () => {
+    const a = mkA("a1", { ddl: iso(new Date(NOW.getTime() + 5 * 86400000), 20, 0), estimatedMinutes: 120 });
+    const block = mkBlock("b1", 3, "19:00", "20:00"); // 周四
+    const dowOfWed = new Date(NOW.getTime() + 2 * 86400000).getDay() === 0 ? 7 : new Date(NOW.getTime() + 2 * 86400000).getDay();
+    // 课程日 = 周三（距原位置 1 天，若课程时间入池会因日期更近被选中）；
+    // 免费日 = 周六（距 2 天）；周五全天考试堵死
+    const schedules: CourseSchedule[] = [
+      { id: "s1", courseId: "c2", dayOfWeek: dowOfWed, startTime: "08:00", endTime: "21:00", location: "", weeks: "1-16周" },
+    ];
+    const calendarMarks: CalendarMark[] = [
+      { id: "cm0", date: date(1), type: "exam", title: "周二全天", startTime: "00:00", endTime: "23:59" },
+      { id: "cm1", date: date(3), type: "exam", title: "周四考试", startTime: "08:00", endTime: "21:00" }, // 覆盖 block → 触发 fixed_event，且周四无空档
+      { id: "cm2", date: date(4), type: "exam", title: "周五全天", startTime: "00:00", endTime: "23:59" },
+    ];
+    const r = proposeStudyRebalance(baseInput({ assignments: [a], studyBlocks: [block], schedules, calendarMarks }));
+    expect(r.moves).toHaveLength(1);
     const m = r.moves[0];
-    expect(m.reason).toBe("course_conflict");
-    expect(m.to.date).toBe(date(1)); // 周二（距离相同且字典序更早的最近可用日）
-    expect(m.to.startTime).toBe("10:00");
+    expect(m.reason).toBe("fixed_event_conflict");
+    // 必须选免费日（周六 date(5)），而不是更近但课程重叠的周三
+    expect(m.to.date).toBe(date(5));
+    expect(m.to.startTime).toBe("19:00");
+  });
+
+  it("§71c Case 3：只有课程重叠 target 可用 → 允许生成 fallback target", () => {
+    const a = mkA("a1", { ddl: iso(new Date(NOW.getTime() + 1 * 86400000), 10, 0), estimatedMinutes: 120 });
+    const block = mkBlock("b1", 1, "10:30", "11:30"); // 周二 10:30–11:30，DDL 周二 10:00 → after_deadline
+    const dowOfTue = new Date(NOW.getTime() + 1 * 86400000).getDay() === 0 ? 7 : new Date(NOW.getTime() + 1 * 86400000).getDay();
+    const dowOfMon = new Date(NOW.getTime()).getDay() === 0 ? 7 : new Date(NOW.getTime()).getDay();
+    // 周一全天考试（hard busy，两个 pass 都不进）；周二 08:00–10:00 课程（fallback 唯一可用，end 09:00 <= DDL 10:00）
+    const schedules: CourseSchedule[] = [
+      { id: "s1", courseId: "c2", dayOfWeek: dowOfTue, startTime: "08:00", endTime: "10:00", location: "", weeks: "1-16周" },
+    ];
+    const calendarMarks: CalendarMark[] = [
+      { id: "cm0", date: date(0), type: "exam", title: "周一全天", startTime: "00:00", endTime: "23:59" },
+      // 周一也按 dayOfWeek 堵死（上面 cm0 已按日期；再补周几无关紧要）
+    ];
+    void dowOfMon;
+    const r = proposeStudyRebalance(
+      baseInput({ assignments: [a], studyBlocks: [block], schedules, calendarMarks })
+    );
+    expect(r.moves).toHaveLength(1);
+    const m = r.moves[0];
+    expect(m.reason).toBe("after_deadline");
+    // Pass 1 无解（周一考试 + 周二课程时间 busy + 剩余 <60min / 超 DDL）→ fallback 到课程重叠位
+    expect(m.to.date).toBe(date(1));
+    expect(m.to.startTime).toBe("09:00");
+    expect(m.to.endTime).toBe("10:00");
   });
 
   it("§72 fixed_event_conflict：exam 冲突 → 移动", () => {

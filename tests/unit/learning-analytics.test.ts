@@ -181,7 +181,7 @@ describe("Learning Analytics Snapshot（本周）", () => {
     expect(snapshot.coverage.assignmentReliability).toBe("complete");
     expect(snapshot.coverage.planReliability).toBe("complete");
     expect(snapshot.coverage.focusReliability).toBe("complete");
-    expect(snapshot.coverage.focusBackfilled).toBe(true);
+    expect(snapshot.coverage.focusBackfilled).toBe(false); // 无真实回填会话
 
     // signals：无 period change（比较不可用）；max 3
     expect(snapshot.signals.map((s) => s.id)).toEqual(["plan-actual", "deadline", "course-concentration"]);

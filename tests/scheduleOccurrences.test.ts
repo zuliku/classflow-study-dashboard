@@ -16,10 +16,8 @@ const schedule = (overrides: Partial<CourseSchedule> = {}): CourseSchedule => ({
   ...overrides,
 });
 
-const override = (o: Omit<ScheduleOccurrenceOverride, "id">): ScheduleOccurrenceOverride => ({
-  id: "occ_1",
-  ...o,
-});
+/** 测试 helper：避免判别联合 spread 的 TS 限制（字段在用例中语义完整） */
+const override = (o: object): ScheduleOccurrenceOverride => o as ScheduleOccurrenceOverride;
 
 const state = {
   schedules: [schedule()],
@@ -39,7 +37,7 @@ function week6Schedules(totalWeeks = 16) {
 
 describe("resolveCourseOccurrencesForWeek", () => {
   it("Case 1：cancel 第 6 周 → week6 隐藏，week5/7 仍显示", () => {
-    state.overrides = [override({ kind: "cancel", courseId: "c1", baseScheduleId: "s1", week: 6 })];
+    state.overrides = [override({ id: "occ_1", kind: "cancel", courseId: "c1", baseScheduleId: "s1", week: 6 })];
     const w6 = week6Schedules();
     expect(w6).toHaveLength(0);
     for (const w of [5, 7]) {
@@ -77,7 +75,7 @@ describe("resolveCourseOccurrencesForWeek", () => {
 
   it("Case 3：extra 只出现在目标周", () => {
     state.overrides = [
-      override({ kind: "extra", courseId: "c2", week: 6, dayOfWeek: 7, startTime: "19:00", endTime: "20:00", location: "教201" }),
+      override({ id: "occ_1", kind: "extra", courseId: "c2", week: 6, dayOfWeek: 7, startTime: "19:00", endTime: "20:00", location: "教201" }),
     ];
     const w6 = week6Schedules();
     const w7 = resolveCourseOccurrencesForWeek({ schedules: state.schedules, overrides: state.overrides, week: 7, totalWeeks: 16 });
@@ -96,7 +94,7 @@ describe("resolveCourseOccurrencesForWeek", () => {
 
   it("Case 5：excludedWeeks 与 override 共存：excluded 周 base 不出现，但 extra 仍出现", () => {
     state.overrides = [
-      override({ kind: "extra", courseId: "c1", week: 3, dayOfWeek: 5, startTime: "18:00", endTime: "19:00", location: "" }),
+      override({ id: "occ_1", kind: "extra", courseId: "c1", week: 3, dayOfWeek: 5, startTime: "18:00", endTime: "19:00", location: "" }),
     ];
     const r = resolveCourseOccurrencesForWeek({
       schedules: [schedule({ excludedWeeks: [3] })],
@@ -140,7 +138,7 @@ describe("validateScheduleOccurrenceOverride", () => {
       { kind: "move", courseId: "c1", baseScheduleId: "s1", week: 6, dayOfWeek: 5, startTime: "14:00", endTime: "15:00" },
       {
         ...state,
-        overrides: [override({ kind: "cancel", courseId: "c1", baseScheduleId: "s1", week: 6 })],
+        overrides: [override({ id: "occ_1", kind: "cancel", courseId: "c1", baseScheduleId: "s1", week: 6 })],
       }
     );
     expect(v.ok).toBe(false);

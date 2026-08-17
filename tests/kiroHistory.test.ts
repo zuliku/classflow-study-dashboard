@@ -230,9 +230,9 @@ describe("IndexedDB CRUD", () => {
 
   it("损坏记录被跳过（不崩溃）", async () => {
     await saveConversation(makeRecord({ id: "c1" }));
-    // 直接写入一条损坏数据（DB 现为 v3：用缓存连接而非 open v2）
+    // 直接写入一条损坏数据（DB 现为 v4：用缓存连接而非固定旧版本号）
     const db = await new Promise<IDBDatabase>((resolve, reject) => {
-      const req = indexedDB.open(KIRO_HISTORY_DB_NAME, 3);
+      const req = indexedDB.open(KIRO_HISTORY_DB_NAME, 4);
       req.onsuccess = () => resolve(req.result);
       req.onerror = () => reject(req.error);
     });
