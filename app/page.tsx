@@ -273,6 +273,7 @@ export default function Home() {
                       studyBlocks,
                       semester,
                       currentSemesterWeek,
+                      schedules,
                     })}
                     courseIndicators={buildOverviewCourseTaskMarkers({
                       studyBlocks,
