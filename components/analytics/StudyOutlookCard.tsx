@@ -1,9 +1,11 @@
 "use client";
 
 import React from "react";
-import { CalendarClock, Sparkles } from "lucide-react";
+import { CalendarClock } from "lucide-react";
 import { OutlookHealth, OutlookTask, StudyOutlook, StudyOutlookHorizon } from "@/lib/outlook/types";
 import { useKiroSessionActions } from "@/components/kiro/KiroSessionProvider";
+import { KiroFlowButton } from "@/components/kiro/KiroFlow";
+import { KiroLogoIcon } from "@/components/kiro/KiroLogo";
 import { cn } from "@/lib/utils";
 
 const HEALTH_COPY: Record<OutlookHealth, { label: string; cls: string }> = {
@@ -165,28 +167,24 @@ export function StudyOutlookCard({
       {/* Kiro 入口收敛：最多一个优化入口 + 一个规划入口（不堆按钮） */}
       <div className="px-4 py-3 border-t border-line-soft flex flex-wrap items-center gap-2">
         {rebalanceSuggestion && (
-          <button
-            type="button"
+          <KiroFlowButton
+            icon={KiroLogoIcon}
+            label="优化已有计划"
+            size="sm"
             data-testid="outlook-rebalance-handoff"
             onClick={() =>
               handoffPrompt(
                 "结合当前学习前瞻，检查已有 Kiro 学习计划是否可以通过移动时段改善。请先生成重排建议，不要直接修改。"
               )
             }
-            className="ux-press inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-line-strong text-charcoal text-[11px] font-bold rounded-xl hover:bg-alabaster transition-colors"
-          >
-            <Sparkles className="w-3.5 h-3.5 text-[#A48F82]" />
-            优化已有计划
-          </button>
+          />
         )}
-        <button
-          type="button"
+        <KiroFlowButton
+          icon={KiroLogoIcon}
+          label="让 Kiro 帮我规划"
+          size="sm"
           onClick={() => handoffPrompt(PLAN_OUTLOOK_PROMPT)}
-          className="ux-press inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-line-strong text-charcoal text-[11px] font-bold rounded-xl hover:bg-alabaster transition-colors"
-        >
-          <Sparkles className="w-3.5 h-3.5 text-[#A48F82]" />
-          让 Kiro 帮我规划
-        </button>
+        />
       </div>
     </div>
   );
@@ -214,7 +212,7 @@ function OutlookTaskRow({ task, onEstimate }: { task: OutlookTask; onEstimate: (
               onClick={onEstimate}
               className="ml-1.5 text-[10px] font-bold text-sandrift bg-transparent border border-line rounded px-1.5 py-0.5 hover:text-charcoal hover:border-line-strong transition-colors inline-flex items-center gap-0.5"
             >
-              <Sparkles className="w-2.5 h-2.5" />
+              <KiroLogoIcon className="w-2.5 h-2.5" />
               估算任务
             </button>
           </>

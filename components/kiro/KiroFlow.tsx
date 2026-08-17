@@ -18,6 +18,7 @@ export function KiroFlowButton({
   size = "md",
   className,
   labelClassName,
+  "data-testid": dataTestId,
 }: {
   icon: React.ComponentType<{ className?: string }>;
   label: string;
@@ -27,12 +28,14 @@ export function KiroFlowButton({
   className?: string;
   /** label 响应式控制（如窄屏隐藏文字只留图标；aria 名称仍来自 label） */
   labelClassName?: string;
+  "data-testid"?: string;
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
       aria-label={label}
+      data-testid={dataTestId}
       className={cn(
         "relative rounded-lg overflow-hidden group text-left transition-colors duration-[var(--motion-base)]",
         className

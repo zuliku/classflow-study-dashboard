@@ -18,11 +18,12 @@ export function FocusRhythmCard({ rhythm }: { rhythm: FocusRhythm }) {
   const maxMinutes = Math.max(...rhythm.byTimeOfDay.map((b) => b.minutes), 1);
   return (
     <div
-      className="w-full min-w-0 bg-surface border border-line rounded-2xl p-4"
+      className="w-full min-w-0 bg-surface border border-line rounded-2xl p-4 flex flex-col"
       data-testid="focus-rhythm-card"
     >
       <h3 className="text-sm font-bold text-charcoal">专注节奏</h3>
-      <div className="space-y-1.5 pt-3">
+      {/* 等高配对下：时段分布区 flex-1 垂直居中分布，避免内容全部挤在上方、底部大片留白 */}
+      <div className="flex-1 flex flex-col justify-center gap-2 pt-3">
         {rhythm.byTimeOfDay.map((b) => {
           const Icon = BUCKET_ICON[b.bucket] ?? Moon;
           const active = rhythm.dominantTimeOfDay === b.bucket && b.minutes > 0;

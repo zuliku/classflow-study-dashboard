@@ -1,9 +1,11 @@
 "use client";
 
 import React from "react";
-import { TrendingUp, Target, CalendarCheck2, Sparkles, ChevronRight } from "lucide-react";
+import { TrendingUp, Target, CalendarCheck2, ChevronRight } from "lucide-react";
 import { LearningSignal, LearningSignalTone } from "@/lib/analytics/types";
 import { useKiroSessionActions } from "@/components/kiro/KiroSessionProvider";
+import { KiroFlowButton } from "@/components/kiro/KiroFlow";
+import { KiroLogoIcon } from "@/components/kiro/KiroLogo";
 import { cn } from "@/lib/utils";
 
 const TONE_STYLE: Record<LearningSignalTone, { icon: typeof TrendingUp; cls: string }> = {
@@ -33,12 +35,12 @@ export function LearningSignalsCard({
   const { handoffPrompt } = useKiroSessionActions();
 
   if (signals.length === 0) {
-    // V3.1：紧凑 Level 3 contextual state（不制造高卡空洞）；圆角与主卡一致
+    // V3.1：紧凑 Level 3 contextual state；等高配对下内容垂直/水平居中（不制造空洞感）
     return (
       <div
-      className="w-full min-w-0 bg-alabaster/50 border border-line rounded-2xl px-3.5 py-3 h-fit self-start"
-      data-testid="learning-signals-card"
-    >
+        className="w-full min-w-0 bg-alabaster/50 border border-line rounded-2xl px-3.5 py-4 h-full flex flex-col items-center justify-center text-center"
+        data-testid="learning-signals-card"
+      >
         <h3 className="text-[11px] font-bold text-charcoal">值得注意</h3>
         <p className="text-[10px] text-sandrift mt-0.5">目前没有明显需要调整的信号</p>
       </div>
@@ -73,14 +75,12 @@ export function LearningSignalsCard({
                   </button>
                 )}
                 {kiroPrompt && (
-                  <button
-                    type="button"
+                  <KiroFlowButton
+                    icon={KiroLogoIcon}
+                    label="问 Kiro"
+                    size="sm"
                     onClick={() => handoffPrompt(kiroPrompt)}
-                    className="inline-flex items-center gap-1 text-[10px] font-bold text-sandrift hover:text-charcoal transition-colors"
-                  >
-                    <Sparkles className="w-3 h-3" />
-                    问 Kiro
-                  </button>
+                  />
                 )}
               </div>
             </div>

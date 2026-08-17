@@ -1,10 +1,12 @@
 "use client";
 
 import React, { useMemo } from "react";
-import { Sparkles, CalendarPlus, Info } from "lucide-react";
+import { CalendarPlus, Info } from "lucide-react";
 import { LearningAnalyticsSnapshot } from "@/lib/analytics/types";
 import { buildWeeklyReview, weeklyReviewCopy } from "@/lib/analytics/weeklyReview";
 import { useKiroSessionActions } from "@/components/kiro/KiroSessionProvider";
+import { KiroFlowButton } from "@/components/kiro/KiroFlow";
+import { KiroLogoIcon } from "@/components/kiro/KiroLogo";
 
 const DEEP_REVIEW_PROMPT =
   "基于我本周的学习洞察，帮我做一次简洁复盘：先总结本周投入、计划与实际、任务完成和学习节奏，再指出最值得调整的 1–3 个方面。请基于 ClassFlow 的真实学习数据，不要给学习力评分。";
@@ -57,14 +59,13 @@ export function WeeklyReviewCard({ snapshot }: { snapshot: LearningAnalyticsSnap
         <div className="px-4 py-6 flex flex-col items-center justify-center text-center gap-1.5">
           <p className="text-xs font-bold text-charcoal">本周还没有足够的学习记录形成回顾</p>
           <p className="text-[11px] text-sandrift">完成任务、安排学习计划或进行专注后即可生成</p>
-          <button
-            type="button"
+          <KiroFlowButton
+            icon={KiroLogoIcon}
+            label="让 Kiro 帮我规划本周"
+            size="sm"
+            className="mt-2 self-center"
             onClick={() => handoffPrompt(PLAN_NEXT_WEEK_PROMPT)}
-            className="ux-press mt-2 inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-white border border-line-strong text-charcoal text-[11px] font-bold rounded-xl hover:bg-alabaster transition-colors"
-          >
-            <Sparkles className="w-3.5 h-3.5 text-[#A48F82]" />
-            让 Kiro 帮我规划本周
-          </button>
+          />
         </div>
       ) : (
         <>
@@ -119,14 +120,12 @@ export function WeeklyReviewCard({ snapshot }: { snapshot: LearningAnalyticsSnap
           )}
 
           <div className="px-4 py-3 border-t border-line-soft flex flex-wrap items-center gap-2">
-            <button
-              type="button"
+            <KiroFlowButton
+              icon={KiroLogoIcon}
+              label="让 Kiro 深入复盘"
+              size="sm"
               onClick={() => handoffPrompt(DEEP_REVIEW_PROMPT)}
-              className="ux-press inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-line-strong text-charcoal text-[11px] font-bold rounded-xl hover:bg-alabaster transition-colors"
-            >
-              <Sparkles className="w-3.5 h-3.5 text-[#A48F82]" />
-              让 Kiro 深入复盘
-            </button>
+            />
             <button
               type="button"
               onClick={() => handoffPrompt(PLAN_NEXT_WEEK_PROMPT)}

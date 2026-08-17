@@ -1,9 +1,11 @@
 "use client";
 
 import React from "react";
-import { Scale, Sparkles } from "lucide-react";
+import { Scale } from "lucide-react";
 import { EstimateCalibration } from "@/lib/analytics/estimateCalibration";
 import { useKiroSessionActions } from "@/components/kiro/KiroSessionProvider";
+import { KiroFlowButton } from "@/components/kiro/KiroFlow";
+import { KiroLogoIcon } from "@/components/kiro/KiroLogo";
 
 const ESTIMATE_KIRO_PROMPT =
   "结合我的估时记录和未来任务，帮我判断哪些任务的预计耗时值得重新检查。先给建议，不要直接修改任务。";
@@ -58,14 +60,12 @@ export function EstimateCalibrationCard({ calibration }: { calibration: Estimate
         )}
       </div>
       <div className="pt-2 mt-1 flex flex-wrap items-center gap-1.5">
-        <button
-          type="button"
+        <KiroFlowButton
+          icon={KiroLogoIcon}
+          label="问 Kiro"
+          size="sm"
           onClick={() => handoffPrompt(ESTIMATE_KIRO_PROMPT)}
-          className="text-[10px] font-bold text-sandrift bg-transparent border border-line rounded-lg px-2 py-1 hover:text-charcoal hover:border-line-strong transition-colors inline-flex items-center gap-1"
-        >
-          <Sparkles className="w-3 h-3" />
-          问 Kiro
-        </button>
+        />
       </div>
     </div>
   );
