@@ -6,7 +6,8 @@
  * - 30 项任务：过去已归档 6、逾期 2、今天 2、未来 3 周内 ~16、无 DDL 4
  *   （预计耗时混合、子任务、关联课程资料、1 项关闭自动提醒）
  * - 日历：DDL mark 全覆盖 + 考试 4 场 + 活动 3 场（含历史月份内容）
- * - 13 个 StudyBlock（过去 4 + 今天 2 + 未来 7；manual/kiro 混合）
+ * - 13 个 StudyBlock（过去 4 + 今天 2 + 未来 7；manual/kiro 混合；
+ *   未来块固定落在「下一周」内（+12/+13 天 = 下周六/周日），避免与课程重叠被 Timeline 抑制）
  * - 26 个 FocusSession（25 已完成 + 1 暂停，覆盖过去 3 周，跨 8 门课程与四时段）
  *   → 注入后 Focus backfill 生成完整学习历史，学习洞察呈现趋势/节奏/课程投入/执行质量
  * - 3 个小组项目（成员/任务/DDL/进度）
@@ -413,9 +414,9 @@ const studyBlocks: StudyBlock[] = [
   { id: "b8", title: "置信区间与假设检验小测", date: dateStr(2), startTime: "15:00", endTime: "16:30", assignmentId: "a6", courseId: "c2", source: "kiro" },
   { id: "b9", title: "红黑树删除算法整理", date: dateStr(3), startTime: "14:00", endTime: "15:30", assignmentId: "a7", courseId: "c1", source: "manual" },
   { id: "b10", title: "数据库实验四：复杂嵌套查询", date: dateStr(4), startTime: "19:00", endTime: "20:30", assignmentId: "a8", courseId: "c6", source: "manual" },
-  { id: "b11", title: "大数定律专题精读", date: dateStr(7), startTime: "09:00", endTime: "10:15", assignmentId: "a23", courseId: "c2", source: "manual" },
-  { id: "b12", title: "虚拟内存期末项目设计", date: dateStr(7), startTime: "15:00", endTime: "17:30", assignmentId: "a10", courseId: "c3", source: "manual" },
-  { id: "b13", title: "虚拟内存期末项目设计（继续）", date: dateStr(8), startTime: "14:00", endTime: "15:30", assignmentId: "a10", courseId: "c3", source: "kiro" },
+  { id: "b11", title: "大数定律专题精读", date: dateStr(13), startTime: "09:00", endTime: "10:15", assignmentId: "a23", courseId: "c2", source: "manual" },
+  { id: "b12", title: "虚拟内存期末项目设计", date: dateStr(13), startTime: "15:00", endTime: "17:30", assignmentId: "a10", courseId: "c3", source: "manual" },
+  { id: "b13", title: "虚拟内存期末项目设计（继续）", date: dateStr(12), startTime: "19:00", endTime: "20:30", assignmentId: "a10", courseId: "c3", source: "kiro" },
 ];
 
 // ==================== 日历（DDL 全覆盖 + 考试 4 + 活动 3，含历史）====================

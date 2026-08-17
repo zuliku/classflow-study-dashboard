@@ -55,8 +55,15 @@ test("1440×900：左右等高（顶部/底部/总高 ≤2px），左侧时间�
   expect(calendar!.height).toBeGreaterThan(upcoming!.height);
 
   // 时间轴完整：08:00 / 21:00 可见且 21:00 未裁切
-  await expect(page.getByText("08:00", { exact: true }).first()).toBeVisible();
-  const t2100 = await page.getByText("21:00", { exact: true }).first().boundingBox();
+  // （时间列 = timetable-body 所在 grid 的第一列；Header/页面其它位置的隐藏 tooltip 也可能含「08:00/21:00」纯文本）
+  const timeColumn = page
+    .locator('[data-testid="timetable-body"]')
+    .locator("xpath=..")
+    .locator(":scope > div")
+    .first();
+  await expect(timeColumn).toBeVisible();
+  await expect(timeColumn.getByText("08:00", { exact: true })).toBeVisible();
+  const t2100 = await timeColumn.getByText("21:00", { exact: true }).boundingBox();
   expect(t2100!.y + t2100!.height).toBeLessThanOrEqual(timetable!.y + timetable!.height + 1);
 });
 
