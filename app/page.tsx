@@ -196,12 +196,19 @@ export default function Home() {
       <Sidebar />
 
       {/* Main Content Workspace */}
-      <div className="flex-1 flex flex-col min-w-0">
+      <div className="flex-1 min-h-0 flex flex-col min-w-0">
         {/* Dynamic Page Views */}
         {/* main：只负责 flex / overflow / workspace geometry，不承担页面 gutter。
             WorkspaceHeader 是 full-width structural layer；page padding 由各页面 body 自己负责。
-            Kiro Tab 保持 full-bleed（p-0），gutter 由 KiroWorkspace 内部提供。 */}
-        <main className="flex-1 flex flex-col overflow-y-auto [scrollbar-gutter:stable]">
+            Kiro Tab 保持 full-bleed（p-0），gutter 由 KiroWorkspace 内部提供。
+            Kiro 拥有自己的滚动（KiroConversation overflow-y-auto），main 不再成为第二个纵向滚动容器；
+            其它页面（Overview/Assignments 等）保持 outer main scrolling。 */}
+        <main
+          className={cn(
+            "flex-1 min-h-0 flex flex-col [scrollbar-gutter:stable]",
+            activeTab === "kiro" ? "overflow-hidden" : "overflow-y-auto"
+          )}
+        >
           <PageTransition
             tab={activeTab}
             className="flex flex-col flex-1 min-h-0"

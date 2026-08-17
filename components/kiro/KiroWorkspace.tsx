@@ -35,7 +35,7 @@ export function KiroWorkspace() {
       {/* 主内容区：md 下为 Rail 预留左侧空间（lg+ 聊天居中不受影响）；
           移动端 pb-24 为固定底部导航（BottomNav，h-14 + safe-area）预留空间，避免遮挡 Composer 发送按钮。
           Project Panel 为纯悬浮层（expanded/collapsed 都不改变聊天宽度） */}
-      <div className="flex-1 min-w-0 flex flex-col px-4 md:pr-6 md:pl-[72px] lg:px-6 pt-4 md:pt-6 pb-24 md:pb-6">
+      <div className="flex-1 min-w-0 min-h-0 flex flex-col overflow-hidden px-4 md:pr-6 md:pl-[72px] lg:px-6 pt-4 md:pt-6 pb-24 md:pb-6">
         <KiroHeader onNewChat={newChat} onOpenHistory={() => setHistoryOpen(true)} />
         <KiroChatSurface variant="workspace" />
       </div>
