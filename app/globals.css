@@ -954,13 +954,10 @@ html[data-motion-effective="reduced"] .kiro-send-activate {
   animation: none !important;
 }
 
-/* Motion V1：Sidecar geometry 交互期间内部装饰性 motion 近瞬时（hover/streaming/scroll 正常） */
+/* Motion V1：Sidecar geometry 交互期间内部装饰性 motion 近瞬时（hover/streaming/scroll 正常）。
+   intro 类（kiro-empty-*-intro / kiro-composer-intro）不在此降权：它们是一次性进场动画，
+   animation:none 打断后再恢复会从头部重放（拖动放置时标题/输入框又出现入场动画）。 */
 [data-geometry-interacting] .kiro-structure-settle,
-[data-geometry-interacting] .kiro-empty-logo-intro,
-[data-geometry-interacting] .kiro-empty-title-intro,
-[data-geometry-interacting] .kiro-empty-subtitle-intro,
-[data-geometry-interacting] .kiro-empty-suggestion-intro,
-[data-geometry-interacting] .kiro-composer-intro,
 [data-geometry-interacting] .kiro-popover-motion,
 [data-geometry-interacting] .kiro-scroll-control-enter,
 [data-geometry-interacting] .kiro-scroll-control-exit {
