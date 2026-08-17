@@ -598,7 +598,7 @@ export function TimelineWorkspace() {
                 setStudyDrag(studyDragRef.current);
               }}
               className={cn(
-                "absolute left-1 right-1 z-[2] rounded-lg border border-dashed border-line-soft bg-pastel-mint/20 px-1.5 py-0.5 flex items-center gap-1 overflow-hidden group",
+                "absolute left-1 right-1 z-[2] rounded-lg border border-dashed border-line bg-pastel-mint/20 px-1.5 py-0.5 flex items-center gap-1 overflow-hidden group",
                 "transition-opacity duration-[var(--motion-fast)]",
                 isDraggingThis && "opacity-50",
                 // Rebalance Preview：被移动的块弱化 + dashed outline（不改真实数据）

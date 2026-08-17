@@ -11,6 +11,7 @@ import { UpcomingDDL } from "@/components/dashboard/UpcomingDDL";
 import { MiniCalendar } from "@/components/dashboard/MiniCalendar";
 import { StudyLoadChart } from "@/components/dashboard/StudyLoadChart";
 import { AssignmentTable } from "@/components/dashboard/AssignmentTable";
+import { TodayStudyPlanCard } from "@/components/dashboard/TodayStudyPlanCard";
 import { AssignmentsWorkspace } from "@/components/assignment/AssignmentsWorkspace";
 import { CoursesWorkspace } from "@/components/course/CoursesWorkspace";
 import { GroupCollaborationView } from "@/components/group/GroupCollaborationView";
@@ -286,6 +287,9 @@ export default function Home() {
                 </div>
                 <div className="md:min-h-[460px] min-w-0" data-testid="overview-tasks-wrap">
                   <AssignmentTable mode="compact" />
+                </div>
+                <div className="md:min-h-[460px] min-w-0" data-testid="overview-plan-wrap">
+                  <TodayStudyPlanCard />
                 </div>
               </section>
                 </>
