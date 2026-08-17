@@ -28,10 +28,10 @@ export function FocusSettings() {
           <SettingsRow
             settingId="focus-completion-notification"
             title="完成提示"
-            description="专注结束时会播放本地提示音；若浏览器已授权通知权限，同时发送系统通知。"
+            description="专注结束时会播放本地提示音；若系统已授权通知权限，同时发送系统通知。"
           >
             <span className="px-2 py-0.5 rounded-full bg-alabaster border border-line text-[10px] font-bold text-satin-grey shrink-0">
-              跟随浏览器权限
+              跟随系统权限
             </span>
           </SettingsRow>
 

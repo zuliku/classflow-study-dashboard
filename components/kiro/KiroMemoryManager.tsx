@@ -263,7 +263,7 @@ export function KiroMemoryManager({
         {/* Footer */}
         <div className="shrink-0 px-4 py-2.5 border-t border-line flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
           <p className="text-[10px] text-sandrift leading-relaxed max-w-[420px]">
-            记忆保存在当前浏览器中。只有完成当前请求需要时，相关记忆内容才会发送给你选择的 AI 服务。
+            记忆保存在当前设备中。只有完成当前请求需要时，相关记忆内容才会发送给你选择的 AI 服务。
           </p>
           {memory.memories.length > 0 && (
             <Button

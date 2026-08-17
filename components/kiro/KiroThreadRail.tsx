@@ -418,7 +418,6 @@ export function KiroThreadRail({ onOpenProjects }: { onOpenProjects?: () => void
 
           {/* Footer（固定区） */}
           <div className="shrink-0 flex items-center justify-between px-3 py-2 border-t border-line">
-            <p className="text-[10px] text-sandrift">Kiro 对话仅保存在当前浏览器中。</p>
             <div className="relative">
               <button
                 onClick={() => setMoreOpen((v) => !v)}

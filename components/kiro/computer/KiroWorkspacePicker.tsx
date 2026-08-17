@@ -78,7 +78,7 @@ export function KiroWorkspacePicker({
         </div>
         <p className="px-2 pb-2 text-[9px] text-sandrift leading-relaxed">
           {isSandbox
-            ? "数据仅保存在当前浏览器（Kiro 内置工作区），不会写入本地文件夹。"
+            ? "数据仅保存在当前设备（Kiro 内置工作区），不会写入本地文件夹。"
             : "工作区文件只在你授权的目录内访问。"}
         </p>
         {grantWarning && (

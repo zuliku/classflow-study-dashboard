@@ -128,12 +128,12 @@ export function DataSettings() {
 
         {/* 隐私：本地优先的数据边界（真实行为说明，非虚构承诺） */}
         <SettingsGroup title="隐私">
-          <SettingsRow settingId="kiro-privacy-local" title="本地优先" description="课程、任务、记忆与聊天历史保存在当前浏览器；附件正文存入浏览器本地存储。">
+          <SettingsRow settingId="kiro-privacy-local" title="本地优先" description="课程、任务、记忆与聊天历史保存在当前设备；附件正文存入本地存储。">
             <span className="px-2 py-0.5 rounded-full bg-alabaster border border-line text-[10px] font-bold text-satin-grey shrink-0">
               本地存储
             </span>
           </SettingsRow>
-          <SettingsRow settingId="kiro-privacy-api-key" title="API Key" description="仅保存在当前浏览器会话（sessionStorage），不写入本地存储、备份或日志。">
+          <SettingsRow settingId="kiro-privacy-api-key" title="API Key" description="仅保存在当前会话（session 级存储），不写入本地存储、备份或日志。">
             <span className="px-2 py-0.5 rounded-full bg-alabaster border border-line text-[10px] font-bold text-satin-grey shrink-0">
               会话级
             </span>

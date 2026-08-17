@@ -49,7 +49,7 @@ export function DangerZone() {
       confirmRequest({
         title: "清除所有本地数据？",
         description:
-          "删除 ClassFlow 在此浏览器中的所有本地数据，包括个人资料、课程、任务、设置和课程附件。此操作无法撤销。",
+          "删除 ClassFlow 在当前设备上的所有本地数据，包括个人资料、课程、任务、设置和课程附件。此操作无法撤销。",
         confirmLabel: "继续",
         danger: true,
         onConfirm: () => {
@@ -94,7 +94,7 @@ export function DangerZone() {
       key: "entire",
       icon: <XCircle className="w-3.5 h-3.5" />,
       title: "清除所有本地数据",
-      description: "删除此浏览器中的所有本地数据，包括个人资料、课程、任务、设置和课程附件。",
+      description: "删除当前设备上的所有本地数据，包括个人资料、课程、任务、设置和课程附件。",
       action: handleResetEntireApp,
       label: confirmPhase === 1 ? "再次点击确认清除" : "清除所有本地数据",
       danger: true,

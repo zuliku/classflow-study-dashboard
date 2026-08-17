@@ -30,13 +30,13 @@ export function describeBrowserNotificationPermission(
 ): { label: string; tone: "success" | "warning" | "neutral" } {
   switch (state) {
     case "granted":
-      return { label: "浏览器已授权", tone: "success" };
+      return { label: "系统已授权", tone: "success" };
     case "denied":
-      return { label: "浏览器已阻止通知权限，请在浏览器设置中修改", tone: "warning" };
+      return { label: "系统已阻止通知权限，请在系统设置中修改", tone: "warning" };
     case "default":
       return { label: "未授权 · 开启开关时会请求授权", tone: "neutral" };
     default:
-      return { label: "当前浏览器不支持系统通知，站内提醒仍可使用", tone: "neutral" };
+      return { label: "当前设备不支持系统通知，站内提醒仍可使用", tone: "neutral" };
   }
 }
 

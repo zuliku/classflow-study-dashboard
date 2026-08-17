@@ -67,7 +67,7 @@ export function TaskSettings({ highlightedId }: { highlightedId?: string }) {
     }
     if (!isBrowserNotificationSupported()) {
       setBrowserNotificationsEnabled(false);
-      setPermissionNote("当前浏览器不支持系统通知，站内提醒仍可正常使用。");
+      setPermissionNote("当前设备不支持系统通知，站内提醒仍可正常使用。");
       return;
     }
     const permission = getBrowserNotificationPermission();
@@ -78,7 +78,7 @@ export function TaskSettings({ highlightedId }: { highlightedId?: string }) {
     }
     if (permission === "denied") {
       setBrowserNotificationsEnabled(false);
-      setPermissionNote("浏览器已阻止通知权限，请在浏览器设置中修改。");
+      setPermissionNote("系统已阻止通知权限，请在系统设置中修改。");
       return;
     }
     const result = await requestBrowserNotificationPermission();
@@ -88,7 +88,7 @@ export function TaskSettings({ highlightedId }: { highlightedId?: string }) {
     } else {
       setBrowserNotificationsEnabled(false);
       setPermissionNote(
-        result === "denied" ? "浏览器已阻止通知权限，请在浏览器设置中修改。" : ""
+        result === "denied" ? "系统已阻止通知权限，请在系统设置中修改。" : ""
       );
     }
   };
@@ -236,15 +236,15 @@ export function TaskSettings({ highlightedId }: { highlightedId?: string }) {
 
           <SettingsRow
             settingId="browser-notifications"
-            title="浏览器系统通知"
-            description="提醒到期时同时发送浏览器系统通知。"
+            title="系统通知"
+            description="提醒到期时同时发送系统通知。"
             highlighted={highlightedId === "browser-notifications"}
           >
             <div className="flex flex-col items-end gap-1">
               <SettingsToggle
                 checked={browserNotificationsEnabled}
                 onChange={(v) => void handleBrowserNotificationToggle(v)}
-                label="浏览器系统通知"
+                label="系统通知"
               />
               {/* 权限状态反映真实浏览器状态（granted / denied / default / unsupported） */}
               <p

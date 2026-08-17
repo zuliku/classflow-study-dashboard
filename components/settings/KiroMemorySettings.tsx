@@ -40,7 +40,7 @@ export function KiroMemorySettings() {
 
   return (
     <>
-      <SettingsRow settingId="kiro-memory-enabled" title="Kiro 记忆" description="Kiro 记住你的学习偏好并持续运用。记忆保存在当前浏览器中。">
+      <SettingsRow settingId="kiro-memory-enabled" title="Kiro 记忆" description="Kiro 记住你的学习偏好并持续运用。记忆保存在当前设备中。">
         <SettingsToggle checked={memoryEnabled} onChange={setMemoryEnabled} label="启用 Kiro 记忆" />
       </SettingsRow>
 

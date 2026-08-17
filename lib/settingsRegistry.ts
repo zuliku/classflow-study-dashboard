@@ -274,8 +274,8 @@ export const SETTINGS_REGISTRY: SettingDefinition[] = [
   {
     id: SETTING_IDS.tasks.browserNotifications,
     section: "tasks",
-    title: "浏览器系统通知",
-    description: "提醒到期时同时发送浏览器系统通知",
+    title: "系统通知",
+    description: "提醒到期时同时发送系统通知",
     keywords: ["通知", "提醒", "浏览器通知", "notification", "browser"],
   },
   {
@@ -386,7 +386,7 @@ export const SETTINGS_REGISTRY: SettingDefinition[] = [
     id: SETTING_IDS.kiro.apiKey,
     section: "kiro",
     title: "API Key",
-    description: "各服务的 API Key（仅保存在当前浏览器会话）",
+    description: "各服务的 API Key（仅保存在当前会话）",
     keywords: ["api key", "密钥", "key", "token"],
   },
   {
@@ -452,7 +452,7 @@ export const SETTINGS_REGISTRY: SettingDefinition[] = [
     id: SETTING_IDS.kiro.webSearchCredential,
     section: "kiro",
     title: "凭据",
-    description: "选择搜索凭据来源；使用自己的 API Key 时，Key 仅保存在当前浏览器会话中",
+    description: "选择搜索凭据来源；使用自己的 API Key 时，Key 仅保存在当前会话中",
     keywords: ["凭据", "api key", "byok", "搜索 key", "credential"],
     conditional: true,
     gate: [{ control: SETTING_IDS.kiro.webSearchEnabled, requiresValue: true }],
@@ -462,7 +462,7 @@ export const SETTINGS_REGISTRY: SettingDefinition[] = [
     id: SETTING_IDS.kiro.webSearchByokKey,
     section: "kiro",
     title: "Tavily API Key",
-    description: "仅保存在当前浏览器会话中（调用时发送到 ClassFlow 服务端转发）",
+    description: "仅保存在当前会话中（调用时发送到 ClassFlow 服务端转发）",
     keywords: ["tavily", "api key", "搜索", "密钥"],
     conditional: true,
     gate: [
@@ -515,7 +515,7 @@ export const SETTINGS_REGISTRY: SettingDefinition[] = [
     id: SETTING_IDS.kiro.webPdfVisionKey,
     section: "kiro",
     title: "OpenCode Go Vision API Key",
-    description: "仅用于读取联网搜索发现的扫描型 PDF。密钥仅保存在当前浏览器会话中",
+    description: "仅用于读取联网搜索发现的扫描型 PDF。密钥仅保存在当前会话中",
     keywords: ["vision", "api key", "pdf", "密钥"],
     conditional: true,
     gate: [{ control: SETTING_IDS.kiro.webSearchEnabled, requiresValue: true }],
@@ -585,14 +585,14 @@ export const SETTINGS_REGISTRY: SettingDefinition[] = [
     id: SETTING_IDS.data.privacyLocal,
     section: "data",
     title: "本地优先",
-    description: "课程、任务、记忆与聊天历史保存在当前浏览器；附件正文存入浏览器本地存储",
+    description: "课程、任务、记忆与聊天历史保存在当前设备；附件正文存入本地存储",
     keywords: ["本地", "隐私", "存储", "设备", "隐私说明"],
   },
   {
     id: SETTING_IDS.data.privacyApiKey,
     section: "data",
     title: "API Key",
-    description: "仅保存在当前浏览器会话（sessionStorage），不写入本地存储、备份或日志",
+    description: "仅保存在当前会话（session 级存储），不写入本地存储、备份或日志",
     keywords: ["api key", "隐私", "会话", "密钥"],
   },
   {

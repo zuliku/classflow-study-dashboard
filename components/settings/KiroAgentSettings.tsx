@@ -140,7 +140,7 @@ export function KiroAgentSettings() {
   /** 添加位置（显式用户手势）：Desktop Runtime → Native picker；否则 Chromium → Browser picker */
   const handleAddLocation = async () => {
     if (!isClassFlowDesktopRuntime() && !supportsFileSystemAccess()) {
-      setError("当前浏览器不支持本地文件夹授权，请使用 Kiro 内置工作区。");
+      setError("当前应用环境不支持本地文件夹授权，请使用 Kiro 内置工作区。");
       return;
     }
     setAddingLocation(true);
@@ -256,7 +256,7 @@ export function KiroAgentSettings() {
     confirmRequest({
       title: isSandboxWs ? "删除 Kiro 内置工作区？" : "移除本地文件夹授权？",
       description: isSandboxWs
-        ? "此操作会删除该内置工作区在当前浏览器中保存的文件和工作区记录，无法撤销。"
+        ? "此操作会删除该内置工作区在当前应用中保存的文件和工作区记录，无法撤销。"
         : isNativeWs
           ? "ClassFlow 将忘记这个文件夹的授权，但不会删除电脑上的任何文件。"
           : "ClassFlow 将忘记这个文件夹的授权记录，但不会删除电脑上的任何文件。",
@@ -375,7 +375,7 @@ export function KiroAgentSettings() {
               {workspaces.map((ws) => {
                 const isSandboxWs = ws.roots.every((r) => isSandboxAdapterRef(r.adapterRef));
                 const metadata = isSandboxWs
-                  ? `当前浏览器 · ${ws.roots
+                  ? `内置工作区 · ${ws.roots
                       .map((r) => (r.access === "read-write" ? "读写" : "只读"))
                       .join(" · ")}`
                   : ws.roots

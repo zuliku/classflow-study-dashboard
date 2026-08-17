@@ -168,7 +168,6 @@ export function KiroHistoryPanel({
           </div>
           {records.length > 0 && (
             <div className="flex items-center justify-between gap-2">
-              <p className="text-[10px] text-sandrift">Kiro 对话仅保存在当前浏览器中。</p>
               <button onClick={clearAll} className="text-[11px] font-bold text-sandrift hover:text-danger transition-colors">
                 清空全部
               </button>
