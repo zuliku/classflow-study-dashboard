@@ -117,7 +117,7 @@ describe("VisualActionProposalCard（V1.4 Runtime-owned）", () => {
     expect(card.text()).toContain("已应用 2 项修改");
     expect(card.container.querySelector('[data-testid="visual-apply"]')).toBeNull();
     expect(card.container.querySelector('[data-testid="visual-undo"]')).toBeTruthy();
-    expect(mocks.runtime.getState("p-live-1")?.status).toBe("applied");
+    expect(mocks.runtime!.getState("p-live-1")?.status).toBe("applied");
 
     // remount：unmount → 重新 render 同一 proposal
     card.cleanup();
@@ -160,7 +160,7 @@ describe("VisualActionProposalCard（V1.4 Runtime-owned）", () => {
     card.render();
     // 已 revoked：Card Undo 按钮消失（不可能二次触发）；undo 只执行一次
     expect(undoMock).toHaveBeenCalledTimes(1);
-    expect(mocks.runtime.getState("p-live-1")?.status).toBe("revoked");
+    expect(mocks.runtime!.getState("p-live-1")?.status).toBe("revoked");
     expect(card.container.querySelector('[data-testid="visual-undo"]')).toBeNull();
     expect(card.container.querySelector('[data-testid="visual-apply"]')).toBeNull();
     card.cleanup();

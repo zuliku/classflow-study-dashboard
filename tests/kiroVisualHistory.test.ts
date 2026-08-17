@@ -211,7 +211,7 @@ describe("sanitizeConversation（V1.3 消息保留 + 快照落库）", () => {
       visualActionProposals: [makeLiveProposal()],
     };
     const receipts = new Map([["proposal-live-1", { status: "applied" as const, count: 2, appliedAt: 123 }]]);
-    const rec = sanitizeConversation({ ...base, messages: [m], visualProposalReceipts: receipts });
+    const rec = sanitizeConversation({ ...base, messages: [m], visualProposalReceipts: receipts as unknown as ReadonlyMap<string, import("@/lib/ai/visual/receipt").VisualProposalReceiptView> });
     const snapshot = rec.messages[0].visualProposals?.[0];
     expect(snapshot?.receipt).toEqual({ status: "applied", count: 2, appliedAt: 123 });
     assertNoExecutableKeys(JSON.parse(JSON.stringify(rec)));
@@ -228,7 +228,7 @@ describe("sanitizeConversation（V1.3 消息保留 + 快照落库）", () => {
       visualActionProposals: [makeLiveProposal()],
     };
     const receipts = new Map([["proposal-live-1", { status: "revoked" as const, count: 2, appliedAt: 100, revokedAt: 200 }]]);
-    const rec = sanitizeConversation({ ...base, messages: [m], visualProposalReceipts: receipts });
+    const rec = sanitizeConversation({ ...base, messages: [m], visualProposalReceipts: receipts as unknown as ReadonlyMap<string, import("@/lib/ai/visual/receipt").VisualProposalReceiptView> });
     expect(rec.messages[0].visualProposals?.[0].receipt).toEqual({ status: "revoked", count: 2, appliedAt: 100, revokedAt: 200 });
     // 无 receipt（idle/stale 未记录）→ 不写 receipt 字段
     const rec2 = sanitizeConversation({ ...base, messages: [m] });
@@ -245,9 +245,9 @@ describe("sanitizeConversation（V1.3 消息保留 + 快照落库）", () => {
       visualActionProposals: [makeLiveProposal()],
     };
     const receipts = new Map([["proposal-live-1", { status: "stale", count: 2, appliedAt: 123, undo: () => {} }]]);
-    const rec = sanitizeConversation({ ...base, messages: [m], visualProposalReceipts: receipts });
+    const rec = sanitizeConversation({ ...base, messages: [m], visualProposalReceipts: receipts as unknown as ReadonlyMap<string, import("@/lib/ai/visual/receipt").VisualProposalReceiptView> });
     expect(rec.messages[0].visualProposals?.[0].receipt).toBeUndefined();
-    const rec2 = sanitizeConversation({ ...base, messages: [m], visualProposalReceipts: new Map([["proposal-live-1", { status: "applied" as const, count: 2, appliedAt: 123, undo: () => {} }]]) });
+    const rec2 = sanitizeConversation({ ...base, messages: [m], visualProposalReceipts: new Map([["proposal-live-1", { status: "applied" as const, count: 2, appliedAt: 123, undo: () => {} }]]) as unknown as ReadonlyMap<string, import("@/lib/ai/visual/receipt").VisualProposalReceiptView> });
     const projected = rec2.messages[0].visualProposals?.[0].receipt;
     expect(projected).toEqual({ status: "applied", count: 2, appliedAt: 123 });
     expect("undo" in projected!).toBe(false);
