@@ -1199,8 +1199,9 @@ export function KiroSessionProvider({ children }: { children: React.ReactNode })
       <KiroSessionMetaContext.Provider value={metaValue}>
         <KiroSessionActionsContext.Provider value={actionsValue}>
           <KiroSessionContext.Provider value={sessionValue}>
-            {/* 固定视口高度外壳（h-dvh）：main 内部滚动，Kiro Conversation 独立滚动，不随内容撑高 */}
-            <div className="flex h-dvh bg-[#F7F5F5] font-sans antialiased text-charcoal">
+            {/* 桌面内容高度外壳：继承 Renderer 中 TitleBar 以下的剩余区域（h-full，非 viewport 高度）；
+                Provider 不自行使用 viewport height，内部 Workspace/Conversation 负责各自滚动。 */}
+            <div className="flex h-full min-h-0 w-full overflow-hidden bg-[#F7F5F5] font-sans antialiased text-charcoal">
               {children}
               {/* Sidecar 与 Workspace 互斥；保留组件到 exit presence 完成。 */}
               <KiroSidecar open={effectiveSidecarOpen} />
