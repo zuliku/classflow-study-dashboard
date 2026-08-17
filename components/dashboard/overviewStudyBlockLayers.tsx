@@ -5,6 +5,30 @@ import { format } from "date-fns";
 import { StudyBlock, Semester } from "@/types";
 import { getWeekDateRange } from "@/lib/semester";
 
+/** StudyBlock 与某课程是否同时间重叠（视觉层判断；课程生效周由调用方过滤） */
+function timeOverlap(
+  block: { startTime: string; endTime: string },
+  schedule: { startTime: string; endTime: string }
+): boolean {
+  const toMin = (t: string): number | null => {
+    const [h, m] = t.split(":").map(Number);
+    if (typeof h !== "number" || typeof m !== "number" || Number.isNaN(h) || Number.isNaN(m)) return null;
+    return h * 60 + m;
+  };
+  const s = toMin(block.startTime);
+  const e = toMin(block.endTime);
+  const ss = toMin(schedule.startTime);
+  const se = toMin(schedule.endTime);
+  if (s === null || e === null || ss === null || se === null) return false;
+  return s < se && ss < e;
+}
+
+function weekDateByDay(semester: Semester, week: number): Map<number, string> {
+  const dateByDay = new Map<number, string>();
+  getWeekDateRange(semester, week).forEach((d, i) => dateByDay.set(i + 1, format(d, "yyyy-MM-dd")));
+  return dateByDay;
+}
+
 /**
  * 总览页课表时间线上的 StudyBlock 任务小卡片图层。
  *
@@ -19,9 +43,7 @@ export function buildOverviewStudyBlockLayers(input: {
   currentSemesterWeek: number;
 }) {
   const { studyBlocks, semester, currentSemesterWeek } = input;
-  const weekDates = getWeekDateRange(semester, currentSemesterWeek);
-  const dateByDay = new Map<number, string>();
-  weekDates.forEach((d, i) => dateByDay.set(i + 1, format(d, "yyyy-MM-dd")));
+  const dateByDay = weekDateByDay(semester, currentSemesterWeek);
 
   return (ctx: {
     dayOfWeek: number;
@@ -60,6 +82,44 @@ export function buildOverviewStudyBlockLayers(input: {
           );
         })}
       </>
+    );
+  };
+}
+
+/**
+ * 总览课表课程卡右上角 Task Marker：与课程时间重叠的 StudyBlock 任务
+ * 以单个标识点呈现（参考时间表 CourseTaskMarker 视觉：7px 圆点），
+ * hover 显示重叠任务列表（原生 title）。与课程重叠的块不再单独绘制卡片。
+ */
+export function buildOverviewCourseTaskMarkers(input: {
+  studyBlocks: StudyBlock[];
+  semester: Semester;
+  currentSemesterWeek: number;
+}) {
+  const { studyBlocks, semester, currentSemesterWeek } = input;
+  const dateByDay = weekDateByDay(semester, currentSemesterWeek);
+
+  return (ctx: {
+    schedule: { startTime: string; endTime: string; id: string };
+    dayOfWeek: number;
+    hasConflict: boolean;
+  }): React.ReactNode => {
+    const date = dateByDay.get(ctx.dayOfWeek);
+    if (!date) return null;
+    const blocks = studyBlocks
+      .filter((b) => b.date === date && timeOverlap(b, ctx.schedule))
+      .sort((a, b) => a.startTime.localeCompare(b.startTime));
+    if (blocks.length === 0) return null;
+    const label = blocks.map((b) => `${b.title}（${b.startTime}–${b.endTime}）`).join("、");
+    return (
+      <div
+        className="absolute z-[7] pointer-events-none"
+        style={{ top: 4, right: ctx.hasConflict ? 26 : 6 }}
+        aria-label={`${blocks.length} 个学习任务与本课程时间重叠`}
+        title={`${blocks.length} 个学习任务与本课程时间重叠：${label}`}
+      >
+        <span className="block w-[7px] h-[7px] rounded-full bg-[#A87952]" />
+      </div>
     );
   };
 }

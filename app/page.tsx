@@ -6,7 +6,7 @@ import { WorkspaceHeader } from "@/components/layout/WorkspaceHeader";
 import { Button } from "@/components/ui/Button";
 import { BottomNav } from "@/components/layout/BottomNav";
 import { TimetableGrid } from "@/components/dashboard/TimetableGrid";
-import { buildOverviewStudyBlockLayers } from "@/components/dashboard/overviewStudyBlockLayers";
+import { buildOverviewStudyBlockLayers, buildOverviewCourseTaskMarkers } from "@/components/dashboard/overviewStudyBlockLayers";
 import { TimetableQuickGlance } from "@/components/dashboard/TimetableQuickGlance";
 import { UpcomingDDL } from "@/components/dashboard/UpcomingDDL";
 import { MiniCalendar } from "@/components/dashboard/MiniCalendar";
@@ -270,6 +270,11 @@ export default function Home() {
                     fillAvailableHeight
                     headerActions={<TimetableQuickGlance />}
                     extraLayers={buildOverviewStudyBlockLayers({
+                      studyBlocks,
+                      semester,
+                      currentSemesterWeek,
+                    })}
+                    courseIndicators={buildOverviewCourseTaskMarkers({
                       studyBlocks,
                       semester,
                       currentSemesterWeek,
