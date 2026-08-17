@@ -301,7 +301,8 @@ export function CourseDetailDrawer() {
     excludeId?: string
   ): ScheduleConflict[] => {
     const others = schedules.filter((s) => s.id !== excludeId);
-    return findScheduleConflicts([...others, candidate]).filter(
+    // ignoreSameCourse：编辑某门课时段时，与同课程其它时段重叠不属跨课程冲突
+    return findScheduleConflicts([...others, candidate], { ignoreSameCourse: true }).filter(
       (c) => c.scheduleA.id === candidate.id || c.scheduleB.id === candidate.id
     );
   };

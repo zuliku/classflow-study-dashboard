@@ -187,8 +187,9 @@ export function TimetableGrid({
       )
     : undefined;
 
-  // 统一冲突定义（与导入器一致）：星期相同 + 时间重叠 + 至少一个共同生效教学周
-  const conflicts = findScheduleConflicts(activeSchedules);
+  // 统一冲突定义（与导入器一致）：星期相同 + 时间重叠 + 至少一个共同生效教学周；
+  // ignoreSameCourse：同一门课内部时段重叠不标冲突（连堂/同课多节属该课程自身安排）
+  const conflicts = findScheduleConflicts(activeSchedules, { ignoreSameCourse: true });
   const firstConflict = conflicts[0];
 
   // 周次切换方向：上一周 -6px 进入，下一周 +6px 进入（仅内容区，卡片本体不动）

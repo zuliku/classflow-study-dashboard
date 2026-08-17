@@ -142,7 +142,8 @@ export function validateScheduleCandidate(
   excludeScheduleId: string
 ): ScheduleCandidateValidation {
   const others = allSchedules.filter((s) => s.id !== excludeScheduleId);
-  const conflicts = findScheduleConflicts([...others, candidate]);
+  // ignoreSameCourse：拖动/调整某门课的卡片时，与同课程其它时段的重叠不属于跨课程冲突
+  const conflicts = findScheduleConflicts([...others, candidate], { ignoreSameCourse: true });
   const conflict =
     conflicts.find(
       (c) => c.scheduleA.id === candidate.id || c.scheduleB.id === candidate.id

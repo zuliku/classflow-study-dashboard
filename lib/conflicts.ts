@@ -21,9 +21,15 @@ export function sharesActiveWeek(a: CourseSchedule, b: CourseSchedule): boolean 
 /**
  * 统一冲突定义：星期相同 + 时间区间重叠 + 至少一个共同生效教学周。
  * TimetableGrid 与导入器共用同一套冲突判定。
+ *
+ * options.ignoreSameCourse：忽略同一门课程（courseId 相同）内部时段之间的重叠——
+ * 用于课表拖动/编辑/详情等"某门课卡片内部调整"场景：同课程多节时段（如连堂、补课）
+ * 重叠属于该课程自身的安排，不应与"与其它课程冲突"混淆。
+ * 导入器 / 新增课程保持默认 false（跨记录校验语义不变）。
  */
 export function findScheduleConflicts(
-  schedules: CourseSchedule[]
+  schedules: CourseSchedule[],
+  options?: { ignoreSameCourse?: boolean }
 ): ScheduleConflict[] {
   const conflicts: ScheduleConflict[] = [];
 
@@ -34,6 +40,7 @@ export function findScheduleConflicts(
       if (a.dayOfWeek !== b.dayOfWeek) continue;
       if (!hasTimeOverlap(a.startTime, a.endTime, b.startTime, b.endTime)) continue;
       if (!sharesActiveWeek(a, b)) continue;
+      if (options?.ignoreSameCourse && a.courseId === b.courseId) continue;
 
       conflicts.push({
         scheduleA: a,

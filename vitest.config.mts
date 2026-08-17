@@ -9,6 +9,11 @@ export default defineConfig({
   },
   test: {
     environment: "node",
-    include: ["tests/terminalCapability*.test.ts", "tests/terminalToolExposure*.test.ts", "tests/terminalCapabilityPrompt*.test.ts"],
+    include: [
+      "tests/terminalCapability*.test.ts",
+      "tests/terminalToolExposure*.test.ts",
+      "tests/terminalCapabilityPrompt*.test.ts",
+      "tests/scheduleConflictSameCourse.test.ts",
+    ],
   },
 });
