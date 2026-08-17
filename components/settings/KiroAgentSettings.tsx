@@ -87,7 +87,6 @@ export function KiroAgentSettings() {
 
   // Desktop Terminal V1：仅在 Desktop runtime + terminal bridge 可用时显示（网页版完全不出现）
   const desktopTerminalAvailable = isClassFlowDesktopRuntime() && hasClassFlowDesktopTerminal();
-
   const [grantStatus, setGrantStatus] = useState<Record<string, BrowserGrantStatus>>({});
   // Native V1：root 运行时可用性（runtime facts；不持久化）
   const [rootAvailability, setRootAvailability] = useState<Record<string, WorkspaceRootAvailability>>({});
@@ -96,6 +95,9 @@ export function KiroAgentSettings() {
   const [error, setError] = useState("");
 
   const activeWorkspace = workspaces.find((w) => w.id === activeWorkspaceId) ?? null;
+  // Terminal 是否绑定 Native Workspace（决定 run_terminal_command 当前是否实际可用）
+  const terminalHasNativeRoot =
+    activeWorkspace?.roots.some((r) => isNativeAdapterRef(r.adapterRef)) ?? false;
   const hasCanonicalSandbox = workspaces.some(isDefaultSandboxWorkspace);
 
   // 启动 + workspaces 变化时查询各 root 的授权/可用性状态
@@ -299,15 +301,34 @@ export function KiroAgentSettings() {
           </SettingsRow>
 
           {/* Desktop Terminal V1：仅 Desktop runtime + terminal bridge 可用时显示（网页版完全不出现） */}
-          {desktopTerminalAvailable && (
+          {desktopTerminalAvailable ? (
             <SettingsRow
               settingId="kiro-terminal-enabled"
               title="允许 Kiro 使用终端"
-              description="允许 Kiro 运行 PowerShell 或命令提示符。「授权范围内自动」模式下普通命令可自动执行；识别到的删除、高风险或任意内联代码命令仍会请求确认。"
+              description={
+                terminalEnabled && terminalHasNativeRoot
+                  ? "PowerShell / CMD · 当前本地工作区"
+                  : terminalEnabled
+                  ? "需要先选择一个本地文件夹工作区"
+                  : "PowerShell / CMD 支持已就绪，开启后 Kiro 才能执行命令。"
+              }
             >
               <SettingsToggle
                 checked={terminalEnabled}
                 onChange={handleToggleTerminal}
+                label="允许 Kiro 使用终端"
+              />
+            </SettingsRow>
+          ) : (
+            <SettingsRow
+              settingId="kiro-terminal-enabled"
+              title="允许 Kiro 使用终端"
+              description="仅 ClassFlow 桌面版支持终端操作"
+            >
+              <SettingsToggle
+                checked={false}
+                onChange={() => undefined}
+                disabled
                 label="允许 Kiro 使用终端"
               />
             </SettingsRow>

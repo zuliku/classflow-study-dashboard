@@ -47,12 +47,14 @@ export function SettingsToggle({
   checked,
   onChange,
   label,
+  disabled,
 }: {
   checked: boolean;
   onChange: (v: boolean) => void;
   label: string;
+  disabled?: boolean;
 }) {
-  return <Switch checked={checked} onChange={onChange} label={label} />;
+  return <Switch checked={checked} onChange={onChange} label={label} disabled={disabled} />;
 }
 
 /** 分段选择 → SegmentedControl */

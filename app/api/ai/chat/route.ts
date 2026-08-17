@@ -52,6 +52,8 @@ import {
 } from "@/lib/ai/visual/continuation";
 import { buildClassFlowContextSection } from "@/lib/ai/prompts/classFlowContextSection";
 import { buildKiroMemoryIndexSection } from "@/lib/ai/prompts/memoryIndexSection";
+import { buildDesktopRuntimeCapabilityContext } from "@/lib/ai/computer/desktopCapabilityPrompt";
+import { resolveTerminalCapability } from "@/lib/ai/computer/terminalCapability";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -179,6 +181,21 @@ export async function handleChat(req: Request) {
     computerSnapshot
   );
   const workspaceInstructionsSection = buildWorkspaceInstructionsSection(workspaceInstructionEntries);
+
+  // Desktop Terminal V1.0.1：动态能力声明（与 run_terminal_command Tool Exposure 同源 resolver）。
+  // 模型对「当前是否可用 PowerShell / CMD」的判断以此段为准，而不是静态先验。
+  const desktopRuntimeCapabilityContext = buildDesktopRuntimeCapabilityContext(computerSnapshot);
+  // Dev-only diagnostics（bounded；不含 command / absolute path / grantId / adapterRef / key）
+  if (process.env.NODE_ENV === "development") {
+    const cap = resolveTerminalCapability(computerSnapshot);
+    console.info(
+      `[Kiro terminal capability] computerEnabled=${computerSnapshot?.enabled ?? false} ` +
+        `terminalEnabled=${computerSnapshot?.terminalEnabled ?? false} ` +
+        `terminalAvailable=${computerSnapshot?.terminalAvailable ?? false} ` +
+        `hasNativeRoot=${computerSnapshot?.hasNativeRoot ?? false} result=${cap.reason}`
+    );
+  }
+
   const attachmentsContext = Array.isArray(b.attachmentsContext)
     ? (b.attachmentsContext as {
         sourceId?: string;
@@ -315,8 +332,8 @@ export async function handleChat(req: Request) {
   const visualPendingContinuationSection = buildVisualPendingContinuationSection(visualPendingContinuation);
 
   const systemMessage = baseContext
-    ? `${trustedBasePrompt}${buildClassFlowContextSection(baseContext, contextRefs)}${projectInstructionsSection}${visualPendingContinuationSection}${memorySection}${attachmentSection(plan.attachmentContext)}${visionPagesSection}${computerWorkspaceContext}${workspaceInstructionsSection}${artifactContextNotice}`
-    : trustedBasePrompt + projectInstructionsSection + visualPendingContinuationSection + memorySection + attachmentSection(plan.attachmentContext) + visionPagesSection + computerWorkspaceContext + workspaceInstructionsSection + artifactContextNotice;
+    ? `${trustedBasePrompt}${buildClassFlowContextSection(baseContext, contextRefs)}${projectInstructionsSection}${visualPendingContinuationSection}${memorySection}${attachmentSection(plan.attachmentContext)}${visionPagesSection}${computerWorkspaceContext}${desktopRuntimeCapabilityContext}${workspaceInstructionsSection}${artifactContextNotice}`
+    : trustedBasePrompt + projectInstructionsSection + visualPendingContinuationSection + memorySection + attachmentSection(plan.attachmentContext) + visionPagesSection + computerWorkspaceContext + desktopRuntimeCapabilityContext + workspaceInstructionsSection + artifactContextNotice;
 
   try {
     const modelMessages = await convertToModelMessages(plan.messages as never);
@@ -336,6 +353,13 @@ export async function handleChat(req: Request) {
           documentAuthoringVersion: resolveDocumentAuthoringVersion(computerSnapshot?.documentAuthoringVersion),
         }),
       });
+      // Dev-only：Tool Exposure 与 Capability 同源确认（bounded；不含 command/path/key）
+      if (process.env.NODE_ENV === "development") {
+        const cap = resolveTerminalCapability(computerSnapshot);
+        console.info(
+          `[Kiro tools] terminalCapability=${cap.reason} run_terminal_command=${cap.available ? "exposed" : "hidden"}`
+        );
+      }
 
     // V2.3：Document Failure Fuse（server continuation 层主防线）——
     // 同一 User Turn 第 2 次结构失败或首次渲染/校验硬失败后，不再向模型暴露 create_document / update_document。

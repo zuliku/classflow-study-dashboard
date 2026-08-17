@@ -10,6 +10,7 @@ import {
   KIRO_FINAL_ANSWER_TOOL_DESCRIPTION,
 } from "@/lib/ai/tools/finalAnswer";
 import { resolveDocumentAuthoringVersion, DocumentAuthoringVersion } from "@/lib/ai/computer/documents/authoring/protocol";
+import { resolveTerminalCapability, TerminalCapabilityState } from "@/lib/ai/computer/terminalCapability";
 
 /** Kiro 全部基础工具（Read + Write + Memory）：Server 提供 schema，Client 按同名执行 */
 export const KIRO_TOOLS = {
@@ -93,16 +94,26 @@ export function getKiroToolsForRequest(input: {
   const snap = input.computerSnapshot;
   if (!snap?.enabled) return base;
   const set = { ...base, ...buildComputerToolSet(snap.agentMode, input.documentAuthoringVersion) };
-  if (
-    !(
-      snap.terminalEnabled === true &&
-      snap.terminalAvailable === true &&
-      snap.hasNativeRoot === true
-    )
-  ) {
+  // Desktop Terminal V1.0.1：Tool Exposure 与 Capability Prompt 同源（统一 resolver）。
+  // ready ⇔ run_terminal_command 暴露；任何一道 Gate false → 不暴露。
+  const terminalCapability = resolveTerminalCapability(snap as never);
+  if (!terminalCapability.available) {
     delete (set as Record<string, unknown>)["run_terminal_command"];
   }
   return set;
+}
+
+/** 供 chat route / diagnostics 读取本请求的 Terminal Capability（与 Tool Exposure 同源） */
+export function resolveKiroTerminalCapability(input: {
+  computerSnapshot?: {
+    enabled: boolean;
+    agentMode: "plan" | "guided" | "workspace-auto";
+    terminalEnabled?: boolean;
+    terminalAvailable?: boolean;
+    hasNativeRoot?: boolean;
+  };
+}): TerminalCapabilityState {
+  return resolveTerminalCapability(input.computerSnapshot as never);
 }
 
 export { COMPUTER_TOOLS };
