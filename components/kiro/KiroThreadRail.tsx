@@ -415,21 +415,6 @@ export function KiroThreadRail({ onOpenProjects }: { onOpenProjects?: () => void
               </button>
             )}
           </div>
-
-          {/* Footer（固定区） */}
-          <div className="shrink-0 flex items-center justify-between px-3 py-2 border-t border-line">
-            <div className="relative">
-              <button
-                onClick={() => setMoreOpen((v) => !v)}
-                aria-label="对话更多操作"
-                aria-expanded={moreOpen}
-                className="p-1.5 rounded-lg text-sandrift hover:bg-alabaster hover:text-charcoal transition-colors"
-              >
-                <MoreHorizontal className="w-4 h-4" />
-              </button>
-              {moreMenu("top-end")}
-            </div>
-          </div>
           </div>
         )}
       </div>
