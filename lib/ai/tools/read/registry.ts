@@ -178,13 +178,14 @@ export const KIRO_READ_TOOLS = {
       "与 propose_visual_actions 的边界：propose_visual_actions 用于「根据截图修改已有 ClassFlow 实体」（作业/DDL/停课/调课/补课）；本工具用于「批量初始化全新课程与排课」。" +
       "重复课程 / 冲突 / 节次时间（Bell Schedule）/ 指纹校验全部由系统确定性处理，不需要先逐门查询已有课程。" +
       "输出要求：" +
+      "- 第一遍覆盖扫描整张图所有可能承载课程的非空单元格/区域，逐格绑定课程名、星期、节次、周次、教室；跨行/跨列/合并单元格按视觉边界读取，不以固定课程数量或固定版式为先验；" +
+      "- 第二遍按课程聚合并反向核对：每个输出 slot 都应能对应回截图中的课程单元格，同时检查第一遍发现的单元格是否都进入 courses 或 pendingItems；" +
       "- 同一课程多个上课时间必须聚合到一个 course 的 slots 下（draftKey 仅本次内部关联，绝不使用真实 courseId）；" +
-      "- 同一课程连续节次（如第7节与第8节同课/同周/同地点）应合并为 periodStart/periodEnd（7-8）；" +
+      "- 同一课程连续节次只有在同一天、周次语义相同、地点相同且节次连续时才可合并为 periodStart/periodEnd；不同周次或不同地点不得为了减少 slot 数而合并；" +
       "- 上课时间只输出节次（periodStart/periodEnd，如第1-2节 → 1 和 2），绝不输出 startTime/endTime 猜测值；" +
       "- 周次用表达式原样（如 1-5,7-17 / 1-4,6-7,9-17 / 3-7,9 / 单周 / 双周），不猜测、不展开；看不清周次时不要编造，放入 pendingItems；" +
       "- 图片顶部姓名/学号等个人信息绝不进入课程数据；" +
-      "- 识别不确定的课程或时段放入 pendingItems（reason: ambiguous-cell 或 missing-information），不要静默丢弃或猜测；" +
-      "- 输出前必须自查复核：课程数量与截图逐行一致，每门课所有上课时段（含仅1周、单双周、多天不同时段）逐一核对周次/节次/教室；看不清就放 pendingItems，不得猜测。" +
+      "- 识别不确定的课程或时段放入 pendingItems（reason: ambiguous-cell 或 missing-information），不要静默丢弃或猜测；不得依据示例、历史课表或预期数量补齐/删除课程。" +
       "这是 READ / PROPOSAL 工具：绝不写 Store；结果只是课表导入预览，用户核对并确认后才会一次性原子导入。",
     inputSchema: KIRO_READ_TOOL_SCHEMAS.propose_timetable_import,
   }),
