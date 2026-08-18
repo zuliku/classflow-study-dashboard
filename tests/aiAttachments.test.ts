@@ -123,7 +123,17 @@ describe("Vision Capability（真实约束）", () => {
     expect(getModelCapabilities({ provider: "opencode-go", model: "grok-4.5" }).vision).toBe(false);
     expect(getModelCapabilities({ provider: "opencode-go", model: "kimi-k3" }).vision).toBe(true);
     expect(getModelCapabilities({ provider: "opencode-go", model: "mimo-v2.5" }).vision).toBe(true);
+    // Phase 3.7 probe 通过的模型（真实红色识别验证）
+    expect(getModelCapabilities({ provider: "opencode-go", model: "kimi-k2.7-code" }).vision).toBe(true);
+    expect(getModelCapabilities({ provider: "opencode-go", model: "gpt-5.6-luna" }).vision).toBe(true);
+    expect(getModelCapabilities({ provider: "opencode-go", model: "minimax-m3" }).vision).toBe(true);
+    expect(getModelCapabilities({ provider: "opencode-go", model: "qwen3.8-max" }).vision).toBe(true);
+    // 明确不支持 / 未验证的保持关闭
     expect(getModelCapabilities({ provider: "opencode-go", model: "glm-5.2" }).vision).toBe(false);
+    expect(getModelCapabilities({ provider: "opencode-go", model: "glm-5.3" }).vision).toBe(false);
+    expect(getModelCapabilities({ provider: "opencode-go", model: "deepseek-v4-pro" }).vision).toBe(false);
+    expect(getModelCapabilities({ provider: "opencode-go", model: "minimax-m2.7" }).vision).toBe(false);
+    expect(getModelCapabilities({ provider: "opencode-go", model: "qwen3.7-max" }).vision).toBe(false);
     expect(getModelCapabilities({ provider: "opencode-go", model: "hy3" }).vision).toBe(false);
     expect(getModelCapabilities({ provider: "deepseek", model: "deepseek-v4-flash" }).vision).toBe(false);
   });
@@ -220,13 +230,16 @@ describe("Vision MIME gate（isVisionMimeSupported，Phase 3.3A）", () => {
 
   it("visionMimeTypes 贯通：registry 未声明 → undefined（无额外限制）", () => {
     // Phase 3.3B：kimi-k3 / mimo-v2.5 已 live 验证 PNG/JPEG/WEBP
-    expect(getModelCapabilities({ provider: "opencode-go", model: "kimi-k3" }).visionMimeTypes).toEqual(["image/jpeg", "image/png", "image/webp"]);
-    expect(getModelCapabilities({ provider: "opencode-go", model: "mimo-v2.5" }).visionMimeTypes).toEqual(["image/jpeg", "image/png", "image/webp"]);
+    // Phase 3.7：kimi-k2.7-code / gpt-5.6-luna / minimax-m3 / qwen3.8-max 同白名单
+    const visionModels = ["kimi-k3", "mimo-v2.5", "kimi-k2.7-code", "gpt-5.6-luna", "minimax-m3", "qwen3.8-max"];
+    for (const model of visionModels) {
+      expect(getModelCapabilities({ provider: "opencode-go", model }).visionMimeTypes).toEqual(["image/jpeg", "image/png", "image/webp"]);
+    }
     expect(getModelCapabilities({ provider: "custom-openai", model: "x", custom: { providerName: "", baseURL: "", model: "x", vision: true } }).visionMimeTypes).toBeUndefined();
   });
 
-  it("kimi-k3 / mimo-v2.5：JPEG/PNG/WEBP 全部通过 MIME gate；扫描 PDF（JPEG）通过；空 type 扩展名兜底一致", () => {
-    for (const model of ["kimi-k3", "mimo-v2.5"]) {
+  it("kimi-k3 / mimo-v2.5 / Phase 3.7 新模型：JPEG/PNG/WEBP 全部通过 MIME gate；扫描 PDF（JPEG）通过；空 type 扩展名兜底一致", () => {
+    for (const model of ["kimi-k3", "mimo-v2.5", "kimi-k2.7-code", "gpt-5.6-luna", "minimax-m3", "qwen3.8-max"]) {
       const cap = getModelCapabilities({ provider: "opencode-go", model });
       expect(isVisionMimeSupported(cap, "image/jpeg"), model).toBe(true);
       expect(isVisionMimeSupported(cap, "image/png"), model).toBe(true);

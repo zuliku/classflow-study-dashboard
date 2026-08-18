@@ -166,5 +166,10 @@ describeGo("OpenCode Go Chat Vision live smoke（OPENCODE_GO_TEST_API_KEY 存在
     tier2Matrix("mimo-v2.5");
     tier1Smoke("kimi-k3");
     tier2Matrix("kimi-k3");
+    // Phase 3.7：新增 live 验证的 vision 模型（红色识别 probe 通过）
+    tier1Smoke("kimi-k2.7-code");
+    tier1Smoke("gpt-5.6-luna");
+    tier1Smoke("minimax-m3");
+    tier1Smoke("qwen3.8-max");
   }
 });

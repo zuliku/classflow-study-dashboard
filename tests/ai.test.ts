@@ -70,9 +70,9 @@ describe("Provider Registry", () => {
     // 厂商首字母序：deepseek(D) < kimi(K) < mimo(M) < minimax(M) < openai(O) < qwen(Q) < tencent(T) < xai(X) < zai(Z)
     const unique = Array.from(new Set(vendors.map((v) => v ?? "")));
     expect(unique).toEqual(["deepseek", "kimi", "mimo", "minimax", "openai", "qwen", "tencent", "xai", "zai"]);
-    // 组内能力降序：kimi-k3（vision）在 kimi-k2.7-code 前
+    // 组内能力降序：kimi 的 vision 模型（k3/k2.7-code，Phase 3.7）都在 k2.6（非 vision）前
     const kimiIdx = models.map((m) => m.id);
-    expect(kimiIdx.indexOf("kimi-k3")).toBeLessThan(kimiIdx.indexOf("kimi-k2.7-code"));
+    expect(kimiIdx.indexOf("kimi-k2.6")).toBeGreaterThan(Math.max(kimiIdx.indexOf("kimi-k3"), kimiIdx.indexOf("kimi-k2.7-code")));
     // DeepSeek 组内按 id 稳定
     expect(models.map((m) => m.id).indexOf("deepseek-v4-flash")).toBeLessThan(models.map((m) => m.id).indexOf("deepseek-v4-pro"));
   });

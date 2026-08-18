@@ -18,7 +18,9 @@ export const OPENCODE_MODELS: AIModelDefinition[] = [
   { id: "glm-5.2", name: "GLM 5.2", provider: "opencode-go", vendor: "zai", transport: "openai-chat", capabilities: { streaming: true, tools: true, vision: false, fileParts: false } },
   { id: "glm-5.1", name: "GLM 5.1", provider: "opencode-go", vendor: "zai", transport: "openai-chat", capabilities: { streaming: true, tools: true, vision: false, fileParts: false } },
   // kimi-k3 / mimo-v2.5 Vision：Phase 3.3B live 验证（PNG/JPEG/WEBP 颜色识别全通过，
-  // 经生产 resolver → @ai-sdk/openai-compatible → OpenCode Go chat/completions）
+  // 经生产 resolver → @ai-sdk/openai-compatible → OpenCode Go chat/completions）。
+  // Phase 3.7：kimi-k2.7-code 经同一红色识别 probe 验证（openai-chat）；gpt-5.6-luna
+  // （openai-responses）、minimax-m3 / qwen3.8-max（anthropic-messages）同批 probe 通过。
   {
     id: "kimi-k3",
     name: "Kimi K3",
@@ -41,7 +43,7 @@ export const OPENCODE_MODELS: AIModelDefinition[] = [
       },
     },
   },
-  { id: "kimi-k2.7-code", name: "Kimi K2.7 Code", provider: "opencode-go", vendor: "kimi", transport: "openai-chat", capabilities: { streaming: true, tools: true, vision: false, fileParts: false } },
+  { id: "kimi-k2.7-code", name: "Kimi K2.7 Code", provider: "opencode-go", vendor: "kimi", transport: "openai-chat", capabilities: { streaming: true, tools: true, vision: true, fileParts: false, visionMimeTypes: ["image/jpeg", "image/png", "image/webp"] } },
   { id: "kimi-k2.6", name: "Kimi K2.6", provider: "opencode-go", vendor: "kimi", transport: "openai-chat", capabilities: { streaming: true, tools: true, vision: false, fileParts: false } },
   { id: "deepseek-v4-pro", name: "DeepSeek V4 Pro", provider: "opencode-go", vendor: "deepseek", transport: "openai-chat", capabilities: { streaming: true, tools: true, vision: false, fileParts: false } },
   { id: "deepseek-v4-flash", name: "DeepSeek V4 Flash", provider: "opencode-go", vendor: "deepseek", transport: "openai-chat", capabilities: { streaming: true, tools: true, vision: false, fileParts: false } },
@@ -81,8 +83,9 @@ export const OPENCODE_MODELS: AIModelDefinition[] = [
     capabilities: {
       streaming: true,
       tools: true,
-      vision: false,
+      vision: true,
       fileParts: false,
+      visionMimeTypes: ["image/jpeg", "image/png", "image/webp"],
       // Phase 3.2A：GPT 5.6 Luna 是首个启用 reasoning 的 OpenCode Go 模型。
       // mechanism=openai-responses-effort（providerOptions.openai.reasoningEffort → reasoning.effort）。
       // SDK/request-shape verified（request-body capture 测试）；OpenCode Go live smoke
@@ -96,11 +99,12 @@ export const OPENCODE_MODELS: AIModelDefinition[] = [
     },
   },
   // ---- Anthropic Messages（官方 endpoint：/v1/messages）----
-  // V1 保守能力声明：streaming + tools 为强要求；vision/fileParts 未经实测不开
-  { id: "minimax-m3", name: "MiniMax M3", provider: "opencode-go", vendor: "minimax", transport: "anthropic-messages", capabilities: { streaming: true, tools: true, vision: false, fileParts: false } },
+  // V1 保守能力声明：streaming + tools 为强要求；vision/fileParts 仅经 live probe 通过者开启
+  // （Phase 3.7：minimax-m3 / qwen3.8-max 红色识别验证通过；m2.7/m2.5/qwen3.7-max 未通过或服务端错误）
+  { id: "minimax-m3", name: "MiniMax M3", provider: "opencode-go", vendor: "minimax", transport: "anthropic-messages", capabilities: { streaming: true, tools: true, vision: true, fileParts: false, visionMimeTypes: ["image/jpeg", "image/png", "image/webp"] } },
   { id: "minimax-m2.7", name: "MiniMax M2.7", provider: "opencode-go", vendor: "minimax", transport: "anthropic-messages", capabilities: { streaming: true, tools: true, vision: false, fileParts: false } },
   { id: "minimax-m2.5", name: "MiniMax M2.5", provider: "opencode-go", vendor: "minimax", transport: "anthropic-messages", capabilities: { streaming: true, tools: true, vision: false, fileParts: false } },
-  { id: "qwen3.8-max", name: "Qwen3.8 Max", provider: "opencode-go", vendor: "qwen", transport: "anthropic-messages", capabilities: { streaming: true, tools: true, vision: false, fileParts: false } },
+  { id: "qwen3.8-max", name: "Qwen3.8 Max", provider: "opencode-go", vendor: "qwen", transport: "anthropic-messages", capabilities: { streaming: true, tools: true, vision: true, fileParts: false, visionMimeTypes: ["image/jpeg", "image/png", "image/webp"] } },
   { id: "qwen3.7-max", name: "Qwen3.7 Max", provider: "opencode-go", vendor: "qwen", transport: "anthropic-messages", capabilities: { streaming: true, tools: true, vision: false, fileParts: false } },
   { id: "qwen3.7-plus", name: "Qwen3.7 Plus", provider: "opencode-go", vendor: "qwen", transport: "anthropic-messages", capabilities: { streaming: true, tools: true, vision: false, fileParts: false } },
   { id: "qwen3.6-plus", name: "Qwen3.6 Plus", provider: "opencode-go", vendor: "qwen", transport: "anthropic-messages", capabilities: { streaming: true, tools: true, vision: false, fileParts: false } },
