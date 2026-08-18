@@ -35,3 +35,6 @@ next-env.d.ts
 .tmp/
 
 # 桌面运行时本地数据（userData 不在此目录；保留系统默认）
+
+# 真实课表截图 fixture（可能含 PII，禁止提交）
+/tests/fixtures/timetable/
