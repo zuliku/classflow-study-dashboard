@@ -183,7 +183,8 @@ export const KIRO_READ_TOOLS = {
       "- 上课时间只输出节次（periodStart/periodEnd，如第1-2节 → 1 和 2），绝不输出 startTime/endTime 猜测值；" +
       "- 周次用表达式原样（如 1-5,7-17 / 1-4,6-7,9-17 / 3-7,9 / 单周 / 双周），不猜测、不展开；看不清周次时不要编造，放入 pendingItems；" +
       "- 图片顶部姓名/学号等个人信息绝不进入课程数据；" +
-      "- 识别不确定的课程或时段放入 pendingItems（reason: ambiguous-cell 或 missing-information），不要静默丢弃或猜测。" +
+      "- 识别不确定的课程或时段放入 pendingItems（reason: ambiguous-cell 或 missing-information），不要静默丢弃或猜测；" +
+      "- 输出前必须自查复核：课程数量与截图逐行一致，每门课所有上课时段（含仅1周、单双周、多天不同时段）逐一核对周次/节次/教室；看不清就放 pendingItems，不得猜测。" +
       "这是 READ / PROPOSAL 工具：绝不写 Store；结果只是课表导入预览，用户核对并确认后才会一次性原子导入。",
     inputSchema: KIRO_READ_TOOL_SCHEMAS.propose_timetable_import,
   }),
