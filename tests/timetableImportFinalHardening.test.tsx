@@ -140,7 +140,7 @@ describe("TimetableImportProposalCard — conflict requires preview", () => {
     expect(screen.queryByText(/导入全部课程/)).toBeNull();
     fireEvent.click(screen.getByText("查看导入预览"));
 
-    expect(screen.getByText(/与已有排课或其它导入课程时间重叠/)).toBeTruthy();
+    expect(screen.getAllByText(/与已有排课或其它导入课程时间重叠/).length).toBeGreaterThan(0);
     const apply = screen.getByText("导入所选课程") as HTMLButtonElement;
     expect(apply.disabled).toBe(false);
   });
