@@ -186,7 +186,7 @@ describe("preflightScheduleImport", () => {
     expect(res.issues[0].code).toBe("missing-information");
   });
 
-  it("fingerprint：内容相同稳定，不同变化", () => {
+  it("fingerprint：内容相同稳定，不同变化；store 变化（已有课程）变化", () => {
     const a = preflightScheduleImport({ courses: [course("高数")], existingCourses: [], existingSchedules: [], bell });
     const b = preflightScheduleImport({ courses: [course("高数")], existingCourses: [], existingSchedules: [], bell });
     const c = preflightScheduleImport({
@@ -195,8 +195,18 @@ describe("preflightScheduleImport", () => {
       existingSchedules: [],
       bell,
     });
+    const d = preflightScheduleImport({
+      courses: [course("高数")],
+      existingCourses: [{ name: "其它课", code: "X", teacher: "李" }],
+      existingSchedules: [],
+      bell,
+    });
     expect(a.fingerprint).toBe(b.fingerprint);
     expect(a.fingerprint).not.toBe(c.fingerprint);
-    expect(computeScheduleImportFingerprint(a.resolvedCourses)).toBe(a.fingerprint);
+    // store 变化（已有课程新增）→ fingerprint 变化 → stale
+    expect(a.fingerprint).not.toBe(d.fingerprint);
+    // bell 变化不改变 fingerprint（派生时间不属于指纹）
+    const noBell = preflightScheduleImport({ courses: [course("高数")], existingCourses: [], existingSchedules: [], bell: null });
+    expect(a.fingerprint).toBe(noBell.fingerprint);
   });
 });

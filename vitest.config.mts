@@ -17,6 +17,7 @@ export default defineConfig({
       "tests/scheduleWeekExpression.test.ts",
       "tests/scheduleWeekIntegration.test.ts",
       "tests/scheduleImportCore.test.ts",
+      "tests/timetableImportDomain.test.ts",
       "tests/focusControlCompact.test.tsx",
     ],
   },

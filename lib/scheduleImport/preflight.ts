@@ -201,7 +201,10 @@ export function preflightScheduleImport(
 
   const blockers = issues.filter((i) => i.severity === "blocker").length;
   const warnings = issues.length - blockers;
-  const fingerprint = computeScheduleImportFingerprint(resolvedCourses);
+  const fingerprint = computeScheduleImportFingerprint(input.courses, {
+    existingCourses: input.existingCourses,
+    existingSchedules: input.existingSchedules,
+  });
 
   return {
     ok: blockers === 0,

@@ -21,6 +21,7 @@ import {
   SettingsSection,
   StudyBlock,
   ScheduleOccurrenceOverride,
+  BellScheduleTemplate,
 } from "@/types";
 import { createDefaultSemester, getSemesterWeek } from "@/lib/semester";
 import { getLocalDDLDate, parseLocalDDL } from "@/lib/ddl";
@@ -305,6 +306,10 @@ interface PersistedAppState {
   groupProjects: GroupProject[];
   /** Timeline V1：学习计划（旧数据可缺失 → 回落 []） */
   studyBlocks?: StudyBlock[];
+  /** Bell Schedule：上课节次模板（旧数据可缺失 → []） */
+  bellSchedules?: BellScheduleTemplate[];
+  /** 当前启用的 Bell Schedule id（旧数据可缺失 → null） */
+  activeBellScheduleId?: string | null;
   /** 任务列表时间筛选：用户偏好，保留并在缺失时回落 "all" */
   assignmentTimeSlice?: TimeSliceFilter;
   /** 上次使用的工作区 Tab（仅记录 workspace，设置不是 Tab） */
@@ -337,6 +342,8 @@ interface LegacyPersistedStateV0 {
   reminders?: unknown;
   focusSessions?: unknown;
   scheduleOccurrenceOverrides?: unknown;
+  bellSchedules?: unknown;
+  activeBellScheduleId?: unknown;
   sidebarCollapsed?: unknown;
 }
 
@@ -456,6 +463,19 @@ function sanitizePersistedState(persisted: unknown): PersistedAppState {
     scheduleOccurrenceOverrides: Array.isArray(legacy.scheduleOccurrenceOverrides)
       ? (legacy.scheduleOccurrenceOverrides as ScheduleOccurrenceOverride[])
       : [],
+    // v8：Bell Schedule（旧数据缺失 → []；非法条目丢弃；active 回落第一个或 null）
+    bellSchedules: Array.isArray(legacy.bellSchedules)
+      ? (legacy.bellSchedules as BellScheduleTemplate[]).filter(
+          (b): b is BellScheduleTemplate =>
+            b !== null && typeof b === "object" && typeof b.id === "string" && typeof b.name === "string" && Array.isArray(b.periods)
+        )
+      : [],
+    activeBellScheduleId:
+      typeof legacy.activeBellScheduleId === "string" &&
+      Array.isArray(legacy.bellSchedules) &&
+      (legacy.bellSchedules as BellScheduleTemplate[]).some((b) => b && b.id === legacy.activeBellScheduleId)
+        ? legacy.activeBellScheduleId
+        : null,
   };
 }
 
@@ -532,8 +552,17 @@ export interface AppState {
   studyBlocks: StudyBlock[];
   /** Task 7：一次性停课/调课/补课（recurring schedule 的周级例外；不改变 base schedule） */
   scheduleOccurrenceOverrides: ScheduleOccurrenceOverride[];
+  /** Bell Schedule：上课节次模板（课表导入节次→时间解析的唯一来源） */
+  bellSchedules: BellScheduleTemplate[];
+  activeBellScheduleId: string | null;
 
   // Actions
+  /** 新增/替换 Bell Schedule 模板 */
+  upsertBellSchedule: (template: BellScheduleTemplate) => void;
+  /** 删除 Bell Schedule；若为当前激活项则回落 */
+  removeBellSchedule: (id: string) => void;
+  /** 设置当前激活的 Bell Schedule */
+  setActiveBellSchedule: (id: string | null) => void;
   updateUserProfile: (profile: Partial<UserProfile>) => void;
   /** 只恢复偏好为默认值，不影响业务数据/个人资料/学期 */
   resetPreferences: () => void;
@@ -865,6 +894,30 @@ export const useAppStore = create<AppState>()(
       reminders: [],
       focusSessions: [],
       scheduleOccurrenceOverrides: [],
+      bellSchedules: [],
+      activeBellScheduleId: null,
+
+      upsertBellSchedule: (template) =>
+        set((state) => ({
+          bellSchedules: state.bellSchedules.some((b) => b.id === template.id)
+            ? state.bellSchedules.map((b) => (b.id === template.id ? template : b))
+            : [...state.bellSchedules, template],
+          activeBellScheduleId: state.activeBellScheduleId ?? template.id,
+        })),
+      removeBellSchedule: (id) =>
+        set((state) => {
+          const next = state.bellSchedules.filter((b) => b.id !== id);
+          return {
+            bellSchedules: next,
+            activeBellScheduleId:
+              state.activeBellScheduleId === id ? (next[0]?.id ?? null) : state.activeBellScheduleId,
+          };
+        }),
+      setActiveBellSchedule: (id) =>
+        set((state) => ({
+          activeBellScheduleId:
+            id === null || state.bellSchedules.some((b) => b.id === id) ? id : state.activeBellScheduleId,
+        })),
 
       updateUserProfile: (profile) =>
         set((state) => ({
@@ -2527,7 +2580,8 @@ export const useAppStore = create<AppState>()(
       // v4 → v5：Task 7G-A1 —— Reminder（旧数据缺失 → []；sanitize 丢弃非法条目）
       // v5 → v6：Task 2 —— Focus Session（旧数据缺失 → []；sanitize 丢弃非法条目）
       // v6 → v7：Task 7 —— Schedule Occurrence Override（旧数据缺失 → []；backward compatible）
-      version: 7,
+      // v7 → v8：Bell Schedule（旧数据缺失 → []；backward compatible）
+      version: 8,
       storage: createJSONStorage(() => localStorage),
       partialize: (state): PersistedAppState => ({
         userProfile: state.userProfile,
@@ -2544,6 +2598,8 @@ export const useAppStore = create<AppState>()(
         reminders: state.reminders,
         focusSessions: state.focusSessions,
         scheduleOccurrenceOverrides: state.scheduleOccurrenceOverrides,
+        bellSchedules: state.bellSchedules,
+        activeBellScheduleId: state.activeBellScheduleId,
         sidebarCollapsed: state.sidebarCollapsed,
       }),
       migrate: (persistedState) => sanitizePersistedState(persistedState),

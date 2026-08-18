@@ -292,6 +292,17 @@ export interface StudyBlock {
   courseOverlapApprovals?: import("@/lib/planning/courseOverlapPolicy").StudyBlockCourseOverlapApproval[];
 }
 
+/** 上课节次模板（Bell Schedule）：节次号 → 具体时间；课表导入节次解析的唯一来源 */
+export interface BellScheduleTemplate {
+  id: string;
+  name: string;
+  periods: Array<{
+    period: number;
+    startTime: string; // "HH:mm"
+    endTime: string;
+  }>;
+}
+
 /** 应用偏好（稳定用户偏好，持久化；Task 2 接入业务模块） */
 export interface AppPreferences {
   showWeekends: boolean;

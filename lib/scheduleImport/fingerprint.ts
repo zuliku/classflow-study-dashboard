@@ -1,22 +1,57 @@
 /**
  * Schedule Import Preview Fingerprint：
- * Apply 前基于最新 Store 重算，与 Preview 时不一致 → stale → 0 mutation。
+ * 基于「原始导入草稿 + 已有 store 摘要」的确定性指纹。
+ * - 不含 Bell Schedule 派生时间（bell 配置变化不误判 stale；由 blocker 检查管控）
+ * - 包含已有课程/排课摘要（store 变化 → stale → Apply 0 mutation）
  */
-import { ResolvedCourseImport } from "@/lib/scheduleImport/types";
+import { ImportableCourseDraft } from "@/lib/scheduleImport/types";
 
-export function computeScheduleImportFingerprint(courses: ResolvedCourseImport[]): string {
-  const canonical = courses.map((c) => ({
+export interface FingerprintExisting {
+  existingCourses: Array<{ name: string; code?: string | null; teacher?: string | null }>;
+  existingSchedules: Array<{
+    id: string;
+    courseId: string;
+    dayOfWeek: number;
+    startTime: string;
+    endTime: string;
+    weeks: string;
+  }>;
+}
+
+function sortKey(items: Array<{ id: string }>): string {
+  return items
+    .map((i) => i.id)
+    .sort()
+    .join("|");
+}
+
+export function computeScheduleImportFingerprint(
+  courses: ImportableCourseDraft[],
+  existing: FingerprintExisting
+): string {
+  const canonicalCourses = courses.map((c) => ({
+    key: c.draftKey,
     n: c.name,
     code: c.code ?? null,
     teacher: c.teacher ?? null,
     classroom: c.classroom ?? null,
     slots: c.slots.map((s) => ({
       d: s.dayOfWeek,
-      st: s.startTime,
-      et: s.endTime,
-      w: s.weekExpression,
+      ps: s.periodStart ?? null,
+      pe: s.periodEnd ?? null,
+      st: s.startTime ?? null,
+      et: s.endTime ?? null,
+      w: s.weekExpression ?? null,
       l: s.location ?? null,
     })),
   }));
-  return JSON.stringify(canonical);
+  const canonicalExisting = {
+    courses: existing.existingCourses.map((c) => `${c.name}::${c.code ?? ""}::${c.teacher ?? ""}`).sort(),
+    schedules: existing.existingSchedules
+      .map((s) => `${s.id}::${s.courseId}::${s.dayOfWeek}::${s.startTime}::${s.endTime}::${s.weeks}`)
+      .sort(),
+    // schedules 集合变化顺序不影响语义；用集合成员 + 摘要即可
+    scheduleSet: sortKey(existing.existingSchedules),
+  };
+  return JSON.stringify({ courses: canonicalCourses, existing: canonicalExisting });
 }
