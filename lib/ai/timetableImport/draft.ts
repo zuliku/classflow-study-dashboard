@@ -30,12 +30,23 @@ function isPeriodSlot(s: { periodStart?: number; periodEnd?: number }): boolean 
   return typeof s.periodStart === "number";
 }
 
+type TimetableSlot = TimetableImportCourseDraft["slots"][number];
+
+function mergeGroupKey(slot: TimetableSlot, index: number): string {
+  if (!isPeriodSlot(slot)) return `single:${index}`;
+  return JSON.stringify([
+    slot.dayOfWeek,
+    normalizeWeekExpression(slot.weekExpression),
+    normalizeLocation(slot.location),
+  ]);
+}
+
 /**
- * 连续相同单元格合并（deterministic normalization，不依赖模型自觉合并）。
+ * 连续相同单元格合并（deterministic normalization，不依赖模型输出顺序或自觉合并）。
  * 合并条件：同一课程 / 同一星期 / 归一化周次相同 / 归一化地点相同 /
  * 节次连续（b.periodStart === a.periodEnd + 1）。
- * 例如 7-7 + 8-8 → 7-8；9-10 + 11-11 → 9-11。
- * 无节次（已含具体时间）或条件不满足的 slot 保持不变。
+ * 同一可合并组先按 periodStart 稳定排序，因此 8+7 与 11+9-10 也会正确归一化。
+ * 无节次（已含具体时间）或条件不满足的 slot 保持独立。
  */
 export function mergeAdjacentTimetableSlots(
   courses: TimetableImportCourseDraft[]
@@ -43,27 +54,53 @@ export function mergeAdjacentTimetableSlots(
   return courses.map((course) => {
     const slots = [...course.slots];
     if (slots.length < 2) return course;
-    const merged: typeof slots = [];
-    for (const slot of slots) {
-      const prev = merged[merged.length - 1];
-      if (
-        prev &&
-        isPeriodSlot(prev) &&
-        isPeriodSlot(slot) &&
-        prev.dayOfWeek === slot.dayOfWeek &&
-        normalizeWeekExpression(prev.weekExpression) === normalizeWeekExpression(slot.weekExpression) &&
-        normalizeLocation(prev.location) === normalizeLocation(slot.location) &&
-        (slot.periodStart ?? 0) === (prev.periodEnd ?? prev.periodStart ?? 0) + 1
-      ) {
-        merged[merged.length - 1] = {
-          ...prev,
-          periodEnd: slot.periodEnd ?? slot.periodStart,
-          evidence: prev.evidence ?? slot.evidence,
-        };
+
+    const groups = new Map<
+      string,
+      { firstIndex: number; entries: Array<{ slot: TimetableSlot; index: number }> }
+    >();
+
+    slots.forEach((slot, index) => {
+      const key = mergeGroupKey(slot, index);
+      const group = groups.get(key);
+      if (group) {
+        group.entries.push({ slot, index });
       } else {
-        merged.push(slot);
+        groups.set(key, { firstIndex: index, entries: [{ slot, index }] });
+      }
+    });
+
+    const merged: TimetableSlot[] = [];
+    const orderedGroups = [...groups.values()].sort((a, b) => a.firstIndex - b.firstIndex);
+
+    for (const group of orderedGroups) {
+      const orderedEntries = [...group.entries].sort((a, b) => {
+        if (!isPeriodSlot(a.slot) || !isPeriodSlot(b.slot)) return a.index - b.index;
+        return (a.slot.periodStart ?? 0) - (b.slot.periodStart ?? 0) || a.index - b.index;
+      });
+
+      for (const { slot } of orderedEntries) {
+        const prev = merged[merged.length - 1];
+        if (
+          prev &&
+          isPeriodSlot(prev) &&
+          isPeriodSlot(slot) &&
+          prev.dayOfWeek === slot.dayOfWeek &&
+          normalizeWeekExpression(prev.weekExpression) === normalizeWeekExpression(slot.weekExpression) &&
+          normalizeLocation(prev.location) === normalizeLocation(slot.location) &&
+          (slot.periodStart ?? 0) === (prev.periodEnd ?? prev.periodStart ?? 0) + 1
+        ) {
+          merged[merged.length - 1] = {
+            ...prev,
+            periodEnd: slot.periodEnd ?? slot.periodStart,
+            evidence: prev.evidence ?? slot.evidence,
+          };
+        } else {
+          merged.push(slot);
+        }
       }
     }
+
     return { ...course, slots: merged };
   });
 }
