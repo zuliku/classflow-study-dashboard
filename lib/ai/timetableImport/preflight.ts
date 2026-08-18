@@ -2,7 +2,7 @@
  * Timetable Import Proposal 构建（0 Store mutation）。
  * Runtime 拥有 sourceAttachmentIds / preview / fingerprint。
  */
-import { randomUUID } from "node:crypto";
+import { createId } from "@/lib/utils";
 import { TimetableImportDraft, TimetableImportProposal } from "@/lib/ai/timetableImport/types";
 import { preflightScheduleImport, ScheduleImportPreflightInput } from "@/lib/scheduleImport/preflight";
 import { ImportableCourseDraft } from "@/lib/scheduleImport/types";
@@ -67,7 +67,7 @@ export function buildTimetableImportProposal(
   });
 
   const proposal: TimetableImportProposal = {
-    id: `timport_${randomUUID()}`,
+    id: createId("timport"),
     sourceAttachmentIds: [...input.sourceAttachmentIds],
     summary: input.draft.summary,
     draft: input.draft,

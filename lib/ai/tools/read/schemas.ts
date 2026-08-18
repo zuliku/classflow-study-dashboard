@@ -2,6 +2,7 @@ import { z } from "zod";
 import { TaskBreakdownProposalSchema } from "@/lib/tasks/taskBreakdown";
 import { MAX_SCANNED_PDF_PAGES_PER_TURN, MAX_PROJECT_PDF_TEXT_PAGES_PER_READ } from "@/lib/ai/attachments/limits";
 import { proposeVisualActionsInputSchema } from "@/lib/ai/visual/schemas";
+import { proposeTimetableImportInputSchema } from "@/lib/ai/timetableImport/schemas";
 
 /**
  * Kiro Read Tool 输入 Schema（zod）。
@@ -272,6 +273,7 @@ export const KIRO_READ_TOOL_SCHEMAS = {
   get_learning_outlook: getLearningOutlookSchema,
   propose_study_rebalance: proposeStudyRebalanceSchema,
   propose_visual_actions: proposeVisualActionsSchema,
+  propose_timetable_import: proposeTimetableImportInputSchema,
 } as const;
 
 export type KiroReadToolName = keyof typeof KIRO_READ_TOOL_SCHEMAS;

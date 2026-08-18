@@ -30,6 +30,8 @@ import { DEFAULT_PREFERENCES } from "@/lib/preferences";
 import { buildVisualActionProposal } from "@/lib/ai/visual/preflight";
 import { ProposeVisualActionsInput } from "@/lib/ai/visual/schemas";
 import { VisualPendingContinuation } from "@/lib/ai/visual/continuation";
+import { buildTimetableImportProposal } from "@/lib/ai/timetableImport/preflight";
+import { ProposeTimetableImportInput } from "@/lib/ai/timetableImport/schemas";
 
 /**
  * Read Tool Executor：pure / deterministic / no mutations。
@@ -668,6 +670,48 @@ export function proposeVisualActionsTool(
   return { ok: true, data: { proposal: result.proposal } };
 }
 
+/**
+ * propose_timetable_import（Visual Timetable Import，独立于 Visual Action Intake）：
+ * 根据完整课表截图输出课表初始化草稿（课程/节次/周次表达式），
+ * Runtime 生成预览（Bell Schedule 节次解析 + 重复/冲突 preflight + 指纹）。
+ * 模型不得提供真实 ID / 具体时间 / 附件 ID。绝不写 Store。
+ */
+export function proposeTimetableImportTool(
+  state: ReadToolState,
+  input: unknown,
+  context?: ReadToolExecutionContext
+): ReadToolResult<unknown> {
+  const sourceAttachmentIds = context?.visualSourceAttachmentIds ?? [];
+  if (sourceAttachmentIds.length === 0) {
+    return {
+      ok: false,
+      code: "VISUAL_SOURCE_REQUIRED",
+      message: "课表导入需要当前用户消息包含课程表截图。",
+    };
+  }
+  const parsed = safeParse<ProposeTimetableImportInput>("propose_timetable_import", input);
+  if (!parsed.ok) return parsed;
+  const appState = state as unknown as AppState;
+  const result = buildTimetableImportProposal({
+    draft: parsed.data,
+    sourceAttachmentIds: [...sourceAttachmentIds],
+    state: {
+      existingCourses: appState.courses.map((c) => ({ name: c.name, code: c.code, teacher: c.teacher })),
+      existingSchedules: appState.schedules,
+      bellSchedules: appState.bellSchedules ?? [],
+      activeBellScheduleId: appState.activeBellScheduleId ?? null,
+    },
+  });
+  if (!result.ok) {
+    return {
+      ok: false,
+      code: result.code === "SOURCE_REQUIRED" ? "VISUAL_SOURCE_REQUIRED" : "INVALID_INPUT",
+      message: result.message,
+    };
+  }
+  return { ok: true, data: { proposal: result.proposal } };
+}
+
 /** propose_task_breakdown 输入形状（与 TaskBreakdownProposal 一致；schema 校验为准） */
 interface TaskBreakdownProposalInput {
   assignmentId: string;
@@ -973,6 +1017,7 @@ const EXECUTORS: Record<Exclude<KiroReadToolName, "read_material" | "read_projec
   propose_study_plan: proposeStudyPlanTool,
   propose_study_rebalance: proposeStudyRebalanceTool,
   propose_visual_actions: proposeVisualActionsTool,
+  propose_timetable_import: proposeTimetableImportTool,
   get_upcoming_assignments: getUpcomingAssignments,
   search_group_projects: searchGroupProjects,
   get_group_project: getGroupProject,

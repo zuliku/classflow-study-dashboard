@@ -17,6 +17,7 @@ import { StudyPlanProposalCard } from "@/components/kiro/StudyPlanProposalCard";
 import { StudyRebalanceProposalCard } from "@/components/kiro/StudyRebalanceProposalCard";
 import { TaskBreakdownProposalCard } from "@/components/kiro/TaskBreakdownProposalCard";
 import { VisualActionProposalCard } from "@/components/kiro/VisualActionProposalCard";
+import { TimetableImportProposalCard } from "@/components/kiro/TimetableImportProposalCard";
 import { VisualActionProposalHistoryCard } from "@/components/kiro/VisualActionProposalHistoryCard";
 import { resolveLiveImageSources } from "@/lib/ai/attachments/liveImageRegistry";
 import { actionSummaryText } from "@/lib/ai/share";
@@ -419,6 +420,14 @@ const KiroConversationRow = React.memo(function KiroConversationRow({
                 proposal={p}
                 sourceAttachments={resolveLiveImageSources(p.sourceAttachmentIds)}
               />
+            ))}
+          </div>
+        )}
+        {/* Visual Timetable Import Proposal Card（课表初始化导入；独立于 Visual Action Intake） */}
+        {view.timetableImportProposals && view.timetableImportProposals.length > 0 && !view.streaming && (
+          <div className="space-y-2.5 pt-1">
+            {view.timetableImportProposals.map((p) => (
+              <TimetableImportProposalCard key={p.id} proposal={p} />
             ))}
           </div>
         )}

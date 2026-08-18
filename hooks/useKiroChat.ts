@@ -97,6 +97,7 @@ import { createKiroWriteApi } from "@/lib/ai/tools/write/api";
 import { isClassFlowMutationTool, visualProposalRequired, VISUAL_PROPOSAL_REQUIRED_CODE, VISUAL_PROPOSAL_REQUIRED_MESSAGE } from "@/lib/ai/visual/guard";
 import { isVisualPendingCancel, VisualPendingContinuation } from "@/lib/ai/visual/continuation";
 import { VisualActionProposal } from "@/lib/ai/visual/types";
+import { TimetableImportProposal } from "@/lib/ai/timetableImport/types";
 import { KIRO_MUTATING_TOOL_NAMES } from "@/lib/ai/tools/mutating";
 import { actionToastMessage, toolLabel } from "@/lib/ai/tools/formatters";
 import { executeChangeSet } from "@/lib/ai/transactions/executor";
@@ -210,6 +211,8 @@ export interface KiroChatMessageView {
   rebalanceProposals?: import("@/lib/planning/studyRebalance").StudyRebalanceProposal[];
   /** Kiro propose_visual_actions 的真实结果（Visual Action Proposal Card 事实来源；模型不得生成） */
   visualActionProposals?: VisualActionProposal[];
+  /** Kiro propose_timetable_import 的真实结果（Timetable Import Card 事实来源；模型不得生成） */
+  timetableImportProposals?: TimetableImportProposal[];
   /** Visual Intake V1.3：历史恢复的只读 Proposal 快照（display-only；绝不可执行） */
   historyVisualActionProposals?: PersistedVisualProposalView[];
   /** Task 7：User Message 是否可编辑（attachment/history metadata 最终绑定后计算） */
@@ -354,6 +357,7 @@ function toView(
   const breakdowns: TaskBreakdownProposal[] = [];
   const rebalanceProposals: import("@/lib/planning/studyRebalance").StudyRebalanceProposal[] = [];
   const visualActionProposals: VisualActionProposal[] = [];
+  const timetableImportProposals: TimetableImportProposal[] = [];
   for (const p of parts) {
     if (typeof p.type !== "string" || !p.type.startsWith("tool-")) continue;
     // Streaming UX V3：begin_final_answer 是内部控制信号（不产生 Action Card / Proposal）
@@ -393,6 +397,14 @@ function toView(
       }
       continue;
     }
+    if (toolNameOf(tp) === "propose_timetable_import") {
+      const output = tp.output as ReadToolResult<unknown> | undefined;
+      if (output && output.ok === true) {
+        const data = output.data as { proposal?: TimetableImportProposal } | undefined;
+        if (data?.proposal) timetableImportProposals.push(data.proposal);
+      }
+      continue;
+    }
     if ((KIRO_MEMORY_TOOL_NAMES as string[]).includes(toolNameOf(tp))) continue;
     const output = tp.output as WriteToolResult | undefined;
     if (output && output.ok === true && output.action) {
@@ -410,6 +422,7 @@ function toView(
     breakdowns: breakdowns.length > 0 ? breakdowns : undefined,
     rebalanceProposals: rebalanceProposals.length > 0 ? rebalanceProposals : undefined,
     visualActionProposals: visualActionProposals.length > 0 ? visualActionProposals : undefined,
+    timetableImportProposals: timetableImportProposals.length > 0 ? timetableImportProposals : undefined,
     restored,
     // 历史恢复消息：禁止重新生成；live 且有 Write Tool Call 的轮次同样禁止
     canRegenerate: !restored && !messageHasWriteToolCalls(m),

@@ -45,3 +45,5 @@ export const proposeTimetableImportInputSchema = z
     pendingItems: z.array(timetableImportPendingItemSchema).max(8).optional(),
   })
   .strict();
+
+export type ProposeTimetableImportInput = z.infer<typeof proposeTimetableImportInputSchema>;
