@@ -13,6 +13,7 @@ import {
 } from "@/lib/ai/timetableImport/types";
 import { preflightScheduleImport } from "@/lib/scheduleImport/preflight";
 import { ImportableCourseDraft } from "@/lib/scheduleImport/types";
+import { normalizeTimetableImportDraft } from "@/lib/ai/timetableImport/draft";
 import { Course, CourseSchedule } from "@/types";
 
 export interface ApplyTimetableImportOptions {
@@ -63,7 +64,10 @@ export function applyTimetableImport(
   options: ApplyTimetableImportOptions = {}
 ): ApplyTimetableImportResult {
   const state = deps.getState();
-  const activeDraft: TimetableImportDraft = options.editableDraft ?? proposal.draft;
+  // canonicalization：Apply 与 Proposal/Preview 使用同一 normalized draft（含用户编辑后）
+  const activeDraft: TimetableImportDraft = normalizeTimetableImportDraft(
+    options.editableDraft ?? proposal.draft
+  );
   const expectedFingerprint = options.expectedFingerprint ?? proposal.preview.fingerprint;
 
   const effectiveBell =

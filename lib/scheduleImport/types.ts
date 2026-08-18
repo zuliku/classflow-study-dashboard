@@ -48,6 +48,8 @@ export interface ImportableSlotDraft {
 
 /** Preflight 后解析出的可导入时段 */
 export interface ResolvedImportSlot {
+  /** 对应原始 draft slot 下标（非法 slot 被过滤后仍能正确定位；不写入持久化数据） */
+  sourceSlotIndex: number;
   dayOfWeek: number;
   startTime: string;
   endTime: string;

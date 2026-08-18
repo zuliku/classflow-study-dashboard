@@ -4,6 +4,7 @@
  */
 import { createId } from "@/lib/utils";
 import { TimetableImportDraft, TimetableImportProposal } from "@/lib/ai/timetableImport/types";
+import { normalizeTimetableImportDraft } from "@/lib/ai/timetableImport/draft";
 import { preflightScheduleImport, ScheduleImportPreflightInput } from "@/lib/scheduleImport/preflight";
 import { ImportableCourseDraft } from "@/lib/scheduleImport/types";
 
@@ -31,7 +32,9 @@ export function buildTimetableImportProposal(
       message: "课表导入需要先上传课程表截图。",
     };
   }
-  const courses = input.draft.courses;
+  // canonicalization：模型原始 draft → normalize（连续相同单元格合并）→ proposal 统一看到逻辑 slot
+  const normalized = normalizeTimetableImportDraft(input.draft);
+  const courses = normalized.courses;
   if (!Array.isArray(courses) || courses.length === 0) {
     return { ok: false, code: "EMPTY_DRAFT", message: "未识别到任何课程。" };
   }
@@ -72,8 +75,8 @@ export function buildTimetableImportProposal(
   const proposal: TimetableImportProposal = {
     id: createId("timport"),
     sourceAttachmentIds: [...input.sourceAttachmentIds],
-    summary: input.draft.summary,
-    draft: input.draft,
+    summary: normalized.summary,
+    draft: normalized,
     preview,
     createdAt: Date.now(),
   };

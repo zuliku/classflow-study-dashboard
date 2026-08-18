@@ -22,6 +22,7 @@ export default defineConfig({
       "tests/timetableImportDraft.test.ts",
       "tests/timetableImportPreview.test.tsx",
       "tests/timetableImportRouting.test.ts",
+      "tests/timetableImportNormalization.test.ts",
       "tests/aiOpenCodeGoMimoTimetableVisionSmoke.test.ts",
       "tests/focusControlCompact.test.tsx",
     ],

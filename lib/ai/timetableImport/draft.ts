@@ -2,6 +2,7 @@
  * Timetable Import Draft 纯函数：
  * - getTimetableDraftCounts：Extraction Counts（AI 识别数量，与 preflight 无关）
  * - mergeAdjacentTimetableSlots：连续相同课表单元格合并（第7节+第8节 → 7-8）
+ * - normalizeTimetableImportDraft：唯一 canonicalization 边界（Model→Proposal→Preview→Apply 共用）
  */
 import { TimetableImportCourseDraft, TimetableImportDraft } from "@/lib/ai/timetableImport/types";
 import { normalizeWeekExpression } from "@/lib/scheduleWeekExpression";
@@ -65,4 +66,20 @@ export function mergeAdjacentTimetableSlots(
     }
     return { ...course, slots: merged };
   });
+}
+
+/**
+ * Timetable Import 唯一 canonicalization 边界。
+ * Model → Proposal → Preview → Apply 全部基于 normalize 后的 draft：
+ * - 不 mutate 原 draft
+ * - 保留 summary / pendingItems / course draftKey / slot evidence
+ * - 连续相同单元格合并（mergeAdjacentTimetableSlots）
+ * - 幂等：normalize(normalize(d)) === normalize(d)
+ */
+export function normalizeTimetableImportDraft(draft: TimetableImportDraft): TimetableImportDraft {
+  return {
+    summary: draft.summary,
+    courses: mergeAdjacentTimetableSlots(draft.courses),
+    pendingItems: draft.pendingItems?.map((p) => ({ ...p })),
+  };
 }

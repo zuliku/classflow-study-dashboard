@@ -211,6 +211,45 @@ describe("preflightScheduleImport", () => {
   });
 });
 
+describe("preflightScheduleImport — sourceSlotIndex（过滤后正确定位）", () => {
+  it("slot[0] 非法 weeks + slot[1] 合法 → resolved 仅含 sourceSlotIndex===1", () => {
+    const res = preflightScheduleImport(
+      {
+        courses: [
+          course("高数", {
+            slots: [
+              { dayOfWeek: 1, periodStart: 1, periodEnd: 2, weekExpression: "1-5,7-?" },
+              { dayOfWeek: 1, periodStart: 3, periodEnd: 4, weekExpression: "1-16周" },
+            ],
+          }),
+        ],
+        existingCourses: [],
+        existingSchedules: [],
+        bell,
+      },
+      { strictWeeks: true }
+    );
+    expect(res.ok).toBe(false);
+    expect(res.resolvedCourses[0].slots).toHaveLength(1);
+    expect(res.resolvedCourses[0].slots[0]).toMatchObject({ sourceSlotIndex: 1, startTime: "10:00", endTime: "11:40" });
+    // 非法 slot 有 blocker
+    expect(res.issues.some((i) => i.slotIndex === 0 && i.code === "invalid-week-expression")).toBe(true);
+  });
+
+  it("全部合法 → sourceSlotIndex 与原始下标一一对应", () => {
+    const res = preflightScheduleImport(
+      {
+        courses: [course("高数", { slots: [{ dayOfWeek: 1, periodStart: 1, periodEnd: 2, weekExpression: "1-16周" }, { dayOfWeek: 3, periodStart: 3, periodEnd: 4, weekExpression: "单周" }] })],
+        existingCourses: [],
+        existingSchedules: [],
+        bell,
+      },
+      { strictWeeks: true }
+    );
+    expect(res.resolvedCourses[0].slots.map((s) => s.sourceSlotIndex)).toEqual([0, 1]);
+  });
+});
+
 describe("preflightScheduleImport — strictWeeks（Vision 课表导入）", () => {
   const slotWith = (overrides: Record<string, unknown>) => ({
     dayOfWeek: 1,

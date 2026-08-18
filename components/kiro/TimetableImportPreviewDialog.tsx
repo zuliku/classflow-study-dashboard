@@ -6,6 +6,7 @@ import { useAppStore } from "@/store/useAppStore";
 import { TimetableImportDraft, TimetableImportProposal } from "@/lib/ai/timetableImport/types";
 import { BellScheduleTemplate } from "@/types";
 import { preflightScheduleImport } from "@/lib/scheduleImport/preflight";
+import { normalizeTimetableImportDraft } from "@/lib/ai/timetableImport/draft";
 import { resolveLiveImageSources } from "@/lib/ai/attachments/liveImageRegistry";
 import { cn } from "@/lib/utils";
 
@@ -144,12 +145,13 @@ export function TimetableImportPreviewDialog({
   const store = useAppStore();
   const activeBell = pendingBell ?? store.bellSchedules.find((b) => b.id === store.activeBellScheduleId) ?? null;
 
-  // currentPreflight：基于 editableDraft + 最新 Store + 当前 Bell 实时重算（proposal.preview 只是创建快照）
+  // currentPreflight：基于 normalize(editableDraft) + 最新 Store + 当前 Bell 实时重算
   const currentPreflight = useMemo(() => {
     const state = useAppStore.getState();
+    const normalized = normalizeTimetableImportDraft(editableDraft);
     return preflightScheduleImport(
       {
-        courses: editableDraft.courses,
+        courses: normalized.courses,
         existingCourses: state.courses.map((c) => ({ name: c.name, code: c.code, teacher: c.teacher })),
         existingSchedules: state.schedules,
         bell: activeBell ? { id: activeBell.id, name: activeBell.name, periods: activeBell.periods } : null,
@@ -368,7 +370,7 @@ export function TimetableImportPreviewDialog({
                   {course.slots.map((slot, i) => {
                     const resolved = currentPreflight.resolvedCourses
                       .find((c) => c.draftKey === course.draftKey)
-                      ?.slots[i];
+                      ?.slots.find((s) => s.sourceSlotIndex === i);
                     return editing ? (
                       <div key={i} className="flex flex-wrap items-center gap-1.5">
                         <select

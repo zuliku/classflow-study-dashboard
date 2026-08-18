@@ -185,6 +185,7 @@ export function preflightScheduleImport(
       }
 
       slots.push({
+        sourceSlotIndex: slotIndex,
         dayOfWeek: day,
         startTime,
         endTime,
