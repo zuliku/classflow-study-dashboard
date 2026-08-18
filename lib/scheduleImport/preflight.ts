@@ -11,7 +11,12 @@ import {
 } from "@/lib/scheduleImport/types";
 import { resolvePeriodTime } from "@/lib/scheduleImport/periodResolver";
 import { findImportDuplicateCourse, ImportDuplicateCandidate } from "@/lib/scheduleImport/duplicate";
-import { parseWeekExpression, normalizeWeekExpression, getMaxActiveWeek } from "@/lib/scheduleWeekExpression";
+import {
+  parseWeekExpression,
+  parseWeekExpressionStrict,
+  normalizeWeekExpression,
+  getMaxActiveWeek,
+} from "@/lib/scheduleWeekExpression";
 import { isValidTimeRange } from "@/lib/schedule";
 import { findScheduleConflicts } from "@/lib/conflicts";
 import { CourseSchedule } from "@/types";
@@ -47,8 +52,19 @@ function dayLabel(day: number): string {
   return ["", "周一", "周二", "周三", "周四", "周五", "周六", "周日"][day] ?? String(day);
 }
 
+export interface ScheduleImportPreflightOptions {
+  /**
+   * strictWeeks（Vision 课表导入）：周次必须完整消费、且不允许缺失。
+   * - 空 weekExpression → missing-information blocker（绝不自动按 1-16）
+   * - 表达式有任何非法段 → invalid-week-expression blocker
+   * 传统手动导入（ICS/CSV/JSON）保持兼容语义（缺失 → 默认 1-16，容错解析）。
+   */
+  strictWeeks?: boolean;
+}
+
 export function preflightScheduleImport(
-  input: ScheduleImportPreflightInput
+  input: ScheduleImportPreflightInput,
+  options: ScheduleImportPreflightOptions = {}
 ): ScheduleImportPreflightResult {
   const issues: ImportIssue[] = [];
   const resolvedCourses: ResolvedCourseImport[] = [];
@@ -97,19 +113,43 @@ export function preflightScheduleImport(
         return;
       }
 
-      // 周次表达式
+      // 周次表达式：strict（Vision）不允许缺失/非法；legacy 缺失默认全学期
       const rawWeeks = (slot.weekExpression ?? "").trim();
-      const weeksExpr = rawWeeks || IMPORT_DEFAULT_WEEKS;
-      const parsedWeeks = parseWeekExpression(weeksExpr);
-      if (!parsedWeeks) {
-        issues.push({
-          code: "invalid-week-expression",
-          severity: "blocker",
-          courseKey: course.draftKey,
-          slotIndex,
-          message: `《${name}》的周次"${rawWeeks}"无法识别，请修正。`,
-        });
-        return;
+      let weeksExpr: string;
+      if (options.strictWeeks) {
+        if (!rawWeeks) {
+          issues.push({
+            code: "missing-information",
+            severity: "blocker",
+            courseKey: course.draftKey,
+            slotIndex,
+            message: `《${name}》缺少周次信息，无法确认教学周，请补充（如 1-5,7-17）。`,
+          });
+          return;
+        }
+        if (!parseWeekExpressionStrict(rawWeeks)) {
+          issues.push({
+            code: "invalid-week-expression",
+            severity: "blocker",
+            courseKey: course.draftKey,
+            slotIndex,
+            message: `《${name}》的周次"${rawWeeks}"无法识别，请修正。`,
+          });
+          return;
+        }
+        weeksExpr = normalizeWeekExpression(rawWeeks);
+      } else {
+        weeksExpr = rawWeeks || IMPORT_DEFAULT_WEEKS;
+        if (!parseWeekExpression(weeksExpr)) {
+          issues.push({
+            code: "invalid-week-expression",
+            severity: "blocker",
+            courseKey: course.draftKey,
+            slotIndex,
+            message: `《${name}》的周次"${rawWeeks}"无法识别，请修正。`,
+          });
+          return;
+        }
       }
 
       // 时间：节次 → Bell Schedule；或已有时间

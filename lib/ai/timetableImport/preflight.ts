@@ -57,14 +57,17 @@ export function buildTimetableImportProposal(
   const activeBell =
     input.state.bellSchedules.find((b) => b.id === input.state.activeBellScheduleId) ?? null;
 
-  const preview = preflightScheduleImport({
-    courses: importable,
-    existingCourses: input.state.existingCourses,
-    existingSchedules: input.state.existingSchedules,
-    bell: activeBell
-      ? { id: activeBell.id, name: activeBell.name, periods: activeBell.periods }
-      : null,
-  });
+  const preview = preflightScheduleImport(
+    {
+      courses: importable,
+      existingCourses: input.state.existingCourses,
+      existingSchedules: input.state.existingSchedules,
+      bell: activeBell
+        ? { id: activeBell.id, name: activeBell.name, periods: activeBell.periods }
+        : null,
+    },
+    { strictWeeks: true }
+  );
 
   const proposal: TimetableImportProposal = {
     id: createId("timport"),

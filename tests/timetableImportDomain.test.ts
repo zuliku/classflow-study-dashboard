@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from "vitest";
 import { buildTimetableImportProposal } from "@/lib/ai/timetableImport/preflight";
 import { applyTimetableImport } from "@/lib/ai/timetableImport/executor";
 import { TimetableImportProposal, TimetableImportStoreDeps } from "@/lib/ai/timetableImport/types";
+import { preflightScheduleImport } from "@/lib/scheduleImport/preflight";
 import { BellScheduleTemplate } from "@/types";
 
 const bell: BellScheduleTemplate = {
@@ -167,5 +168,82 @@ describe("applyTimetableImport", () => {
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.code).toBe("EMPTY_SELECTION");
     expect(importSchedules).not.toHaveBeenCalled();
+  });
+
+  it("无 Bell 构建的 proposal：Apply 传 pendingBell → blocker 解除并成功导入（P0-1）", () => {
+    const { deps, importSchedules } = makeDeps();
+    // 无 Bell 构建 proposal（preview 有 missing-period-template blocker）
+    const base = buildTimetableImportProposal({
+      draft: draft as never,
+      sourceAttachmentIds: ["att_1"],
+      state: { existingCourses: [], existingSchedules: [], bellSchedules: [], activeBellScheduleId: null },
+    });
+    if (!base.ok) throw new Error("build failed");
+    expect(base.proposal.preview.ok).toBe(false);
+    // Apply：用户刚保存的 Bell Schedule 作为 pendingBell
+    const r = applyTimetableImport(base.proposal, deps, { pendingBell: bell });
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.applied).toEqual({ courses: 2, slots: 3 });
+      expect(importSchedules).toHaveBeenCalledTimes(1);
+    }
+  });
+
+  it("无 Bell 构建的 proposal：Apply 不传 bell → BLOCKED，0 mutation（P0-1）", () => {
+    const { deps, importSchedules } = makeDeps({ bellSchedules: [], activeBellScheduleId: null });
+    const base = buildTimetableImportProposal({
+      draft: draft as never,
+      sourceAttachmentIds: ["att_1"],
+      state: { existingCourses: [], existingSchedules: [], bellSchedules: [], activeBellScheduleId: null },
+    });
+    if (!base.ok) throw new Error("build failed");
+    const r = applyTimetableImport(base.proposal, deps);
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.code).toBe("BLOCKED");
+    expect(importSchedules).not.toHaveBeenCalled();
+  });
+
+  it("用户编辑 draft（修正周次）不误判 stale：expectedFingerprint 基于编辑后 draft（P0-1）", () => {
+    const { deps, importSchedules } = makeDeps();
+    const p = makeProposal();
+    // 用户把 c2 的周次从 1-16周 改为 1-4,6-7,9-17
+    const edited = {
+      ...draft,
+      courses: draft.courses.map((c) =>
+        c.draftKey === "c2" ? { ...c, slots: [{ ...c.slots[0], weekExpression: "1-4,6-7,9-17" }] } : c
+      ),
+    };
+    // Dialog 会基于 edited draft 重算 currentPreflight 得到 expectedFingerprint
+    const editedPreflight = preflightScheduleImport(
+      {
+        courses: edited.courses.map((c) => ({
+          draftKey: c.draftKey,
+          name: c.name,
+          code: c.code,
+          teacher: c.teacher,
+          classroom: c.classroom,
+          credit: c.credit,
+          slots: c.slots.map((s) => ({
+            dayOfWeek: s.dayOfWeek,
+            periodStart: s.periodStart,
+            periodEnd: s.periodEnd,
+            weekExpression: s.weekExpression,
+            location: s.location,
+          })),
+        })),
+        existingCourses: [],
+        existingSchedules: [],
+        bell,
+      },
+      { strictWeeks: true }
+    );
+    const r = applyTimetableImport(p, deps, {
+      editableDraft: edited as never,
+      expectedFingerprint: editedPreflight.fingerprint,
+    });
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(importSchedules.mock.calls[0][1][2].weeks).toBe("1-4,6-7,9-17");
+    }
   });
 });

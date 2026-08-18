@@ -135,3 +135,61 @@ export function normalizeWeekExpression(expr: string | null | undefined): string
   if (!parsed) return typeof expr === "string" ? expr : "";
   return parsed.canonical;
 }
+
+/**
+ * 严格解析：整个非空输入必须被完整消费（用于截图课表导入）。
+ * 任何段非法（0-5 / 5-2 / 1--5 / abc / 1-5,test / 1-5,7-?）→ null。
+ * 空串 / 无任何可识别段 → null（调用方据此判定缺失或非法）。
+ * 不影响 parseWeekExpression / isScheduleActive 的历史兼容语义。
+ */
+export function parseWeekExpressionStrict(
+  expr: string | null | undefined
+): ParsedWeekExpression | null {
+  if (typeof expr !== "string") return null;
+  let text = expr.trim();
+  if (!text) return null;
+
+  let parity: WeekParity = "all";
+  if (text.includes("单周")) parity = "odd";
+  else if (text.includes("双周")) parity = "even";
+
+  const cleaned = stripWeekSuffix(text).replace(/^第/, "");
+  const parts = cleaned.split(/[,，、]/).map((p) => p.trim()).filter(Boolean);
+  if (parts.length === 0) {
+    // 纯单周/双周（无数字段）
+    if (parity !== "all") return { ranges: [], singles: [], parity, canonical: parity === "odd" ? "单周" : "双周" };
+    return null;
+  }
+
+  const ranges: Array<{ start: number; end: number }> = [];
+  const singles: number[] = [];
+  const seen = new Set<number>();
+
+  for (const part of parts) {
+    const p = part.replace(/单|双/g, "");
+    if (p === "") continue; // 纯奇偶标记段（已由全局 parity 捕获）
+    if (!/^\d+([-–—]\d+)?$/.test(p)) return null; // 段必须为数字或数字区间
+    const rangeMatch = /^(\d+)[-–—](\d+)$/.exec(p);
+    if (rangeMatch) {
+      const start = Number(rangeMatch[1]);
+      const end = Number(rangeMatch[2]);
+      if (start < 1 || end < start) return null; // 0-5 / 5-2 非法
+      ranges.push({ start, end });
+      for (let w = start; w <= end; w++) seen.add(w);
+      continue;
+    }
+    const week = Number(p);
+    if (!Number.isInteger(week) || week < 1) return null;
+    if (!seen.has(week)) {
+      singles.push(week);
+      seen.add(week);
+    }
+  }
+
+  if (ranges.length === 0 && singles.length === 0 && parity !== "all") {
+    return { ranges: [], singles: [], parity, canonical: parity === "odd" ? "单周" : "双周" };
+  }
+  if (ranges.length === 0 && singles.length === 0) return null;
+
+  return { ranges, singles, parity, canonical: buildCanonical(ranges, singles, parity) };
+}

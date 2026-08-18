@@ -210,3 +210,67 @@ describe("preflightScheduleImport", () => {
     expect(a.fingerprint).toBe(noBell.fingerprint);
   });
 });
+
+describe("preflightScheduleImport — strictWeeks（Vision 课表导入）", () => {
+  const slotWith = (overrides: Record<string, unknown>) => ({
+    dayOfWeek: 1,
+    periodStart: 1,
+    periodEnd: 2,
+    weekExpression: "1-16周",
+    ...overrides,
+  });
+
+  it("Vision 缺周次 → missing-information blocker（不得自动 1-16）", () => {
+    const res = preflightScheduleImport(
+      {
+        courses: [course("高数", { slots: [slotWith({ weekExpression: "" }) as never] })],
+        existingCourses: [],
+        existingSchedules: [],
+        bell,
+      },
+      { strictWeeks: true }
+    );
+    expect(res.ok).toBe(false);
+    expect(res.issues[0].code).toBe("missing-information");
+    expect(res.resolvedCourses).toHaveLength(0);
+  });
+
+  it("Vision 部分非法周次 → invalid-week-expression blocker（不部分导入）", () => {
+    const res = preflightScheduleImport(
+      {
+        courses: [course("高数", { slots: [slotWith({ weekExpression: "1-5,7-?" }) as never] })],
+        existingCourses: [],
+        existingSchedules: [],
+        bell,
+      },
+      { strictWeeks: true }
+    );
+    expect(res.ok).toBe(false);
+    expect(res.issues[0].code).toBe("invalid-week-expression");
+  });
+
+  it("Vision 合法复杂周次 → 通过并归一", () => {
+    const res = preflightScheduleImport(
+      {
+        courses: [course("高数", { slots: [slotWith({ weekExpression: "1-5，7-17" }) as never] })],
+        existingCourses: [],
+        existingSchedules: [],
+        bell,
+      },
+      { strictWeeks: true }
+    );
+    expect(res.ok).toBe(true);
+    expect(res.resolvedCourses[0].slots[0].weekExpression).toBe("1-5,7-17");
+  });
+
+  it("legacy（无 strictWeeks）缺周次 → 默认 1-16（传统导入兼容）", () => {
+    const res = preflightScheduleImport({
+      courses: [course("高数", { slots: [slotWith({ weekExpression: "" }) as never] })],
+      existingCourses: [],
+      existingSchedules: [],
+      bell,
+    });
+    expect(res.ok).toBe(true);
+    expect(res.resolvedCourses[0].slots[0].weekExpression).toBe("1-16");
+  });
+});

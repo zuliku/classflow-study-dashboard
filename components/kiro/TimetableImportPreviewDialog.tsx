@@ -1,10 +1,11 @@
 "use client";
 
 import React, { useMemo, useState } from "react";
-import { CalendarClock, Check, TriangleAlert, Image as ImageIcon, X, Save, Plus, Trash2 } from "lucide-react";
+import { CalendarClock, Check, TriangleAlert, Image as ImageIcon, X, Save, Plus, Trash2, Pencil } from "lucide-react";
 import { useAppStore } from "@/store/useAppStore";
-import { TimetableImportProposal } from "@/lib/ai/timetableImport/types";
+import { TimetableImportDraft, TimetableImportProposal } from "@/lib/ai/timetableImport/types";
 import { BellScheduleTemplate } from "@/types";
+import { preflightScheduleImport } from "@/lib/scheduleImport/preflight";
 import { resolveLiveImageSources } from "@/lib/ai/attachments/liveImageRegistry";
 import { cn } from "@/lib/utils";
 
@@ -15,7 +16,12 @@ interface TimetableImportPreviewDialogProps {
   onOpenChange: (open: boolean) => void;
   proposal: TimetableImportProposal;
   sourceAttachments: ReturnType<typeof resolveLiveImageSources>;
-  onApply: (skipCourseKeys: Set<string>) => void;
+  onApply: (input: {
+    skipCourseKeys: Set<string>;
+    editableDraft: TimetableImportDraft;
+    expectedFingerprint: string;
+    pendingBell: BellScheduleTemplate | null;
+  }) => void;
   onViewImage: () => void;
 }
 
@@ -109,6 +115,18 @@ function BellScheduleEditor({
   );
 }
 
+/** 深度拷贝 draft（editableDraft 独立于 originalProposal） */
+function cloneDraft(draft: TimetableImportDraft): TimetableImportDraft {
+  return {
+    summary: draft.summary,
+    courses: draft.courses.map((c) => ({
+      ...c,
+      slots: c.slots.map((s) => ({ ...s })),
+    })),
+    pendingItems: draft.pendingItems?.map((p) => ({ ...p })),
+  };
+}
+
 export function TimetableImportPreviewDialog({
   open,
   onOpenChange,
@@ -117,19 +135,49 @@ export function TimetableImportPreviewDialog({
   onApply,
   onViewImage,
 }: TimetableImportPreviewDialogProps) {
-  const [skip, setSkip] = useState<Set<string>>(new Set());
+  // editableDraft：用户在 Dialog 内的修改（绝不 mutate originalProposal / Store）
+  const [editableDraft, setEditableDraft] = useState<TimetableImportDraft>(() => cloneDraft(proposal.draft));
+  const [editingCourseKey, setEditingCourseKey] = useState<string | null>(null);
   const [bellEditorOpen, setBellEditorOpen] = useState(false);
   const [pendingBell, setPendingBell] = useState<BellScheduleTemplate | null>(null);
-  const { bellSchedules, activeBellScheduleId } = useAppStore();
-  const activeBell = pendingBell ?? bellSchedules.find((b) => b.id === activeBellScheduleId) ?? null;
+  const [skippedPendingIndexes, setSkippedPendingIndexes] = useState<Set<number>>(new Set());
+  const store = useAppStore();
+  const activeBell = pendingBell ?? store.bellSchedules.find((b) => b.id === store.activeBellScheduleId) ?? null;
+
+  // currentPreflight：基于 editableDraft + 最新 Store + 当前 Bell 实时重算（proposal.preview 只是创建快照）
+  const currentPreflight = useMemo(() => {
+    const state = useAppStore.getState();
+    return preflightScheduleImport(
+      {
+        courses: editableDraft.courses,
+        existingCourses: state.courses.map((c) => ({ name: c.name, code: c.code, teacher: c.teacher })),
+        existingSchedules: state.schedules,
+        bell: activeBell ? { id: activeBell.id, name: activeBell.name, periods: activeBell.periods } : null,
+      },
+      { strictWeeks: true }
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editableDraft, activeBell, store.courses, store.schedules]);
+
+  // skip 初始状态：duplicate-course 默认 skip（与 preflight 文案一致）
+  const [skip, setSkip] = useState<Set<string>>(() => {
+    const initial = new Set<string>();
+    proposal.preview.issues
+      .filter((i) => i.code === "duplicate-course" && i.courseKey)
+      .forEach((i) => initial.add(i.courseKey!));
+    return initial;
+  });
 
   if (!open) return null;
 
-  const counts = proposal.preview.counts;
-  const issues = proposal.preview.issues;
+  const counts = currentPreflight.counts;
+  const issues = currentPreflight.issues;
   const blockers = issues.filter((i) => i.severity === "blocker");
   const warnings = issues.filter((i) => i.severity === "warning");
-  const selectedCourses = proposal.draft.courses.filter((c) => !skip.has(c.draftKey));
+  const selectedCourses = editableDraft.courses.filter((c) => !skip.has(c.draftKey));
+
+  const pendingItems = editableDraft.pendingItems ?? [];
+  const unresolvedPendingCount = pendingItems.filter((_, i) => !skippedPendingIndexes.has(i)).length;
 
   const toggleSkip = (key: string) => {
     setSkip((prev) => {
@@ -140,17 +188,42 @@ export function TimetableImportPreviewDialog({
     });
   };
 
+  const updateCourse = (key: string, patch: Partial<TimetableImportDraft["courses"][number]>) => {
+    setEditableDraft((d) => ({
+      ...d,
+      courses: d.courses.map((c) => (c.draftKey === key ? { ...c, ...patch } : c)),
+    }));
+  };
+
+  const updateSlot = (courseKey: string, slotIndex: number, patch: Partial<TimetableImportDraft["courses"][number]["slots"][number]>) => {
+    setEditableDraft((d) => ({
+      ...d,
+      courses: d.courses.map((c) =>
+        c.draftKey === courseKey
+          ? { ...c, slots: c.slots.map((s, i) => (i === slotIndex ? { ...s, ...patch } : s)) }
+          : c
+      ),
+    }));
+  };
+
   const saveBell = (template: BellScheduleTemplate) => {
-    const store = useAppStore.getState();
-    store.upsertBellSchedule(template);
-    store.setActiveBellSchedule(template.id);
+    const state = useAppStore.getState();
+    state.upsertBellSchedule(template);
+    state.setActiveBellSchedule(template.id);
     setPendingBell(template);
   };
 
   const handleApply = () => {
-    onApply(skip);
+    onApply({
+      skipCourseKeys: skip,
+      editableDraft,
+      expectedFingerprint: currentPreflight.fingerprint,
+      pendingBell,
+    });
     onOpenChange(false);
   };
+
+  const applyDisabled = blockers.length > 0 || selectedCourses.length === 0 || unresolvedPendingCount > 0;
 
   return (
     <div className="fixed inset-x-0 bottom-0 top-[var(--titlebar-h)] z-[90] bg-black/40 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4">
@@ -160,7 +233,8 @@ export function TimetableImportPreviewDialog({
           <div className="min-w-0">
             <h3 className="text-sm font-bold text-charcoal">课表导入预览</h3>
             <p className="text-[10px] text-sandrift mt-0.5">
-              {counts.courses} 门课程 · {counts.slots} 个上课时段
+              识别到 {editableDraft.courses.length} 门课程 ·{" "}
+              {editableDraft.courses.reduce((n, c) => n + c.slots.length, 0)} 个上课时段
               {blockers.length > 0 ? ` · ${blockers.length} 项需处理` : ""}
             </p>
           </div>
@@ -220,9 +294,10 @@ export function TimetableImportPreviewDialog({
             )}
           </div>
 
-          {/* 课程分组预览 */}
-          {proposal.draft.courses.map((course) => {
+          {/* 课程分组预览（可编辑） */}
+          {editableDraft.courses.map((course) => {
             const skipped = skip.has(course.draftKey);
+            const editing = editingCourseKey === course.draftKey;
             const courseIssues = issues.filter((i) => i.courseKey === course.draftKey);
             const courseBlockers = courseIssues.filter((i) => i.severity === "blocker");
             return (
@@ -236,31 +311,120 @@ export function TimetableImportPreviewDialog({
                     aria-label={`导入《${course.name}》`}
                   />
                   <div className="min-w-0 flex-1">
-                    <p className="text-xs font-bold text-charcoal truncate">
-                      {course.name}
-                      {course.code ? <span className="ml-1.5 text-[10px] font-mono text-sandrift">{course.code}</span> : null}
-                    </p>
-                    <p className="text-[10px] text-satin-grey truncate">
-                      {[course.teacher, course.classroom].filter(Boolean).join(" · ") || "—"}
-                    </p>
+                    {editing ? (
+                      <div className="space-y-1.5">
+                        <input
+                          value={course.name}
+                          onChange={(e) => updateCourse(course.draftKey, { name: e.target.value })}
+                          className="w-full h-7 rounded-lg border border-line bg-white px-2 text-xs font-semibold focus:outline-none focus:border-line-strong"
+                          aria-label="课程名称"
+                        />
+                        <div className="flex gap-1.5">
+                          <input
+                            value={course.teacher ?? ""}
+                            onChange={(e) => updateCourse(course.draftKey, { teacher: e.target.value })}
+                            placeholder="教师"
+                            className="flex-1 h-7 rounded-lg border border-line bg-white px-2 text-[11px] focus:outline-none focus:border-line-strong"
+                            aria-label="教师"
+                          />
+                          <input
+                            value={course.code ?? ""}
+                            onChange={(e) => updateCourse(course.draftKey, { code: e.target.value })}
+                            placeholder="课程代码"
+                            className="flex-1 h-7 rounded-lg border border-line bg-white px-2 text-[11px] focus:outline-none focus:border-line-strong"
+                            aria-label="课程代码"
+                          />
+                        </div>
+                      </div>
+                    ) : (
+                      <>
+                        <p className="text-xs font-bold text-charcoal truncate">
+                          {course.name}
+                          {course.code ? <span className="ml-1.5 text-[10px] font-mono text-sandrift">{course.code}</span> : null}
+                        </p>
+                        <p className="text-[10px] text-satin-grey truncate">
+                          {[course.teacher, course.classroom].filter(Boolean).join(" · ") || "—"}
+                        </p>
+                      </>
+                    )}
                   </div>
+                  <button
+                    type="button"
+                    onClick={() => setEditingCourseKey(editing ? null : course.draftKey)}
+                    className={cn(
+                      "shrink-0 flex items-center gap-1 text-[10px] font-bold rounded-lg px-2 h-6 transition-colors",
+                      editing ? "text-white bg-charcoal" : "text-sandrift hover:text-charcoal hover:bg-alabaster"
+                    )}
+                    aria-label={editing ? "完成编辑" : "编辑课程"}
+                  >
+                    <Pencil className="w-3 h-3" />
+                    {editing ? "完成" : "编辑"}
+                  </button>
                   {courseBlockers.length > 0 && (
                     <span className="shrink-0 text-[10px] font-bold text-danger">需处理</span>
                   )}
                 </div>
                 <div className="mt-2 space-y-1">
                   {course.slots.map((slot, i) => {
-                    const resolved = proposal.preview.resolvedCourses
+                    const resolved = currentPreflight.resolvedCourses
                       .find((c) => c.draftKey === course.draftKey)
                       ?.slots[i];
-                    return (
+                    return editing ? (
+                      <div key={i} className="flex flex-wrap items-center gap-1.5">
+                        <select
+                          value={slot.dayOfWeek}
+                          onChange={(e) => updateSlot(course.draftKey, i, { dayOfWeek: Number(e.target.value) })}
+                          className="h-6 rounded-lg border border-line bg-white px-1 text-[10px] focus:outline-none"
+                          aria-label="星期"
+                        >
+                          {DAY_LABELS.slice(1).map((d, idx) => (
+                            <option key={idx + 1} value={idx + 1}>{d}</option>
+                          ))}
+                        </select>
+                        <input
+                          type="number"
+                          min={1}
+                          max={30}
+                          value={slot.periodStart ?? ""}
+                          onChange={(e) => updateSlot(course.draftKey, i, { periodStart: e.target.value ? Number(e.target.value) : undefined })}
+                          placeholder="起始节"
+                          className="w-14 h-6 rounded-lg border border-line bg-white px-1 text-[10px] focus:outline-none"
+                          aria-label="起始节次"
+                        />
+                        <span className="text-[10px] text-sandrift">–</span>
+                        <input
+                          type="number"
+                          min={1}
+                          max={30}
+                          value={slot.periodEnd ?? ""}
+                          onChange={(e) => updateSlot(course.draftKey, i, { periodEnd: e.target.value ? Number(e.target.value) : undefined })}
+                          placeholder="结束节"
+                          className="w-14 h-6 rounded-lg border border-line bg-white px-1 text-[10px] focus:outline-none"
+                          aria-label="结束节次"
+                        />
+                        <input
+                          value={slot.weekExpression ?? ""}
+                          onChange={(e) => updateSlot(course.draftKey, i, { weekExpression: e.target.value })}
+                          placeholder="周次（如 1-5,7-17）"
+                          className="w-28 h-6 rounded-lg border border-line bg-white px-1 text-[10px] focus:outline-none"
+                          aria-label="周次"
+                        />
+                        <input
+                          value={slot.location ?? ""}
+                          onChange={(e) => updateSlot(course.draftKey, i, { location: e.target.value })}
+                          placeholder="教室"
+                          className="w-24 h-6 rounded-lg border border-line bg-white px-1 text-[10px] focus:outline-none"
+                          aria-label="教室"
+                        />
+                      </div>
+                    ) : (
                       <div key={i} className="flex items-center gap-2 text-[11px] text-satin-grey">
                         <CalendarClock className="w-3 h-3 text-sandrift shrink-0" />
                         <span className="font-semibold text-charcoal shrink-0 w-8">{DAY_LABELS[slot.dayOfWeek] ?? "?"}</span>
                         <span className="shrink-0">
                           {resolved ? `${resolved.startTime}–${resolved.endTime}` : `第${slot.periodStart ?? "?"}节`}
                         </span>
-                        <span className="shrink-0">{slot.weekExpression || "1-16周"}</span>
+                        <span className="shrink-0">{slot.weekExpression || "待补充"}</span>
                         {slot.location && <span className="truncate">{slot.location}</span>}
                         {resolved && slot.periodStart !== undefined && (
                           <span className="text-[10px] text-sandrift shrink-0">（第{slot.periodStart}{slot.periodEnd && slot.periodEnd !== slot.periodStart ? `-${slot.periodEnd}` : ""}节）</span>
@@ -282,15 +446,37 @@ export function TimetableImportPreviewDialog({
             );
           })}
 
-          {/* Pending items */}
-          {proposal.draft.pendingItems && proposal.draft.pendingItems.length > 0 && (
-            <div className="rounded-xl border border-warning-border bg-warning-bg/40 px-3 py-2.5">
-              <p className="text-[11px] font-bold text-warning">待确认事项</p>
-              {proposal.draft.pendingItems.map((item, i) => (
-                <p key={i} className="text-[10px] text-satin-grey mt-1">
-                  {item.description}
-                </p>
-              ))}
+          {/* Pending items：必须 resolved 或明确跳过才能 Apply */}
+          {pendingItems.length > 0 && (
+            <div className="rounded-xl border border-warning-border bg-warning-bg/40 px-3 py-2.5 space-y-1.5">
+              <p className="text-[11px] font-bold text-warning">待确认事项（{unresolvedPendingCount} 项未处理）</p>
+              {pendingItems.map((item, i) => {
+                const skippedItem = skippedPendingIndexes.has(i);
+                return (
+                  <div key={i} className={cn("flex items-start gap-2", skippedItem && "opacity-50")}>
+                    <p className={cn("flex-1 text-[10px]", skippedItem ? "text-satin-grey line-through" : "text-satin-grey")}>
+                      {item.description}
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setSkippedPendingIndexes((prev) => {
+                          const next = new Set(prev);
+                          if (next.has(i)) next.delete(i);
+                          else next.add(i);
+                          return next;
+                        })
+                      }
+                      className={cn(
+                        "shrink-0 text-[10px] font-bold rounded-lg px-2 h-5 transition-colors",
+                        skippedItem ? "text-sandrift hover:text-charcoal" : "text-white bg-warning"
+                      )}
+                    >
+                      {skippedItem ? "恢复" : "忽略此项"}
+                    </button>
+                  </div>
+                );
+              })}
             </div>
           )}
 
@@ -309,6 +495,7 @@ export function TimetableImportPreviewDialog({
           <p className="text-[10px] text-sandrift">
             将导入 {selectedCourses.length} 门课程 ·{" "}
             {selectedCourses.reduce((n, c) => n + c.slots.length, 0)} 个上课时段
+            {counts.blockers > 0 ? `（${counts.blockers} 项需处理）` : ""}
           </p>
           <div className="flex items-center gap-2">
             <button
@@ -320,17 +507,17 @@ export function TimetableImportPreviewDialog({
             </button>
             <button
               type="button"
-              disabled={blockers.length > 0 || selectedCourses.length === 0}
+              disabled={applyDisabled}
               onClick={handleApply}
               className={cn(
                 "flex items-center gap-1.5 h-8 px-3.5 rounded-lg text-[11px] font-bold text-white transition-colors",
-                blockers.length > 0 || selectedCourses.length === 0
-                  ? "bg-satin-grey/50 cursor-not-allowed"
-                  : "bg-charcoal hover:bg-black"
+                applyDisabled ? "bg-satin-grey/50 cursor-not-allowed" : "bg-charcoal hover:bg-black"
               )}
             >
               <Check className="w-3.5 h-3.5" />
-              导入所选课程
+              {unresolvedPendingCount > 0
+                ? `还有 ${unresolvedPendingCount} 项需确认`
+                : `导入所选课程`}
             </button>
           </div>
         </div>

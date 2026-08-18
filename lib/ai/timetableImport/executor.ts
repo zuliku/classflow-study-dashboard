@@ -6,7 +6,11 @@
  * - 绝不做逐项写工具执行
  */
 import { createId } from "@/lib/utils";
-import { TimetableImportProposal, TimetableImportStoreDeps } from "@/lib/ai/timetableImport/types";
+import {
+  TimetableImportDraft,
+  TimetableImportProposal,
+  TimetableImportStoreDeps,
+} from "@/lib/ai/timetableImport/types";
 import { preflightScheduleImport } from "@/lib/scheduleImport/preflight";
 import { ImportableCourseDraft } from "@/lib/scheduleImport/types";
 import { Course, CourseSchedule } from "@/types";
@@ -20,6 +24,10 @@ export interface ApplyTimetableImportOptions {
     name: string;
     periods: Array<{ period: number; startTime: string; endTime: string }>;
   } | null;
+  /** 用户编辑后的 draft（缺省 = proposal.draft） */
+  editableDraft?: TimetableImportDraft;
+  /** stale 基准指纹：Dialog 最后一次 currentPreflight 的 fingerprint（缺省 = proposal.preview.fingerprint） */
+  expectedFingerprint?: string;
 }
 
 export type ApplyTimetableImportResult =
@@ -55,6 +63,8 @@ export function applyTimetableImport(
   options: ApplyTimetableImportOptions = {}
 ): ApplyTimetableImportResult {
   const state = deps.getState();
+  const activeDraft: TimetableImportDraft = options.editableDraft ?? proposal.draft;
+  const expectedFingerprint = options.expectedFingerprint ?? proposal.preview.fingerprint;
 
   const effectiveBell =
     options.pendingBell ??
@@ -77,28 +87,35 @@ export function applyTimetableImport(
     weeks: s.weeks,
   }));
 
-  // 1. stale：基于最新 Store 对【完整 draft】重算 fingerprint，与预览不一致 → 0 mutation
-  const fullRecheck = preflightScheduleImport({
-    courses: draftToImportable(proposal.draft),
-    existingCourses,
-    existingSchedules,
-    bell: effectiveBell,
-  });
-  if (fullRecheck.fingerprint !== proposal.preview.fingerprint) {
+  // 1. stale：基于最新 Store 对【当前 draft】重算 fingerprint，与预期不一致 → 0 mutation
+  //    （expectedFingerprint 由 Dialog 最后一次 currentPreflight 提供；用户编辑不误判 stale）
+  const fullRecheck = preflightScheduleImport(
+    {
+      courses: draftToImportable(activeDraft),
+      existingCourses,
+      existingSchedules,
+      bell: effectiveBell,
+    },
+    { strictWeeks: true }
+  );
+  if (fullRecheck.fingerprint !== expectedFingerprint) {
     return { ok: false, code: "STALE", message: "课表预览已过期，请重新查看后再导入。" };
   }
 
   // 2. 过滤用户跳过的课程 → 重新 preflight（blockers 未解决 → 拒绝）
-  const selected = proposal.draft.courses.filter((c) => !options.skipCourseKeys?.has(c.draftKey));
+  const selected = activeDraft.courses.filter((c) => !options.skipCourseKeys?.has(c.draftKey));
   if (selected.length === 0) {
     return { ok: false, code: "EMPTY_SELECTION", message: "没有可导入的课程。" };
   }
-  const recheck = preflightScheduleImport({
-    courses: draftToImportable({ ...proposal.draft, courses: selected }),
-    existingCourses,
-    existingSchedules,
-    bell: effectiveBell,
-  });
+  const recheck = preflightScheduleImport(
+    {
+      courses: draftToImportable({ ...activeDraft, courses: selected }),
+      existingCourses,
+      existingSchedules,
+      bell: effectiveBell,
+    },
+    { strictWeeks: true }
+  );
   if (recheck.counts.blockers > 0) {
     return { ok: false, code: "BLOCKED", message: "课表导入仍存在待处理问题，请先修正。" };
   }
