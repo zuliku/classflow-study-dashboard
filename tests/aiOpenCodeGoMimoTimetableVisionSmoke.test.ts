@@ -150,6 +150,9 @@ gated(`${smokeModel} Timetable Vision Smoke（真实截图 + 生产 schema）`, 
       // extraction counts 保持识别数量（10 门 / 15 时段）
       expect(draft.courses.length).toBeGreaterThanOrEqual(8);
     }
+    const normalizedSlotCount = noBell.ok
+      ? noBell.proposal.draft.courses.reduce((n, c) => n + c.slots.length, 0)
+      : 0;
 
     // 3. 注入完整 Bell Schedule（覆盖图片使用的所有节次：1-12 节）后 apply
     const bell = {
@@ -180,7 +183,7 @@ gated(`${smokeModel} Timetable Vision Smoke（真实截图 + 生产 schema）`, 
     if (result.ok) {
       expect(importCalls).toBe(1);
       expect(importedCourses).toBe(draft.courses.length);
-      expect(importedSchedules).toBe(draft.courses.reduce((n, c) => n + c.slots.length, 0));
+      expect(importedSchedules).toBe(normalizedSlotCount);
       console.log(`[LIVE:apply] courses=${importedCourses} slots=${importedSchedules} once=${importCalls}`);
     }
   }, 240000);
