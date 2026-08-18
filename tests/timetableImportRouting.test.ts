@@ -20,6 +20,22 @@ describe("Kiro System Prompt — Visual 路由 contract", () => {
     expect(KIRO_SYSTEM_PROMPT).toContain("不要求逐门 search_courses");
   });
 
+  it("完整课表识别采用两遍通用复核，而不是针对某张 Golden 图背答案", () => {
+    const aSection = KIRO_SYSTEM_PROMPT.split("## Visual 截图路由")[1]?.split("##")[0] ?? "";
+    expect(aSection).toContain("第一遍");
+    expect(aSection).toContain("覆盖扫描");
+    expect(aSection).toContain("第二遍");
+    expect(aSection).toContain("聚合复核");
+    expect(aSection).toContain("反向核对");
+
+    // 生产 Prompt 只能描述通用识别策略，不得写入当前 Golden fixture 的专用答案。
+    expect(aSection).not.toContain("10 门");
+    expect(aSection).not.toContain("15 个");
+    expect(aSection).not.toContain("网络营销");
+    expect(aSection).not.toContain("国际贸易实务");
+    expect(aSection).not.toContain("宝石鉴定与欣赏");
+  });
+
   it("已有实体图片修改仍要求 resolve real IDs（B 路径）", () => {
     expect(KIRO_SYSTEM_PROMPT).toContain("使用 Read Tools 解析 ClassFlow 真实数据");
     expect(KIRO_SYSTEM_PROMPT).toContain("没有匹配就询问是否需要创建课程");
