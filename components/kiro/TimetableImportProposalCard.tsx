@@ -20,7 +20,7 @@ import { Course, CourseSchedule } from "@/types";
  * 「查看导入预览」打开完整分组预览（实时重算 preflight）→
  * 用户核对/修正/跳过/设置作息时间 →「导入所选课程」一次性原子写入。
  *
- * 快速导入（不打开预览）仅当：无 blocker、无 pending、无 duplicate warning。
+ * 快速导入（不打开预览）仅当：无 blocker、无 pending、无 duplicate/schedule-conflict warning。
  * Apply 永远走 applyTimetableImport（stale + blockers 检查；0 mutation 失败路径）。
  */
 export function TimetableImportProposalCard({ proposal }: { proposal: TimetableImportProposal }) {
@@ -38,9 +38,11 @@ export function TimetableImportProposalCard({ proposal }: { proposal: TimetableI
   const pendingCount = extraction.pending;
   const blockerCount = snapshotCounts.blockers;
   const hasDuplicateWarning = proposal.preview.issues.some((i) => i.code === "duplicate-course");
+  const hasConflictWarning = proposal.preview.issues.some((i) => i.code === "schedule-conflict");
 
-  // 快速导入条件：pending = 0 且 blocker = 0 且无 duplicate warning
-  const canQuickApply = blockerCount === 0 && pendingCount === 0 && !hasDuplicateWarning;
+  // 快速导入条件：pending = 0 且 blocker = 0，且没有需要用户先查看的 duplicate/conflict warning
+  const canQuickApply =
+    blockerCount === 0 && pendingCount === 0 && !hasDuplicateWarning && !hasConflictWarning;
 
   const runApply = (input: {
     skipCourseKeys: Set<string>;
@@ -134,6 +136,11 @@ export function TimetableImportProposalCard({ proposal }: { proposal: TimetableI
               含重复课程
             </span>
           )}
+          {hasConflictWarning && (
+            <span className="text-[10px] font-semibold text-warning bg-warning-bg border border-warning-border px-1.5 py-px rounded-full">
+              含时间冲突
+            </span>
+          )}
         </div>
         {blockerCount > 0 && (
           <p className="flex items-center gap-1 text-[10px] font-semibold text-warning">
@@ -177,7 +184,7 @@ export function TimetableImportProposalCard({ proposal }: { proposal: TimetableI
         {!canQuickApply && !applied && (
           <p className="flex items-center gap-1 text-[10px] font-semibold text-sandrift">
             <TriangleAlert className="w-3 h-3 shrink-0" />
-            请先打开预览处理待确认/重复项后导入。
+            请先打开预览查看待确认、重复或冲突项后导入。
           </p>
         )}
       </div>
