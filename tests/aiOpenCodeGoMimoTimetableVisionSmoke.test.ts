@@ -8,17 +8,19 @@ import { describe, it, expect } from "vitest";
  * 生产 propose_timetable_import tool schema（模型真实调用工具，捕获 tool arguments）。
  */
 const key = process.env.OPENCODE_GO_TEST_API_KEY;
+// 可用环境变量覆盖测试模型（默认 mimo-v2.5；如 OPENCODE_GO_SMOKE_MODEL=gpt-5.6-luna）
+const smokeModel = process.env.OPENCODE_GO_SMOKE_MODEL ?? "mimo-v2.5";
 const fixturePath = "tests/fixtures/timetable/sanitized-real-timetable.jpg";
 const { existsSync } = require("node:fs") as typeof import("node:fs");
 const hasFixture = existsSync(fixturePath);
 
 const gated = hasFixture && !!key ? describe : describe.skip;
 
-gated("MiMo V2.5 Timetable Vision Smoke（真实截图 + 生产 schema）", () => {
+gated(`${smokeModel} Timetable Vision Smoke（真实截图 + 生产 schema）`, () => {
   it("Layer 0：连通性（无图片无 tools）", async () => {
     const { generateText } = await import("ai");
     const { resolveLanguageModel } = await import("@/lib/ai/providers/resolver");
-    const resolved = await resolveLanguageModel({ provider: "opencode-go", model: "mimo-v2.5", apiKey: key! });
+    const resolved = await resolveLanguageModel({ provider: "opencode-go", model: smokeModel, apiKey: key! });
     const t0 = Date.now();
     const r = await generateText({ model: resolved.model, prompt: "只回复两个字母：OK", maxOutputTokens: 200 });
     console.log(`[LIVE:ping] ms=${Date.now() - t0} text=${JSON.stringify((r.text ?? "").slice(0, 20))}`);
@@ -35,7 +37,7 @@ gated("MiMo V2.5 Timetable Vision Smoke（真实截图 + 生产 schema）", () =
 
     const resolved = await resolveLanguageModel({
       provider: "opencode-go",
-      model: "mimo-v2.5",
+      model: smokeModel,
       apiKey: key!,
     });
     const image = readFileSync(fixturePath);
@@ -108,7 +110,7 @@ gated("MiMo V2.5 Timetable Vision Smoke（真实截图 + 生产 schema）", () =
     const { applyTimetableImport } = await import("@/lib/ai/timetableImport/executor");
     const { readFileSync } = await import("node:fs");
 
-    const resolved = await resolveLanguageModel({ provider: "opencode-go", model: "mimo-v2.5", apiKey: key! });
+    const resolved = await resolveLanguageModel({ provider: "opencode-go", model: smokeModel, apiKey: key! });
     const image = readFileSync(fixturePath);
 
     // 1. 真实模型输出 draft
@@ -193,7 +195,7 @@ gated("MiMo V2.5 Timetable Vision Smoke（真实截图 + 生产 schema）", () =
     const { readFileSync } = await import("node:fs");
     const { TimetableImportCourseDraft } = await import("@/lib/ai/timetableImport/types");
 
-    const resolved = await resolveLanguageModel({ provider: "opencode-go", model: "mimo-v2.5", apiKey: key! });
+    const resolved = await resolveLanguageModel({ provider: "opencode-go", model: smokeModel, apiKey: key! });
     const image = readFileSync(fixturePath);
     const { toolCalls } = await generateText({
       model: resolved.model,
@@ -220,10 +222,8 @@ gated("MiMo V2.5 Timetable Vision Smoke（真实截图 + 生产 schema）", () =
     const normalized = normalizeTimetableImportDraft(parsed.data!);
     const totalSlots = normalized.courses.reduce((n, c) => n + c.slots.length, 0);
     console.log(`[LIVE:golden] raw=${parsed.data!.courses.length}/${parsed.data!.courses.reduce((n, c) => n + c.slots.length, 0)} normalized=${normalized.courses.length}/${totalSlots}`);
-    if (totalSlots !== 15) {
-      for (const c of normalized.courses) {
-        console.log(`[GOLDEN:course] ${c.name} slots=${c.slots.length} -> ${c.slots.map((s) => `d${s.dayOfWeek}p${s.periodStart}-${s.periodEnd ?? "?"}[${s.weekExpression ?? ""}]`).join(" | ")}`);
-      }
+    for (const c of normalized.courses) {
+      console.log(`[GOLDEN:course] ${c.name} slots=${c.slots.length} -> ${c.slots.map((s) => `d${s.dayOfWeek}p${s.periodStart}-${s.periodEnd ?? "?"}[${s.weekExpression ?? ""}] loc=${s.location ?? "-"}`).join(" | ")}`);
     }
     expect(normalized.courses.length).toBe(10);
     expect(totalSlots).toBe(15);
