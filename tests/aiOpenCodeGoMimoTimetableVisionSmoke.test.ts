@@ -12,7 +12,8 @@ const key = process.env.OPENCODE_GO_TEST_API_KEY;
 // 可用环境变量覆盖测试模型（默认 mimo-v2.5；例如 OPENCODE_GO_SMOKE_MODEL=gpt-5.6-luna）
 const smokeModel = process.env.OPENCODE_GO_SMOKE_MODEL ?? "mimo-v2.5";
 const strictVisionGolden = /^(1|true)$/i.test(process.env.OPENCODE_GO_STRICT_VISION_GOLDEN ?? "");
-const fixturePath = "tests/fixtures/timetable/sanitized-real-timetable.jpg";
+// 可用环境变量覆盖被测图片（默认真实课表 fixture；例如 OPENCODE_GO_SMOKE_FIXTURE=<任意图片绝对路径>）
+const fixturePath = process.env.OPENCODE_GO_SMOKE_FIXTURE ?? "tests/fixtures/timetable/sanitized-real-timetable.jpg";
 const { existsSync } = require("node:fs") as typeof import("node:fs");
 const hasFixture = existsSync(fixturePath);
 
