@@ -176,13 +176,14 @@ export const KIRO_READ_TOOLS = {
     description:
       "当当前用户回合包含【完整新学期课程表截图】（图片附件）且用户希望把整张课表初始化导入 ClassFlow（如「把这学期课表导入」「帮我录入全部课程」「初始化课表」）时，把截图中的课程整理为课表导入草稿（Visual Timetable Import）。" +
       "与 propose_visual_actions 的边界：propose_visual_actions 用于「根据截图修改已有 ClassFlow 实体」（作业/DDL/停课/调课/补课）；本工具用于「批量初始化全新课程与排课」。" +
-      "调用前用 Read Tools 了解当前课程库（search_courses/get_week_schedule），判断是初始化新课表还是修改已有数据；已有课程对应的截图课程应通过 duplicate 语义处理，不要重复创建。" +
+      "重复课程 / 冲突 / 节次时间（Bell Schedule）/ 指纹校验全部由系统确定性处理，不需要先逐门查询已有课程。" +
       "输出要求：" +
       "- 同一课程多个上课时间必须聚合到一个 course 的 slots 下（draftKey 仅本次内部关联，绝不使用真实 courseId）；" +
-      "- 上课时间只输出节次（periodStart/periodEnd，如第1-2节 → 1 和 2），绝不输出 startTime/endTime 猜测值（具体时间由用户配置的作息时间表解析）；" +
-      "- 周次用表达式原样（如 1-5,7-17 / 1-4,6-7,9-17 / 3-7,9 / 单周 / 双周），不猜测、不展开；" +
+      "- 同一课程连续节次（如第7节与第8节同课/同周/同地点）应合并为 periodStart/periodEnd（7-8）；" +
+      "- 上课时间只输出节次（periodStart/periodEnd，如第1-2节 → 1 和 2），绝不输出 startTime/endTime 猜测值；" +
+      "- 周次用表达式原样（如 1-5,7-17 / 1-4,6-7,9-17 / 3-7,9 / 单周 / 双周），不猜测、不展开；看不清周次时不要编造，放入 pendingItems；" +
       "- 图片顶部姓名/学号等个人信息绝不进入课程数据；" +
-      "- 识别不确定的课程放入 pendingItems（reason: ambiguous-cell 或 missing-information），不要静默丢弃或猜测。" +
+      "- 识别不确定的课程或时段放入 pendingItems（reason: ambiguous-cell 或 missing-information），不要静默丢弃或猜测。" +
       "这是 READ / PROPOSAL 工具：绝不写 Store；结果只是课表导入预览，用户核对并确认后才会一次性原子导入。",
     inputSchema: KIRO_READ_TOOL_SCHEMAS.propose_timetable_import,
   }),
