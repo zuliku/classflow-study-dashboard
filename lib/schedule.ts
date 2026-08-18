@@ -1,4 +1,5 @@
 import { CourseSchedule } from "@/types";
+import { parseWeekExpression, isWeekActive } from "@/lib/scheduleWeekExpression";
 
 /** 周次规则预设（新增/编辑排课时共享） */
 export const WEEK_RANGE_PRESETS: { label: string; value: string }[] = [
@@ -42,7 +43,11 @@ export function hasTimeOverlap(
 
 /**
  * 判断课程在某教学周是否生效（所有课程周次判断的唯一入口）。
- * 支持 "1-16周" / "1-8周" / "9-16周" / "单周" / "双周" 与 excludedWeeks。
+ * 周次语义统一由 lib/scheduleWeekExpression.ts 解析：
+ * 支持 "1-16周" / "1-8周" / "9-16周" / "单周" / "双周" /
+ * 多段 "1-5,7-17" / "1-4,6-7,9-17" / 枚举 "1,3,5,7" / 中文逗号 等。
+ * excludedWeeks（临时停课/排除）优先于原始教学周规则。
+ * 无法解析的表达式按旧语义回退为全学期生效。
  */
 export function isScheduleActive(schedule: CourseSchedule, week: number): boolean {
   if (schedule.excludedWeeks && schedule.excludedWeeks.includes(week)) {
@@ -50,20 +55,6 @@ export function isScheduleActive(schedule: CourseSchedule, week: number): boolea
   }
 
   const weeksStr = schedule.weeks || "1-16周";
-
-  if (weeksStr.includes("单周")) {
-    return week % 2 !== 0;
-  }
-  if (weeksStr.includes("双周")) {
-    return week % 2 === 0;
-  }
-
-  const match = weeksStr.match(/(\d+)-(\d+)/);
-  if (match) {
-    const start = parseInt(match[1], 10);
-    const end = parseInt(match[2], 10);
-    return week >= start && week <= end;
-  }
-
-  return true;
+  const parsed = parseWeekExpression(weeksStr);
+  return isWeekActive(parsed, week);
 }

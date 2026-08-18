@@ -1,17 +1,12 @@
 import { CourseSchedule, ScheduleConflict } from "@/types";
 import { isScheduleActive, hasTimeOverlap } from "@/lib/schedule";
+import { parseWeekExpression, getMaxActiveWeek } from "@/lib/scheduleWeekExpression";
 
-const WEEK_DEFAULT_MAX = 16;
-
-function getMaxWeek(schedule: CourseSchedule): number {
-  const m = /(\d+)\s*-\s*(\d+)/.exec(schedule.weeks || "");
-  if (m) return Math.max(Number(m[1]), Number(m[2]));
-  return WEEK_DEFAULT_MAX;
-}
-
-/** 两门课是否至少存在一个共同生效教学周（如 1-8周 与 9-16周 不冲突） */
+/** 两门课是否至少存在一个共同生效教学周（如 1-5,7-17 与 6 周课程不冲突） */
 export function sharesActiveWeek(a: CourseSchedule, b: CourseSchedule): boolean {
-  const maxWeek = Math.max(getMaxWeek(a), getMaxWeek(b), WEEK_DEFAULT_MAX);
+  const pa = parseWeekExpression(a.weeks);
+  const pb = parseWeekExpression(b.weeks);
+  const maxWeek = Math.max(getMaxActiveWeek(pa), getMaxActiveWeek(pb), 16);
   for (let week = 1; week <= maxWeek; week++) {
     if (isScheduleActive(a, week) && isScheduleActive(b, week)) return true;
   }
