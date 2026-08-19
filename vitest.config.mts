@@ -27,6 +27,11 @@ export default defineConfig({
       "tests/aiOpenCodeGoMimoTimetableVisionSmoke.test.ts",
       "tests/focusControlCompact.test.tsx",
       "tests/sidebarChrome.test.ts",
+      "tests/extensionsRegistry.test.ts",
+      "tests/extensionsPermissions.test.ts",
+      "tests/secretVault.test.ts",
+      "tests/securityBaseline.test.ts",
+      "tests/settingsRegistry.test.ts",
     ],
   },
 });
