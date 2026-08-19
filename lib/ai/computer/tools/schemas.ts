@@ -82,7 +82,9 @@ export const deleteFileSchema = z.object({
   path: resourcePath,
 });
 
-/** Desktop Terminal V1：run_terminal_command（唯一 terminal 工具；无 env/stdin/elevation/background 字段） */
+/** Desktop Terminal V1/V2：run_terminal_command。
+ * V2 新增 executionMode（默认 foreground；long-running 必须显式使用——放宽 timeout 上限，
+ * 不默认允许无限 background process）。无 env/stdin/elevation 字段。 */
 export const runTerminalCommandSchema = z.object({
   shell: z.enum(["powershell", "cmd"]),
   rootId: z.string().trim().min(1).max(120).optional(),
@@ -91,6 +93,8 @@ export const runTerminalCommandSchema = z.object({
   // 空命令由 Risk Classifier 判为 blocked（TERMINAL_COMMAND_BLOCKED），不在 schema 层拦截
   command: z.string().max(8192),
   timeoutMs: z.number().int().min(1000).max(120000).optional(),
+  /** V2：executionMode = "long-running" 显式启用长任务（timeout 上限放宽至 600s）；默认 foreground */
+  executionMode: z.enum(["foreground", "long-running"]).optional(),
 });
 /** V2.3：Model-facing schemas 按 Document Authoring Protocol Version 分离。
  *  - V1 model contract：Canonical KiroDocument（legacy Client）

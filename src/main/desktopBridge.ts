@@ -645,7 +645,25 @@ async function handleTerminalCancel(input: unknown): Promise<void> {
 /** V2 活跃执行注册表（runtime handle；cancel/清理统一入口） */
 const activeV2Executions = new Map<string, TerminalRuntimeHandle>();
 
-/** Stop Kiro / App 关闭时终止全部 V2 活跃进程（含 process tree） */
+/** Stop Kiro / App 关闭时终止全部活跃 terminal 进程（V1 + V2；含 process tree） */
+export async function cancelAllTerminalExecutions(): Promise<void> {
+  // V2 runtime handles
+  const v2Handles = Array.from(activeV2Executions.values());
+  activeV2Executions.clear();
+  // V1 entries
+  const v1Entries = Array.from(activeExecutions.values());
+  activeExecutions.clear();
+  for (const entry of v1Entries) {
+    if (entry.cancelled) continue;
+    entry.cancelled = true;
+    if (entry.timer) clearTimeout(entry.timer);
+    await killProcessTree(entry.child.pid ?? 0);
+    entry.reject(failError("CANCELLED"));
+  }
+  await Promise.allSettled(v2Handles.map((h) => h.cancel()));
+}
+
+/** 兼容导出：仅 V2（Stop Kiro 由 Web 侧 cancelAllActiveTerminalExecutions 走 bridge.cancel 处理） */
 export async function cancelAllV2TerminalExecutions(): Promise<void> {
   const handles = Array.from(activeV2Executions.values());
   activeV2Executions.clear();

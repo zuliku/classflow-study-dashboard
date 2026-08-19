@@ -30,6 +30,7 @@ export default defineConfig({
       "tests/terminalStreaming.test.ts",
       "tests/terminalSecretRedaction.test.ts",
       "tests/kiroTerminalBlock.test.tsx",
+      "tests/terminalLifecycle.test.ts",
     ],
   },
 });

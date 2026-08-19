@@ -47,6 +47,7 @@ export const MAX_TERMINAL_STDERR_CHARS = 32_000;
 export const DEFAULT_TERMINAL_TIMEOUT_MS = 30_000;
 export const MIN_TERMINAL_TIMEOUT_MS = 1_000;
 export const MAX_TERMINAL_TIMEOUT_MS = 120_000;
+export const MAX_TERMINAL_TIMEOUT_LONG_RUNNING_MS = 600_000;
 /** Audit / History 中保存的命令预览上限（不无限持久化 shell script） */
 export const TERMINAL_AUDIT_COMMAND_PREVIEW_MAX = 500;
 
@@ -331,10 +332,17 @@ export async function executeKiroTerminalCommand(
 
   // ---- execute ----
   counters.terminalCount += 1;
-  const timeoutMs = Math.min(
-    Math.max(args.timeoutMs === undefined ? DEFAULT_TERMINAL_TIMEOUT_MS : Number(args.timeoutMs), MIN_TERMINAL_TIMEOUT_MS),
-    MAX_TERMINAL_TIMEOUT_MS
-  );
+  // V2：long-running 必须显式使用（默认 foreground；long-running 默认更久 timeout，模型仍可 1–120s 显式覆盖）
+  const isLongRunning = args.executionMode === "long-running";
+  const timeoutMs = isLongRunning
+    ? Math.min(
+        Math.max(args.timeoutMs === undefined ? 300_000 : Number(args.timeoutMs), MIN_TERMINAL_TIMEOUT_MS),
+        MAX_TERMINAL_TIMEOUT_LONG_RUNNING_MS
+      )
+    : Math.min(
+        Math.max(args.timeoutMs === undefined ? DEFAULT_TERMINAL_TIMEOUT_MS : Number(args.timeoutMs), MIN_TERMINAL_TIMEOUT_MS),
+        MAX_TERMINAL_TIMEOUT_MS
+      );
   const executionId = `term-${crypto.randomUUID()}`;
   let outcome: { exitCode: number | null; stdout: string; stderr: string; timedOut: boolean; durationMs: number; stdoutTruncated: boolean; stderrTruncated: boolean };
   try {
@@ -361,6 +369,7 @@ export async function executeKiroTerminalCommand(
             cwd,
             command,
             timeoutMs,
+            executionMode: isLongRunning ? "long-running" : "foreground",
           });
         } finally {
           unsubscribe();
