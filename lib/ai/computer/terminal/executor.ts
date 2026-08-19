@@ -26,13 +26,16 @@ import {
 } from "@/lib/ai/computer/approval";
 import { evaluateComputerPolicy } from "@/lib/ai/computer/policy";
 import { normalizeRelativeComputerPath } from "@/lib/ai/computer/workspace/resolver";
-import { getClassFlowDesktopTerminalBridge } from "@/lib/desktop/bridge";
+import { getClassFlowDesktopTerminalBridge, getClassFlowDesktopTerminalBridgeV2 } from "@/lib/desktop/bridge";
 import { nativeGrantIdFromAdapterRef, isNativeAdapterRef } from "@/lib/desktop/bridge";
 import {
   ClassFlowDesktopTerminalShell,
   DesktopTerminalBridgeError,
+  DesktopTerminalEvent,
 } from "@/lib/desktop/types";
 import { classifyTerminalCommandRisk, TerminalCommandRisk } from "@/lib/ai/computer/terminal/risk";
+import { redactCommandPreview } from "@/lib/ai/computer/terminal/redact";
+import { TerminalActivityInit } from "@/lib/ai/computer/terminal/activity";
 import { appendComputerAuditEntry } from "@/lib/ai/computer/audit";
 import { markWorkspaceKnowledgeDirty } from "@/lib/ai/computer/knowledge/service";
 import { runTerminalCommandSchema } from "@/lib/ai/computer/tools/schemas";
@@ -75,12 +78,9 @@ export function boundTerminalOutput(text: string, maxChars: number): { text: str
   return { text: stripped.slice(0, maxChars), truncated: true };
 }
 
-/** 命令预览（≤500 chars；Audit/History 用；不存完整 stdout/stderr） */
+/** 命令预览（≤500 chars；Audit/History/UI 用；secret + absolute path 必须 redacted） */
 export function terminalCommandPreview(command: string): string {
-  const single = command.replace(/\s+/g, " ").trim();
-  return single.length <= TERMINAL_AUDIT_COMMAND_PREVIEW_MAX
-    ? single
-    : single.slice(0, TERMINAL_AUDIT_COMMAND_PREVIEW_MAX);
+  return redactCommandPreview(command, TERMINAL_AUDIT_COMMAND_PREVIEW_MAX);
 }
 
 /** Terminal approval fingerprint（shell/rootId/cwd/command 精确绑定；不把完整 command 写入持久化规则） */
@@ -162,6 +162,10 @@ export interface ExecuteKiroTerminalCommandInput {
   counters: { readCount: number; mutationCount: number; terminalCount: number };
   oneShotApprovals: ComputerOneShotApproval[];
   taskId: string;
+  /** V2 streaming：启动前注册 runtime activity（UI-only；经 store 消费） */
+  onTerminalActivityInit?: (init: TerminalActivityInit) => void;
+  /** V2 streaming：sanitized 事件转发（UI runtime activity store；不进入模型 context） */
+  onTerminalEvent?: (event: DesktopTerminalEvent) => void;
 }
 
 export async function executeKiroTerminalCommand(
@@ -334,16 +338,43 @@ export async function executeKiroTerminalCommand(
   const executionId = `term-${crypto.randomUUID()}`;
   let outcome: { exitCode: number | null; stdout: string; stderr: string; timedOut: boolean; durationMs: number; stdoutTruncated: boolean; stderrTruncated: boolean };
   try {
+    // V2 streaming：启动前注册 runtime activity（UI 立即进入 starting/running；事件经 streamSink 推送）
+    const bridgeV2 = getClassFlowDesktopTerminalBridgeV2();
+    input.onTerminalActivityInit?.({
+      executionId,
+      toolCallId,
+      shell,
+      commandPreview: terminalCommandPreview(command),
+    });
     registerActiveTerminalExecution(executionId, () => bridge.cancel({ executionId }));
     try {
-      outcome = await bridge.execute({
-        executionId,
-        shell,
-        grantId,
-        cwd,
-        command,
-        timeoutMs,
-      });
+      if (bridgeV2) {
+        const unsubscribe = bridgeV2.subscribe((event) => {
+          if (event.executionId !== executionId) return;
+          input.onTerminalEvent?.(event);
+        });
+        try {
+          outcome = await bridgeV2.start({
+            executionId,
+            shell,
+            grantId,
+            cwd,
+            command,
+            timeoutMs,
+          });
+        } finally {
+          unsubscribe();
+        }
+      } else {
+        outcome = await bridge.execute({
+          executionId,
+          shell,
+          grantId,
+          cwd,
+          command,
+          timeoutMs,
+        });
+      }
     } finally {
       unregisterActiveTerminalExecution(executionId);
     }

@@ -53,9 +53,17 @@ const filesystemBridge = {
 };
 
 const terminalBridge = {
-  version: 1,
+  version: 2,
+  // V1 向后兼容（Command Runner 语义不变）
   execute: (input: unknown) => invokeBridge("bridge:terminal:execute", input),
   cancel: (input: unknown) => invokeBridge("bridge:terminal:cancel", input),
+  // V2：流式启动 + 事件订阅（事件已 sanitized；sequence 单调递增）
+  start: (input: unknown) => invokeBridge("bridge:terminal:start", input),
+  subscribe: (listener: (event: unknown) => void): (() => void) => {
+    const handler = (_e: unknown, event: unknown) => listener(event);
+    ipcRenderer.on("bridge:terminal:event", handler);
+    return () => ipcRenderer.removeListener("bridge:terminal:event", handler);
+  },
 };
 
 contextBridge.exposeInMainWorld("classflowDesktop", {

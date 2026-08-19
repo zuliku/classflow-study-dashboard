@@ -6,6 +6,8 @@ import { KiroTurnPhase, KiroWorklogBlock } from "@/lib/ai/presentation/turnPrese
 import { bumpStreamPerf, bumpStreamPerfKeyed } from "@/lib/ai/perf/streamPerf";
 import { hasMeaningfulKiroToolDetails } from "@/lib/ai/presentation/toolActivityDetails";
 import { KiroAssistantShell } from "@/components/kiro/KiroAssistantShell";
+import { KiroTerminalBlock } from "@/components/kiro/computer/KiroTerminalBlock";
+import { useTerminalActivityStore } from "@/store/useTerminalActivityStore";
 import { DisclosureRegion } from "@/components/ui/DisclosureRegion";
 import { cn } from "@/lib/utils";
 
@@ -156,6 +158,14 @@ export const KiroWorklog = React.memo(function KiroWorklog({
     (block) => block.status === "done" || block.status === "error"
   ).length;
 
+  // Terminal V2：runtime activity（UI-only；sanitized；按 toolCallId 精确关联本 turn 的
+  // run_terminal_command；历史恢复 turn 无对应 activity → 自动过滤）
+  const terminalActivities = useTerminalActivityStore((s) => s.activities);
+  const toolCallIds = new Set(
+    toolBlocks.map((b) => b.toolCallId).filter((id): id is string => id.length > 0)
+  );
+  const terminalBlocks = terminalActivities.filter((a) => toolCallIds.has(a.toolCallId));
+
   // 当前 Turn：working/composing/answering 保持 expanded；历史恢复（初始 done）默认折叠；
   // 不因 done 瞬时 collapse（避免完成瞬间 layout 跳动）；用户手动操作始终优先。
   const [expanded, setExpanded] = useState(
@@ -229,6 +239,10 @@ export const KiroWorklog = React.memo(function KiroWorklog({
             <KiroToolRow key={block.id} block={block} />
           )
         )}
+        {/* Terminal V2 Streaming：runtime activity 实时输出（挂在对应 tool row 之后） */}
+        {terminalBlocks.map((activity) => (
+          <KiroTerminalBlock key={activity.executionId} activity={activity} />
+        ))}
       </DisclosureRegion>
 
       {/* Final Answer 前的极弱分割线：无论折叠与否都保留（answering/done 才可能有 answer） */}

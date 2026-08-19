@@ -45,6 +45,7 @@ import {
 } from "@/lib/ai/computer/knowledge/instructions";
 import { markWorkspaceKnowledgeDirty } from "@/lib/ai/computer/knowledge/service";
 import { useKiroComputerRuntimeStore } from "@/store/useKiroComputerRuntimeStore";
+import { useTerminalActivityStore } from "@/store/useTerminalActivityStore";
 import { useKiroPreferencesStore } from "@/store/useKiroPreferencesStore";
 import { useConfirmStore } from "@/store/useConfirmStore";
 import { useToastStore } from "@/store/useToastStore";
@@ -1625,6 +1626,9 @@ export function useKiroChat({
         },
         counters: computerCountersRef.current,
         oneShotApprovals: oneShotApprovalsRef.current,
+        // Terminal V2 streaming：runtime activity（UI-only；sanitized 事件；不进入模型 context）
+        onTerminalActivityInit: (init) => useTerminalActivityStore.getState().registerActivity(init),
+        onTerminalEvent: (event) => useTerminalActivityStore.getState().pushEvent(event),
       });
       if (attempt.kind === "approval-required") {
         handleApprovalRequired(attempt.request, toolName, toolCallId, input, frozenSnapshot);

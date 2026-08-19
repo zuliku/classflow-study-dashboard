@@ -23,6 +23,8 @@ import {
   oneShotApprovalMatches,
 } from "@/lib/ai/computer/approval";
 import { executeKiroTerminalCommand } from "@/lib/ai/computer/terminal/executor";
+import { TerminalActivityInit } from "@/lib/ai/computer/terminal/activity";
+import { DesktopTerminalEvent } from "@/lib/desktop/types";
 import { getComputerAdapterForAdapterRef } from "@/lib/ai/computer/adapters/factory";
 import {
   applyReadBounds,
@@ -142,6 +144,9 @@ export async function executeKiroComputerTool(request: {
   counters: ComputerCounterState;
   /** Part 3：本会话 allow-once 集合（approval 后由 useKiroChat 注入；exact 匹配即消费） */
   oneShotApprovals?: ComputerOneShotApproval[];
+  /** Terminal V2 streaming：活动注册 + sanitized 事件（UI-only） */
+  onTerminalActivityInit?: (init: TerminalActivityInit) => void;
+  onTerminalEvent?: (event: DesktopTerminalEvent) => void;
 }): Promise<ComputerExecutionAttempt> {
   const { toolName, toolCallId, toolInput, context, counters, oneShotApprovals } = request;
   const { turnSnapshot, liveWorkspaces, livePermissionRules } = context;
@@ -154,7 +159,7 @@ export async function executeKiroComputerTool(request: {
     };
   }
 
-  // Desktop Terminal V1：独立预算（terminalCount；不走 filesystem read/mutation 计数）
+  // Desktop Terminal V1/V2：独立预算（terminalCount；不走 filesystem read/mutation 计数）
   if (toolName === "run_terminal_command") {
     return executeKiroTerminalCommand({
       toolCallId,
@@ -165,6 +170,8 @@ export async function executeKiroComputerTool(request: {
       counters: counters as ComputerCounterState,
       oneShotApprovals: oneShotApprovals ?? [],
       taskId: context.taskId ?? "",
+      onTerminalActivityInit: request.onTerminalActivityInit,
+      onTerminalEvent: request.onTerminalEvent,
     });
   }
 

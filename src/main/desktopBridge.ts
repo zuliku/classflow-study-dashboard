@@ -12,6 +12,8 @@ import { promises as fs, existsSync, realpathSync } from "node:fs";
 import { join, sep, dirname, basename } from "node:path";
 import { randomUUID } from "node:crypto";
 import { spawn, ChildProcess } from "node:child_process";
+import { runTerminalProcess, TerminalRuntimeHandle } from "@/src/main/terminalRuntime";
+import { DesktopTerminalEvent } from "@/lib/desktop/types";
 
 /* ---------------- Grant 管理（grantId → absolute root，renderer 不可见） ---------------- */
 
@@ -622,6 +624,12 @@ async function handleTerminalExecute(input: unknown): Promise<TerminalResult> {
 async function handleTerminalCancel(input: unknown): Promise<void> {
   const obj = validateInputObject(input);
   const executionId = typeof obj?.executionId === "string" ? obj.executionId : "";
+  // V2 registry 优先（runtime handle；cancel → runtime reject CANCELLED）
+  const v2 = activeV2Executions.get(executionId);
+  if (v2) {
+    await v2.cancel();
+    return;
+  }
   const entry = activeExecutions.get(executionId);
   if (!entry) return; // 已结束：幂等
   entry.cancelled = true;
@@ -630,6 +638,66 @@ async function handleTerminalCancel(input: unknown): Promise<void> {
   await killProcessTree(entry.child.pid ?? 0);
   // 契约：cancel 必须让 execute reject { code: "CANCELLED" }
   entry.reject(failError("CANCELLED"));
+}
+
+/* ---------------- Terminal V2（Streaming / Lifecycle；向后兼容 V1） ---------------- */
+
+/** V2 活跃执行注册表（runtime handle；cancel/清理统一入口） */
+const activeV2Executions = new Map<string, TerminalRuntimeHandle>();
+
+/** Stop Kiro / App 关闭时终止全部 V2 活跃进程（含 process tree） */
+export async function cancelAllV2TerminalExecutions(): Promise<void> {
+  const handles = Array.from(activeV2Executions.values());
+  activeV2Executions.clear();
+  await Promise.allSettled(handles.map((h) => h.cancel()));
+}
+
+async function handleTerminalStart(
+  input: unknown,
+  event: Electron.IpcMainInvokeEvent
+): Promise<TerminalResult> {
+  const obj = validateInputObject(input);
+  if (!obj) fail("INVALID_OPERATION");
+  const executionId = typeof obj.executionId === "string" && obj.executionId.length > 0 && obj.executionId.length <= 128 ? obj.executionId : null;
+  const shell = obj.shell === "cmd" ? "cmd" : obj.shell === "powershell" ? "powershell" : null;
+  const command = typeof obj.command === "string" && obj.command.length > 0 && obj.command.length <= 8192 ? obj.command : null;
+  const timeoutMs = typeof obj.timeoutMs === "number" ? Math.floor(obj.timeoutMs) : 60000;
+  const executionMode = obj.executionMode === "long-running" ? "long-running" : "foreground";
+  if (!executionId || !shell || !command) fail("INVALID_OPERATION");
+
+  if (activeExecutions.has(executionId) || activeV2Executions.has(executionId)) fail("INVALID_OPERATION", "执行 ID 冲突。");
+  const grant = getGrant(obj.grantId);
+  if (!grant) fail("PERMISSION_DENIED");
+
+  const cwdRaw = typeof obj.cwd === "string" ? obj.cwd : "";
+  const resolvedCwd = resolveWithinRoot(grant.root, cwdRaw);
+  if (!resolvedCwd) fail("PERMISSION_DENIED");
+
+  // 事件只经 sanitized 内容（runtime 已做 ANSI/path/secret redaction + char bound）；
+  // 发送给发起请求的 renderer（webContents）
+  const { promise, handle } = runTerminalProcess({
+    executionId,
+    shell,
+    cwd: resolvedCwd,
+    command,
+    timeoutMs,
+    executionMode,
+    onEvent: (e: DesktopTerminalEvent) => {
+      if (!event.sender.isDestroyed()) {
+        event.sender.send("bridge:terminal:event", e);
+      }
+    },
+  });
+  activeV2Executions.set(executionId, handle);
+  promise.finally(() => {
+    activeV2Executions.delete(executionId);
+  });
+
+  // runtime 错误 code → Bridge failError 契约（preload 只认 Error.message 内 JSON）
+  return promise.catch((err: Error & { code?: string }) => {
+    if (err?.code === "CANCELLED") throw failError("CANCELLED");
+    throw failError("EXECUTION_FAILED");
+  });
 }
 
 /* ---------------- IPC 注册 ---------------- */
@@ -655,4 +723,5 @@ export function registerDesktopBridgeIpc(): void {
 
   ipcMain.handle("bridge:terminal:execute", (_e, input) => handleTerminalExecute(input));
   ipcMain.handle("bridge:terminal:cancel", (_e, input) => handleTerminalCancel(input));
+  ipcMain.handle("bridge:terminal:start", (e, input) => handleTerminalStart(input, e));
 }

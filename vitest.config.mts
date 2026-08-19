@@ -27,6 +27,9 @@ export default defineConfig({
       "tests/aiOpenCodeGoMimoTimetableVisionSmoke.test.ts",
       "tests/focusControlCompact.test.tsx",
       "tests/sidebarChrome.test.ts",
+      "tests/terminalStreaming.test.ts",
+      "tests/terminalSecretRedaction.test.ts",
+      "tests/kiroTerminalBlock.test.tsx",
     ],
   },
 });

@@ -37,16 +37,29 @@ export function getClassFlowDesktopBridge(): ClassFlowDesktopBridgeV1 | null {
 }
 
 /**
- * Terminal Bridge（V1，optional capability）：
+ * Terminal Bridge（V1/V2，optional capability）：
  * Desktop Runtime 可以只有 filesystem（Native Folder V1 保持 valid）——
  * terminal 缺失绝不使整个 Bridge invalid。
+ * V2：向后兼容（execute/cancel 语义不变）+ start/subscribe 流式能力。
  */
-export function getClassFlowDesktopTerminalBridge(): import("@/lib/desktop/types").ClassFlowDesktopTerminalBridgeV1 | null {
+export function getClassFlowDesktopTerminalBridge(): import("@/lib/desktop/types").ClassFlowDesktopTerminalBridge | null {
   const bridge = getClassFlowDesktopBridge();
   if (!bridge) return null;
   const terminal = bridge.terminal;
   if (!terminal || typeof terminal !== "object") return null;
-  if (terminal.version !== 1) return null;
+  if (terminal.version !== 1 && terminal.version !== 2) return null;
+  if (typeof terminal.execute !== "function" || typeof terminal.cancel !== "function") return null;
+  return terminal;
+}
+
+/** Terminal V2（Streaming）可用性：V2 专属能力检测（start/subscribe 存在 + version === 2） */
+export function getClassFlowDesktopTerminalBridgeV2(): import("@/lib/desktop/types").ClassFlowDesktopTerminalBridgeV2 | null {
+  const bridge = getClassFlowDesktopBridge();
+  if (!bridge) return null;
+  const terminal = bridge.terminal;
+  if (!terminal || typeof terminal !== "object") return null;
+  if (terminal.version !== 2) return null;
+  if (typeof terminal.start !== "function" || typeof terminal.subscribe !== "function") return null;
   if (typeof terminal.execute !== "function" || typeof terminal.cancel !== "function") return null;
   return terminal;
 }
@@ -54,6 +67,11 @@ export function getClassFlowDesktopTerminalBridge(): import("@/lib/desktop/types
 /** Terminal Bridge 是否可用（SSR safe） */
 export function hasClassFlowDesktopTerminal(): boolean {
   return getClassFlowDesktopTerminalBridge() !== null;
+}
+
+/** Terminal V2 Streaming 是否可用 */
+export function hasClassFlowDesktopTerminalV2(): boolean {
+  return getClassFlowDesktopTerminalBridgeV2() !== null;
 }
 
 /**

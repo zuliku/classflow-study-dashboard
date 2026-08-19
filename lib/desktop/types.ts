@@ -104,9 +104,10 @@ export interface ClassFlowDesktopBridgeV1 {
   /**
    * Optional Capability（V1.1）：Terminal Bridge。
    * Desktop Runtime 可以只有 filesystem（filesystem-only → 依旧 valid；terminal 不可用）。
-   * Terminal 自己拥有 version: 1（版本协商独立于 Bridge version）。
+   * Terminal 自己拥有 version（1=V1 Command Runner；2=Streaming/Lifecycle/stdin/Session）；
+   * 版本协商独立于 Bridge version。
    */
-  terminal?: ClassFlowDesktopTerminalBridgeV1;
+  terminal?: ClassFlowDesktopTerminalBridge;
 }
 
 export type ClassFlowDesktopTerminalShell = "powershell" | "cmd";
@@ -164,6 +165,73 @@ export interface ClassFlowDesktopTerminalBridgeV1 {
   }>;
   cancel(input: { executionId: string }): Promise<void>;
 }
+
+/**
+ * Terminal Runtime Event（V2 streaming；经 preload subscribe 推送给 renderer / UI）。
+ * - sequence 单调递增（每 execution 从 1 起），保证 chunk 顺序可确定重建。
+ * - 事件内容已经过 sanitization（ANSI strip / absolute path redaction / secret redaction / char bound）。
+ * - 绝不含 OS pid / native absolute path / username / raw error。
+ */
+export type DesktopTerminalEvent =
+  | {
+      type: "started";
+      executionId: string;
+      sequence: number;
+    }
+  | {
+      type: "stdout";
+      executionId: string;
+      sequence: number;
+      text: string;
+    }
+  | {
+      type: "stderr";
+      executionId: string;
+      sequence: number;
+      text: string;
+    }
+  | {
+      type: "exit";
+      executionId: string;
+      sequence: number;
+      exitCode: number | null;
+      timedOut: boolean;
+      cancelled: boolean;
+      durationMs: number;
+    };
+
+/** V2 execution mode：foreground 默认；long-running 必须显式（放宽 timeout 上限） */
+export type DesktopTerminalExecutionMode = "foreground" | "long-running";
+
+/** Desktop Terminal Bridge V2：向后兼容 V1（execute/cancel 语义不变）+ 流式 start/subscribe。
+ *  Phase 3 增加 write；Phase 4 增加 createSession/writeSession/resizeSession/closeSession。 */
+export interface ClassFlowDesktopTerminalBridgeV2 {
+  version: 2;
+  execute: ClassFlowDesktopTerminalBridgeV1["execute"];
+  cancel: ClassFlowDesktopTerminalBridgeV1["cancel"];
+  /** 流式启动：resolve 最终 bounded result（与 V1 execute 相同返回契约）；事件经 subscribe 推送 */
+  start(input: {
+    executionId: string;
+    shell: ClassFlowDesktopTerminalShell;
+    grantId: string;
+    cwd: string;
+    command: string;
+    timeoutMs: number;
+    executionMode?: DesktopTerminalExecutionMode;
+  }): Promise<{
+    exitCode: number | null;
+    stdout: string;
+    stderr: string;
+    timedOut: boolean;
+    durationMs: number;
+    stdoutTruncated: boolean;
+    stderrTruncated: boolean;
+  }>;
+  /** 订阅该 runtime 的 terminal 事件流；返回取消订阅函数 */
+  subscribe(listener: (event: DesktopTerminalEvent) => void): () => void;
+}
+
+export type ClassFlowDesktopTerminalBridge = ClassFlowDesktopTerminalBridgeV1 | ClassFlowDesktopTerminalBridgeV2;
 
 declare global {
   interface Window {
