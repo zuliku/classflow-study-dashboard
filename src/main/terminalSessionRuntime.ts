@@ -44,10 +44,8 @@ export function createPtySession(options: PtySessionOptions): string {
   const sessionId = `pty-${randomUUID().slice(0, 8)}`;
   const cols = Math.min(Math.max(Math.floor(options.cols), PTY_MIN_COLS), PTY_MAX_COLS);
   const rows = Math.min(Math.max(Math.floor(options.rows), PTY_MIN_ROWS), PTY_MAX_ROWS);
-  const shellArgs =
-    options.shell === "powershell"
-      ? ["-NoLogo", "-NoProfile", "-NonInteractive"]
-      : [];
+  // PTY 保持交互能力：保留 -NoLogo -NoProfile（避免加载用户 profile），移除 -NonInteractive
+  const shellArgs = options.shell === "powershell" ? ["-NoLogo", "-NoProfile"] : [];
   const term = pty.spawn(options.shell === "powershell" ? "powershell.exe" : "cmd.exe", shellArgs, {
     name: "xterm-color",
     cols,

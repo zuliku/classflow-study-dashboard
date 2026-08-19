@@ -122,14 +122,25 @@ app.on("window-all-closed", () => {
   if (process.platform !== "darwin") app.quit();
 });
 
-app.on("will-quit", () => {
-  console.info("[classflow] will-quit");
-  // Terminal V1/V2：App 关闭不留下 orphan process（taskkill 独立进程；fire-and-forget）
-  void import("./desktopBridge").then((m) => m.cancelAllTerminalExecutions());
-  // PTY sessions：dispose 全部（kill process tree）
-  void import("./terminalSessionRuntime").then((m) => m.closeAllPtySessions());
+let isQuitting = false;
+app.on("before-quit", async (event) => {
+  if (isQuitting) return;
+  isQuitting = true;
+  event.preventDefault();
+  console.info("[classflow] before-quit cleanup");
+  try {
+    const { cancelAllTerminalExecutions } = await import("./desktopBridge");
+    await cancelAllTerminalExecutions();
+  } catch {}
+  try {
+    const { closeAllPtySessions } = await import("./terminalSessionRuntime");
+    closeAllPtySessions();
+  } catch {}
   if (apiServer) {
-    void apiServer.close();
+    try {
+      await apiServer.close();
+    } catch {}
     apiServer = null;
   }
+  app.exit(0);
 });

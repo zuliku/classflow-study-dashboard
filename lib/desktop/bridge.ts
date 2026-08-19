@@ -74,6 +74,30 @@ export function hasClassFlowDesktopTerminalV2(): boolean {
   return getClassFlowDesktopTerminalBridgeV2() !== null;
 }
 
+/** PTY 渐进能力检测：version === 2 且完整 PTY surface 存在 */
+export function getClassFlowDesktopTerminalPtyBridge(): import("@/lib/desktop/types").ClassFlowDesktopTerminalBridgeV2 | null {
+  const bridge = getClassFlowDesktopBridge();
+  if (!bridge) return null;
+  const terminal = bridge.terminal;
+  if (!terminal || typeof terminal !== "object") return null;
+  if (terminal.version !== 2) return null;
+  if (
+    typeof terminal.createSession !== "function" ||
+    typeof terminal.writeSession !== "function" ||
+    typeof terminal.resizeSession !== "function" ||
+    typeof terminal.closeSession !== "function" ||
+    typeof terminal.subscribeSession !== "function"
+  )
+    return null;
+  if (typeof terminal.execute !== "function" || typeof terminal.cancel !== "function" || typeof terminal.write !== "function" || typeof terminal.start !== "function" || typeof terminal.subscribe !== "function")
+    return null;
+  return terminal as import("@/lib/desktop/types").ClassFlowDesktopTerminalBridgeV2;
+}
+
+export function hasClassFlowDesktopTerminalPty(): boolean {
+  return getClassFlowDesktopTerminalPtyBridge() !== null;
+}
+
 /**
  * grantId 校验：opaque token。
  * 拒绝：空 / 超长 / 非 [A-Za-z0-9_-] / 路径样式（slash、backslash、colon 均被字符集排除；

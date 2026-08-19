@@ -25,6 +25,12 @@ import {
   retrieveWorkspaceContextSchema,
   runTerminalCommandSchema,
   writeTerminalInputSchema,
+  startTerminalCommandSchema,
+  waitTerminalCommandSchema,
+  createTerminalSessionSchema,
+  runTerminalSessionCommandSchema,
+  writeTerminalSessionInputSchema,
+  closeTerminalSessionSchema,
 } from "@/lib/ai/computer/tools/schemas";
 
 export interface ComputerToolModelContract {
@@ -179,13 +185,90 @@ export const COMPUTER_MUTATION_TOOLS: ComputerToolDefinition[] = [
   {
     name: "write_terminal_input",
     description:
-      "向当前仍在运行的终端进程写入 stdin 输入（Terminal V2，Phase 3）。用于进程明确等待输入时提供非敏感应答：确认提示（y/n）、数字选择、项目名、普通文本等。必须使用 run_terminal_command 返回的 terminalHandle。只允许非敏感输入——密码、API Key、Token、SSH secret 等敏感信息绝不可通过此工具发送，必须让用户通过界面安全输入框手动输入。输入大小有界（≤4096 字符）。进程结束后调用会被拒绝。",
+      "向当前仍在运行的终端进程写入 stdin 输入（Terminal V2，Phase 3）。用于进程明确等待输入时提供非敏感应答：确认提示（y/n）、数字选择、项目名、普通文本等。必须使用 start_terminal_command 返回的 terminalHandle。只允许非敏感输入——密码、API Key、Token、SSH secret 等敏感信息绝不可通过此工具发送，必须让用户通过界面安全输入框手动输入。输入大小有界（≤4096 字符）。进程结束后调用会被拒绝。",
     schema: writeTerminalInputSchema,
     capability: "shell.execute",
     mutation: false,
     inputExamples: [
       {
         input: { handle: "th-abc12345", data: "y" },
+      },
+    ],
+  },
+  {
+    name: "start_terminal_command",
+    description:
+      "异步启动一个交互式终端命令并立即返回 terminalHandle（Terminal V2，Phase 3）。与 run_terminal_command 共享完全相同的 Workspace/Native root/policy/Risk/approval 安全管线。适用于需要后续 stdin 交互的命令（例如等待用户输入的脚本）。命令启动后保持运行，需配合 write_terminal_input 写入输入，并通过 wait_terminal_command 等待最终结果。普通无需交互的命令请直接使用 run_terminal_command。",
+    schema: startTerminalCommandSchema,
+    capability: "shell.execute",
+    mutation: true,
+    inputExamples: [
+      {
+        input: { shell: "powershell", cwd: "", command: "$x=[Console]::In.ReadLine(); Write-Output \"received:$x\"" },
+      },
+    ],
+  },
+  {
+    name: "wait_terminal_command",
+    description:
+      "等待指定 terminalHandle 对应的交互式命令完成并返回脱敏后的最终结果（Terminal V2，Phase 3）。仅接受 start_terminal_command 返回的 opaque handle，不接受 executionId/PID。handle 进入终态后保留短 TTL，随后自动清理；已终态的 handle 再次等待将返回 TERMINAL_NOT_FOUND。",
+    schema: waitTerminalCommandSchema,
+    capability: "shell.execute",
+    mutation: false,
+    inputExamples: [
+      {
+        input: { handle: "th-abc12345" },
+      },
+    ],
+  },
+  {
+    name: "create_terminal_session",
+    description:
+      "创建持久 PowerShell/cmd PTY 会话（Terminal V2，Phase 4）。会话在已授权工作区内保持 cwd/环境变量，需显式关闭。通过 shell.execute policy 与 read-write 校验；绝不接受 absolute path/env dump/elevation。返回 opaque sessionHandle（非 PID/native path）。",
+    schema: createTerminalSessionSchema,
+    capability: "shell.execute",
+    mutation: true,
+    inputExamples: [
+      {
+        input: { shell: "powershell", cwd: "" },
+      },
+    ],
+  },
+  {
+    name: "run_terminal_session_command",
+    description:
+      "在已创建的持久 PTY 会话中执行单条命令（Terminal V2，Phase 4）。每条命令重新经过 shell.execute policy + Risk Classifier + approval gate，绝不绕过安全校验。使用内部随机 sentinel 探测命令结束并去除 sentinel，不暴露内部实现。会话同时仅允许一条活跃 Agent 命令。",
+    schema: runTerminalSessionCommandSchema,
+    capability: "shell.execute",
+    mutation: true,
+    inputExamples: [
+      {
+        input: { sessionHandle: "sh-abc12345", command: "git status" },
+      },
+    ],
+  },
+  {
+    name: "write_terminal_session_input",
+    description:
+      "向持久 PTY 会话中等待输入的命令写入非敏感 stdin（Terminal V2，Phase 4）。仅接受 sessionHandle + data，不接受任意按键序列（Ctrl+C/ESC/Fn 等作为第一版不暴露）。敏感输入（密码/API Key/Token 等）禁止经模型路径，需用户本地输入。",
+    schema: writeTerminalSessionInputSchema,
+    capability: "shell.execute",
+    mutation: false,
+    inputExamples: [
+      {
+        input: { sessionHandle: "sh-abc12345", data: "y" },
+      },
+    ],
+  },
+  {
+    name: "close_terminal_session",
+    description: "关闭持久 PTY 会话并终止其进程树（Terminal V2，Phase 4）。幂等操作，已关闭的 handle 再次调用无副作用。",
+    schema: closeTerminalSessionSchema,
+    capability: "shell.execute",
+    mutation: false,
+    inputExamples: [
+      {
+        input: { sessionHandle: "sh-abc12345" },
       },
     ],
   },
