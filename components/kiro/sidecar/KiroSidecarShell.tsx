@@ -2,10 +2,9 @@
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { X, Expand, Minus } from "lucide-react";
-import { useKiroSession, type KiroSidecarMode } from "@/components/kiro/KiroSessionProvider";
+import { useKiroSessionActions, type KiroSidecarMode } from "@/components/kiro/KiroSessionProvider";
 import { KiroMark } from "@/components/kiro/KiroHeader";
 import { KiroSessionActions } from "@/components/kiro/KiroSessionActions";
-import { usePresence } from "@/lib/usePresence";
 import { useKiroPreferencesStore } from "@/store/useKiroPreferencesStore";
 import { SidecarSize } from "@/lib/ai/ui/sidecarSize";
 import {
@@ -37,11 +36,27 @@ import { cn } from "@/lib/utils";
  * - 位置用 CSS variables（top/right）实时更新，不用 transform（避免与 presence motion 冲突）
  * - Move 与 Resize 共享 interactionRef 互斥；pointermove 只更新 draft，pointerup 一次性持久化
  */
-export function KiroSidecarShell(props: { mode: KiroSidecarMode; children: React.ReactNode } | { open: boolean; children: React.ReactNode }) {
-  const mode: KiroSidecarMode = "mode" in props ? props.mode : props.open ? "open" : "closed";
+type ShellProps =
+  | { mode: KiroSidecarMode; present: boolean; children: React.ReactNode }
+  | { open: boolean; children: React.ReactNode };
+
+export function KiroSidecarShell(props: ShellProps) {
+  // Host 场景：mode + present（present 来自 usePresence，Shell 不再自管 closed lifecycle）
+  // 兼容测试：open boolean → 内部自行 usePresence（legacy）
+  const isHost = "mode" in props && "present" in props;
+  // eslint-disable-next-line react-hooks/rules-of-hooks
+  const legacyPresence = !isHost ? useLegacyPresence((props as { open: boolean }).open) : null;
+
+  const mode: KiroSidecarMode = isHost
+    ? (props as { mode: KiroSidecarMode }).mode
+    : (props as { open: boolean }).open
+      ? "open"
+      : "closed";
+  const present = isHost ? (props as { present: boolean }).present : legacyPresence!.visible;
+  const mounted = isHost ? true : legacyPresence!.mounted;
   const children = props.children;
-  const session = useKiroSession();
-  const { closeSidecar, expandSidecar, minimizeSidecar } = session as unknown as { closeSidecar: () => void; expandSidecar: () => void; minimizeSidecar: () => void };
+
+  const { closeSidecar, expandSidecar, minimizeSidecar } = useKiroSessionActions();
   const sidecarSize = useKiroPreferencesStore((s) => s.sidecarSize);
   const setSidecarSize = useKiroPreferencesStore((s) => s.setSidecarSize);
   const sidecarPosition = useKiroPreferencesStore((s) => s.sidecarPosition);
@@ -104,19 +119,9 @@ export function KiroSidecarShell(props: { mode: KiroSidecarMode; children: React
   // Motion V1：geometry 交互期间降权内部 motion（intro/settle/popover transforms 近瞬时）
   const [geometryInteracting, setGeometryInteracting] = useState(false);
 
-  // 支持两类调用：1) 经 KiroSidecar host（host 已做 closed 的 usePresence，Shell 仅管显隐）
-  // 2) 直接在测试/独立场景以 open/mode 调用（需自行处理 closed 的 mount/unmount）
-  // 为兼容测试，保持 usePresence（closed→卸载），但 host 场景下 mounted 始终 true（因为 host 仅在非 closed 渲染 Shell）
-  const { mounted } = usePresence(mode !== "closed", 160);
-  // Esc 关闭（仅 open 时监听；minimized 时不抢主界面 Esc）
-  useEffect(() => {
-    if (!isOpen) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") closeSidecar();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [isOpen, closeSidecar]);
+  // fullVisible / fullInteractive 语义（Present 单 ownership：host 的 present 决定 exit 动画）
+  const fullVisible = mode === "open" && present;
+  const fullInteractive = mode === "open" && present;
 
   // 早期返回必须在所有 hooks 之后（保持 hooks 数量一致）
   if (!mounted) return null;
@@ -204,7 +209,7 @@ export function KiroSidecarShell(props: { mode: KiroSidecarMode; children: React
     setGeometryInteracting(false);
   };
 
-  // Capsule V1：open ↔ minimized 不卸载 ChatSurface，closed 由 usePresence 控制 unmount（host 与 standalone 均兼容）
+  // Final Closure：fullVisible = open && present；closed exit 时保持 hidden 不闪回
   return (
     <div
       data-testid="kiro-sidecar"
@@ -212,27 +217,19 @@ export function KiroSidecarShell(props: { mode: KiroSidecarMode; children: React
       data-geometry-interacting={geometryInteracting || undefined}
       role="dialog"
       aria-label="Kiro 侧边聊天"
-      aria-hidden={isMinimized}
-      // inert 确保 hidden Composer 不进 Tab 顺序（React 19+ 支持）
-      {...(isMinimized ? ({ inert: "" } as unknown as React.HTMLAttributes<HTMLDivElement>) : {})}
+      aria-hidden={!fullInteractive}
+      {...(!fullInteractive ? ({ inert: "" } as unknown as React.HTMLAttributes<HTMLDivElement>) : {})}
       className={cn(
-        // Single Shell：几何由 responsive CSS 切换（children 只 mount 一份）
         "fixed z-40 flex flex-col bg-surface overflow-hidden",
-        // Mobile：<md full-screen（不用 persisted 尺寸/位置）
         "inset-0 w-full h-full rounded-none pb-[env(safe-area-inset-bottom)]",
-        // Desktop：md+ floating（persisted 尺寸/位置经 CSS variables 生效；不用 transform 定位）
         "md:inset-auto md:top-[var(--kiro-sidecar-top)] md:right-[var(--kiro-sidecar-right)]",
         "md:w-[var(--kiro-sidecar-width)] md:h-[var(--kiro-sidecar-height)] md:rounded-[28px] md:border md:border-line md:shadow-card",
-        // Minimize/Restore choreography（180–220ms，opacity+scale+轻 translate，禁止 width/height 动画）
-        // open → minimized：opacity 1→0, scale 1→0.985, translate 微向胶囊方向；胶囊延迟 40–60ms 由自身控制
-        // minimized 不可交互（aria-hidden + inert + pointer-events-none，已满足 a11y）
-        isMinimized
-          ? "opacity-0 scale-[0.985] pointer-events-none -translate-y-1 md:translate-x-1"
-          : "opacity-100 scale-100 translate-x-0 translate-y-0",
-        // 仅在交互或 mode 切换时过渡；drag 期间降权由 data-geometry-interacting 控制
-        isMinimized
-          ? "transition-[opacity,transform] duration-[180ms] ease-[var(--ease-standard)]"
-          : "transition-[opacity,transform] duration-[var(--motion-panel)] ease-[var(--ease-standard)]"
+        fullVisible
+          ? "opacity-100 scale-100 translate-x-0 translate-y-0 pointer-events-auto"
+          : "opacity-0 scale-[0.985] pointer-events-none -translate-y-1 md:translate-x-1",
+        fullVisible
+          ? "transition-[opacity,transform] duration-[var(--motion-panel)] ease-[var(--ease-standard)]"
+          : "transition-[opacity,transform] duration-[160ms] ease-[var(--ease-standard)]"
       )}
       style={
         {

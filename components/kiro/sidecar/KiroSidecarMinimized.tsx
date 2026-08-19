@@ -63,12 +63,22 @@ export function KiroSidecarMinimized({ visible }: { visible: boolean }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clampedPersisted.right, clampedPersisted.bottom]);
 
-  // drag 状态
+  // drag 状态（确定性 suppressNextClick，不靠 timer）
   const originRef = useRef<{ right: number; bottom: number } | null>(null);
   const startPointRef = useRef<{ x: number; y: number } | null>(null);
   const didDragRef = useRef(false);
+  const suppressNextClickRef = useRef(false);
   const latestDraftRef = useRef<{ right: number; bottom: number } | null>(null);
   const prevUserSelectRef = useRef("");
+
+  // 卸载时恢复 userSelect（drag 中异常关闭/卸载）
+  useEffect(() => {
+    return () => {
+      if (document.body.style.userSelect === "none") {
+        document.body.style.userSelect = prevUserSelectRef.current;
+      }
+    };
+  }, []);
 
   const handlePointerDown = useCallback(
     (e: React.PointerEvent) => {
@@ -110,7 +120,7 @@ export function KiroSidecarMinimized({ visible }: { visible: boolean }) {
   );
 
   const finish = useCallback(
-    (e?: React.PointerEvent) => {
+    (reason: "up" | "cancel" = "up") => {
       if (!originRef.current) return;
       const shouldPersist = didDragRef.current;
       const finalPos = latestDraftRef.current;
@@ -123,24 +133,33 @@ export function KiroSidecarMinimized({ visible }: { visible: boolean }) {
       setDraft(null);
       if (shouldPersist && finalPos) {
         setPersisted(finalPos);
-        // 拖拽结束不触发恢复
-        // 保持 didDrag true 一小段时间，防止后续 click 误触发
-        setTimeout(() => {
-          didDragRef.current = false;
-          latestDraftRef.current = null;
-        }, 0);
-      } else {
-        // 未拖拽：不持久化，click 处理恢复（避免 pointerup 与 click 双触发）
+        // 拖拽后确定性抑制下一次 click（不靠 timer）
+        if (reason === "up") suppressNextClickRef.current = true;
         didDragRef.current = false;
         latestDraftRef.current = null;
+      } else {
+        didDragRef.current = false;
+        latestDraftRef.current = null;
+        if (reason === "cancel") suppressNextClickRef.current = false;
       }
     },
     [setPersisted]
   );
 
+  const handlePointerUp = useCallback(
+    (e: React.PointerEvent) => finish("up"),
+    [finish]
+  );
+  const handlePointerCancel = useCallback(() => finish("cancel"), [finish]);
+
   const handleClickRestore = useCallback(
     (e: React.MouseEvent) => {
-      // 拖拽后 click 必须忽略
+      if (suppressNextClickRef.current) {
+        suppressNextClickRef.current = false;
+        e.preventDefault();
+        e.stopPropagation();
+        return;
+      }
       if (didDragRef.current) {
         e.preventDefault();
         e.stopPropagation();
@@ -165,31 +184,19 @@ export function KiroSidecarMinimized({ visible }: { visible: boolean }) {
     [closeSidecar]
   );
 
-  // 键盘：主区 Enter/Space 恢复，关闭按钮原生支持
-  const handleRestoreKeyDown = useCallback(
-    (e: React.KeyboardEvent) => {
-      if (e.key === "Enter" || e.key === " ") {
-        e.preventDefault();
-        restoreSidecar();
-      }
-    },
-    [restoreSidecar]
-  );
-
-  // 仅 md+ 可见；minimized 时 opacity 1，open 时 opacity 0（保留 DOM 以便 choreography，不卸载）
-  // 为避免 open 时 capsule 仍可聚焦，hidden 时 pointer-events-none + aria-hidden
+  // 仅 md+ 可见；minimized 时 opacity 1，open/closed 时 hidden + inert
   return (
     <div
       data-testid="kiro-sidecar-capsule"
       data-dragging={dragging || undefined}
       aria-hidden={!visible}
+      {...(!visible ? ({ inert: "" } as unknown as React.HTMLAttributes<HTMLDivElement>) : {})}
       className={cn(
         "hidden md:flex fixed z-40 items-center gap-2 px-2.5",
         "bg-surface border border-line rounded-full shadow-card",
         "select-none touch-none",
         "transition-[opacity,transform] ease-[var(--ease-standard)]",
-        // drag 期间关闭 transition（跟手）
-        dragging ? "transition-none" : "duration-[180ms]",
+        dragging ? "transition-none" : "duration-[160ms]",
         visible ? "opacity-100 scale-100 translate-y-0" : "opacity-0 scale-[0.96] translate-y-1 pointer-events-none"
       )}
       style={
@@ -202,14 +209,13 @@ export function KiroSidecarMinimized({ visible }: { visible: boolean }) {
       }
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
-      onPointerUp={finish}
-      onPointerCancel={finish}
+      onPointerUp={handlePointerUp}
+      onPointerCancel={handlePointerCancel}
       aria-label="Kiro 已最小化"
     >
       <button
         type="button"
         onClick={handleClickRestore}
-        onKeyDown={handleRestoreKeyDown}
         aria-label="恢复 Kiro"
         title="点击恢复 Kiro"
         className="flex-1 min-w-0 flex items-center gap-2 h-full text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-charcoal/40 rounded-full"

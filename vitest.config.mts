@@ -40,6 +40,7 @@ export default defineConfig({
       "tests/kiroSidecarMinimizedPosition.test.ts",
       "tests/kiroSidecarPreferences.test.ts",
       "tests/kiroSidecarCapsule.test.tsx",
+      "tests/kiroSidecarHost.test.tsx",
     ],
   },
 });

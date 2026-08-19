@@ -36,21 +36,43 @@ describe("Kiro Preferences — sidecarMinimizedPosition persistence", () => {
     }
   });
 
-  it("旧 persisted data（无 minimized position）→ default", async () => {
-    // 模拟旧版本 localStorage（无 sidecarMinimizedPosition）
+  it("旧 persisted data（无 minimized position）→ rehydrate 后为 default，且旧 size/position 正确恢复", async () => {
     const old = {
       state: {
         sidecarSize: SIDECAR_DEFAULT_SIZE,
         sidecarPosition: SIDECAR_DEFAULT_POSITION,
-        // 无 sidecarMinimizedPosition
         outputTextSize: "standard",
       },
       version: 0,
     };
     localStorage.setItem("classflow-kiro-preferences-v1", JSON.stringify(old));
+    // 触发 Zustand persist 的 rehydrate（按当前版本 API）
+    // @ts-expect-error — persist 存在于 store
+    await (useKiroPreferencesStore.persist as unknown as { rehydrate: () => Promise<void> }).rehydrate();
+    expect(useKiroPreferencesStore.getState().sidecarMinimizedPosition).toEqual(DEFAULT_SIDECAR_MINIMIZED_POSITION);
+    expect(useKiroPreferencesStore.getState().sidecarSize).toEqual(SIDECAR_DEFAULT_SIZE);
+    expect(useKiroPreferencesStore.getState().sidecarPosition).toEqual(SIDECAR_DEFAULT_POSITION);
+    // 纯函数层面同样归一
     const { normalizeSidecarMinimizedPosition } = await import("@/lib/ai/ui/sidecarMinimizedPosition");
     expect(normalizeSidecarMinimizedPosition(undefined)).toEqual(DEFAULT_SIDECAR_MINIMIZED_POSITION);
-    expect(normalizeSidecarMinimizedPosition(null)).toEqual(DEFAULT_SIDECAR_MINIMIZED_POSITION);
+  });
+
+  it("invalid persisted minimizedPosition → rehydrate 后安全归一", async () => {
+    const invalid = {
+      state: {
+        sidecarSize: SIDECAR_DEFAULT_SIZE,
+        sidecarPosition: SIDECAR_DEFAULT_POSITION,
+        sidecarMinimizedPosition: { right: -100, bottom: null },
+        outputTextSize: "standard",
+      },
+      version: 0,
+    };
+    localStorage.setItem("classflow-kiro-preferences-v1", JSON.stringify(invalid));
+    // @ts-expect-error
+    await (useKiroPreferencesStore.persist as unknown as { rehydrate: () => Promise<void> }).rehydrate();
+    const pos = useKiroPreferencesStore.getState().sidecarMinimizedPosition;
+    expect(pos.right).toBe(24);
+    expect(pos.bottom).toBe(24);
   });
 
   it("新 persisted data（有 valid minimized position）→ restore", () => {
