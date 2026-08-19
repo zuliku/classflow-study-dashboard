@@ -15,6 +15,7 @@ import { previewMaterial, openAssignmentEditor } from "@/lib/uiEvents";
 import { deriveNextCourseSession } from "@/lib/courses/nextSession";
 import { getSemesterWeek } from "@/lib/semester";
 import { useEnterOnAdd } from "@/lib/useEnterOnAdd";
+import { cn } from "@/lib/utils";
 import {
   sortCourseAssignments,
   buildCourseTaskRow,
@@ -102,6 +103,8 @@ export function CoursesWorkspace() {
   // 新增资料出场动画：跨课程统一追踪（useEnterOnAdd 不能放在 map 内）
   const allMaterialIds = courses.flatMap((c) => c.materials.map((m) => m.id));
   const newMaterialIds = useEnterOnAdd(allMaterialIds);
+  // 新增课程卡片入场：首次创建（Empty→Grid）与后续新增都轻量 enter
+  const newCourseIds = useEnterOnAdd(courses.map((course) => course.id));
 
   // 任务行派生（V5 单次循环）：复用 courseDetailView 排序/状态/截止 + courseLibraryView attention 投影。
   // attention/overdue/total 来自同一 rows 数组（submitted 旧 DDL 不误算逾期；submitted/completed 不算待处理）。
@@ -146,7 +149,7 @@ export function CoursesWorkspace() {
             </div>
           </div>
         ) : (
-          <div className="grid grid-cols-1 gap-4 xl:grid-cols-2 items-stretch">
+          <div className="ux-settle grid grid-cols-1 gap-4 xl:grid-cols-2 items-stretch">
             {courses.map((course) => {
               const next = inTeachingWeek
                 ? deriveNextCourseSession(
@@ -165,9 +168,12 @@ export function CoursesWorkspace() {
                   : "本周无后续课程";
 
               return (
-                <CourseLibraryCard
+                <div
                   key={course.id}
-                  course={course}
+                  className={cn("h-full", newCourseIds.has(course.id) && "animate-enter")}
+                >
+                  <CourseLibraryCard
+                    course={course}
                   next={next}
                   nextCellText={nextCellText}
                   meta={courseMetaText(course)}
@@ -193,7 +199,8 @@ export function CoursesWorkspace() {
                     openAssignmentEditor({ courseId: course.id });
                   }}
                   onPreviewMaterial={previewMaterial}
-                />
+                  />
+                </div>
               );
             })}
           </div>

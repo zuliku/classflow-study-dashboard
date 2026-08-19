@@ -453,7 +453,7 @@ export function GroupCollaborationView() {
         </aside>
 
         {/* Right: Project Detail */}
-        <div className="flex-1 min-w-0 flex flex-col space-y-4">
+        <div key={selectedProject?.id ?? "none"} className="ux-detail-swap-in flex-1 min-w-0 flex flex-col space-y-4">
           {selectedProject ? (
             <>
               {/* Detail：单 Surface（header / progress / description / members） */}

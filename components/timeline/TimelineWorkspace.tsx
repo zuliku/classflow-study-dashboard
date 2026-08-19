@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Plus,
   MoreHorizontal,
@@ -132,6 +132,17 @@ export function TimelineWorkspace() {
   const [arrangeFor, setArrangeFor] = useState<Assignment | null>(null);
   const [freeBlockOpen, setFreeBlockOpen] = useState(false);
   const [markOpen, setMarkOpen] = useState(false);
+  // 周切换方向（motion）：统一入口 goToWeek 派生；null = 无动画（首屏 / 非切换路径）
+  const [weekShift, setWeekShift] = useState<"prev" | "next" | null>(null);
+  const goToWeek = useCallback(
+    (target: number) => {
+      const next = Math.min(Math.max(target, 1), semester.totalWeeks);
+      if (next === currentSemesterWeek) return;
+      setWeekShift(next > currentSemesterWeek ? "next" : "prev");
+      setCurrentSemesterWeek(next);
+    },
+    [currentSemesterWeek, semester.totalWeeks, setCurrentSemesterWeek]
+  );
   const wrapRef = useRef<HTMLDivElement | null>(null);
 
   // ---- App Chrome V2.2：Popover mutual exclusion（Filter / Quick / More 三向互斥） ----
@@ -998,13 +1009,9 @@ export function TimelineWorkspace() {
           currentSemesterWeek={currentSemesterWeek}
           totalWeeks={semester.totalWeeks}
           isCurrentWeek={isCurrentWeek}
-          onPrevWeek={() => setCurrentSemesterWeek(currentSemesterWeek - 1)}
-          onNextWeek={() => setCurrentSemesterWeek(currentSemesterWeek + 1)}
-          onToday={() =>
-            setCurrentSemesterWeek(
-              Math.min(Math.max(getSemesterWeekOf(new Date(), semester), 1), semester.totalWeeks)
-            )
-          }
+          onPrevWeek={() => goToWeek(currentSemesterWeek - 1)}
+          onNextWeek={() => goToWeek(currentSemesterWeek + 1)}
+          onToday={() => goToWeek(getSemesterWeekOf(new Date(), semester))}
           filterOptions={filterOptions}
           filterActive={filterActive}
           filterOpen={filterOpen}
@@ -1019,9 +1026,18 @@ export function TimelineWorkspace() {
       {/* body：主卡 flex-1 吸收剩余空间；shelf shrink-0；section spacing 由父容器 gap-4 统一控制 */}
       <div className="flex flex-1 min-h-0 flex-col gap-4 p-4 pb-24 md:p-6 md:pb-6">
       <div
+        key={currentSemesterWeek}
         ref={wrapRef}
         data-testid="timeline-workspace"
-        className="flex flex-1 min-h-0 flex-col bg-surface border border-line rounded-2xl shadow-subtle overflow-hidden"
+        className={cn(
+          "flex flex-1 min-h-0 flex-col bg-surface border border-line rounded-2xl shadow-subtle overflow-hidden",
+          weekShift && "ux-week-enter"
+        )}
+        style={
+          weekShift
+            ? ({ "--motion-shift-y": weekShift === "prev" ? "-6px" : "6px" } as React.CSSProperties)
+            : undefined
+        }
       >      {/* ---------- 主体：Weekday Header（唯一一份）+ Key Timeline + Course Grid ---------- */}
       <div className="flex-1 min-h-0 flex flex-col overflow-x-auto">
         <div className="min-w-[640px] w-full flex flex-col flex-1 min-h-0 px-3 pt-2.5">

@@ -216,7 +216,7 @@ button:disabled {
     animation: ux-page-in var(--motion-page) var(--ease-standard) both;
   }
 
-  /* 周次切换：方向由 --enter-y 控制（±6px） */
+  /* 周次切换：方向由 --motion-shift-y（±6px）控制，兼容旧 --enter-y */
   .ux-week-enter {
     animation: ux-week-in 180ms var(--ease-standard) both;
   }
@@ -245,6 +245,11 @@ button:disabled {
   .ux-settle {
     animation: ux-settle-in 200ms var(--ease-standard) both;
   }
+
+  /* Kiro Project Panel 内部 view 切换：横向方向由 --motion-shift-x（±4px）控制 */
+  .ux-kiro-view-enter {
+    animation: ux-kiro-view-in 140ms var(--ease-standard) both;
+  }
 }
 
 @keyframes ux-enter {
@@ -272,7 +277,7 @@ button:disabled {
 @keyframes ux-week-in {
   from {
     opacity: 0;
-    transform: translateY(var(--enter-y, 6px));
+    transform: translateY(var(--motion-shift-y, var(--enter-y, 6px)));
   }
   to {
     opacity: 1;
@@ -329,6 +334,18 @@ button:disabled {
   }
   to {
     opacity: 1;
+  }
+}
+
+/* Kiro Project Panel 内部 view 切换：横向方向由 --motion-shift-x 控制（±4px），140ms */
+@keyframes ux-kiro-view-in {
+  from {
+    opacity: 0;
+    transform: translateX(var(--motion-shift-x, 4px));
+  }
+  to {
+    opacity: 1;
+    transform: none;
   }
 }
 

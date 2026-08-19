@@ -7,6 +7,7 @@ import { useKiroSessionMeta, useKiroSessionActions } from "@/components/kiro/Kir
 import { useConfirmStore } from "@/store/useConfirmStore";
 import { useToastStore } from "@/store/useToastStore";
 import { usePresence } from "@/lib/usePresence";
+import { DisclosureRegion } from "@/components/ui/DisclosureRegion";
 import { KiroProjectRecord, KIRO_PROJECT_NAME_MAX, KIRO_PROJECT_DESCRIPTION_MAX, KIRO_PROJECT_INSTRUCTIONS_MAX } from "@/lib/ai/projects/types";
 import { KiroProjectFileRecord, MAX_PROJECT_FILES_PER_PROJECT } from "@/lib/ai/projects/files/types";
 import { listKiroProjects, listProjectConversations } from "@/lib/ai/projects/db";
@@ -52,11 +53,31 @@ export function KiroProjectPanel({
   const [detailConversations, setDetailConversations] = useState<KiroConversationRecord[]>([]);
   const [addCandidates, setAddCandidates] = useState<KiroConversationRecord[]>([]);
   const loadedProjectsVersionRef = useRef(-1);
+  // 内部 view 切换方向（motion）：next=从右进(+4px)；prev=从左进(-4px)；由 goToView 统一派生
+  const viewShiftRef = useRef<"next" | "prev">("next");
+  const viewRef = useRef<ProjectView>("list");
+  const goToView = useCallback((next: ProjectView) => {
+    const prev = viewRef.current;
+    if (prev === next) return;
+    viewShiftRef.current =
+      next === "list" ? "prev" : prev === "list" ? "next" : next === "add" ? "next" : "prev";
+    viewRef.current = next;
+    setView(next);
+  }, []);
 
   // 编辑/创建 inline form
   const [formOpen, setFormOpen] = useState<"create" | KiroProjectRecord["id"] | null>(null);
   const [formName, setFormName] = useState("");
   const [formDescription, setFormDescription] = useState("");
+  // Form 常驻 DOM（DisclosureRegion）→ autoFocus 只在首次 mount 生效；改为打开时显式 focus
+  const nameInputRef = useRef<HTMLInputElement | null>(null);
+  useEffect(() => {
+    if (!formOpen) return;
+    const raf = requestAnimationFrame(() => {
+      nameInputRef.current?.focus();
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [formOpen]);
   const [formInstructions, setFormInstructions] = useState("");
   // V1.3A：Project Files（Detail 按需加载；上传/删除后 refreshProjects 触发重载）
   const [projectFiles, setProjectFiles] = useState<KiroProjectFileRecord[]>([]);
@@ -71,10 +92,10 @@ export function KiroProjectPanel({
 
   const openView = useCallback(
     (v: ProjectView, projectId?: string) => {
-      setView(v);
+      goToView(v);
       if (projectId !== undefined) setSelectedProjectId(projectId);
     },
-    []
+    [goToView]
   );
 
   // lazy load：首次 expanded 才读 Project DB；projectsVersion 变更后刷新
@@ -161,7 +182,7 @@ export function KiroProjectPanel({
       });
       if (record) {
         setFormOpen(null);
-        setView("detail");
+        goToView("detail");
         setSelectedProjectId(record.id);
       }
     } else if (formOpen) {
@@ -184,7 +205,7 @@ export function KiroProjectPanel({
         void actions.deleteProject(p.id);
         if (selectedProjectId === p.id) {
           setSelectedProjectId(null);
-          setView("list");
+          goToView("list");
         }
       },
       onCancel: () => {},
@@ -304,7 +325,7 @@ export function KiroProjectPanel({
         <>
           <div className="flex items-center gap-1.5 min-w-0">
             <button
-              onClick={() => setView("list")}
+              onClick={() => goToView("list")}
               aria-label="返回项目列表"
               className="p-1 rounded-lg text-sandrift hover:bg-alabaster hover:text-charcoal transition-colors"
             >
@@ -469,15 +490,15 @@ export function KiroProjectPanel({
                 expanded ? "opacity-100 duration-[var(--kiro-motion-structure,150ms)] delay-[90ms]" : "opacity-0"
               )}
             >
-            {formOpen ? (
+            <DisclosureRegion open={formOpen !== null}>
               <div className="p-2.5 space-y-2 border-b border-line">
                 <input
+                  ref={nameInputRef}
                   value={formName}
                   onChange={(e) => setFormName(e.target.value)}
                   placeholder="项目名称"
                   aria-label="项目名称"
                   maxLength={KIRO_PROJECT_NAME_MAX}
-                  autoFocus
                   className="w-full h-8 px-2 rounded-lg text-xs text-charcoal placeholder-sandrift bg-[#F7F5F5] border border-line focus:outline-none"
                 />
                 <textarea
@@ -519,8 +540,14 @@ export function KiroProjectPanel({
                   </button>
                 </div>
               </div>
-            ) : null}
+            </DisclosureRegion>
 
+            {/* 内部 view stage：list/detail/add 切换轻横向方向入场（--motion-shift-x 由 goToView 派生） */}
+            <div
+              key={view}
+              className="ux-kiro-view-enter flex-1 min-h-0 flex flex-col overflow-hidden"
+              style={{ ["--motion-shift-x" as string]: viewShiftRef.current === "prev" ? "-4px" : "4px" } as React.CSSProperties}
+            >
             {view === "list" ? (
               /* ---------- List View ---------- */
               <div className="flex-1 min-h-0 overflow-y-auto px-2 py-2 space-y-0.5">
@@ -646,7 +673,7 @@ export function KiroProjectPanel({
                       新对话
                     </button>
                     <button
-                      onClick={() => setView("add")}
+                      onClick={() => goToView("add")}
                       disabled={transitioning}
                       aria-label="添加历史对话"
                       className="flex items-center gap-1 px-2 h-6 rounded-lg text-[10px] font-semibold text-satin-grey bg-alabaster hover:bg-alabaster hover:text-charcoal transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
@@ -669,7 +696,7 @@ export function KiroProjectPanel({
                   <div className="flex flex-col items-center gap-1 py-7 text-center">
                     <p className="text-xs font-semibold text-satin-grey">这个项目还没有对话</p>
                     <button
-                      onClick={() => setView("add")}
+                      onClick={() => goToView("add")}
                       className="mt-1 px-2.5 h-7 rounded-lg text-[11px] font-bold text-charcoal bg-pastel-mint hover:bg-pastel-mint transition-colors"
                     >
                       添加历史对话
@@ -740,6 +767,7 @@ export function KiroProjectPanel({
                 )}
               </div>
             )}
+            </div>
           </div>
           </div>
         )}

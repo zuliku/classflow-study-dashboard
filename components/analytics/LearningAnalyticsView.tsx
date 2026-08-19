@@ -32,6 +32,7 @@ import {
 import { cn } from "@/lib/utils";
 import { WorkspaceHeader } from "@/components/layout/WorkspaceHeader";
 import { AnalyticsWorkspaceViewBar } from "@/components/analytics/AnalyticsWorkspaceViewBar";
+import { DisclosureRegion } from "@/components/ui/DisclosureRegion";
 
 function ChartSkeleton() {
   return <div className="h-64 w-full rounded-xl bg-alabaster animate-pulse" />;
@@ -69,6 +70,10 @@ export function LearningAnalyticsView() {
   const outlook = useStudyOutlook(outlookHorizon);
 
   const courseNameById = Object.fromEntries(courses.map((c) => [c.id, c.name]));
+
+  // 历史分析 stage：preset / data state 变化时轻 settle（skeleton→data、empty→data、error→data 均有连续性）
+  const analyticsStageState = loading ? "loading" : error ? "error" : data ? (data.isEmpty ? "empty" : "data") : "idle";
+  const analyticsStageKey = `${preset}|${analyticsStageState}`;
 
   const navigate = (tab: "assignments" | "timetable" | "courses") => {
     setActiveTab(tab);
@@ -157,6 +162,9 @@ export function LearningAnalyticsView() {
           data-testid="analytics-body"
           className="w-full max-w-[1500px] mx-auto flex flex-col gap-6 p-4 md:p-6"
         >
+          {/* 历史分析 stage（loading/error/empty/normal 同一容器；preset 变化轻 settle）——
+              StudyOutlookCard 在其下方独立存在，不随 preset 重播 */}
+          <div key={analyticsStageKey} className="ux-settle flex flex-col gap-6">
           {loading ? (
             <>
               <AnalyticsSummaryStripSkeleton />
@@ -189,22 +197,22 @@ export function LearningAnalyticsView() {
               {data.isEmpty ? (
                 <>
                   <EmptyState />
-                  {reviewExpanded && (
+                  <DisclosureRegion open={reviewExpanded}>
                     <div ref={reviewRef} className="scroll-mt-4">
                       <WeeklyReviewCard snapshot={data} />
                     </div>
-                  )}
+                  </DisclosureRegion>
                 </>
               ) : (
                 <>
                   {/* Summary Strip（一个共同 surface，替代四张独立卡） */}
                   <AnalyticsSummaryStrip metrics={summaryMetrics(data)} />
 
-                  {reviewExpanded && (
+                  <DisclosureRegion open={reviewExpanded}>
                     <div ref={reviewRef} className="scroll-mt-4">
                       <WeeklyReviewCard snapshot={data} />
                     </div>
-                  )}
+                  </DisclosureRegion>
 
                   {/* 学习趋势（唯一主视觉）+ 值得注意 —— 统一 Paired Grid（50/50；层级由标题/图表/顺序表达） */}
                   <div className={ANALYTICS_PAIRED_GRID}>
@@ -253,6 +261,7 @@ export function LearningAnalyticsView() {
               )}
             </>
           ) : null}
+          </div>
 
           {/* 下一步：学习前瞻 + 估时参考（独立于历史 Snapshot；确定性；不逐卡查询） */}
           {outlook.error ? (

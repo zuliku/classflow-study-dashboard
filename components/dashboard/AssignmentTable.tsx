@@ -154,6 +154,12 @@ export function AssignmentTable({
   );
   const filteredIdsKey = filteredIds.join(",");
 
+  // 列表内容舞台 presentation key：View / Course / Risk 切换时轻过渡（不含 search——
+  // 搜索仍即时同步列表，不反复重放整表动画）。workspaceResetKey 保持原语义不变。
+  const contentTransitionKey = isWorkspace
+    ? `${controller?.view ?? ""}|${controller?.courseFilter ?? ""}|${controller?.riskOnly ?? ""}`
+    : `compact|${courseFilter}`;
+
   // IM4A：Exit-only 列表保留——仅真实数据 mutation（完成/删除导致离开当前视图）触发 Row 退出；
   // View/筛选/搜索/风险过滤 变化（resetKey）直接同步新列表，不播放大面积退出
   const retainedWorkspaceList = useExitPresenceList({
@@ -703,12 +709,13 @@ export function AssignmentTable({
           Layout Hotfix：workspace 列表区由 pt-* 承担首行顶部 inset（不再用 mt-1 margin 叠加），
           首条任务卡与卡片上边框之间有清晰的 12–16px 呼吸空间；compact 保持原 mt-1 布局 */}
       <div
+        key={contentTransitionKey}
         data-testid="assignment-list"
         data-density={isWorkspace ? contentDensity : undefined}
         tabIndex={isWorkspace ? 0 : undefined}
         onKeyDown={isWorkspace ? handleListKeyDown : undefined}
         className={cn(
-          "divide-y divide-line-soft flex-1 min-h-0 space-y-1",
+          "divide-y divide-line-soft flex-1 min-h-0 space-y-1 ux-settle",
           isWorkspace
             ? "mt-0 overflow-y-auto px-4 pt-4 pb-1 [scrollbar-gutter:stable] overscroll-contain outline-none focus-visible:ring-2 focus-visible:ring-line-strong"
             : "mt-1"

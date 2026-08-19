@@ -278,7 +278,7 @@ export function SettingsView({
         {/* Detail Pane：唯一滚动区；所有 section 常驻挂载 */}
         <div className="flex-1 min-w-0 min-h-0 overflow-y-auto p-4 md:pt-4 md:px-5 md:pb-5" data-testid="settings-detail">
           {searching ? (
-            <div data-testid="settings-search-results">
+            <div key="search-results" className="ux-fade" data-testid="settings-search-results">
               <p className="text-[11px] font-bold text-sandrift mb-2">
                 搜索结果 · {searchResults.length}
               </p>
@@ -311,8 +311,8 @@ export function SettingsView({
               )}
             </div>
           ) : (
-            /* ---- 常规 section 内容（常驻挂载） ---- */
-            <>
+            /* ---- 常规 section 内容（常驻挂载；仅 Search↔Normal 边界轻 fade） ---- */
+            <div key="normal-settings" className="ux-fade">
               <div className={cn(section === "general" && "ux-fade")} hidden={section !== "general"}>
                 <GeneralSettings highlightedId={highlightedId ?? undefined} />
               </div>
@@ -344,7 +344,7 @@ export function SettingsView({
               <div className={cn(section === "about" && "ux-fade")} hidden={section !== "about"}>
                 <AboutSettings />
               </div>
-            </>
+            </div>
           )}
         </div>
       </div>
