@@ -63,13 +63,15 @@ export function KiroSidecarMinimized({ visible }: { visible: boolean }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clampedPersisted.right, clampedPersisted.bottom]);
 
-  // drag 状态（确定性 suppressNextClick，不靠 timer）
+  // drag 状态（确定性 suppressNextClick，不靠 timer；仅 >=5px 后进入 drag 并 capture）
   const originRef = useRef<{ right: number; bottom: number } | null>(null);
   const startPointRef = useRef<{ x: number; y: number } | null>(null);
   const didDragRef = useRef(false);
   const suppressNextClickRef = useRef(false);
   const latestDraftRef = useRef<{ right: number; bottom: number } | null>(null);
   const prevUserSelectRef = useRef("");
+  const activePointerIdRef = useRef<number | null>(null);
+  const capsuleElRef = useRef<HTMLDivElement | null>(null);
 
   // 卸载时恢复 userSelect（drag 中异常关闭/卸载）
   useEffect(() => {
@@ -82,17 +84,15 @@ export function KiroSidecarMinimized({ visible }: { visible: boolean }) {
 
   const handlePointerDown = useCallback(
     (e: React.PointerEvent) => {
-      // 关闭按钮不启动 drag（由 button stopPropagation 保证，但此处再保护）
       if ((e.target as HTMLElement).closest('[data-capsule-close="true"]')) return;
       if (e.button !== 0) return;
       originRef.current = position;
       startPointRef.current = { x: e.clientX, y: e.clientY };
       didDragRef.current = false;
       latestDraftRef.current = position;
-      setDragging(true);
-      prevUserSelectRef.current = document.body.style.userSelect;
-      document.body.style.userSelect = "none";
-      (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+      activePointerIdRef.current = e.pointerId;
+      capsuleElRef.current = e.currentTarget as HTMLDivElement;
+      // 不立即 capture / setDragging，保持原生 click 链路
     },
     [position]
   );
@@ -102,8 +102,18 @@ export function KiroSidecarMinimized({ visible }: { visible: boolean }) {
       if (!originRef.current || !startPointRef.current) return;
       const dx = e.clientX - startPointRef.current.x;
       const dy = e.clientY - startPointRef.current.y;
-      if (!didDragRef.current && Math.hypot(dx, dy) >= DRAG_THRESHOLD) {
+      const dist = Math.hypot(dx, dy);
+      if (!didDragRef.current) {
+        if (dist < DRAG_THRESHOLD) return;
         didDragRef.current = true;
+        setDragging(true);
+        prevUserSelectRef.current = document.body.style.userSelect;
+        document.body.style.userSelect = "none";
+        if (capsuleElRef.current && activePointerIdRef.current !== null) {
+          try {
+            capsuleElRef.current.setPointerCapture(activePointerIdRef.current);
+          } catch {}
+        }
       }
       const origin = originRef.current;
       const next = clampSidecarMinimizedPosition(
@@ -124,8 +134,18 @@ export function KiroSidecarMinimized({ visible }: { visible: boolean }) {
       if (!originRef.current) return;
       const shouldPersist = didDragRef.current;
       const finalPos = latestDraftRef.current;
+      // release capture if held
+      if (capsuleElRef.current && activePointerIdRef.current !== null) {
+        try {
+          if (capsuleElRef.current.hasPointerCapture(activePointerIdRef.current)) {
+            capsuleElRef.current.releasePointerCapture(activePointerIdRef.current);
+          }
+        } catch {}
+      }
       originRef.current = null;
       startPointRef.current = null;
+      activePointerIdRef.current = null;
+      capsuleElRef.current = null;
       setDragging(false);
       if (document.body.style.userSelect === "none") {
         document.body.style.userSelect = prevUserSelectRef.current;
@@ -173,10 +193,22 @@ export function KiroSidecarMinimized({ visible }: { visible: boolean }) {
   const handleClose = useCallback(
     (e: React.MouseEvent) => {
       e.stopPropagation();
-      // 防止 close 同时触发 drag restore
       didDragRef.current = false;
+      suppressNextClickRef.current = false;
+      if (capsuleElRef.current && activePointerIdRef.current !== null) {
+        try {
+          if (capsuleElRef.current.hasPointerCapture(activePointerIdRef.current)) {
+            capsuleElRef.current.releasePointerCapture(activePointerIdRef.current);
+          }
+        } catch {}
+      }
       originRef.current = null;
       startPointRef.current = null;
+      activePointerIdRef.current = null;
+      capsuleElRef.current = null;
+      if (document.body.style.userSelect === "none") {
+        document.body.style.userSelect = prevUserSelectRef.current;
+      }
       setDragging(false);
       setDraft(null);
       closeSidecar();
@@ -185,16 +217,16 @@ export function KiroSidecarMinimized({ visible }: { visible: boolean }) {
   );
 
   // 仅 md+ 可见；minimized 时 opacity 1，open/closed 时 hidden + inert
+  // 流光边框复用现有 Kiro perimeter sweep（kiro-ring），1px 克制，不做强霓虹
   return (
     <div
+      ref={capsuleElRef}
       data-testid="kiro-sidecar-capsule"
       data-dragging={dragging || undefined}
       aria-hidden={!visible}
       {...(!visible ? ({ inert: "" } as unknown as React.HTMLAttributes<HTMLDivElement>) : {})}
       className={cn(
-        "hidden md:flex fixed z-40 items-center gap-2 px-2.5",
-        "bg-surface border border-line rounded-full shadow-card",
-        "select-none touch-none",
+        "hidden md:flex fixed z-40 rounded-full overflow-hidden select-none touch-none shadow-card",
         "transition-[opacity,transform] ease-[var(--ease-standard)]",
         dragging ? "transition-none" : "duration-[160ms]",
         visible ? "opacity-100 scale-100 translate-y-0" : "opacity-0 scale-[0.96] translate-y-1 pointer-events-none"
@@ -213,37 +245,48 @@ export function KiroSidecarMinimized({ visible }: { visible: boolean }) {
       onPointerCancel={handlePointerCancel}
       aria-label="Kiro 已最小化"
     >
-      <button
-        type="button"
-        onClick={handleClickRestore}
-        aria-label="恢复 Kiro"
-        title="点击恢复 Kiro"
-        className="flex-1 min-w-0 flex items-center gap-2 h-full text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-charcoal/40 rounded-full"
-      >
-        <span className="shrink-0 w-7 h-7 rounded-full bg-alabaster border border-line flex items-center justify-center">
-          {/* 复用 KiroMark 小尺寸，或简化为文字 K */}
-          <span className="text-[11px] font-black text-charcoal">K</span>
-        </span>
-        <span className="min-w-0 flex flex-col leading-none">
-          <span className="text-[12px] font-bold text-charcoal truncate">Kiro</span>
-          {kiroBusy && (
-            <span className="text-[10px] font-semibold text-sandrift truncate" data-testid="kiro-capsule-busy">
-              正在处理
-            </span>
-          )}
-        </span>
-      </button>
+      {/* 1px 流光边框：复用 kiro-ring + kiro-ring-animated，沿 rounded-full 循环，低饱和慢速 */}
+      <span
+        aria-hidden="true"
+        className={cn(
+          "absolute -inset-1/2 kiro-ring kiro-ring-animated pointer-events-none",
+          kiroBusy ? "opacity-80" : "opacity-55",
+          dragging && "opacity-30"
+        )}
+        style={{ animationDuration: kiroBusy ? "4.5s" : "7s" } as React.CSSProperties}
+      />
+      <div className="relative flex-1 m-[1px] bg-surface rounded-full flex items-center gap-2 px-2.5 h-[calc(100%-2px)]">
+        <button
+          type="button"
+          onClick={handleClickRestore}
+          aria-label="恢复 Kiro"
+          title="点击恢复 Kiro"
+          className="flex-1 min-w-0 flex items-center gap-2 h-full text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-charcoal/40 rounded-full"
+        >
+          <span className="shrink-0 w-7 h-7 rounded-full bg-alabaster border border-line flex items-center justify-center overflow-hidden">
+            <KiroMark size="sm" className="w-5 h-5" />
+          </span>
+          <span className="min-w-0 flex flex-col leading-none">
+            <span className="text-[12px] font-bold text-charcoal truncate">Kiro</span>
+            {kiroBusy && (
+              <span className="text-[10px] font-semibold text-sandrift truncate" data-testid="kiro-capsule-busy">
+                正在处理
+              </span>
+            )}
+          </span>
+        </button>
 
-      <button
-        type="button"
-        data-capsule-close="true"
-        onClick={handleClose}
-        aria-label="关闭 Kiro"
-        title="关闭"
-        className="shrink-0 w-7 h-7 flex items-center justify-center rounded-full text-sandrift hover:bg-alabaster hover:text-charcoal transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-charcoal/40"
-      >
-        <X className="w-3.5 h-3.5" />
-      </button>
+        <button
+          type="button"
+          data-capsule-close="true"
+          onClick={handleClose}
+          aria-label="关闭 Kiro"
+          title="关闭"
+          className="shrink-0 w-7 h-7 flex items-center justify-center rounded-full text-sandrift hover:bg-alabaster hover:text-charcoal transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-charcoal/40"
+        >
+          <X className="w-3.5 h-3.5" />
+        </button>
+      </div>
     </div>
   );
 }

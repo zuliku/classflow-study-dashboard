@@ -104,7 +104,7 @@ export const OPENCODE_MODELS: AIModelDefinition[] = [
   { id: "qwen3.7-max", name: "Qwen3.7 Max", provider: "opencode-go", vendor: "qwen", transport: "anthropic-messages", capabilities: { streaming: true, tools: true, vision: false, fileParts: false } },
   { id: "qwen3.7-plus", name: "Qwen3.7 Plus", provider: "opencode-go", vendor: "qwen", transport: "anthropic-messages", capabilities: { streaming: true, tools: true, vision: false, fileParts: false } },
   { id: "qwen3.6-plus", name: "Qwen3.6 Plus", provider: "opencode-go", vendor: "qwen", transport: "anthropic-messages", capabilities: { streaming: true, tools: true, vision: false, fileParts: false } },
-  { id: "muse-spark-1.2-contributor", name: "Muse Spark 1.2 Contributor", provider: "opencode-go", vendor: null, transport: "openai-chat", capabilities: { streaming: true, tools: true, vision: false, fileParts: false } },
+  { id: "muse-spark-1.2-contributor", name: "Muse Spark 1.2 Contributor", provider: "opencode-go", vendor: "meta", transport: "openai-chat", capabilities: { streaming: true, tools: true, vision: false, fileParts: false } },
 ];
 
 export const OPENCODE_DEFAULT_MODEL = "deepseek-v4-flash";
