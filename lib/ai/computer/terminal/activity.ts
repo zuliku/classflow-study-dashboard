@@ -115,13 +115,12 @@ export function applyTerminalEvent(
     }
     case "exit": {
       if (!activity) return undefined;
-      const status: TerminalActivityStatus = event.cancelled
-        ? event.timedOut
-          ? "timed-out"
-          : "cancelled"
-        : event.exitCode === 0
-          ? "completed"
-          : "failed";
+      let status: TerminalActivityStatus;
+      // timeout 优先级最高（即使 exitCode=null 也应为 timed-out，而非 failed）
+      if (event.timedOut) status = "timed-out";
+      else if (event.cancelled) status = "cancelled";
+      else if (event.exitCode === 0) status = "completed";
+      else status = "failed";
       return {
         ...activity,
         status,

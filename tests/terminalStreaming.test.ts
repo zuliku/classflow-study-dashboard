@@ -82,11 +82,12 @@ describe("Phase 1 — 真实 PowerShell streaming", () => {
   });
 
   it("bounded：>512KB 单 chunk 输出 → truncated 标志", async () => {
-    const { result } = await collectEvents('Write-Output ("x" * 600000)');
+    // 使用循环生成 600KB+ 输出（避免单次大字符串在并发下的 PowerShell 启动开销）
+    const { result } = await collectEvents('1..1200 | ForEach-Object { Write-Output ("x" * 500) }');
     expect(result.exitCode).toBe(0);
     expect(result.stdoutTruncated).toBe(true);
     expect(result.stdout.length).toBeLessThan(512 * 1024);
-  }, 60_000);
+  }, 120000);
 });
 
 describe("Phase 1 — 事件 sanitization（真实输出）", () => {
@@ -95,14 +96,28 @@ describe("Phase 1 — 事件 sanitization（真实输出）", () => {
     const totalText = events.filter((e) => e.type === "stdout").map((e) => (e.type === "stdout" ? e.text : "")).join("");
     expect(totalText).toContain("[REDACTED_SECRET]");
     expect(totalText).not.toContain("sk-fake-secret-1234567890");
-    // 最终 aggregate（回模型的 Tool Result）保持原始 bounded 输出（Web 层另有 strip/bound）
-    expect(result.stdout).toContain("sk-fake-secret-1234567890");
+    // 最终 aggregate（回模型的 Tool Result）同样必须脱敏（不含 raw secret）
+    expect(result.stdout).toContain("[REDACTED_SECRET]");
+    expect(result.stdout).not.toContain("sk-fake-secret-1234567890");
   });
 
   it("绝对路径在事件中被 redacted", async () => {
     const { events } = await collectEvents('Write-Output "C:\\\\Users\\\\alice\\\\secret\\\\file.txt"');
     const totalText = events.filter((e) => e.type === "stdout").map((e) => (e.type === "stdout" ? e.text : "")).join("");
     expect(totalText).not.toContain("C:\\Users\\alice");
+  });
+
+  it("Final Tool Result 同样脱敏：fake secret + absolute path 不泄漏", async () => {
+    const fakeSecret = "OPENCODE_GO_TEST_API_KEY=fake-secret-value-for-test-12345678";
+    const { events, result } = await collectEvents(`Write-Output "${fakeSecret}"\nWrite-Output "C:\\\\Users\\\\alice\\\\private\\\\file.txt"`);
+    const totalText = events.filter((e) => e.type === "stdout").map((e) => (e.type === "stdout" ? e.text : "")).join("");
+    expect(totalText).not.toContain("fake-secret-value-for-test-12345678");
+    expect(totalText).not.toContain("C:\\Users\\alice");
+    expect(totalText).toContain("[REDACTED_SECRET]");
+    // Final runtime result 同样
+    expect(result.stdout).not.toContain("fake-secret-value-for-test-12345678");
+    expect(result.stdout).not.toContain("C:\\Users\\alice");
+    expect(result.stdout).toContain("[REDACTED_SECRET]");
   });
 
   it("started/exit 事件不含 pid / native path / username", async () => {

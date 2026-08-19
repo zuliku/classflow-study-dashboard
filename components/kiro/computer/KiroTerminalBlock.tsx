@@ -74,7 +74,7 @@ export const KiroTerminalBlock = React.memo(function KiroTerminalBlock({
   const [inputValue, setInputValue] = useState("");
   const [inputBusy, setInputBusy] = useState(false);
   const [inputSent, setInputSent] = useState(false);
-  const running = !isTerminalActivityTerminal(activity.status) && activity.status !== "waiting-input";
+  const running = !isTerminalActivityTerminal(activity.status);
   const cancelling = stopping;
 
   // elapsed tick：运行中每 500ms 刷新（仅本 block 内部状态）

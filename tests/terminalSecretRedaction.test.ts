@@ -4,6 +4,7 @@ import {
   redactAbsolutePaths,
   redactTerminalSecrets,
   sanitizeTerminalChunk,
+  sanitizeTerminalModelOutput,
   redactCommandPreview,
   REDACTED_PATH_MARK,
   REDACTED_SECRET_MARK,
@@ -93,5 +94,24 @@ describe("redactCommandPreview", () => {
     const out = redactCommandPreview("echo   a   b\nc".padEnd(900, "x"));
     expect(out.length).toBeLessThanOrEqual(500);
     expect(redactCommandPreview("echo   a   b\nc")).toContain("echo a b c");
+  });
+});
+
+describe("sanitizeTerminalModelOutput", () => {
+  it("最终模型输出：ANSI → path → secret → bound 同规则", () => {
+    const { text } = sanitizeTerminalModelOutput(
+      "\u001b[31merror at C:\\Users\\alice\\x.txt token=sk-fake-secret-1234567890\u001b[0m",
+      1000
+    );
+    expect(text).not.toContain("sk-fake-secret-1234567890");
+    expect(text).not.toContain("C:\\Users\\alice");
+    expect(text).not.toContain("\u001b");
+    expect(text).toContain("[REDACTED_SECRET]");
+  });
+  it("与 streaming 同规则（sanitizeTerminalChunk 等价）", () => {
+    const raw = "OPENCODE_GO_TEST_API_KEY=fake-secret-value-for-test-12345678 at C:\\Users\\alice\\f.txt";
+    const chunk = sanitizeTerminalChunk(raw, 1000);
+    const { text } = sanitizeTerminalModelOutput(raw, 1000);
+    expect(chunk).toBe(text);
   });
 });

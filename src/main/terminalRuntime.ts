@@ -12,7 +12,7 @@
  * - 单次 resolve/reject（settled 防双 completion）
  */
 import { spawn } from "node:child_process";
-import { sanitizeTerminalChunk } from "@/lib/ai/computer/terminal/redact";
+import { sanitizeTerminalChunk, stripAnsi, redactAbsolutePaths, redactTerminalSecrets } from "@/lib/ai/computer/terminal/redact";
 import { DesktopTerminalEvent, DesktopTerminalExecutionMode } from "@/lib/desktop/types";
 
 export interface TerminalRuntimeResult {
@@ -150,11 +150,13 @@ export function runTerminalProcess(
       err.code = "CANCELLED";
       rejectResult(err);
     } else {
-      // timeout 是 process outcome：resolve timedOut=true（Bridge 契约绝不 reject TIMEOUT）
+      // 最终回 Kiro 的 stdout/stderr 必须经过与实时事件相同的脱敏规则（ANSI → path → secret），绝不返回 raw
+      const sanitizedStdout = redactTerminalSecrets(redactAbsolutePaths(stripAnsi(stdout.text)));
+      const sanitizedStderr = redactTerminalSecrets(redactAbsolutePaths(stripAnsi(stderr.text)));
       resolveResult({
         exitCode: child?.exitCode ?? null,
-        stdout: stdout.text,
-        stderr: stderr.text,
+        stdout: sanitizedStdout,
+        stderr: sanitizedStderr,
         timedOut,
         durationMs,
         stdoutTruncated: stdout.truncated,

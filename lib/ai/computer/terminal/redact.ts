@@ -49,6 +49,13 @@ export function sanitizeTerminalChunk(text: string, maxChars = 16_000): string {
   return cleaned.slice(0, maxChars);
 }
 
+/** 最终模型输出 sanitize（Final Tool Result → MiMo）：ANSI → path → secret → bound（与 streaming 同规则） */
+export function sanitizeTerminalModelOutput(text: string, maxChars: number): { text: string; truncated: boolean } {
+  const cleaned = redactTerminalSecrets(redactAbsolutePaths(stripAnsi(text)));
+  if (cleaned.length <= maxChars) return { text: cleaned, truncated: false };
+  return { text: cleaned.slice(0, maxChars), truncated: true };
+}
+
 /** 命令预览（进 audit / UI）同样必须过 secret redaction */
 export function redactCommandPreview(command: string, maxChars = 500): string {
   const cleaned = redactTerminalSecrets(redactAbsolutePaths(command)).replace(/\s+/g, " ").trim();
