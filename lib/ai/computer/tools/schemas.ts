@@ -101,11 +101,55 @@ export const runTerminalCommandSchema = z.object({
  * Desktop Terminal V2（Phase 3）：write_terminal_input —— 向活跃进程写 stdin。
  * - 只允许非敏感输入（y/n/数字/短文本等）；密码/API Key/Token/SSH secret 必须走
  *   UI secure-input（不经模型 context）——executor 会拒绝敏感形状数据。
- * - handle 是 opaque logical terminal handle（run_terminal_command 返回；不是原生 executionId）。
+ * - handle 是 opaque logical terminal handle（start_terminal_command 返回；不是原生 executionId）。
  */
 export const writeTerminalInputSchema = z.object({
   handle: z.string().trim().min(1).max(64),
   data: z.string().min(1).max(4096),
+});
+
+/**
+ * Desktop Terminal V2（Phase 3 async）：start_terminal_command —— 异步启动交互式命令，立即返回 handle。
+ * 与 run_terminal_command 共享完全相同的 safety pipeline（workspace gate / Native root / policy / Risk / approval）。
+ */
+export const startTerminalCommandSchema = z.object({
+  shell: z.enum(["powershell", "cmd"]),
+  rootId: z.string().trim().min(1).max(120).optional(),
+  cwd: z.string().trim().max(512).optional(),
+  command: z.string().max(8192),
+  timeoutMs: z.number().int().min(1000).max(120000).optional(),
+  executionMode: z.enum(["foreground", "long-running"]).optional(),
+});
+
+/** wait_terminal_command —— 等待指定 handle 的最终结果（仅 opaque handle，不接受 executionId） */
+export const waitTerminalCommandSchema = z.object({
+  handle: z.string().trim().min(1).max(64),
+  timeoutMs: z.number().int().min(1000).max(120000).optional(),
+});
+
+/** PTY Session V2（Phase 4 Agent）：create_terminal_session */
+export const createTerminalSessionSchema = z.object({
+  shell: z.enum(["powershell", "cmd"]),
+  rootId: z.string().trim().min(1).max(120).optional(),
+  cwd: z.string().trim().max(512).optional(),
+});
+
+/** PTY Session V2：run_terminal_session_command —— 在持久 PTY 中运行单条命令（per-command Risk Gate） */
+export const runTerminalSessionCommandSchema = z.object({
+  sessionHandle: z.string().trim().min(1).max(64),
+  command: z.string().max(8192),
+  timeoutMs: z.number().int().min(1000).max(60000).optional(),
+});
+
+/** PTY Session V2：write_terminal_session_input —— 向 PTY 中等待输入的命令写入非敏感输入 */
+export const writeTerminalSessionInputSchema = z.object({
+  sessionHandle: z.string().trim().min(1).max(64),
+  data: z.string().min(1).max(4096),
+});
+
+/** PTY Session V2：close_terminal_session */
+export const closeTerminalSessionSchema = z.object({
+  sessionHandle: z.string().trim().min(1).max(64),
 });
 /** V2.3：Model-facing schemas 按 Document Authoring Protocol Version 分离。
  *  - V1 model contract：Canonical KiroDocument（legacy Client）

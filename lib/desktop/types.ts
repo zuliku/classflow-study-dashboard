@@ -242,6 +242,7 @@ export interface ClassFlowDesktopTerminalBridgeV2 {
   writeSession?(input: { sessionId: string; data: string }): Promise<void>;
   resizeSession?(input: { sessionId: string; cols: number; rows: number }): Promise<void>;
   closeSession?(input: { sessionId: string }): Promise<void>;
+  subscribeSession?(listener: (event: DesktopTerminalSessionEvent) => void): () => void;
 }
 
 /** PTY Session 事件（经 subscribe 的独立 session 事件通道；data 已 sanitized） */

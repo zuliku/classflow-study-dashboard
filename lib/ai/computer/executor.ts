@@ -22,7 +22,8 @@ import {
   buildApprovalRequest,
   oneShotApprovalMatches,
 } from "@/lib/ai/computer/approval";
-import { executeKiroTerminalCommand, writeKiroTerminalInput } from "@/lib/ai/computer/terminal/executor";
+import { executeKiroTerminalCommand, writeKiroTerminalInput, startKiroTerminalCommand, waitKiroTerminalCommand } from "@/lib/ai/computer/terminal/executor";
+import { createKiroPtySession, runKiroPtySessionCommand, writeKiroPtySessionInput, closeKiroPtySession } from "@/lib/ai/computer/terminal/ptyAgent";
 import { TerminalActivityInit } from "@/lib/ai/computer/terminal/activity";
 import { DesktopTerminalEvent } from "@/lib/desktop/types";
 import { getComputerAdapterForAdapterRef } from "@/lib/ai/computer/adapters/factory";
@@ -178,6 +179,86 @@ export async function executeKiroComputerTool(request: {
   // Desktop Terminal V2（Phase 3）：受控 stdin write（不启动新进程；不消耗 terminalCount）
   if (toolName === "write_terminal_input") {
     return writeKiroTerminalInput({
+      toolCallId,
+      toolInput: (toolInput ?? {}) as Record<string, unknown>,
+      snapshot: turnSnapshot,
+      liveWorkspaces,
+      livePermissionRules,
+      counters: counters as ComputerCounterState,
+      oneShotApprovals: oneShotApprovals ?? [],
+      taskId: context.taskId ?? "",
+    });
+  }
+
+  if (toolName === "start_terminal_command") {
+    return startKiroTerminalCommand({
+      toolCallId,
+      toolInput: (toolInput ?? {}) as Record<string, unknown>,
+      snapshot: turnSnapshot,
+      liveWorkspaces,
+      livePermissionRules,
+      counters: counters as ComputerCounterState,
+      oneShotApprovals: oneShotApprovals ?? [],
+      taskId: context.taskId ?? "",
+      onTerminalActivityInit: request.onTerminalActivityInit,
+      onTerminalEvent: request.onTerminalEvent,
+    });
+  }
+
+  if (toolName === "wait_terminal_command") {
+    return waitKiroTerminalCommand({
+      toolCallId,
+      toolInput: (toolInput ?? {}) as Record<string, unknown>,
+      snapshot: turnSnapshot,
+      liveWorkspaces,
+      livePermissionRules,
+      counters: counters as ComputerCounterState,
+      oneShotApprovals: oneShotApprovals ?? [],
+      taskId: context.taskId ?? "",
+    });
+  }
+
+  if (toolName === "create_terminal_session") {
+    return createKiroPtySession({
+      toolCallId,
+      toolInput: (toolInput ?? {}) as Record<string, unknown>,
+      snapshot: turnSnapshot,
+      liveWorkspaces,
+      livePermissionRules,
+      counters: counters as ComputerCounterState,
+      oneShotApprovals: oneShotApprovals ?? [],
+      taskId: context.taskId ?? "",
+    });
+  }
+
+  if (toolName === "run_terminal_session_command") {
+    return runKiroPtySessionCommand({
+      toolCallId,
+      toolInput: (toolInput ?? {}) as Record<string, unknown>,
+      snapshot: turnSnapshot,
+      liveWorkspaces,
+      livePermissionRules,
+      counters: counters as ComputerCounterState,
+      oneShotApprovals: oneShotApprovals ?? [],
+      taskId: context.taskId ?? "",
+    });
+  }
+
+  if (toolName === "write_terminal_session_input") {
+    return writeKiroPtySessionInput({
+      toolCallId,
+      toolInput: (toolInput ?? {}) as Record<string, unknown>,
+      snapshot: turnSnapshot,
+      liveWorkspaces,
+      livePermissionRules,
+      counters: counters as ComputerCounterState,
+      oneShotApprovals: oneShotApprovals ?? [],
+      taskId: context.taskId ?? "",
+    });
+  }
+
+  if (toolName === "close_terminal_session") {
+    return closeKiroPtySession({
       toolCallId,
       toolInput: (toolInput ?? {}) as Record<string, unknown>,
       snapshot: turnSnapshot,

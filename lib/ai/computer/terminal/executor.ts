@@ -34,11 +34,12 @@ import {
   DesktopTerminalEvent,
 } from "@/lib/desktop/types";
 import { classifyTerminalCommandRisk, TerminalCommandRisk } from "@/lib/ai/computer/terminal/risk";
-import { redactCommandPreview, redactTerminalSecrets } from "@/lib/ai/computer/terminal/redact";
+import { redactCommandPreview, redactTerminalSecrets, sanitizeTerminalModelOutput } from "@/lib/ai/computer/terminal/redact";
 import { TerminalActivityInit } from "@/lib/ai/computer/terminal/activity";
+import { createInteractiveHandle, setInteractivePromise, getInteractiveRecord, deleteInteractiveHandle, activeInteractiveHandleCount, resolveInteractiveHandle, rejectInteractiveHandle } from "@/lib/ai/computer/terminal/interactiveRegistry";
 import { appendComputerAuditEntry } from "@/lib/ai/computer/audit";
 import { markWorkspaceKnowledgeDirty } from "@/lib/ai/computer/knowledge/service";
-import { runTerminalCommandSchema, writeTerminalInputSchema } from "@/lib/ai/computer/tools/schemas";
+import { runTerminalCommandSchema, writeTerminalInputSchema, startTerminalCommandSchema, waitTerminalCommandSchema, createTerminalSessionSchema, runTerminalSessionCommandSchema, writeTerminalSessionInputSchema, closeTerminalSessionSchema } from "@/lib/ai/computer/tools/schemas";
 
 export const COMPUTER_TERMINAL_LIMIT_PER_TURN = 12;
 export const MAX_TERMINAL_COMMAND_CHARS = 8192;
@@ -99,6 +100,177 @@ function resolveSnapshotWorkspace(snapshot: KiroComputerTurnSnapshot, liveWorksp
   const ws = liveWorkspaces.find((w) => w.id === snapshot.workspaceId);
   if (!ws) throw new ComputerError("WORKSPACE_NOT_FOUND", "当前 Workspace 不存在");
   return ws;
+}
+
+/**
+ * 共享安全管线（prepareTerminalExecution）：run/start 共用完全相同的校验。
+ * 绝不复制缩水版 pipeline。
+ */
+function prepareTerminalExecution(params: {
+  toolCallId: string;
+  toolInput: Record<string, unknown>;
+  snapshot: KiroComputerTurnSnapshot;
+  liveWorkspaces: KiroWorkspaceMeta[];
+  livePermissionRules: ComputerPermissionRule[];
+  oneShotApprovals: ComputerOneShotApproval[];
+  taskId: string;
+  counters: { terminalCount: number };
+  schema: typeof runTerminalCommandSchema;
+}):
+  | {
+      kind: "prepared";
+      ws: ReturnType<typeof resolveSnapshotWorkspace>;
+      root: KiroWorkspaceMeta["roots"][number];
+      grantId: string;
+      shell: ClassFlowDesktopTerminalShell;
+      command: string;
+      cwd: string;
+      timeoutMs: number;
+      isLongRunning: boolean;
+      policy: ReturnType<typeof evaluateComputerPolicy>;
+      risk: TerminalCommandRisk;
+      fingerprint: string;
+      askForRisk: boolean;
+    }
+  | { kind: "approval-required"; request: ReturnType<typeof buildApprovalRequest> }
+  | { kind: "error"; output: ComputerToolResult } {
+  const { toolCallId, toolInput, snapshot, liveWorkspaces, livePermissionRules, oneShotApprovals, taskId, counters, schema } = params;
+  const parsed = schema.safeParse(toolInput);
+  if (!parsed.success) {
+    return { kind: "error", output: { ok: false, code: "INVALID_INPUT", message: "输入不合法" } };
+  }
+  const args = parsed.data as Record<string, unknown>;
+  if (counters.terminalCount >= COMPUTER_TERMINAL_LIMIT_PER_TURN) {
+    return {
+      kind: "error",
+      output: {
+        ok: false,
+        code: "PERMISSION_DENIED",
+        message: `本轮终端命令已达上限（${COMPUTER_TERMINAL_LIMIT_PER_TURN}/${COMPUTER_TERMINAL_LIMIT_PER_TURN}），请分步进行或开启新对话`,
+      },
+    };
+  }
+  const bridge = getClassFlowDesktopTerminalBridge();
+  if (!bridge || snapshot.terminalEnabled !== true) {
+    return { kind: "error", output: { ok: false, code: "TERMINAL_UNAVAILABLE", message: TERMINAL_FIXED_MESSAGES.TERMINAL_UNAVAILABLE } };
+  }
+  let ws: ReturnType<typeof resolveSnapshotWorkspace>;
+  try {
+    ws = resolveSnapshotWorkspace(snapshot, liveWorkspaces);
+  } catch (e) {
+    const code = e instanceof ComputerError ? e.code : "WORKSPACE_NOT_FOUND";
+    return { kind: "error", output: { ok: false, code, message: (e as Error).message } };
+  }
+  const shell = args.shell as ClassFlowDesktopTerminalShell;
+  const command = String(args.command ?? "").trim();
+  const rootId = String(args.rootId ?? "");
+  const cwdArg = String(args.cwd ?? "").trim();
+  const root = rootId ? ws.roots.find((r) => r.id === rootId) : ws.roots.length === 1 ? ws.roots[0] : undefined;
+  if (!root) {
+    return { kind: "error", output: { ok: false, code: rootId ? "ROOT_NOT_FOUND" : "ROOT_REQUIRED", message: rootId ? "工作区根不存在" : "该工作区有多个根目录，请指定 rootId" } };
+  }
+  if (!isNativeAdapterRef(root.adapterRef)) {
+    return { kind: "error", output: { ok: false, code: "TERMINAL_NATIVE_WORKSPACE_REQUIRED", message: TERMINAL_FIXED_MESSAGES.TERMINAL_NATIVE_WORKSPACE_REQUIRED } };
+  }
+  const grantId = nativeGrantIdFromAdapterRef(root.adapterRef);
+  if (!grantId) {
+    return { kind: "error", output: { ok: false, code: "WORKSPACE_PERMISSION_REQUIRED", message: "本地授权信息无效，需要重新授权" } };
+  }
+  if (root.access === "read-only") {
+    return { kind: "error", output: { ok: false, code: "READ_ONLY_ROOT", message: "只读工作区不允许运行终端命令" } };
+  }
+  let cwd: string;
+  try {
+    cwd = normalizeRelativeComputerPath(cwdArg, { allowRoot: true }).path;
+  } catch {
+    return { kind: "error", output: { ok: false, code: "PATH_OUTSIDE_SANDBOX", message: "工作目录超出授权范围" } };
+  }
+  const policy = evaluateComputerPolicy({
+    capability: "shell.execute",
+    mode: snapshot.agentMode,
+    rules: livePermissionRules,
+    workspaceId: ws.id,
+    rootId: root.id,
+    rootAccess: root.access,
+    resourcePath: cwd,
+  });
+  if (policy.effect === "deny") {
+    return { kind: "error", output: { ok: false, code: "PERMISSION_DENIED", message: policy.reason } };
+  }
+  if (policy.effect === "allow" && policy.matchedRuleId && snapshot.agentMode !== "workspace-auto") {
+    (policy as { effect: string }).effect = "ask";
+  }
+  const risk = classifyTerminalCommandRisk(command, shell);
+  if (risk === "blocked") {
+    void appendComputerAuditEntry({
+      id: `audit-${crypto.randomUUID()}`,
+      timestamp: new Date().toISOString(),
+      taskId,
+      toolCallId,
+      toolName: "run_terminal_command",
+      capability: "shell.execute",
+      decision: "deny",
+      outcome: "denied",
+      workspaceId: ws.id,
+      workspaceLabel: ws.name,
+      rootId: root.id,
+      rootLabel: root.label,
+      relativePath: cwd,
+      shell,
+      risk,
+      commandPreview: terminalCommandPreview(command),
+    });
+    return { kind: "error", output: { ok: false, code: "TERMINAL_COMMAND_BLOCKED", message: TERMINAL_FIXED_MESSAGES.TERMINAL_COMMAND_BLOCKED } };
+  }
+  const askForRisk = risk === "destructive" || risk === "privileged";
+  const needsApproval = policy.effect === "ask" || askForRisk;
+  const fingerprint = terminalExecutionFingerprint({ shell, rootId: root.id, cwd, command });
+  if (needsApproval) {
+    const matched = oneShotApprovals.findIndex((o) =>
+      oneShotApprovalMatches(o, {
+        toolCallId,
+        capability: "shell.execute",
+        workspaceId: ws.id,
+        rootId: root.id,
+        relativePath: cwd,
+        fingerprint,
+      })
+    );
+    if (matched === -1) {
+      return {
+        kind: "approval-required",
+        request: buildApprovalRequest({
+          id: `approval-${crypto.randomUUID()}`,
+          toolCallId,
+          taskId,
+          capability: "shell.execute",
+          workspaceId: ws.id,
+          workspaceLabel: ws.name,
+          rootId: root.id,
+          rootLabel: root.label,
+          relativePath: cwd,
+          resourceLabel: terminalCommandPreview(command),
+          description:
+            risk === "destructive"
+              ? `${shell === "powershell" ? "PowerShell" : "命令提示符"}：${terminalCommandPreview(command)}（此命令可能删除或不可逆修改文件。）`
+              : risk === "privileged"
+                ? `${shell === "powershell" ? "PowerShell" : "命令提示符"}：${terminalCommandPreview(command)}（此命令会启动额外的命令解释器或执行高权限/系统级操作。）`
+                : `${shell === "powershell" ? "PowerShell" : "命令提示符"}：${terminalCommandPreview(command)}`,
+          fingerprint,
+          allowedDecisions: ["deny", "allow-once"],
+          commandPreview: terminalCommandPreview(command),
+          shell,
+          risk: askForRisk ? risk : undefined,
+        }),
+      };
+    }
+    oneShotApprovals.splice(matched, 1);
+  }
+  const isLongRunning = (args.executionMode as string) === "long-running";
+  const timeoutMs = isLongRunning
+    ? Math.min(Math.max(args.timeoutMs === undefined ? 300_000 : Number(args.timeoutMs), MIN_TERMINAL_TIMEOUT_MS), MAX_TERMINAL_TIMEOUT_LONG_RUNNING_MS)
+    : Math.min(Math.max(args.timeoutMs === undefined ? DEFAULT_TERMINAL_TIMEOUT_MS : Number(args.timeoutMs), MIN_TERMINAL_TIMEOUT_MS), MAX_TERMINAL_TIMEOUT_MS);
+  return { kind: "prepared", ws, root, grantId, shell, command, cwd, timeoutMs, isLongRunning, policy, risk, fingerprint, askForRisk };
 }
 
 /**
@@ -182,6 +354,18 @@ export interface ExecuteKiroTerminalCommandInput {
   onTerminalEvent?: (event: DesktopTerminalEvent) => void;
 }
 
+export interface StartKiroTerminalCommandInput extends ExecuteKiroTerminalCommandInput {}
+export interface WaitKiroTerminalCommandInput {
+  toolCallId: string;
+  toolInput: Record<string, unknown>;
+  snapshot: KiroComputerTurnSnapshot;
+  liveWorkspaces: KiroWorkspaceMeta[];
+  livePermissionRules: ComputerPermissionRule[];
+  counters: { readCount: number; mutationCount: number; terminalCount: number };
+  oneShotApprovals: ComputerOneShotApproval[];
+  taskId: string;
+}
+
 export async function executeKiroTerminalCommand(
   input: ExecuteKiroTerminalCommandInput
 ): Promise<ComputerExecutionAttempt> {
@@ -189,174 +373,25 @@ export async function executeKiroTerminalCommand(
 
   const fail = (output: ComputerToolResult): ComputerExecutionAttempt => ({ kind: "completed", output });
 
-  // ---- schema（与通用 executor 同一信任边界；拒绝 env/stdin/elevation 等未知字段）----
-  const parsed = runTerminalCommandSchema.safeParse(toolInput);
-  if (!parsed.success) {
-    return fail({ ok: false, code: "INVALID_INPUT", message: "输入不合法" });
-  }
-  const args = parsed.data as Record<string, unknown>;
-
-  // ---- 预算：独立 terminalCount（git status 不算 filesystem read；npm test 不算 mutation）----
-  if (counters.terminalCount >= COMPUTER_TERMINAL_LIMIT_PER_TURN) {
-    return fail({
-      ok: false,
-      code: "PERMISSION_DENIED",
-      message: `本轮终端命令已达上限（${COMPUTER_TERMINAL_LIMIT_PER_TURN}/${COMPUTER_TERMINAL_LIMIT_PER_TURN}），请分步进行或开启新对话`,
-    });
-  }
-
-  // ---- availability：live bridge + snapshot preference（runtime availability 优先于 preference）----
-  const bridge = getClassFlowDesktopTerminalBridge();
-  if (!bridge || snapshot.terminalEnabled !== true) {
-    return fail({ ok: false, code: "TERMINAL_UNAVAILABLE", message: TERMINAL_FIXED_MESSAGES.TERMINAL_UNAVAILABLE });
-  }
-
-  // ---- workspace / root ----
-  const ws = resolveSnapshotWorkspace(snapshot, liveWorkspaces);
-  const shell = args.shell as ClassFlowDesktopTerminalShell;
-  const command = String(args.command ?? "").trim();
-  const rootId = String(args.rootId ?? "");
-  const cwdArg = String(args.cwd ?? "").trim();
-
-  const root = rootId
-    ? ws.roots.find((r) => r.id === rootId)
-    : ws.roots.length === 1
-      ? ws.roots[0]
-      : undefined;
-  if (!root) {
-    return fail({
-      ok: false,
-      code: rootId ? "ROOT_NOT_FOUND" : "ROOT_REQUIRED",
-      message: rootId ? "工作区根不存在" : "该工作区有多个根目录，请指定 rootId",
-    });
-  }
-
-  // ---- Native root only（browser / sandbox 无真实 OS cwd）----
-  if (!isNativeAdapterRef(root.adapterRef)) {
-    return fail({ ok: false, code: "TERMINAL_NATIVE_WORKSPACE_REQUIRED", message: TERMINAL_FIXED_MESSAGES.TERMINAL_NATIVE_WORKSPACE_REQUIRED });
-  }
-  const grantId = nativeGrantIdFromAdapterRef(root.adapterRef);
-  if (!grantId) {
-    return fail({ ok: false, code: "WORKSPACE_PERMISSION_REQUIRED", message: "本地授权信息无效，需要重新授权" });
-  }
-
-  // ---- read-only root：terminal 可写系统资源，只读授权下拒绝执行 ----
-  if (root.access === "read-only") {
-    return fail({ ok: false, code: "READ_ONLY_ROOT", message: "只读工作区不允许运行终端命令" });
-  }
-
-  // ---- cwd sandbox（PATH_OUTSIDE_SANDBOX 在 Desktop Bridge 前拒绝；bridge call = 0）----
-  // cwd "" / "." = root（与 list_directory 的 scope 语义一致）；绝对路径 / drive / UNC / .. 一律拒绝
-  let cwd: string;
-  try {
-    cwd = normalizeRelativeComputerPath(cwdArg, { allowRoot: true }).path;
-  } catch {
-    return fail({ ok: false, code: "PATH_OUTSIDE_SANDBOX", message: "工作目录超出授权范围" });
-  }
-
-  // ---- policy shell.execute（显式 deny 永远有效）----
-  const policy = evaluateComputerPolicy({
-    capability: "shell.execute",
-    mode: snapshot.agentMode,
-    rules: livePermissionRules,
-    workspaceId: ws.id,
-    rootId: root.id,
-    rootAccess: root.access,
-    resourcePath: cwd,
+  const prepared = prepareTerminalExecution({
+    toolCallId,
+    toolInput,
+    snapshot,
+    liveWorkspaces,
+    livePermissionRules,
+    oneShotApprovals,
+    taskId,
+    counters,
+    schema: runTerminalCommandSchema,
   });
-  if (policy.effect === "deny") {
-    return fail({ ok: false, code: "PERMISSION_DENIED", message: policy.reason });
-  }
-  // Part 29：显式规则不能在非 workspace-auto 模式下授予永久 shell 权限（规则放行 → 仍需确认）
-  if (policy.effect === "allow" && policy.matchedRuleId && snapshot.agentMode !== "workspace-auto") {
-    policy.effect = "ask";
-  }
-
-  // ---- Terminal Risk Gate（模型无法提供 risk；runtime 判定）----
-  const risk = classifyTerminalCommandRisk(command, shell);
-  if (risk === "blocked") {
-    void appendComputerAuditEntry({
-      id: `audit-${crypto.randomUUID()}`,
-      timestamp: new Date().toISOString(),
-      taskId,
-      toolCallId,
-      toolName: "run_terminal_command",
-      capability: "shell.execute",
-      decision: "deny",
-      outcome: "denied",
-      workspaceId: ws.id,
-      workspaceLabel: ws.name,
-      rootId: root.id,
-      rootLabel: root.label,
-      relativePath: cwd,
-      shell,
-      risk,
-      commandPreview: terminalCommandPreview(command),
-    });
-    return fail({ ok: false, code: "TERMINAL_COMMAND_BLOCKED", message: TERMINAL_FIXED_MESSAGES.TERMINAL_COMMAND_BLOCKED });
-  }
-  const askForRisk = risk === "destructive" || risk === "privileged";
-  const needsApproval = policy.effect === "ask" || askForRisk;
-
-  const fingerprint = terminalExecutionFingerprint({ shell, rootId: root.id, cwd, command });
-
-  // ---- approval（allow-once only；fingerprint 精确绑定）----
-  if (needsApproval) {
-    const matched = oneShotApprovals.findIndex((o) =>
-      oneShotApprovalMatches(o, {
-        toolCallId,
-        capability: "shell.execute",
-        workspaceId: ws.id,
-        rootId: root.id,
-        relativePath: cwd,
-        fingerprint,
-      })
-    );
-    if (matched === -1) {
-      return {
-        kind: "approval-required",
-        request: buildApprovalRequest({
-          id: `approval-${crypto.randomUUID()}`,
-          toolCallId,
-          taskId,
-          capability: "shell.execute",
-          workspaceId: ws.id,
-          workspaceLabel: ws.name,
-          rootId: root.id,
-          rootLabel: root.label,
-          relativePath: cwd,
-          resourceLabel: terminalCommandPreview(command),
-          description:
-            risk === "destructive"
-              ? `${shell === "powershell" ? "PowerShell" : "命令提示符"}：${terminalCommandPreview(command)}（此命令可能删除或不可逆修改文件。）`
-              : risk === "privileged"
-                ? `${shell === "powershell" ? "PowerShell" : "命令提示符"}：${terminalCommandPreview(command)}（此命令会启动额外的命令解释器或执行高权限/系统级操作。）`
-                : `${shell === "powershell" ? "PowerShell" : "命令提示符"}：${terminalCommandPreview(command)}`,
-          fingerprint,
-          allowedDecisions: ["deny", "allow-once"],
-          commandPreview: terminalCommandPreview(command),
-          shell,
-          risk: askForRisk ? risk : undefined,
-        }),
-      };
-    }
-    oneShotApprovals.splice(matched, 1);
-  }
+  if (prepared.kind === "error") return fail(prepared.output);
+  if (prepared.kind === "approval-required") return { kind: "approval-required", request: prepared.request };
+  const { ws, root, grantId, shell, command, cwd, timeoutMs, isLongRunning, policy, risk, askForRisk } = prepared;
 
   // ---- execute ----
   counters.terminalCount += 1;
-  // V2：long-running 必须显式使用（默认 foreground；long-running 默认更久 timeout，模型仍可 1–120s 显式覆盖）
-  const isLongRunning = args.executionMode === "long-running";
-  const timeoutMs = isLongRunning
-    ? Math.min(
-        Math.max(args.timeoutMs === undefined ? 300_000 : Number(args.timeoutMs), MIN_TERMINAL_TIMEOUT_MS),
-        MAX_TERMINAL_TIMEOUT_LONG_RUNNING_MS
-      )
-    : Math.min(
-        Math.max(args.timeoutMs === undefined ? DEFAULT_TERMINAL_TIMEOUT_MS : Number(args.timeoutMs), MIN_TERMINAL_TIMEOUT_MS),
-        MAX_TERMINAL_TIMEOUT_MS
-      );
   const executionId = `term-${crypto.randomUUID()}`;
+  const bridge = getClassFlowDesktopTerminalBridge()!;
   const bridgeV2 = getClassFlowDesktopTerminalBridgeV2();
   let outcome: { exitCode: number | null; stdout: string; stderr: string; timedOut: boolean; durationMs: number; stdoutTruncated: boolean; stderrTruncated: boolean };
   try {
@@ -405,9 +440,9 @@ export async function executeKiroTerminalCommand(
     return fail({ ok: false, code: mapped.code, message: mapped.message });
   }
 
-  // ---- output bounds（Web 第二层）+ ANSI strip ----
-  const stdout = boundTerminalOutput(outcome.stdout, MAX_TERMINAL_STDOUT_CHARS);
-  const stderr = boundTerminalOutput(outcome.stderr, MAX_TERMINAL_STDERR_CHARS);
+  // ---- output bounds（Web 第二层）+ 完整 sanitization（ANSI → path → secret → bound，与 streaming 同规则）----
+  const stdout = sanitizeTerminalModelOutput(outcome.stdout, MAX_TERMINAL_STDOUT_CHARS);
+  const stderr = sanitizeTerminalModelOutput(outcome.stderr, MAX_TERMINAL_STDERR_CHARS);
   const truncated = outcome.stdoutTruncated || outcome.stderrTruncated || stdout.truncated || stderr.truncated;
 
   // ---- audit（命令预览 ≤500；不含 grantId / absolute path / 完整 stdout/stderr）----
@@ -457,6 +492,192 @@ export async function executeKiroTerminalCommand(
   };
 }
 
+/**
+ * Terminal V2（Phase 3 async）：start_terminal_command —— 异步启动交互式命令，立即返回 handle。
+ * 与 run_terminal_command 共享完全相同的 safety pipeline（prepareTerminalExecution）。
+ */
+export async function startKiroTerminalCommand(
+  input: StartKiroTerminalCommandInput
+): Promise<ComputerExecutionAttempt> {
+  const { toolCallId, toolInput, snapshot, liveWorkspaces, livePermissionRules, counters, oneShotApprovals, taskId } = input;
+  const fail = (output: ComputerToolResult): ComputerExecutionAttempt => ({ kind: "completed", output });
+  const prepared = prepareTerminalExecution({
+    toolCallId,
+    toolInput,
+    snapshot,
+    liveWorkspaces,
+    livePermissionRules,
+    oneShotApprovals,
+    taskId,
+    counters,
+    schema: startTerminalCommandSchema,
+  });
+  if (prepared.kind === "error") return fail(prepared.output);
+  if (prepared.kind === "approval-required") return { kind: "approval-required", request: prepared.request };
+  const { ws, root, grantId, shell, command, cwd, timeoutMs, isLongRunning, policy, risk, askForRisk } = prepared;
+  counters.terminalCount += 1;
+  const executionId = `term-${crypto.randomUUID()}`;
+  const bridge = getClassFlowDesktopTerminalBridge();
+  const bridgeV2 = getClassFlowDesktopTerminalBridgeV2();
+  if (!bridgeV2 || !bridge) {
+    return fail({ ok: false, code: "TERMINAL_UNAVAILABLE", message: TERMINAL_FIXED_MESSAGES.TERMINAL_UNAVAILABLE });
+  }
+  const handle = createInteractiveHandle(executionId, toolCallId, shell, terminalCommandPreview(command));
+  // 立即注册 activity（UI 进入 running）
+  input.onTerminalActivityInit?.({ executionId, toolCallId, shell, commandPreview: terminalCommandPreview(command) });
+  registerActiveTerminalExecution(executionId, () => bridge.cancel({ executionId }));
+  // 后台启动：复用与 run 相同的 bridge 调用，但不等待完成即可返回 handle
+  const backgroundPromise = (async () => {
+    const unsubscribe = bridgeV2.subscribe((event) => {
+      if (event.executionId !== executionId) return;
+      input.onTerminalEvent?.(event);
+    });
+    try {
+      const outcome = await bridgeV2.start({
+        executionId,
+        shell,
+        grantId,
+        cwd,
+        command,
+        timeoutMs,
+        executionMode: isLongRunning ? "long-running" : "foreground",
+      });
+      const stdout = sanitizeTerminalModelOutput(outcome.stdout, MAX_TERMINAL_STDOUT_CHARS);
+      const stderr = sanitizeTerminalModelOutput(outcome.stderr, MAX_TERMINAL_STDERR_CHARS);
+      const truncated = outcome.stdoutTruncated || outcome.stderrTruncated || stdout.truncated || stderr.truncated;
+      const status: import("@/lib/ai/computer/terminal/interactiveRegistry").InteractiveFinalResult["status"] = outcome.timedOut
+        ? "timed-out"
+        : outcome.exitCode === 0
+          ? "completed"
+          : "failed";
+      const finalResult = {
+        status,
+        exitCode: outcome.exitCode,
+        stdout: stdout.text,
+        stderr: stderr.text,
+        durationMs: outcome.durationMs,
+        truncated,
+        timedOut: outcome.timedOut,
+      };
+      resolveInteractiveHandle(handle, finalResult);
+      return finalResult;
+    } catch (err) {
+      const code = (err as { code?: string })?.code;
+      if (code === "CANCELLED") {
+        const cancelledResult = {
+          status: "cancelled" as const,
+          exitCode: null,
+          stdout: "",
+          stderr: "",
+          durationMs: Date.now() - Date.now(),
+          truncated: false,
+          timedOut: false,
+        };
+        // 尝试从 record 获取 startedAt 精确 duration？简化
+        const rec = getInteractiveRecord(handle);
+        if (rec) {
+          cancelledResult.durationMs = Date.now() - rec.startedAt;
+        }
+        resolveInteractiveHandle(handle, cancelledResult);
+        // 不再向上抛，让 wait 能拿到 cancelled 结果
+        return cancelledResult;
+      }
+      rejectInteractiveHandle(handle, err as Error);
+      throw err;
+    } finally {
+      unsubscribe();
+      unregisterActiveTerminalExecution(executionId);
+    }
+  })();
+  // 将后台 promise 注册到 interactiveRegistry 供 wait 使用
+  setInteractivePromise(handle, backgroundPromise as Promise<import("@/lib/ai/computer/terminal/interactiveRegistry").InteractiveFinalResult>);
+  // audit（启动时记录，不含 stdout）
+  void appendComputerAuditEntry({
+    id: `audit-${crypto.randomUUID()}`,
+    timestamp: new Date().toISOString(),
+    taskId,
+    toolCallId,
+    toolName: "start_terminal_command",
+    capability: "shell.execute",
+    decision: policy.effect === "ask" || askForRisk ? "allow-once" : "auto",
+    outcome: "executed",
+    workspaceId: ws.id,
+    workspaceLabel: ws.name,
+    rootId: root.id,
+    rootLabel: root.label,
+    relativePath: cwd,
+    shell,
+    risk: askForRisk ? risk : "normal",
+    commandPreview: terminalCommandPreview(command),
+  });
+  void markWorkspaceKnowledgeDirty(ws.id).catch(() => {});
+  return {
+    kind: "completed",
+    output: {
+      ok: true,
+      data: {
+        started: true,
+        terminalHandle: handle,
+        shell,
+        cwd,
+        status: "running",
+      },
+    },
+  };
+}
+
+/**
+ * Terminal V2（Phase 3 async）：wait_terminal_command —— 等待 handle 对应的命令完成。
+ * 仅接受 opaque handle，不接受 executionId/PID。handle 终态后保留短 TTL，随后自动清理。
+ */
+export async function waitKiroTerminalCommand(
+  input: WaitKiroTerminalCommandInput
+): Promise<ComputerExecutionAttempt> {
+  const { toolInput } = input;
+  const fail = (output: ComputerToolResult): ComputerExecutionAttempt => ({ kind: "completed", output });
+  const parsed = waitTerminalCommandSchema.safeParse(toolInput);
+  if (!parsed.success) {
+    return fail({ ok: false, code: "INVALID_INPUT", message: "输入不合法" });
+  }
+  const { handle, timeoutMs } = parsed.data;
+  const record = getInteractiveRecord(handle);
+  if (!record) {
+    return fail({ ok: false, code: "TERMINAL_NOT_FOUND", message: "终端进程不存在或已结束。" });
+  }
+  const waitTimeout = timeoutMs ?? 120000;
+  let final: import("@/lib/ai/computer/terminal/interactiveRegistry").InteractiveFinalResult;
+  try {
+    // 等待结果，带超时
+    final = await Promise.race([
+      record.resultPromise,
+      new Promise<never>((_, reject) => setTimeout(() => reject(new Error("WAIT_TIMEOUT")), waitTimeout)),
+    ]);
+  } catch (err) {
+    if ((err as Error).message === "WAIT_TIMEOUT") {
+      return fail({ ok: false, code: "TERMINAL_TIMEOUT", message: TERMINAL_FIXED_MESSAGES.TERMINAL_TIMEOUT });
+    }
+    const mapped = terminalBridgeErrorToComputerError(err);
+    return fail({ ok: false, code: mapped.code, message: mapped.message });
+  }
+  // 成功等待后删除 handle（TTL 已在 registry 中调度，但 wait 成功立即清理）
+  deleteInteractiveHandle(handle);
+  return {
+    kind: "completed",
+    output: {
+      ok: true,
+      data: {
+        status: final.status,
+        exitCode: final.exitCode,
+        stdout: final.stdout,
+        stderr: final.stderr,
+        durationMs: final.durationMs,
+        truncated: final.truncated,
+        timedOut: final.timedOut,
+      },
+    },
+  };
+}
+
 /** 敏感输入形状检测：任何会被 redactTerminalSecrets 命中的输入都禁止经模型路径 */
 export function isSensitiveTerminalInput(data: string): boolean {
   const cleaned = redactTerminalSecrets(data);
@@ -498,7 +719,7 @@ export async function writeKiroTerminalInput(
     return fail({ ok: false, code: "TERMINAL_UNAVAILABLE", message: TERMINAL_FIXED_MESSAGES.TERMINAL_UNAVAILABLE });
   }
 
-  const executionId = resolveTerminalHandle(handle);
+  const executionId = getInteractiveRecord(handle)?.executionId ?? resolveTerminalHandle(handle);
   if (!executionId) {
     return fail({ ok: false, code: "TERMINAL_NOT_FOUND", message: "终端进程不存在或已结束。" });
   }
