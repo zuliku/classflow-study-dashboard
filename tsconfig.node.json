@@ -21,7 +21,8 @@
     "src/main/**/*",
     "src/preload/**/*",
     "types/**/*",
-    "app/api/ai/**/*"
+    "app/api/ai/**/*",
+    "lib/**/*"
   ],
   "exclude": ["node_modules", "out", "dist"]
 }
