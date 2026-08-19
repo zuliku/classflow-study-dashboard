@@ -58,7 +58,7 @@ if (!Element.prototype.setPointerCapture) {
   Element.prototype.releasePointerCapture = () => {};
 }
 
-function setupShell(mode: "open" | "minimized" | "closed", Child?: React.ComponentType) {
+function setupShell(mode: "open" | "minimized" | "closed", present = true, Child?: React.ComponentType) {
   Object.defineProperty(window, "innerWidth", { configurable: true, value: 1440 });
   Object.defineProperty(window, "innerHeight", { configurable: true, value: 900 });
   const container = document.createElement("div");
@@ -66,8 +66,7 @@ function setupShell(mode: "open" | "minimized" | "closed", Child?: React.Compone
   const root = createRoot(container);
   const Probe = Child ?? (() => <div data-testid="probe" />);
   act(() => {
-    // @ts-expect-error — legacy open prop also supported, but we test mode
-    root.render(<KiroSidecarShell mode={mode}><Probe /></KiroSidecarShell>);
+    root.render(<KiroSidecarShell mode={mode} present={present}><Probe /></KiroSidecarShell>);
   });
   const shell = () => container.querySelector('[data-testid="kiro-sidecar"]') as HTMLElement | null;
   const cleanup = () => {
@@ -103,16 +102,14 @@ describe("Single Mount — open ↔ minimized 不卸载 ChatSurface", () => {
     Object.defineProperty(window, "innerHeight", { configurable: true, value: 900 });
 
     act(() => {
-      // @ts-expect-error
-      root.render(<KiroSidecarShell mode="open"><Probe /></KiroSidecarShell>);
+      root.render(<KiroSidecarShell mode="open" present={true}><Probe /></KiroSidecarShell>);
     });
     await act(async () => { await Promise.resolve(); });
     expect(mountCount).toBe(1);
     expect(unmountCount).toBe(0);
 
     act(() => {
-      // @ts-expect-error
-      root.render(<KiroSidecarShell mode="minimized"><Probe /></KiroSidecarShell>);
+      root.render(<KiroSidecarShell mode="minimized" present={true}><Probe /></KiroSidecarShell>);
     });
     await act(async () => { await Promise.resolve(); });
     expect(mountCount).toBe(1);
@@ -123,24 +120,23 @@ describe("Single Mount — open ↔ minimized 不卸载 ChatSurface", () => {
     expect(shell.hasAttribute("inert")).toBe(true);
 
     act(() => {
-      // @ts-expect-error
-      root.render(<KiroSidecarShell mode="open"><Probe /></KiroSidecarShell>);
+      root.render(<KiroSidecarShell mode="open" present={true}><Probe /></KiroSidecarShell>);
     });
     await act(async () => { await Promise.resolve(); });
     expect(mountCount).toBe(1);
     expect(unmountCount).toBe(0);
 
-    // closed 后才允许 unmount（presence 160ms 后）
+    // closed  present=false 时 Shell 保持 hidden（host 负责 160ms 后卸载，Shell 单独不卸载）
     act(() => {
-      // @ts-expect-error
-      root.render(<KiroSidecarShell mode="closed"><Probe /></KiroSidecarShell>);
+      root.render(<KiroSidecarShell mode="closed" present={false}><Probe /></KiroSidecarShell>);
     });
-    // mounted 仍 true 直到 160ms 后
-    await act(async () => { await new Promise((r) => setTimeout(r, 200)); });
-    // 此时应已卸载
-    expect(container.querySelector('[data-testid="kiro-sidecar"]')).toBeNull();
-    // unmountCount 应为 1（Probe 卸载）
-    expect(unmountCount).toBe(1);
+    await act(async () => { await Promise.resolve(); });
+    const closedShell = container.querySelector('[data-testid="kiro-sidecar"]') as HTMLElement;
+    expect(closedShell).toBeTruthy();
+    expect(closedShell.getAttribute("aria-hidden")).toBe("true");
+    expect(closedShell.hasAttribute("inert")).toBe(true);
+    // Probe 仍 mounted（Shell 未卸载）
+    expect(unmountCount).toBe(0);
 
     act(() => root.unmount());
     container.remove();
@@ -149,7 +145,7 @@ describe("Single Mount — open ↔ minimized 不卸载 ChatSurface", () => {
 
 describe("Hidden Full Shell — minimized 时不可交互", () => {
   it("minimized：aria-hidden true + inert + pointer-events-none", async () => {
-    const { shell, cleanup } = setupShell("minimized");
+    const { shell, cleanup } = setupShell("minimized", true);
     await act(async () => { await Promise.resolve(); });
     const el = shell();
     expect(el).toBeTruthy();
@@ -161,7 +157,7 @@ describe("Hidden Full Shell — minimized 时不可交互", () => {
   });
 
   it("open：aria-hidden false 且可交互", async () => {
-    const { shell, cleanup } = setupShell("open");
+    const { shell, cleanup } = setupShell("open", true);
     await act(async () => { await Promise.resolve(); });
     const el = shell();
     expect(el!.getAttribute("aria-hidden")).toBe("false");
@@ -273,7 +269,7 @@ describe("Capsule Interaction", () => {
 
 describe("Minimize 按钮响应式", () => {
   it("md+ 可见（hidden md:flex），<md 隐藏", async () => {
-    const { shell, cleanup } = setupShell("open");
+    const { shell, cleanup } = setupShell("open", true);
     await act(async () => { await Promise.resolve(); });
     const btn = shell()!.querySelector('[data-testid="kiro-sidecar-minimize"]') as HTMLElement;
     expect(btn).toBeTruthy();
@@ -283,15 +279,28 @@ describe("Minimize 按钮响应式", () => {
   });
 });
 
-describe("Streaming Semantics — minimize 不 stop", () => {
-  it("minimizeSidecar 仅改变 mode，不调用 chat.stop / clear 等（通过 mock 验证）", async () => {
-    // 此测试为回归保障：minimize 实现中禁止调用 stop/newChat 等
-    // 通过检查 provider 源码：minimizeSidecar 仅 setSidecarMode
-    // 这里做轻量存在性检查
-    expect(mocks.minimizeSidecar).toBeDefined();
-    expect(mocks.restoreSidecar).toBeDefined();
-    // 调用不应抛错且不触发 close
-    act(() => mocks.minimizeSidecar());
-    expect(mocks.minimizeSidecar).toHaveBeenCalled();
+describe("Streaming Semantics — minimize 不 stop (Provider invariant)", () => {
+  it("minimizeSidecar 仅 setSidecarMode('minimized')，不调用 stop/newChat/clear", async () => {
+    const fs = await import("fs");
+    const path = await import("path");
+    const file = path.resolve(process.cwd(), "components/kiro/KiroSessionProvider.tsx");
+    const content = fs.readFileSync(file, "utf-8");
+    const start = content.indexOf("const minimizeSidecar");
+    const block = content.slice(start, start + 800);
+    expect(block).toContain('setSidecarMode("minimized")');
+    expect(block).not.toContain("stop(");
+    expect(block).not.toContain("newChat");
+    expect(block).not.toContain("clear(");
+    expect(block).not.toContain("requestConversationTransition");
+  });
+
+  it("restoreSidecar 仅 setSidecarMode('open')", async () => {
+    const fs = await import("fs");
+    const path = await import("path");
+    const file = path.resolve(process.cwd(), "components/kiro/KiroSessionProvider.tsx");
+    const content = fs.readFileSync(file, "utf-8");
+    const start = content.indexOf("const restoreSidecar");
+    const block = content.slice(start, start + 400);
+    expect(block).toContain('setSidecarMode("open")');
   });
 });

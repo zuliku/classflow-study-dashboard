@@ -221,3 +221,79 @@ describe("KiroSidecar Host — Presence 回归", () => {
     container.remove();
   });
 });
+
+describe("KiroSidecar Host — Normal Motion 160ms Presence", () => {
+  beforeEach(() => {
+    document.documentElement.removeAttribute("data-motion-effective");
+  });
+  afterEach(() => {
+    document.documentElement.setAttribute("data-motion-effective", "reduced");
+  });
+
+  it("open → closed 在 Normal Motion 下保持 hidden 160ms 后卸载", async () => {
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+
+    act(() => {
+      root.render(<KiroSidecar mode="open" />);
+    });
+    // Normal Motion 需要 rAF 两帧才 visible
+    await act(async () => {
+      await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+    });
+    let shell = container.querySelector('[data-testid="kiro-sidecar"]') as HTMLElement;
+    expect(shell.className).toContain("opacity-100");
+
+    act(() => {
+      root.render(<KiroSidecar mode="closed" />);
+    });
+    // 立即：仍 mounted 但 Full 已 hidden
+    await act(async () => { await Promise.resolve(); });
+    shell = container.querySelector('[data-testid="kiro-sidecar"]') as HTMLElement | null;
+    if (shell) {
+      expect(shell.className).toContain("opacity-0");
+      expect(shell.getAttribute("aria-hidden")).toBe("true");
+    }
+    // 50ms 内仍 mounted
+    await act(async () => { await new Promise((r) => setTimeout(r, 50)); });
+    expect(container.querySelector('[data-testid="kiro-sidecar-host"]')).toBeTruthy();
+    // 200ms 后卸载
+    await act(async () => { await new Promise((r) => setTimeout(r, 170)); });
+    expect(container.querySelector('[data-testid="kiro-sidecar-host"]')).toBeNull();
+
+    act(() => root.unmount());
+    container.remove();
+  });
+
+  it("minimized → closed 在 Normal Motion 下 Full 始终 hidden", async () => {
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+
+    act(() => {
+      root.render(<KiroSidecar mode="minimized" />);
+    });
+    await act(async () => {
+      await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+    });
+    let shell = container.querySelector('[data-testid="kiro-sidecar"]') as HTMLElement;
+    expect(shell.className).toContain("opacity-0");
+    let capsule = container.querySelector('[data-testid="kiro-sidecar-capsule"]') as HTMLElement;
+    expect(capsule.className).toContain("opacity-100");
+
+    act(() => {
+      root.render(<KiroSidecar mode="closed" />);
+    });
+    await act(async () => { await Promise.resolve(); });
+    shell = container.querySelector('[data-testid="kiro-sidecar"]') as HTMLElement | null;
+    capsule = container.querySelector('[data-testid="kiro-sidecar-capsule"]') as HTMLElement | null;
+    if (shell) expect(shell.className).toContain("opacity-0");
+    if (capsule) expect(capsule.className).toContain("opacity-0");
+    await act(async () => { await new Promise((r) => setTimeout(r, 220)); });
+    expect(container.querySelector('[data-testid="kiro-sidecar-host"]')).toBeNull();
+
+    act(() => root.unmount());
+    container.remove();
+  });
+});

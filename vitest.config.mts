@@ -41,6 +41,11 @@ export default defineConfig({
       "tests/kiroSidecarPreferences.test.ts",
       "tests/kiroSidecarCapsule.test.tsx",
       "tests/kiroSidecarHost.test.tsx",
+      "tests/kiroStreamingHistory.test.ts",
+      "tests/kiroStreamingPromotion.test.tsx",
+      "tests/kiroSendControl.test.tsx",
+      "tests/kiroMotionEmptyIntro.test.tsx",
+      "tests/motionPreference.test.ts",
     ],
   },
 });
