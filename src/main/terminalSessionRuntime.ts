@@ -9,7 +9,6 @@
  * - PTY 不构成对 run_terminal_command Risk Classifier 的绕过：Agent 侧不提供
  *   send_arbitrary_keys 工具；Agent 命令仍走 run_terminal_command policy。
  */
-// @ts-ignore: node-pty types not available in this tsconfig
 import * as pty from "node-pty";
 import { buildSafeTerminalEnv } from "@/lib/ai/computer/terminal/env";
 import { randomUUID } from "node:crypto";
