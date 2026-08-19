@@ -26,6 +26,11 @@ import {
   SIDECAR_DEFAULT_POSITION,
   normalizeSidecarPosition,
 } from "@/lib/ai/ui/sidecarPosition";
+import {
+  SidecarMinimizedPosition,
+  DEFAULT_SIDECAR_MINIMIZED_POSITION,
+  normalizeSidecarMinimizedPosition,
+} from "@/lib/ai/ui/sidecarMinimizedPosition";
 
 /**
  * Kiro UI / Behavior Preference（独立于业务 useAppStore / useAISettingsStore）：
@@ -50,6 +55,8 @@ interface KiroPreferencesState {
   sidecarSize: SidecarSize;
   /** Sidecar Move V1：浮动面板位置（top/right；拖拽后持久化；首次使用右上 24px） */
   sidecarPosition: SidecarPosition;
+  /** Capsule V1：最小化浮动胶囊位置（right/bottom；拖拽后持久化；首次右下 24px） */
+  sidecarMinimizedPosition: SidecarMinimizedPosition;
   /** Task B：截图隐私提示已展示过（只属于 UI preference；首次添加图片轻提示一次） */
   visualAttachmentPrivacyNoticeSeen: boolean;
   setOutputTextSize: (size: KiroOutputTextSize) => void;
@@ -61,6 +68,7 @@ interface KiroPreferencesState {
   setWebPdfVisionModel: (model: string) => void;
   setSidecarSize: (size: SidecarSize) => void;
   setSidecarPosition: (position: SidecarPosition) => void;
+  setSidecarMinimizedPosition: (position: SidecarMinimizedPosition) => void;
   setVisualAttachmentPrivacyNoticeSeen: (seen: boolean) => void;
 }
 
@@ -76,6 +84,7 @@ export const useKiroPreferencesStore = create<KiroPreferencesState>()(
       webPdfVisionModel: DEFAULT_WEB_PDF_VISION_MODEL,
       sidecarSize: SIDECAR_DEFAULT_SIZE,
       sidecarPosition: SIDECAR_DEFAULT_POSITION,
+      sidecarMinimizedPosition: DEFAULT_SIDECAR_MINIMIZED_POSITION,
       visualAttachmentPrivacyNoticeSeen: false,
       setOutputTextSize: (size) => set({ outputTextSize: normalizeKiroOutputTextSize(size) }),
       setAutoContextEnabled: (enabled) => set({ autoContextEnabled: enabled }),
@@ -91,6 +100,8 @@ export const useKiroPreferencesStore = create<KiroPreferencesState>()(
       setSidecarSize: (size) => set({ sidecarSize: normalizeSidecarSize(size) }),
       setSidecarPosition: (position) =>
         set({ sidecarPosition: normalizeSidecarPosition(position) }),
+      setSidecarMinimizedPosition: (position) =>
+        set({ sidecarMinimizedPosition: normalizeSidecarMinimizedPosition(position) }),
       setVisualAttachmentPrivacyNoticeSeen: (seen) =>
         set({ visualAttachmentPrivacyNoticeSeen: seen }),
     }),
@@ -110,6 +121,8 @@ export const useKiroPreferencesStore = create<KiroPreferencesState>()(
         sidecarSize: state.sidecarSize,
         // Sidecar Move V1：浮动位置持久化（top/right；key 不变，不建 v2）
         sidecarPosition: state.sidecarPosition,
+        // Capsule V1：最小化胶囊位置（right/bottom）
+        sidecarMinimizedPosition: state.sidecarMinimizedPosition,
         // Task B：截图隐私提示（UI preference）
         visualAttachmentPrivacyNoticeSeen: state.visualAttachmentPrivacyNoticeSeen,
       }),
@@ -137,6 +150,8 @@ export const useKiroPreferencesStore = create<KiroPreferencesState>()(
           sidecarSize: normalizeSidecarSize(p?.sidecarSize),
           // Sidecar Move V1：旧持久化无字段 → 默认右上 24px；非法值 → 归一
           sidecarPosition: normalizeSidecarPosition(p?.sidecarPosition),
+          // Capsule V1：旧持久化无字段 → 默认右下 24px；非法值 → 归一
+          sidecarMinimizedPosition: normalizeSidecarMinimizedPosition(p?.sidecarMinimizedPosition),
           // Task B：旧持久化无字段 → 默认未看过（下次添加图片再提示一次）
           visualAttachmentPrivacyNoticeSeen:
             typeof p?.visualAttachmentPrivacyNoticeSeen === "boolean"

@@ -32,6 +32,14 @@ export default defineConfig({
       "tests/secretVault.test.ts",
       "tests/securityBaseline.test.ts",
       "tests/settingsRegistry.test.ts",
+      // Kiro Sidecar Capsule V1 — jsdom via @vitest-environment
+      "tests/kiroSidecarShell.test.tsx",
+      "tests/kiroSidecarSize.test.ts",
+      "tests/sidecarPosition.test.ts",
+      "tests/kiroRuntime.test.ts",
+      "tests/kiroSidecarMinimizedPosition.test.ts",
+      "tests/kiroSidecarPreferences.test.ts",
+      "tests/kiroSidecarCapsule.test.tsx",
     ],
   },
 });

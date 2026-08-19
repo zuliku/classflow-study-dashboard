@@ -1,8 +1,8 @@
 "use client";
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { X, Expand } from "lucide-react";
-import { useKiroSession } from "@/components/kiro/KiroSessionProvider";
+import { X, Expand, Minus } from "lucide-react";
+import { useKiroSession, type KiroSidecarMode } from "@/components/kiro/KiroSessionProvider";
 import { KiroMark } from "@/components/kiro/KiroHeader";
 import { KiroSessionActions } from "@/components/kiro/KiroSessionActions";
 import { usePresence } from "@/lib/usePresence";
@@ -37,9 +37,11 @@ import { cn } from "@/lib/utils";
  * - 位置用 CSS variables（top/right）实时更新，不用 transform（避免与 presence motion 冲突）
  * - Move 与 Resize 共享 interactionRef 互斥；pointermove 只更新 draft，pointerup 一次性持久化
  */
-export function KiroSidecarShell({ open, children }: { open: boolean; children: React.ReactNode }) {
+export function KiroSidecarShell(props: { mode: KiroSidecarMode; children: React.ReactNode } | { open: boolean; children: React.ReactNode }) {
+  const mode: KiroSidecarMode = "mode" in props ? props.mode : props.open ? "open" : "closed";
+  const children = props.children;
   const session = useKiroSession();
-  const { closeSidecar, expandSidecar } = session;
+  const { closeSidecar, expandSidecar, minimizeSidecar } = session as unknown as { closeSidecar: () => void; expandSidecar: () => void; minimizeSidecar: () => void };
   const sidecarSize = useKiroPreferencesStore((s) => s.sidecarSize);
   const setSidecarSize = useKiroPreferencesStore((s) => s.setSidecarSize);
   const sidecarPosition = useKiroPreferencesStore((s) => s.sidecarPosition);
@@ -97,22 +99,29 @@ export function KiroSidecarShell({ open, children }: { open: boolean; children: 
     draftPosition,
   ]);
 
-  const { mounted, visible } = usePresence(open, 160);
+  const isMinimized = mode === "minimized";
+  const isOpen = mode === "open";
+  // Motion V1：geometry 交互期间降权内部 motion（intro/settle/popover transforms 近瞬时）
+  const [geometryInteracting, setGeometryInteracting] = useState(false);
 
-  // Esc 关闭（仅 open 时监听）
+  // 支持两类调用：1) 经 KiroSidecar host（host 已做 closed 的 usePresence，Shell 仅管显隐）
+  // 2) 直接在测试/独立场景以 open/mode 调用（需自行处理 closed 的 mount/unmount）
+  // 为兼容测试，保持 usePresence（closed→卸载），但 host 场景下 mounted 始终 true（因为 host 仅在非 closed 渲染 Shell）
+  const { mounted } = usePresence(mode !== "closed", 160);
+  // Esc 关闭（仅 open 时监听；minimized 时不抢主界面 Esc）
   useEffect(() => {
-    if (!open) return;
+    if (!isOpen) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") closeSidecar();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [open, closeSidecar]);
+  }, [isOpen, closeSidecar]);
+
+  // 早期返回必须在所有 hooks 之后（保持 hooks 数量一致）
+  if (!mounted) return null;
 
   // ---- Resize（position-aware clamp） ----
-
-  // Motion V1：geometry 交互期间降权内部 motion（intro/settle/popover transforms 近瞬时）
-  const [geometryInteracting, setGeometryInteracting] = useState(false);
 
   /** pointerdown：snapshot 当次 drag 开始时的可见尺寸（不是不断变化的 draft） */
   const beginResize = () => {
@@ -195,16 +204,17 @@ export function KiroSidecarShell({ open, children }: { open: boolean; children: 
     setGeometryInteracting(false);
   };
 
-  if (!mounted) return null;
-
+  // Capsule V1：open ↔ minimized 不卸载 ChatSurface，closed 由 usePresence 控制 unmount（host 与 standalone 均兼容）
   return (
     <div
       data-testid="kiro-sidecar"
-      data-state={open ? "open" : "closed"}
+      data-state={mode}
       data-geometry-interacting={geometryInteracting || undefined}
       role="dialog"
       aria-label="Kiro 侧边聊天"
-      aria-hidden={!open}
+      aria-hidden={isMinimized}
+      // inert 确保 hidden Composer 不进 Tab 顺序（React 19+ 支持）
+      {...(isMinimized ? ({ inert: "" } as unknown as React.HTMLAttributes<HTMLDivElement>) : {})}
       className={cn(
         // Single Shell：几何由 responsive CSS 切换（children 只 mount 一份）
         "fixed z-40 flex flex-col bg-surface overflow-hidden",
@@ -213,11 +223,16 @@ export function KiroSidecarShell({ open, children }: { open: boolean; children: 
         // Desktop：md+ floating（persisted 尺寸/位置经 CSS variables 生效；不用 transform 定位）
         "md:inset-auto md:top-[var(--kiro-sidecar-top)] md:right-[var(--kiro-sidecar-right)]",
         "md:w-[var(--kiro-sidecar-width)] md:h-[var(--kiro-sidecar-height)] md:rounded-[28px] md:border md:border-line md:shadow-card",
-        // Presence 动画
-        "transition-[opacity,transform] ease-[var(--ease-standard)]",
-        visible
-          ? "duration-[var(--motion-panel)] translate-x-0 scale-100 opacity-100"
-          : "duration-[160ms] translate-x-3 scale-[0.985] opacity-0 pointer-events-none"
+        // Minimize/Restore choreography（180–220ms，opacity+scale+轻 translate，禁止 width/height 动画）
+        // open → minimized：opacity 1→0, scale 1→0.985, translate 微向胶囊方向；胶囊延迟 40–60ms 由自身控制
+        // minimized 不可交互（aria-hidden + inert + pointer-events-none，已满足 a11y）
+        isMinimized
+          ? "opacity-0 scale-[0.985] pointer-events-none -translate-y-1 md:translate-x-1"
+          : "opacity-100 scale-100 translate-x-0 translate-y-0",
+        // 仅在交互或 mode 切换时过渡；drag 期间降权由 data-geometry-interacting 控制
+        isMinimized
+          ? "transition-[opacity,transform] duration-[180ms] ease-[var(--ease-standard)]"
+          : "transition-[opacity,transform] duration-[var(--motion-panel)] ease-[var(--ease-standard)]"
       )}
       style={
         {
@@ -235,7 +250,7 @@ export function KiroSidecarShell({ open, children }: { open: boolean; children: 
         onMoveEnd={commitMove}
         className="hidden md:block"
       />
-      <KiroSidecarHeader onExpand={expandSidecar} onClose={closeSidecar} />
+      <KiroSidecarHeader onMinimize={minimizeSidecar} onExpand={expandSidecar} onClose={closeSidecar} />
       <div className="flex-1 min-h-0 flex flex-col overflow-hidden">{children}</div>
 
       {/* Resize handles：仅 md+ 可见（responsive hidden，不复制容器） */}
@@ -264,7 +279,7 @@ export function KiroSidecarShell({ open, children }: { open: boolean; children: 
   );
 }
 
-function KiroSidecarHeader({ onExpand, onClose }: { onExpand: () => void; onClose: () => void }) {
+function KiroSidecarHeader({ onMinimize, onExpand, onClose }: { onMinimize: () => void; onExpand: () => void; onClose: () => void }) {
   return (
     <div
       data-testid="kiro-sidecar-header"
@@ -278,6 +293,15 @@ function KiroSidecarHeader({ onExpand, onClose }: { onExpand: () => void; onClos
       </div>
       <div className="flex items-center gap-0.5 shrink-0">
         <KiroSessionActions variant="sidecar" onExpand={onExpand} />
+        <button
+          onClick={onMinimize}
+          aria-label="最小化 Kiro"
+          title="最小化"
+          className="hidden md:flex w-8 h-8 items-center justify-center rounded-xl text-sandrift hover:bg-alabaster hover:text-charcoal transition-colors"
+          data-testid="kiro-sidecar-minimize"
+        >
+          <Minus className="w-4 h-4" />
+        </button>
         <button
           onClick={onExpand}
           aria-label="展开到 Kiro 工作区"
