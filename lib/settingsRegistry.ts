@@ -109,6 +109,15 @@ export const SETTING_IDS = {
     permissions: "kiro-agent-permissions",
     workspaceKnowledge: "kiro-workspace-knowledge",
   },
+  extensions: {
+    overview: "extensions-overview",
+    skills: "extensions-skills",
+    mcp: "extensions-mcp",
+    channels: "extensions-channels",
+    qqBot: "extensions-qq-bot",
+    gmail: "extensions-gmail",
+    qqMail: "extensions-qq-mail",
+  },
   data: {
     backupFull: "backup-full",
     backupJson: "backup-json",
@@ -559,6 +568,56 @@ export const SETTINGS_REGISTRY: SettingDefinition[] = [
     description: "V1 安全边界：无 shell / 删除 / 应用启动 / MCP / Full Access",
     keywords: ["安全", "权限", "shell", "删除", "终端", "full access", "sandbox", "沙箱"],
   },
+  // ---- 连接与扩展 ----
+  {
+    id: SETTING_IDS.extensions.overview,
+    section: "extensions",
+    title: "连接与扩展",
+    description: "让 Kiro 使用你的工作流、外部工具与消息来源",
+    keywords: ["扩展", "连接", "extensions", "skills", "mcp", "消息渠道", "channel"],
+  },
+  {
+    id: SETTING_IDS.extensions.skills,
+    section: "extensions",
+    title: "Skills",
+    description: "将常用的 Kiro 工作流程保存为可复用能力",
+    keywords: ["skills", "skill", "工作流", "复用能力"],
+  },
+  {
+    id: SETTING_IDS.extensions.mcp,
+    section: "extensions",
+    title: "MCP",
+    description: "连接外部工具和数据服务，让 Kiro 在需要时调用",
+    keywords: ["mcp", "工具", "外部工具", "数据服务"],
+  },
+  {
+    id: SETTING_IDS.extensions.channels,
+    section: "extensions",
+    title: "消息渠道",
+    description: "QQ Bot / Gmail / QQ 邮箱等消息来源",
+    keywords: ["消息渠道", "channel", "消息", "渠道"],
+  },
+  {
+    id: SETTING_IDS.extensions.qqBot,
+    section: "extensions",
+    title: "QQ Bot",
+    description: "通过 QQ 与 Kiro 对话，将课程通知和消息交给 ClassFlow 处理",
+    keywords: ["qq", "qq bot", "qq-bot", "机器人", "qq机器人"],
+  },
+  {
+    id: SETTING_IDS.extensions.gmail,
+    section: "extensions",
+    title: "Gmail",
+    description: "从 Gmail 接收课程通知、DDL 和相关附件",
+    keywords: ["gmail", "谷歌邮箱", "google", "邮件"],
+  },
+  {
+    id: SETTING_IDS.extensions.qqMail,
+    section: "extensions",
+    title: "QQ 邮箱",
+    description: "从 QQ 邮箱接收课程通知和学习相关邮件",
+    keywords: ["qq邮箱", "qq mail", "qq-mail", "邮件"],
+  },
   // ---- 数据与隐私 ----
   {
     id: SETTING_IDS.data.backupFull,
@@ -648,6 +707,7 @@ const SETTINGS_REGISTRY_SECTIONS = new Set<SettingsSection>([
   "focus",
   "kiro",
   "kiro-agent",
+  "extensions",
   "data",
   "about",
 ]);

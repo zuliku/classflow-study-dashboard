@@ -13,6 +13,7 @@ import { DataSettings } from "@/components/settings/DataSettings";
 import { AboutSettings } from "@/components/settings/AboutSettings";
 import { KiroAISettings } from "@/components/settings/KiroAISettings";
 import { KiroAgentSettings } from "@/components/settings/KiroAgentSettings";
+import { ExtensionsSettings } from "@/components/settings/ExtensionsSettings";
 import {
   searchSettings,
   SettingDefinition,
@@ -337,6 +338,9 @@ export function SettingsView({
               </div>
               <div className={cn(section === "kiro-agent" && "ux-fade")} hidden={section !== "kiro-agent"}>
                 <KiroAgentSettings />
+              </div>
+              <div className={cn(section === "extensions" && "ux-fade")} hidden={section !== "extensions"}>
+                <ExtensionsSettings />
               </div>
               <div className={cn(section === "data" && "ux-fade")} hidden={section !== "data"}>
                 <DataSettings />
