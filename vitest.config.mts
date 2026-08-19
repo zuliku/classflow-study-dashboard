@@ -33,6 +33,7 @@ export default defineConfig({
       "tests/terminalLifecycle.test.ts",
       "tests/terminalStdin.test.ts",
       "tests/terminalPtyContract.test.ts",
+      "tests/aiOpenCodeGoMimoTerminalSmoke.test.ts",
     ],
   },
 });
