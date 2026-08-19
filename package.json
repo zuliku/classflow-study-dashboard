@@ -14,7 +14,8 @@
     "typecheck:web": "tsc --noEmit -p tsconfig.json",
     "typecheck": "npm run typecheck:node && npm run typecheck:web",
     "postinstall": "electron-builder install-app-deps",
-    "test:terminal": "vitest run tests/terminalCapability.test.ts tests/terminalToolExposure.test.ts tests/terminalCapabilityPrompt.test.ts",
+    "test:terminal": "vitest run tests/terminalCapability.test.ts tests/terminalToolExposure.test.ts tests/terminalCapabilityPrompt.test.ts tests/terminalStreaming.test.ts tests/terminalSecretRedaction.test.ts tests/kiroTerminalBlock.test.tsx tests/terminalLifecycle.test.ts tests/terminalStdin.test.ts tests/terminalPtyContract.test.ts tests/terminalAsyncLifecycle.test.ts tests/terminalPtyAgentIntegration.test.ts",
+    "test:terminal:live": "vitest run tests/aiOpenCodeGoMimoTerminalSmoke.test.ts tests/aiOpenCodeGoMimoTerminalInteractiveSmoke.test.ts",
     "pack:win": "electron-vite build && electron-builder --win nsis"
   },
   "dependencies": {

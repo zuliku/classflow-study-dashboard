@@ -11,6 +11,7 @@ import {
   activePtySessionCount,
 } from "@/src/main/terminalSessionRuntime";
 import { DesktopTerminalSessionEvent } from "@/lib/desktop/types";
+import { waitForSessionOutput, waitForSessionEvent } from "./helpers/terminalHarness";
 
 /**
  * Phase 4 — Persistent PowerShell PTY Session（真实 Windows ConPTY via node-pty）。
@@ -21,10 +22,6 @@ import { DesktopTerminalSessionEvent } from "@/lib/desktop/types";
 function scratchDir(): string {
   const base = mkdtempSync(join(tmpdir(), "classflow-pty-"));
   return base;
-}
-
-function waitFor(ms: number): Promise<void> {
-  return new Promise((r) => setTimeout(r, ms));
 }
 
 /** 创建 session + 事件收集 helper；返回 { sessionId, collect } */
@@ -51,21 +48,20 @@ afterEach(() => {
 describe("Phase 4 — PTY session（真实 ConPTY）", () => {
   it("create → write → 输出回显（pty-start）", async () => {
     const { sessionId, buffer } = openSession(scratchDir());
-    await waitFor(700);
     writePtySession(sessionId, 'Write-Output "pty-start"\r');
-    await waitFor(700);
-    const out = dataText(buffer);
-    expect(out).toContain("pty-start");
+    await waitForSessionOutput(buffer, (t) => t.includes("pty-start"), 5000);
+    expect(dataText(buffer)).toContain("pty-start");
     expect(activePtySessionCount()).toBe(1);
   });
 
   it("session state 持久化：env 变量跨独立 write 保持", async () => {
     const { sessionId, buffer } = openSession(scratchDir());
-    await waitFor(700);
     writePtySession(sessionId, '$env:CLASSFLOW_PTY_SMOKE = "ok"\r');
-    await waitFor(400);
+    await waitForSessionOutput(buffer, (t) => t.includes("ok") || t.includes("CLASSFLOW_PTY_SMOKE"), 3000).catch(() => {});
+    // 清空 buffer 避免前一个包含 ok 的误判，重新等待
+    buffer.length = 0;
     writePtySession(sessionId, 'Write-Output $env:CLASSFLOW_PTY_SMOKE\r');
-    await waitFor(700);
+    await waitForSessionOutput(buffer, (t) => t.includes("ok"), 5000);
     expect(dataText(buffer)).toContain("ok");
   });
 
@@ -74,46 +70,50 @@ describe("Phase 4 — PTY session（真实 ConPTY）", () => {
     const sub = join(base, "classflow-pty-sub");
     mkdirSync(sub);
     const { sessionId, buffer } = openSession(base);
-    await waitFor(700);
     writePtySession(sessionId, "Set-Location .\\classflow-pty-sub\r");
-    await waitFor(400);
+    await new Promise((r) => setTimeout(r, 400));
+    buffer.length = 0;
     // 只输出路径最后一段（绝对路径整串会被 sanitize 成 [REDACTED_PATH]，不泄漏 native path）
     writePtySession(sessionId, '$PWD.Path.Split([IO.Path]::DirectorySeparatorChar)[-1]\r');
-    await waitFor(700);
+    await waitForSessionOutput(buffer, (t) => t.includes("classflow-pty-sub"), 5000);
     expect(dataText(buffer)).toContain("classflow-pty-sub");
   });
 
   it("绝对路径在 session 事件中被 redacted（不泄漏 native path）", async () => {
     const base = scratchDir();
-    const { buffer } = openSession(base);
-    await waitFor(700);
+    const { sessionId, buffer } = openSession(base);
+    await new Promise((r) => setTimeout(r, 300));
     expect(dataText(buffer)).not.toContain("\\Users\\");
-    // 输出完整绝对路径 → 应被 redact
-    const sessionId = openSession(base).sessionId;
+    // 输出完整绝对路径 → 应被 redact（同一 session/buffer）
     writePtySession(sessionId, "(Get-Location).Path\r");
-    await waitFor(800);
-    const out = dataText(buffer);
-    expect(out).not.toContain(base); // 绝对路径不出现
+    await waitForSessionOutput(buffer, (t) => t.includes("[REDACTED_PATH]"), 5000);
+    expect(dataText(buffer)).toContain("[REDACTED_PATH]");
+    expect(dataText(buffer)).not.toContain(base); // 绝对路径不出现
   });
 
-  it("resize（120x32 → 100x24）不 crash", async () => {
-    const { sessionId } = openSession(scratchDir());
-    await waitFor(500);
+  it("resize（120x32 → 100x24）不 crash 且后续命令仍有输出", async () => {
+    const { sessionId, buffer } = openSession(scratchDir());
     resizePtySession(sessionId, 100, 24);
     resizePtySession(sessionId, 120, 32);
-    await waitFor(400);
     writePtySession(sessionId, 'Write-Output "resize-ok"\r');
-    await waitFor(600);
-    expect(true).toBe(true);
+    await waitForSessionOutput(buffer, (t) => t.includes("resize-ok"), 5000);
+    expect(dataText(buffer)).toContain("resize-ok");
   });
 
   it("closeSession → session 退出 + registry 清空（dispose kill process tree）", async () => {
-    const { sessionId } = openSession(scratchDir());
-    await waitFor(500);
+    const { sessionId, buffer } = openSession(scratchDir());
+    await new Promise((r) => setTimeout(r, 300));
+    const exitBefore = buffer.filter((e) => e.type === "exit").length;
     closePtySession(sessionId);
-    await waitFor(500);
+    await waitForSessionEvent(buffer, (events) => events.filter((e) => e.type === "exit").length > exitBefore, 5000).catch(() => {});
+    // exit 事件或 registry 清空任一可观测
+    const hasExit = buffer.filter((e) => e.type === "exit").length > exitBefore;
+    const isCleared = activePtySessionCount() === 0;
+    expect(hasExit || isCleared).toBe(true);
     expect(activePtySessionCount()).toBe(0);
     // 幂等：重复 close 不抛错
     closePtySession(sessionId);
+    // write after close → INVALID_OPERATION
+    expect(() => writePtySession(sessionId, "Write-Output \"late\"\r")).toThrow();
   });
 });

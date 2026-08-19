@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, afterEach } from "vitest";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -13,6 +13,11 @@ import { DesktopTerminalEvent } from "@/lib/desktop/types";
 function scratchCwd(): string {
   return mkdtempSync(join(tmpdir(), "classflow-term-life-"));
 }
+
+afterEach(async () => {
+  // 让前一个 PowerShell 进程的 taskkill 有时间完成，避免下一个测试的启动竞争
+  await new Promise((r) => setTimeout(r, 300));
+});
 
 /** 启动执行，可选在 delayMs 后 cancel；返回事件流 + settle 结果 */
 function launch(
@@ -54,10 +59,10 @@ function launch(
 }
 
 describe("Phase 2 — 长任务生命周期", () => {
-  it("cancel：启动后 ~900ms cancel → reject CANCELLED、无 late chunk、不 crash", async () => {
+  it("cancel：启动后 ~1500ms cancel → reject CANCELLED、无 late chunk、不 crash", async () => {
     const { events, settled } = await launch(
       "1..20 | ForEach-Object { Write-Output \"tick-$_\"; Start-Sleep -Milliseconds 250 }",
-      { cancelAfterMs: 900 }
+      { cancelAfterMs: 1500 }
     );
     // 至少已有若干 realtime chunks（cancel 前 tick-1/2/3）
     const stdoutEvents = events.filter((e) => e.type === "stdout").length;
@@ -81,31 +86,28 @@ describe("Phase 2 — 长任务生命周期", () => {
   });
 
   it("cancel 幂等：settle 后再次 cancel 无副作用", async () => {
-    const { handle } = (() => {
-      const events: DesktopTerminalEvent[] = [];
-      const r = runTerminalProcess({
-        executionId: `term-life-idem-${Date.now()}`,
-        shell: "powershell",
-        cwd: scratchCwd(),
-        command: 'Write-Output "idem"',
-        timeoutMs: 10_000,
-        onEvent: (e) => events.push(e),
-      });
-      return { ...r, events };
-    })();
+    const { promise, handle } = runTerminalProcess({
+      executionId: `term-life-idem-${Date.now()}`,
+      shell: "powershell",
+      cwd: scratchCwd(),
+      command: 'Start-Sleep -Milliseconds 2000',
+      timeoutMs: 10_000,
+      onEvent: () => {},
+    });
+    promise.catch(() => {});
     await handle.cancel();
     await handle.cancel();
     expect(true).toBe(true);
   });
 
   it("timeout：短 timeout → resolve timedOut=true（不是 reject）", async () => {
-    const { settled } = await launch("Start-Sleep -Seconds 10", { timeoutMs: 1_500 });
+    const { settled } = await launch("Start-Sleep -Seconds 10", { timeoutMs: 2_000 });
     expect(settled.kind).toBe("resolve");
     if (settled.kind === "resolve") {
       expect(settled.result?.timedOut).toBe(true);
       expect(settled.result?.exitCode).toBeNull();
     }
-  });
+  }, 10000);
 
   it("long-running：executionMode 允许放宽 timeout（>120s clamp 到 600s，不拒绝）", async () => {
     const { settled } = await launch('Write-Output "long-ok"', {
