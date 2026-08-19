@@ -69,6 +69,8 @@ import { buildConversationPersistenceSignature } from "@/lib/ai/visual/receipt";
 
 export type KiroSuggestionsKind = "assignment" | "course" | "group-project" | "week" | "generic";
 
+export type KiroSidecarMode = "open" | "minimized" | "closed";
+
 import { claimEmptyIntroOnce } from "@/lib/kiro/motion/emptyIntro";
 
 interface KiroSessionValue {
@@ -93,11 +95,14 @@ interface KiroSessionValue {
   renameConversation: (id: string, title: string) => void;
   clearHistory: () => void;
   refreshHistory: () => void;
-  // Sidecar
+  // Sidecar（三态）
   sidecarOpen: boolean;
+  sidecarMode: KiroSidecarMode;
   openSidecar: () => void;
   closeSidecar: () => void;
   expandSidecar: () => void;
+  minimizeSidecar: () => void;
+  restoreSidecar: () => void;
   suggestionsKind: KiroSuggestionsKind | null;
   suggestionsGen: number;
   lastUserTurnGen: number;
@@ -190,6 +195,8 @@ interface KiroSessionMetaValue {
   conversationSummary: KiroConversationSummary | null;
   historyVersion: number;
   sidecarOpen: boolean;
+  sidecarMode: KiroSidecarMode;
+  kiroBusy: boolean;
   suggestionsKind: KiroSuggestionsKind | null;
   suggestionsGen: number;
   lastUserTurnGen: number;
@@ -218,6 +225,8 @@ interface KiroSessionActionsValue {
   openSidecar: () => void;
   closeSidecar: () => void;
   expandSidecar: () => void;
+  minimizeSidecar: () => void;
+  restoreSidecar: () => void;
   openForAssignment: (id: string) => void;
   openForCourse: (id: string) => void;
   openForGroupProject: (id: string) => void;
@@ -258,7 +267,7 @@ export function KiroSessionProvider({ children }: { children: React.ReactNode })
   const [manualRefs, setManualRefs] = useState<KiroContextRef[]>([]);
   const [entryRefs, setEntryRefs] = useState<KiroContextRef[]>([]);
   const [suppressedAutoKeys, setSuppressedAutoKeys] = useState<string[]>([]);
-  const [sidecarOpen, setSidecarOpen] = useState(false);
+  const [sidecarMode, setSidecarMode] = useState<KiroSidecarMode>("closed");
   const [suggestionsKind, setSuggestionsKind] = useState<KiroSuggestionsKind | null>(null);
   const suggestionsGenRef = useRef(0);
   const [lastUserTurnGen, setLastUserTurnGen] = useState(0);
@@ -691,25 +700,38 @@ export function KiroSessionProvider({ children }: { children: React.ReactNode })
     [requestConversationTransition]
   );
 
+  const sidecarOpen = sidecarMode !== "closed";
+  // kiroBusy 低频 boolean（idle→busy / busy→idle 才变化，不订阅 token 文本）
+  const kiroBusy = chat.turnInFlight || chat.streaming || sendClaimed;
+
   const openSidecar = useCallback(() => {
-    setSidecarOpen(true);
+    setSidecarMode("open");
   }, []);
 
   const closeSidecar = useCallback(() => {
-    setSidecarOpen(false);
+    setSidecarMode("closed");
   }, []);
 
   const expandSidecar = useCallback(() => {
-    setSidecarOpen(false);
+    setSidecarMode("closed");
     setActiveTab("kiro");
   }, [setActiveTab]);
+
+  const minimizeSidecar = useCallback(() => {
+    // 禁止在 minimize 时调用任何 runtime stop/reset（仅改变 presentation）
+    setSidecarMode("minimized");
+  }, []);
+
+  const restoreSidecar = useCallback(() => {
+    setSidecarMode("open");
+  }, []);
 
   /** 从业务实体打开 Sidecar：Entry Context 替换（不累积），显式展示可移除 */
   const openForEntry = useCallback((refs: KiroContextRef[], kind: KiroSuggestionsKind) => {
     setEntryRefs((prev) => replaceEntryRefs(prev, refs));
     suggestionsGenRef.current += 1;
     setSuggestionsKind(kind);
-    setSidecarOpen(true);
+    setSidecarMode("open");
   }, []);
 
   const openForAssignment = useCallback(
@@ -790,7 +812,7 @@ export function KiroSessionProvider({ children }: { children: React.ReactNode })
   // Task 7A：Conversation lifecycle 的 send 是 Provider 唯一暴露入口（不允许 runtime/session 语义分叉）
   const handoffPrompt = useCallback(
     (prompt: string) => {
-      setSidecarOpen(true);
+      setSidecarMode("open");
       void sendWithTurn(prompt).then((ok) => {
         if (!ok) return;
         suggestionsGenRef.current += 1;
@@ -810,7 +832,7 @@ export function KiroSessionProvider({ children }: { children: React.ReactNode })
     async (continuation: VisualPendingContinuation, prompt: string): Promise<boolean> => {
       const chatNow = chatRef.current;
       chatNow.setVisualPendingContinuation(continuation);
-      setSidecarOpen(true);
+      setSidecarMode("open");
       try {
         const ok = await sendWithTurn(prompt);
         if (!ok) {
@@ -840,7 +862,7 @@ export function KiroSessionProvider({ children }: { children: React.ReactNode })
       entryRefsRef.current = nextEntryRefs;
       pendingEntryRefsRef.current = nextEntryRefs;
       setSuggestionsKind(suggestionsTypeOf(ref));
-      setSidecarOpen(true);
+      setSidecarMode("open");
       void sendWithTurn(prompt);
     },
     [sendWithTurn]
@@ -888,26 +910,49 @@ export function KiroSessionProvider({ children }: { children: React.ReactNode })
     newChat();
   }, [newChat]);
 
-  const effectiveSidecarOpen = sidecarOpen && activeTab !== "kiro";
+  // effectiveSidecarMode：Workspace 覆盖（与 capsule 互斥）—— 派生 presentation 状态
+  const effectiveSidecarMode: KiroSidecarMode = activeTab === "kiro" ? "closed" : sidecarMode;
+  const effectiveSidecarOpen = effectiveSidecarMode !== "closed";
 
-  // 直接进入 Kiro Workspace 等价于收起 Sidecar，避免离开后意外复现。
+  // 直接进入 Kiro Workspace 等价于收起 Sidecar/Capsule，避免离开后意外复现
   React.useEffect(() => {
-    if (activeTab === "kiro" && sidecarOpen) setSidecarOpen(false);
-  }, [activeTab, sidecarOpen]);
+    if (activeTab === "kiro" && sidecarMode !== "closed") setSidecarMode("closed");
+  }, [activeTab, sidecarMode]);
 
-  // Sidecar 真正可见时才注册 overlay（Esc 只在最上层关闭）
+  // 窄窗口（<md）时 minimized 自动恢复为 open（Fullscreen Sidecar），Capsule 仅 md+ 生效
   React.useEffect(() => {
-    if (!effectiveSidecarOpen) return;
+    if (typeof window === "undefined") return;
+    const mq = window.matchMedia("(max-width: 767px)");
+    const handler = () => {
+      if (mq.matches && sidecarMode === "minimized") {
+        setSidecarMode("open");
+      }
+    };
+    handler();
+    if (mq.addEventListener) mq.addEventListener("change", handler);
+    else (mq as unknown as { addListener: (cb: () => void) => void }).addListener(handler as never);
+    const onResize = () => handler();
+    window.addEventListener("resize", onResize);
+    return () => {
+      if (mq.removeEventListener) mq.removeEventListener("change", handler);
+      else (mq as unknown as { removeListener: (cb: () => void) => void }).removeListener(handler as never);
+      window.removeEventListener("resize", onResize);
+    };
+  }, [sidecarMode]);
+
+  // Sidecar 真正可见（open）时才注册 overlay（Esc 只在 open 关闭；minimized 不抢 Esc）
+  React.useEffect(() => {
+    if (effectiveSidecarMode !== "open") return;
     pushOverlay("kiro-sidecar", 45);
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && isTopmostOverlay("kiro-sidecar")) setSidecarOpen(false);
+      if (e.key === "Escape" && isTopmostOverlay("kiro-sidecar")) setSidecarMode("closed");
     };
     window.addEventListener("keydown", onKey);
     return () => {
       popOverlay("kiro-sidecar");
       window.removeEventListener("keydown", onKey);
     };
-  }, [effectiveSidecarOpen]);
+  }, [effectiveSidecarMode]);
 
   // ---- Transcript 操作（Task 13）：点击时读 Ref，collapsed Rail 不订阅 streaming messages ----
   const pushToast = useToastStore((s) => s.pushToast);
@@ -1061,6 +1106,8 @@ export function KiroSessionProvider({ children }: { children: React.ReactNode })
       conversationSummary,
       historyVersion,
       sidecarOpen,
+      sidecarMode,
+      kiroBusy,
       suggestionsKind,
       suggestionsGen: suggestionsGenRef.current,
       lastUserTurnGen,
@@ -1078,6 +1125,8 @@ export function KiroSessionProvider({ children }: { children: React.ReactNode })
       conversationSummary,
       historyVersion,
       sidecarOpen,
+      sidecarMode,
+      kiroBusy,
       suggestionsKind,
       lastUserTurnGen,
       hasMessages,
@@ -1100,6 +1149,8 @@ export function KiroSessionProvider({ children }: { children: React.ReactNode })
       openSidecar,
       closeSidecar,
       expandSidecar,
+      minimizeSidecar,
+      restoreSidecar,
       openForAssignment,
       openForCourse,
       openForGroupProject,
@@ -1129,6 +1180,8 @@ export function KiroSessionProvider({ children }: { children: React.ReactNode })
       openSidecar,
       closeSidecar,
       expandSidecar,
+      minimizeSidecar,
+      restoreSidecar,
       openForAssignment,
       openForCourse,
       openForGroupProject,
@@ -1167,9 +1220,12 @@ export function KiroSessionProvider({ children }: { children: React.ReactNode })
     clearHistory,
     refreshHistory,
     sidecarOpen,
+    sidecarMode,
     openSidecar,
     closeSidecar,
     expandSidecar,
+    minimizeSidecar,
+    restoreSidecar,
     suggestionsKind,
     suggestionsGen: suggestionsGenRef.current,
     lastUserTurnGen,
@@ -1204,7 +1260,7 @@ export function KiroSessionProvider({ children }: { children: React.ReactNode })
             <div className="flex h-full min-h-0 w-full overflow-hidden bg-[#F7F5F5] font-sans antialiased text-charcoal">
               {children}
               {/* Sidecar 与 Workspace 互斥；保留组件到 exit presence 完成。 */}
-              <KiroSidecar open={effectiveSidecarOpen} />
+              <KiroSidecar mode={effectiveSidecarMode} />
               {/* V2 Part 3：全局唯一 Artifact Preview Host（Workspace/Sidecar 共用） */}
               <KiroArtifactPreviewDialogHost />
             </div>

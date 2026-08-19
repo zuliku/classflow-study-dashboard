@@ -16,13 +16,20 @@ import { useKiroPreferencesStore } from "@/store/useKiroPreferencesStore";
 const mocks = vi.hoisted(() => ({
   closeSidecar: vi.fn(),
   expandSidecar: vi.fn(),
-  sessionActions: {},
+  minimizeSidecar: vi.fn(),
+  restoreSidecar: vi.fn(),
 }));
 
 vi.mock("@/components/kiro/KiroSessionProvider", () => ({
   useKiroSession: () => ({
     closeSidecar: mocks.closeSidecar,
     expandSidecar: mocks.expandSidecar,
+  }),
+  useKiroSessionActions: () => ({
+    closeSidecar: mocks.closeSidecar,
+    expandSidecar: mocks.expandSidecar,
+    minimizeSidecar: mocks.minimizeSidecar,
+    restoreSidecar: mocks.restoreSidecar,
   }),
   useKiroSessionMeta: () => ({
     currentConversationId: null,
@@ -31,6 +38,8 @@ vi.mock("@/components/kiro/KiroSessionProvider", () => ({
     conversationSummary: null,
     historyVersion: 0,
     sidecarOpen: true,
+    sidecarMode: "open" as const,
+    kiroBusy: false,
     suggestionsKind: null,
     suggestionsGen: 0,
     lastUserTurnGen: 0,
@@ -39,8 +48,8 @@ vi.mock("@/components/kiro/KiroSessionProvider", () => ({
     conversationTransition: { phase: "idle" },
     conversationProjectId: null,
     projectsVersion: 0,
+    emptyIntroGeneration: 0,
   }),
-  useKiroSessionActions: () => mocks.sessionActions,
 }));
 
 if (!window.matchMedia) {
@@ -60,16 +69,25 @@ if (!Element.prototype.setPointerCapture) {
   Element.prototype.releasePointerCapture = () => {};
 }
 
-function setup(open: boolean) {
+function setup(mode: "open" | "closed" | "minimized" = "open", present = true) {
   // 固定 viewport（jsdom 默认 768 高会把 clamp 上限压到 720，干扰 resize 断言）
   Object.defineProperty(window, "innerWidth", { configurable: true, value: 1440 });
   Object.defineProperty(window, "innerHeight", { configurable: true, value: 900 });
   const container = document.createElement("div");
   document.body.appendChild(container);
   const root = createRoot(container);
+  const rerender = (m: typeof mode, p: boolean = true) => {
+    act(() => {
+      root.render(
+        <KiroSidecarShell mode={m} present={p}>
+          <div data-testid="sidecar-body-stub">messages</div>
+        </KiroSidecarShell>
+      );
+    });
+  };
   act(() => {
     root.render(
-      <KiroSidecarShell open={open}>
+      <KiroSidecarShell mode={mode} present={present}>
         <div data-testid="sidecar-body-stub">messages</div>
       </KiroSidecarShell>
     );
@@ -84,7 +102,7 @@ function setup(open: boolean) {
     act(() => root.unmount());
     container.remove();
   };
-  return { container, panel, flush, cleanup };
+  return { container, panel, flush, cleanup, rerender, root };
 }
 
 function pointerDrag(handle: Element, moves: { x: number; y: number }[]) {
@@ -111,7 +129,7 @@ beforeEach(() => {
 
 describe("Sidecar Shell 状态机", () => {
   it("open：md+ 浮动面板渲染（role=dialog），无全屏遮罩", async () => {
-    const s = setup(true);
+    const s = setup("open", true);
     await s.flush();
     const panel = s.panel();
     expect(panel).toBeTruthy();
@@ -129,7 +147,7 @@ describe("Sidecar Shell 状态机", () => {
   });
 
   it("close 按钮 → closeSidecar 被调用", async () => {
-    const s = setup(true);
+    const s = setup("open", true);
     await s.flush();
     const closeBtn = s.container.querySelector('[aria-label="关闭 Kiro"]') as HTMLElement;
     expect(closeBtn).toBeTruthy();
@@ -138,20 +156,25 @@ describe("Sidecar Shell 状态机", () => {
     s.cleanup();
   });
 
-  it("Esc → closeSidecar 被调用", async () => {
-    const s = setup(true);
+  it("Esc → Shell 不直接处理（由 Provider + Overlay Stack 负责）", async () => {
+    const s = setup("open", true);
     await s.flush();
     act(() => {
       window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
     });
-    expect(mocks.closeSidecar).toHaveBeenCalledTimes(1);
+    // Shell 已移除独立 Esc 监听，Provider 负责
+    expect(mocks.closeSidecar).toHaveBeenCalledTimes(0);
     s.cleanup();
   });
 
-  it("closed：面板卸载（presence）", async () => {
-    const s = setup(false);
+  it("closed：present=false 时 Full 隐藏（opacity-0 + inert），不闪回", async () => {
+    const s = setup("closed", false);
     await s.flush();
-    expect(s.panel()).toBeNull();
+    const panel = s.panel();
+    expect(panel).toBeTruthy();
+    expect(panel!.getAttribute("aria-hidden")).toBe("true");
+    expect(panel!.hasAttribute("inert")).toBe(true);
+    expect(panel!.className).toContain("opacity-0");
     s.cleanup();
   });
 });
@@ -163,7 +186,7 @@ describe("Resize handles", () => {
     Number.parseFloat(s.panel()!.style.getPropertyValue("--kiro-sidecar-height"));
 
   it("左/底/角三个 handle 存在且 aria 正确", async () => {
-    const s = setup(true);
+    const s = setup("open", true);
     await s.flush();
     expect(s.container.querySelector('[data-sidecar-resize-handle="left"][aria-label="调整宽度"]')).toBeTruthy();
     expect(s.container.querySelector('[data-sidecar-resize-handle="bottom"][aria-label="调整高度"]')).toBeTruthy();
@@ -172,7 +195,7 @@ describe("Resize handles", () => {
   });
 
   it("左边缘拖拽 → 宽度变化并持久化到 store", async () => {
-    const s = setup(true);
+    const s = setup("open", true);
     await s.flush();
     const handle = s.container.querySelector('[data-sidecar-resize-handle="left"]')!;
     pointerDrag(handle, [
@@ -185,7 +208,7 @@ describe("Resize handles", () => {
   });
 
   it("底边拖拽 → 高度变化", async () => {
-    const s = setup(true);
+    const s = setup("open", true);
     await s.flush();
     const handle = s.container.querySelector('[data-sidecar-resize-handle="bottom"]')!;
     pointerDrag(handle, [
@@ -199,7 +222,7 @@ describe("Resize handles", () => {
   });
 
   it("拖到最小 → 受 min 限制（420×560）", async () => {
-    const s = setup(true);
+    const s = setup("open", true);
     await s.flush();
     const handle = s.container.querySelector('[data-sidecar-resize-handle="corner"]')!;
     pointerDrag(handle, [
@@ -215,7 +238,7 @@ describe("Resize handles", () => {
   // ---- V2.1：drag origin snapshot（multi-move 不得累计漂移） ----
 
   it("multi-move left：宽度 = origin + 最终 delta（非逐帧累计）", async () => {
-    const s = setup(true);
+    const s = setup("open", true);
     await s.flush();
     const handle = s.container.querySelector('[data-sidecar-resize-handle="left"]')!;
     // down x=620 → move 600 (+20) → 560 (+60) → 520 (+100)；最终 = 620 + 100 = 720
@@ -232,7 +255,7 @@ describe("Resize handles", () => {
   });
 
   it("multi-move bottom：高度 = origin + 最终 delta（+50）", async () => {
-    const s = setup(true);
+    const s = setup("open", true);
     await s.flush();
     const handle = s.container.querySelector('[data-sidecar-resize-handle="bottom"]')!;
     pointerDrag(handle, [
@@ -247,7 +270,7 @@ describe("Resize handles", () => {
   });
 
   it("multi-move corner：宽高同时 = origin + 最终 delta", async () => {
-    const s = setup(true);
+    const s = setup("open", true);
     await s.flush();
     const handle = s.container.querySelector('[data-sidecar-resize-handle="corner"]')!;
     // down (620,760) → (600,780) delta(+20,+20) → (580,800) delta(+40,+40) → (560,820) delta(+60,+60)
@@ -267,7 +290,7 @@ describe("Resize handles", () => {
   });
 
   it("multi-move 穿越 min 边界：最终稳定在 min（无跳变/回弹）", async () => {
-    const s = setup(true);
+    const s = setup("open", true);
     await s.flush();
     const handle = s.container.querySelector('[data-sidecar-resize-handle="left"]')!;
     // 大幅缩小越过 420 → 再微调，最终仍 = min（基于 origin 620 计算，不累计）
@@ -283,7 +306,7 @@ describe("Resize handles", () => {
   });
 
   it("最后一帧持久化：move 后立即 pointerup，保存的是该帧 size", async () => {
-    const s = setup(true);
+    const s = setup("open", true);
     await s.flush();
     const handle = s.container.querySelector('[data-sidecar-resize-handle="left"]')!;
     // down → move(590, +30) → 立即 up（无更多 move）
@@ -296,7 +319,7 @@ describe("Resize handles", () => {
   });
 
   it("拖拽中 unmount：body userSelect 恢复", async () => {
-    const s = setup(true);
+    const s = setup("open", true);
     await s.flush();
     const handle = s.container.querySelector('[data-sidecar-resize-handle="left"]')!;
     const h = handle as HTMLElement;
@@ -338,7 +361,7 @@ describe("Single Mount（V2.1）", () => {
     Object.defineProperty(window, "innerHeight", { configurable: true, value: 900 });
     act(() => {
       root.render(
-        <KiroSidecarShell open={true}>
+        <KiroSidecarShell mode="open" present={true}>
           <ChildProbe />
         </KiroSidecarShell>
       );
@@ -362,7 +385,7 @@ describe("Move handle（Move V1）", () => {
     Number.parseFloat(s.panel()!.style.getPropertyValue("--kiro-sidecar-right"));
 
   it("A. handle 存在：testid + aria-hidden（不进 Tab order）", async () => {
-    const s = setup(true);
+    const s = setup("open", true);
     await s.flush();
     const handle = s.container.querySelector('[data-testid="kiro-sidecar-move-handle"]')!;
     expect(handle).toBeTruthy();
@@ -374,7 +397,7 @@ describe("Move handle（Move V1）", () => {
   });
 
   it("B. 初始 position vars = 24px / 24px", async () => {
-    const s = setup(true);
+    const s = setup("open", true);
     await s.flush();
     expect(panelTop(s)).toBe(24);
     expect(panelRight(s)).toBe(24);
@@ -382,7 +405,7 @@ describe("Move handle（Move V1）", () => {
   });
 
   it("C. move：pointerdown(1000,100) → move(900,150) → right +100 / top +50", async () => {
-    const s = setup(true);
+    const s = setup("open", true);
     await s.flush();
     const handle = s.container.querySelector('[data-testid="kiro-sidecar-move-handle"]')!;
     pointerDrag(handle, [
@@ -395,7 +418,7 @@ describe("Move handle（Move V1）", () => {
   });
 
   it("D. multi-move：最终 = origin + 最终 delta（非逐帧累计）", async () => {
-    const s = setup(true);
+    const s = setup("open", true);
     await s.flush();
     const handle = s.container.querySelector('[data-testid="kiro-sidecar-move-handle"]')!;
     // down(1000,100) → (950,120) → (900,150)：最终 delta = (-100, +50)
@@ -411,7 +434,7 @@ describe("Move handle（Move V1）", () => {
   });
 
   it("E+G. pointermove 后立即 pointerup：store 保存最后一帧位置", async () => {
-    const s = setup(true);
+    const s = setup("open", true);
     await s.flush();
     const handle = s.container.querySelector('[data-testid="kiro-sidecar-move-handle"]')!;
     pointerDrag(handle, [
@@ -423,7 +446,7 @@ describe("Move handle（Move V1）", () => {
   });
 
   it("F. clamp：拖出右上角 → top=24 / right=maxRight（不越安全边界）", async () => {
-    const s = setup(true);
+    const s = setup("open", true);
     await s.flush();
     const handle = s.container.querySelector('[data-testid="kiro-sidecar-move-handle"]')!;
     pointerDrag(handle, [
@@ -437,7 +460,7 @@ describe("Move handle（Move V1）", () => {
   });
 
   it("F2. clamp：拖出左下角 → top=maxTop / right=24", async () => {
-    const s = setup(true);
+    const s = setup("open", true);
     await s.flush();
     const handle = s.container.querySelector('[data-testid="kiro-sidecar-move-handle"]')!;
     pointerDrag(handle, [
@@ -451,7 +474,7 @@ describe("Move handle（Move V1）", () => {
   });
 
   it("H. 拖拽中 unmount：body userSelect 恢复", async () => {
-    const s = setup(true);
+    const s = setup("open", true);
     await s.flush();
     const handle = s.container.querySelector('[data-testid="kiro-sidecar-move-handle"]')!;
     const h = handle as HTMLElement;
@@ -465,7 +488,7 @@ describe("Move handle（Move V1）", () => {
   });
 
   it("§27a. move 靠左后 left-resize：right edge 不变且 left ≥ 24", async () => {
-    const s = setup(true);
+    const s = setup("open", true);
     await s.flush();
     // 1) 移动到 right=500（左移 476：down(1000,100) → move(524,100)）
     const move = s.container.querySelector('[data-testid="kiro-sidecar-move-handle"]')!;
@@ -491,7 +514,7 @@ describe("Move handle（Move V1）", () => {
   });
 
   it("§27b. move 靠下后 bottom-resize：top edge 不变且 bottom ≤ viewport - 24", async () => {
-    const s = setup(true);
+    const s = setup("open", true);
     await s.flush();
     // 移到 top=74（dy=+50，避开 760 高度的 bottom bound 116）
     const move = s.container.querySelector('[data-testid="kiro-sidecar-move-handle"]')!;
