@@ -55,19 +55,18 @@ import {
 } from "lucide-react";
 
 export default function Home() {
-  const {
-    activeTab,
-    courses,
-    assignments,
-    semester,
-    currentSemesterWeek,
-    schedules,
-    studyBlocks,
-    setAddCourseModalOpen,
-    setImportScheduleModalOpen,
-    setFullTimetableModalOpen,
-    setSettingsModalOpen,
-  } = useAppStore();
+  // 精确 selector：避免整 store 订阅导致 UI Chrome 等无关 state 变化触发 Home 全量 render
+  const activeTab = useAppStore((s) => s.activeTab);
+  const courses = useAppStore((s) => s.courses);
+  const assignments = useAppStore((s) => s.assignments);
+  const semester = useAppStore((s) => s.semester);
+  const currentSemesterWeek = useAppStore((s) => s.currentSemesterWeek);
+  const schedules = useAppStore((s) => s.schedules);
+  const studyBlocks = useAppStore((s) => s.studyBlocks);
+  const setAddCourseModalOpen = useAppStore((s) => s.setAddCourseModalOpen);
+  const setImportScheduleModalOpen = useAppStore((s) => s.setImportScheduleModalOpen);
+  const setFullTimetableModalOpen = useAppStore((s) => s.setFullTimetableModalOpen);
+  const setSettingsModalOpen = useAppStore((s) => s.setSettingsModalOpen);
 
   // 当前周 Context（Overview / Timeline / Analytics 共用同一学期模型数据源）
   const currentWeekContext = `第 ${currentSemesterWeek} 周 · ${formatWeekDateRange(

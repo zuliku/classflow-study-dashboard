@@ -3,6 +3,7 @@
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { useAppStore } from "@/store/useAppStore";
+import { useUIChromeStore } from "@/store/useUIChromeStore";
 import { useReminderCenterStore } from "@/store/useReminderCenterStore";
 import { hasUnreadFiredReminders } from "@/lib/reminders/reminderCenterView";
 import { useEffectiveReducedMotion } from "@/hooks/useEffectiveReducedMotion";
@@ -16,17 +17,26 @@ import { SidebarProfileCard } from "@/components/layout/SidebarProfileCard";
 
 /** 桌面展开断点（≥1280）：用户可手动折叠；<1280 强制 icon rail。resolved 标记视口已测量（hydration guard）。 */
 function useIsXl(): { isXl: boolean; resolved: boolean } {
-  const [isXl, setIsXl] = useState(false);
-  const [resolved, setResolved] = useState(false);
+  // Desktop Renderer 无 SSR hydration：首帧直接同步 matchMedia，避免 64px → 224px 额外 App Layout
+  const [isXl, setIsXl] = useState(() =>
+    typeof window === "undefined" ? false : window.matchMedia("(min-width: 1280px)").matches
+  );
+  const [resolved, setResolved] = useState(() => isXl);
   useEffect(() => {
     const mq = window.matchMedia("(min-width: 1280px)");
     const apply = () => setIsXl(mq.matches);
-    apply();
-    setResolved(true);
     mq.addEventListener("change", apply);
     return () => mq.removeEventListener("change", apply);
   }, []);
   return { isXl, resolved };
+}
+
+/** Plate 测量去重：y/h 未真实变化时返回 false（避免无意义 setState → React commit） */
+export function shouldUpdatePlate(
+  prev: { y: number; h: number } | null,
+  next: { y: number; h: number }
+): boolean {
+  return prev === null || prev.y !== next.y || prev.h !== next.h;
 }
 
 /**
@@ -38,9 +48,12 @@ function useIsXl(): { isXl: boolean; resolved: boolean } {
  * - Logo：Full Logo 与 Mark 同容器 crossfade；Profile：single-DOM morph（SidebarProfileCard）
  */
 export function Sidebar() {
-  const { activeTab, setActiveTab, setSettingsModalOpen } = useAppStore();
-  const sidebarCollapsed = useAppStore((s) => s.sidebarCollapsed);
-  const setSidebarCollapsed = useAppStore((s) => s.setSidebarCollapsed);
+  const activeTab = useAppStore((s) => s.activeTab);
+  const setActiveTab = useAppStore((s) => s.setActiveTab);
+  const setSettingsModalOpen = useAppStore((s) => s.setSettingsModalOpen);
+  // UI Chrome：低成本独立 store（不触发主业务 store persist / 大范围 render）
+  const sidebarCollapsed = useUIChromeStore((s) => s.sidebarCollapsed);
+  const setSidebarCollapsed = useUIChromeStore((s) => s.setSidebarCollapsed);
   const reminderCenterOpen = useReminderCenterStore((s) => s.isOpen);
   const reminderCenterToggle = useReminderCenterStore((s) => s.toggle);
   const reminders = useAppStore((s) => s.reminders);
@@ -55,10 +68,13 @@ export function Sidebar() {
   // 只有用户主动点击才进入 manual morph；transitionend(width) 后回落 idle。
   const [motionActive, setMotionActive] = useState(false);
   const [motionDirection, setMotionDirection] = useState<"collapse" | "expand" | null>(null);
+  // ref 供 ResizeObserver 回调读取（回调闭包捕获旧 state 会失效）
+  const motionActiveRef = useRef(false);
 
   const toggleCollapsed = () => {
     const next = !sidebarCollapsed;
     if (!reducedMotion) {
+      motionActiveRef.current = true;
       setMotionActive(true);
       setMotionDirection(next ? "collapse" : "expand");
     }
@@ -68,8 +84,11 @@ export function Sidebar() {
   const handleShellTransitionEnd = (e: React.TransitionEvent<HTMLElement>) => {
     // 只认 Sidebar width 段：动画完成 → 回落 idle（CSS transition 可直接从当前位置反向，无 timer queue）
     if (e.propertyName !== "width") return;
+    motionActiveRef.current = false;
     setMotionActive(false);
     setMotionDirection(null);
+    // motion 结束后做一次最终 plate 校正（motionActive 期间冻结了 RO measure）
+    requestAnimationFrame(() => measurePlate());
   };
 
   // ---- 共享 Navigation Active Plate（IM1）：MAIN_NAV 唯一 selection surface ----
@@ -82,7 +101,9 @@ export function Sidebar() {
   const measurePlate = useCallback(() => {
     const el = itemRefs.current.get(activeTab);
     if (!el) return;
-    setPlate({ y: el.offsetTop, h: el.offsetHeight });
+    const next = { y: el.offsetTop, h: el.offsetHeight };
+    // 相同 y/h 不创建新 state object（避免无意义 React commit）
+    setPlate((prev) => (shouldUpdatePlate(prev, next) ? next : prev));
   }, [activeTab]);
 
   // 首次 render / activeTab 变化：paint 前同步定位（无 transition 由 interacted 控制）
@@ -90,11 +111,22 @@ export function Sidebar() {
     measurePlate();
   }, [measurePlate]);
 
-  // nav 尺寸变化（断点 / 折叠 / 内容变化）→ 重新测量
+  // nav 垂直尺寸变化 → 重新测量。
+  // 只响应 block-size（contentRect.height）真实变化；宽度 morph 不触发（nav 行高折叠时不变）。
+  // motionActive（manual morph）期间冻结：transitionend 后再做一次最终校正。
   useLayoutEffect(() => {
     const nav = navRef.current;
     if (!nav) return;
-    const ro = new ResizeObserver(() => measurePlate());
+    let lastHeight = -1;
+    const ro = new ResizeObserver((entries) => {
+      if (motionActiveRef.current) return;
+      const entry = entries[0];
+      if (!entry) return;
+      const h = entry.contentRect.height;
+      if (h === lastHeight) return;
+      lastHeight = h;
+      measurePlate();
+    });
     ro.observe(nav);
     return () => ro.disconnect();
   }, [measurePlate]);
@@ -110,7 +142,18 @@ export function Sidebar() {
   useLayoutEffect(() => {
     const el = navAreaRef.current;
     if (!el) return;
-    const check = () => setNavScrollable(el.scrollHeight > el.clientHeight + 1);
+    let lastHeight: number | null = null;
+    let lastScrollable: boolean | null = null;
+    const check = () => {
+      // 只响应 block-size 变化（宽度 morph 不影响 overflow-y）
+      if (el.clientHeight === lastHeight) return;
+      lastHeight = el.clientHeight;
+      const next = el.scrollHeight > el.clientHeight + 1;
+      if (next !== lastScrollable) {
+        lastScrollable = next;
+        setNavScrollable(next);
+      }
+    };
     check();
     const ro = new ResizeObserver(check);
     ro.observe(el);

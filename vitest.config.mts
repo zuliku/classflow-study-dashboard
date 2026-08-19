@@ -26,6 +26,7 @@ export default defineConfig({
       "tests/timetableImportFinalHardening.test.tsx",
       "tests/aiOpenCodeGoMimoTimetableVisionSmoke.test.ts",
       "tests/focusControlCompact.test.tsx",
+      "tests/sidebarChrome.test.ts",
     ],
   },
 });

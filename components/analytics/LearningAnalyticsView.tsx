@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { useAppStore } from "@/store/useAppStore";
 import { AnalyticsRangePreset, LearningAnalyticsSnapshot } from "@/lib/analytics/types";
 import { useLearningAnalytics } from "@/hooks/useLearningAnalytics";
@@ -68,6 +68,11 @@ export function LearningAnalyticsView() {
   const { data, loading, error } = useLearningAnalytics(preset);
   const [outlookHorizon, setOutlookHorizon] = useState<StudyOutlookHorizon>(7);
   const outlook = useStudyOutlook(outlookHorizon);
+  // 趋势图动画：仅首次 meaningful load 播放；后续 Range 切换直接更新（外层 ux-settle 表达 continuity）
+  const [trendAnimated, setTrendAnimated] = useState(true);
+  useEffect(() => {
+    if (data && !data.isEmpty) setTrendAnimated(false);
+  }, [data]);
 
   const courseNameById = Object.fromEntries(courses.map((c) => [c.id, c.name]));
 
@@ -221,7 +226,7 @@ export function LearningAnalyticsView() {
                         学习趋势
                       </h3>
                       <div className="pt-3">
-                        <LearningTrendChart points={data.trend} period={data.period} />
+                        <LearningTrendChart points={data.trend} period={data.period} animate={trendAnimated} />
                       </div>
                     </div>
                     <LearningSignalsCard signals={data.signals} onNavigate={navigate} />

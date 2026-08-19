@@ -275,10 +275,59 @@ export function SettingsView({
 
       {/* 右侧 Workspace：Detail Pane（唯一主要滚动区） */}
       <div className="flex-1 min-w-0 min-h-0 flex flex-col">
-        {/* Detail Pane：唯一滚动区；所有 section 常驻挂载 */}
-        <div className="flex-1 min-w-0 min-h-0 overflow-y-auto p-4 md:pt-4 md:px-5 md:pb-5" data-testid="settings-detail">
-          {searching ? (
-            <div key="search-results" className="ux-fade" data-testid="settings-search-results">
+        {/* Detail Pane：唯一滚动区；Search / Normal 双 mounted（不卸载 Normal Settings → draft/effect 不丢）。
+            保持一个在 flow（决定滚动高度），另一个 absolute inset 覆盖隐藏；只切 visibility/pointer-events/aria-hidden */}
+        <div className="relative flex-1 min-w-0 min-h-0 overflow-y-auto p-4 md:pt-4 md:px-5 md:pb-5" data-testid="settings-detail">
+          {/* ---- 常规 section 内容（searching 时保持 mounted，仅覆盖隐藏） ---- */}
+          <div
+            aria-hidden={searching || undefined}
+            className={cn(
+              "ux-fade transition-opacity duration-[var(--motion-fast)] ease-[var(--ease-standard)]",
+              searching && "absolute inset-0 opacity-0 invisible pointer-events-none"
+            )}
+          >
+            <div className={cn(section === "general" && "ux-fade")} hidden={section !== "general"}>
+              <GeneralSettings highlightedId={highlightedId ?? undefined} />
+            </div>
+            <div className={cn(section === "profile" && "ux-fade")} hidden={section !== "profile"}>
+              <ProfileSettings onDirtyChange={(d) => onDirtyChange("profile", d)} discardToken={discardToken} />
+            </div>
+            <div className={cn(section === "semester" && "ux-fade")} hidden={section !== "semester"}>
+              <SemesterSettings
+                highlightedId={highlightedId ?? undefined}
+                onDirtyChange={(d) => onDirtyChange("semester", d)}
+                discardToken={discardToken}
+              />
+            </div>
+            <div className={cn(section === "tasks" && "ux-fade")} hidden={section !== "tasks"}>
+              <TaskSettings highlightedId={highlightedId ?? undefined} />
+            </div>
+            <div className={cn(section === "focus" && "ux-fade")} hidden={section !== "focus"}>
+              <FocusSettings />
+            </div>
+            <div className={cn(section === "kiro" && "ux-fade")} hidden={section !== "kiro"}>
+              <KiroAISettings reveal={reveal} />
+            </div>
+            <div className={cn(section === "kiro-agent" && "ux-fade")} hidden={section !== "kiro-agent"}>
+              <KiroAgentSettings />
+            </div>
+            <div className={cn(section === "data" && "ux-fade")} hidden={section !== "data"}>
+              <DataSettings />
+            </div>
+            <div className={cn(section === "about" && "ux-fade")} hidden={section !== "about"}>
+              <AboutSettings />
+            </div>
+          </div>
+
+          {/* ---- Search Results（常驻 mounted；非 searching 时覆盖隐藏） ---- */}
+          <div
+            aria-hidden={!searching || undefined}
+            className={cn(
+              "ux-fade transition-opacity duration-[var(--motion-fast)] ease-[var(--ease-standard)]",
+              !searching && "absolute inset-0 opacity-0 invisible pointer-events-none"
+            )}
+          >
+            <div data-testid="settings-search-results">
               <p className="text-[11px] font-bold text-sandrift mb-2">
                 搜索结果 · {searchResults.length}
               </p>
@@ -310,42 +359,7 @@ export function SettingsView({
                 })()
               )}
             </div>
-          ) : (
-            /* ---- 常规 section 内容（常驻挂载；仅 Search↔Normal 边界轻 fade） ---- */
-            <div key="normal-settings" className="ux-fade">
-              <div className={cn(section === "general" && "ux-fade")} hidden={section !== "general"}>
-                <GeneralSettings highlightedId={highlightedId ?? undefined} />
-              </div>
-              <div className={cn(section === "profile" && "ux-fade")} hidden={section !== "profile"}>
-                <ProfileSettings onDirtyChange={(d) => onDirtyChange("profile", d)} discardToken={discardToken} />
-              </div>
-              <div className={cn(section === "semester" && "ux-fade")} hidden={section !== "semester"}>
-                <SemesterSettings
-                  highlightedId={highlightedId ?? undefined}
-                  onDirtyChange={(d) => onDirtyChange("semester", d)}
-                  discardToken={discardToken}
-                />
-              </div>
-              <div className={cn(section === "tasks" && "ux-fade")} hidden={section !== "tasks"}>
-                <TaskSettings highlightedId={highlightedId ?? undefined} />
-              </div>
-              <div className={cn(section === "focus" && "ux-fade")} hidden={section !== "focus"}>
-                <FocusSettings />
-              </div>
-              <div className={cn(section === "kiro" && "ux-fade")} hidden={section !== "kiro"}>
-                <KiroAISettings reveal={reveal} />
-              </div>
-              <div className={cn(section === "kiro-agent" && "ux-fade")} hidden={section !== "kiro-agent"}>
-                <KiroAgentSettings />
-              </div>
-              <div className={cn(section === "data" && "ux-fade")} hidden={section !== "data"}>
-                <DataSettings />
-              </div>
-              <div className={cn(section === "about" && "ux-fade")} hidden={section !== "about"}>
-                <AboutSettings />
-              </div>
-            </div>
-          )}
+          </div>
         </div>
       </div>
     </div>

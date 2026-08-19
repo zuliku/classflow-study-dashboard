@@ -28,12 +28,16 @@ const FOCUS_COLOR = "#627566";
 export function LearningTrendChart({
   points,
   period,
+  animate = true,
 }: {
   points: LearningTrendPoint[];
   period: AnalyticsPeriod;
+  /** 是否播放 Recharts 条形入场动画（仅首次 meaningful load 启用；Range 切换由外层 ux-settle 表达） */
+  animate?: boolean;
 }) {
   const reducedMotion = useEffectiveReducedMotion();
   const hasPlanValues = points.some((p) => p.plannedMinutes !== null);
+  const chartActive = animate && !reducedMotion;
   const data = points.map((p) => ({
     key: p.key,
     label: p.label,
@@ -87,9 +91,9 @@ export function LearningTrendChart({
               wrapperStyle={{ outline: "none" }}
             />
             {hasPlanValues && (
-              <Bar dataKey="计划" fill={PLAN_COLOR} radius={[3, 3, 0, 0]} isAnimationActive={!reducedMotion} animationDuration={reducedMotion ? 0 : 400} />
+              <Bar dataKey="计划" fill={PLAN_COLOR} radius={[3, 3, 0, 0]} isAnimationActive={chartActive} animationDuration={chartActive ? 400 : 0} />
             )}
-            <Bar dataKey="实际专注" fill={FOCUS_COLOR} radius={[3, 3, 0, 0]} isAnimationActive={!reducedMotion} animationDuration={reducedMotion ? 0 : 400} />
+            <Bar dataKey="实际专注" fill={FOCUS_COLOR} radius={[3, 3, 0, 0]} isAnimationActive={chartActive} animationDuration={chartActive ? 400 : 0} />
           </BarChart>
         </ResponsiveContainer>
       </div>

@@ -436,6 +436,12 @@ html[data-motion-effective="reduced"] *::after {
   animation: flow-angle-spin 4.5s linear infinite;
 }
 
+/* Performance（Phase 2）：Sidebar width morph 期间暂停品牌流光（230ms 无需持续 repaint）；
+   morph 结束（data-motion-active 回落 false）后自动继续。 */
+.sidebar-shell[data-motion-active="true"] .kiro-featured-flow {
+  animation-play-state: paused;
+}
+
 /* Reduced Motion：关闭动画，保留静态品牌细边 */
 html[data-motion-effective="reduced"] .kiro-ring-animated,
 html[data-motion-effective="reduced"] .kiro-featured-flow {
@@ -594,7 +600,9 @@ html[data-motion-effective="reduced"] .kiro-rail-plate .kiro-ring {
 
 /* Nav / Profile Label：始终 mounted，永不 display:none。
    折叠 = opacity 0 + translateX(-4px) + max-width 0（文字随宽度自然裁剪）；
-   展开 = 反向。绝不 scale 文字。 */
+   展开 = 反向。绝不 scale 文字。
+   Performance（Phase 2）：max-width 是 layout 属性，用更短 duration（120ms）只做必要短段收束，
+   避免 230ms 全程所有 label 持续 layout tween；opacity/transform 保持快速。 */
 .sidebar-label,
 .sidebar-profile-identity {
   display: inline-block;
@@ -604,8 +612,8 @@ html[data-motion-effective="reduced"] .kiro-rail-plate .kiro-ring {
   white-space: nowrap;
   overflow: hidden;
   transition-property: opacity, transform, max-width;
-  transition-duration: var(--motion-fast), var(--motion-fast), var(--motion-panel);
-  transition-timing-function: var(--ease-standard), var(--ease-standard), var(--ease-emphasized);
+  transition-duration: var(--motion-fast), var(--motion-fast), 120ms;
+  transition-timing-function: var(--ease-standard), var(--ease-standard), var(--ease-standard);
 }
 [data-collapsed="true"] .sidebar-label,
 [data-collapsed="true"] .sidebar-profile-identity {
@@ -617,8 +625,8 @@ html[data-motion-effective="reduced"] .kiro-rail-plate .kiro-ring {
 [data-motion-active="false"] .sidebar-profile-identity {
   transition: none;
 }
-/* Collapse：文字先淡出（0ms），宽度随 Shell 收束（40ms 后开始）；
-   Expand：宽度先释放，文字延迟 80ms 淡入（先有几何再有内容）。 */
+/* Collapse：文字先淡出（0ms），几何短段收束（40ms 后开始、120ms 内完成）；
+   Expand：几何先释放（0ms），文字延迟 80ms 淡入（先有几何再有内容）。 */
 [data-motion-active="true"][data-motion-direction="collapse"] .sidebar-label,
 [data-motion-active="true"][data-motion-direction="collapse"] .sidebar-profile-identity {
   transition-delay: 0ms, 0ms, 40ms;
@@ -717,15 +725,15 @@ html[data-motion-effective="reduced"] .kiro-rail-plate .kiro-ring {
   display: block;
 }
 
-/* Profile Credits：max-height 0 + 上移 + 淡出 */
+/* Profile Credits：max-height 0 + 上移 + 淡出（max-height 短段收束，避免 230ms layout tween） */
 .sidebar-profile-credits {
   max-height: 64px;
   opacity: 1;
   transform: translateY(0);
   overflow: hidden;
   transition-property: opacity, transform, max-height;
-  transition-duration: var(--motion-fast), var(--motion-fast), var(--motion-panel);
-  transition-timing-function: var(--ease-standard), var(--ease-standard), var(--ease-emphasized);
+  transition-duration: var(--motion-fast), var(--motion-fast), 120ms;
+  transition-timing-function: var(--ease-standard), var(--ease-standard), var(--ease-standard);
 }
 [data-collapsed="true"] .sidebar-profile-credits {
   max-height: 0;
