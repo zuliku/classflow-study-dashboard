@@ -2,10 +2,11 @@
  * PTY Agent Integration（Phase 4）— 高层工具，不暴露 arbitrary keys。
  *
  * - create_terminal_session / run_terminal_session_command / write_terminal_session_input / close_terminal_session
- * - 每条 run 命令重新经过 shell.execute policy + Risk Gate + approval
+ * - 每条 run 命令重新经过 shell.execute policy + Risk Gate + approval（绑定原始 session 的 workspace/root/shell）
  * - 使用随机 sentinel 探测命令结束（PowerShell $LASTEXITCODE），不暴露内部实现给模型
  * - 每 session 同时最多一条活跃 Agent 命令
  * - 输出经脱敏（ANSI → path → secret → bound）
+ * - 本轮 PTY Agent 仅支持 PowerShell（cmd PTY 返回 UNSUPPORTED_TERMINAL_SHELL）
  */
 
 import { KiroWorkspaceMeta, ComputerPermissionRule } from "@/lib/ai/computer/types";
@@ -33,6 +34,7 @@ const TERMINAL_FIXED_MESSAGES = {
   TERMINAL_UNAVAILABLE: "终端仅在桌面版且已开启时可用",
   TERMINAL_NATIVE_WORKSPACE_REQUIRED: "终端需要桌面本地工作区",
   TERMINAL_NOT_FOUND: "终端会话不存在或已结束。",
+  TERMINAL_SESSION_EXITED: "终端会话已结束。",
 };
 
 function resolveSnapshotWorkspace(snapshot: KiroComputerTurnSnapshot, liveWorkspaces: KiroWorkspaceMeta[]) {
@@ -42,9 +44,18 @@ function resolveSnapshotWorkspace(snapshot: KiroComputerTurnSnapshot, liveWorksp
   return ws;
 }
 
-// PTY handle → sessionId 映射（opaque，不暴露 raw sessionId/PID/native path）
-const ptyHandleToSessionId = new Map<string, string>();
-const sessionIdToHandle = new Map<string, string>();
+interface PtyAgentSessionRecord {
+  handle: string;
+  sessionId: string;
+  workspaceId: string;
+  rootId: string;
+  shell: "powershell";
+  initialCwd: string;
+  createdAt: number;
+}
+
+const ptySessions = new Map<string, PtyAgentSessionRecord>(); // handle -> record
+const sessionIdToHandle = new Map<string, string>(); // sessionId -> handle
 // 每 session 的活跃命令状态（同时仅一条）
 const activePtyCommands = new Map<string, { nonce: string; resolve: (r: PtyCommandResult) => void; reject: (e: Error) => void; buffer: string; timer?: ReturnType<typeof setTimeout> }>();
 
@@ -60,21 +71,29 @@ function ptyError(code: string, message: string): ComputerError {
 
 // 供测试：直接检查 handle 存在
 export function hasPtyHandle(handle: string): boolean {
-  return ptyHandleToSessionId.has(handle);
+  return ptySessions.has(handle);
 }
 export function activePtyHandleCount(): number {
-  return ptyHandleToSessionId.size;
+  return ptySessions.size;
 }
 export function clearAllPtyHandles(): void {
-  ptyHandleToSessionId.clear();
+  ptySessions.clear();
   sessionIdToHandle.clear();
   for (const [, rec] of activePtyCommands) {
     if (rec.timer) clearTimeout(rec.timer);
   }
   activePtyCommands.clear();
+  if (ptyGlobalUnsubscribe) {
+    try { ptyGlobalUnsubscribe(); } catch {}
+    ptyGlobalUnsubscribe = null;
+    ptyGlobalBridge = null;
+  }
+}
+export function getPtySessionRecord(handle: string): PtyAgentSessionRecord | undefined {
+  return ptySessions.get(handle);
 }
 
-// 订阅 PTY session 事件：全局单例订阅，路由到对应 active command 的 buffer
+// 订阅 PTY session 事件：全局单例订阅，路由到对应 active command 的 buffer + 处理 exit 清理
 let ptyGlobalUnsubscribe: (() => void) | null = null;
 let ptyGlobalBridge: unknown = null;
 function ensurePtyEventSubscription(): void {
@@ -88,22 +107,32 @@ function ensurePtyEventSubscription(): void {
   ptyGlobalBridge = bridge;
   ptyGlobalUnsubscribe = bridge.subscribeSession((event: unknown) => {
     const e = event as DesktopTerminalSessionEvent;
+    if (e.type === "exit") {
+      const handle = sessionIdToHandle.get(e.sessionId);
+      if (handle) {
+        // 清理 active command（若有）
+        const rec = activePtyCommands.get(e.sessionId);
+        if (rec) {
+          if (rec.timer) clearTimeout(rec.timer);
+          activePtyCommands.delete(e.sessionId);
+          rec.reject(new Error("PTY_SESSION_EXITED"));
+        }
+        ptySessions.delete(handle);
+        sessionIdToHandle.delete(e.sessionId);
+      }
+      return;
+    }
     if (e.type !== "data") return;
     for (const [sessionId, rec] of activePtyCommands.entries()) {
-      // 找到对应 sessionId 的活跃命令
-      // sessionId 来自 ptyHandleToSessionId 的值
-      // 需要反向查找：handle → sessionId, 但 activePtyCommands key 是 sessionId
       if (sessionId !== (e as { sessionId: string }).sessionId) continue;
       rec.buffer += (e as { data: string }).data;
       const sentinel = `__CF_DONE_${rec.nonce}__`;
       const idx = rec.buffer.indexOf(sentinel);
       if (idx !== -1) {
         const before = rec.buffer.slice(0, idx);
-        // 提取 exitCode：sentinel 后紧跟数字
         const after = rec.buffer.slice(idx + sentinel.length);
         const m = after.match(/^(\d+)/);
         const exitCode = m ? parseInt(m[1], 10) : null;
-        // 从输出中移除 sentinel 行（含前后换行）
         const output = before.trim();
         if (rec.timer) clearTimeout(rec.timer);
         activePtyCommands.delete(sessionId);
@@ -131,6 +160,10 @@ export async function createKiroPtySession(input: CreatePtySessionInput): Promis
   const parsed = createTerminalSessionSchema.safeParse(toolInput);
   if (!parsed.success) return fail({ ok: false, code: "INVALID_INPUT", message: "输入不合法" });
   const args = parsed.data;
+  // 本轮 PTY Agent 仅支持 PowerShell
+  if (args.shell !== "powershell") {
+    return fail({ ok: false, code: "UNSUPPORTED_TERMINAL_SHELL", message: "当前 PTY 仅支持 PowerShell" });
+  }
   const bridge = getClassFlowDesktopTerminalPtyBridge();
   if (!bridge || snapshot.terminalEnabled !== true) {
     return fail({ ok: false, code: "TERMINAL_UNAVAILABLE", message: TERMINAL_FIXED_MESSAGES.TERMINAL_UNAVAILABLE });
@@ -141,7 +174,7 @@ export async function createKiroPtySession(input: CreatePtySessionInput): Promis
   } catch (e) {
     return fail({ ok: false, code: (e as ComputerError).code, message: (e as Error).message });
   }
-  const shell = args.shell;
+  const shell = args.shell as "powershell";
   const rootId = args.rootId ? String(args.rootId) : "";
   const cwdArg = args.cwd ? String(args.cwd) : "";
   const root = rootId ? ws.roots.find((r) => r.id === rootId) : ws.roots.length === 1 ? ws.roots[0] : undefined;
@@ -170,7 +203,6 @@ export async function createKiroPtySession(input: CreatePtySessionInput): Promis
     (policy as { effect: string }).effect = "ask";
   }
   if (policy.effect === "ask") {
-    // PTY 创建同样需要 approval（allow-once）
     const fingerprint = `pty-create:${root.id}:${cwd}:${shell}`;
     const matched = input.oneShotApprovals.findIndex((o) => oneShotApprovalMatches(o, { toolCallId, capability: "shell.execute", workspaceId: ws.id, rootId: root.id, relativePath: cwd, fingerprint }));
     if (matched === -1) {
@@ -201,7 +233,16 @@ export async function createKiroPtySession(input: CreatePtySessionInput): Promis
     const result = await bridge.createSession!({ shell, grantId, cwd, cols: 120, rows: 32 });
     const sessionId = result.sessionId;
     const handle = `sh-${crypto.randomUUID().slice(0, 8)}`;
-    ptyHandleToSessionId.set(handle, sessionId);
+    const record: PtyAgentSessionRecord = {
+      handle,
+      sessionId,
+      workspaceId: ws.id,
+      rootId: root.id,
+      shell,
+      initialCwd: cwd,
+      createdAt: Date.now(),
+    };
+    ptySessions.set(handle, record);
     sessionIdToHandle.set(sessionId, handle);
     ensurePtyEventSubscription();
     void appendComputerAuditEntry({
@@ -239,43 +280,46 @@ export async function runKiroPtySessionCommand(input: RunPtySessionCommandInput)
   const parsed = runTerminalSessionCommandSchema.safeParse(toolInput);
   if (!parsed.success) return fail({ ok: false, code: "INVALID_INPUT", message: "输入不合法" });
   const { sessionHandle, command, timeoutMs } = parsed.data;
-  const sessionId = ptyHandleToSessionId.get(sessionHandle);
-  if (!sessionId) return fail({ ok: false, code: "TERMINAL_NOT_FOUND", message: TERMINAL_FIXED_MESSAGES.TERMINAL_NOT_FOUND });
-  if (activePtyCommands.has(sessionId)) return fail({ ok: false, code: "INVALID_OPERATION", message: "会话已有活跃命令，请等待完成" });
-  // 每条命令重新经过 policy + Risk Gate
-  // 需要获取 workspace/root 信息：从 handle 的原始创建记录中无法直接获取，改用 snapshot 的 workspace
+  const record = ptySessions.get(sessionHandle);
+  if (!record) return fail({ ok: false, code: "TERMINAL_NOT_FOUND", message: TERMINAL_FIXED_MESSAGES.TERMINAL_NOT_FOUND });
+  // 验证 session 仍属于当前 workspace 且 root 仍有效
+  if (record.workspaceId !== snapshot.workspaceId) {
+    return fail({ ok: false, code: "TERMINAL_NOT_FOUND", message: TERMINAL_FIXED_MESSAGES.TERMINAL_NOT_FOUND });
+  }
   let ws: ReturnType<typeof resolveSnapshotWorkspace>;
   try {
     ws = resolveSnapshotWorkspace(snapshot, liveWorkspaces);
   } catch (e) {
     return fail({ ok: false, code: (e as ComputerError).code, message: (e as Error).message });
   }
-  // 简化：取第一个 native root 作为校验目标（PTY 会话已绑定 grant，此处做通用校验）
-  const nativeRoot = ws.roots.find((r) => isNativeAdapterRef(r.adapterRef));
-  if (!nativeRoot) return fail({ ok: false, code: "TERMINAL_NATIVE_WORKSPACE_REQUIRED", message: TERMINAL_FIXED_MESSAGES.TERMINAL_NATIVE_WORKSPACE_REQUIRED });
-  const cwdForPolicy = ""; // PTY cwd 已持久化，此处用 root 路径做 policy 校验
+  const root = ws.roots.find((r) => r.id === record.rootId);
+  if (!root) return fail({ ok: false, code: "TERMINAL_NOT_FOUND", message: TERMINAL_FIXED_MESSAGES.TERMINAL_NOT_FOUND });
+  if (!isNativeAdapterRef(root.adapterRef) || root.access === "read-only" || snapshot.terminalEnabled !== true) {
+    return fail({ ok: false, code: "TERMINAL_NOT_FOUND", message: TERMINAL_FIXED_MESSAGES.TERMINAL_NOT_FOUND });
+  }
+  if (activePtyCommands.has(record.sessionId)) return fail({ ok: false, code: "INVALID_OPERATION", message: "会话已有活跃命令，请等待完成" });
   const policy = evaluateComputerPolicy({
     capability: "shell.execute",
     mode: snapshot.agentMode,
     rules: livePermissionRules,
     workspaceId: ws.id,
-    rootId: nativeRoot.id,
-    rootAccess: nativeRoot.access,
-    resourcePath: cwdForPolicy,
+    rootId: root.id,
+    rootAccess: root.access,
+    resourcePath: record.initialCwd,
   });
   if (policy.effect === "deny") return fail({ ok: false, code: "PERMISSION_DENIED", message: policy.reason });
   if (policy.effect === "allow" && policy.matchedRuleId && snapshot.agentMode !== "workspace-auto") {
     (policy as { effect: string }).effect = "ask";
   }
-  const shell: "powershell" | "cmd" = "powershell"; // PTY 默认 powershell，risk 判定按 powershell
+  const shell = record.shell;
   const risk = classifyTerminalCommandRisk(command, shell);
   if (risk === "blocked") {
     return fail({ ok: false, code: "TERMINAL_COMMAND_BLOCKED", message: "该终端命令需要更高系统权限或使用了当前版本不允许的执行方式。" });
   }
   const askForRisk = risk === "destructive" || risk === "privileged";
   if (policy.effect === "ask" || askForRisk) {
-    const fingerprint = terminalExecutionFingerprint({ shell, rootId: nativeRoot.id, cwd: cwdForPolicy, command });
-    const matched = input.oneShotApprovals.findIndex((o) => oneShotApprovalMatches(o, { toolCallId, capability: "shell.execute", workspaceId: ws.id, rootId: nativeRoot.id, relativePath: cwdForPolicy, fingerprint }));
+    const fingerprint = terminalExecutionFingerprint({ shell, rootId: root.id, cwd: record.initialCwd, command });
+    const matched = input.oneShotApprovals.findIndex((o) => oneShotApprovalMatches(o, { toolCallId, capability: "shell.execute", workspaceId: ws.id, rootId: root.id, relativePath: record.initialCwd, fingerprint }));
     if (matched === -1) {
       return {
         kind: "approval-required",
@@ -286,9 +330,9 @@ export async function runKiroPtySessionCommand(input: RunPtySessionCommandInput)
           capability: "shell.execute",
           workspaceId: ws.id,
           workspaceLabel: ws.name,
-          rootId: nativeRoot.id,
-          rootLabel: nativeRoot.label,
-          relativePath: cwdForPolicy,
+          rootId: root.id,
+          rootLabel: root.label,
+          relativePath: record.initialCwd,
           resourceLabel: redactCommandPreview(command, 80),
           description: `${shell}: ${redactCommandPreview(command, 80)}`,
           fingerprint,
@@ -306,7 +350,6 @@ export async function runKiroPtySessionCommand(input: RunPtySessionCommandInput)
   ensurePtyEventSubscription();
   const nonce = crypto.randomUUID().replace(/-/g, "").slice(0, 8);
   const sentinel = `__CF_DONE_${nonce}__`;
-  // PowerShell sentinel：命令 + 捕获 LASTEXITCODE + 输出 sentinel + exitCode
   const wrapped = `${command}\n$__cfExit=$LASTEXITCODE\nWrite-Output "${sentinel}$__cfExit"`;
   let resolve!: (r: PtyCommandResult) => void;
   let reject!: (e: Error) => void;
@@ -315,15 +358,21 @@ export async function runKiroPtySessionCommand(input: RunPtySessionCommandInput)
     reject = rej;
   });
   const timeout = timeoutMs ?? 10000;
-  const timer = setTimeout(() => {
-    activePtyCommands.delete(sessionId);
+  const timer = setTimeout(async () => {
+    activePtyCommands.delete(record.sessionId);
+    // 超时必须终止整个 session（确定性安全策略）
+    try {
+      if (bridge.closeSession) await bridge.closeSession({ sessionId: record.sessionId });
+    } catch {}
+    ptySessions.delete(sessionHandle);
+    sessionIdToHandle.delete(record.sessionId);
     reject(new Error("PTY_TIMEOUT"));
   }, timeout);
-  activePtyCommands.set(sessionId, { nonce, resolve, reject, buffer: "", timer });
+  activePtyCommands.set(record.sessionId, { nonce, resolve, reject, buffer: "", timer });
   try {
-    await bridge.writeSession({ sessionId, data: wrapped + "\r" });
+    await bridge.writeSession({ sessionId: record.sessionId, data: wrapped + "\r" });
   } catch (err) {
-    activePtyCommands.delete(sessionId);
+    activePtyCommands.delete(record.sessionId);
     clearTimeout(timer);
     return fail({ ok: false, code: "TERMINAL_EXECUTION_FAILED", message: "PTY 命令写入失败" });
   }
@@ -333,6 +382,9 @@ export async function runKiroPtySessionCommand(input: RunPtySessionCommandInput)
   } catch (e) {
     if ((e as Error).message === "PTY_TIMEOUT") {
       return fail({ ok: false, code: "TERMINAL_TIMEOUT", message: "终端命令执行超时" });
+    }
+    if ((e as Error).message === "PTY_SESSION_EXITED") {
+      return fail({ ok: false, code: "TERMINAL_SESSION_EXITED", message: TERMINAL_FIXED_MESSAGES.TERMINAL_SESSION_EXITED });
     }
     return fail({ ok: false, code: "TERMINAL_EXECUTION_FAILED", message: "PTY 命令执行失败" });
   } finally {
@@ -350,9 +402,9 @@ export async function runKiroPtySessionCommand(input: RunPtySessionCommandInput)
     outcome: "executed",
     workspaceId: ws.id,
     workspaceLabel: ws.name,
-    rootId: nativeRoot.id,
-    rootLabel: nativeRoot.label,
-    relativePath: cwdForPolicy,
+    rootId: root.id,
+    rootLabel: root.label,
+    relativePath: record.initialCwd,
     shell,
     risk: askForRisk ? risk : "normal",
     commandPreview: redactCommandPreview(command, 80),
@@ -381,19 +433,17 @@ export async function writeKiroPtySessionInput(input: WritePtySessionInputInput)
   const parsed = writeTerminalSessionInputSchema.safeParse(toolInput);
   if (!parsed.success) return fail({ ok: false, code: "INVALID_INPUT", message: "输入不合法" });
   const { sessionHandle, data } = parsed.data;
-  const sessionId = ptyHandleToSessionId.get(sessionHandle);
-  if (!sessionId) return fail({ ok: false, code: "TERMINAL_NOT_FOUND", message: TERMINAL_FIXED_MESSAGES.TERMINAL_NOT_FOUND });
+  const record = ptySessions.get(sessionHandle);
+  if (!record) return fail({ ok: false, code: "TERMINAL_NOT_FOUND", message: TERMINAL_FIXED_MESSAGES.TERMINAL_NOT_FOUND });
+  if (record.workspaceId !== snapshot.workspaceId) return fail({ ok: false, code: "TERMINAL_NOT_FOUND", message: TERMINAL_FIXED_MESSAGES.TERMINAL_NOT_FOUND });
   const bridge = getClassFlowDesktopTerminalPtyBridge();
   if (!bridge || !bridge.writeSession) return fail({ ok: false, code: "TERMINAL_UNAVAILABLE", message: TERMINAL_FIXED_MESSAGES.TERMINAL_UNAVAILABLE });
-  // 敏感检测
-  const cleaned = redactCommandPreview(data, 4096);
-  // 简易：若 redact 后不同，说明含敏感
   const { redactTerminalSecrets } = await import("@/lib/ai/computer/terminal/redact");
   if (redactTerminalSecrets(data) !== data) {
     return fail({ ok: false, code: "TERMINAL_SENSITIVE_INPUT_REJECTED", message: "检测到疑似敏感信息，请通过界面安全输入。" });
   }
   try {
-    await bridge.writeSession({ sessionId, data });
+    await bridge.writeSession({ sessionId: record.sessionId, data });
   } catch {
     return fail({ ok: false, code: "TERMINAL_EXECUTION_FAILED", message: "PTY 输入失败" });
   }
@@ -408,16 +458,19 @@ export async function closeKiroPtySession(input: ClosePtySessionInput): Promise<
   const parsed = closeTerminalSessionSchema.safeParse(toolInput);
   if (!parsed.success) return fail({ ok: false, code: "INVALID_INPUT", message: "输入不合法" });
   const { sessionHandle } = parsed.data;
-  const sessionId = ptyHandleToSessionId.get(sessionHandle);
-  if (!sessionId) return fail({ ok: false, code: "TERMINAL_NOT_FOUND", message: TERMINAL_FIXED_MESSAGES.TERMINAL_NOT_FOUND });
+  const record = ptySessions.get(sessionHandle);
+  if (!record) {
+    // 幂等：已关闭的 handle 再次关闭返回 closed:true
+    return { kind: "completed", output: { ok: true, data: { closed: true } } };
+  }
   const bridge = getClassFlowDesktopTerminalPtyBridge();
   if (bridge && bridge.closeSession) {
     try {
-      await bridge.closeSession({ sessionId });
+      await bridge.closeSession({ sessionId: record.sessionId });
     } catch {}
   }
-  ptyHandleToSessionId.delete(sessionHandle);
-  sessionIdToHandle.delete(sessionId);
-  activePtyCommands.delete(sessionId);
+  ptySessions.delete(sessionHandle);
+  sessionIdToHandle.delete(record.sessionId);
+  activePtyCommands.delete(record.sessionId);
   return { kind: "completed", output: { ok: true, data: { closed: true } } };
 }

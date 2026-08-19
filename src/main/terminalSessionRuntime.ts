@@ -9,6 +9,7 @@
  * - PTY 不构成对 run_terminal_command Risk Classifier 的绕过：Agent 侧不提供
  *   send_arbitrary_keys 工具；Agent 命令仍走 run_terminal_command policy。
  */
+// @ts-ignore: node-pty types not available in this tsconfig
 import * as pty from "node-pty";
 import { randomUUID } from "node:crypto";
 import { sanitizeTerminalChunk } from "@/lib/ai/computer/terminal/redact";
@@ -53,10 +54,10 @@ export function createPtySession(options: PtySessionOptions): string {
     cwd: options.cwd,
     env: { ...process.env },
   });
-  term.onData((data) => {
+  term.onData((data: string) => {
     options.onEvent({ type: "data", sessionId, data: sanitizeTerminalChunk(data) });
   });
-  term.onExit(({ exitCode }) => {
+  term.onExit(({ exitCode }: { exitCode: number }) => {
     sessions.delete(sessionId);
     options.onEvent({ type: "exit", sessionId, exitCode });
   });

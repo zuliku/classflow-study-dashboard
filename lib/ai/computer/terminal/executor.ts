@@ -303,19 +303,6 @@ function terminalBridgeErrorToComputerError(err: unknown): ComputerError {
 /** Active execution registry（runtime-only；Stop 必须终止 process tree） */
 const activeExecutions = new Map<string, { cancel: () => Promise<void> }>();
 
-/** Terminal V2（Phase 3）：opaque logical handle → executionId 映射（模型只能持有 handle，拿不到原生 executionId） */
-const terminalHandleMap = new Map<string, string>();
-
-export function newTerminalHandle(executionId: string): string {
-  const handle = `th-${crypto.randomUUID().slice(0, 8)}`;
-  terminalHandleMap.set(handle, executionId);
-  return handle;
-}
-
-export function resolveTerminalHandle(handle: string): string | undefined {
-  return terminalHandleMap.get(handle);
-}
-
 export function registerActiveTerminalExecution(executionId: string, cancel: () => Promise<void>): void {
   activeExecutions.set(executionId, { cancel });
 }
@@ -485,8 +472,6 @@ export async function executeKiroTerminalCommand(
         timedOut: outcome.timedOut,
         durationMs: outcome.durationMs,
         truncated,
-        // Terminal V2（Phase 3）：opaque handle 供 write_terminal_input 引用（仅 V2 runtime 提供）
-        ...(bridgeV2 ? { terminalHandle: newTerminalHandle(executionId) } : {}),
       },
     },
   };
@@ -719,7 +704,7 @@ export async function writeKiroTerminalInput(
     return fail({ ok: false, code: "TERMINAL_UNAVAILABLE", message: TERMINAL_FIXED_MESSAGES.TERMINAL_UNAVAILABLE });
   }
 
-  const executionId = getInteractiveRecord(handle)?.executionId ?? resolveTerminalHandle(handle);
+  const executionId = getInteractiveRecord(handle)?.executionId;
   if (!executionId) {
     return fail({ ok: false, code: "TERMINAL_NOT_FOUND", message: "终端进程不存在或已结束。" });
   }

@@ -13,6 +13,7 @@
  */
 
 import { ClassFlowDesktopTerminalShell } from "@/lib/desktop/types";
+import { ComputerError } from "@/lib/ai/computer/errors";
 
 export interface InteractiveHandleRecord {
   handle: string;
@@ -51,17 +52,20 @@ export function createInteractiveHandle(
   shell: ClassFlowDesktopTerminalShell,
   commandPreview: string,
 ): string {
-  const handle = `th-${crypto.randomUUID().slice(0, 8)}`;
-  // 上限保护：超过时丢弃最旧的已终态 handle
+  // 上限保护：先清理已终态的 handle
   if (interactiveHandles.size >= MAX_HANDLES) {
-    const oldest = Array.from(interactiveHandles.entries()).find(([, r]) => r.finalResult);
-    if (oldest) {
-      deleteInteractiveHandle(oldest[0]);
-    } else {
-      const firstKey = interactiveHandles.keys().next().value as string | undefined;
-      if (firstKey) deleteInteractiveHandle(firstKey);
+    for (const [h, r] of Array.from(interactiveHandles.entries())) {
+      if (r.finalResult) {
+        deleteInteractiveHandle(h);
+        if (interactiveHandles.size < MAX_HANDLES) break;
+      }
     }
   }
+  if (interactiveHandles.size >= MAX_HANDLES) {
+    // 仍满且都是 running，不得删除 active handle
+    throw new ComputerError("TOO_MANY_ACTIVE_TERMINALS", "活跃终端过多，请等待部分完成后再启动");
+  }
+  const handle = `th-${crypto.randomUUID().slice(0, 8)}`;
   let resolve!: (r: InteractiveFinalResult) => void;
   let reject!: (e: Error) => void;
   const resultPromise = new Promise<InteractiveFinalResult>((res, rej) => {
