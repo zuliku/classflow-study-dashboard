@@ -32,6 +32,7 @@ export default defineConfig({
       "tests/kiroTerminalBlock.test.tsx",
       "tests/terminalLifecycle.test.ts",
       "tests/terminalStdin.test.ts",
+      "tests/terminalPtyContract.test.ts",
     ],
   },
 });

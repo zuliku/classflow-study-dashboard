@@ -13,6 +13,7 @@ import { join, sep, dirname, basename } from "node:path";
 import { randomUUID } from "node:crypto";
 import { spawn, ChildProcess } from "node:child_process";
 import { runTerminalProcess, TerminalRuntimeHandle } from "@/src/main/terminalRuntime";
+import { createPtySession, writePtySession, resizePtySession, closePtySession } from "@/src/main/terminalSessionRuntime";
 import { DesktopTerminalEvent } from "@/lib/desktop/types";
 
 /* ---------------- Grant 管理（grantId → absolute root，renderer 不可见） ---------------- */
@@ -734,6 +735,68 @@ async function handleTerminalWrite(input: unknown): Promise<void> {
   }
 }
 
+/* ---------------- Terminal V2（Phase 4）— Persistent PTY Session ---------------- */
+
+/** 会话事件只发给发起 session 的 renderer（事件 data 已 sanitized） */
+async function handleCreateSession(input: unknown, event: Electron.IpcMainInvokeEvent): Promise<{ sessionId: string }> {
+  const obj = validateInputObject(input);
+  if (!obj) fail("INVALID_OPERATION");
+  const shell = obj.shell === "cmd" ? "cmd" : obj.shell === "powershell" ? "powershell" : null;
+  const cols = typeof obj.cols === "number" ? obj.cols : 80;
+  const rows = typeof obj.rows === "number" ? obj.rows : 24;
+  if (!shell) fail("INVALID_OPERATION");
+  const grant = getGrant(obj.grantId);
+  if (!grant) fail("PERMISSION_DENIED");
+  const cwdRaw = typeof obj.cwd === "string" ? obj.cwd : "";
+  const resolvedCwd = resolveWithinRoot(grant.root, cwdRaw);
+  if (!resolvedCwd) fail("PERMISSION_DENIED");
+  const sessionId = createPtySession({
+    shell,
+    cwd: resolvedCwd,
+    cols,
+    rows,
+    onEvent: (e) => {
+      if (!event.sender.isDestroyed()) {
+        event.sender.send("bridge:terminal:session-event", e);
+      }
+    },
+  });
+  return { sessionId };
+}
+
+async function handleWriteSession(input: unknown): Promise<void> {
+  const obj = validateInputObject(input);
+  if (!obj) fail("INVALID_OPERATION");
+  const sessionId = typeof obj.sessionId === "string" ? obj.sessionId : "";
+  const data = typeof obj.data === "string" && obj.data.length > 0 ? obj.data : "";
+  if (!sessionId || !data) fail("INVALID_OPERATION");
+  try {
+    writePtySession(sessionId, data);
+  } catch {
+    throw failError("INVALID_OPERATION");
+  }
+}
+
+async function handleResizeSession(input: unknown): Promise<void> {
+  const obj = validateInputObject(input);
+  if (!obj) fail("INVALID_OPERATION");
+  const sessionId = typeof obj.sessionId === "string" ? obj.sessionId : "";
+  const cols = typeof obj.cols === "number" ? obj.cols : 80;
+  const rows = typeof obj.rows === "number" ? obj.rows : 24;
+  if (!sessionId) fail("INVALID_OPERATION");
+  try {
+    resizePtySession(sessionId, cols, rows);
+  } catch {
+    throw failError("INVALID_OPERATION");
+  }
+}
+
+async function handleCloseSession(input: unknown): Promise<void> {
+  const obj = validateInputObject(input);
+  const sessionId = typeof obj?.sessionId === "string" ? obj.sessionId : "";
+  if (sessionId) closePtySession(sessionId);
+}
+
 /* ---------------- IPC 注册 ---------------- */
 
 export function registerDesktopBridgeIpc(): void {
@@ -759,4 +822,8 @@ export function registerDesktopBridgeIpc(): void {
   ipcMain.handle("bridge:terminal:cancel", (_e, input) => handleTerminalCancel(input));
   ipcMain.handle("bridge:terminal:start", (e, input) => handleTerminalStart(input, e));
   ipcMain.handle("bridge:terminal:write", (_e, input) => handleTerminalWrite(input));
+  ipcMain.handle("bridge:terminal:createSession", (e, input) => handleCreateSession(input, e));
+  ipcMain.handle("bridge:terminal:writeSession", (_e, input) => handleWriteSession(input));
+  ipcMain.handle("bridge:terminal:resizeSession", (_e, input) => handleResizeSession(input));
+  ipcMain.handle("bridge:terminal:closeSession", (_e, input) => handleCloseSession(input));
 }

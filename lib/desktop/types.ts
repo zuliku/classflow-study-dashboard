@@ -231,7 +231,23 @@ export interface ClassFlowDesktopTerminalBridgeV2 {
   subscribe(listener: (event: DesktopTerminalEvent) => void): () => void;
   /** 受控 stdin write（Phase 3）：execution 必须 active；size/rate bounded；结束/取消后 reject INVALID_OPERATION */
   write(input: { executionId: string; data: string }): Promise<void>;
+  /** 持久 PowerShell PTY Session（Phase 4，渐进能力）：createSession → writeSession/resizeSession/closeSession */
+  createSession?(input: {
+    shell: ClassFlowDesktopTerminalShell;
+    grantId: string;
+    cwd: string;
+    cols: number;
+    rows: number;
+  }): Promise<{ sessionId: string }>;
+  writeSession?(input: { sessionId: string; data: string }): Promise<void>;
+  resizeSession?(input: { sessionId: string; cols: number; rows: number }): Promise<void>;
+  closeSession?(input: { sessionId: string }): Promise<void>;
 }
+
+/** PTY Session 事件（经 subscribe 的独立 session 事件通道；data 已 sanitized） */
+export type DesktopTerminalSessionEvent =
+  | { type: "data"; sessionId: string; data: string }
+  | { type: "exit"; sessionId: string; exitCode: number };
 
 export type ClassFlowDesktopTerminalBridge = ClassFlowDesktopTerminalBridgeV1 | ClassFlowDesktopTerminalBridgeV2;
 

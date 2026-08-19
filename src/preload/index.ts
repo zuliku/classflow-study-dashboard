@@ -66,6 +66,16 @@ const terminalBridge = {
   },
   // V3 Phase 3：受控 stdin write（execution 必须 active；size/rate bounded）
   write: (input: unknown) => invokeBridge("bridge:terminal:write", input),
+  // V2 Phase 4：持久 PowerShell PTY Session（渐进能力）
+  createSession: (input: unknown) => invokeBridge("bridge:terminal:createSession", input),
+  writeSession: (input: unknown) => invokeBridge("bridge:terminal:writeSession", input),
+  resizeSession: (input: unknown) => invokeBridge("bridge:terminal:resizeSession", input),
+  closeSession: (input: unknown) => invokeBridge("bridge:terminal:closeSession", input),
+  subscribeSession: (listener: (event: unknown) => void): (() => void) => {
+    const handler = (_e: unknown, event: unknown) => listener(event);
+    ipcRenderer.on("bridge:terminal:session-event", handler);
+    return () => ipcRenderer.removeListener("bridge:terminal:session-event", handler);
+  },
 };
 
 contextBridge.exposeInMainWorld("classflowDesktop", {
