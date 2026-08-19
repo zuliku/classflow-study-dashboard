@@ -1,6 +1,6 @@
 {
   "name": "classflow-desktop",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "ClassFlow - 大学生课表与作业 DDL 学习管理系统（Windows 桌面版）",
   "private": true,
   "type": "module",
