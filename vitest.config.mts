@@ -9,16 +9,6 @@ export default defineConfig({
   },
   test: {
     environment: "node",
-    pool: "forks",
-    poolOptions: {
-      forks: {
-        singleFork: true,
-      },
-    },
-    sequence: {
-      concurrent: false,
-    },
-    testTimeout: 30000,
     include: [
       "tests/terminalCapability*.test.ts",
       "tests/terminalToolExposure*.test.ts",
@@ -46,6 +36,16 @@ export default defineConfig({
       "tests/terminalAsyncLifecycle.test.ts",
       "tests/terminalPtyAgentIntegration.test.ts",
       "tests/terminalFinalHardening.test.ts",
+      "tests/aiOpenCodeGoTerminalSmoke.test.ts",
+      "tests/aiOpenCodeGoTerminalInteractiveSmoke.test.ts",
+      "tests/terminalStreaming.test.ts",
+      "tests/terminalSecretRedaction.test.ts",
+      "tests/kiroTerminalBlock.test.tsx",
+      "tests/terminalLifecycle.test.ts",
+      "tests/terminalStdin.test.ts",
+      "tests/terminalPtyContract.test.ts",
+      "tests/terminalAsyncLifecycle.test.ts",
+      "tests/terminalPtyAgentIntegration.test.ts",
       "tests/aiOpenCodeGoTerminalSmoke.test.ts",
       "tests/aiOpenCodeGoTerminalInteractiveSmoke.test.ts",
       "tests/extensionsRegistry.test.ts",

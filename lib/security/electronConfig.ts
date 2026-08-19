@@ -15,6 +15,35 @@ export const SECURE_WINDOW_OPTIONS = {
   },
 } as const;
 
+/**
+ * 唯一 Source of Truth：所有 BrowserWindow 必须通过此 builder 产生 webPreferences。
+ * 测试直接校验此 builder 输出的 sandbox/contextIsolation/nodeIntegration，而非未使用的常量。
+ */
+export function buildClassFlowWebPreferences(opts: {
+  preloadPath: string;
+  apiBase: string;
+}): {
+  preload: string;
+  contextIsolation: true;
+  nodeIntegration: false;
+  sandbox: true;
+  webSecurity: true;
+  allowRunningInsecureContent: false;
+  enableWebSQL: false;
+  additionalArguments: string[];
+} {
+  return {
+    preload: opts.preloadPath,
+    contextIsolation: true,
+    nodeIntegration: false,
+    sandbox: true,
+    webSecurity: true,
+    allowRunningInsecureContent: false,
+    enableWebSQL: false,
+    additionalArguments: [`--classflow-api-base=${opts.apiBase}`],
+  };
+}
+
 export function assertSecureWindowOptions(opts: {
   contextIsolation?: boolean;
   nodeIntegration?: boolean;

@@ -1,29 +1,25 @@
 /**
- * Electron 基线声明 — Task 01
+ * Electron 基线声明 — Task 05
  * 当前受支持的稳定版本（截至 2026-08-19）
- * - Electron 32.x 为当前 LTS / Stable（支持到 2026 年底；32.3.x 最新稳定）
- * - 不使用 beta/alpha/nightly/prerelease
+ * - Electron 43.3.x stable（Chromium 141 / Node 22）
+ * - 不使用 beta/alpha/nightly/prerelease（禁止 44 alpha）
  * - electron-vite / electron-builder 仅在兼容需要时同步升级
- *
- * 本文件作为 Web 侧的基线声明；实际 Electron 依赖由桌面壳（classflow-desktop）管理。
- * Web 侧通过此模块暴露版本常量供测试与文档使用。
  */
 
 export const ELECTRON_BASELINE = {
-  // 2026-08-19 仍受支持的稳定版本（官方支持周期：每版 8 周，32.x 为 LTS）
-  electron: "32.3.3",
+  // 2026-08-19 仍受支持的稳定版本（43.3.x）
+  electron: "43.3.0",
   electronVite: "2.3.0",
   electronBuilder: "24.13.3",
-  nodeTypes: "20.14.12",
+  nodeTypes: "22.14.0",
   channel: "stable" as const,
   prerelease: false,
-  // 兼容性备注
   notes: [
-    "Electron 32 基于 Chromium 128 / Node 20，支持 sandbox:true + contextIsolation:true",
+    "Electron 43 基于 Chromium 141 / Node 22，支持 sandbox:true + contextIsolation:true",
     "preload ESM 需 electron-vite 2.3+",
     "app:// protocol 在 sandbox 下仍可通过 protocol.handle 正常加载 bundle",
     "safeStorage 在 Windows 上可用；不可用时 SecretVault fail closed",
-    "BrowserWindow 安全基线：sandbox:true 已在 lib/security/electronConfig.ts 固化",
+    "BrowserWindow 安全基线：sandbox:true 已在 lib/security/electronConfig.ts 固化 via buildClassFlowWebPreferences",
   ],
 } as const;
 

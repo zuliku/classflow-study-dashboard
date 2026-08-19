@@ -3,6 +3,10 @@ import { join, normalize, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { startApiServer, installPdfFontEnv, ApiServer } from "./httpServer";
 import { registerDesktopBridgeIpc } from "./desktopBridge";
+import { buildClassFlowWebPreferences } from "@/lib/security/electronConfig";
+import { decideNavigation } from "@/lib/security/navigation";
+import { getCspHeader } from "@/lib/security/csp";
+import { validateIpcSender } from "@/lib/security/ipcSender";
 
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
 
@@ -20,7 +24,15 @@ const RENDERER_DIR = join(__dirname, "../renderer");
 let apiServer: ApiServer | null = null;
 let mainWindow: BrowserWindow | null = null;
 
+function getAllowedOrigins(apiBase: string): { allowedApiOrigin: string; allowedDevOrigin: string | undefined } {
+  const allowedApiOrigin = apiBase;
+  const allowedDevOrigin = process.env.ELECTRON_RENDERER_URL;
+  return { allowedApiOrigin, allowedDevOrigin };
+}
+
 function createWindow(apiBase: string): void {
+  const { allowedApiOrigin, allowedDevOrigin } = getAllowedOrigins(apiBase);
+
   mainWindow = new BrowserWindow({
     width: 1440,
     height: 900,
@@ -32,13 +44,21 @@ function createWindow(apiBase: string): void {
     title: "ClassFlow",
     // 自绘顶部状态栏：去掉原生窗口边框，由渲染进程 TitleBar 提供拖动/最小化/最大化/关闭
     frame: false,
-    webPreferences: {
-      preload: join(__dirname, "../preload/index.mjs"),
-      contextIsolation: true,
-      nodeIntegration: false,
-      sandbox: false,
-      additionalArguments: [`--classflow-api-base=${apiBase}`],
-    },
+    webPreferences: buildClassFlowWebPreferences({
+      preloadPath: join(__dirname, "../preload/index.mjs"),
+      apiBase,
+    }),
+  });
+
+  // CSP：根据环境选择 production / development 策略，通过 response header 真正下发
+  const isDev = Boolean(process.env.ELECTRON_RENDERER_URL);
+  const cspHeader = getCspHeader(isDev);
+  const ses = mainWindow.webContents.session;
+  ses.webRequest.onHeadersReceived((details, callback) => {
+    const headers = details.responseHeaders ?? {};
+    headers["Content-Security-Policy"] = [cspHeader];
+    headers["content-security-policy"] = [cspHeader];
+    callback({ responseHeaders: headers });
   });
 
   // 最大化状态同步给渲染进程（TitleBar 切换 最大化/还原 图标）
@@ -56,19 +76,25 @@ function createWindow(apiBase: string): void {
     if (level >= 1) console.log(`[classflow:renderer] ${message}`);
   });
 
-  // 外部链接一律用系统浏览器打开（不劫持应用内导航）
+  // 外部链接硬化：使用 decideNavigation 统一判定
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    if (url.startsWith("http://") || url.startsWith("https://")) {
+    const verdict = decideNavigation({ url, allowedApiOrigin, allowedDevOrigin });
+    if (verdict.kind === "allow-external") {
       void shell.openExternal(url);
+    } else if (verdict.kind === "deny") {
+      console.warn(`[classflow] blocked window.open: ${url} reason=${verdict.reason}`);
     }
     return { action: "deny" };
   });
   mainWindow.webContents.on("will-navigate", (event, url) => {
-    const devUrl = process.env.ELECTRON_RENDERER_URL;
-    if (devUrl && url.startsWith(devUrl)) return;
-    if (url.startsWith("app://") || url.startsWith("http://127.0.0.1")) return;
+    const verdict = decideNavigation({ url, allowedApiOrigin, allowedDevOrigin });
+    if (verdict.kind === "allow-internal") return;
     event.preventDefault();
-    void shell.openExternal(url);
+    if (verdict.kind === "allow-external") {
+      void shell.openExternal(url);
+    } else {
+      console.warn(`[classflow] blocked will-navigate: ${url} reason=${verdict.reason}`);
+    }
   });
 
   if (process.env.ELECTRON_RENDERER_URL) {
@@ -78,19 +104,70 @@ function createWindow(apiBase: string): void {
   }
 }
 
+function isTrustedSender(sender: Electron.WebContents): boolean {
+  if (!mainWindow) return false;
+  if (sender.isDestroyed()) return false;
+  return sender.id === mainWindow.webContents.id;
+}
+
+function validateWindowSender(channel: string, sender: Electron.WebContents, apiBase: string): boolean {
+  const { allowedApiOrigin, allowedDevOrigin } = getAllowedOrigins(apiBase);
+  const ctx = {
+    destroyed: sender.isDestroyed(),
+    isTrustedWindow: isTrustedSender(sender),
+    url: (() => {
+      try {
+        return sender.getURL();
+      } catch {
+        return "";
+      }
+    })(),
+  };
+  const result = validateIpcSender(channel, ctx, { allowedApiOrigin, allowedDevOrigin });
+  if (!result.ok) {
+    console.warn(`[classflow] IPC denied ${channel}: ${result.reason}`);
+  }
+  return result.ok;
+}
+
 app.whenReady().then(async () => {
-  // 窗口控制 IPC（自绘标题栏）
-  ipcMain.on("window:minimize", () => mainWindow?.minimize());
-  ipcMain.on("window:maximize", () => {
+  installPdfFontEnv();
+  try {
+    apiServer = await startApiServer();
+  } catch (err) {
+    console.error("[classflow] 本地 API server 启动失败:", err);
+    app.quit();
+    return;
+  }
+  const apiBase = `http://127.0.0.1:${apiServer.port}`;
+
+  // 窗口控制 IPC（自绘标题栏）— 受 sender validation 保护
+  ipcMain.on("window:minimize", (event) => {
+    if (!validateWindowSender("window:minimize", event.sender, apiBase)) return;
+    mainWindow?.minimize();
+  });
+  ipcMain.on("window:maximize", (event) => {
+    if (!validateWindowSender("window:maximize", event.sender, apiBase)) return;
     if (!mainWindow) return;
     if (mainWindow.isMaximized()) mainWindow.unmaximize();
     else mainWindow.maximize();
   });
-  ipcMain.on("window:close", () => mainWindow?.close());
-  ipcMain.handle("window:isMaximized", () => mainWindow?.isMaximized() ?? false);
+  ipcMain.on("window:close", (event) => {
+    if (!validateWindowSender("window:close", event.sender, apiBase)) return;
+    mainWindow?.close();
+  });
+  ipcMain.handle("window:isMaximized", (event) => {
+    if (!validateWindowSender("window:isMaximized", event.sender, apiBase)) {
+      throw new Error(JSON.stringify({ code: "PERMISSION_DENIED" }));
+    }
+    return mainWindow?.isMaximized() ?? false;
+  });
 
-  // Desktop Bridge V1（Filesystem + Terminal）：grant opaque / relative-path-only / canonical sandbox
-  registerDesktopBridgeIpc();
+  // Desktop Bridge V1（Filesystem + Terminal）：通过 validateSender 统一校验
+  registerDesktopBridgeIpc({
+    getAllowedOrigins: () => getAllowedOrigins(apiBase),
+    isTrustedSender,
+  });
 
   // app:// → out/renderer 静态资源（路径穿越防护：仅允许 renderer 目录内文件）
   protocol.handle("app", (request) => {
@@ -103,17 +180,9 @@ app.whenReady().then(async () => {
     return net.fetch(pathToFileURL(target).toString());
   });
 
-  installPdfFontEnv();
-  try {
-    apiServer = await startApiServer();
-  } catch (err) {
-    console.error("[classflow] 本地 API server 启动失败:", err);
-    app.quit();
-    return;
-  }
-  createWindow(`http://127.0.0.1:${apiServer.port}`);
+  createWindow(apiBase);
   app.on("activate", () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow(`http://127.0.0.1:${apiServer?.port}`);
+    if (BrowserWindow.getAllWindows().length === 0) createWindow(apiBase);
   });
 });
 
@@ -143,4 +212,8 @@ app.on("before-quit", async (event) => {
     apiServer = null;
   }
   app.exit(0);
+});
+
+app.on("before-quit", async () => {
+  console.info("[classflow] before-quit");
 });

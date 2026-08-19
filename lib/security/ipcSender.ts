@@ -24,7 +24,14 @@ export interface IpcSenderContext {
 
 export type IpcChannel = string;
 
-const SENSITIVE_PREFIXES = ["bridge:fs:", "bridge:terminal:", "window:"] as const;
+const SENSITIVE_PREFIXES = [
+  "bridge:fs:",
+  "bridge:terminal:",
+  "bridge:credential:",
+  "bridge:mcp:",
+  "bridge:channel:",
+  "window:",
+] as const;
 const SENSITIVE_EXACT: ReadonlySet<string> = new Set([
   "bridge:fs:pickDirectory",
   "bridge:terminal:execute",

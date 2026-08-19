@@ -36,15 +36,42 @@ import { cn } from "@/lib/utils";
  * - 位置用 CSS variables（top/right）实时更新，不用 transform（避免与 presence motion 冲突）
  * - Move 与 Resize 共享 interactionRef 互斥；pointermove 只更新 draft，pointerup 一次性持久化
  */
-export function KiroSidecarShell({
-  mode,
-  present,
-  children,
-}: {
-  mode: KiroSidecarMode;
-  present: boolean;
-  children: React.ReactNode;
-}) {
+type ShellProps =
+  | { mode: KiroSidecarMode; present: boolean; children: React.ReactNode }
+  | { open: boolean; children: React.ReactNode };
+
+function useLegacyPresence(open: boolean): { mounted: boolean; visible: boolean } {
+  const [mounted, setMounted] = React.useState(open);
+  const [visible, setVisible] = React.useState(open);
+  React.useEffect(() => {
+    if (open) {
+      setMounted(true);
+      setVisible(true);
+    } else {
+      setVisible(false);
+      const t = window.setTimeout(() => setMounted(false), 200);
+      return () => window.clearTimeout(t);
+    }
+  }, [open]);
+  return { mounted, visible };
+}
+
+export function KiroSidecarShell(props: ShellProps) {
+  // Host 场景：mode + present（present 来自 usePresence，Shell 不再自管 closed lifecycle）
+  // 兼容测试：open boolean → 内部自行 usePresence（legacy）
+  const isHost = "mode" in props && "present" in props;
+  // eslint-disable-next-line react-hooks/rules-of-hooks
+  const legacyPresence = !isHost ? useLegacyPresence((props as { open: boolean }).open) : null;
+
+  const mode: KiroSidecarMode = isHost
+    ? (props as { mode: KiroSidecarMode }).mode
+    : (props as { open: boolean }).open
+      ? "open"
+      : "closed";
+  const present = isHost ? (props as { present: boolean }).present : legacyPresence!.visible;
+  const mounted = isHost ? true : legacyPresence!.mounted;
+  const children = props.children;
+
   const { closeSidecar, expandSidecar, minimizeSidecar } = useKiroSessionActions();
   const sidecarSize = useKiroPreferencesStore((s) => s.sidecarSize);
   const setSidecarSize = useKiroPreferencesStore((s) => s.setSidecarSize);
@@ -103,10 +130,17 @@ export function KiroSidecarShell({
     draftPosition,
   ]);
 
+  const isMinimized = mode === "minimized";
+  const isOpen = mode === "open";
   // Motion V1：geometry 交互期间降权内部 motion（intro/settle/popover transforms 近瞬时）
   const [geometryInteracting, setGeometryInteracting] = useState(false);
+
+  // fullVisible / fullInteractive 语义（Present 单 ownership：host 的 present 决定 exit 动画）
   const fullVisible = mode === "open" && present;
   const fullInteractive = mode === "open" && present;
+
+  // 早期返回必须在所有 hooks 之后（保持 hooks 数量一致）
+  if (!mounted) return null;
 
   // ---- Resize（position-aware clamp） ----
 
