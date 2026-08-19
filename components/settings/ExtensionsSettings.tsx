@@ -41,14 +41,15 @@ export function ExtensionsSettings() {
         title="连接与扩展"
         description="让 Kiro 使用你的工作流、外部工具与消息来源。"
       >
-        {/* Top summary — 布局稳定（空数据亦占位） */}
+        {/* Top summary — 布局稳定（空数据亦占位）；文案精确匹配验收字符串 */}
         <div
           data-setting-id="extensions-overview"
           className="grid grid-cols-3 gap-2 text-center"
+          data-testid="extensions-summary"
         >
-          <SummaryCard label="Skills 已启用" value={counts.enabledSkills} total={counts.skills} />
-          <SummaryCard label="MCP 已连接" value={counts.connectedMcp} total={counts.mcp} />
-          <SummaryCard label="消息渠道在线" value={counts.onlineChannels} total={counts.channels} />
+          <SummaryCard label="Skills 已启用" value={counts.enabledSkills} total={counts.skills} exact={`${counts.enabledSkills} 个 Skills 已启用`} />
+          <SummaryCard label="MCP 已连接" value={counts.connectedMcp} total={counts.mcp} exact={`${counts.connectedMcp} 个 MCP 已连接`} />
+          <SummaryCard label="消息渠道在线" value={counts.onlineChannels} total={counts.channels} exact={`${counts.onlineChannels} 个消息渠道在线`} />
         </div>
 
         {/* Tabs */}
@@ -297,13 +298,14 @@ export function ExtensionsSettings() {
   );
 }
 
-function SummaryCard({ label, value, total }: { label: string; value: number; total: number }) {
+function SummaryCard({ label, value, total, exact }: { label: string; value: number; total: number; exact: string }) {
   return (
-    <div className="bg-surface border border-line rounded-xl px-3 py-3 flex flex-col items-center justify-center gap-1">
-      <span className="text-[11px] font-bold text-sandrift">{label}</span>
-      <span className="text-sm font-bold text-charcoal">
-        {value} <span className="font-normal text-satin-grey">/ {total}</span>
+    <div className="bg-surface border border-line rounded-xl px-3 py-3 flex flex-col items-center justify-center gap-1 min-h-[64px]">
+      <span className="text-sm font-bold text-charcoal" data-testid={`summary-${label}`}>{exact}</span>
+      <span className="text-[11px] font-medium text-sandrift">
+        {value} / {total}
       </span>
+      <span className="sr-only">{label}</span>
     </div>
   );
 }
