@@ -60,7 +60,7 @@ export function getClassFlowDesktopTerminalBridgeV2(): import("@/lib/desktop/typ
   if (!terminal || typeof terminal !== "object") return null;
   if (terminal.version !== 2) return null;
   if (typeof terminal.start !== "function" || typeof terminal.subscribe !== "function") return null;
-  if (typeof terminal.execute !== "function" || typeof terminal.cancel !== "function") return null;
+  if (typeof terminal.execute !== "function" || typeof terminal.cancel !== "function" || typeof terminal.write !== "function") return null;
   return terminal;
 }
 

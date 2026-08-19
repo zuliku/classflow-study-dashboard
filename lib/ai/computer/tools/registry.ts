@@ -24,6 +24,7 @@ import {
   searchWorkspaceKnowledgeSchema,
   retrieveWorkspaceContextSchema,
   runTerminalCommandSchema,
+  writeTerminalInputSchema,
 } from "@/lib/ai/computer/tools/schemas";
 
 export interface ComputerToolModelContract {
@@ -172,6 +173,19 @@ export const COMPUTER_MUTATION_TOOLS: ComputerToolDefinition[] = [
       },
       {
         input: { shell: "cmd", cwd: "", command: "python script.py" },
+      },
+    ],
+  },
+  {
+    name: "write_terminal_input",
+    description:
+      "向当前仍在运行的终端进程写入 stdin 输入（Terminal V2，Phase 3）。用于进程明确等待输入时提供非敏感应答：确认提示（y/n）、数字选择、项目名、普通文本等。必须使用 run_terminal_command 返回的 terminalHandle。只允许非敏感输入——密码、API Key、Token、SSH secret 等敏感信息绝不可通过此工具发送，必须让用户通过界面安全输入框手动输入。输入大小有界（≤4096 字符）。进程结束后调用会被拒绝。",
+    schema: writeTerminalInputSchema,
+    capability: "shell.execute",
+    mutation: false,
+    inputExamples: [
+      {
+        input: { handle: "th-abc12345", data: "y" },
       },
     ],
   },

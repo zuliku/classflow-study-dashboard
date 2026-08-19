@@ -229,6 +229,8 @@ export interface ClassFlowDesktopTerminalBridgeV2 {
   }>;
   /** 订阅该 runtime 的 terminal 事件流；返回取消订阅函数 */
   subscribe(listener: (event: DesktopTerminalEvent) => void): () => void;
+  /** 受控 stdin write（Phase 3）：execution 必须 active；size/rate bounded；结束/取消后 reject INVALID_OPERATION */
+  write(input: { executionId: string; data: string }): Promise<void>;
 }
 
 export type ClassFlowDesktopTerminalBridge = ClassFlowDesktopTerminalBridgeV1 | ClassFlowDesktopTerminalBridgeV2;

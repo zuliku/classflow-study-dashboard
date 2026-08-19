@@ -96,6 +96,17 @@ export const runTerminalCommandSchema = z.object({
   /** V2：executionMode = "long-running" 显式启用长任务（timeout 上限放宽至 600s）；默认 foreground */
   executionMode: z.enum(["foreground", "long-running"]).optional(),
 });
+
+/**
+ * Desktop Terminal V2（Phase 3）：write_terminal_input —— 向活跃进程写 stdin。
+ * - 只允许非敏感输入（y/n/数字/短文本等）；密码/API Key/Token/SSH secret 必须走
+ *   UI secure-input（不经模型 context）——executor 会拒绝敏感形状数据。
+ * - handle 是 opaque logical terminal handle（run_terminal_command 返回；不是原生 executionId）。
+ */
+export const writeTerminalInputSchema = z.object({
+  handle: z.string().trim().min(1).max(64),
+  data: z.string().min(1).max(4096),
+});
 /** V2.3：Model-facing schemas 按 Document Authoring Protocol Version 分离。
  *  - V1 model contract：Canonical KiroDocument（legacy Client）
  *  - V2 model contract：扁平 Draft（当前 Client）

@@ -34,11 +34,11 @@ import {
   DesktopTerminalEvent,
 } from "@/lib/desktop/types";
 import { classifyTerminalCommandRisk, TerminalCommandRisk } from "@/lib/ai/computer/terminal/risk";
-import { redactCommandPreview } from "@/lib/ai/computer/terminal/redact";
+import { redactCommandPreview, redactTerminalSecrets } from "@/lib/ai/computer/terminal/redact";
 import { TerminalActivityInit } from "@/lib/ai/computer/terminal/activity";
 import { appendComputerAuditEntry } from "@/lib/ai/computer/audit";
 import { markWorkspaceKnowledgeDirty } from "@/lib/ai/computer/knowledge/service";
-import { runTerminalCommandSchema } from "@/lib/ai/computer/tools/schemas";
+import { runTerminalCommandSchema, writeTerminalInputSchema } from "@/lib/ai/computer/tools/schemas";
 
 export const COMPUTER_TERMINAL_LIMIT_PER_TURN = 12;
 export const MAX_TERMINAL_COMMAND_CHARS = 8192;
@@ -130,6 +130,19 @@ function terminalBridgeErrorToComputerError(err: unknown): ComputerError {
 
 /** Active execution registry（runtime-only；Stop 必须终止 process tree） */
 const activeExecutions = new Map<string, { cancel: () => Promise<void> }>();
+
+/** Terminal V2（Phase 3）：opaque logical handle → executionId 映射（模型只能持有 handle，拿不到原生 executionId） */
+const terminalHandleMap = new Map<string, string>();
+
+export function newTerminalHandle(executionId: string): string {
+  const handle = `th-${crypto.randomUUID().slice(0, 8)}`;
+  terminalHandleMap.set(handle, executionId);
+  return handle;
+}
+
+export function resolveTerminalHandle(handle: string): string | undefined {
+  return terminalHandleMap.get(handle);
+}
 
 export function registerActiveTerminalExecution(executionId: string, cancel: () => Promise<void>): void {
   activeExecutions.set(executionId, { cancel });
@@ -344,10 +357,10 @@ export async function executeKiroTerminalCommand(
         MAX_TERMINAL_TIMEOUT_MS
       );
   const executionId = `term-${crypto.randomUUID()}`;
+  const bridgeV2 = getClassFlowDesktopTerminalBridgeV2();
   let outcome: { exitCode: number | null; stdout: string; stderr: string; timedOut: boolean; durationMs: number; stdoutTruncated: boolean; stderrTruncated: boolean };
   try {
     // V2 streaming：启动前注册 runtime activity（UI 立即进入 starting/running；事件经 streamSink 推送）
-    const bridgeV2 = getClassFlowDesktopTerminalBridgeV2();
     input.onTerminalActivityInit?.({
       executionId,
       toolCallId,
@@ -437,8 +450,96 @@ export async function executeKiroTerminalCommand(
         timedOut: outcome.timedOut,
         durationMs: outcome.durationMs,
         truncated,
+        // Terminal V2（Phase 3）：opaque handle 供 write_terminal_input 引用（仅 V2 runtime 提供）
+        ...(bridgeV2 ? { terminalHandle: newTerminalHandle(executionId) } : {}),
       },
     },
+  };
+}
+
+/** 敏感输入形状检测：任何会被 redactTerminalSecrets 命中的输入都禁止经模型路径 */
+export function isSensitiveTerminalInput(data: string): boolean {
+  const cleaned = redactTerminalSecrets(data);
+  return cleaned !== data;
+}
+
+export interface WriteKiroTerminalInputInput {
+  toolCallId: string;
+  toolInput: Record<string, unknown>;
+  snapshot: KiroComputerTurnSnapshot;
+  liveWorkspaces: KiroWorkspaceMeta[];
+  livePermissionRules: ComputerPermissionRule[];
+  counters: { readCount: number; mutationCount: number; terminalCount: number };
+  oneShotApprovals: ComputerOneShotApproval[];
+  taskId: string;
+}
+
+/**
+ * Terminal V2（Phase 3）：write_terminal_input —— 向活跃进程写非敏感 stdin。
+ * - 只允许非敏感输入（y/n/数字/短文本）；敏感输入必须走 UI secure-input（不经模型 context）。
+ * - handle 是 opaque logical handle（非原生 executionId）；进程结束后拒绝。
+ * - 不消耗 terminalCount（不启动新进程）。
+ */
+export async function writeKiroTerminalInput(
+  input: WriteKiroTerminalInputInput
+): Promise<ComputerExecutionAttempt> {
+  const { toolInput, snapshot, liveWorkspaces } = input;
+  const fail = (output: ComputerToolResult): ComputerExecutionAttempt => ({ kind: "completed", output });
+
+  const parsed = writeTerminalInputSchema.safeParse(toolInput);
+  if (!parsed.success) {
+    return fail({ ok: false, code: "INVALID_INPUT", message: "输入不合法" });
+  }
+  const { handle, data } = parsed.data;
+
+  // 终端 gate
+  const bridgeV2 = getClassFlowDesktopTerminalBridgeV2();
+  if (!bridgeV2 || snapshot.terminalEnabled !== true) {
+    return fail({ ok: false, code: "TERMINAL_UNAVAILABLE", message: TERMINAL_FIXED_MESSAGES.TERMINAL_UNAVAILABLE });
+  }
+
+  const executionId = resolveTerminalHandle(handle);
+  if (!executionId) {
+    return fail({ ok: false, code: "TERMINAL_NOT_FOUND", message: "终端进程不存在或已结束。" });
+  }
+
+  // 敏感输入硬边界：password / API Key / Token / SSH secret 绝不进入模型路径
+  if (isSensitiveTerminalInput(data)) {
+    return fail({
+      ok: false,
+      code: "TERMINAL_SENSITIVE_INPUT_REJECTED",
+      message: "检测到疑似敏感信息（密码 / API Key / Token 等）。敏感输入请让用户通过界面安全输入框手动输入，不要通过模型工具发送。",
+    });
+  }
+
+  try {
+    await bridgeV2.write({ executionId, data });
+  } catch (err) {
+    const mapped = terminalBridgeErrorToComputerError(err);
+    return fail({ ok: false, code: mapped.code, message: mapped.message });
+  }
+
+  // audit：记录 handle 与大小，绝不记录 data 内容
+  void appendComputerAuditEntry({
+    id: `audit-${crypto.randomUUID()}`,
+    timestamp: new Date().toISOString(),
+    taskId: input.taskId,
+    toolCallId: input.toolCallId,
+    toolName: "write_terminal_input",
+    capability: "shell.execute",
+    decision: "auto",
+    outcome: "executed",
+    workspaceId: snapshot.workspaceId ?? "",
+    workspaceLabel: "",
+    rootId: "",
+    rootLabel: "",
+    relativePath: "",
+    commandPreview: `stdin write (handle=${handle}, size=${data.length})`,
+  });
+
+  return {
+    kind: "completed",
+    output: { ok: true, data: { written: true, size: data.length } },
   };
 }
 

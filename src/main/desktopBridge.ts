@@ -718,6 +718,22 @@ async function handleTerminalStart(
   });
 }
 
+async function handleTerminalWrite(input: unknown): Promise<void> {
+  const obj = validateInputObject(input);
+  if (!obj) fail("INVALID_OPERATION");
+  const executionId = typeof obj.executionId === "string" && obj.executionId.length > 0 && obj.executionId.length <= 128 ? obj.executionId : null;
+  const data = typeof obj.data === "string" && obj.data.length > 0 ? obj.data : null;
+  if (!executionId || !data) fail("INVALID_OPERATION");
+
+  const handle = activeV2Executions.get(executionId);
+  if (!handle) fail("INVALID_OPERATION", "执行不存在或已结束。");
+  try {
+    await handle.write(data);
+  } catch {
+    throw failError("INVALID_OPERATION");
+  }
+}
+
 /* ---------------- IPC 注册 ---------------- */
 
 export function registerDesktopBridgeIpc(): void {
@@ -742,4 +758,5 @@ export function registerDesktopBridgeIpc(): void {
   ipcMain.handle("bridge:terminal:execute", (_e, input) => handleTerminalExecute(input));
   ipcMain.handle("bridge:terminal:cancel", (_e, input) => handleTerminalCancel(input));
   ipcMain.handle("bridge:terminal:start", (e, input) => handleTerminalStart(input, e));
+  ipcMain.handle("bridge:terminal:write", (_e, input) => handleTerminalWrite(input));
 }

@@ -29,6 +29,8 @@ export interface TerminalRuntimeHandle {
   executionId: string;
   /** 幂等 cancel；process tree 终止后 reject CANCELLED */
   cancel(): Promise<void>;
+  /** stdin write（Phase 3）：execution 必须 active；size/rate bounded；结束/取消后 reject INVALID_OPERATION */
+  write(data: string): Promise<void>;
 }
 
 export interface TerminalRuntimeOptions {
@@ -45,6 +47,15 @@ export interface TerminalRuntimeOptions {
 export const TERMINAL_RUNTIME_MAX_OUTPUT_BYTES = 512 * 1024;
 export const TERMINAL_TIMEOUT_FOREGROUND_MAX_MS = 120_000;
 export const TERMINAL_TIMEOUT_LONG_RUNNING_MAX_MS = 600_000;
+/** stdin write 上限：单次字符数 + 每秒累计（rate bounded） */
+export const TERMINAL_STDIN_MAX_CHARS = 4_096;
+export const TERMINAL_STDIN_MAX_RATE_BYTES = 16_384;
+
+function terminalOperationError(code: string): Error & { code: string } {
+  const e = new Error(code) as Error & { code: string };
+  e.code = code;
+  return e;
+}
 
 /** 进程树终止（Windows）：taskkill /pid <pid> /t /f */
 export function killProcessTree(pid: number): Promise<void> {
@@ -174,6 +185,7 @@ export function runTerminalProcess(
       handle: {
         executionId,
         cancel: async () => {},
+        write: () => Promise.reject(terminalOperationError("INVALID_OPERATION")),
       },
     };
   }
@@ -236,8 +248,43 @@ export function runTerminalProcess(
     finish();
   };
 
+  // stdin write：active-only + size/rate bounded（Phase 3）
+  let rateWindowStart = Date.now();
+  let rateBytes = 0;
+  const write = (data: string): Promise<void> => {
+    return new Promise((resolveWrite, rejectWrite) => {
+      if (settled || cancelled) {
+        rejectWrite(terminalOperationError("INVALID_OPERATION"));
+        return;
+      }
+      const stdin = child?.stdin;
+      if (!stdin || stdin.destroyed) {
+        rejectWrite(terminalOperationError("INVALID_OPERATION"));
+        return;
+      }
+      if (data.length === 0 || data.length > TERMINAL_STDIN_MAX_CHARS) {
+        rejectWrite(terminalOperationError("INVALID_OPERATION"));
+        return;
+      }
+      const now = Date.now();
+      if (now - rateWindowStart > 1_000) {
+        rateWindowStart = now;
+        rateBytes = 0;
+      }
+      if (rateBytes + Buffer.byteLength(data, "utf8") > TERMINAL_STDIN_MAX_RATE_BYTES) {
+        rejectWrite(terminalOperationError("INVALID_OPERATION"));
+        return;
+      }
+      rateBytes += Buffer.byteLength(data, "utf8");
+      stdin.write(data, (err) => {
+        if (err) rejectWrite(terminalOperationError("INVALID_OPERATION"));
+        else resolveWrite();
+      });
+    });
+  };
+
   return {
     promise,
-    handle: { executionId, cancel },
+    handle: { executionId, cancel, write },
   };
 }

@@ -64,6 +64,8 @@ const terminalBridge = {
     ipcRenderer.on("bridge:terminal:event", handler);
     return () => ipcRenderer.removeListener("bridge:terminal:event", handler);
   },
+  // V3 Phase 3：受控 stdin write（execution 必须 active；size/rate bounded）
+  write: (input: unknown) => invokeBridge("bridge:terminal:write", input),
 };
 
 contextBridge.exposeInMainWorld("classflowDesktop", {

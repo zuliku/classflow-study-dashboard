@@ -22,7 +22,7 @@ import {
   buildApprovalRequest,
   oneShotApprovalMatches,
 } from "@/lib/ai/computer/approval";
-import { executeKiroTerminalCommand } from "@/lib/ai/computer/terminal/executor";
+import { executeKiroTerminalCommand, writeKiroTerminalInput } from "@/lib/ai/computer/terminal/executor";
 import { TerminalActivityInit } from "@/lib/ai/computer/terminal/activity";
 import { DesktopTerminalEvent } from "@/lib/desktop/types";
 import { getComputerAdapterForAdapterRef } from "@/lib/ai/computer/adapters/factory";
@@ -172,6 +172,20 @@ export async function executeKiroComputerTool(request: {
       taskId: context.taskId ?? "",
       onTerminalActivityInit: request.onTerminalActivityInit,
       onTerminalEvent: request.onTerminalEvent,
+    });
+  }
+
+  // Desktop Terminal V2（Phase 3）：受控 stdin write（不启动新进程；不消耗 terminalCount）
+  if (toolName === "write_terminal_input") {
+    return writeKiroTerminalInput({
+      toolCallId,
+      toolInput: (toolInput ?? {}) as Record<string, unknown>,
+      snapshot: turnSnapshot,
+      liveWorkspaces,
+      livePermissionRules,
+      counters: counters as ComputerCounterState,
+      oneShotApprovals: oneShotApprovals ?? [],
+      taskId: context.taskId ?? "",
     });
   }
 

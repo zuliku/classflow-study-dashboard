@@ -31,6 +31,7 @@ export default defineConfig({
       "tests/terminalSecretRedaction.test.ts",
       "tests/kiroTerminalBlock.test.tsx",
       "tests/terminalLifecycle.test.ts",
+      "tests/terminalStdin.test.ts",
     ],
   },
 });

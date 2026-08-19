@@ -1,9 +1,9 @@
 "use client";
 
 import React, { useEffect, useRef, useState } from "react";
-import { Check, AlertCircle, XCircle, Loader2, ChevronDown, Square, Terminal } from "lucide-react";
+import { Check, AlertCircle, XCircle, Loader2, ChevronDown, Square, Terminal, SendHorizonal } from "lucide-react";
 import { TerminalActivity, isTerminalActivityTerminal } from "@/lib/ai/computer/terminal/activity";
-import { getClassFlowDesktopTerminalBridge } from "@/lib/desktop/bridge";
+import { getClassFlowDesktopTerminalBridge, getClassFlowDesktopTerminalBridgeV2 } from "@/lib/desktop/bridge";
 import { DisclosureRegion } from "@/components/ui/DisclosureRegion";
 import { cn } from "@/lib/utils";
 
@@ -70,6 +70,10 @@ export const KiroTerminalBlock = React.memo(function KiroTerminalBlock({
   const [expanded, setExpanded] = useState(false);
   const [showAll, setShowAll] = useState(false);
   const [stopping, setStopping] = useState(false);
+  const [inputOpen, setInputOpen] = useState(false);
+  const [inputValue, setInputValue] = useState("");
+  const [inputBusy, setInputBusy] = useState(false);
+  const [inputSent, setInputSent] = useState(false);
   const running = !isTerminalActivityTerminal(activity.status) && activity.status !== "waiting-input";
   const cancelling = stopping;
 
@@ -79,6 +83,26 @@ export const KiroTerminalBlock = React.memo(function KiroTerminalBlock({
     const id = window.setInterval(() => setNow(Date.now()), 500);
     return () => window.clearInterval(id);
   }, [running, cancelling]);
+
+  // secure input：用户手动输入 → bridgeV2.write（绝不进入模型 context / 对话历史 / audit）
+  const onSendInput = async () => {
+    const text = inputValue;
+    if (!text.trim() || inputBusy) return;
+    setInputBusy(true);
+    try {
+      const bridgeV2 = getClassFlowDesktopTerminalBridgeV2();
+      if (!bridgeV2) return;
+      const payload = text.endsWith("\n") ? text : `${text}\n`;
+      await bridgeV2.write({ executionId: activity.executionId, data: payload });
+      setInputValue("");
+      setInputSent(true);
+      window.setTimeout(() => setInputSent(false), 1200);
+    } catch {
+      /* write 失败（进程已结束等）：静默 */
+    } finally {
+      setInputBusy(false);
+    }
+  };
 
   const body = [...activity.stdoutLines, ...activity.stderrLines.map((l) => `  ${l}`)];
   const displayLines = showAll ? body : body.slice(-PREVIEW_LINES);
@@ -127,9 +151,19 @@ export const KiroTerminalBlock = React.memo(function KiroTerminalBlock({
         )}
         <button
           type="button"
+          data-testid="kiro-terminal-input-toggle"
+          onClick={() => setInputOpen((v) => !v)}
+          aria-expanded={inputOpen}
+          className="flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-medium text-satin-grey hover:text-charcoal hover:bg-alabaster border border-line-soft transition-colors ml-1"
+        >
+          <SendHorizonal className="w-2.5 h-2.5" aria-hidden="true" />
+          输入
+        </button>
+        <button
+          type="button"
           aria-expanded={expanded}
           onClick={() => setExpanded((v) => !v)}
-          className="ml-auto flex items-center justify-center w-5 h-5 rounded-md text-satin-grey hover:bg-alabaster transition-colors"
+          className="ml-0.5 flex items-center justify-center w-5 h-5 rounded-md text-satin-grey hover:bg-alabaster transition-colors"
           aria-label={expanded ? "折叠终端输出" : "展开终端输出"}
         >
           <ChevronDown
@@ -138,6 +172,37 @@ export const KiroTerminalBlock = React.memo(function KiroTerminalBlock({
           />
         </button>
       </div>
+
+      {/* Secure stdin（Phase 3）：本地安全输入路径——不经模型 / 历史 / audit */}
+      {inputOpen && (
+        <div className="px-2.5 pb-1.5" data-testid="kiro-terminal-input">
+          <div className="flex items-center gap-1.5">
+            <input
+              type="text"
+              value={inputValue}
+              onChange={(e) => setInputValue(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  void onSendInput();
+                }
+              }}
+              placeholder="向进程输入（敏感内容请在此输入，不会发送给模型）"
+              aria-label="向进程输入"
+              className="min-w-0 flex-1 rounded-lg border border-line-soft bg-white/70 px-2 py-1 text-[11px] font-mono text-charcoal outline-none focus:border-sandrift"
+            />
+            <button
+              type="button"
+              data-testid="kiro-terminal-input-send"
+              onClick={() => void onSendInput()}
+              disabled={inputBusy || !inputValue.trim()}
+              className="rounded-lg px-2 py-1 text-[10px] font-medium text-white bg-sandrift hover:opacity-90 transition-opacity disabled:opacity-40"
+            >
+              {inputSent ? "已发送" : inputBusy ? "发送中" : "发送"}
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Command preview（sanitized；等宽块） */}
       <div className="px-2.5 pb-1">
