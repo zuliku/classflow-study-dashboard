@@ -13,6 +13,7 @@
  */
 import { spawn } from "node:child_process";
 import { sanitizeTerminalChunk, stripAnsi, redactAbsolutePaths, redactTerminalSecrets } from "@/lib/ai/computer/terminal/redact";
+import { buildSafeTerminalEnv } from "@/lib/ai/computer/terminal/env";
 import { DesktopTerminalEvent, DesktopTerminalExecutionMode } from "@/lib/desktop/types";
 
 export interface TerminalRuntimeResult {
@@ -173,6 +174,7 @@ export function runTerminalProcess(
         : ["/d", "/s", "/c", command];
     child = spawn(shell === "powershell" ? "powershell.exe" : "cmd.exe", args, {
       cwd,
+      env: buildSafeTerminalEnv(process.env),
       windowsHide: true,
       shell: false,
     });

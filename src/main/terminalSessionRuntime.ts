@@ -11,6 +11,7 @@
  */
 // @ts-ignore: node-pty types not available in this tsconfig
 import * as pty from "node-pty";
+import { buildSafeTerminalEnv } from "@/lib/ai/computer/terminal/env";
 import { randomUUID } from "node:crypto";
 import { sanitizeTerminalChunk } from "@/lib/ai/computer/terminal/redact";
 import { DesktopTerminalSessionEvent } from "@/lib/desktop/types";
@@ -52,7 +53,7 @@ export function createPtySession(options: PtySessionOptions): string {
     cols,
     rows,
     cwd: options.cwd,
-    env: { ...process.env },
+    env: buildSafeTerminalEnv(process.env) as Record<string, string>,
   });
   term.onData((data: string) => {
     options.onEvent({ type: "data", sessionId, data: sanitizeTerminalChunk(data) });
