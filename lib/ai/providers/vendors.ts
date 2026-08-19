@@ -17,6 +17,7 @@ export const AI_PROVIDER_META: Record<AIModelVendor, AIModelVendorMeta> = {
   qwen: { id: "qwen", name: "Qwen", logo: "/ai-providers/qwen.svg" },
   // 项目为浅色主题：使用黑色 Blossom SVG（白底黑标）
   openai: { id: "openai", name: "OpenAI", logo: "/ai-providers/openai.svg" },
+  meta: { id: "meta", name: "Meta", logo: "/ai-providers/meta.svg" },
 };
 
 /** 未知厂商的统一 fallback（ProviderLogo 组件兜底） */

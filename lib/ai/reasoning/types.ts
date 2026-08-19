@@ -10,7 +10,7 @@
  *   capability 归一后的值（UI 显示 / Turn Snapshot 发送 / Server 二次校验）。
  * requested 不在当前模型 supportedEfforts 中 → effective = "default"。
  */
-export type KiroReasoningEffort = "default" | "low" | "medium" | "high" | "max";
+export type KiroReasoningEffort = "default" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
 
 export interface ReasoningCapability {
   /** 是否可调（不可调 → UI 显示固定态，不展示假 control） */
@@ -25,7 +25,7 @@ export interface ReasoningCapability {
     | "fixed";
 }
 
-export const REASONING_EFFORTS: KiroReasoningEffort[] = ["default", "low", "medium", "high", "max"];
+export const REASONING_EFFORTS: KiroReasoningEffort[] = ["default", "minimal", "low", "medium", "high", "xhigh", "max"];
 
 /** 固定模型能力（不可调，仅 default） */
 export const FIXED_REASONING: ReasoningCapability = {

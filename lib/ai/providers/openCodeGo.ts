@@ -95,6 +95,40 @@ export const OPENCODE_MODELS: AIModelDefinition[] = [
       },
     },
   },
+  // Muse Spark 1.2 — 2026-08-19 live verified（OpenCode Go /v1/models 已返回 muse-spark-1.2；
+  // 禁止根据厂商/名称猜测，必须先 live probe 再加入 registry）：
+  // transport：openai-responses（@ai-sdk/openai .responses）
+  //   - /v1/chat/completions → 200 for text/tools/reasoning/streaming but 400 for vision（image_url → 空 assistant，finish_reason null）
+  //   - /v1/responses → 200 for all：text / streaming(event-stream) / tool_call(function_call) / reasoning(effort) / vision(input_image)
+  //   - /v1/messages → 400
+  //   → 唯一满足全能力的 transport 是 openai-responses；vision 仅在 responses 下通过（128x128 红/蓝 PNG/JPEG/WEBP 均识别 RED/BLUE）。
+  // streaming：true（responses streaming 200 event: response.created/in_progress/output_item.added；chat streaming 亦 200 但 vision 仍 400）
+  // tools：true（responses minimal/high 均返回 function_call get_current_time；chat 亦 200 但与 vision 互斥，统一走 responses）
+  // reasoning：adjustable true，supportedEfforts ["default","minimal","low","medium","high","xhigh"]，mechanism openai-responses-effort
+  //   - live：minimal/low/medium/high/xhigh 均 200 completed，reasoning_tokens 35-209；none 400 “does not support none”；max 400 “unknown variant max”
+  //   - forceReasoning=true（SDK 启发式不识别 muse-*，需显式 force）
+  //   - 与 Grok/Luna 同 mechanism，需合并到 providerOptions.openai
+  // vision：true（responses input_image 200 RED for red png/jpeg/webp 128, BLUE for blue；chat 400）
+  // fileParts/pdf：false（PDF via responses 400 “failed to parse PDF”；chat 200 空内容；未经有效 PDF 验证，不声明 true）
+  {
+    id: "muse-spark-1.2",
+    name: "Muse Spark 1.2",
+    provider: "opencode-go",
+    vendor: "meta",
+    transport: "openai-responses",
+    capabilities: {
+      streaming: true,
+      tools: true,
+      vision: true,
+      fileParts: false,
+      visionMimeTypes: ["image/jpeg", "image/png", "image/webp"],
+      reasoning: {
+        adjustable: true,
+        supportedEfforts: ["default", "minimal", "low", "medium", "high", "xhigh"],
+        mechanism: "openai-responses-effort",
+      },
+    },
+  },
   // ---- Anthropic Messages（官方 endpoint：/v1/messages）----
   // V1 保守能力声明：streaming + tools 为强要求；vision/fileParts 未经实测不开
   { id: "minimax-m3", name: "MiniMax M3", provider: "opencode-go", vendor: "minimax", transport: "anthropic-messages", capabilities: { streaming: true, tools: true, vision: false, fileParts: false } },

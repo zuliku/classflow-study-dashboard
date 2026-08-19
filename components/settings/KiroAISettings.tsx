@@ -38,9 +38,11 @@ const PROVIDER_OPTIONS: { value: AIProviderId; label: string }[] = [
 
 const REASONING_EFFORT_LABELS: Record<KiroReasoningEffort, string> = {
   default: "默认",
+  minimal: "极低",
   low: "低",
   medium: "中",
   high: "高",
+  xhigh: "超高",
   max: "极高",
 };
 

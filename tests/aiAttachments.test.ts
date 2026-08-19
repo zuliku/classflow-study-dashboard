@@ -123,6 +123,7 @@ describe("Vision Capability（真实约束）", () => {
     expect(getModelCapabilities({ provider: "opencode-go", model: "grok-4.5" }).vision).toBe(false);
     expect(getModelCapabilities({ provider: "opencode-go", model: "kimi-k3" }).vision).toBe(true);
     expect(getModelCapabilities({ provider: "opencode-go", model: "mimo-v2.5" }).vision).toBe(true);
+    expect(getModelCapabilities({ provider: "opencode-go", model: "muse-spark-1.2" }).vision).toBe(true);
     expect(getModelCapabilities({ provider: "opencode-go", model: "glm-5.2" }).vision).toBe(false);
     expect(getModelCapabilities({ provider: "opencode-go", model: "hy3" }).vision).toBe(false);
     expect(getModelCapabilities({ provider: "deepseek", model: "deepseek-v4-flash" }).vision).toBe(false);
@@ -179,8 +180,8 @@ describe("Vision MIME gate（isVisionMimeSupported，Phase 3.3A）", () => {
   });
 
   it("File.type 为空：扩展名解析真实 MIME；白名单最终决定（.webp 对 WEBP 模型通过、对 JPEG/PNG 模型拒绝）", () => {
-    // Kimi/MiMo（已 live 验证 WEBP）：空 type 下扩展名兜底全部通过
-    for (const model of ["kimi-k3", "mimo-v2.5"]) {
+    // Kimi/MiMo/Muse Spark（已 live 验证 WEBP）：空 type 下扩展名兜底全部通过
+    for (const model of ["kimi-k3", "mimo-v2.5", "muse-spark-1.2"]) {
       const cap = getModelCapabilities({ provider: "opencode-go", model });
       expect(isVisionMimeSupported(cap, undefined, "photo.jpg"), model).toBe(true);
       expect(isVisionMimeSupported(cap, undefined, "photo.jpeg"), model).toBe(true);
@@ -219,14 +220,15 @@ describe("Vision MIME gate（isVisionMimeSupported，Phase 3.3A）", () => {
   });
 
   it("visionMimeTypes 贯通：registry 未声明 → undefined（无额外限制）", () => {
-    // Phase 3.3B：kimi-k3 / mimo-v2.5 已 live 验证 PNG/JPEG/WEBP
+    // Phase 3.3B：kimi-k3 / mimo-v2.5 已 live 验证 PNG/JPEG/WEBP；muse-spark-1.2 同为 responses vision 128 验证
     expect(getModelCapabilities({ provider: "opencode-go", model: "kimi-k3" }).visionMimeTypes).toEqual(["image/jpeg", "image/png", "image/webp"]);
     expect(getModelCapabilities({ provider: "opencode-go", model: "mimo-v2.5" }).visionMimeTypes).toEqual(["image/jpeg", "image/png", "image/webp"]);
+    expect(getModelCapabilities({ provider: "opencode-go", model: "muse-spark-1.2" }).visionMimeTypes).toEqual(["image/jpeg", "image/png", "image/webp"]);
     expect(getModelCapabilities({ provider: "custom-openai", model: "x", custom: { providerName: "", baseURL: "", model: "x", vision: true } }).visionMimeTypes).toBeUndefined();
   });
 
-  it("kimi-k3 / mimo-v2.5：JPEG/PNG/WEBP 全部通过 MIME gate；扫描 PDF（JPEG）通过；空 type 扩展名兜底一致", () => {
-    for (const model of ["kimi-k3", "mimo-v2.5"]) {
+  it("kimi-k3 / mimo-v2.5 / muse-spark-1.2：JPEG/PNG/WEBP 全部通过 MIME gate；扫描 PDF（JPEG）通过；空 type 扩展名兜底一致", () => {
+    for (const model of ["kimi-k3", "mimo-v2.5", "muse-spark-1.2"]) {
       const cap = getModelCapabilities({ provider: "opencode-go", model });
       expect(isVisionMimeSupported(cap, "image/jpeg"), model).toBe(true);
       expect(isVisionMimeSupported(cap, "image/png"), model).toBe(true);

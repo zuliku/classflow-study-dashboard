@@ -62,6 +62,12 @@ describe("resolveModelDefinition", () => {
     expect(def?.vendor).toBe("xai");
   });
 
+  it("B4. OpenCode Responses：muse-spark-1.2 → openai-responses / meta（live verified）", async () => {
+    const def = await resolveModelDefinition({ provider: "opencode-go", model: "muse-spark-1.2" });
+    expect(def?.transport).toBe("openai-responses");
+    expect(def?.vendor).toBe("meta");
+  });
+
   it("Custom 固定 openai-chat（不扩展 Anthropic-compatible）", async () => {
     const def = await resolveModelDefinition({ provider: "custom-openai", model: "my-model", custom: { providerName: "x", baseURL: "https://x.example.com/v1", model: "my-model" } });
     expect(def?.transport).toBe("openai-chat");
@@ -179,6 +185,19 @@ describe("createLanguageModelFromDefinition（Adapter 选择）", () => {
     expect(openAICompatibleFactory).not.toHaveBeenCalled();
   });
 
+  it("F3c. muse-spark-1.2 同样走 @ai-sdk/openai .responses（meta vendor，live verified）", () => {
+    const m = createLanguageModelFromDefinition(
+      { id: "muse-spark-1.2", name: "Muse Spark 1.2", provider: "opencode-go", vendor: "meta", transport: "openai-responses", capabilities: { streaming: true, tools: true, vision: true, fileParts: false, visionMimeTypes: ["image/jpeg", "image/png", "image/webp"] } },
+      { baseURL: "https://opencode.ai/zen/go/v1", apiKey: "sk-go" }
+    );
+    expect(providerOf(m)).toBe("openai");
+    expect(modelIdOf(m)).toBe("muse-spark-1.2");
+    expect((m as { api?: string }).api).toBe("responses");
+    expect(openAIFactory).toHaveBeenCalledTimes(1);
+    expect(openAICompatibleFactory).not.toHaveBeenCalled();
+    expect(anthropicFactory).not.toHaveBeenCalled();
+  });
+
   it("F4. 未知 transport → 明确 UNSUPPORTED_TRANSPORT（不偷偷降级）", () => {
     expect(() =>
       createLanguageModelFromDefinition(
@@ -241,7 +260,7 @@ describe("OpenCode 注册表完整性", () => {
     for (const id of [
       "glm-5.3", "glm-5.2", "glm-5.1", "kimi-k3", "kimi-k2.7-code", "kimi-k2.6",
       "deepseek-v4-pro", "deepseek-v4-flash", "mimo-v2.5", "mimo-v2.5-pro", "hy3",
-      "grok-4.5", "gpt-5.6-luna",
+      "grok-4.5", "gpt-5.6-luna", "muse-spark-1.2",
       "minimax-m3", "minimax-m2.7", "minimax-m2.5", "qwen3.8-max", "qwen3.7-max", "qwen3.7-plus", "qwen3.6-plus",
     ]) {
       expect(ids.has(id), id).toBe(true);

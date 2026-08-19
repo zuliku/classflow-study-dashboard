@@ -14,7 +14,8 @@ export type AIModelVendor =
   | "tencent"
   | "minimax"
   | "qwen"
-  | "openai";
+  | "openai"
+  | "meta";
 
 /** 厂商元数据（Logo 本地静态资源，唯一来源） */
 export interface AIModelVendorMeta {
