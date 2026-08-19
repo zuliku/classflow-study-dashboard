@@ -14,6 +14,7 @@
     "typecheck:web": "tsc --noEmit -p tsconfig.json",
     "typecheck": "npm run typecheck:node && npm run typecheck:web",
     "postinstall": "electron-builder install-app-deps",
+    "test": "vitest run",
     "test:terminal": "vitest run tests/terminalCapability.test.ts tests/terminalToolExposure.test.ts tests/terminalCapabilityPrompt.test.ts",
     "pack:win": "electron-vite build && electron-builder --win nsis"
   },
@@ -51,12 +52,12 @@
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
     "@types/jsdom": "^30.0.0",
-    "@types/node": "^20.14.12",
+    "@types/node": "^22.14.0",
     "@types/react": "^18.3.3",
     "@types/react-dom": "^18.3.0",
     "@vitejs/plugin-react": "^4.3.4",
     "autoprefixer": "^10.4.19",
-    "electron": "^31.7.7",
+    "electron": "43.3.0",
     "electron-builder": "^24.13.3",
     "electron-vite": "^2.3.0",
     "postcss": "^8.4.40",
@@ -66,7 +67,7 @@
     "vitest": "^4.1.10"
   },
   "allowScripts": {
-    "electron@31.7.7": true,
+    "electron@43.3.0": true,
     "esbuild@0.21.5": true
   }
 }

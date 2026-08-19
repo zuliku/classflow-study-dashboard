@@ -37,7 +37,8 @@ export type ComputerErrorCode =
   | "TERMINAL_EXECUTION_FAILED"
   | "TERMINAL_CANCELLED"
   | "TERMINAL_COMMAND_BLOCKED"
-  | "TERMINAL_NATIVE_WORKSPACE_REQUIRED";
+  | "TERMINAL_NATIVE_WORKSPACE_REQUIRED"
+  | "TOO_MANY_ACTIVE_TERMINALS";
 
 export class ComputerError extends Error {
   readonly code: ComputerErrorCode;

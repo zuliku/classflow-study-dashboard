@@ -12,6 +12,7 @@ import { promises as fs, existsSync, realpathSync } from "node:fs";
 import { join, sep, dirname, basename } from "node:path";
 import { randomUUID } from "node:crypto";
 import { spawn, ChildProcess } from "node:child_process";
+import { validateIpcSender } from "@/lib/security/ipcSender";
 
 /* ---------------- Grant 管理（grantId → absolute root，renderer 不可见） ---------------- */
 
@@ -632,27 +633,72 @@ async function handleTerminalCancel(input: unknown): Promise<void> {
   entry.reject(failError("CANCELLED"));
 }
 
-/* ---------------- IPC 注册 ---------------- */
+/* ---------------- IPC 注册（带 Sender Validation） ---------------- */
 
-export function registerDesktopBridgeIpc(): void {
+interface BridgeIpcOptions {
+  getAllowedOrigins?: () => { allowedApiOrigin: string; allowedDevOrigin?: string };
+  isTrustedSender?: (sender: Electron.WebContents) => boolean;
+}
+
+function withValidation<T extends unknown[]>(
+  channel: string,
+  handler: (event: Electron.IpcMainInvokeEvent, ...args: T) => unknown,
+  getAllowedOrigins?: () => { allowedApiOrigin: string; allowedDevOrigin?: string },
+  isTrustedSender?: (sender: Electron.WebContents) => boolean
+): (event: Electron.IpcMainInvokeEvent, ...args: T) => unknown {
+  return (event, ...args) => {
+    const sender = event.sender;
+    const destroyed = (() => {
+      try {
+        return sender.isDestroyed();
+      } catch {
+        return true;
+      }
+    })();
+    const isTrustedWindow = isTrustedSender ? isTrustedSender(sender) : !destroyed;
+    const url = (() => {
+      try {
+        return sender.getURL();
+      } catch {
+        return "";
+      }
+    })();
+    const origins = getAllowedOrigins ? getAllowedOrigins() : {};
+    const result = validateIpcSender(channel, { destroyed, isTrustedWindow, url }, origins);
+    if (!result.ok) {
+      console.warn(`[classflow] IPC denied ${channel}: ${result.reason}`);
+      throw new Error(JSON.stringify({ code: "PERMISSION_DENIED", message: result.reason }));
+    }
+    return handler(event, ...args);
+  };
+}
+
+export function registerDesktopBridgeIpc(opts?: BridgeIpcOptions): void {
   void loadGrants().then(() => {
     /* grants 就绪 */
   });
 
-  ipcMain.handle("bridge:fs:pickDirectory", (_e, input) => handlePickDirectory(input));
-  ipcMain.handle("bridge:fs:getGrantStatus", (_e, input) => handleGetGrantStatus(input));
-  ipcMain.handle("bridge:fs:forgetGrant", (_e, input) => handleForgetGrant(input));
-  ipcMain.handle("bridge:fs:list", (_e, input) => handleList(input));
-  ipcMain.handle("bridge:fs:stat", (_e, input) => handleStat(input));
-  ipcMain.handle("bridge:fs:readText", (_e, input) => handleReadText(input));
-  ipcMain.handle("bridge:fs:readBytes", (_e, input) => handleReadBytes(input));
-  ipcMain.handle("bridge:fs:readTextPrefix", (_e, input) => handleReadTextPrefix(input));
-  ipcMain.handle("bridge:fs:createDirectory", (_e, input) => handleCreateDirectory(input));
-  ipcMain.handle("bridge:fs:writeText", (_e, input) => handleWriteText(input));
-  ipcMain.handle("bridge:fs:writeBytes", (_e, input) => handleWriteBytes(input));
-  ipcMain.handle("bridge:fs:remove", (_e, input) => handleRemove(input));
-  ipcMain.handle("bridge:fs:move", (_e, input) => handleMove(input));
+  const wrap = <T extends unknown[]>(
+    channel: string,
+    handler: (event: Electron.IpcMainInvokeEvent, ...args: T) => unknown
+  ) => withValidation(channel, handler, opts?.getAllowedOrigins, opts?.isTrustedSender);
 
-  ipcMain.handle("bridge:terminal:execute", (_e, input) => handleTerminalExecute(input));
-  ipcMain.handle("bridge:terminal:cancel", (_e, input) => handleTerminalCancel(input));
+  ipcMain.handle("bridge:fs:pickDirectory", wrap("bridge:fs:pickDirectory", (_e, input) => handlePickDirectory(input)));
+  ipcMain.handle("bridge:fs:getGrantStatus", wrap("bridge:fs:getGrantStatus", (_e, input) => handleGetGrantStatus(input)));
+  ipcMain.handle("bridge:fs:forgetGrant", wrap("bridge:fs:forgetGrant", (_e, input) => handleForgetGrant(input)));
+  ipcMain.handle("bridge:fs:list", wrap("bridge:fs:list", (_e, input) => handleList(input)));
+  ipcMain.handle("bridge:fs:stat", wrap("bridge:fs:stat", (_e, input) => handleStat(input)));
+  ipcMain.handle("bridge:fs:readText", wrap("bridge:fs:readText", (_e, input) => handleReadText(input)));
+  ipcMain.handle("bridge:fs:readBytes", wrap("bridge:fs:readBytes", (_e, input) => handleReadBytes(input)));
+  ipcMain.handle("bridge:fs:readTextPrefix", wrap("bridge:fs:readTextPrefix", (_e, input) => handleReadTextPrefix(input)));
+  ipcMain.handle("bridge:fs:createDirectory", wrap("bridge:fs:createDirectory", (_e, input) => handleCreateDirectory(input)));
+  ipcMain.handle("bridge:fs:writeText", wrap("bridge:fs:writeText", (_e, input) => handleWriteText(input)));
+  ipcMain.handle("bridge:fs:writeBytes", wrap("bridge:fs:writeBytes", (_e, input) => handleWriteBytes(input)));
+  ipcMain.handle("bridge:fs:remove", wrap("bridge:fs:remove", (_e, input) => handleRemove(input)));
+  ipcMain.handle("bridge:fs:move", wrap("bridge:fs:move", (_e, input) => handleMove(input)));
+
+  ipcMain.handle("bridge:terminal:execute", wrap("bridge:terminal:execute", (_e, input) => handleTerminalExecute(input)));
+  ipcMain.handle("bridge:terminal:cancel", wrap("bridge:terminal:cancel", (_e, input) => handleTerminalCancel(input)));
+
+  // 预留未来敏感通道（credential / mcp / channel）— 已在 ipcSender 中标记为敏感，新增时自动受保护
 }
