@@ -56,7 +56,9 @@ export function ReminderViewport() {
   return (
     <div
       data-testid="reminder-viewport"
-      className="fixed top-3 left-3 right-3 md:left-auto md:right-4 md:top-4 z-[80] flex flex-col gap-2 pointer-events-none md:w-[400px]"
+      // 顶部安全间距计入自绘 TitleBar（--titlebar-h: 26px）：
+      // 桌面 md+ 位于 TitleBar 下方 16px；移动端无 TitleBar 时回落 12px（var 为 0 时结果等价 top-3）
+      className="fixed left-3 right-3 md:left-auto md:right-4 z-[80] flex flex-col gap-2 pointer-events-none md:w-[400px] top-[calc(var(--titlebar-h,0px)+12px)] md:top-[calc(var(--titlebar-h)+16px)]"
     >
       {visible.map((r) => (
         <ReminderCard
