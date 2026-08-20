@@ -150,7 +150,7 @@ function buildTraceFromTurnMessages(
     toolCalls: successToolCalls,
     toolResults: successResults,
     proposals: hasProposal ? [{}] : undefined,
-    userConfirmation: hasProposal ? hasSuccessMutation : undefined,
+    userConfirmation: undefined,
     finalStatus: "success",
     timestamp: Date.now(),
   };
@@ -277,7 +277,7 @@ export function extractWorkflowTrace(messages: KiroMessageForTrace[]): WorkflowT
     toolCalls: successToolCalls,
     toolResults: successResults,
     proposals: hasProposal ? [{}] : undefined,
-    userConfirmation: hasProposal ? hasSuccessMutation : undefined, // 真实 receipt：有 mutation 成功才算 confirmed
+    userConfirmation: undefined,
     finalStatus: "success",
     timestamp: Date.now(),
   };

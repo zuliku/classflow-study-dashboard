@@ -34,7 +34,7 @@ export function createMcpApproval(input: {
   toolName: string;
   arguments: unknown;
 }): McpApprovalRecord {
-  const id = `mcp_approval_${randomUUID().slice(0, 8)}`;
+  const id = `mcp_approval_${randomUUID()}`;
   const now = Date.now();
   const rec: McpApprovalRecord = {
     id,

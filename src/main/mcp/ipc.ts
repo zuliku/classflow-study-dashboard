@@ -9,13 +9,20 @@ import { classifyMcpToolRisk, requiresMcpToolConfirmation, isMcpToolAllowedForOr
 
 function toIpcError(err: unknown): never {
   const raw = err instanceof Error ? err.message : String(err);
+  let parsed: { code?: string; message?: string; approvalRequestId?: string } | null = null;
   try {
-    const parsed = JSON.parse(raw) as { code?: string; message?: string };
-    throw new Error(JSON.stringify({ code: parsed.code ?? "UNKNOWN", message: parsed.message ?? raw }));
-  } catch {
-    const e = err as { code?: string; message?: string };
-    throw new Error(JSON.stringify({ code: e?.code ?? "UNKNOWN", message: e?.message ?? raw }));
+    parsed = JSON.parse(raw);
+  } catch {}
+  if (parsed) {
+    throw new Error(
+      JSON.stringify({
+        code: parsed.code ?? "UNKNOWN",
+        message: parsed.message ?? "Unknown error",
+        ...(parsed.approvalRequestId ? { approvalRequestId: parsed.approvalRequestId } : {}),
+      })
+    );
   }
+  throw new Error(JSON.stringify({ code: "UNKNOWN", message: raw }));
 }
 
 export function registerMcpIpc(opts?: {

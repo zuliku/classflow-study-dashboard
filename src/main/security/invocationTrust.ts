@@ -23,7 +23,7 @@ export function beginInvocation(
   origin: InvocationOrigin,
   opts?: { source?: InvocationTrustRecord["source"]; inboxItemId?: string }
 ): string {
-  const id = `inv_${randomUUID().slice(0, 8)}`;
+  const id = `inv_${randomUUID()}`;
   const now = Date.now();
   const rec: InvocationTrustRecord = {
     id,
