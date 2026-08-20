@@ -11,8 +11,10 @@ export interface SidecarSize {
 export const SIDECAR_DEFAULT_SIZE: SidecarSize = { width: 620, height: 760 };
 export const SIDECAR_MIN_WIDTH = 420;
 export const SIDECAR_MIN_HEIGHT = 560;
-/** 面板与 viewport 四边保留的安全边距 */
+/** 面板与 viewport 四边保留的安全边距（左/右/底） */
 export const SIDECAR_VIEWPORT_MARGIN = 24;
+/** 桌面 TitleBar 安全顶部边距：--titlebar-h(26px) + 12~16px → 40px（统一 Capsule/Full Sidecar 几何原则） */
+export const SIDECAR_VIEWPORT_TOP_MARGIN = 40;
 
 function clamp(n: number, min: number, max: number): number {
   return Math.min(Math.max(n, min), max);

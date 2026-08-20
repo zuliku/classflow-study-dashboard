@@ -57,6 +57,16 @@ if (!Element.prototype.setPointerCapture) {
   Element.prototype.setPointerCapture = () => {};
   Element.prototype.releasePointerCapture = () => {};
 }
+if (typeof PointerEvent === "undefined") {
+  // @ts-ignore
+  globalThis.PointerEvent = class PointerEvent extends MouseEvent {
+    pointerId: number;
+    constructor(type: string, params: PointerEventInit = {}) {
+      super(type, params);
+      this.pointerId = (params as any).pointerId ?? 0;
+    }
+  } as any;
+}
 
 function setupShell(mode: "open" | "minimized" | "closed", present = true, Child?: React.ComponentType) {
   Object.defineProperty(window, "innerWidth", { configurable: true, value: 1440 });

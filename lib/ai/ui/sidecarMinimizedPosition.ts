@@ -1,9 +1,9 @@
 /**
- * Kiro Sidecar Minimized Capsule Position（Capsule V1）：
+ * Kiro Sidecar Minimized Capsule Position（Capsule V1 + Desktop Polish）：
  * - right / bottom 表示（吸附右下角语义）
- * - 固定尺寸 176×46，margin 24
+ * - 固定尺寸 176×46，margin 24（左/右/底），顶部安全区 40px（--titlebar-h 26 + 14）
  * - 纯函数，供 Shell/Capsule/Preferences/测试共用
- * - 四边至少保留 24px，不产生 NaN/negative
+ * - 四边可见（top ≥40，left/right/bottom ≥24），不产生 NaN/negative
  */
 
 export interface SidecarMinimizedPosition {
@@ -12,6 +12,8 @@ export interface SidecarMinimizedPosition {
 }
 
 export const SIDECAR_MINIMIZED_MARGIN = 24;
+/** Capsule 顶部安全边距：复用桌面 TitleBar 安全区 40px（26 + 14），左/右/底仍 24px */
+export const SIDECAR_MINIMIZED_TOP_MARGIN = 40;
 
 export const SIDECAR_MINIMIZED_SIZE = {
   width: 176,
@@ -38,15 +40,16 @@ export function normalizeSidecarMinimizedPosition(value: unknown): SidecarMinimi
   };
 }
 
-/** 位置 clamp：四边均保留 margin */
+/** 位置 clamp：左/右/底 ≥24px，顶部 ≥40px（TitleBar safe area） */
 export function clampSidecarMinimizedPosition(
   position: SidecarMinimizedPosition,
   viewport: { width: number; height: number }
 ): SidecarMinimizedPosition {
   const margin = SIDECAR_MINIMIZED_MARGIN;
+  const topMargin = SIDECAR_MINIMIZED_TOP_MARGIN;
   const { width, height } = SIDECAR_MINIMIZED_SIZE;
   const maxRight = Math.max(margin, viewport.width - width - margin);
-  const maxBottom = Math.max(margin, viewport.height - height - margin);
+  const maxBottom = Math.max(margin, viewport.height - height - topMargin);
   return {
     right: clamp(Math.round(position.right), margin, maxRight),
     bottom: clamp(Math.round(position.bottom), margin, maxBottom),

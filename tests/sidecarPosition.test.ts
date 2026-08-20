@@ -6,7 +6,12 @@ import {
   clampSidecarSizeAtPosition,
   normalizeSidecarPosition,
 } from "@/lib/ai/ui/sidecarPosition";
-import { SIDECAR_DEFAULT_SIZE, SIDECAR_MIN_WIDTH, SIDECAR_MIN_HEIGHT } from "@/lib/ai/ui/sidecarSize";
+import {
+  SIDECAR_DEFAULT_SIZE,
+  SIDECAR_MIN_WIDTH,
+  SIDECAR_MIN_HEIGHT,
+  SIDECAR_VIEWPORT_TOP_MARGIN,
+} from "@/lib/ai/ui/sidecarSize";
 
 const VIEWPORT = { width: 1440, height: 900 };
 const SIZE = SIDECAR_DEFAULT_SIZE; // 620×760
@@ -30,34 +35,55 @@ describe("normalizeSidecarPosition", () => {
   });
 });
 
-describe("clampSidecarPosition（四边 ≥24px）", () => {
-  it("2. 向右拖（dx +100）→ right -100", () => {
-    expect(clampSidecarPosition({ top: 24, right: 24 - 100 }, SIZE, VIEWPORT)).toEqual({ top: 24, right: 24 });
-    // 无 clamp 冲突：从 124 右移 100 → 24
-    expect(clampSidecarPosition({ top: 24, right: 124 }, SIZE, VIEWPORT)).toEqual({ top: 24, right: 124 });
+describe("clampSidecarPosition（左/右/底 ≥24px，顶 ≥40px TitleBar safe area）", () => {
+  it("2. 向右拖（dx +100）→ right -100（top clamp 到 40）", () => {
+    expect(clampSidecarPosition({ top: 24, right: 24 - 100 }, SIZE, VIEWPORT)).toEqual({
+      top: SIDECAR_VIEWPORT_TOP_MARGIN,
+      right: 24,
+    });
+    // 无 clamp 冲突：从 124 右移 100 → 24；top 24 仍会被 clamp 到 40
+    expect(clampSidecarPosition({ top: 24, right: 124 }, SIZE, VIEWPORT)).toEqual({
+      top: SIDECAR_VIEWPORT_TOP_MARGIN,
+      right: 124,
+    });
   });
 
-  it("3. 向左拖（dx -100）→ right +100", () => {
-    expect(clampSidecarPosition({ top: 24, right: 124 }, SIZE, VIEWPORT)).toEqual({ top: 24, right: 124 });
+  it("3. 向左拖（dx -100）→ right +100（top safe）", () => {
+    expect(clampSidecarPosition({ top: 24, right: 124 }, SIZE, VIEWPORT)).toEqual({
+      top: SIDECAR_VIEWPORT_TOP_MARGIN,
+      right: 124,
+    });
   });
 
   it("4. 向下拖（dy +100）→ top +100（未触及 bottom bound）", () => {
     const size = { width: 620, height: 600 }; // maxTop = 900-600-24 = 276
     expect(clampSidecarPosition({ top: 24 + 100, right: 24 }, size, VIEWPORT)).toEqual({ top: 124, right: 24 });
-    expect(clampSidecarPosition({ top: 24, right: 124 }, size, VIEWPORT)).toEqual({ top: 24, right: 124 });
+    expect(clampSidecarPosition({ top: 24, right: 124 }, size, VIEWPORT)).toEqual({
+      top: SIDECAR_VIEWPORT_TOP_MARGIN,
+      right: 124,
+    });
   });
 
-  it("5. top clamp 24（向上拖过头）", () => {
-    expect(clampSidecarPosition({ top: 24 - 500, right: 24 }, SIZE, VIEWPORT)).toEqual({ top: 24, right: 24 });
+  it("5. top clamp 40（向上拖过头，TitleBar safe）", () => {
+    expect(clampSidecarPosition({ top: 24 - 500, right: 24 }, SIZE, VIEWPORT)).toEqual({
+      top: SIDECAR_VIEWPORT_TOP_MARGIN,
+      right: 24,
+    });
   });
 
-  it("6. right clamp 24（向右拖过头）", () => {
-    expect(clampSidecarPosition({ top: 24, right: -400 }, SIZE, VIEWPORT)).toEqual({ top: 24, right: 24 });
+  it("6. right clamp 24（向右拖过头，top safe 40）", () => {
+    expect(clampSidecarPosition({ top: 24, right: -400 }, SIZE, VIEWPORT)).toEqual({
+      top: SIDECAR_VIEWPORT_TOP_MARGIN,
+      right: 24,
+    });
   });
 
-  it("7. left edge clamp：right <= viewport.width - size.width - 24", () => {
+  it("7. left edge clamp：right <= viewport.width - size.width - 24（top safe 40）", () => {
     const maxRight = VIEWPORT.width - SIZE.width - 24; // 796
-    expect(clampSidecarPosition({ top: 24, right: 5000 }, SIZE, VIEWPORT)).toEqual({ top: 24, right: maxRight });
+    expect(clampSidecarPosition({ top: 24, right: 5000 }, SIZE, VIEWPORT)).toEqual({
+      top: SIDECAR_VIEWPORT_TOP_MARGIN,
+      right: maxRight,
+    });
   });
 
   it("8. bottom clamp：top <= viewport.height - size.height - 24", () => {
@@ -65,12 +91,12 @@ describe("clampSidecarPosition（四边 ≥24px）", () => {
     expect(clampSidecarPosition({ top: 5000, right: 24 }, SIZE, VIEWPORT)).toEqual({ top: 116, right: 24 });
   });
 
-  it("窗口过小：不产生 NaN / 负几何（Math.max 兜底）", () => {
+  it("窗口过小：不产生 NaN / 负几何（Math.max 兜底，top ≥40）", () => {
     const tiny = { width: 300, height: 400 };
     const pos = clampSidecarPosition({ top: 24, right: 24 }, { width: 620, height: 760 }, tiny);
     expect(Number.isFinite(pos.top)).toBe(true);
     expect(Number.isFinite(pos.right)).toBe(true);
-    expect(pos.top).toBeGreaterThanOrEqual(24);
+    expect(pos.top).toBeGreaterThanOrEqual(SIDECAR_VIEWPORT_TOP_MARGIN);
     expect(pos.right).toBeGreaterThanOrEqual(24);
   });
 });
@@ -114,9 +140,9 @@ describe("clampSidecarGeometry（viewport resize 后确定性修正）", () => {
     expect(g.position.top + g.size.height).toBeLessThanOrEqual(small.height - 24);
   });
 
-  it("默认几何在默认 viewport 下不变（backward-compatible）", () => {
+  it("默认几何在默认 viewport 下：size 不变，position top clamp 到 TitleBar safe 40", () => {
     const g = clampSidecarGeometry(SIZE, SIDECAR_DEFAULT_POSITION, VIEWPORT);
     expect(g.size).toEqual(SIZE);
-    expect(g.position).toEqual(SIDECAR_DEFAULT_POSITION);
+    expect(g.position).toEqual({ top: SIDECAR_VIEWPORT_TOP_MARGIN, right: 24 });
   });
 });

@@ -15,11 +15,13 @@ import { cn } from "@/lib/utils";
 const DRAG_THRESHOLD = 5;
 
 /**
- * Kiro Minimized Capsule（V1）：
+ * Kiro Minimized Capsule（V1 + Desktop Polish）：
  * - 固定 176×46，右下角默认 24px
  * - 可拖拽（pointer capture，draft 本地，pointerup 一次持久化）
  * - 点击主区恢复，× 关闭；拖拽后不误触恢复
  * - 仅 md+ 可见（父级隐藏）；busy 低频 boolean
+ * - 顶部安全区 40px（TitleBar 26 + 14），左/右/底 24px；viewport resize 仅 presentation clamp
+ * - 流光 inset-0 rounded-full，hover/drag 克制反馈
  * - 不订阅 streaming token
  */
 export function KiroSidecarMinimized({ visible }: { visible: boolean }) {
@@ -38,6 +40,7 @@ export function KiroSidecarMinimized({ visible }: { visible: boolean }) {
     return () => window.removeEventListener("resize", onResize);
   }, []);
 
+  // viewport clamp 仅 presentation，不写 store（resize 不持久化；仅 pointerup 持久化）
   const clampedPersisted = useMemo(
     () => clampSidecarMinimizedPosition(persisted ?? DEFAULT_SIDECAR_MINIMIZED_POSITION, viewport),
     [persisted, viewport]
@@ -47,21 +50,6 @@ export function KiroSidecarMinimized({ visible }: { visible: boolean }) {
   const [draft, setDraft] = useState<null | { right: number; bottom: number }>(null);
   const [dragging, setDragging] = useState(false);
   const position = draft ?? clampedPersisted;
-
-  // 当 viewport 导致 persisted 超出边界，修正一次（避免死循环：只在非 dragging 时）
-  const isDraggingRef = useRef(false);
-  useEffect(() => {
-    isDraggingRef.current = dragging;
-  }, [dragging]);
-  useEffect(() => {
-    if (dragging) return;
-    if (draft) return;
-    if (clampedPersisted.right !== persisted.right || clampedPersisted.bottom !== persisted.bottom) {
-      // 有些测试环境 localStorage 同步，这里只在真正超出时写回
-      setPersisted(clampedPersisted);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [clampedPersisted.right, clampedPersisted.bottom]);
 
   // drag 状态（确定性 suppressNextClick，不靠 timer；仅 >=5px 后进入 drag 并 capture）
   const originRef = useRef<{ right: number; bottom: number } | null>(null);
@@ -217,7 +205,7 @@ export function KiroSidecarMinimized({ visible }: { visible: boolean }) {
   );
 
   // 仅 md+ 可见；minimized 时 opacity 1，open/closed 时 hidden + inert
-  // 流光边框复用现有 Kiro perimeter sweep（kiro-ring），1px 克制，不做强霓虹
+  // 流光边框：inset-0 rounded-full + 1px surface inset，复用 kiro-ring conic 旋转；hover/drag 仅克制反馈，不改变几何
   return (
     <div
       ref={capsuleElRef}
@@ -226,9 +214,10 @@ export function KiroSidecarMinimized({ visible }: { visible: boolean }) {
       aria-hidden={!visible}
       {...(!visible ? ({ inert: "" } as unknown as React.HTMLAttributes<HTMLDivElement>) : {})}
       className={cn(
-        "hidden md:flex fixed z-40 rounded-full overflow-hidden select-none touch-none shadow-card",
-        "transition-[opacity,transform] ease-[var(--ease-standard)]",
-        dragging ? "transition-none" : "duration-[160ms]",
+        "hidden md:flex fixed z-40 rounded-full overflow-hidden select-none touch-none shadow-card group",
+        dragging
+          ? "cursor-grabbing transition-none"
+          : "cursor-grab transition-[opacity,transform,box-shadow] ease-[var(--ease-standard)] duration-[160ms] hover:shadow-[0_6px_18px_-2px_rgba(49,48,50,0.10)]",
         visible ? "opacity-100 scale-100 translate-y-0" : "opacity-0 scale-[0.96] translate-y-1 pointer-events-none"
       )}
       style={
@@ -245,17 +234,25 @@ export function KiroSidecarMinimized({ visible }: { visible: boolean }) {
       onPointerCancel={handlePointerCancel}
       aria-label="Kiro 已最小化"
     >
-      {/* 1px 流光边框：复用 kiro-ring + kiro-ring-animated，沿 rounded-full 循环，低饱和慢速 */}
+      {/* 1px 流光边框：inset-0 rounded-full（非 -inset-1/2），沿 rounded-full 完整覆盖，无 seam/裁切；低饱和慢速 */}
       <span
         aria-hidden="true"
         className={cn(
-          "absolute -inset-1/2 kiro-ring kiro-ring-animated pointer-events-none",
-          kiroBusy ? "opacity-80" : "opacity-55",
-          dragging && "opacity-30"
+          "absolute inset-0 rounded-full kiro-ring kiro-ring-animated pointer-events-none",
+          dragging
+            ? "opacity-30"
+            : kiroBusy
+              ? "opacity-80 group-hover:opacity-90"
+              : "opacity-55 group-hover:opacity-70"
         )}
         style={{ animationDuration: kiroBusy ? "4.5s" : "7s" } as React.CSSProperties}
       />
-      <div className="relative flex-1 m-[1px] bg-surface rounded-full flex items-center gap-2 px-2.5 h-[calc(100%-2px)]">
+      <div
+        className={cn(
+          "relative flex-1 m-[1px] bg-surface rounded-full flex items-center gap-2 px-2.5 h-[calc(100%-2px)] transition-colors duration-150",
+          !dragging && "group-hover:bg-white"
+        )}
+      >
         <button
           type="button"
           onClick={handleClickRestore}

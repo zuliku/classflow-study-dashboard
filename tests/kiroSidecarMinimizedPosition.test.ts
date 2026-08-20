@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   DEFAULT_SIDECAR_MINIMIZED_POSITION,
   SIDECAR_MINIMIZED_MARGIN,
+  SIDECAR_MINIMIZED_TOP_MARGIN,
   SIDECAR_MINIMIZED_SIZE,
   normalizeSidecarMinimizedPosition,
   clampSidecarMinimizedPosition,
@@ -32,12 +33,14 @@ describe("Sidecar Minimized Position Domain", () => {
     expect(clamped.right).toBe(SIDECAR_MINIMIZED_MARGIN);
   });
 
-  it("4. top clamp（bottom 过大 → bottom 被限制，top ≥24）", () => {
+  it("4. top clamp（bottom 过大 → bottom 被限制，top ≥40 TitleBar safe area）", () => {
     const viewport = { width: 1440, height: 900 };
     const clamped = clampSidecarMinimizedPosition({ right: 24, bottom: 10000 }, viewport);
-    const maxBottom = viewport.height - SIDECAR_MINIMIZED_SIZE.height - SIDECAR_MINIMIZED_MARGIN;
+    const maxBottom = viewport.height - SIDECAR_MINIMIZED_SIZE.height - SIDECAR_MINIMIZED_TOP_MARGIN;
     expect(clamped.bottom).toBe(maxBottom);
-    expect(viewport.height - clamped.bottom - SIDECAR_MINIMIZED_SIZE.height).toBeGreaterThanOrEqual(24);
+    expect(viewport.height - clamped.bottom - SIDECAR_MINIMIZED_SIZE.height).toBeGreaterThanOrEqual(
+      SIDECAR_MINIMIZED_TOP_MARGIN
+    );
   });
 
   it("5. bottom clamp（bottom 过小）", () => {
@@ -80,14 +83,14 @@ describe("Sidecar Minimized Position Domain", () => {
     expect(clamped.bottom).toBe(24);
   });
 
-  it("10. huge persisted values → viewport clamp", () => {
+  it("10. huge persisted values → viewport clamp（top safe 40）", () => {
     const viewport = { width: 1440, height: 900 };
     const huge = normalizeSidecarMinimizedPosition({ right: 1e9, bottom: 1e9 });
     expect(huge.right).toBe(1e9);
     expect(huge.bottom).toBe(1e9);
     const clamped = clampSidecarMinimizedPosition(huge, viewport);
     const maxRight = viewport.width - SIDECAR_MINIMIZED_SIZE.width - SIDECAR_MINIMIZED_MARGIN;
-    const maxBottom = viewport.height - SIDECAR_MINIMIZED_SIZE.height - SIDECAR_MINIMIZED_MARGIN;
+    const maxBottom = viewport.height - SIDECAR_MINIMIZED_SIZE.height - SIDECAR_MINIMIZED_TOP_MARGIN;
     expect(clamped.right).toBe(maxRight);
     expect(clamped.bottom).toBe(maxBottom);
   });

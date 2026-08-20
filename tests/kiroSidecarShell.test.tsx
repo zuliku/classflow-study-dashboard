@@ -10,7 +10,12 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { KiroSidecarShell } from "@/components/kiro/sidecar/KiroSidecarShell";
-import { SIDECAR_DEFAULT_SIZE, SIDECAR_MIN_WIDTH, SIDECAR_MIN_HEIGHT } from "@/lib/ai/ui/sidecarSize";
+import {
+  SIDECAR_DEFAULT_SIZE,
+  SIDECAR_MIN_WIDTH,
+  SIDECAR_MIN_HEIGHT,
+  SIDECAR_VIEWPORT_TOP_MARGIN,
+} from "@/lib/ai/ui/sidecarSize";
 import { useKiroPreferencesStore } from "@/store/useKiroPreferencesStore";
 
 const mocks = vi.hoisted(() => ({
@@ -63,10 +68,20 @@ if (!window.matchMedia) {
       removeListener: () => {},
     }) as unknown as MediaQueryList;
 }
-// jsdom 无 setPointerCapture
+// jsdom 无 setPointerCapture / PointerEvent（Node 24 jsdom 缺失，补齐以保证拖拽测试）
 if (!Element.prototype.setPointerCapture) {
   Element.prototype.setPointerCapture = () => {};
   Element.prototype.releasePointerCapture = () => {};
+}
+if (typeof PointerEvent === "undefined") {
+  // @ts-ignore
+  globalThis.PointerEvent = class PointerEvent extends MouseEvent {
+    pointerId: number;
+    constructor(type: string, params: PointerEventInit = {}) {
+      super(type, params);
+      this.pointerId = (params as any).pointerId ?? 0;
+    }
+  } as any;
 }
 
 function setup(mode: "open" | "closed" | "minimized" = "open", present = true) {
@@ -396,15 +411,15 @@ describe("Move handle（Move V1）", () => {
     s.cleanup();
   });
 
-  it("B. 初始 position vars = 24px / 24px", async () => {
+  it("B. 初始 position vars = 40px / 24px（TitleBar safe area）", async () => {
     const s = setup("open", true);
     await s.flush();
-    expect(panelTop(s)).toBe(24);
+    expect(panelTop(s)).toBe(SIDECAR_VIEWPORT_TOP_MARGIN);
     expect(panelRight(s)).toBe(24);
     s.cleanup();
   });
 
-  it("C. move：pointerdown(1000,100) → move(900,150) → right +100 / top +50", async () => {
+  it("C. move：pointerdown(1000,100) → move(900,150) → right +100 / top +50（safe top 40 基准）", async () => {
     const s = setup("open", true);
     await s.flush();
     const handle = s.container.querySelector('[data-testid="kiro-sidecar-move-handle"]')!;
@@ -413,27 +428,30 @@ describe("Move handle（Move V1）", () => {
       { x: 900, y: 150 },
     ]);
     expect(panelRight(s)).toBe(124);
-    expect(panelTop(s)).toBe(74);
+    expect(panelTop(s)).toBe(SIDECAR_VIEWPORT_TOP_MARGIN + 50);
     s.cleanup();
   });
 
-  it("D. multi-move：最终 = origin + 最终 delta（非逐帧累计）", async () => {
+  it("D. multi-move：最终 = origin + 最终 delta（非逐帧累计，safe top）", async () => {
     const s = setup("open", true);
     await s.flush();
     const handle = s.container.querySelector('[data-testid="kiro-sidecar-move-handle"]')!;
-    // down(1000,100) → (950,120) → (900,150)：最终 delta = (-100, +50)
+    // down(1000,100) → (950,120) → (900,150)：最终 delta = (-100, +50)；origin top 已 clamp 到 40
     pointerDrag(handle, [
       { x: 1000, y: 100 },
       { x: 950, y: 120 },
       { x: 900, y: 150 },
     ]);
     expect(panelRight(s)).toBe(124);
-    expect(panelTop(s)).toBe(74);
-    expect(useKiroPreferencesStore.getState().sidecarPosition).toEqual({ top: 74, right: 124 });
+    expect(panelTop(s)).toBe(SIDECAR_VIEWPORT_TOP_MARGIN + 50);
+    expect(useKiroPreferencesStore.getState().sidecarPosition).toEqual({
+      top: SIDECAR_VIEWPORT_TOP_MARGIN + 50,
+      right: 124,
+    });
     s.cleanup();
   });
 
-  it("E+G. pointermove 后立即 pointerup：store 保存最后一帧位置", async () => {
+  it("E+G. pointermove 后立即 pointerup：store 保存最后一帧位置（safe top）", async () => {
     const s = setup("open", true);
     await s.flush();
     const handle = s.container.querySelector('[data-testid="kiro-sidecar-move-handle"]')!;
@@ -441,11 +459,14 @@ describe("Move handle（Move V1）", () => {
       { x: 1000, y: 100 },
       { x: 900, y: 150 },
     ]);
-    expect(useKiroPreferencesStore.getState().sidecarPosition).toEqual({ top: 74, right: 124 });
+    expect(useKiroPreferencesStore.getState().sidecarPosition).toEqual({
+      top: SIDECAR_VIEWPORT_TOP_MARGIN + 50,
+      right: 124,
+    });
     s.cleanup();
   });
 
-  it("F. clamp：拖出右上角 → top=24 / right=maxRight（不越安全边界）", async () => {
+  it("F. clamp：拖出右上角 → top=40 / right=maxRight（TitleBar safe，不越边界）", async () => {
     const s = setup("open", true);
     await s.flush();
     const handle = s.container.querySelector('[data-testid="kiro-sidecar-move-handle"]')!;
@@ -454,7 +475,7 @@ describe("Move handle（Move V1）", () => {
       { x: -5000, y: -5000 },
     ]);
     const maxRight = 1440 - SIDECAR_DEFAULT_SIZE.width - 24;
-    expect(panelTop(s)).toBe(24);
+    expect(panelTop(s)).toBe(SIDECAR_VIEWPORT_TOP_MARGIN);
     expect(panelRight(s)).toBe(maxRight);
     s.cleanup();
   });
@@ -513,26 +534,26 @@ describe("Move handle（Move V1）", () => {
     s.cleanup();
   });
 
-  it("§27b. move 靠下后 bottom-resize：top edge 不变且 bottom ≤ viewport - 24", async () => {
+  it("§27b. move 靠下后 bottom-resize：top edge 不变且 bottom ≤ viewport - 24（safe top 40）", async () => {
     const s = setup("open", true);
     await s.flush();
-    // 移到 top=74（dy=+50，避开 760 高度的 bottom bound 116）
+    // 移到 top=90（40+50，避开 760 高度的 bottom bound 116）
     const move = s.container.querySelector('[data-testid="kiro-sidecar-move-handle"]')!;
     pointerDrag(move, [
       { x: 1000, y: 100 },
       { x: 1000, y: 150 },
     ]);
-    expect(panelTop(s)).toBe(74);
-    // bottom-resize +100：position-aware height 上限 = 900-74-24 = 802
+    expect(panelTop(s)).toBe(SIDECAR_VIEWPORT_TOP_MARGIN + 50);
+    // bottom-resize +100：position-aware height 上限 = 900-90-24 = 786
     const bottom = s.container.querySelector('[data-sidecar-resize-handle="bottom"]')!;
     pointerDrag(bottom, [
       { x: 400, y: 700 },
       { x: 400, y: 800 },
     ]);
-    expect(panelTop(s)).toBe(74);
+    expect(panelTop(s)).toBe(SIDECAR_VIEWPORT_TOP_MARGIN + 50);
     const height = Number.parseFloat(s.panel()!.style.getPropertyValue("--kiro-sidecar-height"));
-    expect(height).toBe(802);
-    expect(74 + height).toBeLessThanOrEqual(900 - 24);
+    expect(height).toBe(786);
+    expect(SIDECAR_VIEWPORT_TOP_MARGIN + 50 + height).toBeLessThanOrEqual(900 - 24);
     s.cleanup();
   });
 });

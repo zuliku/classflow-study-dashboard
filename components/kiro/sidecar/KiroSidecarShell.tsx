@@ -18,13 +18,15 @@ import { KiroSidecarMoveHandle } from "@/components/kiro/sidecar/KiroSidecarMove
 import { cn } from "@/lib/utils";
 
 /**
- * Kiro Sidecar Shell（UX V2 + V2.1 correctness + Move V1）：
+ * Kiro Sidecar Shell（UX V2 + V2.1 correctness + Move V1 + Capsule Polish）：
  * - 非模态浮动面板（md+ 圆角 + shadow），无 backdrop，面板外可继续操作
- * - 进入/退出动画：usePresence（open 挂载 → visible；close 先播动画再卸载）
+ * - 进入/退出动画：usePresence（由 KiroSidecar host 唯一拥有；Shell 仅消费 present）
  * - Esc 可关闭；不点击外部关闭
  * - 尺寸：左边缘调宽 + 底边调高 + 左下角 handle；min/max + viewport clamp；持久化
- * - 位置（Move V1）：顶部中央 hover-reveal 把手拖拽；top/right 表示；四边 ≥24px；
+ * - 位置（Move V1 + Desktop Polish）：顶部中央 hover-reveal 把手拖拽；top/right 表示；
+ *   左/右/底 ≥24px、顶 ≥40px（--titlebar-h 26 + 14 safe gap，md+ 统一几何原则）；
  *   持久化；close/reopen 与 refresh 均保留；resize 与 position 共同遵守 geometry invariant
+ * - viewport resize 的 clamp 仅 presentation（不写 Preferences；用户 drag commit 才持久化）
  *
  * V2.1 修复：
  * 1. Single mount：同一 Shell DOM 用 responsive CSS（mobile full-screen ↔ desktop floating），
@@ -35,50 +37,24 @@ import { cn } from "@/lib/utils";
  * Move V1：
  * - 位置用 CSS variables（top/right）实时更新，不用 transform（避免与 presence motion 冲突）
  * - Move 与 Resize 共享 interactionRef 互斥；pointermove 只更新 draft，pointerup 一次性持久化
+ * - Presence 单 ownership：mount/unmount 仅由 KiroSidecar host 的 usePresence 负责
  */
-type ShellProps =
-  | { mode: KiroSidecarMode; present: boolean; children: React.ReactNode }
-  | { open: boolean; children: React.ReactNode };
-
-function useLegacyPresence(open: boolean): { mounted: boolean; visible: boolean } {
-  const [mounted, setMounted] = React.useState(open);
-  const [visible, setVisible] = React.useState(open);
-  React.useEffect(() => {
-    if (open) {
-      setMounted(true);
-      setVisible(true);
-    } else {
-      setVisible(false);
-      const t = window.setTimeout(() => setMounted(false), 200);
-      return () => window.clearTimeout(t);
-    }
-  }, [open]);
-  return { mounted, visible };
-}
-
-export function KiroSidecarShell(props: ShellProps) {
-  // Host 场景：mode + present（present 来自 usePresence，Shell 不再自管 closed lifecycle）
-  // 兼容测试：open boolean → 内部自行 usePresence（legacy）
-  const isHost = "mode" in props && "present" in props;
-  // eslint-disable-next-line react-hooks/rules-of-hooks
-  const legacyPresence = !isHost ? useLegacyPresence((props as { open: boolean }).open) : null;
-
-  const mode: KiroSidecarMode = isHost
-    ? (props as { mode: KiroSidecarMode }).mode
-    : (props as { open: boolean }).open
-      ? "open"
-      : "closed";
-  const present = isHost ? (props as { present: boolean }).present : legacyPresence!.visible;
-  const mounted = isHost ? true : legacyPresence!.mounted;
-  const children = props.children;
-
+export function KiroSidecarShell({
+  mode,
+  present,
+  children,
+}: {
+  mode: KiroSidecarMode;
+  present: boolean;
+  children: React.ReactNode;
+}) {
   const { closeSidecar, expandSidecar, minimizeSidecar } = useKiroSessionActions();
   const sidecarSize = useKiroPreferencesStore((s) => s.sidecarSize);
   const setSidecarSize = useKiroPreferencesStore((s) => s.setSidecarSize);
   const sidecarPosition = useKiroPreferencesStore((s) => s.sidecarPosition);
   const setSidecarPosition = useKiroPreferencesStore((s) => s.setSidecarPosition);
 
-  // viewport 跟踪（clamp 上限；窗口 resize 时自动修正）
+  // viewport 跟踪（clamp 仅 presentation，resize 不写 Preferences）
   const [viewport, setViewport] = useState(() => ({
     width: typeof window !== "undefined" ? window.innerWidth : 1280,
     height: typeof window !== "undefined" ? window.innerHeight : 800,
@@ -89,11 +65,11 @@ export function KiroSidecarShell(props: ShellProps) {
     return () => window.removeEventListener("resize", onResize);
   }, []);
 
-  // 拖拽中的草稿（size + position）：实时更新显示，pointerup 时一次性持久化
+  // 拖拽中的草稿（size + position）：实时更新显示，pointerup 时一次性持久化（resize 不持久化）
   const [draft, setDraft] = useState<SidecarSize | null>(null);
   const [draftPosition, setDraftPosition] = useState<SidecarPosition | null>(null);
 
-  // 确定性几何：size → position（viewport resize 后一次修正，避免双 effect ping-pong）
+  // 确定性几何：size → position（viewport clamp 仅 presentation；不自动写 store）
   const clampedGeometry = useMemo(
     () => clampSidecarGeometry(sidecarSize, sidecarPosition, viewport),
     [sidecarSize, sidecarPosition, viewport]
@@ -109,38 +85,12 @@ export function KiroSidecarShell(props: ShellProps) {
   // Move / Resize 互斥（同族 geometry interaction，防 pointer capture 竞态）
   const interactionRef = useRef<"idle" | "move" | "resize">("idle");
 
-  // 持久化几何超出当前 viewport → 自动修正（不溢出）
-  useEffect(() => {
-    if (draft || draftPosition) return;
-    const sizeChanged =
-      clampedGeometry.size.width !== sidecarSize.width ||
-      clampedGeometry.size.height !== sidecarSize.height;
-    const positionChanged =
-      clampedGeometry.position.top !== sidecarPosition.top ||
-      clampedGeometry.position.right !== sidecarPosition.right;
-    if (sizeChanged) setSidecarSize(clampedGeometry.size);
-    if (positionChanged) setSidecarPosition(clampedGeometry.position);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [
-    clampedGeometry.size.width,
-    clampedGeometry.size.height,
-    clampedGeometry.position.top,
-    clampedGeometry.position.right,
-    draft,
-    draftPosition,
-  ]);
-
-  const isMinimized = mode === "minimized";
-  const isOpen = mode === "open";
   // Motion V1：geometry 交互期间降权内部 motion（intro/settle/popover transforms 近瞬时）
   const [geometryInteracting, setGeometryInteracting] = useState(false);
 
   // fullVisible / fullInteractive 语义（Present 单 ownership：host 的 present 决定 exit 动画）
   const fullVisible = mode === "open" && present;
   const fullInteractive = mode === "open" && present;
-
-  // 早期返回必须在所有 hooks 之后（保持 hooks 数量一致）
-  if (!mounted) return null;
 
   // ---- Resize（position-aware clamp） ----
 
