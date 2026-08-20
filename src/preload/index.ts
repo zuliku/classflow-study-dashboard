@@ -129,6 +129,17 @@ const invocationBridge = {
   assertCapability: (input: unknown) => invokeBridge("bridge:invocation:assertCapability", input),
 };
 
+const channelsBridge = {
+  list: () => invokeBridge("bridge:channels:list", {}),
+  addQQ: (input: unknown) => invokeBridge("bridge:channels:addQQ", input),
+  update: (input: unknown) => invokeBridge("bridge:channels:update", input),
+  setEnabled: (input: unknown) => invokeBridge("bridge:channels:setEnabled", input),
+  connect: (input: unknown) => invokeBridge("bridge:channels:connect", input),
+  disconnect: (input: unknown) => invokeBridge("bridge:channels:disconnect", input),
+  test: (input: unknown) => invokeBridge("bridge:channels:test", input),
+  remove: (input: unknown) => invokeBridge("bridge:channels:remove", input),
+};
+
 contextBridge.exposeInMainWorld("classflowDesktop", {
   version: 1,
   platform: "windows",
@@ -150,6 +161,7 @@ contextBridge.exposeInMainWorld("classflowDesktop", {
   skills: skillBridge,
   mcp: mcpBridge,
   invocation: invocationBridge,
+  channels: channelsBridge,
   api: {
     request: async (path: string, init?: RequestInit): Promise<Response> => {
       const base = resolveApiBase();

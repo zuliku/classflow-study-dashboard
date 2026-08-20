@@ -12,6 +12,7 @@ import { registerSecretIpc } from "./secrets/secretIpc";
 import { registerSkillIpc } from "./skills/skillIpc";
 import { registerMcpIpc } from "./mcp/ipc";
 import { registerInvocationIpc } from "./security/invocationIpc";
+import { registerChannelIpc } from "./channels/ipc";
 
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
 
@@ -196,6 +197,11 @@ app.whenReady().then(async () => {
     validateSender: (channel, event) => validateWindowSender(channel, event.sender, apiBase),
   });
 
+  // Channels — QQ Bot (WebSocket Gateway, Transport-independent)
+  registerChannelIpc({
+    validateSender: (channel, event) => validateWindowSender(channel, event.sender, apiBase),
+  });
+
   // app:// → out/renderer 静态资源（路径穿越防护：仅允许 renderer 目录内文件）
   protocol.handle("app", (request) => {
     const { pathname } = new URL(request.url);
@@ -237,6 +243,12 @@ app.on("before-quit", async (event) => {
     await getMcpManager().disconnectAll();
   } catch (e) {
     console.error("[classflow] mcp disconnectAll failed", (e as Error).message);
+  }
+  try {
+    const { getChannelManager } = await import("./channels/manager");
+    await getChannelManager().disconnectAll();
+  } catch (e) {
+    console.error("[classflow] channels disconnectAll failed", (e as Error).message);
   }
   if (apiServer) {
     try {

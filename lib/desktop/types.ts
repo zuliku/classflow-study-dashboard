@@ -97,6 +97,17 @@ export interface ClassFlowDesktopFilesystemBridgeV1 {
   move(input: { grantId: string; from: string; to: string }): Promise<void>;
 }
 
+export interface ClassFlowDesktopChannelsBridge {
+  list: () => Promise<{ channels: unknown[] }>;
+  addQQ: (input: unknown) => Promise<{ channel: unknown }>;
+  update: (input: unknown) => Promise<{ channel: unknown }>;
+  setEnabled: (input: unknown) => Promise<{ ok: boolean }>;
+  connect: (input: unknown) => Promise<{ ok: boolean }>;
+  disconnect: (input: unknown) => Promise<{ ok: boolean }>;
+  test: (input: unknown) => Promise<{ ok: boolean; error?: string }>;
+  remove: (input: unknown) => Promise<{ ok: boolean }>;
+}
+
 export interface ClassFlowDesktopBridgeV1 {
   version: typeof CLASSFLOW_DESKTOP_BRIDGE_VERSION;
   platform: ClassFlowDesktopPlatform;
@@ -108,6 +119,17 @@ export interface ClassFlowDesktopBridgeV1 {
    * 版本协商独立于 Bridge version。
    */
   terminal?: ClassFlowDesktopTerminalBridge;
+  channels?: ClassFlowDesktopChannelsBridge;
+  credentials?: {
+    create: (input: unknown) => Promise<{ credentialRef: string }>;
+    replace: (input: unknown) => Promise<unknown>;
+    delete: (input: unknown) => Promise<unknown>;
+    list: () => Promise<{ metadata: unknown[] }>;
+  };
+  skills?: unknown;
+  mcp?: unknown;
+  invocation?: unknown;
+  api?: { request: (path: string, init?: RequestInit) => Promise<Response> };
 }
 
 export type ClassFlowDesktopTerminalShell = "powershell" | "cmd";

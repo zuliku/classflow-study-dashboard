@@ -122,3 +122,13 @@ export function nativeGrantIdFromAdapterRef(adapterRef: string): string | null {
   const grantId = adapterRef.slice(NATIVE_ADAPTER_REF_PREFIX.length);
   return isValidNativeGrantId(grantId) ? grantId : null;
 }
+
+export function getClassFlowDesktopChannelsBridge(): import("@/lib/desktop/types").ClassFlowDesktopChannelsBridge | null {
+  const bridge = getClassFlowDesktopBridge();
+  if (!bridge) return null;
+  const channels = (bridge as unknown as { channels?: unknown }).channels;
+  if (!channels || typeof channels !== "object") return null;
+  const required = ["list", "addQQ", "update", "setEnabled", "connect", "disconnect", "test", "remove"] as const;
+  if (!required.every((m) => typeof (channels as Record<string, unknown>)[m] === "function")) return null;
+  return channels as import("@/lib/desktop/types").ClassFlowDesktopChannelsBridge;
+}

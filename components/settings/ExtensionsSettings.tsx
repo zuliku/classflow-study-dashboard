@@ -9,6 +9,7 @@ import { listChannelProviders } from "@/lib/extensions/registry";
 import { cn } from "@/lib/utils";
 import { Dialog } from "@/components/ui/Dialog";
 import { SkillDistillDialog } from "@/components/kiro/SkillDistillDialog";
+import { ChannelSettings } from "@/components/settings/ChannelSettings";
 import { extractWorkflowTrace } from "@/lib/ai/skills/workflowTrace";
 import { useKiroRuntime } from "@/components/kiro/KiroSessionProvider";
 
@@ -497,62 +498,37 @@ export function ExtensionsSettings() {
         </div>
 
         <div className="space-y-3" data-testid="extensions-channels-panel" data-setting-id="extensions-channels" hidden={activeTab !== "channels"}>
-          <div className="grid gap-3 sm:grid-cols-1">
-            {channelProviders.map((provider) => {
+          <ChannelSettings />
+          {/* Legacy provider cards kept for Gmail/QQ Mail placeholder */}
+          <div className="grid gap-3 sm:grid-cols-1 mt-4">
+            {channelProviders.filter((p) => p.id !== "qq-bot").map((provider) => {
               const isOnline = extensions.some((e) => e.providerId === provider.id && e.status === "connected");
               const statusLabel = isOnline ? "已连接" : "未连接";
-              const settingId =
-                provider.id === "qq-bot"
-                  ? "extensions-qq-bot"
-                  : provider.id === "gmail"
-                    ? "extensions-gmail"
-                    : "extensions-qq-mail";
+              const settingId = provider.id === "gmail" ? "extensions-gmail" : "extensions-qq-mail";
               return (
                 <div
                   key={provider.id}
                   data-setting-id={settingId}
-                  className="bg-surface border border-line rounded-xl p-4 flex flex-col gap-3"
+                  className="bg-surface border border-line rounded-xl p-4 flex flex-col gap-3 opacity-60"
                   data-testid={`channel-card-${provider.id}`}
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex items-start gap-3 min-w-0">
                       <div className="w-9 h-9 rounded-xl bg-alabaster border border-line flex items-center justify-center shrink-0 mt-0.5">
-                        {provider.id === "qq-bot" ? (
-                          <MessageSquare className="w-4 h-4 text-charcoal" />
-                        ) : provider.id === "gmail" ? (
-                          <ExternalLink className="w-4 h-4 text-charcoal" />
-                        ) : (
-                          <Wrench className="w-4 h-4 text-charcoal" />
-                        )}
+                        {provider.id === "gmail" ? <ExternalLink className="w-4 h-4 text-charcoal" /> : <Wrench className="w-4 h-4 text-charcoal" />}
                       </div>
                       <div className="min-w-0">
-                        <h4 className="text-sm font-bold text-charcoal">{provider.name}</h4>
+                        <h4 className="text-sm font-bold text-charcoal">{provider.name} <span className="text-[11px] font-normal text-sandrift">（占位）</span></h4>
                         <p className="text-xs text-sandrift mt-0.5 leading-relaxed">{provider.description}</p>
                       </div>
                     </div>
-                    <span
-                      className={cn(
-                        "shrink-0 px-2 py-1 rounded-full text-[11px] font-bold border",
-                        isOnline
-                          ? "bg-success/10 text-success border-success/20"
-                          : "bg-[#F7F5F5] text-satin-grey border-line"
-                      )}
-                    >
+                    <span className={cn("shrink-0 px-2 py-1 rounded-full text-[11px] font-bold border", isOnline ? "bg-success/10 text-success border-success/20" : "bg-[#F7F5F5] text-satin-grey border-line")}>
                       {statusLabel}
                     </span>
                   </div>
                   <div className="flex items-center justify-between gap-2 pt-1">
-                    <span className="text-[11px] text-sandrift">
-                      {provider.capabilities.join(" · ")}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => setProviderDetail({ id: provider.id, name: provider.name })}
-                      data-testid={`channel-connect-${provider.id}`}
-                      className="h-7 px-3 bg-charcoal hover:bg-black text-white text-xs font-bold rounded-lg transition-colors shrink-0"
-                    >
-                      连接
-                    </button>
+                    <span className="text-[11px] text-sandrift">{provider.capabilities.join(" · ")}</span>
+                    <button type="button" onClick={() => setProviderDetail({ id: provider.id, name: provider.name })} data-testid={`channel-connect-${provider.id}`} className="h-7 px-3 bg-charcoal hover:bg-black text-white text-xs font-bold rounded-lg shrink-0">连接</button>
                   </div>
                 </div>
               );
