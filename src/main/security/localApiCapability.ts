@@ -9,51 +9,15 @@ export interface LocalApiCapabilityRequestContext {
   currentRendererUrl?: string;
 }
 
-function canonicalAppOrigin(value: string): string | null {
-  try {
-    const u = new URL(value);
-    if (u.protocol === "app:" && u.hostname === "bundle") {
-      return "app://bundle";
-    }
-    return u.origin;
-  } catch {
-    // For custom app:// URLs, URL may fail in some Node versions; fallback to manual parse
-    if (value.startsWith("app://bundle")) {
-      // Must be exactly app://bundle or app://bundle/... but we need exact
-      // For canonical check, we require protocol app: and host bundle
-      const withoutProto = value.slice("app://".length);
-      const host = withoutProto.split("/")[0].split(":")[0];
-      if (host === "bundle") return "app://bundle";
-    }
-    return null;
-  }
-}
+import { canonicalRendererOrigin, isTrustedRendererUrl } from "@/lib/security/rendererOrigin";
 
 function isTrustedRendererOrigin(candidate: string, trustedOrigins: readonly string[]): boolean {
   if (!candidate || candidate === "null") return false;
-  let candidateOrigin: string | null = null;
-  // Try to canonicalize candidate as URL origin
-  const appCanonical = canonicalAppOrigin(candidate);
-  if (appCanonical) {
-    candidateOrigin = appCanonical;
-  } else {
-    try {
-      candidateOrigin = new URL(candidate).origin;
-    } catch {
-      return false;
-    }
-  }
+  const candidateOrigin = canonicalRendererOrigin(candidate);
+  if (!candidateOrigin) return false;
   for (const trusted of trustedOrigins) {
-    let trustedOrigin: string | null = null;
-    const trustedApp = canonicalAppOrigin(trusted);
-    if (trustedApp) trustedOrigin = trustedApp;
-    else {
-      try {
-        trustedOrigin = new URL(trusted).origin;
-      } catch {
-        continue;
-      }
-    }
+    const trustedOrigin = canonicalRendererOrigin(trusted);
+    if (!trustedOrigin) continue;
     if (candidateOrigin === trustedOrigin) return true;
   }
   return false;
@@ -79,16 +43,7 @@ export function shouldInjectLocalApiCapability(context: LocalApiCapabilityReques
     // Only allow if currentRendererUrl is exactly app://bundle/* and trusted list contains app://bundle.
     const currentUrl = context.currentRendererUrl ?? "";
     if (!currentUrl) return false;
-    let currentOrigin: string | null = null;
-    const currentApp = canonicalAppOrigin(currentUrl);
-    if (currentApp) currentOrigin = currentApp;
-    else {
-      try {
-        currentOrigin = new URL(currentUrl).origin;
-      } catch {
-        return false;
-      }
-    }
+    const currentOrigin = canonicalRendererOrigin(currentUrl);
     if (currentOrigin !== "app://bundle") return false;
     // Also ensure trustedRendererOrigins contains app://bundle
     if (!context.trustedRendererOrigins.includes("app://bundle") && !context.trustedRendererOrigins.includes("app://bundle/")) {

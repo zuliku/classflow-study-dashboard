@@ -47,27 +47,13 @@ function isSensitiveChannel(channel: string): boolean {
 /** 允许的内部协议/origin（最小集合） */
 const ALLOWED_PROTOCOLS: ReadonlySet<string> = new Set(["app:", "http:", "https:"]);
 
-function isAllowedInternalUrl(rawUrl: string | undefined, allowedApiOrigin?: string): boolean {
-  if (!rawUrl) return false;
-  try {
-    const parsed = new URL(rawUrl);
-    // app:// bundle（生产）
-    if (parsed.protocol === "app:") return true;
-    // localhost API（需绑定到本次启动实际端口，而非任意 localhost）
-    if (allowedApiOrigin) {
-      if (rawUrl.startsWith(allowedApiOrigin)) return true;
-    }
-    // 开发环境 Vite dev origin（由调用方传入 allowedApiOrigin，此处不宽松信任所有 localhost）
-    return false;
-  } catch {
-    return false;
-  }
-}
+import { isTrustedRendererUrl } from "./rendererOrigin";
 
 /**
  * 核心校验：纯函数，fail closed。
  * - 非敏感 channel：放行（不校验 sender；由业务自行决定）
  * - 敏感 channel：必须 destroyed===false && isTrustedWindow===true && url 属于受信任范围
+ * - 仅 app://bundle 与精确的 dev origin 为可信渲染器，local API origin 不授予渲染器信任
  */
 export function validateIpcSender(
   channel: IpcChannel,
@@ -104,15 +90,13 @@ export function validateIpcSender(
     return { ok: false, reason: `blocked protocol: ${protocol}` };
   }
 
-  // 受信任 URL 判定
-  const isApp = url.startsWith("app://");
-  const isAllowedApi = opts?.allowedApiOrigin ? url.startsWith(opts.allowedApiOrigin) : false;
-  const isAllowedDev = opts?.allowedDevOrigin ? url.startsWith(opts.allowedDevOrigin) : false;
-  if (isApp || isAllowedApi || isAllowedDev) {
+  // 受信任渲染器判定：仅 app://bundle 与精确 dev origin，local API 不授予信任
+  // 使用共享 canonical 策略，避免 startsWith 误判（如 @userinfo 前缀攻击）
+  if (isTrustedRendererUrl(url, { allowedDevOrigin: opts?.allowedDevOrigin })) {
     return { ok: true };
   }
 
-  // 其他 https origin 一律不视为受信任 sender（外部链接应走 shell.openExternal，而非 IPC）
+  // 其他 origin 一律不视为受信任 sender（外部链接应走 shell.openExternal，而非 IPC）
   return { ok: false, reason: `untrusted origin: ${url}` };
 }
 

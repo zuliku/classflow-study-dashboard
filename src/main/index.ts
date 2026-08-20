@@ -14,6 +14,7 @@ import { registerMcpIpc } from "./mcp/ipc";
 import { registerInvocationIpc } from "./security/invocationIpc";
 import { registerChannelIpc } from "./channels/ipc";
 import { installLocalApiCapabilityInjector } from "./security/localApiCapability";
+import { isTrustedRendererUrl } from "@/lib/security/rendererOrigin";
 
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
 
@@ -158,15 +159,14 @@ function validateWindowSender(channel: string, sender: Electron.WebContents, api
       return "";
     }
   })();
-  // Sanitized protocol/origin category (no query, no secrets)
+  // Sanitized protocol/origin category (no query, no secrets) — use shared canonical policy
   let protocolCategory = "unknown";
   let originCategory = "unknown";
   try {
     const parsed = new URL(rawUrl);
     protocolCategory = parsed.protocol;
-    if (rawUrl.startsWith("app://")) originCategory = "app";
-    else if (allowedApiOrigin && rawUrl.startsWith(allowedApiOrigin)) originCategory = "api";
-    else if (allowedDevOrigin && rawUrl.startsWith(allowedDevOrigin)) originCategory = "dev";
+    if (isTrustedRendererUrl(rawUrl, { allowedDevOrigin }) && parsed.protocol === "app:") originCategory = "app";
+    else if (isTrustedRendererUrl(rawUrl, { allowedDevOrigin })) originCategory = "trusted-renderer";
     else originCategory = "untrusted";
   } catch {
     protocolCategory = "malformed";
@@ -283,7 +283,16 @@ app.whenReady().then(async () => {
 
   // app:// → out/renderer 静态资源（路径穿越防护：仅允许 renderer 目录内文件）
   protocol.handle("app", (request) => {
-    const { pathname } = new URL(request.url);
+    let url: URL;
+    try {
+      url = new URL(request.url);
+    } catch {
+      return new Response("forbidden", { status: 403 });
+    }
+    if (url.protocol !== "app:" || url.hostname !== "bundle" || url.username !== "" || url.password !== "" || url.port !== "") {
+      return new Response("forbidden", { status: 403 });
+    }
+    const { pathname } = url;
     const decoded = decodeURIComponent(pathname);
     const target = normalize(join(RENDERER_DIR, decoded === "/" ? "/index.html" : decoded));
     if (target !== RENDERER_DIR && !target.startsWith(RENDERER_DIR + sep)) {
