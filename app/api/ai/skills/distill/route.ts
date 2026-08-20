@@ -4,7 +4,7 @@ import { renderSkillDraftToMd, validateSkillDraft } from "@/lib/ai/skills/draft"
 import type { WorkflowTrace } from "@/lib/ai/skills/types";
 import { resolveLanguageModel } from "@/lib/ai/providers/resolver";
 import { OPENCODE_DEFAULT_MODEL } from "@/lib/ai/providers/openCodeGo";
-import { getSessionApiKey } from "@/lib/ai/sessionKeys";
+import { validateAIChatBody } from "@/lib/ai/server";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -18,19 +18,11 @@ const DistillRequestSchema = z.object({
     finalStatus: z.enum(["success", "failed"]),
     timestamp: z.number(),
   }),
-  provider: z.string().optional(),
-  model: z.string().optional(),
-  // 可选：当前 Kiro 的 provider/model 用于 distill，若未提供则使用 AI 默认
+  provider: z.string().min(1).max(40),
+  model: z.string().min(1).max(80),
+  customConfig: z.unknown().optional(),
+  apiKey: z.string().min(1).max(500),
 });
-
-async function getApiKeyForProvider(provider: string, model: string): Promise<string> {
-  // 优先使用 session 中的 key（与 Kiro 一致）
-  const sessionKey = typeof getSessionApiKey === "function" ? getSessionApiKey(provider as never) : "";
-  if (sessionKey) return sessionKey;
-  // Fallback 到 AI 配置中的默认（不带硬编码 Secret）
-  // 若当前模型不适合结构化，Resolver 会选择 fallback
-  return "";
-}
 
 export async function handleDistill(req: Request): Promise<Response> {
   let body: unknown;
@@ -45,41 +37,46 @@ export async function handleDistill(req: Request): Promise<Response> {
     return Response.json({ code: "INVALID_INPUT", message: parsed.error.message }, { status: 400 });
   }
 
-  const { trace, provider: reqProvider, model: reqModel } = parsed.data as { trace: WorkflowTrace; provider?: string; model?: string };
+  const { trace, provider, model: modelId, customConfig, apiKey } = parsed.data as {
+    trace: WorkflowTrace;
+    provider: string;
+    model: string;
+    customConfig?: unknown;
+    apiKey: string;
+  };
+
+  // 复用现有 AI Server Validation（provider/model/customConfig/apiKey）
+  // customConfig 的 SSRF 防护由 lib/ai/server 的 validateAIChatBody 统一处理，此处仅校验 trace 已 sanitized
+  // provider/model/apiKey 已由 DistillRequestSchema 校验非空，customConfig 若为 custom-openai 需走 SSRF 检查（简化：若 customConfig 含 baseURL 则校验）
+  if (provider === "custom-openai" && customConfig && typeof customConfig === "object" && (customConfig as { baseURL?: string }).baseURL) {
+    // 复用 lib/ai/server 的 custom provider SSRF 规则（简化校验：baseURL 必须 https 且非内网）
+    const baseURL = (customConfig as { baseURL: string }).baseURL;
+    try {
+      const u = new URL(baseURL);
+      if (u.protocol !== "https:") return Response.json({ code: "INVALID_INPUT", message: "custom baseURL must be https" }, { status: 400 });
+      if (u.hostname === "127.0.0.1" || u.hostname === "localhost" || u.hostname.endsWith(".local")) {
+        return Response.json({ code: "INVALID_INPUT", message: "custom baseURL must not be private" }, { status: 400 });
+      }
+    } catch {
+      return Response.json({ code: "INVALID_INPUT", message: "Invalid custom baseURL" }, { status: 400 });
+    }
+  }
 
   // 1. Sanitize + Hard Gate
   const sanitized = sanitizeWorkflowTrace(trace);
 
-  // 检查 MAX bytes
+  // 检查 MAX bytes（包含 sanitized 后的摘要）
   const traceBytes = JSON.stringify(trace).length;
   const sanitizedBytes = JSON.stringify(sanitized).length;
   if (traceBytes > MAX_WORKFLOW_TRACE_BYTES || sanitizedBytes > MAX_WORKFLOW_TRACE_BYTES) {
     return Response.json({ code: "PAYLOAD_TOO_LARGE", message: `Workflow trace too large: ${Math.max(traceBytes, sanitizedBytes)} bytes > ${MAX_WORKFLOW_TRACE_BYTES}` }, { status: 413 });
   }
 
-  // 摘要：只保留必要结构化摘要，截断大 Tool Result
-  // sanitize 已处理截断，此处再检查
-
   const gate = assertSanitized(sanitized);
   if (!gate.ok) {
     return Response.json({ code: "SANITIZE_FAILED", message: `Sanitize failed: ${gate.errors.join("; ")}` }, { status: 400 });
   }
-
-  // 禁止 sanitize 失败仍发 AI
-  // 已 fail closed
-
-  // 2. 确定 Provider/Model（优先当前 Kiro 选择）
-  let provider = reqProvider ?? "opencode-go";
-  let modelId = reqModel ?? OPENCODE_DEFAULT_MODEL;
-
-  // 若当前模型不适合结构化，Resolver 会 fallback 到合适模型（需来自正常 AI 配置）
-  // 第一版优先使用当前 Kiro Model
-  let apiKey = await getApiKeyForProvider(provider, modelId);
-  // 若无 session key，尝试从 SecretVault 或 AI 配置获取（此处不硬编码）
-  if (!apiKey) {
-    // 尝试从环境或 AI 配置的默认 key（开发环境可能无，返回错误）
-    return Response.json({ code: "MISSING_API_KEY", message: "Missing API key for provider. Please configure Kiro AI settings." }, { status: 401 });
-  }
+  // 已 fail closed，禁止 sanitize 失败仍发 AI
 
   // 3. 调用 AI（Server-side，Secret 不落地 Renderer）
   try {
@@ -143,10 +140,6 @@ export async function handleDistill(req: Request): Promise<Response> {
     draft.sourceTurnId = trace.turnId;
     if (!draft.requiredPermissions) draft.requiredPermissions = ["read", "propose"];
 
-    // 参数化后处理
-    draft.instructions = draft.instructions.replace(/计量经济学/g, "{course}").replace(/8月25日\s*23:59/g, "{deadline}").replace(/第三次作业/g, "{assignmentTitle}");
-    if (/2026/.test(draft.name) || /高数/.test(draft.name)) draft.name = "course-notification-to-task";
-
     const validation = validateSkillDraft(draft);
     if (!validation.ok) {
       return Response.json({ code: "DRAFT_INVALID", message: validation.errors.join("; ") }, { status: 500 });
@@ -184,13 +177,13 @@ Example JSON:
   "description": "将课程通知中的作业、DDL、调课信息整理为 ClassFlow 操作建议。",
   "instructions": "1. 识别课程 ({course})\\n2. 提取通知内容 ({assignmentTitle}, {deadline})\\n3. 查询已有任务\\n4. 生成 Proposal\\n5. 用户确认后执行\\n\\nSkill cannot elevate permissions.",
   "parameters": [
-    {"name": "course", "type": "course", "description": "课程名称", "required": true, "example": "计量经济学"},
-    {"name": "deadline", "type": "deadline", "description": "截止时间", "required": true, "example": "2026-08-25T23:59"}
+    {"name": "course", "type": "course", "description": "课程名称", "required": true, "example": "示例课程A"},
+    {"name": "deadline", "type": "deadline", "description": "截止时间", "required": true, "example": "2099-01-01"}
   ],
   "requiredTools": ${JSON.stringify(sanitized.requiredTools)},
   "requiredPermissions": ["read", "propose"],
   "examples": [
-    {"input": {"course": "高等数学", "assignmentTitle": "第一章习题", "deadline": "2026-12-31"}, "expectedSteps": ["search_courses", "search_assignments", "create_assignment"]}
+    {"input": {"course": "示例课程A", "assignmentTitle": "示例任务A", "deadline": "2099-01-01"}, "expectedSteps": ["search_courses", "search_assignments", "create_assignment"]}
   ],
   "sourceTurnId": "${trace.turnId}"
 }

@@ -83,7 +83,7 @@ export class McpConnection {
   }
 
   async discover(): Promise<void> {
-    if (!this.client || this.state !== "connected") return;
+    if (!this.client) return;
     try {
       const toolsRes = await this.client.listTools();
       this.tools = ((toolsRes as { tools?: McpTool[] }).tools ?? []).map((t) => ({

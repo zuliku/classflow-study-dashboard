@@ -5,6 +5,8 @@
  */
 
 import type { WorkflowTrace } from "@/lib/ai/skills/types";
+import { KIRO_MUTATING_TOOL_NAMES } from "@/lib/ai/tools/mutating";
+import { isClassFlowMutationTool } from "@/lib/ai/visual/guard";
 
 export interface KiroMessageForTrace {
   id: string;
@@ -21,6 +23,137 @@ export interface WorkflowActionFact {
   proposal?: boolean;
   mutation?: boolean;
   verified?: boolean;
+}
+
+export function extractWorkflowTraceForTurn(
+  messages: KiroMessageForTrace[],
+  selector: { assistantMessageId?: string; userMessageId?: string }
+): WorkflowTrace | null {
+  if (!messages || messages.length === 0) return null;
+  let targetAssistantIdx = -1;
+  let userIdx = -1;
+
+  if (selector.assistantMessageId) {
+    targetAssistantIdx = messages.findIndex((m) => m.id === selector.assistantMessageId);
+    if (targetAssistantIdx === -1) return null;
+    // 找到该 Assistant 所属的 User Turn（往前找最近的 user）
+    for (let i = targetAssistantIdx - 1; i >= 0; i--) {
+      if (messages[i].role === "user") {
+        userIdx = i;
+        break;
+      }
+    }
+    if (userIdx === -1) return null;
+  } else if (selector.userMessageId) {
+    userIdx = messages.findIndex((m) => m.id === selector.userMessageId);
+    if (userIdx === -1 || messages[userIdx].role !== "user") return null;
+    targetAssistantIdx = -1;
+    for (let i = userIdx + 1; i < messages.length; i++) {
+      if (messages[i].role === "assistant") {
+        targetAssistantIdx = i;
+        break;
+      }
+    }
+    if (targetAssistantIdx === -1) return null;
+  } else {
+    return null;
+  }
+
+  const userMessage = messages[userIdx];
+  const userGoal = extractTextFromMessage(userMessage);
+  if (!userGoal || userGoal.trim().length === 0) return null;
+
+  // 确定 Turn 边界：User N -> 下一个 User N+1
+  let nextUserIdx = -1;
+  for (let i = targetAssistantIdx + 1; i < messages.length; i++) {
+    if (messages[i].role === "user") {
+      nextUserIdx = i;
+      break;
+    }
+  }
+  const turnEndIdx = nextUserIdx === -1 ? messages.length : nextUserIdx;
+  const turnMessages = messages.slice(userIdx + 1, turnEndIdx).filter((m) => m.role === "assistant");
+
+  // 复用与 extractWorkflowTrace 相同的逻辑（抽取该 Turn 的 tool 调用）
+  return buildTraceFromTurnMessages(messages, userIdx, turnMessages, userGoal);
+}
+
+function buildTraceFromTurnMessages(
+  allMessages: KiroMessageForTrace[],
+  userIdx: number,
+  turnMessages: KiroMessageForTrace[],
+  userGoal: string
+): WorkflowTrace | null {
+  const toolCalls: WorkflowTrace["toolCalls"] = [];
+  const toolResults: WorkflowTrace["toolResults"] = [];
+  const facts: WorkflowActionFact[] = [];
+  let hasProposal = false;
+  let hasSuccessMutation = false;
+  let hasPending = false;
+
+  for (const msg of turnMessages) {
+    const parts = msg.parts ?? [];
+    for (const part of parts) {
+      if (typeof part.type === "string" && part.type.startsWith("tool-")) {
+        const toolName = part.type.slice("tool-".length);
+        const isProposal = toolName.startsWith("propose_");
+        if (isProposal) hasProposal = true;
+        const isMutation = (KIRO_MUTATING_TOOL_NAMES as string[]).includes(toolName);
+        const output = part.output as { ok?: boolean } | undefined;
+        const state = (part as { state?: string }).state;
+        let outcome: WorkflowActionFact["outcome"] = "pending";
+        if (output) {
+          if (output.ok === true) outcome = "success";
+          else if (output.ok === false) outcome = "failed";
+          else outcome = "pending";
+        } else if (state === "output-available") {
+          outcome = "pending";
+        } else if (part.toolCallId) {
+          outcome = "pending";
+        }
+        if (outcome === "pending") hasPending = true;
+        if (outcome === "success" && isMutation) hasSuccessMutation = true;
+        if (part.toolCallId) {
+          const fact: WorkflowActionFact = {
+            toolCallId: part.toolCallId,
+            toolName,
+            input: part.input ?? {},
+            outcome,
+            proposal: isProposal,
+            mutation: isMutation,
+            verified: outcome === "success" && isMutation,
+          };
+          facts.push(fact);
+          toolCalls.push({ toolName, input: part.input ?? {}, toolCallId: part.toolCallId });
+          if (output) toolResults.push({ toolName, result: output, toolCallId: part.toolCallId });
+        }
+      }
+    }
+  }
+
+  if (toolCalls.length === 0) return null;
+  if (hasPending) return null;
+  const hasAnySuccess = facts.some((f) => f.outcome === "success");
+  if (!hasAnySuccess) return null;
+
+  const turnId = `turn_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+  const successToolCalls = toolCalls.filter((c) => {
+    const f = facts.find((fact) => fact.toolCallId === c.toolCallId);
+    return f?.outcome === "success";
+  });
+  const successResults = toolResults.filter((r) => (r.result as { ok?: boolean })?.ok === true);
+  if (successToolCalls.length === 0) return null;
+
+  return {
+    turnId,
+    userGoal,
+    toolCalls: successToolCalls,
+    toolResults: successResults,
+    proposals: hasProposal ? [{}] : undefined,
+    userConfirmation: hasProposal ? hasSuccessMutation : undefined,
+    finalStatus: "success",
+    timestamp: Date.now(),
+  };
 }
 
 /**
