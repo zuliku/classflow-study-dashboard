@@ -37,6 +37,8 @@ export class QQWebSocketTransport {
   private abortController: AbortController | null = null;
   private runPromise: Promise<void> | null = null;
   private startupTimeoutMs = 15_000;
+  private startupTimer: ReturnType<typeof setTimeout> | null = null;
+  private botListeners: Array<{ event: string; handler: (...args: unknown[]) => void }> = [];
 
   constructor(config: QQChannelConfig, appSecret: string, events: QQTransportEvents) {
     this.config = config;
@@ -109,43 +111,46 @@ export class QQWebSocketTransport {
         tokenPrefetch: "sync",
       }) as unknown as QQSdkClientLike & { use?: (...a: unknown[]) => void };
 
-      // SDK middleware: skipSelfEcho (dedup handled by our dedupe)
+      // SDK middleware: skipSelfEcho only, dedup handled by ClassFlow dedupe
       try {
         if (bot.use && mod.messageFilter) {
           const mf = (mod as unknown as { messageFilter: (o: unknown) => unknown }).messageFilter;
           if (typeof mf === "function") {
-            bot.use(mf({ skipSelfEcho: true }));
+            bot.use(mf({ skipSelfEcho: true, dedup: false }));
           }
         } else if (bot.use) {
           // Fallback: try dynamic import of middleware
           try {
             const mid = await import("@tencent-connect/qqbot-nodejs") as unknown as { messageFilter?: (o: unknown) => unknown };
             if (mid.messageFilter && typeof bot.use === "function") {
-              bot.use(mid.messageFilter({ skipSelfEcho: true }));
+              bot.use(mid.messageFilter({ skipSelfEcho: true, dedup: false }));
             }
           } catch {}
         }
       } catch {}
 
       bot.on("ready", onReady);
+      this.botListeners.push({ event: "ready", handler: onReady });
       bot.on("resumed", onResumed);
+      this.botListeners.push({ event: "resumed", handler: onResumed });
       bot.on("error", onError);
-
-      bot.on("message", async (...args: unknown[]) => {
+      this.botListeners.push({ event: "error", handler: onError });
+      const onMessage = async (...args: unknown[]) => {
         const msg = (args[1] ?? args[0]) as Record<string, unknown> | undefined;
         if (!msg) return;
         try {
           const { normalizeQQSdkMessage } = await import("./normalize");
-          // detect isGroup via replyTarget.scope or kind
           const replyTarget = (msg as unknown as { replyTarget?: { scope?: string } })?.replyTarget;
           const kind = (msg as unknown as { kind?: string })?.kind;
           const isGroup = replyTarget?.scope === "group" || kind === "group";
-          const normalized = normalizeQQSdkMessage(msg as never, { accountId: this.config.id, isGroup });
+          const normalized = normalizeQQSdkMessage(msg as never, { accountId: this.config.id, botAppId: this.config.appId, isGroup });
           await this.events.onMessage(normalized);
         } catch (e) {
           console.warn(`[qq-transport] normalize failed ${String(e).slice(0, 200)}`);
         }
-      });
+      };
+      bot.on("message", onMessage);
+      this.botListeners.push({ event: "message", handler: onMessage });
 
       this.client = bot as QQSdkClientLike;
 
@@ -171,14 +176,18 @@ export class QQWebSocketTransport {
         }
       });
 
-      // Wait for ready or timeout or auth error
-      const timeoutPromise = new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error(JSON.stringify({ code: "QQ_GATEWAY_DISCONNECTED", message: "Gateway connect timeout" }))), this.startupTimeoutMs)
-      );
+      // Wait for ready or timeout or auth error (with timer cleanup)
+      let timer: ReturnType<typeof setTimeout> | null = null;
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error(JSON.stringify({ code: "QQ_GATEWAY_DISCONNECTED", message: "Gateway connect timeout" }))), this.startupTimeoutMs);
+        this.startupTimer = timer;
+      });
 
       try {
         await Promise.race([readyPromise, timeoutPromise]);
       } catch (e) {
+        if (timer) clearTimeout(timer);
+        this.startupTimer = null;
         // Cleanup on startup failure
         try {
           this.abortController?.abort();
@@ -189,11 +198,12 @@ export class QQWebSocketTransport {
         // Remove listeners
         try {
           if (bot.off) {
-            bot.off("ready", onReady);
-            bot.off("resumed", onResumed);
-            bot.off("error", onError);
+            for (const { event, handler } of this.botListeners) {
+              try { bot.off(event, handler); } catch {}
+            }
           }
         } catch {}
+        this.botListeners = [];
         this.runPromise = null;
         this.client = null;
         const raw = e instanceof Error ? e.message : String(e);
@@ -214,6 +224,9 @@ export class QQWebSocketTransport {
         this.setState("error", { code, message: msg });
         throw new Error(JSON.stringify({ code, message: msg }));
       }
+      // Success: clear timeout
+      if (timer) clearTimeout(timer);
+      this.startupTimer = null;
 
       // Ready succeeded, state already connected via onReady
     } catch (e) {
@@ -240,12 +253,17 @@ export class QQWebSocketTransport {
 
   async stop(): Promise<void> {
     // Idempotent
-    if (this.state === "disconnected" && !this.client && !this.runPromise) return;
+    if (this.state === "disconnected" && !this.client && !this.runPromise && !this.startupTimer) return;
+    if (this.startupTimer) {
+      clearTimeout(this.startupTimer);
+      this.startupTimer = null;
+    }
     try {
       this.abortController?.abort();
     } catch {}
+    const bot = this.client;
     try {
-      this.client?.stop();
+      bot?.stop();
     } catch {}
     // Bounded await runPromise settle (2s)
     if (this.runPromise) {
@@ -256,13 +274,15 @@ export class QQWebSocketTransport {
         ]);
       } catch {}
     }
-    // Remove listeners if possible
-    try {
-      if (this.client && typeof (this.client as unknown as { off?: unknown }).off === "function") {
-        // we don't have exact refs stored globally, but we can try to remove all
-        // For now just clear client
+    // Listener cleanup
+    if (bot && typeof (bot as unknown as { off?: unknown }).off === "function") {
+      for (const { event, handler } of this.botListeners) {
+        try {
+          (bot as unknown as { off: (e: string, h: (...a: unknown[]) => void) => void }).off(event, handler);
+        } catch {}
       }
-    } catch {}
+    }
+    this.botListeners = [];
     this.client = null;
     this.runPromise = null;
     this.abortController = null;

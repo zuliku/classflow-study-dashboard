@@ -28,6 +28,7 @@ export interface ExternalInboxItem {
   status: InboxStatus;
   dedupeKey: string;
   origin: "remote-channel";
+  sourceAccountId?: string;
 }
 
 // Trust Boundary marker

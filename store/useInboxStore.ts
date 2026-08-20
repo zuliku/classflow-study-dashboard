@@ -16,9 +16,10 @@ interface InboxState {
   clearAll: () => void;
 }
 
-function makeDedupeKey(input: { source: InboxSource; externalMessageId?: string; text: string; senderDisplay?: string }): string {
-  if (input.externalMessageId) return `${input.source}:${input.externalMessageId}`;
-  return `${input.source}:${createHash(input.text + (input.senderDisplay ?? ""))}`;
+function makeDedupeKey(input: { source: InboxSource; externalMessageId?: string; text: string; senderDisplay?: string; sourceAccountId?: string }): string {
+  const accountPart = input.sourceAccountId ? `:${input.sourceAccountId}` : "";
+  if (input.externalMessageId) return `${input.source}${accountPart}:${input.externalMessageId}`;
+  return `${input.source}${accountPart}:${createHash(input.text + (input.senderDisplay ?? ""))}`;
 }
 
 export const useInboxStore = create<InboxState>()(
@@ -26,7 +27,7 @@ export const useInboxStore = create<InboxState>()(
     (set, get) => ({
       items: [],
       addItem: (input) => {
-        const dedupeKey = makeDedupeKey(input);
+        const dedupeKey = makeDedupeKey(input as { source: InboxSource; externalMessageId?: string; text: string; senderDisplay?: string; sourceAccountId?: string });
         // 去重：已存在则不重复创建
         const existing = get().items.find((it) => it.dedupeKey === dedupeKey);
         if (existing) return existing.id;
@@ -45,6 +46,7 @@ export const useInboxStore = create<InboxState>()(
           status: "unread",
           dedupeKey,
           origin: "remote-channel",
+          sourceAccountId: (input as { sourceAccountId?: string }).sourceAccountId,
         };
         set((s) => ({ items: [item, ...s.items] }));
         return id;
@@ -84,6 +86,7 @@ export const useInboxStore = create<InboxState>()(
           status: it.status,
           dedupeKey: it.dedupeKey,
           origin: it.origin,
+          sourceAccountId: it.sourceAccountId,
         })),
       }),
       version: 1,
@@ -96,7 +99,7 @@ export function createTestInboxStore() {
   return create<InboxState>()((set, get) => ({
     items: [],
     addItem: (input) => {
-      const dedupeKey = makeDedupeKey(input);
+      const dedupeKey = makeDedupeKey(input as { source: InboxSource; externalMessageId?: string; text: string; senderDisplay?: string; sourceAccountId?: string });
       const existing = get().items.find((it) => it.dedupeKey === dedupeKey);
       if (existing) return existing.id;
       const id = `test_${Math.random().toString(36).slice(2, 6)}`;
@@ -113,6 +116,7 @@ export function createTestInboxStore() {
         status: "unread",
         dedupeKey,
         origin: "remote-channel",
+        sourceAccountId: (input as { sourceAccountId?: string }).sourceAccountId,
       };
       set((s) => ({ items: [item, ...s.items] }));
       return id;

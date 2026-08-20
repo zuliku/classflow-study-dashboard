@@ -13,7 +13,8 @@ export function createHash(input: string): string {
   return Math.abs(hash).toString(36);
 }
 
-export function getInboxDedupeKey(input: { source: string; externalMessageId?: string; text: string; senderDisplay?: string }): string {
-  if (input.externalMessageId) return `${input.source}:${input.externalMessageId}`;
-  return `${input.source}:${createHash(input.text + (input.senderDisplay ?? ""))}`;
+export function getInboxDedupeKey(input: { source: string; externalMessageId?: string; text: string; senderDisplay?: string; sourceAccountId?: string }): string {
+  const accountPart = input.sourceAccountId ? `:${input.sourceAccountId}` : "";
+  if (input.externalMessageId) return `${input.source}${accountPart}:${input.externalMessageId}`;
+  return `${input.source}${accountPart}:${createHash(input.text + (input.senderDisplay ?? ""))}`;
 }

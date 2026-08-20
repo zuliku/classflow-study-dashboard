@@ -141,11 +141,13 @@ const channelsBridge = {
 };
 
 const inboxBridge = {
-  subscribeExternalItem: (callback: (item: unknown) => void): (() => void) => {
-    const handler = (_e: unknown, item: unknown) => callback(item);
+  subscribeExternalItem: (callback: (envelope: unknown) => void): (() => void) => {
+    const handler = (_e: unknown, envelope: unknown) => callback(envelope);
     ipcRenderer.on("bridge:inbox:externalItem", handler);
     return () => ipcRenderer.removeListener("bridge:inbox:externalItem", handler);
   },
+  rendererReady: () => invokeBridge("bridge:inbox:rendererReady", {}),
+  ack: (deliveryId: string) => invokeBridge("bridge:inbox:ack", { deliveryId }),
 };
 
 contextBridge.exposeInMainWorld("classflowDesktop", {

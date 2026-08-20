@@ -109,7 +109,9 @@ export interface ClassFlowDesktopChannelsBridge {
 }
 
 export interface ClassFlowDesktopInboxBridge {
-  subscribeExternalItem: (callback: (item: unknown) => void) => () => void;
+  subscribeExternalItem: (callback: (envelope: unknown) => void) => () => void;
+  rendererReady: () => Promise<{ ok: boolean }>;
+  ack: (deliveryId: string) => Promise<{ ok: boolean }>;
 }
 
 export interface ClassFlowDesktopBridgeV1 {

@@ -268,13 +268,7 @@ function EditQQDialog({ target, onOpenChange, onSaved }: { target: ChannelStatus
           credentialRef,
         },
       });
-      if (newRef) {
-        // success: delete old credential
-        try {
-          await credBridge!.delete({ credentialRef: oldRef });
-        } catch {}
-        setNewSecret("");
-      }
+      if (newRef) setNewSecret("");
       onSaved();
       onOpenChange(false);
     } catch (e) {
@@ -284,9 +278,7 @@ function EditQQDialog({ target, onOpenChange, onSaved }: { target: ChannelStatus
         } catch {}
       }
       setError((e as { message?: string })?.message ?? String(e));
-    } finally {
-      setSaving(false);
-    }
+    } finally { setSaving(false); }
   };
 
   return (

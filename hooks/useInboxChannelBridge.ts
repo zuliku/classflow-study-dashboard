@@ -4,15 +4,16 @@ import { useEffect } from "react";
 import { useInboxStore } from "@/store/useInboxStore";
 
 /**
- * Renderer bridge for Main → Renderer inbox external items (Task 13B)
+ * Renderer bridge for Main → Renderer inbox external items (Task 13C reliable queue)
  * Must be mounted once at stable root, does not create second inbox DB.
  */
 export function useInboxChannelBridge(): void {
   useEffect(() => {
-    const bridge = (window as unknown as { classflowDesktop?: { inbox?: { subscribeExternalItem: (cb: (item: unknown) => void) => () => void } } }).classflowDesktop?.inbox;
+    const bridge = (window as unknown as { classflowDesktop?: { inbox?: { subscribeExternalItem: (cb: (envelope: unknown) => void) => () => void; rendererReady: () => Promise<unknown>; ack: (id: string) => Promise<unknown> } } }).classflowDesktop?.inbox;
     if (!bridge || typeof bridge.subscribeExternalItem !== "function") return;
-    const unsubscribe = bridge.subscribeExternalItem((raw: unknown) => {
-      const item = raw as {
+    const unsubscribe = bridge.subscribeExternalItem((envelopeRaw: unknown) => {
+      const envelope = envelopeRaw as { deliveryId?: string; payload?: unknown };
+      const payload = (envelope?.payload ?? envelopeRaw) as {
         source?: string;
         externalMessageId?: string;
         conversationId?: string;
@@ -21,20 +22,32 @@ export function useInboxChannelBridge(): void {
         text?: string;
         receivedAt?: number;
         attachments?: unknown[];
+        sourceAccountId?: string;
       };
-      if (!item || item.source !== "qq-bot") return;
-      // Only raw payload, useInboxStore will generate dedupeKey/status/origin/id
-      useInboxStore.getState().addItem({
-        source: "qq-bot",
-        externalMessageId: item.externalMessageId,
-        conversationId: item.conversationId,
-        senderDisplay: item.senderDisplay,
-        subject: item.subject,
-        text: item.text ?? "",
-        receivedAt: item.receivedAt ?? Date.now(),
-        attachments: (item.attachments as never) ?? [],
-      });
+      const deliveryId = envelope?.deliveryId as string | undefined;
+      if (!payload || payload.source !== "qq-bot") {
+        if (deliveryId) void bridge.ack(deliveryId).catch(() => {});
+        return;
+      }
+      try {
+        useInboxStore.getState().addItem({
+          source: "qq-bot",
+          externalMessageId: payload.externalMessageId,
+          conversationId: payload.conversationId,
+          senderDisplay: payload.senderDisplay,
+          subject: payload.subject,
+          text: payload.text ?? "",
+          receivedAt: payload.receivedAt ?? Date.now(),
+          attachments: (payload.attachments as never) ?? [],
+          sourceAccountId: (payload as unknown as { sourceAccountId?: string }).sourceAccountId,
+        } as never);
+        if (deliveryId) void bridge.ack(deliveryId).catch(() => {});
+      } catch {
+        // addItem threw, do not ack so it will be resent on reload
+      }
     });
+    // Signal ready after subscribe, so Main resends pending
+    void bridge.rendererReady().catch(() => {});
     return unsubscribe;
   }, []);
 }

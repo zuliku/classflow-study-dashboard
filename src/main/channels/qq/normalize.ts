@@ -65,7 +65,7 @@ function mapAttachments(rawAttachments: unknown[]): ChannelAttachment[] | undefi
 
 export function normalizeQQMessage(
   raw: QQRawMessageLike,
-  opts: { accountId: string; botId?: string }
+  opts: { accountId: string; botId?: string; botAppId?: string }
 ): ChannelInboundMessage {
   const externalMessageId = String(raw.externalMessageId ?? raw.messageId ?? raw.msgId ?? raw.id ?? `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`);
   const isGroup = raw.isGroup === true || raw.chatType === "group" || raw.conversationType === "group" || raw.kind === "group" || !!raw.groupId || !!raw.groupOpenId || !!raw.groupOpenid;
@@ -93,12 +93,17 @@ export function normalizeQQMessage(
     attachments = [{ id: `unsupported_${Date.now()}`, name: "暂不支持的附件", kind: "unsupported" as const }];
   }
 
-  // Mention detection: GROUP_AT_MESSAGE_CREATE already means @, GROUP_MESSAGE_CREATE uses mentions
+  // Precise mention detection per Task 13C: GROUP_AT_MESSAGE_CREATE => true, else check mentions.is_you or content <@APP_ID>
   let mentionedBot: boolean | undefined;
-  if (rawEventType === "GROUP_AT_MESSAGE_CREATE") mentionedBot = true;
-  else if (rawEventType === "GROUP_MESSAGE_CREATE") {
-    if (Array.isArray(raw.mentions) && raw.mentions.length > 0) mentionedBot = true;
-    else mentionedBot = false;
+  if (rawEventType === "GROUP_AT_MESSAGE_CREATE") {
+    mentionedBot = true;
+  } else if (Array.isArray(raw.mentions) && raw.mentions.some((m) => (m as Record<string, unknown>)?.is_you === true)) {
+    mentionedBot = true;
+  } else if (opts.botAppId && typeof text === "string" && (text.includes(`<@${opts.botAppId}>`) || text.includes(`<@!${opts.botAppId}>`))) {
+    mentionedBot = true;
+  } else if (rawEventType === "GROUP_MESSAGE_CREATE") {
+    // Only if none of the precise checks matched, then false (not mentioned)
+    mentionedBot = false;
   } else if (typeof raw.mentionedBot === "boolean") mentionedBot = raw.mentionedBot;
   else if (typeof raw.isMentioned === "boolean") mentionedBot = raw.isMentioned;
 
@@ -144,7 +149,7 @@ export function normalizeQQSdkMessage(
     userOpenId?: string;
     isMentioned?: boolean;
   },
-  opts: { accountId: string; isGroup?: boolean }
+  opts: { accountId: string; botAppId?: string; isGroup?: boolean }
 ): ChannelInboundMessage {
   // Preserve official fields, fallback to legacy for tests
   const messageId = sdkMsg.messageId ?? sdkMsg.id;
@@ -185,5 +190,5 @@ export function normalizeQQSdkMessage(
     userOpenId: sdkMsg.userOpenId,
   };
 
-  return normalizeQQMessage(raw, { accountId: opts.accountId });
+  return normalizeQQMessage(raw, { accountId: opts.accountId, botAppId: opts.botAppId });
 }

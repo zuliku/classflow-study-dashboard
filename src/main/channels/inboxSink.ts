@@ -43,6 +43,7 @@ export class ChannelInboxSink {
         size: a.size,
         url: a.url,
       })),
+      sourceAccountId: msg.accountId,
     };
 
     // Test direct addItem path (simulates Renderer store)

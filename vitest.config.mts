@@ -79,6 +79,11 @@ export default defineConfig({
       "tests/qqTransportLifecycle.test.ts",
       "tests/qqInboxDelivery.test.ts",
       "tests/qqTestConnection.test.ts",
+      "tests/qqMentionPolicy.test.ts",
+      "tests/inboxDeliveryQueue.test.ts",
+      "tests/inboxRendererReload.test.ts",
+      "tests/inboxMultiAccount.test.ts",
+      "tests/channelPersistence.test.ts",
       "tests/settingsRegistry.test.ts",
       // Kiro Sidecar Capsule V1 — jsdom via @vitest-environment
       "tests/kiroSidecarShell.test.tsx",

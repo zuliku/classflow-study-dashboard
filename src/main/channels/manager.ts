@@ -75,18 +75,38 @@ export class ChannelManager {
   }
 
   private async persistConfigsAtomic(): Promise<void> {
+    let tmp: string | null = null;
     try {
       ensureChannelDir();
       const data = JSON.stringify({ channels: Array.from(this.configs.values()) }, null, 2);
-      const tmp = join(dirname(this.configPath), `.channels-tmp-${randomUUID().slice(0, 8)}`);
+      tmp = join(dirname(this.configPath), `.channels-tmp-${randomUUID().slice(0, 8)}`);
       await fs.writeFile(tmp, data, "utf8");
+      const handle = await fs.open(tmp, "r");
+      let syncFailed = false;
+      let syncError: unknown = null;
       try {
-        const handle = await fs.open(tmp, "r");
         await handle.sync();
-        await handle.close();
-      } catch {}
+      } catch (e) {
+        const code = (e as NodeJS.ErrnoException).code;
+        if (code === "EPERM" || code === "EINVAL") {
+          // Windows/tmpfs may not support fsync, best-effort ignore
+          syncFailed = false;
+        } else {
+          syncFailed = true;
+          syncError = e;
+        }
+      }
+      try { await handle.close(); } catch {}
+      if (syncFailed) {
+        try { await fs.unlink(tmp); } catch {}
+        throw new ChannelError("PERSISTENCE_FAILED", `fsync failed: ${(syncError as Error).message}`);
+      }
       await fs.rename(tmp, this.configPath);
     } catch (e) {
+      if (tmp) {
+        try { await fs.unlink(tmp); } catch {}
+      }
+      if (e instanceof ChannelError) throw e;
       throw new ChannelError("PERSISTENCE_FAILED", `保存配置失败: ${(e as Error).message}`);
     }
   }
@@ -161,6 +181,7 @@ export class ChannelManager {
   async updateChannel(id: string, patch: Partial<PersistedChannelConfig>): Promise<PersistedChannelConfig> {
     const existing = this.configs.get(id);
     if (!existing) throw new ChannelError("CHANNEL_NOT_FOUND", `Channel not found: ${id}`);
+    const oldCredentialRef = existing.credentialRef;
     if (patch.credentialRef && patch.credentialRef !== existing.credentialRef) {
       try {
         const vault = getRuntimeSecretVault();
@@ -179,6 +200,16 @@ export class ChannelManager {
     } catch (e) {
       this.configs = backup;
       throw e;
+    }
+    // Credential rotation ownership: delete old only if no other channel references it
+    if (patch.credentialRef && oldCredentialRef !== patch.credentialRef) {
+      const stillReferenced = Array.from(this.configs.values()).some((c) => c.id !== id && c.credentialRef === oldCredentialRef);
+      if (!stillReferenced) {
+        try {
+          const vault = getRuntimeSecretVault();
+          vault.deleteCredential(oldCredentialRef);
+        } catch {}
+      }
     }
     const adapter = this.adapters.get(id);
     if (adapter) {

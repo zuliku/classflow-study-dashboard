@@ -202,19 +202,33 @@ app.whenReady().then(async () => {
     validateSender: (channel, event) => validateWindowSender(channel, event.sender, apiBase),
   });
 
-  // Inbox publisher (Main → Renderer raw payload, Renderer store generates status/origin/dedupe)
-  const { setInboxPublisher } = await import("./channels/inboxPublisher");
+  // Inbox publisher (Main → Renderer raw payload with deliveryId, reliable queue)
+  const { setInboxPublisher, setRendererReady, ackInboxDelivery } = await import("./channels/inboxPublisher");
   // Will be set after window created (needs mainWindow reference)
   let inboxPublisherSet = false;
   const setupInboxPublisher = () => {
     if (inboxPublisherSet || !mainWindow) return;
     inboxPublisherSet = true;
-    setInboxPublisher((payload) => {
+    setInboxPublisher((envelope) => {
       if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.webContents.send("bridge:inbox:externalItem", payload);
+        mainWindow.webContents.send("bridge:inbox:externalItem", envelope);
       }
     });
   };
+
+  // Inbox reliable delivery: rendererReady + ack
+  ipcMain.handle("bridge:inbox:rendererReady", (event) => {
+    if (!validateWindowSender("bridge:inbox:rendererReady", event.sender, apiBase)) throw new Error(JSON.stringify({ code: "PERMISSION_DENIED" }));
+    setRendererReady(true);
+    return { ok: true };
+  });
+  ipcMain.handle("bridge:inbox:ack", (event, input: unknown) => {
+    if (!validateWindowSender("bridge:inbox:ack", event.sender, apiBase)) throw new Error(JSON.stringify({ code: "PERMISSION_DENIED" }));
+    const { deliveryId } = (input as { deliveryId?: string }) ?? {};
+    if (!deliveryId) throw new Error(JSON.stringify({ code: "INVALID_INPUT", message: "deliveryId required" }));
+    const ok = ackInboxDelivery(deliveryId);
+    return { ok };
+  });
 
   // app:// → out/renderer 静态资源（路径穿越防护：仅允许 renderer 目录内文件）
   protocol.handle("app", (request) => {
