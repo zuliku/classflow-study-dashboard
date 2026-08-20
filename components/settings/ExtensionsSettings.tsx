@@ -41,6 +41,30 @@ function getSkillBridge(): {
   return bridge ?? null;
 }
 
+type McpConnectionItem = {
+  config: { id: string; name: string; endpoint: string; credentialRef?: string; enabled: boolean };
+  state: string;
+  serverInfo?: { name: string; version: string };
+  toolCount: number;
+  resourceCount: number;
+  promptCount: number;
+  error?: string;
+};
+
+function getMcpBridge(): {
+  list: () => Promise<{ connections: McpConnectionItem[] }>;
+  add: (input: { name: string; endpoint: string; credentialRef?: string }) => Promise<unknown>;
+  test: (input: { endpoint: string; credentialRef?: string }) => Promise<{ ok: boolean; error?: string; serverInfo?: unknown }>;
+  connect: (input: { id: string }) => Promise<unknown>;
+  disconnect: (input: { id: string }) => Promise<unknown>;
+  remove: (input: { id: string }) => Promise<unknown>;
+  setEnabled: (input: { id: string; enabled: boolean }) => Promise<unknown>;
+} | null {
+  if (typeof window === "undefined") return null;
+  const bridge = (window as unknown as { classflowDesktop?: { mcp?: unknown } }).classflowDesktop?.mcp as never;
+  return bridge ?? null;
+}
+
 export function ExtensionsSettings() {
   const extensions = useExtensionsStore((s) => s.extensions);
   const activeTab = useExtensionsStore((s) => s.activeTab);
@@ -49,6 +73,25 @@ export function ExtensionsSettings() {
   const [skills, setSkills] = useState<SkillListItem[]>([]);
   const [skillsLoading, setSkillsLoading] = useState(true);
   const skillBridge = useMemo(() => getSkillBridge(), []);
+  const [mcpConnections, setMcpConnections] = useState<McpConnectionItem[]>([]);
+  const [mcpLoading, setMcpLoading] = useState(true);
+  const mcpBridge = useMemo(() => getMcpBridge(), []);
+
+  const refreshMcp = async () => {
+    const bridge = getMcpBridge();
+    if (!bridge) {
+      setMcpLoading(false);
+      return;
+    }
+    try {
+      const res = (await bridge.list()) as { connections: McpConnectionItem[] };
+      setMcpConnections(Array.isArray(res.connections) ? res.connections : []);
+    } catch {
+      setMcpConnections([]);
+    } finally {
+      setMcpLoading(false);
+    }
+  };
 
   const refreshSkills = async () => {
     const bridge = getSkillBridge();
@@ -70,14 +113,20 @@ export function ExtensionsSettings() {
     refreshSkills();
   }, []);
 
+  useEffect(() => {
+    refreshMcp();
+  }, []);
+
   const counts = useMemo(() => {
-    if (skillBridge && skills.length > 0) {
+    if (skillBridge || mcpBridge) {
       const enabledSkills = skills.filter((s) => s.enabled).length;
+      const mcpCount = mcpConnections.length;
+      const connectedMcp = mcpConnections.filter((c) => c.state === "connected").length;
       return {
-        skills: skills.length,
-        enabledSkills,
-        mcp: extensions.filter((e) => e.kind === "mcp").length,
-        connectedMcp: extensions.filter((e) => e.kind === "mcp" && e.status === "connected").length,
+        skills: skills.length || extensions.filter((e) => e.kind === "skill").length,
+        enabledSkills: enabledSkills || extensions.filter((e) => e.kind === "skill" && e.enabled).length,
+        mcp: mcpCount || extensions.filter((e) => e.kind === "mcp").length,
+        connectedMcp: connectedMcp || extensions.filter((e) => e.kind === "mcp" && e.status === "connected").length,
         channels: extensions.filter((e) => e.kind === "channel").length,
         onlineChannels: extensions.filter((e) => e.kind === "channel" && e.status === "connected").length,
       };
@@ -110,6 +159,8 @@ export function ExtensionsSettings() {
   const [skillTestResult, setSkillTestResult] = useState<null | { ok: boolean; errors: string[] }>(null);
   const [workflowDistillOpen, setWorkflowDistillOpen] = useState(false);
   const [workflowTrace, setWorkflowTrace] = useState<import("@/lib/ai/skills/types").WorkflowTrace | null>(null);
+  const [mcpAddOpen, setMcpAddOpen] = useState(false);
+  const [mcpDetail, setMcpDetail] = useState<McpConnectionItem | null>(null);
 
   const handleSkillToggle = async (name: string, enabled: boolean) => {
     const bridge = getSkillBridge();
@@ -390,24 +441,58 @@ export function ExtensionsSettings() {
 
         <div className="space-y-3" data-testid="extensions-mcp-panel" data-setting-id="extensions-mcp" hidden={activeTab !== "mcp"}>
           <SettingsGroup title="MCP" description="连接外部工具和数据服务，让 Kiro 在需要时调用。">
-            <div className="p-6 flex flex-col items-center text-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-pastel-mint/60 border border-line flex items-center justify-center">
-                <Boxes className="w-5 h-5 text-charcoal" />
-              </div>
-              <div>
-                <p className="text-sm font-bold text-charcoal">还没有 MCP 连接</p>
-                <p className="text-xs text-sandrift mt-1 max-w-[320px]">连接外部工具和数据服务，让 Kiro 在需要时调用。</p>
-              </div>
+            <div className="flex items-center justify-between gap-2">
               <button
                 type="button"
-                onClick={() => setMcpPlaceholderOpen(true)}
+                onClick={() => setMcpAddOpen(true)}
                 data-testid="extensions-add-mcp"
-                className="mt-1 h-8 px-4 bg-charcoal hover:bg-black text-white text-xs font-bold rounded-lg transition-colors shadow-subtle flex items-center gap-1.5"
+                className="h-8 px-4 bg-charcoal hover:bg-black text-white text-xs font-bold rounded-lg transition-colors shadow-subtle flex items-center gap-1.5"
               >
                 <Plus className="w-3.5 h-3.5" />
                 添加 MCP
               </button>
+              <span className="text-[11px] text-sandrift">{mcpConnections.length} 个 MCP · {mcpConnections.filter((c) => c.state === "connected").length} 已连接</span>
             </div>
+            {mcpLoading ? (
+              <p className="text-xs text-sandrift">加载中...</p>
+            ) : mcpConnections.length === 0 ? (
+              <div className="p-6 flex flex-col items-center text-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-pastel-mint/60 border border-line flex items-center justify-center">
+                  <Boxes className="w-5 h-5 text-charcoal" />
+                </div>
+                <div>
+                  <p className="text-sm font-bold text-charcoal">还没有 MCP 连接</p>
+                  <p className="text-xs text-sandrift mt-1 max-w-[320px]">连接外部工具和数据服务，让 Kiro 在需要时调用。支持 Remote MCP (Streamable HTTP)，默认 https，http 仅允许 127.0.0.1/localhost。</p>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {mcpConnections.map((conn) => (
+                  <div key={conn.config.id} data-testid={`mcp-card-${conn.config.id}`} className="bg-surface border border-line rounded-xl p-4 flex flex-col gap-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          <h4 className="text-sm font-bold text-charcoal truncate">{conn.config.name} MCP</h4>
+                          <span className={cn("shrink-0 px-2 py-0.5 rounded-full text-[11px] font-bold border", conn.state === "connected" ? "bg-success/10 text-success border-success/20" : conn.state === "error" ? "bg-danger/10 text-danger border-danger/20" : "bg-[#F7F5F5] text-satin-grey border-line")}>
+                            {conn.state === "connected" ? "● 已连接" : conn.state === "connecting" ? "连接中" : conn.state === "error" ? "错误" : "未连接"}
+                          </span>
+                        </div>
+                        <p className="text-xs text-sandrift mt-1 truncate">{conn.config.endpoint}</p>
+                        <p className="text-[11px] text-sandrift mt-1">
+                          {conn.toolCount} Tools · {conn.resourceCount} Resources {conn.serverInfo?.name ? `· ${conn.serverInfo.name}` : ""}
+                        </p>
+                        <div className="flex items-center gap-2 mt-2 text-[11px]">
+                          <span className="px-2 py-1 bg-[#F7F5F5] border border-line rounded-full">Kiro 使用 {conn.config.enabled ? "已允许" : "已禁用"}</span>
+                          <span className="px-2 py-1 bg-alabaster border border-line rounded-full">副作用操作 每次确认</span>
+                        </div>
+                      </div>
+                      <button type="button" onClick={() => setMcpDetail(conn)} data-testid={`mcp-manage-${conn.config.id}`} className="h-7 px-3 bg-white border border-line text-charcoal text-xs font-bold rounded-lg hover:bg-alabaster">管理</button>
+                    </div>
+                    {conn.error && <p className="text-[11px] text-danger">{conn.error}</p>}
+                  </div>
+                ))}
+              </div>
+            )}
           </SettingsGroup>
         </div>
 
@@ -559,7 +644,183 @@ export function ExtensionsSettings() {
           setWorkflowDistillOpen(false);
         }}
       />
+      <McpAddDialog open={mcpAddOpen} onOpenChange={setMcpAddOpen} onAdded={refreshMcp} />
+      <McpDetailDialog connection={mcpDetail} onOpenChange={(open) => !open && setMcpDetail(null)} onRefresh={refreshMcp} />
     </div>
+  );
+}
+
+function McpAddDialog({ open, onOpenChange, onAdded }: { open: boolean; onOpenChange: (open: boolean) => void; onAdded: () => void }) {
+  const [name, setName] = useState("");
+  const [endpoint, setEndpoint] = useState("");
+  const [credentialRef, setCredentialRef] = useState("");
+  const [testResult, setTestResult] = useState<null | { ok: boolean; serverInfo?: unknown; error?: string }>(null);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleTest = async () => {
+    setError(null);
+    setTestResult(null);
+    if (!endpoint) {
+      setError("Endpoint 必填");
+      return;
+    }
+    const bridge = getMcpBridge();
+    if (!bridge) {
+      setError("桌面环境不可用");
+      return;
+    }
+    try {
+      const res = (await bridge.test({ endpoint, credentialRef: credentialRef || undefined })) as { ok: boolean; serverInfo?: unknown; error?: string };
+      setTestResult(res);
+      if (!res.ok) setError(res.error ?? "连接失败");
+    } catch (e) {
+      setError((e as Error).message ?? String(e));
+    }
+  };
+
+  const handleSave = async () => {
+    setError(null);
+    if (!name || !endpoint) {
+      setError("名称和 Endpoint 必填");
+      return;
+    }
+    const bridge = getMcpBridge();
+    if (!bridge) {
+      setError("桌面环境不可用");
+      return;
+    }
+    setSaving(true);
+    try {
+      await bridge.add({ name, endpoint, credentialRef: credentialRef || undefined });
+      onAdded();
+      onOpenChange(false);
+      setName("");
+      setEndpoint("");
+      setCredentialRef("");
+      setTestResult(null);
+    } catch (e) {
+      const msg = (e as Error).message ?? String(e);
+      try {
+        const parsed = JSON.parse(msg);
+        setError(parsed.message ?? msg);
+      } catch {
+        setError(msg);
+      }
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange} overlayId="mcp-add" aria-label="添加 MCP" className="w-[min(520px,calc(100vw-24px))] bg-surface border border-line rounded-2xl p-5 space-y-4 max-h-[85vh] overflow-y-auto">
+      <div className="flex items-center gap-2.5">
+        <div className="w-9 h-9 rounded-xl bg-pastel-mint border border-line flex items-center justify-center">
+          <Boxes className="w-4 h-4 text-charcoal" />
+        </div>
+        <div>
+          <h4 className="text-sm font-bold text-charcoal">添加 MCP</h4>
+          <p className="text-[11px] text-sandrift">Remote MCP · Streamable HTTP · 默认 https</p>
+        </div>
+      </div>
+      <div className="space-y-3">
+        <div>
+          <label className="text-xs font-bold text-charcoal">名称 *</label>
+          <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Notion MCP" data-testid="mcp-add-name" className="mt-1 w-full h-9 px-3 bg-white border border-line rounded-lg text-sm" />
+        </div>
+        <div>
+          <label className="text-xs font-bold text-charcoal">Endpoint *</label>
+          <input value={endpoint} onChange={(e) => setEndpoint(e.target.value)} placeholder="https://mcp.example.com/mcp" data-testid="mcp-add-endpoint" className="mt-1 w-full h-9 px-3 bg-white border border-line rounded-lg text-sm font-mono" />
+          <p className="text-[11px] text-sandrift mt-1">V1 仅支持 Remote MCP (https)，http 仅允许 127.0.0.1/localhost（开发模式）</p>
+        </div>
+        <div>
+          <label className="text-xs font-bold text-charcoal">凭据 (SecretVault credentialRef)</label>
+          <input value={credentialRef} onChange={(e) => setCredentialRef(e.target.value)} placeholder="cred_xxx（可选，来自 SecretVault）" data-testid="mcp-add-credential" className="mt-1 w-full h-9 px-3 bg-white border border-line rounded-lg text-sm font-mono" />
+          <p className="text-[11px] text-sandrift mt-1">禁止明文 token/apiKey 写入 Zustand；Secret 来自 SecretVault</p>
+        </div>
+        {testResult && (
+          <div className={`text-xs font-bold px-3 py-2 rounded-lg border ${testResult.ok ? "text-success bg-success/5 border-success/20" : "text-danger bg-danger/5 border-danger/20"}`}>
+            {testResult.ok ? `连接成功${testResult.serverInfo ? ` · ${(testResult.serverInfo as { name?: string })?.name ?? ""}` : ""}` : `测试失败: ${testResult.error}`}
+            {testResult.ok && (testResult as { tools?: unknown[] }).tools && <p className="text-[11px] font-normal mt-1">{(testResult as { tools?: unknown[] }).tools?.length ?? 0} Tools 已发现</p>}
+          </div>
+        )}
+        {error && <p className="text-xs font-bold text-danger bg-danger/5 border border-danger/20 rounded-lg px-3 py-2">{error}</p>}
+        <div className="flex items-center gap-2">
+          <button type="button" onClick={handleTest} data-testid="mcp-test" className="h-8 px-4 bg-white border border-line text-charcoal text-xs font-bold rounded-lg hover:bg-alabaster">测试连接</button>
+          <div className="flex-1" />
+          <button type="button" onClick={() => onOpenChange(false)} className="h-8 px-4 bg-white border border-line text-charcoal text-xs font-bold rounded-lg">取消</button>
+          <button type="button" onClick={handleSave} disabled={saving} data-testid="mcp-save" className="h-8 px-5 bg-charcoal text-white text-xs font-bold rounded-lg hover:bg-black disabled:opacity-60">{saving ? "保存中..." : "保存"}</button>
+        </div>
+      </div>
+    </Dialog>
+  );
+}
+
+function McpDetailDialog({ connection, onOpenChange, onRefresh }: { connection: McpConnectionItem | null; onOpenChange: (open: boolean) => void; onRefresh: () => void }) {
+  const open = !!connection;
+  const handleAction = async (action: "connect" | "disconnect" | "remove" | "toggle") => {
+    if (!connection) return;
+    const bridge = getMcpBridge();
+    if (!bridge) return;
+    try {
+      if (action === "connect") await bridge.connect({ id: connection.config.id });
+      if (action === "disconnect") await bridge.disconnect({ id: connection.config.id });
+      if (action === "remove") {
+        if (!confirm(`确定删除 MCP "${connection.config.name}"？`)) return;
+        await bridge.remove({ id: connection.config.id });
+      }
+      if (action === "toggle") await bridge.setEnabled({ id: connection.config.id, enabled: !connection.config.enabled });
+      onRefresh();
+      if (action === "remove") onOpenChange(false);
+    } catch (e) {
+      alert((e as Error).message ?? String(e));
+    }
+  };
+
+  if (!connection) return <Dialog open={false} onOpenChange={onOpenChange} overlayId="mcp-detail" aria-label="MCP 详情" className="w-[min(520px,calc(100vw-24px))] bg-surface border border-line rounded-2xl p-5" />;
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange} overlayId="mcp-detail" aria-label="MCP 详情" className="w-[min(560px,calc(100vw-24px))] bg-surface border border-line rounded-2xl p-5 space-y-4 max-h-[85vh] overflow-y-auto">
+      <div className="flex items-center gap-2.5">
+        <div className="w-9 h-9 rounded-xl bg-pastel-mint border border-line flex items-center justify-center">
+          <Boxes className="w-4 h-4 text-charcoal" />
+        </div>
+        <div>
+          <h4 className="text-sm font-bold text-charcoal">{connection.config.name}</h4>
+          <p className="text-[11px] text-sandrift">{connection.config.endpoint} · {connection.state}</p>
+        </div>
+      </div>
+      <div className="grid grid-cols-3 gap-2 text-center">
+        <div className="bg-[#F7F5F5] border border-line rounded-lg p-2">
+          <p className="text-sm font-bold text-charcoal">{connection.toolCount}</p>
+          <p className="text-[11px] text-sandrift">Tools</p>
+        </div>
+        <div className="bg-[#F7F5F5] border border-line rounded-lg p-2">
+          <p className="text-sm font-bold text-charcoal">{connection.resourceCount}</p>
+          <p className="text-[11px] text-sandrift">Resources</p>
+        </div>
+        <div className="bg-[#F7F5F5] border border-line rounded-lg p-2">
+          <p className="text-sm font-bold text-charcoal">{connection.promptCount}</p>
+          <p className="text-[11px] text-sandrift">Prompts</p>
+        </div>
+      </div>
+      <div className="space-y-2 text-xs">
+        <p><span className="font-bold">连接信息：</span>{connection.config.endpoint}</p>
+        <p><span className="font-bold">凭据：</span>{connection.config.credentialRef ? `credentialRef ${connection.config.credentialRef.slice(0, 8)}...` : "无 (公开)"}</p>
+        <p><span className="font-bold">权限：</span>Kiro 使用 已允许 · 副作用操作 每次确认</p>
+        {connection.serverInfo && <p><span className="font-bold">Server：</span>{connection.serverInfo.name} {connection.serverInfo.version}</p>}
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
+        {connection.state !== "connected" ? (
+          <button type="button" onClick={() => handleAction("connect")} data-testid="mcp-connect" className="h-8 px-4 bg-charcoal text-white text-xs font-bold rounded-lg">连接</button>
+        ) : (
+          <button type="button" onClick={() => handleAction("disconnect")} data-testid="mcp-disconnect" className="h-8 px-4 bg-white border border-line text-charcoal text-xs font-bold rounded-lg">断开</button>
+        )}
+        <button type="button" onClick={() => handleAction("toggle")} data-testid="mcp-toggle" className="h-8 px-4 bg-white border border-line text-charcoal text-xs font-bold rounded-lg">{connection.config.enabled ? "停用" : "启用"}</button>
+        <button type="button" onClick={() => handleAction("remove")} data-testid="mcp-remove" className="h-8 px-4 bg-white border border-line text-danger text-xs font-bold rounded-lg">删除</button>
+        <div className="flex-1" />
+        <button type="button" onClick={() => onOpenChange(false)} className="h-8 px-4 bg-alabaster border border-line text-charcoal text-xs font-bold rounded-lg">关闭</button>
+      </div>
+    </Dialog>
   );
 }
 

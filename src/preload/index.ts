@@ -110,6 +110,18 @@ const skillBridge = {
   activate: (input: unknown) => invokeBridge("bridge:skill:activate", input),
 };
 
+const mcpBridge = {
+  list: () => invokeBridge("bridge:mcp:list", {}),
+  add: (input: unknown) => invokeBridge("bridge:mcp:add", input),
+  test: (input: unknown) => invokeBridge("bridge:mcp:test", input),
+  connect: (input: unknown) => invokeBridge("bridge:mcp:connect", input),
+  disconnect: (input: unknown) => invokeBridge("bridge:mcp:disconnect", input),
+  remove: (input: unknown) => invokeBridge("bridge:mcp:remove", input),
+  setEnabled: (input: unknown) => invokeBridge("bridge:mcp:setEnabled", input),
+  searchTools: (input: unknown) => invokeBridge("bridge:mcp:searchTools", input),
+  callTool: (input: unknown) => invokeBridge("bridge:mcp:callTool", input),
+};
+
 contextBridge.exposeInMainWorld("classflowDesktop", {
   version: 1,
   platform: "windows",
@@ -129,6 +141,7 @@ contextBridge.exposeInMainWorld("classflowDesktop", {
   terminal: terminalBridge,
   credentials: credentialsBridge,
   skills: skillBridge,
+  mcp: mcpBridge,
   api: {
     request: async (path: string, init?: RequestInit): Promise<Response> => {
       const base = resolveApiBase();

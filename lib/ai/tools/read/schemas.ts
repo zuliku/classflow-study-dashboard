@@ -251,6 +251,17 @@ export const activateSkillSchema = z.object({
     .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, "skillName must be lowercase hyphen"),
 });
 
+export const mcpSearchToolsSchema = z.object({
+  query: z.string().trim().min(1).max(100).optional(),
+  limit: z.number().int().min(1).max(20).optional(),
+});
+
+export const mcpCallToolSchema = z.object({
+  connectionId: z.string().trim().min(1).max(64),
+  toolName: z.string().trim().min(1).max(100),
+  arguments: z.record(z.string(), z.unknown()).optional(),
+});
+
 export const KIRO_READ_TOOL_SCHEMAS = {
   get_current_context: emptyInputSchema,
   get_user_study_profile: emptyInputSchema,
@@ -284,6 +295,8 @@ export const KIRO_READ_TOOL_SCHEMAS = {
   propose_visual_actions: proposeVisualActionsSchema,
   propose_timetable_import: proposeTimetableImportInputSchema,
   activate_skill: activateSkillSchema,
+  mcp_search_tools: mcpSearchToolsSchema,
+  mcp_call_tool: mcpCallToolSchema,
 } as const;
 
 export type KiroReadToolName = keyof typeof KIRO_READ_TOOL_SCHEMAS;

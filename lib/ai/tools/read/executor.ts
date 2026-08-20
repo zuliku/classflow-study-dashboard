@@ -1006,6 +1006,20 @@ export function activateSkillTool(state: ReadToolState, input: unknown): ReadToo
   return { ok: false, code: "NOT_FOUND", message: `Skill not found: ${parsed.data.skillName}` };
 }
 
+export function mcpSearchToolsTool(state: ReadToolState, input: unknown): ReadToolResult<unknown> {
+  const parsed = safeParse<{ query?: string; limit?: number }>("mcp_search_tools", input);
+  if (!parsed.ok) return parsed;
+  // 实际搜索由 Main 的 MCP Manager 完成，此处为占位（Client 将通过 IPC 调用）
+  return { ok: true, data: { tools: [], query: parsed.data.query } };
+}
+
+export function mcpCallToolTool(state: ReadToolState, input: unknown): ReadToolResult<unknown> {
+  const parsed = safeParse<{ connectionId: string; toolName: string; arguments?: Record<string, unknown> }>("mcp_call_tool", input);
+  if (!parsed.ok) return parsed;
+  // 实际调用由 Main 完成，此处为占位
+  return { ok: false, code: "NOT_FOUND", message: "MCP call requires Main gateway" };
+}
+
 // ---------- 统一入口 ----------
 
 /** 同步执行的 Read Tools（read_material / read_project_file / read_project_visual / search_project_file / history / analytics / outlook 为异步重量级工具，独立处理） */
@@ -1034,6 +1048,8 @@ const EXECUTORS: Record<Exclude<KiroReadToolName, "read_material" | "read_projec
   list_reminders: listReminders,
   get_focus_status: getFocusStatus,
   activate_skill: activateSkillTool,
+  mcp_search_tools: mcpSearchToolsTool,
+  mcp_call_tool: mcpCallToolTool,
 };
 
 /**

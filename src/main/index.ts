@@ -10,6 +10,7 @@ import { getCspHeader } from "@/lib/security/csp";
 import { validateIpcSender } from "@/lib/security/ipcSender";
 import { registerSecretIpc } from "./secrets/secretIpc";
 import { registerSkillIpc } from "./skills/skillIpc";
+import { registerMcpIpc } from "./mcp/ipc";
 
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
 
@@ -181,6 +182,11 @@ app.whenReady().then(async () => {
 
   // Skills — 仅 Main 管理文件，Renderer 通过 IPC 操作，同样受 sender validation
   registerSkillIpc({
+    validateSender: (channel, event) => validateWindowSender(channel, event.sender, apiBase),
+  });
+
+  // MCP — Remote Streamable HTTP, 仅 Main 建立网络连接
+  registerMcpIpc({
     validateSender: (channel, event) => validateWindowSender(channel, event.sender, apiBase),
   });
 
