@@ -153,23 +153,20 @@ export class QQChannelAdapter implements ChannelAdapter {
   }
 
   async restart(): Promise<void> {
+    // Deprecated: Manager should do disconnect + SecretVault.resolve + connect to avoid secret retention.
+    // Kept for compat but will fail if secret cleared.
     await this.stop();
-    // appSecret was cleared on stop, need to re-resolve from SecretVault? But adapter holds secret only for lifecycle.
-    // For V1, restart requires caller to provide new adapter with fresh secret. If still have secret, reconnect.
-    // If secret cleared, we throw invalid config.
     if (!this.appSecret) {
-      throw new ChannelError("QQ_INVALID_CONFIG", "Missing appSecret for restart");
+      throw new ChannelError("QQ_INVALID_CONFIG", "Missing appSecret for restart — use Manager reconnect");
     }
     await this.start();
   }
 
   // For testing: inject message directly without transport
   async handleInbound(rawMsg: ChannelInboundMessage): Promise<void> {
-    // Self protection (double layer: SDK skipSelfEcho + here)
-    if (this.botIdentity && rawMsg.senderId === this.botIdentity) {
-      // drop self echo
-      return;
-    }
+    // Self protection double layer: SDK skipSelfEcho + here via senderIsBot
+    if (rawMsg.isSelf) return;
+    if (this.botIdentity && rawMsg.senderId === this.botIdentity) return;
     // Dedupe
     const dedupeKey = getQQDedupeKey({
       channel: rawMsg.channel,
@@ -183,17 +180,18 @@ export class QQChannelAdapter implements ChannelAdapter {
     if (this.dedupe.has(dedupeKey)) return;
     this.dedupe.add(dedupeKey);
 
-    // Policy
-    const isMentioned = rawMsg.text.includes(`@${this.config.appId}`) || rawMsg.text.includes("@bot") || (rawMsg.rawEventType?.includes("AT") ?? false);
-    // Heuristic: group @ detection via text containing @
+    // Policy: use SDK protocol facts, not text heuristic
+    const isMentioned = rawMsg.mentionedBot ?? (rawMsg.rawEventType === "GROUP_AT_MESSAGE_CREATE" ? true : rawMsg.rawEventType === "GROUP_MESSAGE_CREATE" ? false : undefined);
+    // Fallback: if mentionedBot undefined, treat group AT event as mentioned
+    const effectiveMentioned = typeof isMentioned === "boolean" ? isMentioned : rawMsg.rawEventType?.includes("AT") ?? false;
     const policyDecision = evaluateQQPolicy(
       {
         senderId: rawMsg.senderId,
         conversationId: rawMsg.conversationId,
         conversationType: rawMsg.conversationType,
         text: rawMsg.text,
-        isMentioned,
-        isSelf: this.botIdentity ? rawMsg.senderId === this.botIdentity : false,
+        isMentioned: effectiveMentioned,
+        isSelf: !!rawMsg.isSelf,
       },
       {
         allowedUsers: this.config.allowedUsers,

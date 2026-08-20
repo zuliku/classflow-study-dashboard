@@ -1,13 +1,15 @@
 /**
- * Channel Manager — Task 13
+ * Channel Manager — Task 13B closure
  * Load configs, start enabled channels, stop/restart/list, registry abstraction
+ * Fixes: atomic persistence with rollback, load logging, real TokenManager test with timeout, credential ownership, auto start non-blocking
  */
 
 import { promises as fs, existsSync, mkdirSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { app } from "electron";
 import { randomUUID } from "node:crypto";
-import type { ChannelHealth, ChannelState, ChannelType } from "./types";
+import type { ChannelHealth } from "./types";
+import type { ChannelType } from "./types";
 import type { QQChannelConfig } from "./qq/config";
 import { validateQQChannelConfig } from "./qq/config";
 import { QQChannelAdapter } from "./qq/adapter";
@@ -47,11 +49,7 @@ export class ChannelManager {
   constructor(inboxSink?: ChannelInboxSink) {
     this.configPath = getChannelConfigPath();
     this.inboxSink = inboxSink ?? new ChannelInboxSink();
-    // Register factory for qq-bot
-    registerChannelFactory("qq-bot", (config) => {
-      // factory will be called with secret resolved at start time; here we just create adapter placeholder
-      // But for manager we create adapter lazily with secret during start
-      // This registration is for dynamic creation; we use direct adapter creation in start
+    registerChannelFactory("qq-bot", () => {
       throw new Error("Use ChannelManager.createAdapter");
     });
     this.loadConfigsSync();
@@ -70,7 +68,10 @@ export class ChannelManager {
           }
         }
       }
-    } catch {}
+    } catch (e) {
+      console.warn(`[channel] config load failed path=${getChannelConfigPath()} code=${(e as Error).message.slice(0, 100)}`);
+      // Don't crash App; keep empty configs, UI health will show disconnected
+    }
   }
 
   private async persistConfigsAtomic(): Promise<void> {
@@ -79,7 +80,6 @@ export class ChannelManager {
       const data = JSON.stringify({ channels: Array.from(this.configs.values()) }, null, 2);
       const tmp = join(dirname(this.configPath), `.channels-tmp-${randomUUID().slice(0, 8)}`);
       await fs.writeFile(tmp, data, "utf8");
-      // fsync file handle
       try {
         const handle = await fs.open(tmp, "r");
         await handle.sync();
@@ -123,7 +123,6 @@ export class ChannelManager {
       throw new ChannelError("INVALID_INPUT", "displayName/appId/credentialRef required");
     }
     if (!input.credentialRef.startsWith("cred_")) throw new ChannelError("INVALID_INPUT", "credentialRef invalid");
-    // Verify credential exists and provider matches qq-bot
     try {
       const vault = getRuntimeSecretVault();
       vault.resolveSecretForProvider(input.credentialRef, "qq-bot");
@@ -147,15 +146,21 @@ export class ChannelManager {
     };
     const validated = validateQQChannelConfig({ ...cfg });
     if (!validated.ok) throw new ChannelError("QQ_INVALID_CONFIG", validated.message);
+    // Atomic with rollback
+    const backup = new Map(this.configs);
     this.configs.set(id, cfg);
-    await this.persistConfigsAtomic();
+    try {
+      await this.persistConfigsAtomic();
+    } catch (e) {
+      this.configs = backup;
+      throw e;
+    }
     return cfg;
   }
 
   async updateChannel(id: string, patch: Partial<PersistedChannelConfig>): Promise<PersistedChannelConfig> {
     const existing = this.configs.get(id);
     if (!existing) throw new ChannelError("CHANNEL_NOT_FOUND", `Channel not found: ${id}`);
-    // Prevent updating secret directly via config; must use credentialRef via SecretVault replace
     if (patch.credentialRef && patch.credentialRef !== existing.credentialRef) {
       try {
         const vault = getRuntimeSecretVault();
@@ -165,12 +170,16 @@ export class ChannelManager {
       }
     }
     const updated: PersistedChannelConfig = { ...existing, ...patch, id: existing.id, channel: "qq-bot" as const };
-    // do not allow changing id/channel via patch
     const validated = validateQQChannelConfig(updated);
     if (!validated.ok) throw new ChannelError("QQ_INVALID_CONFIG", validated.message);
+    const backup = new Map(this.configs);
     this.configs.set(id, updated);
-    await this.persistConfigsAtomic();
-    // If adapter running, restart to apply new policy
+    try {
+      await this.persistConfigsAtomic();
+    } catch (e) {
+      this.configs = backup;
+      throw e;
+    }
     const adapter = this.adapters.get(id);
     if (adapter) {
       await adapter.stop().catch(() => {});
@@ -185,16 +194,22 @@ export class ChannelManager {
   async setEnabled(id: string, enabled: boolean): Promise<void> {
     const cfg = this.configs.get(id);
     if (!cfg) throw new ChannelError("CHANNEL_NOT_FOUND", `Channel not found: ${id}`);
-    cfg.enabled = enabled;
-    await this.persistConfigsAtomic();
+    const backup = new Map(this.configs);
+    // Create new object to avoid mutating backup reference
+    const updated = { ...cfg, enabled };
+    this.configs.set(id, updated);
+    try {
+      await this.persistConfigsAtomic();
+    } catch (e) {
+      this.configs = backup;
+      throw e;
+    }
     if (!enabled) {
       const adapter = this.adapters.get(id);
       if (adapter) {
         await adapter.stop().catch(() => {});
         this.adapters.delete(id);
       }
-    } else {
-      // auto connect when enabled? V1: user must click connect, but we allow auto if they enable
     }
   }
 
@@ -202,7 +217,6 @@ export class ChannelManager {
     const cfg = this.configs.get(id);
     if (!cfg) throw new ChannelError("CHANNEL_NOT_FOUND", `Channel not found: ${id}`);
     if (!cfg.enabled) throw new ChannelError("CHANNEL_DISABLED", "Channel disabled");
-    // Resolve secret
     let appSecret: string;
     try {
       const vault = getRuntimeSecretVault();
@@ -210,29 +224,36 @@ export class ChannelManager {
     } catch {
       throw new ChannelError("QQ_AUTH_FAILED", "无法解析 AppSecret");
     }
-    if (this.adapters.has(id)) {
-      await this.adapters.get(id)!.stop().catch(() => {});
-      this.adapters.delete(id);
+    let secretToClear = appSecret;
+    try {
+      if (this.adapters.has(id)) {
+        await this.adapters.get(id)!.stop().catch(() => {});
+        this.adapters.delete(id);
+      }
+      const qqConfig: QQChannelConfig = {
+        id: cfg.id,
+        enabled: cfg.enabled,
+        displayName: cfg.displayName,
+        appId: cfg.appId,
+        credentialRef: cfg.credentialRef,
+        requireMentionInGroup: cfg.requireMentionInGroup,
+        allowedUsers: cfg.allowedUsers,
+        allowedGroups: cfg.allowedGroups,
+        receiveDirectMessages: cfg.receiveDirectMessages,
+        receiveGroupMessages: cfg.receiveGroupMessages,
+      };
+      const adapter = new QQChannelAdapter({
+        config: qqConfig,
+        appSecret,
+        inboxSink: this.inboxSink,
+      });
+      this.adapters.set(id, adapter);
+      await adapter.start();
+    } finally {
+      // Release secret memory
+      secretToClear = "";
+      appSecret = "";
     }
-    const qqConfig: QQChannelConfig = {
-      id: cfg.id,
-      enabled: cfg.enabled,
-      displayName: cfg.displayName,
-      appId: cfg.appId,
-      credentialRef: cfg.credentialRef,
-      requireMentionInGroup: cfg.requireMentionInGroup,
-      allowedUsers: cfg.allowedUsers,
-      allowedGroups: cfg.allowedGroups,
-      receiveDirectMessages: cfg.receiveDirectMessages,
-      receiveGroupMessages: cfg.receiveGroupMessages,
-    };
-    const adapter = new QQChannelAdapter({
-      config: qqConfig,
-      appSecret,
-      inboxSink: this.inboxSink,
-    });
-    this.adapters.set(id, adapter);
-    await adapter.start();
   }
 
   async disconnect(id: string): Promise<void> {
@@ -242,42 +263,103 @@ export class ChannelManager {
     this.adapters.delete(id);
   }
 
+  private mapTokenError(e: unknown): { code: string; message: string } {
+    const raw = e instanceof Error ? e.message : String(e);
+    if (raw.includes("timeout") || raw.includes("Timeout")) return { code: "QQ_NETWORK_ERROR", message: "连接超时" };
+    if (raw.includes("401") || raw.includes("auth") || raw.includes("QQ_AUTH_FAILED") || raw.toLowerCase().includes("credential") || raw.toLowerCase().includes("secret")) return { code: "QQ_AUTH_FAILED", message: "QQ 机器人认证失败" };
+    if (raw.toLowerCase().includes("rate")) return { code: "QQ_RATE_LIMITED", message: "请求过于频繁" };
+    if (raw.includes("QQ_GATEWAY_DISCONNECTED")) return { code: "QQ_GATEWAY_DISCONNECTED", message: "网关连接失败" };
+    return { code: "QQ_NETWORK_ERROR", message: raw.slice(0, 200) };
+  }
+
   async testChannel(id: string): Promise<{ ok: boolean; error?: string }> {
     const cfg = this.configs.get(id);
     if (!cfg) throw new ChannelError("CHANNEL_NOT_FOUND", `Channel not found: ${id}`);
+    let secret: string;
     try {
       const vault = getRuntimeSecretVault();
-      const secret = vault.resolveSecretForProvider(cfg.credentialRef, "qq-bot");
-      if (!secret || secret.length < 8) throw new ChannelError("QQ_AUTH_FAILED", "AppSecret 无效");
-      // For V1, test only validates credential existence; not connecting to real QQ unless we have network
-      // If we want live test, we could try to create a QQBot and fetch token, but that would require network.
-      // So we return ok if credential valid.
+      secret = vault.resolveSecretForProvider(cfg.credentialRef, "qq-bot");
+    } catch (e) {
+      const mapped = this.mapTokenError(e);
+      return { ok: false, error: mapped.message };
+    }
+    // Real token fetch with timeout 10s, not just existence
+    try {
+      const { TokenManager } = await import("@tencent-connect/qqbot-nodejs/protocol") as unknown as { TokenManager: new (opts?: unknown) => { getAccessToken: (a: string, s: string) => Promise<string>; clearCache: (a?: string) => void } };
+      const tm = new TokenManager();
+      const tokenPromise = tm.getAccessToken(cfg.appId, secret);
+      const timeoutPromise = new Promise<never>((_, reject) => setTimeout(() => reject(new Error(JSON.stringify({ code: "QQ_NETWORK_ERROR", message: "Test connection timeout" }))), 10_000));
+      await Promise.race([tokenPromise, timeoutPromise]);
+      try { tm.clearCache(cfg.appId); } catch {}
+      secret = "";
       return { ok: true };
     } catch (e) {
-      return { ok: false, error: (e as Error).message };
+      secret = "";
+      const mapped = this.mapTokenError(e);
+      // Preserve specific code in message for caller, but return ok false
+      try {
+        const parsed = JSON.parse((e as Error).message) as { code?: string };
+        if (parsed.code) return { ok: false, error: parsed.code };
+      } catch {}
+      return { ok: false, error: mapped.code };
     }
   }
 
   async testConnectionForInput(input: { appId: string; credentialRef: string }): Promise<{ ok: boolean; error?: string }> {
     if (!input.appId || !input.credentialRef) return { ok: false, error: "appId/credentialRef required" };
+    let secret: string;
     try {
       const vault = getRuntimeSecretVault();
-      const secret = vault.resolveSecretForProvider(input.credentialRef, "qq-bot");
-      if (!secret) return { ok: false, error: "AppSecret 无效" };
+      secret = vault.resolveSecretForProvider(input.credentialRef, "qq-bot");
+    } catch (e) {
+      const mapped = this.mapTokenError(e);
+      return { ok: false, error: mapped.code };
+    }
+    try {
+      const { TokenManager } = await import("@tencent-connect/qqbot-nodejs/protocol") as unknown as { TokenManager: new (opts?: unknown) => { getAccessToken: (a: string, s: string) => Promise<string>; clearCache: (a?: string) => void } };
+      const tm = new TokenManager();
+      const tokenPromise = tm.getAccessToken(input.appId, secret);
+      const timeoutPromise = new Promise<never>((_, reject) => setTimeout(() => reject(new Error(JSON.stringify({ code: "QQ_NETWORK_ERROR", message: "Test connection timeout" }))), 10_000));
+      await Promise.race([tokenPromise, timeoutPromise]);
+      try { tm.clearCache(input.appId); } catch {}
+      secret = "";
       return { ok: true };
     } catch (e) {
-      return { ok: false, error: (e as Error).message };
+      secret = "";
+      const mapped = this.mapTokenError(e);
+      try {
+        const parsed = JSON.parse((e as Error).message) as { code?: string };
+        if (parsed.code) return { ok: false, error: parsed.code };
+      } catch {}
+      return { ok: false, error: mapped.code };
     }
   }
 
   async removeChannel(id: string): Promise<void> {
+    const cfg = this.configs.get(id);
     const adapter = this.adapters.get(id);
     if (adapter) {
       await adapter.stop().catch(() => {});
       this.adapters.delete(id);
     }
+    if (!cfg) return;
+    const credentialRef = cfg.credentialRef;
+    const backup = new Map(this.configs);
     this.configs.delete(id);
-    await this.persistConfigsAtomic();
+    try {
+      await this.persistConfigsAtomic();
+    } catch (e) {
+      this.configs = backup;
+      throw e;
+    }
+    // Credential ownership: if no other channel references same credentialRef, delete it
+    const stillReferenced = Array.from(this.configs.values()).some((c) => c.credentialRef === credentialRef);
+    if (!stillReferenced) {
+      try {
+        const vault = getRuntimeSecretVault();
+        vault.deleteCredential(credentialRef);
+      } catch {}
+    }
   }
 
   async disconnectAll(): Promise<void> {
@@ -292,15 +374,15 @@ export class ChannelManager {
   }
 
   async startEnabledChannels(): Promise<void> {
-    for (const cfg of this.configs.values()) {
-      if (cfg.enabled) {
-        try {
-          await this.connect(cfg.id);
-        } catch (e) {
+    // Each channel independent, one fail shouldn't block others or App
+    const promises = Array.from(this.configs.values())
+      .filter((c) => c.enabled)
+      .map((cfg) =>
+        this.connect(cfg.id).catch((e) => {
           console.warn(`[channel] auto-start ${cfg.id} failed`, (e as Error).message);
-        }
-      }
-    }
+        })
+      );
+    await Promise.allSettled(promises);
   }
 
   // For tests: inject fake inbox sink

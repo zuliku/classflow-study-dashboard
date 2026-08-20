@@ -202,6 +202,20 @@ app.whenReady().then(async () => {
     validateSender: (channel, event) => validateWindowSender(channel, event.sender, apiBase),
   });
 
+  // Inbox publisher (Main → Renderer raw payload, Renderer store generates status/origin/dedupe)
+  const { setInboxPublisher } = await import("./channels/inboxPublisher");
+  // Will be set after window created (needs mainWindow reference)
+  let inboxPublisherSet = false;
+  const setupInboxPublisher = () => {
+    if (inboxPublisherSet || !mainWindow) return;
+    inboxPublisherSet = true;
+    setInboxPublisher((payload) => {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send("bridge:inbox:externalItem", payload);
+      }
+    });
+  };
+
   // app:// → out/renderer 静态资源（路径穿越防护：仅允许 renderer 目录内文件）
   protocol.handle("app", (request) => {
     const { pathname } = new URL(request.url);
@@ -214,8 +228,18 @@ app.whenReady().then(async () => {
   });
 
   createWindow(apiBase, apiCapability);
+  setupInboxPublisher();
+  // Auto start enabled channels in background, must not block window show
+  void import("./channels/manager").then(({ getChannelManager }) => {
+    void getChannelManager()
+      .startEnabledChannels()
+      .catch((e) => console.warn("[channels] auto start failed", (e as Error).message));
+  });
   app.on("activate", () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow(apiBase, apiCapability);
+    if (BrowserWindow.getAllWindows().length === 0) {
+      createWindow(apiBase, apiCapability);
+      setupInboxPublisher();
+    }
   });
 });
 

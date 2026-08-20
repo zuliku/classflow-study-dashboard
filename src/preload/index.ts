@@ -140,6 +140,14 @@ const channelsBridge = {
   remove: (input: unknown) => invokeBridge("bridge:channels:remove", input),
 };
 
+const inboxBridge = {
+  subscribeExternalItem: (callback: (item: unknown) => void): (() => void) => {
+    const handler = (_e: unknown, item: unknown) => callback(item);
+    ipcRenderer.on("bridge:inbox:externalItem", handler);
+    return () => ipcRenderer.removeListener("bridge:inbox:externalItem", handler);
+  },
+};
+
 contextBridge.exposeInMainWorld("classflowDesktop", {
   version: 1,
   platform: "windows",
@@ -162,6 +170,7 @@ contextBridge.exposeInMainWorld("classflowDesktop", {
   mcp: mcpBridge,
   invocation: invocationBridge,
   channels: channelsBridge,
+  inbox: inboxBridge,
   api: {
     request: async (path: string, init?: RequestInit): Promise<Response> => {
       const base = resolveApiBase();

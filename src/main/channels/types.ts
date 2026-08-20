@@ -32,6 +32,9 @@ export interface ChannelInboundMessage {
   receivedAt: number;
   attachments?: ChannelAttachment[];
   rawEventType?: string;
+  /** SDK protocol facts, not trust origin */
+  mentionedBot?: boolean;
+  isSelf?: boolean;
 }
 
 export interface ChannelHealth {
@@ -51,7 +54,8 @@ export interface ChannelAdapter {
   getHealth(): ChannelHealth;
   start(): Promise<void>;
   stop(): Promise<void>;
-  restart(): Promise<void>;
+  /** @deprecated Use ChannelManager.disconnect+connect (re-resolve secret). Kept for compat but should not be used. */
+  restart?(): Promise<void>;
   /** Optional: explicit send (V1 receive-only, but API reserved) */
   sendText?(target: { conversationId: string; conversationType: "direct" | "group" }, text: string): Promise<void>;
   dispose?(): Promise<void>;

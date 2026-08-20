@@ -22,7 +22,7 @@ function getChannelsBridge(): {
   return bridge ?? null;
 }
 
-function getCredentialsBridge(): { create: (input: unknown) => Promise<{ credentialRef: string }>; replace: (input: unknown) => Promise<unknown> } | null {
+function getCredentialsBridge(): { create: (input: unknown) => Promise<{ credentialRef: string }>; replace: (input: unknown) => Promise<unknown>; delete: (input: unknown) => Promise<unknown> } | null {
   if (typeof window === "undefined") return null;
   const bridge = (window as unknown as { classflowDesktop?: { credentials?: unknown } }).classflowDesktop?.credentials as never;
   return bridge ?? null;
@@ -246,13 +246,15 @@ function EditQQDialog({ target, onOpenChange, onSaved }: { target: ChannelStatus
     const credBridge = getCredentialsBridge();
     if (!chBridge) { setError("桌面环境不可用"); return; }
     setSaving(true);
+    const oldRef = target.config.credentialRef;
+    let newRef: string | null = null;
+    let credentialRef = oldRef;
     try {
-      let credentialRef = target.config.credentialRef;
       if (newSecret.trim()) {
         if (!credBridge) throw new Error("凭据服务不可用");
-        // replace existing credential
-        await credBridge.replace({ credentialRef, secret: newSecret.trim() });
-        setNewSecret("");
+        const created = (await credBridge.create({ provider: "qq-bot", label: displayName.trim(), secret: newSecret.trim() })) as { credentialRef: string };
+        newRef = created.credentialRef;
+        credentialRef = newRef;
       }
       await chBridge.update({
         id: target.config.id,
@@ -266,11 +268,25 @@ function EditQQDialog({ target, onOpenChange, onSaved }: { target: ChannelStatus
           credentialRef,
         },
       });
+      if (newRef) {
+        // success: delete old credential
+        try {
+          await credBridge!.delete({ credentialRef: oldRef });
+        } catch {}
+        setNewSecret("");
+      }
       onSaved();
       onOpenChange(false);
     } catch (e) {
+      if (newRef) {
+        try {
+          await credBridge!.delete({ credentialRef: newRef });
+        } catch {}
+      }
       setError((e as { message?: string })?.message ?? String(e));
-    } finally { setSaving(false); }
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (

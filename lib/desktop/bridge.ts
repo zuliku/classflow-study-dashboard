@@ -132,3 +132,12 @@ export function getClassFlowDesktopChannelsBridge(): import("@/lib/desktop/types
   if (!required.every((m) => typeof (channels as Record<string, unknown>)[m] === "function")) return null;
   return channels as import("@/lib/desktop/types").ClassFlowDesktopChannelsBridge;
 }
+
+export function getClassFlowDesktopInboxBridge(): import("@/lib/desktop/types").ClassFlowDesktopInboxBridge | null {
+  const bridge = getClassFlowDesktopBridge();
+  if (!bridge) return null;
+  const inbox = (bridge as unknown as { inbox?: unknown }).inbox;
+  if (!inbox || typeof inbox !== "object") return null;
+  if (typeof (inbox as Record<string, unknown>).subscribeExternalItem !== "function") return null;
+  return inbox as import("@/lib/desktop/types").ClassFlowDesktopInboxBridge;
+}

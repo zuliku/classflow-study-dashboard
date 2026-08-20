@@ -11,11 +11,20 @@ import { ChannelError, channelErrorToIpc } from "./errors";
 function toIpcError(err: unknown): never {
   if (err instanceof ChannelError) throw new Error(JSON.stringify({ code: err.code, message: err.message }));
   const raw = err instanceof Error ? err.message : String(err);
+  let parsed: { code?: string; message?: string } | null = null;
   try {
-    const parsed = JSON.parse(raw) as { code?: string; message?: string };
-    if (parsed.code) throw new Error(JSON.stringify({ code: parsed.code, message: parsed.message ?? raw }));
+    parsed = JSON.parse(raw) as { code?: string; message?: string };
   } catch {}
-  throw new Error(JSON.stringify({ code: "QQ_SDK_ERROR", message: raw.slice(0, 300) }));
+  if (parsed?.code) {
+    throw new Error(JSON.stringify({ code: parsed.code, message: parsed.message ?? raw }));
+  }
+  // Preserve known QQ codes if present in raw string
+  const known = ["QQ_AUTH_FAILED", "QQ_NETWORK_ERROR", "QQ_GATEWAY_DISCONNECTED", "QQ_RATE_LIMITED", "QQ_INVALID_CONFIG", "QQ_SDK_ERROR"];
+  for (const c of known) {
+    if (raw.includes(c)) throw new Error(JSON.stringify({ code: c, message: raw.slice(0, 300) }));
+  }
+  const sanitized = raw.replace(/appSecret|access_token|Authorization|credentialRef/gi, "[redacted]").slice(0, 300);
+  throw new Error(JSON.stringify({ code: "QQ_SDK_ERROR", message: sanitized }));
 }
 
 export function registerChannelIpc(opts?: { validateSender?: (channel: string, event: Electron.IpcMainInvokeEvent) => boolean }): void {

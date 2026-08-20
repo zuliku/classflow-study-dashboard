@@ -108,6 +108,10 @@ export interface ClassFlowDesktopChannelsBridge {
   remove: (input: unknown) => Promise<{ ok: boolean }>;
 }
 
+export interface ClassFlowDesktopInboxBridge {
+  subscribeExternalItem: (callback: (item: unknown) => void) => () => void;
+}
+
 export interface ClassFlowDesktopBridgeV1 {
   version: typeof CLASSFLOW_DESKTOP_BRIDGE_VERSION;
   platform: ClassFlowDesktopPlatform;
@@ -120,6 +124,7 @@ export interface ClassFlowDesktopBridgeV1 {
    */
   terminal?: ClassFlowDesktopTerminalBridge;
   channels?: ClassFlowDesktopChannelsBridge;
+  inbox?: ClassFlowDesktopInboxBridge;
   credentials?: {
     create: (input: unknown) => Promise<{ credentialRef: string }>;
     replace: (input: unknown) => Promise<unknown>;

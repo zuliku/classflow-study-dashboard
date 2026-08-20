@@ -41,6 +41,7 @@ import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { PageTransition } from "@/components/ui/PageTransition";
 import { useAppStore } from "@/store/useAppStore";
 import { useToastStore } from "@/store/useToastStore";
+import { useInboxChannelBridge } from "@/hooks/useInboxChannelBridge";
 import { cardKeyHandler, cn } from "@/lib/utils";
 import { openAssignmentEditor } from "@/lib/uiEvents";
 import { reconcilePersistedFileBlobs } from "@/lib/fileReconcile";
@@ -55,6 +56,8 @@ import {
 } from "lucide-react";
 
 export default function Home() {
+  // Task 13B: Main → Renderer inbox bridge (single subscription at stable root)
+  useInboxChannelBridge();
   // 精确 selector：避免整 store 订阅导致 UI Chrome 等无关 state 变化触发 Home 全量 render
   const activeTab = useAppStore((s) => s.activeTab);
   const courses = useAppStore((s) => s.courses);

@@ -75,6 +75,10 @@ export default defineConfig({
       "tests/qqAdapter.test.ts",
       "tests/channelInboxIntegration.test.ts",
       "tests/qqSecretBoundary.test.ts",
+      "tests/qqSdkContract.test.ts",
+      "tests/qqTransportLifecycle.test.ts",
+      "tests/qqInboxDelivery.test.ts",
+      "tests/qqTestConnection.test.ts",
       "tests/settingsRegistry.test.ts",
       // Kiro Sidecar Capsule V1 — jsdom via @vitest-environment
       "tests/kiroSidecarShell.test.tsx",
