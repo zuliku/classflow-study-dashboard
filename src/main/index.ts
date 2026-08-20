@@ -13,6 +13,7 @@ import { registerSkillIpc } from "./skills/skillIpc";
 import { registerMcpIpc } from "./mcp/ipc";
 import { registerInvocationIpc } from "./security/invocationIpc";
 import { registerChannelIpc } from "./channels/ipc";
+import { installLocalApiCapabilityInjector } from "./security/localApiCapability";
 
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
 
@@ -29,13 +30,14 @@ const RENDERER_DIR = join(__dirname, "../renderer");
 
 let apiServer: ApiServer | null = null;
 let mainWindow: BrowserWindow | null = null;
-let localApiWebRequestInstalledFor: string | null = null;
 
 function getAllowedOrigins(apiBase: string): { allowedApiOrigin: string; allowedDevOrigin: string | undefined } {
   const allowedApiOrigin = apiBase;
   const allowedDevOrigin = process.env.ELECTRON_RENDERER_URL;
   return { allowedApiOrigin, allowedDevOrigin };
 }
+
+let disposeLocalApiInjector: (() => void) | null = null;
 
 function createWindow(apiBase: string, apiCapability: string): void {
   const { allowedApiOrigin, allowedDevOrigin } = getAllowedOrigins(apiBase);
@@ -70,72 +72,33 @@ function createWindow(apiBase: string, apiCapability: string): void {
   });
 
   // Local API capability injection — Main owns capability, Renderer never sees it
-  // Only for exact apiBase origin, from ClassFlow main WebContents, with trusted initiator (app:// or exact dev origin)
-  // Lifecycle: one owner per launch, avoid duplicate listeners on HMR/window recreate
+  // Pure policy extracted to src/main/security/localApiCapability.ts, injection via session.webRequest
+  if (disposeLocalApiInjector) {
+    try {
+      disposeLocalApiInjector();
+    } catch {}
+    disposeLocalApiInjector = null;
+  }
   const apiOrigin = new URL(apiBase).origin;
-  const trustedInitiators = new Set<string>(["app://bundle", "app://bundle/"]);
+  const trustedRendererOrigins: string[] = ["app://bundle", "app://bundle/"];
   if (process.env.ELECTRON_RENDERER_URL) {
     const devOrigin = new URL(process.env.ELECTRON_RENDERER_URL).origin;
-    trustedInitiators.add(devOrigin);
-    trustedInitiators.add(`${devOrigin}/`);
+    trustedRendererOrigins.push(devOrigin, `${devOrigin}/`);
   }
-  const mainWebContentsId = mainWindow.webContents.id;
-  // Ensure single handler per launch, update closure for fresh mainWebContentsId
-  try {
-    ses.webRequest.onBeforeSendHeaders(null as unknown as Parameters<typeof ses.webRequest.onBeforeSendHeaders>[0]);
-  } catch {}
-  localApiWebRequestInstalledFor = apiBase;
-  ses.webRequest.onBeforeSendHeaders((details, callback) => {
-    try {
-      const url = details.url;
-      // 1. URL 必须精确匹配当前 apiBase origin（非任意 localhost）
-      let urlOrigin: string;
+  disposeLocalApiInjector = installLocalApiCapabilityInjector(
+    ses,
+    apiBase,
+    apiCapability,
+    () => mainWindow?.webContents.id,
+    () => {
       try {
-        urlOrigin = new URL(url).origin;
+        return mainWindow?.webContents.getURL() ?? undefined;
       } catch {
-        callback({});
-        return;
+        return undefined;
       }
-      if (urlOrigin !== apiOrigin) {
-        callback({});
-        return;
-      }
-      // 2. 必须来自 ClassFlow 主窗口的 WebContents
-      if (details.webContentsId !== mainWebContentsId) {
-        callback({});
-        return;
-      }
-      // 3. initiator/Origin 必须属于受信任集合（app:// 或精确 dev origin），防止 untrusted 窗口冒用
-      // webRequest 的 details 可能包含 initiator 字段（Electron 28+），回退检查 requestHeaders Origin
-      const initiator = (details as unknown as { initiator?: string }).initiator ?? "";
-      const originHeader = (details.requestHeaders?.["Origin"] as string) ?? (details.requestHeaders?.["origin"] as string) ?? "";
-      const candidateOrigin = initiator || originHeader;
-      if (candidateOrigin) {
-        let candidateOk = false;
-        for (const trusted of trustedInitiators) {
-          if (candidateOrigin === trusted || candidateOrigin.startsWith(trusted)) {
-            candidateOk = true;
-            break;
-          }
-        }
-        // 严格：origin 必须精确等于受信任 origin 之一（或以 trusted + "/" 开头）
-        // 但为兼容 fetch 的 Origin 可能为 null/空（same-origin），若无 Origin 则仅依赖 webContentsId + urlOrigin 已足够
-        // 此处若 candidateOrigin 存在但不在白名单，则拒绝注入
-        if (!candidateOk && candidateOrigin !== "null" && candidateOrigin !== "") {
-          // 额外检查：若 candidateOrigin 是 apiOrigin 自身（同源请求），也视为可信（fetch 到 127.0.0.1 时 Origin 可能为 apiOrigin）
-          if (candidateOrigin !== apiOrigin && candidateOrigin !== `${apiOrigin}/`) {
-            callback({});
-            return;
-          }
-        }
-      }
-      // 4. 注入 capability（仅本次 launch 的随机值，Renderer JS 永远不可见）
-      const newHeaders = { ...details.requestHeaders, "x-classflow-capability": apiCapability };
-      callback({ requestHeaders: newHeaders });
-    } catch {
-      callback({});
-    }
-  });
+    },
+    () => trustedRendererOrigins
+  );
 
   // 最大化状态同步给渲染进程（TitleBar 切换 最大化/还原 图标）
   mainWindow.on("maximize", () => mainWindow?.webContents.send("window:maximized-changed", true));

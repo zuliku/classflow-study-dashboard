@@ -19,6 +19,7 @@
     "test:terminal:live": "vitest run tests/aiOpenCodeGoTerminalSmoke.test.ts tests/aiOpenCodeGoTerminalInteractiveSmoke.test.ts",
     "test:docx:fixtures": "vitest run scripts/docx-compat/generate-fixtures.test.ts",
     "test:docx:openxml": "node scripts/docx-compat/validate-openxml.mjs",
+    "verify:preload-artifact": "node scripts/verify-preload-artifact.mjs",
     "pack:win": "electron-vite build && electron-builder --win nsis",
     "security:secrets": "node scripts/check-secrets.mjs"
   },

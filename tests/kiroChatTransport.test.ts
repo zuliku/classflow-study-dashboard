@@ -14,11 +14,11 @@ describe("Kiro Chat transport — Task 16D Phase 17/18/19", () => {
   });
 
   it("webRequest injection preserves ReadableStream/AbortSignal for continuation and Stop", () => {
-    const mainSrc = fs.readFileSync(path.join(process.cwd(), "src/main/index.ts"), "utf8");
+    const helper = fs.readFileSync(path.join(process.cwd(), "src/main/security/localApiCapability.ts"), "utf8");
     // Injection only adds header, does not consume body or signal
-    expect(mainSrc).toContain("x-classflow-capability");
-    expect(mainSrc).not.toContain("ReadableStream");
-    expect(mainSrc).not.toContain("AbortSignal");
+    expect(helper).toContain("x-classflow-capability");
+    expect(helper).not.toContain("ReadableStream");
+    expect(helper).not.toContain("AbortSignal");
     // Kiro chat must support tool continuation and Stop (via useChat + chat.stop)
     const chatSrc = fs.readFileSync(path.join(process.cwd(), "hooks/useKiroChat.ts"), "utf8");
     expect(chatSrc).toContain("DefaultChatTransport");

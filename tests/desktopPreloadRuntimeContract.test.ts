@@ -3,19 +3,6 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 
 describe("Desktop preload runtime contract — Task 16D Phase 4/5", () => {
-  it("out/preload/index.cjs exists (CJS) and index.mjs does not", () => {
-    const cjs = path.join(process.cwd(), "out/preload/index.cjs");
-    const mjs = path.join(process.cwd(), "out/preload/index.mjs");
-    expect(fs.existsSync(cjs)).toBe(true);
-    expect(fs.existsSync(mjs)).toBe(false);
-    const content = fs.readFileSync(cjs, "utf8");
-    expect(content).toContain("contextBridge");
-    expect(content).toContain("ipcRenderer");
-    // CJS should use require, not import
-    expect(content).toContain('require("electron")');
-    expect(content).not.toContain('import { contextBridge');
-  });
-
   it("Main preload path points to index.cjs", () => {
     const src = fs.readFileSync(path.join(process.cwd(), "src/main/index.ts"), "utf8");
     expect(src).toContain('preload/index.cjs');
