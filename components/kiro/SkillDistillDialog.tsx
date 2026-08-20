@@ -30,12 +30,19 @@ export function SkillDistillDialog({ open, onOpenChange, trace, onSaved }: Skill
     setError(null);
     try {
       const { useAISettingsStore } = await import("@/store/useAISettingsStore");
-      const { provider, model } = useAISettingsStore.getState();
+      const { getSessionApiKey } = await import("@/lib/ai/sessionKeys");
+      const { provider, model, custom } = useAISettingsStore.getState();
+      const apiKey = getSessionApiKey(provider as never);
+      if (!apiKey) {
+        setError("请先在 Kiro 设置中配置 API Key");
+        setLoading(false);
+        return;
+      }
       // 通过 ClassFlow Local API 调用 Server-side Distill via window.classflowDesktop.api.request
       const res = await (window as unknown as { classflowDesktop: { api: { request: (path: string, init?: RequestInit) => Promise<Response> } } }).classflowDesktop.api.request("/api/ai/skills/distill", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ trace, provider, model }),
+        body: JSON.stringify({ trace, provider, model, customConfig: custom, apiKey }),
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({ message: res.statusText }));
