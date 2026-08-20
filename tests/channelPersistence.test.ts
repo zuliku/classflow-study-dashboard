@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";
@@ -32,9 +32,15 @@ describe("channelPersistence", () => {
       const filePath = path.join(base, "channels", "channels.json");
       if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
     } catch {}
+    // Mock fs.open to succeed by default (avoid Windows EPERM on fsync)
+    vi.spyOn(fs.promises, "open").mockImplementation(async () => ({ sync: async () => {}, close: async () => {} } as never));
     vault = new SecretVault({ store: new InMemorySecretStore(), safeStorage: new MockSafeStorage(true) });
     vi.spyOn(secretRuntime, "getRuntimeSecretVault").mockReturnValue(vault as never);
     manager = new ChannelManager(new ChannelInboxSink());
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
   it("add persists credentialRef not secret, atomic", async () => {
@@ -106,5 +112,33 @@ describe("channelPersistence", () => {
     expect(() => vault.resolveSecretForProvider(credentialRef, "qq-bot")).not.toThrow();
     await manager.removeChannel(cfg2.id);
     expect(() => vault.resolveSecretForProvider(credentialRef, "qq-bot")).toThrow();
+  });
+
+  it("fsync failure => PERSISTENCE_FAILED and rollback", async () => {
+    const { credentialRef } = vault.createCredential({ provider: "qq-bot", label: "bot", secret: "s" });
+    await manager.addQQChannel({ displayName: "Bot1", appId: "111", credentialRef });
+    expect(manager.listConfigs().length).toBe(1);
+    const { credentialRef: cred2 } = vault.createCredential({ provider: "qq-bot", label: "bot2", secret: "s2" });
+    vi.spyOn(fs.promises, "open").mockImplementationOnce(async () => ({ sync: async () => { throw new Error("fsync failed"); }, close: async () => {} } as never));
+    await expect(manager.addQQChannel({ displayName: "Bot2", appId: "222", credentialRef: cred2 })).rejects.toMatchObject({ code: "PERSISTENCE_FAILED" });
+    expect(manager.listConfigs().length).toBe(1);
+  });
+
+  it("close failure => PERSISTENCE_FAILED and rollback", async () => {
+    const { credentialRef } = vault.createCredential({ provider: "qq-bot", label: "bot", secret: "s" });
+    await manager.addQQChannel({ displayName: "Bot1", appId: "111", credentialRef });
+    const { credentialRef: cred2 } = vault.createCredential({ provider: "qq-bot", label: "bot2", secret: "s2" });
+    vi.spyOn(fs.promises, "open").mockImplementationOnce(async () => ({ sync: async () => {}, close: async () => { throw new Error("close failed"); } } as never));
+    await expect(manager.addQQChannel({ displayName: "Bot2", appId: "222", credentialRef: cred2 })).rejects.toMatchObject({ code: "PERSISTENCE_FAILED" });
+    expect(manager.listConfigs().length).toBe(1);
+  });
+
+  it("rename failure => PERSISTENCE_FAILED and rollback", async () => {
+    const { credentialRef } = vault.createCredential({ provider: "qq-bot", label: "bot", secret: "s" });
+    await manager.addQQChannel({ displayName: "Bot1", appId: "111", credentialRef });
+    const { credentialRef: cred2 } = vault.createCredential({ provider: "qq-bot", label: "bot2", secret: "s2" });
+    vi.spyOn(fs.promises, "rename").mockRejectedValueOnce(new Error("rename failed") as never);
+    await expect(manager.addQQChannel({ displayName: "Bot2", appId: "222", credentialRef: cred2 })).rejects.toMatchObject({ code: "PERSISTENCE_FAILED" });
+    expect(manager.listConfigs().length).toBe(1);
   });
 });

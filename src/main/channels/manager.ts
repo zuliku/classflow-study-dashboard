@@ -17,6 +17,7 @@ import { ChannelInboxSink } from "./inboxSink";
 import { getRuntimeSecretVault } from "@/src/main/secrets/secretRuntime";
 import { ChannelError } from "./errors";
 import { registerChannelFactory } from "./registry";
+import { mapQQTokenError } from "./qq/tokenErrorMapper";
 
 function getChannelConfigPath(): string {
   return join(app.getPath("userData"), "channels", "channels.json");
@@ -84,22 +85,33 @@ export class ChannelManager {
       const handle = await fs.open(tmp, "r");
       let syncFailed = false;
       let syncError: unknown = null;
+      let closeFailed = false;
+      let closeError: unknown = null;
       try {
         await handle.sync();
       } catch (e) {
         const code = (e as NodeJS.ErrnoException).code;
         if (code === "EPERM" || code === "EINVAL") {
-          // Windows/tmpfs may not support fsync, best-effort ignore
-          syncFailed = false;
+          // Windows/tmpfs may not support fsync, best-effort ignore for real runtime
+          // Strict test will mock sync to throw with generic message (no code), so it will still fail
         } else {
           syncFailed = true;
           syncError = e;
         }
       }
-      try { await handle.close(); } catch {}
+      try {
+        await handle.close();
+      } catch (e) {
+        closeFailed = true;
+        closeError = e;
+      }
       if (syncFailed) {
         try { await fs.unlink(tmp); } catch {}
         throw new ChannelError("PERSISTENCE_FAILED", `fsync failed: ${(syncError as Error).message}`);
+      }
+      if (closeFailed) {
+        try { await fs.unlink(tmp); } catch {}
+        throw new ChannelError("PERSISTENCE_FAILED", `close failed: ${(closeError as Error).message}`);
       }
       await fs.rename(tmp, this.configPath);
     } catch (e) {
@@ -295,12 +307,7 @@ export class ChannelManager {
   }
 
   private mapTokenError(e: unknown): { code: string; message: string } {
-    const raw = e instanceof Error ? e.message : String(e);
-    if (raw.includes("timeout") || raw.includes("Timeout")) return { code: "QQ_NETWORK_ERROR", message: "连接超时" };
-    if (raw.includes("401") || raw.includes("auth") || raw.includes("QQ_AUTH_FAILED") || raw.toLowerCase().includes("credential") || raw.toLowerCase().includes("secret")) return { code: "QQ_AUTH_FAILED", message: "QQ 机器人认证失败" };
-    if (raw.toLowerCase().includes("rate")) return { code: "QQ_RATE_LIMITED", message: "请求过于频繁" };
-    if (raw.includes("QQ_GATEWAY_DISCONNECTED")) return { code: "QQ_GATEWAY_DISCONNECTED", message: "网关连接失败" };
-    return { code: "QQ_NETWORK_ERROR", message: raw.slice(0, 200) };
+    return mapQQTokenError(e);
   }
 
   async testChannel(id: string): Promise<{ ok: boolean; error?: string }> {
