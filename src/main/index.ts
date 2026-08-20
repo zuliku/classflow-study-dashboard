@@ -1,12 +1,14 @@
 import { app, BrowserWindow, shell, protocol, net, ipcMain } from "electron";
 import { join, normalize, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { randomUUID } from "node:crypto";
 import { startApiServer, installPdfFontEnv, ApiServer } from "./httpServer";
 import { registerDesktopBridgeIpc } from "./desktopBridge";
 import { buildClassFlowWebPreferences } from "@/lib/security/electronConfig";
 import { decideNavigation } from "@/lib/security/navigation";
 import { getCspHeader } from "@/lib/security/csp";
 import { validateIpcSender } from "@/lib/security/ipcSender";
+import { registerSecretIpc } from "./secrets/secretIpc";
 
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
 
@@ -30,7 +32,7 @@ function getAllowedOrigins(apiBase: string): { allowedApiOrigin: string; allowed
   return { allowedApiOrigin, allowedDevOrigin };
 }
 
-function createWindow(apiBase: string): void {
+function createWindow(apiBase: string, apiCapability: string): void {
   const { allowedApiOrigin, allowedDevOrigin } = getAllowedOrigins(apiBase);
 
   mainWindow = new BrowserWindow({
@@ -47,6 +49,7 @@ function createWindow(apiBase: string): void {
     webPreferences: buildClassFlowWebPreferences({
       preloadPath: join(__dirname, "../preload/index.mjs"),
       apiBase,
+      apiCapability,
     }),
   });
 
@@ -131,9 +134,10 @@ function validateWindowSender(channel: string, sender: Electron.WebContents, api
 }
 
 app.whenReady().then(async () => {
+  const apiCapability = randomUUID();
   installPdfFontEnv();
   try {
-    apiServer = await startApiServer();
+    apiServer = await startApiServer({ capability: apiCapability });
   } catch (err) {
     console.error("[classflow] 本地 API server 启动失败:", err);
     app.quit();
@@ -169,6 +173,11 @@ app.whenReady().then(async () => {
     isTrustedSender,
   });
 
+  // SecretVault — 仅暴露 create/replace/delete/list，且受 sender validation 保护
+  registerSecretIpc({
+    validateSender: (channel, event) => validateWindowSender(channel, event.sender, apiBase),
+  });
+
   // app:// → out/renderer 静态资源（路径穿越防护：仅允许 renderer 目录内文件）
   protocol.handle("app", (request) => {
     const { pathname } = new URL(request.url);
@@ -180,9 +189,9 @@ app.whenReady().then(async () => {
     return net.fetch(pathToFileURL(target).toString());
   });
 
-  createWindow(apiBase);
+  createWindow(apiBase, apiCapability);
   app.on("activate", () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow(apiBase);
+    if (BrowserWindow.getAllWindows().length === 0) createWindow(apiBase, apiCapability);
   });
 });
 

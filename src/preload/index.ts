@@ -7,6 +7,16 @@ function resolveApiBase(): string {
   return arg ? arg.slice(prefix.length) : "";
 }
 
+/** 主进程通过 additionalArguments 注入 per-launch capability（随机 token，Renderer 不直接暴露给业务组件） */
+function resolveApiCapability(): string {
+  const prefix = "--classflow-api-capability=";
+  const arg = process.argv.find((a) => a.startsWith(prefix));
+  return arg ? arg.slice(prefix.length) : "";
+}
+
+// 闭包保存 capability，不暴露到 window，统一通过 api.request 自动附加
+const apiCapability = resolveApiCapability();
+
 /**
  * Bridge IPC 调用封装：
  * - 主进程统一抛 Error（message 内 JSON 编码 { code, message? }）
@@ -78,6 +88,14 @@ const terminalBridge = {
   },
 };
 
+// Credentials Bridge — 仅允许受限的 4 个操作（创建/替换/删除/列表），不暴露明文读取
+const credentialsBridge = {
+  create: (input: unknown) => invokeBridge("bridge:credential:create", input),
+  replace: (input: unknown) => invokeBridge("bridge:credential:replace", input),
+  delete: (input: unknown) => invokeBridge("bridge:credential:delete", input),
+  list: (input: unknown) => invokeBridge("bridge:credential:list", input),
+};
+
 contextBridge.exposeInMainWorld("classflowDesktop", {
   version: 1,
   platform: "windows",
@@ -95,4 +113,18 @@ contextBridge.exposeInMainWorld("classflowDesktop", {
   },
   filesystem: filesystemBridge,
   terminal: terminalBridge,
+  credentials: credentialsBridge,
+  api: {
+    request: async (path: string, init?: RequestInit): Promise<Response> => {
+      const base = resolveApiBase();
+      const url = `${base}${path}`;
+      const headers = new Headers(init?.headers);
+      // per-launch capability 自动附加，不暴露给普通业务组件
+      if (apiCapability) {
+        headers.set("x-classflow-capability", apiCapability);
+      }
+      const mergedInit: RequestInit = { ...init, headers };
+      return fetch(url, mergedInit);
+    },
+  },
 });

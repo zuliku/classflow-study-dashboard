@@ -2,6 +2,7 @@ import { createServer, IncomingMessage, ServerResponse } from "node:http";
 import { pathToFileURL } from "node:url";
 import { join } from "node:path";
 import { app } from "electron";
+import { randomUUID } from "node:crypto";
 import { handleChat } from "@/app/api/ai/chat/route";
 import { handleCompact } from "@/app/api/ai/compact/route";
 import { handleTest } from "@/app/api/ai/test/route";
@@ -12,6 +13,7 @@ import { handleWebSearchStatus } from "@/app/api/ai/web-search/status/route";
 
 export interface ApiServer {
   port: number;
+  capability: string;
   close: () => Promise<void>;
 }
 
@@ -97,27 +99,73 @@ async function sendWebResponse(
   nodeRes.end();
 }
 
-export function startApiServer(): Promise<ApiServer> {
-  const CORS_HEADERS: Record<string, string> = {
-    "access-control-allow-origin": "*",
-    "access-control-allow-methods": "GET, POST, OPTIONS",
-    "access-control-allow-headers": "content-type",
-    "access-control-max-age": "600",
-  };
+/** 仅允许的 Origin：app://bundle（生产）与当前 ELECTRON_RENDERER_URL（开发） */
+function isTrustedOrigin(origin: string | undefined): boolean {
+  if (!origin) return false;
+  if (origin === "app://bundle") return true;
+  if (origin === "app://bundle/") return true;
+  if (origin.startsWith("app://bundle")) return false; // 仅允许精确 app://bundle
+  // ELECTRON_RENDERER_URL 为 dev 下 http://localhost:5173 等
+  const devOrigin = process.env.ELECTRON_RENDERER_URL;
+  if (devOrigin) {
+    if (origin === devOrigin) return true;
+    // 允许 dev origin 仅精确匹配，防止任意 localhost 端口被信任
+    if (origin === devOrigin.replace(/\/$/, "")) return true;
+  }
+  return false;
+}
 
+export function startApiServer(opts?: { capability?: string }): Promise<ApiServer> {
+  const expectedCapability = opts?.capability ?? randomUUID();
+
+  // 不再使用 Access-Control-Allow-Origin: *，改为按 Origin 白名单回显
   const server = createServer((req, res) => {
-    const url = new URL(req.url ?? "/", "http://127.0.0.1");
-    // 渲染进程 origin 为 file://（生产）/ http://localhost（dev）：一律跨源，
-    // 本地回环服务只服务本机窗口，CORS 全放行（无第三方网站可访问 127.0.0.1 随机端口响应）
-    res.setHeader("access-control-allow-origin", "*");
-    res.setHeader("access-control-allow-methods", CORS_HEADERS["access-control-allow-methods"]);
-    res.setHeader("access-control-allow-headers", CORS_HEADERS["access-control-allow-headers"]);
-    res.setHeader("access-control-max-age", CORS_HEADERS["access-control-max-age"]);
+    const origin = req.headers.origin as string | undefined;
+
+    // Origin 校验：仅允许 app://bundle 与当前 dev origin
+    if (origin !== undefined && !isTrustedOrigin(origin)) {
+      res.writeHead(403, { "content-type": "application/json" });
+      res.end(JSON.stringify({ code: "FORBIDDEN", message: "Invalid origin" }));
+      return;
+    }
+
+    // capability 校验：缺失或错误 → 401（不写日志避免泄漏）
+    const incomingCap = req.headers["x-classflow-capability"] as string | undefined;
+    if (req.method !== "OPTIONS") {
+      if (!incomingCap || incomingCap !== expectedCapability) {
+        res.writeHead(401, { "content-type": "application/json" });
+        res.end(JSON.stringify({ code: "UNAUTHORIZED", message: "Missing capability" }));
+        return;
+      }
+    } else {
+      // 预检同样校验 capability（若提供）
+      if (incomingCap && incomingCap !== expectedCapability) {
+        res.writeHead(401, { "content-type": "application/json" });
+        res.end(JSON.stringify({ code: "UNAUTHORIZED", message: "Invalid capability" }));
+        return;
+      }
+    }
+
+    const requestOrigin = origin && isTrustedOrigin(origin) ? origin : "app://bundle";
+    const corsHeaders: Record<string, string> = {
+      "access-control-allow-origin": requestOrigin,
+      "access-control-allow-methods": "GET, POST, OPTIONS",
+      "access-control-allow-headers": "content-type, x-classflow-capability",
+      "access-control-max-age": "600",
+      "vary": "Origin",
+    };
+
+    for (const [k, v] of Object.entries(corsHeaders)) {
+      res.setHeader(k, v);
+    }
+
     if (req.method === "OPTIONS") {
       res.writeHead(204);
       res.end();
       return;
     }
+
+    const url = new URL(req.url ?? "/", "http://127.0.0.1");
     const route = ROUTES.find((r) => r.method === req.method && r.path === url.pathname);
     if (!route) {
       res.writeHead(404, { "content-type": "application/json" });
@@ -127,7 +175,7 @@ export function startApiServer(): Promise<ApiServer> {
     const webReq = toWebRequest(req, res, url.toString());
     route
       .handler(webReq)
-      .then((webRes) => sendWebResponse(res, webRes, CORS_HEADERS))
+      .then((webRes) => sendWebResponse(res, webRes, corsHeaders))
       .catch((err) => {
         console.error(`[classflow-api] ${route.method} ${route.path} 失败:`, err);
         if (!res.headersSent) {
@@ -145,7 +193,7 @@ export function startApiServer(): Promise<ApiServer> {
       const address = server.address();
       const port = typeof address === "object" && address ? address.port : 0;
       console.log(`[classflow-api] local API server listening on http://127.0.0.1:${port}`);
-      resolve({ port, close: () => new Promise<void>((r) => server.close(() => r())) });
+      resolve({ port, capability: expectedCapability, close: () => new Promise<void>((r) => server.close(() => r())) });
     });
   });
 }

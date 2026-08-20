@@ -1,7 +1,10 @@
 /**
- * Permission 基础模型 — Task 04
- * 统一权限语义，供 Skill / MCP / Channel 共用；核心安全规则：remote-channel 永不获得 terminal/filesystem 直接写入等高危能力。
+ * Permission Model V2 — Task 06
+ * 核心不变量：Effective Permission = Origin Policy ∩ Agent Mode ∩ Extension Grant ∩ Tool Risk Policy, deny always wins.
+ * 远端 (remote-channel) 永远受限，Skill/MCP 不能成为提权器。
  */
+
+import type { KiroAgentMode } from "@/lib/ai/computer/types";
 
 export type Permission =
   | "read"
@@ -13,39 +16,33 @@ export type Permission =
   | "filesystem"
   | "filesystem-write";
 
-export type PermissionOrigin =
-  | "local-user"
-  | "skill"
-  | "mcp"
-  | "remote-channel";
+export type InvocationOrigin = "local-user" | "remote-channel";
 
-export type AgentMode = "plan" | "ask" | "workspace-auto";
+/** @deprecated 旧模型混淆 origin 与 actor，已拆分为 InvocationOrigin + CapabilityActor */
+export type PermissionOrigin = InvocationOrigin | "skill" | "mcp";
 
-/**
- * Deterministic permission resolution.
- * 输入：origin + 当前 agentMode + 请求权限
- * 输出：是否允许
- *
- * 安全不变量（必须测试）：
- * - remote-channel 无论任何 agentMode，都不能获得 terminal / filesystem / filesystem-write / silent destructive write
- * - remote-channel 只能 read / propose（+ 受限的 external-side-effect? 本任务禁止）
- * - workspace-auto 不能覆盖 remote restriction
- */
+export type CapabilityActor =
+  | { kind: "native" }
+  | { kind: "skill"; skillId: string }
+  | { kind: "mcp"; connectionId: string; toolName?: string };
+
+export type AgentMode = KiroAgentMode; // "plan" | "guided" | "workspace-auto"
 
 const REMOTE_DENIED: ReadonlySet<Permission> = new Set<Permission>([
   "terminal",
   "filesystem",
   "filesystem-write",
   "delete",
-  // write 仅允许通过 proposal（propose），不允许直接 silent write
   "write",
   "external-side-effect",
 ]);
 
 export interface PermissionRequest {
-  origin: PermissionOrigin;
+  origin: InvocationOrigin | PermissionOrigin;
   permission: Permission;
   agentMode?: AgentMode;
+  actor?: CapabilityActor;
+  actorGranted?: boolean;
 }
 
 export interface PermissionResolution {
@@ -54,49 +51,94 @@ export interface PermissionResolution {
 }
 
 /**
- * 核心策略：pure function，无 I/O，无随机性。
+ * 分层校验：
+ * 1. Origin Policy（remote 最严格）
+ * 2. Extension Grant（skill/mcp 需授权）
+ * 3. Agent Mode（plan 最严格，guided 中等，workspace-auto 最宽）
+ * 4. deny always wins
  */
 export function resolvePermission(req: PermissionRequest): PermissionResolution {
-  const { origin, permission } = req;
+  // 兼容旧 PermissionOrigin 的 skill/mcp：将它们映射为 local-user + 对应 actor
+  let origin: InvocationOrigin | string = req.origin as string;
+  let actor: CapabilityActor | undefined = req.actor;
+  const permission = req.permission;
+  const agentMode = req.agentMode;
+  const actorGranted = (req as PermissionRequest).actorGranted;
 
-  // remote-channel 严格受限：即使 workspace-auto 也不提升
+  if (origin === "skill" || origin === "mcp") {
+    if (!actor) {
+      actor = origin === "skill" ? { kind: "skill", skillId: "legacy-skill" } : { kind: "mcp", connectionId: "legacy-mcp" };
+    }
+    origin = "local-user";
+  }
+
+  // Layer 1: Origin Policy
   if (origin === "remote-channel") {
     if (REMOTE_DENIED.has(permission)) {
       return { allowed: false, reason: `remote-channel denied: ${permission}` };
     }
-    // 仅允许 read / propose
-    if (permission === "read" || permission === "propose") {
-      return { allowed: true, reason: `remote-channel allowed: ${permission}` };
+    if (permission !== "read" && permission !== "propose") {
+      return { allowed: false, reason: `remote-channel denied: ${permission} (not in allowlist)` };
     }
-    // 其他未明确允许的也拒绝（fail closed）
-    return { allowed: false, reason: `remote-channel denied: ${permission} (not in allowlist)` };
+    // Origin allows read/propose, but still subject to Extension Grant and Agent Mode (deny wins)
+    // Fall through to next layers; if they deny, result is deny.
+  } else if (origin !== "local-user") {
+    return { allowed: false, reason: `unknown origin: ${origin}` };
   }
 
-  // local-user：完全信任（UI 已授权）
-  if (origin === "local-user") {
-    return { allowed: true, reason: `local-user allowed: ${permission}` };
+  // Layer 2: Extension Grant — 仅当 actor 为 skill/mcp 且显式 actorGranted===false 时拒绝
+  if (actor && (actor.kind === "skill" || actor.kind === "mcp")) {
+    if (actorGranted === false) {
+      return { allowed: false, reason: `${actor.kind} grant denied: ${permission}` };
+    }
   }
 
-  // skill / mcp：目前与 local-user 同权，但保留未来按 skill/mcp 细粒度控制的扩展点
-  // 本任务不实现 MCP 网络连接，仅定义类型；此处允许全部，后续再收敛
-  if (origin === "skill" || origin === "mcp") {
-    // 甚至 skill/mcp 的 terminal/filesystem 仍需用户在 Agent Mode 中授权；
-    // 本基础模型先允许，未来接入 Tool Router 时再按 agentMode 细化
-    return { allowed: true, reason: `${origin} allowed: ${permission}` };
+  // Layer 3: Agent Mode Policy（仅当显式提供 agentMode 时才限制；兼容旧 local-user 无 mode 时全部允许）
+  if (agentMode) {
+    if (agentMode !== "plan" && agentMode !== "guided" && agentMode !== "workspace-auto") {
+      return { allowed: false, reason: `unknown agentMode: ${agentMode}` };
+    }
+    if (agentMode === "plan") {
+      // plan：仅允许 read / propose
+      if (permission !== "read" && permission !== "propose") {
+        return { allowed: false, reason: `plan denied: ${permission}` };
+      }
+    } else if (agentMode === "guided") {
+      // guided：拒绝高危 terminal / filesystem-write（plan 已拒绝更多）
+      if (permission === "terminal" || permission === "filesystem-write") {
+        return { allowed: false, reason: `guided denied: ${permission}` };
+      }
+      // guided 对 terminal/filesystem-write 之外允许，后续 workspace-auto 全部允许
+    } else if (agentMode === "workspace-auto") {
+      // 最宽松：不额外拒绝，依赖 Origin 和 Grant 已校验
+    }
   }
 
-  return { allowed: false, reason: `unknown origin: ${origin}` };
+  // 全部层通过 → allow
+  if (origin === "remote-channel") {
+    return { allowed: true, reason: `remote-channel allowed: ${permission}` };
+  }
+  if (actor) {
+    return { allowed: true, reason: `${actor.kind} allowed: ${permission}` };
+  }
+  return { allowed: true, reason: `${origin} allowed: ${permission}` };
 }
 
-/** 批量检查 */
+/** 批量检查 — 兼容旧签名 (origin, permissions, agentMode string) 与新签名 (origin, permissions, {agentMode, actor, actorGranted}) */
 export function resolvePermissions(
-  origin: PermissionOrigin,
+  origin: InvocationOrigin | PermissionOrigin,
   permissions: Permission[],
-  agentMode?: AgentMode
+  agentModeOrOpts?: AgentMode | string | { agentMode?: AgentMode; actor?: CapabilityActor; actorGranted?: boolean }
 ): Record<Permission, boolean> {
   const result = {} as Record<Permission, boolean>;
+  let opts: { agentMode?: AgentMode; actor?: CapabilityActor; actorGranted?: boolean } = {};
+  if (typeof agentModeOrOpts === "string") {
+    opts = { agentMode: agentModeOrOpts as AgentMode };
+  } else if (typeof agentModeOrOpts === "object" && agentModeOrOpts !== null) {
+    opts = agentModeOrOpts as typeof opts;
+  }
   for (const p of permissions) {
-    result[p] = resolvePermission({ origin, permission: p, agentMode }).allowed;
+    result[p] = resolvePermission({ origin, permission: p, agentMode: opts.agentMode, actor: opts.actor, actorGranted: opts.actorGranted }).allowed;
   }
   return result;
 }

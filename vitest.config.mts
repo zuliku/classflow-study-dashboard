@@ -50,7 +50,10 @@ export default defineConfig({
       "tests/aiOpenCodeGoTerminalInteractiveSmoke.test.ts",
       "tests/extensionsRegistry.test.ts",
       "tests/extensionsPermissions.test.ts",
+      "tests/permissionModelV2.test.ts",
       "tests/secretVault.test.ts",
+      "tests/secretVaultProduction.test.ts",
+      "tests/apiBoundary.test.ts",
       "tests/securityBaseline.test.ts",
       "tests/settingsRegistry.test.ts",
       // Kiro Sidecar Capsule V1 — jsdom via @vitest-environment

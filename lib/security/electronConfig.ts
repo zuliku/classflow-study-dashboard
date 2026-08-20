@@ -22,6 +22,7 @@ export const SECURE_WINDOW_OPTIONS = {
 export function buildClassFlowWebPreferences(opts: {
   preloadPath: string;
   apiBase: string;
+  apiCapability?: string;
 }): {
   preload: string;
   contextIsolation: true;
@@ -32,6 +33,10 @@ export function buildClassFlowWebPreferences(opts: {
   enableWebSQL: false;
   additionalArguments: string[];
 } {
+  const args = [`--classflow-api-base=${opts.apiBase}`];
+  if (opts.apiCapability) {
+    args.push(`--classflow-api-capability=${opts.apiCapability}`);
+  }
   return {
     preload: opts.preloadPath,
     contextIsolation: true,
@@ -40,7 +45,7 @@ export function buildClassFlowWebPreferences(opts: {
     webSecurity: true,
     allowRunningInsecureContent: false,
     enableWebSQL: false,
-    additionalArguments: [`--classflow-api-base=${opts.apiBase}`],
+    additionalArguments: args,
   };
 }
 
