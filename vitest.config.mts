@@ -68,6 +68,7 @@ export default defineConfig({
       "tests/workflowTurnSelection.test.ts",
       "tests/workflowDistillIntegration.test.ts",
       "tests/channelRegistry.test.ts",
+      "tests/channelBrandPresentation.test.ts",
       "tests/channelConfig.test.ts",
       "tests/qqNormalize.test.ts",
       "tests/qqDedupe.test.ts",
@@ -109,6 +110,9 @@ export default defineConfig({
       "tests/kiroSendControl.test.tsx",
       "tests/kiroMotionEmptyIntro.test.tsx",
       "tests/motionPreference.test.ts",
+      "tests/titleBarWindowControls.test.tsx",
+      "tests/inboxPanelLifecycle.test.tsx",
+      "tests/extensionsSettingsLayout.test.tsx",
     ],
   },
 });
