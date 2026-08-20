@@ -54,6 +54,14 @@ export class ApprovalStore {
     }
   }
 
+  cancel(id: string): boolean {
+    const a = this.get(id);
+    if (!a) return false;
+    if (a.used) return false;
+    this.approvals.delete(id);
+    return true;
+  }
+
   // For tests
   __clearForTest(): void { this.approvals.clear(); }
   __getForTest(id: string): ChannelSendApproval | undefined { return this.approvals.get(id); }

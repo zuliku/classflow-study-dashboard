@@ -92,6 +92,7 @@ export default defineConfig({
       "tests/qqOutboundIdempotency.test.ts",
       "tests/qqOutboundAntiLoop.test.ts",
       "tests/qqOutboundIpc.test.ts",
+      "tests/qqReplyContextPropagation.test.ts",
       "tests/settingsRegistry.test.ts",
       // Kiro Sidecar Capsule V1 — jsdom via @vitest-environment
       "tests/kiroSidecarShell.test.tsx",

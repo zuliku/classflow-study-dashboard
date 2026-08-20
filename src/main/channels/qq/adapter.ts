@@ -242,17 +242,9 @@ export class QQChannelAdapter implements ChannelAdapter {
   async sendReply(target: { conversationId: string; conversationType: "direct" | "group"; inboundMessageId: string }, text: string): Promise<{ messageId?: string; timestamp?: string }> {
     if (!target.inboundMessageId) throw new ChannelError("QQ_REPLY_CONTEXT_INVALID" as never, "Missing inboundMessageId, cannot send as passive reply");
     if (!this.transport) throw new ChannelError("QQ_GATEWAY_DISCONNECTED", "Not connected");
-    const t = this.transport as unknown as { sendReply?: (target: unknown, text: string) => Promise<unknown>; sendText?: (target: unknown, text: string) => Promise<unknown> };
-    if (typeof t.sendReply === "function") {
-      return await t.sendReply(target, text) as { messageId?: string; timestamp?: string };
-    }
-    if (typeof t.sendText === "function") {
-      // Fallback for real SDK: construct target with msgId
-      const scope = target.conversationType === "group" ? "group" : "c2c";
-      const result = await t.sendText({ scope, targetId: target.conversationId, msgId: target.inboundMessageId }, text) as { id?: string; messageId?: string; timestamp?: string };
-      return { messageId: result?.messageId ?? result?.id, timestamp: result?.timestamp };
-    }
-    throw new ChannelError("QQ_GATEWAY_DISCONNECTED", "Transport send not available");
+    const t = this.transport as unknown as { sendReply: (target: unknown, text: string) => Promise<unknown> };
+    if (typeof t.sendReply !== "function") throw new ChannelError("QQ_GATEWAY_DISCONNECTED", "Transport sendReply not available");
+    return await t.sendReply(target, text) as { messageId?: string; timestamp?: string };
   }
 
   // For tests: expose dedupe size

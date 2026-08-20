@@ -54,7 +54,6 @@ describe("qqOutboundAntiLoop", () => {
     (adapter as unknown as { transport: unknown }).transport = fakeTransport as never;
     (adapter as unknown as { state: string }).state = "connected";
     (manager as unknown as { adapters: Map<string, unknown> }).adapters.set(cfg.id, adapter);
-    console.log("after set, health state", adapter.getHealth().state);
 
     const store = createTestInboxStore();
     const sink = new ChannelInboxSink({ addItem: async (item) => store.getState().addItem(item as never) } as never);
@@ -67,17 +66,8 @@ describe("qqOutboundAntiLoop", () => {
     (testAdapter as unknown as { state: string }).state = "connected";
 
     const ctx = await getReplyContextStore().create({ channel: "qq-bot", sourceAccountId: cfg.id, conversationId: "c1", conversationType: "direct", inboundMessageId: "msg1" });
-    console.log("ctx sourceAccountId", ctx.sourceAccountId, "cfg.id", cfg.id, "manager has", manager.getConfig(ctx.sourceAccountId));
-    console.log("getChannelManager has", (await import("@/src/main/channels/manager")).getChannelManager().getConfig(ctx.sourceAccountId));
-    console.log("adapter health", (manager as unknown as { adapters: Map<string, { getHealth: () => { state: string } }> }).adapters.get(cfg.id)?.getHealth());
     const prep = await prepareReply({ replyContextId: ctx.replyContextId, text: "reply hello" });
-    console.log("prep", prep);
-    try {
-      await confirmReply({ approvalId: prep.approvalId });
-    } catch (e) {
-      console.log("confirm error", e);
-      throw e;
-    }
+    await confirmReply({ approvalId: prep.approvalId });
     expect(fakeTransport.sendReplyCalls.length).toBe(1);
 
     const selfMsg = { channel: "qq-bot" as const, accountId: cfg.id, externalMessageId: "echo1", conversationId: "c1", conversationType: "direct" as const, senderId: "botSelf", text: "reply hello", receivedAt: Date.now(), isSelf: true };

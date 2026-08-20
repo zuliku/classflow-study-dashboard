@@ -61,19 +61,25 @@ export class ReplyContextStore {
   private async persistAtomic(): Promise<void> {
     if (this.configPath === ":memory:") return;
     let tmp: string | null = null;
+    let handle: fs.FileHandle | null = null;
     try {
       ensureDir();
       const data = JSON.stringify({ contexts: Array.from(this.contexts.values()) }, null, 2);
       tmp = join(dirname(this.configPath), `.reply-tmp-${randomUUID().slice(0,8)}`);
       await fs.writeFile(tmp, data, "utf8");
-      const handle = await fs.open(tmp, "r");
-      try { await handle.sync(); } catch (e) {
+      handle = await fs.open(tmp, "r");
+      try {
+        await handle.sync();
+      } catch (e) {
         const code = (e as NodeJS.ErrnoException).code;
         if (code !== "EPERM" && code !== "EINVAL") throw e;
       }
-      try { await handle.close(); } catch {}
+      await handle.close();
+      handle = null;
       await fs.rename(tmp, this.configPath);
+      tmp = null;
     } catch (e) {
+      if (handle) try { await handle.close(); } catch {}
       if (tmp) try { await fs.unlink(tmp); } catch {}
       throw new ChannelError("PERSISTENCE_FAILED", `reply context persist failed: ${(e as Error).message}`);
     }
@@ -88,7 +94,6 @@ export class ReplyContextStore {
       createdAt: now,
       expiresAt: now + this.ttlMs,
     };
-    // Only allow listed fields (no secret, no text)
     const sanitized: ChannelReplyContext = {
       replyContextId: ctx.replyContextId,
       channel: "qq-bot",
@@ -99,9 +104,15 @@ export class ReplyContextStore {
       createdAt: ctx.createdAt,
       expiresAt: ctx.expiresAt,
     };
+    const backup = new Map(this.contexts);
     this.contexts.set(sanitized.replyContextId, sanitized);
     this.enforceMax();
-    await this.persistAtomic();
+    try {
+      await this.persistAtomic();
+    } catch (e) {
+      this.contexts = backup;
+      throw e;
+    }
     return sanitized;
   }
 
@@ -116,6 +127,7 @@ export class ReplyContextStore {
   }
 
   async deleteForAccount(sourceAccountId: string): Promise<void> {
+    const backup = new Map(this.contexts);
     let changed = false;
     for (const [id, c] of this.contexts) {
       if (c.sourceAccountId === sourceAccountId) {
@@ -123,7 +135,13 @@ export class ReplyContextStore {
         changed = true;
       }
     }
-    if (changed) await this.persistAtomic().catch(()=>{});
+    if (!changed) return;
+    try {
+      await this.persistAtomic();
+    } catch (e) {
+      this.contexts = backup;
+      throw e;
+    }
   }
 
   expireSync(): void {

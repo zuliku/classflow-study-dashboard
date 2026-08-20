@@ -2,9 +2,10 @@
 
 import { useEffect } from "react";
 import { useInboxStore } from "@/store/useInboxStore";
+import { inboxRawPayloadToInput } from "@/lib/inbox/fromRawPayload";
 
 /**
- * Renderer bridge for Main → Renderer inbox external items (Task 13C reliable queue)
+ * Renderer bridge for Main → Renderer inbox external items (Task 14B reliable queue)
  * Must be mounted once at stable root, does not create second inbox DB.
  */
 export function useInboxChannelBridge(): void {
@@ -23,6 +24,7 @@ export function useInboxChannelBridge(): void {
         receivedAt?: number;
         attachments?: unknown[];
         sourceAccountId?: string;
+        replyContextId?: string;
       };
       const deliveryId = envelope?.deliveryId as string | undefined;
       if (!payload || payload.source !== "qq-bot") {
@@ -30,17 +32,8 @@ export function useInboxChannelBridge(): void {
         return;
       }
       try {
-        useInboxStore.getState().addItem({
-          source: "qq-bot",
-          externalMessageId: payload.externalMessageId,
-          conversationId: payload.conversationId,
-          senderDisplay: payload.senderDisplay,
-          subject: payload.subject,
-          text: payload.text ?? "",
-          receivedAt: payload.receivedAt ?? Date.now(),
-          attachments: (payload.attachments as never) ?? [],
-          sourceAccountId: (payload as unknown as { sourceAccountId?: string }).sourceAccountId,
-        } as never);
+        const input = inboxRawPayloadToInput(payload as never);
+        useInboxStore.getState().addItem(input);
         if (deliveryId) void bridge.ack(deliveryId).catch(() => {});
       } catch {
         // addItem threw, do not ack so it will be resent on reload

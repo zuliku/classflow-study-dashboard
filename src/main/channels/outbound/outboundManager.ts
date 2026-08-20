@@ -77,34 +77,10 @@ export async function confirmReply(input: { approvalId: string }): Promise<{ ok:
   const consumed = approvalStore.consume(approvalId);
   if (!consumed) throw new ChannelError("CHANNEL_SEND_APPROVAL_USED" as never, "Approval already used");
 
-  // Find channel config via sourceAccountId
+  // Find channel config via sourceAccountId (via outboundManager's manager, not renderer-provided)
   const channelManager = getChannelManager();
   const cfg = channelManager.getConfig(ctx.sourceAccountId);
   if (!cfg) throw new ChannelError("CHANNEL_NOT_FOUND" as never, "Channel not found for reply context");
-
-  // If disconnected, try to connect (resolve secret, connect)
-  const adapter = channelManager.__getAdapterForTest(ctx.sourceAccountId);
-  const health = adapter?.getHealth();
-  if (!adapter || health?.state !== "connected") {
-    try {
-      await channelManager.connect(ctx.sourceAccountId);
-    } catch (e) {
-      // Audit failed
-      const auditStore = getOutboundAuditStore();
-      auditStore.add({
-        outboundId: `out_${randomUUID().slice(0, 8)}`,
-        channel: "qq-bot",
-        sourceAccountId: ctx.sourceAccountId,
-        replyContextId: ctx.replyContextId,
-        textHash: approval.textHash,
-        textLength: approval.text.length,
-        attemptedAt: Date.now(),
-        status: "failed",
-        errorCode: (e as Error).message?.includes("QQ_AUTH_FAILED") ? "QQ_AUTH_FAILED" : "QQ_NETWORK_ERROR",
-      });
-      throw e;
-    }
-  }
 
   // Build target with msgId (must not be empty, no fallback) — already validated above, but double-check
   if (!ctx.inboundMessageId) {
@@ -187,12 +163,8 @@ export async function confirmReply(input: { approvalId: string }): Promise<{ ok:
 
 export async function cancelReply(input: { approvalId: string }): Promise<{ ok: boolean }> {
   const store = getApprovalStore();
-  const a = store.get(input.approvalId);
-  if (!a) throw new ChannelError("CHANNEL_SEND_APPROVAL_NOT_FOUND" as never, "Approval not found");
-  // Mark as used to prevent later confirm? Or just delete. For V1, we can just delete by consuming and not using.
-  // Instead, we just remove it by marking used and not sending.
-  // Simplest: delete from map by marking used
-  (store as unknown as { approvals: Map<string, unknown> }).approvals.delete(input.approvalId);
+  const ok = store.cancel(input.approvalId);
+  if (!ok) throw new ChannelError("CHANNEL_SEND_APPROVAL_NOT_FOUND" as never, "Approval not found or already used");
   return { ok: true };
 }
 

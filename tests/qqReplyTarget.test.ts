@@ -53,13 +53,9 @@ describe("qqReplyTarget", () => {
     (adapter as unknown as { transport: unknown }).transport = fakeTransport as never;
     (adapter as unknown as { state: string }).state = "connected";
     (manager as unknown as { adapters: Map<string, unknown> }).adapters.set(cfg.id, adapter);
-    console.log("adapter health", adapter.getHealth());
-    console.log("manager getConfig", manager.getConfig(cfg.id));
-    console.log("getChannelManager getConfig", (await import("@/src/main/channels/manager")).getChannelManager().getConfig(cfg.id));
     const ctx = await getReplyContextStore().create({ channel: "qq-bot", sourceAccountId: cfg.id, conversationId: "group_1", conversationType: "group", inboundMessageId: "msg_123" });
     const prep = await prepareReply({ replyContextId: ctx.replyContextId, text: "hello" });
     await confirmReply({ approvalId: prep.approvalId });
-    console.log("sendReplyCalls", fakeTransport.sendReplyCalls);
     expect(fakeTransport.sendReplyCalls[0].target.scope).toBe("group");
     expect(fakeTransport.sendReplyCalls[0].target.targetId).toBe("group_1");
     expect(fakeTransport.sendReplyCalls[0].target.msgId).toBe("msg_123");

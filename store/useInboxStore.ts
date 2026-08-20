@@ -47,6 +47,7 @@ export const useInboxStore = create<InboxState>()(
           dedupeKey,
           origin: "remote-channel",
           sourceAccountId: (input as { sourceAccountId?: string }).sourceAccountId,
+          replyContextId: (input as { replyContextId?: string }).replyContextId,
         };
         set((s) => ({ items: [item, ...s.items] }));
         return id;
@@ -87,6 +88,7 @@ export const useInboxStore = create<InboxState>()(
           dedupeKey: it.dedupeKey,
           origin: it.origin,
           sourceAccountId: it.sourceAccountId,
+          replyContextId: it.replyContextId,
         })),
       }),
       version: 1,
@@ -117,6 +119,7 @@ export function createTestInboxStore() {
         dedupeKey,
         origin: "remote-channel",
         sourceAccountId: (input as { sourceAccountId?: string }).sourceAccountId,
+        replyContextId: (input as { replyContextId?: string }).replyContextId,
       };
       set((s) => ({ items: [item, ...s.items] }));
       return id;

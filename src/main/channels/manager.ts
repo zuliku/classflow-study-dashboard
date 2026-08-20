@@ -8,7 +8,7 @@ import { promises as fs, existsSync, mkdirSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { app } from "electron";
 import { randomUUID } from "node:crypto";
-import type { ChannelHealth } from "./types";
+import type { ChannelHealth, ChannelState } from "./types";
 import type { ChannelType } from "./types";
 import type { QQChannelConfig } from "./qq/config";
 import { validateQQChannelConfig } from "./qq/config";
@@ -417,6 +417,13 @@ export class ChannelManager {
         vault.deleteCredential(credentialRef);
       } catch {}
     }
+    // Reply context cleanup: delete all contexts for this account, don't rollback channel on failure
+    try {
+      const { getReplyContextStore } = await import("./outbound/replyContextStore");
+      await getReplyContextStore().deleteForAccount(id);
+    } catch (e) {
+      console.warn(`[channel] reply context cleanup failed code=${(e as Error).message.slice(0,100)} accountId=${id.slice(0,8)}`);
+    }
   }
 
   async disconnectAll(): Promise<void> {
@@ -449,6 +456,17 @@ export class ChannelManager {
 
   __getAdapterForTest(id: string): QQChannelAdapter | undefined {
     return this.adapters.get(id) as QQChannelAdapter | undefined;
+  }
+
+  isConnected(id: string): boolean {
+    const adapter = this.adapters.get(id);
+    if (!adapter) return false;
+    return adapter.getState() === "connected";
+  }
+
+  getConnectionState(id: string): ChannelState | undefined {
+    const adapter = this.adapters.get(id);
+    return adapter?.getState();
   }
 
   __clearAllForTest(): void {

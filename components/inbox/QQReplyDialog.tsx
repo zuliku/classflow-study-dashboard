@@ -128,7 +128,7 @@ export function QQReplyDialog({ open, onOpenChange, item, onSent }: QQReplyDialo
           </div>
           <div>
             <h4 className="text-sm font-bold text-charcoal">回复到 QQ</h4>
-            <p className="text-[11px] text-sandrift">来源：QQ · {item.senderDisplay ?? "未知"} · {item.conversationId ? (item.conversationId.includes("group") ? "群聊" : "私聊") : ""}</p>
+            <p className="text-[11px] text-sandrift">来源：QQ · {item.senderDisplay ?? "未知"} · QQ 会话</p>
           </div>
         </div>
 
