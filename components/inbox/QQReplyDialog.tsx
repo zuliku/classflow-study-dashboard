@@ -2,9 +2,10 @@
 
 import React, { useState } from "react";
 import { Dialog } from "@/components/ui/Dialog";
-import { MessageSquare, Sparkles } from "lucide-react";
+import { Sparkles } from "lucide-react";
 import { useToastStore } from "@/store/useToastStore";
 import { useKiroReplyDraft } from "@/hooks/useKiroReplyDraft";
+import { ChannelBrandIcon } from "@/components/icons/ChannelBrandIcon";
 
 interface QQReplyDialogProps {
   open: boolean;
@@ -131,7 +132,7 @@ export function QQReplyDialog({ open, onOpenChange, item, onSent }: QQReplyDialo
       <Dialog open={open && !confirmOpen} onOpenChange={onOpenChange} overlayId="qq-reply" aria-label="回复到 QQ" className="w-[min(560px,calc(100vw-24px))] bg-surface border border-line rounded-2xl p-5 space-y-4 max-h-[85vh] overflow-y-auto">
         <div className="flex items-center gap-2.5">
           <div className="w-9 h-9 rounded-xl bg-pastel-mint border border-line flex items-center justify-center">
-            <MessageSquare className="w-4 h-4 text-charcoal" />
+            <ChannelBrandIcon source="qq-bot" size={18} />
           </div>
           <div>
             <h4 className="text-sm font-bold text-charcoal">回复到 QQ</h4>
