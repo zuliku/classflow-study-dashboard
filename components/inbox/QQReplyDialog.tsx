@@ -2,9 +2,9 @@
 
 import React, { useState } from "react";
 import { Dialog } from "@/components/ui/Dialog";
-import { MessageSquare } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { MessageSquare, Sparkles } from "lucide-react";
 import { useToastStore } from "@/store/useToastStore";
+import { useKiroReplyDraft } from "@/hooks/useKiroReplyDraft";
 
 interface QQReplyDialogProps {
   open: boolean;
@@ -28,7 +28,9 @@ export function QQReplyDialog({ open, onOpenChange, item, onSent }: QQReplyDialo
   const [approval, setApproval] = useState<{ approvalId: string; expiresAt: number; preview: { channel: string; conversationType: string; text: string } } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [tone, setTone] = useState<"natural" | "concise" | "formal" | "friendly">("natural");
   const pushToast = useToastStore((s) => s.pushToast);
+  const { generateDraft, cancel: cancelDraft, loading: draftLoading, error: draftError } = useKiroReplyDraft();
 
   React.useEffect(() => {
     if (open) {
@@ -36,8 +38,14 @@ export function QQReplyDialog({ open, onOpenChange, item, onSent }: QQReplyDialo
       setApproval(null);
       setError(null);
       setConfirmOpen(false);
+    } else {
+      cancelDraft();
     }
-  }, [open, item?.id]);
+  }, [open, item?.id, cancelDraft]);
+
+  React.useEffect(() => {
+    return () => cancelDraft();
+  }, [cancelDraft]);
 
   if (!item) return null;
 
@@ -138,9 +146,34 @@ export function QQReplyDialog({ open, onOpenChange, item, onSent }: QQReplyDialo
         </div>
 
         <div>
-          <label className="text-xs font-bold text-charcoal">回复正文 *</label>
+          <div className="flex items-center justify-between">
+            <label className="text-xs font-bold text-charcoal">回复正文 *</label>
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={async () => {
+                  if (!item) return;
+                  const draft = await generateDraft({ inboxItemId: item.id, message: item.text, senderDisplay: item.senderDisplay, tone });
+                  if (draft) setText(draft);
+                }}
+                disabled={draftLoading}
+                data-testid="qq-reply-generate"
+                className="h-7 px-3 bg-white border border-line text-charcoal text-xs font-bold rounded-lg hover:bg-alabaster flex items-center gap-1 disabled:opacity-60"
+              >
+                <Sparkles className="w-3 h-3" />
+                {text ? "重新生成" : "Kiro 生成草稿"}
+              </button>
+              <select value={tone} onChange={(e) => setTone(e.target.value as never)} data-testid="qq-reply-tone" className="h-7 px-2 bg-white border border-line rounded-lg text-xs">
+                <option value="natural">自然</option>
+                <option value="concise">简洁</option>
+                <option value="formal">正式</option>
+                <option value="friendly">友好</option>
+              </select>
+            </div>
+          </div>
           <textarea value={text} onChange={(e) => setText(e.target.value)} placeholder="输入回复内容..." rows={4} maxLength={2000} data-testid="qq-reply-text" className="mt-1 w-full p-3 bg-white border border-line rounded-lg text-sm resize-none focus:outline-none focus:border-charcoal" />
-          <p className="text-[11px] text-sandrift mt-1">{text.length}/2000 · 单次发送，不会自动拆分</p>
+          <p className="text-[11px] text-sandrift mt-1">{text.length}/2000 · 单次发送，不会自动拆分 {draftLoading ? "· 生成中..." : text ? "· AI 草稿，可继续编辑" : ""}</p>
+          {draftError && <p className="text-[11px] text-danger mt-1">{draftError}</p>}
         </div>
 
         {error && <p className="text-xs font-bold text-danger bg-danger/5 border border-danger/20 rounded-lg px-3 py-2">{error}</p>}

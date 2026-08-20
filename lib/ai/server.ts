@@ -16,6 +16,50 @@ function normalizeReasoningEffortInput(value: unknown): KiroReasoningEffort {
     : "default";
 }
 
+export function validateAIProviderRequest(body: unknown): {
+  ok: true;
+  provider: "opencode-go" | "deepseek" | "custom-openai";
+  model: string;
+  apiKey: string;
+  customConfig?: {
+    providerName: string;
+    baseURL: string;
+    model: string;
+    vision?: boolean;
+    fileParts?: boolean;
+    reasoningEffort?: boolean;
+  };
+  reasoningEffort: KiroReasoningEffort;
+} | { ok: false; code: string; message: string } {
+  const b = (typeof body === "object" && body !== null ? body : {}) as Record<string, unknown>;
+  const provider = b.provider;
+  if (provider !== "opencode-go" && provider !== "deepseek" && provider !== "custom-openai") {
+    return { ok: false, code: "UNKNOWN", message: "未知的 AI 服务。" };
+  }
+  if (typeof b.model !== "string" || !b.model.trim()) {
+    return { ok: false, code: "MODEL_NOT_FOUND", message: "未选择模型。" };
+  }
+  if (typeof b.apiKey !== "string" || !b.apiKey.trim()) {
+    return { ok: false, code: "INVALID_API_KEY", message: "缺少 API Key。" };
+  }
+  const custom = (typeof b.customConfig === "object" && b.customConfig !== null ? b.customConfig : {}) as Record<string, unknown>;
+  return {
+    ok: true,
+    provider,
+    model: b.model.trim(),
+    apiKey: b.apiKey.trim(),
+    customConfig: {
+      providerName: typeof custom.providerName === "string" ? custom.providerName : "",
+      baseURL: typeof custom.baseURL === "string" ? custom.baseURL : "",
+      model: typeof custom.model === "string" ? custom.model : "",
+      vision: custom.vision === true,
+      fileParts: custom.fileParts === true,
+      reasoningEffort: custom.reasoningEffort === true,
+    },
+    reasoningEffort: normalizeReasoningEffortInput(b.reasoningEffort),
+  };
+}
+
 /** 请求体校验（chat / test / compact 共用）：非法返回错误信息字符串 */
 export function validateAIChatBody(body: unknown): {
   ok: true;
@@ -48,19 +92,10 @@ export function validateAIChatBody(body: unknown): {
     apiKey?: string;
   };
 } | { ok: false; code: string; message: string } {
+  const providerRes = validateAIProviderRequest(body);
+  if (!providerRes.ok) return providerRes;
   const b = (typeof body === "object" && body !== null ? body : {}) as Record<string, unknown>;
-  const provider = b.provider;
-  if (provider !== "opencode-go" && provider !== "deepseek" && provider !== "custom-openai") {
-    return { ok: false, code: "UNKNOWN", message: "未知的 AI 服务。" };
-  }
-  if (typeof b.model !== "string" || !b.model.trim()) {
-    return { ok: false, code: "MODEL_NOT_FOUND", message: "未选择模型。" };
-  }
-  if (typeof b.apiKey !== "string" || !b.apiKey.trim()) {
-    return { ok: false, code: "INVALID_API_KEY", message: "缺少 API Key。" };
-  }
   const invocationId = b.invocationId;
-  // invocationId 仅 chat 需要（有 messages 时），test/compact 可选
   if (b.messages !== undefined) {
     if (typeof invocationId !== "string" || !invocationId.trim()) {
       return { ok: false, code: "INVOCATION_REQUIRED", message: "Missing invocationId" };
@@ -69,37 +104,26 @@ export function validateAIChatBody(body: unknown): {
       return { ok: false, code: "INVALID_INVOCATION", message: "Invalid invocationId" };
     }
   }
-  const custom = (typeof b.customConfig === "object" && b.customConfig !== null ? b.customConfig : {}) as Record<string, unknown>;
   const webSearch = (typeof b.webSearchConfig === "object" && b.webSearchConfig !== null ? b.webSearchConfig : {}) as Record<string, unknown>;
   const vision = (typeof b.webPdfVisionConfig === "object" && b.webPdfVisionConfig !== null ? b.webPdfVisionConfig : {}) as Record<string, unknown>;
   return {
     ok: true,
-    provider,
-    model: b.model.trim(),
-    apiKey: b.apiKey.trim(),
+    provider: providerRes.provider,
+    model: providerRes.model,
+    apiKey: providerRes.apiKey,
+    customConfig: providerRes.customConfig,
+    reasoningEffort: providerRes.reasoningEffort,
     invocationId: typeof invocationId === "string" ? invocationId.trim() : undefined,
-    customConfig: {
-      providerName: typeof custom.providerName === "string" ? custom.providerName : "",
-      baseURL: typeof custom.baseURL === "string" ? custom.baseURL : "",
-      model: typeof custom.model === "string" ? custom.model : "",
-      // 高级能力声明只接受 boolean === true（绝不信任任意 raw custom object）
-      vision: custom.vision === true,
-      fileParts: custom.fileParts === true,
-      reasoningEffort: custom.reasoningEffort === true,
-    },
     messages: b.messages,
     timeoutMs: typeof b.timeoutMs === "number" && b.timeoutMs > 0 ? b.timeoutMs : undefined,
     responsePreference: normalizeKiroResponsePreference(b.responsePreference),
-    reasoningEffort: normalizeReasoningEffortInput(b.reasoningEffort),
     webSearchConfig: {
       enabled: webSearch.enabled === true,
       credentialMode: webSearch.credentialMode === "byok" ? "byok" : "server",
       apiKey: typeof webSearch.apiKey === "string" ? webSearch.apiKey : undefined,
     },
     webPdfVisionConfig: {
-      // 只有真正 boolean true 才接受；旧 Client 缺失 → false（不会触发未来 Vision API）
       enabled: vision.enabled === true,
-      // arbitrary model id 无法穿透：非法 → 默认 mimo-v2.5
       model: normalizeWebPdfVisionModel(vision.model),
       apiKey: typeof vision.apiKey === "string" ? vision.apiKey.trim() || undefined : undefined,
     },
