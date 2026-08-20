@@ -5,9 +5,11 @@ import { Inbox, Archive, Eye, Trash2, Check, Clock, Mail, Reply, X } from "lucid
 import { useInboxStore } from "@/store/useInboxStore";
 import type { ExternalInboxItem, InboxStatus } from "@/lib/inbox/types";
 import { wrapExternalContent } from "@/lib/inbox/types";
+import { getInboxSourcePresentation } from "@/lib/inbox/sourcePresentation";
 import { cn } from "@/lib/utils";
 import { Dialog } from "@/components/ui/Dialog";
 import { QQReplyDialog } from "@/components/inbox/QQReplyDialog";
+import { ChannelBrandIcon } from "@/components/icons/ChannelBrandIcon";
 
 export function InboxPanel({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
   const items = useInboxStore((s) => s.items);
@@ -103,9 +105,12 @@ export function InboxPanel({ open, onOpenChange }: { open: boolean; onOpenChange
             <div key={item.id} data-testid={`inbox-item-${item.id}`} className="bg-[#F7F5F5] border border-line rounded-xl p-3 flex flex-col gap-2">
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0 flex-1">
-                  <p className="text-xs font-bold text-charcoal truncate">
-                    {item.source === "qq-bot" ? "QQ" : item.source === "gmail" ? "Gmail" : "QQ 邮箱"} · {item.senderDisplay ?? "未知发送者"} {new Date(item.receivedAt).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" })}
-                  </p>
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <ChannelBrandIcon source={item.source} size={16} />
+                    <p className="text-xs font-bold text-charcoal truncate">
+                      {getInboxSourcePresentation(item.source).label} · {item.senderDisplay ?? "未知发送者"} {new Date(item.receivedAt).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" })}
+                    </p>
+                  </div>
                   {item.subject && <p className="text-xs font-bold text-charcoal mt-1 truncate">{item.subject}</p>}
                   <p className="text-xs text-sandrift mt-1 line-clamp-2">{item.text.slice(0, 100)}</p>
                   <p className="text-[11px] text-sandrift mt-1 flex items-center gap-1">
@@ -177,7 +182,7 @@ export function InboxPanel({ open, onOpenChange }: { open: boolean; onOpenChange
       {selected && (
         <Dialog open={!!selected} onOpenChange={(open) => !open && setSelected(null)} overlayId="inbox-detail" aria-label="查看消息" className="w-[min(560px,calc(100vw-24px))] bg-surface border border-line rounded-2xl p-5 space-y-3 max-h-[85vh] overflow-y-auto">
           <div className="flex items-center gap-2">
-            <Mail className="w-4 h-4 text-charcoal" />
+            <ChannelBrandIcon source={selected.source} size={18} />
             <h4 className="text-sm font-bold text-charcoal">{selected.senderDisplay ?? selected.source}</h4>
             <span className="text-[11px] text-sandrift">{new Date(selected.receivedAt).toLocaleString("zh-CN")}</span>
           </div>

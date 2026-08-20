@@ -3,6 +3,7 @@
 import React, { useEffect, useState, useCallback } from "react";
 import { MessageSquare, Plus, Plug2, Trash2, Power, TestTube2, Settings2 } from "lucide-react";
 import { Dialog } from "@/components/ui/Dialog";
+import { ChannelBrandIcon } from "@/components/icons/ChannelBrandIcon";
 import { cn } from "@/lib/utils";
 
 type ChannelStatus = { config: { id: string; displayName: string; appId: string; credentialRef: string; enabled: boolean; requireMentionInGroup: boolean; allowedUsers: string[]; allowedGroups: string[]; receiveDirectMessages: boolean; receiveGroupMessages: boolean }; health: { state: string; lastError?: { code: string; message: string } } };
@@ -117,7 +118,7 @@ export function ChannelSettings() {
               <div className="flex items-start justify-between gap-3">
                 <div className="flex items-start gap-3 min-w-0">
                   <div className="w-9 h-9 rounded-xl bg-alabaster border border-line flex items-center justify-center shrink-0 mt-0.5">
-                    <MessageSquare className="w-4 h-4 text-charcoal" />
+                    <ChannelBrandIcon source="qq-bot" size={20} />
                   </div>
                   <div className="min-w-0">
                     <h4 className="text-sm font-bold text-charcoal truncate">{config.displayName}</h4>
@@ -204,7 +205,7 @@ function AddQQDialog({ open, onOpenChange, onAdded }: { open: boolean; onOpenCha
   return (
     <Dialog open={open} onOpenChange={onOpenChange} overlayId="channel-add-qq" aria-label="添加 QQ Bot" className="w-[min(520px,calc(100vw-24px))] bg-surface border border-line rounded-2xl p-5 space-y-4 max-h-[85vh] overflow-y-auto">
       <div className="flex items-center gap-2.5">
-        <div className="w-9 h-9 rounded-xl bg-pastel-mint border border-line flex items-center justify-center"><MessageSquare className="w-4 h-4 text-charcoal" /></div>
+        <div className="w-9 h-9 rounded-xl bg-pastel-mint border border-line flex items-center justify-center"><ChannelBrandIcon source="qq-bot" size={18} /></div>
         <div><h4 className="text-sm font-bold text-charcoal">添加 QQ Bot</h4><p className="text-[11px] text-sandrift">WebSocket 长连接 · 需 App ID / App Secret</p></div>
       </div>
       <div className="space-y-3">
@@ -284,7 +285,7 @@ function EditQQDialog({ target, onOpenChange, onSaved }: { target: ChannelStatus
   return (
     <Dialog open={true} onOpenChange={onOpenChange} overlayId="channel-edit-qq" aria-label="编辑 QQ Bot" className="w-[min(520px,calc(100vw-24px))] bg-surface border border-line rounded-2xl p-5 space-y-4 max-h-[85vh] overflow-y-auto">
       <div className="flex items-center gap-2.5">
-        <div className="w-9 h-9 rounded-xl bg-pastel-mint border border-line flex items-center justify-center"><MessageSquare className="w-4 h-4 text-charcoal" /></div>
+        <div className="w-9 h-9 rounded-xl bg-pastel-mint border border-line flex items-center justify-center"><ChannelBrandIcon source="qq-bot" size={18} /></div>
         <div><h4 className="text-sm font-bold text-charcoal">编辑 QQ Bot</h4><p className="text-[11px] text-sandrift">App ID: {target.config.appId}</p></div>
       </div>
       <div className="space-y-3">

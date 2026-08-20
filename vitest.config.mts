@@ -68,6 +68,7 @@ export default defineConfig({
       "tests/workflowTurnSelection.test.ts",
       "tests/workflowDistillIntegration.test.ts",
       "tests/channelRegistry.test.ts",
+      "tests/channelBrandPresentation.test.ts",
       "tests/channelConfig.test.ts",
       "tests/qqNormalize.test.ts",
       "tests/qqDedupe.test.ts",
