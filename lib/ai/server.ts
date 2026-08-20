@@ -32,6 +32,7 @@ export function validateAIChatBody(body: unknown): {
   };
   messages?: unknown;
   timeoutMs?: number;
+  invocationId?: string;
   /** Intelligence V2 Task 1：回答偏好（可安全 fallback；非法/缺失 → dense，不报错） */
   responsePreference: KiroResponsePreference;
   /** 推理投入（capability-driven；客户端仅发 effort，server 归一 + 映射 provider options） */
@@ -58,6 +59,16 @@ export function validateAIChatBody(body: unknown): {
   if (typeof b.apiKey !== "string" || !b.apiKey.trim()) {
     return { ok: false, code: "INVALID_API_KEY", message: "缺少 API Key。" };
   }
+  const invocationId = b.invocationId;
+  // invocationId 仅 chat 需要（有 messages 时），test/compact 可选
+  if (b.messages !== undefined) {
+    if (typeof invocationId !== "string" || !invocationId.trim()) {
+      return { ok: false, code: "INVOCATION_REQUIRED", message: "Missing invocationId" };
+    }
+    if (!/^inv_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(invocationId.trim())) {
+      return { ok: false, code: "INVALID_INVOCATION", message: "Invalid invocationId" };
+    }
+  }
   const custom = (typeof b.customConfig === "object" && b.customConfig !== null ? b.customConfig : {}) as Record<string, unknown>;
   const webSearch = (typeof b.webSearchConfig === "object" && b.webSearchConfig !== null ? b.webSearchConfig : {}) as Record<string, unknown>;
   const vision = (typeof b.webPdfVisionConfig === "object" && b.webPdfVisionConfig !== null ? b.webPdfVisionConfig : {}) as Record<string, unknown>;
@@ -66,6 +77,7 @@ export function validateAIChatBody(body: unknown): {
     provider,
     model: b.model.trim(),
     apiKey: b.apiKey.trim(),
+    invocationId: typeof invocationId === "string" ? invocationId.trim() : undefined,
     customConfig: {
       providerName: typeof custom.providerName === "string" ? custom.providerName : "",
       baseURL: typeof custom.baseURL === "string" ? custom.baseURL : "",
