@@ -51,7 +51,7 @@ function createWindow(apiBase: string, apiCapability: string): void {
     // 自绘顶部状态栏：去掉原生窗口边框，由渲染进程 TitleBar 提供拖动/最小化/最大化/关闭
     frame: false,
     webPreferences: buildClassFlowWebPreferences({
-      preloadPath: join(__dirname, "../preload/index.mjs"),
+      preloadPath: join(__dirname, "../preload/index.cjs"),
       apiBase,
       apiCapability,
     }),
@@ -119,20 +119,39 @@ function isTrustedSender(sender: Electron.WebContents): boolean {
 
 function validateWindowSender(channel: string, sender: Electron.WebContents, apiBase: string): boolean {
   const { allowedApiOrigin, allowedDevOrigin } = getAllowedOrigins(apiBase);
+  const rawUrl = (() => {
+    try {
+      return sender.getURL();
+    } catch {
+      return "";
+    }
+  })();
+  // Sanitized protocol/origin category (no query, no secrets)
+  let protocolCategory = "unknown";
+  let originCategory = "unknown";
+  try {
+    const parsed = new URL(rawUrl);
+    protocolCategory = parsed.protocol;
+    if (rawUrl.startsWith("app://")) originCategory = "app";
+    else if (allowedApiOrigin && rawUrl.startsWith(allowedApiOrigin)) originCategory = "api";
+    else if (allowedDevOrigin && rawUrl.startsWith(allowedDevOrigin)) originCategory = "dev";
+    else originCategory = "untrusted";
+  } catch {
+    protocolCategory = "malformed";
+    originCategory = "malformed";
+  }
   const ctx = {
     destroyed: sender.isDestroyed(),
     isTrustedWindow: isTrustedSender(sender),
-    url: (() => {
-      try {
-        return sender.getURL();
-      } catch {
-        return "";
-      }
-    })(),
+    url: rawUrl,
   };
   const result = validateIpcSender(channel, ctx, { allowedApiOrigin, allowedDevOrigin });
+  // Sanitized debug instrumentation (no secrets, no query)
+  console.log(`[classflow] window IPC received channel=${channel} protocol=${protocolCategory} originCategory=${originCategory} trusted=${ctx.isTrustedWindow} destroyed=${ctx.destroyed}`);
   if (!result.ok) {
-    console.warn(`[classflow] IPC denied ${channel}: ${result.reason}`);
+    console.warn(`[classflow] IPC denied ${channel}: ${result.reason} protocol=${protocolCategory} originCategory=${originCategory}`);
+  } else {
+    console.log(`[classflow] IPC validate ${channel}: allowed protocol=${protocolCategory} originCategory=${originCategory}`);
   }
   return result.ok;
 }

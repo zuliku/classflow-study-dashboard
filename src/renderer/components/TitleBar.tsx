@@ -18,13 +18,42 @@ export function TitleBar() {
   const semesterName = useAppStore((s) => s.semester?.name);
   const currentSemesterWeek = useAppStore((s) => s.currentSemesterWeek);
 
-  const windowBridge = getClassFlowDesktopWindowBridge();
-  const hasDesktopRuntime =
-    typeof window !== "undefined" && !!(window as unknown as { classflowDesktop?: unknown }).classflowDesktop;
+  // Use state to track bridge availability reactively (handles async preload injection)
+  const [windowBridge, setWindowBridge] = useState(() => getClassFlowDesktopWindowBridge());
+  const [hasDesktopRuntime, setHasDesktopRuntime] = useState(
+    () => typeof window !== "undefined" && !!(window as unknown as { classflowDesktop?: unknown }).classflowDesktop
+  );
   const windowAvailable = !!windowBridge;
   const warnedRef = useRef(false);
 
   useEffect(() => {
+    // Sanitized debug instrumentation (no secrets)
+    const bridgeExists = typeof window !== "undefined" && !!(window as unknown as { classflowDesktop?: unknown }).classflowDesktop;
+    const windowBridgeExists = !!getClassFlowDesktopWindowBridge();
+    if (process.env.NODE_ENV !== "production") {
+      console.log(`[classflow] TitleBar bridgeExists=${bridgeExists} windowBridgeExists=${windowBridgeExists}`);
+    }
+    // If bridge not yet available, poll briefly for async injection (preload may load after first render)
+    if (!windowBridgeExists && !bridgeExists) {
+      const id = setInterval(() => {
+        const nowBridge = getClassFlowDesktopWindowBridge();
+        const nowExists = typeof window !== "undefined" && !!(window as unknown as { classflowDesktop?: unknown }).classflowDesktop;
+        if (nowBridge || nowExists) {
+          setWindowBridge(nowBridge);
+          setHasDesktopRuntime(nowExists);
+          clearInterval(id);
+        }
+      }, 100);
+      const timeout = setTimeout(() => clearInterval(id), 2000);
+      return () => {
+        clearInterval(id);
+        clearTimeout(timeout);
+      };
+    }
+    // Update state if bridge becomes available after mount
+    setWindowBridge(getClassFlowDesktopWindowBridge());
+    setHasDesktopRuntime(bridgeExists);
+
     if (!windowBridge) {
       if (hasDesktopRuntime && !warnedRef.current && process.env.NODE_ENV !== "production") {
         warnedRef.current = true;
