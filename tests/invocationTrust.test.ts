@@ -1,5 +1,12 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { beginInvocation, resolveInvocationOrThrow, __clearAllInvocationsForTest } from "@/src/main/security/invocationTrust";
+import {
+  beginInvocation,
+  resolveInvocationOrThrow,
+  __clearAllInvocationsForTest,
+  isInvocationCapabilityAllowed,
+  INVOCATION_CAPABILITIES,
+  isValidInvocationCapability,
+} from "@/src/main/security/invocationTrust";
 
 describe("invocationTrust", () => {
   beforeEach(() => __clearAllInvocationsForTest());
@@ -44,5 +51,49 @@ describe("invocationTrust", () => {
     expect(rec.origin).toBe("remote-channel");
     // Renderer tries to claim local-user via string, but Main still sees remote
     expect(rec.origin).not.toBe("local-user");
+  });
+
+  it("INVOCATION_CAPABILITIES contains exactly 8 known capabilities", () => {
+    expect(INVOCATION_CAPABILITIES.size).toBe(8);
+    expect([...INVOCATION_CAPABILITIES].sort()).toEqual(
+      ["computer-mutation", "delete", "filesystem-write", "mcp-call", "propose", "read", "terminal", "write"].sort()
+    );
+  });
+
+  it("remote-channel: read/propose allowed, all mutations denied", () => {
+    expect(isInvocationCapabilityAllowed("remote-channel", "read")).toBe(true);
+    expect(isInvocationCapabilityAllowed("remote-channel", "propose")).toBe(true);
+    expect(isInvocationCapabilityAllowed("remote-channel", "write")).toBe(false);
+    expect(isInvocationCapabilityAllowed("remote-channel", "delete")).toBe(false);
+    expect(isInvocationCapabilityAllowed("remote-channel", "terminal")).toBe(false);
+    expect(isInvocationCapabilityAllowed("remote-channel", "filesystem-write")).toBe(false);
+    expect(isInvocationCapabilityAllowed("remote-channel", "computer-mutation")).toBe(false);
+    expect(isInvocationCapabilityAllowed("remote-channel", "mcp-call")).toBe(false);
+  });
+
+  it("remote-channel: unknown capability → false (fail closed)", () => {
+    expect(isInvocationCapabilityAllowed("remote-channel", "unknown_future_tool")).toBe(false);
+    expect(isInvocationCapabilityAllowed("remote-channel", "")).toBe(false);
+    expect(isValidInvocationCapability("unknown_future_tool")).toBe(false);
+  });
+
+  it("local-user: known capabilities allowed, unknown → false", () => {
+    for (const cap of INVOCATION_CAPABILITIES) {
+      expect(isInvocationCapabilityAllowed("local-user", cap)).toBe(true);
+      expect(isValidInvocationCapability(cap)).toBe(true);
+    }
+    expect(isInvocationCapabilityAllowed("local-user", "unknown_future_tool")).toBe(false);
+    expect(isInvocationCapabilityAllowed("local-user", "write; rm -rf /")).toBe(false);
+    expect(isValidInvocationCapability("unknown_future_tool")).toBe(false);
+    expect(isValidInvocationCapability("")).toBe(false);
+  });
+
+  it("unknown capability isValid → false and isAllowed → false for both origins", () => {
+    const unknowns = ["unknown", "READ", "Write", "filesystem-write ", "mcp-call\n", "admin"];
+    for (const unk of unknowns) {
+      expect(isValidInvocationCapability(unk)).toBe(false);
+      expect(isInvocationCapabilityAllowed("local-user", unk)).toBe(false);
+      expect(isInvocationCapabilityAllowed("remote-channel", unk)).toBe(false);
+    }
   });
 });

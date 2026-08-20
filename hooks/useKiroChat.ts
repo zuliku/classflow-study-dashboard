@@ -18,6 +18,7 @@ import { ComputerError } from "@/lib/ai/computer/errors";
 import { executeKiroComputerTool } from "@/lib/ai/computer/executor";
 import { getComputerAdapterForAdapterRef } from "@/lib/ai/computer/adapters/factory";
 import { isComputerToolName, ComputerExecutionAttempt } from "@/lib/ai/computer/result";
+import { COMPUTER_MUTATION_TOOL_NAMES } from "@/lib/ai/computer/tools/registry";
 import { ComputerApprovalRequest, ComputerApprovalDecision, ComputerOneShotApproval } from "@/lib/ai/computer/approval";
 import {
   KiroAgentTask,
@@ -665,6 +666,50 @@ export function useKiroChat({
     await bridge.assertCapability({ invocationId, capability });
   };
 
+  // 统一 Tool Guard（避免到处复制 try/catch）：失败时通过 failOutput 输出 PERMISSION_DENIED_REMOTE 并返回 false
+  const guardTurnCapability = async (
+    capability: "read" | "propose" | "write" | "delete" | "terminal" | "filesystem-write" | "computer-mutation" | "mcp-call",
+    failOutput: (code: string, message: string) => void
+  ): Promise<boolean> => {
+    try {
+      await assertTurnCapability(capability);
+      return true;
+    } catch (e) {
+      const raw = (e as Error).message ?? String(e);
+      try {
+        const parsed = JSON.parse(raw) as { code?: string; message?: string };
+        failOutput(parsed.code ?? "PERMISSION_DENIED_REMOTE", parsed.message ?? raw);
+      } catch {
+        failOutput("PERMISSION_DENIED_REMOTE", raw);
+      }
+      return false;
+    }
+  };
+
+  // 文件系统 mutation 工具（create/write/update/move/rename/delete）→ filesystem-write gate
+  const FILESYSTEM_MUTATION_TOOLS = new Set<string>([
+    "create_directory",
+    "create_text_file",
+    "patch_text_file",
+    "delete_file",
+    "create_document",
+    "update_document",
+    "rename_file",
+    "move_file",
+  ]);
+
+  // Terminal 工具 → terminal gate
+  const TERMINAL_TOOLS = new Set<string>([
+    "run_terminal_command",
+    "start_terminal_command",
+    "create_terminal_session",
+    "run_terminal_session_command",
+    "write_terminal_input",
+    "write_terminal_session_input",
+    "close_terminal_session",
+    "wait_terminal_command",
+  ]);
+
   // 发送瞬间绑定的附件快照：按 user message 顺序消费（File 不进入 Chat state）
   const snapshotQueueRef = useRef<KiroAttachmentView[][]>([]);
 
@@ -1266,6 +1311,8 @@ export function useKiroChat({
           failOutput("INVOCATION_REQUIRED", "Missing invocationId");
           return;
         }
+        // MCP Executor Gate — 三层链路第一层：Invocation assertCapability
+        if (!(await guardTurnCapability("mcp-call", failOutput))) return;
         void bridge
           .callTool({
             connectionId: parsed.data.connectionId,
@@ -1346,6 +1393,20 @@ export function useKiroChat({
       // ask → approval-required：不执行 IO、不 addToolOutput（Tool Call 保持 pending）；
       // 用户决策后 resume 同一条 exact call（同一 sandbox/policy/grant 检查）。
       if (isComputerToolName(toolName)) {
+        // Filesystem Mutation Gate: create/write/update/move/rename/delete → filesystem-write
+        if (FILESYSTEM_MUTATION_TOOLS.has(toolName)) {
+          if (!(await guardTurnCapability("filesystem-write", failOutput))) return;
+          // 额外防御：destructive 文件删除同时受 computer-mutation 约束（共用 guard，双重 deny）
+          // remote 任一失败即 DENY，保证不会通过 workspace-auto 绕过
+          if (!(await guardTurnCapability("computer-mutation", failOutput))) return;
+        } else if (TERMINAL_TOOLS.has(toolName)) {
+          // Terminal Executor Gate: run/create session/execute command 前必须通过 terminal capability
+          if (!(await guardTurnCapability("terminal", failOutput))) return;
+        } else if ((COMPUTER_MUTATION_TOOL_NAMES as unknown as Set<string>).has(toolName)) {
+          // Computer Mutation Gate: 区分 read-only 与 mutation，mutation 必须通过 computer-mutation
+          if (!(await guardTurnCapability("computer-mutation", failOutput))) return;
+        }
+        // read-only computer tools 继续正常执行
         void runComputerToolCall(toolName, toolCallId, input);
         return;
       }
@@ -1362,6 +1423,8 @@ export function useKiroChat({
           failOutput(VISUAL_PROPOSAL_REQUIRED_CODE, VISUAL_PROPOSAL_REQUIRED_MESSAGE);
           return;
         }
+        // Invocation Trust Gate: remote-channel 禁止 apply_change_set
+        if (!(await guardTurnCapability("write", failOutput))) return;
         const parsed = KIRO_WRITE_TOOL_SCHEMAS.apply_change_set.safeParse(input);
         if (!parsed.success) {
           failOutput("INVALID_INPUT", "Change Set 输入不合法。");
@@ -1460,18 +1523,7 @@ export function useKiroChat({
           return;
         }
 
-        try {
-          await assertTurnCapability(isDestructiveWriteTool(toolName) ? "delete" : "write");
-        } catch (e) {
-          const raw = (e as Error).message ?? String(e);
-          try {
-            const parsed = JSON.parse(raw);
-            failOutput(parsed.code ?? "PERMISSION_DENIED_REMOTE", parsed.message ?? raw);
-          } catch {
-            failOutput("PERMISSION_DENIED_REMOTE", raw);
-          }
-          return;
-        }
+        if (!(await guardTurnCapability(isDestructiveWriteTool(toolName) ? "delete" : "write", failOutput))) return;
 
         // 受限 API：只暴露白名单 action；禁止 setState
         const api = createKiroWriteApi({
@@ -1816,6 +1868,46 @@ export function useKiroChat({
         return;
       }
 
+      // Invocation Trust Gates (defense-in-depth, also covers approval resume path)
+      // 区分 read-only 与 mutation，阻止 workspace-auto 绕过 remote restriction
+      const denyOutput = (e: unknown): ToolOutput => {
+        const raw = (e as Error).message ?? String(e);
+        try {
+          const parsed = JSON.parse(raw) as { code?: string; message?: string };
+          return { ok: false, code: parsed.code ?? "PERMISSION_DENIED_REMOTE", message: parsed.message ?? raw } as ToolOutput;
+        } catch {
+          return { ok: false, code: "PERMISSION_DENIED_REMOTE", message: raw } as ToolOutput;
+        }
+      };
+      if (FILESYSTEM_MUTATION_TOOLS.has(toolName)) {
+        try {
+          await assertTurnCapability("filesystem-write");
+        } catch (e) {
+          applyCompletedAttempt({ kind: "completed", output: denyOutput(e) } as ComputerExecutionAttempt, toolName, toolCallId, taskId);
+          return;
+        }
+        try {
+          await assertTurnCapability("computer-mutation");
+        } catch (e) {
+          applyCompletedAttempt({ kind: "completed", output: denyOutput(e) } as ComputerExecutionAttempt, toolName, toolCallId, taskId);
+          return;
+        }
+      } else if (TERMINAL_TOOLS.has(toolName)) {
+        try {
+          await assertTurnCapability("terminal");
+        } catch (e) {
+          applyCompletedAttempt({ kind: "completed", output: denyOutput(e) } as ComputerExecutionAttempt, toolName, toolCallId, taskId);
+          return;
+        }
+      } else if ((COMPUTER_MUTATION_TOOL_NAMES as unknown as Set<string>).has(toolName)) {
+        try {
+          await assertTurnCapability("computer-mutation");
+        } catch (e) {
+          applyCompletedAttempt({ kind: "completed", output: denyOutput(e) } as ComputerExecutionAttempt, toolName, toolCallId, taskId);
+          return;
+        }
+      }
+
       const attempt = await executeKiroComputerTool({
         toolName,
         toolCallId,
@@ -1934,6 +2026,57 @@ export function useKiroChat({
       } else if (decision === "allow-workspace") {
         if (request.allowedDecisions.includes("allow-workspace")) {
           useKiroComputerStore.getState().upsertPermissionRule(workspaceRuleForRequest(request));
+        }
+      }
+
+      // Resume path must re-validate invocation trust (remote cannot approve to bypass)
+      {
+        const deny = (e: unknown) => {
+          const raw = (e as Error).message ?? String(e);
+          let code = "PERMISSION_DENIED_REMOTE";
+          let msg = raw;
+          try {
+            const parsed = JSON.parse(raw) as { code?: string; message?: string };
+            code = parsed.code ?? code;
+            msg = parsed.message ?? raw;
+          } catch {}
+          const task = tasksRef.current.get(taskId);
+          if (task) {
+            failTaskStep(task, toolCallId);
+            updateTasks();
+          }
+          emitToolOutput(toolName, toolCallId, { ok: false, code, message: msg } as ToolOutput);
+          void appendComputerAuditEntry({
+            id: `audit-${crypto.randomUUID()}`,
+            timestamp: new Date().toISOString(),
+            taskId,
+            conversationId: conversationIdRef.current,
+            toolCallId,
+            toolName,
+            capability: request.capability,
+            decision,
+            outcome: "denied",
+            workspaceId: request.workspaceId,
+            workspaceLabel: request.workspaceLabel,
+            rootId: request.rootId,
+            rootLabel: request.rootLabel,
+            relativePath: request.relativePath,
+            verification: "failed",
+          });
+          advancePendingApproval();
+        };
+        try {
+          if (FILESYSTEM_MUTATION_TOOLS.has(toolName)) {
+            await assertTurnCapability("filesystem-write");
+            await assertTurnCapability("computer-mutation");
+          } else if (TERMINAL_TOOLS.has(toolName)) {
+            await assertTurnCapability("terminal");
+          } else if ((COMPUTER_MUTATION_TOOL_NAMES as unknown as Set<string>).has(toolName)) {
+            await assertTurnCapability("computer-mutation");
+          }
+        } catch (e) {
+          deny(e);
+          return;
         }
       }
 

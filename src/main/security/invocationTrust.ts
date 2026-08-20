@@ -17,10 +17,26 @@ export type InvocationCapability =
   | "computer-mutation"
   | "mcp-call";
 
+export const INVOCATION_CAPABILITIES = new Set<InvocationCapability>([
+  "read",
+  "propose",
+  "write",
+  "delete",
+  "terminal",
+  "filesystem-write",
+  "computer-mutation",
+  "mcp-call",
+]);
+
+export function isValidInvocationCapability(capability: string): capability is InvocationCapability {
+  return INVOCATION_CAPABILITIES.has(capability as InvocationCapability);
+}
+
 export function isInvocationCapabilityAllowed(
   origin: InvocationOrigin,
-  capability: InvocationCapability
+  capability: string
 ): boolean {
+  if (!isValidInvocationCapability(capability)) return false;
   if (origin === "local-user") {
     // local-user 后续仍由 Agent Mode / Tool policy 约束，此处仅作 origin 层 allow
     return true;

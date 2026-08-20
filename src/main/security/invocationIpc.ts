@@ -4,7 +4,7 @@
  */
 
 import { ipcMain } from "electron";
-import { beginInvocation, resolveInvocationOrThrow, isInvocationCapabilityAllowed } from "@/src/main/security/invocationTrust";
+import { beginInvocation, resolveInvocationOrThrow, isInvocationCapabilityAllowed, isValidInvocationCapability } from "@/src/main/security/invocationTrust";
 
 export function registerInvocationIpc(opts?: {
   validateSender?: (channel: string, event: Electron.IpcMainInvokeEvent) => boolean;
@@ -34,8 +34,9 @@ export function registerInvocationIpc(opts?: {
     if (!guard("bridge:invocation:assertCapability", event)) throw new Error(JSON.stringify({ code: "PERMISSION_DENIED" }));
     const { invocationId, capability } = input as { invocationId?: string; capability?: string };
     if (!invocationId || !capability) throw new Error(JSON.stringify({ code: "INVALID_INPUT", message: "invocationId and capability required" }));
+    if (!isValidInvocationCapability(capability)) throw new Error(JSON.stringify({ code: "INVALID_CAPABILITY", message: `Unknown capability: ${capability}` }));
     const invocation = resolveInvocationOrThrow(invocationId);
-    const allowed = isInvocationCapabilityAllowed(invocation.origin, capability as never);
+    const allowed = isInvocationCapabilityAllowed(invocation.origin, capability);
     if (!allowed) throw new Error(JSON.stringify({ code: "PERMISSION_DENIED_REMOTE", message: `Capability denied for ${invocation.origin}: ${capability}` }));
     return { ok: true };
   });
