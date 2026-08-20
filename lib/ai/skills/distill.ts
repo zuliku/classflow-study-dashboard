@@ -84,23 +84,27 @@ const SkillDraftSchema = SkillDraftSchemaRaw.transform((raw) => {
 });
 
 /**
- * 调用 Muse Spark 1.2 Contributor 进行 AI 抽象
- * 使用 opencode key: sk-jibB4MGawaWUtbQ34Rqdok1w3LH3qAp0ph7EF6llgJYeNeT1R18R6m8FaonH0roT
- * provider: opencode-go, model: muse-spark-1.2-contributor, transport: openai-chat
+ * 调用当前 Kiro 模型进行 AI 抽象（Server-side，Secret 不落地 Renderer）
+ * Provider/Model 来自 AI Settings Store，Server Resolver 负责 fallback
  */
 export async function callMuseSparkForDistill(
   sanitized: SanitizedTrace,
   trace: WorkflowTrace,
-  apiKey: string
+  apiKey: string,
+  opts?: { provider?: string; model?: string }
 ): Promise<SkillDraft> {
   const { generateText } = await import("ai");
   const { resolveLanguageModel } = await import("@/lib/ai/providers/resolver");
+  const { OPENCODE_DEFAULT_MODEL } = await import("@/lib/ai/providers/openCodeGo");
 
   const prompt = buildDistillPrompt(sanitized, trace);
 
+  const provider = (opts?.provider as never) ?? "opencode-go";
+  const modelId = (opts?.model as string) ?? OPENCODE_DEFAULT_MODEL;
+
   const { model } = await resolveLanguageModel({
-    provider: "opencode-go",
-    model: "muse-spark-1.2-contributor",
+    provider: provider as never,
+    model: modelId,
     apiKey,
   });
 
@@ -186,12 +190,12 @@ Return JSON only.`;
  */
 export async function distillWorkflowToSkill(
   trace: WorkflowTrace,
-  opts: { apiKey: string; onSanitized?: (s: SanitizedTrace) => void }
+  opts: { apiKey: string; provider?: string; model?: string; onSanitized?: (s: SanitizedTrace) => void }
 ): Promise<{ draft: SkillDraft; md: string; sanitized: SanitizedTrace }> {
   const sanitized = sanitizeWorkflowTrace(trace);
   if (opts.onSanitized) opts.onSanitized(sanitized);
 
-  const draft = await callMuseSparkForDistill(sanitized, trace, opts.apiKey);
+  const draft = await callMuseSparkForDistill(sanitized, trace, opts.apiKey, { provider: opts.provider, model: opts.model });
 
   const draftWithParams = ensureParameterized(draft, trace);
 

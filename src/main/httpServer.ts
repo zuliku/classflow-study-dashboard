@@ -10,6 +10,7 @@ import { handleModels } from "@/app/api/ai/models/route";
 import { handleVisionExtract } from "@/app/api/ai/vision/extract/route";
 import { handleWebSearchTest } from "@/app/api/ai/web-search/test/route";
 import { handleWebSearchStatus } from "@/app/api/ai/web-search/status/route";
+import { handleDistill } from "@/app/api/ai/skills/distill/route";
 
 export interface ApiServer {
   port: number;
@@ -27,6 +28,7 @@ const ROUTES: { method: string; path: string; handler: Handler }[] = [
   { method: "POST", path: "/api/ai/vision/extract", handler: handleVisionExtract },
   { method: "POST", path: "/api/ai/web-search/test", handler: handleWebSearchTest },
   { method: "GET", path: "/api/ai/web-search/status", handler: handleWebSearchStatus },
+  { method: "POST", path: "/api/ai/skills/distill", handler: handleDistill },
 ];
 
 /**

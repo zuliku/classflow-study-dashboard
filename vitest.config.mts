@@ -56,6 +56,9 @@ export default defineConfig({
       "tests/apiBoundary.test.ts",
       "tests/securityBaseline.test.ts",
       "tests/skillCore.test.ts",
+      "tests/workflowTrace.test.ts",
+      "tests/workflowSanitize.test.ts",
+      "tests/workflowDistillSecurity.test.ts",
       "tests/settingsRegistry.test.ts",
       // Kiro Sidecar Capsule V1 — jsdom via @vitest-environment
       "tests/kiroSidecarShell.test.tsx",

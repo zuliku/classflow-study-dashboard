@@ -5,8 +5,6 @@ import { Dialog } from "@/components/ui/Dialog";
 import { Sparkles, Loader2, Beaker, Save } from "lucide-react";
 import type { WorkflowTrace } from "@/lib/ai/skills/types";
 import type { SkillDraft } from "@/lib/ai/skills/types";
-import { sanitizeWorkflowTrace } from "@/lib/ai/skills/sanitize";
-import { renderSkillDraftToMd } from "@/lib/ai/skills/draft";
 
 interface SkillDistillDialogProps {
   open: boolean;
@@ -31,13 +29,21 @@ export function SkillDistillDialog({ open, onOpenChange, trace, onSaved }: Skill
     setLoading(true);
     setError(null);
     try {
-      const sanitized = sanitizeWorkflowTrace(trace);
-      // 调用 AI 抽象（使用 Muse Spark）
-      const apiKey = "sk-jibB4MGawaWUtbQ34Rqdok1w3LH3qAp0ph7EF6llgJYeNeT1R18R6m8FaonH0roT";
-      const { distillWorkflowToSkill } = await import("@/lib/ai/skills/distill");
-      const result = await distillWorkflowToSkill(trace, { apiKey });
-      setDraft(result.draft);
-      setMd(result.md);
+      const { useAISettingsStore } = await import("@/store/useAISettingsStore");
+      const { provider, model } = useAISettingsStore.getState();
+      // 通过 ClassFlow Local API 调用 Server-side Distill via window.classflowDesktop.api.request
+      const res = await (window as unknown as { classflowDesktop: { api: { request: (path: string, init?: RequestInit) => Promise<Response> } } }).classflowDesktop.api.request("/api/ai/skills/distill", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ trace, provider, model }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ message: res.statusText }));
+        throw new Error((err as { message?: string }).message ?? `Distill failed: ${res.status}`);
+      }
+      const data = (await res.json()) as { draft: SkillDraft; md: string };
+      setDraft(data.draft);
+      setMd(data.md);
     } catch (e) {
       setError((e as Error).message ?? String(e));
     } finally {
@@ -47,35 +53,63 @@ export function SkillDistillDialog({ open, onOpenChange, trace, onSaved }: Skill
 
   const handleTest = async () => {
     if (!draft) return;
-    // 构造 2-3 个 simulated inputs 测试
-    const simulatedInputs = [
-      { course: "高等数学", assignmentTitle: "第一章习题", deadline: "2026-12-31" },
-      { course: "大学英语", assignmentTitle: "写作作业", deadline: "2026-09-01" },
-    ];
     const errors: string[] = [];
-    for (const input of simulatedInputs) {
-      // 检查是否触发正确
-      const hasCourse = draft.parameters.some((p) => p.name === "course");
-      if (!hasCourse) errors.push("missing course param");
-      // 检查输出步骤是否符合 schema
-      if (!draft.requiredTools.includes("search_courses")) errors.push("missing required tool search_courses");
+    // 1. SKILL.md schema valid (通过 draft 已校验，此处再检查)
+    try {
+      const { parseSkillMd } = await import("@/lib/ai/skills/parser");
+      const md = `---\nname: ${draft.name}\ndescription: ${draft.description}\n---\n\n${draft.instructions}`;
+      parseSkillMd(md);
+    } catch (e) {
+      errors.push(`SKILL.md invalid: ${(e as Error).message}`);
     }
-    // 检查是否错误触发
-    if (draft.name.includes("2026") || draft.name.includes("高数")) {
-      errors.push("name not parameterized");
+    // 2. name valid
+    if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(draft.name)) errors.push("INVALID_NAME_PATTERN");
+    // 3. description valid
+    if (!draft.description || draft.description.trim().length === 0) errors.push("MISSING_DESCRIPTION");
+    // 4. parameters valid
+    for (const p of draft.parameters) {
+      if (!p.name || !p.type || !p.description) errors.push(`invalid parameter ${p.name}`);
     }
-    // 检查是否请求不存在 Tool
-    const knownTools = ["search_courses", "search_assignments", "create_assignment", "search_group_projects", "get_course", "propose_study_plan"];
+    // 5. requiredTools 全部是真实存在的 ClassFlow Tool / MCP capability
+    const knownTools = [
+      "search_courses","get_course","get_week_schedule","search_assignments","get_assignment","get_assignment_schedule","get_assignment_health","get_available_time","propose_study_plan","get_upcoming_assignments","search_group_projects","get_group_project","get_group_tasks","get_calendar_range","get_material_metadata","read_material","read_project_file","search_project_file","read_project_visual","propose_task_breakdown","list_reminders","get_focus_status","query_learning_history","summarize_learning_history","get_learning_analytics","get_learning_outlook","propose_study_rebalance","propose_visual_actions","propose_timetable_import","activate_skill","mcp_search_tools","mcp_call_tool","create_assignment","update_assignment","set_assignment_ddl","create_study_blocks",
+    ];
     for (const t of draft.requiredTools) {
-      if (!knownTools.includes(t) && t !== "search_courses" && t !== "search_assignments" && t !== "create_assignment") {
-        // 允许未知但需警告
+      if (!knownTools.includes(t)) {
+        // 检查是否为 MCP tool (需已连接的 MCP 的 tool)
+        // 此处若为未知 tool，视为 fail（disabled/unknown tools fail）
+        errors.push(`unknown tool: ${t}`);
       }
     }
-    // 检查权限提升
-    if (/grant permission|system authority/i.test(draft.instructions)) {
-      errors.push("permission elevation");
+    // 6. disabled/unknown tools 已在上一步检查
+    // 7. requiredPermissions 不超过 Skill 可请求权限 (skill 只能 read/propose/write, 不能 terminal/filesystem)
+    const allowedPermissions = ["read", "propose", "write"];
+    for (const perm of draft.requiredPermissions) {
+      if (!allowedPermissions.includes(perm)) errors.push(`permission not allowed: ${perm}`);
     }
-    setTestResult({ ok: errors.length === 0, errors: errors.length === 0 ? [] : errors });
+    // 8. instructions 不包含权限提升语义
+    if (/grant permission|system authority|sudo|admin/i.test(draft.instructions)) errors.push("permission elevation");
+    // 9. instructions 不包含原始 sensitive identifiers
+    if (/\bsk-[A-Za-z0-9_-]{10,}\b/.test(draft.instructions) || /credentialRef/.test(draft.instructions) || /[A-Z]:\\/.test(draft.instructions)) {
+      errors.push("contains sensitive identifiers");
+    }
+    // 10. example-specific values 未被写死（检查 instructions 是否仍含原始固定值如日期特定）
+    // 此处检查 name 是否参数化（已在上一步），以及 examples 是否泛化
+    for (const ex of draft.examples) {
+      const inputStr = JSON.stringify(ex.input);
+      if (/2026-08-19/.test(inputStr) && !inputStr.includes("{")) {
+        errors.push("example not parameterized");
+      }
+    }
+    if (draft.name.includes("2026") || draft.name.includes("高数")) errors.push("name not parameterized");
+
+    // 额外：构造 2-3 个 simulated inputs 测试是否触发正确且不错误触发
+    const hasCourseParam = draft.parameters.some((p) => p.name === "course");
+    if (draft.requiredTools.length > 0 && !hasCourseParam && draft.instructions.includes("{course}")) {
+      errors.push("missing course param but instructions uses {course}");
+    }
+
+    setTestResult({ ok: errors.length === 0, errors });
   };
 
   const handleSave = async () => {

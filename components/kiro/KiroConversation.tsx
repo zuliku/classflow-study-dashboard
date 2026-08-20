@@ -214,6 +214,7 @@ export function KiroConversation({
               <KiroConversationRow
                 key={m.id}
                 view={m}
+                allMessages={messages}
                 actionsReady={idx === lastAssistantIndex ? !turnInFlight : true}
                 sources={idx === lastAssistantIndex ? sources : undefined}
                 onUndo={onUndo}
@@ -288,6 +289,7 @@ export function KiroConversation({
  */
 const KiroConversationRow = React.memo(function KiroConversationRow({
   view,
+  allMessages,
   actionsReady,
   sources,
   onUndo,
@@ -297,6 +299,7 @@ const KiroConversationRow = React.memo(function KiroConversationRow({
   onUndoComputerTask,
 }: {
   view: KiroChatMessageView;
+  allMessages?: KiroChatMessageView[];
   actionsReady: boolean;
   sources?: KiroSourceMeta[];
   onUndo: (toolCallId: string) => void;
@@ -385,32 +388,29 @@ const KiroConversationRow = React.memo(function KiroConversationRow({
             ))}
           </div>
         )}
-        {view.actions && view.actions.length > 0 && actionsReady && !view.streaming && (
-          <div className="pt-2">
-            <button
-              type="button"
-              onClick={() => {
-                const trace: WorkflowTrace = {
-                  turnId: view.id,
-                  userGoal: view.content.slice(0, 100) || "Kiro workflow",
-                  toolCalls: view.actions!.map((a) => ({ toolName: (a.action as { tool?: string }).tool ?? "unknown", input: a.action, toolCallId: a.toolCallId })),
-                  toolResults: view.actions!.map((a) => ({ toolName: (a.action as { tool?: string }).tool ?? "unknown", result: { ok: true }, toolCallId: a.toolCallId })),
-                  finalStatus: "success",
-                  timestamp: Date.now(),
-                };
-                if (isWorkflowTraceReusable(trace)) {
+        {view.actions && view.actions.length > 0 && actionsReady && !view.streaming && (() => {
+          // 使用完整 messages 提取真实 WorkflowTrace（userGoal 来自真实 User Message，非 Assistant content）
+          const trace = allMessages ? extractWorkflowTrace(allMessages as never) : null;
+          const reusable = trace ? isWorkflowTraceReusable(trace) : false;
+          // 仅当存在真实可复用 trace 时才显示按钮
+          if (!reusable || !trace) return null;
+          return (
+            <div className="pt-2">
+              <button
+                type="button"
+                onClick={() => {
                   setSkillTrace(trace);
                   setSkillDistillOpen(true);
-                }
-              }}
-              data-testid="save-workflow-as-skill"
-              className="h-8 px-4 bg-charcoal text-white text-xs font-bold rounded-lg hover:bg-black flex items-center gap-1.5"
-            >
-              <Sparkles className="w-3.5 h-3.5" />
-              将这套流程保存为 Skill
-            </button>
-          </div>
-        )}
+                }}
+                data-testid="save-workflow-as-skill"
+                className="h-8 px-4 bg-charcoal text-white text-xs font-bold rounded-lg hover:bg-black flex items-center gap-1.5"
+              >
+                <Sparkles className="w-3.5 h-3.5" />
+                将这套流程保存为 Skill
+              </button>
+            </div>
+          );
+        })()}
         {/* 历史恢复的 Action Cards：纯展示事实（canUndo 恒 false） */}
         {view.historyActions && view.historyActions.length > 0 && (
           <div className="space-y-2.5 pt-1">

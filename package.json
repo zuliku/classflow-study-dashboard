@@ -17,7 +17,8 @@
     "test": "vitest run",
     "test:terminal": "vitest run tests/terminalCapability.test.ts tests/terminalToolExposure.test.ts tests/terminalCapabilityPrompt.test.ts tests/terminalStreaming.test.ts tests/terminalSecretRedaction.test.ts tests/kiroTerminalBlock.test.tsx tests/terminalLifecycle.test.ts tests/terminalStdin.test.ts tests/terminalPtyContract.test.ts tests/terminalAsyncLifecycle.test.ts tests/terminalPtyAgentIntegration.test.ts tests/terminalFinalHardening.test.ts",
     "test:terminal:live": "vitest run tests/aiOpenCodeGoTerminalSmoke.test.ts tests/aiOpenCodeGoTerminalInteractiveSmoke.test.ts",
-    "pack:win": "electron-vite build && electron-builder --win nsis"
+    "pack:win": "electron-vite build && electron-builder --win nsis",
+    "security:secrets": "node scripts/check-secrets.mjs"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^4.0.36",
