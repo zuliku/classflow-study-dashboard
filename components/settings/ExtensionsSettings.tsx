@@ -8,6 +8,9 @@ import { useExtensionsStore } from "@/store/useExtensionsStore";
 import { listChannelProviders } from "@/lib/extensions/registry";
 import { cn } from "@/lib/utils";
 import { Dialog } from "@/components/ui/Dialog";
+import { SkillDistillDialog } from "@/components/kiro/SkillDistillDialog";
+import { extractWorkflowTrace } from "@/lib/ai/skills/workflowTrace";
+import { useKiroRuntime } from "@/components/kiro/KiroSessionProvider";
 
 type SkillListItem = {
   name: string;
@@ -105,6 +108,8 @@ export function ExtensionsSettings() {
   const [skillEditorOpen, setSkillEditorOpen] = useState(false);
   const [editingSkill, setEditingSkill] = useState<SkillListItem | null>(null);
   const [skillTestResult, setSkillTestResult] = useState<null | { ok: boolean; errors: string[] }>(null);
+  const [workflowDistillOpen, setWorkflowDistillOpen] = useState(false);
+  const [workflowTrace, setWorkflowTrace] = useState<import("@/lib/ai/skills/types").WorkflowTrace | null>(null);
 
   const handleSkillToggle = async (name: string, enabled: boolean) => {
     const bridge = getSkillBridge();
@@ -257,9 +262,23 @@ export function ExtensionsSettings() {
                   </button>
                   <button
                     type="button"
-                    disabled
-                    title="从 Kiro 工作流创建（即将推出）"
-                    className="h-8 px-4 bg-white border border-line text-satin-grey text-xs font-bold rounded-lg opacity-60 cursor-not-allowed flex items-center gap-1.5"
+                    onClick={() => {
+                      // 尝试提取最近成功 workflow（若无则提示）
+                      try {
+                        const chatMessages = (window as unknown as { __kiroChatMessages?: unknown[] }).__kiroChatMessages;
+                        if (Array.isArray(chatMessages) && chatMessages.length > 0) {
+                          const trace = extractWorkflowTrace(chatMessages as never);
+                          setWorkflowTrace(trace);
+                        } else {
+                          setWorkflowTrace(null);
+                        }
+                      } catch {
+                        setWorkflowTrace(null);
+                      }
+                      setWorkflowDistillOpen(true);
+                    }}
+                    data-testid="extensions-create-from-workflow"
+                    className="h-8 px-4 bg-white border border-line text-charcoal text-xs font-bold rounded-lg hover:bg-alabaster transition-colors flex items-center gap-1.5"
                   >
                     从 Kiro 工作流创建
                   </button>
@@ -530,6 +549,15 @@ export function ExtensionsSettings() {
         onOpenChange={setSkillEditorOpen}
         editingSkill={editingSkill}
         onSaved={refreshSkills}
+      />
+      <SkillDistillDialog
+        open={workflowDistillOpen}
+        onOpenChange={setWorkflowDistillOpen}
+        trace={workflowTrace}
+        onSaved={(name) => {
+          refreshSkills();
+          setWorkflowDistillOpen(false);
+        }}
       />
     </div>
   );

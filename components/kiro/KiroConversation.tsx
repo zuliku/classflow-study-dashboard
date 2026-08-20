@@ -5,13 +5,16 @@ import { usePresence } from "@/lib/usePresence";
 import { KiroMessage, KiroUserMessage } from "@/components/kiro/KiroMessage";
 import { KiroPendingIndicator } from "@/components/kiro/KiroWorklog";
 import { KiroAssistantShell } from "@/components/kiro/KiroAssistantShell";
-import { Loader2, RotateCcw, Settings, ChevronDown } from "lucide-react";
+import { Loader2, RotateCcw, Settings, ChevronDown, Sparkles } from "lucide-react";
 import { KiroChatMessageView } from "@/hooks/useKiroChat";
 import { KiroSourceMeta } from "@/lib/ai/citations/types";
 import { useKiroSessionMeta } from "@/components/kiro/KiroSessionProvider";
 import { useEffectiveReducedMotion } from "@/hooks/useEffectiveReducedMotion";
 import { AIError, AI_ERROR_MESSAGES } from "@/lib/ai/errors";
 import { KiroActionCard, actionToCardProps, KiroActionCardVariant } from "@/components/kiro/KiroActionCard";
+import { SkillDistillDialog } from "@/components/kiro/SkillDistillDialog";
+import { extractWorkflowTrace, isWorkflowTraceReusable } from "@/lib/ai/skills/workflowTrace";
+import type { WorkflowTrace } from "@/lib/ai/skills/types";
 import { KiroAgentTaskCard } from "@/components/kiro/computer/KiroAgentTaskCard";
 import { StudyPlanProposalCard } from "@/components/kiro/StudyPlanProposalCard";
 import { StudyRebalanceProposalCard } from "@/components/kiro/StudyRebalanceProposalCard";
@@ -315,6 +318,8 @@ const KiroConversationRow = React.memo(function KiroConversationRow({
     [view.actions]
   );
   const enteringActionIds = useEnterOnAdd(actionIds);
+  const [skillDistillOpen, setSkillDistillOpen] = React.useState(false);
+  const [skillTrace, setSkillTrace] = React.useState<WorkflowTrace | null>(null);
 
   if (view.role === "user") {
     return (
@@ -378,6 +383,32 @@ const KiroConversationRow = React.memo(function KiroConversationRow({
                 onUndo={a.action.canUndo ? () => onUndo(a.toolCallId) : undefined}
               />
             ))}
+          </div>
+        )}
+        {view.actions && view.actions.length > 0 && actionsReady && !view.streaming && (
+          <div className="pt-2">
+            <button
+              type="button"
+              onClick={() => {
+                const trace: WorkflowTrace = {
+                  turnId: view.id,
+                  userGoal: view.content.slice(0, 100) || "Kiro workflow",
+                  toolCalls: view.actions!.map((a) => ({ toolName: (a.action as { tool?: string }).tool ?? "unknown", input: a.action, toolCallId: a.toolCallId })),
+                  toolResults: view.actions!.map((a) => ({ toolName: (a.action as { tool?: string }).tool ?? "unknown", result: { ok: true }, toolCallId: a.toolCallId })),
+                  finalStatus: "success",
+                  timestamp: Date.now(),
+                };
+                if (isWorkflowTraceReusable(trace)) {
+                  setSkillTrace(trace);
+                  setSkillDistillOpen(true);
+                }
+              }}
+              data-testid="save-workflow-as-skill"
+              className="h-8 px-4 bg-charcoal text-white text-xs font-bold rounded-lg hover:bg-black flex items-center gap-1.5"
+            >
+              <Sparkles className="w-3.5 h-3.5" />
+              将这套流程保存为 Skill
+            </button>
           </div>
         )}
         {/* 历史恢复的 Action Cards：纯展示事实（canUndo 恒 false） */}
@@ -451,6 +482,7 @@ const KiroConversationRow = React.memo(function KiroConversationRow({
           </div>
         )}
       </KiroMessage>
+      <SkillDistillDialog open={skillDistillOpen} onOpenChange={setSkillDistillOpen} trace={skillTrace} />
     </div>
   );
 });
