@@ -29,23 +29,22 @@ export function QQReplyDialog({ open, onOpenChange, item, onSent }: QQReplyDialo
   const [error, setError] = useState<string | null>(null);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [tone, setTone] = useState<"natural" | "concise" | "formal" | "friendly">("natural");
+  const [draftGenerated, setDraftGenerated] = useState(false);
+  const currentDialogItemIdRef = React.useRef<string | null>(null);
   const pushToast = useToastStore((s) => s.pushToast);
   const { generateDraft, cancel: cancelDraft, loading: draftLoading, error: draftError } = useKiroReplyDraft();
 
   React.useEffect(() => {
-    if (open) {
-      setText("");
-      setApproval(null);
-      setError(null);
-      setConfirmOpen(false);
-    } else {
-      cancelDraft();
-    }
-  }, [open, item?.id, cancelDraft]);
-
-  React.useEffect(() => {
+    cancelDraft();
+    setText("");
+    setApproval(null);
+    setError(null);
+    setConfirmOpen(false);
+    setDraftGenerated(false);
+    setTone("natural");
+    currentDialogItemIdRef.current = open && item ? item.id : null;
     return () => cancelDraft();
-  }, [cancelDraft]);
+  }, [open, item?.id, cancelDraft]);
 
   if (!item) return null;
 
@@ -153,15 +152,18 @@ export function QQReplyDialog({ open, onOpenChange, item, onSent }: QQReplyDialo
                 type="button"
                 onClick={async () => {
                   if (!item) return;
-                  const draft = await generateDraft({ inboxItemId: item.id, message: item.text, senderDisplay: item.senderDisplay, tone });
-                  if (draft) setText(draft);
+                  const requestedItemId = item.id;
+                  const result = await generateDraft({ inboxItemId: item.id, message: item.text, senderDisplay: item.senderDisplay, tone });
+                  if (!result || currentDialogItemIdRef.current !== requestedItemId) return;
+                  setText(result.draft);
+                  setDraftGenerated(true);
                 }}
                 disabled={draftLoading}
                 data-testid="qq-reply-generate"
                 className="h-7 px-3 bg-white border border-line text-charcoal text-xs font-bold rounded-lg hover:bg-alabaster flex items-center gap-1 disabled:opacity-60"
               >
                 <Sparkles className="w-3 h-3" />
-                {text ? "重新生成" : "Kiro 生成草稿"}
+                {draftGenerated ? "重新生成" : "Kiro 生成草稿"}
               </button>
               <select value={tone} onChange={(e) => setTone(e.target.value as never)} data-testid="qq-reply-tone" className="h-7 px-2 bg-white border border-line rounded-lg text-xs">
                 <option value="natural">自然</option>
@@ -172,7 +174,7 @@ export function QQReplyDialog({ open, onOpenChange, item, onSent }: QQReplyDialo
             </div>
           </div>
           <textarea value={text} onChange={(e) => setText(e.target.value)} placeholder="输入回复内容..." rows={4} maxLength={2000} data-testid="qq-reply-text" className="mt-1 w-full p-3 bg-white border border-line rounded-lg text-sm resize-none focus:outline-none focus:border-charcoal" />
-          <p className="text-[11px] text-sandrift mt-1">{text.length}/2000 · 单次发送，不会自动拆分 {draftLoading ? "· 生成中..." : text ? "· AI 草稿，可继续编辑" : ""}</p>
+          <p className="text-[11px] text-sandrift mt-1">{text.length}/2000 · 单次发送，不会自动拆分 {draftLoading ? "· 生成中..." : draftGenerated ? "· AI 草稿，可继续编辑" : ""}</p>
           {draftError && <p className="text-[11px] text-danger mt-1">{draftError}</p>}
         </div>
 

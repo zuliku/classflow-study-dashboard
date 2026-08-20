@@ -3,12 +3,11 @@
 import { useCallback, useRef, useState } from "react";
 import { useAISettingsStore } from "@/store/useAISettingsStore";
 import { getSessionApiKey } from "@/lib/ai/sessionKeys";
-import { apiUrl } from "@/lib/desktop/apiBase";
+import { requestDesktopApi } from "@/lib/desktop/apiClient";
 
 export type ReplyDraftTone = "natural" | "concise" | "formal" | "friendly";
 
 export function useKiroReplyDraft() {
-  const [draft, setDraft] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -16,12 +15,15 @@ export function useKiroReplyDraft() {
   const currentItemIdRef = useRef<string | null>(null);
 
   const cancel = useCallback(() => {
+    seqRef.current += 1;
+    currentItemIdRef.current = null;
     abortRef.current?.abort();
     abortRef.current = null;
+    setLoading(false);
   }, []);
 
   const generateDraft = useCallback(
-    async (input: { inboxItemId: string; message: string; senderDisplay?: string; tone?: ReplyDraftTone }) => {
+    async (input: { inboxItemId: string; message: string; senderDisplay?: string; tone?: ReplyDraftTone }): Promise<{ draft: string; inboxItemId: string; requestSeq: number } | null> => {
       const enabled = useAISettingsStore.getState().enabled;
       if (!enabled) {
         setError("请先在设置中启用 Kiro");
@@ -37,7 +39,7 @@ export function useKiroReplyDraft() {
         return null;
       }
 
-      // Cancel previous
+      // Cancel previous and start new
       abortRef.current?.abort();
       const controller = new AbortController();
       abortRef.current = controller;
@@ -47,12 +49,15 @@ export function useKiroReplyDraft() {
       setError(null);
 
       try {
-        // Begin remote invocation for qq-bot
         const invBridge = (window as unknown as { classflowDesktop?: { invocation?: { beginRemoteInbox: (input: unknown) => Promise<{ invocationId: string }> } } }).classflowDesktop?.invocation;
         if (!invBridge) throw new Error("Invocation not available");
         const { invocationId } = await invBridge.beginRemoteInbox({ source: "qq-bot", inboxItemId: input.inboxItemId });
+        // Check stale after beginRemoteInbox (could have been cancelled/switched)
+        if (seq !== seqRef.current || currentItemIdRef.current !== input.inboxItemId || controller.signal.aborted) {
+          return null;
+        }
 
-        const res = await (window as unknown as { classflowDesktop: { api: { request: (path: string, init?: RequestInit) => Promise<Response> } } }).classflowDesktop.api.request(apiUrl("/api/ai/reply-draft"), {
+        const res = await requestDesktopApi("/api/ai/reply-draft", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -76,16 +81,12 @@ export function useKiroReplyDraft() {
           throw new Error((err as { message?: string }).message ?? `Draft failed: ${res.status}`);
         }
         const data = (await res.json()) as { draft: string };
-        // Stale guard: only apply if still same item and seq is latest
-        if (seq !== seqRef.current || currentItemIdRef.current !== input.inboxItemId) {
+        if (seq !== seqRef.current || currentItemIdRef.current !== input.inboxItemId || controller.signal.aborted) {
           return null;
         }
-        if (controller.signal.aborted) return null;
-        setDraft(data.draft);
-        return data.draft;
+        return { draft: data.draft, inboxItemId: input.inboxItemId, requestSeq: seq };
       } catch (e) {
         if ((e as Error).name === "AbortError") return null;
-        // Stale guard: don't show error for stale request
         if (seq !== seqRef.current || currentItemIdRef.current !== input.inboxItemId) return null;
         setError((e as Error).message ?? String(e));
         return null;
@@ -103,5 +104,5 @@ export function useKiroReplyDraft() {
     [generateDraft]
   );
 
-  return { draft, loading, error, generateDraft, regenerate, cancel, setDraft, setError };
+  return { loading, error, generateDraft, regenerate, cancel, setError };
 }
