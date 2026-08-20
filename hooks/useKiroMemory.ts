@@ -20,9 +20,14 @@ export function useKiroMemory() {
   const memoriesRef = useRef<KiroMemory[]>([]);
 
   const refresh = useCallback(async () => {
-    const list = await listMemories();
-    memoriesRef.current = list;
-    setMemories(list);
+    try {
+      const list = await listMemories();
+      memoriesRef.current = list;
+      setMemories(list);
+    } catch {
+      memoriesRef.current = [];
+      setMemories([]);
+    }
   }, []);
 
   useEffect(() => {
