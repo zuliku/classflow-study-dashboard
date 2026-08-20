@@ -1,12 +1,13 @@
 "use client";
 
 import React, { useState, useMemo } from "react";
-import { Inbox, Archive, Eye, Trash2, Check, Clock, Mail } from "lucide-react";
+import { Inbox, Archive, Eye, Trash2, Check, Clock, Mail, Reply } from "lucide-react";
 import { useInboxStore } from "@/store/useInboxStore";
 import type { ExternalInboxItem, InboxStatus } from "@/lib/inbox/types";
 import { wrapExternalContent } from "@/lib/inbox/types";
 import { cn } from "@/lib/utils";
 import { Dialog } from "@/components/ui/Dialog";
+import { QQReplyDialog } from "@/components/inbox/QQReplyDialog";
 
 export function InboxPanel({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
   const items = useInboxStore((s) => s.items);
@@ -14,6 +15,7 @@ export function InboxPanel({ open, onOpenChange }: { open: boolean; onOpenChange
   const removeItem = useInboxStore((s) => s.removeItem);
   const [filter, setFilter] = useState<InboxStatus | "all">("unread");
   const [selected, setSelected] = useState<ExternalInboxItem | null>(null);
+  const [replyItem, setReplyItem] = useState<ExternalInboxItem | null>(null);
 
   const filtered = useMemo(() => {
     if (filter === "all") return items;
@@ -110,6 +112,21 @@ export function InboxPanel({ open, onOpenChange }: { open: boolean; onOpenChange
                   <Check className="w-3 h-3" />
                   让 Kiro 处理
                 </button>
+                {item.source === "qq-bot" && (
+                  item.replyContextId ? (
+                    <button
+                      type="button"
+                      onClick={() => setReplyItem(item)}
+                      data-testid={`inbox-reply-${item.id}`}
+                      className="h-7 px-3 bg-white border border-line text-charcoal text-xs font-bold rounded-lg hover:bg-alabaster flex items-center gap-1"
+                    >
+                      <Reply className="w-3 h-3" />
+                      回复到 QQ
+                    </button>
+                  ) : (
+                    <span className="text-[11px] text-sandrift" title="此消息来自旧版本，无法直接回复">无法直接回复</span>
+                  )
+                )}
                 <button
                   type="button"
                   onClick={() => updateStatus(item.id, "archived")}
@@ -161,11 +178,20 @@ export function InboxPanel({ open, onOpenChange }: { open: boolean; onOpenChange
               <Check className="w-3.5 h-3.5" />
               让 Kiro 处理
             </button>
+            {selected.source === "qq-bot" && selected.replyContextId && (
+              <button type="button" onClick={() => { setReplyItem(selected); setSelected(null); }} className="h-8 px-4 bg-white border border-line text-charcoal text-xs font-bold rounded-lg hover:bg-alabaster flex items-center gap-1.5">
+                <Reply className="w-3.5 h-3.5" />
+                回复到 QQ
+              </button>
+            )}
             <button type="button" onClick={() => setSelected(null)} className="h-8 px-4 bg-white border border-line text-charcoal text-xs font-bold rounded-lg">
               关闭
             </button>
           </div>
         </Dialog>
+      )}
+      {replyItem && (
+        <QQReplyDialog open={!!replyItem} onOpenChange={(open) => !open && setReplyItem(null)} item={replyItem} onSent={() => { if (replyItem) updateStatus(replyItem.id, "reviewed"); setReplyItem(null); }} />
       )}
     </Dialog>
   );

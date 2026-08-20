@@ -161,4 +161,63 @@ export function registerChannelIpc(opts?: { validateSender?: (channel: string, e
       toIpcError(e);
     }
   });
+
+  ipcMain.handle("bridge:channels:prepareReply", async (event, input: unknown) => {
+    if (!guard("bridge:channels:prepareReply", event)) throw new Error(JSON.stringify({ code: "PERMISSION_DENIED" }));
+    try {
+      const { prepareReply } = await import("./outbound/outboundManager");
+      const i = input as { replyContextId?: string; text?: string };
+      if (!i.replyContextId || typeof i.text !== "string") throw new ChannelError("INVALID_INPUT" as never, "replyContextId and text required");
+      // Prevent renderer from sending target fields
+      if ((i as Record<string, unknown>).target || (i as Record<string, unknown>).conversationId || (i as Record<string, unknown>).inboundMessageId) {
+        throw new ChannelError("INVALID_INPUT" as never, "target fields not allowed");
+      }
+      const res = await prepareReply({ replyContextId: i.replyContextId, text: i.text });
+      return res;
+    } catch (e) {
+      toIpcError(e);
+    }
+  });
+
+  ipcMain.handle("bridge:channels:confirmReply", async (event, input: unknown) => {
+    if (!guard("bridge:channels:confirmReply", event)) throw new Error(JSON.stringify({ code: "PERMISSION_DENIED" }));
+    try {
+      const { confirmReply } = await import("./outbound/outboundManager");
+      const i = input as { approvalId?: string };
+      if (!i.approvalId) throw new ChannelError("INVALID_INPUT" as never, "approvalId required");
+      if ((i as Record<string, unknown>).text || (i as Record<string, unknown>).target) {
+        throw new ChannelError("INVALID_INPUT" as never, "text/target not allowed in confirm");
+      }
+      const res = await confirmReply({ approvalId: i.approvalId });
+      return res;
+    } catch (e) {
+      toIpcError(e);
+    }
+  });
+
+  ipcMain.handle("bridge:channels:cancelReply", async (event, input: unknown) => {
+    if (!guard("bridge:channels:cancelReply", event)) throw new Error(JSON.stringify({ code: "PERMISSION_DENIED" }));
+    try {
+      const { cancelReply } = await import("./outbound/outboundManager");
+      const i = input as { approvalId?: string };
+      if (!i.approvalId) throw new ChannelError("INVALID_INPUT" as never, "approvalId required");
+      const res = await cancelReply({ approvalId: i.approvalId });
+      return res;
+    } catch (e) {
+      toIpcError(e);
+    }
+  });
+
+  ipcMain.handle("bridge:channels:canReply", async (event, input: unknown) => {
+    if (!guard("bridge:channels:canReply", event)) throw new Error(JSON.stringify({ code: "PERMISSION_DENIED" }));
+    try {
+      const { canReply } = await import("./outbound/outboundManager");
+      const i = input as { replyContextId?: string };
+      if (!i.replyContextId) throw new ChannelError("INVALID_INPUT" as never, "replyContextId required");
+      const res = await canReply({ replyContextId: i.replyContextId });
+      return res;
+    } catch (e) {
+      toIpcError(e);
+    }
+  });
 }

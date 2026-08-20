@@ -6,6 +6,8 @@
 
 import type { ChannelInboundMessage } from "../types";
 import type { QQChannelConfig } from "./config";
+import type { ChannelReplyTarget } from "../types";
+import { ChannelError } from "../errors";
 
 export type QQTransportState = "disconnected" | "connecting" | "connected" | "reconnecting" | "error";
 
@@ -290,6 +292,26 @@ export class QQWebSocketTransport {
     (this as unknown as { appSecret: string }).appSecret = "";
   }
 
+  async sendReply(target: ChannelReplyTarget, text: string): Promise<{ messageId?: string; timestamp?: string }> {
+    if (!target.inboundMessageId) throw new ChannelError("QQ_REPLY_CONTEXT_INVALID" as never, "Missing inboundMessageId, cannot send as passive reply");
+    if (!this.client) throw new ChannelError("QQ_GATEWAY_DISCONNECTED", "Not connected");
+    const scope = target.conversationType === "group" ? "group" : "c2c";
+    const sendTarget = { scope, targetId: target.conversationId, msgId: target.inboundMessageId };
+    // Strict: never fallback to proactive (no delete msgId)
+    try {
+      const result = await (this.client as unknown as { sendText: (t: unknown, c: string) => Promise<unknown> }).sendText(sendTarget, text);
+      const res = result as { id?: string; messageId?: string; timestamp?: string };
+      return { messageId: res?.messageId ?? res?.id, timestamp: res?.timestamp };
+    } catch (e) {
+      const raw = e instanceof Error ? e.message : String(e);
+      // Map passive reply rejected
+      if (raw.includes("QQ_REPLY_REJECTED") || raw.toLowerCase().includes("passive") || raw.toLowerCase().includes("lifecycle") || raw.toLowerCase().includes("rejected")) {
+        throw new ChannelError("QQ_REPLY_REJECTED" as never, "QQ 已无法将此消息作为被动回复发送，请重新收到一条消息后再回复。");
+      }
+      throw e;
+    }
+  }
+
   getState(): QQTransportState {
     return this.state;
   }
@@ -309,6 +331,8 @@ export class FakeQQTransport {
   private events: QQTransportEvents;
   private state: QQTransportState = "disconnected";
   public emittedMessages: ChannelInboundMessage[] = [];
+  public sendReplyCalls: Array<{ target: { scope: string; targetId: string; msgId: string }; text: string }> = [];
+  public sendReplyImpl?: (target: import("../types").ChannelReplyTarget, text: string) => Promise<unknown>;
   private runPromise: Promise<void> | null = null;
   private runResolve: (() => void) | null = null;
   private abortController: AbortController | null = null;
@@ -369,6 +393,13 @@ export class FakeQQTransport {
   emitReconnect() {
     this.state = "connected";
     this.events.onStateChange("connected");
+  }
+  async sendReply(target: import("../types").ChannelReplyTarget, text: string): Promise<{ messageId?: string; timestamp?: string }> {
+    if (!target.inboundMessageId) throw new Error(JSON.stringify({ code: "QQ_REPLY_CONTEXT_INVALID", message: "Missing inboundMessageId" }));
+    const sdkTarget = { scope: target.conversationType === "group" ? "group" : "c2c", targetId: target.conversationId, msgId: target.inboundMessageId };
+    this.sendReplyCalls.push({ target: sdkTarget, text });
+    if (this.sendReplyImpl) return await this.sendReplyImpl(target, text) as { messageId?: string; timestamp?: string };
+    return { messageId: `mock_${Date.now()}`, timestamp: new Date().toISOString() };
   }
   // For auth failure test: start that rejects before ready
   static createAuthFailingTransport(events: QQTransportEvents): FakeQQTransport {

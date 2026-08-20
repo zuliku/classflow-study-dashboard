@@ -35,6 +35,7 @@ export interface ChannelInboundMessage {
   /** SDK protocol facts, not trust origin */
   mentionedBot?: boolean;
   isSelf?: boolean;
+  replyContextId?: string;
 }
 
 export interface ChannelHealth {
@@ -47,6 +48,12 @@ export interface ChannelHealth {
   messageCount?: number;
 }
 
+export interface ChannelReplyTarget {
+  conversationId: string;
+  conversationType: "direct" | "group";
+  inboundMessageId: string;
+}
+
 export interface ChannelAdapter {
   readonly id: string;
   readonly channel: ChannelType;
@@ -56,8 +63,7 @@ export interface ChannelAdapter {
   stop(): Promise<void>;
   /** @deprecated Use ChannelManager.disconnect+connect (re-resolve secret). Kept for compat but should not be used. */
   restart?(): Promise<void>;
-  /** Optional: explicit send (V1 receive-only, but API reserved) */
-  sendText?(target: { conversationId: string; conversationType: "direct" | "group" }, text: string): Promise<void>;
+  sendReply?(target: ChannelReplyTarget, text: string): Promise<{ messageId?: string; timestamp?: string }>;
   dispose?(): Promise<void>;
 }
 

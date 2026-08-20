@@ -47,8 +47,8 @@ export class ChannelManager {
   private configPath: string;
   private inboxSink: ChannelInboxSink;
 
-  constructor(inboxSink?: ChannelInboxSink) {
-    this.configPath = getChannelConfigPath();
+  constructor(inboxSink?: ChannelInboxSink, configPath?: string) {
+    this.configPath = configPath ?? getChannelConfigPath();
     this.inboxSink = inboxSink ?? new ChannelInboxSink();
     registerChannelFactory("qq-bot", () => {
       throw new Error("Use ChannelManager.createAdapter");
@@ -57,6 +57,7 @@ export class ChannelManager {
   }
 
   private loadConfigsSync(): void {
+    if (this.configPath === ":memory:") return;
     try {
       ensureChannelDir();
       if (!existsSync(this.configPath)) return;
@@ -70,12 +71,13 @@ export class ChannelManager {
         }
       }
     } catch (e) {
-      console.warn(`[channel] config load failed path=${getChannelConfigPath()} code=${(e as Error).message.slice(0, 100)}`);
+      console.warn(`[channel] config load failed path=${this.configPath} code=${(e as Error).message.slice(0, 100)}`);
       // Don't crash App; keep empty configs, UI health will show disconnected
     }
   }
 
   private async persistConfigsAtomic(): Promise<void> {
+    if (this.configPath === ":memory:") return;
     let tmp: string | null = null;
     try {
       ensureChannelDir();
@@ -306,6 +308,23 @@ export class ChannelManager {
     this.adapters.delete(id);
   }
 
+  async sendQQReply(replyContext: { sourceAccountId: string; conversationId: string; conversationType: "direct" | "group"; inboundMessageId: string }, text: string): Promise<{ messageId?: string; timestamp?: string }> {
+    const cfg = this.configs.get(replyContext.sourceAccountId);
+    if (!cfg) throw new ChannelError("CHANNEL_NOT_FOUND" as never, "Channel not found for reply context");
+    let adapter = this.adapters.get(replyContext.sourceAccountId);
+    if (!adapter || adapter.getState() !== "connected") {
+      // Auto-connect for confirmed send
+      await this.connect(replyContext.sourceAccountId);
+      adapter = this.adapters.get(replyContext.sourceAccountId);
+      if (!adapter) throw new ChannelError("QQ_GATEWAY_DISCONNECTED" as never, "Failed to connect");
+    }
+    if (!adapter.sendReply) throw new ChannelError("QQ_GATEWAY_DISCONNECTED" as never, "Transport not available");
+    return await adapter.sendReply(
+      { conversationId: replyContext.conversationId, conversationType: replyContext.conversationType, inboundMessageId: replyContext.inboundMessageId },
+      text
+    );
+  }
+
   private mapTokenError(e: unknown): { code: string; message: string } {
     return mapQQTokenError(e);
   }
@@ -447,4 +466,8 @@ export function getChannelManager(): ChannelManager {
 
 export function __resetChannelManagerForTest(): void {
   manager = null;
+}
+
+export function __setChannelManagerForTest(m: ChannelManager | null): void {
+  manager = m;
 }

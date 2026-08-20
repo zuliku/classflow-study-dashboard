@@ -10,6 +10,7 @@ import { QQMessageDedupe, getQQDedupeKey } from "./dedupe";
 import { evaluateQQPolicy, QQRateLimiter } from "./policy";
 import type { QQTransportEvents } from "./transport";
 import { ChannelError } from "../errors";
+import { getReplyContextStore } from "../outbound/replyContextStore";
 
 export type QQSdkClientFactory = (config: QQChannelConfig, appSecret: string, events: QQTransportEvents) => {
   start: () => Promise<void>;
@@ -214,20 +215,44 @@ export class QQChannelAdapter implements ChannelAdapter {
       return;
     }
 
-    // Forward to inbox (V1: only create inbox, not auto AI)
-    await this.inboxSink.ingest(rawMsg);
+    // Create reply context (for explicit user reply, not auto)
+    let replyContextId: string | undefined;
+    try {
+      const store = getReplyContextStore();
+      const ctx = await store.create({
+        channel: "qq-bot",
+        sourceAccountId: rawMsg.accountId,
+        conversationId: rawMsg.conversationId,
+        conversationType: rawMsg.conversationType,
+        inboundMessageId: rawMsg.externalMessageId,
+      });
+      replyContextId = ctx.replyContextId;
+    } catch (e) {
+      console.warn(`[qq-adapter] reply context create failed ${(e as Error).message.slice(0,100)}`);
+    }
+
+    // Forward to inbox with replyContextId
+    const msgWithContext: ChannelInboundMessage = replyContextId ? { ...rawMsg, replyContextId } as ChannelInboundMessage & { replyContextId?: string } : rawMsg;
+    // Pass replyContextId via inboxSink (which will publish to renderer)
+    // We need to extend ingested message to carry replyContextId
+    await this.inboxSink.ingest(msgWithContext as ChannelInboundMessage);
     this.messageCount += 1;
   }
 
-  // Optional sendText (receive-only V1 but API reserved for explicit user action)
-  async sendText(target: { conversationId: string; conversationType: "direct" | "group" }, text: string): Promise<void> {
+  async sendReply(target: { conversationId: string; conversationType: "direct" | "group"; inboundMessageId: string }, text: string): Promise<{ messageId?: string; timestamp?: string }> {
+    if (!target.inboundMessageId) throw new ChannelError("QQ_REPLY_CONTEXT_INVALID" as never, "Missing inboundMessageId, cannot send as passive reply");
     if (!this.transport) throw new ChannelError("QQ_GATEWAY_DISCONNECTED", "Not connected");
-    // For V1, we do not auto-reply; this is explicit manual operation path for future task
-    // If transport supports sendText, delegate (Fake will no-op)
-    const t = this.transport as unknown as { sendText?: (target: unknown, text: string) => Promise<void> };
-    if (typeof t.sendText === "function") {
-      await t.sendText({ scope: target.conversationType === "group" ? "group" : "c2c", targetId: target.conversationId }, text);
+    const t = this.transport as unknown as { sendReply?: (target: unknown, text: string) => Promise<unknown>; sendText?: (target: unknown, text: string) => Promise<unknown> };
+    if (typeof t.sendReply === "function") {
+      return await t.sendReply(target, text) as { messageId?: string; timestamp?: string };
     }
+    if (typeof t.sendText === "function") {
+      // Fallback for real SDK: construct target with msgId
+      const scope = target.conversationType === "group" ? "group" : "c2c";
+      const result = await t.sendText({ scope, targetId: target.conversationId, msgId: target.inboundMessageId }, text) as { id?: string; messageId?: string; timestamp?: string };
+      return { messageId: result?.messageId ?? result?.id, timestamp: result?.timestamp };
+    }
+    throw new ChannelError("QQ_GATEWAY_DISCONNECTED", "Transport send not available");
   }
 
   // For tests: expose dedupe size

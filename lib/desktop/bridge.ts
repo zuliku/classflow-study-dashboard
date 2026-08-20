@@ -128,7 +128,7 @@ export function getClassFlowDesktopChannelsBridge(): import("@/lib/desktop/types
   if (!bridge) return null;
   const channels = (bridge as unknown as { channels?: unknown }).channels;
   if (!channels || typeof channels !== "object") return null;
-  const required = ["list", "addQQ", "update", "setEnabled", "connect", "disconnect", "test", "remove"] as const;
+  const required = ["list", "addQQ", "update", "setEnabled", "connect", "disconnect", "test", "remove", "prepareReply", "confirmReply", "cancelReply", "canReply"] as const;
   if (!required.every((m) => typeof (channels as Record<string, unknown>)[m] === "function")) return null;
   return channels as import("@/lib/desktop/types").ClassFlowDesktopChannelsBridge;
 }

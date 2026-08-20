@@ -39,9 +39,7 @@ describe("channelPersistence", () => {
     manager = new ChannelManager(new ChannelInboxSink());
   });
 
-  afterEach(() => {
-    vi.restoreAllMocks();
-  });
+  afterEach(() => { vi.clearAllMocks(); });
 
   it("add persists credentialRef not secret, atomic", async () => {
     const { credentialRef } = vault.createCredential({ provider: "qq-bot", label: "bot", secret: "secret123" });
@@ -142,3 +140,6 @@ describe("channelPersistence", () => {
     expect(manager.listConfigs().length).toBe(1);
   });
 });
+
+
+

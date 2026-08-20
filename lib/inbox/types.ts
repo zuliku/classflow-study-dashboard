@@ -29,6 +29,7 @@ export interface ExternalInboxItem {
   dedupeKey: string;
   origin: "remote-channel";
   sourceAccountId?: string;
+  replyContextId?: string;
 }
 
 // Trust Boundary marker

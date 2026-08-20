@@ -138,6 +138,10 @@ const channelsBridge = {
   disconnect: (input: unknown) => invokeBridge("bridge:channels:disconnect", input),
   test: (input: unknown) => invokeBridge("bridge:channels:test", input),
   remove: (input: unknown) => invokeBridge("bridge:channels:remove", input),
+  prepareReply: (input: unknown) => invokeBridge("bridge:channels:prepareReply", input),
+  confirmReply: (input: unknown) => invokeBridge("bridge:channels:confirmReply", input),
+  cancelReply: (input: unknown) => invokeBridge("bridge:channels:cancelReply", input),
+  canReply: (input: unknown) => invokeBridge("bridge:channels:canReply", input),
 };
 
 const inboxBridge = {

@@ -106,6 +106,10 @@ export interface ClassFlowDesktopChannelsBridge {
   disconnect: (input: unknown) => Promise<{ ok: boolean }>;
   test: (input: unknown) => Promise<{ ok: boolean; error?: string }>;
   remove: (input: unknown) => Promise<{ ok: boolean }>;
+  prepareReply: (input: unknown) => Promise<{ approvalId: string; expiresAt: number; preview: { channel: string; conversationType: string; text: string } }>;
+  confirmReply: (input: unknown) => Promise<{ ok: boolean; platformMessageId?: string }>;
+  cancelReply: (input: unknown) => Promise<{ ok: boolean }>;
+  canReply: (input: unknown) => Promise<{ ok: boolean; reason?: string }>;
 }
 
 export interface ClassFlowDesktopInboxBridge {

@@ -15,6 +15,7 @@ export type InboxRawPayload = {
   receivedAt: number;
   attachments?: Array<{ id: string; name: string; mimeType?: string; size?: number; url?: string }>;
   sourceAccountId?: string;
+  replyContextId?: string;
 };
 
 let sender: ((envelope: { deliveryId: string; payload: InboxRawPayload }) => void) | null = null;
