@@ -14,7 +14,7 @@ import { registerMcpIpc } from "./mcp/ipc";
 import { registerInvocationIpc } from "./security/invocationIpc";
 import { registerChannelIpc } from "./channels/ipc";
 import { installLocalApiCapabilityInjector } from "./security/localApiCapability";
-import { isTrustedRendererUrl } from "@/lib/security/rendererOrigin";
+import { isTrustedRendererUrl, isValidAppBundleRequestUrl } from "@/lib/security/rendererOrigin";
 
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
 
@@ -283,13 +283,13 @@ app.whenReady().then(async () => {
 
   // app:// → out/renderer 静态资源（路径穿越防护：仅允许 renderer 目录内文件）
   protocol.handle("app", (request) => {
+    if (!isValidAppBundleRequestUrl(request.url)) {
+      return new Response("forbidden", { status: 403 });
+    }
     let url: URL;
     try {
       url = new URL(request.url);
     } catch {
-      return new Response("forbidden", { status: 403 });
-    }
-    if (url.protocol !== "app:" || url.hostname !== "bundle" || url.username !== "" || url.password !== "" || url.port !== "") {
       return new Response("forbidden", { status: 403 });
     }
     const { pathname } = url;

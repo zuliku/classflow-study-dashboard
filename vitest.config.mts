@@ -109,6 +109,7 @@ export default defineConfig({
       "tests/kiroChatTransport.test.ts",
       "tests/aiModelCatalogTransport.test.ts",
       "tests/kiroAISettingsTransport.test.ts",
+      "tests/rendererOriginTrust.test.ts",
       "scripts/docx-compat/generate-fixtures.test.ts",
     ],
   },

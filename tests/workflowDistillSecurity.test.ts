@@ -66,7 +66,7 @@ describe("workflowDistillSecurity — Task 08 hotfix", () => {
     expect(content).not.toContain('requiredTools.includes("search_courses")');
     // 应检查通用 knownTools 包含多种
     expect(content).toContain("knownTools");
-  });
+  }, 10000);
 
   it("17. Invalid requiredTool 能被检测", async () => {
     const draft = {

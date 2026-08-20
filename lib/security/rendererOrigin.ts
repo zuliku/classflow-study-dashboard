@@ -9,7 +9,7 @@ export interface TrustedRendererContext {
  * Development: exact origin of ELECTRON_RENDERER_URL (e.g., http://localhost:5173)
  */
 
-function isStrictAppBundleUrl(value: string): boolean {
+export function isStrictAppBundleUrl(value: string): boolean {
   try {
     const u = new URL(value);
     return (
@@ -24,23 +24,37 @@ function isStrictAppBundleUrl(value: string): boolean {
   }
 }
 
+/**
+ * Validate app:// protocol request URL for handler.
+ * Require exact bundle host without userinfo or port.
+ * Pure helper — testable without Electron.
+ */
+export function isValidAppBundleRequestUrl(requestUrl: string): boolean {
+  try {
+    const u = new URL(requestUrl);
+    return (
+      u.protocol === "app:" &&
+      u.hostname === "bundle" &&
+      u.username === "" &&
+      u.password === "" &&
+      u.port === ""
+    );
+  } catch {
+    return false;
+  }
+}
+
 export function canonicalRendererOrigin(rawUrl: string): string | null {
   if (!rawUrl) return null;
-  // Handle app://bundle/* specially
-  if (rawUrl.startsWith("app://")) {
-    // Must be strict app://bundle with no user/pass/port
-    try {
-      const u = new URL(rawUrl);
-      if (u.protocol === "app:" && u.hostname === "bundle" && u.username === "" && u.password === "" && u.port === "") {
+  try {
+    const u = new URL(rawUrl);
+    if (u.protocol === "app:") {
+      // Must be strict app://bundle with no user/pass/port
+      if (u.hostname === "bundle" && u.username === "" && u.password === "" && u.port === "") {
         return "app://bundle";
       }
       return null;
-    } catch {
-      return null;
     }
-  }
-  try {
-    const u = new URL(rawUrl);
     // Only http/https allowed for dev
     if (u.protocol !== "http:" && u.protocol !== "https:") return null;
     return u.origin;

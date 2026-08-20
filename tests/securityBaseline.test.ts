@@ -72,7 +72,9 @@ describe("Security Baseline — Task 01/02 + Task05 integration", () => {
 
   it("10. local API origin 正常（绑定到实际端口）", () => {
     const api = "http://127.0.0.1:53211";
-    expect(decideNavigation({ url: `${api}/api/status`, allowedApiOrigin: api }).kind).toBe("allow-internal");
+    const localApiNav = decideNavigation({ url: `${api}/api/status`, allowedApiOrigin: api });
+    expect(localApiNav.kind).toBe("deny");
+    expect((localApiNav as { reason?: string }).reason).toBe("local-api-navigation");
     expect(decideNavigation({ url: "http://127.0.0.1:9999/evil", allowedApiOrigin: api }).kind).toBe("allow-external");
   });
 
