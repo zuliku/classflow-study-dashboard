@@ -120,6 +120,12 @@ const mcpBridge = {
   setEnabled: (input: unknown) => invokeBridge("bridge:mcp:setEnabled", input),
   searchTools: (input: unknown) => invokeBridge("bridge:mcp:searchTools", input),
   callTool: (input: unknown) => invokeBridge("bridge:mcp:callTool", input),
+  approveAndCall: (input: unknown) => invokeBridge("bridge:mcp:approveAndCall", input),
+};
+
+const invocationBridge = {
+  beginLocal: () => invokeBridge("bridge:invocation:beginLocal", {}),
+  beginRemoteInbox: (input: unknown) => invokeBridge("bridge:invocation:beginRemoteInbox", input),
 };
 
 contextBridge.exposeInMainWorld("classflowDesktop", {
@@ -142,6 +148,7 @@ contextBridge.exposeInMainWorld("classflowDesktop", {
   credentials: credentialsBridge,
   skills: skillBridge,
   mcp: mcpBridge,
+  invocation: invocationBridge,
   api: {
     request: async (path: string, init?: RequestInit): Promise<Response> => {
       const base = resolveApiBase();

@@ -51,10 +51,21 @@ export function resolveInvocation(invocationId: string): InvocationTrustRecord |
   return rec;
 }
 
+export function resolveInvocationOrThrow(invocationId: string | undefined): InvocationTrustRecord {
+  if (!invocationId) throw new Error(JSON.stringify({ code: "INVOCATION_REQUIRED", message: "invocationId required" }));
+  const rec = records.get(invocationId);
+  if (!rec) throw new Error(JSON.stringify({ code: "INVALID_INVOCATION", message: `Invalid invocation: ${invocationId}` }));
+  if (rec.expiresAt < Date.now()) {
+    records.delete(invocationId);
+    throw new Error(JSON.stringify({ code: "INVOCATION_EXPIRED", message: `Invocation expired: ${invocationId}` }));
+  }
+  return rec;
+}
+
 export function getInvocationOrigin(invocationId?: string): InvocationOrigin {
-  if (!invocationId) return "local-user";
-  const rec = resolveInvocation(invocationId);
-  return rec?.origin ?? "local-user";
+  // Fail closed version for legacy callers: use resolveInvocationOrThrow instead
+  if (!invocationId) throw new Error(JSON.stringify({ code: "INVOCATION_REQUIRED", message: "invocationId required" }));
+  return resolveInvocationOrThrow(invocationId).origin;
 }
 
 export function clearExpiredInvocations(): void {

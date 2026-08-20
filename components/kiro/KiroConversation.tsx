@@ -13,7 +13,7 @@ import { useEffectiveReducedMotion } from "@/hooks/useEffectiveReducedMotion";
 import { AIError, AI_ERROR_MESSAGES } from "@/lib/ai/errors";
 import { KiroActionCard, actionToCardProps, KiroActionCardVariant } from "@/components/kiro/KiroActionCard";
 import { SkillDistillDialog } from "@/components/kiro/SkillDistillDialog";
-import { extractWorkflowTrace, isWorkflowTraceReusable } from "@/lib/ai/skills/workflowTrace";
+import { extractWorkflowTraceForTurn, isWorkflowTraceReusable } from "@/lib/ai/skills/workflowTrace";
 import type { WorkflowTrace } from "@/lib/ai/skills/types";
 import { KiroAgentTaskCard } from "@/components/kiro/computer/KiroAgentTaskCard";
 import { StudyPlanProposalCard } from "@/components/kiro/StudyPlanProposalCard";
@@ -389,10 +389,8 @@ const KiroConversationRow = React.memo(function KiroConversationRow({
           </div>
         )}
         {view.actions && view.actions.length > 0 && actionsReady && !view.streaming && (() => {
-          // 使用完整 messages 提取真实 WorkflowTrace（userGoal 来自真实 User Message，非 Assistant content）
-          const trace = allMessages ? extractWorkflowTrace(allMessages as never) : null;
+          const trace = allMessages ? extractWorkflowTraceForTurn(allMessages as never, { assistantMessageId: view.id }) : null;
           const reusable = trace ? isWorkflowTraceReusable(trace) : false;
-          // 仅当存在真实可复用 trace 时才显示按钮
           if (!reusable || !trace) return null;
           return (
             <div className="pt-2">

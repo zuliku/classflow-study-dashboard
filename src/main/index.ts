@@ -11,6 +11,7 @@ import { validateIpcSender } from "@/lib/security/ipcSender";
 import { registerSecretIpc } from "./secrets/secretIpc";
 import { registerSkillIpc } from "./skills/skillIpc";
 import { registerMcpIpc } from "./mcp/ipc";
+import { registerInvocationIpc } from "./security/invocationIpc";
 
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
 
@@ -190,6 +191,11 @@ app.whenReady().then(async () => {
     validateSender: (channel, event) => validateWindowSender(channel, event.sender, apiBase),
   });
 
+  // Invocation Trust — 每 Turn 的 opaque invocationId
+  registerInvocationIpc({
+    validateSender: (channel, event) => validateWindowSender(channel, event.sender, apiBase),
+  });
+
   // app:// → out/renderer 静态资源（路径穿越防护：仅允许 renderer 目录内文件）
   protocol.handle("app", (request) => {
     const { pathname } = new URL(request.url);
@@ -226,6 +232,12 @@ app.on("before-quit", async (event) => {
     const { closeAllPtySessions } = await import("./terminalSessionRuntime");
     closeAllPtySessions();
   } catch {}
+  try {
+    const { getMcpManager } = await import("./mcp/manager");
+    await getMcpManager().disconnectAll();
+  } catch (e) {
+    console.error("[classflow] mcp disconnectAll failed", (e as Error).message);
+  }
   if (apiServer) {
     try {
       await apiServer.close();

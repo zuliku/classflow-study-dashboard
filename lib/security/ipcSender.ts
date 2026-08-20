@@ -31,6 +31,7 @@ const SENSITIVE_PREFIXES = [
   "bridge:skill:",
   "bridge:mcp:",
   "bridge:channel:",
+  "bridge:invocation:",
   "window:",
 ] as const;
 const SENSITIVE_EXACT: ReadonlySet<string> = new Set([
