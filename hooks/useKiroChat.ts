@@ -657,6 +657,14 @@ export function useKiroChat({
   // Task 12: Invocation Trust — 每 Turn 冻结的 invocationId
   const activeInvocationIdRef = useRef<string | null>(null);
 
+  const assertTurnCapability = async (capability: "read" | "propose" | "write" | "delete" | "terminal" | "filesystem-write" | "computer-mutation" | "mcp-call"): Promise<void> => {
+    const invocationId = activeInvocationIdRef.current;
+    if (!invocationId) throw new Error(JSON.stringify({ code: "INVOCATION_REQUIRED", message: "Missing invocationId" }));
+    const bridge = (window as unknown as { classflowDesktop?: { invocation?: { assertCapability: (input: unknown) => Promise<unknown> } } }).classflowDesktop?.invocation;
+    if (!bridge) throw new Error(JSON.stringify({ code: "INVOCATION_REQUIRED", message: "Invocation not available" }));
+    await bridge.assertCapability({ invocationId, capability });
+  };
+
   // 发送瞬间绑定的附件快照：按 user message 顺序消费（File 不进入 Chat state）
   const snapshotQueueRef = useRef<KiroAttachmentView[][]>([]);
 
@@ -1000,7 +1008,7 @@ export function useKiroChat({
     onError: () => {
       // error 状态由 useChat 内部维护；归一化在下方派生
     },
-    onToolCall: ({ toolCall }) => {
+    onToolCall: async ({ toolCall }) => {
       const { toolName, toolCallId, input } = toolCall as {
         toolName: string;
         toolCallId: string;
@@ -1452,6 +1460,19 @@ export function useKiroChat({
           return;
         }
 
+        try {
+          await assertTurnCapability(isDestructiveWriteTool(toolName) ? "delete" : "write");
+        } catch (e) {
+          const raw = (e as Error).message ?? String(e);
+          try {
+            const parsed = JSON.parse(raw);
+            failOutput(parsed.code ?? "PERMISSION_DENIED_REMOTE", parsed.message ?? raw);
+          } catch {
+            failOutput("PERMISSION_DENIED_REMOTE", raw);
+          }
+          return;
+        }
+
         // 受限 API：只暴露白名单 action；禁止 setState
         const api = createKiroWriteApi({
           toolCallId,
@@ -1605,6 +1626,16 @@ export function useKiroChat({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chat.status, chat.messages]);
   const turnInFlight = turnExecution !== "settled";
+
+  // Task 12: Turn Lifecycle — settled/cancelled/error/reset 清空 invocationId, continuation 保留
+  useEffect(() => {
+    const isSettled = chat.status === "error" || (!turnInFlight && chat.status !== "submitted" && chat.status !== "streaming");
+    if (isSettled) {
+      if (!pendingAutoContinueRef.current) {
+        activeInvocationIdRef.current = null;
+      }
+    }
+  }, [chat.status, turnInFlight]);
 
   /** 执行 Write Tool：preflight + mutation + Undo 注册 + Toast + addToolOutput */
   const runWriteTool = useCallback(

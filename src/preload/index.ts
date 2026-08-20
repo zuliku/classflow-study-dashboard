@@ -126,6 +126,7 @@ const mcpBridge = {
 const invocationBridge = {
   beginLocal: () => invokeBridge("bridge:invocation:beginLocal", {}),
   beginRemoteInbox: (input: unknown) => invokeBridge("bridge:invocation:beginRemoteInbox", input),
+  assertCapability: (input: unknown) => invokeBridge("bridge:invocation:assertCapability", input),
 };
 
 contextBridge.exposeInMainWorld("classflowDesktop", {

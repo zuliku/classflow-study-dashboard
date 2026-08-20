@@ -7,6 +7,29 @@ import { randomUUID } from "node:crypto";
 
 export type InvocationOrigin = "local-user" | "remote-channel";
 
+export type InvocationCapability =
+  | "read"
+  | "propose"
+  | "write"
+  | "delete"
+  | "terminal"
+  | "filesystem-write"
+  | "computer-mutation"
+  | "mcp-call";
+
+export function isInvocationCapabilityAllowed(
+  origin: InvocationOrigin,
+  capability: InvocationCapability
+): boolean {
+  if (origin === "local-user") {
+    // local-user 后续仍由 Agent Mode / Tool policy 约束，此处仅作 origin 层 allow
+    return true;
+  }
+  // remote-channel: 仅 read/propose 允许，其余全部拒绝，workspace-auto 亦不覆盖
+  if (capability === "read" || capability === "propose") return true;
+  return false;
+}
+
 export interface InvocationTrustRecord {
   id: string;
   origin: InvocationOrigin;

@@ -111,6 +111,22 @@ export async function handleChat(req: Request) {
     return Response.json({ code: "UNKNOWN", message: "缺少对话消息。" }, { status: 400 });
   }
 
+  // Task 12: Resolve Invocation Trust before Provider/Tool Assembly
+  let invocationOrigin: "local-user" | "remote-channel" = "local-user";
+  try {
+    const { resolveInvocationOrThrow } = await import("@/src/main/security/invocationTrust");
+    const invocation = resolveInvocationOrThrow((parsed as { invocationId?: string }).invocationId ?? "");
+    invocationOrigin = invocation.origin;
+  } catch (err) {
+    const raw = (err as Error).message ?? String(err);
+    try {
+      const parsedErr = JSON.parse(raw) as { code?: string; message?: string };
+      return Response.json({ code: parsedErr.code ?? "INVOCATION_REQUIRED", message: parsedErr.message ?? raw }, { status: 403 });
+    } catch {
+      return Response.json({ code: "INVOCATION_REQUIRED", message: raw }, { status: 403 });
+    }
+  }
+
   // Model Resolver：provider/model → transport → LanguageModel（SSRF 校验在 resolver 内）
   let resolved;
   try {
@@ -368,7 +384,7 @@ export async function handleChat(req: Request) {
   try {
     const modelMessages = await convertToModelMessages(plan.messages as never);
       // Task 14：Server-side web_search（enabled 时追加；Server Key 不下发 Browser）
-      const tools = assembleKiroToolsForRequest({
+      const assembledTools = assembleKiroToolsForRequest({
         webSearchEnabled: parsed.webSearchConfig?.enabled ?? false,
         credential: {
           mode: parsed.webSearchConfig?.credentialMode ?? "server",
@@ -383,6 +399,8 @@ export async function handleChat(req: Request) {
           documentAuthoringVersion: resolveDocumentAuthoringVersion(computerSnapshot?.documentAuthoringVersion),
         }),
       });
+      const { filterKiroToolsForInvocation } = await import("@/lib/ai/tools/invocationFilter");
+      const tools = filterKiroToolsForInvocation({ tools: assembledTools, origin: invocationOrigin });
       // Dev-only：Tool Exposure 与 Capability 同源确认（bounded；不含 command/path/key）
       if (process.env.NODE_ENV === "development") {
         const cap = resolveTerminalCapability(computerSnapshot);
