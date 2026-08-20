@@ -17,9 +17,15 @@
     "test": "vitest run",
     "test:terminal": "vitest run tests/terminalCapability.test.ts tests/terminalToolExposure.test.ts tests/terminalCapabilityPrompt.test.ts tests/terminalStreaming.test.ts tests/terminalSecretRedaction.test.ts tests/kiroTerminalBlock.test.tsx tests/terminalLifecycle.test.ts tests/terminalStdin.test.ts tests/terminalPtyContract.test.ts tests/terminalAsyncLifecycle.test.ts tests/terminalPtyAgentIntegration.test.ts tests/terminalFinalHardening.test.ts",
     "test:terminal:live": "vitest run tests/aiOpenCodeGoTerminalSmoke.test.ts tests/aiOpenCodeGoTerminalInteractiveSmoke.test.ts",
+    "test:docx:fixtures": "vitest run scripts/docx-compat/generate-fixtures.test.ts",
+    "test:docx:openxml": "node scripts/docx-compat/validate-openxml.mjs",
     "pack:win": "electron-vite build && electron-builder --win nsis",
     "security:secrets": "node scripts/check-secrets.mjs"
   },
+  "engines": {
+    "node": ">=22.12 <23"
+  },
+  "packageManager": "npm@10.9.8",
   "dependencies": {
     "@ai-sdk/anthropic": "^4.0.36",
     "@ai-sdk/openai": "^4.0.42",
