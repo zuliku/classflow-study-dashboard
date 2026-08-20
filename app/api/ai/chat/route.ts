@@ -331,9 +331,39 @@ export async function handleChat(req: Request) {
   );
   const visualPendingContinuationSection = buildVisualPendingContinuationSection(visualPendingContinuation);
 
+  // Task 07: Skill Catalog — progressive disclosure (only name/description for enabled skills)
+  let skillCatalogSection = "";
+  let slashSkillSection = "";
+  try {
+    const { listSkills } = await import("@/src/main/skills/skillStore");
+    const pkgs = listSkills();
+    const catalog = pkgs.filter((p) => p.enabled).map((p) => ({ name: p.name, description: p.description, enabled: true }));
+    const { buildSkillCatalogPromptSection, buildSkillActivationPrompt } = await import("@/lib/ai/skills/prompt");
+    skillCatalogSection = buildSkillCatalogPromptSection(catalog);
+    const lastUser = [...parsed.messages].reverse().find((m: { role: string }) => m.role === "user");
+    const lastText: string =
+      (lastUser as unknown as { parts?: { type?: string; text?: string }[]; content?: string })?.parts?.find((p) => p.type === "text")?.text ??
+      (lastUser as unknown as { content?: string })?.content ??
+      "";
+    if (typeof lastText === "string" && lastText.trim().startsWith("/")) {
+      const { parseSlashSkillCommand } = await import("@/lib/ai/skills/slash");
+      const skillName = parseSlashSkillCommand(lastText);
+      if (skillName) {
+        const { activateSkill } = await import("@/lib/ai/skills/activation");
+        const result = activateSkill(pkgs, { skillName });
+        if (result.ok && result.instructions) {
+          slashSkillSection = buildSkillActivationPrompt(skillName, result.instructions);
+        }
+      }
+    }
+  } catch {
+    skillCatalogSection = "";
+    slashSkillSection = "";
+  }
+
   const systemMessage = baseContext
-    ? `${trustedBasePrompt}${buildClassFlowContextSection(baseContext, contextRefs)}${projectInstructionsSection}${visualPendingContinuationSection}${memorySection}${attachmentSection(plan.attachmentContext)}${visionPagesSection}${computerWorkspaceContext}${desktopRuntimeCapabilityContext}${workspaceInstructionsSection}${artifactContextNotice}`
-    : trustedBasePrompt + projectInstructionsSection + visualPendingContinuationSection + memorySection + attachmentSection(plan.attachmentContext) + visionPagesSection + computerWorkspaceContext + desktopRuntimeCapabilityContext + workspaceInstructionsSection + artifactContextNotice;
+    ? `${trustedBasePrompt}${buildClassFlowContextSection(baseContext, contextRefs)}${projectInstructionsSection}${visualPendingContinuationSection}${memorySection}${attachmentSection(plan.attachmentContext)}${visionPagesSection}${computerWorkspaceContext}${desktopRuntimeCapabilityContext}${workspaceInstructionsSection}${artifactContextNotice}${skillCatalogSection}${slashSkillSection}`
+    : trustedBasePrompt + projectInstructionsSection + visualPendingContinuationSection + memorySection + attachmentSection(plan.attachmentContext) + visionPagesSection + computerWorkspaceContext + desktopRuntimeCapabilityContext + workspaceInstructionsSection + artifactContextNotice + skillCatalogSection + slashSkillSection;
 
   try {
     const modelMessages = await convertToModelMessages(plan.messages as never);

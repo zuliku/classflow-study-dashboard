@@ -9,6 +9,7 @@ import { decideNavigation } from "@/lib/security/navigation";
 import { getCspHeader } from "@/lib/security/csp";
 import { validateIpcSender } from "@/lib/security/ipcSender";
 import { registerSecretIpc } from "./secrets/secretIpc";
+import { registerSkillIpc } from "./skills/skillIpc";
 
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
 
@@ -175,6 +176,11 @@ app.whenReady().then(async () => {
 
   // SecretVault — 仅暴露 create/replace/delete/list，且受 sender validation 保护
   registerSecretIpc({
+    validateSender: (channel, event) => validateWindowSender(channel, event.sender, apiBase),
+  });
+
+  // Skills — 仅 Main 管理文件，Renderer 通过 IPC 操作，同样受 sender validation
+  registerSkillIpc({
     validateSender: (channel, event) => validateWindowSender(channel, event.sender, apiBase),
   });
 

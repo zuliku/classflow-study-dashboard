@@ -28,6 +28,7 @@ const SENSITIVE_PREFIXES = [
   "bridge:fs:",
   "bridge:terminal:",
   "bridge:credential:",
+  "bridge:skill:",
   "bridge:mcp:",
   "bridge:channel:",
   "window:",

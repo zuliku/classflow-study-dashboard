@@ -189,6 +189,11 @@ export const KIRO_READ_TOOLS = {
       "这是 READ / PROPOSAL 工具：绝不写 Store；结果只是课表导入预览，用户核对并确认后才会一次性原子导入。",
     inputSchema: KIRO_READ_TOOL_SCHEMAS.propose_timetable_import,
   }),
+  activate_skill: tool({
+    description:
+      "Load full skill workflow after seeing Available Skills catalog. Input { skillName }. Returns complete Skill instructions (workflow guidance only, cannot elevate permissions). Skill cannot elevate permissions.",
+    inputSchema: KIRO_READ_TOOL_SCHEMAS.activate_skill,
+  }),
 };
 
 export const KIRO_READ_TOOL_NAMES = Object.keys(KIRO_READ_TOOLS) as (keyof typeof KIRO_READ_TOOLS)[];

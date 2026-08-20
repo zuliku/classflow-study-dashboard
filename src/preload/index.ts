@@ -96,6 +96,20 @@ const credentialsBridge = {
   list: (input: unknown) => invokeBridge("bridge:credential:list", input),
 };
 
+const skillBridge = {
+  list: (input?: unknown) => invokeBridge("bridge:skill:list", input ?? {}),
+  get: (input: unknown) => invokeBridge("bridge:skill:get", input),
+  create: (input: unknown) => invokeBridge("bridge:skill:create", input),
+  update: (input: unknown) => invokeBridge("bridge:skill:update", input),
+  delete: (input: unknown) => invokeBridge("bridge:skill:delete", input),
+  setEnabled: (input: unknown) => invokeBridge("bridge:skill:setEnabled", input),
+  import: () => invokeBridge("bridge:skill:import", {}),
+  importPath: (input: unknown) => invokeBridge("bridge:skill:importPath", input),
+  export: (input: unknown) => invokeBridge("bridge:skill:export", input),
+  test: (input: unknown) => invokeBridge("bridge:skill:test", input),
+  activate: (input: unknown) => invokeBridge("bridge:skill:activate", input),
+};
+
 contextBridge.exposeInMainWorld("classflowDesktop", {
   version: 1,
   platform: "windows",
@@ -114,6 +128,7 @@ contextBridge.exposeInMainWorld("classflowDesktop", {
   filesystem: filesystemBridge,
   terminal: terminalBridge,
   credentials: credentialsBridge,
+  skills: skillBridge,
   api: {
     request: async (path: string, init?: RequestInit): Promise<Response> => {
       const base = resolveApiBase();

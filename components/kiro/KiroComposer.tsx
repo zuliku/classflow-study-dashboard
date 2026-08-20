@@ -136,6 +136,8 @@ export function KiroComposer({
   const [materialPickerOpen, setMaterialPickerOpen] = useState(false);
   const [dragOver, setDragOver] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [slashSkills, setSlashSkills] = useState<{ name: string; description: string }[]>([]);
+  const [slashOpen, setSlashOpen] = useState(false);
   const submittingRef = useRef(false);
   const taRef = useRef<HTMLTextAreaElement | null>(null);
   const attachRef = useRef<HTMLDivElement | null>(null);
@@ -165,6 +167,35 @@ export function KiroComposer({
     !preparingSend &&
     !submitting &&
     !preparingVision;
+  // Task 07: Slash Skill — 仅显示 enabled skills
+  useEffect(() => {
+    if (!text.startsWith("/")) {
+      setSlashOpen(false);
+      return;
+    }
+    const bridge = (window as unknown as { classflowDesktop?: { skills?: { list: () => Promise<{ skills: { name: string; description: string; enabled: boolean }[] }> } } }).classflowDesktop?.skills;
+    if (!bridge) {
+      setSlashOpen(false);
+      return;
+    }
+    bridge
+      .list()
+      .then((res) => {
+        const enabled = (res.skills ?? []).filter((s) => s.enabled);
+        const prefix = text.slice(1).split(/\s+/)[0].toLowerCase();
+        const filtered = prefix ? enabled.filter((s) => s.name.toLowerCase().startsWith(prefix)) : enabled;
+        setSlashSkills(filtered);
+        setSlashOpen(filtered.length > 0);
+      })
+      .catch(() => setSlashOpen(false));
+  }, [text]);
+
+  const handleSlashSelect = (name: string) => {
+    setText(`/${name} `);
+    setSlashOpen(false);
+    requestAnimationFrame(() => taRef.current?.focus());
+  };
+
   // V4.1（Productization）+ V4.6：拆分「当前 Turn scope 锁」与「下一 Turn preference 锁」。
   // - currentTurnScopeLocked：Agent Turn 尚未真正 settled——保护 Context/Attachment/Workspace/Computer 等
   //   会改变「当前工作范围」展示的控件（preparing 阶段同样属于当前 Turn 范围）
@@ -181,6 +212,7 @@ export function KiroComposer({
     setAttachOpen(false);
     setPickerOpen(false);
     setMaterialPickerOpen(false);
+    setSlashOpen(false);
   }, [currentTurnScopeLocked]);
 
   const autoGrow = () => {
@@ -237,6 +269,7 @@ export function KiroComposer({
         setModelOpen(false);
         setPickerOpen(false);
         setMaterialPickerOpen(false);
+        setSlashOpen(false);
       }
     };
     const onPointerDown = (e: PointerEvent) => {
@@ -440,6 +473,30 @@ export function KiroComposer({
                   ))}
                 </div>
               )}
+            </div>
+          )}
+
+          {/* Task 07: Slash Skill Menu — 仅显示 enabled skills */}
+          {slashOpen && (
+            <div
+              data-testid="skill-slash-menu"
+              className="mx-3 mb-2 bg-surface border border-line rounded-xl shadow-card overflow-hidden"
+            >
+              <p className="px-3 py-2 text-[11px] font-bold text-sandrift border-b border-line-soft">已启用 Skills · 输入 /skill-name 显式调用</p>
+              <div className="max-h-40 overflow-y-auto">
+                {slashSkills.map((s) => (
+                  <button
+                    key={s.name}
+                    type="button"
+                    onClick={() => handleSlashSelect(s.name)}
+                    data-testid={`skill-slash-item-${s.name}`}
+                    className="w-full text-left px-3 py-2 hover:bg-alabaster flex flex-col gap-0.5 transition-colors"
+                  >
+                    <span className="text-xs font-bold text-charcoal">/{s.name}</span>
+                    <span className="text-[11px] text-sandrift line-clamp-1">{s.description}</span>
+                  </button>
+                ))}
+              </div>
             </div>
           )}
 

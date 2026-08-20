@@ -242,6 +242,15 @@ export const proposeStudyRebalanceSchema = z
  */
 export const proposeVisualActionsSchema = proposeVisualActionsInputSchema;
 
+export const activateSkillSchema = z.object({
+  skillName: z
+    .string()
+    .trim()
+    .min(1)
+    .max(64)
+    .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, "skillName must be lowercase hyphen"),
+});
+
 export const KIRO_READ_TOOL_SCHEMAS = {
   get_current_context: emptyInputSchema,
   get_user_study_profile: emptyInputSchema,
@@ -274,6 +283,7 @@ export const KIRO_READ_TOOL_SCHEMAS = {
   propose_study_rebalance: proposeStudyRebalanceSchema,
   propose_visual_actions: proposeVisualActionsSchema,
   propose_timetable_import: proposeTimetableImportInputSchema,
+  activate_skill: activateSkillSchema,
 } as const;
 
 export type KiroReadToolName = keyof typeof KIRO_READ_TOOL_SCHEMAS;

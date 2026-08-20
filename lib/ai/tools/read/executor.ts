@@ -1000,6 +1000,12 @@ export function getMaterialMetadata(state: ReadToolState, input: unknown): ReadT
   };
 }
 
+export function activateSkillTool(state: ReadToolState, input: unknown): ReadToolResult<unknown> {
+  const parsed = safeParse<{ skillName: string }>("activate_skill", input);
+  if (!parsed.ok) return parsed;
+  return { ok: false, code: "NOT_FOUND", message: `Skill not found: ${parsed.data.skillName}` };
+}
+
 // ---------- 统一入口 ----------
 
 /** 同步执行的 Read Tools（read_material / read_project_file / read_project_visual / search_project_file / history / analytics / outlook 为异步重量级工具，独立处理） */
@@ -1027,6 +1033,7 @@ const EXECUTORS: Record<Exclude<KiroReadToolName, "read_material" | "read_projec
   propose_task_breakdown: proposeTaskBreakdownTool,
   list_reminders: listReminders,
   get_focus_status: getFocusStatus,
+  activate_skill: activateSkillTool,
 };
 
 /**

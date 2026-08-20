@@ -12,6 +12,7 @@ import { useAppStore } from "@/store/useAppStore";
 import { useAISettingsStore } from "@/store/useAISettingsStore";
 import { useKiroComputerStore } from "@/store/useKiroComputerStore";
 import { KiroComputerTurnSnapshot, KiroProjectTurnContext } from "@/lib/ai/contextBudget/types";
+import { KIRO_READ_TOOL_SCHEMAS } from "@/lib/ai/tools/read/schemas";
 import { ComputerActionFact, ComputerCapability, KiroWorkspaceMeta } from "@/lib/ai/computer/types";
 import { ComputerError } from "@/lib/ai/computer/errors";
 import { executeKiroComputerTool } from "@/lib/ai/computer/executor";
@@ -1181,6 +1182,35 @@ export function useKiroChat({
           const output = await runMemoryTool(toolName, input, toolCallId);
           emitToolOutput(toolName, toolCallId, output);
         })();
+        return;
+      }
+
+      // ---- Skill Activation (Task 07): Server Control Tool activate_skill ----
+      if (toolName === "activate_skill") {
+        const parsed = KIRO_READ_TOOL_SCHEMAS.activate_skill.safeParse(input);
+        if (!parsed.success) {
+          failOutput("INVALID_INPUT", "skillName 必须为有效 Skill 名称");
+          return;
+        }
+        const bridge = (window as unknown as { classflowDesktop?: { skills?: { activate: (input: unknown) => Promise<unknown> } } }).classflowDesktop?.skills;
+        if (!bridge || typeof bridge.activate !== "function") {
+          failOutput("NOT_FOUND", `Skill not found: ${parsed.data.skillName} (桌面环境不可用)`);
+          return;
+        }
+        void bridge
+          .activate({ skillName: parsed.data.skillName })
+          .then((result) => {
+            emitToolOutput(toolName, toolCallId, result as ToolOutput);
+          })
+          .catch((err) => {
+            const raw = err instanceof Error ? err.message : String(err);
+            try {
+              const parsedErr = JSON.parse(raw) as { message?: string };
+              failOutput("NOT_FOUND", parsedErr.message ?? raw);
+            } catch {
+              failOutput("NOT_FOUND", raw);
+            }
+          });
         return;
       }
 
