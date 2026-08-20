@@ -1,8 +1,11 @@
 ﻿"use client";
 
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { WorkspaceHeader } from "@/components/layout/WorkspaceHeader";
+import { WorkspaceInboxButton } from "@/components/layout/WorkspaceInboxButton";
+import { InboxPanel } from "@/components/inbox/InboxPanel";
+import { useInboxStore } from "@/store/useInboxStore";
 import { Button } from "@/components/ui/Button";
 import { BottomNav } from "@/components/layout/BottomNav";
 import { TimetableGrid } from "@/components/dashboard/TimetableGrid";
@@ -58,6 +61,8 @@ import {
 export default function Home() {
   // Task 13B: Main → Renderer inbox bridge (single subscription at stable root)
   useInboxChannelBridge();
+  const [inboxOpen, setInboxOpen] = useState(false);
+  const inboxUnreadCount = useInboxStore((s) => s.items.filter((it) => it.status === "unread").length);
   // 精确 selector：避免整 store 订阅导致 UI Chrome 等无关 state 变化触发 Home 全量 render
   const activeTab = useAppStore((s) => s.activeTab);
   const courses = useAppStore((s) => s.courses);
@@ -320,7 +325,12 @@ export default function Home() {
 
 {activeTab === "kiro" && (
             <div className="flex flex-1 min-h-0 flex-col">
-              <WorkspaceHeader title="Kiro" />
+              <WorkspaceHeader
+                title="Kiro"
+                actions={
+                  <WorkspaceInboxButton unreadCount={inboxUnreadCount} onClick={() => setInboxOpen(true)} />
+                }
+              />
               <KiroWorkspace />
             </div>
           )}
@@ -339,6 +349,7 @@ export default function Home() {
       <CommandCenter />
       <GlobalShortcutController />
       <SettingsModal />
+      <InboxPanel open={inboxOpen} onOpenChange={setInboxOpen} />
       <AddCourseModal />
       <ImportScheduleModal />
       <ConflictResolutionModal />

@@ -1,10 +1,10 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Minus, Square, Copy, X, CalendarDays } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAppStore } from "@/store/useAppStore";
-import { getClassFlowDesktopExtras } from "@/lib/desktop/desktopExtras";
+import { getClassFlowDesktopWindowBridge } from "@/lib/desktop/desktopExtras";
 
 /**
  * 桌面版自绘顶部状态栏（替代原生 Windows 标题栏）——紧凑型。
@@ -18,17 +18,26 @@ export function TitleBar() {
   const semesterName = useAppStore((s) => s.semester?.name);
   const currentSemesterWeek = useAppStore((s) => s.currentSemesterWeek);
 
-  useEffect(() => {
-    const bridge = getClassFlowDesktopExtras()?.window;
-    if (!bridge) return;
-    void bridge.isMaximized().then(setMaximized);
-    return bridge.onMaximizedChange(setMaximized);
-  }, []);
+  const windowBridge = getClassFlowDesktopWindowBridge();
+  const hasDesktopRuntime =
+    typeof window !== "undefined" && !!(window as unknown as { classflowDesktop?: unknown }).classflowDesktop;
+  const windowAvailable = !!windowBridge;
+  const warnedRef = useRef(false);
 
-  const win = getClassFlowDesktopExtras()?.window;
+  useEffect(() => {
+    if (!windowBridge) {
+      if (hasDesktopRuntime && !warnedRef.current && process.env.NODE_ENV !== "production") {
+        warnedRef.current = true;
+        console.warn("[classflow] desktop window bridge unavailable");
+      }
+      return;
+    }
+    void windowBridge.isMaximized().then(setMaximized);
+    return windowBridge.onMaximizedChange(setMaximized);
+  }, [windowBridge, hasDesktopRuntime]);
 
   const buttonClass =
-    "flex items-center justify-center w-9 h-full text-satin-grey hover:bg-alabaster hover:text-charcoal transition-colors duration-[var(--motion-fast)] cursor-default";
+    "flex items-center justify-center w-9 h-full text-satin-grey hover:bg-alabaster hover:text-charcoal transition-colors duration-[var(--motion-fast)] cursor-default disabled:opacity-40 disabled:cursor-not-allowed";
 
   return (
     <header
@@ -58,14 +67,27 @@ export function TitleBar() {
         className="flex items-stretch h-full -mr-2"
         style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
       >
-        <button type="button" aria-label="最小化" className={buttonClass} onClick={() => win?.minimize()}>
+        <button
+          type="button"
+          aria-label="最小化"
+          className={buttonClass}
+          disabled={!windowAvailable}
+          onClick={() => {
+            if (!windowBridge) return;
+            windowBridge.minimize();
+          }}
+        >
           <Minus className="w-3 h-3" strokeWidth={1.75} />
         </button>
         <button
           type="button"
           aria-label={maximized ? "还原" : "最大化"}
           className={buttonClass}
-          onClick={() => win?.toggleMaximize()}
+          disabled={!windowAvailable}
+          onClick={() => {
+            if (!windowBridge) return;
+            windowBridge.toggleMaximize();
+          }}
         >
           {maximized ? (
             <Copy className="w-2.5 h-2.5" strokeWidth={1.75} />
@@ -76,8 +98,12 @@ export function TitleBar() {
         <button
           type="button"
           aria-label="关闭"
-          className={cn(buttonClass, "hover:bg-danger hover:text-white")}
-          onClick={() => win?.close()}
+          className={cn(buttonClass, "hover:bg-danger hover:text-white disabled:hover:bg-transparent disabled:hover:text-satin-grey")}
+          disabled={!windowAvailable}
+          onClick={() => {
+            if (!windowBridge) return;
+            windowBridge.close();
+          }}
         >
           <X className="w-3 h-3" strokeWidth={1.75} />
         </button>

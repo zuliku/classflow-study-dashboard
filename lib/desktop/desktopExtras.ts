@@ -25,3 +25,26 @@ export function getClassFlowDesktopExtras(): ClassFlowDesktopBridge | null {
   const bridge = window.classflowDesktop as ClassFlowDesktopBridge | undefined;
   return bridge && typeof bridge === "object" && bridge.apiBase && bridge.window ? bridge : null;
 }
+
+/**
+ * 仅窗口控制 Bridge（不依赖 apiBase / filesystem / terminal 等 capability）。
+ * 校验：window.classflowDesktop.version === 1 且 window 表面完整。
+ */
+export function getClassFlowDesktopWindowBridge(): ClassFlowDesktopWindowBridge | null {
+  if (typeof window === "undefined") return null;
+  const bridge = window.classflowDesktop as unknown as { version?: unknown; window?: unknown } | undefined;
+  if (!bridge || typeof bridge !== "object") return null;
+  if ((bridge as { version?: unknown }).version !== 1) return null;
+  const win = (bridge as { window?: unknown }).window as Partial<ClassFlowDesktopWindowBridge> | undefined;
+  if (!win || typeof win !== "object") return null;
+  if (
+    typeof win.minimize !== "function" ||
+    typeof win.toggleMaximize !== "function" ||
+    typeof win.close !== "function" ||
+    typeof win.isMaximized !== "function" ||
+    typeof win.onMaximizedChange !== "function"
+  ) {
+    return null;
+  }
+  return win as ClassFlowDesktopWindowBridge;
+}

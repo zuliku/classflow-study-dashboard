@@ -91,3 +91,75 @@ describe("migration：旧主 store sidebarCollapsed → UI Chrome initial value"
     expect(migrateLegacy()).toBe(false);
   });
 });
+
+describe("Sidebar motion decoupling — Task 16B T/U/V/W", () => {
+  it("Sidebar.tsx 实现 visualCollapsed 与 persistedCollapsed 解耦（pending + transitionend 持久化）", async () => {
+    const fs = await import("node:fs");
+    const path = await import("node:path");
+    const src = fs.readFileSync(path.join(process.cwd(), "components/layout/Sidebar.tsx"), "utf-8");
+    // 必须存在 visualCollapsed / persistedCollapsed / pendingCollapsedRef
+    expect(src).toContain("visualCollapsed");
+    expect(src).toContain("persistedCollapsed");
+    expect(src).toContain("pendingCollapsedRef");
+    // toggle 立即 setVisualCollapsed，不同步 persist；reducedMotion 分支立即持久化
+    expect(src).toContain("setVisualCollapsed(next)");
+    expect(src).toContain("setPersistedCollapsed");
+    // transitionend(width) 后才持久化 pending
+    expect(src).toContain('propertyName !== "width"');
+    expect(src).toContain("pendingCollapsedRef.current !== null");
+    // 第一帧不做同步 persistence（注释或逻辑）
+    expect(src).toMatch(/第一帧|立即.*visual|不.*persist/i);
+  });
+
+  it("减少 layout-property tween：Shell 仅 width，Label 仅 opacity/transform，padding/gap 瞬时", async () => {
+    const fs = await import("node:fs");
+    const path = await import("node:path");
+    const css = fs.readFileSync(path.join(process.cwd(), "app/globals.css"), "utf-8");
+    // sidebar-nav-row 不应有 230ms padding/gap tween
+    const navRowBlock = css.match(/\.sidebar-nav-row\s*\{[^}]+\}/)?.[0] ?? "";
+    expect(navRowBlock).not.toContain("transition-property: padding");
+    // nav row should not transition gap via transition-property (gap itself is okay as static)
+    expect(navRowBlock).not.toMatch(/transition-property:[^;]*gap/);
+    // Label 仅 opacity/transform，不含 max-width 持续 tween
+    expect(css).toContain("transition-property: opacity, transform;");
+    // Shell 仍保留 width transition
+    expect(css).toContain(".sidebar-shell");
+    expect(css).toMatch(/transition-property:\s*width/);
+  });
+
+  it("不使用 transform scale 模拟 Sidebar（保持 64px/224px 几何，图标光学居中）", async () => {
+    const fs = await import("node:fs");
+    const path = await import("node:path");
+    const css = fs.readFileSync(path.join(process.cwd(), "app/globals.css"), "utf-8");
+    // 不应出现 scaleX(sidebar) 或 scale(sidebar)
+    expect(css).not.toMatch(/scaleX\s*\(/);
+    // sidebar-shell 应为 w-16 / w-56（由组件控制），css 中不应有 transform scale 模拟
+    const sidebarSrc = fs.readFileSync(path.join(process.cwd(), "components/layout/Sidebar.tsx"), "utf-8");
+    expect(sidebarSrc).toContain("w-16");
+    expect(sidebarSrc).toContain("w-56");
+    expect(sidebarSrc).not.toContain("scaleX");
+  });
+
+  it("observers：ResizeObserver 冻结期间不重复 measure，transitionend width 单次完成，无 timer 双触发", async () => {
+    const fs = await import("node:fs");
+    const path = await import("node:path");
+    const src = fs.readFileSync(path.join(process.cwd(), "components/layout/Sidebar.tsx"), "utf-8");
+    expect(src).toContain("motionActiveRef.current");
+    expect(src).toContain("if (motionActiveRef.current) return");
+    expect(src).toContain('if (e.propertyName !== "width") return');
+    // 确保没有同时使用 timer + transitionend 双完成（无 setTimeout 完成 morph）
+    // 允许 requestAnimationFrame 用于 plate 校正，但不应有 setTimeout 触发 persisted 写入
+    const hasTimeoutPersist = /setTimeout\([^)]*setPersistedCollapsed/.test(src);
+    expect(hasTimeoutPersist).toBe(false);
+  });
+
+  it("Reduced Motion 瞬时切换（不进 motionActive）", async () => {
+    const fs = await import("node:fs");
+    const path = await import("node:path");
+    const src = fs.readFileSync(path.join(process.cwd(), "components/layout/Sidebar.tsx"), "utf-8");
+    expect(src).toContain("reducedMotion");
+    expect(src).toContain("setVisualCollapsed(next)");
+    // reduced branch should set motionActive false
+    expect(src).toMatch(/if\s*\(reducedMotion\)[\s\S]*setMotionActive\(false\)/);
+  });
+});

@@ -269,8 +269,10 @@ export function ExtensionsSettings() {
         </div>
 
         <div className="space-y-3" data-testid="extensions-skills-panel" data-setting-id="extensions-skills" hidden={activeTab !== "skills"}>
-          <SettingsGroup title="Skills" description="将常用的 Kiro 工作流程保存为可复用能力。">
-            <div className="flex items-center justify-between gap-2">
+          <SettingsGroup
+            title="Skills"
+            description="将常用的 Kiro 工作流程保存为可复用能力。"
+            action={
               <div className="flex items-center gap-2">
                 <button
                   type="button"
@@ -291,11 +293,12 @@ export function ExtensionsSettings() {
                   导入
                 </button>
               </div>
-              <span className="text-[11px] text-sandrift">{skills.length} 个 Skills · {skills.filter((s) => s.enabled).length} 已启用</span>
-            </div>
+            }
+            contentClassName="px-4 py-4"
+          >
 
             {!skillsLoading && skills.length === 0 ? (
-              <div className="p-6 flex flex-col items-center text-center gap-3">
+              <div className="min-h-[220px] flex flex-col items-center justify-center text-center gap-3 py-8">
                 <div className="w-10 h-10 rounded-xl bg-pastel-mint/60 border border-line flex items-center justify-center">
                   <Puzzle className="w-5 h-5 text-charcoal" />
                 </div>
@@ -441,8 +444,10 @@ export function ExtensionsSettings() {
         </div>
 
         <div className="space-y-3" data-testid="extensions-mcp-panel" data-setting-id="extensions-mcp" hidden={activeTab !== "mcp"}>
-          <SettingsGroup title="MCP" description="连接外部工具和数据服务，让 Kiro 在需要时调用。">
-            <div className="flex items-center justify-between gap-2">
+          <SettingsGroup
+            title="MCP"
+            description="连接外部工具和数据服务，让 Kiro 在需要时调用。"
+            action={
               <button
                 type="button"
                 onClick={() => setMcpAddOpen(true)}
@@ -452,12 +457,13 @@ export function ExtensionsSettings() {
                 <Plus className="w-3.5 h-3.5" />
                 添加 MCP
               </button>
-              <span className="text-[11px] text-sandrift">{mcpConnections.length} 个 MCP · {mcpConnections.filter((c) => c.state === "connected").length} 已连接</span>
-            </div>
+            }
+            contentClassName="px-4 py-4"
+          >
             {mcpLoading ? (
               <p className="text-xs text-sandrift">加载中...</p>
             ) : mcpConnections.length === 0 ? (
-              <div className="p-6 flex flex-col items-center text-center gap-3">
+              <div className="min-h-[220px] flex flex-col items-center justify-center text-center gap-3 py-8">
                 <div className="w-10 h-10 rounded-xl bg-pastel-mint/60 border border-line flex items-center justify-center">
                   <Boxes className="w-5 h-5 text-charcoal" />
                 </div>

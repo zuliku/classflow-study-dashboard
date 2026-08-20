@@ -1,7 +1,7 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
-import { Inbox, Archive, Eye, Trash2, Check, Clock, Mail, Reply } from "lucide-react";
+import React, { useState, useMemo, useEffect } from "react";
+import { Inbox, Archive, Eye, Trash2, Check, Clock, Mail, Reply, X } from "lucide-react";
 import { useInboxStore } from "@/store/useInboxStore";
 import type { ExternalInboxItem, InboxStatus } from "@/lib/inbox/types";
 import { wrapExternalContent } from "@/lib/inbox/types";
@@ -24,6 +24,14 @@ export function InboxPanel({ open, onOpenChange }: { open: boolean; onOpenChange
 
   const unreadCount = useMemo(() => items.filter((it) => it.status === "unread").length, [items]);
 
+  // Root close cleanup: selected / replyItem must not persist across reopen
+  useEffect(() => {
+    if (!open) {
+      setSelected(null);
+      setReplyItem(null);
+    }
+  }, [open]);
+
   const handleKiroProcess = (item: ExternalInboxItem) => {
     // 授权 Kiro 分析消息并生成 Proposal（非直接写入）
     // 将外部内容包装为 EXTERNAL UNTRUSTED CONTENT
@@ -36,7 +44,14 @@ export function InboxPanel({ open, onOpenChange }: { open: boolean; onOpenChange
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange} overlayId="inbox-panel" aria-label="收件箱" className="w-[min(640px,calc(100vw-24px))] bg-surface border border-line rounded-2xl p-0 max-h-[85vh] overflow-hidden flex flex-col">
+    <Dialog
+      open={open}
+      onOpenChange={onOpenChange}
+      overlayId="inbox-panel"
+      aria-label="收件箱"
+      closeOnBackdrop={false}
+      className="w-[min(640px,calc(100vw-24px))] bg-surface border border-line rounded-2xl p-0 max-h-[85vh] overflow-hidden flex flex-col"
+    >
       <div className="shrink-0 p-4 border-b border-line flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Inbox className="w-5 h-5 text-charcoal" />
@@ -67,6 +82,15 @@ export function InboxPanel({ open, onOpenChange }: { open: boolean; onOpenChange
             data-testid="inbox-filter-archived"
           >
             归档
+          </button>
+          <button
+            type="button"
+            onClick={() => onOpenChange(false)}
+            aria-label="关闭收件箱"
+            data-testid="inbox-close-button"
+            className="ml-2 w-7 h-7 flex items-center justify-center rounded-lg text-sandrift hover:bg-alabaster hover:text-charcoal transition-colors"
+          >
+            <X className="w-4 h-4" />
           </button>
         </div>
       </div>

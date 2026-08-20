@@ -139,4 +139,19 @@ describe("Security Baseline — Task 01/02 + Task05 integration", () => {
     expect(validateExternalUrl("ht!tp://[invalid").ok).toBe(false);
     expect(decideNavigation({ url: "not a url" }).kind).toBe("deny");
   });
+
+  it("window controls IPC — trusted app:// allowed, untrusted denied", () => {
+    const trusted = validateIpcSender("window:minimize", { destroyed: false, isTrustedWindow: true, url: "app://bundle/index.html" }, { allowedApiOrigin: "http://127.0.0.1:1234" });
+    expect(trusted.ok).toBe(true);
+    const trustedMax = validateIpcSender("window:maximize", { destroyed: false, isTrustedWindow: true, url: "app://bundle/index.html" }, { allowedApiOrigin: "http://127.0.0.1:1234" });
+    expect(trustedMax.ok).toBe(true);
+    const trustedClose = validateIpcSender("window:close", { destroyed: false, isTrustedWindow: true, url: "app://bundle/index.html" }, { allowedApiOrigin: "http://127.0.0.1:1234" });
+    expect(trustedClose.ok).toBe(true);
+    const trustedIsMax = validateIpcSender("window:isMaximized", { destroyed: false, isTrustedWindow: true, url: "app://bundle/index.html" }, { allowedApiOrigin: "http://127.0.0.1:1234" });
+    expect(trustedIsMax.ok).toBe(true);
+    const deniedUntrusted = validateIpcSender("window:minimize", { destroyed: false, isTrustedWindow: false, url: "app://bundle/index.html" }, { allowedApiOrigin: "http://127.0.0.1:1234" });
+    expect(deniedUntrusted.ok).toBe(false);
+    const deniedEvil = validateIpcSender("window:minimize", { destroyed: false, isTrustedWindow: true, url: "https://evil.com" }, { allowedApiOrigin: "http://127.0.0.1:1234" });
+    expect(deniedEvil.ok).toBe(false);
+  });
 });

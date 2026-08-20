@@ -52,8 +52,8 @@ export function Sidebar() {
   const setActiveTab = useAppStore((s) => s.setActiveTab);
   const setSettingsModalOpen = useAppStore((s) => s.setSettingsModalOpen);
   // UI Chrome：低成本独立 store（不触发主业务 store persist / 大范围 render）
-  const sidebarCollapsed = useUIChromeStore((s) => s.sidebarCollapsed);
-  const setSidebarCollapsed = useUIChromeStore((s) => s.setSidebarCollapsed);
+  const persistedCollapsed = useUIChromeStore((s) => s.sidebarCollapsed);
+  const setPersistedCollapsed = useUIChromeStore((s) => s.setSidebarCollapsed);
   const reminderCenterOpen = useReminderCenterStore((s) => s.isOpen);
   const reminderCenterToggle = useReminderCenterStore((s) => s.toggle);
   const reminders = useAppStore((s) => s.reminders);
@@ -61,29 +61,63 @@ export function Sidebar() {
   const reducedMotion = useEffectiveReducedMotion();
   const { isXl, resolved } = useIsXl();
 
-  // <1280 强制 icon rail；≥1280 遵循用户持久化状态
-  const effectiveCollapsed = isXl ? sidebarCollapsed : true;
+  // ---- Visual vs Persisted decoupling (Task 16B T) ----
+  // persistedCollapsed = 用户最终偏好（localStorage），visualCollapsed = 当前显示态（立即响应）
+  const [visualCollapsed, setVisualCollapsed] = useState(() => {
+    if (typeof window !== "undefined" && !window.matchMedia("(min-width: 1280px)").matches) return true;
+    return persistedCollapsed;
+  });
+  const pendingCollapsedRef = useRef<boolean | null>(null);
+
+  // 同步：非动画期，visual 跟随 persisted（isXl 变化 / 外部持久化恢复）；动画期由 pending 控制
+  useEffect(() => {
+    if (motionActiveRef.current) return;
+    if (!isXl) {
+      setVisualCollapsed(true);
+    } else {
+      setVisualCollapsed(persistedCollapsed);
+    }
+  }, [persistedCollapsed, isXl]);
+
+  // <1280 强制 icon rail；≥1280 遵循用户偏好（visual）
+  const effectiveCollapsed = isXl ? visualCollapsed : true;
 
   // ---- Rail Morph Motion State（transient UI，不入 store）----
-  // 只有用户主动点击才进入 manual morph；transitionend(width) 后回落 idle。
+  // 只有用户主动点击才进入 manual morph；transitionend(width) 后回落 idle 并持久化。
   const [motionActive, setMotionActive] = useState(false);
   const [motionDirection, setMotionDirection] = useState<"collapse" | "expand" | null>(null);
   // ref 供 ResizeObserver 回调读取（回调闭包捕获旧 state 会失效）
   const motionActiveRef = useRef(false);
 
   const toggleCollapsed = () => {
-    const next = !sidebarCollapsed;
-    if (!reducedMotion) {
-      motionActiveRef.current = true;
-      setMotionActive(true);
-      setMotionDirection(next ? "collapse" : "expand");
+    if (!isXl) return;
+    const next = !visualCollapsed;
+    pendingCollapsedRef.current = next;
+    if (reducedMotion) {
+      // Reduced Motion：瞬时落位 + 立即持久化
+      setVisualCollapsed(next);
+      setPersistedCollapsed(next);
+      pendingCollapsedRef.current = null;
+      motionActiveRef.current = false;
+      setMotionActive(false);
+      setMotionDirection(null);
+      return;
     }
-    setSidebarCollapsed(next);
+    // 第一帧仅做 presentation：立即设置 visual + 启动动画，不同步 localStorage
+    motionActiveRef.current = true;
+    setMotionActive(true);
+    setMotionDirection(next ? "collapse" : "expand");
+    setVisualCollapsed(next);
   };
 
   const handleShellTransitionEnd = (e: React.TransitionEvent<HTMLElement>) => {
     // 只认 Sidebar width 段：动画完成 → 回落 idle（CSS transition 可直接从当前位置反向，无 timer queue）
+    // 且仅在 width transitionend 持久化 pending 值（single completion，无 timer 双触发）
     if (e.propertyName !== "width") return;
+    if (pendingCollapsedRef.current !== null) {
+      setPersistedCollapsed(pendingCollapsedRef.current);
+      pendingCollapsedRef.current = null;
+    }
     motionActiveRef.current = false;
     setMotionActive(false);
     setMotionDirection(null);
@@ -370,11 +404,11 @@ export function Sidebar() {
           <button
             type="button"
             onClick={toggleCollapsed}
-            aria-label={sidebarCollapsed ? "展开侧栏" : "收起侧栏"}
+            aria-label={effectiveCollapsed ? "展开侧栏" : "收起侧栏"}
             data-testid="sidebar-collapse-toggle"
             className="w-full flex items-center justify-center py-1 rounded-lg text-sandrift hover:text-charcoal hover:bg-alabaster transition-colors focus-visible:outline-2 focus-visible:outline-charcoal/30"
           >
-            {sidebarCollapsed ? (
+            {effectiveCollapsed ? (
               <PanelLeftOpen className="w-4 h-4" aria-hidden="true" />
             ) : (
               <PanelLeftClose className="w-4 h-4" aria-hidden="true" />
