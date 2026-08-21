@@ -8,10 +8,12 @@ import { promises as fs, existsSync, mkdirSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { app } from "electron";
 import { randomUUID } from "node:crypto";
-import type { ChannelHealth, ChannelState } from "./types";
+import type { ChannelHealth, ChannelState, PersistedChannelConfig } from "./types";
 import type { ChannelType } from "./types";
 import type { QQChannelConfig } from "./qq/config";
 import { validateQQChannelConfig } from "./qq/config";
+import { validateGmailChannelConfig } from "./email/config";
+import type { GmailChannelConfig } from "./email/types";
 import { QQChannelAdapter } from "./qq/adapter";
 import { ChannelInboxSink } from "./inboxSink";
 import { getRuntimeSecretVault } from "@/src/main/secrets/secretRuntime";
@@ -27,23 +29,9 @@ function ensureChannelDir(): void {
   mkdirSync(dirname(getChannelConfigPath()), { recursive: true });
 }
 
-export interface PersistedChannelConfig {
-  id: string;
-  channel: ChannelType;
-  enabled: boolean;
-  displayName: string;
-  appId: string;
-  credentialRef: string;
-  requireMentionInGroup: boolean;
-  allowedUsers: string[];
-  allowedGroups: string[];
-  receiveDirectMessages: boolean;
-  receiveGroupMessages: boolean;
-}
-
 export class ChannelManager {
   private configs = new Map<string, PersistedChannelConfig>();
-  private adapters = new Map<string, QQChannelAdapter>();
+  private adapters = new Map<string, import("./types").ChannelAdapter>();
   private configPath: string;
   private inboxSink: ChannelInboxSink;
 
@@ -62,11 +50,20 @@ export class ChannelManager {
       ensureChannelDir();
       if (!existsSync(this.configPath)) return;
       const raw = require("node:fs").readFileSync(this.configPath, "utf8");
-      const parsed = JSON.parse(raw) as { channels?: PersistedChannelConfig[] };
+      const parsed = JSON.parse(raw) as { channels?: unknown[] };
       if (Array.isArray(parsed.channels)) {
-        for (const cfg of parsed.channels) {
-          if (cfg.id && cfg.channel === "qq-bot" && cfg.appId && cfg.credentialRef) {
-            this.configs.set(cfg.id, cfg);
+        for (const rawCfg of parsed.channels) {
+          const cfg = rawCfg as unknown as PersistedChannelConfig & Record<string, unknown>;
+          if (!cfg.id || !cfg.credentialRef) continue;
+          if ((cfg as unknown as { channel?: string }).channel === "qq-bot" && (cfg as unknown as { appId?: string }).appId) {
+            this.configs.set(cfg.id, cfg as PersistedChannelConfig);
+          } else if ((cfg as unknown as { channel?: string }).channel === "gmail" && (cfg as unknown as { emailAddress?: string }).emailAddress) {
+            this.configs.set(cfg.id, cfg as PersistedChannelConfig);
+          } else if ((cfg as unknown as { channel?: string }).channel === "qq-mail" && (cfg as unknown as { emailAddress?: string }).emailAddress) {
+            this.configs.set(cfg.id, cfg as PersistedChannelConfig);
+          } else if (!(cfg as unknown as { channel?: string }).channel && (cfg as unknown as { appId?: string }).appId) {
+            (cfg as unknown as { channel: ChannelType }).channel = "qq-bot";
+            this.configs.set(cfg.id, cfg as PersistedChannelConfig);
           }
         }
       }
@@ -134,7 +131,7 @@ export class ChannelManager {
       const adapter = this.adapters.get(cfg.id);
       const health: ChannelHealth = adapter
         ? adapter.getHealth()
-        : { channel: "qq-bot", id: cfg.id, state: cfg.enabled ? "disconnected" : "disabled" };
+        : { channel: cfg.channel, id: cfg.id, state: cfg.enabled ? "disconnected" : "disabled" };
       return { config: cfg, health };
     });
   }
@@ -192,21 +189,91 @@ export class ChannelManager {
     return cfg;
   }
 
+  async addGmailChannel(input: {
+    displayName: string;
+    emailAddress: string;
+    credentialRef: string;
+  }): Promise<PersistedChannelConfig> {
+    if (!input.displayName || !input.emailAddress || !input.credentialRef) {
+      throw new ChannelError("INVALID_INPUT", "displayName/emailAddress/credentialRef required");
+    }
+    if (!input.credentialRef.startsWith("cred_")) throw new ChannelError("INVALID_INPUT", "credentialRef invalid");
+    try {
+      const vault = getRuntimeSecretVault();
+      vault.resolveSecretForProvider(input.credentialRef, "google");
+    } catch {
+      throw new ChannelError("GMAIL_AUTH_FAILED", "凭据不存在或类型不匹配");
+    }
+    const id = `gmail_${randomUUID().slice(0, 8)}`;
+    const cfg: PersistedChannelConfig = {
+      id,
+      channel: "gmail",
+      enabled: true,
+      displayName: input.displayName,
+      emailAddress: input.emailAddress.trim().toLowerCase(),
+      credentialRef: input.credentialRef,
+      syncIntervalSeconds: 60,
+    } as PersistedChannelConfig;
+    const validated = validateGmailChannelConfig({ ...cfg });
+    if (!validated.ok) throw new ChannelError("EMAIL_INVALID_CONFIG", validated.message);
+    const backup = new Map(this.configs);
+    this.configs.set(id, cfg);
+    try {
+      await this.persistConfigsAtomic();
+    } catch (e) {
+      this.configs = backup;
+      throw e;
+    }
+    return cfg;
+  }
+
+  async startGmailOAuth(): Promise<{ channel: PersistedChannelConfig }> {
+    const { startGmailOAuth } = await import("./email/gmail/oauth");
+    const { emailAddress, refreshToken } = await startGmailOAuth();
+    const vault = getRuntimeSecretVault();
+    const { credentialRef } = vault.createCredential({ provider: "google", label: emailAddress, secret: refreshToken });
+    const cfg = await this.addGmailChannel({ displayName: emailAddress, emailAddress, credentialRef });
+    try {
+      await this.connect(cfg.id);
+    } catch {}
+    return { channel: cfg };
+  }
+
+  async syncNow(id: string): Promise<{ added: number; durationMs: number }> {
+    const adapter = this.adapters.get(id);
+    if (!adapter) throw new ChannelError("CHANNEL_NOT_FOUND" as never, "Channel not found");
+    if (!adapter.syncNow) throw new ChannelError("CHANNEL_RUNTIME_ERROR" as never, "Sync not available for this channel");
+    return await adapter.syncNow();
+  }
+
   async updateChannel(id: string, patch: Partial<PersistedChannelConfig>): Promise<PersistedChannelConfig> {
     const existing = this.configs.get(id);
     if (!existing) throw new ChannelError("CHANNEL_NOT_FOUND", `Channel not found: ${id}`);
     const oldCredentialRef = existing.credentialRef;
     if (patch.credentialRef && patch.credentialRef !== existing.credentialRef) {
+      const expectedProvider = existing.channel === "gmail" ? "google" : existing.channel === "qq-mail" ? "qq-mail" : "qq-bot";
       try {
         const vault = getRuntimeSecretVault();
-        vault.resolveSecretForProvider(patch.credentialRef, "qq-bot");
+        vault.resolveSecretForProvider(patch.credentialRef, expectedProvider as never);
       } catch {
-        throw new ChannelError("QQ_AUTH_FAILED", "新凭据不存在");
+        throw new ChannelError(existing.channel === "gmail" ? "GMAIL_AUTH_FAILED" : "QQ_AUTH_FAILED", "新凭据不存在");
       }
     }
-    const updated: PersistedChannelConfig = { ...existing, ...patch, id: existing.id, channel: "qq-bot" as const };
-    const validated = validateQQChannelConfig(updated);
-    if (!validated.ok) throw new ChannelError("QQ_INVALID_CONFIG", validated.message);
+    const updated = { ...existing, ...patch, id: existing.id, channel: existing.channel } as PersistedChannelConfig;
+    let validated: { ok: boolean; message?: string };
+    if (existing.channel === "gmail") {
+      const r = validateGmailChannelConfig(updated);
+      validated = r.ok ? { ok: true } as never : { ok: false, message: r.message };
+      if (!r.ok) throw new ChannelError("EMAIL_INVALID_CONFIG", r.message);
+    } else if (existing.channel === "qq-mail") {
+      const { validateQQMailChannelConfig } = await import("./email/config");
+      const r = validateQQMailChannelConfig(updated);
+      validated = r.ok ? { ok: true } as never : { ok: false, message: r.message };
+      if (!r.ok) throw new ChannelError("EMAIL_INVALID_CONFIG", r.message);
+    } else {
+      const r = validateQQChannelConfig(updated as never);
+      if (!r.ok) throw new ChannelError("QQ_INVALID_CONFIG", r.message);
+    }
     const backup = new Map(this.configs);
     this.configs.set(id, updated);
     try {
@@ -262,6 +329,37 @@ export class ChannelManager {
     const cfg = this.configs.get(id);
     if (!cfg) throw new ChannelError("CHANNEL_NOT_FOUND", `Channel not found: ${id}`);
     if (!cfg.enabled) throw new ChannelError("CHANNEL_DISABLED", "Channel disabled");
+    if (cfg.channel === "gmail") {
+      let refreshToken: string;
+      try {
+        const vault = getRuntimeSecretVault();
+        refreshToken = vault.resolveSecretForProvider(cfg.credentialRef, "google");
+      } catch {
+        throw new ChannelError("GMAIL_AUTH_FAILED", "无法解析 Gmail refresh token");
+      }
+      try {
+        if (this.adapters.has(id)) {
+          await this.adapters.get(id)!.stop().catch(() => {});
+          this.adapters.delete(id);
+        }
+        const gmailCfg = cfg as unknown as import("./email/types").GmailChannelConfig;
+        const { GmailChannelAdapter } = await import("./email/gmail/adapter");
+        const adapter = new GmailChannelAdapter({
+          config: gmailCfg,
+          inboxSink: this.inboxSink,
+        });
+        // Inject token provider with credentialRef
+        this.adapters.set(id, adapter as unknown as import("./types").ChannelAdapter);
+        await adapter.start();
+      } finally {
+        refreshToken = "";
+      }
+      return;
+    }
+    if (cfg.channel === "qq-mail") {
+      throw new ChannelError("EMAIL_INVALID_CONFIG", "QQ Mail not yet implemented");
+    }
+    // qq-bot
     let appSecret: string;
     try {
       const vault = getRuntimeSecretVault();
@@ -277,15 +375,16 @@ export class ChannelManager {
       }
       const qqConfig: QQChannelConfig = {
         id: cfg.id,
+        channel: "qq-bot",
         enabled: cfg.enabled,
         displayName: cfg.displayName,
-        appId: cfg.appId,
+        appId: (cfg as unknown as { appId: string }).appId,
         credentialRef: cfg.credentialRef,
-        requireMentionInGroup: cfg.requireMentionInGroup,
-        allowedUsers: cfg.allowedUsers,
-        allowedGroups: cfg.allowedGroups,
-        receiveDirectMessages: cfg.receiveDirectMessages,
-        receiveGroupMessages: cfg.receiveGroupMessages,
+        requireMentionInGroup: (cfg as unknown as { requireMentionInGroup: boolean }).requireMentionInGroup,
+        allowedUsers: (cfg as unknown as { allowedUsers: string[] }).allowedUsers,
+        allowedGroups: (cfg as unknown as { allowedGroups: string[] }).allowedGroups,
+        receiveDirectMessages: (cfg as unknown as { receiveDirectMessages: boolean }).receiveDirectMessages,
+        receiveGroupMessages: (cfg as unknown as { receiveGroupMessages: boolean }).receiveGroupMessages,
       };
       const adapter = new QQChannelAdapter({
         config: qqConfig,
@@ -325,6 +424,35 @@ export class ChannelManager {
     );
   }
 
+  async sendEmailReply(ctx: import("./email/types").EmailReplyContext, text: string): Promise<{ messageId?: string; timestamp?: string }> {
+    const cfg = this.configs.get(ctx.sourceAccountId);
+    if (!cfg || cfg.channel !== "gmail") throw new ChannelError("CHANNEL_NOT_FOUND" as never, "Channel not found for reply context");
+    let adapter = this.adapters.get(ctx.sourceAccountId);
+    if (!adapter || adapter.getState() !== "connected") {
+      await this.connect(ctx.sourceAccountId);
+      adapter = this.adapters.get(ctx.sourceAccountId);
+      if (!adapter) throw new ChannelError("CHANNEL_RUNTIME_ERROR" as never, "Failed to connect");
+    }
+    try {
+      const { GmailTokenProvider } = await import("./email/gmail/tokenProvider");
+      const { buildReplyMime } = await import("./email/gmail/mime");
+      const { sendMessage } = await import("./email/gmail/api");
+      const tokenProvider = new GmailTokenProvider(cfg.credentialRef);
+      const raw = buildReplyMime({ to: ctx.replyToAddress, subject: ctx.subject, text, inReplyTo: ctx.rfcMessageId, references: ctx.references, threadId: ctx.threadId });
+      const res = await sendMessage(tokenProvider, raw, ctx.threadId);
+      return { messageId: res.id, timestamp: new Date().toISOString() };
+    } catch (e) {
+      const raw = e instanceof Error ? e.message : String(e);
+      try {
+        const parsed = JSON.parse(raw) as { code?: string };
+        if (parsed.code === "EMAIL_SEND_REJECTED" || parsed.code === "EMAIL_SEND_UNCERTAIN") throw e;
+      } catch {}
+      if (raw.toLowerCase().includes("uncertain") || raw.toLowerCase().includes("timeout")) throw new ChannelError("EMAIL_SEND_UNCERTAIN" as never, raw.slice(0,200));
+      if (raw.toLowerCase().includes("rejected")) throw new ChannelError("EMAIL_SEND_REJECTED" as never, raw.slice(0,200));
+      throw new ChannelError("EMAIL_SEND_REJECTED" as never, raw.slice(0,200));
+    }
+  }
+
   private mapTokenError(e: unknown): { code: string; message: string } {
     return mapQQTokenError(e);
   }
@@ -332,6 +460,28 @@ export class ChannelManager {
   async testChannel(id: string): Promise<{ ok: boolean; error?: string }> {
     const cfg = this.configs.get(id);
     if (!cfg) throw new ChannelError("CHANNEL_NOT_FOUND", `Channel not found: ${id}`);
+    if (cfg.channel === "gmail") {
+      try {
+        const vault = getRuntimeSecretVault();
+        const refreshToken = vault.resolveSecretForProvider(cfg.credentialRef, "google");
+        // Simple check: try to get access token via GmailTokenProvider
+        const { GmailTokenProvider } = await import("./email/gmail/tokenProvider");
+        const provider = new GmailTokenProvider(cfg.credentialRef);
+        // Directly try refresh
+        await provider.getAccessToken();
+        return { ok: true };
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        try {
+          const parsed = JSON.parse(msg) as { code?: string };
+          if (parsed.code) return { ok: false, error: parsed.code };
+        } catch {}
+        return { ok: false, error: "GMAIL_AUTH_FAILED" };
+      }
+    }
+    if (cfg.channel === "qq-mail") {
+      return { ok: false, error: "EMAIL_INVALID_CONFIG" };
+    }
     let secret: string;
     try {
       const vault = getRuntimeSecretVault();
@@ -344,10 +494,10 @@ export class ChannelManager {
     try {
       const { TokenManager } = await import("@tencent-connect/qqbot-nodejs/protocol") as unknown as { TokenManager: new (opts?: unknown) => { getAccessToken: (a: string, s: string) => Promise<string>; clearCache: (a?: string) => void } };
       const tm = new TokenManager();
-      const tokenPromise = tm.getAccessToken(cfg.appId, secret);
+      const tokenPromise = tm.getAccessToken((cfg as unknown as { appId: string }).appId, secret);
       const timeoutPromise = new Promise<never>((_, reject) => setTimeout(() => reject(new Error(JSON.stringify({ code: "QQ_NETWORK_ERROR", message: "Test connection timeout" }))), 10_000));
       await Promise.race([tokenPromise, timeoutPromise]);
-      try { tm.clearCache(cfg.appId); } catch {}
+      try { tm.clearCache((cfg as unknown as { appId: string }).appId); } catch {}
       secret = "";
       return { ok: true };
     } catch (e) {

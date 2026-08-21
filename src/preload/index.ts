@@ -142,6 +142,8 @@ const channelsBridge = {
   confirmReply: (input: unknown) => invokeBridge("bridge:channels:confirmReply", input),
   cancelReply: (input: unknown) => invokeBridge("bridge:channels:cancelReply", input),
   canReply: (input: unknown) => invokeBridge("bridge:channels:canReply", input),
+  startGmailOAuth: () => invokeBridge("bridge:channels:startGmailOAuth", {}),
+  syncNow: (input: unknown) => invokeBridge("bridge:channels:syncNow", input),
 };
 
 const inboxBridge = {

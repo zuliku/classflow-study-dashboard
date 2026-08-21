@@ -9,6 +9,7 @@ import { getInboxSourcePresentation } from "@/lib/inbox/sourcePresentation";
 import { cn } from "@/lib/utils";
 import { Dialog } from "@/components/ui/Dialog";
 import { QQReplyDialog } from "@/components/inbox/QQReplyDialog";
+import { EmailReplyDialog } from "@/components/inbox/EmailReplyDialog";
 import { ChannelBrandIcon } from "@/components/icons/ChannelBrandIcon";
 
 export function InboxPanel({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
@@ -141,7 +142,7 @@ export function InboxPanel({ open, onOpenChange }: { open: boolean; onOpenChange
                   <Check className="w-3 h-3" />
                   让 Kiro 处理
                 </button>
-                {item.source === "qq-bot" && (
+                {(item.source === "qq-bot" || item.source === "gmail" || item.source === "qq-mail") && (
                   item.replyContextId ? (
                     <button
                       type="button"
@@ -150,7 +151,7 @@ export function InboxPanel({ open, onOpenChange }: { open: boolean; onOpenChange
                       className="h-7 px-3 bg-white border border-line text-charcoal text-xs font-bold rounded-lg hover:bg-alabaster flex items-center gap-1"
                     >
                       <Reply className="w-3 h-3" />
-                      回复到 QQ
+                      {item.source === "gmail" ? "回复到 Gmail" : item.source === "qq-mail" ? "回复到 QQ 邮箱" : "回复到 QQ"}
                     </button>
                   ) : (
                     <span className="text-[11px] text-sandrift" title="此消息来自旧版本，无法直接回复">无法直接回复</span>
@@ -207,10 +208,10 @@ export function InboxPanel({ open, onOpenChange }: { open: boolean; onOpenChange
               <Check className="w-3.5 h-3.5" />
               让 Kiro 处理
             </button>
-            {selected.source === "qq-bot" && selected.replyContextId && (
+            {(selected.source === "qq-bot" || selected.source === "gmail" || selected.source === "qq-mail") && selected.replyContextId && (
               <button type="button" onClick={() => { setReplyItem(selected); setSelected(null); }} className="h-8 px-4 bg-white border border-line text-charcoal text-xs font-bold rounded-lg hover:bg-alabaster flex items-center gap-1.5">
                 <Reply className="w-3.5 h-3.5" />
-                回复到 QQ
+                {selected.source === "gmail" ? "回复到 Gmail" : selected.source === "qq-mail" ? "回复到 QQ 邮箱" : "回复到 QQ"}
               </button>
             )}
             <button type="button" onClick={() => setSelected(null)} className="h-8 px-4 bg-white border border-line text-charcoal text-xs font-bold rounded-lg">
@@ -219,8 +220,11 @@ export function InboxPanel({ open, onOpenChange }: { open: boolean; onOpenChange
           </div>
         </Dialog>
       )}
-      {replyItem && (
+      {replyItem && replyItem.source === "qq-bot" && (
         <QQReplyDialog open={!!replyItem} onOpenChange={(open) => !open && setReplyItem(null)} item={replyItem} onSent={() => { if (replyItem) updateStatus(replyItem.id, "reviewed"); setReplyItem(null); }} />
+      )}
+      {replyItem && (replyItem.source === "gmail" || replyItem.source === "qq-mail") && (
+        <EmailReplyDialog open={!!replyItem} onOpenChange={(open) => !open && setReplyItem(null)} item={replyItem} onSent={() => { if (replyItem) updateStatus(replyItem.id, "reviewed"); setReplyItem(null); }} />
       )}
     </Dialog>
   );

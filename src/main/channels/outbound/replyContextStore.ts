@@ -8,6 +8,7 @@ import { app } from "electron";
 import { randomUUID } from "node:crypto";
 import { ChannelError } from "../errors";
 import type { ChannelReplyContext } from "./types";
+import type { EmailReplyContext } from "../email/types";
 
 function getReplyContextPath(): string {
   return join(app.getPath("userData"), "channels", "reply-contexts.json");
@@ -93,17 +94,39 @@ export class ReplyContextStore {
       ...context,
       createdAt: now,
       expiresAt: now + this.ttlMs,
-    };
-    const sanitized: ChannelReplyContext = {
-      replyContextId: ctx.replyContextId,
-      channel: "qq-bot",
-      sourceAccountId: ctx.sourceAccountId,
-      conversationId: ctx.conversationId,
-      conversationType: ctx.conversationType,
-      inboundMessageId: ctx.inboundMessageId,
-      createdAt: ctx.createdAt,
-      expiresAt: ctx.expiresAt,
-    };
+    } as ChannelReplyContext;
+    let sanitized: ChannelReplyContext;
+    if ((ctx as unknown as { channel: string }).channel === "gmail" || (ctx as unknown as { channel: string }).channel === "qq-mail") {
+      const emailCtx = ctx as unknown as EmailReplyContext;
+      sanitized = {
+        replyContextId: ctx.replyContextId,
+        channel: emailCtx.channel,
+        sourceAccountId: emailCtx.sourceAccountId,
+        providerMessageId: emailCtx.providerMessageId,
+        rfcMessageId: emailCtx.rfcMessageId,
+        threadId: emailCtx.threadId,
+        subject: emailCtx.subject,
+        replyToAddress: emailCtx.replyToAddress,
+        references: emailCtx.references,
+        createdAt: ctx.createdAt,
+        expiresAt: ctx.expiresAt,
+        conversationId: emailCtx.threadId ?? emailCtx.providerMessageId,
+        conversationType: "direct",
+        inboundMessageId: emailCtx.providerMessageId,
+      } as unknown as ChannelReplyContext;
+    } else {
+      const qqCtx = ctx as unknown as import("./types").QQReplyContext;
+      sanitized = {
+        replyContextId: ctx.replyContextId,
+        channel: "qq-bot",
+        sourceAccountId: qqCtx.sourceAccountId,
+        conversationId: qqCtx.conversationId,
+        conversationType: qqCtx.conversationType,
+        inboundMessageId: qqCtx.inboundMessageId,
+        createdAt: ctx.createdAt,
+        expiresAt: ctx.expiresAt,
+      };
+    }
     const backup = new Map(this.contexts);
     this.contexts.set(sanitized.replyContextId, sanitized);
     this.enforceMax();

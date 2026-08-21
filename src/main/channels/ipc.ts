@@ -18,13 +18,13 @@ function toIpcError(err: unknown): never {
   if (parsed?.code) {
     throw new Error(JSON.stringify({ code: parsed.code, message: parsed.message ?? raw }));
   }
-  // Preserve known QQ codes if present in raw string
-  const known = ["QQ_AUTH_FAILED", "QQ_NETWORK_ERROR", "QQ_GATEWAY_DISCONNECTED", "QQ_RATE_LIMITED", "QQ_INVALID_CONFIG", "QQ_SDK_ERROR"];
+  // Preserve known codes if present in raw string
+  const known = ["QQ_AUTH_FAILED", "QQ_NETWORK_ERROR", "QQ_GATEWAY_DISCONNECTED", "QQ_RATE_LIMITED", "QQ_INVALID_CONFIG", "QQ_SDK_ERROR", "GMAIL_AUTH_FAILED", "GMAIL_OAUTH_CONFIG_MISSING", "GMAIL_OAUTH_STATE_MISMATCH", "GMAIL_OAUTH_TIMEOUT", "GMAIL_OAUTH_DENIED", "EMAIL_INVALID_CONFIG", "EMAIL_SYNC_FAILED", "EMAIL_REPLY_CONTEXT_INVALID", "EMAIL_SEND_REJECTED", "EMAIL_SEND_UNCERTAIN", "CHANNEL_RUNTIME_ERROR"];
   for (const c of known) {
     if (raw.includes(c)) throw new Error(JSON.stringify({ code: c, message: raw.slice(0, 300) }));
   }
-  const sanitized = raw.replace(/appSecret|access_token|Authorization|credentialRef/gi, "[redacted]").slice(0, 300);
-  throw new Error(JSON.stringify({ code: "QQ_SDK_ERROR", message: sanitized }));
+  const sanitized = raw.replace(/appSecret|access_token|Authorization|credentialRef|refresh_token|code_verifier/gi, "[redacted]").slice(0, 300);
+  throw new Error(JSON.stringify({ code: "CHANNEL_RUNTIME_ERROR", message: sanitized }));
 }
 
 export function registerChannelIpc(opts?: { validateSender?: (channel: string, event: Electron.IpcMainInvokeEvent) => boolean }): void {
@@ -157,6 +157,30 @@ export function registerChannelIpc(opts?: { validateSender?: (channel: string, e
       if (!i.id) throw new ChannelError("INVALID_INPUT", "id required");
       await mgr.removeChannel(i.id);
       return { ok: true };
+    } catch (e) {
+      toIpcError(e);
+    }
+  });
+
+  ipcMain.handle("bridge:channels:startGmailOAuth", async (event) => {
+    if (!guard("bridge:channels:startGmailOAuth", event)) throw new Error(JSON.stringify({ code: "PERMISSION_DENIED" }));
+    try {
+      const mgr = getChannelManager();
+      const result = await (mgr as unknown as { startGmailOAuth: () => Promise<unknown> }).startGmailOAuth();
+      return result;
+    } catch (e) {
+      toIpcError(e);
+    }
+  });
+
+  ipcMain.handle("bridge:channels:syncNow", async (event, input: unknown) => {
+    if (!guard("bridge:channels:syncNow", event)) throw new Error(JSON.stringify({ code: "PERMISSION_DENIED" }));
+    try {
+      const mgr = getChannelManager();
+      const i = input as { id?: string };
+      if (!i.id) throw new ChannelError("INVALID_INPUT", "id required");
+      const result = await (mgr as unknown as { syncNow: (id: string) => Promise<unknown> }).syncNow(i.id);
+      return result;
     } catch (e) {
       toIpcError(e);
     }

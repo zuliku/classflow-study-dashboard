@@ -5,8 +5,10 @@
 
 import { getInboxDeliveryQueue } from "./inboxDeliveryQueue";
 
+import type { InboxSource } from "@/lib/inbox/types";
+
 export type InboxRawPayload = {
-  source: "qq-bot";
+  source: InboxSource;
   externalMessageId: string;
   conversationId: string;
   senderDisplay?: string;

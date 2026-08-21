@@ -7,6 +7,7 @@ import { z } from "zod";
 
 export interface QQChannelConfig {
   id: string;
+  channel: "qq-bot";
   enabled: boolean;
   displayName: string;
   appId: string;
@@ -20,6 +21,7 @@ export interface QQChannelConfig {
 
 export const qqChannelConfigSchema = z.object({
   id: z.string().min(1).max(64),
+  channel: z.literal("qq-bot"),
   enabled: z.boolean(),
   displayName: z.string().min(1).max(64),
   appId: z.string().min(1).max(64),
@@ -60,6 +62,7 @@ export function createQQChannelConfig(input: {
 }): QQChannelConfig {
   return {
     id: input.id ?? `qq_${Math.random().toString(36).slice(2, 8)}`,
+    channel: "qq-bot",
     enabled: input.enabled ?? true,
     displayName: input.displayName,
     appId: input.appId.trim(),

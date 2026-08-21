@@ -11,6 +11,7 @@ import { getChannelManager } from "../manager";
 import { QQOutboundRateLimiter } from "./rateLimiter";
 import { getOutboundAuditStore } from "./audit";
 import { getRuntimeSecretVault } from "@/src/main/secrets/secretRuntime";
+import type { EmailReplyContext, QQReplyContext } from "./types";
 
 function hashText(text: string): string {
   return createHash("sha256").update(text).digest("hex").slice(0, 16);
@@ -36,8 +37,8 @@ export async function prepareReply(input: { replyContextId: string; text: string
   const ctx = ctxStore.get(replyContextId);
   if (!ctx) throw new ChannelError("CHANNEL_REPLY_CONTEXT_NOT_FOUND" as never, "Reply context not found");
   if (ctx.expiresAt < Date.now()) throw new ChannelError("CHANNEL_REPLY_CONTEXT_EXPIRED" as never, "Reply context expired");
-  if (ctx.channel !== "qq-bot") throw new ChannelError("QQ_REPLY_CONTEXT_INVALID" as never, "Invalid channel");
-  if (!ctx.inboundMessageId) throw new ChannelError("QQ_REPLY_CONTEXT_INVALID" as never, "Missing inboundMessageId");
+  if (ctx.channel !== "qq-bot" && ctx.channel !== "gmail" && ctx.channel !== "qq-mail") throw new ChannelError("CHANNEL_REPLY_CONTEXT_INVALID" as never, "Invalid channel");
+  if (!ctx.inboundMessageId) throw new ChannelError(ctx.channel === "gmail" || ctx.channel === "qq-mail" ? "EMAIL_REPLY_CONTEXT_INVALID" as never : "QQ_REPLY_CONTEXT_INVALID" as never, "Missing inboundMessageId");
 
   const approvalStore = getApprovalStore();
   const approval = approvalStore.create(replyContextId, text.trim());
@@ -46,8 +47,8 @@ export async function prepareReply(input: { replyContextId: string; text: string
     approvalId: approval.approvalId,
     expiresAt: approval.expiresAt,
     preview: {
-      channel: "QQ",
-      conversationType: ctx.conversationType,
+      channel: ctx.channel === "gmail" ? "Gmail" : ctx.channel === "qq-mail" ? "QQ Mail" : "QQ",
+      conversationType: (ctx as unknown as { conversationType: string }).conversationType ?? "direct",
       text: text.trim(),
     },
   };
@@ -67,7 +68,7 @@ export async function confirmReply(input: { approvalId: string }): Promise<{ ok:
   const ctx = ctxStore.get(approval.replyContextId);
   if (!ctx) throw new ChannelError("CHANNEL_REPLY_CONTEXT_NOT_FOUND" as never, "Reply context not found");
   if (ctx.expiresAt < Date.now()) throw new ChannelError("CHANNEL_REPLY_CONTEXT_EXPIRED" as never, "Reply context expired");
-  if (!ctx.inboundMessageId) throw new ChannelError("QQ_REPLY_CONTEXT_INVALID" as never, "Missing inboundMessageId");
+  if (!ctx.inboundMessageId) throw new ChannelError((ctx.channel === "gmail" || ctx.channel === "qq-mail" ? "EMAIL_REPLY_CONTEXT_INVALID" : "QQ_REPLY_CONTEXT_INVALID") as never, "Missing inboundMessageId");
 
   // Rate limit per account/global
   const rate = rateLimiter.allow(ctx.sourceAccountId);
@@ -103,9 +104,14 @@ export async function confirmReply(input: { approvalId: string }): Promise<{ ok:
   let status: "sent" | "failed" | "uncertain" = "sent";
   let errorCode: string | undefined;
   let platformMessageId: string | undefined;
+  const isEmail = ctx.channel === "gmail" || ctx.channel === "qq-mail";
 
   try {
-    result = await channelManager.sendQQReply(ctx, approval.text);
+    if (isEmail) {
+      result = await (channelManager as unknown as { sendEmailReply: (c: EmailReplyContext, t: string) => Promise<{ messageId?: string }> }).sendEmailReply(ctx as EmailReplyContext, approval.text);
+    } else {
+      result = await channelManager.sendQQReply(ctx as QQReplyContext, approval.text);
+    }
     platformMessageId = result?.messageId;
   } catch (e) {
     const raw = e instanceof Error ? e.message : String(e);
@@ -113,24 +119,24 @@ export async function confirmReply(input: { approvalId: string }): Promise<{ ok:
     // Uncertain cases: timeout, reset, network closed after dispatch
     if (lower.includes("timeout") || lower.includes("econnreset") || lower.includes("econnrefused") || lower.includes("network") || lower.includes("abort") || lower.includes("reset") || lower.includes("closed")) {
       status = "uncertain";
-      errorCode = "QQ_SEND_UNCERTAIN";
-    } else if (raw.includes("QQ_REPLY_REJECTED") || lower.includes("rejected") || lower.includes("lifecycle") || lower.includes("passive")) {
+      errorCode = isEmail ? "EMAIL_SEND_UNCERTAIN" : "QQ_SEND_UNCERTAIN";
+    } else if (raw.includes("QQ_REPLY_REJECTED") || raw.includes("EMAIL_SEND_REJECTED") || lower.includes("rejected") || lower.includes("lifecycle") || lower.includes("passive")) {
       status = "failed";
-      errorCode = "QQ_REPLY_REJECTED";
+      errorCode = isEmail ? "EMAIL_SEND_REJECTED" : "QQ_REPLY_REJECTED";
     } else if (lower.includes("429") || lower.includes("rate")) {
       status = "failed";
-      errorCode = "QQ_RATE_LIMITED";
+      errorCode = isEmail ? "EMAIL_SEND_REJECTED" : "QQ_RATE_LIMITED";
     } else if (lower.includes("401") || lower.includes("403") || lower.includes("auth")) {
       status = "failed";
-      errorCode = "QQ_AUTH_FAILED";
+      errorCode = isEmail ? "GMAIL_AUTH_FAILED" : "QQ_AUTH_FAILED";
     } else {
       status = "failed";
-      errorCode = "QQ_SEND_REJECTED";
+      errorCode = isEmail ? "EMAIL_SEND_REJECTED" : "QQ_SEND_REJECTED";
     }
     const auditStore = getOutboundAuditStore();
     auditStore.add({
       outboundId: `out_${randomUUID().slice(0, 8)}`,
-      channel: "qq-bot",
+      channel: ctx.channel,
       sourceAccountId: ctx.sourceAccountId,
       replyContextId: ctx.replyContextId,
       textHash: approval.textHash,
@@ -140,15 +146,15 @@ export async function confirmReply(input: { approvalId: string }): Promise<{ ok:
       platformMessageId,
       errorCode,
     });
-    if (status === "uncertain") throw new ChannelError("QQ_SEND_UNCERTAIN" as never, "发送结果不确定，请先检查 QQ，避免重复发送。");
-    throw new ChannelError((errorCode as never) ?? "QQ_SEND_REJECTED", raw.slice(0, 200));
+    if (status === "uncertain") throw new ChannelError((isEmail ? "EMAIL_SEND_UNCERTAIN" : "QQ_SEND_UNCERTAIN") as never, isEmail ? "发送结果不确定，请先检查 Gmail，避免重复发送。" : "发送结果不确定，请先检查 QQ，避免重复发送。");
+    throw new ChannelError((errorCode as never) ?? (isEmail ? "EMAIL_SEND_REJECTED" : "QQ_SEND_REJECTED"), raw.slice(0, 200));
   }
 
   // Success audit
   const auditStore = getOutboundAuditStore();
   auditStore.add({
     outboundId: `out_${randomUUID().slice(0, 8)}`,
-    channel: "qq-bot",
+    channel: ctx.channel,
     sourceAccountId: ctx.sourceAccountId,
     replyContextId: ctx.replyContextId,
     textHash: approval.textHash,
@@ -172,6 +178,6 @@ export async function canReply(input: { replyContextId: string }): Promise<{ ok:
   const ctx = getReplyContextStore().get(input.replyContextId);
   if (!ctx) return { ok: false, reason: "CHANNEL_REPLY_CONTEXT_NOT_FOUND" };
   if (ctx.expiresAt < Date.now()) return { ok: false, reason: "CHANNEL_REPLY_CONTEXT_EXPIRED" };
-  if (!ctx.inboundMessageId) return { ok: false, reason: "QQ_REPLY_CONTEXT_INVALID" };
+  if (!ctx.inboundMessageId) return { ok: false, reason: ctx.channel === "gmail" || (ctx as unknown as { channel: string }).channel === "qq-mail" ? "EMAIL_REPLY_CONTEXT_INVALID" : "QQ_REPLY_CONTEXT_INVALID" };
   return { ok: true };
 }
