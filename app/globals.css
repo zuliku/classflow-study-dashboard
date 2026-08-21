@@ -594,14 +594,10 @@ html[data-motion-effective="reduced"] .kiro-rail-plate .kiro-ring {
 }
 
 /* Nav / Profile Label：始终 mounted，永不 display:none。
-   折叠 = opacity 0 + translateX(-4px) + max-width 0（文字随宽度自然裁剪）；
-   展开 = 反向。绝不 scale 文字。
-   Performance（Task 16B U）：仅 opacity/transform 参与 140ms tween，max-width 瞬时切换
-   （fixed/overflow clipping wrapper 思路），避免 230ms 全程 layout。 */
+   折叠 = opacity 0 + translateX(-4px)，宽度由 Sidebar 自然裁剪；展开反向。绝不 scale 文字。
+   Performance：仅 opacity/transform 140ms 参与 tween，无 max-width 硬切，避免 layout jump。 */
 .sidebar-label,
 .sidebar-profile-identity {
-  display: inline-block;
-  max-width: 200px;
   opacity: 1;
   transform: translateX(0);
   white-space: nowrap;
@@ -614,7 +610,6 @@ html[data-motion-effective="reduced"] .kiro-rail-plate .kiro-ring {
 [data-collapsed="true"] .sidebar-profile-identity {
   opacity: 0;
   transform: translateX(-4px);
-  max-width: 0;
 }
 [data-motion-active="false"] .sidebar-label,
 [data-motion-active="false"] .sidebar-profile-identity {
@@ -669,16 +664,17 @@ html[data-motion-effective="reduced"] .kiro-rail-plate .kiro-ring {
 [data-motion-active="true"][data-motion-direction="expand"] .sidebar-logo-full { transition-delay: 60ms; }
 [data-motion-active="true"][data-motion-direction="expand"] .sidebar-logo-mark { transition-delay: 0ms; }
 
-/* Profile Card Single-DOM Morph：
-   - Surface：Expanded p-2.5（10px）；Collapsed padding 6px 2px（inner 36 - 4 = 32px = Avatar）
-   - Header Row：gap 10px（Expanded）/ 0 + 居中（Collapsed）
-   - Avatar Slot：固定 32×32（flex 0 0 32px），img width/height 100% + max-width:none（不被 Tailwind preflight 压扁）
-   Performance（Task 16B U）：Surface 仅 background/border 瞬时，Header gap 瞬时，避免每帧 layout。 */
+/* Profile Card Single-DOM Morph — Continuous Geometry (No Avatar Jump)：
+   - Surface：Expanded p-2.5（10px）；Collapsed 6px 2px；padding 230ms 连续过渡与 Sidebar width 对齐
+   - Header Row：保持 flex-start + gap 10px，常量；位置由 Sidebar 宽度自然裁剪，不瞬切 justify-center
+   - Avatar Slot：固定 32×32 单实例，不 scale/crossfade；位置由 Surface 宽度连续驱动
+   - Identity：仅 opacity + translateX，无 max-width 硬切；Collapse 立即淡出，Expand 80ms 延迟淡入
+   - Credits：连续可插值高度 grid-template-rows 1fr→0fr，inner min-height:0 overflow:hidden */
 .sidebar-profile-surface {
   padding: 10px;
-  transition-property: background-color, border-color;
-  transition-duration: var(--motion-fast);
-  transition-timing-function: var(--ease-standard);
+  transition-property: padding, background-color, border-color;
+  transition-duration: var(--motion-panel), var(--motion-fast), var(--motion-fast);
+  transition-timing-function: var(--ease-emphasized), var(--ease-standard), var(--ease-standard);
 }
 [data-collapsed="true"] .sidebar-profile-surface {
   background-color: transparent;
@@ -692,10 +688,7 @@ html[data-motion-effective="reduced"] .kiro-rail-plate .kiro-ring {
   display: flex;
   align-items: center;
   gap: 10px;
-}
-[data-collapsed="true"] .sidebar-profile-header-row {
-  gap: 0;
-  justify-content: center;
+  justify-content: flex-start;
 }
 .sidebar-profile-avatar-slot {
   width: 32px;
@@ -714,18 +707,23 @@ html[data-motion-effective="reduced"] .kiro-rail-plate .kiro-ring {
   display: block;
 }
 
-/* Profile Credits：max-height 瞬时，opacity/transform 140ms 淡变，避免 230ms layout tween */
+/* Profile Credits：连续 grid 高度，无 max-height 硬切 */
 .sidebar-profile-credits {
-  max-height: 64px;
+  display: grid;
+  grid-template-rows: 1fr;
   opacity: 1;
   transform: translateY(0);
   overflow: hidden;
-  transition-property: opacity, transform;
-  transition-duration: var(--motion-fast), var(--motion-fast);
-  transition-timing-function: var(--ease-standard), var(--ease-standard);
+  transition-property: grid-template-rows, opacity, transform;
+  transition-duration: var(--motion-panel), var(--motion-fast), var(--motion-fast);
+  transition-timing-function: var(--ease-emphasized), var(--ease-standard), var(--ease-standard);
+}
+.sidebar-profile-credits-inner {
+  min-height: 0;
+  overflow: hidden;
 }
 [data-collapsed="true"] .sidebar-profile-credits {
-  max-height: 0;
+  grid-template-rows: 0fr;
   opacity: 0;
   transform: translateY(-3px);
 }
@@ -733,10 +731,10 @@ html[data-motion-effective="reduced"] .kiro-rail-plate .kiro-ring {
   transition: none;
 }
 [data-motion-active="true"][data-motion-direction="collapse"] .sidebar-profile-credits {
-  transition-delay: 0ms, 0ms;
+  transition-delay: 0ms, 0ms, 0ms;
 }
 [data-motion-active="true"][data-motion-direction="expand"] .sidebar-profile-credits {
-  transition-delay: 80ms, 80ms;
+  transition-delay: 0ms, 80ms, 80ms;
 }
 
 /* Profile Tooltip：仅在 collapsed 稳定态可 hover 显示；manual morph 期间强制隐藏 */
