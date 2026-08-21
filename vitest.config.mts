@@ -124,6 +124,7 @@ export default defineConfig({
       "tests/adaptiveDdlLayout.test.ts",
       "tests/workspacePolish.test.tsx",
       "tests/demoManualInjection.test.tsx",
+      "tests/extensionsRuntimeTruth.test.tsx",
       "scripts/docx-compat/generate-fixtures.test.ts",
     ],
   },

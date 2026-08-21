@@ -13,6 +13,8 @@ import { extractWorkflowTrace } from "@/lib/ai/skills/workflowTrace";
 import { useToastStore } from "@/store/useToastStore";
 import { useConfirmStore } from "@/store/useConfirmStore";
 
+type RuntimeLoadState = "loading" | "ready" | "unavailable" | "error";
+
 type SkillListItem = {
   name: string;
   description: string;
@@ -67,46 +69,49 @@ function getMcpBridge(): {
 }
 
 export function ExtensionsSettings() {
-  const extensions = useExtensionsStore((s) => s.extensions);
   const activeTab = useExtensionsStore((s) => s.activeTab);
   const setActiveTab = useExtensionsStore((s) => s.setActiveTab);
 
   const [skills, setSkills] = useState<SkillListItem[]>([]);
-  const [skillsLoading, setSkillsLoading] = useState(true);
+  const [skillsState, setSkillsState] = useState<RuntimeLoadState>("loading");
   const skillBridge = useMemo(() => getSkillBridge(), []);
   const [mcpConnections, setMcpConnections] = useState<McpConnectionItem[]>([]);
-  const [mcpLoading, setMcpLoading] = useState(true);
+  const [mcpState, setMcpState] = useState<RuntimeLoadState>("loading");
   const mcpBridge = useMemo(() => getMcpBridge(), []);
 
   const refreshMcp = async () => {
     const bridge = getMcpBridge();
     if (!bridge) {
-      setMcpLoading(false);
+      setMcpConnections([]);
+      setMcpState("unavailable");
       return;
     }
+    setMcpState("loading");
     try {
       const res = (await bridge.list()) as { connections: McpConnectionItem[] };
       setMcpConnections(Array.isArray(res.connections) ? res.connections : []);
+      setMcpState("ready");
     } catch {
       setMcpConnections([]);
-    } finally {
-      setMcpLoading(false);
+      setMcpState("error");
     }
   };
 
   const refreshSkills = async () => {
     const bridge = getSkillBridge();
     if (!bridge) {
-      setSkillsLoading(false);
+      setSkills([]);
+      setSkillsState("unavailable");
       return;
     }
+    setSkillsState("loading");
     try {
       const res = (await bridge.list()) as { skills: SkillListItem[] };
       setSkills(Array.isArray(res.skills) ? res.skills : []);
+      setSkillsState("ready");
     } catch {
       setSkills([]);
-    } finally {
-      setSkillsLoading(false);
+      setSkillsState("error");
     }
   };
 
@@ -120,22 +125,26 @@ export function ExtensionsSettings() {
 
   // Channel summary truth source: real Channel runtime via desktop bridge
   const [channelStatuses, setChannelStatuses] = useState<Array<{ health: { state: string } }>>([]);
-  const [channelLoading, setChannelLoading] = useState(true);
+  const [channelState, setChannelState] = useState<RuntimeLoadState>("loading");
   useEffect(() => {
     let cancelled = false;
     const fetchChannels = async () => {
       const bridge = (window as unknown as { classflowDesktop?: { channels?: { list: () => Promise<{ channels: Array<{ health: { state: string } }> }> } } }).classflowDesktop?.channels;
       if (!bridge?.list) {
-        if (!cancelled) { setChannelStatuses([]); setChannelLoading(false); }
+        if (!cancelled) { setChannelStatuses([]); setChannelState("unavailable"); }
         return;
       }
       try {
         const res = await bridge.list();
-        if (!cancelled) setChannelStatuses(Array.isArray(res.channels) ? res.channels : []);
+        if (!cancelled) {
+          setChannelStatuses(Array.isArray(res.channels) ? res.channels : []);
+          setChannelState("ready");
+        }
       } catch {
-        if (!cancelled) setChannelStatuses([]);
-      } finally {
-        if (!cancelled) setChannelLoading(false);
+        if (!cancelled) {
+          setChannelStatuses([]);
+          setChannelState("error");
+        }
       }
     };
     fetchChannels();
@@ -144,22 +153,54 @@ export function ExtensionsSettings() {
   }, []);
 
   const counts = useMemo(() => {
-    const skillsCount = extensions.filter((e) => e.kind === "skill").length;
-    const enabledSkillsFallback = extensions.filter((e) => e.kind === "skill" && e.enabled).length;
-    const mcpFallback = extensions.filter((e) => e.kind === "mcp").length;
-    const connectedMcpFallback = extensions.filter((e) => e.kind === "mcp" && e.status === "connected").length;
+    let skillsVal: number | undefined;
+    let enabledSkillsVal: number | undefined;
+    let skillsExact = "—";
+    let mcpVal: number | undefined;
+    let connectedMcpVal: number | undefined;
+    let channelsVal: number | undefined;
+    let onlineChannelsVal: number | undefined;
+    let channelsExact = "—";
 
-    const skillsDisplay = skillsLoading ? skillsCount : skills.length || skillsCount;
-    const enabledSkills = skillsLoading ? enabledSkillsFallback : skills.filter((s) => s.enabled).length || enabledSkillsFallback;
-    const mcp = mcpConnections.length || mcpFallback;
-    const connectedMcp = mcpConnections.filter((c) => c.state === "connected").length || connectedMcpFallback;
+    if (skillsState === "ready") {
+      const total = skills.length;
+      const enabled = skills.filter((s) => s.enabled).length;
+      skillsVal = total;
+      enabledSkillsVal = enabled;
+      skillsExact = `${enabled} 个 Skills 已启用`;
+    }
+    if (mcpState === "ready") {
+      const total = mcpConnections.length;
+      const connected = mcpConnections.filter((c) => c.state === "connected").length;
+      mcpVal = total;
+      connectedMcpVal = connected;
+    }
+    if (channelState === "ready") {
+      const total = channelStatuses.length;
+      const online = channelStatuses.filter((c) => c.health.state === "connected").length;
+      channelsVal = total;
+      onlineChannelsVal = online;
+      channelsExact = `${online} 个消息渠道在线`;
+    }
 
-    const channels = channelLoading ? 0 : channelStatuses.length;
-    const onlineChannels = channelLoading ? 0 : channelStatuses.filter((c) => c.health.state === "connected").length;
-
-    // When bridge not available, fallback to extensions legacy to avoid 0/0 flash? But prefer real; if loading show skeleton via — handled in SummaryCard
-    return { skills: skillsDisplay, enabledSkills, mcp, connectedMcp, channels, onlineChannels, channelLoading };
-  }, [extensions, skills, skillsLoading, mcpConnections, channelStatuses, channelLoading]);
+    // SummaryCard expects value=enabled/connected, total=total
+    // For Skills card: value=enabledSkills, total=skills
+    // For MCP: value=connectedMcp, total=mcp
+    return {
+      skills: skillsVal,
+      enabledSkills: enabledSkillsVal,
+      skillsExact,
+      mcp: mcpVal,
+      connectedMcp: connectedMcpVal,
+      mcpExact: mcpState === "ready" ? `${connectedMcpVal} 个 MCP 已连接` : "—",
+      channels: channelsVal,
+      onlineChannels: onlineChannelsVal,
+      channelsExact,
+      skillsState,
+      mcpState,
+      channelState,
+    };
+  }, [skills, skillsState, mcpConnections, mcpState, channelStatuses, channelState]);
 
   const [skillEditorOpen, setSkillEditorOpen] = useState(false);
   const [editingSkill, setEditingSkill] = useState<SkillListItem | null>(null);
@@ -275,9 +316,9 @@ export function ExtensionsSettings() {
           className="grid grid-cols-3 gap-2 text-center"
           data-testid="extensions-summary"
         >
-          <SummaryCard label="Skills 已启用" value={counts.enabledSkills} total={counts.skills} exact={`${counts.enabledSkills} 个 Skills 已启用`} />
-          <SummaryCard label="MCP 已连接" value={counts.connectedMcp} total={counts.mcp} exact={`${counts.connectedMcp} 个 MCP 已连接`} />
-          <SummaryCard label="消息渠道在线" value={counts.channelLoading ? (undefined as unknown as number) : counts.onlineChannels} total={counts.channelLoading ? (undefined as unknown as number) : counts.channels} exact={counts.channelLoading ? "—" : `${counts.onlineChannels} 个消息渠道在线`} />
+          <SummaryCard label="Skills 已启用" value={counts.enabledSkills} total={counts.skills} exact={counts.skillsExact} />
+          <SummaryCard label="MCP 已连接" value={counts.connectedMcp} total={counts.mcp} exact={counts.mcpExact} />
+          <SummaryCard label="消息渠道在线" value={counts.onlineChannels} total={counts.channels} exact={counts.channelsExact} />
         </div>
 
         <div className="flex items-center gap-1 p-1 bg-[#F7F5F5] border border-line rounded-xl w-fit" role="tablist" aria-label="扩展类型">
@@ -315,7 +356,30 @@ export function ExtensionsSettings() {
             contentClassName="px-4 py-4"
           >
 
-            {!skillsLoading && skills.length === 0 ? (
+            {skillsState === "loading" ? (
+              <p className="text-xs text-sandrift" data-testid="skills-loading">加载中...</p>
+            ) : skillsState === "unavailable" ? (
+              <div className="min-h-[220px] flex flex-col items-center justify-center text-center gap-3 py-8" data-testid="skills-unavailable">
+                <div className="w-10 h-10 rounded-xl bg-pastel-mint/60 border border-line flex items-center justify-center">
+                  <Puzzle className="w-5 h-5 text-charcoal" />
+                </div>
+                <div>
+                  <p className="text-sm font-bold text-charcoal">当前环境无法读取 Skills</p>
+                  <p className="text-xs text-sandrift mt-1 max-w-[320px]">Skills 管理在桌面环境中可用</p>
+                </div>
+              </div>
+            ) : skillsState === "error" ? (
+              <div className="min-h-[220px] flex flex-col items-center justify-center text-center gap-3 py-8" data-testid="skills-error">
+                <div className="w-10 h-10 rounded-xl bg-pastel-mint/60 border border-line flex items-center justify-center">
+                  <Puzzle className="w-5 h-5 text-charcoal" />
+                </div>
+                <div>
+                  <p className="text-sm font-bold text-charcoal">暂时无法读取 Skills</p>
+                  <p className="text-xs text-sandrift mt-1">请检查连接后重试</p>
+                </div>
+                <button type="button" onClick={refreshSkills} data-testid="skills-retry" className="h-8 px-4 bg-charcoal hover:bg-black text-white text-xs font-bold rounded-lg transition-colors shadow-subtle">重新加载</button>
+              </div>
+            ) : skills.length === 0 ? (
               <div className="min-h-[220px] flex flex-col items-center justify-center text-center gap-3 py-8">
                 <div className="w-10 h-10 rounded-xl bg-pastel-mint/60 border border-line flex items-center justify-center">
                   <Puzzle className="w-5 h-5 text-charcoal" />
@@ -484,8 +548,29 @@ export function ExtensionsSettings() {
             }
             contentClassName="px-4 py-4"
           >
-            {mcpLoading ? (
-              <p className="text-xs text-sandrift">加载中...</p>
+            {mcpState === "loading" ? (
+              <p className="text-xs text-sandrift" data-testid="mcp-loading">加载中...</p>
+            ) : mcpState === "unavailable" ? (
+              <div className="min-h-[220px] flex flex-col items-center justify-center text-center gap-3 py-8" data-testid="mcp-unavailable">
+                <div className="w-10 h-10 rounded-xl bg-pastel-mint/60 border border-line flex items-center justify-center">
+                  <Boxes className="w-5 h-5 text-charcoal" />
+                </div>
+                <div>
+                  <p className="text-sm font-bold text-charcoal">当前环境无法读取 MCP</p>
+                  <p className="text-xs text-sandrift mt-1 max-w-[320px]">MCP 管理在桌面环境中可用</p>
+                </div>
+              </div>
+            ) : mcpState === "error" ? (
+              <div className="min-h-[220px] flex flex-col items-center justify-center text-center gap-3 py-8" data-testid="mcp-error">
+                <div className="w-10 h-10 rounded-xl bg-pastel-mint/60 border border-line flex items-center justify-center">
+                  <Boxes className="w-5 h-5 text-charcoal" />
+                </div>
+                <div>
+                  <p className="text-sm font-bold text-charcoal">暂时无法读取 MCP</p>
+                  <p className="text-xs text-sandrift mt-1">请检查连接后重试</p>
+                </div>
+                <button type="button" onClick={refreshMcp} data-testid="mcp-retry" className="h-8 px-4 bg-charcoal hover:bg-black text-white text-xs font-bold rounded-lg transition-colors shadow-subtle">重新加载</button>
+              </div>
             ) : mcpConnections.length === 0 ? (
               <div className="min-h-[220px] flex flex-col items-center justify-center text-center gap-3 py-8">
                 <div className="w-10 h-10 rounded-xl bg-pastel-mint/60 border border-line flex items-center justify-center">
