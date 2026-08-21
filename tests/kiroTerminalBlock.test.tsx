@@ -73,7 +73,8 @@ describe("KiroTerminalBlock", () => {
       />
     );
     expect(screen.queryByTestId("kiro-terminal-stop")).toBeNull();
-    expect(screen.getByText(/exit 0/)).toBeTruthy();
+    expect(screen.getByText("已完成")).toBeTruthy();
+    expect(screen.queryByText(/exit 0/)).toBeNull();
     expect(screen.getByText(/2\.3s/)).toBeTruthy();
   });
 
@@ -83,7 +84,8 @@ describe("KiroTerminalBlock", () => {
         activity={makeActivity({ status: "failed", exitCode: 1, durationMs: 4_200 })}
       />
     );
-    expect(screen.getByText(/exit 1/)).toBeTruthy();
+    expect(screen.getByText("运行失败")).toBeTruthy();
+    expect(screen.queryByText(/exit 1/)).toBeNull();
     // card 自身不带 danger 边框/背景（只有文本 tone）
     expect(container.firstElementChild?.className).not.toMatch(/bg-danger|border-danger/);
   });

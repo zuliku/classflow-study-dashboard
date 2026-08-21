@@ -4,6 +4,10 @@ import React, { useEffect, useState, useCallback } from "react";
 import { MessageSquare, Plus, Plug2, Trash2, Power, TestTube2, Settings2, Mail, RefreshCw, X } from "lucide-react";
 import { Dialog } from "@/components/ui/Dialog";
 import { ChannelBrandIcon } from "@/components/icons/ChannelBrandIcon";
+import { Button } from "@/components/ui/Button";
+import { Switch } from "@/components/ui/Switch";
+import { useToastStore } from "@/store/useToastStore";
+import { useConfirmStore } from "@/store/useConfirmStore";
 import { cn } from "@/lib/utils";
 
 type QQConfig = { id: string; channel: "qq-bot"; displayName: string; appId: string; credentialRef: string; enabled: boolean; requireMentionInGroup: boolean; allowedUsers: string[]; allowedGroups: string[]; receiveDirectMessages: boolean; receiveGroupMessages: boolean };
@@ -50,8 +54,8 @@ function stateLabel(state: string): string {
 function stateColor(state: string): string {
   if (state === "connected") return "bg-success/10 text-success border-success/20";
   if (state === "error") return "bg-danger/10 text-danger border-danger/20";
-  if (state === "connecting" || state === "reconnecting") return "bg-amber-500/10 text-amber-700 border-amber-500/20";
-  return "bg-[#F7F5F5] text-satin-grey border-line";
+  if (state === "connecting" || state === "reconnecting") return "bg-warning-bg text-warning border-warning-border";
+  return "bg-surface-soft text-satin-grey border-line";
 }
 
 export function ChannelSettings() {
@@ -59,6 +63,11 @@ export function ChannelSettings() {
   const [loading, setLoading] = useState(true);
   const [addOpen, setAddOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<ChannelStatus | null>(null);
+  const [busyMap, setBusyMap] = useState<Record<string, boolean>>({});
+  const pushToast = useToastStore((s) => s.pushToast);
+
+  const isBusy = (id: string, action: string) => !!busyMap[`${id}:${action}`];
+  const setBusy = (id: string, action: string, v: boolean) => setBusyMap((prev) => ({ ...prev, [`${id}:${action}`]: v }));
 
   const refresh = useCallback(async () => {
     const bridge = getChannelsBridge();
@@ -73,37 +82,50 @@ export function ChannelSettings() {
 
   const handleConnect = async (id: string) => {
     const b = getChannelsBridge(); if (!b) return;
-    try { await b.connect({ id }); await refresh(); } catch (e) { alert((e as { message?: string })?.message ?? String(e)); }
+    setBusy(id, "connect", true);
+    try { await b.connect({ id }); await refresh(); pushToast({ message: "已连接", type: "success" }); } catch (e) { pushToast({ message: (e as { message?: string })?.message ?? String(e), type: "error" }); } finally { setBusy(id, "connect", false); }
   };
   const handleDisconnect = async (id: string) => {
     const b = getChannelsBridge(); if (!b) return;
-    try { await b.disconnect({ id }); await refresh(); } catch (e) { alert((e as { message?: string })?.message ?? String(e)); }
+    setBusy(id, "disconnect", true);
+    try { await b.disconnect({ id }); await refresh(); pushToast({ message: "已断开", type: "success" }); } catch (e) { pushToast({ message: (e as { message?: string })?.message ?? String(e), type: "error" }); } finally { setBusy(id, "disconnect", false); }
   };
   const handleTest = async (id: string) => {
     const b = getChannelsBridge(); if (!b) return;
+    setBusy(id, "test", true);
     try {
       const res = await b.test({ id }) as { ok: boolean; error?: string };
-      alert(res.ok ? "连接测试通过" : `测试失败: ${res.error ?? "未知"}`);
-    } catch (e) { alert((e as { message?: string })?.message ?? String(e)); }
+      pushToast({ message: res.ok ? "连接正常" : `测试失败：${res.error ?? "未知"}`, type: res.ok ? "success" : "error" });
+    } catch (e) { pushToast({ message: (e as { message?: string })?.message ?? String(e), type: "error" }); } finally { setBusy(id, "test", false); }
   };
   const handleSyncNow = async (id: string) => {
     const b = getChannelsBridge(); if (!b) return;
+    setBusy(id, "sync", true);
     try {
       const res = await b.syncNow({ id }) as { added: number; durationMs: number };
-      alert(`同步完成：新增 ${res.added} 封`);
+      pushToast({ message: `已同步，新增 ${res.added} 封邮件`, type: "success" });
       await refresh();
-    } catch (e) { alert((e as { message?: string })?.message ?? String(e)); }
+    } catch (e) { pushToast({ message: (e as { message?: string })?.message ?? String(e), type: "error" }); } finally { setBusy(id, "sync", false); }
   };
   const handleRemove = async (id: string, displayName: string) => {
     const cfg = channels.find(c => c.config.id === id)?.config;
     const typeLabel = cfg?.channel === "gmail" ? "Gmail 账号" : cfg?.channel === "qq-mail" ? "QQ 邮箱账号" : "QQ Bot 配置";
-    if (!confirm(`确定删除该${typeLabel}「${displayName}」？`)) return;
-    const b = getChannelsBridge(); if (!b) return;
-    try { await b.remove({ id }); await refresh(); } catch (e) { alert((e as { message?: string })?.message ?? String(e)); }
+    useConfirmStore.getState().confirm({
+      title: `删除「${displayName}」？`,
+      description: `确定删除该${typeLabel}「${displayName}」？删除后无法恢复。`,
+      danger: true,
+      confirmLabel: "删除",
+      onConfirm: async () => {
+        setBusy(id, "remove", true);
+        const b = getChannelsBridge(); if (!b) { setBusy(id, "remove", false); return; }
+        try { await b.remove({ id }); await refresh(); pushToast({ message: "已删除", type: "success" }); } catch (e) { pushToast({ message: (e as { message?: string })?.message ?? String(e), type: "error" }); } finally { setBusy(id, "remove", false); }
+      },
+    });
   };
   const handleToggleEnabled = async (id: string, enabled: boolean) => {
     const b = getChannelsBridge(); if (!b) return;
-    try { await b.setEnabled({ id, enabled }); await refresh(); } catch (e) { alert((e as { message?: string })?.message ?? String(e)); }
+    setBusy(id, "toggle", true);
+    try { await b.setEnabled({ id, enabled }); await refresh(); pushToast({ message: enabled ? "已启用" : "已停用", type: "success" }); } catch (e) { pushToast({ message: (e as { message?: string })?.message ?? String(e), type: "error" }); } finally { setBusy(id, "toggle", false); }
   };
 
   if (loading) return <p className="text-xs text-sandrift">加载中...</p>;
@@ -112,9 +134,9 @@ export function ChannelSettings() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h3 className="text-sm font-bold text-charcoal">消息渠道</h3>
-        <button type="button" onClick={() => setAddOpen(true)} data-testid="channel-add" data-channel-add="generic" className="h-8 px-4 bg-charcoal hover:bg-black text-white text-xs font-bold rounded-lg flex items-center gap-1.5 transition-colors duration-[var(--motion-fast)] ease-[var(--ease-standard)] ux-press">
+        <Button variant="primary" size="sm" onClick={() => setAddOpen(true)} data-testid="channel-add" data-channel-add="generic">
           <Plus className="w-3.5 h-3.5" />添加渠道
-        </button>
+        </Button>
         {/* Legacy test id kept for backward compat */}
         <span data-testid="channel-add-qq" className="hidden" />
       </div>
@@ -148,9 +170,9 @@ export function ChannelSettings() {
                     {config.channel === "qq-bot" ? (
                       <p className="text-xs text-sandrift truncate">App ID: {(config as QQConfig).appId} · {(config as QQConfig).receiveDirectMessages ? "接收私聊" : "不接收私聊"} · {(config as QQConfig).receiveGroupMessages ? "接收群聊" : "不接收群聊"} {(config as QQConfig).requireMentionInGroup ? "· 群聊需 @" : ""}</p>
                     ) : config.channel === "gmail" ? (
-                      <p className="text-xs text-sandrift truncate">Gmail · {(config as GmailConfig).emailAddress} · 60s 轮询 · 仅 INBOX</p>
+                      <p className="text-xs text-sandrift truncate">Gmail · {(config as GmailConfig).emailAddress}</p>
                     ) : (
-                      <p className="text-xs text-sandrift truncate">QQ 邮箱 · {(config as QQMailConfig).emailAddress} · 60s 轮询 · 仅 INBOX</p>
+                      <p className="text-xs text-sandrift truncate">QQ 邮箱 · {(config as QQMailConfig).emailAddress}</p>
                     )}
                     {config.channel === "qq-bot" && (
                       <p className="text-[11px] text-sandrift mt-1">允许用户: {(config as QQConfig).allowedUsers.length ? (config as QQConfig).allowedUsers.join(", ") : "不限制"} · 允许群: {(config as QQConfig).allowedGroups.length ? (config as QQConfig).allowedGroups.join(", ") : "不限制"}</p>
@@ -162,23 +184,22 @@ export function ChannelSettings() {
               </div>
               <div className="flex items-center gap-1.5 flex-wrap">
                 {config.channel === "qq-bot" ? (
-                  <button type="button" onClick={() => setEditTarget({ config, health })} data-testid={`channel-edit-${config.id}`} className="h-7 px-3 bg-white border border-line text-charcoal text-xs font-bold rounded-lg hover:bg-alabaster flex items-center gap-1 transition-colors duration-[var(--motion-fast)] ease-[var(--ease-standard)] ux-press"> <Settings2 className="w-3 h-3" />配置</button>
-                ) : (
-                  <button type="button" onClick={() => handleTest(config.id)} data-testid={`channel-test-${config.id}`} className="h-7 px-3 bg-white border border-line text-charcoal text-xs font-bold rounded-lg hover:bg-alabaster flex items-center gap-1 transition-colors duration-[var(--motion-fast)] ease-[var(--ease-standard)] ux-press"><TestTube2 className="w-3 h-3" />测试</button>
-                )}
-                <button type="button" onClick={() => handleTest(config.id)} data-testid={`channel-test-${config.id}`} className={cn("h-7 px-3 bg-white border border-line text-charcoal text-xs font-bold rounded-lg hover:bg-alabaster flex items-center gap-1 transition-colors duration-[var(--motion-fast)] ease-[var(--ease-standard)] ux-press", config.channel !== "qq-bot" ? "hidden" : "")}><TestTube2 className="w-3 h-3" />测试连接</button>
+                  <Button variant="secondary" size="sm" onClick={() => setEditTarget({ config, health })} data-testid={`channel-edit-${config.id}`}> <Settings2 className="w-3 h-3" />配置</Button>
+                ) : null}
+                <Button variant="secondary" size="sm" loading={isBusy(config.id, "test")} loadingLabel="正在测试" onClick={() => handleTest(config.id)} data-testid={`channel-test-${config.id}`}><TestTube2 className="w-3 h-3" />{config.channel === "qq-bot" ? "测试连接" : "测试"}</Button>
                 {(config.channel === "gmail" || config.channel === "qq-mail") && (
-                  <button type="button" onClick={() => handleSyncNow(config.id)} data-testid={`channel-sync-${config.id}`} className="h-7 px-3 bg-white border border-line text-charcoal text-xs font-bold rounded-lg hover:bg-alabaster flex items-center gap-1 transition-colors duration-[var(--motion-fast)] ease-[var(--ease-standard)] ux-press"><RefreshCw className="w-3 h-3" />立即同步</button>
+                  <Button variant="secondary" size="sm" loading={isBusy(config.id, "sync")} loadingLabel="正在同步" onClick={() => handleSyncNow(config.id)} data-testid={`channel-sync-${config.id}`}><RefreshCw className="w-3 h-3" />立即同步</Button>
                 )}
                 {health.state === "connected" ? (
-                  <button type="button" onClick={() => handleDisconnect(config.id)} data-testid={`channel-disconnect-${config.id}`} className="h-7 px-3 bg-white border border-line text-charcoal text-xs font-bold rounded-lg hover:bg-alabaster flex items-center gap-1 transition-colors duration-[var(--motion-fast)] ease-[var(--ease-standard)] ux-press"><Power className="w-3 h-3" />断开</button>
+                  <Button variant="secondary" size="sm" loading={isBusy(config.id, "disconnect")} loadingLabel="断开中" onClick={() => handleDisconnect(config.id)} data-testid={`channel-disconnect-${config.id}`}><Power className="w-3 h-3" />断开</Button>
                 ) : (
-                  <button type="button" onClick={() => handleConnect(config.id)} data-testid={`channel-connect-${config.id}`} className="h-7 px-3 bg-charcoal text-white text-xs font-bold rounded-lg hover:bg-black flex items-center gap-1 transition-colors duration-[var(--motion-fast)] ease-[var(--ease-standard)] ux-press"><Plug2 className="w-3 h-3" />连接</button>
+                  <Button variant="primary" size="sm" loading={isBusy(config.id, "connect")} loadingLabel="正在连接" onClick={() => handleConnect(config.id)} data-testid={`channel-connect-${config.id}`}><Plug2 className="w-3 h-3" />连接</Button>
                 )}
-                <button type="button" onClick={() => handleRemove(config.id, config.displayName)} data-testid={`channel-remove-${config.id}`} className="h-7 px-3 bg-white border border-line text-danger text-xs font-bold rounded-lg hover:bg-alabaster transition-colors duration-[var(--motion-fast)] ease-[var(--ease-standard)] ux-press"><Trash2 className="w-3 h-3" /></button>
-                <label className="ml-auto flex items-center gap-1.5 text-xs">
-                  <input type="checkbox" checked={config.enabled} onChange={(e) => handleToggleEnabled(config.id, e.target.checked)} /> 启用
-                </label>
+                <Button variant="secondary" size="sm" loading={isBusy(config.id, "remove")} onClick={() => handleRemove(config.id, config.displayName)} data-testid={`channel-remove-${config.id}`} className="text-danger hover:bg-danger-bg"><Trash2 className="w-3 h-3" /></Button>
+                <div className="ml-auto flex items-center gap-2">
+                  <span className="text-xs text-sandrift">启用</span>
+                  <Switch checked={config.enabled} onChange={(v) => handleToggleEnabled(config.id, v)} label="启用" disabled={isBusy(config.id, "toggle")} />
+                </div>
               </div>
             </div>
           ))}
@@ -358,7 +379,7 @@ function AddGmailPanel({ onAdded, onBusyChange }: { onAdded: () => void; onBusyC
     } catch (e) {
       const raw = (e as { code?: string; message?: string })?.message ?? String(e);
       const code = (e as { code?: string })?.code ?? "";
-      if (code === "GMAIL_OAUTH_CONFIG_MISSING") setError("Gmail OAuth 未配置（开发环境需设置 CLASSFLOW_GOOGLE_OAUTH_CLIENT_ID）");
+      if (code === "GMAIL_OAUTH_CONFIG_MISSING") setError(process.env.NODE_ENV === "development" ? "Gmail OAuth 未配置（开发环境需设置 CLASSFLOW_GOOGLE_OAUTH_CLIENT_ID）" : "Gmail 授权服务暂不可用，请稍后重试。");
       else if (code === "GMAIL_OAUTH_DENIED") setError("已拒绝授权");
       else if (code === "GMAIL_OAUTH_TIMEOUT") setError("授权超时，请重试");
       else setError(raw);
@@ -368,21 +389,23 @@ function AddGmailPanel({ onAdded, onBusyChange }: { onAdded: () => void; onBusyC
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-2 text-xs font-bold text-charcoal"><ChannelBrandIcon source="gmail" size={16} />Gmail 账号</div>
-      <div className="bg-[#F7F5F5] border border-line rounded-xl p-4 space-y-2">
+      <div className="bg-surface-soft border border-line rounded-xl p-4 space-y-2">
         <p className="text-xs font-bold text-charcoal">连接 Gmail</p>
-        <p className="text-[11px] text-sandrift">将打开浏览器完成 Google OAuth（PKCE + loopback），仅请求 gmail.readonly 与 gmail.send 权限。不会请求 gmail.modify。</p>
+        <p className="text-[11px] text-sandrift">将打开浏览器完成 Google 授权，仅请求读取和发送邮件权限。</p>
         <ul className="text-[11px] text-sandrift list-disc ml-4 space-y-1">
-          <li>首次同步：最近 7 天 INBOX，最多 50 封</li>
-          <li>之后：history 增量同步，60 秒轮询</li>
-          <li>仅展示附件 metadata，不自动下载</li>
+          <li>首次同步最近 7 天邮件，最多 50 封</li>
+          <li>之后每分钟自动同步</li>
+          <li>附件仅显示基本信息，不会自动下载</li>
           <li>回复仅回复发件人，保持原线程</li>
         </ul>
       </div>
       {error && <p data-testid="gmail-add-error" className="text-xs font-bold text-danger bg-danger/5 border border-danger/20 rounded-lg px-3 py-2 animate-enter">{error}</p>}
       <button type="button" onClick={handleConnect} disabled={saving} data-testid="gmail-connect-oauth" className="w-full h-10 bg-charcoal hover:bg-black text-white text-xs font-bold rounded-xl flex items-center justify-center gap-2 disabled:opacity-60 transition-colors duration-[var(--motion-fast)] ease-[var(--ease-standard)] ux-press">
-        <Mail className="w-4 h-4" />{saving ? "连接中..." : "连接 Gmail"}
+        <Mail className="w-4 h-4" />{saving ? "正在打开授权页面…" : "连接 Gmail"}
       </button>
-      <p className="text-[11px] text-sandrift text-center">ClassFlow 内置 Desktop OAuth Client，无需手动输入 Client ID/Secret。开发环境可通过 CLASSFLOW_GOOGLE_OAUTH_CLIENT_ID 覆盖。</p>
+      {process.env.NODE_ENV === "development" && (
+        <p className="text-[11px] text-sandrift text-center">开发环境可通过 CLASSFLOW_GOOGLE_OAUTH_CLIENT_ID 覆盖内置授权配置。</p>
+      )}
     </div>
   );
 }
@@ -433,8 +456,8 @@ function AddQQMailPanel({ onAdded, onBusyChange }: { onAdded: () => void; onBusy
       <div><label className="text-xs font-bold text-charcoal">名称 *</label><input value={displayName} onChange={(e) => setDisplayName(e.target.value)} placeholder="我的 QQ 邮箱" data-testid="qqmail-add-name" className="mt-1 w-full h-9 px-3 bg-white border border-line rounded-lg text-sm focus:outline-none focus:border-charcoal transition-colors duration-[var(--motion-fast)]" /></div>
       <div><label className="text-xs font-bold text-charcoal">QQ 邮箱地址 *</label><input value={emailAddress} onChange={(e) => setEmailAddress(e.target.value)} placeholder="example@qq.com" data-testid="qqmail-add-email" className="mt-1 w-full h-9 px-3 bg-white border border-line rounded-lg text-sm focus:outline-none focus:border-charcoal transition-colors duration-[var(--motion-fast)]" /></div>
       <div><label className="text-xs font-bold text-charcoal">授权码 *</label><input type="password" value={authCode} onChange={(e) => setAuthCode(e.target.value)} placeholder="请输入 QQ 邮箱授权码，不是 QQ 登录密码" data-testid="qqmail-add-authcode" className="mt-1 w-full h-9 px-3 bg-white border border-line rounded-lg text-sm font-mono focus:outline-none focus:border-charcoal transition-colors duration-[var(--motion-fast)]" /><p className="text-[11px] text-sandrift mt-1">请输入 QQ 邮箱授权码，不是 QQ 登录密码。仅存于 SecretVault，关闭后不保留明文</p></div>
-      <div className="bg-[#F7F5F5] border border-line rounded-xl p-3 space-y-1">
-        <p className="text-[11px] text-sandrift">IMAP: imap.qq.com:993 TLS · SMTP: smtp.qq.com:465 TLS · 60s 轮询 · 仅 INBOX · 7天/50封</p>
+      <div className="bg-surface-soft border border-line rounded-xl p-3 space-y-1">
+        <p className="text-[11px] text-sandrift">仅读取收件箱 · 首次同步最近 7 天最多 50 封 · 之后每分钟自动同步 · 附件仅显示基本信息，不会自动下载</p>
         <p className="text-[11px] text-sandrift">获取授权码：QQ 邮箱 → 设置 → 账户 → 生成授权码</p>
       </div>
       {error && <p data-testid="qqmail-add-error" className="text-xs font-bold text-danger bg-danger/5 border border-danger/20 rounded-lg px-3 py-2 animate-enter">{error}</p>}

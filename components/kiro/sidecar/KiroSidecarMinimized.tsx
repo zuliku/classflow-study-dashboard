@@ -234,18 +234,19 @@ export function KiroSidecarMinimized({ visible }: { visible: boolean }) {
       onPointerCancel={handlePointerCancel}
       aria-label="Kiro 已最小化"
     >
-      {/* 1px 流光边框：inset-0 rounded-full（非 -inset-1/2），沿 rounded-full 完整覆盖，无 seam/裁切；低饱和慢速 */}
+      {/* 1px 流光边框：idle 静态细边，busy 才运行 perimeter sweep */}
       <span
         aria-hidden="true"
         className={cn(
-          "absolute inset-0 rounded-full kiro-ring kiro-ring-animated pointer-events-none",
+          "absolute inset-0 rounded-full kiro-ring pointer-events-none",
+          kiroBusy && "kiro-ring-animated",
           dragging
             ? "opacity-30"
             : kiroBusy
               ? "opacity-80 group-hover:opacity-90"
               : "opacity-55 group-hover:opacity-70"
         )}
-        style={{ animationDuration: kiroBusy ? "4.5s" : "7s" } as React.CSSProperties}
+        style={kiroBusy ? ({ animationDuration: "4.5s" } as React.CSSProperties) : undefined}
       />
       <div
         className={cn(

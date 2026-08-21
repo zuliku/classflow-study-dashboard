@@ -139,7 +139,7 @@ export function UpcomingDDL() {
         </button>
       </div>
 
-      {/* DDL Task Cards：每页 3 张；卡片无 shadow、无嵌套小卡 */}
+      {/* DDL Task Cards：每页 3 张；分页切换使用 ux-agenda-enter 克制过渡 */}
       <div className="flex-1 min-h-0 overflow-y-auto scrollbar-none flex flex-col gap-2 py-1.5">
         {pagedItems.length === 0 ? (
           <div className="flex-1 flex flex-col items-center justify-center text-xs text-sandrift space-y-1 min-h-24">
@@ -147,7 +147,8 @@ export function UpcomingDDL() {
             <p>暂无临近 DDL</p>
           </div>
         ) : (
-          pagedItems.map((task) => {
+          <div key={safePage} className="flex flex-col gap-2 ux-agenda-enter">
+            {pagedItems.map((task) => {
             const course = courses.find((c) => c.id === task.courseId);
             const ddlDate = parseLocalDDL(task.ddl) ?? new Date();
             const relativeTime = formatDistanceToNow(ddlDate, {
@@ -164,9 +165,9 @@ export function UpcomingDDL() {
                 onKeyDown={cardKeyHandler(() => setSelectedAssignmentId(task.id))}
                 aria-label={`${task.title}，${course?.name || "通用课题"}，${format(ddlDate, "M月d日 EEE", { locale: zhCN })} ${format(ddlDate, "HH:mm")}，${relativeTime}`}
                 className={cn(
-                  "group flex items-center gap-3 p-2.5 rounded-lg border border-line bg-[#F7F5F5]",
+                  "group flex items-center gap-3 p-2.5 rounded-lg border border-line bg-surface-soft",
                   "cursor-pointer transition-colors duration-[var(--motion-fast)] ease-[var(--ease-standard)]",
-                  "hover:bg-alabaster hover:border-[#CDB9AB]",
+                  "hover:bg-alabaster hover:border-line-strong",
                   fillAvailable && "flex-1 min-h-[72px]"
                 )}
               >
@@ -197,7 +198,8 @@ export function UpcomingDDL() {
                 </div>
               </div>
             );
-          })
+            })}
+          </div>
         )}
       </div>
 

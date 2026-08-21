@@ -17,14 +17,14 @@ export function AboutSettings() {
             </span>
           </p>
           <p className="text-[11px] text-satin-grey mt-0.5">
-            课程、任务与学习日程的一体化学习工作台（demo 预览版）。
+            课程、任务与学习日程的一体化学习工作台。
           </p>
         </div>
         <div className="pt-2 border-t border-line-soft space-y-1.5">
           <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
             <span className="text-sandrift shrink-0">版本</span>
             <span className="font-mono font-semibold text-charcoal text-right break-words min-w-0">
-              {APP_VERSION}（测试版）
+              {APP_VERSION}
             </span>
           </div>
           <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
@@ -41,7 +41,7 @@ export function AboutSettings() {
           </div>
         </div>
         <p className="pt-2 border-t border-line-soft text-[10px] text-sandrift leading-relaxed">
-          测试版数据可能随版本更新重置，重要数据请及时备份。
+          测试期间建议定期备份重要数据。
         </p>
       </div>
     </SettingsSection>

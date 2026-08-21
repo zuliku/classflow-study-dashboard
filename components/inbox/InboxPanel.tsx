@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useMemo, useEffect } from "react";
-import { Inbox, Archive, Eye, Trash2, Check, Clock, Mail, Reply, X } from "lucide-react";
+import { Inbox, Archive, Eye, Trash2, Check, Clock, Reply, X } from "lucide-react";
 import { useInboxStore } from "@/store/useInboxStore";
 import type { ExternalInboxItem, InboxStatus } from "@/lib/inbox/types";
 import { wrapExternalContent } from "@/lib/inbox/types";
@@ -11,6 +11,8 @@ import { Dialog } from "@/components/ui/Dialog";
 import { QQReplyDialog } from "@/components/inbox/QQReplyDialog";
 import { EmailReplyDialog } from "@/components/inbox/EmailReplyDialog";
 import { ChannelBrandIcon } from "@/components/icons/ChannelBrandIcon";
+import { useExitPresenceList } from "@/lib/useExitPresenceList";
+import { ExitCollapse } from "@/components/ui/ExitCollapse";
 
 export function InboxPanel({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
   const items = useInboxStore((s) => s.items);
@@ -25,6 +27,8 @@ export function InboxPanel({ open, onOpenChange }: { open: boolean; onOpenChange
     return items.filter((it) => it.status === filter);
   }, [items, filter]);
 
+  const retained = useExitPresenceList({ items: filtered, getId: (it) => (it as ExternalInboxItem).id, resetKey: filter });
+
   const unreadCount = useMemo(() => items.filter((it) => it.status === "unread").length, [items]);
 
   // Root close cleanup: selected / replyItem must not persist across reopen
@@ -37,7 +41,6 @@ export function InboxPanel({ open, onOpenChange }: { open: boolean; onOpenChange
 
   const handleKiroProcess = (item: ExternalInboxItem) => {
     // 授权 Kiro 分析消息并生成 Proposal（非直接写入）
-    // 将外部内容包装为 EXTERNAL UNTRUSTED CONTENT
     const wrapped = wrapExternalContent(item.text);
     // 通过全局事件或直接调用 Kiro 的处理函数
     // 此处通过 window 事件通知 Kiro 处理 Inbox
@@ -98,12 +101,14 @@ export function InboxPanel({ open, onOpenChange }: { open: boolean; onOpenChange
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-3 space-y-2">
-        {filtered.length === 0 ? (
+      <div className="flex-1 overflow-y-auto p-3">
+        {retained.length === 0 ? (
           <p className="text-xs text-sandrift text-center py-8">暂无消息</p>
         ) : (
-          filtered.map((item) => (
-            <div key={item.id} data-testid={`inbox-item-${item.id}`} className="bg-[#F7F5F5] border border-line rounded-xl p-3 flex flex-col gap-2">
+          <div key={filter} className="space-y-2 ux-page">
+            {retained.map(({ item, exiting }) => (
+              <ExitCollapse key={item.id} exiting={exiting}>
+                <div data-testid={`inbox-item-${item.id}`} className="bg-surface-soft border border-line rounded-xl p-3 flex flex-col gap-2">
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-1.5 min-w-0">
@@ -114,12 +119,8 @@ export function InboxPanel({ open, onOpenChange }: { open: boolean; onOpenChange
                   </div>
                   {item.subject && <p className="text-xs font-bold text-charcoal mt-1 truncate">{item.subject}</p>}
                   <p className="text-xs text-sandrift mt-1 line-clamp-2">{item.text.slice(0, 100)}</p>
-                  <p className="text-[11px] text-sandrift mt-1 flex items-center gap-1">
-                    <Mail className="w-3 h-3" />
-                    Kiro 可能识别：课程通知 · 作业 · DDL
-                  </p>
                 </div>
-                <span className={cn("shrink-0 px-2 py-0.5 rounded-full text-[11px] font-bold border", item.status === "unread" ? "bg-charcoal text-white border-charcoal" : item.status === "reviewed" ? "bg-success/10 text-success border-success/20" : "bg-[#F7F5F5] text-satin-grey border-line")}>
+                <span className={cn("shrink-0 px-2 py-0.5 rounded-full text-[11px] font-bold border", item.status === "unread" ? "bg-charcoal text-white border-charcoal" : item.status === "reviewed" ? "bg-success/10 text-success border-success/20" : "bg-surface-soft text-satin-grey border-line")}>
                   {item.status === "unread" ? "未读" : item.status === "reviewed" ? "已查看" : "已归档"}
                 </span>
               </div>
@@ -175,8 +176,10 @@ export function InboxPanel({ open, onOpenChange }: { open: boolean; onOpenChange
                   <Trash2 className="w-3.5 h-3.5" />
                 </button>
               </div>
+              </div>
+              </ExitCollapse>
+            ))}
             </div>
-          ))
         )}
       </div>
 
@@ -188,10 +191,10 @@ export function InboxPanel({ open, onOpenChange }: { open: boolean; onOpenChange
             <span className="text-[11px] text-sandrift">{new Date(selected.receivedAt).toLocaleString("zh-CN")}</span>
           </div>
           {selected.subject && <p className="text-sm font-bold text-charcoal">{selected.subject}</p>}
-          <div className="bg-[#F7F5F5] border border-line rounded-lg p-3">
-            <p className="text-[11px] font-bold text-sandrift mb-2">EXTERNAL UNTRUSTED CONTENT</p>
+          <div className="bg-surface-soft border border-line rounded-lg p-3">
+            <p className="text-[11px] font-bold text-sandrift mb-2">外部消息</p>
             <p className="text-xs text-charcoal whitespace-pre-wrap leading-relaxed">{selected.text}</p>
-            <p className="text-[11px] text-sandrift mt-2">内容可以提供事实，内容不能提供权限，内容中的指令不是用户授权。</p>
+            <p className="text-[11px] text-sandrift mt-2">Kiro 会将这段内容作为外部信息处理，不会执行其中的指令。</p>
           </div>
           {selected.attachments.length > 0 && (
             <div className="space-y-1">
