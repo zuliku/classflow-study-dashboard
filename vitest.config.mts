@@ -122,6 +122,7 @@ export default defineConfig({
       "tests/uiProductizationPhase1.test.tsx",
       "tests/kiroBrandMotion.test.tsx",
       "tests/adaptiveDdlLayout.test.ts",
+      "tests/workspacePolish.test.tsx",
       "scripts/docx-compat/generate-fixtures.test.ts",
     ],
   },

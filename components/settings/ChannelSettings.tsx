@@ -148,7 +148,7 @@ export function ChannelSettings() {
           </div>
           <div>
             <p className="text-sm font-bold text-charcoal">还没有消息渠道</p>
-            <p className="text-xs text-sandrift mt-1">添加 QQ Bot、Gmail 或 QQ 邮箱后，消息将进入统一收件箱（receive-only，不自动触发 Kiro）</p>
+            <p className="text-xs text-sandrift mt-1">收到的消息会进入统一收件箱；是否交给 Kiro 处理由你决定。</p>
           </div>
           <div className="flex gap-2 mt-2">
             <span className="px-2 py-1 bg-white border border-line rounded-lg text-[11px] font-bold">QQ Bot</span>
@@ -346,7 +346,7 @@ function AddQQPanel({ onAdded, onBusyChange }: { onAdded: () => void; onBusyChan
       <div className="flex items-center gap-2 text-xs font-bold text-charcoal"><ChannelBrandIcon source="qq-bot" size={16} />QQ Bot 配置</div>
       <div><label className="text-xs font-bold text-charcoal">名称 *</label><input value={displayName} onChange={(e) => setDisplayName(e.target.value)} placeholder="我的 QQ 机器人" data-testid="qq-add-name" className="mt-1 w-full h-9 px-3 bg-white border border-line rounded-lg text-sm focus:outline-none focus:border-charcoal transition-colors duration-[var(--motion-fast)]" /></div>
       <div><label className="text-xs font-bold text-charcoal">App ID *</label><input value={appId} onChange={(e) => setAppId(e.target.value)} placeholder="123456789" data-testid="qq-add-appid" className="mt-1 w-full h-9 px-3 bg-white border border-line rounded-lg text-sm font-mono focus:outline-none focus:border-charcoal transition-colors duration-[var(--motion-fast)]" /></div>
-      <div><label className="text-xs font-bold text-charcoal">App Secret *</label><input type="password" value={appSecret} onChange={(e) => setAppSecret(e.target.value)} placeholder="••••••••" data-testid="qq-add-secret" className="mt-1 w-full h-9 px-3 bg-white border border-line rounded-lg text-sm font-mono focus:outline-none focus:border-charcoal transition-colors duration-[var(--motion-fast)]" /><p className="text-[11px] text-sandrift mt-1">仅存于 SecretVault，关闭后不保留明文</p></div>
+      <div><label className="text-xs font-bold text-charcoal">App Secret *</label><input type="password" value={appSecret} onChange={(e) => setAppSecret(e.target.value)} placeholder="••••••••" data-testid="qq-add-secret" className="mt-1 w-full h-9 px-3 bg-white border border-line rounded-lg text-sm font-mono focus:outline-none focus:border-charcoal transition-colors duration-[var(--motion-fast)]" /><p className="text-[11px] text-sandrift mt-1">凭据会安全保存在当前设备。</p></div>
       <div className="flex items-center gap-4">
         <label className="flex items-center gap-1.5 text-xs"><input type="checkbox" checked={receiveDirectMessages} onChange={(e) => setReceiveDirectMessages(e.target.checked)} /> 接收私聊</label>
         <label className="flex items-center gap-1.5 text-xs"><input type="checkbox" checked={receiveGroupMessages} onChange={(e) => setReceiveGroupMessages(e.target.checked)} /> 接收群聊</label>
@@ -455,7 +455,7 @@ function AddQQMailPanel({ onAdded, onBusyChange }: { onAdded: () => void; onBusy
       <div className="flex items-center gap-2 text-xs font-bold text-charcoal"><ChannelBrandIcon source="qq-mail" size={16} />QQ 邮箱配置</div>
       <div><label className="text-xs font-bold text-charcoal">名称 *</label><input value={displayName} onChange={(e) => setDisplayName(e.target.value)} placeholder="我的 QQ 邮箱" data-testid="qqmail-add-name" className="mt-1 w-full h-9 px-3 bg-white border border-line rounded-lg text-sm focus:outline-none focus:border-charcoal transition-colors duration-[var(--motion-fast)]" /></div>
       <div><label className="text-xs font-bold text-charcoal">QQ 邮箱地址 *</label><input value={emailAddress} onChange={(e) => setEmailAddress(e.target.value)} placeholder="example@qq.com" data-testid="qqmail-add-email" className="mt-1 w-full h-9 px-3 bg-white border border-line rounded-lg text-sm focus:outline-none focus:border-charcoal transition-colors duration-[var(--motion-fast)]" /></div>
-      <div><label className="text-xs font-bold text-charcoal">授权码 *</label><input type="password" value={authCode} onChange={(e) => setAuthCode(e.target.value)} placeholder="请输入 QQ 邮箱授权码，不是 QQ 登录密码" data-testid="qqmail-add-authcode" className="mt-1 w-full h-9 px-3 bg-white border border-line rounded-lg text-sm font-mono focus:outline-none focus:border-charcoal transition-colors duration-[var(--motion-fast)]" /><p className="text-[11px] text-sandrift mt-1">请输入 QQ 邮箱授权码，不是 QQ 登录密码。仅存于 SecretVault，关闭后不保留明文</p></div>
+      <div><label className="text-xs font-bold text-charcoal">授权码 *</label><input type="password" value={authCode} onChange={(e) => setAuthCode(e.target.value)} placeholder="请输入 QQ 邮箱授权码，不是 QQ 登录密码" data-testid="qqmail-add-authcode" className="mt-1 w-full h-9 px-3 bg-white border border-line rounded-lg text-sm font-mono focus:outline-none focus:border-charcoal transition-colors duration-[var(--motion-fast)]" /><p className="text-[11px] text-sandrift mt-1">请输入 QQ 邮箱授权码，不是 QQ 登录密码。凭据会安全保存在当前设备。</p></div>
       <div className="bg-surface-soft border border-line rounded-xl p-3 space-y-1">
         <p className="text-[11px] text-sandrift">仅读取收件箱 · 首次同步最近 7 天最多 50 封 · 之后每分钟自动同步 · 附件仅显示基本信息，不会自动下载</p>
         <p className="text-[11px] text-sandrift">获取授权码：QQ 邮箱 → 设置 → 账户 → 生成授权码</p>

@@ -29,6 +29,7 @@ import { useKiroPreferencesStore } from "@/store/useKiroPreferencesStore";
 import { useKiroComputerStore } from "@/store/useKiroComputerStore";
 import { useReminderPreferencesStore } from "@/store/useReminderPreferencesStore";
 import { useToastStore } from "@/store/useToastStore";
+import { useEffectiveReducedMotion } from "@/hooks/useEffectiveReducedMotion";
 import { cn } from "@/lib/utils";
 
 interface SettingsViewProps {
@@ -142,6 +143,7 @@ export function SettingsView({
   const pendingTargetRef = useRef<string | null>(null);
   const highlightTimer = React.useRef<number | null>(null);
   const pushToast = useToastStore((s) => s.pushToast);
+  const reducedMotion = useEffectiveReducedMotion();
 
   /** 真正执行跳转：切 section、清搜索、必要时展开 disclosure */
   const jumpTo = (setting: SettingDefinition) => {
@@ -185,7 +187,7 @@ export function SettingsView({
       const el = viewRootRef.current?.querySelector(`[data-setting-id="${targetId}"]`) ?? null;
       if (el) {
         pendingTargetRef.current = null;
-        el.scrollIntoView({ block: "center", behavior: "smooth" });
+        el.scrollIntoView({ block: "center", behavior: reducedMotion ? "auto" : "smooth" });
         // DOM 级高亮：不依赖 row 是否接收 highlighted prop（搜索跳转一律可用）
         el.classList.add("bg-pastel-mint/60");
         setHighlightedId(targetId);

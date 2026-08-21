@@ -642,7 +642,7 @@ export function KiroComposer({
                     iconOnly={compact}
                   />
                 )}
-                {reasoningCapability && reasoningEffort && (
+                {computerEnabled && reasoningCapability && reasoningEffort && (
                   <KiroReasoningMenu
                     capability={reasoningCapability}
                     effort={reasoningEffort}
