@@ -16,6 +16,7 @@ import { RestoreSection, RestoreResult } from "@/components/settings/RestoreSect
 import { DangerZone } from "@/components/settings/DangerZone";
 import { LearningHistorySettings } from "@/components/settings/LearningHistorySettings";
 import { CheckCircle2, AlertTriangle, ChevronDown, RefreshCcw } from "lucide-react";
+import { useConfirmStore } from "@/store/useConfirmStore";
 import { cn } from "@/lib/utils";
 
 /** 数据与隐私中心：数据管理 / 学习历史 / 当前设备数据 / 隐私边界 / 危险操作 */
@@ -47,19 +48,18 @@ export function DataSettings() {
   // 数据诊断：日常不需要常开，默认收起
   const [diagnosticsOpen, setDiagnosticsOpen] = useState(false);
 
-  // Dev Only：重新载入全模块演示数据（解决旧版预览数据残留，无需 ?preview= URL）
+  // 演示数据手动载入（设置 → 数据 唯一入口）
   const reloadDemoData = () => {
-    if (
-      !confirm(
-        "重新载入完整演示数据？\n\n将覆盖当前全部任务/课程/学习计划数据（个人资料与偏好保留）。"
-      )
-    ) {
-      return;
-    }
-    import("@/lib/dev/fullDemoData").then(({ buildFullDemoData }) => {
-      useAppStore.getState().restoreAppData(buildFullDemoData());
-      localStorage.setItem("classflow-demo-injected", "1");
-      useToastStore.getState().pushToast({ message: "已重新载入完整演示数据", type: "success" });
+    useConfirmStore.getState().confirm({
+      title: "载入完整演示数据？",
+      description: "这会使用示例课程、任务、课表、学习记录等数据覆盖当前业务数据。该操作主要用于开发和功能预览。",
+      confirmLabel: "载入演示数据",
+      onConfirm: () => {
+        import("@/lib/dev/fullDemoData").then(({ buildFullDemoData }) => {
+          useAppStore.getState().restoreAppData(buildFullDemoData());
+          useToastStore.getState().pushToast({ message: "完整演示数据已载入", type: "success" });
+        });
+      },
     });
   };
 
@@ -150,17 +150,17 @@ export function DataSettings() {
           <DangerZone />
         </SettingsGroup>
 
-        {/* 开发工具（仅 dev）：低权重，位于页面最底部，不属于正式设置 */}
+        {/* 演示数据（仅 dev）：设置 → 数据 唯一人工入口 */}
         {process.env.NODE_ENV === "development" && (
-          <SettingsGroup title="开发工具">
+          <SettingsGroup title="开发者 · 演示数据">
             <div data-testid="dev-demo-reload">
               <SettingsActionRow
                 title="完整演示数据"
-                description="重载用于本地开发的完整模块数据（覆盖业务数据，保留个人资料与偏好）"
+                description="用于快速预览 ClassFlow 的完整功能状态。载入后会使用示例课程、任务、课表和学习记录覆盖当前业务数据。"
                 icon={<RefreshCcw className="w-3.5 h-3.5 text-[#A48F82]" />}
-                actionLabel="重新载入"
+                actionLabel="载入完整演示数据"
                 onAction={reloadDemoData}
-                actionMinWidth="min-w-[104px]"
+                actionMinWidth="min-w-[140px]"
               />
             </div>
           </SettingsGroup>

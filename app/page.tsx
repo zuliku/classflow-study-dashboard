@@ -100,45 +100,8 @@ export default function Home() {
     });
   }, []);
 
-  // Dev 自动注入：开发构建 + 首次启动（无持久化数据）→ 自动载入全模块演示数据，
-  // 无需 ?preview= URL 即可查看所有模块。用户主动清空数据后不再注入（marker 保留）。
-  // 自动化测试环境（navigator.webdriver / __CLASSFLOW_E2E__）与生产构建完全禁用。
-  useEffect(() => {
-    if (process.env.NODE_ENV !== "development") return;
-    if (navigator.webdriver) return;
-    if ((window as unknown as { __CLASSFLOW_E2E__?: boolean }).__CLASSFLOW_E2E__) return;
-    try {
-      const KEY = "classflow-storage-v2";
-      const stored = localStorage.getItem(KEY);
-      if (stored) {
-        // persist 可能在注入前写入 first-run 空状态；只有「真正有业务数据」才跳过
-        try {
-          const parsed = JSON.parse(stored) as {
-            state?: Record<string, unknown>;
-          };
-          const s = (parsed.state ?? parsed) as Record<string, unknown>;
-          const arr = (k: string) => (Array.isArray(s[k]) ? (s[k] as unknown[]).length : 0);
-          const hasData = arr("assignments") > 0 || arr("courses") > 0 || arr("studyBlocks") > 0;
-          if (hasData) return;
-        } catch {
-          return; // 损坏数据不覆盖
-        }
-      }
-      if (localStorage.getItem("classflow-demo-injected") === "1") return;
-      import("@/lib/dev/fullDemoData").then(({ buildFullDemoData }) => {
-        useAppStore.getState().restoreAppData(buildFullDemoData());
-        localStorage.setItem("classflow-demo-injected", "1");
-        useToastStore.getState().pushToast({
-          message: "已载入完整演示数据（开发模式），可在设置 → 数据中清空",
-          type: "info",
-        });
-      });
-    } catch {
-      /* 注入失败不影响启动 */
-    }
-  }, []);
-
   // Dev Preview 覆盖注入：?preview=task-v2 → confirm 后强制覆盖（仅开发构建）
+  // 显式开发行为，需用户确认才会覆盖数据
   useEffect(() => {
     if (process.env.NODE_ENV !== "development") return;
     const params = new URLSearchParams(window.location.search);
