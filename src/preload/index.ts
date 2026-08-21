@@ -132,6 +132,7 @@ const invocationBridge = {
 const channelsBridge = {
   list: () => invokeBridge("bridge:channels:list", {}),
   addQQ: (input: unknown) => invokeBridge("bridge:channels:addQQ", input),
+  addQQMail: (input: unknown) => invokeBridge("bridge:channels:addQQMail", input),
   update: (input: unknown) => invokeBridge("bridge:channels:update", input),
   setEnabled: (input: unknown) => invokeBridge("bridge:channels:setEnabled", input),
   connect: (input: unknown) => invokeBridge("bridge:channels:connect", input),

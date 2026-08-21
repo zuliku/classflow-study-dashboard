@@ -12,7 +12,7 @@ import type { ChannelHealth, ChannelState, PersistedChannelConfig } from "./type
 import type { ChannelType } from "./types";
 import type { QQChannelConfig } from "./qq/config";
 import { validateQQChannelConfig } from "./qq/config";
-import { validateGmailChannelConfig } from "./email/config";
+import { validateGmailChannelConfig, validateQQMailChannelConfig } from "./email/config";
 import type { GmailChannelConfig } from "./email/types";
 import { QQChannelAdapter } from "./qq/adapter";
 import { ChannelInboxSink } from "./inboxSink";
@@ -239,6 +239,44 @@ export class ChannelManager {
     return { channel: cfg };
   }
 
+  async addQQMailChannel(input: {
+    displayName: string;
+    emailAddress: string;
+    credentialRef: string;
+  }): Promise<PersistedChannelConfig> {
+    if (!input.displayName || !input.emailAddress || !input.credentialRef) {
+      throw new ChannelError("INVALID_INPUT", "displayName/emailAddress/credentialRef required");
+    }
+    if (!input.credentialRef.startsWith("cred_")) throw new ChannelError("INVALID_INPUT", "credentialRef invalid");
+    try {
+      const vault = getRuntimeSecretVault();
+      vault.resolveSecretForProvider(input.credentialRef, "qq-mail");
+    } catch {
+      throw new ChannelError("QQ_MAIL_AUTH_FAILED" as never, "凭据不存在或类型不匹配");
+    }
+    const id = `qqmail_${randomUUID().slice(0, 8)}`;
+    const cfg: PersistedChannelConfig = {
+      id,
+      channel: "qq-mail",
+      enabled: true,
+      displayName: input.displayName,
+      emailAddress: input.emailAddress.trim().toLowerCase(),
+      credentialRef: input.credentialRef,
+      syncIntervalSeconds: 60,
+    } as PersistedChannelConfig;
+    const validated = validateQQMailChannelConfig({ ...cfg });
+    if (!validated.ok) throw new ChannelError("EMAIL_INVALID_CONFIG", validated.message);
+    const backup = new Map(this.configs);
+    this.configs.set(id, cfg);
+    try {
+      await this.persistConfigsAtomic();
+    } catch (e) {
+      this.configs = backup;
+      throw e;
+    }
+    return cfg;
+  }
+
   async syncNow(id: string): Promise<{ added: number; durationMs: number }> {
     const adapter = this.adapters.get(id);
     if (!adapter) throw new ChannelError("CHANNEL_NOT_FOUND" as never, "Channel not found");
@@ -357,7 +395,31 @@ export class ChannelManager {
       return;
     }
     if (cfg.channel === "qq-mail") {
-      throw new ChannelError("EMAIL_INVALID_CONFIG", "QQ Mail not yet implemented");
+      let authCode: string;
+      try {
+        const vault = getRuntimeSecretVault();
+        authCode = vault.resolveSecretForProvider(cfg.credentialRef, "qq-mail");
+      } catch {
+        throw new ChannelError("QQ_MAIL_AUTH_FAILED" as never, "无法解析 QQ 邮箱授权码");
+      }
+      try {
+        if (this.adapters.has(id)) {
+          await this.adapters.get(id)!.stop().catch(() => {});
+          this.adapters.delete(id);
+        }
+        const qqmailCfg = cfg as unknown as import("./email/types").QQMailChannelConfig;
+        const { QQMailChannelAdapter } = await import("./email/qqmail/adapter");
+        const adapter = new QQMailChannelAdapter({
+          config: qqmailCfg,
+          authCode,
+          inboxSink: this.inboxSink,
+        });
+        this.adapters.set(id, adapter as unknown as import("./types").ChannelAdapter);
+        await adapter.start();
+      } finally {
+        authCode = "";
+      }
+      return;
     }
     // qq-bot
     let appSecret: string;
@@ -426,30 +488,60 @@ export class ChannelManager {
 
   async sendEmailReply(ctx: import("./email/types").EmailReplyContext, text: string): Promise<{ messageId?: string; timestamp?: string }> {
     const cfg = this.configs.get(ctx.sourceAccountId);
-    if (!cfg || cfg.channel !== "gmail") throw new ChannelError("CHANNEL_NOT_FOUND" as never, "Channel not found for reply context");
+    if (!cfg || (cfg.channel !== "gmail" && cfg.channel !== "qq-mail")) throw new ChannelError("CHANNEL_NOT_FOUND" as never, "Channel not found for reply context");
     let adapter = this.adapters.get(ctx.sourceAccountId);
     if (!adapter || adapter.getState() !== "connected") {
       await this.connect(ctx.sourceAccountId);
       adapter = this.adapters.get(ctx.sourceAccountId);
       if (!adapter) throw new ChannelError("CHANNEL_RUNTIME_ERROR" as never, "Failed to connect");
     }
-    try {
-      const { GmailTokenProvider } = await import("./email/gmail/tokenProvider");
-      const { buildReplyMime } = await import("./email/gmail/mime");
-      const { sendMessage } = await import("./email/gmail/api");
-      const tokenProvider = new GmailTokenProvider(cfg.credentialRef);
-      const raw = buildReplyMime({ to: ctx.replyToAddress, subject: ctx.subject, text, inReplyTo: ctx.rfcMessageId, references: ctx.references, threadId: ctx.threadId });
-      const res = await sendMessage(tokenProvider, raw, ctx.threadId);
-      return { messageId: res.id, timestamp: new Date().toISOString() };
-    } catch (e) {
-      const raw = e instanceof Error ? e.message : String(e);
+    if (cfg.channel === "gmail") {
       try {
-        const parsed = JSON.parse(raw) as { code?: string };
-        if (parsed.code === "EMAIL_SEND_REJECTED" || parsed.code === "EMAIL_SEND_UNCERTAIN") throw e;
-      } catch {}
-      if (raw.toLowerCase().includes("uncertain") || raw.toLowerCase().includes("timeout")) throw new ChannelError("EMAIL_SEND_UNCERTAIN" as never, raw.slice(0,200));
-      if (raw.toLowerCase().includes("rejected")) throw new ChannelError("EMAIL_SEND_REJECTED" as never, raw.slice(0,200));
-      throw new ChannelError("EMAIL_SEND_REJECTED" as never, raw.slice(0,200));
+        const { GmailTokenProvider } = await import("./email/gmail/tokenProvider");
+        const { buildReplyMime } = await import("./email/gmail/mime");
+        const { sendMessage } = await import("./email/gmail/api");
+        const tokenProvider = new GmailTokenProvider(cfg.credentialRef);
+        const raw = buildReplyMime({ to: ctx.replyToAddress, subject: ctx.subject, text, inReplyTo: ctx.rfcMessageId, references: ctx.references, threadId: ctx.threadId });
+        const res = await sendMessage(tokenProvider, raw, ctx.threadId);
+        return { messageId: res.id, timestamp: new Date().toISOString() };
+      } catch (e) {
+        const raw = e instanceof Error ? e.message : String(e);
+        try {
+          const parsed = JSON.parse(raw) as { code?: string };
+          if (parsed.code === "EMAIL_SEND_REJECTED" || parsed.code === "EMAIL_SEND_UNCERTAIN") throw e;
+        } catch {}
+        if (raw.toLowerCase().includes("uncertain") || raw.toLowerCase().includes("timeout")) throw new ChannelError("EMAIL_SEND_UNCERTAIN" as never, raw.slice(0,200));
+        if (raw.toLowerCase().includes("rejected")) throw new ChannelError("EMAIL_SEND_REJECTED" as never, raw.slice(0,200));
+        throw new ChannelError("EMAIL_SEND_REJECTED" as never, raw.slice(0,200));
+      }
+    } else {
+      // qq-mail via SMTP (passive reply only, no CC/BCC)
+      try {
+        const vault = getRuntimeSecretVault();
+        const authCode = vault.resolveSecretForProvider(cfg.credentialRef, "qq-mail");
+        const { createQQMailTransporter, sendQQMailReply } = await import("./email/qqmail/smtp");
+        const transporter = createQQMailTransporter({ emailAddress: (cfg as unknown as { emailAddress: string }).emailAddress, authCode });
+        const references = [...(ctx.references ?? []), ctx.rfcMessageId].filter(Boolean).join(" ");
+        const res = await sendQQMailReply(transporter, {
+          from: (cfg as unknown as { emailAddress: string }).emailAddress,
+          to: ctx.replyToAddress,
+          subject: ctx.subject,
+          text,
+          inReplyTo: ctx.rfcMessageId,
+          references,
+        });
+        try { await transporter.close(); } catch {}
+        return { messageId: res.messageId, timestamp: new Date().toISOString() };
+      } catch (e) {
+        const raw = e instanceof Error ? e.message : String(e);
+        try {
+          const parsed = JSON.parse(raw) as { code?: string };
+          if (parsed.code === "QQ_MAIL_AUTH_FAILED" || parsed.code === "EMAIL_SEND_REJECTED" || parsed.code === "EMAIL_SEND_UNCERTAIN") throw e;
+        } catch {}
+        if (raw.includes("QQ_MAIL_AUTH_FAILED") || raw.toLowerCase().includes("auth") || raw.includes("535") || raw.includes("530")) throw new ChannelError("QQ_MAIL_AUTH_FAILED" as never, raw.slice(0,200));
+        if (raw.toLowerCase().includes("uncertain") || raw.toLowerCase().includes("timeout") || raw.toLowerCase().includes("reset") || raw.toLowerCase().includes("closed")) throw new ChannelError("EMAIL_SEND_UNCERTAIN" as never, raw.slice(0,200));
+        throw new ChannelError("EMAIL_SEND_REJECTED" as never, raw.slice(0,200));
+      }
     }
   }
 
@@ -480,7 +572,35 @@ export class ChannelManager {
       }
     }
     if (cfg.channel === "qq-mail") {
-      return { ok: false, error: "EMAIL_INVALID_CONFIG" };
+      try {
+        const vault = getRuntimeSecretVault();
+        const authCode = vault.resolveSecretForProvider(cfg.credentialRef, "qq-mail");
+        const { QQMailImapTransport } = await import("./email/qqmail/transport");
+        const imap = new QQMailImapTransport({ emailAddress: (cfg as unknown as { emailAddress: string }).emailAddress, authCode });
+        await imap.connect();
+        try {
+          await imap.selectInbox();
+        } catch (e) {
+          await imap.disconnect().catch(() => {});
+          throw e;
+        }
+        await imap.disconnect();
+        const { createQQMailTransporter, verifyQQMailTransporter } = await import("./email/qqmail/smtp");
+        const transporter = createQQMailTransporter({ emailAddress: (cfg as unknown as { emailAddress: string }).emailAddress, authCode });
+        await verifyQQMailTransporter(transporter);
+        try { await transporter.close(); } catch {}
+        return { ok: true };
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        try {
+          const parsed = JSON.parse(msg) as { code?: string };
+          if (parsed.code === "QQ_MAIL_AUTH_FAILED") return { ok: false, error: "QQ_MAIL_AUTH_FAILED" };
+          if (parsed.code) return { ok: false, error: parsed.code };
+        } catch {}
+        if (msg.toLowerCase().includes("auth") || msg.includes("535") || msg.includes("530")) return { ok: false, error: "QQ_MAIL_AUTH_FAILED" };
+        if (msg.includes("QQ_MAIL_AUTH_FAILED")) return { ok: false, error: "QQ_MAIL_AUTH_FAILED" };
+        return { ok: false, error: "EMAIL_SYNC_FAILED" };
+      }
     }
     let secret: string;
     try {

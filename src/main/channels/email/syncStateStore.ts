@@ -16,9 +16,16 @@ export interface GmailSyncState {
   lastSyncAt?: number;
 }
 
+export interface QQMailSyncState {
+  uidValidity: string;
+  lastSeenUid: number;
+  initializedAt?: number;
+  lastSyncAt?: number;
+}
+
 export interface EmailSyncStateFile {
   gmail?: Record<string, GmailSyncState>; // key = channelId
-  qqMail?: Record<string, unknown>;
+  qqMail?: Record<string, QQMailSyncState>;
 }
 
 function getSyncStatePath(): string {
@@ -70,6 +77,18 @@ export class EmailSyncStateStore {
     const state = this.load();
     if (!state.gmail) state.gmail = {};
     state.gmail[channelId] = gmailState;
+    this.save(state);
+  }
+
+  getQQMailState(channelId: string): QQMailSyncState | null {
+    const state = this.load();
+    return state.qqMail?.[channelId] ?? null;
+  }
+
+  setQQMailState(channelId: string, qqState: QQMailSyncState): void {
+    const state = this.load();
+    if (!state.qqMail) state.qqMail = {};
+    state.qqMail[channelId] = qqState;
     this.save(state);
   }
 

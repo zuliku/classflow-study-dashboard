@@ -128,7 +128,9 @@ export async function confirmReply(input: { approvalId: string }): Promise<{ ok:
       errorCode = isEmail ? "EMAIL_SEND_REJECTED" : "QQ_RATE_LIMITED";
     } else if (lower.includes("401") || lower.includes("403") || lower.includes("auth")) {
       status = "failed";
-      errorCode = isEmail ? "GMAIL_AUTH_FAILED" : "QQ_AUTH_FAILED";
+      if (ctx.channel === "qq-mail") errorCode = "QQ_MAIL_AUTH_FAILED";
+      else if (ctx.channel === "gmail") errorCode = "GMAIL_AUTH_FAILED";
+      else errorCode = "QQ_AUTH_FAILED";
     } else {
       status = "failed";
       errorCode = isEmail ? "EMAIL_SEND_REJECTED" : "QQ_SEND_REJECTED";
@@ -146,7 +148,10 @@ export async function confirmReply(input: { approvalId: string }): Promise<{ ok:
       platformMessageId,
       errorCode,
     });
-    if (status === "uncertain") throw new ChannelError((isEmail ? "EMAIL_SEND_UNCERTAIN" : "QQ_SEND_UNCERTAIN") as never, isEmail ? "发送结果不确定，请先检查 Gmail，避免重复发送。" : "发送结果不确定，请先检查 QQ，避免重复发送。");
+    if (status === "uncertain") {
+      const msg = ctx.channel === "qq-mail" ? "发送结果不确定，请先检查 QQ 邮箱，避免重复发送。" : ctx.channel === "gmail" ? "发送结果不确定，请先检查 Gmail，避免重复发送。" : "发送结果不确定，请先检查 QQ，避免重复发送。";
+      throw new ChannelError("EMAIL_SEND_UNCERTAIN" as never, msg);
+    }
     throw new ChannelError((errorCode as never) ?? (isEmail ? "EMAIL_SEND_REJECTED" : "QQ_SEND_REJECTED"), raw.slice(0, 200));
   }
 

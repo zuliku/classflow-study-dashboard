@@ -20,6 +20,7 @@ export type ChannelErrorCode =
   | "GMAIL_OAUTH_STATE_MISMATCH"
   | "GMAIL_OAUTH_TIMEOUT"
   | "GMAIL_OAUTH_DENIED"
+  | "QQ_MAIL_AUTH_FAILED"
   | "EMAIL_INVALID_CONFIG"
   | "EMAIL_SYNC_FAILED"
   | "EMAIL_REPLY_CONTEXT_INVALID"
@@ -71,6 +72,7 @@ const USER_MESSAGES: Record<ChannelErrorCode, string> = {
   GMAIL_OAUTH_STATE_MISMATCH: "OAuth 状态不匹配",
   GMAIL_OAUTH_TIMEOUT: "OAuth 超时",
   GMAIL_OAUTH_DENIED: "OAuth 已拒绝",
+  QQ_MAIL_AUTH_FAILED: "QQ 邮箱认证失败，请检查邮箱地址/授权码",
   EMAIL_INVALID_CONFIG: "Email 配置错误",
   EMAIL_SYNC_FAILED: "邮件同步失败",
   EMAIL_REPLY_CONTEXT_INVALID: "邮件回复上下文无效",

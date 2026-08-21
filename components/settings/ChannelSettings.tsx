@@ -126,12 +126,12 @@ export function ChannelSettings() {
           </div>
           <div>
             <p className="text-sm font-bold text-charcoal">还没有消息渠道</p>
-            <p className="text-xs text-sandrift mt-1">添加 QQ Bot 或 Gmail 后，消息将进入统一收件箱（receive-only，不自动触发 Kiro）</p>
+            <p className="text-xs text-sandrift mt-1">添加 QQ Bot、Gmail 或 QQ 邮箱后，消息将进入统一收件箱（receive-only，不自动触发 Kiro）</p>
           </div>
           <div className="flex gap-2 mt-2">
             <span className="px-2 py-1 bg-white border border-line rounded-lg text-[11px] font-bold">QQ Bot</span>
             <span className="px-2 py-1 bg-white border border-line rounded-lg text-[11px] font-bold">Gmail</span>
-            <span className="px-2 py-1 bg-white border border-line rounded-lg text-[11px] font-bold opacity-50">QQ 邮箱（下一阶段支持）</span>
+            <span className="px-2 py-1 bg-white border border-line rounded-lg text-[11px] font-bold">QQ 邮箱</span>
           </div>
         </div>
       ) : (
@@ -150,7 +150,7 @@ export function ChannelSettings() {
                     ) : config.channel === "gmail" ? (
                       <p className="text-xs text-sandrift truncate">Gmail · {(config as GmailConfig).emailAddress} · 60s 轮询 · 仅 INBOX</p>
                     ) : (
-                      <p className="text-xs text-sandrift truncate">QQ 邮箱 · {(config as QQMailConfig).emailAddress} · 下一阶段支持</p>
+                      <p className="text-xs text-sandrift truncate">QQ 邮箱 · {(config as QQMailConfig).emailAddress} · 60s 轮询 · 仅 INBOX</p>
                     )}
                     {config.channel === "qq-bot" && (
                       <p className="text-[11px] text-sandrift mt-1">允许用户: {(config as QQConfig).allowedUsers.length ? (config as QQConfig).allowedUsers.join(", ") : "不限制"} · 允许群: {(config as QQConfig).allowedGroups.length ? (config as QQConfig).allowedGroups.join(", ") : "不限制"}</p>
@@ -164,10 +164,10 @@ export function ChannelSettings() {
                 {config.channel === "qq-bot" ? (
                   <button type="button" onClick={() => setEditTarget({ config, health })} data-testid={`channel-edit-${config.id}`} className="h-7 px-3 bg-white border border-line text-charcoal text-xs font-bold rounded-lg hover:bg-alabaster flex items-center gap-1 transition-colors duration-[var(--motion-fast)] ease-[var(--ease-standard)] ux-press"> <Settings2 className="w-3 h-3" />配置</button>
                 ) : (
-                  <button type="button" onClick={() => handleTest(config.id)} data-testid={`channel-test-${config.id}`} className="h-7 px-3 bg-white border border-line text-charcoal text-xs font-bold rounded-lg hover:bg-alabaster flex items-center gap-1 transition-colors duration-[var(--motion-fast)] ease-[var(--ease-standard)] ux-press disabled:opacity-50" disabled={config.channel === "qq-mail"}><TestTube2 className="w-3 h-3" />测试</button>
+                  <button type="button" onClick={() => handleTest(config.id)} data-testid={`channel-test-${config.id}`} className="h-7 px-3 bg-white border border-line text-charcoal text-xs font-bold rounded-lg hover:bg-alabaster flex items-center gap-1 transition-colors duration-[var(--motion-fast)] ease-[var(--ease-standard)] ux-press"><TestTube2 className="w-3 h-3" />测试</button>
                 )}
                 <button type="button" onClick={() => handleTest(config.id)} data-testid={`channel-test-${config.id}`} className={cn("h-7 px-3 bg-white border border-line text-charcoal text-xs font-bold rounded-lg hover:bg-alabaster flex items-center gap-1 transition-colors duration-[var(--motion-fast)] ease-[var(--ease-standard)] ux-press", config.channel !== "qq-bot" ? "hidden" : "")}><TestTube2 className="w-3 h-3" />测试连接</button>
-                {config.channel === "gmail" && (
+                {(config.channel === "gmail" || config.channel === "qq-mail") && (
                   <button type="button" onClick={() => handleSyncNow(config.id)} data-testid={`channel-sync-${config.id}`} className="h-7 px-3 bg-white border border-line text-charcoal text-xs font-bold rounded-lg hover:bg-alabaster flex items-center gap-1 transition-colors duration-[var(--motion-fast)] ease-[var(--ease-standard)] ux-press"><RefreshCw className="w-3 h-3" />立即同步</button>
                 )}
                 {health.state === "connected" ? (
@@ -245,9 +245,7 @@ export function AddChannelDialog({ open, onOpenChange, onAdded }: { open: boolea
       <div className="flex gap-2">
         <button type="button" onClick={() => setProvider("qq-bot")} data-testid="provider-qq-bot" className={cn("flex-1 h-10 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 transition-[background-color,border-color,color,opacity,transform] duration-[var(--motion-fast)] ease-[var(--ease-standard)] ux-press", provider === "qq-bot" ? "bg-charcoal text-white border-charcoal" : "bg-white border-line text-charcoal hover:bg-alabaster")}> <MessageSquare className="w-4 h-4" />QQ Bot</button>
         <button type="button" onClick={() => setProvider("gmail")} data-testid="provider-gmail" className={cn("flex-1 h-10 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 transition-[background-color,border-color,color,opacity,transform] duration-[var(--motion-fast)] ease-[var(--ease-standard)] ux-press", provider === "gmail" ? "bg-charcoal text-white border-charcoal" : "bg-white border-line text-charcoal hover:bg-alabaster")}> <Mail className="w-4 h-4" />Gmail</button>
-        <button type="button" disabled data-testid="provider-qq-mail" className="flex-1 h-10 rounded-xl border bg-[#F7F5F5] border-line text-sandrift text-xs font-bold flex flex-col items-center justify-center opacity-60 cursor-not-allowed">
-          <span>QQ 邮箱</span><span className="text-[10px]">下一阶段支持</span>
-        </button>
+        <button type="button" onClick={() => setProvider("qq-mail")} data-testid="provider-qq-mail" className={cn("flex-1 h-10 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 transition-[background-color,border-color,color,opacity,transform] duration-[var(--motion-fast)] ease-[var(--ease-standard)] ux-press", provider === "qq-mail" ? "bg-charcoal text-white border-charcoal" : "bg-white border-line text-charcoal hover:bg-alabaster")}> <Mail className="w-4 h-4" />QQ 邮箱</button>
       </div>
       <div className="border-t border-line pt-4">
         <div key={provider} className="ux-channel-provider-enter">
@@ -256,7 +254,7 @@ export function AddChannelDialog({ open, onOpenChange, onAdded }: { open: boolea
           ) : provider === "gmail" ? (
             <AddGmailPanel onAdded={() => { onAdded(); onOpenChange(false); }} onBusyChange={setBusy} />
           ) : (
-            <p className="text-xs text-sandrift text-center py-4">QQ 邮箱将在下一阶段支持，敬请期待</p>
+            <AddQQMailPanel onAdded={() => { onAdded(); onOpenChange(false); }} onBusyChange={setBusy} />
           )}
         </div>
       </div>
@@ -385,6 +383,65 @@ function AddGmailPanel({ onAdded, onBusyChange }: { onAdded: () => void; onBusyC
         <Mail className="w-4 h-4" />{saving ? "连接中..." : "连接 Gmail"}
       </button>
       <p className="text-[11px] text-sandrift text-center">ClassFlow 内置 Desktop OAuth Client，无需手动输入 Client ID/Secret。开发环境可通过 CLASSFLOW_GOOGLE_OAUTH_CLIENT_ID 覆盖。</p>
+    </div>
+  );
+}
+
+function AddQQMailPanel({ onAdded, onBusyChange }: { onAdded: () => void; onBusyChange?: (b: boolean) => void }) {
+  const [displayName, setDisplayName] = useState("");
+  const [emailAddress, setEmailAddress] = useState("");
+  const [authCode, setAuthCode] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => { setDisplayName(""); setEmailAddress(""); setAuthCode(""); setError(null); }, []);
+
+  const handleSave = async () => {
+    setError(null);
+    if (!displayName.trim() || !emailAddress.trim() || !authCode.trim()) { setError("名称 / QQ 邮箱地址 / 授权码 必填"); return; }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailAddress.trim())) { setError("邮箱地址格式不正确"); return; }
+    const credBridge = getCredentialsBridge();
+    const chBridge = getChannelsBridge();
+    if (!credBridge || !chBridge) { setError("桌面环境不可用"); return; }
+    setSaving(true);
+    onBusyChange?.(true);
+    let credentialRef: string | null = null;
+    try {
+      const credRes = await credBridge.create({ provider: "qq-mail", label: emailAddress.trim(), secret: authCode }) as { credentialRef: string };
+      credentialRef = credRes.credentialRef;
+      await (chBridge as unknown as { addQQMail: (i: unknown) => Promise<unknown> }).addQQMail({
+        displayName: displayName.trim(),
+        emailAddress: emailAddress.trim(),
+        credentialRef,
+      });
+      setAuthCode("");
+      onAdded();
+    } catch (e) {
+      const raw = (e as { message?: string })?.message ?? String(e);
+      const code = (e as { code?: string })?.code ?? "";
+      if (code === "QQ_MAIL_AUTH_FAILED") setError("QQ 邮箱认证失败，请检查邮箱地址/授权码");
+      else setError(raw);
+      if (credentialRef) {
+        try { await (credBridge as unknown as { delete: (i: unknown) => Promise<unknown> }).delete({ credentialRef }); } catch {}
+      }
+    } finally { setSaving(false); onBusyChange?.(false); }
+  };
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center gap-2 text-xs font-bold text-charcoal"><ChannelBrandIcon source="qq-mail" size={16} />QQ 邮箱配置</div>
+      <div><label className="text-xs font-bold text-charcoal">名称 *</label><input value={displayName} onChange={(e) => setDisplayName(e.target.value)} placeholder="我的 QQ 邮箱" data-testid="qqmail-add-name" className="mt-1 w-full h-9 px-3 bg-white border border-line rounded-lg text-sm focus:outline-none focus:border-charcoal transition-colors duration-[var(--motion-fast)]" /></div>
+      <div><label className="text-xs font-bold text-charcoal">QQ 邮箱地址 *</label><input value={emailAddress} onChange={(e) => setEmailAddress(e.target.value)} placeholder="example@qq.com" data-testid="qqmail-add-email" className="mt-1 w-full h-9 px-3 bg-white border border-line rounded-lg text-sm focus:outline-none focus:border-charcoal transition-colors duration-[var(--motion-fast)]" /></div>
+      <div><label className="text-xs font-bold text-charcoal">授权码 *</label><input type="password" value={authCode} onChange={(e) => setAuthCode(e.target.value)} placeholder="请输入 QQ 邮箱授权码，不是 QQ 登录密码" data-testid="qqmail-add-authcode" className="mt-1 w-full h-9 px-3 bg-white border border-line rounded-lg text-sm font-mono focus:outline-none focus:border-charcoal transition-colors duration-[var(--motion-fast)]" /><p className="text-[11px] text-sandrift mt-1">请输入 QQ 邮箱授权码，不是 QQ 登录密码。仅存于 SecretVault，关闭后不保留明文</p></div>
+      <div className="bg-[#F7F5F5] border border-line rounded-xl p-3 space-y-1">
+        <p className="text-[11px] text-sandrift">IMAP: imap.qq.com:993 TLS · SMTP: smtp.qq.com:465 TLS · 60s 轮询 · 仅 INBOX · 7天/50封</p>
+        <p className="text-[11px] text-sandrift">获取授权码：QQ 邮箱 → 设置 → 账户 → 生成授权码</p>
+      </div>
+      {error && <p data-testid="qqmail-add-error" className="text-xs font-bold text-danger bg-danger/5 border border-danger/20 rounded-lg px-3 py-2 animate-enter">{error}</p>}
+      <div className="flex items-center gap-2">
+        <div className="flex-1" />
+        <button type="button" onClick={handleSave} disabled={saving} data-testid="qqmail-save" className="h-8 px-5 bg-charcoal text-white text-xs font-bold rounded-lg hover:bg-black disabled:opacity-60 transition-colors duration-[var(--motion-fast)] ease-[var(--ease-standard)] ux-press">{saving ? "保存中..." : "保存"}</button>
+      </div>
     </div>
   );
 }

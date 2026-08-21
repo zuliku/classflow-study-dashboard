@@ -19,11 +19,11 @@ function toIpcError(err: unknown): never {
     throw new Error(JSON.stringify({ code: parsed.code, message: parsed.message ?? raw }));
   }
   // Preserve known codes if present in raw string
-  const known = ["QQ_AUTH_FAILED", "QQ_NETWORK_ERROR", "QQ_GATEWAY_DISCONNECTED", "QQ_RATE_LIMITED", "QQ_INVALID_CONFIG", "QQ_SDK_ERROR", "GMAIL_AUTH_FAILED", "GMAIL_OAUTH_CONFIG_MISSING", "GMAIL_OAUTH_STATE_MISMATCH", "GMAIL_OAUTH_TIMEOUT", "GMAIL_OAUTH_DENIED", "EMAIL_INVALID_CONFIG", "EMAIL_SYNC_FAILED", "EMAIL_REPLY_CONTEXT_INVALID", "EMAIL_SEND_REJECTED", "EMAIL_SEND_UNCERTAIN", "CHANNEL_RUNTIME_ERROR"];
+  const known = ["QQ_AUTH_FAILED", "QQ_NETWORK_ERROR", "QQ_GATEWAY_DISCONNECTED", "QQ_RATE_LIMITED", "QQ_INVALID_CONFIG", "QQ_SDK_ERROR", "GMAIL_AUTH_FAILED", "GMAIL_OAUTH_CONFIG_MISSING", "GMAIL_OAUTH_STATE_MISMATCH", "GMAIL_OAUTH_TIMEOUT", "GMAIL_OAUTH_DENIED", "QQ_MAIL_AUTH_FAILED", "EMAIL_INVALID_CONFIG", "EMAIL_SYNC_FAILED", "EMAIL_REPLY_CONTEXT_INVALID", "EMAIL_SEND_REJECTED", "EMAIL_SEND_UNCERTAIN", "CHANNEL_RUNTIME_ERROR"];
   for (const c of known) {
     if (raw.includes(c)) throw new Error(JSON.stringify({ code: c, message: raw.slice(0, 300) }));
   }
-  const sanitized = raw.replace(/appSecret|access_token|Authorization|credentialRef|refresh_token|code_verifier/gi, "[redacted]").slice(0, 300);
+  const sanitized = raw.replace(/appSecret|access_token|Authorization|credentialRef|refresh_token|code_verifier|authCode|authorizationCode|password/gi, "[redacted]").slice(0, 300);
   throw new Error(JSON.stringify({ code: "CHANNEL_RUNTIME_ERROR", message: sanitized }));
 }
 
@@ -81,7 +81,7 @@ export function registerChannelIpc(opts?: { validateSender?: (channel: string, e
       const i = input as { id?: string; patch?: Record<string, unknown> };
       if (!i.id) throw new ChannelError("INVALID_INPUT", "id required");
       // Prevent secret plaintext via update (only credentialRef allowed)
-      if (i.patch && ("appSecret" in (i.patch as Record<string, unknown>) || "secret" in (i.patch as Record<string, unknown>))) {
+      if (i.patch && ("appSecret" in (i.patch as Record<string, unknown>) || "secret" in (i.patch as Record<string, unknown>) || "authCode" in (i.patch as Record<string, unknown>) || "authorizationCode" in (i.patch as Record<string, unknown>) || "password" in (i.patch as Record<string, unknown>))) {
         throw new ChannelError("INVALID_INPUT", "secret plaintext not allowed via update");
       }
       const cfg = await mgr.updateChannel(i.id, i.patch as never);
@@ -157,6 +157,23 @@ export function registerChannelIpc(opts?: { validateSender?: (channel: string, e
       if (!i.id) throw new ChannelError("INVALID_INPUT", "id required");
       await mgr.removeChannel(i.id);
       return { ok: true };
+    } catch (e) {
+      toIpcError(e);
+    }
+  });
+
+  ipcMain.handle("bridge:channels:addQQMail", async (event, input: unknown) => {
+    if (!guard("bridge:channels:addQQMail", event)) throw new Error(JSON.stringify({ code: "PERMISSION_DENIED" }));
+    try {
+      const mgr = getChannelManager();
+      const i = input as { displayName?: string; emailAddress?: string; credentialRef?: string };
+      if (!i.displayName || !i.emailAddress || !i.credentialRef) throw new ChannelError("INVALID_INPUT", "displayName/emailAddress/credentialRef required");
+      const cfg = await (mgr as unknown as { addQQMailChannel: (input: unknown) => Promise<unknown> }).addQQMailChannel({
+        displayName: i.displayName,
+        emailAddress: i.emailAddress,
+        credentialRef: i.credentialRef,
+      });
+      return { channel: cfg };
     } catch (e) {
       toIpcError(e);
     }
