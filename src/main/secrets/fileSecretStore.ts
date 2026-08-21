@@ -4,12 +4,21 @@
  * 磁盘只允许出现 { credentialRef, ciphertext, metadata }；禁止明文。
  * 写入采用 atomic replace（tmp + rename）。
  */
-import { existsSync, readFileSync, writeFileSync, mkdirSync, renameSync } from "node:fs";
+import * as fs from "node:fs";
 import { join, dirname } from "node:path";
 import { randomUUID } from "node:crypto";
 import { app } from "electron";
 import type { CredentialRef } from "@/lib/secrets/types";
 import type { EncryptedRecord, SecretStore } from "@/lib/secrets/secretStore";
+
+export interface FileSecretStoreFs {
+  existsSync: typeof fs.existsSync;
+  readFileSync: typeof fs.readFileSync;
+  writeFileSync: typeof fs.writeFileSync;
+  mkdirSync: typeof fs.mkdirSync;
+  renameSync: typeof fs.renameSync;
+  unlinkSync: typeof fs.unlinkSync;
+}
 
 const FORBIDDEN_PLAINTEXT_KEYS = new Set([
   "secret",
@@ -24,8 +33,10 @@ export class FileSecretStore implements SecretStore {
   private filePath: string;
   private cache = new Map<CredentialRef, EncryptedRecord>();
   private loaded = false;
+  private fs: FileSecretStoreFs;
 
-  constructor(filePath?: string) {
+  constructor(filePath?: string, fsImpl?: FileSecretStoreFs) {
+    this.fs = fsImpl ?? fs;
     this.filePath = filePath ?? join(app.getPath("userData"), "secrets", "vault.json");
     // 同步加载，避免 Vault 同步 API 读不到已持久化的数据
     this.loadSync();
@@ -39,11 +50,11 @@ export class FileSecretStore implements SecretStore {
     if (this.loaded) return;
     this.loaded = true;
     try {
-      if (!existsSync(this.filePath)) {
+      if (!this.fs.existsSync(this.filePath)) {
         this.cache = new Map();
         return;
       }
-      const raw = readFileSync(this.filePath, "utf8");
+      const raw = this.fs.readFileSync(this.filePath, "utf8") as string;
       const parsed = JSON.parse(raw) as { records?: EncryptedRecord[] };
       if (Array.isArray(parsed.records)) {
         const map = new Map<CredentialRef, EncryptedRecord>();
@@ -66,17 +77,29 @@ export class FileSecretStore implements SecretStore {
     }
   }
 
-  private persistSync(): void {
+  private persistSnapshotSync(snapshot: Map<CredentialRef, EncryptedRecord>): void {
+    const dir = dirname(this.filePath);
+    const tmp = join(dir, `.vault-tmp-${randomUUID().slice(0, 8)}`);
     try {
-      const dir = dirname(this.filePath);
-      mkdirSync(dir, { recursive: true });
-      const tmp = join(dir, `.vault-tmp-${randomUUID().slice(0, 8)}`);
-      const data = JSON.stringify({ records: [...this.cache.values()] }, null, 2);
-      writeFileSync(tmp, data, "utf8");
-      renameSync(tmp, this.filePath);
+      this.fs.mkdirSync(dir, { recursive: true });
+      const data = JSON.stringify({ records: [...snapshot.values()] }, null, 2);
+      this.fs.writeFileSync(tmp, data, "utf8");
+      this.fs.renameSync(tmp, this.filePath);
     } catch {
-      /* 持久化失败：由 vault 层 fail closed，后续 flush 可重试 */
+      try {
+        this.fs.unlinkSync(tmp);
+      } catch {
+        // ignore cleanup error
+      }
+      const err = new Error("Secret persistence failed") as Error & { code: "SECRET_PERSISTENCE_FAILED" };
+      (err as unknown as { code: string }).code = "SECRET_PERSISTENCE_FAILED";
+      throw err;
     }
+  }
+
+  private persistSync(): void {
+    // Legacy wrapper kept for internal helpers that still call it directly (now delegates to snapshot)
+    this.persistSnapshotSync(this.cache);
   }
 
   getRecord(credentialRef: CredentialRef): EncryptedRecord | null {
@@ -95,14 +118,18 @@ export class FileSecretStore implements SecretStore {
     if (forbidden.length > 0) {
       throw new Error("INVALID_INPUT: plaintext key in record");
     }
-    this.cache.set(record.credentialRef, record);
-    this.persistSync();
+    const candidate = new Map(this.cache);
+    candidate.set(record.credentialRef, record);
+    this.persistSnapshotSync(candidate);
+    this.cache = candidate;
   }
 
   deleteRecord(credentialRef: CredentialRef): void {
     this.loadSync();
-    this.cache.delete(credentialRef);
-    this.persistSync();
+    const candidate = new Map(this.cache);
+    candidate.delete(credentialRef);
+    this.persistSnapshotSync(candidate);
+    this.cache = candidate;
   }
 
   listRecords(): EncryptedRecord[] {
@@ -121,15 +148,19 @@ export class FileSecretStore implements SecretStore {
     this.loadSync();
     const existing = this.cache.get(credentialRef);
     if (existing) {
-      this.cache.set(credentialRef, { ...existing, ciphertext });
-      this.persistSync();
+      const candidate = new Map(this.cache);
+      candidate.set(credentialRef, { ...existing, ciphertext });
+      this.persistSnapshotSync(candidate);
+      this.cache = candidate;
     }
   }
 
   __clearAll(): void {
     this.loadSync();
-    this.cache.clear();
-    this.persistSync();
+    const candidate = new Map(this.cache);
+    candidate.clear();
+    this.persistSnapshotSync(candidate);
+    this.cache = candidate;
   }
 
   __containsPlaintext(plaintext: string): boolean {
@@ -142,6 +173,6 @@ export class FileSecretStore implements SecretStore {
   }
 
   existsOnDisk(): boolean {
-    return existsSync(this.filePath);
+    return this.fs.existsSync(this.filePath);
   }
 }
