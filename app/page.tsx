@@ -266,9 +266,9 @@ export default function Home() {
               </div>
               ) : (
                 <>
-              {/* Overview Hero Section — flex column with bottom breathing, internal grid flex-1 */}
-              <section className="flex flex-col min-h-0 shrink-0 p-4 pb-24 md:p-5 md:pb-5 xl:flex-1 xl:min-h-0 xl:pb-5 [@media(max-height:720px)]:!pt-2 [@media(max-height:720px)]:!pb-4">
-                {/* 三卡 Grid：flex-1 分配剩余高度，三卡同顶同底 */}
+              {/* Overview Hero Section — xl viewport bounded, internal grid flex-1 */}
+              <section className="box-border flex flex-col shrink-0 min-h-0 p-4 pb-24 md:p-5 md:pb-5 xl:h-[calc(100dvh-4rem)] [@media(max-height:720px)]:!pt-2 [@media(max-height:720px)]:!pb-4">
+                {/* 三卡 Grid：flex-1 eats remaining hero space, three cards same top/bottom */}
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 items-stretch flex-1 min-h-0">
                 <div className="lg:col-span-2 flex flex-col min-h-0">
                   <TimetableGrid
@@ -291,7 +291,7 @@ export default function Home() {
                 {/* 右栏：DDL 吸收剩余高度（flex-1），Calendar 固定稳定高度（不随月份/内容变化）
                     右栏总高恒等于左侧课表 → 三卡同顶同底
                     高度受限（≤800px 视口）：Agenda 隐藏 + Calendar shell 缩短，空间让给 DDL */}
-                <div className="flex flex-col flex-1 min-h-0 gap-4">
+                <div className="flex flex-col h-full min-h-0 gap-4">
                   <div className="flex-1 min-h-0">
                     <UpcomingDDL />
                   </div>
