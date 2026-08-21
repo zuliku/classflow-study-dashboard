@@ -86,6 +86,7 @@ export default defineConfig({
       "tests/qqOutboundIpc.test.ts",
       "tests/qqReplyContextPropagation.test.ts",
       "tests/qqReplyDraft.test.ts",
+      "tests/kiroReplyDraftAbortSignal.test.tsx",
       "tests/settingsRegistry.test.ts",
       // Kiro Sidecar Capsule V1 — jsdom via @vitest-environment
       "tests/kiroSidecarShell.test.tsx",
