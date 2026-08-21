@@ -15,6 +15,7 @@ import { registerInvocationIpc } from "./security/invocationIpc";
 import { registerChannelIpc } from "./channels/ipc";
 import { installLocalApiCapabilityInjector } from "./security/localApiCapability";
 import { isTrustedRendererUrl, isValidAppBundleRequestUrl } from "@/lib/security/rendererOrigin";
+import { configureRuntimeProfile, getRuntimeProfileDiagnostic } from "./runtimeProfile";
 
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
 
@@ -26,6 +27,12 @@ protocol.registerSchemesAsPrivileged([
     privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true },
   },
 ]);
+
+const runtimeProfile = configureRuntimeProfile(app, {
+  hasDevRendererUrl: Boolean(process.env.ELECTRON_RENDERER_URL),
+});
+const runtimeProfileDiagnostic = getRuntimeProfileDiagnostic(runtimeProfile);
+console.info(`[classflow] runtime profile=${runtimeProfileDiagnostic.profile} userDataPolicy=${runtimeProfileDiagnostic.userDataPolicy}`);
 
 const RENDERER_DIR = join(__dirname, "../renderer");
 
