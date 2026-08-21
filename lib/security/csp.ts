@@ -44,6 +44,35 @@ export const DEVELOPMENT_CSP: CspPolicy = {
   "worker-src": ["'self'", "blob:"],
 };
 
+export interface CspRuntimeContext {
+  apiOrigin: string;
+  devOrigin?: string;
+}
+
+/**
+ * Strict validation for ClassFlow Local API origin.
+ * Must be exactly http://127.0.0.1:<port> with no userinfo, path, query, fragment.
+ * Returns canonical origin (e.g. http://127.0.0.1:54321) or null if invalid.
+ */
+export function canonicalLocalApiOrigin(raw: string): string | null {
+  if (!raw || typeof raw !== "string") return null;
+  try {
+    const u = new URL(raw);
+    if (u.protocol !== "http:") return null;
+    if (u.hostname !== "127.0.0.1") return null;
+    if (u.username !== "" || u.password !== "") return null;
+    if (u.port === "") return null;
+    const portNum = Number(u.port);
+    if (!Number.isInteger(portNum) || portNum < 1 || portNum > 65535) return null;
+    if (u.pathname !== "/" && u.pathname !== "") return null;
+    if (u.search !== "") return null;
+    if (u.hash !== "") return null;
+    return u.origin;
+  } catch {
+    return null;
+  }
+}
+
 function serializePolicy(policy: CspPolicy): string {
   const parts: string[] = [];
   for (const [key, values] of Object.entries(policy) as [keyof CspPolicy, string[] | undefined][]) {
@@ -53,8 +82,40 @@ function serializePolicy(policy: CspPolicy): string {
   return parts.join("; ");
 }
 
-export function getCspHeader(isDev: boolean): string {
-  return serializePolicy(isDev ? DEVELOPMENT_CSP : PRODUCTION_CSP);
+function buildRuntimePolicy(isDev: boolean, context?: CspRuntimeContext): CspPolicy {
+  const base = isDev ? DEVELOPMENT_CSP : PRODUCTION_CSP;
+  // Immutable copy — never mutate global base
+  const policy: CspPolicy = {
+    "default-src": [...base["default-src"]],
+    "object-src": [...base["object-src"]],
+    "base-uri": [...base["base-uri"]],
+    "frame-ancestors": [...base["frame-ancestors"]],
+    ...(base["script-src"] ? { "script-src": [...base["script-src"]] } : {}),
+    ...(base["style-src"] ? { "style-src": [...base["style-src"]] } : {}),
+    ...(base["connect-src"] ? { "connect-src": [...base["connect-src"]] } : {}),
+    ...(base["img-src"] ? { "img-src": [...base["img-src"]] } : {}),
+    ...(base["font-src"] ? { "font-src": [...base["font-src"]] } : {}),
+    ...(base["worker-src"] ? { "worker-src": [...base["worker-src"]] } : {}),
+  };
+  if (context?.apiOrigin) {
+    const canonical = canonicalLocalApiOrigin(context.apiOrigin);
+    if (canonical) {
+      const connect = policy["connect-src"] ?? [];
+      if (!connect.includes(canonical)) {
+        policy["connect-src"] = [...connect, canonical];
+      }
+    }
+  }
+  return policy;
+}
+
+export function getCspHeader(isDev: boolean, context?: CspRuntimeContext): string {
+  return serializePolicy(buildRuntimePolicy(isDev, context));
+}
+
+/** Exposed for testing: get runtime policy object */
+export function getCspPolicy(isDev: boolean, context?: CspRuntimeContext): CspPolicy {
+  return buildRuntimePolicy(isDev, context);
 }
 
 /** 校验 production CSP 是否满足基线（测试用） */

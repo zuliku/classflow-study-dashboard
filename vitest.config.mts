@@ -110,6 +110,7 @@ export default defineConfig({
       "tests/aiModelCatalogTransport.test.ts",
       "tests/kiroAISettingsTransport.test.ts",
       "tests/rendererOriginTrust.test.ts",
+      "tests/cspLocalApi.test.ts",
       "scripts/docx-compat/generate-fixtures.test.ts",
     ],
   },

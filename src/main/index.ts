@@ -62,8 +62,19 @@ function createWindow(apiBase: string, apiCapability: string): void {
   });
 
   // CSP：根据环境选择 production / development 策略，通过 response header 真正下发
+  // Runtime exact apiOrigin — must match Local API capability authority
   const isDev = Boolean(process.env.ELECTRON_RENDERER_URL);
-  const cspHeader = getCspHeader(isDev);
+  const apiOriginForCsp = (() => {
+    try {
+      return new URL(apiBase).origin;
+    } catch {
+      return "";
+    }
+  })();
+  const cspHeader = getCspHeader(isDev, {
+    apiOrigin: apiOriginForCsp,
+    devOrigin: process.env.ELECTRON_RENDERER_URL,
+  });
   const ses = mainWindow.webContents.session;
   ses.webRequest.onHeadersReceived((details, callback) => {
     const headers = details.responseHeaders ?? {};
