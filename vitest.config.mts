@@ -111,6 +111,7 @@ export default defineConfig({
       "tests/runtimeProfile.test.ts",
       "tests/runtimeProfileWiring.test.ts",
       "tests/emailCore.test.ts",
+      "tests/channelAddModal.test.tsx",
       "tests/kiroChatTransport.test.ts",
       "tests/aiModelCatalogTransport.test.ts",
       "tests/kiroAISettingsTransport.test.ts",

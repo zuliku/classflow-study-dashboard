@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useState, useCallback } from "react";
-import { MessageSquare, Plus, Plug2, Trash2, Power, TestTube2, Settings2, Mail, RefreshCw } from "lucide-react";
+import { MessageSquare, Plus, Plug2, Trash2, Power, TestTube2, Settings2, Mail, RefreshCw, X } from "lucide-react";
 import { Dialog } from "@/components/ui/Dialog";
 import { ChannelBrandIcon } from "@/components/icons/ChannelBrandIcon";
 import { cn } from "@/lib/utils";
@@ -112,7 +112,7 @@ export function ChannelSettings() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h3 className="text-sm font-bold text-charcoal">消息渠道</h3>
-        <button type="button" onClick={() => setAddOpen(true)} data-testid="channel-add" data-channel-add="generic" className="h-8 px-4 bg-charcoal hover:bg-black text-white text-xs font-bold rounded-lg flex items-center gap-1.5">
+        <button type="button" onClick={() => setAddOpen(true)} data-testid="channel-add" data-channel-add="generic" className="h-8 px-4 bg-charcoal hover:bg-black text-white text-xs font-bold rounded-lg flex items-center gap-1.5 transition-colors duration-[var(--motion-fast)] ease-[var(--ease-standard)] ux-press">
           <Plus className="w-3.5 h-3.5" />添加渠道
         </button>
         {/* Legacy test id kept for backward compat */}
@@ -137,7 +137,7 @@ export function ChannelSettings() {
       ) : (
         <div className="space-y-3">
           {channels.map(({ config, health }) => (
-            <div key={config.id} data-testid={`channel-card-${config.id}`} data-channel-type={config.channel} className="bg-surface border border-line rounded-xl p-4 flex flex-col gap-3">
+            <div key={config.id} data-testid={`channel-card-${config.id}`} data-channel-type={config.channel} className="bg-surface border border-line rounded-xl p-4 flex flex-col gap-3 transition-[border-color,background-color,box-shadow] duration-[var(--motion-fast)] ease-[var(--ease-standard)] hover:border-line-strong hover:bg-surface-soft/30 animate-enter">
               <div className="flex items-start justify-between gap-3">
                 <div className="flex items-start gap-3 min-w-0">
                   <div className="w-9 h-9 rounded-xl bg-alabaster border border-line flex items-center justify-center shrink-0 mt-0.5">
@@ -158,24 +158,24 @@ export function ChannelSettings() {
                     {health.lastError && <p className="text-[11px] text-danger mt-1">错误: {health.lastError.code} {health.lastError.message}</p>}
                   </div>
                 </div>
-                <span className={cn("shrink-0 px-2 py-1 rounded-full text-[11px] font-bold border", stateColor(health.state))}>{stateLabel(health.state)}</span>
+                <span className={cn("shrink-0 px-2 py-1 rounded-full text-[11px] font-bold border transition-[background-color,border-color,color,opacity] duration-[var(--motion-fast)] ease-[var(--ease-standard)]", stateColor(health.state))}>{stateLabel(health.state)}</span>
               </div>
               <div className="flex items-center gap-1.5 flex-wrap">
                 {config.channel === "qq-bot" ? (
-                  <button type="button" onClick={() => setEditTarget({ config, health })} data-testid={`channel-edit-${config.id}`} className="h-7 px-3 bg-white border border-line text-charcoal text-xs font-bold rounded-lg hover:bg-alabaster flex items-center gap-1"><Settings2 className="w-3 h-3" />配置</button>
+                  <button type="button" onClick={() => setEditTarget({ config, health })} data-testid={`channel-edit-${config.id}`} className="h-7 px-3 bg-white border border-line text-charcoal text-xs font-bold rounded-lg hover:bg-alabaster flex items-center gap-1 transition-colors duration-[var(--motion-fast)] ease-[var(--ease-standard)] ux-press"> <Settings2 className="w-3 h-3" />配置</button>
                 ) : (
-                  <button type="button" onClick={() => handleTest(config.id)} data-testid={`channel-test-${config.id}`} className="h-7 px-3 bg-white border border-line text-charcoal text-xs font-bold rounded-lg hover:bg-alabaster flex items-center gap-1" disabled={config.channel === "qq-mail"}><TestTube2 className="w-3 h-3" />测试</button>
+                  <button type="button" onClick={() => handleTest(config.id)} data-testid={`channel-test-${config.id}`} className="h-7 px-3 bg-white border border-line text-charcoal text-xs font-bold rounded-lg hover:bg-alabaster flex items-center gap-1 transition-colors duration-[var(--motion-fast)] ease-[var(--ease-standard)] ux-press disabled:opacity-50" disabled={config.channel === "qq-mail"}><TestTube2 className="w-3 h-3" />测试</button>
                 )}
-                <button type="button" onClick={() => handleTest(config.id)} data-testid={`channel-test-${config.id}`} className={cn("h-7 px-3 bg-white border border-line text-charcoal text-xs font-bold rounded-lg hover:bg-alabaster flex items-center gap-1", config.channel !== "qq-bot" ? "hidden" : "")}><TestTube2 className="w-3 h-3" />测试连接</button>
+                <button type="button" onClick={() => handleTest(config.id)} data-testid={`channel-test-${config.id}`} className={cn("h-7 px-3 bg-white border border-line text-charcoal text-xs font-bold rounded-lg hover:bg-alabaster flex items-center gap-1 transition-colors duration-[var(--motion-fast)] ease-[var(--ease-standard)] ux-press", config.channel !== "qq-bot" ? "hidden" : "")}><TestTube2 className="w-3 h-3" />测试连接</button>
                 {config.channel === "gmail" && (
-                  <button type="button" onClick={() => handleSyncNow(config.id)} data-testid={`channel-sync-${config.id}`} className="h-7 px-3 bg-white border border-line text-charcoal text-xs font-bold rounded-lg hover:bg-alabaster flex items-center gap-1"><RefreshCw className="w-3 h-3" />立即同步</button>
+                  <button type="button" onClick={() => handleSyncNow(config.id)} data-testid={`channel-sync-${config.id}`} className="h-7 px-3 bg-white border border-line text-charcoal text-xs font-bold rounded-lg hover:bg-alabaster flex items-center gap-1 transition-colors duration-[var(--motion-fast)] ease-[var(--ease-standard)] ux-press"><RefreshCw className="w-3 h-3" />立即同步</button>
                 )}
                 {health.state === "connected" ? (
-                  <button type="button" onClick={() => handleDisconnect(config.id)} data-testid={`channel-disconnect-${config.id}`} className="h-7 px-3 bg-white border border-line text-charcoal text-xs font-bold rounded-lg hover:bg-alabaster flex items-center gap-1"><Power className="w-3 h-3" />断开</button>
+                  <button type="button" onClick={() => handleDisconnect(config.id)} data-testid={`channel-disconnect-${config.id}`} className="h-7 px-3 bg-white border border-line text-charcoal text-xs font-bold rounded-lg hover:bg-alabaster flex items-center gap-1 transition-colors duration-[var(--motion-fast)] ease-[var(--ease-standard)] ux-press"><Power className="w-3 h-3" />断开</button>
                 ) : (
-                  <button type="button" onClick={() => handleConnect(config.id)} data-testid={`channel-connect-${config.id}`} className="h-7 px-3 bg-charcoal text-white text-xs font-bold rounded-lg hover:bg-black flex items-center gap-1"><Plug2 className="w-3 h-3" />连接</button>
+                  <button type="button" onClick={() => handleConnect(config.id)} data-testid={`channel-connect-${config.id}`} className="h-7 px-3 bg-charcoal text-white text-xs font-bold rounded-lg hover:bg-black flex items-center gap-1 transition-colors duration-[var(--motion-fast)] ease-[var(--ease-standard)] ux-press"><Plug2 className="w-3 h-3" />连接</button>
                 )}
-                <button type="button" onClick={() => handleRemove(config.id, config.displayName)} data-testid={`channel-remove-${config.id}`} className="h-7 px-3 bg-white border border-line text-danger text-xs font-bold rounded-lg hover:bg-alabaster"><Trash2 className="w-3 h-3" /></button>
+                <button type="button" onClick={() => handleRemove(config.id, config.displayName)} data-testid={`channel-remove-${config.id}`} className="h-7 px-3 bg-white border border-line text-danger text-xs font-bold rounded-lg hover:bg-alabaster transition-colors duration-[var(--motion-fast)] ease-[var(--ease-standard)] ux-press"><Trash2 className="w-3 h-3" /></button>
                 <label className="ml-auto flex items-center gap-1.5 text-xs">
                   <input type="checkbox" checked={config.enabled} onChange={(e) => handleToggleEnabled(config.id, e.target.checked)} /> 启用
                 </label>
@@ -191,35 +191,91 @@ export function ChannelSettings() {
   );
 }
 
-function AddChannelDialog({ open, onOpenChange, onAdded }: { open: boolean; onOpenChange: (o: boolean) => void; onAdded: () => void }) {
+export function AddChannelDialog({ open, onOpenChange, onAdded }: { open: boolean; onOpenChange: (o: boolean) => void; onAdded: () => void }) {
   const [provider, setProvider] = useState<"qq-bot" | "gmail" | "qq-mail">("qq-bot");
+  const [busy, setBusy] = useState(false);
+
+  // Reset to qq-bot on next open (after exit animation, not during close)
+  useEffect(() => {
+    if (open) {
+      // defer to next tick to avoid closing-frame flash
+      const id = setTimeout(() => {
+        if (!busy) setProvider("qq-bot");
+      }, 0);
+      return () => clearTimeout(id);
+    }
+  }, [open, busy]);
+
+  // Also clear busy when dialog closes (safety)
+  useEffect(() => {
+    if (!open) setBusy(false);
+  }, [open]);
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange} overlayId="channel-add" aria-label="添加渠道" className="w-[min(560px,calc(100vw-24px))] bg-surface border border-line rounded-2xl p-5 space-y-4 max-h-[85vh] overflow-y-auto">
-      <div className="flex items-center gap-2.5">
-        <div className="w-9 h-9 rounded-xl bg-pastel-mint border border-line flex items-center justify-center"><Plus className="w-4 h-4" /></div>
-        <div><h4 className="text-sm font-bold text-charcoal">添加渠道</h4><p className="text-[11px] text-sandrift">选择要连接的消息渠道</p></div>
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        if (busy && !next) return;
+        onOpenChange(next);
+      }}
+      overlayId="channel-add"
+      aria-label="添加渠道"
+      closeOnBackdrop={!busy}
+      onEscapeKeyDown={(e) => {
+        if (busy) e.preventDefault();
+      }}
+      className="w-[min(560px,calc(100vw-24px))] bg-surface border border-line rounded-2xl p-5 space-y-4 max-h-[85vh] overflow-y-auto"
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex items-center gap-2.5">
+          <div className="w-9 h-9 rounded-xl bg-pastel-mint border border-line flex items-center justify-center"><Plus className="w-4 h-4" /></div>
+          <div><h4 className="text-sm font-bold text-charcoal">添加渠道</h4><p className="text-[11px] text-sandrift">选择要连接的消息渠道</p></div>
+        </div>
+        <button
+          type="button"
+          aria-label="关闭添加渠道"
+          data-testid="channel-add-close"
+          onClick={() => onOpenChange(false)}
+          disabled={busy}
+          className="w-8 h-8 flex items-center justify-center rounded-lg text-sandrift hover:bg-alabaster hover:text-charcoal transition-colors duration-[var(--motion-fast)] ease-[var(--ease-standard)] disabled:opacity-40 disabled:cursor-not-allowed ux-press"
+        >
+          <X className="w-4 h-4" />
+        </button>
       </div>
       <div className="flex gap-2">
-        <button type="button" onClick={() => setProvider("qq-bot")} data-testid="provider-qq-bot" className={cn("flex-1 h-10 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5", provider === "qq-bot" ? "bg-charcoal text-white border-charcoal" : "bg-white border-line text-charcoal")}><MessageSquare className="w-4 h-4" />QQ Bot</button>
-        <button type="button" onClick={() => setProvider("gmail")} data-testid="provider-gmail" className={cn("flex-1 h-10 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5", provider === "gmail" ? "bg-charcoal text-white border-charcoal" : "bg-white border-line text-charcoal")}><Mail className="w-4 h-4" />Gmail</button>
+        <button type="button" onClick={() => setProvider("qq-bot")} data-testid="provider-qq-bot" className={cn("flex-1 h-10 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 transition-[background-color,border-color,color,opacity,transform] duration-[var(--motion-fast)] ease-[var(--ease-standard)] ux-press", provider === "qq-bot" ? "bg-charcoal text-white border-charcoal" : "bg-white border-line text-charcoal hover:bg-alabaster")}> <MessageSquare className="w-4 h-4" />QQ Bot</button>
+        <button type="button" onClick={() => setProvider("gmail")} data-testid="provider-gmail" className={cn("flex-1 h-10 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 transition-[background-color,border-color,color,opacity,transform] duration-[var(--motion-fast)] ease-[var(--ease-standard)] ux-press", provider === "gmail" ? "bg-charcoal text-white border-charcoal" : "bg-white border-line text-charcoal hover:bg-alabaster")}> <Mail className="w-4 h-4" />Gmail</button>
         <button type="button" disabled data-testid="provider-qq-mail" className="flex-1 h-10 rounded-xl border bg-[#F7F5F5] border-line text-sandrift text-xs font-bold flex flex-col items-center justify-center opacity-60 cursor-not-allowed">
           <span>QQ 邮箱</span><span className="text-[10px]">下一阶段支持</span>
         </button>
       </div>
       <div className="border-t border-line pt-4">
-        {provider === "qq-bot" ? (
-          <AddQQPanel onAdded={() => { onAdded(); onOpenChange(false); }} />
-        ) : provider === "gmail" ? (
-          <AddGmailPanel onAdded={() => { onAdded(); onOpenChange(false); }} />
-        ) : (
-          <p className="text-xs text-sandrift text-center py-4">QQ 邮箱将在下一阶段支持，敬请期待</p>
-        )}
+        <div key={provider} className="ux-channel-provider-enter">
+          {provider === "qq-bot" ? (
+            <AddQQPanel onAdded={() => { onAdded(); onOpenChange(false); }} onBusyChange={setBusy} />
+          ) : provider === "gmail" ? (
+            <AddGmailPanel onAdded={() => { onAdded(); onOpenChange(false); }} onBusyChange={setBusy} />
+          ) : (
+            <p className="text-xs text-sandrift text-center py-4">QQ 邮箱将在下一阶段支持，敬请期待</p>
+          )}
+        </div>
+      </div>
+      <div className="flex items-center justify-end gap-2 pt-2 border-t border-line">
+        <button
+          type="button"
+          data-testid="channel-add-cancel"
+          onClick={() => onOpenChange(false)}
+          disabled={busy}
+          className="h-8 px-4 bg-white border border-line text-charcoal text-xs font-bold rounded-lg hover:bg-alabaster disabled:opacity-40 disabled:cursor-not-allowed transition-colors duration-[var(--motion-fast)] ease-[var(--ease-standard)] ux-press"
+        >
+          取消
+        </button>
       </div>
     </Dialog>
   );
 }
 
-function AddQQPanel({ onAdded }: { onAdded: () => void }) {
+function AddQQPanel({ onAdded, onBusyChange }: { onAdded: () => void; onBusyChange?: (b: boolean) => void }) {
   const [displayName, setDisplayName] = useState("");
   const [appId, setAppId] = useState("");
   const [appSecret, setAppSecret] = useState("");
@@ -241,6 +297,7 @@ function AddQQPanel({ onAdded }: { onAdded: () => void }) {
     const chBridge = getChannelsBridge();
     if (!credBridge || !chBridge) { setError("桌面环境不可用"); return; }
     setSaving(true);
+    onBusyChange?.(true);
     let credentialRef: string | null = null;
     try {
       const credRes = await credBridge.create({ provider: "qq-bot", label: displayName.trim(), secret: appSecret }) as { credentialRef: string };
@@ -262,32 +319,32 @@ function AddQQPanel({ onAdded }: { onAdded: () => void }) {
       if (credentialRef) {
         try { await (credBridge as unknown as { delete: (i: unknown) => Promise<unknown> }).delete({ credentialRef }); } catch {}
       }
-    } finally { setSaving(false); }
+    } finally { setSaving(false); onBusyChange?.(false); }
   };
 
   return (
     <div className="space-y-3">
       <div className="flex items-center gap-2 text-xs font-bold text-charcoal"><ChannelBrandIcon source="qq-bot" size={16} />QQ Bot 配置</div>
-      <div><label className="text-xs font-bold text-charcoal">名称 *</label><input value={displayName} onChange={(e) => setDisplayName(e.target.value)} placeholder="我的 QQ 机器人" data-testid="qq-add-name" className="mt-1 w-full h-9 px-3 bg-white border border-line rounded-lg text-sm" /></div>
-      <div><label className="text-xs font-bold text-charcoal">App ID *</label><input value={appId} onChange={(e) => setAppId(e.target.value)} placeholder="123456789" data-testid="qq-add-appid" className="mt-1 w-full h-9 px-3 bg-white border border-line rounded-lg text-sm font-mono" /></div>
-      <div><label className="text-xs font-bold text-charcoal">App Secret *</label><input type="password" value={appSecret} onChange={(e) => setAppSecret(e.target.value)} placeholder="••••••••" data-testid="qq-add-secret" className="mt-1 w-full h-9 px-3 bg-white border border-line rounded-lg text-sm font-mono" /><p className="text-[11px] text-sandrift mt-1">仅存于 SecretVault，关闭后不保留明文</p></div>
+      <div><label className="text-xs font-bold text-charcoal">名称 *</label><input value={displayName} onChange={(e) => setDisplayName(e.target.value)} placeholder="我的 QQ 机器人" data-testid="qq-add-name" className="mt-1 w-full h-9 px-3 bg-white border border-line rounded-lg text-sm focus:outline-none focus:border-charcoal transition-colors duration-[var(--motion-fast)]" /></div>
+      <div><label className="text-xs font-bold text-charcoal">App ID *</label><input value={appId} onChange={(e) => setAppId(e.target.value)} placeholder="123456789" data-testid="qq-add-appid" className="mt-1 w-full h-9 px-3 bg-white border border-line rounded-lg text-sm font-mono focus:outline-none focus:border-charcoal transition-colors duration-[var(--motion-fast)]" /></div>
+      <div><label className="text-xs font-bold text-charcoal">App Secret *</label><input type="password" value={appSecret} onChange={(e) => setAppSecret(e.target.value)} placeholder="••••••••" data-testid="qq-add-secret" className="mt-1 w-full h-9 px-3 bg-white border border-line rounded-lg text-sm font-mono focus:outline-none focus:border-charcoal transition-colors duration-[var(--motion-fast)]" /><p className="text-[11px] text-sandrift mt-1">仅存于 SecretVault，关闭后不保留明文</p></div>
       <div className="flex items-center gap-4">
         <label className="flex items-center gap-1.5 text-xs"><input type="checkbox" checked={receiveDirectMessages} onChange={(e) => setReceiveDirectMessages(e.target.checked)} /> 接收私聊</label>
         <label className="flex items-center gap-1.5 text-xs"><input type="checkbox" checked={receiveGroupMessages} onChange={(e) => setReceiveGroupMessages(e.target.checked)} /> 接收群聊</label>
         <label className="flex items-center gap-1.5 text-xs"><input type="checkbox" checked={requireMentionInGroup} onChange={(e) => setRequireMentionInGroup(e.target.checked)} /> 群聊需 @</label>
       </div>
-      <div><label className="text-xs font-bold text-charcoal">允许用户 QQ / OpenID (逗号分隔，空=不限制)</label><input value={allowedUsers} onChange={(e) => setAllowedUsers(e.target.value)} placeholder="user1, user2" data-testid="qq-add-allowed-users" className="mt-1 w-full h-9 px-3 bg-white border border-line rounded-lg text-sm" /></div>
-      <div><label className="text-xs font-bold text-charcoal">允许群 ID (逗号分隔)</label><input value={allowedGroups} onChange={(e) => setAllowedGroups(e.target.value)} placeholder="group1, group2" data-testid="qq-add-allowed-groups" className="mt-1 w-full h-9 px-3 bg-white border border-line rounded-lg text-sm" /></div>
-      {error && <p className="text-xs font-bold text-danger bg-danger/5 border border-danger/20 rounded-lg px-3 py-2">{error}</p>}
+      <div><label className="text-xs font-bold text-charcoal">允许用户 QQ / OpenID (逗号分隔，空=不限制)</label><input value={allowedUsers} onChange={(e) => setAllowedUsers(e.target.value)} placeholder="user1, user2" data-testid="qq-add-allowed-users" className="mt-1 w-full h-9 px-3 bg-white border border-line rounded-lg text-sm focus:outline-none focus:border-charcoal transition-colors duration-[var(--motion-fast)]" /></div>
+      <div><label className="text-xs font-bold text-charcoal">允许群 ID (逗号分隔)</label><input value={allowedGroups} onChange={(e) => setAllowedGroups(e.target.value)} placeholder="group1, group2" data-testid="qq-add-allowed-groups" className="mt-1 w-full h-9 px-3 bg-white border border-line rounded-lg text-sm focus:outline-none focus:border-charcoal transition-colors duration-[var(--motion-fast)]" /></div>
+      {error && <p data-testid="qq-add-error" className="text-xs font-bold text-danger bg-danger/5 border border-danger/20 rounded-lg px-3 py-2 animate-enter">{error}</p>}
       <div className="flex items-center gap-2">
         <div className="flex-1" />
-        <button type="button" onClick={handleSave} disabled={saving} data-testid="qq-save" className="h-8 px-5 bg-charcoal text-white text-xs font-bold rounded-lg hover:bg-black disabled:opacity-60">{saving ? "保存中..." : "保存"}</button>
+        <button type="button" onClick={handleSave} disabled={saving} data-testid="qq-save" className="h-8 px-5 bg-charcoal text-white text-xs font-bold rounded-lg hover:bg-black disabled:opacity-60 transition-colors duration-[var(--motion-fast)] ease-[var(--ease-standard)] ux-press">{saving ? "保存中..." : "保存"}</button>
       </div>
     </div>
   );
 }
 
-function AddGmailPanel({ onAdded }: { onAdded: () => void }) {
+function AddGmailPanel({ onAdded, onBusyChange }: { onAdded: () => void; onBusyChange?: (b: boolean) => void }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -296,6 +353,7 @@ function AddGmailPanel({ onAdded }: { onAdded: () => void }) {
     const bridge = getChannelsBridge();
     if (!bridge) { setError("桌面环境不可用"); return; }
     setSaving(true);
+    onBusyChange?.(true);
     try {
       await bridge.startGmailOAuth();
       onAdded();
@@ -306,7 +364,7 @@ function AddGmailPanel({ onAdded }: { onAdded: () => void }) {
       else if (code === "GMAIL_OAUTH_DENIED") setError("已拒绝授权");
       else if (code === "GMAIL_OAUTH_TIMEOUT") setError("授权超时，请重试");
       else setError(raw);
-    } finally { setSaving(false); }
+    } finally { setSaving(false); onBusyChange?.(false); }
   };
 
   return (
@@ -322,8 +380,8 @@ function AddGmailPanel({ onAdded }: { onAdded: () => void }) {
           <li>回复仅回复发件人，保持原线程</li>
         </ul>
       </div>
-      {error && <p className="text-xs font-bold text-danger bg-danger/5 border border-danger/20 rounded-lg px-3 py-2">{error}</p>}
-      <button type="button" onClick={handleConnect} disabled={saving} data-testid="gmail-connect-oauth" className="w-full h-10 bg-charcoal hover:bg-black text-white text-xs font-bold rounded-xl flex items-center justify-center gap-2 disabled:opacity-60">
+      {error && <p data-testid="gmail-add-error" className="text-xs font-bold text-danger bg-danger/5 border border-danger/20 rounded-lg px-3 py-2 animate-enter">{error}</p>}
+      <button type="button" onClick={handleConnect} disabled={saving} data-testid="gmail-connect-oauth" className="w-full h-10 bg-charcoal hover:bg-black text-white text-xs font-bold rounded-xl flex items-center justify-center gap-2 disabled:opacity-60 transition-colors duration-[var(--motion-fast)] ease-[var(--ease-standard)] ux-press">
         <Mail className="w-4 h-4" />{saving ? "连接中..." : "连接 Gmail"}
       </button>
       <p className="text-[11px] text-sandrift text-center">ClassFlow 内置 Desktop OAuth Client，无需手动输入 Client ID/Secret。开发环境可通过 CLASSFLOW_GOOGLE_OAUTH_CLIENT_ID 覆盖。</p>
@@ -390,20 +448,20 @@ function EditQQDialog({ target, onOpenChange, onSaved }: { target: { config: QQC
         <div><h4 className="text-sm font-bold text-charcoal">编辑 QQ Bot</h4><p className="text-[11px] text-sandrift">App ID: {target.config.appId}</p></div>
       </div>
       <div className="space-y-3">
-        <div><label className="text-xs font-bold text-charcoal">名称</label><input value={displayName} onChange={(e) => setDisplayName(e.target.value)} data-testid="qq-edit-name" className="mt-1 w-full h-9 px-3 bg-white border border-line rounded-lg text-sm" /></div>
-        <div><label className="text-xs font-bold text-charcoal">App Secret</label><input type="password" value={newSecret} onChange={(e) => setNewSecret(e.target.value)} placeholder="已安全保存（留空则不修改）" data-testid="qq-edit-secret" className="mt-1 w-full h-9 px-3 bg-white border border-line rounded-lg text-sm font-mono" /><p className="text-[11px] text-sandrift mt-1">输入新 Secret 将替换旧凭据</p></div>
+        <div><label className="text-xs font-bold text-charcoal">名称</label><input value={displayName} onChange={(e) => setDisplayName(e.target.value)} data-testid="qq-edit-name" className="mt-1 w-full h-9 px-3 bg-white border border-line rounded-lg text-sm focus:outline-none focus:border-charcoal transition-colors duration-[var(--motion-fast)]" /></div>
+        <div><label className="text-xs font-bold text-charcoal">App Secret</label><input type="password" value={newSecret} onChange={(e) => setNewSecret(e.target.value)} placeholder="已安全保存（留空则不修改）" data-testid="qq-edit-secret" className="mt-1 w-full h-9 px-3 bg-white border border-line rounded-lg text-sm font-mono focus:outline-none focus:border-charcoal transition-colors duration-[var(--motion-fast)]" /><p className="text-[11px] text-sandrift mt-1">输入新 Secret 将替换旧凭据</p></div>
         <div className="flex items-center gap-4">
           <label className="flex items-center gap-1.5 text-xs"><input type="checkbox" checked={receiveDirectMessages} onChange={(e) => setReceiveDirectMessages(e.target.checked)} /> 接收私聊</label>
           <label className="flex items-center gap-1.5 text-xs"><input type="checkbox" checked={receiveGroupMessages} onChange={(e) => setReceiveGroupMessages(e.target.checked)} /> 接收群聊</label>
           <label className="flex items-center gap-1.5 text-xs"><input type="checkbox" checked={requireMentionInGroup} onChange={(e) => setRequireMentionInGroup(e.target.checked)} /> 群聊需 @</label>
         </div>
-        <div><label className="text-xs font-bold text-charcoal">允许用户</label><input value={allowedUsers} onChange={(e) => setAllowedUsers(e.target.value)} data-testid="qq-edit-allowed-users" className="mt-1 w-full h-9 px-3 bg-white border border-line rounded-lg text-sm" /></div>
-        <div><label className="text-xs font-bold text-charcoal">允许群</label><input value={allowedGroups} onChange={(e) => setAllowedGroups(e.target.value)} data-testid="qq-edit-allowed-groups" className="mt-1 w-full h-9 px-3 bg-white border border-line rounded-lg text-sm" /></div>
-        {error && <p className="text-xs font-bold text-danger bg-danger/5 border border-danger/20 rounded-lg px-3 py-2">{error}</p>}
+        <div><label className="text-xs font-bold text-charcoal">允许用户</label><input value={allowedUsers} onChange={(e) => setAllowedUsers(e.target.value)} data-testid="qq-edit-allowed-users" className="mt-1 w-full h-9 px-3 bg-white border border-line rounded-lg text-sm focus:outline-none focus:border-charcoal transition-colors duration-[var(--motion-fast)]" /></div>
+        <div><label className="text-xs font-bold text-charcoal">允许群</label><input value={allowedGroups} onChange={(e) => setAllowedGroups(e.target.value)} data-testid="qq-edit-allowed-groups" className="mt-1 w-full h-9 px-3 bg-white border border-line rounded-lg text-sm focus:outline-none focus:border-charcoal transition-colors duration-[var(--motion-fast)]" /></div>
+        {error && <p className="text-xs font-bold text-danger bg-danger/5 border border-danger/20 rounded-lg px-3 py-2 animate-enter">{error}</p>}
         <div className="flex items-center gap-2">
           <div className="flex-1" />
-          <button type="button" onClick={() => onOpenChange(false)} className="h-8 px-4 bg-white border border-line text-charcoal text-xs font-bold rounded-lg">取消</button>
-          <button type="button" onClick={handleSave} disabled={saving} data-testid="qq-edit-save" className="h-8 px-5 bg-charcoal text-white text-xs font-bold rounded-lg hover:bg-black disabled:opacity-60">{saving ? "保存中..." : "保存"}</button>
+          <button type="button" onClick={() => onOpenChange(false)} className="h-8 px-4 bg-white border border-line text-charcoal text-xs font-bold rounded-lg hover:bg-alabaster transition-colors duration-[var(--motion-fast)] ux-press">取消</button>
+          <button type="button" onClick={handleSave} disabled={saving} data-testid="qq-edit-save" className="h-8 px-5 bg-charcoal text-white text-xs font-bold rounded-lg hover:bg-black disabled:opacity-60 transition-colors duration-[var(--motion-fast)] ux-press">{saving ? "保存中..." : "保存"}</button>
         </div>
       </div>
     </Dialog>

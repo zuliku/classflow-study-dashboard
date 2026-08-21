@@ -250,6 +250,11 @@ button:disabled {
   .ux-kiro-view-enter {
     animation: ux-kiro-view-in 140ms var(--ease-standard) both;
   }
+
+  /* Channel provider panel switch：轻微上移 3px + 淡入 140ms（复用 --motion-fast） */
+  .ux-channel-provider-enter {
+    animation: ux-channel-provider-in var(--motion-fast) var(--ease-standard) both;
+  }
 }
 
 @keyframes ux-enter {
@@ -349,6 +354,17 @@ button:disabled {
   }
 }
 
+@keyframes ux-channel-provider-in {
+  from {
+    opacity: 0;
+    transform: translateY(3px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
 /* 尊重系统减弱动效偏好 */
 @media (prefers-reduced-motion: reduce) {
   html:not([data-motion-preference="full"]) *,
@@ -369,6 +385,10 @@ html[data-motion-effective="reduced"] *::after {
   animation-iteration-count: 1 !important;
   transition-duration: 0.01ms !important;
   scroll-behavior: auto !important;
+}
+
+html[data-motion-effective="reduced"] .ux-channel-provider-enter {
+  animation: none !important;
 }
 
 /* Kiro Math（KaTeX，Task 7C）：只作用于 Kiro 输出 scope（.kiro-markdown），不污染全局。
