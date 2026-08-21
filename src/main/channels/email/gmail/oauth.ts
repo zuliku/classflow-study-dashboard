@@ -38,6 +38,7 @@ export async function startGmailOAuth(): Promise<GmailOAuthResult> {
   return new Promise((resolve, reject) => {
     let server: ReturnType<typeof createServer> | null = null;
     let settled = false;
+    let redirectUri = "";
     const timeout = setTimeout(() => {
       if (settled) return;
       settled = true;
@@ -101,10 +102,12 @@ export async function startGmailOAuth(): Promise<GmailOAuthResult> {
 
         if (settled) return;
         settled = true;
+        // Capture redirectUri before cleanup (server.address() becomes null after close)
+        const currentRedirectUri = redirectUri;
         cleanup();
 
         // Exchange code for tokens
-        const redirectUri = `http://127.0.0.1:${(server!.address() as { port: number }).port}/callback`;
+        const effectiveRedirectUri = currentRedirectUri || redirectUri;
         try {
           const tokenRes = await fetch(GOOGLE_TOKEN_URL, {
             method: "POST",
@@ -114,7 +117,7 @@ export async function startGmailOAuth(): Promise<GmailOAuthResult> {
               code,
               code_verifier: verifier,
               grant_type: "authorization_code",
-              redirect_uri: redirectUri,
+              redirect_uri: effectiveRedirectUri,
             }),
           });
           const tokenData = await tokenRes.json() as { refresh_token?: string; access_token?: string; error?: string };
@@ -145,7 +148,7 @@ export async function startGmailOAuth(): Promise<GmailOAuthResult> {
 
     server.listen(0, "127.0.0.1", () => {
       const addr = server!.address() as { port: number };
-      const redirectUri = `http://127.0.0.1:${addr.port}/callback`;
+      redirectUri = `http://127.0.0.1:${addr.port}/callback`;
       const authUrl = new URL(GOOGLE_AUTH_URL);
       authUrl.searchParams.set("client_id", clientId);
       authUrl.searchParams.set("redirect_uri", redirectUri);
