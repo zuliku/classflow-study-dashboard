@@ -22,7 +22,8 @@ export type SecretVaultErrorCode =
   | "PROVIDER_MISMATCH"
   | "INVALID_INPUT"
   | "ENCRYPTION_FAILED"
-  | "DECRYPTION_FAILED";
+  | "DECRYPTION_FAILED"
+  | "SECRET_PERSISTENCE_FAILED";
 
 export interface SecretVaultError {
   code: SecretVaultErrorCode;

@@ -44,6 +44,7 @@ export default defineConfig({
       "tests/permissionModelV2.test.ts",
       "tests/secretVault.test.ts",
       "tests/secretVaultProduction.test.ts",
+      "tests/secretVaultPersistenceFailure.test.ts",
       "tests/apiBoundary.test.ts",
       "tests/securityBaseline.test.ts",
       "tests/skillCore.test.ts",
