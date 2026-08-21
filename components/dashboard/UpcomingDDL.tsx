@@ -7,23 +7,20 @@ import { format, formatDistanceToNow, differenceInDays } from "date-fns";
 import { zhCN } from "date-fns/locale";
 import { parseLocalDDL } from "@/lib/ddl";
 import { paginate } from "@/lib/pagination";
-import { resolveAdaptiveDdlLayout, DdlDensity } from "@/lib/ui/adaptiveDdlLayout";
+import { DDL_DENSITY_METRICS, resolveAdaptiveDdlLayout, DdlDensity } from "@/lib/ui/adaptiveDdlLayout";
 import { cn, cardKeyHandler } from "@/lib/utils";
 
 function DDLDateTile({ date, taskId, density }: { date: Date; taskId: string; density: DdlDensity }) {
-  const isCompact = density === "compact";
-  const isSpacious = density === "spacious";
+  const metrics = DDL_DENSITY_METRICS[density];
   return (
     <div
       aria-hidden="true"
       data-testid={`upcoming-ddl-date-${taskId}`}
-      className={cn(
-        "shrink-0 rounded-xl border border-line bg-surface flex flex-col items-center justify-center leading-none",
-        isCompact ? "w-[40px] h-[48px]" : isSpacious ? "w-[52px] h-[64px]" : "w-[46px] h-[56px]"
-      )}
+      className="shrink-0 rounded-xl border border-line bg-surface flex flex-col items-center justify-center leading-none"
+      style={{ width: metrics.dateTile.w, height: metrics.dateTile.h }}
     >
       <span className="text-[9px] font-semibold text-sandrift">{format(date, "M月")}</span>
-      <span className={cn("font-bold tabular-nums text-warning leading-none mt-1", isCompact ? "text-[15px]" : isSpacious ? "text-[19px]" : "text-[17px]")}>{format(date, "d")}</span>
+      <span className="font-bold tabular-nums text-warning leading-none mt-1" style={{ fontSize: density === "compact" ? 15 : density === "spacious" ? 19 : 17 }}>{format(date, "d")}</span>
       <span className="text-[9px] font-semibold text-satin-grey mt-1">{format(date, "EEE", { locale: zhCN })}</span>
     </div>
   );
@@ -129,10 +126,11 @@ export function UpcomingDDL() {
     }
   };
 
-  const fillAvailable = pagedItems.length === pageSize && density !== "compact";
+  const fillAvailable = pagedItems.length === pageSize;
 
-  const cardPadding = density === "compact" ? "p-2" : density === "spacious" ? "p-3" : "p-2.5";
-  const cardGap = density === "compact" ? "gap-2" : "gap-3";
+  const metrics = DDL_DENSITY_METRICS[density];
+  const cardPadding = density === "compact" ? "p-2" : density === "spacious" ? "p-3.5" : "p-2.5";
+  const cardGap = `gap-${metrics.gap === 6 ? "1.5" : "2"}`;
 
   return (
     <div
@@ -179,8 +177,9 @@ export function UpcomingDDL() {
                     "hover:bg-alabaster hover:border-line-strong",
                     cardPadding,
                     cardGap,
-                    fillAvailable && "flex-1 min-h-[72px]"
+                    fillAvailable && "flex-1"
                   )}
+                  style={fillAvailable ? { minHeight: metrics.cardHeight } : undefined}
                 >
                   <DDLDateTile date={ddlDate} taskId={task.id} density={density} />
                   <div className="min-w-0 flex-1">

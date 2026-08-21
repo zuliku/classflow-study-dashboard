@@ -49,10 +49,28 @@ describe("Adaptive DDL Layout", () => {
     for (const [h, count] of cases) {
       const r = resolveAdaptiveDdlLayout({ availableHeight: h, itemCount: count });
       expect(r.pageSize).toBeGreaterThanOrEqual(1);
-      expect(r.pageSize).toBeLessThanOrEqual(5);
       expect(r.pageSize).toBeLessThanOrEqual(count);
       expect(["compact", "normal", "spacious"]).toContain(r.density);
     }
+  });
+
+  it("5 items in sufficient height should all show (no 4+1 pagination)", () => {
+    // Simulate screenshot: 5 items, fullscreen height ~460 available
+    const r = resolveAdaptiveDdlLayout({ availableHeight: 460, itemCount: 5 });
+    expect(r.pageSize).toBe(5);
+  });
+
+  it("6+ items in sufficient height allows >5", () => {
+    const r = resolveAdaptiveDdlLayout({ availableHeight: 700, itemCount: 7 });
+    expect(r.pageSize).toBeGreaterThan(5);
+    expect(r.pageSize).toBeLessThanOrEqual(7);
+  });
+
+  it("metrics unified with renderer", async () => {
+    const { DDL_DENSITY_METRICS } = await import("@/lib/ui/adaptiveDdlLayout");
+    expect(DDL_DENSITY_METRICS.compact.cardHeight).toBe(64);
+    expect(DDL_DENSITY_METRICS.normal.cardHeight).toBe(76);
+    expect(DDL_DENSITY_METRICS.spacious.cardHeight).toBe(88);
   });
 
   it("all items fit with spacious when abundant space", () => {

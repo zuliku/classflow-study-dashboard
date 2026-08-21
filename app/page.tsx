@@ -266,11 +266,10 @@ export default function Home() {
               </div>
               ) : (
                 <>
-              {/* Overview Hero Section（xl+ 严格占满 Header 以下首屏，padding 计入 section box；
-                  < xl 自然流式堆叠，不强制视口高度） */}
-              <section className="min-h-0 shrink-0 p-4 pb-24 md:p-6 md:pb-6 xl:h-[calc(100dvh-4.0625rem)] [@media(max-height:720px)]:!pt-2 [@media(max-height:720px)]:!pb-4">
-                {/* 三卡 Grid：xl 时 h-full 填满 Hero Section；三卡同顶同底（items-stretch） */}
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 items-stretch h-full min-h-0">
+              {/* Overview Hero Section — flex column with bottom breathing, internal grid flex-1 */}
+              <section className="flex flex-col min-h-0 shrink-0 p-4 pb-24 md:p-5 md:pb-5 xl:flex-1 xl:min-h-0 xl:pb-5 [@media(max-height:720px)]:!pt-2 [@media(max-height:720px)]:!pb-4">
+                {/* 三卡 Grid：flex-1 分配剩余高度，三卡同顶同底 */}
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 items-stretch flex-1 min-h-0">
                 <div className="lg:col-span-2 flex flex-col min-h-0">
                   <TimetableGrid
                     density="compact"
@@ -292,11 +291,11 @@ export default function Home() {
                 {/* 右栏：DDL 吸收剩余高度（flex-1），Calendar 固定稳定高度（不随月份/内容变化）
                     右栏总高恒等于左侧课表 → 三卡同顶同底
                     高度受限（≤800px 视口）：Agenda 隐藏 + Calendar shell 缩短，空间让给 DDL */}
-                <div className="flex flex-col h-full min-h-0 gap-4">
+                <div className="flex flex-col flex-1 min-h-0 gap-4">
                   <div className="flex-1 min-h-0">
                     <UpcomingDDL />
                   </div>
-                  <div className="h-[380px] lg:h-[390px] xl:h-[410px] 2xl:h-[420px] shrink-0 [@media(max-height:800px)]:h-[315px]">
+                  <div className="h-[370px] lg:h-[380px] xl:h-[400px] 2xl:h-[410px] shrink-0 [@media(max-height:800px)]:h-[305px]">
                     <MiniCalendar />
                   </div>
                 </div>
@@ -304,7 +303,7 @@ export default function Home() {
               </section>
 
               {/* Overview Secondary Section：完全位于首屏 fold 以下，滚动后才可见 */}
-              <section className="grid gap-4 items-stretch shrink-0 grid-cols-[repeat(auto-fit,minmax(520px,1fr))] px-4 pb-24 md:px-6 md:pb-6">
+              <section className="grid gap-4 items-stretch shrink-0 grid-cols-[repeat(auto-fit,minmax(520px,1fr))] px-4 pb-24 md:px-5 md:pb-5">
                 <div className="md:min-h-[460px]" data-testid="overview-load-wrap">
                   <StudyLoadChart />
                 </div>
