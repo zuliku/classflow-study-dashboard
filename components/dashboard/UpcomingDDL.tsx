@@ -57,8 +57,9 @@ export function UpcomingDDL() {
   const [prevPageSize, setPrevPageSize] = useState(3);
 
   const layout = useMemo(() => resolveAdaptiveDdlLayout({ availableHeight, itemCount: upcomingAssignments.length }), [availableHeight, upcomingAssignments.length]);
-  const pageSize = layout.pageSize || 3;
+  const pageSize = layout.pageSize || 4;
   const density = layout.density;
+  const cardHeight = layout.cardHeight;
 
   // ResizeObserver for adaptive height
   useEffect(() => {
@@ -126,11 +127,8 @@ export function UpcomingDDL() {
     }
   };
 
-  const fillAvailable = pagedItems.length === pageSize;
-
   const metrics = DDL_DENSITY_METRICS[density];
   const cardPadding = density === "compact" ? "p-2" : density === "spacious" ? "p-3.5" : "p-2.5";
-  const cardGap = `gap-${metrics.gap === 6 ? "1.5" : "2"}`;
 
   return (
     <div
@@ -151,14 +149,18 @@ export function UpcomingDDL() {
         </button>
       </div>
 
-      <div className="flex-1 min-h-0 overflow-y-auto scrollbar-none flex flex-col gap-2 py-1.5">
+      <div className="flex-1 min-h-0 overflow-hidden flex flex-col py-1.5" style={{ ["--ddl-card-height" as string]: `${cardHeight}px` } as React.CSSProperties}>
         {pagedItems.length === 0 ? (
           <div className="flex-1 flex flex-col items-center justify-center text-xs text-sandrift space-y-1 min-h-24">
             <CheckCircle2 className="w-6 h-6 text-success" />
             <p>暂无临近 DDL</p>
           </div>
         ) : (
-          <div key={`${safePage}-${pageSize}-${density}`} className={density === "compact" ? "flex flex-col gap-1.5" : "flex flex-col gap-2 ux-agenda-enter"}>
+          <div
+            key={`${safePage}-${pageSize}-${density}-${cardHeight}`}
+            className="grid ux-agenda-enter"
+            style={{ gridTemplateRows: `repeat(${pagedItems.length}, ${cardHeight}px)`, gap: `${metrics.gap}px` }}
+          >
             {pagedItems.map((task) => {
               const course = courses.find((c) => c.id === task.courseId);
               const ddlDate = parseLocalDDL(task.ddl) ?? new Date();
@@ -175,11 +177,9 @@ export function UpcomingDDL() {
                     "group flex items-center rounded-lg border border-line bg-surface-soft",
                     "cursor-pointer transition-colors duration-[var(--motion-fast)] ease-[var(--ease-standard)]",
                     "hover:bg-alabaster hover:border-line-strong",
-                    cardPadding,
-                    cardGap,
-                    fillAvailable && "flex-1"
+                    cardPadding
                   )}
-                  style={fillAvailable ? { minHeight: metrics.cardHeight } : undefined}
+                  style={{ height: cardHeight }}
                 >
                   <DDLDateTile date={ddlDate} taskId={task.id} density={density} />
                   <div className="min-w-0 flex-1">

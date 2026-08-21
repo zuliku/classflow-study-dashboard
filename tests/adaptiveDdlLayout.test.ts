@@ -54,16 +54,19 @@ describe("Adaptive DDL Layout", () => {
     }
   });
 
-  it("5 items in sufficient height should all show (no 4+1 pagination)", () => {
-    // Simulate screenshot: 5 items, fullscreen height ~460 available
+  it("5 items with MAX=4 should be 4+1 pagination", () => {
     const r = resolveAdaptiveDdlLayout({ availableHeight: 460, itemCount: 5 });
-    expect(r.pageSize).toBe(5);
+    expect(r.pageSize).toBe(4);
+    expect(r.density).toBeDefined();
+    expect(r.cardHeight).toBeGreaterThanOrEqual(64);
+    expect(r.cardHeight).toBeLessThanOrEqual(104);
   });
 
-  it("6+ items in sufficient height allows >5", () => {
+  it("6+ items never exceeds MAX=4", () => {
     const r = resolveAdaptiveDdlLayout({ availableHeight: 700, itemCount: 7 });
-    expect(r.pageSize).toBeGreaterThan(5);
-    expect(r.pageSize).toBeLessThanOrEqual(7);
+    expect(r.pageSize).toBe(4);
+    expect(r.cardHeight).toBeGreaterThanOrEqual(64);
+    expect(r.cardHeight).toBeLessThanOrEqual(104);
   });
 
   it("metrics unified with renderer", async () => {
@@ -87,5 +90,42 @@ describe("Adaptive DDL Layout", () => {
     const a = resolveAdaptiveDdlLayout({ availableHeight: 300, itemCount: 7 });
     const b = resolveAdaptiveDdlLayout({ availableHeight: 300, itemCount: 7 });
     expect(a).toEqual(b);
+  });
+
+  it("pageSize never exceeds MAX=4", () => {
+    for (const h of [300, 500, 800, 1200]) {
+      const r = resolveAdaptiveDdlLayout({ availableHeight: h, itemCount: 10 });
+      expect(r.pageSize).toBeLessThanOrEqual(4);
+    }
+  });
+
+  it("when pageSize already 4, larger height increases cardHeight not pageSize", () => {
+    const r1 = resolveAdaptiveDdlLayout({ availableHeight: 380, itemCount: 10 });
+    const r2 = resolveAdaptiveDdlLayout({ availableHeight: 500, itemCount: 10 });
+    expect(r1.pageSize).toBe(4);
+    expect(r2.pageSize).toBe(4);
+    expect(r2.cardHeight).toBeGreaterThanOrEqual(r1.cardHeight);
+  });
+
+  it("cardHeight never exceeds MAX 104", () => {
+    for (const h of [300, 500, 800, 1200]) {
+      const r = resolveAdaptiveDdlLayout({ availableHeight: h, itemCount: 4 });
+      expect(r.cardHeight).toBeLessThanOrEqual(104);
+    }
+  });
+
+  it("1 item large window does not infinite stretch", () => {
+    const r = resolveAdaptiveDdlLayout({ availableHeight: 800, itemCount: 1 });
+    expect(r.pageSize).toBe(1);
+    expect(r.cardHeight).toBeLessThanOrEqual(104);
+    expect(r.cardHeight).toBeGreaterThanOrEqual(64);
+  });
+
+  it("4 items remaining space digested via cardHeight", () => {
+    const r1 = resolveAdaptiveDdlLayout({ availableHeight: 350, itemCount: 4 });
+    const r2 = resolveAdaptiveDdlLayout({ availableHeight: 450, itemCount: 4 });
+    expect(r1.pageSize).toBe(4);
+    expect(r2.pageSize).toBe(4);
+    expect(r2.cardHeight).toBeGreaterThan(r1.cardHeight);
   });
 });
