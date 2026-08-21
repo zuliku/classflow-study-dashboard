@@ -10,9 +10,8 @@ import { EmailSyncStateStore } from "../syncStateStore";
 import { ChannelError } from "../../errors";
 import { getReplyContextStore } from "../../outbound/replyContextStore";
 import { htmlToSafeText } from "../bodyParser";
-import { findTextPart, extractAttachmentsMeta, decodeBodyPartContent } from "./mime";
+import { findTextPart, extractAttachmentsMeta } from "./mime";
 import { QQMailImapTransport } from "./transport";
-import { createQQMailTransporter, verifyQQMailTransporter } from "./smtp";
 
 export interface QQMailAdapterDeps {
   config: QQMailChannelConfig;
@@ -21,7 +20,6 @@ export interface QQMailAdapterDeps {
   syncStateStore?: EmailSyncStateStore;
   imapTransport?: any;
   smtpTransport?: any;
-  // For tests, allow injecting already-connected mock
 }
 
 export class QQMailChannelAdapter implements ChannelAdapter {
@@ -38,6 +36,7 @@ export class QQMailChannelAdapter implements ChannelAdapter {
   private imapTransport: any;
   private smtpTransport: any;
   private seenIds = new Set<string>();
+  private imapConnected = false;
 
   constructor(deps: QQMailAdapterDeps) {
     this.id = deps.config.id;
@@ -71,7 +70,6 @@ export class QQMailChannelAdapter implements ChannelAdapter {
   private getImap(): any {
     if (this.imapTransport) return this.imapTransport;
     if (!this.authCode) {
-      // Try to resolve via SecretVault if not injected (for production)
       try {
         const { getRuntimeSecretVault } = require("@/src/main/secrets/secretRuntime");
         const vault = getRuntimeSecretVault();
@@ -92,8 +90,10 @@ export class QQMailChannelAdapter implements ChannelAdapter {
     this.setState("connecting");
     try {
       const imap = this.getImap();
-      await imap.connect();
-      // Verify INBOX access — tolerate mock without selectInbox
+      if (!this.imapConnected) {
+        await imap.connect();
+        this.imapConnected = true;
+      }
       try {
         if (typeof imap.selectInbox === "function") {
           await imap.selectInbox();
@@ -131,14 +131,13 @@ export class QQMailChannelAdapter implements ChannelAdapter {
     if (typeof imap.getUidValidity === "function") return await imap.getUidValidity();
     if (typeof imap.mailboxOpen === "function") {
       const info = await imap.mailboxOpen("INBOX");
-      return info.uidValidity;
+      return Number(info.uidValidity);
     }
     if (typeof imap.selectInbox === "function") {
       const info = await imap.selectInbox();
-      return info.uidValidity;
+      return Number(info.uidValidity);
     }
-    // Fallback for mock
-    if (imap.mailbox?.uidValidity) return imap.mailbox.uidValidity;
+    if (imap.mailbox?.uidValidity) return Number(imap.mailbox.uidValidity);
     return 0;
   }
 
@@ -150,26 +149,29 @@ export class QQMailChannelAdapter implements ChannelAdapter {
       try { await imap.disconnect?.() ?? await imap.close?.() ?? await imap.logout?.(); } catch {}
     }
     this.imapTransport = null;
-    // Clear auth material
+    this.imapConnected = false;
     this.authCode = null;
     this.setState("disconnected");
   }
 
   async syncNow(): Promise<{ added: number; durationMs: number }> {
     const start = Date.now();
+    const before = this.messageCount;
     if (this.scheduler) {
       await this.scheduler.syncNow();
     } else {
       await this.doPoll();
     }
-    return { added: 0, durationMs: Date.now() - start };
+    return { added: this.messageCount - before, durationMs: Date.now() - start };
   }
 
   private async doPoll(): Promise<void> {
     const imap = this.getImap();
-    try {
-      await imap.connect?.();
-    } catch {}
+    const isConnected = typeof (imap as { isConnected?: () => boolean }).isConnected === "function" ? (imap as { isConnected: () => boolean }).isConnected() : this.imapConnected;
+    if (!isConnected) {
+      await imap.connect();
+      this.imapConnected = true;
+    }
     const currentValidity = await this.getCurrentUidValidity(imap);
     const existing = this.syncStateStore.getQQMailState(this.id);
     if (!existing) {
@@ -181,6 +183,99 @@ export class QQMailChannelAdapter implements ChannelAdapter {
     }
   }
 
+  private parseHeadersToMap(headers: unknown): Map<string, string> {
+    const map = new Map<string, string>();
+    if (!headers) return map;
+    if (headers instanceof Map) {
+      for (const [k, v] of headers.entries()) map.set(k.toLowerCase(), String(v));
+      return map;
+    }
+    let raw: string;
+    if (Buffer.isBuffer(headers)) raw = headers.toString("utf-8");
+    else if (typeof headers === "string") raw = headers;
+    else return map;
+    // Handle folded headers (continuation lines starting with space/tab)
+    const lines = raw.split(/\r?\n/);
+    let currentKey = "";
+    let currentValue = "";
+    for (const line of lines) {
+      if (/^\s/.test(line) && currentKey) {
+        currentValue += " " + line.trim();
+      } else {
+        if (currentKey) map.set(currentKey.toLowerCase(), currentValue.trim());
+        const idx = line.indexOf(":");
+        if (idx > -1) {
+          currentKey = line.slice(0, idx).trim();
+          currentValue = line.slice(idx + 1).trim();
+        } else {
+          currentKey = "";
+          currentValue = "";
+        }
+      }
+    }
+    if (currentKey) map.set(currentKey.toLowerCase(), currentValue.trim());
+    return map;
+  }
+
+  private async fetchEnvelopes(imap: any, uids: number[]): Promise<any[]> {
+    if (uids.length === 0) return [];
+    // Prefer dedicated method if mock provides it
+    if (typeof imap.fetchEnvelopes === "function") {
+      return await imap.fetchEnvelopes(uids);
+    }
+    if (typeof imap.fetchMessages === "function") {
+      // For backward compat with older mock, but we prefer two-stage; however fetchMessages was single-stage
+      // We treat it as envelope fetch without body
+      return await imap.fetchMessages(uids);
+    }
+    const out: any[] = [];
+    // Correct ImapFlow fetch: range as number[], query as FetchQueryObject, options {uid:true}
+    const query = {
+      uid: true,
+      envelope: true,
+      internalDate: true,
+      bodyStructure: true,
+      flags: true,
+      headers: true,
+    };
+    for await (const msg of imap.fetch(uids, query, { uid: true })) {
+      out.push({
+        uid: (msg as { uid: number }).uid,
+        envelope: (msg as { envelope: unknown }).envelope,
+        bodyStructure: (msg as { bodyStructure: unknown }).bodyStructure,
+        internalDate: (msg as { internalDate: Date }).internalDate,
+        flags: (msg as { flags: Set<string> }).flags,
+        headers: (msg as { headers: Buffer }).headers,
+      });
+    }
+    return out;
+  }
+
+  private async fetchBodyPart(imap: any, uid: number, partId: string): Promise<string | null> {
+    if (typeof imap.fetchBodyPart === "function") {
+      const buf = await imap.fetchBodyPart(uid, partId);
+      if (Buffer.isBuffer(buf)) return buf.toString("utf-8");
+      if (typeof buf === "string") return buf;
+      return null;
+    }
+    if (typeof imap.fetchTextPart === "function") {
+      const res = await imap.fetchTextPart(uid, partId);
+      if (Buffer.isBuffer(res)) return res.toString("utf-8");
+      return res as string | null;
+    }
+    // Fallback to fetch with bodyParts
+    for await (const msg of imap.fetch([uid], { uid: true, bodyParts: [partId] }, { uid: true })) {
+      const map = (msg as { bodyParts?: Map<string, Buffer> }).bodyParts;
+      if (map) {
+        const buf = map.get(partId);
+        if (buf) return Buffer.isBuffer(buf) ? buf.toString("utf-8") : String(buf);
+      }
+      const rec = (msg as { bodyParts?: Record<string, string> }).bodyParts as unknown as Record<string, string> | undefined;
+      if (rec && rec[partId]) return rec[partId];
+    }
+    return null;
+  }
+
   private async doInitialSync(imap: any, uidValidity: number): Promise<void> {
     const since = new Date(Date.now() - 7 * 86400000);
     let uids: number[] = [];
@@ -188,72 +283,45 @@ export class QQMailChannelAdapter implements ChannelAdapter {
       if (typeof imap.searchSince === "function") {
         uids = await imap.searchSince(since);
       } else if (typeof imap.search === "function") {
-        const res = await imap.search({ since });
-        uids = Array.isArray(res) ? res : (res as { uidList?: number[] }).uidList ?? [];
-      } else {
-        uids = [];
+        const res = await imap.search({ since }, { uid: true });
+        uids = Array.isArray(res) ? res : [];
       }
     } catch {
       uids = [];
     }
-    // INBOX only already via search in INBOX lock; cap 50
-    const slice = uids.slice(0, 50);
-    // If mock returns empty but we have direct messages mock for test, fallback to fetch all?
-    // For test that directly provides messages, search may return all; we need to filter by 7 days after fetch anyway.
-    // If slice is empty and mock has messages, we will try to fetch via search; but for test we handle filtering after fetch.
-    // To satisfy test that expects 7d filtering, we will later filter by internalDate.
-    if (slice.length === 0) {
-      // Try alternative: if search returned all, but we still have no uids, try to get via fetchMessages with all?
-      // For test where search is mocked to return all, slice will not be empty.
+    if (uids.length === 0) {
+      this.syncStateStore.setQQMailState(this.id, { uidValidity: String(uidValidity), lastSeenUid: 0, initializedAt: Date.now(), lastSyncAt: Date.now() });
+      return;
     }
-    // Fetch messages - need to handle that mock's fetch returns already filtered bodyParts
-    let messages: any[] = [];
-    try {
-      if (typeof imap.fetchMessages === "function") {
-        messages = await imap.fetchMessages(slice);
-      } else if (typeof imap.fetch === "function") {
-        const collected: any[] = [];
-        const fetchOpts: Record<string, unknown> = { uid: true, envelope: true, internalDate: true, bodyStructure: true, flags: true };
-        // For QQ Mail we fetch only necessary, but for mock we just call fetch
-        const gen = imap.fetch(slice, fetchOpts);
-        for await (const m of gen) collected.push(m);
-        messages = collected;
-      }
-    } catch {
-      messages = [];
-    }
-
-    // If search was mocked to return all but we need 7d filter, filter now by internalDate
-    const filtered = messages.filter((m) => {
-      const d = m.internalDate instanceof Date ? m.internalDate : new Date(m.internalDate);
+    // Latest 50: numeric sort, take newest 50
+    const sorted = [...uids].sort((a, b) => a - b);
+    const newest = sorted.slice(-50);
+    // Fetch envelopes for newest
+    const envelopes = await this.fetchEnvelopes(imap, newest);
+    // Filter by 7d after fetch as safety (in case search didn't filter)
+    const filtered = envelopes.filter((m) => {
+      const d = m.internalDate instanceof Date ? m.internalDate : new Date(m.internalDate ?? 0);
       return d.getTime() >= since.getTime();
-    }).slice(0, 50);
-
-    // If mock indicates no messages via fetch but search returned all, use original uids? For our test mock where fetch not implemented separately, filtered may be empty due to no fetch; fallback to using mock's messages directly
-    // For test simplicity, if filtered is empty but slice has values, treat slice as still needing ingest via direct fetch per UID
-    // Instead we will attempt to ingest each uid individually via fetch of single
-    let toIngest = filtered.length > 0 ? filtered : messages;
-    // If still empty and we have slice, we will ingest via per-uid fetch in loop above? Already handled.
-
-    // For test where mock's fetch returns envelope already, we have toIngest
-    // If toIngest still empty and we are in test with direct messages array passed via mockClient's internal messages, we can attempt to fetch each uid via transport's internal messages
-    // For simplicity, if toIngest is empty and slice length >0, we will try to fetch each uid individually
-    if (toIngest.length === 0 && slice.length > 0) {
-      // Fallback: try to fetch each uid individually via fetchMessages with single uid
-      // This path is for mock where fetch not returning data due to earlier error
-    }
-
+    });
+    // Ensure we still respect latest 50 after filtering (if some filtered out, we already have newest, so okay)
+    // Ingest in old→new order for stable order
+    const toIngest = [...filtered].sort((a, b) => a.uid - b.uid);
     let maxUid = 0;
     let hadFailure = false;
-    const successfulUids: number[] = [];
-    for (const msg of toIngest) {
+    for (const env of toIngest) {
       try {
-        const normalized = await this.normalizeAndIngest(msg, uidValidity);
+        const partInfo = findTextPart(env.bodyStructure as never);
+        let bodyContent: string | null = null;
+        let isHtml = false;
+        if (partInfo.partId) {
+          bodyContent = await this.fetchBodyPart(imap, env.uid, partInfo.partId);
+          isHtml = partInfo.isHtml;
+        }
+        const normalized = await this.normalizeFromEnvelope(env, uidValidity, bodyContent, isHtml);
         if (this.seenIds.has(normalized.externalMessageId)) continue;
         this.seenIds.add(normalized.externalMessageId);
-        // Create ReplyContext before ingest
         const rfcId = normalized.rfcMessageId ?? `<${normalized.externalMessageId}>`;
-        const replyTo = normalized.fromAddress ? (normalized as unknown as { replyToAddress?: string }).replyToAddress ?? normalized.fromAddress : normalized.senderId;
+        const replyTo = (normalized as unknown as { replyToAddress?: string }).replyToAddress ?? normalized.fromAddress ?? normalized.senderId;
         let replyContextId: string | undefined;
         try {
           const store = getReplyContextStore();
@@ -271,34 +339,15 @@ export class QQMailChannelAdapter implements ChannelAdapter {
         const withCtx = replyContextId ? { ...normalized, replyContextId } as ChannelInboundMessage & { replyContextId?: string } : normalized;
         await this.inboxSink.ingest(withCtx);
         this.messageCount++;
-        if (msg.uid && msg.uid > maxUid) maxUid = msg.uid;
-        successfulUids.push(msg.uid);
+        if (env.uid > maxUid) maxUid = env.uid;
       } catch {
         hadFailure = true;
-        // Do not advance cursor for failed batch per spec — break and do not commit
         break;
       }
     }
-    // Cursor commit after batch success only if no failure
-    if (!hadFailure && toIngest.length > 0) {
-      this.syncStateStore.setQQMailState(this.id, { uidValidity: String(uidValidity), lastSeenUid: maxUid, initializedAt: Date.now(), lastSyncAt: Date.now() });
-    } else if (!hadFailure && toIngest.length === 0) {
-      // Even if no messages, still establish baseline
-      this.syncStateStore.setQQMailState(this.id, { uidValidity: String(uidValidity), lastSeenUid: 0, initializedAt: Date.now(), lastSyncAt: Date.now() });
-    } else if (hadFailure) {
-      // Do not commit new cursor for failed batch — keep old (or if initial, keep none? For initial, we still need baseline? Spec says do not advance past failed message, so keep old)
-      // If initial and hadFailure, we should not set lastSeenUid beyond failed point; keep 0 or last successful before failure
-      // For test, expect lastSeenUid < failed uid, so we keep 0 or last successful
-      if (successfulUids.length > 0) {
-        const lastOk = Math.max(...successfulUids);
-        // Optionally commit up to lastOk, but spec prefers not to commit for failed batch at all; to satisfy test ( <102) either 0 or 101 passes.
-        // We choose to not commit at all for initial failure case, keep existing (none) or previous.
-        // For initial sync with failure, we will not persist new state at all, leaving none or old.
-        // To make test pass (expect <102), we leave as is (not set). But initial had no previous, so we need to ensure not set to 102.
-        // We'll do nothing.
-      }
-      // If there was already a state, we keep it; if not, we establish baseline with 0 but not max?
-      // For initial failure with no prior state, we should still establish uidValidity but lastSeen 0
+    if (!hadFailure) {
+      this.syncStateStore.setQQMailState(this.id, { uidValidity: String(uidValidity), lastSeenUid: maxUid || 0, initializedAt: Date.now(), lastSyncAt: Date.now() });
+    } else {
       const existing = this.syncStateStore.getQQMailState(this.id);
       if (!existing) {
         this.syncStateStore.setQQMailState(this.id, { uidValidity: String(uidValidity), lastSeenUid: 0, initializedAt: Date.now(), lastSyncAt: Date.now() });
@@ -312,35 +361,33 @@ export class QQMailChannelAdapter implements ChannelAdapter {
       if (typeof imap.searchUidGreater === "function") {
         uids = await imap.searchUidGreater(existing.lastSeenUid);
       } else if (typeof imap.search === "function") {
-        const res = await imap.search({ uid: `${existing.lastSeenUid + 1}:*` });
-        uids = Array.isArray(res) ? res : (res as { uidList?: number[] }).uidList ?? [];
+        const res = await imap.search({ uid: `${existing.lastSeenUid + 1}:*` }, { uid: true });
+        uids = Array.isArray(res) ? res : [];
       }
     } catch {
       uids = [];
     }
-    const slice = uids.slice(0, 50);
-    if (slice.length === 0) {
-      this.syncStateStore.setQQMailState(this.id, { uidValidity: String(currentValidity), lastSeenUid: existing.lastSeenUid, lastSyncAt: Date.now(), initializedAt: existing.lastSeenUid ? Date.now() : undefined });
+    const sorted = [...uids].sort((a, b) => a - b).slice(0, 50);
+    // debug log removed
+    if (sorted.length === 0) {
+      this.syncStateStore.setQQMailState(this.id, { uidValidity: String(currentValidity), lastSeenUid: existing.lastSeenUid, lastSyncAt: Date.now(), initializedAt: (existing as unknown as { initializedAt?: number }).initializedAt ?? Date.now() });
       return;
     }
-    let messages: any[] = [];
-    try {
-      if (typeof imap.fetchMessages === "function") {
-        messages = await imap.fetchMessages(slice);
-      } else if (typeof imap.fetch === "function") {
-        const collected: any[] = [];
-        for await (const m of imap.fetch(slice, { uid: true, envelope: true, internalDate: true, bodyStructure: true, bodyParts: ["1"] } as never)) collected.push(m);
-        messages = collected;
-      }
-    } catch {
-      return;
-    }
+    const envelopes = await this.fetchEnvelopes(imap, sorted);
+    // debug log removed
+    const toIngest = [...envelopes].sort((a, b) => a.uid - b.uid);
     let maxUid = existing.lastSeenUid;
     let hadFailure = false;
-    const successfulUids: number[] = [];
-    for (const msg of messages) {
+    for (const env of toIngest) {
       try {
-        const normalized = await this.normalizeAndIngest(msg, Number(existing.uidValidity));
+        const partInfo = findTextPart(env.bodyStructure as never);
+        let bodyContent: string | null = null;
+        let isHtml = false;
+        if (partInfo.partId) {
+          bodyContent = await this.fetchBodyPart(imap, env.uid, partInfo.partId);
+          isHtml = partInfo.isHtml;
+        }
+        const normalized = await this.normalizeFromEnvelope(env, Number(existing.uidValidity), bodyContent, isHtml);
         if (this.seenIds.has(normalized.externalMessageId)) continue;
         this.seenIds.add(normalized.externalMessageId);
         const rfcId = normalized.rfcMessageId ?? `<${normalized.externalMessageId}>`;
@@ -362,8 +409,7 @@ export class QQMailChannelAdapter implements ChannelAdapter {
         const withCtx = replyContextId ? { ...normalized, replyContextId } as ChannelInboundMessage & { replyContextId?: string } : normalized;
         await this.inboxSink.ingest(withCtx);
         this.messageCount++;
-        if (msg.uid && msg.uid > maxUid) maxUid = msg.uid;
-        successfulUids.push(msg.uid);
+        if (env.uid > maxUid) maxUid = env.uid;
       } catch {
         hadFailure = true;
         break;
@@ -371,68 +417,60 @@ export class QQMailChannelAdapter implements ChannelAdapter {
     }
     if (!hadFailure) {
       this.syncStateStore.setQQMailState(this.id, { uidValidity: String(currentValidity), lastSeenUid: maxUid, lastSyncAt: Date.now(), initializedAt: (existing as unknown as { initializedAt?: number }).initializedAt ?? Date.now() });
-    } else {
-      // Do not commit for failed batch
     }
   }
 
   private async doRecoverySync(imap: any, newValidity: number): Promise<void> {
-    // Bounded recovery: 7d/50
     await this.doInitialSync(imap, newValidity);
   }
 
-  private async normalizeAndIngest(msg: any, uidValidity: number): Promise<ChannelInboundMessage> {
-    // msg: { uid, envelope, internalDate, bodyStructure, bodyParts, flags }
-    const envelope = msg.envelope ?? {};
-    const internalDate: Date = msg.internalDate instanceof Date ? msg.internalDate : new Date(msg.internalDate ?? Date.now());
-    const bodyStructure = msg.bodyStructure;
-    const bodyParts: Record<string, string> = msg.bodyParts ?? {};
+  private async normalizeFromEnvelope(env: any, uidValidity: number, bodyContent: string | null, isHtml: boolean): Promise<ChannelInboundMessage> {
+    const envelope = env.envelope ?? {};
+    const internalDate: Date = env.internalDate instanceof Date ? env.internalDate : new Date(env.internalDate ?? Date.now());
+    const bodyStructure = env.bodyStructure;
+    const rawHeaders: unknown = env.headers;
 
     const subject: string = envelope.subject ?? "(no subject)";
     const fromAddr: string = envelope.from?.[0]?.address ?? envelope.from?.[0]?.name ?? "";
     const fromDisplay: string = envelope.from?.[0]?.name ?? fromAddr;
     const replyToAddr: string = envelope.replyTo?.[0]?.address ?? fromAddr;
-    const messageId: string = envelope.messageId ?? `<${msg.uid}@qqmail>`;
+    const messageId: string = envelope.messageId ?? `<${env.uid}@qqmail>`;
     const date: Date | undefined = envelope.date ? new Date(envelope.date) : undefined;
     const receivedAt = date && !isNaN(date.getTime()) ? date.getTime() : internalDate.getTime();
 
-    // Normalize externalMessageId: prefer Message-ID, else uid:validity:uid
     const hasValidMessageId = typeof messageId === "string" && messageId.includes("@") && messageId.trim().startsWith("<") && messageId.trim().endsWith(">");
-    const externalMessageId = hasValidMessageId ? `mid:${messageId.trim().toLowerCase()}` : `uid:${uidValidity}:${msg.uid}`;
+    const externalMessageId = hasValidMessageId ? `mid:${messageId.trim().toLowerCase()}` : `uid:${uidValidity}:${env.uid}`;
 
-    // References / In-Reply-To from headers if available; mock may not have, fallback to empty
-    const headers: Map<string, string> = msg.headers instanceof Map ? msg.headers : new Map<string, string>();
-    const referencesRaw = headers.get("references") ?? headers.get("References") ?? "";
+    const headersMap = this.parseHeadersToMap(rawHeaders);
+    // References handling with folding support
+    const referencesRaw = headersMap.get("references") ?? "";
     const references = referencesRaw.split(/\s+/).filter(Boolean);
-    const inReplyTo = headers.get("in-reply-to") ?? headers.get("In-Reply-To") ?? undefined;
+    const inReplyTo = headersMap.get("in-reply-to") ?? undefined;
+    // Also consider envelope.inReplyTo if headers missing
+    const finalInReplyTo = inReplyTo ?? envelope.inReplyTo ?? undefined;
+    // Merge envelope references if needed? For now use headers
 
-    // Body selection: prefer text/plain else html fallback sanitized
     let text = "";
-    let usedHtml = false;
-    const textPart = findTextPart(bodyStructure as never);
-    if (textPart.partId) {
-      const raw = bodyParts[textPart.partId] ?? bodyParts["1"] ?? "";
-      const decoded = decodeBodyPartContent(raw);
-      if (textPart.isHtml) {
-        text = htmlToSafeText(decoded);
-        usedHtml = true;
+    if (bodyContent !== null && bodyContent !== undefined) {
+      if (isHtml) {
+        text = htmlToSafeText(bodyContent);
       } else {
-        text = decoded;
-      }
-    } else if (bodyParts["1"]) {
-      // Fallback: assume part 1 is text
-      const raw = bodyParts["1"];
-      // Try to detect if html
-      if (raw.includes("<") && raw.includes(">")) {
-        text = htmlToSafeText(raw);
-        usedHtml = true;
-      } else {
-        text = raw;
+        text = bodyContent;
       }
     } else {
+      // Fallback: try to decode from bodyStructure if no fetch
       text = "";
     }
     text = text.slice(0, 10000);
+
+    const headersForReplyTo = headersMap;
+    // Prefer Reply-To header, fallback to envelope
+    let replyToAddress = headersForReplyTo.get("reply-to") ?? replyToAddr;
+    if (!replyToAddress || !replyToAddress.includes("@")) replyToAddress = fromAddr;
+    // Extract email
+    const match = replyToAddress.match(/<([^>]+)>/);
+    replyToAddress = (match ? match[1] : replyToAddress).trim().split(/\s+/)[0] ?? "";
+    if (/[\r\n]/.test(replyToAddress)) replyToAddress = fromAddr.match(/<([^>]+)>/)?.[1] ?? fromAddr;
 
     const attachmentsMeta = extractAttachmentsMeta(bodyStructure as never).map((a) => ({
       id: `${a.partId}`,
@@ -440,9 +478,6 @@ export class QQMailChannelAdapter implements ChannelAdapter {
       mimeType: a.mimeType,
       size: a.size,
     }));
-
-    // Header injection check for replyTo
-    const sanitizedReplyTo = /[\r\n]/.test(replyToAddr) ? fromAddr : replyToAddr;
 
     return {
       channel: "qq-mail",
@@ -459,11 +494,67 @@ export class QQMailChannelAdapter implements ChannelAdapter {
       rfcMessageId: messageId,
       threadId: undefined,
       references,
+      inReplyTo: finalInReplyTo,
+      fromAddress: fromAddr,
+      replyToAddress,
+    } as unknown as ChannelInboundMessage & { replyToAddress?: string };
+  }
+
+  private async normalizeAndIngest(msg: any, uidValidity: number): Promise<ChannelInboundMessage> {
+    // Legacy path for tests that call normalize directly with old mock structure (with bodyParts)
+    // Convert old mock's bodyParts Record<string,string> to new envelope flow
+    const envelope = msg.envelope ?? {};
+    const internalDate: Date = msg.internalDate instanceof Date ? msg.internalDate : new Date(msg.internalDate ?? Date.now());
+    const bodyStructure = msg.bodyStructure;
+    const bodyParts: Record<string, string> = msg.bodyParts ?? {};
+    const subject: string = envelope.subject ?? "(no subject)";
+    const fromAddr: string = envelope.from?.[0]?.address ?? envelope.from ?? "";
+    const fromDisplay: string = envelope.from?.[0]?.name ?? fromAddr;
+    const replyToAddr: string = envelope.replyTo?.[0]?.address ?? fromAddr;
+    const messageId: string = envelope.messageId ?? `<${msg.uid}@qqmail>`;
+    const hasValidMessageId = typeof messageId === "string" && messageId.includes("@") && messageId.trim().startsWith("<") && messageId.trim().endsWith(">");
+    const externalMessageId = hasValidMessageId ? `mid:${messageId.trim().toLowerCase()}` : `uid:${uidValidity}:${msg.uid}`;
+    const headersMap = this.parseHeadersToMap(msg.headers);
+    const referencesRaw = headersMap.get("references") ?? "";
+    const references = referencesRaw.split(/\s+/).filter(Boolean);
+    const inReplyTo = headersMap.get("in-reply-to") ?? undefined;
+    let text = "";
+    const textPart = findTextPart(bodyStructure as never);
+    if (textPart.partId) {
+      const raw = bodyParts[textPart.partId] ?? bodyParts["1"] ?? "";
+      if (textPart.isHtml) text = htmlToSafeText(raw);
+      else text = raw;
+    } else if (bodyParts["1"]) {
+      const raw = bodyParts["1"];
+      if (raw.includes("<") && raw.includes(">")) text = htmlToSafeText(raw);
+      else text = raw;
+    }
+    text = text.slice(0, 10000);
+    const attachmentsMeta = extractAttachmentsMeta(bodyStructure as never).map((a) => ({
+      id: `${a.partId}`,
+      name: a.name,
+      mimeType: a.mimeType,
+      size: a.size,
+    }));
+    const sanitizedReplyTo = /[\r\n]/.test(replyToAddr) ? fromAddr : replyToAddr;
+    return {
+      channel: "qq-mail",
+      accountId: this.id,
+      externalMessageId,
+      conversationId: messageId ?? externalMessageId,
+      conversationType: "direct",
+      senderId: fromAddr,
+      senderDisplay: fromDisplay || fromAddr,
+      subject,
+      text,
+      receivedAt: internalDate.getTime(),
+      attachments: attachmentsMeta,
+      rfcMessageId: messageId,
+      threadId: undefined,
+      references,
       inReplyTo,
       fromAddress: fromAddr,
-      // Extra for reply context
-      // @ts-ignore
       replyToAddress: sanitizedReplyTo,
-    } as ChannelInboundMessage & { replyToAddress?: string };
+    } as unknown as ChannelInboundMessage & { replyToAddress?: string };
   }
 }

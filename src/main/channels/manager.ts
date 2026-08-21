@@ -515,23 +515,32 @@ export class ChannelManager {
         throw new ChannelError("EMAIL_SEND_REJECTED" as never, raw.slice(0,200));
       }
     } else {
-      // qq-mail via SMTP (passive reply only, no CC/BCC)
+      // qq-mail via SMTP (passive reply only, no CC/BCC) — ensure finally close without masking send error
+      let transporter: ReturnType<typeof import("./email/qqmail/smtp").createQQMailTransporter> | null = null;
+      let sendResult: { messageId?: string } | null = null;
+      let sendError: unknown = null;
       try {
         const vault = getRuntimeSecretVault();
         const authCode = vault.resolveSecretForProvider(cfg.credentialRef, "qq-mail");
         const { createQQMailTransporter, sendQQMailReply } = await import("./email/qqmail/smtp");
-        const transporter = createQQMailTransporter({ emailAddress: (cfg as unknown as { emailAddress: string }).emailAddress, authCode });
+        transporter = createQQMailTransporter({ emailAddress: (cfg as unknown as { emailAddress: string }).emailAddress, authCode });
         const references = [...(ctx.references ?? []), ctx.rfcMessageId].filter(Boolean).join(" ");
-        const res = await sendQQMailReply(transporter, {
-          from: (cfg as unknown as { emailAddress: string }).emailAddress,
-          to: ctx.replyToAddress,
-          subject: ctx.subject,
-          text,
-          inReplyTo: ctx.rfcMessageId,
-          references,
-        });
-        try { await transporter.close(); } catch {}
-        return { messageId: res.messageId, timestamp: new Date().toISOString() };
+        try {
+          sendResult = await sendQQMailReply(transporter, {
+            from: (cfg as unknown as { emailAddress: string }).emailAddress,
+            to: ctx.replyToAddress,
+            subject: ctx.subject,
+            text,
+            inReplyTo: ctx.rfcMessageId,
+            references,
+          });
+        } catch (e) {
+          sendError = e;
+        } finally {
+          try { await transporter.close(); } catch { /* close failure must not mask send error */ }
+        }
+        if (sendError) throw sendError;
+        return { messageId: sendResult!.messageId, timestamp: new Date().toISOString() };
       } catch (e) {
         const raw = e instanceof Error ? e.message : String(e);
         try {
@@ -587,8 +596,11 @@ export class ChannelManager {
         await imap.disconnect();
         const { createQQMailTransporter, verifyQQMailTransporter } = await import("./email/qqmail/smtp");
         const transporter = createQQMailTransporter({ emailAddress: (cfg as unknown as { emailAddress: string }).emailAddress, authCode });
-        await verifyQQMailTransporter(transporter);
-        try { await transporter.close(); } catch {}
+        try {
+          await verifyQQMailTransporter(transporter);
+        } finally {
+          try { await transporter.close(); } catch {}
+        }
         return { ok: true };
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);

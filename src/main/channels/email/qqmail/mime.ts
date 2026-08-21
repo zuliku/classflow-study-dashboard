@@ -24,14 +24,31 @@ export interface QqMailAttachmentMeta {
   partId: string;
 }
 
+function getMimeType(node: QqMailBodyStructureNode & { parameters?: Record<string, string>; dispositionParameters?: Record<string, string> }): string {
+  const rawType = (node as unknown as { type?: string }).type ?? "";
+  const sub = (node as unknown as { subtype?: string }).subtype ?? "";
+  if (rawType.includes("/")) return rawType.toLowerCase();
+  if (rawType && sub) return `${rawType}/${sub}`.toLowerCase();
+  if (rawType) return rawType.toLowerCase();
+  return "";
+}
+
+function isAttachmentNode(node: QqMailBodyStructureNode & { dispositionParameters?: Record<string, string>; parameters?: Record<string, string> }): boolean {
+  if (node.disposition === "attachment") return true;
+  if (node.filename) return true;
+  const dispParams = (node as unknown as { dispositionParameters?: Record<string, string> }).dispositionParameters;
+  if (dispParams && (dispParams.filename || dispParams.Filename)) return true;
+  return false;
+}
+
 export function findTextPart(structure: QqMailBodyStructureNode | null | undefined): { partId: string | null; isHtml: boolean } {
   if (!structure) return { partId: null, isHtml: false };
   const queue: QqMailBodyStructureNode[] = [structure];
   let htmlCandidate: string | null = null;
   while (queue.length) {
     const node = queue.shift()!;
-    const mime = `${node.type ?? ""}/${node.subtype ?? ""}`.toLowerCase();
-    const isAttachment = node.disposition === "attachment" || !!node.filename;
+    const mime = getMimeType(node as never);
+    const isAttachment = isAttachmentNode(node as never);
     if (!isAttachment) {
       if (mime === "text/plain" && node.part) {
         return { partId: node.part, isHtml: false };
@@ -54,12 +71,14 @@ export function extractAttachmentsMeta(structure: QqMailBodyStructureNode | null
   const queue: QqMailBodyStructureNode[] = [structure];
   while (queue.length) {
     const node = queue.shift()!;
-    const isAttachment = node.disposition === "attachment" || !!node.filename;
+    const isAttachment = isAttachmentNode(node as never);
     if (isAttachment && node.part) {
-      const mime = `${node.type ?? "application"}/${node.subtype ?? "octet-stream"}`.toLowerCase();
+      const mime = getMimeType(node as never) || "application/octet-stream";
+      const dispParams = (node as unknown as { dispositionParameters?: Record<string, string> }).dispositionParameters;
+      const filename = node.filename ?? dispParams?.filename ?? dispParams?.Filename ?? `attachment-${node.part}`;
       out.push({
-        name: node.filename ?? `attachment-${node.part}`,
-        mimeType: mime,
+        name: filename,
+        mimeType: mime.toLowerCase(),
         size: node.size ?? 0,
         partId: node.part,
       });
