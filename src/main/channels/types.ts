@@ -4,8 +4,11 @@
  * All downstream code only consumes ChannelInboundMessage, never raw SDK object.
  */
 import type { QQChannelConfig } from "./qq/config";
+import type { GmailChannelConfig, QQMailChannelConfig } from "./email/types";
 
-export type ChannelType = "qq-bot";
+export type ChannelType = "qq-bot" | "gmail" | "qq-mail";
+
+export type PersistedChannelConfig = QQChannelConfig | GmailChannelConfig | QQMailChannelConfig;
 
 export type ChannelState = "disabled" | "disconnected" | "connecting" | "connected" | "reconnecting" | "error";
 
@@ -20,7 +23,7 @@ export interface ChannelAttachment {
 }
 
 export interface ChannelInboundMessage {
-  channel: "qq-bot";
+  channel: ChannelType;
   accountId: string;
   externalMessageId: string;
   conversationId: string;
@@ -36,6 +39,12 @@ export interface ChannelInboundMessage {
   mentionedBot?: boolean;
   isSelf?: boolean;
   replyContextId?: string;
+  // Email specific (populated for gmail/qq-mail)
+  rfcMessageId?: string;
+  threadId?: string;
+  references?: string[];
+  inReplyTo?: string;
+  fromAddress?: string;
 }
 
 export interface ChannelHealth {
@@ -64,9 +73,10 @@ export interface ChannelAdapter {
   /** @deprecated Use ChannelManager.disconnect+connect (re-resolve secret). Kept for compat but should not be used. */
   restart?(): Promise<void>;
   sendReply?(target: ChannelReplyTarget, text: string): Promise<{ messageId?: string; timestamp?: string }>;
+  syncNow?(): Promise<{ added: number; durationMs: number }>;
   dispose?(): Promise<void>;
 }
 
-export type ChannelFactory = (config: QQChannelConfig) => ChannelAdapter;
+export type ChannelFactory = (config: PersistedChannelConfig) => ChannelAdapter;
 
-export type { QQChannelConfig };
+export type { QQChannelConfig, GmailChannelConfig, QQMailChannelConfig };

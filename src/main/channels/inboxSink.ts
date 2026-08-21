@@ -29,7 +29,7 @@ export class ChannelInboxSink {
 
   async ingest(msg: ChannelInboundMessage): Promise<void> {
     const rawPayload: InboxRawPayload = {
-      source: "qq-bot",
+      source: msg.channel,
       externalMessageId: msg.externalMessageId,
       conversationId: msg.conversationId,
       senderDisplay: msg.senderDisplay ?? msg.senderId,
@@ -66,10 +66,10 @@ export class ChannelInboxSink {
     // Fallback for legacy tests using onIngest: construct minimal ExternalInboxItem for compat but without wrap
     if (this.onIngest) {
       const { getInboxDedupeKey } = await import("@/lib/inbox/dedupe");
-      const dedupeKey = getInboxDedupeKey({ source: "qq-bot", externalMessageId: msg.externalMessageId, text: msg.text, senderDisplay: msg.senderDisplay, sourceAccountId: msg.accountId });
+      const dedupeKey = getInboxDedupeKey({ source: msg.channel, externalMessageId: msg.externalMessageId, text: msg.text, senderDisplay: msg.senderDisplay, sourceAccountId: msg.accountId });
       const item: ExternalInboxItem = {
         id: `inbox_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`,
-        source: "qq-bot",
+        source: msg.channel,
         externalMessageId: msg.externalMessageId,
         conversationId: msg.conversationId,
         senderDisplay: msg.senderDisplay,

@@ -23,7 +23,7 @@ export function useKiroReplyDraft() {
   }, []);
 
   const generateDraft = useCallback(
-    async (input: { inboxItemId: string; message: string; senderDisplay?: string; tone?: ReplyDraftTone }): Promise<{ draft: string; inboxItemId: string; requestSeq: number } | null> => {
+    async (input: { inboxItemId: string; message: string; senderDisplay?: string; tone?: ReplyDraftTone; source?: string }): Promise<{ draft: string; inboxItemId: string; requestSeq: number } | null> => {
       const enabled = useAISettingsStore.getState().enabled;
       if (!enabled) {
         setError("请先在设置中启用 Kiro");
@@ -51,7 +51,9 @@ export function useKiroReplyDraft() {
       try {
         const invBridge = (window as unknown as { classflowDesktop?: { invocation?: { beginRemoteInbox: (input: unknown) => Promise<{ invocationId: string }> } } }).classflowDesktop?.invocation;
         if (!invBridge) throw new Error("Invocation not available");
-        const { invocationId } = await invBridge.beginRemoteInbox({ source: "qq-bot", inboxItemId: input.inboxItemId });
+        const invSource = (input as { source?: string }).source ?? "qq-bot";
+        if (!["qq-bot", "gmail", "qq-mail"].includes(invSource)) throw new Error("Invalid source for draft");
+        const { invocationId } = await invBridge.beginRemoteInbox({ source: invSource, inboxItemId: input.inboxItemId });
         // Check stale after beginRemoteInbox (could have been cancelled/switched)
         if (seq !== seqRef.current || currentItemIdRef.current !== input.inboxItemId || controller.signal.aborted) {
           return null;
@@ -72,7 +74,7 @@ export function useKiroReplyDraft() {
             reasoningEffort,
             invocationId,
             inboxItemId: input.inboxItemId,
-            source: "qq-bot",
+            source: invSource,
             message: input.message,
             senderDisplay: input.senderDisplay,
             tone: input.tone ?? "natural",
@@ -102,7 +104,7 @@ export function useKiroReplyDraft() {
   );
 
   const regenerate = useCallback(
-    async (input: { inboxItemId: string; message: string; senderDisplay?: string; tone?: ReplyDraftTone }) => {
+    async (input: { inboxItemId: string; message: string; senderDisplay?: string; tone?: ReplyDraftTone; source?: string }) => {
       return generateDraft(input);
     },
     [generateDraft]

@@ -2,7 +2,9 @@
  * Outbound Types — Task 14 explicit QQ reply
  */
 
-export interface ChannelReplyContext {
+import type { ChannelType } from "../types";
+
+export interface QQReplyContext {
   replyContextId: string;
   channel: "qq-bot";
   sourceAccountId: string;
@@ -12,6 +14,26 @@ export interface ChannelReplyContext {
   createdAt: number;
   expiresAt: number;
 }
+
+export interface EmailReplyContext {
+  replyContextId: string;
+  channel: "gmail" | "qq-mail";
+  sourceAccountId: string;
+  providerMessageId: string;
+  rfcMessageId: string;
+  threadId?: string;
+  subject: string;
+  replyToAddress: string;
+  references: string[];
+  createdAt: number;
+  expiresAt: number;
+  // For generic handling, also expose conversation fields
+  conversationId: string;
+  conversationType: "direct";
+  inboundMessageId: string;
+}
+
+export type ChannelReplyContext = QQReplyContext | EmailReplyContext;
 
 export interface ChannelSendApproval {
   approvalId: string;
@@ -25,7 +47,7 @@ export interface ChannelSendApproval {
 
 export interface ChannelOutboundAudit {
   outboundId: string;
-  channel: "qq-bot";
+  channel: ChannelType;
   sourceAccountId: string;
   replyContextId: string;
   textHash: string;

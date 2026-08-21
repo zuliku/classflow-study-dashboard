@@ -14,7 +14,19 @@ export type ChannelErrorCode =
   | "CHANNEL_ALREADY_EXISTS"
   | "CHANNEL_DISABLED"
   | "INVALID_INPUT"
-  | "PERSISTENCE_FAILED";
+  | "PERSISTENCE_FAILED"
+  | "GMAIL_AUTH_FAILED"
+  | "GMAIL_OAUTH_CONFIG_MISSING"
+  | "GMAIL_OAUTH_STATE_MISMATCH"
+  | "GMAIL_OAUTH_TIMEOUT"
+  | "GMAIL_OAUTH_DENIED"
+  | "QQ_MAIL_AUTH_FAILED"
+  | "EMAIL_INVALID_CONFIG"
+  | "EMAIL_SYNC_FAILED"
+  | "EMAIL_REPLY_CONTEXT_INVALID"
+  | "EMAIL_SEND_REJECTED"
+  | "EMAIL_SEND_UNCERTAIN"
+  | "CHANNEL_RUNTIME_ERROR";
 
 export class ChannelError extends Error {
   code: ChannelErrorCode;
@@ -55,6 +67,18 @@ const USER_MESSAGES: Record<ChannelErrorCode, string> = {
   CHANNEL_DISABLED: "该渠道已停用",
   INVALID_INPUT: "输入参数不合法",
   PERSISTENCE_FAILED: "保存配置失败",
+  GMAIL_AUTH_FAILED: "Gmail 认证失败",
+  GMAIL_OAUTH_CONFIG_MISSING: "Gmail OAuth 未配置",
+  GMAIL_OAUTH_STATE_MISMATCH: "OAuth 状态不匹配",
+  GMAIL_OAUTH_TIMEOUT: "OAuth 超时",
+  GMAIL_OAUTH_DENIED: "OAuth 已拒绝",
+  QQ_MAIL_AUTH_FAILED: "QQ 邮箱认证失败，请检查邮箱地址/授权码",
+  EMAIL_INVALID_CONFIG: "Email 配置错误",
+  EMAIL_SYNC_FAILED: "邮件同步失败",
+  EMAIL_REPLY_CONTEXT_INVALID: "邮件回复上下文无效",
+  EMAIL_SEND_REJECTED: "邮件发送被拒绝",
+  EMAIL_SEND_UNCERTAIN: "邮件发送结果不确定，请检查 Gmail",
+  CHANNEL_RUNTIME_ERROR: "渠道运行错误",
 };
 
 export function userMessageForCode(code: ChannelErrorCode): string {

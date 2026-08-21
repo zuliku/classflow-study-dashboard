@@ -4,8 +4,7 @@
  * Future can support QQ Bot, Gmail, QQ Mail without Manager coupling to QQ-specific logic
  */
 
-import type { ChannelFactory, ChannelType } from "./types";
-import type { QQChannelConfig } from "./qq/config";
+import type { ChannelFactory, ChannelType, PersistedChannelConfig } from "./types";
 
 const factories = new Map<ChannelType, ChannelFactory>();
 
@@ -21,7 +20,7 @@ export function listRegisteredChannelTypes(): ChannelType[] {
   return Array.from(factories.keys());
 }
 
-export function createChannelAdapter(type: ChannelType, config: QQChannelConfig) {
+export function createChannelAdapter(type: ChannelType, config: PersistedChannelConfig) {
   const factory = factories.get(type);
   if (!factory) throw new Error(JSON.stringify({ code: "CHANNEL_NOT_FOUND", message: `No factory for ${type}` }));
   return factory(config);

@@ -132,6 +132,7 @@ const invocationBridge = {
 const channelsBridge = {
   list: () => invokeBridge("bridge:channels:list", {}),
   addQQ: (input: unknown) => invokeBridge("bridge:channels:addQQ", input),
+  addQQMail: (input: unknown) => invokeBridge("bridge:channels:addQQMail", input),
   update: (input: unknown) => invokeBridge("bridge:channels:update", input),
   setEnabled: (input: unknown) => invokeBridge("bridge:channels:setEnabled", input),
   connect: (input: unknown) => invokeBridge("bridge:channels:connect", input),
@@ -142,6 +143,8 @@ const channelsBridge = {
   confirmReply: (input: unknown) => invokeBridge("bridge:channels:confirmReply", input),
   cancelReply: (input: unknown) => invokeBridge("bridge:channels:cancelReply", input),
   canReply: (input: unknown) => invokeBridge("bridge:channels:canReply", input),
+  startGmailOAuth: () => invokeBridge("bridge:channels:startGmailOAuth", {}),
+  syncNow: (input: unknown) => invokeBridge("bridge:channels:syncNow", input),
 };
 
 const inboxBridge = {
