@@ -106,6 +106,7 @@ export default defineConfig({
       "tests/extensionsSettingsLayout.test.tsx",
       "tests/desktopPreloadRuntimeContract.test.ts",
       "tests/desktopLocalApiCapability.test.ts",
+      "tests/runtimeProfile.test.ts",
       "tests/kiroChatTransport.test.ts",
       "tests/aiModelCatalogTransport.test.ts",
       "tests/kiroAISettingsTransport.test.ts",
