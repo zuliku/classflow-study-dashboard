@@ -6,6 +6,7 @@ import { Sparkles, Mail } from "lucide-react";
 import { useToastStore } from "@/store/useToastStore";
 import { useKiroReplyDraft } from "@/hooks/useKiroReplyDraft";
 import { ChannelBrandIcon } from "@/components/icons/ChannelBrandIcon";
+import { Button } from "@/components/ui/Button";
 
 interface EmailReplyDialogProps {
   open: boolean;
@@ -205,8 +206,8 @@ export function EmailReplyDialog({ open, onOpenChange, item, onSent }: EmailRepl
 
         <div className="flex items-center gap-2">
           <div className="flex-1" />
-          <button type="button" onClick={() => onOpenChange(false)} className="h-8 px-4 bg-white border border-line text-charcoal text-xs font-bold rounded-lg">取消</button>
-          <button type="button" onClick={handlePrepare} disabled={saving || !text.trim()} data-testid="email-reply-prepare" className="h-8 px-5 bg-charcoal text-white text-xs font-bold rounded-lg hover:bg-black disabled:opacity-60">继续</button>
+          <Button variant="secondary" size="sm" onClick={() => onOpenChange(false)}>取消</Button>
+          <Button variant="primary" size="sm" loading={saving} disabled={!text.trim()} onClick={handlePrepare} data-testid="email-reply-prepare">继续</Button>
         </div>
       </Dialog>
 
@@ -224,8 +225,8 @@ export function EmailReplyDialog({ open, onOpenChange, item, onSent }: EmailRepl
         {error && <p className="text-xs font-bold text-danger bg-danger/5 border border-danger/20 rounded-lg px-3 py-2">{error}</p>}
         <div className="flex items-center gap-2">
           <div className="flex-1" />
-          <button type="button" onClick={handleCancelPrepare} className="h-8 px-4 bg-white border border-line text-charcoal text-xs font-bold rounded-lg">取消</button>
-          <button type="button" onClick={handleConfirm} disabled={saving} data-testid="email-reply-confirm" className="h-8 px-5 bg-charcoal text-white text-xs font-bold rounded-lg hover:bg-black disabled:opacity-60">{saving ? "发送中..." : "确认发送"}</button>
+          <Button variant="secondary" size="sm" onClick={handleCancelPrepare}>取消</Button>
+          <Button variant="primary" size="sm" loading={saving} loadingLabel="发送中..." onClick={handleConfirm} data-testid="email-reply-confirm">确认发送</Button>
         </div>
       </Dialog>
     </>

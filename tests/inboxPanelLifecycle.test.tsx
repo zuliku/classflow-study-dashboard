@@ -119,8 +119,9 @@ describe("InboxPanel Lifecycle — Task 16B K", () => {
     // Open detail by clicking 查看
     const viewBtn = screen.getByTestId("inbox-view-item-1");
     fireEvent.click(viewBtn);
-    // Detail dialog should be visible
-    expect(screen.getByText("EXTERNAL UNTRUSTED CONTENT")).toBeTruthy();
+    // Detail dialog should be visible (productized copy: 外部消息)
+    expect(screen.getByText("外部消息")).toBeTruthy();
+    expect(screen.queryByText("EXTERNAL UNTRUSTED CONTENT")).toBeNull();
     // Escape should close detail only, not root
     fireEvent.keyDown(window, { key: "Escape" });
     // Detail should be gone, but root onOpenChange not called (since topmost was detail)
@@ -128,7 +129,7 @@ describe("InboxPanel Lifecycle — Task 16B K", () => {
     // So root onOpenChange should not have been called with false
     expect(onOpenChange).not.toHaveBeenCalledWith(false);
     // Detail content should be removed
-    expect(screen.queryByText("EXTERNAL UNTRUSTED CONTENT")).toBeNull();
+    expect(screen.queryByText("外部消息")).toBeNull();
     // Root inbox should still be in DOM (check header)
     expect(screen.getByText("收件箱")).toBeTruthy();
   });
@@ -161,17 +162,17 @@ describe("InboxPanel Lifecycle — Task 16B K", () => {
     render(<Wrapper />);
     // Open detail
     fireEvent.click(screen.getByTestId("inbox-view-item-1"));
-    expect(screen.getByText("EXTERNAL UNTRUSTED CONTENT")).toBeTruthy();
+    expect(screen.getByText("外部消息")).toBeTruthy();
     // Close root via X
     fireEvent.click(screen.getByLabelText("关闭收件箱"));
     // Should have cleared selected; detail should be gone
-    expect(screen.queryByText("EXTERNAL UNTRUSTED CONTENT")).toBeNull();
+    expect(screen.queryByText("外部消息")).toBeNull();
     expect(screen.getByTestId("open-state").textContent).toBe("closed");
     // Reopen
     fireEvent.click(screen.getByText("reopen"));
     expect(screen.getByTestId("open-state").textContent).toBe("open");
     // Detail should not automatically reappear
-    expect(screen.queryByText("EXTERNAL UNTRUSTED CONTENT")).toBeNull();
+    expect(screen.queryByText("外部消息")).toBeNull();
     // QQ reply also not reappear
     expect(screen.queryByTestId("mock-qq-reply")).toBeNull();
   });

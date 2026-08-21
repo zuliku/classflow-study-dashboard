@@ -4,6 +4,10 @@ import React, { useEffect, useState, useCallback } from "react";
 import { MessageSquare, Plus, Plug2, Trash2, Power, TestTube2, Settings2, Mail, RefreshCw, X } from "lucide-react";
 import { Dialog } from "@/components/ui/Dialog";
 import { ChannelBrandIcon } from "@/components/icons/ChannelBrandIcon";
+import { Button } from "@/components/ui/Button";
+import { Switch } from "@/components/ui/Switch";
+import { useToastStore } from "@/store/useToastStore";
+import { useConfirmStore } from "@/store/useConfirmStore";
 import { cn } from "@/lib/utils";
 
 type QQConfig = { id: string; channel: "qq-bot"; displayName: string; appId: string; credentialRef: string; enabled: boolean; requireMentionInGroup: boolean; allowedUsers: string[]; allowedGroups: string[]; receiveDirectMessages: boolean; receiveGroupMessages: boolean };
@@ -50,8 +54,8 @@ function stateLabel(state: string): string {
 function stateColor(state: string): string {
   if (state === "connected") return "bg-success/10 text-success border-success/20";
   if (state === "error") return "bg-danger/10 text-danger border-danger/20";
-  if (state === "connecting" || state === "reconnecting") return "bg-amber-500/10 text-amber-700 border-amber-500/20";
-  return "bg-[#F7F5F5] text-satin-grey border-line";
+  if (state === "connecting" || state === "reconnecting") return "bg-warning-bg text-warning border-warning-border";
+  return "bg-surface-soft text-satin-grey border-line";
 }
 
 export function ChannelSettings() {
@@ -59,6 +63,11 @@ export function ChannelSettings() {
   const [loading, setLoading] = useState(true);
   const [addOpen, setAddOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<ChannelStatus | null>(null);
+  const [busyMap, setBusyMap] = useState<Record<string, boolean>>({});
+  const pushToast = useToastStore((s) => s.pushToast);
+
+  const isBusy = (id: string, action: string) => !!busyMap[`${id}:${action}`];
+  const setBusy = (id: string, action: string, v: boolean) => setBusyMap((prev) => ({ ...prev, [`${id}:${action}`]: v }));
 
   const refresh = useCallback(async () => {
     const bridge = getChannelsBridge();
@@ -73,37 +82,50 @@ export function ChannelSettings() {
 
   const handleConnect = async (id: string) => {
     const b = getChannelsBridge(); if (!b) return;
-    try { await b.connect({ id }); await refresh(); } catch (e) { alert((e as { message?: string })?.message ?? String(e)); }
+    setBusy(id, "connect", true);
+    try { await b.connect({ id }); await refresh(); pushToast({ message: "已连接", type: "success" }); } catch (e) { pushToast({ message: (e as { message?: string })?.message ?? String(e), type: "error" }); } finally { setBusy(id, "connect", false); }
   };
   const handleDisconnect = async (id: string) => {
     const b = getChannelsBridge(); if (!b) return;
-    try { await b.disconnect({ id }); await refresh(); } catch (e) { alert((e as { message?: string })?.message ?? String(e)); }
+    setBusy(id, "disconnect", true);
+    try { await b.disconnect({ id }); await refresh(); pushToast({ message: "已断开", type: "success" }); } catch (e) { pushToast({ message: (e as { message?: string })?.message ?? String(e), type: "error" }); } finally { setBusy(id, "disconnect", false); }
   };
   const handleTest = async (id: string) => {
     const b = getChannelsBridge(); if (!b) return;
+    setBusy(id, "test", true);
     try {
       const res = await b.test({ id }) as { ok: boolean; error?: string };
-      alert(res.ok ? "连接测试通过" : `测试失败: ${res.error ?? "未知"}`);
-    } catch (e) { alert((e as { message?: string })?.message ?? String(e)); }
+      pushToast({ message: res.ok ? "连接正常" : `测试失败：${res.error ?? "未知"}`, type: res.ok ? "success" : "error" });
+    } catch (e) { pushToast({ message: (e as { message?: string })?.message ?? String(e), type: "error" }); } finally { setBusy(id, "test", false); }
   };
   const handleSyncNow = async (id: string) => {
     const b = getChannelsBridge(); if (!b) return;
+    setBusy(id, "sync", true);
     try {
       const res = await b.syncNow({ id }) as { added: number; durationMs: number };
-      alert(`同步完成：新增 ${res.added} 封`);
+      pushToast({ message: `已同步，新增 ${res.added} 封邮件`, type: "success" });
       await refresh();
-    } catch (e) { alert((e as { message?: string })?.message ?? String(e)); }
+    } catch (e) { pushToast({ message: (e as { message?: string })?.message ?? String(e), type: "error" }); } finally { setBusy(id, "sync", false); }
   };
   const handleRemove = async (id: string, displayName: string) => {
     const cfg = channels.find(c => c.config.id === id)?.config;
     const typeLabel = cfg?.channel === "gmail" ? "Gmail 账号" : cfg?.channel === "qq-mail" ? "QQ 邮箱账号" : "QQ Bot 配置";
-    if (!confirm(`确定删除该${typeLabel}「${displayName}」？`)) return;
-    const b = getChannelsBridge(); if (!b) return;
-    try { await b.remove({ id }); await refresh(); } catch (e) { alert((e as { message?: string })?.message ?? String(e)); }
+    useConfirmStore.getState().confirm({
+      title: `删除「${displayName}」？`,
+      description: `确定删除该${typeLabel}「${displayName}」？删除后无法恢复。`,
+      danger: true,
+      confirmLabel: "删除",
+      onConfirm: async () => {
+        setBusy(id, "remove", true);
+        const b = getChannelsBridge(); if (!b) { setBusy(id, "remove", false); return; }
+        try { await b.remove({ id }); await refresh(); pushToast({ message: "已删除", type: "success" }); } catch (e) { pushToast({ message: (e as { message?: string })?.message ?? String(e), type: "error" }); } finally { setBusy(id, "remove", false); }
+      },
+    });
   };
   const handleToggleEnabled = async (id: string, enabled: boolean) => {
     const b = getChannelsBridge(); if (!b) return;
-    try { await b.setEnabled({ id, enabled }); await refresh(); } catch (e) { alert((e as { message?: string })?.message ?? String(e)); }
+    setBusy(id, "toggle", true);
+    try { await b.setEnabled({ id, enabled }); await refresh(); pushToast({ message: enabled ? "已启用" : "已停用", type: "success" }); } catch (e) { pushToast({ message: (e as { message?: string })?.message ?? String(e), type: "error" }); } finally { setBusy(id, "toggle", false); }
   };
 
   if (loading) return <p className="text-xs text-sandrift">加载中...</p>;
@@ -112,9 +134,9 @@ export function ChannelSettings() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h3 className="text-sm font-bold text-charcoal">消息渠道</h3>
-        <button type="button" onClick={() => setAddOpen(true)} data-testid="channel-add" data-channel-add="generic" className="h-8 px-4 bg-charcoal hover:bg-black text-white text-xs font-bold rounded-lg flex items-center gap-1.5 transition-colors duration-[var(--motion-fast)] ease-[var(--ease-standard)] ux-press">
+        <Button variant="primary" size="sm" onClick={() => setAddOpen(true)} data-testid="channel-add" data-channel-add="generic">
           <Plus className="w-3.5 h-3.5" />添加渠道
-        </button>
+        </Button>
         {/* Legacy test id kept for backward compat */}
         <span data-testid="channel-add-qq" className="hidden" />
       </div>
@@ -162,23 +184,22 @@ export function ChannelSettings() {
               </div>
               <div className="flex items-center gap-1.5 flex-wrap">
                 {config.channel === "qq-bot" ? (
-                  <button type="button" onClick={() => setEditTarget({ config, health })} data-testid={`channel-edit-${config.id}`} className="h-7 px-3 bg-white border border-line text-charcoal text-xs font-bold rounded-lg hover:bg-alabaster flex items-center gap-1 transition-colors duration-[var(--motion-fast)] ease-[var(--ease-standard)] ux-press"> <Settings2 className="w-3 h-3" />配置</button>
-                ) : (
-                  <button type="button" onClick={() => handleTest(config.id)} data-testid={`channel-test-${config.id}`} className="h-7 px-3 bg-white border border-line text-charcoal text-xs font-bold rounded-lg hover:bg-alabaster flex items-center gap-1 transition-colors duration-[var(--motion-fast)] ease-[var(--ease-standard)] ux-press"><TestTube2 className="w-3 h-3" />测试</button>
-                )}
-                <button type="button" onClick={() => handleTest(config.id)} data-testid={`channel-test-${config.id}`} className={cn("h-7 px-3 bg-white border border-line text-charcoal text-xs font-bold rounded-lg hover:bg-alabaster flex items-center gap-1 transition-colors duration-[var(--motion-fast)] ease-[var(--ease-standard)] ux-press", config.channel !== "qq-bot" ? "hidden" : "")}><TestTube2 className="w-3 h-3" />测试连接</button>
+                  <Button variant="secondary" size="sm" onClick={() => setEditTarget({ config, health })} data-testid={`channel-edit-${config.id}`}> <Settings2 className="w-3 h-3" />配置</Button>
+                ) : null}
+                <Button variant="secondary" size="sm" loading={isBusy(config.id, "test")} loadingLabel="正在测试" onClick={() => handleTest(config.id)} data-testid={`channel-test-${config.id}`}><TestTube2 className="w-3 h-3" />{config.channel === "qq-bot" ? "测试连接" : "测试"}</Button>
                 {(config.channel === "gmail" || config.channel === "qq-mail") && (
-                  <button type="button" onClick={() => handleSyncNow(config.id)} data-testid={`channel-sync-${config.id}`} className="h-7 px-3 bg-white border border-line text-charcoal text-xs font-bold rounded-lg hover:bg-alabaster flex items-center gap-1 transition-colors duration-[var(--motion-fast)] ease-[var(--ease-standard)] ux-press"><RefreshCw className="w-3 h-3" />立即同步</button>
+                  <Button variant="secondary" size="sm" loading={isBusy(config.id, "sync")} loadingLabel="正在同步" onClick={() => handleSyncNow(config.id)} data-testid={`channel-sync-${config.id}`}><RefreshCw className="w-3 h-3" />立即同步</Button>
                 )}
                 {health.state === "connected" ? (
-                  <button type="button" onClick={() => handleDisconnect(config.id)} data-testid={`channel-disconnect-${config.id}`} className="h-7 px-3 bg-white border border-line text-charcoal text-xs font-bold rounded-lg hover:bg-alabaster flex items-center gap-1 transition-colors duration-[var(--motion-fast)] ease-[var(--ease-standard)] ux-press"><Power className="w-3 h-3" />断开</button>
+                  <Button variant="secondary" size="sm" loading={isBusy(config.id, "disconnect")} loadingLabel="断开中" onClick={() => handleDisconnect(config.id)} data-testid={`channel-disconnect-${config.id}`}><Power className="w-3 h-3" />断开</Button>
                 ) : (
-                  <button type="button" onClick={() => handleConnect(config.id)} data-testid={`channel-connect-${config.id}`} className="h-7 px-3 bg-charcoal text-white text-xs font-bold rounded-lg hover:bg-black flex items-center gap-1 transition-colors duration-[var(--motion-fast)] ease-[var(--ease-standard)] ux-press"><Plug2 className="w-3 h-3" />连接</button>
+                  <Button variant="primary" size="sm" loading={isBusy(config.id, "connect")} loadingLabel="正在连接" onClick={() => handleConnect(config.id)} data-testid={`channel-connect-${config.id}`}><Plug2 className="w-3 h-3" />连接</Button>
                 )}
-                <button type="button" onClick={() => handleRemove(config.id, config.displayName)} data-testid={`channel-remove-${config.id}`} className="h-7 px-3 bg-white border border-line text-danger text-xs font-bold rounded-lg hover:bg-alabaster transition-colors duration-[var(--motion-fast)] ease-[var(--ease-standard)] ux-press"><Trash2 className="w-3 h-3" /></button>
-                <label className="ml-auto flex items-center gap-1.5 text-xs">
-                  <input type="checkbox" checked={config.enabled} onChange={(e) => handleToggleEnabled(config.id, e.target.checked)} /> 启用
-                </label>
+                <Button variant="secondary" size="sm" loading={isBusy(config.id, "remove")} onClick={() => handleRemove(config.id, config.displayName)} data-testid={`channel-remove-${config.id}`} className="text-danger hover:bg-danger-bg"><Trash2 className="w-3 h-3" /></Button>
+                <div className="ml-auto flex items-center gap-2">
+                  <span className="text-xs text-sandrift">启用</span>
+                  <Switch checked={config.enabled} onChange={(v) => handleToggleEnabled(config.id, v)} label="启用" disabled={isBusy(config.id, "toggle")} />
+                </div>
               </div>
             </div>
           ))}

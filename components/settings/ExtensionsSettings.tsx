@@ -10,6 +10,8 @@ import { Dialog } from "@/components/ui/Dialog";
 import { SkillDistillDialog } from "@/components/kiro/SkillDistillDialog";
 import { ChannelSettings } from "@/components/settings/ChannelSettings";
 import { extractWorkflowTrace } from "@/lib/ai/skills/workflowTrace";
+import { useToastStore } from "@/store/useToastStore";
+import { useConfirmStore } from "@/store/useConfirmStore";
 
 type SkillListItem = {
   name: string;
@@ -179,13 +181,21 @@ export function ExtensionsSettings() {
   const handleSkillDelete = async (name: string) => {
     const bridge = getSkillBridge();
     if (!bridge) return;
-    if (!confirm(`确定删除 Skill "${name}"？此操作不可撤销。`)) return;
-    try {
-      await bridge.delete({ name });
-      await refreshSkills();
-    } catch (e) {
-      alert(`删除失败：${(e as { message?: string })?.message ?? String(e)}`);
-    }
+    useConfirmStore.getState().confirm({
+      title: `删除「${name}」？`,
+      description: `确定删除 Skill "${name}"？此操作不可撤销。`,
+      danger: true,
+      confirmLabel: "删除",
+      onConfirm: async () => {
+        try {
+          await bridge.delete({ name });
+          await refreshSkills();
+          useToastStore.getState().pushToast({ message: "已删除", type: "success" });
+        } catch (e) {
+          useToastStore.getState().pushToast({ message: `删除失败：${(e as { message?: string })?.message ?? String(e)}`, type: "error" });
+        }
+      },
+    });
   };
 
   const handleSkillTest = async (name: string) => {
@@ -205,9 +215,12 @@ export function ExtensionsSettings() {
     if (!bridge) return;
     try {
       const res = (await bridge.import()) as { cancelled?: boolean };
-      if (!res.cancelled) await refreshSkills();
+      if (!res.cancelled) {
+        await refreshSkills();
+        useToastStore.getState().pushToast({ message: "已导入", type: "success" });
+      }
     } catch (e) {
-      alert(`导入失败：${(e as { message?: string })?.message ?? String(e)}`);
+      useToastStore.getState().pushToast({ message: `导入失败：${(e as { message?: string })?.message ?? String(e)}`, type: "error" });
     }
   };
 
@@ -223,8 +236,9 @@ export function ExtensionsSettings() {
       a.download = `${name}-SKILL.md`;
       a.click();
       URL.revokeObjectURL(url);
+      useToastStore.getState().pushToast({ message: "已导出", type: "success" });
     } catch (e) {
-      alert(`导出失败：${(e as { message?: string })?.message ?? String(e)}`);
+      useToastStore.getState().pushToast({ message: `导出失败：${(e as { message?: string })?.message ?? String(e)}`, type: "error" });
     }
   };
 
@@ -655,18 +669,33 @@ function McpDetailDialog({ connection, onOpenChange, onRefresh }: { connection: 
     if (!connection) return;
     const bridge = getMcpBridge();
     if (!bridge) return;
+    if (action === "remove") {
+      useConfirmStore.getState().confirm({
+        title: `删除「${connection.config.name}」？`,
+        description: `确定删除 MCP "${connection.config.name}"？删除后无法恢复。`,
+        danger: true,
+        confirmLabel: "删除",
+        onConfirm: async () => {
+          try {
+            await bridge.remove({ id: connection.config.id });
+            onRefresh();
+            onOpenChange(false);
+            useToastStore.getState().pushToast({ message: "已删除", type: "success" });
+          } catch (e) {
+            useToastStore.getState().pushToast({ message: (e as Error).message ?? String(e), type: "error" });
+          }
+        },
+      });
+      return;
+    }
     try {
       if (action === "connect") await bridge.connect({ id: connection.config.id });
       if (action === "disconnect") await bridge.disconnect({ id: connection.config.id });
-      if (action === "remove") {
-        if (!confirm(`确定删除 MCP "${connection.config.name}"？`)) return;
-        await bridge.remove({ id: connection.config.id });
-      }
       if (action === "toggle") await bridge.setEnabled({ id: connection.config.id, enabled: !connection.config.enabled });
       onRefresh();
-      if (action === "remove") onOpenChange(false);
+      useToastStore.getState().pushToast({ message: action === "connect" ? "已连接" : action === "disconnect" ? "已断开" : "已更新", type: "success" });
     } catch (e) {
-      alert((e as Error).message ?? String(e));
+      useToastStore.getState().pushToast({ message: (e as Error).message ?? String(e), type: "error" });
     }
   };
 
