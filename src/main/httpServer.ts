@@ -3,6 +3,7 @@ import { pathToFileURL } from "node:url";
 import { join } from "node:path";
 import { app } from "electron";
 import { randomUUID } from "node:crypto";
+import { canonicalRendererOrigin } from "@/lib/security/rendererOrigin";
 import { handleChat } from "@/app/api/ai/chat/route";
 import { handleCompact } from "@/app/api/ai/compact/route";
 import { handleTest } from "@/app/api/ai/test/route";
@@ -104,17 +105,18 @@ async function sendWebResponse(
 }
 
 /** 仅允许的 Origin：app://bundle（生产）与当前 ELECTRON_RENDERER_URL（开发） */
-function isTrustedOrigin(origin: string | undefined): boolean {
+export function isTrustedOrigin(origin: string | undefined): boolean {
   if (!origin) return false;
-  if (origin === "app://bundle") return true;
-  if (origin === "app://bundle/") return true;
-  if (origin.startsWith("app://bundle")) return false; // 仅允许精确 app://bundle
-  // ELECTRON_RENDERER_URL 为 dev 下 http://localhost:5173 等
+  const canonical = canonicalRendererOrigin(origin);
+  if (canonical === "app://bundle") return true;
   const devOrigin = process.env.ELECTRON_RENDERER_URL;
   if (devOrigin) {
-    if (origin === devOrigin) return true;
-    // 允许 dev origin 仅精确匹配，防止任意 localhost 端口被信任
-    if (origin === devOrigin.replace(/\/$/, "")) return true;
+    const devCanonical = canonicalRendererOrigin(devOrigin);
+    if (canonical && devCanonical && canonical === devCanonical) return true;
+    try {
+      const devO = new URL(devOrigin).origin;
+      if (canonical === devO) return true;
+    } catch {}
   }
   return false;
 }

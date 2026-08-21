@@ -18,6 +18,9 @@ export const KIRO_PROJECT_FILES_STORE = "project-files";
 let dbPromise: Promise<IDBDatabase> | null = null;
 
 export function openKiroDB(): Promise<IDBDatabase> {
+  if (typeof indexedDB === "undefined") {
+    return Promise.reject(new Error("indexedDB not available in this environment"));
+  }
   if (dbPromise) return dbPromise;
   dbPromise = new Promise((resolve, reject) => {
     const request = indexedDB.open(KIRO_DB_NAME, KIRO_DB_VERSION);

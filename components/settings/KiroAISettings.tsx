@@ -30,7 +30,6 @@ import {
 import { getWebPdfVisionModelOptions } from "@/lib/ai/web/vision/models";
 import { cn } from "@/lib/utils";
 import { apiUrl } from "@/lib/desktop/apiBase";
-import { requestDesktopApi } from "@/lib/desktop/apiClient";
 import { AI } from "@/lib/ai/config";
 
 const PROVIDER_OPTIONS: { value: AIProviderId; label: string }[] = [
@@ -120,12 +119,7 @@ export function KiroAISettings({ reveal }: { reveal?: { key: string; seq: number
     let cancelled = false;
     const doFetch = async () => {
       try {
-        let res: Response;
-        try {
-          res = await requestDesktopApi("/api/ai/web-search/status");
-        } catch {
-          res = await fetch(apiUrl("/api/ai/web-search/status"));
-        }
+        const res = await fetch(apiUrl("/api/ai/web-search/status"));
         const data = res.ok ? ((await res.json()) as { serverConfigured?: boolean } | null) : null;
         if (!cancelled && data && typeof data.serverConfigured === "boolean") {
           setServerSearchConfigured(data.serverConfigured);
@@ -181,28 +175,17 @@ export function KiroAISettings({ reveal }: { reveal?: { key: string; seq: number
       console.log(`[classflow] AI test provider=${provider} model=${model} endpoint=${endpointHostname}`);
     }
     try {
-      let res: Response;
-      const body = JSON.stringify({
-        provider,
-        model,
-        apiKey: getSessionApiKey(provider),
-        customConfig: custom,
-        timeoutMs: 10_000,
+      const res = await fetch(apiUrl("/api/ai/test"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          provider,
+          model,
+          apiKey: getSessionApiKey(provider),
+          customConfig: custom,
+          timeoutMs: 10_000,
+        }),
       });
-      const headers = { "Content-Type": "application/json" };
-      try {
-        res = await requestDesktopApi("/api/ai/test", {
-          method: "POST",
-          headers,
-          body,
-        });
-      } catch {
-        res = await fetch(apiUrl("/api/ai/test"), {
-          method: "POST",
-          headers,
-          body,
-        });
-      }
       const data = (await res.json()) as { ok: boolean; code?: AIErrorCode; message?: string };
       if (process.env.NODE_ENV !== "production") {
         console.log(`[classflow] AI test status=${res.status} ok=${data.ok} code=${data.code ?? "-"} endpoint=${endpointHostname}`);
@@ -227,25 +210,14 @@ export function KiroAISettings({ reveal }: { reveal?: { key: string; seq: number
   const runWebSearchTest = async () => {
     setWebSearchTest({ status: "testing" });
     try {
-      let res: Response;
-      const body = JSON.stringify({
-        credentialMode: webSearchCredentialMode,
-        apiKey: webSearchCredentialMode === "byok" ? getSessionWebSearchApiKey() : undefined,
+      const res = await fetch(apiUrl("/api/ai/web-search/test"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          credentialMode: webSearchCredentialMode,
+          apiKey: webSearchCredentialMode === "byok" ? getSessionWebSearchApiKey() : undefined,
+        }),
       });
-      const headers = { "Content-Type": "application/json" };
-      try {
-        res = await requestDesktopApi("/api/ai/web-search/test", {
-          method: "POST",
-          headers,
-          body,
-        });
-      } catch {
-        res = await fetch(apiUrl("/api/ai/web-search/test"), {
-          method: "POST",
-          headers,
-          body,
-        });
-      }
       const data = (await res.json()) as { ok: boolean; code?: string; message?: string };
       if (data.ok) setWebSearchTest({ status: "success" });
       else setWebSearchTest({ status: "error", message: data.message || "搜索服务不可用" });

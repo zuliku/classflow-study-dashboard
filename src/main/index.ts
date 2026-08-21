@@ -13,6 +13,8 @@ import { registerSkillIpc } from "./skills/skillIpc";
 import { registerMcpIpc } from "./mcp/ipc";
 import { registerInvocationIpc } from "./security/invocationIpc";
 import { registerChannelIpc } from "./channels/ipc";
+import { installLocalApiCapabilityInjector } from "./security/localApiCapability";
+import { isTrustedRendererUrl, isValidAppBundleRequestUrl } from "@/lib/security/rendererOrigin";
 
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
 
@@ -36,6 +38,8 @@ function getAllowedOrigins(apiBase: string): { allowedApiOrigin: string; allowed
   return { allowedApiOrigin, allowedDevOrigin };
 }
 
+let disposeLocalApiInjector: (() => void) | null = null;
+
 function createWindow(apiBase: string, apiCapability: string): void {
   const { allowedApiOrigin, allowedDevOrigin } = getAllowedOrigins(apiBase);
 
@@ -58,8 +62,19 @@ function createWindow(apiBase: string, apiCapability: string): void {
   });
 
   // CSP：根据环境选择 production / development 策略，通过 response header 真正下发
+  // Runtime exact apiOrigin — must match Local API capability authority
   const isDev = Boolean(process.env.ELECTRON_RENDERER_URL);
-  const cspHeader = getCspHeader(isDev);
+  const apiOriginForCsp = (() => {
+    try {
+      return new URL(apiBase).origin;
+    } catch {
+      return "";
+    }
+  })();
+  const cspHeader = getCspHeader(isDev, {
+    apiOrigin: apiOriginForCsp,
+    devOrigin: process.env.ELECTRON_RENDERER_URL,
+  });
   const ses = mainWindow.webContents.session;
   ses.webRequest.onHeadersReceived((details, callback) => {
     const headers = details.responseHeaders ?? {};
@@ -67,6 +82,35 @@ function createWindow(apiBase: string, apiCapability: string): void {
     headers["content-security-policy"] = [cspHeader];
     callback({ responseHeaders: headers });
   });
+
+  // Local API capability injection — Main owns capability, Renderer never sees it
+  // Pure policy extracted to src/main/security/localApiCapability.ts, injection via session.webRequest
+  if (disposeLocalApiInjector) {
+    try {
+      disposeLocalApiInjector();
+    } catch {}
+    disposeLocalApiInjector = null;
+  }
+  const apiOrigin = new URL(apiBase).origin;
+  const trustedRendererOrigins: string[] = ["app://bundle", "app://bundle/"];
+  if (process.env.ELECTRON_RENDERER_URL) {
+    const devOrigin = new URL(process.env.ELECTRON_RENDERER_URL).origin;
+    trustedRendererOrigins.push(devOrigin, `${devOrigin}/`);
+  }
+  disposeLocalApiInjector = installLocalApiCapabilityInjector(
+    ses,
+    apiBase,
+    apiCapability,
+    () => mainWindow?.webContents.id,
+    () => {
+      try {
+        return mainWindow?.webContents.getURL() ?? undefined;
+      } catch {
+        return undefined;
+      }
+    },
+    () => trustedRendererOrigins
+  );
 
   // 最大化状态同步给渲染进程（TitleBar 切换 最大化/还原 图标）
   mainWindow.on("maximize", () => mainWindow?.webContents.send("window:maximized-changed", true));
@@ -126,15 +170,14 @@ function validateWindowSender(channel: string, sender: Electron.WebContents, api
       return "";
     }
   })();
-  // Sanitized protocol/origin category (no query, no secrets)
+  // Sanitized protocol/origin category (no query, no secrets) — use shared canonical policy
   let protocolCategory = "unknown";
   let originCategory = "unknown";
   try {
     const parsed = new URL(rawUrl);
     protocolCategory = parsed.protocol;
-    if (rawUrl.startsWith("app://")) originCategory = "app";
-    else if (allowedApiOrigin && rawUrl.startsWith(allowedApiOrigin)) originCategory = "api";
-    else if (allowedDevOrigin && rawUrl.startsWith(allowedDevOrigin)) originCategory = "dev";
+    if (isTrustedRendererUrl(rawUrl, { allowedDevOrigin }) && parsed.protocol === "app:") originCategory = "app";
+    else if (isTrustedRendererUrl(rawUrl, { allowedDevOrigin })) originCategory = "trusted-renderer";
     else originCategory = "untrusted";
   } catch {
     protocolCategory = "malformed";
@@ -251,7 +294,16 @@ app.whenReady().then(async () => {
 
   // app:// → out/renderer 静态资源（路径穿越防护：仅允许 renderer 目录内文件）
   protocol.handle("app", (request) => {
-    const { pathname } = new URL(request.url);
+    if (!isValidAppBundleRequestUrl(request.url)) {
+      return new Response("forbidden", { status: 403 });
+    }
+    let url: URL;
+    try {
+      url = new URL(request.url);
+    } catch {
+      return new Response("forbidden", { status: 403 });
+    }
+    const { pathname } = url;
     const decoded = decodeURIComponent(pathname);
     const target = normalize(join(RENDERER_DIR, decoded === "/" ? "/index.html" : decoded));
     if (target !== RENDERER_DIR && !target.startsWith(RENDERER_DIR + sep)) {

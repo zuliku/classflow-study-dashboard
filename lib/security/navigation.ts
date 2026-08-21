@@ -4,6 +4,8 @@
  * 内部允许：app:// / 当前 Vite dev origin / 127.0.0.1 本地 API origin（绑定到本次启动实际端口）。
  */
 
+import { isTrustedRendererUrl } from "./rendererOrigin";
+
 export type NavigationVerdict =
   | { kind: "allow-internal" }
   | { kind: "allow-external" }
@@ -49,15 +51,22 @@ export function decideNavigation(ctx: NavigationContext): NavigationVerdict {
     return { kind: "deny", reason: `blocked protocol: ${proto}` };
   }
 
-  // 内部允许
-  if (proto === "app:") {
+  // 内部允许：仅精确的 app://bundle 或精确的 dev origin
+  // 使用共享 canonical 校验，避免 startsWith 误判
+  if (isTrustedRendererUrl(raw, { allowedDevOrigin: ctx.allowedDevOrigin })) {
     return { kind: "allow-internal" };
   }
-  if (ctx.allowedApiOrigin && raw.startsWith(ctx.allowedApiOrigin)) {
-    return { kind: "allow-internal" };
-  }
-  if (ctx.allowedDevOrigin && raw.startsWith(ctx.allowedDevOrigin)) {
-    return { kind: "allow-internal" };
+
+  // Local API origin 不作为普通页面导航的 allow-internal
+  // 若为 local API 的精确 origin，视为 deny（非用户可见页面，不应 shell.openExternal）
+  if (ctx.allowedApiOrigin) {
+    try {
+      const apiOrigin = new URL(ctx.allowedApiOrigin).origin;
+      const rawOrigin = new URL(raw).origin;
+      if (rawOrigin === apiOrigin) {
+        return { kind: "deny", reason: "local-api-navigation" };
+      }
+    } catch {}
   }
 
   // 外部允许：仅 http/https
