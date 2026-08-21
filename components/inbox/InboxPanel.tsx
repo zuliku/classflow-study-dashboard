@@ -13,6 +13,7 @@ import { EmailReplyDialog } from "@/components/inbox/EmailReplyDialog";
 import { ChannelBrandIcon } from "@/components/icons/ChannelBrandIcon";
 import { useExitPresenceList } from "@/lib/useExitPresenceList";
 import { ExitCollapse } from "@/components/ui/ExitCollapse";
+import { Button } from "@/components/ui/Button";
 
 export function InboxPanel({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
   const items = useInboxStore((s) => s.items);
@@ -65,30 +66,15 @@ export function InboxPanel({ open, onOpenChange }: { open: boolean; onOpenChange
           {unreadCount > 0 && <span className="px-2 py-0.5 bg-charcoal text-white text-[11px] font-bold rounded-full">{unreadCount}</span>}
         </div>
         <div className="flex items-center gap-1">
-          <button
-            type="button"
-            onClick={() => setFilter("unread")}
-            className={cn("h-7 px-3 text-xs font-bold rounded-lg border", filter === "unread" ? "bg-charcoal text-white border-charcoal" : "bg-white text-charcoal border-line")}
-            data-testid="inbox-filter-unread"
-          >
+          <Button variant={filter === "unread" ? "primary" : "secondary"} size="sm" onClick={() => setFilter("unread")} data-testid="inbox-filter-unread">
             未读
-          </button>
-          <button
-            type="button"
-            onClick={() => setFilter("all")}
-            className={cn("h-7 px-3 text-xs font-bold rounded-lg border", filter === "all" ? "bg-charcoal text-white border-charcoal" : "bg-white text-charcoal border-line")}
-            data-testid="inbox-filter-all"
-          >
+          </Button>
+          <Button variant={filter === "all" ? "primary" : "secondary"} size="sm" onClick={() => setFilter("all")} data-testid="inbox-filter-all">
             全部
-          </button>
-          <button
-            type="button"
-            onClick={() => setFilter("archived")}
-            className={cn("h-7 px-3 text-xs font-bold rounded-lg border", filter === "archived" ? "bg-charcoal text-white border-charcoal" : "bg-white text-charcoal border-line")}
-            data-testid="inbox-filter-archived"
-          >
+          </Button>
+          <Button variant={filter === "archived" ? "primary" : "secondary"} size="sm" onClick={() => setFilter("archived")} data-testid="inbox-filter-archived">
             归档
-          </button>
+          </Button>
           <button
             type="button"
             onClick={() => onOpenChange(false)}

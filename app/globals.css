@@ -45,6 +45,11 @@
   --motion-snap: 90ms;
   --ease-standard: cubic-bezier(0.2, 0.8, 0.2, 1);
   --ease-emphasized: cubic-bezier(0.22, 1, 0.36, 1);
+
+  /* Kiro Brand Motion tokens (V2 unified) */
+  --kiro-flow-ambient: 6.5s;
+  --kiro-flow-active: 5.2s;
+  --kiro-flow-working: 3.7s;
 }
 
 body {
@@ -448,26 +453,51 @@ html[data-motion-effective="reduced"] .ux-channel-provider-enter {
 }
 
 .kiro-ring-animated {
-  animation: flow-angle-spin 7s linear infinite;
+  animation: flow-angle-spin var(--kiro-flow-ambient) linear infinite;
 }
 
-/* 主 Sidebar Kiro Featured：Idle 静态品牌细边，Busy 才运行 sweep */
+/* Kiro Brand Motion System V2 — unified ambient/active/working */
+[data-kiro-flow="ambient"] .kiro-ring,
+.kiro-ring[data-kiro-flow="ambient"] {
+  animation: flow-angle-spin var(--kiro-flow-ambient) linear infinite;
+}
+[data-kiro-flow="active"] .kiro-ring,
+.kiro-ring[data-kiro-flow="active"] {
+  animation: flow-angle-spin var(--kiro-flow-active) linear infinite;
+}
+[data-kiro-flow="working"] .kiro-ring,
+.kiro-ring[data-kiro-flow="working"] {
+  animation: flow-angle-spin var(--kiro-flow-working) linear infinite;
+}
+
+/* Sidebar Kiro Featured — ambient always, active when kiro tab, working when busy */
+.sidebar-kiro[data-kiro-flow="ambient"] .kiro-ring { opacity: 0.78; }
+.sidebar-kiro[data-kiro-flow="active"] .kiro-ring { opacity: 0.88; }
+.sidebar-kiro[data-kiro-flow="working"] .kiro-ring { opacity: 0.92; }
 .kiro-featured-flow {
-  /* idle static */
+  animation: flow-angle-spin var(--kiro-flow-ambient) linear infinite;
+  opacity: 0.78;
 }
-.kiro-featured-flow-busy {
-  animation: flow-angle-spin 4.5s linear infinite;
+.kiro-featured-flow[data-kiro-flow="active"] {
+  animation-duration: var(--kiro-flow-active);
+  opacity: 0.88;
+}
+.kiro-featured-flow[data-kiro-flow="working"] {
+  animation-duration: var(--kiro-flow-working);
+  opacity: 0.92;
 }
 
-/* Performance（Phase 2）：Sidebar width morph 期间暂停品牌流光（230ms 无需持续 repaint）；
-   morph 结束（data-motion-active 回落 false）后自动继续。 */
-.sidebar-shell[data-motion-active="true"] .kiro-featured-flow {
+/* Performance：Sidebar width morph 期间暂停品牌流光 */
+.sidebar-shell[data-motion-active="true"] .kiro-ring,
+.sidebar-shell[data-motion-active="true"] [data-kiro-flow] .kiro-ring {
   animation-play-state: paused;
 }
 
 /* Reduced Motion：关闭动画，保留静态品牌细边 */
 html[data-motion-effective="reduced"] .kiro-ring-animated,
-html[data-motion-effective="reduced"] .kiro-featured-flow {
+html[data-motion-effective="reduced"] .kiro-featured-flow,
+html[data-motion-effective="reduced"] [data-kiro-flow] .kiro-ring,
+html[data-motion-effective="reduced"] .kiro-ring[data-kiro-flow] {
   animation: none;
 }
 
@@ -556,33 +586,21 @@ html[data-motion-effective="reduced"] .kiro-agent-logo-glow-soft {
   animation: none;
 }
 
-/* Thread Rail Soft Plate（方案 A）：Idle 静态细边，Hover 轻微提升，Active 静态加强，Busy 才运行 sweep */
-.kiro-rail-plate .kiro-ring {
-  opacity: 0.45;
-}
+/* Thread Rail — unified ambient/active/working via data-kiro-flow (slightly slower ambient) */
+.kiro-rail-plate[data-kiro-flow="ambient"] .kiro-ring { opacity: 0.60; animation-duration: 7.8s; }
+.kiro-rail-plate[data-kiro-flow="active"] .kiro-ring { opacity: 0.85; }
+.kiro-rail-plate[data-kiro-flow="working"] .kiro-ring { opacity: 0.75; }
+.group\/plate:hover .kiro-rail-plate[data-kiro-flow="ambient"] .kiro-ring,
+.group\/plate:focus-visible .kiro-rail-plate[data-kiro-flow="ambient"] .kiro-ring { opacity: 0.70; }
+.group\/plate:hover .kiro-rail-plate[data-kiro-flow="active"] .kiro-ring { opacity: 0.90; }
+html[data-motion-effective="reduced"] .kiro-rail-plate .kiro-ring { animation: none; opacity: 0.6; }
 
-.kiro-rail-plate-busy .kiro-ring {
-  animation: flow-angle-spin 7s linear infinite;
-  opacity: 0.7;
-}
-
-.group\/plate:hover .kiro-rail-plate .kiro-ring,
-.group\/plate:focus-visible .kiro-rail-plate .kiro-ring {
-  opacity: 0.6;
-}
-.group\/plate:hover .kiro-rail-plate-busy .kiro-ring {
-  opacity: 0.8;
-}
-
-.kiro-rail-plate-active .kiro-ring {
-  opacity: 0.85;
-}
-
-html[data-motion-effective="reduced"] .kiro-rail-plate .kiro-ring,
-html[data-motion-effective="reduced"] .kiro-rail-plate-busy .kiro-ring {
-  animation: none;
-  opacity: 0.6;
-}
+/* Minimized Capsule — ambient vs working */
+.kiro-capsule[data-kiro-flow="ambient"] .kiro-ring { opacity: 0.74; }
+.kiro-capsule[data-kiro-flow="working"] .kiro-ring { opacity: 0.88; }
+.kiro-capsule[data-kiro-flow="ambient"]:hover .kiro-ring { opacity: 0.80; }
+.kiro-capsule[data-kiro-flow="working"]:hover .kiro-ring { opacity: 0.92; }
+html[data-motion-effective="reduced"] .kiro-capsule .kiro-ring { animation: none; opacity: 0.74; }
 
 
 

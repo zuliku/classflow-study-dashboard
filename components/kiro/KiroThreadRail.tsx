@@ -29,18 +29,19 @@ function KiroRailPlate({
 }) {
   const box = size === "sm" ? "w-8 h-8" : "w-10 h-10";
   const logo = size === "sm" ? "w-[18px] h-[18px]" : "w-6 h-6";
+  const flow: "ambient" | "active" | "working" = active ? "active" : "ambient";
   return (
     <span
+      data-kiro-flow={flow}
       className={cn(
         "relative inline-flex items-center justify-center rounded-xl overflow-hidden kiro-rail-plate",
-        active && "kiro-rail-plate-active",
         box,
         className
       )}
       aria-hidden="true"
     >
-      {/* 1px 品牌 perimeter：Idle 隐藏 / hover 慢速流光 / active 静态细边 */}
-      <span className="absolute inset-0 rounded-xl kiro-ring transition-opacity duration-[var(--motion-fast)]" />
+      {/* Kiro Brand Motion V2 — ambient always, active when expanded/current */}
+      <span data-kiro-flow={flow} className="absolute inset-0 rounded-xl kiro-ring" />
       <span className="relative w-full h-full rounded-[11px] bg-surface border border-line-soft flex items-center justify-center">
         <KiroLogoIcon className={cn(logo, "relative")} />
       </span>
