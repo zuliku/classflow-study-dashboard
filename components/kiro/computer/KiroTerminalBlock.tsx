@@ -175,9 +175,9 @@ export const KiroTerminalBlock = React.memo(function KiroTerminalBlock({
         </button>
       </div>
 
-      {/* Secure stdin: 本地终端输入 */}
-      {running && inputOpen && (
-        <div className="px-2.5 pb-1.5" data-testid="kiro-terminal-input">
+      {/* Secure stdin: 使用 DisclosureRegion，避免撑高跳变 */}
+      <DisclosureRegion open={running && inputOpen} innerClassName="px-2.5 pb-1.5">
+        <div data-testid="kiro-terminal-input" className="flex flex-col gap-1.5">
           <div className="flex items-center gap-1.5">
             <input
               type="text"
@@ -203,9 +203,9 @@ export const KiroTerminalBlock = React.memo(function KiroTerminalBlock({
               {inputSent ? "已发送" : inputBusy ? "发送中" : "发送"}
             </button>
           </div>
-          <p className="text-[10px] text-sandrift mt-1">内容仅发送给本地终端。</p>
+          <p className="text-[10px] text-sandrift">内容仅发送给本地终端。</p>
         </div>
-      )}
+      </DisclosureRegion>
 
       {/* Command preview（sanitized；等宽块） */}
       <div className="px-2.5 pb-1">

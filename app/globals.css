@@ -451,8 +451,11 @@ html[data-motion-effective="reduced"] .ux-channel-provider-enter {
   animation: flow-angle-spin 7s linear infinite;
 }
 
-/* 主 Sidebar Kiro Featured：常驻流光稍快（4.5s），元素静止、渐变角度动画 */
+/* 主 Sidebar Kiro Featured：Idle 静态品牌细边，Busy 才运行 sweep */
 .kiro-featured-flow {
+  /* idle static */
+}
+.kiro-featured-flow-busy {
   animation: flow-angle-spin 4.5s linear infinite;
 }
 
@@ -553,23 +556,30 @@ html[data-motion-effective="reduced"] .kiro-agent-logo-glow-soft {
   animation: none;
 }
 
-/* Thread Rail Soft Plate（方案 A）：Logo 浅色底座 + 常驻弱品牌流光（比主 Sidebar 更弱）。
-   Idle 0.45 → hover 0.7 → active 0.85；不使用任何 shadow。 */
+/* Thread Rail Soft Plate（方案 A）：Idle 静态细边，Hover 轻微提升，Active 静态加强，Busy 才运行 sweep */
 .kiro-rail-plate .kiro-ring {
   opacity: 0.45;
+}
+
+.kiro-rail-plate-busy .kiro-ring {
   animation: flow-angle-spin 7s linear infinite;
+  opacity: 0.7;
 }
 
 .group\/plate:hover .kiro-rail-plate .kiro-ring,
 .group\/plate:focus-visible .kiro-rail-plate .kiro-ring {
-  opacity: 0.7;
+  opacity: 0.6;
+}
+.group\/plate:hover .kiro-rail-plate-busy .kiro-ring {
+  opacity: 0.8;
 }
 
 .kiro-rail-plate-active .kiro-ring {
   opacity: 0.85;
 }
 
-html[data-motion-effective="reduced"] .kiro-rail-plate .kiro-ring {
+html[data-motion-effective="reduced"] .kiro-rail-plate .kiro-ring,
+html[data-motion-effective="reduced"] .kiro-rail-plate-busy .kiro-ring {
   animation: none;
   opacity: 0.6;
 }

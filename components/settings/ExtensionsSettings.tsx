@@ -286,7 +286,7 @@ export function ExtensionsSettings() {
           <TabButton active={activeTab === "channels"} onClick={() => setActiveTab("channels")} icon={MessageSquare} label="消息渠道" testId="extensions-tab-channels" />
         </div>
 
-        <div className="space-y-3" data-testid="extensions-skills-panel" data-setting-id="extensions-skills" hidden={activeTab !== "skills"}>
+        <div className={cn("space-y-3", activeTab === "skills" && "ux-page")} data-testid="extensions-skills-panel" data-setting-id="extensions-skills" hidden={activeTab !== "skills"}>
           <SettingsGroup
             title="Skills"
             description="将常用的 Kiro 工作流程保存为可复用能力。"
@@ -467,7 +467,7 @@ export function ExtensionsSettings() {
           </SettingsGroup>
         </div>
 
-        <div className="space-y-3" data-testid="extensions-mcp-panel" data-setting-id="extensions-mcp" hidden={activeTab !== "mcp"}>
+        <div className={cn("space-y-3", activeTab === "mcp" && "ux-page")} data-testid="extensions-mcp-panel" data-setting-id="extensions-mcp" hidden={activeTab !== "mcp"}>
           <SettingsGroup
             title="MCP"
             description="连接外部工具和数据服务，让 Kiro 在需要时调用。"
@@ -527,7 +527,7 @@ export function ExtensionsSettings() {
           </SettingsGroup>
         </div>
 
-        <div className="space-y-3" data-testid="extensions-channels-panel" data-setting-id="extensions-channels" hidden={activeTab !== "channels"}>
+        <div className={cn("space-y-3", activeTab === "channels" && "ux-page")} data-testid="extensions-channels-panel" data-setting-id="extensions-channels" hidden={activeTab !== "channels"}>
           <ChannelSettings />
         </div>
       </SettingsSection>

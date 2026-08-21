@@ -1,11 +1,12 @@
 "use client";
 
-import React from "react";
+import React, { useState } from "react";
 import { CalendarClock, CalendarDays, Plus, Check, ArrowDown, Undo2, PencilLine, Layers, ChevronDown, Bell, Timer } from "lucide-react";
 import { parseLocalDDL, getLocalDDLDate, getLocalDDLTime } from "@/lib/ddl";
 import { format } from "date-fns";
 import { zhCN } from "date-fns/locale";
 import { cn } from "@/lib/utils";
+import { DisclosureRegion } from "@/components/ui/DisclosureRegion";
 import type { WriteToolResult } from "@/lib/ai/tools/write/types";
 
 export type KiroActionCardVariant = "ddl" | "schedule" | "create" | "generic" | "change-set" | "reminder" | "focus-session";
@@ -46,11 +47,12 @@ export function KiroActionCard({ variant, heading, title, change, bullets, foote
   const isCreate = variant === "create";
   const showBullets = isCreate || variant === "change-set" || variant === "reminder" || variant === "focus-session";
 
+  const [detailsOpen, setDetailsOpen] = useState(false);
   return (
     <div
       data-testid="kiro-action-card"
       className={cn(
-        "max-w-md rounded-2xl bg-[#F7F5F5] border border-line p-3.5 space-y-2.5",
+        "max-w-md rounded-2xl bg-surface-soft border border-line p-3.5 space-y-2.5",
         // Motion V1：live 首次结构落位（kiro-structure-settle）；history 静态
         entering && "kiro-structure-settle"
       )}
@@ -83,22 +85,29 @@ export function KiroActionCard({ variant, heading, title, change, bullets, foote
         </ul>
       )}
 
-      {/* Change Set 明细（展开可见具体动作，不生成多张 Card） */}
+      {/* Change Set 明细：受控 disclosure + Chevron + DisclosureRegion */}
       {variant === "change-set" && details && details.length > 0 && (
-        <details className="pl-8 group">
-          <summary className="cursor-pointer text-[10px] font-semibold text-sandrift hover:text-charcoal transition-colors list-none flex items-center gap-1">
-            <ChevronDown className="w-3 h-3 transition-transform duration-[var(--motion-fast)] group-open:rotate-180" />
+        <div className="pl-8">
+          <button
+            type="button"
+            onClick={() => setDetailsOpen((v) => !v)}
+            aria-expanded={detailsOpen}
+            className="flex items-center gap-1 text-[10px] font-semibold text-sandrift hover:text-charcoal transition-colors"
+          >
+            <ChevronDown className={cn("w-3 h-3 transition-transform duration-[var(--motion-fast)]", detailsOpen && "rotate-180")} />
             查看明细
-          </summary>
-          <ul className="mt-1.5 space-y-1">
-            {details.map((d) => (
-              <li key={d.label} className="text-[10px] text-satin-grey flex items-center gap-1.5">
-                <span className="w-1 h-1 rounded-full bg-sandrift shrink-0" />
-                {d.label}
-              </li>
-            ))}
-          </ul>
-        </details>
+          </button>
+          <DisclosureRegion open={detailsOpen} innerClassName="mt-1.5">
+            <ul className="space-y-1">
+              {details.map((d) => (
+                <li key={d.label} className="text-[10px] text-satin-grey flex items-center gap-1.5">
+                  <span className="w-1 h-1 rounded-full bg-sandrift shrink-0" />
+                  {d.label}
+                </li>
+              ))}
+            </ul>
+          </DisclosureRegion>
+        </div>
       )}
 
       <div className="flex items-center justify-between pl-8 pt-1">
