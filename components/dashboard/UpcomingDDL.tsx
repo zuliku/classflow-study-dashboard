@@ -177,7 +177,8 @@ export function UpcomingDDL() {
                     "group flex items-center rounded-lg border border-line bg-surface-soft",
                     "cursor-pointer transition-colors duration-[var(--motion-fast)] ease-[var(--ease-standard)]",
                     "hover:bg-alabaster hover:border-line-strong",
-                    cardPadding
+                    cardPadding,
+                    density === "compact" ? "gap-x-2.5" : "gap-x-3"
                   )}
                   style={{ height: cardHeight }}
                 >
@@ -189,7 +190,7 @@ export function UpcomingDDL() {
                       {getPriorityMark(task.priority)}
                     </div>
                   </div>
-                  <div className="shrink-0 text-right">
+                  <div className="shrink-0 text-right min-w-[76px]">
                     <div className="text-[11px] font-bold text-danger/90 truncate">{relativeTime}</div>
                     <div className="text-[10px] text-sandrift tabular-nums mt-0.5">{format(ddlDate, "HH:mm")}</div>
                   </div>

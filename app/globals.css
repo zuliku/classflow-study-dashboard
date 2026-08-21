@@ -50,6 +50,14 @@
   --kiro-flow-ambient: 6.5s;
   --kiro-flow-active: 5.2s;
   --kiro-flow-working: 3.7s;
+
+  /* Overview Hero fold gap */
+  --overview-fold-gap: 24px;
+}
+@media (max-height: 720px) {
+  :root {
+    --overview-fold-gap: 16px;
+  }
 }
 
 body {

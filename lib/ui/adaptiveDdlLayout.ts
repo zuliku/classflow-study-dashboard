@@ -7,7 +7,8 @@ export interface AdaptiveDdlLayout {
 }
 
 export const MAX_DDL_PAGE_SIZE = 4;
-export const LIST_BREATHING_SPACE = 14;
+export const LIST_BREATHING_SPACE = 16;
+export const CARD_RENDER_SAFETY = 3;
 export const MAX_CARD_HEIGHT = 104;
 
 export const DDL_DENSITY_METRICS = {
@@ -23,15 +24,16 @@ export function resolveAdaptiveDdlLayout(input: { availableHeight: number; itemC
 
   const gap = 8;
   const breathing = LIST_BREATHING_SPACE;
+  const safety = CARD_RENDER_SAFETY;
 
   // PageSize is capped at 4, based on minimal readable height (compact)
   const minCard = DDL_DENSITY_METRICS.compact.cardHeight;
-  const maxVisibleByHeight = Math.max(1, Math.floor((availableHeight - breathing + gap) / (minCard + gap)));
+  const maxVisibleByHeight = Math.max(1, Math.floor((availableHeight - breathing - safety + gap) / (minCard + gap)));
   const pageSize = Math.min(maxVisibleByHeight, MAX_DDL_PAGE_SIZE, itemCount);
 
-  // Determine density and adaptive cardHeight based on usable height
+  // Determine density and adaptive cardHeight based on usable height (floor-safe)
   const visibleCount = pageSize;
-  const usableHeight = availableHeight - breathing - gap * Math.max(0, visibleCount - 1);
+  const usableHeight = availableHeight - breathing - safety - gap * Math.max(0, visibleCount - 1);
   const target = visibleCount > 0 ? usableHeight / visibleCount : DDL_DENSITY_METRICS.normal.cardHeight;
 
   let density: DdlDensity = "normal";
@@ -78,8 +80,8 @@ export function resolveAdaptiveDdlLayout(input: { availableHeight: number; itemC
     }
   }
 
-  // Clamp overall
-  cardHeight = Math.max(DDL_DENSITY_METRICS.compact.cardHeight, Math.min(cardHeight, MAX_CARD_HEIGHT));
+  // Clamp overall and floor-safe (never round-up beyond available)
+  cardHeight = Math.max(DDL_DENSITY_METRICS.compact.cardHeight, Math.min(Math.floor(cardHeight), MAX_CARD_HEIGHT));
 
   // If 1-2 cards and height would be huge, keep at spacious max and not fill
   if (visibleCount <= 2 && availableHeight > 400) {
@@ -87,5 +89,5 @@ export function resolveAdaptiveDdlLayout(input: { availableHeight: number; itemC
     if (cardHeight > spaciousMax) cardHeight = spaciousMax;
   }
 
-  return { pageSize, density, cardHeight: Math.round(cardHeight) };
+  return { pageSize, density, cardHeight: Math.floor(cardHeight) };
 }

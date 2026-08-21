@@ -266,8 +266,8 @@ export default function Home() {
               </div>
               ) : (
                 <>
-              {/* Overview Hero Section — xl viewport bounded, internal grid flex-1 */}
-              <section className="box-border flex flex-col shrink-0 min-h-0 p-4 pb-24 md:p-5 md:pb-5 xl:h-[calc(100dvh-4rem)] [@media(max-height:720px)]:!pt-2 [@media(max-height:720px)]:!pb-4">
+              {/* Overview Hero Section — viewport bounded with explicit fold gap */}
+              <section className="box-border flex flex-col shrink-0 min-h-0 p-4 pb-24 md:p-5 md:pb-5 xl:h-[calc(100dvh-4rem-24px)] xl:mb-6 xl:pb-0 [@media(max-height:720px)]:!h-[calc(100dvh-4rem-16px)] [@media(max-height:720px)]:!mb-4 [@media(max-height:720px)]:!pt-2 [@media(max-height:720px)]:!pb-0">
                 {/* 三卡 Grid：flex-1 eats remaining hero space, three cards same top/bottom */}
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 items-stretch flex-1 min-h-0">
                 <div className="lg:col-span-2 flex flex-col min-h-0">
