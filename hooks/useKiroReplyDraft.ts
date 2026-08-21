@@ -3,7 +3,7 @@
 import { useCallback, useRef, useState } from "react";
 import { useAISettingsStore } from "@/store/useAISettingsStore";
 import { getSessionApiKey } from "@/lib/ai/sessionKeys";
-import { requestDesktopApi } from "@/lib/desktop/apiClient";
+import { apiUrl } from "@/lib/desktop/apiBase";
 
 export type ReplyDraftTone = "natural" | "concise" | "formal" | "friendly";
 
@@ -57,7 +57,11 @@ export function useKiroReplyDraft() {
           return null;
         }
 
-        const res = await requestDesktopApi("/api/ai/reply-draft", {
+        // Keep AbortSignal in the Renderer world. Passing RequestInit.signal through
+        // contextBridge makes the native AbortSignal lose its fetch-compatible identity.
+        // The trusted Renderer → exact Local API request still receives its per-launch
+        // capability from Main's webRequest injector.
+        const res = await fetch(apiUrl("/api/ai/reply-draft"), {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
