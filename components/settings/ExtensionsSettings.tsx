@@ -1,17 +1,15 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
-import { Plug2, Wrench, MessageSquare, Plus, Puzzle, Boxes, ExternalLink, Info, Pencil, Trash2, Upload, Download, Beaker } from "lucide-react";
+import { MessageSquare, Plus, Puzzle, Boxes, Info, Pencil, Trash2, Upload, Download, Beaker } from "lucide-react";
 import { SettingsSection } from "@/components/settings/SettingsSection";
 import { SettingsGroup } from "@/components/settings/SettingsGroup";
 import { useExtensionsStore } from "@/store/useExtensionsStore";
-import { listChannelProviders } from "@/lib/extensions/registry";
 import { cn } from "@/lib/utils";
 import { Dialog } from "@/components/ui/Dialog";
 import { SkillDistillDialog } from "@/components/kiro/SkillDistillDialog";
 import { ChannelSettings } from "@/components/settings/ChannelSettings";
 import { extractWorkflowTrace } from "@/lib/ai/skills/workflowTrace";
-import { useKiroRuntime } from "@/components/kiro/KiroSessionProvider";
 
 type SkillListItem = {
   name: string;
@@ -118,43 +116,49 @@ export function ExtensionsSettings() {
     refreshMcp();
   }, []);
 
+  // Channel summary truth source: real Channel runtime via desktop bridge
+  const [channelStatuses, setChannelStatuses] = useState<Array<{ health: { state: string } }>>([]);
+  const [channelLoading, setChannelLoading] = useState(true);
+  useEffect(() => {
+    let cancelled = false;
+    const fetchChannels = async () => {
+      const bridge = (window as unknown as { classflowDesktop?: { channels?: { list: () => Promise<{ channels: Array<{ health: { state: string } }> }> } } }).classflowDesktop?.channels;
+      if (!bridge?.list) {
+        if (!cancelled) { setChannelStatuses([]); setChannelLoading(false); }
+        return;
+      }
+      try {
+        const res = await bridge.list();
+        if (!cancelled) setChannelStatuses(Array.isArray(res.channels) ? res.channels : []);
+      } catch {
+        if (!cancelled) setChannelStatuses([]);
+      } finally {
+        if (!cancelled) setChannelLoading(false);
+      }
+    };
+    fetchChannels();
+    const id = window.setInterval(fetchChannels, 5000);
+    return () => { cancelled = true; window.clearInterval(id); };
+  }, []);
+
   const counts = useMemo(() => {
-    if (skillBridge || mcpBridge) {
-      const enabledSkills = skills.filter((s) => s.enabled).length;
-      const mcpCount = mcpConnections.length;
-      const connectedMcp = mcpConnections.filter((c) => c.state === "connected").length;
-      return {
-        skills: skills.length || extensions.filter((e) => e.kind === "skill").length,
-        enabledSkills: enabledSkills || extensions.filter((e) => e.kind === "skill" && e.enabled).length,
-        mcp: mcpCount || extensions.filter((e) => e.kind === "mcp").length,
-        connectedMcp: connectedMcp || extensions.filter((e) => e.kind === "mcp" && e.status === "connected").length,
-        channels: extensions.filter((e) => e.kind === "channel").length,
-        onlineChannels: extensions.filter((e) => e.kind === "channel" && e.status === "connected").length,
-      };
-    }
     const skillsCount = extensions.filter((e) => e.kind === "skill").length;
-    const enabledSkills = extensions.filter((e) => e.kind === "skill" && e.enabled).length;
-    const mcp = extensions.filter((e) => e.kind === "mcp").length;
-    const connectedMcp = extensions.filter((e) => e.kind === "mcp" && e.status === "connected").length;
-    const channels = extensions.filter((e) => e.kind === "channel").length;
-    const onlineChannels = extensions.filter((e) => e.kind === "channel" && e.status === "connected").length;
-    if (skillBridge && !skillsLoading) {
-      return {
-        skills: skills.length,
-        enabledSkills: skills.filter((s) => s.enabled).length,
-        mcp,
-        connectedMcp,
-        channels,
-        onlineChannels,
-      };
-    }
-    return { skills: skillsCount, enabledSkills, mcp, connectedMcp, channels, onlineChannels };
-  }, [extensions, skills, skillBridge, skillsLoading]);
+    const enabledSkillsFallback = extensions.filter((e) => e.kind === "skill" && e.enabled).length;
+    const mcpFallback = extensions.filter((e) => e.kind === "mcp").length;
+    const connectedMcpFallback = extensions.filter((e) => e.kind === "mcp" && e.status === "connected").length;
 
-  const channelProviders = listChannelProviders();
+    const skillsDisplay = skillsLoading ? skillsCount : skills.length || skillsCount;
+    const enabledSkills = skillsLoading ? enabledSkillsFallback : skills.filter((s) => s.enabled).length || enabledSkillsFallback;
+    const mcp = mcpConnections.length || mcpFallback;
+    const connectedMcp = mcpConnections.filter((c) => c.state === "connected").length || connectedMcpFallback;
 
-  const [providerDetail, setProviderDetail] = useState<null | { id: string; name: string }>(null);
-  const [mcpPlaceholderOpen, setMcpPlaceholderOpen] = useState(false);
+    const channels = channelLoading ? 0 : channelStatuses.length;
+    const onlineChannels = channelLoading ? 0 : channelStatuses.filter((c) => c.health.state === "connected").length;
+
+    // When bridge not available, fallback to extensions legacy to avoid 0/0 flash? But prefer real; if loading show skeleton via — handled in SummaryCard
+    return { skills: skillsDisplay, enabledSkills, mcp, connectedMcp, channels, onlineChannels, channelLoading };
+  }, [extensions, skills, skillsLoading, mcpConnections, channelStatuses, channelLoading]);
+
   const [skillEditorOpen, setSkillEditorOpen] = useState(false);
   const [editingSkill, setEditingSkill] = useState<SkillListItem | null>(null);
   const [skillTestResult, setSkillTestResult] = useState<null | { ok: boolean; errors: string[] }>(null);
@@ -259,7 +263,7 @@ export function ExtensionsSettings() {
         >
           <SummaryCard label="Skills 已启用" value={counts.enabledSkills} total={counts.skills} exact={`${counts.enabledSkills} 个 Skills 已启用`} />
           <SummaryCard label="MCP 已连接" value={counts.connectedMcp} total={counts.mcp} exact={`${counts.connectedMcp} 个 MCP 已连接`} />
-          <SummaryCard label="消息渠道在线" value={counts.onlineChannels} total={counts.channels} exact={`${counts.onlineChannels} 个消息渠道在线`} />
+          <SummaryCard label="消息渠道在线" value={counts.channelLoading ? (undefined as unknown as number) : counts.onlineChannels} total={counts.channelLoading ? (undefined as unknown as number) : counts.channels} exact={counts.channelLoading ? "—" : `${counts.onlineChannels} 个消息渠道在线`} />
         </div>
 
         <div className="flex items-center gap-1 p-1 bg-[#F7F5F5] border border-line rounded-xl w-fit" role="tablist" aria-label="扩展类型">
@@ -362,9 +366,15 @@ export function ExtensionsSettings() {
                         </div>
                         <p className="text-xs text-sandrift mt-1 leading-relaxed line-clamp-2">{skill.description}</p>
                         <div className="flex flex-wrap items-center gap-2 mt-2 text-[11px] text-sandrift">
-                          <span className="inline-flex items-center gap-1 px-2 py-1 bg-[#F7F5F5] border border-line rounded-full">
-                            自动触发 · {skill.triggers?.join(" · ") ?? "课程 · DDL · 通知"}
-                          </span>
+                          {skill.triggers && skill.triggers.length > 0 ? (
+                            <span className="inline-flex items-center gap-1 px-2 py-1 bg-[#F7F5F5] border border-line rounded-full">
+                              自动触发 · {skill.triggers.join(" · ")}
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 px-2 py-1 bg-surface-soft border border-line rounded-full text-sandrift">
+                              未设置自动触发
+                            </span>
+                          )}
                           {skill.compatibility && <span className="px-2 py-1 bg-alabaster border border-line rounded-full">{skill.compatibility}</span>}
                         </div>
                         {skill.lastUsedAt && (
@@ -469,7 +479,7 @@ export function ExtensionsSettings() {
                 </div>
                 <div>
                   <p className="text-sm font-bold text-charcoal">还没有 MCP 连接</p>
-                  <p className="text-xs text-sandrift mt-1 max-w-[320px]">连接外部工具和数据服务，让 Kiro 在需要时调用。支持 Remote MCP (Streamable HTTP)，默认 https，http 仅允许 127.0.0.1/localhost。</p>
+                  <p className="text-xs text-sandrift mt-1 max-w-[320px]">连接外部工具和数据服务，让 Kiro 在需要时调用。支持远程 MCP 服务。</p>
                 </div>
               </div>
             ) : (
@@ -486,11 +496,11 @@ export function ExtensionsSettings() {
                         </div>
                         <p className="text-xs text-sandrift mt-1 truncate">{conn.config.endpoint}</p>
                         <p className="text-[11px] text-sandrift mt-1">
-                          {conn.toolCount} Tools · {conn.resourceCount} Resources {conn.serverInfo?.name ? `· ${conn.serverInfo.name}` : ""}
+                          {conn.toolCount} 个工具 · {conn.resourceCount} 个资源 {conn.serverInfo?.name ? `· ${conn.serverInfo.name}` : ""}
                         </p>
                         <div className="flex items-center gap-2 mt-2 text-[11px]">
                           <span className="px-2 py-1 bg-[#F7F5F5] border border-line rounded-full">Kiro 使用 {conn.config.enabled ? "已允许" : "已禁用"}</span>
-                          <span className="px-2 py-1 bg-alabaster border border-line rounded-full">副作用操作 每次确认</span>
+                          <span className="px-2 py-1 bg-alabaster border border-line rounded-full">可能修改数据的操作会先询问</span>
                         </div>
                       </div>
                       <button type="button" onClick={() => setMcpDetail(conn)} data-testid={`mcp-manage-${conn.config.id}`} className="h-7 px-3 bg-white border border-line text-charcoal text-xs font-bold rounded-lg hover:bg-alabaster">管理</button>
@@ -505,111 +515,8 @@ export function ExtensionsSettings() {
 
         <div className="space-y-3" data-testid="extensions-channels-panel" data-setting-id="extensions-channels" hidden={activeTab !== "channels"}>
           <ChannelSettings />
-          {/* Legacy provider cards kept for Gmail/QQ Mail placeholder */}
-          <div className="grid gap-3 sm:grid-cols-1 mt-4">
-            {channelProviders.filter((p) => p.id !== "qq-bot").map((provider) => {
-              const isOnline = extensions.some((e) => e.providerId === provider.id && e.status === "connected");
-              const statusLabel = isOnline ? "已连接" : "未连接";
-              const settingId = provider.id === "gmail" ? "extensions-gmail" : "extensions-qq-mail";
-              return (
-                <div
-                  key={provider.id}
-                  data-setting-id={settingId}
-                  className="bg-surface border border-line rounded-xl p-4 flex flex-col gap-3 opacity-60"
-                  data-testid={`channel-card-${provider.id}`}
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex items-start gap-3 min-w-0">
-                      <div className="w-9 h-9 rounded-xl bg-alabaster border border-line flex items-center justify-center shrink-0 mt-0.5">
-                        {provider.id === "gmail" ? <ExternalLink className="w-4 h-4 text-charcoal" /> : <Wrench className="w-4 h-4 text-charcoal" />}
-                      </div>
-                      <div className="min-w-0">
-                        <h4 className="text-sm font-bold text-charcoal">{provider.name} <span className="text-[11px] font-normal text-sandrift">（占位）</span></h4>
-                        <p className="text-xs text-sandrift mt-0.5 leading-relaxed">{provider.description}</p>
-                      </div>
-                    </div>
-                    <span className={cn("shrink-0 px-2 py-1 rounded-full text-[11px] font-bold border", isOnline ? "bg-success/10 text-success border-success/20" : "bg-[#F7F5F5] text-satin-grey border-line")}>
-                      {statusLabel}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between gap-2 pt-1">
-                    <span className="text-[11px] text-sandrift">{provider.capabilities.join(" · ")}</span>
-                    <button type="button" onClick={() => setProviderDetail({ id: provider.id, name: provider.name })} data-testid={`channel-connect-${provider.id}`} className="h-7 px-3 bg-charcoal hover:bg-black text-white text-xs font-bold rounded-lg shrink-0">连接</button>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
         </div>
       </SettingsSection>
-
-      <Dialog
-        open={providerDetail !== null}
-        onOpenChange={(open) => {
-          if (!open) setProviderDetail(null);
-        }}
-        overlayId="extensions-provider-detail"
-        aria-label={providerDetail ? `${providerDetail.name} 详情` : "渠道详情"}
-        className="w-[min(480px,calc(100vw-24px))] bg-surface border border-line rounded-2xl p-5 space-y-3"
-      >
-        {providerDetail && (
-          <>
-            <div className="flex items-center gap-2.5">
-              <div className="w-9 h-9 rounded-xl bg-pastel-mint border border-line flex items-center justify-center">
-                <Plug2 className="w-4 h-4 text-charcoal" />
-              </div>
-              <div>
-                <h4 className="text-sm font-bold text-charcoal">{providerDetail.name}</h4>
-                <p className="text-[11px] text-sandrift">基础设施尚未启用</p>
-              </div>
-            </div>
-            <p className="text-xs text-satin-grey leading-relaxed">
-              {providerDetail.id === "qq-bot"
-                ? "QQ Bot 连接需要完成桌面端授权与消息通道配置，当前为占位预览。"
-                : providerDetail.id === "gmail"
-                  ? "Gmail 需完成 OAuth 授权后方可接收课程通知与附件，当前为占位预览。"
-                  : "QQ 邮箱需完成授权后方可接收相关邮件，当前为占位预览。"}
-            </p>
-            <div className="flex items-center justify-end gap-2 pt-2">
-              <button
-                type="button"
-                onClick={() => setProviderDetail(null)}
-                className="h-8 px-4 bg-alabaster hover:bg-[#E8E5E1] border border-line text-charcoal text-xs font-bold rounded-lg transition-colors"
-              >
-                知道了
-              </button>
-            </div>
-          </>
-        )}
-      </Dialog>
-
-      <Dialog
-        open={mcpPlaceholderOpen}
-        onOpenChange={setMcpPlaceholderOpen}
-        overlayId="extensions-mcp-placeholder"
-        aria-label="添加 MCP"
-        className="w-[min(480px,calc(100vw-24px))] bg-surface border border-line rounded-2xl p-5 space-y-3"
-      >
-        <div className="flex items-center gap-2.5">
-          <div className="w-9 h-9 rounded-xl bg-pastel-mint border border-line flex items-center justify-center">
-            <Boxes className="w-4 h-4 text-charcoal" />
-          </div>
-          <div>
-            <h4 className="text-sm font-bold text-charcoal">添加 MCP</h4>
-            <p className="text-[11px] text-sandrift">基础设施尚未启用</p>
-          </div>
-        </div>
-        <p className="text-xs text-satin-grey leading-relaxed">MCP 连接需要桌面运行时与 Tool Discovery 支持，当前版本仅提供 UI 占位。</p>
-        <div className="flex items-center justify-end gap-2 pt-2">
-          <button
-            type="button"
-            onClick={() => setMcpPlaceholderOpen(false)}
-            className="h-8 px-4 bg-alabaster hover:bg-[#E8E5E1] border border-line text-charcoal text-xs font-bold rounded-lg transition-colors"
-          >
-            知道了
-          </button>
-        </div>
-      </Dialog>
 
       <SkillEditorDialog
         open={skillEditorOpen}
@@ -702,7 +609,7 @@ function McpAddDialog({ open, onOpenChange, onAdded }: { open: boolean; onOpenCh
         </div>
         <div>
           <h4 className="text-sm font-bold text-charcoal">添加 MCP</h4>
-          <p className="text-[11px] text-sandrift">Remote MCP · Streamable HTTP · 默认 https</p>
+          <p className="text-[11px] text-sandrift">支持远程 MCP 服务</p>
         </div>
       </div>
       <div className="space-y-3">
@@ -713,17 +620,21 @@ function McpAddDialog({ open, onOpenChange, onAdded }: { open: boolean; onOpenCh
         <div>
           <label className="text-xs font-bold text-charcoal">Endpoint *</label>
           <input value={endpoint} onChange={(e) => setEndpoint(e.target.value)} placeholder="https://mcp.example.com/mcp" data-testid="mcp-add-endpoint" className="mt-1 w-full h-9 px-3 bg-white border border-line rounded-lg text-sm font-mono" />
-          <p className="text-[11px] text-sandrift mt-1">V1 仅支持 Remote MCP (https)，http 仅允许 127.0.0.1/localhost（开发模式）</p>
+          <p className="text-[11px] text-sandrift mt-1">支持远程 MCP 服务，默认使用 https</p>
+          <details className="mt-1">
+            <summary className="text-[11px] text-sandrift cursor-pointer">高级说明</summary>
+            <p className="text-[11px] text-sandrift mt-1">http 仅允许 127.0.0.1 / localhost（开发模式），endpoint 需为完整 URL。</p>
+          </details>
         </div>
         <div>
-          <label className="text-xs font-bold text-charcoal">凭据 (SecretVault credentialRef)</label>
-          <input value={credentialRef} onChange={(e) => setCredentialRef(e.target.value)} placeholder="cred_xxx（可选，来自 SecretVault）" data-testid="mcp-add-credential" className="mt-1 w-full h-9 px-3 bg-white border border-line rounded-lg text-sm font-mono" />
-          <p className="text-[11px] text-sandrift mt-1">禁止明文 token/apiKey 写入 Zustand；Secret 来自 SecretVault</p>
+          <label className="text-xs font-bold text-charcoal">凭据</label>
+          <input value={credentialRef} onChange={(e) => setCredentialRef(e.target.value)} placeholder="cred_xxx（可选）" data-testid="mcp-add-credential" className="mt-1 w-full h-9 px-3 bg-white border border-line rounded-lg text-sm font-mono" />
+          <p className="text-[11px] text-sandrift mt-1">如需认证，请先在凭据管理中创建后填入引用</p>
         </div>
         {testResult && (
           <div className={`text-xs font-bold px-3 py-2 rounded-lg border ${testResult.ok ? "text-success bg-success/5 border-success/20" : "text-danger bg-danger/5 border-danger/20"}`}>
             {testResult.ok ? `连接成功${testResult.serverInfo ? ` · ${(testResult.serverInfo as { name?: string })?.name ?? ""}` : ""}` : `测试失败: ${testResult.error}`}
-            {testResult.ok && (testResult as { tools?: unknown[] }).tools && <p className="text-[11px] font-normal mt-1">{(testResult as { tools?: unknown[] }).tools?.length ?? 0} Tools 已发现</p>}
+            {testResult.ok && (testResult as { tools?: unknown[] }).tools && <p className="text-[11px] font-normal mt-1">{(testResult as { tools?: unknown[] }).tools?.length ?? 0} 个工具已发现</p>}
           </div>
         )}
         {error && <p className="text-xs font-bold text-danger bg-danger/5 border border-danger/20 rounded-lg px-3 py-2">{error}</p>}
@@ -772,23 +683,23 @@ function McpDetailDialog({ connection, onOpenChange, onRefresh }: { connection: 
         </div>
       </div>
       <div className="grid grid-cols-3 gap-2 text-center">
-        <div className="bg-[#F7F5F5] border border-line rounded-lg p-2">
+        <div className="bg-surface-soft border border-line rounded-lg p-2">
           <p className="text-sm font-bold text-charcoal">{connection.toolCount}</p>
-          <p className="text-[11px] text-sandrift">Tools</p>
+          <p className="text-[11px] text-sandrift">工具</p>
         </div>
-        <div className="bg-[#F7F5F5] border border-line rounded-lg p-2">
+        <div className="bg-surface-soft border border-line rounded-lg p-2">
           <p className="text-sm font-bold text-charcoal">{connection.resourceCount}</p>
-          <p className="text-[11px] text-sandrift">Resources</p>
+          <p className="text-[11px] text-sandrift">资源</p>
         </div>
-        <div className="bg-[#F7F5F5] border border-line rounded-lg p-2">
+        <div className="bg-surface-soft border border-line rounded-lg p-2">
           <p className="text-sm font-bold text-charcoal">{connection.promptCount}</p>
-          <p className="text-[11px] text-sandrift">Prompts</p>
+          <p className="text-[11px] text-sandrift">提示</p>
         </div>
       </div>
       <div className="space-y-2 text-xs">
         <p><span className="font-bold">连接信息：</span>{connection.config.endpoint}</p>
-        <p><span className="font-bold">凭据：</span>{connection.config.credentialRef ? `credentialRef ${connection.config.credentialRef.slice(0, 8)}...` : "无 (公开)"}</p>
-        <p><span className="font-bold">权限：</span>Kiro 使用 已允许 · 副作用操作 每次确认</p>
+        <p><span className="font-bold">凭据：</span>{connection.config.credentialRef ? `已配置` : "无 (公开)"}</p>
+        <p><span className="font-bold">权限：</span>可能修改数据的操作会先询问</p>
         {connection.serverInfo && <p><span className="font-bold">Server：</span>{connection.serverInfo.name} {connection.serverInfo.version}</p>}
       </div>
       <div className="flex flex-wrap items-center gap-2">
@@ -806,12 +717,13 @@ function McpDetailDialog({ connection, onOpenChange, onRefresh }: { connection: 
   );
 }
 
-function SummaryCard({ label, value, total, exact }: { label: string; value: number; total: number; exact: string }) {
+function SummaryCard({ label, value, total, exact }: { label: string; value?: number; total?: number; exact: string }) {
+  const showSkeleton = value === undefined || total === undefined;
   return (
     <div className="bg-surface border border-line rounded-xl px-3 py-3 flex flex-col items-center justify-center gap-1 min-h-[64px]">
       <span className="text-sm font-bold text-charcoal" data-testid={`summary-${label}`}>{exact}</span>
       <span className="text-[11px] font-medium text-sandrift">
-        {value} / {total}
+        {showSkeleton ? "—" : `${value} / ${total}`}
       </span>
       <span className="sr-only">{label}</span>
     </div>
@@ -1006,11 +918,11 @@ function SkillEditorDialog({
         </div>
         <div>
           <label className="text-xs font-bold text-charcoal">什么时候使用</label>
-          <p className="text-[11px] text-sandrift">触发关键词，逗号分隔（如：课程 · DDL · 通知）</p>
+          <p className="text-[11px] text-sandrift">触发关键词，逗号分隔（如：课程、作业）</p>
           <input
             value={triggers}
             onChange={(e) => setTriggers(e.target.value)}
-            placeholder="课程, DDL, 通知"
+            placeholder="课程, 作业"
             data-testid="skill-editor-triggers"
             className="mt-1 w-full h-9 px-3 bg-white border border-line rounded-lg text-sm text-charcoal placeholder-sandrift focus:outline-none focus:border-charcoal"
           />

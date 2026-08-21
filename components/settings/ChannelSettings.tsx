@@ -148,9 +148,9 @@ export function ChannelSettings() {
                     {config.channel === "qq-bot" ? (
                       <p className="text-xs text-sandrift truncate">App ID: {(config as QQConfig).appId} · {(config as QQConfig).receiveDirectMessages ? "接收私聊" : "不接收私聊"} · {(config as QQConfig).receiveGroupMessages ? "接收群聊" : "不接收群聊"} {(config as QQConfig).requireMentionInGroup ? "· 群聊需 @" : ""}</p>
                     ) : config.channel === "gmail" ? (
-                      <p className="text-xs text-sandrift truncate">Gmail · {(config as GmailConfig).emailAddress} · 60s 轮询 · 仅 INBOX</p>
+                      <p className="text-xs text-sandrift truncate">Gmail · {(config as GmailConfig).emailAddress}</p>
                     ) : (
-                      <p className="text-xs text-sandrift truncate">QQ 邮箱 · {(config as QQMailConfig).emailAddress} · 60s 轮询 · 仅 INBOX</p>
+                      <p className="text-xs text-sandrift truncate">QQ 邮箱 · {(config as QQMailConfig).emailAddress}</p>
                     )}
                     {config.channel === "qq-bot" && (
                       <p className="text-[11px] text-sandrift mt-1">允许用户: {(config as QQConfig).allowedUsers.length ? (config as QQConfig).allowedUsers.join(", ") : "不限制"} · 允许群: {(config as QQConfig).allowedGroups.length ? (config as QQConfig).allowedGroups.join(", ") : "不限制"}</p>
@@ -358,7 +358,7 @@ function AddGmailPanel({ onAdded, onBusyChange }: { onAdded: () => void; onBusyC
     } catch (e) {
       const raw = (e as { code?: string; message?: string })?.message ?? String(e);
       const code = (e as { code?: string })?.code ?? "";
-      if (code === "GMAIL_OAUTH_CONFIG_MISSING") setError("Gmail OAuth 未配置（开发环境需设置 CLASSFLOW_GOOGLE_OAUTH_CLIENT_ID）");
+      if (code === "GMAIL_OAUTH_CONFIG_MISSING") setError(process.env.NODE_ENV === "development" ? "Gmail OAuth 未配置（开发环境需设置 CLASSFLOW_GOOGLE_OAUTH_CLIENT_ID）" : "Gmail 授权服务暂不可用，请稍后重试。");
       else if (code === "GMAIL_OAUTH_DENIED") setError("已拒绝授权");
       else if (code === "GMAIL_OAUTH_TIMEOUT") setError("授权超时，请重试");
       else setError(raw);
@@ -368,21 +368,23 @@ function AddGmailPanel({ onAdded, onBusyChange }: { onAdded: () => void; onBusyC
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-2 text-xs font-bold text-charcoal"><ChannelBrandIcon source="gmail" size={16} />Gmail 账号</div>
-      <div className="bg-[#F7F5F5] border border-line rounded-xl p-4 space-y-2">
+      <div className="bg-surface-soft border border-line rounded-xl p-4 space-y-2">
         <p className="text-xs font-bold text-charcoal">连接 Gmail</p>
-        <p className="text-[11px] text-sandrift">将打开浏览器完成 Google OAuth（PKCE + loopback），仅请求 gmail.readonly 与 gmail.send 权限。不会请求 gmail.modify。</p>
+        <p className="text-[11px] text-sandrift">将打开浏览器完成 Google 授权，仅请求读取和发送邮件权限。</p>
         <ul className="text-[11px] text-sandrift list-disc ml-4 space-y-1">
-          <li>首次同步：最近 7 天 INBOX，最多 50 封</li>
-          <li>之后：history 增量同步，60 秒轮询</li>
-          <li>仅展示附件 metadata，不自动下载</li>
+          <li>首次同步最近 7 天邮件，最多 50 封</li>
+          <li>之后每分钟自动同步</li>
+          <li>附件仅显示基本信息，不会自动下载</li>
           <li>回复仅回复发件人，保持原线程</li>
         </ul>
       </div>
       {error && <p data-testid="gmail-add-error" className="text-xs font-bold text-danger bg-danger/5 border border-danger/20 rounded-lg px-3 py-2 animate-enter">{error}</p>}
       <button type="button" onClick={handleConnect} disabled={saving} data-testid="gmail-connect-oauth" className="w-full h-10 bg-charcoal hover:bg-black text-white text-xs font-bold rounded-xl flex items-center justify-center gap-2 disabled:opacity-60 transition-colors duration-[var(--motion-fast)] ease-[var(--ease-standard)] ux-press">
-        <Mail className="w-4 h-4" />{saving ? "连接中..." : "连接 Gmail"}
+        <Mail className="w-4 h-4" />{saving ? "正在打开授权页面…" : "连接 Gmail"}
       </button>
-      <p className="text-[11px] text-sandrift text-center">ClassFlow 内置 Desktop OAuth Client，无需手动输入 Client ID/Secret。开发环境可通过 CLASSFLOW_GOOGLE_OAUTH_CLIENT_ID 覆盖。</p>
+      {process.env.NODE_ENV === "development" && (
+        <p className="text-[11px] text-sandrift text-center">开发环境可通过 CLASSFLOW_GOOGLE_OAUTH_CLIENT_ID 覆盖内置授权配置。</p>
+      )}
     </div>
   );
 }
@@ -433,8 +435,8 @@ function AddQQMailPanel({ onAdded, onBusyChange }: { onAdded: () => void; onBusy
       <div><label className="text-xs font-bold text-charcoal">名称 *</label><input value={displayName} onChange={(e) => setDisplayName(e.target.value)} placeholder="我的 QQ 邮箱" data-testid="qqmail-add-name" className="mt-1 w-full h-9 px-3 bg-white border border-line rounded-lg text-sm focus:outline-none focus:border-charcoal transition-colors duration-[var(--motion-fast)]" /></div>
       <div><label className="text-xs font-bold text-charcoal">QQ 邮箱地址 *</label><input value={emailAddress} onChange={(e) => setEmailAddress(e.target.value)} placeholder="example@qq.com" data-testid="qqmail-add-email" className="mt-1 w-full h-9 px-3 bg-white border border-line rounded-lg text-sm focus:outline-none focus:border-charcoal transition-colors duration-[var(--motion-fast)]" /></div>
       <div><label className="text-xs font-bold text-charcoal">授权码 *</label><input type="password" value={authCode} onChange={(e) => setAuthCode(e.target.value)} placeholder="请输入 QQ 邮箱授权码，不是 QQ 登录密码" data-testid="qqmail-add-authcode" className="mt-1 w-full h-9 px-3 bg-white border border-line rounded-lg text-sm font-mono focus:outline-none focus:border-charcoal transition-colors duration-[var(--motion-fast)]" /><p className="text-[11px] text-sandrift mt-1">请输入 QQ 邮箱授权码，不是 QQ 登录密码。仅存于 SecretVault，关闭后不保留明文</p></div>
-      <div className="bg-[#F7F5F5] border border-line rounded-xl p-3 space-y-1">
-        <p className="text-[11px] text-sandrift">IMAP: imap.qq.com:993 TLS · SMTP: smtp.qq.com:465 TLS · 60s 轮询 · 仅 INBOX · 7天/50封</p>
+      <div className="bg-surface-soft border border-line rounded-xl p-3 space-y-1">
+        <p className="text-[11px] text-sandrift">仅读取收件箱 · 首次同步最近 7 天最多 50 封 · 之后每分钟自动同步 · 附件仅显示基本信息，不会自动下载</p>
         <p className="text-[11px] text-sandrift">获取授权码：QQ 邮箱 → 设置 → 账户 → 生成授权码</p>
       </div>
       {error && <p data-testid="qqmail-add-error" className="text-xs font-bold text-danger bg-danger/5 border border-danger/20 rounded-lg px-3 py-2 animate-enter">{error}</p>}

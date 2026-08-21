@@ -229,7 +229,7 @@ export function KiroAISettings({ reveal }: { reveal?: { key: string; seq: number
   return (
     <SettingsSection
       title="Kiro"
-      description="配置 Kiro 使用的 AI 服务与回答行为。API Key 默认仅保存在当前浏览器会话中。"
+      description="配置 Kiro 使用的 AI 服务与回答行为。API Key 默认仅保存在本次应用会话中。"
     >
       <div className="text-xs space-y-4" data-testid="settings-kiro">
         {/* ---- Kiro ---- */}
@@ -237,7 +237,7 @@ export function KiroAISettings({ reveal }: { reveal?: { key: string; seq: number
           <SettingsRow
             settingId="ai-enabled"
             title="启用 Kiro"
-            description="关闭后 Kiro 仅保留界面预览，不发起任何请求。"
+            description="关闭后将停用 Kiro 的 AI 功能。"
           >
             <SettingsToggle checked={enabled} onChange={setEnabled} label="启用 Kiro" />
           </SettingsRow>
@@ -323,7 +323,7 @@ export function KiroAISettings({ reveal }: { reveal?: { key: string; seq: number
           <SettingsRow
             settingId="ai-api-key"
             title="API Key"
-            description="API Key 默认仅保存在当前浏览器会话中（调用时会发送到 ClassFlow 服务端转发）。"
+            description="API Key 默认仅保存在本次应用会话中（调用时会发送到 ClassFlow 服务端转发）。"
           >
             <div className="relative w-full">
               <SettingsInput
@@ -496,7 +496,7 @@ export function KiroAISettings({ reveal }: { reveal?: { key: string; seq: number
                   <SettingsRow
                     settingId="kiro-web-search-credential"
                     title="凭据"
-                    description="选择搜索凭据来源；使用自己的 API Key 时，Key 仅保存在当前浏览器会话中。"
+                    description="选择搜索凭据来源；使用自己的 API Key 时，Key 仅保存在本次应用会话中。"
                   >
                     <SettingsSegmentedControl<"server" | "byok">
                       value={webSearchCredentialMode}
@@ -533,7 +533,7 @@ export function KiroAISettings({ reveal }: { reveal?: { key: string; seq: number
                     <SettingsRow
                       settingId="kiro-web-search-byok-key"
                       title="Tavily API Key"
-                      description="仅保存在当前浏览器会话中（调用时发送到 ClassFlow 服务端转发）。"
+                      description="仅保存在本次应用会话中（调用时发送到 ClassFlow 服务端转发）。"
                     >
                       <div className="relative w-full">
                         <SettingsInput
@@ -584,7 +584,7 @@ export function KiroAISettings({ reveal }: { reveal?: { key: string; seq: number
                     </div>
                   </SettingsRow>
 
-                  <SettingsRow settingId="kiro-web-search-privacy" title="隐私" description="联网搜索开启时，Kiro 可能将当前搜索查询发送给搜索服务。使用自己的 API Key 时，Key 仅保存在当前浏览器会话中。">
+                  <SettingsRow settingId="kiro-web-search-privacy" title="隐私" description="联网搜索开启时，Kiro 可能将当前搜索查询发送给搜索服务。使用自己的 API Key 时，Key 仅保存在本次应用会话中。">
                     <span className="px-2 py-0.5 rounded-full bg-alabaster border border-line text-[10px] font-bold text-satin-grey shrink-0">
                       按需发送
                     </span>
@@ -690,7 +690,7 @@ export function KiroAISettings({ reveal }: { reveal?: { key: string; seq: number
                   <SettingsRow
                     settingId="kiro-web-pdf-vision-key"
                     title="OpenCode Go Vision API Key"
-                    description="仅用于读取联网搜索发现的扫描型 PDF。密钥仅保存在当前浏览器会话中。"
+                    description="仅用于读取联网搜索发现的扫描型 PDF。密钥仅保存在本次应用会话中。"
                   >
                     <div className="relative w-full">
                       <SettingsInput

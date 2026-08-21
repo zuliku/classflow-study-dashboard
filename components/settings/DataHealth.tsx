@@ -63,17 +63,19 @@ export function DataHealth() {
   const materialsTotal = health?.materials?.total ?? 0;
   const materialsAvailable = health?.materials?.available ?? 0;
   const materialsMissing = health?.materials?.missing.length ?? 0;
-  const anyIssue =
-    !health ||
-    integrityRows.some((r) => r.ok === false) ||
-    materialsMissing > 0;
+  const issueCount =
+    (health?.integrity.courses === false ? 1 : 0) +
+    (health?.integrity.marks === false ? 1 : 0) +
+    (health?.integrity.groupTasks === false ? 1 : 0) +
+    (materialsMissing > 0 ? 1 : 0);
+  const anyIssue = !health || issueCount > 0;
 
   return (
-    <div className="p-3 bg-[#F7F5F5] border border-line rounded-xl space-y-2 text-xs" data-testid="data-health">
+    <div className="p-3 bg-surface-soft border border-line rounded-xl space-y-2 text-xs" data-testid="data-health">
       <div className="flex items-center justify-between">
         <span className={cn("flex items-center gap-1.5 font-bold", anyIssue ? "text-warning" : "text-success")}>
           <span className={cn("w-1.5 h-1.5 rounded-full", anyIssue ? "bg-warning" : "bg-success")} />
-          {health && anyIssue ? "发现 1 项需要注意" : health ? "数据状态正常" : "检查中…"}
+          {health ? (issueCount === 0 ? "数据状态正常" : issueCount === 1 ? "发现 1 项需要处理" : `发现 ${issueCount} 项需要处理`) : "检查中…"}
         </span>
         <button
           onClick={runCheck}

@@ -37,13 +37,13 @@ function statusMeta(activity: TerminalActivity): { icon: React.ReactNode; label:
     case "completed":
       return {
         icon: <Check className="w-3.5 h-3.5 text-success shrink-0" aria-hidden="true" />,
-        label: activity.exitCode === 0 ? `已完成 · exit ${activity.exitCode}` : `exit ${activity.exitCode}`,
+        label: "已完成",
         tone: "text-satin-grey",
       };
     case "failed":
       return {
         icon: <AlertCircle className="w-3.5 h-3.5 text-danger shrink-0" aria-hidden="true" />,
-        label: `失败 · exit ${activity.exitCode}`,
+        label: "运行失败",
         tone: "text-danger",
       };
     case "cancelled":
@@ -149,16 +149,18 @@ export const KiroTerminalBlock = React.memo(function KiroTerminalBlock({
             {cancelling ? "正在停止" : "停止"}
           </button>
         )}
-        <button
-          type="button"
-          data-testid="kiro-terminal-input-toggle"
-          onClick={() => setInputOpen((v) => !v)}
-          aria-expanded={inputOpen}
-          className="flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-medium text-satin-grey hover:text-charcoal hover:bg-alabaster border border-line-soft transition-colors ml-1"
-        >
-          <SendHorizonal className="w-2.5 h-2.5" aria-hidden="true" />
-          输入
-        </button>
+        {running && (
+          <button
+            type="button"
+            data-testid="kiro-terminal-input-toggle"
+            onClick={() => setInputOpen((v) => !v)}
+            aria-expanded={inputOpen}
+            className="flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-medium text-satin-grey hover:text-charcoal hover:bg-alabaster border border-line-soft transition-colors ml-1"
+          >
+            <SendHorizonal className="w-2.5 h-2.5" aria-hidden="true" />
+            输入
+          </button>
+        )}
         <button
           type="button"
           aria-expanded={expanded}
@@ -173,8 +175,8 @@ export const KiroTerminalBlock = React.memo(function KiroTerminalBlock({
         </button>
       </div>
 
-      {/* Secure stdin（Phase 3）：本地安全输入路径——不经模型 / 历史 / audit */}
-      {inputOpen && (
+      {/* Secure stdin: 本地终端输入 */}
+      {running && inputOpen && (
         <div className="px-2.5 pb-1.5" data-testid="kiro-terminal-input">
           <div className="flex items-center gap-1.5">
             <input
@@ -187,8 +189,8 @@ export const KiroTerminalBlock = React.memo(function KiroTerminalBlock({
                   void onSendInput();
                 }
               }}
-              placeholder="向进程输入（敏感内容请在此输入，不会发送给模型）"
-              aria-label="向进程输入"
+              placeholder="向本地终端输入"
+              aria-label="向本地终端输入"
               className="min-w-0 flex-1 rounded-lg border border-line-soft bg-white/70 px-2 py-1 text-[11px] font-mono text-charcoal outline-none focus:border-sandrift"
             />
             <button
@@ -201,6 +203,7 @@ export const KiroTerminalBlock = React.memo(function KiroTerminalBlock({
               {inputSent ? "已发送" : inputBusy ? "发送中" : "发送"}
             </button>
           </div>
+          <p className="text-[10px] text-sandrift mt-1">内容仅发送给本地终端。</p>
         </div>
       )}
 

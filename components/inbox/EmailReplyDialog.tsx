@@ -111,11 +111,11 @@ export function EmailReplyDialog({ open, onOpenChange, item, onSent }: EmailRepl
       if (code === "EMAIL_SEND_REJECTED") {
         setError("邮件发送被拒绝，请检查发件人地址与线程。");
       } else if (code === "EMAIL_SEND_UNCERTAIN") {
-        setError("发送结果不确定，请先检查 Gmail，避免重复发送。");
+        setError("发送结果不确定，请先检查“已发送”，避免重复发送。");
       } else if (code === "EMAIL_REPLY_CONTEXT_INVALID") {
         setError("邮件回复上下文无效，请重新同步后重试。");
       } else if (code === "GMAIL_AUTH_FAILED") {
-        setError("Gmail 认证失败，请重新连接账号。");
+        setError("账号授权失效，请重新连接。");
       } else {
         setError(raw);
       }
@@ -151,18 +151,17 @@ export function EmailReplyDialog({ open, onOpenChange, item, onSent }: EmailRepl
         </div>
 
         <div className="space-y-2">
-          <div className="bg-[#F7F5F5] border border-line rounded-lg p-3">
+          <div className="bg-surface-soft border border-line rounded-lg p-3">
             <p className="text-[11px] font-bold text-sandrift mb-1">回复至</p>
             <p className="text-xs text-charcoal flex items-center gap-1.5"><Mail className="w-3 h-3" /> {item.senderDisplay ?? "发件人"} · 仅回复发件人（不支持抄送/群发）</p>
           </div>
           {item.subject && (
-            <div className="bg-[#F7F5F5] border border-line rounded-lg p-3">
-              <p className="text-[11px] font-bold text-sandrift mb-1">原邮件主题</p>
+            <div className="bg-surface-soft border border-line rounded-lg p-3">
+              <p className="text-[11px] font-bold text-sandrift mb-1">原主题</p>
               <p className="text-xs text-charcoal font-bold truncate">Re: {item.subject.startsWith("Re:") ? item.subject.slice(3).trim() : item.subject}</p>
-              <p className="text-[11px] text-sandrift mt-1">Subject: {item.subject}</p>
             </div>
           )}
-          <div className="bg-[#F7F5F5] border border-line rounded-lg p-3">
+          <div className="bg-surface-soft border border-line rounded-lg p-3">
             <p className="text-[11px] font-bold text-sandrift mb-1">原邮件正文（安全纯文本）</p>
             <p className="text-xs text-charcoal whitespace-pre-wrap line-clamp-4">{item.text.slice(0, 400)}</p>
           </div>
@@ -177,7 +176,7 @@ export function EmailReplyDialog({ open, onOpenChange, item, onSent }: EmailRepl
                 onClick={async () => {
                   if (!item) return;
                   const requestedItemId = item.id;
-                  const result = await generateDraft({ inboxItemId: item.id, message: `Subject: ${item.subject ?? "(no subject)"}\n\n${item.text}`, senderDisplay: item.senderDisplay, tone, source: item.source });
+                  const result = await generateDraft({ inboxItemId: item.id, message: `主题：${item.subject ?? "(无主题)"}\n\n${item.text}`, senderDisplay: item.senderDisplay, tone, source: item.source });
                   if (!result || currentDialogItemIdRef.current !== requestedItemId) return;
                   setText(result.draft);
                   setDraftGenerated(true);
@@ -207,7 +206,7 @@ export function EmailReplyDialog({ open, onOpenChange, item, onSent }: EmailRepl
         <div className="flex items-center gap-2">
           <div className="flex-1" />
           <button type="button" onClick={() => onOpenChange(false)} className="h-8 px-4 bg-white border border-line text-charcoal text-xs font-bold rounded-lg">取消</button>
-          <button type="button" onClick={handlePrepare} disabled={saving || !text.trim()} data-testid="email-reply-prepare" className="h-8 px-5 bg-charcoal text-white text-xs font-bold rounded-lg hover:bg-black disabled:opacity-60">Prepare</button>
+          <button type="button" onClick={handlePrepare} disabled={saving || !text.trim()} data-testid="email-reply-prepare" className="h-8 px-5 bg-charcoal text-white text-xs font-bold rounded-lg hover:bg-black disabled:opacity-60">继续</button>
         </div>
       </Dialog>
 
@@ -215,18 +214,18 @@ export function EmailReplyDialog({ open, onOpenChange, item, onSent }: EmailRepl
         <h4 className="text-sm font-bold text-charcoal">确认发送到 {label}？</h4>
         {approval && (
           <div className="space-y-2">
-            <p className="text-xs text-sandrift">发送至：{item.senderDisplay ?? "发件人"} · 仅回复发件人 · 将保持原 Gmail 线程</p>
-            <div className="bg-[#F7F5F5] border border-line rounded-lg p-3">
+            <p className="text-xs text-sandrift">发送至：{item.senderDisplay ?? "发件人"} · 仅回复发件人 · 将在原邮件会话中回复。</p>
+            <div className="bg-surface-soft border border-line rounded-lg p-3">
               <p className="text-xs text-charcoal whitespace-pre-wrap">{approval.preview.text}</p>
             </div>
-            <p className="text-[11px] text-sandrift">一次审批对应一次发送，不会自动重试。若超时请先检查 Gmail 已发箱，避免重复发送。</p>
+            <p className="text-[11px] text-sandrift">一次审批对应一次发送，不会自动重试。如果发送结果不确定，请先检查“已发送”，避免重复发送。</p>
           </div>
         )}
         {error && <p className="text-xs font-bold text-danger bg-danger/5 border border-danger/20 rounded-lg px-3 py-2">{error}</p>}
         <div className="flex items-center gap-2">
           <div className="flex-1" />
           <button type="button" onClick={handleCancelPrepare} className="h-8 px-4 bg-white border border-line text-charcoal text-xs font-bold rounded-lg">取消</button>
-          <button type="button" onClick={handleConfirm} disabled={saving} data-testid="email-reply-confirm" className="h-8 px-5 bg-charcoal text-white text-xs font-bold rounded-lg hover:bg-black disabled:opacity-60">{saving ? "发送中..." : "Final Confirm · 发送"}</button>
+          <button type="button" onClick={handleConfirm} disabled={saving} data-testid="email-reply-confirm" className="h-8 px-5 bg-charcoal text-white text-xs font-bold rounded-lg hover:bg-black disabled:opacity-60">{saving ? "发送中..." : "确认发送"}</button>
         </div>
       </Dialog>
     </>

@@ -209,7 +209,7 @@ export function SkillDistillDialog({ open, onOpenChange, trace, onSaved }: Skill
               <input
                 value={draft.triggers?.join(", ") ?? ""}
                 onChange={(e) => setDraft({ ...draft, triggers: e.target.value.split(",").map((s) => s.trim()).filter(Boolean) })}
-                placeholder="课程 · DDL · 通知"
+                placeholder="课程, 作业"
                 className="mt-1 w-full h-9 px-3 bg-white border border-line rounded-lg text-sm"
               />
             </div>
