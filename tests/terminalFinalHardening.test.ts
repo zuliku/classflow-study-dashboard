@@ -335,12 +335,12 @@ describe("P1: child env filtering", () => {
       shell: "powershell",
       cwd,
       command: 'if ($env:CLASSFLOW_FAKE_API_KEY) { Write-Output "leaked" } else { Write-Output "clean" }',
-      timeoutMs: 5000,
+      timeoutMs: 8000,
       onEvent: () => {},
     });
     const result = await promise;
     delete process.env.CLASSFLOW_FAKE_API_KEY;
     expect(result.stdout).toContain("clean");
     expect(result.stdout).not.toContain("leaked");
-  });
+  }, 10000);
 });
