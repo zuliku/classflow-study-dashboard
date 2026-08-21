@@ -121,6 +121,7 @@ export default defineConfig({
       "tests/cspLocalApi.test.ts",
       "tests/uiProductizationPhase1.test.tsx",
       "tests/kiroBrandMotion.test.tsx",
+      "tests/adaptiveDdlLayout.test.ts",
       "scripts/docx-compat/generate-fixtures.test.ts",
     ],
   },
