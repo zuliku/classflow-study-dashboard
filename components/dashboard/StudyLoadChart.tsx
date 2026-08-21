@@ -59,23 +59,23 @@ export function StudyLoadChart() {
         </span>
       </div>
 
-      {/* Metrics — 3 equal light boxes */}
+      {/* Metrics — 3 equal light boxes, slightly taller for balance */}
       <div className="grid grid-cols-3 gap-2.5 mt-3 shrink-0">
-        <div className="bg-surface-soft border border-line-soft rounded-xl p-3 flex flex-col justify-center min-h-[72px]">
+        <div className="bg-surface-soft border border-line-soft rounded-xl p-3.5 flex flex-col justify-center min-h-[108px]">
           <div className="flex items-baseline gap-1">
             <span className="text-xl font-bold text-charcoal tracking-tight">{isEmpty ? "0" : weekLoad.totalHours}</span>
             <span className="text-[11px] font-semibold text-satin-grey">h</span>
           </div>
           <p className="text-[10px] font-semibold text-sandrift mt-1">本周课时</p>
         </div>
-        <div className="bg-surface-soft border border-line-soft rounded-xl p-3 flex flex-col justify-center min-h-[72px]">
+        <div className="bg-surface-soft border border-line-soft rounded-xl p-3.5 flex flex-col justify-center min-h-[108px]">
           <div className="flex items-baseline gap-1">
             <span className="text-xl font-bold text-charcoal tracking-tight">{isEmpty ? "0" : weekLoad.totalSessions}</span>
             <span className="text-[11px] font-semibold text-satin-grey">节</span>
           </div>
           <p className="text-[10px] font-semibold text-sandrift mt-1">课程安排</p>
         </div>
-        <div className="bg-surface-soft border border-line-soft rounded-xl p-3 flex flex-col justify-center min-h-[72px]">
+        <div className="bg-surface-soft border border-line-soft rounded-xl p-3.5 flex flex-col justify-center min-h-[108px]">
           <div className="text-[13px] font-bold text-charcoal leading-5 truncate">
             {isEmpty || !weekLoad.busiestDay ? "—" : `${weekLoad.busiestDay.day} · ${weekLoad.busiestDay.hours}h`}
           </div>
@@ -83,8 +83,8 @@ export function StudyLoadChart() {
         </div>
       </div>
 
-      {/* Chart — bounded height, not flex-1 infinite */}
-      <div className="mt-3 shrink-0" style={{ height: "clamp(250px, 28vh, 310px)" }}>
+      {/* Chart — adaptive height, anchored near bottom with breathing */}
+      <div className="flex-1 flex flex-col justify-end mt-5 min-h-[330px] max-h-[400px] mb-6">
         {isEmpty ? (
           <div className="h-full flex items-center justify-center text-xs text-sandrift border border-dashed border-line-soft rounded-xl bg-surface-soft/50">
             本周暂无课程安排
