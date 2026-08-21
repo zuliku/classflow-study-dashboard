@@ -82,9 +82,10 @@ export function SidebarProfileCard({ collapsed }: { collapsed: boolean }) {
           </span>
         </span>
 
-        {/* Credit Progress：折叠时 max-height 0 + 上移 + 淡出 */}
+        {/* Credit Progress：grid 连续高度 1fr→0fr，无 max-height 硬切 */}
         <span className="sidebar-profile-credits">
-          <span className="block pt-1 mt-2 border-t border-line-soft">
+          <span className="sidebar-profile-credits-inner">
+            <span className="block pt-1 mt-2 border-t border-line-soft">
             {userProfile.totalCredits > 0 ? (
               <>
                 <span className="flex justify-between items-center text-[11px]">
@@ -106,6 +107,7 @@ export function SidebarProfileCard({ collapsed }: { collapsed: boolean }) {
             ) : (
               <span className="block text-[10px] text-sandrift pt-0.5">完善学业信息</span>
             )}
+            </span>
           </span>
         </span>
 
