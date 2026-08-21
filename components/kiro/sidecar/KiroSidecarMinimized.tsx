@@ -210,11 +210,12 @@ export function KiroSidecarMinimized({ visible }: { visible: boolean }) {
     <div
       ref={capsuleElRef}
       data-testid="kiro-sidecar-capsule"
+      data-kiro-flow={kiroBusy ? "working" : "ambient"}
       data-dragging={dragging || undefined}
       aria-hidden={!visible}
       {...(!visible ? ({ inert: "" } as unknown as React.HTMLAttributes<HTMLDivElement>) : {})}
       className={cn(
-        "hidden md:flex fixed z-40 rounded-full overflow-hidden select-none touch-none shadow-card group",
+        "hidden md:flex fixed z-40 rounded-full overflow-hidden select-none touch-none shadow-card group kiro-capsule",
         dragging
           ? "cursor-grabbing transition-none"
           : "cursor-grab transition-[opacity,transform,box-shadow] ease-[var(--ease-standard)] duration-[160ms] hover:shadow-[0_6px_18px_-2px_rgba(49,48,50,0.10)]",
@@ -234,19 +235,14 @@ export function KiroSidecarMinimized({ visible }: { visible: boolean }) {
       onPointerCancel={handlePointerCancel}
       aria-label="Kiro 已最小化"
     >
-      {/* 1px 流光边框：idle 静态细边，busy 才运行 perimeter sweep */}
+      {/* Kiro Brand Motion V2 — ambient always, working when busy */}
       <span
         aria-hidden="true"
+        data-kiro-flow={kiroBusy ? "working" : "ambient"}
         className={cn(
           "absolute inset-0 rounded-full kiro-ring pointer-events-none",
-          kiroBusy && "kiro-ring-animated",
-          dragging
-            ? "opacity-30"
-            : kiroBusy
-              ? "opacity-80 group-hover:opacity-90"
-              : "opacity-55 group-hover:opacity-70"
+          dragging ? "opacity-30" : "opacity-70 group-hover:opacity-80"
         )}
-        style={kiroBusy ? ({ animationDuration: "4.5s" } as React.CSSProperties) : undefined}
       />
       <div
         className={cn(

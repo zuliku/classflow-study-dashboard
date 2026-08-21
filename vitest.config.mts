@@ -120,6 +120,7 @@ export default defineConfig({
       "tests/rendererOriginTrust.test.ts",
       "tests/cspLocalApi.test.ts",
       "tests/uiProductizationPhase1.test.tsx",
+      "tests/kiroBrandMotion.test.tsx",
       "scripts/docx-compat/generate-fixtures.test.ts",
     ],
   },

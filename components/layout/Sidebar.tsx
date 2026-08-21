@@ -323,19 +323,21 @@ export function Sidebar() {
                 onClick={() => setActiveTab(item.id)}
                 aria-label={item.label}
                 aria-current={isActive ? "page" : undefined}
+                data-kiro-flow={isActive ? "active" : "ambient"}
                 className={cn(
-                  "relative w-full flex items-center rounded-xl group text-left",
+                  "relative w-full flex items-center rounded-xl group text-left sidebar-kiro",
                   "overflow-hidden transition-colors duration-[var(--motion-base)] ease-[var(--ease-standard)]"
                 )}
               >
-                {/* 1px 品牌流光：常驻（Idle 0.8 → Hover/Active 1）；DOM 始终 mounted，折叠不触发 ring restart */}
+                {/* Kiro Brand Motion V2 — ambient always, active when selected */}
                 <span
                   aria-hidden="true"
+                  data-kiro-flow={isActive ? "active" : "ambient"}
                   className={cn(
                     "absolute -inset-1/2 kiro-ring kiro-featured-flow pointer-events-none",
-                    "opacity-80 transition-opacity duration-[var(--motion-fast)]",
+                    "transition-opacity duration-[var(--motion-fast)]",
                     "group-hover:opacity-100 group-focus-visible:opacity-100",
-                    isActive && "opacity-100!"
+                    isActive ? "opacity-100!" : "opacity-80"
                   )}
                 />
                 {/* 内容层：m-[1.5px] + w calc(100%-3px)，四边均匀留出 1.5px 流光环（细 1 倍，基底高亮无断口） */}
