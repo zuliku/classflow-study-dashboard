@@ -50,6 +50,36 @@ describe("qqAdapter", () => {
     expect(adapter.getHealth().state).toBe("connected");
   });
 
+  it("transport auth failure uses shared QQ_AUTH_FAILED taxonomy", async () => {
+    const config = {
+      id: "qq_test",
+      enabled: true,
+      displayName: "Test Bot",
+      appId: "123456",
+      credentialRef: "cred_abc",
+      requireMentionInGroup: true,
+      allowedUsers: [] as string[],
+      allowedGroups: [] as string[],
+      receiveDirectMessages: true,
+      receiveGroupMessages: true,
+    } as never;
+    const adapter = new QQChannelAdapter({
+      config,
+      appSecret: "secret123",
+      inboxSink: sink,
+      transportFactory: (() => ({
+        start: async () => {
+          throw new Error("100016 invalid appid or secret");
+        },
+        stop: async () => {},
+        getState: () => "error",
+      })) as never,
+    });
+
+    await expect(adapter.start()).rejects.toMatchObject({ code: "QQ_AUTH_FAILED" });
+    expect(adapter.getHealth().lastError?.code).toBe("QQ_AUTH_FAILED");
+  });
+
   it("emit message → inbox ingest", async () => {
     const adapter = makeAdapter();
     await adapter.start();

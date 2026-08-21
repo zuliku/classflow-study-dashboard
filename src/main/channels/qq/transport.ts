@@ -8,6 +8,7 @@ import type { ChannelInboundMessage } from "../types";
 import type { QQChannelConfig } from "./config";
 import type { ChannelReplyTarget } from "../types";
 import { ChannelError } from "../errors";
+import { mapQQTokenError } from "./tokenErrorMapper";
 
 export type QQTransportState = "disconnected" | "connecting" | "connected" | "reconnecting" | "error";
 
@@ -72,26 +73,23 @@ export class QQWebSocketTransport {
     };
     const onResumed = () => this.setState("connected");
     const onError = (err: unknown) => {
-      const msg = err instanceof Error ? err.message : String(err);
-      // If still waiting for ready, reject readyPromise with auth error
-      // Check if readyPromise already settled by tracking?
-      // We'll reject only if not yet connected
+      const mapped = mapQQTokenError(err);
+      // Startup auth/rate failures are terminal and should not be hidden behind
+      // the gateway timeout. Other transient startup events retain the existing
+      // timeout/reconnect behavior.
       if (this.state === "connecting") {
-        if (msg.includes("401") || msg.includes("auth") || msg.includes("AppSecret") || msg.includes("QQ_AUTH_FAILED")) {
-          readyReject(new Error(JSON.stringify({ code: "QQ_AUTH_FAILED", message: msg.slice(0, 300) })));
-        } else {
-          // For non-auth errors during startup, also reject but with network code
-          // Let startup timeout handle otherwise
+        if (mapped.code === "QQ_AUTH_FAILED" || mapped.code === "QQ_RATE_LIMITED") {
+          readyReject(new Error(JSON.stringify(mapped)));
         }
+        return;
       }
-      // Runtime errors after ready
+      // Runtime errors after ready preserve reconnect semantics for transport
+      // failures, while auth/rate errors remain terminal.
       if (this.state === "connected" || this.state === "reconnecting") {
-        if (msg.includes("401") || msg.includes("auth")) {
-          this.setState("error", { code: "QQ_AUTH_FAILED", message: msg.slice(0, 200) });
-        } else if (msg.includes("rate")) {
-          this.setState("error", { code: "QQ_RATE_LIMITED", message: msg.slice(0, 200) });
+        if (mapped.code === "QQ_AUTH_FAILED" || mapped.code === "QQ_RATE_LIMITED") {
+          this.setState("error", mapped);
         } else {
-          this.setState("reconnecting", { code: "QQ_GATEWAY_DISCONNECTED", message: msg.slice(0, 200) });
+          this.setState("reconnecting", { code: "QQ_GATEWAY_DISCONNECTED", message: mapped.message });
         }
       }
     };
@@ -158,21 +156,10 @@ export class QQWebSocketTransport {
 
       // Start runPromise in background (maintains WS until stop/abort)
       this.runPromise = bot.start(signal).catch((e) => {
-        const raw = e instanceof Error ? e.message : String(e);
-        // If we are still connecting and ready not yet, reject ready
+        // If we are still connecting and ready not yet, reject ready with the
+        // same sanitized taxonomy used by connection testing and the adapter.
         if (this.state === "connecting") {
-          try {
-            const parsed = JSON.parse(raw) as { code?: string };
-            if (parsed.code === "QQ_AUTH_FAILED") {
-              readyReject(new Error(JSON.stringify({ code: "QQ_AUTH_FAILED", message: raw.slice(0, 300) })));
-              return;
-            }
-          } catch {}
-          if (raw.includes("401") || raw.includes("auth") || raw.includes("AppSecret")) {
-            readyReject(new Error(JSON.stringify({ code: "QQ_AUTH_FAILED", message: raw.slice(0, 300) })));
-          } else {
-            readyReject(e);
-          }
+          readyReject(new Error(JSON.stringify(mapQQTokenError(e))));
         } else {
           // After connected, errors are handled via onError
         }
@@ -208,23 +195,9 @@ export class QQWebSocketTransport {
         this.botListeners = [];
         this.runPromise = null;
         this.client = null;
-        const raw = e instanceof Error ? e.message : String(e);
-        let code = "QQ_GATEWAY_DISCONNECTED";
-        let msg = raw.slice(0, 300);
-        try {
-          const parsed = JSON.parse(raw) as { code?: string; message?: string };
-          if (parsed.code) {
-            code = parsed.code;
-            msg = parsed.message ?? msg;
-          }
-        } catch {
-          if (raw.includes("QQ_AUTH_FAILED") || raw.includes("401") || raw.includes("auth")) code = "QQ_AUTH_FAILED";
-          else if (raw.includes("rate")) code = "QQ_RATE_LIMITED";
-          else if (raw.includes("timeout") || raw.includes("GATEWAY")) code = "QQ_GATEWAY_DISCONNECTED";
-          else code = "QQ_NETWORK_ERROR";
-        }
-        this.setState("error", { code, message: msg });
-        throw new Error(JSON.stringify({ code, message: msg }));
+        const mapped = mapQQTokenError(e);
+        this.setState("error", mapped);
+        throw new Error(JSON.stringify(mapped));
       }
       // Success: clear timeout
       if (timer) clearTimeout(timer);
@@ -232,24 +205,11 @@ export class QQWebSocketTransport {
 
       // Ready succeeded, state already connected via onReady
     } catch (e) {
-      const raw = e instanceof Error ? e.message : String(e);
       // If already set error state, just throw
       if (this.state === "error") throw e;
-      let code = "QQ_NETWORK_ERROR";
-      let msg = raw.slice(0, 300);
-      try {
-        const parsed = JSON.parse(raw) as { code?: string; message?: string };
-        if (parsed.code) {
-          code = parsed.code;
-          msg = parsed.message ?? msg;
-        }
-      } catch {
-        if (raw.includes("QQ_AUTH_FAILED") || raw.includes("401") || raw.includes("auth")) code = "QQ_AUTH_FAILED";
-        else if (raw.includes("rate")) code = "QQ_RATE_LIMITED";
-        else if (raw.includes("GATEWAY")) code = "QQ_GATEWAY_DISCONNECTED";
-      }
-      this.setState("error", { code, message: msg });
-      throw new Error(JSON.stringify({ code, message: msg }));
+      const mapped = mapQQTokenError(e);
+      this.setState("error", mapped);
+      throw new Error(JSON.stringify(mapped));
     }
   }
 

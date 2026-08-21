@@ -36,7 +36,7 @@ class MockQQBot {
   }
   async start(signal?: AbortSignal): Promise<void> {
     this.startSignal = signal ?? null;
-    this.startPromise = new Promise<void>((resolve, reject) => {
+    this.startPromise = new Promise<void>((resolve) => {
       this.startResolve = resolve;
       if (signal) {
         signal.addEventListener("abort", () => resolve());
@@ -173,6 +173,25 @@ describe("qqTransportLifecycle", () => {
     bot.emit("error", new Error("HTTP 401 Unauthorized"));
     await expect(startPromise).rejects.toThrow(/QQ_AUTH_FAILED/);
     expect(transport.getState()).toBe("error");
+  });
+
+  it("Real transport maps QQ 100016 invalid appid or secret to QQ_AUTH_FAILED", async () => {
+    vi.useFakeTimers();
+    const config = { id: "qq_test", appId: "123", credentialRef: "cred_1", enabled: true, displayName: "Bot", requireMentionInGroup: true, allowedUsers: [], allowedGroups: [], receiveDirectMessages: true, receiveGroupMessages: true } as never;
+    const transport = new QQWebSocketTransport(config, "secret", {
+      onMessage: async () => {},
+      onStateChange: () => {},
+    });
+    const startPromise = transport.start();
+    await vi.advanceTimersByTimeAsync(0);
+    const bot = mockState.lastBot!;
+    bot.emit("error", new Error("100016 invalid appid or secret"));
+    const assertion = expect(startPromise).rejects.toThrow(/QQ_AUTH_FAILED/);
+    await vi.advanceTimersByTimeAsync(15_001);
+    await assertion;
+    expect(transport.getState()).toBe("error");
+    vi.useRealTimers();
+    await transport.stop().catch(() => {});
   });
 
   it("Real transport startup timeout 15s -> QQ_GATEWAY_DISCONNECTED", async () => {
