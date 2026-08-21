@@ -11,6 +11,7 @@ import { evaluateQQPolicy, QQRateLimiter } from "./policy";
 import type { QQTransportEvents } from "./transport";
 import { ChannelError } from "../errors";
 import { getReplyContextStore } from "../outbound/replyContextStore";
+import { mapQQTokenError } from "./tokenErrorMapper";
 
 export type QQSdkClientFactory = (config: QQChannelConfig, appSecret: string, events: QQTransportEvents) => {
   start: () => Promise<void>;
@@ -116,29 +117,9 @@ export class QQChannelAdapter implements ChannelAdapter {
       await this.transport.start();
       this.setState("connected");
     } catch (e) {
-      const raw = e instanceof Error ? e.message : String(e);
-      let code = "QQ_SDK_ERROR";
-      let msg = raw.slice(0, 300);
-      try {
-        const parsed = JSON.parse(raw) as { code?: string; message?: string };
-        if (parsed.code) {
-          code = parsed.code;
-          msg = parsed.message ?? msg;
-        }
-      } catch {}
-      // Map to known codes
-      if (raw.includes("QQ_AUTH_FAILED") || code === "QQ_AUTH_FAILED") code = "QQ_AUTH_FAILED";
-      else if (code !== "QQ_AUTH_FAILED" && code !== "QQ_NETWORK_ERROR" && code !== "QQ_RATE_LIMITED") {
-        // try infer
-        if (msg.includes("auth") || msg.includes("401")) code = "QQ_AUTH_FAILED";
-        else if (msg.includes("network") || msg.includes("ECONN")) code = "QQ_NETWORK_ERROR";
-      }
-      this.setState("error", { code, message: msg });
-      // Clear secret ref on auth fail for safety (keep config credentialRef but release memory)
-      if (code === "QQ_AUTH_FAILED") {
-        // do not clear appSecret entirely - keep for retry but log only code
-      }
-      throw new ChannelError(code as never, msg);
+      const mapped = mapQQTokenError(e);
+      this.setState("error", mapped);
+      throw new ChannelError(mapped.code, mapped.message);
     }
   }
 
