@@ -32,6 +32,22 @@ export function QQReplyDialog({ open, onOpenChange, item, onSent }: QQReplyDialo
   const [tone, setTone] = useState<"natural" | "concise" | "formal" | "friendly">("natural");
   const [draftGenerated, setDraftGenerated] = useState(false);
   const currentDialogItemIdRef = React.useRef<string | null>(null);
+
+  // Fresh-open session reset（Motion V2.1）：组件常驻后，false→true 沿清空上一会话的
+  // 草稿 / 错误 / 审批流状态（保持既有「每次打开为新回复」语义）；不在 close 时 reset。
+  const prevOpenRef = React.useRef(open);
+  React.useEffect(() => {
+    if (open && !prevOpenRef.current) {
+      setText("");
+      setTone("natural");
+      setDraftGenerated(false);
+      setError(null);
+      setApproval(null);
+      setConfirmOpen(false);
+      setSaving(false);
+    }
+    prevOpenRef.current = open;
+  }, [open]);
   const pushToast = useToastStore((s) => s.pushToast);
   const { generateDraft, cancel: cancelDraft, loading: draftLoading, error: draftError } = useKiroReplyDraft();
 

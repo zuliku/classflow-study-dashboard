@@ -125,6 +125,7 @@ export default defineConfig({
       "tests/workspacePolish.test.tsx",
       "tests/motionContract.test.tsx",
       "tests/uiMotionLifecycle.test.tsx",
+      "tests/timelineOverlayLifecycle.test.tsx",
       "tests/drawerPresentation.test.ts",
       "tests/demoManualInjection.test.tsx",
       "tests/extensionsRuntimeTruth.test.tsx",

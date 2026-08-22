@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useRef, useState, useCallback } from "react";
 import { MessageSquare, Plus, Plug2, Trash2, Power, TestTube2, Settings2, Mail, RefreshCw, X } from "lucide-react";
 import { Dialog } from "@/components/ui/Dialog";
 import { ChannelBrandIcon } from "@/components/icons/ChannelBrandIcon";
@@ -66,6 +66,9 @@ export function ChannelSettings() {
   const [runtimeState, setRuntimeState] = useState<ChannelRuntimeState>("loading");
   const [addOpen, setAddOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<ChannelStatus | null>(null);
+  // Exit payload snapshot：关闭编辑器后保留最后一次 target，exit 淡出不闪空（UI snapshot）
+  const lastEditTargetRef = useRef<ChannelStatus | null>(null);
+  if (editTarget) lastEditTargetRef.current = editTarget;
   const [busyMap, setBusyMap] = useState<Record<string, boolean>>({});
   const pushToast = useToastStore((s) => s.pushToast);
 
@@ -224,7 +227,16 @@ export function ChannelSettings() {
       )}
 
       <AddChannelDialog open={addOpen} onOpenChange={setAddOpen} onAdded={refresh} />
-      {editTarget && editTarget.config.channel === "qq-bot" && <EditQQDialog target={editTarget as unknown as { config: QQConfig; health: ChannelStatus["health"] }} onOpenChange={(o) => !o && setEditTarget(null)} onSaved={refresh} />}
+      {/* QQ Bot 编辑 Dialog：常驻 lifecycle owner（首次编辑后挂载）；open 表达 semantic state，
+          payload snapshot 由 lastEditTargetRef 提供——exit 期间继续渲染当前配置，不闪空 */}
+      {lastEditTargetRef.current && (
+        <EditQQDialog
+          open={editTarget?.config.channel === "qq-bot"}
+          target={lastEditTargetRef.current as unknown as { config: QQConfig; health: ChannelStatus["health"] }}
+          onOpenChange={(o) => !o && setEditTarget(null)}
+          onSaved={refresh}
+        />
+      )}
     </div>
   );
 }
@@ -484,7 +496,7 @@ function AddQQMailPanel({ onAdded, onBusyChange }: { onAdded: () => void; onBusy
   );
 }
 
-function EditQQDialog({ target, onOpenChange, onSaved }: { target: { config: QQConfig; health: ChannelStatus["health"] }; onOpenChange: (o: boolean) => void; onSaved: () => void }) {
+function EditQQDialog({ open, target, onOpenChange, onSaved }: { open: boolean; target: { config: QQConfig; health: ChannelStatus["health"] }; onOpenChange: (o: boolean) => void; onSaved: () => void }) {
   const [displayName, setDisplayName] = useState(target.config.displayName);
   const [requireMentionInGroup, setRequireMentionInGroup] = useState(target.config.requireMentionInGroup);
   const [receiveDirectMessages, setReceiveDirectMessages] = useState(target.config.receiveDirectMessages);
@@ -494,6 +506,24 @@ function EditQQDialog({ target, onOpenChange, onSaved }: { target: { config: QQC
   const [newSecret, setNewSecret] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Fresh-open session reset（Motion V2.1）：组件常驻后，false→true 沿从 target 重新 seed
+  // 表单（保持既有「每次打开为当前配置」语义）；不在 close 时 reset，exit 中内容保持。
+  const prevOpenRef = React.useRef(open);
+  useEffect(() => {
+    if (open && !prevOpenRef.current) {
+      setDisplayName(target.config.displayName);
+      setRequireMentionInGroup(target.config.requireMentionInGroup);
+      setReceiveDirectMessages(target.config.receiveDirectMessages);
+      setReceiveGroupMessages(target.config.receiveGroupMessages);
+      setAllowedUsers(target.config.allowedUsers.join(", "));
+      setAllowedGroups(target.config.allowedGroups.join(", "));
+      setNewSecret("");
+      setError(null);
+      setSaving(false);
+    }
+    prevOpenRef.current = open;
+  }, [open, target]);
 
   const handleSave = async () => {
     setError(null);
@@ -537,7 +567,7 @@ function EditQQDialog({ target, onOpenChange, onSaved }: { target: { config: QQC
   };
 
   return (
-    <Dialog open={true} onOpenChange={onOpenChange} overlayId="channel-edit-qq" aria-label="编辑 QQ Bot" className="w-[min(520px,calc(100vw-24px))] bg-surface border border-line rounded-2xl p-5 space-y-4 max-h-[85vh] overflow-y-auto">
+    <Dialog open={open} onOpenChange={onOpenChange} overlayId="channel-edit-qq" aria-label="编辑 QQ Bot" aria-hidden={!open || undefined} className={cn("w-[min(520px,calc(100vw-24px))] bg-surface border border-line rounded-2xl p-5 space-y-4 max-h-[85vh] overflow-y-auto", !open && "pointer-events-none")}>
       <div className="flex items-center gap-2.5">
         <div className="w-9 h-9 rounded-xl bg-pastel-mint border border-line flex items-center justify-center"><ChannelBrandIcon source="qq-bot" size={18} /></div>
         <div><h4 className="text-sm font-bold text-charcoal">编辑 QQ Bot</h4><p className="text-[11px] text-sandrift">App ID: {target.config.appId}</p></div>

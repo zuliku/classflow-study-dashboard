@@ -50,7 +50,8 @@ export function KiroMemoryManager({
     });
   }, [memory.memories]);
 
-  if (!open) return null;
+  // Motion V2.1：组件常驻（不再 `if (!open) return null` 硬卸载）——
+  // semantic close 后 Dialog 自身播完 exit presence；数据刷新本就以 open 为门控。
 
   const startEdit = (m: KiroMemory) => {
     setEditing(m);
@@ -98,7 +99,7 @@ export function KiroMemoryManager({
 
   return (
     <Dialog
-      open
+      open={open}
       onOpenChange={(next) => {
         if (!next) onClose();
       }}

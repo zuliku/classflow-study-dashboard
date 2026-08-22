@@ -2,6 +2,8 @@
 
 import React, { useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { usePresence } from "@/lib/usePresence";
+import { MOTION_EXIT_MS } from "@/lib/motion";
 import { cn } from "@/lib/utils";
 
 /**
@@ -10,6 +12,13 @@ import { cn } from "@/lib/utils";
  * - Collision Detection：按真实 anchor/popover/workspace 矩形选择 placement，再 clamp
  * - bounds = Timeline Workspace ∩ Viewport，内边距 10px
  * - Esc 关闭；mouseenter/leave 转发（调用方实现 hover bridge）
+ *
+ * Presence Lifecycle（Motion V2.1）：
+ * - semantic `open` = 交互所有权（Esc / outside listener 均以 open 为条件，exiting DOM 不吞输入）
+ * - mounted / visible = 共享 usePresence（exit = MOTION_EXIT_MS.fast，与 CSS --motion-exit-fast 同源）；
+ *   Portal 在 mounted=false 前保留，退出期间面板原位淡出
+ * - position：open=true 时测量/更新；semantic close 不清空 pos —— exit 沿最后位置 fade，
+ *   下一次 open 重新测量真实 anchor/bounds（不 transition left/top）
  */
 
 export type FloatingDetailKind = "marker" | "interval";
@@ -84,14 +93,15 @@ export function FloatingTimelineDetail({
   onMouseLeave?: () => void;
   children: React.ReactNode;
 }) {
+  // semantic open / presentation mounted+visible（共享 presence lifecycle）
+  const { mounted, visible } = usePresence(open, MOTION_EXIT_MS.fast);
   const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
   const popRef = useRef<HTMLDivElement | null>(null);
 
   useLayoutEffect(() => {
-    if (!open) {
-      setPos(null);
-      return;
-    }
+    // semantic close：停止新的 position ownership 但保留最后一个 pos（exit 原位淡出）；
+    // 真正 unmount 后无需显式 reset，下次 open 重新测量
+    if (!open) return;
     const anchor = anchorRef.current;
     const boundsEl = boundsRef.current;
     const pop = popRef.current;
@@ -114,7 +124,7 @@ export function FloatingTimelineDetail({
     setPos(next);
   }, [open, kind, anchorRef, boundsRef]);
 
-  // Esc 关闭
+  // Esc 所有权以 semantic open 为条件（不是 mounted）：visual exit 期间不再拦截用户输入
   useLayoutEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
@@ -124,7 +134,7 @@ export function FloatingTimelineDetail({
     return () => window.removeEventListener("keydown", onKey);
   }, [open, onRequestClose]);
 
-  if (!open) return null;
+  if (!mounted) return null;
 
   return createPortal(
     <div
@@ -136,15 +146,16 @@ export function FloatingTimelineDetail({
       onMouseLeave={onMouseLeave}
       className={cn(
         "fixed z-[70] bg-surface border border-line-strong rounded-[13px] shadow-card",
-        "transition-opacity duration-[var(--motion-fast)]",
-        pos ? "opacity-100" : "opacity-0"
+        // enter = --motion-fast / exit = --motion-exit-fast（与 presence unmount 同源对应）
+        "transition-opacity ease-[var(--ease-standard)]",
+        visible ? "opacity-100 duration-[var(--motion-fast)]" : "opacity-0 pointer-events-none !duration-[var(--motion-exit-fast)]"
       )}
       style={{
         left: pos?.x ?? -9999,
         top: pos?.y ?? -9999,
         width: 232,
         maxWidth: "min(260px, calc(100vw - 24px))",
-        pointerEvents: "auto",
+        pointerEvents: visible ? "auto" : "none",
       }}
     >
       {children}

@@ -18,6 +18,7 @@ import {
 } from "@/lib/planning/applyStudyRebalance";
 import { Dialog } from "@/components/ui/Dialog";
 import { Button } from "@/components/ui/Button";
+import { cn } from "@/lib/utils";
 import {
   CourseOverlapApprovalList,
   CourseOverlapDisplayItem,
@@ -53,6 +54,10 @@ export function StudyRebalanceProposalCard({
   const [dismissed, setDismissed] = useState(false);
   const [applyState, setApplyState] = useState<ApplyState>("idle");
   const [pendingApproval, setPendingApproval] = useState<RebalanceCourseOverlapInfo[] | null>(null);
+  // Exit payload snapshot：semantic close 后保留最后一次 approval 内容供 exit 淡出渲染
+  const shownApprovalRef = useRef<RebalanceCourseOverlapInfo[] | null>(null);
+  if (pendingApproval) shownApprovalRef.current = pendingApproval;
+  const shownApproval = pendingApproval ?? shownApprovalRef.current;
   const appliedMovesRef = useRef<RebalanceMoveInput[] | null>(null);
   /** Apply 前的 Approval 快照 + Apply 后的状态（Undo 精确恢复 / stale 指纹；V1.1） */
   const originalApprovalsRef = useRef<StudyRebalanceApprovalSnapshot | null>(null);
@@ -299,22 +304,23 @@ export function StudyRebalanceProposalCard({
         {renderActions()}
       </div>
 
-      {/* Task 6 Approval Gate：Rebalance 与课程重叠 → 写入前批量确认一次（all-or-nothing） */}
-      {pendingApproval && (
-        <Dialog
-          open
-          onOpenChange={(next) => {
-            if (!next) setPendingApproval(null);
-          }}
-          overlayId="kiro-rebalance-course-overlap-approval"
-          stackZ={60}
-          aria-label="学习计划调整与课程时间重叠"
-          className="max-w-md"
-        >
+      {/* Task 6 Approval Gate：Rebalance 与课程重叠 → 写入前批量确认一次（all-or-nothing）。
+          Motion V2.1：Dialog 常驻，open 表达 semantic state；payload snapshot 供 exit 淡出渲染 */}
+      <Dialog
+        open={!!pendingApproval}
+        onOpenChange={(next) => {
+          if (!next) setPendingApproval(null);
+        }}
+        overlayId="kiro-rebalance-course-overlap-approval"
+        stackZ={60}
+        aria-label="学习计划调整与课程时间重叠"
+        aria-hidden={!pendingApproval || undefined}
+        className={cn("max-w-md", !pendingApproval && "pointer-events-none")}
+      >
           <div className="p-5 space-y-3">
             <h3 className="text-base font-bold text-charcoal">学习计划调整与课程时间重叠</h3>
             <p className="text-xs leading-relaxed text-satin-grey">
-              Kiro 的这次调整中有 {pendingApproval.length} 个学习时段会与课程时间重叠。
+              Kiro 的这次调整中有 {(shownApproval?.length ?? 0)} 个学习时段会与课程时间重叠。
               确认后将一次性应用全部调整。
             </p>
             <p className="text-[11px] leading-relaxed text-sandrift">
@@ -323,7 +329,7 @@ export function StudyRebalanceProposalCard({
               如果之后课程时间发生变化，会重新检查。
             </p>
             <CourseOverlapApprovalList
-              items={pendingApproval.map(
+              items={(shownApproval ?? []).map(
                 (o): CourseOverlapDisplayItem => ({
                   key: `${o.moveIndex}-${o.blockId}`,
                   title: o.title,
@@ -350,8 +356,7 @@ export function StudyRebalanceProposalCard({
               </Button>
             </div>
           </div>
-        </Dialog>
-      )}
+      </Dialog>
     </div>
   );
 }

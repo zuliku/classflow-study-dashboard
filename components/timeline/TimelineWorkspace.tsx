@@ -1079,35 +1079,23 @@ export function TimelineWorkspace() {
         </div>
       </div>
 
-      {/* ---------- 安排学习计划（popover） ---------- */}
-      {arrangeFor && (
-        <ArrangeSheet
-          assignment={arrangeFor}
-          weekDates={weekDates}
-          onClose={() => setArrangeFor(null)}
-          getPlacement={(date, start, end) =>
-            analyzeStudyBlockPlacement(
-              { date, startTime: start, endTime: end },
-              { schedules: weekSchedules, studyBlocks, courses, currentSemesterWeek }
-            )
-          }
-          onSubmit={submitArrange}
-        />
-      )}
-
-      {/* ---------- 自由学习计划（Quick Create） ---------- */}
-      {freeBlockOpen && (
-        <ArrangeSheet
-          assignment={null}
-          weekDates={weekDates}
-          onClose={() => setFreeBlockOpen(false)}
-          getPlacement={(date, start, end) =>
-            analyzeStudyBlockPlacement(
-              { date, startTime: start, endTime: end },
-              { schedules: weekSchedules, studyBlocks, courses, currentSemesterWeek }
-            )
-          }
-          onSubmit={(_a, date, start, end) => {
+      {/* ---------- 安排学习计划（assignment 安排 / 自由创建共用同一个 Dialog lifecycle owner；
+          payload snapshot 由 ArrangeSheet 内部持有，exit 期间不发生内容 morph） ---------- */}
+      <ArrangeSheet
+        open={arrangeFor !== null || freeBlockOpen}
+        assignment={arrangeFor}
+        weekDates={weekDates}
+        onClose={() => { setArrangeFor(null); setFreeBlockOpen(false); }}
+        getPlacement={(date, start, end) =>
+          analyzeStudyBlockPlacement(
+            { date, startTime: start, endTime: end },
+            { schedules: weekSchedules, studyBlocks, courses, currentSemesterWeek }
+          )
+        }
+        onSubmit={(assignment, date, start, end) => {
+          if (assignment) {
+            submitArrange(assignment, date, start, end);
+          } else {
             const analysis = analyzeStudyBlockPlacement(
               { date, startTime: start, endTime: end },
               { schedules: weekSchedules, studyBlocks, courses, currentSemesterWeek }
@@ -1122,12 +1110,12 @@ export function TimelineWorkspace() {
             addStudyBlock({ title: "学习计划", date, startTime: start, endTime: end, source: "manual" });
             pushToast({ message: `已添加学习计划${courseOverlapSuffix(analysis.courseOverlaps)}` });
             setFreeBlockOpen(false);
-          }}
-        />
-      )}
+          }
+        }}
+      />
 
-      {/* ---------- 考试 / 日程（popover） ---------- */}
-      {markOpen && <MarkSheet weekDates={weekDates} onClose={() => setMarkOpen(false)} onSubmit={submitMark} />}
+      {/* ---------- 考试 / 日程（常驻 lifecycle owner；fresh-open 重置表单） ---------- */}
+      <MarkSheet open={markOpen} weekDates={weekDates} onClose={() => setMarkOpen(false)} onSubmit={submitMark} />
     </div>
 
     {/* ---------- 待安排：独立 Secondary Panel（首屏之后，不挤压时间表） ---------- */}
@@ -1181,6 +1169,12 @@ export function TimelineWorkspace() {
  * Hover / Focus / Tap 通过 FloatingTimelineDetail（Portal + collision）显示详情；
  * 点击不导航（stopPropagation 防误开课程 Drawer）。hover 只允许 opacity/ring/color，无 scale。
  */
+
+/** Hover bridge grace（交互宽限时间，非 Motion Contract）：
+ *  mouse 离开 marker 与移入 floating panel 之间的 intent 宽限；属于 hover debounce 类
+ *  交互计时，不迁移到 lib/motion.ts。 */
+const HOVER_BRIDGE_GRACE_MS = 100;
+
 function CourseTaskMarker({
   blocks,
   schedule,
@@ -1199,7 +1193,7 @@ function CourseTaskMarker({
 
   const scheduleClose = () => {
     if (closeTimerRef.current) window.clearTimeout(closeTimerRef.current);
-    closeTimerRef.current = window.setTimeout(() => setOpen(false), 100);
+    closeTimerRef.current = window.setTimeout(() => setOpen(false), HOVER_BRIDGE_GRACE_MS);
   };
   const cancelClose = () => {
     if (closeTimerRef.current) {
@@ -1294,15 +1288,29 @@ function getSemesterWeekOf(date: Date, semester: { startDate: string; totalWeeks
   return Math.floor(diff / 7) + 1;
 }
 
-/** 安排学习计划小表单（assignment 可选：来自 Shelf 或自由创建）
- *  getPlacement：实时分析所选时间（课程重叠 = warning 提示，仍可确认；StudyBlock 硬冲突在提交时拦截） */
-function ArrangeSheet({
+/**
+ * 安排学习计划小表单（assignment 可选：来自 Shelf 或自由创建）。
+ *
+ * Presence Lifecycle（Motion V2.1）：
+ * - 组件常驻，`open` 表达 semantic state；Dialog 自己控制 mounted/visible，
+ *   semantic close 后仍播完 --motion-exit-base 的 exit（父级不再条件卸载）。
+ * - Exit payload snapshot：open=true 时跟随 assignment；关闭后保留最后一次打开的
+ *   payload 播 exit——「安排任务 A」的淡出不得闪变成自由学习计划表单。
+ *   纯 UI snapshot（组件内 state），不写入 Store、不复制 domain 数据。
+ * - Fresh-open session reset：在 false→true 沿重置本地草稿（保持既有
+ *   「每次打开为新表单」语义）；不在 close 时 reset，否则 exit 中内容会清空。
+ * - semantic close 即释放交互所有权：exit 期间面板 pointer-events-none +
+ *   aria-hidden，确认/取消不可再触发。
+ */
+export function ArrangeSheet({
+  open,
   assignment,
   weekDates,
   onClose,
   onSubmit,
   getPlacement,
 }: {
+  open: boolean;
   assignment: Assignment | null;
   weekDates: string[];
   onClose: () => void;
@@ -1314,12 +1322,32 @@ function ArrangeSheet({
   const [date, setDate] = useState(defaultDate);
   const [start, setStart] = useState("19:00");
   const [end, setEnd] = useState("20:00");
-  const [title, setTitle] = useState(assignment?.title ?? "");
+  const [title, setTitle] = useState("");
+
+  // ---- Exit payload snapshot（semantic close 后继续渲染最后一次 payload） ----
+  const [snapshot, setSnapshot] = useState<Assignment | null>(null);
+  useEffect(() => {
+    if (open) setSnapshot(assignment);
+  }, [open, assignment]);
+  const shown = open ? assignment : snapshot;
+
+  // ---- Fresh-open session reset（false→true 沿） ----
+  const prevOpenRef = useRef(false);
+  useEffect(() => {
+    if (open && !prevOpenRef.current) {
+      setDate(defaultDate);
+      setStart("19:00");
+      setEnd("20:00");
+      setTitle("");
+    }
+    prevOpenRef.current = open;
+  }, [open, defaultDate]);
+
   const placement = getPlacement?.(date, start, end);
   const overlapHint = placement?.courseOverlaps[0];
   return (
     <Dialog
-      open
+      open={open}
       onOpenChange={(next) => {
         if (!next) onClose();
       }}
@@ -1328,7 +1356,12 @@ function ArrangeSheet({
       closeOnBackdrop
       aria-label="安排学习计划"
       data-testid="timeline-arrange-sheet"
-      className="max-w-sm p-4 space-y-3 border-line-strong rounded-2xl shadow-card"
+      aria-hidden={!open || undefined}
+      className={cn(
+        "max-w-sm p-4 space-y-3 border-line-strong rounded-2xl shadow-card",
+        // exit presence 期间释放指针所有权（视觉快照只读）
+        !open && "pointer-events-none"
+      )}
     >
         <div className="flex items-center justify-between">
           <h3 className="text-sm font-bold text-charcoal">安排学习计划</h3>
@@ -1336,8 +1369,8 @@ function ArrangeSheet({
             <X className="w-4 h-4" />
           </button>
         </div>
-        {assignment ? (
-          <p className="text-[11px] font-semibold text-charcoal">{assignment.title}</p>
+        {shown ? (
+          <p className="text-[11px] font-semibold text-charcoal">{shown.title}</p>
         ) : (
           <input
             type="text"
@@ -1345,13 +1378,13 @@ function ArrangeSheet({
             onChange={(e) => setTitle(e.target.value)}
             placeholder="学习计划标题（如：复习计量经济学）"
             aria-label="学习计划标题"
-            className="w-full h-9 px-2.5 bg-[#F7F5F5] border border-line rounded-xl text-xs font-semibold text-charcoal focus:outline-none focus:border-charcoal placeholder-sandrift"
+            className="w-full h-9 px-2.5 bg-background border border-line rounded-xl text-xs font-semibold text-charcoal focus:outline-none focus:border-charcoal placeholder-sandrift"
           />
         )}
         <div className="grid grid-cols-3 gap-2">
           <label className="space-y-1">
             <span className="text-[10px] font-bold text-sandrift">日期</span>
-            <select value={date} onChange={(e) => setDate(e.target.value)} className="w-full h-8 bg-[#F7F5F5] border border-line rounded-lg px-1.5 text-[11px] font-semibold text-charcoal focus:outline-none">
+            <select value={date} onChange={(e) => setDate(e.target.value)} className="w-full h-8 bg-background border border-line rounded-lg px-1.5 text-[11px] font-semibold text-charcoal focus:outline-none">
               {weekDates.map((d) => (
                 <option key={d} value={d}>{d.slice(5).replace("-", "/")}</option>
               ))}
@@ -1359,23 +1392,23 @@ function ArrangeSheet({
           </label>
           <label className="space-y-1">
             <span className="text-[10px] font-bold text-sandrift">开始</span>
-            <input type="time" value={start} onChange={(e) => setStart(e.target.value)} className="w-full h-8 bg-[#F7F5F5] border border-line rounded-lg px-1.5 text-[11px] font-semibold text-charcoal focus:outline-none" />
+            <input type="time" value={start} onChange={(e) => setStart(e.target.value)} className="w-full h-8 bg-background border border-line rounded-lg px-1.5 text-[11px] font-semibold text-charcoal focus:outline-none" />
           </label>
           <label className="space-y-1">
             <span className="text-[10px] font-bold text-sandrift">结束</span>
-            <input type="time" value={end} onChange={(e) => setEnd(e.target.value)} className="w-full h-8 bg-[#F7F5F5] border border-line rounded-lg px-1.5 text-[11px] font-semibold text-charcoal focus:outline-none" />
+            <input type="time" value={end} onChange={(e) => setEnd(e.target.value)} className="w-full h-8 bg-background border border-line rounded-lg px-1.5 text-[11px] font-semibold text-charcoal focus:outline-none" />
           </label>
         </div>
         {overlapHint && !placement?.hardConflict && (
-          <p className="text-[11px] font-semibold text-[#936E4C]">
+          <p className="text-[11px] font-semibold text-warning">
             ⚠ 与《{overlapHint.courseName}》{overlapHint.startTime}–{overlapHint.endTime} 重叠
           </p>
         )}
         <div className="flex justify-end gap-2 pt-1">
-          <button onClick={onClose} className="px-3 h-8 rounded-lg text-[11px] font-bold text-satin-grey hover:bg-alabaster transition-colors">取消</button>
+          <button onClick={onClose} disabled={!open} className="px-3 h-8 rounded-lg text-[11px] font-bold text-satin-grey hover:bg-alabaster transition-colors">取消</button>
           <button
-            disabled={!assignment && title.trim().length === 0}
-            onClick={() => onSubmit(assignment, date, start, end)}
+            disabled={!open || (!shown && title.trim().length === 0)}
+            onClick={() => onSubmit(shown, date, start, end)}
             className="px-3 h-8 rounded-lg text-[11px] font-bold text-charcoal bg-pastel-mint hover:bg-pastel-mint transition-colors disabled:opacity-40"
           >
             确认安排
@@ -1385,12 +1418,17 @@ function ArrangeSheet({
   );
 }
 
-/** 考试 / 日程小表单 */
-function MarkSheet({
+/** 考试 / 日程小表单（常驻 lifecycle owner）：
+ *  - `open` 表达 semantic state，Dialog 自己控制 presence；semantic close 后播完 exit
+ *  - Fresh-open session reset：false→true 沿重置本地草稿（保持既有「每次打开为新表单」语义）；
+ *    不在 close 时 reset——否则 exit 中用户会看到内容清空 */
+export function MarkSheet({
+  open,
   weekDates,
   onClose,
   onSubmit,
 }: {
+  open: boolean;
   weekDates: string[];
   onClose: () => void;
   onSubmit: (m: { title: string; type: "exam" | "activity"; date: string; startTime?: string; endTime?: string }) => void;
@@ -1402,10 +1440,24 @@ function MarkSheet({
   const [date, setDate] = useState(defaultDate);
   const [start, setStart] = useState("");
   const [end, setEnd] = useState("");
+
+  // ---- Fresh-open session reset（false→true 沿） ----
+  const prevOpenRef = useRef(false);
+  useEffect(() => {
+    if (open && !prevOpenRef.current) {
+      setTitle("");
+      setType("exam");
+      setDate(defaultDate);
+      setStart("");
+      setEnd("");
+    }
+    prevOpenRef.current = open;
+  }, [open, defaultDate]);
+
   const canSubmit = title.trim().length > 0;
   return (
     <Dialog
-      open
+      open={open}
       onOpenChange={(next) => {
         if (!next) onClose();
       }}
@@ -1414,7 +1466,12 @@ function MarkSheet({
       closeOnBackdrop
       aria-label="添加考试或日程"
       data-testid="timeline-mark-sheet"
-      className="max-w-sm p-4 space-y-3 border-line-strong rounded-2xl shadow-card"
+      aria-hidden={!open || undefined}
+      className={cn(
+        "max-w-sm p-4 space-y-3 border-line-strong rounded-2xl shadow-card",
+        // exit presence 期间释放指针所有权
+        !open && "pointer-events-none"
+      )}
     >
         <div className="flex items-center justify-between">
           <h3 className="text-sm font-bold text-charcoal">考试 / 日程</h3>
@@ -1428,7 +1485,7 @@ function MarkSheet({
           onChange={(e) => setTitle(e.target.value)}
           placeholder="标题（如：英语六级模拟考试）"
           aria-label="标题"
-          className="w-full h-9 px-2.5 bg-[#F7F5F5] border border-line rounded-xl text-xs font-semibold text-charcoal focus:outline-none focus:border-charcoal placeholder-sandrift"
+          className="w-full h-9 px-2.5 bg-background border border-line rounded-xl text-xs font-semibold text-charcoal focus:outline-none focus:border-charcoal placeholder-sandrift"
         />
         <div className="flex items-center gap-1.5">
           {(["exam", "activity"] as const).map((t) => (
@@ -1448,7 +1505,7 @@ function MarkSheet({
         <div className="grid grid-cols-3 gap-2">
           <label className="space-y-1">
             <span className="text-[10px] font-bold text-sandrift">日期</span>
-            <select value={date} onChange={(e) => setDate(e.target.value)} className="w-full h-8 bg-[#F7F5F5] border border-line rounded-lg px-1.5 text-[11px] font-semibold text-charcoal focus:outline-none">
+            <select value={date} onChange={(e) => setDate(e.target.value)} className="w-full h-8 bg-background border border-line rounded-lg px-1.5 text-[11px] font-semibold text-charcoal focus:outline-none">
               {weekDates.map((d) => (
                 <option key={d} value={d}>{d.slice(5).replace("-", "/")}</option>
               ))}
@@ -1456,16 +1513,16 @@ function MarkSheet({
           </label>
           <label className="space-y-1">
             <span className="text-[10px] font-bold text-sandrift">开始（可选）</span>
-            <input type="time" value={start} onChange={(e) => setStart(e.target.value)} className="w-full h-8 bg-[#F7F5F5] border border-line rounded-lg px-1.5 text-[11px] font-semibold text-charcoal focus:outline-none" />
+            <input type="time" value={start} onChange={(e) => setStart(e.target.value)} className="w-full h-8 bg-background border border-line rounded-lg px-1.5 text-[11px] font-semibold text-charcoal focus:outline-none" />
           </label>
           <label className="space-y-1">
             <span className="text-[10px] font-bold text-sandrift">结束（可选）</span>
-            <input type="time" value={end} onChange={(e) => setEnd(e.target.value)} className="w-full h-8 bg-[#F7F5F5] border border-line rounded-lg px-1.5 text-[11px] font-semibold text-charcoal focus:outline-none" />
+            <input type="time" value={end} onChange={(e) => setEnd(e.target.value)} className="w-full h-8 bg-background border border-line rounded-lg px-1.5 text-[11px] font-semibold text-charcoal focus:outline-none" />
           </label>
         </div>
         <p className="text-[10px] text-sandrift">不填开始 / 结束时间时显示为「全天」事件。</p>
         <div className="flex justify-end gap-2 pt-1">
-          <button onClick={onClose} className="px-3 h-8 rounded-lg text-[11px] font-bold text-satin-grey hover:bg-alabaster transition-colors">取消</button>
+          <button onClick={onClose} disabled={!open} className="px-3 h-8 rounded-lg text-[11px] font-bold text-satin-grey hover:bg-alabaster transition-colors">取消</button>
           <button
             disabled={!canSubmit}
             onClick={() => onSubmit({ title: title.trim(), type, date, startTime: start || undefined, endTime: end || undefined })}

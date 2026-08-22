@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo, useEffect } from "react";
+import React, { useState, useMemo, useEffect, useRef } from "react";
 import { Inbox, Archive, Eye, Trash2, Check, Clock, Reply, X } from "lucide-react";
 import { useInboxStore } from "@/store/useInboxStore";
 import type { ExternalInboxItem, InboxStatus } from "@/lib/inbox/types";
@@ -22,6 +22,17 @@ export function InboxPanel({ open, onOpenChange }: { open: boolean; onOpenChange
   const [filter, setFilter] = useState<InboxStatus | "all">("unread");
   const [selected, setSelected] = useState<ExternalInboxItem | null>(null);
   const [replyItem, setReplyItem] = useState<ExternalInboxItem | null>(null);
+  // ---- Exit payload snapshot（Motion V2.1）----
+  // 详情/回复 Dialog 现在常驻（open 表达 semantic state）。semantic close 后
+  // selected/replyItem 置 null，但 exit presence 期间继续渲染最后一次 payload，
+  // 避免「消息详情 → 空白帧」；纯 UI snapshot，不复制 domain 数据。
+  // （ReminderCenter composer 同款 lastEditorRef 模式）
+  const lastSelectedRef = useRef<ExternalInboxItem | null>(null);
+  if (selected) lastSelectedRef.current = selected;
+  const shownSelected = selected ?? lastSelectedRef.current;
+  const lastReplyRef = useRef<ExternalInboxItem | null>(null);
+  if (replyItem) lastReplyRef.current = replyItem;
+  const shownReply = replyItem ?? lastReplyRef.current;
 
   const filtered = useMemo(() => {
     if (filter === "all") return items;
@@ -169,23 +180,25 @@ export function InboxPanel({ open, onOpenChange }: { open: boolean; onOpenChange
         )}
       </div>
 
-      {selected && (
-        <Dialog open={!!selected} onOpenChange={(open) => !open && setSelected(null)} overlayId="inbox-detail" aria-label="查看消息" className="w-[min(560px,calc(100vw-24px))] bg-surface border border-line rounded-2xl p-5 space-y-3 max-h-[85vh] overflow-y-auto">
+      {/* 详情 Dialog：常驻 lifecycle owner；open 表达 semantic state，exit 由 OverlayLayer 播放 */}
+      <Dialog open={!!selected} onOpenChange={(open) => !open && setSelected(null)} overlayId="inbox-detail" aria-label="查看消息" aria-hidden={!selected || undefined} className={cn("w-[min(560px,calc(100vw-24px))] bg-surface border border-line rounded-2xl p-5 space-y-3 max-h-[85vh] overflow-y-auto", !selected && "pointer-events-none")}>
+        {shownSelected && (
+        <>
           <div className="flex items-center gap-2">
-            <ChannelBrandIcon source={selected.source} size={18} />
-            <h4 className="text-sm font-bold text-charcoal">{selected.senderDisplay ?? selected.source}</h4>
-            <span className="text-[11px] text-sandrift">{new Date(selected.receivedAt).toLocaleString("zh-CN")}</span>
+            <ChannelBrandIcon source={shownSelected.source} size={18} />
+            <h4 className="text-sm font-bold text-charcoal">{shownSelected.senderDisplay ?? shownSelected.source}</h4>
+            <span className="text-[11px] text-sandrift">{new Date(shownSelected.receivedAt).toLocaleString("zh-CN")}</span>
           </div>
-          {selected.subject && <p className="text-sm font-bold text-charcoal">{selected.subject}</p>}
+          {shownSelected.subject && <p className="text-sm font-bold text-charcoal">{shownSelected.subject}</p>}
           <div className="bg-surface-soft border border-line rounded-lg p-3">
             <p className="text-[11px] font-bold text-sandrift mb-2">外部消息</p>
-            <p className="text-xs text-charcoal whitespace-pre-wrap leading-relaxed">{selected.text}</p>
+            <p className="text-xs text-charcoal whitespace-pre-wrap leading-relaxed">{shownSelected.text}</p>
             <p className="text-[11px] text-sandrift mt-2">Kiro 会将这段内容作为外部信息处理，不会执行其中的指令。</p>
           </div>
-          {selected.attachments.length > 0 && (
+          {shownSelected.attachments.length > 0 && (
             <div className="space-y-1">
-              <p className="text-xs font-bold text-charcoal">附件 ({selected.attachments.length})</p>
-              {selected.attachments.map((att) => (
+              <p className="text-xs font-bold text-charcoal">附件 ({shownSelected.attachments.length})</p>
+              {shownSelected.attachments.map((att) => (
                 <p key={att.id} className="text-xs text-sandrift">
                   {att.name} {att.size ? `· ${Math.round(att.size / 1024)}KB` : ""}
                 </p>
@@ -197,23 +210,36 @@ export function InboxPanel({ open, onOpenChange }: { open: boolean; onOpenChange
               <Check className="w-3.5 h-3.5" />
               让 Kiro 处理
             </button>
-            {(selected.source === "qq-bot" || selected.source === "gmail" || selected.source === "qq-mail") && selected.replyContextId && (
-              <button type="button" onClick={() => { setReplyItem(selected); setSelected(null); }} className="h-8 px-4 bg-white border border-line text-charcoal text-xs font-bold rounded-lg hover:bg-alabaster flex items-center gap-1.5">
+            {(shownSelected.source === "qq-bot" || shownSelected.source === "gmail" || shownSelected.source === "qq-mail") && shownSelected.replyContextId && (
+              <button type="button" onClick={() => { setReplyItem(shownSelected); setSelected(null); }} className="h-8 px-4 bg-white border border-line text-charcoal text-xs font-bold rounded-lg hover:bg-alabaster flex items-center gap-1.5">
                 <Reply className="w-3.5 h-3.5" />
-                {selected.source === "gmail" ? "回复到 Gmail" : selected.source === "qq-mail" ? "回复到 QQ 邮箱" : "回复到 QQ"}
+                {shownSelected.source === "gmail" ? "回复到 Gmail" : shownSelected.source === "qq-mail" ? "回复到 QQ 邮箱" : "回复到 QQ"}
               </button>
             )}
             <button type="button" onClick={() => setSelected(null)} className="h-8 px-4 bg-white border border-line text-charcoal text-xs font-bold rounded-lg">
               关闭
             </button>
           </div>
-        </Dialog>
-      )}
-      {replyItem && replyItem.source === "qq-bot" && (
-        <QQReplyDialog open={!!replyItem} onOpenChange={(open) => !open && setReplyItem(null)} item={replyItem} onSent={() => { if (replyItem) updateStatus(replyItem.id, "reviewed"); setReplyItem(null); }} />
-      )}
-      {replyItem && (replyItem.source === "gmail" || replyItem.source === "qq-mail") && (
-        <EmailReplyDialog open={!!replyItem} onOpenChange={(open) => !open && setReplyItem(null)} item={replyItem} onSent={() => { if (replyItem) updateStatus(replyItem.id, "reviewed"); setReplyItem(null); }} />
+        </>
+        )}
+      </Dialog>
+      {/* 回复 Dialog：常驻 lifecycle owner（首次使用后挂载）；open 表达 semantic state，
+          exit 期间继续渲染最后回复目标（snapshot），不闪空 */}
+      {shownReply && (
+        <>
+          <QQReplyDialog
+            open={replyItem?.source === "qq-bot"}
+            onOpenChange={(open) => !open && setReplyItem(null)}
+            item={shownReply}
+            onSent={() => { if (replyItem) updateStatus(replyItem.id, "reviewed"); setReplyItem(null); }}
+          />
+          <EmailReplyDialog
+            open={!!replyItem && (replyItem.source === "gmail" || replyItem.source === "qq-mail")}
+            onOpenChange={(open) => !open && setReplyItem(null)}
+            item={shownReply}
+            onSent={() => { if (replyItem) updateStatus(replyItem.id, "reviewed"); setReplyItem(null); }}
+          />
+        </>
       )}
     </Dialog>
   );

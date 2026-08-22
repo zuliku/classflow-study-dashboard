@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import React from "react";
-import { render, screen, fireEvent, cleanup, act } from "@testing-library/react";
+import { render, screen, fireEvent, cleanup, act, waitFor } from "@testing-library/react";
 
 // Polyfill ResizeObserver & matchMedia (jsdom)
 class RO {
@@ -128,8 +128,8 @@ describe("InboxPanel Lifecycle — Task 16B K", () => {
     // The detail's onOpenChange sets selected null, not calling root's onOpenChange
     // So root onOpenChange should not have been called with false
     expect(onOpenChange).not.toHaveBeenCalledWith(false);
-    // Detail content should be removed
-    expect(screen.queryByText("外部消息")).toBeNull();
+    // Motion V2.1：detail 经 exit presence（≤150ms）淡出后移除
+    await waitFor(() => expect(screen.queryByText("外部消息")).toBeNull());
     // Root inbox should still be in DOM (check header)
     expect(screen.getByText("收件箱")).toBeTruthy();
   });
@@ -165,9 +165,10 @@ describe("InboxPanel Lifecycle — Task 16B K", () => {
     expect(screen.getByText("外部消息")).toBeTruthy();
     // Close root via X
     fireEvent.click(screen.getByLabelText("关闭收件箱"));
-    // Should have cleared selected; detail should be gone
-    expect(screen.queryByText("外部消息")).toBeNull();
+    // Should have cleared selected; open state flips immediately
     expect(screen.getByTestId("open-state").textContent).toBe("closed");
+    // Motion V2.1：detail 随 root close 进入 exit presence，淡出完成后移除
+    await waitFor(() => expect(screen.queryByText("外部消息")).toBeNull());
     // Reopen
     fireEvent.click(screen.getByText("reopen"));
     expect(screen.getByTestId("open-state").textContent).toBe("open");
@@ -175,7 +176,7 @@ describe("InboxPanel Lifecycle — Task 16B K", () => {
     expect(screen.queryByText("外部消息")).toBeNull();
     // QQ reply also not reappear
     expect(screen.queryByTestId("mock-qq-reply")).toBeNull();
-  });
+  }, 10000);
 
   it("Inbox trigger not in Kiro chat vertical body", async () => {
     const fs = await import("node:fs");

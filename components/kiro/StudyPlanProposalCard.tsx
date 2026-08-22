@@ -8,6 +8,7 @@ import { useToastStore } from "@/store/useToastStore";
 import { useConfirmStore } from "@/store/useConfirmStore";
 import { useKiroSession } from "@/components/kiro/KiroSessionProvider";
 import { StudyPlanProposal } from "@/lib/planning/studyPlanner";
+import { cn } from "@/lib/utils";
 import {
   applyStudyPlan,
   createStudyPlanProposalKey,
@@ -40,6 +41,10 @@ export function StudyPlanProposalCard({ proposals }: { proposals: StudyPlanPropo
   const [dismissed, setDismissed] = useState(false);
   const [applyState, setApplyState] = useState<ApplyState>("idle");
   const [pendingApproval, setPendingApproval] = useState<PendingCourseOverlapApproval | null>(null);
+  // Exit payload snapshot：semantic close 后保留最后一次 approval 内容供 exit 淡出渲染
+  const shownApprovalRef = useRef<PendingCourseOverlapApproval | null>(null);
+  if (pendingApproval) shownApprovalRef.current = pendingApproval;
+  const shownApproval = pendingApproval ?? shownApprovalRef.current;
   const createdIdsRef = useRef<string[]>([]);
   const { planningPreview, setPlanningPreview } = useKiroSession();
   const setActiveTab = useAppStore((s) => s.setActiveTab);
@@ -376,22 +381,23 @@ export function StudyPlanProposalCard({ proposals }: { proposals: StudyPlanPropo
         {renderActions()}
       </div>
 
-      {/* Task 5 Approval Gate：Kiro batch 与课程重叠 → 写入前必须确认一次（batch 级、all-or-nothing） */}
-      {pendingApproval && (
-        <Dialog
-          open
-          onOpenChange={(next) => {
-            if (!next) setPendingApproval(null);
-          }}
-          overlayId="kiro-course-overlap-approval"
-          stackZ={60}
-          aria-label="任务与课程时间重叠"
-          className="max-w-md"
-        >
+      {/* Task 5 Approval Gate：Kiro batch 与课程重叠 → 写入前必须确认一次（batch 级、all-or-nothing）。
+          Motion V2.1：Dialog 常驻，open 表达 semantic state；payload snapshot 供 exit 淡出渲染 */}
+      <Dialog
+        open={!!pendingApproval}
+        onOpenChange={(next) => {
+          if (!next) setPendingApproval(null);
+        }}
+        overlayId="kiro-course-overlap-approval"
+        stackZ={60}
+        aria-label="任务与课程时间重叠"
+        aria-hidden={!pendingApproval || undefined}
+        className={cn("max-w-md", !pendingApproval && "pointer-events-none")}
+      >
           <div className="p-5 space-y-3">
             <h3 className="text-base font-bold text-charcoal">任务与课程时间重叠</h3>
             <p className="text-xs leading-relaxed text-satin-grey">
-              Kiro 的这次安排中有 {pendingApproval.overlaps.length} 项会占用上课时间。请确认是否继续。
+              Kiro 的这次安排中有 {(shownApproval?.overlaps.length ?? 0)} 项会占用上课时间。请确认是否继续。
             </p>
             <p className="text-[11px] leading-relaxed text-sandrift">
               选择「仍然安排」后，ClassFlow 会将当前课程重叠视为你已确认的例外。
@@ -399,7 +405,7 @@ export function StudyPlanProposalCard({ proposals }: { proposals: StudyPlanPropo
               如果之后课程时间发生变化，会重新检查。
             </p>
             <CourseOverlapApprovalList
-              items={pendingApproval.overlaps.map(
+              items={(shownApproval?.overlaps ?? []).map(
                 (o): CourseOverlapDisplayItem => ({
                   key: `${o.blockIndex}-${o.title}`,
                   title: o.title,
@@ -426,8 +432,7 @@ export function StudyPlanProposalCard({ proposals }: { proposals: StudyPlanPropo
               </Button>
             </div>
           </div>
-        </Dialog>
-      )}
+      </Dialog>
     </div>
   );
 }

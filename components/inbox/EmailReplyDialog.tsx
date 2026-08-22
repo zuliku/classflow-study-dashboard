@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Dialog } from "@/components/ui/Dialog";
 import { Sparkles, Mail } from "lucide-react";
 import { useToastStore } from "@/store/useToastStore";
@@ -36,8 +36,24 @@ export function EmailReplyDialog({ open, onOpenChange, item, onSent }: EmailRepl
   const [approval, setApproval] = useState<{ approvalId: string; expiresAt: number; preview: { channel: string; conversationType: string; text: string } } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [confirmOpen, setConfirmOpen] = useState(false);
-  const [tone, setTone] = useState<"natural" | "concise" | "formal" | "friendly">("natural");
-  const [draftGenerated, setDraftGenerated] = useState(false);
+const [tone, setTone] = useState<"natural" | "concise" | "formal" | "friendly">("natural");
+const [draftGenerated, setDraftGenerated] = useState(false);
+
+// Fresh-open session reset（Motion V2.1）：组件常驻后，false→true 沿清空上一会话的
+// 草稿 / 错误 / 审批流状态（保持既有「每次打开为新回复」语义）；不在 close 时 reset。
+const prevOpenRef = useRef(open);
+useEffect(() => {
+  if (open && !prevOpenRef.current) {
+    setText("");
+    setTone("natural");
+    setDraftGenerated(false);
+    setError(null);
+    setApproval(null);
+    setConfirmOpen(false);
+    setSaving(false);
+  }
+  prevOpenRef.current = open;
+}, [open]);
   const currentDialogItemIdRef = React.useRef<string | null>(null);
   const pushToast = useToastStore((s) => s.pushToast);
   const { generateDraft, cancel: cancelDraft, loading: draftLoading, error: draftError } = useKiroReplyDraft();
