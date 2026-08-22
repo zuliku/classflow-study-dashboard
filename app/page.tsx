@@ -6,15 +6,7 @@ import { WorkspaceHeader } from "@/components/layout/WorkspaceHeader";
 import { WorkspaceInboxButton } from "@/components/layout/WorkspaceInboxButton";
 import { InboxPanel } from "@/components/inbox/InboxPanel";
 import { useInboxStore } from "@/store/useInboxStore";
-import { Button } from "@/components/ui/Button";
 import { BottomNav } from "@/components/layout/BottomNav";
-import { TimetableGrid } from "@/components/dashboard/TimetableGrid";
-import { buildOverviewStudyBlockLayers, buildOverviewCourseTaskMarkers } from "@/components/dashboard/overviewStudyBlockLayers";
-import { TimetableQuickGlance } from "@/components/dashboard/TimetableQuickGlance";
-import { UpcomingDDL } from "@/components/dashboard/UpcomingDDL";
-import { MiniCalendar } from "@/components/dashboard/MiniCalendar";
-import { StudyLoadChart } from "@/components/dashboard/StudyLoadChart";
-import { AssignmentTable } from "@/components/dashboard/AssignmentTable";
 import { AssignmentsWorkspace } from "@/components/assignment/AssignmentsWorkspace";
 import { CoursesWorkspace } from "@/components/course/CoursesWorkspace";
 import { GroupCollaborationView } from "@/components/group/GroupCollaborationView";
@@ -42,21 +34,13 @@ import { ReminderCenter } from "@/components/reminders/ReminderCenter";
 import { FocusRuntime } from "@/components/focus/FocusRuntime";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { PageTransition } from "@/components/ui/PageTransition";
+import { OverviewWorkspace } from "@/components/dashboard/OverviewWorkspace";
 import { useAppStore } from "@/store/useAppStore";
-import { useToastStore } from "@/store/useToastStore";
 import { useInboxChannelBridge } from "@/hooks/useInboxChannelBridge";
-import { cardKeyHandler, cn } from "@/lib/utils";
-import { openAssignmentEditor } from "@/lib/uiEvents";
+import { cn } from "@/lib/utils";
 import { reconcilePersistedFileBlobs } from "@/lib/fileReconcile";
 import { listAllProjectFileStorageKeys } from "@/lib/ai/projects/files/db";
 import { resolveStartupTab } from "@/lib/startup";
-import { formatWeekDateRange } from "@/lib/semester";
-import {
-  Plus,
-  FileUp,
-  ExternalLink,
-  CalendarDays,
-} from "lucide-react";
 
 export default function Home() {
   // Task 13B: Main → Renderer inbox bridge (single subscription at stable root)
@@ -64,23 +48,8 @@ export default function Home() {
   const [inboxOpen, setInboxOpen] = useState(false);
   const inboxUnreadCount = useInboxStore((s) => s.items.filter((it) => it.status === "unread").length);
   // 精确 selector：避免整 store 订阅导致 UI Chrome 等无关 state 变化触发 Home 全量 render
+  // （Overview 内容已抽至 OverviewWorkspace，其数据订阅由该组件自持）
   const activeTab = useAppStore((s) => s.activeTab);
-  const courses = useAppStore((s) => s.courses);
-  const assignments = useAppStore((s) => s.assignments);
-  const semester = useAppStore((s) => s.semester);
-  const currentSemesterWeek = useAppStore((s) => s.currentSemesterWeek);
-  const schedules = useAppStore((s) => s.schedules);
-  const studyBlocks = useAppStore((s) => s.studyBlocks);
-  const setAddCourseModalOpen = useAppStore((s) => s.setAddCourseModalOpen);
-  const setImportScheduleModalOpen = useAppStore((s) => s.setImportScheduleModalOpen);
-  const setFullTimetableModalOpen = useAppStore((s) => s.setFullTimetableModalOpen);
-  const setSettingsModalOpen = useAppStore((s) => s.setSettingsModalOpen);
-
-  // 当前周 Context（Overview / Timeline / Analytics 共用同一学期模型数据源）
-  const currentWeekContext = `第 ${currentSemesterWeek} 周 · ${formatWeekDateRange(
-    semester,
-    currentSemesterWeek
-  )}`;
 
   // 启动时孤儿 Blob 对账（V1.3A.1 fail-closed）：
   // Course + Project 引用 key 必须全部枚举成功才执行 GC；
@@ -185,99 +154,7 @@ export default function Home() {
             tab={activeTab}
             className="flex flex-col flex-1 min-h-0"
           >
-          {activeTab === "overview" && (
-            <div className="flex flex-1 min-h-0 flex-col">
-              <WorkspaceHeader title="总览" context={currentWeekContext} sticky />
-              {/* First Run：空工作区时显示 Getting Started（非阻塞，三个动作即可开始） */}
-              {courses.length === 0 && schedules.length === 0 && assignments.length === 0 ? (
-                <div className="flex flex-1 min-h-0 flex-col p-4 pb-24 md:p-6 md:pb-6">
-                <div
-                  data-testid="getting-started"
-                  className="bg-surface border border-line rounded-xl p-6 shadow-subtle space-y-4 text-center"
-                >
-                  <div>
-                    <h2 className="text-lg font-bold text-charcoal">欢迎使用 ClassFlow</h2>
-                    <p className="text-xs text-sandrift mt-1">建立你的学习工作区</p>
-                  </div>
-                  <div className="flex flex-wrap items-center justify-center gap-2.5">
-                    <button
-                      onClick={() => setImportScheduleModalOpen(true)}
-                      className="ux-press flex items-center gap-1.5 h-9 px-4 bg-charcoal hover:bg-black text-white text-xs font-bold rounded-lg transition-colors shadow-subtle"
-                    >
-                      <FileUp className="w-3.5 h-3.5" />
-                      导入课表
-                    </button>
-                    <button
-                      onClick={() => setAddCourseModalOpen(true)}
-                      className="ux-press flex items-center gap-1.5 h-9 px-4 bg-pastel-mint hover:bg-pastel-mint text-charcoal text-xs font-bold rounded-lg transition-colors"
-                    >
-                      <Plus className="w-3.5 h-3.5" />
-                      添加第一门课程
-                    </button>
-                    <button
-                      onClick={() => setSettingsModalOpen(true)}
-                      className="ux-press flex items-center gap-1.5 h-9 px-4 bg-transparent border border-line text-satin-grey text-xs font-bold rounded-lg transition-colors hover:bg-alabaster hover:text-charcoal"
-                    >
-                      <CalendarDays className="w-3.5 h-3.5 text-sandrift" />
-                      设置当前学期
-                    </button>
-                  </div>
-                  <p className="text-[11px] text-sandrift">
-                    也可以直接新建任务或浏览课表，随时可以从设置中调整
-                  </p>
-                </div>
-              </div>
-              ) : (
-                <>
-              {/* Overview Hero Section — viewport bounded accounting for TitleBar + Header + fold gap */}
-              <section className="box-border flex flex-col shrink-0 min-h-0 p-4 pb-24 md:p-5 md:pb-5 xl:h-[calc(100dvh-var(--titlebar-h)-4rem-var(--overview-fold-gap))] xl:mb-[var(--overview-fold-gap)] xl:pb-0 [@media(max-height:720px)]:!pt-2 [@media(max-height:720px)]:!pb-0">
-                {/* 三卡 Grid：flex-1 eats remaining hero space, three cards same top/bottom */}
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 items-stretch flex-1 min-h-0">
-                <div className="lg:col-span-2 flex flex-col min-h-0">
-                  <TimetableGrid
-                    density="compact"
-                    fillAvailableHeight
-                    headerActions={<TimetableQuickGlance />}
-                    extraLayers={buildOverviewStudyBlockLayers({
-                      studyBlocks,
-                      semester,
-                      currentSemesterWeek,
-                      schedules,
-                    })}
-                    courseIndicators={buildOverviewCourseTaskMarkers({
-                      studyBlocks,
-                      semester,
-                      currentSemesterWeek,
-                    })}
-                  />
-                </div>
-                {/* 右栏：DDL 吸收剩余高度（flex-1），Calendar 固定稳定高度（不随月份/内容变化）
-                    右栏总高恒等于左侧课表 → 三卡同顶同底
-                    高度受限（≤800px 视口）：Agenda 隐藏 + Calendar shell 缩短，空间让给 DDL */}
-                <div className="flex flex-col h-full min-h-0 gap-4">
-                  <div className="flex-1 min-h-0">
-                    <UpcomingDDL />
-                  </div>
-                  <div className="h-[370px] lg:h-[380px] xl:h-[400px] 2xl:h-[410px] shrink-0 [@media(max-height:800px)]:h-[305px]">
-                    <MiniCalendar />
-                  </div>
-                </div>
-                </div>
-              </section>
-
-              {/* Overview Secondary Section：完全位于首屏 fold 以下，滚动后才可见 */}
-              <section className="grid gap-4 items-stretch shrink-0 grid-cols-[repeat(auto-fit,minmax(520px,1fr))] px-4 pb-24 md:px-5 md:pb-5">
-                <div className="md:min-h-[460px]" data-testid="overview-load-wrap">
-                  <StudyLoadChart />
-                </div>
-                <div className="md:min-h-[460px] min-w-0" data-testid="overview-tasks-wrap">
-                  <AssignmentTable mode="compact" />
-                </div>
-              </section>
-                </>
-              )}
-            </div>
-          )}
+          {activeTab === "overview" && <OverviewWorkspace />}
 
           {activeTab === "timetable" && <TimelineWorkspace />}
 
@@ -322,7 +199,7 @@ export default function Home() {
       <ToastViewport />
       {/* Reminder Local Runtime + 站内通知（独立于 KiroSession；不依赖 Kiro Provider） */}
       <ReminderRuntime />
-<LearningHistoryRuntime />
+      <LearningHistoryRuntime />
       <ReminderViewport />
       <ReminderCenter />
       <FocusRuntime />

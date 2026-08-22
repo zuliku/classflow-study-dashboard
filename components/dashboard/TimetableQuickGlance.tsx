@@ -21,8 +21,14 @@ const PANEL_MAX = 5;
  * 统计口径与 StatCards / UpcomingDDL 完全一致。
  */
 export function TimetableQuickGlance() {
-  const { schedules, assignments, courses, semester, preferences, setActiveTab, setAssignmentTimeSlice } =
-    useAppStore();
+  // 精确 selector：避免整 store 订阅导致无关 state 更新触发整组 chip re-render
+  const schedules = useAppStore((s) => s.schedules);
+  const assignments = useAppStore((s) => s.assignments);
+  const courses = useAppStore((s) => s.courses);
+  const semester = useAppStore((s) => s.semester);
+  const warningDays = useAppStore((s) => s.preferences.ddlWarningDays);
+  const setActiveTab = useAppStore((s) => s.setActiveTab);
+  const setAssignmentTimeSlice = useAppStore((s) => s.setAssignmentTimeSlice);
 
   const today = new Date();
   const currentDayOfWeek = today.getDay() === 0 ? 7 : today.getDay();
@@ -54,7 +60,6 @@ export function TimetableQuickGlance() {
   );
 
   // ---- 临近 DDL：与 UpcomingDDL 同源（未完成 / 未逾期 / ddlWarningDays 窗口内） ----
-  const warningDays = preferences.ddlWarningDays;
   const upcoming = useMemo(
     () =>
       [...assignments]

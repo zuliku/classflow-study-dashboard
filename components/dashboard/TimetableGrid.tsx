@@ -115,21 +115,21 @@ export function TimetableGrid({
   }) => React.ReactNode;
   }) {
   const isCompactDensity = density === "compact";
-  const {
-    courses,
-    schedules,
-    scheduleOccurrenceOverrides,
-    semester,
-    currentSemesterWeek,
-    setCurrentSemesterWeek,
-    setSelectedCourseId,
-    setConflictModalOpen,
-    setSelectedConflict,
-    setActiveTab,
-    setFullTimetableModalOpen,
-    updateSchedule,
-    preferences,
-  } = useAppStore();
+  // 精确 selector：避免整 store 订阅导致无关 state 更新触发整卡 re-render
+  const courses = useAppStore((s) => s.courses);
+  const schedules = useAppStore((s) => s.schedules);
+  const scheduleOccurrenceOverrides = useAppStore((s) => s.scheduleOccurrenceOverrides);
+  const semester = useAppStore((s) => s.semester);
+  const currentSemesterWeek = useAppStore((s) => s.currentSemesterWeek);
+  const preferences = useAppStore((s) => s.preferences);
+  // actions（zustand 引用稳定）
+  const setCurrentSemesterWeek = useAppStore((s) => s.setCurrentSemesterWeek);
+  const setSelectedCourseId = useAppStore((s) => s.setSelectedCourseId);
+  const setConflictModalOpen = useAppStore((s) => s.setConflictModalOpen);
+  const setSelectedConflict = useAppStore((s) => s.setSelectedConflict);
+  const setActiveTab = useAppStore((s) => s.setActiveTab);
+  const setFullTimetableModalOpen = useAppStore((s) => s.setFullTimetableModalOpen);
+  const updateSchedule = useAppStore((s) => s.updateSchedule);
   const pushToast = useToastStore((s) => s.pushToast);
 
   // 周一至周日表头完全由 semester.startDate + currentSemesterWeek 推导。
@@ -473,26 +473,26 @@ export function TimetableGrid({
       className={
         variant === "embedded"
           ? "flex flex-col flex-1 min-h-0 w-full"
-          : "bg-surface border border-line rounded-xl p-4 shadow-subtle flex flex-col justify-between h-full w-full"
+          : "dashboard-card p-4 flex flex-col justify-between h-full w-full"
       }
     >
-      {/* Header */}
+      {/* Header：视觉层级 本周课表 > 周次 > Quick Glance > 查看课表 */}
       {showHeader && (
       <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-2.5 border-b border-line-soft gap-2 shrink-0">
         <div className="flex items-center space-x-2">
-          <h2 className="text-sm font-bold text-charcoal">本周课表</h2>
-          {/* Semester Week Picker */}
-          <div className="flex items-center h-8 bg-alabaster border border-line-strong rounded-lg px-2 text-xs font-semibold text-charcoal">
+          <h2 className="text-sm font-semibold text-charcoal tracking-tight">本周课表</h2>
+          {/* Semester Week Picker（减重：非按钮块，弱边框 + 次级文字 + 透明底） */}
+          <div className="flex items-center h-7 bg-transparent border border-line-soft rounded-md px-1.5 text-[11px] font-medium text-satin-grey">
             <button
               onClick={() => setCurrentSemesterWeek(currentSemesterWeek - 1)}
               disabled={currentSemesterWeek <= 1}
               title="上一周"
               aria-label="上一周"
-              className="hover:text-black transition-colors disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:text-charcoal"
+              className="flex items-center justify-center w-5 h-5 rounded hover:bg-alabaster hover:text-charcoal transition-colors disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-satin-grey"
             >
               <ChevronLeft className="w-3 h-3" />
             </button>
-            <span>
+            <span className="tabular-nums px-0.5">
               第 {currentSemesterWeek} 周 · {formatWeekDateRange(semester, currentSemesterWeek)}
             </span>
             <button
@@ -500,20 +500,20 @@ export function TimetableGrid({
               disabled={currentSemesterWeek >= semester.totalWeeks}
               title="下一周"
               aria-label="下一周"
-              className="hover:text-black transition-colors disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:text-charcoal"
+              className="flex items-center justify-center w-5 h-5 rounded hover:bg-alabaster hover:text-charcoal transition-colors disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-satin-grey"
             >
               <ChevronRight className="w-3 h-3" />
             </button>
           </div>
         </div>
 
-        {/* 右侧：Quick Glance + 查看课表（同一 group，紧贴右对齐） */}
+        {/* 右侧：Quick Glance + 查看课表（同一 group，紧贴右对齐；hover 语言统一 = alabaster 填充 + line 边框） */}
         <div className="flex items-center gap-3 shrink-0">
           {headerActions}
 
           <button
             onClick={handleOpenFullTimetable}
-            className="group flex items-center space-x-1 h-8 text-xs text-sandrift hover:text-charcoal transition-colors bg-[#F7F5F5] hover:bg-alabaster px-2.5 rounded-lg border border-line font-medium"
+            className="group flex items-center space-x-1 h-8 text-[11px] font-semibold text-sandrift hover:text-charcoal transition-colors hover:bg-alabaster px-2.5 rounded-lg border border-line-soft hover:border-line"
           >
             <span>查看课表</span>
             <ExternalLink className="w-3.5 h-3.5 transition-transform duration-[var(--motion-fast)] group-hover:translate-x-px" />
@@ -524,7 +524,7 @@ export function TimetableGrid({
 
       {/* Conflict Warning Banner */}
       {conflicts.length > 0 && (
-        <div className="my-2 p-2.5 bg-danger-bg border border-danger-border rounded-xl flex items-center justify-between text-xs text-danger shrink-0">
+        <div className="my-2 p-2.5 bg-danger-bg border border-danger-border rounded-lg flex items-center justify-between text-xs text-danger shrink-0">
           <div className="flex items-center space-x-2">
             <AlertTriangle className="w-4 h-4 shrink-0" />
             <span>
@@ -613,7 +613,7 @@ export function TimetableGrid({
           <div
             ref={gridBodyRef}
             data-testid="timetable-body"
-            className="relative grid border-l border-[#F0EBE1] h-full"
+            className="relative grid border-l border-line-soft h-full"
             style={{
               gridTemplateColumns: `repeat(${dayCount}, minmax(0, 1fr))`,
               gridColumn: `span ${dayCount} / span ${dayCount}`,
@@ -667,7 +667,7 @@ export function TimetableGrid({
                     >
                       <div className="relative flex items-center -translate-y-1/2 h-[1.5px]">
                         <span className="flex-1 h-[1.5px] bg-sandrift/60" />
-                        <span className="shrink-0 z-[7] h-[21px] px-2.5 rounded-full border bg-[#F7F5F5] border-line-strong/70 text-[11px] font-semibold tabular-nums text-charcoal flex items-center shadow-subtle">
+                        <span className="shrink-0 z-[7] h-[21px] px-2.5 rounded-full border bg-background border-line-strong/70 text-[11px] font-semibold tabular-nums text-charcoal flex items-center shadow-subtle">
                           {minutesToClock(nowMinutes)}
                         </span>
                         <span className="flex-1 h-[1.5px] bg-sandrift/60" />
@@ -742,9 +742,9 @@ export function TimetableGrid({
                             settleId === sched.id && "ux-settle"
                           )}
                           style={{
-                            backgroundColor: hasConflict ? "#F2E8E6" : course.bgHex,
-                            borderColor: hasConflict ? "#D9BCB8" : course.borderHex,
-                            color: hasConflict ? "#9B5B57" : course.textHex,
+                            backgroundColor: hasConflict ? "var(--danger-bg)" : course.bgHex,
+                            borderColor: hasConflict ? "var(--danger-border)" : course.borderHex,
+                            color: hasConflict ? "var(--danger)" : course.textHex,
                             touchAction: editingEnabled ? "none" : "auto",
                           }}
                         >

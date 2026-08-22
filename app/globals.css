@@ -185,6 +185,26 @@ button:disabled {
   opacity: 0.5;
 }
 
+/* ============ Dashboard Surface 层级（V1 精修） ============
+   Level 0：App background / chrome（--background）
+   Level 1：顶层 Dashboard Card（surface + line + rounded-xl + shadow-subtle）
+   Level 2：卡内 inset 表面（surface-soft / alabaster，弱边框、无独立阴影）
+   目标：减少 card-inside-card-inside-card 感；只统一视觉基线，不新增 DOM wrapper。 */
+@layer components {
+  .dashboard-card {
+    background-color: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 0.875rem; /* = tailwind rounded-xl（本项目自定义 0.875rem） */
+    box-shadow:
+      0 2px 8px -2px rgba(49, 48, 50, 0.04),
+      0 1px 3px -1px rgba(49, 48, 50, 0.02);
+  }
+  .surface-inset {
+    background-color: var(--surface-soft);
+    border: 1px solid var(--line-soft);
+  }
+}
+
 /* 按下反馈：只对显式 .ux-press 的独立操作按钮做轻缩放。
    空间稳定型控件（日期格 / 导航 / 拖拽面 / Resize handle / 周月切换几何控件）一律不缩放。 */
 .ux-press:active:not(:disabled) {
@@ -193,6 +213,19 @@ button:disabled {
 
 /* 统一过渡与动效工具类 */
 @layer utilities {
+  /* Workspace gutter：App Shell 结构层（WorkspaceHeader）与页面 body 的统一水平内边距。
+     页面标题左缘与内容卡片左缘精确对齐；Kiro full-bleed 等特殊布局不使用本 utility。 */
+  .workspace-gutter {
+    padding-left: 1rem;
+    padding-right: 1rem;
+  }
+  @media (min-width: 768px) {
+    .workspace-gutter {
+      padding-left: 1.5rem;
+      padding-right: 1.5rem;
+    }
+  }
+
   /* 遮罩：仅透明度过渡（介于 panel enter/exit 之间，不拖尾） */
   .ux-overlay {
     transition: opacity var(--motion-base) var(--ease-standard);

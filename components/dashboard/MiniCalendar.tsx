@@ -123,17 +123,17 @@ export function computeAgendaRequiredHeight(input: {
 }
 
 export function MiniCalendar() {
-  const {
-    schedules,
-    assignments,
-    calendarMarks,
-    courses,
-    semester,
-    setSelectedCourseId,
-    setSelectedAssignmentId,
-    updateAssignment,
-    preferences,
-  } = useAppStore();
+  // 精确 selector：避免整 store 订阅导致无关 state 更新触发整卡 re-render
+  const schedules = useAppStore((s) => s.schedules);
+  const assignments = useAppStore((s) => s.assignments);
+  const calendarMarks = useAppStore((s) => s.calendarMarks);
+  const courses = useAppStore((s) => s.courses);
+  const semester = useAppStore((s) => s.semester);
+  const ddlDirectEnabled = useAppStore((s) => s.preferences.enableDDLDirectManipulation);
+  // actions（zustand 引用稳定）
+  const setSelectedCourseId = useAppStore((s) => s.setSelectedCourseId);
+  const setSelectedAssignmentId = useAppStore((s) => s.setSelectedAssignmentId);
+  const updateAssignment = useAppStore((s) => s.updateAssignment);
 
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState(new Date());
@@ -236,7 +236,7 @@ export function MiniCalendar() {
   }, []);
   // DDL Drag：>=768px + 精确指针 + 偏好开启；关闭时点击仍打开 Assignment Drawer
   const ddlDragEnabled =
-    mediaState.wide && mediaState.fine && preferences.enableDDLDirectManipulation;
+    mediaState.wide && mediaState.fine && ddlDirectEnabled;
 
   const [drag, setDrag] = useState<DDLDragState>({ type: "idle" });
   // 同步镜像：pointer 事件快于 React 渲染，handler 一律读 ref（见 Task 2 竞态修复）
@@ -537,7 +537,7 @@ export function MiniCalendar() {
       data-week-rows={weekRows}
       data-agenda-required={Math.round(agendaRequiredHeight)}
       data-agenda-visible={agendaVisible ? "1" : "0"}
-      className="bg-surface border border-line rounded-xl p-4 shadow-subtle space-y-3 flex flex-col min-h-0 h-full"
+      className="dashboard-card p-4 space-y-3 flex flex-col min-h-0 h-full"
     >
       {/* Header：年月 min-w-0 不主动 truncate；右侧 controls shrink-0（compact 释放空间） */}
       <div
@@ -545,8 +545,8 @@ export function MiniCalendar() {
         className="flex items-center justify-between gap-2 pb-2 border-b border-line-soft"
       >
         <div className="flex items-center space-x-2 min-w-0">
-          <CalendarIcon className="w-4 h-4 text-[#A48F82] shrink-0" />
-          <h3 key={monthKey} className="ux-fade text-sm font-bold text-charcoal whitespace-nowrap">
+          <CalendarIcon className="w-4 h-4 text-sandrift shrink-0" />
+          <h3 key={monthKey} className="ux-fade text-sm font-semibold text-charcoal whitespace-nowrap">
             {format(currentMonth, "yyyy年 M月", { locale: zhCN })}
           </h3>
         </div>
@@ -571,7 +571,7 @@ export function MiniCalendar() {
           </button>
           <button
             onClick={handlePrevMonth}
-            className="p-1.5 rounded-lg text-sandrift hover:bg-alabaster transition-colors"
+            className="w-7 h-7 flex items-center justify-center rounded-lg text-sandrift hover:bg-alabaster hover:text-charcoal transition-colors"
             title="上一月"
             aria-label="上一月"
           >
@@ -579,7 +579,7 @@ export function MiniCalendar() {
           </button>
           <button
             onClick={handleNextMonth}
-            className="p-1.5 rounded-lg text-sandrift hover:bg-alabaster transition-colors"
+            className="w-7 h-7 flex items-center justify-center rounded-lg text-sandrift hover:bg-alabaster hover:text-charcoal transition-colors"
             title="下一月"
             aria-label="下一月"
           >
@@ -669,10 +669,10 @@ export function MiniCalendar() {
                 isSelected
                   ? "text-white font-bold"
                   : isTodayDate
-                  ? "bg-pastel-mint text-charcoal font-extrabold border border-[#CDB9AB]"
+                  ? "bg-pastel-mint text-charcoal font-extrabold border border-stone-beige"
                   : isCurrentMonth
                   ? "text-charcoal hover:bg-alabaster"
-                  : "text-[#CDB9AB] opacity-40 hover:opacity-80",
+                  : "text-stone-beige opacity-40 hover:opacity-80",
                 // DDL 拖动中：全部日期格低饱和 outline；当前目标明确 ring
                 dragActive && "outline outline-1 outline-line-soft",
                 isHoverTarget && "outline-2 outline-sandrift bg-alabaster"
@@ -764,7 +764,7 @@ export function MiniCalendar() {
                   onClick={() => setAgendaPage(agendaSafePage - 1)}
                   disabled={agendaSafePage <= 1}
                   aria-label="上一页"
-                  className="w-6 h-6 flex items-center justify-center rounded-lg text-sandrift hover:bg-alabaster hover:text-charcoal transition-colors disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-sandrift"
+                  className="w-6 h-6 flex items-center justify-center rounded-md text-sandrift hover:bg-alabaster hover:text-charcoal transition-colors disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-sandrift"
                 >
                   <ChevronLeft className="w-3 h-3" />
                 </button>
@@ -775,7 +775,7 @@ export function MiniCalendar() {
                   onClick={() => setAgendaPage(agendaSafePage + 1)}
                   disabled={agendaSafePage >= agendaPaged.totalPages}
                   aria-label="下一页"
-                  className="w-6 h-6 flex items-center justify-center rounded-lg text-sandrift hover:bg-alabaster hover:text-charcoal transition-colors disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-sandrift"
+                  className="w-6 h-6 flex items-center justify-center rounded-md text-sandrift hover:bg-alabaster hover:text-charcoal transition-colors disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-sandrift"
                 >
                   <ChevronRight className="w-3 h-3" />
                 </button>
@@ -902,7 +902,7 @@ export function MiniCalendar() {
             {timeEditOpen && (
               <div
                 ref={timeEditRef}
-                className="absolute bottom-full right-0 mb-1 w-44 bg-white border border-line-strong rounded-xl shadow-card p-2.5 space-y-2 z-40"
+                className="absolute bottom-full right-0 mb-1 w-44 bg-background border border-line-strong rounded-xl shadow-card p-2.5 space-y-2 z-40"
               >
                 <label className="block text-[10px] font-bold text-sandrift">
                   截止时间
@@ -912,12 +912,12 @@ export function MiniCalendar() {
                   type="time"
                   value={timeInput}
                   onChange={(e) => setTimeInput(e.target.value)}
-                  className="w-full p-1.5 bg-[#F7F5F5] border border-line rounded-lg text-xs font-mono focus:outline-none"
+                  className="w-full p-1.5 bg-background border border-line rounded-lg text-xs font-mono focus:outline-none"
                 />
                 <div className="flex justify-end space-x-1.5">
                   <button
                     onClick={() => setTimeEditOpen(false)}
-                    className="px-2 py-1 text-[11px] font-medium text-satin-grey bg-[#F7F5F5] border border-line rounded-lg hover:bg-alba"
+                    className="px-2 py-1 text-[11px] font-medium text-satin-grey bg-background border border-line rounded-lg hover:bg-alba"
                   >
                     取消
                   </button>

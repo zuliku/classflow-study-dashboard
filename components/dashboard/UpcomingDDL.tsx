@@ -3,7 +3,7 @@
 import React, { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import { Clock, ArrowUpRight, CheckCircle2, ChevronLeft, ChevronRight } from "lucide-react";
 import { useAppStore } from "@/store/useAppStore";
-import { format, formatDistanceToNow, differenceInDays } from "date-fns";
+import { format, formatDistanceToNow, differenceInDays, differenceInHours } from "date-fns";
 import { zhCN } from "date-fns/locale";
 import { parseLocalDDL } from "@/lib/ddl";
 import { paginate } from "@/lib/pagination";
@@ -16,7 +16,7 @@ function DDLDateTile({ date, taskId, density }: { date: Date; taskId: string; de
     <div
       aria-hidden="true"
       data-testid={`upcoming-ddl-date-${taskId}`}
-      className="shrink-0 rounded-xl border border-line bg-surface flex flex-col items-center justify-center leading-none"
+      className="shrink-0 rounded-lg border border-line-soft bg-background flex flex-col items-center justify-center leading-none"
       style={{ width: metrics.dateTile.w, height: metrics.dateTile.h }}
     >
       <span className="text-[9px] font-semibold text-sandrift">{format(date, "M月")}</span>
@@ -27,10 +27,14 @@ function DDLDateTile({ date, taskId, density }: { date: Date; taskId: string; de
 }
 
 export function UpcomingDDL() {
-  const { assignments, courses, setSelectedAssignmentId, setActiveTab, preferences } = useAppStore();
+  // 精确 selector：避免整 store 订阅导致无关 state 更新触发整卡 re-render
+  const assignments = useAppStore((s) => s.assignments);
+  const courses = useAppStore((s) => s.courses);
+  const warningDays = useAppStore((s) => s.preferences.ddlWarningDays);
+  const setSelectedAssignmentId = useAppStore((s) => s.setSelectedAssignmentId);
+  const setActiveTab = useAppStore((s) => s.setActiveTab);
   const [currentPage, setCurrentPage] = useState(1);
   const today = new Date();
-  const warningDays = preferences.ddlWarningDays;
 
   const upcomingAssignments = useMemo(
     () =>
@@ -135,12 +139,12 @@ export function UpcomingDDL() {
       ref={containerRef}
       data-testid="upcoming-ddl-card"
       data-density={density}
-      className="bg-surface border border-line rounded-xl p-3.5 shadow-subtle flex flex-col min-h-0 h-full"
+      className="dashboard-card p-3.5 flex flex-col min-h-0 h-full"
     >
       <div ref={headerRef} className="flex items-center justify-between border-b border-line-soft pb-3 shrink-0">
         <div className="flex items-center space-x-2">
           <Clock className="w-4 h-4 text-danger" />
-          <h3 className="text-sm font-bold text-charcoal tracking-tight">临近 DDL</h3>
+          <h3 className="text-sm font-semibold text-charcoal tracking-tight">临近 DDL</h3>
           <span className="text-[10px] font-semibold text-sandrift">{paged.totalItems} 项待办</span>
         </div>
         <button onClick={() => setActiveTab("assignments")} className="text-[11px] font-semibold text-sandrift hover:text-charcoal flex items-center transition-colors">
@@ -165,6 +169,9 @@ export function UpcomingDDL() {
               const course = courses.find((c) => c.id === task.courseId);
               const ddlDate = parseLocalDDL(task.ddl) ?? new Date();
               const relativeTime = formatDistanceToNow(ddlDate, { addSuffix: true, locale: zhCN });
+              // relative time 仅真正临近（≤24h）时才 danger 强调；否则保持次级信息权重
+              // （避免日期 tile / badge / 时间 / 整行同时高饱和红色）
+              const imminent = differenceInHours(ddlDate, today) <= 24;
               return (
                 <div
                   key={task.id}
@@ -174,9 +181,9 @@ export function UpcomingDDL() {
                   onKeyDown={cardKeyHandler(() => setSelectedAssignmentId(task.id))}
                   aria-label={`${task.title}，${course?.name || "通用课题"}，${format(ddlDate, "M月d日 EEE", { locale: zhCN })} ${format(ddlDate, "HH:mm")}，${relativeTime}`}
                   className={cn(
-                    "group flex items-center rounded-lg border border-line bg-surface-soft",
+                    "group flex items-center rounded-lg bg-surface-soft",
                     "cursor-pointer transition-colors duration-[var(--motion-fast)] ease-[var(--ease-standard)]",
-                    "hover:bg-alabaster hover:border-line-strong",
+                    "hover:bg-alabaster",
                     cardPadding,
                     density === "compact" ? "gap-x-2.5" : "gap-x-3"
                   )}
@@ -191,7 +198,7 @@ export function UpcomingDDL() {
                     </div>
                   </div>
                   <div className="shrink-0 text-right min-w-[76px]">
-                    <div className="text-[11px] font-bold text-danger/90 truncate">{relativeTime}</div>
+                    <div className={cn("text-[11px] font-bold truncate", imminent ? "text-danger/90" : "text-satin-grey")}>{relativeTime}</div>
                     <div className="text-[10px] text-sandrift tabular-nums mt-0.5">{format(ddlDate, "HH:mm")}</div>
                   </div>
                 </div>

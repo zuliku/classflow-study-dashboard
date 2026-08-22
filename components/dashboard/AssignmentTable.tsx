@@ -78,15 +78,14 @@ export function AssignmentTable({
     if (isWorkspace) onWorkspaceQuickAddOpenChange?.(open);
   };
 
-  const {
-    assignments,
-    courses,
-    updateAssignmentStatus,
-    setActiveTab,
-    assignmentTimeSlice,
-    setAssignmentTimeSlice,
-    studyBlocks,
-  } = useAppStore();
+  // 精确 selector：避免整 store 订阅导致无关 state 更新触发整卡 re-render
+  const assignments = useAppStore((s) => s.assignments);
+  const courses = useAppStore((s) => s.courses);
+  const assignmentTimeSlice = useAppStore((s) => s.assignmentTimeSlice);
+  // actions（zustand 引用稳定）
+  const updateAssignmentStatus = useAppStore((s) => s.updateAssignmentStatus);
+  const setActiveTab = useAppStore((s) => s.setActiveTab);
+  const setAssignmentTimeSlice = useAppStore((s) => s.setAssignmentTimeSlice);
   const pushToast = useToastStore((s) => s.pushToast);
   const confirmRequest = useConfirmStore((s) => s.confirm);
   const handoff = useKiroHandoff();
@@ -481,7 +480,7 @@ export function AssignmentTable({
               );
             }}
             onClick={(e) => e.stopPropagation()}
-            className="w-4 h-4 rounded text-charcoal border-[#CDB9AB] focus:ring-0 cursor-pointer shrink-0"
+            className="w-4 h-4 rounded text-charcoal border-stone-beige focus:ring-0 cursor-pointer shrink-0"
           />
 
           <div className="min-w-0 flex-1">
@@ -617,7 +616,7 @@ export function AssignmentTable({
   return (
     <div
       className={cn(
-        "bg-surface border border-line rounded-xl shadow-subtle flex flex-col h-full min-w-0",
+        "dashboard-card flex flex-col h-full min-w-0",
         // workspace：edge-owned scroll surface（p-0，Header/Filters/List/Footer 分区拥有 padding；scrollbar 贴卡片右缘）
         // compact：保持原卡片 padding 布局
         isWorkspace ? "p-0 justify-start" : "p-4 justify-between space-y-3"
@@ -626,10 +625,10 @@ export function AssignmentTable({
       {/* Compact Header & Filters：workspace 模式的标题/主创建/视图/筛选/搜索已上移至
           AssignmentsWorkspace 的 Sticky Chrome（WorkspaceHeader + ViewBar），compact Overview 保持原样 */}
       {!isWorkspace && (
-      <div className="space-y-3 pb-3.5 border-b border-[#F0EBE1]">
+      <div className="space-y-3 pb-3.5 border-b border-line-soft">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
           <div className="flex items-center space-x-2">
-            <h3 className="text-sm font-bold text-charcoal">任务清单</h3>
+            <h3 className="text-sm font-semibold text-charcoal">任务清单</h3>
             <span className="text-[10px] font-semibold text-sandrift">
               {filteredAssignments.length} 项任务
             </span>
@@ -653,10 +652,11 @@ export function AssignmentTable({
           </div>
         </div>
 
-        {/* Filters Row: Course Filter + Time Slice Pills（compact 专属） */}
+        {/* Filters Row: Course Filter + Time Slice Segmented（compact 专属）。
+            两者高度统一为 h-9；segmented 为单一浅轨道 + 克制 active 指示，非六个独立 Pill */}
         <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
-          <div className="flex items-center space-x-1.5 bg-[#F7F5F5] border border-line rounded-lg h-9 px-2.5">
-            <BookOpen className="w-3.5 h-3.5 text-[#A48F82]" />
+          <div className="flex items-center space-x-1.5 bg-background border border-line rounded-lg h-9 px-2.5">
+            <BookOpen className="w-3.5 h-3.5 text-sandrift" />
             <UISelect
               value={courseFilter}
               onChange={(v) => {
@@ -673,7 +673,7 @@ export function AssignmentTable({
             />
           </div>
 
-          <div className="flex flex-wrap items-center gap-1 bg-alabaster p-0.5 rounded-lg border border-line-strong text-[11px] font-medium">
+          <div className="flex flex-wrap items-center gap-0.5 bg-surface-soft p-1 rounded-lg border border-line-soft min-h-9 text-[11px] font-medium">
             {[
               { id: "all", label: "全部" },
               { id: "overdue", label: "已逾期" },
@@ -690,11 +690,12 @@ export function AssignmentTable({
                     setAssignmentTimeSlice(slice.id as TimeSliceFilter);
                     setCompactPage(1); // 筛选变化回第一页
                   }}
-                  className={`px-2.5 py-0.5 rounded-lg transition-colors duration-[var(--motion-fast)] ease-[var(--ease-standard)] ${
+                  className={cn(
+                    "h-7 px-2.5 rounded-md transition-colors duration-[var(--motion-fast)] ease-[var(--ease-standard)]",
                     isActive
-                      ? "bg-white text-charcoal font-bold shadow-subtle"
+                      ? "bg-background text-charcoal font-bold shadow-subtle"
                       : "text-satin-grey hover:text-charcoal"
-                  }`}
+                  )}
                 >
                   {slice.label}
                 </button>
@@ -761,8 +762,8 @@ export function AssignmentTable({
         className={cn(
           "shrink-0 text-xs",
           isWorkspace
-            ? "mx-4 mb-4 pt-2 border-t border-[#F0EBE1] flex justify-between items-center"
-            : "pt-3 pb-1.5 border-t border-[#F0EBE1] grid grid-cols-[1fr_auto_1fr] items-center"
+            ? "mx-4 mb-4 pt-2 border-t border-line-soft flex justify-between items-center"
+            : "pt-3 pb-1.5 border-t border-line-soft grid grid-cols-[1fr_auto_1fr] items-center"
         )}
       >
         {isWorkspace ? (
