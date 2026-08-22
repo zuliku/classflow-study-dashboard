@@ -146,26 +146,26 @@ export function LearningAnalyticsView() {
 
   return (
     <div className="flex flex-1 min-h-0 flex-col">
-      {/* App Chrome V2.3：WorkspaceHeader + AnalyticsWorkspaceViewBar（与 Body 同 max-width 版心对齐） */}
+      {/* App Chrome V2.3：WorkspaceHeader + AnalyticsWorkspaceViewBar（与 Body 同步拉伸，大屏充分利用宽度，保留 24–32px 安全边距） */}
       <div className="shrink-0">
         <WorkspaceHeader
           title="学习洞察"
           context="从学习历史中理解你的投入与节奏"
-          innerClassName="max-w-[1500px] mx-auto"
+          innerClassName="w-full max-w-none xl:px-8"
         />
         <AnalyticsWorkspaceViewBar
           preset={preset}
           onPresetChange={changePreset}
           reviewExpanded={reviewExpanded}
           onWeeklyReviewToggle={toggleWeeklyReview}
-          innerClassName="max-w-[1500px] mx-auto"
+          innerClassName="w-full max-w-none xl:px-8"
         />
       </div>
 
       <div className="flex-1 min-h-0 overflow-y-auto">
         <div
           data-testid="analytics-body"
-          className="w-full max-w-[1500px] mx-auto flex flex-col gap-6 p-4 md:p-6"
+          className="w-full max-w-none flex flex-col gap-6 p-4 md:p-6 xl:p-8"
         >
           {/* 历史分析 stage（loading/error/empty/normal 同一容器；preset 变化轻 settle）——
               StudyOutlookCard 在其下方独立存在，不随 preset 重播 */}
