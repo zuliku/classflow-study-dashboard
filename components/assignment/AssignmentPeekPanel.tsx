@@ -4,6 +4,7 @@ import React from "react";
 import { X, BookOpen, CheckCircle2, Clock, Flag, ListChecks, CalendarClock, Tags } from "lucide-react";
 import { useAppStore } from "@/store/useAppStore";
 import { usePresence } from "@/lib/usePresence";
+import { MOTION_MS } from "@/lib/motion";
 import { getPriorityMeta } from "@/lib/utils";
 import { getLocalDDLDate, getLocalDDLTime, parseLocalDDL } from "@/lib/ddl";
 import { formatEstimatedMinutes } from "@/lib/tasks/taskSemantics";
@@ -29,7 +30,9 @@ export function AssignmentPeekPanel() {
   } = useAppStore();
   const assignment = assignments.find((a) => a.id === assignmentPeekId) ?? null;
 
-  const { mounted, visible } = usePresence(!!assignment, 200);
+  // Motion Contract：面板走 ux-drawer-panel（--motion-panel 对称过渡 230ms）。
+  // 原 200ms 会在 CSS 退出完成前截断卸载，现与实际过渡时长同源对齐。
+  const { mounted, visible } = usePresence(!!assignment, MOTION_MS.panel);
 
   if (!mounted || !assignment) return null;
 

@@ -2,6 +2,7 @@
 
 import React from "react";
 import { OverlayLayer } from "@/components/ui/OverlayLayer";
+import { MOTION_EXIT_MS } from "@/lib/motion";
 import { cn } from "@/lib/utils";
 
 /**
@@ -60,10 +61,11 @@ export function resolveDrawerPresentation(
         "w-full sm:w-[470px] h-full max-h-[calc(100dvh-24px)] sm:max-h-[calc(100dvh-32px)]",
         "bg-surface rounded-2xl sm:rounded-[22px] border border-line-strong shadow-card",
         "flex flex-col overflow-hidden ux-drawer-panel !ease-[var(--ease-emphasized)] pointer-events-auto",
-        // enter：20px→0 位移 + 微缩放 + 淡入（230ms）；exit：更快（160ms）
+        // enter：20px→0 位移 + 微缩放 + 淡入（--motion-overlay 220ms，与 edge/Dialog 同档）；
+        // exit：更快（--motion-exit-panel 160ms）
         visible
-          ? "translate-x-0 scale-100 opacity-100 !duration-[230ms]"
-          : "translate-x-4 scale-[.994] opacity-0 !duration-[160ms]"
+          ? "translate-x-0 scale-100 opacity-100 !duration-[var(--motion-overlay)]"
+          : "translate-x-4 scale-[.994] opacity-0 !duration-[var(--motion-exit-panel)]"
       ),
     };
   }
@@ -71,10 +73,11 @@ export function resolveDrawerPresentation(
     overlayClassName: "fixed inset-x-0 bottom-0 top-[var(--titlebar-h)] bg-black/30 backdrop-blur-sm flex justify-end overflow-hidden",
     panelClassName: cn(
       "h-full w-full bg-surface shadow-drawer border-l border-line flex flex-col overflow-hidden ux-drawer-panel",
-      // 右侧来源感：enter ≈220ms（12px 位移）；exit ≈160ms（更快），不像是从屏幕外飞入
+      // 右侧来源感：enter = --motion-overlay（220ms，12px 位移）；exit = --motion-exit-panel（160ms 更快），
+      // 与 floating 同一生命周期语义；不像是从屏幕外飞入
       visible
-        ? "translate-x-0 opacity-100 !duration-[220ms]"
-        : "translate-x-3 opacity-0 !duration-[160ms]"
+        ? "translate-x-0 opacity-100 !duration-[var(--motion-overlay)]"
+        : "translate-x-3 opacity-0 !duration-[var(--motion-exit-panel)]"
     ),
   };
 }
@@ -84,7 +87,8 @@ export function Drawer({
   onOpenChange,
   overlayId,
   stackZ = 40,
-  exitMs = 200,
+  // panel 档 exit（160ms）：与两种 presentation 的 CSS 退出过渡（--motion-exit-panel）一致
+  exitMs = MOTION_EXIT_MS.panel,
   closeOnBackdrop = false,
   onEscapeKeyDown,
   overlayClassName,

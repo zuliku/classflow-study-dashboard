@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import { usePresence } from "@/lib/usePresence";
 import { useRestoreFocus } from "@/lib/useRestoreFocus";
 import { pushOverlay, popOverlay, isTopmostOverlay } from "@/lib/overlayStack";
+import { MOTION_EXIT_MS } from "@/lib/motion";
 import { cn } from "@/lib/utils";
 
 /**
@@ -42,7 +43,8 @@ export function OverlayLayer({
   onOpenChange,
   overlayId,
   stackZ,
-  exitMs = 220,
+  // 默认 panel 档 exit：与 Drawer CSS 退出过渡（--motion-exit-panel）一致
+  exitMs = MOTION_EXIT_MS.panel,
   closeOnBackdrop = false,
   onEscapeKeyDown,
   className,

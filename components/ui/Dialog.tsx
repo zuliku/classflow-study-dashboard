@@ -2,6 +2,7 @@
 
 import React from "react";
 import { OverlayLayer } from "@/components/ui/OverlayLayer";
+import { MOTION_EXIT_MS } from "@/lib/motion";
 import { cn } from "@/lib/utils";
 
 /**
@@ -10,6 +11,9 @@ import { cn } from "@/lib/utils";
  * - role="dialog" aria-modal="true"（consumer 可覆盖为 alertdialog）
  * - 不自动生成 close button / title context；close button 属于 consumer
  * - 无 focus trap / scroll lock
+ *
+ * Motion Contract：enter = --motion-overlay（220ms，与 Drawer panel enter 同档）；
+ * exit = --motion-exit-base（150ms）；presence unmount = MOTION_EXIT_MS.base —— 三者同源对应。
  */
 export interface DialogProps extends React.HTMLAttributes<HTMLDivElement> {
   open: boolean;
@@ -28,7 +32,7 @@ export function Dialog({
   onOpenChange,
   overlayId,
   stackZ = 50,
-  exitMs = 190,
+  exitMs = MOTION_EXIT_MS.base,
   closeOnBackdrop = false,
   onEscapeKeyDown,
   overlayClassName,
@@ -57,10 +61,10 @@ export function Dialog({
             aria-modal="true"
             className={cn(
               "w-full max-w-md bg-surface border border-line rounded-2xl shadow-drawer overflow-hidden ux-modal-panel",
-              // enter ≈200ms（scale 0.99→1 + 2px 上移归零）；exit ≈150ms（scale 1→0.99 + 2px），exit < enter
+              // enter ≈220ms（scale 0.99→1 + 2px 上移归零）；exit =150ms（scale 1→0.99 + 2px），exit < enter
               visible
-                ? "opacity-100 scale-100 translate-y-0 !duration-[200ms]"
-                : "opacity-0 scale-[0.99] translate-y-0.5 !duration-[150ms]",
+                ? "opacity-100 scale-100 translate-y-0 !duration-[var(--motion-overlay)]"
+                : "opacity-0 scale-[0.99] translate-y-0.5 !duration-[var(--motion-exit-base)]",
               className
             )}
             {...props}

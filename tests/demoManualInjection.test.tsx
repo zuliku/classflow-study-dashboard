@@ -45,7 +45,11 @@ describe("Demo Manual Injection Hardening", () => {
   });
 
   it("C. First Run visible when empty", async () => {
-    const src = fs.readFileSync(path.join(process.cwd(), "app/page.tsx"), "utf8");
+    // Overview 抽取为 OverviewWorkspace 后，First Run UI 及空工作区判断位于该组件
+    const src = fs.readFileSync(
+      path.join(process.cwd(), "components/dashboard/OverviewWorkspace.tsx"),
+      "utf8"
+    );
     expect(src).toContain('data-testid="getting-started"');
     expect(src).toContain("欢迎使用 ClassFlow");
     // Verify Home renders getting-started when store is empty (empty check)

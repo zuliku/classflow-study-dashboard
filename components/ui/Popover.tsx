@@ -2,6 +2,7 @@
 
 import React, { useEffect, useRef } from "react";
 import { usePresence } from "@/lib/usePresence";
+import { MOTION_EXIT_MS } from "@/lib/motion";
 import { cn } from "@/lib/utils";
 
 /**
@@ -75,7 +76,13 @@ const KIRO_PLACEMENT_ORIGIN: Record<PopoverPlacement, string> = {
  * 通用浮层 surface（service 任何 popover 内容：Filter / Share 等）。
  * 注意：不默认 role="menu"（由 DropdownMenuPanel 添加）。
  * open 可选：传入后 panel 拥有 mounted/visible presence（close 有快速 exit，最终 unmount）；
- * 不传则保持常显（兼容旧 consumer）。位移 ≤3px，enter 140ms / exit 120ms（快于 Dialog/Drawer）。
+ * 不传则保持常显（兼容旧 consumer）。位移 ≤3px。
+ *
+ * Motion Contract（default profile）：enter = --motion-fast / exit = --motion-exit-fast，
+ * presence unmount = MOTION_EXIT_MS.fast —— 三者同源对应，快于 Dialog/Drawer。
+ * kiro profile 特殊 duration（160）：Kiro scope CSS 变量（--kiro-motion-popover-*）按
+ * workspace/sidecar 作用域取值（120/100ms），presence 取上限档保证 unmount 晚于任一 scope 的
+ * 视觉退出；属 Kiro Brand Motion 域，不并入全局 contract。
  */
 export interface PopoverPanelProps extends React.HTMLAttributes<HTMLDivElement> {
   placement?: PopoverPlacement;
@@ -95,7 +102,11 @@ export function PopoverPanel({
   children,
   ...props
 }: PopoverPanelProps) {
-  const { mounted, visible } = usePresence(open ?? true, motionProfile === "kiro" ? 160 : 120);
+  // kiro=160：见上方注释（Kiro scope 域独立定速）；default=fast exit（110）
+  const { mounted, visible } = usePresence(
+    open ?? true,
+    motionProfile === "kiro" ? 160 : MOTION_EXIT_MS.fast
+  );
   if (!mounted) return null;
 
   return (
@@ -108,9 +119,9 @@ export function PopoverPanel({
         motionProfile === "kiro" && cn(KIRO_PLACEMENT_ORIGIN[placement], "kiro-popover-motion"),
         motionProfile === "default" &&
           (visible
-            ? "opacity-100 translate-x-0 translate-y-0 !duration-[140ms] ux-inline"
+            ? "opacity-100 translate-x-0 translate-y-0 duration-[var(--motion-fast)] ux-inline"
             : cn(
-                "opacity-0 !duration-[120ms] ux-inline",
+                "opacity-0 !duration-[var(--motion-exit-fast)] ux-inline",
                 // 仅 exit 阻塞 pointer（enter 是唯一 interaction owner，2 帧内可交互）
                 !open && "pointer-events-none",
                 PLACEMENT_ENTER_OFFSET[placement]

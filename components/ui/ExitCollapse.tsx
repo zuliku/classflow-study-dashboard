@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useRef } from "react";
+import { MOTION_EXIT_MS } from "@/lib/motion";
 import { cn } from "@/lib/utils";
 
 /**
@@ -8,7 +9,8 @@ import { cn } from "@/lib/utils";
  * 真实数据 mutation（删除 / 离开当前数据集）时，包裹内容轻 fade + 结构折叠（grid 1fr→0fr + opacity）。
  *
  * - normal：grid-rows-1fr + opacity-100（首次 render 不播放 entry）。
- * - exiting：grid-rows-0fr + opacity-0 + pointer-events-none + inner inert（不可 Tab 聚焦），约 160ms。
+ * - exiting：grid-rows-0fr + opacity-0 + pointer-events-none + inner inert（不可 Tab 聚焦），
+ *   exit = --motion-exit-panel（160ms，与 useExitPresenceList 默认 snapshot 保留时长同源一致）。
  * - 只做 exit；enter / presence 由调用方（useEnterOnAdd / useExitPresenceList）负责。
  * - Reduced Motion：全局 data-motion-effective 会把 transition 近即时化（无需组件内额外处理）。
  */
@@ -38,7 +40,7 @@ export function ExitCollapse({
     <div
       data-state={exiting ? "exiting" : "present"}
       className={cn(
-        "grid transition-[grid-template-rows,opacity] duration-[160ms] ease-[var(--ease-standard)]",
+        "grid transition-[grid-template-rows,opacity] duration-[var(--motion-exit-panel)] ease-[var(--ease-standard)]",
         exiting
           ? "grid-rows-[0fr] opacity-0 pointer-events-none"
           : "grid-rows-[1fr] opacity-100",

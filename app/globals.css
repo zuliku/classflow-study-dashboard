@@ -35,14 +35,20 @@
   --success-bg: #E7ECE6;
   --success-border: #C8D3C7;
 
-  /* Motion tokens */
+  /* Motion tokens（与 lib/motion.ts MOTION_MS / MOTION_EXIT_MS 一一对应，勿单方面修改） */
   --motion-fast: 140ms;
-  --motion-base: 200ms;
+  --motion-base: 180ms;
   --motion-panel: 230ms;
   --motion-page: 180ms;
   --motion-data: 200ms;
   --motion-select: 140ms;
   --motion-snap: 90ms;
+  /* Overlay panel enter：Dialog/Drawer 共用（≠ --motion-panel——后者保留给 Sidebar App Chrome morph 域） */
+  --motion-overlay: 220ms;
+  /* Exit durations（≈ 对应 enter 档位的 70–80%）：presence/unmount 与 CSS 退出过渡的唯一真值对 */
+  --motion-exit-fast: 110ms;
+  --motion-exit-base: 150ms;
+  --motion-exit-panel: 160ms;
   --ease-standard: cubic-bezier(0.2, 0.8, 0.2, 1);
   --ease-emphasized: cubic-bezier(0.22, 1, 0.36, 1);
 

@@ -3,7 +3,8 @@
 import React, { useCallback, useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Check, ChevronDown } from "lucide-react";
-import { useEffectiveReducedMotion } from "@/hooks/useEffectiveReducedMotion";
+import { usePresence } from "@/lib/usePresence";
+import { MOTION_EXIT_MS } from "@/lib/motion";
 import { cn } from "@/lib/utils";
 
 /**
@@ -13,7 +14,8 @@ import { cn } from "@/lib/utils";
  *   menu role=listbox；item role=option / aria-selected
  * - 键盘：Enter/Space 打开；↑↓ 导航；Home/End；Enter 选择；Escape 关闭并聚焦回 trigger；Tab 关闭
  * - 鼠标：click 打开/选择；outside click 关闭；scroll/resize 关闭
- * - 动画：open = opacity + translateY(2px→0)（--motion-fast）；reduced motion 无动画
+ * - 动画（Motion Contract）：open = opacity + translateY(2px→0)；enter = --motion-fast，
+ *   exit = --motion-exit-fast，unmount = MOTION_EXIT_MS.fast（共享 usePresence，同源对应）
  * - focus：mouse 点击不保留刺眼 ring；键盘 focus-visible 轻量 ring（:focus-visible）
  */
 
@@ -53,8 +55,14 @@ export function UISelect<T extends string | number>({
 }: UISelectProps<T>) {
   const baseId = useId().replace(/[^a-zA-Z0-9]/g, "");
   const listboxId = `select-listbox-${baseId}`;
+  // semantic state：open 拥有交互所有权；mounted/visible 仅表达 presentation（共享 presence lifecycle）
   const [open, setOpen] = useState(false);
-  const [visible, setVisible] = useState(false);
+  const { mounted, visible } = usePresence(open, MOTION_EXIT_MS.fast);
+  /**
+   * 选择完成后的立即卸载旁路：跳过退出窗口，不拦截紧随其后的 Escape / 父 Overlay 交互。
+   * （既有语义：selection 不做 animated close——普通 outside/Escape/Tab 关闭才走 exit 动画。）
+   */
+  const [suppressRender, setSuppressRender] = useState(false);
   const [activeIndex, setActiveIndex] = useState(() =>
     Math.max(0, options.findIndex((o) => o.value === value))
   );
@@ -66,13 +74,9 @@ export function UISelect<T extends string | number>({
   const [viewportMaxWidth, setViewportMaxWidth] = useState<number>(320);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
-  const closeTimerRef = useRef<number | null>(null);
-  const rafRef = useRef<number | null>(null);
   const selectedIndex = Math.max(0, options.findIndex((o) => o.value === value));
 
-  const reducedMotion = useEffectiveReducedMotion();
-
-  // 打开：先挂载（opacity-0）→ 下一帧切到可见（opacity-100 + translate-y-0）
+  // 打开：presence 负责 mount hidden → 双 rAF 后 visible（进入过渡）；此处只做定位测量 + semantic open
   const openMenu = useCallback(() => {
     if (disabled || options.length === 0) return;
     const el = triggerRef.current;
@@ -94,42 +98,15 @@ export function UISelect<T extends string | number>({
     setTriggerWidth(rect.width);
     setMenuLeft(rect.left);
     setViewportMaxWidth(Math.min(320, window.innerWidth - 16));
+    setSuppressRender(false);
     setOpen(true);
     setActiveIndex(options.findIndex((o) => o.value === value));
-    if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
-    if (reducedMotion) {
-      setVisible(true);
-    } else {
-      setVisible(false);
-      rafRef.current = requestAnimationFrame(() => {
-        rafRef.current = null;
-        setVisible(true);
-      });
-    }
-  }, [disabled, options, value, reducedMotion]);
+  }, [disabled, options, value]);
 
-  // 关闭：先切不可见（fade）→ 动画结束后卸载
+  // 关闭：semantic close → usePresence 播放退出（exit-fast）后卸载；reduced motion 即时落位
   const closeMenu = useCallback(() => {
-    if (closeTimerRef.current !== null) window.clearTimeout(closeTimerRef.current);
-    setVisible(false);
-    if (reducedMotion) {
-      closeTimerRef.current = null;
-      setOpen(false);
-      return;
-    }
-    closeTimerRef.current = window.setTimeout(() => {
-      closeTimerRef.current = null;
-      setOpen(false);
-    }, 120);
-  }, [reducedMotion]);
-
-  useEffect(
-    () => () => {
-      if (closeTimerRef.current !== null) window.clearTimeout(closeTimerRef.current);
-      if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
-    },
-    []
-  );
+    setOpen(false);
+  }, []);
 
   // outside click / scroll / resize 关闭
   useEffect(() => {
@@ -177,13 +154,14 @@ export function UISelect<T extends string | number>({
     return () => window.removeEventListener("keydown", onKey, true);
   }, [open, closeMenu]);
 
-  // 打开时聚焦到当前选中项（preventScroll）+ 保证 active option 在可视区域
+  // 打开时聚焦到当前选中项（preventScroll）+ 保证 active option 在可视区域。
+  // mounted 门控：portal 在 mounted 翻转后的 commit 才存在（presence 先 mount hidden 再 visible）。
   useEffect(() => {
-    if (!open) return;
+    if (!open || !mounted) return;
     const el = menuRef.current?.querySelector<HTMLElement>(`[data-index="${activeIndex}"]`);
     el?.focus({ preventScroll: true });
     el?.scrollIntoView({ block: "nearest" });
-  }, [open, activeIndex]);
+  }, [open, mounted, activeIndex]);
 
   // 挂载后测量实际宽度：右侧溢出 → 右对齐修正；至少保留 8px viewport inset
   useEffect(() => {
@@ -202,10 +180,8 @@ export function UISelect<T extends string | number>({
     const opt = options[index];
     if (!opt) return;
     onChange(opt.value);
-    // 选择完成：立即卸载（不保留淡出窗口，避免拦截紧随其后的 Escape / 上层交互）
-    if (closeTimerRef.current !== null) window.clearTimeout(closeTimerRef.current);
-    closeTimerRef.current = null;
-    setVisible(false);
+    // 选择完成：立即卸载（不经退出窗口，避免拦截紧随其后的 Escape / 上层交互）——保留既有语义
+    setSuppressRender(true);
     setOpen(false);
     triggerRef.current?.focus();
   };
@@ -263,7 +239,7 @@ export function UISelect<T extends string | number>({
         onClick={() => (open ? closeMenu() : openMenu())}
         onKeyDown={onTriggerKeyDown}
         className={cn(
-          "flex items-center justify-between gap-2 px-2.5 h-9 rounded-lg bg-[#F7F5F5] border border-line text-xs font-bold text-charcoal cursor-pointer",
+          "flex items-center justify-between gap-2 px-2.5 h-9 rounded-lg bg-background border border-line text-xs font-bold text-charcoal cursor-pointer",
           "focus:outline-none focus:border-charcoal focus-visible:outline-2 focus-visible:outline-charcoal/30",
           "disabled:opacity-50 disabled:cursor-not-allowed",
           "transition-colors duration-[var(--motion-fast)]",
@@ -280,7 +256,8 @@ export function UISelect<T extends string | number>({
         />
       </button>
 
-      {open &&
+      {/* presentation：mounted 决定 Portal 是否存在（exit 期间延迟卸载）；visible 决定 opacity/transform */}
+      {mounted && !suppressRender &&
         createPortal(
           <div
             ref={menuRef}
@@ -297,9 +274,11 @@ export function UISelect<T extends string | number>({
             }}
             className={cn(
               "overflow-y-auto scrollbar-none rounded-lg border border-line bg-surface shadow-card py-1 pointer-events-auto",
-              "transition-opacity transition-transform duration-[var(--motion-fast)] ease-[var(--ease-standard)]",
-              visible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-0.5 pointer-events-none",
-              reducedMotion && "transition-none transform-none",
+              "transition-opacity transition-transform ease-[var(--ease-standard)]",
+              // enter = --motion-fast；exit = --motion-exit-fast（更快），与 presence unmount 同源对应
+              visible
+                ? "opacity-100 translate-y-0 duration-[var(--motion-fast)]"
+                : "opacity-0 translate-y-0.5 pointer-events-none !duration-[var(--motion-exit-fast)]",
               menuClassName
             )}
             onKeyDown={onMenuKeyDown}

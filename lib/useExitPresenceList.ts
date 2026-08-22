@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useEffectiveReducedMotion } from "@/hooks/useEffectiveReducedMotion";
+import { MOTION_EXIT_MS } from "@/lib/motion";
 
 /**
  * Exit-only 列表保留 helper（Interaction Motion IM4A/IM4B）：
@@ -14,6 +15,9 @@ import { useEffectiveReducedMotion } from "@/hooks/useEffectiveReducedMotion";
  * - Store mutation 必须在调用方立即执行；本 helper 只保留短暂视觉 snapshot。
  * - 支持批量（多个 item 同时消失）。删除后 snapshot 来自上一 render（不从 store 重新取）。
  * - Reduced Motion：exit duration = 0（近即时移除）。
+ *
+ * Motion Contract：默认 duration = MOTION_EXIT_MS.panel —— 与 ExitCollapse 的 CSS
+ * 退出过渡（--motion-exit-panel）同源一致，勿在调用处另传魔法数字。
  */
 export interface RetainedExitItem<T> {
   item: T;
@@ -24,7 +28,7 @@ export function useExitPresenceList<T>({
   items,
   getId,
   resetKey,
-  duration = 160,
+  duration = MOTION_EXIT_MS.panel,
 }: {
   items: T[];
   getId: (item: T) => string;

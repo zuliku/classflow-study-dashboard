@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import React, { useState, useEffect, useMemo, useRef } from "react";
 import { Search, X, ArrowRight, Keyboard } from "lucide-react";
@@ -6,6 +6,7 @@ import { useAppStore } from "@/store/useAppStore";
 import { useShallow } from "zustand/react/shallow";
 import { pushOverlay, popOverlay, isTopmostOverlay } from "@/lib/overlayStack";
 import { usePresence } from "@/lib/usePresence";
+import { MOTION_MS } from "@/lib/motion";
 import { useRestoreFocus } from "@/lib/useRestoreFocus";
 import { cn } from "@/lib/utils";
 import {
@@ -104,7 +105,8 @@ export function CommandCenter() {
     [pushToast, confirmRequest]
   );
 
-  const { mounted, visible } = usePresence(isSearchModalOpen, 220);
+  // Motion Contract：面板走 ux-modal-panel（--motion-base 对称过渡），presence 与之同源
+  const { mounted, visible } = usePresence(isSearchModalOpen, MOTION_MS.base);
   useRestoreFocus(isSearchModalOpen);
 
   // Overlay 栈 + Esc（仅最上层）

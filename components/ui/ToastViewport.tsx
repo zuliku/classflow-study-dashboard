@@ -3,16 +3,22 @@
 import React, { useEffect, useRef, useState } from "react";
 import { CheckCircle2, AlertTriangle, Info, XCircle, X } from "lucide-react";
 import { useToastStore, ToastType } from "@/store/useToastStore";
+import { MOTION_MS } from "@/lib/motion";
 import { cn } from "@/lib/utils";
 
-const TYPE_META: Record<ToastType, { icon: React.ElementType; accent: string }> = {
-  success: { icon: CheckCircle2, accent: "#627566" },
-  warning: { icon: AlertTriangle, accent: "#936E4C" },
-  error: { icon: XCircle, accent: "#9B5B57" },
-  info: { icon: Info, accent: "#A48F82" },
+// accent 走 semantic color class（= token 值：success/warning/danger/sandrift），不再散落 HEX
+const TYPE_META: Record<ToastType, { icon: React.ElementType; accentClass: string }> = {
+  success: { icon: CheckCircle2, accentClass: "text-success" },
+  warning: { icon: AlertTriangle, accentClass: "text-warning" },
+  error: { icon: XCircle, accentClass: "text-danger" },
+  info: { icon: Info, accentClass: "text-sandrift" },
 };
 
-const EXIT_MS = 200;
+/**
+ * Motion Contract：toast 视觉退出走 ux-inline（--motion-fast），
+ * EXIT_MS = MOTION_MS.fast 与之同源——动画结束即移除，不空等也不截断。
+ */
+const EXIT_MS = MOTION_MS.fast;
 
 export function ToastViewport() {
   const toasts = useToastStore((s) => s.toasts);
@@ -61,7 +67,7 @@ export function ToastViewport() {
       aria-live="polite"
     >
       {toasts.map((toast) => {
-        const { icon: Icon, accent } = TYPE_META[toast.type];
+        const { icon: Icon, accentClass } = TYPE_META[toast.type];
         const isExiting = exiting.has(toast.id);
         return (
           <div
@@ -73,7 +79,7 @@ export function ToastViewport() {
             )}
             role="status"
           >
-            <Icon className="w-4 h-4 shrink-0 mt-0.5" style={{ color: accent }} />
+            <Icon className={cn("w-4 h-4 shrink-0 mt-0.5", accentClass)} />
             <p className="flex-1 text-xs text-charcoal font-medium leading-relaxed min-w-0">
               {toast.message}
             </p>
@@ -83,7 +89,7 @@ export function ToastViewport() {
                   toast.onAction?.();
                   dismiss(toast.id);
                 }}
-                className="shrink-0 px-1.5 py-0.5 -m-0.5 rounded-lg text-[11px] font-bold text-charcoal hover:bg-[#F0EBE1] transition-colors duration-[var(--motion-fast)]"
+                className="shrink-0 px-1.5 py-0.5 -m-0.5 rounded-lg text-[11px] font-bold text-charcoal hover:bg-alabaster transition-colors duration-[var(--motion-fast)]"
               >
                 {toast.actionLabel}
               </button>

@@ -11,6 +11,7 @@ import { getReminderCenterGroups, formatReminderCenterTime } from "@/lib/reminde
 import { useExitPresenceList } from "@/lib/useExitPresenceList";
 import { useEnterOnAdd } from "@/lib/useEnterOnAdd";
 import { usePresence } from "@/lib/usePresence";
+import { MOTION_MS } from "@/lib/motion";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
 import { IconButton } from "@/components/ui/IconButton";
@@ -69,8 +70,9 @@ export function ReminderCenter() {
   const [draft, setDraft] = useState<StandaloneDraft>({ title: "", date: "", time: "23:59", note: "" });
   const [error, setError] = useState("");
 
-  // Composer presence：editor 置 null 后保留最后一个快照播 exit（纯 UI snapshot，不复制 domain 数据）
-  const composerPresence = usePresence(editor !== null, 180);
+  // Composer presence：editor 置 null 后保留最后一个快照播 exit（纯 UI snapshot，不复制 domain 数据）。
+  // Motion Contract：composer grid 过渡对称（enter=exit=--motion-base），presence 取同值。
+  const composerPresence = usePresence(editor !== null, MOTION_MS.base);
   const lastEditorRef = useRef<typeof editor>(null);
   if (editor) lastEditorRef.current = editor;
   const renderedEditor = editor ?? lastEditorRef.current;
