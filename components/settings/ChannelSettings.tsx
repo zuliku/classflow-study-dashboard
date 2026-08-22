@@ -9,6 +9,9 @@ import { Switch } from "@/components/ui/Switch";
 import { useToastStore } from "@/store/useToastStore";
 import { useConfirmStore } from "@/store/useConfirmStore";
 import { cn } from "@/lib/utils";
+import { resolveChannelUserMessage } from "@/lib/channels/errorContract";
+
+type ChannelRuntimeState = "loading" | "ready" | "unavailable" | "error";
 
 type QQConfig = { id: string; channel: "qq-bot"; displayName: string; appId: string; credentialRef: string; enabled: boolean; requireMentionInGroup: boolean; allowedUsers: string[]; allowedGroups: string[]; receiveDirectMessages: boolean; receiveGroupMessages: boolean };
 type GmailConfig = { id: string; channel: "gmail"; displayName: string; emailAddress: string; credentialRef: string; enabled: boolean; syncIntervalSeconds: 60 };
@@ -60,7 +63,7 @@ function stateColor(state: string): string {
 
 export function ChannelSettings() {
   const [channels, setChannels] = useState<ChannelStatus[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [runtimeState, setRuntimeState] = useState<ChannelRuntimeState>("loading");
   const [addOpen, setAddOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<ChannelStatus | null>(null);
   const [busyMap, setBusyMap] = useState<Record<string, boolean>>({});
@@ -71,11 +74,18 @@ export function ChannelSettings() {
 
   const refresh = useCallback(async () => {
     const bridge = getChannelsBridge();
-    if (!bridge) { setLoading(false); return; }
+    if (!bridge) {
+      setRuntimeState("unavailable");
+      return;
+    }
+    setRuntimeState("loading");
     try {
       const res = await bridge.list() as { channels: ChannelStatus[] };
       setChannels(Array.isArray(res.channels) ? res.channels : []);
-    } catch { setChannels([]); } finally { setLoading(false); }
+      setRuntimeState("ready");
+    } catch {
+      setRuntimeState("error");
+    }
   }, []);
 
   useEffect(() => { refresh(); }, [refresh]);
@@ -83,20 +93,20 @@ export function ChannelSettings() {
   const handleConnect = async (id: string) => {
     const b = getChannelsBridge(); if (!b) return;
     setBusy(id, "connect", true);
-    try { await b.connect({ id }); await refresh(); pushToast({ message: "已连接", type: "success" }); } catch (e) { pushToast({ message: (e as { message?: string })?.message ?? String(e), type: "error" }); } finally { setBusy(id, "connect", false); }
+    try { await b.connect({ id }); await refresh(); pushToast({ message: "已连接", type: "success" }); } catch (e) { pushToast({ message: resolveChannelUserMessage(e, "连接失败，请稍后重试"), type: "error" }); } finally { setBusy(id, "connect", false); }
   };
   const handleDisconnect = async (id: string) => {
     const b = getChannelsBridge(); if (!b) return;
     setBusy(id, "disconnect", true);
-    try { await b.disconnect({ id }); await refresh(); pushToast({ message: "已断开", type: "success" }); } catch (e) { pushToast({ message: (e as { message?: string })?.message ?? String(e), type: "error" }); } finally { setBusy(id, "disconnect", false); }
+    try { await b.disconnect({ id }); await refresh(); pushToast({ message: "已断开", type: "success" }); } catch (e) { pushToast({ message: resolveChannelUserMessage(e, "断开失败，请稍后重试"), type: "error" }); } finally { setBusy(id, "disconnect", false); }
   };
   const handleTest = async (id: string) => {
     const b = getChannelsBridge(); if (!b) return;
     setBusy(id, "test", true);
     try {
       const res = await b.test({ id }) as { ok: boolean; error?: string };
-      pushToast({ message: res.ok ? "连接正常" : `测试失败：${res.error ?? "未知"}`, type: res.ok ? "success" : "error" });
-    } catch (e) { pushToast({ message: (e as { message?: string })?.message ?? String(e), type: "error" }); } finally { setBusy(id, "test", false); }
+      pushToast({ message: res.ok ? "连接正常" : resolveChannelUserMessage(res.error, "测试失败，请稍后重试"), type: res.ok ? "success" : "error" });
+    } catch (e) { pushToast({ message: resolveChannelUserMessage(e, "测试失败，请稍后重试"), type: "error" }); } finally { setBusy(id, "test", false); }
   };
   const handleSyncNow = async (id: string) => {
     const b = getChannelsBridge(); if (!b) return;
@@ -105,7 +115,7 @@ export function ChannelSettings() {
       const res = await b.syncNow({ id }) as { added: number; durationMs: number };
       pushToast({ message: `已同步，新增 ${res.added} 封邮件`, type: "success" });
       await refresh();
-    } catch (e) { pushToast({ message: (e as { message?: string })?.message ?? String(e), type: "error" }); } finally { setBusy(id, "sync", false); }
+    } catch (e) { pushToast({ message: resolveChannelUserMessage(e, "同步失败，请稍后重试"), type: "error" }); } finally { setBusy(id, "sync", false); }
   };
   const handleRemove = async (id: string, displayName: string) => {
     const cfg = channels.find(c => c.config.id === id)?.config;
@@ -118,17 +128,15 @@ export function ChannelSettings() {
       onConfirm: async () => {
         setBusy(id, "remove", true);
         const b = getChannelsBridge(); if (!b) { setBusy(id, "remove", false); return; }
-        try { await b.remove({ id }); await refresh(); pushToast({ message: "已删除", type: "success" }); } catch (e) { pushToast({ message: (e as { message?: string })?.message ?? String(e), type: "error" }); } finally { setBusy(id, "remove", false); }
+        try { await b.remove({ id }); await refresh(); pushToast({ message: "已删除", type: "success" }); } catch (e) { pushToast({ message: resolveChannelUserMessage(e, "删除失败，请稍后重试"), type: "error" }); } finally { setBusy(id, "remove", false); }
       },
     });
   };
   const handleToggleEnabled = async (id: string, enabled: boolean) => {
     const b = getChannelsBridge(); if (!b) return;
     setBusy(id, "toggle", true);
-    try { await b.setEnabled({ id, enabled }); await refresh(); pushToast({ message: enabled ? "已启用" : "已停用", type: "success" }); } catch (e) { pushToast({ message: (e as { message?: string })?.message ?? String(e), type: "error" }); } finally { setBusy(id, "toggle", false); }
+    try { await b.setEnabled({ id, enabled }); await refresh(); pushToast({ message: enabled ? "已启用" : "已停用", type: "success" }); } catch (e) { pushToast({ message: resolveChannelUserMessage(e, "操作失败，请稍后重试"), type: "error" }); } finally { setBusy(id, "toggle", false); }
   };
-
-  if (loading) return <p className="text-xs text-sandrift">加载中...</p>;
 
   return (
     <div className="space-y-4">
@@ -141,7 +149,16 @@ export function ChannelSettings() {
         <span data-testid="channel-add-qq" className="hidden" />
       </div>
 
-      {channels.length === 0 ? (
+      {runtimeState === "loading" ? (
+        <p className="text-xs text-sandrift" data-testid="channel-loading">加载中...</p>
+      ) : runtimeState === "unavailable" ? (
+        <p className="text-xs text-sandrift" data-testid="channel-unavailable">消息渠道管理在桌面环境中可用</p>
+      ) : runtimeState === "error" ? (
+        <div className="space-y-3" data-testid="channel-error">
+          <p className="text-xs text-sandrift">暂时无法读取消息渠道</p>
+          <Button variant="secondary" size="sm" onClick={refresh} data-testid="channel-retry">重新加载</Button>
+        </div>
+      ) : channels.length === 0 ? (
         <div className="p-6 flex flex-col items-center text-center gap-3 bg-surface border border-line rounded-xl">
           <div className="w-10 h-10 rounded-xl bg-pastel-mint/60 border border-line flex items-center justify-center">
             <MessageSquare className="w-5 h-5 text-charcoal" />
@@ -177,7 +194,7 @@ export function ChannelSettings() {
                     {config.channel === "qq-bot" && (
                       <p className="text-[11px] text-sandrift mt-1">允许用户: {(config as QQConfig).allowedUsers.length ? (config as QQConfig).allowedUsers.join(", ") : "不限制"} · 允许群: {(config as QQConfig).allowedGroups.length ? (config as QQConfig).allowedGroups.join(", ") : "不限制"}</p>
                     )}
-                    {health.lastError && <p className="text-[11px] text-danger mt-1">错误: {health.lastError.code} {health.lastError.message}</p>}
+                    {health.lastError && <p className="text-[11px] text-danger mt-1" data-testid={`channel-error-${config.id}`}>{resolveChannelUserMessage(health.lastError)}</p>}
                   </div>
                 </div>
                 <span className={cn("shrink-0 px-2 py-1 rounded-full text-[11px] font-bold border transition-[background-color,border-color,color,opacity] duration-[var(--motion-fast)] ease-[var(--ease-standard)]", stateColor(health.state))}>{stateLabel(health.state)}</span>
@@ -334,7 +351,7 @@ function AddQQPanel({ onAdded, onBusyChange }: { onAdded: () => void; onBusyChan
       setAppSecret("");
       onAdded();
     } catch (e) {
-      setError((e as { message?: string })?.message ?? String(e));
+      setError(resolveChannelUserMessage(e));
       if (credentialRef) {
         try { await (credBridge as unknown as { delete: (i: unknown) => Promise<unknown> }).delete({ credentialRef }); } catch {}
       }
@@ -377,12 +394,11 @@ function AddGmailPanel({ onAdded, onBusyChange }: { onAdded: () => void; onBusyC
       await bridge.startGmailOAuth();
       onAdded();
     } catch (e) {
-      const raw = (e as { code?: string; message?: string })?.message ?? String(e);
       const code = (e as { code?: string })?.code ?? "";
       if (code === "GMAIL_OAUTH_CONFIG_MISSING") setError(process.env.NODE_ENV === "development" ? "Gmail OAuth 未配置（开发环境需设置 CLASSFLOW_GOOGLE_OAUTH_CLIENT_ID）" : "Gmail 授权服务暂不可用，请稍后重试。");
       else if (code === "GMAIL_OAUTH_DENIED") setError("已拒绝授权");
       else if (code === "GMAIL_OAUTH_TIMEOUT") setError("授权超时，请重试");
-      else setError(raw);
+      else setError(resolveChannelUserMessage(e));
     } finally { setSaving(false); onBusyChange?.(false); }
   };
 
@@ -440,10 +456,9 @@ function AddQQMailPanel({ onAdded, onBusyChange }: { onAdded: () => void; onBusy
       setAuthCode("");
       onAdded();
     } catch (e) {
-      const raw = (e as { message?: string })?.message ?? String(e);
       const code = (e as { code?: string })?.code ?? "";
       if (code === "QQ_MAIL_AUTH_FAILED") setError("QQ 邮箱认证失败，请检查邮箱地址/授权码");
-      else setError(raw);
+      else setError(resolveChannelUserMessage(e));
       if (credentialRef) {
         try { await (credBridge as unknown as { delete: (i: unknown) => Promise<unknown> }).delete({ credentialRef }); } catch {}
       }
@@ -517,7 +532,7 @@ function EditQQDialog({ target, onOpenChange, onSaved }: { target: { config: QQC
           await credBridge!.delete({ credentialRef: newRef });
         } catch {}
       }
-      setError((e as { message?: string })?.message ?? String(e));
+      setError(resolveChannelUserMessage(e));
     } finally { setSaving(false); }
   };
 

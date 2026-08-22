@@ -620,7 +620,7 @@ export class ChannelManager {
       secret = vault.resolveSecretForProvider(cfg.credentialRef, "qq-bot");
     } catch (e) {
       const mapped = this.mapTokenError(e);
-      return { ok: false, error: mapped.message };
+      return { ok: false, error: mapped.code };
     }
     // Real token fetch with timeout 10s, not just existence
     try {
@@ -645,7 +645,7 @@ export class ChannelManager {
   }
 
   async testConnectionForInput(input: { appId: string; credentialRef: string }): Promise<{ ok: boolean; error?: string }> {
-    if (!input.appId || !input.credentialRef) return { ok: false, error: "appId/credentialRef required" };
+    if (!input.appId || !input.credentialRef) return { ok: false, error: "INVALID_INPUT" };
     let secret: string;
     try {
       const vault = getRuntimeSecretVault();

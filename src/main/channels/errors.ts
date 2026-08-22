@@ -1,32 +1,19 @@
 /**
  * Channel Error Model — Task 13 unified error codes
  * User UI: short Chinese message. Dev log: code + state + operation (no secrets)
+ * Shared contract lives in lib/channels/errorContract.ts (pure, renderer-safe)
  */
 
-export type ChannelErrorCode =
-  | "QQ_AUTH_FAILED"
-  | "QQ_NETWORK_ERROR"
-  | "QQ_GATEWAY_DISCONNECTED"
-  | "QQ_RATE_LIMITED"
-  | "QQ_INVALID_CONFIG"
-  | "QQ_SDK_ERROR"
-  | "CHANNEL_NOT_FOUND"
-  | "CHANNEL_ALREADY_EXISTS"
-  | "CHANNEL_DISABLED"
-  | "INVALID_INPUT"
-  | "PERSISTENCE_FAILED"
-  | "GMAIL_AUTH_FAILED"
-  | "GMAIL_OAUTH_CONFIG_MISSING"
-  | "GMAIL_OAUTH_STATE_MISMATCH"
-  | "GMAIL_OAUTH_TIMEOUT"
-  | "GMAIL_OAUTH_DENIED"
-  | "QQ_MAIL_AUTH_FAILED"
-  | "EMAIL_INVALID_CONFIG"
-  | "EMAIL_SYNC_FAILED"
-  | "EMAIL_REPLY_CONTEXT_INVALID"
-  | "EMAIL_SEND_REJECTED"
-  | "EMAIL_SEND_UNCERTAIN"
-  | "CHANNEL_RUNTIME_ERROR";
+import {
+  type ChannelErrorCode as SharedChannelErrorCode,
+  isChannelErrorCode,
+  userMessageForChannelCode as sharedUserMessageForCode,
+  resolveChannelUserMessage as sharedResolveChannelUserMessage,
+  CHANNEL_ERROR_CODES,
+} from "@/lib/channels/errorContract";
+
+export type ChannelErrorCode = SharedChannelErrorCode;
+export { isChannelErrorCode, CHANNEL_ERROR_CODES };
 
 export class ChannelError extends Error {
   code: ChannelErrorCode;
@@ -55,7 +42,7 @@ export function channelErrorToIpc(e: unknown): never {
   throw new Error(JSON.stringify({ code: "QQ_SDK_ERROR", message: raw }));
 }
 
-const USER_MESSAGES: Record<ChannelErrorCode, string> = {
+export const USER_MESSAGES: Record<ChannelErrorCode, string> = {
   QQ_AUTH_FAILED: "QQ 机器人认证失败，请检查 App ID / Secret",
   QQ_NETWORK_ERROR: "网络连接失败，请稍后重试",
   QQ_GATEWAY_DISCONNECTED: "网关连接已断开，正在重连",
@@ -68,10 +55,10 @@ const USER_MESSAGES: Record<ChannelErrorCode, string> = {
   INVALID_INPUT: "输入参数不合法",
   PERSISTENCE_FAILED: "保存配置失败",
   GMAIL_AUTH_FAILED: "Gmail 认证失败",
-  GMAIL_OAUTH_CONFIG_MISSING: "Gmail OAuth 未配置",
-  GMAIL_OAUTH_STATE_MISMATCH: "OAuth 状态不匹配",
-  GMAIL_OAUTH_TIMEOUT: "OAuth 超时",
-  GMAIL_OAUTH_DENIED: "OAuth 已拒绝",
+  GMAIL_OAUTH_CONFIG_MISSING: "Gmail 授权服务暂不可用，请稍后重试",
+  GMAIL_OAUTH_STATE_MISMATCH: "Gmail 登录验证失败，请重新连接",
+  GMAIL_OAUTH_TIMEOUT: "授权超时，请重试",
+  GMAIL_OAUTH_DENIED: "已拒绝授权",
   QQ_MAIL_AUTH_FAILED: "QQ 邮箱认证失败，请检查邮箱地址/授权码",
   EMAIL_INVALID_CONFIG: "Email 配置错误",
   EMAIL_SYNC_FAILED: "邮件同步失败",
@@ -82,5 +69,9 @@ const USER_MESSAGES: Record<ChannelErrorCode, string> = {
 };
 
 export function userMessageForCode(code: ChannelErrorCode): string {
-  return USER_MESSAGES[code] ?? "未知错误";
+  return sharedUserMessageForCode(code);
+}
+
+export function resolveChannelUserMessage(error: unknown, fallback?: string): string {
+  return sharedResolveChannelUserMessage(error, fallback);
 }

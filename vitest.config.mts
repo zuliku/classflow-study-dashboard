@@ -125,6 +125,8 @@ export default defineConfig({
       "tests/workspacePolish.test.tsx",
       "tests/demoManualInjection.test.tsx",
       "tests/extensionsRuntimeTruth.test.tsx",
+      "tests/channelRuntimeTruth.test.tsx",
+      "tests/channelErrorContract.test.ts",
       "scripts/docx-compat/generate-fixtures.test.ts",
     ],
   },
