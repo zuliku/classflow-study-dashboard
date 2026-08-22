@@ -31,6 +31,9 @@ export function SettingsModal() {
 
   const handleDirtyChange = useCallback((section: SettingsSection, dirty: boolean) => {
     setDirtySections((prev) => {
+      // 无变化时返回原引用：section 以 inline 回调上报（如 ProfileSettings 的
+      // [dirty, onDirtyChange] effect）时，避免「新 Set 引用 → re-render → 新回调 → 再上报」死循环
+      if (prev.has(section) === dirty) return prev;
       const next = new Set(prev);
       if (dirty) next.add(section);
       else next.delete(section);

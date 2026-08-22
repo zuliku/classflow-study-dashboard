@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo, useRef, useState } from "react";
+import React, { useCallback, useMemo, useRef, useState } from "react";
 import { Search } from "lucide-react";
 import { SettingsSection } from "@/types";
 import { SettingsNav, SETTINGS_NAV, ABOUT_NAV } from "@/components/settings/SettingsNav";
@@ -80,6 +80,11 @@ export function SettingsView({
 }: SettingsViewProps) {
   const [section, setSection] = useState<SettingsSection>("general");
   const viewRootRef = useRef<HTMLDivElement | null>(null);
+
+  // 稳定的 per-section dirty 上报回调：Profile/Semester 的 dirty effect 以 onDirtyChange 为依赖，
+  // inline 箭头会在每次 render 时产生新引用并重触发上报链（Maximum update depth）。
+  const handleProfileDirty = useCallback((d: boolean) => onDirtyChange("profile", d), [onDirtyChange]);
+  const handleSemesterDirty = useCallback((d: boolean) => onDirtyChange("semester", d), [onDirtyChange]);
 
   // ---- 条件 gate 取值快照（只读；跳转逻辑绝不修改偏好） ----
   const aiProvider = useAISettingsStore((s) => s.provider);
@@ -320,12 +325,12 @@ export function SettingsView({
                 <GeneralSettings highlightedId={highlightedId ?? undefined} />
               </div>
               <div className={cn(section === "profile" && "ux-fade")} hidden={section !== "profile"}>
-                <ProfileSettings onDirtyChange={(d) => onDirtyChange("profile", d)} discardToken={discardToken} />
+                <ProfileSettings onDirtyChange={handleProfileDirty} discardToken={discardToken} />
               </div>
               <div className={cn(section === "semester" && "ux-fade")} hidden={section !== "semester"}>
                 <SemesterSettings
                   highlightedId={highlightedId ?? undefined}
-                  onDirtyChange={(d) => onDirtyChange("semester", d)}
+                  onDirtyChange={handleSemesterDirty}
                   discardToken={discardToken}
                 />
               </div>
