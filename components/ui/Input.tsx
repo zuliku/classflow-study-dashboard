@@ -16,7 +16,7 @@ export function Input({ invalid, mono, className, ...props }: InputProps) {
   return (
     <input
       className={cn(
-        "w-full h-9 px-2.5 bg-[#F7F5F5] border rounded-lg text-xs font-semibold text-charcoal",
+        "w-full h-9 px-2.5 bg-background border rounded-lg text-xs font-semibold text-charcoal",
         "placeholder:text-sandrift focus:outline-none focus:border-charcoal",
         "disabled:opacity-50 disabled:cursor-not-allowed",
         invalid ? "border-danger-border" : "border-line",

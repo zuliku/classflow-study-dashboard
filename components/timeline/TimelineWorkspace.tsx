@@ -28,6 +28,11 @@ import {
   TimelineFilterOption,
 } from "@/components/timeline/TimelineWorkspaceViewBar";
 import { Dialog } from "@/components/ui/Dialog";
+import { Button } from "@/components/ui/Button";
+import { Field } from "@/components/ui/Field";
+import { Input } from "@/components/ui/Input";
+import { SegmentedControl } from "@/components/ui/SegmentedControl";
+import { UISelect } from "@/components/ui/Select";
 import {
   DropdownMenuPanel,
   DropdownMenuItem,
@@ -1365,39 +1370,39 @@ export function ArrangeSheet({
     >
         <div className="flex items-center justify-between">
           <h3 className="text-sm font-bold text-charcoal">安排学习计划</h3>
-          <button onClick={onClose} aria-label="关闭" className="p-1.5 rounded-lg text-sandrift hover:bg-alabaster hover:text-charcoal">
+          <IconButton variant="ghost" size="sm" onClick={onClose} disabled={!open} aria-label="关闭">
             <X className="w-4 h-4" />
-          </button>
+          </IconButton>
         </div>
         {shown ? (
           <p className="text-[11px] font-semibold text-charcoal">{shown.title}</p>
         ) : (
-          <input
-            type="text"
+          <Input
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             placeholder="学习计划标题（如：复习计量经济学）"
             aria-label="学习计划标题"
-            className="w-full h-9 px-2.5 bg-background border border-line rounded-xl text-xs font-semibold text-charcoal focus:outline-none focus:border-charcoal placeholder-sandrift"
+            disabled={!open}
           />
         )}
+        {/* 三列布局与 Dialog 几何保持不变；日期 value 仍为 yyyy-MM-dd domain */}
         <div className="grid grid-cols-3 gap-2">
-          <label className="space-y-1">
-            <span className="text-[10px] font-bold text-sandrift">日期</span>
-            <select value={date} onChange={(e) => setDate(e.target.value)} className="w-full h-8 bg-background border border-line rounded-lg px-1.5 text-[11px] font-semibold text-charcoal focus:outline-none">
-              {weekDates.map((d) => (
-                <option key={d} value={d}>{d.slice(5).replace("-", "/")}</option>
-              ))}
-            </select>
-          </label>
-          <label className="space-y-1">
-            <span className="text-[10px] font-bold text-sandrift">开始</span>
-            <input type="time" value={start} onChange={(e) => setStart(e.target.value)} className="w-full h-8 bg-background border border-line rounded-lg px-1.5 text-[11px] font-semibold text-charcoal focus:outline-none" />
-          </label>
-          <label className="space-y-1">
-            <span className="text-[10px] font-bold text-sandrift">结束</span>
-            <input type="time" value={end} onChange={(e) => setEnd(e.target.value)} className="w-full h-8 bg-background border border-line rounded-lg px-1.5 text-[11px] font-semibold text-charcoal focus:outline-none" />
-          </label>
+          <Field label="日期">
+            <UISelect
+              value={date}
+              onChange={(v) => setDate(v)}
+              ariaLabel="日期"
+              options={weekDates.map((d) => ({ value: d, label: d.slice(5).replace("-", "/") }))}
+              triggerClassName="w-full h-8 px-1.5 min-w-0 text-[11px]"
+              itemClassName="h-8"
+            />
+          </Field>
+          <Field label="开始">
+            <Input type="time" value={start} onChange={(e) => setStart(e.target.value)} aria-label="开始时间" disabled={!open} className="h-8 px-1.5 text-[11px]" />
+          </Field>
+          <Field label="结束">
+            <Input type="time" value={end} onChange={(e) => setEnd(e.target.value)} aria-label="结束时间" disabled={!open} className="h-8 px-1.5 text-[11px]" />
+          </Field>
         </div>
         {overlapHint && !placement?.hardConflict && (
           <p className="text-[11px] font-semibold text-warning">
@@ -1405,14 +1410,15 @@ export function ArrangeSheet({
           </p>
         )}
         <div className="flex justify-end gap-2 pt-1">
-          <button onClick={onClose} disabled={!open} className="px-3 h-8 rounded-lg text-[11px] font-bold text-satin-grey hover:bg-alabaster transition-colors">取消</button>
-          <button
+          <Button variant="ghost" size="sm" onClick={onClose} disabled={!open}>取消</Button>
+          <Button
+            variant="accent"
+            size="sm"
             disabled={!open || (!shown && title.trim().length === 0)}
             onClick={() => onSubmit(shown, date, start, end)}
-            className="px-3 h-8 rounded-lg text-[11px] font-bold text-charcoal bg-pastel-mint hover:bg-pastel-mint transition-colors disabled:opacity-40"
           >
             确认安排
-          </button>
+          </Button>
         </div>
       </Dialog>
   );
@@ -1475,61 +1481,58 @@ export function MarkSheet({
     >
         <div className="flex items-center justify-between">
           <h3 className="text-sm font-bold text-charcoal">考试 / 日程</h3>
-          <button onClick={onClose} aria-label="关闭" className="p-1.5 rounded-lg text-sandrift hover:bg-alabaster hover:text-charcoal">
+          <IconButton variant="ghost" size="sm" onClick={onClose} disabled={!open} aria-label="关闭">
             <X className="w-4 h-4" />
-          </button>
+          </IconButton>
         </div>
-        <input
-          type="text"
+        <Input
           value={title}
           onChange={(e) => setTitle(e.target.value)}
           placeholder="标题（如：英语六级模拟考试）"
           aria-label="标题"
-          className="w-full h-9 px-2.5 bg-background border border-line rounded-xl text-xs font-semibold text-charcoal focus:outline-none focus:border-charcoal placeholder-sandrift"
+          disabled={!open}
         />
-        <div className="flex items-center gap-1.5">
-          {(["exam", "activity"] as const).map((t) => (
-            <button
-              key={t}
-              onClick={() => setType(t)}
-              aria-pressed={type === t}
-              className={cn(
-                "px-2.5 h-7 rounded-lg text-[11px] font-bold transition-colors",
-                type === t ? "bg-charcoal text-white" : "bg-alabaster text-satin-grey hover:text-charcoal"
-              )}
-            >
-              {t === "exam" ? "考试" : "活动"}
-            </button>
-          ))}
-        </div>
+        {/* exclusive selection → SegmentedControl（active plate 语义，不再自绘两套 active bg） */}
+        <SegmentedControl
+          value={type}
+          onChange={(v) => setType(v)}
+          ariaLabel="类型"
+          className="self-start"
+          options={[
+            { value: "exam", label: "考试" },
+            { value: "activity", label: "活动" },
+          ]}
+        />
+        {/* 三列布局与 Dialog 几何保持不变；日期 value 仍为 yyyy-MM-dd domain */}
         <div className="grid grid-cols-3 gap-2">
-          <label className="space-y-1">
-            <span className="text-[10px] font-bold text-sandrift">日期</span>
-            <select value={date} onChange={(e) => setDate(e.target.value)} className="w-full h-8 bg-background border border-line rounded-lg px-1.5 text-[11px] font-semibold text-charcoal focus:outline-none">
-              {weekDates.map((d) => (
-                <option key={d} value={d}>{d.slice(5).replace("-", "/")}</option>
-              ))}
-            </select>
-          </label>
-          <label className="space-y-1">
-            <span className="text-[10px] font-bold text-sandrift">开始（可选）</span>
-            <input type="time" value={start} onChange={(e) => setStart(e.target.value)} className="w-full h-8 bg-background border border-line rounded-lg px-1.5 text-[11px] font-semibold text-charcoal focus:outline-none" />
-          </label>
-          <label className="space-y-1">
-            <span className="text-[10px] font-bold text-sandrift">结束（可选）</span>
-            <input type="time" value={end} onChange={(e) => setEnd(e.target.value)} className="w-full h-8 bg-background border border-line rounded-lg px-1.5 text-[11px] font-semibold text-charcoal focus:outline-none" />
-          </label>
+          <Field label="日期">
+            <UISelect
+              value={date}
+              onChange={(v) => setDate(v)}
+              ariaLabel="日期"
+              options={weekDates.map((d) => ({ value: d, label: d.slice(5).replace("-", "/") }))}
+              triggerClassName="w-full h-8 px-1.5 min-w-0 text-[11px]"
+              itemClassName="h-8"
+            />
+          </Field>
+          <Field label="开始">
+            <Input type="time" value={start} onChange={(e) => setStart(e.target.value)} aria-label="开始时间（可选）" disabled={!open} className="h-8 px-1.5 text-[11px]" />
+          </Field>
+          <Field label="结束">
+            <Input type="time" value={end} onChange={(e) => setEnd(e.target.value)} aria-label="结束时间（可选）" disabled={!open} className="h-8 px-1.5 text-[11px]" />
+          </Field>
         </div>
         <p className="text-[10px] text-sandrift">不填开始 / 结束时间时显示为「全天」事件。</p>
         <div className="flex justify-end gap-2 pt-1">
-          <button onClick={onClose} disabled={!open} className="px-3 h-8 rounded-lg text-[11px] font-bold text-satin-grey hover:bg-alabaster transition-colors">取消</button>
-          <button
-            disabled={!canSubmit}
+          <Button variant="ghost" size="sm" onClick={onClose} disabled={!open}>取消</Button>
+          <Button
+            variant="accent"
+            size="sm"
+            disabled={!canSubmit || !open}
             onClick={() => onSubmit({ title: title.trim(), type, date, startTime: start || undefined, endTime: end || undefined })}
-            className="px-3 h-8 rounded-lg text-[11px] font-bold text-charcoal bg-pastel-mint hover:bg-pastel-mint transition-colors disabled:opacity-40"
           >
-             添加
-          </button>
+            添加
+          </Button>
         </div>
       </Dialog>
   );

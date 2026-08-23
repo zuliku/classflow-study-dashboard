@@ -115,9 +115,9 @@ export function AssignmentWorkspaceViewBar({ controller }: { controller: Assignm
 
   const secondary = (
     <>
-      {/* Course Filter */}
-      <div className="flex items-center space-x-1.5 bg-[#F7F5F5] border border-line rounded-lg h-9 px-2.5 shrink-0">
-        <BookOpen className="w-3.5 h-3.5 text-[#A48F82]" />
+      {/* Course Filter：BookOpen + UISelect 外层 control group（仅 semantic token 等价迁移，不改筛选） */}
+      <div className="flex items-center space-x-1.5 bg-background border border-line rounded-lg h-9 px-2.5 shrink-0">
+        <BookOpen className="w-3.5 h-3.5 text-sandrift" />
         <UISelect
           value={courseFilter}
           onChange={setCourseFilter}
@@ -140,7 +140,7 @@ export function AssignmentWorkspaceViewBar({ controller }: { controller: Assignm
           className={`flex items-center gap-1 px-2.5 py-1 rounded-xl border text-[11px] font-semibold transition-colors ${
             riskOnly
               ? "bg-danger-bg border-danger-border text-danger font-bold"
-              : "bg-[#F7F5F5] border-line text-satin-grey hover:text-charcoal"
+              : "bg-background border-line text-satin-grey hover:text-charcoal"
           }`}
         >
           <AlertTriangle className="w-3 h-3" />

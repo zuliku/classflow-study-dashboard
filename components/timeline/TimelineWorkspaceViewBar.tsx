@@ -4,6 +4,7 @@ import React from "react";
 import { ChevronLeft, ChevronRight, SlidersHorizontal } from "lucide-react";
 import { WorkspaceViewBar } from "@/components/layout/WorkspaceViewBar";
 import { IconButton } from "@/components/ui/IconButton";
+import { Checkbox } from "@/components/ui/Checkbox";
 import { Popover, PopoverPanel } from "@/components/ui/Popover";
 import { cn } from "@/lib/utils";
 
@@ -138,6 +139,13 @@ export function TimelineWorkspaceViewBar({
   return <WorkspaceViewBar primary={primary} secondary={secondary} testid="timeline-viewbar" />;
 }
 
+/**
+ * Filter row：row 负责整行 hover / click target；
+ * Checkbox primitive 只承载 checkbox 本身（label 省略，避免双 label / 双 click target）。
+ * - 点击 checkbox 本体：input 原生 change（stopPropagation 防 row 二次触发）
+ * - 点击行其它区域：row onClick 切换
+ * - Space / focus-visible / disabled 由原生 input semantics 提供
+ */
 function FilterToggle({
   label,
   checked,
@@ -152,21 +160,28 @@ function FilterToggle({
   hint?: string;
 }) {
   return (
-    <label
+    <div
       className={cn(
-        "flex items-center gap-2 px-1.5 py-1.5 rounded-lg text-[11px] font-semibold text-charcoal cursor-pointer hover:bg-alabaster transition-colors",
-        disabled && "cursor-default opacity-80"
+        "flex items-center gap-2 px-1.5 py-1.5 rounded-lg text-[11px] font-semibold text-charcoal hover:bg-alabaster transition-colors",
+        disabled ? "cursor-default opacity-80" : "cursor-pointer"
       )}
       title={hint}
+      onClick={() => {
+        if (!disabled) onChange?.(!checked);
+      }}
     >
-      <input
-        type="checkbox"
-        checked={checked}
-        disabled={disabled}
-        onChange={(e) => onChange?.(e.target.checked)}
-        className="w-3.5 h-3.5 rounded accent-charcoal"
-      />
-      {label}
-    </label>
+      <span
+        className="flex items-center"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <Checkbox
+          checked={checked}
+          disabled={disabled}
+          onChange={(v) => onChange?.(v)}
+          aria-label={label}
+        />
+      </span>
+      <span>{label}</span>
+    </div>
   );
 }

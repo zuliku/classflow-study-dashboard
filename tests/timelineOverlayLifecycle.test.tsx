@@ -24,9 +24,14 @@ if (typeof window !== "undefined" && !window.matchMedia) {
     dispatchEvent: () => false,
   });
 }
+// UISelect 打开时聚焦 active option 并 scrollIntoView（jsdom 未实现）
+if (typeof HTMLElement !== "undefined" && !HTMLElement.prototype.scrollIntoView) {
+  Object.defineProperty(HTMLElement.prototype, "scrollIntoView", { configurable: true, value: () => {} });
+}
 
 import { ArrangeSheet, MarkSheet } from "@/components/timeline/TimelineWorkspace";
 import { FloatingTimelineDetail } from "@/components/timeline/FloatingTimelineDetail";
+import { TimelineWorkspaceViewBar } from "@/components/timeline/TimelineWorkspaceViewBar";
 import { MOTION_EXIT_MS } from "@/lib/motion";
 import type { Assignment } from "@/types";
 import { useAppStore } from "@/store/useAppStore";
@@ -275,5 +280,151 @@ describe("Hover bridge static guard", () => {
     expect(timelineSrc).toContain("HOVER_BRIDGE_GRACE_MS = 100");
     const motionSrc = fs.readFileSync(path.join(process.cwd(), "lib/motion.ts"), "utf8");
     expect(motionSrc).not.toContain("HOVER_BRIDGE");
+  });
+});
+
+describe("UI Productization V2.2 —— Workspace Controls & Form Primitive Adoption", () => {
+  const noop = () => {};
+
+  describe("Timeline FilterToggle → Checkbox primitive", () => {
+    function renderViewBar(onFilterChange = noop) {
+      return render(
+        <TimelineWorkspaceViewBar
+          currentSemesterWeek={2}
+          totalWeeks={16}
+          isCurrentWeek
+          onPrevWeek={noop}
+          onNextWeek={noop}
+          onToday={noop}
+          filterOptions={[
+            { key: "studyBlocks", label: "学习计划", checked: true },
+            { key: "exams", label: "考试", checked: false },
+          ]}
+          filterActive
+          filterOpen
+          onFilterToggle={noop}
+          onFilterClose={noop}
+          onFilterChange={onFilterChange}
+        />
+      );
+    }
+
+    it("共享 Checkbox 渲染原生 checkbox semantics；点击行文本切换", () => {
+      const onFilterChange = vi.fn();
+      renderViewBar(onFilterChange);
+      // 原生 checkbox semantics（真实 input，非 accent 样式）
+      const studyCb = screen.getByLabelText("学习计划") as HTMLInputElement;
+      expect(studyCb.type).toBe("checkbox");
+      expect(studyCb.checked).toBe(true);
+      // 点击行文本（sibling span）→ row onClick 切换
+      fireEvent.click(screen.getByText("考试"));
+      expect(onFilterChange).toHaveBeenCalledWith("exams", true);
+    });
+
+    it("点击 checkbox 本体只触发一次 change（stopPropagation 防双触发）", () => {
+      const onFilterChange = vi.fn();
+      renderViewBar(onFilterChange);
+      const examsCb = screen.getByLabelText("考试") as HTMLInputElement;
+      expect(examsCb.checked).toBe(false);
+      fireEvent.click(examsCb);
+      // checkbox 本体：input 原生 change 一次（row onClick 被 stopPropagation 挡住）；
+      // 受控 props 未变 → checked 回滚为 false（harness 无 state），但回调只发生一次
+      expect(onFilterChange).toHaveBeenCalledTimes(1);
+      expect(onFilterChange).toHaveBeenCalledWith("exams", true);
+    });
+
+    it("课程恒显示：disabled checkbox 不响应点击", () => {
+      const onFilterChange = vi.fn();
+      renderViewBar(onFilterChange);
+      const courseCb = screen.getByLabelText("课程") as HTMLInputElement;
+      expect(courseCb.disabled).toBe(true);
+      expect(courseCb.checked).toBe(true);
+      fireEvent.click(screen.getByText("课程"));
+      expect(onFilterChange).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("ArrangeSheet form primitives", () => {
+    it("标题编辑 + 时间编辑 + UISelect 选日期 → 提交 payload 保持 domain value", () => {
+      const onSubmit = vi.fn();
+      render(
+        <ArrangeSheet open assignment={null} weekDates={WEEK_DATES} onClose={noop} onSubmit={onSubmit} />
+      );
+      // 标题（Input primitive）
+      fireEvent.change(screen.getByLabelText("学习计划标题"), { target: { value: "复习计量经济学" } });
+      // 时间（Input type=time primitive）
+      fireEvent.change(screen.getByLabelText("开始时间"), { target: { value: "07:30" } });
+      fireEvent.change(screen.getByLabelText("结束时间"), { target: { value: "09:00" } });
+      // 日期（UISelect：portal menu，label 为 MM/DD、value 保持 yyyy-MM-dd）
+      fireEvent.click(screen.getByRole("combobox", { name: "日期" }));
+      fireEvent.click(screen.getByRole("option", { name: "08/19" }));
+      fireEvent.click(screen.getByRole("button", { name: "确认安排" }));
+      expect(onSubmit).toHaveBeenCalledWith(null, "2026-08-19", "07:30", "09:00");
+    });
+
+    it("title.trim() validation 不变：空白标题禁止提交", () => {
+      const onSubmit = vi.fn();
+      render(
+        <ArrangeSheet open assignment={null} weekDates={WEEK_DATES} onClose={noop} onSubmit={onSubmit} />
+      );
+      fireEvent.change(screen.getByLabelText("学习计划标题"), { target: { value: "   " } });
+      expect((screen.getByRole("button", { name: "确认安排" }) as HTMLButtonElement).disabled).toBe(true);
+      fireEvent.click(screen.getByRole("button", { name: "确认安排" }));
+      expect(onSubmit).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("MarkSheet SegmentedControl", () => {
+    it("exam/activity exclusive selection；提交 payload type 跟随选择", () => {
+      const onSubmit = vi.fn();
+      render(<MarkSheet open weekDates={WEEK_DATES} onClose={noop} onSubmit={onSubmit} />);
+      // 默认 exam
+      expect(screen.getByRole("button", { name: "考试" }).getAttribute("aria-pressed")).toBe("true");
+      // 切到活动
+      fireEvent.click(screen.getByRole("button", { name: "活动" }));
+      expect(screen.getByRole("button", { name: "活动" }).getAttribute("aria-pressed")).toBe("true");
+      expect(screen.getByRole("button", { name: "考试" }).getAttribute("aria-pressed")).toBe("false");
+
+      fireEvent.change(screen.getByLabelText("标题"), { target: { value: "社团纳新宣讲" } });
+      fireEvent.click(screen.getByRole("button", { name: "添加" }));
+      expect(onSubmit).toHaveBeenCalledWith(
+        expect.objectContaining({ title: "社团纳新宣讲", type: "activity" })
+      );
+    });
+
+    it("空标题禁止提交（validation 不变）", () => {
+      const onSubmit = vi.fn();
+      render(<MarkSheet open weekDates={WEEK_DATES} onClose={noop} onSubmit={onSubmit} />);
+      expect((screen.getByRole("button", { name: "添加" }) as HTMLButtonElement).disabled).toBe(true);
+    });
+  });
+
+  describe("Static audit guard（目标文件 semantic token）", () => {
+    const read = (p: string) => fs.readFileSync(path.join(process.cwd(), p), "utf8");
+
+    it("WorkspaceViewBar / Input / Textarea / AssignmentViewBar 不再散落 bg-[#F7F5F5]", () => {
+      for (const f of [
+        "components/layout/WorkspaceViewBar.tsx",
+        "components/ui/Input.tsx",
+        "components/ui/Textarea.tsx",
+        "components/assignment/AssignmentWorkspaceViewBar.tsx",
+      ]) {
+        expect(read(f)).not.toContain("bg-[#F7F5F5]");
+      }
+    });
+
+    it("AssignmentViewBar 图标色走 sandrift token；FilterToggle 不再使用 accent checkbox", () => {
+      expect(read("components/assignment/AssignmentWorkspaceViewBar.tsx")).not.toContain("text-[#A48F82]");
+      const viewBar = read("components/timeline/TimelineWorkspaceViewBar.tsx");
+      expect(viewBar).not.toContain("accent-charcoal");
+      expect(viewBar).toContain('from "@/components/ui/Checkbox"');
+    });
+
+    it("Timeline 表单不再有原生 select / 手写 label span（Field/UISelect 收敛）", () => {
+      const src = read("components/timeline/TimelineWorkspace.tsx");
+      expect(src).not.toMatch(/<select /);
+      expect(src).toContain('from "@/components/ui/Field"');
+      expect(src).toContain('from "@/components/ui/SegmentedControl"');
+    });
   });
 });

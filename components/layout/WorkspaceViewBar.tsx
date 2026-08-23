@@ -35,7 +35,7 @@ export function WorkspaceViewBar({
       role="toolbar"
       aria-label="工作区视图栏"
       data-testid={testid}
-      className={cn("z-20 w-full shrink-0 border-b border-line bg-[#F7F5F5]", className)}
+      className={cn("z-20 w-full shrink-0 border-b border-line bg-background", className)}
     >
       <div
         className={cn(
