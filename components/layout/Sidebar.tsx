@@ -329,21 +329,28 @@ export function Sidebar() {
                   "overflow-hidden transition-colors duration-[var(--motion-base)] ease-[var(--ease-standard)]"
                 )}
               >
-                {/* Kiro Brand Motion V2 — ambient always, active when selected */}
+                {/* Kiro Featured 双层 perimeter（V2.3 polish）：
+                    L1 sidebar-kiro-base-ring = 静态连续底环（任何状态四边完整，不依赖动画）
+                    L2 kiro-ring animated sweep = 在完整底环上移动的高光（弱段不再形成视觉断口）
+                    hover/focus 高光提升由 scoped CSS（.sidebar-kiro:hover）显式表达，
+                    不再依赖 group-hover 与高 specificity 规则竞争。 */}
+                <span
+                  aria-hidden="true"
+                  className="sidebar-kiro-base-ring pointer-events-none absolute -inset-1/2"
+                />
                 <span
                   aria-hidden="true"
                   data-kiro-flow={isActive ? "active" : "ambient"}
                   className={cn(
                     "absolute -inset-1/2 kiro-ring kiro-featured-flow pointer-events-none",
-                    "transition-opacity duration-[var(--motion-fast)]",
-                    "group-hover:opacity-100 group-focus-visible:opacity-100",
-                    isActive ? "opacity-100!" : "opacity-80"
+                    "transition-opacity duration-[var(--motion-fast)]"
                   )}
                 />
-                {/* 内容层：m-[1.5px] + w calc(100%-3px)，四边均匀留出 1.5px 流光环（细 1 倍，基底高亮无断口） */}
+                {/* 内容层：m-[2px] + w calc(100%-4px) + rounded-[12px]
+                    （outer rounded-xl 14px − ring 2px = inner 12px，四边等宽、角部无厚度漂移） */}
                 <span
                   className={cn(
-                    "relative m-[1.5px] w-[calc(100%-3px)] h-11 rounded-[11px] bg-[#F7F5F5]",
+                    "relative m-[2px] w-[calc(100%-4px)] h-11 rounded-[12px] bg-background",
                     "sidebar-nav-row sidebar-nav-row-kiro text-xs font-semibold transition-colors duration-[var(--motion-base)]",
                     isActive ? "bg-surface text-charcoal" : "text-charcoal"
                   )}

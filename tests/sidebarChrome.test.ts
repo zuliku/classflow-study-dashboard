@@ -163,3 +163,36 @@ describe("Sidebar motion decoupling — Task 16B T/U/V/W", () => {
     expect(src).toMatch(/if\s*\(reducedMotion\)[\s\S]*setMotionActive\(false\)/);
   });
 });
+
+describe("Kiro Featured 双层 perimeter（V2.3 polish）static guard", () => {
+  const fs = require("node:fs");
+  const path = require("node:path");
+  const read = (p: string) => fs.readFileSync(path.join(process.cwd(), p), "utf8");
+
+  it("Sidebar Featured Entry：存在 base ring 层 + animated ring 层 + 内容层", () => {
+    const src = read("components/layout/Sidebar.tsx");
+    expect(src).toContain("sidebar-kiro-base-ring");
+    expect(src).toContain("kiro-ring kiro-featured-flow");
+    // inner surface：2px 环宽几何（outer rounded-xl 14px − 2 = 12px）
+    expect(src).toContain("m-[2px]");
+    expect(src).toContain("w-[calc(100%-4px)]");
+    expect(src).toContain("rounded-[12px]"); // outer 14 − ring 2 = inner 12
+  });
+
+  it("scoped hover/focus 规则存在（不再依赖 group-hover 竞争）", () => {
+    const css = read("app/globals.css");
+    expect(css).toMatch(/\.sidebar-kiro:hover \.kiro-featured-flow/);
+    expect(css).toMatch(/\.sidebar-kiro:focus-visible \.kiro-featured-flow/);
+    expect(css).toContain(".sidebar-kiro-base-ring {");
+  });
+
+  it("Reduced Motion：仅停动画，base ring 不被移除", () => {
+    const css = read("app/globals.css");
+    const reduced = css.match(
+      /html\[data-motion-effective="reduced"\] \.kiro-featured-flow[^{]*\{[^}]*\}/
+    );
+    expect(reduced).toBeTruthy();
+    expect(reduced![0]).not.toContain("display: none");
+    expect(reduced![0]).toContain("animation: none");
+  });
+});

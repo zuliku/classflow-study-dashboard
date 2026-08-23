@@ -518,20 +518,59 @@ html[data-motion-effective="reduced"] .ux-channel-provider-enter {
 }
 
 /* Sidebar Kiro Featured — ambient always, active when kiro tab, working when busy */
-.sidebar-kiro[data-kiro-flow="ambient"] .kiro-ring { opacity: 0.78; }
-.sidebar-kiro[data-kiro-flow="active"] .kiro-ring { opacity: 0.88; }
-.sidebar-kiro[data-kiro-flow="working"] .kiro-ring { opacity: 0.92; }
+.sidebar-kiro[data-kiro-flow="ambient"] .kiro-ring { opacity: 0.85; }
+.sidebar-kiro[data-kiro-flow="active"] .kiro-ring { opacity: 0.95; }
+.sidebar-kiro[data-kiro-flow="working"] .kiro-ring { opacity: 0.95; }
 .kiro-featured-flow {
   animation: flow-angle-spin var(--kiro-flow-ambient) linear infinite;
-  opacity: 0.78;
+  opacity: 0.85;
 }
 .kiro-featured-flow[data-kiro-flow="active"] {
   animation-duration: var(--kiro-flow-active);
-  opacity: 0.88;
+  opacity: 0.95;
 }
 .kiro-featured-flow[data-kiro-flow="working"] {
   animation-duration: var(--kiro-flow-working);
+  opacity: 0.95;
+}
+
+/* ---- Sidebar Kiro Featured 双层 Perimeter（V2.3 polish）----
+   根因：单层流光在浅色段与 #F7F5F5 对比过低 + ambient opacity 偏低 +
+   group-hover 与高 specificity 规则竞争失效 → 视觉上「边框断掉」。
+   方案：L1 静态连续底环（任何时刻四边完整，不依赖动画）+
+   L2 kiro-ring 高光在底环上移动；hover/focus 用显式 :hover/:focus-visible
+   规则（置于既有规则之后，同特异性靠源顺序取胜）。
+   仅作用于 Sidebar Featured Entry；不触碰全局 .kiro-ring 定义与其它消费者。 */
+.sidebar-kiro-base-ring {
+  /* 低饱和 Kiro 品牌三色静态 conic：暖金 → 浅绿 → 灰蓝 → 暖金（完整闭环） */
+  background: conic-gradient(
+    from 20deg,
+    rgba(225, 187, 137, 0.55),
+    rgba(158, 185, 166, 0.50) 110deg,
+    rgba(143, 159, 198, 0.52) 210deg,
+    rgba(225, 187, 137, 0.55) 300deg,
+    rgba(225, 187, 137, 0.55)
+  );
+}
+.sidebar-kiro .sidebar-kiro-base-ring {
   opacity: 0.92;
+  transition: opacity var(--motion-fast) var(--ease-standard);
+}
+
+/* Hover / Focus：显式选择器（修复 specificity 竞争），高光更清楚、底环全量 */
+.sidebar-kiro:hover .sidebar-kiro-base-ring,
+.sidebar-kiro:focus-visible .sidebar-kiro-base-ring {
+  opacity: 1;
+}
+.sidebar-kiro:hover .kiro-featured-flow,
+.sidebar-kiro:focus-visible .kiro-featured-flow,
+.sidebar-kiro:hover[data-kiro-flow="active"] .kiro-featured-flow {
+  opacity: 0.96;
+}
+
+/* Active Kiro Tab：底环 + 高光再升一级（不加发光底板/大面积彩色背景） */
+.sidebar-kiro[data-kiro-flow="active"] .sidebar-kiro-base-ring {
+  opacity: 1;
 }
 
 /* Performance：Sidebar width morph 期间暂停品牌流光 */
