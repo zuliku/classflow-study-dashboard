@@ -413,24 +413,25 @@ export function CourseDetailDrawer() {
     }
   };
 
-  // 删除资料：先移除 metadata，Blob 在撤销窗口结束后再删；courseId 恒为 displayed 实体
+  // 删除资料：snapshot capture → 原子移除；Blob 在撤销窗口结束后再删。
+  // Workflow UX V6：Undo 走 relation-level restore——
+  // 恢复失败（如 Course 已被删除）时 undone 保持 false，Blob 仍被清理避免 orphan。
   const handleDeleteMaterial = (mat: Material) => {
     if (!entityInteractive) return;
     const targetCourseId = displayedCourse.id;
-    const removed = deleteCourseMaterial(targetCourseId, mat.id);
-    if (!removed) return;
+    const snapshot = deleteCourseMaterial(targetCourseId, mat.id);
+    if (!snapshot) return;
     let undone = false;
     pushToast({
       type: "info",
       message: "资料已删除",
       actionLabel: "撤销",
       onAction: () => {
-        undone = true;
-        restoreCourseMaterial(targetCourseId, removed);
+        undone = restoreCourseMaterial(snapshot);
       },
       onDismiss: () => {
-        if (!undone && removed.storageKey) {
-          deleteFileBlob(removed.storageKey).catch(() => {});
+        if (!undone && snapshot.material.storageKey) {
+          deleteFileBlob(snapshot.material.storageKey).catch(() => {});
         }
       },
       duration: 6000,

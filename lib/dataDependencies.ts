@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Task 7G-C：数据依赖 / 级联删除纯逻辑（不触碰 Zustand / Notification / UI / Kiro）。
  * 只计算引用关系；禁止 generic dependency graph engine。
  * CalendarMark 匹配必须走 isDDLMarkForAssignment（严格 matcher），禁止 title/date 模糊猜测。
@@ -10,6 +10,7 @@ import {
   Course,
   CourseSchedule,
   GroupProject,
+  Material,
   Reminder,
   ScheduleOccurrenceOverride,
   StudyBlock,
@@ -220,5 +221,114 @@ export function restoreCourseDeleteCascade(
     studyBlocks: insert(state.studyBlocks, cascade.studyBlocks),
     reminders: insert(state.reminders, cascade.reminders),
     scheduleOccurrenceOverrides: insert(state.scheduleOccurrenceOverrides ?? [], cascade.scheduleOccurrenceOverrides),
+  };
+}
+
+
+// ---------- CourseMaterial ----------
+
+/**
+ * Workflow UX V6：Material Delete Snapshot（relation-level，非整对象）。
+ * Delete → Undo 必须是完整 inverse，但 Undo 只补回「被删的那条 relation」，
+ * 不覆盖撤销窗口内的 concurrent relation edits（如用户新关联了资料 N）。
+ */
+export interface CourseMaterialDeleteSnapshot {
+  courseId: string;
+  material: Material;
+  /** material 在 Course.materials 中原 index */
+  materialIndex: number;
+  /** 删除前真实引用该资料的 Assignment relation（同课程强约束；index = 原 materialIds 位置） */
+  assignmentLinks: Array<{
+    assignmentId: string;
+    materialIndex: number;
+  }>;
+}
+
+export function collectCourseMaterialDeleteSnapshot(
+  state: Pick<DependencyCollections, "courses" | "assignments">,
+  courseId: string,
+  materialId: string
+): CourseMaterialDeleteSnapshot | null {
+  const course = state.courses.find((c) => c.id === courseId);
+  if (!course) return null;
+  const materialIndex = course.materials.findIndex((m) => m.id === materialId);
+  if (materialIndex === -1) return null;
+  const assignmentLinks = state.assignments.flatMap((a) => {
+    if (a.courseId !== courseId || !a.materialIds) return [];
+    const idx = a.materialIds.indexOf(materialId);
+    return idx === -1 ? [] : [{ assignmentId: a.id, materialIndex: idx }];
+  });
+  return {
+    courseId,
+    material: course.materials[materialIndex],
+    materialIndex,
+    assignmentLinks,
+  };
+}
+
+/** Delete：Course 删目标 Material + 同课程 Assignment 清该条 relation（空数组存 undefined 保持现有语义） */
+export function removeCourseMaterialDeleteSnapshot(
+  state: Pick<DependencyCollections, "courses" | "assignments">,
+  snapshot: CourseMaterialDeleteSnapshot
+): Pick<DependencyCollections, "courses" | "assignments"> {
+  const materialId = snapshot.material.id;
+  return {
+    courses: state.courses.map((c) =>
+      c.id !== snapshot.courseId
+        ? c
+        : { ...c, materials: c.materials.filter((m) => m.id !== materialId) }
+    ),
+    assignments: state.assignments.map((a) => {
+      if (a.courseId !== snapshot.courseId || !a.materialIds?.includes(materialId)) return a;
+      const rest = a.materialIds.filter((id) => id !== materialId);
+      return { ...a, materialIds: rest.length > 0 ? rest : undefined };
+    }),
+  };
+}
+
+/**
+ * Restore：relation-level merge，不是旧对象覆盖。
+ * - Course 不存在 → null（不凭空重建 Course / orphan material）；调用方仍可清理 Blob。
+ * - Material 按 snapshot.materialIndex 原顺序插回（bounded + 幂等）。
+ * - Assignment relation 逐条校验：任务仍存在 / 未换课程 / relation 当前缺失 /
+ *   material 已成功恢复——满足才按原 index（Math.min bounded）插回；
+ *   Undo 窗口内的 concurrent edits（新增其它资料）原样保留。
+ */
+export function restoreCourseMaterialDeleteSnapshot(
+  state: Pick<DependencyCollections, "courses" | "assignments">,
+  snapshot: CourseMaterialDeleteSnapshot
+): Pick<DependencyCollections, "courses" | "assignments"> | null {
+  const courseIdx = state.courses.findIndex((c) => c.id === snapshot.courseId);
+  if (courseIdx === -1) return null; // Course 已删除：不凭空重建 / 不生成 orphan material
+
+  const course = state.courses[courseIdx];
+  // Material 原顺序恢复（幂等：已存在不重复插入；bounded index）
+  const materials = course.materials.some((m) => m.id === snapshot.material.id)
+    ? course.materials
+    : (() => {
+        const next = [...course.materials];
+        const index = Math.min(Math.max(snapshot.materialIndex, 0), next.length);
+        next.splice(index, 0, snapshot.material);
+        return next;
+      })();
+
+  // Assignment relation-level merge（逐条校验；concurrent edits 原样保留）
+  const linksByAssignment = new Map(
+    snapshot.assignmentLinks.map((l) => [l.assignmentId, l.materialIndex])
+  );
+  const assignments = state.assignments.map((a) => {
+    const originalIndex = linksByAssignment.get(a.id);
+    if (originalIndex === undefined) return a; // 非关联任务 / 已删除任务不重建
+    if (a.courseId !== snapshot.courseId) return a; // 换课程 → 禁止跨课程 relation
+    const ids = a.materialIds ?? [];
+    if (ids.includes(snapshot.material.id)) return a; // 幂等
+    const index = Math.min(originalIndex, ids.length);
+    const next = [...ids.slice(0, index), snapshot.material.id, ...ids.slice(index)];
+    return { ...a, materialIds: next };
+  });
+
+  return {
+    courses: state.courses.map((c, i) => (i === courseIdx ? { ...c, materials } : c)),
+    assignments,
   };
 }

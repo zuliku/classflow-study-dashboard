@@ -88,17 +88,18 @@ describe("删除撤销（Undo）", () => {
       ),
     }));
 
-    const removed = useAppStore.getState().deleteCourseMaterial("c_1", "m_test");
+    const removedSnapshot = useAppStore.getState().deleteCourseMaterial("c_1", "m_test");
+    const removed = removedSnapshot?.material ?? null;
     expect(removed).toEqual(mat);
     expect(useAppStore.getState().courses.find((c) => c.id === "c_1")!.materials).toHaveLength(2);
 
-    useAppStore.getState().restoreCourseMaterial("c_1", removed!);
+    useAppStore.getState().restoreCourseMaterial(removedSnapshot!);
     const restored = useAppStore.getState().courses.find((c) => c.id === "c_1")!.materials;
     expect(restored).toHaveLength(3);
     expect(restored.find((m) => m.id === "m_test")).toEqual(mat);
 
     // 重复恢复不产生重复
-    useAppStore.getState().restoreCourseMaterial("c_1", removed!);
+    useAppStore.getState().restoreCourseMaterial(removedSnapshot!);
     expect(useAppStore.getState().courses.find((c) => c.id === "c_1")!.materials).toHaveLength(3);
   });
 

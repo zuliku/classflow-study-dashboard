@@ -38,10 +38,14 @@ import { buildNextRecurringAssignment } from "@/lib/tasks/taskRecurrence";
 import {
   collectAssignmentDeleteSnapshot,
   collectCourseDeleteCascade,
+  collectCourseMaterialDeleteSnapshot,
   removeAssignmentDeleteSnapshot,
   removeCourseDeleteCascade,
   restoreAssignmentDeleteSnapshot,
   AssignmentDeleteSnapshot,
+  CourseMaterialDeleteSnapshot,
+  removeCourseMaterialDeleteSnapshot,
+  restoreCourseMaterialDeleteSnapshot,
 } from "@/lib/dataDependencies";
 import {
   FocusErrorCode,
@@ -630,9 +634,16 @@ export interface AppState {
     material: { title: string; type: Material["type"]; size?: string; url?: string; storageKey?: string }
   ) => Material;
   /** 删除资料：仅移除 Zustand metadata；Blob 由调用方在撤销窗口结束后延迟删除 */
-  deleteCourseMaterial: (courseId: string, materialId: string) => Material | null;
-  /** 撤销删除：恢复资料 metadata（Blob 未被删除） */
-  restoreCourseMaterial: (courseId: string, material: Material) => void;
+  deleteCourseMaterial: (
+    courseId: string,
+    materialId: string
+  ) => CourseMaterialDeleteSnapshot | null;
+  /**
+   * 撤销删除（Workflow UX V6）：relation-level merge——
+   * 恢复资料原 index + 补回被删 Assignment relation（不覆盖窗口内 concurrent edits）。
+   * 目标 Course 已不存在 → false（不生成 orphan material）；调用方仍可清理 Blob。
+   */
+  restoreCourseMaterial: (snapshot: CourseMaterialDeleteSnapshot) => boolean;
 
   // Assignment Actions
   /** 创建任务，返回新任务 id（History context 可选；UI 默认 manual） */
@@ -1367,36 +1378,26 @@ export const useAppStore = create<AppState>()(
       },
 
       deleteCourseMaterial: (courseId, materialId) => {
-        // 仅移除 metadata；Blob 由调用方在撤销窗口结束后延迟删除
-        const current = get();
-        const targetCourse = current.courses.find((c) => c.id === courseId);
-        const targetMaterial = targetCourse?.materials.find((m) => m.id === materialId) || null;
-
-        set((state) => ({
-          courses: state.courses.map((c) =>
-            c.id === courseId
-              ? { ...c, materials: c.materials.filter((m) => m.id !== materialId) }
-              : c
-          ),
-          // Task 6A：资料被删除 → 清理所有同课程任务的 materialIds 引用（不留 dangling ref）
-          assignments: state.assignments.map((a) => {
-            if (a.courseId !== courseId || !a.materialIds?.includes(materialId)) return a;
-            const rest = a.materialIds.filter((id) => id !== materialId);
-            return { ...a, materialIds: rest.length > 0 ? rest : undefined };
-          }),
-        }));
-
-        return targetMaterial;
+        // 仅移除 metadata；Blob 由调用方在撤销窗口结束后延迟删除。
+        // Workflow UX V6：snapshot capture（material + 原 index + 受影响 assignment relations）
+        const snapshot = collectCourseMaterialDeleteSnapshot(get(), courseId, materialId);
+        if (!snapshot) return null;
+        set((state) => {
+          // 原子 mutation：Course material 删除 + Assignment relations 清理同一 set
+          const next = removeCourseMaterialDeleteSnapshot(state, snapshot);
+          return { courses: next.courses, assignments: next.assignments };
+        });
+        return snapshot;
       },
 
-      restoreCourseMaterial: (courseId, material) =>
-        set((state) => ({
-          courses: state.courses.map((c) =>
-            c.id === courseId && !c.materials.some((m) => m.id === material.id)
-              ? { ...c, materials: [...c.materials, material] }
-              : c
-          ),
-        })),
+      restoreCourseMaterial: (snapshot) => {
+        // 目标 Course 已不存在 → no-op / false（不凭空重建 Course，不生成 orphan material）；
+        // 调用方据 false 仍执行 Blob cleanup。恢复为原子 set：material + relations 同一变换。
+        const next = restoreCourseMaterialDeleteSnapshot(get(), snapshot);
+        if (!next) return false;
+        set({ courses: next.courses, assignments: next.assignments });
+        return true;
+      },
 
       addAssignment: (assignmentData, context) =>
         createAssignmentWithId(set, assignmentData, createId("a"), context),
