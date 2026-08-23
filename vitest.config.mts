@@ -130,6 +130,7 @@ export default defineConfig({
       "tests/workspaceStateConsistency.test.tsx",
       "tests/calendarMarkDeepLink.test.tsx",
       "tests/assignmentEditorIntegrity.test.tsx",
+      "tests/materialLinkIntegrity.test.tsx",
       "tests/drawerPresentation.test.ts",
       "tests/demoManualInjection.test.tsx",
       "tests/extensionsRuntimeTruth.test.tsx",

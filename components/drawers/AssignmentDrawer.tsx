@@ -30,7 +30,7 @@ import {
 } from "@/lib/tasks/assignmentDetailView";
 
 import { cn } from "@/lib/utils";
-import { openAssignmentEditor } from "@/lib/uiEvents";
+import { openAssignmentEditor, previewMaterial } from "@/lib/uiEvents";
 import { Drawer } from "@/components/ui/Drawer";
 import { IconButton } from "@/components/ui/IconButton";
 import { Button } from "@/components/ui/Button";
@@ -730,20 +730,31 @@ export function AssignmentDrawer() {
                   {linkedMaterials.map((m) => (
                     <div
                       key={m.id}
-                      className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-xs transition-colors hover:bg-alabaster/70"
+                      className="flex items-center gap-1 rounded-lg px-2 py-1.5 text-xs transition-colors hover:bg-alabaster/70"
                     >
-                      <MaterialTypeIcon type={m.type} />
-                      <span className="min-w-0 flex-1 truncate font-medium text-charcoal">{m.title}</span>
-                      <span className="shrink-0 text-[9px] font-semibold text-sandrift">
-                        {MATERIAL_TYPE_LABELS[m.type]}
-                      </span>
+                      {/* Preview：整个主要内容区可点（Workflow UX V6）——
+                          复用 previewMaterial 全局 contract，不关闭 Assignment Drawer */}
+                      <button
+                        type="button"
+                        onClick={() => previewMaterial(m)}
+                        aria-label={`预览资料《${m.title}》`}
+                        title="预览资料"
+                        className="flex min-w-0 flex-1 cursor-pointer items-center gap-2 rounded-md text-left focus-visible:outline-2 focus-visible:outline-charcoal/30"
+                      >
+                        <MaterialTypeIcon type={m.type} />
+                        <span className="min-w-0 flex-1 truncate font-medium text-charcoal">{m.title}</span>
+                        <span className="shrink-0 text-[9px] font-semibold text-sandrift">
+                          {MATERIAL_TYPE_LABELS[m.type]}
+                        </span>
+                      </button>
+                      {/* Unlink：独立 sibling action（DOM 结构保证与 Preview 分离，无 nested button） */}
                       <IconButton
                         variant="danger"
                         size="sm"
                         onClick={() => toggleMaterial(m.id)}
                         aria-label={`解除关联 ${m.title}`}
                         title="解除关联（不删除课程资料）"
-                        className="h-6 w-6"
+                        className="h-6 w-6 shrink-0"
                       >
                         <X className="h-3 w-3" />
                       </IconButton>
