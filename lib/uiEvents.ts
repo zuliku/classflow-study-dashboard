@@ -1,10 +1,31 @@
-import { Material } from "@/types";
+import { Assignment, Material } from "@/types";
 
-/** 打开新建/编辑任务弹窗：assignmentId 存在 → 编辑；否则新增（可携带上下文预填） */
+/**
+ * Quick Add → Full Editor 的草稿 prefill（Workflow UX V5）：
+ * 仅表单可编辑字段的轻量子集——这是"新建草稿 prefill"，不是 Assignment snapshot。
+ * 刻意不携带 id / materialIds / recurrenceSeriesId / recurrenceParentId /
+ * autoReminderDisabled 等 Domain metadata。
+ */
+export type AssignmentEditorDraft = Partial<
+  Pick<
+    Assignment,
+    | "title"
+    | "courseId"
+    | "ddl"
+    | "estimatedMinutes"
+    | "priority"
+    | "status"
+    | "description"
+  >
+>;
+
+/** 打开新建/编辑任务弹窗：assignmentId 存在 → 编辑（忽略 draft）；否则新增（可携带草稿预填） */
 export interface OpenAssignmentEditorDetail {
   assignmentId?: string;
   courseId?: string;
   ddlDate?: string;
+  /** Capture Continuity：Quick Add → Full Editor 的草稿移交 */
+  draft?: AssignmentEditorDraft;
 }
 
 export interface PreviewMaterialDetail {

@@ -19,9 +19,10 @@ import { Button } from "@/components/ui/Button";
 import { IconButton } from "@/components/ui/IconButton";
 import { UISelect, SelectOption } from "@/components/ui/Select";
 import { FormSection } from "@/components/ui/FormSection";
-import { onOpenAssignmentEditor } from "@/lib/uiEvents";
+import { onOpenAssignmentEditor, OpenAssignmentEditorDetail } from "@/lib/uiEvents";
 
 import { getNewTaskDefaults } from "@/lib/taskDefaults";
+import { normalizeEstimatedMinutes } from "@/lib/tasks/taskSemantics";
 
 
 
@@ -38,7 +39,7 @@ export function AddAssignmentModal() {
   const {
     courses,
     addAssignment,
-    updateAssignment,
+    updateAssignmentPatch,
     assignments,
     preferences,
   } = useAppStore();
@@ -66,9 +67,10 @@ export function AddAssignmentModal() {
   const [description, setDescription] = useState("");
   const [subtasks, setSubtasks] = useState<{ id: string; title: string; completed: boolean }[]>([]);
 
-  // 打开事件：assignmentId → 编辑模式；否则新增模式，支持 courseId / ddlDate 上下文预填
+  // 打开事件：assignmentId → 编辑模式（已有 Assignment 是事实源，忽略 draft）；
+  // 否则新增模式，precedence：draft（Quick Add capture handoff）→ legacy context（courseId / ddlDate）→ preferences defaults
   useEffect(() => {
-    const handleOpen = (detail: { assignmentId?: string; courseId?: string; ddlDate?: string }) => {
+    const handleOpen = (detail: OpenAssignmentEditorDetail) => {
       if (detail.assignmentId) {
         const target = assignments.find((a) => a.id === detail.assignmentId);
         if (target) {
@@ -90,37 +92,73 @@ export function AddAssignmentModal() {
         }
       } else {
         setEditingId(null);
-        setTitle("");
-        setCourseId(
-          detail.courseId && courses.some((c) => c.id === detail.courseId)
-            ? detail.courseId
-            : courses[0]?.id || ""
-        );
-        const tomorrow = new Date();
-        tomorrow.setDate(tomorrow.getDate() + 1);
-        // 本地日期格式化（不用 toISOString，避免时区偏移导致日期错误）；日历发起时预填当天
-        setDdlDate(detail.ddlDate || format(tomorrow, "yyyy-MM-dd"));
-        // Task V2：日历入口语义 = 创建当天截止任务（自动开启 DDL）；其余默认不设截止
-        setDdlEnabled(!!detail.ddlDate);
-        // 新建任务默认值（截止时刻/优先级/状态）统一来自偏好；
-        // 编辑已有任务不受影响，走上方回填分支。
-        const defaults = getNewTaskDefaults(preferences);
-        setDdlTime(defaults.ddlTime);
-        setEstimatedMinutes("");
-        setPriority(defaults.priority);
-        setStatus(defaults.status);
         setProgress(0);
         setTagsStr("");
-        setDescription("");
         setSubtasks([]);
         setRecurrence("none");
-        setPrefillSource(detail.courseId ? "course" : detail.ddlDate ? "calendar" : null);
+        const defaults = getNewTaskDefaults(preferences);
+        const tomorrow = new Date();
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        const legacyCourseValid =
+          !!detail.courseId && courses.some((c) => c.id === detail.courseId);
+
+        if (detail.draft) {
+          // ---- Workflow UX V5：Quick Add 草稿移交（capture continuity）----
+          // Draft ownership 完整高于 legacy context：draft 无 DDL 时绝不因
+          // detail.ddlDate / 内部默认 tomorrow 而自动开启 DDL。
+          const draft = detail.draft;
+          setTitle(draft.title ?? "");
+          const draftCourseValid =
+            !!draft.courseId && courses.some((c) => c.id === draft.courseId);
+          setCourseId(
+            draftCourseValid
+              ? draft.courseId!
+              : legacyCourseValid
+              ? detail.courseId!
+              : courses[0]?.id || ""
+          );
+          const draftDdlValid = !!draft.ddl && parseLocalDDL(draft.ddl) !== null;
+          if (draftDdlValid) {
+            setDdlEnabled(true);
+            setDdlDate(getLocalDDLDate(draft.ddl));
+            setDdlTime(getLocalDDLTime(draft.ddl) || defaults.ddlTime);
+          } else {
+            setDdlEnabled(false);
+            setDdlDate(format(tomorrow, "yyyy-MM-dd"));
+            setDdlTime(defaults.ddlTime);
+          }
+          const estDraft =
+            draft.estimatedMinutes !== undefined
+              ? normalizeEstimatedMinutes(draft.estimatedMinutes)
+              : undefined;
+          setEstimatedMinutes(estDraft !== undefined ? String(estDraft) : "");
+          setPriority(draft.priority ?? defaults.priority);
+          setStatus(draft.status ?? defaults.status);
+          setDescription(draft.description ?? "");
+          setPrefillSource(null); // draft 移交不属于 course/calendar legacy source
+        } else {
+          // ---- Legacy create context ----
+          setTitle("");
+          setCourseId(legacyCourseValid ? detail.courseId! : courses[0]?.id || "");
+          // 本地日期格式化（不用 toISOString，避免时区偏移导致日期错误）；日历发起时预填当天
+          setDdlDate(detail.ddlDate || format(tomorrow, "yyyy-MM-dd"));
+          // Task V2：日历入口语义 = 创建当天截止任务（自动开启 DDL）；其余默认不设截止
+          setDdlEnabled(!!detail.ddlDate);
+          setDdlTime(defaults.ddlTime);
+          setEstimatedMinutes("");
+          setPriority(defaults.priority);
+          setStatus(defaults.status);
+          setDescription("");
+          setPrefillSource(detail.courseId ? "course" : detail.ddlDate ? "calendar" : null);
+        }
       }
       setIsOpen(true);
     };
 
     return onOpenAssignmentEditor(handleOpen);
-  }, [assignments, courses, preferences.defaultDDLTime]);
+    // Preference listener deps：defaults 同时读取 defaultDDLTime / defaultTaskPriority /
+    // defaultTaskStatus——三者任一变化都需重建 listener，否则旧 closure 继续生效。
+  }, [assignments, courses, preferences.defaultDDLTime, preferences.defaultTaskPriority, preferences.defaultTaskStatus]);
 
 
   const handleAddSubtask = () => {
@@ -173,10 +211,23 @@ export function AddAssignmentModal() {
     };
 
     if (editingId) {
-      // Update existing assignment in-place preserving original ID
-      updateAssignment({
-        id: editingId,
-        ...baseFields,
+      // P0 数据完整性：Full Editor 只写自己拥有的字段（field-level patch）。
+      // materialIds / autoReminderDisabled / recurrenceSeriesId / recurrenceParentId
+      // 不属于本表单 ownership——经 current merge 原值保留，不再被整对象覆盖清空。
+      // recurrence: undefined 交由 normalizeAssignment 清除 seriesId（Domain 原语义）；
+      // DDL mark reconcile / reminder reconcile / History 由 updateAssignmentPatch 全链路执行。
+      updateAssignmentPatch(editingId, {
+        courseId: baseFields.courseId,
+        title: baseFields.title,
+        description: baseFields.description,
+        ddl: baseFields.ddl,
+        estimatedMinutes: baseFields.estimatedMinutes,
+        priority: baseFields.priority,
+        status: baseFields.status,
+        progress: baseFields.progress,
+        tags: baseFields.tags,
+        subtasks: baseFields.subtasks,
+        recurrence: baseFields.recurrence,
       });
       pushToast({ message: "修改已保存" });
     } else {
@@ -323,7 +374,7 @@ export function AddAssignmentModal() {
                   value={estimatedMinutes}
                   onChange={(e) => setEstimatedMinutes(e.target.value)}
                   placeholder="如：120"
-                  aria-label="预计耗时（分钟）"
+                  aria-label="预计耗时"
                   className="font-mono"
                 />
               </Field>

@@ -11,6 +11,7 @@ import { openAssignmentEditor } from "@/lib/uiEvents";
 import { UISelect } from "@/components/ui/Select";
 import { DisclosureRegion } from "@/components/ui/DisclosureRegion";
 import { getNewTaskDefaults } from "@/lib/taskDefaults";
+import { normalizeEstimatedMinutes } from "@/lib/tasks/taskSemantics";
 import { cn } from "@/lib/utils";
 
 /**
@@ -55,18 +56,21 @@ export function QuickAddCard({
 
   const canSubmit = title.trim().length > 0;
 
+  /** 预计耗时统一清洗（Quick Add 直提与 Full Editor handoff 同一规则，不产生双标准） */
+  const parseEstimate = (): number | undefined =>
+    estimatedMinutes.trim() ? normalizeEstimatedMinutes(Number(estimatedMinutes.trim())) : undefined;
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!canSubmit || submitting) return;
     setSubmitting(true);
-    const est = estimatedMinutes.trim() ? Number(estimatedMinutes.trim()) : undefined;
     addAssignment({
       courseId: courseId || courses[0]?.id || "",
       title: title.trim(),
       description: description.trim(),
       // Task V2：未启用 DDL = 无截止日期（合法状态，不自动生成）
       ddl: ddlEnabled ? combineLocalDateTime(ddlDate, ddlTime) : undefined,
-      estimatedMinutes: est,
+      estimatedMinutes: parseEstimate(),
       priority,
       status: defaults.status,
       progress: 0,
@@ -83,7 +87,21 @@ export function QuickAddCard({
   };
 
   const handleOpenFullEditor = () => {
-    openAssignmentEditor(courseId ? { courseId } : {});
+    // Workflow UX V5：草稿 ownership transfer——Quick Add 不提前创建任务，
+    // 全部已输入内容经 draft 移交 Full Editor；随后关闭 Capture Surface，
+    // 避免 Full Editor 保存后旧草稿残留导致重复创建。
+    openAssignmentEditor({
+      draft: {
+        title: title.trim() || undefined,
+        courseId: courseId || undefined,
+        ddl: ddlEnabled ? combineLocalDateTime(ddlDate, ddlTime) : undefined,
+        estimatedMinutes: parseEstimate(),
+        priority,
+        status: defaults.status,
+        description: description.trim() || undefined,
+      },
+    });
+    onClose();
   };
 
   return (
@@ -230,6 +248,7 @@ export function QuickAddCard({
             onChange={(e) => setDescription(e.target.value)}
             rows={2}
             placeholder="可选"
+            aria-label="描述"
             className="w-full px-2.5 py-2 bg-white border border-line-strong rounded-lg text-[11px] text-charcoal focus:outline-none placeholder:text-sandrift resize-none"
           />
         </div>
