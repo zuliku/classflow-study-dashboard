@@ -123,6 +123,7 @@ export default defineConfig({
       "tests/kiroBrandMotion.test.tsx",
       "tests/adaptiveDdlLayout.test.ts",
       "tests/workspacePolish.test.tsx",
+      "tests/commands.test.ts",
       "tests/motionContract.test.tsx",
       "tests/uiMotionLifecycle.test.tsx",
       "tests/timelineOverlayLifecycle.test.tsx",

@@ -244,7 +244,7 @@ export function CommandCenter() {
             <Icon
               className={cn(
                 "w-4 h-4 shrink-0 transition-colors duration-[var(--motion-fast)]",
-                isHighlighted ? "text-charcoal" : "text-[#A48F82]"
+                isHighlighted ? "text-charcoal" : "text-sandrift"
               )}
             />
             <span className="flex-1 min-w-0">
@@ -320,7 +320,7 @@ export function CommandCenter() {
           <div className="p-5 space-y-4">
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-bold text-charcoal flex items-center gap-2">
-                <Keyboard className="w-4 h-4 text-[#A48F82]" />
+                <Keyboard className="w-4 h-4 text-sandrift" />
                 键盘快捷键
               </h3>
               <button
@@ -347,7 +347,7 @@ export function CommandCenter() {
                       <div
                         key={it.keys + it.label}
                         className={cn(
-                          "flex items-center justify-between px-3 py-2 rounded-xl bg-[#F7F5F5]",
+                          "flex items-center justify-between px-3 py-2 rounded-xl bg-background",
                           disabled && "opacity-50"
                         )}
                       >
@@ -381,15 +381,15 @@ export function CommandCenter() {
           /* ---- Command Palette 主视图 ---- */
           <>
             {/* Input */}
-            <div className="flex items-center px-4 py-3.5 border-b border-[#F0EBE1] bg-[#F7F5F5]">
-              <Search className="w-4 h-4 text-[#A48F82] shrink-0 mr-3" />
+            <div className="flex items-center px-4 py-3.5 border-b border-line-soft bg-background">
+              <Search className="w-4 h-4 text-sandrift shrink-0 mr-3" />
               <input
                 ref={inputRef}
                 type="text"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 onKeyDown={handleInputKeyDown}
-                placeholder="搜索命令、课程、任务…"
+                placeholder="搜索命令、课程、任务、资料…"
                 aria-label="命令中心搜索"
                 className="w-full text-sm bg-transparent border-none focus:outline-none text-charcoal placeholder-sandrift"
                 autoFocus
@@ -428,7 +428,7 @@ export function CommandCenter() {
                       >
                         <span className="w-5 h-5 rounded-lg flex items-center justify-center shrink-0 relative overflow-hidden">
                           <span aria-hidden="true" className="absolute -inset-1/2 kiro-ring kiro-featured-flow pointer-events-none opacity-80" />
-                          <span className="relative m-[1px] w-[calc(100%-2px)] h-[calc(100%-2px)] rounded-[5px] bg-[#F7F5F5] flex items-center justify-center">
+                          <span className="relative m-[1px] w-[calc(100%-2px)] h-[calc(100%-2px)] rounded-[5px] bg-background flex items-center justify-center">
                             <KIRO_ICON className="w-3 h-3" />
                           </span>
                         </span>

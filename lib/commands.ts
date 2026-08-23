@@ -3,6 +3,11 @@ import {
   Plus,
   BookOpen,
   FileUp,
+  FileText,
+  File,
+  Presentation,
+  Image,
+  Link as LinkIcon,
   Settings,
   RotateCcw,
   CalendarRange,
@@ -13,9 +18,9 @@ import {
   Flag,
   Trash2,
 } from "lucide-react";
-import { NavTab, Course, Assignment, Semester, TimeSliceFilter, Priority } from "@/types";
+import { NavTab, Course, Assignment, Semester, TimeSliceFilter, Priority, Material } from "@/types";
 import type { AssignmentActions } from "@/lib/assignmentActions";
-import { openAssignmentEditor } from "@/lib/uiEvents";
+import { openAssignmentEditor, previewMaterial } from "@/lib/uiEvents";
 import {
   WORKSPACE_NAV_ITEMS,
   KIRO_ICON,
@@ -136,10 +141,37 @@ export function getCommands(): AppCommand[] {
   ];
 }
 
-// ---- 搜索匹配（不引入 fuzzy 库：normalize + startsWith/includes + keywords） ----
+// ---- 搜索匹配（不引入 fuzzy 库：normalize + terms×fields 包含匹配 + keywords） ----
 
+/** 旧版单串归一化：trim + lowercase + 去除全部空白（命令 keywords 匹配保持原行为） */
 export function normalizeQuery(query: string): string {
   return (query || "").trim().toLowerCase().replace(/\s+/g, "");
+}
+
+/**
+ * Search V2 归一化（Global Search V2）：
+ * NFKC（全角→半角等兼容折叠）+ lowercase + trim + 连续空白折叠为单空格。
+ * 供 queryTerms 分词使用；不做语言学处理。
+ */
+export function normalizeSearchText(text: string): string {
+  return (text || "").normalize("NFKC").toLowerCase().trim().replace(/\s+/g, " ");
+}
+
+/** 查询分词："  计量   讲义 " → ["计量", "讲义"]；空串 → [] */
+export function queryTerms(query: string): string[] {
+  return normalizeSearchText(query).split(" ").filter(Boolean);
+}
+
+/** 多 Term × 多字段匹配：每个 term 至少被某个字段包含（字段经 normalizeSearchText） */
+export function matchesFields(
+  fields: Array<string | undefined | null>,
+  terms: string[]
+): boolean {
+  if (terms.length === 0) return false;
+  const normalized = fields
+    .filter((f): f is string => typeof f === "string" && f.length > 0)
+    .map((f) => normalizeSearchText(f));
+  return terms.every((term) => normalized.some((f) => f.includes(term)));
 }
 
 function fieldMatch(field: string, q: string): boolean {
@@ -153,25 +185,137 @@ export function commandMatches(cmd: AppCommand, q: string): boolean {
   return (cmd.keywords ?? []).some((k) => fieldMatch(k, q));
 }
 
-export function courseMatches(course: Course, q: string): boolean {
-  return (
-    fieldMatch(course.name, q) ||
-    fieldMatch(course.code, q) ||
-    fieldMatch(course.teacher, q) ||
-    fieldMatch(course.description, q)
-  );
+// ---- 实体搜索投影（Search V2）：字段集合 + 多 term 匹配 ----
+
+const PRIORITY_ALIASES: Record<Priority, string[]> = {
+  urgent: ["urgent", "紧急"],
+  high: ["high", "高", "高优先级"],
+  medium: ["medium", "中"],
+  low: ["low", "低"],
+};
+
+const STATUS_ALIASES: Record<string, string[]> = {
+  todo: ["todo", "待办", "未开始"],
+  doing: ["doing", "进行中"],
+  submitted: ["submitted", "已提交"],
+  completed: ["completed", "已完成"],
+};
+
+/** Material type 的中英文常用检索词（只作搜索 alias，不改 Domain type） */
+export const MATERIAL_TYPE_ALIASES: Record<Material["type"], string[]> = {
+  pdf: ["pdf"],
+  ppt: ["ppt", "pptx", "演示文稿", "课件"],
+  doc: ["doc", "docx", "文档"],
+  image: ["image", "png", "jpg", "jpeg", "图片"],
+  link: ["link", "链接", "url"],
+};
+
+export const MATERIAL_TYPE_LABELS: Record<Material["type"], string> = {
+  pdf: "PDF",
+  ppt: "PPT",
+  doc: "DOC",
+  image: "图片",
+  link: "链接",
+};
+
+/** 合法本地 DDL → 可搜索日期表现（原始 YYYY-MM-DD + M月D日）；非法输入返回空集 */
+function ddlDateFields(ddl: string | undefined): string[] {
+  if (!ddl) return [];
+  const datePart = ddl.slice(0, 10);
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(datePart);
+  if (!m) return [];
+  const month = Number(m[2]);
+  const day = Number(m[3]);
+  if (month < 1 || month > 12 || day < 1 || day > 31) return [];
+  return [datePart, `${month}月${day}日`];
 }
 
-export function assignmentMatches(assignment: Assignment, q: string): boolean {
-  return (
-    fieldMatch(assignment.title, q) ||
-    fieldMatch(assignment.description, q)
-  );
+/** Course 可搜索字段：name / code / teacher / classroom / description */
+export function courseSearchFields(course: Course): string[] {
+  return [course.name, course.code, course.teacher, course.classroom, course.description];
+}
+
+export function courseMatches(course: Course, terms: string[]): boolean {
+  return matchesFields(courseSearchFields(course), terms);
+}
+
+/**
+ * Assignment 可搜索字段（Search projection，不复制 Course object 进 domain）：
+ * title / description / tags / priority aliases / status aliases / DDL 日期 + course.name/code。
+ * courseLookup 由调用方构建一次（避免逐项 .find()）。
+ */
+export function assignmentSearchFields(
+  assignment: Assignment,
+  courseLookup: Map<string, Course>
+): string[] {
+  const fields: string[] = [
+    assignment.title,
+    assignment.description,
+    ...(assignment.tags ?? []),
+    ...(PRIORITY_ALIASES[assignment.priority] ?? []),
+    ...(STATUS_ALIASES[assignment.status] ?? []),
+    ...ddlDateFields(assignment.ddl),
+  ];
+  const course = assignment.courseId ? courseLookup.get(assignment.courseId) : undefined;
+  if (course) {
+    fields.push(course.name, course.code);
+  }
+  return fields;
+}
+
+export function assignmentMatches(
+  assignment: Assignment,
+  terms: string[],
+  courseLookup: Map<string, Course>
+): boolean {
+  return matchesFields(assignmentSearchFields(assignment, courseLookup), terms);
+}
+
+/**
+ * Material 可搜索字段：title / type aliases / 所属课程 name+code（上下文 term）。
+ * Flood 防护规则：至少一个 term 必须命中 material 自身（title/type），
+ * 课程字段只能补足其余 term——仅搜课程名不会倾倒该课全部资料。
+ */
+export function materialSearchFields(
+  material: Material,
+  course: Course | undefined
+): { selfFields: string[]; contextFields: string[] } {
+  const selfFields = [
+    material.title,
+    ...(MATERIAL_TYPE_ALIASES[material.type] ?? []),
+  ];
+  const contextFields = course ? [course.name, course.code] : [];
+  return { selfFields, contextFields };
+}
+
+export function materialMatches(
+  material: Material,
+  terms: string[],
+  course: Course | undefined
+): boolean {
+  const { selfFields, contextFields } = materialSearchFields(material, course);
+  const norm = (arr: string[]) => arr.map((f) => normalizeSearchText(f));
+  const self = norm(selfFields);
+  const context = norm(contextFields);
+  // 至少一个 term 命中资料自身字段（title/type）
+  const selfHit = terms.some((t) => self.some((f) => f.includes(t)));
+  if (!selfHit) return false;
+  // 其余 term 允许由所属课程补足
+  return terms.every((t) => self.some((f) => f.includes(t)) || context.some((f) => f.includes(t)));
 }
 
 // ---- Palette 结果模型 ----
 
-export type PaletteItemKind = "command" | "course" | "assignment";
+export type PaletteItemKind = "command" | "course" | "assignment" | "material";
+
+/** Material 结果图标：复用 lucide 既有视觉，不为此重构 PaletteItem.icon 接口 */
+const MATERIAL_ICONS: Record<Material["type"], ElementType> = {
+  pdf: FileText,
+  ppt: Presentation,
+  doc: File,
+  image: Image,
+  link: LinkIcon,
+};
 
 export interface PaletteItem {
   key: string;
@@ -348,7 +492,11 @@ const EMPTY_QUERY_VIEW_IDS = new Set(
  */
 export function buildPalette(query: string, ctx: CommandContext): PaletteItem[] {
   const q = normalizeQuery(query);
+  const terms = queryTerms(query);
   const items: PaletteItem[] = [];
+
+  // course lookup 一次构建（assignment/material 投影共用，避免逐项 .find()）
+  const courseLookup = new Map(ctx.courses.map((c) => [c.id, c]));
 
   // 任务选择上下文：workspace 的 highlight / selection 存在时注入「当前任务」命令。
   // 只保留仍存在的实体 id（stale highlight / 已删除的 selection 项不产生命令）。
@@ -405,8 +553,10 @@ export function buildPalette(query: string, ctx: CommandContext): PaletteItem[] 
     pushCommand(cmd);
   }
 
+  // ---- 实体搜索（Search V2：多 term × 字段集合；顺序 command → course → assignment → material） ----
+
   for (const c of ctx.courses) {
-    if (!courseMatches(c, q)) continue;
+    if (!courseMatches(c, terms)) continue;
     items.push({
       key: `course-${c.id}`,
       kind: "course",
@@ -419,16 +569,37 @@ export function buildPalette(query: string, ctx: CommandContext): PaletteItem[] 
   }
 
   for (const a of ctx.assignments) {
-    if (!assignmentMatches(a, q)) continue;
+    if (!assignmentMatches(a, terms, courseLookup)) continue;
+    const course = a.courseId ? courseLookup.get(a.courseId) : undefined;
+    const ddlDate = ddlDateFields(a.ddl)[0];
     items.push({
       key: `assignment-${a.id}`,
       kind: "assignment",
       group: "search",
       label: a.title,
-      sub: `进度 ${a.progress}%`,
+      sub: `${course ? `${course.name} · ` : ""}${ddlDate ? `${ddlDate} · ` : ""}进度 ${a.progress}%`,
       icon: ClipboardCheck,
       run: () => { ctx.setSelectedAssignmentId(a.id); ctx.close(); },
     });
+  }
+
+  for (const c of ctx.courses) {
+    for (const m of c.materials ?? []) {
+      if (!materialMatches(m, terms, c)) continue;
+      const typeLabel = MATERIAL_TYPE_LABELS[m.type];
+      items.push({
+        key: `material-${m.id}`,
+        kind: "material",
+        group: "search",
+        label: m.title,
+        sub: [c.name, typeLabel, m.size].filter(Boolean).join(" · "),
+        icon: MATERIAL_ICONS[m.type],
+        run: () => {
+          previewMaterial(m);
+          ctx.close();
+        },
+      });
+    }
   }
 
   return items;

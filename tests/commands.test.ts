@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { describe, it, expect, vi } from "vitest";
 import {
   buildPalette,
@@ -6,10 +7,15 @@ import {
   getAssignmentContextCommands,
   getSelectedCourse,
   getSelectedAssignment,
+  normalizeQuery,
+  normalizeSearchText,
+  queryTerms,
+  matchesFields,
   CommandContext,
 } from "@/lib/commands";
+import { previewMaterial } from "@/lib/uiEvents";
 import { KIRO_ICON } from "@/components/layout/navItems";
-import { Course, Assignment } from "@/types";
+import { Course, Assignment, Material } from "@/types";
 
 const course = (id: string, name: string): Course => ({
   id,
@@ -315,5 +321,179 @@ describe("Context 命令 Dedupe（Task 3）", () => {
     const items = buildPalette("", sel).filter((i) => i.group === "context");
     expect(items.some((i) => i.label === "标记当前任务完成")).toBe(true);
     expect(items.some((i) => i.label.includes("已选 2 项"))).toBe(false);
+  });
+});
+
+// ============================================================
+// Global Search V2 —— Material 搜索 + 实体语义匹配
+// ============================================================
+
+const material = (id: string, title: string, type: Material["type"], size?: string): Material => ({
+  id,
+  title,
+  type,
+  uploadDate: "2026-09-01",
+  ...(size ? { size } : {}),
+});
+
+/** 计量经济学课程：含 classroom + 全类型 materials */
+function econCourse(): Course {
+  return {
+    ...course("c1", "计量经济学"),
+    code: "ECON301",
+    teacher: "李教授",
+    classroom: "文科楼 B203",
+    materials: [
+      material("m1", "回归分析讲义", "pdf", "2.4 MB"),
+      material("m2", "第三章课件", "ppt"),
+      material("m3", "课程大纲", "doc"),
+      material("m4", "散点图示例", "image"),
+      material("m5", "课程主页", "link"),
+    ],
+  };
+}
+
+describe("Query normalization（Search V2 纯函数）", () => {
+  it("大小写等价：PDF == pdf", () => {
+    expect(normalizeSearchText("PDF")).toBe(normalizeSearchText("pdf"));
+    expect(queryTerms("PDF")).toEqual(queryTerms("pdf"));
+  });
+
+  it("whitespace：连续空白折叠为单空格并分词", () => {
+    expect(queryTerms("  计量   讲义 ")).toEqual(["计量", "讲义"]);
+  });
+
+  it("NFKC：全角拉丁/数字折叠为半角", () => {
+    expect(normalizeSearchText("ＰＤＦ")).toBe("pdf");
+    expect(normalizeSearchText("２０２６")).toBe("2026");
+  });
+
+  it("空字符串 → []", () => {
+    expect(queryTerms("")).toEqual([]);
+    expect(queryTerms("   ")).toEqual([]);
+  });
+
+  it("matchesFields：每个 term 至少被一个字段包含；空 terms 不匹配", () => {
+    expect(matchesFields(["回归分析讲义"], ["回归", "讲义"])).toBe(true);
+    expect(matchesFields(["回归分析讲义"], ["回归", "缺失词"])).toBe(false);
+    expect(matchesFields(["a"], [])).toBe(false);
+    expect(matchesFields([undefined, ""], ["x"])).toBe(false);
+  });
+});
+
+describe("Global Search V2 —— Course", () => {
+  it("按 name 搜索仍正常（单 term）", () => {
+    const items = buildPalette("计量经济", makeCtx({ courses: [econCourse()] }));
+    expect(items.some((i) => i.kind === "course" && i.label === "计量经济学")).toBe(true);
+  });
+
+  it("classroom 现在可搜索", () => {
+    const items = buildPalette("B203", makeCtx({ courses: [econCourse()] }));
+    expect(items.some((i) => i.kind === "course" && i.label === "计量经济学")).toBe(true);
+  });
+});
+
+describe("Global Search V2 —— Assignment", () => {
+  function econAssignments(): Assignment[] {
+    return [
+      { ...assignment("a1", "第三次作业"), courseId: "c1", priority: "urgent", status: "doing", tags: ["回归"] as never },
+      assignment("a2", "英语演讲"),
+    ];
+  }
+
+  it("title 旧行为不变", () => {
+    const items = buildPalette("第三次作业", makeCtx({ courses: [econCourse()], assignments: econAssignments() }));
+    expect(items.some((i) => i.kind === "assignment" && i.label === "第三次作业")).toBe(true);
+  });
+
+  it("跨字段：『计量 作业』通过 course.name + assignment.title 命中", () => {
+    const items = buildPalette("计量 作业", makeCtx({ courses: [econCourse()], assignments: econAssignments() }));
+    expect(items.some((i) => i.kind === "assignment" && i.label === "第三次作业")).toBe(true);
+  });
+
+  it("tags 可搜索", () => {
+    const items = buildPalette("回归", makeCtx({ courses: [econCourse()], assignments: econAssignments() }));
+    expect(items.some((i) => i.kind === "assignment" && i.label === "第三次作业")).toBe(true);
+  });
+
+  it("priority alias：『紧急』命中 urgent 任务", () => {
+    const items = buildPalette("紧急", makeCtx({ courses: [econCourse()], assignments: econAssignments() }));
+    expect(items.some((i) => i.kind === "assignment" && i.label === "第三次作业")).toBe(true);
+  });
+
+  it("status alias：『进行中』命中 doing 任务；不误伤 todo", () => {
+    const items = buildPalette("进行中", makeCtx({ courses: [econCourse()], assignments: econAssignments() }));
+    expect(items.some((i) => i.kind === "assignment" && i.label === "第三次作业")).toBe(true);
+    expect(items.some((i) => i.kind === "assignment" && i.label === "英语演讲")).toBe(false);
+  });
+
+  it("DDL：YYYY-MM-DD 与 M月D日 均可命中", () => {
+    const ctx = makeCtx({ courses: [econCourse()], assignments: econAssignments() });
+    // a1 ddl = 2026-08-12T23:59:00
+    expect(buildPalette("2026-08-12", ctx).some((i) => i.kind === "assignment" && i.label === "第三次作业")).toBe(true);
+    expect(buildPalette("8月12日", ctx).some((i) => i.kind === "assignment" && i.label === "第三次作业")).toBe(true);
+  });
+});
+
+describe("Global Search V2 —— Material", () => {
+  it("title 搜索返回 kind=material，sub 含 课程名 · 类型 · size", () => {
+    const items = buildPalette("回归分析讲义", makeCtx({ courses: [econCourse()] }));
+    const hit = items.find((i) => i.kind === "material");
+    expect(hit).toBeTruthy();
+    expect(hit!.label).toBe("回归分析讲义");
+    expect(hit!.sub).toBe("计量经济学 · PDF · 2.4 MB");
+  });
+
+  it("type 中英文 alias：ppt / pdf / 图片 各自命中对应类型", () => {
+    const ctx = makeCtx({ courses: [econCourse()] });
+    const kindsOf = (q: string) =>
+      buildPalette(q, ctx).filter((i) => i.kind === "material").map((i) => i.label);
+    expect(kindsOf("ppt")).toContain("第三章课件");
+    expect(kindsOf("演示文稿")).toContain("第三章课件");
+    expect(kindsOf("pdf")).toContain("回归分析讲义");
+    expect(kindsOf("图片")).toContain("散点图示例");
+    // 类型间不串扰
+    expect(kindsOf("pdf")).not.toContain("第三章课件");
+  });
+
+  it("multi-term：『计量 讲义』= course context + material title 跨字段命中", () => {
+    const items = buildPalette("计量 讲义", makeCtx({ courses: [econCourse()] }));
+    expect(items.some((i) => i.kind === "material" && i.label === "回归分析讲义")).toBe(true);
+  });
+
+  it("flood 防护：仅搜课程名不得倾倒该课全部资料", () => {
+    const materials = buildPalette("计量经济学", makeCtx({ courses: [econCourse()] }))
+      .filter((i) => i.kind === "material");
+    expect(materials.length).toBe(0);
+  });
+
+  it("run：调用 previewMaterial（唯一打开契约）并关闭 Command Center", () => {
+    const sent: Material[] = [];
+    const dispatchSpy = vi
+      .spyOn(window, "dispatchEvent")
+      .mockImplementation((ev: Event) => {
+        const detail = (ev as CustomEvent<{ material: Material }>).detail;
+        if (detail?.material) sent.push(detail.material);
+        return true;
+      });
+    let closed = false;
+    const ctx = makeCtx({
+      courses: [econCourse()],
+      close: () => { closed = true; },
+    });
+    const item = buildPalette("回归分析讲义", ctx).find((i) => i.kind === "material");
+    item!.run();
+    expect(sent).toHaveLength(1);
+    expect(sent[0].id).toBe("m1");
+    expect(sent[0].title).toBe("回归分析讲义");
+    expect(closed).toBe(true);
+    dispatchSpy.mockRestore();
+  });
+
+  it("empty query 不出现任何实体结果（course/assignment/material）", () => {
+    const items = buildPalette("", makeCtx({ courses: [econCourse()], assignments: [assignment("a1", "作业")] }));
+    expect(items.some((i) => i.kind === "course")).toBe(false);
+    expect(items.some((i) => i.kind === "assignment")).toBe(false);
+    expect(items.some((i) => i.kind === "material")).toBe(false);
   });
 });
