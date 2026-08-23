@@ -56,6 +56,7 @@ function makeCtx(overrides: Partial<CommandContext> = {}): CommandContext {
     selectedAssignmentId: null,
     courses,
     assignments,
+    calendarMarks: [],
     semester: { id: "s", name: "2026春", startDate: "2026-02-23", totalWeeks: 16 },
     currentSemesterWeek: 1,
     highlightedAssignmentId: null,
@@ -77,6 +78,7 @@ function makeCtx(overrides: Partial<CommandContext> = {}): CommandContext {
     openReminderCenter: () => {},
     setSelectedCourseId: () => {},
     setSelectedAssignmentId: () => {},
+    setSelectedCalendarMarkId: () => {},
     setAddCourseModalOpen: () => {},
     setImportScheduleModalOpen: () => {},
     setFullTimetableModalOpen: () => {},
@@ -495,5 +497,117 @@ describe("Global Search V2 —— Material", () => {
     expect(items.some((i) => i.kind === "course")).toBe(false);
     expect(items.some((i) => i.kind === "assignment")).toBe(false);
     expect(items.some((i) => i.kind === "material")).toBe(false);
+  });
+});
+
+// ============================================================
+// Global Search V3 —— CalendarMark（exam / activity）
+// ============================================================
+
+const calendarMark = (id: string, over: Partial<import("@/types").CalendarMark> = {}): import("@/types").CalendarMark => ({
+  id,
+  date: "2026-09-18",
+  type: "exam",
+  title: `Mark ${id}`,
+  ...over,
+});
+
+function searchCtx(marks: import("@/types").CalendarMark[]) {
+  return makeCtx({ calendarMarks: marks });
+}
+
+describe("Global Search V3 —— CalendarMark", () => {
+  it("empty query：calendar 不出现（Empty Palette 契约不变）", () => {
+    const items = buildPalette("", searchCtx([
+      calendarMark("e1", { title: "英语六级模拟考试" }),
+    ]));
+    expect(items.some((i) => i.kind === "calendar")).toBe(false);
+  });
+
+  it("exam title：『六级』命中对应考试，sub 含 类型/日期/时间", () => {
+    const items = buildPalette("六级", searchCtx([
+      calendarMark("e1", { title: "英语六级模拟考试", startTime: "14:00", endTime: "16:00" }),
+      calendarMark("a1", { type: "activity", title: "班级答辩", date: "2026-09-20" }),
+    ]));
+    const hit = items.find((i) => i.kind === "calendar");
+    expect(hit?.label).toBe("英语六级模拟考试");
+    expect(hit?.sub).toBe("考试 · 9月18日 · 14:00–16:00");
+  });
+
+  it("type aliases：『考试』『测验』命中 exam；『活动』『日程』命中 activity", () => {
+    const marks = [
+      calendarMark("e1", { title: "线代期末" }),
+      calendarMark("ac1", { type: "activity", title: "社团招新" }),
+    ];
+    expect(buildPalette("考试", searchCtx(marks)).some((i) => i.label === "线代期末")).toBe(true);
+    expect(buildPalette("测验", searchCtx(marks)).some((i) => i.label === "线代期末")).toBe(true);
+    expect(buildPalette("活动", searchCtx(marks)).some((i) => i.label === "社团招新")).toBe(true);
+    expect(buildPalette("日程", searchCtx(marks)).some((i) => i.label === "社团招新")).toBe(true);
+    // 类型间不串扰
+    expect(buildPalette("考试", searchCtx(marks)).some((i) => i.label === "社团招新")).toBe(false);
+  });
+
+  it("date：YYYY-MM-DD 与 M月D日 均可命中", () => {
+    const marks = [calendarMark("e1", { title: "英语六级模拟考试" })];
+    expect(buildPalette("2026-09-18", searchCtx(marks)).some((i) => i.kind === "calendar")).toBe(true);
+    expect(buildPalette("9月18日", searchCtx(marks)).some((i) => i.kind === "calendar")).toBe(true);
+  });
+
+  it("time：14:00 命中带起止时间的 timed exam/activity；all-day 不误中", () => {
+    const marks = [
+      calendarMark("e-timed", { title: "口试", startTime: "14:00", endTime: "15:30" }),
+      calendarMark("a-allday", { type: "activity", title: "全天讲座" }),
+    ];
+    const hits = buildPalette("14:00", searchCtx(marks)).filter((i) => i.kind === "calendar");
+    expect(hits).toHaveLength(1);
+    expect(hits[0].label).toBe("口试");
+  });
+
+  it("multi-term：『六级 考试』跨字段命中同一 mark", () => {
+    const items = buildPalette("六级 考试", searchCtx([
+      calendarMark("e1", { title: "英语六级模拟考试" }),
+    ]));
+    expect(items.some((i) => i.kind === "calendar")).toBe(true);
+  });
+
+  it("type=course 与 type=ddl 不进入 Calendar 结果", () => {
+    const items = buildPalette("考试", searchCtx([
+      calendarMark("c-type", { type: "course", title: "课程块" }),
+      calendarMark("d-type", { type: "ddl", title: "独立截止" }),
+      calendarMark("e-real", { title: "真实考试" }),
+    ]));
+    const calItems = items.filter((i) => i.kind === "calendar");
+    expect(calItems).toHaveLength(1);
+    expect(calItems[0].label).toBe("真实考试");
+  });
+
+  it("run：setSelectedCalendarMarkId(id) + close()", () => {
+    let selectedId: string | null = null;
+    let closed = false;
+    const ctx = makeCtx({
+      calendarMarks: [calendarMark("e-run", { title: "英语六级模拟考试" })],
+      setSelectedCalendarMarkId: (id) => { selectedId = id; },
+      close: () => { closed = true; },
+    });
+    buildPalette("六级", ctx).find((i) => i.kind === "calendar")!.run();
+    expect(selectedId).toBe("e-run");
+    expect(closed).toBe(true);
+  });
+
+  it("结果顺序：Course → Assignment → Calendar → Material", () => {
+    const econ = {
+      ...course("c1", "计量经济学"),
+      // material title 自身含「计量」→ selfHit 成立（与 flood 防护规则一致），四类同屏验证顺序
+      materials: [material("m1", "计量经济学课件", "pdf")],
+    };
+    const items = buildPalette("计量", makeCtx({
+      courses: [econ],
+      assignments: [{ ...assignment("a1", "计量作业"), courseId: "c1" }],
+      calendarMarks: [calendarMark("e1", { title: "计量期中考试", date: "2026-09-18" })],
+    })).filter((i) => i.group === "search");
+    const kinds = items.map((i) => i.kind);
+    expect(kinds.indexOf("course")).toBeLessThan(kinds.indexOf("assignment"));
+    expect(kinds.indexOf("assignment")).toBeLessThan(kinds.indexOf("calendar"));
+    expect(kinds.indexOf("calendar")).toBeLessThan(kinds.indexOf("material"));
   });
 });

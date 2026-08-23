@@ -8,6 +8,8 @@ import {
   Presentation,
   Image,
   Link as LinkIcon,
+  GraduationCap,
+  CalendarDays,
   Settings,
   RotateCcw,
   CalendarRange,
@@ -18,7 +20,7 @@ import {
   Flag,
   Trash2,
 } from "lucide-react";
-import { NavTab, Course, Assignment, Semester, TimeSliceFilter, Priority, Material } from "@/types";
+import { NavTab, Course, Assignment, Semester, TimeSliceFilter, Priority, Material, CalendarMark } from "@/types";
 import type { AssignmentActions } from "@/lib/assignmentActions";
 import { openAssignmentEditor, previewMaterial } from "@/lib/uiEvents";
 import {
@@ -46,6 +48,8 @@ export interface CommandContext {
   selectedAssignmentId: string | null;
   courses: Course[];
   assignments: Assignment[];
+  /** CalendarMark 实体（Workflow UX V3）：exam/activity 进入全局搜索 */
+  calendarMarks: CalendarMark[];
   semester: Semester;
   currentSemesterWeek: number;
   // Assignment Workspace 选择上下文（highlight / selection 驱动）
@@ -61,6 +65,8 @@ export interface CommandContext {
   openReminderCenter: () => void;
   setSelectedCourseId: (id: string | null) => void;
   setSelectedAssignmentId: (id: string | null) => void;
+  /** CalendarMark Detail 唯一 ownership（Workflow UX V2 contract） */
+  setSelectedCalendarMarkId: (id: string | null) => void;
   setAddCourseModalOpen: (open: boolean) => void;
   setImportScheduleModalOpen: (open: boolean) => void;
   setFullTimetableModalOpen: (open: boolean) => void;
@@ -218,16 +224,21 @@ export const MATERIAL_TYPE_LABELS: Record<Material["type"], string> = {
   link: "链接",
 };
 
-/** 合法本地 DDL → 可搜索日期表现（原始 YYYY-MM-DD + M月D日）；非法输入返回空集 */
-function ddlDateFields(ddl: string | undefined): string[] {
-  if (!ddl) return [];
-  const datePart = ddl.slice(0, 10);
+/** 合法本地日期 "YYYY-MM-DD" → 可搜索表现（原始 + M月D日）；非法输入返回空集。
+ *  Assignment DDL 与 CalendarMark date 共用（不复制两份日期解析）。 */
+function dateSearchFields(datePart: string): string[] {
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(datePart);
   if (!m) return [];
   const month = Number(m[2]);
   const day = Number(m[3]);
   if (month < 1 || month > 12 || day < 1 || day > 31) return [];
   return [datePart, `${month}月${day}日`];
+}
+
+/** DDL "YYYY-MM-DDTHH:mm..." → 日期可搜索字段 */
+function ddlDateFields(ddl: string | undefined): string[] {
+  if (!ddl) return [];
+  return dateSearchFields(ddl.slice(0, 10));
 }
 
 /** Course 可搜索字段：name / code / teacher / classroom / description */
@@ -304,9 +315,31 @@ export function materialMatches(
   return terms.every((t) => self.some((f) => f.includes(t)) || context.some((f) => f.includes(t)));
 }
 
+// ---- CalendarMark 搜索（Workflow UX V3）：仅 exam / activity ----
+
+const CALENDAR_TYPE_ALIASES: Record<"exam" | "activity", string[]> = {
+  exam: ["exam", "考试", "测验"],
+  activity: ["activity", "活动", "日程", "event"],
+};
+
+/**
+ * CalendarMark 可搜索字段（真实 Domain 字段，不发明关系）：
+ * title / type aliases / date（YYYY-MM-DD + M月D日）/ startTime / endTime。
+ * CalendarMark 无 courseId——禁止凭空推导课程关系（如「计量 考试」不会命中）。
+ */
+export function calendarMarkSearchFields(mark: CalendarMark): string[] {
+  return [
+    mark.title,
+    ...(CALENDAR_TYPE_ALIASES[mark.type as "exam" | "activity"] ?? []),
+    ...dateSearchFields(mark.date),
+    ...(mark.startTime ? [mark.startTime] : []),
+    ...(mark.endTime ? [mark.endTime] : []),
+  ];
+}
+
 // ---- Palette 结果模型 ----
 
-export type PaletteItemKind = "command" | "course" | "assignment" | "material";
+export type PaletteItemKind = "command" | "course" | "assignment" | "material" | "calendar";
 
 /** Material 结果图标：复用 lucide 既有视觉，不为此重构 PaletteItem.icon 接口 */
 const MATERIAL_ICONS: Record<Material["type"], ElementType> = {
@@ -580,6 +613,25 @@ export function buildPalette(query: string, ctx: CommandContext): PaletteItem[] 
       sub: `${course ? `${course.name} · ` : ""}${ddlDate ? `${ddlDate} · ` : ""}进度 ${a.progress}%`,
       icon: ClipboardCheck,
       run: () => { ctx.setSelectedAssignmentId(a.id); ctx.close(); },
+    });
+  }
+
+  // ---- CalendarMark（Workflow UX V3）：仅 exam / activity；open contract =
+  // setSelectedCalendarMarkId → CalendarMarkDetailDrawer。course/ddl 不进入
+  //（ddl 由 Assignment Search 覆盖，避免结果重复）。高时效实体排在 Material 前。
+  for (const m of ctx.calendarMarks) {
+    if (m.type !== "exam" && m.type !== "activity") continue;
+    if (!matchesFields(calendarMarkSearchFields(m), terms)) continue;
+    const typeLabel = m.type === "exam" ? "考试" : "活动";
+    const timeText = m.startTime && m.endTime ? `${m.startTime}–${m.endTime}` : "全天";
+    items.push({
+      key: `calendar-${m.id}`,
+      kind: "calendar",
+      group: "search",
+      label: m.title,
+      sub: `${typeLabel} · ${dateSearchFields(m.date)[1] ?? ""} · ${timeText}`,
+      icon: m.type === "exam" ? GraduationCap : CalendarDays,
+      run: () => { ctx.setSelectedCalendarMarkId(m.id); ctx.close(); },
     });
   }
 

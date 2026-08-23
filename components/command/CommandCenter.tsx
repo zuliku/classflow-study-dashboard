@@ -34,6 +34,7 @@ export function CommandCenter() {
     searchModalView,
     courses,
     assignments,
+    calendarMarks,
     semester,
     currentSemesterWeek,
     activeTab,
@@ -44,6 +45,7 @@ export function CommandCenter() {
     setActiveTab,
     setSelectedCourseId,
     setSelectedAssignmentId,
+    setSelectedCalendarMarkId,
     setAddCourseModalOpen,
     setImportScheduleModalOpen,
     setFullTimetableModalOpen,
@@ -59,6 +61,7 @@ export function CommandCenter() {
       setSearchModalView: s.setSearchModalView,
       courses: s.courses,
       assignments: s.assignments,
+      calendarMarks: s.calendarMarks,
       semester: s.semester,
       currentSemesterWeek: s.currentSemesterWeek,
       activeTab: s.activeTab,
@@ -69,6 +72,7 @@ export function CommandCenter() {
       setActiveTab: s.setActiveTab,
       setSelectedCourseId: s.setSelectedCourseId,
       setSelectedAssignmentId: s.setSelectedAssignmentId,
+      setSelectedCalendarMarkId: s.setSelectedCalendarMarkId,
       setAddCourseModalOpen: s.setAddCourseModalOpen,
       setImportScheduleModalOpen: s.setImportScheduleModalOpen,
       setFullTimetableModalOpen: s.setFullTimetableModalOpen,
@@ -141,6 +145,7 @@ export function CommandCenter() {
       selectedAssignmentId,
       courses,
       assignments,
+      calendarMarks,
       semester,
       currentSemesterWeek,
       highlightedAssignmentId,
@@ -152,6 +157,7 @@ export function CommandCenter() {
       openReminderCenter: () => openReminderCenter(),
       setSelectedCourseId: (id: string | null) => setSelectedCourseId(id),
       setSelectedAssignmentId: (id: string | null) => setSelectedAssignmentId(id),
+      setSelectedCalendarMarkId: (id: string | null) => setSelectedCalendarMarkId(id),
       setAddCourseModalOpen: (o: boolean) => setAddCourseModalOpen(o),
       setImportScheduleModalOpen: (o: boolean) => setImportScheduleModalOpen(o),
       setFullTimetableModalOpen: (o: boolean) => setFullTimetableModalOpen(o),
@@ -159,7 +165,7 @@ export function CommandCenter() {
       resetToCurrentWeek: () => resetToCurrentWeek(),
       close: () => setSearchModalOpen(false),
     }),
-    [activeTab, selectedCourseId, selectedAssignmentId, highlightedAssignmentId, assignmentSelection, courses, assignments, semester, currentSemesterWeek, assignmentActions, setActiveTab, setSelectedCourseId, setSelectedAssignmentId, setAddCourseModalOpen, setImportScheduleModalOpen, setFullTimetableModalOpen, setAssignmentTimeSlice, resetToCurrentWeek, setSearchModalOpen, setSettingsModalOpen, setAssignmentWorkspaceView, openReminderCenter]
+    [activeTab, selectedCourseId, selectedAssignmentId, highlightedAssignmentId, assignmentSelection, courses, assignments, calendarMarks, semester, currentSemesterWeek, assignmentActions, setActiveTab, setSelectedCourseId, setSelectedAssignmentId, setSelectedCalendarMarkId, setAddCourseModalOpen, setImportScheduleModalOpen, setFullTimetableModalOpen, setAssignmentTimeSlice, resetToCurrentWeek, setSearchModalOpen, setSettingsModalOpen, setAssignmentWorkspaceView, openReminderCenter]
   );
 
   const items = useMemo(() => buildPalette(query, ctx), [query, ctx]);
