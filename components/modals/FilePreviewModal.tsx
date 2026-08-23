@@ -1,14 +1,15 @@
-﻿"use client";
+"use client";
 
 import React, { useState, useEffect, useRef } from "react";
-import { X, Download, FileText, Loader2 } from "lucide-react";
+import { X, Download, FileText, Loader2, Plus } from "lucide-react";
 import { Material } from "@/types";
 import { getFileBlob } from "@/lib/fileStorage";
 
 
 import { cn } from "@/lib/utils";
 import { Dialog } from "@/components/ui/Dialog";
-import { onPreviewMaterial } from "@/lib/uiEvents";
+import { onPreviewMaterial, openAssignmentEditor } from "@/lib/uiEvents";
+import { useAppStore } from "@/store/useAppStore";
 
 
 
@@ -19,6 +20,21 @@ export function FilePreviewModal() {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [loadFailed, setLoadFailed] = useState(false);
+
+  // Workflow UX V7：Resource → Task Promotion——
+  // 通过 Store Source of Truth 反查 Material 所属课程（不修改 previewMaterial contract、
+  // 不给 Material Domain 加 courseId）。找不到（已删 / stale）→ 隐藏创建任务入口。
+  const courses = useAppStore((s) => s.courses);
+  const sourceCourse =
+    isOpen && material
+      ? courses.find((c) => c.materials.some((m) => m.id === material.id)) ?? null
+      : null;
+
+  const handleCreateTask = () => {
+    if (!sourceCourse || !material) return;
+    openAssignmentEditor({ courseId: sourceCourse.id, materialId: material.id });
+    handleClose(); // Preview semantic close；Editor 持有创建上下文
+  };
 
   const objectUrlRef = useRef<string | null>(null);
 
@@ -98,8 +114,8 @@ export function FilePreviewModal() {
       aria-label="文件预览"
       className="max-w-4xl h-[88dvh]"
     >
-        {/* Header */}
-        <div className="p-4 px-6 border-b border-[#F0EBE1] bg-[#F7F5F5] flex items-center justify-between shrink-0">
+        {/* Header（触及区 token 等价迁移：bg-background / border-line-soft） */}
+        <div className="p-4 px-6 border-b border-line-soft bg-background flex items-center justify-between shrink-0">
           <div className="flex items-center space-x-3 min-w-0 flex-1">
             <div className="w-9 h-9 rounded-xl bg-pastel-mint border border-pastel-mint flex items-center justify-center text-charcoal shrink-0">
               <FileText className="w-4 h-4" />
@@ -115,6 +131,19 @@ export function FilePreviewModal() {
           </div>
 
           <div className="flex items-center space-x-2 shrink-0 ml-2">
+            {/* Resource → Task Promotion：低于 Download 权重的 secondary action */}
+            {sourceCourse && (
+              <button
+                type="button"
+                onClick={handleCreateTask}
+                title="基于此资料创建任务"
+                aria-label="基于此资料创建任务"
+                className="flex items-center space-x-1.5 px-3 py-1.5 bg-white border border-line-strong hover:border-charcoal text-charcoal text-xs font-bold rounded-xl transition-colors"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>创建任务</span>
+              </button>
+            )}
             {displayUrl && (
               <a
                 href={displayUrl}
@@ -191,7 +220,7 @@ export function FilePreviewModal() {
                   <span>下载文件</span>
                 </a>
               ) : (
-                <div className="text-xs text-sandrift p-3 bg-[#F7F5F5] rounded-xl border border-line">
+                <div className="text-xs text-sandrift p-3 bg-background rounded-xl border border-line">
                   本地示例资料 ({material.size || "2.4 MB"})，上传后可预览与下载
                 </div>
               )}

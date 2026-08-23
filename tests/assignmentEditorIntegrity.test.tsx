@@ -443,3 +443,205 @@ describe("Workflow UX V7 —— Material relation invariant", () => {
     expect(useAppStore.getState().assignments.find((a) => a.id === id2)!.materialIds).toEqual(["mat-shared"]);
   });
 });
+
+
+// ============================================================
+// P1：Resource → Task Promotion（FilePreviewModal → Editor）
+// ============================================================
+import { FilePreviewModal } from "@/components/modals/FilePreviewModal";
+import { useToastStore } from "@/store/useToastStore";
+import { previewMaterial } from "@/lib/uiEvents";
+
+describe("P1 Resource → Task Promotion", () => {
+  const promoMat = {
+    id: "mat-promo",
+    title: "回归分析讲义.pdf",
+    type: "pdf" as const,
+    uploadDate: "2026-09-01",
+    url: "https://example.com/x.pdf",
+  };
+
+    function promotionHarness() {
+    // promoMat 真实属于 c-jl.materials（sourceCourse 反查前提）
+    const coursesWithPromo = COURSES.map((c) =>
+      c.id === "c-jl" ? { ...c, materials: [...c.materials, promoMat] } : c
+    );
+    useAppStore.setState({ courses: coursesWithPromo, assignments: [] });
+    render(
+      <>
+        <FilePreviewModal />
+        <AddAssignmentModal />
+      </>
+    );
+  }
+
+  function openPreview() {
+    act(() => previewMaterial(promoMat));
+  }
+
+  it("material 属于某 Course → 显示『创建任务』secondary action", () => {
+    promotionHarness();
+    openPreview();
+    expect(screen.getByRole("button", { name: /创建任务/ })).toBeTruthy();
+  });
+
+  it("stale material（不属于任何 Course）→ 隐藏创建任务入口", () => {
+    // stale：从 courses 移除该资料（保留不含它的课程）
+    render(
+      <>
+        <FilePreviewModal />
+        <AddAssignmentModal />
+      </>
+    );
+    openPreview();
+    expect(screen.queryByRole("button", { name: /创建任务/ })).toBeNull();
+  });
+
+  it("点击 → FPM semantic close；Editor 收到 courseId+materialId；assignments 数量不变", async () => {
+    promotionHarness();
+    openPreview();
+
+    fireEvent.click(screen.getByRole("button", { name: /创建任务/ }));
+
+    // Preview semantic close：exit presence（~220ms）后卸载
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog", { name: "文件预览" })).toBeNull();
+    });
+    // Editor 打开且 context 正确
+    expect((document.getElementById("assignment-title") as HTMLInputElement).value).toBe("");
+    expect(useAppStore.getState().assignments.length).toBe(0);
+    const courseTrigger = screen.getAllByRole("combobox", { name: "关联课程" })[0];
+    expect(courseTrigger.textContent).toContain("计量经济学");
+  });
+
+  it("context chip 显示 title/type；DDL 保持关闭；title 空白 autoFocus", () => {
+    promotionHarness();
+    openPreview();
+    fireEvent.click(screen.getByRole("button", { name: /创建任务/ }));
+
+    const chip = screen.getByTestId("editor-material-context");
+    expect(chip.textContent).toContain("回归分析讲义.pdf");
+    expect(chip.textContent).toContain("关联资料");
+
+    const checkbox = screen.getByLabelText("设置截止时间") as HTMLInputElement;
+    expect(checkbox.checked).toBe(false); // Material ≠ 有截止日期
+  });
+
+  it("提交：新 Assignment.materialIds 含 matId；toast 为已关联变体", async () => {
+    promotionHarness();
+    openPreview();
+    fireEvent.click(screen.getByRole("button", { name: /创建任务/ }));
+    fireEvent.change(document.getElementById("assignment-title") as HTMLInputElement, {
+      target: { value: "基于讲义的练习任务" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "保存" }));
+
+    await waitFor(() => {
+      expect(useAppStore.getState().assignments.length).toBe(1);
+    });
+    const a = useAppStore.getState().assignments[0];
+    expect(a.materialIds).toEqual(["mat-promo"]);
+    const lastToast = useToastStore.getState().toasts.at(-1);
+    expect(lastToast?.message).toContain("并关联资料");
+  });
+
+  it("移除 context（×）→ 提交后无 materialIds", () => {
+    promotionHarness();
+    openPreview();
+    fireEvent.click(screen.getByRole("button", { name: /创建任务/ }));
+    fireEvent.click(screen.getByLabelText("移除关联资料"));
+    fireEvent.change(document.getElementById("assignment-title") as HTMLInputElement, {
+      target: { value: "普通任务" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "保存" }));
+    const a = useAppStore.getState().assignments[0];
+    expect(a.materialIds).toBeUndefined();
+  });
+
+  it("课程切换 → context 自动清除；切回原课不自动恢复", () => {
+    promotionHarness();
+    openPreview();
+    fireEvent.click(screen.getByRole("button", { name: /创建任务/ }));
+    expect(screen.getByTestId("editor-material-context")).toBeTruthy();
+
+    // 切到物理课（无该资料）→ 清除
+    const courseTrigger = screen.getAllByRole("combobox", { name: "关联课程" })[0];
+    fireEvent.click(courseTrigger);
+    fireEvent.click(screen.getByRole("option", { name: /物理/ }));
+    expect(screen.queryByTestId("editor-material-context")).toBeNull();
+
+    // 切回计量经济学 → 不自动恢复
+    fireEvent.click(courseTrigger);
+    fireEvent.click(screen.getAllByRole("option", { name: /计量经济学/ })[0]);
+    expect(screen.queryByTestId("editor-material-context")).toBeNull();
+  });
+
+  it("Editor 打开期间 Material 被删除 → Store sanitize 兜底，无 dangling ID", () => {
+    promotionHarness();
+    openPreview();
+    fireEvent.click(screen.getByRole("button", { name: /创建任务/ }));
+    // 模拟打开期间资料被删除
+    act(() => {
+      useAppStore.setState({
+        courses: COURSES.map((c) =>
+          c.id === "c-jl" ? { ...c, materials: c.materials.filter((m) => m.id !== "mat-promo") } : c
+        ),
+      });
+    });
+    fireEvent.change(document.getElementById("assignment-title") as HTMLInputElement, {
+      target: { value: "兜底校验" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "保存" }));
+    const a = useAppStore.getState().assignments[0];
+    expect(a.materialIds).toBeUndefined(); // write-boundary sanitize 最终保障
+  });
+
+  it("assignmentId 编辑 + 伪造 materialId → create context 被忽略", () => {
+    useAppStore.setState({
+      courses: COURSES,
+      assignments: [makeAssignment({ title: "已有任务", courseId: "c-jl" })],
+    });
+    render(
+      <>
+        <FilePreviewModal />
+        <AddAssignmentModal />
+      </>
+    );
+    act(() => {
+      openAssignmentEditor({ assignmentId: "a-target", materialId: "mat-promo" });
+    });
+    expect((document.getElementById("assignment-title") as HTMLInputElement).value).toBe("已有任务");
+    expect(screen.queryByTestId("editor-material-context")).toBeNull();
+    fireEvent.change(document.getElementById("assignment-title") as HTMLInputElement, {
+      target: { value: "已有任务（改）" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "保存" }));
+    expect(getAssignment().materialIds ?? []).not.toContain("mat-promo");
+  });
+
+  it("V5 draft-only 行为不变：draft 存在时 materialId 缺省不干扰 DDL 关闭语义", () => {
+    useAppStore.setState({ courses: COURSES, assignments: [] });
+    render(<AddAssignmentModal />);
+    act(() => {
+      openAssignmentEditor({
+        draft: { title: "纯草稿", ddl: undefined },
+      });
+    });
+    expect((document.getElementById("assignment-title") as HTMLInputElement).value).toBe("纯草稿");
+    const checkbox = screen.getByLabelText("设置截止时间") as HTMLInputElement;
+    expect(checkbox.checked).toBe(false);
+  });
+
+  it("ddlDate Calendar create：行为不变", () => {
+    useAppStore.setState({ courses: COURSES, assignments: [] });
+    render(<AddAssignmentModal />);
+    act(() => {
+      openAssignmentEditor({ ddlDate: "2026-09-18" });
+    });
+    const checkbox = screen.getByLabelText("设置截止时间") as HTMLInputElement;
+    expect(checkbox.checked).toBe(true);
+    expect((document.querySelector('input[type="date"]') as HTMLInputElement).value).toBe("2026-09-18");
+    expect((document.querySelector('input[type="time"]') as HTMLInputElement).value).toBe("23:59");
+    expect(screen.queryByTestId("editor-material-context")).toBeNull();
+  });
+});

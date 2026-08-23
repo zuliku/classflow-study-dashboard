@@ -1,7 +1,7 @@
 ﻿"use client";
 
 import React, { useState, useEffect, useRef } from "react";
-import { X, ClipboardList, Clock, Plus, Trash2 } from "lucide-react";
+import { X, ClipboardList, Clock, Plus, Trash2, FileText } from "lucide-react";
 import { useAppStore } from "@/store/useAppStore";
 import { useToastStore } from "@/store/useToastStore";
 import { Priority, AssignmentStatus, Subtask, TaskRecurrence } from "@/types";
@@ -19,7 +19,11 @@ import { Button } from "@/components/ui/Button";
 import { IconButton } from "@/components/ui/IconButton";
 import { UISelect, SelectOption } from "@/components/ui/Select";
 import { FormSection } from "@/components/ui/FormSection";
-import { onOpenAssignmentEditor, OpenAssignmentEditorDetail } from "@/lib/uiEvents";
+import {
+  onOpenAssignmentEditor,
+  OpenAssignmentEditorDetail,
+} from "@/lib/uiEvents";
+import { sanitizeAssignmentMaterialIds } from "@/lib/tasks/taskMaterials";
 
 import { getNewTaskDefaults } from "@/lib/taskDefaults";
 import { normalizeEstimatedMinutes } from "@/lib/tasks/taskSemantics";
@@ -66,6 +70,32 @@ export function AddAssignmentModal() {
   const [tagsStr, setTagsStr] = useState("");
   const [description, setDescription] = useState("");
   const [subtasks, setSubtasks] = useState<{ id: string; title: string; completed: boolean }[]>([]);
+  /**
+   * Workflow UX V7：Resource → Task Promotion——create-only 关联资料 context。
+   * 编辑模式恒为 null（assignmentId 是事实源）；课程切换即清除（不搬运/不恢复）；
+   * 提交时经 Store write-boundary sanitize 最终校验。
+   */
+  const [initialMaterialId, setInitialMaterialId] = useState<string | null>(null);
+
+  /** context chip 展示信息：跨全部 Course 反查（仅在仍真实存在时显示） */
+  const initialMaterial = (() => {
+    if (!initialMaterialId) return null;
+    for (const c of courses) {
+      const m = c.materials.find((x) => x.id === initialMaterialId);
+      if (m) return m;
+    }
+    return null;
+  })();
+
+  /** 课程切换：预关联资料不属于新课程 → 立即清除（切回原课也不自动恢复） */
+  const handleCourseChange = (v: string) => {
+    setCourseId(v);
+    if (initialMaterialId) {
+      const stillValid =
+        sanitizeAssignmentMaterialIds({ courseId: v }, courses, [initialMaterialId]).length > 0;
+      if (!stillValid) setInitialMaterialId(null);
+    }
+  };
 
   // 打开事件：assignmentId → 编辑模式（已有 Assignment 是事实源，忽略 draft）；
   // 否则新增模式，precedence：draft（Quick Add capture handoff）→ legacy context（courseId / ddlDate）→ preferences defaults
@@ -74,6 +104,8 @@ export function AddAssignmentModal() {
       if (detail.assignmentId) {
         const target = assignments.find((a) => a.id === detail.assignmentId);
         if (target) {
+          // 编辑模式：已有 Assignment 是事实源——忽略 draft / materialId create context
+          setInitialMaterialId(null);
           setEditingId(target.id);
           setTitle(target.title);
           setCourseId(target.courseId);
@@ -92,6 +124,7 @@ export function AddAssignmentModal() {
         }
       } else {
         setEditingId(null);
+        setInitialMaterialId(null);
         setProgress(0);
         setTagsStr("");
         setSubtasks([]);
@@ -102,21 +135,19 @@ export function AddAssignmentModal() {
         const legacyCourseValid =
           !!detail.courseId && courses.some((c) => c.id === detail.courseId);
 
+        let nextCourseId = "";
         if (detail.draft) {
           // ---- Workflow UX V5：Quick Add 草稿移交（capture continuity）----
-          // Draft ownership 完整高于 legacy context：draft 无 DDL 时绝不因
-          // detail.ddlDate / 内部默认 tomorrow 而自动开启 DDL。
           const draft = detail.draft;
           setTitle(draft.title ?? "");
           const draftCourseValid =
             !!draft.courseId && courses.some((c) => c.id === draft.courseId);
-          setCourseId(
-            draftCourseValid
-              ? draft.courseId!
-              : legacyCourseValid
-              ? detail.courseId!
-              : courses[0]?.id || ""
-          );
+          nextCourseId = draftCourseValid
+            ? draft.courseId!
+            : legacyCourseValid
+            ? detail.courseId!  // detail.courseId 存在时已验证合法
+            : courses[0]?.id || "";
+          setCourseId(nextCourseId);
           const draftDdlValid = !!draft.ddl && parseLocalDDL(draft.ddl) !== null;
           if (draftDdlValid) {
             setDdlEnabled(true);
@@ -139,10 +170,9 @@ export function AddAssignmentModal() {
         } else {
           // ---- Legacy create context ----
           setTitle("");
-          setCourseId(legacyCourseValid ? detail.courseId! : courses[0]?.id || "");
-          // 本地日期格式化（不用 toISOString，避免时区偏移导致日期错误）；日历发起时预填当天
+          nextCourseId = legacyCourseValid ? detail.courseId! : courses[0]?.id || "";
+          setCourseId(nextCourseId);
           setDdlDate(detail.ddlDate || format(tomorrow, "yyyy-MM-dd"));
-          // Task V2：日历入口语义 = 创建当天截止任务（自动开启 DDL）；其余默认不设截止
           setDdlEnabled(!!detail.ddlDate);
           setDdlTime(defaults.ddlTime);
           setEstimatedMinutes("");
@@ -150,6 +180,19 @@ export function AddAssignmentModal() {
           setStatus(defaults.status);
           setDescription("");
           setPrefillSource(detail.courseId ? "course" : detail.ddlDate ? "calendar" : null);
+        }
+
+        // ---- Workflow UX V7：materialId create-only context（Resource → Task）----
+        // 经 Domain sanitize 校验真实归属 resolved Course（非字符串比较）；编辑模式不进入此分支。
+        if (detail.materialId && nextCourseId) {
+          const valid = sanitizeAssignmentMaterialIds(
+            { courseId: nextCourseId },
+            courses,
+            [detail.materialId]
+          );
+          setInitialMaterialId(valid.length > 0 ? detail.materialId : null);
+        } else {
+          setInitialMaterialId(null);
         }
       }
       setIsOpen(true);
@@ -214,8 +257,6 @@ export function AddAssignmentModal() {
       // P0 数据完整性：Full Editor 只写自己拥有的字段（field-level patch）。
       // materialIds / autoReminderDisabled / recurrenceSeriesId / recurrenceParentId
       // 不属于本表单 ownership——经 current merge 原值保留，不再被整对象覆盖清空。
-      // recurrence: undefined 交由 normalizeAssignment 清除 seriesId（Domain 原语义）；
-      // DDL mark reconcile / reminder reconcile / History 由 updateAssignmentPatch 全链路执行。
       updateAssignmentPatch(editingId, {
         courseId: baseFields.courseId,
         title: baseFields.title,
@@ -231,10 +272,23 @@ export function AddAssignmentModal() {
       });
       pushToast({ message: "修改已保存" });
     } else {
-      // Create new assignment
-      addAssignment(baseFields);
-      // 从课程/日历发起的任务创建，提示带上下文语义
-      pushToast({ message: prefillSource ? "任务已添加" : "任务已创建" });
+      // Create：material context（仍有效时）随表单一并提交；
+      // 最终 relation 由 Store write-boundary sanitize 保证（stale / 已删自动清除）。
+      const createPayload = {
+        ...baseFields,
+        materialIds: initialMaterialId ? [initialMaterialId] : undefined,
+      };
+      const newId = addAssignment(createPayload);
+      const linkedCreated = !!useAppStore
+        .getState()
+        .assignments.find((a) => a.id === newId)?.materialIds?.length;
+      if (linkedCreated) {
+        pushToast({ message: "任务已创建并关联资料" });
+      } else {
+        // 从课程/日历发起的任务创建，提示带上下文语义
+        pushToast({ message: prefillSource ? "任务已添加" : "任务已创建" });
+      }
+      setInitialMaterialId(null);
     }
 
     setIsOpen(false);
@@ -274,6 +328,31 @@ export function AddAssignmentModal() {
           <div className="flex-1 min-h-0 overflow-y-auto p-5 space-y-5 text-xs">
             {/* 基本信息 */}
             <FormSection title="基本信息">
+              {/* Resource → Task context chip（create-only；课程切换即清除） */}
+              {initialMaterial && initialMaterialId && (
+                <div
+                  data-testid="editor-material-context"
+                  className="flex items-center gap-2 rounded-lg border border-line bg-background px-2.5 py-1.5"
+                >
+                  <span className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-sandrift shrink-0">
+                    <FileText className="h-3 w-3 text-sandrift" />
+                    关联资料
+                  </span>
+                  <span className="min-w-0 flex-1 truncate text-[11px] font-semibold text-charcoal">
+                    {initialMaterial.title}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setInitialMaterialId(null)}
+                    aria-label="移除关联资料"
+                    title="移除关联资料（不删除课程资料）"
+                    className="shrink-0 rounded-md p-0.5 text-sandrift transition-colors hover:bg-danger-bg hover:text-danger"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                  <span className="sr-only">创建后将自动关联此资料</span>
+                </div>
+              )}
               <Field label="任务名称" required htmlFor="assignment-title">
                 <Input
                   id="assignment-title"
@@ -290,7 +369,7 @@ export function AddAssignmentModal() {
                 <Field label="关联课程">
                   <UISelect
                     value={courseId}
-                    onChange={(v) => setCourseId(v)}
+                    onChange={handleCourseChange}
                     ariaLabel="关联课程"
                     options={courses.map((c) => ({ value: c.id, label: `${c.name} (${c.code})` }))}
                   />

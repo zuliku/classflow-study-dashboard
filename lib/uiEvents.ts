@@ -19,13 +19,18 @@ export type AssignmentEditorDraft = Partial<
   >
 >;
 
-/** 打开新建/编辑任务弹窗：assignmentId 存在 → 编辑（忽略 draft）；否则新增（可携带草稿预填） */
+/** 打开新建/编辑任务弹窗：assignmentId 存在 → 编辑（忽略 draft / materialId）；否则新增 */
 export interface OpenAssignmentEditorDetail {
   assignmentId?: string;
   courseId?: string;
   ddlDate?: string;
   /** Capture Continuity：Quick Add → Full Editor 的草稿移交 */
   draft?: AssignmentEditorDraft;
+  /**
+   * Workflow UX V7：Resource → Task Promotion——create-only 关联资料 context。
+   * 编辑模式（assignmentId 存在）必须忽略；不携带任何 Domain metadata。
+   */
+  materialId?: string;
 }
 
 export interface PreviewMaterialDetail {
