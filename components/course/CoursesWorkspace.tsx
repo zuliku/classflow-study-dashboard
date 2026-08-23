@@ -1,11 +1,12 @@
 "use client";
 
 import React, { useRef, useState } from "react";
-import { FileUp, Plus } from "lucide-react";
+import { BookOpen, FileUp, Plus } from "lucide-react";
 import { useAppStore } from "@/store/useAppStore";
 import { useToastStore } from "@/store/useToastStore";
 import { WorkspaceHeader } from "@/components/layout/WorkspaceHeader";
 import { Button } from "@/components/ui/Button";
+import { WorkspaceEmptyState } from "@/components/ui/WorkspaceEmptyState";
 import {
   CourseLibraryCard,
   CourseCardPopover,
@@ -132,22 +133,26 @@ export function CoursesWorkspace() {
         sticky
       />
 
-      <div className="flex-1 min-h-0 overflow-y-auto p-4 pb-24 md:p-6 md:pb-6">
+      {/* 水平 gutter 单一来源（workspace-gutter）；纵向节奏保持 16/24px */}
+      <div className="workspace-gutter flex-1 min-h-0 overflow-y-auto pt-4 pb-24 md:pt-6 md:pb-6">
         {courses.length === 0 ? (
-          <div className="bg-surface border border-line rounded-xl p-10 shadow-subtle flex flex-col items-center justify-center gap-2.5 text-center">
-            <p className="text-xs font-bold text-charcoal">暂无课程</p>
-            <p className="text-[11px] text-sandrift">添加第一门课程或导入课表，开始建立课程资料库</p>
-            <div className="flex items-center gap-2 mt-1">
-              <Button variant="primary" size="sm" onClick={() => setAddCourseModalOpen(true)}>
-                <Plus className="w-3.5 h-3.5" />
-                <span>添加课程</span>
-              </Button>
-              <Button variant="secondary" size="sm" onClick={() => setImportScheduleModalOpen(true)}>
-                <FileUp className="w-3.5 h-3.5" />
-                <span>导入课表</span>
-              </Button>
-            </div>
-          </div>
+          <WorkspaceEmptyState
+            icon={<BookOpen className="w-8 h-8" strokeWidth={1.5} />}
+            title="暂无课程"
+            description="添加第一门课程或导入课表，开始建立课程资料库"
+            actions={
+              <>
+                <Button variant="primary" size="sm" onClick={() => setAddCourseModalOpen(true)}>
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>添加课程</span>
+                </Button>
+                <Button variant="secondary" size="sm" onClick={() => setImportScheduleModalOpen(true)}>
+                  <FileUp className="w-3.5 h-3.5" />
+                  <span>导入课表</span>
+                </Button>
+              </>
+            }
+          />
         ) : (
           <div className="ux-settle grid grid-cols-1 gap-4 xl:grid-cols-2 items-stretch">
             {courses.map((course) => {

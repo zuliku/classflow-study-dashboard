@@ -1041,7 +1041,7 @@ export function TimelineWorkspace() {
       </div>
 
       {/* body：主卡 flex-1 吸收剩余空间；shelf shrink-0；section spacing 由父容器 gap-4 统一控制 */}
-      <div className="flex flex-1 min-h-0 flex-col gap-4 p-4 pb-24 md:p-6 md:pb-6">
+      <div className="workspace-gutter flex flex-1 min-h-0 flex-col gap-4 pt-4 pb-24 md:pt-6 md:pb-6">
       {/* 周内容主体：DOM 稳定（不 key remount）；动画由 weekMotion effect 重放 ux-week-enter */}
       <div
         ref={wrapRef}

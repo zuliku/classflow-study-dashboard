@@ -165,7 +165,9 @@ export function LearningAnalyticsView() {
       <div className="flex-1 min-h-0 overflow-y-auto">
         <div
           data-testid="analytics-body"
-          className="w-full max-w-none flex flex-col gap-6 p-4 md:p-6 xl:p-8"
+          // 水平 gutter 单一来源（workspace-gutter 16/24）+ intentional xl:px-8 大屏档；
+          // !important 用于在 utilities 产物顺序上确定压过 .workspace-gutter 的 md 规则（受控覆盖）
+          className="w-full max-w-none flex flex-col gap-6 workspace-gutter py-4 md:py-6 xl:!px-8 xl:py-8"
         >
           {/* 历史分析 stage（loading/error/empty/normal 同一容器；preset 变化轻 settle）——
               StudyOutlookCard 在其下方独立存在，不随 preset 重播 */}

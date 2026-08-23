@@ -90,7 +90,7 @@ export function AssignmentsWorkspace() {
           mobile: px-16 / pt-20；desktop: px-24 / pt-28（ViewBar → 内容首卡呼吸空间）。
           bottom 保持既有逻辑（mobile BottomNav pb-24 / desktop pb-6）。
           QuickAdd ↔ Table 的间距仍由 space-y-4 统一控制，不额外扩大。 */}
-      <div className="flex flex-1 min-h-0 flex-col space-y-4 px-4 pt-5 pb-24 md:px-6 md:pt-7 md:pb-6">
+      <div className="workspace-gutter flex flex-1 min-h-0 flex-col space-y-4 pt-5 pb-24 md:pt-7 md:pb-6">
         {/* Quick Add：Chrome 之下、内容之上（原卡片内 Inline Card 迁移） */}
         <DisclosureRegion open={quickAddOpen}>
           <QuickAddCard

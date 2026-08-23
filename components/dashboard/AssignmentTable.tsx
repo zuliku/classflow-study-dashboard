@@ -7,6 +7,7 @@ import {
   Plus,
   AlertTriangle,
   CheckCircle2,
+  ClipboardList,
   Edit2,
   Trash2,
   BookOpen,
@@ -726,10 +727,23 @@ export function AssignmentTable({
           // compact：空状态填满 Header/Filters 与 Footer 之间的完整内容区（真正垂直居中，非 py 假居中）；
           // workspace：保持原有内边距样式
           isWorkspace ? (
-            <div className="py-10 text-center text-xs text-sandrift space-y-1">
-              <CheckCircle2 className="w-8 h-8 mx-auto text-success" />
-              <p>该视图暂无任务</p>
-            </div>
+            // 语义区分（V2.3）：domain 零任务（zero-data）≠ 当前筛选无结果（contextual）。
+            // 判断使用真实 domain assignments（store），不根据 retained filtered list 推测。
+            assignments.length === 0 ? (
+              <div
+                data-testid="assignment-zero-data"
+                className="py-10 text-center text-xs space-y-1.5"
+              >
+                <ClipboardList className="w-8 h-8 mx-auto text-sandrift" strokeWidth={1.5} />
+                <p className="font-bold text-charcoal">还没有任务</p>
+                <p className="text-[11px] text-sandrift">从右上角「新增任务」开始安排你的第一个 DDL</p>
+              </div>
+            ) : (
+              <div className="py-10 text-center text-xs text-sandrift space-y-1">
+                <CheckCircle2 className="w-8 h-8 mx-auto text-success" />
+                <p>该视图暂无任务</p>
+              </div>
+            )
           ) : (
             <div
               data-testid="assignment-empty"
