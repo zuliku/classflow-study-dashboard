@@ -133,12 +133,16 @@ export function GroupCollaborationView() {
     updateGroupTask,
     deleteGroupTask,
     toggleGroupTask,
+    setSelectedGroupProjectId,
   } = useAppStore();
   const pushToast = useToastStore((s) => s.pushToast);
   const confirmRequest = useConfirmStore((s) => s.confirm);
   const handoff = useKiroHandoff();
 
-  const [selectedProjectId, setSelectedProjectId] = useState<string>(groupProjects[0]?.id || "");
+  // Workflow UX V4：selection ownership 上移至 store（transient，不持久化）。
+  // Global Search Deep Link 在本组件 mount 前写入目标 id → 首帧即精确直达。
+  const selectedGroupProjectId = useAppStore((s) => s.selectedGroupProjectId);
+
   const [projectMoreOpen, setProjectMoreOpen] = useState(false);
 
   // 弹窗表单状态：null = 关闭
@@ -147,13 +151,27 @@ export function GroupCollaborationView() {
   const [taskForm, setTaskForm] = useState<null | { mode: "create" } | { mode: "edit"; taskId: string }>(null);
   const [taskSearch, setTaskSearch] = useState("");
 
-  // 新增小组任务：仅新创建的 item 出场（页面初次渲染不 stagger；scope = 项目，切换项目不误报新增）
-  const selectedProjectTasks = groupProjects.find((p) => p.id === selectedProjectId);
-  const newTaskIds = useEnterOnAdd(selectedProjectTasks?.tasks.map((t) => t.id) ?? [], selectedProjectId);
+  // ---- Selection Normalization（单一 resolved project，消除双 fallback 轨道）----
+  // - 空域 → null（Workspace Empty State）
+  // - stale id（项目被删除 / 未初始化）→ 落第一项目，不出现 blank detail
+  // - 合法 id（含 Search 在 mount 前写入的目标）绝不被覆盖
+  useEffect(() => {
+    if (groupProjects.length === 0) {
+      if (selectedGroupProjectId !== null) setSelectedGroupProjectId(null);
+      return;
+    }
+    if (!groupProjects.some((p) => p.id === selectedGroupProjectId)) {
+      setSelectedGroupProjectId(groupProjects[0].id);
+    }
+  }, [groupProjects, selectedGroupProjectId, setSelectedGroupProjectId]);
 
-  // IM4B：Project / Member / Task mutation continuity（exit-only；filter/search/项目切换直接同步）
-  const activeProject = groupProjects.find((p) => p.id === selectedProjectId) || groupProjects[0];
-  const selectedProject = groupProjects.find((p) => p.id === selectedProjectId) || null;
+  // 新增小组任务：仅新创建的 item 出场（页面初次渲染不 stagger；scope = 项目，切换项目不误报新增）
+  const selectedProject =
+    groupProjects.find((p) => p.id === selectedGroupProjectId) ??
+    groupProjects[0] ??
+    null;
+  const selectedProjectId = selectedProject?.id ?? "";
+  const newTaskIds = useEnterOnAdd(selectedProject?.tasks.map((t) => t.id) ?? [], selectedProjectId);
 
   const newProjectIds = useEnterOnAdd(groupProjects.map((p) => p.id));
   const retainedProjects = useExitPresenceList({
@@ -217,7 +235,7 @@ export function GroupCollaborationView() {
         title: pName.trim(),
         description: pDesc,
       });
-      setSelectedProjectId(newId); // 创建后进入新项目
+      setSelectedGroupProjectId(newId); // 创建后进入新项目
       pushToast({ message: "项目已创建" });
     }
     setProjectForm(null);
@@ -234,7 +252,7 @@ export function GroupCollaborationView() {
         deleteGroupProject(selectedProject.id);
         // 自动选中下一个项目，没有则进入空态
         const remaining = groupProjects.filter((p) => p.id !== selectedProject.id);
-        setSelectedProjectId(remaining[0]?.id || "");
+        setSelectedGroupProjectId(remaining[0]?.id || null); // 无剩余 → null（Workspace Empty）
         pushToast({ message: "项目已删除" });
       },
     });
@@ -365,18 +383,18 @@ export function GroupCollaborationView() {
 
   return (
     <div className="flex flex-1 min-h-0 flex-col">
-      {/* 统一 Workspace Header（App Shell Structural；Banner 已删除；Ask Kiro 仅 activeProject 时显示） */}
+      {/* 统一 Workspace Header（Ask Kiro 仅 resolved selectedProject 存在时显示） */}
       <WorkspaceHeader
         title="小组协作"
         context={`${groupProjects.length} 个项目`}
         actions={
-          activeProject ? (
+          selectedProject ? (
             <KiroFlowButton
               icon={KIRO_ICON}
               label="问 Kiro"
               size="sm"
               className="h-8"
-              onClick={() => handoff.openForGroupProject(activeProject.id)}
+              onClick={() => handoff.openForGroupProject(selectedProject.id)}
             />
           ) : undefined
         }
@@ -437,14 +455,14 @@ export function GroupCollaborationView() {
             <div className="bg-surface border border-line rounded-xl divide-y divide-line-soft overflow-y-auto">
               {retainedProjects.map((entry) => {
                 const p = entry.item;
-                const isSelected = activeProject?.id === p.id;
+                const isSelected = selectedProject?.id === p.id;
                 const course = courses.find((c) => c.id === p.courseId);
                 const completedCount = p.tasks.filter((t) => t.completed).length;
                 return (
                   <ExitCollapse key={p.id} exiting={entry.exiting}>
                     <button
                       type="button"
-                      onClick={() => setSelectedProjectId(p.id)}
+                      onClick={() => setSelectedGroupProjectId(p.id)}
                       aria-current={isSelected ? "true" : undefined}
                       className={cn(
                         "relative w-full px-3.5 py-2.5 text-left transition-colors duration-[var(--motion-fast)] ease-[var(--ease-standard)]",

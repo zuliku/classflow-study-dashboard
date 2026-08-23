@@ -240,3 +240,91 @@ describe("Horizontal gutter source guard", () => {
     expect(read("components/dashboard/OverviewWorkspace.tsx")).toContain("workspace-gutter");
   });
 });
+
+// ============================================================
+// Workflow UX V4 —— Group Project Deep Link（selection ownership）
+// ============================================================
+import { act as testAct } from "@testing-library/react";
+
+describe("Group selection ownership（transient store selection）", () => {
+  const gp = (id: string, title: string): import("@/types").GroupProject => ({
+    id,
+    courseId: "c1",
+    title,
+    description: "",
+    progress: 0,
+    updatedAt: "2026-09-01",
+    members: [],
+    tasks: [],
+  });
+
+  function setProjects(projects: import("@/types").GroupProject[]) {
+    useAppStore.setState({ groupProjects: projects });
+  }
+
+  it("初始无 selection → normalization 落第一项目，detail 非空", () => {
+    setProjects([gp("g-a", "项目 A"), gp("g-b", "项目 B")]);
+    useAppStore.setState({ selectedGroupProjectId: null });
+    render(<GroupCollaborationView />);
+    expect(useAppStore.getState().selectedGroupProjectId).toBe("g-a");
+    expect(screen.getAllByText(/项目 A/).length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("selectedGroupProjectId 有效 → 精确显示该项目", () => {
+    setProjects([gp("g-a", "项目 A"), gp("g-b", "项目 B")]);
+    useAppStore.setState({ selectedGroupProjectId: "g-b" });
+    render(<GroupCollaborationView />);
+    // detail 标题为 B（非第一项）
+    expect(screen.getAllByText("项目 B").length).toBeGreaterThanOrEqual(1);
+    expect(useAppStore.getState().selectedGroupProjectId).toBe("g-b");
+  });
+
+  it("stale id → fallback 第一项目，不出现 blank detail；Search 预写的合法 id 不被覆盖", () => {
+    setProjects([gp("g-a", "项目 A"), gp("g-b", "项目 B")]);
+    useAppStore.setState({ selectedGroupProjectId: "g-deleted" });
+    render(<GroupCollaborationView />);
+    expect(useAppStore.getState().selectedGroupProjectId).toBe("g-a");
+
+    // Search Deep Link 场景：mount 后写入合法目标 → 不被 first-project 覆盖
+    cleanup();
+    useAppStore.setState({ selectedGroupProjectId: "g-b" });
+    render(<GroupCollaborationView />);
+    expect(useAppStore.getState().selectedGroupProjectId).toBe("g-b");
+    expect(screen.getAllByText(/项目 B/).length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("删除当前项目 → fallback 剩余合理项；最后一个删除 → null + Workspace Empty", () => {
+    setProjects([gp("g-only", "唯一项目")]);
+    useAppStore.setState({ selectedGroupProjectId: "g-only" });
+    render(<GroupCollaborationView />);
+
+    testAct(() => {
+      useAppStore.getState().deleteGroupProject("g-only");
+      useAppStore.setState({ groupProjects: [] });
+    });
+    expect(useAppStore.getState().selectedGroupProjectId).toBeNull();
+    expect(screen.getByTestId("workspace-empty-state")).toBeTruthy();
+
+    // 多项目场景：删 b（选中）→ fallback a
+    cleanup();
+    setProjects([gp("g-a2", "剩余 A"), gp("g-b2", "剩余 B")]);
+    useAppStore.setState({ selectedGroupProjectId: "g-b2" });
+    render(<GroupCollaborationView />);
+    testAct(() => {
+      useAppStore.getState().deleteGroupProject("g-b2");
+      setProjects([gp("g-a2", "剩余 A")]);
+    });
+    expect(useAppStore.getState().selectedGroupProjectId).toBe("g-a2");
+  });
+
+  it("切 Workspace 再回来：transient selection session 内保持", () => {
+    setProjects([gp("g-a3", "保持 A"), gp("g-b3", "保持 B")]);
+    useAppStore.setState({ selectedGroupProjectId: "g-b3" });
+    const { unmount } = render(<GroupCollaborationView />);
+    unmount();
+    // 组件卸载不清 store selection（transient 但 session 存续）
+    render(<GroupCollaborationView />);
+    expect(useAppStore.getState().selectedGroupProjectId).toBe("g-b3");
+    expect(screen.getAllByText(/保持 B/).length).toBeGreaterThanOrEqual(1);
+  });
+});

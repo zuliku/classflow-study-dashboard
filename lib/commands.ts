@@ -10,6 +10,7 @@ import {
   Link as LinkIcon,
   GraduationCap,
   CalendarDays,
+  Users,
   Settings,
   RotateCcw,
   CalendarRange,
@@ -20,7 +21,7 @@ import {
   Flag,
   Trash2,
 } from "lucide-react";
-import { NavTab, Course, Assignment, Semester, TimeSliceFilter, Priority, Material, CalendarMark } from "@/types";
+import { NavTab, Course, Assignment, Semester, TimeSliceFilter, Priority, Material, CalendarMark, GroupProject } from "@/types";
 import type { AssignmentActions } from "@/lib/assignmentActions";
 import { openAssignmentEditor, previewMaterial } from "@/lib/uiEvents";
 import {
@@ -50,6 +51,8 @@ export interface CommandContext {
   assignments: Assignment[];
   /** CalendarMark 实体（Workflow UX V3）：exam/activity 进入全局搜索 */
   calendarMarks: CalendarMark[];
+  /** GroupProject 实体（Workflow UX V4）：项目 Deep Link 搜索 */
+  groupProjects: GroupProject[];
   semester: Semester;
   currentSemesterWeek: number;
   // Assignment Workspace 选择上下文（highlight / selection 驱动）
@@ -67,6 +70,8 @@ export interface CommandContext {
   setSelectedAssignmentId: (id: string | null) => void;
   /** CalendarMark Detail 唯一 ownership（Workflow UX V2 contract） */
   setSelectedCalendarMarkId: (id: string | null) => void;
+  /** Group Project Deep Link（Workflow UX V4）：transient selection + workspace 切换由 run 组合 */
+  setSelectedGroupProjectId: (id: string | null) => void;
   setAddCourseModalOpen: (open: boolean) => void;
   setImportScheduleModalOpen: (open: boolean) => void;
   setFullTimetableModalOpen: (open: boolean) => void;
@@ -337,9 +342,52 @@ export function calendarMarkSearchFields(mark: CalendarMark): string[] {
   ];
 }
 
+// ---- GroupProject 搜索（Workflow UX V4）：仅 Project，不含 GroupTask ----
+
+const GROUP_PROJECT_TYPE_ALIASES = ["小组", "项目", "group", "project"];
+
+/**
+ * GroupProject 可搜索字段（真实 Domain 字段）：
+ * Self：title / description / 类型 aliases。
+ * Context：关联课程 name/code / 成员 name——只能补足其它 term（flood 规则同 Material：
+ * 至少一个 term 必须命中 self，仅搜课程名不倾倒该课全部项目）。
+ */
+export function groupProjectSearchFields(
+  project: GroupProject,
+  course: Course | undefined
+): { selfFields: string[]; contextFields: string[] } {
+  return {
+    selfFields: [project.title, project.description, ...GROUP_PROJECT_TYPE_ALIASES],
+    contextFields: [
+      ...(course ? [course.name, course.code] : []),
+      ...(project.members ?? []).map((m) => m.name),
+    ],
+  };
+}
+
+export function groupProjectMatches(
+  project: GroupProject,
+  terms: string[],
+  course: Course | undefined
+): boolean {
+  const { selfFields, contextFields } = groupProjectSearchFields(project, course);
+  const norm = (arr: string[]) => arr.map((f) => normalizeSearchText(f));
+  const self = norm(selfFields);
+  const context = norm(contextFields);
+  const selfHit = terms.some((t) => self.some((f) => f.includes(t)));
+  if (!selfHit) return false;
+  return terms.every((t) => self.some((f) => f.includes(t)) || context.some((f) => f.includes(t)));
+}
+
 // ---- Palette 结果模型 ----
 
-export type PaletteItemKind = "command" | "course" | "assignment" | "material" | "calendar";
+export type PaletteItemKind =
+  | "command"
+  | "course"
+  | "assignment"
+  | "material"
+  | "calendar"
+  | "group-project";
 
 /** Material 结果图标：复用 lucide 既有视觉，不为此重构 PaletteItem.icon 接口 */
 const MATERIAL_ICONS: Record<Material["type"], ElementType> = {
@@ -632,6 +680,33 @@ export function buildPalette(query: string, ctx: CommandContext): PaletteItem[] 
       sub: `${typeLabel} · ${dateSearchFields(m.date)[1] ?? ""} · ${timeText}`,
       icon: m.type === "exam" ? GraduationCap : CalendarDays,
       run: () => { ctx.setSelectedCalendarMarkId(m.id); ctx.close(); },
+    });
+  }
+
+  // ---- GroupProject（Workflow UX V4）：Deep Link 顺序 = 先写目标实体再切 Workspace；
+  // 仅 Project（GroupTask 无 detail/scroll contract，刻意不做）----
+  for (const p of ctx.groupProjects) {
+    if (!groupProjectMatches(p, terms, courseLookup.get(p.courseId))) continue;
+    const course = p.courseId ? courseLookup.get(p.courseId) : undefined;
+    items.push({
+      key: `group-project-${p.id}`,
+      kind: "group-project",
+      group: "search",
+      label: p.title,
+      sub: [
+        "小组项目",
+        course?.name,
+        `${(p.members ?? []).length} 人`,
+        `${(p.tasks ?? []).length} 个任务`,
+      ]
+        .filter(Boolean)
+        .join(" · "),
+      icon: Users,
+      run: () => {
+        ctx.setSelectedGroupProjectId(p.id);
+        ctx.setActiveTab("group");
+        ctx.close();
+      },
     });
   }
 

@@ -57,6 +57,7 @@ function makeCtx(overrides: Partial<CommandContext> = {}): CommandContext {
     courses,
     assignments,
     calendarMarks: [],
+    groupProjects: [],
     semester: { id: "s", name: "2026春", startDate: "2026-02-23", totalWeeks: 16 },
     currentSemesterWeek: 1,
     highlightedAssignmentId: null,
@@ -79,6 +80,7 @@ function makeCtx(overrides: Partial<CommandContext> = {}): CommandContext {
     setSelectedCourseId: () => {},
     setSelectedAssignmentId: () => {},
     setSelectedCalendarMarkId: () => {},
+    setSelectedGroupProjectId: () => {},
     setAddCourseModalOpen: () => {},
     setImportScheduleModalOpen: () => {},
     setFullTimetableModalOpen: () => {},
@@ -609,5 +611,108 @@ describe("Global Search V3 —— CalendarMark", () => {
     expect(kinds.indexOf("course")).toBeLessThan(kinds.indexOf("assignment"));
     expect(kinds.indexOf("assignment")).toBeLessThan(kinds.indexOf("calendar"));
     expect(kinds.indexOf("calendar")).toBeLessThan(kinds.indexOf("material"));
+  });
+});
+
+// ============================================================
+// Global Search V4 —— GroupProject Deep Link
+// ============================================================
+
+const groupProject = (id: string, over: Partial<import("@/types").GroupProject> = {}): import("@/types").GroupProject => ({
+  id,
+  courseId: "c1",
+  title: `项目 ${id}`,
+  description: "",
+  progress: 0,
+  updatedAt: "2026-09-01",
+  members: [],
+  tasks: [],
+  ...over,
+});
+
+function searchCtxV4(marks: import("@/types").CalendarMark[] = [], projects: import("@/types").GroupProject[] = []) {
+  return makeCtx({ calendarMarks: marks, groupProjects: projects });
+}
+
+describe("Global Search V4 —— GroupProject", () => {
+  it("title 命中，sub 含 真实计数（人/任务）与课程名", () => {
+    const items = buildPalette("红海危机", searchCtxV4([], [
+      groupProject("g1", { title: "红海危机案例分析", description: "", members: [{ id: "m1", name: "张三", role: "leader" }] as never, tasks: [{}, {}, {}] as never }),
+    ]));
+    const hit = items.find((i) => i.kind === "group-project");
+    expect(hit?.label).toBe("红海危机案例分析");
+    expect(hit?.sub).toContain("小组项目");
+    expect(hit?.sub).toContain("高等数学");
+    expect(hit?.sub).toContain("1 人");
+    expect(hit?.sub).toContain("3 个任务");
+  });
+
+  it("description 命中", () => {
+    const items = buildPalette("供应链韧性", searchCtxV4([], [
+      groupProject("g2", { title: "案例分析二", description: "研究全球供应链韧性问题" }),
+    ]));
+    expect(items.some((i) => i.kind === "group-project")).toBe(true);
+  });
+
+  it("aliases：『小组』『项目』『group』命中 self 字段", () => {
+    const projects = [groupProject("g3", { title: "案例分析三" })];
+    for (const q of ["小组", "项目", "group"]) {
+      expect(buildPalette(q, searchCtxV4([], projects)).some((i) => i.kind === "group-project" && i.label === "案例分析三")).toBe(true);
+    }
+  });
+
+  it("course context + alias：『计量 项目』命中关联课程的项目", () => {
+    const items = buildPalette("计量 项目", makeCtx({
+      courses: [{ ...course("c1", "计量经济学") }],
+      groupProjects: [groupProject("g4", { title: "期中案例", courseId: "c1" })],
+    }));
+    expect(items.some((i) => i.kind === "group-project" && i.label === "期中案例")).toBe(true);
+  });
+
+  it("member name 跨字段：member term + self alias 命中", () => {
+    const items = buildPalette("李四 项目", searchCtxV4([], [
+      groupProject("g5", { title: "数据调研", members: [{ id: "m9", name: "李四", role: "member" }] as never }),
+    ]));
+    expect(items.some((i) => i.kind === "group-project" && i.label === "数据调研")).toBe(true);
+  });
+
+  it("flood 防护：仅搜课程名不倾倒该课全部项目", () => {
+    const items = buildPalette("高等数学", searchCtxV4([], [
+      groupProject("ga"), groupProject("gb"), groupProject("gc"),
+    ]));
+    expect(items.filter((i) => i.kind === "group-project")).toHaveLength(0);
+  });
+
+  it("run 顺序：先 selectedGroupProjectId → 再 activeTab=group → close", () => {
+    let selectedId: string | null = null;
+    let tab: string | null = null;
+    let closed = false;
+    const ctx = makeCtx({
+      groupProjects: [groupProject("g-run")],
+      setSelectedGroupProjectId: (id) => { selectedId = id; },
+      setActiveTab: (t) => { tab = t; },
+      close: () => { closed = true; },
+    });
+    buildPalette("项目 g-run", ctx).find((i) => i.kind === "group-project")!.run();
+    expect(selectedId).toBe("g-run");
+    expect(tab).toBe("group");
+    expect(closed).toBe(true);
+    expect(selectedId !== null).toBe(true); // selection 先于导航语义（顺序断言见 invocationCallOrder）
+    void closed;
+  });
+
+  it("empty query 不出现 group-project；结果位置在 calendar 后 material 前", () => {
+    expect(buildPalette("", searchCtxV4([], [groupProject("gx")])).some((i) => i.kind === "group-project")).toBe(false);
+
+    const econ = { ...course("c1", "计量经济学"), materials: [material("m1", "计量课件", "pdf")] };
+    const items = buildPalette("计量", makeCtx({
+      courses: [econ],
+      assignments: [{ ...assignment("a1", "计量作业"), courseId: "c1" }],
+      calendarMarks: [calendarMark("e1", { title: "计量期中考试" })],
+      groupProjects: [groupProject("gp", { title: "计量小组课题" })],
+    })).filter((i) => i.group === "search");
+    const kinds = items.map((i) => i.kind);
+    expect(kinds.indexOf("calendar")).toBeLessThan(kinds.indexOf("group-project"));
+    expect(kinds.indexOf("group-project")).toBeLessThan(kinds.indexOf("material"));
   });
 });

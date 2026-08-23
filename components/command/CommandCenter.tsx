@@ -35,6 +35,7 @@ export function CommandCenter() {
     courses,
     assignments,
     calendarMarks,
+    groupProjects,
     semester,
     currentSemesterWeek,
     activeTab,
@@ -46,6 +47,7 @@ export function CommandCenter() {
     setSelectedCourseId,
     setSelectedAssignmentId,
     setSelectedCalendarMarkId,
+    setSelectedGroupProjectId,
     setAddCourseModalOpen,
     setImportScheduleModalOpen,
     setFullTimetableModalOpen,
@@ -62,6 +64,7 @@ export function CommandCenter() {
       courses: s.courses,
       assignments: s.assignments,
       calendarMarks: s.calendarMarks,
+      groupProjects: s.groupProjects,
       semester: s.semester,
       currentSemesterWeek: s.currentSemesterWeek,
       activeTab: s.activeTab,
@@ -73,6 +76,7 @@ export function CommandCenter() {
       setSelectedCourseId: s.setSelectedCourseId,
       setSelectedAssignmentId: s.setSelectedAssignmentId,
       setSelectedCalendarMarkId: s.setSelectedCalendarMarkId,
+      setSelectedGroupProjectId: s.setSelectedGroupProjectId,
       setAddCourseModalOpen: s.setAddCourseModalOpen,
       setImportScheduleModalOpen: s.setImportScheduleModalOpen,
       setFullTimetableModalOpen: s.setFullTimetableModalOpen,
@@ -146,6 +150,7 @@ export function CommandCenter() {
       courses,
       assignments,
       calendarMarks,
+      groupProjects,
       semester,
       currentSemesterWeek,
       highlightedAssignmentId,
@@ -158,6 +163,7 @@ export function CommandCenter() {
       setSelectedCourseId: (id: string | null) => setSelectedCourseId(id),
       setSelectedAssignmentId: (id: string | null) => setSelectedAssignmentId(id),
       setSelectedCalendarMarkId: (id: string | null) => setSelectedCalendarMarkId(id),
+      setSelectedGroupProjectId: (id: string | null) => setSelectedGroupProjectId(id),
       setAddCourseModalOpen: (o: boolean) => setAddCourseModalOpen(o),
       setImportScheduleModalOpen: (o: boolean) => setImportScheduleModalOpen(o),
       setFullTimetableModalOpen: (o: boolean) => setFullTimetableModalOpen(o),
@@ -165,7 +171,7 @@ export function CommandCenter() {
       resetToCurrentWeek: () => resetToCurrentWeek(),
       close: () => setSearchModalOpen(false),
     }),
-    [activeTab, selectedCourseId, selectedAssignmentId, highlightedAssignmentId, assignmentSelection, courses, assignments, calendarMarks, semester, currentSemesterWeek, assignmentActions, setActiveTab, setSelectedCourseId, setSelectedAssignmentId, setSelectedCalendarMarkId, setAddCourseModalOpen, setImportScheduleModalOpen, setFullTimetableModalOpen, setAssignmentTimeSlice, resetToCurrentWeek, setSearchModalOpen, setSettingsModalOpen, setAssignmentWorkspaceView, openReminderCenter]
+    [activeTab, selectedCourseId, selectedAssignmentId, highlightedAssignmentId, assignmentSelection, courses, assignments, calendarMarks, groupProjects, semester, currentSemesterWeek, assignmentActions, setActiveTab, setSelectedCourseId, setSelectedAssignmentId, setSelectedCalendarMarkId, setAddCourseModalOpen, setImportScheduleModalOpen, setFullTimetableModalOpen, setAssignmentTimeSlice, resetToCurrentWeek, setSearchModalOpen, setSettingsModalOpen, setAssignmentWorkspaceView, openReminderCenter]
   );
 
   const items = useMemo(() => buildPalette(query, ctx), [query, ctx]);

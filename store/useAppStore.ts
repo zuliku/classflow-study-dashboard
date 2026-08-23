@@ -510,6 +510,10 @@ export interface AppState {
   /** 独立 DDL CalendarMark 的轻量详情（Task/DDL Detail Panel：linked mark 仍走 Assignment 详情） */
   selectedCalendarMarkId: string | null;
   setSelectedCalendarMarkId: (id: string | null) => void;
+  /** Workflow UX V4：Group Project Deep Link——transient UI selection（跨 Workspace 精确直达）。
+   *  不持久化（不在 partialize 白名单）；GroupCollaborationView 统一经 resolved project 消费。 */
+  selectedGroupProjectId: string | null;
+  setSelectedGroupProjectId: (id: string | null) => void;
   isSearchModalOpen: boolean;
   setSearchModalOpen: (open: boolean) => void;
   /** 设置中心 Modal：侧边栏 / 底部导航 / 命令面板统一入口 */
@@ -857,6 +861,10 @@ export const useAppStore = create<AppState>()(
           selectedAssignmentId: id !== null ? null : state.selectedAssignmentId,
         })),
 
+      // Transient selection（不持久化）：Search Deep Link / Group Workspace 共享
+      selectedGroupProjectId: null,
+      setSelectedGroupProjectId: (id) => set({ selectedGroupProjectId: id }),
+
       isSearchModalOpen: false,
       setSearchModalOpen: (open) => set({ isSearchModalOpen: open }),
       isSettingsModalOpen: false,
@@ -997,6 +1005,7 @@ export const useAppStore = create<AppState>()(
           selectedCourseId: null,
           selectedAssignmentId: null,
           selectedCalendarMarkId: null,
+          selectedGroupProjectId: null,
           selectedConflict: null,
           assignmentSelection: [],
           assignmentPeekId: null,
