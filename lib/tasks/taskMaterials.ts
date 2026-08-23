@@ -53,3 +53,21 @@ export function sanitizeAssignmentMaterialIds(
   }
   return out;
 }
+
+/**
+ * Workflow UX V7：Assignment ↔ Material 关系不变量（write boundary 统一清洗）。
+ * 对 assignment.materialIds 按「当前 courseId 所属 Course.materials」重新校验：
+ * 跨课程 / 已删除的 ID 一律清除；空结果 → undefined（无关联语义）。
+ * update / create 写入边界共用本函数；不新建 Relation Manager。
+ */
+export function sanitizeAssignmentMaterialLinks(
+  assignment: Pick<Assignment, "courseId" | "materialIds"> & Partial<Assignment>,
+  courses: Course[]
+): Assignment {
+  const valid = sanitizeAssignmentMaterialIds(
+    assignment,
+    courses,
+    assignment.materialIds ?? []
+  );
+  return { ...assignment, materialIds: valid.length > 0 ? valid : undefined } as Assignment;
+}

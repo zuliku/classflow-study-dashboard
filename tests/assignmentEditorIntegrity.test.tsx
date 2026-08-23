@@ -74,7 +74,17 @@ function makeAssignment(over: Partial<Assignment> = {}): Assignment {
   } as Assignment;
 }
 
-const COURSES = [course("c-jl", "计量经济学"), course("c-wl", "物理")];
+// Course.materials 是 Material Source of Truth；assignment 引用的 ID 必须真实存在
+const COURSES = [
+  {
+    ...course("c-jl", "计量经济学"),
+    materials: [
+      { id: "mat-1", title: "回归分析讲义", type: "pdf" as const, uploadDate: "2026-09-01" },
+      { id: "mat-2", title: "第三章课件", type: "ppt" as const, uploadDate: "2026-09-01" },
+    ],
+  },
+  course("c-wl", "物理"),
+];
 
 beforeEach(() => {
   cleanup();
@@ -314,5 +324,122 @@ describe("Legacy editor entries regression", () => {
     act(() => openAssignmentEditor({}));
     trigger = screen.getAllByRole("combobox", { name: "优先级" })[0];
     expect(trigger.textContent).toContain("紧急");
+  });
+});
+
+
+// ============================================================
+// Workflow UX V7 —— Material relation invariant（write boundary）
+// ============================================================
+const matA1 = { id: "mat-a1", title: "A 课资料", type: "pdf" as const, uploadDate: "2026-09-01" };
+const matB1 = { id: "mat-b1", title: "B 课资料", type: "ppt" as const, uploadDate: "2026-09-01" };
+const shared = { id: "mat-shared", title: "同名资料", type: "doc" as const, uploadDate: "2026-09-01" };
+
+function twoCourseFixture() {
+  return [
+    { ...course("c-a", "课程 A"), materials: [matA1, shared] },
+    { ...course("c-b", "课程 B"), materials: [matB1, shared] },
+  ];
+}
+
+describe("Workflow UX V7 —— Material relation invariant", () => {
+  it("patch courseId 跨课程 → materialIds 清为 undefined", () => {
+    useAppStore.setState({
+      courses: twoCourseFixture(),
+      assignments: [makeAssignment({ courseId: "c-a", materialIds: ["mat-a1"] })],
+    });
+    act(() => {
+      useAppStore.getState().updateAssignmentPatch("a-target", { courseId: "c-b" });
+    });
+    const a = getAssignment();
+    expect(a.courseId).toBe("c-b");
+    expect(a.materialIds).toBeUndefined();
+  });
+
+  it("同 ID 恰好存在于新 Course → 只保留新课程真实存在的 ID", () => {
+    useAppStore.setState({
+      courses: twoCourseFixture(),
+      assignments: [makeAssignment({ courseId: "c-a", materialIds: ["mat-a1", "mat-shared"] })],
+    });
+    act(() => {
+      useAppStore.getState().updateAssignmentPatch("a-target", { courseId: "c-b" });
+    });
+    const a = getAssignment();
+    expect(a.materialIds).toEqual(["mat-shared"]); // mat-a1 跨课程清除；shared 保留
+  });
+
+  it("普通 title patch（course 不变）→ materialIds 原样保留", () => {
+    useAppStore.setState({
+      courses: twoCourseFixture(),
+      assignments: [makeAssignment({ courseId: "c-a", materialIds: ["mat-a1"] })],
+    });
+    act(() => {
+      useAppStore.getState().updateAssignmentPatch("a-target", { title: "只改标题" });
+    });
+    expect(getAssignment().materialIds).toEqual(["mat-a1"]);
+  });
+
+  it("priority / status / DDL patch → relation 不回归", () => {
+    useAppStore.setState({
+      courses: twoCourseFixture(),
+      assignments: [makeAssignment({ courseId: "c-a", materialIds: ["mat-a1"], ddl: undefined })],
+    });
+    act(() => {
+      useAppStore.getState().updateAssignmentPatch("a-target", {
+        priority: "urgent",
+        status: "doing",
+        ddl: "2026-11-01T12:00:00",
+      });
+    });
+    expect(getAssignment().materialIds).toEqual(["mat-a1"]);
+  });
+
+  it("直接 updateAssignment 传跨课程 materialIds → 被清理", () => {
+    useAppStore.setState({
+      courses: twoCourseFixture(),
+      assignments: [makeAssignment({ courseId: "c-a" })],
+    });
+    const cross = { ...getAssignment(), materialIds: ["mat-b1"] };
+    act(() => {
+      useAppStore.getState().updateAssignment(cross);
+    });
+    expect(getAssignment().materialIds).toBeUndefined();
+  });
+
+  it("addAssignment 传跨课程 materialIds → 被清理", () => {
+    useAppStore.setState({ courses: twoCourseFixture() });
+    let newId = "";
+    act(() => {
+      newId = useAppStore.getState().addAssignment({
+        courseId: "c-a",
+        title: "新建跨课程",
+        description: "",
+        priority: "low",
+        status: "todo",
+        progress: 0,
+        tags: [],
+        materialIds: ["mat-b1"],
+      } as never);
+    });
+    expect(useAppStore.getState().assignments.find((a) => a.id === newId)!.materialIds).toBeUndefined();
+  });
+
+  it("addAssignmentWithId 同样执行 invariant；同 ID 存在于新课程则保留", () => {
+    useAppStore.setState({ courses: twoCourseFixture() });
+    let id1 = "";
+    let id2 = "";
+    act(() => {
+      id1 = useAppStore.getState().addAssignmentWithId(
+        { courseId: "c-a", title: "跨", description: "", priority: "low", status: "todo", progress: 0, tags: [], materialIds: ["mat-b1"] } as never,
+        "a-inv1"
+      );
+      id2 = useAppStore.getState().addAssignmentWithId(
+        { courseId: "c-a", title: "同ID", description: "", priority: "low", status: "todo", progress: 0, tags: [], materialIds: ["mat-shared"] } as never,
+        "a-inv2"
+      );
+    });
+    expect(id1).toBe("a-inv1");
+    expect(useAppStore.getState().assignments.find((a) => a.id === id1)!.materialIds).toBeUndefined();
+    expect(useAppStore.getState().assignments.find((a) => a.id === id2)!.materialIds).toEqual(["mat-shared"]);
   });
 });

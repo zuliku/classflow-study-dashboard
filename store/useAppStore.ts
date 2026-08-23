@@ -26,7 +26,10 @@ import {
 import { createDefaultSemester, getSemesterWeek } from "@/lib/semester";
 import { getLocalDDLDate, parseLocalDDL } from "@/lib/ddl";
 import { normalizeAssignment, hasTaskDeadline } from "@/lib/tasks/taskSemantics";
-import { sanitizeAssignmentMaterialIds } from "@/lib/tasks/taskMaterials";
+import {
+  sanitizeAssignmentMaterialIds,
+  sanitizeAssignmentMaterialLinks,
+} from "@/lib/tasks/taskMaterials";
 import { TaskWorkspaceView } from "@/lib/tasks/taskViews";
 import { deleteFileBlob, clearAllFileBlobs } from "@/lib/fileStorage";
 import { isLegacyDDLMarkForAssignment, linkLegacyDDLMarks } from "@/lib/calendarMark";
@@ -1400,15 +1403,34 @@ export const useAppStore = create<AppState>()(
       },
 
       addAssignment: (assignmentData, context) =>
-        createAssignmentWithId(set, assignmentData, createId("a"), context),
+        createAssignmentWithId(
+          set,
+          // Workflow UX V7：create boundary 同一 invariant（Resource → Task Promotion 安全前提）
+          sanitizeAssignmentMaterialLinks(assignmentData, get().courses),
+          createId("a"),
+          context
+        ),
 
       // Task 7 Change Set V2：reserved-ID 创建（仅事务层使用；Preflight → Re-preflight → Commit 同一实体 ID）
       addAssignmentWithId: (assignmentData, id, context) =>
-        createAssignmentWithId(set, assignmentData, id, context),
+        createAssignmentWithId(
+          set,
+          sanitizeAssignmentMaterialLinks(assignmentData, get().courses),
+          id,
+          context
+        ),
 
       updateAssignment: (updatedAssignment, context) =>
         set((state) => {
-          const next = normalizeAssignment(updatedAssignment);
+          // Workflow UX V7：Material relation invariant —— 写入边界统一按 next.courseId
+          // 重新校验 materialIds（跨课程 / 已删资料清除；空 → undefined）。
+          // 无论调用方是 updateAssignmentPatch / setAssignmentMaterialIds / 其它 Domain
+          // action，都不可能写入 dangling relation。DDL mark / Reminder / History /
+          // recurrence completion 的既有顺序全部保持不变。
+          const next = sanitizeAssignmentMaterialLinks(
+            normalizeAssignment(updatedAssignment),
+            state.courses
+          );
           const oldAssignment = state.assignments.find((a) => a.id === next.id);
           const hasDdl = hasTaskDeadline(next);
           const newDdlDate = getLocalDDLDate(next.ddl);
@@ -1552,14 +1574,14 @@ export const useAppStore = create<AppState>()(
 
       /**
        * Task 6A：设置任务关联的课程资料 ID。
-       * 仅保留所属 Course.materials 中真实存在的 ID（跨课程引用自动清洗）+ 去重；
-       * 空结果 → undefined（无关联）。复用 updateAssignment（DDL mark 同步为 no-op）。
+       * Workflow UX V7：invariant 由 updateAssignment 写入边界统一保证——
+       * 此处不再 pre-sanitize（避免第二套校验）；跨课程 / 已删 ID 在边界被清除，
+       * 空结果 → undefined。DDL mark 同步为 no-op（relation-only change）。
        */
       setAssignmentMaterialIds: (assignmentId, materialIds) => {
         const current = get().assignments.find((a) => a.id === assignmentId);
         if (!current) return;
-        const valid = sanitizeAssignmentMaterialIds(current, get().courses, materialIds);
-        get().updateAssignment({ ...current, materialIds: valid.length > 0 ? valid : undefined });
+        get().updateAssignment({ ...current, materialIds });
       },
 
       updateAssignmentStatus: (id, status, context) =>
