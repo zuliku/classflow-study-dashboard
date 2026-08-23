@@ -133,6 +133,8 @@ export function MiniCalendar() {
   // actions（zustand 引用稳定）
   const setSelectedCourseId = useAppStore((s) => s.setSelectedCourseId);
   const setSelectedAssignmentId = useAppStore((s) => s.setSelectedAssignmentId);
+  // Workflow UX V2：exam/activity agenda cell → 统一 CalendarMarkDetailDrawer
+  const setSelectedCalendarMarkId = useAppStore((s) => s.setSelectedCalendarMarkId);
   const updateAssignment = useAppStore((s) => s.updateAssignment);
 
   const [currentMonth, setCurrentMonth] = useState(new Date());
@@ -492,12 +494,14 @@ export function MiniCalendar() {
       kind: "exam" as const,
       label: "考试",
       time: "99:00",
+      onClick: () => setSelectedCalendarMarkId(m.id),
     })),
     ...dayActivities.map((m) => ({
       key: `ac_${m.id}`,
       kind: "activity" as const,
       label: "活动",
       time: "99:00",
+      onClick: () => setSelectedCalendarMarkId(m.id),
     })),
   ].sort((x, y) => x.time.localeCompare(y.time));
 

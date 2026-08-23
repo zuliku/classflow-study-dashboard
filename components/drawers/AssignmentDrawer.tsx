@@ -55,6 +55,7 @@ import {
 } from "@/lib/focus/assignmentFocusTransition";
 import { deriveFocusClock } from "@/lib/focus/focusDomain";
 import { FOCUS_ERROR_MESSAGES, formatFocusClock, formatFocusDurationMs } from "@/lib/focus/focusView";
+import { openTimelineAtDate } from "@/lib/timeline/openTimelineAtDate";
 
 const OVERLAY_ID = "assignment-drawer";
 
@@ -81,6 +82,7 @@ export function AssignmentDrawer() {
     calendarMarks,
     semester,
     currentSemesterWeek,
+    setCurrentSemesterWeek,
     studyBlocks,
     reminders,
     selectedAssignmentId,
@@ -304,7 +306,14 @@ export function AssignmentDrawer() {
 
   const handleViewInTimeline = () => {
     setSelectedAssignmentId(null);
-    setActiveTab("timetable");
+    // Workflow UX V2：精确跳到 DDL 所在教学周（本地日期语义；无 DDL 不伪造日期、不导航）
+    if (!assignment.ddl) return;
+    openTimelineAtDate({
+      date: assignment.ddl.slice(0, 10),
+      semester,
+      setCurrentSemesterWeek,
+      setActiveTab: (tab) => setActiveTab(tab),
+    });
   };
 
   const course = courses.find((c) => c.id === assignment.courseId);

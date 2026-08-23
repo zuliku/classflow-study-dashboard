@@ -75,8 +75,11 @@ export function deriveTimelineItems(input: DeriveTimelineInput): TimelineItem[] 
       date: m.date,
       startTime: m.startTime,
       endTime: m.endTime,
-      // P3 fix 4：独立 ddl mark 携带 mark id（per-target 默认提醒控制定位）
-      calendarMarkId: m.type === "ddl" ? m.id : undefined,
+      // Workflow UX V2：所有来自 CalendarMark 的可交互 item（独立 ddl / exam / activity）
+      // 都携带 mark id → 统一打开 CalendarMarkDetailDrawer；
+      // type="course" 已排除；Assignment-linked ddl mark 已在上面去重排除
+      //（assignment DDL item 仍走 assignment source，无此字段）
+      calendarMarkId: m.id,
     });
   }
 

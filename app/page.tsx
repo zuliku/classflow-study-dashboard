@@ -17,7 +17,7 @@ import { SettingsModal } from "@/components/settings/SettingsModal";
 import { LearningAnalyticsView } from "@/components/analytics/LearningAnalyticsView";
 import { CourseDetailDrawer } from "@/components/drawers/CourseDetailDrawer";
 import { AssignmentDrawer } from "@/components/drawers/AssignmentDrawer";
-import { DDLDetailDrawer } from "@/components/drawers/DDLDetailDrawer";
+import { CalendarMarkDetailDrawer } from "@/components/drawers/CalendarMarkDetailDrawer";
 import { CommandCenter } from "@/components/command/CommandCenter";
 import { GlobalShortcutController } from "@/components/command/GlobalShortcutController";
 import { AddCourseModal } from "@/components/modals/AddCourseModal";
@@ -184,7 +184,7 @@ export default function Home() {
       {/* Global Drawers & Modals */}
       <CourseDetailDrawer />
       <AssignmentDrawer />
-      <DDLDetailDrawer />
+      <CalendarMarkDetailDrawer />
       <CommandCenter />
       <GlobalShortcutController />
       <SettingsModal />

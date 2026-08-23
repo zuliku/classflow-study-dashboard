@@ -128,6 +128,7 @@ export default defineConfig({
       "tests/uiMotionLifecycle.test.tsx",
       "tests/timelineOverlayLifecycle.test.tsx",
       "tests/workspaceStateConsistency.test.tsx",
+      "tests/calendarMarkDeepLink.test.tsx",
       "tests/drawerPresentation.test.ts",
       "tests/demoManualInjection.test.tsx",
       "tests/extensionsRuntimeTruth.test.tsx",

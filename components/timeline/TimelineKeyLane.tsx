@@ -170,13 +170,10 @@ export function TimelineKeyLane({
               {allDays.length > 0 && (
                 <div className="absolute left-0.5 right-0.5 top-1 space-y-0.5">
                   {allDays.slice(0, 2).map((it) => (
-                    <span
+                    <AllDayMark
                       key={it.id}
-                      title={`${it.title}（全天）`}
-                      className="block truncate text-[10px] font-semibold text-satin-grey bg-alabaster/80 border border-line rounded px-1 py-px"
-                    >
-                      全天 · {it.title}
-                    </span>
+                      item={it}
+                    />
                   ))}
                   {allDays.length > 2 && (
                     <span className="block text-[10px] font-bold text-sandrift pl-1">+{allDays.length - 2}</span>
@@ -359,10 +356,18 @@ function IntervalBlock({
   const exam = item.sourceType === "exam";
   const { open, setOpen, anchorLeave, cancelClose } = useHoverBridge();
   const ref = useRef<HTMLDivElement | null>(null);
+  const setSelectedCalendarMarkId = useAppStore((s) => s.setSelectedCalendarMarkId);
   const weekDay = item.date ? new Date(`${item.date}T00:00:00`).getDay() : 0;
   const dayLabel = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"][weekDay];
   const dateLabel = `${Number(item.date.slice(5, 7))}月${Number(item.date.slice(8, 10))}日`;
   const typeLabel = exam ? "考试" : "活动";
+
+  // Workflow UX V2：exam/activity 是真正可打开实体 → CalendarMarkDetailDrawer。
+  // Full Detail 打开时立即 semantic close hover preview（不等 mouseleave）。
+  const handleOpenDetail = () => {
+    setOpen(false);
+    if (item.calendarMarkId) setSelectedCalendarMarkId(item.calendarMarkId);
+  };
 
   // Semantic Geometry（真实时间比例）
   const trueWidthPx = widthRatio * colWidth;
@@ -382,9 +387,11 @@ function IntervalBlock({
         ref={ref}
         role="button"
         tabIndex={0}
-        aria-label={`${item.title}，${dayLabel} ${item.startTime ?? ""} 至 ${item.endTime ?? ""}`}
-        className="absolute z-10 outline-none"
+        aria-label={`${item.title}，${typeLabel}，${dateLabel} ${item.startTime ?? ""} 至 ${item.endTime ?? ""}`}
+        className="absolute z-10 cursor-pointer outline-none"
         style={{ left: `${leftPx}px`, top: `${top}px`, width: visualWidthPx }}
+        onClick={handleOpenDetail}
+        onKeyDown={cardKeyHandler(handleOpenDetail)}
         onMouseEnter={() => {
           cancelClose();
           setOpen(true);
@@ -431,5 +438,48 @@ function IntervalBlock({
         </div>
       </FloatingTimelineDetail>
     </>
+  );
+}
+
+/**
+ * All-day CalendarMark（exam / activity / 独立 ddl，无起止时间）：
+ * 原为纯 span（不可交互）；Workflow UX V2 起为真实 control——
+ * 点击 / Enter / Space 打开统一 CalendarMarkDetailDrawer。
+ * 保持原 compact geometry（两项上限 + +N 逻辑由调用方维持）。
+ * 无 calendarMarkId 的 item 不假造 interaction（保持纯展示）。
+ */
+function AllDayMark({ item }: { item: TimelineItem }) {
+  const setSelectedCalendarMarkId = useAppStore((s) => s.setSelectedCalendarMarkId);
+  const label = `全天 · ${item.title}`;
+
+  // 无 mark id：无法打开任何详情 → 保持纯展示（不假造 interaction）
+  if (!item.calendarMarkId) {
+    return (
+      <span
+        title={`${item.title}（全天）`}
+        className="block truncate text-[10px] font-semibold text-satin-grey bg-alabaster/80 border border-line rounded px-1 py-px"
+      >
+        {label}
+      </span>
+    );
+  }
+
+  const weekDay = item.date ? new Date(`${item.date}T00:00:00`).getDay() : 0;
+  const dayLabel = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"][weekDay];
+  const dateLabel = `${Number(item.date.slice(5, 7))}月${Number(item.date.slice(8, 10))}日`;
+  const typeLabel =
+    item.sourceType === "exam" ? "考试" : item.sourceType === "activity" ? "活动" : "截止";
+
+  return (
+    <button
+      type="button"
+      title={`${item.title}（全天）`}
+      aria-label={`${item.title}，${typeLabel}，${dateLabel} 全天`}
+      onClick={() => setSelectedCalendarMarkId(item.calendarMarkId!)}
+      onKeyDown={cardKeyHandler(() => setSelectedCalendarMarkId(item.calendarMarkId!))}
+      className="block w-full truncate text-left text-[10px] font-semibold text-satin-grey bg-alabaster/80 border border-line rounded px-1 py-px cursor-pointer hover:bg-alabaster hover:border-line-strong transition-colors focus-visible:outline-2 focus-visible:outline-charcoal/30"
+    >
+      {label}
+    </button>
   );
 }
