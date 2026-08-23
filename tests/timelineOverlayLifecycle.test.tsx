@@ -30,6 +30,8 @@ if (typeof HTMLElement !== "undefined" && !HTMLElement.prototype.scrollIntoView)
 }
 
 import { ArrangeSheet, MarkSheet } from "@/components/timeline/TimelineWorkspace";
+import { TimelineKeyLane } from "@/components/timeline/TimelineKeyLane";
+import type { TimelineItem } from "@/lib/timeline/timelineTypes";
 import { FloatingTimelineDetail } from "@/components/timeline/FloatingTimelineDetail";
 import { TimelineWorkspaceViewBar } from "@/components/timeline/TimelineWorkspaceViewBar";
 import { MOTION_EXIT_MS } from "@/lib/motion";
@@ -253,6 +255,69 @@ describe("FloatingTimelineDetail lifecycle", () => {
     expect(document.querySelector('[data-testid="floating-timeline-detail"]')).toBeNull();
   });
 
+  it("P0 regression：closed → open 真实生命周期下，Portal 挂载后立即完成定位（非 -9999）", () => {
+    const onRequestClose = vi.fn();
+    const { rerender } = render(<DetailHarness open={false} onRequestClose={onRequestClose} />);
+    // 初始关闭：无 Portal
+    expect(document.querySelector('[data-testid="floating-timeline-detail"]')).toBeNull();
+
+    // 真实 hover 路径：open false → true（presence 的 mounted 在 effect 后才翻转）
+    rerender(<DetailHarness open onRequestClose={onRequestClose} />);
+
+    const panel = document.querySelector('[data-testid="floating-timeline-detail"]') as HTMLElement;
+    expect(panel).toBeTruthy(); // DOM exists
+    // 本 Bug 恰是「DOM exists 但位置在屏幕外」——定位必须在 mount commit 内完成
+    expect(panel.style.left).not.toBe("-9999px");
+    expect(panel.style.top).not.toBe("-9999px");
+  });
+
+  it("visible lifecycle order：closed → open → mounted(hidden) → positioned → visible", () => {
+    const onRequestClose = vi.fn();
+    const { rerender } = render(<DetailHarness open={false} onRequestClose={onRequestClose} />);
+    rerender(<DetailHarness open onRequestClose={onRequestClose} />);
+
+    const panel = document.querySelector('[data-testid="floating-timeline-detail"]') as HTMLElement;
+    // 1) mounted：Portal 存在
+    expect(panel).toBeTruthy();
+    // 2) positioned：坐标已测量（非屏外）
+    expect(panel.style.left).not.toBe("-9999px");
+    // 3) visible=false：进入动画起点为透明（mount hidden）
+    expect(panel.className).toContain("opacity-0");
+
+    act(() => {
+      vi.advanceTimersByTime(16);
+      vi.advanceTimersByTime(16);
+    });
+    // visible=true：双 rAF 后进入动画完成态
+    const shown = document.querySelector('[data-testid="floating-timeline-detail"]') as HTMLElement;
+    expect(shown.className).toContain("opacity-100");
+    expect(shown.style.left).not.toBe("-9999px");
+  });
+
+  it("rapid reopen（exit 未结束）：重新测量当前 anchor，坐标非 -9999 且不沿用错误位置", () => {
+    const onRequestClose = vi.fn();
+    const { rerender } = render(<DetailHarness open onRequestClose={onRequestClose} />);
+    rerender(<DetailHarness open={false} onRequestClose={onRequestClose} />);
+    // exit 未结束即 reopen
+    rerender(<DetailHarness open onRequestClose={onRequestClose} />);
+    const panel = document.querySelector('[data-testid="floating-timeline-detail"]') as HTMLElement;
+    expect(panel).toBeTruthy();
+    // 关键：reopen 后 mount commit 内即完成重定位（非 -9999）
+    expect(panel.style.left).not.toBe("-9999px");
+    // 重新进入 enter 流程：双 rAF 后回到可见态
+    act(() => {
+      vi.advanceTimersByTime(16);
+      vi.advanceTimersByTime(16);
+    });
+    const reopened = document.querySelector('[data-testid="floating-timeline-detail"]') as HTMLElement;
+    expect(reopened.className).toContain("opacity-100");
+
+    act(() => {
+      vi.advanceTimersByTime(MOTION_EXIT_MS.fast * 2);
+    });
+    expect(document.querySelector('[data-testid="floating-timeline-detail"]')).toBeTruthy();
+  });
+
   it("semantic close：Esc listener 随 open 解除，exiting DOM 不再拥有 ownership", () => {
     const onRequestClose = vi.fn();
     const { rerender } = render(<DetailHarness open onRequestClose={onRequestClose} />);
@@ -426,5 +491,66 @@ describe("UI Productization V2.2 —— Workspace Controls & Form Primitive Adop
       expect(src).toContain('from "@/components/ui/Field"');
       expect(src).toContain('from "@/components/ui/SegmentedControl"');
     });
+  });
+});
+
+// ============================================================
+// Workflow UX V4 —— Caller Integration（hover glance ≠ click full detail）
+// ============================================================
+describe("TimelineKeyLane hover/click integration", () => {
+  it("A. DeadlinePoint：mouseEnter → 浮层出现；click → Assignment Full Detail（不回归）", () => {
+    useAppStore.setState({
+      assignments: [
+        { id: "asg-h", courseId: "c1", title: "计量经济学大作业", ddl: "2026-09-10T23:59:00", priority: "high", status: "todo", progress: 0, tags: [] } as unknown as Assignment,
+      ],
+      selectedAssignmentId: null,
+    });
+    const item: TimelineItem = {
+      id: "a-asg-h",
+      sourceId: "asg-h",
+      sourceType: "assignment",
+      temporalType: "deadline",
+      title: "计量经济学大作业",
+      date: WEEK_DATES[3],
+      startTime: "23:59",
+      priority: "high",
+    };
+    render(<TimelineKeyLane items={[item]} weekDates={WEEK_DATES} />);
+
+    const dot = screen.getByRole("button", { name: /计量经济学大作业/ });
+    // Hover = Glance：Floating Detail 出现
+    fireEvent.mouseEnter(dot);
+    expect(document.querySelector('[data-testid="floating-timeline-detail"]')).toBeTruthy();
+    expect(screen.getAllByText("计量经济学大作业").length).toBeGreaterThanOrEqual(1);
+    // Click = Full Detail：Assignment ownership
+    fireEvent.click(dot);
+    expect(useAppStore.getState().selectedAssignmentId).toBe("asg-h");
+    // semantic close hover preview on full-detail open
+    expect(useAppStore.getState().selectedCalendarMarkId).toBeNull();
+  });
+
+  it("B. IntervalBlock：mouseEnter → exam preview；click → CalendarMarkDetail ownership", () => {
+    useAppStore.setState({ selectedCalendarMarkId: null });
+    const item: TimelineItem = {
+      id: "m-ex1",
+      sourceId: "ex1",
+      sourceType: "exam",
+      temporalType: "interval",
+      title: "线性代数期中",
+      date: WEEK_DATES[2],
+      startTime: "14:00",
+      endTime: "16:00",
+      calendarMarkId: "ex1",
+    };
+    render(<TimelineKeyLane items={[item]} weekDates={WEEK_DATES} />);
+
+    const bar = screen.getByRole("button", { name: /线性代数期中/ });
+    fireEvent.mouseEnter(bar);
+    expect(document.querySelector('[data-testid="floating-timeline-detail"]')).toBeTruthy();
+    expect(screen.getByText(/考试/)).toBeTruthy(); // 类型标签出现在 preview
+    // Click = Full Detail：CalendarMark ownership
+    fireEvent.click(bar);
+    expect(useAppStore.getState().selectedCalendarMarkId).toBe("ex1");
+    expect(useAppStore.getState().selectedAssignmentId).toBeNull();
   });
 });

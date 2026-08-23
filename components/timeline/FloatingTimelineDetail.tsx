@@ -99,9 +99,13 @@ export function FloatingTimelineDetail({
   const popRef = useRef<HTMLDivElement | null>(null);
 
   useLayoutEffect(() => {
-    // semantic close：停止新的 position ownership 但保留最后一个 pos（exit 原位淡出）；
-    // 真正 unmount 后无需显式 reset，下次 open 重新测量
-    if (!open) return;
+    // Workflow UX V4 regression fix：必须等 mounted（Portal DOM 存在）后再测量。
+    // 真实 hover 生命周期：open=true 的首帧 mounted 仍为 false（presence 经 effect 置位），
+    // 若只依赖 open，layout effect 在 Portal 创建前跑一次 → popRef null → 定位提前 return，
+    // 之后 mounted 翻转不再触发 → pos=null → 面板停在 -9999 屏幕外。
+    // 语义：mount hidden → measure → visible（进入动画第一帧已在正确坐标）。
+    if (!open || !mounted) return;
+
     const anchor = anchorRef.current;
     const boundsEl = boundsRef.current;
     const pop = popRef.current;
@@ -122,7 +126,9 @@ export function FloatingTimelineDetail({
     const preferred: Direction[] = kind === "marker" ? ["right", "left", "bottom", "top"] : ["bottom", "top"];
     const next = computePlacement(ar, pr.width, pr.height, bounds, preferred);
     setPos(next);
-  }, [open, kind, anchorRef, boundsRef]);
+    // semantic close（open=false）不清空 pos：exit 原位淡出；
+    // rapid reopen 时 mounted 已 true，open false→true 变化触发重新测量当前 anchor。
+  }, [open, mounted, kind, anchorRef, boundsRef]);
 
   // Esc 所有权以 semantic open 为条件（不是 mounted）：visual exit 期间不再拦截用户输入
   useLayoutEffect(() => {
