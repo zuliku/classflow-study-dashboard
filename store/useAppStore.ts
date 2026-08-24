@@ -525,6 +525,11 @@ export interface AppState {
    *  pending 表达「待消费」语义；transient 不持久化；consume once 后即清 null。 */
   pendingTimelineArrangeAssignmentId: string | null;
   setPendingTimelineArrangeAssignmentId: (id: string | null) => void;
+  /** Workflow UX V11：live timer 完成 → Assignment Drawer follow-up 的一次性 UI intent。
+   *  跨 FocusRuntime（global）→ AssignmentDrawer（entity owner）持有事实目标；
+   *  不是业务数据、不持久化（不在 partialize 白名单）；consume once 后即清 null。 */
+  pendingFocusCompletionFollowUp: { assignmentId: string; sessionId: string } | null;
+  setPendingFocusCompletionFollowUp: (intent: { assignmentId: string; sessionId: string } | null) => void;
   isSearchModalOpen: boolean;
   setSearchModalOpen: (open: boolean) => void;
   /** 设置中心 Modal：侧边栏 / 底部导航 / 命令面板统一入口 */
@@ -888,6 +893,11 @@ export const useAppStore = create<AppState>()(
       setPendingTimelineArrangeAssignmentId: (id) =>
         set({ pendingTimelineArrangeAssignmentId: id }),
 
+      // Workflow UX V11：Focus timer 完成 → follow-up handoff intent（transient，consume once）
+      pendingFocusCompletionFollowUp: null,
+      setPendingFocusCompletionFollowUp: (intent) =>
+        set({ pendingFocusCompletionFollowUp: intent }),
+
       isSearchModalOpen: false,
       setSearchModalOpen: (open) => set({ isSearchModalOpen: open }),
       isSettingsModalOpen: false,
@@ -1030,6 +1040,7 @@ export const useAppStore = create<AppState>()(
           selectedCalendarMarkId: null,
           selectedGroupProjectId: null,
           pendingTimelineArrangeAssignmentId: null,
+          pendingFocusCompletionFollowUp: null,
           selectedConflict: null,
           assignmentSelection: [],
           assignmentPeekId: null,

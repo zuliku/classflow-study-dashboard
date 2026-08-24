@@ -103,6 +103,8 @@ export function AssignmentDrawer() {
     resumeFocusSession,
     finishFocusSession,
     setPendingTimelineArrangeAssignmentId,
+    pendingFocusCompletionFollowUp,
+    setPendingFocusCompletionFollowUp,
   } = useAppStore();
   const pushToast = useToastStore((s) => s.pushToast);
   const handoff = useKiroHandoff();
@@ -200,6 +202,31 @@ export function AssignmentDrawer() {
     observedFocusRef.current = nextObserved;
     if (completedSessionId) setRecentCompletedSessionId(completedSessionId);
   }, [focusSessions, currentId]);
+
+  // ---- Workflow UX V11：consume timer-completion handoff intent（一次性）----
+  // 声明顺序位于 currentId reset effect 之后：closed→open 同一 commit 内
+  // reset（清 recent）先跑、consume 后写 → Follow-up 不会被 reset 清掉（无 setTimeout 赌时序）。
+  // 校验链：目标实体匹配 → 目标仍存在 → session 仍 completed 且归属一致；
+  // 合法 = setRecent(sessionId) + clear pending；不合法/目标已删 = 仅 clear，不猜实体关系。
+  useEffect(() => {
+    if (!pendingFocusCompletionFollowUp) return;
+    const intent = pendingFocusCompletionFollowUp;
+    const clearPending = () => setPendingFocusCompletionFollowUp(null);
+    // 目标 Assignment 已删除：丢弃 intent（不写 stale selection、不给错误任务显示）
+    if (!assignments.some((a) => a.id === intent.assignmentId)) {
+      clearPending();
+      return;
+    }
+    // 只服务当前打开的实体；其它任务保持 pending 等待目标打开
+    if (intent.assignmentId !== currentId) return;
+    const session = focusSessions.find((s) => s.id === intent.sessionId);
+    if (!session || session.status !== "completed" || session.assignmentId !== currentId) {
+      clearPending();
+      return;
+    }
+    clearPending();
+    setRecentCompletedSessionId(intent.sessionId);
+  }, [pendingFocusCompletionFollowUp, setPendingFocusCompletionFollowUp, assignments, focusSessions, currentId]);
 
   const assignment =
     assignments.find((a) => a.id === displayedId) ?? currentAssignment ?? staleAssignment;

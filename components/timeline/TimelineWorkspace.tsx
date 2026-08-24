@@ -714,11 +714,9 @@ export function TimelineWorkspace() {
                     title={focusTooltip}
                   />
                 ) : (
-                  <Pause
-                    className="h-2 w-2 shrink-0 text-satin-grey"
-                    aria-hidden="true"
-                    title={focusTooltip}
-                  />
+                  <span className="flex shrink-0 items-center" title={focusTooltip}>
+                    <Pause className="h-2 w-2 text-satin-grey" aria-hidden="true" />
+                  </span>
                 ))}
               {isFocusAnchor && showMeta && (
                 <span

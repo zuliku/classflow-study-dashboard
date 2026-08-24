@@ -8,6 +8,8 @@ import { FocusSession } from "@/types";
 import {
   FocusRuntimePhase,
   getFocusRuntimeDecision,
+  revalidateTimerCompletionHandoff,
+  resolveTimerCompletionHandoff,
 } from "@/lib/focus/focusRuntime";
 import { deriveFocusClock } from "@/lib/focus/focusDomain";
 import { playFocusCompleteSound, showFocusBrowserNotification } from "@/lib/focus/focusNotifications";
@@ -34,15 +36,43 @@ export function FocusRuntime() {
     }
   }, []);
 
-  /** live 完成交付：complete 成功后才通知（音 + Toast + 系统通知） */
+  /** live 完成交付：complete 成功后才通知（音 + Toast + 系统通知）；
+   *  Workflow UX V11：Drawer 未打开同一任务且 Assignment 有效时，Toast 附带
+   *  「查看任务」→ 点击时 revalidate → 写一次性 intent → 打开 Drawer（不切 Workspace） */
   const deliverLiveComplete = useCallback(
     (session: FocusSession) => {
       const now = Date.now();
       const result = useAppStore.getState().completeFocusSession(session.id, "timer", now);
       if (!result.ok) return; // Store 已 completed / 已结算 → 不重复通知
+      const state = useAppStore.getState();
+      const handoffTarget = resolveTimerCompletionHandoff({
+        assignmentId: session.assignmentId,
+        sessionId: session.id,
+        selectedAssignmentId: state.selectedAssignmentId,
+        assignments: state.assignments,
+      });
       pushToast({
         message: "专注完成，休息一下吧",
         type: "info",
+        ...(handoffTarget
+          ? {
+              actionLabel: "查看任务",
+              onAction: () => {
+                // 点击时刻重新验证（不用完成时的旧 snapshot）
+                const fresh = useAppStore.getState();
+                const intent = revalidateTimerCompletionHandoff({
+                  assignmentId: handoffTarget.assignmentId,
+                  sessionId: handoffTarget.sessionId,
+                  assignments: fresh.assignments,
+                  focusSessions: fresh.focusSessions,
+                });
+                if (!intent) return;
+                // 顺序必须 intent → entity open：Drawer 首帧即有目标 context
+                fresh.setPendingFocusCompletionFollowUp(intent);
+                fresh.setSelectedAssignmentId(intent.assignmentId);
+              },
+            }
+          : {}),
       });
       playFocusCompleteSound();
       const prefs = useReminderPreferencesStore.getState();
