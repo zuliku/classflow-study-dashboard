@@ -30,6 +30,7 @@ import {
   presentPlanMetric,
 } from "@/lib/analytics/presentation";
 import { cn } from "@/lib/utils";
+import { handleOpenOutlookAssignment } from "@/lib/analytics/outlookAssignmentAction";
 import { WorkspaceHeader } from "@/components/layout/WorkspaceHeader";
 import { AnalyticsWorkspaceViewBar } from "@/components/analytics/AnalyticsWorkspaceViewBar";
 import { DisclosureRegion } from "@/components/ui/DisclosureRegion";
@@ -64,6 +65,8 @@ export function LearningAnalyticsView() {
   const reducedMotion = useEffectiveReducedMotion();
   const setActiveTab = useAppStore((s) => s.setActiveTab);
   const setSelectedCourseId = useAppStore((s) => s.setSelectedCourseId);
+  // Workflow UX V13：Outlook task → 全局 Assignment Drawer（selective action 订阅，不切 Workspace）
+  const setSelectedAssignmentId = useAppStore((s) => s.setSelectedAssignmentId);
   const courses = useAppStore((s) => s.courses);
   const { data, loading, error } = useLearningAnalytics(preset);
   const [outlookHorizon, setOutlookHorizon] = useState<StudyOutlookHorizon>(7);
@@ -285,6 +288,7 @@ export function LearningAnalyticsView() {
                   outlook={outlook.data}
                   horizonDays={outlookHorizon}
                   onHorizonChange={setOutlookHorizon}
+                  onOpenAssignment={handleOpenOutlookAssignment}
                 />
                 <EstimateCalibrationCard calibration={outlook.data.estimateCalibration} />
               </div>

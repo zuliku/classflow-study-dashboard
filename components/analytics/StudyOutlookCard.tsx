@@ -38,12 +38,16 @@ export function StudyOutlookCard({
   outlook,
   horizonDays,
   onHorizonChange,
+  onOpenAssignment,
 }: {
   outlook: StudyOutlook;
   horizonDays: StudyOutlookHorizon;
   onHorizonChange: (h: StudyOutlookHorizon) => void;
+  /** Workflow UX V13：Outlook task → 全局 Assignment Drawer（由 View 持有 navigation ownership） */
+  onOpenAssignment: (assignmentId: string) => void;
 }) {
-  const { handoffPrompt } = useKiroSessionActions();
+  // 低频 actions subscription：保持 actions surface，不订阅完整 session（避免 streaming rerender）
+  const { handoffPrompt, handoffAssignmentPrompt } = useKiroSessionActions();
   const { summary, tasks, bottleneckDays, firstCapacityShortfall } = outlook;
   const top = tasks.slice(0, 5);
   const attentionCount = summary.counts.atRisk + summary.counts.attention;
@@ -140,7 +144,13 @@ export function StudyOutlookCard({
       ) : (
         <div className="divide-y divide-line-soft">
           {top.map((t) => (
-            <OutlookTaskRow key={t.assignmentId} task={t} onEstimate={() => handoffPrompt(ESTIMATE_PROMPT)} />
+            <OutlookTaskRow
+              key={t.assignmentId}
+              task={t}
+              onOpenAssignment={onOpenAssignment}
+              // Workflow UX V13：Assignment-scoped Kiro context（exact id，不再 generic）
+              onEstimate={() => handoffAssignmentPrompt(t.assignmentId, ESTIMATE_PROMPT)}
+            />
           ))}
         </div>
       )}
@@ -190,59 +200,86 @@ export function StudyOutlookCard({
   );
 }
 
-function OutlookTaskRow({ task, onEstimate }: { task: OutlookTask; onEstimate: () => void }) {
+/**
+ * Outlook task row（Workflow UX V13 action closure）：
+ * - 主内容区 = 原生 <button>（mouse / Enter / Space / focus 原生语义）→ 打开 Assignment Drawer
+ * - 「估算任务」= sibling secondary control（禁止 nested interactive，不用 stopPropagation 修复）
+ * - Health badge 属于 main button 内容（span 合法），不是独立 clickable control
+ */
+function OutlookTaskRow({
+  task,
+  onOpenAssignment,
+  onEstimate,
+}: {
+  task: OutlookTask;
+  onOpenAssignment: (assignmentId: string) => void;
+  onEstimate: () => void;
+}) {
   const health = HEALTH_COPY[task.health];
   const missingEstimate = task.reasons.includes("missing_estimate");
   const scheduledAfterDeadline = task.reasons.includes("scheduled_after_deadline");
   const unscheduled = task.unscheduledMinutes ?? 0;
   return (
     <div className="px-4 py-2.5 space-y-1">
-      <div className="flex items-center justify-between gap-2">
-        <p className="text-[11px] font-semibold text-charcoal truncate">{task.title}</p>
-        <span className={cn("shrink-0 text-[9px] font-bold px-1.5 py-0.5 rounded-md border", health.cls)}>
-          {health.label}
-        </span>
-      </div>
-      <p className="text-[10px] text-satin-grey">
-        {missingEstimate ? (
-          <>
-            缺少预计耗时，暂无法判断安排是否充足。
-            <button
-              type="button"
-              onClick={onEstimate}
-              className="ml-1.5 text-[10px] font-bold text-sandrift bg-transparent border border-line rounded px-1.5 py-0.5 hover:text-charcoal hover:border-line-strong transition-colors inline-flex items-center gap-0.5"
-            >
-              <KiroLogoIcon className="w-2.5 h-2.5" />
-              估算任务
-            </button>
-          </>
-        ) : task.health === "overdue" ? (
-          <>{formatDeadline(task.deadline)} · 已逾期，不占用未来容量</>
-        ) : task.capacityComplete === null ? (
-          <>{formatDeadline(task.deadline)} · 信息不足</>
-        ) : task.capacityComplete ? (
-          <>
-            {formatDeadline(task.deadline)}
-            {unscheduled > 0 ? (
-              <span className="text-[#627566]"> · 尚需安排 {Math.round(unscheduled)}min · 当前容量可覆盖</span>
-            ) : (
-              <span className="text-[#627566]"> · 已安排覆盖</span>
-            )}
-          </>
-        ) : task.combinedCapacityComplete === true ? (
-          <>
-            {formatDeadline(task.deadline)} · 尚需安排 {Math.round(unscheduled)}min · 非课程时间不足 · 可通过课程重叠方案覆盖
-          </>
-        ) : (
-          <>
-            {formatDeadline(task.deadline)} · 尚需安排 {Math.round(unscheduled)}min · 预计仍缺{" "}
-            {Math.round(task.combinedCapacityShortfallMinutes ?? task.capacityShortfallMinutes ?? 0)}min
-          </>
-        )}
-        {scheduledAfterDeadline && (
-          <span className="text-sandrift"> · Deadline 后仍有已安排时段</span>
-        )}
-      </p>
+      <button
+        type="button"
+        aria-label={`打开任务《${task.title}》`}
+        title={`打开任务《${task.title}》`}
+        onClick={() => onOpenAssignment(task.assignmentId)}
+        className="w-full text-left rounded-lg outline-none cursor-pointer group/row hover:bg-alabaster/60 focus-visible:bg-alabaster/60 focus-visible:outline-2 focus-visible:outline-charcoal/30 transition-colors duration-[var(--motion-fast)]"
+      >
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-[11px] font-semibold text-charcoal truncate">{task.title}</p>
+          <span className={cn("shrink-0 text-[9px] font-bold px-1.5 py-0.5 rounded-md border", health.cls)}>
+            {health.label}
+          </span>
+        </div>
+        {/* facts 文本属于 main surface（只读信息；估算 control 在外层 sibling） */}
+        <p className="text-[10px] text-satin-grey pointer-events-none">
+          {missingEstimate ? (
+            <>缺少预计耗时，暂无法判断安排是否充足。</>
+          ) : task.health === "overdue" ? (
+            <>{formatDeadline(task.deadline)} · 已逾期，不占用未来容量</>
+          ) : task.capacityComplete === null ? (
+            <>{formatDeadline(task.deadline)} · 信息不足</>
+          ) : task.capacityComplete ? (
+            <>
+              {formatDeadline(task.deadline)}
+              {unscheduled > 0 ? (
+                <span className="text-[#627566]"> · 尚需安排 {Math.round(unscheduled)}min · 当前容量可覆盖</span>
+              ) : (
+                <span className="text-[#627566]"> · 已安排覆盖</span>
+              )}
+            </>
+          ) : task.combinedCapacityComplete === true ? (
+            <>
+              {formatDeadline(task.deadline)} · 尚需安排 {Math.round(unscheduled)}min · 非课程时间不足 · 可通过课程重叠方案覆盖
+            </>
+          ) : (
+            <>
+              {formatDeadline(task.deadline)} · 尚需安排 {Math.round(unscheduled)}min · 预计仍缺{" "}
+              {Math.round(task.combinedCapacityShortfallMinutes ?? task.capacityShortfallMinutes ?? 0)}min
+            </>
+          )}
+          {scheduledAfterDeadline && (
+            <span className="text-sandrift"> · Deadline 后仍有已安排时段</span>
+          )}
+        </p>
+      </button>
+      {missingEstimate && (
+        // sibling of main button：点击只走 Kiro exact-context handoff，绝不触发打开 Assignment
+        <div className="flex justify-end">
+          <button
+            type="button"
+            onClick={onEstimate}
+            aria-label={`让 Kiro 估算任务《${task.title}》预计耗时`}
+            className="text-[10px] font-bold text-sandrift bg-transparent border border-line rounded px-1.5 py-0.5 hover:text-charcoal hover:border-line-strong transition-colors inline-flex items-center gap-0.5 focus-visible:outline-2 focus-visible:outline-charcoal/30"
+          >
+            <KiroLogoIcon className="w-2.5 h-2.5" />
+            估算任务
+          </button>
+        </div>
+      )}
     </div>
   );
 }
