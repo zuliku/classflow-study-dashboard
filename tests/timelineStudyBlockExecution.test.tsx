@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+﻿// @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import React from "react";
 import {
@@ -8,6 +8,7 @@ import {
   fireEvent,
   act,
   waitFor,
+  within,
 } from "@testing-library/react";
 
 // Polyfills
@@ -82,7 +83,7 @@ vi.mock("@/components/kiro/KiroSessionProvider", async (importOriginal) => {
 import { TimelineWorkspace } from "@/components/timeline/TimelineWorkspace";
 import { AssignmentDrawer } from "@/components/drawers/AssignmentDrawer";
 import { useAppStore } from "@/store/useAppStore";
-import type { Assignment, Course, CourseSchedule, Semester, StudyBlock } from "@/types";
+import type { Assignment, Course, CourseSchedule, FocusSession, Semester, StudyBlock } from "@/types";
 
 /**
  * Workflow UX V9 —— StudyBlock → Assignment Execution Handoff：
@@ -190,6 +191,7 @@ beforeEach(() => {
     selectedCourseId: null,
     selectedCalendarMarkId: null,
     pendingTimelineArrangeAssignmentId: null,
+    focusSessions: [],
     preferences: { ...prefs, enableScheduleDirectManipulation: true },
   });
 });
@@ -617,6 +619,206 @@ describe("CourseTaskMarker rows → Assignment", () => {
     fireEvent.mouseLeave(dot);
     // detail 仍在（grace 内）
     expect(floatingDetail()).toBeTruthy();
+  });
+});
+
+// ============================================================
+// Workflow UX V10 —— StudyBlock Active Focus Awareness
+// ============================================================
+const FOCUS_STARTED_MON_1407 = new Date(`${WEEK7_MON}T14:07:00`).getTime();
+const FOCUS_STARTED_TUE_1430 = new Date(`${WEEK7_TUE}T14:30:00`).getTime();
+
+const mkActiveFocus = (over: Partial<FocusSession> = {}): FocusSession =>
+  ({
+    id: "f-anchor",
+    plannedMinutes: 25,
+    startedAt: FOCUS_STARTED_MON_1407,
+    activeStartedAt: FOCUS_STARTED_MON_1407,
+    accumulatedActiveMs: 0,
+    status: "running",
+    assignmentId: "a-exec",
+    source: "manual",
+    createdAt: FOCUS_STARTED_MON_1407,
+    updatedAt: FOCUS_STARTED_MON_1407,
+    ...over,
+  }) as FocusSession;
+
+describe("StudyBlock focus anchor visual", () => {
+  it("startedAt 命中 block → 对应 block 存在 focus state（aria + 状态文案）", () => {
+    seedBlocks([mkLinkedBlock("sb-f1", WEEK7_MON)]);
+    useAppStore.setState({ focusSessions: [mkActiveFocus()] });
+    render(<TimelineWorkspace />);
+
+    expect(
+      screen.getByLabelText("打开任务《实证报告学习》，该任务正在专注")
+    ).toBeTruthy();
+    const blockEl = getStudyBlockEl();
+    expect(within(blockEl).getByText("专注中")).toBeTruthy();
+  });
+
+  it("同 Assignment 第二个 block（时间不含 startedAt）→ 无 focus state", () => {
+    seedBlocks([
+      mkLinkedBlock("sb-f2a", WEEK7_MON), // 14:00–15:00 ← anchor
+      {
+        ...mkLinkedBlock("sb-f2b", WEEK7_MON),
+        title: "另一段学习",
+        startTime: "19:00",
+        endTime: "20:00",
+      } as unknown as StudyBlock,
+    ]);
+    useAppStore.setState({ focusSessions: [mkActiveFocus()] }); // 14:07 只落在第一段
+    render(<TimelineWorkspace />);
+
+    expect(
+      screen.getByLabelText("打开任务《实证报告学习》，该任务正在专注")
+    ).toBeTruthy();
+    // 第二段：普通 aria（无 suffix）、无状态文案
+    expect(screen.getByLabelText("打开任务《另一段学习》")).toBeTruthy();
+    const second = screen
+      .getByText("另一段学习")
+      .closest('[data-testid="timeline-study-block"]') as HTMLElement;
+    expect(within(second).queryByText("专注中")).toBeNull();
+  });
+
+  it("startedAt 不在任何 block 内 → 任何 block 都不标（Header chip 仍显示）", () => {
+    seedBlocks([
+      mkLinkedBlock("sb-f3a", WEEK7_MON),
+      {
+        ...mkLinkedBlock("sb-f3b", WEEK7_MON),
+        title: "晚间学习",
+        startTime: "19:00",
+        endTime: "20:00",
+      } as unknown as StudyBlock,
+    ]);
+    useAppStore.setState({
+      focusSessions: [
+        mkActiveFocus({ startedAt: new Date(`${WEEK7_MON}T17:30:00`).getTime() }),
+      ],
+    });
+    render(<TimelineWorkspace />);
+
+    expect(screen.getByLabelText("打开任务《实证报告学习》")).toBeTruthy();
+    expect(screen.getByLabelText("打开任务《晚间学习》")).toBeTruthy();
+    expect(screen.queryByText("专注中")).toBeNull(); // block 层无；chip 文本为「剩余 · 专注中」不同节点结构
+  });
+
+  it("paused → anchor 保留但状态变 paused", () => {
+    seedBlocks([mkLinkedBlock("sb-f4", WEEK7_MON)]);
+    useAppStore.setState({
+      focusSessions: [
+        mkActiveFocus({ status: "paused", activeStartedAt: undefined, accumulatedActiveMs: 300_000 }),
+      ],
+    });
+    render(<TimelineWorkspace />);
+
+    expect(
+      screen.getByLabelText("打开任务《实证报告学习》，专注已暂停")
+    ).toBeTruthy();
+    expect(within(getStudyBlockEl()).getByText("已暂停")).toBeTruthy();
+  });
+
+  it("completed → 状态清除（anchor 不再存在）", () => {
+    seedBlocks([mkLinkedBlock("sb-f5", WEEK7_MON)]);
+    useAppStore.setState({
+      focusSessions: [
+        mkActiveFocus({
+          status: "completed",
+          activeStartedAt: undefined,
+          endedAt: FOCUS_STARTED_MON_1407 + 1_500_000,
+          actualActiveMs: 1_500_000,
+        }),
+      ],
+    });
+    render(<TimelineWorkspace />);
+
+    expect(screen.getByLabelText("打开任务《实证报告学习》")).toBeTruthy();
+    expect(screen.queryByText("专注中")).toBeNull();
+    expect(screen.queryByText("已暂停")).toBeNull();
+  });
+});
+
+// ============================================================
+// Workflow UX V10 —— CourseTaskMarker focus awareness
+// ============================================================
+describe("CourseTaskMarker focus awareness", () => {
+  function markerHarnessWithFocus(
+    blocks: StudyBlock[],
+    session: FocusSession | null
+  ) {
+    seedBlocks(blocks);
+    useAppStore.setState({ focusSessions: session ? [session] : [] });
+    render(<TimelineWorkspace />);
+    const dot = screen.getByLabelText(/个学习任务与本课程时间重叠/) as HTMLElement;
+    fireEvent.mouseEnter(dot);
+    return dot;
+  }
+
+  it("重叠 anchor block → Marker trigger 有 focus awareness（aria 同步）", () => {
+    const dot = markerHarnessWithFocus(
+      [MARKER_BLOCK_A], // Tue 14:10–15:00
+      mkActiveFocus({ startedAt: FOCUS_STARTED_TUE_1430 })
+    );
+    expect(dot.getAttribute("aria-label")).toBe(
+      "1 个学习任务与本课程时间重叠，其中当前专注任务 1 个"
+    );
+  });
+
+  it("panel 中只有 anchor row 显示「专注中」；同 Assignment 其它 row 不显示", () => {
+    // 同 Assignment（a-exec）的第二段：15:00–15:50 不含 startedAt → 不是 anchor
+    const sameAssignmentBlockC = {
+      ...MARKER_BLOCK_A,
+      id: "mk-c",
+      title: "重叠学习 C",
+      startTime: "15:00",
+      endTime: "15:50",
+    } as unknown as StudyBlock;
+    markerHarnessWithFocus(
+      [MARKER_BLOCK_A, sameAssignmentBlockC],
+      mkActiveFocus({ startedAt: FOCUS_STARTED_TUE_1430 })
+    );
+
+    const rowA = screen.getByRole("button", { name: "打开任务 重叠学习 A" });
+    expect(rowA.textContent).toContain("专注中");
+    const rowC = screen.getByRole("button", { name: "打开任务 重叠学习 C" });
+    expect(rowC.textContent).not.toContain("专注中");
+    expect(rowC.textContent).not.toContain("已暂停");
+  });
+
+  it("paused → anchor row 显示「已暂停」", () => {
+    markerHarnessWithFocus(
+      [MARKER_BLOCK_A],
+      mkActiveFocus({
+        status: "paused",
+        activeStartedAt: undefined,
+        startedAt: FOCUS_STARTED_TUE_1430,
+        accumulatedActiveMs: 120_000,
+      })
+    );
+    const rowA = screen.getByRole("button", { name: "打开任务 重叠学习 A" });
+    expect(rowA.textContent).toContain("已暂停");
+    expect(rowA.textContent).not.toContain("专注中");
+  });
+
+  it("anchor row：pointerdown/up/click 仍能打开 Assignment（V9 契约不回归）", async () => {
+    markerHarnessWithFocus(
+      [MARKER_BLOCK_A],
+      mkActiveFocus({ startedAt: FOCUS_STARTED_TUE_1430 })
+    );
+    const rowA = screen.getByRole("button", { name: "打开任务 重叠学习 A" });
+    fireEvent.pointerDown(rowA);
+    fireEvent.pointerUp(rowA);
+    fireEvent.click(rowA);
+    await waitFor(() => {
+      expect(useAppStore.getState().selectedAssignmentId).toBe("a-exec");
+    });
+  });
+
+  it("无 anchor → trigger aria 保持原样", () => {
+    seedBlocks([MARKER_BLOCK_A]);
+    useAppStore.setState({ focusSessions: [] });
+    render(<TimelineWorkspace />);
+    const dot = screen.getByLabelText(/个学习任务与本课程时间重叠/);
+    expect(dot.getAttribute("aria-label")).toBe("1 个学习任务与本课程时间重叠");
   });
 });
 

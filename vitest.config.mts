@@ -133,6 +133,8 @@ export default defineConfig({
       "tests/materialLinkIntegrity.test.tsx",
       "tests/timelineArrangeDeepLink.test.tsx",
       "tests/timelineStudyBlockExecution.test.tsx",
+      "tests/focusStudyBlockAnchor.test.ts",
+      "tests/timelineActiveFocusChip.test.tsx",
       "tests/drawerPresentation.test.ts",
       "tests/demoManualInjection.test.tsx",
       "tests/extensionsRuntimeTruth.test.tsx",

@@ -11,6 +11,7 @@ import {
   ListChecks,
   CalendarClock,
   BookOpenCheck,
+  Pause,
   X,
 } from "lucide-react";
 import { format } from "date-fns";
@@ -41,6 +42,7 @@ import {
 import { TimetableGrid } from "@/components/dashboard/TimetableGrid";
 import { TimelineKeyLane } from "@/components/timeline/TimelineKeyLane";
 import { FloatingTimelineDetail } from "@/components/timeline/FloatingTimelineDetail";
+import { TimelineActiveFocusChip } from "@/components/timeline/TimelineActiveFocusChip";
 import { TimelineUnscheduledShelf } from "@/components/timeline/TimelineUnscheduledShelf";
 import { getWeekDateRange, formatWeekDateRange } from "@/lib/semester";
 import { deriveTimelineItems, deriveUnscheduledAssignments } from "@/lib/timeline/deriveTimelineItems";
@@ -51,6 +53,7 @@ import {
   createQuickStudyBlockCandidate,
 } from "@/lib/timeline/studyBlockInteraction";
 import { timeToMinutes } from "@/lib/timeline/timelineGeometry";
+import { resolveFocusStudyBlockAnchor } from "@/lib/timeline/focusStudyBlockAnchor";
 import { findCourseOverlapsForStudyBlock, isCourseOverlapApproved } from "@/lib/planning/courseOverlapPolicy";
 import {
   analyzeStudyBlockPlacement,
@@ -123,6 +126,7 @@ export function TimelineWorkspace() {
     updateStudyBlock,
     addCalendarMark,
     scheduleOccurrenceOverrides,
+    focusSessions,
   } = useAppStore();
   const pushToast = useToastStore((s) => s.pushToast);
   const handoff = useKiroHandoff();
@@ -607,6 +611,25 @@ export function TimelineWorkspace() {
     [schedules, scheduleOccurrenceOverrides, currentSemesterWeek, semester.totalWeeks]
   );
 
+  // ---- Workflow UX V10：Active Focus Awareness（无 tick 投影）----
+  // 本组件只订阅 focusSessions 推导 anchor/status（事件驱动，非每秒 tick）；
+  // 倒计时 1s tick 隔离在 TimelineActiveFocusChip 子组件内，
+  // TimelineWorkspace 含 TimetableGrid / Drag / Ghost，严禁每秒 rerender。
+  const activeFocusSession = useMemo(
+    () =>
+      focusSessions.find((s) => s.status === "running" || s.status === "paused") ?? null,
+    [focusSessions]
+  );
+  // anchor 只由 session.startedAt + StudyBlock 时间窗推导（纯函数，不写 Store）
+  const focusAnchorBlockId = useMemo(
+    () => resolveFocusStudyBlockAnchor({ session: activeFocusSession, studyBlocks })?.id ?? null,
+    [activeFocusSession, studyBlocks]
+  );
+  const focusStatus: "running" | "paused" | null =
+    activeFocusSession?.status === "running" || activeFocusSession?.status === "paused"
+      ? activeFocusSession.status
+      : null;
+
   // ---- StudyBlock 层（Grid 内弱时间块；Course > StudyBlock：重叠时不绘制 Card）----
   const studyLayer = (ctx: {
     dayOfWeek: number;
@@ -647,12 +670,19 @@ export function TimelineWorkspace() {
           const showMeta = heightPct >= 3.4;
           const isDraggingThis = studyDrag.type === "dragging" && studyDrag.origin.id === b.id;
           const isRebalanced = rebalanceMoveIds.has(b.id);
+          // Workflow UX V10：execution anchor = startedAt 命中该 block 时间窗（唯一可信，
+          // 同 Assignment 其它 block 不标）；running / paused 各自低侵入视觉
+          const isFocusAnchor = b.id === focusAnchorBlockId;
+          const focusRunning = isFocusAnchor && focusStatus === "running";
+          const focusPaused = isFocusAnchor && focusStatus === "paused";
           // Workflow UX V9：linked = assignmentId 存在且 Assignment 真实存在（stale 防御）。
           // linked → 主区域是真实 <button>（原生键盘语义）；standalone → 普通 div，不伪造任务语义。
           const linkedAssignment = b.assignmentId
             ? assignments.find((a) => a.id === b.assignmentId)
             : undefined;
-          const openTaskLabel = `打开任务《${b.title}》`;
+          const openTaskLabel = `打开任务《${b.title}》${
+            focusRunning ? "，该任务正在专注" : focusPaused ? "，专注已暂停" : ""
+          }`;
           const handleOpenLinkedAssignment = (e: React.MouseEvent<HTMLButtonElement>) => {
             // 只吞掉 pointer 生成的 click（detail > 0）；键盘激活 detail=0 不受 stale suppression 影响
             if (e.detail > 0 && studyBlockClickSuppressedRef.current) {
@@ -671,9 +701,36 @@ export function TimelineWorkspace() {
           const titleText = linkedAssignment
             ? `${b.title} · ${timeHint} · 点击打开任务`
             : `${b.title} · ${timeHint}`;
-          // 主区域内容（linked button / standalone div 共用排版）：title + 课程重叠批准 + duration
+          // 主区域内容（linked button / standalone div 共用排版）：focus 状态 + title + 课程重叠批准 + duration
+          const focusTooltip = focusRunning
+            ? `任务《${b.title}》正在专注`
+            : `任务《${b.title}》专注已暂停`;
           const blockMainContent = (
             <>
+              {isFocusAnchor &&
+                (focusRunning ? (
+                  <span
+                    className="h-1.5 w-1.5 shrink-0 rounded-full bg-[#2E7D5B]"
+                    title={focusTooltip}
+                  />
+                ) : (
+                  <Pause
+                    className="h-2 w-2 shrink-0 text-satin-grey"
+                    aria-hidden="true"
+                    title={focusTooltip}
+                  />
+                ))}
+              {isFocusAnchor && showMeta && (
+                <span
+                  className={cn(
+                    "shrink-0 text-[9px] font-bold",
+                    focusRunning ? "text-charcoal" : "text-satin-grey"
+                  )}
+                  title={focusTooltip}
+                >
+                  {focusRunning ? "专注中" : "已暂停"}
+                </span>
+              )}
               <span className="truncate text-[10px] font-semibold text-satin-grey">
                 {b.title}
               </span>
@@ -734,7 +791,10 @@ export function TimelineWorkspace() {
                 // Linked hover affordance（克制：边框/底色略增强，无 scale/glow）
                 linkedAssignment &&
                   !isDraggingThis &&
-                  "hover:border-line-strong hover:bg-pastel-mint/30"
+                  "hover:border-line-strong hover:bg-pastel-mint/30",
+                // Workflow UX V10：execution anchor 低侵入状态（不改变 geometry，无 pulse/glow）
+                focusRunning && !isDraggingThis && "border-line-strong bg-pastel-mint/30",
+                focusPaused && !isDraggingThis && "bg-alabaster/60"
               )}
               style={{ top: `${topPct}%`, height: `${heightPct}%`, minHeight: touchesEdge ? undefined : 6 }}
             >
@@ -980,6 +1040,8 @@ export function TimelineWorkspace() {
         schedule={schedule}
         hasConflict={hasConflict}
         boundsRef={wrapRef}
+        focusAnchorBlockId={focusAnchorBlockId}
+        focusStatus={focusStatus}
       />
     );
   };
@@ -1025,9 +1087,11 @@ export function TimelineWorkspace() {
 
   const isToday = (dateStr: string) => dateStr === todayStr;
 
-  // ---- App Chrome V2.2：WorkspaceHeader actions（Ask Kiro / More）+ primaryAction（新建） ----
+  // ---- App Chrome V2.2：WorkspaceHeader actions（Active Focus / Ask Kiro / More）+ primaryAction（新建） ----
   const headerActions = (
     <>
+      {/* Workflow UX V10：Active Focus Awareness（idle 不渲染；1s tick 在子组件内） */}
+      <TimelineActiveFocusChip />
       <KiroFlowButton
         icon={KIRO_ICON}
         label="Ask Kiro"
@@ -1288,11 +1352,16 @@ function CourseTaskMarker({
   schedule,
   hasConflict,
   boundsRef,
+  focusAnchorBlockId = null,
+  focusStatus = null,
 }: {
   blocks: StudyBlock[];
   schedule: CourseSchedule;
   hasConflict: boolean;
   boundsRef: React.RefObject<HTMLDivElement | null>;
+  /** Workflow UX V10：本组 block 命中 execution anchor 的 id（无则 null） */
+  focusAnchorBlockId?: string | null;
+  focusStatus?: "running" | "paused" | null;
 }) {
   // Workflow UX V9：linked block row → Assignment Drawer（global owner，留在 Timeline 上下文）
   const assignments = useAppStore((s) => s.assignments);
@@ -1313,6 +1382,10 @@ function CourseTaskMarker({
     }
   };
 
+  // Workflow UX V10：本组重叠 block 中是否包含 execution anchor（trigger 轻 ring + aria 同步）
+  const markerHasFocus =
+    focusAnchorBlockId !== null && blocks.some((b) => b.id === focusAnchorBlockId);
+
   return (
     <>
       <div
@@ -1324,7 +1397,9 @@ function CourseTaskMarker({
         <button
           type="button"
           tabIndex={0}
-          aria-label={`${count} 个学习任务与本课程时间重叠`}
+          aria-label={`${count} 个学习任务与本课程时间重叠${
+            markerHasFocus ? "，其中当前专注任务 1 个" : ""
+          }`}
           aria-expanded={open}
           onClick={(e) => {
             e.stopPropagation();
@@ -1343,7 +1418,16 @@ function CourseTaskMarker({
           className="w-[20px] h-[20px] -m-[1px] flex items-center justify-center rounded-full cursor-pointer outline-none transition-[opacity,box-shadow] duration-[var(--motion-fast)] hover:ring-2 hover:ring-inset hover:ring-[#A87952]/40"
           title="查看重叠的学习任务"
         >
-          <span className="block w-[7px] h-[7px] rounded-full bg-[#A87952]" />
+          <span
+            className={cn(
+              "block w-[7px] h-[7px] rounded-full bg-[#A87952]",
+              // Workflow UX V10：包含 anchor → 非常轻的 ring emphasis（不变大、不闪烁）
+              markerHasFocus &&
+                (focusStatus === "running"
+                  ? "ring-2 ring-inset ring-[#2E7D5B]/30"
+                  : "ring-2 ring-inset ring-satin-grey/30")
+            )}
+          />
         </button>
       </div>
 
@@ -1373,12 +1457,15 @@ function CourseTaskMarker({
             const linkedAssignmentId = b.assignmentId
               ? assignments.find((a) => a.id === b.assignmentId)?.id ?? null
               : null;
+            // Workflow UX V10：只有 anchor row 显示专注状态（同 Assignment 其它 row 不标）
+            const isAnchorRow = b.id === focusAnchorBlockId;
             const rowInner = (
               <>
                 <p className="text-[10px] font-semibold text-charcoal leading-snug">{b.title}</p>
                 <p className="text-[10px] text-satin-grey">
                   {b.startTime}–{b.endTime}
                   {linkedAssignmentId ? " · 点击打开" : ""}
+                  {isAnchorRow ? (focusStatus === "running" ? " · 专注中" : " · 已暂停") : ""}
                 </p>
               </>
             );
