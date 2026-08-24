@@ -339,8 +339,6 @@ describe("Timeline pending arrange intent consume", () => {
         expect(screen.getByTestId("timeline-arrange-sheet")).toBeTruthy();
       });
       const sheetDialog = screen.getByTestId("timeline-arrange-sheet");
-      // eslint-disable-next-line no-console
-      console.log("SHEET_HTML_LEN:", sheetDialog.innerHTML.length, "HAS_CONFIRM:", sheetDialog.innerHTML.includes("确认安排"), "SHOWN:", sheetDialog.innerHTML.includes("计量经济学大作业"));
       fireEvent.click(within(sheetDialog).getByRole("button", { name: "确认安排" }));
       await waitFor(() => {
         expect(useAppStore.getState().studyBlocks.length).toBe(1);

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useLayoutEffect, useRef, useState } from "react";
+import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { usePresence } from "@/lib/usePresence";
 import { MOTION_EXIT_MS } from "@/lib/motion";
@@ -12,6 +12,10 @@ import { cn } from "@/lib/utils";
  * - Collision Detection：按真实 anchor/popover/workspace 矩形选择 placement，再 clamp
  * - bounds = Timeline Workspace ∩ Viewport，内边距 10px
  * - Esc 关闭；mouseenter/leave 转发（调用方实现 hover bridge）
+ * - 可选 closeOnOutsidePointerDown：由本组件同时持有 anchor + Portal panel ref，
+ *   判断 inside = anchor ∋ target || panel ∋ target；两边都不含才 onRequestClose。
+ *   （Portal 面板在 document.body 下，调用方用自身 ref 判 outside 必然误判——
+ *    outside 边界必须归面板 owner 所有）
  *
  * Presence Lifecycle（Motion V2.1）：
  * - semantic `open` = 交互所有权（Esc / outside listener 均以 open 为条件，exiting DOM 不吞输入）
@@ -79,6 +83,7 @@ export function FloatingTimelineDetail({
   kind,
   ariaLabel,
   onRequestClose,
+  closeOnOutsidePointerDown = false,
   onMouseEnter,
   onMouseLeave,
   children,
@@ -89,6 +94,9 @@ export function FloatingTimelineDetail({
   kind: FloatingDetailKind;
   ariaLabel?: string;
   onRequestClose: () => void;
+  /** Workflow UX V9：true 时由本组件注册 document pointerdown（capture），
+   *  target 同时不在 anchor 与 Portal panel 内才 onRequestClose；默认 false 不影响既有消费者 */
+  closeOnOutsidePointerDown?: boolean;
   onMouseEnter?: () => void;
   onMouseLeave?: () => void;
   children: React.ReactNode;
@@ -139,6 +147,22 @@ export function FloatingTimelineDetail({
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [open, onRequestClose]);
+
+  // Outside pointerdown 契约（可选）：与 Esc 同样以 semantic open 为条件。
+  // inside = anchor ∋ target || popRef(panel) ∋ target；只有两边都 false 才 close，
+  // 因此 panel 内 pointerdown 不会抢先 semantic close（row click 仍完整走 open→select 流程）
+  useEffect(() => {
+    if (!closeOnOutsidePointerDown || !open) return;
+    const onDocPointerDown = (e: PointerEvent) => {
+      const target = e.target as Node | null;
+      if (!target) return;
+      if (anchorRef.current?.contains(target)) return;
+      if (popRef.current?.contains(target)) return;
+      onRequestClose();
+    };
+    document.addEventListener("pointerdown", onDocPointerDown, true);
+    return () => document.removeEventListener("pointerdown", onDocPointerDown, true);
+  }, [closeOnOutsidePointerDown, open, onRequestClose, anchorRef]);
 
   if (!mounted) return null;
 
