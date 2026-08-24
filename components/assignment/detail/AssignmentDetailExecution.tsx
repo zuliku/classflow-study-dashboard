@@ -36,6 +36,8 @@ export function AssignmentDetailExecution({
   estimatedMinutesLabel,
   scheduleSummary,
   onViewSchedule,
+  viewScheduleDisabled,
+  viewScheduleDisabledTitle,
   subtasks,
   onToggleSubtask,
   progress,
@@ -48,6 +50,9 @@ export function AssignmentDetailExecution({
   estimatedMinutesLabel: string;
   scheduleSummary: StudyScheduleSummary;
   onViewSchedule: () => void;
+  /** Workflow UX V8：全部 StudyBlock 均不在当前学期范围 → 禁用查看（muted disabled pattern，非 clickable no-op） */
+  viewScheduleDisabled?: boolean;
+  viewScheduleDisabledTitle?: string;
   subtasks: { id: string; title: string; completed: boolean }[];
   onToggleSubtask: (subtaskId: string) => void;
   progress: number;
@@ -85,7 +90,14 @@ export function AssignmentDetailExecution({
             <button
               type="button"
               onClick={onViewSchedule}
-              className="shrink-0 text-[11px] font-bold text-satin-grey transition-colors hover:text-charcoal"
+              disabled={viewScheduleDisabled}
+              title={viewScheduleDisabled ? viewScheduleDisabledTitle : undefined}
+              className={cn(
+                "shrink-0 text-[11px] font-bold transition-colors",
+                viewScheduleDisabled
+                  ? "cursor-not-allowed text-sandrift/60"
+                  : "text-satin-grey hover:text-charcoal"
+              )}
             >
               {scheduleSummary.hasBlocks ? "在时间表查看" : "安排"}
             </button>

@@ -1,4 +1,4 @@
-﻿import { create } from "zustand";
+import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import {
   Course,
@@ -521,6 +521,10 @@ export interface AppState {
    *  不持久化（不在 partialize 白名单）；GroupCollaborationView 统一经 resolved project 消费。 */
   selectedGroupProjectId: string | null;
   setSelectedGroupProjectId: (id: string | null) => void;
+  /** Workflow UX V8：Assignment → Timeline ArrangeSheet 的一次性 navigation intent。
+   *  pending 表达「待消费」语义；transient 不持久化；consume once 后即清 null。 */
+  pendingTimelineArrangeAssignmentId: string | null;
+  setPendingTimelineArrangeAssignmentId: (id: string | null) => void;
   isSearchModalOpen: boolean;
   setSearchModalOpen: (open: boolean) => void;
   /** 设置中心 Modal：侧边栏 / 底部导航 / 命令面板统一入口 */
@@ -879,6 +883,11 @@ export const useAppStore = create<AppState>()(
       selectedGroupProjectId: null,
       setSelectedGroupProjectId: (id) => set({ selectedGroupProjectId: id }),
 
+      // Workflow UX V8：Arrange deep link intent（consume once）
+      pendingTimelineArrangeAssignmentId: null,
+      setPendingTimelineArrangeAssignmentId: (id) =>
+        set({ pendingTimelineArrangeAssignmentId: id }),
+
       isSearchModalOpen: false,
       setSearchModalOpen: (open) => set({ isSearchModalOpen: open }),
       isSettingsModalOpen: false,
@@ -1020,6 +1029,7 @@ export const useAppStore = create<AppState>()(
           selectedAssignmentId: null,
           selectedCalendarMarkId: null,
           selectedGroupProjectId: null,
+          pendingTimelineArrangeAssignmentId: null,
           selectedConflict: null,
           assignmentSelection: [],
           assignmentPeekId: null,

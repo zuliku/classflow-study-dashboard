@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import React, { useEffect, useRef, useState } from "react";
 import {
@@ -56,6 +56,7 @@ import {
 import { deriveFocusClock } from "@/lib/focus/focusDomain";
 import { FOCUS_ERROR_MESSAGES, formatFocusClock, formatFocusDurationMs } from "@/lib/focus/focusView";
 import { openTimelineAtDate } from "@/lib/timeline/openTimelineAtDate";
+import { resolveStudyScheduleTimelineTarget } from "@/lib/timeline/assignmentScheduleNavigation";
 
 const OVERLAY_ID = "assignment-drawer";
 
@@ -101,6 +102,8 @@ export function AssignmentDrawer() {
     pauseFocusSession,
     resumeFocusSession,
     finishFocusSession,
+    toggleGroupTask,
+    setPendingTimelineArrangeAssignmentId,
   } = useAppStore();
   const pushToast = useToastStore((s) => s.pushToast);
   const handoff = useKiroHandoff();
@@ -304,17 +307,43 @@ export function AssignmentDrawer() {
     setSelectedAssignmentId(null);
   };
 
-  const handleViewInTimeline = () => {
+  const blocks = studyBlocks.filter((b) => b.assignmentId === assignment.id);
+  const scheduleSummary = summarizeStudySchedule(blocks);
+
+  /**
+   * Workflow UX V8-A「日程」（Primary）：为当前任务继续安排学习时间。
+   * 语义 = Add / Arrange（非 View DDL）：保持 Timeline 当前周不变（当前周就是
+   * 用户的规划上下文，DDL 是完成截止而非推荐学习时间），经 transient intent
+   * 打开 Timeline 现有 ArrangeSheet。顺序：先写目标实体，再关 Drawer、切 Workspace。
+   * 无论有无 DDL / StudyBlock 均可用（修复无 DDL 点击「安排」空操作回归）。
+   */
+  const handleArrangeStudyTime = () => {
+    setPendingTimelineArrangeAssignmentId(assignment.id);
     setSelectedAssignmentId(null);
-    // Workflow UX V2：精确跳到 DDL 所在教学周（本地日期语义；无 DDL 不伪造日期、不导航）
-    if (!assignment.ddl) return;
-    openTimelineAtDate({
-      date: assignment.ddl.slice(0, 10),
+    setActiveTab("timetable");
+  };
+
+  /**
+   * Workflow UX V8-B「在时间表查看」：按已有 StudyBlock 精确跳周。
+   * 目标选择：学期内 block 按 date+startTime 升序 → 今天/未来最早；全过去 → 最近过去。
+   * 禁止 DDL fallback（不同实体）。导航失败（全学期外）不关闭 Drawer——保留用户上下文。
+   */
+  const handleViewStudySchedule = () => {
+    const target = resolveStudyScheduleTimelineTarget(blocks, semester, new Date());
+    if (!target) return;
+    const opened = openTimelineAtDate({
+      date: target.block.date,
       semester,
       setCurrentSemesterWeek,
       setActiveTab: (tab) => setActiveTab(tab),
     });
+    if (opened) setSelectedAssignmentId(null);
   };
+
+  // Execution「在时间表查看」disabled 判定：有 blocks 但全部不在当前学期范围
+  const viewScheduleDisabled =
+    scheduleSummary.hasBlocks &&
+    resolveStudyScheduleTimelineTarget(blocks, semester, new Date()) === null;
 
   const course = courses.find((c) => c.id === assignment.courseId);
 
@@ -332,8 +361,6 @@ export function AssignmentDrawer() {
   );
   const healthMeta = healthViewMeta(health.state);
   const healthHint = healthExplanation(health);
-  const blocks = studyBlocks.filter((b) => b.assignmentId === assignment.id);
-  const scheduleSummary = summarizeStudySchedule(blocks);
   const reminderSummary = summarizeReminders(
     reminders,
     "assignment",
@@ -558,7 +585,7 @@ export function AssignmentDrawer() {
               completed={completed}
               onComplete={() => updateAssignmentStatus(assignment.id, "completed")}
               onReopen={() => updateAssignmentStatus(assignment.id, "todo")}
-              onSchedule={handleViewInTimeline}
+              onSchedule={handleArrangeStudyTime}
               onReminder={() => setReminderOpen(true)}
               onEdit={handleEdit}
             />
@@ -573,7 +600,9 @@ export function AssignmentDrawer() {
                 : "未估时"
             }
             scheduleSummary={scheduleSummary}
-            onViewSchedule={handleViewInTimeline}
+            onViewSchedule={handleViewStudySchedule}
+            viewScheduleDisabled={viewScheduleDisabled}
+            viewScheduleDisabledTitle="学习安排不在当前学期范围内"
             subtasks={(assignment.subtasks ?? []).map((st) => ({
               id: st.id,
               title: st.title,

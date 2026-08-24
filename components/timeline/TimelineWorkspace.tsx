@@ -137,6 +137,43 @@ export function TimelineWorkspace() {
   const [arrangeFor, setArrangeFor] = useState<Assignment | null>(null);
   const [freeBlockOpen, setFreeBlockOpen] = useState(false);
   const [markOpen, setMarkOpen] = useState(false);
+
+  // ---- Workflow UX V8：消费 Assignment → Timeline Arrange Deep Link（consume once）----
+  // pending 是跨 Workspace 的一次性 intent：Assignment Drawer 先写目标 id 再切 tab，
+  // 本组件 mount 后在此消费 → setArrangeFor(target) 打开现有 ArrangeSheet。
+  // - target stale / 不存在：clear pending，不打开
+  // - ArrangeSheet 已打开（arrangeFor/freeBlock）：先 semantic close 当前 session，
+  //   pending 保持不消费；open=false 渲染后下一轮 effect 再 fresh-open target，
+  //   保留 false→true 沿的 Fresh-open session reset（不发生 open→open payload morph）
+  // - 消费时同步关闭临时 Popover / Sheet，避免叠层
+  const pendingArrangeId = useAppStore((s) => s.pendingTimelineArrangeAssignmentId);
+  const setPendingTimelineArrangeAssignmentId = useAppStore(
+    (s) => s.setPendingTimelineArrangeAssignmentId
+  );
+  // consume once：消费即 clear——后续 assignments 更新重跑 effect 时 pending 已为 null，不重复打开
+  useEffect(() => {
+    // 无 pending：无事可做（consume 后的每次重跑都从这里退出，sheet 保持打开）
+    if (!pendingArrangeId) return;
+    const target = assignments.find((a) => a.id === pendingArrangeId);
+    // stale target：clear 且不打开
+    if (!target) {
+      setPendingTimelineArrangeAssignmentId(null);
+      return;
+    }
+    // ArrangeSheet 已打开：semantic close 当前 session，pending 保持；
+    // open=false 渲染后本轮 effect 再次执行 → fresh-open target（保留 false→true 沿 reset）
+    if (arrangeFor !== null || freeBlockOpen || markOpen || quickOpen) {
+      setArrangeFor(null);
+      setFreeBlockOpen(false);
+      setMarkOpen(false);
+      setQuickOpen(false);
+      return;
+    }
+    // 消费 intent：打开目标 Assignment 的 ArrangeSheet 并清 pending
+    setArrangeFor(target);
+    setPendingTimelineArrangeAssignmentId(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingArrangeId, assignments, arrangeFor, freeBlockOpen, markOpen, quickOpen]);
   // 周切换动画：用 nonce 触发 CSS animation replay（不 remount 重型 TimetableGrid 子树）。
   // DOM identity 保持 → drag / pointer capture / weekSchedules 全部稳定；仅 animation 重新生效。
   const [weekMotion, setWeekMotion] = useState<{ nonce: number; shift: "prev" | "next" } | null>(null);
