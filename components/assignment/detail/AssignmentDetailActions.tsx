@@ -10,12 +10,18 @@ import { cn } from "@/lib/utils";
  * - 开始专注（eligible 且无 active）由 focusSlot 由父级注入（primary slot）
  * - 标记完成 / 重新打开：统一 secondary（完成态 → 重新打开）
  * - 日程 → Timeline 安排链路；提醒 → 展开 Reminder disclosure；编辑 → openAssignmentEditor
+ * - Workflow UX V14：日程受 planning eligibility gate（todo/doing 才可安排）——
+ *   资格由父级（AssignmentDrawer）计算传入，本组件只负责 presentation；
+ *   disabled 保留按钮位置（不隐藏，避免 Action Bar 布局跳动），
+ *   「在时间表查看」（View existing schedule）是独立语义，不受此影响
  */
 export function AssignmentDetailActions({
   completed,
   onComplete,
   onReopen,
   onSchedule,
+  scheduleDisabled = false,
+  scheduleDisabledTitle,
   onReminder,
   onEdit,
   className,
@@ -24,6 +30,9 @@ export function AssignmentDetailActions({
   onComplete: () => void;
   onReopen: () => void;
   onSchedule: () => void;
+  /** Workflow UX V14：submitted / completed → true（planning terminal） */
+  scheduleDisabled?: boolean;
+  scheduleDisabledTitle?: string;
   onReminder: () => void;
   onEdit: () => void;
   className?: string;
@@ -44,7 +53,14 @@ export function AssignmentDetailActions({
           标记完成
         </Button>
       )}
-      <Button variant="secondary" size="sm" onClick={onSchedule} className="h-8 px-2.5" title="安排学习时间">
+      <Button
+        variant="secondary"
+        size="sm"
+        onClick={onSchedule}
+        disabled={scheduleDisabled}
+        className="h-8 px-2.5"
+        title={scheduleDisabled ? scheduleDisabledTitle ?? "当前状态无需继续安排学习时间" : "安排学习时间"}
+      >
         <CalendarPlus className="h-3.5 w-3.5" />
         日程
       </Button>

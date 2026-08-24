@@ -10,6 +10,7 @@
 
 import { Assignment, CalendarMark, CourseSchedule, Semester, StudyBlock } from "@/types";
 import { parseLocalDDL } from "@/lib/ddl";
+import { isAssignmentPlanningEligible } from "@/lib/tasks/taskSemantics";
 import { CapacityTaskAllocation } from "@/lib/planning/capacityAllocation";
 import { buildPlanningCapacity } from "@/lib/planning/planningCapacity";
 import { findCourseOverlapsForStudyBlock } from "@/lib/planning/courseOverlapPolicy";
@@ -112,9 +113,10 @@ export function proposeStudyPlan(input: ProposeStudyPlanInput): ProposeStudyPlan
   const { assignments, now } = input;
   const reasons: string[] = ["deadline_first", "existing_schedule_respected"];
 
-  // 1. 过滤可规划任务：active（todo/doing），排除已提交/已完成；overdue 不安排
+  // 1. 过滤可规划任务：planning eligibility 单一事实源（todo/doing，Workflow UX V14）；
+  //    overdue 不安排
   const planable = assignments.filter(
-    (a) => (a.status === "todo" || a.status === "doing") && (!a.ddl || parseLocalDDL(a.ddl)! > now)
+    (a) => isAssignmentPlanningEligible(a) && (!a.ddl || parseLocalDDL(a.ddl)! > now)
   );
 
   // 2. Canonical Planning Capacity（Planner 模式：no_deadline 也参与）

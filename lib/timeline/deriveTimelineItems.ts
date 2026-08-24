@@ -8,6 +8,7 @@
 import { Assignment, CalendarMark, GroupProject, StudyBlock, Priority } from "@/types";
 import { TimelineItem } from "@/lib/timeline/timelineTypes";
 import { timeToMinutes } from "@/lib/timeline/timelineGeometry";
+import { isAssignmentPlanningEligible } from "@/lib/tasks/taskSemantics";
 
 /** 本地 "YYYY-MM-DDTHH:mm" → date "YYYY-MM-DD" */
 function ddlToDate(ddl: string): string {
@@ -120,7 +121,9 @@ export function deriveUnscheduledAssignments(input: {
   const scheduledIds = new Set(
     studyBlocks.map((b) => b.assignmentId).filter((id): id is string => !!id)
   );
+  // Workflow UX V14：planning eligibility 单一事实源（todo/doing）——
+  // submitted 与 completed 同为 terminal，不得再进入 Shelf（旧实现 status !== "completed" 漏掉 submitted）
   return assignments.filter(
-    (a) => a.status !== "completed" && !scheduledIds.has(a.id)
+    (a) => isAssignmentPlanningEligible(a) && !scheduledIds.has(a.id)
   );
 }

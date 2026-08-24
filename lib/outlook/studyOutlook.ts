@@ -6,6 +6,7 @@
  */
 
 import { parseLocalDDL } from "@/lib/ddl";
+import { isAssignmentPlanningEligible } from "@/lib/tasks/taskSemantics";
 import { findFreeTime, FreeTimeSlot } from "@/lib/planning/freeTime";
 import { deriveAssignmentHealth } from "@/lib/tasks/taskHealth";
 import { buildPlanningCapacity } from "@/lib/planning/planningCapacity";
@@ -72,8 +73,9 @@ export function buildStudyOutlook(input: StudyOutlookBuildInput): StudyOutlook {
   const horizonEnd = new Date(now.getTime() + horizonDays * 86400000);
   horizonEnd.setHours(23, 59, 59, 999);
 
-  // 1. Task selection：active（todo/doing）；DDL 在 horizon 内或已 overdue
-  const active = assignments.filter((a) => a.status === "todo" || a.status === "doing");
+  // 1. Task selection：planning eligibility 单一事实源（todo/doing，Workflow UX V14）；
+  //    DDL 在 horizon 内或已 overdue
+  const active = assignments.filter((a) => isAssignmentPlanningEligible(a));
   const noDeadline = active.filter((a) => !a.ddl || !parseLocalDDL(a.ddl));
   const selected = active.filter((a) => {
     if (!a.ddl) return false;

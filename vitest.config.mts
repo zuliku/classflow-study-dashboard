@@ -138,6 +138,7 @@ export default defineConfig({
       "tests/focusCompletionHandoff.test.tsx",
       "tests/groupTaskDeepLink.test.tsx",
       "tests/studyOutlookActionClosure.test.tsx",
+      "tests/assignmentPlanningEligibility.test.ts",
       "tests/drawerPresentation.test.ts",
       "tests/demoManualInjection.test.tsx",
       "tests/extensionsRuntimeTruth.test.tsx",

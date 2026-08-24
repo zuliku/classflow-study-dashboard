@@ -128,6 +128,34 @@ describe("deriveUnscheduledAssignments + analyzeStudyBlockPlacement", () => {
     expect(out.map((a) => a.id)).toEqual(["a1"]);
   });
 
+  it("Workflow UX V14：submitted 与 completed 同为 terminal，不进入 Shelf；todo/doing 正常进入", () => {
+    const out = deriveUnscheduledAssignments({
+      assignments: [
+        { id: "a-todo", courseId: "c1", title: "进行前", description: "", ddl: "", priority: "medium", status: "todo", progress: 0, tags: [] },
+        { id: "a-doing", courseId: "c1", title: "进行中", description: "", ddl: "", priority: "medium", status: "doing", progress: 40, tags: [] },
+        { id: "a-sub", courseId: "c1", title: "已提交", description: "", ddl: "", priority: "medium", status: "submitted", progress: 100, tags: [] },
+        { id: "a-done", courseId: "c1", title: "已完成", description: "", ddl: "", priority: "medium", status: "completed", progress: 100, tags: [] },
+      ],
+      studyBlocks: [],
+    });
+    expect(out.map((a) => a.id).sort()).toEqual(["a-doing", "a-todo"]);
+  });
+
+  it("已有 linked block 的 active 任务仍排除；standalone block 不影响其它任务资格", () => {
+    const out = deriveUnscheduledAssignments({
+      assignments: [
+        { id: "a-has", courseId: "c1", title: "已有计划", description: "", ddl: "", priority: "medium", status: "doing", progress: 10, tags: [] },
+        { id: "a-free", courseId: "c1", title: "自由任务", description: "", ddl: "", priority: "medium", status: "todo", progress: 0, tags: [] },
+      ],
+      // standalone block（无 assignmentId）不得把任何 Assignment 排除
+      studyBlocks: [
+        { id: "sb-linked", title: "已有计划", date: "2026-08-12", startTime: "19:00", endTime: "20:00", assignmentId: "a-has", source: "manual" },
+        { id: "sb-free", title: "自由学习", date: "2026-08-13", startTime: "19:00", endTime: "20:00", source: "manual" },
+      ],
+    });
+    expect(out.map((a) => a.id)).toEqual(["a-free"]);
+  });
+
   it("Case 9/29（Task 5 新语义）：与课程重叠 = soft（courseOverlaps，非 hard）；与另一 StudyBlock 重叠 = hard", () => {
     const state = {
       schedules: [{ id: "s1", courseId: "c1", dayOfWeek: 3, startTime: "10:00", endTime: "11:40", location: "教101", weeks: "1-16周" }],

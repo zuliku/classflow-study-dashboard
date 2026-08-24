@@ -15,6 +15,7 @@
 
 import { Assignment, StudyBlock } from "@/types";
 import { parseLocalDDL } from "@/lib/ddl";
+import { isAssignmentPlanningEligible } from "@/lib/tasks/taskSemantics";
 import { FreeTimeSlot } from "@/lib/planning/freeTime";
 import { PLAN_MIN_BLOCK_MINUTES, PLAN_PREFERRED_BLOCK_MINUTES } from "@/lib/planning/planningConstants";
 import { getScheduledMinutesBeforeDeadline } from "@/lib/planning/taskPlanningFacts";
@@ -222,9 +223,10 @@ export function allocateStudyCapacity(
   const { assignments, studyBlocks, freeSlots, now } = input;
   const includeNoDeadline = options?.includeNoDeadline === true;
 
-  // 1. 分类（不参与 allocation 的任务保留分类 + 0 分配）
+  // 1. 分类（不参与 allocation 的任务保留分类 + 0 分配）；
+  //    eligibility 走单一事实源（Workflow UX V14，行为不变）
   const classified = assignments
-    .filter((a) => a.status === "todo" || a.status === "doing")
+    .filter((a) => isAssignmentPlanningEligible(a))
     .map((a) => {
       const cls = classify(a, now);
       const allocatable =

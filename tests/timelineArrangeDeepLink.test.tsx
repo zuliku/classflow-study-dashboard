@@ -431,3 +431,176 @@ describe("Pending intent persistence guard", () => {
     expect(useAppStore.getState().pendingTimelineArrangeAssignmentId).toBeNull();
   });
 });
+
+// ============================================================
+// Workflow UX V14 —— Assignment Planning Eligibility Guard
+// ============================================================
+
+describe("AssignmentDrawer 日程 eligibility（todo/doing 可安排）", () => {
+  function drawerWithStatus(status: Assignment["status"], opts: { studyBlocks?: StudyBlock[] } = {}) {
+    useAppStore.setState({
+      assignments: [mkAssignment({ ddl: undefined, status })],
+      studyBlocks: opts.studyBlocks ?? [],
+      selectedAssignmentId: "a-v8",
+      activeTab: "assignments" as never,
+    });
+    render(<AssignmentDrawer />);
+  }
+
+  it("todo → 日程 enabled", () => {
+    drawerWithStatus("todo");
+    expect((screen.getByRole("button", { name: /日程/ }) as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it("doing → 日程 enabled", () => {
+    drawerWithStatus("doing");
+    expect((screen.getByRole("button", { name: /日程/ }) as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it("submitted → 日程 native disabled（保留位置，不隐藏）", () => {
+    drawerWithStatus("submitted");
+    const btn = screen.getByRole("button", { name: /日程/ }) as HTMLButtonElement;
+    expect(btn.disabled).toBe(true);
+  });
+
+  it("completed → 日程 native disabled", () => {
+    drawerWithStatus("completed");
+    expect((screen.getByRole("button", { name: /日程/ }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("submitted：点击不写 pending、不切 Timeline、Drawer 保持打开（disabled + defensive 双层）", () => {
+    drawerWithStatus("submitted");
+    fireEvent.click(screen.getByRole("button", { name: /日程/ }));
+    expect(useAppStore.getState().pendingTimelineArrangeAssignmentId).toBeNull();
+    expect(useAppStore.getState().activeTab).toBe("assignments");
+    expect(useAppStore.getState().selectedAssignmentId).toBe("a-v8"); // 未关闭
+  });
+
+  it("completed：同样不产生 intent / 导航", () => {
+    drawerWithStatus("completed");
+    fireEvent.click(screen.getByRole("button", { name: /日程/ }));
+    expect(useAppStore.getState().pendingTimelineArrangeAssignmentId).toBeNull();
+    expect(useAppStore.getState().activeTab).toBe("assignments");
+  });
+
+  it("completed 已有 StudyBlock：「在时间表查看」不受 scheduleDisabled 误伤（View ≠ Arrange）", () => {
+    const sb = mkBlock(8, 1, "14:00");
+    drawerWithStatus("completed", { studyBlocks: [sb] });
+    const viewBtn = screen.getByRole("button", { name: /在时间表查看/ }) as HTMLButtonElement;
+    expect(viewBtn.disabled).toBe(false);
+    fireEvent.click(viewBtn);
+    expect(useAppStore.getState().currentSemesterWeek).toBe(8);
+    expect(useAppStore.getState().activeTab).toBe("timetable");
+  });
+});
+
+describe("Timeline pending consumer eligibility（deep-link revalidation）", () => {
+  function pendingHarness(pendingId: string | null, status: Assignment["status"]) {
+    useAppStore.setState({
+      activeTab: "timetable" as never,
+      currentSemesterWeek: 7,
+      pendingTimelineArrangeAssignmentId: pendingId,
+      assignments: [mkAssignment({ status })],
+      studyBlocks: [],
+      schedules: [],
+      calendarMarks: [],
+      courses: [],
+    });
+    render(<TimelineWorkspace />);
+  }
+
+  it("pending doing → ArrangeSheet 正常打开且 pending cleared", async () => {
+    pendingHarness("a-v8", "doing");
+    await waitFor(() => {
+      expect(screen.getByTestId("timeline-arrange-sheet")).toBeTruthy();
+    });
+    expect(useAppStore.getState().pendingTimelineArrangeAssignmentId).toBeNull();
+  });
+
+  it("pending submitted → stale intent 被 consume：Sheet 不打开、pending clear、无导航副作用", () => {
+    pendingHarness("a-v8", "submitted");
+    expect(screen.queryByTestId("timeline-arrange-sheet")).toBeNull();
+    expect(useAppStore.getState().pendingTimelineArrangeAssignmentId).toBeNull();
+    expect(useAppStore.getState().activeTab).toBe("timetable"); // 停留原 Workspace
+  });
+
+  it("pending completed → 同样安全清除", () => {
+    pendingHarness("a-v8", "completed");
+    expect(screen.queryByTestId("timeline-arrange-sheet")).toBeNull();
+    expect(useAppStore.getState().pendingTimelineArrangeAssignmentId).toBeNull();
+  });
+});
+
+describe("ArrangeSheet commit-time fresh revalidation（open-sheet race）", () => {
+  async function openSheetThenMutate(mutate: (state: Assignment) => Assignment | null) {
+    useAppStore.setState({
+      activeTab: "timetable" as never,
+      currentSemesterWeek: 7,
+      pendingTimelineArrangeAssignmentId: "a-v8",
+      assignments: [mkAssignment()],
+      studyBlocks: [],
+      schedules: [],
+      calendarMarks: [],
+      courses: [],
+    });
+    render(<TimelineWorkspace />);
+    await waitFor(() => {
+      expect(screen.getByTestId("timeline-arrange-sheet")).toBeTruthy();
+    });
+    // Sheet 打开期间任务在另一路径变化
+    act(() => {
+      const cur = useAppStore.getState().assignments[0];
+      const next = mutate(cur);
+      useAppStore.setState({ assignments: next ? [next] : [] });
+    });
+    fireEvent.click(within(screen.getByTestId("timeline-arrange-sheet")).getByRole("button", { name: "确认安排" }));
+  }
+
+  it.each([
+    ["completed", (a: Assignment) => ({ ...a, status: "completed" as const })],
+    ["submitted", (a: Assignment) => ({ ...a, status: "submitted" as const })],
+  ])("Sheet 打开后 A → %s：submit 不创建 StudyBlock 且 Sheet semantic close", async (_name, mutate) => {
+    await openSheetThenMutate(mutate);
+    expect(useAppStore.getState().studyBlocks.length).toBe(0);
+    // exit presence 结束后 Sheet 卸载（semantic close，非残留 stale 表单）
+    await waitFor(
+      () => {
+        expect(screen.queryByTestId("timeline-arrange-sheet")).toBeNull();
+      },
+      { timeout: 2000 }
+    );
+  }, 10000);
+
+  it("Sheet 打开后 A 被删除：submit 同样不得生成 orphan block", async () => {
+    await openSheetThenMutate(() => null);
+    expect(useAppStore.getState().studyBlocks.length).toBe(0);
+    await waitFor(
+      () => {
+        expect(screen.queryByTestId("timeline-arrange-sheet")).toBeNull();
+      },
+      { timeout: 2000 }
+    );
+  }, 10000);
+
+  it("对照组：Sheet 打开期间任务保持 todo → 正常创建 linked block", async () => {
+    useAppStore.setState({
+      activeTab: "timetable" as never,
+      currentSemesterWeek: 7,
+      pendingTimelineArrangeAssignmentId: "a-v8",
+      assignments: [mkAssignment()],
+      studyBlocks: [],
+      schedules: [],
+      calendarMarks: [],
+      courses: [],
+    });
+    render(<TimelineWorkspace />);
+    await waitFor(() => {
+      expect(screen.getByTestId("timeline-arrange-sheet")).toBeTruthy();
+    });
+    fireEvent.click(within(screen.getByTestId("timeline-arrange-sheet")).getByRole("button", { name: "确认安排" }));
+    await waitFor(() => {
+      expect(useAppStore.getState().studyBlocks.length).toBe(1);
+    });
+    expect(useAppStore.getState().studyBlocks[0].assignmentId).toBe("a-v8");
+  }, 10000);
+});

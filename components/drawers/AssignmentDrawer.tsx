@@ -16,7 +16,7 @@ import {
 import { useAppStore } from "@/store/useAppStore";
 import { useToastStore } from "@/store/useToastStore";
 import { Priority, AssignmentStatus, Assignment } from "@/types";
-import { formatEstimatedMinutes } from "@/lib/tasks/taskSemantics";
+import { formatEstimatedMinutes, isAssignmentPlanningEligible } from "@/lib/tasks/taskSemantics";
 import { resolveAssignmentMaterials } from "@/lib/tasks/taskMaterials";
 import { uploadCourseMaterials } from "@/lib/materialUpload";
 import { RECURRENCE_LABELS } from "@/lib/tasks/taskRecurrence";
@@ -340,9 +340,16 @@ export function AssignmentDrawer() {
    * 用户的规划上下文，DDL 是完成截止而非推荐学习时间），经 transient intent
    * 打开 Timeline 现有 ArrangeSheet。顺序：先写目标实体，再关 Drawer、切 Workspace。
    * 无论有无 DDL / StudyBlock 均可用（修复无 DDL 点击「安排」空操作回归）。
+   *
+   * Workflow UX V14：planning eligibility gate——仅 todo/doing 可安排；
+   * disabled button 之外的竞态保护：点击时以 fresh Store 重新确认
+   * （实体存在 + planning eligible），terminal/deleted → 不写 pending、不关 Drawer、不切 Timeline。
    */
   const handleArrangeStudyTime = () => {
-    setPendingTimelineArrangeAssignmentId(assignment.id);
+    const fresh = useAppStore.getState();
+    const freshAssignment = fresh.assignments.find((a) => a.id === assignment.id);
+    if (!freshAssignment || !isAssignmentPlanningEligible(freshAssignment)) return;
+    setPendingTimelineArrangeAssignmentId(freshAssignment.id);
     setSelectedAssignmentId(null);
     setActiveTab("timetable");
   };
@@ -461,6 +468,14 @@ export function AssignmentDrawer() {
   };
 
   const canStartFocus = assignment.status === "todo" || assignment.status === "doing";
+  // Workflow UX V14：scheduling eligibility（与 Focus 语义同值但独立命名——语义清晰优先于机械 DRY）
+  const planningEligible = isAssignmentPlanningEligible(assignment);
+  const scheduleDisabledTitle =
+    assignment.status === "submitted"
+      ? "已提交任务无需继续安排学习时间"
+      : assignment.status === "completed"
+        ? "已完成任务无需继续安排学习时间"
+        : undefined;
   const recentCompletedSession = recentCompletedSessionId
     ? (focusSessions.find((s) => s.id === recentCompletedSessionId) ?? null)
     : null;
@@ -614,6 +629,8 @@ export function AssignmentDrawer() {
               onComplete={() => updateAssignmentStatus(assignment.id, "completed")}
               onReopen={() => updateAssignmentStatus(assignment.id, "todo")}
               onSchedule={handleArrangeStudyTime}
+              scheduleDisabled={!planningEligible}
+              scheduleDisabledTitle={scheduleDisabledTitle}
               onReminder={() => setReminderOpen(true)}
               onEdit={handleEdit}
             />

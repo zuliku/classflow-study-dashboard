@@ -53,6 +53,22 @@ export function formatEstimatedMinutes(minutes: number | undefined): string | nu
   return `${Math.floor(minutes / 60)} 小时 ${minutes % 60} 分`;
 }
 
+/**
+ * Workflow UX V14：Assignment Planning Eligibility（单一事实源）。
+ * todo / doing = planning eligible；submitted / completed = terminal for planning。
+ *
+ * - 与 Planner（studyPlanner）/ Capacity（capacityAllocation）/ Outlook（studyOutlook）/
+ *   Focus（canStartFocus）既有语义一致——本轮只是收敛为单一 helper，杜绝再次漂移
+ *   （deriveUnscheduledAssignments 曾写成 status !== "completed"，漏掉 submitted）
+ * - 与 DDL 无关：无 DDL 的 todo/doing 仍可安排（Task ≠ Deadline ≠ StudyBlock，V8 契约）
+ * - 与 estimatedMinutes 无关：缺估时不 gate 手动 Arrange，只影响 Planner 自动估算
+ */
+export function isAssignmentPlanningEligible(
+  task: Pick<Assignment, "status">
+): boolean {
+  return task.status === "todo" || task.status === "doing";
+}
+
 /** materialIds 清洗：仅保留非空 string + 去重；空结果 → undefined（无关联） */
 export function normalizeMaterialIds(value: unknown): string[] | undefined {
   if (!Array.isArray(value)) return undefined;

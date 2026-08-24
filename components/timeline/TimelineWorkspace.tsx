@@ -54,6 +54,7 @@ import {
 } from "@/lib/timeline/studyBlockInteraction";
 import { timeToMinutes } from "@/lib/timeline/timelineGeometry";
 import { resolveFocusStudyBlockAnchor } from "@/lib/timeline/focusStudyBlockAnchor";
+import { isAssignmentPlanningEligible } from "@/lib/tasks/taskSemantics";
 import { findCourseOverlapsForStudyBlock, isCourseOverlapApproved } from "@/lib/planning/courseOverlapPolicy";
 import {
   analyzeStudyBlockPlacement,
@@ -162,6 +163,12 @@ export function TimelineWorkspace() {
     const target = assignments.find((a) => a.id === pendingArrangeId);
     // stale target：clear 且不打开
     if (!target) {
+      setPendingTimelineArrangeAssignmentId(null);
+      return;
+    }
+    // Workflow UX V14：planning eligibility——terminal（submitted/completed）任务
+    // consume 掉 stale intent：不打开 ArrangeSheet、不无限重试、不自动重开任务
+    if (!isAssignmentPlanningEligible(target)) {
       setPendingTimelineArrangeAssignmentId(null);
       return;
     }
@@ -1046,6 +1053,20 @@ export function TimelineWorkspace() {
 
   // ---- 安排学习计划 ----
   const submitArrange = (a: Assignment | null, date: string, start: string, end: string) => {
+    // Workflow UX V14：commit-time fresh revalidation（最重要的 race guard）——
+    // Sheet 打开期间任务可能已被另一路径 submitted / completed / 删除；
+    // terminal/missing → 不创建 StudyBlock / Reminder / History event，
+    // semantic close stale Sheet + 克制 Toast（不静默降级为 standalone）
+    if (a) {
+      const freshAssignment = useAppStore
+        .getState()
+        .assignments.find((x) => x.id === a.id);
+      if (!freshAssignment || !isAssignmentPlanningEligible(freshAssignment)) {
+        pushToast({ type: "warning", message: "任务状态已变化，未创建学习计划" });
+        setArrangeFor(null);
+        return;
+      }
+    }
     const analysis = analyzeStudyBlockPlacement(
       { date, startTime: start, endTime: end },
       { schedules: weekSchedules, studyBlocks, courses, currentSemesterWeek }
