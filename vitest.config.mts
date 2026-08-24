@@ -142,6 +142,7 @@ export default defineConfig({
       "tests/studyBlockReleaseLifecycle.test.ts",
       "tests/studyBlockReleaseStore.test.tsx",
       "tests/reminderNavigation.test.tsx",
+      "tests/studyBlockWriteBoundary.test.tsx",
       "tests/drawerPresentation.test.ts",
       "tests/demoManualInjection.test.tsx",
       "tests/extensionsRuntimeTruth.test.tsx",

@@ -60,6 +60,60 @@ export function didAssignmentLosePlanningEligibility(
   return isAssignmentPlanningEligible({ status: before }) && !isAssignmentPlanningEligible({ status: after });
 }
 
+// ---- Workflow UX V17：Planning Write Boundary（Store 最终 mutation invariant）----
+// Preflight（Kiro / UX）是 transaction protection；这里是 data integrity protection，
+// 两者不可互替。任何 caller（Timeline / Kiro / MCP / 未来 API）最终走到 Store mutation 时，
+// 都不能写出违反 V14/V15 的状态。
+
+export type StudyBlockPlanningWriteRejection =
+  | "released" // historical plan：不可编辑（delete 允许）
+  | "parent-missing" // linked Assignment 不存在（orphan 写入拒绝）
+  | "parent-terminal"; // linked Assignment submitted/completed
+
+export interface StudyBlockPlanningWriteOk {
+  ok: true;
+}
+export interface StudyBlockPlanningWriteRejected {
+  ok: false;
+  reason: StudyBlockPlanningWriteRejection;
+}
+
+/**
+ * 单个 StudyBlock 是否允许被 Store 层 mutate（update / batch update 共用）：
+ * - released → 拒绝（historical plan 不可编辑；与 parent 现状无关——reopen 不复活）
+ * - active + 有 assignmentId → parent 必须存在且 planning eligible
+ *   （覆盖 V15 遗留：terminal parent 的过去 block 虽无 released 标记，同样不可移动）
+ * - standalone active → 允许
+ */
+export function validateStudyBlockPlanningWrite(
+  block: Pick<StudyBlock, "planningState" | "assignmentId">,
+  assignments: ReadonlyArray<Pick<Assignment, "id" | "status">>
+): StudyBlockPlanningWriteOk | StudyBlockPlanningWriteRejected {
+  if (isStudyBlockReleased(block)) return { ok: false, reason: "released" };
+  if (!block.assignmentId) return { ok: true };
+  const parent = assignments.find((a) => a.id === block.assignmentId);
+  if (!parent) return { ok: false, reason: "parent-missing" };
+  if (!isAssignmentPlanningEligible(parent)) return { ok: false, reason: "parent-terminal" };
+  return { ok: true };
+}
+
+/**
+ * Linked create 校验（addStudyBlock / addStudyBlocksBatch 共用）：
+ * assignmentId 存在 → parent 必须存在且 todo/doing；standalone（无 assignmentId）→ 允许。
+ * 失败 = 一次被拒绝的 planning write：调用方必须 0 side effect（不降级 standalone、
+ * 不自动建 released block、不写 History/Reminder）。
+ */
+export function validateStudyBlockLinkedCreate(
+  assignmentId: string | undefined,
+  assignments: ReadonlyArray<Pick<Assignment, "id" | "status">>
+): StudyBlockPlanningWriteOk | StudyBlockPlanningWriteRejected {
+  if (!assignmentId) return { ok: true };
+  const parent = assignments.find((a) => a.id === assignmentId);
+  if (!parent) return { ok: false, reason: "parent-missing" };
+  if (!isAssignmentPlanningEligible(parent)) return { ok: false, reason: "parent-terminal" };
+  return { ok: true };
+}
+
 // ---- Release mutation ----
 
 export interface ReleaseFutureStudyBlocksInput {

@@ -397,22 +397,31 @@ export function TimelineWorkspace() {
         if (!valid) {
           pushToast({ type: "error", message: conflictMessage ?? "时间冲突，学习计划未调整" });
         } else if (!isSameStudyBlockPosition(origin, candidate)) {
-          updateStudyBlock(origin.id, {
+          // Workflow UX V17：write boundary 拒绝（released / parent terminal）→ 不显示成功、不创建 Undo
+          const updated = updateStudyBlock(origin.id, {
             date: candidate.date,
             startTime: candidate.startTime,
             endTime: candidate.endTime,
           });
-          pushToast({
-            message: `学习计划时间已调整${courseOverlapSuffix(courseOverlaps)}`,
-            actionLabel: "撤销",
-            onAction: () => {
-              updateStudyBlock(origin.id, {
-                date: origin.date,
-                startTime: origin.startTime,
-                endTime: origin.endTime,
-              });
-            },
-          });
+          if (!updated) {
+            pushToast({ type: "warning", message: "学习计划状态已变化，未调整时间" });
+          } else {
+            pushToast({
+              message: `学习计划时间已调整${courseOverlapSuffix(courseOverlaps)}`,
+              actionLabel: "撤销",
+              onAction: () => {
+                // Undo race：move 成功后 parent completed → released，Store 拒绝撤销移动
+                const undone = updateStudyBlock(origin.id, {
+                  date: origin.date,
+                  startTime: origin.startTime,
+                  endTime: origin.endTime,
+                });
+                if (!undone) {
+                  pushToast({ type: "warning", message: "学习计划状态已变化，无法撤销时间调整" });
+                }
+              },
+            });
+          }
         }
       }
       setStudyDrag({ type: "idle" });
@@ -541,12 +550,17 @@ export function TimelineWorkspace() {
         if (!current.valid) {
           pushToast({ type: "error", message: current.conflictMessage ?? "与学习计划时间重叠，未安排" });
         } else {
+          // Workflow UX V17：drag session 中任务可能已 terminal → Store reject（null）
           const createdId = addStudyBlock(current.candidate);
+          if (!createdId) {
+            pushToast({ type: "warning", message: "任务状态已变化，未创建学习计划" });
+            return;
+          }
           pushToast({
             message: `已安排学习时间 · 1 小时${courseOverlapSuffix(current.courseOverlaps)}`,
             actionLabel: "撤销",
             onAction: () => {
-              if (createdId) deleteStudyBlock(createdId);
+              deleteStudyBlock(createdId);
             },
           });
         }
@@ -1103,15 +1117,30 @@ export function TimelineWorkspace() {
       });
       return;
     }
-    addStudyBlock({
-      title: a?.title ?? "学习计划",
-      date,
-      startTime: start,
-      endTime: end,
-      assignmentId: a?.id,
-      courseId: a?.courseId,
-      source: "manual",
-    });
+    // Workflow UX V17：Store 才是最终 authority——V14 fresh 校验之外仍可能 race；
+    // addStudyBlock 返回 null = write boundary 拒绝（不成功 Toast、不创建 Undo、semantic close）
+    const createdArrangeId = a
+      ? addStudyBlock({
+          title: a.title,
+          date,
+          startTime: start,
+          endTime: end,
+          assignmentId: a.id,
+          courseId: a.courseId,
+          source: "manual",
+        })
+      : addStudyBlock({
+          title: "学习计划",
+          date,
+          startTime: start,
+          endTime: end,
+          source: "manual",
+        });
+    if (a && createdArrangeId === null) {
+      pushToast({ type: "warning", message: "任务状态已变化，未创建学习计划" });
+      setArrangeFor(null);
+      return;
+    }
     pushToast({ message: `已安排学习计划：${a?.title ?? "学习计划"}${courseOverlapSuffix(analysis.courseOverlaps)}` });
     setArrangeFor(null);
   };

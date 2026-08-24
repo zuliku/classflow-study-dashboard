@@ -258,6 +258,16 @@ export function applyStudyPlan(
     // 用户确认并不改变 origin：Apply 仍是 Kiro-generated 计划（History event.source=kiro）
     { source: "kiro" }
   );
+  // Workflow UX V17：Store write boundary 拒绝（preflight 后 parent terminal / missing）→
+  // 视为 proposal stale，绝不报告 Apply 成功、不产生 partial mutation
+  if (created === null) {
+    return {
+      ok: false,
+      code: "STALE_PROPOSAL",
+      message: "任务状态已变化，计划未应用。",
+      details: { reason: "planning_state_changed" },
+    };
+  }
   return { ok: true, state: "created" as const, created };
 }
 

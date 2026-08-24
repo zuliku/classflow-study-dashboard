@@ -20,6 +20,8 @@ import {
   AppPreferences,
   SettingsSection,
   StudyBlock,
+  StudyBlockCreateInput,
+  StudyBlockUpdatePatch,
   ScheduleOccurrenceOverride,
   BellScheduleTemplate,
 } from "@/types";
@@ -32,6 +34,8 @@ import {
   clearScheduledRemindersForReleasedBlocks,
   reconcileTerminalAssignmentStudyBlocks,
   isStudyBlockPlanningActive,
+  validateStudyBlockPlanningWrite,
+  validateStudyBlockLinkedCreate,
 } from "@/lib/planning/studyBlockLifecycle";
 import {
   sanitizeAssignmentMaterialIds,
@@ -722,19 +726,35 @@ export interface AppState {
   restoreAssignment: (snapshot: AssignmentDeleteSnapshot, context?: LearningMutationContext) => void;
 
   // Timeline V1：StudyBlock Actions
-  /** 创建学习计划，返回新 id */
-  addStudyBlock: (block: Omit<StudyBlock, "id">, context?: LearningMutationContext) => string;
-  /** Atomic Batch：一次性生成全部 ID，单次 set；全量成功或全量失败（Kiro Study Plan Apply） */
-  addStudyBlocksBatch: (
-    blocks: Omit<StudyBlock, "id">[],
+  /** 创建学习计划，返回新 id。
+   *  Workflow UX V17：Store = Final Planning Authority——assignmentId 指向的 Assignment
+   *  必须存在且 planning eligible（todo/doing），否则 reject 返回 null（0 side effect：
+   *  不创建 block / 不写 History / 不写 Reminder；禁止静默降级 standalone）。
+   *  standalone（无 assignmentId）正常允许。 */
+  addStudyBlock: (
+    block: StudyBlockCreateInput,
     context?: LearningMutationContext
-  ) => StudyBlock[];
+  ) => string | null;
+  /** Atomic Batch：一次性生成全部 ID，单次 set。
+   *  Workflow UX V17：All-or-None fresh validation——任一项 linked Assignment missing /
+   *  terminal → 整批 reject 返回 null（0 mutation）；空 batch 合法返回 []。 */
+  addStudyBlocksBatch: (
+    blocks: StudyBlockCreateInput[],
+    context?: LearningMutationContext
+  ) => StudyBlock[] | null;
+  /** 更新学习计划。
+   *  Workflow UX V17：released block 一律拒绝（historical plan 不可编辑，delete 允许）；
+   *  active linked block 要求 parent 存在且 planning eligible（覆盖 drag→complete race
+   *  与 terminal parent 的历史 block）。成功 true；target 不存在 / 被 boundary 拒绝 → false
+   *  （0 side effect：不动 Reminder / 不写 History）。 */
   updateStudyBlock: (
     id: string,
-    patch: Partial<Omit<StudyBlock, "id">>,
+    patch: StudyBlockUpdatePatch,
     context?: LearningMutationContext
-  ) => void;
-  /** Atomic Batch Update（Rebalance Apply / Undo）：单次 set；全部成功或全部不动（null）；只改 date/startTime/endTime */
+  ) => boolean;
+  /** Atomic Batch Update（Rebalance Apply / Undo）：单次 set；全部成功或全部不动（null）；只改 date/startTime/endTime。
+   *  Workflow UX V17：preflight 增加每项 write-boundary gate——released / parent missing /
+   *  parent terminal 任一命中 → null（0 mutation、0 History）。 */
   updateStudyBlocksBatch: (
     updates: {
       id: string;
@@ -1912,6 +1932,11 @@ export const useAppStore = create<AppState>()(
 
       // ---- Timeline V1：StudyBlock（学习计划）----
       addStudyBlock: (blockData, context) => {
+        // Workflow UX V17：write boundary——validation 成功后才生成 id / 触发任何 side effect。
+        // linked Assignment missing / terminal → reject（null）：0 Store mutation、0 History、0 Reminder；
+        // 禁止静默降级 standalone、禁止为 terminal parent 自动创建 released block。
+        const gate = validateStudyBlockLinkedCreate(blockData.assignmentId, get().assignments);
+        if (!gate.ok) return null;
         const block: StudyBlock = {
           id: createId("sb"),
           title: blockData.title,
@@ -1935,6 +1960,14 @@ export const useAppStore = create<AppState>()(
         return block.id;
       },
       addStudyBlocksBatch: (blocksData, context) => {
+        // Workflow UX V17：空 batch = 合法空 mutation（区别于 reject 的 null）；
+        // 任一项 linked Assignment missing / terminal → 整批 reject 返回 null（All-or-None，0 mutation）
+        if (blocksData.length === 0) return [];
+        const gate = get().assignments;
+        for (const b of blocksData) {
+          const check = validateStudyBlockLinkedCreate(b.assignmentId, gate);
+          if (!check.ok) return null;
+        }
         const created: StudyBlock[] = blocksData.map((b) => ({
           id: createId("sb"),
           title: b.title,
@@ -1962,13 +1995,20 @@ export const useAppStore = create<AppState>()(
         });
         return created;
       },
-      updateStudyBlock: (id, patch, context) =>
+      updateStudyBlock: (id, patch, context) => {
+        // Workflow UX V17：write boundary——fresh 读取 current block + linked parent：
+        // released / parent missing / parent terminal → 拒绝（false；0 side effect，
+        // 不动 Reminder / 不写 History）；standalone active 与 eligible parent 正常放行
+        const current = get();
+        const prev = current.studyBlocks.find((b) => b.id === id);
+        if (!prev) return false;
+        const gate = validateStudyBlockPlanningWrite(prev, current.assignments);
+        if (!gate.ok) return false;
         set((state) => {
-          const prev = state.studyBlocks.find((b) => b.id === id);
           const blocks = state.studyBlocks.map((b) => (b.id === id ? { ...b, ...patch } : b));
           let reminders = state.reminders;
           // Task 7G-A1：date / startTime 变化 → 同步 relative reminders（absolute 不动）
-          const next = prev ? blocks.find((b) => b.id === id) : undefined;
+          const next = blocks.find((b) => b.id === id);
           if (prev && next && (prev.date !== next.date || prev.startTime !== next.startTime)) {
             reminders = reconcileTargetReminders(
               reminders,
@@ -2004,15 +2044,23 @@ export const useAppStore = create<AppState>()(
             if (event) enqueueLearningHistoryEvents([event]);
           }
           return { studyBlocks: blocks, reminders };
-        }),
+        });
+        return true;
+      },
       updateStudyBlocksBatch: (updates, context) => {
         const current = get();
-        // All-or-None：重复 ID 或任何 ID 不存在 → 0 mutation
+        // All-or-None：重复 ID、任何 ID 不存在、或任一 write-boundary 命中
+        //（released / parent missing / parent terminal）→ 0 mutation
         const seen = new Set<string>();
         for (const u of updates) {
           if (seen.has(u.id)) return null;
           seen.add(u.id);
-          if (!current.studyBlocks.some((b) => b.id === u.id)) return null;
+          const block = current.studyBlocks.find((b) => b.id === u.id);
+          if (!block) return null;
+          // Workflow UX V17：Rebalance race 封口——preview 后 block released 或
+          // parent terminal，旧 proposal Apply/Undo 都不得移动历史计划
+          const gate = validateStudyBlockPlanningWrite(block, current.assignments);
+          if (!gate.ok) return null;
         }
         const before: StudyBlock[] = [];
         const after: StudyBlock[] = [];

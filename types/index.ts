@@ -299,6 +299,13 @@ export interface StudyBlock {
   planningState?: "released";
 }
 
+/**
+ * Workflow UX V17：planningState 由 StudyBlock lifecycle Domain 独占——
+ * 普通 create / update caller 不得直接写（release 只能经 lifecycle helpers）。
+ */
+export type StudyBlockCreateInput = Omit<StudyBlock, "id" | "planningState">;
+export type StudyBlockUpdatePatch = Partial<Omit<StudyBlock, "id" | "planningState">>;
+
 /** 上课节次模板（Bell Schedule）：节次号 → 具体时间；课表导入节次解析的唯一来源 */
 export interface BellScheduleTemplate {
   id: string;
