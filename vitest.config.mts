@@ -132,6 +132,7 @@ export default defineConfig({
       "tests/assignmentEditorIntegrity.test.tsx",
       "tests/materialLinkIntegrity.test.tsx",
       "tests/timelineArrangeDeepLink.test.tsx",
+      "tests/timelineStudyBlockExecution.test.tsx",
       "tests/drawerPresentation.test.ts",
       "tests/demoManualInjection.test.tsx",
       "tests/extensionsRuntimeTruth.test.tsx",

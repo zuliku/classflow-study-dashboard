@@ -59,7 +59,7 @@ import {
 } from "@/lib/timeline/studyBlockPlacement";
 import { resolveCourseOccurrencesForWeek } from "@/lib/scheduleOccurrences";
 import { Assignment, CalendarMark, CourseSchedule, StudyBlock } from "@/types";
-import { cn } from "@/lib/utils";
+import { cardKeyHandler, cn } from "@/lib/utils";
 
 interface TimelineFilters {
   studyBlocks: boolean;
@@ -119,6 +119,7 @@ export function TimelineWorkspace() {
     setFullTimetableModalOpen,
     addStudyBlock,
     deleteStudyBlock,
+    setSelectedAssignmentId,
     updateStudyBlock,
     addCalendarMark,
     scheduleOccurrenceOverrides,
@@ -153,7 +154,11 @@ export function TimelineWorkspace() {
   // consume once：消费即 clear——后续 assignments 更新重跑 effect 时 pending 已为 null，不重复打开
   useEffect(() => {
     // 无 pending：无事可做（consume 后的每次重跑都从这里退出，sheet 保持打开）
-    if (!pendingArrangeId) return;
+    if (!pendingArrangeId) {
+      if ((window as unknown as { __DBG?: boolean }).__DBG) console.log("CONSUME-A: no pending, arrangeFor=", arrangeFor?.title ?? null);
+      return;
+    }
+    if ((window as unknown as { __DBG?: boolean }).__DBG) console.log("CONSUME-B: pending=", pendingArrangeId, "alreadyOpen=", arrangeFor !== null || freeBlockOpen || markOpen || quickOpen);
     const target = assignments.find((a) => a.id === pendingArrangeId);
     // stale target：clear 且不打开
     if (!target) {
@@ -260,6 +265,9 @@ export function TimelineWorkspace() {
       };
   const [studyDrag, setStudyDrag] = useState<StudyBlockDragState>({ type: "idle" });
   const studyDragRef = useRef<StudyBlockDragState>({ type: "idle" });
+  // Workflow UX V8：click vs drag suppression——跨过 5px threshold 后置 true，
+  // 使拖动释放产生的 click 不打开 Assignment；下一次 pointerdown 重置为 false。
+  const studyBlockClickSuppressedRef = useRef(false);
   const [finePointer, setFinePointer] = useState(false);
   useEffect(() => {
     const mq = window.matchMedia("(pointer: fine)");
@@ -345,6 +353,8 @@ export function TimelineWorkspace() {
       if (current.type === "pending") {
         // 5px 阈值后才 engage
         if (Math.abs(e.clientX - current.startX) < 5 && Math.abs(e.clientY - current.startY) < 5) return;
+        // Workflow UX V8：跨过阈值 = drag engagement → 吞掉随后的 click（不打开 Assignment）
+        studyBlockClickSuppressedRef.current = true;
         document.body.dataset.dragActive = "1";
         toDragging(
           evaluateStudyCandidate(current.block, e.clientX, e.clientY, current.pointerOffsetMinutes),
@@ -604,6 +614,8 @@ export function TimelineWorkspace() {
     // 只与「当前教学周真正生效」的课程比较（Task 7：effective occurrences 含一次性调课）
     const daySchedules = weekSchedules.filter((s) => s.dayOfWeek === ctx.dayOfWeek);
     const dayBlocks = studyBlocks.filter((b) => b.date === date);
+    // eslint-disable-next-line no-console
+    console.log("LAYER:", date, "blocks=", dayBlocks.length);
     const dayStart = ctx.dayStartMinutes;
     const dayEnd = ctx.dayStartMinutes + ctx.totalMinutes;
     // Kiro Proposal Ghost：ephemeral 预览（防御性冲突检查 → 标记「计划已过期」而非压课程）
@@ -632,18 +644,47 @@ export function TimelineWorkspace() {
           const showMeta = heightPct >= 3.4;
           const isDraggingThis = studyDrag.type === "dragging" && studyDrag.origin.id === b.id;
           const isRebalanced = rebalanceMoveIds.has(b.id);
+          // Workflow UX V8：linked = assignmentId 存在且 Assignment 真实存在（stale 防御）。
+          // linked → 主内容区成为打开 Assignment 的入口；standalone → 不伪造任务语义。
+          const linkedAssignment =
+            b.assignmentId && assignments.some((a) => a.id === b.assignmentId)
+              ? assignments.find((a) => a.id === b.assignmentId)!
+              : null;
+          const openTaskLabel = `打开任务《${b.title}》`;
+          const handleOpenLinkedAssignment = () => {
+            if (studyBlockClickSuppressedRef.current) {
+              // 拖动释放产生的 click：吞掉，不打开 Assignment
+              studyBlockClickSuppressedRef.current = false;
+              return;
+            }
+            setSelectedAssignmentId(b.assignmentId!);
+          };
           // V1.1：当前仍有效的课程重叠批准 → 小型 secondary label（非醒目警告）
           const validApprovalCount = findCourseOverlapsForStudyBlock({
             block: b,
       schedules: weekSchedules,
             semester,
           }).filter((o) => isCourseOverlapApproved(b, o)).length;
+          const timeHint = `${b.startTime}–${b.endTime}（${formatCompactMinutes(rawE - rawS)}）`;
+          const titleText = linkedAssignment
+            ? `${b.title} · ${timeHint} · 点击打开任务`
+            : `${b.title} · ${timeHint}`;
           return (
             <div
               key={b.id}
               data-testid="timeline-study-block"
-              title={`${b.title} · ${b.startTime}–${b.endTime}（${formatCompactMinutes(rawE - rawS)}）`}
+              title={titleText}
+              {...(linkedAssignment
+                ? {
+                    role: "button" as const,
+                    tabIndex: 0,
+                    "aria-label": openTaskLabel,
+                    onClick: handleOpenLinkedAssignment,
+                    onKeyDown: cardKeyHandler(handleOpenLinkedAssignment),
+                  }
+                : {})}
               onPointerDown={(e) => {
+                studyBlockClickSuppressedRef.current = false;
                 if (!studyDragEnabled) return;
                 if (e.button !== 0) return;
                 e.preventDefault();
@@ -664,19 +705,34 @@ export function TimelineWorkspace() {
               }}
               className={cn(
                 "absolute left-1 right-1 z-[2] rounded-lg border border-dashed border-line bg-pastel-mint/20 px-1.5 py-0.5 flex items-center gap-1 overflow-hidden group",
-                "transition-opacity duration-[var(--motion-fast)]",
+                "transition-[opacity,border-color,background-color] duration-[var(--motion-fast)]",
                 isDraggingThis && "opacity-50",
                 // Rebalance Preview：被移动的块弱化 + dashed outline（不改真实数据）
                 isRebalanced && "opacity-35 border-dashed border-[#A48F82]",
                 studyDragEnabled && !isDraggingThis && "cursor-grab",
+                isDraggingThis && "cursor-grabbing",
+                // Linked hover affordance（克制：边框/底色略增强，无 scale/glow）
+                linkedAssignment &&
+                  !isDraggingThis &&
+                  "hover:border-line-strong hover:bg-pastel-mint/30",
+                // Keyboard focus ring（linked 专属；standalone 不可聚焦）
+                linkedAssignment &&
+                  "focus-visible:outline-2 focus-visible:outline-charcoal/40 focus-visible:outline-offset-[-2px]",
+                !linkedAssignment && studyDragEnabled && "cursor-grab",
                 isDraggingThis && "cursor-grabbing"
               )}
               style={{ top: `${topPct}%`, height: `${heightPct}%`, minHeight: touchesEdge ? undefined : 6 }}
             >
-              <span className="truncate text-[10px] font-semibold text-satin-grey">{b.title}</span>
+              <span
+                className="truncate text-[10px] font-semibold text-satin-grey"
+              >
+                {b.title}
+              </span>
               {validApprovalCount > 0 && (
                 <span
-                  className="shrink-0 text-[9px] text-sandrift bg-white/70 border border-line rounded px-1 py-px"
+                  className={cn(
+                    "shrink-0 text-[9px] text-sandrift bg-white/70 border border-line rounded px-1 py-px",
+                  )}
                   title="已确认与课程时间重叠（课程时间变化后会重新检查）"
                 >
                   已确认课程重叠
@@ -684,7 +740,9 @@ export function TimelineWorkspace() {
               )}
               {showMeta && (
                 <>
-                  <span className="text-[10px] text-sandrift font-medium shrink-0">
+                  <span
+                    className="text-[10px] text-sandrift font-medium shrink-0"
+                  >
                     {formatCompactMinutes(durationMinutes)}
                   </span>
                   <button
@@ -695,7 +753,7 @@ export function TimelineWorkspace() {
                       pushToast({ message: "已删除学习计划" });
                     }}
                     aria-label={`删除学习计划 ${b.title}`}
-                    className="ml-auto p-0.5 rounded text-sandrift hover:text-danger transition-colors shrink-0 opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
+                    className="relative z-[2] ml-auto p-0.5 rounded text-sandrift hover:text-danger transition-colors shrink-0 opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
                   >
                     <X className="w-2.5 h-2.5" />
                   </button>
@@ -1228,6 +1286,9 @@ function CourseTaskMarker({
   hasConflict: boolean;
   boundsRef: React.RefObject<HTMLDivElement | null>;
 }) {
+  // Workflow UX V8：linked block row → Assignment Drawer（global owner，留在 Timeline 上下文）
+  const assignments = useAppStore((s) => s.assignments);
+  const setSelectedAssignmentId = useAppStore((s) => s.setSelectedAssignmentId);
   const [open, setOpen] = useState(false);
   const markerRef = useRef<HTMLDivElement | null>(null);
   const closeTimerRef = useRef<number | null>(null);
@@ -1307,14 +1368,47 @@ function CourseTaskMarker({
           <p className="text-[10px] font-semibold text-[#936E4C]">
             与当前课程时间重叠
           </p>
-          {blocks.slice(0, 4).map((b) => (
-            <div key={b.id} className="space-y-0.5">
-              <p className="text-[10px] font-semibold text-charcoal leading-snug">{b.title}</p>
-              <p className="text-[10px] text-satin-grey">
-                {b.startTime}–{b.endTime}
-              </p>
-            </div>
-          ))}
+          {blocks.slice(0, 4).map((b) => {
+            // Workflow UX V8：linked（assignmentId 有效且 Assignment 存在）→ 行可点击
+            // 打开 Assignment Drawer；standalone → 只读 row（不伪造任务语义）。
+            const linkedAssignment =
+              b.assignmentId && assignments.some((a) => a.id === b.assignmentId)
+                ? b.assignmentId
+                : null;
+            const rowInner = (
+              <>
+                <p className="text-[10px] font-semibold text-charcoal leading-snug">{b.title}</p>
+                <p className="text-[10px] text-satin-grey">
+                  {b.startTime}–{b.endTime}
+                  {linkedAssignment ? " · 点击打开" : ""}
+                </p>
+              </>
+            );
+            return (
+              <div key={b.id} className="space-y-0.5">
+                {linkedAssignment ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setOpen(false); // semantic close Floating Detail
+                      setSelectedAssignmentId(linkedAssignment);
+                    }}
+                    aria-label={`打开任务 ${b.title}`}
+                    title={`打开任务 ${b.title}`}
+                    className={cn(
+                      "w-full text-left rounded-md px-1 -mx-1 py-0.5 cursor-pointer",
+                      "hover:bg-alabaster transition-colors duration-[var(--motion-fast)]",
+                      "focus-visible:outline-2 focus-visible:outline-charcoal/30"
+                    )}
+                  >
+                    {rowInner}
+                  </button>
+                ) : (
+                  <div className="px-1 -mx-1 py-0.5">{rowInner}</div>
+                )}
+              </div>
+            );
+          })}
           {blocks.length > 4 && (
             <p className="text-[10px] font-semibold text-satin-grey">还有 {blocks.length - 4} 项</p>
           )}

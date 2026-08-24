@@ -102,7 +102,6 @@ export function AssignmentDrawer() {
     pauseFocusSession,
     resumeFocusSession,
     finishFocusSession,
-    toggleGroupTask,
     setPendingTimelineArrangeAssignmentId,
   } = useAppStore();
   const pushToast = useToastStore((s) => s.pushToast);
@@ -307,8 +306,6 @@ export function AssignmentDrawer() {
     setSelectedAssignmentId(null);
   };
 
-  const blocks = studyBlocks.filter((b) => b.assignmentId === assignment.id);
-  const scheduleSummary = summarizeStudySchedule(blocks);
 
   /**
    * Workflow UX V8-A「日程」（Primary）：为当前任务继续安排学习时间。
@@ -322,6 +319,9 @@ export function AssignmentDrawer() {
     setSelectedAssignmentId(null);
     setActiveTab("timetable");
   };
+
+  const blocks = studyBlocks.filter((b) => b.assignmentId === assignment.id);
+  const scheduleSummary = summarizeStudySchedule(blocks);
 
   /**
    * Workflow UX V8-B「在时间表查看」：按已有 StudyBlock 精确跳周。
@@ -361,6 +361,7 @@ export function AssignmentDrawer() {
   );
   const healthMeta = healthViewMeta(health.state);
   const healthHint = healthExplanation(health);
+
   const reminderSummary = summarizeReminders(
     reminders,
     "assignment",
