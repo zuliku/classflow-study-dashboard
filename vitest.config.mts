@@ -141,6 +141,7 @@ export default defineConfig({
       "tests/assignmentPlanningEligibility.test.ts",
       "tests/studyBlockReleaseLifecycle.test.ts",
       "tests/studyBlockReleaseStore.test.tsx",
+      "tests/reminderNavigation.test.tsx",
       "tests/drawerPresentation.test.ts",
       "tests/demoManualInjection.test.tsx",
       "tests/extensionsRuntimeTruth.test.tsx",

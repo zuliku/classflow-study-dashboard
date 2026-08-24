@@ -20,6 +20,7 @@ import { Textarea } from "@/components/ui/Textarea";
 import { Field } from "@/components/ui/Field";
 import { ExitCollapse } from "@/components/ui/ExitCollapse";
 import { OverlayLayer } from "@/components/ui/OverlayLayer";
+import { navigateReminderTarget } from "@/lib/reminders/reminderNavigation";
 
 const TARGET_LABELS: Record<Reminder["targetType"], string> = {
   assignment: "任务",
@@ -184,17 +185,15 @@ export function ReminderCenter() {
   };
 
   const handleOpenItem = (r: Reminder) => {
-    const state = useAppStore.getState();
-    if (r.targetType === "assignment" && r.targetId) {
-      close();
-      state.setSelectedAssignmentId(r.targetId);
-    } else if (r.targetType === "studyBlock" || r.targetType === "calendarMark") {
-      close();
-      state.setActiveTab("timetable");
-    } else if (r.targetType === "standalone") {
-      if (r.status === "scheduled") startEdit(r);
-      // fired / skipped：只展示历史，不重新激活
-    }
+    // Workflow UX V16：canonical routing 收敛到 shared navigateReminderTarget——
+    // entity 目标先 close Center；standalone 保持既有语义
+    //（scheduled → 就地编辑；fired / skipped 只展示历史，不重新激活）
+    navigateReminderTarget(r, {
+      onBeforeEntityNavigate: () => close(),
+      onStandalone: (rem) => {
+        if (rem.status === "scheduled") startEdit(rem);
+      },
+    });
   };
 
   const renderRow = (r: Reminder, opts: { isHistory: boolean; exiting: boolean; entering: boolean }) => {

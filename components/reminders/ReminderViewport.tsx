@@ -8,6 +8,7 @@ import { useReminderCenterStore } from "@/store/useReminderCenterStore";
 import { Reminder } from "@/types";
 import { formatLocalDateTime } from "@/lib/reminders/reminderDomain";
 import { getReminderDeliverySubtitle } from "@/lib/reminders/reminderPresentation";
+import { navigateReminderTarget } from "@/lib/reminders/reminderNavigation";
 import { KiroLogoIcon } from "@/components/kiro/KiroLogo";
 import { cn } from "@/lib/utils";
 
@@ -43,14 +44,13 @@ export function ReminderViewport() {
     const state = useAppStore.getState();
     state.markReminderRead(reminder.id, formatLocalDateTime(new Date()));
     dismiss(reminder.id);
-    if (reminder.targetType === "assignment" && reminder.targetId) {
-      state.setSelectedAssignmentId(reminder.targetId);
-    } else if (reminder.targetType === "studyBlock" || reminder.targetType === "calendarMark") {
-      state.setActiveTab("timetable");
-    } else if (reminder.targetType === "standalone") {
-      // Task 7G-A3a：standalone 通知点击 → 打开 Reminder Center（A2 曾留空）
-      useReminderCenterStore.getState().open();
-    }
+    // Workflow UX V16：navigation 收敛到 shared navigateReminderTarget
+    navigateReminderTarget(reminder, {
+      onStandalone: () => {
+        // Task 7G-A3a：standalone 通知点击 → 打开 Reminder Center（A2 曾留空）
+        useReminderCenterStore.getState().open();
+      },
+    });
   };
 
   return (

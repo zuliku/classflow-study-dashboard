@@ -16,6 +16,7 @@ import {
 import { getRunningSessionDueReminders, ReminderRuntimePhase } from "@/lib/reminders/reminderRuntimePolicy";
 import { getReminderDeliverySubtitle } from "@/lib/reminders/reminderPresentation";
 import { showBrowserReminderNotification } from "@/lib/reminders/browserNotifications";
+import { navigateReminderTarget } from "@/lib/reminders/reminderNavigation";
 
 /**
  * Reminder Local Runtime（Task 7G-A2）：无视觉 DOM（return null）。
@@ -33,18 +34,16 @@ export function ReminderRuntime() {
   const phaseRef = useRef<ReminderRuntimePhase>("booting");
   const enqueue = useReminderDeliveryStore((s) => s.enqueue);
 
-  /** 系统通知点击 → 打开 ClassFlow + target navigation（bridge 不 import store，回调在此注入） */
+  /** 系统通知点击 → 打开 ClassFlow + target navigation（bridge 不 import store，回调在此注入）。
+   *  Workflow UX V16：navigation 收敛到 shared navigateReminderTarget（fresh Store 解析）。 */
   const buildNotificationOnClick = useCallback((reminder: Reminder) => {
     return () => {
       const state = useAppStore.getState();
+      // read 语义先行：即使 target stale，reminder 也必须标记已读
       state.markReminderRead(reminder.id, formatLocalDateTime(new Date()));
-      if (reminder.targetType === "assignment" && reminder.targetId) {
-        state.setSelectedAssignmentId(reminder.targetId);
-      } else if (reminder.targetType === "studyBlock" || reminder.targetType === "calendarMark") {
-        state.setActiveTab("timetable");
-      } else if (reminder.targetType === "standalone") {
-        useReminderCenterStore.getState().open();
-      }
+      navigateReminderTarget(reminder, {
+        onStandalone: () => useReminderCenterStore.getState().open(),
+      });
     };
   }, []);
 
