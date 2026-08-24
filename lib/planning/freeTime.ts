@@ -10,6 +10,7 @@
 import { CalendarMark, CourseSchedule, Semester, StudyBlock } from "@/types";
 import { isScheduleActive } from "@/lib/schedule";
 import { getSemesterWeek } from "@/lib/semester";
+import { isStudyBlockPlanningActive } from "@/lib/planning/studyBlockLifecycle";
 
 export interface FreeTimeQuery {
   start: Date;
@@ -141,9 +142,10 @@ export function findFreeTime(query: FreeTimeQuery): FreeTimeSlot[] {
       }
     }
 
-    // 已有 StudyBlock（避免重复排程）
+    // 已有 StudyBlock（避免重复排程）；Workflow UX V15：released block 不占 Free Time
     for (const b of query.studyBlocks) {
       if (b.date !== date) continue;
+      if (!isStudyBlockPlanningActive(b)) continue;
       const bs = parseHM(b.startTime);
       const be = parseHM(b.endTime);
       if (bs === null || be === null || be <= bs) continue;

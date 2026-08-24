@@ -604,3 +604,50 @@ describe("ArrangeSheet commit-time fresh revalidation（open-sheet race）", () 
     expect(useAppStore.getState().studyBlocks[0].assignmentId).toBe("a-v8");
   }, 10000);
 });
+
+// ============================================================
+// Workflow UX V15 —— Drawer schedule summary / view priority（released）
+// ============================================================
+describe("AssignmentDrawer released blocks presentation", () => {
+  function drawerWithBlocks(blocks: StudyBlock[], status: Assignment["status"] = "completed") {
+    useAppStore.setState({
+      assignments: [mkAssignment({ status })],
+      studyBlocks: blocks,
+      selectedAssignmentId: "a-v8",
+      activeTab: "assignments" as never,
+    });
+    render(<AssignmentDrawer />);
+  }
+
+  it("summary 只计 active；released 以克制计数呈现", () => {
+    drawerWithBlocks([
+      { id: "sb-act", title: "活跃计划", date: weekDate(8, 1), startTime: "10:00", endTime: "11:00", assignmentId: "a-v8", source: "manual" } as unknown as StudyBlock,
+      { id: "sb-rel1", title: "旧计划一", date: weekDate(7, 2), startTime: "14:00", endTime: "15:00", assignmentId: "a-v8", planningState: "released", source: "manual" } as unknown as StudyBlock,
+      { id: "sb-rel2", title: "旧计划二", date: weekDate(6, 3), startTime: "14:00", endTime: "15:00", assignmentId: "a-v8", planningState: "released", source: "manual" } as unknown as StudyBlock,
+    ]);
+    const releasedNote = screen.getByText(/已释放 2 个旧计划/);
+    const summaryText = releasedNote.parentElement?.textContent ?? "";
+    expect(summaryText).toContain("1 个时段"); // released 不计入有效安排
+    expect(summaryText).toContain("已释放 2 个旧计划");
+  });
+
+  it("reopened todo 只有 released block → 显示未安排 + 日程重新 enabled", () => {
+    drawerWithBlocks(
+      [{ id: "sb-rel", title: "旧计划", date: weekDate(7, 2), startTime: "14:00", endTime: "15:00", assignmentId: "a-v8", planningState: "released", source: "manual" } as unknown as StudyBlock],
+      "todo"
+    );
+    expect(screen.getByText("未安排")).toBeTruthy();
+    const scheduleBtn = screen.getByRole("button", { name: /日程/ }) as HTMLButtonElement;
+    expect(scheduleBtn.disabled).toBe(false);
+  });
+
+  it("在时间表查看：active 优先；仅 released 时 fallback 可查看历史", () => {
+    // 仅 released：仍可跳到该 block 所在周
+    drawerWithBlocks(
+      [{ id: "sb-rel-only", title: "旧计划", date: weekDate(9, 2), startTime: "14:00", endTime: "15:00", assignmentId: "a-v8", planningState: "released", source: "manual" } as unknown as StudyBlock],
+      "completed"
+    );
+    fireEvent.click(screen.getByRole("button", { name: /在时间表查看/ }));
+    expect(useAppStore.getState().currentSemesterWeek).toBe(9);
+  });
+});

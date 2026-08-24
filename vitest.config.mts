@@ -139,6 +139,8 @@ export default defineConfig({
       "tests/groupTaskDeepLink.test.tsx",
       "tests/studyOutlookActionClosure.test.tsx",
       "tests/assignmentPlanningEligibility.test.ts",
+      "tests/studyBlockReleaseLifecycle.test.ts",
+      "tests/studyBlockReleaseStore.test.tsx",
       "tests/drawerPresentation.test.ts",
       "tests/demoManualInjection.test.tsx",
       "tests/extensionsRuntimeTruth.test.tsx",

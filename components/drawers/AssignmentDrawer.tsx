@@ -17,6 +17,7 @@ import { useAppStore } from "@/store/useAppStore";
 import { useToastStore } from "@/store/useToastStore";
 import { Priority, AssignmentStatus, Assignment } from "@/types";
 import { formatEstimatedMinutes, isAssignmentPlanningEligible } from "@/lib/tasks/taskSemantics";
+import { isStudyBlockPlanningActive } from "@/lib/planning/studyBlockLifecycle";
 import { resolveAssignmentMaterials } from "@/lib/tasks/taskMaterials";
 import { uploadCourseMaterials } from "@/lib/materialUpload";
 import { RECURRENCE_LABELS } from "@/lib/tasks/taskRecurrence";
@@ -355,15 +356,22 @@ export function AssignmentDrawer() {
   };
 
   const blocks = studyBlocks.filter((b) => b.assignmentId === assignment.id);
-  const scheduleSummary = summarizeStudySchedule(blocks);
+  // Workflow UX V15：released block 不算有效学习安排——summary 只基于 active；
+  // released 仅以克制计数呈现（「已释放 N 个旧计划」），仍可在时间表查看历史
+  const activeBlocks = blocks.filter((b) => isStudyBlockPlanningActive(b));
+  const releasedBlocks = blocks.filter((b) => !isStudyBlockPlanningActive(b));
+  const scheduleSummary = summarizeStudySchedule(activeBlocks);
 
   /**
    * Workflow UX V8-B「在时间表查看」：按已有 StudyBlock 精确跳周。
    * 目标选择：学期内 block 按 date+startTime 升序 → 今天/未来最早；全过去 → 最近过去。
    * 禁止 DDL fallback（不同实体）。导航失败（全学期外）不关闭 Drawer——保留用户上下文。
+   * Workflow UX V15：active block 优先；仅存在 released 历史时仍可查看。
    */
   const handleViewStudySchedule = () => {
-    const target = resolveStudyScheduleTimelineTarget(blocks, semester, new Date());
+    const target =
+      resolveStudyScheduleTimelineTarget(activeBlocks, semester, new Date()) ??
+      resolveStudyScheduleTimelineTarget(releasedBlocks, semester, new Date());
     if (!target) return;
     const opened = openTimelineAtDate({
       date: target.block.date,
@@ -376,8 +384,9 @@ export function AssignmentDrawer() {
 
   // Execution「在时间表查看」disabled 判定：有 blocks 但全部不在当前学期范围
   const viewScheduleDisabled =
-    scheduleSummary.hasBlocks &&
-    resolveStudyScheduleTimelineTarget(blocks, semester, new Date()) === null;
+    blocks.length > 0 &&
+    resolveStudyScheduleTimelineTarget(activeBlocks, semester, new Date()) === null &&
+    resolveStudyScheduleTimelineTarget(releasedBlocks, semester, new Date()) === null;
 
   const course = courses.find((c) => c.id === assignment.courseId);
 
@@ -639,12 +648,13 @@ export function AssignmentDrawer() {
           {/* EXECUTION：截止 / 预计耗时 / 学习安排 / 专注 / 进度 + 子任务 */}
           <AssignmentDetailExecution
             deadline={deadline}
+            scheduleSummary={scheduleSummary}
+            releasedScheduleCount={releasedBlocks.length}
             estimatedMinutesLabel={
               assignment.estimatedMinutes
                 ? formatEstimatedMinutes(assignment.estimatedMinutes) ?? "未估时"
                 : "未估时"
             }
-            scheduleSummary={scheduleSummary}
             onViewSchedule={handleViewStudySchedule}
             viewScheduleDisabled={viewScheduleDisabled}
             viewScheduleDisabledTitle="学习安排不在当前学期范围内"

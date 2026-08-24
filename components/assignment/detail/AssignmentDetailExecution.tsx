@@ -35,6 +35,7 @@ export function AssignmentDetailExecution({
   deadline,
   estimatedMinutesLabel,
   scheduleSummary,
+  releasedScheduleCount = 0,
   onViewSchedule,
   viewScheduleDisabled,
   viewScheduleDisabledTitle,
@@ -49,6 +50,8 @@ export function AssignmentDetailExecution({
   /** 已格式化的预计耗时文案（未估时 → "未估时"） */
   estimatedMinutesLabel: string;
   scheduleSummary: StudyScheduleSummary;
+  /** Workflow UX V15：已释放（terminal 任务）的历史计划数（克制计数，不计入有效安排） */
+  releasedScheduleCount?: number;
   onViewSchedule: () => void;
   /** Workflow UX V8：全部 StudyBlock 均不在当前学期范围 → 禁用查看（muted disabled pattern，非 clickable no-op） */
   viewScheduleDisabled?: boolean;
@@ -86,6 +89,11 @@ export function AssignmentDetailExecution({
               {scheduleSummary.hasBlocks
                 ? `${formatEstimatedMinutes(scheduleSummary.minutes) ?? `${scheduleSummary.minutes} 分钟`} · ${scheduleSummary.blockCount} 个时段`
                 : "未安排"}
+              {releasedScheduleCount > 0 && (
+                <span className="ml-1 text-[10px] font-medium text-sandrift" title="任务结束后的历史计划已释放，不占用未来安排容量">
+                  · 已释放 {releasedScheduleCount} 个旧计划
+                </span>
+              )}
             </span>
             <button
               type="button"
@@ -99,7 +107,8 @@ export function AssignmentDetailExecution({
                   : "text-satin-grey hover:text-charcoal"
               )}
             >
-              {scheduleSummary.hasBlocks ? "在时间表查看" : "安排"}
+              {/* Workflow UX V15：仅存在 released 历史时也提供「在时间表查看」（View ≠ Arrange） */}
+              {scheduleSummary.hasBlocks || releasedScheduleCount > 0 ? "在时间表查看" : "安排"}
             </button>
           </span>
         </div>

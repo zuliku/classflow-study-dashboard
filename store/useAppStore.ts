@@ -25,7 +25,14 @@ import {
 } from "@/types";
 import { createDefaultSemester, getSemesterWeek } from "@/lib/semester";
 import { getLocalDDLDate, parseLocalDDL } from "@/lib/ddl";
-import { normalizeAssignment, hasTaskDeadline } from "@/lib/tasks/taskSemantics";
+import { normalizeAssignment, hasTaskDeadline, isAssignmentPlanningEligible } from "@/lib/tasks/taskSemantics";
+import {
+  didAssignmentLosePlanningEligibility,
+  releaseFutureStudyBlocksForAssignment,
+  clearScheduledRemindersForReleasedBlocks,
+  reconcileTerminalAssignmentStudyBlocks,
+  isStudyBlockPlanningActive,
+} from "@/lib/planning/studyBlockLifecycle";
 import {
   sanitizeAssignmentMaterialIds,
   sanitizeAssignmentMaterialLinks,
@@ -187,7 +194,9 @@ function findTargetAnchor(
   }
   if (targetType === "studyBlock") {
     const b = state.studyBlocks.find((x) => x.id === targetId);
-    return b ? getReminderTargetAnchor("studyBlock", b) : null;
+    // Workflow UX V15：released block 不再提供 reminder anchor（relative 创建被拒绝）
+    if (!b || !isStudyBlockPlanningActive(b)) return null;
+    return getReminderTargetAnchor("studyBlock", b);
   }
   if (targetType === "calendarMark") {
     const m = state.calendarMarks.find((x) => x.id === targetId);
@@ -432,7 +441,7 @@ function sanitizePersistedState(persisted: unknown): PersistedAppState {
   const groupProjects = Array.isArray(legacy.groupProjects)
     ? (legacy.groupProjects as GroupProject[]).map(normalizeGroupProject)
     : [];
-  return {
+  const result: PersistedAppState = {
     userProfile:
       legacy.userProfile && typeof legacy.userProfile === "object"
         ? (legacy.userProfile as UserProfile)
@@ -484,6 +493,17 @@ function sanitizePersistedState(persisted: unknown): PersistedAppState {
         ? legacy.activeBellScheduleId
         : null,
   };
+
+  // Workflow UX V15：Legacy Terminal Data Reconciliation（幂等）——
+  // 旧数据允许「terminal Assignment + 未来 active StudyBlock + scheduled reminder」共存；
+  // hydrate 时统一修复（past block 保持；active parent 不触碰；非法 planningState 视为 active）
+  const reconciled = reconcileTerminalAssignmentStudyBlocks({
+    assignments: result.assignments,
+    studyBlocks: result.studyBlocks ?? [],
+    reminders: result.reminders ?? [],
+    now: Date.now(),
+  });
+  return { ...result, studyBlocks: reconciled.studyBlocks, reminders: reconciled.reminders };
 }
 
 export interface AppState {
@@ -1088,6 +1108,13 @@ export const useAppStore = create<AppState>()(
             defaultDDLTime: preferences.defaultDDLTime,
             now: nowLocalString(),
           });
+          // Workflow UX V15：backup import 同样执行 legacy terminal reconciliation（幂等）
+          const reconciledRestore = reconcileTerminalAssignmentStudyBlocks({
+            assignments,
+            studyBlocks: Array.isArray(data.studyBlocks) ? data.studyBlocks : [],
+            reminders,
+            now: Date.now(),
+          });
           return {
             userProfile: data.userProfile,
             semester: data.semester,
@@ -1096,9 +1123,9 @@ export const useAppStore = create<AppState>()(
             assignments,
             calendarMarks,
             groupProjects: data.groupProjects.map(normalizeGroupProject),
-            studyBlocks: Array.isArray(data.studyBlocks) ? data.studyBlocks : [],
+            studyBlocks: reconciledRestore.studyBlocks,
             preferences,
-            reminders,
+            reminders: reconciledRestore.reminders,
             focusSessions: Array.isArray(data.focusSessions)
               ? data.focusSessions.map(normalizeFocusSession).filter((f): f is FocusSession => f !== null)
               : [],
@@ -1472,6 +1499,7 @@ export const useAppStore = create<AppState>()(
             a.id === next.id ? next : a
           );
           let newReminders = state.reminders;
+          let newStudyBlocks = state.studyBlocks;
           // Task 7G-A1：DDL 变化 → 同步该任务的 relative reminders（absolute 不动；
           // anchor 消失（DDL 删除）→ scheduled relative 移除，不自动变 absolute）
           if (oldAssignment && (oldAssignment.ddl ?? null) !== (next.ddl ?? null)) {
@@ -1555,6 +1583,21 @@ export const useAppStore = create<AppState>()(
             spawnedChild = applied.spawnedAssignment;
           }
 
+          // Workflow UX V15：eligible → terminal（submitted / completed，含 Full Editor 保存）→
+          // 同一 set 内释放未来 StudyBlocks + 清理 scheduled reminder（无中间态）
+          if (oldAssignment && didAssignmentLosePlanningEligibility(oldAssignment.status, next.status)) {
+            const released = releaseFutureStudyBlocksForAssignment({
+              studyBlocks: newStudyBlocks,
+              assignmentId: next.id,
+              now: Date.now(),
+            });
+            newStudyBlocks = released.studyBlocks;
+            newReminders = clearScheduledRemindersForReleasedBlocks(
+              newReminders,
+              new Set(released.releasedIds)
+            );
+          }
+
           // P2：统一自动 DDL 提醒 reconcile（eligible → 生成/保留；ineligible / opt-out / 已过 → 移除；
           // completed 清除的 reminders 不会重建；spawn 的 child 获得自己的 auto）
           const finalReminders = reconcileAllAuto({
@@ -1591,6 +1634,7 @@ export const useAppStore = create<AppState>()(
             assignments: newAssignments,
             calendarMarks: newCalendarMarks,
             reminders: finalReminders,
+            studyBlocks: newStudyBlocks,
           };
         }),
 
@@ -1627,6 +1671,7 @@ export const useAppStore = create<AppState>()(
           });
           let calendarMarks = state.calendarMarks;
           let reminders = state.reminders;
+          let studyBlocks = state.studyBlocks;
           // Task 7F + 7G：completion → recurrence spawn + 清除 scheduled reminders
           let spawnedChild: Assignment | undefined;
           if (completedNow && target) {
@@ -1639,6 +1684,20 @@ export const useAppStore = create<AppState>()(
             calendarMarks = applied.calendarMarks;
             reminders = applied.reminders;
             spawnedChild = applied.spawnedAssignment;
+          }
+          // Workflow UX V15：eligible → terminal（submitted / completed）→
+          // 同一 set 内释放未来 StudyBlocks 并清理其 scheduled reminder（无中间态）
+          if (target && didAssignmentLosePlanningEligibility(target.status, status)) {
+            const released = releaseFutureStudyBlocksForAssignment({
+              studyBlocks,
+              assignmentId: id,
+              now: Date.now(),
+            });
+            studyBlocks = released.studyBlocks;
+            reminders = clearScheduledRemindersForReleasedBlocks(
+              reminders,
+              new Set(released.releasedIds)
+            );
           }
           // P2：submitted/completed → scheduled auto 移除；回到 todo/doing（eligible）→ 按当前默认重建
           reminders = reconcileAllAuto({ assignments, calendarMarks, reminders, preferences: state.preferences });
@@ -1664,7 +1723,7 @@ export const useAppStore = create<AppState>()(
             }
             enqueueLearningHistoryEvents(events);
           }
-          return { assignments, calendarMarks, reminders };
+          return { assignments, calendarMarks, reminders, studyBlocks };
         }),
 
       updateAssignmentPriority: (id, priority, context) => {
@@ -1687,6 +1746,7 @@ export const useAppStore = create<AppState>()(
           });
           let calendarMarks = state.calendarMarks;
           let reminders = state.reminders;
+          let studyBlocks = state.studyBlocks;
           // Task 7F + 7G：进度拉满 → completed（Drawer 滑杆 / Kiro set_assignment_progress）
           const updated = assignments.find((a) => a.id === id);
           let spawnedChild: Assignment | undefined;
@@ -1696,6 +1756,19 @@ export const useAppStore = create<AppState>()(
             calendarMarks = applied.calendarMarks;
             reminders = applied.reminders;
             spawnedChild = applied.spawnedAssignment;
+          }
+          // Workflow UX V15：progress 驱动的 eligible → terminal → release future blocks（原子）
+          if (target && updated && didAssignmentLosePlanningEligibility(target.status, updated.status)) {
+            const released = releaseFutureStudyBlocksForAssignment({
+              studyBlocks,
+              assignmentId: id,
+              now: Date.now(),
+            });
+            studyBlocks = released.studyBlocks;
+            reminders = clearScheduledRemindersForReleasedBlocks(
+              reminders,
+              new Set(released.releasedIds)
+            );
           }
           // P2：统一自动 DDL 提醒 reconcile
           reminders = reconcileAllAuto({ assignments, calendarMarks, reminders, preferences: state.preferences });
@@ -1720,7 +1793,7 @@ export const useAppStore = create<AppState>()(
             }
             enqueueLearningHistoryEvents(events);
           }
-          return { assignments, calendarMarks, reminders };
+          return { assignments, calendarMarks, reminders, studyBlocks };
         }),
 
       toggleSubtask: (assignmentId, subtaskId, context) =>
@@ -1739,6 +1812,7 @@ export const useAppStore = create<AppState>()(
           });
           let calendarMarks = state.calendarMarks;
           let reminders = state.reminders;
+          let studyBlocks = state.studyBlocks;
           // Task 7F + 7G：完成最后一个子任务 → 同样 spawn + 清除 scheduled reminders
           const updated = assignments.find((a) => a.id === assignmentId);
           let spawnedChild: Assignment | undefined;
@@ -1748,6 +1822,19 @@ export const useAppStore = create<AppState>()(
             calendarMarks = applied.calendarMarks;
             reminders = applied.reminders;
             spawnedChild = applied.spawnedAssignment;
+          }
+          // Workflow UX V15：subtask 驱动的 eligible → terminal → release future blocks（原子）
+          if (target && updated && didAssignmentLosePlanningEligibility(target.status, updated.status)) {
+            const released = releaseFutureStudyBlocksForAssignment({
+              studyBlocks,
+              assignmentId,
+              now: Date.now(),
+            });
+            studyBlocks = released.studyBlocks;
+            reminders = clearScheduledRemindersForReleasedBlocks(
+              reminders,
+              new Set(released.releasedIds)
+            );
           }
           // P2：统一自动 DDL 提醒 reconcile
           reminders = reconcileAllAuto({ assignments, calendarMarks, reminders, preferences: state.preferences });
@@ -1772,7 +1859,7 @@ export const useAppStore = create<AppState>()(
             }
             enqueueLearningHistoryEvents(events);
           }
-          return { assignments, calendarMarks, reminders };
+          return { assignments, calendarMarks, reminders, studyBlocks };
         }),
 
       deleteAssignment: (id, context) => {
@@ -2074,6 +2161,14 @@ export const useAppStore = create<AppState>()(
           triggerAt = resolved;
         } else if (!parseLocalDDL(input.triggerAt)) {
           return null;
+        }
+        // Workflow UX V15：released StudyBlock 一律不得新建 scheduled reminder
+        //（absolute 与 relative 同拒——不只挡 relative）
+        if (input.targetType === "studyBlock") {
+          const targetBlock = state.studyBlocks.find(
+            (b) => b.id === (input.targetId ?? "")
+          );
+          if (targetBlock && !isStudyBlockPlanningActive(targetBlock)) return null;
         }
         const reminder = normalizeReminder({
           ...input,

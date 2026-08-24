@@ -18,6 +18,7 @@ import { parseLocalDDL } from "@/lib/ddl";
 import { findFreeTime, FreeTimeSlot } from "@/lib/planning/freeTime";
 import { allocateStudyCapacity } from "@/lib/planning/capacityAllocation";
 import { isScheduleActive } from "@/lib/schedule";
+import { isStudyBlockPlanningActive } from "@/lib/planning/studyBlockLifecycle";
 import { getSemesterWeek } from "@/lib/semester";
 import { timeToMinutes } from "@/lib/timeline/timelineGeometry";
 import { StudyOutlookHorizon } from "@/lib/outlook/types";
@@ -379,6 +380,8 @@ export function proposeStudyRebalance(input: StudyRebalanceInput): StudyRebalanc
   );
   const candidates = studyBlocks.filter((b) => {
     if (b.source !== "kiro") return false;
+    // Workflow UX V15：released block 不是 active 计划——不能成为 move candidate
+    if (!isStudyBlockPlanningActive(b)) return false;
     if (!b.assignmentId || !activeIds.has(b.assignmentId)) return false;
     const startMs = posStartMs(positionOf(b));
     return !Number.isNaN(startMs) && startMs > now.getTime();

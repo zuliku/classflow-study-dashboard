@@ -16,6 +16,7 @@ import { parseLocalDDL } from "@/lib/ddl";
 import { timeToMinutes } from "@/lib/schedule";
 import { FREE_TIME_DAY_END, FREE_TIME_DAY_START } from "@/lib/planning/freeTime";
 import { findCourseOverlapsForStudyBlock } from "@/lib/planning/courseOverlapPolicy";
+import { isStudyBlockPlanningActive } from "@/lib/planning/studyBlockLifecycle";
 
 export interface StudyPlanApplyBlockInput {
   assignmentId: string;
@@ -174,8 +175,10 @@ export function preflightStudyPlan(input: StudyPlanApplyInput, state: AppState):
       }
     }
 
-    // 7. Duplicate：已存在相同 assignmentId + date + start + end → stale（Double Apply 防护）
+    // 7. Duplicate：已存在相同 assignmentId + date + start + end → stale（Double Apply 防护）；
+    //    Workflow UX V15：released block 不构成 active duplicate
     for (const x of state.studyBlocks) {
+      if (!isStudyBlockPlanningActive(x)) continue;
       if (
         x.assignmentId === b.assignmentId &&
         x.date === b.date &&
@@ -186,9 +189,11 @@ export function preflightStudyPlan(input: StudyPlanApplyInput, state: AppState):
       }
     }
 
-    // 8. 与最新 StudyBlock 冲突（Proposal 生成后用户可能手动新增）——仍为硬失败
+    // 8. 与最新 StudyBlock 冲突（Proposal 生成后用户可能手动新增）——仍为硬失败；
+    //    Workflow UX V15：released block 已释放时间 reservation，不参与冲突扫描
     for (const x of state.studyBlocks) {
       if (x.date !== b.date) continue;
+      if (!isStudyBlockPlanningActive(x)) continue;
       const xs = timeToMinutes(x.startTime);
       const xe = timeToMinutes(x.endTime);
       if (xs === null || xe === null) continue;

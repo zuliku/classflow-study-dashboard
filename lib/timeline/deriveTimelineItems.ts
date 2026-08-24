@@ -9,6 +9,7 @@ import { Assignment, CalendarMark, GroupProject, StudyBlock, Priority } from "@/
 import { TimelineItem } from "@/lib/timeline/timelineTypes";
 import { timeToMinutes } from "@/lib/timeline/timelineGeometry";
 import { isAssignmentPlanningEligible } from "@/lib/tasks/taskSemantics";
+import { isStudyBlockPlanningActive } from "@/lib/planning/studyBlockLifecycle";
 
 /** 本地 "YYYY-MM-DDTHH:mm" → date "YYYY-MM-DD" */
 function ddlToDate(ddl: string): string {
@@ -118,8 +119,13 @@ export function deriveUnscheduledAssignments(input: {
   studyBlocks: StudyBlock[];
 }): Assignment[] {
   const { assignments, studyBlocks } = input;
+  // Workflow UX V15：只有 planning active 的 StudyBlock 才算「已安排」——
+  // released block 不再从 Shelf 隐藏 Assignment（reopened 任务应重新出现）
   const scheduledIds = new Set(
-    studyBlocks.map((b) => b.assignmentId).filter((id): id is string => !!id)
+    studyBlocks
+      .filter((b) => isStudyBlockPlanningActive(b))
+      .map((b) => b.assignmentId)
+      .filter((id): id is string => !!id)
   );
   // Workflow UX V14：planning eligibility 单一事实源（todo/doing）——
   // submitted 与 completed 同为 terminal，不得再进入 Shelf（旧实现 status !== "completed" 漏掉 submitted）

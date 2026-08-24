@@ -290,6 +290,13 @@ export interface StudyBlock {
   source?: "manual" | "kiro";
   /** 课程软重叠的显式批准（Block × Schedule 版本级别；optional，旧数据兼容） */
   courseOverlapApprovals?: import("@/lib/planning/courseOverlapPolicy").StudyBlockCourseOverlapApproval[];
+  /**
+   * Workflow UX V15：planning lifecycle。undefined = active / normal（旧数据天然兼容）；
+   * "released" = 时间 reservation 已释放（linked Assignment 进入 planning terminal）——
+   * 不占 Free Time、不制造 hard conflict、不计 scheduledMinutes、不参与 Rebalance /
+   * Focus anchor；记录仍可查看 / 打开原任务 / 手动删除。不是 delete，也不是 standalone。
+   */
+  planningState?: "released";
 }
 
 /** 上课节次模板（Bell Schedule）：节次号 → 具体时间；课表导入节次解析的唯一来源 */

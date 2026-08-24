@@ -7,6 +7,7 @@
 import { Assignment, StudyBlock } from "@/types";
 import { parseLocalDDL } from "@/lib/ddl";
 import { timeToMinutes } from "@/lib/timeline/timelineGeometry";
+import { isStudyBlockPlanningActive } from "@/lib/planning/studyBlockLifecycle";
 
 /** 该 StudyBlock 是否完全落在 Deadline 之前（同日 end <= deadline 时刻） */
 export function blockBeforeDeadline(
@@ -30,7 +31,13 @@ export function getScheduledMinutesBeforeDeadline(
   const dlDate = assignment.ddl.slice(0, 10);
   const dlMinutes = deadline.getHours() * 60 + deadline.getMinutes();
   return studyBlocks
-    .filter((b) => b.assignmentId === assignment.id && blockBeforeDeadline(b, dlDate, dlMinutes))
+    .filter(
+      (b) =>
+        // Workflow UX V15：released block 不计入 alreadyScheduledMinutes
+        isStudyBlockPlanningActive(b) &&
+        b.assignmentId === assignment.id &&
+        blockBeforeDeadline(b, dlDate, dlMinutes)
+    )
     .reduce((sum, b) => {
       const s = timeToMinutes(b.startTime);
       const e = timeToMinutes(b.endTime);

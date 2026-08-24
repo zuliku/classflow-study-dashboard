@@ -8,6 +8,7 @@
 
 import { CourseSchedule, StudyBlock } from "@/types";
 import { isScheduleActive, timeToMinutes } from "@/lib/schedule";
+import { isStudyBlockPlanningActive } from "@/lib/planning/studyBlockLifecycle";
 
 export interface CourseOverlap {
   scheduleId: string;
@@ -83,6 +84,8 @@ export function analyzeStudyBlockPlacement(
 
   for (const b of state.studyBlocks) {
     if (b.id === block.id || b.date !== block.date) continue;
+    // Workflow UX V15：released block 不是 active reservation——不制造 hard conflict
+    if (!isStudyBlockPlanningActive(b)) continue;
     const bs = timeToMinutes(b.startTime) ?? 0;
     const be = timeToMinutes(b.endTime) ?? bs + 60;
     if (overlaps(s, e, bs, be)) {

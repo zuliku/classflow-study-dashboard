@@ -16,6 +16,7 @@ import { StudyBlock } from "@/types";
 import { parseLocalDDL } from "@/lib/ddl";
 import { timeToMinutes } from "@/lib/schedule";
 import { findCourseOverlapsForStudyBlock } from "@/lib/planning/courseOverlapPolicy";
+import { isStudyBlockPlanningActive } from "@/lib/planning/studyBlockLifecycle";
 
 export interface RebalancePositionInput {
   date: string;
@@ -127,9 +128,11 @@ function hardOccupancyConflict(
       return true;
     }
   }
-  // 受保护 StudyBlock（非本次移动的 block；移动块旧位置已释放）
+  // 受保护 StudyBlock（非本次移动的 block；移动块旧位置已释放）；
+  // Workflow UX V15：released block 不是 active reservation，不构成目标 hard conflict
   for (const b of state.studyBlocks) {
     if (excludedIds.has(b.id)) continue;
+    if (!isStudyBlockPlanningActive(b)) continue;
     if (b.date !== target.date) continue;
     const bs = parseHM(b.startTime);
     const be = parseHM(b.endTime);

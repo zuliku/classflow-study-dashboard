@@ -6,6 +6,7 @@ import { useReminderPreferencesStore } from "@/store/useReminderPreferencesStore
 import { useReminderDeliveryStore } from "@/store/useReminderDeliveryStore";
 import { useReminderCenterStore } from "@/store/useReminderCenterStore";
 import { Reminder } from "@/types";
+import { isStudyBlockPlanningActive } from "@/lib/planning/studyBlockLifecycle";
 import { evaluateMissedReminder, formatLocalDateTime } from "@/lib/reminders/reminderDomain";
 import {
   getDueScheduledReminders,
@@ -54,6 +55,15 @@ export function ReminderRuntime() {
       // 每次交付前重新读取 Store：只有仍 scheduled 才继续（duplicate guard，不依赖 React closure）
       const current = state.reminders.find((r) => r.id === reminder.id);
       if (!current || current.status !== "scheduled") return false;
+      // Workflow UX V15：final safety guard——target 为 released/已消失的 StudyBlock 时
+      // 不 deliver，标记 skipped（防 legacy/race reminder 重复进入 scheduler）
+      if (current.targetType === "studyBlock") {
+        const block = state.studyBlocks.find((b) => b.id === current.targetId);
+        if (!block || !isStudyBlockPlanningActive(block)) {
+          state.markReminderSkipped(current.id);
+          return false;
+        }
+      }
       state.markReminderFired(reminder.id, formatLocalDateTime(new Date()));
       enqueue(reminder.id);
       const prefs = useReminderPreferencesStore.getState();

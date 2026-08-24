@@ -861,3 +861,107 @@ describe("StudyBlock → AssignmentDrawer execution handoff", () => {
     10000
   );
 });
+
+// ============================================================
+// Workflow UX V15 —— Released StudyBlock Timeline 行为
+// ============================================================
+const RELEASE_NOW = new Date(`${SEMESTER.startDate}T00:00:00`).getTime() + 6 * 7 * 86400000 + 12 * 3600000;
+
+describe("Released StudyBlock：Timeline 视觉 / 交互 / Marker", () => {
+  function seedReleased(over: Partial<StudyBlock> = {}) {
+    const prefs = useAppStore.getState().preferences;
+    useAppStore.setState({
+      assignments: [{ ...LINKED, status: "completed" }],
+      studyBlocks: [
+        {
+          id: "sb-rel",
+          title: "实证报告学习",
+          date: WEEK7_MON,
+          startTime: "14:00",
+          endTime: "15:00",
+          assignmentId: "a-exec",
+          source: "manual",
+          planningState: "released",
+          ...over,
+        } as unknown as StudyBlock,
+      ],
+      focusSessions: [],
+      preferences: { ...prefs, enableScheduleDirectManipulation: true },
+    });
+    render(<TimelineWorkspace />);
+  }
+
+  it("released block 渲染并显示「已释放」；main action aria 含「学习计划已释放」", () => {
+    useAppStore.setState({ currentSemesterWeek: 7 });
+    seedReleased();
+    const btn = screen.getByLabelText("打开任务《实证报告学习》，该学习计划已释放");
+    expect(btn).toBeTruthy();
+    expect(screen.getByText("已释放")).toBeTruthy();
+  });
+
+  it("released main action 仍打开 Assignment Drawer", () => {
+    useAppStore.setState({ currentSemesterWeek: 7 });
+    seedReleased();
+    fireEvent.click(screen.getByLabelText(/该学习计划已释放/));
+    expect(useAppStore.getState().selectedAssignmentId).toBe("a-exec");
+  });
+
+  it("released block pointerdown 不进入 drag lifecycle（无 dragActive）", () => {
+    useAppStore.setState({ currentSemesterWeek: 7 });
+    seedReleased();
+    const el = getStudyBlockEl();
+    fireEvent.pointerDown(el, { button: 0, clientX: 100, clientY: 100, pointerId: 1 });
+    act(() => {
+      fireEvent.pointerMove(window, { clientX: 130, clientY: 140, pointerId: 1 });
+    });
+    expect(document.body.dataset.dragActive).not.toBe("1");
+  });
+
+  it("released block 不锚定 Focus Awareness（即使时间窗命中也不显示专注中）", () => {
+    useAppStore.setState({ currentSemesterWeek: 7 });
+    seedReleased();
+    // 构造 running focus，startedAt 落在 released block 时间窗内
+    act(() => {
+      useAppStore.setState({
+        focusSessions: [
+          {
+            id: "f-race", plannedMinutes: 25,
+            startedAt: new Date(`${WEEK7_TUE}T14:30:00`).getTime(),
+            activeStartedAt: new Date(`${WEEK7_TUE}T14:30:00`).getTime(),
+            accumulatedActiveMs: 0, status: "running",
+            assignmentId: "a-exec", source: "manual",
+            createdAt: 0, updatedAt: 0,
+          } as never,
+        ],
+      });
+    });
+    expect(screen.getByLabelText("打开任务《实证报告学习》，该学习计划已释放")).toBeTruthy();
+    expect(screen.queryByText("专注中")).toBeNull();
+  });
+
+  it("delete 对 released block 仍可用", () => {
+    useAppStore.setState({ currentSemesterWeek: 7 });
+    seedReleased();
+    fireEvent.click(screen.getByLabelText("删除学习计划 实证报告学习"));
+    expect(useAppStore.getState().studyBlocks.length).toBe(0);
+  });
+
+  it("CourseTaskMarker：released row 标注已释放且仍能打开 Assignment", async () => {
+    useAppStore.setState({ currentSemesterWeek: 7 });
+    // 与周二课程（14:00–16:00）重叠 → 折叠进 Marker
+    seedReleased({ date: WEEK7_TUE, startTime: "14:10", endTime: "15:00" });
+    const dot = screen.getByLabelText(/个学习任务与本课程时间重叠/);
+    fireEvent.mouseEnter(dot);
+    // Marker floating detail 中 row 带「已释放」标注
+    const row = screen.getByRole("button", { name: "打开任务 实证报告学习" });
+    expect(row.textContent).toContain("已释放");
+    expect(row.textContent).not.toContain("专注中");
+    // row 点击仍打开 Assignment
+    fireEvent.pointerDown(row);
+    fireEvent.pointerUp(row);
+    fireEvent.click(row);
+    await waitFor(() => {
+      expect(useAppStore.getState().selectedAssignmentId).toBe("a-exec");
+    });
+  });
+});

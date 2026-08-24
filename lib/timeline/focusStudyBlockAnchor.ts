@@ -16,6 +16,7 @@
 import { format } from "date-fns";
 import { FocusSession, StudyBlock } from "@/types";
 import { timeToMinutes } from "@/lib/timeline/timelineGeometry";
+import { isStudyBlockPlanningActive } from "@/lib/planning/studyBlockLifecycle";
 
 export interface FocusStudyBlockAnchorInput {
   session: FocusSession | null | undefined;
@@ -58,6 +59,8 @@ export function resolveFocusStudyBlockAnchor({
 
   const candidates = studyBlocks.filter((b) => {
     if (b.assignmentId !== session.assignmentId) return false;
+    // Workflow UX V15：released block 不再声明「此计划正在执行」——不作 execution anchor
+    if (!isStudyBlockPlanningActive(b)) return false;
     if (b.date !== start.date) return false;
     const s = timeToMinutes(b.startTime);
     const e = timeToMinutes(b.endTime);

@@ -55,6 +55,9 @@ import {
 import { timeToMinutes } from "@/lib/timeline/timelineGeometry";
 import { resolveFocusStudyBlockAnchor } from "@/lib/timeline/focusStudyBlockAnchor";
 import { isAssignmentPlanningEligible } from "@/lib/tasks/taskSemantics";
+import {
+  isStudyBlockPlanningActive,
+} from "@/lib/planning/studyBlockLifecycle";
 import { findCourseOverlapsForStudyBlock, isCourseOverlapApproved } from "@/lib/planning/courseOverlapPolicy";
 import {
   analyzeStudyBlockPlacement,
@@ -682,13 +685,22 @@ export function TimelineWorkspace() {
           const isFocusAnchor = b.id === focusAnchorBlockId;
           const focusRunning = isFocusAnchor && focusStatus === "running";
           const focusPaused = isFocusAnchor && focusStatus === "paused";
+          // Workflow UX V15：released block——时间 reservation 已释放（不 drag / 不占容量），
+          // 仍可查看、打开原任务、手动删除
+          const isReleasedBlock = !isStudyBlockPlanningActive(b);
           // Workflow UX V9：linked = assignmentId 存在且 Assignment 真实存在（stale 防御）。
           // linked → 主区域是真实 <button>（原生键盘语义）；standalone → 普通 div，不伪造任务语义。
           const linkedAssignment = b.assignmentId
             ? assignments.find((a) => a.id === b.assignmentId)
             : undefined;
           const openTaskLabel = `打开任务《${b.title}》${
-            focusRunning ? "，该任务正在专注" : focusPaused ? "，专注已暂停" : ""
+            isReleasedBlock
+              ? "，该学习计划已释放"
+              : focusRunning
+                ? "，该任务正在专注"
+                : focusPaused
+                  ? "，专注已暂停"
+                  : ""
           }`;
           const handleOpenLinkedAssignment = (e: React.MouseEvent<HTMLButtonElement>) => {
             // 只吞掉 pointer 生成的 click（detail > 0）；键盘激活 detail=0 不受 stale suppression 影响
@@ -714,7 +726,15 @@ export function TimelineWorkspace() {
             : `任务《${b.title}》专注已暂停`;
           const blockMainContent = (
             <>
-              {isFocusAnchor &&
+              {isReleasedBlock && showMeta && (
+                <span
+                  className="shrink-0 text-[9px] font-bold text-sandrift"
+                  title="学习计划已释放（任务已结束），不占用未来安排容量"
+                >
+                  已释放
+                </span>
+              )}
+              {isFocusAnchor && !isReleasedBlock &&
                 (focusRunning ? (
                   <span
                     className="h-1.5 w-1.5 shrink-0 rounded-full bg-[#2E7D5B]"
@@ -769,6 +789,8 @@ export function TimelineWorkspace() {
                 // drag engagement（跨 5px 阈值）后才 capture + 抑制 click。
                 studyBlockClickSuppressedRef.current = false;
                 if (!studyDragEnabled) return;
+                // Workflow UX V15：released block 不进入 drag lifecycle（移动 = 重排已释放计划）
+                if (isReleasedBlock) return;
                 if (e.button !== 0) return;
                 const dayCol = e.currentTarget.closest("[data-timetable-day]") as HTMLElement | null;
                 if (!dayCol) return;
@@ -786,12 +808,15 @@ export function TimelineWorkspace() {
                 setStudyDrag(studyDragRef.current);
               }}
               className={cn(
-                "absolute left-1 right-1 z-[2] rounded-lg border border-dashed border-line bg-pastel-mint/20 px-1.5 py-0.5 flex items-center gap-1 overflow-hidden group select-none",
+                "absolute left-1 right-1 rounded-lg border border-dashed border-line bg-pastel-mint/20 px-1.5 py-0.5 flex items-center gap-1 overflow-hidden group select-none",
                 "transition-[opacity,border-color,background-color] duration-[var(--motion-fast)]",
+                // Workflow UX V15：released 低侵入（弱化 + 低 z，允许与 active block 同屏不遮挡）
+                isReleasedBlock && "z-[1] opacity-55 bg-transparent",
+                !isReleasedBlock && "z-[2]",
                 isDraggingThis && "opacity-50",
                 // Rebalance Preview：被移动的块弱化 + dashed outline（不改真实数据）
                 isRebalanced && "opacity-35 border-dashed border-[#A48F82]",
-                studyDragEnabled && !isDraggingThis && "cursor-grab",
+                studyDragEnabled && !isDraggingThis && !isReleasedBlock && "cursor-grab",
                 isDraggingThis && "cursor-grabbing",
                 // Linked hover affordance（克制：边框/底色略增强，无 scale/glow）
                 linkedAssignment &&
@@ -1478,6 +1503,8 @@ function CourseTaskMarker({
               : null;
             // Workflow UX V10：只有 anchor row 显示专注状态（同 Assignment 其它 row 不标）
             const isAnchorRow = b.id === focusAnchorBlockId;
+            // Workflow UX V15：released row 标注（anchor 排除 released，二者互斥）
+            const isReleasedRow = !isStudyBlockPlanningActive(b);
             const rowInner = (
               <>
                 <p className="text-[10px] font-semibold text-charcoal leading-snug">{b.title}</p>
@@ -1485,6 +1512,7 @@ function CourseTaskMarker({
                   {b.startTime}–{b.endTime}
                   {linkedAssignmentId ? " · 点击打开" : ""}
                   {isAnchorRow ? (focusStatus === "running" ? " · 专注中" : " · 已暂停") : ""}
+                  {isReleasedRow ? " · 已释放" : ""}
                 </p>
               </>
             );
