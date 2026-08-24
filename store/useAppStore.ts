@@ -530,6 +530,11 @@ export interface AppState {
    *  不是业务数据、不持久化（不在 partialize 白名单）；consume once 后即清 null。 */
   pendingFocusCompletionFollowUp: { assignmentId: string; sessionId: string } | null;
   setPendingFocusCompletionFollowUp: (intent: { assignmentId: string; sessionId: string } | null) => void;
+  /** Workflow UX V12：GroupTask Deep Link intent——Timeline / Global Search → Group Workspace
+   *  精确展示某一任务。完整 identity = projectId + taskId（Domain: GroupProject.tasks[]）；
+   *  transient 不持久化；consume once（scroll/focus exact row 后清 null）。 */
+  pendingGroupTaskTarget: { projectId: string; taskId: string } | null;
+  setPendingGroupTaskTarget: (target: { projectId: string; taskId: string } | null) => void;
   isSearchModalOpen: boolean;
   setSearchModalOpen: (open: boolean) => void;
   /** 设置中心 Modal：侧边栏 / 底部导航 / 命令面板统一入口 */
@@ -898,6 +903,11 @@ export const useAppStore = create<AppState>()(
       setPendingFocusCompletionFollowUp: (intent) =>
         set({ pendingFocusCompletionFollowUp: intent }),
 
+      // Workflow UX V12：GroupTask deep link intent（transient，consume once）
+      pendingGroupTaskTarget: null,
+      setPendingGroupTaskTarget: (target) =>
+        set({ pendingGroupTaskTarget: target }),
+
       isSearchModalOpen: false,
       setSearchModalOpen: (open) => set({ isSearchModalOpen: open }),
       isSettingsModalOpen: false,
@@ -1041,6 +1051,7 @@ export const useAppStore = create<AppState>()(
           selectedGroupProjectId: null,
           pendingTimelineArrangeAssignmentId: null,
           pendingFocusCompletionFollowUp: null,
+          pendingGroupTaskTarget: null,
           selectedConflict: null,
           assignmentSelection: [],
           assignmentPeekId: null,

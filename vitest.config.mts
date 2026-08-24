@@ -136,6 +136,7 @@ export default defineConfig({
       "tests/focusStudyBlockAnchor.test.ts",
       "tests/timelineActiveFocusChip.test.tsx",
       "tests/focusCompletionHandoff.test.tsx",
+      "tests/groupTaskDeepLink.test.tsx",
       "tests/drawerPresentation.test.ts",
       "tests/demoManualInjection.test.tsx",
       "tests/extensionsRuntimeTruth.test.tsx",

@@ -92,6 +92,8 @@ export function deriveTimelineItems(input: DeriveTimelineInput): TimelineItem[] 
       items.push({
         id: `gt-${p.id}-${t.id}`,
         sourceId: t.id,
+        // Workflow UX V12：结构化 parent identity（projectId），供 Timeline → Group deep link
+        sourceParentId: p.id,
         sourceType: "group-task",
         temporalType: "deadline",
         title: t.title,

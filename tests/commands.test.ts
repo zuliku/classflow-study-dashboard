@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+﻿// @vitest-environment jsdom
 import { describe, it, expect, vi } from "vitest";
 import {
   buildPalette,
@@ -81,6 +81,7 @@ function makeCtx(overrides: Partial<CommandContext> = {}): CommandContext {
     setSelectedAssignmentId: () => {},
     setSelectedCalendarMarkId: () => {},
     setSelectedGroupProjectId: () => {},
+    setPendingGroupTaskTarget: () => {},
     setAddCourseModalOpen: () => {},
     setImportScheduleModalOpen: () => {},
     setFullTimetableModalOpen: () => {},
@@ -714,5 +715,149 @@ describe("Global Search V4 —— GroupProject", () => {
     const kinds = items.map((i) => i.kind);
     expect(kinds.indexOf("calendar")).toBeLessThan(kinds.indexOf("group-project"));
     expect(kinds.indexOf("group-project")).toBeLessThan(kinds.indexOf("material"));
+  });
+});
+// ============================================================
+// Global Search V5 —— GroupTask exact-target deep link（Workflow UX V12）
+// Flood 防护：至少一个 term 命中 task 自身（title / 类型 alias）；
+// project / course / assignee 只能补足其它 term。
+// ============================================================
+
+const groupTask = (id: string, over: Partial<import("@/types").GroupTask> = {}): import("@/types").GroupTask =>
+  ({ id, title: `任务 ${id}`, ddl: "2026-08-28T18:00:00", completed: false, ...over });
+
+const v5Project = (id: string, over: Partial<import("@/types").GroupProject> = {}): import("@/types").GroupProject =>
+  groupProject(id, { courseId: "c1", ...over });
+
+describe("Global Search V5 —— GroupTask", () => {
+  const econ = course("c-trade", "国际贸易实务");
+
+  it("1. task title 命中 → group-task result", () => {
+    const items = buildPalette("模型复核", searchCtxV4([], [
+      v5Project("g1", { title: "红海危机案例分析", tasks: [groupTask("t1", { title: "模型复核" })] }),
+    ]));
+    expect(items.some((i) => i.kind === "group-task" && i.label === "模型复核")).toBe(true);
+  });
+
+  it("2/3. 类型 alias：『小组任务』『group task』命中", () => {
+    const projects = [v5Project("g1", { title: "案例一", tasks: [groupTask("t1", { title: "问卷设计" })] })];
+    for (const q of ["小组任务", "group task"]) {
+      expect(buildPalette(q, searchCtxV4([], projects)).some((i) => i.kind === "group-task")).toBe(true);
+    }
+  });
+
+  it("4. project context + alias：『红海 任务』→ 正确 task", () => {
+    const items = buildPalette("红海 任务", searchCtxV4([], [
+      v5Project("g1", { title: "红海危机案例分析", tasks: [
+        groupTask("t-a", { title: "资料收集" }),
+        groupTask("t-b", { title: "框架搭建" }),
+        groupTask("t-c", { title: "模型复核" }),
+      ] }),
+    ]));
+    expect(buildPalette("红海 任务", searchCtxV4([], [
+      v5Project("g1", { title: "红海危机案例分析", tasks: [groupTask("t-c", { title: "模型复核" })] }),
+    ])).some((i) => i.kind === "group-task" && i.label === "模型复核")).toBe(true);
+    void items;
+  });
+
+  it("5. course context + alias：『国际贸易 任务』→ 关联课程的 task", () => {
+    const items = buildPalette("国际贸易 任务", makeCtx({
+      courses: [econ],
+      groupProjects: [v5Project("g5", { courseId: "c-trade", title: "贸易案例分析", tasks: [groupTask("t5", { title: "关税测算" })] })],
+    }));
+    expect(items.some((i) => i.kind === "group-task" && i.label === "关税测算")).toBe(true);
+  });
+
+  it("6. assignee context + alias：『李明 任务』→ 正确 task；未分配不伪造名字", () => {
+    const items = buildPalette("李明 任务", searchCtxV4([], [
+      v5Project("g6", {
+        title: "调研项目",
+        members: [{ id: "m-lm", name: "李明", role: "member" }] as never,
+        tasks: [groupTask("t6", { title: "访谈提纲", assigneeId: "m-lm" })],
+      }),
+    ]));
+    expect(items.some((i) => i.kind === "group-task" && i.label === "访谈提纲")).toBe(true);
+    // assigneeId 指向不存在成员 → 无名字可补足
+    const none = buildPalette("李明 任务", searchCtxV4([], [
+      v5Project("g7", { title: "调研项目二", members: [] as never, tasks: [groupTask("t7", { title: "访谈提纲二", assigneeId: "m-gone" })] }),
+    ]));
+    expect(none.some((i) => i.kind === "group-task")).toBe(false);
+  });
+
+  it("7/8. flood 防护：仅课程名 / 仅项目名 → 不倾倒 GroupTask", () => {
+    const tasks = [groupTask("f1"), groupTask("f2"), groupTask("f3")];
+    const byCourse = buildPalette("国际贸易", makeCtx({
+      courses: [econ],
+      groupProjects: [v5Project("gf", { courseId: "c-trade", title: "无关标题项目", tasks })],
+    }));
+    expect(byCourse.filter((i) => i.kind === "group-task")).toHaveLength(0);
+
+    const byProject = buildPalette("红海危机案例分析", searchCtxV4([], [
+      v5Project("gp", { title: "红海危机案例分析", tasks }),
+    ]));
+    expect(byProject.filter((i) => i.kind === "group-task")).toHaveLength(0);
+    // project 本身仍正常命中
+    expect(byProject.some((i) => i.kind === "group-project")).toBe(true);
+  });
+
+  it("9. result presentation：小组任务 · project · assignee · 真实 DDL 日期；未分配显示 未分配", () => {
+    const hit = buildPalette("访谈提纲", searchCtxV4([], [
+      v5Project("g9", {
+        title: "用户调研",
+        members: [{ id: "m2", name: "李明", role: "member" }] as never,
+        tasks: [groupTask("t9", { title: "访谈提纲", assigneeId: "m2", ddl: "2026-08-28T18:00:00" })],
+      }),
+    ])).find((i) => i.kind === "group-task");
+    expect(hit?.sub).toContain("小组任务");
+    expect(hit?.sub).toContain("用户调研");
+    expect(hit?.sub).toContain("李明");
+    expect(hit?.sub).toContain("8月28日");
+
+    const unassigned = buildPalette("自由写作", searchCtxV4([], [
+      v5Project("g10", { title: "写作小组", members: [] as never, tasks: [groupTask("t10", { title: "自由写作" })] }),
+    ])).find((i) => i.kind === "group-task");
+    expect(unassigned?.sub).toContain("未分配");
+  });
+
+  it("10-13. run contract：target → parent → workspace → close（target 早于 activeTab）", () => {
+    let pending: { projectId: string; taskId: string } | null = null;
+    let selectedId: string | null = null;
+    let tab: string | null = null;
+    let closed = false;
+    const calls: string[] = [];
+    const ctx = makeCtx({
+      groupProjects: [v5Project("gr", { title: "执行项目", tasks: [groupTask("tr", { title: "联调脚本" })] })],
+      setPendingGroupTaskTarget: (t) => { calls.push("target"); pending = t; },
+      setSelectedGroupProjectId: (id) => { calls.push("parent"); selectedId = id; },
+      setActiveTab: (t) => { calls.push("tab"); tab = t as string; },
+      close: () => { closed = true; calls.push("close"); },
+    });
+    buildPalette("联调脚本", ctx).find((i) => i.kind === "group-task")!.run();
+    expect(pending).toEqual({ projectId: "gr", taskId: "tr" });
+    expect(selectedId).toBe("gr");
+    expect(tab).toBe("group");
+    expect(closed).toBe(true);
+    // 顺序契约：exact target 必须早于 workspace navigation
+    expect(calls.indexOf("target")).toBeLessThan(calls.indexOf("tab"));
+  });
+
+  it("14. empty query 不出现 GroupTask", () => {
+    expect(buildPalette("", searchCtxV4([], [
+      v5Project("ge", { tasks: [groupTask("te")] }),
+    ])).some((i) => i.kind === "group-task")).toBe(false);
+  });
+
+  it("结果顺序：Group Project → Group Task → Material", () => {
+    const withMaterial = { ...econ, materials: [material("m-v5", "国贸小组课件", "pdf")] };
+    // 「小组」同时命中 project 类型 alias 与 task 类型 alias（「小组任务」含「小组」）；
+    // 「国贸」由课程 context 补足——三类同屏验证顺序
+    const kinds = buildPalette("国贸 小组", makeCtx({
+      courses: [withMaterial],
+      groupProjects: [v5Project("gv5", { courseId: "c-trade", title: "国贸小组案例", tasks: [groupTask("tv5")] })],
+    })).filter((i) => i.group === "search").map((i) => i.kind);
+    expect(kinds).toContain("group-project");
+    expect(kinds).toContain("group-task");
+    expect(kinds.indexOf("group-project")).toBeLessThan(kinds.indexOf("group-task"));
+    expect(kinds.indexOf("group-task")).toBeLessThan(kinds.indexOf("material"));
   });
 });

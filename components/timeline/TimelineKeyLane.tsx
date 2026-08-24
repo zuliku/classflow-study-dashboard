@@ -254,6 +254,9 @@ function DeadlinePoint({
   const ref = useRef<HTMLDivElement | null>(null);
   const setSelectedAssignmentId = useAppStore((s) => s.setSelectedAssignmentId);
   const setSelectedCalendarMarkId = useAppStore((s) => s.setSelectedCalendarMarkId);
+  const setPendingGroupTaskTarget = useAppStore((s) => s.setPendingGroupTaskTarget);
+  const setSelectedGroupProjectId = useAppStore((s) => s.setSelectedGroupProjectId);
+  const setActiveTab = useAppStore((s) => s.setActiveTab);
   const assignments = useAppStore((s) => s.assignments);
   const color = item.priority ? PRIORITY_DOT[item.priority] : DEFAULT_DOT;
   const dotTop = top + track * 12;
@@ -266,6 +269,16 @@ function DeadlinePoint({
   // 打开 Full Detail 时立即关闭 hover preview（不等 mouseleave；keyboard 激活同样处理）。
   const handleOpenDetail = () => {
     setOpen(false);
+    // Workflow UX V12：GroupTask → Group Workspace exact task row。
+    // 顺序必须 target intent → parent selection → workspace navigation：
+    // Group Workspace 首帧即有准确 destination context（pending 由其 consume scroll/focus）。
+    if (item.sourceType === "group-task") {
+      if (!item.sourceParentId) return; // identity 不完整 → 不假导航
+      setPendingGroupTaskTarget({ projectId: item.sourceParentId, taskId: item.sourceId });
+      setSelectedGroupProjectId(item.sourceParentId);
+      setActiveTab("group");
+      return;
+    }
     if (item.sourceType === "assignment") {
       const linked = assignments.some((a) => a.id === item.sourceId);
       if (linked) {

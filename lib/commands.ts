@@ -20,6 +20,7 @@ import {
   Play,
   Flag,
   Trash2,
+  ListTodo,
 } from "lucide-react";
 import { NavTab, Course, Assignment, Semester, TimeSliceFilter, Priority, Material, CalendarMark, GroupProject } from "@/types";
 import type { AssignmentActions } from "@/lib/assignmentActions";
@@ -72,6 +73,8 @@ export interface CommandContext {
   setSelectedCalendarMarkId: (id: string | null) => void;
   /** Group Project Deep Link（Workflow UX V4）：transient selection + workspace 切换由 run 组合 */
   setSelectedGroupProjectId: (id: string | null) => void;
+  /** Workflow UX V12：GroupTask Deep Link intent（exact project + task row） */
+  setPendingGroupTaskTarget: (target: { projectId: string; taskId: string } | null) => void;
   setAddCourseModalOpen: (open: boolean) => void;
   setImportScheduleModalOpen: (open: boolean) => void;
   setFullTimetableModalOpen: (open: boolean) => void;
@@ -379,6 +382,55 @@ export function groupProjectMatches(
   return terms.every((t) => self.some((f) => f.includes(t)) || context.some((f) => f.includes(t)));
 }
 
+// ---- GroupTask 搜索（Workflow UX V12 / Search V5）：exact-target contract 已建立 ----
+
+const GROUP_TASK_TYPE_ALIASES = ["小组任务", "任务", "task", "group task"];
+
+export interface GroupTaskSearchEntity {
+  id: string;
+  title: string;
+  assigneeId?: string;
+  ddl?: string;
+}
+
+/**
+ * GroupTask 可搜索字段（真实 Domain 字段，不发明关系）：
+ * Self：task.title / 类型 aliases（flood 防护锚点——至少一个 term 必须命中自身）。
+ * Context：project.title / 关联课程 name+code / assignee member.name——只能补足其它 term。
+ * 「课程名」「项目名」单独搜索不倾倒该实体下全部任务；assigneeId 为空或成员不存在不伪造名字。
+ */
+export function groupTaskSearchFields(
+  task: GroupTaskSearchEntity,
+  project: { title: string },
+  course: Course | undefined,
+  assigneeName: string | undefined
+): { selfFields: string[]; contextFields: string[] } {
+  return {
+    selfFields: [task.title, ...GROUP_TASK_TYPE_ALIASES],
+    contextFields: [
+      project.title,
+      ...(course ? [course.name, course.code] : []),
+      ...(assigneeName ? [assigneeName] : []),
+    ],
+  };
+}
+
+export function groupTaskMatches(
+  task: GroupTaskSearchEntity,
+  terms: string[],
+  project: { title: string },
+  course: Course | undefined,
+  assigneeName: string | undefined
+): boolean {
+  const { selfFields, contextFields } = groupTaskSearchFields(task, project, course, assigneeName);
+  const norm = (arr: string[]) => arr.map((f) => normalizeSearchText(f));
+  const self = norm(selfFields);
+  const context = norm(contextFields);
+  const selfHit = terms.some((t) => self.some((f) => f.includes(t)));
+  if (!selfHit) return false;
+  return terms.every((t) => self.some((f) => f.includes(t)) || context.some((f) => f.includes(t)));
+}
+
 // ---- Palette 结果模型 ----
 
 export type PaletteItemKind =
@@ -387,7 +439,8 @@ export type PaletteItemKind =
   | "assignment"
   | "material"
   | "calendar"
-  | "group-project";
+  | "group-project"
+  | "group-task";
 
 /** Material 结果图标：复用 lucide 既有视觉，不为此重构 PaletteItem.icon 接口 */
 const MATERIAL_ICONS: Record<Material["type"], ElementType> = {
@@ -683,8 +736,8 @@ export function buildPalette(query: string, ctx: CommandContext): PaletteItem[] 
     });
   }
 
-  // ---- GroupProject（Workflow UX V4）：Deep Link 顺序 = 先写目标实体再切 Workspace；
-  // 仅 Project（GroupTask 无 detail/scroll contract，刻意不做）----
+  // ---- GroupProject（Workflow UX V4）：Deep Link 顺序 = 先写目标实体再切 Workspace。
+  // Workflow UX V12 起 GroupTask 亦有 exact-target contract（见下方 group-task 段）----
   for (const p of ctx.groupProjects) {
     if (!groupProjectMatches(p, terms, courseLookup.get(p.courseId))) continue;
     const course = p.courseId ? courseLookup.get(p.courseId) : undefined;
@@ -708,6 +761,41 @@ export function buildPalette(query: string, ctx: CommandContext): PaletteItem[] 
         ctx.close();
       },
     });
+  }
+
+  // ---- GroupTask（Workflow UX V12 / Search V5）：exact-target deep link。
+  // run 顺序 = target intent → parent selection → workspace → close palette；
+  // flood 防护同 Material/Project：至少一个 term 命中 task 自身（title / 类型 alias）。
+  for (const p of ctx.groupProjects) {
+    const course = p.courseId ? courseLookup.get(p.courseId) : undefined;
+    for (const t of p.tasks ?? []) {
+      const assignee = t.assigneeId
+        ? (p.members ?? []).find((m: { id: string }) => m.id === t.assigneeId)
+        : undefined;
+      if (!groupTaskMatches(t, terms, p, course, assignee?.name)) continue;
+      const dueLabel = ddlDateFields(t.ddl)[1];
+      items.push({
+        key: `group-task-${t.id}`,
+        kind: "group-task",
+        group: "search",
+        label: t.title,
+        sub: [
+          "小组任务",
+          p.title,
+          assignee?.name ?? "未分配",
+          ...(dueLabel ? [dueLabel] : []),
+        ]
+          .filter(Boolean)
+          .join(" · "),
+        icon: ListTodo,
+        run: () => {
+          ctx.setPendingGroupTaskTarget({ projectId: p.id, taskId: t.id });
+          ctx.setSelectedGroupProjectId(p.id);
+          ctx.setActiveTab("group");
+          ctx.close();
+        },
+      });
+    }
   }
 
   for (const c of ctx.courses) {

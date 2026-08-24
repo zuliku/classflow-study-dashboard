@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 
 import { WorkspaceHeader } from "@/components/layout/WorkspaceHeader";
 import { Button } from "@/components/ui/Button";
@@ -37,6 +37,7 @@ import { formatLocalDate } from "@/lib/groupProject";
 
 
 import { useKiroHandoff } from "@/hooks/useKiroHandoff";
+import { useEffectiveReducedMotion } from "@/hooks/useEffectiveReducedMotion";
 import { KIRO_ICON } from "@/components/layout/navItems";
 import { KiroFlowButton } from "@/components/kiro/KiroFlow";
 import { cn } from "@/lib/utils";
@@ -381,6 +382,59 @@ export function GroupCollaborationView() {
     retainedTasks.filter((e) => e.exiting).map((e) => e.item.id)
   );
 
+  // ---- Workflow UX V12：GroupTask Deep Link consume（一次性）----
+  // 外部入口（Timeline / Global Search）写入 pendingGroupTaskTarget 后：
+  // 1. project 不存在 / task 不属于该 project（完整 identity 校验）→ 安全 clear，不 blank
+  // 2. selected project 未稳定 → 先切 project，本轮 return（下一 render 再消费）
+  // 3. taskSearch 会隐藏目标 → 清空搜索，本轮 return
+  // 4. row DOM 存在 → scrollIntoView + focus({preventScroll}) → clear pending（consume once）
+  // 声明于 selection normalization effect 之后：同 commit 内 normalization 先收敛，
+  // 无 setTimeout/queueMicrotask 赌 render timing。
+  const pendingGroupTaskTarget = useAppStore((s) => s.pendingGroupTaskTarget);
+  const setPendingGroupTaskTarget = useAppStore((s) => s.setPendingGroupTaskTarget);
+  const reducedMotion = useEffectiveReducedMotion();
+  const taskRowRefs = useRef(new Map<string, HTMLDivElement>());
+
+  useEffect(() => {
+    const target = pendingGroupTaskTarget;
+    if (!target) return;
+    const clearPending = () => setPendingGroupTaskTarget(null);
+    const project = groupProjects.find((p) => p.id === target.projectId);
+    if (!project) {
+      clearPending();
+      return;
+    }
+    if (!project.tasks.some((t) => t.id === target.taskId)) {
+      // taskId 必须精确归属该 project——不能因存在于其它 project 就跳走
+      clearPending();
+      return;
+    }
+    if (selectedProjectId !== target.projectId) {
+      setSelectedGroupProjectId(target.projectId);
+      return; // 等 project 稳定后下一 render 继续
+    }
+    if (!filteredTasks.some((t) => t.id === target.taskId)) {
+      setTaskSearch(""); // stale 搜索词不得让「已跳转」变成「看不到」
+      return;
+    }
+    const row = taskRowRefs.current.get(target.taskId);
+    if (!row) return; // DOM 未就绪（exit-presence 等）→ 下一 render 再定位
+    row.scrollIntoView({
+      block: "nearest",
+      behavior: reducedMotion ? "auto" : "smooth",
+    });
+    row.focus({ preventScroll: true });
+    clearPending();
+  }, [
+    pendingGroupTaskTarget,
+    setPendingGroupTaskTarget,
+    groupProjects,
+    selectedProjectId,
+    setSelectedGroupProjectId,
+    filteredTasks,
+    reducedMotion,
+  ]);
+
   return (
     <div className="flex flex-1 min-h-0 flex-col">
       {/* 统一 Workspace Header（Ask Kiro 仅 resolved selectedProject 存在时显示） */}
@@ -677,8 +731,17 @@ export function GroupCollaborationView() {
                       return (
                         <ExitCollapse key={task.id} exiting={entry.exiting}>
                           <div
+                            ref={(el) => {
+                              // Workflow UX V12：deep link 程序化 scroll/focus 的 row registry
+                              if (el) taskRowRefs.current.set(task.id, el);
+                              else taskRowRefs.current.delete(task.id);
+                            }}
+                            data-testid={`group-task-row-${task.id}`}
+                            tabIndex={-1}
                             className={cn(
-                              "group flex items-center gap-2.5 px-2 py-2.5",
+                              "group flex items-center gap-2.5 px-2 py-2.5 rounded-lg outline-none",
+                              "focus-visible:outline-2 focus-visible:outline-charcoal/30",
+                              "focus:bg-alabaster/60",
                               newTaskIds.has(task.id) && "animate-enter"
                             )}
                           >

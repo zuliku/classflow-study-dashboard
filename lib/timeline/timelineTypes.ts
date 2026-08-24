@@ -21,6 +21,10 @@ export type TimelineTemporalType =
 export interface TimelineItem {
   id: string;
   sourceId: string;
+  /** Workflow UX V12：parent context——GroupTask 的 Domain ownership 是 Project.tasks[]，
+   *  完整导航 identity = { sourceParentId: projectId, sourceId: taskId }；
+   *  禁止从 composite UI id（gt-${projectId}-${taskId}）反向 parse。 */
+  sourceParentId?: string;
   sourceType: TimelineSourceType;
   temporalType: TimelineTemporalType;
   title: string;

@@ -553,4 +553,59 @@ describe("TimelineKeyLane hover/click integration", () => {
     expect(useAppStore.getState().selectedCalendarMarkId).toBe("ex1");
     expect(useAppStore.getState().selectedAssignmentId).toBeNull();
   });
+
+  it("C. GroupTask point（Workflow UX V12）：click → pending target → parent selection → activeTab=group；hover preview 不回归", () => {
+    useAppStore.setState({
+      selectedGroupProjectId: null,
+      pendingGroupTaskTarget: null,
+      groupProjects: [],
+    });
+    const item: TimelineItem = {
+      id: "gt-g9-t9",
+      sourceId: "t9",
+      sourceParentId: "g9", // Workflow UX V12：结构化 parent identity
+      sourceType: "group-task",
+      temporalType: "deadline",
+      title: "模型复核",
+      date: WEEK_DATES[3],
+      startTime: "18:00",
+    };
+    render(<TimelineKeyLane items={[item]} weekDates={WEEK_DATES} />);
+    const dot = screen.getByRole("button", { name: /模型复核/ });
+
+    // hover preview 保持
+    fireEvent.mouseEnter(dot);
+    expect(document.querySelector('[data-testid="floating-timeline-detail"]')).toBeTruthy();
+
+    fireEvent.click(dot);
+
+    expect(useAppStore.getState().pendingGroupTaskTarget).toEqual({
+      projectId: "g9",
+      taskId: "t9",
+    });
+    expect(useAppStore.getState().selectedGroupProjectId).toBe("g9");
+    expect(useAppStore.getState().activeTab).toBe("group");
+  });
+
+  it("C2. GroupTask 无 sourceParentId（异常 projection）→ 点击不假导航", () => {
+    useAppStore.setState({
+      selectedGroupProjectId: null,
+      pendingGroupTaskTarget: null,
+      activeTab: "timetable" as never,
+    });
+    const item: TimelineItem = {
+      id: "gt-orphan",
+      sourceId: "t-x",
+      sourceType: "group-task",
+      temporalType: "deadline",
+      title: "孤儿任务",
+      date: WEEK_DATES[0],
+      startTime: "09:00",
+    };
+    render(<TimelineKeyLane items={[item]} weekDates={WEEK_DATES} />);
+    fireEvent.click(screen.getByRole("button", { name: /孤儿任务/ }));
+    expect(useAppStore.getState().pendingGroupTaskTarget).toBeNull();
+    expect(useAppStore.getState().selectedGroupProjectId).toBeNull();
+    expect(useAppStore.getState().activeTab).toBe("timetable");
+  });
 });

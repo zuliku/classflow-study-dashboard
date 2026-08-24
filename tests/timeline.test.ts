@@ -97,7 +97,7 @@ describe("deriveTimelineItems（Projection + DDL 去重）", () => {
     expect(g.widthRatio).toBeCloseTo(2 / 24, 4);
   });
 
-  it("小组任务 DDL 进入时间轴（group-task sourceType）", () => {
+  it("小组任务 DDL 进入时间轴（group-task sourceType + sourceParentId identity）", () => {
     const items = deriveTimelineItems({
       weekDates,
       assignments: [],
@@ -106,6 +106,11 @@ describe("deriveTimelineItems（Projection + DDL 去重）", () => {
       studyBlocks: [],
     });
     expect(items[0].sourceType).toBe("group-task");
+    // Workflow UX V12：完整导航 identity = projectId（sourceParentId）+ taskId（sourceId）
+    expect(items[0].sourceParentId).toBe("gp1");
+    expect(items[0].sourceId).toBe("t1");
+    expect(items[0].title).toBe("数据收集");
+    expect(items[0].date).toBe("2026-08-14");
     expect(items[0].startTime).toBe("20:00");
   });
 });

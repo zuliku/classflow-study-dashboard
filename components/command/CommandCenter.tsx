@@ -48,6 +48,7 @@ export function CommandCenter() {
     setSelectedAssignmentId,
     setSelectedCalendarMarkId,
     setSelectedGroupProjectId,
+    setPendingGroupTaskTarget,
     setAddCourseModalOpen,
     setImportScheduleModalOpen,
     setFullTimetableModalOpen,
@@ -77,6 +78,7 @@ export function CommandCenter() {
       setSelectedAssignmentId: s.setSelectedAssignmentId,
       setSelectedCalendarMarkId: s.setSelectedCalendarMarkId,
       setSelectedGroupProjectId: s.setSelectedGroupProjectId,
+      setPendingGroupTaskTarget: s.setPendingGroupTaskTarget,
       setAddCourseModalOpen: s.setAddCourseModalOpen,
       setImportScheduleModalOpen: s.setImportScheduleModalOpen,
       setFullTimetableModalOpen: s.setFullTimetableModalOpen,
@@ -164,6 +166,7 @@ export function CommandCenter() {
       setSelectedAssignmentId: (id: string | null) => setSelectedAssignmentId(id),
       setSelectedCalendarMarkId: (id: string | null) => setSelectedCalendarMarkId(id),
       setSelectedGroupProjectId: (id: string | null) => setSelectedGroupProjectId(id),
+      setPendingGroupTaskTarget: (target) => setPendingGroupTaskTarget(target),
       setAddCourseModalOpen: (o: boolean) => setAddCourseModalOpen(o),
       setImportScheduleModalOpen: (o: boolean) => setImportScheduleModalOpen(o),
       setFullTimetableModalOpen: (o: boolean) => setFullTimetableModalOpen(o),
@@ -171,7 +174,7 @@ export function CommandCenter() {
       resetToCurrentWeek: () => resetToCurrentWeek(),
       close: () => setSearchModalOpen(false),
     }),
-    [activeTab, selectedCourseId, selectedAssignmentId, highlightedAssignmentId, assignmentSelection, courses, assignments, calendarMarks, groupProjects, semester, currentSemesterWeek, assignmentActions, setActiveTab, setSelectedCourseId, setSelectedAssignmentId, setSelectedCalendarMarkId, setAddCourseModalOpen, setImportScheduleModalOpen, setFullTimetableModalOpen, setAssignmentTimeSlice, resetToCurrentWeek, setSearchModalOpen, setSettingsModalOpen, setAssignmentWorkspaceView, openReminderCenter]
+    [activeTab, selectedCourseId, selectedAssignmentId, highlightedAssignmentId, assignmentSelection, courses, assignments, calendarMarks, groupProjects, semester, currentSemesterWeek, assignmentActions, setActiveTab, setSelectedCourseId, setSelectedAssignmentId, setSelectedCalendarMarkId, setSelectedGroupProjectId, setPendingGroupTaskTarget, setAddCourseModalOpen, setImportScheduleModalOpen, setFullTimetableModalOpen, setAssignmentTimeSlice, resetToCurrentWeek, setSearchModalOpen, setSettingsModalOpen, setAssignmentWorkspaceView, openReminderCenter]
   );
 
   const items = useMemo(() => buildPalette(query, ctx), [query, ctx]);
