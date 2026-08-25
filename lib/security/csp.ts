@@ -40,7 +40,7 @@ export const DEVELOPMENT_CSP: CspPolicy = {
   "style-src": ["'self'", "'unsafe-inline'", "http://localhost:*"],
   "connect-src": ["'self'", "http://localhost:*", "ws://localhost:*", "https://*"],
   "img-src": ["'self'", "data:", "blob:", "http://localhost:*"],
-  "font-src": ["'self'", "data:"],
+  "font-src": ["'self'", "data:", "http://localhost:*"],
   "worker-src": ["'self'", "blob:"],
 };
 
