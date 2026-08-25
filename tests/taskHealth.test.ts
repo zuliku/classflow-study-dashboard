@@ -141,7 +141,8 @@ describe("findFreeTime", () => {
   });
 
   it("今天不返回过去时间（now 12:00 → 最早 12:00 之后，15min ceil）", () => {
-    const slots = findFreeTime({ ...q(0), start: new Date(NOW) });
+    // FreeTimeQuery.now 是显式入参（确定性测试）；不传则用真实系统时间
+    const slots = findFreeTime({ ...q(0), now: new Date(NOW) });
     const todaySlots = slots.filter((s) => s.date === date(0));
     for (const s of todaySlots) {
       expect(s.startTime >= "12:00").toBe(true);

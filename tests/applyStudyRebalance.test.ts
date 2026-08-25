@@ -62,7 +62,10 @@ describe("updateStudyBlocksBatch（store）", () => {
   it("§81 2 blocks 原子更新：单次 state 结果 + 2 个 updated events + 共享 occurredAt + sequence 稳定", async () => {
     useAppStore.setState({
       semester: { id: "s", name: "S", startDate: dayStr(-14), totalWeeks: 16 } as never,
-      assignments: [],
+      assignments: [
+        // Workflow UX V17 write boundary：parent 必须存在且非 terminal
+        { id: "a1", title: "A", status: "doing", progress: 10 } as never,
+      ],
       studyBlocks: [
         { id: "sb1", title: "A", date: dayStr(3), startTime: "19:00", endTime: "20:00", assignmentId: "a1", courseId: "c1", source: "kiro" } as never,
         { id: "sb2", title: "B", date: dayStr(3), startTime: "20:00", endTime: "21:00", assignmentId: "a1", courseId: "c1", source: "kiro" } as never,

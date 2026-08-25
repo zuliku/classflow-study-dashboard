@@ -6,7 +6,7 @@
  * Worker 指令的 prompt injection 锁死。
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { POST, buildProjectVisualWorkerInstruction } from "@/app/api/ai/vision/extract/route";
+import { handleVisionExtract as POST, buildProjectVisualWorkerInstruction } from "@/app/api/ai/vision/extract/route";
 import { resetOpenCodeGoModelsCache } from "@/lib/ai/providers/openCodeGo";
 
 const MIB = 1024 * 1024;

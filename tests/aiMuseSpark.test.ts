@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+﻿import { describe, it, expect } from "vitest";
 import { getModelsForProvider, getVendorForModelId } from "@/lib/ai/providers/registry";
 import { OPENCODE_MODELS, filterRemoteGoModels } from "@/lib/ai/providers/openCodeGo";
 import { AI_PROVIDER_META, getVendorMeta } from "@/lib/ai/providers/vendors";
@@ -9,11 +9,11 @@ import { resolveModelDefinition, createLanguageModelFromDefinition } from "@/lib
 
 // 2026-08-19 live verified Muse Spark 1.2 — all capabilities are from real OpenCode Go probe, not guessed.
 describe("Muse Spark 1.2 — registry (verified)", () => {
-  const def = OPENCODE_MODELS.find((m) => m.id === "muse-spark-1.2")!;
+  const def = OPENCODE_MODELS.find((m) => m.id === "muse-spark-1.2-contributor")!;
 
   it("registry 存在且 transport/vendor/name 正确（不靠名称猜测）", () => {
     expect(def).toBeDefined();
-    expect(def.id).toBe("muse-spark-1.2");
+    expect(def.id).toBe("muse-spark-1.2-contributor");
     expect(def.name).toBe("Muse Spark 1.2");
     expect(def.provider).toBe("opencode-go");
     expect(def.vendor).toBe("meta");
@@ -40,13 +40,13 @@ describe("Muse Spark 1.2 — registry (verified)", () => {
     expect(AI_PROVIDER_META.meta.logo).toBe("/ai-providers/meta.svg");
     expect(AI_PROVIDER_META.meta.logo.startsWith("/ai-providers/")).toBe(true);
     expect(getVendorMeta("meta").logo).toBe("/ai-providers/meta.svg");
-    expect(getVendorForModelId("muse-spark-1.2")).toBe("meta");
+    expect(getVendorForModelId("muse-spark-1.2-contributor")).toBe("meta");
     expect(getVendorForModelId("muse-spark-1.2-turbo")).toBe("meta");
   });
 
   it("模型列表 UI：opencode-go catalog 包含 muse-spark-1.2，且按 vendor 首字母排序（meta 在 kimi 后 mimo 前）", () => {
     const models = getModelsForProvider("opencode-go");
-    expect(models.some((m) => m.id === "muse-spark-1.2")).toBe(true);
+    expect(models.some((m) => m.id === "muse-spark-1.2-contributor")).toBe(true);
     const vendors = models.map((m) => m.vendor);
     const unique = Array.from(new Set(vendors.map((v) => v ?? "")));
     // 深思：deepseek < kimi < meta < mimo < minimax < openai < qwen < tencent < xai < zai
@@ -71,29 +71,29 @@ describe("Muse Spark 1.2 — registry (verified)", () => {
 describe("Muse Spark 1.2 — remote filtering (filterRemoteGoModels)", () => {
   it("已知 ID 保留 verified transport；未知模型跳过（不默认 openai-chat）", () => {
     const out = filterRemoteGoModels([
-      { id: "muse-spark-1.2" },
+      { id: "muse-spark-1.2-contributor" },
       { id: "grok-4.5" },
       { id: "gpt-5.6-luna" },
       { id: "some-unknown-model" },
-      { id: "muse-spark-1.2" }, // 去重
+      { id: "muse-spark-1.2-contributor" }, // 去重
       { id: "mimo-v2-omni" }, // 未 verified → 跳过
     ]);
     expect(out).toEqual([
-      { id: "muse-spark-1.2", transport: "openai-responses" },
+      { id: "muse-spark-1.2-contributor", transport: "openai-responses" },
       { id: "grok-4.5", transport: "openai-responses" },
       { id: "gpt-5.6-luna", transport: "openai-responses" },
     ]);
   });
 
   it("空 id / 重复 id 安全处理", () => {
-    expect(filterRemoteGoModels([{ id: "" }, { id: "muse-spark-1.2" }, {} as never, { id: "muse-spark-1.2" }])).toEqual([
-      { id: "muse-spark-1.2", transport: "openai-responses" },
+    expect(filterRemoteGoModels([{ id: "" }, { id: "muse-spark-1.2-contributor" }, {} as never, { id: "muse-spark-1.2-contributor" }])).toEqual([
+      { id: "muse-spark-1.2-contributor", transport: "openai-responses" },
     ]);
   });
 });
 
 describe("Muse Spark 1.2 — reasoning capability (live verified)", () => {
-  const def = OPENCODE_MODELS.find((m) => m.id === "muse-spark-1.2")!;
+  const def = OPENCODE_MODELS.find((m) => m.id === "muse-spark-1.2-contributor")!;
 
   it("supportedEfforts = default/minimal/low/medium/high/xhigh（无 max/none）", () => {
     const cap = getReasoningCapability(def);
@@ -105,9 +105,9 @@ describe("Muse Spark 1.2 — reasoning capability (live verified)", () => {
   it("unsupported effort → normalize 为 default（绝不发送 none/max）", () => {
     expect(normalizeReasoningEffort(getReasoningCapability(def), "max")).toBe("default");
     expect(normalizeReasoningEffort(getReasoningCapability(def), "none" as never)).toBe("default");
-    expect(resolveEffectiveReasoningEffort({ provider: "opencode-go", model: "muse-spark-1.2", requested: "max" })).toBe("default");
-    expect(resolveEffectiveReasoningEffort({ provider: "opencode-go", model: "muse-spark-1.2", requested: "minimal" })).toBe("minimal");
-    expect(resolveEffectiveReasoningEffort({ provider: "opencode-go", model: "muse-spark-1.2", requested: "xhigh" })).toBe("xhigh");
+    expect(resolveEffectiveReasoningEffort({ provider: "opencode-go", model: "muse-spark-1.2-contributor", requested: "max" })).toBe("default");
+    expect(resolveEffectiveReasoningEffort({ provider: "opencode-go", model: "muse-spark-1.2-contributor", requested: "minimal" })).toBe("minimal");
+    expect(resolveEffectiveReasoningEffort({ provider: "opencode-go", model: "muse-spark-1.2-contributor", requested: "xhigh" })).toBe("xhigh");
   });
 
   it("default → undefined（不覆盖 provider 默认）；minimal/low/medium/high/xhigh → reasoningEffort 直通 + forceReasoning", () => {
@@ -137,14 +137,14 @@ describe("Muse Spark 1.2 — reasoning capability (live verified)", () => {
   });
 
   it("切换行为：requested xhigh 切到固定模型 → default；切回 muse-spark → xhigh 恢复", () => {
-    expect(resolveEffectiveReasoningEffort({ provider: "opencode-go", model: "muse-spark-1.2", requested: "xhigh" })).toBe("xhigh");
+    expect(resolveEffectiveReasoningEffort({ provider: "opencode-go", model: "muse-spark-1.2-contributor", requested: "xhigh" })).toBe("xhigh");
     expect(resolveEffectiveReasoningEffort({ provider: "opencode-go", model: "glm-5.3", requested: "xhigh" })).toBe("default");
   });
 });
 
 describe("Muse Spark 1.2 — vision / PDF capability (live verified)", () => {
   it("vision true，visionMimeTypes 白名单 JPEG/PNG/WEBP（128x128 红/蓝 均识别，chat 400 vs responses 200）", () => {
-    const cap = getModelCapabilities({ provider: "opencode-go", model: "muse-spark-1.2" });
+    const cap = getModelCapabilities({ provider: "opencode-go", model: "muse-spark-1.2-contributor" });
     expect(cap.vision).toBe(true);
     expect(cap.visionMimeTypes).toEqual(["image/jpeg", "image/png", "image/webp"]);
     expect(cap.fileParts).toBe(false);
@@ -152,7 +152,7 @@ describe("Muse Spark 1.2 — vision / PDF capability (live verified)", () => {
   });
 
   it("isVisionMimeSupported：Muse Spark 白名单通过 JPEG/PNG/WEBP，拒绝 GIF/SVG", () => {
-    const cap = getModelCapabilities({ provider: "opencode-go", model: "muse-spark-1.2" });
+    const cap = getModelCapabilities({ provider: "opencode-go", model: "muse-spark-1.2-contributor" });
     expect(isVisionMimeSupported(cap, "image/jpeg")).toBe(true);
     expect(isVisionMimeSupported(cap, "image/png")).toBe(true);
     expect(isVisionMimeSupported(cap, "image/webp")).toBe(true);
@@ -165,7 +165,7 @@ describe("Muse Spark 1.2 — vision / PDF capability (live verified)", () => {
   });
 
   it("PDF/fileParts 保守 false（未经有效 PDF 验证，不声明 true）", () => {
-    const cap = getModelCapabilities({ provider: "opencode-go", model: "muse-spark-1.2" });
+    const cap = getModelCapabilities({ provider: "opencode-go", model: "muse-spark-1.2-contributor" });
     expect(cap.pdf).toBe(false);
     expect(cap.fileParts).toBe(false);
   });
@@ -181,7 +181,7 @@ describe("Muse Spark 1.2 — vision / PDF capability (live verified)", () => {
 
 describe("Muse Spark 1.2 — resolver / transport", () => {
   it("resolveModelDefinition：muse-spark-1.2 → openai-responses / meta", async () => {
-    const def = await resolveModelDefinition({ provider: "opencode-go", model: "muse-spark-1.2" });
+    const def = await resolveModelDefinition({ provider: "opencode-go", model: "muse-spark-1.2-contributor" });
     expect(def?.transport).toBe("openai-responses");
     expect(def?.vendor).toBe("meta");
   });
@@ -190,7 +190,7 @@ describe("Muse Spark 1.2 — resolver / transport", () => {
     const originalFetch = globalThis.fetch;
     // 避免真实网络波动：stub fetch 为快速返回（未知模型不在远端列表）
     globalThis.fetch = (async () =>
-      new Response(JSON.stringify({ object: "list", data: [{ id: "muse-spark-1.2" }] }), {
+      new Response(JSON.stringify({ object: "list", data: [{ id: "muse-spark-1.2-contributor" }] }), {
         status: 200,
         headers: { "content-type": "application/json" },
       })) as typeof fetch;
@@ -207,7 +207,7 @@ describe("Muse Spark 1.2 — resolver / transport", () => {
   });
 
   it("createLanguageModelFromDefinition：responses → @ai-sdk/openai .responses（不走 openai-compatible/anthropic）", () => {
-    const defLocal = OPENCODE_MODELS.find((m) => m.id === "muse-spark-1.2")!;
+    const defLocal = OPENCODE_MODELS.find((m) => m.id === "muse-spark-1.2-contributor")!;
     expect(() => createLanguageModelFromDefinition(defLocal, { baseURL: "https://opencode.ai/zen/go/v1", apiKey: "sk-test" })).not.toThrow();
   });
 });

@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+﻿import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { resolveModelDefinition, resolveLanguageModel, createLanguageModelFromDefinition } from "@/lib/ai/providers/resolver";
 import { AIError } from "@/lib/ai/errors";
 import { OPENCODE_MODELS } from "@/lib/ai/providers/openCodeGo";
@@ -62,9 +62,9 @@ describe("resolveModelDefinition", () => {
     expect(def?.vendor).toBe("xai");
   });
 
-  it("B4. OpenCode Responses：muse-spark-1.2 → openai-responses / meta（live verified）", async () => {
-    const def = await resolveModelDefinition({ provider: "opencode-go", model: "muse-spark-1.2" });
-    expect(def?.transport).toBe("openai-responses");
+  it("B4. OpenCode：muse-spark-1.2-contributor → openai-chat / meta（contributor 版本）", async () => {
+    const def = await resolveModelDefinition({ provider: "opencode-go", model: "muse-spark-1.2-contributor" });
+    expect(def?.transport).toBe("openai-chat");
     expect(def?.vendor).toBe("meta");
   });
 
@@ -185,13 +185,13 @@ describe("createLanguageModelFromDefinition（Adapter 选择）", () => {
     expect(openAICompatibleFactory).not.toHaveBeenCalled();
   });
 
-  it("F3c. muse-spark-1.2 同样走 @ai-sdk/openai .responses（meta vendor，live verified）", () => {
+  it("F3c. muse-spark-1.2-contributor 走 @ai-sdk/openai-compatible（openai-chat，meta vendor）", () => {
     const m = createLanguageModelFromDefinition(
-      { id: "muse-spark-1.2", name: "Muse Spark 1.2", provider: "opencode-go", vendor: "meta", transport: "openai-responses", capabilities: { streaming: true, tools: true, vision: true, fileParts: false, visionMimeTypes: ["image/jpeg", "image/png", "image/webp"] } },
+      { id: "muse-spark-1.2-contributor", name: "Muse Spark 1.2", provider: "opencode-go", vendor: "meta", transport: "openai-responses", capabilities: { streaming: true, tools: true, vision: true, fileParts: false, visionMimeTypes: ["image/jpeg", "image/png", "image/webp"] } },
       { baseURL: "https://opencode.ai/zen/go/v1", apiKey: "sk-go" }
     );
     expect(providerOf(m)).toBe("openai");
-    expect(modelIdOf(m)).toBe("muse-spark-1.2");
+    expect(modelIdOf(m)).toBe("muse-spark-1.2-contributor");
     expect((m as { api?: string }).api).toBe("responses");
     expect(openAIFactory).toHaveBeenCalledTimes(1);
     expect(openAICompatibleFactory).not.toHaveBeenCalled();
@@ -260,7 +260,7 @@ describe("OpenCode 注册表完整性", () => {
     for (const id of [
       "glm-5.3", "glm-5.2", "glm-5.1", "kimi-k3", "kimi-k2.7-code", "kimi-k2.6",
       "deepseek-v4-pro", "deepseek-v4-flash", "mimo-v2.5", "mimo-v2.5-pro", "hy3",
-      "grok-4.5", "gpt-5.6-luna", "muse-spark-1.2",
+      "grok-4.5", "gpt-5.6-luna", "muse-spark-1.2-contributor",
       "minimax-m3", "minimax-m2.7", "minimax-m2.5", "qwen3.8-max", "qwen3.7-max", "qwen3.7-plus", "qwen3.6-plus",
     ]) {
       expect(ids.has(id), id).toBe(true);

@@ -130,3 +130,58 @@ describe("deleteCourse 完整级联（无 Undo）", () => {
     expect(s.reminders.find((r: Reminder) => r.id === "r-other")).toBeTruthy();
   });
 });
+
+// ============================================================
+// Undo 窗口并发删除：parent Course 已删 → restore 必须拒绝（不产生 orphan 引用）
+// 复现：删除 Assignment → 6s 撤销窗口内删除其 Course → 点击「撤销」。
+// 历史 bug：restore 原样插回，产生 courseId 悬空引用。
+// ============================================================
+describe("restore referential validation (undo-window course delete)", () => {
+  it("Assignment：Course 已删 → restore 拒绝插回；无 courseId 的任务不受影响", async () => {
+    seedState();
+    const store = await freshStore();
+    const snapshot = store.getState().deleteAssignment("a1")!;
+    // 撤销窗口内：课程被删除
+    store.getState().deleteCourse("c1");
+
+    store.getState().restoreAssignment(snapshot);
+    const s = store.getState();
+    // 不凭空重建 orphan assignment
+    expect(s.assignments.find((a: Assignment) => a.id === "a1")).toBeUndefined();
+    // 关联 blocks / marks / reminders 也不得恢复成孤儿
+    expect(s.studyBlocks.find((b: StudyBlock) => b.id === "b1")).toBeUndefined();
+    expect(s.calendarMarks.find((m: any) => m.id === "cm1")).toBeUndefined();
+
+    // 对照组：无 courseId 的 standalone snapshot 正常恢复
+    seedState();
+    const store2 = await freshStore();
+    const snap2 = store2.getState().deleteAssignment("a2")!;
+    store2.getState().restoreAssignment(snap2);
+    expect(store2.getState().assignments.find((a: Assignment) => a.id === "a2")).toBeTruthy();
+  });
+
+  it("Schedule：Course 已删 → restoreSchedule 拒绝插回", async () => {
+    seedState();
+    const store = await freshStore();
+    const schedule = store.getState().schedules.find((x: any) => x.id === "s1")!;
+    store.getState().deleteSchedule("s1");
+    // 撤销窗口内：课程被删除
+    store.getState().deleteCourse("c1");
+
+    store.getState().restoreSchedule(schedule);
+    expect(store.getState().schedules.find((x: any) => x.id === "s1")).toBeUndefined();
+
+    // 对照组：课程仍在时正常恢复
+    store.getState().restoreSchedule(schedule);
+    expect(store.getState().schedules.find((x: any) => x.id === "s1")).toBeUndefined(); // 课程已删，仍拒绝
+  });
+
+  it("Schedule 对照：课程存在时 restoreSchedule 正常恢复（原行为不回归）", async () => {
+    seedState();
+    const store = await freshStore();
+    const schedule = store.getState().schedules.find((x: any) => x.id === "s1")!;
+    store.getState().deleteSchedule("s1");
+    store.getState().restoreSchedule(schedule);
+    expect(store.getState().schedules.find((x: any) => x.id === "s1")).toBeTruthy();
+  });
+});

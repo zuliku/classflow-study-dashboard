@@ -50,6 +50,7 @@ import { calculateGroupProjectProgress, formatLocalDate, normalizeGroupProject }
 import { DEFAULT_PREFERENCES, sanitizePreferences } from "@/lib/preferences";
 import { buildNextRecurringAssignment } from "@/lib/tasks/taskRecurrence";
 import {
+  canRestoreWithParentCourse,
   collectAssignmentDeleteSnapshot,
   collectCourseDeleteCascade,
   collectCourseMaterialDeleteSnapshot,
@@ -1311,6 +1312,10 @@ export const useAppStore = create<AppState>()(
 
       restoreSchedule: (schedule, context) =>
         set((state) => {
+          // Undo 窗口并发防御：parent Course 已删除 → 拒绝恢复（不产生 dangling courseId）
+          if (!canRestoreWithParentCourse(state, schedule.courseId)) {
+            return {};
+          }
           enqueueLearningHistoryEvents([
             buildScheduleCreatedEvent({
               schedule,
@@ -1912,6 +1917,10 @@ export const useAppStore = create<AppState>()(
 
       restoreAssignment: (snapshot, context) =>
         set((state) => {
+          // Undo 窗口并发防御：parent Course 已删除 → 拒绝恢复（不产生 orphan 引用）
+          if (!canRestoreWithParentCourse(state, snapshot.assignment.courseId)) {
+            return {};
+          }
           // History：assignment.restored + 恢复的 study blocks → study_block.created restored=true
           const resolved = resolveLearningMutationContext(context);
           enqueueLearningHistoryEvents([
@@ -1926,7 +1935,7 @@ export const useAppStore = create<AppState>()(
             ),
           ]);
           return {
-            ...restoreAssignmentDeleteSnapshot(state, snapshot),
+            ...restoreAssignmentDeleteSnapshot(state, snapshot)!,
           };
         }),
 

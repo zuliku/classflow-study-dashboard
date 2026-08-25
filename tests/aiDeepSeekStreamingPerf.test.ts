@@ -29,7 +29,7 @@ import {
   KIRO_CATCH_UP_CHUNK_CHARS,
 } from "@/lib/ai/streaming/textOnlySmoothStream";
 import { splitKiroStreamingMarkdown, classifySettleSafety } from "@/lib/ai/streaming/markdownBlocks";
-import { POST as chatPOST } from "@/app/api/ai/chat/route";
+import { handleChat as chatPOST } from "@/app/api/ai/chat/route";
 
 const KEY = process.env.DEEPSEEK_TEST_API_KEY ?? "";
 const describeDeepSeek = KEY ? describe : describe.skip;

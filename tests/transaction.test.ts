@@ -8,10 +8,10 @@ import { KiroWriteApi } from "@/lib/ai/tools/write/types";
 function makeState() {
   return {
     semester: { id: "s", name: "测试学期", startDate: "2026-08-03", totalWeeks: 16 },
-    courses: [{ id: "c1", name: "统计学", materials: [] }],
+    courses: [{ id: "c1", name: "统计学", materials: [] }, { id: "c2", name: "英语", materials: [] }],
     schedules: [
       { id: "s1", courseId: "c1", dayOfWeek: 1, startTime: "08:00", endTime: "09:40", location: "教101", weeks: "1-16周" },
-      { id: "s2", courseId: "c1", dayOfWeek: 2, startTime: "10:00", endTime: "11:40", location: "教102", weeks: "1-16周" },
+      { id: "s2", courseId: "c2", dayOfWeek: 2, startTime: "10:00", endTime: "11:40", location: "教102", weeks: "1-16周" },
     ],
     assignments: [
       { id: "a1", courseId: "c1", title: "统计作业1", description: "", ddl: "2026-08-10T23:59:00", priority: "medium", status: "todo", progress: 0, tags: [] },

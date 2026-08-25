@@ -9,7 +9,7 @@ vi.mock("ai", () => ({
   generateText: (opts: Record<string, unknown>) => generateTextMock(opts),
 }));
 
-import { POST } from "@/app/api/ai/compact/route";
+import { handleCompact as POST } from "@/app/api/ai/compact/route";
 
 function req(body: unknown): NextRequest {
   return new Request("http://localhost/api/ai/compact", {

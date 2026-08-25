@@ -82,11 +82,27 @@ export function removeAssignmentDeleteSnapshot(
   };
 }
 
+/**
+ * Undo 窗口 referential 校验：parent Course 已删除 → 拒绝恢复。
+ * 复现场景：删除 Assignment（撤销 toast 存活 ≤6s）→ 删除其 Course → 点击「撤销」；
+ * 不校验会原样插回 orphan 引用（courseId 悬空）。与 restoreCourseMaterialDeleteSnapshot
+ * 的「Course 不存在 → null（不凭空重建）」同一 Domain 契约。
+ */
+export function canRestoreWithParentCourse(
+  state: Pick<DependencyCollections, "courses">,
+  courseId: string | undefined | null
+): boolean {
+  if (!courseId) return true;
+  return state.courses.some((c) => c.id === courseId);
+}
+
 /** 原对象原样插回（禁止 addAssignment/addStudyBlock/addReminder 重建）；按 ID 幂等，调用两次不重复 */
 export function restoreAssignmentDeleteSnapshot(
   state: DependencyCollections,
   snapshot: AssignmentDeleteSnapshot
-): Pick<DependencyCollections, "assignments" | "calendarMarks" | "studyBlocks" | "reminders"> {
+): Pick<DependencyCollections, "assignments" | "calendarMarks" | "studyBlocks" | "reminders"> | null {
+  // Parent Course 已在 Undo 窗口内被删除 → 整个 snapshot 拒绝恢复（不产生 dangling ref）
+  if (!canRestoreWithParentCourse(state, snapshot.assignment.courseId)) return null;
   return {
     assignments: state.assignments.some((a) => a.id === snapshot.assignment.id)
       ? state.assignments

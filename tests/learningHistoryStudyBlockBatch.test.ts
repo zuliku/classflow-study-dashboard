@@ -309,15 +309,16 @@ describe("Kiro Apply / Undo History Integrity", () => {
   it("Analytics：plan coverage 不完整（batch marker 晚于 range 起点）→ actualToPlanRatio=null + 计划序列不完整", async () => {
     const storeMod = await import("@/lib/history/store");
     await storeMod.clearLearningHistoryStorage();
+    // 确定性锚点：2026-08-20 为周四 → 本周一 = 08-17，早于 marker（08-18）
+    const FIXED_NOW = new Date(2026, 7, 20, 12, 0, 0).getTime();
     // batch integrity marker 在 range 起点之后（模拟老用户：batch 历史缺失）
-    const now = Date.now();
     await storeMod.setLearningHistoryCoverage({
       schemaVersion: 1,
-      historyStartedAt: now - 60 * 86400000,
-      initializedAt: now - 60 * 86400000,
+      historyStartedAt: FIXED_NOW - 60 * 86400000,
+      initializedAt: FIXED_NOW - 60 * 86400000,
       focusBackfillCompleted: true,
       backfilledFocusSessions: 0,
-      studyBlockBatchIntegrityStartedAt: now - 2 * 86400000, // 2 天前才开始完整 batch 记录
+      studyBlockBatchIntegrityStartedAt: FIXED_NOW - 2 * 86400000, // 2 天前才开始完整 batch 记录
     });
     // 本周 range 起点 = 本周一（早于 marker）→ planCoverageFull=false
     useAppStore.getState().addStudyBlocksBatch([mkBlock("A", { date: "2026-08-15", source: "kiro" })], { source: "kiro" });
@@ -326,6 +327,7 @@ describe("Kiro Apply / Undo History Integrity", () => {
     const snapshot = await buildLearningAnalyticsSnapshot({
       preset: "week",
       semester: useAppStore.getState().semester,
+      now: FIXED_NOW,
     });
     expect(snapshot.coverage.planCoverageFull).toBe(false);
     expect(snapshot.overview.actualToPlanRatio).toBeNull();

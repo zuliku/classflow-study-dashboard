@@ -70,9 +70,9 @@ async function post(route: { POST: (req: NextRequest) => Promise<Response> }, bo
   );
 }
 
-import { POST as chatPOST } from "@/app/api/ai/chat/route";
-import { POST as testPOST } from "@/app/api/ai/test/route";
-import { GET as modelsGET } from "@/app/api/ai/models/route";
+import { handleChat as chatPOST } from "@/app/api/ai/chat/route";
+import { handleTest as testPOST } from "@/app/api/ai/test/route";
+import { handleModels as modelsGET } from "@/app/api/ai/models/route";
 
 describe("/api/ai/chat（流式）", () => {
   const baseBody = {
