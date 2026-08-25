@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { PanelLeftClose, PanelLeftOpen } from "lucide-react";
+import { PanelLeftClose, PanelLeftOpen, Search } from "lucide-react";
 import { useAppStore } from "@/store/useAppStore";
 import { useUIChromeStore } from "@/store/useUIChromeStore";
 import { useReminderCenterStore } from "@/store/useReminderCenterStore";
@@ -51,6 +51,13 @@ export function Sidebar() {
   const activeTab = useAppStore((s) => s.activeTab);
   const setActiveTab = useAppStore((s) => s.setActiveTab);
   const setSettingsModalOpen = useAppStore((s) => s.setSettingsModalOpen);
+  // Workflow UX Sidebar Productization V1：Global Search / Command Center 入口（复用现有 Modal，不建第二套）
+  const setSearchModalView = useAppStore((s) => s.setSearchModalView);
+  const setSearchModalOpen = useAppStore((s) => s.setSearchModalOpen);
+  const openGlobalSearch = useCallback(() => {
+    setSearchModalView("palette");
+    setSearchModalOpen(true);
+  }, [setSearchModalView, setSearchModalOpen]);
   // UI Chrome：低成本独立 store（不触发主业务 store persist / 大范围 render）
   const persistedCollapsed = useUIChromeStore((s) => s.sidebarCollapsed);
   const setPersistedCollapsed = useUIChromeStore((s) => s.setSidebarCollapsed);
@@ -231,9 +238,14 @@ export function Sidebar() {
           navScrollable ? "overflow-y-auto" : "overflow-visible"
         )}
       >
-        {/* Brand Logo：Full Logo ↔ Mark 同容器 crossfade（始终 mounted；绝对定位互不挤压） */}
-        <div
-          className="sidebar-logo relative h-10 w-full overflow-hidden cursor-pointer"
+        {/* Brand Logo：Full Logo ↔ Mark 同容器 crossfade（始终 mounted；绝对定位互不挤压）。
+            Workflow UX Sidebar Productization V1：div → 真实 <button>（Home shortcut，
+            Tab/Enter/Space 原生语义）；Logo 不是第二个 Overview selection（无 aria-current）。 */}
+        <button
+          type="button"
+          aria-label="返回总览"
+          data-testid="sidebar-logo"
+          className="sidebar-logo relative h-10 w-full overflow-hidden cursor-pointer rounded-lg outline-none focus-visible:outline-2 focus-visible:outline-charcoal/30"
           onClick={() => {
             interactedRef.current = true;
             setActiveTab("overview");
@@ -241,17 +253,44 @@ export function Sidebar() {
         >
           <img
             src="/logo.png"
-            alt="ClassFlow"
+            alt=""
             aria-hidden={effectiveCollapsed ? "true" : undefined}
             className="sidebar-logo-full absolute left-1/2 top-1/2 w-auto max-h-8 object-contain mix-blend-multiply"
           />
           <img
             src="/branding/classflow-mark.png"
-            alt="ClassFlow"
+            alt=""
             aria-hidden={effectiveCollapsed ? undefined : "true"}
             className="sidebar-logo-mark absolute left-1/2 top-1/2 w-8 h-8 object-contain"
           />
-        </div>
+        </button>
+
+        {/* Global Search / Command Center Entry（Sidebar Productization V1）：
+            utility 而非 Workspace Tab——不进 MAIN_NAV_ITEMS、不移动 Active Plate；
+            复用现有 Command Center Modal（palette view）。Expanded = field-like 入口
+            （icon + 搜索 + ⌘K），Collapsed = 光学居中的 icon-only。 */}
+        <button
+          type="button"
+          onClick={openGlobalSearch}
+          aria-label="全局搜索"
+          data-testid="sidebar-search-entry"
+          className={cn(
+            "relative w-full h-9 flex items-center gap-2 px-2.5 rounded-lg text-left",
+            "border border-line bg-alabaster/60 text-satin-grey",
+            "hover:bg-alabaster hover:border-line-strong hover:text-charcoal",
+            "transition-colors duration-[var(--motion-fast)] ease-[var(--ease-standard)]",
+            "outline-none focus-visible:outline-2 focus-visible:outline-charcoal/30 group"
+          )}
+        >
+          <Search className="w-4 h-4 shrink-0 text-sandrift group-hover:text-charcoal transition-colors duration-[var(--motion-fast)]" />
+          <span data-testid="nav-label" className="sidebar-label flex-1 min-w-0 truncate text-xs font-medium">
+            搜索
+          </span>
+          <kbd className="sidebar-kbd shrink-0 text-[10px] font-semibold leading-none text-sandrift border border-line rounded px-1 py-0.5 bg-surface">
+            ⌘K
+          </kbd>
+          {tooltip("搜索 · ⌘K")}
+        </button>
 
         {/* Navigation Menu（核心学习功能） */}
         <nav ref={navRef} className="relative space-y-0.5">

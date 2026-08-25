@@ -882,6 +882,27 @@ html[data-motion-effective="reduced"] .kiro-capsule .kiro-ring { animation: none
   opacity: 0 !important;
 }
 
+/* Workflow UX Sidebar Productization V1 —— Nav Tooltip Rail Semantics：
+   Tooltip 只服务 collapsed rail（icon-only 无 label）。
+   Expanded 稳定态 / manual morph 期间一律 suppress——由 [data-collapsed] 直接控制，
+   不依赖 label 是否 opacity 0 的间接判断。collapsed 态的 hover/focus-visible 显示
+   由组件上的 group-hover/group-focus-visible utilities 驱动。 */
+.sidebar-shell:not([data-collapsed="true"]) .sidebar-tooltip {
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+
+/* Global Search Entry ⌘K kbd：仅 expanded 参与 layout；collapsed 不占宽度
+   （display 切换为瞬时，不参与 rail morph tween——morph 仍只有 width/opacity/transform）。 */
+.sidebar-kbd {
+  transition-property: opacity;
+  transition-duration: var(--motion-fast);
+  transition-timing-function: var(--ease-standard);
+}
+[data-collapsed="true"] .sidebar-kbd {
+  display: none;
+}
+
 /* Reduced Motion：全部瞬时切换 */
 html[data-motion-effective="reduced"] .sidebar-shell,
 html[data-motion-effective="reduced"] .sidebar-nav-row,
@@ -891,7 +912,8 @@ html[data-motion-effective="reduced"] .sidebar-logo-full,
 html[data-motion-effective="reduced"] .sidebar-logo-mark,
 html[data-motion-effective="reduced"] .sidebar-profile-surface,
 html[data-motion-effective="reduced"] .sidebar-profile-header-row,
-html[data-motion-effective="reduced"] .sidebar-profile-credits {
+html[data-motion-effective="reduced"] .sidebar-profile-credits,
+html[data-motion-effective="reduced"] .sidebar-kbd {
   transition: none !important;
 }
 /* ============================================================
