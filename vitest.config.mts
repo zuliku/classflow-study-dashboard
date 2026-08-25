@@ -10,6 +10,10 @@ export default defineConfig({
   test: {
     environment: "node",
     setupFiles: ["vitest.setup.ts"],
+    // 全量并行跑 145+ 文件时，重 IO/真实 ConPTY/docx fixture 用例在默认 5s 下会被
+    // CPU 争用误杀（单独运行均 <3s）。放宽全局上限，消除 CI gate 偶发 flake。
+    testTimeout: 20000,
+    hookTimeout: 20000,
     include: [
       "tests/terminalCapability*.test.ts",
       "tests/terminalToolExposure*.test.ts",
