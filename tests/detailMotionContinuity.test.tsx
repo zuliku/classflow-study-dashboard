@@ -146,13 +146,6 @@ describe("AssignmentDrawer detail continuity", () => {
     expect(screen.queryByText("任务 a2")).toBeNull();
   });
 
-  function actSet(partial: Record<string, unknown>) {
-  // React 18 concurrent：包 act 确保状态刷新同步于断言
-  act(() => {
-    useAppStore.setState(partial as never);
-  });
-    useAppStore.setState(partial as never);
-  }
 });
 
 describe("Peek keyboard continuity", () => {
@@ -346,37 +339,3 @@ describe("DetailContentStage visualKey contract", () => {
     expect(stageEl().textContent).toBe("content-C");
     expect(swapMark()).toBeNull();
   });
-});
-
-// ============================================================
-// Workflow UX Motion M3 P0 —— Course Drawer close ownership regression
-// （open truth = Selection Entity；exit presence 期间 Header/Body DOM 冻结）
-// ============================================================
-
-const COURSE_FIXTURE: Course = {
-  id: "course-a",
-  name: "课程 A",
-  code: "C-A",
-  credit: 3,
-  description: "",
-  materials: [],
-} as unknown as Course;
-
-function seedCourse() {
-  const prefs = useAppStore.getState().preferences;
-  useAppStore.setState({
-    courses: [COURSE_FIXTURE],
-    assignments: [],
-    schedules: [],
-    calendarMarks: [],
-    studyBlocks: [],
-    reminders: [],
-    groupProjects: [],
-    scheduleOccurrenceOverrides: [],
-    semester: { id: "s", name: "x", startDate: "2026-01-05", totalWeeks: 16 },
-    currentSemesterWeek: 1,
-    activeTab: "courses" as never,
-    selectedCourseId: null,
-    preferences: { ...prefs },
-  });
-}

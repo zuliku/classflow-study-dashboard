@@ -497,17 +497,18 @@ export function CourseDetailDrawer() {
           !entityInteractive && "pointer-events-none"
         )}
       >
-        <DetailContentStage entityKey={currentId} className="space-y-4">
-          {/* OVERVIEW */}
-          <CourseDetailOverview
-            course={course}
-            editing={isEditing}
-            draft={draft}
-            onDraftChange={setDraft}
-            error={editError}
-          />
+        <DetailContentStage entityKey={currentId}>
+          <div className="space-y-4">
+            {/* OVERVIEW */}
+            <CourseDetailOverview
+              course={course}
+              editing={isEditing}
+              draft={draft}
+              onDraftChange={setDraft}
+              error={editError}
+            />
 
-          {/* PRIMARY ACTIONS：上传资料 primary；编辑态切换为 [保存][取消] */}
+            {/* PRIMARY ACTIONS：上传资料 primary；编辑态切换为 [保存][取消] */}
           {isEditing ? (
             <div className="flex items-center gap-1.5">
               <Button variant="secondary" size="sm" onClick={handleCancelEdit}>
@@ -536,59 +537,62 @@ export function CourseDetailDrawer() {
             </div>
           )}
 
-          {/* SCHEDULE — rounded fine-border section shell */}
-          <div className="rounded-xl border border-line-soft bg-surface px-3.5 pt-3 pb-2">
-            <CourseScheduleSection
-              schedules={courseSchedules}
-              courseClassroom={course.classroom}
-              courseName={course.name}
-              overrides={scheduleOccurrenceOverrides.filter((o) => o.courseId === course.id)}
-              onDeleteOverride={(overrideId) => {
-                const removed = deleteScheduleOccurrenceOverride(overrideId);
-                if (removed) {
-                  pushToast({
-                    message: "已移除临时调整",
-                    actionLabel: "撤销",
-                    onAction: () => restoreScheduleOccurrenceOverride(removed),
-                  });
-                }
-              }}
-              addSlotOpen={addSlotOpen}
-              onAddSlotOpenChange={setAddSlotOpen}
-              autoFocusKey={addSlotAutoFocusKey}
-              onAddSlot={handleAddSlot}
-              onUpdateSlot={handleUpdateSlot}
-              onDeleteSlot={handleDeleteSlot}
-              newIds={newScheduleIds}
-              sectionRef={scheduleSectionRef}
-            />
-          </div>
+            <div className="space-y-3">
+              {/* SCHEDULE — rounded fine-border section shell */}
+              <div className="rounded-xl border border-line-soft bg-surface px-3.5 pt-3 pb-2">
+                <CourseScheduleSection
+                  schedules={courseSchedules}
+                  courseClassroom={course.classroom}
+                  courseName={course.name}
+                  overrides={scheduleOccurrenceOverrides.filter((o) => o.courseId === course.id)}
+                  onDeleteOverride={(overrideId) => {
+                    const removed = deleteScheduleOccurrenceOverride(overrideId);
+                    if (removed) {
+                      pushToast({
+                        message: "已移除临时调整",
+                        actionLabel: "撤销",
+                        onAction: () => restoreScheduleOccurrenceOverride(removed),
+                      });
+                    }
+                  }}
+                  addSlotOpen={addSlotOpen}
+                  onAddSlotOpenChange={setAddSlotOpen}
+                  autoFocusKey={addSlotAutoFocusKey}
+                  onAddSlot={handleAddSlot}
+                  onUpdateSlot={handleUpdateSlot}
+                  onDeleteSlot={handleDeleteSlot}
+                  newIds={newScheduleIds}
+                  sectionRef={scheduleSectionRef}
+                />
+              </div>
 
-          {/* TASKS */}
-          <div className="rounded-xl border border-line-soft bg-surface px-3.5 pt-3 pb-2">
-            <CourseTaskSection
-              assignments={courseAssignments}
-              now={new Date()}
-              onOpenAssignment={handleOpenAssignment}
-              onAddTask={handleQuickAddAssignment}
-            />
-          </div>
+              {/* TASKS */}
+              <div className="rounded-xl border border-line-soft bg-surface px-3.5 pt-3 pb-2">
+                <CourseTaskSection
+                  assignments={courseAssignments}
+                  now={new Date()}
+                  onOpenAssignment={handleOpenAssignment}
+                  onAddTask={handleQuickAddAssignment}
+                />
+              </div>
 
-          {/* MATERIALS */}
-          <div className="rounded-xl border border-line-soft bg-surface px-3.5 pt-3 pb-2">
-            <CourseMaterialSection
-              materials={course.materials}
-              uploading={uploadingCourseId === course.id}
-              onUploadClick={handleQuickUploadMaterial}
-              onPreview={handlePreviewMaterial}
-              onDelete={handleDeleteMaterial}
-              newIds={newMaterialIds}
-            />
-          </div>
+              {/* MATERIALS */}
+              <div className="rounded-xl border border-line-soft bg-surface px-3.5 pt-3 pb-2">
+                <CourseMaterialSection
+                  materials={course.materials}
+                  uploading={uploadingCourseId === course.id}
+                  onUploadClick={handleQuickUploadMaterial}
+                  onPreview={handlePreviewMaterial}
+                  onDelete={handleDeleteMaterial}
+                  newIds={newMaterialIds}
+                />
+              </div>
 
-          {/* 活动记录：secondary context，默认 collapsed，lazy 加载真实 Learning History */}
-          <div className="rounded-xl border border-line-soft bg-surface px-3.5 pt-3 pb-2">
-            <EntityActivitySection scope="course" courseId={course.id} />
+              {/* 活动记录：secondary context，默认 collapsed，lazy 加载真实 Learning History */}
+              <div className="rounded-xl border border-line-soft bg-surface px-3.5 pt-3 pb-2">
+                <EntityActivitySection scope="course" courseId={course.id} />
+              </div>
+            </div>
           </div>
         </DetailContentStage>
       </div>
