@@ -1,17 +1,13 @@
-# Source Han Sans SC — Bundled Font Placeholder
+# Source Han Sans SC — Bundled Variable
 
-请将 Adobe 官方 source-han-sans release 的 SC 字体文件置于此目录。
+官方来源：`https://github.com/adobe-fonts/source-han-sans` (`release` 分支)
 
-约束：
-- 使用 Adobe 官方发布版本
-- 优先使用 SC Variable OTF（减少多个静态 weight 文件）
-- 保留 SIL OFL 1.1 许可（见 `../licenses/OFL.txt`）
-- 内部 family：`ClassFlow Source Han Sans SC`
+已下载（2026-08-25，release commit `a4f7cf94edfb9d7ffbdfc4841de276358bd7e0f2`）：
 
-期望文件名（CSS 已引用，未放置时回退）：
-- `SourceHanSansSC-VF.woff2` / `.otf`（Variable，推荐）
-- `SourceHanSansSC-Regular.woff2` / `.otf`
-- `SourceHanSansSC-Medium.woff2` / `.otf`
-- `SourceHanSansSC-Bold.woff2` / `.otf`
+- `SourceHanSansSC-VF.ttf.woff2` — 来自 `Variable/WOFF2/TTF/SourceHanSansSC-VF.ttf.woff2` — 14129688 — SHA256 `CFEC773CDC2EA964DE8713471C6FD20774BC40617F5567F92EFEECCACA6604B0`
+- 权重轴：`wght` 250–900（fvar，default 250）
+- CSS：`@font-face { src: url("/fonts/source-han-sans-sc/SourceHanSansSC-VF.ttf.woff2") format("woff2"); font-weight: 250 900; }`
 
-官方仓库：https://github.com/adobe-fonts/source-han-sans
+许可：`../licenses/OFL.txt`（`master/LICENSE.txt` 原文，SIL OFL 1.1）
+
+策略：单 Variable 文件覆盖全部权重，未下载 848MB 全量 archive；内部 family `ClassFlow Source Han Sans SC`。

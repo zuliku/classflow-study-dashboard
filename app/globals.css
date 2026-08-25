@@ -6,79 +6,37 @@
 /* Typography V1 — Font Faces (bundled only; MiSans is local-only and not bundled) */
 @font-face {
   font-family: "ClassFlow HarmonyOS Sans SC";
-  src:
-    local("HarmonyOS Sans SC"),
-    url("/fonts/harmonyos-sans-sc/HarmonyOS_Sans_SC_Regular.woff2") format("woff2"),
-    url("/fonts/harmonyos-sans-sc/HarmonyOS_Sans_SC_Regular.ttf") format("truetype");
+  src: url("/fonts/harmonyos-sans-sc/HarmonyOS_Sans_SC_Regular.ttf") format("truetype");
   font-weight: 400;
   font-style: normal;
   font-display: swap;
 }
 @font-face {
   font-family: "ClassFlow HarmonyOS Sans SC";
-  src:
-    local("HarmonyOS Sans SC Medium"),
-    url("/fonts/harmonyos-sans-sc/HarmonyOS_Sans_SC_Medium.woff2") format("woff2"),
-    url("/fonts/harmonyos-sans-sc/HarmonyOS_Sans_SC_Medium.ttf") format("truetype");
+  src: url("/fonts/harmonyos-sans-sc/HarmonyOS_Sans_SC_Medium.ttf") format("truetype");
   font-weight: 500;
   font-style: normal;
   font-display: swap;
 }
 @font-face {
   font-family: "ClassFlow HarmonyOS Sans SC";
-  src:
-    local("HarmonyOS Sans SC Bold"),
-    url("/fonts/harmonyos-sans-sc/HarmonyOS_Sans_SC_Bold.woff2") format("woff2"),
-    url("/fonts/harmonyos-sans-sc/HarmonyOS_Sans_SC_Bold.ttf") format("truetype");
+  src: url("/fonts/harmonyos-sans-sc/HarmonyOS_Sans_SC_Bold.ttf") format("truetype");
   font-weight: 700;
   font-style: normal;
   font-display: swap;
 }
-/* Variable font (preferred if official release provides it; falls back to static above) */
+/* HarmonyOS 600 (font-semibold) → Medium 500，避免 Bold 过粗或合成粗体；经实测 600 在仅有 500/700 时会跳至 700 */
 @font-face {
   font-family: "ClassFlow HarmonyOS Sans SC";
-  src: url("/fonts/harmonyos-sans-sc/HarmonyOS_Sans_SC_Variable.woff2") format("woff2-variations");
-  font-weight: 100 900;
+  src: url("/fonts/harmonyos-sans-sc/HarmonyOS_Sans_SC_Medium.ttf") format("truetype");
+  font-weight: 600;
   font-style: normal;
   font-display: swap;
 }
 @font-face {
   font-family: "ClassFlow Source Han Sans SC";
-  src:
-    local("Source Han Sans SC"),
-    url("/fonts/source-han-sans-sc/SourceHanSansSC-VF.woff2") format("woff2-variations"),
-    url("/fonts/source-han-sans-sc/SourceHanSansSC-VF.otf") format("opentype");
-  font-weight: 100 900;
-  font-style: normal;
-  font-display: swap;
-}
-@font-face {
-  font-family: "ClassFlow Source Han Sans SC";
-  src:
-    local("Source Han Sans SC Regular"),
-    url("/fonts/source-han-sans-sc/SourceHanSansSC-Regular.woff2") format("woff2"),
-    url("/fonts/source-han-sans-sc/SourceHanSansSC-Regular.otf") format("opentype");
-  font-weight: 400;
-  font-style: normal;
-  font-display: swap;
-}
-@font-face {
-  font-family: "ClassFlow Source Han Sans SC";
-  src:
-    local("Source Han Sans SC Medium"),
-    url("/fonts/source-han-sans-sc/SourceHanSansSC-Medium.woff2") format("woff2"),
-    url("/fonts/source-han-sans-sc/SourceHanSansSC-Medium.otf") format("opentype");
-  font-weight: 500;
-  font-style: normal;
-  font-display: swap;
-}
-@font-face {
-  font-family: "ClassFlow Source Han Sans SC";
-  src:
-    local("Source Han Sans SC Bold"),
-    url("/fonts/source-han-sans-sc/SourceHanSansSC-Bold.woff2") format("woff2"),
-    url("/fonts/source-han-sans-sc/SourceHanSansSC-Bold.otf") format("opentype");
-  font-weight: 700;
+  src: url("/fonts/source-han-sans-sc/SourceHanSansSC-VF.ttf.woff2") format("woff2");
+  font-weight: 250 900;
   font-style: normal;
   font-display: swap;
 }

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { readFileSync, readdirSync } from "node:fs";
+import { readFileSync, readdirSync, statSync } from "node:fs";
 import { resolve } from "node:path";
 import {
   FONT_REGISTRY,
@@ -140,11 +140,43 @@ describe("Typography V1 — CSS tokens & ownership", () => {
     expect(bodyBlock).not.toContain("tabular-nums");
   });
 
-  it("font-weight 400/500/700 declared (Variable + static)", () => {
+  it("font-weight 400/500/700 declared (HarmonyOS static + Source Han Variable 250-900)", () => {
     expect(css).toContain("font-weight: 400");
     expect(css).toContain("font-weight: 500");
+    expect(css).toContain("font-weight: 600");
     expect(css).toContain("font-weight: 700");
-    expect(css).toContain("font-weight: 100 900");
+    expect(css).toContain("font-weight: 250 900");
+  });
+
+  it("CSS does not reference nonexistent placeholders", () => {
+    // HarmonyOS placeholders removed
+    expect(css).not.toContain("HarmonyOS_Sans_SC_Regular.woff2");
+    expect(css).not.toContain("HarmonyOS_Sans_SC_Medium.woff2");
+    expect(css).not.toContain("HarmonyOS_Sans_SC_Bold.woff2");
+    expect(css).not.toContain("HarmonyOS_Sans_SC_Variable");
+    expect(css).not.toContain('format("woff2-variations")');
+    // Source Han old placeholders
+    expect(css).not.toContain("SourceHanSansSC-VF.woff2");
+    expect(css).not.toContain("SourceHanSansSC-VF.otf");
+    expect(css).not.toContain("SourceHanSansSC-Regular");
+    expect(css).not.toContain("SourceHanSansSC-Medium");
+    expect(css).not.toContain("SourceHanSansSC-Bold");
+    // correct final source
+    expect(css).toContain("SourceHanSansSC-VF.ttf.woff2");
+    expect(css).toContain('format("woff2")');
+    expect(css).toContain('format("truetype")');
+  });
+
+  it("CSS bundled src prefers url before local (no local before bundled)", () => {
+    // HarmonyOS internal family should use url directly, not local() before
+    const harmonyBlocks = [...css.matchAll(/@font-face\s*\{[^}]*ClassFlow HarmonyOS Sans SC[^}]*\}/g)].map((m) => m[0]);
+    for (const block of harmonyBlocks) {
+      // should contain url("/fonts/harmonyos-sans-sc/
+      expect(block).toContain('url("/fonts/harmonyos-sans-sc/');
+      // should NOT have local("HarmonyOS Sans SC") before url
+      const localBefore = block.indexOf('local(') !== -1 && block.indexOf('local(') < block.indexOf('url(');
+      expect(localBefore).toBe(false);
+    }
   });
 
   it("index.html pre-paint whitelist is correct and sets dataset.uiFont", () => {
@@ -166,6 +198,12 @@ describe("Typography V1 — CSS tokens & ownership", () => {
     expect(readme).toContain("Source Han Sans");
     expect(readme).toContain("MiSans");
     expect(readme).toContain("不将 MiSans");
+    // official license files exist
+    const lic1 = resolve(process.cwd(), "public/fonts/licenses/HarmonyOS_Sans_LICENSE.txt");
+    const ofl = resolve(process.cwd(), "public/fonts/licenses/OFL.txt");
+    expect(() => readFileSync(lic1, "utf8")).not.toThrow();
+    expect(readFileSync(lic1, "utf8")).toContain("HarmonyOS Sans Fonts License Agreement");
+    expect(readFileSync(ofl, "utf8")).toContain("SIL OPEN FONT LICENSE");
     // verify no MiSans font file committed
     const fontsRoot = resolve(process.cwd(), "public/fonts");
     const walk = (dir: string): string[] => {
@@ -180,5 +218,67 @@ describe("Typography V1 — CSS tokens & ownership", () => {
     const all = walk(fontsRoot);
     const hasMiSansBinary = all.some((p) => /misan/i.test(p) && /\.(woff2?|ttf|otf)$/i.test(p));
     expect(hasMiSansBinary).toBe(false);
+  });
+});
+
+describe("Typography V1 — Asset Integrity (Closure)", () => {
+  const stat = (p: string) => {
+    try {
+      return statSync(p);
+    } catch {
+      return null;
+    }
+  };
+  it("bundled HarmonyOS three TTF exist and size > 5MB", () => {
+    const base = resolve(process.cwd(), "public/fonts/harmonyos-sans-sc");
+    for (const name of ["HarmonyOS_Sans_SC_Regular.ttf", "HarmonyOS_Sans_SC_Medium.ttf", "HarmonyOS_Sans_SC_Bold.ttf"]) {
+      const p = resolve(base, name);
+      const st = stat(p);
+      expect(st, `${name} missing`).not.toBeNull();
+      expect(st!.size).toBeGreaterThan(5 * 1024 * 1024);
+      expect(st!.size).toBeLessThan(20 * 1024 * 1024);
+    }
+  });
+  it("bundled Source Han Variable WOFF2 exists and size > 10MB", () => {
+    const p = resolve(process.cwd(), "public/fonts/source-han-sans-sc/SourceHanSansSC-VF.ttf.woff2");
+    const st = stat(p);
+    expect(st).not.toBeNull();
+    expect(st!.size).toBeGreaterThan(10 * 1024 * 1024);
+  });
+  it("no placeholder woff2/otf font binaries remain (only approved Variable)", () => {
+    const baseH = resolve(process.cwd(), "public/fonts/harmonyos-sans-sc");
+    const baseS = resolve(process.cwd(), "public/fonts/source-han-sans-sc");
+    // HarmonyOS should have zero woff2 (only TTF)
+    const hw = readdirSync(baseH).filter((f) => f.endsWith(".woff2")).length;
+    expect(hw).toBe(0);
+    // Source Han should have exactly one woff2: SourceHanSansSC-VF.ttf.woff2
+    const sw = readdirSync(baseS).filter((f) => f.endsWith(".woff2"));
+    expect(sw).toEqual(["SourceHanSansSC-VF.ttf.woff2"]);
+    // old placeholders must not exist
+    const all = [...readdirSync(baseH), ...readdirSync(baseS)].join(" ");
+    expect(all).not.toContain("Variable");
+    expect(all).not.toContain("SourceHanSansSC-VF.woff2");
+    expect(all).not.toContain("SourceHanSansSC-Regular");
+  });
+  it("MiSans binary not in public/fonts", () => {
+    const walk = (dir: string): string[] => {
+      const out: string[] = [];
+      for (const e of readdirSync(dir, { withFileTypes: true })) {
+        const p = resolve(dir, e.name);
+        if (e.isDirectory()) out.push(...walk(p));
+        else out.push(p);
+      }
+      return out;
+    };
+    const all = walk(resolve(process.cwd(), "public/fonts"));
+    const hasMiSans = all.some((p) => /misan/i.test(p) && /\.(woff|woff2|ttf|otf)$/i.test(p));
+    expect(hasMiSans).toBe(false);
+  });
+  it("licenses README contains SHA and upstream commit", () => {
+    const readme = readFileSync(resolve(process.cwd(), "public/fonts/licenses/README.md"), "utf8");
+    expect(readme).toContain("SHA-256");
+    expect(readme).toContain("9c3252");
+    expect(readme).toContain("a4f7cf");
+    expect(readme).toContain("SourceHanSansSC-VF.ttf.woff2");
   });
 });
