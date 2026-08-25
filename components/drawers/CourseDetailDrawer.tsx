@@ -431,7 +431,7 @@ export function CourseDetailDrawer() {
       // Floating Course Hub：水平靠右 + 垂直居中（only Course Hub 使用 items-center）
       overlayClassName="items-center"
       // 内容驱动高度：!h-auto 覆盖 floating base 的 h-full；max-h 由 base 提供（desktop 32px / mobile 24px inset）
-      className="!h-auto sm:w-[540px] lg:w-[560px]"
+      className="!h-auto sm:w-[500px]"
     >
       {/* HEADER：与 Assignment Floating Detail 同 shell —— breadcrumb + 标题 + More / 关闭 */}
       <header className="shrink-0 border-b border-line bg-[#F7F5F5] px-5 pt-4 pb-3.5">
@@ -497,7 +497,7 @@ export function CourseDetailDrawer() {
           !entityInteractive && "pointer-events-none"
         )}
       >
-        <DetailContentStage entityKey={currentId} className="space-y-6">
+        <DetailContentStage entityKey={currentId} className="space-y-4">
           {/* OVERVIEW */}
           <CourseDetailOverview
             course={course}
@@ -536,58 +536,60 @@ export function CourseDetailDrawer() {
             </div>
           )}
 
-          {/* SCHEDULE */}
-          <CourseScheduleSection
-            schedules={courseSchedules}
-            courseClassroom={course.classroom}
-            courseName={course.name}
-            overrides={scheduleOccurrenceOverrides.filter((o) => o.courseId === course.id)}
-            onDeleteOverride={(overrideId) => {
-              const removed = deleteScheduleOccurrenceOverride(overrideId);
-              if (removed) {
-                pushToast({
-                  message: "已移除临时调整",
-                  actionLabel: "撤销",
-                  onAction: () => restoreScheduleOccurrenceOverride(removed),
-                });
-              }
-            }}
-            addSlotOpen={addSlotOpen}
-            onAddSlotOpenChange={setAddSlotOpen}
-            autoFocusKey={addSlotAutoFocusKey}
-            onAddSlot={handleAddSlot}
-            onUpdateSlot={handleUpdateSlot}
-            onDeleteSlot={handleDeleteSlot}
-            newIds={newScheduleIds}
-            sectionRef={scheduleSectionRef}
-          />
-
-          <div className="h-px bg-line-soft" aria-hidden="true" />
+          {/* SCHEDULE — rounded fine-border section shell */}
+          <div className="rounded-xl border border-line-soft bg-surface px-3.5 pt-3 pb-2">
+            <CourseScheduleSection
+              schedules={courseSchedules}
+              courseClassroom={course.classroom}
+              courseName={course.name}
+              overrides={scheduleOccurrenceOverrides.filter((o) => o.courseId === course.id)}
+              onDeleteOverride={(overrideId) => {
+                const removed = deleteScheduleOccurrenceOverride(overrideId);
+                if (removed) {
+                  pushToast({
+                    message: "已移除临时调整",
+                    actionLabel: "撤销",
+                    onAction: () => restoreScheduleOccurrenceOverride(removed),
+                  });
+                }
+              }}
+              addSlotOpen={addSlotOpen}
+              onAddSlotOpenChange={setAddSlotOpen}
+              autoFocusKey={addSlotAutoFocusKey}
+              onAddSlot={handleAddSlot}
+              onUpdateSlot={handleUpdateSlot}
+              onDeleteSlot={handleDeleteSlot}
+              newIds={newScheduleIds}
+              sectionRef={scheduleSectionRef}
+            />
+          </div>
 
           {/* TASKS */}
-          <CourseTaskSection
-            assignments={courseAssignments}
-            now={new Date()}
-            onOpenAssignment={handleOpenAssignment}
-            onAddTask={handleQuickAddAssignment}
-          />
-
-          <div className="h-px bg-line-soft" aria-hidden="true" />
+          <div className="rounded-xl border border-line-soft bg-surface px-3.5 pt-3 pb-2">
+            <CourseTaskSection
+              assignments={courseAssignments}
+              now={new Date()}
+              onOpenAssignment={handleOpenAssignment}
+              onAddTask={handleQuickAddAssignment}
+            />
+          </div>
 
           {/* MATERIALS */}
-          <CourseMaterialSection
-            materials={course.materials}
-            uploading={uploadingCourseId === course.id}
-            onUploadClick={handleQuickUploadMaterial}
-            onPreview={handlePreviewMaterial}
-            onDelete={handleDeleteMaterial}
-            newIds={newMaterialIds}
-          />
-
-          <div className="h-px bg-line-soft" aria-hidden="true" />
+          <div className="rounded-xl border border-line-soft bg-surface px-3.5 pt-3 pb-2">
+            <CourseMaterialSection
+              materials={course.materials}
+              uploading={uploadingCourseId === course.id}
+              onUploadClick={handleQuickUploadMaterial}
+              onPreview={handlePreviewMaterial}
+              onDelete={handleDeleteMaterial}
+              newIds={newMaterialIds}
+            />
+          </div>
 
           {/* 活动记录：secondary context，默认 collapsed，lazy 加载真实 Learning History */}
-          <EntityActivitySection scope="course" courseId={course.id} />
+          <div className="rounded-xl border border-line-soft bg-surface px-3.5 pt-3 pb-2">
+            <EntityActivitySection scope="course" courseId={course.id} />
+          </div>
         </DetailContentStage>
       </div>
 
