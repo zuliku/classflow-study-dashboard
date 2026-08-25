@@ -270,6 +270,11 @@ export function TimelineWorkspace() {
       };
   const [studyDrag, setStudyDrag] = useState<StudyBlockDragState>({ type: "idle" });
   const studyDragRef = useRef<StudyBlockDragState>({ type: "idle" });
+  // Motion M5 Drop Settle：成功落位（move / quick-create / undo）后真实 block 播放一次
+  // 轻量 ux-settle。仅 TimelineWorkspace local transient（不进 Zustand / 不 persist）；
+  // onAnimationEnd（animationName === "ux-settle-in"）清除，JS 不复制 motion duration。
+  // rejected drop（write boundary 拒绝 / invalid placement）绝不 settle。
+  const [settledStudyBlockId, setSettledStudyBlockId] = useState<string | null>(null);
   // Workflow UX V9：click vs drag suppression——跨过 5px threshold 后置 true，
   // 使拖动释放产生的 click 不打开 Assignment；下一次 pointerdown 重置为 false。
   // 只作用于 pointer 生成的 click（event.detail > 0）：键盘激活（detail=0）
@@ -401,6 +406,8 @@ export function TimelineWorkspace() {
           if (!updated) {
             pushToast({ type: "warning", message: "学习计划状态已变化，未调整时间" });
           } else {
+            // Motion M5：成功落位 → 真实 block 轻 settle（rejected 不 settle）
+            setSettledStudyBlockId(origin.id);
             pushToast({
               message: `学习计划时间已调整${courseOverlapSuffix(courseOverlaps)}`,
               actionLabel: "撤销",
@@ -413,6 +420,9 @@ export function TimelineWorkspace() {
                 });
                 if (!undone) {
                   pushToast({ type: "warning", message: "学习计划状态已变化，无法撤销时间调整" });
+                } else {
+                  // Undo 成功同样轻 settle（不做反向飞行动画）
+                  setSettledStudyBlockId(origin.id);
                 }
               },
             });
@@ -551,6 +561,8 @@ export function TimelineWorkspace() {
             pushToast({ type: "warning", message: "任务状态已变化，未创建学习计划" });
             return;
           }
+          // Motion M5：成功创建 → 新 block 轻 settle（rejected 不 settle）
+          setSettledStudyBlockId(createdId);
           pushToast({
             message: `已安排学习时间 · 1 小时${courseOverlapSuffix(current.courseOverlaps)}`,
             actionLabel: "撤销",
@@ -819,14 +831,18 @@ export function TimelineWorkspace() {
               className={cn(
                 "absolute left-1 right-1 rounded-lg border border-dashed border-line bg-pastel-mint/20 px-1.5 py-0.5 flex items-center gap-1 overflow-hidden group select-none",
                 "transition-[opacity,border-color,background-color] duration-[var(--motion-fast)]",
-                // Workflow UX V15：released 低侵入（弱化 + 低 z，允许与 active block 同屏不遮挡）
-                isReleasedBlock && "z-[1] opacity-55 bg-transparent",
-                !isReleasedBlock && "z-[2]",
-                isDraggingThis && "opacity-50",
-                // Rebalance Preview：被移动的块弱化 + dashed outline（不改真实数据）
-                isRebalanced && "opacity-35 border-dashed border-[#A48F82]",
-                studyDragEnabled && !isDraggingThis && !isReleasedBlock && "cursor-grab",
-                isDraggingThis && "cursor-grabbing",
+                 // Workflow UX V15：released 低侵入（弱化 + 低 z，允许与 active block 同屏不遮挡）
+                 isReleasedBlock && "z-[1] opacity-55 bg-transparent",
+                 !isReleasedBlock && "z-[2]",
+                 // Motion M5 Grab 态：source 只是 placeholder（~40%），geometry 冻结（原位置原尺寸）；
+                 // 真实拖动对象由 Candidate Ghost 表达，无 scale/rotate/shadow lift
+                 isDraggingThis && "opacity-40",
+                 // Rebalance Preview：被移动的块弱化 + dashed outline（不改真实数据）
+                 isRebalanced && "opacity-35 border-dashed border-[#A48F82]",
+                 studyDragEnabled && !isDraggingThis && !isReleasedBlock && "cursor-grab",
+                 isDraggingThis && "cursor-grabbing",
+                 // Motion M5 Drop Settle：成功落位后一次性轻确认（复用 ux-settle；无 scale/overshoot）
+                 settledStudyBlockId === b.id && "ux-settle",
                 // Linked hover affordance（克制：边框/底色略增强，无 scale/glow）
                 linkedAssignment &&
                   !isDraggingThis &&
@@ -836,6 +852,13 @@ export function TimelineWorkspace() {
                 focusPaused && !isDraggingThis && "bg-alabaster/60"
               )}
               style={{ top: `${topPct}%`, height: `${heightPct}%`, minHeight: touchesEdge ? undefined : 6 }}
+              onAnimationEnd={(e) => {
+                // Settle State 清理：只认 settle keyframe（子元素动画会冒泡，按 animationName 过滤）；
+                // JS 不复制 motion duration（不用 setTimeout）
+                if (e.animationName === "ux-settle-in") {
+                  setSettledStudyBlockId((id) => (id === b.id ? null : id));
+                }
+              }}
             >
               {linkedAssignment ? (
                 <button
@@ -869,6 +892,17 @@ export function TimelineWorkspace() {
             </div>
           );
         })}
+
+        {/* Motion M5 Target Surface：StudyBlock move 与 Unscheduled quick drag 统一同一
+            day-level target（极弱背景 + 1px inset ring）。有效性语义完全由 Candidate Ghost
+            承担——Day Column 自身不变绿/黄/红。 */}
+        {studyDrag.type === "dragging" && studyDrag.candidate?.date === date && (
+          <div
+            aria-hidden="true"
+            data-testid="timeline-day-target"
+            className="absolute inset-0 pointer-events-none bg-alabaster/55 ring-1 ring-inset ring-charcoal/20"
+          />
+        )}
 
         {/* IM5A：拖动 Ghost（真实 candidate 几何；三态：clean mint / course overlap warm warning / hard danger；snap 过渡 top） */}
         {studyDrag.type === "dragging" && studyDrag.candidate && studyDrag.candidate.date === date && (
@@ -907,19 +941,14 @@ export function TimelineWorkspace() {
           </div>
         )}
 
-        {/* IM5B：Unscheduled Quick Schedule Ghost + 目标日弱高亮（candidate 几何；1h；三态） */}
+        {/* IM5B：Unscheduled Quick Schedule Ghost + 统一 Target Surface（candidate 几何；1h；
+            三态语义在 Ghost 上，day surface 与 StudyBlock move 同一套中性高亮） */}
         {unscheduledDrag.type === "dragging" && unscheduledDrag.candidate?.date === date && (
           <>
             <div
               aria-hidden="true"
-              className={cn(
-                "absolute inset-0 pointer-events-none",
-                !unscheduledDrag.valid
-                  ? "bg-danger-bg/10 ring-1 ring-inset ring-danger/30"
-                  : unscheduledDrag.courseOverlaps.length > 0
-                    ? "bg-[#F3EEE7]/40 ring-1 ring-inset ring-stone-beige/50"
-                    : "bg-pastel-mint/5 ring-1 ring-inset ring-pastel-mint/40"
-              )}
+              data-testid="timeline-day-target"
+              className="absolute inset-0 pointer-events-none bg-alabaster/55 ring-1 ring-inset ring-charcoal/20"
             />
             <div
               data-testid="unscheduled-ghost"

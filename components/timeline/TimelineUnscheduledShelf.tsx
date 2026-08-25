@@ -80,7 +80,8 @@ export function TimelineUnscheduledShelf({
               className={cn(
                 "inline-flex items-center gap-1.5 pl-1.5 pr-1 h-7 rounded-lg bg-surface border border-line text-[11px] font-semibold text-charcoal max-w-[240px] shrink-0",
                 directManipulationEnabled && !isDragging && "cursor-grab select-none",
-                isDragging && "opacity-50 cursor-grabbing"
+                // Motion M5 Grab 态：与 StudyBlock source 统一语言（~40%，只降视觉权重，无 scale）
+                isDragging && "opacity-40 cursor-grabbing"
               )}
             >
               {directManipulationEnabled && (

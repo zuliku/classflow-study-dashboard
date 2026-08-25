@@ -47,6 +47,17 @@ if (typeof window !== "undefined" && !(window as unknown as { PointerEvent?: unk
   }
   (window as unknown as { PointerEvent: unknown }).PointerEvent = PointerEventPolyfill;
 }
+// Motion M5：settle 清理依赖 onAnimationEnd（e.animationName）；jsdom 无 AnimationEvent
+if (typeof window !== "undefined" && !(window as unknown as { AnimationEvent?: unknown }).AnimationEvent) {
+  class AnimationEventPolyfill extends Event {
+    animationName: string;
+    constructor(type: string, init: AnimationEventInit = {}) {
+      super(type, init);
+      this.animationName = init.animationName ?? "";
+    }
+  }
+  (window as unknown as { AnimationEvent: unknown }).AnimationEvent = AnimationEventPolyfill;
+}
 
 vi.mock("@/hooks/useKiroHandoff", () => ({
   useKiroHandoff: () => ({
@@ -83,6 +94,7 @@ vi.mock("@/components/kiro/KiroSessionProvider", async (importOriginal) => {
 import { TimelineWorkspace } from "@/components/timeline/TimelineWorkspace";
 import { AssignmentDrawer } from "@/components/drawers/AssignmentDrawer";
 import { useAppStore } from "@/store/useAppStore";
+import { useToastStore } from "@/store/useToastStore";
 import type { Assignment, Course, CourseSchedule, FocusSession, Semester, StudyBlock } from "@/types";
 
 /**
@@ -172,6 +184,10 @@ const mkStandaloneBlock = (id: string, date: string): StudyBlock =>
     source: "manual",
   }) as unknown as StudyBlock;
 
+// Motion M5：action 真实实现快照（模块加载期，先于任何用例覆写）
+const REAL_UPDATE_STUDY_BLOCK = useAppStore.getState().updateStudyBlock;
+const REAL_ADD_STUDY_BLOCK = useAppStore.getState().addStudyBlock;
+
 beforeEach(() => {
   cleanup();
   const prefs = useAppStore.getState().preferences;
@@ -197,7 +213,31 @@ beforeEach(() => {
 });
 afterEach(() => {
   cleanup();
+  // Motion M5 rejection 测试可能覆写 store action → 每个用例后恢复真实实现
+  useAppStore.setState({
+    updateStudyBlock: REAL_UPDATE_STUDY_BLOCK,
+    addStudyBlock: REAL_ADD_STUDY_BLOCK,
+  });
 });
+
+/**
+ * Motion M5：mock elementFromPoint 返回指定 day column（jsdom 无布局/命中测试）。
+ * rect top=0 height=780 → pointerMinutes = 480 + clientY（780px 全域 ≈ 08:00–21:00）。
+ */
+function mockElementFromPointDay(dow: number) {
+  const fakeDayCol = {
+    dataset: { timetableDay: String(dow) },
+    getBoundingClientRect: () =>
+      ({ top: 0, left: 0, right: 100, bottom: 780, width: 100, height: 780, x: 0, y: 0, toJSON: () => ({}) }) as DOMRect,
+  };
+  (document as unknown as Record<string, unknown>).elementFromPoint = () => ({
+    closest: () => fakeDayCol,
+  });
+}
+
+function restoreElementFromPoint() {
+  (document as unknown as Record<string, unknown>).elementFromPoint = () => null;
+}
 
 function seedBlocks(blocks: StudyBlock[]) {
   useAppStore.setState({ studyBlocks: blocks });
@@ -963,5 +1003,165 @@ describe("Released StudyBlock：Timeline 视觉 / 交互 / Marker", () => {
     await waitFor(() => {
       expect(useAppStore.getState().selectedAssignmentId).toBe("a-exec");
     });
+  });
+});
+
+// ============================================================
+// Motion M5 —— Direct Manipulation Feedback（Grab / Target / Settle）
+// ============================================================
+const WEEK7_WED = weekDate(7, 2); // 无课日：move 目标列（day 3）
+const WEEK7_THU = weekDate(7, 3); // 无课日：quick drag 目标列（day 4）
+
+describe("Motion M5 —— StudyBlock move feedback", () => {
+  function engageMove(dow: number) {
+    mockElementFromPointDay(dow);
+    const el = getStudyBlockEl();
+    fireEvent.pointerDown(el, { button: 0, clientX: 100, clientY: 100, pointerId: 1 });
+    act(() => {
+      fireEvent.pointerMove(window, { clientX: 100, clientY: 195, pointerId: 1 });
+    });
+    return el;
+  }
+
+  it("跨过阈值 → origin source subdued（opacity-40，geometry 不变）+ candidate 日出现统一 target surface", () => {
+    seedBlocks([mkLinkedBlock("sb-m5a", WEEK7_MON)]);
+    render(<TimelineWorkspace />);
+    engageMove(3);
+
+    const origin = getStudyBlockEl();
+    expect(origin.className).toContain("opacity-40");
+    expect(document.querySelector('[data-testid="study-block-ghost"]')).toBeTruthy();
+
+    const target = document.querySelector('[data-testid="timeline-day-target"]') as HTMLElement;
+    expect(target).toBeTruthy();
+    // 中性 target surface：极弱背景 + 1px inset ring（有效性语义在 Ghost 上，列自身不变色）
+    expect(target.className).toContain("bg-alabaster/55");
+    expect(target.className).toContain("ring-charcoal/20");
+
+    fireEvent.pointerUp(window, { pointerId: 1 });
+    restoreElementFromPoint();
+  });
+
+  it("成功 move → 真实 block 获得 ux-settle；settle animation end 清除 local settle state", () => {
+    seedBlocks([mkLinkedBlock("sb-m5b", WEEK7_MON)]);
+    render(<TimelineWorkspace />);
+    engageMove(3);
+    fireEvent.pointerUp(window, { pointerId: 1 });
+
+    // Store 已更新到周三
+    const moved = useAppStore.getState().studyBlocks.find((b) => b.id === "sb-m5b")!;
+    expect(moved.date).toBe(WEEK7_WED);
+
+    const block = getStudyBlockEl();
+    expect(block.className).toContain("ux-settle");
+
+    // onAnimationEnd（animationName === ux-settle-in）→ 清 settle state（不用 setTimeout）
+    act(() => {
+      block.dispatchEvent(
+        new window.AnimationEvent("animationend", { animationName: "ux-settle-in", bubbles: true })
+      );
+    });
+    expect(getStudyBlockEl().className).not.toContain("ux-settle");
+    restoreElementFromPoint();
+  });
+
+  it("write boundary 拒绝（updateStudyBlock → false）→ 无 settle、block 不动", () => {
+    useAppStore.setState({ updateStudyBlock: () => false });
+    seedBlocks([mkLinkedBlock("sb-m5c", WEEK7_MON)]);
+    render(<TimelineWorkspace />);
+    engageMove(3);
+    fireEvent.pointerUp(window, { pointerId: 1 });
+
+    const block = useAppStore.getState().studyBlocks.find((b) => b.id === "sb-m5c")!;
+    expect(block.date).toBe(WEEK7_MON); // 未动
+    expect(getStudyBlockEl().className).not.toContain("ux-settle");
+    restoreElementFromPoint();
+  });
+
+  it("键盘激活不受 drag visual state 影响（无 subdued / 无 settle，正常打开 Assignment）", () => {
+    seedBlocks([mkLinkedBlock("sb-m5d", WEEK7_MON)]);
+    render(<TimelineWorkspace />);
+    const mainBtn = screen.getByLabelText("打开任务《实证报告学习》");
+    fireEvent.keyDown(mainBtn, { key: "Enter" });
+    fireEvent.click(mainBtn);
+
+    expect(useAppStore.getState().selectedAssignmentId).toBe("a-exec");
+    const block = getStudyBlockEl();
+    expect(block.className).not.toContain("opacity-40");
+    expect(block.className).not.toContain("ux-settle");
+  });
+
+  it("Undo 成功 → block 回原位并再次轻 settle", () => {
+    seedBlocks([mkLinkedBlock("sb-m5e", WEEK7_MON)]);
+    render(<TimelineWorkspace />);
+    engageMove(3);
+    fireEvent.pointerUp(window, { pointerId: 1 });
+    expect(useAppStore.getState().studyBlocks.find((b) => b.id === "sb-m5e")!.date).toBe(WEEK7_WED);
+
+    // 触发成功 toast 的「撤销」action（真实 undo 路径）
+    const undoToast = useToastStore
+      .getState()
+      .toasts.slice()
+      .reverse()
+      .find((t) => t.actionLabel === "撤销");
+    expect(undoToast).toBeTruthy();
+    act(() => {
+      undoToast!.onAction?.();
+    });
+
+    expect(useAppStore.getState().studyBlocks.find((b) => b.id === "sb-m5e")!.date).toBe(WEEK7_MON);
+    // Undo 成功同样轻 settle（不做反向飞行动画）
+    expect(getStudyBlockEl().className).toContain("ux-settle");
+    restoreElementFromPoint();
+  });
+});
+
+describe("Motion M5 —— Unscheduled quick drag feedback", () => {
+  function engageShelfDrag(dow: number) {
+    mockElementFromPointDay(dow);
+    const chip = document.querySelector('[data-testid="timeline-unscheduled-item"]') as HTMLElement;
+    fireEvent.pointerDown(chip, { button: 0, clientX: 200, clientY: 600, pointerId: 2 });
+    act(() => {
+      fireEvent.pointerMove(window, { clientX: 200, clientY: 614, pointerId: 2 });
+    });
+    return chip;
+  }
+
+  it("跨过阈值 → shelf chip subdued（opacity-40）", () => {
+    render(<TimelineWorkspace />); // LINKED 无 block → unscheduled shelf 有 chip
+    const chip = engageShelfDrag(4);
+    expect(chip.className).toContain("opacity-40");
+    fireEvent.pointerUp(window, { pointerId: 2 });
+    restoreElementFromPoint();
+  });
+
+  it("candidate 日保持 target surface 高亮；成功 create → 新 block 播放 ux-settle", () => {
+    render(<TimelineWorkspace />);
+    engageShelfDrag(4);
+
+    const target = document.querySelector('[data-testid="timeline-day-target"]') as HTMLElement;
+    expect(target).toBeTruthy();
+    expect(target.className).toContain("ring-charcoal/20");
+
+    fireEvent.pointerUp(window, { pointerId: 2 });
+    const created = useAppStore.getState().studyBlocks[0];
+    expect(created).toBeTruthy();
+    expect(created.assignmentId).toBe("a-exec");
+
+    const blockEl = document.querySelector('[data-testid="timeline-study-block"]') as HTMLElement;
+    expect(blockEl.className).toContain("ux-settle");
+    restoreElementFromPoint();
+  });
+
+  it("create 被 Store 拒绝（addStudyBlock → null）→ 无新 block、无 settle", () => {
+    useAppStore.setState({ addStudyBlock: () => null });
+    render(<TimelineWorkspace />);
+    engageShelfDrag(4);
+    fireEvent.pointerUp(window, { pointerId: 2 });
+
+    expect(useAppStore.getState().studyBlocks.length).toBe(0);
+    expect(document.querySelector('[data-testid="timeline-study-block"]')).toBeNull();
+    expect(document.querySelector(".ux-settle")).toBeNull();
+    restoreElementFromPoint();
   });
 });

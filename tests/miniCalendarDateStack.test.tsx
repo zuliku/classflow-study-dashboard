@@ -176,3 +176,56 @@ describe("MiniCalendar date content stack", () => {
     expect(grid.style.gridTemplateRows).toContain("minmax(22px, 1fr)");
   });
 });
+
+// ============================================================
+// Motion M5 —— MiniCalendar DDL drag feedback（source subdued / target outline /
+// preview 无 left/top transition）
+// ============================================================
+describe("MiniCalendar DDL drag feedback", () => {
+  function engageDdlDrag() {
+    const src = document.querySelector('[data-testid="agenda-ddl-item"]') as HTMLElement;
+    fireEvent.pointerDown(src, { button: 0, clientX: 300, clientY: 300, pointerId: 1 });
+    // 跨过 5px 阈值 → dragging
+    fireEvent.pointerMove(src, { clientX: 312, clientY: 300, pointerId: 1 });
+    return src;
+  }
+
+  it("dragging 时 source card subdued（opacity-40）且 pointer preview 即时跟随（无 transition）", () => {
+    useAppStore.setState({ assignments: [mkDdlAssignment("a-drag", TODAY_KEY)] });
+    render(<MiniCalendar />);
+    const src = engageDdlDrag();
+
+    expect(src.className).toContain("opacity-40");
+
+    const preview = document.querySelector('[data-testid="ddl-drag-preview"]') as HTMLElement;
+    expect(preview).toBeTruthy();
+    // preview left/top 直接内联跟随指针：禁止任何 position transition（拖尾回归锁）
+    expect(preview.style.transition).toBe("");
+    expect(/transition/.test(preview.className)).toBe(false);
+
+    fireEvent.pointerUp(src, { clientX: 312, clientY: 300, pointerId: 1 });
+  });
+
+  it("hover 目标日期保持 1px 低对比 outline target surface；非目标格低饱和 outline", () => {
+    useAppStore.setState({ assignments: [mkDdlAssignment("a-drag2", TODAY_KEY)] });
+    render(<MiniCalendar />);
+    const src = engageDdlDrag();
+
+    const targetCell = getCell(TOMORROW_KEY);
+    (document as unknown as Record<string, unknown>).elementFromPoint = () => ({
+      closest: (selector: string) =>
+        selector === "[data-calendar-day]" ? targetCell : null,
+    });
+    fireEvent.pointerMove(src, { clientX: 320, clientY: 302, pointerId: 1 });
+
+    // 统一 Timeline 强度：1px 低对比 ring + 极弱 tint（不大面积填色）
+    expect(targetCell.className).toContain("outline-charcoal/30");
+    expect(targetCell.className).toContain("bg-alabaster/55");
+
+    const idleCell = getCell(TODAY_KEY);
+    expect(idleCell.className).toContain("outline-line-soft");
+    expect(idleCell.className).not.toContain("outline-charcoal/30");
+
+    fireEvent.pointerUp(src, { clientX: 320, clientY: 302, pointerId: 1 });
+  });
+});

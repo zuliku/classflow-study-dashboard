@@ -677,9 +677,10 @@ export function MiniCalendar() {
                   : isCurrentMonth
                   ? "text-charcoal hover:bg-alabaster"
                   : "text-stone-beige opacity-40 hover:opacity-80",
-                // DDL 拖动中：全部日期格低饱和 outline；当前目标明确 ring
+                // DDL 拖动中：全部日期格低饱和 outline；当前目标 1px 低对比 + 极弱 tint（与
+                // Timeline day target 同强度；强语义交给 drag preview，不大面积填色）
                 dragActive && "outline outline-1 outline-line-soft",
-                isHoverTarget && "outline-2 outline-sandrift bg-alabaster"
+                isHoverTarget && "outline-charcoal/30 bg-alabaster/55"
               )}
             >
               {/* Fixed Content Stack：数字 → gap-1(4px) → indicator rail（永远存在，h-1）。
@@ -731,10 +732,12 @@ export function MiniCalendar() {
       </div>
       </div>
 
-      {/* Drag Preview：跟随 pointer，不复制完整卡片；无动画（Reduced Motion 下天然静态） */}
+      {/* Drag Preview：跟随 pointer，不复制完整卡片；无动画（Reduced Motion 下天然静态）。
+          禁止 left/top/transform transition——否则 preview 拖尾 */}
       {dragActive && (
         <div
           aria-hidden="true"
+          data-testid="ddl-drag-preview"
           className="fixed z-[60] pointer-events-none px-3 py-2 rounded-xl bg-charcoal text-white shadow-card space-y-0.5"
           style={{ left: drag.x + 14, top: drag.y + 16 }}
         >
@@ -864,7 +867,8 @@ export function MiniCalendar() {
                     cell.kind === "ddl" && [
                       "bg-danger-bg border-danger-border text-danger cursor-pointer",
                       draggable && "cursor-grab active:cursor-grabbing",
-                      isDraggingThis && "opacity-50",
+                      // Grab 态统一语言：source 只降视觉权重（~40%），无 scale/shadow
+                      isDraggingThis && "opacity-40",
                     ],
                     cell.kind === "exam" && "bg-alabaster/60 border-stone-beige text-sandrift",
                     cell.kind === "activity" &&
