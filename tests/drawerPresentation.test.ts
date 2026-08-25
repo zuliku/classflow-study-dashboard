@@ -46,8 +46,9 @@ describe("Drawer presentation class contract", () => {
     expect(enter.panelClassName).toContain("border-line-strong");
     expect(enter.panelClassName).toContain("shadow-card");
     expect(enter.panelClassName).toContain("flex flex-col overflow-hidden");
-    // enter 运动：位移 + 微缩放 + 淡入
-    expect(enter.panelClassName).toContain("translate-x-0 scale-100 opacity-100");
+    // Workflow UX Motion M4：enter 运动 = 位移归位 + 淡入（无 scale——Drawer ≠ Modal）
+    expect(enter.panelClassName).toContain("translate-x-0 opacity-100");
+    expect(enter.panelClassName).not.toContain("scale");
     // 无 edge 的 border-l-only 形态
     expect(enter.panelClassName).not.toContain("shadow-drawer");
     expect(enter.panelClassName).not.toMatch(/\bborder-l\b/);
@@ -65,7 +66,9 @@ describe("Drawer presentation class contract", () => {
 
   it("floating exit：更快且位移方向保持右侧来源感", () => {
     const exit = resolveDrawerPresentation("floating", false);
-    expect(exit.panelClassName).toContain("translate-x-4 scale-[.994] opacity-0");
+    // Workflow UX Motion M4：exit = 右侧轻移 + 淡出，无向心缩放（Stable Edge Exit）
+    expect(exit.panelClassName).toContain("translate-x-3 opacity-0");
+    expect(exit.panelClassName).not.toContain("scale");
     expect(exit.panelClassName).toContain("!duration-[var(--motion-exit-panel)]");
   });
 

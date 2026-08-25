@@ -45,7 +45,11 @@ export function resolveDrawerAriaModal(
   return presentation === "edge" ? "true" : undefined;
 }
 
-/** 面板 enter/exit 视觉：edge = 右侧滑入；floating = 浮层位移 + 微缩放 */
+/** 面板 enter/exit 视觉：
+ *  edge = 右侧滑入；
+ *  floating = 浮层位移 + 淡入（Workflow UX Motion M4：Stable Edge Exit——
+ *  floating contextual panel 是右侧 detail surface，不做 Modal 式向心缩放；
+ *  产品 Motion Grammar：Dialog → scale + fade；Drawer → translate + fade） */
 export function resolveDrawerPresentation(
   presentation: DrawerPresentation,
   visible: boolean
@@ -61,11 +65,11 @@ export function resolveDrawerPresentation(
         "w-full sm:w-[470px] h-full max-h-[calc(100dvh-24px)] sm:max-h-[calc(100dvh-32px)]",
         "bg-surface rounded-2xl sm:rounded-[22px] border border-line-strong shadow-card",
         "flex flex-col overflow-hidden ux-drawer-panel !ease-[var(--ease-emphasized)] pointer-events-auto",
-        // enter：20px→0 位移 + 微缩放 + 淡入（--motion-overlay 220ms，与 edge/Dialog 同档）；
-        // exit：更快（--motion-exit-panel 160ms）
+        // enter：translate-x 0 + 淡入（--motion-overlay 220ms）；
+        // exit：右侧轻移 + 淡出（--motion-exit-panel 160ms）；无 scale（M4 Stable Edge Exit）
         visible
-          ? "translate-x-0 scale-100 opacity-100 !duration-[var(--motion-overlay)]"
-          : "translate-x-4 scale-[.994] opacity-0 !duration-[var(--motion-exit-panel)]"
+          ? "translate-x-0 opacity-100 !duration-[var(--motion-overlay)]"
+          : "translate-x-3 opacity-0 !duration-[var(--motion-exit-panel)]"
       ),
     };
   }
