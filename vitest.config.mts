@@ -145,6 +145,7 @@ export default defineConfig({
       "tests/studyBlockWriteBoundary.test.tsx",
       "tests/todayTaskProgress.test.ts",
       "tests/pageTransitionMotion.test.tsx",
+      "tests/detailMotionContinuity.test.tsx",
       "tests/drawerPresentation.test.ts",
       "tests/demoManualInjection.test.tsx",
       "tests/extensionsRuntimeTruth.test.tsx",

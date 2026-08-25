@@ -18,6 +18,7 @@ import { IconButton } from "@/components/ui/IconButton";
 import { Button } from "@/components/ui/Button";
 import { cn } from "@/lib/utils";
 import { useEffectiveReducedMotion } from "@/hooks/useEffectiveReducedMotion";
+import { DetailContentStage } from "@/components/ui/DetailContentStage";
 import { DetailDisclosure } from "@/components/assignment/detail/DetailDisclosure";
 import { openTimelineAtDate, canOpenTimelineAtDate } from "@/lib/timeline/openTimelineAtDate";
 import { useConfirmStore } from "@/store/useConfirmStore";
@@ -61,51 +62,16 @@ export function CalendarMarkDetailDrawer() {
     if (currentMark) setStaleMark(currentMark);
   }, [currentMark?.id]);
 
-  // ---- Detail entity swap lifecycle（与 AssignmentDrawer 同一 state machine）----
-  // closed → open：第一帧即当前 mark（不 flash 旧 mark）；open A → open B：shell 保持 + 轻量 swap
+  // ---- Detail entity continuity（Workflow UX Motion Productization M2）----
+  // semantic switch 立即生效；内容经 DetailContentStage 轻量 swap（移除 60ms timer 状态机）。
   const currentId = currentMark?.id ?? null;
-  const [prevSelectedId, setPrevSelectedId] = useState(currentId);
-  const [displayedMarkId, setDisplayedMarkId] = useState<string | null>(null);
-  const [swapPhase, setSwapPhase] = useState<"in" | "out">("in");
-
-  if (currentId !== prevSelectedId) {
-    setPrevSelectedId(currentId);
-    const wasOpen = prevSelectedId !== null;
-    if (currentId === null) {
-      // closing：保留 displayed 内容供 exit presence
-    } else if (!wasOpen) {
-      setDisplayedMarkId(currentId);
-      setSwapPhase("in");
-    } else if (displayedMarkId !== currentId) {
-      setSwapPhase("out");
-    }
-  }
-
-  const reducedMotion = useEffectiveReducedMotion();
-  useEffect(() => {
-    if (currentId === null || swapPhase !== "out") return;
-    if (displayedMarkId === currentId) {
-      setSwapPhase("in");
-      return;
-    }
-    if (reducedMotion) {
-      setDisplayedMarkId(currentId);
-      setSwapPhase("in");
-      return;
-    }
-    const t = window.setTimeout(() => {
-      setDisplayedMarkId(currentId);
-      setSwapPhase("in");
-    }, 60);
-    return () => window.clearTimeout(t);
-  }, [currentId, swapPhase, displayedMarkId, reducedMotion]);
 
   // 实体切换/关闭/重开：reminder 展开状态回到默认
   useEffect(() => {
     setReminderOpen(false);
   }, [currentId]);
 
-  const mark = calendarMarks.find((m) => m.id === displayedMarkId) ?? currentMark ?? staleMark;
+  const mark = currentMark ?? staleMark;
 
   // 排除规则（Domain 一致）：
   // - type="ddl" 且 sourceId 精确匹配 assignment → linked（走 AssignmentDrawer，不在此出现）
@@ -190,12 +156,6 @@ export function CalendarMarkDetailDrawer() {
     deleteReminderByUser(id);
   };
 
-  const swapContentClasses = cn(
-    swapPhase === "out"
-      ? "-translate-y-[3px] opacity-0 transition-[opacity,transform] duration-[60ms] ease-[var(--ease-standard)]"
-      : "ux-detail-swap-in"
-  );
-
   // exam/activity Detail 展示字段（Domain 只有 title/type/date/起止时间，不发明其它信息）
   const markTypeLabel = mark.type === "exam" ? "考试" : mark.type === "activity" ? "活动" : "截止";
   const drawerAriaLabel =
@@ -225,9 +185,9 @@ export function CalendarMarkDetailDrawer() {
       {/* HEADER：类型 breadcrumb（随 entity swap）+ 标题 + 静态关闭 */}
       <header className="shrink-0 border-b border-line bg-background px-5 pb-3.5 pt-4">
         <div className="flex items-start justify-between gap-2">
-          <div
-            key={displayedMarkId ?? "none"}
-            className={cn("min-w-0 flex-1 space-y-2", swapContentClasses)}
+          <DetailContentStage
+            entityKey={currentId}
+            className="min-w-0 flex-1 space-y-2"
           >
             <span className="flex min-w-0 items-center gap-1 text-xs font-semibold text-sandrift">
               <CalendarDays className="h-3.5 w-3.5 shrink-0 text-sandrift" />
@@ -236,7 +196,7 @@ export function CalendarMarkDetailDrawer() {
             <h2 className="break-words text-[19px] font-bold leading-snug text-charcoal">
               {mark.title}
             </h2>
-          </div>
+          </DetailContentStage>
           <IconButton
             variant="secondary"
             size="sm"
@@ -249,10 +209,10 @@ export function CalendarMarkDetailDrawer() {
         </div>
       </header>
 
-      {/* BODY：与 Header entity 内容同层替换（outer shell 保持 mounted；type 分支只换 content） */}
-      <div
-        key={displayedMarkId ?? "none"}
-        className={cn("min-h-0 flex-1 overflow-y-auto overscroll-contain", swapContentClasses)}
+      {/* BODY：与 Header 同一 stage 语义（keyed by currentId，同步 swap） */}
+      <DetailContentStage
+        entityKey={currentId}
+        className="min-h-0 flex-1 overflow-y-auto overscroll-contain"
       >
         {isExamActivity ? (
           /* ---- B. exam / activity 轻量 branch：只展示真实字段 ---- */
@@ -449,9 +409,9 @@ export function CalendarMarkDetailDrawer() {
                )}
              </div>
            </DetailDisclosure>
-          </div>
-        )}
-      </div>
+           </div>
+         )}
+       </DetailContentStage>
     </Drawer>
   );
 }

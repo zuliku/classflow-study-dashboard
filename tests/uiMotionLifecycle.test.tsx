@@ -369,3 +369,23 @@ describe("ToastViewport lifecycle", () => {
     expect(useToastStore.getState().toasts.find((t) => t.id === "t1")).toBeUndefined();
   });
 });
+
+// ============================================================
+// Workflow UX Motion Productization M2 —— Popover / Select fast-tier contract
+// ============================================================
+describe("Motion M2 —— overlay fast-tier static contract", () => {
+  it("Popover panel：enter --motion-fast / exit --motion-exit-fast；无 200ms+ 覆盖", async () => {
+    const fs = await import("node:fs");
+    const path = await import("node:path");
+    const src = fs.readFileSync(path.join(process.cwd(), "components/ui/Popover.tsx"), "utf-8");
+    expect(src).toContain("duration-[var(--motion-fast)]");
+    expect(src).toContain("!duration-[var(--motion-exit-fast)]");
+    expect(src).not.toMatch(/duration-\[(2|3)00ms\]/);
+    const sel = fs.readFileSync(path.join(process.cwd(), "components/ui/Select.tsx"), "utf-8");
+    expect(sel).toContain("duration-[var(--motion-fast)]");
+    expect(sel).toContain("var(--motion-exit-fast)");
+    // Context Menu 复用 ux-inline（fast 同源）
+    const menu = fs.readFileSync(path.join(process.cwd(), "components/assignment/AssignmentContextMenu.tsx"), "utf-8");
+    expect(menu).toContain("ux-inline");
+  });
+});

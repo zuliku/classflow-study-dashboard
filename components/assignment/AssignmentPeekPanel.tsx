@@ -9,6 +9,7 @@ import { getPriorityMeta } from "@/lib/utils";
 import { getLocalDDLDate, getLocalDDLTime, parseLocalDDL } from "@/lib/ddl";
 import { formatEstimatedMinutes } from "@/lib/tasks/taskSemantics";
 import { deriveAssignmentHealthWithAvailability, healthViewMeta, healthExplanation } from "@/lib/tasks/taskHealthView";
+import { DetailContentStage } from "@/components/ui/DetailContentStage";
 import { cn } from "@/lib/utils";
 
 /**
@@ -94,8 +95,11 @@ export function AssignmentPeekPanel() {
         </button>
       </div>
 
-      {/* Body */}
-      <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3 text-xs">
+      {/* Body：J/K 连续浏览 → DetailContentStage 轻量 swap（surface 保持 mounted，不关闭重开） */}
+      <DetailContentStage
+        entityKey={assignment.id}
+        className="flex-1 overflow-y-auto px-4 py-3 space-y-3 text-xs"
+      >
         {/* 课程 / 状态 / 优先级 / DDL / 预计耗时 */}
         <div className="space-y-1.5">
           <div className="flex items-center gap-2 text-satin-grey">
@@ -244,7 +248,7 @@ export function AssignmentPeekPanel() {
             </div>
           </div>
         )}
-      </div>
+      </DetailContentStage>
 
       <p className="px-4 py-2 border-t border-line-soft text-[10px] text-sandrift shrink-0">
         Enter 打开完整编辑 · Esc 关闭

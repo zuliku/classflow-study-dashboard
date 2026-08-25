@@ -40,7 +40,7 @@ import { DropdownMenuPanel, DropdownMenuItem, DropdownMenuDivider } from "@/comp
 import { useKiroHandoff } from "@/hooks/useKiroHandoff";
 import { KIRO_ICON } from "@/components/layout/navItems";
 import { useMemo } from "react";
-import { useEffectiveReducedMotion } from "@/hooks/useEffectiveReducedMotion";
+import { DetailContentStage } from "@/components/ui/DetailContentStage";
 import { DetailDisclosure } from "@/components/assignment/detail/DetailDisclosure";
 import { EntityActivitySection } from "@/components/history/EntityActivitySection";
 import { AssignmentDetailHero } from "@/components/assignment/detail/AssignmentDetailHero";
@@ -109,7 +109,6 @@ export function AssignmentDrawer() {
   } = useAppStore();
   const pushToast = useToastStore((s) => s.pushToast);
   const handoff = useKiroHandoff();
-  const reducedMotion = useEffectiveReducedMotion();
   // Task 6A：关联资料 Mini Picker 展开状态
   const [materialPickerOpen, setMaterialPickerOpen] = useState(false);
   // Task 6B-B：添加资料下拉（选择课程资料 / 上传文件）与上传中状态
@@ -138,49 +137,12 @@ export function AssignmentDrawer() {
     if (currentAssignment) setStaleAssignment(currentAssignment);
   }, [currentAssignment?.id]);
 
-  // ---- Detail entity swap lifecycle（deterministic state machine）----
-  // 明确区分 closed→open 与 open→open：
-  // - closed → open：第一帧就必须是当前实体（render-phase adjustment，paint 前完成），
-  //   不执行 entity swap-out；panel enter presence 承担进入动效
-  // - open A → open B：outer shell 保持 mounted，先 old fade-out（60ms）再替换内容
-  // - close：保留 displayed 内容供 exit presence（panel 自身负责退场动画）
+  // ---- Detail entity continuity（Workflow UX Motion Productization M2）----
+  // semantic entity switch 立即生效：open A → open B 时 outer Drawer shell 保持 mounted，
+  // 内容经 <DetailContentStage entityKey={currentId}> 播放一次轻量 swap-in
+  // （不再有 60ms fade-out timer / displayedId / swapPhase 手写状态机）。
+  // close：保留 staleAssignment 供 exit presence 渲染（panel 自身负责退场动画）。
   const currentId = currentAssignment?.id ?? null;
-  const [prevSelectedId, setPrevSelectedId] = useState(currentId);
-  const [displayedId, setDisplayedId] = useState<string | null>(null);
-  const [swapPhase, setSwapPhase] = useState<"in" | "out">("in");
-
-  if (currentId !== prevSelectedId) {
-    setPrevSelectedId(currentId);
-    const wasOpen = prevSelectedId !== null;
-    if (currentId === null) {
-      // closing：不改变 displayed 内容
-    } else if (!wasOpen) {
-      // closed → open：立即指向新实体，无 swap-out
-      setDisplayedId(currentId);
-      setSwapPhase("in");
-    } else if (displayedId !== currentId) {
-      // open → open：先 old fade-out，随后（60ms 或 reduced motion 立即）替换
-      setSwapPhase("out");
-    }
-  }
-
-  useEffect(() => {
-    if (currentId === null || swapPhase !== "out") return;
-    if (displayedId === currentId) {
-      setSwapPhase("in");
-      return;
-    }
-    if (reducedMotion) {
-      setDisplayedId(currentId);
-      setSwapPhase("in");
-      return;
-    }
-    const t = window.setTimeout(() => {
-      setDisplayedId(currentId);
-      setSwapPhase("in");
-    }, 60);
-    return () => window.clearTimeout(t);
-  }, [currentId, swapPhase, displayedId, reducedMotion]);
 
   // 实体切换/关闭/重开：transient UI state 一律回到默认（uploading 是真实异步业务，不中断）
   useEffect(() => {
@@ -229,8 +191,7 @@ export function AssignmentDrawer() {
     setRecentCompletedSessionId(intent.sessionId);
   }, [pendingFocusCompletionFollowUp, setPendingFocusCompletionFollowUp, assignments, focusSessions, currentId]);
 
-  const assignment =
-    assignments.find((a) => a.id === displayedId) ?? currentAssignment ?? staleAssignment;
+  const assignment = currentAssignment ?? staleAssignment;
 
   // Task Execution Loop：Focus 只读投影（active 关系 + 本任务已完成统计；tick 不在此层）
   const focusView = useMemo(
@@ -495,13 +456,9 @@ export function AssignmentDrawer() {
     ? formatFocusDurationMs(followUpSession.actualActiveMs)
     : null;
 
-  // Header（breadcrumb/title）与 Body 共享同一 entity swap lifecycle：
-  // 静态 shell 控件（More / Close）留在 swap 层外；entity 内容（course/title + body）同层替换。
-  const swapContentClasses = cn(
-    swapPhase === "out"
-      ? "-translate-y-[3px] opacity-0 transition-[opacity,transform] duration-[60ms] ease-[var(--ease-standard)]"
-      : "ux-detail-swap-in"
-  );
+  // Header（breadcrumb/title）与 Body 作为同一个 Detail Stage：entity 切换时整体轻量 swap
+  //（静态 shell 控件 More / Close 留在 stage 外；Focus / follow-up 业务状态不受 remount 影响——
+  // stage 只重挂 presentation 层，且 entityKey 仅含实体 id）。
 
   return (
     <Drawer
@@ -518,9 +475,9 @@ export function AssignmentDrawer() {
       {/* HEADER：上下文 breadcrumb + 标题（随 entity swap）+ 静态 More / 关闭 */}
       <header className="shrink-0 border-b border-line bg-[#F7F5F5] px-5 pb-3.5 pt-4">
         <div className="flex items-start justify-between gap-2">
-          <div
-            key={displayedId ?? "none"}
-            className={cn("min-w-0 flex-1 space-y-2", swapContentClasses)}
+          <DetailContentStage
+            entityKey={currentId}
+            className="min-w-0 flex-1 space-y-2"
           >
             {course ? (
               <button
@@ -544,7 +501,7 @@ export function AssignmentDrawer() {
             <h2 className="break-words text-[19px] font-bold leading-snug text-charcoal">
               {assignment.title}
             </h2>
-          </div>
+          </DetailContentStage>
           <div className="flex shrink-0 items-center gap-1">
             <Popover open={moreOpen} onOpenChange={setMoreOpen}>
               <IconButton
@@ -578,10 +535,10 @@ export function AssignmentDrawer() {
         </div>
       </header>
 
-      {/* BODY：与 Header entity 内容同层替换（outer shell 保持 mounted） */}
-      <div
-        key={displayedId ?? "none"}
-        className={cn("min-h-0 flex-1 overflow-y-auto overscroll-contain", swapContentClasses)}
+      {/* BODY：与 Header 同属一个 entity stage 语义（stage 各自 keyed by currentId，同步 swap） */}
+      <DetailContentStage
+        entityKey={currentId}
+        className="min-h-0 flex-1 overflow-y-auto overscroll-contain"
       >
         <div className="space-y-5 p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))]">
           {/* HERO：Deadline / Remaining / Status / Priority / Health / 摘要 */}
@@ -927,7 +884,7 @@ export function AssignmentDrawer() {
             </div>
           </DetailDisclosure>
         </div>
-      </div>
+      </DetailContentStage>
     </Drawer>
   );
 }

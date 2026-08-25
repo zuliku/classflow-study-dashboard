@@ -409,9 +409,10 @@ button:disabled {
 
 /* 详情面板内容切换进入（Task A→B；4px 上移 + 淡入，100ms） */
 @keyframes ux-detail-in {
+  /* Workflow UX Motion M2：Detail A → B 轻量 swap（0.94 / 3px → 1 / 0） */
   from {
-    opacity: 0;
-    transform: translateY(4px);
+    opacity: 0.94;
+    transform: translateY(3px);
   }
   to {
     opacity: 1;

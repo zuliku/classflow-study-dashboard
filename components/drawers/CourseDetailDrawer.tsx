@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import React, { useEffect, useRef, useState } from "react";
 import {
@@ -30,6 +30,7 @@ import { DropdownMenuPanel, DropdownMenuItem, DropdownMenuDivider } from "@/comp
 import { useKiroHandoff } from "@/hooks/useKiroHandoff";
 import { useEnterOnAdd } from "@/lib/useEnterOnAdd";
 import { useEffectiveReducedMotion } from "@/hooks/useEffectiveReducedMotion";
+import { DetailContentStage } from "@/components/ui/DetailContentStage";
 import { CourseDetailOverview, CourseDraft } from "@/components/course/detail/CourseDetailOverview";
 import { CourseScheduleSection, ScheduleForm } from "@/components/course/detail/CourseScheduleSection";
 import { CourseTaskSection } from "@/components/course/detail/CourseTaskSection";
@@ -105,44 +106,11 @@ export function CourseDetailDrawer() {
     if (currentCourse) setStaleCourse(currentCourse);
   }, [currentCourse?.id]);
 
-  // ---- Floating entity swap lifecycle（与 Assignment Floating Detail 同家族）----
-  // closed→open：第一帧即当前实体；open A→open B：先 old fade-out（60ms）再替换；
-  // close：保留 displayed 内容供 exit presence。reduced motion 即时切换。
+  // ---- Detail entity continuity（Workflow UX Motion Productization M2）----
+  // semantic entity switch 立即生效：open A → open B 时 shell 保持 mounted，
+  // 内容经 <DetailContentStage entityKey={currentId}> 轻量 swap（移除 60ms fade-out timer）。
+  // close：保留 staleCourse 供 exit presence。reducedMotion 保留给其它消费点。
   const currentId = currentCourse?.id ?? null;
-  const [prevSelectedId, setPrevSelectedId] = useState(currentId);
-  const [displayedId, setDisplayedId] = useState<string | null>(null);
-  const [swapPhase, setSwapPhase] = useState<"in" | "out">("in");
-
-  if (currentId !== prevSelectedId) {
-    setPrevSelectedId(currentId);
-    const wasOpen = prevSelectedId !== null;
-    if (currentId === null) {
-      // closing：不改变 displayed 内容
-    } else if (!wasOpen) {
-      setDisplayedId(currentId);
-      setSwapPhase("in");
-    } else if (displayedId !== currentId) {
-      setSwapPhase("out");
-    }
-  }
-
-  useEffect(() => {
-    if (currentId === null || swapPhase !== "out") return;
-    if (displayedId === currentId) {
-      setSwapPhase("in");
-      return;
-    }
-    if (reducedMotion) {
-      setDisplayedId(currentId);
-      setSwapPhase("in");
-      return;
-    }
-    const t = window.setTimeout(() => {
-      setDisplayedId(currentId);
-      setSwapPhase("in");
-    }, 60);
-    return () => window.clearTimeout(t);
-  }, [currentId, swapPhase, displayedId, reducedMotion]);
 
   // 实体切换/关闭：transient UI 一律复位（editing / more / addSlot / error）
   useEffect(() => {
@@ -155,10 +123,10 @@ export function CourseDetailDrawer() {
 
   // Entity Ownership（V1 closure）：
   // - Selection Entity = currentCourse/currentId：只负责 open/close、swap 驱动、focus restore
-  // - Displayed Entity = displayedCourse/displayedId：Header / Overview / stats / schedule /
+  // - Displayed Entity = currentCourse/currentId：Header / Overview / stats / schedule /
   //   tasks / materials / activity / 全部 mutation target 的唯一来源
   // - swap-out 与 close presence 期间：旧实体内容仅视觉退场 → non-interactive（inert + pointer-events-none）
-  const entityInteractive = isCourseEntityInteractive(currentId, displayedId, swapPhase);
+  const entityInteractive = currentId !== null;
   useEffect(() => {
     const el = bodyRef.current;
     if (!el) return;
@@ -166,28 +134,28 @@ export function CourseDetailDrawer() {
     else el.setAttribute("inert", "");
   }, [entityInteractive]);
 
-  const displayedCourse =
-    courses.find((c) => c.id === displayedId) ?? currentCourse ?? staleCourse;
+  const course =
+    courses.find((c) => c.id === currentId) ?? currentCourse ?? staleCourse;
 
-  const courseSchedules = schedules.filter((s) => s.courseId === displayedCourse?.id);
-  const courseAssignments = assignments.filter((a) => a.courseId === displayedCourse?.id);
-  const newScheduleIds = useEnterOnAdd(courseSchedules.map((s) => s.id), displayedCourse?.id);
+  const courseSchedules = schedules.filter((s) => s.courseId === course?.id);
+  const courseAssignments = assignments.filter((a) => a.courseId === course?.id);
+  const newScheduleIds = useEnterOnAdd(courseSchedules.map((s) => s.id), course?.id);
   const newMaterialIds = useEnterOnAdd(
-    displayedCourse?.materials.map((m) => m.id) ?? [],
-    displayedCourse?.id
+    course?.materials.map((m) => m.id) ?? [],
+    course?.id
   );
 
-  if (!displayedCourse) return null;
+  if (!course) return null;
 
   // ---- Course Edit（只允许 interactive 的 displayed entity；draft 来自 displayed snapshot）----
   const handleStartEdit = () => {
     if (!entityInteractive) return;
     setDraft({
-      name: displayedCourse.name,
-      teacher: displayedCourse.teacher,
-      classroom: displayedCourse.classroom,
-      credit: displayedCourse.credit,
-      description: displayedCourse.description,
+      name: course.name,
+      teacher: course.teacher,
+      classroom: course.classroom,
+      credit: course.credit,
+      description: course.description,
     });
     setEditError(null);
     setIsEditing(true);
@@ -209,7 +177,7 @@ export function CourseDetailDrawer() {
       return;
     }
     updateCourse({
-      ...displayedCourse,
+      ...course,
       name: draft.name.trim(),
       teacher: draft.teacher,
       classroom: draft.classroom,
@@ -224,7 +192,7 @@ export function CourseDetailDrawer() {
   // 快捷操作：添加任务（自动预选当前 displayed 课程）
   const handleQuickAddAssignment = () => {
     if (!entityInteractive) return;
-    openAssignmentEditor({ courseId: displayedCourse.id });
+    openAssignmentEditor({ courseId: course.id });
   };
 
   // 快捷操作：展开 Add Schedule form + 滚动 + focus（由 section 的 autoFocusKey 联动）
@@ -240,7 +208,7 @@ export function CourseDetailDrawer() {
   // 快捷操作：触发资料上传文件选择。capture 点击时的 displayed 课程作为 async 上传 target
   const handleQuickUploadMaterial = () => {
     if (!entityInteractive) return;
-    materialUploadTargetCourseIdRef.current = displayedCourse.id;
+    materialUploadTargetCourseIdRef.current = course.id;
     materialInputRef.current?.click();
   };
 
@@ -248,7 +216,7 @@ export function CourseDetailDrawer() {
   const handleAskKiro = () => {
     if (!entityInteractive) return;
     setMoreOpen(false);
-    handoff.openForCourse(displayedCourse.id);
+    handoff.openForCourse(course.id);
     setSelectedCourseId(null);
   };
 
@@ -263,7 +231,7 @@ export function CourseDetailDrawer() {
   const handleDeleteCourse = () => {
     if (!entityInteractive) return;
     setMoreOpen(false);
-    const target = displayedCourse;
+    const target = course;
     confirmRequest({
       title: "删除课程？",
       description: `课程《${target.name}》的排课、相关任务和本地资料也会一并删除，此操作无法撤销。`,
@@ -324,11 +292,11 @@ export function CourseDetailDrawer() {
     if (error) return error;
     const candidate: CourseSchedule = {
       id: "__candidate__",
-      courseId: displayedCourse.id,
+      courseId: course.id,
       dayOfWeek: form.dayOfWeek,
       startTime: form.startTime,
       endTime: form.endTime,
-      location: form.location || displayedCourse.classroom,
+      location: form.location || course.classroom,
       weeks: form.weeks,
     };
     const conflicts = findCandidateConflicts(candidate);
@@ -336,11 +304,11 @@ export function CourseDetailDrawer() {
       return formatConflictMessage(conflicts, candidate.id) + slotConflictSuffix(false);
     }
     addScheduleSlot({
-      courseId: displayedCourse.id,
+      courseId: course.id,
       dayOfWeek: form.dayOfWeek,
       startTime: form.startTime,
       endTime: form.endTime,
-      location: form.location || displayedCourse.classroom,
+      location: form.location || course.classroom,
       weeks: form.weeks,
     });
     return null;
@@ -389,7 +357,7 @@ export function CourseDetailDrawer() {
 
     const targetCourseId = resolveMaterialUploadTarget(
       materialUploadTargetCourseIdRef.current,
-      displayedCourse.id
+      course.id
     );
     if (!targetCourseId) return;
 
@@ -418,7 +386,7 @@ export function CourseDetailDrawer() {
   // 恢复失败（如 Course 已被删除）时 undone 保持 false，Blob 仍被清理避免 orphan。
   const handleDeleteMaterial = (mat: Material) => {
     if (!entityInteractive) return;
-    const targetCourseId = displayedCourse.id;
+    const targetCourseId = course.id;
     const snapshot = deleteCourseMaterial(targetCourseId, mat.id);
     if (!snapshot) return;
     let undone = false;
@@ -445,20 +413,16 @@ export function CourseDetailDrawer() {
   const stats = formatCourseStats(
     courseSchedules.length,
     courseAssignments.length,
-    displayedCourse.materials.length
+    course.materials.length
   );
 
-  // Header 与 Body 共享 entity swap lifecycle：静态 shell 控件（More/Close）留在 swap 层外
-  const swapContentClasses = cn(
-    swapPhase === "out"
-      ? "-translate-y-[3px] opacity-0 transition-[opacity,transform] duration-[60ms] ease-[var(--ease-standard)]"
-      : "ux-detail-swap-in"
-  );
+  // Header 与 Body 作为同一个 entity stage 语义（各自 keyed by currentId，同步 swap）：
+  // 静态 shell 控件（More/Close）留在 stage 外
 
   return (
     <Drawer
       presentation="floating"
-      open={!!currentCourse}
+      open={!!course}
       onOpenChange={(next) => {
         if (!next) setSelectedCourseId(null);
       }}
@@ -473,23 +437,23 @@ export function CourseDetailDrawer() {
       {/* HEADER：与 Assignment Floating Detail 同 shell —— breadcrumb + 标题 + More / 关闭 */}
       <header className="shrink-0 border-b border-line bg-[#F7F5F5] px-5 pt-4 pb-3.5">
         <div className="flex items-start justify-between gap-2">
-          <div
-            key={displayedId ?? "none"}
-            data-displayed-course-id={displayedCourse.id}
-            className={cn("min-w-0 flex-1", swapContentClasses)}
+          <DetailContentStage
+            entityKey={currentId}
+            data-displayed-course-id={course.id}
+            className="min-w-0 flex-1"
           >
             <p className="flex items-center gap-1.5 text-xs font-semibold text-sandrift">
               <span
                 aria-hidden="true"
                 className="w-1.5 h-1.5 rounded-full shrink-0"
-                style={{ backgroundColor: displayedCourse.borderHex }}
+                style={{ backgroundColor: course.borderHex }}
               />
-              {displayedCourse.code ? `课程资料 · ${displayedCourse.code}` : "课程资料"}
+              {course.code ? `课程资料 · ${course.code}` : "课程资料"}
             </p>
             <h2 className="mt-1 break-words text-[19px] font-bold leading-snug text-charcoal">
-              {displayedCourse.name}
+              {course.name}
             </h2>
-          </div>
+          </DetailContentStage>
           <div className="flex shrink-0 items-center gap-1">
             <Popover open={moreOpen} onOpenChange={setMoreOpen}>
               <IconButton
@@ -528,16 +492,16 @@ export function CourseDetailDrawer() {
       <div
         ref={bodyRef}
         data-testid="course-detail-body"
-        data-displayed-course-id={displayedCourse.id}
+        data-displayed-course-id={course.id}
         className={cn(
           "min-h-0 flex-[0_1_auto] overflow-y-auto overscroll-contain p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))]",
           !entityInteractive && "pointer-events-none"
         )}
       >
-        <div key={displayedId ?? "none"} className={cn("space-y-5", swapContentClasses)}>
+        <DetailContentStage entityKey={currentId} className="space-y-5">
           {/* OVERVIEW */}
           <CourseDetailOverview
-            course={displayedCourse}
+            course={course}
             stats={stats}
             editing={isEditing}
             draft={draft}
@@ -585,9 +549,9 @@ export function CourseDetailDrawer() {
           {/* SCHEDULE */}
           <CourseScheduleSection
             schedules={courseSchedules}
-            courseClassroom={displayedCourse.classroom}
-            courseName={displayedCourse.name}
-            overrides={scheduleOccurrenceOverrides.filter((o) => o.courseId === displayedCourse.id)}
+            courseClassroom={course.classroom}
+            courseName={course.name}
+            overrides={scheduleOccurrenceOverrides.filter((o) => o.courseId === course.id)}
             onDeleteOverride={(overrideId) => {
               const removed = deleteScheduleOccurrenceOverride(overrideId);
               if (removed) {
@@ -622,8 +586,8 @@ export function CourseDetailDrawer() {
 
           {/* MATERIALS */}
           <CourseMaterialSection
-            materials={displayedCourse.materials}
-            uploading={uploadingCourseId === displayedCourse.id}
+            materials={course.materials}
+            uploading={uploadingCourseId === course.id}
             onUploadClick={handleQuickUploadMaterial}
             onPreview={handlePreviewMaterial}
             onDelete={handleDeleteMaterial}
@@ -633,8 +597,8 @@ export function CourseDetailDrawer() {
           <div className="h-px bg-line-soft" aria-hidden="true" />
 
           {/* 活动记录：secondary context，默认 collapsed，lazy 加载真实 Learning History */}
-          <EntityActivitySection scope="course" courseId={displayedCourse.id} />
-        </div>
+          <EntityActivitySection scope="course" courseId={course.id} />
+        </DetailContentStage>
       </div>
 
       {/* Real File Input（上传资料 quick action 触发；id 供既有 E2E 定位） */}
