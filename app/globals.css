@@ -294,9 +294,13 @@ button:disabled {
     animation: ux-month-in var(--motion-base) var(--ease-standard) both;
   }
 
-  /* Agenda 内容切换：3px 上移 */
+  /* Agenda 内容切换：仅 opacity 淡入，不做位移（标题行几何稳定） */
   .ux-agenda-enter {
-    animation: ux-agenda-in var(--motion-fast) var(--ease-standard) both;
+    animation: ux-agenda-in var(--motion-snap) var(--ease-standard) both;
+  }
+
+  .ux-agenda-swap {
+    animation: ux-agenda-in var(--motion-snap) var(--ease-standard) both;
   }
 
   /* 简单淡入（月份标题等） */
@@ -408,12 +412,10 @@ button:disabled {
 
 @keyframes ux-agenda-in {
   from {
-    opacity: 0;
-    transform: translateY(3px);
+    opacity: 0.94;
   }
   to {
     opacity: 1;
-    transform: none;
   }
 }
 

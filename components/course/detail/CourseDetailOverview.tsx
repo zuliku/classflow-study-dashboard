@@ -25,15 +25,12 @@ export interface CourseDraft {
  */
 export function CourseDetailOverview({
   course,
-  stats,
   editing,
   draft,
   onDraftChange,
   error,
 }: {
   course: Course;
-  /** 1 个时段 · 4 个任务 · 2 份资料 */
-  stats: string;
   editing: boolean;
   draft: CourseDraft;
   onDraftChange: (draft: CourseDraft) => void;
@@ -65,7 +62,6 @@ export function CourseDetailOverview({
               {course.credit} 学分
             </span>
           </div>
-          <p className="text-[11px] font-semibold text-sandrift">{stats}</p>
         </div>
       </DisclosureRegion>
 

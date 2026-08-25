@@ -750,8 +750,8 @@ export function MiniCalendar() {
         data-testid="calendar-agenda"
         className="pt-1.5 pb-1 border-t border-line-soft shrink-0"
       >
-        <div className="flex justify-between items-center text-xs">
-          <span className="font-bold text-charcoal">
+        <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 min-h-6 text-xs">
+          <span className="font-bold text-charcoal min-w-0 truncate whitespace-nowrap">
             {isSelectedInSemester
               ? `第 ${selectedWeek} 周 · `
               : ""}
@@ -790,9 +790,9 @@ export function MiniCalendar() {
 
         {/* Compact Event Grid：高度恒定（一行 h-12），不随数量变化 */}
         <div
-          key={selectedDateStr}
+          key={`${selectedDateStr}-${agendaSafePage}`}
           data-testid="agenda-grid"
-          className="ux-agenda-enter grid grid-cols-4 gap-1.5 mt-1 min-h-[48px]"
+          className="ux-agenda-swap grid grid-cols-4 gap-1.5 mt-1 min-h-[48px]"
         >
           {pagedCells.length === 0 ? (
             <div className="col-span-4 h-12 flex items-center justify-center gap-2 text-[10px] text-sandrift">

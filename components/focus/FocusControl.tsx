@@ -160,9 +160,17 @@ export function FocusControl({ compact = false }: { compact?: boolean }) {
           data-testid="focus-popover"
           className="absolute right-0 top-full mt-1.5 w-[260px] bg-surface border border-line-strong rounded-2xl shadow-card p-3 space-y-3 text-xs z-40 ux-inline"
         >
+          {/* Workflow UX M4.1：单一关闭入口——右上角绝对定位，Idle/Running/Paused 共享 */}
+          <button
+            onClick={() => setOpen(false)}
+            aria-label="关闭专注"
+            className="absolute right-2.5 top-2.5 z-10 p-1 rounded-lg text-sandrift hover:text-charcoal hover:bg-alabaster transition-colors"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
           {!active ? (
             <>
-              <div className="space-y-1.5">
+              <div className="space-y-1.5 pr-8">
                 <p className="text-[10px] font-bold text-sandrift uppercase tracking-wider">专注时间</p>
                 <div className="flex items-center gap-1">
                   {FOCUS_PRESETS.map((p) => (
@@ -232,7 +240,7 @@ export function FocusControl({ compact = false }: { compact?: boolean }) {
             </>
           ) : (
             <>
-              <div className="space-y-1">
+              <div className="space-y-1 pr-8">
                 <p className="text-[10px] font-bold text-sandrift uppercase tracking-wider">专注中</p>
                 <p className="text-xs font-bold text-charcoal truncate">{snapshotLabel}</p>
                 {active.note && <p className="text-[10px] text-satin-grey break-words">{active.note}</p>}
@@ -269,16 +277,6 @@ export function FocusControl({ compact = false }: { compact?: boolean }) {
               </div>
             </>
           )}
-
-          <div className="flex items-center justify-end">
-            <button
-              onClick={() => setOpen(false)}
-              aria-label="关闭专注"
-              className="p-1 rounded-lg text-sandrift hover:text-charcoal hover:bg-alabaster transition-colors"
-            >
-              <X className="w-3.5 h-3.5" />
-            </button>
-          </div>
         </div>
       )}
     </div>

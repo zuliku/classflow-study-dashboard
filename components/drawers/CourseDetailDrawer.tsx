@@ -18,7 +18,6 @@ import { uploadCourseMaterials } from "@/lib/materialUpload";
 import { isValidTimeRange } from "@/lib/schedule";
 import { findScheduleConflicts } from "@/lib/conflicts";
 import { openAssignmentEditor, previewMaterial } from "@/lib/uiEvents";
-import { formatCourseStats } from "@/lib/courseDetailView";
 import { isCourseEntityInteractive, resolveMaterialUploadTarget } from "@/lib/courseDetailOwnership";
 
 import { cn } from "@/lib/utils";
@@ -410,11 +409,7 @@ export function CourseDetailDrawer() {
     previewMaterial(mat);
   };
 
-  const stats = formatCourseStats(
-    courseSchedules.length,
-    courseAssignments.length,
-    course.materials.length
-  );
+  // stats summary removed (V2.1: information now shown per-section headers)
 
   // Header 与 Body 作为同一个 entity stage 语义（各自 keyed by currentId，同步 swap）：
   // 静态 shell 控件（More/Close）留在 stage 外
@@ -436,7 +431,7 @@ export function CourseDetailDrawer() {
       // Floating Course Hub：水平靠右 + 垂直居中（only Course Hub 使用 items-center）
       overlayClassName="items-center"
       // 内容驱动高度：!h-auto 覆盖 floating base 的 h-full；max-h 由 base 提供（desktop 32px / mobile 24px inset）
-      className="!h-auto sm:w-[500px]"
+      className="!h-auto sm:w-[540px] lg:w-[560px]"
     >
       {/* HEADER：与 Assignment Floating Detail 同 shell —— breadcrumb + 标题 + More / 关闭 */}
       <header className="shrink-0 border-b border-line bg-[#F7F5F5] px-5 pt-4 pb-3.5">
@@ -502,11 +497,10 @@ export function CourseDetailDrawer() {
           !entityInteractive && "pointer-events-none"
         )}
       >
-        <DetailContentStage entityKey={currentId} className="space-y-5">
+        <DetailContentStage entityKey={currentId} className="space-y-6">
           {/* OVERVIEW */}
           <CourseDetailOverview
             course={course}
-            stats={stats}
             editing={isEditing}
             draft={draft}
             onDraftChange={setDraft}
@@ -528,14 +522,6 @@ export function CourseDetailDrawer() {
               <Button variant="primary" size="sm" onClick={handleQuickUploadMaterial} className="h-8 px-3">
                 <FileUp className="h-3.5 w-3.5" />
                 上传资料
-              </Button>
-              <Button variant="secondary" size="sm" onClick={handleQuickAddAssignment} className="h-8 px-2.5">
-                <Plus className="h-3.5 w-3.5" />
-                添加任务
-              </Button>
-              <Button variant="secondary" size="sm" onClick={handleQuickAddSlot} className="h-8 px-2.5">
-                <Plus className="h-3.5 w-3.5" />
-                添加时段
               </Button>
               <Button
                 variant="secondary"
