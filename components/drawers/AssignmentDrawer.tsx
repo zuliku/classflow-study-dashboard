@@ -460,6 +460,9 @@ export function AssignmentDrawer() {
   //（静态 shell 控件 More / Close 留在 stage 外；Focus / follow-up 业务状态不受 remount 影响——
   // stage 只重挂 presentation 层，且 entityKey 仅含实体 id）。
 
+  // Floating Assignment Detail — content-fit height（M4 已稳定的 Course 方案复用）：
+  // width 保持约 470px（floating base），height 按内容自然高度 + 垂直居中；
+  // 超过 max-height 后 Body 内部滚动。不要误认为 floating = full-height。
   return (
     <Drawer
       presentation="floating"
@@ -471,6 +474,8 @@ export function AssignmentDrawer() {
       aria-label="任务详情"
       data-testid="assignment-detail-panel"
       focusRestoreKey={currentId}
+      overlayClassName="items-center"
+      className="!h-auto"
     >
       {/* HEADER：上下文 breadcrumb + 标题（随 entity swap）+ 静态 More / 关闭 */}
       <header className="shrink-0 border-b border-line bg-[#F7F5F5] px-5 pb-3.5 pt-4">
