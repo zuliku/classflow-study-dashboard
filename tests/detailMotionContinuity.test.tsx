@@ -339,3 +339,4 @@ describe("DetailContentStage visualKey contract", () => {
     expect(stageEl().textContent).toBe("content-C");
     expect(swapMark()).toBeNull();
   });
+});
