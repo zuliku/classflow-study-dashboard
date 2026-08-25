@@ -682,39 +682,49 @@ export function MiniCalendar() {
                 isHoverTarget && "outline-2 outline-sandrift bg-alabaster"
               )}
             >
-              <span>{format(day, "d")}</span>
-
-              {/* Event Indicator Dots */}
-              <div className="flex items-center space-x-0.5 absolute bottom-1">
-                {hasCourse && (
-                  <span
-                    className={`w-1 h-1 rounded-full transition-colors duration-[var(--motion-fast)] ${
-                      isSelected ? "bg-white" : "bg-success"
-                    }`}
-                  />
-                )}
-                {hasDDL && (
-                  <span
-                    className={`w-1 h-1 rounded-full transition-colors duration-[var(--motion-fast)] ${
-                      isSelected ? "bg-white" : "bg-danger"
-                    }`}
-                  />
-                )}
-                {hasExam && (
-                  <span
-                    className={`w-1 h-1 rounded-full transition-colors duration-[var(--motion-fast)] ${
-                      isSelected ? "bg-white" : "bg-sandrift"
-                    }`}
-                  />
-                )}
-                {hasActivity && (
-                  <span
-                    className={`w-1 h-1 rounded-full transition-colors duration-[var(--motion-fast)] ${
-                      isSelected ? "bg-white" : "bg-satin-grey"
-                    }`}
-                  />
-                )}
-              </div>
+              {/* Fixed Content Stack：数字 → gap-1(4px) → indicator rail（永远存在，h-1）。
+                  数字与 dots 的相对距离由 stack 决定，不再随 Cell 高度漂移；
+                  无事件日期也 render 空 rail，保证有/无事件日期数字垂直位置完全一致。 */}
+              <span
+                data-testid="calendar-date-content"
+                className="flex flex-col items-center justify-center gap-1"
+              >
+                <span className="leading-none">{format(day, "d")}</span>
+                <span
+                  aria-hidden="true"
+                  data-testid="calendar-indicator-rail"
+                  className="flex h-1 items-center justify-center gap-0.5"
+                >
+                  {hasCourse && (
+                    <span
+                      className={`w-1 h-1 rounded-full transition-colors duration-[var(--motion-fast)] ${
+                        isSelected ? "bg-white" : "bg-success"
+                      }`}
+                    />
+                  )}
+                  {hasDDL && (
+                    <span
+                      className={`w-1 h-1 rounded-full transition-colors duration-[var(--motion-fast)] ${
+                        isSelected ? "bg-white" : "bg-danger"
+                      }`}
+                    />
+                  )}
+                  {hasExam && (
+                    <span
+                      className={`w-1 h-1 rounded-full transition-colors duration-[var(--motion-fast)] ${
+                        isSelected ? "bg-white" : "bg-sandrift"
+                      }`}
+                    />
+                  )}
+                  {hasActivity && (
+                    <span
+                      className={`w-1 h-1 rounded-full transition-colors duration-[var(--motion-fast)] ${
+                        isSelected ? "bg-white" : "bg-satin-grey"
+                      }`}
+                    />
+                  )}
+                </span>
+              </span>
             </button>
           );
         })}

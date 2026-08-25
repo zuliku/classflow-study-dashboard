@@ -132,6 +132,7 @@ export default defineConfig({
       "tests/timelineOverlayLifecycle.test.tsx",
       "tests/workspaceStateConsistency.test.tsx",
       "tests/calendarMarkDeepLink.test.tsx",
+      "tests/miniCalendarDateStack.test.tsx",
       "tests/assignmentEditorIntegrity.test.tsx",
       "tests/materialLinkIntegrity.test.tsx",
       "tests/timelineArrangeDeepLink.test.tsx",
