@@ -3,6 +3,26 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import React from "react";
 import { render, screen, cleanup, fireEvent } from "@testing-library/react";
 
+// jsdom 无 ResizeObserver：StudyOutlookCard 内 SegmentedControl 依赖（与其它 jsdom 套件同一约定）
+class RO {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+}
+(globalThis as unknown as Record<string, unknown>).ResizeObserver =
+  RO as unknown as typeof ResizeObserver;
+// jsdom 无 matchMedia：useEffectiveReducedMotion / SegmentedControl 依赖
+(window as unknown as Record<string, unknown>).matchMedia = (query: string) => ({
+  matches: false,
+  media: query,
+  onchange: null,
+  addListener: () => {},
+  removeListener: () => {},
+  addEventListener: () => {},
+  removeEventListener: () => {},
+  dispatchEvent: () => false,
+});
+
 const kiroActionMocks = vi.hoisted(() => ({
   handoffPrompt: vi.fn(),
   handoffAssignmentPrompt: vi.fn(),
