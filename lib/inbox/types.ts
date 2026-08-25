@@ -5,6 +5,13 @@
 
 export type InboxSource = "qq-bot" | "gmail" | "qq-mail";
 
+/** Single source of truth for runtime source validation（Main / Preload / Renderer 共用） */
+export const INBOX_SOURCES = ["qq-bot", "gmail", "qq-mail"] as const;
+
+export function isInboxSource(value: unknown): value is InboxSource {
+  return typeof value === "string" && (INBOX_SOURCES as readonly string[]).includes(value);
+}
+
 export type InboxStatus = "unread" | "reviewed" | "archived";
 
 export interface InboxAttachment {

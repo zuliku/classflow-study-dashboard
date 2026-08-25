@@ -160,6 +160,7 @@ export default defineConfig({
       "tests/extensionsRuntimeTruth.test.tsx",
       "tests/channelRuntimeTruth.test.tsx",
       "tests/channelErrorContract.test.ts",
+      "tests/inboxChannelBridge.test.tsx",
       "scripts/docx-compat/generate-fixtures.test.ts",
     ],
   },

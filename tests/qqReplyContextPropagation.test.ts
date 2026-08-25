@@ -57,13 +57,13 @@ describe("qqReplyContextPropagation", () => {
       attachments: [],
     };
 
-    const input = inboxRawPayloadToInput(rawPayload as never);
+    const input = inboxRawPayloadToInput(rawPayload);
     expect(input.sourceAccountId).toBe("qq_a");
     expect(input.replyContextId).toBe(ctx.replyContextId);
     expect(input.externalMessageId).toBe("msg_123");
 
     const store = createTestInboxStore();
-    const id = store.getState().addItem(input as never);
+    const id = store.getState().addItem(input);
     const item = store.getState().items.find((it) => it.id === id)!;
     expect(item.source).toBe("qq-bot");
     expect(item.sourceAccountId).toBe("qq_a");

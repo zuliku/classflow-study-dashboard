@@ -4,6 +4,7 @@ import { validateAIProviderRequest, createTimeoutController } from "@/lib/ai/ser
 import { normalizeAIError } from "@/lib/ai/errors";
 import { logProviderError } from "@/lib/ai/providerLog";
 import { isInvocationCapabilityAllowed } from "@/src/main/security/invocationTrust";
+import { isInboxSource } from "@/lib/inbox/types";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -94,7 +95,7 @@ export async function handleReplyDraft(req: Request): Promise<Response> {
   if (typeof inboxItemId !== "string" || !inboxItemId.trim() || inboxItemId.length > 128) {
     return Response.json({ code: "INVALID_INPUT", message: "Invalid inboxItemId" }, { status: 400 });
   }
-  if (source !== "qq-bot" && source !== "gmail" && source !== "qq-mail") {
+  if (!isInboxSource(source)) {
     return Response.json({ code: "INVALID_INPUT", message: "Invalid source" }, { status: 400 });
   }
   if (typeof message !== "string" || !message.trim() || message.length > 8000) {
