@@ -252,7 +252,7 @@ export class ChannelManager {
       const vault = getRuntimeSecretVault();
       vault.resolveSecretForProvider(input.credentialRef, "qq-mail");
     } catch {
-      throw new ChannelError("QQ_MAIL_AUTH_FAILED" as never, "凭据不存在或类型不匹配");
+      throw new ChannelError("QQ_MAIL_AUTH_FAILED", "凭据不存在或类型不匹配");
     }
     const id = `qqmail_${randomUUID().slice(0, 8)}`;
     const cfg: PersistedChannelConfig = {
@@ -279,8 +279,8 @@ export class ChannelManager {
 
   async syncNow(id: string): Promise<{ added: number; durationMs: number }> {
     const adapter = this.adapters.get(id);
-    if (!adapter) throw new ChannelError("CHANNEL_NOT_FOUND" as never, "Channel not found");
-    if (!adapter.syncNow) throw new ChannelError("CHANNEL_RUNTIME_ERROR" as never, "Sync not available for this channel");
+    if (!adapter) throw new ChannelError("CHANNEL_NOT_FOUND", "Channel not found");
+    if (!adapter.syncNow) throw new ChannelError("CHANNEL_RUNTIME_ERROR", "Sync not available for this channel");
     return await adapter.syncNow();
   }
 
@@ -400,7 +400,7 @@ export class ChannelManager {
         const vault = getRuntimeSecretVault();
         authCode = vault.resolveSecretForProvider(cfg.credentialRef, "qq-mail");
       } catch {
-        throw new ChannelError("QQ_MAIL_AUTH_FAILED" as never, "无法解析 QQ 邮箱授权码");
+        throw new ChannelError("QQ_MAIL_AUTH_FAILED", "无法解析 QQ 邮箱授权码");
       }
       try {
         if (this.adapters.has(id)) {
@@ -471,15 +471,15 @@ export class ChannelManager {
 
   async sendQQReply(replyContext: { sourceAccountId: string; conversationId: string; conversationType: "direct" | "group"; inboundMessageId: string }, text: string): Promise<{ messageId?: string; timestamp?: string }> {
     const cfg = this.configs.get(replyContext.sourceAccountId);
-    if (!cfg) throw new ChannelError("CHANNEL_NOT_FOUND" as never, "Channel not found for reply context");
+    if (!cfg) throw new ChannelError("CHANNEL_NOT_FOUND", "Channel not found for reply context");
     let adapter = this.adapters.get(replyContext.sourceAccountId);
     if (!adapter || adapter.getState() !== "connected") {
       // Auto-connect for confirmed send
       await this.connect(replyContext.sourceAccountId);
       adapter = this.adapters.get(replyContext.sourceAccountId);
-      if (!adapter) throw new ChannelError("QQ_GATEWAY_DISCONNECTED" as never, "Failed to connect");
+      if (!adapter) throw new ChannelError("QQ_GATEWAY_DISCONNECTED", "Failed to connect");
     }
-    if (!adapter.sendReply) throw new ChannelError("QQ_GATEWAY_DISCONNECTED" as never, "Transport not available");
+    if (!adapter.sendReply) throw new ChannelError("QQ_GATEWAY_DISCONNECTED", "Transport not available");
     return await adapter.sendReply(
       { conversationId: replyContext.conversationId, conversationType: replyContext.conversationType, inboundMessageId: replyContext.inboundMessageId },
       text
@@ -488,12 +488,12 @@ export class ChannelManager {
 
   async sendEmailReply(ctx: import("./email/types").EmailReplyContext, text: string): Promise<{ messageId?: string; timestamp?: string }> {
     const cfg = this.configs.get(ctx.sourceAccountId);
-    if (!cfg || (cfg.channel !== "gmail" && cfg.channel !== "qq-mail")) throw new ChannelError("CHANNEL_NOT_FOUND" as never, "Channel not found for reply context");
+    if (!cfg || (cfg.channel !== "gmail" && cfg.channel !== "qq-mail")) throw new ChannelError("CHANNEL_NOT_FOUND", "Channel not found for reply context");
     let adapter = this.adapters.get(ctx.sourceAccountId);
     if (!adapter || adapter.getState() !== "connected") {
       await this.connect(ctx.sourceAccountId);
       adapter = this.adapters.get(ctx.sourceAccountId);
-      if (!adapter) throw new ChannelError("CHANNEL_RUNTIME_ERROR" as never, "Failed to connect");
+      if (!adapter) throw new ChannelError("CHANNEL_RUNTIME_ERROR", "Failed to connect");
     }
     if (cfg.channel === "gmail") {
       try {
@@ -510,9 +510,9 @@ export class ChannelManager {
           const parsed = JSON.parse(raw) as { code?: string };
           if (parsed.code === "EMAIL_SEND_REJECTED" || parsed.code === "EMAIL_SEND_UNCERTAIN") throw e;
         } catch {}
-        if (raw.toLowerCase().includes("uncertain") || raw.toLowerCase().includes("timeout")) throw new ChannelError("EMAIL_SEND_UNCERTAIN" as never, raw.slice(0,200));
-        if (raw.toLowerCase().includes("rejected")) throw new ChannelError("EMAIL_SEND_REJECTED" as never, raw.slice(0,200));
-        throw new ChannelError("EMAIL_SEND_REJECTED" as never, raw.slice(0,200));
+        if (raw.toLowerCase().includes("uncertain") || raw.toLowerCase().includes("timeout")) throw new ChannelError("EMAIL_SEND_UNCERTAIN", raw.slice(0,200));
+        if (raw.toLowerCase().includes("rejected")) throw new ChannelError("EMAIL_SEND_REJECTED", raw.slice(0,200));
+        throw new ChannelError("EMAIL_SEND_REJECTED", raw.slice(0,200));
       }
     } else {
       // qq-mail via SMTP (passive reply only, no CC/BCC) — ensure finally close without masking send error
@@ -547,9 +547,9 @@ export class ChannelManager {
           const parsed = JSON.parse(raw) as { code?: string };
           if (parsed.code === "QQ_MAIL_AUTH_FAILED" || parsed.code === "EMAIL_SEND_REJECTED" || parsed.code === "EMAIL_SEND_UNCERTAIN") throw e;
         } catch {}
-        if (raw.includes("QQ_MAIL_AUTH_FAILED") || raw.toLowerCase().includes("auth") || raw.includes("535") || raw.includes("530")) throw new ChannelError("QQ_MAIL_AUTH_FAILED" as never, raw.slice(0,200));
-        if (raw.toLowerCase().includes("uncertain") || raw.toLowerCase().includes("timeout") || raw.toLowerCase().includes("reset") || raw.toLowerCase().includes("closed")) throw new ChannelError("EMAIL_SEND_UNCERTAIN" as never, raw.slice(0,200));
-        throw new ChannelError("EMAIL_SEND_REJECTED" as never, raw.slice(0,200));
+        if (raw.includes("QQ_MAIL_AUTH_FAILED") || raw.toLowerCase().includes("auth") || raw.includes("535") || raw.includes("530")) throw new ChannelError("QQ_MAIL_AUTH_FAILED", raw.slice(0,200));
+        if (raw.toLowerCase().includes("uncertain") || raw.toLowerCase().includes("timeout") || raw.toLowerCase().includes("reset") || raw.toLowerCase().includes("closed")) throw new ChannelError("EMAIL_SEND_UNCERTAIN", raw.slice(0,200));
+        throw new ChannelError("EMAIL_SEND_REJECTED", raw.slice(0,200));
       }
     }
   }

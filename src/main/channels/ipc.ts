@@ -6,7 +6,7 @@
 
 import { ipcMain } from "electron";
 import { getChannelManager } from "./manager";
-import { ChannelError, channelErrorToIpc } from "./errors";
+import { ChannelError, CHANNEL_ERROR_CODES } from "./errors";
 
 function toIpcError(err: unknown): never {
   if (err instanceof ChannelError) throw new Error(JSON.stringify({ code: err.code, message: err.message }));
@@ -18,9 +18,8 @@ function toIpcError(err: unknown): never {
   if (parsed?.code) {
     throw new Error(JSON.stringify({ code: parsed.code, message: parsed.message ?? raw }));
   }
-  // Preserve known codes if present in raw string
-  const known = ["QQ_AUTH_FAILED", "QQ_NETWORK_ERROR", "QQ_GATEWAY_DISCONNECTED", "QQ_RATE_LIMITED", "QQ_INVALID_CONFIG", "QQ_SDK_ERROR", "GMAIL_AUTH_FAILED", "GMAIL_OAUTH_CONFIG_MISSING", "GMAIL_OAUTH_STATE_MISMATCH", "GMAIL_OAUTH_TIMEOUT", "GMAIL_OAUTH_DENIED", "QQ_MAIL_AUTH_FAILED", "EMAIL_INVALID_CONFIG", "EMAIL_SYNC_FAILED", "EMAIL_REPLY_CONTEXT_INVALID", "EMAIL_SEND_REJECTED", "EMAIL_SEND_UNCERTAIN", "CHANNEL_RUNTIME_ERROR"];
-  for (const c of known) {
+  // Preserve known codes if present in raw string（单一来源：共享契约，不再手抄第二份 union）
+  for (const c of CHANNEL_ERROR_CODES) {
     if (raw.includes(c)) throw new Error(JSON.stringify({ code: c, message: raw.slice(0, 300) }));
   }
   const sanitized = raw.replace(/appSecret|access_token|Authorization|credentialRef|refresh_token|code_verifier|authCode|authorizationCode|password/gi, "[redacted]").slice(0, 300);

@@ -128,14 +128,61 @@ describe("Manager Contract — testChannel / testConnectionForInput", () => {
     expect(src).toContain('return { ok: false, error: mapped.code }');
   });
 
-  it("channelErrorToIpc is dead helper (imported but not used)", async () => {
+  it("channelErrorToIpc dead helper removed（toIpcError 是唯一 error mapper）", async () => {
     const fs = await import("node:fs");
     const path = await import("node:path");
+    const errorsSrc = fs.readFileSync(path.join(process.cwd(), "src/main/channels/errors.ts"), "utf8");
     const ipcSrc = fs.readFileSync(path.join(process.cwd(), "src/main/channels/ipc.ts"), "utf8");
-    // channelErrorToIpc is imported but not called; toIpcError is used
-    expect(ipcSrc).toContain('channelErrorToIpc');
-    // Check that toIpcError is the actual handler, and channelErrorToIpc has no call sites
-    const managerUsage = ipcSrc.match(/channelErrorToIpc\s*\(/g);
-    expect(managerUsage).toBeNull();
+    // 历史 bug：channelErrorToIpc 的 JSON-preserve throw 被自己的 catch {} 吞掉，
+    // 且与 toIpcError 形成两套行为不同的 mapper。现已彻底删除。
+    expect(errorsSrc).not.toContain("channelErrorToIpc");
+    expect(ipcSrc).not.toContain("channelErrorToIpc");
+    // ipc 使用共享错误码契约（不再手抄第二份 union）
+    expect(ipcSrc).toContain("CHANNEL_ERROR_CODES");
+  });
+
+  it("IPC error round trip：Main ChannelError → toIpcError wire → preload unwrap → renderer resolve", () => {
+    // 模拟 Main 侧序列化（ipc.ts toIpcError 的 wire 格式）
+    const serializeMainError = (code: string, message: string) =>
+      new Error(JSON.stringify({ code, message }));
+    // 模拟 Electron invoke 前缀 + preload invokeBridge 的解析逻辑
+    const simulatePreloadUnwrap = (err: Error): { code: string; message?: string } => {
+      const raw = err.message;
+      const jsonMatch = raw.match(/\{[^{}]*\}/);
+      const payload = jsonMatch ? jsonMatch[0] : raw;
+      let code = "IO_ERROR";
+      let message: string | undefined;
+      try {
+        const parsed = JSON.parse(payload) as { code?: unknown; message?: unknown };
+        if (typeof parsed?.code === "string") {
+          code = parsed.code;
+          if (typeof parsed.message === "string") message = parsed.message;
+        }
+      } catch {}
+      return { code, message };
+    };
+
+    const cases: Array<[string, string]> = [
+      ["QQ_AUTH_FAILED", "QQ 机器人认证失败，请检查 App ID / Secret"],
+      ["QQ_MAIL_AUTH_FAILED", "QQ 邮箱认证失败，请检查邮箱地址/授权码"],
+      ["GMAIL_AUTH_FAILED", "Gmail 认证失败"],
+      ["PERSISTENCE_FAILED", "保存配置失败"],
+      ["CHANNEL_RUNTIME_ERROR", "渠道运行错误"],
+      ["EMAIL_SEND_UNCERTAIN", "邮件发送结果不确定，请检查 Gmail"],
+    ];
+    for (const [code, expected] of cases) {
+      const wireErr = serializeMainError(code, "detail");
+      // Electron 会加前缀："Error invoking remote method 'bridge:x': {...}"
+      const prefixed = new Error(`Error invoking remote method 'bridge:channels:test': ${wireErr.message}`);
+      const unwrapped = simulatePreloadUnwrap(prefixed);
+      expect(unwrapped.code).toBe(code);
+      expect(resolveChannelUserMessage(unwrapped)).toBe(expected);
+    }
+    // guard 抛出的 PERMISSION_DENIED 不在 channel union：code 完整保留，文案走 fallback（不 crash）
+    const guardErr = simulatePreloadUnwrap(
+      new Error(`Error invoking remote method 'x': ${JSON.stringify({ code: "PERMISSION_DENIED" })}`)
+    );
+    expect(guardErr.code).toBe("PERMISSION_DENIED");
+    expect(resolveChannelUserMessage(guardErr)).toBe("操作失败，请稍后重试");
   });
 });
