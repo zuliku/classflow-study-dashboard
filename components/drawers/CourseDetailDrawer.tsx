@@ -419,15 +419,19 @@ export function CourseDetailDrawer() {
   // Header 与 Body 作为同一个 entity stage 语义（各自 keyed by currentId，同步 swap）：
   // 静态 shell 控件（More/Close）留在 stage 外
 
+  // Workflow UX Motion M3 P0 fix：Selection Entity = open truth（!!currentCourse）。
+  // staleCourse 只提供 exit presence 期间的视觉内容——绝不参与 open 判定，
+  // 否则 selectedCourseId=null 后 course(stale) 仍非空 → Drawer 永远无法关闭。
   return (
     <Drawer
       presentation="floating"
-      open={!!course}
+      open={!!currentCourse}
       onOpenChange={(next) => {
         if (!next) setSelectedCourseId(null);
       }}
       overlayId={OVERLAY_ID}
       aria-label="课程详情"
+      data-testid="course-detail-panel"
       focusRestoreKey={currentId}
       // Floating Course Hub：水平靠右 + 垂直居中（only Course Hub 使用 items-center）
       overlayClassName="items-center"

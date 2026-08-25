@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import React from "react";
-import { render, screen, cleanup, act } from "@testing-library/react";
+import { render, screen, cleanup, fireEvent, act } from "@testing-library/react";
 
 if (typeof window !== "undefined" && !window.matchMedia) {
   (window as unknown as Record<string, unknown>).matchMedia = (query: string) => ({
@@ -47,9 +47,11 @@ vi.mock("@/components/kiro/KiroSessionProvider", async (importOriginal) => {
 });
 
 import { AssignmentDrawer } from "@/components/drawers/AssignmentDrawer";
+import { CourseDetailDrawer } from "@/components/drawers/CourseDetailDrawer";
+import { MOTION_EXIT_MS } from "@/lib/motion";
 import { AssignmentPeekPanel } from "@/components/assignment/AssignmentPeekPanel";
 import { useAppStore } from "@/store/useAppStore";
-import type { Assignment } from "@/types";
+import type { Assignment, Course } from "@/types";
 
 /**
  * Workflow UX Motion Productization M2 —— Detail Surface Continuity：
@@ -187,4 +189,77 @@ describe("Reduced Motion contract（static）", () => {
     const path = await import("node:path");
     return fs.readFileSync(path.join(process.cwd(), p), "utf-8");
   }
+});
+
+// ============================================================
+// Workflow UX Motion M3 P0 —— Course Drawer close ownership regression
+// ============================================================
+
+const COURSE: Course = {
+  id: "course-a",
+  name: "课程 A",
+  code: "C-A",
+  credit: 3,
+  description: "",
+  materials: [],
+} as unknown as Course;
+
+describe("CourseDetailDrawer close ownership（M3 P0 regression）", () => {
+  beforeEach(() => {
+    cleanup();
+    const prefs = useAppStore.getState().preferences;
+    useAppStore.setState({
+      courses: [COURSE],
+      assignments: [],
+      schedules: [],
+      calendarMarks: [],
+      studyBlocks: [],
+      reminders: [],
+      groupProjects: [],
+      scheduleOccurrenceOverrides: [],
+      semester: { id: "s", name: "x", startDate: "2026-01-05", totalWeeks: 16 },
+      currentSemesterWeek: 1,
+      activeTab: "courses" as never,
+      selectedCourseId: null,
+      preferences: { ...prefs },
+    });
+  });
+
+  it("open → setSelectedCourseId(null)：selection 立即清空、Drawer 收到 open=false、exit 后 unmount", async () => {
+    vi.useFakeTimers();
+    try {
+      act(() => {
+        useAppStore.getState().setSelectedCourseId("course-a");
+      });
+      render(<CourseDetailDrawer />);
+      expect(screen.getByTestId("course-detail-panel")).toBeTruthy();
+      expect(useAppStore.getState().selectedCourseId).toBe("course-a");
+
+      // X / Esc / Ask Kiro 等所有 close path 最终都走 setSelectedCourseId(null)
+      fireEvent.click(screen.getByLabelText("关闭"));
+
+      // Selection Entity 立即清空 + Drawer 接收 open=false（shell 在 exit presence 内保持）
+      expect(useAppStore.getState().selectedCourseId).toBeNull();
+      const panel = screen.getByTestId("course-detail-panel");
+      expect(panel.className).toContain("opacity-0"); // exit presence 视觉退场中
+
+      // 退出 presence（--motion-exit-panel = 160ms）后完全 unmount
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(MOTION_EXIT_MS.panel + 20);
+      });
+      expect(screen.queryByTestId("course-detail-panel")).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  }, 20000);
+
+  it("静态 ownership contract：open 只能来自 Selection Entity（!!currentCourse）", async () => {
+    const fs = await import("node:fs");
+    const path = await import("node:path");
+    const src = fs.readFileSync(path.join(process.cwd(), "components/drawers/CourseDetailDrawer.tsx"), "utf-8");
+    expect(src).toContain("open={!!currentCourse}");
+    // 禁止 stale/resolved entity 参与 open truth（Motion refactor 曾误写 open={!!course}）
+    expect(src).not.toContain("open={!!course}");
+    expect(src).not.toContain("open={!!staleCourse}");
+  });
 });
