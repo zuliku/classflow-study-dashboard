@@ -670,219 +670,235 @@ export function AssignmentDrawer() {
             </div>
           )}
 
-          {/* REMINDER：默认 collapsed summary；展开 = 现有 AssignmentReminderSection（Domain 不变） */}
-          <DetailDisclosure
-            title="提醒"
-            summary={formatReminderSummaryText(reminderSummary)}
-            open={reminderOpen}
-            onOpenChange={setReminderOpen}
-            testid="reminder-disclosure-trigger"
-          >
-            <div className="pb-0.5">
-              <AssignmentReminderSection assignment={assignment} />
-            </div>
-          </DetailDisclosure>
-
-          {/* 任务说明：有内容默认展开；无内容只留轻量添加入口 */}
-          {assignment.description ? (
-            <DetailDisclosure title="任务说明" defaultOpen>
-              <p className="whitespace-pre-wrap text-xs leading-relaxed text-charcoal">
-                {assignment.description}
-              </p>
-            </DetailDisclosure>
-          ) : (
-            <button
-              type="button"
-              onClick={handleEdit}
-              className="text-xs font-semibold text-satin-grey transition-colors hover:text-charcoal"
+          {/* ===== Secondary Stack：Content Group → Auxiliary Group（12px = space-y-3）===== */}
+          <div className="space-y-3">
+            {/* Task Content Group：Reminder / Description+Tags / Materials */}
+            <div
+              data-testid="assignment-content-group"
+              className="rounded-xl border border-line-soft bg-surface divide-y divide-line-soft"
             >
-              添加任务说明
-            </button>
-          )}
-
-          {/* 关联资料：collapsed summary + 添加/上传/解除/分析（Material Domain 不变） */}
-          <DetailDisclosure
-            title="关联资料"
-            summary={linkedMaterials.length > 0 ? `(${linkedMaterials.length})` : "(0)"}
-            action={
-              <div className="flex items-center gap-1.5">
-                {linkedMaterials.length > 0 && (
-                  <button
-                    onClick={handleMaterialAskKiro}
-                    title="根据关联资料请 Kiro 分析"
-                    className="text-[10px] font-semibold text-satin-grey hover:text-charcoal transition-colors"
-                  >
-                    根据资料分析
-                  </button>
-                )}
-                <Popover open={addMenuOpen} onOpenChange={setAddMenuOpen}>
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    onClick={() => {
-                      setAddMenuOpen((v) => !v);
-                      setMaterialPickerOpen(false);
-                    }}
-                    loading={uploading}
-                    loadingLabel="上传中"
-                    className="h-6 px-1.5 text-[10px]"
-                  >
-                    <Plus className="h-3 w-3" />
-                    添加
-                  </Button>
-                  <DropdownMenuPanel open={addMenuOpen} placement="bottom-end" aria-label="添加资料" className="w-48">
-                    <DropdownMenuItem
-                      icon={BookOpen}
-                      label="选择课程资料"
-                      onClick={() => {
-                        setAddMenuOpen(false);
-                        setMaterialPickerOpen((v) => !v);
-                      }}
-                    />
-                    <DropdownMenuItem
-                      icon={Upload}
-                      label="上传文件"
-                      onClick={() => {
-                        setAddMenuOpen(false);
-                        fileInputRef.current?.click();
-                      }}
-                    />
-                    <p className="px-2.5 pt-1 pb-1.5 text-[9px] text-sandrift">
-                      上传后自动关联本任务（同时出现在课程资料）
-                    </p>
-                  </DropdownMenuPanel>
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    multiple
-                    accept=".pdf,.doc,.docx,.ppt,.pptx,.txt,.md,.png,.jpg,.jpeg,.webp"
-                    onChange={handleUploadFiles}
-                    className="hidden"
-                    aria-hidden="true"
-                    tabIndex={-1}
-                  />
-                </Popover>
+              <div className="px-3.5 py-2.5">
+                <DetailDisclosure
+                  title="提醒"
+                  summary={formatReminderSummaryText(reminderSummary)}
+                  open={reminderOpen}
+                  onOpenChange={setReminderOpen}
+                  testid="reminder-disclosure-trigger"
+                >
+                  <div className="pb-0.5">
+                    <AssignmentReminderSection assignment={assignment} />
+                  </div>
+                </DetailDisclosure>
               </div>
-            }
-          >
-            <div className="space-y-2 pt-0.5">
-              {linkedMaterials.length > 0 && (
-                <div className="space-y-1">
-                  {linkedMaterials.map((m) => (
-                    <div
-                      key={m.id}
-                      className="flex items-center gap-1 rounded-lg px-2 py-1.5 text-xs transition-colors hover:bg-alabaster/70"
-                    >
-                      {/* Preview：整个主要内容区可点（Workflow UX V6）——
-                          复用 previewMaterial 全局 contract，不关闭 Assignment Drawer */}
+
+              <div className="px-3.5 py-2.5">
+                <DetailDisclosure title="任务说明" defaultOpen={!!assignment.description}>
+                  <div className="space-y-2">
+                    {assignment.description ? (
+                      <p className="whitespace-pre-wrap text-xs leading-relaxed text-charcoal">
+                        {assignment.description}
+                      </p>
+                    ) : (
                       <button
                         type="button"
-                        onClick={() => previewMaterial(m)}
-                        aria-label={`预览资料《${m.title}》`}
-                        title="预览资料"
-                        className="flex min-w-0 flex-1 cursor-pointer items-center gap-2 rounded-md text-left focus-visible:outline-2 focus-visible:outline-charcoal/30"
+                        onClick={handleEdit}
+                        className="text-xs font-semibold text-satin-grey transition-colors hover:text-charcoal"
                       >
-                        <MaterialTypeIcon type={m.type} />
-                        <span className="min-w-0 flex-1 truncate font-medium text-charcoal">{m.title}</span>
-                        <span className="shrink-0 text-[9px] font-semibold text-sandrift">
-                          {MATERIAL_TYPE_LABELS[m.type]}
-                        </span>
+                        添加任务说明
                       </button>
-                      {/* Unlink：独立 sibling action（DOM 结构保证与 Preview 分离，无 nested button） */}
-                      <IconButton
-                        variant="danger"
-                        size="sm"
-                        onClick={() => toggleMaterial(m.id)}
-                        aria-label={`解除关联 ${m.title}`}
-                        title="解除关联（不删除课程资料）"
-                        className="h-6 w-6 shrink-0"
-                      >
-                        <X className="h-3 w-3" />
-                      </IconButton>
-                    </div>
-                  ))}
-                </div>
-              )}
+                    )}
+                    {assignment.tags.length > 0 && (
+                      <div className="flex flex-wrap gap-1 pt-1">
+                        {assignment.tags.map((t) => (
+                          <span
+                            key={t}
+                            className="rounded border border-line bg-[#F7F5F5] px-1.5 py-0.5 text-[10px] font-semibold text-satin-grey"
+                          >
+                            #{t}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </DetailDisclosure>
+              </div>
 
-              {materialPickerOpen && (
-                <div data-testid="material-picker" className="space-y-0.5 rounded-xl border border-line bg-[#F7F5F5] p-2">
-                  {courseMaterials.length === 0 ? (
-                    <div className="space-y-1 px-1 py-0.5">
-                      <p className="text-[11px] text-satin-grey">暂无课程资料</p>
-                      <button
-                        onClick={handleOpenCourse}
-                        className="text-[11px] font-semibold text-satin-grey hover:text-charcoal transition-colors"
-                      >
-                        前往课程资料 →
-                      </button>
-                    </div>
-                  ) : (
-                    courseMaterials.map((m) => {
-                      const linkedNow = linkedMaterials.some((l) => l.id === m.id);
-                      return (
+              <div className="px-3.5 py-2.5">
+                <DetailDisclosure
+                  title="关联资料"
+                  summary={linkedMaterials.length > 0 ? `(${linkedMaterials.length})` : "(0)"}
+                  action={
+                    <div className="flex items-center gap-1.5">
+                      {linkedMaterials.length > 0 && (
                         <button
-                          key={m.id}
-                          onClick={() => toggleMaterial(m.id)}
-                          className="w-full flex items-center gap-2 rounded-lg px-2 py-1.5 text-left hover:bg-white transition-colors"
+                          onClick={handleMaterialAskKiro}
+                          title="根据关联资料请 Kiro 分析"
+                          className="text-[10px] font-semibold text-satin-grey hover:text-charcoal transition-colors"
                         >
-                          <MaterialTypeIcon type={m.type} />
-                          <span className="min-w-0 flex-1 truncate text-[11px] font-medium text-charcoal">
-                            {m.title}
-                          </span>
-                          <span className="text-[9px] font-semibold text-sandrift shrink-0">
-                            {MATERIAL_TYPE_LABELS[m.type]}
-                          </span>
-                          {linkedNow && <Check className="h-3.5 w-3.5 shrink-0 text-success" />}
+                          根据资料分析
                         </button>
-                      );
-                    })
-                  )}
-                </div>
-              )}
-            </div>
-          </DetailDisclosure>
-
-          {/* 标签：一行 chip；无 tag 不占 section */}
-          {assignment.tags.length > 0 && (
-            <div className="flex flex-wrap gap-1">
-              {assignment.tags.map((t) => (
-                <span
-                  key={t}
-                  className="rounded border border-line bg-[#F7F5F5] px-1.5 py-0.5 text-[10px] font-semibold text-satin-grey"
+                      )}
+                      <Popover open={addMenuOpen} onOpenChange={setAddMenuOpen}>
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          onClick={() => {
+                            setAddMenuOpen((v) => !v);
+                            setMaterialPickerOpen(false);
+                          }}
+                          loading={uploading}
+                          loadingLabel="上传中"
+                          className="h-6 px-1.5 text-[10px]"
+                        >
+                          <Plus className="h-3 w-3" />
+                          添加
+                        </Button>
+                        <DropdownMenuPanel open={addMenuOpen} placement="bottom-end" aria-label="添加资料" className="w-48">
+                          <DropdownMenuItem
+                            icon={BookOpen}
+                            label="选择课程资料"
+                            onClick={() => {
+                              setAddMenuOpen(false);
+                              setMaterialPickerOpen((v) => !v);
+                            }}
+                          />
+                          <DropdownMenuItem
+                            icon={Upload}
+                            label="上传文件"
+                            onClick={() => {
+                              setAddMenuOpen(false);
+                              fileInputRef.current?.click();
+                            }}
+                          />
+                          <p className="px-2.5 pt-1 pb-1.5 text-[9px] text-sandrift">
+                            上传后自动关联本任务（同时出现在课程资料）
+                          </p>
+                        </DropdownMenuPanel>
+                        <input
+                          ref={fileInputRef}
+                          type="file"
+                          multiple
+                          accept=".pdf,.doc,.docx,.ppt,.pptx,.txt,.md,.png,.jpg,.jpeg,.webp"
+                          onChange={handleUploadFiles}
+                          className="hidden"
+                          aria-hidden="true"
+                          tabIndex={-1}
+                        />
+                      </Popover>
+                    </div>
+                  }
                 >
-                  #{t}
-                </span>
-              ))}
-            </div>
-          )}
+                  <div className="space-y-2 pt-0.5">
+                    {linkedMaterials.length > 0 && (
+                      <div className="space-y-1">
+                        {linkedMaterials.map((m) => (
+                          <div
+                            key={m.id}
+                            className="flex items-center gap-1 rounded-lg px-2 py-1.5 text-xs transition-colors hover:bg-alabaster/70"
+                          >
+                            <button
+                              type="button"
+                              onClick={() => previewMaterial(m)}
+                              aria-label={`预览资料《${m.title}》`}
+                              title="预览资料"
+                              className="flex min-w-0 flex-1 cursor-pointer items-center gap-2 rounded-md text-left focus-visible:outline-2 focus-visible:outline-charcoal/30"
+                            >
+                              <MaterialTypeIcon type={m.type} />
+                              <span className="min-w-0 flex-1 truncate font-medium text-charcoal">{m.title}</span>
+                              <span className="shrink-0 text-[9px] font-semibold text-sandrift">
+                                {MATERIAL_TYPE_LABELS[m.type]}
+                              </span>
+                            </button>
+                            <IconButton
+                              variant="danger"
+                              size="sm"
+                              onClick={() => toggleMaterial(m.id)}
+                              aria-label={`解除关联 ${m.title}`}
+                              title="解除关联（不删除课程资料）"
+                              className="h-6 w-6 shrink-0"
+                            >
+                              <X className="h-3 w-3" />
+                            </IconButton>
+                          </div>
+                        ))}
+                      </div>
+                    )}
 
-          {/* 活动记录：secondary context，默认 collapsed，lazy 加载真实 Learning History */}
-          <EntityActivitySection scope="assignment" assignmentId={assignment.id} />
-
-          {/* Kiro 帮助：默认 collapsed；Ask Kiro 是辅助能力（Header More 也有入口） */}
-          <DetailDisclosure title="Kiro 帮助">
-            <div className="space-y-0.5 pt-0.5">
-              {QUICK_PROMPTS.map((q) => (
-                <button
-                  key={q.label}
-                  type="button"
-                  onClick={() => handleQuickPrompt(q.prompt)}
-                  className="ux-press flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs font-semibold text-satin-grey transition-colors hover:bg-alabaster hover:text-charcoal"
-                >
-                  <KIRO_ICON className="h-3.5 w-3.5 shrink-0 text-[#A48F82]" />
-                  {q.label}
-                </button>
-              ))}
-              <button
-                type="button"
-                onClick={handleAskKiro}
-                className="ux-press flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs font-semibold text-satin-grey transition-colors hover:bg-alabaster hover:text-charcoal"
-              >
-                <KIRO_ICON className="h-3.5 w-3.5 shrink-0 text-[#A48F82]" />
-                Ask Kiro
-              </button>
+                    {materialPickerOpen && (
+                      <div data-testid="material-picker" className="space-y-0.5 rounded-xl border border-line bg-[#F7F5F5] p-2">
+                        {courseMaterials.length === 0 ? (
+                          <div className="space-y-1 px-1 py-0.5">
+                            <p className="text-[11px] text-satin-grey">暂无课程资料</p>
+                            <button
+                              onClick={handleOpenCourse}
+                              className="text-[11px] font-semibold text-satin-grey hover:text-charcoal transition-colors"
+                            >
+                              前往课程资料 →
+                            </button>
+                          </div>
+                        ) : (
+                          courseMaterials.map((m) => {
+                            const linkedNow = linkedMaterials.some((l) => l.id === m.id);
+                            return (
+                              <button
+                                key={m.id}
+                                onClick={() => toggleMaterial(m.id)}
+                                className="w-full flex items-center gap-2 rounded-lg px-2 py-1.5 text-left hover:bg-white transition-colors"
+                              >
+                                <MaterialTypeIcon type={m.type} />
+                                <span className="min-w-0 flex-1 truncate text-[11px] font-medium text-charcoal">
+                                  {m.title}
+                                </span>
+                                <span className="text-[9px] font-semibold text-sandrift shrink-0">
+                                  {MATERIAL_TYPE_LABELS[m.type]}
+                                </span>
+                                {linkedNow && <Check className="h-3.5 w-3.5 shrink-0 text-success" />}
+                              </button>
+                            );
+                          })
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </DetailDisclosure>
+              </div>
             </div>
-          </DetailDisclosure>
+
+            {/* Auxiliary Group：Activity + Kiro 帮助（低频辅助能力，视觉低于 Content Group） */}
+            <div
+              data-testid="assignment-auxiliary-group"
+              className="rounded-xl border border-line-soft bg-transparent divide-y divide-line-soft"
+            >
+              <div className="px-3.5 py-2.5">
+                <EntityActivitySection scope="assignment" assignmentId={assignment.id} />
+              </div>
+              <div className="px-3.5 py-2.5">
+                <DetailDisclosure title="Kiro 帮助">
+                  <div className="space-y-0.5 pt-0.5">
+                    {QUICK_PROMPTS.map((q) => (
+                      <button
+                        key={q.label}
+                        type="button"
+                        onClick={() => handleQuickPrompt(q.prompt)}
+                        className="ux-press flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs font-semibold text-satin-grey transition-colors hover:bg-alabaster hover:text-charcoal"
+                      >
+                        <KIRO_ICON className="h-3.5 w-3.5 shrink-0 text-[#A48F82]" />
+                        {q.label}
+                      </button>
+                    ))}
+                    <button
+                      type="button"
+                      onClick={handleAskKiro}
+                      className="ux-press flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs font-semibold text-satin-grey transition-colors hover:bg-alabaster hover:text-charcoal"
+                    >
+                      <KIRO_ICON className="h-3.5 w-3.5 shrink-0 text-[#A48F82]" />
+                      Ask Kiro
+                    </button>
+                  </div>
+                </DetailDisclosure>
+              </div>
+            </div>
+          </div>
         </div>
       </DetailContentStage>
     </Drawer>
