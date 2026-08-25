@@ -41,7 +41,6 @@
   --motion-panel: 230ms;
   --motion-page: 180ms;
   --motion-data: 200ms;
-  --motion-select: 140ms;
   --motion-snap: 90ms;
   /* Overlay panel enter：Dialog/Drawer 共用（≠ --motion-panel——后者保留给 Sidebar App Chrome morph 域） */
   --motion-overlay: 220ms;
@@ -279,9 +278,15 @@ button:disabled {
     animation-name: ux-page-in-backward;
   }
 
-  /* 周次切换：方向由 --motion-shift-y（±6px）控制，兼容旧 --enter-y */
-  .ux-week-enter {
-    animation: ux-week-in var(--motion-base) var(--ease-standard) both;
+  /* 周次切换（Workflow UX Motion M3）：nonce parity 在 ux-week-enter-a / -b 之间切换
+     animation-name——两个 keyframes 内容一致，仅凭 name 变化让浏览器自然重启动画，
+     取代旧的 classList.remove + void offsetWidth 强制 reflow。方向由 --motion-shift-y
+     （±6px）在 JSX 注入；duration = --motion-base。 */
+  .ux-week-enter-a {
+    animation: ux-week-in-a var(--motion-base) var(--ease-standard) both;
+  }
+  .ux-week-enter-b {
+    animation: ux-week-in-b var(--motion-base) var(--ease-standard) both;
   }
 
   /* 月份切换：方向由 --enter-x 控制（±6px） */
@@ -299,7 +304,8 @@ button:disabled {
     animation: ux-fade var(--motion-fast) var(--ease-standard) both;
   }
 
-  /* 详情面板内容切换（Task A→B）：新内容进入（旧内容由组件先行淡出 ~60ms） */
+  /* 详情面板内容切换（Workflow UX Motion M2）：semantic entity 立即切换 +
+     新内容 ux-detail-swap-in 轻量进入（DetailContentStage；无旧内容 fade-out timer） */
   .ux-detail-swap-in {
     animation: ux-detail-in var(--motion-snap) var(--ease-standard) both;
   }
@@ -365,7 +371,20 @@ button:disabled {
   }
 }
 
-@keyframes ux-week-in {
+/* Workflow UX Motion M3：周切换 keyframes a/b——内容完全一致（opacity 0→1 +
+   translateY(--motion-shift-y ±6px)），成对存在仅为 animation-name alternation
+   重放机制；方向与 duration 由调用处注入。 */
+@keyframes ux-week-in-a {
+  from {
+    opacity: 0;
+    transform: translateY(var(--motion-shift-y, var(--enter-y, 6px)));
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes ux-week-in-b {
   from {
     opacity: 0;
     transform: translateY(var(--motion-shift-y, var(--enter-y, 6px)));

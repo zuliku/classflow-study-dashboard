@@ -6,6 +6,7 @@ import { OutlookHealth, OutlookTask, StudyOutlook, StudyOutlookHorizon } from "@
 import { useKiroSessionActions } from "@/components/kiro/KiroSessionProvider";
 import { KiroFlowButton } from "@/components/kiro/KiroFlow";
 import { KiroLogoIcon } from "@/components/kiro/KiroLogo";
+import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { cn } from "@/lib/utils";
 
 const HEALTH_COPY: Record<OutlookHealth, { label: string; cls: string }> = {
@@ -76,20 +77,19 @@ export function StudyOutlookCard({
             学习前瞻
           </h3>
           <div className="flex items-center gap-1 bg-alabaster p-0.5 rounded-lg border border-line-strong">
-            {([7, 14] as StudyOutlookHorizon[]).map((h) => (
-              <button
-                key={h}
-                type="button"
-                aria-pressed={horizonDays === h}
-                onClick={() => onHorizonChange(h)}
-                className={cn(
-                  "px-2 py-0.5 rounded-md text-[10px] font-bold whitespace-nowrap transition-colors",
-                  horizonDays === h ? "bg-white text-charcoal shadow-subtle" : "text-satin-grey hover:text-charcoal"
-                )}
-              >
-                未来 {h} 天
-              </button>
-            ))}
+            {/* Workflow UX Motion M3：horizon 切换收敛为 SegmentedControl（compact xs）——
+                single moving plate（--motion-base / emphasized），替代静态 bg-white 瞬切 */}
+            <SegmentedControl<StudyOutlookHorizon>
+              value={horizonDays}
+              onChange={onHorizonChange}
+              ariaLabel="学习前瞻范围"
+              size="xs"
+              className="border-0 p-0.5"
+              options={([7, 14] as StudyOutlookHorizon[]).map((h) => ({
+                value: h,
+                label: `未来 ${h} 天`,
+              }))}
+            />
           </div>
         </div>
         <p className="text-[11px] text-sandrift mt-1.5">

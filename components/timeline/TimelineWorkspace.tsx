@@ -203,16 +203,11 @@ export function TimelineWorkspace() {
     [currentSemesterWeek, semester.totalWeeks, setCurrentSemesterWeek]
   );
   const wrapRef = useRef<HTMLDivElement | null>(null);
-  // nonce 变化 → 手动重启周内容入场动画（remove class → force reflow → 设置方向 → add class）
-  useEffect(() => {
-    if (!weekMotion) return;
-    const el = wrapRef.current;
-    if (!el) return;
-    el.classList.remove("ux-week-enter");
-    void el.offsetWidth; // 强制 reflow，确保 animation 重新开始
-    el.style.setProperty("--motion-shift-y", weekMotion.shift === "prev" ? "-6px" : "6px");
-    el.classList.add("ux-week-enter");
-  }, [weekMotion]);
+  // Workflow UX Motion M3：周切换动画重放改为 animation-name alternation——
+  // nonce % 2 在 ux-week-enter-a/b 两个等价 animation 之间切换，浏览器因
+  // animation-name 变化自然启动新动画（无 classList remove/add、无 void offsetWidth
+  // 强制 reflow、无 imperative style mutation）。方向 --motion-shift-y 直接由 JSX 注入。
+  // weekMotion === null（首帧 / 非交互）不附加任何 enter 类 → 初次打开不播周切换动画。
 
   // ---- App Chrome V2.2：Popover mutual exclusion（Filter / Quick / More 三向互斥） ----
   const openFilterOnly = () => {
@@ -1282,11 +1277,25 @@ export function TimelineWorkspace() {
 
       {/* body：主卡 flex-1 吸收剩余空间；shelf shrink-0；section spacing 由父容器 gap-4 统一控制 */}
       <div className="workspace-gutter flex flex-1 min-h-0 flex-col gap-4 pt-4 pb-24 md:pt-6 md:pb-6">
-      {/* 周内容主体：DOM 稳定（不 key remount）；动画由 weekMotion effect 重放 ux-week-enter */}
+      {/* 周内容主体：DOM 稳定（不 key remount）；Workflow UX Motion M3——
+          nonce parity 切换 animation-name（a/b 等价 keyframes）自然重放，
+          方向 --motion-shift-y 由 JSX 注入；weekMotion=null 不播动画 */}
       <div
         ref={wrapRef}
         data-testid="timeline-workspace"
-        className="flex flex-1 min-h-0 flex-col bg-surface border border-line rounded-2xl shadow-subtle overflow-hidden"
+        className={cn(
+          "flex flex-1 min-h-0 flex-col bg-surface border border-line rounded-2xl shadow-subtle overflow-hidden",
+          weekMotion &&
+            (weekMotion.nonce % 2 === 0 ? "ux-week-enter-a" : "ux-week-enter-b")
+        )}
+        style={
+          weekMotion
+            ? ({
+                "--motion-shift-y":
+                  weekMotion.shift === "prev" ? "-6px" : "6px",
+              } as React.CSSProperties)
+            : undefined
+        }
       >      {/* ---------- 主体：Weekday Header（唯一一份）+ Key Timeline + Course Grid ---------- */}
       <div className="flex-1 min-h-0 flex flex-col overflow-x-auto">
         <div className="min-w-[640px] w-full flex flex-col flex-1 min-h-0 px-3 pt-2.5">

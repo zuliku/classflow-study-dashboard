@@ -2,7 +2,7 @@
 
 import React from "react";
 import { AnalyticsRangePreset } from "@/lib/analytics/types";
-import { cn } from "@/lib/utils";
+import { SegmentedControl } from "@/components/ui/SegmentedControl";
 
 const PRESET_LABELS: Record<AnalyticsRangePreset, string> = {
   week: "本周",
@@ -10,7 +10,13 @@ const PRESET_LABELS: Record<AnalyticsRangePreset, string> = {
   semester: "本学期",
 };
 
-/** 分析范围选择（本周 / 近 4 周 / 本学期） */
+/**
+ * 分析范围选择（本周 / 近 4 周 / 本学期）。
+ * Workflow UX Motion M3：从手写三 button（active 瞬间切背景）收敛为
+ * 共享 SegmentedControl——single moving Active Plate（--motion-base /
+ * --ease-emphasized），programmatic change（周回顾回跳）同样自然移动。
+ * AnalyticsRangePreset 业务语义完全不变。
+ */
 export function AnalyticsRangeSelector({
   value,
   onChange,
@@ -19,30 +25,15 @@ export function AnalyticsRangeSelector({
   onChange: (preset: AnalyticsRangePreset) => void;
 }) {
   return (
-    <div
-      role="group"
-      aria-label="分析范围"
-      className="flex items-center gap-1 bg-alabaster p-0.5 rounded-lg border border-line-strong"
-    >
-      {(["week", "4weeks", "semester"] as AnalyticsRangePreset[]).map((preset) => {
-        const active = value === preset;
-        return (
-          <button
-            key={preset}
-            type="button"
-            aria-pressed={active}
-            onClick={() => onChange(preset)}
-            className={cn(
-              "px-2.5 py-1 rounded-md text-[11px] font-bold whitespace-nowrap transition-colors duration-[var(--motion-fast)]",
-              active
-                ? "bg-white text-charcoal shadow-subtle"
-                : "text-satin-grey hover:text-charcoal"
-            )}
-          >
-            {PRESET_LABELS[preset]}
-          </button>
-        );
-      })}
-    </div>
+    <SegmentedControl<AnalyticsRangePreset>
+      value={value}
+      onChange={onChange}
+      ariaLabel="分析范围"
+      options={[
+        { value: "week", label: PRESET_LABELS.week },
+        { value: "4weeks", label: PRESET_LABELS["4weeks"] },
+        { value: "semester", label: PRESET_LABELS.semester },
+      ]}
+    />
   );
 }
