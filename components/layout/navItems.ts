@@ -48,6 +48,25 @@ export const WORKSPACE_NAV_ITEMS: NavItem[] = [
 /** 核心学习功能（Sidebar 主区域渲染顺序） */
 export const MAIN_NAV_ITEMS: NavItem[] = WORKSPACE_NAV_ITEMS.filter((i) => i.section !== "ai");
 
+/**
+ * Workflow UX Motion Productization M1：MAIN workspace 视觉顺序（= Sidebar 排列）。
+ * PageTransition 方向 resolver 消费——只有 MAIN workspace 之间有方向感；
+ * Kiro 是独立 Featured Workspace（不在此列）→ neutral fade。
+ */
+export const MAIN_WORKSPACE_ORDER: string[] = MAIN_NAV_ITEMS.map((i) => i.id);
+
+/** 方向 resolver：向下选择 = forward（+4px 进入）；向上 = backward（−4px）；非 MAIN / 相同 → neutral */
+export function resolveWorkspaceMotionDirection(
+  previous: string | null | undefined,
+  next: string | null | undefined
+): "forward" | "backward" | "neutral" {
+  if (!previous || !next || previous === next) return "neutral";
+  const from = MAIN_WORKSPACE_ORDER.indexOf(previous);
+  const to = MAIN_WORKSPACE_ORDER.indexOf(next);
+  if (from === -1 || to === -1) return "neutral";
+  return to > from ? "forward" : "backward";
+}
+
 /** AI Agent 区域（Sidebar Featured Entry） */
 export const AI_NAV_ITEMS: NavItem[] = WORKSPACE_NAV_ITEMS.filter((i) => i.section === "ai");
 

@@ -8,6 +8,8 @@ import { cn } from "@/lib/utils";
  * 只负责 32×32 / 36×36 的 ghost/secondary/primary/danger 语义；
  * 不做 Tooltip / 业务状态 / feature variant。
  * Icon-only 调用方必须提供 aria-label。
+ * Workflow UX Motion M1：soft press = opacity 反馈（--motion-snap）——
+ * IconButton 多为 Close/Chevron/Toolbar 等空间稳定控件，不做 scale tactile。
  */
 export interface IconButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: "ghost" | "secondary" | "primary" | "danger";
@@ -37,7 +39,9 @@ export function IconButton({
     <button
       type={type}
       className={cn(
-        "inline-flex items-center justify-center rounded-lg transition-colors shrink-0",
+        "inline-flex items-center justify-center rounded-lg shrink-0",
+        "transition-[background-color,color,opacity] duration-[var(--motion-snap)] ease-[var(--ease-standard)]",
+        "active:opacity-75",
         "focus-visible:outline-2 focus-visible:outline-charcoal/30 focus-visible:outline-offset-2",
         "disabled:opacity-50 disabled:cursor-not-allowed",
         ICON_BUTTON_VARIANTS[variant],

@@ -302,7 +302,7 @@ export function Sidebar() {
                 }}
                 aria-label={item.label}
                 aria-current={isActive ? "page" : undefined}
-                className={cn("sidebar-nav-row relative w-full py-2 rounded-xl text-xs font-medium transition-colors duration-[var(--motion-base)] ease-[var(--ease-standard)] group text-left",
+                className={cn("sidebar-nav-row relative w-full py-2 rounded-xl text-xs font-medium transition-[background-color,color,opacity] duration-[var(--motion-base)] ease-[var(--ease-standard)] group text-left active:opacity-[0.78] active:duration-[var(--motion-snap)]",
                   isActive
                     ? "text-charcoal font-semibold"
                     : "text-satin-grey hover:bg-alabaster hover:text-charcoal"
@@ -362,6 +362,7 @@ export function Sidebar() {
                 <span
                   className={cn(
                     "relative m-[2px] w-[calc(100%-4px)] h-11 rounded-[12px] bg-background",
+                    "active:opacity-[0.85] transition-opacity duration-[var(--motion-snap)]",
                     "sidebar-nav-row sidebar-nav-row-kiro text-xs font-semibold transition-colors duration-[var(--motion-base)]",
                     isActive ? "bg-surface text-charcoal" : "text-charcoal"
                   )}
@@ -395,7 +396,7 @@ export function Sidebar() {
                 }
                 aria-label={item.label}
                 aria-expanded={isReminders ? reminderCenterOpen : undefined}
-                className={cn("sidebar-nav-row relative w-full py-2 rounded-xl text-xs font-medium transition-colors duration-[var(--motion-base)] ease-[var(--ease-standard)] group text-left",
+                className={cn("sidebar-nav-row relative w-full py-2 rounded-xl text-xs font-medium transition-[background-color,color,opacity] duration-[var(--motion-base)] ease-[var(--ease-standard)] group text-left active:opacity-[0.78] active:duration-[var(--motion-snap)]",
                   isActiveSurface
                     ? "bg-alabaster text-charcoal"
                     : "text-satin-grey hover:bg-alabaster hover:text-charcoal"
@@ -437,7 +438,7 @@ export function Sidebar() {
             onClick={toggleCollapsed}
             aria-label={effectiveCollapsed ? "展开侧栏" : "收起侧栏"}
             data-testid="sidebar-collapse-toggle"
-            className="w-full flex items-center justify-center py-1 rounded-lg text-sandrift hover:text-charcoal hover:bg-alabaster transition-colors focus-visible:outline-2 focus-visible:outline-charcoal/30"
+            className="w-full flex items-center justify-center py-1 rounded-lg text-sandrift hover:text-charcoal hover:bg-alabaster transition-[color,background-color,opacity] duration-[var(--motion-snap)] focus-visible:outline-2 focus-visible:outline-charcoal/30 active:opacity-[0.78]"
           >
             {effectiveCollapsed ? (
               <PanelLeftOpen className="w-4 h-4" aria-hidden="true" />
