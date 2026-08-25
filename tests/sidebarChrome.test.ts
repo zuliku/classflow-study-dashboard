@@ -369,3 +369,24 @@ describe("Sidebar Productization V2.1 —— Profile Card restoration", () => {
     expect(card).toContain("· 个人资料"); // collapsed tooltip 文案保持
   });
 });
+
+// ============================================================
+// Sidebar Productization V2.2 —— Profile Today Progress
+// ============================================================
+describe("Sidebar Productization V2.2 —— Today Progress", () => {
+  it("Profile 有「今日任务进度」+ sidebar-profile-progress region（credits 命名不回归）", async () => {
+    const card = await readSrc("components/layout/SidebarProfileCard.tsx");
+    expect(card).toContain("今日任务进度");
+    expect(card).toContain("sidebar-profile-progress");
+    expect(card).toContain("getTodayTaskProgress");
+    expect(card).not.toContain("sidebar-profile-credits");
+  });
+
+  it("progress width 使用 --motion-data / --ease-emphasized（Data motion）", async () => {
+    const card = await readSrc("components/layout/SidebarProfileCard.tsx");
+    expect(card).toContain("duration-[var(--motion-data)]");
+    expect(card).toContain("ease-[var(--ease-emphasized)]");
+    const css = await readSrc("app/globals.css");
+    expect(css).toMatch(/\[data-collapsed="true"\] \.sidebar-profile-progress \{[^}]*grid-template-rows: 0fr;/s);
+  });
+});

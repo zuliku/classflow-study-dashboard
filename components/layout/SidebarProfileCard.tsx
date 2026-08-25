@@ -1,9 +1,10 @@
 "use client";
 
-import React from "react";
+import React, { useMemo } from "react";
 import { ChevronRight } from "lucide-react";
 import { useAppStore } from "@/store/useAppStore";
 import { useProfileAvatar } from "@/hooks/useProfileAvatar";
+import { getTodayTaskProgress } from "@/lib/tasks/todayTaskProgress";
 import { cn } from "@/lib/utils";
 
 /**
@@ -12,6 +13,10 @@ import { cn } from "@/lib/utils";
  *   bg-surface/50 → hover bg-surface + border-line-strong（克制账户区域感）
  * - Credit Progress 永久移除（学习数据不属于 App Chrome；完整学分信息保留在
  *   Store / Settings 中，仅不在此展示），对应 credits CSS 保持删除
+ * - Workflow UX Sidebar Productization V2.2：加回底部信息区 = 「今日任务进度」
+ *   （DDL isToday 口径，done = submitted/completed；见 lib/tasks/todayTaskProgress.ts）。
+ *   Collapse morph 复用 grid-template-rows choreography（类名 sidebar-profile-progress，
+ *   不再使用 credits 命名）；进度条 width 使用 --motion-data（Data motion 语义）。
  * - Single-DOM Morph：Avatar 始终 mounted（32×32）；Identity 由 data-collapsed +
  *   data-motion-* 驱动 opacity/translateX 收束；无 scale / crossfade / height tween
  * - 信息层级：姓名 + ChevronRight → 学院 → 年级（224px 宽度下两行 meta 扫描性更好；
@@ -23,6 +28,8 @@ export function SidebarProfileCard({ collapsed }: { collapsed: boolean }) {
   const setSettingsModalOpen = useAppStore((s) => s.setSettingsModalOpen);
   const setSettingsTargetSection = useAppStore((s) => s.setSettingsTargetSection);
   const profileAvatarUrl = useProfileAvatar();
+  const assignments = useAppStore((s) => s.assignments);
+  const todayProgress = useMemo(() => getTodayTaskProgress(assignments), [assignments]);
 
   const openProfile = () => {
     setSettingsModalOpen(true);
@@ -74,6 +81,33 @@ export function SidebarProfileCard({ collapsed }: { collapsed: boolean }) {
             ) : (
               <span className="block text-[11px] text-sandrift truncate">完善个人资料</span>
             )}
+          </span>
+        </span>
+
+        {/* 今日任务进度（Workflow UX Sidebar Productization V2.2）：
+            纯信息展示——点击整卡仍打开 Settings → profile，不跳任务工作区。
+            Collapse morph：grid-template-rows 1fr→0fr + opacity/translateY
+            （collapse 优先淡出 / expand 延迟进入，沿 data-motion-direction choreography）。 */}
+        <span className="sidebar-profile-progress">
+          <span className="sidebar-profile-progress-inner">
+            <span className="block pt-1 mt-2 border-t border-line-soft">
+              <span className="flex justify-between items-center text-[11px]">
+                <span className="text-satin-grey">今日任务进度</span>
+                <span className="font-semibold text-charcoal tabular-nums">
+                  {todayProgress.done} / {todayProgress.total} 项
+                </span>
+              </span>
+              {/* Data motion：width → --motion-data / --ease-emphasized（柔和反馈，非 press） */}
+              <span className="block w-full bg-pastel-mint rounded-full h-1.5 overflow-hidden mt-1">
+                <span
+                  className={cn(
+                    "block bg-sandrift h-1.5 rounded-full",
+                    "transition-[width] duration-[var(--motion-data)] ease-[var(--ease-emphasized)]"
+                  )}
+                  style={{ width: `${todayProgress.percentage}%` }}
+                />
+              </span>
+            </span>
           </span>
         </span>
 

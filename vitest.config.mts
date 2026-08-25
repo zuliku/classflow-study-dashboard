@@ -143,6 +143,8 @@ export default defineConfig({
       "tests/studyBlockReleaseStore.test.tsx",
       "tests/reminderNavigation.test.tsx",
       "tests/studyBlockWriteBoundary.test.tsx",
+      "tests/todayTaskProgress.test.ts",
+      "tests/pageTransitionMotion.test.tsx",
       "tests/drawerPresentation.test.ts",
       "tests/demoManualInjection.test.tsx",
       "tests/extensionsRuntimeTruth.test.tsx",

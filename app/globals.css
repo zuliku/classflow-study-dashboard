@@ -214,7 +214,7 @@ button:disabled {
 /* 按下反馈：只对显式 .ux-press 的独立操作按钮做轻缩放。
    空间稳定型控件（日期格 / 导航 / 拖拽面 / Resize handle / 周月切换几何控件）一律不缩放。 */
 .ux-press:active:not(:disabled) {
-  transform: scale(0.98);
+  transform: scale(0.985);
 }
 
 /* 统一过渡与动效工具类 */
@@ -263,24 +263,35 @@ button:disabled {
     animation: ux-enter var(--motion-base) var(--ease-standard) both;
   }
 
-  /* 页面 Tab 切换：opacity-only（无 translateY，避免动画期 scroll overflow / 布局抖动） */
+  /* 页面 Tab 切换：neutral fade（Kiro / 首帧 / Reduced Motion）。
+     MAIN workspace 方向性变体（ux-page-forward / ux-page-backward）见下方 M1 段。 */
   .ux-page {
     animation: ux-page-in var(--motion-page) var(--ease-standard) both;
   }
 
+  /* Workflow UX Motion Productization M1 —— Workspace Page Direction：
+     仅极小水平 shift（±4px，wrapper overflow-x: clip 防 scrollbar jank）；
+     opacity 0.94→1 保持页面切换的连续感但不做 crossfade。 */
+  .ux-page-forward {
+    animation-name: ux-page-in-forward;
+  }
+  .ux-page-backward {
+    animation-name: ux-page-in-backward;
+  }
+
   /* 周次切换：方向由 --motion-shift-y（±6px）控制，兼容旧 --enter-y */
   .ux-week-enter {
-    animation: ux-week-in 180ms var(--ease-standard) both;
+    animation: ux-week-in var(--motion-base) var(--ease-standard) both;
   }
 
   /* 月份切换：方向由 --enter-x 控制（±6px） */
   .ux-month-enter {
-    animation: ux-month-in 180ms var(--ease-standard) both;
+    animation: ux-month-in var(--motion-base) var(--ease-standard) both;
   }
 
   /* Agenda 内容切换：3px 上移 */
   .ux-agenda-enter {
-    animation: ux-agenda-in 160ms var(--ease-standard) both;
+    animation: ux-agenda-in var(--motion-fast) var(--ease-standard) both;
   }
 
   /* 简单淡入（月份标题等） */
@@ -290,17 +301,17 @@ button:disabled {
 
   /* 详情面板内容切换（Task A→B）：新内容进入（旧内容由组件先行淡出 ~60ms） */
   .ux-detail-swap-in {
-    animation: ux-detail-in 100ms var(--ease-standard) both;
+    animation: ux-detail-in var(--motion-snap) var(--ease-standard) both;
   }
 
-  /* 直接操作成功落位：非常轻的 settle（不放大的动画，仅 opacity 归位） */
+  /* 直接操作成功落位：非常轻的 settle（不放大的动画，仅 opacity 归位；Data tier） */
   .ux-settle {
-    animation: ux-settle-in 200ms var(--ease-standard) both;
+    animation: ux-settle-in var(--motion-data) var(--ease-standard) both;
   }
 
   /* Kiro Project Panel 内部 view 切换：横向方向由 --motion-shift-x（±4px）控制 */
   .ux-kiro-view-enter {
-    animation: ux-kiro-view-in 140ms var(--ease-standard) both;
+    animation: ux-kiro-view-in var(--motion-fast) var(--ease-standard) both;
   }
 
   /* Channel provider panel switch：轻微上移 3px + 淡入 140ms（复用 --motion-fast） */
@@ -328,6 +339,29 @@ button:disabled {
   }
   to {
     opacity: 1;
+  }
+}
+
+/* Workflow UX Motion Productization M1：MAIN workspace 方向性进入（±4px，极轻）
+   —— opacity 0.94 起步保持连续感；wrapper overflow-x: clip 防 scrollbar jank */
+@keyframes ux-page-in-forward {
+  from {
+    opacity: 0.94;
+    transform: translateX(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+@keyframes ux-page-in-backward {
+  from {
+    opacity: 0.94;
+    transform: translateX(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
   }
 }
 
@@ -844,9 +878,38 @@ html[data-motion-effective="reduced"] .kiro-capsule .kiro-ring { animation: none
   display: block;
 }
 
-/* Profile Credits：已移除（Workflow UX Sidebar Productization V2）——
-   学分进度是学习数据而非 App Chrome；完整数据保留在 Store / Settings。
-   sidebar-profile-credits 相关 grid 动画规则随之删除（减少 layout-property animation）。 */
+/* Workflow UX Sidebar Productization V2.2 —— Profile Today Progress：
+   沿用原 credits 的连续 grid 高度 choreography（1fr↔0fr + opacity/translateY），
+   命名改为 progress（credits 概念永久离开 Sidebar）；只作用于 Profile footer，
+   不推广为全局 layout animation。Collapse 优先淡出 / Expand 延迟进入。 */
+.sidebar-profile-progress {
+  display: grid;
+  grid-template-rows: 1fr;
+  opacity: 1;
+  transform: translateY(0);
+  overflow: hidden;
+  transition-property: grid-template-rows, opacity, transform;
+  transition-duration: var(--motion-panel), var(--motion-fast), var(--motion-fast);
+  transition-timing-function: var(--ease-emphasized), var(--ease-standard), var(--ease-standard);
+}
+.sidebar-profile-progress-inner {
+  min-height: 0;
+  overflow: hidden;
+}
+[data-collapsed="true"] .sidebar-profile-progress {
+  grid-template-rows: 0fr;
+  opacity: 0;
+  transform: translateY(-3px);
+}
+[data-motion-active="false"] .sidebar-profile-progress {
+  transition: none;
+}
+[data-motion-active="true"][data-motion-direction="collapse"] .sidebar-profile-progress {
+  transition-delay: 0ms, 0ms, 0ms;
+}
+[data-motion-active="true"][data-motion-direction="expand"] .sidebar-profile-progress {
+  transition-delay: 0ms, 80ms, 80ms;
+}
 
 /* Profile Tooltip：仅在 collapsed 稳定态可 hover 显示；manual morph 期间强制隐藏 */
 .sidebar-profile-tooltip {
@@ -877,7 +940,8 @@ html[data-motion-effective="reduced"] .sidebar-profile-identity,
 html[data-motion-effective="reduced"] .sidebar-logo-full,
 html[data-motion-effective="reduced"] .sidebar-logo-mark,
 html[data-motion-effective="reduced"] .sidebar-profile-surface,
-html[data-motion-effective="reduced"] .sidebar-profile-header-row {
+html[data-motion-effective="reduced"] .sidebar-profile-header-row,
+html[data-motion-effective="reduced"] .sidebar-profile-progress {
   transition: none !important;
 }
 /* ============================================================
