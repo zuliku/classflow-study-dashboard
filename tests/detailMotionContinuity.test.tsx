@@ -52,6 +52,7 @@ import { MOTION_EXIT_MS } from "@/lib/motion";
 import { AssignmentPeekPanel } from "@/components/assignment/AssignmentPeekPanel";
 import { useAppStore } from "@/store/useAppStore";
 import type { Assignment, Course } from "@/types";
+import { DetailContentStage } from "@/components/ui/DetailContentStage";
 
 /**
  * Workflow UX Motion Productization M2 —— Detail Surface Continuity：
@@ -118,9 +119,10 @@ describe("AssignmentDrawer detail continuity", () => {
     const shellAfter = screen.getByTestId("assignment-detail-panel");
     expect(shellAfter).toBe(shellBefore);
 
-    // stage：新内容 + 一次 swap 标记
+    // stage：新内容 + stage key 已切到 B（transient swap 标记由 effect 清除，
+    // 持久化的 data-stage-key 锁定连续性）
     expect(screen.getByText("任务 a2")).toBeTruthy();
-    expect(document.querySelector('[data-stage-swap="true"]')).toBeTruthy();
+    expect(document.querySelector('[data-stage-key="a2"]')).toBeTruthy();
   });
 
   it("同一 Assignment 的 status 变化：stage 不重切（无 swap 标记）、内容即时更新", () => {
@@ -263,3 +265,118 @@ describe("CourseDetailDrawer close ownership（M3 P0 regression）", () => {
     expect(src).not.toContain("open={!!staleCourse}");
   });
 });
+
+// ============================================================
+// Workflow UX Motion M2.1/M3 —— DetailContentStage visualKey contract
+// + Course Drawer close ownership regression
+// ============================================================
+
+let stageUtils: { rerender(next: string | null): void };
+let childText = "content-closed";
+// 模拟真实调用方：close 时 parent 继续渲染 stale 实体内容（children 不随 entityKey=null 变成 closed）
+function renderStage(entityKey: string | null) {
+  if (entityKey !== null) childText = `content-${entityKey}`;
+  stageUtils = render(
+    <DetailContentStage entityKey={entityKey} data-testid="stage">
+      <p>{childText}</p>
+    </DetailContentStage>
+  );
+}
+function rerenderStage(next: string | null) {
+  if (next !== null) childText = `content-${next}`;
+  stageUtils.rerender(
+    <DetailContentStage entityKey={next} data-testid="stage">
+      <p>{childText}</p>
+    </DetailContentStage>
+  );
+}
+const stageEl = () => document.querySelector('[data-testid="stage"]') as HTMLElement;
+const stageKey = () => stageEl().getAttribute("data-stage-key");
+const swapMark = () => document.querySelector('[data-stage-swap="true"]');
+
+describe("DetailContentStage visualKey contract", () => {
+  afterEach(() => cleanup());
+
+  it("1. null → A 首次打开：无 detail swap", () => {
+    renderStage(null);
+    expect(stageEl().getAttribute("data-stage-swap")).toBeNull();
+    rerenderStage("A");
+    expect(stageEl().getAttribute("data-stage-swap")).toBeNull();
+    expect(stageKey()).toBe("A");
+    expect(stageEl().textContent).toBe("content-A");
+  });
+
+  it("2. A → B 已打开切换：发生一次 detail swap", () => {
+    renderStage(null);
+    rerenderStage("A");
+    expect(swapMark()).toBeNull();
+    rerenderStage("B");
+    expect(swapMark()).toBeTruthy();
+    expect(stageEl().textContent).toBe("content-B");
+  });
+
+  it("3. B 普通rerender：swap 标记清除后不再出现（contract 干净）", () => {
+    renderStage(null);
+    rerenderStage("A");
+    rerenderStage("B"); // swap 发生
+    rerenderStage("B"); // 同实体 rerender：不重新标记
+    expect(swapMark()).toBeNull();
+  });
+
+  it("4. B → null 关闭：DOM node identity 保持相同、内容冻结、无 swap", () => {
+    renderStage(null);
+    rerenderStage("A");
+    rerenderStage("B");
+    const nodeBefore = stageEl();
+    expect(nodeBefore.textContent).toBe("content-B");
+
+    rerenderStage(null);
+    const nodeAfter = stageEl();
+    expect(nodeAfter).toBe(nodeBefore); // DOM key 未变 → 同一节点
+    expect(nodeAfter.textContent).toBe("content-B");
+    expect(swapMark()).toBeNull();
+    expect(stageKey()).toBe("B");
+  });
+
+  it("5. B → null → C 重新打开：无 detail swap（Drawer enter 已提供动画）", () => {
+    renderStage(null);
+    rerenderStage("B");
+    rerenderStage(null);
+    rerenderStage("C");
+    expect(stageEl().textContent).toBe("content-C");
+    expect(swapMark()).toBeNull();
+  });
+});
+
+// ============================================================
+// Workflow UX Motion M3 P0 —— Course Drawer close ownership regression
+// （open truth = Selection Entity；exit presence 期间 Header/Body DOM 冻结）
+// ============================================================
+
+const COURSE_FIXTURE: Course = {
+  id: "course-a",
+  name: "课程 A",
+  code: "C-A",
+  credit: 3,
+  description: "",
+  materials: [],
+} as unknown as Course;
+
+function seedCourse() {
+  const prefs = useAppStore.getState().preferences;
+  useAppStore.setState({
+    courses: [COURSE_FIXTURE],
+    assignments: [],
+    schedules: [],
+    calendarMarks: [],
+    studyBlocks: [],
+    reminders: [],
+    groupProjects: [],
+    scheduleOccurrenceOverrides: [],
+    semester: { id: "s", name: "x", startDate: "2026-01-05", totalWeeks: 16 },
+    currentSemesterWeek: 1,
+    activeTab: "courses" as never,
+    selectedCourseId: null,
+    preferences: { ...prefs },
+  });
+}
