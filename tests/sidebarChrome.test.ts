@@ -290,44 +290,82 @@ describe("Sidebar Productization V2 —— hierarchy & plate", () => {
     expect(src).toMatch(/Footer Utility Zone[\s\S]*border-t border-line-soft/);
   });
 
-  it("Collapse 产品化为标准 Utility Row：sidebar-nav-row + sidebar-label「收起侧栏」", async () => {
+
+});
+
+
+// ============================================================
+// Sidebar Productization V2.1 —— Footer visual rollback：
+// Collapse 恢复低权重 Chrome control；Profile 恢复 Card 形态（无 credits）
+// ============================================================
+
+describe("Sidebar Productization V2.1 —— Collapse rollback", () => {
+  it("Collapse 不再使用 sidebar-nav-row / sidebar-label 常驻文字", async () => {
     const src = await readSrc("components/layout/Sidebar.tsx");
     const idx = src.indexOf('data-testid="sidebar-collapse-toggle"');
     const openTagStart = src.lastIndexOf("<button", idx);
-    const blockEnd = src.indexOf("{tooltip(", idx);
+    const blockEnd = src.indexOf("</button>", idx);
     const block = src.slice(openTagStart, blockEnd);
-    expect(block).toContain("sidebar-nav-row");
-    expect(block).toContain("sidebar-label");
-    expect(block).toContain("收起侧栏");
-    expect(block).not.toMatch(/justify-center py-1 rounded-lg text-sandrift/); // 旧 ghost icon-only 形态移除
-    // Responsive contract 保持：仅 isXl 显示
-    expect(src).toMatch(/isXl && \(\s*<button[^]*?sidebar-collapse-toggle/s);
+    expect(block).not.toContain("sidebar-nav-row");
+    expect(block).not.toContain("sidebar-label");
+    expect(block).not.toContain("收起侧栏</span>");
+  });
+
+  it("Collapse 仍有 aria-label + PanelLeftOpen/Close；仅 isXl 显示", async () => {
+    const src = await readSrc("components/layout/Sidebar.tsx");
+    const idx = src.indexOf('data-testid="sidebar-collapse-toggle"');
+    const block = src.slice(src.lastIndexOf("<button", idx), src.indexOf("</button>", idx));
+    expect(block).toContain('aria-label=');
+    expect(block).toContain("PanelLeftOpen");
+    expect(block).toContain("PanelLeftClose");
+    expect(block).toMatch(/justify-center/); // 居中 icon control
+    expect(src.slice(0, idx)).toMatch(/isXl && \(\s*$/m);
+  });
+
+  it("Collapsed tooltip：展开侧栏（expanded suppress 规则继续共用）", async () => {
+    // V2.1 collapse 不再常驻 label → collapsed 态由 aria-label 提供可访问名，
+    // 视觉提示依赖既有 rail tooltip suppress 契约（不新建第二套 tooltip 系统）
+    const css = await readSrc("app/globals.css");
+    expect(css).toContain('.sidebar-shell:not([data-collapsed="true"]) .sidebar-tooltip');
   });
 });
 
-describe("Sidebar Productization V2 —— Compact Profile", () => {
-  it("Profile 去卡片化：无默认 border/shadow、hover alabaster、rounded-lg；credits 进度已移除", async () => {
+describe("Sidebar Productization V2.1 —— Profile Card restoration", () => {
+  it("恢复 Card Surface：rounded-xl / border-line / bg-surface/50 → hover surface+strong", async () => {
     const card = await readSrc("components/layout/SidebarProfileCard.tsx");
-    expect(card).not.toContain("rounded-xl border border-line bg-surface/50");
-    expect(card).toContain("hover:bg-alabaster/70");
-    expect(card).toContain("rounded-lg");
-    expect(card).not.toContain("sidebar-profile-credits");
-    expect(card).not.toContain("本学期学分进度");
-    expect(card).not.toContain("completedCredits");
-    expect(card).toContain("完善个人资料"); // 无 college/grade 时真实 fallback
-    expect(card).toContain('aria-label="打开个人资料"');
+    expect(card).toContain("rounded-xl border border-line bg-surface/50");
+    expect(card).toContain("hover:bg-surface hover:border-line-strong");
+    expect(card).not.toContain("hover:bg-alabaster/70");
+    expect(card).not.toContain('"rounded-lg text-left');
   });
 
-  it("CSS：sidebar-profile-credits 规则删除；surface 收敛为 compact padding", async () => {
+  it("信息层级：姓名 + ChevronRight → 学院（satin-grey）→ 年级（sandrift）；缺失 → 完善个人资料", async () => {
+    const card = await readSrc("components/layout/SidebarProfileCard.tsx");
+    expect(card).toContain('text-[11px] text-satin-grey truncate');
+    expect(card).toContain('text-[11px] text-sandrift truncate">{userProfile.grade}');
+    expect(card).toContain("完善个人资料");
+    expect(card).toContain("ChevronRight");
+  });
+
+  it("Credit Progress 保持永久移除（不随 Card 恢复）", async () => {
+    const card = await readSrc("components/layout/SidebarProfileCard.tsx");
+    for (const banned of ["completedCredits", "totalCredits", "creditPercentage", "sidebar-profile-credits", "本学期学分进度", "完善学业信息"]) {
+      expect(card).not.toContain(banned);
+    }
     const css = await readSrc("app/globals.css");
     expect(css).not.toMatch(/\.sidebar-profile-credits\s*\{/);
-    expect(css).toMatch(/\.sidebar-profile-surface \{[^}]*padding: 6px 8px;/s);
   });
 
-  it("Profile 仍打开 Settings → profile section（settingsTargetSection 保持）", async () => {
+  it("Profile surface CSS：padding 10px 恢复 + border-color 参与 morph transition", async () => {
+    const css = await readSrc("app/globals.css");
+    expect(css).toMatch(/\.sidebar-profile-surface \{[^}]*padding: 10px;[^}]*border-color/s);
+    expect(css).toMatch(/\[data-collapsed="true"\] \.sidebar-profile-surface \{[^}]*padding: 6px 2px;/s);
+  });
+
+  it("Profile 点击仍打开 Settings → profile section", async () => {
     const card = await readSrc("components/layout/SidebarProfileCard.tsx");
     expect(card).toContain('setSettingsTargetSection("profile")');
-    expect(card).toContain("collapsed-tooltip".replace("collapsed-", "sidebar-profile-") + "");
-    expect(card).toContain("· 个人资料");
+    expect(card).toContain('aria-label="打开个人资料"');
+    expect(card).toContain("· 个人资料"); // collapsed tooltip 文案保持
   });
 });

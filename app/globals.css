@@ -804,18 +804,19 @@ html[data-motion-effective="reduced"] .kiro-capsule .kiro-ring { animation: none
    - Avatar Slot：固定 32×32 单实例，不 scale/crossfade；位置由 Surface 宽度连续驱动
    - Identity：仅 opacity + translateX，无 max-width 硬切；Collapse 立即淡出，Expand 80ms 延迟淡入
    - Credits：连续可插值高度 grid-template-rows 1fr→0fr，inner min-height:0 overflow:hidden */
-/* Workflow UX Sidebar Productization V2 —— Profile = compact account row：
-   transparent base（hover bg 由组件 utilities 提供）；padding 仅 6/8px；
-   collapsed → 透明窄 padding（Avatar 光学居中）。不再有 Card border / shadow。 */
+/* Workflow UX Sidebar Productization V2.1（视觉回调）—— Profile 恢复独立 Card Surface：
+   padding 10px / border-color 参与 morph transition；collapsed → transparent + 6px 2px
+   （Avatar 光学居中）。Credit Progress 已永久移除，credits CSS 保持删除。 */
 .sidebar-profile-surface {
-  padding: 6px 8px;
-  transition-property: padding, background-color;
-  transition-duration: var(--motion-fast), var(--motion-fast);
-  transition-timing-function: var(--ease-standard), var(--ease-standard);
+  padding: 10px;
+  transition-property: padding, background-color, border-color;
+  transition-duration: var(--motion-fast), var(--motion-fast), var(--motion-fast);
+  transition-timing-function: var(--ease-standard), var(--ease-standard), var(--ease-standard);
 }
 [data-collapsed="true"] .sidebar-profile-surface {
   background-color: transparent;
-  padding: 4px 2px;
+  border-color: transparent;
+  padding: 6px 2px;
 }
 [data-motion-active="false"] .sidebar-profile-surface {
   transition: none;

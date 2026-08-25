@@ -426,25 +426,24 @@ export function Sidebar() {
           Reminder / Settings / Collapse / Profile 同为 App Chrome utility，视觉权重一致；
           内部不再用多条横线切割（spacing 建立层级）。低高度 viewport 由上方导航区收缩。 */}
       <div className="shrink-0 pt-1 mt-1 border-t border-line-soft space-y-0.5">
-        {/* Collapse / Expand：仅桌面（≥1280）显示；产品化为标准 Utility Row
-            （sidebar-nav-row + sidebar-label，天然参与既有 Label Morph，无第二套动画） */}
+        {/* Collapse / Expand：仅桌面（≥1280）显示。
+            Workflow UX Sidebar Productization V2.1（视觉回调）：保持 43d1bc7 的
+            低权重 Chrome Control 形态——居中 icon-only、无常驻文字；
+            它是 App Chrome control，不是导航入口（不使用 sidebar-nav-row / sidebar-label）。
+            Collapsed rail 仍有 tooltip「展开侧栏」（expanded suppress 规则共用）。 */}
         {isXl && (
           <button
             type="button"
             onClick={toggleCollapsed}
             aria-label={effectiveCollapsed ? "展开侧栏" : "收起侧栏"}
             data-testid="sidebar-collapse-toggle"
-            className="sidebar-nav-row relative w-full py-2 rounded-xl text-xs font-medium transition-colors duration-[var(--motion-base)] ease-[var(--ease-standard)] group text-left text-satin-grey hover:bg-alabaster hover:text-charcoal"
+            className="w-full flex items-center justify-center py-1 rounded-lg text-sandrift hover:text-charcoal hover:bg-alabaster transition-colors focus-visible:outline-2 focus-visible:outline-charcoal/30"
           >
             {effectiveCollapsed ? (
-              <PanelLeftOpen className="w-4 h-4 shrink-0 transition-colors duration-[var(--motion-base)] text-sandrift group-hover:text-charcoal" aria-hidden="true" />
+              <PanelLeftOpen className="w-4 h-4" aria-hidden="true" />
             ) : (
-              <PanelLeftClose className="w-4 h-4 shrink-0 transition-colors duration-[var(--motion-base)] text-sandrift group-hover:text-charcoal" aria-hidden="true" />
+              <PanelLeftClose className="w-4 h-4" aria-hidden="true" />
             )}
-            <span data-testid="nav-label" className="sidebar-label flex-1 min-w-0 truncate">
-              {effectiveCollapsed ? "展开侧栏" : "收起侧栏"}
-            </span>
-            {tooltip(effectiveCollapsed ? "展开侧栏" : "收起侧栏")}
           </button>
         )}
         <SidebarProfileCard collapsed={effectiveCollapsed} />
