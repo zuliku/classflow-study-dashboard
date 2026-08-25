@@ -86,6 +86,10 @@ describe("get_available_time", () => {
   it("返回 slots：排除课程（今天 08:00-09:40）与考试（今天 14:00-16:00）", async () => {
     seedState();
     const { store, read } = await freshRead();
+    // 确定性时钟：固定在「今天」10:00（真实晚间运行时 today 窗口会被 now-capping 耗尽）
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(`${dayStr(0)}T10:00:00`));
+    try {
     const r = read.executeKiroReadTool(
       "get_available_time",
       { startDate: dayStr(0), endDate: dayStr(1) },
@@ -108,6 +112,9 @@ describe("get_available_time", () => {
     expect(typeof r.data.totalMinutes).toBe("number");
     const returnedMinutes = r.data.slots.reduce((sum, slot) => sum + slot.minutes, 0);
     expect(r.data.totalMinutes).toBe(returnedMinutes);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("totalMinutes 汇总完整空闲结果，而 slots 详情仍最多返回 20 条", async () => {

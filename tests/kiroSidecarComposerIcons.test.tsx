@@ -21,7 +21,8 @@ describe("Sidecar compact 一级图标按钮", () => {
     const html = renderToStaticMarkup(
       <KiroReasoningMenu capability={cap} effort={"high" as KiroReasoningEffort} onChange={() => {}} iconOnly />
     );
-    expect(html).not.toContain("思考");
+    // iconOnly 时无可见文字标签；title/aria 属性中的「思考程度」是 tooltip/无障碍语义，允许保留
+    expect(html).not.toMatch(/>思考[^<]*</);
     expect(html).toContain('aria-label="思考程度"');
     expect(html).toContain('aria-expanded="false"');
   });
@@ -37,7 +38,8 @@ describe("Sidecar compact 一级图标按钮", () => {
     const html = renderToStaticMarkup(
       <KiroAgentModeMenu mode={"guided" as KiroAgentMode} onChange={() => {}} iconOnly />
     );
-    expect(html).not.toContain("受控");
+    // iconOnly 时无可见模式文字；aria-label 保留
+    expect(html).not.toMatch(/>受控[^<]*</);
     expect(html).toContain('aria-label="权限模式"');
   });
 

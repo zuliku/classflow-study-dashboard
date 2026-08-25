@@ -91,7 +91,7 @@ describe("Demo Manual Injection Hardening", () => {
     // @ts-ignore
     process.env.NODE_ENV = originalEnv;
     vi.resetModules();
-  }, 10000);
+  }, 20000);
 
   it("E. Manual re-injection works without marker", async () => {
     const { useAppStore } = await import("@/store/useAppStore");

@@ -146,7 +146,8 @@ function seedState() {
   const state = {
     userProfile: { name: "测试", avatarUrl: "", college: "", grade: "", studentId: "", completedCredits: 0, totalCredits: 0 },
     semester: { id: "s", name: "测试学期", startDate: "2026-08-10", totalWeeks: 16 },
-    courses: [],
+    // restoreSchedule 的 parent-course 校验（BUG-005 回归防御）要求被引用课程真实存在
+    courses: [{ id: "c1", name: "统计学", code: "STAT", teacher: "", classroom: "", credit: 3, description: "", materials: [] }],
     schedules: [],
     assignments: [],
     calendarMarks: [],

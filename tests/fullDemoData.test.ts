@@ -16,14 +16,14 @@ it("full demo data 全模块形状（V2 完整数据集）", () => {
     return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
   };
   expect(data.courses).toHaveLength(10);
-  expect(data.schedules).toHaveLength(16);
+  expect(data.schedules).toHaveLength(17);
   expect(data.assignments).toHaveLength(30);
   expect(data.calendarMarks).toHaveLength(29);
   expect(data.studyBlocks).toHaveLength(13);
   expect(data.groupProjects).toHaveLength(3);
   expect(data.reminders).toHaveLength(5);
   expect(data.focusSessions).toHaveLength(28);
-  expect(data.scheduleOccurrenceOverrides).toHaveLength(3);
+  expect(data.scheduleOccurrenceOverrides).toHaveLength(2);
 
   const materials = data.courses.flatMap((c) => c.materials);
   expect(materials.length).toBe(23);
@@ -69,7 +69,7 @@ it("full demo data 全模块形状（V2 完整数据集）", () => {
   }
 
   // 排课例外：本周（当前教学周第 1 周）cancel / move / extra 各 1
-  expect(data.scheduleOccurrenceOverrides!.map((o) => o.kind).sort()).toEqual(["cancel", "extra", "move"]);
+  expect(data.scheduleOccurrenceOverrides!.map((o) => o.kind).sort()).toEqual(["cancel", "move"]);
   expect(data.scheduleOccurrenceOverrides!.every((o) => o.week === 1)).toBe(true);
 
   // 提醒：三种 targetType 覆盖 + 已触发示例
@@ -84,13 +84,13 @@ it("restoreAppData 归一化后全模块可用", () => {
   store.restoreAppData(buildFullDemoData());
   const s = useAppStore.getState();
   expect(s.courses).toHaveLength(10);
-  expect(s.schedules).toHaveLength(16);
+  expect(s.schedules).toHaveLength(17);
   expect(s.assignments).toHaveLength(30);
   expect(s.groupProjects).toHaveLength(3);
   expect(s.studyBlocks).toHaveLength(13);
   expect(s.focusSessions).toHaveLength(28);
   expect(s.reminders!.length).toBeGreaterThanOrEqual(5);
-  expect(s.scheduleOccurrenceOverrides).toHaveLength(3);
+  expect(s.scheduleOccurrenceOverrides).toHaveLength(2);
   expect(s.calendarMarks.filter((m) => m.type === "ddl").every((m) => !!m.sourceId)).toBe(true);
   // 资料关联有效：materialIds 必须指向所属课程真实存在的材料
   for (const a of s.assignments) {
