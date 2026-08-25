@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { PanelLeftClose, PanelLeftOpen, Search } from "lucide-react";
+import { PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { useAppStore } from "@/store/useAppStore";
 import { useUIChromeStore } from "@/store/useUIChromeStore";
 import { useReminderCenterStore } from "@/store/useReminderCenterStore";
@@ -51,13 +51,8 @@ export function Sidebar() {
   const activeTab = useAppStore((s) => s.activeTab);
   const setActiveTab = useAppStore((s) => s.setActiveTab);
   const setSettingsModalOpen = useAppStore((s) => s.setSettingsModalOpen);
-  // Workflow UX Sidebar Productization V1：Global Search / Command Center 入口（复用现有 Modal，不建第二套）
-  const setSearchModalView = useAppStore((s) => s.setSearchModalView);
-  const setSearchModalOpen = useAppStore((s) => s.setSearchModalOpen);
-  const openGlobalSearch = useCallback(() => {
-    setSearchModalView("palette");
-    setSearchModalOpen(true);
-  }, [setSearchModalView, setSearchModalOpen]);
+  // Workflow UX Sidebar Productization V2：Settings Modal 打开态 → Footer utility soft active surface
+  const settingsModalOpen = useAppStore((s) => s.isSettingsModalOpen);
   // UI Chrome：低成本独立 store（不触发主业务 store persist / 大范围 render）
   const persistedCollapsed = useUIChromeStore((s) => s.sidebarCollapsed);
   const setPersistedCollapsed = useUIChromeStore((s) => s.setSidebarCollapsed);
@@ -265,32 +260,8 @@ export function Sidebar() {
           />
         </button>
 
-        {/* Global Search / Command Center Entry（Sidebar Productization V1）：
-            utility 而非 Workspace Tab——不进 MAIN_NAV_ITEMS、不移动 Active Plate；
-            复用现有 Command Center Modal（palette view）。Expanded = field-like 入口
-            （icon + 搜索 + ⌘K），Collapsed = 光学居中的 icon-only。 */}
-        <button
-          type="button"
-          onClick={openGlobalSearch}
-          aria-label="全局搜索"
-          data-testid="sidebar-search-entry"
-          className={cn(
-            "relative w-full h-9 flex items-center gap-2 px-2.5 rounded-lg text-left",
-            "border border-line bg-alabaster/60 text-satin-grey",
-            "hover:bg-alabaster hover:border-line-strong hover:text-charcoal",
-            "transition-colors duration-[var(--motion-fast)] ease-[var(--ease-standard)]",
-            "outline-none focus-visible:outline-2 focus-visible:outline-charcoal/30 group"
-          )}
-        >
-          <Search className="w-4 h-4 shrink-0 text-sandrift group-hover:text-charcoal transition-colors duration-[var(--motion-fast)]" />
-          <span data-testid="nav-label" className="sidebar-label flex-1 min-w-0 truncate text-xs font-medium">
-            搜索
-          </span>
-          <kbd className="sidebar-kbd shrink-0 text-[10px] font-semibold leading-none text-sandrift border border-line rounded px-1 py-0.5 bg-surface">
-            ⌘K
-          </kbd>
-          {tooltip("搜索 · ⌘K")}
-        </button>
+        {/* Global Search Entry 已移除（Sidebar Productization V2：避免与 WorkspaceHeader 搜索 /
+            Command Center 快捷键重复——Sidebar 收敛为纯 navigation chrome）。 */}
 
         {/* Navigation Menu（核心学习功能） */}
         <nav ref={navRef} className="relative space-y-0.5">
@@ -301,7 +272,9 @@ export function Sidebar() {
             aria-hidden="true"
             data-testid="nav-active-plate"
             className={cn(
-              "absolute left-0 right-0 rounded-xl bg-pastel-mint shadow-subtle transition-[transform,opacity] ease-[var(--ease-standard)]",
+              // Workflow UX Sidebar Productization V2：去 Card 感——soft semantic fill +
+              // very subtle border（无 elevated shadow）；仍是唯一 moving selection surface
+              "absolute left-0 right-0 rounded-xl bg-pastel-mint/70 border border-line-soft transition-[transform,opacity] ease-[var(--ease-standard)]",
               plateAnimated ? "duration-[var(--motion-base)]" : "duration-0",
               isMainActive ? "opacity-100" : "opacity-0"
             )}
@@ -352,8 +325,7 @@ export function Sidebar() {
         </nav>
 
         {/* AI Agent 区域：Kiro Featured Entry（独立分组，不做普通 nav row） */}
-        <div className="mt-3 pt-3 border-t border-line-soft space-y-0.5">
-          {AI_NAV_ITEMS.map((item) => {
+        <div className="mt-3 pt-3 border-t border-line-soft space-y-0.5">          {AI_NAV_ITEMS.map((item) => {
             const Icon = item.icon;
             const isActive = activeTab === item.id;
             return (
@@ -405,11 +377,16 @@ export function Sidebar() {
           })}
         </div>
 
-        {/* 全局 Action：Reminder Center（Bell，unread 圆点锚定 Icon Slot）/ Settings（Modal 入口） */}
-        <div className="pt-1 mt-1 border-t border-line-soft space-y-0.5">
+        {/* 全局 Action：Reminder Center（Bell，unread 圆点锚定 Icon Slot）/ Settings（Modal 入口）。
+            Workflow UX Sidebar Productization V2：与 Kiro 之间的 divider 移除（divider 收敛：
+            仅保留 Main→Kiro 与 Footer 顶部），Actions 并入底部统一 Footer Utility Zone。 */}
+        <div className="pt-1 space-y-0.5">
           {GLOBAL_NAV_ACTIONS.map((item) => {
             const Icon = item.icon;
             const isReminders = item.id === "reminders";
+            const isActiveSurface = isReminders
+              ? reminderCenterOpen
+              : settingsModalOpen;
             return (
               <button
                 key={item.id}
@@ -419,7 +396,7 @@ export function Sidebar() {
                 aria-label={item.label}
                 aria-expanded={isReminders ? reminderCenterOpen : undefined}
                 className={cn("sidebar-nav-row relative w-full py-2 rounded-xl text-xs font-medium transition-colors duration-[var(--motion-base)] ease-[var(--ease-standard)] group text-left",
-                  isReminders && reminderCenterOpen
+                  isActiveSurface
                     ? "bg-alabaster text-charcoal"
                     : "text-satin-grey hover:bg-alabaster hover:text-charcoal"
                 )}
@@ -445,22 +422,29 @@ export function Sidebar() {
         </div>
       </div>
 
-      {/* Profile Region：shrink-0（不随导航滚动；低高度 viewport 由上方导航区收缩） */}
-      <div className="shrink-0 pt-1 mt-1 border-t border-line-soft space-y-1.5">
-        {/* Collapse / Expand 动作：仅桌面（≥1280）显示；低权重 ghost 图标按钮 */}
+      {/* Workflow UX Sidebar Productization V2 —— Footer Utility Zone（shrink-0，顶部唯一 divider）：
+          Reminder / Settings / Collapse / Profile 同为 App Chrome utility，视觉权重一致；
+          内部不再用多条横线切割（spacing 建立层级）。低高度 viewport 由上方导航区收缩。 */}
+      <div className="shrink-0 pt-1 mt-1 border-t border-line-soft space-y-0.5">
+        {/* Collapse / Expand：仅桌面（≥1280）显示；产品化为标准 Utility Row
+            （sidebar-nav-row + sidebar-label，天然参与既有 Label Morph，无第二套动画） */}
         {isXl && (
           <button
             type="button"
             onClick={toggleCollapsed}
             aria-label={effectiveCollapsed ? "展开侧栏" : "收起侧栏"}
             data-testid="sidebar-collapse-toggle"
-            className="w-full flex items-center justify-center py-1 rounded-lg text-sandrift hover:text-charcoal hover:bg-alabaster transition-colors focus-visible:outline-2 focus-visible:outline-charcoal/30"
+            className="sidebar-nav-row relative w-full py-2 rounded-xl text-xs font-medium transition-colors duration-[var(--motion-base)] ease-[var(--ease-standard)] group text-left text-satin-grey hover:bg-alabaster hover:text-charcoal"
           >
             {effectiveCollapsed ? (
-              <PanelLeftOpen className="w-4 h-4" aria-hidden="true" />
+              <PanelLeftOpen className="w-4 h-4 shrink-0 transition-colors duration-[var(--motion-base)] text-sandrift group-hover:text-charcoal" aria-hidden="true" />
             ) : (
-              <PanelLeftClose className="w-4 h-4" aria-hidden="true" />
+              <PanelLeftClose className="w-4 h-4 shrink-0 transition-colors duration-[var(--motion-base)] text-sandrift group-hover:text-charcoal" aria-hidden="true" />
             )}
+            <span data-testid="nav-label" className="sidebar-label flex-1 min-w-0 truncate">
+              {effectiveCollapsed ? "展开侧栏" : "收起侧栏"}
+            </span>
+            {tooltip(effectiveCollapsed ? "展开侧栏" : "收起侧栏")}
           </button>
         )}
         <SidebarProfileCard collapsed={effectiveCollapsed} />

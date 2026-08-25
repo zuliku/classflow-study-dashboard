@@ -207,54 +207,7 @@ const readSrc = async (p: string) => {
   return fs.readFileSync(path.join(process.cwd(), p), "utf-8");
 };
 
-describe("Sidebar Productization V1 —— Global Search Entry", () => {
-  it("Search Entry 存在于 Logo 与 MAIN_NAV 之间（hierarchy：Logo → Search → Nav）", async () => {
-    const src = await readSrc("components/layout/Sidebar.tsx");
-    const logoIdx = src.indexOf('data-testid="sidebar-logo"');
-    const searchIdx = src.indexOf('data-testid="sidebar-search-entry"');
-    const navIdx = src.indexOf("MAIN_NAV_ITEMS.map");
-    expect(logoIdx).toBeGreaterThan(-1);
-    expect(searchIdx).toBeGreaterThan(logoIdx);
-    expect(navIdx).toBeGreaterThan(searchIdx);
-  });
-
-  it("点击复用现有 Command Center（palette view + open），不创建第二套 Modal", async () => {
-    const src = await readSrc("components/layout/Sidebar.tsx");
-    expect(src).toContain('setSearchModalView("palette")');
-    expect(src).toContain("setSearchModalOpen(true)");
-  });
-
-  it("Search 是 utility 而非 Workspace Tab：不进 MAIN/WORKSPACE_NAV_ITEMS、不移动 Active Plate", async () => {
-    const navItems = await readSrc("components/layout/navItems.ts");
-    expect(navItems).not.toContain("全局搜索");
-    const src = await readSrc("components/layout/Sidebar.tsx");
-    // Search handler 内不得写 activeTab
-    const entryBlock = src.slice(
-      src.indexOf('data-testid="sidebar-search-entry"'),
-      src.indexOf("{tooltip(")
-    );
-    expect(entryBlock).not.toContain("setActiveTab");
-  });
-
-  it("Expanded 表现 = field-like（icon + 搜索 + ⌘K kbd）；aria-label 全局搜索", async () => {
-    const src = await readSrc("components/layout/Sidebar.tsx");
-    const searchIdx = src.indexOf('data-testid="sidebar-search-entry"');
-    const block = src.slice(searchIdx, src.indexOf("</button>", searchIdx));
-    expect(src).toContain('aria-label="全局搜索"');
-    expect(block).toContain("搜索");
-    expect(block).toContain("⌘K");
-    expect(block).toContain("sidebar-kbd");
-  });
-
-  it("Collapsed：⌘K 不参与 width layout（display:none）+ Search tooltip 文案", async () => {
-    const css = await readSrc("app/globals.css");
-    expect(css).toMatch(/\[data-collapsed="true"\] \.sidebar-kbd \{\s*display: none;/);
-    const src = await readSrc("components/layout/Sidebar.tsx");
-    expect(src).toContain('tooltip("搜索 · ⌘K")');
-  });
-});
-
-describe("Sidebar Productization V1 —— Logo semantics", () => {
+describe("Sidebar Productization V2 —— Logo semantics", () => {
   it("Logo 是真实 button（type=button）且 aria-label=返回总览；无 aria-current（非第二 Overview selection）", async () => {
     const src = await readSrc("components/layout/Sidebar.tsx");
     const logoIdx = src.indexOf('data-testid="sidebar-logo"');
@@ -270,7 +223,7 @@ describe("Sidebar Productization V1 —— Logo semantics", () => {
   });
 });
 
-describe("Sidebar Productization V1 —— Tooltip rail semantics", () => {
+describe("Sidebar Productization V2 —— Tooltip rail semantics", () => {
   it("collapsed 稳定态 tooltip 可显示；expanded 稳定态被 suppress（[data-collapsed] 直接控制）", async () => {
     const css = await readSrc("app/globals.css");
     expect(css).toContain('.sidebar-shell:not([data-collapsed="true"]) .sidebar-tooltip');
@@ -283,7 +236,7 @@ describe("Sidebar Productization V1 —— Tooltip rail semantics", () => {
   });
 });
 
-describe("Sidebar Productization V1 —— Baseline guards", () => {
+describe("Sidebar Productization V2 —— Baseline guards", () => {
   it("Kiro 双层 perimeter 仍存在；w-16 / w-56 保持；Reduced Motion guard 保持", async () => {
     const src = await readSrc("components/layout/Sidebar.tsx");
     expect(src).toContain("sidebar-kiro-base-ring");
@@ -301,11 +254,80 @@ describe("Sidebar Productization V1 —— Baseline guards", () => {
     expect(src).not.toContain("reminder-unread-count");
   });
 
-  it("Search Entry motion 只用现有 token（fast/base + standard ease），无 scale/bounce", async () => {
+
+});
+
+// ============================================================
+// Sidebar Productization V2 —— Hierarchy / Utility Footer / Compact Profile
+// ============================================================
+
+describe("Sidebar Productization V2 —— hierarchy & plate", () => {
+  it("不存在 sidebar-search-entry（V1 Search 已移除；⌘K/Command Center 不受影响）", async () => {
     const src = await readSrc("components/layout/Sidebar.tsx");
-    const searchIdx = src.indexOf('data-testid="sidebar-search-entry"');
-    const block = src.slice(searchIdx, src.indexOf("{tooltip(", searchIdx));
-    expect(block).toContain("duration-[var(--motion-fast)]");
-    expect(block).not.toMatch(/scale|bounce|translate-y-|translate-x-/);
+    expect(src).not.toContain("sidebar-search-entry");
+    expect(src).not.toContain("setSearchModalView");
+    const css = await readSrc("app/globals.css");
+    expect(css).not.toContain(".sidebar-kbd");
+  });
+
+  it("Active Plate 扁平化：soft fill + subtle border，无 elevated shadow", async () => {
+    const src = await readSrc("components/layout/Sidebar.tsx");
+    const plateIdx = src.indexOf('data-testid="nav-active-plate"');
+    const block = src.slice(plateIdx, src.indexOf("style={{", plateIdx));
+    expect(block).toContain("bg-pastel-mint/70");
+    expect(block).toContain("border border-line-soft");
+    expect(block).not.toContain("shadow-subtle");
+  });
+
+  it("divider 收敛：仅 Main→Kiro 与 Footer 顶部两条；Actions 组无独立 border-top", async () => {
+    const src = await readSrc("components/layout/Sidebar.tsx");
+    // Actions（GLOBAL_NAV_ACTIONS）组不再有 border-t
+    const actionsIdx = src.indexOf("GLOBAL_NAV_ACTIONS.map");
+    const actionsBlockStart = src.lastIndexOf("<div", actionsIdx);
+    const actionsBlock = src.slice(actionsBlockStart, actionsIdx);
+    expect(actionsBlock).not.toContain("border-t");
+    // Footer Zone 顶部唯一 divider
+    expect(src).toMatch(/Footer Utility Zone[\s\S]*border-t border-line-soft/);
+  });
+
+  it("Collapse 产品化为标准 Utility Row：sidebar-nav-row + sidebar-label「收起侧栏」", async () => {
+    const src = await readSrc("components/layout/Sidebar.tsx");
+    const idx = src.indexOf('data-testid="sidebar-collapse-toggle"');
+    const openTagStart = src.lastIndexOf("<button", idx);
+    const blockEnd = src.indexOf("{tooltip(", idx);
+    const block = src.slice(openTagStart, blockEnd);
+    expect(block).toContain("sidebar-nav-row");
+    expect(block).toContain("sidebar-label");
+    expect(block).toContain("收起侧栏");
+    expect(block).not.toMatch(/justify-center py-1 rounded-lg text-sandrift/); // 旧 ghost icon-only 形态移除
+    // Responsive contract 保持：仅 isXl 显示
+    expect(src).toMatch(/isXl && \(\s*<button[^]*?sidebar-collapse-toggle/s);
+  });
+});
+
+describe("Sidebar Productization V2 —— Compact Profile", () => {
+  it("Profile 去卡片化：无默认 border/shadow、hover alabaster、rounded-lg；credits 进度已移除", async () => {
+    const card = await readSrc("components/layout/SidebarProfileCard.tsx");
+    expect(card).not.toContain("rounded-xl border border-line bg-surface/50");
+    expect(card).toContain("hover:bg-alabaster/70");
+    expect(card).toContain("rounded-lg");
+    expect(card).not.toContain("sidebar-profile-credits");
+    expect(card).not.toContain("本学期学分进度");
+    expect(card).not.toContain("completedCredits");
+    expect(card).toContain("完善个人资料"); // 无 college/grade 时真实 fallback
+    expect(card).toContain('aria-label="打开个人资料"');
+  });
+
+  it("CSS：sidebar-profile-credits 规则删除；surface 收敛为 compact padding", async () => {
+    const css = await readSrc("app/globals.css");
+    expect(css).not.toMatch(/\.sidebar-profile-credits\s*\{/);
+    expect(css).toMatch(/\.sidebar-profile-surface \{[^}]*padding: 6px 8px;/s);
+  });
+
+  it("Profile 仍打开 Settings → profile section（settingsTargetSection 保持）", async () => {
+    const card = await readSrc("components/layout/SidebarProfileCard.tsx");
+    expect(card).toContain('setSettingsTargetSection("profile")');
+    expect(card).toContain("collapsed-tooltip".replace("collapsed-", "sidebar-profile-") + "");
+    expect(card).toContain("· 个人资料");
   });
 });

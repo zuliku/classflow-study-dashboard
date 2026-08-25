@@ -804,16 +804,18 @@ html[data-motion-effective="reduced"] .kiro-capsule .kiro-ring { animation: none
    - Avatar Slot：固定 32×32 单实例，不 scale/crossfade；位置由 Surface 宽度连续驱动
    - Identity：仅 opacity + translateX，无 max-width 硬切；Collapse 立即淡出，Expand 80ms 延迟淡入
    - Credits：连续可插值高度 grid-template-rows 1fr→0fr，inner min-height:0 overflow:hidden */
+/* Workflow UX Sidebar Productization V2 —— Profile = compact account row：
+   transparent base（hover bg 由组件 utilities 提供）；padding 仅 6/8px；
+   collapsed → 透明窄 padding（Avatar 光学居中）。不再有 Card border / shadow。 */
 .sidebar-profile-surface {
-  padding: 10px;
-  transition-property: padding, background-color, border-color;
-  transition-duration: var(--motion-panel), var(--motion-fast), var(--motion-fast);
-  transition-timing-function: var(--ease-emphasized), var(--ease-standard), var(--ease-standard);
+  padding: 6px 8px;
+  transition-property: padding, background-color;
+  transition-duration: var(--motion-fast), var(--motion-fast);
+  transition-timing-function: var(--ease-standard), var(--ease-standard);
 }
 [data-collapsed="true"] .sidebar-profile-surface {
   background-color: transparent;
-  border-color: transparent;
-  padding: 6px 2px;
+  padding: 4px 2px;
 }
 [data-motion-active="false"] .sidebar-profile-surface {
   transition: none;
@@ -841,35 +843,9 @@ html[data-motion-effective="reduced"] .kiro-capsule .kiro-ring { animation: none
   display: block;
 }
 
-/* Profile Credits：连续 grid 高度，无 max-height 硬切 */
-.sidebar-profile-credits {
-  display: grid;
-  grid-template-rows: 1fr;
-  opacity: 1;
-  transform: translateY(0);
-  overflow: hidden;
-  transition-property: grid-template-rows, opacity, transform;
-  transition-duration: var(--motion-panel), var(--motion-fast), var(--motion-fast);
-  transition-timing-function: var(--ease-emphasized), var(--ease-standard), var(--ease-standard);
-}
-.sidebar-profile-credits-inner {
-  min-height: 0;
-  overflow: hidden;
-}
-[data-collapsed="true"] .sidebar-profile-credits {
-  grid-template-rows: 0fr;
-  opacity: 0;
-  transform: translateY(-3px);
-}
-[data-motion-active="false"] .sidebar-profile-credits {
-  transition: none;
-}
-[data-motion-active="true"][data-motion-direction="collapse"] .sidebar-profile-credits {
-  transition-delay: 0ms, 0ms, 0ms;
-}
-[data-motion-active="true"][data-motion-direction="expand"] .sidebar-profile-credits {
-  transition-delay: 0ms, 80ms, 80ms;
-}
+/* Profile Credits：已移除（Workflow UX Sidebar Productization V2）——
+   学分进度是学习数据而非 App Chrome；完整数据保留在 Store / Settings。
+   sidebar-profile-credits 相关 grid 动画规则随之删除（减少 layout-property animation）。 */
 
 /* Profile Tooltip：仅在 collapsed 稳定态可 hover 显示；manual morph 期间强制隐藏 */
 .sidebar-profile-tooltip {
@@ -882,7 +858,7 @@ html[data-motion-effective="reduced"] .kiro-capsule .kiro-ring { animation: none
   opacity: 0 !important;
 }
 
-/* Workflow UX Sidebar Productization V1 —— Nav Tooltip Rail Semantics：
+/* Workflow UX Sidebar Productization V1（V2 保留）—— Nav Tooltip Rail Semantics：
    Tooltip 只服务 collapsed rail（icon-only 无 label）。
    Expanded 稳定态 / manual morph 期间一律 suppress——由 [data-collapsed] 直接控制，
    不依赖 label 是否 opacity 0 的间接判断。collapsed 态的 hover/focus-visible 显示
@@ -890,17 +866,6 @@ html[data-motion-effective="reduced"] .kiro-capsule .kiro-ring { animation: none
 .sidebar-shell:not([data-collapsed="true"]) .sidebar-tooltip {
   opacity: 0 !important;
   pointer-events: none !important;
-}
-
-/* Global Search Entry ⌘K kbd：仅 expanded 参与 layout；collapsed 不占宽度
-   （display 切换为瞬时，不参与 rail morph tween——morph 仍只有 width/opacity/transform）。 */
-.sidebar-kbd {
-  transition-property: opacity;
-  transition-duration: var(--motion-fast);
-  transition-timing-function: var(--ease-standard);
-}
-[data-collapsed="true"] .sidebar-kbd {
-  display: none;
 }
 
 /* Reduced Motion：全部瞬时切换 */
@@ -911,9 +876,7 @@ html[data-motion-effective="reduced"] .sidebar-profile-identity,
 html[data-motion-effective="reduced"] .sidebar-logo-full,
 html[data-motion-effective="reduced"] .sidebar-logo-mark,
 html[data-motion-effective="reduced"] .sidebar-profile-surface,
-html[data-motion-effective="reduced"] .sidebar-profile-header-row,
-html[data-motion-effective="reduced"] .sidebar-profile-credits,
-html[data-motion-effective="reduced"] .sidebar-kbd {
+html[data-motion-effective="reduced"] .sidebar-profile-header-row {
   transition: none !important;
 }
 /* ============================================================
