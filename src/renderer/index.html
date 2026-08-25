@@ -7,6 +7,7 @@
     <script>
       (() => {
         let preference = "system";
+        let uiFont = "harmonyos-sans-sc";
         try {
           const raw = window.localStorage.getItem("classflow-storage-v2");
           if (raw) {
@@ -17,6 +18,9 @@
               if (persisted && ["system", "full", "reduced"].includes(persisted.motionPreference)) {
                 preference = persisted.motionPreference;
               }
+              if (persisted && ["harmonyos-sans-sc", "source-han-sans-sc", "misan"].includes(persisted.uiFont)) {
+                uiFont = persisted.uiFont;
+              }
             } catch {}
           }
         } catch {}
@@ -26,6 +30,7 @@
           const root = document.documentElement;
           root.dataset.motionPreference = preference;
           root.dataset.motionEffective = reduced ? "reduced" : "full";
+          root.dataset.uiFont = uiFont;
         } catch {}
       })();
     </script>

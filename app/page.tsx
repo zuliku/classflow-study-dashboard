@@ -32,6 +32,7 @@ import { LearningHistoryRuntime } from "@/components/history/LearningHistoryRunt
 import { ReminderViewport } from "@/components/reminders/ReminderViewport";
 import { ReminderCenter } from "@/components/reminders/ReminderCenter";
 import { FocusRuntime } from "@/components/focus/FocusRuntime";
+import { TypographyRuntime } from "@/components/runtime/TypographyRuntime";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { PageTransition } from "@/components/ui/PageTransition";
 import { OverviewWorkspace } from "@/components/dashboard/OverviewWorkspace";
@@ -203,6 +204,7 @@ export default function Home() {
       <ReminderViewport />
       <ReminderCenter />
       <FocusRuntime />
+      <TypographyRuntime />
       {/* 移动端底部导航（<768px） */}
       <BottomNav />
     </KiroSessionProvider>

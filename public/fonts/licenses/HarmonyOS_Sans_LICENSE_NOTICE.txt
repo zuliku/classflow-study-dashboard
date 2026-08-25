@@ -1,0 +1,22 @@
+HarmonyOS Sans — License & Copyright Notice
+---------------------------------------------
+
+HarmonyOS Sans SC is provided by Huawei / OpenHarmony.
+Copyright and trademark belong to Huawei Device Co., Ltd.
+
+ClassFlow does NOT modify, subset, or convert the font files.
+Only original files from the official Huawei / OpenHarmony release are
+distributed (if present under public/fonts/harmonyos-sans-sc/).
+No third-party converted woff/woff2 and no unofficial builds are used.
+
+Please retain this notice and the original license / copyright file
+shipped with the official HarmonyOS Sans distribution when placing
+files under public/fonts/harmonyos-sans-sc/.
+
+Official source: please obtain HarmonyOS Sans from Huawei / OpenHarmony
+official distribution channels. For details, refer to the license file
+included in the official package (e.g., LICENSE.txt / copyright notice).
+
+If no font files are present, ClassFlow falls back to system fonts
+via CSS local("HarmonyOS Sans SC") and "Microsoft YaHei UI" and remains
+fully functional.

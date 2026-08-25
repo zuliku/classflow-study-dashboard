@@ -1,0 +1,20 @@
+MiSans — Trademark & License Attribution
+------------------------------------------
+
+MiSans is provided by Xiaomi Inc.
+MiSans trademark and copyright belong to Xiaomi.
+The MiSans license does NOT permit further redistribution of the font
+software copies.
+
+ClassFlow does NOT bundle, copy, or auto-download MiSans.
+The "MiSans" preset in ClassFlow uses CSS local("MiSans") only:
+- If the user has MiSans installed locally, it will be used.
+- Otherwise it automatically falls back to HarmonyOS Sans SC.
+Preference may remain as "misan"; after the user installs MiSans
+and restarts the app, it takes effect.
+
+No MiSans files are committed to the repository or the installer.
+Users should obtain MiSans from Xiaomi's official channels and install
+it locally if they wish to use it in ClassFlow.
+
+Settings displays this option as "MiSans（需本机安装）".

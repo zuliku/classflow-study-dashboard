@@ -64,6 +64,7 @@ export const VISUAL_EVAL_WORLD: ReadToolState = {
     contentDensity: "comfortable",
     defaultTaskWorkspaceView: "focus",
     defaultDeadlineReminderMinutes: 60,
+    uiFont: "harmonyos-sans-sc",
   },
 };
 

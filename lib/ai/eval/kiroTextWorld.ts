@@ -82,6 +82,7 @@ export const KIRO_TEXT_EVAL_WORLD: KiroTextWorldState = {
     contentDensity: "comfortable",
     defaultTaskWorkspaceView: "focus",
     defaultDeadlineReminderMinutes: 60,
+    uiFont: "harmonyos-sans-sc",
   },
 };
 

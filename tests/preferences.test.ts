@@ -1,6 +1,10 @@
+/**
+ * @vitest-environment jsdom
+ */
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { DEFAULT_PREFERENCES, sanitizePreferences } from "@/lib/preferences";
+import { DEFAULT_PREFERENCES, sanitizePreferences, PREFERENCE_SECTIONS, getModifiedPreferenceKeys, resetPreferencePatch } from "@/lib/preferences";
 import { getLocalDDLDate } from "@/lib/ddl";
+import { FONT_REGISTRY, UI_FONT_PRESETS, DEFAULT_UI_FONT } from "@/lib/typography/fonts";
 
 const KEY = "classflow-storage-v2";
 
@@ -17,6 +21,9 @@ const validPrefs = {
   defaultTaskStatus: "doing",
   enableSingleKeyShortcuts: false,
   contentDensity: "compact",
+  defaultDeadlineReminderMinutes: 60 as const,
+  defaultTaskWorkspaceView: "focus" as const,
+  uiFont: "source-han-sans-sc" as const,
 };
 
 describe("sanitizePreferences 逐字段回落", () => {
@@ -93,6 +100,57 @@ describe("sanitizePreferences 逐字段回落", () => {
     expect(sanitizePreferences({ contentDensity: "huge" }).contentDensity).toBe("comfortable");
     expect(sanitizePreferences({ contentDensity: "compact" }).contentDensity).toBe("compact");
   });
+
+  // Typography V1 — uiFont sanitize & defaults
+  it("Typography V1：DEFAULT uiFont = harmonyos-sans-sc", () => {
+    expect(DEFAULT_PREFERENCES.uiFont).toBe("harmonyos-sans-sc");
+    expect(DEFAULT_UI_FONT).toBe("harmonyos-sans-sc");
+  });
+
+  it("Typography V1：三个合法值均通过 sanitize", () => {
+    expect(sanitizePreferences({ uiFont: "harmonyos-sans-sc" }).uiFont).toBe("harmonyos-sans-sc");
+    expect(sanitizePreferences({ uiFont: "source-han-sans-sc" }).uiFont).toBe("source-han-sans-sc");
+    expect(sanitizePreferences({ uiFont: "misan" }).uiFont).toBe("misan");
+  });
+
+  it("Typography V1：非法 uiFont 回落 harmonyos-sans-sc", () => {
+    expect(sanitizePreferences({ uiFont: "comic-sans" }).uiFont).toBe("harmonyos-sans-sc");
+    expect(sanitizePreferences({ uiFont: "" }).uiFont).toBe("harmonyos-sans-sc");
+    expect(sanitizePreferences({ uiFont: null }).uiFont).toBe("harmonyos-sans-sc");
+    expect(sanitizePreferences({ uiFont: 123 }).uiFont).toBe("harmonyos-sans-sc");
+  });
+
+  it("Typography V1：旧持久化无 uiFont 自动补 harmonyos-sans-sc", () => {
+    const out = sanitizePreferences({ showWeekends: true });
+    expect(out.uiFont).toBe("harmonyos-sans-sc");
+    expect(sanitizePreferences({}).uiFont).toBe("harmonyos-sans-sc");
+  });
+
+  it("Typography V1：uiFont 属于 general section", () => {
+    expect(PREFERENCE_SECTIONS.uiFont).toBe("general");
+  });
+
+  it("Typography V1：getModifiedPreferenceKeys 能检测 uiFont 差异", () => {
+    const modified = getModifiedPreferenceKeys({ ...DEFAULT_PREFERENCES, uiFont: "misan" });
+    expect(modified).toContain("uiFont");
+    expect(getModifiedPreferenceKeys(DEFAULT_PREFERENCES)).not.toContain("uiFont");
+  });
+
+  it("Typography V1：resetPreferencePatch uiFont → harmonyos-sans-sc", () => {
+    expect(resetPreferencePatch("uiFont")).toEqual({ uiFont: "harmonyos-sans-sc" });
+  });
+
+  it("Typography V1：Font Registry 三项完整且 fallback 正确", () => {
+    expect(UI_FONT_PRESETS).toEqual(["harmonyos-sans-sc", "source-han-sans-sc", "misan"]);
+    expect(Object.keys(FONT_REGISTRY)).toEqual(expect.arrayContaining(UI_FONT_PRESETS));
+    // harmony default bundled, source-han bundled, misan local-only
+    expect(FONT_REGISTRY["harmonyos-sans-sc"].bundled).toBe(true);
+    expect(FONT_REGISTRY["source-han-sans-sc"].bundled).toBe(true);
+    expect(FONT_REGISTRY["misan"].bundled).toBe(false);
+    expect(FONT_REGISTRY["misan"].localOnly).toBe(true);
+    // MiSans fallback 必须包含 HarmonyOS
+    expect(FONT_REGISTRY["misan"].cssFallback).toContain("HarmonyOS Sans SC");
+  });
 });
 
 describe("AppPreferences store 集成", () => {
@@ -134,7 +192,7 @@ describe("AppPreferences store 集成", () => {
     // 触发 persist 写入
     await new Promise((r) => setTimeout(r, 10));
     const raw = JSON.parse(localStorage.getItem(KEY)!);
-    expect(raw.version).toBe(7); // 当前 persist schema version
+    expect(raw.version).toBe(8); // 当前 persist schema version (Typography V1 保持 v8 additive)
     expect(raw.state.preferences.motionPreference).toBe("reduced");
 
     // 重新加载 store（模拟刷新）
@@ -278,5 +336,112 @@ describe("backup 兼容：preferences 纳入备份且旧备份不损坏", () => 
       ],
     } as never);
     expect(getLocalDDLDate(store.getState().assignments[0].ddl)).toBe("2026-09-01");
+  });
+});
+
+describe("Typography V1 store 集成与备用", () => {
+  beforeEach(() => {
+    localStorage.clear();
+  });
+  async function freshStore() {
+    vi.resetModules();
+    const mod = await import("@/store/useAppStore");
+    return mod.useAppStore;
+  }
+
+  it("updatePreferences 可实时切换 uiFont", async () => {
+    const store = await freshStore();
+    expect(store.getState().preferences.uiFont).toBe("harmonyos-sans-sc");
+    store.getState().updatePreferences({ uiFont: "source-han-sans-sc" });
+    expect(store.getState().preferences.uiFont).toBe("source-han-sans-sc");
+    store.getState().updatePreferences({ uiFont: "misan" });
+    expect(store.getState().preferences.uiFont).toBe("misan");
+  });
+
+  it("旧 persisted preferences 无 uiFont 自动补 harmonyos-sans-sc", async () => {
+    localStorage.setItem(
+      KEY,
+      JSON.stringify({
+        version: 8,
+        state: {
+          userProfile: { name: "u", avatarUrl: "", college: "c", grade: "g", studentId: "s", completedCredits: 0, totalCredits: 0 },
+          semester: { id: "s1", name: "学期", startDate: "2026-02-23", totalWeeks: 16 },
+          courses: [], schedules: [], assignments: [], calendarMarks: [], groupProjects: [],
+          preferences: { showWeekends: false, ddlWarningDays: 3, defaultDDLTime: "23:59", motionPreference: "system" },
+        },
+      })
+    );
+    const store = await freshStore();
+    expect(store.getState().preferences.uiFont).toBe("harmonyos-sans-sc");
+    expect(store.getState().preferences.showWeekends).toBe(false);
+  });
+
+  it("非法 uiFont persisted 回落 harmonyos-sans-sc", async () => {
+    localStorage.setItem(
+      KEY,
+      JSON.stringify({
+        version: 8,
+        state: {
+          userProfile: { name: "u", avatarUrl: "", college: "c", grade: "g", studentId: "s", completedCredits: 0, totalCredits: 0 },
+          semester: { id: "s1", name: "学期", startDate: "2026-02-23", totalWeeks: 16 },
+          courses: [], schedules: [], assignments: [], calendarMarks: [], groupProjects: [],
+          preferences: { uiFont: "comic-sans" },
+        },
+      })
+    );
+    const store = await freshStore();
+    expect(store.getState().preferences.uiFont).toBe("harmonyos-sans-sc");
+  });
+
+  it("resetPreferencePatch uiFont → harmonyos-sans-sc 且 updatePreferences 生效", async () => {
+    const store = await freshStore();
+    store.getState().updatePreferences({ uiFont: "misan" });
+    expect(store.getState().preferences.uiFont).toBe("misan");
+    store.getState().updatePreferences(resetPreferencePatch("uiFont"));
+    expect(store.getState().preferences.uiFont).toBe("harmonyos-sans-sc");
+  });
+
+  it("backup/restore 保持 uiFont", async () => {
+    const store = await freshStore();
+    const s = store.getState();
+    store.getState().restoreAppData({
+      ...s,
+      preferences: { ...DEFAULT_PREFERENCES, uiFont: "source-han-sans-sc" as const },
+    } as never);
+    expect(store.getState().preferences.uiFont).toBe("source-han-sans-sc");
+    // persist round-trip via localStorage
+    store.getState().updatePreferences({ uiFont: "misan" });
+    await new Promise((r) => setTimeout(r, 10));
+    const raw = JSON.parse(localStorage.getItem(KEY)!);
+    expect(raw.state.preferences.uiFont).toBe("misan");
+    const reloaded = await freshStore();
+    expect(reloaded.getState().preferences.uiFont).toBe("misan");
+  });
+
+  it("旧备份无 uiFont 导入后 uiFont 回落默认", async () => {
+    const store = await freshStore();
+    const s = store.getState();
+    store.getState().updatePreferences({ uiFont: "misan" });
+    store.getState().restoreAppData({
+      userProfile: s.userProfile,
+      semester: s.semester,
+      courses: [], schedules: [], assignments: [], calendarMarks: [], groupProjects: [],
+      // 无 preferences → 保留当前（misan）
+    } as never);
+    expect(store.getState().preferences.uiFont).toBe("misan");
+    // 带非法 uiFont 的备份应被 sanitize
+    store.getState().restoreAppData({
+      ...s,
+      preferences: { uiFont: "comic-sans" } as never,
+    } as never);
+    expect(store.getState().preferences.uiFont).toBe("harmonyos-sans-sc");
+  });
+
+  it("persist version 保持 v8（additive preference 不 bump schema）", async () => {
+    const store = await freshStore();
+    store.getState().updatePreferences({ uiFont: "source-han-sans-sc" });
+    await new Promise((r) => setTimeout(r, 10));
+    const raw = JSON.parse(localStorage.getItem(KEY)!);
+    expect(raw.version).toBe(8);
   });
 });

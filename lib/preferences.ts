@@ -1,5 +1,6 @@
 import { AppPreferences, Priority, ContentDensity, StartupView } from "@/types";
 import { TASK_WORKSPACE_VIEWS, TaskWorkspaceView } from "@/lib/tasks/taskViews";
+import { DEFAULT_UI_FONT, UI_FONT_PRESETS as TYPOGRAPHY_UI_FONT_PRESETS } from "@/lib/typography/fonts";
 
 /** P1：自动 DDL 提醒默认提前分钟数固定档位（7天 / 3天 / 1天 / 1小时） */
 export const DEADLINE_REMINDER_MINUTES: readonly AppPreferences["defaultDeadlineReminderMinutes"][] = [
@@ -18,6 +19,8 @@ export const DEADLINE_REMINDER_LABELS: Record<AppPreferences["defaultDeadlineRem
   60: "提前 1 小时",
 };
 
+export const UI_FONT_PRESETS = TYPOGRAPHY_UI_FONT_PRESETS;
+
 /** 第一版默认偏好 */
 export const DEFAULT_PREFERENCES: AppPreferences = {
   showWeekends: true,
@@ -35,6 +38,8 @@ export const DEFAULT_PREFERENCES: AppPreferences = {
   defaultTaskWorkspaceView: "focus",
   // P1：自动 DDL 提醒默认提前 1 天（1440 分钟）
   defaultDeadlineReminderMinutes: DEFAULT_DEADLINE_REMINDER_MINUTES,
+  // Typography V1：界面字体（additive preference，未在旧持久化中出现时 sanitize 回落）
+  uiFont: DEFAULT_UI_FONT,
 };
 
 export const DDL_WARNING_DAYS: readonly AppPreferences["ddlWarningDays"][] = [1, 3, 7];
@@ -104,6 +109,10 @@ export function sanitizePreferences(v: unknown): AppPreferences {
     ).includes(src.defaultDeadlineReminderMinutes)
       ? (src.defaultDeadlineReminderMinutes as AppPreferences["defaultDeadlineReminderMinutes"])
       : DEFAULT_PREFERENCES.defaultDeadlineReminderMinutes,
+    // Typography V1：界面字体——旧数据缺失 / 非法回落 harmonyos-sans-sc
+    uiFont: (TYPOGRAPHY_UI_FONT_PRESETS as readonly unknown[]).includes(src.uiFont)
+      ? (src.uiFont as AppPreferences["uiFont"])
+      : DEFAULT_PREFERENCES.uiFont,
   };
 }
 
@@ -126,6 +135,7 @@ export const PREFERENCE_SECTIONS: Record<
   contentDensity: "general",
   defaultTaskWorkspaceView: "tasks",
   defaultDeadlineReminderMinutes: "tasks",
+  uiFont: "general",
 };
 
 /** 当前与默认不同的偏好键（纯函数，UI 不自行比较） */

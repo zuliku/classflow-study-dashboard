@@ -245,7 +245,7 @@ export function FocusControl({ compact = false }: { compact?: boolean }) {
                 <p className="text-xs font-bold text-charcoal truncate">{snapshotLabel}</p>
                 {active.note && <p className="text-[10px] text-satin-grey break-words">{active.note}</p>}
                 <p className="text-[10px] text-sandrift">
-                  剩余 <span className="font-mono font-bold text-charcoal">{remainingText}</span>
+                  剩余 <span className="font-mono font-bold text-charcoal tabular-nums">{remainingText}</span>
                   {active.status === "paused" && " · 已暂停"}
                 </p>
               </div>

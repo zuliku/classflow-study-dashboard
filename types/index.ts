@@ -317,6 +317,9 @@ export interface BellScheduleTemplate {
   }>;
 }
 
+/** 界面字体（Typography V1：additive preference，默认 HarmonyOS Sans SC） */
+export type UIFontPreset = "harmonyos-sans-sc" | "source-han-sans-sc" | "misan";
+
 /** 应用偏好（稳定用户偏好，持久化；Task 2 接入业务模块） */
 export interface AppPreferences {
   showWeekends: boolean;
@@ -343,6 +346,8 @@ export interface AppPreferences {
    * 0（到期时）只作为 Domain fallback，不属于 Settings 可选档位。
    */
   defaultDeadlineReminderMinutes: 60 | 1440 | 4320 | 10080;
+  /** Typography V1：界面字体 */
+  uiFont: UIFontPreset;
 }
 
 /** 设置中心 section */

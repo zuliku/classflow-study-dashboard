@@ -17,7 +17,8 @@ import {
   getModifiedPreferenceKeys,
   resetPreferencePatch,
 } from "@/lib/preferences";
-import type { StartupView, ContentDensity } from "@/types";
+import { UI_FONT_LABELS } from "@/lib/typography/fonts";
+import type { StartupView, ContentDensity, UIFontPreset } from "@/types";
 
 const STARTUP_VIEW_LABELS: Record<StartupView, string> = {
   overview: "总览",
@@ -101,6 +102,32 @@ export function GeneralSettings({ highlightedId }: { highlightedId?: string }) {
               options={MOTION_PREFERENCES.map((m) => ({
                 value: m,
                 label: m === "system" ? "跟随系统" : m === "full" ? "完整动效" : "减少动效",
+              }))}
+            />
+          </SettingsRow>
+
+          <SettingsRow
+            settingId="ui-font"
+            title="界面字体"
+            description="调整 ClassFlow 的界面字体，不影响代码、终端与数学公式。"
+            modified={modified.has("uiFont")}
+            onReset={() => updatePreferences(resetPreferencePatch("uiFont"))}
+            resetAriaLabel="将界面字体恢复默认"
+            highlighted={highlightedId === "ui-font"}
+          >
+            <SettingsSelect<UIFontPreset>
+              value={preferences.uiFont}
+              onChange={(v) => updatePreferences({ uiFont: v })}
+              ariaLabel="界面字体"
+              options={(
+                [
+                  "harmonyos-sans-sc",
+                  "source-han-sans-sc",
+                  "misan",
+                ] as const
+              ).map((v) => ({
+                value: v,
+                label: UI_FONT_LABELS[v],
               }))}
             />
           </SettingsRow>
