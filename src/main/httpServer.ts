@@ -1,8 +1,20 @@
 import { createServer, IncomingMessage, ServerResponse } from "node:http";
+import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
 import { pathToFileURL } from "node:url";
 import { join } from "node:path";
 import { app } from "electron";
-import { randomUUID } from "node:crypto";
+
+/** 全局请求体上限（字节）：vision 6×2MiB + 表单开销后仍宽松 */
+const MAX_BODY_BYTES = 32 * 1024 * 1024;
+
+/** capability timing-safe 比较：对两侧做 SHA-256 后 timingSafeEqual，
+ *  规避长度差与逐字节短路时序面。 */
+function timingSafeCapability(incoming: string | undefined, expected: string): boolean {
+  if (typeof incoming !== "string" || incoming.length === 0) return false;
+  const a = createHash("sha256").update(incoming, "utf8").digest();
+  const b = createHash("sha256").update(expected, "utf8").digest();
+  return timingSafeEqual(a, b);
+}
 import { canonicalRendererOrigin } from "@/lib/security/rendererOrigin";
 import { handleChat } from "@/app/api/ai/chat/route";
 import { handleCompact } from "@/app/api/ai/compact/route";
@@ -135,21 +147,32 @@ export function startApiServer(opts?: { capability?: string }): Promise<ApiServe
       return;
     }
 
-    // capability 校验：缺失或错误 → 401（不写日志避免泄漏）
+    // capability 校验：缺失或错误 → 401（不写日志避免泄漏）。
+    // timing-safe 比较（哈希后 timingSafeEqual）：本地端口上理论上的逐字节时序探测面收口
     const incomingCap = req.headers["x-classflow-capability"] as string | undefined;
+    const capOk = timingSafeCapability(incomingCap, expectedCapability);
     if (req.method !== "OPTIONS") {
-      if (!incomingCap || incomingCap !== expectedCapability) {
+      if (!capOk) {
         res.writeHead(401, { "content-type": "application/json" });
         res.end(JSON.stringify({ code: "UNAUTHORIZED", message: "Missing capability" }));
         return;
       }
     } else {
       // 预检同样校验 capability（若提供）
-      if (incomingCap && incomingCap !== expectedCapability) {
+      if (incomingCap !== undefined && !capOk) {
         res.writeHead(401, { "content-type": "application/json" });
         res.end(JSON.stringify({ code: "UNAUTHORIZED", message: "Invalid capability" }));
         return;
       }
+    }
+
+    // 请求体大小上限（稳定性审计 BUG-039）：在缓冲进内存前拒绝超大 body。
+    // 9 条路由中最大合法载荷为 vision 6×2MiB + 表单开销 → 32MiB 全局上限足够宽松。
+    const contentLength = Number(req.headers["content-length"] ?? 0);
+    if (Number.isFinite(contentLength) && contentLength > MAX_BODY_BYTES) {
+      res.writeHead(413, { "content-type": "application/json" });
+      res.end(JSON.stringify({ code: "PAYLOAD_TOO_LARGE", message: "Request body too large" }));
+      return;
     }
 
     const requestOrigin = origin && isTrustedOrigin(origin) ? origin : "app://bundle";

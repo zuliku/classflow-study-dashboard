@@ -152,6 +152,22 @@ export class McpManager {
         this.connections.set(id, conn);
         throw e;
       }
+      // 孤儿凭据清理（对齐 channels/manager）：无其他连接引用该 credentialRef → 从 vault 删除。
+      // best-effort：清理失败不影响已成功的移除。
+      const ref = conn.config.credentialRef;
+      if (ref) {
+        const stillReferenced = Array.from(this.connections.values()).some(
+          (c) => c.config.credentialRef === ref
+        );
+        if (!stillReferenced) {
+          try {
+            const { getRuntimeSecretVault } = await import("@/src/main/secrets/secretRuntime");
+            getRuntimeSecretVault().deleteCredential(ref);
+          } catch (e) {
+            console.warn("[mcp-manager] orphan credential cleanup failed", (e as Error).message?.slice(0, 120));
+          }
+        }
+      }
     }
   }
 

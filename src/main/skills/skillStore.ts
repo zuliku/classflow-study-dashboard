@@ -87,9 +87,22 @@ function loadEnabledMap(): Map<string, boolean> {
   try {
     if (!existsSync(mapPath)) return new Map();
     const raw = readFileSync(mapPath, "utf8");
-    const parsed = JSON.parse(raw) as Record<string, boolean>;
+    let parsed: Record<string, boolean>;
+    try {
+      parsed = JSON.parse(raw) as Record<string, boolean>;
+    } catch (parseErr) {
+      // 损坏文件：隔离留证（稳定性审计 BUG-041）。旧行为静默当空 → 全部 skill
+      // 恢复 enabled 默认值（true），用户禁用状态无声丢失
+      const quarantine = `${mapPath}.corrupt-${Date.now()}`;
+      try {
+        renameSync(mapPath, quarantine);
+      } catch {}
+      console.error(`[skills] .enabled.json 损坏，已隔离到 ${quarantine}`, parseErr);
+      return new Map();
+    }
     return new Map(Object.entries(parsed));
-  } catch {
+  } catch (e) {
+    console.error("[skills] load .enabled.json failed", e);
     return new Map();
   }
 }
@@ -207,6 +220,22 @@ export function setSkillEnabled(name: string, enabled: boolean): void {
   persistEnabledMap(map);
 }
 
+/** Import 体积上限：SKILL.md 单文件 + 目录拷贝总量（防无界同步 IO/内存 DoS） */
+const SKILL_MD_MAX_BYTES = 512 * 1024;
+const SKILL_DIR_MAX_BYTES = 8 * 1024 * 1024;
+
+function dirSizeRecursive(dir: string): number {
+  let total = 0;
+  const entries = readdirSync(dir, { withFileTypes: true });
+  for (const e of entries) {
+    const p = join(dir, e.name);
+    if (e.isDirectory()) total += dirSizeRecursive(p);
+    else total += statSync(p).size;
+    if (total > SKILL_DIR_MAX_BYTES) return total; // 早退
+  }
+  return total;
+}
+
 export function importSkill(sourcePath: string): SkillPackage {
   const base = basename(sourcePath);
   if (!isValidFolderName(base)) throw new Error(JSON.stringify({ code: "FOLDER_TRAVERSAL", message: `invalid import folder: ${base}` }));
@@ -218,6 +247,15 @@ export function importSkill(sourcePath: string): SkillPackage {
       return createSkill({ name: frontmatter.name, description: frontmatter.description, instructions: body, license: frontmatter.license, compatibility: frontmatter.compatibility, metadata: frontmatter.metadata });
     }
     throw new Error(JSON.stringify({ code: "INVALID_FRONTMATTER", message: "SKILL.md not found in import source" }));
+  }
+  // 体积上限（稳定性审计 BUG-037）：先查单文件，再查整树
+  const mdSize = statSync(sourceMd).size;
+  if (mdSize > SKILL_MD_MAX_BYTES) {
+    throw new Error(JSON.stringify({ code: "SKILL_TOO_LARGE", message: `SKILL.md exceeds ${SKILL_MD_MAX_BYTES} bytes` }));
+  }
+  const treeSize = dirSizeRecursive(sourcePath);
+  if (treeSize > SKILL_DIR_MAX_BYTES) {
+    throw new Error(JSON.stringify({ code: "SKILL_TOO_LARGE", message: `Skill folder exceeds ${SKILL_DIR_MAX_BYTES} bytes` }));
   }
   const content = readFileSync(sourceMd, "utf8");
   const { frontmatter, body } = parseSkillMd(content);

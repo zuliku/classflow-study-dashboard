@@ -104,7 +104,8 @@ const skillBridge = {
   delete: (input: unknown) => invokeBridge("bridge:skill:delete", input),
   setEnabled: (input: unknown) => invokeBridge("bridge:skill:setEnabled", input),
   import: () => invokeBridge("bridge:skill:import", {}),
-  importPath: (input: unknown) => invokeBridge("bridge:skill:importPath", input),
+  // importPath 已移除：renderer 可传任意路径的目录拷贝 = 绕过 fs grant 模型的攻击面
+  //（稳定性审计 BUG-037；无生产调用方）。导入统一走 bridge:skill:import 的原生目录选择器。
   export: (input: unknown) => invokeBridge("bridge:skill:export", input),
   test: (input: unknown) => invokeBridge("bridge:skill:test", input),
   activate: (input: unknown) => invokeBridge("bridge:skill:activate", input),

@@ -138,17 +138,8 @@ export function registerSkillIpc(opts?: {
     }
   });
 
-  ipcMain.handle("bridge:skill:importPath", (event, input: unknown) => {
-    if (!guard("bridge:skill:importPath", event)) throw new Error(JSON.stringify({ code: "PERMISSION_DENIED" }));
-    try {
-      const { path } = input as { path?: string };
-      if (!path) throw new Error(JSON.stringify({ code: "INVALID_INPUT", message: "path required" }));
-      const imported = importSkill(path);
-      return { skill: { name: imported.name, description: imported.description, enabled: imported.enabled } };
-    } catch (err) {
-      toIpcError(err);
-    }
-  });
+  // bridge:skill:importPath 已移除（BUG-037）：renderer 可传任意路径 = 绕过 grant 模型；
+  // 无生产调用方。导入统一走 bridge:skill:import 原生目录选择器。
 
   ipcMain.handle("bridge:skill:export", (event, input: unknown) => {
     if (!guard("bridge:skill:export", event)) throw new Error(JSON.stringify({ code: "PERMISSION_DENIED" }));
