@@ -159,6 +159,8 @@ export async function handleVisionExtract(req: Request) {
   }
 
   // ---- Vision Worker：每张图片独立转录；单图失败保留成功项 ----
+  // Client disconnect → req.signal abort（httpServer 已在 res close 时 abort Web Request）；
+  // 不接线会让已关闭的对话框仍烧完最多 6 张图片的 paid vision 调用。
   const results = await Promise.allSettled(
     files.map(async ({ file, page }) => {
       const buffer = await file.arrayBuffer();
@@ -166,6 +168,7 @@ export async function handleVisionExtract(req: Request) {
       const { text } = await generateText({
         model: modelInstance,
         maxOutputTokens: MAX_OUTPUT_TOKENS_PER_IMAGE,
+        abortSignal: req.signal,
         experimental_include: { requestBody: false, responseBody: false },
         messages: [
           {
