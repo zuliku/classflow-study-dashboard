@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import React, { useEffect, useRef, useState, useCallback } from "react";
 import { MessageSquare, Plus, Plug2, Trash2, Power, TestTube2, Settings2, Mail, RefreshCw, X } from "lucide-react";
@@ -371,7 +371,7 @@ function AddQQPanel({ onAdded, onBusyChange }: { onAdded: () => void; onBusyChan
     } catch (e) {
       setError(resolveChannelUserMessage(e));
       if (credentialRef) {
-        try { await (credBridge as unknown as { delete: (i: unknown) => Promise<unknown> }).delete({ credentialRef }); } catch {}
+        try { await (credBridge as unknown as { delete: (i: unknown) => Promise<unknown> }).delete({ credentialRef }); } catch (delErr) { console.warn("[channels] orphan credential cleanup failed", (delErr as Error).message?.slice(0, 120)); }
       }
     } finally { setSaving(false); onBusyChange?.(false); }
   };
@@ -478,7 +478,7 @@ function AddQQMailPanel({ onAdded, onBusyChange }: { onAdded: () => void; onBusy
       if (code === "QQ_MAIL_AUTH_FAILED") setError("QQ 邮箱认证失败，请检查邮箱地址/授权码");
       else setError(resolveChannelUserMessage(e));
       if (credentialRef) {
-        try { await (credBridge as unknown as { delete: (i: unknown) => Promise<unknown> }).delete({ credentialRef }); } catch {}
+        try { await (credBridge as unknown as { delete: (i: unknown) => Promise<unknown> }).delete({ credentialRef }); } catch (delErr) { console.warn("[channels] orphan credential cleanup failed", (delErr as Error).message?.slice(0, 120)); }
       }
     } finally { setSaving(false); onBusyChange?.(false); }
   };

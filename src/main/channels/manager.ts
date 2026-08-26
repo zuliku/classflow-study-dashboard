@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Channel Manager — Task 13B closure
  * Load configs, start enabled channels, stop/restart/list, registry abstraction
  * Fixes: atomic persistence with rollback, load logging, real TokenManager test with timeout, credential ownership, auto start non-blocking
@@ -327,7 +327,9 @@ export class ChannelManager {
         try {
           const vault = getRuntimeSecretVault();
           vault.deleteCredential(oldCredentialRef);
-        } catch {}
+        } catch (e) {
+          console.warn("[channels] orphan credential cleanup failed", (e as Error).message?.slice(0, 120));
+        }
       }
     }
     const adapter = this.adapters.get(id);
@@ -697,7 +699,9 @@ export class ChannelManager {
       try {
         const vault = getRuntimeSecretVault();
         vault.deleteCredential(credentialRef);
-      } catch {}
+      } catch (e) {
+        console.warn("[channels] orphan credential cleanup failed", (e as Error).message?.slice(0, 120));
+      }
     }
     // Reply context cleanup: delete all contexts for this account, don't rollback channel on failure
     try {

@@ -205,7 +205,28 @@ function createGroupProject(api: KiroWriteApi, input: unknown, toolCallId: strin
   if (!api.getState().courses.some((c) => c.id === courseId)) return notFound("未找到对应课程。");
 
   const id = api.addGroupProject({ courseId, title, description });
-  api.registerUndo(toolCallId, () => api.deleteGroupProject(id));
+  // Undo 过度删除防御：创建后用户/其他流程可能已向项目添加成员或任务。
+  // 快照初始内容；撤销时若发现新增内容 → 保留项目并提示（不静默级联删除）。
+  const initialMemberIds = new Set(
+    api.getState().groupProjects.find((p) => p.id === id)?.members.map((m) => m.id) ?? []
+  );
+  const initialTaskIds = new Set(
+    api.getState().groupProjects.find((p) => p.id === id)?.tasks.map((t) => t.id) ?? []
+  );
+  api.registerUndo(toolCallId, () => {
+    const current = api.getState().groupProjects.find((p) => p.id === id);
+    const hasNewContent =
+      !!current &&
+      current.members.length !== initialMemberIds.size ||
+      (current ? current.members.some((m) => !initialMemberIds.has(m.id)) : false);
+    const hasNewTasks =
+      !!current &&
+      current.tasks.length !== initialTaskIds.size ||
+      (current ? current.tasks.some((t) => !initialTaskIds.has(t.id)) : false);
+    if (!current) return; // 已被外部删除 → undo 自然 no-op
+    if (hasNewContent || hasNewTasks) return; // 有新增内容 → 保留（避免静默级联删除）
+    api.deleteGroupProject(id);
+  });
 
   return {
     ok: true,
