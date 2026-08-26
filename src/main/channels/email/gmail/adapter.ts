@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Gmail Adapter — Task 18A
  * Implements ChannelAdapter for gmail, with 60s scheduler, 7d/50 initial, history incremental, INBOX only.
  */
@@ -97,13 +97,16 @@ export class GmailChannelAdapter implements ChannelAdapter {
 
   private async doInitialSync(): Promise<void> {
     const items = await GmailApi.listInboxMessages(this.tokenProvider, 50);
+    let hadIngestFailure = false;
     for (const item of items) {
+      let ingestedExternalId: string | undefined;
       try {
         const detail = await GmailApi.getMessageDetail(this.tokenProvider, item.id);
         if (!detail.labelIds?.includes("INBOX")) continue;
         const normalizedBase = this.normalizeMessage(detail);
         if (this.seenIds.has(normalizedBase.externalMessageId)) continue;
         this.seenIds.add(normalizedBase.externalMessageId);
+        ingestedExternalId = normalizedBase.externalMessageId;
         // Create EmailReplyContext before ingest (for outbound reply target)
         let normalized: ChannelInboundMessage = normalizedBase;
         try {
@@ -124,9 +127,17 @@ export class GmailChannelAdapter implements ChannelAdapter {
         }
         await this.inboxSink.ingest(normalized);
         this.messageCount++;
-      } catch {}
+      } catch (e) {
+        // 静默跳过 = 该邮件永久丢失。回滚 seenIds + 本轮不建立 baseline cursor，
+        // 下轮 initial sync 会重新拉取该消息
+        hadIngestFailure = true;
+        if (ingestedExternalId) this.seenIds.delete(ingestedExternalId);
+        console.warn(`[gmail-adapter] initial sync message ${item.id} failed: ${(e as Error).message?.slice(0, 120)}`);
+      }
     }
-    // Establish baseline historyId AFTER ingest success (cursor commit order)
+    // Establish baseline historyId AFTER ingest success (cursor commit order)。
+    // hadIngestFailure → 不建立 baseline：下轮仍走 initial sync 重试失败消息
+    if (hadIngestFailure) return;
     try {
       const historyId = await GmailApi.getProfileHistoryId(this.tokenProvider);
       if (historyId) this.syncStateStore.setGmailState(this.id, { historyId, initializedAt: Date.now(), lastSyncAt: Date.now() });
@@ -141,7 +152,9 @@ export class GmailChannelAdapter implements ChannelAdapter {
     }
     try {
       const { historyId, messages } = await GmailApi.getHistory(this.tokenProvider, state.historyId);
+      let hadIngestFailure = false;
       for (const m of messages) {
+        let ingestedExternalId: string | undefined;
         try {
           if (this.seenIds.has(m.id)) continue;
           const detail = await GmailApi.getMessageDetail(this.tokenProvider, m.id);
@@ -149,6 +162,7 @@ export class GmailChannelAdapter implements ChannelAdapter {
           const normalizedBase = this.normalizeMessage(detail);
           if (this.seenIds.has(normalizedBase.externalMessageId)) continue;
           this.seenIds.add(normalizedBase.externalMessageId);
+          ingestedExternalId = normalizedBase.externalMessageId;
           let normalized: ChannelInboundMessage = normalizedBase;
           try {
             const store = getReplyContextStore();
@@ -168,9 +182,15 @@ export class GmailChannelAdapter implements ChannelAdapter {
           }
           await this.inboxSink.ingest(normalized);
           this.messageCount++;
-        } catch {}
+        } catch (e) {
+          // 静默跳过 + cursor 照常推进 = 该邮件永久丢失（与 qq-mail 的 hadFailure 模式对齐）
+          hadIngestFailure = true;
+          if (ingestedExternalId) this.seenIds.delete(ingestedExternalId);
+          console.warn(`[gmail-adapter] incremental sync message ${m.id} failed: ${(e as Error).message?.slice(0, 120)}`);
+        }
       }
-      // Commit cursor AFTER ingest success
+      // Commit cursor AFTER ingest success；本轮存在失败 → 不推进 cursor，下轮 history 重放
+      if (hadIngestFailure) return;
       this.syncStateStore.setGmailState(this.id, { historyId, lastSyncAt: Date.now(), initializedAt: state.initializedAt ?? Date.now() });
     } catch (e) {
       const err = e as { message?: string };
