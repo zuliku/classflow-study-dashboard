@@ -206,6 +206,20 @@ function validateWindowSender(channel: string, sender: Electron.WebContents, api
   return result.ok;
 }
 
+// 单实例锁：两个实例会并发读写同一 userData（grants / channels / vault / IndexedDB），
+// last-writer-wins 造成配置丢失或损坏。抢不到锁 → 立即退出；二次启动由已有实例聚焦窗口。
+if (!app.requestSingleInstanceLock()) {
+  console.warn("[classflow] another instance is running; exiting");
+  app.exit(0);
+} else {
+  app.on("second-instance", () => {
+    if (mainWindow) {
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.focus();
+    }
+  });
+}
+
 app.whenReady().then(async () => {
   const apiCapability = randomUUID();
   installPdfFontEnv();
@@ -341,6 +355,22 @@ app.on("window-all-closed", () => {
 });
 
 let isQuitting = false;
+/** 单个清理步骤的时间上限：IMAP logout / MCP close / HTTP close 在网络挂起时
+ *  可能等待数分钟，导致进程变成杀不掉的僵尸（稳定性审计 BUG-025）。 */
+const QUIT_STEP_TIMEOUT_MS = 5_000;
+
+function withQuitTimeout<T>(label: string, task: Promise<T>): Promise<T | null> {
+  return Promise.race([
+    task,
+    new Promise<null>((resolve) =>
+      setTimeout(() => {
+        console.error(`[classflow] quit cleanup step timed out: ${label}`);
+        resolve(null);
+      }, QUIT_STEP_TIMEOUT_MS)
+    ),
+  ]);
+}
+
 app.on("before-quit", async (event) => {
   if (isQuitting) return;
   isQuitting = true;
@@ -348,7 +378,7 @@ app.on("before-quit", async (event) => {
   console.info("[classflow] before-quit cleanup");
   try {
     const { cancelAllTerminalExecutions } = await import("./desktopBridge");
-    await cancelAllTerminalExecutions();
+    await withQuitTimeout("terminal-executions", cancelAllTerminalExecutions());
   } catch {}
   try {
     const { closeAllPtySessions } = await import("./terminalSessionRuntime");
@@ -356,19 +386,20 @@ app.on("before-quit", async (event) => {
   } catch {}
   try {
     const { getMcpManager } = await import("./mcp/manager");
-    await getMcpManager().disconnectAll();
+    await withQuitTimeout("mcp-disconnectAll", getMcpManager().disconnectAll());
   } catch (e) {
     console.error("[classflow] mcp disconnectAll failed", (e as Error).message);
   }
   try {
     const { getChannelManager } = await import("./channels/manager");
-    await getChannelManager().disconnectAll();
+    await withQuitTimeout("channels-disconnectAll", getChannelManager().disconnectAll());
   } catch (e) {
     console.error("[classflow] channels disconnectAll failed", (e as Error).message);
   }
   if (apiServer) {
     try {
-      await apiServer.close();
+      // close() 内部已强制断开 keep-alive/流式 socket（见 httpServer）
+      await withQuitTimeout("api-server-close", apiServer.close());
     } catch {}
     apiServer = null;
   }

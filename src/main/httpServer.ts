@@ -199,7 +199,19 @@ export function startApiServer(opts?: { capability?: string }): Promise<ApiServe
       const address = server.address();
       const port = typeof address === "object" && address ? address.port : 0;
       console.log(`[classflow-api] local API server listening on http://127.0.0.1:${port}`);
-      resolve({ port, capability: expectedCapability, close: () => new Promise<void>((r) => server.close(() => r())) });
+      resolve({
+        port,
+        capability: expectedCapability,
+        close: () =>
+          new Promise<void>((r) => {
+            // closeAllConnections：强制断开 keep-alive / 挂起流式 socket，
+            // 否则 close() 会等在活跃连接上，退出流程被无限阻塞
+            try {
+              (server as unknown as { closeAllConnections?: () => void }).closeAllConnections?.();
+            } catch {}
+            server.close(() => r());
+          }),
+      });
     });
   });
 }
