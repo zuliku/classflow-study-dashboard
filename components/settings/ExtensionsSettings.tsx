@@ -11,6 +11,7 @@ import { SkillDistillDialog } from "@/components/kiro/SkillDistillDialog";
 import { ChannelSettings } from "@/components/settings/ChannelSettings";
 import { extractWorkflowTrace } from "@/lib/ai/skills/workflowTrace";
 import { useToastStore } from "@/store/useToastStore";
+import { resolveChannelUserMessage } from "@/lib/channels/errorContract";
 import { useConfirmStore } from "@/store/useConfirmStore";
 
 type RuntimeLoadState = "loading" | "ready" | "unavailable" | "error";
@@ -216,7 +217,13 @@ export function ExtensionsSettings() {
     try {
       await bridge.setEnabled({ name, enabled });
       await refreshSkills();
-    } catch {}
+    } catch (e) {
+      // 持久化失败必须可见（否则用户以为已切换，重启后回退）
+      useToastStore.getState().pushToast({
+        message: `切换「${name}」状态失败：${resolveChannelUserMessage(e, "请稍后重试")}`,
+        type: "error",
+      });
+    }
   };
 
   const handleSkillDelete = async (name: string) => {

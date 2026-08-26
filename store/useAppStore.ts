@@ -1520,13 +1520,20 @@ export const useAppStore = create<AppState>()(
 
       updateAssignment: (updatedAssignment, context) =>
         set((state) => {
+          const normalized = normalizeAssignment(updatedAssignment);
+          // Stale-writer 防御（BUG：MiniCalendar timeEdit 对已删除任务写回 →
+          // map 是 no-op，但下方 mark 同步会为幻影 id 新建 DDL CalendarMark）。
+          // 不存在的 assignment id → 整个 update no-op。
+          if (!state.assignments.some((a) => a.id === normalized.id)) {
+            return {};
+          }
           // Workflow UX V7：Material relation invariant —— 写入边界统一按 next.courseId
           // 重新校验 materialIds（跨课程 / 已删资料清除；空 → undefined）。
           // 无论调用方是 updateAssignmentPatch / setAssignmentMaterialIds / 其它 Domain
           // action，都不可能写入 dangling relation。DDL mark / Reminder / History /
           // recurrence completion 的既有顺序全部保持不变。
           const next = sanitizeAssignmentMaterialLinks(
-            normalizeAssignment(updatedAssignment),
+            normalized,
             state.courses
           );
           const oldAssignment = state.assignments.find((a) => a.id === next.id);

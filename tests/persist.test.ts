@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
+import { act } from "@testing-library/react";
 
 const KEY = "classflow-storage-v2";
 
@@ -311,5 +312,60 @@ describe("hydration sanitization hardening", () => {
     expect(s.courses.find((c) => c.id === "c_fragile")).toBeUndefined();
     expect(s.assignments.find((a) => a.id === "a_fragile")).toBeUndefined();
     expect(s.schedules.find((x) => x.id === "s_f")).toBeUndefined();
+  });
+});
+
+// ============================================================
+// 稳定性审计 BUG-024 回归：stale writer 对已删除 assignment 调 updateAssignment
+// → map no-op 但 mark 同步曾为幻影 id 新建 DDL CalendarMark（Timeline 出现
+//   打开即「独立 DDL」的假日程）。
+// 修复契约：updateAssignment 对不存在的 id 整体 no-op（含 mark / reminder / history 副作用）。
+// ============================================================
+describe("updateAssignment stale-writer guard", () => {
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
+  it("已删除的 id → assignments 与 calendarMarks 均不变（无幻影 DDL mark）", async () => {
+    vi.resetModules();
+    const mod = await import("@/store/useAppStore");
+    const store = mod.useAppStore;
+    act(() => {
+      store.setState({
+        semester: { id: "s", name: "S", startDate: "2026-08-01", totalWeeks: 16 },
+        assignments: [],
+        calendarMarks: [],
+      });
+    });
+
+    const ghost = {
+      id: "a-ghost", courseId: "", title: "幻影任务", description: "",
+      ddl: "2026-09-01T23:59:00", priority: "medium" as const, status: "todo" as const,
+      progress: 0, tags: [],
+    };
+    act(() => { store.getState().updateAssignment(ghost as never); });
+
+    const s = store.getState();
+    expect(s.assignments.find((a) => a.id === "a-ghost")).toBeUndefined();
+    expect(s.calendarMarks.filter((m) => m.sourceId === "a-ghost")).toHaveLength(0);
+  });
+
+  it("存在的 id → 正常更新 + DDL mark 同步（原行为不回归）", async () => {
+    vi.resetModules();
+    const mod = await import("@/store/useAppStore");
+    const store = mod.useAppStore;
+    act(() => {
+      store.setState({
+        semester: { id: "s", name: "S", startDate: "2026-08-01", totalWeeks: 16 },
+        assignments: [{ id: "a-real", courseId: "", title: "真实任务", description: "", ddl: "2026-09-01T23:59:00", priority: "medium", status: "todo", progress: 0, tags: [] }],
+        calendarMarks: [],
+      });
+    });
+    act(() => {
+      store.getState().updateAssignment({ id: "a-real", title: "改名", description: "", ddl: "2026-09-02T12:00:00", priority: "high", status: "doing", progress: 10, tags: [] } as never);
+    });
+    const s = store.getState();
+    expect(s.assignments[0].title).toBe("改名");
+    expect(s.calendarMarks.filter((m) => m.sourceId === "a-real" && m.type === "ddl")).toHaveLength(1);
   });
 });

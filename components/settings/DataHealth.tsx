@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import React, { useState, useEffect, useCallback } from "react";
 import { RefreshCw } from "lucide-react";
@@ -14,6 +14,8 @@ export interface DataHealthState {
     groupTasks: boolean;
   };
   materials: MaterialAvailability | null;
+  /** 检查本身失败（IndexedDB 不可用 / 异常）——绝不能显示为「数据状态正常」 */
+  checkFailed?: boolean;
 }
 
 /** 数据状态：完整性（用户语义）+ 课程资料可用性合并；进入页面或点击「重新检查」时计算 */
@@ -45,7 +47,10 @@ export function DataHealth() {
       .then((m) =>
         setHealth((prev) => (prev ? { ...prev, materials: m } : prev))
       )
-      .catch(() => {})
+      .catch(() => {
+        // 检查失败必须可见：静默吞掉会让诊断面板在存储层故障时仍报「数据状态正常」
+        setHealth((prev) => (prev ? { ...prev, checkFailed: true } : prev));
+      })
       .finally(() => setIsChecking(false));
   }, [courses, schedules, assignments, calendarMarks, groupProjects]);
 
@@ -63,11 +68,13 @@ export function DataHealth() {
   const materialsTotal = health?.materials?.total ?? 0;
   const materialsAvailable = health?.materials?.available ?? 0;
   const materialsMissing = health?.materials?.missing.length ?? 0;
+  const checkFailed = health?.checkFailed === true;
   const issueCount =
     (health?.integrity.courses === false ? 1 : 0) +
     (health?.integrity.marks === false ? 1 : 0) +
     (health?.integrity.groupTasks === false ? 1 : 0) +
-    (materialsMissing > 0 ? 1 : 0);
+    (materialsMissing > 0 ? 1 : 0) +
+    (checkFailed ? 1 : 0);
   const anyIssue = !health || issueCount > 0;
 
   return (
@@ -75,7 +82,15 @@ export function DataHealth() {
       <div className="flex items-center justify-between">
         <span className={cn("flex items-center gap-1.5 font-bold", anyIssue ? "text-warning" : "text-success")}>
           <span className={cn("w-1.5 h-1.5 rounded-full", anyIssue ? "bg-warning" : "bg-success")} />
-          {health ? (issueCount === 0 ? "数据状态正常" : issueCount === 1 ? "发现 1 项需要处理" : `发现 ${issueCount} 项需要处理`) : "检查中…"}
+          {health
+            ? checkFailed && issueCount === 1
+              ? "资料检查失败，请重试"
+              : issueCount === 0
+                ? "数据状态正常"
+                : issueCount === 1
+                  ? "发现 1 项需要处理"
+                  : `发现 ${issueCount} 项需要处理`
+            : "检查中…"}
         </span>
         <button
           onClick={runCheck}

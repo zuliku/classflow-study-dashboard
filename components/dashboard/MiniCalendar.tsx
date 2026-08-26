@@ -12,6 +12,7 @@ import {
   Plus,
 } from "lucide-react";
 import { useAppStore } from "@/store/useAppStore";
+import { useToastStore } from "@/store/useToastStore";
 import { FocusControl } from "@/components/focus/FocusControl";
 import { getSemesterWeek } from "@/lib/semester";
 import { getLocalDDLDate, getLocalDDLTime } from "@/lib/ddl";
@@ -136,6 +137,7 @@ export function MiniCalendar() {
   // Workflow UX V2：exam/activity agenda cell → 统一 CalendarMarkDetailDrawer
   const setSelectedCalendarMarkId = useAppStore((s) => s.setSelectedCalendarMarkId);
   const updateAssignment = useAppStore((s) => s.updateAssignment);
+  const pushToast = useToastStore.getState().pushToast;
 
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState(new Date());
@@ -385,6 +387,15 @@ export function MiniCalendar() {
 
   const saveTimeEdit = () => {
     if (!feedback) return;
+    // Stale-snapshot 防御：feedback 挂着拖动时刻的任务快照（存活 4-6s），
+    // 期间任务可能已被删除（其它 surface / Kiro）。已删除 → 放弃写回 + 提示。
+    const stillExists = assignments.some((a) => a.id === feedback.current.id);
+    if (!stillExists) {
+      setFeedback(null);
+      setTimeEditOpen(false);
+      pushToast({ message: "该任务已被删除，修改未保存", type: "warning" });
+      return;
+    }
     const result = editAssignmentDDLTime(feedback.current, feedback.targetDate, timeInput);
     if (!result) {
       setTimeEditOpen(false);
@@ -397,6 +408,13 @@ export function MiniCalendar() {
 
   const handleUndoDDLMove = () => {
     if (!feedback) return;
+    // Stale-snapshot 防御：同 saveTimeEdit —— 任务已删除则撤销恢复同样必须放弃
+    const stillExists = assignments.some((a) => a.id === feedback.origin.id);
+    if (!stillExists) {
+      setFeedback(null);
+      if (feedbackTimerRef.current) window.clearTimeout(feedbackTimerRef.current);
+      return;
+    }
     updateAssignment(feedback.origin); // 同一 id，完整原字段恢复（含原 DDL）
     setFeedback(null);
     if (feedbackTimerRef.current) window.clearTimeout(feedbackTimerRef.current);
