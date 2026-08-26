@@ -109,7 +109,14 @@ export async function startGmailOAuth(): Promise<GmailOAuthResult> {
         // Exchange code for tokens
         const effectiveRedirectUri = currentRedirectUri || redirectUri;
         try {
-          const tokenRes = await fetch(GOOGLE_TOKEN_URL, {
+          // 有界网络调用：consent 完成后 loopback 已关闭，若 Google 端挂起，
+          // 无超时会让 IPC promise 悬挂数分钟（稳定性审计 BUG-027）
+          const fetchWithTimeout = (url: string, init: RequestInit) => {
+            const controller = new AbortController();
+            const timer = setTimeout(() => controller.abort(), 15_000);
+            return fetch(url, { ...init, signal: controller.signal }).finally(() => clearTimeout(timer));
+          };
+          const tokenRes = await fetchWithTimeout(GOOGLE_TOKEN_URL, {
             method: "POST",
             headers: { "Content-Type": "application/x-www-form-urlencoded" },
             body: new URLSearchParams({
@@ -125,7 +132,7 @@ export async function startGmailOAuth(): Promise<GmailOAuthResult> {
             throw new Error(JSON.stringify({ code: "GMAIL_AUTH_FAILED", message: tokenData.error || "Token exchange failed" }));
           }
           // Fetch Gmail profile to get emailAddress
-          const profileRes = await fetch("https://gmail.googleapis.com/gmail/v1/users/me/profile", {
+          const profileRes = await fetchWithTimeout("https://gmail.googleapis.com/gmail/v1/users/me/profile", {
             headers: { Authorization: `Bearer ${tokenData.access_token}` },
           });
           const profile = await profileRes.json() as { emailAddress?: string };

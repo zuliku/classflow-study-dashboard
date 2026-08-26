@@ -1248,6 +1248,7 @@ export const useAppStore = create<AppState>()(
         set((state) => {
           const next = removeCourseDeleteCascade(state, cascade);
           const deletedAssignmentIds = new Set(cascade.assignments.map((a) => a.id));
+          const deletedMarkIds = new Set(cascade.calendarMarks.map((m) => m.id));
           return {
             ...next,
             selectedCourseId: state.selectedCourseId === courseId ? null : state.selectedCourseId,
@@ -1255,6 +1256,15 @@ export const useAppStore = create<AppState>()(
               state.selectedAssignmentId !== null && deletedAssignmentIds.has(state.selectedAssignmentId)
                 ? null
                 : state.selectedAssignmentId,
+            // 级联删除的 DDL mark 若正被选中 → 一并清理（不留 stale id）
+            selectedCalendarMarkId:
+              state.selectedCalendarMarkId !== null && deletedMarkIds.has(state.selectedCalendarMarkId)
+                ? null
+                : state.selectedCalendarMarkId,
+            assignmentPeekId:
+              state.assignmentPeekId !== null && deletedAssignmentIds.has(state.assignmentPeekId)
+                ? null
+                : state.assignmentPeekId,
           };
         });
       },
