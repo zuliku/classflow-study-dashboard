@@ -34,7 +34,18 @@ export class McpManager {
       ensureMcpDir();
       if (!existsSync(this.configPath)) return;
       const raw = require("node:fs").readFileSync(this.configPath, "utf8");
-      const parsed = JSON.parse(raw) as { connections?: McpConnectionConfig[] };
+      let parsed: { connections?: McpConnectionConfig[] };
+      try {
+        parsed = JSON.parse(raw) as { connections?: McpConnectionConfig[] };
+      } catch (parseErr) {
+        // 损坏配置：隔离留证（不再静默当空处理），避免下次持久化覆盖证据
+        const quarantine = `${this.configPath}.corrupt-${Date.now()}`;
+        try {
+          require("node:fs").renameSync(this.configPath, quarantine);
+        } catch {}
+        console.error(`[mcp-manager] connections.json 损坏，已隔离到 ${quarantine}`, parseErr);
+        return;
+      }
       if (Array.isArray(parsed.connections)) {
         for (const cfg of parsed.connections) {
           if (cfg.id && cfg.endpoint && cfg.name) {
@@ -42,17 +53,18 @@ export class McpManager {
           }
         }
       }
-    } catch {}
+    } catch (e) {
+      console.error("[mcp-manager] load connections failed", e);
+    }
   }
 
   private persistConfigs(): void {
-    try {
-      ensureMcpDir();
-      const data = JSON.stringify({ connections: Array.from(this.connections.values()).map((c) => c.config) }, null, 2);
-      const tmp = join(dirname(this.configPath), `.connections-tmp-${randomUUID().slice(0, 8)}`);
-      require("node:fs").writeFileSync(tmp, data, "utf8");
-      require("node:fs").renameSync(tmp, this.configPath);
-    } catch {}
+    // 失败必须上抛：静默吞掉会让用户以为连接已保存，重启后凭空消失
+    ensureMcpDir();
+    const data = JSON.stringify({ connections: Array.from(this.connections.values()).map((c) => c.config) }, null, 2);
+    const tmp = join(dirname(this.configPath), `.connections-tmp-${randomUUID().slice(0, 8)}`);
+    require("node:fs").writeFileSync(tmp, data, "utf8");
+    require("node:fs").renameSync(tmp, this.configPath);
   }
 
   listConnections(): Array<{ config: McpConnectionConfig; state: string; serverInfo: unknown; toolCount: number; resourceCount: number; promptCount: number; error?: string }> {
@@ -84,7 +96,13 @@ export class McpManager {
     };
     const conn = new McpConnection(config);
     this.connections.set(id, conn);
-    this.persistConfigs();
+    try {
+      this.persistConfigs();
+    } catch (e) {
+      // 持久化失败 → 回滚内存，保证「用户看到成功 ⇔ 磁盘已保存」
+      this.connections.delete(id);
+      throw e;
+    }
     return conn;
   }
 
@@ -127,16 +145,28 @@ export class McpManager {
     if (conn) {
       await conn.disconnect().catch(() => {});
       this.connections.delete(id);
-      this.persistConfigs();
+      try {
+        this.persistConfigs();
+      } catch (e) {
+        // 持久化失败 → 回滚内存（连接仍然存在）
+        this.connections.set(id, conn);
+        throw e;
+      }
     }
   }
 
   async setEnabled(id: string, enabled: boolean): Promise<void> {
     const conn = this.connections.get(id);
     if (!conn) throw new Error(JSON.stringify({ code: "NOT_FOUND", message: `Connection not found: ${id}` }));
+    const previous = conn.config.enabled;
     conn.config.enabled = enabled;
-    if (!enabled) await conn.disconnect().catch(() => {});
-    this.persistConfigs();
+    try {
+      if (!enabled) await conn.disconnect().catch(() => {});
+      this.persistConfigs();
+    } catch (e) {
+      conn.config.enabled = previous;
+      throw e;
+    }
   }
 
   getConnectionsMap(): Map<string, McpConnection> {

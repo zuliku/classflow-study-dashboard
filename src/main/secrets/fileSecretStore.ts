@@ -55,7 +55,20 @@ export class FileSecretStore implements SecretStore {
         return;
       }
       const raw = this.fs.readFileSync(this.filePath, "utf8") as string;
-      const parsed = JSON.parse(raw) as { records?: EncryptedRecord[] };
+      let parsed: { records?: EncryptedRecord[] };
+      try {
+        parsed = JSON.parse(raw) as { records?: EncryptedRecord[] };
+      } catch (parseErr) {
+        // 损坏 vault：隔离留证而非静默清空 —— 否则下一次 put/delete 会把损坏文件
+        // 覆盖成空库，凭据永久丢失且无任何痕迹（稳定性审计 BUG-023）
+        const quarantine = `${this.filePath}.corrupt-${Date.now()}`;
+        try {
+          this.fs.renameSync(this.filePath, quarantine);
+        } catch {}
+        console.error(`[secret-vault] vault.json 损坏，已隔离到 ${quarantine}；本次以空库启动`, parseErr);
+        this.cache = new Map();
+        return;
+      }
       if (Array.isArray(parsed.records)) {
         const map = new Map<CredentialRef, EncryptedRecord>();
         for (const r of parsed.records) {
@@ -72,7 +85,8 @@ export class FileSecretStore implements SecretStore {
         }
         this.cache = map;
       }
-    } catch {
+    } catch (e) {
+      console.error("[secret-vault] vault load failed；本次以空库启动", e);
       this.cache = new Map();
     }
   }

@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import * as os from "node:os";
 import * as path from "node:path";
 import * as realFs from "node:fs";
@@ -224,5 +224,39 @@ describe("Task 17 — SecretVault Persistence Fail-Closed", () => {
     const store2 = new FileSecretStore(filePath);
     const vault2 = new SecretVault({ store: store2, safeStorage: new MockSafeStorage(true) });
     expect(vault2.resolveSecretInternal(credentialRef)).toBe("new-retry");
+  });
+});
+
+// ============================================================
+// 稳定性审计 BUG-023 回归：vault.json 损坏 → 隔离留证，不静默清空
+//（旧行为：catch 后当空库；下一次 put/delete 会把损坏文件覆盖成空库，
+//  凭据永久丢失且无痕迹）
+// ============================================================
+describe("FileSecretStore — corrupt vault quarantine", () => {
+  let tmpDir: string;
+  let filePath: string;
+
+  beforeEach(async () => {
+    tmpDir = await fsp.mkdtemp(path.join(os.tmpdir(), "cf-secrets-corrupt-"));
+    filePath = path.join(tmpDir, "vault.json");
+    vi.spyOn(console, "error").mockImplementation(() => {});
+  });
+
+  afterEach(async () => {
+    vi.restoreAllMocks();
+    await fsp.rm(tmpDir, { recursive: true, force: true });
+  });
+
+  it("损坏 JSON → 隔离为 .corrupt-* 文件 + 空库启动 + 显式错误日志", async () => {
+    realFs.writeFileSync(filePath, "{{{ not json", "utf8");
+    const store = new FileSecretStore(filePath);
+    const vault = new SecretVault({ store, safeStorage: new MockSafeStorage(true) });
+
+    // 空库启动
+    expect(vault.listCredentialMetadata()).toHaveLength(0);
+    // 损坏文件被隔离留证（不是原地消失/被覆盖）
+    const files = realFs.readdirSync(tmpDir);
+    expect(files.some((f) => f.startsWith("vault.json.corrupt-"))).toBe(true);
+    // console.error 已输出诊断（不再无声）
   });
 });
