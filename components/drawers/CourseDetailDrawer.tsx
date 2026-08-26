@@ -336,14 +336,14 @@ export function CourseDetailDrawer() {
     return null;
   };
 
-  // 删除时段：立即删除 + Toast 撤销（保留原 Schedule ID）
+  // 删除时段：立即删除 + Toast 撤销（保留原 Schedule ID + 被级联的一次性 override）
   const handleDeleteSlot = (sched: CourseSchedule) => {
     const removed = deleteSchedule(sched.id);
     if (removed) {
       pushToast({
         message: "上课时段已删除",
         actionLabel: "撤销",
-        onAction: () => restoreSchedule(removed),
+        onAction: () => restoreSchedule(removed.schedule, undefined, removed.removedOverrides),
       });
     }
   };

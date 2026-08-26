@@ -24,6 +24,9 @@ export function ToastViewport() {
   const toasts = useToastStore((s) => s.toasts);
   const removeToast = useToastStore((s) => s.removeToast);
   const [exiting, setExiting] = useState<Set<string>>(new Set());
+  // action 单发守卫：按钮在 140ms 退出动画期间仍可点击，双击会把「撤销」执行两次
+  //（restoreSchedule 曾因此插入重复 id 实体）。点击一次后立即禁用。
+  const actionTakenRef = useRef<Set<string>>(new Set());
   const toastsRef = useRef(toasts);
   toastsRef.current = toasts;
 
@@ -85,11 +88,14 @@ export function ToastViewport() {
             </p>
             {toast.actionLabel && (
               <button
+                disabled={actionTakenRef.current.has(toast.id)}
                 onClick={() => {
+                  if (actionTakenRef.current.has(toast.id)) return;
+                  actionTakenRef.current.add(toast.id);
                   toast.onAction?.();
                   dismiss(toast.id);
                 }}
-                className="shrink-0 px-1.5 py-0.5 -m-0.5 rounded-lg text-[11px] font-bold text-charcoal hover:bg-alabaster transition-colors duration-[var(--motion-fast)]"
+                className="shrink-0 px-1.5 py-0.5 -m-0.5 rounded-lg text-[11px] font-bold text-charcoal hover:bg-alabaster transition-colors duration-[var(--motion-fast)] disabled:opacity-40 disabled:pointer-events-none"
               >
                 {toast.actionLabel}
               </button>

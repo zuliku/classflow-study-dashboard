@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from "vitest";
+﻿import { describe, it, expect, beforeEach } from "vitest";
 import { useAppStore } from "@/store/useAppStore";
 import { seedDemoData } from "./demoSeed";
 import { Material } from "@/types";
@@ -63,10 +63,11 @@ describe("删除撤销（Undo）", () => {
     const s1 = before.schedules.find((s) => s.id === "s1")!;
 
     const removed = useAppStore.getState().deleteSchedule("s1");
-    expect(removed).toEqual(s1);
+    expect(removed!.schedule).toEqual(s1);
+    expect(removed!.removedOverrides).toEqual([]);
     expect(useAppStore.getState().schedules.find((s) => s.id === "s1")).toBeUndefined();
 
-    useAppStore.getState().restoreSchedule(removed!);
+    useAppStore.getState().restoreSchedule(removed!.schedule, undefined, removed!.removedOverrides);
     const after = useAppStore.getState();
     expect(after.schedules.find((s) => s.id === "s1")).toEqual(s1);
     expect(after.schedules).toHaveLength(12);

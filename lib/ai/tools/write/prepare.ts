@@ -409,7 +409,8 @@ function prepareDeleteSchedule(toolName: TransactionSafeToolName, input: unknown
     (api, callId) => {
       const removed = api.deleteSchedule(scheduleId);
       if (!removed) return null;
-      return { undo: () => api.restoreSchedule(removed) };
+      // 快照含被级联的一次性 override：undo 一并恢复（不静默丢失）
+      return { undo: () => api.restoreSchedule(removed.schedule, undefined, removed.removedOverrides) };
     });
 }
 

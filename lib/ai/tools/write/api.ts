@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Kiro Write Executor 的受限 API（白名单，禁止 setState）。
  * 单一实现：useKiroChat 的 Tool 执行与 Visual Proposal Apply（executeVisualActionProposal）
  * 共用同一 Adapter Wrapper，避免两套业务 mutation 入口。
@@ -41,7 +41,7 @@ export function createKiroWriteApi({
     addScheduleSlot: (sl) => useAppStore.getState().addScheduleSlot(sl, kiro),
     updateSchedule: (sc) => useAppStore.getState().updateSchedule(sc, kiro),
     deleteSchedule: (id) => useAppStore.getState().deleteSchedule(id, kiro),
-    restoreSchedule: (sc) => useAppStore.getState().restoreSchedule(sc, kiro),
+    restoreSchedule: (sc, _ctx, removedOverrides) => useAppStore.getState().restoreSchedule(sc, kiro, removedOverrides),
     excludeWeekFromSchedule: (id, week) => useAppStore.getState().excludeWeekFromSchedule(id, week, kiro),
     addCourseWithSchedule: (c, slots) => useAppStore.getState().addCourseWithSchedule(c, slots, kiro),
     updateCourse: (c) => useAppStore.getState().updateCourse(c, kiro),

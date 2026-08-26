@@ -1,4 +1,4 @@
-import {
+﻿import {
   Assignment,
   Course,
   CourseSchedule,
@@ -157,8 +157,8 @@ export interface KiroWriteApi {
 
   addScheduleSlot: (s: Omit<CourseSchedule, "id">) => string;
   updateSchedule: (s: CourseSchedule) => void;
-  deleteSchedule: (id: string) => CourseSchedule | null;
-  restoreSchedule: (s: CourseSchedule) => void;
+  deleteSchedule: (id: string) => import("@/store/useAppStore").ScheduleDeleteSnapshot | null;
+  restoreSchedule: (s: CourseSchedule, context?: unknown, removedOverrides?: import("@/types").ScheduleOccurrenceOverride[]) => void;
   excludeWeekFromSchedule: (scheduleId: string, week: number) => void;
   /** Task 7 Change Set V2：reserved-ID 创建（事务层使用） */
   addAssignmentWithId: (

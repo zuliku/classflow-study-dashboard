@@ -511,6 +511,13 @@ function sanitizePersistedState(persisted: unknown): PersistedAppState {
   return { ...result, studyBlocks: reconciled.studyBlocks, reminders: reconciled.reminders };
 }
 
+/** deleteSchedule 的完整删除快照：schedule 本体 + 被级联删除的一次性 override
+ *  （cancel/move 挂在 base schedule 上；不快照则撤销会静默丢失它们 —— BUG-032） */
+export interface ScheduleDeleteSnapshot {
+  schedule: CourseSchedule;
+  removedOverrides: ScheduleOccurrenceOverride[];
+}
+
 export interface AppState {
   // Navigation & UI State
   activeTab: NavTab;
@@ -637,9 +644,14 @@ export interface AppState {
   deleteSchedule: (
     scheduleId: string,
     context?: LearningMutationContext
-  ) => CourseSchedule | null;
-  /** 撤销删除：恢复原 Schedule（保留原 ID）；History 追加 created restored=true */
-  restoreSchedule: (schedule: CourseSchedule, context?: LearningMutationContext) => void;
+  ) => ScheduleDeleteSnapshot | null;
+  /** 撤销删除：恢复原 Schedule（保留原 ID）+ 其被级联删除的一次性 override；
+   *  幂等（重复调用 no-op，不产生重复 History）；parent Course 已删 → 拒绝 */
+  restoreSchedule: (
+    schedule: CourseSchedule,
+    context?: LearningMutationContext,
+    removedOverrides?: ScheduleOccurrenceOverride[]
+  ) => void;
   excludeWeekFromSchedule: (
     scheduleId: string,
     week: number,
@@ -1315,27 +1327,33 @@ export const useAppStore = create<AppState>()(
       deleteSchedule: (scheduleId, context) => {
         const current = get();
         const target = current.schedules.find((s) => s.id === scheduleId) || null;
-        if (target) {
-          enqueueLearningHistoryEvents([
-            buildScheduleDeletedEvent({
-              schedule: target,
-              context: resolveLearningMutationContext(context),
-              environment: historyEnvironment(current),
-            }),
-          ]);
-        }
+        if (!target) return null;
+        enqueueLearningHistoryEvents([
+          buildScheduleDeletedEvent({
+            schedule: target,
+            context: resolveLearningMutationContext(context),
+            environment: historyEnvironment(current),
+          }),
+        ]);
+        // BUG-032：cancel/move override 级联删除必须进入快照，撤销时一并恢复
+        const removedOverrides = current.scheduleOccurrenceOverrides.filter(
+          (o) => o.kind !== "extra" && o.baseScheduleId === scheduleId
+        );
         set({
           schedules: current.schedules.filter((s) => s.id !== scheduleId),
-          // Task 7：删除 recurring schedule → 其 cancel/move override 同步删除（extra 无 baseScheduleId 不受影响）
           scheduleOccurrenceOverrides: current.scheduleOccurrenceOverrides.filter(
             (o) => o.kind === "extra" || o.baseScheduleId !== scheduleId
           ),
         });
-        return target;
+        return { schedule: target, removedOverrides };
       },
 
-      restoreSchedule: (schedule, context) =>
+      restoreSchedule: (schedule, context, removedOverrides) =>
         set((state) => {
+          // 幂等：重复撤销（toast 双击）→ 已存在则整体 no-op（不重复插入、不重复 History）
+          if (state.schedules.some((s) => s.id === schedule.id)) {
+            return {};
+          }
           // Undo 窗口并发防御：parent Course 已删除 → 拒绝恢复（不产生 dangling courseId）
           if (!canRestoreWithParentCourse(state, schedule.courseId)) {
             return {};
@@ -1348,7 +1366,17 @@ export const useAppStore = create<AppState>()(
               restored: true,
             }),
           ]);
-          return { schedules: [...state.schedules, schedule] };
+          // 被级联删除的 cancel/move override 一并恢复（id 去重；baseScheduleId 必然重新存在）
+          const restoredOverrides = (removedOverrides ?? []).filter(
+            (o) => !state.scheduleOccurrenceOverrides.some((x) => x.id === o.id)
+          );
+          return {
+            schedules: [...state.schedules, schedule],
+            scheduleOccurrenceOverrides:
+              restoredOverrides.length > 0
+                ? [...state.scheduleOccurrenceOverrides, ...restoredOverrides]
+                : state.scheduleOccurrenceOverrides,
+          };
         }),
 
       // ---- Task 7：Schedule Occurrence Override ----
@@ -1394,11 +1422,20 @@ export const useAppStore = create<AppState>()(
       },
 
       restoreScheduleOccurrenceOverride: (override) =>
-        set((state) => ({
-          scheduleOccurrenceOverrides: state.scheduleOccurrenceOverrides.some((o) => o.id === override.id)
-            ? state.scheduleOccurrenceOverrides
-            : [...state.scheduleOccurrenceOverrides, override],
-        })),
+        set((state) => {
+          // Undo 窗口并发防御（BUG-033）：base schedule / course 已删 → 拒绝恢复，
+          // 不插入 dangling baseScheduleId/courseId（与 assignment/schedule restore 同一契约）
+          if (override.kind !== "extra") {
+            const baseExists = state.schedules.some((s) => s.id === override.baseScheduleId);
+            const courseExists = state.courses.some((c) => c.id === override.courseId);
+            if (!baseExists || !courseExists) return {};
+          }
+          return {
+            scheduleOccurrenceOverrides: state.scheduleOccurrenceOverrides.some((o) => o.id === override.id)
+              ? state.scheduleOccurrenceOverrides
+              : [...state.scheduleOccurrenceOverrides, override],
+          };
+        }),
 
       replaceScheduleOccurrenceOverride: (input) => {
         // 原子替换：删除同 baseScheduleId+week 的旧 active override，再创建新 override（单次 set）
@@ -1952,6 +1989,11 @@ export const useAppStore = create<AppState>()(
           if (!canRestoreWithParentCourse(state, snapshot.assignment.courseId)) {
             return {};
           }
+          // 幂等：重复撤销（toast 双击 140ms 退出窗口）→ 已存在则整体 no-op，
+          // 不产生重复 History（BUG-035：enqueue 曾先于 dedupe 执行）
+          if (state.assignments.some((a) => a.id === snapshot.assignment.id)) {
+            return {};
+          }
           // History：assignment.restored + 恢复的 study blocks → study_block.created restored=true
           const resolved = resolveLearningMutationContext(context);
           enqueueLearningHistoryEvents([
@@ -2467,6 +2509,23 @@ export const useAppStore = create<AppState>()(
         })),
       restoreReminder: (reminder) =>
         set((state) => {
+          // Undo 窗口并发防御（BUG-034）：target 已删除 → 拒绝恢复 orphan reminder
+          //（Kiro delete_reminder undo 路径；UI 用户删除无 undo，不受影响）
+          const targetAlive = (() => {
+            switch (reminder.targetType) {
+              case "assignment":
+                return state.assignments.some((a) => a.id === reminder.targetId);
+              case "studyBlock":
+                return state.studyBlocks.some((b) => b.id === reminder.targetId);
+              case "calendarMark":
+                return state.calendarMarks.some((m) => m.id === reminder.targetId);
+              case "standalone":
+                return true;
+              default:
+                return false;
+            }
+          })();
+          if (!targetAlive) return {};
           const reminders = state.reminders.some((r) => r.id === reminder.id)
             ? state.reminders
             : [...state.reminders, reminder];
