@@ -88,8 +88,33 @@ export function buildTaskWorkspaceMeta(
   now: Date,
   planning?: TaskHealthPlanningInput
 ): TaskWorkspaceMeta {
+  return buildTaskWorkspaceMetaWithIndex(task, indexStudyBlocksByAssignment(studyBlocks), now, planning);
+}
+
+/**
+ * O(A×B) → O(A+B)：deriveTaskWorkspace 对每个任务全量 filter studyBlocks（1000×1000 = 1M 次迭代/渲染）。
+ * 批量路径先建一次 assignmentId 索引再逐任务取用；单任务路径保持原签名兼容。
+ */
+export function indexStudyBlocksByAssignment(studyBlocks: StudyBlock[]): Map<string, StudyBlock[]> {
+  const map = new Map<string, StudyBlock[]>();
+  for (const b of studyBlocks) {
+    const key = b.assignmentId;
+    if (!key) continue;
+    const list = map.get(key);
+    if (list) list.push(b);
+    else map.set(key, [b]);
+  }
+  return map;
+}
+
+export function buildTaskWorkspaceMetaWithIndex(
+  task: Assignment,
+  blocksById: Map<string, StudyBlock[]>,
+  now: Date,
+  planning?: TaskHealthPlanningInput
+): TaskWorkspaceMeta {
   const deadline = getTaskDeadline(task);
-  const blocks = studyBlocks.filter((b) => b.assignmentId === task.id);
+  const blocks = blocksById.get(task.id) ?? [];
   const scheduledMinutes = blocks.reduce((sum, b) => sum + studyBlockMinutes(b), 0);
   const today = dayStr(now);
   const meta: TaskWorkspaceMeta = {
@@ -105,7 +130,7 @@ export function buildTaskWorkspaceMeta(
       dayStr(deadline) < today,
   };
   if (planning) {
-    meta.health = deriveAssignmentHealthWithAvailability(task, studyBlocks, planning, now).state;
+    meta.health = deriveAssignmentHealthWithAvailability(task, blocks, planning, now).state;
   }
   return meta;
 }
@@ -149,9 +174,10 @@ export function deriveTaskWorkspace(
   now: Date,
   planning?: TaskHealthPlanningInput
 ): { items: TaskWorkspaceItem[]; counts: Record<TaskWorkspaceView, number> } {
+  const blocksById = indexStudyBlocksByAssignment(studyBlocks);
   const all: TaskWorkspaceItem[] = assignments.map((task) => ({
     task,
-    meta: buildTaskWorkspaceMeta(task, studyBlocks, now, planning),
+    meta: buildTaskWorkspaceMetaWithIndex(task, blocksById, now, planning),
   }));
 
   const byView = (v: TaskWorkspaceView): TaskWorkspaceItem[] =>

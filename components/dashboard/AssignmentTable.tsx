@@ -18,6 +18,7 @@ import { useAppStore } from "@/store/useAppStore";
 import { useToastStore } from "@/store/useToastStore";
 import { useConfirmStore } from "@/store/useConfirmStore";
 import { TimeSliceFilter, Priority, Assignment } from "@/types";
+import type { TaskWorkspaceItem } from "@/lib/tasks/taskViews";
 import { openAssignmentEditor } from "@/lib/uiEvents";
 import { useEnterOnAdd } from "@/lib/useEnterOnAdd";
 import { useExitPresenceList } from "@/lib/useExitPresenceList";
@@ -114,35 +115,56 @@ export function AssignmentTable({
   const today = new Date();
 
   // 课程筛选（compact / workspace 共用）
-  const courseFiltered = assignments.filter(
-    (item) => courseFilter === "all" || item.courseId === courseFilter
+  const courseFiltered = useMemo(
+    () => assignments.filter((item) => courseFilter === "all" || item.courseId === courseFilter),
+    [assignments, courseFilter]
   );
 
   // compact：TimeSlice 筛选（Task V2 后保持原逻辑，compact Overview 不动）
-  const filteredAssignments = courseFiltered.filter((item) => {
-    if (assignmentTimeSlice === "all" || assignmentTimeSlice === "completed") {
-      return assignmentTimeSlice === "completed" ? item.status === "completed" : true;
-    }
-    const ddlDate = parseLocalDDL(item.ddl);
-    if (!ddlDate) return false;
-    const diff = differenceInDays(ddlDate, today);
+  const filteredAssignments = useMemo(
+    () =>
+      courseFiltered.filter((item) => {
+        if (assignmentTimeSlice === "all" || assignmentTimeSlice === "completed") {
+          return assignmentTimeSlice === "completed" ? item.status === "completed" : true;
+        }
+        const ddlDate = parseLocalDDL(item.ddl);
+        if (!ddlDate) return false;
+        const diff = differenceInDays(ddlDate, today);
 
-    switch (assignmentTimeSlice) {
-      case "overdue":
-        return item.status !== "completed" && diff < 0 && !isToday(ddlDate);
-      case "today":
-        return isToday(ddlDate);
-      case "3days":
-        return item.status !== "completed" && diff >= 0 && diff <= 3;
-      case "7days":
-        return item.status !== "completed" && diff >= 0 && diff <= 7;
-      default:
-        return true;
-    }
-  });
+        switch (assignmentTimeSlice) {
+          case "overdue":
+            return item.status !== "completed" && diff < 0 && !isToday(ddlDate);
+          case "today":
+            return isToday(ddlDate);
+          case "3days":
+            return item.status !== "completed" && diff >= 0 && diff <= 3;
+          case "7days":
+            return item.status !== "completed" && diff >= 0 && diff <= 7;
+          default:
+            return true;
+        }
+      }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [courseFiltered, assignmentTimeSlice]
+  );
+
 
   // Workspace V2：视图派生 + 筛选 + 搜索由控制器统一完成（ViewBar 与列表共享，避免二次 derive）
   const workspaceItems = isWorkspace ? (controller?.items ?? []) : [];
+
+  // 行渲染 O(n²)→O(1) 查找表（性能批次：1000 行时每渲染 ~1M 次 .find → Map/Set）
+  const wsMetaById = useMemo(() => {
+    const map = new Map<string, TaskWorkspaceItem["meta"]>();
+    for (const it of workspaceItems) map.set(it.task.id, it.meta);
+    return map;
+  }, [workspaceItems]);
+  const courseById = useMemo(() => {
+    const map = new Map<string, (typeof courses)[number]>();
+    for (const c of courses) map.set(c.id, c);
+    return map;
+  }, [courses]);
+  const selectedIdSet = useMemo(() => new Set(assignmentSelection), [assignmentSelection]);
+
   const workspaceResetKey = isWorkspace
     ? `${controller?.view}|${controller?.courseFilter}|${controller?.searchQuery}|${controller?.riskOnly}`
     : "";
@@ -422,10 +444,8 @@ export function AssignmentTable({
 
   // ---- IM4A：行渲染（workspace 与 compact 共用；ExitRow 只用于 workspace mutation exit） ----
   const renderAssignmentRow = (task: Assignment) => {
-    const wsMeta = isWorkspace
-      ? workspaceItems.find((it) => it.task.id === task.id)?.meta
-      : undefined;
-    const course = courses.find((c) => c.id === task.courseId);
+    const wsMeta = isWorkspace ? wsMetaById.get(task.id) : undefined;
+    const course = courseById.get(task.courseId);
     const priorityMeta = getPriorityMeta(task.priority);
     const hasDdl = !!task.ddl && parseLocalDDL(task.ddl) !== null;
     const formattedDate = hasDdl ? getLocalDDLDate(task.ddl) : "无截止日期";
@@ -440,7 +460,7 @@ export function AssignmentTable({
 
     const isNew = newTaskIds.has(task.id);
     const isHighlighted = isWorkspace && highlightedAssignmentId === task.id;
-    const isSelected = isWorkspace && assignmentSelection.includes(task.id);
+    const isSelected = isWorkspace && selectedIdSet.has(task.id);
 
     return (
       <div

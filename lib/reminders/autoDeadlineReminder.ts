@@ -397,10 +397,13 @@ export function applyAutoReconcileResult(
   now: string
 ): Reminder[] {
   const staleIds = new Set(result.staleAutoIds);
+  // refreshAutoIds 建 Map：每目标 O(R) 的 .find 在 2000 目标 × O(R) 下是 reconcile 的
+  // 主要分配来源之一（稳定性审计性能批次）
+  const refreshById = new Map(result.refreshAutoIds.map((x) => [x.id, x]));
   let out = reminders
     .filter((r) => !staleIds.has(r.id))
     .map((r) => {
-      const refresh = result.refreshAutoIds.find((x) => x.id === r.id);
+      const refresh = refreshById.get(r.id);
       if (!refresh) return r;
       return {
         ...r,
