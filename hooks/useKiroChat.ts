@@ -2900,7 +2900,20 @@ export function useKiroChat({
     writeCounterRef.current = 0;
     limitReachedRef.current = false;
     resetDocumentFailureFuse();
-    void c.regenerate({ body: requestBody() });
+    // Retry 重新铸造 invocation：旧 turn 的 invocation 在 settle 时已清空（或超过 TTL），
+    // 复用会让 capability-gated 工具全部 INVOCATION_REQUIRED / EXPIRED 失败
+    void (async () => {
+      try {
+        const invBridge = (window as unknown as { classflowDesktop?: { invocation?: { beginLocal: () => Promise<{ invocationId: string }> } } }).classflowDesktop?.invocation;
+        if (invBridge) {
+          const { invocationId } = (await invBridge.beginLocal()) as { invocationId: string };
+          activeInvocationIdRef.current = invocationId ?? null;
+        }
+      } catch {
+        activeInvocationIdRef.current = null;
+      }
+      void latestChatRef.current.regenerate({ body: requestBody() });
+    })();
   }, [enabled, pushToast]);
 
   /** stale approval / 本会话 task 状态清理（newChat / loadConversation 共用；不清理已完成任务展示？） */
