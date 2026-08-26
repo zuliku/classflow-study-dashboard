@@ -285,6 +285,8 @@ export function KiroSessionProvider({ children }: { children: React.ReactNode })
   const [conversationCreatedAt, setConversationCreatedAt] = useState<string | null>(null);
   const [historyVersion, setHistoryVersion] = useState(0);
   const conversationIdRef = useRef<string | null>(null);
+  // 本会话生命周期内已被删除的 conversation id：persistCurrent 据此拒绝复活性落盘
+  const deletedConversationIdsRef = useRef<Set<string>>(new Set());
   const conversationTitleRef = useRef<string | null>(null);
   const conversationCreatedAtRef = useRef<string | null>(null);
   // Kiro Projects V1：当前 Conversation 的 projectId（persistCurrent / transition 使用 ref）
@@ -378,6 +380,9 @@ export function KiroSessionProvider({ children }: { children: React.ReactNode })
   const persistCurrent = useCallback(async () => {
     const id = conversationIdRef.current;
     if (!id) return; // 尚无会话（transient，直到第一条 User Message）
+    // Tombstone（BUG：删除/清空后迟到的持久化会把已删除对话复活）：
+    // 已被删除的会话 id 一律拒绝落盘 —— debounce timer / flushSave 都经过这里
+    if (deletedConversationIdsRef.current.has(id)) return;
     const chatNow = chatRef.current;
     const messages = chatNow.messages;
     if (messages.length === 0 || chatNow.streaming) return;
@@ -540,7 +545,11 @@ export function KiroSessionProvider({ children }: { children: React.ReactNode })
       // Task B V1.2.1：Conversation identity 切换（new / load / delete / reset）→ 旧 continuation 必须失效。
       // guard 与 prompt context 绝不跨会话携带（「Conversation 只能有一个 active continuation」+ 隔离硬不变量）
       chatRef.current.setVisualPendingContinuation(null);
-      applyTransition({ type: "request", transition, streaming: chatRef.current.streaming });
+      // Gate 用完整 turnInFlight（executing / awaiting-tool-result / awaiting-continuation）而非仅 streaming：
+      // awaiting-tool-result 窗口内（status=ready、审批等待中）直接切换会绕过 stop() ——
+      // 迟到的工具输出/审计/引用会落到切换后的新会话。走 stopping 分支先 stop，
+      // handleStop 会武装 stoppedTurnMessageIdRef → 迟到回填被丢弃（与用户 Stop 同一守卫）。
+      applyTransition({ type: "request", transition, streaming: chatRef.current.turnInFlight });
       const s = transitionStateRef.current;
       if (s.pending !== transition) return; // 被拒绝（已有 pending）
       if (s.phase === "stopping") {
@@ -552,14 +561,14 @@ export function KiroSessionProvider({ children }: { children: React.ReactNode })
     [applyTransition, finishConversationTransition]
   );
 
-  // streaming true→false：若存在 pending transition → stop 已完成 → finish（flush → reset/load）
+  // turn 结束（turnInFlight true→false）：若存在 pending transition → stop 已完成 → finish（flush → reset/load）
   React.useEffect(() => {
-    if (chat.streaming) return;
+    if (chat.turnInFlight) return;
     const pending = transitionStateRef.current.pending;
     if (!pending) return;
     applyTransition({ type: "stopped" });
     void finishConversationTransition(pending);
-  }, [chat.streaming, applyTransition, finishConversationTransition]);
+  }, [chat.turnInFlight, applyTransition, finishConversationTransition]);
 
   /** 后台 Compact（Task 7）：估算达到预算 75% 时，增量生成 Conversation Summary；失败静默（不阻塞聊天） */
   const maybeCompact = useCallback(async () => {
@@ -882,13 +891,16 @@ export function KiroSessionProvider({ children }: { children: React.ReactNode })
   const deleteConversation = useCallback(
     async (id: string) => {
       await deleteConversationRecord(id);
-      if (conversationIdRef.current === id) {
-        // 删除当前会话：切到新的 transient session，避免 UI 指向不存在的 ID
-        newChat();
-      }
       refreshHistory();
+      if (conversationIdRef.current === id) {
+        // 删除当前会话：先 tombstone（迟到的 debounce/flush 不得复活它），
+        // 再经统一 transition lifecycle —— streaming/tool-pending 中先 stop，再切到 transient session
+        //（直接 newChat() 会绕过 stop→save→switch，且半成品可能被迟到保存复活）
+        deletedConversationIdsRef.current.add(id);
+        requestConversationTransition({ type: "new", projectId: conversationProjectIdRef.current });
+      }
     },
-    [newChat, refreshHistory]
+    [requestConversationTransition, refreshHistory]
   );
 
   const renameConversation = useCallback(
@@ -906,9 +918,16 @@ export function KiroSessionProvider({ children }: { children: React.ReactNode })
   );
 
   const clearHistory = useCallback(() => {
+    // 全量清空 + 当前会话 tombstone：防止清空后迟到的持久化把当前线程复活
     void clearConversationHistory();
-    newChat();
-  }, [newChat]);
+    const current = conversationIdRef.current;
+    if (current) deletedConversationIdsRef.current.add(current);
+    if (conversationIdRef.current !== null) {
+      requestConversationTransition({ type: "new", projectId: conversationProjectIdRef.current });
+    } else {
+      newChat();
+    }
+  }, [newChat, requestConversationTransition]);
 
   // effectiveSidecarMode：Workspace 覆盖（与 capsule 互斥）—— 派生 presentation 状态
   const effectiveSidecarMode: KiroSidecarMode = activeTab === "kiro" ? "closed" : sidecarMode;
