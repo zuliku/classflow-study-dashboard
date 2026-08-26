@@ -1,10 +1,10 @@
-"use client";
+﻿"use client";
 
 import React from "react";
 import { X, BookOpen, CheckCircle2, Clock, Flag, ListChecks, CalendarClock, Tags } from "lucide-react";
 import { useAppStore } from "@/store/useAppStore";
 import { usePresence } from "@/lib/usePresence";
-import { MOTION_MS } from "@/lib/motion";
+import { MOTION_EXIT_MS } from "@/lib/motion";
 import { getPriorityMeta } from "@/lib/utils";
 import { getLocalDDLDate, getLocalDDLTime, parseLocalDDL } from "@/lib/ddl";
 import { formatEstimatedMinutes } from "@/lib/tasks/taskSemantics";
@@ -31,9 +31,9 @@ export function AssignmentPeekPanel() {
   } = useAppStore();
   const assignment = assignments.find((a) => a.id === assignmentPeekId) ?? null;
 
-  // Motion Contract：面板走 ux-drawer-panel（--motion-panel 对称过渡 230ms）。
-  // 原 200ms 会在 CSS 退出完成前截断卸载，现与实际过渡时长同源对齐。
-  const { mounted, visible } = usePresence(!!assignment, MOTION_MS.panel);
+  // Motion Contract（BUG-072 修正）：入场 --motion-panel(230)；退场对齐 Drawer 家族
+  // exit-panel(160) —— presence 窗口与 CSS 退出过渡同源，不再借用入场档当卸载窗口。
+  const { mounted, visible } = usePresence(!!assignment, MOTION_EXIT_MS.panel);
 
   if (!mounted || !assignment) return null;
 
@@ -75,7 +75,9 @@ export function AssignmentPeekPanel() {
       data-testid="assignment-peek"
       className={cn(
         "fixed right-0 top-24 bottom-24 w-80 z-30 bg-surface border-l border-line shadow-drawer rounded-l-2xl flex flex-col overflow-hidden ux-drawer-panel",
-        visible ? "translate-x-0 opacity-100" : "translate-x-8 opacity-0"
+        visible
+          ? "translate-x-0 opacity-100"
+          : "!duration-[var(--motion-exit-panel)] translate-x-8 opacity-0"
       )}
     >
       {/* Header */}

@@ -281,6 +281,9 @@ export function AssignmentTable({
   const [bulkDdlDate, setBulkDdlDate] = useState("");
   const [bulkShiftDays, setBulkShiftDays] = useState("");
 
+  // BUG-073：右键菜单退出存在感 —— open flag + last-anchor 快照，卸载由 usePresence 延迟
+  const [ctxMenuOpen, setCtxMenuOpen] = useState(false);
+  const lastCtxAnchorRef = useRef<{ anchorX: number; anchorY: number; ids: string[]; highlightedId: string | null } | null>(null);
   const handleListKeyDown = (e: React.KeyboardEvent) => {
     if (e.target !== e.currentTarget) return;
     const k = e.key;
@@ -292,7 +295,7 @@ export function AssignmentTable({
         moveHighlight(k === "ArrowDown" ? 1 : -1);
       } else if (k === "Enter") {
         if (ctxMenu) {
-          setCtxMenu(null);
+          setCtxMenuOpen(false);
           return;
         }
         if (!highlightedAssignmentId) return;
@@ -304,7 +307,7 @@ export function AssignmentTable({
         setAssignmentSelection(selectAllVisible(filteredIds));
       } else if (k === "Escape") {
         if (ctxMenu) {
-          setCtxMenu(null);
+          setCtxMenuOpen(false);
         } else if (assignmentPeekId) {
           setAssignmentPeekId(null);
         } else if (assignmentSelection.length > 0) {
@@ -325,7 +328,7 @@ export function AssignmentTable({
       moveHighlight(-1);
     } else if (k === "Enter") {
       if (ctxMenu) {
-        setCtxMenu(null);
+        setCtxMenuOpen(false);
         return;
       }
       if (!highlightedAssignmentId) return;
@@ -348,7 +351,7 @@ export function AssignmentTable({
       setAssignmentSelection(selectAllVisible(filteredIds));
     } else if (k === "Escape") {
       if (ctxMenu) {
-        setCtxMenu(null);
+        setCtxMenuOpen(false);
       } else if (assignmentPeekId) {
         setAssignmentPeekId(null);
       } else if (assignmentSelection.length > 0) {
@@ -382,6 +385,8 @@ export function AssignmentTable({
     const ids = assignmentSelection.includes(taskId) ? assignmentSelection : [taskId];
     // 记录 Viewport 锚点（clientX/clientY）；菜单定位在 AssignmentContextMenu 内
     // 按真实尺寸 computeContextMenuPosition（翻转 / clamp），不做 magic 偏移
+    lastCtxAnchorRef.current = { anchorX: e.clientX, anchorY: e.clientY, ids, highlightedId: taskId };
+    setCtxMenuOpen(true);
     setCtxMenu({
       anchorX: e.clientX,
       anchorY: e.clientY,
@@ -439,7 +444,7 @@ export function AssignmentTable({
     } else if (date) {
       actions.setDDLDate(ctxMenu.ids, date);
     }
-    setCtxMenu(null);
+    setCtxMenuOpen(false);
   };
 
   // ---- IM4A：行渲染（workspace 与 compact 共用；ExitRow 只用于 workspace mutation exit） ----
@@ -965,14 +970,16 @@ export function AssignmentTable({
       )}
 
       {/* ---- Workspace：Context Menu（Portal + fixed；非 modal，不拦截页面交互） ---- */}
-      {isWorkspace && ctxMenu && menuCtx && (
+      {/* BUG-073：open=false 后保留挂载至 fast 退场结束（anchor 用最后快照冻结定位） */}
+      {isWorkspace && (ctxMenu ?? lastCtxAnchorRef.current) && menuCtx && (
         <AssignmentContextMenu
-          anchor={ctxMenu}
+          open={ctxMenuOpen}
+          anchor={ctxMenu ?? lastCtxAnchorRef.current!}
           commands={menuCommands}
           hasDdl={ctxHasDdl}
           onRun={(cmd) => cmd.run()}
           onApplyDDL={applyCtxDDL}
-          onClose={() => setCtxMenu(null)}
+          onClose={() => setCtxMenuOpen(false)}
         />
       )}
 

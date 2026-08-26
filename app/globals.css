@@ -1,4 +1,4 @@
-@import "katex/dist/katex.min.css";
+﻿@import "katex/dist/katex.min.css";
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -357,6 +357,12 @@ button:disabled {
       transform var(--motion-fast) var(--ease-standard);
   }
 
+  /* BUG-071：Toast 入场（此前只有出场过渡，挂载即最终态硬现）。
+     用一次性 animation 而非双相 presence —— 不触碰 EXIT_MS 卸载时序。 */
+  .ux-toast-enter {
+    animation: ux-toast-in var(--motion-fast) var(--ease-standard);
+  }
+
   /* 进入动画（列表新增等） */
   .animate-enter {
     animation: ux-enter var(--motion-base) var(--ease-standard) both;
@@ -547,6 +553,18 @@ button:disabled {
   }
   to {
     opacity: 1;
+  }
+}
+
+/* Toast 入场：4px 上浮 + 淡入（与出场 translate-y-1 方向呼应） */
+@keyframes ux-toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
   }
 }
 

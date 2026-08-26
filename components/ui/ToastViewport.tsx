@@ -77,7 +77,8 @@ export function ToastViewport() {
             key={toast.id}
             className={cn(
               "pointer-events-auto w-full sm:w-auto sm:max-w-sm bg-surface border border-line rounded-xl shadow-card p-3 flex items-start gap-2.5",
-              "ux-inline",
+              // BUG-071：入场用一次性 animation（挂载即播），出场仍走 ux-inline 过渡
+              "ux-toast-enter ux-inline",
               isExiting ? "opacity-0 translate-y-1" : "opacity-100 translate-y-0"
             )}
             role="status"

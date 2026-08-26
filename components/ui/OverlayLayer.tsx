@@ -94,7 +94,13 @@ export function OverlayLayer({
         !open && "pointer-events-none",
         className
       )}
-      style={{ zIndex: stackZ }}
+      style={{
+        zIndex: stackZ,
+        // BUG-070：背板淡出必须与 presence 卸载窗口同长 —— 共享类是 base(180ms)，
+        // 而 Dialog/Drawer 的卸载窗口是 150/160ms，背板淡出会被截断在 ~83–89%。
+        // 退场时以内联时长精确对齐 exitMs（入场保持类内 base 档不变）。
+        ...(visible ? {} : { transitionDuration: `${exitMs}ms` }),
+      }}
       onPointerDown={(event) => {
         // backdrop request-close：仅点击背景本身（target === currentTarget），面板内点击不关闭
         if (closeOnBackdrop && event.target === event.currentTarget) {

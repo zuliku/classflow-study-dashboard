@@ -5,6 +5,8 @@ import { createPortal } from "react-dom";
 import { ArrowLeft, CalendarClock, ChevronRight, Flag } from "lucide-react";
 import { AppCommand } from "@/lib/commands";
 import { computeContextMenuPosition } from "@/lib/contextMenuPosition";
+import { usePresence } from "@/lib/usePresence";
+import { MOTION_EXIT_MS } from "@/lib/motion";
 import { cn } from "@/lib/utils";
 
 /**
@@ -47,6 +49,8 @@ const PRIORITY_LABELS: Record<string, string> = {
 
 interface AssignmentContextMenuProps {
   anchor: AssignmentContextMenuAnchor;
+  /** BUG-073：显式 open —— 关闭走 fast 档退出存在感（父级保留挂载至动画结束） */
+  open: boolean;
   /** 来自 Command Registry 的扁平命令列表（run 已绑定菜单上下文，可无参执行） */
   commands: ContextMenuCommand[];
   /** 目标任务中是否有已设置 DDL（决定「清除截止时间」是否显示） */
@@ -59,6 +63,7 @@ interface AssignmentContextMenuProps {
 }
 
 export function AssignmentContextMenu({
+  open,
   anchor,
   commands,
   hasDdl,
@@ -70,6 +75,8 @@ export function AssignmentContextMenu({
   const [view, setView] = useState<MenuView>("main");
   const [ddlDate, setDdlDate] = useState("");
   const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
+  // BUG-073：退出存在感（fast 档）；定位测量仅在 open 时进行，退场冻结最后位置
+  const { mounted, visible } = usePresence(open, MOTION_EXIT_MS.fast);
 
   const find = (id: string) => commands.find((c) => c.id === id);
   const openCmd = find("ctx-open");
@@ -81,6 +88,7 @@ export function AssignmentContextMenu({
 
   // 渲染后按真实尺寸定位（view 切换高度变化 → 重新定位）
   useLayoutEffect(() => {
+    if (!open) return; // 退场期间冻结最后定位
     const el = menuRef.current;
     if (!el) return;
     setPos(
@@ -260,7 +268,10 @@ export function AssignmentContextMenu({
       data-testid="assignment-context-menu"
       className={cn(
         "fixed z-50 w-52 bg-surface border border-line-strong rounded-2xl shadow-card p-1.5 text-xs ux-inline",
-        pos ? "opacity-100" : "opacity-0"
+        // BUG-073：open 驱动进出场（fast 档上浮），退场期间冻结最后定位
+        open && visible
+          ? "opacity-100 translate-y-0"
+          : "opacity-0 translate-y-1 pointer-events-none"
       )}
       style={pos ? { left: pos.x, top: pos.y } : { left: anchor.anchorX, top: anchor.anchorY }}
     >
