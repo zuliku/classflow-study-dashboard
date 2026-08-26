@@ -864,6 +864,18 @@ export interface AppState {
   toggleGroupTask: (projectId: string, taskId: string) => void;
 }
 
+/**
+ * Hydration 失败标记（模块级 transient，不持久化）。
+ * true = 本次启动 persist rehydrate 失败（localStorage 损坏 / 读取异常），
+ * Store 处于初始空态而非真实用户数据。启动 Blob 对账据此跳过 GC（fail-closed），
+ * 防止把「看不见引用」误判为「没有引用」而清光课程附件。
+ */
+let mainStoreHydrationFailed = false;
+
+export function didMainStoreHydrationFail(): boolean {
+  return mainStoreHydrationFailed;
+}
+
 export const useAppStore = create<AppState>()(
   persist(
     (set, get) => ({
@@ -1215,7 +1227,9 @@ export const useAppStore = create<AppState>()(
         if (!cascade) return;
 
         // 1. 同步清理该课程关联资料的 Blob（fire-and-forget，失败不阻塞）
-        cascade.course.materials.forEach((m) => {
+        // 防御：部分持久化数据（cast-only hydration）可能缺 materials 数组 → 同步 TypeError 会打断级联删除
+        const deletedMaterials = Array.isArray(cascade.course.materials) ? cascade.course.materials : [];
+        deletedMaterials.forEach((m) => {
           if (m.storageKey) deleteFileBlob(m.storageKey).catch(() => {});
         });
 
@@ -2819,6 +2833,20 @@ export const useAppStore = create<AppState>()(
         sidebarCollapsed: state.sidebarCollapsed,
       }),
       migrate: (persistedState) => sanitizePersistedState(persistedState),
+      // Hydration 结果监控：localStorage 损坏（JSON.parse 失败 / getItem 抛错）时
+      // zustand 会静默吞掉错误并把 Store 留在初始空态。若不记录，启动 Blob 对账会把
+      // 「引用集合为空」当成真实状态，删除全部课程附件 Blob（不可逆数据放大损失）。
+      // didMainStoreHydrationFail() 供启动 reconcile 做 fail-closed 门禁。
+      onRehydrateStorage: () => (state, error) => {
+        mainStoreHydrationFailed = !!error;
+        if (error) {
+          // 显式诊断：损坏的持久化数据不再无声丢失
+          console.error(
+            "[useAppStore] persist rehydration failed；启动 Blob 对账将跳过 GC（fail-closed）。",
+            error
+          );
+        }
+      },
       // zustand 在存储为空时也会调用 merge（migratedState=undefined），
       // 此时必须原样保留 currentState（初始演示数据），不能把 undefined 清洗成空数组；
       // 旧数据可能没有 version 键（zustand 不会触发 migrate），

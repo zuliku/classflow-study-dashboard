@@ -4,7 +4,7 @@
  * 后续 Workspace / Timeline / Kiro Tools 一律经此取语义，不各自判断 task.ddl。
  */
 
-import { Assignment, TaskRecurrence } from "@/types";
+import { Assignment, AssignmentStatus, Priority, TaskRecurrence } from "@/types";
 import { parseLocalDDL, getLocalDDLDate, getLocalDDLTime } from "@/lib/ddl";
 import { createId } from "@/lib/utils";
 
@@ -14,6 +14,14 @@ const RECURRENCE_VALUES: TaskRecurrence[] = ["daily", "weekly", "biweekly", "mon
 function normalizeRecurrence(value: unknown): TaskRecurrence | undefined {
   return RECURRENCE_VALUES.includes(value as TaskRecurrence) ? (value as TaskRecurrence) : undefined;
 }
+
+/**
+ * status / priority 枚举白名单（持久化数据不可信：垃圾值 → 默认值回落）。
+ * 与 recurrence / reminder / preferences 同一 sanitize 策略；
+ * 垃圾 status 会被 planning-eligible 判定误读为 terminal，必须挡在 hydration 边界。
+ */
+const ASSIGNMENT_PRIORITIES: readonly Priority[] = ["urgent", "high", "medium", "low"];
+const ASSIGNMENT_STATUSES: readonly AssignmentStatus[] = ["todo", "doing", "submitted", "completed"];
 
 /** 预计耗时上限：7 天（防止 NaN / Infinity / 异常大值进入持久化） */
 export const MAX_ESTIMATED_MINUTES = 7 * 24 * 60;
@@ -109,8 +117,8 @@ export function normalizeAssignment(raw: unknown): Assignment {
     description: typeof a.description === "string" ? a.description : "",
     ddl: hasValidDdl ? (a.ddl as string) : undefined,
     estimatedMinutes: normalizeEstimatedMinutes(a.estimatedMinutes),
-    priority: base.priority ?? "medium",
-    status: base.status ?? "todo",
+    priority: ASSIGNMENT_PRIORITIES.includes(base.priority) ? base.priority : "medium",
+    status: ASSIGNMENT_STATUSES.includes(base.status) ? base.status : "todo",
     progress: typeof a.progress === "number" && a.progress >= 0 && a.progress <= 100 ? a.progress : 0,
     tags: Array.isArray(a.tags) ? a.tags.filter((t): t is string => typeof t === "string") : [],
     subtasks: Array.isArray(a.subtasks) ? (a.subtasks as Assignment["subtasks"]) : undefined,

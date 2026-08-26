@@ -40,6 +40,7 @@ import { useAppStore } from "@/store/useAppStore";
 import { useInboxChannelBridge } from "@/hooks/useInboxChannelBridge";
 import { cn } from "@/lib/utils";
 import { reconcilePersistedFileBlobs } from "@/lib/fileReconcile";
+import { didMainStoreHydrationFail } from "@/store/useAppStore";
 import { listAllProjectFileStorageKeys } from "@/lib/ai/projects/files/db";
 import { resolveStartupTab } from "@/lib/startup";
 
@@ -55,7 +56,10 @@ export default function Home() {
   // 启动时孤儿 Blob 对账（V1.3A.1 fail-closed）：
   // Course + Project 引用 key 必须全部枚举成功才执行 GC；
   // Project key enumeration 失败 → 完全 skip（不删除任何 Blob，避免误删 Project File）。
+  // Hydration 失败（localStorage 损坏 → Store 空态）→ 同样完全 skip：
+  // 「看不见引用」≠「没有引用」，此时 GC 会清光用户附件且不可逆。
   useEffect(() => {
+    if (didMainStoreHydrationFail()) return;
     const courseKeys = new Set<string>();
     useAppStore.getState().courses.forEach((c) =>
       c.materials.forEach((m) => {

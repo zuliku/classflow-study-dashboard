@@ -212,3 +212,104 @@ describe("Zustand persist 边界与迁移", () => {
     expect(store.getState().selectedCourseId).toBeNull();
   });
 });
+
+// ============================================================
+// Hydration 失败门禁（稳定性审计 BUG-006 回归）：
+// localStorage 损坏 → zustand 静默吞错、Store 留在空态。
+// didMainStoreHydrationFail() 必须如实报告，供启动 Blob 对账 fail-closed。
+// ============================================================
+describe("persist hydration failure gate", () => {
+  beforeEach(() => {
+    localStorage.clear();
+    vi.restoreAllMocks();
+  });
+
+  async function freshModule() {
+    vi.resetModules();
+    return import("@/store/useAppStore");
+  }
+
+  it("损坏 JSON → hydration failed = true（Store 空态但 GC 门禁关闭）", async () => {
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    localStorage.setItem(KEY, "{{{ not json");
+    const mod = await freshModule();
+    expect(mod.didMainStoreHydrationFail()).toBe(true);
+    // 显式诊断输出（不再无声丢失）
+    expect(errSpy.mock.calls.some((args) => String(args[0]).includes("rehydration failed"))).toBe(true);
+  });
+
+  it("健康数据 / 空 storage → hydration failed = false", async () => {
+    seedV0({ state: v0Payload });
+    let mod = await freshModule();
+    expect(mod.didMainStoreHydrationFail()).toBe(false);
+
+    localStorage.clear();
+    mod = await freshModule();
+    expect(mod.didMainStoreHydrationFail()).toBe(false);
+  });
+
+  it("page.tsx 启动对账消费该门禁：reconcile 前检查 hydration 失败", async () => {
+    const fs = await import("node:fs");
+    const path = await import("node:path");
+    const src = fs.readFileSync(path.join(process.cwd(), "app/page.tsx"), "utf-8");
+    expect(src).toContain("didMainStoreHydrationFail");
+    // fail-closed：门禁为 true 时直接 return，不执行 reconcile
+    expect(src).toMatch(/if \(didMainStoreHydrationFail\(\)\) return;/);
+  });
+});
+
+// ============================================================
+// Hydration sanitize 加固（稳定性审计 BUG-007 回归）：
+// 1) status / priority 枚举白名单（垃圾值 → 默认值，不再透传）
+// 2) deleteCourse 对缺 materials 数组的部分持久化数据不再 TypeError
+// ============================================================
+describe("hydration sanitization hardening", () => {
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
+  async function freshModule() {
+    vi.resetModules();
+    return import("@/store/useAppStore");
+  }
+
+  it("垃圾 status/priority → 回落 todo/medium（不进入业务态）", async () => {
+    localStorage.setItem(KEY, JSON.stringify({
+      state: {
+        semester: v0Payload.semester,
+        assignments: [
+          { id: "a_bad", courseId: "", title: "坏数据任务", description: "", priority: 123, status: "banana", progress: 0, tags: [] },
+          { id: "a_ok", courseId: "", title: "好数据任务", description: "", priority: "high", status: "doing", progress: 0, tags: [] },
+        ],
+      },
+      version: 8,
+    }));
+    const mod = await freshModule();
+    const s = mod.useAppStore.getState();
+    const bad = s.assignments.find((a) => a.id === "a_bad")!;
+    expect(bad.status).toBe("todo");
+    expect(bad.priority).toBe("medium");
+    const ok = s.assignments.find((a) => a.id === "a_ok")!;
+    expect(ok.status).toBe("doing");
+    expect(ok.priority).toBe("high");
+  });
+
+  it("course 缺 materials 数组 → deleteCourse 不抛错且级联完成", async () => {
+    localStorage.setItem(KEY, JSON.stringify({
+      state: {
+        semester: v0Payload.semester,
+        // 故意缺 materials 字段（cast-only hydration 的历史风险形状）
+        courses: [{ id: "c_fragile", name: "脆弱课程", code: "F-01" }],
+        schedules: [{ id: "s_f", courseId: "c_fragile", dayOfWeek: 1, startTime: "08:00", endTime: "09:40", location: "", weeks: "1-16周" }],
+        assignments: [{ id: "a_fragile", courseId: "c_fragile", title: "脆弱任务", description: "", ddl: "2026-09-01T23:59:00", priority: "medium", status: "todo", progress: 0, tags: [] }],
+      },
+      version: 8,
+    }));
+    const mod = await freshModule();
+    expect(() => mod.useAppStore.getState().deleteCourse("c_fragile")).not.toThrow();
+    const s = mod.useAppStore.getState();
+    expect(s.courses.find((c) => c.id === "c_fragile")).toBeUndefined();
+    expect(s.assignments.find((a) => a.id === "a_fragile")).toBeUndefined();
+    expect(s.schedules.find((x) => x.id === "s_f")).toBeUndefined();
+  });
+});
