@@ -374,7 +374,6 @@ describe("BUG-050: Kiro reminder tools vs auto lifecycle", () => {
     expect(a1.autoReminderDisabled).toBe(true); // durable opt-out 已写入
 
     // 下轮 reconcileAllAuto 不删除该提醒、不重建默认 auto
-    act(() => { store.setState({}); });
     const mod = await import("@/lib/reminders/autoDeadlineReminder");
     const reconciled = mod.reconcileAllAutomaticDeadlineReminders({
       assignments: s.assignments,
