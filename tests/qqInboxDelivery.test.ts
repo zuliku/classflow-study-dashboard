@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+﻿import { describe, it, expect } from "vitest";
 import { ChannelInboxSink } from "@/src/main/channels/inboxSink";
 import { QQChannelAdapter } from "@/src/main/channels/qq/adapter";
 import type { ChannelInboundMessage } from "@/src/main/channels/types";
@@ -49,10 +49,9 @@ describe("qqInboxDelivery", () => {
     const processed = wrapExternalContent(stored.text);
     expect(processed).toContain("EXTERNAL UNTRUSTED CONTENT");
     expect((processed.match(/EXTERNAL UNTRUSTED CONTENT/g) || []).length).toBe(1);
-    // Not double wrapped
-    expect(wrapExternalContent(processed).match(/EXTERNAL UNTRUSTED CONTENT/g)!.length).toBeGreaterThan(1); // double would be 2, but we only wrap once in real flow
-    // So real flow should be exactly 1
-    expect((processed.match(/EXTERNAL UNTRUSTED CONTENT/g) || []).length).toBe(1);
+    // BUG-064：重复包裹被中性化 —— 标记数恒为 1（幂等），攻击者无法借二次处理伪造嵌套边界
+    const rewrapped = wrapExternalContent(processed);
+    expect((rewrapped.match(/EXTERNAL UNTRUSTED CONTENT/g) || []).length).toBe(1);
   });
 
   it("Self echo senderIsBot true → inbox 0 even without botIdentity", async () => {
