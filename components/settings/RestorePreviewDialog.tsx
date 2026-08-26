@@ -103,10 +103,24 @@ export function RestorePreviewDialog({
                     <CheckCircle2 className="w-3.5 h-3.5" />
                     数据结构正常
                   </p>
-                  {prepared.integrity.fatal.length === 0 && (
+                  {prepared.integrity.fatal.length === 0 && prepared.missingMaterials.length === 0 && (
                     <p className="flex items-center gap-1.5 text-success font-semibold">
                       <CheckCircle2 className="w-3.5 h-3.5" />
                       关联关系正常
+                    </p>
+                  )}
+                  {/* B1：ZIP 内缺失的附件必须在预览可见（否则用户在「关联关系正常」误导下确认恢复） */}
+                  {prepared.missingMaterials.length > 0 && (
+                    <p
+                      className="flex items-start gap-1.5 text-warning font-semibold"
+                      data-testid="restore-missing-materials"
+                    >
+                      <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                      <span>
+                        {prepared.missingMaterials.length} 个附件文件不在备份包内（如{" "}
+                        {prepared.missingMaterials[0].title}
+                        {prepared.missingMaterials.length > 1 ? " 等" : ""}），恢复后将无法打开这些资料
+                      </span>
                     </p>
                   )}
                   {prepared.integrity.warnings.map((w) => (

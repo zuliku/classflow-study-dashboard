@@ -75,18 +75,24 @@ export function ChannelSettings() {
   const isBusy = (id: string, action: string) => !!busyMap[`${id}:${action}`];
   const setBusy = (id: string, action: string, v: boolean) => setBusyMap((prev) => ({ ...prev, [`${id}:${action}`]: v }));
 
+  // Latest-wins generation token：connect/disconnect/test 各自触发 refresh()，
+  // 无守卫时慢的旧 list() 响应会覆盖新状态（卡片显示与真实连接态相反，直到下次刷新）
+  const refreshGenerationRef = useRef(0);
   const refresh = useCallback(async () => {
     const bridge = getChannelsBridge();
     if (!bridge) {
       setRuntimeState("unavailable");
       return;
     }
+    const generation = ++refreshGenerationRef.current;
     setRuntimeState("loading");
     try {
       const res = await bridge.list() as { channels: ChannelStatus[] };
+      if (generation !== refreshGenerationRef.current) return; // 过期响应：丢弃
       setChannels(Array.isArray(res.channels) ? res.channels : []);
       setRuntimeState("ready");
     } catch {
+      if (generation !== refreshGenerationRef.current) return;
       setRuntimeState("error");
     }
   }, []);

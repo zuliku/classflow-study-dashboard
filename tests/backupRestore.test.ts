@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from "vitest";
+﻿import { describe, it, expect, vi } from "vitest";
 import JSZip from "jszip";
 import {
   prepareBackupRestore,
@@ -172,6 +172,30 @@ describe("commitBackupRestore — 本地头像一致性（V4.1）", () => {
     // 不留下悬挂引用（绝不复用恢复前的陈旧本地头像）
     expect(after.userProfile.avatarStorageKey).toBeUndefined();
     expect(await loadAvatarBlob()).toBeNull();
+  });
+
+  it("saveAvatar 失败 → 摘除 avatarStorageKey（不保留悬挂引用）", async () => {
+    const data = buildBackupData();
+    data.userProfile.avatarStorageKey = "profile-avatar";
+    const avatar = new Blob([PNG_BYTES], { type: "image/png" });
+    const zip = await makeZip(data, {}, avatar);
+
+    const prepared = await prepareBackupRestore(toFile(zip, "backup-avatar-fail.zip"));
+    expect(prepared.ok).toBe(true);
+    if (!prepared.ok) return;
+
+    const saved: ClassFlowBackupData[] = [];
+    await commitBackupRestore(prepared.prepared, {
+      restoreAppData: (d) => {
+        saved.push(d);
+      },
+      saveAvatarBlob: async () => {
+        throw new Error("quota exceeded");
+      },
+    });
+    // 模块不变量：头像 Blob 写入失败 → 引用必须被摘除（restoreData 不携带 avatarStorageKey）
+    expect(saved).toHaveLength(1);
+    expect(saved[0].userProfile.avatarStorageKey).toBeUndefined();
   });
 
   it("JSON 备份声明头像 → prepare 给出 warning；commit 剥离引用且不恢复本地头像", async () => {

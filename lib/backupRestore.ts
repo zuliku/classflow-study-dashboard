@@ -149,6 +149,12 @@ export async function commitBackupRestore(
       await saveAvatar(prepared.avatar);
     } catch {
       savedFailures.push("avatar");
+      // 模块不变量「绝不保留不可用的 avatarStorageKey」：Blob 写入失败 →
+      // 摘除引用（否则恢复后 profile 指向不存在的头像 Blob）
+      restoreData = {
+        ...prepared.data,
+        userProfile: stripUnbackableAvatarRef(prepared.data.userProfile),
+      };
     }
   } else if (prepared.data.userProfile.avatarStorageKey) {
     // 备份内无头像 Blob：清理陈旧本地头像（失败不阻塞恢复），并摘除悬挂引用

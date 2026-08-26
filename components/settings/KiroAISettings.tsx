@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { Check, Loader2, Eye, EyeOff, PlugZap, Globe2, ChevronDown } from "lucide-react";
 import { useAISettingsStore } from "@/store/useAISettingsStore";
 import { getSessionApiKey, setSessionApiKey } from "@/lib/ai/sessionKeys";
@@ -151,6 +151,8 @@ export function KiroAISettings({ reveal }: { reveal?: { key: string; seq: number
   });
 
   const handleProviderChange = (p: AIProviderId) => {
+    // 使 in-flight 测试结果过期（runTest 落地时 seq 不匹配 → 丢弃）
+    runTestSeqRef.current += 1;
     setProvider(p);
     setApiKeyInput(getSessionApiKey(p));
     setTest({ status: "idle" });
@@ -161,7 +163,12 @@ export function KiroAISettings({ reveal }: { reveal?: { key: string; seq: number
     setSessionApiKey(provider, v);
   };
 
+  // Latest-wins seq：测试进行中切换 provider/修改配置 → 迟到的旧测试结果不得
+  // 覆盖新选择的状态徽章（handleProviderChange 会重置为 idle，旧响应随后落地会误标）
+  const runTestSeqRef = useRef(0);
+
   const runTest = async () => {
+    const seq = ++runTestSeqRef.current;
     setTest({ status: "testing" });
     // Sanitized logging (no API key)
     const endpointHostname = (() => {
@@ -187,12 +194,14 @@ export function KiroAISettings({ reveal }: { reveal?: { key: string; seq: number
         }),
       });
       const data = (await res.json()) as { ok: boolean; code?: AIErrorCode; message?: string };
+      if (seq !== runTestSeqRef.current) return; // 过期结果：丢弃（provider 已切换）
       if (process.env.NODE_ENV !== "production") {
         console.log(`[classflow] AI test status=${res.status} ok=${data.ok} code=${data.code ?? "-"} endpoint=${endpointHostname}`);
       }
       if (data.ok) setTest({ status: "success" });
       else setTest({ status: "error", message: data.message || AI_ERROR_MESSAGES[data.code ?? "UNKNOWN"] });
     } catch (err) {
+      if (seq !== runTestSeqRef.current) return;
       if (process.env.NODE_ENV !== "production") {
         console.error(`[classflow] AI test provider=${provider} model=${model} endpoint=${endpointHostname} error=fetch_failed`);
       }
