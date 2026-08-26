@@ -89,6 +89,9 @@ export function buildStudyOutlook(input: StudyOutlookBuildInput): StudyOutlook {
   const freeSlots = findFreeTime({
     start: now,
     end: horizonEnd,
+    // 显式传入业务 now：「今天不返回过去时间」的基准必须与本引擎的时间锚一致，
+    // 否则可用时间随真实墙钟时段漂移（晚间运行 vs 早晨运行结果不同）
+    now,
     semester,
     currentSemesterWeek,
     schedules,

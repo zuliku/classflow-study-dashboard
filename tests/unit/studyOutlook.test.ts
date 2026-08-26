@@ -5,8 +5,8 @@ import { EstimateCalibration } from "@/lib/analytics/estimateCalibration";
 import { findFreeTime } from "@/lib/planning/freeTime";
 import { Assignment, CalendarMark, CourseSchedule, Semester, StudyBlock } from "@/types";
 
-// fixture 相对真实 now（findFreeTime 内部用真实时钟；与 taskHealth.test 同策略）
-const NOW = new Date();
+// fixture 使用固定时钟（studyOutlook 已将 now 透传 findFreeTime，可用时间断言与运行时段无关）
+const NOW = new Date(2026, 6, 15, 10, 0, 0); // 2026-07-15 周三 10:00
 const iso = (d: Date, h = 23, m = 59) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}T${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:00`;
 const date = (offset: number) => {
@@ -143,7 +143,9 @@ describe("Study Outlook", () => {
   it("at-risk：可用时间不足 → health=at-risk", () => {
     const input = baseInput({
       assignments: [
-        mk("a1", { ddl: iso(new Date(NOW.getTime() + 1 * 86400000), 12, 0), estimatedMinutes: 480 }), // 明天中午，缺口巨大
+        // 明天中午截止；now→deadline 的物理可用上限 ≈ 900min（今日剩余窗口 + 次日 08:00–12:00）
+        // 1440min 需求在任何运行时段都 > 可用 → 确定性 at-risk（不随小时漂移）
+        mk("a1", { ddl: iso(new Date(NOW.getTime() + 1 * 86400000), 12, 0), estimatedMinutes: 1440 }),
       ],
     });
     const out = buildStudyOutlook(input);
