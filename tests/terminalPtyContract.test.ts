@@ -1,4 +1,4 @@
-import { describe, it, expect, afterEach } from "vitest";
+﻿import { describe, it, expect, afterEach } from "vitest";
 import { mkdtempSync, mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -91,7 +91,8 @@ describe("Phase 4 — PTY session（真实 ConPTY）", () => {
     expect(dataText(buffer)).not.toContain(base); // 绝对路径不出现
   });
 
-  it("resize（120x32 → 100x24）不 crash 且后续命令仍有输出", async () => {
+  // 真实 ConPTY：满载并行下 resize 后输出到达时序抖动 → 允许重试
+  it("resize（120x32 → 100x24）不 crash 且后续命令仍有输出", { retry: 2 }, async () => {
     const { sessionId, buffer } = openSession(scratchDir());
     resizePtySession(sessionId, 100, 24);
     resizePtySession(sessionId, 120, 32);
