@@ -309,6 +309,7 @@ export class QQMailChannelAdapter implements ChannelAdapter {
     let maxUid = 0;
     let hadFailure = false;
     for (const env of toIngest) {
+      let ingestedExternalId: string | undefined;
       try {
         const partInfo = findTextPart(env.bodyStructure as never);
         let bodyContent: string | null = null;
@@ -320,6 +321,7 @@ export class QQMailChannelAdapter implements ChannelAdapter {
         const normalized = await this.normalizeFromEnvelope(env, uidValidity, bodyContent, isHtml);
         if (this.seenIds.has(normalized.externalMessageId)) continue;
         this.seenIds.add(normalized.externalMessageId);
+        ingestedExternalId = normalized.externalMessageId;
         const rfcId = normalized.rfcMessageId ?? `<${normalized.externalMessageId}>`;
         const replyTo = (normalized as unknown as { replyToAddress?: string }).replyToAddress ?? normalized.fromAddress ?? normalized.senderId;
         let replyContextId: string | undefined;
@@ -340,22 +342,28 @@ export class QQMailChannelAdapter implements ChannelAdapter {
         await this.inboxSink.ingest(withCtx);
         this.messageCount++;
         if (env.uid > maxUid) maxUid = env.uid;
-      } catch {
+      } catch (e) {
+        // BUG-045：失败消息必须回滚 seenIds，否则下轮被去重跳过而 cursor 越过 → 永久丢失
         hadFailure = true;
+        if (ingestedExternalId) this.seenIds.delete(ingestedExternalId);
+        console.warn(`[qqmail-adapter] initial sync message ${env.uid} failed: ${(e as Error).message?.slice(0, 120)}`);
         break;
       }
     }
     if (!hadFailure) {
       this.syncStateStore.setQQMailState(this.id, { uidValidity: String(uidValidity), lastSeenUid: maxUid || 0, initializedAt: Date.now(), lastSyncAt: Date.now() });
-    } else {
-      const existing = this.syncStateStore.getQQMailState(this.id);
-      if (!existing) {
-        this.syncStateStore.setQQMailState(this.id, { uidValidity: String(uidValidity), lastSeenUid: 0, initializedAt: Date.now(), lastSyncAt: Date.now() });
-      }
     }
+    // 失败且无既有 state：不写入 lastSeenUid:0 占位 —— 留空使下轮重走 initial sync 重试
+    // （旧代码写 uid=0，下轮 incremental 会按 uid>0 拉全库最旧 50 封）
   }
 
   private async doIncrementalSync(imap: any, existing: { uidValidity: string; lastSeenUid: number }, currentValidity: number): Promise<void> {
+    // BUG-046：lastSeenUid=0 表示「尚无有效 baseline」（空窗口或失败占位）。
+    // 若按 uid>0 走 incremental，会拉全库并取最旧 50 封升序灌入。重走 initial sync。
+    if (!(existing.lastSeenUid > 0)) {
+      await this.doInitialSync(imap, currentValidity);
+      return;
+    }
     let uids: number[] = [];
     try {
       if (typeof imap.searchUidGreater === "function") {
@@ -379,6 +387,7 @@ export class QQMailChannelAdapter implements ChannelAdapter {
     let maxUid = existing.lastSeenUid;
     let hadFailure = false;
     for (const env of toIngest) {
+      let ingestedExternalId: string | undefined;
       try {
         const partInfo = findTextPart(env.bodyStructure as never);
         let bodyContent: string | null = null;
@@ -390,6 +399,7 @@ export class QQMailChannelAdapter implements ChannelAdapter {
         const normalized = await this.normalizeFromEnvelope(env, Number(existing.uidValidity), bodyContent, isHtml);
         if (this.seenIds.has(normalized.externalMessageId)) continue;
         this.seenIds.add(normalized.externalMessageId);
+        ingestedExternalId = normalized.externalMessageId;
         const rfcId = normalized.rfcMessageId ?? `<${normalized.externalMessageId}>`;
         const replyTo = (normalized as unknown as { replyToAddress?: string }).replyToAddress ?? normalized.fromAddress ?? normalized.senderId;
         let replyContextId: string | undefined;
@@ -410,8 +420,11 @@ export class QQMailChannelAdapter implements ChannelAdapter {
         await this.inboxSink.ingest(withCtx);
         this.messageCount++;
         if (env.uid > maxUid) maxUid = env.uid;
-      } catch {
+      } catch (e) {
+        // BUG-045：与 Gmail 同契约 —— seenIds 回滚 + cursor 不推进（break 保持批次序稳定）
         hadFailure = true;
+        if (ingestedExternalId) this.seenIds.delete(ingestedExternalId);
+        console.warn(`[qqmail-adapter] incremental sync message ${env.uid} failed: ${(e as Error).message?.slice(0, 120)}`);
         break;
       }
     }

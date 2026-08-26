@@ -92,6 +92,9 @@ function buildApi(store: { getState: () => any }, undos: Map<string, () => void>
     updateReminder: (id, patch) => store.getState().updateReminder(id, patch),
     deleteReminder: (id) => store.getState().deleteReminder(id),
     restoreReminder: (r) => store.getState().restoreReminder(r),
+    updateReminderByUser: (id: string, patch: Record<string, unknown>) => store.getState().updateReminderByUser(id, patch as never),
+    deleteReminderByUser: (id: string) => store.getState().deleteReminderByUser(id),
+    enableAutomaticReminderForTarget: (targetType: never, targetId: string) => store.getState().enableAutomaticReminderForTarget(targetType, targetId),
     reconcileTargetReminders: (targetType, targetId) => store.getState().reconcileTargetReminders(targetType, targetId),
     startFocusSession: (input) => store.getState().startFocusSession(input),
     pauseFocusSession: (now) => store.getState().pauseFocusSession(now),
@@ -318,5 +321,103 @@ describe("delete_reminder contract", () => {
     expect(description).toContain("没有唯一 reminderId");
     expect(description).toContain("list_reminders");
     expect(description).not.toContain("删除前必须用 list_reminders");
+  });
+});
+
+// ============================================================
+// 稳定性审计 Round4 BUG-050 回归：
+// Kiro reminder 工具对 source="auto" 的操作必须走 ByUser 语义
+//（update → manual + durable opt-out；delete → opt-out 删除，不再被 reconcile 复活/清除）
+// ============================================================
+describe("BUG-050: Kiro reminder tools vs auto lifecycle", () => {
+  function seedAutoReminder() {
+    seedState({
+      reminders: [
+        {
+          id: "r-auto", title: "截止提醒", targetType: "assignment", targetId: "a1",
+          timingMode: "relative", offsetMinutes: -1440,
+          triggerAt: dayOffset(5, 23, 59), status: "scheduled", source: "auto",
+          createdAt: dayOffset(-1), updatedAt: dayOffset(-1),
+        },
+      ],
+    });
+    // a1 的 opt-out 是为绕开 hydrate backfill 的；本用例需要 auto 存活 → 移除 opt-out
+    const raw = JSON.parse(localStorage.getItem(KEY)!);
+    raw.state.assignments = raw.state.assignments.map((a: { id: string; autoReminderDisabled?: boolean }) =>
+      a.id === "a1" ? { ...a, autoReminderDisabled: false } : a
+    );
+    localStorage.setItem(KEY, JSON.stringify(raw));
+  }
+
+  it("update_reminder on auto → 转 manual + assignment.autoReminderDisabled=true（不被 reconcile 清除）", async () => {
+    seedAutoReminder();
+    const { store, write } = await freshModules();
+    const api = buildApi(store, new Map());
+    // hydrate reconcile 生成的 auto 提醒（id 由 Store 创建）
+    const autoReminder = store.getState().reminders.find(
+      (x) => x.targetType === "assignment" && x.targetId === "a1" && x.source === "auto" && x.status === "scheduled"
+    )!;
+    expect(autoReminder).toBeTruthy();
+    const res = write.executeKiroWriteTool(
+      "update_reminder",
+      { reminderId: autoReminder.id, timingMode: "absolute", triggerAt: dayOffset(4, 9, 0) },
+      api,
+      "c1"
+    ) as { ok: boolean };
+    expect(res.ok).toBe(true);
+
+    const s = store.getState();
+    const r = s.reminders.find((x) => x.id === autoReminder.id)!;
+    expect(r.source).toBe("manual"); // 不再是 auto → reconcile 不会判 stale 删除
+    expect(r.timingMode).toBe("absolute");
+    const a1 = s.assignments.find((a) => a.id === "a1")!;
+    expect(a1.autoReminderDisabled).toBe(true); // durable opt-out 已写入
+
+    // 下轮 reconcileAllAuto 不删除该提醒、不重建默认 auto
+    act(() => { store.setState({}); });
+    const mod = await import("@/lib/reminders/autoDeadlineReminder");
+    const reconciled = mod.reconcileAllAutomaticDeadlineReminders({
+      assignments: s.assignments,
+      calendarMarks: s.calendarMarks,
+      reminders: s.reminders,
+      requestedLead: 1440 as never,
+      defaultDDLTime: "23:59",
+      now: new Date().toISOString().slice(0, 19),
+    });
+    expect(reconciled.some((x) => x.id === autoReminder.id && x.status === "scheduled")).toBe(true);
+  });
+
+  it("delete_reminder on auto → 走 ByUser（opt-out 持久），下轮 reconcile 不复活", async () => {
+    seedAutoReminder();
+    const { store, write } = await freshModules();
+    const api = buildApi(store, new Map());
+    const autoReminder = store.getState().reminders.find(
+      (x) => x.targetType === "assignment" && x.targetId === "a1" && x.source === "auto" && x.status === "scheduled"
+    )!;
+    expect(autoReminder).toBeTruthy();
+    const res = write.executeKiroWriteTool(
+      "delete_reminder",
+      { reminderId: autoReminder.id },
+      api,
+      "c1"
+    ) as { ok: boolean };
+    expect(res.ok).toBe(true);
+    expect(store.getState().reminders.find((x) => x.id === "r-auto")).toBeUndefined();
+
+    const s = store.getState();
+    const a1 = s.assignments.find((a) => a.id === "a1")!;
+    expect(a1.autoReminderDisabled).toBe(true);
+
+    // reconcile 后不复活默认 auto（opt-out 生效）
+    const mod = await import("@/lib/reminders/autoDeadlineReminder");
+    const reconciled = mod.reconcileAllAutomaticDeadlineReminders({
+      assignments: s.assignments,
+      calendarMarks: s.calendarMarks,
+      reminders: s.reminders,
+      requestedLead: 1440 as never,
+      defaultDDLTime: "23:59",
+      now: new Date().toISOString().slice(0, 19),
+    });
+    expect(reconciled.some((x) => x.targetType === "assignment" && x.targetId === "a1" && x.status === "scheduled")).toBe(false);
   });
 });

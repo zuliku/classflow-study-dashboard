@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { DefaultChatTransport, lastAssistantMessageIsCompleteWithToolCalls } from "ai";
@@ -12,6 +12,7 @@ import { useAppStore } from "@/store/useAppStore";
 import { useAISettingsStore } from "@/store/useAISettingsStore";
 import { useKiroComputerStore } from "@/store/useKiroComputerStore";
 import { KiroComputerTurnSnapshot, KiroProjectTurnContext } from "@/lib/ai/contextBudget/types";
+import { stripWrappedExternalSegment } from "@/lib/inbox/types";
 import { KIRO_READ_TOOL_SCHEMAS } from "@/lib/ai/tools/read/schemas";
 import { ComputerActionFact, ComputerCapability, KiroWorkspaceMeta } from "@/lib/ai/computer/types";
 import { ComputerError } from "@/lib/ai/computer/errors";
@@ -2289,15 +2290,17 @@ export function useKiroChat({
     };
   }, [setPendingApproval]);
 
-  /** 当前用户 Turn 的文本（Memory Intent 守卫使用：只能来自当前 User Message，附件/摘要不算） */
+  /** 当前用户 Turn 的文本（Memory Intent 守卫使用：只能来自当前 User Message，附件/摘要不算）。
+   *  BUG-048：先剥离 wrapped 外部内容段 —— 邮件正文里的“请记住”不得触发记忆写入。 */
   const latestUserText = useMemo(() => {
     for (let i = chat.messages.length - 1; i >= 0; i--) {
       const m = chat.messages[i];
       if (m.role !== "user") continue;
-      return ((m.parts ?? []) as { type?: string; text?: string }[])
+      const raw = ((m.parts ?? []) as { type?: string; text?: string }[])
         .filter((p) => p.type === "text" && typeof p.text === "string")
         .map((p) => p.text as string)
         .join(" ");
+      return stripWrappedExternalSegment(raw);
     }
     return "";
   }, [chat.messages]);

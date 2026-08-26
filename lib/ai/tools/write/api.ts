@@ -59,6 +59,9 @@ export function createKiroWriteApi({
     updateReminder: (id, patch) => useAppStore.getState().updateReminder(id, patch),
     deleteReminder: (id) => useAppStore.getState().deleteReminder(id),
     restoreReminder: (r) => useAppStore.getState().restoreReminder(r),
+    updateReminderByUser: (id, patch) => useAppStore.getState().updateReminderByUser(id, patch),
+    enableAutomaticReminderForTarget: (targetType, targetId) => useAppStore.getState().enableAutomaticReminderForTarget(targetType, targetId),
+    deleteReminderByUser: (id) => useAppStore.getState().deleteReminderByUser(id),
     reconcileTargetReminders: (targetType, targetId) =>
       useAppStore.getState().reconcileTargetReminders(targetType, targetId),
     startFocusSession: (input) => useAppStore.getState().startFocusSession(input, kiro),

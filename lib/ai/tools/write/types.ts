@@ -204,6 +204,9 @@ export interface KiroWriteApi {
   deleteReminder: AppState["deleteReminder"];
   /** Undo 精确恢复原 Reminder（相同 ID，不重新生成） */
   restoreReminder: AppState["restoreReminder"];
+  updateReminderByUser: AppState["updateReminderByUser"];
+  enableAutomaticReminderForTarget: AppState["enableAutomaticReminderForTarget"];
+  deleteReminderByUser: AppState["deleteReminderByUser"];
   reconcileTargetReminders: AppState["reconcileTargetReminders"];
 
   // Task 5：Focus Session 白名单（canUndo=false；不暴露 setState）

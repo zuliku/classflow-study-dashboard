@@ -467,16 +467,107 @@ function restoreReminderSnapshot(api: KiroWriteApi, before: Reminder) {
   });
 }
 
+/** BUG-050 auto 分支共用：纯校验 + patch 计算（不写 Store）。错误时返回 error。 */
+function planReminderUpdate(
+  api: KiroWriteApi,
+  old: Reminder,
+  data: { title?: string; note?: string | null; timingMode?: ReminderTimingMode; offsetMinutes?: number; triggerAt?: string },
+  nowMs: number
+): { error?: WriteToolResult<unknown>; patch?: Partial<Reminder> } {
+  const nextTimingMode = data.timingMode ?? old.timingMode;
+  if (nextTimingMode === "relative") {
+    if (old.targetType === "standalone") return { error: invalidInput("独立提醒不支持相对时间。") };
+    const offsetMinutes = data.offsetMinutes ?? old.offsetMinutes;
+    if (offsetMinutes === undefined) return { error: invalidInput("缺少提前时间（offsetMinutes）。") };
+    const target = resolveReminderTarget(api, old.targetType, old.targetId);
+    if (target.notFound) return { error: notFound("提醒的目标已不存在。") };
+    if (!target.anchor) return { error: invalidInput("目标已没有可用的提醒基准时间。") };
+    const triggerAt = resolveReminderTriggerAt({ timingMode: "relative", triggerAt: target.anchor, offsetMinutes });
+    if (!triggerAt || (parseLocalDDL(triggerAt)?.getTime() ?? 0) <= nowMs) {
+      return { error: invalidInput("调整后的提醒时间已过。") };
+    }
+    if (
+      hasKiroReminderDuplicate(
+        api,
+        { targetType: old.targetType, targetId: old.targetId, timingMode: "relative", offsetMinutes, triggerAt },
+        old.id
+      )
+    ) {
+      return { error: invalidInput("已存在相同的提醒。") };
+    }
+    return {
+      patch: {
+        title: data.title ?? old.title,
+        note: data.note !== undefined ? data.note ?? undefined : old.note,
+        timingMode: "relative",
+        offsetMinutes,
+        triggerAt,
+      },
+    };
+  }
+
+  let triggerAt = data.triggerAt;
+  if (triggerAt === undefined) {
+    if (old.timingMode === "absolute") triggerAt = old.triggerAt;
+    else return { error: invalidInput("切换为自定义时间时必须提供具体时间（triggerAt）。") };
+  }
+  if ((parseLocalDDL(triggerAt)?.getTime() ?? 0) <= nowMs) {
+    return { error: invalidInput("提醒时间已过，请选择未来的时间。") };
+  }
+  if (hasKiroReminderDuplicate(api, { targetType: old.targetType, targetId: old.targetId, timingMode: "absolute", triggerAt }, old.id)) {
+    return { error: invalidInput("已存在相同时间的提醒。") };
+  }
+  return {
+    patch: {
+      title: data.title ?? old.title,
+      note: data.note !== undefined ? data.note ?? undefined : old.note,
+      timingMode: "absolute",
+      offsetMinutes: undefined,
+      triggerAt,
+    },
+  };
+}
+
 function updateReminder(api: KiroWriteApi, input: unknown, toolCallId: string): WriteToolResult<unknown> {
   const parsed = safeParse<{ reminderId: string; title?: string; note?: string | null; timingMode?: ReminderTimingMode; offsetMinutes?: number; triggerAt?: string }>("update_reminder", input);
   if (!parsed.ok) return parsed;
   const old = api.getState().reminders.find((r) => r.id === parsed.data.reminderId);
   if (!old) return notFound("未找到对应提醒。");
   if (old.status !== "scheduled") return invalidInput("历史提醒不能修改时间重新激活。");
+  const before: Reminder = { ...old };
+
+  // BUG-050：source="auto" 的提醒由自动生命周期管理 —— Kiro 直接改写会被下轮
+  // reconcile 判 stale 静默删除（绝对时间 anchor 推断为 null）再重建默认。
+  // 与 UI updateReminderByUser 同语义：视为用户定制 → 转 manual + 写 durable opt-out。
+  if (old.source === "auto") {
+    const nowMs = new Date().getTime();
+    const planned = planReminderUpdate(api, old, parsed.data, nowMs);
+    if (planned.error) return planned.error;
+    api.updateReminderByUser(old.id, planned.patch!);
+    const after = api.getState().reminders.find((r) => r.id === old.id)!;
+    api.registerUndo(toolCallId, () => {
+      // auto→manual 撤销：清除 durable opt-out + 原样恢复快照（source 回 auto）
+      api.enableAutomaticReminderForTarget(before.targetType, before.targetId!);
+      restoreReminderSnapshot(api, before);
+    });
+    return {
+      ok: true,
+      data: { id: old.id },
+      action: {
+        tool: "update_reminder",
+        entityType: "reminder",
+        entityId: old.id,
+        title: after.title,
+        operation: "update",
+        before: { timingMode: before.timingMode, offsetMinutes: before.offsetMinutes, triggerAt: before.triggerAt },
+        after: { timingMode: after.timingMode, offsetMinutes: after.offsetMinutes, triggerAt: after.triggerAt },
+        canUndo: true,
+      },
+    };
+  }
 
   const nextTimingMode = parsed.data.timingMode ?? old.timingMode;
   const nowMs = new Date().getTime();
-  const before: Reminder = { ...old };
 
   if (nextTimingMode === "relative") {
     if (old.targetType === "standalone") return invalidInput("独立提醒不支持相对时间。");
@@ -505,9 +596,14 @@ function updateReminder(api: KiroWriteApi, input: unknown, toolCallId: string): 
       offsetMinutes,
       triggerAt: target.anchor,
     });
+    // targeted 同步（manual 提醒保持既有路径；auto 分支上方已改走 ByUser）
     api.reconcileTargetReminders(old.targetType, old.targetId!);
     const after = api.getState().reminders.find((r) => r.id === old.id)!;
     api.registerUndo(toolCallId, () => {
+      // auto→manual 转换的撤销：先清除 durable opt-out，再原样恢复快照
+      if (before.source === "auto") {
+        api.enableAutomaticReminderForTarget(before.targetType, before.targetId!);
+      }
       restoreReminderSnapshot(api, before);
       if (before.timingMode === "relative") api.reconcileTargetReminders(before.targetType, before.targetId!);
     });
@@ -547,6 +643,9 @@ function updateReminder(api: KiroWriteApi, input: unknown, toolCallId: string): 
   // absolute 固定时间：不 reconcile
   const after = api.getState().reminders.find((r) => r.id === old.id)!;
   api.registerUndo(toolCallId, () => {
+    if (before.source === "auto") {
+      api.enableAutomaticReminderForTarget(before.targetType, before.targetId!);
+    }
     restoreReminderSnapshot(api, before);
     if (before.timingMode === "relative") api.reconcileTargetReminders(before.targetType, before.targetId!);
   });
@@ -573,6 +672,23 @@ function deleteReminder(api: KiroWriteApi, input: unknown, toolCallId: string): 
   if (!target) return notFound("未找到对应提醒。");
   // scheduled-only guard：fired / skipped 属于历史提醒，禁止删除（与 update_reminder 一致）
   if (target.status !== "scheduled") return invalidInput("历史提醒不能删除。");
+  // BUG-050：auto 提醒删除必须走 ByUser（写 durable opt-out），否则下轮 reconcile 复活
+  if (target.source === "auto") {
+    api.deleteReminderByUser(target.id);
+    return {
+      ok: true,
+      data: { id: target.id },
+      action: {
+        tool: "delete_reminder",
+        entityType: "reminder",
+        entityId: target.id,
+        title: target.title,
+        operation: "delete",
+        before: { timingMode: target.timingMode, offsetMinutes: target.offsetMinutes, triggerAt: target.triggerAt },
+        canUndo: false, // opt-out 是持久意图；恢复请走 enableAutomaticReminderForTarget / UI
+      },
+    };
+  }
   const snapshot: Reminder = { ...target };
   api.deleteReminder(target.id);
   api.registerUndo(toolCallId, () => api.restoreReminder(snapshot));

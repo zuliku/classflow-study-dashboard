@@ -1620,11 +1620,13 @@ export const useAppStore = create<AppState>()(
           // A. 有 DDL → 有 DDL：更新已有 linked mark（sourceId 精确匹配 / legacy 唯一匹配）
           // B. 无 DDL → 有 DDL：创建 linked mark
           // C. 有 DDL → 无 DDL：删除 linked mark（不留下孤儿）
-          let matchedId: string | null = null;
+          const removedLinkedMarkIds = new Set<string>();
           let newCalendarMarks = state.calendarMarks.map((m) => {
             if (m.sourceId === next.id) {
-              matchedId = m.id;
-              if (!hasDdl) return null; // C：删除
+              if (!hasDdl) {
+                removedLinkedMarkIds.add(m.id);
+                return null; // C：删除
+              }
               return {
                 ...m,
                 date: newDdlDate,
@@ -1633,8 +1635,10 @@ export const useAppStore = create<AppState>()(
               };
             }
             if (oldAssignment && isLegacyDDLMarkForAssignment(m, oldAssignment)) {
-              matchedId = m.id;
-              if (!hasDdl) return null; // C：删除
+              if (!hasDdl) {
+                removedLinkedMarkIds.add(m.id);
+                return null; // C：删除
+              }
               return {
                 ...m,
                 date: newDdlDate,
@@ -1645,8 +1649,20 @@ export const useAppStore = create<AppState>()(
             return m;
           }).filter((m): m is CalendarMark => m !== null);
 
+          // BUG-051：case C 删除 linked mark 时，指向该 mark 的提醒必须级联移除
+          //（与 deleteCalendarMark 同语义；此前 void matchedId 丢弃 → 提醒在死目标上照常触发）
+          if (removedLinkedMarkIds.size > 0) {
+            newReminders = newReminders.filter(
+              (r) =>
+                !(
+                  r.targetType === "calendarMark" &&
+                  r.targetId !== undefined &&
+                  removedLinkedMarkIds.has(r.targetId)
+                )
+            );
+          }
+
           // B：无关联 mark 且存在 DDL → 新建（避免重复：确认过滤后无同 id mark）
-          void matchedId;
           if (hasDdl && !newCalendarMarks.some((m) => m.sourceId === next.id && m.type === "ddl")) {
             newCalendarMarks.push({
               id: createId("cm"),
