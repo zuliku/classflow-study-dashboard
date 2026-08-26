@@ -231,7 +231,7 @@ export function KiroConversation({
             {error && (
               <div
                 data-testid="kiro-error"
-                className="rounded-2xl bg-danger-bg border border-danger-border p-3.5 space-y-2"
+                className="kiro-structure-settle rounded-2xl bg-danger-bg border border-danger-border p-3.5 space-y-2"
               >
                 <p className="text-xs font-bold text-danger">Kiro 暂时没有完成回复</p>
                 <p className="text-[11px] text-satin-grey leading-relaxed">

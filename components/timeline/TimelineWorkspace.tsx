@@ -1165,6 +1165,8 @@ export function TimelineWorkspace() {
       setArrangeFor(null);
       return;
     }
+    // BUG-G1：与拖拽创建同一 settle 语法 —— 表单提交的新块同样播放 ux-settle
+    if (createdArrangeId) setSettledStudyBlockId(createdArrangeId);
     pushToast({ message: `已安排学习计划：${a?.title ?? "学习计划"}${courseOverlapSuffix(analysis.courseOverlaps)}` });
     setArrangeFor(null);
   };
@@ -1390,7 +1392,9 @@ export function TimelineWorkspace() {
               });
               return;
             }
-            addStudyBlock({ title: "学习计划", date, startTime: start, endTime: end, source: "manual" });
+            const freeCreatedId = addStudyBlock({ title: "学习计划", date, startTime: start, endTime: end, source: "manual" });
+            // BUG-G1：自由创建同样 settle（与拖拽/表单排课同一语法）
+            if (freeCreatedId) setSettledStudyBlockId(freeCreatedId);
             pushToast({ message: `已添加学习计划${courseOverlapSuffix(analysis.courseOverlaps)}` });
             setFreeBlockOpen(false);
           }

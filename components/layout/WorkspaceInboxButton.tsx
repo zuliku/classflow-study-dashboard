@@ -35,7 +35,7 @@ export function WorkspaceInboxButton({ unreadCount = 0, onClick, className }: Wo
       {hasUnread && (
         <span
           data-testid="workspace-inbox-badge"
-          className="min-w-[18px] h-[18px] px-1 rounded-full bg-charcoal text-white text-[10px] font-bold flex items-center justify-center leading-none"
+          className="animate-enter min-w-[18px] h-[18px] px-1 rounded-full bg-charcoal text-white text-[10px] font-bold flex items-center justify-center leading-none"
         >
           {unreadCount > 99 ? "99+" : unreadCount}
         </span>

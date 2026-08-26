@@ -32,11 +32,16 @@ const KiroToolRow = React.memo(function KiroToolRow({ block }: { block: ToolBloc
   const expandable = hasMeaningfulKiroToolDetails(block.safeDetails);
 
   const icon = error ? (
-    <AlertCircle className="w-3.5 h-3.5 text-danger shrink-0" aria-hidden="true" />
+    <AlertCircle
+      key="icon-error"
+      className="w-3.5 h-3.5 text-danger shrink-0 kiro-check-settle"
+      aria-hidden="true"
+    />
   ) : working ? (
     <Loader2 className="w-3.5 h-3.5 animate-spin text-charcoal shrink-0" aria-hidden="true" />
   ) : (
-    <Check className="w-3 h-3 text-success shrink-0" aria-hidden="true" />
+    // BUG-G5：working → done 到达时一次性 check-settle（key 变化触发重挂载播放）
+    <Check key="icon-check" className="w-3 h-3 text-success shrink-0 kiro-check-settle" aria-hidden="true" />
   );
 
   const rowBody = (

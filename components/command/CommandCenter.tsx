@@ -331,8 +331,8 @@ export function CommandCenter() {
         )}
       >
         {searchModalView === "guide" ? (
-          /* ---- Shortcut Guide 子视图 ---- */
-          <div className="p-5 space-y-4">
+          /* ---- Shortcut Guide 子视图（BUG-G10：key 驱动 ux-fade 淡入） ---- */
+          <div key="guide" className="ux-fade p-5 space-y-4">
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-bold text-charcoal flex items-center gap-2">
                 <Keyboard className="w-4 h-4 text-sandrift" />
@@ -393,8 +393,8 @@ export function CommandCenter() {
             </p>
           </div>
         ) : (
-          /* ---- Command Palette 主视图 ---- */
-          <>
+          /* ---- Command Palette 主视图（BUG-G10：key 驱动 ux-fade 淡入） ---- */
+          <div key="palette" className="ux-fade">
             {/* Input */}
             <div className="flex items-center px-4 py-3.5 border-b border-line-soft bg-background">
               <Search className="w-4 h-4 text-sandrift shrink-0 mr-3" />
@@ -466,9 +466,9 @@ export function CommandCenter() {
                     renderGroup(g, groupItems)
                   )}
                 </>
-              )}
-            </div>
-          </>
+                )}
+              </div>
+          </div>
         )}
       </div>
     </div>

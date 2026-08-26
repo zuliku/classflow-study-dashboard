@@ -164,8 +164,12 @@ export function FilePreviewModal() {
           </div>
         </div>
 
-        {/* Content Viewer Body */}
+        {/* Content Viewer Body（BUG-G6：状态切换淡入，key 驱动 ux-fade 重放） */}
         <div className="flex-1 p-4 bg-charcoal flex items-center justify-center overflow-hidden relative">
+          <div
+            key={isLoading ? "loading" : loadFailed ? "failed" : displayUrl && isPdf ? "pdf" : displayUrl && isImage ? "image" : "fallback"}
+            className="ux-fade w-full h-full flex items-center justify-center"
+          >
           {isLoading ? (
             <div className="flex flex-col items-center space-y-2 text-white/80 text-xs">
               <Loader2 className="w-6 h-6 animate-spin" />
@@ -226,6 +230,7 @@ export function FilePreviewModal() {
               )}
             </div>
           )}
+          </div>
         </div>
       </Dialog>
   );

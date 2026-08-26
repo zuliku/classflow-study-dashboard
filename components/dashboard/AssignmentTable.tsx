@@ -180,7 +180,8 @@ export function AssignmentTable({
   // 搜索仍即时同步列表，不反复重放整表动画）。workspaceResetKey 保持原语义不变。
   const contentTransitionKey = isWorkspace
     ? `${controller?.view ?? ""}|${controller?.courseFilter ?? ""}|${controller?.riskOnly ?? ""}`
-    : `compact|${courseFilter}`;
+    // BUG-G3：timeSlice 是显式分段切换（与搜索不同），纳入过渡键 → 切段播放 settle
+    : `compact|${courseFilter}|${assignmentTimeSlice}`;
 
   // IM4A：Exit-only 列表保留——仅真实数据 mutation（完成/删除导致离开当前视图）触发 Row 退出；
   // View/筛选/搜索/风险过滤 变化（resetKey）直接同步新列表，不播放大面积退出
@@ -189,6 +190,18 @@ export function AssignmentTable({
     getId: (it) => it.task.id,
     resetKey: workspaceResetKey,
   });
+
+  // BUG-G3：compact 模式同语法 —— 行删除/完成播放 ExitCollapse（此前仅 workspace 有）
+  const retainedCompactList = useExitPresenceList({
+    items: filteredAssignments,
+    getId: (a) => a.id,
+    resetKey: `compact-reset|${courseFilter}|${assignmentTimeSlice}`,
+  });
+  const compactExitById = useMemo(() => {
+    const map = new Map<string, boolean>();
+    for (const entry of retainedCompactList) map.set(entry.item.id, entry.exiting);
+    return map;
+  }, [retainedCompactList]);
 
   // 筛选变化 → 清理隐藏的 selection / highlight（保留可见项）
   useEffect(() => {
@@ -789,7 +802,9 @@ export function AssignmentTable({
                 );
               })
             : pagedAssignments.map((task) => (
-                <div key={task.id}>{renderAssignmentRow(task)}</div>
+                <ExitCollapse key={task.id} exiting={compactExitById.get(task.id) ?? false}>
+                  {renderAssignmentRow(task)}
+                </ExitCollapse>
               ))
         )}
         </div>

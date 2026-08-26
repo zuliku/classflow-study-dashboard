@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { CheckCircle2, Eye, RotateCcw, Clock3, XCircle, AlertTriangle, Download, Trash2 } from "lucide-react";
 import { KiroAgentTask, KiroComputerChange } from "@/lib/ai/computer/task";
 import { PersistedComputerTaskView } from "@/lib/ai/history/types";
@@ -28,6 +28,13 @@ export function KiroAgentTaskCard({
 }) {
   const { previewArtifact, downloadArtifact, deleteArtifact } = useKiroArtifactActions();
   const confirm = useConfirmStore((s) => s.confirm);
+  // BUG-G5（spec item 14）：live 任务卡入场 structure-settle（挂载播一次）；
+  // 历史恢复分支已提前返回，不会重播
+  const [settled, setSettled] = useState(false);
+  useEffect(() => {
+    const t = window.setTimeout(() => setSettled(true), 400);
+    return () => window.clearTimeout(t);
+  }, []);
 
   const requestDelete = (artifactId: string, displayName: string) => {
     confirm({
@@ -70,6 +77,7 @@ export function KiroAgentTaskCard({
       data-testid="kiro-agent-task-card"
       className={cn(
         "rounded-2xl border p-3 space-y-2",
+        task && !settled && "kiro-structure-settle",
         task.status === "undo_failed"
           ? "border-danger-border bg-danger-bg"
           : "border-line bg-[#F7F5F5]"
