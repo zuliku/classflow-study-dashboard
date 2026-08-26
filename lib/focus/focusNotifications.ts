@@ -23,7 +23,11 @@ export function playFocusCompleteSound(): boolean {
     osc.connect(gain).connect(ctx.destination);
     osc.start(now);
     osc.stop(now + 0.42);
-    void osc.onended;
+    // BUG-060：播放完关闭 AudioContext —— Chromium 每页 ~6 个上限，
+    // 不关闭则第 7 次完成起提示音永久静默
+    osc.onended = () => {
+      void ctx.close().catch(() => {});
+    };
     return true;
   } catch {
     return false;

@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Inbox Delivery Queue — Task 13C transient delivery buffer (not second Inbox DB)
  * Pure logic, max 500, TTL 30min, drop oldest, no content in logs, ACK driven.
  */
@@ -17,7 +17,9 @@ export class InboxDeliveryQueue {
   private order: string[] = []; // insertion order for drop oldest
   private rendererReady = false;
   private max = 500;
-  private ttlMs = 30 * 60 * 1000;
+  // BUG-057：30min TTL 会在 renderer 长时间忙碌（长流式回复）时把「已投递未 ACK」的
+  // 信封在重发前清扫掉。放宽到 24h —— 内存上限 500 条仍是主要边界。
+  private ttlMs = 24 * 60 * 60 * 1000;
 
   constructor(opts?: { max?: number; ttlMs?: number }) {
     if (opts?.max) this.max = opts.max;
@@ -57,6 +59,8 @@ export class InboxDeliveryQueue {
   }
 
   ack(deliveryId: string): boolean {
+    // 与 listPending 同语义：先过期再判定（否则同一逻辑状态两种结果）
+    this.expire();
     const existed = this.pending.has(deliveryId);
     if (existed) {
       this.pending.delete(deliveryId);

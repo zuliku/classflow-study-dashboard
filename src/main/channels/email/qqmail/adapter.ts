@@ -68,6 +68,10 @@ export class QQMailChannelAdapter implements ChannelAdapter {
   }
 
   private getImap(): any {
+    // BUG-056：已 disconnect 的适配器不得再悄悄重建 IMAP 连接（残余 tick 防护）
+    if (this.state === "disconnected") {
+      throw new ChannelError("EMAIL_SYNC_FAILED", "Adapter stopped");
+    }
     if (this.imapTransport) return this.imapTransport;
     if (!this.authCode) {
       try {
@@ -142,7 +146,10 @@ export class QQMailChannelAdapter implements ChannelAdapter {
   }
 
   async stop(): Promise<void> {
+    // BUG-056：先等进行中的 tick 结束（≤5s），再置 disconnected ——
+    // 否则残余 tick 会在断开后经 getImap 重建 IMAP 连接（ghost connection）
     this.scheduler?.stop();
+    await this.scheduler?.whenSettled();
     this.scheduler = null;
     const imap = this.imapTransport;
     if (imap) {
@@ -159,7 +166,7 @@ export class QQMailChannelAdapter implements ChannelAdapter {
     const before = this.messageCount;
     if (this.scheduler) {
       await this.scheduler.syncNow();
-    } else {
+    } else if (this.state !== "disconnected") {
       await this.doPoll();
     }
     return { added: this.messageCount - before, durationMs: Date.now() - start };

@@ -9,6 +9,9 @@ export class GmailTokenProvider {
   private credentialRef: string;
   private accessToken: string | null = null;
   private accessTokenExpiry = 0;
+  // BUG-052：single-flight —— 并发 getAccessToken 共享同一次 refresh，
+  // 防止 rotation 型凭据下第二次 refresh 使第一次失效
+  private inFlight: Promise<string> | null = null;
 
   constructor(credentialRef: string) {
     this.credentialRef = credentialRef;
@@ -18,6 +21,14 @@ export class GmailTokenProvider {
     if (this.accessToken && Date.now() < this.accessTokenExpiry - 60_000) {
       return this.accessToken;
     }
+    if (this.inFlight) return this.inFlight;
+    this.inFlight = this.refresh().finally(() => {
+      this.inFlight = null;
+    });
+    return this.inFlight;
+  }
+
+  private async refresh(): Promise<string> {
     const vault = getRuntimeSecretVault();
     const refreshToken = vault.resolveSecretForProvider(this.credentialRef, "google");
     const clientId = process.env.CLASSFLOW_GOOGLE_OAUTH_CLIENT_ID || process.env.GOOGLE_CLIENT_ID;
@@ -43,5 +54,6 @@ export class GmailTokenProvider {
   clearCache(): void {
     this.accessToken = null;
     this.accessTokenExpiry = 0;
+    this.inFlight = null;
   }
 }

@@ -65,7 +65,20 @@ export async function runFocusBackfill(input: {
 
   const events: LearningHistoryEvent[] = [];
   let backfilled = 0;
+  // BUG-058：先取全部已存在的 focus.completed 事件，构建 sessionId 集合 ——
+  // 回填只应补「从未被 live recorder 记录」的会话；否则首次回填中断后，
+  // 已 live 记录的 session 会被再补一条，专注分钟/校准样本最高 2× 通胀。
+  const { collectLearningHistoryEvents, resolveLearningHistoryQuery } = await import("@/lib/history/query");
+  const existingFocusEvents = await collectLearningHistoryEvents(
+    resolveLearningHistoryQuery({ eventTypes: ["focus.completed"], limit: 100000 })
+  );
+  const liveSessionIds = new Set<string>();
+  for (const ev of existingFocusEvents) {
+    // focus.completed 的 entityId = session.id（live 与 backfill 同一构建器）
+    if (ev.entityId) liveSessionIds.add(ev.entityId);
+  }
   for (const session of input.sessions) {
+    if (liveSessionIds.has(session.id)) continue; // 已有 live 记录 → 不回填
     const id = `lh_backfill_focus_completed_${session.id}`;
     const exists = await getLearningHistoryEvent(id);
     if (exists) continue;

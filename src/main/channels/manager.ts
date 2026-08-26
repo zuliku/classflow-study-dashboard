@@ -198,6 +198,14 @@ export class ChannelManager {
       throw new ChannelError("INVALID_INPUT", "displayName/emailAddress/credentialRef required");
     }
     if (!input.credentialRef.startsWith("cred_")) throw new ChannelError("INVALID_INPUT", "credentialRef invalid");
+    // BUG-052：同一邮箱/凭据重复添加会产生两个并发 refresh 的 provider（rotation 凭据下互踢）
+    const normalizedEmail = input.emailAddress.trim().toLowerCase();
+    const duplicate = Array.from(this.configs.values()).find(
+      (c) => c.channel === "gmail" && (c as { emailAddress?: string }).emailAddress === normalizedEmail
+    );
+    if (duplicate) {
+      throw new ChannelError("CHANNEL_ALREADY_EXISTS", `Gmail 渠道已存在：${normalizedEmail}`);
+    }
     try {
       const vault = getRuntimeSecretVault();
       vault.resolveSecretForProvider(input.credentialRef, "google");
@@ -366,6 +374,20 @@ export class ChannelManager {
   }
 
   async connect(id: string): Promise<void> {
+    // BUG-055：同 id 并发 connect 单飞 —— check-then-act 跨 await 会产生孤儿适配器
+    // 与重复网关连接（sendQQReply 自动连 × UI connect × startEnabledChannels 竞态）
+    const pending = this.connectingPromises.get(id);
+    if (pending) return pending;
+    const task = this.doConnect(id).finally(() => {
+      this.connectingPromises.delete(id);
+    });
+    this.connectingPromises.set(id, task);
+    return task;
+  }
+
+  private connectingPromises = new Map<string, Promise<void>>();
+
+  private async doConnect(id: string): Promise<void> {
     const cfg = this.configs.get(id);
     if (!cfg) throw new ChannelError("CHANNEL_NOT_FOUND", `Channel not found: ${id}`);
     if (!cfg.enabled) throw new ChannelError("CHANNEL_DISABLED", "Channel disabled");

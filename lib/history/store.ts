@@ -26,6 +26,9 @@ export function openLearningHistoryDB(): Promise<IDBDatabase> {
   if (dbPromise) return dbPromise;
   if (!hasIndexedDB()) {
     dbPromise = Promise.reject(new Error("IndexedDB unavailable"));
+    // BUG-049：拒绝态不能永久缓存 —— 否则一次瞬时失败导致本会话所有写入静默丢弃。
+    // 吞掉未处理的 rejection，并允许后续重试（resetLearningHistoryDbForRetry）。
+    dbPromise.catch(() => {});
     return dbPromise;
   }
   dbPromise = new Promise<IDBDatabase>((resolve, reject) => {
@@ -50,9 +53,26 @@ export function openLearningHistoryDB(): Promise<IDBDatabase> {
       }
     };
     req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error ?? new Error("failed to open learning history db"));
+    req.onerror = () => {
+      const err = req.error ?? new Error("failed to open learning history db");
+      // BUG-049：打开失败 → 丢弃缓存的 rejected promise，下次调用重试
+      dbPromise = null;
+      reject(err);
+    };
+    req.onblocked = () => {
+      dbPromise = null;
+      reject(new Error("learning history db open blocked"));
+    };
   });
   return dbPromise;
+}
+
+/** 测试/恢复路径：强制下一次 openLearningHistoryDB 重新尝试打开 */
+export function resetLearningHistoryDbForRetry(): void {
+  if (dbPromise) {
+    dbPromise.catch(() => {});
+  }
+  dbPromise = null;
 }
 
 function txDone(tx: IDBTransaction): Promise<void> {

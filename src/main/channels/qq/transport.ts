@@ -42,6 +42,8 @@ export class QQWebSocketTransport {
   private startupTimeoutMs = 15_000;
   private startupTimer: ReturnType<typeof setTimeout> | null = null;
   private botListeners: Array<{ event: string; handler: (...args: unknown[]) => void }> = [];
+  /** BUG-053：connecting 阶段 stop() 需要 reject readyPromise，否则 start() 永久挂起 */
+  private readyRejectRef: ((e: unknown) => void) | null = null;
 
   constructor(config: QQChannelConfig, appSecret: string, events: QQTransportEvents) {
     this.config = config;
@@ -66,6 +68,9 @@ export class QQWebSocketTransport {
       readyResolve = resolve;
       readyReject = reject;
     });
+    this.readyRejectRef = readyReject;
+    // 防 unhandled rejection：race 之外迟到 reject（如 stop() 触发）被静默吞掉
+    readyPromise.catch(() => {});
 
     const onReady = () => {
       readyResolve();
@@ -202,11 +207,15 @@ export class QQWebSocketTransport {
       // Success: clear timeout
       if (timer) clearTimeout(timer);
       this.startupTimer = null;
+      this.readyRejectRef = null;
 
       // Ready succeeded, state already connected via onReady
     } catch (e) {
       // If already set error state, just throw
       if (this.state === "error") throw e;
+      // BUG-053：stop() 在 connecting 阶段触发的 reject —— 适配器已在断开流程中，
+      // start() 静默返回（不抛错、不置 error 态）
+      if (this.state === "disconnected") return;
       const mapped = mapQQTokenError(e);
       this.setState("error", mapped);
       throw new Error(JSON.stringify(mapped));
@@ -216,6 +225,13 @@ export class QQWebSocketTransport {
   async stop(): Promise<void> {
     // Idempotent
     if (this.state === "disconnected" && !this.client && !this.runPromise && !this.startupTimer) return;
+    // BUG-053：connecting 阶段 stop → reject readyPromise，让 start() 的 race 立即结算
+    if (this.state === "connecting" && this.readyRejectRef) {
+      try {
+        this.readyRejectRef(new Error(JSON.stringify({ code: "QQ_GATEWAY_DISCONNECTED", message: "Stopped during connecting" })));
+      } catch {}
+      this.readyRejectRef = null;
+    }
     if (this.startupTimer) {
       clearTimeout(this.startupTimer);
       this.startupTimer = null;

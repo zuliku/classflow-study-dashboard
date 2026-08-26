@@ -195,10 +195,8 @@ export class GmailChannelAdapter implements ChannelAdapter {
     } catch (e) {
       const err = e as { message?: string };
       const raw = String((e as Error).message ?? "");
-      if (raw.includes("HISTORY_EXPIRED") || raw.includes("HISTORY_EXPIRED") || (e as { code?: string })?.code === "HISTORY_EXPIRED" || err?.message?.includes("HISTORY_EXPIRED") || raw.includes("404")) {
+      if (raw.includes("HISTORY_EXPIRED") || (e as { code?: string })?.code === "HISTORY_EXPIRED" || raw.includes("404")) {
         // Bounded recovery: 7d/50 — then re-establish historyId
-        await this.doInitialSync();
-      } else if (err?.message?.includes("HISTORY_EXPIRED")) {
         await this.doInitialSync();
       } else {
         throw e;

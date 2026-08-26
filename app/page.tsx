@@ -58,20 +58,30 @@ export default function Home() {
   // Project key enumeration 失败 → 完全 skip（不删除任何 Blob，避免误删 Project File）。
   // Hydration 失败（localStorage 损坏 → Store 空态）→ 同样完全 skip：
   // 「看不见引用」≠「没有引用」，此时 GC 会清光用户附件且不可逆。
+  // 延迟 30s 执行（BUG-067）：避免与启动窗口内 blob-first 上传（恢复/自动流程）
+  // 的快照-删除间隙竞态——新落盘的 blob 被误判为 orphan。
   useEffect(() => {
     if (didMainStoreHydrationFail()) return;
-    const courseKeys = new Set<string>();
-    useAppStore.getState().courses.forEach((c) =>
-      c.materials.forEach((m) => {
-        if (m.storageKey) courseKeys.add(m.storageKey);
-      })
-    );
-    void reconcilePersistedFileBlobs({
-      courseStorageKeys: courseKeys,
-      listProjectStorageKeys: listAllProjectFileStorageKeys,
-    }).catch(() => {
-      // reconcilePersistedFileBlobs 自身已 fail-closed；此处仅兜底未预期异常
-    });
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      if (cancelled) return;
+      const courseKeys = new Set<string>();
+      useAppStore.getState().courses.forEach((c) =>
+        c.materials.forEach((m) => {
+          if (m.storageKey) courseKeys.add(m.storageKey);
+        })
+      );
+      void reconcilePersistedFileBlobs({
+        courseStorageKeys: courseKeys,
+        listProjectStorageKeys: listAllProjectFileStorageKeys,
+      }).catch(() => {
+        // reconcilePersistedFileBlobs 自身已 fail-closed；此处仅兜底未预期异常
+      });
+    }, 30_000);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
   }, []);
 
   // Dev Preview 覆盖注入：?preview=task-v2 → confirm 后强制覆盖（仅开发构建）

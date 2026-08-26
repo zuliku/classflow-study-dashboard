@@ -156,11 +156,21 @@ export function FocusRuntime() {
     return () => clearTimer();
   }, [clearTimer]);
 
-  // Session 变化 → 清旧 timer 并重排（paused 自然不设 timer）
+  // Session 变化 → 清旧 timer 并重排（paused 自然不设 timer）。
+  // BUG-059：paused→running（继续）后 remaining 可能为 0 —— scheduleNext 会跳过 ≤0，
+  // 必须立即 reconcile 一次，否则完成结算冻结到下次切窗。
   const focusSessions = useAppStore((s) => s.focusSessions);
+  const prevStatusByIdRef = useRef<Map<string, FocusSession["status"]>>(new Map());
   useEffect(() => {
+    let resumedFromPaused = false;
+    for (const s of focusSessions) {
+      const prev = prevStatusByIdRef.current.get(s.id);
+      if (prev === "paused" && s.status === "running") resumedFromPaused = true;
+      prevStatusByIdRef.current.set(s.id, s.status);
+    }
     if (!initializedRef.current) return;
     scheduleNextRef.current();
+    if (resumedFromPaused) reconcileRef.current();
   }, [focusSessions, scheduleNext]);
 
   // timeout / visible / focus 统一走 reconcile（重新读 Store，dedup 由 Store completed 保证）

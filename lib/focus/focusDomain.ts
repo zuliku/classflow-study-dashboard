@@ -38,11 +38,17 @@ export function normalizeFocusSession(value: unknown): FocusSession | null {
   if (!STATUSES.includes(s.status as FocusSessionStatus)) return null;
   if (typeof s.startedAt !== "number" || !Number.isFinite(s.startedAt)) return null;
   if (typeof s.accumulatedActiveMs !== "number" || !Number.isFinite(s.accumulatedActiveMs)) return null;
+  // BUG-062：running 会话缺 activeStartedAt = 僵尸（时钟冻结、永不完成、调度跳过）。
+  // 自愈：以 startedAt 作为恢复基准，让 runtime 正常结算（actual 仍被 clamp ≤ planned）。
+  let activeStartedAt = typeof s.activeStartedAt === "number" ? s.activeStartedAt : undefined;
+  if (s.status === "running" && activeStartedAt === undefined) {
+    activeStartedAt = s.startedAt;
+  }
   return {
     id: s.id,
     plannedMinutes: s.plannedMinutes,
     startedAt: s.startedAt,
-    activeStartedAt: typeof s.activeStartedAt === "number" ? s.activeStartedAt : undefined,
+    activeStartedAt,
     accumulatedActiveMs: s.accumulatedActiveMs,
     status: s.status as FocusSessionStatus,
     endedAt: typeof s.endedAt === "number" ? s.endedAt : undefined,

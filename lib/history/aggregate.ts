@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Learning History Aggregation Engine（Part 2）。
  * deterministic summary：所有指标只从 Event 统计（不根据当前状态倒推）。
  * 与 query.ts 共用 collectLearningHistoryEvents。
@@ -122,7 +122,8 @@ export async function aggregateLearningHistory(
     if (event.type === "focus.completed") {
       const data = event.data as { actualActiveMs: number; plannedMinutes: number };
       summary.focus.completedSessions += 1;
-      summary.focus.actualMinutes += Math.round(data.actualActiveMs / 60000);
+      // BUG-068：损坏/负值 actualActiveMs 不允许拉低总时长
+      summary.focus.actualMinutes += Number.isFinite(data.actualActiveMs) && data.actualActiveMs > 0 ? Math.round(data.actualActiveMs / 60000) : 0;
       summary.focus.plannedMinutes += data.plannedMinutes;
     }
 
@@ -173,7 +174,8 @@ export async function aggregateLearningHistory(
       }
       if (event.type === "focus.completed") {
         b.focusCompletedSessions += 1;
-        b.focusActualMinutes += Math.round((event.data as { actualActiveMs: number }).actualActiveMs / 60000);
+        const ms = (event.data as { actualActiveMs: number }).actualActiveMs;
+        b.focusActualMinutes += Number.isFinite(ms) && ms > 0 ? Math.round(ms / 60000) : 0;
       } else if (event.type === "assignment.completed") {
         b.assignmentsCompleted += 1;
       } else if (event.type === "study_block.created") {
