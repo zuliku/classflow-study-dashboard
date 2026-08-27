@@ -183,6 +183,12 @@ export const KIRO_WRITE_TOOLS = {
     description: "删除日历标记（仅 exam/activity；course/ddl 类型不可通过本工具删除）。",
     inputSchema: KIRO_WRITE_TOOL_SCHEMAS.delete_calendar_mark,
   }),
+  link_materials_to_assignment: tool({
+    description:
+      "批量关联课程资料到任务（1-20 个资料 ID，仅限任务所属课程的真实资料；跨课程 ID 自动忽略）。" +
+      "用于‘把这几份讲义关联到作业’，覆盖原有 materialIds。空结果会清除关联。",
+    inputSchema: KIRO_WRITE_TOOL_SCHEMAS.link_materials_to_assignment,
+  }),
   start_focus_session: tool({
     description:
       "开始一个专注会话（Focus Session）。plannedMinutes 为整数 1–240；可选关联 Assignment 或 Course（自动取真实 courseId 与标题快照）。" +

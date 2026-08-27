@@ -97,6 +97,14 @@ export const KIRO_READ_TOOLS = {
       "用于‘小组进度怎样’‘谁的任务逾期’‘哪位成员负荷不均’等协作节奏判断。",
     inputSchema: KIRO_READ_TOOL_SCHEMAS.get_group_project_health,
   }),
+  get_semester_config: tool({
+    description: "读取当前学期配置（学期名、起始日、总周数、当前教学周与本周起始日、当前时间）。用于‘这学期第几周’‘节次时间表’等锚点判断，不要猜测学期周数。",
+    inputSchema: KIRO_READ_TOOL_SCHEMAS.get_semester_config,
+  }),
+  get_bell_schedules: tool({
+    description: "读取铃声/节次模板（BellSchedule）：节次号→具体时间与当前激活模板。用于‘第三节是几点’等节次时间解析。",
+    inputSchema: KIRO_READ_TOOL_SCHEMAS.get_bell_schedules,
+  }),
   get_material_metadata: tool({
     description: "查看课程资料的 metadata（标题/类型/大小/日期）。不能读取文件正文。",
     inputSchema: KIRO_READ_TOOL_SCHEMAS.get_material_metadata,

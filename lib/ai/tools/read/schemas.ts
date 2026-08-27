@@ -106,6 +106,10 @@ export const getGroupProjectHealthSchema = z.object({
   projectId: z.string().trim().min(1).max(120),
 });
 
+export const getSemesterConfigSchema = z.object({});
+
+export const getBellSchedulesSchema = z.object({});
+
 export const getMaterialMetadataSchema = z.object({
   courseId: z.string().trim().min(1).max(120).optional(),
   materialId: z.string().trim().min(1).max(120).optional(),
@@ -331,6 +335,8 @@ export const KIRO_READ_TOOL_SCHEMAS = {
   get_calendar_range: getCalendarRangeSchema,
   get_calendar_density: getCalendarDensitySchema,
   get_group_project_health: getGroupProjectHealthSchema,
+  get_semester_config: getSemesterConfigSchema,
+  get_bell_schedules: getBellSchedulesSchema,
   get_material_metadata: getMaterialMetadataSchema,
   read_material: readMaterialSchema,
   read_project_file: readProjectFileSchema,

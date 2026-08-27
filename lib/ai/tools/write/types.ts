@@ -49,6 +49,7 @@ export const KIRO_WRITE_RISKS: Record<string, KiroWriteRisk> = {
   delete_reminders_batch: "normal",
   create_calendar_mark: "normal",
   delete_calendar_mark: "normal",
+  link_materials_to_assignment: "normal",
   // Task 5：Focus 操作均 normal（不弹 ConfirmDialog；无 Undo）
   start_focus_session: "normal",
   pause_focus_session: "normal",

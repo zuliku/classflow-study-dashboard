@@ -109,6 +109,8 @@ export interface ReadToolState {
   scheduleOccurrenceOverrides?: ScheduleOccurrenceOverride[];
   /** Task B：Visual Proposal preflight 需要（optional：旧 fixture 回落 DEFAULT_PREFERENCES） */
   preferences?: AppState["preferences"];
+  bellSchedules?: AppState["bellSchedules"];
+  activeBellScheduleId?: AppState["activeBellScheduleId"];
 }
 
 const notFound = (message: string): ReadToolResult<never> => ({ ok: false, code: "NOT_FOUND", message });
@@ -1375,6 +1377,33 @@ export function getGroupProjectHealth(state: ReadToolState, input: unknown): Rea
   };
 }
 
+export function getSemesterConfig(state: ReadToolState, _input: unknown): ReadToolResult<unknown> {
+  const week = state.currentSemesterWeek;
+  const sem = state.semester;
+  const weekStart = getWeekDateRange(sem, week)[0];
+  return {
+    ok: true,
+    data: {
+      id: sem.id,
+      name: sem.name,
+      startDate: sem.startDate,
+      totalWeeks: sem.totalWeeks,
+      currentWeek: week,
+      currentWeekStartDate: format(weekStart, "yyyy-MM-dd"),
+      now: format(new Date(), "yyyy-MM-dd HH:mm EEEE", { locale: zhCN }),
+    },
+  };
+}
+
+export function getBellSchedules(state: ReadToolState, _input: unknown): ReadToolResult<unknown> {
+  const bellSchedules = (state as unknown as { bellSchedules?: unknown }).bellSchedules as unknown[] | undefined;
+  const activeId = (state as unknown as { activeBellScheduleId?: string | null }).activeBellScheduleId ?? null;
+  if (!Array.isArray(bellSchedules)) {
+    return { ok: true, data: { bellSchedules: [], activeBellScheduleId: activeId } };
+  }
+  return { ok: true, data: { bellSchedules, activeBellScheduleId: activeId } };
+}
+
 export function getMaterialMetadata(state: ReadToolState, input: unknown): ReadToolResult<unknown> {
   const parsed = safeParse<{ courseId?: string; materialId?: string }>("get_material_metadata", input);
   if (!parsed.ok) return parsed;
@@ -1451,6 +1480,8 @@ const EXECUTORS: Record<Exclude<KiroReadToolName, "read_material" | "read_projec
   get_calendar_range: getCalendarRange,
   get_calendar_density: getCalendarDensity,
   get_group_project_health: getGroupProjectHealth,
+  get_semester_config: getSemesterConfig,
+  get_bell_schedules: getBellSchedules,
   get_material_metadata: getMaterialMetadata,
   propose_task_breakdown: proposeTaskBreakdownTool,
   list_reminders: listReminders,

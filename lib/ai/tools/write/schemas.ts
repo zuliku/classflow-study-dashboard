@@ -298,6 +298,11 @@ export const deleteCalendarMarkSchema = z.object({
   markId: z.string().trim().min(1).max(120),
 });
 
+export const linkMaterialsToAssignmentSchema = z.object({
+  assignmentId: z.string().trim().min(1).max(120),
+  materialIds: z.array(z.string().trim().min(1).max(120)).min(1).max(20),
+});
+
 /** Task 5：Focus 工具（有界：不创建 timer / 不实现 Undo） */
 export const startFocusSessionSchema = z.object({
   plannedMinutes: z.number().int().min(1).max(240),
@@ -370,6 +375,7 @@ export const KIRO_WRITE_TOOL_SCHEMAS = {
   delete_reminders_batch: deleteRemindersBatchSchema,
   create_calendar_mark: createCalendarMarkSchema,
   delete_calendar_mark: deleteCalendarMarkSchema,
+  link_materials_to_assignment: linkMaterialsToAssignmentSchema,
   start_focus_session: startFocusSessionSchema,
   pause_focus_session: pauseFocusSessionSchema,
   resume_focus_session: resumeFocusSessionSchema,

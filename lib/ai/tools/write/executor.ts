@@ -17,6 +17,7 @@ import { formatLocalDate } from "@/lib/groupProject";
 import { parseLocalDDL } from "@/lib/ddl";
 import { formatLocalDateTime, getReminderTargetAnchor, resolveReminderTriggerAt } from "@/lib/reminders/reminderDomain";
 import { prepareKiroWriteTool } from "@/lib/ai/tools/write/prepare";
+import { sanitizeAssignmentMaterialIds } from "@/lib/tasks/taskMaterials";
 import { TransactionSafeToolName } from "@/lib/ai/transactions/types";
 
 /**
@@ -1024,6 +1025,40 @@ function deleteCalendarMark(api: KiroWriteApi, input: unknown, _toolCallId: stri
   };
 }
 
+function linkMaterialsToAssignment(api: KiroWriteApi, input: unknown, toolCallId: string): WriteToolResult<unknown> {
+  const parsed = safeParse<{ assignmentId: string; materialIds: string[] }>("link_materials_to_assignment", input);
+  if (!parsed.ok) return parsed;
+  const assignment = api.getState().assignments.find((a) => a.id === parsed.data.assignmentId);
+  if (!assignment) return notFound("未找到对应任务。");
+  const course = api.getState().courses.find((c) => c.id === assignment.courseId);
+  if (!course) return notFound("未找到任务所属课程。");
+  const beforeIds = assignment.materialIds ? [...assignment.materialIds] : [];
+  const sanitized = sanitizeAssignmentMaterialIds(assignment, api.getState().courses, parsed.data.materialIds);
+  // 校验：若输入中包含非本课程资料，则 sanitized 会小于输入，需告知
+  const ignored = parsed.data.materialIds.filter((id) => !sanitized.includes(id) && !beforeIds.includes(id));
+  api.updateAssignmentPatch(assignment.id, { materialIds: sanitized.length > 0 ? sanitized : undefined } as Partial<import("@/types").Assignment>);
+  const after = api.getState().assignments.find((a) => a.id === assignment.id)!;
+  api.registerUndo(toolCallId, () => {
+    try {
+      api.updateAssignmentPatch(assignment.id, { materialIds: beforeIds.length > 0 ? beforeIds : undefined } as Partial<import("@/types").Assignment>);
+    } catch {}
+  });
+  return {
+    ok: true,
+    data: { assignmentId: assignment.id, materialIds: sanitized, ignoredIds: ignored, before: beforeIds, after: sanitized },
+    action: {
+      tool: "link_materials_to_assignment",
+      entityType: "assignment",
+      entityId: assignment.id,
+      title: assignment.title,
+      operation: "update",
+      before: { materialIds: beforeIds },
+      after: { materialIds: sanitized },
+      canUndo: true,
+    },
+  };
+}
+
 // ---------- Task 5：Focus 工具（有界：canUndo=false，不创建 timer） ----------
 
 function startFocusSession(api: KiroWriteApi, input: unknown, toolCallId: string): WriteToolResult<unknown> {
@@ -1247,6 +1282,7 @@ const EXECUTORS: Record<KiroWriteToolName, (api: KiroWriteApi, input: unknown, t
   delete_reminders_batch: deleteRemindersBatch,
   create_calendar_mark: createCalendarMark,
   delete_calendar_mark: deleteCalendarMark,
+  link_materials_to_assignment: linkMaterialsToAssignment,
   start_focus_session: startFocusSession,
   pause_focus_session: pauseFocusSession,
   resume_focus_session: resumeFocusSession,
