@@ -82,6 +82,8 @@ export function KiroProjectPanel({
   // V1.3A：Project Files（Detail 按需加载；上传/删除后 refreshProjects 触发重载）
   const [projectFiles, setProjectFiles] = useState<KiroProjectFileRecord[]>([]);
   const [uploading, setUploading] = useState(false);
+  // BUG-G11：上传进度（受控 60/future 不确定，顺序循环）—— 轻量计数反馈
+  const [uploadProgress, setUploadProgress] = useState<{ done: number; total: number } | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const expanded = mode === "expanded";
@@ -243,6 +245,7 @@ export function KiroProjectPanel({
       pushToast({ message: `项目最多保存 ${MAX_PROJECT_FILES_PER_PROJECT} 个资料，已添加可容纳的文件。` });
     }
     setUploading(true);
+    setUploadProgress({ done: 0, total: accepted.length });
     try {
       let added = 0;
       for (const file of accepted) {
@@ -257,6 +260,7 @@ export function KiroProjectPanel({
           blob: file,
         });
         added++;
+        setUploadProgress({ done: added, total: accepted.length });
       }
       actions.refreshProjects();
       if (added > 0) pushToast({ message: `已添加 ${added} 个资料` });
@@ -269,6 +273,7 @@ export function KiroProjectPanel({
       }
     } finally {
       setUploading(false);
+      setUploadProgress(null);
     }
   };
 
@@ -605,15 +610,22 @@ export function KiroProjectPanel({
                 <div className="px-1.5 pb-1">
                   <div className="flex items-center justify-between gap-1">
                     <p className="text-[10px] font-semibold text-sandrift">项目资料 · {projectFiles.length}</p>
-                    <button
-                      onClick={() => fileInputRef.current?.click()}
-                      disabled={uploading || projectFiles.length >= MAX_PROJECT_FILES_PER_PROJECT}
-                      aria-label="添加项目资料"
-                      className="flex items-center gap-0.5 px-1.5 h-5 rounded-md text-[10px] font-bold text-charcoal bg-alabaster hover:bg-pastel-mint transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-                    >
-                      <Plus className="w-3 h-3" />
-                      添加资料
-                    </button>
+                    {uploading && uploadProgress ? (
+                      <span className="flex items-center gap-1 text-[10px] font-semibold text-sandrift">
+                        <span className="w-3 h-3 border border-sandrift/30 border-t-sandrift rounded-full animate-spin" aria-hidden="true" />
+                        上传中 {uploadProgress.done}/{uploadProgress.total}
+                      </span>
+                    ) : (
+                      <button
+                        onClick={() => fileInputRef.current?.click()}
+                        disabled={uploading || projectFiles.length >= MAX_PROJECT_FILES_PER_PROJECT}
+                        aria-label="添加项目资料"
+                        className="flex items-center gap-0.5 px-1.5 h-5 rounded-md text-[10px] font-bold text-charcoal bg-alabaster hover:bg-pastel-mint transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                      >
+                        <Plus className="w-3 h-3" />
+                        添加资料
+                      </button>
+                    )}
                     <input
                       ref={fileInputRef}
                       type="file"

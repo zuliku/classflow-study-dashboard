@@ -50,7 +50,7 @@ export function ConfirmDialog() {
             </div>
             <button
               onClick={handleCancel}
-              className="p-1 rounded-lg text-sandrift hover:bg-alabaster hover:text-charcoal transition-colors"
+              className="p-1 rounded-lg text-sandrift hover:bg-alabaster hover:text-charcoal transition-colors duration-[var(--motion-fast)]"
               aria-label="关闭"
             >
               <X className="w-4 h-4" />
@@ -64,7 +64,7 @@ export function ConfirmDialog() {
           <div className="flex justify-end space-x-2 pt-2 border-t border-[#F0EBE1]">
             <button
               onClick={handleCancel}
-              className="px-4 py-2 text-xs font-medium text-satin-grey bg-alabaster border border-line rounded-xl hover:bg-alba transition-colors"
+              className="px-4 py-2 text-xs font-medium text-satin-grey bg-alabaster border border-line rounded-xl hover:bg-alba transition-colors duration-[var(--motion-fast)]"
             >
               取消
             </button>
@@ -73,7 +73,7 @@ export function ConfirmDialog() {
               autoFocus
               data-testid="confirm-dialog-confirm"
               className={cn(
-                "ux-press px-4 py-2 text-xs font-bold rounded-xl transition-colors",
+                "ux-press px-4 py-2 text-xs font-bold rounded-xl transition-colors duration-[var(--motion-fast)]",
                 request.danger
                   ? "bg-danger hover:bg-danger/85 text-white"
                   : "bg-charcoal hover:bg-black text-white"

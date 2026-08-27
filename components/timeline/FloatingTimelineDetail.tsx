@@ -178,7 +178,7 @@ export function FloatingTimelineDetail({
         "fixed z-[70] bg-surface border border-line-strong rounded-[13px] shadow-card",
         // enter = --motion-fast / exit = --motion-exit-fast（与 presence unmount 同源对应）
         "transition-opacity ease-[var(--ease-standard)]",
-        visible ? "opacity-100 duration-[var(--motion-fast)]" : "opacity-0 pointer-events-none !duration-[var(--motion-exit-fast)]"
+        visible ? "opacity-100 translate-y-0 duration-[var(--motion-fast)]" : "opacity-0 translate-y-1 pointer-events-none !duration-[var(--motion-exit-fast)]"
       )}
       style={{
         left: pos?.x ?? -9999,

@@ -407,11 +407,11 @@ export function KiroComposer({
             introActive && "kiro-composer-intro"
           )}
         >
-          {/* Attachment Shelf：无附件时完全不存在 */}
+          {/* Attachment Shelf：无附件时完全不存在（BUG-G8：入场 structure-settle） */}
           {attachments.length > 0 && (
             <div
               className={cn(
-                "bg-alabaster/40 border-b border-line-soft rounded-t-2xl",
+                "kiro-structure-settle bg-alabaster/40 border-b border-line-soft rounded-t-2xl",
                 compact ? "px-2.5 py-1.5" : "px-3 py-2"
               )}
             >
@@ -476,11 +476,11 @@ export function KiroComposer({
             </div>
           )}
 
-          {/* Task 07: Slash Skill Menu — 仅显示 enabled skills */}
+          {/* Task 07: Slash Skill Menu — 仅显示 enabled skills（BUG-G8：入场 structure-settle） */}
           {slashOpen && (
             <div
               data-testid="skill-slash-menu"
-              className="mx-3 mb-2 bg-surface border border-line rounded-xl shadow-card overflow-hidden"
+              className="kiro-structure-settle mx-3 mb-2 bg-surface border border-line rounded-xl shadow-card overflow-hidden"
             >
               <p className="px-3 py-2 text-[11px] font-bold text-sandrift border-b border-line-soft">已启用 Skills · 输入 /skill-name 显式调用</p>
               <div className="max-h-40 overflow-y-auto">

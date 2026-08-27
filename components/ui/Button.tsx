@@ -66,14 +66,14 @@ export function Button({
     >
       <span
         className={cn(
-          "inline-flex items-center justify-center gap-1.5",
+          "inline-flex items-center justify-center gap-1.5 transition-opacity duration-[var(--motion-snap)]",
           loading && "opacity-0"
         )}
       >
         {children}
       </span>
       {loading && (
-        <span className="absolute inset-0 flex items-center justify-center gap-1.5">
+        <span className="absolute inset-0 flex items-center justify-center gap-1.5 animate-enter">
           <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden="true" />
           {loadingLabel ? <span>{loadingLabel}</span> : null}
         </span>

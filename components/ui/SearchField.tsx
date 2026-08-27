@@ -36,7 +36,7 @@ export function SearchField({ onClear, className, ...props }: SearchFieldProps) 
           type="button"
           onClick={onClear}
           aria-label="清除搜索"
-          className="absolute right-1.5 flex h-5 w-5 items-center justify-center rounded-md text-sandrift hover:bg-alabaster hover:text-charcoal transition-colors"
+          className="absolute right-1.5 flex h-5 w-5 items-center justify-center rounded-md text-sandrift hover:bg-alabaster hover:text-charcoal transition-colors duration-[var(--motion-fast)]"
         >
           <X className="h-3.5 w-3.5" aria-hidden="true" />
         </button>

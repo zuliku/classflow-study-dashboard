@@ -61,7 +61,7 @@ export function KiroSendControl({
         aria-hidden="true"
         className={cn(
           "absolute inset-0 flex items-center justify-center",
-          "transition-[opacity,transform] duration-[90ms] ease-[var(--ease-standard)]",
+          "transition-[opacity,transform] duration-[var(--kiro-motion-control,var(--motion-snap))] ease-[var(--ease-standard)]",
           state === "stop" || state === "preparing"
             ? "opacity-0 scale-[0.82] pointer-events-none"
             : "opacity-100 scale-100"
@@ -74,7 +74,7 @@ export function KiroSendControl({
         aria-hidden="true"
         className={cn(
           "absolute inset-0 flex items-center justify-center",
-          "transition-[opacity,transform] duration-[90ms] ease-[var(--ease-standard)]",
+          "transition-[opacity,transform] duration-[var(--kiro-motion-control,var(--motion-snap))] ease-[var(--ease-standard)]",
           state === "preparing" ? "opacity-100 scale-100" : "opacity-0 scale-[0.82] pointer-events-none"
         )}
       >
@@ -85,7 +85,7 @@ export function KiroSendControl({
         aria-hidden="true"
         className={cn(
           "absolute inset-0 flex items-center justify-center",
-          "transition-[opacity,transform] duration-[90ms] ease-[var(--ease-standard)]",
+          "transition-[opacity,transform] duration-[var(--kiro-motion-control,var(--motion-snap))] ease-[var(--ease-standard)]",
           state === "stop" ? "opacity-100 scale-100" : "opacity-0 scale-[0.82] pointer-events-none"
         )}
       >

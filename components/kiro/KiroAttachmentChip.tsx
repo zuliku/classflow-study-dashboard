@@ -107,7 +107,8 @@ export function KiroAttachmentChip({
     <span
       data-testid="kiro-attachment-chip"
       className={cn(
-        "inline-flex items-center gap-1.5 pl-1 pr-1 h-10 rounded-xl border text-[11px] font-semibold shrink-0 max-w-[220px]",
+        // BUG-G8：入场 structure-settle（与 ContextBar chips 同语法此前未实现）
+        "kiro-structure-settle inline-flex items-center gap-1.5 pl-1 pr-1 h-10 rounded-xl border text-[11px] font-semibold shrink-0 max-w-[220px]",
         failed
           ? "bg-danger-bg border-danger-border text-danger"
           : isMaterial

@@ -28,7 +28,7 @@ export function Switch({ checked, onChange, label, disabled, className }: Switch
         onChange(!checked);
       }}
       className={cn(
-        "relative w-9 h-5 rounded-full transition-colors duration-[var(--motion-fast)]",
+        "relative w-9 h-5 rounded-full transition-colors duration-[var(--motion-fast)] active:opacity-75",
         "focus-visible:outline-2 focus-visible:outline-charcoal/30 focus-visible:outline-offset-2",
         "disabled:opacity-50 disabled:cursor-not-allowed",
         checked ? "bg-charcoal" : "bg-alba",

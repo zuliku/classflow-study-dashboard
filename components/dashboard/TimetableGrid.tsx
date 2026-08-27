@@ -11,6 +11,7 @@ import { resolveCourseOccurrencesForWeek } from "@/lib/scheduleOccurrences";
 import { findScheduleConflicts } from "@/lib/conflicts";
 import { isScheduleActive, timeToMinutes } from "@/lib/schedule";
 import { getNowIndicatorPosition } from "@/lib/timeline/nowIndicator";
+import { useEffectiveReducedMotion } from "@/hooks/useEffectiveReducedMotion";
 import { Course, CourseSchedule, ScheduleConflict } from "@/types";
 import {
   TIMETABLE_DAY_START_MINUTES,
@@ -167,6 +168,9 @@ export function TimetableGrid({
   const todayStr = format(new Date(), "yyyy-MM-dd");
   const isRealCurrentWeek = getSemesterWeek(new Date(), semester) === currentSemesterWeek;
   const [nowMinutes, setNowMinutes] = useState(() => new Date().getHours() * 60 + new Date().getMinutes());
+  // 显式消费 reduced 标志：now-indicator 的 30s 线性位移是 JS 驱动视觉运动，
+  // 全局 CSS override 兜底外再加显式分支，语义更清晰
+  const reducedMotion = useEffectiveReducedMotion();
   // 实时更新：仅当前周 + 今天列需要；30s 节流 + CSS 30s linear transition 实现平滑流动
   React.useEffect(() => {
     if (!isRealCurrentWeek) return;
@@ -662,7 +666,7 @@ export function TimetableGrid({
                       className="absolute inset-x-0 z-[6] pointer-events-none"
                       style={{
                         top: nowIndicator.top,
-                        transition: "top 30s linear",
+                        transition: reducedMotion ? "none" : "top 30s linear",
                       }}
                     >
                       <div className="relative flex items-center -translate-y-1/2 h-[1.5px]">

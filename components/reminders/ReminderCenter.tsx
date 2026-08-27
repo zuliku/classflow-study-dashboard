@@ -346,7 +346,7 @@ export function ReminderCenter() {
               data-testid="reminder-composer"
               data-state={editor ? (composerPresence.visible ? "open" : "entering") : "exiting"}
               className={cn(
-                "grid shrink-0 transition-[grid-template-rows,opacity,transform] duration-[180ms] ease-[var(--ease-standard)]",
+                "grid shrink-0 transition-[grid-template-rows,opacity,transform] duration-[var(--motion-base)] ease-[var(--ease-standard)]",
                 composerPresence.visible
                   ? "grid-rows-[1fr] opacity-100 translate-y-0"
                   : "grid-rows-[0fr] opacity-0 -translate-y-1"

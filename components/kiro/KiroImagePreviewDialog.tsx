@@ -3,6 +3,9 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { ChevronLeft, ChevronRight, X } from "lucide-react";
+import { usePresence } from "@/lib/usePresence";
+import { MOTION_EXIT_MS } from "@/lib/motion";
+import { cn } from "@/lib/utils";
 
 /** Gallery 项：runtime File（调用方从 Live Image Source Registry 解析；绝不落历史） */
 export interface KiroImagePreviewSource {
@@ -117,7 +120,10 @@ export function KiroImagePreviewDialog({
     return () => window.removeEventListener("keydown", onKey);
   }, [currentSource, onClose, step]);
 
-  if (!currentSource || !url) return null;
+  const open = !!currentSource && !!url;
+  const { mounted, visible } = usePresence(open, MOTION_EXIT_MS.base);
+
+  if (!mounted || !currentSource || !url) return null;
 
   const total = gallery?.length ?? 1;
   const shownIndex = gallery ? safeIndex : 0;
@@ -130,14 +136,24 @@ export function KiroImagePreviewDialog({
       aria-modal="true"
       aria-label={currentSource.name ? `查看原图：${currentSource.name}` : "查看原图"}
     >
-      {/* Backdrop */}
+      {/* Backdrop — reuse shared overlay grammar (enter overlay tier, exit base) */}
       <div
         data-testid="kiro-image-preview-backdrop"
-        className="absolute inset-0 bg-charcoal/60 backdrop-blur-[2px]"
+        className={cn(
+          "absolute inset-0 bg-charcoal/60 backdrop-blur-[2px] transition-opacity",
+          visible ? "opacity-100 duration-[var(--motion-overlay)]" : "opacity-0 !duration-[var(--motion-exit-base)]"
+        )}
         onClick={onClose}
       />
 
-      <div className="relative flex flex-col w-[min(94vw,1080px)] max-h-[86dvh]">
+      <div
+        className={cn(
+          "relative flex flex-col w-[min(94vw,1080px)] max-h-[86dvh] ux-modal-panel",
+          visible
+            ? "opacity-100 scale-100 translate-y-0 !duration-[var(--motion-overlay)]"
+            : "opacity-0 scale-[0.99] translate-y-0.5 !duration-[var(--motion-exit-base)]"
+        )}
+      >
         {/* Header：名称 + Gallery 计数 + Close */}
         <div className="flex items-center justify-between gap-3 mb-2 shrink-0">
           <p className="min-w-0 truncate text-[11px] font-semibold text-white/90">
