@@ -226,12 +226,6 @@ body {
   background: transparent;
 }
 
-/* Now Indicator 末端圆点：极轻呼吸 + 柔和外发光（克制，不闪烁） */
-
-
-  animation: none;
-  opacity: 1;
-}
 
 /* 当前正在上课的课程卡：克制外框高亮（深于课程边框的强调色，轻微呼吸） */
 .kiro-now-course {
@@ -752,10 +746,6 @@ html[data-motion-effective="reduced"] .kiro-ring[data-kiro-flow] {
 
 
 
-
-/* Reduced Motion：关闭 breathe / glow 动画，保留静态轻 drop-shadow（状态文字照常更新） */
-  animation: none;
-}
 
 /* Thread Rail — unified ambient/active/working via data-kiro-flow (slightly slower ambient) */
 .kiro-rail-plate[data-kiro-flow="ambient"] .kiro-ring { opacity: 0.60; animation-duration: 7.8s; }
