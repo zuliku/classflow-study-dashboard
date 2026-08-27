@@ -110,6 +110,13 @@ export const getSemesterConfigSchema = z.object({});
 
 export const getBellSchedulesSchema = z.object({});
 
+export const getLearningSignalSchema = z
+  .object({
+    signalId: z.string().trim().min(1).max(40).optional(),
+    preset: z.enum(["week", "4weeks", "semester"]).optional().default("week"),
+  })
+  .strict();
+
 export const getMaterialMetadataSchema = z.object({
   courseId: z.string().trim().min(1).max(120).optional(),
   materialId: z.string().trim().min(1).max(120).optional(),
@@ -337,6 +344,7 @@ export const KIRO_READ_TOOL_SCHEMAS = {
   get_group_project_health: getGroupProjectHealthSchema,
   get_semester_config: getSemesterConfigSchema,
   get_bell_schedules: getBellSchedulesSchema,
+  get_learning_signal: getLearningSignalSchema,
   get_material_metadata: getMaterialMetadataSchema,
   read_material: readMaterialSchema,
   read_project_file: readProjectFileSchema,

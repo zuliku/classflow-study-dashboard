@@ -71,6 +71,7 @@ import {
 } from "@/lib/ai/tools/read/history";
 import { executeGetLearningAnalytics } from "@/lib/ai/tools/read/analytics";
 import { executeGetLearningOutlook } from "@/lib/ai/tools/read/outlook";
+import { executeGetLearningSignal } from "@/lib/ai/tools/read/signal";
 import { MAX_DOCUMENT_READS_PER_TURN } from "@/lib/ai/attachments/limits";
 import { KiroAttachment, KiroDocumentContext, KiroAttachmentView } from "@/lib/ai/attachments/types";
 import { getModelCapabilities, isVisionMimeSupported } from "@/lib/ai/providers/capabilities";
@@ -1250,6 +1251,18 @@ export function useKiroChat({
         void (async () => {
           try {
             const result = await executeGetLearningOutlook(input);
+            emitToolOutput(toolName, toolCallId, result as ToolOutput);
+          } catch (e) {
+            emitToolOutput(toolName, toolCallId, { ok: false, code: "UNKNOWN", message: (e as Error)?.message ?? String(e) } as ToolOutput);
+          }
+        })();
+        return;
+      }
+
+      if (toolName === "get_learning_signal") {
+        void (async () => {
+          try {
+            const result = await executeGetLearningSignal(input);
             emitToolOutput(toolName, toolCallId, result as ToolOutput);
           } catch (e) {
             emitToolOutput(toolName, toolCallId, { ok: false, code: "UNKNOWN", message: (e as Error)?.message ?? String(e) } as ToolOutput);

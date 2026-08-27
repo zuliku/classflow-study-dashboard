@@ -1457,8 +1457,8 @@ export function mcpCallToolTool(state: ReadToolState, input: unknown): ReadToolR
 
 // ---------- 统一入口 ----------
 
-/** 同步执行的 Read Tools（read_material / read_project_file / read_project_visual / search_project_file / history / analytics / outlook 为异步重量级工具，独立处理） */
-const EXECUTORS: Record<Exclude<KiroReadToolName, "read_material" | "read_project_file" | "read_project_visual" | "search_project_file" | "query_learning_history" | "summarize_learning_history" | "get_learning_analytics" | "get_learning_outlook">, (state: ReadToolState, input: unknown, context?: ReadToolExecutionContext) => ReadToolResult<unknown>> = {
+/** 同步执行的 Read Tools（read_material / read_project_file / read_project_visual / search_project_file / history / analytics / outlook / signal 为异步重量级工具，独立处理） */
+const EXECUTORS: Record<Exclude<KiroReadToolName, "read_material" | "read_project_file" | "read_project_visual" | "search_project_file" | "query_learning_history" | "summarize_learning_history" | "get_learning_analytics" | "get_learning_outlook" | "get_learning_signal">, (state: ReadToolState, input: unknown, context?: ReadToolExecutionContext) => ReadToolResult<unknown>> = {
   get_current_context: getCurrentContext,
   get_user_study_profile: getUserStudyProfile,
   search_courses: searchCourses,
@@ -1514,11 +1514,12 @@ export function executeKiroReadTool(
     toolName === "query_learning_history" ||
     toolName === "summarize_learning_history" ||
     toolName === "get_learning_analytics" ||
-    toolName === "get_learning_outlook"
+    toolName === "get_learning_outlook" ||
+    toolName === "get_learning_signal"
   ) {
     return { ok: false, code: "INVALID_INPUT", message: `${toolName} 需要异步执行。` };
   }
-  const executor = EXECUTORS[toolName as Exclude<KiroReadToolName, "read_material" | "read_project_file" | "read_project_visual" | "search_project_file" | "query_learning_history" | "summarize_learning_history" | "get_learning_analytics" | "get_learning_outlook">];
+  const executor = EXECUTORS[toolName as Exclude<KiroReadToolName, "read_material" | "read_project_file" | "read_project_visual" | "search_project_file" | "query_learning_history" | "summarize_learning_history" | "get_learning_analytics" | "get_learning_outlook" | "get_learning_signal">];
   if (!executor) {
     return { ok: false, code: "INVALID_INPUT", message: `未知工具：${toolName}` };
   }

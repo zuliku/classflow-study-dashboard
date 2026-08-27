@@ -105,6 +105,13 @@ export const KIRO_READ_TOOLS = {
     description: "读取铃声/节次模板（BellSchedule）：节次号→具体时间与当前激活模板。用于‘第三节是几点’等节次时间解析。",
     inputSchema: KIRO_READ_TOOL_SCHEMAS.get_bell_schedules,
   }),
+  get_learning_signal: tool({
+    description:
+      "按 preset（week/4weeks/semester）读取学习信号（focus-up/down、plan-actual、deadline、course-concentration、focus-rhythm 等，最多 3 条）。" +
+      "不带 signalId 返回全量 signals；带 signalId 返回单条信号的 evidence（关联的专注/计划/截止/课程投入等底层指标与 period/coverage 上下文）。" +
+      "用于‘为什么按时只有 60%’等信号级下钻，不要自行从历史拼凑。",
+    inputSchema: KIRO_READ_TOOL_SCHEMAS.get_learning_signal,
+  }),
   get_material_metadata: tool({
     description: "查看课程资料的 metadata（标题/类型/大小/日期）。不能读取文件正文。",
     inputSchema: KIRO_READ_TOOL_SCHEMAS.get_material_metadata,
