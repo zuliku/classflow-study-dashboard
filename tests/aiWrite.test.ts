@@ -337,7 +337,7 @@ describe("Write Executor — 安全", () => {
     const { store, executeKiroWriteTool } = await freshModules();
     const undos = new Map();
     const api = buildApi(store, undos);
-    const unknown = executeKiroWriteTool("delete_course", {}, api, "c") as { ok: false; code: string };
+    const unknown = executeKiroWriteTool("definitely_unknown_tool_xyz", {}, api, "c") as { ok: false; code: string };
     expect(unknown.ok).toBe(false);
     expect(unknown.code).toBe("UNSUPPORTED");
     const bad = executeKiroWriteTool("set_assignment_progress", { assignmentId: "a1", progress: 150 }, api, "c2") as { ok: false; code: string };
