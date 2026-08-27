@@ -1244,6 +1244,67 @@ export function getCalendarRange(state: ReadToolState, input: unknown): ReadTool
   };
 }
 
+export function getCalendarDensity(state: ReadToolState, input: unknown): ReadToolResult<unknown> {
+  const parsed = safeParse<{ startDate: string; endDate: string; groupBy?: "day" | "week" }>("get_calendar_density", input);
+  if (!parsed.ok) return parsed;
+  const { startDate, endDate, groupBy } = parsed.data;
+  const start = new Date(`${startDate}T00:00:00`);
+  const end = new Date(`${endDate}T23:59:59`);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return invalidInput("日期格式不合法。");
+  if (end < start) return invalidInput("结束日期早于开始日期。");
+  const days = differenceInDays(end, start);
+  if (days > 90) return { ok: false, code: "OUT_OF_RANGE", message: "时间范围最长 90 天。" };
+  const marks = state.calendarMarks.filter((m) => m.date >= startDate && m.date <= endDate);
+  const group = groupBy ?? "day";
+  if (group === "day") {
+    const byDay = new Map<string, { date: string; courseCount: number; ddlCount: number; examCount: number; activityCount: number }>();
+    for (const m of marks) {
+      const entry = byDay.get(m.date) ?? { date: m.date, courseCount: 0, ddlCount: 0, examCount: 0, activityCount: 0 };
+      if (m.type === "course") entry.courseCount += 1;
+      else if (m.type === "ddl") entry.ddlCount += 1;
+      else if (m.type === "exam") entry.examCount += 1;
+      else if (m.type === "activity") entry.activityCount += 1;
+      byDay.set(m.date, entry);
+    }
+    const byDayArr = Array.from(byDay.values())
+      .map((d) => {
+        const total = d.courseCount + d.ddlCount + d.examCount * 2 + d.activityCount;
+        const pressureLabel = d.examCount > 0 && d.ddlCount > 0 ? "high" : total >= 5 ? "high" : total >= 3 ? "medium" : total >= 1 ? "low" : "low";
+        return { ...d, total, pressureLabel: pressureLabel as "low" | "medium" | "high" };
+      })
+      .sort((a, b) => a.date.localeCompare(b.date));
+    let busiestDay: (typeof byDayArr)[number] | null = null;
+    for (const d of byDayArr) {
+      if (!busiestDay || d.total > busiestDay.total) busiestDay = d;
+    }
+    return { ok: true, data: { startDate, endDate, groupBy: "day", byDay: byDayArr, busiestDay } };
+  } else {
+    const byWeek = new Map<number, { week: number; weekStartDate: string; courseCount: number; ddlCount: number; examCount: number; activityCount: number }>();
+    for (const m of marks) {
+      const week = getSemesterWeek(new Date(`${m.date}T00:00:00`), state.semester);
+      const weekNum = week >= 1 && week <= state.semester.totalWeeks ? week : 0;
+      const entry = byWeek.get(weekNum) ?? { week: weekNum, weekStartDate: weekNum > 0 ? format(getWeekDateRange(state.semester, weekNum)[0], "yyyy-MM-dd") : m.date, courseCount: 0, ddlCount: 0, examCount: 0, activityCount: 0 };
+      if (m.type === "course") entry.courseCount += 1;
+      else if (m.type === "ddl") entry.ddlCount += 1;
+      else if (m.type === "exam") entry.examCount += 1;
+      else if (m.type === "activity") entry.activityCount += 1;
+      byWeek.set(weekNum, entry);
+    }
+    const byWeekArr = Array.from(byWeek.values())
+      .map((w) => {
+        const total = w.courseCount + w.ddlCount + w.examCount * 2 + w.activityCount;
+        const pressureLabel = w.examCount > 0 && w.ddlCount > 0 ? "high" : total >= 10 ? "high" : total >= 5 ? "medium" : "low";
+        return { ...w, total, pressureLabel: pressureLabel as "low" | "medium" | "high" };
+      })
+      .sort((a, b) => a.week - b.week);
+    let busiestWeek: (typeof byWeekArr)[number] | null = null;
+    for (const w of byWeekArr) {
+      if (!busiestWeek || w.total > busiestWeek.total) busiestWeek = w;
+    }
+    return { ok: true, data: { startDate, endDate, groupBy: "week", byWeek: byWeekArr, busiestWeek } };
+  }
+}
+
 export function getMaterialMetadata(state: ReadToolState, input: unknown): ReadToolResult<unknown> {
   const parsed = safeParse<{ courseId?: string; materialId?: string }>("get_material_metadata", input);
   if (!parsed.ok) return parsed;
@@ -1318,6 +1379,7 @@ const EXECUTORS: Record<Exclude<KiroReadToolName, "read_material" | "read_projec
   get_group_project: getGroupProject,
   get_group_tasks: getGroupTasks,
   get_calendar_range: getCalendarRange,
+  get_calendar_density: getCalendarDensity,
   get_material_metadata: getMaterialMetadata,
   propose_task_breakdown: proposeTaskBreakdownTool,
   list_reminders: listReminders,

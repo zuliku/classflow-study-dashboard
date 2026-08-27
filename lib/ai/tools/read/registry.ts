@@ -85,6 +85,12 @@ export const KIRO_READ_TOOLS = {
     description: "查看日期范围内（最长 90 天）的日历标记（课程/DDL/考试/活动）。",
     inputSchema: KIRO_READ_TOOL_SCHEMAS.get_calendar_range,
   }),
+  get_calendar_density: tool({
+    description:
+      "按天或周聚合日历密度（课程/截止/考试/活动计数与压力标签 low/medium/high，考试+截止同现即 high）。" +
+      "用于‘这周哪天最挤’‘考试周与 DDL 叠加’等密度分析，返回 byDay/byWeek 与 busiestDay/busiestWeek。",
+    inputSchema: KIRO_READ_TOOL_SCHEMAS.get_calendar_density,
+  }),
   get_material_metadata: tool({
     description: "查看课程资料的 metadata（标题/类型/大小/日期）。不能读取文件正文。",
     inputSchema: KIRO_READ_TOOL_SCHEMAS.get_material_metadata,

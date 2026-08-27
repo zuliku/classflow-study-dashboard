@@ -94,6 +94,14 @@ export const getCalendarRangeSchema = z.object({
   types: z.array(CALENDAR_TYPES).min(1).max(4).optional(),
 });
 
+export const getCalendarDensitySchema = z
+  .object({
+    startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "日期格式必须为 YYYY-MM-DD"),
+    endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "日期格式必须为 YYYY-MM-DD"),
+    groupBy: z.enum(["day", "week"]).optional().default("day"),
+  })
+  .refine((d) => d.startDate <= d.endDate, { message: "startDate 必须早于或等于 endDate", path: ["startDate"] });
+
 export const getMaterialMetadataSchema = z.object({
   courseId: z.string().trim().min(1).max(120).optional(),
   materialId: z.string().trim().min(1).max(120).optional(),
@@ -317,6 +325,7 @@ export const KIRO_READ_TOOL_SCHEMAS = {
   get_group_project: getGroupProjectSchema,
   get_group_tasks: getGroupTasksSchema,
   get_calendar_range: getCalendarRangeSchema,
+  get_calendar_density: getCalendarDensitySchema,
   get_material_metadata: getMaterialMetadataSchema,
   read_material: readMaterialSchema,
   read_project_file: readProjectFileSchema,
