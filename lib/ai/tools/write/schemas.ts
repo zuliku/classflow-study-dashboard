@@ -303,6 +303,18 @@ export const linkMaterialsToAssignmentSchema = z.object({
   materialIds: z.array(z.string().trim().min(1).max(120)).min(1).max(20),
 });
 
+export const deleteCourseSchema = z.object({
+  courseId: z.string().trim().min(1).max(120),
+});
+
+export const updateSemesterConfigSchema = z
+  .object({
+    name: z.string().trim().min(1).max(120).optional(),
+    startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "日期必须为 YYYY-MM-DD").optional(),
+    totalWeeks: z.number().int().min(1).max(30).optional(),
+  })
+  .refine((d) => Object.keys(d).length > 0, { message: "至少提供一个字段" });
+
 /** Task 5：Focus 工具（有界：不创建 timer / 不实现 Undo） */
 export const startFocusSessionSchema = z.object({
   plannedMinutes: z.number().int().min(1).max(240),
@@ -376,6 +388,8 @@ export const KIRO_WRITE_TOOL_SCHEMAS = {
   create_calendar_mark: createCalendarMarkSchema,
   delete_calendar_mark: deleteCalendarMarkSchema,
   link_materials_to_assignment: linkMaterialsToAssignmentSchema,
+  delete_course: deleteCourseSchema,
+  update_semester_config: updateSemesterConfigSchema,
   start_focus_session: startFocusSessionSchema,
   pause_focus_session: pauseFocusSessionSchema,
   resume_focus_session: resumeFocusSessionSchema,

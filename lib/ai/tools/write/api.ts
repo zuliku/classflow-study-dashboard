@@ -45,6 +45,8 @@ export function createKiroWriteApi({
     excludeWeekFromSchedule: (id, week) => useAppStore.getState().excludeWeekFromSchedule(id, week, kiro),
     addCourseWithSchedule: (c, slots) => useAppStore.getState().addCourseWithSchedule(c, slots, kiro),
     updateCourse: (c) => useAppStore.getState().updateCourse(c, kiro),
+    deleteCourse: (courseId) => useAppStore.getState().deleteCourse(courseId, kiro),
+    setSemester: (semester) => useAppStore.getState().setSemester(semester, kiro),
     addGroupProject: (p) => useAppStore.getState().addGroupProject(p),
     updateGroupProject: (id, patch) => useAppStore.getState().updateGroupProject(id, patch),
     deleteGroupProject: (id) => useAppStore.getState().deleteGroupProject(id),

@@ -189,6 +189,16 @@ export const KIRO_WRITE_TOOLS = {
       "用于‘把这几份讲义关联到作业’，覆盖原有 materialIds。空结果会清除关联。",
     inputSchema: KIRO_WRITE_TOOL_SCHEMAS.link_materials_to_assignment,
   }),
+  delete_course: tool({
+    description: "删除课程（高风险，需确认；会级联删除该课程的排课、作业、资料关联与一次性调课/补课等）。",
+    inputSchema: KIRO_WRITE_TOOL_SCHEMAS.delete_course,
+  }),
+  update_semester_config: tool({
+    description:
+      "更新学期配置（名称/起始日/总周数，至少一项）。起始日为 YYYY-MM-DD，总周数 1-30。" +
+      "用于‘这学期改成 18 周’‘开学是 9 月 1 日’等学期锚点调整。",
+    inputSchema: KIRO_WRITE_TOOL_SCHEMAS.update_semester_config,
+  }),
   start_focus_session: tool({
     description:
       "开始一个专注会话（Focus Session）。plannedMinutes 为整数 1–240；可选关联 Assignment 或 Course（自动取真实 courseId 与标题快照）。" +

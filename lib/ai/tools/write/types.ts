@@ -50,6 +50,8 @@ export const KIRO_WRITE_RISKS: Record<string, KiroWriteRisk> = {
   create_calendar_mark: "normal",
   delete_calendar_mark: "normal",
   link_materials_to_assignment: "normal",
+  delete_course: "destructive",
+  update_semester_config: "normal",
   // Task 5：Focus 操作均 normal（不弹 ConfirmDialog；无 Undo）
   start_focus_session: "normal",
   pause_focus_session: "normal",
@@ -79,7 +81,8 @@ export type WriteToolResult<T = unknown> =
           | "memory"
           | "reminder"
           | "focus-session"
-          | "calendar-mark";
+          | "calendar-mark"
+          | "semester";
         entityId: string;
         title: string;
         operation: "create" | "update" | "delete";
@@ -184,6 +187,8 @@ export interface KiroWriteApi {
     slots: Omit<CourseSchedule, "id" | "courseId">[]
   ) => string;
   updateCourse: (c: Course) => void;
+  deleteCourse: (courseId: string) => void;
+  setSemester: (semester: import("@/types").Semester) => void;
 
   addGroupProject: (p: { courseId: string; title: string; description?: string }) => string;
   updateGroupProject: (projectId: string, patch: { title?: string; description?: string }) => void;

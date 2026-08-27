@@ -1025,6 +1025,59 @@ function deleteCalendarMark(api: KiroWriteApi, input: unknown, _toolCallId: stri
   };
 }
 
+function deleteCourse(api: KiroWriteApi, input: unknown, _toolCallId: string): WriteToolResult<unknown> {
+  const parsed = safeParse<{ courseId: string }>("delete_course", input);
+  if (!parsed.ok) return parsed;
+  const course = api.getState().courses.find((c) => c.id === parsed.data.courseId);
+  if (!course) return notFound("未找到对应课程。");
+  api.deleteCourse(course.id);
+  return {
+    ok: true,
+    data: { id: course.id },
+    action: {
+      tool: "delete_course",
+      entityType: "course",
+      entityId: course.id,
+      title: course.name,
+      operation: "delete",
+      before: { name: course.name, code: course.code },
+      canUndo: false,
+    },
+  };
+}
+
+function updateSemesterConfig(api: KiroWriteApi, input: unknown, toolCallId: string): WriteToolResult<unknown> {
+  const parsed = safeParse<{ name?: string; startDate?: string; totalWeeks?: number }>("update_semester_config", input);
+  if (!parsed.ok) return parsed;
+  const before = { ...api.getState().semester };
+  const next: import("@/types").Semester = {
+    ...before,
+    ...(parsed.data.name !== undefined ? { name: parsed.data.name } : {}),
+    ...(parsed.data.startDate !== undefined ? { startDate: parsed.data.startDate } : {}),
+    ...(parsed.data.totalWeeks !== undefined ? { totalWeeks: parsed.data.totalWeeks } : {}),
+  };
+  if (next.startDate && !/^\d{4}-\d{2}-\d{2}$/.test(next.startDate)) return invalidInput("起始日格式必须为 YYYY-MM-DD。");
+  if (next.totalWeeks < 1 || next.totalWeeks > 30) return invalidInput("总周数需为 1-30。");
+  api.setSemester(next);
+  api.registerUndo(toolCallId, () => {
+    try { api.setSemester(before); } catch {}
+  });
+  return {
+    ok: true,
+    data: { id: next.id },
+    action: {
+      tool: "update_semester_config",
+      entityType: "semester",
+      entityId: next.id,
+      title: next.name,
+      operation: "update",
+      before: { name: before.name, startDate: before.startDate, totalWeeks: before.totalWeeks },
+      after: { name: next.name, startDate: next.startDate, totalWeeks: next.totalWeeks },
+      canUndo: true,
+    },
+  };
+}
+
 function linkMaterialsToAssignment(api: KiroWriteApi, input: unknown, toolCallId: string): WriteToolResult<unknown> {
   const parsed = safeParse<{ assignmentId: string; materialIds: string[] }>("link_materials_to_assignment", input);
   if (!parsed.ok) return parsed;
@@ -1283,6 +1336,8 @@ const EXECUTORS: Record<KiroWriteToolName, (api: KiroWriteApi, input: unknown, t
   create_calendar_mark: createCalendarMark,
   delete_calendar_mark: deleteCalendarMark,
   link_materials_to_assignment: linkMaterialsToAssignment,
+  delete_course: deleteCourse,
+  update_semester_config: updateSemesterConfig,
   start_focus_session: startFocusSession,
   pause_focus_session: pauseFocusSession,
   resume_focus_session: resumeFocusSession,
