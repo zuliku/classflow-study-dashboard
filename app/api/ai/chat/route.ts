@@ -76,14 +76,19 @@ function guardStream<TOOLS extends ToolSet>(
   return src.pipeThrough(
     new TransformStream<TextStreamPart<TOOLS>, TextStreamPart<TOOLS>>({
       transform(part, controller) {
-        if (part.type === "abort" && part.reason && /timeout|timed out/i.test(String(part.reason))) {
-          controller.enqueue({
-            type: "error",
-            error: new AIError("TIMEOUT", AI_ERROR_MESSAGES.TIMEOUT),
-          } as TextStreamPart<TOOLS>);
-          return;
+        try {
+          if (part.type === "abort" && part.reason && /timeout|timed out/i.test(String(part.reason))) {
+            controller.enqueue({
+              type: "error",
+              error: new AIError("TIMEOUT", AI_ERROR_MESSAGES.TIMEOUT),
+            } as TextStreamPart<TOOLS>);
+            return;
+          }
+          // 用户 Stop 的 abort 原样透传；下游 toUIMessageStream 会处理为中断而非错误
+          controller.enqueue(part);
+        } catch {
+          // controller 已关闭时静默丢弃，避免二次抛错掩盖原始 abort
         }
-        controller.enqueue(part);
       },
     })
   );
@@ -546,6 +551,7 @@ export async function handleChat(req: Request) {
         catchUpChunkChars: KIRO_CATCH_UP_CHUNK_CHARS,
         runResetGapMs: KIRO_RUN_RESET_GAP_MS,
         finalAnswerToolName: KIRO_FINAL_ANSWER_TOOL_NAME,
+        signal,
       }),
     });
 

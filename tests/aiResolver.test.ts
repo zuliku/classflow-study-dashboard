@@ -62,9 +62,9 @@ describe("resolveModelDefinition", () => {
     expect(def?.vendor).toBe("xai");
   });
 
-  it("B4. OpenCode：muse-spark-1.2-contributor → openai-chat / meta（contributor 版本）", async () => {
+  it("B4. OpenCode：muse-spark-1.2-contributor → openai-responses / meta", async () => {
     const def = await resolveModelDefinition({ provider: "opencode-go", model: "muse-spark-1.2-contributor" });
-    expect(def?.transport).toBe("openai-chat");
+    expect(def?.transport).toBe("openai-responses");
     expect(def?.vendor).toBe("meta");
   });
 

@@ -29,14 +29,13 @@ export default defineConfig({
     // ---- Legacy Suite Quarantine（稳定性审计 BUG-012，见 docs/bug-ledger）----
     // 这些套件在 include 清单漂移期间从未被执行，其断言已与现行产品契约脱节，
     // 属「未完成的 TDD / 已废弃契约」而非产品回归。恢复执行前需按当前契约重写：
-    // - aiMuseSpark.test.ts          ：muse-spark 高配变体已退役（contributor 版 = openai-chat、无 vision/reasoning）
     // - aiRoutes.test.ts             ：chat/test/models 路由已强制 invocationId 校验（安全加固后未回填用例）
     // - compactRoute.test.ts         ：同上
     // - kiro-computer-delete.test.ts ：文件内自带「红测试（先失败后修复）」标注，TDD 未完成
     // - kiro-computer-policy.test.ts ：断言旧策略默认值（workspace-auto 全 allow / fs.delete=deny），已被新审批模型取代
     // - kiro-computer-tools.test.ts  ：工具面数量断言过期（17 vs 现行 25）
+    // aiMuseSpark.test.ts 已于 Phase 3.6 重新 live 验证（muse-spark-1.2-contributor → openai-responses + vision + reasoning），不再隔离
     exclude: [
-      "tests/aiMuseSpark.test.ts",
       "tests/aiRoutes.test.ts",
       "tests/compactRoute.test.ts",
       "tests/unit/kiro-computer-delete.test.ts",

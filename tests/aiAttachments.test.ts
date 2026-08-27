@@ -219,11 +219,11 @@ describe("Vision MIME gate（isVisionMimeSupported，Phase 3.3A）", () => {
     expect(formatVisionMimeTypes([])).toBe("");
   });
 
-  it("visionMimeTypes 贯通：registry 未声明 → undefined（无额外限制）", () => {
-    // Phase 3.3B：kimi-k3 / mimo-v2.5 已 live 验证 PNG/JPEG/WEBP；muse-spark contributor vision=false → 无白名单声明
+  it("visionMimeTypes 贯通：registry 未声明 → undefined；已声明 → 白名单", () => {
+    // Phase 3.3B：kimi-k3 / mimo-v2.5 / muse-spark-1.2 已 live 验证 PNG/JPEG/WEBP
     expect(getModelCapabilities({ provider: "opencode-go", model: "kimi-k3" }).visionMimeTypes).toEqual(["image/jpeg", "image/png", "image/webp"]);
     expect(getModelCapabilities({ provider: "opencode-go", model: "mimo-v2.5" }).visionMimeTypes).toEqual(["image/jpeg", "image/png", "image/webp"]);
-    expect(getModelCapabilities({ provider: "opencode-go", model: "muse-spark-1.2-contributor" }).visionMimeTypes).toBeUndefined();
+    expect(getModelCapabilities({ provider: "opencode-go", model: "muse-spark-1.2-contributor" }).visionMimeTypes).toEqual(["image/jpeg", "image/png", "image/webp"]);
     expect(getModelCapabilities({ provider: "custom-openai", model: "x", custom: { providerName: "", baseURL: "", model: "x", vision: true } }).visionMimeTypes).toBeUndefined();
   });
 

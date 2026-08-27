@@ -67,6 +67,8 @@ export interface TextOnlySmoothStreamOptions {
   runResetGapMs?: number;
   /** Final Answer boundary tool name（tool-input-start 命中后切换 final-answer phase） */
   finalAnswerToolName?: string;
+  /** 上游 abort signal（client Stop / timeout），sleep 期间可中断，避免 enqueue 到已关闭的 controller */
+  signal?: AbortSignal;
 }
 
 export type TextOnlySmoothPhase = "execution" | "final-answer";
@@ -101,6 +103,7 @@ export function textOnlySmoothStream<TOOLS extends ToolSet>({
   catchUpChunkChars = KIRO_CATCH_UP_CHUNK_CHARS,
   runResetGapMs = KIRO_RUN_RESET_GAP_MS,
   finalAnswerToolName = "begin_final_answer",
+  signal,
 }: TextOnlySmoothStreamOptions): TextOnlySmoothStreamTransform<TOOLS> {
   let latestStats: Readonly<TextOnlySmoothStats> | null = null;
 
@@ -139,19 +142,34 @@ export function textOnlySmoothStream<TOOLS extends ToolSet>({
       return first?.segment ?? null;
     };
 
-    const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+    const sleep = (ms: number) => {
+      if (signal?.aborted) return Promise.resolve();
+      return new Promise<void>((resolve) => {
+        const t = setTimeout(resolve, ms);
+        if (signal) {
+          signal.addEventListener("abort", () => {
+            clearTimeout(t);
+            resolve();
+          }, { once: true });
+        }
+      });
+    };
 
     const emit = (
       controller: TransformStreamDefaultController<TextStreamPart<TOOLS>>,
       text: string,
       attachMeta: boolean
     ) => {
-      controller.enqueue({
-        type: "text-delta",
-        text,
-        id,
-        ...(attachMeta && providerMetadata != null ? { providerMetadata } : {}),
-      });
+      try {
+        controller.enqueue({
+          type: "text-delta",
+          text,
+          id,
+          ...(attachMeta && providerMetadata != null ? { providerMetadata } : {}),
+        });
+      } catch {
+        // controller 已关闭（abort/timeout），静默丢弃，避免 TransformStream error 丢失 error part
+      }
       stats.emittedTextChunks += 1;
       stats.emittedTextChars += text.length;
       if (text.length > stats.maxEmittedChunkChars) stats.maxEmittedChunkChars = text.length;

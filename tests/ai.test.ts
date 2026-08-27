@@ -48,8 +48,8 @@ describe("Provider Registry", () => {
 
   it("OpenCode transport 划分与官方 endpoint 表一致", () => {
     const byId = new Map(OPENCODE_MODELS.map((m) => [m.id, m.transport]));
-    const chatModels = ["glm-5.3", "glm-5.2", "glm-5.1", "kimi-k3", "kimi-k2.7-code", "kimi-k2.6", "deepseek-v4-pro", "deepseek-v4-flash", "mimo-v2.5", "mimo-v2.5-pro", "hy3", "muse-spark-1.2-contributor"];
-    const responsesModels = ["grok-4.5", "gpt-5.6-luna"];
+    const chatModels = ["glm-5.3", "glm-5.2", "glm-5.1", "kimi-k3", "kimi-k2.7-code", "kimi-k2.6", "deepseek-v4-pro", "deepseek-v4-flash", "mimo-v2.5", "mimo-v2.5-pro", "hy3"];
+    const responsesModels = ["grok-4.5", "gpt-5.6-luna", "muse-spark-1.2-contributor"];
     const messagesModels = ["minimax-m3", "minimax-m2.7", "minimax-m2.5", "qwen3.8-max", "qwen3.7-max", "qwen3.7-plus", "qwen3.6-plus"];
     for (const id of chatModels) expect(byId.get(id), id).toBe("openai-chat");
     for (const id of responsesModels) expect(byId.get(id), id).toBe("openai-responses");
@@ -106,7 +106,7 @@ describe("Provider Registry", () => {
       { id: "qwen3.7-plus" },
       { id: "gpt-5.6-luna" }, // openai-responses：已支持 → 保留
       { id: "grok-4.5" }, // openai-responses：已支持 → 保留
-      { id: "muse-spark-1.2-contributor" }, // openai-chat：contributor 版本 → 保留
+      { id: "muse-spark-1.2-contributor" }, // openai-responses：Muse Spark 1.2 → 保留
       { id: "some-unknown-model" }, // 未知 → 跳过（远端不返回 transport，绝不猜测）
       { id: "minimax-m3" }, // 去重
     ]);
@@ -116,7 +116,7 @@ describe("Provider Registry", () => {
       { id: "qwen3.7-plus", transport: "anthropic-messages" },
       { id: "gpt-5.6-luna", transport: "openai-responses" },
       { id: "grok-4.5", transport: "openai-responses" },
-      { id: "muse-spark-1.2-contributor", transport: "openai-chat" },
+      { id: "muse-spark-1.2-contributor", transport: "openai-responses" },
     ]);
   });
 
@@ -162,17 +162,18 @@ describe("OpenCode Phase 3.1：openai-responses registry 与过滤一致性", ()
     expect(def?.capabilities.reasoning?.mechanism).toBe("openai-responses-effort");
   });
 
-  it("3b. muse-spark-1.2-contributor 已注册（contributor 版本），transport = openai-chat，Meta vendor，保守能力", () => {
+  it("3b. muse-spark-1.2-contributor 已注册，transport = openai-responses，Meta vendor，vision + reasoning 已 live 验证", () => {
     const def = OPENCODE_MODELS.find((m) => m.id === "muse-spark-1.2-contributor");
-    expect(def?.transport).toBe("openai-chat");
+    expect(def?.transport).toBe("openai-responses");
     expect(def?.vendor).toBe("meta");
-    expect(def?.name).toBe("Muse Spark 1.2 Contributor");
-    // contributor 版本降级为 chat transport + 保守能力声明（streaming + tools）
+    expect(def?.name).toBe("Muse Spark 1.2");
     expect(def?.capabilities.streaming).toBe(true);
     expect(def?.capabilities.tools).toBe(true);
-    expect(def?.capabilities.vision).toBe(false);
+    expect(def?.capabilities.vision).toBe(true);
+    expect(def?.capabilities.visionMimeTypes).toEqual(["image/jpeg", "image/png", "image/webp"]);
     expect(def?.capabilities.fileParts).toBe(false);
-    expect(def?.capabilities.reasoning).toBeUndefined();
+    expect(def?.capabilities.reasoning?.adjustable).toBe(true);
+    expect(def?.capabilities.reasoning?.mechanism).toBe("openai-responses-effort");
   });
 
   it("4. filterRemoteGoModels：glm-5.3 / minimax-m3 / grok-4.5 / gpt-5.6-luna / muse-spark-1.2-contributor 保留各自 transport；unknown 过滤", () => {
@@ -189,7 +190,7 @@ describe("OpenCode Phase 3.1：openai-responses registry 与过滤一致性", ()
       { id: "minimax-m3", transport: "anthropic-messages" },
       { id: "grok-4.5", transport: "openai-responses" },
       { id: "gpt-5.6-luna", transport: "openai-responses" },
-      { id: "muse-spark-1.2-contributor", transport: "openai-chat" },
+      { id: "muse-spark-1.2-contributor", transport: "openai-responses" },
     ]);
   });
 

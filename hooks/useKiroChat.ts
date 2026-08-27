@@ -1099,15 +1099,19 @@ export function useKiroChat({
           return;
         }
         // Browser 异步执行（IndexedDB Blob → 提取）；完成后回传 Tool Output
-        void executeReadMaterial(input, useAppStore.getState()).then((result) => {
-          if (result.ok) {
-            registerMaterialSource(
-              result.data as { materialId?: string; title?: string; pages?: { page: number }[] },
-              input
-            );
-          }
-          emitToolOutput(toolName, toolCallId, result as ToolOutput);
-        });
+        void executeReadMaterial(input, useAppStore.getState())
+          .then((result) => {
+            if (result.ok) {
+              registerMaterialSource(
+                result.data as { materialId?: string; title?: string; pages?: { page: number }[] },
+                input
+              );
+            }
+            emitToolOutput(toolName, toolCallId, result as ToolOutput);
+          })
+          .catch((e) => {
+            emitToolOutput(toolName, toolCallId, { ok: false, code: "UNKNOWN", message: (e as Error)?.message ?? String(e) } as ToolOutput);
+          });
         return;
       }
 
@@ -1121,18 +1125,22 @@ export function useKiroChat({
         const frozenProjectContext = turnSnapshotRef.current?.projectContext as
           | KiroProjectTurnContext
           | undefined;
-        void executeReadProjectFile(input, frozenProjectContext).then((result) => {
-          // V1.3B：只有真实 Evidence（text 非空 或 pages 有内容）才注册 Citation；
-          // image / scanned PDF 只返回 visualRequired，不注册（后续 read_project_visual 再注册）
-          if (result.ok && (result.data.text || (result.data.pages && result.data.pages.length > 0))) {
-            registerProjectFileSource({
-              projectFileId: result.data.projectFileId,
+        void executeReadProjectFile(input, frozenProjectContext)
+          .then((result) => {
+            // V1.3B：只有真实 Evidence（text 非空 或 pages 有内容）才注册 Citation；
+            // image / scanned PDF 只返回 visualRequired，不注册（后续 read_project_visual 再注册）
+            if (result.ok && (result.data.text || (result.data.pages && result.data.pages.length > 0))) {
+              registerProjectFileSource({
+                projectFileId: result.data.projectFileId,
               name: result.data.name,
               pages: result.data.pages,
             });
           }
-          emitToolOutput(toolName, toolCallId, result as ToolOutput);
-        });
+            emitToolOutput(toolName, toolCallId, result as ToolOutput);
+          })
+          .catch((e) => {
+            emitToolOutput(toolName, toolCallId, { ok: false, code: "UNKNOWN", message: (e as Error)?.message ?? String(e) } as ToolOutput);
+          });
         return;
       }
 
@@ -1190,28 +1198,36 @@ export function useKiroChat({
           projectContext?: KiroProjectTurnContext;
         }) | null;
         const frozenProjectContext = snapshot?.projectContext;
-        void executeSearchProjectFile(input, { frozenProjectContext }).then((result) => {
-          if (result.ok && result.data.matches.length > 0) {
-            registerProjectFileSource({
-              projectFileId: result.data.projectFileId,
-              name: result.data.name,
-              // PDF：实际返回的匹配页；TXT/DOCX：无页码（注册 source 但不伪造 availablePages）
-              pages: result.data.kind === "pdf" ? (result.data.matches as { page: number }[]) : undefined,
-            });
-          }
-          emitToolOutput(toolName, toolCallId, result as ToolOutput);
-        });
+        void executeSearchProjectFile(input, { frozenProjectContext })
+          .then((result) => {
+            if (result.ok && result.data.matches.length > 0) {
+              registerProjectFileSource({
+                projectFileId: result.data.projectFileId,
+                name: result.data.name,
+                // PDF：实际返回的匹配页；TXT/DOCX：无页码（注册 source 但不伪造 availablePages）
+                pages: result.data.kind === "pdf" ? (result.data.matches as { page: number }[]) : undefined,
+              });
+            }
+            emitToolOutput(toolName, toolCallId, result as ToolOutput);
+          })
+          .catch((e) => {
+            emitToolOutput(toolName, toolCallId, { ok: false, code: "UNKNOWN", message: (e as Error)?.message ?? String(e) } as ToolOutput);
+          });
         return;
       }
 
       // ---- Learning History（Part 2）：Browser 异步执行 IndexedDB 查询；只读 ----
       if (toolName === "query_learning_history" || toolName === "summarize_learning_history") {
         void (async () => {
-          const result =
-            toolName === "query_learning_history"
-              ? await executeQueryLearningHistory(input)
-              : await executeSummarizeLearningHistory(input);
-          emitToolOutput(toolName, toolCallId, result as ToolOutput);
+          try {
+            const result =
+              toolName === "query_learning_history"
+                ? await executeQueryLearningHistory(input)
+                : await executeSummarizeLearningHistory(input);
+            emitToolOutput(toolName, toolCallId, result as ToolOutput);
+          } catch (e) {
+            emitToolOutput(toolName, toolCallId, { ok: false, code: "UNKNOWN", message: (e as Error)?.message ?? String(e) } as ToolOutput);
+          }
         })();
         return;
       }
@@ -1219,8 +1235,12 @@ export function useKiroChat({
       // ---- Canonical Analytics（Part 2）：Browser 异步执行，与 UI 同源；只读 ----
       if (toolName === "get_learning_analytics") {
         void (async () => {
-          const result = await executeGetLearningAnalytics(input);
-          emitToolOutput(toolName, toolCallId, result as ToolOutput);
+          try {
+            const result = await executeGetLearningAnalytics(input);
+            emitToolOutput(toolName, toolCallId, result as ToolOutput);
+          } catch (e) {
+            emitToolOutput(toolName, toolCallId, { ok: false, code: "UNKNOWN", message: (e as Error)?.message ?? String(e) } as ToolOutput);
+          }
         })();
         return;
       }
@@ -1228,8 +1248,12 @@ export function useKiroChat({
       // ---- Canonical Outlook（Part 3）：Browser 异步执行，与 UI 同源；只读 ----
       if (toolName === "get_learning_outlook") {
         void (async () => {
-          const result = await executeGetLearningOutlook(input);
-          emitToolOutput(toolName, toolCallId, result as ToolOutput);
+          try {
+            const result = await executeGetLearningOutlook(input);
+            emitToolOutput(toolName, toolCallId, result as ToolOutput);
+          } catch (e) {
+            emitToolOutput(toolName, toolCallId, { ok: false, code: "UNKNOWN", message: (e as Error)?.message ?? String(e) } as ToolOutput);
+          }
         })();
         return;
       }
@@ -1237,8 +1261,12 @@ export function useKiroChat({
       // ---- Memory Tools（Task 9）：Browser 执行 IndexedDB；独立于业务 Write ----
       if ((KIRO_MEMORY_TOOL_NAMES as string[]).includes(toolName)) {
         void (async () => {
-          const output = await runMemoryTool(toolName, input, toolCallId);
-          emitToolOutput(toolName, toolCallId, output);
+          try {
+            const output = await runMemoryTool(toolName, input, toolCallId);
+            emitToolOutput(toolName, toolCallId, output);
+          } catch (e) {
+            emitToolOutput(toolName, toolCallId, { ok: false, code: "UNKNOWN", message: (e as Error)?.message ?? String(e) } as ToolOutput);
+          }
         })();
         return;
       }
