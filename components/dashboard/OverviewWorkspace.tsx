@@ -44,12 +44,15 @@ export function OverviewWorkspace() {
     currentSemesterWeek
   )}`;
 
+  // BUG-G7：空/满态轻过渡（此前双向硬换，首屏大面积 snap）
+  const isEmpty = courses.length === 0 && schedules.length === 0 && assignments.length === 0;
+
   return (
     <div className="flex flex-1 min-h-0 flex-col">
       <WorkspaceHeader title="总览" context={currentWeekContext} sticky />
       {/* First Run：空工作区时显示 Getting Started（非阻塞，三个动作即可开始） */}
-      {courses.length === 0 && schedules.length === 0 && assignments.length === 0 ? (
-        <div className="workspace-gutter flex flex-1 min-h-0 flex-col pt-4 pb-24 md:pt-6 md:pb-6">
+      {isEmpty ? (
+        <div key="empty" className="ux-settle workspace-gutter flex flex-1 min-h-0 flex-col pt-4 pb-24 md:pt-6 md:pb-6">
           <div
             data-testid="getting-started"
             className="dashboard-card p-6 space-y-4 text-center"
@@ -87,7 +90,7 @@ export function OverviewWorkspace() {
           </div>
         </div>
       ) : (
-        <>
+        <div key="hero" className="ux-settle flex flex-1 min-h-0 flex-col">
           {/* Overview Hero Section — viewport bounded accounting for TitleBar + Header + fold gap。
               水平 gutter 走 workspace-gutter（16 → 24px），垂直 rhythm 保持原有 pt/pb 不变，
               fold geometry（xl 固定高度 + fold-gap margin）不受影响。 */}
@@ -135,7 +138,7 @@ export function OverviewWorkspace() {
               <AssignmentTable mode="compact" />
             </div>
           </section>
-        </>
+        </div>
       )}
     </div>
   );

@@ -340,7 +340,7 @@ export function CommandCenter() {
               </h3>
               <button
                 onClick={() => setSearchModalOpen(false)}
-                className="p-1.5 rounded-lg text-sandrift hover:bg-alabaster transition-colors"
+                className="p-1.5 rounded-lg text-sandrift hover:bg-alabaster transition-colors duration-[var(--motion-fast)]"
                 aria-label="关闭"
               >
                 <X className="w-4 h-4" />

@@ -253,7 +253,7 @@ export function AssignmentContextMenu({
         {hasDdl && (
           <button
             onClick={() => onApplyDDL(null)}
-            className="w-full px-3 py-1.5 rounded-lg text-left text-[11px] font-semibold text-satin-grey hover:bg-alabaster hover:text-charcoal transition-colors"
+            className="w-full px-3 py-1.5 rounded-lg text-left text-[11px] font-semibold text-satin-grey hover:bg-alabaster hover:text-charcoal transition-colors duration-[var(--motion-fast)]"
           >
             清除截止时间
           </button>

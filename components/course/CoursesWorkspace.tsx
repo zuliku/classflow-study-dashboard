@@ -17,6 +17,8 @@ import { deriveNextCourseSession } from "@/lib/courses/nextSession";
 import { getSemesterWeek } from "@/lib/semester";
 import { useEnterOnAdd } from "@/lib/useEnterOnAdd";
 import { cn } from "@/lib/utils";
+import { ExitCollapse } from "@/components/ui/ExitCollapse";
+import { useExitPresenceList } from "@/lib/useExitPresenceList";
 import {
   sortCourseAssignments,
   buildCourseTaskRow,
@@ -106,6 +108,12 @@ export function CoursesWorkspace() {
   const newMaterialIds = useEnterOnAdd(allMaterialIds);
   // 新增课程卡片入场：首次创建（Empty→Grid）与后续新增都轻量 enter
   const newCourseIds = useEnterOnAdd(courses.map((course) => course.id));
+  // BUG-G2：课程卡删除退场（大卡片瞬时回流 → 视觉跳变）
+  const retainedCourses = useExitPresenceList({
+    items: courses,
+    getId: (c) => c.id,
+    resetKey: "",
+  });
 
   // 任务行派生（V5 单次循环）：复用 courseDetailView 排序/状态/截止 + courseLibraryView attention 投影。
   // attention/overdue/total 来自同一 rows 数组（submitted 旧 DDL 不误算逾期；submitted/completed 不算待处理）。
@@ -155,7 +163,7 @@ export function CoursesWorkspace() {
           />
         ) : (
           <div className="ux-settle grid grid-cols-1 gap-4 xl:grid-cols-2 items-stretch">
-            {courses.map((course) => {
+            {retainedCourses.map(({ item: course, exiting }) => {
               const next = inTeachingWeek
                 ? deriveNextCourseSession(
                     course.id,
@@ -173,8 +181,8 @@ export function CoursesWorkspace() {
                   : "本周无后续课程";
 
               return (
+                <ExitCollapse key={course.id} exiting={exiting}>
                 <div
-                  key={course.id}
                   className={cn("h-full", newCourseIds.has(course.id) && "animate-enter")}
                 >
                   <CourseLibraryCard
@@ -206,6 +214,7 @@ export function CoursesWorkspace() {
                   onPreviewMaterial={previewMaterial}
                   />
                 </div>
+                </ExitCollapse>
               );
             })}
           </div>
