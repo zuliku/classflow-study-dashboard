@@ -307,13 +307,11 @@ export const deleteCourseSchema = z.object({
   courseId: z.string().trim().min(1).max(120),
 });
 
-export const updateSemesterConfigSchema = z
-  .object({
-    name: z.string().trim().min(1).max(120).optional(),
-    startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "日期必须为 YYYY-MM-DD").optional(),
-    totalWeeks: z.number().int().min(1).max(30).optional(),
-  })
-  .refine((d) => Object.keys(d).length > 0, { message: "至少提供一个字段" });
+export const updateSemesterConfigSchema = z.object({
+  name: z.string().trim().min(1).max(120).optional(),
+  startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "日期必须为 YYYY-MM-DD").optional(),
+  totalWeeks: z.number().int().min(1).max(30).optional(),
+});
 
 /** Task 5：Focus 工具（有界：不创建 timer / 不实现 Undo） */
 export const startFocusSessionSchema = z.object({

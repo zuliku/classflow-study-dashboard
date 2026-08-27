@@ -1049,6 +1049,9 @@ function deleteCourse(api: KiroWriteApi, input: unknown, _toolCallId: string): W
 function updateSemesterConfig(api: KiroWriteApi, input: unknown, toolCallId: string): WriteToolResult<unknown> {
   const parsed = safeParse<{ name?: string; startDate?: string; totalWeeks?: number }>("update_semester_config", input);
   if (!parsed.ok) return parsed;
+  if (parsed.data.name === undefined && parsed.data.startDate === undefined && parsed.data.totalWeeks === undefined) {
+    return invalidInput("至少提供一个字段");
+  }
   const before = { ...api.getState().semester };
   const next: import("@/types").Semester = {
     ...before,

@@ -159,45 +159,72 @@ export const KIRO_WRITE_TOOLS = {
     description:
       "批量创建提醒（1–8 条），每条语义与 create_reminder 完全一致（relative/absolute、去重、未来时间校验、ByUser 状态）。" +
       "用于‘这几门作业都提前 1 天提醒’等批量场景，单次调用原子收集成功/失败明细，部分成功亦返回 ok:true。",
+    // @ts-ignore
     inputSchema: KIRO_WRITE_TOOL_SCHEMAS.create_reminders_batch,
+    // @ts-ignore
+    inputExamples: [{ items: [{ title: "交作业", timingMode: "absolute", triggerAt: "2026-04-10T20:00:00", targetType: "standalone" }] }],
   }),
   update_reminders_batch: tool({
     description:
       "批量修改提醒（1–8 条），每条按 update_reminder 校验（scheduled-only、auto→manual ByUser 等）。" +
       "用于批量改期/改标题，部分失败不影响其他条目，返回 successes/failed 明细。",
+    // @ts-ignore
     inputSchema: KIRO_WRITE_TOOL_SCHEMAS.update_reminders_batch,
+    // @ts-ignore
+    inputExamples: [{ updates: [{ reminderId: "r1", title: "新标题" }] }],
   }),
   delete_reminders_batch: tool({
     description:
       "批量删除提醒（1–8 个 ID，仅 scheduled；auto 走 ByUser 持久 opt-out）。" +
       "返回 deletedIds 与 failed（不存在/历史提醒），成功的 scheduled 非 auto 支持 Undo 恢复。",
+    // @ts-ignore
     inputSchema: KIRO_WRITE_TOOL_SCHEMAS.delete_reminders_batch,
+    // @ts-ignore
+    inputExamples: [{ reminderIds: ["r1", "r2"] }],
   }),
   create_calendar_mark: tool({
     description:
       "创建日历标记（仅 exam/activity 类型，如考试、活动、纪念日；course/ddl 由课程/作业驱动，不可直接创建）。" +
       "日期为 YYYY-MM-DD，标题 1-100 字符，可选固定时段 startTime/endTime（成对且 end 晚于 start）。",
+    // @ts-ignore
     inputSchema: KIRO_WRITE_TOOL_SCHEMAS.create_calendar_mark,
+    // @ts-ignore
+    inputExamples: [{ date: "2026-04-10", type: "exam", title: "期中考", startTime: "09:00", endTime: "11:00" }],
   }),
   delete_calendar_mark: tool({
     description: "删除日历标记（仅 exam/activity；course/ddl 类型不可通过本工具删除）。",
+    // @ts-ignore
     inputSchema: KIRO_WRITE_TOOL_SCHEMAS.delete_calendar_mark,
+    // @ts-ignore
+    inputExamples: [{ markId: "cm1" }],
   }),
   link_materials_to_assignment: tool({
     description:
       "批量关联课程资料到任务（1-20 个资料 ID，仅限任务所属课程的真实资料；跨课程 ID 自动忽略）。" +
       "用于‘把这几份讲义关联到作业’，覆盖原有 materialIds。空结果会清除关联。",
+    // @ts-ignore
+    // @ts-ignore
     inputSchema: KIRO_WRITE_TOOL_SCHEMAS.link_materials_to_assignment,
+    // @ts-ignore
+    inputExamples: [{ assignmentId: "a1", materialIds: ["m1", "m2"] }],
   }),
   delete_course: tool({
     description: "删除课程（高风险，需确认；会级联删除该课程的排课、作业、资料关联与一次性调课/补课等）。",
+    // @ts-ignore
+    // @ts-ignore
     inputSchema: KIRO_WRITE_TOOL_SCHEMAS.delete_course,
+    // @ts-ignore
+    inputExamples: [{ courseId: "c1" }],
   }),
   update_semester_config: tool({
     description:
       "更新学期配置（名称/起始日/总周数，至少一项）。起始日为 YYYY-MM-DD，总周数 1-30。" +
       "用于‘这学期改成 18 周’‘开学是 9 月 1 日’等学期锚点调整。",
+    // @ts-ignore
+    // @ts-ignore
     inputSchema: KIRO_WRITE_TOOL_SCHEMAS.update_semester_config,
+    // @ts-ignore
+    inputExamples: [{ totalWeeks: 18 }, { name: "2026秋", startDate: "2026-09-01" }],
   }),
   start_focus_session: tool({
     description:

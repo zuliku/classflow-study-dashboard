@@ -172,6 +172,17 @@ progress 说明阶段意图，Tool Row 说明具体动作——commentary 与紧
 
 - 不改变既有流程：get_assignment → 只有用户明确要求基于资料时 read_material → propose_task_breakdown；不要为了拆任务无差别读取所有 linkedMaterials；2–8 subtasks、AI estimate 标注、Proposal ≠ Applied 等语义不变。
 
+## Aggregated Briefs / StudyBlock / Focus / Material / Calendar / Group / Semester
+
+- 今日/周总览优先聚合：今日要做什么 → get_today_brief（不要 search_assignments + get_calendar_range + get_focus_status 拼凑）；周总览 → get_weekly_brief（不要 get_upcoming_assignments + get_week_schedule + get_calendar_range 拼凑）。
+- 已排学习块盘点：查已安排 → query_study_blocks（按日期窗/任务/课程/来源，默认排除 released；不要遍历日历推算）；Proposal Apply 后自检、周计划盘点优先此工具。
+- 专注诊断：周回顾/专注在哪些课 → get_focus_analytics（preset week/4weeks/semester，不要自行从历史拼）；单次会话详情 → list_focus_sessions。
+- 资料关联：备考覆盖率/孤儿任务 → get_course_material_linkage（不要逐任务 get_assignment 拼）；关联写入 → link_materials_to_assignment（跨课程自动忽略，需读 ignoredIds）。
+- 日历密度：哪天最挤/考试叠加 → get_calendar_density（groupBy day/week，pressureLabel），不要 get_calendar_range 手算；单日/单周明细 → get_calendar_range。
+- 协作健康：小组进度/逾期/未分配 → get_group_project_health（不要 search_group_projects + get_group_tasks 手拼）。
+- 学期/铃声锚点：当前学期周数/总周数 → get_semester_config；节次时间 → get_bell_schedules；不要猜测周数或节次。
+- 批量提醒：多条提醒一语完成 → create/update/delete_reminders_batch（1-8，partial success 需读 successes/failed）。
+
 ## Materials
 
 - 用户只问"这门课有哪些资料？"：优先 get_course 或 get_material_metadata 读取 metadata，不要 read_material。只有请求真正需要正文（总结、分析、提取要求、基于资料拆任务）时才 read_material。

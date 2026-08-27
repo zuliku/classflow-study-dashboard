@@ -89,40 +89,61 @@ export const KIRO_READ_TOOLS = {
     description:
       "按天或周聚合日历密度（课程/截止/考试/活动计数与压力标签 low/medium/high，考试+截止同现即 high）。" +
       "用于‘这周哪天最挤’‘考试周与 DDL 叠加’等密度分析，返回 byDay/byWeek 与 busiestDay/busiestWeek。",
+    // @ts-ignore
     inputSchema: KIRO_READ_TOOL_SCHEMAS.get_calendar_density,
+    // @ts-ignore
+    inputExamples: [{ startDate: "2026-03-10", endDate: "2026-03-16", groupBy: "day" }],
   }),
   get_group_project_health: tool({
     description:
       "分析小组项目的协作健康：总/完成/逾期/临期（3天内）/未分配任务数、进度、最近截止任务与按成员负荷分布。" +
       "用于‘小组进度怎样’‘谁的任务逾期’‘哪位成员负荷不均’等协作节奏判断。",
+    // @ts-ignore
     inputSchema: KIRO_READ_TOOL_SCHEMAS.get_group_project_health,
+    // @ts-ignore
+    inputExamples: [{ projectId: "p1" }],
   }),
   get_semester_config: tool({
     description: "读取当前学期配置（学期名、起始日、总周数、当前教学周与本周起始日、当前时间）。用于‘这学期第几周’‘节次时间表’等锚点判断，不要猜测学期周数。",
+    // @ts-ignore
     inputSchema: KIRO_READ_TOOL_SCHEMAS.get_semester_config,
+    // @ts-ignore
+    inputExamples: [{}],
   }),
   get_bell_schedules: tool({
     description: "读取铃声/节次模板（BellSchedule）：节次号→具体时间与当前激活模板。用于‘第三节是几点’等节次时间解析。",
+    // @ts-ignore
     inputSchema: KIRO_READ_TOOL_SCHEMAS.get_bell_schedules,
+    // @ts-ignore
+    inputExamples: [{}],
   }),
   get_learning_signal: tool({
     description:
       "按 preset（week/4weeks/semester）读取学习信号（focus-up/down、plan-actual、deadline、course-concentration、focus-rhythm 等，最多 3 条）。" +
       "不带 signalId 返回全量 signals；带 signalId 返回单条信号的 evidence（关联的专注/计划/截止/课程投入等底层指标与 period/coverage 上下文）。" +
       "用于‘为什么按时只有 60%’等信号级下钻，不要自行从历史拼凑。",
+    // @ts-ignore
     inputSchema: KIRO_READ_TOOL_SCHEMAS.get_learning_signal,
+    // @ts-ignore
+    inputExamples: [{ preset: "week" }, { signalId: "deadline", preset: "week" }],
   }),
   get_today_brief: tool({
     description:
       "聚合今日简报：今日截止任务、今日已安排学习块（去 released）、今日日历标记、今日待提醒与当前专注状态。" +
       "用于‘今天有哪些安排’‘今天要做什么’等一日总览，不要分别调多个工具拼凑。",
+    // @ts-ignore
     inputSchema: KIRO_READ_TOOL_SCHEMAS.get_today_brief,
+    // @ts-ignore
+    inputExamples: [{}, { date: "2026-03-10" }],
   }),
   get_weekly_brief: tool({
     description:
       "聚合周简报：指定教学周（默认当前周）的截止任务、学习块、日历密度与本周专注完成。" +
       "用于‘这周压力怎样’‘本周安排’等周级总览，返回起止日、聚合计数与按日分布。",
+    // @ts-ignore
     inputSchema: KIRO_READ_TOOL_SCHEMAS.get_weekly_brief,
+    // @ts-ignore
+    inputExamples: [{}, { week: 5 }],
   }),
   get_material_metadata: tool({
     description: "查看课程资料的 metadata（标题/类型/大小/日期）。不能读取文件正文。",
@@ -173,25 +194,37 @@ export const KIRO_READ_TOOLS = {
       "按日期范围与条件批量查询学习计划 StudyBlock（天/周视图条带），支持按任务、课程、来源过滤，默认排除 released（已释放）块。" +
       "返回按日期与开始时间排序的块（含标题/日期/时间段/关联任务与课程/来源/状态与时长）、总数与 released 计数。" +
       "Proposal Apply 后的自检、周计划盘点、日程密度分析优先使用本工具，不要遍历日历推算。",
+    // @ts-ignore
     inputSchema: KIRO_READ_TOOL_SCHEMAS.query_study_blocks,
+    // @ts-ignore - inputExamples not in formal AI SDK Tool type but passed to model
+    inputExamples: [{ from: "2026-03-10", to: "2026-03-16" }, { assignmentId: "a1", includeReleased: false }],
   }),
   list_focus_sessions: tool({
     description:
       "按时间范围、课程、任务或状态查询专注会话历史（已完成/进行中/已暂停），按开始时间倒序，支持 limit。" +
       "进行中会话的 elapsedActiveMs/remainingMs 由 ClassFlow 计算，不要自己推算。",
+    // @ts-ignore
     inputSchema: KIRO_READ_TOOL_SCHEMAS.list_focus_sessions,
+    // @ts-ignore
+    inputExamples: [{ status: "completed", limit: 10 }, { from: "2026-03-01", to: "2026-03-31", courseId: "c1" }],
   }),
   get_focus_analytics: tool({
     description:
       "返回与学习洞察同源的专注分析快照（preset: week/4weeks/semester），基于已完成的专注会话实际 active 时长，包含总次数/总计划与实际分钟/活跃天/平均与最长/按课程与时段分布与主导时段。" +
       "周回顾、专注在哪些课上最多、哪段时间最专注等前瞻问题优先使用本工具，不要自行从历史事件拼凑。",
+    // @ts-ignore
     inputSchema: KIRO_READ_TOOL_SCHEMAS.get_focus_analytics,
+    // @ts-ignore
+    inputExamples: [{ preset: "week" }, { preset: "semester" }],
   }),
   get_course_material_linkage: tool({
     description:
       "分析指定课程的资料与任务关联覆盖率：每份资料被哪些任务引用、未关联资料、未关联任何资料的孤儿任务数与覆盖率。" +
       "备考时‘这门课哪些资料还没关联任务’‘这份 PDF 被哪几个作业用了’优先使用本工具，不要逐任务 get_assignment 拼凑。",
+    // @ts-ignore
     inputSchema: KIRO_READ_TOOL_SCHEMAS.get_course_material_linkage,
+    // @ts-ignore
+    inputExamples: [{ courseId: "c1" }, { courseId: "c1", includeUnlinked: true }],
   }),
   query_learning_history: tool({
     description:
