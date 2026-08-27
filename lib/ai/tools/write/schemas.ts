@@ -252,6 +252,30 @@ export const deleteReminderSchema = z.object({
   reminderId: z.string().trim().min(1).max(120),
 });
 
+export const createRemindersBatchSchema = z.object({
+  items: z.array(createReminderSchema).min(1).max(8),
+});
+
+export const updateRemindersBatchSchema = z.object({
+  updates: z
+    .array(
+      z.object({
+        reminderId: z.string().trim().min(1).max(120),
+        title: z.string().trim().min(1).max(200).optional(),
+        note: z.string().max(500).nullable().optional(),
+        timingMode: z.enum(["relative", "absolute"]).optional(),
+        offsetMinutes: z.number().int().min(-43200).max(0).optional(),
+        triggerAt: z.string().regex(LOCAL_DDL_RE, "提醒时间必须为本地时间 YYYY-MM-DDTHH:mm[:ss]").optional(),
+      })
+    )
+    .min(1)
+    .max(8),
+});
+
+export const deleteRemindersBatchSchema = z.object({
+  reminderIds: z.array(z.string().trim().min(1).max(120)).min(1).max(8),
+});
+
 /** Task 5：Focus 工具（有界：不创建 timer / 不实现 Undo） */
 export const startFocusSessionSchema = z.object({
   plannedMinutes: z.number().int().min(1).max(240),
@@ -319,6 +343,9 @@ export const KIRO_WRITE_TOOL_SCHEMAS = {
   create_reminder: createReminderSchema,
   update_reminder: updateReminderSchema,
   delete_reminder: deleteReminderSchema,
+  create_reminders_batch: createRemindersBatchSchema,
+  update_reminders_batch: updateRemindersBatchSchema,
+  delete_reminders_batch: deleteRemindersBatchSchema,
   start_focus_session: startFocusSessionSchema,
   pause_focus_session: pauseFocusSessionSchema,
   resume_focus_session: resumeFocusSessionSchema,

@@ -295,6 +295,11 @@ export const getFocusAnalyticsSchema = z
   })
   .strict();
 
+export const getCourseMaterialLinkageSchema = z.object({
+  courseId: z.string().trim().min(1).max(120),
+  includeUnlinked: z.boolean().optional().default(false),
+});
+
 export const KIRO_READ_TOOL_SCHEMAS = {
   get_current_context: emptyInputSchema,
   get_user_study_profile: emptyInputSchema,
@@ -323,6 +328,7 @@ export const KIRO_READ_TOOL_SCHEMAS = {
   query_study_blocks: queryStudyBlocksSchema,
   list_focus_sessions: listFocusSessionsSchema,
   get_focus_analytics: getFocusAnalyticsSchema,
+  get_course_material_linkage: getCourseMaterialLinkageSchema,
   query_learning_history: queryLearningHistorySchema,
   summarize_learning_history: summarizeLearningHistorySchema,
   get_learning_analytics: getLearningAnalyticsSchema,

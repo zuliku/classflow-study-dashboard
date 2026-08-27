@@ -148,6 +148,12 @@ export const KIRO_READ_TOOLS = {
       "周回顾、专注在哪些课上最多、哪段时间最专注等前瞻问题优先使用本工具，不要自行从历史事件拼凑。",
     inputSchema: KIRO_READ_TOOL_SCHEMAS.get_focus_analytics,
   }),
+  get_course_material_linkage: tool({
+    description:
+      "分析指定课程的资料与任务关联覆盖率：每份资料被哪些任务引用、未关联资料、未关联任何资料的孤儿任务数与覆盖率。" +
+      "备考时‘这门课哪些资料还没关联任务’‘这份 PDF 被哪几个作业用了’优先使用本工具，不要逐任务 get_assignment 拼凑。",
+    inputSchema: KIRO_READ_TOOL_SCHEMAS.get_course_material_linkage,
+  }),
   query_learning_history: tool({
     description:
       "查询本地学习历史原始事件（任务创建/完成/重开/DDL 变更、学习计划、专注完成、课程/课表变更等），支持按时间/事件类型/课程/任务/来源筛选。只读本地历史，不读取当前状态。" +

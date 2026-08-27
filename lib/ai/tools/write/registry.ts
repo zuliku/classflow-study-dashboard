@@ -155,6 +155,24 @@ export const KIRO_WRITE_TOOLS = {
       "多个候选必须询问用户，不得猜 ID。",
     inputSchema: KIRO_WRITE_TOOL_SCHEMAS.delete_reminder,
   }),
+  create_reminders_batch: tool({
+    description:
+      "批量创建提醒（1–8 条），每条语义与 create_reminder 完全一致（relative/absolute、去重、未来时间校验、ByUser 状态）。" +
+      "用于‘这几门作业都提前 1 天提醒’等批量场景，单次调用原子收集成功/失败明细，部分成功亦返回 ok:true。",
+    inputSchema: KIRO_WRITE_TOOL_SCHEMAS.create_reminders_batch,
+  }),
+  update_reminders_batch: tool({
+    description:
+      "批量修改提醒（1–8 条），每条按 update_reminder 校验（scheduled-only、auto→manual ByUser 等）。" +
+      "用于批量改期/改标题，部分失败不影响其他条目，返回 successes/failed 明细。",
+    inputSchema: KIRO_WRITE_TOOL_SCHEMAS.update_reminders_batch,
+  }),
+  delete_reminders_batch: tool({
+    description:
+      "批量删除提醒（1–8 个 ID，仅 scheduled；auto 走 ByUser 持久 opt-out）。" +
+      "返回 deletedIds 与 failed（不存在/历史提醒），成功的 scheduled 非 auto 支持 Undo 恢复。",
+    inputSchema: KIRO_WRITE_TOOL_SCHEMAS.delete_reminders_batch,
+  }),
   start_focus_session: tool({
     description:
       "开始一个专注会话（Focus Session）。plannedMinutes 为整数 1–240；可选关联 Assignment 或 Course（自动取真实 courseId 与标题快照）。" +

@@ -34,6 +34,7 @@ const REMOTE_ALLOWED = new Set<string>([
   "query_study_blocks",
   "list_focus_sessions",
   "get_focus_analytics",
+  "get_course_material_linkage",
   "query_learning_history",
   "summarize_learning_history",
   "get_learning_analytics",

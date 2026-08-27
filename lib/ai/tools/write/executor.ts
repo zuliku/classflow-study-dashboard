@@ -707,6 +707,276 @@ function deleteReminder(api: KiroWriteApi, input: unknown, toolCallId: string): 
   };
 }
 
+// ---------- Reminder Batch（P2）：批量创建/修改/删除（1-8） ----------
+function createRemindersBatch(api: KiroWriteApi, input: unknown, toolCallId: string): WriteToolResult<unknown> {
+  const parsed = safeParse<{ items: unknown[] }>("create_reminders_batch", input);
+  if (!parsed.ok) return parsed;
+  const items = (parsed.data as { items: unknown[] }).items;
+  const successes: { index: number; id: string }[] = [];
+  const failures: { index: number; code: string; message: string }[] = [];
+  const createdIds: string[] = [];
+  for (let idx = 0; idx < items.length; idx++) {
+    const item = items[idx];
+    // 复用单条 create_reminder 的校验与创建逻辑，但批量收集而非立即返回错误
+    const singleParsed = safeParse<
+      | { title: string; note?: string; targetType: "assignment" | "studyBlock" | "calendarMark"; targetId: string; timingMode: "relative"; offsetMinutes: number }
+      | { title: string; note?: string; timingMode: "absolute"; triggerAt: string; targetType?: ReminderTargetType; targetId?: string }
+    >("create_reminder", item);
+    if (!singleParsed.ok) {
+      failures.push({ index: idx, code: singleParsed.code, message: singleParsed.message });
+      continue;
+    }
+    const nowMs = Date.now();
+    let id: string | null = null;
+    let err: WriteToolResult<unknown> | null = null;
+    if (singleParsed.data.timingMode === "relative") {
+      const { title, note, targetType, targetId, offsetMinutes } = singleParsed.data as { title: string; note?: string; targetType: "assignment" | "studyBlock" | "calendarMark"; targetId: string; timingMode: "relative"; offsetMinutes: number };
+      const target = resolveReminderTarget(api, targetType, targetId);
+      if (target.notFound) err = notFound("未找到对应目标。");
+      else if (target.completedAssignment) err = invalidInput("已完成任务无需新增相对提醒。");
+      else if (!target.anchor) err = invalidInput("该目标没有可用的提醒基准时间（如任务缺少截止时间）。");
+      else {
+        const triggerAt = resolveReminderTriggerAt({ timingMode: "relative", triggerAt: target.anchor!, offsetMinutes });
+        if (!triggerAt || (parseLocalDDL(triggerAt)?.getTime() ?? 0) <= nowMs) err = invalidInput("该提醒时间已过，无法创建。");
+        else if (hasKiroReminderDuplicate(api, { targetType, targetId, timingMode: "relative", offsetMinutes, triggerAt })) err = invalidInput("已存在相同的提醒。");
+        else {
+          id = api.addReminder({ title, note, targetType, targetId, timingMode: "relative", offsetMinutes, triggerAt: target.anchor!, source: "kiro" });
+          if (id === null) err = invalidInput("提醒创建失败。");
+        }
+      }
+    } else {
+      const { title, note, triggerAt, targetId } = singleParsed.data as { title: string; note?: string; timingMode: "absolute"; triggerAt: string; targetType?: ReminderTargetType; targetId?: string };
+      const targetType = (singleParsed.data as { targetType?: ReminderTargetType }).targetType ?? "standalone";
+      if (targetType === "standalone") {
+        if (targetId !== undefined) err = invalidInput("独立提醒不需要 targetId。");
+      } else {
+        if (!targetId) err = invalidInput("需要指定目标 ID。");
+        else {
+          const target = resolveReminderTarget(api, targetType, targetId);
+          if (target.notFound) err = notFound("未找到对应目标。");
+        }
+      }
+      if (!err) {
+        if ((parseLocalDDL(triggerAt)?.getTime() ?? 0) <= nowMs) err = invalidInput("提醒时间已过，请选择未来的时间。");
+        else if (hasKiroReminderDuplicate(api, { targetType, targetId, timingMode: "absolute", triggerAt })) err = invalidInput("已存在相同时间的提醒。");
+        else {
+          id = api.addReminder({ title, note, targetType, targetId: targetType === "standalone" ? undefined : targetId, timingMode: "absolute", triggerAt, source: "kiro" });
+          if (id === null) err = invalidInput("提醒创建失败。");
+        }
+      }
+    }
+    if (err) {
+      failures.push({ index: idx, code: (err as { code: string }).code, message: (err as { message: string }).message });
+    } else if (id) {
+      successes.push({ index: idx, id });
+      createdIds.push(id);
+    }
+  }
+  if (createdIds.length > 0) {
+    const toDelete = [...createdIds];
+    api.registerUndo(toolCallId, () => {
+      for (const cid of toDelete.reverse()) {
+        try { api.deleteReminder(cid); } catch {}
+      }
+    });
+  }
+  if (successes.length === 0 && failures.length > 0) {
+    return { ok: false, code: "INVALID_INPUT", message: `批量创建全部失败（${failures.length} 条）：${failures[0].message}`, data: { successes, failures } } as unknown as WriteToolResult<unknown>;
+  }
+  return {
+    ok: true,
+    data: { createdIds, successes, failures, total: items.length },
+    action: {
+      tool: "create_reminders_batch",
+      entityType: "reminder",
+      entityId: successes[0]?.id ?? `batch-${toolCallId}`,
+      title: successes.length > 0 ? `批量创建 ${successes.length} 条提醒` : "批量创建提醒",
+      operation: "create",
+      after: { createdIds, count: successes.length },
+      canUndo: createdIds.length > 0,
+    },
+  };
+}
+
+function updateRemindersBatch(api: KiroWriteApi, input: unknown, toolCallId: string): WriteToolResult<unknown> {
+  const parsed = safeParse<{ updates: unknown[] }>("update_reminders_batch", input);
+  if (!parsed.ok) return parsed;
+  const updates = (parsed.data as { updates: unknown[] }).updates;
+  const successes: { index: number; id: string }[] = [];
+  const failures: { index: number; code: string; message: string }[] = [];
+  const snapshots: Reminder[] = [];
+  for (let idx = 0; idx < updates.length; idx++) {
+    const raw = updates[idx] as { reminderId?: string; title?: string; note?: string | null; timingMode?: ReminderTimingMode; offsetMinutes?: number; triggerAt?: string };
+    if (!raw || typeof raw.reminderId !== "string" || !raw.reminderId.trim()) {
+      failures.push({ index: idx, code: "INVALID_INPUT", message: "缺少 reminderId。" });
+      continue;
+    }
+    const old = api.getState().reminders.find((r) => r.id === raw.reminderId);
+    if (!old) {
+      failures.push({ index: idx, code: "NOT_FOUND", message: "未找到对应提醒。" });
+      continue;
+    }
+    if (old.status !== "scheduled") {
+      failures.push({ index: idx, code: "INVALID_INPUT", message: "历史提醒不能修改时间重新激活。" });
+      continue;
+    }
+    const before: Reminder = { ...old };
+    const patchInput = { reminderId: raw.reminderId, title: raw.title, note: raw.note, timingMode: raw.timingMode, offsetMinutes: raw.offsetMinutes, triggerAt: raw.triggerAt };
+    // 复用单条 update 的 auto 分支逻辑（简化版，直接走 ByUser 路径判断）
+    const nowMs = Date.now();
+    let patch: Partial<Reminder> | null = null;
+    let err: WriteToolResult<unknown> | null = null;
+    if (old.source === "auto") {
+      const planned = planReminderUpdate(api, old, patchInput, nowMs);
+      if (planned.error) err = planned.error as WriteToolResult<unknown>;
+      else patch = planned.patch ?? null;
+    } else {
+      const nextTimingMode = patchInput.timingMode ?? old.timingMode;
+      if (nextTimingMode === "relative") {
+        if (old.targetType === "standalone") err = invalidInput("独立提醒不支持相对时间。");
+        else {
+          const offsetMinutes = patchInput.offsetMinutes ?? old.offsetMinutes;
+          if (offsetMinutes === undefined) err = invalidInput("缺少提前时间（offsetMinutes）。");
+          else {
+            const target = resolveReminderTarget(api, old.targetType, old.targetId);
+            if (target.notFound) err = notFound("提醒的目标已不存在。");
+            else if (!target.anchor) err = invalidInput("目标已没有可用的提醒基准时间。");
+            else {
+              const triggerAt = resolveReminderTriggerAt({ timingMode: "relative", triggerAt: target.anchor!, offsetMinutes });
+              if (!triggerAt || (parseLocalDDL(triggerAt)?.getTime() ?? 0) <= nowMs) err = invalidInput("调整后的提醒时间已过。");
+              else if (hasKiroReminderDuplicate(api, { targetType: old.targetType, targetId: old.targetId, timingMode: "relative", offsetMinutes, triggerAt }, old.id)) err = invalidInput("已存在相同的提醒。");
+              else patch = { title: patchInput.title ?? old.title, note: patchInput.note !== undefined ? patchInput.note ?? undefined : old.note, timingMode: "relative", offsetMinutes, triggerAt: target.anchor! };
+            }
+          }
+        }
+      } else {
+        let triggerAt = patchInput.triggerAt;
+        if (triggerAt === undefined) {
+          if (old.timingMode === "absolute") triggerAt = old.triggerAt;
+          else err = invalidInput("切换为自定义时间时必须提供具体时间（triggerAt）。");
+        }
+        if (!err && triggerAt) {
+          if ((parseLocalDDL(triggerAt)?.getTime() ?? 0) <= nowMs) err = invalidInput("提醒时间已过，请选择未来的时间。");
+          else if (hasKiroReminderDuplicate(api, { targetType: old.targetType, targetId: old.targetId, timingMode: "absolute", triggerAt }, old.id)) err = invalidInput("已存在相同时间的提醒。");
+          else patch = { title: patchInput.title ?? old.title, note: patchInput.note !== undefined ? patchInput.note ?? undefined : old.note, timingMode: "absolute", offsetMinutes: undefined, triggerAt };
+        }
+      }
+    }
+    if (err) {
+      failures.push({ index: idx, code: (err as { code: string }).code, message: (err as { message: string }).message });
+      continue;
+    }
+    if (!patch) {
+      failures.push({ index: idx, code: "INVALID_INPUT", message: "无有效修改字段。" });
+      continue;
+    }
+    try {
+      if (old.source === "auto") {
+        api.updateReminderByUser(old.id, patch);
+      } else {
+        api.updateReminder(old.id, patch);
+        if (patch.timingMode === "relative") api.reconcileTargetReminders(old.targetType, old.targetId!);
+      }
+      snapshots.push(before);
+      successes.push({ index: idx, id: old.id });
+    } catch (e) {
+      failures.push({ index: idx, code: "UNKNOWN", message: (e as Error)?.message ?? String(e) });
+    }
+  }
+  if (snapshots.length > 0) {
+    const snaps = [...snapshots];
+    api.registerUndo(toolCallId, () => {
+      for (const snap of snaps.reverse()) {
+        try {
+          if (snap.source === "auto") api.enableAutomaticReminderForTarget(snap.targetType, snap.targetId!);
+          restoreReminderSnapshot(api, snap);
+          if (snap.timingMode === "relative") api.reconcileTargetReminders(snap.targetType, snap.targetId!);
+        } catch {}
+      }
+    });
+  }
+  if (successes.length === 0 && failures.length > 0) {
+    return { ok: false, code: "INVALID_INPUT", message: `批量修改全部失败：${failures[0].message}`, data: { successes, failures } } as unknown as WriteToolResult<unknown>;
+  }
+  return {
+    ok: true,
+    data: { updatedIds: successes.map((s) => s.id), successes, failures, total: updates.length },
+    action: {
+      tool: "update_reminders_batch",
+      entityType: "reminder",
+      entityId: successes[0]?.id ?? `batch-${toolCallId}`,
+      title: successes.length > 0 ? `批量修改 ${successes.length} 条提醒` : "批量修改提醒",
+      operation: "update",
+      after: { count: successes.length },
+      canUndo: snapshots.length > 0,
+    },
+  };
+}
+
+function deleteRemindersBatch(api: KiroWriteApi, input: unknown, toolCallId: string): WriteToolResult<unknown> {
+  const parsed = safeParse<{ reminderIds: string[] }>("delete_reminders_batch", input);
+  if (!parsed.ok) return parsed;
+  const ids = (parsed.data as { reminderIds: string[] }).reminderIds;
+  const successes: { index: number; id: string }[] = [];
+  const failures: { index: number; code: string; message: string }[] = [];
+  const snapshots: Reminder[] = [];
+  const autoIds: string[] = [];
+  for (let idx = 0; idx < ids.length; idx++) {
+    const rid = ids[idx];
+    const target = api.getState().reminders.find((r) => r.id === rid);
+    if (!target) {
+      failures.push({ index: idx, code: "NOT_FOUND", message: "未找到对应提醒。" });
+      continue;
+    }
+    if (target.status !== "scheduled") {
+      failures.push({ index: idx, code: "INVALID_INPUT", message: "历史提醒不能删除。" });
+      continue;
+    }
+    if (target.source === "auto") {
+      try {
+        api.deleteReminderByUser(target.id);
+        autoIds.push(target.id);
+        successes.push({ index: idx, id: target.id });
+      } catch (e) {
+        failures.push({ index: idx, code: "UNKNOWN", message: (e as Error)?.message ?? String(e) });
+      }
+    } else {
+      const snap: Reminder = { ...target };
+      try {
+        api.deleteReminder(target.id);
+        snapshots.push(snap);
+        successes.push({ index: idx, id: target.id });
+      } catch (e) {
+        failures.push({ index: idx, code: "UNKNOWN", message: (e as Error)?.message ?? String(e) });
+      }
+    }
+  }
+  if (snapshots.length > 0) {
+    const snaps = [...snapshots];
+    api.registerUndo(toolCallId, () => {
+      for (const snap of snaps.reverse()) {
+        try { api.restoreReminder(snap); } catch {}
+      }
+    });
+  }
+  if (successes.length === 0 && failures.length > 0) {
+    return { ok: false, code: "INVALID_INPUT", message: `批量删除全部失败：${failures[0].message}`, data: { successes, failures } } as unknown as WriteToolResult<unknown>;
+  }
+  return {
+    ok: true,
+    data: { deletedIds: successes.map((s) => s.id), successes, failures, total: ids.length, autoIds },
+    action: {
+      tool: "delete_reminders_batch",
+      entityType: "reminder",
+      entityId: successes[0]?.id ?? `batch-${toolCallId}`,
+      title: successes.length > 0 ? `批量删除 ${successes.length} 条提醒` : "批量删除提醒",
+      operation: "delete",
+      after: { count: successes.length },
+      canUndo: snapshots.length > 0,
+    },
+  };
+}
+
 // ---------- Task 5：Focus 工具（有界：canUndo=false，不创建 timer） ----------
 
 function startFocusSession(api: KiroWriteApi, input: unknown, toolCallId: string): WriteToolResult<unknown> {
@@ -925,6 +1195,9 @@ const EXECUTORS: Record<KiroWriteToolName, (api: KiroWriteApi, input: unknown, t
   create_reminder: createReminder,
   update_reminder: updateReminder,
   delete_reminder: deleteReminder,
+  create_reminders_batch: createRemindersBatch,
+  update_reminders_batch: updateRemindersBatch,
+  delete_reminders_batch: deleteRemindersBatch,
   start_focus_session: startFocusSession,
   pause_focus_session: pauseFocusSession,
   resume_focus_session: resumeFocusSession,

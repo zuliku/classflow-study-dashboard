@@ -1036,6 +1036,52 @@ export function getFocusAnalytics(state: ReadToolState, input: unknown): ReadToo
   };
 }
 
+export function getCourseMaterialLinkage(state: ReadToolState, input: unknown): ReadToolResult<unknown> {
+  const parsed = safeParse<{ courseId: string; includeUnlinked?: boolean }>("get_course_material_linkage", input);
+  if (!parsed.ok) return parsed;
+  const { courseId, includeUnlinked } = parsed.data;
+  const course = findCourse(state, courseId);
+  if (!course) return notFound("未找到对应课程。");
+  const courseAssignments = state.assignments.filter((a) => a.courseId === courseId);
+  const materials = course.materials.map((m) => {
+    const linkedAssignmentIds = courseAssignments
+      .filter((a) => a.materialIds?.includes(m.id))
+      .map((a) => a.id);
+    return {
+      materialId: m.id,
+      title: m.title,
+      type: m.type,
+      size: m.size ?? null,
+      uploadDate: m.uploadDate,
+      linkedAssignmentIds,
+      linkCount: linkedAssignmentIds.length,
+    };
+  });
+  const linkedAssignmentIdSet = new Set<string>();
+  for (const m of materials) {
+    for (const aid of m.linkedAssignmentIds) linkedAssignmentIdSet.add(aid);
+  }
+  const totalAssignments = courseAssignments.length;
+  const linkedAssignments = courseAssignments.filter((a) => linkedAssignmentIdSet.has(a.id)).length;
+  const orphanAssignments = courseAssignments
+    .filter((a) => !a.materialIds || a.materialIds.length === 0 || !a.materialIds.some((id) => course.materials.some((m) => m.id === id)))
+    .map((a) => ({ id: a.id, title: a.title, status: a.status, ddl: a.ddl ?? null }));
+  const coverage = totalAssignments > 0 ? Math.round((linkedAssignments / totalAssignments) * 100) / 100 : 0;
+  return {
+    ok: true,
+    data: {
+      courseId: course.id,
+      courseName: course.name,
+      totalMaterials: materials.length,
+      totalAssignments,
+      linkedAssignments,
+      coverage,
+      materials,
+      ...(includeUnlinked ? { orphanAssignments } : {}),
+    },
+  };
+}
+
 export function getUpcomingAssignments(state: ReadToolState, input: unknown): ReadToolResult<unknown> {
   const parsed = safeParse<{ days?: number; limit?: number }>("get_upcoming_assignments", input);
   if (!parsed.ok) return parsed;
@@ -1279,6 +1325,7 @@ const EXECUTORS: Record<Exclude<KiroReadToolName, "read_material" | "read_projec
   query_study_blocks: queryStudyBlocks,
   list_focus_sessions: listFocusSessions,
   get_focus_analytics: getFocusAnalytics,
+  get_course_material_linkage: getCourseMaterialLinkage,
   activate_skill: activateSkillTool,
   mcp_search_tools: mcpSearchToolsTool,
   mcp_call_tool: mcpCallToolTool,
