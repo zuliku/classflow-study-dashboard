@@ -807,6 +807,235 @@ export function getFocusStatus(state: ReadToolState): ReadToolResult<unknown> {
   };
 }
 
+export function queryStudyBlocks(state: ReadToolState, input: unknown): ReadToolResult<unknown> {
+  const parsed = safeParse<{
+    from?: string;
+    to?: string;
+    assignmentId?: string;
+    courseId?: string;
+    source?: "manual" | "kiro";
+    includeReleased?: boolean;
+    limit?: number;
+  }>("query_study_blocks", input);
+  if (!parsed.ok) return parsed;
+  const { from, to, assignmentId, courseId, source, includeReleased, limit } = parsed.data;
+  if (from && to && from > to) return invalidInput("from 必须早于或等于 to。");
+  const fromDate = from ?? "0000-01-01";
+  const toDate = to ?? "9999-12-31";
+  if (to && from) {
+    const diff = differenceInDays(new Date(`${to}T00:00:00`), new Date(`${from}T00:00:00`));
+    if (diff > 90) return { ok: false, code: "OUT_OF_RANGE", message: "StudyBlock 查询最长 90 天。" };
+  }
+  const baseBlocks = (state.studyBlocks ?? []).filter((b) => {
+    if (assignmentId && b.assignmentId !== assignmentId) return false;
+    if (courseId && b.courseId !== courseId) return false;
+    if (source && b.source !== source) return false;
+    if (b.date < fromDate || b.date > toDate) return false;
+    return true;
+  });
+  const releasedCount = baseBlocks.filter((b) => b.planningState === "released").length;
+  const blocks = includeReleased ? baseBlocks : baseBlocks.filter((b) => b.planningState !== "released");
+  blocks.sort((a, b) => {
+    if (a.date !== b.date) return a.date.localeCompare(b.date);
+    return (timeToMinutes(a.startTime) ?? 0) - (timeToMinutes(b.startTime) ?? 0);
+  });
+  const lim = limit ?? 20;
+  const sliced = blocks.slice(0, lim);
+  const totalMinutes = sliced.reduce((sum, b) => {
+    const s = timeToMinutes(b.startTime);
+    const e = timeToMinutes(b.endTime);
+    return sum + (s !== null && e !== null && e > s ? e - s : 0);
+  }, 0);
+  return {
+    ok: true,
+    data: {
+      from: from ?? null,
+      to: to ?? null,
+      totalCount: blocks.length,
+      returnedCount: sliced.length,
+      totalMinutes,
+      releasedCount,
+      blocks: sliced.map((b) => {
+        const s = timeToMinutes(b.startTime);
+        const e = timeToMinutes(b.endTime);
+        const minutes = s !== null && e !== null && e > s ? e - s : 0;
+        const assignment = b.assignmentId ? state.assignments.find((a) => a.id === b.assignmentId) : undefined;
+        const course = b.courseId ? state.courses.find((c) => c.id === b.courseId) : undefined;
+        return {
+          id: b.id,
+          title: b.title,
+          date: b.date,
+          startTime: b.startTime,
+          endTime: b.endTime,
+          minutes,
+          assignmentId: b.assignmentId ?? null,
+          assignmentTitle: assignment?.title ?? null,
+          courseId: b.courseId ?? null,
+          courseName: course?.name ?? null,
+          source: b.source ?? "manual",
+          planningState: b.planningState ?? "active",
+        };
+      }),
+    },
+  };
+}
+
+function parseLocalDayToMs(s: string, endOfDay: boolean): number | null {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
+  if (!m) return null;
+  const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]), 0, 0, 0, 0);
+  if (Number.isNaN(d.getTime())) return null;
+  return endOfDay ? d.getTime() + 86_400_000 - 1 : d.getTime();
+}
+
+export function listFocusSessions(state: ReadToolState, input: unknown): ReadToolResult<unknown> {
+  const parsed = safeParse<{
+    from?: string;
+    to?: string;
+    courseId?: string;
+    assignmentId?: string;
+    status?: "running" | "paused" | "completed";
+    limit?: number;
+  }>("list_focus_sessions", input);
+  if (!parsed.ok) return parsed;
+  const { from, to, courseId, assignmentId, status, limit } = parsed.data;
+  const sessions = state.focusSessions ?? [];
+  const fromMs = from ? parseLocalDayToMs(from, false) : null;
+  const toMs = to ? parseLocalDayToMs(to, true) : null;
+  if (from && fromMs === null) return invalidInput("from 日期格式必须为 YYYY-MM-DD。");
+  if (to && toMs === null) return invalidInput("to 日期格式必须为 YYYY-MM-DD。");
+  if (fromMs !== null && toMs !== null && fromMs > toMs) return invalidInput("from 必须早于或等于 to。");
+  if (fromMs !== null && toMs !== null && toMs - fromMs > 366 * 86_400_000) {
+    return { ok: false, code: "OUT_OF_RANGE", message: "Focus 查询最长 366 天。" };
+  }
+  const filtered = sessions.filter((s) => {
+    if (courseId && s.courseId !== courseId) return false;
+    if (assignmentId && s.assignmentId !== assignmentId) return false;
+    if (status && s.status !== status) return false;
+    if (fromMs !== null && s.startedAt < fromMs) return false;
+    if (toMs !== null && s.startedAt > toMs) return false;
+    return true;
+  });
+  filtered.sort((a, b) => b.startedAt - a.startedAt);
+  const lim = limit ?? 20;
+  const sliced = filtered.slice(0, lim);
+  const now = Date.now();
+  return {
+    ok: true,
+    data: {
+      totalCount: filtered.length,
+      returnedCount: sliced.length,
+      sessions: sliced.map((s) => {
+        const isActive = s.status === "running" || s.status === "paused";
+        const clock = isActive ? deriveFocusClock(s, now) : null;
+        const assignment = s.assignmentId ? state.assignments.find((a) => a.id === s.assignmentId) : undefined;
+        const course = s.courseId ? state.courses.find((c) => c.id === s.courseId) : undefined;
+        const startedLocalDate = format(new Date(s.startedAt), "yyyy-MM-dd");
+        return {
+          id: s.id,
+          status: s.status,
+          plannedMinutes: s.plannedMinutes,
+          actualActiveMs: s.actualActiveMs ?? null,
+          elapsedActiveMs: isActive ? (clock?.elapsedMs ?? null) : null,
+          remainingMs: isActive ? (clock?.remainingMs ?? null) : null,
+          startedAt: s.startedAt,
+          startedLocalDate,
+          endedAt: s.endedAt ?? null,
+          endReason: s.endReason ?? null,
+          assignmentId: s.assignmentId ?? null,
+          assignmentTitle: assignment?.title ?? s.assignmentTitleSnapshot ?? null,
+          courseId: s.courseId ?? null,
+          courseName: course?.name ?? s.courseNameSnapshot ?? null,
+          note: s.note ?? null,
+          source: s.source,
+        };
+      }),
+    },
+  };
+}
+
+export function getFocusAnalytics(state: ReadToolState, input: unknown): ReadToolResult<unknown> {
+  const parsed = safeParse<{ preset?: "week" | "4weeks" | "semester" }>("get_focus_analytics", input);
+  if (!parsed.ok) return parsed;
+  const preset = parsed.data.preset ?? "week";
+  const now = new Date();
+  const nowMs = now.getTime();
+  let fromMs: number;
+  if (preset === "semester") {
+    const semStart = new Date(`${state.semester.startDate}T00:00:00`).getTime();
+    fromMs = Number.isNaN(semStart) ? nowMs - 28 * 86_400_000 : semStart;
+  } else if (preset === "4weeks") {
+    fromMs = nowMs - 28 * 86_400_000;
+  } else {
+    fromMs = nowMs - 7 * 86_400_000;
+  }
+  const sessions = (state.focusSessions ?? []).filter((s) => s.status === "completed" && typeof s.actualActiveMs === "number" && s.startedAt >= fromMs && s.startedAt <= nowMs);
+  let totalPlanned = 0;
+  let totalActualMs = 0;
+  let longest = 0;
+  const byCourse = new Map<string, { courseId: string; courseName: string; minutes: number; sessions: number }>();
+  const byBucket = new Map<string, { minutes: number; sessions: number }>();
+  const activeDates = new Set<string>();
+  const hourToBucket = (h: number): "深夜" | "上午" | "下午" | "晚间" => {
+    if (h < 5) return "深夜";
+    if (h < 12) return "上午";
+    if (h < 18) return "下午";
+    return "晚间";
+  };
+  for (const s of sessions) {
+    const actualMs = s.actualActiveMs ?? 0;
+    totalPlanned += s.plannedMinutes;
+    totalActualMs += actualMs;
+    longest = Math.max(longest, actualMs);
+    const localDate = format(new Date(s.startedAt), "yyyy-MM-dd");
+    activeDates.add(localDate);
+    const courseId = s.courseId ?? "__none__";
+    const courseName = s.courseId ? (state.courses.find((c) => c.id === s.courseId)?.name ?? s.courseNameSnapshot ?? "未关联课程") : "未关联课程";
+    const entry = byCourse.get(courseId) ?? { courseId: s.courseId ?? null, courseName, minutes: 0, sessions: 0 } as unknown as { courseId: string; courseName: string; minutes: number; sessions: number };
+    entry.minutes += Math.round(actualMs / 60000);
+    entry.sessions += 1;
+    byCourse.set(courseId, entry);
+    const bucket = hourToBucket(new Date(s.startedAt).getHours());
+    const b = byBucket.get(bucket) ?? { minutes: 0, sessions: 0 };
+    b.minutes += Math.round(actualMs / 60000);
+    b.sessions += 1;
+    byBucket.set(bucket, b);
+  }
+  const totalActualMinutes = Math.round(totalActualMs / 60000);
+  const averageSessionMinutes = sessions.length > 0 ? Math.round(totalActualMs / sessions.length / 60000) : null;
+  const longestSessionMinutes = Math.round(longest / 60000);
+  const byCourseArr = Array.from(byCourse.values()).sort((a, b) => b.minutes - a.minutes);
+  const byTimeOfDay = (["深夜", "上午", "下午", "晚间"] as const).map((bucket) => {
+    const v = byBucket.get(bucket) ?? { minutes: 0, sessions: 0 };
+    return { bucket, minutes: v.minutes, sessions: v.sessions };
+  });
+  let dominantTimeOfDay: "深夜" | "上午" | "下午" | "晚间" | null = null;
+  if (sessions.length >= 3 && totalActualMinutes >= 60) {
+    let best: { bucket: string; minutes: number } | null = null;
+    for (const b of byTimeOfDay) {
+      if (!best || b.minutes > best.minutes) best = b;
+    }
+    if (best && best.minutes > 0) dominantTimeOfDay = best.bucket as "深夜" | "上午" | "下午" | "晚间";
+  }
+  return {
+    ok: true,
+    data: {
+      preset,
+      range: { from: format(new Date(fromMs), "yyyy-MM-dd"), to: format(now, "yyyy-MM-dd") },
+      totalSessions: sessions.length,
+      totalPlannedMinutes: totalPlanned,
+      totalActualMinutes,
+      totalActualMs: totalActualMs,
+      activeDays: activeDates.size,
+      averageSessionMinutes,
+      longestSessionMinutes,
+      byCourse: byCourseArr,
+      byTimeOfDay,
+      dominantTimeOfDay,
+    },
+  };
+}
+
 export function getUpcomingAssignments(state: ReadToolState, input: unknown): ReadToolResult<unknown> {
   const parsed = safeParse<{ days?: number; limit?: number }>("get_upcoming_assignments", input);
   if (!parsed.ok) return parsed;
@@ -1047,6 +1276,9 @@ const EXECUTORS: Record<Exclude<KiroReadToolName, "read_material" | "read_projec
   propose_task_breakdown: proposeTaskBreakdownTool,
   list_reminders: listReminders,
   get_focus_status: getFocusStatus,
+  query_study_blocks: queryStudyBlocks,
+  list_focus_sessions: listFocusSessions,
+  get_focus_analytics: getFocusAnalytics,
   activate_skill: activateSkillTool,
   mcp_search_tools: mcpSearchToolsTool,
   mcp_call_tool: mcpCallToolTool,

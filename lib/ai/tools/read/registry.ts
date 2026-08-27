@@ -129,6 +129,25 @@ export const KIRO_READ_TOOLS = {
       "查看当前 Focus 专注会话状态。无进行中的会话 → active:false；有 → 返回剩余/已专注时间（由 ClassFlow 计算，不要自己推算时间）、关联任务或课程与备注。",
     inputSchema: KIRO_READ_TOOL_SCHEMAS.get_focus_status,
   }),
+  query_study_blocks: tool({
+    description:
+      "按日期范围与条件批量查询学习计划 StudyBlock（天/周视图条带），支持按任务、课程、来源过滤，默认排除 released（已释放）块。" +
+      "返回按日期与开始时间排序的块（含标题/日期/时间段/关联任务与课程/来源/状态与时长）、总数与 released 计数。" +
+      "Proposal Apply 后的自检、周计划盘点、日程密度分析优先使用本工具，不要遍历日历推算。",
+    inputSchema: KIRO_READ_TOOL_SCHEMAS.query_study_blocks,
+  }),
+  list_focus_sessions: tool({
+    description:
+      "按时间范围、课程、任务或状态查询专注会话历史（已完成/进行中/已暂停），按开始时间倒序，支持 limit。" +
+      "进行中会话的 elapsedActiveMs/remainingMs 由 ClassFlow 计算，不要自己推算。",
+    inputSchema: KIRO_READ_TOOL_SCHEMAS.list_focus_sessions,
+  }),
+  get_focus_analytics: tool({
+    description:
+      "返回与学习洞察同源的专注分析快照（preset: week/4weeks/semester），基于已完成的专注会话实际 active 时长，包含总次数/总计划与实际分钟/活跃天/平均与最长/按课程与时段分布与主导时段。" +
+      "周回顾、专注在哪些课上最多、哪段时间最专注等前瞻问题优先使用本工具，不要自行从历史事件拼凑。",
+    inputSchema: KIRO_READ_TOOL_SCHEMAS.get_focus_analytics,
+  }),
   query_learning_history: tool({
     description:
       "查询本地学习历史原始事件（任务创建/完成/重开/DDL 变更、学习计划、专注完成、课程/课表变更等），支持按时间/事件类型/课程/任务/来源筛选。只读本地历史，不读取当前状态。" +

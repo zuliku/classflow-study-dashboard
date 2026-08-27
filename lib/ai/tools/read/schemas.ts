@@ -262,6 +262,39 @@ export const mcpCallToolSchema = z.object({
   arguments: z.record(z.string(), z.unknown()).optional(),
 });
 
+export const queryStudyBlocksSchema = z
+  .object({
+    from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "日期格式必须为 YYYY-MM-DD").optional(),
+    to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "日期格式必须为 YYYY-MM-DD").optional(),
+    assignmentId: z.string().trim().min(1).max(120).optional(),
+    courseId: z.string().trim().min(1).max(120).optional(),
+    source: z.enum(["manual", "kiro"]).optional(),
+    includeReleased: z.boolean().optional().default(false),
+    limit: z.number().int().min(1).max(50).optional().default(20),
+  })
+  .refine(
+    (d) => {
+      if (d.from && d.to) return d.from <= d.to;
+      return true;
+    },
+    { message: "from 必须早于或等于 to", path: ["from"] }
+  );
+
+export const listFocusSessionsSchema = z.object({
+  from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "格式应为 YYYY-MM-DD").optional(),
+  to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "格式应为 YYYY-MM-DD").optional(),
+  courseId: z.string().trim().min(1).max(120).optional(),
+  assignmentId: z.string().trim().min(1).max(120).optional(),
+  status: z.enum(["running", "paused", "completed"]).optional(),
+  limit: z.number().int().min(1).max(50).optional().default(20),
+});
+
+export const getFocusAnalyticsSchema = z
+  .object({
+    preset: z.enum(["week", "4weeks", "semester"]).default("week"),
+  })
+  .strict();
+
 export const KIRO_READ_TOOL_SCHEMAS = {
   get_current_context: emptyInputSchema,
   get_user_study_profile: emptyInputSchema,
@@ -287,6 +320,9 @@ export const KIRO_READ_TOOL_SCHEMAS = {
   propose_task_breakdown: proposeTaskBreakdownSchema,
   list_reminders: listRemindersSchema,
   get_focus_status: emptyInputSchema,
+  query_study_blocks: queryStudyBlocksSchema,
+  list_focus_sessions: listFocusSessionsSchema,
+  get_focus_analytics: getFocusAnalyticsSchema,
   query_learning_history: queryLearningHistorySchema,
   summarize_learning_history: summarizeLearningHistorySchema,
   get_learning_analytics: getLearningAnalyticsSchema,
