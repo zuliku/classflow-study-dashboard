@@ -28,6 +28,8 @@ const REMOTE_ALLOWED = new Set<string>([
   "get_semester_config",
   "get_bell_schedules",
   "get_learning_signal",
+  "get_today_brief",
+  "get_weekly_brief",
   "get_material_metadata",
   "read_material",
   "read_project_file",

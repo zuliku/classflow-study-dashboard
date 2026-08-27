@@ -112,6 +112,18 @@ export const KIRO_READ_TOOLS = {
       "用于‘为什么按时只有 60%’等信号级下钻，不要自行从历史拼凑。",
     inputSchema: KIRO_READ_TOOL_SCHEMAS.get_learning_signal,
   }),
+  get_today_brief: tool({
+    description:
+      "聚合今日简报：今日截止任务、今日已安排学习块（去 released）、今日日历标记、今日待提醒与当前专注状态。" +
+      "用于‘今天有哪些安排’‘今天要做什么’等一日总览，不要分别调多个工具拼凑。",
+    inputSchema: KIRO_READ_TOOL_SCHEMAS.get_today_brief,
+  }),
+  get_weekly_brief: tool({
+    description:
+      "聚合周简报：指定教学周（默认当前周）的截止任务、学习块、日历密度与本周专注完成。" +
+      "用于‘这周压力怎样’‘本周安排’等周级总览，返回起止日、聚合计数与按日分布。",
+    inputSchema: KIRO_READ_TOOL_SCHEMAS.get_weekly_brief,
+  }),
   get_material_metadata: tool({
     description: "查看课程资料的 metadata（标题/类型/大小/日期）。不能读取文件正文。",
     inputSchema: KIRO_READ_TOOL_SCHEMAS.get_material_metadata,

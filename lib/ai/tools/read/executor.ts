@@ -1404,6 +1404,104 @@ export function getBellSchedules(state: ReadToolState, _input: unknown): ReadToo
   return { ok: true, data: { bellSchedules, activeBellScheduleId: activeId } };
 }
 
+export function getTodayBrief(state: ReadToolState, input: unknown): ReadToolResult<unknown> {
+  const parsed = safeParse<{ date?: string }>("get_today_brief", input);
+  if (!parsed.ok) return parsed;
+  const today = parsed.data.date ?? format(new Date(), "yyyy-MM-dd");
+  const dueToday = state.assignments.filter((a) => {
+    if (a.status === "completed") return false;
+    const ddl = parseLocalDDL(a.ddl);
+    return ddl ? isToday(ddl) && format(ddl, "yyyy-MM-dd") === today : false;
+  });
+  // 更宽松的 today 判定：若 ddl 的 YYYY-MM-DD 直接等于 today（本地墙钟），也视为今日截止
+  const dueTodayFallback = state.assignments.filter((a) => {
+    if (a.status === "completed") return false;
+    if (!a.ddl) return false;
+    return a.ddl.slice(0, 10) === today;
+  });
+  const dueMap = new Map(dueToday.map((a) => [a.id, a]));
+  for (const a of dueTodayFallback) if (!dueMap.has(a.id)) dueMap.set(a.id, a);
+  const dueList = Array.from(dueMap.values());
+  const scheduledToday = (state.studyBlocks ?? []).filter((b) => b.date === today && b.planningState !== "released");
+  const scheduledMinutesToday = scheduledToday.reduce((sum, b) => {
+    const s = timeToMinutes(b.startTime);
+    const e = timeToMinutes(b.endTime);
+    return sum + (s !== null && e !== null && e > s ? e - s : 0);
+  }, 0);
+  const calendarToday = state.calendarMarks.filter((m) => m.date === today);
+  const remindersToday = (state.reminders ?? []).filter((r) => r.status === "scheduled" && r.triggerAt.slice(0, 10) === today);
+  const focusActive = (state.focusSessions ?? []).find((s) => s.status === "running" || s.status === "paused");
+  const focusClock = focusActive ? deriveFocusClock(focusActive, Date.now()) : null;
+  return {
+    ok: true,
+    data: {
+      date: today,
+      dueToday: dueList.map((a) => ({ id: a.id, title: a.title, courseId: a.courseId, courseName: courseName(state, a.courseId), ddl: a.ddl, priority: a.priority, status: a.status })),
+      scheduledToday: {
+        count: scheduledToday.length,
+        totalMinutes: scheduledMinutesToday,
+        blocks: scheduledToday.map((b) => {
+          const assignment = b.assignmentId ? state.assignments.find((a) => a.id === b.assignmentId) : undefined;
+          const course = b.courseId ? state.courses.find((c) => c.id === b.courseId) : undefined;
+          return { id: b.id, title: b.title, startTime: b.startTime, endTime: b.endTime, assignmentId: b.assignmentId ?? null, assignmentTitle: assignment?.title ?? null, courseId: b.courseId ?? null, courseName: course?.name ?? null, source: b.source ?? "manual" };
+        }),
+      },
+      calendarToday: calendarToday.map((m) => ({ id: m.id, type: m.type, title: m.title, startTime: m.startTime ?? null, endTime: m.endTime ?? null })),
+      focus: focusActive ? { active: true, status: focusActive.status, plannedMinutes: focusActive.plannedMinutes, elapsedActiveMs: focusClock?.elapsedMs ?? null, remainingMs: focusClock?.remainingMs ?? null, assignmentId: focusActive.assignmentId ?? null } : { active: false },
+      remindersToday: remindersToday.map((r) => ({ id: r.id, title: r.title, triggerAt: r.triggerAt, targetType: r.targetType })),
+      counts: { dueToday: dueList.length, scheduledToday: scheduledToday.length, calendarToday: calendarToday.length, remindersToday: remindersToday.length },
+    },
+  };
+}
+
+export function getWeeklyBrief(state: ReadToolState, input: unknown): ReadToolResult<unknown> {
+  const parsed = safeParse<{ week?: number }>("get_weekly_brief", input);
+  if (!parsed.ok) return parsed;
+  const week = parsed.data.week ?? state.currentSemesterWeek;
+  if (week < 1 || week > state.semester.totalWeeks) return { ok: false, code: "OUT_OF_RANGE", message: `教学周 ${week} 超出本学期范围（1-${state.semester.totalWeeks}）。` };
+  const weekRange = getWeekDateRange(state.semester, week);
+  const startDate = format(weekRange[0], "yyyy-MM-dd");
+  const endDate = format(weekRange[6], "yyyy-MM-dd");
+  const assignmentsDueThisWeek = state.assignments.filter((a) => {
+    if (a.status === "completed" || !a.ddl) return false;
+    const d = a.ddl.slice(0, 10);
+    return d >= startDate && d <= endDate;
+  });
+  const studyBlocksThisWeek = (state.studyBlocks ?? []).filter((b) => b.date >= startDate && b.date <= endDate && b.planningState !== "released");
+  const totalStudyMinutes = studyBlocksThisWeek.reduce((sum, b) => {
+    const s = timeToMinutes(b.startTime);
+    const e = timeToMinutes(b.endTime);
+    return sum + (s !== null && e !== null && e > s ? e - s : 0);
+  }, 0);
+  const calendarThisWeek = state.calendarMarks.filter((m) => m.date >= startDate && m.date <= endDate);
+  const byDay: Record<string, { date: string; courseCount: number; ddlCount: number; examCount: number; activityCount: number }> = {};
+  for (const m of calendarThisWeek) {
+    const d = (byDay[m.date] = byDay[m.date] ?? { date: m.date, courseCount: 0, ddlCount: 0, examCount: 0, activityCount: 0 });
+    if (m.type === "course") d.courseCount += 1;
+    else if (m.type === "ddl") d.ddlCount += 1;
+    else if (m.type === "exam") d.examCount += 1;
+    else if (m.type === "activity") d.activityCount += 1;
+  }
+  const focusThisWeek = (state.focusSessions ?? []).filter((s) => {
+    const d = format(new Date(s.startedAt), "yyyy-MM-dd");
+    return d >= startDate && d <= endDate && s.status === "completed" && typeof s.actualActiveMs === "number";
+  });
+  const totalFocusMinutes = focusThisWeek.reduce((sum, s) => sum + Math.round((s.actualActiveMs ?? 0) / 60000), 0);
+  return {
+    ok: true,
+    data: {
+      week,
+      startDate,
+      endDate,
+      assignmentsDueThisWeek: assignmentsDueThisWeek.map((a) => ({ id: a.id, title: a.title, courseId: a.courseId, courseName: courseName(state, a.courseId), ddl: a.ddl, priority: a.priority, status: a.status })),
+      studyBlocksThisWeek: { count: studyBlocksThisWeek.length, totalMinutes: totalStudyMinutes, byDay: Object.values(byDay) },
+      calendarThisWeek: { count: calendarThisWeek.length, byDay: Object.values(byDay) },
+      focusThisWeek: { completedSessions: focusThisWeek.length, totalFocusMinutes, sessions: focusThisWeek.map((s) => ({ id: s.id, plannedMinutes: s.plannedMinutes, actualActiveMs: s.actualActiveMs, startedAt: s.startedAt })) },
+      counts: { assignmentsDue: assignmentsDueThisWeek.length, studyBlocks: studyBlocksThisWeek.length, calendarMarks: calendarThisWeek.length, focusSessions: focusThisWeek.length },
+    },
+  };
+}
+
 export function getMaterialMetadata(state: ReadToolState, input: unknown): ReadToolResult<unknown> {
   const parsed = safeParse<{ courseId?: string; materialId?: string }>("get_material_metadata", input);
   if (!parsed.ok) return parsed;
@@ -1490,6 +1588,8 @@ const EXECUTORS: Record<Exclude<KiroReadToolName, "read_material" | "read_projec
   list_focus_sessions: listFocusSessions,
   get_focus_analytics: getFocusAnalytics,
   get_course_material_linkage: getCourseMaterialLinkage,
+  get_today_brief: getTodayBrief,
+  get_weekly_brief: getWeeklyBrief,
   activate_skill: activateSkillTool,
   mcp_search_tools: mcpSearchToolsTool,
   mcp_call_tool: mcpCallToolTool,

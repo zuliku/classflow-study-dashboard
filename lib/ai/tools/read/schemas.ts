@@ -117,6 +117,14 @@ export const getLearningSignalSchema = z
   })
   .strict();
 
+export const getTodayBriefSchema = z.object({
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "日期必须为 YYYY-MM-DD").optional(),
+});
+
+export const getWeeklyBriefSchema = z.object({
+  week: z.number().int().min(1).max(30).optional(),
+});
+
 export const getMaterialMetadataSchema = z.object({
   courseId: z.string().trim().min(1).max(120).optional(),
   materialId: z.string().trim().min(1).max(120).optional(),
@@ -345,6 +353,8 @@ export const KIRO_READ_TOOL_SCHEMAS = {
   get_semester_config: getSemesterConfigSchema,
   get_bell_schedules: getBellSchedulesSchema,
   get_learning_signal: getLearningSignalSchema,
+  get_today_brief: getTodayBriefSchema,
+  get_weekly_brief: getWeeklyBriefSchema,
   get_material_metadata: getMaterialMetadataSchema,
   read_material: readMaterialSchema,
   read_project_file: readProjectFileSchema,
