@@ -16,6 +16,14 @@ export function useEffectiveReducedMotion(): boolean {
   const [reducedMotion, setReducedMotion] = useState(readBootstrappedReducedMotion);
 
   useEffect(() => {
+    if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
+      // jsdom / node 环境兜底：按偏好推导，不监听媒体查询
+      const reduced = resolveEffectiveReducedMotion(preference, false);
+      document.documentElement.dataset.motionPreference = preference;
+      document.documentElement.dataset.motionEffective = reduced ? "reduced" : "full";
+      setReducedMotion(reduced);
+      return;
+    }
     const mediaQuery = window.matchMedia(MEDIA_QUERY);
     const update = () => {
       const reduced = resolveEffectiveReducedMotion(preference, mediaQuery.matches);
