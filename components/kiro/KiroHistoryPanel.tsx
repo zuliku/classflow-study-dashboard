@@ -99,7 +99,7 @@ export function KiroHistoryPanel({
           "absolute inset-0 z-30 bg-black/20 transition-opacity ease-[var(--ease-standard)]",
           visible
             ? "duration-[var(--motion-panel)] opacity-100"
-            : "duration-[160ms] opacity-0 pointer-events-none"
+            : "duration-[var(--motion-exit-panel)] opacity-0 pointer-events-none"
         )}
         onClick={onClose}
         aria-hidden="true"
@@ -114,7 +114,7 @@ export function KiroHistoryPanel({
           "absolute inset-x-0 bottom-0 z-40 bg-surface border-t border-line rounded-t-2xl shadow-card p-4 pb-5 max-h-[65dvh] overflow-y-auto transition-[opacity,transform] ease-[var(--ease-standard)]",
           visible
             ? "duration-[var(--motion-panel)] translate-y-0 opacity-100"
-            : "duration-[160ms] translate-y-2 opacity-0 pointer-events-none"
+            : "duration-[var(--motion-exit-panel)] translate-y-2 opacity-0 pointer-events-none"
         )}
       >
         <div className="w-10 h-1 rounded-full bg-line-strong mx-auto mb-4" />

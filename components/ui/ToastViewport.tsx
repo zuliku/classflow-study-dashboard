@@ -103,7 +103,7 @@ export function ToastViewport() {
             )}
             <button
               onClick={() => dismiss(toast.id)}
-              className="shrink-0 p-0.5 text-sandrift hover:text-charcoal rounded transition-colors"
+              className="shrink-0 p-0.5 text-sandrift hover:text-charcoal rounded transition-colors duration-[var(--motion-fast)]"
               aria-label="关闭提示"
             >
               <X className="w-3.5 h-3.5" />

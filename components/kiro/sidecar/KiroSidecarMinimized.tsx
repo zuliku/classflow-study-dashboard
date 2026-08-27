@@ -218,7 +218,7 @@ export function KiroSidecarMinimized({ visible }: { visible: boolean }) {
         "hidden md:flex fixed z-40 rounded-full overflow-hidden select-none touch-none shadow-card group kiro-capsule",
         dragging
           ? "cursor-grabbing transition-none"
-          : "cursor-grab transition-[opacity,transform,box-shadow] ease-[var(--ease-standard)] duration-[160ms] hover:shadow-[0_6px_18px_-2px_rgba(49,48,50,0.10)]",
+          : "cursor-grab transition-[opacity,transform,box-shadow] ease-[var(--ease-standard)] duration-[var(--motion-exit-panel)] hover:shadow-[0_6px_18px_-2px_rgba(49,48,50,0.10)]",
         visible ? "opacity-100 scale-100 translate-y-0" : "opacity-0 scale-[0.96] translate-y-1 pointer-events-none"
       )}
       style={
