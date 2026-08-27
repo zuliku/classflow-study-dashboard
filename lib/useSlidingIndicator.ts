@@ -1,6 +1,7 @@
 "use client";
 
 import { useLayoutEffect, useRef, useState, useCallback } from "react";
+import { MOTION_MS } from "@/lib/motion";
 
 export interface SlidingIndicatorStyle {
   /** translate3d 相对容器定位 */
@@ -39,7 +40,7 @@ export function useSlidingIndicator<T extends HTMLElement = HTMLDivElement>(
     transition: "none",
   });
   const skipTransitionRef = useRef(true);
-  const durationMs = options?.durationMs ?? 180;
+  const durationMs = options?.durationMs ?? MOTION_MS.base;
   const resetKey = options?.resetKey;
 
   const measure = useCallback(() => {
@@ -67,7 +68,7 @@ export function useSlidingIndicator<T extends HTMLElement = HTMLDivElement>(
       opacity: 1,
       transition: skipTransitionRef.current
         ? "none"
-        : `transform ${durationMs}ms var(--ease-emphasized), width ${durationMs}ms var(--ease-emphasized), height ${durationMs}ms var(--ease-emphasized), opacity 120ms var(--ease-standard)`,
+        : `transform ${durationMs}ms var(--ease-emphasized), width ${durationMs}ms var(--ease-emphasized), height ${durationMs}ms var(--ease-emphasized), opacity var(--motion-fast) var(--ease-standard)`,
     });
   }, [activeKey, durationMs]);
 

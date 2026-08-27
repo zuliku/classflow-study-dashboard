@@ -2,6 +2,7 @@
 
 import React from "react";
 import { useEffectiveReducedMotion } from "@/hooks/useEffectiveReducedMotion";
+import { MOTION_MS } from "@/lib/motion";
 import {
   Bar,
   BarChart,
@@ -91,9 +92,9 @@ export function LearningTrendChart({
               wrapperStyle={{ outline: "none" }}
             />
             {hasPlanValues && (
-              <Bar dataKey="计划" fill={PLAN_COLOR} radius={[3, 3, 0, 0]} isAnimationActive={chartActive} animationDuration={chartActive ? 400 : 0} />
+              <Bar dataKey="计划" fill={PLAN_COLOR} radius={[3, 3, 0, 0]} isAnimationActive={chartActive} animationDuration={chartActive ? MOTION_MS.data : 0} />
             )}
-            <Bar dataKey="实际专注" fill={FOCUS_COLOR} radius={[3, 3, 0, 0]} isAnimationActive={chartActive} animationDuration={chartActive ? 400 : 0} />
+            <Bar dataKey="实际专注" fill={FOCUS_COLOR} radius={[3, 3, 0, 0]} isAnimationActive={chartActive} animationDuration={chartActive ? MOTION_MS.data : 0} />
           </BarChart>
         </ResponsiveContainer>
       </div>

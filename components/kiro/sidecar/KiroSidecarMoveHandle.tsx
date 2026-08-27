@@ -98,7 +98,7 @@ export function KiroSidecarMoveHandle({
     >
       <div
         className={cn(
-          "mx-auto mt-[5px] h-[4px] w-8 rounded-full transition-opacity duration-[120ms] ease-[var(--ease-standard)]",
+          "mx-auto mt-[5px] h-[4px] w-8 rounded-full transition-opacity duration-[var(--motion-fast)] ease-[var(--ease-standard)]",
           hovered || dragging ? "opacity-100" : "opacity-0",
           dragging ? "bg-sandrift/70" : "bg-sandrift/40"
         )}

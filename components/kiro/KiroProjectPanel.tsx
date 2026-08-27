@@ -7,6 +7,7 @@ import { useKiroSessionMeta, useKiroSessionActions } from "@/components/kiro/Kir
 import { useConfirmStore } from "@/store/useConfirmStore";
 import { useToastStore } from "@/store/useToastStore";
 import { usePresence } from "@/lib/usePresence";
+import { MOTION_EXIT_MS, MOTION_MS } from "@/lib/motion";
 import { DisclosureRegion } from "@/components/ui/DisclosureRegion";
 import { KiroProjectRecord, KIRO_PROJECT_NAME_MAX, KIRO_PROJECT_DESCRIPTION_MAX, KIRO_PROJECT_INSTRUCTIONS_MAX } from "@/lib/ai/projects/types";
 import { KiroProjectFileRecord, MAX_PROJECT_FILES_PER_PROJECT } from "@/lib/ai/projects/files/types";
@@ -87,10 +88,10 @@ export function KiroProjectPanel({
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const expanded = mode === "expanded";
-  const { mounted, visible } = usePresence(mode !== "closed", 160);
+  const { mounted, visible } = usePresence(mode !== "closed", MOTION_EXIT_MS.panel);
   // Motion V1：expanded / collapsed 两层 presence（shell 同一 DOM anchored width morph）
-  const expandedPresence = usePresence(expanded, 200);
-  const collapsedPresence = usePresence(!expanded, 160);
+  const expandedPresence = usePresence(expanded, MOTION_MS.data);
+  const collapsedPresence = usePresence(!expanded, MOTION_EXIT_MS.panel);
 
   const openView = useCallback(
     (v: ProjectView, projectId?: string) => {
@@ -438,7 +439,7 @@ export function KiroProjectPanel({
               "transition-[opacity,transform] ease-[var(--ease-standard)]",
               // expanded 或退出中 → 立即淡出（无 delay）；collapsed 可见态延迟进入
               expanded || !collapsedPresence.visible
-                ? "opacity-0 translate-x-[3px] duration-[80ms]"
+                ? "opacity-0 translate-x-[3px] duration-[var(--motion-snap)]"
                 : "opacity-100 translate-x-0 duration-[var(--kiro-motion-structure,150ms)] delay-[140ms]"
             )}
           >

@@ -9,6 +9,7 @@ import { KiroThreadRow } from "@/components/kiro/KiroThreadRow";
 import { listConversations } from "@/lib/ai/history/db";
 import { KiroConversationRecord } from "@/lib/ai/history/types";
 import { usePresence } from "@/lib/usePresence";
+import { MOTION_EXIT_MS } from "@/lib/motion";
 import { cn } from "@/lib/utils";
 
 /**
@@ -31,7 +32,7 @@ export function KiroHistoryPanel({
   const [query, setQuery] = useState("");
   const [requestedThreadId, setRequestedThreadId] = useState<string | null>(null);
   const [requestedTransitionStarted, setRequestedTransitionStarted] = useState(false);
-  const { mounted, visible } = usePresence(open, 160);
+  const { mounted, visible } = usePresence(open, MOTION_EXIT_MS.panel);
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     return q ? records.filter((r) => r.title.toLowerCase().includes(q)) : records;

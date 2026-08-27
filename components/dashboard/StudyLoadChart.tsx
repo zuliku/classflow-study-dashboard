@@ -15,6 +15,7 @@ import {
   LabelList,
 } from "recharts";
 import { useAppStore } from "@/store/useAppStore";
+import { MOTION_MS } from "@/lib/motion";
 import { computeWeekCourseLoad, WeekDayLoad } from "@/lib/studyLoad";
 
 interface TooltipEntry {
@@ -119,7 +120,7 @@ export function StudyLoadChart() {
               <XAxis dataKey="day" tick={{ fontSize: 10, fill: "var(--sandrift)" }} axisLine={false} tickLine={false} />
               <YAxis ticks={[0, 4, 8]} tick={{ fontSize: 10, fill: "var(--sandrift)" }} axisLine={false} tickLine={false} unit="h" domain={[0, 8]} />
               <Tooltip cursor={{ fill: "rgba(240, 235, 225, 0.4)" }} content={<ChartTooltip />} />
-              <Bar dataKey="hours" radius={[4, 4, 0, 0]} isAnimationActive={!reducedMotion} animationDuration={reducedMotion ? 0 : 300} animationEasing="ease-out">
+              <Bar dataKey="hours" radius={[4, 4, 0, 0]} isAnimationActive={!reducedMotion} animationDuration={reducedMotion ? 0 : MOTION_MS.data} animationEasing="ease-out">
                 {weekLoad.days.map((d, index) => (
                   <Cell key={`cell-${index}`} fill={index === todayIndex ? "var(--sandrift)" : "var(--stone-beige)"} />
                 ))}

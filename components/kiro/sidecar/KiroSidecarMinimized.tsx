@@ -246,7 +246,7 @@ export function KiroSidecarMinimized({ visible }: { visible: boolean }) {
       />
       <div
         className={cn(
-          "relative flex-1 m-[1px] bg-surface rounded-full flex items-center gap-2 px-2.5 h-[calc(100%-2px)] transition-colors duration-150",
+          "relative flex-1 m-[1px] bg-surface rounded-full flex items-center gap-2 px-2.5 h-[calc(100%-2px)] transition-colors duration-[var(--motion-exit-base)]",
           !dragging && "group-hover:bg-white"
         )}
       >

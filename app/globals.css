@@ -230,7 +230,7 @@ body {
 /* 当前正在上课的课程卡：克制外框高亮（深于课程边框的强调色，轻微呼吸） */
 .kiro-now-course {
   box-shadow: 0 0 0 2px rgba(49, 48, 50, 0.32);
-  animation: kiro-now-course-breathe 3.2s ease-in-out infinite;
+  animation: kiro-now-course-breathe 3.2s var(--ease-standard) infinite;
 }
 
 @keyframes kiro-now-course-breathe {
@@ -593,6 +593,24 @@ html[data-motion-effective="reduced"] *::after {
 
 html[data-motion-effective="reduced"] .ux-channel-provider-enter {
   animation: none !important;
+}
+
+/* Reduced Motion：spinner / pulse 快转一次会闪烁，直接禁动画；stagger 延迟清零避免延迟后瞬显 */
+@media (prefers-reduced-motion: reduce) {
+  html:not([data-motion-preference="full"]) .animate-spin,
+  html:not([data-motion-preference="full"]) .animate-pulse {
+    animation: none !important;
+  }
+  html:not([data-motion-preference="full"]) .kiro-empty-suggestion-intro {
+    animation-delay: 0ms !important;
+  }
+}
+html[data-motion-effective="reduced"] .animate-spin,
+html[data-motion-effective="reduced"] .animate-pulse {
+  animation: none !important;
+}
+html[data-motion-effective="reduced"] .kiro-empty-suggestion-intro {
+  animation-delay: 0ms !important;
 }
 
 /* Kiro Math（KaTeX，Task 7C）：只作用于 Kiro 输出 scope（.kiro-markdown），不污染全局。
@@ -1109,7 +1127,7 @@ html[data-motion-effective="reduced"] .sidebar-profile-progress {
 
   /* Empty 退场（Contextual Handoff）：semantic close 立即 inert；视觉 ~150ms */
   .kiro-empty-exit {
-    animation: kiro-empty-out 150ms var(--ease-standard) both;
+    animation: kiro-empty-out var(--motion-exit-base) var(--ease-standard) both;
   }
   @keyframes kiro-empty-out {
     from {
@@ -1137,11 +1155,11 @@ html[data-motion-effective="reduced"] .sidebar-profile-progress {
     }
   }
 
-  /* Scroll-to-bottom presence：enter 140ms / exit 100ms */
+  /* Scroll-to-bottom presence：enter var(--motion-fast) / exit 100ms */
   .kiro-scroll-control-enter {
     transition:
-      opacity 140ms var(--ease-standard),
-      transform 140ms var(--ease-standard);
+      opacity var(--motion-fast) var(--ease-standard),
+      transform var(--motion-fast) var(--ease-standard);
   }
   .kiro-scroll-control-exit {
     transition:

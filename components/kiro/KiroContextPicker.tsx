@@ -6,6 +6,7 @@ import { useAppStore } from "@/store/useAppStore";
 import { KiroContextRef } from "@/lib/ai/context/types";
 import { cn } from "@/lib/utils";
 import { usePresence } from "@/lib/usePresence";
+import { MOTION_EXIT_MS } from "@/lib/motion";
 
 /**
  * Context Picker（@）：从当前 Store 实时读取真实实体（属于 UI，不构建 Prompt、不发送数据）。
@@ -28,7 +29,7 @@ export function KiroContextPicker({
   const compact = contentDensity === "compact";
   const mobilePanelRef = useRef<HTMLDivElement | null>(null);
   const desktopPanelRef = useRef<HTMLDivElement | null>(null);
-  const { mounted, visible } = usePresence(open, 160);
+  const { mounted, visible } = usePresence(open, MOTION_EXIT_MS.panel);
 
   // Esc 关闭
   useEffect(() => {

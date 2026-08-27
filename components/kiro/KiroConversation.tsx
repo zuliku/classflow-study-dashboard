@@ -2,6 +2,7 @@
 
 import React, { useEffect, useRef, useState } from "react";
 import { usePresence } from "@/lib/usePresence";
+import { MOTION_MS } from "@/lib/motion";
 import { KiroMessage, KiroUserMessage } from "@/components/kiro/KiroMessage";
 import { KiroPendingIndicator } from "@/components/kiro/KiroWorklog";
 import { KiroAssistantShell } from "@/components/kiro/KiroAssistantShell";
@@ -67,8 +68,8 @@ export function KiroConversation({
   const contentRef = useRef<HTMLDivElement | null>(null);
   const stickToBottomRef = useRef(true);
   const [showScrollBtn, setShowScrollBtn] = React.useState(false);
-  // Motion V1：回到底部浮钮 presence（enter 140 / exit 100；hidden 立即不可交互）
-  const scrollBtnPresence = usePresence(showScrollBtn, 140);
+  // Motion V1：回到底部浮钮 presence（enter fast / exit 100；hidden 立即不可交互）
+  const scrollBtnPresence = usePresence(showScrollBtn, MOTION_MS.fast);
   const { conversationSummary, currentConversationId } = useKiroSessionMeta();
   const reducedMotion = useEffectiveReducedMotion();
   const messageIds = React.useMemo(

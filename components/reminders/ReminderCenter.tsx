@@ -11,7 +11,7 @@ import { getReminderCenterGroups, formatReminderCenterTime } from "@/lib/reminde
 import { useExitPresenceList } from "@/lib/useExitPresenceList";
 import { useEnterOnAdd } from "@/lib/useEnterOnAdd";
 import { usePresence } from "@/lib/usePresence";
-import { MOTION_MS } from "@/lib/motion";
+import { MOTION_EXIT_MS, MOTION_MS } from "@/lib/motion";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
 import { IconButton } from "@/components/ui/IconButton";
@@ -287,7 +287,7 @@ export function ReminderCenter() {
       }}
       overlayId="reminder-center"
       stackZ={70}
-      exitMs={170}
+      exitMs={MOTION_EXIT_MS.panel}
       closeOnBackdrop
       className="fixed inset-x-0 bottom-0 top-[var(--titlebar-h)] flex items-center"
     >

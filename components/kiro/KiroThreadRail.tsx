@@ -2,6 +2,7 @@
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { usePresence } from "@/lib/usePresence";
+import { MOTION_EXIT_MS, MOTION_MS } from "@/lib/motion";
 import { Plus, Search, MoreHorizontal, FileDown, Copy, Trash2, ChevronLeft, History as HistoryIcon } from "lucide-react";
 import { KIRO_PROJECT_ICON } from "@/components/kiro/kiroProjectIcon";
 import { useKiroSessionMeta, useKiroSessionActions } from "@/components/kiro/KiroSessionProvider";
@@ -72,8 +73,8 @@ export function KiroThreadRail({ onOpenProjects }: { onOpenProjects?: () => void
   const railRef = useRef<HTMLDivElement | null>(null);
   // Motion V1：collapsed / expanded 两层 presence —— 只挂载 active 层（退场动画后 unmount），
   // shell 本体始终同一 DOM（anchored width morph）
-  const collapsedPresence = usePresence(!expanded, 160);
-  const expandedPresence = usePresence(expanded, 220);
+  const collapsedPresence = usePresence(!expanded, MOTION_EXIT_MS.panel);
+  const expandedPresence = usePresence(expanded, MOTION_MS.overlay);
   const searchRef = useRef<HTMLInputElement | null>(null);
   const collapseAfterTransitionRef = useRef(false);
 
@@ -242,7 +243,7 @@ export function KiroThreadRail({ onOpenProjects }: { onOpenProjects?: () => void
               "transition-[opacity,transform] ease-[var(--ease-standard)]",
               // expanded 或退出中 → 立即淡出（无 delay）；collapsed 可见态延迟进入
               expanded || !collapsedPresence.visible
-                ? "opacity-0 -translate-x-[3px] duration-[80ms]"
+                ? "opacity-0 -translate-x-[3px] duration-[var(--motion-snap)]"
                 : "opacity-100 translate-x-0 duration-[var(--kiro-motion-structure,150ms)] delay-[140ms]"
             )}
           >

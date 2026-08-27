@@ -5,6 +5,7 @@ import { KiroChatSurface } from "@/components/kiro/KiroChatSurface";
 import { KiroSidecarShell } from "@/components/kiro/sidecar/KiroSidecarShell";
 import { KiroSidecarMinimized } from "@/components/kiro/sidecar/KiroSidecarMinimized";
 import { usePresence } from "@/lib/usePresence";
+import { MOTION_EXIT_MS } from "@/lib/motion";
 
 /**
  * Kiro Sidecar（UX V2 + Capsule V1 Final Closure）：单实例持久挂载，Presence 单 ownership。
@@ -14,7 +15,7 @@ import { usePresence } from "@/lib/usePresence";
  * - closed：hostVisible false → Full 保持 hidden，Capsule exit，160ms 后 host unmount
  */
 export function KiroSidecar({ mode }: { mode: KiroSidecarMode }) {
-  const { mounted, visible: hostVisible } = usePresence(mode !== "closed", 160);
+  const { mounted, visible: hostVisible } = usePresence(mode !== "closed", MOTION_EXIT_MS.panel);
   if (!mounted) return null;
 
   const fullVisible = mode === "open" && hostVisible;

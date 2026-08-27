@@ -2,6 +2,7 @@
 
 import React, { useEffect, useRef } from "react";
 import { usePresence } from "@/lib/usePresence";
+import { MOTION_EXIT_MS } from "@/lib/motion";
 import { KiroEmptyState } from "@/components/kiro/KiroEmptyState";
 import { cn } from "@/lib/utils";
 
@@ -25,7 +26,7 @@ export function KiroEmptyExperience({
   onSuggestion: (text: string) => void;
   contextSuggestions?: React.ReactNode;
 }) {
-  const { mounted, visible } = usePresence(open, 160);
+  const { mounted, visible } = usePresence(open, MOTION_EXIT_MS.panel);
   const rootRef = useRef<HTMLDivElement | null>(null);
 
   // React 18 types 无 inert prop → 运行时属性（仓库既有模式）

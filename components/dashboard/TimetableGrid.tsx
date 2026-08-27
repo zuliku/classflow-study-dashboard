@@ -199,9 +199,11 @@ export function TimetableGrid({
   // 周次切换方向：上一周 -6px 进入，下一周 +6px 进入（仅内容区，卡片本体不动）
   const prevWeekRef = useRef(currentSemesterWeek);
   const [weekDir, setWeekDir] = useState(0);
+  const [weekMotionNonce, setWeekMotionNonce] = useState(0);
   useEffect(() => {
     if (prevWeekRef.current !== currentSemesterWeek) {
       setWeekDir(currentSemesterWeek > prevWeekRef.current ? 1 : -1);
+      setWeekMotionNonce((n) => n + 1);
       prevWeekRef.current = currentSemesterWeek;
     }
   }, [currentSemesterWeek]);
@@ -553,11 +555,11 @@ export function TimetableGrid({
         key={currentSemesterWeek}
         className={cn(
           "mt-2 flex-1 flex flex-col min-h-0 select-none overflow-x-auto",
-          weekDir !== 0 && "ux-week-enter"
+          weekDir !== 0 && (weekMotionNonce % 2 === 0 ? "ux-week-enter-a" : "ux-week-enter-b")
         )}
         style={
           weekDir !== 0
-            ? ({ "--enter-y": weekDir === 1 ? "6px" : "-6px" } as React.CSSProperties)
+            ? ({ "--motion-shift-y": weekDir === 1 ? "6px" : "-6px" } as React.CSSProperties)
             : undefined
         }
       >
