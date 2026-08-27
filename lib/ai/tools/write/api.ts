@@ -68,6 +68,8 @@ export function createKiroWriteApi({
     pauseFocusSession: (now) => useAppStore.getState().pauseFocusSession(now, kiro),
     resumeFocusSession: (now) => useAppStore.getState().resumeFocusSession(now, kiro),
     finishFocusSession: (now) => useAppStore.getState().finishFocusSession(now, kiro),
+    addCalendarMark: (input) => useAppStore.getState().addCalendarMark(input),
+    deleteCalendarMark: (id) => useAppStore.getState().deleteCalendarMark(id),
     pushToast,
     registerUndo: (id, undo) => registerUndo(id, undo),
   };

@@ -173,6 +173,16 @@ export const KIRO_WRITE_TOOLS = {
       "返回 deletedIds 与 failed（不存在/历史提醒），成功的 scheduled 非 auto 支持 Undo 恢复。",
     inputSchema: KIRO_WRITE_TOOL_SCHEMAS.delete_reminders_batch,
   }),
+  create_calendar_mark: tool({
+    description:
+      "创建日历标记（仅 exam/activity 类型，如考试、活动、纪念日；course/ddl 由课程/作业驱动，不可直接创建）。" +
+      "日期为 YYYY-MM-DD，标题 1-100 字符，可选固定时段 startTime/endTime（成对且 end 晚于 start）。",
+    inputSchema: KIRO_WRITE_TOOL_SCHEMAS.create_calendar_mark,
+  }),
+  delete_calendar_mark: tool({
+    description: "删除日历标记（仅 exam/activity；course/ddl 类型不可通过本工具删除）。",
+    inputSchema: KIRO_WRITE_TOOL_SCHEMAS.delete_calendar_mark,
+  }),
   start_focus_session: tool({
     description:
       "开始一个专注会话（Focus Session）。plannedMinutes 为整数 1–240；可选关联 Assignment 或 Course（自动取真实 courseId 与标题快照）。" +

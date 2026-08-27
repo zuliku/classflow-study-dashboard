@@ -276,6 +276,28 @@ export const deleteRemindersBatchSchema = z.object({
   reminderIds: z.array(z.string().trim().min(1).max(120)).min(1).max(8),
 });
 
+/** P3 扩展：日历写入（仅 exam/activity；course/ddl 由课程/作业驱动） */
+export const createCalendarMarkSchema = z
+  .object({
+    date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "日期必须为 YYYY-MM-DD"),
+    type: z.enum(["exam", "activity"]),
+    title: z.string().trim().min(1).max(100),
+    startTime: z.string().regex(TIME_RE, "时间格式必须为 HH:mm").optional(),
+    endTime: z.string().regex(TIME_RE, "时间格式必须为 HH:mm").optional(),
+  })
+  .refine(
+    (d) => {
+      if ((d.startTime && !d.endTime) || (!d.startTime && d.endTime)) return false;
+      if (d.startTime && d.endTime && d.startTime >= d.endTime) return false;
+      return true;
+    },
+    { message: "startTime/endTime 必须成对且 endTime 晚于 startTime", path: ["endTime"] }
+  );
+
+export const deleteCalendarMarkSchema = z.object({
+  markId: z.string().trim().min(1).max(120),
+});
+
 /** Task 5：Focus 工具（有界：不创建 timer / 不实现 Undo） */
 export const startFocusSessionSchema = z.object({
   plannedMinutes: z.number().int().min(1).max(240),
@@ -346,6 +368,8 @@ export const KIRO_WRITE_TOOL_SCHEMAS = {
   create_reminders_batch: createRemindersBatchSchema,
   update_reminders_batch: updateRemindersBatchSchema,
   delete_reminders_batch: deleteRemindersBatchSchema,
+  create_calendar_mark: createCalendarMarkSchema,
+  delete_calendar_mark: deleteCalendarMarkSchema,
   start_focus_session: startFocusSessionSchema,
   pause_focus_session: pauseFocusSessionSchema,
   resume_focus_session: resumeFocusSessionSchema,

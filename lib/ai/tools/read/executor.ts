@@ -1305,6 +1305,76 @@ export function getCalendarDensity(state: ReadToolState, input: unknown): ReadTo
   }
 }
 
+export function getGroupProjectHealth(state: ReadToolState, input: unknown): ReadToolResult<unknown> {
+  const parsed = safeParse<{ projectId: string }>("get_group_project_health", input);
+  if (!parsed.ok) return parsed;
+  const p = findProject(state, parsed.data.projectId);
+  if (!p) return notFound("未找到对应小组项目。");
+  const now = Date.now();
+  const tasks = p.tasks;
+  const totalTasks = tasks.length;
+  const completedTasks = tasks.filter((t) => t.completed).length;
+  const unassignedTasks = tasks.filter((t) => !t.assigneeId && !t.completed).length;
+  const overdueTasks = tasks.filter((t) => {
+    if (t.completed) return false;
+    const ddlMs = new Date(t.ddl.replace("T", " ")).getTime();
+    if (Number.isNaN(ddlMs)) return false;
+    return ddlMs < now;
+  }).length;
+  const atRiskTasks = tasks.filter((t) => {
+    if (t.completed) return false;
+    const ddlMs = new Date(t.ddl.replace("T", " ")).getTime();
+    if (Number.isNaN(ddlMs)) return false;
+    const diffDays = (ddlMs - now) / 86_400_000;
+    return diffDays >= 0 && diffDays <= 3;
+  }).length;
+  // 按成员聚合
+  const byMember = p.members.map((m) => {
+    const memberTasks = tasks.filter((t) => t.assigneeId === m.id);
+    const mc = memberTasks.length;
+    const mo = memberTasks.filter((t) => {
+      if (t.completed) return false;
+      const ddlMs = new Date(t.ddl.replace("T", " ")).getTime();
+      return !Number.isNaN(ddlMs) && ddlMs < now;
+    }).length;
+    const mr = memberTasks.filter((t) => {
+      if (t.completed) return false;
+      const ddlMs = new Date(t.ddl.replace("T", " ")).getTime();
+      const diffDays = (ddlMs - now) / 86_400_000;
+      return diffDays >= 0 && diffDays <= 3;
+    }).length;
+    const completed = memberTasks.filter((t) => t.completed).length;
+    return { memberId: m.id, name: m.name, role: m.role, taskCount: mc, completedTasks: completed, overdueTasks: mo, atRiskTasks: mr };
+  });
+  // 未分配任务按成员外统计
+  const unassignedDetail = tasks.filter((t) => !t.assigneeId && !t.completed).map((t) => ({ id: t.id, title: t.title, ddl: t.ddl, completed: t.completed }));
+  // 最近截止的未完成任务
+  const nextDue = tasks
+    .filter((t) => !t.completed)
+    .map((t) => ({ t, ms: new Date(t.ddl.replace("T", " ")).getTime() }))
+    .filter((x) => !Number.isNaN(x.ms))
+    .sort((a, b) => a.ms - b.ms)[0];
+  const progress = p.progress;
+  return {
+    ok: true,
+    data: {
+      projectId: p.id,
+      title: p.title,
+      courseId: p.courseId,
+      courseName: courseName(state, p.courseId),
+      totalTasks,
+      completedTasks,
+      overdueTasks,
+      atRiskTasks,
+      unassignedTasks,
+      progress,
+      nextDue: nextDue ? { id: nextDue.t.id, title: nextDue.t.title, ddl: nextDue.t.ddl, assigneeId: nextDue.t.assigneeId ?? null } : null,
+      byMember,
+      unassignedTasksDetail: unassignedDetail,
+    },
+  };
+}
+
 export function getMaterialMetadata(state: ReadToolState, input: unknown): ReadToolResult<unknown> {
   const parsed = safeParse<{ courseId?: string; materialId?: string }>("get_material_metadata", input);
   if (!parsed.ok) return parsed;
@@ -1380,6 +1450,7 @@ const EXECUTORS: Record<Exclude<KiroReadToolName, "read_material" | "read_projec
   get_group_tasks: getGroupTasks,
   get_calendar_range: getCalendarRange,
   get_calendar_density: getCalendarDensity,
+  get_group_project_health: getGroupProjectHealth,
   get_material_metadata: getMaterialMetadata,
   propose_task_breakdown: proposeTaskBreakdownTool,
   list_reminders: listReminders,

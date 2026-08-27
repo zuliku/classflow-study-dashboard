@@ -977,6 +977,53 @@ function deleteRemindersBatch(api: KiroWriteApi, input: unknown, toolCallId: str
   };
 }
 
+function createCalendarMark(api: KiroWriteApi, input: unknown, toolCallId: string): WriteToolResult<unknown> {
+  const parsed = safeParse<{ date: string; type: "exam" | "activity"; title: string; startTime?: string; endTime?: string }>("create_calendar_mark", input);
+  if (!parsed.ok) return parsed;
+  const { date, type, title, startTime, endTime } = parsed.data;
+  // 仅 exam/activity 允许通过本工具创建；course/ddl 由课程/作业驱动
+  if (type !== "exam" && type !== "activity") return invalidInput("仅支持创建考试或活动标记。");
+  const id = api.addCalendarMark({ date, type, title, startTime, endTime });
+  api.registerUndo(toolCallId, () => {
+    try { api.deleteCalendarMark(id); } catch {}
+  });
+  return {
+    ok: true,
+    data: { id },
+    action: {
+      tool: "create_calendar_mark",
+      entityType: "calendar-mark",
+      entityId: id,
+      title,
+      operation: "create",
+      after: { date, type, title, startTime, endTime },
+      canUndo: true,
+    },
+  };
+}
+
+function deleteCalendarMark(api: KiroWriteApi, input: unknown, _toolCallId: string): WriteToolResult<unknown> {
+  const parsed = safeParse<{ markId: string }>("delete_calendar_mark", input);
+  if (!parsed.ok) return parsed;
+  const target = api.getState().calendarMarks.find((m) => m.id === parsed.data.markId);
+  if (!target) return notFound("未找到对应日历标记。");
+  if (target.type === "course" || target.type === "ddl") return invalidInput("课程与截止标记由课程/作业驱动，不可通过本工具删除。");
+  api.deleteCalendarMark(target.id);
+  return {
+    ok: true,
+    data: { id: target.id },
+    action: {
+      tool: "delete_calendar_mark",
+      entityType: "calendar-mark",
+      entityId: target.id,
+      title: target.title,
+      operation: "delete",
+      before: { date: target.date, type: target.type, title: target.title },
+      canUndo: false,
+    },
+  };
+}
+
 // ---------- Task 5：Focus 工具（有界：canUndo=false，不创建 timer） ----------
 
 function startFocusSession(api: KiroWriteApi, input: unknown, toolCallId: string): WriteToolResult<unknown> {
@@ -1198,6 +1245,8 @@ const EXECUTORS: Record<KiroWriteToolName, (api: KiroWriteApi, input: unknown, t
   create_reminders_batch: createRemindersBatch,
   update_reminders_batch: updateRemindersBatch,
   delete_reminders_batch: deleteRemindersBatch,
+  create_calendar_mark: createCalendarMark,
+  delete_calendar_mark: deleteCalendarMark,
   start_focus_session: startFocusSession,
   pause_focus_session: pauseFocusSession,
   resume_focus_session: resumeFocusSession,

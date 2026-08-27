@@ -44,6 +44,11 @@ export const KIRO_WRITE_RISKS: Record<string, KiroWriteRisk> = {
   create_reminder: "normal",
   update_reminder: "normal",
   delete_reminder: "normal",
+  create_reminders_batch: "normal",
+  update_reminders_batch: "normal",
+  delete_reminders_batch: "normal",
+  create_calendar_mark: "normal",
+  delete_calendar_mark: "normal",
   // Task 5：Focus 操作均 normal（不弹 ConfirmDialog；无 Undo）
   start_focus_session: "normal",
   pause_focus_session: "normal",
@@ -72,7 +77,8 @@ export type WriteToolResult<T = unknown> =
           | "change-set"
           | "memory"
           | "reminder"
-          | "focus-session";
+          | "focus-session"
+          | "calendar-mark";
         entityId: string;
         title: string;
         operation: "create" | "update" | "delete";
@@ -214,6 +220,9 @@ export interface KiroWriteApi {
   pauseFocusSession: AppState["pauseFocusSession"];
   resumeFocusSession: AppState["resumeFocusSession"];
   finishFocusSession: AppState["finishFocusSession"];
+
+  addCalendarMark: AppState["addCalendarMark"];
+  deleteCalendarMark: AppState["deleteCalendarMark"];
 
   pushToast: (t: {
     message: string;

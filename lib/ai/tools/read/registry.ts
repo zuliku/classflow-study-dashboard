@@ -91,6 +91,12 @@ export const KIRO_READ_TOOLS = {
       "用于‘这周哪天最挤’‘考试周与 DDL 叠加’等密度分析，返回 byDay/byWeek 与 busiestDay/busiestWeek。",
     inputSchema: KIRO_READ_TOOL_SCHEMAS.get_calendar_density,
   }),
+  get_group_project_health: tool({
+    description:
+      "分析小组项目的协作健康：总/完成/逾期/临期（3天内）/未分配任务数、进度、最近截止任务与按成员负荷分布。" +
+      "用于‘小组进度怎样’‘谁的任务逾期’‘哪位成员负荷不均’等协作节奏判断。",
+    inputSchema: KIRO_READ_TOOL_SCHEMAS.get_group_project_health,
+  }),
   get_material_metadata: tool({
     description: "查看课程资料的 metadata（标题/类型/大小/日期）。不能读取文件正文。",
     inputSchema: KIRO_READ_TOOL_SCHEMAS.get_material_metadata,
