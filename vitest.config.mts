@@ -4,7 +4,7 @@ import { resolve } from "node:path";
 export default defineConfig({
   resolve: {
     alias: {
-      "@": resolve(__dirname, "."),
+      "@": resolve(import.meta.dirname, "."),
     },
   },
   test: {
@@ -17,9 +17,8 @@ export default defineConfig({
     // Windows 大仓库全量并行时，过多 worker 会导致 CPU 争用，2-3s 的用例被放大到
     // 超过 testTimeout（实测 18 线程下 6-10 倍减速）。限制并发到一半核心数，
     // 单文件耗时基本不变、总墙钟更稳定。
-    poolOptions: {
-      threads: { maxThreads: 8, minThreads: 1 },
-    },
+    maxWorkers: 8,
+    minWorkers: 1,
     // 全量收集：显式文件清单已严重漂移（219 个测试文件从未被执行），改为 glob 防止再次漂移。
     // Live-provider smoke 自带环境变量 skip 守卫；Playwright E2E（*.spec.ts）不在 vitest 范围。
     include: [

@@ -354,6 +354,13 @@ app.on("window-all-closed", () => {
   if (process.platform !== "darwin") app.quit();
 });
 
+process.on("uncaughtException", (err) => {
+  console.error("[classflow] uncaughtException", err);
+});
+process.on("unhandledRejection", (reason) => {
+  console.error("[classflow] unhandledRejection", reason);
+});
+
 let isQuitting = false;
 /** 单个清理步骤的时间上限：IMAP logout / MCP close / HTTP close 在网络挂起时
  *  可能等待数分钟，导致进程变成杀不掉的僵尸（稳定性审计 BUG-025）。 */

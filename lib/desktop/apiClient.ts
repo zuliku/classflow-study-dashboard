@@ -1,6 +1,8 @@
 /**
  * Desktop local API helper — Task 15B path contract fail-closed
- * Ensures preload api.request is used with correct path prefix and capability handling
+ * Ensures preload api.request is used with correct path prefix and capability handling.
+ * Reserved helper for DTO routes; current streaming routes (chat/models) use direct
+ * window.classflowDesktop.api.request for SSE compatibility. Keep for future use.
  */
 
 export async function requestDesktopApi(path: string, init?: RequestInit): Promise<Response> {

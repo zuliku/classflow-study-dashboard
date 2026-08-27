@@ -31,7 +31,6 @@ yarn-error.log*
 
 # typescript
 *.tsbuildinfo
-next-env.d.ts
 .tmp/
 
 # 桌面运行时本地数据（userData 不在此目录；保留系统默认）

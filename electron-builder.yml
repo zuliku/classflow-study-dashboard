@@ -27,7 +27,9 @@ win:
       arch:
         - x64
   artifactName: ClassFlow-Setup-${version}.${ext}
-  # 本机无开发者模式，winCodeSign 缓存解压 symlink 失败；跳过签名与 rcedit 编辑
+  # 发布说明：当前为未签名预览版（signAndEditExecutable: false），安装时 Windows SmartScreen
+  # 会提示“未知发布者”。正式分发需配置代码签名（CSC_LINK / CSC_KEY_PASSWORD 或 AzureSignTool），
+  # 并移除此开关。afterPack 仍通过 rcedit 写入图标与版本信息（若 winCodeSign 可用）。
   signAndEditExecutable: false
 
 nsis:

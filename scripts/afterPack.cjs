@@ -4,7 +4,12 @@ const path = require("node:path");
 
 /** 从 electron-builder 缓存中递归定位 rcedit（本机无开发者模式，winCodeSign 自动解压失败，需手动） */
 function findRcedit() {
-  const base = "C:/Users/ye/AppData/Local/electron-builder/Cache/winCodeSign";
+  const base = path.join(
+    process.env.LOCALAPPDATA ?? path.join(require("node:os").homedir(), "AppData", "Local"),
+    "electron-builder",
+    "Cache",
+    "winCodeSign"
+  );
   if (!existsSync(base)) return null;
   const { readdirSync, statSync } = require("node:fs");
   const queue = [base];
@@ -35,14 +40,15 @@ exports.default = async (context) => {
     return;
   }
   const icon = path.join(__dirname, "..", "build", "icon.ico");
+  const version = require("../package.json").version;
   execFileSync(rcedit, [
     exe,
     "--set-icon", icon,
     "--set-version-string", "FileDescription", "ClassFlow",
     "--set-version-string", "ProductName", "ClassFlow",
     "--set-version-string", "CompanyName", "ClassFlow",
-    "--set-version-string", "ProductVersion", "1.0.0",
-    "--set-version-string", "FileVersion", "1.0.0",
+    "--set-version-string", "ProductVersion", version,
+    "--set-version-string", "FileVersion", version,
   ]);
   console.log("[afterPack] icon + version info written to", exe);
 };
