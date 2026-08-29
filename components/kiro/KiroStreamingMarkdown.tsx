@@ -253,7 +253,7 @@ export function KiroStreamingMarkdown({
       let inFence = next.inFence;
       let inDisplayMath = next.inDisplayMath;
       const finalLine = next.tailLastLine.trim();
-      if (finalLine.startsWith("```")) {
+      if (/^(```|~~~)/.test(finalLine)) {
         inFence = !inFence;
       } else if (finalLine.startsWith("$$")) {
         inDisplayMath = !inDisplayMath;
@@ -314,23 +314,35 @@ export function KiroStreamingMarkdown({
     lastPrefixRef.current = content;
     const epoch = renderEpochRef.current;
 
-    const stable: KiroStreamingRenderBlock[] = split.stableBlocks.map((text, i) => ({
-      ordinal: i,
-      text,
-      state: "stable",
-      tailState: "text",
-    }));
+    // P1 优化：稳定块对象池——同 epoch 且 text 值相等时复用同一对象引用，
+    // 使 <KiroStreamingBlock> 的 React.memo comparator 更容易命中（减少 GC + 浅比较开销）
+    const prevStablePool = prevBlocksRef.current?.epoch === renderEpochRef.current
+      ? prevBlocksRef.current.blocks
+      : [];
+    const stable: KiroStreamingRenderBlock[] = split.stableBlocks.map((text, i) => {
+      const pooled = prevStablePool.find((p) => p.ordinal === i && p.text === text && p.state === "stable");
+      if (pooled) return pooled;
+      return { ordinal: i, text, state: "stable", tailState: "text" };
+    });
+    const tailOrdinal = split.stableBlocks.length;
     const tail: KiroStreamingRenderBlock[] =
       split.tail.length > 0
-        ? [
-            {
-              ordinal: split.stableBlocks.length,
-              text: split.tail,
-              // settle-reuse：tail 已是最终内容 → stable；streaming 中 → active
-              state: streaming ? "active" : "stable",
-              tailState: split.tailState,
-            },
-          ]
+        ? (() => {
+            const tailState = streaming ? "active" as const : "stable" as const;
+            const pooledTail = prevStablePool.find(
+              (p) => p.ordinal === tailOrdinal && p.text === split.tail && p.tailState === split.tailState && p.state === tailState
+            );
+            if (pooledTail) return [pooledTail];
+            return [
+              {
+                ordinal: tailOrdinal,
+                text: split.tail,
+                // settle-reuse：tail 已是最终内容 → stable；streaming 中 → active
+                state: tailState,
+                tailState: split.tailState,
+              },
+            ];
+          })()
         : [];
     const next = [...stable, ...tail];
 

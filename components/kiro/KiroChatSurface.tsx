@@ -46,6 +46,7 @@ export function KiroChatSurface({ variant }: { variant: "workspace" | "sidecar" 
 
   // Computer Agent Part 3：审批对话框 + 更改审查（runtime store 只存展示状态）
   const pendingApproval = useKiroComputerRuntimeStore((s) => s.pendingApproval);
+  const pendingQueueLength = useKiroComputerRuntimeStore((s) => s.pendingQueueLength);
   const setPendingApproval = useKiroComputerRuntimeStore((s) => s.setPendingApproval);
   const reviewTaskId = useKiroComputerRuntimeStore((s) => s.reviewTaskId);
   const setReviewTaskId = useKiroComputerRuntimeStore((s) => s.setReviewTaskId);
@@ -232,8 +233,13 @@ export function KiroChatSurface({ variant }: { variant: "workspace" | "sidecar" 
         workspaceIsSandbox={workspaceIsSandbox}
       />
 
-      {/* Computer Agent Part 3：Approval（ask 暂停；决策后 resume 同一条 exact call）+ Change Review */}
-      <ComputerApprovalDialog request={pendingApproval} onDecision={(id, decision) => void chat.resolveApproval(id, decision)} />
+      {/* Computer Agent Part 3：Approval（ask 暂停；决策后 resume 同一条 exact call）+ Change Review + Bulk */}
+      <ComputerApprovalDialog
+        request={pendingApproval}
+        queueLength={pendingQueueLength}
+        onDecision={(id, decision) => void chat.resolveApproval(id, decision)}
+        onBulkDecision={(decision) => void (chat as unknown as { resolveBulkApproval: (d: string) => void }).resolveBulkApproval(decision)}
+      />
       <KiroChangeReviewDialog
         task={
           reviewTaskId

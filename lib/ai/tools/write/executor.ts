@@ -18,6 +18,7 @@ import { parseLocalDDL } from "@/lib/ddl";
 import { formatLocalDateTime, getReminderTargetAnchor, resolveReminderTriggerAt } from "@/lib/reminders/reminderDomain";
 import { prepareKiroWriteTool } from "@/lib/ai/tools/write/prepare";
 import { sanitizeAssignmentMaterialIds } from "@/lib/tasks/taskMaterials";
+import { useAppStore } from "@/store/useAppStore";
 import { TransactionSafeToolName } from "@/lib/ai/transactions/types";
 
 /**
@@ -1219,6 +1220,106 @@ function focusErrorMessage(code: string): string {
   return map[code] ?? "操作失败。";
 }
 
+function createStudyBlock(api: KiroWriteApi, input: unknown, toolCallId: string): WriteToolResult<unknown> {
+  const parsed = safeParse<{ title: string; date: string; startTime: string; endTime: string; assignmentId?: string; courseId?: string; source?: "manual" | "kiro" }>("create_study_block", input);
+  if (!parsed.ok) return parsed;
+  const { title, date, startTime, endTime, assignmentId, courseId, source } = parsed.data;
+  const id = useAppStore.getState().addStudyBlock({ title, date, startTime, endTime, assignmentId, courseId, source: source ?? "kiro" }, { source: "kiro" });
+  if (!id) return conflict("创建学习计划失败，可能与已有安排冲突或关联任务不存在。");
+  api.registerUndo(toolCallId, () => {
+    useAppStore.getState().deleteStudyBlock(id, { source: "kiro" });
+  });
+  return {
+    ok: true,
+    data: { id },
+    action: { tool: "create_study_block", entityType: "study-block", entityId: id, title, operation: "create", after: { date, startTime, endTime, assignmentId, courseId }, canUndo: true },
+  };
+}
+
+function updateStudyBlock(api: KiroWriteApi, input: unknown, toolCallId: string): WriteToolResult<unknown> {
+  const parsed = safeParse<{ blockId: string; date?: string; startTime?: string; endTime?: string; title?: string; assignmentId?: string | null }>("update_study_block", input);
+  if (!parsed.ok) return parsed;
+  const { blockId, ...patch } = parsed.data;
+  const before = useAppStore.getState().studyBlocks.find((b) => b.id === blockId);
+  if (!before) return notFound("未找到对应学习计划块。");
+  const ok = useAppStore.getState().updateStudyBlock(blockId, patch as any, { source: "kiro" });
+  if (!ok) return conflict("修改学习计划失败，可能与已有安排冲突或为已释放块。");
+  const after = useAppStore.getState().studyBlocks.find((b) => b.id === blockId);
+  api.registerUndo(toolCallId, () => {
+    useAppStore.getState().updateStudyBlock(blockId, { date: before.date, startTime: before.startTime, endTime: before.endTime, title: before.title, assignmentId: before.assignmentId } as any, { source: "kiro" });
+  });
+  return {
+    ok: true,
+    data: { id: blockId },
+    action: { tool: "update_study_block", entityType: "study-block", entityId: blockId, title: patch.title ?? before.title, operation: "update", before: { date: before.date, startTime: before.startTime, endTime: before.endTime }, after: { date: after?.date, startTime: after?.startTime, endTime: after?.endTime }, canUndo: true },
+  };
+}
+
+function deleteStudyBlocks(api: KiroWriteApi, input: unknown, toolCallId: string): WriteToolResult<unknown> {
+  const parsed = safeParse<{ blockIds: string[] }>("delete_study_blocks", input);
+  if (!parsed.ok) return parsed;
+  const { blockIds } = parsed.data;
+  const removed = useAppStore.getState().deleteStudyBlocksBatch(blockIds, { source: "kiro" });
+  if (removed.length === 0) return notFound("未找到可删除的学习计划块。");
+  api.registerUndo(toolCallId, () => {
+    // 恢复被删块（按原对象插回，需保留 id）
+    for (const b of removed) useAppStore.getState().addStudyBlock({ title: b.title, date: b.date, startTime: b.startTime, endTime: b.endTime, assignmentId: b.assignmentId, courseId: b.courseId, source: b.source } as any, { source: "kiro" });
+  });
+  return {
+    ok: true,
+    data: { deletedIds: removed.map((b) => b.id), requestedIds: blockIds },
+    action: { tool: "delete_study_blocks", entityType: "study-block", entityId: removed[0].id, title: `删除 ${removed.length} 个学习计划`, operation: "delete", before: { count: removed.length }, canUndo: true },
+  };
+}
+
+function updateCourseAppearance(api: KiroWriteApi, input: unknown, toolCallId: string): WriteToolResult<unknown> {
+  const parsed = safeParse<{ courseId: string; bgHex?: string; borderHex?: string; textHex?: string }>("update_course_appearance", input);
+  if (!parsed.ok) return parsed;
+  const { courseId, bgHex, borderHex, textHex } = parsed.data;
+  const course = api.getState().courses.find((c) => c.id === courseId);
+  if (!course) return notFound("未找到对应课程。");
+  const before = { bgHex: course.bgHex, borderHex: course.borderHex, textHex: course.textHex };
+  api.updateCourse({ id: courseId, bgHex, borderHex, textHex } as any);
+  api.registerUndo(toolCallId, () => {
+    api.updateCourse({ id: courseId, ...before } as any);
+  });
+  return {
+    ok: true,
+    data: { courseId },
+    action: { tool: "update_course_appearance", entityType: "course", entityId: courseId, title: course.name, operation: "update", before, after: { bgHex, borderHex, textHex }, canUndo: true },
+  };
+}
+
+function updatePreferences(api: KiroWriteApi, input: unknown, toolCallId: string): WriteToolResult<unknown> {
+  const parsed = safeParse<Record<string, unknown>>("update_preferences", input);
+  if (!parsed.ok) return parsed;
+  const before = { ...useAppStore.getState().preferences };
+  useAppStore.getState().updatePreferences(parsed.data as any);
+  api.registerUndo(toolCallId, () => {
+    useAppStore.getState().updatePreferences(before as any);
+  });
+  return {
+    ok: true,
+    data: { updated: Object.keys(parsed.data) },
+    action: { tool: "update_preferences", entityType: "preferences", entityId: "preferences", title: "更新偏好", operation: "update", before, after: parsed.data, canUndo: true },
+  };
+}
+
+function updateUserProfile(api: KiroWriteApi, input: unknown, toolCallId: string): WriteToolResult<unknown> {
+  const parsed = safeParse<Record<string, unknown>>("update_user_profile", input);
+  if (!parsed.ok) return parsed;
+  const before = { ...useAppStore.getState().userProfile };
+  useAppStore.getState().updateUserProfile(parsed.data as any);
+  api.registerUndo(toolCallId, () => {
+    useAppStore.getState().updateUserProfile(before as any);
+  });
+  return {
+    ok: true,
+    data: { updated: Object.keys(parsed.data) },
+    action: { tool: "update_user_profile", entityType: "user-profile", entityId: "profile", title: "更新档案", operation: "update", before, after: parsed.data, canUndo: true },
+  };
+}
+
 // ---------- Task 7：一次性停课/调课/补课（独立执行路径；Change Set 内走 prepare 保留 ID） ----------
 
 function cancelScheduleOccurrence(api: KiroWriteApi, input: unknown, toolCallId: string): WriteToolResult<unknown> {
@@ -1345,6 +1446,12 @@ const EXECUTORS: Record<KiroWriteToolName, (api: KiroWriteApi, input: unknown, t
   pause_focus_session: pauseFocusSession,
   resume_focus_session: resumeFocusSession,
   finish_focus_session: finishFocusSession,
+  create_study_block: createStudyBlock,
+  update_study_block: updateStudyBlock,
+  delete_study_blocks: deleteStudyBlocks,
+  update_course_appearance: updateCourseAppearance,
+  update_preferences: updatePreferences,
+  update_user_profile: updateUserProfile,
   apply_change_set: (() => {
     // apply_change_set 不在 EXECUTORS 单写路径执行（走 useKiroChat 事务分支）
     return (): WriteToolResult<never> => ({ ok: false, code: "UNSUPPORTED", message: "请通过事务执行 Change Set。" });

@@ -149,9 +149,11 @@ function rowClasses(block: ToolBlock): string {
 export const KiroWorklog = React.memo(function KiroWorklog({
   worklog,
   phase,
+  reasoningSummary,
 }: {
   worklog: KiroWorklogBlock[];
   phase: KiroTurnPhase;
+  reasoningSummary?: string;
 }) {
   bumpStreamPerf("worklogRenders");
   bumpStreamPerfKeyed("worklogRendersByPhase", phase);
@@ -232,6 +234,15 @@ export const KiroWorklog = React.memo(function KiroWorklog({
 
       {/* Expanded：commentary / Tool rows 真实时序（无 synthetic row）；collapsed 时结构收起 */}
       <DisclosureRegion open={expanded} innerClassName="pt-1 space-y-1">
+        {worklog.length === 0 && reasoningSummary && (
+          <p
+            data-testid="kiro-reasoning-summary"
+            className="text-[11px] text-sandrift leading-relaxed whitespace-pre-wrap break-words"
+            aria-live="polite"
+          >
+            {reasoningSummary}
+          </p>
+        )}
         {worklog.map((block) =>
           block.kind === "commentary" ? (
             <p
@@ -260,10 +271,10 @@ export const KiroWorklog = React.memo(function KiroWorklog({
 
 /** KiroWorklog comparator：只有 phase 或 worklog 内容真正变化才重渲染 */
 function worklogPropsEqual(
-  a: { worklog: KiroWorklogBlock[]; phase: KiroTurnPhase },
-  b: { worklog: KiroWorklogBlock[]; phase: KiroTurnPhase }
+  a: { worklog: KiroWorklogBlock[]; phase: KiroTurnPhase; reasoningSummary?: string },
+  b: { worklog: KiroWorklogBlock[]; phase: KiroTurnPhase; reasoningSummary?: string }
 ): boolean {
-  return a.phase === b.phase && worklogEquals(a.worklog, b.worklog);
+  return a.phase === b.phase && a.reasoningSummary === b.reasoningSummary && worklogEquals(a.worklog, b.worklog);
 }
 
 /**

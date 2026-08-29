@@ -35,6 +35,11 @@ export const getFileMetadataSchema = z.object({
   path: resourcePath,
 });
 
+export const getDiagnosticsSchema = z.object({
+  path: resourcePath,
+  rootId: z.string().trim().min(1).max(120).optional(),
+});
+
 export const readTextSchema = z.object({
   path: resourcePath,
   startLine: z.number().int().min(1).max(1_000_000).optional(),

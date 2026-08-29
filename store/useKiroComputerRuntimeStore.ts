@@ -12,15 +12,19 @@ import { ComputerApprovalRequest } from "@/lib/ai/computer/approval";
 export interface KiroComputerRuntimeState {
   pendingApproval: ComputerApprovalRequest | null;
   reviewTaskId: string | null;
+  pendingQueueLength: number;
   setPendingApproval: (request: ComputerApprovalRequest | null) => void;
   setReviewTaskId: (taskId: string | null) => void;
+  setPendingQueueLength: (n: number) => void;
   clearRuntime: () => void;
 }
 
 export const useKiroComputerRuntimeStore = create<KiroComputerRuntimeState>()((set) => ({
   pendingApproval: null,
   reviewTaskId: null,
+  pendingQueueLength: 0,
   setPendingApproval: (request) => set({ pendingApproval: request }),
   setReviewTaskId: (taskId) => set({ reviewTaskId: taskId }),
-  clearRuntime: () => set({ pendingApproval: null, reviewTaskId: null }),
+  setPendingQueueLength: (n) => set({ pendingQueueLength: n }),
+  clearRuntime: () => set({ pendingApproval: null, reviewTaskId: null, pendingQueueLength: 0 }),
 }));

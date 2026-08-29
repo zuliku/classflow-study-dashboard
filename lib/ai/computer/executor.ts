@@ -82,6 +82,15 @@ export const COMPUTER_DOCUMENT_REVISION_LIMIT_BYTES = 5 * 1024 * 1024;
 /** Patch Undo before-text 上限（超限 → canUndo=false，不保留 checkpoint 快照） */
 export const COMPUTER_PATCH_UNDO_LIMIT_BYTES = GENERIC_ARTIFACT_PATCH_UNDO_LIMIT_BYTES;
 
+/** patch_text_file 指纹：oldText/newText 哈希，避免同路径不同 patch 复用 allow-once */
+function hashEditsForFingerprint(edits: { oldText: string; newText: string }[]): string {
+  const flat = edits.map((e) => `${e.oldText.length}:${e.oldText.slice(0, 32)}→${e.newText.length}:${e.newText.slice(0, 32)}`).join("|");
+  // 简单哈希：长度 + 前 64 字符，避免超长 fingerprint
+  let hash = 0;
+  for (let i = 0; i < flat.length; i++) hash = (hash * 31 + flat.charCodeAt(i)) >>> 0;
+  return `${hash.toString(16)}:${flat.length}`;
+}
+
 export interface ComputerExecutorContext {
   turnSnapshot: KiroComputerTurnSnapshot;
   liveWorkspaces: KiroWorkspaceMeta[];
@@ -1134,6 +1143,11 @@ export async function executeKiroComputerTool(request: {
     }
 
     // ask：无匹配 allow-once → approval-required（NO IO / NO mutation count / NO Tool Output）
+    // P1 修复：patch_text_file 的 allow-once 必须绑定 oldText 指纹，避免同路径不同 patch 复用
+    const patchFingerprint =
+      toolName === "patch_text_file" && Array.isArray((args as { edits?: unknown }).edits)
+        ? `patch:${resource.rootId}:${normalized}:${hashEditsForFingerprint((args as { edits: { oldText: string; newText: string }[] }).edits)}`
+        : undefined;
     if (policy.effect === "ask") {
       if (oneShotApprovals && oneShotApprovals.length > 0) {
         const idx = oneShotApprovals.findIndex((o) =>
@@ -1143,6 +1157,7 @@ export async function executeKiroComputerTool(request: {
             workspaceId: resource.workspaceId,
             rootId: resource.rootId,
             relativePath: normalized,
+            ...(patchFingerprint ? { fingerprint: patchFingerprint } : {}),
           })
         );
         if (idx !== -1) {
@@ -1162,6 +1177,7 @@ export async function executeKiroComputerTool(request: {
               relativePath: normalized,
               resourceLabel: normalized.split("/").pop() ?? normalized,
               description: mutationDescription(toolName, normalized),
+              ...(patchFingerprint ? { fingerprint: patchFingerprint } : {}),
             }),
           };
         }
@@ -1180,6 +1196,7 @@ export async function executeKiroComputerTool(request: {
             relativePath: normalized,
             resourceLabel: normalized.split("/").pop() ?? normalized,
             description: mutationDescription(toolName, normalized),
+            ...(patchFingerprint ? { fingerprint: patchFingerprint } : {}),
           }),
         };
       }
@@ -1331,6 +1348,40 @@ export async function executeKiroComputerTool(request: {
             bytes: bytes.byteLength,
             text,
             truncated,
+          },
+        },
+      };
+    }
+    if (toolName === "get_diagnostics") {
+      counters.readCount += 1;
+      const text = await adapter.readText(normalized);
+      const lines = text.split("\n");
+      const diagnostics: { line: number; severity: "info" | "warning"; message: string }[] = [];
+      lines.forEach((line, idx) => {
+        const lineNo = idx + 1;
+        if (line.length > 120) diagnostics.push({ line: lineNo, severity: "info", message: `超长行 ${line.length} 字符` });
+        if (/\bTODO\b/.test(line)) diagnostics.push({ line: lineNo, severity: "info", message: "含 TODO 标记" });
+        if (/\bFIXME\b/.test(line)) diagnostics.push({ line: lineNo, severity: "warning", message: "含 FIXME" });
+        if (/\bconsole\.log\b/.test(line)) diagnostics.push({ line: lineNo, severity: "info", message: "含 console.log" });
+      });
+      const openParens = (text.match(/\(/g) ?? []).length;
+      const closeParens = (text.match(/\)/g) ?? []).length;
+      if (openParens !== closeParens) diagnostics.push({ line: 0, severity: "warning", message: `括号不匹配 ( ${openParens} vs ) ${closeParens}` });
+      const openBrace = (text.match(/\{/g) ?? []).length;
+      const closeBrace = (text.match(/\}/g) ?? []).length;
+      if (openBrace !== closeBrace) diagnostics.push({ line: 0, severity: "warning", message: `大括号不匹配 { ${openBrace} vs } ${closeBrace}` });
+      return {
+        kind: "completed",
+        output: {
+          ok: true,
+          data: {
+            rootId: root.id,
+            rootLabel: root.label,
+            path: normalized,
+            lines: lines.length,
+            characters: text.length,
+            diagnostics: diagnostics.slice(0, 20),
+            truncated: diagnostics.length > 20,
           },
         },
       };

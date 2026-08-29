@@ -18,6 +18,7 @@ import { UserMessageEditBlockReason } from "@/lib/ai/history/messageEditing";
 import { KiroAssistantTurnPresentation } from "@/lib/ai/presentation/turnPresentation";
 import { citationsToReadableText } from "@/lib/ai/citations/parser";
 import { cn } from "@/lib/utils";
+import { useEffectiveReducedMotion } from "@/hooks/useEffectiveReducedMotion";
 import {
   markdownToPlainText,
   copyTextToClipboard,
@@ -81,11 +82,22 @@ export function KiroMessage({
     return collectCitedWebSources(content ?? "", sources);
   }, [actionsReady, streaming, content, sources]);
 
+  // V2 二次优化：流式中即时预取引用来源（live citation prefetch），24ms 节流下额外扫描成本可控（8K 正则）
+  // settled 后由 citedWebSources 接管 More 菜单，live 仅作轻量 tray 预览
+  const liveCitedWebSources = React.useMemo(() => {
+    if (!content || !sources || sources.length === 0) return [] as KiroSourceMeta[];
+    if (!streaming) return [] as KiroSourceMeta[];
+    return collectCitedWebSources(content, sources);
+  }, [content, sources, streaming]);
+
+  const reducedMotion = useEffectiveReducedMotion();
   // streaming cursor 只在 Final Answer 真正 streaming 时出现（phase === "answering" 且
   // answer 仍有 streaming text part）；绝不给 commentary / tool row / 已完成的 answer 显示 cursor
   const showStreamingCursor = assistantTurn
     ? assistantTurn.phase === "answering" && assistantTurn.answerStreaming
     : streaming;
+  const showComposingSkeleton =
+    assistantTurn?.phase === "composing" && !content && !assistantTurn.answerStreaming;
 
   const copyMarkdownSource = async () => {
     const ok = await copyTextToClipboard(citationsToReadableText(content ?? "", sources));
@@ -109,23 +121,82 @@ export function KiroMessage({
 
   const hasActions = !!actionSummaries && actionSummaries.length > 0;
 
+  // V2 跟进建议：基于正文关键词的轻量 follow-up（settled 后，actionsReady 时，低成本启发式）
+  const followUps = React.useMemo(() => {
+    if (!actionsReady || streaming || !content) return [] as string[];
+    if (content.length < 30) return [] as string[];
+    const ups: string[] = [];
+    if (content.includes("任务")) ups.push("帮我把这些任务创建到日历");
+    if (content.includes("学习") || content.includes("复习")) ups.push("生成一周学习计划");
+    if (content.includes("课程") || content.includes("课表")) ups.push("查看相关课程详情");
+    if (content.includes("考试") || content.includes("DDL")) ups.push("提醒我相关截止时间");
+    if (ups.length < 2) ups.push("再详细一点");
+    if (ups.length < 2) ups.push("总结成清单");
+    return ups.slice(0, 3);
+  }, [actionsReady, streaming, content]);
+
+  const handleFollowUp = async (text: string) => {
+    const ok = await copyTextToClipboard(text);
+    if (ok) pushToast({ message: `已复制：${text}` });
+  };
+
   return (
     // V4.6：统一 KiroAssistantShell（Pending 共用同一 outer——Logo/左侧 column 不 remount）
     <KiroAssistantShell testid={testid ?? "kiro-message"} messageId={messageId}>
-      {/* Worklog V2：真实 part 时序（commentary → tool → … → final answer）；V4.2 props 缩窄 */}
-      {assistantTurn && assistantTurn.worklog.length > 0 && (
-        <KiroWorklog worklog={assistantTurn.worklog} phase={assistantTurn.phase} />
+      {/* Worklog V2：真实 part 时序（commentary → tool → … → final answer）；V4.2 props 缩窄 + 推理摘要 */}
+      {assistantTurn && (assistantTurn.worklog.length > 0 || assistantTurn.reasoningSummary) && (
+        <KiroWorklog
+          worklog={assistantTurn.worklog}
+          phase={assistantTurn.phase}
+          reasoningSummary={assistantTurn.reasoningSummary}
+        />
       )}
-        {content ? (
+        {(content || showComposingSkeleton) ? (
           <div>
             {/* Worklog V2 Task 4：Stable Blocks（React.memo 缓存）+ Active Tail（同语义 Markdown） */}
-            <KiroStreamingMarkdown content={content} streaming={!!streaming} sources={sources} />
+            {content ? (
+              <KiroStreamingMarkdown content={content} streaming={!!streaming} sources={sources} />
+            ) : (
+              <div
+                data-testid="kiro-composing-skeleton"
+                aria-hidden="true"
+                className="space-y-1.5 py-1"
+              >
+                <div className="h-3 w-3/4 rounded bg-alabaster animate-pulse" style={{ animationDuration: reducedMotion ? "0s" : undefined }} />
+                <div className="h-3 w-1/2 rounded bg-alabaster/70 animate-pulse" style={{ animationDuration: reducedMotion ? "0s" : undefined }} />
+              </div>
+            )}
             {showStreamingCursor && (
               <span
                 aria-hidden="true"
                 data-testid="kiro-streaming-cursor"
-                className="inline-block w-[2px] h-3.5 bg-sandrift align-middle animate-pulse"
+                className={cn(
+                  "inline-block w-[2px] h-3.5 bg-sandrift align-middle",
+                  !reducedMotion && "animate-pulse"
+                )}
               />
+            )}
+            {/* V2 live 引用预取：流式中即显示已引用的来源 chips（settled 后收敛到 More→来源） */}
+            {streaming && liveCitedWebSources.length > 0 && (
+              <div
+                data-testid="kiro-live-citations"
+                className="mt-2 flex flex-wrap gap-1.5"
+                aria-live="polite"
+              >
+                {liveCitedWebSources.slice(0, 3).map((s) => (
+                  <span
+                    key={s.sourceId}
+                    className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-alabaster border border-line text-[10px] font-medium text-satin-grey"
+                    title={s.name}
+                  >
+                    <Globe2 className="w-3 h-3 text-sandrift shrink-0" />
+                    <span className="truncate max-w-[120px]">{s.name}</span>
+                  </span>
+                ))}
+                {liveCitedWebSources.length > 3 && (
+                  <span className="inline-flex items-center px-2 py-1 text-[10px] text-sandrift">+{liveCitedWebSources.length - 3}</span>
+                )}
+              </div>
             )}
             {/* Hotfix：正文底部不再显示独立 Sources Tray（来源移入 More → 来源） */}
             {/* Message Actions：整个 Turn 结束后常驻（不依赖 hover），低权重 inline toolbar */}
@@ -195,6 +266,24 @@ export function KiroMessage({
                       )}
                     </KiroMenuPanel>
                 </div>
+              </div>
+            )}
+            {/* 跟进建议：settled 后基于内容关键词的快捷追问（复制即用） */}
+            {(actionsReady ?? true) && !streaming && followUps.length > 0 && (
+              <div
+                data-testid="kiro-followups"
+                className="mt-2 flex flex-wrap gap-1.5"
+              >
+                {followUps.map((q) => (
+                  <button
+                    key={q}
+                    onClick={() => void handleFollowUp(q)}
+                    className="px-2.5 py-1 rounded-full bg-surface border border-line text-[11px] font-medium text-satin-grey hover:bg-alabaster hover:text-charcoal hover:border-line-strong transition-colors"
+                    title="点击复制追问"
+                  >
+                    {q}
+                  </button>
+                ))}
               </div>
             )}
           </div>

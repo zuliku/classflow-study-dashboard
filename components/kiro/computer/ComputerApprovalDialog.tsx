@@ -28,10 +28,14 @@ const DECISION_VARIANTS: Record<ComputerApprovalDecision, "danger" | "primary" |
  */
 export function ComputerApprovalDialog({
   request,
+  queueLength,
   onDecision,
+  onBulkDecision,
 }: {
   request: ComputerApprovalRequest | null;
+  queueLength?: number;
   onDecision: (approvalId: string, decision: ComputerApprovalDecision) => void;
+  onBulkDecision?: (decision: ComputerApprovalDecision) => void;
 }) {
   const [busy, setBusy] = React.useState(false);
   const open = request !== null;
@@ -136,6 +140,22 @@ export function ComputerApprovalDialog({
               {DECISION_LABELS[d]}
             </Button>
           ))}
+          {queueLength !== undefined && queueLength > 1 && onBulkDecision && (
+            <Button
+              variant="secondary"
+              size="sm"
+              className="w-full justify-center mt-1"
+              disabled={busy}
+              onClick={() => {
+                if (!request || busy) return;
+                setBusy(true);
+                onBulkDecision("allow-once");
+              }}
+              data-testid="approval-bulk-allow-once"
+            >
+              批量允许这一次（{queueLength} 项）
+            </Button>
+          )}
         </div>
 
         <p className="text-[10px] text-sandrift leading-relaxed">

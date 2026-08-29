@@ -36,6 +36,12 @@ export const searchAssignmentsSchema = z.object({
   due: DUE_FILTER.optional(),
   /** Task V2 scope：focus/today/upcoming/at-risk/unscheduled/all/archive（与 Workspace 视图同一套规则） */
   scope: ASSIGNMENT_SCOPE.optional(),
+  priority: z.enum(["urgent", "high", "medium", "low"]).optional(),
+  tag: z.string().trim().min(1).max(40).optional(),
+  hasDDL: z.boolean().optional(),
+  hasEstimatedMinutes: z.boolean().optional(),
+  sortBy: z.enum(["ddl", "priority", "health"]).optional(),
+  includeHealth: z.boolean().optional().default(false),
 });
 
 export const getAssignmentSchema = z.object({
@@ -48,6 +54,8 @@ export const getAssignmentScheduleSchema = z.object({
 
 export const getAssignmentHealthSchema = z.object({
   assignmentId: z.string().trim().min(1).max(120),
+  includeEvidence: z.boolean().optional().default(false),
+  horizonDays: z.union([z.literal(7), z.literal(14)]).optional(),
 });
 
 export const getAvailableTimeSchema = z.object({
@@ -57,6 +65,8 @@ export const getAvailableTimeSchema = z.object({
   minimumMinutes: z.number().int().min(15).max(240).optional(),
   /** 提供任务 ID 时：终点自动不超过该任务 Deadline（Deadline 当天最多到 Deadline 时刻） */
   beforeDeadlineOfAssignmentId: z.string().trim().min(1).max(120).optional(),
+  includeCourseOverlap: z.boolean().optional().default(false),
+  includeStudyBlocks: z.boolean().optional().default(true),
 });
 
 export const proposeStudyPlanSchema = z.object({
@@ -331,6 +341,14 @@ export const getCourseMaterialLinkageSchema = z.object({
   includeUnlinked: z.boolean().optional().default(false),
 });
 
+export const searchCourseMaterialsSchema = z.object({
+  courseId: z.string().trim().min(1).max(120),
+  query: z.string().trim().min(1).max(200),
+  maxResults: z.number().int().min(1).max(8).optional().default(5),
+});
+
+export const getPreferencesSchema = z.object({});
+
 export const KIRO_READ_TOOL_SCHEMAS = {
   get_current_context: emptyInputSchema,
   get_user_study_profile: emptyInputSchema,
@@ -367,6 +385,8 @@ export const KIRO_READ_TOOL_SCHEMAS = {
   list_focus_sessions: listFocusSessionsSchema,
   get_focus_analytics: getFocusAnalyticsSchema,
   get_course_material_linkage: getCourseMaterialLinkageSchema,
+  search_course_materials: searchCourseMaterialsSchema,
+  get_preferences: getPreferencesSchema,
   query_learning_history: queryLearningHistorySchema,
   summarize_learning_history: summarizeLearningHistorySchema,
   get_learning_analytics: getLearningAnalyticsSchema,

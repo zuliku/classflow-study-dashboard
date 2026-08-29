@@ -324,6 +324,55 @@ export const pauseFocusSessionSchema = z.object({});
 export const resumeFocusSessionSchema = z.object({});
 export const finishFocusSessionSchema = z.object({});
 
+/** G1：StudyBlock 直接 CRUD（单块精准操作，绕过 Proposal） */
+export const createStudyBlockSchema = z.object({
+  title: z.string().trim().min(1).max(200),
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "日期必须为 YYYY-MM-DD"),
+  startTime: z.string().regex(TIME_RE, "时间格式必须为 HH:mm"),
+  endTime: z.string().regex(TIME_RE, "时间格式必须为 HH:mm"),
+  assignmentId: z.string().trim().min(1).max(120).optional(),
+  courseId: z.string().trim().min(1).max(120).optional(),
+  source: z.enum(["manual", "kiro"]).optional().default("kiro"),
+}).refine((d) => d.startTime < d.endTime, { message: "endTime 必须晚于 startTime", path: ["endTime"] });
+
+export const updateStudyBlockSchema = z.object({
+  blockId: z.string().trim().min(1).max(120),
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "日期必须为 YYYY-MM-DD").optional(),
+  startTime: z.string().regex(TIME_RE, "时间格式必须为 HH:mm").optional(),
+  endTime: z.string().regex(TIME_RE, "时间格式必须为 HH:mm").optional(),
+  title: z.string().trim().min(1).max(200).optional(),
+  assignmentId: z.string().trim().min(1).max(120).nullable().optional(),
+}).refine((d) => !(d.startTime && d.endTime && d.startTime >= d.endTime), { message: "时间区间非法", path: ["endTime"] });
+
+export const deleteStudyBlocksSchema = z.object({
+  blockIds: z.array(z.string().trim().min(1).max(120)).min(1).max(8),
+});
+
+/** G2：课程外观（bgHex/borderHex/textHex） */
+export const updateCourseAppearanceSchema = z.object({
+  courseId: z.string().trim().min(1).max(120),
+  bgHex: z.string().regex(/^#[0-9a-fA-F]{6}$/, "颜色必须为 #RRGGBB").optional(),
+  borderHex: z.string().regex(/^#[0-9a-fA-F]{6}$/, "颜色必须为 #RRGGBB").optional(),
+  textHex: z.string().regex(/^#[0-9a-fA-F]{6}$/, "颜色必须为 #RRGGBB").optional(),
+}).refine((d) => !!(d.bgHex || d.borderHex || d.textHex), { message: "至少提供一个外观字段", path: ["bgHex"] });
+
+/** G6：偏好与用户档案 */
+export const updatePreferencesSchema = z.object({
+  defaultDeadlineReminderMinutes: z.union([z.literal(60), z.literal(1440), z.literal(4320), z.literal(10080)]).optional(),
+  defaultTaskPriority: z.enum(["urgent", "high", "medium", "low"]).optional(),
+  defaultTaskWorkspaceView: z.enum(["focus", "today", "upcoming", "at-risk", "unscheduled", "all", "archive"]).optional(),
+  contentDensity: z.enum(["comfortable", "compact"]).optional(),
+  uiFont: z.enum(["harmonyos-sans-sc", "source-han-sans-sc", "misan"]).optional(),
+  showWeekends: z.boolean().optional(),
+}).refine((d) => Object.keys(d).length > 0, { message: "至少一项", path: ["defaultTaskPriority"] });
+
+export const updateUserProfileSchema = z.object({
+  name: z.string().trim().min(1).max(40).optional(),
+  college: z.string().trim().min(1).max(80).optional(),
+  grade: z.string().trim().min(1).max(40).optional(),
+  studentId: z.string().trim().max(40).optional(),
+}).refine((d) => Object.keys(d).length > 0, { message: "至少一项", path: ["name"] });
+
 /** Task 7：一次性停课/调课/补课（只影响指定教学周，不修改 recurring schedule） */
 export const cancelScheduleOccurrenceSchema = z.object({
   scheduleId: z.string().trim().min(1).max(120),
@@ -392,6 +441,12 @@ export const KIRO_WRITE_TOOL_SCHEMAS = {
   pause_focus_session: pauseFocusSessionSchema,
   resume_focus_session: resumeFocusSessionSchema,
   finish_focus_session: finishFocusSessionSchema,
+  create_study_block: createStudyBlockSchema,
+  update_study_block: updateStudyBlockSchema,
+  delete_study_blocks: deleteStudyBlocksSchema,
+  update_course_appearance: updateCourseAppearanceSchema,
+  update_preferences: updatePreferencesSchema,
+  update_user_profile: updateUserProfileSchema,
 } as const;
 
 export type KiroWriteToolName = keyof typeof KIRO_WRITE_TOOL_SCHEMAS;

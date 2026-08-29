@@ -145,12 +145,17 @@ export function textOnlySmoothStream<TOOLS extends ToolSet>({
     const sleep = (ms: number) => {
       if (signal?.aborted) return Promise.resolve();
       return new Promise<void>((resolve) => {
-        const t = setTimeout(resolve, ms);
+        let onAbort: (() => void) | undefined;
+        const t = setTimeout(() => {
+          if (signal && onAbort) signal.removeEventListener("abort", onAbort);
+          resolve();
+        }, ms);
         if (signal) {
-          signal.addEventListener("abort", () => {
+          onAbort = () => {
             clearTimeout(t);
             resolve();
-          }, { once: true });
+          };
+          signal.addEventListener("abort", onAbort, { once: true });
         }
       });
     };

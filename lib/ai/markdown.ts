@@ -72,7 +72,12 @@ function findFirstDelimiter(line: string): { index: number; type: "$$" | "\\(" |
   return best;
 }
 
+const MATH_NORMALIZE_CACHE = new Map<string, string>();
+const MATH_CACHE_MAX = 64;
+
 export function normalizeMathDelimiters(md: string): string {
+  const cached = MATH_NORMALIZE_CACHE.get(md);
+  if (cached !== undefined) return cached;
   const lines = md.split("\n");
   const out: string[] = [];
   let inFence = false;
@@ -178,5 +183,15 @@ export function normalizeMathDelimiters(md: string): string {
   }
 
   flushPending();
-  return out.join("\n");
+  const result = out.join("\n");
+  if (MATH_NORMALIZE_CACHE.size >= MATH_CACHE_MAX) {
+    const firstKey = MATH_NORMALIZE_CACHE.keys().next().value as string;
+    MATH_NORMALIZE_CACHE.delete(firstKey);
+  }
+  MATH_NORMALIZE_CACHE.set(md, result);
+  return result;
+}
+
+export function clearMathNormalizeCache(): void {
+  MATH_NORMALIZE_CACHE.clear();
 }

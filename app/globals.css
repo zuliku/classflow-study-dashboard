@@ -638,6 +638,83 @@ html[data-motion-effective="reduced"] .kiro-empty-suggestion-intro {
 /* 非法 / 流式中未完成公式：退化为可读 source（throwOnError: false），用 ClassFlow danger 提示 */
 .katex-error {
   color: var(--danger);
+  border: 1px solid var(--danger-border);
+  background: var(--danger-bg);
+  border-radius: 0.375rem;
+  padding: 0 0.25rem;
+}
+
+/* Kiro 代码高亮（rehype-highlight + highlight.js github-light，贴合暖中性） */
+.kiro-markdown .hljs {
+  background: transparent !important;
+  padding: 0 !important;
+}
+.kiro-markdown .hljs-comment,
+.kiro-markdown .hljs-quote {
+  color: #6e7781;
+  font-style: italic;
+}
+.kiro-markdown .hljs-keyword,
+.kiro-markdown .hljs-selector-tag,
+.kiro-markdown .hljs-subst {
+  color: #cf222e;
+}
+.kiro-markdown .hljs-string,
+.kiro-markdown .hljs-doctag {
+  color: #0a3069;
+}
+.kiro-markdown .hljs-title,
+.kiro-markdown .hljs-section,
+.kiro-markdown .hljs-selector-id {
+  color: #0550ae;
+}
+.kiro-markdown .hljs-variable,
+.kiro-markdown .hljs-template-variable {
+  color: #953800;
+}
+.kiro-markdown .hljs-type,
+.kiro-markdown .hljs-class .hljs-title {
+  color: #0550ae;
+}
+.kiro-markdown .hljs-number,
+.kiro-markdown .hljs-literal {
+  color: #0550ae;
+}
+.kiro-markdown .hljs-attr,
+.kiro-markdown .hljs-attribute {
+  color: #6639ba;
+}
+.kiro-markdown .hljs-regexp,
+.kiro-markdown .hljs-link {
+  color: #0969da;
+}
+.kiro-markdown .hljs-meta {
+  color: #6e7781;
+}
+.kiro-markdown .hljs-built_in,
+.kiro-markdown .hljs-builtin-name {
+  color: #8250df;
+}
+/* 长公式横滑渐隐提示 */
+.kiro-markdown .katex-display {
+  position: relative;
+}
+.kiro-markdown .katex-display::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 16px;
+  background: linear-gradient(to right, transparent, var(--background));
+  pointer-events: none;
+  opacity: 0.6;
+}
+/* 复制按钮在窄屏不挤占 */
+@media (max-width: 640px) {
+  .kiro-markdown .hljs {
+    font-size: 0.82em;
+  }
 }
 
 /* Kiro Featured Entry：品牌色 perimeter sweep（低饱和：暖金 / 浅绿 / 灰蓝）。

@@ -226,6 +226,15 @@ export const KIRO_READ_TOOLS = {
     // @ts-ignore
     inputExamples: [{ courseId: "c1" }, { courseId: "c1", includeUnlinked: true }],
   }),
+  search_course_materials: tool({
+    description:
+      "在指定课程的所有资料正文里按关键词搜索（本地提取文本，扫描型 PDF 标记 NOT_SEARCHABLE）。用于‘在《线性代数》课件里找特征值’等资料内检索。",
+    inputSchema: KIRO_READ_TOOL_SCHEMAS.search_course_materials,
+  }),
+  get_preferences: tool({
+    description: "读取当前用户的偏好设置（默认提醒、任务视图、字体、周末显示等 sanitize 后的完整 preferences）。用于个性化规划前读取。",
+    inputSchema: KIRO_READ_TOOL_SCHEMAS.get_preferences,
+  }),
   query_learning_history: tool({
     description:
       "查询本地学习历史原始事件（任务创建/完成/重开/DDL 变更、学习计划、专注完成、课程/课表变更等），支持按时间/事件类型/课程/任务/来源筛选。只读本地历史，不读取当前状态。" +

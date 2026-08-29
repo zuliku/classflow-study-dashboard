@@ -67,7 +67,9 @@ export function splitKiroStreamingMarkdown(
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
-    const trimmed = line.trim();
+    // 遵循 CommonMark：围栏前 0-3 空格为有效，4 空格为缩进代码；支持 ``` 与 ~~~ 两种围栏
+    const fenceProbe = line.match(/^ {0,3}(```|~~~)/);
+    const mathProbe = line.match(/^ {0,3}\$\$/);
     // V4.5 修复：最后一行（可能未完成，无结尾换行）的 fence/math marker 不立即 toggle——
     // 行被跨 chunk 切分时（per-char provider deltas / 小 chunk），partial marker 的
     // premature toggle 会导致完整行到达时反向误 toggle（opener 误关 / closer 误开）。
@@ -75,13 +77,13 @@ export function splitKiroStreamingMarkdown(
     const isLastLine = i === lines.length - 1;
     if (!isLastLine) {
       // 状态切换必须先于边界判断（本行属于新状态）
-      if (!inFence && trimmed.startsWith("```")) {
+      if (!inFence && fenceProbe) {
         inFence = true;
-      } else if (inFence && trimmed.startsWith("```")) {
+      } else if (inFence && fenceProbe) {
         inFence = false;
-      } else if (!inFence && !inDisplayMath && trimmed.startsWith("$$")) {
+      } else if (!inFence && !inDisplayMath && mathProbe) {
         inDisplayMath = true;
-      } else if (!inFence && inDisplayMath && trimmed.startsWith("$$")) {
+      } else if (!inFence && inDisplayMath && mathProbe) {
         inDisplayMath = false;
       }
     }
@@ -153,6 +155,16 @@ function inlineSafePositions(text: string): boolean[] {
     if (ch === "*") {
       let run = 0;
       while (i + run < n && text[i + run] === "*") run += 1;
+      // 孤立 *（两侧均空白/边界，如乘号/列表符号）不视为强调，避免整段无安全切点
+      if (run === 1) {
+        const prevIsSpace = i === 0 || /\s/.test(text[i - 1]);
+        const nextIsSpace = i + run >= n || /\s/.test(text[i + run]);
+        if (prevIsSpace && nextIsSpace) {
+          i += run;
+          markSafeAt(i);
+          continue;
+        }
+      }
       const token = run === 1 ? "*" : "**";
       if (stack[stack.length - 1] === token) stack.pop();
       else stack.push(token);
@@ -327,15 +339,16 @@ export function advanceKiroMarkdownScan(
   const newStable: string[] = [];
 
   for (const line of lines) {
-    const trimmed = line.trim();
+    const fenceProbe = line.match(/^ {0,3}(```|~~~)/);
+    const mathProbe = line.match(/^ {0,3}\$\$/);
     // 状态切换必须先于边界判断（本行属于新状态）——与原 split 一致
-    if (!inFence && trimmed.startsWith("```")) {
+    if (!inFence && fenceProbe) {
       inFence = true;
-    } else if (inFence && trimmed.startsWith("```")) {
+    } else if (inFence && fenceProbe) {
       inFence = false;
-    } else if (!inFence && !inDisplayMath && trimmed.startsWith("$$")) {
+    } else if (!inFence && !inDisplayMath && mathProbe) {
       inDisplayMath = true;
-    } else if (!inFence && inDisplayMath && trimmed.startsWith("$$")) {
+    } else if (!inFence && inDisplayMath && mathProbe) {
       inDisplayMath = false;
     }
     if (line.length === 0 && !inFence && !inDisplayMath) {
@@ -448,14 +461,19 @@ function cutChunks(text: string, safe: boolean[], maxChars: number): { chunks: s
   return { chunks, tail: text.slice(start) };
 }
 
-/** 从 prev 的栈状态继续扩展 safe 数组到 nextText（只扫新增 suffix；stable 前缀不重扫） */
+/** 从 prev 的栈状态继续扩展 safe 数组到 nextText（只扫新增 suffix；stable 前缀不重扫）
+ * 性能优化 P1：safe 数组改为原地扩展（复用同一数组引用，仅延长 length），
+ * 避免每 token 全量 slice(8000) → GC 压力。prev 状态已不再被后续独立使用，
+ * 共享引用安全（仅追加尾部，不改前段）。
+ */
 function extendInlineSafe(
   prev: KiroInlineScanState,
   nextText: string
 ): { safe: boolean[]; stack: string[]; lineStart: number } {
   const start = prev.prefix.length;
   const n = nextText.length;
-  const safe = prev.safe.slice(); // 前段已计算（复制保证不可变；增量段在末尾追加）
+  const safe = prev.safe;
+  if (safe.length < n + 1) safe.length = n + 1;
   const stack = [...prev.stack];
   let lineStart = prev.lineStart;
   let i = start;
@@ -496,6 +514,15 @@ function extendInlineSafe(
     if (ch === "*") {
       let run = 0;
       while (i + run < n && nextText[i + run] === "*") run += 1;
+      if (run === 1) {
+        const prevIsSpace = i === 0 || /\s/.test(nextText[i - 1]);
+        const nextIsSpace = i + run >= n || /\s/.test(nextText[i + run]);
+        if (prevIsSpace && nextIsSpace) {
+          i += run;
+          markSafeAt(i);
+          continue;
+        }
+      }
       const token = run === 1 ? "*" : "**";
       if (stack[stack.length - 1] === token) stack.pop();
       else stack.push(token);
@@ -830,7 +857,9 @@ export function isFragmentSafeChunk(text: string): boolean {
   if (text.length === 0) return true;
   for (const line of text.split("\n")) {
     if (line.trim().length === 0) return false;
-    if (line.includes("|")) return false;
+    // pipe 仅在非 code 区域才视为 table 风险（`a | b` 内联 code 不触发）
+    const withoutCode = line.replace(/`[^`]*`/g, "");
+    if (withoutCode.includes("|")) return false;
     for (const re of FRAGMENT_BLOCK_LINE_RES) {
       if (re.test(line.trim())) return false;
     }

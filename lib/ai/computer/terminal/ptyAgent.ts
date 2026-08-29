@@ -348,8 +348,15 @@ export async function runKiroPtySessionCommand(input: RunPtySessionCommandInput)
   const bridge = getClassFlowDesktopTerminalPtyBridge();
   if (!bridge || !bridge.writeSession) return fail({ ok: false, code: "TERMINAL_UNAVAILABLE", message: TERMINAL_FIXED_MESSAGES.TERMINAL_UNAVAILABLE });
   ensurePtyEventSubscription();
-  const nonce = crypto.randomUUID().replace(/-/g, "").slice(0, 8);
-  const sentinel = `__CF_DONE_${nonce}__`;
+  // Tel2 修复：nonce 碰撞防护 — 若用户命令本身含 sentinel 字面则重生成，避免误判结束
+  let nonce = crypto.randomUUID().replace(/-/g, "").slice(0, 8);
+  let sentinel = `__CF_DONE_${nonce}__`;
+  let guard = 0;
+  while (command.includes(sentinel) && guard < 5) {
+    nonce = crypto.randomUUID().replace(/-/g, "").slice(0, 8);
+    sentinel = `__CF_DONE_${nonce}__`;
+    guard++;
+  }
   const wrapped = `${command}\n$__cfExit=$LASTEXITCODE\nWrite-Output "${sentinel}$__cfExit"`;
   let resolve!: (r: PtyCommandResult) => void;
   let reject!: (e: Error) => void;
@@ -359,14 +366,18 @@ export async function runKiroPtySessionCommand(input: RunPtySessionCommandInput)
   });
   const timeout = timeoutMs ?? 10000;
   const timer = setTimeout(async () => {
+    const rec = activePtyCommands.get(record.sessionId);
+    const partial = rec?.buffer ?? "";
     activePtyCommands.delete(record.sessionId);
-    // 超时必须终止整个 session（确定性安全策略）
+    // 超时必须终止整个 session（确定性安全策略），但保留已缓冲输出供模型参考（Tel3 修复）
     try {
       if (bridge.closeSession) await bridge.closeSession({ sessionId: record.sessionId });
     } catch {}
     ptySessions.delete(sessionHandle);
     sessionIdToHandle.delete(record.sessionId);
-    reject(new Error("PTY_TIMEOUT"));
+    const err = new Error("PTY_TIMEOUT") as Error & { partialOutput?: string };
+    err.partialOutput = partial;
+    reject(err);
   }, timeout);
   activePtyCommands.set(record.sessionId, { nonce, resolve, reject, buffer: "", timer });
   try {
@@ -381,7 +392,18 @@ export async function runKiroPtySessionCommand(input: RunPtySessionCommandInput)
     result = await resultPromise;
   } catch (e) {
     if ((e as Error).message === "PTY_TIMEOUT") {
-      return fail({ ok: false, code: "TERMINAL_TIMEOUT", message: "终端命令执行超时" });
+      const partialRaw = (e as Error & { partialOutput?: string }).partialOutput ?? "";
+      const sanitizedPartial = sanitizeTerminalModelOutput(partialRaw, 32000);
+      // 返回超时但携带已缓冲输出，模型可据此决定重试/继续
+      return {
+        kind: "completed",
+        output: {
+          ok: false,
+          code: "TERMINAL_TIMEOUT",
+          message: "终端命令执行超时",
+          data: { output: sanitizedPartial.text, truncated: sanitizedPartial.truncated },
+        } as unknown as ComputerToolResult,
+      };
     }
     if ((e as Error).message === "PTY_SESSION_EXITED") {
       return fail({ ok: false, code: "TERMINAL_SESSION_EXITED", message: TERMINAL_FIXED_MESSAGES.TERMINAL_SESSION_EXITED });

@@ -244,6 +244,30 @@ export const KIRO_WRITE_TOOLS = {
     description: "提前结束当前进行中的专注会话（无进行中会话 → 失败）。",
     inputSchema: KIRO_WRITE_TOOL_SCHEMAS.finish_focus_session,
   }),
+  create_study_block: tool({
+    description: "创建单个学习计划块（StudyBlock），精确到日期与起止时间，可关联任务或课程。用于单块自习或手动补录，不经过 Proposal。",
+    inputSchema: KIRO_WRITE_TOOL_SCHEMAS.create_study_block,
+  }),
+  update_study_block: tool({
+    description: "修改已有学习计划块的日期/时间/标题/关联任务（仅非 released 块）。",
+    inputSchema: KIRO_WRITE_TOOL_SCHEMAS.update_study_block,
+  }),
+  delete_study_blocks: tool({
+    description: "批量删除学习计划块（1-8 个 ID）。",
+    inputSchema: KIRO_WRITE_TOOL_SCHEMAS.delete_study_blocks,
+  }),
+  update_course_appearance: tool({
+    description: "修改课程外观配色（bgHex/borderHex/textHex，至少一项，#RRGGBB）。用于课程卡片视觉调整。",
+    inputSchema: KIRO_WRITE_TOOL_SCHEMAS.update_course_appearance,
+  }),
+  update_preferences: tool({
+    description: "更新用户偏好（默认提醒、任务视图、字体、周末显示等，至少一项）。",
+    inputSchema: KIRO_WRITE_TOOL_SCHEMAS.update_preferences,
+  }),
+  update_user_profile: tool({
+    description: "更新用户学习档案（姓名/学院/年级/学号，至少一项）。",
+    inputSchema: KIRO_WRITE_TOOL_SCHEMAS.update_user_profile,
+  }),
 };
 
 export const KIRO_WRITE_TOOL_NAMES = Object.keys(KIRO_WRITE_TOOLS) as (keyof typeof KIRO_WRITE_TOOLS)[];

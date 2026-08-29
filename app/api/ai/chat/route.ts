@@ -519,9 +519,10 @@ export async function handleChat(req: Request) {
       // Task 14：Server execute tool 允许有限多步自动执行；客户端工具调用时 loop 自然暂停等 Client Result。
       // V4.1 stopWhen：business-step 上限（boundary 不消耗）——step 数达到上限时，
       // 若最后一步是 begin_final_answer（boundary），必须允许下一步 Final Answer 生成。
+      // P0-4 升级：5 → 8（长链任务 6-7 步常见，配合 Codex 的迭代深度；budget 仍由 contextBudget 兜底）
       stopWhen: (options) => {
         const { steps } = options;
-        if (steps.length < 5) return false;
+        if (steps.length < 8) return false;
         const lastToolName = steps[steps.length - 1]?.toolCalls?.[0]?.toolName;
         if (lastToolName === KIRO_FINAL_ANSWER_TOOL_NAME) return false;
         return true;

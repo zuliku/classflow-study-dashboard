@@ -112,10 +112,10 @@ export function KiroConversation({
   // 只有确实存在距离差（>2px tolerance）时才赋值，避免无意义重复写 scrollTop
   const rafRef = useRef<number | null>(null);
   const scheduleHeightReconcile = React.useCallback(() => {
-    bumpStreamPerf("resizeObserverCalls");
     if (rafRef.current !== null) return;
     rafRef.current = requestAnimationFrame(() => {
       rafRef.current = null;
+      bumpStreamPerf("resizeObserverCalls");
       const el = scrollRef.current;
       if (!el) return;
       if (stickToBottomRef.current) {

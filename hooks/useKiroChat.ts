@@ -92,6 +92,7 @@ import {
   isNativeAdapterRef,
 } from "@/lib/desktop/bridge";
 import { cancelAllActiveTerminalExecutions } from "@/lib/ai/computer/terminal/executor";
+import { sanitizeTerminalModelOutput } from "@/lib/ai/computer/terminal/redact";
 import { projectFileSourceId, upsertProjectFileSource } from "@/lib/ai/citations/sources";
 import { getActiveModelName } from "@/lib/ai/providers/registry";
 import { executeKiroWriteTool } from "@/lib/ai/tools/write/executor";
@@ -961,6 +962,7 @@ export function useKiroChat({
 
   const setPendingApproval = useKiroComputerRuntimeStore((s) => s.setPendingApproval);
   const pendingApproval = useKiroComputerRuntimeStore((s) => s.pendingApproval);
+  const setPendingQueueLength = useKiroComputerRuntimeStore((s) => s.setPendingQueueLength);
 
   // V2.7.2：approval 超时自动取消（默认 3 分钟）——审批挂起不能永久阻塞 Tool Call
   //（用户忽略弹窗 / 页面在后台 / 旧 bundle 死锁等场景下，Kiro 必须最终收到确定结果）。
@@ -1363,9 +1365,24 @@ export function useKiroChat({
             invocationId,
           })
           .then((result) => {
+            // M2 修复：MCP 输出同样过脱敏（ANSI/path/secret 截断），与终端同级，防 absolute path 进一步泄漏
+            let sanitizedResult: unknown = result;
+            try {
+              const rawStr = typeof result === "string" ? result : JSON.stringify(result);
+              const sanitized = sanitizeTerminalModelOutput(rawStr, 32000);
+              sanitizedResult = sanitized.text.length < rawStr.length ? JSON.parse(sanitized.text) : result;
+            } catch {
+              // sanitize 失败则保留原始，但截断超长字符串
+              try {
+                const fallback = JSON.stringify(result).slice(0, 32000);
+                sanitizedResult = JSON.parse(fallback);
+              } catch {
+                sanitizedResult = { truncated: true };
+              }
+            }
             // 标记为 untrusted external content
-            const wrapped = result as { _untrusted?: boolean; content?: unknown };
-            const output = wrapped && typeof wrapped === "object" && "_untrusted" in wrapped ? wrapped : { _untrusted: true, content: result };
+            const wrapped = sanitizedResult as { _untrusted?: boolean; content?: unknown };
+            const output = wrapped && typeof wrapped === "object" && "_untrusted" in wrapped ? wrapped : { _untrusted: true, content: sanitizedResult };
             // 包装为 EXTERNAL UNTRUSTED CONTENT
             const withMarker = {
               ok: true,
@@ -1802,7 +1819,8 @@ export function useKiroChat({
   const advancePendingApproval = useCallback(() => {
     const next = pendingExecutionsRef.current.values().next().value as PendingComputerExecution | undefined;
     setPendingApproval(next ? next.request : null);
-  }, [setPendingApproval]);
+    setPendingQueueLength(pendingExecutionsRef.current.size);
+  }, [setPendingApproval, setPendingQueueLength]);
 
   /** approval-required：保持 Tool Call pending（不 addToolOutput）；Task step → awaiting_permission */
   const handleApprovalRequired = useCallback(
@@ -1814,6 +1832,7 @@ export function useKiroChat({
       frozenSnapshot: KiroComputerTurnSnapshot
     ) => {
       pendingExecutionsRef.current.set(request.id, { request, toolName, toolCallId, input, frozenSnapshot });
+      setPendingQueueLength(pendingExecutionsRef.current.size);
       if (!useKiroComputerRuntimeStore.getState().pendingApproval) {
         setPendingApproval(request);
       }
@@ -1825,7 +1844,7 @@ export function useKiroChat({
         updateTasks();
       }
     },
-    [setPendingApproval, updateTasks]
+    [setPendingApproval, setPendingQueueLength, updateTasks]
   );
 
   /** completed attempt：只有 completed.output 进入 addToolOutput；runtime 事实进 checkpoint/task */
@@ -2213,6 +2232,19 @@ export function useKiroChat({
       }
     },
     [advancePendingApproval, applyCompletedAttempt, handleApprovalRequired, failTaskStep, updateTasks, emitToolOutput, clearApprovalTimeout]
+  );
+
+  const handleBulkApprovalDecision = useCallback(
+    async (decision: ComputerApprovalDecision) => {
+      const allIds = Array.from(pendingExecutionsRef.current.keys());
+      if (allIds.length === 0) return;
+      for (const id of allIds) {
+        // 顺序批准，避免并发竞争 pendingExecutionsRef
+        // eslint-disable-next-line no-await-in-loop
+        await handleApprovalDecision(id, decision);
+      }
+    },
+    [handleApprovalDecision]
   );
 
   // V2.7.2：approval 超时自动取消（3 分钟）——审批挂起不能永久阻塞 Tool Call
@@ -3268,6 +3300,7 @@ export function useKiroChat({
     for (const t of Array.from(approvalTimeoutTimersRef.current.values())) clearTimeout(t);
     approvalTimeoutTimersRef.current.clear();
     setPendingApproval(null);
+    setPendingQueueLength(0);
     // 用户 Stop：该 turn 遗留的 pending tool part 不再视为 in-flight（真 settled）
     const lastMsg = latestChatRef.current.messages[latestChatRef.current.messages.length - 1] as UIMessage | undefined;
     stoppedTurnMessageIdRef.current = lastMsg?.role === "assistant" ? lastMsg.id : null;
@@ -3280,7 +3313,7 @@ export function useKiroChat({
     }
     void cancelAllActiveTerminalExecutions();
     void chat.stop();
-  }, [chat, setPendingApproval, updateTasks]);
+  }, [chat, setPendingApproval, setPendingQueueLength, updateTasks]);
 
   return {
     messages,
@@ -3309,6 +3342,7 @@ export function useKiroChat({
     visionEnabled,
     /** Computer Agent Part 3：approval 决策 / Task Undo（UI 入口） */
     resolveApproval: handleApprovalDecision,
+    resolveBulkApproval: handleBulkApprovalDecision,
     undoTask,
     /** Computer Task 状态版本（历史保存 signal：undo/approval 后变化） */
     computerVersion,

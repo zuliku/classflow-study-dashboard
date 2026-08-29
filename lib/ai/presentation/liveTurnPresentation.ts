@@ -63,6 +63,9 @@ export interface KiroAssistantTurnPresentation {
   hasTools: boolean;
   worklogDone: boolean;
   phase: KiroTurnPhase;
+  /** 压缩推理摘要（不暴露 chain-of-thought 原文，仅“正在分析…xx字”计数，供 Worklog 轻量占位） */
+  reasoningSummary?: string;
+  reasoningStreaming?: boolean;
 }
 
 /**
@@ -273,6 +276,8 @@ export function updateLiveTurnPresentation(
   const worklog: KiroWorklogBlock[] = [];
   const answerTexts: string[] = [];
   let answerPartStreaming = false;
+  let reasoningChars = 0;
+  let reasoningStreaming = false;
 
   for (let i = 0; i < rawParts.length; i++) {
     const p = rawParts[i];
@@ -281,7 +286,12 @@ export function updateLiveTurnPresentation(
       stepIndex += 1;
       continue;
     }
-    if (p.type === "reasoning") continue;
+    if (p.type === "reasoning") {
+      const t = (p as { text?: string }).text ?? "";
+      reasoningChars += t.length;
+      if ((p as { state?: string }).state === "streaming") reasoningStreaming = true;
+      continue;
+    }
 
     if (isToolPart(p)) {
       // 控制信号本身不进入 Worklog（V4.1：无 milestone / 无 Tool Row / 无 Action Card；
@@ -370,6 +380,12 @@ export function updateLiveTurnPresentation(
     phase = "working";
   }
 
+  // 推理摘要：仅长度计数与“思考中”占位，不回显原文（安全）
+  const reasoningSummary =
+    reasoningChars > 0 && turnInFlight && phase === "working" && worklog.length === 0
+      ? `正在分析 · ${reasoningChars} 字思考`
+      : undefined;
+
   return {
     worklog,
     answer,
@@ -378,6 +394,8 @@ export function updateLiveTurnPresentation(
     hasTools: hasBusinessTools,
     worklogDone: hasBusinessTools && (phase === "answering" || phase === "done"),
     phase,
+    reasoningSummary,
+    reasoningStreaming: reasoningSummary ? reasoningStreaming : undefined,
   };
 }
 

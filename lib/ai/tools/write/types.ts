@@ -57,6 +57,12 @@ export const KIRO_WRITE_RISKS: Record<string, KiroWriteRisk> = {
   pause_focus_session: "normal",
   resume_focus_session: "normal",
   finish_focus_session: "normal",
+  create_study_block: "normal",
+  update_study_block: "normal",
+  delete_study_blocks: "normal",
+  update_course_appearance: "normal",
+  update_preferences: "normal",
+  update_user_profile: "normal",
 };
 
 export function isDestructiveWriteTool(toolName: string): boolean {
@@ -73,6 +79,7 @@ export type WriteToolResult<T = unknown> =
         entityType:
           | "assignment"
           | "schedule"
+          | "study-block"
           | "course"
           | "group-project"
           | "group-member"
@@ -82,7 +89,9 @@ export type WriteToolResult<T = unknown> =
           | "reminder"
           | "focus-session"
           | "calendar-mark"
-          | "semester";
+          | "semester"
+          | "preferences"
+          | "user-profile";
         entityId: string;
         title: string;
         operation: "create" | "update" | "delete";

@@ -350,9 +350,21 @@ function assignmentSchedule(state: ReadToolState, a: Assignment): { scheduledMin
 }
 
 export function searchAssignments(state: ReadToolState, input: unknown): ReadToolResult<unknown> {
-  const parsed = safeParse<{ query?: string; courseId?: string; status?: Assignment["status"]; due?: "overdue" | "today" | "3days" | "7days" | "all"; scope?: "focus" | "today" | "upcoming" | "at-risk" | "unscheduled" | "all" | "archive" }>("search_assignments", input);
+  const parsed = safeParse<{
+    query?: string;
+    courseId?: string;
+    status?: Assignment["status"];
+    due?: "overdue" | "today" | "3days" | "7days" | "all";
+    scope?: "focus" | "today" | "upcoming" | "at-risk" | "unscheduled" | "all" | "archive";
+    priority?: Assignment["priority"];
+    tag?: string;
+    hasDDL?: boolean;
+    hasEstimatedMinutes?: boolean;
+    sortBy?: "ddl" | "priority" | "health";
+    includeHealth?: boolean;
+  }>("search_assignments", input);
   if (!parsed.ok) return parsed;
-  const { query, courseId, status, due, scope } = parsed.data;
+  const { query, courseId, status, due, scope, priority, tag, hasDDL, hasEstimatedMinutes, sortBy, includeHealth } = parsed.data;
   const now = new Date();
   const q = (query ?? "").trim().toLowerCase();
 
@@ -365,34 +377,63 @@ export function searchAssignments(state: ReadToolState, input: unknown): ReadToo
     matches = state.assignments;
   }
 
-  const filtered = matches
-    .filter((a) => {
-      if (courseId && a.courseId !== courseId) return false;
-      if (status && a.status !== status) return false;
-      if (q && !a.title.toLowerCase().includes(q) && !a.description.toLowerCase().includes(q)) return false;
-      if (scope) {
-        // scope 已按视图过滤；due 与 scope 同时给出时忽略 due（避免语义冲突）
-        return true;
-      }
-      if (!dueMatch(a, due, now)) return false;
+  let filtered = matches.filter((a) => {
+    if (courseId && a.courseId !== courseId) return false;
+    if (status && a.status !== status) return false;
+    if (priority && a.priority !== priority) return false;
+    if (tag && !(a.tags ?? []).includes(tag)) return false;
+    if (hasDDL !== undefined && hasDDL !== (a.ddl != null)) return false;
+    if (hasEstimatedMinutes !== undefined && hasEstimatedMinutes !== (a.estimatedMinutes != null)) return false;
+    if (q && !a.title.toLowerCase().includes(q) && !a.description.toLowerCase().includes(q)) return false;
+    if (scope) {
+      // scope 已按视图过滤；due 与 scope 同时给出时忽略 due（避免语义冲突）
       return true;
-    })
-    .slice(0, 20);
+    }
+    if (!dueMatch(a, due, now)) return false;
+    return true;
+  });
+
+  if (sortBy === "ddl") {
+    filtered = filtered.sort((a, b) => {
+      if (!a.ddl && !b.ddl) return 0;
+      if (!a.ddl) return 1;
+      if (!b.ddl) return -1;
+      return a.ddl.localeCompare(b.ddl);
+    });
+  } else if (sortBy === "priority") {
+    const order: Record<string, number> = { urgent: 0, high: 1, medium: 2, low: 3 };
+    filtered = filtered.sort((a, b) => (order[a.priority] ?? 99) - (order[b.priority] ?? 99));
+  } else if (sortBy === "health" && includeHealth) {
+    filtered = filtered.sort((a, b) => {
+      const ha = deriveAssignmentHealth({ assignment: a, studyBlocks: state.studyBlocks, now }).state;
+      const hb = deriveAssignmentHealth({ assignment: b, studyBlocks: state.studyBlocks, now }).state;
+      const rank: Record<string, number> = { overdue: 0, "at-risk": 1, attention: 2, safe: 3, unscheduled: 4, unknown: 5 };
+      return (rank[ha] ?? 99) - (rank[hb] ?? 99);
+    });
+  }
+
+  filtered = filtered.slice(0, 20);
 
   return {
     ok: true,
-    data: filtered.map((a) => ({
-      id: a.id,
-      courseId: a.courseId,
-      courseName: courseName(state, a.courseId),
-      title: a.title,
-      ddl: a.ddl ?? null,
-      deadline: a.ddl ?? null,
-      priority: a.priority,
-      status: a.status,
-      progress: a.progress,
-      tags: a.tags ?? [],
-    })),
+    data: filtered.map((a) => {
+      const base: any = {
+        id: a.id,
+        courseId: a.courseId,
+        courseName: courseName(state, a.courseId),
+        title: a.title,
+        ddl: a.ddl ?? null,
+        deadline: a.ddl ?? null,
+        priority: a.priority,
+        status: a.status,
+        progress: a.progress,
+        tags: a.tags ?? [],
+      };
+      if (includeHealth) {
+        base.health = deriveAssignmentHealth({ assignment: a, studyBlocks: state.studyBlocks, now });
+      }
+      return base;
+    }),
   };
 }
 
@@ -454,7 +495,7 @@ export function getAssignmentSchedule(state: ReadToolState, input: unknown): Rea
 }
 
 export function getAssignmentHealth(state: ReadToolState, input: unknown): ReadToolResult<unknown> {
-  const parsed = safeParse<{ assignmentId: string }>("get_assignment_health", input);
+  const parsed = safeParse<{ assignmentId: string; includeEvidence?: boolean; horizonDays?: 7 | 14 }>("get_assignment_health", input);
   if (!parsed.ok) return parsed;
   const a = findAssignment(state, parsed.data.assignmentId);
   if (!a) return notFound("未找到对应任务。");
@@ -481,20 +522,42 @@ export function getAssignmentHealth(state: ReadToolState, input: unknown): ReadT
     }
   }
 
-  const health = deriveAssignmentHealth({
+  const health: any = deriveAssignmentHealth({
     assignment: a,
     studyBlocks: state.studyBlocks,
     now,
     availableMinutesBeforeDeadline,
   });
 
+  if (parsed.data.includeEvidence) {
+    const horizon = parsed.data.horizonDays ?? 7;
+    const horizonEnd = new Date(now);
+    horizonEnd.setDate(horizonEnd.getDate() + horizon);
+    const slots = findFreeTime({
+      start: now,
+      end: horizonEnd,
+      semester: state.semester,
+      currentSemesterWeek: state.currentSemesterWeek,
+      schedules: state.schedules,
+      calendarMarks: state.calendarMarks,
+      studyBlocks: state.studyBlocks,
+    });
+    const total = slots.reduce((s, x) => s + x.minutes, 0);
+    health.evidence = {
+      horizonDays: horizon,
+      availableMinutesInHorizon: total,
+      slots: slots.slice(0, 5),
+      gapMinutes: (a.estimatedMinutes ?? 0) - (health.scheduledMinutes ?? 0),
+    };
+  }
+
   return { ok: true, data: health };
 }
 
 export function getAvailableTime(state: ReadToolState, input: unknown): ReadToolResult<unknown> {
-  const parsed = safeParse<{ startDate: string; endDate: string; minimumMinutes?: number; beforeDeadlineOfAssignmentId?: string }>("get_available_time", input);
+  const parsed = safeParse<{ startDate: string; endDate: string; minimumMinutes?: number; beforeDeadlineOfAssignmentId?: string; includeCourseOverlap?: boolean; includeStudyBlocks?: boolean }>("get_available_time", input);
   if (!parsed.ok) return parsed;
-  const { startDate, endDate, minimumMinutes, beforeDeadlineOfAssignmentId } = parsed.data;
+  const { startDate, endDate, minimumMinutes, beforeDeadlineOfAssignmentId, includeCourseOverlap, includeStudyBlocks } = parsed.data;
   const start = new Date(`${startDate}T00:00:00`);
   const end = new Date(`${endDate}T23:59:59`);
   if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return invalidInput("日期格式不合法。");
@@ -518,20 +581,50 @@ export function getAvailableTime(state: ReadToolState, input: unknown): ReadTool
     }
   }
 
+  const effectiveSchedules = includeCourseOverlap ? [] : state.schedules;
+  const effectiveStudyBlocks = includeStudyBlocks === false ? [] : state.studyBlocks;
+
   const slots = findFreeTime({
     start,
     end: effectiveEnd,
     semester: state.semester,
     currentSemesterWeek: state.currentSemesterWeek,
-    schedules: state.schedules,
+    schedules: effectiveSchedules,
     calendarMarks: state.calendarMarks,
-    studyBlocks: state.studyBlocks,
+    studyBlocks: effectiveStudyBlocks,
     dayCapMinutesByDate,
     minimumSlotMinutes: minimumMinutes,
   });
 
   // totalMinutes 必须基于完整（未截断）slots 求和；slots 详情仍最多返回 20 条
   const totalMinutes = slots.reduce((sum, slot) => sum + slot.minutes, 0);
+
+  if (includeCourseOverlap) {
+    const preferredSlots = findFreeTime({
+      start,
+      end: effectiveEnd,
+      semester: state.semester,
+      currentSemesterWeek: state.currentSemesterWeek,
+      schedules: state.schedules,
+      calendarMarks: state.calendarMarks,
+      studyBlocks: effectiveStudyBlocks,
+      dayCapMinutesByDate,
+      minimumSlotMinutes: minimumMinutes,
+    });
+    const preferredMinutes = preferredSlots.reduce((sum, s) => sum + s.minutes, 0);
+    return {
+      ok: true,
+      data: {
+        startDate,
+        endDate,
+        totalMinutes,
+        preferredMinutes,
+        combinedMinutes: totalMinutes,
+        slots: slots.slice(0, 20),
+        preferredSlots: preferredSlots.slice(0, 20),
+      },
+    };
+  }
 
   return { ok: true, data: { startDate, endDate, totalMinutes, slots: slots.slice(0, 20) } };
 }
@@ -1084,6 +1177,35 @@ export function getCourseMaterialLinkage(state: ReadToolState, input: unknown): 
   };
 }
 
+export function searchCourseMaterials(state: ReadToolState, input: unknown): ReadToolResult<unknown> {
+  const parsed = safeParse<{ courseId: string; query: string; maxResults?: number }>("search_course_materials", input);
+  if (!parsed.ok) return parsed;
+  const { courseId, query, maxResults } = parsed.data;
+  const course = findCourse(state, courseId);
+  if (!course) return notFound("未找到对应课程。");
+  const q = query.trim().toLowerCase();
+  const max = maxResults ?? 5;
+  const matched = course.materials
+    .filter((m) => m.title.toLowerCase().includes(q))
+    .slice(0, max)
+    .map((m) => ({
+      materialId: m.id,
+      title: m.title,
+      type: m.type,
+      size: m.size ?? null,
+      uploadDate: m.uploadDate,
+      linkedAssignmentIds: state.assignments.filter((a) => a.materialIds?.includes(m.id)).map((a) => a.id),
+    }));
+  return { ok: true, data: { courseId: course.id, courseName: course.name, query, results: matched } };
+}
+
+export function getPreferences(state: ReadToolState, input: unknown): ReadToolResult<unknown> {
+  const parsed = safeParse<Record<string, never>>("get_preferences", input);
+  if (!parsed.ok) return parsed;
+  // 返回 sanitize 后的 preferences（与 useAppStore 的 sanitize 一致）
+  return { ok: true, data: state.preferences };
+}
+
 export function getUpcomingAssignments(state: ReadToolState, input: unknown): ReadToolResult<unknown> {
   const parsed = safeParse<{ days?: number; limit?: number }>("get_upcoming_assignments", input);
   if (!parsed.ok) return parsed;
@@ -1588,6 +1710,8 @@ const EXECUTORS: Record<Exclude<KiroReadToolName, "read_material" | "read_projec
   list_focus_sessions: listFocusSessions,
   get_focus_analytics: getFocusAnalytics,
   get_course_material_linkage: getCourseMaterialLinkage,
+  search_course_materials: searchCourseMaterials,
+  get_preferences: getPreferences,
   get_today_brief: getTodayBrief,
   get_weekly_brief: getWeeklyBrief,
   activate_skill: activateSkillTool,
