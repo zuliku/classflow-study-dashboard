@@ -138,8 +138,8 @@ export function KiroAISettings({ reveal }: { reveal?: { key: string; seq: number
   const { models: catalogModels } = useAIModelCatalog(provider);
   const models = catalogModels;
   const isCustom = provider === "custom-openai";
-  // 当前模型不在 Catalog（已下线/远端不可用）：提示重新选择，不自动覆盖
-  const modelUnavailable = !isCustom && !!model && !models.some((m) => m.id === model);
+  // 当前模型不在 Catalog（已下线/远端不可用）：提示重新选择，不自动覆盖；models 为空时不误报（网慢首帧）
+  const modelUnavailable = !isCustom && models.length > 0 && !!model && !models.some((m) => m.id === model);
   // Reasoning：capability-driven（与 Composer 同一事实来源 useAISettingsStore）。
   // Store 保存 requested preference（跨模型切换保留）；UI 显示 effective（当前模型 capability 归一）。
   const reasoningCapability = getModelCapabilities({ provider, model, custom }).reasoning;
@@ -166,6 +166,7 @@ export function KiroAISettings({ reveal }: { reveal?: { key: string; seq: number
   // Latest-wins seq：测试进行中切换 provider/修改配置 → 迟到的旧测试结果不得
   // 覆盖新选择的状态徽章（handleProviderChange 会重置为 idle，旧响应随后落地会误标）
   const runTestSeqRef = useRef(0);
+  const webSearchSeqRef = useRef(0);
 
   const runTest = async () => {
     const seq = ++runTestSeqRef.current;
@@ -217,6 +218,7 @@ export function KiroAISettings({ reveal }: { reveal?: { key: string; seq: number
   };
 
   const runWebSearchTest = async () => {
+    const seq = ++webSearchSeqRef.current;
     setWebSearchTest({ status: "testing" });
     try {
       const res = await fetch(apiUrl("/api/ai/web-search/test"), {
@@ -228,9 +230,11 @@ export function KiroAISettings({ reveal }: { reveal?: { key: string; seq: number
         }),
       });
       const data = (await res.json()) as { ok: boolean; code?: string; message?: string };
+      if (seq !== webSearchSeqRef.current) return;
       if (data.ok) setWebSearchTest({ status: "success" });
       else setWebSearchTest({ status: "error", message: data.message || "搜索服务不可用" });
     } catch {
+      if (seq !== webSearchSeqRef.current) return;
       setWebSearchTest({ status: "error", message: "搜索服务不可用" });
     }
   };

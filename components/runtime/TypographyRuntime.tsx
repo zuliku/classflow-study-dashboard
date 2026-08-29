@@ -11,11 +11,17 @@ import { useAppStore } from "@/store/useAppStore";
  */
 export function TypographyRuntime() {
   const uiFont = useAppStore((s) => s.preferences.uiFont);
+  const uiFontScale = useAppStore((s) => s.preferences.uiFontScale);
   useEffect(() => {
     try {
       document.documentElement.dataset.uiFont = uiFont;
     } catch {}
   }, [uiFont]);
+  useEffect(() => {
+    try {
+      document.documentElement.style.setProperty("--font-scale", String(uiFontScale));
+    } catch {}
+  }, [uiFontScale]);
   return null;
 }
 

@@ -22,6 +22,33 @@ interface AISettingsState extends AISettings {
   reset: () => void;
 }
 
+const VALID_PROVIDERS: AIProviderId[] = ["opencode-go", "deepseek", "custom-openai"];
+const VALID_REASONING: KiroReasoningEffort[] = ["default", "minimal", "low", "medium", "high", "xhigh", "max"];
+
+function sanitizeAISettings(persisted: unknown): Partial<AISettings> {
+  if (!persisted || typeof persisted !== "object") return {};
+  const p = persisted as Record<string, unknown>;
+  const out: Partial<AISettings> = {};
+  if (typeof p.enabled === "boolean") out.enabled = p.enabled;
+  if (typeof p.provider === "string" && (VALID_PROVIDERS as string[]).includes(p.provider)) {
+    out.provider = p.provider as AIProviderId;
+  }
+  if (typeof p.model === "string" && p.model.trim()) out.model = p.model.trim().slice(0, 120);
+  if (p.custom && typeof p.custom === "object") {
+    const c = p.custom as Record<string, unknown>;
+    out.custom = {
+      providerName: typeof c.providerName === "string" ? c.providerName.slice(0, 80) : "",
+      baseURL: typeof c.baseURL === "string" ? c.baseURL.slice(0, 512) : "",
+      model: typeof c.model === "string" ? c.model.slice(0, 120) : "",
+    };
+  }
+  if (typeof p.memoryEnabled === "boolean") out.memoryEnabled = p.memoryEnabled;
+  if (typeof p.reasoningEffort === "string" && (VALID_REASONING as string[]).includes(p.reasoningEffort)) {
+    out.reasoningEffort = p.reasoningEffort as KiroReasoningEffort;
+  }
+  return out;
+}
+
 const DEFAULT_SETTINGS: AISettings = {
   enabled: false,
   provider: "deepseek",
@@ -65,6 +92,25 @@ export const useAISettingsStore = create<AISettingsState>()(
         memoryEnabled: state.memoryEnabled,
         reasoningEffort: state.reasoningEffort,
       }),
+      merge: (persisted, current) => {
+        const sanitized = sanitizeAISettings((persisted as any)?.state ?? persisted);
+        // provider 非法回落 deepseek 并同步默认模型
+        if (sanitized.provider && sanitized.provider !== current.provider && !sanitized.model) {
+          sanitized.model = getDefaultModel(sanitized.provider);
+        }
+        // model 非法或 provider 已回落但 model 不匹配提供商前缀，做一次最小修复
+        if (sanitized.model && sanitized.provider) {
+          const validForProvider =
+            sanitized.provider === "custom-openai"
+              ? true
+              : sanitized.model.startsWith(sanitized.provider === "deepseek" ? "deepseek-" : sanitized.provider === "opencode-go" ? "" : "");
+          // 保守：仅当 deepseek 模型却落在 opencode-go 等明显越界时回落
+          if (!validForProvider && sanitized.provider === "deepseek" && !sanitized.model.startsWith("deepseek-")) {
+            sanitized.model = getDefaultModel("deepseek");
+          }
+        }
+        return { ...current, ...sanitized };
+      },
     }
   )
 );

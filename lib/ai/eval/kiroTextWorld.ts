@@ -83,6 +83,13 @@ export const KIRO_TEXT_EVAL_WORLD: KiroTextWorldState = {
     defaultTaskWorkspaceView: "focus",
     defaultDeadlineReminderMinutes: 60,
     uiFont: "harmonyos-sans-sc",
+    focusDefaultMinutes: 25,
+    focusSoundEnabled: true,
+    focusSoundVolume: 70,
+    coursePalette: ["#FADCD9", "#F8E9A1", "#A8E6CF", "#A0C4FF", "#FFC8A2", "#D8B4FE", "#FFADAD", "#CAFFBF"],
+    courseAutoPalette: true,
+    uiFontScale: 1,
+    shortcuts: { newTask: "N", up: "K", down: "J", delete: "X", help: "?" },
   },
 };
 

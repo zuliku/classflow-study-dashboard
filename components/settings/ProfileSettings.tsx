@@ -36,6 +36,19 @@ export function ProfileSettings({
   const [completedCredits, setCompletedCredits] = useState(userProfile.completedCredits);
   const [totalCredits, setTotalCredits] = useState(userProfile.totalCredits);
 
+  // 外部恢复（如备份恢复）后同步草稿：未脏时跟随 Store
+  React.useEffect(() => {
+    if (!dirty) {
+      setName(userProfile.name);
+      setStudentId(userProfile.studentId);
+      setCollege(userProfile.college);
+      setGrade(userProfile.grade);
+      setCompletedCredits(userProfile.completedCredits);
+      setTotalCredits(userProfile.totalCredits);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userProfile.name, userProfile.studentId, userProfile.college, userProfile.grade, userProfile.completedCredits, userProfile.totalCredits]);
+
   // ---- 头像：本地文件选择 + 降采样 + IndexedDB 持久化 ----
   const [pickedFile, setPickedFile] = useState<File | null>(null);
   const [avatarPreview, setAvatarPreview] = useState<string>("");

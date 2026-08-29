@@ -142,6 +142,9 @@ html[data-ui-font="misan"] body {
   /* MiSans 未安装时由 fallback 静默回退；不产生空白或报错 */
 }
 
+html {
+  font-size: calc(var(--font-scale, 1) * 16px);
+}
 body {
   background-color: var(--background);
   color: var(--dark-charcoal);

@@ -2922,7 +2922,7 @@ export const useAppStore = create<AppState>()(
         scheduleOccurrenceOverrides: state.scheduleOccurrenceOverrides,
         bellSchedules: state.bellSchedules,
         activeBellScheduleId: state.activeBellScheduleId,
-        sidebarCollapsed: state.sidebarCollapsed,
+        // @deprecated v9: sidebarCollapsed 已迁移至 classflow-ui-chrome，仅读兼容，写已收口
       }),
       migrate: (persistedState) => sanitizePersistedState(persistedState),
       // Hydration 结果监控：localStorage 损坏（JSON.parse 失败 / getItem 抛错）时

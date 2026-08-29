@@ -348,6 +348,19 @@ export interface AppPreferences {
   defaultDeadlineReminderMinutes: 60 | 1440 | 4320 | 10080;
   /** Typography V1：界面字体 */
   uiFont: UIFontPreset;
+  /** Focus：默认专注时长（分钟） */
+  focusDefaultMinutes: 15 | 25 | 45 | 60;
+  /** Focus：完成提示音开关 */
+  focusSoundEnabled: boolean;
+  /** Focus：完成提示音量 0-100 */
+  focusSoundVolume: number;
+  /** 课程调色板（新课程自动从调色板轮换） */
+  coursePalette: string[];
+  courseAutoPalette: boolean;
+  /** 全局字体缩放 0.9 - 1.2 */
+  uiFontScale: number;
+  /** 快捷键映射（action -> key） */
+  shortcuts: Record<string, string>;
 }
 
 /** 设置中心 section */

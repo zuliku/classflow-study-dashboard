@@ -40,6 +40,13 @@ export const DEFAULT_PREFERENCES: AppPreferences = {
   defaultDeadlineReminderMinutes: DEFAULT_DEADLINE_REMINDER_MINUTES,
   // Typography V1：界面字体（additive preference，未在旧持久化中出现时 sanitize 回落）
   uiFont: DEFAULT_UI_FONT,
+  focusDefaultMinutes: 25,
+  focusSoundEnabled: true,
+  focusSoundVolume: 70,
+  coursePalette: ["#FADCD9", "#F8E9A1", "#A8E6CF", "#A0C4FF", "#FFC8A2", "#D8B4FE", "#FFADAD", "#CAFFBF"],
+  courseAutoPalette: true,
+  uiFontScale: 1,
+  shortcuts: { newTask: "N", up: "K", down: "J", delete: "X", help: "?" },
 };
 
 export const DDL_WARNING_DAYS: readonly AppPreferences["ddlWarningDays"][] = [1, 3, 7];
@@ -113,13 +120,22 @@ export function sanitizePreferences(v: unknown): AppPreferences {
     uiFont: (TYPOGRAPHY_UI_FONT_PRESETS as readonly unknown[]).includes(src.uiFont)
       ? (src.uiFont as AppPreferences["uiFont"])
       : DEFAULT_PREFERENCES.uiFont,
+    focusDefaultMinutes: [15, 25, 45, 60].includes(src.focusDefaultMinutes as number)
+      ? (src.focusDefaultMinutes as AppPreferences["focusDefaultMinutes"])
+      : DEFAULT_PREFERENCES.focusDefaultMinutes,
+    focusSoundEnabled: isBool(src.focusSoundEnabled) ? src.focusSoundEnabled : DEFAULT_PREFERENCES.focusSoundEnabled,
+    focusSoundVolume: typeof src.focusSoundVolume === "number" && src.focusSoundVolume >= 0 && src.focusSoundVolume <= 100 ? Math.round(src.focusSoundVolume) : DEFAULT_PREFERENCES.focusSoundVolume,
+    coursePalette: Array.isArray(src.coursePalette) && src.coursePalette.every((c: unknown) => typeof c === "string" && /^#[0-9a-fA-F]{6}$/.test(c as string)) ? (src.coursePalette as string[]) : DEFAULT_PREFERENCES.coursePalette,
+    courseAutoPalette: isBool(src.courseAutoPalette) ? src.courseAutoPalette : DEFAULT_PREFERENCES.courseAutoPalette,
+    uiFontScale: typeof src.uiFontScale === "number" && src.uiFontScale >= 0.9 && src.uiFontScale <= 1.2 ? Math.round(src.uiFontScale * 20) / 20 : DEFAULT_PREFERENCES.uiFontScale,
+    shortcuts: src.shortcuts && typeof src.shortcuts === "object" && !Array.isArray(src.shortcuts) ? (src.shortcuts as Record<string, string>) : DEFAULT_PREFERENCES.shortcuts,
   };
 }
 
 /** 偏好 → 所属设置 section（Settings V4：交互偏好已并入通用） */
 export const PREFERENCE_SECTIONS: Record<
   keyof AppPreferences,
-  "general" | "semester" | "tasks"
+  "general" | "semester" | "tasks" | "focus"
 > = {
   showWeekends: "semester",
   ddlWarningDays: "tasks",
@@ -136,6 +152,13 @@ export const PREFERENCE_SECTIONS: Record<
   defaultTaskWorkspaceView: "tasks",
   defaultDeadlineReminderMinutes: "tasks",
   uiFont: "general",
+  focusDefaultMinutes: "focus",
+  focusSoundEnabled: "focus",
+  focusSoundVolume: "focus",
+  coursePalette: "general",
+  courseAutoPalette: "general",
+  uiFontScale: "general",
+  shortcuts: "general",
 };
 
 /** 当前与默认不同的偏好键（纯函数，UI 不自行比较） */

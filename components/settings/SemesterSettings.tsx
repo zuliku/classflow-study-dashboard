@@ -41,6 +41,15 @@ export function SemesterSettings({
   const [totalWeeks, setTotalWeeks] = useState(semester.totalWeeks);
   const [touched, setTouched] = useState(false);
 
+  // 外部恢复（如备份恢复）后同步草稿：未编辑时跟随 Store
+  React.useEffect(() => {
+    if (!editing) {
+      setName(semester.name);
+      setStartDate(semester.startDate);
+      setTotalWeeks(semester.totalWeeks);
+    }
+  }, [semester.name, semester.startDate, semester.totalWeeks, editing]);
+
   // ---- 实时概览（由 semester 推导，不保存 endDate） ----
   const currentWeek = getCurrentSemesterWeek(semester);
   const inSemester = currentWeek >= 1 && currentWeek <= semester.totalWeeks;
@@ -244,6 +253,95 @@ export function SemesterSettings({
           </button>
         </SettingsRow>
       </SettingsSection>
+
+      {/* 作息方案（BellSchedule） */}
+      <SettingsSection title="作息方案" description="管理铃声/节次时间模板，导入的“第3节”按此表解析为具体时间。">
+        <BellScheduleSettings highlightedId={highlightedId} />
+      </SettingsSection>
+    </div>
+  );
+}
+
+function BellScheduleSettings({ highlightedId }: { highlightedId?: string }) {
+  const bellSchedules = useAppStore((s) => s.bellSchedules);
+  const activeBellScheduleId = useAppStore((s) => s.activeBellScheduleId);
+  const upsertBellSchedule = useAppStore((s) => s.upsertBellSchedule);
+  const removeBellSchedule = useAppStore((s) => s.removeBellSchedule);
+  const setActiveBellSchedule = useAppStore((s) => s.setActiveBellSchedule);
+  const pushToast = useToastStore((s) => s.pushToast);
+  const [editingId, setEditingId] = React.useState<string | null>(null);
+  const [draftName, setDraftName] = React.useState("");
+  const [draftPeriods, setDraftPeriods] = React.useState<{ period: number; startTime: string; endTime: string }[]>([
+    { period: 1, startTime: "08:00", endTime: "09:40" },
+  ]);
+
+  const startCreate = () => {
+    setEditingId("new");
+    setDraftName("新作息方案");
+    setDraftPeriods([{ period: 1, startTime: "08:00", endTime: "09:40" }]);
+  };
+
+  const save = () => {
+    if (!draftName.trim()) {
+      pushToast({ message: "方案名称不能为空", type: "error" });
+      return;
+    }
+    const id = editingId === "new" ? `bell-${Date.now()}` : editingId!;
+    upsertBellSchedule({ id, name: draftName.trim(), periods: draftPeriods });
+    pushToast({ message: "作息方案已保存" });
+    setEditingId(null);
+  };
+
+  return (
+    <div className="space-y-3">
+      {bellSchedules.length === 0 ? (
+        <p className="text-[11px] text-sandrift">暂无作息方案，导入的节次将使用系统默认 08:00-21:00</p>
+      ) : (
+        <div className="space-y-2">
+          {bellSchedules.map((b) => (
+            <div key={b.id} className="flex items-center justify-between p-2.5 bg-[#F7F5F5] border border-line rounded-xl">
+              <div>
+                <p className="text-xs font-bold text-charcoal">{b.name}</p>
+                <p className="text-[10px] text-sandrift">{b.periods.length} 节 · {b.periods[0]?.startTime ?? ""}-{b.periods[b.periods.length - 1]?.endTime ?? ""}</p>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <button
+                  onClick={() => setActiveBellSchedule(b.id)}
+                  className={`px-2 py-1 rounded-lg text-[11px] font-bold border ${activeBellScheduleId === b.id ? "bg-charcoal text-white border-charcoal" : "bg-white border-line text-satin-grey"}`}
+                >
+                  {activeBellScheduleId === b.id ? "已激活" : "设为激活"}
+                </button>
+                <button onClick={() => { setEditingId(b.id); setDraftName(b.name); setDraftPeriods(b.periods); }} className="px-2 py-1 rounded-lg bg-white border border-line text-[11px] text-satin-grey">编辑</button>
+                <button onClick={() => { removeBellSchedule(b.id); pushToast({ message: "已删除" }); }} className="px-2 py-1 rounded-lg bg-white border border-line text-[11px] text-danger">删除</button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+      {editingId ? (
+        <div className="p-3 bg-white border border-line rounded-xl space-y-3">
+          <input value={draftName} onChange={(e) => setDraftName(e.target.value)} placeholder="方案名称" className="w-full h-9 px-2.5 bg-[#F7F5F5] border border-line rounded-lg text-xs font-semibold" />
+          <div className="space-y-1.5 max-h-40 overflow-y-auto">
+            {draftPeriods.map((p, idx) => (
+              <div key={idx} className="flex items-center gap-2">
+                <span className="text-[11px] font-bold w-12">第{p.period}节</span>
+                <input type="time" value={p.startTime} onChange={(e) => setDraftPeriods((arr) => arr.map((x, i) => i === idx ? { ...x, startTime: e.target.value } : x))} className="h-8 px-2 bg-[#F7F5F5] border border-line rounded-lg text-xs" />
+                <span className="text-sandrift">-</span>
+                <input type="time" value={p.endTime} onChange={(e) => setDraftPeriods((arr) => arr.map((x, i) => i === idx ? { ...x, endTime: e.target.value } : x))} className="h-8 px-2 bg-[#F7F5F5] border border-line rounded-lg text-xs" />
+                <button onClick={() => setDraftPeriods((arr) => arr.filter((_, i) => i !== idx))} className="text-[11px] text-danger">移除</button>
+              </div>
+            ))}
+          </div>
+          <div className="flex items-center gap-2">
+            <button onClick={() => setDraftPeriods((arr) => [...arr, { period: arr.length + 1, startTime: "10:00", endTime: "11:40" }])} className="px-2.5 py-1.5 bg-alabaster border border-line rounded-lg text-[11px] font-bold">添加节次</button>
+            <div className="flex-1" />
+            <button onClick={() => setEditingId(null)} className="px-3 py-1.5 bg-white border border-line rounded-lg text-[11px] font-bold">取消</button>
+            <button onClick={save} className="px-3 py-1.5 bg-charcoal text-white rounded-lg text-[11px] font-bold">保存</button>
+          </div>
+        </div>
+      ) : (
+        <button onClick={startCreate} className="w-full py-2 bg-white border border-dashed border-line rounded-xl text-[11px] font-bold text-satin-grey hover:text-charcoal">+ 新建作息方案</button>
+      )}
     </div>
   );
 }

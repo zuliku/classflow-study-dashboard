@@ -2,6 +2,7 @@
 
 import React from "react";
 import { useAppStore } from "@/store/useAppStore";
+import { useUIChromeStore } from "@/store/useUIChromeStore";
 import { SettingsSection } from "@/components/settings/SettingsSection";
 import { SettingsGroup } from "@/components/settings/SettingsGroup";
 import { SettingsRow } from "@/components/settings/SettingsRow";
@@ -34,6 +35,8 @@ const STARTUP_VIEW_LABELS: Record<StartupView, string> = {
 export function GeneralSettings({ highlightedId }: { highlightedId?: string }) {
   const preferences = useAppStore((s) => s.preferences);
   const updatePreferences = useAppStore((s) => s.updatePreferences);
+  const sidebarCollapsed = useUIChromeStore((s) => s.sidebarCollapsed);
+  const setSidebarCollapsed = useUIChromeStore((s) => s.setSidebarCollapsed);
   const modified = new Set(getModifiedPreferenceKeys(preferences));
 
   return (
@@ -131,6 +134,94 @@ export function GeneralSettings({ highlightedId }: { highlightedId?: string }) {
               }))}
             />
           </SettingsRow>
+
+          <SettingsRow
+            settingId="ui-font-scale"
+            title="界面字号缩放"
+            description="整体界面字号缩放，90% - 120%。"
+            modified={modified.has("uiFontScale")}
+            onReset={() => updatePreferences(resetPreferencePatch("uiFontScale"))}
+            resetAriaLabel="将界面字号缩放恢复默认"
+            highlighted={highlightedId === "ui-font-scale"}
+          >
+            <div className="flex items-center gap-2">
+              <input
+                type="range"
+                min={0.9}
+                max={1.2}
+                step={0.05}
+                value={preferences.uiFontScale}
+                onChange={(e) => updatePreferences({ uiFontScale: Number(e.target.value) })}
+                className="w-32 accent-charcoal"
+                aria-label="界面字号缩放"
+              />
+              <span className="text-[11px] font-bold text-sandrift w-10 text-right">{Math.round(preferences.uiFontScale * 100)}%</span>
+            </div>
+          </SettingsRow>
+
+          <SettingsRow
+            settingId="sidebar-default-collapsed"
+            title="默认收起侧栏"
+            description="在大屏下次打开时默认收起侧边栏，节省横向空间。"
+            modified={sidebarCollapsed}
+            onReset={() => setSidebarCollapsed(false)}
+            resetAriaLabel="将默认收起侧栏恢复默认"
+            highlighted={highlightedId === "sidebar-default-collapsed"}
+          >
+            <SettingsToggle
+              checked={sidebarCollapsed}
+              onChange={setSidebarCollapsed}
+              label="默认收起侧栏"
+            />
+          </SettingsRow>
+
+          <SettingsRow
+            settingId="course-auto-palette"
+            title="课程自动配色"
+            description="新建课程时自动从调色板轮换柔和配色，关闭则使用默认灰色。"
+            modified={modified.has("courseAutoPalette")}
+            onReset={() => updatePreferences(resetPreferencePatch("courseAutoPalette"))}
+            resetAriaLabel="将课程自动配色恢复默认"
+            highlighted={highlightedId === "course-auto-palette"}
+          >
+            <SettingsToggle
+              checked={preferences.courseAutoPalette}
+              onChange={(v) => updatePreferences({ courseAutoPalette: v })}
+              label="课程自动配色"
+            />
+          </SettingsRow>
+
+          <SettingsRow
+            settingId="course-palette"
+            title="课程调色板"
+            description="自定义课程自动配色的候选颜色（点击色块可移除）。新课程按此顺序轮换。"
+            modified={modified.has("coursePalette")}
+            onReset={() => updatePreferences(resetPreferencePatch("coursePalette"))}
+            resetAriaLabel="将课程调色板恢复默认"
+            highlighted={highlightedId === "course-palette"}
+          >
+            <div className="flex flex-wrap gap-1.5 max-w-[200px]">
+              {preferences.coursePalette.map((c) => (
+                <button
+                  key={c}
+                  onClick={() => updatePreferences({ coursePalette: preferences.coursePalette.filter((x) => x !== c) })}
+                  className="w-6 h-6 rounded-full border border-line shadow-subtle"
+                  style={{ backgroundColor: c }}
+                  title={c}
+                  aria-label={`移除颜色 ${c}`}
+                />
+              ))}
+              <input
+                type="color"
+                onChange={(e) => {
+                  const v = e.target.value;
+                  if (!preferences.coursePalette.includes(v)) updatePreferences({ coursePalette: [...preferences.coursePalette, v] });
+                }}
+                className="w-6 h-6 rounded-full border border-line p-0 overflow-hidden cursor-pointer"
+                title="添加颜色"
+              />
+            </div>
+          </SettingsRow>
         </SettingsGroup>
 
         {/* 3. 操作与快捷键（原「交互与快捷键」） */}
@@ -183,6 +274,25 @@ export function GeneralSettings({ highlightedId }: { highlightedId?: string }) {
               onChange={(v) => updatePreferences({ enableSingleKeyShortcuts: v })}
               label="启用单键快捷键"
             />
+          </SettingsRow>
+
+          <SettingsRow
+            settingId="shortcuts-custom"
+            title="快捷键映射"
+            description="自定义单键快捷键（N 新建、J/K 上下、X 删除、? 帮助）；留空则使用默认。"
+            modified={modified.has("shortcuts")}
+            onReset={() => updatePreferences(resetPreferencePatch("shortcuts"))}
+            resetAriaLabel="将快捷键映射恢复默认"
+            highlighted={highlightedId === "shortcuts-custom"}
+          >
+            <div className="flex flex-wrap gap-1.5">
+              {Object.entries(preferences.shortcuts).map(([action, key]) => (
+                <span key={action} className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-alabaster border border-line text-[11px] font-mono">
+                  <span className="font-bold text-sandrift">{action}</span>
+                  <span className="bg-white border border-line rounded px-1.5 py-0.5 font-bold text-charcoal">{String(key)}</span>
+                </span>
+              ))}
+            </div>
           </SettingsRow>
         </SettingsGroup>
       </SettingsSection>

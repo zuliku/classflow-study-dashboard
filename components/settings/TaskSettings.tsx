@@ -41,6 +41,8 @@ export function TaskSettings({ highlightedId }: { highlightedId?: string }) {
   const preferences = useAppStore((s) => s.preferences);
   const updatePreferences = useAppStore((s) => s.updatePreferences);
   const setDefaultDeadlineReminderMinutes = useAppStore((s) => s.setDefaultDeadlineReminderMinutes);
+  const assignmentTimeSlice = useAppStore((s) => s.assignmentTimeSlice);
+  const setAssignmentTimeSlice = useAppStore((s) => s.setAssignmentTimeSlice);
   const modified = new Set(getModifiedPreferenceKeys(preferences));
 
   const browserNotificationsEnabled = useReminderPreferencesStore((s) => s.browserNotificationsEnabled);
@@ -49,6 +51,14 @@ export function TaskSettings({ highlightedId }: { highlightedId?: string }) {
   const setMissedReminderPolicy = useReminderPreferencesStore((s) => s.setMissedReminderPolicy);
   const missedReminderWindowHours = useReminderPreferencesStore((s) => s.missedReminderWindowHours);
   const setMissedReminderWindowHours = useReminderPreferencesStore((s) => s.setMissedReminderWindowHours);
+  const reminderSoundEnabled = useReminderPreferencesStore((s) => s.reminderSoundEnabled);
+  const setReminderSoundEnabled = useReminderPreferencesStore((s) => s.setReminderSoundEnabled);
+  const doNotDisturbEnabled = useReminderPreferencesStore((s) => s.doNotDisturbEnabled);
+  const setDoNotDisturbEnabled = useReminderPreferencesStore((s) => s.setDoNotDisturbEnabled);
+  const doNotDisturbStart = useReminderPreferencesStore((s) => s.doNotDisturbStart);
+  const setDoNotDisturbStart = useReminderPreferencesStore((s) => s.setDoNotDisturbStart);
+  const doNotDisturbEnd = useReminderPreferencesStore((s) => s.doNotDisturbEnd);
+  const setDoNotDisturbEnd = useReminderPreferencesStore((s) => s.setDoNotDisturbEnd);
   // 权限状态直接行内小字展示（不用 Toast）：真实反映 granted / denied / default / unsupported
   const [permissionNote, setPermissionNote] = useState("");
   const permissionState = getBrowserNotificationPermission();
@@ -199,6 +209,27 @@ export function TaskSettings({ highlightedId }: { highlightedId?: string }) {
             options={PRIMARY_TASK_WORKSPACE_VIEWS.map((v) => ({ value: v.id, label: v.label }))}
           />
         </SettingsRow>
+
+        <SettingsRow
+          settingId="assignment-time-slice"
+          title="任务列表默认筛选"
+          description="任务工作区列表默认显示的时间范围（与顶部筛选一致）。"
+          highlighted={highlightedId === "assignment-time-slice"}
+        >
+          <SettingsSelect
+            value={assignmentTimeSlice}
+            onChange={(v) => setAssignmentTimeSlice(v as any)}
+            ariaLabel="任务列表默认筛选"
+            options={[
+              { value: "all", label: "全部" },
+              { value: "overdue", label: "已逾期" },
+              { value: "today", label: "今天" },
+              { value: "3days", label: "3 天内" },
+              { value: "7days", label: "7 天内" },
+              { value: "completed", label: "已完成" },
+            ]}
+          />
+        </SettingsRow>
         </SettingsGroup>
 
         <SettingsGroup title="提醒">
@@ -296,6 +327,28 @@ export function TaskSettings({ highlightedId }: { highlightedId?: string }) {
               />
             </SettingsRow>
           )}
+
+          <SettingsRow settingId="reminder-sound" title="提醒声音" description="提醒到期时播放提示音；关闭后仅保留视觉提醒。" highlighted={highlightedId === "reminder-sound"}>
+            <SettingsToggle checked={reminderSoundEnabled} onChange={setReminderSoundEnabled} label="提醒声音" />
+          </SettingsRow>
+
+          <SettingsRow
+            settingId="do-not-disturb"
+            title="免打扰时段"
+            description="在此时段内 suppress 系统通知，仅保留应用内角标。"
+            highlighted={highlightedId === "do-not-disturb"}
+          >
+            <div className="flex flex-col items-end gap-2">
+              <SettingsToggle checked={doNotDisturbEnabled} onChange={setDoNotDisturbEnabled} label="免打扰时段" />
+              {doNotDisturbEnabled && (
+                <div className="flex items-center gap-1.5">
+                  <input type="time" value={doNotDisturbStart} onChange={(e) => setDoNotDisturbStart(e.target.value)} className="h-8 px-2 bg-[#F7F5F5] border border-line rounded-lg text-xs font-mono" />
+                  <span className="text-sandrift">-</span>
+                  <input type="time" value={doNotDisturbEnd} onChange={(e) => setDoNotDisturbEnd(e.target.value)} className="h-8 px-2 bg-[#F7F5F5] border border-line rounded-lg text-xs font-mono" />
+                </div>
+              )}
+            </div>
+          </SettingsRow>
         </SettingsGroup>
       </div>
     </SettingsSection>
