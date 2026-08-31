@@ -1424,7 +1424,7 @@ export async function executeKiroComputerTool(request: {
     if (toolName === "create_text_file") {
       counters.mutationCount += 1;
       const existing = await adapter.stat(normalized);
-      if (existing) throw new ComputerError("RESOURCE_ALREADY_EXISTS", `文件已存在：${normalized}`);
+      if (existing) throw new ComputerError("RESOURCE_ALREADY_EXISTS", `文件已存在：${normalized}。如需覆盖请使用 patch_text_file 精确修改，或先 delete_file 后重建。`);
       const content = String(args.content);
       await adapter.writeText(normalized, content);
       // Verify：read-back exact match
