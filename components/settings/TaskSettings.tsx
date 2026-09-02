@@ -49,6 +49,14 @@ export function TaskSettings({ highlightedId }: { highlightedId?: string }) {
   const setMissedReminderPolicy = useReminderPreferencesStore((s) => s.setMissedReminderPolicy);
   const missedReminderWindowHours = useReminderPreferencesStore((s) => s.missedReminderWindowHours);
   const setMissedReminderWindowHours = useReminderPreferencesStore((s) => s.setMissedReminderWindowHours);
+  const reminderSoundEnabled = useReminderPreferencesStore((s) => s.reminderSoundEnabled);
+  const setReminderSoundEnabled = useReminderPreferencesStore((s) => s.setReminderSoundEnabled);
+  const doNotDisturbEnabled = useReminderPreferencesStore((s) => s.doNotDisturbEnabled);
+  const setDoNotDisturbEnabled = useReminderPreferencesStore((s) => s.setDoNotDisturbEnabled);
+  const doNotDisturbStart = useReminderPreferencesStore((s) => s.doNotDisturbStart);
+  const setDoNotDisturbStart = useReminderPreferencesStore((s) => s.setDoNotDisturbStart);
+  const doNotDisturbEnd = useReminderPreferencesStore((s) => s.doNotDisturbEnd);
+  const setDoNotDisturbEnd = useReminderPreferencesStore((s) => s.setDoNotDisturbEnd);
   // 权限状态直接行内小字展示（不用 Toast）：真实反映 granted / denied / default / unsupported
   const [permissionNote, setPermissionNote] = useState("");
   const permissionState = getBrowserNotificationPermission();
@@ -296,6 +304,49 @@ export function TaskSettings({ highlightedId }: { highlightedId?: string }) {
               />
             </SettingsRow>
           )}
+
+          <SettingsRow
+            settingId="reminder-sound"
+            title="提醒声音"
+            description="提醒到期时播放提示音；关闭后仅保留视觉提醒。"
+            highlighted={highlightedId === "reminder-sound"}
+          >
+            <SettingsToggle
+              checked={reminderSoundEnabled}
+              onChange={setReminderSoundEnabled}
+              label="提醒声音"
+            />
+          </SettingsRow>
+
+          <SettingsRow
+            settingId="do-not-disturb"
+            title="免打扰时段"
+            description="在此时段内暂停系统通知和提醒声音，仅保留应用内提醒。"
+            highlighted={highlightedId === "do-not-disturb"}
+          >
+            <div className="flex flex-col items-end gap-2">
+              <SettingsToggle checked={doNotDisturbEnabled} onChange={setDoNotDisturbEnabled} label="免打扰时段" />
+              {doNotDisturbEnabled && (
+                <div className="flex items-center gap-1.5">
+                  <input
+                    type="time"
+                    value={doNotDisturbStart}
+                    onChange={(e) => setDoNotDisturbStart(e.target.value)}
+                    className="h-8 px-2 bg-[#F7F5F5] border border-line rounded-lg text-xs font-mono"
+                    aria-label="免打扰开始时间"
+                  />
+                  <span className="text-sandrift">-</span>
+                  <input
+                    type="time"
+                    value={doNotDisturbEnd}
+                    onChange={(e) => setDoNotDisturbEnd(e.target.value)}
+                    className="h-8 px-2 bg-[#F7F5F5] border border-line rounded-lg text-xs font-mono"
+                    aria-label="免打扰结束时间"
+                  />
+                </div>
+              )}
+            </div>
+          </SettingsRow>
         </SettingsGroup>
       </div>
     </SettingsSection>

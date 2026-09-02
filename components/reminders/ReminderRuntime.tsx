@@ -15,6 +15,8 @@ import {
 import { getRunningSessionDueReminders, ReminderRuntimePhase } from "@/lib/reminders/reminderRuntimePolicy";
 import { getReminderDeliverySubtitle } from "@/lib/reminders/reminderPresentation";
 import { showBrowserReminderNotification } from "@/lib/reminders/browserNotifications";
+import { isWithinDoNotDisturbWindow } from "@/lib/reminders/doNotDisturb";
+import { playReminderSound } from "@/lib/reminders/reminderSound";
 
 /**
  * Reminder Local Runtime（Task 7G-A2）：无视觉 DOM（return null）。
@@ -47,17 +49,31 @@ export function ReminderRuntime() {
     };
   }, []);
 
-  /** 交付：站内 Card（始终）+ Browser Notification（granted 且已开启时）。返回是否实际交付。 */
+  /** 交付：semantic delivery（始终 mark fired + in-app enqueue）+ intrusive channels（受 DND 与开关抑制）。 */
   const deliver = useCallback(
     (reminder: Reminder): boolean => {
       const state = useAppStore.getState();
       // 每次交付前重新读取 Store：只有仍 scheduled 才继续（duplicate guard，不依赖 React closure）
       const current = state.reminders.find((r) => r.id === reminder.id);
       if (!current || current.status !== "scheduled") return false;
+      // semantic delivery：永远执行（DND 不得抑制）
       state.markReminderFired(reminder.id, formatLocalDateTime(new Date()));
       enqueue(reminder.id);
       const prefs = useReminderPreferencesStore.getState();
-      if (prefs.browserNotificationsEnabled) {
+      const nowDate = new Date();
+      const isDnd = isWithinDoNotDisturbWindow({
+        enabled: prefs.doNotDisturbEnabled,
+        start: prefs.doNotDisturbStart,
+        end: prefs.doNotDisturbEnd,
+        now: nowDate,
+      });
+      // intrusive delivery：受 DND 抑制
+      if (!isDnd && prefs.reminderSoundEnabled) {
+        try {
+          playReminderSound();
+        } catch {}
+      }
+      if (!isDnd && prefs.browserNotificationsEnabled) {
         showBrowserReminderNotification({
           title: current.title,
           body: getReminderDeliverySubtitle(current),
