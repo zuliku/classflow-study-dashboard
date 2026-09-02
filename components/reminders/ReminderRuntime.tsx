@@ -17,6 +17,8 @@ import { getRunningSessionDueReminders, ReminderRuntimePhase } from "@/lib/remin
 import { getReminderDeliverySubtitle } from "@/lib/reminders/reminderPresentation";
 import { showBrowserReminderNotification } from "@/lib/reminders/browserNotifications";
 import { navigateReminderTarget } from "@/lib/reminders/reminderNavigation";
+import { isWithinDoNotDisturbWindow } from "@/lib/reminders/doNotDisturb";
+import { playReminderSound } from "@/lib/reminders/reminderSound";
 
 /**
  * Reminder Local Runtime（Task 7G-A2）：无视觉 DOM（return null）。
@@ -47,7 +49,7 @@ export function ReminderRuntime() {
     };
   }, []);
 
-  /** 交付：站内 Card（始终）+ Browser Notification（granted 且已开启时）。返回是否实际交付。 */
+  /** 交付：semantic delivery（始终 mark fired + in-app enqueue）+ intrusive channels（受 DND 与开关抑制）。 */
   const deliver = useCallback(
     (reminder: Reminder): boolean => {
       const state = useAppStore.getState();
@@ -63,10 +65,23 @@ export function ReminderRuntime() {
           return false;
         }
       }
+      // semantic delivery：永远执行（DND 不得抑制）
       state.markReminderFired(reminder.id, formatLocalDateTime(new Date()));
       enqueue(reminder.id);
       const prefs = useReminderPreferencesStore.getState();
-      if (prefs.browserNotificationsEnabled) {
+      const nowDate = new Date();
+      const isDnd = isWithinDoNotDisturbWindow({
+        enabled: prefs.doNotDisturbEnabled,
+        start: prefs.doNotDisturbStart,
+        end: prefs.doNotDisturbEnd,
+        now: nowDate,
+      });
+      if (!isDnd && prefs.reminderSoundEnabled) {
+        try {
+          playReminderSound();
+        } catch {}
+      }
+      if (!isDnd && prefs.browserNotificationsEnabled) {
         showBrowserReminderNotification({
           title: current.title,
           body: getReminderDeliverySubtitle(current),

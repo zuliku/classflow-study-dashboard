@@ -335,7 +335,7 @@ export function TaskSettings({ highlightedId }: { highlightedId?: string }) {
           <SettingsRow
             settingId="do-not-disturb"
             title="免打扰时段"
-            description="在此时段内 suppress 系统通知，仅保留应用内角标。"
+            description="在此时段内暂停系统通知和提醒声音，仅保留应用内提醒。"
             highlighted={highlightedId === "do-not-disturb"}
           >
             <div className="flex flex-col items-end gap-2">

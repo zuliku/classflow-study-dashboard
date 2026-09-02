@@ -74,7 +74,10 @@ export function FocusRuntime() {
             }
           : {}),
       });
-      playFocusCompleteSound();
+      const focusPrefs = useAppStore.getState().preferences;
+      if (focusPrefs.focusSoundEnabled) {
+        playFocusCompleteSound(focusPrefs.focusSoundVolume);
+      }
       const prefs = useReminderPreferencesStore.getState();
       if (prefs.browserNotificationsEnabled) {
         showFocusBrowserNotification({
