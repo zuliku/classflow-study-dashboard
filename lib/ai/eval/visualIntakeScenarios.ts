@@ -64,6 +64,9 @@ export const VISUAL_EVAL_WORLD: ReadToolState = {
     contentDensity: "comfortable",
     defaultTaskWorkspaceView: "focus",
     defaultDeadlineReminderMinutes: 60,
+    focusDefaultMinutes: 25,
+    focusSoundEnabled: true,
+    focusSoundVolume: 70,
   },
 };
 

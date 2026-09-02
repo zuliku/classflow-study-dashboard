@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/Button";
 import { Popover, PopoverPanel } from "@/components/ui/Popover";
 import { FOCUS_MAX_PLANNED_MINUTES, FOCUS_MIN_PLANNED_MINUTES } from "@/lib/focus/focusDomain";
 import { FOCUS_ERROR_MESSAGES, FOCUS_PRESETS } from "@/lib/focus/focusView";
+import { useAppStore } from "@/store/useAppStore";
 import { cn } from "@/lib/utils";
 
 /**
@@ -26,15 +27,18 @@ export function FocusStartPopover({
   /** 校验通过后回调（plannedMinutes 1–240 整数 + 已 trim 备注） */
   onStart: (plannedMinutes: number, note: string) => void;
 }) {
-  const [planned, setPlanned] = useState("30");
+  const getDefaultPlanned = () => String(useAppStore.getState().preferences.focusDefaultMinutes);
+  const [planned, setPlanned] = useState(getDefaultPlanned);
   const [note, setNote] = useState("");
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!open) {
-      // V1.1：每个 picker session 独立 —— 关闭即重置（时长回默认 30、备注清空、错误清除）；
-      // 不持久化用户上次选择（A→B / 继续专注 / 重开均为 30）
-      setPlanned("30");
+    if (open) {
+      // 新 picker session 默认值：读取当时最新 preference；不覆盖已打开 session 的 local draft
+      setPlanned(getDefaultPlanned());
+      setError(null);
+      setNote("");
+    } else {
       setError(null);
       setNote("");
     }

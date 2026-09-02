@@ -318,6 +318,12 @@ export interface AppPreferences {
    * 0（到期时）只作为 Domain fallback，不属于 Settings 可选档位。
    */
   defaultDeadlineReminderMinutes: 60 | 1440 | 4320 | 10080;
+  /** Focus：默认专注时长（分钟，合法档位 15/25/45/60） */
+  focusDefaultMinutes: 15 | 25 | 45 | 60;
+  /** Focus：完成提示音开关 */
+  focusSoundEnabled: boolean;
+  /** Focus：完成提示音量 0–100 */
+  focusSoundVolume: number;
 }
 
 /** 设置中心 section */

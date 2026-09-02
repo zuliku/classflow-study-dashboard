@@ -18,6 +18,10 @@ export const DEADLINE_REMINDER_LABELS: Record<AppPreferences["defaultDeadlineRem
   60: "提前 1 小时",
 };
 
+export const FOCUS_DEFAULT_MINUTES: readonly AppPreferences["focusDefaultMinutes"][] = [15, 25, 45, 60];
+
+export const DEFAULT_FOCUS_SOUND_VOLUME = 70;
+
 /** 第一版默认偏好 */
 export const DEFAULT_PREFERENCES: AppPreferences = {
   showWeekends: true,
@@ -35,6 +39,9 @@ export const DEFAULT_PREFERENCES: AppPreferences = {
   defaultTaskWorkspaceView: "focus",
   // P1：自动 DDL 提醒默认提前 1 天（1440 分钟）
   defaultDeadlineReminderMinutes: DEFAULT_DEADLINE_REMINDER_MINUTES,
+  focusDefaultMinutes: 25,
+  focusSoundEnabled: true,
+  focusSoundVolume: DEFAULT_FOCUS_SOUND_VOLUME,
 };
 
 export const DDL_WARNING_DAYS: readonly AppPreferences["ddlWarningDays"][] = [1, 3, 7];
@@ -104,13 +111,26 @@ export function sanitizePreferences(v: unknown): AppPreferences {
     ).includes(src.defaultDeadlineReminderMinutes)
       ? (src.defaultDeadlineReminderMinutes as AppPreferences["defaultDeadlineReminderMinutes"])
       : DEFAULT_PREFERENCES.defaultDeadlineReminderMinutes,
+    focusDefaultMinutes: (FOCUS_DEFAULT_MINUTES as readonly unknown[]).includes(src.focusDefaultMinutes)
+      ? (src.focusDefaultMinutes as AppPreferences["focusDefaultMinutes"])
+      : DEFAULT_PREFERENCES.focusDefaultMinutes,
+    focusSoundEnabled: isBool(src.focusSoundEnabled)
+      ? src.focusSoundEnabled
+      : DEFAULT_PREFERENCES.focusSoundEnabled,
+    focusSoundVolume:
+      typeof src.focusSoundVolume === "number" &&
+      Number.isFinite(src.focusSoundVolume) &&
+      src.focusSoundVolume >= 0 &&
+      src.focusSoundVolume <= 100
+        ? Math.round(src.focusSoundVolume)
+        : DEFAULT_PREFERENCES.focusSoundVolume,
   };
 }
 
 /** 偏好 → 所属设置 section（Settings V4：交互偏好已并入通用） */
 export const PREFERENCE_SECTIONS: Record<
   keyof AppPreferences,
-  "general" | "semester" | "tasks"
+  "general" | "semester" | "tasks" | "focus"
 > = {
   showWeekends: "semester",
   ddlWarningDays: "tasks",
@@ -126,6 +146,9 @@ export const PREFERENCE_SECTIONS: Record<
   contentDensity: "general",
   defaultTaskWorkspaceView: "tasks",
   defaultDeadlineReminderMinutes: "tasks",
+  focusDefaultMinutes: "focus",
+  focusSoundEnabled: "focus",
+  focusSoundVolume: "focus",
 };
 
 /** 当前与默认不同的偏好键（纯函数，UI 不自行比较） */

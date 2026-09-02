@@ -44,7 +44,10 @@ export function FocusRuntime() {
         message: "专注完成，休息一下吧",
         type: "info",
       });
-      playFocusCompleteSound();
+      const focusPrefs = useAppStore.getState().preferences;
+      if (focusPrefs.focusSoundEnabled) {
+        playFocusCompleteSound(focusPrefs.focusSoundVolume);
+      }
       const prefs = useReminderPreferencesStore.getState();
       if (prefs.browserNotificationsEnabled) {
         showFocusBrowserNotification({

@@ -29,10 +29,18 @@ export function FocusControl() {
   );
 
   const [open, setOpen] = useState(false);
-  const [planned, setPlanned] = useState("30");
+  const getDefaultPlanned = () => String(useAppStore.getState().preferences.focusDefaultMinutes);
+  const [planned, setPlanned] = useState(getDefaultPlanned);
   const [target, setTarget] = useState("none");
   const [note, setNote] = useState("");
   const wrapRef = useRef<HTMLDivElement | null>(null);
+
+  // 新 picker session 初始值：读取当时最新 preference；已打开 session 不被外部 preference 覆盖
+  useEffect(() => {
+    if (open) {
+      setPlanned(getDefaultPlanned());
+    }
+  }, [open]);
   // 每秒本地刷新（仅显示；不写 Store）
   const [, setTick] = useState(0);
 
