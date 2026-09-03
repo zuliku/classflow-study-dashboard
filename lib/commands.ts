@@ -30,6 +30,7 @@ import {
   KIRO_ICON,
 } from "@/components/layout/navItems";
 import { TASK_WORKSPACE_VIEWS, TaskWorkspaceView } from "@/lib/tasks/taskViews";
+import { SINGLE_KEY_SHORTCUTS } from "@/lib/shortcuts";
 
 /**
  * Command Registry：Command Center / Context Menu / 键盘快捷键 共用的唯一动作源。
@@ -116,7 +117,7 @@ export function getCommands(): AppCommand[] {
   return [
   // ---- Create ----
   // 所有「打开任务编辑器」入口统一走 lib/uiEvents.ts 的 openAssignmentEditor
-  { id: "create-task", label: "新建任务", keywords: ["任务", "todo"], group: "create", shortcut: "N", icon: Plus, run: (ctx) => { openAssignmentEditor({}); ctx.close(); } },
+  { id: "create-task", label: "新建任务", keywords: ["任务", "todo"], group: "create", shortcut: SINGLE_KEY_SHORTCUTS.quickCreateTask, icon: Plus, run: (ctx) => { openAssignmentEditor({}); ctx.close(); } },
     { id: "create-course", label: "新建课程", keywords: ["课程", "add"], group: "create", icon: BookOpen, run: (ctx) => { ctx.setAddCourseModalOpen(true); ctx.close(); } },
     { id: "import-schedule", label: "导入课表", keywords: ["导入", "课表", "import"], group: "create", icon: FileUp, run: (ctx) => { ctx.setImportScheduleModalOpen(true); ctx.close(); } },
     // ---- Navigate（工作区 Tab：与 Sidebar / BottomNav 共享同一 metadata） ----
@@ -829,14 +830,16 @@ export interface ShortcutGuideItem {
   singleKey?: boolean;
 }
 
+// V5A4：单键字符派生自 lib/shortcuts.ts（唯一真值源），展示文案保留；
+// Space / Arrow / Enter / Esc / 修饰键为固定展示，不迁移。
 export const SHORTCUT_GUIDE: { group: string; items: ShortcutGuideItem[] }[] = [
   {
     group: "全局",
     items: [
       { keys: "⌘K", label: "打开命令中心" },
       { keys: "⌘,", label: "打开设置" },
-      { keys: "/", label: "快速搜索", singleKey: true },
-      { keys: "?", label: "快捷键指南", singleKey: true },
+      { keys: SINGLE_KEY_SHORTCUTS.openSearch, label: "快速搜索", singleKey: true },
+      { keys: SINGLE_KEY_SHORTCUTS.openHelp, label: "快捷键指南", singleKey: true },
     ],
   },
   {
@@ -850,10 +853,10 @@ export const SHORTCUT_GUIDE: { group: string; items: ShortcutGuideItem[] }[] = [
   {
     group: "任务",
     items: [
-      { keys: "N", label: "新建任务（无输入焦点时）", singleKey: true },
-      { keys: "J / K", label: "在任务列表中移动（任务工作区）", singleKey: true },
+      { keys: SINGLE_KEY_SHORTCUTS.quickCreateTask, label: "新建任务（无输入焦点时）", singleKey: true },
+      { keys: `${SINGLE_KEY_SHORTCUTS.assignmentMoveDown} / ${SINGLE_KEY_SHORTCUTS.assignmentMoveUp}`, label: "在任务列表中移动（任务工作区）", singleKey: true },
       { keys: "Space", label: "预览任务（任务工作区，桌面端）", singleKey: true },
-      { keys: "X", label: "选择 / 取消选择任务（任务工作区）", singleKey: true },
+      { keys: SINGLE_KEY_SHORTCUTS.assignmentToggleSelection, label: "选择 / 取消选择任务（任务工作区）", singleKey: true },
       { keys: "↑ ↓", label: "任务列表移动（标准键盘操作）" },
       { keys: "Enter", label: "打开所选任务" },
     ],

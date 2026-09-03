@@ -46,7 +46,6 @@ export const DEFAULT_PREFERENCES: AppPreferences = {
   coursePalette: ["#FADCD9", "#F8E9A1", "#A8E6CF", "#A0C4FF", "#FFC8A2", "#D8B4FE", "#FFADAD", "#CAFFBF"],
   courseAutoPalette: true,
   uiFontScale: 1,
-  shortcuts: { newTask: "N", up: "K", down: "J", delete: "X", help: "?" },
 };
 
 export const DDL_WARNING_DAYS: readonly AppPreferences["ddlWarningDays"][] = [1, 3, 7];
@@ -128,7 +127,7 @@ export function sanitizePreferences(v: unknown): AppPreferences {
     coursePalette: Array.isArray(src.coursePalette) && src.coursePalette.every((c: unknown) => typeof c === "string" && /^#[0-9a-fA-F]{6}$/.test(c as string)) ? (src.coursePalette as string[]) : DEFAULT_PREFERENCES.coursePalette,
     courseAutoPalette: isBool(src.courseAutoPalette) ? src.courseAutoPalette : DEFAULT_PREFERENCES.courseAutoPalette,
     uiFontScale: typeof src.uiFontScale === "number" && src.uiFontScale >= 0.9 && src.uiFontScale <= 1.2 ? Math.round(src.uiFontScale * 20) / 20 : DEFAULT_PREFERENCES.uiFontScale,
-    shortcuts: src.shortcuts && typeof src.shortcuts === "object" && !Array.isArray(src.shortcuts) ? (src.shortcuts as Record<string, string>) : DEFAULT_PREFERENCES.shortcuts,
+    // V5A4：只输出当前已知字段，legacy persisted `shortcuts` 被自然忽略（无 migration）
   };
 }
 
@@ -158,7 +157,6 @@ export const PREFERENCE_SECTIONS: Record<
   coursePalette: "general",
   courseAutoPalette: "general",
   uiFontScale: "general",
-  shortcuts: "general",
 };
 
 /** 当前与默认不同的偏好键（纯函数，UI 不自行比较） */

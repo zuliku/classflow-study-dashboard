@@ -43,6 +43,7 @@ import { AssignmentPeekPanel } from "@/components/assignment/AssignmentPeekPanel
 import { AssignmentContextMenu, ContextMenuCommand } from "@/components/assignment/AssignmentContextMenu";
 import { healthViewMeta } from "@/lib/tasks/taskHealthView";
 import { useKiroHandoff } from "@/hooks/useKiroHandoff";
+import { SINGLE_KEY_SHORTCUTS, matchesShortcutKey } from "@/lib/shortcuts";
 import type { AssignmentWorkspaceController } from "@/hooks/useAssignmentWorkspaceController";
 
 export interface AssignmentTableProps {
@@ -333,10 +334,10 @@ export function AssignmentTable({
       return;
     }
 
-    if (k === "ArrowDown" || k === "j" || k === "J") {
+    if (k === "ArrowDown" || matchesShortcutKey(k, SINGLE_KEY_SHORTCUTS.assignmentMoveDown)) {
       e.preventDefault();
       moveHighlight(1);
-    } else if (k === "ArrowUp" || k === "k" || k === "K") {
+    } else if (k === "ArrowUp" || matchesShortcutKey(k, SINGLE_KEY_SHORTCUTS.assignmentMoveUp)) {
       e.preventDefault();
       moveHighlight(-1);
     } else if (k === "Enter") {
@@ -354,7 +355,8 @@ export function AssignmentTable({
       setAssignmentPeekId(
         assignmentPeekId === highlightedAssignmentId ? null : highlightedAssignmentId
       );
-    } else if (k === "x" || k === "X") {
+    } else if (matchesShortcutKey(k, SINGLE_KEY_SHORTCUTS.assignmentToggleSelection)) {
+      // X = 选择 / 取消选择任务（绝非删除）
       if (!highlightedAssignmentId) return;
       e.preventDefault();
       anchorRef.current = highlightedAssignmentId;

@@ -445,3 +445,31 @@ describe("Typography V1 store 集成与备用", () => {
     expect(raw.version).toBe(8);
   });
 });
+
+describe("V5A4：fake shortcuts mapping 已移除", () => {
+  it("DEFAULT_PREFERENCES 不再包含 active shortcuts mapping", () => {
+    expect("shortcuts" in DEFAULT_PREFERENCES).toBe(false);
+    expect((DEFAULT_PREFERENCES as Record<string, unknown>).shortcuts).toBeUndefined();
+  });
+
+  it("sanitize 后不再产生 shortcuts 字段", () => {
+    const out = sanitizePreferences({ showWeekends: false }) as Record<string, unknown>;
+    expect("shortcuts" in out).toBe(false);
+    expect(out.shortcuts).toBeUndefined();
+  });
+
+  it("enableSingleKeyShortcuts 仍正常（default / sanitize）", () => {
+    expect(DEFAULT_PREFERENCES.enableSingleKeyShortcuts).toBe(true);
+    expect(sanitizePreferences({}).enableSingleKeyShortcuts).toBe(true);
+    expect(sanitizePreferences({ enableSingleKeyShortcuts: false }).enableSingleKeyShortcuts).toBe(false);
+  });
+
+  it("legacy persisted shortcuts 安全忽略，不 crash、不回流", () => {
+    const out = sanitizePreferences({
+      showWeekends: false,
+      shortcuts: { newTask: "Q", delete: "D" },
+    } as never) as Record<string, unknown>;
+    expect(out.showWeekends).toBe(false);
+    expect("shortcuts" in out).toBe(false);
+  });
+});

@@ -359,8 +359,6 @@ export interface AppPreferences {
   courseAutoPalette: boolean;
   /** 全局字体缩放 0.9 - 1.2 */
   uiFontScale: number;
-  /** 快捷键映射（action -> key） */
-  shortcuts: Record<string, string>;
 }
 
 /** 设置中心 section */

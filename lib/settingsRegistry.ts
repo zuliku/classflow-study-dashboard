@@ -51,7 +51,7 @@ export const SETTING_IDS = {
     scheduleDirectManipulation: "schedule-direct-manipulation",
     ddlDirectManipulation: "ddl-direct-manipulation",
     singleKeyShortcuts: "single-key-shortcuts",
-    shortcutsCustom: "shortcuts-custom",
+    shortcutsOverview: "shortcuts-overview",
   },
   profile: {
     avatar: "profile-avatar",
@@ -218,11 +218,11 @@ export const SETTINGS_REGISTRY: SettingDefinition[] = [
     keywords: ["快捷键", "键盘", "按键", "single key", "shortcut"],
   },
   {
-    id: SETTING_IDS.general.shortcutsCustom,
+    id: SETTING_IDS.general.shortcutsOverview,
     section: "general",
-    title: "快捷键映射",
-    description: "自定义单键快捷键（N 新建、J/K 上下、X 删除、? 帮助）；留空则使用默认",
-    keywords: ["快捷键映射", "快捷键", "映射", "shortcuts", "custom", "N", "J", "K", "X"],
+    title: "快捷键说明",
+    description: "常用单键与任务列表操作（只读说明，不可修改按键）",
+    keywords: ["快捷键", "快捷键说明", "单键", "shortcuts", "N", "J", "K", "X", "搜索", "新建任务", "选择", "预览", "帮助"],
   },
   // ---- 个人资料 ----
   {

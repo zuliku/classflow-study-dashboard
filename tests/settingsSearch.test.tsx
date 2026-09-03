@@ -67,7 +67,7 @@ describe("Settings Search Truth", () => {
     expect(searchSettings("提示音量").some((s) => s.id === "focus-sound-volume" && s.section === "focus")).toBe(true);
     expect(searchSettings("字号").some((s) => s.id === "ui-font-scale")).toBe(true);
     expect(searchSettings("调色板").some((s) => s.id === "course-palette")).toBe(true);
-    expect(searchSettings("快捷键映射").some((s) => s.id === "shortcuts-custom")).toBe(true);
+    expect(searchSettings("快捷键").some((s) => s.id === "shortcuts-overview" && s.section === "general")).toBe(true);
     expect(searchSettings("提醒声音").some((s) => s.id === "reminder-sound")).toBe(true);
     expect(searchSettings("免打扰").some((s) => s.id === "do-not-disturb")).toBe(true);
     expect(searchSettings("作息方案").some((s) => s.id === "bell-schedule" && s.section === "semester")).toBe(true);

@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import { useAppStore } from "@/store/useAppStore";
 import { openAssignmentEditor } from "@/lib/uiEvents";
 import { hasAnyOverlay } from "@/lib/overlayStack";
+import { SINGLE_KEY_SHORTCUTS, matchesShortcutKey } from "@/lib/shortcuts";
 
 /** 单键快捷键守卫：输入型 target 不触发 */
 export function isEditableTarget(e: KeyboardEvent): boolean {
@@ -58,7 +59,7 @@ export function GlobalShortcutController() {
       if (!enableSingleKeyShortcuts) return;
 
       // ?：快捷键指南
-      if (e.key === "?" && !mod && !isEditableTarget(e)) {
+      if (e.key === SINGLE_KEY_SHORTCUTS.openHelp && !mod && !isEditableTarget(e)) {
         e.preventDefault();
         setSearchModalView("guide");
         setSearchModalOpen(true);
@@ -66,7 +67,7 @@ export function GlobalShortcutController() {
       }
 
       // /：直接进入搜索
-      if (e.key === "/" && !mod && !isEditableTarget(e)) {
+      if (e.key === SINGLE_KEY_SHORTCUTS.openSearch && !mod && !isEditableTarget(e)) {
         e.preventDefault();
         setSearchModalView("palette");
         setSearchModalOpen(true);
@@ -74,7 +75,7 @@ export function GlobalShortcutController() {
       }
 
       // N：新建任务（无输入焦点 / 无阻断 Overlay / 无拖拽进行中）
-      if ((e.key === "n" || e.key === "N") && !mod && !isEditableTarget(e)) {
+      if (matchesShortcutKey(e.key, SINGLE_KEY_SHORTCUTS.quickCreateTask) && !mod && !isEditableTarget(e)) {
         if (hasAnyOverlay()) return;
         if (document.body.dataset.dragActive === "1") return;
         e.preventDefault();

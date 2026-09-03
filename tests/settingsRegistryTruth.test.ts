@@ -19,10 +19,21 @@ describe("V5A2 Registry Truth", () => {
   it("General 新增设置已登记", () => {
     const ids = new Set(SETTINGS_REGISTRY.map((s) => s.id));
     const generalValues = new Set(Object.values(SETTING_IDS.general));
-    for (const id of ["ui-font", "ui-font-scale", "sidebar-default-collapsed", "course-auto-palette", "course-palette", "shortcuts-custom"]) {
+    for (const id of ["ui-font", "ui-font-scale", "sidebar-default-collapsed", "course-auto-palette", "course-palette", "shortcuts-overview"]) {
       expect(ids.has(id), `General missing ${id}`).toBe(true);
       expect(generalValues.has(id), `SETTING_IDS.general missing ${id}`).toBe(true);
     }
+  });
+
+  it("V5A4：shortcuts-custom 已迁移为 shortcuts-overview（非可配置映射）", () => {
+    const ids = new Set(SETTINGS_REGISTRY.map((s) => s.id));
+    expect(ids.has("shortcuts-custom")).toBe(false);
+    expect(ids.has("shortcuts-overview")).toBe(true);
+    expect((SETTING_IDS.general as Record<string, string>).shortcutsCustom).toBeUndefined();
+    expect(SETTING_IDS.general.shortcutsOverview).toBe("shortcuts-overview");
+    const entry = SETTINGS_REGISTRY.find((s) => s.id === "shortcuts-overview");
+    expect(entry?.section).toBe("general");
+    expect(entry?.title).toBe("快捷键说明");
   });
 
   it("Focus 当前设置已登记，dead 已清理", () => {
@@ -65,7 +76,7 @@ describe("V5A2 Registry Truth", () => {
     // 构造包含所有当前真实 DOM id 的容器（基于实际 components/settings 枚举）
     const expectedDomIds = [
       // general 12
-      "startup-view","content-density","motion-preference","ui-font","ui-font-scale","sidebar-default-collapsed","course-auto-palette","course-palette","schedule-direct-manipulation","ddl-direct-manipulation","single-key-shortcuts","shortcuts-custom",
+      "startup-view","content-density","motion-preference","ui-font","ui-font-scale","sidebar-default-collapsed","course-auto-palette","course-palette","schedule-direct-manipulation","ddl-direct-manipulation","single-key-shortcuts","shortcuts-overview",
       // profile 6
       "profile-avatar","profile-name","profile-student-id","profile-college","profile-grade","profile-credits",
       // semester 3
@@ -101,7 +112,7 @@ describe("V5A2 Registry Truth", () => {
     const registryIds = new Set(SETTINGS_REGISTRY.map((s) => s.id));
     // 构造包含上述 expectedDomIds 的 DOM
     const expectedDomIds = [
-      "startup-view","content-density","motion-preference","ui-font","ui-font-scale","sidebar-default-collapsed","course-auto-palette","course-palette","schedule-direct-manipulation","ddl-direct-manipulation","single-key-shortcuts","shortcuts-custom",
+      "startup-view","content-density","motion-preference","ui-font","ui-font-scale","sidebar-default-collapsed","course-auto-palette","course-palette","schedule-direct-manipulation","ddl-direct-manipulation","single-key-shortcuts","shortcuts-overview",
       "profile-avatar","profile-name","profile-student-id","profile-college","profile-grade","profile-credits",
       "show-weekends","semester-overview","bell-schedule",
       "ddl-warning-days","default-ddl-time","default-task-priority","default-task-status","default-task-workspace-view","deadline-default-reminder","in-app-reminders","browser-notifications","missed-reminder-policy","missed-reminder-window","reminder-sound","do-not-disturb",
@@ -124,7 +135,8 @@ describe("V5A2 Registry Truth", () => {
     expect(searchSettings("字体").some((s) => s.id === "ui-font")).toBe(true);
     expect(searchSettings("侧栏").some((s) => s.id === "sidebar-default-collapsed")).toBe(true);
     expect(searchSettings("调色板").some((s) => s.id === "course-palette")).toBe(true);
-    expect(searchSettings("快捷键映射").some((s) => s.id === "shortcuts-custom")).toBe(true);
+    expect(searchSettings("快捷键").some((s) => s.id === "shortcuts-overview")).toBe(true);
+    expect(searchSettings("快捷键说明").some((s) => s.id === "shortcuts-overview")).toBe(true);
     expect(searchSettings("提醒声音").some((s) => s.id === "reminder-sound")).toBe(true);
     expect(searchSettings("免打扰").some((s) => s.id === "do-not-disturb")).toBe(true);
     expect(searchSettings("作息方案").some((s) => s.id === "bell-schedule")).toBe(true);
@@ -138,6 +150,10 @@ describe("V5A2 Registry Truth", () => {
     const ids = SETTINGS_REGISTRY.map((s) => s.id);
     expect(ids).not.toContain("focus-completion-notification");
     expect(ids).not.toContain("focus-kiro-duration");
+    // V5A4：shortcuts-custom 已删除，旧“映射”承诺不再出现
+    expect(ids).not.toContain("shortcuts-custom");
+    expect(searchSettings("shortcuts-custom").length).toBe(0);
+    expect(searchSettings("快捷键映射").some((s) => s.id === "shortcuts-custom")).toBe(false);
   });
 
   it("Settings section order 与 Registry categories 对齐（防 index 漂移）", () => {
