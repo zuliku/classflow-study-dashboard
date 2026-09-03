@@ -41,9 +41,15 @@ describe("V5A2 Registry Truth", () => {
 
   it("Task 新设置已登记", () => {
     const ids = new Set(SETTINGS_REGISTRY.map((s) => s.id));
-    for (const id of ["assignment-time-slice", "reminder-sound", "do-not-disturb"]) {
+    for (const id of ["reminder-sound", "do-not-disturb"]) {
       expect(ids.has(id), `Task missing ${id}`).toBe(true);
     }
+  });
+
+  it("V5A3：assignment-time-slice 已从 Settings/Registry 移除（非 Settings preference）", () => {
+    const ids = new Set(SETTINGS_REGISTRY.map((s) => s.id));
+    expect(ids.has("assignment-time-slice")).toBe(false);
+    expect((SETTING_IDS.tasks as Record<string, string>).assignmentTimeSlice).toBeUndefined();
   });
 
   it("Semester BellSchedule 拥有真实 target", () => {
@@ -64,8 +70,8 @@ describe("V5A2 Registry Truth", () => {
       "profile-avatar","profile-name","profile-student-id","profile-college","profile-grade","profile-credits",
       // semester 3
       "show-weekends","semester-overview","bell-schedule",
-      // tasks 13
-      "ddl-warning-days","default-ddl-time","default-task-priority","default-task-status","default-task-workspace-view","assignment-time-slice","deadline-default-reminder","in-app-reminders","browser-notifications","missed-reminder-policy","missed-reminder-window","reminder-sound","do-not-disturb",
+      // tasks 12（V5A3：assignment-time-slice 已移除，非 Settings preference）
+      "ddl-warning-days","default-ddl-time","default-task-priority","default-task-status","default-task-workspace-view","deadline-default-reminder","in-app-reminders","browser-notifications","missed-reminder-policy","missed-reminder-window","reminder-sound","do-not-disturb",
       // focus 4
       "focus-default-minutes","focus-sound-enabled","focus-sound-volume","focus-tracking",
       // kiro, kiro-agent, extensions, data are also in DOM but we test core drift for V5A2; ensure missing is 0 for those we enumerate
@@ -98,7 +104,7 @@ describe("V5A2 Registry Truth", () => {
       "startup-view","content-density","motion-preference","ui-font","ui-font-scale","sidebar-default-collapsed","course-auto-palette","course-palette","schedule-direct-manipulation","ddl-direct-manipulation","single-key-shortcuts","shortcuts-custom",
       "profile-avatar","profile-name","profile-student-id","profile-college","profile-grade","profile-credits",
       "show-weekends","semester-overview","bell-schedule",
-      "ddl-warning-days","default-ddl-time","default-task-priority","default-task-status","default-task-workspace-view","assignment-time-slice","deadline-default-reminder","in-app-reminders","browser-notifications","missed-reminder-policy","missed-reminder-window","reminder-sound","do-not-disturb",
+      "ddl-warning-days","default-ddl-time","default-task-priority","default-task-status","default-task-workspace-view","deadline-default-reminder","in-app-reminders","browser-notifications","missed-reminder-policy","missed-reminder-window","reminder-sound","do-not-disturb",
       "focus-default-minutes","focus-sound-enabled","focus-sound-volume","focus-tracking",
     ];
     for (const id of expectedDomIds) {

@@ -41,8 +41,6 @@ export function TaskSettings({ highlightedId }: { highlightedId?: string }) {
   const preferences = useAppStore((s) => s.preferences);
   const updatePreferences = useAppStore((s) => s.updatePreferences);
   const setDefaultDeadlineReminderMinutes = useAppStore((s) => s.setDefaultDeadlineReminderMinutes);
-  const assignmentTimeSlice = useAppStore((s) => s.assignmentTimeSlice);
-  const setAssignmentTimeSlice = useAppStore((s) => s.setAssignmentTimeSlice);
   const modified = new Set(getModifiedPreferenceKeys(preferences));
 
   const browserNotificationsEnabled = useReminderPreferencesStore((s) => s.browserNotificationsEnabled);
@@ -210,26 +208,6 @@ export function TaskSettings({ highlightedId }: { highlightedId?: string }) {
           />
         </SettingsRow>
 
-        <SettingsRow
-          settingId="assignment-time-slice"
-          title="任务列表默认筛选"
-          description="任务工作区列表默认显示的时间范围（与顶部筛选一致）。"
-          highlighted={highlightedId === "assignment-time-slice"}
-        >
-          <SettingsSelect
-            value={assignmentTimeSlice}
-            onChange={(v) => setAssignmentTimeSlice(v as any)}
-            ariaLabel="任务列表默认筛选"
-            options={[
-              { value: "all", label: "全部" },
-              { value: "overdue", label: "已逾期" },
-              { value: "today", label: "今天" },
-              { value: "3days", label: "3 天内" },
-              { value: "7days", label: "7 天内" },
-              { value: "completed", label: "已完成" },
-            ]}
-          />
-        </SettingsRow>
         </SettingsGroup>
 
         <SettingsGroup title="提醒">

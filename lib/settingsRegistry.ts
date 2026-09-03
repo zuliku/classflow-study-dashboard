@@ -72,7 +72,6 @@ export const SETTING_IDS = {
     defaultTaskPriority: "default-task-priority",
     defaultTaskStatus: "default-task-status",
     defaultTaskWorkspaceView: "default-task-workspace-view",
-    assignmentTimeSlice: "assignment-time-slice",
     deadlineDefaultReminder: "deadline-default-reminder",
     inAppReminders: "in-app-reminders",
     browserNotifications: "browser-notifications",
@@ -325,13 +324,6 @@ export const SETTINGS_REGISTRY: SettingDefinition[] = [
     title: "默认任务视图",
     description: "每次打开 ClassFlow 时任务工作区的默认视图",
     keywords: ["任务", "视图", "聚焦", "今天", "即将截止", "待安排", "workspace", "view", "默认"],
-  },
-  {
-    id: SETTING_IDS.tasks.assignmentTimeSlice,
-    section: "tasks",
-    title: "任务列表默认筛选",
-    description: "任务工作区列表默认显示的时间范围（与顶部筛选一致）",
-    keywords: ["任务", "筛选", "任务列表", "默认筛选", "时间范围", "assignment", "filter"],
   },
   {
     id: SETTING_IDS.tasks.deadlineDefaultReminder,

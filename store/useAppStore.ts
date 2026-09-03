@@ -524,7 +524,7 @@ export interface AppState {
   setActiveTab: (tab: NavTab) => void;
   /** 上次使用的工作区 Tab（持久化；供 startupView=last 使用） */
   lastWorkspaceTab: NavTab;
-  /** 任务列表时间筛选（全局共享，跨页保留） */
+  /** Overview compact AssignmentTable 的时间筛选（持久 view state；非 Assignment Workspace 偏好） */
   assignmentTimeSlice: TimeSliceFilter;
   setAssignmentTimeSlice: (slice: TimeSliceFilter) => void;
   /** Assignment Workspace V2 视图（UI state，不持久化；focus/today/upcoming/unscheduled/all/archive） */
