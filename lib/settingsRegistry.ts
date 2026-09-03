@@ -178,8 +178,8 @@ export const SETTINGS_REGISTRY: SettingDefinition[] = [
   {
     id: SETTING_IDS.general.sidebarDefaultCollapsed,
     section: "general",
-    title: "默认收起侧栏",
-    description: "在大屏下次打开时默认收起侧边栏，节省横向空间",
+    title: "侧栏收起状态",
+    description: "切换侧栏展开或收起，并在下次打开时保持当前状态",
     keywords: ["侧栏", "侧边栏", "收起", "折叠", "sidebar", "collapsed"],
   },
   {

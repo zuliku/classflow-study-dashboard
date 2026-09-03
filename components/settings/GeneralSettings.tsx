@@ -178,17 +178,17 @@ export function GeneralSettings({ highlightedId }: { highlightedId?: string }) {
 
           <SettingsRow
             settingId="sidebar-default-collapsed"
-            title="默认收起侧栏"
-            description="在大屏下次打开时默认收起侧边栏，节省横向空间。"
+            title="侧栏收起状态"
+            description="切换侧栏展开或收起，并在下次打开时保持当前状态。"
             modified={sidebarCollapsed}
             onReset={() => setSidebarCollapsed(false)}
-            resetAriaLabel="将默认收起侧栏恢复默认"
+            resetAriaLabel="将侧栏收起状态恢复默认"
             highlighted={highlightedId === "sidebar-default-collapsed"}
           >
             <SettingsToggle
               checked={sidebarCollapsed}
               onChange={setSidebarCollapsed}
-              label="默认收起侧栏"
+              label="侧栏收起状态"
             />
           </SettingsRow>
 

@@ -390,3 +390,42 @@ describe("Sidebar Productization V2.2 —— Today Progress", () => {
     expect(css).toMatch(/\[data-collapsed="true"\] \.sidebar-profile-progress \{[^}]*grid-template-rows: 0fr;/s);
   });
 });
+
+// ============================================================
+// V5A5 —— Sidebar Chrome State Truth Closure
+// useUIChromeStore 为唯一 active truth；useAppStore 重复 API 已删除；
+// Settings 文案表达“当前状态 + 下次保持”，不再暗示独立 startup default。
+// ============================================================
+describe("V5A5：useAppStore 不再暴露 active sidebar API", () => {
+  it("active state 无 sidebarCollapsed / setSidebarCollapsed", async () => {
+    const { useAppStore } = await import("@/store/useAppStore");
+    const state = useAppStore.getState() as unknown as Record<string, unknown>;
+    expect("sidebarCollapsed" in state).toBe(false);
+    expect("setSidebarCollapsed" in state).toBe(false);
+  });
+
+  it("legacy persisted sidebarCollapsed 可被忽略，不 crash、不回流", async () => {
+    const { useAppStore } = await import("@/store/useAppStore");
+    globalThis.localStorage.setItem(
+      "classflow-storage-v2",
+      JSON.stringify({ version: 8, state: { sidebarCollapsed: true } })
+    );
+    await useAppStore.persist.rehydrate();
+    const state = useAppStore.getState() as unknown as Record<string, unknown>;
+    expect("sidebarCollapsed" in state).toBe(false);
+    expect("setSidebarCollapsed" in state).toBe(false);
+  });
+});
+
+describe("V5A5：Registry/Search 与真实语义一致", () => {
+  it("sidebar 仍可搜到，且标题为真实语义", async () => {
+    const { searchSettings } = await import("@/lib/settingsRegistry");
+    const hits = searchSettings("侧栏");
+    const hit = hits.find((s) => s.id === "sidebar-default-collapsed");
+    expect(hit).toBeDefined();
+    expect(hit?.section).toBe("general");
+    expect(hit?.title).toBe("侧栏收起状态");
+    expect(hit?.title).not.toContain("默认");
+    expect(searchSettings("收起").some((s) => s.id === "sidebar-default-collapsed")).toBe(true);
+  });
+});
