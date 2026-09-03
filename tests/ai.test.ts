@@ -146,13 +146,18 @@ describe("OpenCode Phase 3.1：openai-responses registry 与过滤一致性", ()
     expect(def?.capabilities.reasoning).toBeUndefined(); // 不声明 reasoning → fixed/default
   });
 
-  it("2. grok-4.6 已注册，transport = openai-responses（4.5 的 reasoning 未经 4.6 验证，不继承）", () => {
+  it("2. grok-4.6 已注册，transport = openai-responses，reasoning live 通过，vision 按官方 docs", () => {
     const def = OPENCODE_MODELS.find((m) => m.id === "grok-4.6");
     expect(def?.transport).toBe("openai-responses");
     expect(def?.vendor).toBe("xai");
     expect(def?.name).toBe("Grok 4.6");
-    expect(def?.capabilities.vision).toBe(false); // 保守：未实测多模态兼容
-    expect(def?.capabilities.reasoning).toBeUndefined(); // 未经 live 验证 → fixed/default
+    // xAI 官方声明图像输入（jpg/jpeg/png）→ vision 开，白名单不含 webp
+    expect(def?.capabilities.vision).toBe(true);
+    expect(def?.capabilities.visionMimeTypes).toEqual(["image/jpeg", "image/png"]);
+    // 2026-09-03 live：reasoning low/medium/high 通过（Smoke B/C）
+    expect(def?.capabilities.reasoning?.adjustable).toBe(true);
+    expect(def?.capabilities.reasoning?.supportedEfforts).toEqual(["default", "low", "medium", "high"]);
+    expect(def?.capabilities.reasoning?.mechanism).toBe("openai-responses-effort");
   });
 
   it("3. gpt-5.6-luna 已注册，transport = openai-responses", () => {
@@ -174,7 +179,10 @@ describe("OpenCode Phase 3.1：openai-responses registry 与过滤一致性", ()
     expect(def?.capabilities.tools).toBe(true);
     expect(def?.capabilities.vision).toBe(false);
     expect(def?.capabilities.fileParts).toBe(false);
-    expect(def?.capabilities.reasoning).toBeUndefined();
+    // 2026-09-03 live：minimal/low/medium/high/xhigh 通过，max 不支持
+    expect(def?.capabilities.reasoning?.adjustable).toBe(true);
+    expect(def?.capabilities.reasoning?.supportedEfforts).toEqual(["default", "minimal", "low", "medium", "high", "xhigh"]);
+    expect(def?.capabilities.reasoning?.mechanism).toBe("openai-responses-effort");
   });
 
   it("3c. longcat-2.0 已注册，美团 LongCat 厂商 + 本地 Logo（非 hotlink）", () => {

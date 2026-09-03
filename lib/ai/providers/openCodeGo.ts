@@ -12,14 +12,20 @@ import { AIModelDefinition, AIProviderConfig } from "@/lib/ai/providers/types";
  * 本列表是 /models 无法获取时的 fallback，也是远端模型 transport 的唯一来源
  * （远端 /models 只返回 id，不返回 transport；未知模型一律跳过，绝不猜测协议）。
  *
- * 新增模型保守能力声明（streaming/tools 开；vision/reasoning 未经 OpenCode Go proxy
- * live 实测不开，待 gated live smoke 验证后放开）：
- * - grok-4.6（xai, responses）：4.5 的 reasoning 档位未经 4.6 验证，不继承
- * - hy4-preview（tencent 混元, chat）：与 Hy3 同协议族
- * - glm-5.3-flash（zai, chat）：与 GLM 5.x 同协议族
- * - qwen3.8-flash（qwen, messages）：与 Qwen3.8 Max 同协议族
- * - longcat-2.0（longcat 美团, chat）：LongCat 官方文档兼容 OpenAI Chat Completions
- * - muse-spark-1.3-contributor（meta, responses）：1.2 的 vision/reasoning 未经 1.3 验证，不继承
+ * 2026-09-03 live/文档验证后放开（key：live = 真实 Go probe，docs = 厂商官方文档）：
+ * - grok-4.6（xai, responses）：reasoning [default,low,medium,high] live 通过（B/C；
+ *   D continuation 空文本两次，待跟进，不阻塞档位声明）；vision=true + JPEG/PNG（xAI 官方 docs）
+ * - hy4-preview（tencent 混元, chat）：与 Hy3 同协议族；发布报道无 vision 声明 → vision 不开
+ * - glm-5.3-flash（zai, chat）：vision=true + JPEG/PNG/WEBP（智谱官方：原生多模态）
+ * - qwen3.8-flash（qwen, messages）：vision=true + JPEG/PNG/WEBP（阿里官方：图文视频输入）
+ * - qwen3.7-plus（qwen, messages）：同官方表确认 vision，顺手补上（此前保守 false）
+ * - minimax-m3（minimax, messages）：vision=true + JPEG/PNG/WEBP（MiniMax 官方：原生多模态）
+ * - longcat-2.0（longcat 美团, chat）：LongCat 官方文档兼容 OpenAI Chat Completions；
+ *   2.0 为纯语言 coding 模型（视觉属 LongCat-Next/Omni 线）→ vision 不开
+ * - muse-spark-1.3-contributor（meta, responses）：reasoning [default,minimal,low,medium,high,xhigh]
+ *   live 通过（max 无输出，不声明；high 以上 hungry， trivial prompt 约 450+ reasoning tokens）；
+ *   vision PNG/JPEG/WEBP 均无识别 → vision 不开
+ * - deepseek-v4-flash：官方确认 vision 属独立 -vision-exp 模型 → 保持 false
  */
 export const OPENCODE_MODELS: AIModelDefinition[] = [
   // ---- OpenAI Chat Completions（官方 endpoint：/v1/chat/completions）----
@@ -51,7 +57,7 @@ export const OPENCODE_MODELS: AIModelDefinition[] = [
   { id: "mimo-v2.5", name: "MiMo V2.5", provider: "opencode-go", vendor: "mimo", transport: "openai-chat", capabilities: { streaming: true, tools: true, vision: true, fileParts: false, visionMimeTypes: ["image/jpeg", "image/png", "image/webp"] } },
   { id: "hy3", name: "Hy3", provider: "opencode-go", vendor: "tencent", transport: "openai-chat", capabilities: { streaming: true, tools: true, vision: false, fileParts: false } },
   { id: "hy4-preview", name: "Hy4 preview", provider: "opencode-go", vendor: "tencent", transport: "openai-chat", capabilities: { streaming: true, tools: true, vision: false, fileParts: false } },
-  { id: "glm-5.3-flash", name: "GLM 5.3 Flash", provider: "opencode-go", vendor: "zai", transport: "openai-chat", capabilities: { streaming: true, tools: true, vision: false, fileParts: false } },
+  { id: "glm-5.3-flash", name: "GLM 5.3 Flash", provider: "opencode-go", vendor: "zai", transport: "openai-chat", capabilities: { streaming: true, tools: true, vision: true, fileParts: false, visionMimeTypes: ["image/jpeg", "image/png", "image/webp"] } },
   { id: "longcat-2.0", name: "LongCat 2.0", provider: "opencode-go", vendor: "longcat", transport: "openai-chat", capabilities: { streaming: true, tools: true, vision: false, fileParts: false } },
   // ---- OpenAI Responses（官方 endpoint：/v1/responses → @ai-sdk/openai）----
   // Phase 3.1 正式接入。保守能力声明：vision/fileParts 未经 OpenCode Go proxy 实测不开。
@@ -61,7 +67,20 @@ export const OPENCODE_MODELS: AIModelDefinition[] = [
     provider: "opencode-go",
     vendor: "xai",
     transport: "openai-responses",
-    capabilities: { streaming: true, tools: true, vision: false, fileParts: false },
+    capabilities: {
+      streaming: true,
+      tools: true,
+      vision: true,
+      fileParts: false,
+      visionMimeTypes: ["image/jpeg", "image/png"],
+      // 2026-09-03 live：reasoning low/medium/high outbound 回显 + 文本通过（Smoke B/C）；
+      // 官方边界沿用 4.5（low/medium/high，默认 high，不能关闭）+ forceReasoning。
+      reasoning: {
+        adjustable: true,
+        supportedEfforts: ["default", "low", "medium", "high"],
+        mechanism: "openai-responses-effort",
+      },
+    },
   },
   {
     id: "gpt-5.6-luna",
@@ -92,13 +111,26 @@ export const OPENCODE_MODELS: AIModelDefinition[] = [
     provider: "opencode-go",
     vendor: "meta",
     transport: "openai-responses",
-    capabilities: { streaming: true, tools: true, vision: false, fileParts: false },
+    capabilities: {
+      streaming: true,
+      tools: true,
+      vision: false,
+      fileParts: false,
+      // 2026-09-03 live：minimal/low/medium/high/xhigh outbound 回显 + 文本通过；
+      // max 无输出（NoOutputGeneratedError），不声明；high 以上 hungry（trivial prompt 约 450+ reasoning tokens）；
+      // vision PNG/JPEG/WEBP 均无识别，不开。
+      reasoning: {
+        adjustable: true,
+        supportedEfforts: ["default", "minimal", "low", "medium", "high", "xhigh"],
+        mechanism: "openai-responses-effort",
+      },
+    },
   },
   // ---- Anthropic Messages（官方 endpoint：/v1/messages）----
   // V1 保守能力声明：streaming + tools 为强要求；vision/fileParts 未经实测不开
-  { id: "minimax-m3", name: "MiniMax M3", provider: "opencode-go", vendor: "minimax", transport: "anthropic-messages", capabilities: { streaming: true, tools: true, vision: false, fileParts: false } },
-  { id: "qwen3.7-plus", name: "Qwen3.7 Plus", provider: "opencode-go", vendor: "qwen", transport: "anthropic-messages", capabilities: { streaming: true, tools: true, vision: false, fileParts: false } },
-  { id: "qwen3.8-flash", name: "Qwen3.8 Flash", provider: "opencode-go", vendor: "qwen", transport: "anthropic-messages", capabilities: { streaming: true, tools: true, vision: false, fileParts: false } },
+  { id: "minimax-m3", name: "MiniMax M3", provider: "opencode-go", vendor: "minimax", transport: "anthropic-messages", capabilities: { streaming: true, tools: true, vision: true, fileParts: false, visionMimeTypes: ["image/jpeg", "image/png", "image/webp"] } },
+  { id: "qwen3.7-plus", name: "Qwen3.7 Plus", provider: "opencode-go", vendor: "qwen", transport: "anthropic-messages", capabilities: { streaming: true, tools: true, vision: true, fileParts: false, visionMimeTypes: ["image/jpeg", "image/png", "image/webp"] } },
+  { id: "qwen3.8-flash", name: "Qwen3.8 Flash", provider: "opencode-go", vendor: "qwen", transport: "anthropic-messages", capabilities: { streaming: true, tools: true, vision: true, fileParts: false, visionMimeTypes: ["image/jpeg", "image/png", "image/webp"] } },
 ];
 
 export const OPENCODE_DEFAULT_MODEL = "deepseek-v4-flash";

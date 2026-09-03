@@ -118,14 +118,20 @@ describe("文本提取", () => {
 
 describe("Vision Capability（真实约束）", () => {
   it("内置模型：registry 明确配置", () => {
-    // grok-4.6：Responses 已正式支持，vision 仍处于 capability gate（未经 live 验证 → vision=false，不暴露）
-    expect(getModelCapabilities({ provider: "opencode-go", model: "grok-4.6" }).vision).toBe(false);
     expect(getModelCapabilities({ provider: "opencode-go", model: "kimi-k3" }).vision).toBe(true);
     expect(getModelCapabilities({ provider: "opencode-go", model: "mimo-v2.5" }).vision).toBe(true);
-    // muse-spark-1.3-contributor：vision 未经 1.3 live 验证 → 保守 false（1.2 的声明不继承）
+    // muse-spark-1.3-contributor：live 验证 PNG/JPEG/WEBP 均无识别 → false
     expect(getModelCapabilities({ provider: "opencode-go", model: "muse-spark-1.3-contributor" }).vision).toBe(false);
-    expect(getModelCapabilities({ provider: "opencode-go", model: "glm-5.3-flash" }).vision).toBe(false);
+    // 官方文档确认 vision：GLM 原生多模态 / Qwen 图文视频 / MiniMax 原生多模态 / Grok 图像输入
+    expect(getModelCapabilities({ provider: "opencode-go", model: "glm-5.3-flash" }).vision).toBe(true);
+    expect(getModelCapabilities({ provider: "opencode-go", model: "qwen3.8-flash" }).vision).toBe(true);
+    expect(getModelCapabilities({ provider: "opencode-go", model: "qwen3.7-plus" }).vision).toBe(true);
+    expect(getModelCapabilities({ provider: "opencode-go", model: "minimax-m3" }).vision).toBe(true);
+    expect(getModelCapabilities({ provider: "opencode-go", model: "grok-4.6" }).vision).toBe(true);
+    // 无 vision 声明：混元 Hy3 / LongCat-2.0（纯语言）/ DeepSeek-V4-Flash（vision 属独立 -vision-exp 模型）
     expect(getModelCapabilities({ provider: "opencode-go", model: "hy3" }).vision).toBe(false);
+    expect(getModelCapabilities({ provider: "opencode-go", model: "hy4-preview" }).vision).toBe(false);
+    expect(getModelCapabilities({ provider: "opencode-go", model: "longcat-2.0" }).vision).toBe(false);
     expect(getModelCapabilities({ provider: "deepseek", model: "deepseek-v4-flash" }).vision).toBe(false);
   });
 
@@ -220,10 +226,15 @@ describe("Vision MIME gate（isVisionMimeSupported，Phase 3.3A）", () => {
   });
 
   it("visionMimeTypes 贯通：registry 未声明 → undefined；已声明 → 白名单", () => {
-    // Phase 3.3B：kimi-k3 / mimo-v2.5 已 live 验证 PNG/JPEG/WEBP；1.3 未验证 → undefined
+    // Phase 3.3B：kimi-k3 / mimo-v2.5 已 live 验证 PNG/JPEG/WEBP
     expect(getModelCapabilities({ provider: "opencode-go", model: "kimi-k3" }).visionMimeTypes).toEqual(["image/jpeg", "image/png", "image/webp"]);
     expect(getModelCapabilities({ provider: "opencode-go", model: "mimo-v2.5" }).visionMimeTypes).toEqual(["image/jpeg", "image/png", "image/webp"]);
     expect(getModelCapabilities({ provider: "opencode-go", model: "muse-spark-1.3-contributor" }).visionMimeTypes).toBeUndefined();
+    // 2026-09 文档确认：GLM/Qwen/MiniMax 三格式；Grok 官方仅 JPEG/PNG
+    for (const model of ["glm-5.3-flash", "qwen3.8-flash", "qwen3.7-plus", "minimax-m3"]) {
+      expect(getModelCapabilities({ provider: "opencode-go", model }).visionMimeTypes, model).toEqual(["image/jpeg", "image/png", "image/webp"]);
+    }
+    expect(getModelCapabilities({ provider: "opencode-go", model: "grok-4.6" }).visionMimeTypes).toEqual(["image/jpeg", "image/png"]);
     expect(getModelCapabilities({ provider: "custom-openai", model: "x", custom: { providerName: "", baseURL: "", model: "x", vision: true } }).visionMimeTypes).toBeUndefined();
   });
 
