@@ -338,7 +338,7 @@ export function SettingsView({
                 <TaskSettings highlightedId={highlightedId ?? undefined} />
               </div>
               <div className={cn(section === "focus" && "ux-fade")} hidden={section !== "focus"}>
-                <FocusSettings />
+                <FocusSettings highlightedId={highlightedId ?? undefined} />
               </div>
               <div className={cn(section === "kiro" && "ux-fade")} hidden={section !== "kiro"}>
                 <KiroAISettings reveal={reveal} />

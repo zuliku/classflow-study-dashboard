@@ -255,9 +255,14 @@ export function SemesterSettings({
       </SettingsSection>
 
       {/* 作息方案（BellSchedule） */}
-      <SettingsSection title="作息方案" description="管理铃声/节次时间模板，导入的“第3节”按此表解析为具体时间。">
-        <BellScheduleSettings highlightedId={highlightedId} />
-      </SettingsSection>
+      <div
+        data-setting-id="bell-schedule"
+        className={highlightedId === "bell-schedule" ? "bg-pastel-mint/60 rounded-xl" : ""}
+      >
+        <SettingsSection title="作息方案" description="管理铃声/节次时间模板，导入的“第3节”按此表解析为具体时间。">
+          <BellScheduleSettings highlightedId={highlightedId} />
+        </SettingsSection>
+      </div>
     </div>
   );
 }

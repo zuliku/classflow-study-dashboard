@@ -197,7 +197,7 @@ describe("modified preference 检测", () => {
   });
 
   it("PREFERENCE_SECTIONS 覆盖所有偏好键且 section 有效（V4：交互并入通用）", () => {
-    const validSections = new Set(["general", "semester", "tasks"]);
+    const validSections = new Set(["general", "semester", "tasks", "focus"]);
     for (const key of Object.keys(DEFAULT_PREFERENCES)) {
       const sec = PREFERENCE_SECTIONS[key as keyof typeof DEFAULT_PREFERENCES];
       expect(sec).toBeDefined();
