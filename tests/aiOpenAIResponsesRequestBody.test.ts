@@ -128,8 +128,8 @@ describe("OpenAI Responses image request body（Phase 3.3A，@ai-sdk/openai 4.0.
     return { bodies, model };
   };
 
-  it("grok-4.5：user 图片 part → 请求走 /responses，图片不被丢失，body 含 input_image base64", async () => {
-    const { bodies, model } = captureImageRequest("grok-4.5");
+  it("grok-4.6：user 图片 part → 请求走 /responses，图片不被丢失，body 含 input_image base64", async () => {
+    const { bodies, model } = captureImageRequest("grok-4.6");
     const bytes = Uint8Array.from(atob(PNG_BASE64), (c) => c.charCodeAt(0));
     await generateText({
       model,
@@ -156,7 +156,7 @@ describe("OpenAI Responses image request body（Phase 3.3A，@ai-sdk/openai 4.0.
   });
 
   it("store:false 作为 base provider option 真实进入请求体", async () => {
-    const { bodies, model } = captureImageRequest("grok-4.5");
+    const { bodies, model } = captureImageRequest("grok-4.6");
     await generateText({
       model,
       messages: [{ role: "user", content: "hi" }],

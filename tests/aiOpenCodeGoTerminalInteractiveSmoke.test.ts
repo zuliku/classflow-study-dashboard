@@ -4,11 +4,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 /**
- * Muse Spark 1.2 Contributor Interactive Live Smoke（gated）— start → write → wait
+ * Muse Spark 1.3 Contributor Interactive Live Smoke（gated）— start → write → wait
  * 必须严格证明 Muse 调用三个工具，无 harness 替模型补调用。
  */
 const key = process.env.OPENCODE_GO_TEST_API_KEY;
-const smokeModel = process.env.OPENCODE_GO_SMOKE_MODEL ?? "muse-spark-1.2-contributor";
+const smokeModel = process.env.OPENCODE_GO_SMOKE_MODEL ?? "muse-spark-1.3-contributor";
 const gated = !!key ? describe : describe.skip;
 
 gated(`${smokeModel} Interactive Terminal Smoke（start/write/wait）`, () => {
@@ -32,7 +32,7 @@ gated(`${smokeModel} Interactive Terminal Smoke（start/write/wait）`, () => {
       const msg = String((e as Error)?.message ?? e);
       const code = (e as { code?: string })?.code ?? "";
       if (/not.*found|unsupported|not.*available|unknown.*model|不可用|MODEL_UNAVAILABLE/i.test(msg) || /MODEL_UNAVAILABLE/i.test(code)) {
-        console.log(`[LIVE] Muse Spark 1.2 NOT AVAILABLE THROUGH CURRENT OPENCODE_GO: ${msg} code=${code}`);
+        console.log(`[LIVE] Muse Spark 1.3 NOT AVAILABLE THROUGH CURRENT OPENCODE_GO: ${msg} code=${code}`);
         return;
       }
       throw e;

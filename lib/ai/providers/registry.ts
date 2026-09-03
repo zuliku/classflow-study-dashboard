@@ -100,6 +100,7 @@ export function getVendorForModelId(modelId: string): AIModelVendor | null {
   if (modelId.startsWith("minimax-")) return "minimax";
   if (modelId.startsWith("qwen")) return "qwen";
   if (modelId.startsWith("muse-")) return "meta";
+  if (modelId.startsWith("longcat-")) return "longcat";
   return null;
 }
 

@@ -18,6 +18,8 @@ export const AI_PROVIDER_META: Record<AIModelVendor, AIModelVendorMeta> = {
   // 项目为浅色主题：使用黑色 Blossom SVG（白底黑标）
   openai: { id: "openai", name: "OpenAI", logo: "/ai-providers/openai.svg" },
   meta: { id: "meta", name: "Meta", logo: "/ai-providers/meta.svg" },
+  // LongCat 官方品牌标暂缺：字母标占位（深色圆角 + LC），待官方标替换
+  longcat: { id: "longcat", name: "Meituan · LongCat", logo: "/ai-providers/longcat.svg" },
 };
 
 /** 未知厂商的统一 fallback（ProviderLogo 组件兜底） */

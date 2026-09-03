@@ -118,13 +118,13 @@ describe("文本提取", () => {
 
 describe("Vision Capability（真实约束）", () => {
   it("内置模型：registry 明确配置", () => {
-    // grok-4.5：Responses 已正式支持（Phase 3.1+），vision 仍处于 capability gate
-    // （Phase 3.3A live probe 未通过 → vision=false，不暴露）
-    expect(getModelCapabilities({ provider: "opencode-go", model: "grok-4.5" }).vision).toBe(false);
+    // grok-4.6：Responses 已正式支持，vision 仍处于 capability gate（未经 live 验证 → vision=false，不暴露）
+    expect(getModelCapabilities({ provider: "opencode-go", model: "grok-4.6" }).vision).toBe(false);
     expect(getModelCapabilities({ provider: "opencode-go", model: "kimi-k3" }).vision).toBe(true);
     expect(getModelCapabilities({ provider: "opencode-go", model: "mimo-v2.5" }).vision).toBe(true);
-    // muse-spark-1.2-contributor：contributor 版本 vision=false（保守能力声明）`r`n    expect(getModelCapabilities({ provider: "opencode-go", model: "muse-spark-1.2-contributor" }).vision).toBe(false);
-    expect(getModelCapabilities({ provider: "opencode-go", model: "glm-5.2" }).vision).toBe(false);
+    // muse-spark-1.3-contributor：vision 未经 1.3 live 验证 → 保守 false（1.2 的声明不继承）
+    expect(getModelCapabilities({ provider: "opencode-go", model: "muse-spark-1.3-contributor" }).vision).toBe(false);
+    expect(getModelCapabilities({ provider: "opencode-go", model: "glm-5.3-flash" }).vision).toBe(false);
     expect(getModelCapabilities({ provider: "opencode-go", model: "hy3" }).vision).toBe(false);
     expect(getModelCapabilities({ provider: "deepseek", model: "deepseek-v4-flash" }).vision).toBe(false);
   });
@@ -220,10 +220,10 @@ describe("Vision MIME gate（isVisionMimeSupported，Phase 3.3A）", () => {
   });
 
   it("visionMimeTypes 贯通：registry 未声明 → undefined；已声明 → 白名单", () => {
-    // Phase 3.3B：kimi-k3 / mimo-v2.5 / muse-spark-1.2 已 live 验证 PNG/JPEG/WEBP
+    // Phase 3.3B：kimi-k3 / mimo-v2.5 已 live 验证 PNG/JPEG/WEBP；1.3 未验证 → undefined
     expect(getModelCapabilities({ provider: "opencode-go", model: "kimi-k3" }).visionMimeTypes).toEqual(["image/jpeg", "image/png", "image/webp"]);
     expect(getModelCapabilities({ provider: "opencode-go", model: "mimo-v2.5" }).visionMimeTypes).toEqual(["image/jpeg", "image/png", "image/webp"]);
-    expect(getModelCapabilities({ provider: "opencode-go", model: "muse-spark-1.2-contributor" }).visionMimeTypes).toEqual(["image/jpeg", "image/png", "image/webp"]);
+    expect(getModelCapabilities({ provider: "opencode-go", model: "muse-spark-1.3-contributor" }).visionMimeTypes).toBeUndefined();
     expect(getModelCapabilities({ provider: "custom-openai", model: "x", custom: { providerName: "", baseURL: "", model: "x", vision: true } }).visionMimeTypes).toBeUndefined();
   });
 

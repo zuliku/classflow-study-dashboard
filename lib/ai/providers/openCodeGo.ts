@@ -2,7 +2,7 @@ import { AI } from "@/lib/ai/config";
 import { AIModelDefinition, AIProviderConfig } from "@/lib/ai/providers/types";
 
 /**
- * OpenCode Go 官方模型注册表（Task 10 + Phase 3.0/3.1）：
+ * OpenCode Go 官方模型注册表（Task 10 + Phase 3.0/3.1，2026-09 按 Go 使用/限额表同步 13 款）：
  * 以官方 endpoint 表为准，每个模型声明真实 transport
  * （openai-chat / openai-responses / anthropic-messages）。
  *
@@ -11,12 +11,18 @@ import { AIModelDefinition, AIProviderConfig } from "@/lib/ai/providers/types";
  * - 官方 endpoint 表 + 本 verified registry = transport / vendor / capabilities / 展示名 source
  * 本列表是 /models 无法获取时的 fallback，也是远端模型 transport 的唯一来源
  * （远端 /models 只返回 id，不返回 transport；未知模型一律跳过，绝不猜测协议）。
+ *
+ * 新增模型保守能力声明（streaming/tools 开；vision/reasoning 未经 OpenCode Go proxy
+ * live 实测不开，待 gated live smoke 验证后放开）：
+ * - grok-4.6（xai, responses）：4.5 的 reasoning 档位未经 4.6 验证，不继承
+ * - hy4-preview（tencent 混元, chat）：与 Hy3 同协议族
+ * - glm-5.3-flash（zai, chat）：与 GLM 5.x 同协议族
+ * - qwen3.8-flash（qwen, messages）：与 Qwen3.8 Max 同协议族
+ * - longcat-2.0（longcat 美团, chat）：LongCat 官方文档兼容 OpenAI Chat Completions
+ * - muse-spark-1.3-contributor（meta, responses）：1.2 的 vision/reasoning 未经 1.3 验证，不继承
  */
 export const OPENCODE_MODELS: AIModelDefinition[] = [
   // ---- OpenAI Chat Completions（官方 endpoint：/v1/chat/completions）----
-  { id: "glm-5.3", name: "GLM 5.3", provider: "opencode-go", vendor: "zai", transport: "openai-chat", capabilities: { streaming: true, tools: true, vision: false, fileParts: false } },
-  { id: "glm-5.2", name: "GLM 5.2", provider: "opencode-go", vendor: "zai", transport: "openai-chat", capabilities: { streaming: true, tools: true, vision: false, fileParts: false } },
-  { id: "glm-5.1", name: "GLM 5.1", provider: "opencode-go", vendor: "zai", transport: "openai-chat", capabilities: { streaming: true, tools: true, vision: false, fileParts: false } },
   // kimi-k3 / mimo-v2.5 Vision：Phase 3.3B live 验证（PNG/JPEG/WEBP 颜色识别全通过，
   // 经生产 resolver → @ai-sdk/openai-compatible → OpenCode Go chat/completions）
   {
@@ -41,36 +47,21 @@ export const OPENCODE_MODELS: AIModelDefinition[] = [
       },
     },
   },
-  { id: "kimi-k2.7-code", name: "Kimi K2.7 Code", provider: "opencode-go", vendor: "kimi", transport: "openai-chat", capabilities: { streaming: true, tools: true, vision: false, fileParts: false } },
-  { id: "kimi-k2.6", name: "Kimi K2.6", provider: "opencode-go", vendor: "kimi", transport: "openai-chat", capabilities: { streaming: true, tools: true, vision: false, fileParts: false } },
-  { id: "deepseek-v4-pro", name: "DeepSeek V4 Pro", provider: "opencode-go", vendor: "deepseek", transport: "openai-chat", capabilities: { streaming: true, tools: true, vision: false, fileParts: false } },
   { id: "deepseek-v4-flash", name: "DeepSeek V4 Flash", provider: "opencode-go", vendor: "deepseek", transport: "openai-chat", capabilities: { streaming: true, tools: true, vision: false, fileParts: false } },
   { id: "mimo-v2.5", name: "MiMo V2.5", provider: "opencode-go", vendor: "mimo", transport: "openai-chat", capabilities: { streaming: true, tools: true, vision: true, fileParts: false, visionMimeTypes: ["image/jpeg", "image/png", "image/webp"] } },
-  { id: "mimo-v2.5-pro", name: "MiMo V2.5 Pro", provider: "opencode-go", vendor: "mimo", transport: "openai-chat", capabilities: { streaming: true, tools: true, vision: false, fileParts: false } },
   { id: "hy3", name: "Hy3", provider: "opencode-go", vendor: "tencent", transport: "openai-chat", capabilities: { streaming: true, tools: true, vision: false, fileParts: false } },
+  { id: "hy4-preview", name: "Hy4 preview", provider: "opencode-go", vendor: "tencent", transport: "openai-chat", capabilities: { streaming: true, tools: true, vision: false, fileParts: false } },
+  { id: "glm-5.3-flash", name: "GLM 5.3 Flash", provider: "opencode-go", vendor: "zai", transport: "openai-chat", capabilities: { streaming: true, tools: true, vision: false, fileParts: false } },
+  { id: "longcat-2.0", name: "LongCat 2.0", provider: "opencode-go", vendor: "longcat", transport: "openai-chat", capabilities: { streaming: true, tools: true, vision: false, fileParts: false } },
   // ---- OpenAI Responses（官方 endpoint：/v1/responses → @ai-sdk/openai）----
   // Phase 3.1 正式接入。保守能力声明：vision/fileParts 未经 OpenCode Go proxy 实测不开。
   {
-    id: "grok-4.5",
-    name: "Grok 4.5",
+    id: "grok-4.6",
+    name: "Grok 4.6",
     provider: "opencode-go",
     vendor: "xai",
     transport: "openai-responses",
-    capabilities: {
-      streaming: true,
-      tools: true,
-      vision: false,
-      fileParts: false,
-      // Phase 3.2B：Grok 4.5 reasoning 经真实 OpenCode Go live smoke 验证
-      // （low/medium/high + summary:"detailed" 均 200，含 client-tool continuation）。
-      // 官方边界：low/medium/high，默认 high，不能关闭 → default=不发送 override。
-      // 需要 forceReasoning（SDK id 启发式不识别 grok-*）。
-      reasoning: {
-        adjustable: true,
-        supportedEfforts: ["default", "low", "medium", "high"],
-        mechanism: "openai-responses-effort",
-      },
-    },
+    capabilities: { streaming: true, tools: true, vision: false, fileParts: false },
   },
   {
     id: "gpt-5.6-luna",
@@ -95,34 +86,19 @@ export const OPENCODE_MODELS: AIModelDefinition[] = [
       },
     },
   },
-  // ---- Anthropic Messages（官方 endpoint：/v1/messages）----
-  // V1 保守能力声明：streaming + tools 为强要求；vision/fileParts 未经实测不开
-  { id: "minimax-m3", name: "MiniMax M3", provider: "opencode-go", vendor: "minimax", transport: "anthropic-messages", capabilities: { streaming: true, tools: true, vision: false, fileParts: false } },
-  { id: "minimax-m2.7", name: "MiniMax M2.7", provider: "opencode-go", vendor: "minimax", transport: "anthropic-messages", capabilities: { streaming: true, tools: true, vision: false, fileParts: false } },
-  { id: "minimax-m2.5", name: "MiniMax M2.5", provider: "opencode-go", vendor: "minimax", transport: "anthropic-messages", capabilities: { streaming: true, tools: true, vision: false, fileParts: false } },
-  { id: "qwen3.8-max", name: "Qwen3.8 Max", provider: "opencode-go", vendor: "qwen", transport: "anthropic-messages", capabilities: { streaming: true, tools: true, vision: false, fileParts: false } },
-  { id: "qwen3.7-max", name: "Qwen3.7 Max", provider: "opencode-go", vendor: "qwen", transport: "anthropic-messages", capabilities: { streaming: true, tools: true, vision: false, fileParts: false } },
-  { id: "qwen3.7-plus", name: "Qwen3.7 Plus", provider: "opencode-go", vendor: "qwen", transport: "anthropic-messages", capabilities: { streaming: true, tools: true, vision: false, fileParts: false } },
-  { id: "qwen3.6-plus", name: "Qwen3.6 Plus", provider: "opencode-go", vendor: "qwen", transport: "anthropic-messages", capabilities: { streaming: true, tools: true, vision: false, fileParts: false } },
   {
-    id: "muse-spark-1.2-contributor",
-    name: "Muse Spark 1.2",
+    id: "muse-spark-1.3-contributor",
+    name: "Muse Spark 1.3",
     provider: "opencode-go",
     vendor: "meta",
     transport: "openai-responses",
-    capabilities: {
-      streaming: true,
-      tools: true,
-      vision: true,
-      fileParts: false,
-      visionMimeTypes: ["image/jpeg", "image/png", "image/webp"],
-      reasoning: {
-        adjustable: true,
-        supportedEfforts: ["default", "minimal", "low", "medium", "high", "xhigh"],
-        mechanism: "openai-responses-effort",
-      },
-    },
+    capabilities: { streaming: true, tools: true, vision: false, fileParts: false },
   },
+  // ---- Anthropic Messages（官方 endpoint：/v1/messages）----
+  // V1 保守能力声明：streaming + tools 为强要求；vision/fileParts 未经实测不开
+  { id: "minimax-m3", name: "MiniMax M3", provider: "opencode-go", vendor: "minimax", transport: "anthropic-messages", capabilities: { streaming: true, tools: true, vision: false, fileParts: false } },
+  { id: "qwen3.7-plus", name: "Qwen3.7 Plus", provider: "opencode-go", vendor: "qwen", transport: "anthropic-messages", capabilities: { streaming: true, tools: true, vision: false, fileParts: false } },
+  { id: "qwen3.8-flash", name: "Qwen3.8 Flash", provider: "opencode-go", vendor: "qwen", transport: "anthropic-messages", capabilities: { streaming: true, tools: true, vision: false, fileParts: false } },
 ];
 
 export const OPENCODE_DEFAULT_MODEL = "deepseek-v4-flash";

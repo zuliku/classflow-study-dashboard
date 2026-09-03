@@ -4,12 +4,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 /**
- * Muse Spark 1.2 Contributor Live Terminal Smoke（gated；仅本地显式 OPENCODE_GO_TEST_API_KEY 才运行）。
- * 默认模型：muse-spark-1.2-contributor（可通过 OPENCODE_GO_SMOKE_MODEL 覆盖），provider 优先 opencode-go。
- * 若当前 OpenCode Go 未暴露 muse-spark-1.2-contributor，则 probe 后报告 BLOCKED，不自动 fallback 到 mimo。
+ * Muse Spark 1.3 Contributor Live Terminal Smoke（gated；仅本地显式 OPENCODE_GO_TEST_API_KEY 才运行）。
+ * 默认模型：muse-spark-1.3-contributor（可通过 OPENCODE_GO_SMOKE_MODEL 覆盖），provider 优先 opencode-go。
+ * 若当前 OpenCode Go 未暴露 muse-spark-1.3-contributor，则 probe 后报告 BLOCKED，不自动 fallback 到 mimo。
  */
 const key = process.env.OPENCODE_GO_TEST_API_KEY;
-const smokeModel = process.env.OPENCODE_GO_SMOKE_MODEL ?? "muse-spark-1.2-contributor";
+const smokeModel = process.env.OPENCODE_GO_SMOKE_MODEL ?? "muse-spark-1.3-contributor";
 const gated = !!key ? describe : describe.skip;
 
 gated(`${smokeModel} Terminal Live Smoke（run_terminal_command → 真实 PowerShell）`, () => {
@@ -30,7 +30,7 @@ gated(`${smokeModel} Terminal Live Smoke（run_terminal_command → 真实 Power
       const msg = String((e as Error)?.message ?? e);
       const code = (e as { code?: string })?.code ?? "";
       if (/not.*found|unsupported|not.*available|unknown.*model|不可用|MODEL_UNAVAILABLE/i.test(msg) || /MODEL_UNAVAILABLE/i.test(code)) {
-        console.log(`[LIVE] Muse Spark 1.2 NOT AVAILABLE THROUGH CURRENT OPENCODE_GO: ${msg} code=${code}`);
+        console.log(`[LIVE] Muse Spark 1.3 NOT AVAILABLE THROUGH CURRENT OPENCODE_GO: ${msg} code=${code}`);
         return;
       }
       throw e;

@@ -56,14 +56,14 @@ describe("resolveModelDefinition", () => {
     expect(def?.vendor).toBe("openai");
   });
 
-  it("B3. OpenCode Responses：grok-4.5 → openai-responses", async () => {
-    const def = await resolveModelDefinition({ provider: "opencode-go", model: "grok-4.5" });
+  it("B3. OpenCode Responses：grok-4.6 → openai-responses", async () => {
+    const def = await resolveModelDefinition({ provider: "opencode-go", model: "grok-4.6" });
     expect(def?.transport).toBe("openai-responses");
     expect(def?.vendor).toBe("xai");
   });
 
-  it("B4. OpenCode：muse-spark-1.2-contributor → openai-responses / meta", async () => {
-    const def = await resolveModelDefinition({ provider: "opencode-go", model: "muse-spark-1.2-contributor" });
+  it("B4. OpenCode：muse-spark-1.3-contributor → openai-responses / meta", async () => {
+    const def = await resolveModelDefinition({ provider: "opencode-go", model: "muse-spark-1.3-contributor" });
     expect(def?.transport).toBe("openai-responses");
     expect(def?.vendor).toBe("meta");
   });
@@ -174,24 +174,24 @@ describe("createLanguageModelFromDefinition（Adapter 选择）", () => {
     expect(anthropicFactory).not.toHaveBeenCalled();
   });
 
-  it("F3b. grok-4.5 同样走 @ai-sdk/openai .responses", () => {
+  it("F3b. grok-4.6 同样走 @ai-sdk/openai .responses", () => {
     const m = createLanguageModelFromDefinition(
-      { id: "grok-4.5", name: "Grok 4.5", provider: "opencode-go", vendor: "xai", transport: "openai-responses", capabilities: { streaming: true, tools: true, vision: false, fileParts: false } },
+      { id: "grok-4.6", name: "Grok 4.6", provider: "opencode-go", vendor: "xai", transport: "openai-responses", capabilities: { streaming: true, tools: true, vision: false, fileParts: false } },
       { baseURL: "https://opencode.ai/zen/go/v1", apiKey: "sk-go" }
     );
     expect(providerOf(m)).toBe("openai");
-    expect(modelIdOf(m)).toBe("grok-4.5");
+    expect(modelIdOf(m)).toBe("grok-4.6");
     expect(openAIFactory).toHaveBeenCalledTimes(1);
     expect(openAICompatibleFactory).not.toHaveBeenCalled();
   });
 
-  it("F3c. muse-spark-1.2-contributor 走 @ai-sdk/openai-compatible（openai-chat，meta vendor）", () => {
+  it("F3c. muse-spark-1.3-contributor 走 @ai-sdk/openai .responses（meta vendor，保守 caps）", () => {
     const m = createLanguageModelFromDefinition(
-      { id: "muse-spark-1.2-contributor", name: "Muse Spark 1.2", provider: "opencode-go", vendor: "meta", transport: "openai-responses", capabilities: { streaming: true, tools: true, vision: true, fileParts: false, visionMimeTypes: ["image/jpeg", "image/png", "image/webp"] } },
+      { id: "muse-spark-1.3-contributor", name: "Muse Spark 1.3", provider: "opencode-go", vendor: "meta", transport: "openai-responses", capabilities: { streaming: true, tools: true, vision: false, fileParts: false } },
       { baseURL: "https://opencode.ai/zen/go/v1", apiKey: "sk-go" }
     );
     expect(providerOf(m)).toBe("openai");
-    expect(modelIdOf(m)).toBe("muse-spark-1.2-contributor");
+    expect(modelIdOf(m)).toBe("muse-spark-1.3-contributor");
     expect((m as { api?: string }).api).toBe("responses");
     expect(openAIFactory).toHaveBeenCalledTimes(1);
     expect(openAICompatibleFactory).not.toHaveBeenCalled();
@@ -255,13 +255,14 @@ describe("resolveLanguageModel（统一入口）", () => {
 });
 
 describe("OpenCode 注册表完整性", () => {
-  it("OPENCODE_MODELS：每个模型 transport 均为已支持值；官方 endpoint 表模型全覆盖", () => {
+  it("OPENCODE_MODELS：每个模型 transport 均为已支持值；Go 限额表 13 款全覆盖", () => {
     const ids = new Set(OPENCODE_MODELS.map((m) => m.id));
+    expect(OPENCODE_MODELS).toHaveLength(13);
     for (const id of [
-      "glm-5.3", "glm-5.2", "glm-5.1", "kimi-k3", "kimi-k2.7-code", "kimi-k2.6",
-      "deepseek-v4-pro", "deepseek-v4-flash", "mimo-v2.5", "mimo-v2.5-pro", "hy3",
-      "grok-4.5", "gpt-5.6-luna", "muse-spark-1.2-contributor",
-      "minimax-m3", "minimax-m2.7", "minimax-m2.5", "qwen3.8-max", "qwen3.7-max", "qwen3.7-plus", "qwen3.6-plus",
+      "glm-5.3-flash", "kimi-k3",
+      "deepseek-v4-flash", "mimo-v2.5", "hy3", "hy4-preview", "longcat-2.0",
+      "grok-4.6", "gpt-5.6-luna", "muse-spark-1.3-contributor",
+      "minimax-m3", "qwen3.7-plus", "qwen3.8-flash",
     ]) {
       expect(ids.has(id), id).toBe(true);
     }

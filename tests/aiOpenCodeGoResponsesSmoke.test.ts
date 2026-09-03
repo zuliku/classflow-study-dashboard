@@ -214,9 +214,10 @@ describeGo("OpenCode Go Responses 真实 smoke（OPENCODE_GO_TEST_API_KEY 存在
   }, SMOKE_TIMEOUT);
 });
 
-describeGo("Grok 4.5 reasoning probe（Phase 3.2B，OPENCODE_GO_TEST_API_KEY 存在时运行）", () => {
-  // 官方边界：low / medium / high（默认 high，不能关闭）。
-  // 全部通过后才允许把 grok-4.5 改为 adjustable（见 lib/ai/providers/openCodeGo.ts）。
+describeGo("Grok 4.6 reasoning probe（OPENCODE_GO_TEST_API_KEY 存在时运行）", () => {
+  // 4.5 时代官方边界：low / medium / high（默认 high，不能关闭）。
+  // 本探针直接构造 SDK 请求（不经过 registry），用于验证 4.6 是否延续该边界；
+  // 全部通过后才允许把 grok-4.6 声明为 adjustable（见 lib/ai/providers/openCodeGo.ts）。
   const grokModel = (capture: { urls: string[]; bodies: Record<string, unknown>[] }): LanguageModel =>
     createOpenAI({
       name: "classflow-kiro",
@@ -234,7 +235,7 @@ describeGo("Grok 4.5 reasoning probe（Phase 3.2B，OPENCODE_GO_TEST_API_KEY 存
         }
         return fetch(input, init);
       },
-    }).responses("grok-4.5");
+    }).responses("grok-4.6");
 
   const collectText = async (result: ReturnType<typeof streamText>) => {
     let text = "";
@@ -244,7 +245,7 @@ describeGo("Grok 4.5 reasoning probe（Phase 3.2B，OPENCODE_GO_TEST_API_KEY 存
     return text;
   };
 
-  it("Smoke A：grok-4.5 基础 Responses 正常（control，无 reasoning override）", async () => {
+  it("Smoke A：grok-4.6 基础 Responses 正常（control，无 reasoning override）", async () => {
     const capture = { urls: [] as string[], bodies: [] as Record<string, unknown>[] };
     const model = grokModel(capture);
     const text = await collectText(
@@ -291,7 +292,7 @@ describeGo("Grok 4.5 reasoning probe（Phase 3.2B，OPENCODE_GO_TEST_API_KEY 存
   }, SMOKE_TIMEOUT * 2);
 
   it("Smoke D：reasoning=high + 真实 client-tool continuation（UIMessage 路径，保留 reasoning parts）", async () => {
-    const { model } = await resolveLanguageModel({ provider: "opencode-go", model: "grok-4.5", apiKey: KEY });
+    const { model } = await resolveLanguageModel({ provider: "opencode-go", model: "grok-4.6", apiKey: KEY });
     const getTimeTool = {
       get_current_time: tool({
         description: "获取当前本地时间",
@@ -351,13 +352,13 @@ describeGo("Grok 4.5 reasoning probe（Phase 3.2B，OPENCODE_GO_TEST_API_KEY 存
   }, SMOKE_TIMEOUT * 2);
 });
 
-describeGo("Grok 4.5 Vision smoke（Phase 3.3A，OPENCODE_GO_TEST_API_KEY 存在时运行）", () => {
-  // 已知 blocker（2026-08 实测）：OpenCode Go 对 grok-4.5 的 image 请求返回
+describeGo("Grok 4.6 Vision smoke（OPENCODE_GO_TEST_API_KEY 存在时运行）", () => {
+  // 已知 blocker（2026-08 于 grok-4.5 实测）：OpenCode Go 对 Grok 的 image 请求返回
   // HTTP 200 + response.failed（response.error=null，代理吞掉上游错误详情）。
   // 请求体为标准 input_image + data:image/png;base64（本地 capture 已验证），
   // 纯文本请求正常 → 代理/上游当前不支持 Grok 图片输入。
   // 这些测试作为未来修复后的探针保留；在代理支持前会失败（符合预期），
-  // 通过后即可按 Phase 3.3A 文档把 grok-4.5 vision 打开。
+  // 通过后即可按 Phase 3.3A 文档把 grok-4.6 vision 打开。
   // 确定性 fixture：16x16 红色方块（@napi-rs/canvas 本地生成，无网络变量）
   const redPng = (() => {
     const c = createCanvas(16, 16);
@@ -391,7 +392,7 @@ describeGo("Grok 4.5 Vision smoke（Phase 3.3A，OPENCODE_GO_TEST_API_KEY 存在
         }
         return fetch(input, init);
       },
-    }).responses("grok-4.5");
+    }).responses("grok-4.6");
 
   const collectText = async (result: ReturnType<typeof streamText>) => {
     let text = "";
