@@ -38,6 +38,8 @@ export function BackupSection() {
     reminders,
     focusSessions,
     scheduleOccurrenceOverrides,
+    bellSchedules,
+    activeBellScheduleId,
   } = state;
   const pushToast = useToastStore((s) => s.pushToast);
 
@@ -57,6 +59,8 @@ export function BackupSection() {
     reminders,
     focusSessions,
     scheduleOccurrenceOverrides,
+    bellSchedules,
+    activeBellScheduleId,
   });
 
   const exportFull = async () => {

@@ -1152,6 +1152,20 @@ export const useAppStore = create<AppState>()(
             reminders,
             now: Date.now(),
           });
+          // 作息方案：备份缺失 → 保留当前（旧备份不清空用户作息表）
+          const bellSchedules = Array.isArray(data.bellSchedules)
+            ? (data.bellSchedules as BellScheduleTemplate[]).filter(
+                (b): b is BellScheduleTemplate =>
+                  b !== null && typeof b === "object" && typeof b.id === "string" && typeof b.name === "string" && Array.isArray(b.periods)
+              )
+            : state.bellSchedules;
+          const activeBellScheduleId =
+            typeof data.activeBellScheduleId === "string" &&
+            bellSchedules.some((b) => b.id === data.activeBellScheduleId)
+              ? data.activeBellScheduleId
+              : Array.isArray(data.bellSchedules)
+                ? (bellSchedules[0]?.id ?? null)
+                : state.activeBellScheduleId;
           return {
             userProfile: data.userProfile,
             semester: data.semester,
@@ -1170,6 +1184,8 @@ export const useAppStore = create<AppState>()(
             scheduleOccurrenceOverrides: Array.isArray(data.scheduleOccurrenceOverrides)
               ? data.scheduleOccurrenceOverrides
               : [],
+            bellSchedules,
+            activeBellScheduleId,
             currentSemesterWeek: Math.min(
               Math.max(state.currentSemesterWeek, 1),
               data.semester.totalWeeks

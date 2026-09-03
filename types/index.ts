@@ -393,6 +393,9 @@ export interface ClassFlowBackupData {
   focusSessions?: FocusSession[];
   /** Task 7：一次性停课/调课/补课（旧备份可缺失 → 恢复为 []；不强制破坏性 bump backup version） */
   scheduleOccurrenceOverrides?: ScheduleOccurrenceOverride[];
+  /** 作息方案（旧备份可缺失 → 恢复时保留当前作息表，不清空） */
+  bellSchedules?: BellScheduleTemplate[];
+  activeBellScheduleId?: string | null;
 }
 
 /** 本地数据备份文件结构 (v1) */
