@@ -25,6 +25,17 @@ interface AISettingsState extends AISettings {
 const VALID_PROVIDERS: AIProviderId[] = ["opencode-go", "deepseek", "custom-openai"];
 const VALID_REASONING: KiroReasoningEffort[] = ["default", "minimal", "low", "medium", "high", "xhigh", "max"];
 
+/**
+ * Custom 能力声明 canonical defaults（conservative false；sanitizer fallback 唯一来源）。
+ * runtime（getModelCapabilities / getReasoningCapability）以 `=== true` 判定，
+ * 因此缺失、false、malformed 最终语义一致为 conservative false。
+ */
+const DEFAULT_CUSTOM_CAPABILITIES: Required<Pick<AICustomConfig, "vision" | "fileParts" | "reasoningEffort">> = {
+  vision: false,
+  fileParts: false,
+  reasoningEffort: false,
+};
+
 function sanitizeAISettings(persisted: unknown): Partial<AISettings> {
   if (!persisted || typeof persisted !== "object") return {};
   const p = persisted as Record<string, unknown>;
@@ -40,6 +51,11 @@ function sanitizeAISettings(persisted: unknown): Partial<AISettings> {
       providerName: typeof c.providerName === "string" ? c.providerName.slice(0, 80) : "",
       baseURL: typeof c.baseURL === "string" ? c.baseURL.slice(0, 512) : "",
       model: typeof c.model === "string" ? c.model.slice(0, 120) : "",
+      // V5A8：能力旗标严格 boolean 清洗（禁 truthy 强转；"true"/1/{}/[]/null 一律回落 false）
+      vision: typeof c.vision === "boolean" ? c.vision : DEFAULT_CUSTOM_CAPABILITIES.vision,
+      fileParts: typeof c.fileParts === "boolean" ? c.fileParts : DEFAULT_CUSTOM_CAPABILITIES.fileParts,
+      reasoningEffort:
+        typeof c.reasoningEffort === "boolean" ? c.reasoningEffort : DEFAULT_CUSTOM_CAPABILITIES.reasoningEffort,
     };
   }
   if (typeof p.memoryEnabled === "boolean") out.memoryEnabled = p.memoryEnabled;
@@ -53,7 +69,7 @@ const DEFAULT_SETTINGS: AISettings = {
   enabled: false,
   provider: "deepseek",
   model: getDefaultModel("deepseek"),
-  custom: { providerName: "", baseURL: "", model: "" },
+  custom: { providerName: "", baseURL: "", model: "", ...DEFAULT_CUSTOM_CAPABILITIES },
   memoryEnabled: true,
   reasoningEffort: "default",
 };
