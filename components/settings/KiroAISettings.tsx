@@ -13,7 +13,11 @@ import { SettingsRow } from "@/components/settings/SettingsRow";
 import { SettingsToggle, SettingsSelect, SettingsSegmentedControl, SettingsButton, SettingsInput } from "@/components/settings/SettingsControls";
 import { DisclosureRegion } from "@/components/ui/DisclosureRegion";
 import { KiroMemorySettings } from "@/components/settings/KiroMemorySettings";
-import { useKiroPreferencesStore } from "@/store/useKiroPreferencesStore";
+import {
+  getModifiedKiroSettingsPreferenceKeys,
+  useKiroPreferencesStore,
+  type KiroSettingsPreferences,
+} from "@/store/useKiroPreferencesStore";
 import { getModelCapabilities } from "@/lib/ai/providers/capabilities";
 import { resolveEffectiveReasoningEffort } from "@/lib/ai/reasoning/effective";
 import { KiroReasoningEffort } from "@/lib/ai/reasoning/types";
@@ -86,6 +90,21 @@ export function KiroAISettings({ reveal }: { reveal?: { key: string; seq: number
   const setWebPdfVisionEnabled = useKiroPreferencesStore((s) => s.setWebPdfVisionEnabled);
   const webPdfVisionModel = useKiroPreferencesStore((s) => s.webPdfVisionModel);
   const setWebPdfVisionModel = useKiroPreferencesStore((s) => s.setWebPdfVisionModel);
+  const resetKiroSettingsPreference = useKiroPreferencesStore((s) => s.resetKiroSettingsPreference);
+
+  // V5A9：仅 Settings-facing Kiro preferences 参与 modified/reset；session key / Sidecar / permissions 排除。
+  const kiroSettingsPreferences: KiroSettingsPreferences = {
+    outputTextSize,
+    autoContextEnabled,
+    responsePreference,
+    webSearchEnabled,
+    webSearchCredentialMode,
+    webPdfVisionEnabled,
+    webPdfVisionModel,
+  };
+  const kiroSettingsModified = new Set(
+    getModifiedKiroSettingsPreferenceKeys(kiroSettingsPreferences)
+  );
 
   const RESPONSE_PREFERENCE_DESCRIPTIONS: Record<KiroResponsePreference, string> = {
     dense: "结论、关键事实与行动优先",
@@ -414,6 +433,9 @@ export function KiroAISettings({ reveal }: { reveal?: { key: string; seq: number
             settingId="kiro-response-preference"
             title="回答偏好"
             description="只调整 Kiro 最终回答的表达深度，不影响必要的数据读取、工具调用或安全规则。"
+            modified={kiroSettingsModified.has("responsePreference")}
+            onReset={() => resetKiroSettingsPreference("responsePreference")}
+            resetAriaLabel="将回答偏好恢复默认"
           >
             <div className="flex flex-col items-end gap-1">
               <SettingsSegmentedControl<KiroResponsePreference>
@@ -436,6 +458,9 @@ export function KiroAISettings({ reveal }: { reveal?: { key: string; seq: number
             settingId="kiro-output-text-size"
             title="输出字号"
             description="调整 Kiro 回复正文、公式、代码与表格的显示大小。"
+            modified={kiroSettingsModified.has("outputTextSize")}
+            onReset={() => resetKiroSettingsPreference("outputTextSize")}
+            resetAriaLabel="将输出字号恢复默认"
           >
             <SettingsSegmentedControl<KiroOutputTextSize>
               value={outputTextSize}
@@ -456,6 +481,9 @@ export function KiroAISettings({ reveal }: { reveal?: { key: string; seq: number
             settingId="kiro-auto-context"
             title="自动环境上下文"
             description="根据当前页面、时间范围和选中对象，自动为 Kiro 带入相关上下文。关闭后仍可通过 @ 手动添加课程、任务和资料。"
+            modified={kiroSettingsModified.has("autoContextEnabled")}
+            onReset={() => resetKiroSettingsPreference("autoContextEnabled")}
+            resetAriaLabel="将自动环境上下文恢复默认"
           >
             <SettingsToggle
               checked={autoContextEnabled}
@@ -468,6 +496,9 @@ export function KiroAISettings({ reveal }: { reveal?: { key: string; seq: number
             settingId="kiro-web-search-enabled"
             title="联网搜索"
             description="Kiro 需要最新或可能随时间变化的信息时自动联网搜索。"
+            modified={kiroSettingsModified.has("webSearchEnabled")}
+            onReset={() => resetKiroSettingsPreference("webSearchEnabled")}
+            resetAriaLabel="将联网搜索恢复默认"
           >
             <SettingsToggle
               checked={webSearchEnabled}
@@ -510,6 +541,9 @@ export function KiroAISettings({ reveal }: { reveal?: { key: string; seq: number
                     settingId="kiro-web-search-credential"
                     title="凭据"
                     description="选择搜索凭据来源；使用自己的 API Key 时，Key 仅保存在本次应用会话中。"
+                    modified={kiroSettingsModified.has("webSearchCredentialMode")}
+                    onReset={() => resetKiroSettingsPreference("webSearchCredentialMode")}
+                    resetAriaLabel="将搜索凭据恢复默认"
                   >
                     <SettingsSegmentedControl<"server" | "byok">
                       value={webSearchCredentialMode}
@@ -678,6 +712,9 @@ export function KiroAISettings({ reveal }: { reveal?: { key: string; seq: number
                     settingId="kiro-web-pdf-vision-enabled"
                     title="扫描 PDF 识别"
                     description="仅用于读取联网搜索发现的扫描型 PDF（无文本层页面）。"
+                    modified={kiroSettingsModified.has("webPdfVisionEnabled")}
+                    onReset={() => resetKiroSettingsPreference("webPdfVisionEnabled")}
+                    resetAriaLabel="将扫描 PDF 识别恢复默认"
                   >
                     <SettingsToggle
                       checked={webPdfVisionEnabled}
@@ -690,6 +727,9 @@ export function KiroAISettings({ reveal }: { reveal?: { key: string; seq: number
                     settingId="kiro-web-pdf-vision-model"
                     title="Vision 模型"
                     description="用于识别扫描 PDF 页面的 OpenCode Go 视觉模型。"
+                    modified={kiroSettingsModified.has("webPdfVisionModel")}
+                    onReset={() => resetKiroSettingsPreference("webPdfVisionModel")}
+                    resetAriaLabel="将 Vision 模型恢复默认"
                   >
                     <SettingsSelect
                       value={webPdfVisionModel}
