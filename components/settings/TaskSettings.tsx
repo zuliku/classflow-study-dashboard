@@ -11,7 +11,12 @@ import { DDL_WARNING_DAYS, TASK_PRIORITIES, TASK_STATUSES, DEADLINE_REMINDER_MIN
 import { getModifiedPreferenceKeys, resetPreferencePatch } from "@/lib/preferences";
 import { PRIMARY_TASK_WORKSPACE_VIEWS } from "@/lib/tasks/taskViews";
 import { MissedReminderPolicy } from "@/types";
-import { MissedReminderWindowHours } from "@/store/useReminderPreferencesStore";
+import {
+  MissedReminderWindowHours,
+  getModifiedReminderPreferenceKeys,
+  isDoNotDisturbModified,
+  type ReminderPreferences,
+} from "@/store/useReminderPreferencesStore";
 import {
   getBrowserNotificationPermission,
   isBrowserNotificationSupported,
@@ -57,6 +62,19 @@ export function TaskSettings({ highlightedId }: { highlightedId?: string }) {
   const setDoNotDisturbStart = useReminderPreferencesStore((s) => s.setDoNotDisturbStart);
   const doNotDisturbEnd = useReminderPreferencesStore((s) => s.doNotDisturbEnd);
   const setDoNotDisturbEnd = useReminderPreferencesStore((s) => s.setDoNotDisturbEnd);
+  const resetReminderPreference = useReminderPreferencesStore((s) => s.resetReminderPreference);
+  const resetDoNotDisturb = useReminderPreferencesStore((s) => s.resetDoNotDisturb);
+  // Reminder preferences modified-state（V5A7：与 canonical defaults 比较，无 magic literals）
+  const reminderPrefs: ReminderPreferences = {
+    browserNotificationsEnabled,
+    missedReminderPolicy,
+    missedReminderWindowHours,
+    reminderSoundEnabled,
+    doNotDisturbEnabled,
+    doNotDisturbStart,
+    doNotDisturbEnd,
+  };
+  const reminderModified = new Set(getModifiedReminderPreferenceKeys(reminderPrefs));
   // 权限状态直接行内小字展示（不用 Toast）：真实反映 granted / denied / default / unsupported
   const [permissionNote, setPermissionNote] = useState("");
   const permissionState = getBrowserNotificationPermission();
@@ -247,6 +265,9 @@ export function TaskSettings({ highlightedId }: { highlightedId?: string }) {
             settingId="browser-notifications"
             title="系统通知"
             description="提醒到期时同时发送系统通知。"
+            modified={reminderModified.has("browserNotificationsEnabled")}
+            onReset={() => resetReminderPreference("browserNotificationsEnabled")}
+            resetAriaLabel="将系统通知恢复默认"
             highlighted={highlightedId === "browser-notifications"}
           >
             <div className="flex flex-col items-end gap-1">
@@ -276,6 +297,9 @@ export function TaskSettings({ highlightedId }: { highlightedId?: string }) {
             settingId="missed-reminder-policy"
             title="错过提醒处理"
             description="ClassFlow 未打开期间错过提醒时的处理方式。"
+            modified={reminderModified.has("missedReminderPolicy")}
+            onReset={() => resetReminderPreference("missedReminderPolicy")}
+            resetAriaLabel="将错过提醒处理恢复默认"
             highlighted={highlightedId === "missed-reminder-policy"}
           >
             <SettingsSelect
@@ -291,6 +315,9 @@ export function TaskSettings({ highlightedId }: { highlightedId?: string }) {
               settingId="missed-reminder-window"
               title="补发时间范围"
               description="只补发距离当前时间不超过该范围的提醒。"
+              modified={reminderModified.has("missedReminderWindowHours")}
+              onReset={() => resetReminderPreference("missedReminderWindowHours")}
+              resetAriaLabel="将补发时间范围恢复默认"
               highlighted={highlightedId === "missed-reminder-window"}
             >
               <SettingsSegmentedControl<MissedReminderWindowHours>
@@ -306,7 +333,7 @@ export function TaskSettings({ highlightedId }: { highlightedId?: string }) {
             </SettingsRow>
           )}
 
-          <SettingsRow settingId="reminder-sound" title="提醒声音" description="提醒到期时播放提示音；关闭后仅保留视觉提醒。" highlighted={highlightedId === "reminder-sound"}>
+          <SettingsRow settingId="reminder-sound" title="提醒声音" description="提醒到期时播放提示音；关闭后仅保留视觉提醒。" modified={reminderModified.has("reminderSoundEnabled")} onReset={() => resetReminderPreference("reminderSoundEnabled")} resetAriaLabel="将提醒声音恢复默认" highlighted={highlightedId === "reminder-sound"}>
             <SettingsToggle checked={reminderSoundEnabled} onChange={setReminderSoundEnabled} label="提醒声音" />
           </SettingsRow>
 
@@ -314,15 +341,18 @@ export function TaskSettings({ highlightedId }: { highlightedId?: string }) {
             settingId="do-not-disturb"
             title="免打扰时段"
             description="在此时段内暂停系统通知和提醒声音，仅保留应用内提醒。"
+            modified={isDoNotDisturbModified(reminderPrefs)}
+            onReset={() => resetDoNotDisturb()}
+            resetAriaLabel="将免打扰时段恢复默认"
             highlighted={highlightedId === "do-not-disturb"}
           >
             <div className="flex flex-col items-end gap-2">
               <SettingsToggle checked={doNotDisturbEnabled} onChange={setDoNotDisturbEnabled} label="免打扰时段" />
               {doNotDisturbEnabled && (
                 <div className="flex items-center gap-1.5">
-                  <input type="time" value={doNotDisturbStart} onChange={(e) => setDoNotDisturbStart(e.target.value)} className="h-8 px-2 bg-[#F7F5F5] border border-line rounded-lg text-xs font-mono" />
+                  <input type="time" value={doNotDisturbStart} onChange={(e) => setDoNotDisturbStart(e.target.value)} aria-label="免打扰开始时间" className="h-8 px-2 bg-[#F7F5F5] border border-line rounded-lg text-xs font-mono" />
                   <span className="text-sandrift">-</span>
-                  <input type="time" value={doNotDisturbEnd} onChange={(e) => setDoNotDisturbEnd(e.target.value)} className="h-8 px-2 bg-[#F7F5F5] border border-line rounded-lg text-xs font-mono" />
+                  <input type="time" value={doNotDisturbEnd} onChange={(e) => setDoNotDisturbEnd(e.target.value)} aria-label="免打扰结束时间" className="h-8 px-2 bg-[#F7F5F5] border border-line rounded-lg text-xs font-mono" />
                 </div>
               )}
             </div>
