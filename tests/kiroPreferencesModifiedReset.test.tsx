@@ -1,0 +1,266 @@
+/**
+ * @vitest-environment jsdom
+ */
+import React from "react";
+import { act } from "react";
+import { createRoot } from "react-dom/client";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  DEFAULT_KIRO_SETTINGS_PREFERENCES,
+  getModifiedKiroSettingsPreferenceKeys,
+  resetKiroSettingsPreferencePatch,
+  type KiroSettingsPreferences,
+} from "@/store/useKiroPreferencesStore";
+import { DEFAULT_KIRO_RESPONSE_PREFERENCE } from "@/lib/ai/responsePreference";
+import {
+  DEFAULT_WEB_PDF_VISION_MODEL,
+  getWebPdfVisionModelOptions,
+} from "@/lib/ai/web/vision/models";
+import {
+  getSessionWebSearchApiKey,
+  setSessionWebSearchApiKey,
+} from "@/lib/ai/web/credentials";
+import {
+  getSessionWebPdfVisionApiKey,
+  setSessionWebPdfVisionApiKey,
+} from "@/lib/ai/web/vision/credentials";
+
+vi.mock("@/hooks/useAIModelCatalog", () => ({
+  useAIModelCatalog: () => ({ models: [] }),
+}));
+
+vi.mock("@/components/settings/KiroMemorySettings", () => ({
+  KiroMemorySettings: () => null,
+}));
+
+if (typeof (globalThis as unknown as { ResizeObserver?: unknown }).ResizeObserver === "undefined") {
+  (globalThis as unknown as { ResizeObserver: unknown }).ResizeObserver = class {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  };
+}
+
+const CANONICAL: KiroSettingsPreferences = {
+  outputTextSize: "standard",
+  autoContextEnabled: true,
+  responsePreference: DEFAULT_KIRO_RESPONSE_PREFERENCE,
+  webSearchEnabled: true,
+  webSearchCredentialMode: "server",
+  webPdfVisionEnabled: true,
+  webPdfVisionModel: DEFAULT_WEB_PDF_VISION_MODEL,
+};
+
+function alternateVisionModel(): string {
+  return (
+    getWebPdfVisionModelOptions().find((option) => option.id !== DEFAULT_WEB_PDF_VISION_MODEL)?.id ??
+    DEFAULT_WEB_PDF_VISION_MODEL
+  );
+}
+
+describe("V5A9 A：canonical Kiro Settings preference truth", () => {
+  it("canonical defaults 只包含 7 个 Settings-facing preference", () => {
+    expect(DEFAULT_KIRO_SETTINGS_PREFERENCES).toEqual(CANONICAL);
+    expect(Object.keys(DEFAULT_KIRO_SETTINGS_PREFERENCES).sort()).toEqual(
+      [
+        "autoContextEnabled",
+        "outputTextSize",
+        "responsePreference",
+        "webPdfVisionEnabled",
+        "webPdfVisionModel",
+        "webSearchCredentialMode",
+        "webSearchEnabled",
+      ].sort()
+    );
+  });
+
+  it("默认 preference → modified keys 为空", () => {
+    expect(getModifiedKiroSettingsPreferenceKeys({ ...CANONICAL })).toEqual([]);
+  });
+});
+
+describe("V5A9 B：逐字段 modified/reset semantics", () => {
+  it.each([
+    ["outputTextSize", { ...CANONICAL, outputTextSize: "large" }],
+    ["autoContextEnabled", { ...CANONICAL, autoContextEnabled: false }],
+    ["responsePreference", { ...CANONICAL, responsePreference: "deep" }],
+    ["webSearchEnabled", { ...CANONICAL, webSearchEnabled: false }],
+    ["webSearchCredentialMode", { ...CANONICAL, webSearchCredentialMode: "byok" }],
+    ["webPdfVisionEnabled", { ...CANONICAL, webPdfVisionEnabled: false }],
+    ["webPdfVisionModel", { ...CANONICAL, webPdfVisionModel: "non-default-model" }],
+  ] as const)("%s 偏离 → 仅该字段 modified", (key, preferences) => {
+    expect(getModifiedKiroSettingsPreferenceKeys(preferences)).toEqual([key]);
+  });
+
+  it.each([
+    ["outputTextSize", "standard"],
+    ["autoContextEnabled", true],
+    ["responsePreference", DEFAULT_KIRO_RESPONSE_PREFERENCE],
+    ["webSearchEnabled", true],
+    ["webSearchCredentialMode", "server"],
+    ["webPdfVisionEnabled", true],
+    ["webPdfVisionModel", DEFAULT_WEB_PDF_VISION_MODEL],
+  ] as const)("resetKiroSettingsPreferencePatch(%s) → canonical", (key, value) => {
+    expect(resetKiroSettingsPreferencePatch(key)).toEqual({ [key]: value });
+  });
+});
+
+describe("V5A9 C：store reset boundary / hydrate compatibility", () => {
+  beforeEach(() => {
+    localStorage.clear();
+    sessionStorage.clear();
+  });
+
+  async function freshStore() {
+    vi.resetModules();
+    const mod = await import("@/store/useKiroPreferencesStore");
+    return mod.useKiroPreferencesStore;
+  }
+
+  it("reset 单字段，不触碰其他 Settings preference / Sidecar / privacy state", async () => {
+    const store = await freshStore();
+    const originalSidecarSize = store.getState().sidecarSize;
+    const originalSidecarPosition = store.getState().sidecarPosition;
+    const originalMinimizedPosition = store.getState().sidecarMinimizedPosition;
+
+    store.getState().setOutputTextSize("large");
+    store.getState().setAutoContextEnabled(false);
+    store.getState().setVisualAttachmentPrivacyNoticeSeen(true);
+
+    store.getState().resetKiroSettingsPreference("outputTextSize");
+
+    expect(store.getState().outputTextSize).toBe("standard");
+    expect(store.getState().autoContextEnabled).toBe(false);
+    expect(store.getState().sidecarSize).toEqual(originalSidecarSize);
+    expect(store.getState().sidecarPosition).toEqual(originalSidecarPosition);
+    expect(store.getState().sidecarMinimizedPosition).toEqual(originalMinimizedPosition);
+    expect(store.getState().visualAttachmentPrivacyNoticeSeen).toBe(true);
+  });
+
+  it("legacy / malformed persisted Settings values 继续回落 canonical；排除字段仍按原逻辑 hydrate", async () => {
+    localStorage.setItem(
+      "classflow-kiro-preferences-v1",
+      JSON.stringify({
+        state: {
+          outputTextSize: "giant",
+          autoContextEnabled: "yes",
+          responsePreference: "essay",
+          webSearchEnabled: 1,
+          webSearchCredentialMode: "fallback",
+          webPdfVisionEnabled: "yes",
+          webPdfVisionModel: "not-a-real-model",
+          visualAttachmentPrivacyNoticeSeen: true,
+        },
+      })
+    );
+
+    const store = await freshStore();
+    const state = store.getState();
+    expect(state.outputTextSize).toBe(CANONICAL.outputTextSize);
+    expect(state.autoContextEnabled).toBe(CANONICAL.autoContextEnabled);
+    expect(state.responsePreference).toBe(CANONICAL.responsePreference);
+    expect(state.webSearchEnabled).toBe(CANONICAL.webSearchEnabled);
+    expect(state.webSearchCredentialMode).toBe(CANONICAL.webSearchCredentialMode);
+    expect(state.webPdfVisionEnabled).toBe(CANONICAL.webPdfVisionEnabled);
+    expect(state.webPdfVisionModel).toBe(CANONICAL.webPdfVisionModel);
+    expect(state.visualAttachmentPrivacyNoticeSeen).toBe(true);
+  });
+});
+
+describe("V5A9 D：KiroAISettings consumer modified/reset wiring", () => {
+  const RESET_LABELS: Record<string, string> = {
+    "kiro-response-preference": "将回答偏好恢复默认",
+    "kiro-output-text-size": "将输出字号恢复默认",
+    "kiro-auto-context": "将自动环境上下文恢复默认",
+    "kiro-web-search-enabled": "将联网搜索恢复默认",
+    "kiro-web-search-credential": "将搜索凭据恢复默认",
+    "kiro-web-pdf-vision-enabled": "将扫描 PDF 识别恢复默认",
+    "kiro-web-pdf-vision-model": "将 Vision 模型恢复默认",
+  };
+
+  function resetButton(container: HTMLElement, settingId: string): HTMLButtonElement | null {
+    return container.querySelector(
+      `[data-setting-id="${settingId}"] button[aria-label="${RESET_LABELS[settingId]}"]`
+    );
+  }
+
+  async function mountKiroSettings() {
+    vi.resetModules();
+    const storeMod = await import("@/store/useKiroPreferencesStore");
+    const { KiroAISettings } = await import("@/components/settings/KiroAISettings");
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    await act(async () => {
+      root.render(<KiroAISettings />);
+    });
+    return { container, root, store: storeMod.useKiroPreferencesStore };
+  }
+
+  beforeEach(() => {
+    localStorage.clear();
+    sessionStorage.clear();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => ({ serverConfigured: true }),
+      }))
+    );
+  });
+
+  it("默认态无 reset；字号改为 large 后出现 reset，点击恢复 standard", async () => {
+    const { container, root, store } = await mountKiroSettings();
+    try {
+      expect(resetButton(container, "kiro-output-text-size")).toBeNull();
+      act(() => store.getState().setOutputTextSize("large"));
+      expect(resetButton(container, "kiro-output-text-size")).toBeTruthy();
+      await act(async () => resetButton(container, "kiro-output-text-size")!.click());
+      expect(store.getState().outputTextSize).toBe("standard");
+      expect(resetButton(container, "kiro-output-text-size")).toBeNull();
+    } finally {
+      act(() => root.unmount());
+      container.remove();
+    }
+  });
+
+  it("搜索凭据 reset → server，但 Tavily session key 保留", async () => {
+    setSessionWebSearchApiKey("tvly-v5a9-secret");
+    const { container, root, store } = await mountKiroSettings();
+    try {
+      act(() => store.getState().setWebSearchCredentialMode("byok"));
+      expect(resetButton(container, "kiro-web-search-credential")).toBeTruthy();
+      await act(async () => resetButton(container, "kiro-web-search-credential")!.click());
+      expect(store.getState().webSearchCredentialMode).toBe("server");
+      expect(getSessionWebSearchApiKey()).toBe("tvly-v5a9-secret");
+    } finally {
+      act(() => root.unmount());
+      container.remove();
+    }
+  });
+
+  it("PDF Vision preference reset 不清 Vision session key", async () => {
+    setSessionWebPdfVisionApiKey("vision-v5a9-secret");
+    const { container, root, store } = await mountKiroSettings();
+    try {
+      act(() => {
+        store.getState().setWebPdfVisionEnabled(false);
+        store.getState().setWebPdfVisionModel(alternateVisionModel());
+      });
+      expect(resetButton(container, "kiro-web-pdf-vision-enabled")).toBeTruthy();
+      await act(async () => resetButton(container, "kiro-web-pdf-vision-enabled")!.click());
+      expect(store.getState().webPdfVisionEnabled).toBe(true);
+      expect(getSessionWebPdfVisionApiKey()).toBe("vision-v5a9-secret");
+
+      if (alternateVisionModel() !== DEFAULT_WEB_PDF_VISION_MODEL) {
+        expect(resetButton(container, "kiro-web-pdf-vision-model")).toBeTruthy();
+        await act(async () => resetButton(container, "kiro-web-pdf-vision-model")!.click());
+        expect(store.getState().webPdfVisionModel).toBe(DEFAULT_WEB_PDF_VISION_MODEL);
+        expect(getSessionWebPdfVisionApiKey()).toBe("vision-v5a9-secret");
+      }
+    } finally {
+      act(() => root.unmount());
+      container.remove();
+    }
+  });
+});
