@@ -1,10 +1,34 @@
 /**
  * @vitest-environment jsdom
  */
+import React from "react";
 import { describe, it, expect, beforeEach, vi } from "vitest";
+import { act } from "react";
+import { createRoot } from "react-dom/client";
 import { DEFAULT_PREFERENCES, sanitizePreferences, PREFERENCE_SECTIONS, getModifiedPreferenceKeys, resetPreferencePatch } from "@/lib/preferences";
 import { getLocalDDLDate } from "@/lib/ddl";
 import { FONT_REGISTRY, UI_FONT_PRESETS, DEFAULT_UI_FONT } from "@/lib/typography/fonts";
+import { GeneralSettings } from "@/components/settings/GeneralSettings";
+import { useAppStore } from "@/store/useAppStore";
+
+if (typeof (globalThis as unknown as { ResizeObserver?: unknown }).ResizeObserver === "undefined") {
+  (globalThis as unknown as { ResizeObserver: unknown }).ResizeObserver = class {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  };
+}
+if (typeof window !== "undefined" && !(window as unknown as { matchMedia?: unknown }).matchMedia) {
+  (window as unknown as { matchMedia: unknown }).matchMedia = () =>
+    ({
+      matches: false,
+      media: "",
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      addListener: () => {},
+      removeListener: () => {},
+    }) as unknown as MediaQueryList;
+}
 
 const KEY = "classflow-storage-v2";
 
@@ -471,5 +495,140 @@ describe("V5A4：fake shortcuts mapping 已移除", () => {
     } as never) as Record<string, unknown>;
     expect(out.showWeekends).toBe(false);
     expect("shortcuts" in out).toBe(false);
+  });
+});
+
+describe("V5A6：coursePalette modified-state 语义（ordered 内容比较）", () => {
+  const defaultPalette = DEFAULT_PREFERENCES.coursePalette;
+
+  it("DEFAULT 本身返回 0 modified keys", () => {
+    expect(getModifiedPreferenceKeys(DEFAULT_PREFERENCES)).toEqual([]);
+  });
+
+  it("clone 默认 palette（新引用、内容一致）→ not modified", () => {
+    const prefs = { ...DEFAULT_PREFERENCES, coursePalette: [...defaultPalette] };
+    expect(prefs.coursePalette).not.toBe(defaultPalette);
+    expect(getModifiedPreferenceKeys(prefs)).toEqual([]);
+  });
+
+  it("JSON round-trip 后的默认 palette → not modified", () => {
+    const hydrated = JSON.parse(JSON.stringify(DEFAULT_PREFERENCES)) as typeof DEFAULT_PREFERENCES;
+    expect(hydrated.coursePalette).not.toBe(defaultPalette);
+    expect(getModifiedPreferenceKeys(hydrated)).not.toContain("coursePalette");
+  });
+
+  it("sanitize 后内容等价的默认 palette → not modified", () => {
+    const out = sanitizePreferences({ coursePalette: [...defaultPalette] });
+    expect(out.coursePalette).not.toBe(defaultPalette);
+    expect(getModifiedPreferenceKeys(out)).not.toContain("coursePalette");
+  });
+
+  it("修改一个颜色 → modified", () => {
+    const palette = [...defaultPalette];
+    palette[2] = "#000000";
+    expect(getModifiedPreferenceKeys({ ...DEFAULT_PREFERENCES, coursePalette: palette })).toEqual([
+      "coursePalette",
+    ]);
+  });
+
+  it("交换顺序 → modified（顺序有业务语义，禁止排序后比较）", () => {
+    const palette = [...defaultPalette];
+    [palette[0], palette[1]] = [palette[1], palette[0]];
+    expect(getModifiedPreferenceKeys({ ...DEFAULT_PREFERENCES, coursePalette: palette })).toContain(
+      "coursePalette"
+    );
+  });
+
+  it("长度变化（移除 / 增加）→ modified", () => {
+    expect(
+      getModifiedPreferenceKeys({ ...DEFAULT_PREFERENCES, coursePalette: defaultPalette.slice(1) })
+    ).toContain("coursePalette");
+    expect(
+      getModifiedPreferenceKeys({ ...DEFAULT_PREFERENCES, coursePalette: [...defaultPalette, "#000000"] })
+    ).toContain("coursePalette");
+  });
+
+  it("primitive 回归：boolean 修改继续正确，未修改不出现", () => {
+    expect(
+      getModifiedPreferenceKeys({ ...DEFAULT_PREFERENCES, enableSingleKeyShortcuts: false })
+    ).toEqual(["enableSingleKeyShortcuts"]);
+    expect(getModifiedPreferenceKeys(DEFAULT_PREFERENCES)).not.toContain("enableSingleKeyShortcuts");
+  });
+
+  it("string/enum 修改继续正确（startupView）", () => {
+    expect(getModifiedPreferenceKeys({ ...DEFAULT_PREFERENCES, startupView: "last" })).toEqual([
+      "startupView",
+    ]);
+    expect(getModifiedPreferenceKeys(DEFAULT_PREFERENCES)).not.toContain("startupView");
+  });
+
+  it("reset 为 fresh default copy 后 modified 清零（不要求引用相同）", () => {
+    const dirty = { ...DEFAULT_PREFERENCES, coursePalette: [...defaultPalette.slice(1)] };
+    expect(getModifiedPreferenceKeys(dirty)).toContain("coursePalette");
+    const reset = { ...dirty, coursePalette: [...DEFAULT_PREFERENCES.coursePalette] };
+    expect(reset.coursePalette).not.toBe(DEFAULT_PREFERENCES.coursePalette);
+    expect(getModifiedPreferenceKeys(reset)).toEqual([]);
+  });
+});
+
+describe("V5A6：调色板重置按钮跟随真实 modified-state（GeneralSettings consumer）", () => {
+  const RESET_LABEL = "将课程调色板恢复默认";
+
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
+  function paletteResetButton(container: HTMLElement): HTMLButtonElement | null {
+    return container.querySelector(
+      `[data-setting-id="course-palette"] button[aria-label="${RESET_LABEL}"]`
+    );
+  }
+
+  async function mountGeneralSettings() {
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    await act(async () => {
+      root.render(<GeneralSettings />);
+    });
+    return { container, root };
+  }
+
+  it("rehydrated 等价默认 palette → 不显示重置按钮", async () => {
+    const rehydrated = sanitizePreferences(JSON.parse(JSON.stringify(DEFAULT_PREFERENCES)));
+    act(() => {
+      useAppStore.setState({ preferences: rehydrated });
+    });
+    const { container, root } = await mountGeneralSettings();
+    try {
+      expect(container.querySelector('[data-setting-id="course-palette"]')).toBeTruthy();
+      expect(paletteResetButton(container)).toBeNull();
+    } finally {
+      act(() => root.unmount());
+      container.remove();
+    }
+  });
+
+  it("真实修改 → 显示重置按钮；reset 为 fresh copy → 按钮消失", async () => {
+    act(() => {
+      useAppStore.setState({ preferences: { ...DEFAULT_PREFERENCES } });
+    });
+    const { container, root } = await mountGeneralSettings();
+    try {
+      expect(paletteResetButton(container)).toBeNull();
+      const changed = [...DEFAULT_PREFERENCES.coursePalette];
+      changed[0] = "#000000";
+      act(() => {
+        useAppStore.getState().updatePreferences({ coursePalette: changed });
+      });
+      expect(paletteResetButton(container)).toBeTruthy();
+      act(() => {
+        useAppStore.getState().updatePreferences(resetPreferencePatch("coursePalette"));
+      });
+      expect(paletteResetButton(container)).toBeNull();
+    } finally {
+      act(() => root.unmount());
+      container.remove();
+    }
   });
 });

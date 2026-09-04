@@ -159,11 +159,26 @@ export const PREFERENCE_SECTIONS: Record<
   uiFontScale: "general",
 };
 
-/** 当前与默认不同的偏好键（纯函数，UI 不自行比较） */
+/**
+ * ordered string array 相等：同长度 + 逐 index 同值。
+ * 顺序具有业务语义（课程颜色按 palette 顺序轮换），禁止排序后比较。
+ */
+function isStringArrayEqual(left: readonly string[], right: readonly string[]): boolean {
+  return left.length === right.length && left.every((value, index) => value === right[index]);
+}
+
+/**
+ * 当前与默认不同的偏好键（纯函数，UI 不自行比较）。
+ * V5A6 contract：coursePalette 按 ordered 内容比较（引用不同但内容一致 = 未修改）；
+ * 其余当前字段均为 primitive，按 Object.is 比较；一律不依赖引用相等，不做 JSON.stringify。
+ */
 export function getModifiedPreferenceKeys(preferences: AppPreferences): (keyof AppPreferences)[] {
-  return (Object.keys(DEFAULT_PREFERENCES) as (keyof AppPreferences)[]).filter(
-    (k) => preferences[k] !== DEFAULT_PREFERENCES[k]
-  );
+  return (Object.keys(DEFAULT_PREFERENCES) as (keyof AppPreferences)[]).filter((key) => {
+    if (key === "coursePalette") {
+      return !isStringArrayEqual(preferences.coursePalette, DEFAULT_PREFERENCES.coursePalette);
+    }
+    return !Object.is(preferences[key], DEFAULT_PREFERENCES[key]);
+  });
 }
 
 /** 单项恢复默认的 patch（纯函数；调用方 updatePreferences(patch) 即可） */
