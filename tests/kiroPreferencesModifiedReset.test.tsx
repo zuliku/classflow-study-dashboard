@@ -184,6 +184,21 @@ describe("V5A9 D：KiroAISettings consumer modified/reset wiring", () => {
     );
   }
 
+  /**
+   * 凭据 / Vision 行位于默认折叠的披露区（“搜索设置”/“高级设置”）内；
+   * DisclosureRegion 未展开时 children 不挂载——测试按真实用户路径先展开再操作，
+   * production disclosure 默认状态保持不变。
+   */
+  async function openDisclosure(container: HTMLElement, label: string) {
+    const toggle = Array.from(container.querySelectorAll("button")).find((button) =>
+      button.textContent?.includes(label)
+    );
+    expect(toggle, `disclosure toggle "${label}" 应存在`).toBeTruthy();
+    await act(async () => {
+      toggle!.click();
+    });
+  }
+
   async function mountKiroSettings() {
     vi.resetModules();
     const storeMod = await import("@/store/useKiroPreferencesStore");
@@ -229,10 +244,12 @@ describe("V5A9 D：KiroAISettings consumer modified/reset wiring", () => {
     const { container, root, store } = await mountKiroSettings();
     try {
       act(() => store.getState().setWebSearchCredentialMode("byok"));
+      await openDisclosure(container, "搜索设置");
       expect(resetButton(container, "kiro-web-search-credential")).toBeTruthy();
       await act(async () => resetButton(container, "kiro-web-search-credential")!.click());
       expect(store.getState().webSearchCredentialMode).toBe("server");
       expect(getSessionWebSearchApiKey()).toBe("tvly-v5a9-secret");
+      expect(resetButton(container, "kiro-web-search-credential")).toBeNull();
     } finally {
       act(() => root.unmount());
       container.remove();
@@ -247,17 +264,43 @@ describe("V5A9 D：KiroAISettings consumer modified/reset wiring", () => {
         store.getState().setWebPdfVisionEnabled(false);
         store.getState().setWebPdfVisionModel(alternateVisionModel());
       });
+      await openDisclosure(container, "高级设置");
       expect(resetButton(container, "kiro-web-pdf-vision-enabled")).toBeTruthy();
       await act(async () => resetButton(container, "kiro-web-pdf-vision-enabled")!.click());
       expect(store.getState().webPdfVisionEnabled).toBe(true);
       expect(getSessionWebPdfVisionApiKey()).toBe("vision-v5a9-secret");
+      expect(resetButton(container, "kiro-web-pdf-vision-enabled")).toBeNull();
 
       if (alternateVisionModel() !== DEFAULT_WEB_PDF_VISION_MODEL) {
         expect(resetButton(container, "kiro-web-pdf-vision-model")).toBeTruthy();
         await act(async () => resetButton(container, "kiro-web-pdf-vision-model")!.click());
         expect(store.getState().webPdfVisionModel).toBe(DEFAULT_WEB_PDF_VISION_MODEL);
         expect(getSessionWebPdfVisionApiKey()).toBe("vision-v5a9-secret");
+        expect(resetButton(container, "kiro-web-pdf-vision-model")).toBeNull();
       }
+    } finally {
+      act(() => root.unmount());
+      container.remove();
+    }
+  });
+
+  it("AI 关闭态可启用：点击“启用 Kiro”后设置正常渲染且偏好 truth 不变", async () => {
+    const { container, root, store } = await mountKiroSettings();
+    try {
+      const { useAISettingsStore } = await import("@/store/useAISettingsStore");
+      expect(useAISettingsStore.getState().enabled).toBe(false);
+      const enableSwitch = container.querySelector(
+        '[data-setting-id="ai-enabled"] [role="switch"]'
+      ) as HTMLButtonElement | null;
+      expect(enableSwitch).toBeTruthy();
+      await act(async () => {
+        enableSwitch!.click();
+      });
+      expect(useAISettingsStore.getState().enabled).toBe(true);
+      // 启用后设置行正常渲染（Hook 顺序稳定，无 render exception），偏好 truth 不变
+      expect(container.querySelector('[data-setting-id="kiro-output-text-size"]')).toBeTruthy();
+      expect(resetButton(container, "kiro-output-text-size")).toBeNull();
+      expect(store.getState().outputTextSize).toBe("standard");
     } finally {
       act(() => root.unmount());
       container.remove();
