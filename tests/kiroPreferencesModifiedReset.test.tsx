@@ -9,8 +9,11 @@ import {
   DEFAULT_KIRO_SETTINGS_PREFERENCES,
   getModifiedKiroSettingsPreferenceKeys,
   resetKiroSettingsPreferencePatch,
+  useKiroPreferencesStore,
   type KiroSettingsPreferences,
 } from "@/store/useKiroPreferencesStore";
+import { useAISettingsStore } from "@/store/useAISettingsStore";
+import { KiroAISettings } from "@/components/settings/KiroAISettings";
 import { DEFAULT_KIRO_RESPONSE_PREFERENCE } from "@/lib/ai/responsePreference";
 import {
   DEFAULT_WEB_PDF_VISION_MODEL,
@@ -200,21 +203,25 @@ describe("V5A9 D：KiroAISettings consumer modified/reset wiring", () => {
   }
 
   async function mountKiroSettings() {
-    vi.resetModules();
-    const storeMod = await import("@/store/useKiroPreferencesStore");
-    const { KiroAISettings } = await import("@/components/settings/KiroAISettings");
+    // V5A9.2：consumer 测试使用稳定 module graph——禁止 vi.resetModules() 后再混用
+    // 顶层 import 的 createRoot（实测会分裂出两份 React/ReactDOM 实例）。
+    // fresh state 通过显式 store reset 获得；需要 module-reset 的 hydration
+    // 隔离保留在 C 节（不渲染 React，无此风险）。
     const container = document.createElement("div");
     document.body.appendChild(container);
     const root = createRoot(container);
     await act(async () => {
       root.render(<KiroAISettings />);
     });
-    return { container, root, store: storeMod.useKiroPreferencesStore };
+    return { container, root };
   }
 
   beforeEach(() => {
     localStorage.clear();
     sessionStorage.clear();
+    // 稳定 graph 下显式恢复 fresh state（替代 vi.resetModules）：
+    useKiroPreferencesStore.setState({ ...DEFAULT_KIRO_SETTINGS_PREFERENCES });
+    useAISettingsStore.getState().reset();
     vi.stubGlobal(
       "fetch",
       vi.fn(async () => ({
@@ -225,7 +232,8 @@ describe("V5A9 D：KiroAISettings consumer modified/reset wiring", () => {
   });
 
   it("默认态无 reset；字号改为 large 后出现 reset，点击恢复 standard", async () => {
-    const { container, root, store } = await mountKiroSettings();
+    const { container, root } = await mountKiroSettings();
+    const store = useKiroPreferencesStore;
     try {
       expect(resetButton(container, "kiro-output-text-size")).toBeNull();
       act(() => store.getState().setOutputTextSize("large"));
@@ -241,7 +249,8 @@ describe("V5A9 D：KiroAISettings consumer modified/reset wiring", () => {
 
   it("搜索凭据 reset → server，但 Tavily session key 保留", async () => {
     setSessionWebSearchApiKey("tvly-v5a9-secret");
-    const { container, root, store } = await mountKiroSettings();
+    const { container, root } = await mountKiroSettings();
+    const store = useKiroPreferencesStore;
     try {
       act(() => store.getState().setWebSearchCredentialMode("byok"));
       await openDisclosure(container, "搜索设置");
@@ -258,7 +267,8 @@ describe("V5A9 D：KiroAISettings consumer modified/reset wiring", () => {
 
   it("PDF Vision preference reset 不清 Vision session key", async () => {
     setSessionWebPdfVisionApiKey("vision-v5a9-secret");
-    const { container, root, store } = await mountKiroSettings();
+    const { container, root } = await mountKiroSettings();
+    const store = useKiroPreferencesStore;
     try {
       act(() => {
         store.getState().setWebPdfVisionEnabled(false);
@@ -285,9 +295,9 @@ describe("V5A9 D：KiroAISettings consumer modified/reset wiring", () => {
   });
 
   it("AI 关闭态可启用：点击“启用 Kiro”后设置正常渲染且偏好 truth 不变", async () => {
-    const { container, root, store } = await mountKiroSettings();
+    const { container, root } = await mountKiroSettings();
+    const store = useKiroPreferencesStore;
     try {
-      const { useAISettingsStore } = await import("@/store/useAISettingsStore");
       expect(useAISettingsStore.getState().enabled).toBe(false);
       const enableSwitch = container.querySelector(
         '[data-setting-id="ai-enabled"] [role="switch"]'
