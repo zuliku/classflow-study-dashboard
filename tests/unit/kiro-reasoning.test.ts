@@ -286,7 +286,7 @@ describe("resolveEffectiveReasoningEffort（requested → effective，UI/Turn Sn
 
   it("3. OpenCode Go fixed requested=high → default", () => {
     expect(resolveEffectiveReasoningEffort({ provider: "opencode-go", model: "deepseek-v4-flash", requested: "high" })).toBe("default");
-    expect(resolveEffectiveReasoningEffort({ provider: "opencode-go", model: "grok-4.5", requested: "max" })).toBe("default");
+    expect(resolveEffectiveReasoningEffort({ provider: "opencode-go", model: "grok-4.6", requested: "max" })).toBe("default");
   });
 
   it("4. Custom reasoningEffort=true requested=high → high", () => {
@@ -310,9 +310,9 @@ describe("resolveEffectiveReasoningEffort（requested → effective，UI/Turn Sn
   });
 });
 
-describe("GPT 5.6 Luna / Grok 4.5（openai-responses-effort，Phase 3.2A/B）", () => {
+describe("GPT 5.6 Luna / Grok 4.6（openai-responses-effort）", () => {
   const lunaDef = OPENCODE_MODELS.find((m) => m.id === "gpt-5.6-luna")!;
-  const grokDef = OPENCODE_MODELS.find((m) => m.id === "grok-4.5")!;
+  const grokDef = OPENCODE_MODELS.find((m) => m.id === "grok-4.6")!;
 
   it("1. GPT Luna capability：adjustable=true", () => {
     const cap = getReasoningCapability(lunaDef);
@@ -363,7 +363,7 @@ describe("GPT 5.6 Luna / Grok 4.5（openai-responses-effort，Phase 3.2A/B）", 
     ).toEqual({ "classflow-kiro": { reasoningEffort: "high" } });
   });
 
-  it("7. Grok 4.5：live verified（Phase 3.2B）→ adjustable，同 mechanism 复用", () => {
+  it("7. Grok 4.6：live verified → adjustable，同 mechanism 复用", () => {
     const cap = getReasoningCapability(grokDef);
     expect(cap.adjustable).toBe(true);
     expect(cap.mechanism).toBe("openai-responses-effort");
@@ -387,8 +387,8 @@ describe("GPT 5.6 Luna / Grok 4.5（openai-responses-effort，Phase 3.2A/B）", 
 
   it("effective：Luna/Grok requested=high → high；OpenCode DeepSeek → default；max → default", () => {
     expect(resolveEffectiveReasoningEffort({ provider: "opencode-go", model: "gpt-5.6-luna", requested: "high" })).toBe("high");
-    expect(resolveEffectiveReasoningEffort({ provider: "opencode-go", model: "grok-4.5", requested: "high" })).toBe("high");
-    expect(resolveEffectiveReasoningEffort({ provider: "opencode-go", model: "grok-4.5", requested: "max" })).toBe("default");
+    expect(resolveEffectiveReasoningEffort({ provider: "opencode-go", model: "grok-4.6", requested: "high" })).toBe("high");
+    expect(resolveEffectiveReasoningEffort({ provider: "opencode-go", model: "grok-4.6", requested: "max" })).toBe("default");
     expect(resolveEffectiveReasoningEffort({ provider: "opencode-go", model: "deepseek-v4-flash", requested: "high" })).toBe("default");
   });
 });
