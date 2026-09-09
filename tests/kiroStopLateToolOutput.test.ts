@@ -34,7 +34,7 @@ describe("stop → late tool output guard", () => {
   });
 
   it("handleStop 负责置位 stopped ref；send/reset 路径负责清位", () => {
-    const stopFn = src.match(/const handleStop = useCallback\([\s\S]*?\}, \[chat, setPendingApproval, updateTasks\]\);/);
+    const stopFn = src.match(/const handleStop = useCallback\([\s\S]*?\}, \[chat, setPendingApproval, setPendingQueueLength, updateTasks\]\);/);
     expect(stopFn).toBeTruthy();
     expect(stopFn![0]).toContain("stoppedTurnMessageIdRef.current =");
     // 至少存在多处 reset-to-null（新会话 / 新 send / conversation switch）

@@ -11,18 +11,19 @@ class RO {
 }
 (globalThis as Record<string, unknown>).ResizeObserver = RO;
 
-// Mock useAppStore：FocusControl 只依赖 focusSessions/assignments/courses + toast
+// Mock useAppStore：FocusControl 只依赖 focusSessions/assignments/courses + toast；
+// 另需 getState().preferences.focusDefaultMinutes 作默认时长（canonical 25，见 lib/preferences.ts）。
 const focusSessions = vi.hoisted(() => ({ current: [] as unknown[] }));
-vi.mock("@/store/useAppStore", () => ({
-  useAppStore: (selector: (s: unknown) => unknown) => {
-    const state = {
-      focusSessions: focusSessions.current,
-      assignments: [],
-      courses: [],
-    };
-    return selector(state);
-  },
-}));
+vi.mock("@/store/useAppStore", () => {
+  const snapshot = () => ({
+    focusSessions: focusSessions.current,
+    assignments: [],
+    courses: [],
+    preferences: { focusDefaultMinutes: 25 },
+  });
+  const hook = (selector: (s: unknown) => unknown) => selector(snapshot());
+  return { useAppStore: Object.assign(hook, { getState: snapshot }) };
+});
 
 import { FocusControl } from "@/components/focus/FocusControl";
 

@@ -320,7 +320,6 @@ describe("UI race guards（Timeline）", () => {
     fireEvent.pointerUp(window, { pointerId: 1 });
 
     const block = useAppStore.getState().studyBlocks.find((b) => b.id === "sb-drag")!;
-    require("node:fs").appendFileSync(process.env.TEMP + "/opencode/dbg.txt", "DRAG:" + JSON.stringify({ st: block?.planningState, date: block?.date, status: useAppStore.getState().assignments[0]?.status, toasts: useToastStore.getState().toasts.map((t) => t.message) }) + "\n");
     expect(block.planningState).toBe("released");
     expect(block.date).toBe(MON); // geometry 未变
     expect(useToastStore.getState().toasts.some((t) => t.message.includes("学习计划状态已变化，未调整时间"))).toBe(true);
@@ -376,7 +375,6 @@ describe("UI race guards（Timeline）", () => {
 
     // 无 linked StudyBlock 被创建（standalone 也不应有——本次是失败的一次 planning write）
     const linked = useAppStore.getState().studyBlocks.filter((b) => b.assignmentId === "a-1");
-    require("node:fs").appendFileSync(process.env.TEMP + "/opencode/dbg.txt", "USH:" + JSON.stringify({ linked: linked.length, all: useAppStore.getState().studyBlocks.map((b) => [b.id, b.assignmentId, b.source]) }) + "\n");
     expect(linked).toHaveLength(0);
     expect(useToastStore.getState().toasts.some((t) => t.message.includes("任务状态已变化，未创建学习计划"))).toBe(true);
   }, 20000);
