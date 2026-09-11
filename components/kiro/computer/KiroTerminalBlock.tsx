@@ -263,8 +263,19 @@ export const KiroTerminalBlock = React.memo(function KiroTerminalBlock({
     a.exitCode === b.exitCode &&
     a.durationMs === b.durationMs &&
     a.waitingForInput === b.waitingForInput &&
-    a.stdoutLines === b.stdoutLines &&
-    a.stderrLines === b.stderrLines &&
+    sameLines(a.stdoutLines, b.stdoutLines) &&
+    sameLines(a.stderrLines, b.stderrLines) &&
     a.commandPreview === b.commandPreview
   );
 });
+
+/**
+ * 行数组内容相等（精确比较，非引用比较）。
+ * reducer 的 appendLines 每次返回新数组（即使 chunk 为空），引用比较每帧必 miss；
+ * 内容 join 比较是 memcmp 级开销，远小于一次整块 reconcile，且永远精确（无启发式漏判）。
+ */
+function sameLines(x: string[], y: string[]): boolean {
+  if (x === y) return true;
+  if (x.length !== y.length) return false;
+  return x.join("\n") === y.join("\n");
+}

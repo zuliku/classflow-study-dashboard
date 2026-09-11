@@ -144,8 +144,9 @@ test("Sidecar → 展开到 Kiro 工作区：同一会话保留；新对话清�
   await expect(page.getByTestId("kiro-user-message")).toContainText("帮我整理本周任务", { timeout: 10000 });
   await expect(page.getByTestId("kiro-message").last()).toContainText("已收到你的问题", { timeout: 10000 });
 
-  // Expand：Sidecar 关闭 → Kiro 工作区显示同一会话
-  await page.getByLabel("展开到 Kiro 工作区").click();
+  // Expand（经 More 菜单）：Sidecar 关闭 → Kiro 工作区显示同一会话
+  await page.getByTestId("kiro-sidecar").getByLabel("更多操作").click();
+  await page.getByRole("menuitem", { name: "打开完整 Kiro 工作区" }).click();
   await expect(page.getByTestId("kiro-sidecar")).toHaveCount(0);
   await expect(page.getByTestId("kiro-workspace")).toBeVisible();
   await expect(page.getByTestId("kiro-user-message")).toContainText("帮我整理本周任务");

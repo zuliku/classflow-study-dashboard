@@ -1209,7 +1209,7 @@ export function TimelineWorkspace() {
           aria-expanded={moreOpen}
           title="更多"
         >
-          <MoreHorizontal className="w-4 h-4" />
+          <MoreHorizontal className="w-3.5 h-3.5" />
         </IconButton>
         <DropdownMenuPanel open={moreOpen} placement="bottom-end" aria-label="更多操作">
           <DropdownMenuItem
@@ -1238,8 +1238,11 @@ export function TimelineWorkspace() {
   );
 
   // ---- App Chrome V2.2：新建（primaryAction；菜单沿用原有 handlers，不复制 create menu） ----
+  // 视觉分组：分隔线把「更多操作」与「新建」分成两组，避免两 32px 方块暧昧并置
   const primaryAction = (
-    <Popover open={quickOpen} onOpenChange={setQuickOpen}>
+    <>
+      <span aria-hidden="true" className="mx-0.5 h-4 w-px shrink-0 bg-line" />
+      <Popover open={quickOpen} onOpenChange={setQuickOpen}>
       <IconButton
         variant="primary"
         size="sm"
@@ -1248,7 +1251,7 @@ export function TimelineWorkspace() {
         aria-expanded={quickOpen}
         title="新建"
       >
-        <Plus className="w-4 h-4" />
+          <Plus className="w-3.5 h-3.5" />
       </IconButton>
       <DropdownMenuPanel open={quickOpen} placement="bottom-end" aria-label="新建" className="w-52">
         <DropdownMenuItem
@@ -1276,6 +1279,7 @@ export function TimelineWorkspace() {
         />
       </DropdownMenuPanel>
     </Popover>
+    </>
   );
 
   return (
