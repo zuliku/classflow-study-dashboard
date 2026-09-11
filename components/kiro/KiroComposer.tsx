@@ -11,6 +11,7 @@ import {
   Loader2,
   Globe2,
   Cpu,
+  MoreHorizontal,
 } from "lucide-react";
 import { KiroSendControl } from "@/components/kiro/KiroSendControl";
 import { KiroContextBar } from "@/components/kiro/KiroContextBar";
@@ -134,6 +135,8 @@ export function KiroComposer({
   const [modelOpen, setModelOpen] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [materialPickerOpen, setMaterialPickerOpen] = useState(false);
+  // compact（Sidecar）：Agent/Reasoning/Model 收进“更多设置”溢出菜单，一级栏只留发送
+  const [moreToolsOpen, setMoreToolsOpen] = useState(false);
   const [dragOver, setDragOver] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [slashSkills, setSlashSkills] = useState<{ name: string; description: string }[]>([]);
@@ -143,6 +146,7 @@ export function KiroComposer({
   const attachRef = useRef<HTMLDivElement | null>(null);
   const modelRef = useRef<HTMLDivElement | null>(null);
   const pickerWrapRef = useRef<HTMLDivElement | null>(null);
+  const moreToolsRef = useRef<HTMLDivElement | null>(null);
   const dropRef = useRef<HTMLDivElement | null>(null);
 
   const hasImages = attachments.some((a) => a.kind === "image");
@@ -213,6 +217,7 @@ export function KiroComposer({
     setPickerOpen(false);
     setMaterialPickerOpen(false);
     setSlashOpen(false);
+    setMoreToolsOpen(false);
   }, [currentTurnScopeLocked]);
 
   const autoGrow = () => {
@@ -270,12 +275,14 @@ export function KiroComposer({
         setPickerOpen(false);
         setMaterialPickerOpen(false);
         setSlashOpen(false);
+        setMoreToolsOpen(false);
       }
     };
     const onPointerDown = (e: PointerEvent) => {
       const t = e.target as Node;
       if (attachRef.current && !attachRef.current.contains(t)) setAttachOpen(false);
       if (modelRef.current && !modelRef.current.contains(t)) setModelOpen(false);
+      if (moreToolsRef.current && !moreToolsRef.current.contains(t)) setMoreToolsOpen(false);
       if (pickerWrapRef.current && !pickerWrapRef.current.contains(t)) {
         setPickerOpen(false);
         setMaterialPickerOpen(false);
@@ -522,7 +529,8 @@ export function KiroComposer({
             />
 
             <div className="flex items-center justify-between gap-2 pt-1.5">
-              <div className="flex items-center gap-0.5">
+              {/* 左组：内容动作（附件/上下文常显） */}
+              <div className="flex items-center gap-1">
                 <div ref={attachRef} className="relative">
                   <button
                     onClick={() => {
@@ -531,6 +539,7 @@ export function KiroComposer({
                       setModelOpen(false);
                       setPickerOpen(false);
                       setMaterialPickerOpen(false);
+                      setMoreToolsOpen(false);
                     }}
                     aria-label="添加附件"
                     aria-expanded={attachOpen}
@@ -571,6 +580,7 @@ export function KiroComposer({
                       setPickerOpen((v) => !v);
                       setAttachOpen(false);
                       setModelOpen(false);
+                      setMoreToolsOpen(false);
                     }}
                     aria-label="选择上下文"
                     aria-expanded={pickerOpen}
@@ -630,72 +640,117 @@ export function KiroComposer({
                 </button>
               </div>
 
-              <div className="flex items-center gap-2">
-                {/* Kiro Computer Agent V1：Agent Mode（仅 Computer ON）+ Reasoning（capability-driven）——
-                    下一 Turn preference：回复期间可切换（当前 Turn 用 frozen agentMode/reasoningEffort）。
-                    compact（Sidecar）：一级栏只显示图标，文字进二级 popover */}
-                {computerEnabled && agentMode && (
-                  <KiroAgentModeMenu
-                    mode={agentMode}
-                    onChange={(m) => onSetAgentMode?.(m)}
-                    disabled={nextTurnPreferencesLocked}
-                    iconOnly={compact}
-                  />
-                )}
-                {computerEnabled && reasoningCapability && reasoningEffort && (
-                  <KiroReasoningMenu
-                    capability={reasoningCapability}
-                    effort={reasoningEffort}
-                    onChange={(e) => onSetReasoningEffort?.(e)}
-                    disabled={nextTurnPreferencesLocked}
-                    iconOnly={compact}
-                  />
-                )}
-                <div ref={modelRef} className="relative">
-                  <button
-                    onClick={() => {
-                      if (nextTurnPreferencesLocked) return;
-                      setModelOpen((v) => !v);
-                      setAttachOpen(false);
-                      setPickerOpen(false);
-                    }}
-                    aria-label="选择模型"
-                    aria-expanded={modelOpen}
-                    aria-haspopup="menu"
-                    title={turnInFlight ? "选择下一条消息使用的模型" : "选择模型"}
-                    disabled={nextTurnPreferencesLocked}
-                    data-model-open={modelOpen}
-                    className={cn(
-                      "flex items-center h-9 rounded-xl transition-colors disabled:opacity-40 disabled:cursor-not-allowed",
-                      compact
-                        ? cn("w-9 justify-center", modelOpen ? "bg-alabaster text-charcoal" : "text-sandrift hover:bg-alabaster hover:text-charcoal")
-                        : cn(
-                            "gap-1.5 px-2.5 text-[11px] font-semibold",
-                            modelOpen
-                              ? "bg-alabaster text-charcoal border border-line-strong"
-                              : "text-sandrift border border-transparent hover:bg-alabaster hover:text-charcoal"
-                          )
-                    )}
-                  >
-                    <ProviderLogo vendor={activeModelVendor} size="sm" />
-                    {!compact && (
-                      <>
-                        <span className="truncate max-w-[140px]">{activeModelName}</span>
-                        <ChevronDown
-                          className={cn(
-                            "w-3 h-3 shrink-0 transition-transform duration-[var(--kiro-motion-control,var(--motion-fast))] ease-[var(--ease-standard)]",
-                            modelOpen && "rotate-180"
+              {/* 右组：配置 + 发送。compact 下配置项收进溢出菜单，一级栏只留发送 */}
+              <div className="flex items-center gap-1 shrink-0">
+                {compact ? (
+                  <div ref={moreToolsRef} className="relative">
+                    <button
+                      onClick={() => {
+                        setMoreToolsOpen((v) => !v);
+                        setAttachOpen(false);
+                        setPickerOpen(false);
+                        setModelOpen(false);
+                      }}
+                      aria-label="更多设置"
+                      aria-expanded={moreToolsOpen}
+                      title="模型与 Computer 设置"
+                      className="w-9 h-9 flex items-center justify-center rounded-xl text-sandrift hover:bg-alabaster hover:text-charcoal transition-colors"
+                    >
+                      <MoreHorizontal className="w-4 h-4" />
+                    </button>
+                    {moreToolsOpen && (
+                      <PopoverPanel open placement="top-end" motionProfile="kiro" className="w-64">
+                        <div
+                          className="flex flex-col gap-1 p-2"
+                          onClickCapture={() => setMoreToolsOpen(false)}
+                        >
+                          {computerEnabled && agentMode && (
+                            <KiroAgentModeMenu
+                              mode={agentMode}
+                              onChange={(m) => onSetAgentMode?.(m)}
+                              disabled={nextTurnPreferencesLocked}
+                            />
                           )}
-                        />
-                      </>
+                          {computerEnabled && reasoningCapability && reasoningEffort && (
+                            <KiroReasoningMenu
+                              capability={reasoningCapability}
+                              effort={reasoningEffort}
+                              onChange={(e) => onSetReasoningEffort?.(e)}
+                              disabled={nextTurnPreferencesLocked}
+                            />
+                          )}
+                          <div className="border-t border-line-soft pt-1">{modelMenu}</div>
+                        </div>
+                      </PopoverPanel>
                     )}
-                  </button>
-                  {modelOpen && (
-                    <PopoverPanel open placement="top-end" motionProfile="kiro" className="w-60">
-                      {modelMenu}
-                    </PopoverPanel>
-                  )}
-                </div>
+                  </div>
+                ) : (
+                  <>
+                    {computerEnabled && agentMode && (
+                      <KiroAgentModeMenu
+                        mode={agentMode}
+                        onChange={(m) => onSetAgentMode?.(m)}
+                        disabled={nextTurnPreferencesLocked}
+                        iconOnly={compact}
+                      />
+                    )}
+                    {computerEnabled && reasoningCapability && reasoningEffort && (
+                      <KiroReasoningMenu
+                        capability={reasoningCapability}
+                        effort={reasoningEffort}
+                        onChange={(e) => onSetReasoningEffort?.(e)}
+                        disabled={nextTurnPreferencesLocked}
+                        iconOnly={compact}
+                      />
+                    )}
+                    <div ref={modelRef} className="relative">
+                      <button
+                        onClick={() => {
+                          if (nextTurnPreferencesLocked) return;
+                          setModelOpen((v) => !v);
+                          setAttachOpen(false);
+                          setPickerOpen(false);
+                          setMoreToolsOpen(false);
+                        }}
+                        aria-label="选择模型"
+                        aria-expanded={modelOpen}
+                        aria-haspopup="menu"
+                        title={turnInFlight ? "选择下一条消息使用的模型" : "选择模型"}
+                        disabled={nextTurnPreferencesLocked}
+                        data-model-open={modelOpen}
+                        className={cn(
+                          "flex items-center h-9 rounded-xl transition-colors disabled:opacity-40 disabled:cursor-not-allowed",
+                          compact
+                            ? cn("w-9 justify-center", modelOpen ? "bg-alabaster text-charcoal" : "text-sandrift hover:bg-alabaster hover:text-charcoal")
+                            : cn(
+                                "gap-1.5 px-2.5 text-[11px] font-semibold",
+                                modelOpen
+                                  ? "bg-alabaster text-charcoal border border-line-strong"
+                                  : "text-sandrift border border-transparent hover:bg-alabaster hover:text-charcoal"
+                              )
+                        )}
+                      >
+                        <ProviderLogo vendor={activeModelVendor} size="sm" />
+                        {!compact && (
+                          <>
+                            <span className="truncate max-w-[140px]">{activeModelName}</span>
+                            <ChevronDown
+                            className={cn(
+                              "w-3 h-3 shrink-0 transition-transform duration-[var(--kiro-motion-control,var(--motion-fast))] ease-[var(--ease-standard)]",
+                              modelOpen && "rotate-180"
+                            )}
+                            />
+                          </>
+                        )}
+                      </button>
+                      {modelOpen && (
+                        <PopoverPanel open placement="top-end" motionProfile="kiro" className="w-60">
+                          {modelMenu}
+                        </PopoverPanel>
+                      )}
+                    </div>
+                  </>
+                )}
 
                 <KiroSendControl
                   canSend={canSend}

@@ -557,3 +557,106 @@ describe("Move handle（Move V1）", () => {
     s.cleanup();
   });
 });
+
+describe("Drag Perf（手势帧零 reconcile + compositor 位移）", () => {
+  function setupCounting() {
+    Object.defineProperty(window, "innerWidth", { configurable: true, value: 1440 });
+    Object.defineProperty(window, "innerHeight", { configurable: true, value: 900 });
+    let renders = 0;
+    function CountingChild() {
+      renders += 1;
+      return <div data-testid="sidecar-body-stub">messages</div>;
+    }
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    act(() => {
+      root.render(
+        <KiroSidecarShell mode="open" present={true}>
+          <CountingChild />
+        </KiroSidecarShell>
+      );
+    });
+    const panel = () => container.querySelector('[data-testid="kiro-sidecar"]') as HTMLElement | null;
+    const flushFrame = async () => {
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 32));
+      });
+    };
+    const cleanup = () => {
+      act(() => root.unmount());
+      container.remove();
+    };
+    const renderCount = () => renders;
+    return { container, panel, flushFrame, cleanup, renderCount };
+  }
+
+  function down(handle: Element, x: number, y: number) {
+    act(() => {
+      (handle as HTMLElement).dispatchEvent(
+        new PointerEvent("pointerdown", { bubbles: true, button: 0, clientX: x, clientY: y, pointerId: 1 })
+      );
+    });
+  }
+
+  function move(handle: Element, x: number, y: number) {
+    act(() => {
+      (handle as HTMLElement).dispatchEvent(
+        new PointerEvent("pointermove", { bubbles: true, clientX: x, clientY: y, pointerId: 1 })
+      );
+    });
+  }
+
+  function up(handle: Element, x: number, y: number) {
+    act(() => {
+      (handle as HTMLElement).dispatchEvent(
+        new PointerEvent("pointerup", { bubbles: true, clientX: x, clientY: y, pointerId: 1 })
+      );
+    });
+  }
+
+  it("move 手势帧：transform 直写 + 内容零重渲染，store 只在松手持久化", async () => {
+    const s = setupCounting();
+    const handle = s.container.querySelector('[data-testid="kiro-sidecar-move-handle"]')!;
+    const before = s.renderCount();
+    down(handle, 1000, 100);
+    // 连续多帧 pointermove（rAF 合并，同步 act 内不执行帧回调）
+    move(handle, 980, 110);
+    move(handle, 960, 120);
+    move(handle, 940, 130);
+    // 手势帧期间：无 React state 更新 → 内容零重渲染，store 未写
+    expect(s.renderCount()).toBe(before);
+    expect(useKiroPreferencesStore.getState().sidecarPosition).toEqual({ top: 24, right: 24 });
+    // 帧回调执行后：compositor transform 生效（origin top 已 clamp 到 40）
+    await s.flushFrame();
+    expect(s.panel()!.style.transform).toContain("translate(");
+    expect(s.renderCount()).toBe(before);
+    // 松手：transform 清零 + 最后一帧持久化（delta -60/+30）
+    up(handle, 940, 130);
+    expect(s.panel()!.style.transform).toBe("");
+    expect(useKiroPreferencesStore.getState().sidecarPosition).toEqual({
+      top: SIDECAR_VIEWPORT_TOP_MARGIN + 30,
+      right: 84,
+    });
+    s.cleanup();
+  });
+
+  it("resize 手势帧：CSS 变量直写 + 内容零重渲染，store 只在松手持久化", async () => {
+    const s = setupCounting();
+    const left = s.container.querySelector('[data-sidecar-resize-handle="left"]')!;
+    const before = s.renderCount();
+    down(left, 300, 300);
+    move(left, 250, 300);
+    move(left, 200, 300);
+    expect(s.renderCount()).toBe(before);
+    await s.flushFrame();
+    // origin 620 + 100 = 720（上限 1440-24-24 内）
+    expect(Number.parseFloat(s.panel()!.style.getPropertyValue("--kiro-sidecar-width"))).toBe(
+      SIDECAR_DEFAULT_SIZE.width + 100
+    );
+    expect(s.renderCount()).toBe(before);
+    up(left, 200, 300);
+    expect(useKiroPreferencesStore.getState().sidecarSize.width).toBe(SIDECAR_DEFAULT_SIZE.width + 100);
+    s.cleanup();
+  });
+});

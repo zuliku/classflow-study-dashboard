@@ -1292,3 +1292,18 @@ html[data-motion-effective="reduced"] .kiro-send-activate {
   animation: none !important;
   transition-duration: 0.01ms !important;
 }
+
+/* Drag Perf：手势进行中暂停常转装饰（paused 可恢复，不会像 none 那样重放 intro），
+   并去掉小窗大阴影（松手恢复），避免每帧重绘。 */
+[data-geometry-interacting] .kiro-ring {
+  animation-play-state: paused !important;
+}
+[data-geometry-interacting] .kiro-empty-subtitle-intro,
+[data-geometry-interacting] .kiro-empty-suggestion-intro,
+[data-geometry-interacting] .kiro-empty-exit,
+[data-geometry-interacting] .kiro-composer-intro {
+  animation-play-state: paused !important;
+}
+div[data-geometry-interacting] {
+  box-shadow: none !important;
+}

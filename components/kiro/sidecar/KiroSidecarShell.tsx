@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { X, Expand, Minus } from "lucide-react";
+import { X, Minus } from "lucide-react";
 import { useKiroSessionActions, type KiroSidecarMode } from "@/components/kiro/KiroSessionProvider";
 import { KiroMark } from "@/components/kiro/KiroHeader";
 import { KiroSessionActions } from "@/components/kiro/KiroSessionActions";
@@ -35,10 +35,31 @@ import { cn } from "@/lib/utils";
  *    latestDraftRef 保证最后一帧 pointermove 的 size 被持久化（防 React state batching stale）。
  *
  * Move V1：
- * - 位置用 CSS variables（top/right）实时更新，不用 transform（避免与 presence motion 冲突）
- * - Move 与 Resize 共享 interactionRef 互斥；pointermove 只更新 draft，pointerup 一次性持久化
+ * - 提交态位置用 CSS variables（top/right）；手势进行中视觉走 compositor transform，
+ *   松手清零（presence motion 只在 mount/unmount 时跑，与手势不重叠，故无冲突）
+ * - Move 与 Resize 共享 interactionRef 互斥；手势帧直接写 DOM，pointerup 一次性持久化
  * - Presence 单 ownership：mount/unmount 仅由 KiroSidecar host 的 usePresence 负责
+ *
+ * Drag Perf（帧率优化，与上述语义完全兼容）：
+ * - Shell 内容经 memo 隔离：手势帧只重渲染 Shell 外框（CSS 变量），不再 reconcile 聊天树
+ *   （children 元素在 host 不重渲染时引用稳定；mode/presence 在手势期间冻结）
+ * - pointermove 经 rAF 合并为最多 1 次/帧（delta 相对 pointerdown 起点，latest-wins）
+ * - Move 手势中视觉走 compositor transform（top/right 变量保持 committed），松手清零并持久化；
+ *   Resize 走 CSS 变量直写（尺寸变化本来就需要 layout），同样跳过 React state
+ * - commit 语义不变：latestDraftRef 保证最后一帧被持久化（防 batching stale）
  */
+/**
+ * 手势帧内容隔离：Shell 外框每帧重渲染（CSS 变量/transform），但聊天子树跳过。
+ * children 元素在 host 不重渲染时引用稳定（手势期间 mode/presence 冻结），memo 直接 bail out。
+ */
+const SidecarShellContent = React.memo(function SidecarShellContent({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  return <div className="flex-1 min-h-0 flex flex-col overflow-hidden">{children}</div>;
+});
+
 export function KiroSidecarShell({
   mode,
   present,
@@ -84,6 +105,22 @@ export function KiroSidecarShell({
   const latestDraftPositionRef = useRef<SidecarPosition | null>(null);
   // Move / Resize 互斥（同族 geometry interaction，防 pointer capture 竞态）
   const interactionRef = useRef<"idle" | "move" | "resize">("idle");
+  // Drag Perf：rAF 合并 + DOM 直写所需的 refs（React state 只在 begin/commit 边界变化）
+  const shellRef = useRef<HTMLDivElement | null>(null);
+  const moveRafRef = useRef(0);
+  const pendingMoveRef = useRef<{ deltaX: number; deltaY: number } | null>(null);
+  const resizeRafRef = useRef(0);
+  const pendingResizeRef = useRef<{ deltaWidth: number; deltaHeight: number } | null>(null);
+
+  // unmount：取消未执行的帧回调（防 detached node 写 + 引用滞留）
+  useEffect(() => {
+    return () => {
+      if (moveRafRef.current) cancelAnimationFrame(moveRafRef.current);
+      if (resizeRafRef.current) cancelAnimationFrame(resizeRafRef.current);
+      moveRafRef.current = 0;
+      resizeRafRef.current = 0;
+    };
+  }, []);
 
   // Motion V1：geometry 交互期间降权内部 motion（intro/settle/popover transforms 近瞬时）
   const [geometryInteracting, setGeometryInteracting] = useState(false);
@@ -106,24 +143,49 @@ export function KiroSidecarShell({
    * pointermove（delta 相对 drag 起点）：
    * nextSize = dragOriginSize + delta；上限按当前 position 收紧
    * （left resize 保持 right edge → 宽度受 right+margin 限制；bottom 同理）。
+   *
+   * Drag Perf：只记录最新 delta 并调度一帧；帧回调里直接写 CSS 变量，
+   * 不经过 React state（手势帧零 reconcile，由 memo + 直接写 DOM 保证）。
    */
-  const applyDelta = (delta: { deltaWidth: number; deltaHeight: number }) => {
-    if (interactionRef.current !== "resize") return;
+  /** 同步执行一次 pending resize（rAF 回调与 commit 共用，保证最后一帧不丢） */
+  const flushResizeFrame = () => {
+    const pending = pendingResizeRef.current;
+    pendingResizeRef.current = null;
+    if (!pending || interactionRef.current !== "resize") return;
     const origin = resizeOriginRef.current ?? size;
     const next = clampSidecarSizeAtPosition(
       {
-        width: origin.width + delta.deltaWidth,
-        height: origin.height + delta.deltaHeight,
+        width: origin.width + pending.deltaWidth,
+        height: origin.height + pending.deltaHeight,
       },
       position,
       viewport
     );
     latestDraftRef.current = next;
-    setDraft(next);
+    const el = shellRef.current;
+    if (el) {
+      el.style.setProperty("--kiro-sidecar-width", `${next.width}px`);
+      el.style.setProperty("--kiro-sidecar-height", `${next.height}px`);
+    }
   };
 
-  /** pointerup / pointercancel：以 latestDraftRef 为准（最后一帧 move 可能尚未 render） */
+  const applyDelta = (delta: { deltaWidth: number; deltaHeight: number }) => {
+    if (interactionRef.current !== "resize") return;
+    pendingResizeRef.current = delta;
+    if (resizeRafRef.current) return;
+    resizeRafRef.current = requestAnimationFrame(() => {
+      resizeRafRef.current = 0;
+      flushResizeFrame();
+    });
+  };
+
+  /** pointerup / pointercancel：先同步 flush 最后一帧，再以 latestDraftRef 为准持久化 */
   const commitResize = () => {
+    if (resizeRafRef.current) {
+      cancelAnimationFrame(resizeRafRef.current);
+      resizeRafRef.current = 0;
+    }
+    flushResizeFrame();
     if (interactionRef.current === "resize") {
       const finalSize = latestDraftRef.current;
       if (finalSize) {
@@ -146,22 +208,51 @@ export function KiroSidecarShell({
     setGeometryInteracting(true);
   };
 
-  const applyMove = (delta: { deltaX: number; deltaY: number }) => {
-    if (interactionRef.current !== "move") return;
+  /** 同步执行一次 pending move（rAF 回调与 commit 共用，保证最后一帧不丢） */
+  const flushMoveFrame = () => {
+    const pending = pendingMoveRef.current;
+    pendingMoveRef.current = null;
+    if (!pending || interactionRef.current !== "move") return;
     const origin = moveOriginRef.current ?? position;
     const next = clampSidecarPosition(
       {
-        top: origin.top + delta.deltaY,
-        right: origin.right - delta.deltaX,
+        top: origin.top + pending.deltaY,
+        right: origin.right - pending.deltaX,
       },
       size,
       viewport
     );
     latestDraftPositionRef.current = next;
-    setDraftPosition(next);
+    // Compositor-only 位移（相对 committed 几何的已应用增量；变量保持 committed，
+    // React state 不动）。松手时清零 transform，持久化值与视觉完全一致，无跳变。
+    const el = shellRef.current;
+    if (el) {
+      el.style.transform = `translate(${origin.right - next.right}px, ${next.top - origin.top}px)`;
+    }
+  };
+
+  const applyMove = (delta: { deltaX: number; deltaY: number }) => {
+    if (interactionRef.current !== "move") return;
+    pendingMoveRef.current = delta;
+    if (moveRafRef.current) return;
+    moveRafRef.current = requestAnimationFrame(() => {
+      moveRafRef.current = 0;
+      flushMoveFrame();
+    });
   };
 
   const commitMove = () => {
+    if (moveRafRef.current) {
+      cancelAnimationFrame(moveRafRef.current);
+      moveRafRef.current = 0;
+    }
+    flushMoveFrame();
+    // 先清零视觉位移，再持久化：React 在 microtask 中用新 committed 几何重绘，
+    // 同一 paint 周期内完成，无旧位置闪回。
+    const el = shellRef.current;
+    if (el) {
+      el.style.transform = "";
+    }
     if (interactionRef.current === "move") {
       const finalPosition = latestDraftPositionRef.current;
       if (finalPosition) {
@@ -178,6 +269,7 @@ export function KiroSidecarShell({
   // Final Closure：fullVisible = open && present；closed exit 时保持 hidden 不闪回
   return (
     <div
+      ref={shellRef}
       data-testid="kiro-sidecar"
       data-state={mode}
       data-geometry-interacting={geometryInteracting || undefined}
@@ -214,7 +306,7 @@ export function KiroSidecarShell({
         className="hidden md:block"
       />
       <KiroSidecarHeader onMinimize={minimizeSidecar} onExpand={expandSidecar} onClose={closeSidecar} />
-      <div className="flex-1 min-h-0 flex flex-col overflow-hidden">{children}</div>
+      <SidecarShellContent>{children}</SidecarShellContent>
 
       {/* Resize handles：仅 md+ 可见（responsive hidden，不复制容器） */}
       <KiroSidecarResizeHandle
@@ -254,7 +346,9 @@ function KiroSidecarHeader({ onMinimize, onExpand, onClose }: { onMinimize: () =
           Kiro
         </h2>
       </div>
-      <div className="flex items-center gap-0.5 shrink-0">
+      {/* 右侧收敛为 4 键：分享 / 更多（含新对话与打开完整工作区）/ 最小化 / 关闭；
+          独立 Expand 按钮与 More 菜单重复，已移除 */}
+      <div className="flex items-center gap-1 shrink-0">
         <KiroSessionActions variant="sidecar" onExpand={onExpand} />
         <button
           onClick={onMinimize}
@@ -264,14 +358,6 @@ function KiroSidecarHeader({ onMinimize, onExpand, onClose }: { onMinimize: () =
           data-testid="kiro-sidecar-minimize"
         >
           <Minus className="w-4 h-4" />
-        </button>
-        <button
-          onClick={onExpand}
-          aria-label="展开到 Kiro 工作区"
-          title="展开"
-          className="w-8 h-8 flex items-center justify-center rounded-xl text-sandrift hover:bg-alabaster hover:text-charcoal transition-colors"
-        >
-          <Expand className="w-4 h-4" />
         </button>
         <button
           onClick={onClose}

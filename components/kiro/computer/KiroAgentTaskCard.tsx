@@ -134,22 +134,22 @@ export function KiroAgentTaskCard({
       )}
 
       {canUndo && (
-        <div className="flex items-center gap-2 pt-0.5">
-          <button
-            data-testid="kiro-task-review"
-            onClick={() => onReview?.(task.id)}
-            className="flex items-center gap-1.5 px-2.5 h-7 rounded-lg text-[11px] font-bold text-charcoal bg-surface border border-line hover:border-line-strong transition-colors"
-          >
-            <Eye className="w-3 h-3" aria-hidden="true" />
-            查看更改
-          </button>
+        <div className="flex flex-col gap-1.5 pt-0.5">
           <button
             data-testid="kiro-task-undo"
             onClick={() => onUndo?.(task.id)}
-            className="flex items-center gap-1.5 px-2.5 h-7 rounded-lg text-[11px] font-bold text-white bg-charcoal hover:bg-black transition-colors"
+            className="w-full flex items-center justify-center gap-1.5 h-9 rounded-xl text-xs font-bold text-white bg-charcoal hover:bg-black transition-colors"
           >
-            <RotateCcw className="w-3 h-3" aria-hidden="true" />
+            <RotateCcw className="w-3.5 h-3.5" aria-hidden="true" />
             撤销本次更改
+          </button>
+          <button
+            data-testid="kiro-task-review"
+            onClick={() => onReview?.(task.id)}
+            className="self-start flex items-center gap-1 px-1 min-h-[32px] rounded-md text-[11px] font-semibold text-satin-grey hover:text-charcoal transition-colors"
+          >
+            <Eye className="w-3 h-3" aria-hidden="true" />
+            查看更改
           </button>
         </div>
       )}
@@ -214,11 +214,11 @@ function ChangeList({
       {changes.map((c) => {
         const artifactId = "artifactId" in c ? c.artifactId : undefined;
         return (
-          <li key={c.displayName + c.relativePath} className="flex items-center gap-1.5 text-[11px] text-satin-grey">
+          <li key={c.displayName + c.relativePath} className="group flex items-center gap-1.5 text-[11px] text-satin-grey">
             <span className="w-1 h-1 rounded-full bg-sandrift shrink-0" aria-hidden="true" />
             <span className="truncate min-w-0">{changeSummary(c)}</span>
             {artifactId && (
-              <span className="flex items-center gap-0.5 shrink-0 ml-auto pl-1">
+              <span className="flex items-center gap-1 shrink-0 ml-auto pl-1 md:opacity-0 md:group-hover:opacity-100 md:focus-within:opacity-100 transition-opacity">
                 <button
                   onClick={() => onPreview(artifactId)}
                   aria-label={`预览 ${c.displayName}`}

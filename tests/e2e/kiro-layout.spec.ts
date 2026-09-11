@@ -88,8 +88,9 @@ test("expandSidecar：关闭 Sidecar 进入 Workspace，同一会话保留", asy
   await composer.getByLabel("发送").click();
   await expect(page.getByTestId("kiro-message").last()).toContainText("本周安排已梳理", { timeout: 10000 });
 
-  // Expand：Sidecar 关闭 → Workspace 显示同一会话
-  await page.getByLabel("展开到 Kiro 工作区").click();
+  // Expand（经 More 菜单）：Sidecar 关闭 → Workspace 显示同一会话
+  await page.getByTestId("kiro-sidecar").getByLabel("更多操作").click();
+  await page.getByRole("menuitem", { name: "打开完整 Kiro 工作区" }).click();
   await expect(page.getByTestId("kiro-sidecar")).toHaveCount(0);
   await expect(page.getByTestId("kiro-workspace")).toBeVisible();
   await expect(page.getByTestId("kiro-user-message").last()).toContainText("帮我梳理本周");

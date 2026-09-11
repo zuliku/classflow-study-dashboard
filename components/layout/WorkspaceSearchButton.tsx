@@ -25,7 +25,8 @@ export function WorkspaceSearchButton() {
       size="sm"
       onClick={openSearch}
       aria-label="全局搜索"
-      className="gap-1.5 px-2 text-sandrift hover:text-charcoal md:px-2.5"
+      // 固定断点宽度，避免 md/lg 内容切换时整排按钮跳动
+      className="gap-1.5 px-2 text-sandrift hover:text-charcoal md:w-[76px] md:justify-center md:px-2.5 lg:w-[112px]"
     >
       <Search className="h-3.5 w-3.5 text-[#A48F82] shrink-0" aria-hidden="true" />
       <span className="hidden md:inline font-medium">搜索</span>
