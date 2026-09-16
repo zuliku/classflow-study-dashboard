@@ -8,6 +8,7 @@ import { logProviderError } from "@/lib/ai/providerLog";
 import { getSessionApiKey, setSessionApiKey } from "@/lib/ai/sessionKeys";
 import { DEEPSEEK_MODELS } from "@/lib/ai/providers/deepSeek";
 import { OPENCODE_MODELS, filterRemoteGoModels } from "@/lib/ai/providers/openCodeGo";
+import type { AIModelVendor } from "@/lib/ai/providers/types";
 
 describe("Provider Registry", () => {
   it("DeepSeek：V4 Flash（默认）/ V4 Pro，openai-chat transport", () => {
@@ -18,29 +19,29 @@ describe("Provider Registry", () => {
     expect(DEEPSEEK_MODELS[0].name).toBe("V4 Flash");
   });
 
-  it("OpenCode Go：官方三 transport 注册表（chat + responses + messages，2026-09 Go 限额表 13 款）", () => {
+  it("OpenCode Go：官方三 transport 注册表（chat + responses + messages，2026-09-16 远端 37 款同步 36 款）", () => {
     const models = getModelsForProvider("opencode-go");
     const ids = models.map((m) => m.id);
-    expect(ids).toHaveLength(13);
-    expect(ids).toContain("glm-5.3-flash");
-    expect(ids).toContain("kimi-k3");
-    expect(ids).toContain("deepseek-v4-flash");
-    expect(ids).toContain("mimo-v2.5");
-    expect(ids).toContain("hy3");
-    expect(ids).toContain("hy4-preview");
-    expect(ids).toContain("longcat-2.0");
-    // openai-responses 模型（Phase 3.1 正式接入）
-    expect(ids).toContain("gpt-5.6-luna");
-    expect(ids).toContain("grok-4.6");
-    expect(ids).toContain("muse-spark-1.3-contributor");
-    // anthropic-messages 模型
-    expect(ids).toContain("minimax-m3");
-    expect(ids).toContain("qwen3.7-plus");
-    expect(ids).toContain("qwen3.8-flash");
-    // 已下架旧款不再出现
-    for (const retired of ["glm-5.3", "glm-5.2", "glm-5.1", "kimi-k2.7-code", "kimi-k2.6", "deepseek-v4-pro", "mimo-v2.5-pro", "minimax-m2.7", "minimax-m2.5", "qwen3.8-max", "qwen3.7-max", "qwen3.6-plus", "grok-4.5", "muse-spark-1.2-contributor"]) {
-      expect(ids, retired).not.toContain(retired);
+    expect(ids).toHaveLength(36);
+    for (const id of [
+      "glm-5.3-flash", "glm-5.3", "glm-5.2", "glm-5.1", "glm-5",
+      "kimi-k3", "kimi-k2.7-code", "kimi-k2.6", "kimi-k2.5",
+      "deepseek-v4-flash", "deepseek-v4-pro", "deepseek-flash", "deepseek-v4.1-flash",
+      "deepseek-v4-flash-vision-exp",
+      "mimo-v2.5", "mimo-v2-pro", "mimo-v2-omni", "mimo-v2.5-pro",
+      "hy3", "hy3-preview", "hy4-preview",
+      "longcat-2.0",
+      // openai-responses 模型（Phase 3.1 正式接入）
+      "gpt-5.6-luna", "grok-4.6", "grok-4.5",
+      "muse-spark-1.3-contributor", "muse-spark-1.2-contributor",
+      // anthropic-messages 模型
+      "minimax-m3", "minimax-m2.7", "minimax-m2.5",
+      "qwen3.7-plus", "qwen3.8-flash", "qwen3.7-max", "qwen3.8-max", "qwen3.6-plus", "qwen3.5-plus",
+    ]) {
+      expect(ids, id).toContain(id);
     }
+    // 未知厂商 omen-alpha（无协议证据）绝不进入注册表
+    expect(ids).not.toContain("omen-alpha");
     // 每个模型都有合法 transport（全部来自注册表声明）
     expect(
       models.every(
@@ -52,9 +53,9 @@ describe("Provider Registry", () => {
 
   it("OpenCode transport 划分与官方 endpoint 表一致", () => {
     const byId = new Map(OPENCODE_MODELS.map((m) => [m.id, m.transport]));
-    const chatModels = ["glm-5.3-flash", "kimi-k3", "deepseek-v4-flash", "mimo-v2.5", "hy3", "hy4-preview", "longcat-2.0"];
-    const responsesModels = ["grok-4.6", "gpt-5.6-luna", "muse-spark-1.3-contributor"];
-    const messagesModels = ["minimax-m3", "qwen3.7-plus", "qwen3.8-flash"];
+    const chatModels = ["glm-5.3-flash", "glm-5.3", "glm-5.2", "glm-5.1", "glm-5", "kimi-k3", "kimi-k2.7-code", "kimi-k2.6", "kimi-k2.5", "deepseek-v4-flash", "deepseek-v4-pro", "deepseek-flash", "deepseek-v4.1-flash", "deepseek-v4-flash-vision-exp", "mimo-v2.5", "mimo-v2-pro", "mimo-v2-omni", "mimo-v2.5-pro", "hy3", "hy3-preview", "hy4-preview", "longcat-2.0"];
+    const responsesModels = ["grok-4.6", "grok-4.5", "gpt-5.6-luna", "muse-spark-1.3-contributor", "muse-spark-1.2-contributor"];
+    const messagesModels = ["minimax-m3", "minimax-m2.7", "minimax-m2.5", "qwen3.7-plus", "qwen3.8-flash", "qwen3.7-max", "qwen3.8-max", "qwen3.6-plus", "qwen3.5-plus"];
     for (const id of chatModels) expect(byId.get(id), id).toBe("openai-chat");
     for (const id of responsesModels) expect(byId.get(id), id).toBe("openai-responses");
     for (const id of messagesModels) expect(byId.get(id), id).toBe("anthropic-messages");
@@ -213,9 +214,9 @@ describe("OpenCode Phase 3.1：openai-responses registry 与过滤一致性", ()
     ]);
   });
 
-  it("5. 未知远端模型（mimo-v2-omni）在未 verified transport 前过滤", () => {
-    expect(OPENCODE_MODELS.some((m) => m.id === "mimo-v2-omni")).toBe(false);
-    expect(filterRemoteGoModels([{ id: "mimo-v2-omni" }])).toEqual([]);
+  it("5. 未知远端模型（omen-alpha）在未 verified transport 前过滤", () => {
+    expect(OPENCODE_MODELS.some((m) => m.id === "omen-alpha")).toBe(false);
+    expect(filterRemoteGoModels([{ id: "omen-alpha" }])).toEqual([]);
   });
 });
 
@@ -241,6 +242,30 @@ describe("模型 → 厂商（Logo）映射", () => {
     expect(getVendorForModelId("qwen3.8-flash")).toBe("qwen");
     expect(getVendorForModelId("longcat-2.0")).toBe("longcat");
     expect(getVendorForModelId("muse-spark-1.3-contributor")).toBe("meta");
+  });
+
+  it("新增 23 款模型 → 厂商（Logo）映射正确：注册表声明优先，前缀兜底一致", () => {
+    const cases: [string, AIModelVendor][] = [
+      ["kimi-k2.7-code", "kimi"], ["kimi-k2.6", "kimi"], ["kimi-k2.5", "kimi"],
+      ["minimax-m2.7", "minimax"], ["minimax-m2.5", "minimax"],
+      ["glm-5.3", "zai"], ["glm-5.2", "zai"], ["glm-5.1", "zai"], ["glm-5", "zai"],
+      ["deepseek-v4-pro", "deepseek"], ["deepseek-flash", "deepseek"],
+      ["deepseek-v4.1-flash", "deepseek"], ["deepseek-v4-flash-vision-exp", "deepseek"],
+      ["qwen3.7-max", "qwen"], ["qwen3.8-max", "qwen"],
+      ["qwen3.6-plus", "qwen"], ["qwen3.5-plus", "qwen"],
+      ["mimo-v2-pro", "mimo"], ["mimo-v2-omni", "mimo"], ["mimo-v2.5-pro", "mimo"],
+      ["hy3-preview", "tencent"],
+      ["grok-4.5", "xai"],
+      ["muse-spark-1.2-contributor", "meta"],
+    ];
+    for (const [id, vendor] of cases) {
+      expect(getVendorForModelId(id), id).toBe(vendor);
+      const meta = getVendorMeta(vendor);
+      expect(meta.logo.startsWith("/ai-providers/"), id).toBe(true);
+    }
+    // omen-alpha：未知厂商 → neutral fallback（无 Logo、无猜测）
+    expect(getVendorForModelId("omen-alpha")).toBeNull();
+    expect(getVendorMeta(null).logo).toBe("");
   });
 
   it("未知模型 → null（UI 走 neutral fallback），不猜厂商", () => {

@@ -261,14 +261,20 @@ describe("resolveLanguageModel（统一入口）", () => {
 });
 
 describe("OpenCode 注册表完整性", () => {
-  it("OPENCODE_MODELS：每个模型 transport 均为已支持值；Go 限额表 13 款全覆盖", () => {
+  it("OPENCODE_MODELS：每个模型 transport 均为已支持值；Go 远端 37 款同步 36 款（omen-alpha 无协议证据跳过）", () => {
     const ids = new Set(OPENCODE_MODELS.map((m) => m.id));
-    expect(OPENCODE_MODELS).toHaveLength(13);
+    expect(OPENCODE_MODELS).toHaveLength(36);
     for (const id of [
-      "glm-5.3-flash", "kimi-k3",
-      "deepseek-v4-flash", "mimo-v2.5", "hy3", "hy4-preview", "longcat-2.0",
-      "grok-4.6", "gpt-5.6-luna", "muse-spark-1.3-contributor",
-      "minimax-m3", "qwen3.7-plus", "qwen3.8-flash",
+      "glm-5.3-flash", "glm-5.3", "glm-5.2", "glm-5.1", "glm-5", "kimi-k3",
+      "kimi-k2.7-code", "kimi-k2.6", "kimi-k2.5",
+      "deepseek-v4-flash", "deepseek-v4-pro", "deepseek-flash", "deepseek-v4.1-flash",
+      "deepseek-v4-flash-vision-exp",
+      "mimo-v2.5", "mimo-v2-pro", "mimo-v2-omni", "mimo-v2.5-pro",
+      "hy3", "hy3-preview", "hy4-preview", "longcat-2.0",
+      "grok-4.6", "grok-4.5", "gpt-5.6-luna",
+      "muse-spark-1.3-contributor", "muse-spark-1.2-contributor",
+      "minimax-m3", "minimax-m2.7", "minimax-m2.5",
+      "qwen3.7-plus", "qwen3.8-flash", "qwen3.7-max", "qwen3.8-max", "qwen3.6-plus", "qwen3.5-plus",
     ]) {
       expect(ids.has(id), id).toBe(true);
     }
