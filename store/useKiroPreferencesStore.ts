@@ -39,7 +39,8 @@ import {
  * - Workspace 与 Sidecar 共用（都经 KiroChatSurface 读取）
  */
 
-interface KiroPreferencesState {
+/** V5A9：Settings 中真实可修改/恢复默认的 Kiro preference 数据切片。 */
+export interface KiroSettingsPreferences {
   outputTextSize: KiroOutputTextSize;
   /** Task 7E：自动环境上下文（auto/entry 中的 auto 部分；manual @ 不受影响） */
   autoContextEnabled: boolean;
@@ -51,6 +52,41 @@ interface KiroPreferencesState {
   /** Task 19C1：扫描 Web PDF Vision（设置；Key 绝不进入 Store） */
   webPdfVisionEnabled: boolean;
   webPdfVisionModel: string;
+}
+
+export type KiroSettingsPreferenceKey = keyof KiroSettingsPreferences;
+
+/**
+ * V5A9 canonical defaults：仅覆盖 Settings-facing preferences。
+ * Sidecar 几何与一次性隐私提示不是 Settings row，明确不进入此 truth/reset surface。
+ */
+export const DEFAULT_KIRO_SETTINGS_PREFERENCES: KiroSettingsPreferences = {
+  outputTextSize: "standard",
+  autoContextEnabled: true,
+  responsePreference: DEFAULT_KIRO_RESPONSE_PREFERENCE,
+  webSearchEnabled: true,
+  webSearchCredentialMode: "server",
+  webPdfVisionEnabled: true,
+  webPdfVisionModel: DEFAULT_WEB_PDF_VISION_MODEL,
+};
+
+/** 当前与 canonical defaults 不同的 Kiro Settings preference keys。 */
+export function getModifiedKiroSettingsPreferenceKeys(
+  preferences: KiroSettingsPreferences
+): KiroSettingsPreferenceKey[] {
+  return (Object.keys(DEFAULT_KIRO_SETTINGS_PREFERENCES) as KiroSettingsPreferenceKey[]).filter(
+    (key) => !Object.is(preferences[key], DEFAULT_KIRO_SETTINGS_PREFERENCES[key])
+  );
+}
+
+/** 单项恢复 canonical default 的纯 patch；不会触碰 session credentials / Sidecar / permissions。 */
+export function resetKiroSettingsPreferencePatch(
+  key: KiroSettingsPreferenceKey
+): Partial<KiroSettingsPreferences> {
+  return { [key]: DEFAULT_KIRO_SETTINGS_PREFERENCES[key] };
+}
+
+interface KiroPreferencesState extends KiroSettingsPreferences {
   /** Sidecar UX V2：面板尺寸（用户拖拽调整后持久化；首次使用默认值） */
   sidecarSize: SidecarSize;
   /** Sidecar Move V1：浮动面板位置（top/right；拖拽后持久化；首次使用右上 24px） */
@@ -66,6 +102,8 @@ interface KiroPreferencesState {
   setWebSearchCredentialMode: (mode: KiroWebSearchCredentialMode) => void;
   setWebPdfVisionEnabled: (enabled: boolean) => void;
   setWebPdfVisionModel: (model: string) => void;
+  /** V5A9：只允许 reset Settings-facing Kiro preferences。 */
+  resetKiroSettingsPreference: (key: KiroSettingsPreferenceKey) => void;
   setSidecarSize: (size: SidecarSize) => void;
   setSidecarPosition: (position: SidecarPosition) => void;
   setSidecarMinimizedPosition: (position: SidecarMinimizedPosition) => void;
@@ -75,13 +113,7 @@ interface KiroPreferencesState {
 export const useKiroPreferencesStore = create<KiroPreferencesState>()(
   persist(
     (set) => ({
-      outputTextSize: "standard",
-      autoContextEnabled: true,
-      responsePreference: DEFAULT_KIRO_RESPONSE_PREFERENCE,
-      webSearchEnabled: true,
-      webSearchCredentialMode: "server",
-      webPdfVisionEnabled: true,
-      webPdfVisionModel: DEFAULT_WEB_PDF_VISION_MODEL,
+      ...DEFAULT_KIRO_SETTINGS_PREFERENCES,
       sidecarSize: SIDECAR_DEFAULT_SIZE,
       sidecarPosition: SIDECAR_DEFAULT_POSITION,
       sidecarMinimizedPosition: DEFAULT_SIDECAR_MINIMIZED_POSITION,
@@ -96,6 +128,7 @@ export const useKiroPreferencesStore = create<KiroPreferencesState>()(
       setWebPdfVisionEnabled: (enabled) => set({ webPdfVisionEnabled: enabled }),
       // Store 内永远不保存任意 model id（非法 → 默认 mimo-v2.5）
       setWebPdfVisionModel: (model) => set({ webPdfVisionModel: normalizeWebPdfVisionModel(model) }),
+      resetKiroSettingsPreference: (key) => set(resetKiroSettingsPreferencePatch(key)),
       // 结构归一后保存；viewport clamp 由 Shell 在浏览器内执行
       setSidecarSize: (size) => set({ sidecarSize: normalizeSidecarSize(size) }),
       setSidecarPosition: (position) =>
@@ -135,16 +168,25 @@ export const useKiroPreferencesStore = create<KiroPreferencesState>()(
           outputTextSize: normalizeKiroOutputTextSize(p?.outputTextSize),
           // 旧持久化（Task 7C 时代）没有该字段 → 默认 true
           autoContextEnabled:
-            typeof p?.autoContextEnabled === "boolean" ? p.autoContextEnabled : true,
+            typeof p?.autoContextEnabled === "boolean"
+              ? p.autoContextEnabled
+              : DEFAULT_KIRO_SETTINGS_PREFERENCES.autoContextEnabled,
           // 旧持久化没有 responsePreference → 默认 dense；非法旧数据 → dense
           responsePreference: normalizeKiroResponsePreference(p?.responsePreference),
           // Task 14：旧持久化无字段 → 默认 enabled=true / server
           webSearchEnabled:
-            typeof p?.webSearchEnabled === "boolean" ? p.webSearchEnabled : true,
-          webSearchCredentialMode: p?.webSearchCredentialMode === "byok" ? "byok" : "server",
+            typeof p?.webSearchEnabled === "boolean"
+              ? p.webSearchEnabled
+              : DEFAULT_KIRO_SETTINGS_PREFERENCES.webSearchEnabled,
+          webSearchCredentialMode:
+            p?.webSearchCredentialMode === "byok"
+              ? "byok"
+              : DEFAULT_KIRO_SETTINGS_PREFERENCES.webSearchCredentialMode,
           // Task 19C1：旧持久化无字段 → 默认 enabled=true / mimo-v2.5；非法持久化模型 → 归一
           webPdfVisionEnabled:
-            typeof p?.webPdfVisionEnabled === "boolean" ? p.webPdfVisionEnabled : true,
+            typeof p?.webPdfVisionEnabled === "boolean"
+              ? p.webPdfVisionEnabled
+              : DEFAULT_KIRO_SETTINGS_PREFERENCES.webPdfVisionEnabled,
           webPdfVisionModel: normalizeWebPdfVisionModel(p?.webPdfVisionModel),
           // Sidecar UX V2：旧持久化无字段 → 默认尺寸；非法值 → 结构归一
           sidecarSize: normalizeSidecarSize(p?.sidecarSize),
