@@ -294,11 +294,7 @@ export function KiroAISettings({ reveal }: { reveal?: { key: string; seq: number
             <SettingsRow
               settingId="ai-model"
               title="模型"
-              description={
-                provider === "deepseek"
-                  ? "V4 Flash 适合日常对话，V4 Pro 质量更高。"
-                  : "OpenCode Go 当前可用模型。"
-              }
+              description="选择当前使用的对话模型。"
             >
               <div className="flex flex-col items-end gap-1">
                 <SettingsSelect

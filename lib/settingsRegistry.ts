@@ -193,7 +193,7 @@ export const SETTINGS_REGISTRY: SettingDefinition[] = [
     id: SETTING_IDS.general.coursePalette,
     section: "general",
     title: "课程调色板",
-    description: "自定义课程自动配色的候选颜色（点击色块右上 × 可移除）。新课程按此顺序轮换",
+    description: "自定义课程自动配色的候选颜色（点击管理查看全部、移除或添加）。新课程按此顺序轮换",
     keywords: ["调色板", "课程配色", "调色", "配色", "palette", "颜色", "马卡龙"],
   },
   {

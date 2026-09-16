@@ -3,9 +3,15 @@ import {
   CURATED_COLOR_PRESETS,
   MAX_COURSE_PALETTE_SIZE,
   MIN_COURSE_PALETTE_SIZE,
+  hexToHsv,
+  hexToRgb,
+  hsvToHex,
+  hsvToRgb,
   isValidHex,
   normalizeHex,
   paletteIncludes,
+  rgbToHex,
+  rgbToHsv,
 } from "@/lib/color";
 
 describe("统一调色板颜色工具（无原生 picker）", () => {
@@ -33,5 +39,42 @@ describe("统一调色板颜色工具（无原生 picker）", () => {
     expect(new Set(CURATED_COLOR_PRESETS.map((c) => c.toUpperCase())).size).toBe(16);
     expect(MIN_COURSE_PALETTE_SIZE).toBe(1);
     expect(MAX_COURSE_PALETTE_SIZE).toBe(12);
+  });
+});
+
+describe("自绘取色器 HSV 工具", () => {
+  it("hexToRgb / rgbToHex 互逆", () => {
+    expect(hexToRgb("#A8E6CF")).toEqual({ r: 168, g: 230, b: 207 });
+    expect(hexToRgb("#abc")).toEqual({ r: 170, g: 187, b: 204 });
+    expect(hexToRgb("not-a-color")).toBeNull();
+    expect(rgbToHex(168, 230, 207)).toBe("#A8E6CF");
+    expect(rgbToHex(0, 0, 0)).toBe("#000000");
+  });
+
+  it("hsvToHex 基准色", () => {
+    expect(hsvToHex(0, 100, 100)).toBe("#FF0000");
+    expect(hsvToHex(120, 100, 100)).toBe("#00FF00");
+    expect(hsvToHex(240, 100, 100)).toBe("#0000FF");
+    expect(hsvToHex(0, 0, 0)).toBe("#000000");
+    expect(hsvToHex(0, 0, 100)).toBe("#FFFFFF");
+    expect(hsvToHex(360, 100, 100)).toBe("#FF0000");
+  });
+
+  it("rgbToHsv 灰色与纯色", () => {
+    expect(rgbToHsv(0, 0, 0)).toEqual({ h: 0, s: 0, v: 0 });
+    expect(rgbToHsv(255, 255, 255)).toEqual({ h: 0, s: 0, v: 100 });
+    expect(rgbToHsv(255, 0, 0)).toEqual({ h: 0, s: 100, v: 100 });
+  });
+
+  it("预设色往返误差在 2 以内（整数度数取整）", () => {
+    for (const hex of CURATED_COLOR_PRESETS) {
+      const hsv = hexToHsv(hex);
+      expect(hsv).not.toBeNull();
+      const back = hsvToRgb(hsv!.h, hsv!.s, hsv!.v);
+      const orig = hexToRgb(hex)!;
+      expect(Math.abs(back.r - orig.r)).toBeLessThanOrEqual(2);
+      expect(Math.abs(back.g - orig.g)).toBeLessThanOrEqual(2);
+      expect(Math.abs(back.b - orig.b)).toBeLessThanOrEqual(2);
+    }
   });
 });

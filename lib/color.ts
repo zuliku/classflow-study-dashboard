@@ -90,3 +90,89 @@ export function isLightHex(hex: string): boolean {
 export function contrastTextForHex(hex: string): "#313032" | "#FFFFFF" {
   return isLightHex(hex) ? "#313032" : "#FFFFFF";
 }
+
+/* ---------- HSV（应用内自绘取色器唯一真相；不依赖原生拾色器） ---------- */
+
+export interface Rgb {
+  r: number;
+  g: number;
+  b: number;
+}
+
+/** h: 0–360，s/v: 0–100 */
+export interface Hsv {
+  h: number;
+  s: number;
+  v: number;
+}
+
+export function hexToRgb(hex: string): Rgb | null {
+  const normalized = normalizeHex(hex);
+  if (!normalized) return null;
+  return {
+    r: parseInt(normalized.slice(1, 3), 16),
+    g: parseInt(normalized.slice(3, 5), 16),
+    b: parseInt(normalized.slice(5, 7), 16),
+  };
+}
+
+export function rgbToHex(r: number, g: number, b: number): string {
+  const clamp = (n: number) => Math.max(0, Math.min(255, Math.round(n)));
+  const to2 = (n: number) => clamp(n).toString(16).padStart(2, "0").toUpperCase();
+  return `#${to2(r)}${to2(g)}${to2(b)}`;
+}
+
+export function rgbToHsv(r: number, g: number, b: number): Hsv {
+  const rn = r / 255;
+  const gn = g / 255;
+  const bn = b / 255;
+  const max = Math.max(rn, gn, bn);
+  const min = Math.min(rn, gn, bn);
+  const delta = max - min;
+  let h = 0;
+  if (delta !== 0) {
+    if (max === rn) h = 60 * (((gn - bn) / delta) % 6);
+    else if (max === gn) h = 60 * ((bn - rn) / delta + 2);
+    else h = 60 * ((rn - gn) / delta + 4);
+  }
+  if (h < 0) h += 360;
+  return {
+    h: Math.round(h) % 360,
+    s: max === 0 ? 0 : Math.round((delta / max) * 100),
+    v: Math.round(max * 100),
+  };
+}
+
+export function hsvToRgb(h: number, s: number, v: number): Rgb {
+  const hn = ((h % 360) + 360) % 360;
+  const sn = Math.max(0, Math.min(100, s)) / 100;
+  const vn = Math.max(0, Math.min(100, v)) / 100;
+  const c = vn * sn;
+  const x = c * (1 - Math.abs(((hn / 60) % 2) - 1));
+  const m = vn - c;
+  let r = 0;
+  let g = 0;
+  let b = 0;
+  if (hn < 60) { r = c; g = x; }
+  else if (hn < 120) { r = x; g = c; }
+  else if (hn < 180) { g = c; b = x; }
+  else if (hn < 240) { g = x; b = c; }
+  else if (hn < 300) { r = x; b = c; }
+  else { r = c; b = x; }
+  return {
+    r: Math.round((r + m) * 255),
+    g: Math.round((g + m) * 255),
+    b: Math.round((b + m) * 255),
+  };
+}
+
+export function hsvToHex(h: number, s: number, v: number): string {
+  const { r, g, b } = hsvToRgb(h, s, v);
+  return rgbToHex(r, g, b);
+}
+
+export function hexToHsv(hex: string): Hsv | null {
+  const rgb = hexToRgb(hex);
+  if (!rgb) return null;
+  return rgbToHsv(rgb.r, rgb.g, rgb.b);
+}

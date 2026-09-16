@@ -77,7 +77,7 @@ export function FocusSettings({ highlightedId }: { highlightedId?: string }) {
             />
           </SettingsRow>
 
-          <SettingsRow settingId="focus-tracking" title="实时专注计时" description="FocusSession 记录真实的专注时间；暂停期间不计入，结束后写入实际专注时长。">
+          <SettingsRow settingId="focus-tracking" title="实时专注计时" description="专注会话记录真实的专注时间；暂停期间不计入，结束后写入实际专注时长。">
             <span className="px-2 py-0.5 rounded-full bg-pastel-mint text-[10px] font-bold text-charcoal shrink-0">已启用</span>
           </SettingsRow>
         </SettingsGroup>

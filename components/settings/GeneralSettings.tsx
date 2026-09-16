@@ -19,9 +19,9 @@ import {
   resetPreferencePatch,
 } from "@/lib/preferences";
 import { CoursePaletteEditor } from "@/components/settings/CoursePaletteEditor";
+import { ShortcutOverviewField } from "@/components/settings/ShortcutOverviewDialog";
 import { SettingsSlider } from "@/components/settings/SettingsSlider";
 import { UI_FONT_LABELS } from "@/lib/typography/fonts";
-import { SINGLE_KEY_SHORTCUTS } from "@/lib/shortcuts";
 import type { StartupView, ContentDensity, UIFontPreset } from "@/types";
 
 const STARTUP_VIEW_LABELS: Record<StartupView, string> = {
@@ -30,22 +30,6 @@ const STARTUP_VIEW_LABELS: Record<StartupView, string> = {
   assignments: "任务",
   last: "上次使用的位置",
 };
-
-/**
- * V5A4：只读快捷键说明（静态真值展示，不可修改按键）。
- * 按键字符派生自 lib/shortcuts.ts；X = 选择/取消选择（绝非删除），Space = 预览任务（桌面端）。
- */
-const SHORTCUT_OVERVIEW_ROWS: { keys: string; label: string }[] = [
-  { keys: SINGLE_KEY_SHORTCUTS.quickCreateTask, label: "快速新建任务" },
-  { keys: SINGLE_KEY_SHORTCUTS.openSearch, label: "打开搜索" },
-  {
-    keys: `${SINGLE_KEY_SHORTCUTS.assignmentMoveDown} / ${SINGLE_KEY_SHORTCUTS.assignmentMoveUp}`,
-    label: "任务列表上下移动",
-  },
-  { keys: SINGLE_KEY_SHORTCUTS.assignmentToggleSelection, label: "选择 / 取消选择任务" },
-  { keys: "Space", label: "预览任务（桌面端）" },
-  { keys: SINGLE_KEY_SHORTCUTS.openHelp, label: "快捷键帮助" },
-];
 
 /**
  * 通用（Settings V4）：启动 / 界面 / 操作与快捷键 三组。
@@ -209,7 +193,7 @@ export function GeneralSettings({ highlightedId }: { highlightedId?: string }) {
           <SettingsRow
             settingId="course-palette"
             title="课程调色板"
-            description="自定义课程自动配色的候选颜色（点击色块右上 × 可移除）。新课程按此顺序轮换。"
+            description="自定义课程自动配色的候选颜色（点击「管理」查看全部、移除或添加）。新课程按此顺序轮换。"
             modified={modified.has("coursePalette")}
             onReset={() => updatePreferences(resetPreferencePatch("coursePalette"))}
             resetAriaLabel="将课程调色板恢复默认"
@@ -280,14 +264,7 @@ export function GeneralSettings({ highlightedId }: { highlightedId?: string }) {
             description="常用单键与任务列表操作（只读说明，不可修改按键）。"
             highlighted={highlightedId === "shortcuts-overview"}
           >
-            <div className="flex flex-wrap gap-1.5 max-w-[260px]">
-              {SHORTCUT_OVERVIEW_ROWS.map((row) => (
-                <span key={row.keys} className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-alabaster border border-line text-[11px] font-mono">
-                  <span className="bg-white border border-line rounded px-1.5 py-0.5 font-bold text-charcoal">{row.keys}</span>
-                  <span className="font-bold text-sandrift">{row.label}</span>
-                </span>
-              ))}
-            </div>
+            <ShortcutOverviewField />
           </SettingsRow>
         </SettingsGroup>
       </SettingsSection>

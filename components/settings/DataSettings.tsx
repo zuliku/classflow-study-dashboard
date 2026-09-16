@@ -48,19 +48,19 @@ export function DataSettings() {
   // 数据诊断：日常不需要常开，默认收起
   const [diagnosticsOpen, setDiagnosticsOpen] = useState(false);
 
-  // 预览数据手动载入（设置 → 数据 唯一入口；生产构建同样可用）
+  // 示例数据手动载入（设置 → 数据 唯一入口；生产构建同样可用）
   const reloadDemoData = () => {
     useConfirmStore.getState().confirm({
-      title: "载入完整演示数据？",
-      description: "这会用一学期纵深的示例数据（课程、任务、课表、作息方案、学习计划、专注记录、提醒、小组项目）覆盖当前业务数据。个人资料与偏好设置不受影响。",
-      confirmLabel: "载入演示数据",
+      title: "载入示例数据？",
+      description: "这会用示例学期数据（课程、任务、课表、作息方案、学习计划、专注记录、提醒、小组项目）替换当前业务数据。个人资料与偏好设置不受影响。",
+      confirmLabel: "载入示例数据",
       onConfirm: () => {
         import("@/lib/dev/fullDemoData").then(({ buildFullDemoData }) => {
           const store = useAppStore.getState();
           store.restoreAppData(buildFullDemoData());
           // 示例学期开学于数周前：按新学期校准当前教学周
           store.resetToCurrentWeek();
-          useToastStore.getState().pushToast({ message: "完整演示数据已载入", type: "success" });
+          useToastStore.getState().pushToast({ message: "示例数据已载入", type: "success" });
         });
       },
     });
@@ -147,14 +147,14 @@ export function DataSettings() {
           <DangerZone />
         </SettingsGroup>
 
-        {/* 预览数据：设置 → 数据 唯一人工入口（生产构建同样可用） */}
-        <SettingsGroup title="预览演示数据">
+        {/* 示例数据：设置 → 数据 唯一人工入口（生产构建同样可用） */}
+        <SettingsGroup title="示例数据">
           <div data-testid="dev-demo-reload">
             <SettingsActionRow
-              title="完整演示数据"
-              description="一学期纵深的示例数据，覆盖课程、课表、作息方案、任务、学习计划、专注记录、提醒与小组项目。载入后会覆盖当前业务数据，个人资料与偏好不受影响。"
+              title="完整示例数据"
+              description="一份完整的示例学期数据，覆盖课程、课表、作息方案、任务、学习计划、专注记录、提醒与小组项目。载入后会替换当前业务数据，个人资料与偏好不受影响。"
               icon={<RefreshCcw className="w-3.5 h-3.5 text-[#A48F82]" />}
-              actionLabel="载入完整演示数据"
+              actionLabel="载入示例数据"
               onAction={reloadDemoData}
               actionMinWidth="min-w-[140px]"
             />
