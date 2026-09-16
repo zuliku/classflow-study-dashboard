@@ -125,8 +125,10 @@ describe("createLanguageModelFromDefinition（Adapter 选择）", () => {
       { id: "deepseek-v4-flash", name: "x", provider: "opencode-go", vendor: "deepseek", transport: "openai-chat", capabilities: { streaming: true, tools: true, vision: false, fileParts: false } },
       { baseURL: "https://opencode.ai/zen/go/v1", apiKey: "sk-go" }
     );
-    const ocArgs = (openAICompatibleFactory.mock.calls[0] as unknown[])[0] as { transformRequestBody?: (body: Record<string, unknown>) => Record<string, unknown> };
+    const ocArgs = (openAICompatibleFactory.mock.calls[0] as unknown[])[0] as { transformRequestBody?: (body: Record<string, unknown>) => Record<string, unknown>; headers?: Record<string, string> };
     expect(typeof ocArgs.transformRequestBody).toBe("function");
+    // 2026-09 起强制：chat 同样携带 x-opencode-session
+    expect(ocArgs.headers?.["x-opencode-session"]).toMatch(/^classflow-[0-9a-f]+$/);
     // OpenCode transform 只修 tool schema 根，不注入 DeepSeek thinking
     const body = ocArgs.transformRequestBody?.({ model: "deepseek-v4-flash", messages: [], tools: [] });
     expect(body?.thinking).toBeUndefined();
@@ -148,12 +150,14 @@ describe("createLanguageModelFromDefinition（Adapter 选择）", () => {
     );
     expect(providerOf(m)).toBe("anthropic");
     expect(modelIdOf(m)).toBe("minimax-m3");
-    const args = (anthropicFactory.mock.calls[0] as unknown[])[0] as { baseURL?: string; authToken?: string; apiKey?: string; transformRequestBody?: unknown };
+    const args = (anthropicFactory.mock.calls[0] as unknown[])[0] as { baseURL?: string; authToken?: string; apiKey?: string; transformRequestBody?: unknown; headers?: Record<string, string> };
     expect(args.baseURL).toBe("https://opencode.ai/zen/go/v1");
     // V4.7.2 真实验证：OpenCode Go /v1/messages 接受 x-api-key（apiKey），Bearer authToken 返回 401
     expect(args.apiKey).toBe("sk-go");
     expect(args.authToken).toBeUndefined();
     expect(args.transformRequestBody).toBeUndefined(); // Anthropic transport 不受 DeepSeek 兼容层影响
+    // 2026-09 起强制：messages 同样携带 x-opencode-session
+    expect(args.headers?.["x-opencode-session"]).toMatch(/^classflow-[0-9a-f]+$/);
   });
 
   it("F3. openai-responses → @ai-sdk/openai adapter（createOpenAI + 显式 .responses(modelId)）", () => {
@@ -168,6 +172,8 @@ describe("createLanguageModelFromDefinition（Adapter 选择）", () => {
       name: "classflow-kiro",
       baseURL: "https://opencode.ai/zen/go/v1",
       apiKey: "sk-go",
+      // 2026-09 起强制：OpenCode Go 全 transport 携带 x-opencode-session（缺失 → 400 MissingSessionID）
+      headers: { "x-opencode-session": expect.stringMatching(/^classflow-[0-9a-f]+$/) },
     });
     // Responses 不得调用 openai-compatible / anthropic adapter
     expect(openAICompatibleFactory).not.toHaveBeenCalled();

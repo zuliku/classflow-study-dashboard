@@ -173,6 +173,39 @@ export function getOpenCodeGoConfig(apiKey: string): AIProviderConfig {
   return { baseURL: AI.OPENCODE_BASE_URL, apiKey };
 }
 
+/**
+ * OpenCode Go 路由会话头（2026-09-05 起强制；缺失 → 400 MissingSessionID）。
+ * 用途是同一会话请求的 provider 亲和与 prompt 缓存：同会话稳定、跨会话/用户隔离、
+ * 不透明（任意字符串均可）。凡是发往 OPENCODE_BASE_URL 的模型调用都必须携带，
+ * 与 transport（chat / responses / messages）无关。
+ */
+export const OPENCODE_SESSION_HEADER = "x-opencode-session";
+
+/** 无依赖 53 位哈希（cyrb53）：Node / 浏览器 / Edge 均可跑，不引入 node:crypto（本模块被客户端 registry 同包引用） */
+function hash53(input: string, seed = 0): number {
+  let h1 = 0xdeadbeef ^ seed;
+  let h2 = 0x41c6ce57 ^ seed;
+  for (let i = 0; i < input.length; i++) {
+    const ch = input.charCodeAt(i);
+    h1 = Math.imul(h1 ^ ch, 2654435761);
+    h2 = Math.imul(h2 ^ ch, 1597334677);
+  }
+  h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+  h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+  return 4294967296 * (2097151 & h2) + (h1 >>> 0);
+}
+
+/**
+ * 解析本次调用的 x-opencode-session 值：
+ * - 调用方显式会话 id 优先（同会话稳定；去除空白并截断 128 字符）；
+ * - 否则由 API Key 稳定派生（同 key 稳定、跨 key 隔离；只发送哈希，绝不发送 key 本身）。
+ */
+export function resolveOpenCodeGoSessionId(input: { sessionId?: string; apiKey: string }): string {
+  const explicit = (input.sessionId ?? "").trim().replace(/\s+/g, "-").slice(0, 128);
+  if (explicit) return explicit;
+  return `classflow-${hash53(`classflow-opencode-go:${input.apiKey}`).toString(16)}`;
+}
+
 export interface RemoteGoModel {
   id: string;
   transport: "openai-chat" | "openai-responses" | "anthropic-messages";

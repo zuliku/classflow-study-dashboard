@@ -14,7 +14,7 @@ import { LanguageModel } from "ai";
 import { AIError } from "@/lib/ai/errors";
 import { AIProviderId, AICustomConfig, AIModelDefinition, AIProviderConfig } from "@/lib/ai/providers/types";
 import { DEEPSEEK_MODELS, deepSeekTransformRequestBody } from "@/lib/ai/providers/deepSeek";
-import { OPENCODE_MODELS, fetchOpenCodeGoModels, openCodeGoTransformRequestBody } from "@/lib/ai/providers/openCodeGo";
+import { OPENCODE_MODELS, fetchOpenCodeGoModels, openCodeGoTransformRequestBody, OPENCODE_SESSION_HEADER, resolveOpenCodeGoSessionId } from "@/lib/ai/providers/openCodeGo";
 import { getProviderConfig } from "@/lib/ai/providers/registry";
 
 export interface ResolveModelInput {
@@ -22,6 +22,11 @@ export interface ResolveModelInput {
   model: string;
   apiKey: string;
   custom?: AICustomConfig;
+  /**
+   * OpenCode Go 路由会话 id（可选）：同会话内保持稳定可提升缓存命中。
+   * 省略时由 apiKey 稳定派生（同 key 稳定、跨 key 隔离）。
+   */
+  sessionId?: string;
 }
 
 /**
@@ -66,11 +71,19 @@ export async function resolveModelDefinition(input: Pick<ResolveModelInput, "pro
 /**
  * AIModelDefinition → AI SDK LanguageModel。
  * Custom noRedirect（SSRF 防护）只存在于 openai-chat 分支。
+ * OpenCode Go：全部 transport 统一携带 x-opencode-session（2026-09 起强制，
+ * 缺失 → 400 MissingSessionID；与 transport 无关）。
  */
 export function createLanguageModelFromDefinition(
   definition: AIModelDefinition,
-  cfg: AIProviderConfig
+  cfg: AIProviderConfig,
+  opts?: { sessionId?: string }
 ): LanguageModel {
+  // 非 OpenCode Go provider 不发送会话头（DeepSeek / Custom 原样）
+  const openCodeGoHeaders =
+    definition.provider === "opencode-go"
+      ? { [OPENCODE_SESSION_HEADER]: resolveOpenCodeGoSessionId({ sessionId: opts?.sessionId, apiKey: cfg.apiKey ?? "" }) }
+      : undefined;
   if (definition.transport === "anthropic-messages") {
     // OpenCode Go Messages：真实验证（V4.7.2 real smoke）确认 /v1/messages 接受 x-api-key；
     // Bearer authToken 会返回 401 Missing API key。baseURL 由 Provider 自行拼接 /messages。
@@ -78,6 +91,7 @@ export function createLanguageModelFromDefinition(
       name: "classflow-kiro",
       baseURL: cfg.baseURL,
       apiKey: cfg.apiKey ?? "",
+      headers: openCodeGoHeaders,
     })(definition.id);
   }
   if (definition.transport === "openai-chat") {
@@ -89,6 +103,7 @@ export function createLanguageModelFromDefinition(
       name: "classflow-kiro",
       baseURL: cfg.baseURL,
       apiKey: cfg.apiKey ?? "",
+      headers: openCodeGoHeaders,
       ...(deepSeekCompat ? { transformRequestBody: deepSeekTransformRequestBody } : {}),
       ...(openCodeGoCompat ? { transformRequestBody: openCodeGoTransformRequestBody } : {}),
       // Custom Provider：不自动跟随 redirect，避免 SSRF 跳转到私网地址
@@ -108,6 +123,7 @@ export function createLanguageModelFromDefinition(
       name: "classflow-kiro",
       baseURL: cfg.baseURL,
       apiKey: cfg.apiKey ?? "",
+      headers: openCodeGoHeaders,
     });
     return provider.responses(definition.id);
   }
@@ -127,7 +143,7 @@ export async function resolveLanguageModel(input: ResolveModelInput): Promise<{
   // Custom Base URL SSRF 校验在 getProviderConfig 内执行（非法 → AIError INVALID_CUSTOM_URL）
   const cfg = getProviderConfig({ provider: input.provider, apiKey: input.apiKey, custom: input.custom });
   return {
-    model: createLanguageModelFromDefinition(definition, cfg),
+    model: createLanguageModelFromDefinition(definition, cfg, { sessionId: input.sessionId }),
     definition,
   };
 }
