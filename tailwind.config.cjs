@@ -50,15 +50,9 @@ module.exports = {
         },
       },
       fontFamily: {
-        sans: [
-          "-apple-system",
-          "BlinkMacSystemFont",
-          '"Segoe UI"',
-          "Roboto",
-          '"Helvetica Neue"',
-          "Arial",
-          "sans-serif",
-        ],
+        // Typography V1：sans 必须跟随界面字体 token（勿回退系统栈，否则 font-sans 会逃逸设置）
+        sans: ["var(--font-ui)", "sans-serif"],
+        mono: ["var(--font-mono)", "monospace"],
       },
       boxShadow: {
         subtle: "0 2px 8px -2px rgba(49, 48, 50, 0.04), 0 1px 3px -1px rgba(49, 48, 50, 0.02)",

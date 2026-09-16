@@ -4,7 +4,8 @@ import React from "react";
 import { X, CheckCircle2, AlertTriangle, XCircle } from "lucide-react";
 import { PreparedRestore } from "@/lib/backupRestore";
 import { Dialog } from "@/components/ui/Dialog";
-import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/Button";
+import { IconButton } from "@/components/ui/IconButton";
 
 interface RestorePreviewDialogProps {
   prepared: PreparedRestore;
@@ -52,14 +53,15 @@ export function RestorePreviewDialog({
               {prepared.fileName}
             </p>
           </div>
-          <button
+          <IconButton
+            variant="ghost"
+            size="sm"
             onClick={onCancel}
             disabled={committing}
-            className="p-1.5 rounded-lg text-sandrift hover:bg-alabaster transition-colors disabled:opacity-50"
             aria-label="关闭"
           >
             <X className="w-4 h-4" />
-          </button>
+          </IconButton>
         </div>
 
         <div className="p-5 space-y-4 overflow-y-auto text-xs">
@@ -143,22 +145,25 @@ export function RestorePreviewDialog({
               : "恢复会替换 ClassFlow 当前数据。备份内容已在预览中确认。"}
           </p>
           <div className="flex items-center gap-2 shrink-0">
-            <button
+            <Button
+              variant="secondary"
+              size="sm"
               onClick={onCancel}
               disabled={committing}
-              className="px-3 py-1.5 text-[11px] font-medium text-satin-grey bg-[#F7F5F5] border border-line rounded-xl hover:bg-alba transition-colors disabled:opacity-50"
             >
               {blocked ? "关闭" : "取消"}
-            </button>
+            </Button>
             {!blocked && (
-              <button
+              <Button
+                variant="primary"
+                size="sm"
                 onClick={onConfirm}
-                disabled={committing}
-                className="ux-press px-3.5 py-1.5 text-[11px] font-bold text-white bg-charcoal hover:bg-black rounded-xl transition-colors shadow-subtle disabled:opacity-50"
+                loading={committing}
+                loadingLabel="正在恢复…"
                 data-testid="confirm-restore"
               >
-                {committing ? "正在恢复…" : "恢复"}
-              </button>
+                恢复
+              </Button>
             )}
           </div>
         </div>

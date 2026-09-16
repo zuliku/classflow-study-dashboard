@@ -103,7 +103,7 @@ describe("Typography V1 — GeneralSettings uiFont row", () => {
     const raw = fs.readFileSync("components/settings/GeneralSettings.tsx", "utf8");
     expect(raw).toContain('settingId="ui-font"');
     expect(raw).toContain("界面字体");
-    expect(raw).toContain("调整 ClassFlow 的界面字体，不影响代码、终端与数学公式。");
+    expect(raw).toContain("调整界面字体；不影响代码、终端与数学公式。");
     // ensure SettingsSelect ariaLabel correct and labels used
     expect(raw).toContain('ariaLabel="界面字体"');
     expect(raw).toContain("UI_FONT_LABELS");

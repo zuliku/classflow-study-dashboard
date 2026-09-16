@@ -153,6 +153,17 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+/* Typography V1 — 表单元素默认不继承 body 字体（浏览器 UA 样式），
+ * 显式继承后按钮/输入/下拉/多行文本跟随界面字体设置；字号字重仍由各组件类控制 */
+button,
+input,
+select,
+textarea,
+optgroup,
+option {
+  font: inherit;
+}
+
 /* Typography V1 — preserve professional ownership: Terminal / Code / KaTeX remain mono */
 pre,
 code,

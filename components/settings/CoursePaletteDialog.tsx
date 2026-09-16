@@ -138,7 +138,7 @@ export function CoursePaletteDialog({
           )}
         </div>
 
-        <div className="space-y-2">
+        <div className="space-y-2.5">
           <p className="text-[10px] font-bold text-sandrift uppercase tracking-wider">添加颜色</p>
           <div
             role="group"
@@ -170,12 +170,15 @@ export function CoursePaletteDialog({
             })}
           </div>
 
+          {/* 自定义取色：面板 + 色相条直接写入草稿，HEX 输入框同步显示精确值 */}
+          <CustomColorPicker
+            value={draft}
+            onChange={(hex) => {
+              setDraft(hex);
+              setError(null);
+            }}
+          />
           <div className="flex items-center gap-2">
-            <span
-              aria-hidden="true"
-              className="w-9 h-9 rounded-full border border-line shadow-subtle shrink-0 transition-colors duration-[var(--motion-fast)]"
-              style={{ backgroundColor: normalizedDraft ?? "transparent" }}
-            />
             <div className="flex-1 min-w-0">
               <SettingsInput
                 value={draft}
@@ -207,20 +210,13 @@ export function CoursePaletteDialog({
               添加
             </Button>
           </div>
-          <CustomColorPicker
-            value={draft}
-            onChange={(hex) => {
-              setDraft(hex);
-              setError(null);
-            }}
-          />
           {error ? (
             <p role="alert" className="text-[11px] font-semibold text-danger">
               {error}
             </p>
           ) : (
               <p className="text-[10px] text-sandrift leading-relaxed">
-                从预设选择、取色板微调或直接输入 HEX；点击已有色块右上 × 移除。
+                支持预设、取色板微调与 HEX 直接输入。
               </p>
           )}
         </div>

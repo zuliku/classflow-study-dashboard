@@ -7,6 +7,10 @@ import { SettingsGroup } from "@/components/settings/SettingsGroup";
 import { useExtensionsStore } from "@/store/useExtensionsStore";
 import { cn } from "@/lib/utils";
 import { Dialog } from "@/components/ui/Dialog";
+import { Button } from "@/components/ui/Button";
+import { Input } from "@/components/ui/Input";
+import { Textarea } from "@/components/ui/Textarea";
+import { Field } from "@/components/ui/Field";
 import { SkillDistillDialog } from "@/components/kiro/SkillDistillDialog";
 import { ChannelSettings } from "@/components/settings/ChannelSettings";
 import { extractWorkflowTrace } from "@/lib/ai/skills/workflowTrace";
@@ -719,24 +723,19 @@ function McpAddDialog({ open, onOpenChange, onAdded }: { open: boolean; onOpenCh
         </div>
       </div>
       <div className="space-y-3">
-        <div>
-          <label className="text-xs font-bold text-charcoal">名称 *</label>
-          <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Notion MCP" data-testid="mcp-add-name" className="mt-1 w-full h-9 px-3 bg-white border border-line rounded-lg text-sm" />
-        </div>
-        <div>
-          <label className="text-xs font-bold text-charcoal">Endpoint *</label>
-          <input value={endpoint} onChange={(e) => setEndpoint(e.target.value)} placeholder="https://mcp.example.com/mcp" data-testid="mcp-add-endpoint" className="mt-1 w-full h-9 px-3 bg-white border border-line rounded-lg text-sm font-mono" />
-          <p className="text-[11px] text-sandrift mt-1">支持远程 MCP 服务，默认使用 https</p>
-          <details className="mt-1">
-            <summary className="text-[11px] text-sandrift cursor-pointer">高级说明</summary>
-            <p className="text-[11px] text-sandrift mt-1">http 仅允许 127.0.0.1 / localhost（开发模式），endpoint 需为完整 URL。</p>
-          </details>
-        </div>
-        <div>
-          <label className="text-xs font-bold text-charcoal">凭据</label>
-          <input value={credentialRef} onChange={(e) => setCredentialRef(e.target.value)} placeholder="cred_xxx（可选）" data-testid="mcp-add-credential" className="mt-1 w-full h-9 px-3 bg-white border border-line rounded-lg text-sm font-mono" />
-          <p className="text-[11px] text-sandrift mt-1">如需认证，请先在凭据管理中创建后填入引用</p>
-        </div>
+        <Field label="名称" required>
+          <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Notion MCP" data-testid="mcp-add-name" />
+        </Field>
+        <Field label="Endpoint" required description="默认使用 https">
+          <Input value={endpoint} onChange={(e) => setEndpoint(e.target.value)} placeholder="https://mcp.example.com/mcp" data-testid="mcp-add-endpoint" mono />
+        </Field>
+        <details className="mt-1">
+          <summary className="text-[11px] text-sandrift cursor-pointer">高级说明</summary>
+          <p className="text-[11px] text-sandrift mt-1">http 仅允许 127.0.0.1 / localhost（开发模式），endpoint 需为完整 URL。</p>
+        </details>
+        <Field label="凭据" description="如需认证，请先在凭据管理中创建后填入引用">
+          <Input value={credentialRef} onChange={(e) => setCredentialRef(e.target.value)} placeholder="cred_xxx（可选）" data-testid="mcp-add-credential" mono />
+        </Field>
         {testResult && (
           <div className={`text-xs font-bold px-3 py-2 rounded-lg border ${testResult.ok ? "text-success bg-success/5 border-success/20" : "text-danger bg-danger/5 border-danger/20"}`}>
             {testResult.ok ? `连接成功${testResult.serverInfo ? ` · ${(testResult.serverInfo as { name?: string })?.name ?? ""}` : ""}` : `测试失败: ${testResult.error}`}
@@ -745,10 +744,10 @@ function McpAddDialog({ open, onOpenChange, onAdded }: { open: boolean; onOpenCh
         )}
         {error && <p className="text-xs font-bold text-danger bg-danger/5 border border-danger/20 rounded-lg px-3 py-2">{error}</p>}
         <div className="flex items-center gap-2">
-          <button type="button" onClick={handleTest} data-testid="mcp-test" className="h-8 px-4 bg-white border border-line text-charcoal text-xs font-bold rounded-lg hover:bg-alabaster">测试连接</button>
+          <Button type="button" variant="secondary" size="sm" onClick={handleTest} data-testid="mcp-test">测试连接</Button>
           <div className="flex-1" />
-          <button type="button" onClick={() => onOpenChange(false)} className="h-8 px-4 bg-white border border-line text-charcoal text-xs font-bold rounded-lg">取消</button>
-          <button type="button" onClick={handleSave} disabled={saving} data-testid="mcp-save" className="h-8 px-5 bg-charcoal text-white text-xs font-bold rounded-lg hover:bg-black disabled:opacity-60">{saving ? "保存中..." : "保存"}</button>
+          <Button type="button" variant="secondary" size="sm" onClick={() => onOpenChange(false)}>取消</Button>
+          <Button type="button" variant="primary" size="sm" onClick={handleSave} loading={saving} loadingLabel="保存中…" data-testid="mcp-save">保存</Button>
         </div>
       </div>
     </Dialog>
@@ -825,14 +824,14 @@ function McpDetailDialog({ connection, onOpenChange, onRefresh }: { connection: 
       </div>
       <div className="flex flex-wrap items-center gap-2">
         {connection.state !== "connected" ? (
-          <button type="button" onClick={() => handleAction("connect")} data-testid="mcp-connect" className="h-8 px-4 bg-charcoal text-white text-xs font-bold rounded-lg">连接</button>
+          <Button type="button" variant="primary" size="sm" onClick={() => handleAction("connect")} data-testid="mcp-connect">连接</Button>
         ) : (
-          <button type="button" onClick={() => handleAction("disconnect")} data-testid="mcp-disconnect" className="h-8 px-4 bg-white border border-line text-charcoal text-xs font-bold rounded-lg">断开</button>
+          <Button type="button" variant="secondary" size="sm" onClick={() => handleAction("disconnect")} data-testid="mcp-disconnect">断开</Button>
         )}
-        <button type="button" onClick={() => handleAction("toggle")} data-testid="mcp-toggle" className="h-8 px-4 bg-white border border-line text-charcoal text-xs font-bold rounded-lg">{connection.config.enabled ? "停用" : "启用"}</button>
-        <button type="button" onClick={() => handleAction("remove")} data-testid="mcp-remove" className="h-8 px-4 bg-white border border-line text-danger text-xs font-bold rounded-lg">删除</button>
+        <Button type="button" variant="secondary" size="sm" onClick={() => handleAction("toggle")} data-testid="mcp-toggle">{connection.config.enabled ? "停用" : "启用"}</Button>
+        <Button type="button" variant="danger" size="sm" onClick={() => handleAction("remove")} data-testid="mcp-remove">删除</Button>
         <div className="flex-1" />
-        <button type="button" onClick={() => onOpenChange(false)} className="h-8 px-4 bg-alabaster border border-line text-charcoal text-xs font-bold rounded-lg">关闭</button>
+        <Button type="button" variant="ghost" size="sm" onClick={() => onOpenChange(false)}>关闭</Button>
       </div>
     </Dialog>
   );
@@ -1009,107 +1008,89 @@ function SkillEditorDialog({
         </div>
         <div>
           <h4 className="text-sm font-bold text-charcoal">{isEdit ? "编辑 Skill" : "创建 Skill"}</h4>
-          <p className="text-[11px] text-sandrift">表单 + Markdown Instructions Editor</p>
+          <p className="text-[11px] text-sandrift">定义 Skill 的触发时机与执行步骤</p>
         </div>
       </div>
 
       <div className="space-y-3">
-        <div>
-          <label className="text-xs font-bold text-charcoal">名称 *</label>
-          <p className="text-[11px] text-sandrift">小写字母/数字/连字符，唯一，需与文件夹名一致</p>
-          <input
+        <Field label="名称" required description="小写字母/数字/连字符，唯一，需与文件夹名一致">
+          <Input
             value={name}
             onChange={(e) => setName(e.target.value)}
             disabled={isEdit}
             placeholder="course-notification"
             data-testid="skill-editor-name"
-            className="mt-1 w-full h-9 px-3 bg-white border border-line rounded-lg text-sm text-charcoal placeholder-sandrift focus:outline-none focus:border-charcoal disabled:bg-[#F7F5F5] disabled:text-sandrift"
           />
-        </div>
-        <div>
-          <label className="text-xs font-bold text-charcoal">描述 *</label>
-          <p className="text-[11px] text-sandrift">必填，简要说明 Skill 用途</p>
-          <input
+        </Field>
+        <Field label="描述" required description="必填，简要说明 Skill 用途">
+          <Input
             value={description}
             onChange={(e) => setDescription(e.target.value)}
             placeholder="将课程通知中的作业、DDL、调课信息整理为 ClassFlow 操作建议。"
             data-testid="skill-editor-description"
-            className="mt-1 w-full h-9 px-3 bg-white border border-line rounded-lg text-sm text-charcoal placeholder-sandrift focus:outline-none focus:border-charcoal"
           />
-        </div>
-        <div>
-          <label className="text-xs font-bold text-charcoal">什么时候使用</label>
-          <p className="text-[11px] text-sandrift">触发关键词，逗号分隔（如：课程、作业）</p>
-          <input
+        </Field>
+        <Field label="什么时候使用" description="触发关键词，逗号分隔（如：课程、作业）">
+          <Input
             value={triggers}
             onChange={(e) => setTriggers(e.target.value)}
             placeholder="课程, 作业"
             data-testid="skill-editor-triggers"
-            className="mt-1 w-full h-9 px-3 bg-white border border-line rounded-lg text-sm text-charcoal placeholder-sandrift focus:outline-none focus:border-charcoal"
           />
-        </div>
-        <div>
-          <label className="text-xs font-bold text-charcoal">工作流程 *</label>
-          <p className="text-[11px] text-sandrift">Markdown 格式，描述 Skill 的执行步骤</p>
-          <textarea
+        </Field>
+        <Field label="工作流程" required description="Markdown 格式，描述 Skill 的执行步骤">
+          <Textarea
             value={workflow}
             onChange={(e) => setWorkflow(e.target.value)}
             placeholder={`1. 识别课程\n2. 提取通知内容\n3. 查询已有任务\n4. 生成 Proposal\n5. 用户确认后执行`}
             data-testid="skill-editor-workflow"
             rows={8}
-            className="mt-1 w-full p-3 bg-white border border-line rounded-lg text-sm text-charcoal placeholder-sandrift focus:outline-none focus:border-charcoal font-mono leading-relaxed"
+            className="font-mono"
           />
-        </div>
+        </Field>
         <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className="text-xs font-bold text-charcoal">需要的能力</label>
-            <input
+          <Field label="需要的能力">
+            <Input
               value={capabilities}
               onChange={(e) => setCapabilities(e.target.value)}
               placeholder="filesystem, terminal"
               data-testid="skill-editor-capabilities"
-              className="mt-1 w-full h-9 px-3 bg-white border border-line rounded-lg text-sm text-charcoal placeholder-sandrift focus:outline-none focus:border-charcoal"
             />
-          </div>
-          <div>
-            <label className="text-xs font-bold text-charcoal">兼容性</label>
-            <input
+          </Field>
+          <Field label="兼容性">
+            <Input
               value={compatibility}
               onChange={(e) => setCompatibility(e.target.value)}
               placeholder="windows"
               data-testid="skill-editor-compatibility"
-              className="mt-1 w-full h-9 px-3 bg-white border border-line rounded-lg text-sm text-charcoal placeholder-sandrift focus:outline-none focus:border-charcoal"
             />
-          </div>
+          </Field>
         </div>
-        <div>
-          <label className="text-xs font-bold text-charcoal">许可</label>
-          <input
+        <Field label="许可">
+          <Input
             value={license}
             onChange={(e) => setLicense(e.target.value)}
             placeholder="MIT"
             data-testid="skill-editor-license"
-            className="mt-1 w-full h-9 px-3 bg-white border border-line rounded-lg text-sm text-charcoal placeholder-sandrift focus:outline-none focus:border-charcoal"
           />
-        </div>
-        <div>
-          <label className="text-xs font-bold text-charcoal">权限说明</label>
-          <p className="text-[11px] text-sandrift">Skill 不能提权，仅提供工作流指引</p>
-          <input
+        </Field>
+        <Field label="权限说明" description="Skill 不能提权，仅提供工作流指引">
+          <Input
             value={permissionsNote}
             onChange={(e) => setPermissionsNote(e.target.value)}
             data-testid="skill-editor-permissions"
-            className="mt-1 w-full h-9 px-3 bg-[#F7F5F5] border border-line rounded-lg text-sm text-sandrift focus:outline-none"
           />
-        </div>
+        </Field>
         {error && (
           <p data-testid="skill-editor-error" className="text-xs font-bold text-danger bg-danger/5 border border-danger/20 rounded-lg px-3 py-2">
             {error}
           </p>
         )}
         <div className="flex items-center justify-between gap-2 pt-1">
-          <button
+          <Button
             type="button"
+            variant="secondary"
+            size="sm"
             onClick={async () => {
               const bridge = getSkillBridge();
               if (!bridge || !name) return;
@@ -1121,28 +1102,30 @@ function SkillEditorDialog({
               }
             }}
             data-testid="skill-editor-test"
-            className="h-8 px-4 bg-white border border-line text-charcoal text-xs font-bold rounded-lg hover:bg-alabaster transition-colors flex items-center gap-1.5"
           >
             <Beaker className="w-3.5 h-3.5" />
             测试
-          </button>
+          </Button>
           <div className="flex items-center gap-2">
-            <button
+            <Button
               type="button"
+              variant="secondary"
+              size="sm"
               onClick={() => onOpenChange(false)}
-              className="h-8 px-4 bg-white border border-line text-charcoal text-xs font-bold rounded-lg hover:bg-alabaster transition-colors"
             >
               取消
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
+              variant="primary"
+              size="sm"
               onClick={handleSave}
-              disabled={saving}
+              loading={saving}
+              loadingLabel="保存中…"
               data-testid="skill-editor-save"
-              className="h-8 px-5 bg-charcoal hover:bg-black text-white text-xs font-bold rounded-lg transition-colors shadow-subtle disabled:opacity-60"
             >
-              {saving ? "保存中…" : isEdit ? "保存" : "创建"}
-            </button>
+              {isEdit ? "保存" : "创建"}
+            </Button>
           </div>
         </div>
       </div>

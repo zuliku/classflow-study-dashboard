@@ -5,6 +5,10 @@ import { MessageSquare, Plus, Plug2, Trash2, Power, TestTube2, Settings2, Mail, 
 import { Dialog } from "@/components/ui/Dialog";
 import { ChannelBrandIcon } from "@/components/icons/ChannelBrandIcon";
 import { Button } from "@/components/ui/Button";
+import { IconButton } from "@/components/ui/IconButton";
+import { Input } from "@/components/ui/Input";
+import { Field } from "@/components/ui/Field";
+import { Checkbox } from "@/components/ui/Checkbox";
 import { Switch } from "@/components/ui/Switch";
 import { useToastStore } from "@/store/useToastStore";
 import { useConfirmStore } from "@/store/useConfirmStore";
@@ -287,16 +291,17 @@ export function AddChannelDialog({ open, onOpenChange, onAdded }: { open: boolea
           <div className="w-9 h-9 rounded-xl bg-pastel-mint border border-line flex items-center justify-center"><Plus className="w-4 h-4" /></div>
           <div><h4 className="text-sm font-bold text-charcoal">添加渠道</h4><p className="text-[11px] text-sandrift">选择要连接的消息渠道</p></div>
         </div>
-        <button
+        <IconButton
+          variant="ghost"
+          size="sm"
           type="button"
           aria-label="关闭添加渠道"
           data-testid="channel-add-close"
           onClick={() => onOpenChange(false)}
           disabled={busy}
-          className="w-8 h-8 flex items-center justify-center rounded-lg text-sandrift hover:bg-alabaster hover:text-charcoal transition-colors duration-[var(--motion-fast)] ease-[var(--ease-standard)] disabled:opacity-40 disabled:cursor-not-allowed ux-press"
         >
           <X className="w-4 h-4" />
-        </button>
+        </IconButton>
       </div>
       <div className="flex gap-2">
         <button type="button" onClick={() => setProvider("qq-bot")} data-testid="provider-qq-bot" className={cn("flex-1 h-10 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 transition-[background-color,border-color,color,opacity,transform] duration-[var(--motion-fast)] ease-[var(--ease-standard)] ux-press", provider === "qq-bot" ? "bg-charcoal text-white border-charcoal" : "bg-white border-line text-charcoal hover:bg-alabaster")}> <MessageSquare className="w-4 h-4" />QQ Bot</button>
@@ -379,20 +384,20 @@ function AddQQPanel({ onAdded, onBusyChange }: { onAdded: () => void; onBusyChan
   return (
     <div className="space-y-3">
       <div className="flex items-center gap-2 text-xs font-bold text-charcoal"><ChannelBrandIcon source="qq-bot" size={16} />QQ Bot 配置</div>
-      <div><label className="text-xs font-bold text-charcoal">名称 *</label><input value={displayName} onChange={(e) => setDisplayName(e.target.value)} placeholder="我的 QQ 机器人" data-testid="qq-add-name" className="mt-1 w-full h-9 px-3 bg-white border border-line rounded-lg text-sm focus:outline-none focus:border-charcoal transition-colors duration-[var(--motion-fast)]" /></div>
-      <div><label className="text-xs font-bold text-charcoal">App ID *</label><input value={appId} onChange={(e) => setAppId(e.target.value)} placeholder="123456789" data-testid="qq-add-appid" className="mt-1 w-full h-9 px-3 bg-white border border-line rounded-lg text-sm font-mono focus:outline-none focus:border-charcoal transition-colors duration-[var(--motion-fast)]" /></div>
-      <div><label className="text-xs font-bold text-charcoal">App Secret *</label><input type="password" value={appSecret} onChange={(e) => setAppSecret(e.target.value)} placeholder="••••••••" data-testid="qq-add-secret" className="mt-1 w-full h-9 px-3 bg-white border border-line rounded-lg text-sm font-mono focus:outline-none focus:border-charcoal transition-colors duration-[var(--motion-fast)]" /><p className="text-[11px] text-sandrift mt-1">凭据会安全保存在当前设备。</p></div>
+      <div><Field label="名称" required><Input value={displayName} onChange={(e) => setDisplayName(e.target.value)} placeholder="我的 QQ 机器人" data-testid="qq-add-name" /></Field></div>
+      <div><Field label="App ID" required><Input value={appId} onChange={(e) => setAppId(e.target.value)} placeholder="123456789" data-testid="qq-add-appid" mono /></Field></div>
+      <div><Field label="App Secret" required description="凭据会安全保存在当前设备。"><Input type="password" value={appSecret} onChange={(e) => setAppSecret(e.target.value)} placeholder="••••••••" data-testid="qq-add-secret" mono /></Field></div>
       <div className="flex items-center gap-4">
-        <label className="flex items-center gap-1.5 text-xs"><input type="checkbox" checked={receiveDirectMessages} onChange={(e) => setReceiveDirectMessages(e.target.checked)} /> 接收私聊</label>
-        <label className="flex items-center gap-1.5 text-xs"><input type="checkbox" checked={receiveGroupMessages} onChange={(e) => setReceiveGroupMessages(e.target.checked)} /> 接收群聊</label>
-        <label className="flex items-center gap-1.5 text-xs"><input type="checkbox" checked={requireMentionInGroup} onChange={(e) => setRequireMentionInGroup(e.target.checked)} /> 群聊需 @</label>
+        <Checkbox checked={receiveDirectMessages} onChange={setReceiveDirectMessages} label="接收私聊" />
+        <Checkbox checked={receiveGroupMessages} onChange={setReceiveGroupMessages} label="接收群聊" />
+        <Checkbox checked={requireMentionInGroup} onChange={setRequireMentionInGroup} label="群聊需 @" />
       </div>
-      <div><label className="text-xs font-bold text-charcoal">允许用户 QQ / OpenID (逗号分隔，空=不限制)</label><input value={allowedUsers} onChange={(e) => setAllowedUsers(e.target.value)} placeholder="user1, user2" data-testid="qq-add-allowed-users" className="mt-1 w-full h-9 px-3 bg-white border border-line rounded-lg text-sm focus:outline-none focus:border-charcoal transition-colors duration-[var(--motion-fast)]" /></div>
-      <div><label className="text-xs font-bold text-charcoal">允许群 ID (逗号分隔)</label><input value={allowedGroups} onChange={(e) => setAllowedGroups(e.target.value)} placeholder="group1, group2" data-testid="qq-add-allowed-groups" className="mt-1 w-full h-9 px-3 bg-white border border-line rounded-lg text-sm focus:outline-none focus:border-charcoal transition-colors duration-[var(--motion-fast)]" /></div>
+      <div><Field label="允许用户 QQ / OpenID（逗号分隔，空=不限制）"><Input value={allowedUsers} onChange={(e) => setAllowedUsers(e.target.value)} placeholder="user1, user2" data-testid="qq-add-allowed-users" /></Field></div>
+      <div><Field label="允许群 ID（逗号分隔）"><Input value={allowedGroups} onChange={(e) => setAllowedGroups(e.target.value)} placeholder="group1, group2" data-testid="qq-add-allowed-groups" /></Field></div>
       {error && <p data-testid="qq-add-error" className="text-xs font-bold text-danger bg-danger/5 border border-danger/20 rounded-lg px-3 py-2 animate-enter">{error}</p>}
       <div className="flex items-center gap-2">
         <div className="flex-1" />
-        <button type="button" onClick={handleSave} disabled={saving} data-testid="qq-save" className="h-8 px-5 bg-charcoal text-white text-xs font-bold rounded-lg hover:bg-black disabled:opacity-60 transition-colors duration-[var(--motion-fast)] ease-[var(--ease-standard)] ux-press">{saving ? "保存中..." : "保存"}</button>
+        <Button type="button" variant="primary" size="sm" onClick={handleSave} loading={saving} loadingLabel="保存中…" data-testid="qq-save">保存</Button>
       </div>
     </div>
   );
@@ -486,9 +491,9 @@ function AddQQMailPanel({ onAdded, onBusyChange }: { onAdded: () => void; onBusy
   return (
     <div className="space-y-3">
       <div className="flex items-center gap-2 text-xs font-bold text-charcoal"><ChannelBrandIcon source="qq-mail" size={16} />QQ 邮箱配置</div>
-      <div><label className="text-xs font-bold text-charcoal">名称 *</label><input value={displayName} onChange={(e) => setDisplayName(e.target.value)} placeholder="我的 QQ 邮箱" data-testid="qqmail-add-name" className="mt-1 w-full h-9 px-3 bg-white border border-line rounded-lg text-sm focus:outline-none focus:border-charcoal transition-colors duration-[var(--motion-fast)]" /></div>
-      <div><label className="text-xs font-bold text-charcoal">QQ 邮箱地址 *</label><input value={emailAddress} onChange={(e) => setEmailAddress(e.target.value)} placeholder="example@qq.com" data-testid="qqmail-add-email" className="mt-1 w-full h-9 px-3 bg-white border border-line rounded-lg text-sm focus:outline-none focus:border-charcoal transition-colors duration-[var(--motion-fast)]" /></div>
-      <div><label className="text-xs font-bold text-charcoal">授权码 *</label><input type="password" value={authCode} onChange={(e) => setAuthCode(e.target.value)} placeholder="请输入 QQ 邮箱授权码，不是 QQ 登录密码" data-testid="qqmail-add-authcode" className="mt-1 w-full h-9 px-3 bg-white border border-line rounded-lg text-sm font-mono focus:outline-none focus:border-charcoal transition-colors duration-[var(--motion-fast)]" /><p className="text-[11px] text-sandrift mt-1">请输入 QQ 邮箱授权码，不是 QQ 登录密码。凭据会安全保存在当前设备。</p></div>
+      <div><Field label="名称" required><Input value={displayName} onChange={(e) => setDisplayName(e.target.value)} placeholder="我的 QQ 邮箱" data-testid="qqmail-add-name" /></Field></div>
+      <div><Field label="QQ 邮箱地址" required><Input value={emailAddress} onChange={(e) => setEmailAddress(e.target.value)} placeholder="example@qq.com" data-testid="qqmail-add-email" /></Field></div>
+      <div><Field label="授权码" required description="请输入 QQ 邮箱授权码，不是 QQ 登录密码。凭据会安全保存在当前设备。"><Input type="password" value={authCode} onChange={(e) => setAuthCode(e.target.value)} placeholder="请输入 QQ 邮箱授权码，不是 QQ 登录密码" data-testid="qqmail-add-authcode" mono /></Field></div>
       <div className="bg-surface-soft border border-line rounded-xl p-3 space-y-1">
         <p className="text-[11px] text-sandrift">仅读取收件箱 · 首次同步最近 7 天最多 50 封 · 之后每分钟自动同步 · 附件仅显示基本信息，不会自动下载</p>
         <p className="text-[11px] text-sandrift">获取授权码：QQ 邮箱 → 设置 → 账户 → 生成授权码</p>
@@ -496,7 +501,7 @@ function AddQQMailPanel({ onAdded, onBusyChange }: { onAdded: () => void; onBusy
       {error && <p data-testid="qqmail-add-error" className="text-xs font-bold text-danger bg-danger/5 border border-danger/20 rounded-lg px-3 py-2 animate-enter">{error}</p>}
       <div className="flex items-center gap-2">
         <div className="flex-1" />
-        <button type="button" onClick={handleSave} disabled={saving} data-testid="qqmail-save" className="h-8 px-5 bg-charcoal text-white text-xs font-bold rounded-lg hover:bg-black disabled:opacity-60 transition-colors duration-[var(--motion-fast)] ease-[var(--ease-standard)] ux-press">{saving ? "保存中..." : "保存"}</button>
+        <Button type="button" variant="primary" size="sm" onClick={handleSave} loading={saving} loadingLabel="保存中…" data-testid="qqmail-save">保存</Button>
       </div>
     </div>
   );
@@ -579,20 +584,20 @@ function EditQQDialog({ open, target, onOpenChange, onSaved }: { open: boolean; 
         <div><h4 className="text-sm font-bold text-charcoal">编辑 QQ Bot</h4><p className="text-[11px] text-sandrift">App ID: {target.config.appId}</p></div>
       </div>
       <div className="space-y-3">
-        <div><label className="text-xs font-bold text-charcoal">名称</label><input value={displayName} onChange={(e) => setDisplayName(e.target.value)} data-testid="qq-edit-name" className="mt-1 w-full h-9 px-3 bg-white border border-line rounded-lg text-sm focus:outline-none focus:border-charcoal transition-colors duration-[var(--motion-fast)]" /></div>
-        <div><label className="text-xs font-bold text-charcoal">App Secret</label><input type="password" value={newSecret} onChange={(e) => setNewSecret(e.target.value)} placeholder="已安全保存（留空则不修改）" data-testid="qq-edit-secret" className="mt-1 w-full h-9 px-3 bg-white border border-line rounded-lg text-sm font-mono focus:outline-none focus:border-charcoal transition-colors duration-[var(--motion-fast)]" /><p className="text-[11px] text-sandrift mt-1">输入新 Secret 将替换旧凭据</p></div>
+        <div><Field label="名称"><Input value={displayName} onChange={(e) => setDisplayName(e.target.value)} data-testid="qq-edit-name" /></Field></div>
+        <div><Field label="App Secret" description="输入新 Secret 将替换旧凭据"><Input type="password" value={newSecret} onChange={(e) => setNewSecret(e.target.value)} placeholder="已安全保存（留空则不修改）" data-testid="qq-edit-secret" mono /></Field></div>
         <div className="flex items-center gap-4">
-          <label className="flex items-center gap-1.5 text-xs"><input type="checkbox" checked={receiveDirectMessages} onChange={(e) => setReceiveDirectMessages(e.target.checked)} /> 接收私聊</label>
-          <label className="flex items-center gap-1.5 text-xs"><input type="checkbox" checked={receiveGroupMessages} onChange={(e) => setReceiveGroupMessages(e.target.checked)} /> 接收群聊</label>
-          <label className="flex items-center gap-1.5 text-xs"><input type="checkbox" checked={requireMentionInGroup} onChange={(e) => setRequireMentionInGroup(e.target.checked)} /> 群聊需 @</label>
+          <Checkbox checked={receiveDirectMessages} onChange={setReceiveDirectMessages} label="接收私聊" />
+          <Checkbox checked={receiveGroupMessages} onChange={setReceiveGroupMessages} label="接收群聊" />
+          <Checkbox checked={requireMentionInGroup} onChange={setRequireMentionInGroup} label="群聊需 @" />
         </div>
-        <div><label className="text-xs font-bold text-charcoal">允许用户</label><input value={allowedUsers} onChange={(e) => setAllowedUsers(e.target.value)} data-testid="qq-edit-allowed-users" className="mt-1 w-full h-9 px-3 bg-white border border-line rounded-lg text-sm focus:outline-none focus:border-charcoal transition-colors duration-[var(--motion-fast)]" /></div>
-        <div><label className="text-xs font-bold text-charcoal">允许群</label><input value={allowedGroups} onChange={(e) => setAllowedGroups(e.target.value)} data-testid="qq-edit-allowed-groups" className="mt-1 w-full h-9 px-3 bg-white border border-line rounded-lg text-sm focus:outline-none focus:border-charcoal transition-colors duration-[var(--motion-fast)]" /></div>
+        <div><Field label="允许用户"><Input value={allowedUsers} onChange={(e) => setAllowedUsers(e.target.value)} data-testid="qq-edit-allowed-users" /></Field></div>
+        <div><Field label="允许群"><Input value={allowedGroups} onChange={(e) => setAllowedGroups(e.target.value)} data-testid="qq-edit-allowed-groups" /></Field></div>
         {error && <p className="text-xs font-bold text-danger bg-danger/5 border border-danger/20 rounded-lg px-3 py-2 animate-enter">{error}</p>}
         <div className="flex items-center gap-2">
           <div className="flex-1" />
-          <button type="button" onClick={() => onOpenChange(false)} className="h-8 px-4 bg-white border border-line text-charcoal text-xs font-bold rounded-lg hover:bg-alabaster transition-colors duration-[var(--motion-fast)] ux-press">取消</button>
-          <button type="button" onClick={handleSave} disabled={saving} data-testid="qq-edit-save" className="h-8 px-5 bg-charcoal text-white text-xs font-bold rounded-lg hover:bg-black disabled:opacity-60 transition-colors duration-[var(--motion-fast)] ux-press">{saving ? "保存中..." : "保存"}</button>
+          <Button type="button" variant="secondary" size="sm" onClick={() => onOpenChange(false)}>取消</Button>
+          <Button type="button" variant="primary" size="sm" onClick={handleSave} loading={saving} loadingLabel="保存中…" data-testid="qq-edit-save">保存</Button>
         </div>
       </div>
     </Dialog>
