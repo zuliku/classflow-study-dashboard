@@ -9,8 +9,8 @@ import { findScheduleConflicts } from "@/lib/conflicts";
 import { COURSE_COLOR_OPTIONS } from "@/lib/courseAppearance";
 
 
-import { cn } from "@/lib/utils";
 import { Dialog } from "@/components/ui/Dialog";
+import { ColorSwatch } from "@/components/ui/ColorSwatch";
 import { Input } from "@/components/ui/Input";
 import { Textarea } from "@/components/ui/Textarea";
 import { Field } from "@/components/ui/Field";
@@ -339,25 +339,27 @@ export function AddCourseModal() {
               </div>
             </FormSection>
 
-            {/* 外观：课程颜色（Courses Workspace 已是 neutral row，颜色只做身份识别） */}
+            {/* 外观：课程颜色（与设置调色板同一圆形色块语言；颜色只做身份识别） */}
             <FormSection title="外观">
               <div className="space-y-1.5">
                 <label className="text-[11px] font-bold text-charcoal">课程颜色</label>
                 <p className="text-[11px] text-sandrift">用于课表、课程标记等位置区分课程。</p>
-                <div className="flex space-x-2 pt-0.5">
+                <div
+                  role="radiogroup"
+                  aria-label="课程颜色"
+                  className="flex flex-wrap gap-2 pt-0.5"
+                >
                   {COLOR_OPTIONS.map((c, i) => (
-                    <button
-                      key={i}
-                      type="button"
-                      onClick={() => setColorIndex(i)}
-                      className={`w-8 h-8 rounded-lg border flex items-center justify-center transition-colors duration-[var(--motion-fast)] ease-[var(--ease-standard)] focus-visible:outline-2 focus-visible:outline-charcoal/30 focus-visible:outline-offset-1 ${
-                        colorIndex === i ? "ring-2 ring-charcoal ring-offset-1" : ""
-                      }`}
-                      style={{ backgroundColor: c.bgHex, borderColor: c.borderHex }}
+                    <ColorSwatch
+                      key={`${c.bgHex}-${i}`}
+                      color={c.bgHex}
+                      borderColor={c.borderHex}
+                      size="md"
+                      selected={colorIndex === i}
+                      onSelect={() => setColorIndex(i)}
                       title={c.name}
-                    >
-                      {colorIndex === i && <span className="text-[10px] text-charcoal font-bold">✓</span>}
-                    </button>
+                      ariaLabel={`课程颜色 ${c.name}`}
+                    />
                   ))}
                 </div>
               </div>

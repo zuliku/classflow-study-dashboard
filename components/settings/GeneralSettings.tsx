@@ -18,6 +18,8 @@ import {
   getModifiedPreferenceKeys,
   resetPreferencePatch,
 } from "@/lib/preferences";
+import { CoursePaletteEditor } from "@/components/settings/CoursePaletteEditor";
+import { SettingsSlider } from "@/components/settings/SettingsSlider";
 import { UI_FONT_LABELS } from "@/lib/typography/fonts";
 import { SINGLE_KEY_SHORTCUTS } from "@/lib/shortcuts";
 import type { StartupView, ContentDensity, UIFontPreset } from "@/types";
@@ -161,19 +163,15 @@ export function GeneralSettings({ highlightedId }: { highlightedId?: string }) {
             resetAriaLabel="将界面字号缩放恢复默认"
             highlighted={highlightedId === "ui-font-scale"}
           >
-            <div className="flex items-center gap-2">
-              <input
-                type="range"
-                min={0.9}
-                max={1.2}
-                step={0.05}
-                value={preferences.uiFontScale}
-                onChange={(e) => updatePreferences({ uiFontScale: Number(e.target.value) })}
-                className="w-32 accent-charcoal"
-                aria-label="界面字号缩放"
-              />
-              <span className="text-[11px] font-bold text-sandrift w-10 text-right">{Math.round(preferences.uiFontScale * 100)}%</span>
-            </div>
+            <SettingsSlider
+              value={preferences.uiFontScale}
+              min={0.9}
+              max={1.2}
+              step={0.05}
+              onChange={(v) => updatePreferences({ uiFontScale: v })}
+              ariaLabel="界面字号缩放"
+              formatValue={(v) => `${Math.round(v * 100)}%`}
+            />
           </SettingsRow>
 
           <SettingsRow
@@ -211,33 +209,16 @@ export function GeneralSettings({ highlightedId }: { highlightedId?: string }) {
           <SettingsRow
             settingId="course-palette"
             title="课程调色板"
-            description="自定义课程自动配色的候选颜色（点击色块可移除）。新课程按此顺序轮换。"
+            description="自定义课程自动配色的候选颜色（点击色块右上 × 可移除）。新课程按此顺序轮换。"
             modified={modified.has("coursePalette")}
             onReset={() => updatePreferences(resetPreferencePatch("coursePalette"))}
             resetAriaLabel="将课程调色板恢复默认"
             highlighted={highlightedId === "course-palette"}
           >
-            <div className="flex flex-wrap gap-1.5 max-w-[200px]">
-              {preferences.coursePalette.map((c) => (
-                <button
-                  key={c}
-                  onClick={() => updatePreferences({ coursePalette: preferences.coursePalette.filter((x) => x !== c) })}
-                  className="w-6 h-6 rounded-full border border-line shadow-subtle"
-                  style={{ backgroundColor: c }}
-                  title={c}
-                  aria-label={`移除颜色 ${c}`}
-                />
-              ))}
-              <input
-                type="color"
-                onChange={(e) => {
-                  const v = e.target.value;
-                  if (!preferences.coursePalette.includes(v)) updatePreferences({ coursePalette: [...preferences.coursePalette, v] });
-                }}
-                className="w-6 h-6 rounded-full border border-line p-0 overflow-hidden cursor-pointer"
-                title="添加颜色"
-              />
-            </div>
+            <CoursePaletteEditor
+              value={preferences.coursePalette}
+              onChange={(coursePalette) => updatePreferences({ coursePalette })}
+            />
           </SettingsRow>
         </SettingsGroup>
 

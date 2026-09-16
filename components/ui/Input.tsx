@@ -12,9 +12,13 @@ export interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> 
   mono?: boolean;
 }
 
-export function Input({ invalid, mono, className, ...props }: InputProps) {
+export const Input = React.forwardRef<HTMLInputElement, InputProps>(function Input(
+  { invalid, mono, className, ...props },
+  ref
+) {
   return (
     <input
+      ref={ref}
       className={cn(
         "w-full h-9 px-2.5 bg-background border rounded-lg text-xs font-semibold text-charcoal",
         // BUG-G4：focus 边框色过渡（与 Select trigger 同语义；此前瞬变）
@@ -27,4 +31,4 @@ export function Input({ invalid, mono, className, ...props }: InputProps) {
       {...props}
     />
   );
-}
+});

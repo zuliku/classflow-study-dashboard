@@ -8,14 +8,10 @@ import { useToastStore } from "@/store/useToastStore";
 import { SettingsSection } from "@/components/settings/SettingsSection";
 import { SettingsSaveBar } from "@/components/settings/SettingsSaveBar";
 import { SettingsRow } from "@/components/settings/SettingsRow";
+import { SettingsInput, SettingsToggle } from "@/components/settings/SettingsControls";
+import { Button } from "@/components/ui/Button";
 import { getModifiedPreferenceKeys } from "@/lib/preferences";
-import { cn } from "@/lib/utils";
 import { getCurrentSemesterWeek, getSemesterEndDate } from "@/lib/semester";
-
-const inputCls =
-  "w-full h-9 px-2.5 bg-[#F7F5F5] border border-line rounded-lg text-charcoal font-semibold focus:outline-none";
-const inputErrorCls =
-  "w-full h-9 px-2.5 bg-[#F7F5F5] border border-danger-border rounded-lg text-charcoal font-semibold focus:outline-none";
 
 export function SemesterSettings({
   highlightedId,
@@ -147,12 +143,9 @@ export function SemesterSettings({
 
           {!editing && (
             <div className="flex justify-end">
-              <button
-                onClick={() => setEditing(true)}
-                className="ux-press px-3 py-1.5 bg-white border border-line text-charcoal text-[11px] font-bold rounded-xl transition-colors hover:bg-alabaster"
-              >
+              <Button variant="secondary" size="sm" onClick={() => setEditing(true)}>
                 编辑
-              </button>
+              </Button>
             </div>
           )}
         </div>
@@ -164,37 +157,36 @@ export function SemesterSettings({
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-1">
                 <label htmlFor="settings-semester-name" className="font-bold text-sandrift">学期名称</label>
-                <input
+                <SettingsInput
                   id="settings-semester-name"
-                  type="text"
                   value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  className={touched && errors.name ? inputErrorCls : inputCls}
+                  onChange={setName}
+                  error={touched && !!errors.name}
                 />
                 {touched && errors.name && <p className="text-[10px] text-danger font-bold">{errors.name}</p>}
               </div>
               <div className="space-y-1">
                 <label htmlFor="settings-semester-start" className="font-bold text-sandrift">第一周开始日期</label>
-                <input
+                <SettingsInput
                   id="settings-semester-start"
                   type="date"
                   value={startDate}
-                  onChange={(e) => setStartDate(e.target.value)}
-                  className={`${touched && errors.startDate ? inputErrorCls : inputCls} font-mono`}
+                  onChange={setStartDate}
+                  error={touched && !!errors.startDate}
+                  mono
                 />
                 {touched && errors.startDate && <p className="text-[10px] text-danger font-bold">{errors.startDate}</p>}
                 <p className="text-[10px] text-sandrift">周一为学期第 1 周起始日</p>
               </div>
               <div className="space-y-1">
                 <label htmlFor="settings-semester-weeks" className="font-bold text-sandrift">总教学周数</label>
-                <input
+                <SettingsInput
                   id="settings-semester-weeks"
                   type="number"
                   min={1}
-                  max={30}
                   value={totalWeeks}
-                  onChange={(e) => setTotalWeeks(Number(e.target.value))}
-                  className={touched && errors.totalWeeks ? inputErrorCls : inputCls}
+                  onChange={(v) => setTotalWeeks(Number(v))}
+                  error={touched && !!errors.totalWeeks}
                 />
                 {touched && errors.totalWeeks && (
                   <p className="text-[10px] text-danger font-bold">{errors.totalWeeks}</p>
@@ -234,23 +226,11 @@ export function SemesterSettings({
           resetAriaLabel="将显示周末恢复默认"
           highlighted={highlightedId === "show-weekends"}
         >
-          <button
-            role="switch"
-            aria-checked={preferences.showWeekends}
-            aria-label="显示周末"
-            onClick={() => updatePreferences({ showWeekends: !preferences.showWeekends })}
-            className={cn(
-              "relative w-9 h-5 rounded-full transition-colors duration-[var(--motion-fast)]",
-              preferences.showWeekends ? "bg-charcoal" : "bg-alba"
-            )}
-          >
-            <span
-              className={cn(
-                "absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow-subtle transition-transform duration-[var(--motion-fast)]",
-                preferences.showWeekends && "translate-x-4"
-              )}
-            />
-          </button>
+          <SettingsToggle
+            checked={preferences.showWeekends}
+            onChange={(v) => updatePreferences({ showWeekends: v })}
+            label="显示周末"
+          />
         </SettingsRow>
       </SettingsSection>
 
@@ -310,14 +290,16 @@ function BellScheduleSettings({ highlightedId }: { highlightedId?: string }) {
                 <p className="text-[10px] text-sandrift">{b.periods.length} 节 · {b.periods[0]?.startTime ?? ""}-{b.periods[b.periods.length - 1]?.endTime ?? ""}</p>
               </div>
               <div className="flex items-center gap-1.5">
-                <button
+                <Button
+                  variant={activeBellScheduleId === b.id ? "primary" : "secondary"}
+                  size="sm"
                   onClick={() => setActiveBellSchedule(b.id)}
-                  className={`px-2 py-1 rounded-lg text-[11px] font-bold border ${activeBellScheduleId === b.id ? "bg-charcoal text-white border-charcoal" : "bg-white border-line text-satin-grey"}`}
+                  className="h-7 px-2 text-[11px]"
                 >
                   {activeBellScheduleId === b.id ? "已激活" : "设为激活"}
-                </button>
-                <button onClick={() => { setEditingId(b.id); setDraftName(b.name); setDraftPeriods(b.periods); }} className="px-2 py-1 rounded-lg bg-white border border-line text-[11px] text-satin-grey">编辑</button>
-                <button onClick={() => { removeBellSchedule(b.id); pushToast({ message: "已删除" }); }} className="px-2 py-1 rounded-lg bg-white border border-line text-[11px] text-danger">删除</button>
+                </Button>
+                <Button variant="secondary" size="sm" onClick={() => { setEditingId(b.id); setDraftName(b.name); setDraftPeriods(b.periods); }} className="h-7 px-2 text-[11px]">编辑</Button>
+                <Button variant="danger" size="sm" onClick={() => { removeBellSchedule(b.id); pushToast({ message: "已删除" }); }} className="h-7 px-2 text-[11px]">删除</Button>
               </div>
             </div>
           ))}
@@ -325,27 +307,31 @@ function BellScheduleSettings({ highlightedId }: { highlightedId?: string }) {
       )}
       {editingId ? (
         <div className="p-3 bg-white border border-line rounded-xl space-y-3">
-          <input value={draftName} onChange={(e) => setDraftName(e.target.value)} placeholder="方案名称" className="w-full h-9 px-2.5 bg-[#F7F5F5] border border-line rounded-lg text-xs font-semibold" />
+          <SettingsInput value={draftName} onChange={setDraftName} placeholder="方案名称" ariaLabel="作息方案名称" />
           <div className="space-y-1.5 max-h-40 overflow-y-auto">
             {draftPeriods.map((p, idx) => (
               <div key={idx} className="flex items-center gap-2">
-                <span className="text-[11px] font-bold w-12">第{p.period}节</span>
-                <input type="time" value={p.startTime} onChange={(e) => setDraftPeriods((arr) => arr.map((x, i) => i === idx ? { ...x, startTime: e.target.value } : x))} className="h-8 px-2 bg-[#F7F5F5] border border-line rounded-lg text-xs" />
-                <span className="text-sandrift">-</span>
-                <input type="time" value={p.endTime} onChange={(e) => setDraftPeriods((arr) => arr.map((x, i) => i === idx ? { ...x, endTime: e.target.value } : x))} className="h-8 px-2 bg-[#F7F5F5] border border-line rounded-lg text-xs" />
-                <button onClick={() => setDraftPeriods((arr) => arr.filter((_, i) => i !== idx))} className="text-[11px] text-danger">移除</button>
+                <span className="text-[11px] font-bold w-12 shrink-0">第{p.period}节</span>
+                <span className="w-[104px] shrink-0">
+                  <SettingsInput type="time" value={p.startTime} onChange={(v) => setDraftPeriods((arr) => arr.map((x, i) => i === idx ? { ...x, startTime: v } : x))} ariaLabel={`第${p.period}节开始时间`} mono />
+                </span>
+                <span className="text-sandrift" aria-hidden="true">-</span>
+                <span className="w-[104px] shrink-0">
+                  <SettingsInput type="time" value={p.endTime} onChange={(v) => setDraftPeriods((arr) => arr.map((x, i) => i === idx ? { ...x, endTime: v } : x))} ariaLabel={`第${p.period}节结束时间`} mono />
+                </span>
+                <Button variant="ghost" size="sm" onClick={() => setDraftPeriods((arr) => arr.filter((_, i) => i !== idx))} className="h-7 px-2 text-[11px] text-danger">移除</Button>
               </div>
             ))}
           </div>
           <div className="flex items-center gap-2">
-            <button onClick={() => setDraftPeriods((arr) => [...arr, { period: arr.length + 1, startTime: "10:00", endTime: "11:40" }])} className="px-2.5 py-1.5 bg-alabaster border border-line rounded-lg text-[11px] font-bold">添加节次</button>
+            <Button variant="secondary" size="sm" onClick={() => setDraftPeriods((arr) => [...arr, { period: arr.length + 1, startTime: "10:00", endTime: "11:40" }])} className="h-7 text-[11px]">添加节次</Button>
             <div className="flex-1" />
-            <button onClick={() => setEditingId(null)} className="px-3 py-1.5 bg-white border border-line rounded-lg text-[11px] font-bold">取消</button>
-            <button onClick={save} className="px-3 py-1.5 bg-charcoal text-white rounded-lg text-[11px] font-bold">保存</button>
+            <Button variant="secondary" size="sm" onClick={() => setEditingId(null)}>取消</Button>
+            <Button variant="primary" size="sm" onClick={save}>保存</Button>
           </div>
         </div>
       ) : (
-        <button onClick={startCreate} className="w-full py-2 bg-white border border-dashed border-line rounded-xl text-[11px] font-bold text-satin-grey hover:text-charcoal">+ 新建作息方案</button>
+        <Button variant="secondary" size="sm" onClick={startCreate} className="w-full border-dashed">+ 新建作息方案</Button>
       )}
     </div>
   );

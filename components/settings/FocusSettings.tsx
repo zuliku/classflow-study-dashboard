@@ -6,6 +6,7 @@ import { SettingsSection } from "@/components/settings/SettingsSection";
 import { SettingsGroup } from "@/components/settings/SettingsGroup";
 import { SettingsRow } from "@/components/settings/SettingsRow";
 import { SettingsSegmentedControl, SettingsToggle } from "@/components/settings/SettingsControls";
+import { SettingsSlider } from "@/components/settings/SettingsSlider";
 import { getModifiedPreferenceKeys, resetPreferencePatch } from "@/lib/preferences";
 
 export function FocusSettings({ highlightedId }: { highlightedId?: string }) {
@@ -64,17 +65,16 @@ export function FocusSettings({ highlightedId }: { highlightedId?: string }) {
             resetAriaLabel="将提示音量恢复默认"
             highlighted={highlightedId === "focus-sound-volume"}
           >
-            <input
-              type="range"
+            <SettingsSlider
+              value={preferences.focusSoundVolume}
               min={0}
               max={100}
-              value={preferences.focusSoundVolume}
-              onChange={(e) => updatePreferences({ focusSoundVolume: Number(e.target.value) })}
-              className="w-32 accent-charcoal"
-              aria-label="提示音量"
+              step={1}
+              onChange={(v) => updatePreferences({ focusSoundVolume: v })}
+              ariaLabel="提示音量"
               disabled={!preferences.focusSoundEnabled}
+              formatValue={(v) => `${v}%`}
             />
-            <span className="text-[11px] font-bold text-sandrift w-8 text-right">{preferences.focusSoundVolume}%</span>
           </SettingsRow>
 
           <SettingsRow settingId="focus-tracking" title="实时专注计时" description="FocusSession 记录真实的专注时间；暂停期间不计入，结束后写入实际专注时长。">

@@ -6,6 +6,7 @@ import { useToastStore } from "@/store/useToastStore";
 import { SettingsSection } from "@/components/settings/SettingsSection";
 import { SettingsSaveBar } from "@/components/settings/SettingsSaveBar";
 import { SettingsInput } from "@/components/settings/SettingsControls";
+import { Button } from "@/components/ui/Button";
 import { useProfileAvatar } from "@/hooks/useProfileAvatar";
 import {
   AVATAR_STORAGE_KEY,
@@ -202,12 +203,14 @@ export function ProfileSettings({
             <div className="flex-1 min-w-0 space-y-1.5">
               <p className="font-bold text-charcoal">头像</p>
               <div className="flex items-center gap-2">
-                <button
+                <Button
+                  variant="secondary"
+                  size="sm"
                   onClick={() => fileInputRef.current?.click()}
-                  className="px-2.5 py-1.5 bg-white border border-line text-charcoal text-[11px] font-bold rounded-xl transition-colors hover:bg-alabaster"
+                  disabled={saving}
                 >
                   更换头像
-                </button>
+                </Button>
                 {(pickedFile || removeRequested || (userProfile.avatarStorageKey !== undefined) || userProfile.avatarUrl) && (
                   <button
                     onClick={() => {

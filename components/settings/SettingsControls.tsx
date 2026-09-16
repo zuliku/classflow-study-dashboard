@@ -95,9 +95,13 @@ export function SettingsInput({
   autoComplete,
   spellCheck,
   className,
+  autoFocus,
+  maxLength,
+  onKeyDown,
+  inputRef,
 }: {
   id?: string;
-  type?: "text" | "url" | "number" | "time" | "password";
+  type?: "text" | "url" | "number" | "time" | "password" | "date";
   value: string | number;
   onChange: (v: string) => void;
   placeholder?: string;
@@ -110,9 +114,14 @@ export function SettingsInput({
   autoComplete?: string;
   spellCheck?: boolean;
   className?: string;
+  autoFocus?: boolean;
+  maxLength?: number;
+  onKeyDown?: React.KeyboardEventHandler<HTMLInputElement>;
+  inputRef?: React.Ref<HTMLInputElement>;
 }) {
   return (
     <Input
+      ref={inputRef}
       id={id}
       type={type}
       value={value}
@@ -126,6 +135,9 @@ export function SettingsInput({
       invalid={error}
       mono={mono}
       className={className}
+      autoFocus={autoFocus}
+      maxLength={maxLength}
+      onKeyDown={onKeyDown}
     />
   );
 }

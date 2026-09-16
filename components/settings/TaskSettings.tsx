@@ -135,26 +135,12 @@ export function TaskSettings({ highlightedId }: { highlightedId?: string }) {
           resetAriaLabel="将临近截止提醒恢复默认"
           highlighted={highlightedId === "ddl-warning-days"}
         >
-          <div className="flex items-center gap-1 bg-alabaster p-0.5 rounded-xl border border-line-strong">
-            {DDL_WARNING_DAYS.map((d) => {
-              const isActive = preferences.ddlWarningDays === d;
-              return (
-                <button
-                  key={d}
-                  onClick={() => updatePreferences({ ddlWarningDays: d })}
-                  aria-pressed={isActive}
-                  className={cn(
-                    "px-2.5 py-1 rounded-lg text-[11px] font-bold transition-colors duration-[var(--motion-fast)]",
-                    isActive
-                      ? "bg-white text-charcoal shadow-subtle"
-                      : "text-satin-grey hover:text-charcoal"
-                  )}
-                >
-                  {d} 天
-                </button>
-              );
-            })}
-          </div>
+          <SettingsSegmentedControl<number>
+            value={preferences.ddlWarningDays}
+            onChange={(v) => updatePreferences({ ddlWarningDays: v as 1 | 3 | 7 })}
+            ariaLabel="临近截止提醒"
+            options={DDL_WARNING_DAYS.map((d) => ({ value: d, label: `${d} 天` }))}
+          />
         </SettingsRow>
 
         <SettingsRow
@@ -350,9 +336,25 @@ export function TaskSettings({ highlightedId }: { highlightedId?: string }) {
               <SettingsToggle checked={doNotDisturbEnabled} onChange={setDoNotDisturbEnabled} label="免打扰时段" />
               {doNotDisturbEnabled && (
                 <div className="flex items-center gap-1.5">
-                  <input type="time" value={doNotDisturbStart} onChange={(e) => setDoNotDisturbStart(e.target.value)} aria-label="免打扰开始时间" className="h-8 px-2 bg-[#F7F5F5] border border-line rounded-lg text-xs font-mono" />
-                  <span className="text-sandrift">-</span>
-                  <input type="time" value={doNotDisturbEnd} onChange={(e) => setDoNotDisturbEnd(e.target.value)} aria-label="免打扰结束时间" className="h-8 px-2 bg-[#F7F5F5] border border-line rounded-lg text-xs font-mono" />
+                  <span className="w-[104px] shrink-0">
+                    <SettingsInput
+                      type="time"
+                      value={doNotDisturbStart}
+                      onChange={(v) => setDoNotDisturbStart(v)}
+                      ariaLabel="免打扰开始时间"
+                      mono
+                    />
+                  </span>
+                  <span className="text-sandrift" aria-hidden="true">-</span>
+                  <span className="w-[104px] shrink-0">
+                    <SettingsInput
+                      type="time"
+                      value={doNotDisturbEnd}
+                      onChange={(v) => setDoNotDisturbEnd(v)}
+                      ariaLabel="免打扰结束时间"
+                      mono
+                    />
+                  </span>
                 </div>
               )}
             </div>

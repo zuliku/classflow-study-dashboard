@@ -73,7 +73,7 @@ export function DataSettings() {
         <SettingsGroup title="数据管理">
           <BackupSection />
           {restoreResult && (
-            <div className="mx-3 mb-3 p-3 bg-pastel-mint/60 border border-line rounded-xl space-y-0.5 text-xs" data-testid="restore-result">
+            <div className="my-2 p-3 bg-pastel-mint/60 border border-line rounded-xl space-y-0.5 text-xs" data-testid="restore-result">
               <p className="flex items-center gap-1.5 font-bold text-success">
                 <CheckCircle2 className="w-3.5 h-3.5" />
                 恢复完成
@@ -90,9 +90,7 @@ export function DataSettings() {
               ))}
             </div>
           )}
-          <div className="mx-3 mb-3">
-            <RestoreSection onRestored={setRestoreResult} />
-          </div>
+          <RestoreSection onRestored={setRestoreResult} />
         </SettingsGroup>
 
         {/* 学习历史 */}
@@ -101,15 +99,13 @@ export function DataSettings() {
         </SettingsGroup>
 
         {/* 当前设备数据：概览常驻；诊断默认收起 */}
-        <SettingsGroup title="当前设备数据">
-          <div className="p-3">
-            <DataOverview counts={counts} />
-          </div>
+        <SettingsGroup title="当前设备数据" contentClassName="px-4 py-3 space-y-2">
+          <DataOverview counts={counts} />
           <button
             type="button"
             onClick={() => setDiagnosticsOpen((v) => !v)}
             aria-expanded={diagnosticsOpen}
-            className="w-full flex items-center justify-between px-3 py-2.5 text-left"
+            className="w-full flex items-center justify-between py-2 text-left"
           >
             <span className="text-xs font-bold text-charcoal">数据诊断</span>
             <ChevronDown
@@ -121,10 +117,8 @@ export function DataSettings() {
             />
           </button>
           <DisclosureRegion open={diagnosticsOpen}>
-            <div className="px-3 pb-3 space-y-1">
-              <div className="py-2">
-                <DataHealth />
-              </div>
+            <div className="pb-1">
+              <DataHealth />
             </div>
           </DisclosureRegion>
         </SettingsGroup>
