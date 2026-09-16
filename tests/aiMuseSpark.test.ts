@@ -7,8 +7,7 @@ import { getReasoningCapability, normalizeReasoningEffort, resolveReasoningProvi
 import { resolveEffectiveReasoningEffort } from "@/lib/ai/reasoning/effective";
 import { resolveModelDefinition, createLanguageModelFromDefinition } from "@/lib/ai/providers/resolver";
 
-// 2026-09：Go 限额表同步为 Muse Spark 1.3（1.2 曾下架）；2026-09-16 远端列表 1.2 回归，
-// 以保守能力（无 reasoning/vision 声明）重新收录。
+// 2026-09：Go 限额表同步为 Muse Spark 1.3；2026-09-16 去旧留新，1.2 移出目录。
 // 1.3 的 vision/reasoning 未经 live 验证 → 保守不声明（fixed/default），待 gated live smoke 后放开。
 // 1.2 时代的 live verified 行为测试由 kimi-k3 / gpt-5.6-luna 等保留模型的用例继续覆盖。
 describe("Muse Spark 1.3 — registry", () => {
@@ -35,14 +34,8 @@ describe("Muse Spark 1.3 — registry", () => {
     expect(def.capabilities.reasoning?.supportedEfforts).toEqual(["default", "minimal", "low", "medium", "high", "xhigh"]);
   });
 
-  it("回归的 muse-spark-1.2-contributor 以保守能力收录（responses/meta，无 reasoning/vision 声明）", () => {
-    const old = OPENCODE_MODELS.find((m) => m.id === "muse-spark-1.2-contributor");
-    expect(old).toBeDefined();
-    expect(old!.transport).toBe("openai-responses");
-    expect(old!.vendor).toBe("meta");
-    expect(old!.name).toBe("Muse Spark 1.2");
-    expect(old!.capabilities.vision).toBe(false);
-    expect(old!.capabilities.reasoning).toBeUndefined();
+  it("旧款 muse-spark-1.2-contributor 已按去旧留新移出目录", () => {
+    expect(OPENCODE_MODELS.some((m) => m.id === "muse-spark-1.2-contributor")).toBe(false);
   });
 
   it("vendor meta：Meta 本地 SVG（非 hotlink）", () => {

@@ -97,7 +97,7 @@ describe("/api/ai/chat（流式）", () => {
   it("OpenCode Go stream success：请求到 opencode endpoint", async () => {
     const res = await post(
       { POST: chatPOST },
-      { ...baseBody, provider: "opencode-go", model: "deepseek-v4-flash" }
+      { ...baseBody, provider: "opencode-go", model: "deepseek-v4.1-flash" }
     );
     expect(res.status).toBe(200);
     const text = await res.text();

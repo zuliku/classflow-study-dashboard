@@ -19,26 +19,29 @@ describe("Provider Registry", () => {
     expect(DEEPSEEK_MODELS[0].name).toBe("V4 Flash");
   });
 
-  it("OpenCode Go：官方三 transport 注册表（chat + responses + messages，2026-09-16 远端 37 款同步 36 款）", () => {
+  it("OpenCode Go：官方三 transport 注册表（chat + responses + messages，2026-09-16 去旧留新 19 款）", () => {
     const models = getModelsForProvider("opencode-go");
     const ids = models.map((m) => m.id);
-    expect(ids).toHaveLength(36);
+    expect(ids).toHaveLength(19);
     for (const id of [
-      "glm-5.3-flash", "glm-5.3", "glm-5.2", "glm-5.1", "glm-5",
-      "kimi-k3", "kimi-k2.7-code", "kimi-k2.6", "kimi-k2.5",
-      "deepseek-v4-flash", "deepseek-v4-pro", "deepseek-flash", "deepseek-v4.1-flash",
-      "deepseek-v4-flash-vision-exp",
-      "mimo-v2.5", "mimo-v2-pro", "mimo-v2-omni", "mimo-v2.5-pro",
-      "hy3", "hy3-preview", "hy4-preview",
+      "glm-5.3-flash", "glm-5.3",
+      "kimi-k3", "kimi-k2.7-code",
+      "deepseek-v4.1-flash",
+      "mimo-v2.5", "mimo-v2-omni", "mimo-v2.5-pro",
+      "hy3", "hy4-preview",
       "longcat-2.0",
       // openai-responses 模型（Phase 3.1 正式接入）
-      "gpt-5.6-luna", "grok-4.6", "grok-4.5",
-      "muse-spark-1.3-contributor", "muse-spark-1.2-contributor",
+      "gpt-5.6-luna", "grok-4.6",
+      "muse-spark-1.3-contributor",
       // anthropic-messages 模型
-      "minimax-m3", "minimax-m2.7", "minimax-m2.5",
-      "qwen3.7-plus", "qwen3.8-flash", "qwen3.7-max", "qwen3.8-max", "qwen3.6-plus", "qwen3.5-plus",
+      "minimax-m3", "minimax-m2.7",
+      "qwen3.7-plus", "qwen3.8-flash", "qwen3.8-max",
     ]) {
       expect(ids, id).toContain(id);
+    }
+    // 去旧留新移出的旧版不再出现
+    for (const retired of ["deepseek-v4-flash", "deepseek-v4-pro", "deepseek-flash", "deepseek-v4-flash-vision-exp", "kimi-k2.6", "kimi-k2.5", "glm-5.2", "glm-5.1", "glm-5", "mimo-v2-pro", "hy3-preview", "grok-4.5", "muse-spark-1.2-contributor", "minimax-m2.5", "qwen3.7-max", "qwen3.6-plus", "qwen3.5-plus"]) {
+      expect(ids, retired).not.toContain(retired);
     }
     // 未知厂商 omen-alpha（无协议证据）绝不进入注册表
     expect(ids).not.toContain("omen-alpha");
@@ -48,14 +51,14 @@ describe("Provider Registry", () => {
         (m) => m.transport === "openai-chat" || m.transport === "openai-responses" || m.transport === "anthropic-messages"
       )
     ).toBe(true);
-    expect(getDefaultModel("opencode-go")).toBe("deepseek-v4-flash");
+    expect(getDefaultModel("opencode-go")).toBe("deepseek-v4.1-flash");
   });
 
   it("OpenCode transport 划分与官方 endpoint 表一致", () => {
     const byId = new Map(OPENCODE_MODELS.map((m) => [m.id, m.transport]));
-    const chatModels = ["glm-5.3-flash", "glm-5.3", "glm-5.2", "glm-5.1", "glm-5", "kimi-k3", "kimi-k2.7-code", "kimi-k2.6", "kimi-k2.5", "deepseek-v4-flash", "deepseek-v4-pro", "deepseek-flash", "deepseek-v4.1-flash", "deepseek-v4-flash-vision-exp", "mimo-v2.5", "mimo-v2-pro", "mimo-v2-omni", "mimo-v2.5-pro", "hy3", "hy3-preview", "hy4-preview", "longcat-2.0"];
-    const responsesModels = ["grok-4.6", "grok-4.5", "gpt-5.6-luna", "muse-spark-1.3-contributor", "muse-spark-1.2-contributor"];
-    const messagesModels = ["minimax-m3", "minimax-m2.7", "minimax-m2.5", "qwen3.7-plus", "qwen3.8-flash", "qwen3.7-max", "qwen3.8-max", "qwen3.6-plus", "qwen3.5-plus"];
+    const chatModels = ["glm-5.3-flash", "glm-5.3", "kimi-k3", "kimi-k2.7-code", "deepseek-v4.1-flash", "mimo-v2.5", "mimo-v2-omni", "mimo-v2.5-pro", "hy3", "hy4-preview", "longcat-2.0"];
+    const responsesModels = ["grok-4.6", "gpt-5.6-luna", "muse-spark-1.3-contributor"];
+    const messagesModels = ["minimax-m3", "minimax-m2.7", "qwen3.7-plus", "qwen3.8-flash", "qwen3.8-max"];
     for (const id of chatModels) expect(byId.get(id), id).toBe("openai-chat");
     for (const id of responsesModels) expect(byId.get(id), id).toBe("openai-responses");
     for (const id of messagesModels) expect(byId.get(id), id).toBe("anthropic-messages");
@@ -244,19 +247,22 @@ describe("模型 → 厂商（Logo）映射", () => {
     expect(getVendorForModelId("muse-spark-1.3-contributor")).toBe("meta");
   });
 
-  it("新增 23 款模型 → 厂商（Logo）映射正确：注册表声明优先，前缀兜底一致", () => {
+  it("去旧留新 19 款的图标映射：注册表声明优先，前缀兜底一致", () => {
     const cases: [string, AIModelVendor][] = [
-      ["kimi-k2.7-code", "kimi"], ["kimi-k2.6", "kimi"], ["kimi-k2.5", "kimi"],
-      ["minimax-m2.7", "minimax"], ["minimax-m2.5", "minimax"],
-      ["glm-5.3", "zai"], ["glm-5.2", "zai"], ["glm-5.1", "zai"], ["glm-5", "zai"],
-      ["deepseek-v4-pro", "deepseek"], ["deepseek-flash", "deepseek"],
-      ["deepseek-v4.1-flash", "deepseek"], ["deepseek-v4-flash-vision-exp", "deepseek"],
-      ["qwen3.7-max", "qwen"], ["qwen3.8-max", "qwen"],
-      ["qwen3.6-plus", "qwen"], ["qwen3.5-plus", "qwen"],
-      ["mimo-v2-pro", "mimo"], ["mimo-v2-omni", "mimo"], ["mimo-v2.5-pro", "mimo"],
-      ["hy3-preview", "tencent"],
-      ["grok-4.5", "xai"],
-      ["muse-spark-1.2-contributor", "meta"],
+      ["kimi-k2.7-code", "kimi"],
+      ["minimax-m2.7", "minimax"],
+      ["glm-5.3", "zai"],
+      ["deepseek-v4.1-flash", "deepseek"],
+      ["qwen3.8-max", "qwen"],
+      ["mimo-v2-omni", "mimo"], ["mimo-v2.5-pro", "mimo"],
+      ["hy3", "tencent"], ["hy4-preview", "tencent"],
+      ["grok-4.6", "xai"],
+      ["muse-spark-1.3-contributor", "meta"],
+      ["kimi-k3", "kimi"], ["minimax-m3", "minimax"],
+      ["glm-5.3-flash", "zai"],
+      ["mimo-v2.5", "mimo"],
+      ["qwen3.7-plus", "qwen"], ["qwen3.8-flash", "qwen"],
+      ["gpt-5.6-luna", "openai"], ["longcat-2.0", "longcat"],
     ];
     for (const [id, vendor] of cases) {
       expect(getVendorForModelId(id), id).toBe(vendor);

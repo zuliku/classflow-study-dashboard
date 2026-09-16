@@ -17,6 +17,11 @@ import { AIModelDefinition, AIProviderConfig } from "@/lib/ai/providers/types";
  * （streaming/tools 开；vision/reasoning 未经 live 验证不开）；
  * omen-alpha（未知厂商、无协议证据）按规则跳过，不进入注册表。
  *
+ * 2026-09-16 去旧留新（19 款）：同家族旧版（deepseek v4-flash/v4-pro/flash/vision-exp、
+ * kimi k2.5/k2.6、glm 5/5.1/5.2、qwen 3.5/3.6-plus/3.7-max、minimax m2.5、hy3-preview、
+ * grok-4.5、muse-spark-1.2、mimo-v2-pro）移出选择器；默认模型同步为 deepseek-v4.1-flash。
+ * 已持久化的旧选择由设置页「模型已不可用，请重新选择」诚实承接，不静默覆盖。
+ *
  * 2026-09-03 live/文档验证后放开（key：live = 真实 Go probe，docs = 厂商官方文档）：
  * - grok-4.6（xai, responses）：reasoning [default,low,medium,high] live 通过（B/C；
  *   D continuation 空文本两次，待跟进，不阻塞档位声明）；vision=true + JPEG/PNG（xAI 官方 docs）
@@ -30,7 +35,7 @@ import { AIModelDefinition, AIProviderConfig } from "@/lib/ai/providers/types";
  * - muse-spark-1.3-contributor（meta, responses）：reasoning [default,minimal,low,medium,high,xhigh]
  *   live 通过（max 无输出，不声明；high 以上 hungry， trivial prompt 约 450+ reasoning tokens）；
  *   vision PNG/JPEG/WEBP 均无识别 → vision 不开
- * - deepseek-v4-flash：官方确认 vision 属独立 -vision-exp 模型 → 保持 false
+ * - deepseek-v4-flash：旧版已移出；deepseek 系仅保留 v4.1-flash（vision 不开）
  */
 export const OPENCODE_MODELS: AIModelDefinition[] = [
   // ---- OpenAI Chat Completions（官方 endpoint：/v1/chat/completions）----
@@ -59,38 +64,18 @@ export const OPENCODE_MODELS: AIModelDefinition[] = [
     },
   },
   { id: "kimi-k2.7-code", name: "Kimi K2.7 Code", provider: "opencode-go", vendor: "kimi", transport: "openai-chat", capabilities: { streaming: true, tools: true, vision: false, fileParts: false } },
-  { id: "kimi-k2.6", name: "Kimi K2.6", provider: "opencode-go", vendor: "kimi", transport: "openai-chat", capabilities: { streaming: true, tools: true, vision: false, fileParts: false } },
-  { id: "kimi-k2.5", name: "Kimi K2.5", provider: "opencode-go", vendor: "kimi", transport: "openai-chat", capabilities: { streaming: true, tools: true, vision: false, fileParts: false } },
-  { id: "deepseek-v4-flash", name: "DeepSeek V4 Flash", provider: "opencode-go", vendor: "deepseek", transport: "openai-chat", capabilities: { streaming: true, tools: true, vision: false, fileParts: false } },
-  { id: "deepseek-v4-pro", name: "DeepSeek V4 Pro", provider: "opencode-go", vendor: "deepseek", transport: "openai-chat", capabilities: { streaming: true, tools: true, vision: false, fileParts: false } },
-  { id: "deepseek-flash", name: "DeepSeek Flash", provider: "opencode-go", vendor: "deepseek", transport: "openai-chat", capabilities: { streaming: true, tools: true, vision: false, fileParts: false } },
   { id: "deepseek-v4.1-flash", name: "DeepSeek V4.1 Flash", provider: "opencode-go", vendor: "deepseek", transport: "openai-chat", capabilities: { streaming: true, tools: true, vision: false, fileParts: false } },
-  // deepseek-v4-flash-vision-exp：官方确认 vision 属该独立模型（此前 flash 本体保持 false）
-  { id: "deepseek-v4-flash-vision-exp", name: "DeepSeek V4 Flash Vision", provider: "opencode-go", vendor: "deepseek", transport: "openai-chat", capabilities: { streaming: true, tools: true, vision: true, fileParts: false, visionMimeTypes: ["image/jpeg", "image/png", "image/webp"] } },
   { id: "mimo-v2.5", name: "MiMo V2.5", provider: "opencode-go", vendor: "mimo", transport: "openai-chat", capabilities: { streaming: true, tools: true, vision: true, fileParts: false, visionMimeTypes: ["image/jpeg", "image/png", "image/webp"] } },
-  { id: "mimo-v2-pro", name: "MiMo V2 Pro", provider: "opencode-go", vendor: "mimo", transport: "openai-chat", capabilities: { streaming: true, tools: true, vision: false, fileParts: false } },
   { id: "mimo-v2-omni", name: "MiMo V2 Omni", provider: "opencode-go", vendor: "mimo", transport: "openai-chat", capabilities: { streaming: true, tools: true, vision: false, fileParts: false } },
   { id: "mimo-v2.5-pro", name: "MiMo V2.5 Pro", provider: "opencode-go", vendor: "mimo", transport: "openai-chat", capabilities: { streaming: true, tools: true, vision: false, fileParts: false } },
   { id: "hy3", name: "Hy3", provider: "opencode-go", vendor: "tencent", transport: "openai-chat", capabilities: { streaming: true, tools: true, vision: false, fileParts: false } },
-  { id: "hy3-preview", name: "Hy3 Preview", provider: "opencode-go", vendor: "tencent", transport: "openai-chat", capabilities: { streaming: true, tools: true, vision: false, fileParts: false } },
   { id: "hy4-preview", name: "Hy4 preview", provider: "opencode-go", vendor: "tencent", transport: "openai-chat", capabilities: { streaming: true, tools: true, vision: false, fileParts: false } },
   { id: "glm-5.3-flash", name: "GLM 5.3 Flash", provider: "opencode-go", vendor: "zai", transport: "openai-chat", capabilities: { streaming: true, tools: true, vision: true, fileParts: false, visionMimeTypes: ["image/jpeg", "image/png", "image/webp"] } },
   { id: "glm-5.3", name: "GLM 5.3", provider: "opencode-go", vendor: "zai", transport: "openai-chat", capabilities: { streaming: true, tools: true, vision: false, fileParts: false } },
-  { id: "glm-5.2", name: "GLM 5.2", provider: "opencode-go", vendor: "zai", transport: "openai-chat", capabilities: { streaming: true, tools: true, vision: false, fileParts: false } },
-  { id: "glm-5.1", name: "GLM 5.1", provider: "opencode-go", vendor: "zai", transport: "openai-chat", capabilities: { streaming: true, tools: true, vision: false, fileParts: false } },
-  { id: "glm-5", name: "GLM 5", provider: "opencode-go", vendor: "zai", transport: "openai-chat", capabilities: { streaming: true, tools: true, vision: false, fileParts: false } },
   { id: "longcat-2.0", name: "LongCat 2.0", provider: "opencode-go", vendor: "longcat", transport: "openai-chat", capabilities: { streaming: true, tools: true, vision: false, fileParts: false } },
   // ---- OpenAI Responses（官方 endpoint：/v1/responses → @ai-sdk/openai）----
   // Phase 3.1 正式接入。保守能力声明：vision/fileParts 未经 OpenCode Go proxy 实测不开。
-  // grok-4.5：同 xai responses 协议族；reasoning 未经 live 验证，不声明
-  {
-    id: "grok-4.5",
-    name: "Grok 4.5",
-    provider: "opencode-go",
-    vendor: "xai",
-    transport: "openai-responses",
-    capabilities: { streaming: true, tools: true, vision: false, fileParts: false },
-  },
+  // grok-4.5 等旧版已按去旧留新移出（同 xai responses 协议族；如回归远端列表再收录）
   {
     id: "grok-4.6",
     name: "Grok 4.6",
@@ -156,30 +141,17 @@ export const OPENCODE_MODELS: AIModelDefinition[] = [
       },
     },
   },
-  // muse-spark-1.2-contributor：曾下架后回归远端列表；同 meta responses 协议族，
-  // reasoning/vision 均未经 live 验证，不声明（保守能力）
-  {
-    id: "muse-spark-1.2-contributor",
-    name: "Muse Spark 1.2",
-    provider: "opencode-go",
-    vendor: "meta",
-    transport: "openai-responses",
-    capabilities: { streaming: true, tools: true, vision: false, fileParts: false },
-  },
+  // muse-spark-1.2 等旧版已按去旧留新移出（如回归远端列表再收录）
   // ---- Anthropic Messages（官方 endpoint：/v1/messages）----
   // V1 保守能力声明：streaming + tools 为强要求；vision/fileParts 未经实测不开
   { id: "minimax-m3", name: "MiniMax M3", provider: "opencode-go", vendor: "minimax", transport: "anthropic-messages", capabilities: { streaming: true, tools: true, vision: true, fileParts: false, visionMimeTypes: ["image/jpeg", "image/png", "image/webp"] } },
   { id: "minimax-m2.7", name: "MiniMax M2.7", provider: "opencode-go", vendor: "minimax", transport: "anthropic-messages", capabilities: { streaming: true, tools: true, vision: false, fileParts: false } },
-  { id: "minimax-m2.5", name: "MiniMax M2.5", provider: "opencode-go", vendor: "minimax", transport: "anthropic-messages", capabilities: { streaming: true, tools: true, vision: false, fileParts: false } },
   { id: "qwen3.7-plus", name: "Qwen3.7 Plus", provider: "opencode-go", vendor: "qwen", transport: "anthropic-messages", capabilities: { streaming: true, tools: true, vision: true, fileParts: false, visionMimeTypes: ["image/jpeg", "image/png", "image/webp"] } },
   { id: "qwen3.8-flash", name: "Qwen3.8 Flash", provider: "opencode-go", vendor: "qwen", transport: "anthropic-messages", capabilities: { streaming: true, tools: true, vision: true, fileParts: false, visionMimeTypes: ["image/jpeg", "image/png", "image/webp"] } },
-  { id: "qwen3.7-max", name: "Qwen3.7 Max", provider: "opencode-go", vendor: "qwen", transport: "anthropic-messages", capabilities: { streaming: true, tools: true, vision: false, fileParts: false } },
   { id: "qwen3.8-max", name: "Qwen3.8 Max", provider: "opencode-go", vendor: "qwen", transport: "anthropic-messages", capabilities: { streaming: true, tools: true, vision: false, fileParts: false } },
-  { id: "qwen3.6-plus", name: "Qwen3.6 Plus", provider: "opencode-go", vendor: "qwen", transport: "anthropic-messages", capabilities: { streaming: true, tools: true, vision: false, fileParts: false } },
-  { id: "qwen3.5-plus", name: "Qwen3.5 Plus", provider: "opencode-go", vendor: "qwen", transport: "anthropic-messages", capabilities: { streaming: true, tools: true, vision: false, fileParts: false } },
 ];
 
-export const OPENCODE_DEFAULT_MODEL = "deepseek-v4-flash";
+export const OPENCODE_DEFAULT_MODEL = "deepseek-v4.1-flash";
 
 /**
  * OpenCode Go chat/completions 对 tool 参数 schema 校验严格（与 DeepSeek 官方一致）：
