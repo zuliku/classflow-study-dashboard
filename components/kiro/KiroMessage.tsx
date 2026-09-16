@@ -121,25 +121,6 @@ export function KiroMessage({
 
   const hasActions = !!actionSummaries && actionSummaries.length > 0;
 
-  // V2 跟进建议：基于正文关键词的轻量 follow-up（settled 后，actionsReady 时，低成本启发式）
-  const followUps = React.useMemo(() => {
-    if (!actionsReady || streaming || !content) return [] as string[];
-    if (content.length < 30) return [] as string[];
-    const ups: string[] = [];
-    if (content.includes("任务")) ups.push("帮我把这些任务创建到日历");
-    if (content.includes("学习") || content.includes("复习")) ups.push("生成一周学习计划");
-    if (content.includes("课程") || content.includes("课表")) ups.push("查看相关课程详情");
-    if (content.includes("考试") || content.includes("DDL")) ups.push("提醒我相关截止时间");
-    if (ups.length < 2) ups.push("再详细一点");
-    if (ups.length < 2) ups.push("总结成清单");
-    return ups.slice(0, 3);
-  }, [actionsReady, streaming, content]);
-
-  const handleFollowUp = async (text: string) => {
-    const ok = await copyTextToClipboard(text);
-    if (ok) pushToast({ message: `已复制：${text}` });
-  };
-
   return (
     // V4.6：统一 KiroAssistantShell（Pending 共用同一 outer——Logo/左侧 column 不 remount）
     <KiroAssistantShell testid={testid ?? "kiro-message"} messageId={messageId}>
@@ -266,24 +247,6 @@ export function KiroMessage({
                       )}
                     </KiroMenuPanel>
                 </div>
-              </div>
-            )}
-            {/* 跟进建议：settled 后基于内容关键词的快捷追问（复制即用） */}
-            {(actionsReady ?? true) && !streaming && followUps.length > 0 && (
-              <div
-                data-testid="kiro-followups"
-                className="mt-2 flex flex-wrap gap-1.5"
-              >
-                {followUps.map((q) => (
-                  <button
-                    key={q}
-                    onClick={() => void handleFollowUp(q)}
-                    className="px-2.5 py-1 rounded-full bg-surface border border-line text-[11px] font-medium text-satin-grey hover:bg-alabaster hover:text-charcoal hover:border-line-strong transition-colors"
-                    title="点击复制追问"
-                  >
-                    {q}
-                  </button>
-                ))}
               </div>
             )}
           </div>
