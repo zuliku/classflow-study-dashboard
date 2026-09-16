@@ -131,7 +131,7 @@ export function KiroWorkspaceKnowledgePanel({ workspaceId }: { workspaceId: stri
     <SettingsRow
       settingId="kiro-workspace-knowledge"
       title="工作区知识"
-      description="本地词法索引用于查找相关文件候选；文件正文结论始终以实时读取为准。"
+      description="本地索引查找相关文件；正文以实时读取为准。"
     >
       <div
         className="min-w-0 w-full flex flex-col gap-1"

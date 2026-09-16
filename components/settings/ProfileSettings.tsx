@@ -185,7 +185,7 @@ export function ProfileSettings({
 
   return (
     <div className="space-y-6" data-testid="settings-profile">
-      <SettingsSection title="基本资料" description="你的身份信息，用于学习卡片与课表展示。">
+      <SettingsSection title="基本资料" description="用于学习卡片与课表展示。">
         <div className="space-y-4 text-xs">
           {/* 头像：本地图片选择（无 URL 输入） */}
           <div className="flex items-center gap-4" data-setting-id="profile-avatar">
@@ -265,7 +265,7 @@ export function ProfileSettings({
         </div>
       </SettingsSection>
 
-      <SettingsSection title="学业信息" description="用于总览与侧栏的学分进度展示。">
+      <SettingsSection title="学业信息" description="总览与侧栏据此展示学分进度。">
         <div className="space-y-4 text-xs">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-1" data-setting-id="profile-credits">

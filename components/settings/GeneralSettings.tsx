@@ -53,7 +53,7 @@ export function GeneralSettings({ highlightedId }: { highlightedId?: string }) {
           <SettingsRow
             settingId="startup-view"
             title="默认打开位置"
-            description="下次打开 ClassFlow 时进入的位置。"
+            description="下次打开时进入的位置。"
             modified={modified.has("startupView")}
             onReset={() => updatePreferences(resetPreferencePatch("startupView"))}
             resetAriaLabel="将默认打开位置恢复默认"
@@ -115,7 +115,7 @@ export function GeneralSettings({ highlightedId }: { highlightedId?: string }) {
           <SettingsRow
             settingId="ui-font"
             title="界面字体"
-            description="调整 ClassFlow 的界面字体，不影响代码、终端与数学公式。"
+            description="调整界面字体；不影响代码、终端与数学公式。"
             modified={modified.has("uiFont")}
             onReset={() => updatePreferences(resetPreferencePatch("uiFont"))}
             resetAriaLabel="将界面字体恢复默认"
@@ -141,7 +141,7 @@ export function GeneralSettings({ highlightedId }: { highlightedId?: string }) {
           <SettingsRow
             settingId="ui-font-scale"
             title="界面字号缩放"
-            description="整体界面字号缩放，90% - 120%。"
+            description="90% - 120%。"
             modified={modified.has("uiFontScale")}
             onReset={() => updatePreferences(resetPreferencePatch("uiFontScale"))}
             resetAriaLabel="将界面字号缩放恢复默认"
@@ -161,7 +161,7 @@ export function GeneralSettings({ highlightedId }: { highlightedId?: string }) {
           <SettingsRow
             settingId="sidebar-default-collapsed"
             title="侧栏收起状态"
-            description="切换侧栏展开或收起，并在下次打开时保持当前状态。"
+            description="切换侧栏展开或收起；下次打开时保持。"
             modified={sidebarCollapsed}
             onReset={() => setSidebarCollapsed(false)}
             resetAriaLabel="将侧栏收起状态恢复默认"
@@ -193,7 +193,7 @@ export function GeneralSettings({ highlightedId }: { highlightedId?: string }) {
           <SettingsRow
             settingId="course-palette"
             title="课程调色板"
-            description="自定义课程自动配色的候选颜色（点击「管理」查看全部、移除或添加）。新课程按此顺序轮换。"
+            description="新课程按此顺序轮换；点击「管理」增删颜色。"
             modified={modified.has("coursePalette")}
             onReset={() => updatePreferences(resetPreferencePatch("coursePalette"))}
             resetAriaLabel="将课程调色板恢复默认"
@@ -211,7 +211,7 @@ export function GeneralSettings({ highlightedId }: { highlightedId?: string }) {
           <SettingsRow
             settingId="schedule-direct-manipulation"
             title="课表直接操作"
-            description="在时间表中启用课程、学习计划与待安排任务的直接操作。"
+            description="在时间表中直接拖动调整课程、学习计划与待安排任务。"
             modified={modified.has("enableScheduleDirectManipulation")}
             onReset={() =>
               updatePreferences(resetPreferencePatch("enableScheduleDirectManipulation"))
@@ -229,7 +229,7 @@ export function GeneralSettings({ highlightedId }: { highlightedId?: string }) {
           <SettingsRow
             settingId="ddl-direct-manipulation"
             title="DDL 直接操作"
-            description="在日历中启用拖动调整截止日期。"
+            description="在日历中拖动调整截止日期。"
             modified={modified.has("enableDDLDirectManipulation")}
             onReset={() => updatePreferences(resetPreferencePatch("enableDDLDirectManipulation"))}
             resetAriaLabel="将 DDL 直接操作恢复默认"
@@ -245,7 +245,7 @@ export function GeneralSettings({ highlightedId }: { highlightedId?: string }) {
           <SettingsRow
             settingId="single-key-shortcuts"
             title="启用单键快捷键"
-            description="在未编辑文本时启用 N、J/K、X 等快速操作；标准键盘操作（方向键、Enter、Tab 与 Cmd/Ctrl 组合）始终可用。"
+            description="未编辑文本时可用 N、J/K、X 等单键操作；方向键、Enter、Tab 与 Cmd/Ctrl 组合始终可用。"
             modified={modified.has("enableSingleKeyShortcuts")}
             onReset={() => updatePreferences(resetPreferencePatch("enableSingleKeyShortcuts"))}
             resetAriaLabel="将单键快捷键恢复默认"
@@ -261,7 +261,7 @@ export function GeneralSettings({ highlightedId }: { highlightedId?: string }) {
           <SettingsRow
             settingId="shortcuts-overview"
             title="快捷键说明"
-            description="常用单键与任务列表操作（只读说明，不可修改按键）。"
+            description="常用单键与任务列表操作（只读）。"
             highlighted={highlightedId === "shortcuts-overview"}
           >
             <ShortcutOverviewField />

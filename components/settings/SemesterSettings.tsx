@@ -216,7 +216,7 @@ export function SemesterSettings({
       {editing && <SettingsSaveBar dirty={dirty} onSave={save} onDiscard={discard} />}
 
       {/* 课表显示偏好：显示周末（属于学期与课表范围） */}
-      <SettingsSection title="课表显示" description="课表的时间范围偏好。">
+      <SettingsSection title="课表显示" description="课表显示哪些天。">
         <SettingsRow
           settingId="show-weekends"
           title="显示周末"
@@ -239,7 +239,7 @@ export function SemesterSettings({
         data-setting-id="bell-schedule"
         className={highlightedId === "bell-schedule" ? "bg-pastel-mint/60 rounded-xl" : ""}
       >
-        <SettingsSection title="作息方案" description="管理铃声/节次时间模板，导入的“第3节”按此表解析为具体时间。">
+          <SettingsSection title="作息方案" description="管理节次时间模板；导入的“第3节”按此表解析。">
           <BellScheduleSettings highlightedId={highlightedId} />
         </SettingsSection>
       </div>

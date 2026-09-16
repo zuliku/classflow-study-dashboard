@@ -44,7 +44,7 @@ export function ShortcutOverviewDialog({
       <div className="shrink-0 px-5 py-3.5 border-b border-line-soft flex items-center justify-between gap-3">
         <div className="min-w-0">
           <h3 className="text-sm font-bold text-charcoal">快捷键说明</h3>
-          <p className="text-[11px] text-sandrift mt-0.5">常用单键与任务列表操作（只读，不可修改按键）。</p>
+          <p className="text-[11px] text-sandrift mt-0.5">常用单键与任务列表操作（只读）。</p>
         </div>
         <button
           onClick={() => onOpenChange(false)}
@@ -69,7 +69,7 @@ export function ShortcutOverviewDialog({
       </div>
 
       <div className="shrink-0 px-5 py-3.5 border-t border-line-soft flex items-center justify-between gap-3">
-        <p className="text-[10px] text-sandrift">标准键盘操作（方向键、Enter、Tab 与 Cmd/Ctrl 组合）始终可用。</p>
+        <p className="text-[10px] text-sandrift">方向键、Enter、Tab 与 Cmd/Ctrl 组合始终可用。</p>
         <Button variant="secondary" size="sm" onClick={() => onOpenChange(false)}>
           关闭
         </Button>

@@ -146,7 +146,7 @@ export function TaskSettings({ highlightedId }: { highlightedId?: string }) {
         <SettingsRow
           settingId="default-ddl-time"
           title="默认截止时间"
-          description="新建任务时预填的截止时刻（HH:mm）；编辑已有任务不受影响。"
+            description="新建任务预填的截止时刻（HH:mm）；不影响已有任务。"
           modified={modified.has("defaultDDLTime")}
           onReset={() => updatePreferences(resetPreferencePatch("defaultDDLTime"))}
           resetAriaLabel="将默认截止时间恢复默认"
@@ -164,7 +164,7 @@ export function TaskSettings({ highlightedId }: { highlightedId?: string }) {
         <SettingsRow
           settingId="default-task-priority"
           title="默认优先级"
-          description="新建任务时预填的优先级。"
+            description="新建任务预填的优先级。"
           modified={modified.has("defaultTaskPriority")}
           onReset={() => updatePreferences(resetPreferencePatch("defaultTaskPriority"))}
           resetAriaLabel="将默认优先级恢复默认"
@@ -181,7 +181,7 @@ export function TaskSettings({ highlightedId }: { highlightedId?: string }) {
         <SettingsRow
           settingId="default-task-status"
           title="默认状态"
-          description="新建任务时预填的状态（进行中的任务默认待完成）。"
+            description="新建任务预填的状态。"
           modified={modified.has("defaultTaskStatus")}
           onReset={() => updatePreferences(resetPreferencePatch("defaultTaskStatus"))}
           resetAriaLabel="将默认状态恢复默认"
@@ -198,7 +198,7 @@ export function TaskSettings({ highlightedId }: { highlightedId?: string }) {
         <SettingsRow
           settingId="default-task-workspace-view"
           title="默认任务视图"
-          description="每次打开 ClassFlow 时，任务工作区默认显示的视图。"
+            description="打开时任务工作区默认显示的视图。"
           modified={modified.has("defaultTaskWorkspaceView")}
           onReset={() => updatePreferences(resetPreferencePatch("defaultTaskWorkspaceView"))}
           resetAriaLabel="将默认任务视图恢复默认"
@@ -219,7 +219,7 @@ export function TaskSettings({ highlightedId }: { highlightedId?: string }) {
           <SettingsRow
             settingId="deadline-default-reminder"
             title="任务与 DDL 默认提醒"
-            description="为新建和现有的截止事项自动创建提醒。修改后会同步更新使用默认设置的自动提醒，自定义提醒不受影响。"
+            description="为截止事项自动创建提醒；修改后同步更新默认提醒，自定义提醒不受影响。"
             modified={modified.has("defaultDeadlineReminderMinutes")}
             onReset={() => setDefaultDeadlineReminderMinutes(DEFAULT_DEADLINE_REMINDER_MINUTES)}
             resetAriaLabel="将任务与 DDL 默认提醒恢复默认"
@@ -240,7 +240,7 @@ export function TaskSettings({ highlightedId }: { highlightedId?: string }) {
           <SettingsRow
             settingId="in-app-reminders"
             title="应用内提醒"
-            description="提醒到期时在 ClassFlow 内展示提醒中心与角标。"
+            description="提醒到期时展示提醒中心与角标。"
           >
             <span className="px-2 py-0.5 rounded-full bg-pastel-mint text-[10px] font-bold text-charcoal shrink-0">
               始终开启
@@ -282,7 +282,7 @@ export function TaskSettings({ highlightedId }: { highlightedId?: string }) {
           <SettingsRow
             settingId="missed-reminder-policy"
             title="错过提醒处理"
-            description="ClassFlow 未打开期间错过提醒时的处理方式。"
+            description="未打开期间错过提醒时的处理方式。"
             modified={reminderModified.has("missedReminderPolicy")}
             onReset={() => resetReminderPreference("missedReminderPolicy")}
             resetAriaLabel="将错过提醒处理恢复默认"
@@ -300,7 +300,7 @@ export function TaskSettings({ highlightedId }: { highlightedId?: string }) {
             <SettingsRow
               settingId="missed-reminder-window"
               title="补发时间范围"
-              description="只补发距离当前时间不超过该范围的提醒。"
+              description="仅补发指定范围内的错过提醒。"
               modified={reminderModified.has("missedReminderWindowHours")}
               onReset={() => resetReminderPreference("missedReminderWindowHours")}
               resetAriaLabel="将补发时间范围恢复默认"
@@ -326,7 +326,7 @@ export function TaskSettings({ highlightedId }: { highlightedId?: string }) {
           <SettingsRow
             settingId="do-not-disturb"
             title="免打扰时段"
-            description="在此时段内暂停系统通知和提醒声音，仅保留应用内提醒。"
+            description="暂停系统通知和提醒声音；应用内提醒不受影响。"
             modified={isDoNotDisturbModified(reminderPrefs)}
             onReset={() => resetDoNotDisturb()}
             resetAriaLabel="将免打扰时段恢复默认"

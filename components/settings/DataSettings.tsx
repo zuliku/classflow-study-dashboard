@@ -52,7 +52,7 @@ export function DataSettings() {
   const reloadDemoData = () => {
     useConfirmStore.getState().confirm({
       title: "载入示例数据？",
-      description: "这会用示例学期数据（课程、任务、课表、作息方案、学习计划、专注记录、提醒、小组项目）替换当前业务数据。个人资料与偏好设置不受影响。",
+      description: "用示例学期数据替换当前业务数据（覆盖课程、课表、任务等）。个人资料与偏好不受影响。",
       confirmLabel: "载入示例数据",
       onConfirm: () => {
         import("@/lib/dev/fullDemoData").then(({ buildFullDemoData }) => {
@@ -125,17 +125,17 @@ export function DataSettings() {
 
         {/* 隐私：本地优先的数据边界（真实行为说明，非虚构承诺） */}
         <SettingsGroup title="隐私">
-          <SettingsRow settingId="kiro-privacy-local" title="本地优先" description="课程、任务、记忆与聊天历史保存在当前设备；附件正文存入本地存储。">
+          <SettingsRow settingId="kiro-privacy-local" title="本地优先" description="课程、任务、记忆与聊天记录存放在当前设备；附件正文存本地。">
             <span className="px-2 py-0.5 rounded-full bg-alabaster border border-line text-[10px] font-bold text-satin-grey shrink-0">
               本地存储
             </span>
           </SettingsRow>
-          <SettingsRow settingId="kiro-privacy-api-key" title="API Key" description="仅保存在当前会话（session 级存储），不写入本地存储、备份或日志。">
+          <SettingsRow settingId="kiro-privacy-api-key" title="API Key" description="仅保存在当前会话；不写入本地存储、备份或日志。">
             <span className="px-2 py-0.5 rounded-full bg-alabaster border border-line text-[10px] font-bold text-satin-grey shrink-0">
               会话级
             </span>
           </SettingsRow>
-          <SettingsRow settingId="kiro-privacy-context" title="上下文发送" description="发送给 AI 服务的仅包括当前对话、必要的 ClassFlow 上下文与你选择的资料内容。">
+          <SettingsRow settingId="kiro-privacy-context" title="上下文发送" description="仅发送当前对话、必要的上下文与所选资料内容。">
             <span className="px-2 py-0.5 rounded-full bg-alabaster border border-line text-[10px] font-bold text-satin-grey shrink-0">
               按需发送
             </span>
@@ -152,7 +152,7 @@ export function DataSettings() {
           <div data-testid="dev-demo-reload">
             <SettingsActionRow
               title="完整示例数据"
-              description="一份完整的示例学期数据，覆盖课程、课表、作息方案、任务、学习计划、专注记录、提醒与小组项目。载入后会替换当前业务数据，个人资料与偏好不受影响。"
+              description="示例学期数据，覆盖课程、课表、任务等；载入后替换当前业务数据，个人资料与偏好不受影响。"
               icon={<RefreshCcw className="w-3.5 h-3.5 text-[#A48F82]" />}
               actionLabel="载入示例数据"
               onAction={reloadDemoData}

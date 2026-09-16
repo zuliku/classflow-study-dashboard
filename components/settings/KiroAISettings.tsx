@@ -261,7 +261,7 @@ export function KiroAISettings({ reveal }: { reveal?: { key: string; seq: number
   return (
     <SettingsSection
       title="Kiro"
-      description="配置 Kiro 使用的 AI 服务与回答行为。API Key 默认仅保存在本次应用会话中。"
+      description="配置 AI 服务与回答行为。"
     >
       <div className="text-xs space-y-4" data-testid="settings-kiro">
         {/* ---- Kiro ---- */}
@@ -280,7 +280,7 @@ export function KiroAISettings({ reveal }: { reveal?: { key: string; seq: number
           <SettingsRow
             settingId="ai-provider"
             title="AI 服务"
-            description="选择 Kiro 使用的模型服务，配置保存在本地（不含 API Key）。"
+            description="选择模型服务；配置保存在本地，不含 API Key。"
           >
             <SettingsSelect
               value={provider}
@@ -324,7 +324,7 @@ export function KiroAISettings({ reveal }: { reveal?: { key: string; seq: number
               <SettingsRow
                 settingId="ai-custom-url"
                 title="服务地址"
-                description="OpenAI 兼容接口的 Base URL；https:// 开头，私网地址会被拒绝。"
+                description="OpenAI 兼容接口的 Base URL（https，拒绝私网地址）。"
               >
                 <SettingsInput
                   value={custom.baseURL}
@@ -336,7 +336,7 @@ export function KiroAISettings({ reveal }: { reveal?: { key: string; seq: number
               <SettingsRow
                 settingId="ai-custom-model"
                 title="模型 ID"
-                description="该服务实际使用的模型名称。"
+                description="服务实际使用的模型名称。"
               >
                 <SettingsInput
                   value={custom.model}
@@ -351,7 +351,7 @@ export function KiroAISettings({ reveal }: { reveal?: { key: string; seq: number
           <SettingsRow
             settingId="ai-api-key"
             title="API Key"
-            description="API Key 默认仅保存在本次应用会话中（调用时会发送到 ClassFlow 服务端转发）。"
+            description="仅保存在本次应用会话；调用时经 ClassFlow 服务端转发。"
           >
             <div className="relative w-full">
               <SettingsInput
@@ -408,7 +408,7 @@ export function KiroAISettings({ reveal }: { reveal?: { key: string; seq: number
           <SettingsRow
             settingId="ai-reasoning-effort"
             title="思考程度"
-            description="控制支持该能力的模型在回答前投入的推理计算。"
+            description="支持该能力的模型在回答前投入的推理计算量。"
           >
             {reasoningCapability.adjustable ? (
               <SettingsSegmentedControl<KiroReasoningEffort>
@@ -428,7 +428,7 @@ export function KiroAISettings({ reveal }: { reveal?: { key: string; seq: number
           <SettingsRow
             settingId="kiro-response-preference"
             title="回答偏好"
-            description="只调整 Kiro 最终回答的表达深度，不影响必要的数据读取、工具调用或安全规则。"
+            description="只调整最终回答的表达深度；不影响数据读取、工具调用与安全规则。"
             modified={kiroSettingsModified.has("responsePreference")}
             onReset={() => resetKiroSettingsPreference("responsePreference")}
             resetAriaLabel="将回答偏好恢复默认"
@@ -453,7 +453,7 @@ export function KiroAISettings({ reveal }: { reveal?: { key: string; seq: number
           <SettingsRow
             settingId="kiro-output-text-size"
             title="输出字号"
-            description="调整 Kiro 回复正文、公式、代码与表格的显示大小。"
+            description="调整回复正文、公式、代码与表格的显示大小。"
             modified={kiroSettingsModified.has("outputTextSize")}
             onReset={() => resetKiroSettingsPreference("outputTextSize")}
             resetAriaLabel="将输出字号恢复默认"
@@ -476,7 +476,7 @@ export function KiroAISettings({ reveal }: { reveal?: { key: string; seq: number
           <SettingsRow
             settingId="kiro-auto-context"
             title="自动环境上下文"
-            description="根据当前页面、时间范围和选中对象，自动为 Kiro 带入相关上下文。关闭后仍可通过 @ 手动添加课程、任务和资料。"
+            description="按当前页面、时间与选中对象自动带入上下文；关闭后可用 @ 手动添加。"
             modified={kiroSettingsModified.has("autoContextEnabled")}
             onReset={() => resetKiroSettingsPreference("autoContextEnabled")}
             resetAriaLabel="将自动环境上下文恢复默认"
@@ -491,7 +491,7 @@ export function KiroAISettings({ reveal }: { reveal?: { key: string; seq: number
           <SettingsRow
             settingId="kiro-web-search-enabled"
             title="联网搜索"
-            description="Kiro 需要最新或可能随时间变化的信息时自动联网搜索。"
+            description="需要最新信息时自动联网搜索。"
             modified={kiroSettingsModified.has("webSearchEnabled")}
             onReset={() => resetKiroSettingsPreference("webSearchEnabled")}
             resetAriaLabel="将联网搜索恢复默认"
@@ -527,7 +527,7 @@ export function KiroAISettings({ reveal }: { reveal?: { key: string; seq: number
               </button>
               <DisclosureRegion open={searchSettingsOpen}>
                 <div className="space-y-1">
-                  <SettingsRow settingId="kiro-web-search-service" title="搜索服务" description="Kiro Search 提供实时网页检索能力。">
+                  <SettingsRow settingId="kiro-web-search-service" title="搜索服务" description="实时网页检索服务。">
                     <span className="px-2 py-0.5 rounded-full bg-pastel-mint text-[10px] font-bold text-charcoal shrink-0">
                       Kiro Search
                     </span>
@@ -536,7 +536,7 @@ export function KiroAISettings({ reveal }: { reveal?: { key: string; seq: number
                   <SettingsRow
                     settingId="kiro-web-search-credential"
                     title="凭据"
-                    description="选择搜索凭据来源；使用自己的 API Key 时，Key 仅保存在本次应用会话中。"
+                     description="选择凭据来源；自备 Key 仅保存在本次会话。"
                     modified={kiroSettingsModified.has("webSearchCredentialMode")}
                     onReset={() => resetKiroSettingsPreference("webSearchCredentialMode")}
                     resetAriaLabel="将搜索凭据恢复默认"
@@ -576,7 +576,7 @@ export function KiroAISettings({ reveal }: { reveal?: { key: string; seq: number
                     <SettingsRow
                       settingId="kiro-web-search-byok-key"
                       title="Tavily API Key"
-                      description="仅保存在本次应用会话中（调用时发送到 ClassFlow 服务端转发）。"
+                      description="仅保存在本次会话；调用时经服务端转发。"
                     >
                       <div className="relative w-full">
                         <SettingsInput
@@ -604,7 +604,7 @@ export function KiroAISettings({ reveal }: { reveal?: { key: string; seq: number
                   <SettingsRow
                     settingId="kiro-web-search-test"
                     title="测试搜索连接"
-                    description="只发送最小搜索请求验证凭据，不发送对话或 ClassFlow 数据。"
+                     description="仅发送最小搜索请求验证凭据；不发送对话与业务数据。"
                   >
                     <div className="flex items-center gap-2.5">
                       <SettingsButton variant="accent" onClick={runWebSearchTest} disabled={webSearchTest.status === "testing" || !webSearchEnabled}>
@@ -627,7 +627,7 @@ export function KiroAISettings({ reveal }: { reveal?: { key: string; seq: number
                     </div>
                   </SettingsRow>
 
-                  <SettingsRow settingId="kiro-web-search-privacy" title="隐私" description="联网搜索开启时，Kiro 可能将当前搜索查询发送给搜索服务。使用自己的 API Key 时，Key 仅保存在本次应用会话中。">
+                  <SettingsRow settingId="kiro-web-search-privacy" title="隐私" description="开启后，搜索查询可能发送给搜索服务；自备 Key 仅保存在本次会话。">
                     <span className="px-2 py-0.5 rounded-full bg-alabaster border border-line text-[10px] font-bold text-satin-grey shrink-0">
                       按需发送
                     </span>
@@ -667,7 +667,7 @@ export function KiroAISettings({ reveal }: { reveal?: { key: string; seq: number
                 <SettingsRow
                   settingId="ai-custom-capabilities"
                   title="模型能力"
-                  description="只有你的兼容服务实际支持这些能力时才开启；默认关闭（保守策略）。"
+                   description="仅当兼容服务实际支持时开启；默认关闭。"
                 >
                   <div className="flex items-center gap-4 text-[11px] font-semibold text-satin-grey">
                     <label className="flex items-center gap-1.5 cursor-pointer">
@@ -722,7 +722,7 @@ export function KiroAISettings({ reveal }: { reveal?: { key: string; seq: number
                   <SettingsRow
                     settingId="kiro-web-pdf-vision-model"
                     title="Vision 模型"
-                    description="用于识别扫描 PDF 页面的 OpenCode Go 视觉模型。"
+                     description="识别扫描 PDF 页面的视觉模型。"
                     modified={kiroSettingsModified.has("webPdfVisionModel")}
                     onReset={() => resetKiroSettingsPreference("webPdfVisionModel")}
                     resetAriaLabel="将 Vision 模型恢复默认"
@@ -739,7 +739,7 @@ export function KiroAISettings({ reveal }: { reveal?: { key: string; seq: number
                   <SettingsRow
                     settingId="kiro-web-pdf-vision-key"
                     title="OpenCode Go Vision API Key"
-                    description="仅用于读取联网搜索发现的扫描型 PDF。密钥仅保存在本次应用会话中。"
+                     description="密钥仅保存在本次会话；仅用于读取扫描型 PDF。"
                   >
                     <div className="relative w-full">
                       <SettingsInput

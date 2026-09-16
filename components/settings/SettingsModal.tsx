@@ -84,7 +84,7 @@ export function SettingsModal() {
     }
     confirmRequest({
       title: "放弃未保存的更改？",
-      description: "个人资料或学期设置还有未保存的修改，关闭设置后将丢失。",
+      description: "个人资料或学期设置有未保存的修改，关闭后将丢失。",
       confirmLabel: "放弃更改",
       onConfirm: () => {
         // 通知各 section 丢弃本地草稿（Modal 仍在退出动画期间，effect 可执行）

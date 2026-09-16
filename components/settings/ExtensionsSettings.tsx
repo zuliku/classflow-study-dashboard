@@ -316,7 +316,7 @@ export function ExtensionsSettings() {
     <div className="space-y-6" data-testid="settings-extensions">
       <SettingsSection
         title="连接与扩展"
-        description="让 Kiro 使用你的工作流、外部工具与消息来源。"
+        description="让 Kiro 使用工作流、外部工具与消息来源。"
       >
         <div
           data-setting-id="extensions-overview"
@@ -337,7 +337,7 @@ export function ExtensionsSettings() {
         <div className={cn("space-y-3", activeTab === "skills" && "ux-page")} data-testid="extensions-skills-panel" data-setting-id="extensions-skills" hidden={activeTab !== "skills"}>
           <SettingsGroup
             title="Skills"
-            description="将常用的 Kiro 工作流程保存为可复用能力。"
+            description="将常用工作流程保存为可复用能力。"
             action={
               <div className="flex items-center gap-2">
                 <button

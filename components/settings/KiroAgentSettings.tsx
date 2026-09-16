@@ -269,14 +269,14 @@ export function KiroAgentSettings() {
   return (
     <SettingsSection
       title="Agent 与权限"
-      description="Kiro 能操作哪些文件、自动执行到什么程度，以及当前可以访问的位置。"
+      description="可操作的文件范围、自动执行程度与可访问位置。"
     >
       <div className="text-xs space-y-4" data-testid="settings-kiro-agent">
         <SettingsGroup title="文件操作">
           <SettingsRow
             settingId="kiro-computer-enabled"
             title="允许 Kiro 操作文件"
-            description="开启后 Kiro 可在授权的工作区内读取、创建和受控修改文件；危险系统能力仍保持禁用。"
+            description="开启后可在授权工作区内读取、创建与受控修改文件；危险能力保持禁用。"
           >
             <SettingsToggle
               checked={computerEnabled}
@@ -290,7 +290,7 @@ export function KiroAgentSettings() {
           <SettingsRow
             settingId="kiro-agent-mode"
             title="自动执行级别"
-            description="决定工作区内允许的操作等级；「授权范围内自动」可自动执行创建、修改、移动和普通终端命令；删除及识别到的高风险命令仍会请求确认。终端命令本身可能访问工作区之外的系统资源。"
+            description="决定操作等级；「授权范围内自动」可执行创建、修改、移动与普通终端命令，删除与高风险命令仍需确认。终端命令可能访问工作区外资源。"
           >
             <SettingsSegmentedControl<KiroAgentMode>
               value={agentMode}
@@ -310,7 +310,7 @@ export function KiroAgentSettings() {
                   ? "PowerShell / CMD · 当前本地工作区"
                   : terminalEnabled
                   ? "需要先选择一个本地文件夹工作区"
-                  : "PowerShell / CMD 支持已就绪，开启后 Kiro 才能执行命令。"
+                  : "开启后 Kiro 才能执行 PowerShell / CMD 命令。"
               }
             >
               <SettingsToggle
@@ -323,7 +323,7 @@ export function KiroAgentSettings() {
             <SettingsRow
               settingId="kiro-terminal-enabled"
               title="允许 Kiro 使用终端"
-              description="仅 ClassFlow 桌面版支持终端操作"
+              description="仅桌面版支持终端操作"
             >
               <SettingsToggle
                 checked={false}

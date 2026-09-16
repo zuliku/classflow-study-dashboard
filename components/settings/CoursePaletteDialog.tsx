@@ -219,9 +219,9 @@ export function CoursePaletteDialog({
               {error}
             </p>
           ) : (
-            <p className="text-[10px] text-sandrift leading-relaxed">
-              可从预设选择、用取色板微调，或直接输入 HEX（#RRGGBB / #RGB / 可缺 #）；点击已有色块右上 × 可移除。
-            </p>
+              <p className="text-[10px] text-sandrift leading-relaxed">
+                从预设选择、取色板微调或直接输入 HEX；点击已有色块右上 × 移除。
+              </p>
           )}
         </div>
       </div>
