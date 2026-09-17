@@ -10,18 +10,38 @@ const readMaterialSchema = z.object({
   materialId: z.string().trim().min(1).max(120),
 });
 
-/** Material.type → 提取器 kind */
+/** Material.type → 提取器 kind（doc/ppt 由调用方先经标题扩展名消歧，不直接使用） */
 function materialTypeToKind(type: string): KiroAttachmentKind | null {
   switch (type) {
     case "pdf":
       return "pdf";
-    case "doc":
-      return "docx";
     case "image":
       return "image";
     default:
-      return null; // link / ppt 等暂不支持正文
+      return null;
   }
+}
+
+/**
+ * 材料 kind 消歧（导出供测试）："doc" 类型可能是 DOCX / 纯文本 / XLSX（上传时统一映射为 doc），
+ * "ppt" 类型可能是 PPTX（可读）或旧版 PPT（二进制，需明确拒绝）。
+ * 文件名扩展名优先（材料标题即原文件名），Blob MIME 兜底。
+ */
+export function resolveMaterialKind(type: string, title: string, blobMime: string): KiroAttachmentKind | null {
+  const ext = (title.split(".").pop() ?? "").toLowerCase();
+  if (type === "ppt") {
+    // .ppt 为旧版二进制，zip 解析必失败 → 走 legacy 明确指引而非笼统失败
+    return ext === "ppt" ? null : "slides";
+  }
+  if (type === "doc") {
+    if (ext === "xlsx" || ext === "xls") return "spreadsheet";
+    if (ext === "pptx") return "slides";
+    if (ext === "txt" || ext === "md" || ext === "markdown" || ext === "csv" || ext === "tsv") return "text";
+    if (ext === "doc" || ext === "ppt") return null; // 旧版二进制：明确拒绝
+    if ((blobMime || "").toLowerCase().startsWith("text/")) return "text";
+    return "docx";
+  }
+  return materialTypeToKind(type);
 }
 
 /**
@@ -67,11 +87,9 @@ export async function executeReadMaterial(
     };
   }
 
-  // "doc" 类型可能是 DOCX 也可能是纯文本：先按 Blob MIME 路由，再按 Material.type
-  let kind = materialTypeToKind(material.type);
-  if (kind === "docx" && (blob.type || "").toLowerCase().startsWith("text/")) {
-    kind = "text";
-  }
+  // kind 消歧：Material.type（ppt/doc）+ 标题扩展名 + Blob MIME 三源确定真实格式；
+  // 旧版二进制（.doc/.ppt）走明确拒绝而非提取失败
+  const kind = resolveMaterialKind(material.type, material.title, blob.type);
   if (!kind) {
     return {
       ok: true,
@@ -81,7 +99,7 @@ export async function executeReadMaterial(
         title: material.title,
         type: material.type,
         text: "",
-        note: "暂不支持读取该类资料的正文。",
+        note: "暂不支持旧版 Office 格式（.doc/.ppt），请另存为 .docx/.pptx 后重试。",
       },
     };
   }

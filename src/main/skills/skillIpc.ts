@@ -7,6 +7,7 @@
 import { ipcMain, dialog, BrowserWindow } from "electron";
 import { listSkills, getSkill, createSkill, updateSkill, deleteSkill, setSkillEnabled, importSkill, exportSkill, testSkill } from "@/src/main/skills/skillStore";
 import { activateSkill } from "@/lib/ai/skills/activation";
+import { withBuiltinSkills } from "@/lib/ai/skills/builtin";
 
 function toIpcError(err: unknown): never {
   const e = err as { code?: string; message?: string };
@@ -30,7 +31,7 @@ export function registerSkillIpc(opts?: {
   ipcMain.handle("bridge:skill:list", (event) => {
     if (!guard("bridge:skill:list", event)) throw new Error(JSON.stringify({ code: "PERMISSION_DENIED" }));
     try {
-      const skills = listSkills();
+      const skills = withBuiltinSkills(listSkills());
       return {
         skills: skills.map((s) => ({
           name: s.name,
@@ -169,7 +170,7 @@ export function registerSkillIpc(opts?: {
     if (!guard("bridge:skill:activate", event)) throw new Error(JSON.stringify({ code: "PERMISSION_DENIED" }));
     try {
       const { skillName } = input as { skillName?: string };
-      const skills = listSkills();
+      const skills = withBuiltinSkills(listSkills());
       const result = activateSkill(skills, { skillName: skillName ?? "" });
       if (!result.ok) throw new Error(JSON.stringify({ code: result.code ?? "NOT_FOUND", message: result.error }));
       return result;

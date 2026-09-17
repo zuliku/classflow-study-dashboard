@@ -1,6 +1,5 @@
 /** Kiro 附件类型（临时本地文件 + 已有课程资料） */
-
-export type KiroAttachmentKind = "text" | "pdf" | "docx" | "image";
+export type KiroAttachmentKind = "text" | "pdf" | "docx" | "spreadsheet" | "slides" | "image";
 
 export type KiroAttachmentStatus = "ready" | "processing" | "error" | "unsupported";
 

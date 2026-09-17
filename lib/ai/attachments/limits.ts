@@ -7,6 +7,8 @@ export const MAX_ATTACHMENTS_PER_TURN = 5;
 export const SIZE_LIMITS: Record<string, number> = {
   pdf: 20 * 1024 * 1024,
   docx: 20 * 1024 * 1024,
+  spreadsheet: 20 * 1024 * 1024,
+  slides: 20 * 1024 * 1024,
   text: 5 * 1024 * 1024,
   image: 10 * 1024 * 1024,
 };
@@ -23,8 +25,8 @@ export const MAX_DOCUMENT_READS_PER_TURN = 5;
 /** @deprecated 兼容别名：重型文档读取统一使用 MAX_DOCUMENT_READS_PER_TURN */
 export const MAX_MATERIAL_READS_PER_TURN = MAX_DOCUMENT_READS_PER_TURN;
 
-/** 提取器版本（缓存失效用）：v4 起 1–2 页零文本 PDF 经 canonical classifier 判定为 scanned（V1.4.2） */
-export const EXTRACTOR_VERSION = 4;
+/** 提取器版本（缓存失效用）：v5 起支持 spreadsheet / slides 提取 + legacy 旧版 Office 明确拒绝 */
+export const EXTRACTOR_VERSION = 5;
 
 // ---- V1.4：Project File 本地词法检索 / PDF 定向页读取 ----
 

@@ -36,7 +36,7 @@ const schema = z
 export type ReadProjectFileResult = {
   projectFileId: string;
   name: string;
-  kind: "text" | "pdf" | "docx" | "image";
+  kind: "text" | "pdf" | "docx" | "spreadsheet" | "slides" | "image";
   text: string;
   truncated: boolean;
   pages?: { page: number; text: string }[];

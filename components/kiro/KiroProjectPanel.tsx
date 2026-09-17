@@ -631,7 +631,7 @@ export function KiroProjectPanel({
                       ref={fileInputRef}
                       type="file"
                       multiple
-                      accept=".pdf,.docx,.txt,.md,.markdown,.png,.jpg,.jpeg,.webp"
+                      accept=".pdf,.docx,.xlsx,.xls,.pptx,.csv,.txt,.md,.markdown,.png,.jpg,.jpeg,.webp"
                       aria-label="上传项目资料"
                       className="hidden"
                       onChange={(e) => {

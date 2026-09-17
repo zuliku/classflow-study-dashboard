@@ -9,6 +9,7 @@
  *   不提前 break（后部 exact match 不丢失）
  * - TXT/MD：blob.text() 完整原文（绝不调用 extractTextFile 的 100k truncate）
  * - DOCX：extractDocxRawText（mammoth untruncated raw text）
+ * - XLSX/XLS：extractXlsxRawText（SheetJS untruncated）；PPTX：extractPptxRawText（untruncated）
  * - 不持久化全文（不进 cache / IndexedDB / Memory）
  * - 输出 bounded：maxResults ≤ 8、snippet ≤ 1200、总 chars ≤ 8000
  * - truncated 表示「存在更多匹配未返回」（maxResults / 总预算），绝不是原文 100k 截断
@@ -18,6 +19,8 @@ import { getProjectFileBlob } from "@/lib/ai/projects/files/db";
 import { resolveProjectFileForTurn } from "@/lib/ai/projects/files/access";
 import { searchPdfText, searchLocalText } from "@/lib/ai/attachments/documentSearch";
 import { extractDocxRawText } from "@/lib/ai/attachments/docx";
+import { extractXlsxRawText } from "@/lib/ai/attachments/xlsx";
+import { extractPptxRawText } from "@/lib/ai/attachments/pptx";
 import { KiroProjectTurnContext } from "@/lib/ai/contextBudget/types";
 
 const schema = z
@@ -35,7 +38,7 @@ export type SearchProjectFileMatch =
 export type SearchProjectFileResult = {
   projectFileId: string;
   name: string;
-  kind: "text" | "pdf" | "docx";
+  kind: "text" | "pdf" | "docx" | "spreadsheet" | "slides";
   query: string;
   matches: SearchProjectFileMatch[];
   matchCount: number;
@@ -55,6 +58,8 @@ export interface SearchProjectFileDeps {
   searchPdf?: typeof searchPdfText;
   searchText?: typeof searchLocalText;
   docxRawText?: typeof extractDocxRawText;
+  xlsxRawText?: typeof extractXlsxRawText;
+  pptxRawText?: typeof extractPptxRawText;
 }
 
 export type SearchProjectFileOutcome =
@@ -125,18 +130,22 @@ export async function executeSearchProjectFile(
       };
     }
 
-    if (record.kind === "docx") {
-      // untruncated mammoth raw text（绝不使用 extractDocx 的 100k bounded 结果）
-      const docxRawText = opts.deps?.docxRawText ?? extractDocxRawText;
-      const raw = await docxRawText(blob);
+    if (record.kind === "docx" || record.kind === "spreadsheet" || record.kind === "slides") {
+      // untruncated raw text（绝不使用 bounded extraction 的 100k 结果）
+      const rawText =
+        record.kind === "docx"
+          ? await (opts.deps?.docxRawText ?? extractDocxRawText)(blob)
+          : record.kind === "spreadsheet"
+          ? await (opts.deps?.xlsxRawText ?? extractXlsxRawText)(blob)
+          : await (opts.deps?.pptxRawText ?? extractPptxRawText)(blob);
       const searchText = opts.deps?.searchText ?? searchLocalText;
-      const r = searchText(raw, query, { maxResults });
+      const r = searchText(rawText, query, { maxResults });
       return {
         ok: true,
         data: {
           projectFileId,
           name: record.name,
-          kind: "docx",
+          kind: record.kind,
           query,
           matches: r.matches.map((m) => ({ text: m.text })),
           matchCount: r.matchCount,

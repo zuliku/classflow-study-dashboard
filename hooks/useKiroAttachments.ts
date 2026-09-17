@@ -82,7 +82,7 @@ export function useKiroAttachments() {
           size: file.size,
           kind: routed.ok ? routed.kind : "text",
           status: routed.ok ? "processing" : "unsupported",
-          error: routed.ok ? undefined : routed.reason === "too_large" ? "文件超过大小限制。" : "暂不支持这种文件类型。",
+          error: routed.ok ? undefined : routed.reason === "too_large" ? "文件超过大小限制。" : routed.reason === "legacy" ? "暂不支持旧版 Office 格式（.doc/.ppt），请另存为 .docx/.pptx 后重试。" : "暂不支持这种文件类型。",
         };
         pending.push({ id: base.id, base, routed });
       }

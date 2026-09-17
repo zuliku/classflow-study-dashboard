@@ -8,7 +8,6 @@ import { SettingsInput } from "@/components/settings/SettingsControls";
 import { ColorSwatch } from "@/components/ui/ColorSwatch";
 import { CustomColorPicker } from "@/components/settings/CustomColorPicker";
 import {
-  CURATED_COLOR_PRESETS,
   MAX_COURSE_PALETTE_SIZE,
   MIN_COURSE_PALETTE_SIZE,
   normalizeHex,
@@ -86,6 +85,7 @@ export function CoursePaletteDialog({
       overlayId="course-palette-dialog"
       stackZ={60}
       closeOnBackdrop
+      trapFocus
       aria-label="管理课程调色板"
       data-testid="course-palette-dialog"
       className="max-w-md max-h-[90dvh] flex flex-col"
@@ -140,36 +140,6 @@ export function CoursePaletteDialog({
 
         <div className="space-y-2.5">
           <p className="text-[10px] font-bold text-sandrift uppercase tracking-wider">添加颜色</p>
-          <div
-            role="group"
-            aria-label="预设颜色"
-            className="grid grid-cols-8 gap-1.5"
-          >
-            {CURATED_COLOR_PRESETS.map((preset) => {
-              const added = paletteIncludes(value, preset);
-              const isDraft = normalizedDraft === preset.toUpperCase();
-              return (
-                <ColorSwatch
-                  key={preset}
-                  color={preset}
-                  size="sm"
-                  selected={isDraft}
-                  disabled={added}
-                  onSelect={
-                    added
-                      ? undefined
-                      : () => {
-                          setDraft(preset);
-                          setError(null);
-                        }
-                  }
-                  title={added ? `${preset}（已在调色板）` : preset}
-                  ariaLabel={added ? `${preset}（已在调色板）` : `选择预设 ${preset}`}
-                />
-              );
-            })}
-          </div>
-
           {/* 自定义取色：面板 + 色相条直接写入草稿，HEX 输入框同步显示精确值 */}
           <CustomColorPicker
             value={draft}
@@ -216,7 +186,7 @@ export function CoursePaletteDialog({
             </p>
           ) : (
               <p className="text-[10px] text-sandrift leading-relaxed">
-                支持预设、取色板微调与 HEX 直接输入。
+                用取色板微调或直接输入 HEX。
               </p>
           )}
         </div>

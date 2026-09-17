@@ -357,7 +357,8 @@ export async function handleChat(req: Request) {
   let slashSkillSection = "";
   try {
     const { listSkills } = await import("@/src/main/skills/skillStore");
-    const pkgs = listSkills();
+    const { withBuiltinSkills } = await import("@/lib/ai/skills/builtin");
+    const pkgs = withBuiltinSkills(listSkills());
     const catalog = pkgs.filter((p) => p.enabled).map((p) => ({ name: p.name, description: p.description, enabled: true }));
     const { buildSkillCatalogPromptSection, buildSkillActivationPrompt } = await import("@/lib/ai/skills/prompt");
     skillCatalogSection = buildSkillCatalogPromptSection(catalog);

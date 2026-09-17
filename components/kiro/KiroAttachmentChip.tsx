@@ -18,6 +18,8 @@ function typeLabel(a: KiroAttachmentView): string {
   }
   if (a.kind === "pdf") return "PDF";
   if (a.kind === "docx") return ext === "DOC" ? "DOC" : "DOCX";
+  if (a.kind === "spreadsheet") return ["XLS", "XLSX", "CSV", "TSV"].includes(ext) ? ext : "表格";
+  if (a.kind === "slides") return ["PPT", "PPTX"].includes(ext) ? ext : "幻灯片";
   return ext === "MD" ? "MD" : "TXT";
 }
 

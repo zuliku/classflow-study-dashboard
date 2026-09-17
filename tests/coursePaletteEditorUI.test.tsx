@@ -63,17 +63,25 @@ describe("CoursePaletteEditor 紧凑行 + 二级弹窗（portal，不被设置�
     expect(onChange).not.toHaveBeenCalled();
   });
 
-  it("添加流程：预设选择 + HEX 确认（大小写归一化）", () => {
+  it("添加流程：HEX 输入 + 确认（大小写归一化）", () => {
     const onChange = vi.fn();
     render(<CoursePaletteEditor value={["#FADCD9"]} onChange={onChange} />);
     openManager();
-    // 预设点击写入草稿
-    fireEvent.click(screen.getByLabelText("选择预设 #A8E6CF"));
-    // HEX 输入框已同步为预设值
+    // HEX 输入大小写归一化后提交
     const hexInput = screen.getByLabelText("HEX 颜色") as HTMLInputElement;
-    expect(hexInput.value).toBe("#A8E6CF");
+    fireEvent.change(hexInput, { target: { value: "#a8e6cf" } });
+    expect(hexInput.value).toBe("#a8e6cf");
     fireEvent.click(screen.getByLabelText("确认添加颜色"));
     expect(onChange).toHaveBeenCalledWith(["#FADCD9", "#A8E6CF"]);
+  });
+
+  it("添加区无预设色板（仅取色板 + HEX 输入）", () => {
+    const onChange = vi.fn();
+    render(<CoursePaletteEditor value={["#FADCD9"]} onChange={onChange} />);
+    openManager();
+    expect(screen.queryByRole("group", { name: "预设颜色" })).toBeNull();
+    expect(screen.getByTestId("custom-color-picker")).toBeTruthy();
+    expect(screen.getByLabelText("HEX 颜色")).toBeTruthy();
   });
 
   it("重复颜色给出诚实行内报错且不提交", () => {

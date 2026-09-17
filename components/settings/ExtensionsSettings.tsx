@@ -14,6 +14,7 @@ import { Field } from "@/components/ui/Field";
 import { SkillDistillDialog } from "@/components/kiro/SkillDistillDialog";
 import { ChannelSettings } from "@/components/settings/ChannelSettings";
 import { extractWorkflowTrace } from "@/lib/ai/skills/workflowTrace";
+import { BUILTIN_SKILLS } from "@/lib/ai/skills/builtin";
 import { useToastStore } from "@/store/useToastStore";
 import { resolveChannelUserMessage } from "@/lib/channels/errorContract";
 import { useConfirmStore } from "@/store/useConfirmStore";
@@ -539,6 +540,35 @@ export function ExtensionsSettings() {
                 </p>
               </div>
             )}
+          </SettingsGroup>
+
+          {/* 内置 Skills：随应用打包、无需配置；锁定展示（不可编辑/停用/删除） */}
+          <SettingsGroup
+            title="内置 Skills"
+            description="随应用提供的系统能力，始终启用。"
+          >
+            <div className="space-y-3 py-1" data-testid="builtin-skills">
+              {BUILTIN_SKILLS.map((skill) => (
+                <div
+                  key={skill.name}
+                  data-testid={`skill-card-${skill.name}`}
+                  className="bg-surface border border-line rounded-xl p-4 flex flex-col gap-2"
+                >
+                  <div className="flex items-center gap-2 min-w-0">
+                    <h4 className="text-sm font-bold text-charcoal truncate">{skill.name}</h4>
+                    <span className="shrink-0 px-2 py-0.5 rounded-full text-[11px] font-bold border bg-pastel-mint text-charcoal border-line">
+                      系统内置
+                    </span>
+                  </div>
+                  <p className="text-xs text-sandrift leading-relaxed">{skill.description}</p>
+                  {skill.triggers && skill.triggers.length > 0 && (
+                    <p className="text-[11px] text-sandrift">
+                      触发词：{skill.triggers.join(" · ")}
+                    </p>
+                  )}
+                </div>
+              ))}
+            </div>
           </SettingsGroup>
         </div>
 

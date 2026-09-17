@@ -81,6 +81,50 @@ export function buildScannedPdf(): Uint8Array {
   return Buffer.from(out, "utf8");
 }
 
+/** 构造最小 XLSX（SheetJS 写出），供测试使用 */
+export async function buildMinimalXlsx(sheets: Record<string, unknown[][]>): Promise<Blob> {
+  const XLSX = await import("xlsx");
+  const wb = XLSX.utils.book_new();
+  for (const [name, rows] of Object.entries(sheets)) {
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(rows), name);
+  }
+  const out = XLSX.write(wb, { type: "array", bookType: "xlsx" });
+  return new Blob([out as BlobPart], {
+    type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  });
+}
+
+/** XML 转义（fixture 侧） */
+function escapeXml(s: string): string {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+/** 构造最小 PPTX（每张幻灯片一组文本 Run），供测试使用 */
+export async function buildMinimalPptx(slides: string[][]): Promise<Blob> {
+  const zip = new JSZip();
+  zip.file(
+    "[Content_Types].xml",
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+<Default Extension="xml" ContentType="application/xml"/>
+</Types>`
+  );
+  slides.forEach((runs, i) => {
+    const tree = runs
+      .map(
+        (t) =>
+          `<p:sp><p:txBody><a:p><a:r><a:t xml:space="preserve">${escapeXml(t)}</a:t></a:r></a:p></p:txBody></p:sp>`
+      )
+      .join("");
+    zip.file(
+      `ppt/slides/slide${i + 1}.xml`,
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"><p:cSld><p:spTree>${tree}</p:spTree></p:cSld></p:sld>`
+    );
+  });
+  return zip.generateAsync({ type: "blob" });
+}
+
 /** 构造最小 DOCX（mammoth 可提取），供测试使用 */
 export async function buildMinimalDocx(paragraphs: string[]): Promise<Blob> {
   const zip = new JSZip();

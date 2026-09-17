@@ -3,6 +3,8 @@ import { routeAttachment } from "@/lib/ai/attachments/router";
 import { extractTextFile, ExtractedDocument } from "@/lib/ai/attachments/extractors";
 import { extractPdf } from "@/lib/ai/attachments/pdf";
 import { extractDocx } from "@/lib/ai/attachments/docx";
+import { extractXlsx } from "@/lib/ai/attachments/xlsx";
+import { extractPptx } from "@/lib/ai/attachments/pptx";
 import { getExtractCache, setExtractCache, extractCacheKey } from "@/lib/ai/attachments/cache";
 import { EXTRACTOR_VERSION } from "@/lib/ai/attachments/limits";
 
@@ -15,11 +17,13 @@ export async function extractAttachment(
   options: { cacheKey?: string; kind: KiroAttachmentKind }
 ): Promise<
   | { ok: true; extracted: ExtractedDocument }
-  | { ok: false; reason: "unsupported" | "too_large"; message: string }
+  | { ok: false; reason: "unsupported" | "too_large" | "legacy"; message: string }
 > {
   const routed = routeAttachment({ name: file.name ?? "", type: file.type ?? "", size: file.size });
   if (!routed.ok) {
     if (routed.reason === "too_large") return { ok: false, reason: "too_large", message: "文件超过大小限制。" };
+    if (routed.reason === "legacy")
+      return { ok: false, reason: "legacy", message: "暂不支持旧版 Office 格式（.doc/.ppt），请另存为 .docx/.pptx 后重试。" };
     return { ok: false, reason: "unsupported", message: "暂不支持这种文件类型。" };
   }
 
@@ -50,6 +54,10 @@ export async function extractAttachment(
         ? await extractPdf(file)
         : options.kind === "docx"
         ? await extractDocx(file)
+        : options.kind === "spreadsheet"
+        ? await extractXlsx(file)
+        : options.kind === "slides"
+        ? await extractPptx(file)
         : await extractTextFile(file);
     await setExtractCache(cacheKey, {
       text: extracted.text,

@@ -4,11 +4,16 @@
 
 import { SKILL_NAME_PATTERN, type SkillValidationResult } from "@/lib/ai/skills/types";
 import type { SkillFrontmatter } from "@/lib/ai/skills/types";
+import { BUILTIN_SKILL_NAMES } from "@/lib/ai/skills/builtin";
 
 export function validateSkillName(name: string): { ok: boolean; reason?: string } {
   if (typeof name !== "string" || name.length === 0) return { ok: false, reason: "MISSING_NAME" };
   if (!SKILL_NAME_PATTERN.test(name)) {
     return { ok: false, reason: `INVALID_NAME_PATTERN: ${name} must match ${SKILL_NAME_PATTERN.source}` };
+  }
+  // 内置保留名：用户创建/导入同名会与系统内置 Skill 歧义，直接拒绝
+  if ((BUILTIN_SKILL_NAMES as readonly string[]).includes(name)) {
+    return { ok: false, reason: `RESERVED_NAME: ${name} 为系统内置 Skill 名称，请换一个名称` };
   }
   return { ok: true };
 }
