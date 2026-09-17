@@ -302,11 +302,15 @@ export function AssignmentTable({
     if (e.target !== e.currentTarget) return;
     const k = e.key;
 
-    // 单键快捷键关闭：只保留标准可访问键盘操作（方向键 / Enter / Cmd+A / Esc）
+    // 单键快捷键关闭：只保留标准可访问键盘操作（方向键 / Home / End / Enter / Cmd+A / Esc）
     if (!singleKeyEnabled) {
       if (k === "ArrowDown" || k === "ArrowUp") {
         e.preventDefault();
         moveHighlight(k === "ArrowDown" ? 1 : -1);
+      } else if (k === "Home" || k === "End") {
+        if (filteredIds.length === 0) return;
+        e.preventDefault();
+        setHighlightedAssignmentId(k === "Home" ? filteredIds[0] : filteredIds[filteredIds.length - 1]);
       } else if (k === "Enter") {
         if (ctxMenu) {
           setCtxMenuOpen(false);
@@ -340,6 +344,10 @@ export function AssignmentTable({
     } else if (k === "ArrowUp" || matchesShortcutKey(k, SINGLE_KEY_SHORTCUTS.assignmentMoveUp)) {
       e.preventDefault();
       moveHighlight(-1);
+    } else if (k === "Home" || k === "End") {
+      if (filteredIds.length === 0) return;
+      e.preventDefault();
+      setHighlightedAssignmentId(k === "Home" ? filteredIds[0] : filteredIds[filteredIds.length - 1]);
     } else if (k === "Enter") {
       if (ctxMenu) {
         setCtxMenuOpen(false);

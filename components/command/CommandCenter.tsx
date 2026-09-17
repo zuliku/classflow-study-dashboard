@@ -8,6 +8,7 @@ import { pushOverlay, popOverlay, isTopmostOverlay } from "@/lib/overlayStack";
 import { usePresence } from "@/lib/usePresence";
 import { MOTION_EXIT_MS } from "@/lib/motion";
 import { useRestoreFocus } from "@/lib/useRestoreFocus";
+import { useFocusTrap } from "@/lib/useFocusTrap";
 import { cn } from "@/lib/utils";
 import {
   buildPalette,
@@ -92,6 +93,12 @@ export function CommandCenter() {
   const [query, setQuery] = useState("");
   const [highlighted, setHighlighted] = useState(0);
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const panelRef = useRef<HTMLDivElement | null>(null);
+  const rowRefs = useRef(new Map<number, HTMLButtonElement>());
+  /** hover 跟随武装位：键盘导航后失活，真实指针移动后恢复（防 scroll-hover 抢占） */
+  const pointerActiveRef = useRef(true);
+  // 焦点陷阱：Tab不出命令面板（与 Overlay Esc/关闭、焦点恢复共存）
+  const trapTab = useFocusTrap(panelRef, isSearchModalOpen);
 
   const pushToast = useToastStore((s) => s.pushToast);
   const confirmRequest = useConfirmStore((s) => s.confirm);
@@ -220,14 +227,59 @@ export function CommandCenter() {
     if (displayItems.length === 0) return;
     if (e.key === "ArrowDown") {
       e.preventDefault();
+      pointerActiveRef.current = false;
       setHighlighted((i) => clampIndex(i + 1));
     } else if (e.key === "ArrowUp") {
       e.preventDefault();
+      pointerActiveRef.current = false;
       setHighlighted((i) => clampIndex(i - 1));
+    } else if (e.key === "Home") {
+      e.preventDefault();
+      pointerActiveRef.current = false;
+      setHighlighted(0);
+    } else if (e.key === "End") {
+      e.preventDefault();
+      pointerActiveRef.current = false;
+      setHighlighted(displayItems.length - 1);
+    } else if (e.key === "PageDown") {
+      e.preventDefault();
+      pointerActiveRef.current = false;
+      setHighlighted((i) => clampIndex(i + 5));
+    } else if (e.key === "PageUp") {
+      e.preventDefault();
+      pointerActiveRef.current = false;
+      setHighlighted((i) => clampIndex(i - 5));
     } else if (e.key === "Enter") {
       e.preventDefault();
       displayItems[highlighted]?.run();
     }
+  };
+
+  // 高亮行滚动跟随（nearest：只在超出可视区时滚动，不抢夺页面滚动）
+  useEffect(() => {
+    const el = rowRefs.current.get(highlighted);
+    if (el && typeof el.scrollIntoView === "function") {
+      try {
+        el.scrollIntoView({ block: "nearest" });
+      } catch {
+        /* jsdom / 旧环境无滚动：忽略 */
+      }
+    }
+  }, [highlighted]);
+
+  /** stationary hover（键盘滚动把行送到鼠标下，不产生 pointermove）不抢占键盘高亮：
+   *  只有真实指针移动才重新武装 hover 跟随（VS Code / Linear / cmdk 同款模式） */
+  const handleRowPointerMove = () => {
+    pointerActiveRef.current = true;
+  };
+  const handleRowMouseEnter = (globalIndex: number) => () => {
+    if (!pointerActiveRef.current) return;
+    setHighlighted(globalIndex);
+  };
+
+  const setRowRef = (globalIndex: number) => (el: HTMLButtonElement | null) => {
+    if (el) rowRefs.current.set(globalIndex, el);
+    else rowRefs.current.delete(globalIndex);
   };
 
   // 按分组顺序渲染，组间用极淡分隔线
@@ -248,7 +300,12 @@ export function CommandCenter() {
           <button
             key={item.key}
             type="button"
-            onMouseMove={() => setHighlighted(globalIndex)}
+            ref={setRowRef(globalIndex)}
+            role="option"
+            id={`command-option-${globalIndex}`}
+            aria-selected={isHighlighted}
+            onPointerMove={handleRowPointerMove}
+            onMouseEnter={handleRowMouseEnter(globalIndex)}
             onClick={() => item.run()}
             className={cn(
               "w-full flex items-center gap-3 px-3 rounded-xl text-left transition-colors duration-[var(--motion-fast)]",
@@ -324,6 +381,8 @@ export function CommandCenter() {
     >
       <div
         data-testid="command-center"
+        ref={panelRef}
+        onKeyDown={trapTab}
         className={cn(
           "w-full max-w-[680px] bg-surface rounded-2xl shadow-drawer border border-line overflow-hidden flex flex-col",
           "ux-modal-panel",
@@ -389,7 +448,7 @@ export function CommandCenter() {
               </div>
             ))}
             <p className="text-[10px] text-sandrift">
-              按 Esc 关闭 · 按 Cmd/Ctrl + K 快速切换
+              ↑↓ 选择 · Home/End 跳转 · Enter 执行 · Esc 关闭
             </p>
           </div>
         ) : (
@@ -406,6 +465,11 @@ export function CommandCenter() {
                 onKeyDown={handleInputKeyDown}
                 placeholder="搜索命令、课程、任务、资料…"
                 aria-label="命令中心搜索"
+                role="combobox"
+                aria-expanded={displayItems.length > 0}
+                aria-controls="command-results-listbox"
+                aria-autocomplete="list"
+                aria-activedescendant={displayItems.length > 0 ? `command-option-${highlighted}` : undefined}
                 className="w-full text-sm bg-transparent border-none focus:outline-none text-charcoal placeholder-sandrift"
                 autoFocus
               />
@@ -421,8 +485,14 @@ export function CommandCenter() {
             {/* Results：单面板内部列表行，不做一堆卡片 */}
             <div
               data-testid="command-results"
+              id="command-results-listbox"
+              role="listbox"
+              aria-label="命令搜索结果"
               className="p-2 max-h-[min(440px,60dvh)] overflow-y-auto"
             >
+              <p aria-live="polite" className="sr-only">
+                {displayItems.length === 0 ? "无匹配结果" : `共 ${displayItems.length} 个结果`}
+              </p>
               {displayItems.length === 0 ? (
                 <div className="py-10 text-center text-xs text-sandrift">
                   未找到匹配项
@@ -434,7 +504,12 @@ export function CommandCenter() {
                     <div className="pb-1">
                       <button
                         type="button"
-                        onMouseMove={() => setHighlighted(0)}
+                        ref={setRowRef(0)}
+                        role="option"
+                        id="command-option-0"
+                        aria-selected={highlighted === 0}
+                        onPointerMove={handleRowPointerMove}
+                        onMouseEnter={handleRowMouseEnter(0)}
                         onClick={() => kiroHandoffItem.run()}
                         className={cn(
                           "w-full flex items-center gap-3 px-3 py-2 rounded-xl text-left transition-colors duration-[var(--motion-fast)]",

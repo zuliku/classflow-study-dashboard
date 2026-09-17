@@ -103,6 +103,7 @@ export function SettingsModal() {
       overlayId="settings-modal"
       stackZ={50}
       closeOnBackdrop={!isDirty}
+      trapFocus
       onEscapeKeyDown={(event) => {
         // 搜索框有 query 时：第一次 Esc 只清空搜索，不关闭 Modal
         if (searchQuery.trim().length > 0) {

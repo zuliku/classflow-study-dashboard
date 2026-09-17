@@ -35,6 +35,7 @@ export function ConfirmDialog() {
       overlayId={OVERLAY_ID}
       stackZ={60}
       closeOnBackdrop={false}
+      trapFocus
       role="alertdialog"
       aria-label={request?.title}
       className="max-w-sm"

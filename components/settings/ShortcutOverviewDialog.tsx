@@ -37,6 +37,7 @@ export function ShortcutOverviewDialog({
       overlayId="shortcuts-overview-dialog"
       stackZ={60}
       closeOnBackdrop
+      trapFocus
       aria-label="快捷键说明"
       data-testid="shortcuts-overview-dialog"
       className="max-w-md max-h-[90dvh] flex flex-col"

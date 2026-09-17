@@ -1,8 +1,9 @@
 "use client";
 
-import React from "react";
+import React, { useRef } from "react";
 import { OverlayLayer } from "@/components/ui/OverlayLayer";
 import { MOTION_EXIT_MS } from "@/lib/motion";
+import { useFocusTrap } from "@/lib/useFocusTrap";
 import { cn } from "@/lib/utils";
 
 /**
@@ -25,6 +26,11 @@ export interface DialogProps extends React.HTMLAttributes<HTMLDivElement> {
   onEscapeKeyDown?: (event: KeyboardEvent) => void;
   /** Full-screen overlay 视觉（背景/布局） */
   overlayClassName?: string;
+  /**
+   * 焦点陷阱（默认关闭）：开启后 Tab / Shift+Tab 在面板内循环，不逃逸到背后页面。
+   * 嵌套 Dialog 各自处理包裹处的 Tab（子陷阱 stopPropagation，父不再二次干预）。
+   */
+  trapFocus?: boolean;
 }
 
 export function Dialog({
@@ -36,10 +42,13 @@ export function Dialog({
   closeOnBackdrop = false,
   onEscapeKeyDown,
   overlayClassName,
+  trapFocus = false,
   className,
   children,
   ...props
 }: DialogProps) {
+  const panelRef = useRef<HTMLDivElement | null>(null);
+  const trapTab = useFocusTrap(panelRef, open && trapFocus);
   return (
     <OverlayLayer
       open={open}
@@ -59,6 +68,8 @@ export function Dialog({
           <div
             role="dialog"
             aria-modal="true"
+            ref={panelRef}
+            onKeyDown={trapFocus ? trapTab : undefined}
             className={cn(
               "w-full max-w-md bg-surface border border-line rounded-2xl shadow-drawer overflow-hidden ux-modal-panel",
               // enter ≈220ms（scale 0.99→1 + 2px 上移归零）；exit =150ms（scale 1→0.99 + 2px），exit < enter

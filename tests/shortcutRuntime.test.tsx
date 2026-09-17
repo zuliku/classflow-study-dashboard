@@ -216,6 +216,28 @@ describe("AssignmentTable workspace 键盘行为不变", () => {
     expect(useAppStore.getState().highlightedAssignmentId).toBe(ids[0]);
   });
 
+  it("Home / End 跳转首尾（单键开关均可用，属标准键盘操作）", () => {
+    const start = useAppStore.getState().highlightedAssignmentId;
+    pressKey(listEl(), "Home");
+    const first = useAppStore.getState().highlightedAssignmentId;
+    pressKey(listEl(), "End");
+    const last = useAppStore.getState().highlightedAssignmentId;
+    // 两项列表：首尾互异且往返稳定（不断言具体顺序，顺序由视图派生）
+    expect([first, last].sort()).toEqual([...ids].sort());
+    expect(first).not.toBe(last);
+    pressKey(listEl(), "Home");
+    expect(useAppStore.getState().highlightedAssignmentId).toBe(first);
+    pressKey(listEl(), "End");
+    expect(useAppStore.getState().highlightedAssignmentId).toBe(last);
+    act(() => {
+      useAppStore.getState().updatePreferences({ enableSingleKeyShortcuts: false });
+    });
+    pressKey(listEl(), "Home");
+    expect(useAppStore.getState().highlightedAssignmentId).toBe(first);
+    pressKey(listEl(), "End");
+    expect(useAppStore.getState().highlightedAssignmentId).toBe(last);
+  });
+
   it("X 切换选择且绝不删除任务", () => {
     pressKey(listEl(), "x");
     expect(useAppStore.getState().assignmentSelection).toContain(ids[0]);
