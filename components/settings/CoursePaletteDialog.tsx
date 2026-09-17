@@ -13,13 +13,15 @@ import {
   normalizeHex,
   paletteIncludes,
 } from "@/lib/color";
+import { DEFAULT_PREFERENCES } from "@/lib/preferences";
 
 /**
  * 课程调色板二级弹窗（Settings 通用页「课程调色板」行的管理入口）。
  * - 经 Dialog → OverlayLayer portal 直挂 document.body，彻底告别行内 Popover
  *   被 SettingsGroup(overflow-hidden) / Detail 滚动区裁剪的问题。
- * - 增删即时写入偏好（与行内编辑器同语义）；至少保留 1 色、至多 12 色、
- *   重复 HEX 大小写不敏感去重、非法 HEX 行内报错。
+ * - 增删即时写入偏好；至少保留 1 色、至多 12 色、
+ *   重复 HEX 大小写不敏感去重、非法 HEX 行内报错；
+ *   页脚提供恢复默认（已是默认时禁用）。
  */
 export function CoursePaletteDialog({
   open,
@@ -78,6 +80,16 @@ export function CoursePaletteDialog({
     onChange(value.filter((c) => c.toUpperCase() !== hex.toUpperCase()));
   };
 
+  const isDefault =
+    value.length === DEFAULT_PREFERENCES.coursePalette.length &&
+    value.every((c, i) => c.toUpperCase() === DEFAULT_PREFERENCES.coursePalette[i].toUpperCase());
+
+  const handleReset = () => {
+    onChange([...DEFAULT_PREFERENCES.coursePalette]);
+    setDraft("");
+    setError(null);
+  };
+
   return (
     <Dialog
       open={open}
@@ -95,7 +107,7 @@ export function CoursePaletteDialog({
         <div className="min-w-0">
           <h3 className="text-sm font-bold text-charcoal">课程调色板</h3>
           <p className="text-[11px] text-sandrift mt-0.5">
-            共 {value.length} / {MAX_COURSE_PALETTE_SIZE} 色 · 新课程按此顺序轮换
+            共 {value.length} / {MAX_COURSE_PALETTE_SIZE} 色 · 新课程从左到右轮换
           </p>
         </div>
         <button
@@ -117,22 +129,20 @@ export function CoursePaletteDialog({
             </p>
           ) : (
             <div className="flex flex-wrap gap-2.5">
-              {value.map((c, idx) => (
-                <span key={c.toUpperCase()} className="inline-flex flex-col items-center gap-1">
-                  <ColorSwatch
-                    color={c}
-                    size="md"
-                    removable
-                    removeDisabled={value.length <= MIN_COURSE_PALETTE_SIZE}
-                    onRemove={() => handleRemove(c)}
-                    title={
-                      value.length <= MIN_COURSE_PALETTE_SIZE
-                        ? `${c}（至少保留 1 种颜色）`
-                        : `${c} · 第 ${idx + 1} 位，点击右上 × 移除`
-                    }
-                  />
-                  <span className="text-[10px] font-mono text-sandrift">{idx + 1}</span>
-                </span>
+              {value.map((c) => (
+                <ColorSwatch
+                  key={c.toUpperCase()}
+                  color={c}
+                  size="md"
+                  removable
+                  removeDisabled={value.length <= MIN_COURSE_PALETTE_SIZE}
+                  onRemove={() => handleRemove(c)}
+                  title={
+                    value.length <= MIN_COURSE_PALETTE_SIZE
+                      ? `${c}（至少保留 1 种颜色）`
+                      : `${c} · 点击右上 × 移除`
+                  }
+                />
               ))}
             </div>
           )}
@@ -180,22 +190,26 @@ export function CoursePaletteDialog({
               添加
             </Button>
           </div>
-          {error ? (
+          {error && (
             <p role="alert" className="text-[11px] font-semibold text-danger">
               {error}
             </p>
-          ) : (
-              <p className="text-[10px] text-sandrift leading-relaxed">
-                用取色板微调或直接输入 HEX。
-              </p>
           )}
         </div>
       </div>
 
       {/* Footer */}
       <div className="shrink-0 px-5 py-3.5 border-t border-line-soft flex items-center justify-between gap-3">
-        <p className="text-[10px] text-sandrift">修改即时保存，可随时恢复默认。</p>
-        <Button variant="secondary" size="sm" onClick={() => onOpenChange(false)}>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={handleReset}
+          disabled={isDefault}
+          aria-label="将课程调色板恢复默认"
+        >
+          恢复默认
+        </Button>
+        <Button variant="primary" size="sm" onClick={() => onOpenChange(false)}>
           完成
         </Button>
       </div>

@@ -3,7 +3,7 @@
  */
 import React from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { cleanup, render, screen, fireEvent, waitFor, within } from "@testing-library/react";
 import { CoursePaletteEditor } from "@/components/settings/CoursePaletteEditor";
 import { CustomColorPicker } from "@/components/settings/CustomColorPicker";
 import { DEFAULT_PREFERENCES } from "@/lib/preferences";
@@ -93,6 +93,32 @@ describe("CoursePaletteEditor 紧凑行 + 二级弹窗（portal，不被设置�
     fireEvent.click(screen.getByLabelText("确认添加颜色"));
     expect(screen.getByRole("alert").textContent).toMatch(/已在调色板/);
     expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it("当前颜色无序号徽标（顺序由从左到右的位置表达）", () => {
+    const onChange = vi.fn();
+    render(<CoursePaletteEditor value={["#FADCD9", "#F8E9A1"]} onChange={onChange} />);
+    openManager();
+    const dialog = screen.getByTestId("course-palette-dialog");
+    expect(within(dialog).queryByText("1")).toBeNull();
+    expect(within(dialog).queryByText("2")).toBeNull();
+    expect(screen.getByText(/新课程从左到右轮换/)).toBeTruthy();
+  });
+
+  it("恢复默认：已是默认时禁用；修改后可一键恢复", () => {
+    const onChange = vi.fn();
+    render(
+      <CoursePaletteEditor value={[...DEFAULT_PREFERENCES.coursePalette]} onChange={onChange} />
+    );
+    openManager();
+    const resetBtn = screen.getByRole("button", { name: "将课程调色板恢复默认" });
+    expect((resetBtn as HTMLButtonElement).disabled).toBe(true);
+    cleanup();
+    const onChange2 = vi.fn();
+    render(<CoursePaletteEditor value={["#000000"]} onChange={onChange2} />);
+    fireEvent.click(screen.getByRole("button", { name: "管理课程调色板" }));
+    fireEvent.click(screen.getByRole("button", { name: "将课程调色板恢复默认" }));
+    expect(onChange2).toHaveBeenCalledWith([...DEFAULT_PREFERENCES.coursePalette]);
   });
 
   it("关闭弹窗后退出场卸载（portal，无残留）", async () => {
