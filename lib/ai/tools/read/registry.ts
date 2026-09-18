@@ -151,17 +151,17 @@ export const KIRO_READ_TOOLS = {
   }),
   read_material: tool({
     description:
-      "读取课程资料的正文内容（PDF/DOCX/TXT 本地提取；图片无文本）。扫描 PDF 会明确说明。只读取明确指定的资料，不要无差别读取全部附件。",
+      "读取课程资料的正文内容（PDF / Word / Excel 表格 / PPT 幻灯片 / CSV / 纯文本本地提取；图片无文本）。扫描 PDF 会明确说明。只读取明确指定的资料，不要无差别读取全部附件。旧版 Office（.doc/.ppt）会明确拒绝并指引转存格式。",
     inputSchema: KIRO_READ_TOOL_SCHEMAS.read_material,
   }),
   read_project_file: tool({
     description:
-      "读取当前 Kiro 项目中明确指定资料的正文。只能读取当前 Turn 的项目资料索引中存在的 projectFileId。PDF/DOCX/TXT/Markdown 使用本地提取；扫描型 PDF 会明确说明暂不读取图像正文。PDF 可带 pages 精确读取指定页正文（长文档后半部分使用）。不要无差别遍历全部项目资料；需要正文时按需读取。",
+      "读取当前 Kiro 项目中明确指定资料的正文。只能读取当前 Turn 的项目资料索引中存在的 projectFileId。PDF / Word / Excel 表格 / PPT 幻灯片 / CSV / 纯文本使用本地提取；扫描型 PDF 会明确说明暂不读取图像正文。PDF 可带 pages 精确读取指定页正文（长文档后半部分使用）。不要无差别遍历全部项目资料；需要正文时按需读取。",
     inputSchema: KIRO_READ_TOOL_SCHEMAS.read_project_file,
   }),
   search_project_file: tool({
     description:
-      "在当前 Kiro Project 的指定资料全文中进行本地关键词检索。适用于长文档、read_project_file 返回 truncated=true，或需要定位某个概念/章节/数据所在位置时。PDF 返回匹配页码与片段；TXT/DOCX 返回匹配片段。这是词法检索而非语义搜索，优先使用简洁、具有区分度的关键词。扫描型或没有可用文本层的 PDF 无法进行关键词检索，工具会明确返回 NOT_SEARCHABLE；此时应使用 read_project_visual，而不能把零命中解释为正文不存在。不要无差别搜索所有 Project Files。",
+      "在当前 Kiro Project 的指定资料全文中进行本地关键词检索。适用于长文档、read_project_file 返回 truncated=true，或需要定位某个概念/章节/数据所在位置时。PDF 返回匹配页码与片段；TXT / DOCX / XLSX / PPTX 返回匹配片段。这是词法检索而非语义搜索，优先使用简洁、具有区分度的关键词。扫描型或没有可用文本层的 PDF 无法进行关键词检索，工具会明确返回 NOT_SEARCHABLE；此时应使用 read_project_visual，而不能把零命中解释为正文不存在。不要无差别搜索所有 Project Files。",
     inputSchema: KIRO_READ_TOOL_SCHEMAS.search_project_file,
   }),
   read_project_visual: tool({
