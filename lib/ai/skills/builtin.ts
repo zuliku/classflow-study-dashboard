@@ -143,6 +143,94 @@ const FOCUS_COACH_INSTRUCTIONS = `\
 const FOCUS_COACH_DESCRIPTION =
   "专注计时陪伴：番茄会话的开始/暂停/恢复/结束与简短复盘。";
 
+const WEB_RESEARCH_INSTRUCTIONS = `\
+# 联网调研（内置）
+
+当用户询问需要最新信息、对比、新闻、查证的问题时，按以下流程处理。
+（需先在设置中开启联网搜索，否则搜索工具不可用，应直接说明。）
+
+## 1. 检索
+
+- 用 web_search 检索，关键词简短具体；一次检索不够可换词再查，不要反复刷同一关键词。
+- 只陈述检索到的事实；搜不到就明确说搜不到，不要编造。
+
+## 2. 深读
+
+- 需要正文细节用 read_web_source 打开最相关的 1–3 个来源；不要无差别打开全部结果。
+- 引用时注明来源（媒体/站点名），时间敏感信息注明日期。
+
+## 3. 综合回答
+
+- 多源交叉后再下结论；来源冲突时并列呈现，不选边。
+- 先给结论，再给依据与来源；不需要的背景不展开。
+`;
+
+const WEB_RESEARCH_DESCRIPTION =
+  "联网调研：实时搜索、来源深读与多源综合（需开启联网搜索）。";
+
+const TERMINAL_HELPER_INSTRUCTIONS = `\
+# 终端助手（内置）
+
+当用户要在终端运行命令、写脚本、处理数据时，按以下流程处理。
+（需先在设置中允许 Kiro 操作文件并授权工作区，且终端可用；否则工具不可用，应直接说明。）
+
+## 1. 先说后做
+
+- 执行前用一句话说明要运行的命令与目的；删除、覆盖、安装依赖、高风险命令必须先经用户确认。
+- 只在授权的工作区内操作；不要访问工作区之外的系统位置。
+
+## 2. 执行与跟进
+
+- 用 run_terminal_command 执行；需要交互或长时间运行用终端会话系列工具
+ （create_terminal_session / run_terminal_session_command / close_terminal_session）。
+- 命令失败先读报错本身，不要连续重试同一命令；换思路或请用户补充信息。
+- Stata / Python 等数据命令：先确认数据文件位置，输出文件写回工作区内并告知路径。
+`;
+
+const TERMINAL_HELPER_DESCRIPTION =
+  "终端助手：解释后执行命令、交互式会话与数据脚本跟进（需终端可用）。";
+
+const FILE_ORGANIZER_INSTRUCTIONS = `\
+# 文件整理（内置）
+
+当用户要找文件、整理目录、重命名、清理时，按以下流程处理。
+（需先在设置中允许 Kiro 操作文件并授权工作区；否则工具不可用，应直接说明。）
+
+## 1. 先看后动
+
+- 用 list_workspace_roots / list_directory 看结构，search_files / grep_files 定位，
+  动手前用 read_text / get_file_metadata 确认内容，不要凭文件名猜。
+- 只在授权的工作区内操作。
+
+## 2. 整理动作
+
+- 新建目录用 create_directory；移动/重命名用 move_file / rename_file；
+  小幅改写用 patch_text_file；删除只删用户明确指定的单个文件（delete_file 不支持目录与批量）。
+- 每次只做用户明确要求的那一步；删、覆操作先确认。做完用路径列表汇报结果。
+`;
+
+const FILE_ORGANIZER_DESCRIPTION =
+  "文件整理：查找定位、建目录、移动重命名与单文件删除（删除需确认）。";
+
+const REMINDER_ASSISTANT_INSTRUCTIONS = `\
+# 提醒管理（内置）
+
+当用户说“记得… / 到时叫我 / 别忘了…”时，按以下流程处理。
+
+## 1. 问清三要素（缺一不可，缺就问）
+
+- 什么事、什么时间（具体到日期与时刻，相对时间如“明天上午”先换算确认）、提前多久。
+
+## 2. 创建与管理
+
+- 用 create_reminder 创建；先 list_reminders 确认无重复再建，避免同一事项多个提醒。
+- 改时间/内容用 update_reminder，不用时用 delete_reminder；操作前用 list 拿到真实 id，不要猜。
+- 只创建用户明确要求的提醒，不要顺手加戏。
+`;
+
+const REMINDER_ASSISTANT_DESCRIPTION =
+  "提醒管理：三要素确认、创建/修改/删除提醒，避免重复。";
+
 /** 内置 Skill 名称保留字：用户创建/导入同名 Skill 时拒绝（保证单一事实来源） */
 export const BUILTIN_SKILL_NAMES: readonly string[] = [
   "document-handling",
@@ -150,6 +238,10 @@ export const BUILTIN_SKILL_NAMES: readonly string[] = [
   "task-triage",
   "study-plan",
   "focus-coach",
+  "web-research",
+  "terminal-helper",
+  "file-organizer",
+  "reminder-assistant",
 ] as const;
 
 export const BUILTIN_SKILLS: SkillPackage[] = [
@@ -217,6 +309,59 @@ export const BUILTIN_SKILLS: SkillPackage[] = [
     metadata: {
       builtin: true,
       capabilities: ["get_focus_status", "start_focus_session", "pause_focus_session", "resume_focus_session", "finish_focus_session", "get_focus_analytics", "list_focus_sessions"],
+    },
+    permissionsNote: SKILL_PERMISSIONS_NOTE,
+  },
+  {
+    name: "web-research",
+    description: WEB_RESEARCH_DESCRIPTION,
+    folderName: "__builtin__/web-research",
+    enabled: true,
+    instructions: WEB_RESEARCH_INSTRUCTIONS.trim(),
+    rawContent: WEB_RESEARCH_INSTRUCTIONS.trim(),
+    triggers: ["搜索", "查一下", "最新", "新闻", "调研", "对比", "查证", "怎么样", "推荐"],
+    metadata: { builtin: true, capabilities: ["web_search", "read_web_source"] },
+    permissionsNote: SKILL_PERMISSIONS_NOTE,
+  },
+  {
+    name: "terminal-helper",
+    description: TERMINAL_HELPER_DESCRIPTION,
+    folderName: "__builtin__/terminal-helper",
+    enabled: true,
+    instructions: TERMINAL_HELPER_INSTRUCTIONS.trim(),
+    rawContent: TERMINAL_HELPER_INSTRUCTIONS.trim(),
+    triggers: ["终端", "命令行", "运行", "脚本", "Stata", "Python", "数据处理", "命令"],
+    metadata: {
+      builtin: true,
+      capabilities: ["run_terminal_command", "create_terminal_session", "run_terminal_session_command", "close_terminal_session"],
+    },
+    permissionsNote: SKILL_PERMISSIONS_NOTE,
+  },
+  {
+    name: "file-organizer",
+    description: FILE_ORGANIZER_DESCRIPTION,
+    folderName: "__builtin__/file-organizer",
+    enabled: true,
+    instructions: FILE_ORGANIZER_INSTRUCTIONS.trim(),
+    rawContent: FILE_ORGANIZER_INSTRUCTIONS.trim(),
+    triggers: ["整理", "找文件", "重命名", "清理", "移动文件", "新建文件夹", "删除文件"],
+    metadata: {
+      builtin: true,
+      capabilities: ["list_workspace_roots", "list_directory", "search_files", "grep_files", "read_text", "get_file_metadata", "create_directory", "move_file", "rename_file", "patch_text_file", "delete_file"],
+    },
+    permissionsNote: SKILL_PERMISSIONS_NOTE,
+  },
+  {
+    name: "reminder-assistant",
+    description: REMINDER_ASSISTANT_DESCRIPTION,
+    folderName: "__builtin__/reminder-assistant",
+    enabled: true,
+    instructions: REMINDER_ASSISTANT_INSTRUCTIONS.trim(),
+    rawContent: REMINDER_ASSISTANT_INSTRUCTIONS.trim(),
+    triggers: ["提醒", "记得", "到时叫我", "别忘了", "叫我", "定时提醒"],
+    metadata: {
+      builtin: true,
+      capabilities: ["list_reminders", "create_reminder", "update_reminder", "delete_reminder"],
     },
     permissionsNote: SKILL_PERMISSIONS_NOTE,
   },

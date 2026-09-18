@@ -5,8 +5,16 @@ import { validateSkillName } from "@/lib/ai/skills/validator";
 import { SKILL_NAME_PATTERN } from "@/lib/ai/skills/types";
 import { KIRO_READ_TOOL_NAMES } from "@/lib/ai/tools/read/registry";
 import { KIRO_WRITE_TOOL_NAMES } from "@/lib/ai/tools/write/registry";
+import { COMPUTER_TOOL_NAMES } from "@/lib/ai/computer/tools/registry";
 
-const KNOWN_TOOLS = new Set<string>([...KIRO_READ_TOOL_NAMES, ...KIRO_WRITE_TOOL_NAMES] as string[]);
+const KNOWN_TOOLS = new Set<string>([
+  ...(KIRO_READ_TOOL_NAMES as string[]),
+  ...(KIRO_WRITE_TOOL_NAMES as string[]),
+  ...COMPUTER_TOOL_NAMES,
+  // 联网工具由 lib/ai/web/tool.ts 动态创建（非静态注册表）
+  "web_search",
+  "read_web_source",
+]);
 
 /** skill 正文里形如工具名的 snake_token（排除 capabilities 结构字段本身） */
 function referencedToolTokens(instructions: string): string[] {
@@ -17,7 +25,7 @@ function referencedToolTokens(instructions: string): string[] {
 }
 
 describe("内置 Skills 目录", () => {
-  it("5 个内置 skill：命名规范 + 保留名与目录同源（防漂移）", () => {
+  it("9 个内置 skill：命名规范 + 保留名与目录同源（防漂移）", () => {
     const names = BUILTIN_SKILLS.map((s) => s.name);
     expect(names).toEqual([
       "document-handling",
@@ -25,6 +33,10 @@ describe("内置 Skills 目录", () => {
       "task-triage",
       "study-plan",
       "focus-coach",
+      "web-research",
+      "terminal-helper",
+      "file-organizer",
+      "reminder-assistant",
     ]);
     expect([...BUILTIN_SKILL_NAMES].sort()).toEqual([...names].sort());
     for (const s of BUILTIN_SKILLS) {
