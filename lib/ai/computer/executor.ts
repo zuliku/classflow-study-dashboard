@@ -24,6 +24,11 @@ import {
 } from "@/lib/ai/computer/approval";
 import { executeKiroObserveDesktop } from "@/lib/ai/computer/desktop/observe";
 import { executeKiroDesktopAction } from "@/lib/ai/computer/gui/executor";
+import {
+  executeKiroActivateWindow,
+  executeKiroListDesktopWindows,
+  executeKiroOpenApplication,
+} from "@/lib/ai/computer/gui/windowTools";
 import { executeKiroTerminalCommand, writeKiroTerminalInput, startKiroTerminalCommand, waitKiroTerminalCommand } from "@/lib/ai/computer/terminal/executor";
 import { createKiroPtySession, runKiroPtySessionCommand, writeKiroPtySessionInput, closeKiroPtySession } from "@/lib/ai/computer/terminal/ptyAgent";
 import { TerminalActivityInit } from "@/lib/ai/computer/terminal/activity";
@@ -101,6 +106,10 @@ export interface ComputerExecutorContext {
   taskId?: string;
   /** Computer Use Phase 2：Emergency Stop（Stop 后 GUI 动作拒绝执行） */
   isCancelled?: () => boolean;
+  /** Computer Use Phase 3：Vision fallback 配置（UIA 空 / 显式请求时使用） */
+  desktopVision?: { enabled: boolean; model: string; apiKey?: string };
+  /** 测试注入：vision extractor deps（不真实调用视觉模型） */
+  desktopVisionDeps?: import("@/lib/ai/computer/gui/vision").DesktopVisionDeps;
 }
 
 export interface ComputerCounterState {
@@ -187,6 +196,8 @@ export async function executeKiroComputerTool(request: {
       taskId: context.taskId ?? "",
       readLimitPerTurn: COMPUTER_READ_LIMIT_PER_TURN,
       isCancelled: context.isCancelled,
+      ...(context.desktopVision ? { vision: context.desktopVision } : {}),
+      ...(context.desktopVisionDeps ? { visionDeps: context.desktopVisionDeps } : {}),
     });
   }
 
@@ -205,6 +216,26 @@ export async function executeKiroComputerTool(request: {
       mutationLimitPerTurn: COMPUTER_MUTATION_LIMIT_PER_TURN,
       isCancelled: context.isCancelled,
     });
+  }
+
+  // Computer Use Phase 3：多窗口 / 应用控制（共用 policy / approval / audit 管线）
+  if (toolName === "list_desktop_windows" || toolName === "activate_window" || toolName === "open_application") {
+    const windowToolRequest = {
+      toolCallId,
+      toolInput,
+      snapshot: turnSnapshot,
+      liveWorkspaces,
+      livePermissionRules,
+      counters: counters as ComputerCounterState,
+      oneShotApprovals: oneShotApprovals ?? [],
+      taskId: context.taskId ?? "",
+      readLimitPerTurn: COMPUTER_READ_LIMIT_PER_TURN,
+      mutationLimitPerTurn: COMPUTER_MUTATION_LIMIT_PER_TURN,
+      isCancelled: context.isCancelled,
+    };
+    if (toolName === "list_desktop_windows") return executeKiroListDesktopWindows(windowToolRequest);
+    if (toolName === "activate_window") return executeKiroActivateWindow(windowToolRequest);
+    return executeKiroOpenApplication(windowToolRequest);
   }
 
   // Desktop Terminal V1/V2：独立预算（terminalCount；不走 filesystem read/mutation 计数）

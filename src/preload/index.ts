@@ -89,17 +89,31 @@ const terminalBridge = {
 };
 
 /**
- * Computer Use Phase 1+2：Desktop Observe + Action Bridge。
- * 只暴露结构化 API（capabilities / observe / prepareAction / action / cancelActions）；
+ * Computer Use Phase 1+2+3：Desktop Observe + Action + Session Bridge。
+ * 只暴露结构化 API（capabilities / observe / prepareAction / action / cancelActions /
+ * listWindows / activateWindow / openApplication / session 生命周期）；
  * 不暴露通用 IPC / native handle / HWND / PID。所有输入由 Main 执行。
  */
 const computerBridge = {
-  version: 2,
+  version: 3,
   capabilities: () => invokeBridge("bridge:computer:capabilities", {}),
   observe: (input: unknown) => invokeBridge("bridge:computer:observe", input),
   prepareAction: (input: unknown) => invokeBridge("bridge:computer:prepareAction", input),
   action: (input: unknown) => invokeBridge("bridge:computer:action", input),
   cancelActions: (input: unknown) => invokeBridge("bridge:computer:cancelActions", input),
+  listWindows: (input: unknown) => invokeBridge("bridge:computer:listWindows", input),
+  activateWindow: (input: unknown) => invokeBridge("bridge:computer:activateWindow", input),
+  openApplication: (input: unknown) => invokeBridge("bridge:computer:openApplication", input),
+  getSessionStatus: (input: unknown) => invokeBridge("bridge:computer:getSessionStatus", input),
+  pauseSession: (input: unknown) => invokeBridge("bridge:computer:pauseSession", input),
+  resumeSession: (input: unknown) => invokeBridge("bridge:computer:resumeSession", input),
+  completeSession: (input: unknown) => invokeBridge("bridge:computer:completeSession", input),
+  setSessionState: (input: unknown) => invokeBridge("bridge:computer:setSessionState", input),
+  subscribeSession: (listener: (event: unknown) => void): (() => void) => {
+    const handler = (_e: unknown, event: unknown) => listener(event);
+    ipcRenderer.on("bridge:computer:session-event", handler);
+    return () => ipcRenderer.removeListener("bridge:computer:session-event", handler);
+  },
 };
 
 // Credentials Bridge — 仅允许受限的 4 个操作（创建/替换/删除/列表），不暴露明文读取

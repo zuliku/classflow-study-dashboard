@@ -2,7 +2,10 @@
 import { describe, it, expect, afterEach } from "vitest";
 import {
   getClassFlowDesktopComputerBridge,
+  getClassFlowDesktopComputerSessionBridge,
   hasClassFlowDesktopComputer,
+  hasClassFlowDesktopComputerAction,
+  hasClassFlowDesktopComputerSession,
 } from "@/lib/desktop/bridge";
 import { ClassFlowDesktopComputerBridge } from "@/lib/desktop/types";
 
@@ -90,7 +93,7 @@ describe("getClassFlowDesktopComputerBridge / hasClassFlowDesktopComputer", () =
   it("未知 computer version → null（不做猜测兼容）", () => {
     installBridge(true);
     const desktop = (window as unknown as { classflowDesktop: { computer: { version: number } } }).classflowDesktop;
-    desktop.computer.version = 3;
+    desktop.computer.version = 4;
     expect(getClassFlowDesktopComputerBridge()).toBeNull();
   });
 
@@ -119,5 +122,50 @@ describe("getClassFlowDesktopComputerBridge / hasClassFlowDesktopComputer", () =
     const desktop = getClassFlowDesktopComputerBridge();
     const result = await desktop?.observe({});
     expect(result?.observationId).toBe("obs-test");
+  });
+
+  it("Phase 3：v3 完整 session surface → session bridge 可用", () => {
+    installBridge(true);
+    const computer = (window as unknown as { classflowDesktop: { computer: Record<string, unknown> } }).classflowDesktop
+      .computer;
+    computer.version = 3;
+    for (const method of [
+      "listWindows",
+      "activateWindow",
+      "openApplication",
+      "getSessionStatus",
+      "pauseSession",
+      "resumeSession",
+      "completeSession",
+      "setSessionState",
+      "subscribeSession",
+      "prepareAction",
+      "action",
+      "cancelActions",
+    ]) {
+      computer[method] = async () => ({});
+    }
+    computer.subscribeSession = () => () => {};
+    expect(hasClassFlowDesktopComputerSession()).toBe(true);
+    expect(getClassFlowDesktopComputerSessionBridge()).not.toBeNull();
+    expect(hasClassFlowDesktopComputerAction()).toBe(true);
+  });
+
+  it("Phase 3：v2（无 session surface）→ session bridge null，action bridge 仍可用", () => {
+    (window as unknown as { classflowDesktop?: unknown }).classflowDesktop = {
+      version: 1,
+      platform: "windows",
+      filesystem: filesystemStub,
+      computer: {
+        version: 2,
+        capabilities: async () => ({}),
+        observe: async () => ({}),
+        prepareAction: async () => ({}),
+        action: async () => ({}),
+        cancelActions: async () => ({ ok: true, cancelled: 0 }),
+      },
+    };
+    expect(hasClassFlowDesktopComputerSession()).toBe(false);
+    expect(hasClassFlowDesktopComputerAction()).toBe(true);
   });
 });

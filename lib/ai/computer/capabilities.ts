@@ -14,7 +14,11 @@ import {
  * - Workspace Auto：read / create / modify / move / document allow；**fs.delete = ask**
  *   （删除操作即使在 Workspace Auto 也要求确认）；shell.execute = allow（普通命令自动执行），
  *   但 Terminal Risk Gate 会把 destructive / privileged 升级为 ask、blocked 直接 deny。
- * - Hard Deny（任何 mode / 规则不能覆盖）：app.open / app.reveal / network.access。
+ * - Hard Deny（任何 mode / 规则不能覆盖）：app.reveal / network.access。
+ * - app.open **不再是** hard deny（Computer Use Phase 3）：打开应用是 Desktop Runtime gated
+ *   capability——只有 Desktop computer runtime available + 用户允许 Kiro 查看桌面/操作电脑
+ *   时才暴露；应用必须用 logical identifier + allowlist 解析（绝不接受任意 exe 路径）。
+ * - app.activate（窗口切换）同为 gated capability：Plan deny / Guided ask / Workspace Auto allow。
  * - shell.execute **不再是** hard deny：受 Desktop runtime / 用户 terminalEnabled 偏好 /
  *   workspace native root / policy / Terminal Risk Gate / approval 全链控制。
  * - Computer Use Phase 1（Desktop Observe，只读）：screen.observe / ui.inspect 在
@@ -41,6 +45,7 @@ export const AGENT_MODE_DEFAULTS: Record<
     "document.modify": "deny",
     "app.open": "deny",
     "app.reveal": "deny",
+    "app.activate": "deny",
     "shell.execute": "deny",
     "network.access": "deny",
     // Desktop Observe：Plan 也允许只读观察（不执行点击/键盘）
@@ -62,8 +67,9 @@ export const AGENT_MODE_DEFAULTS: Record<
     "document.modify": "ask",
     // Desktop Terminal V1：Guided 下任何 shell 命令都请求确认（Risk Gate 再收紧）
     "shell.execute": "ask",
-    "app.open": "deny",
+    "app.open": "ask",
     "app.reveal": "deny",
+    "app.activate": "ask",
     "network.access": "deny",
     "screen.observe": "allow",
     "ui.inspect": "allow",
@@ -86,8 +92,9 @@ export const AGENT_MODE_DEFAULTS: Record<
     // Desktop Terminal V1：普通 shell 命令在 Workspace Auto 可自动执行
     //（Terminal Risk Gate 优先：destructive/privileged → ask；blocked → deny）
     "shell.execute": "allow",
-    "app.open": "deny",
+    "app.open": "allow",
     "app.reveal": "deny",
+    "app.activate": "allow",
     "network.access": "deny",
     "screen.observe": "allow",
     "ui.inspect": "allow",
@@ -99,11 +106,11 @@ export const AGENT_MODE_DEFAULTS: Record<
 /**
  * Hard Deny（Current behavior）：无论 Agent Mode / 规则如何都拒绝。
  * shell.execute 不在其中（受 Desktop runtime / terminalEnabled / native root / policy /
- * Risk Gate / approval 全链控制）；但 Shell 本身理论上可以间接访问网络 / 进程 / 系统其它位置，
- * 因此不声称「network absolutely impossible」。剩余 hard deny：app.open / app.reveal / network.access。
+ * Risk Gate / approval 全链控制）；app.open（Phase 3）同样改为 Desktop Runtime gated capability。
+ * 但 Shell 本身理论上可以间接访问网络 / 进程 / 系统其它位置，
+ * 因此不声称「network absolutely impossible」。剩余 hard deny：app.reveal / network.access。
  */
 export const HARD_DENY_CAPABILITIES: ReadonlySet<ComputerCapability> = new Set<ComputerCapability>([
-  "app.open",
   "app.reveal",
   "network.access",
 ]);

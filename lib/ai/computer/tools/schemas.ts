@@ -249,6 +249,39 @@ export const observeDesktopSchema = z
       .optional(),
     includeScreenshot: z.boolean().optional(),
     includeUiTree: z.boolean().optional(),
+    /** Phase 3：UI Automation 无法定位时启用视觉候选区域（只生成 Observation candidate） */
+    includeVision: z.boolean().optional(),
+    visionGoal: z.string().trim().max(200).optional(),
+  })
+  .strict();
+
+/**
+ * Computer Use Phase 3：list_desktop_windows / activate_window / open_application。
+ * - 所有 windowId 都是 session-local opaque id（win-…）
+ * - open_application 只接受 logical app id（绝不接受 exe / 绝对路径）
+ */
+export const listDesktopWindowsSchema = z.object({}).strict();
+
+export const activateWindowSchema = z
+  .object({
+    windowId: z
+      .string()
+      .trim()
+      .regex(/^win-[A-Za-z0-9]+$/, "windowId 必须是 list_desktop_windows / observe_desktop 返回的逻辑窗口 id"),
+  })
+  .strict();
+
+export const openApplicationSchema = z
+  .object({
+    app: z
+      .string()
+      .trim()
+      .min(1)
+      .max(64)
+      .refine(
+        (value) => !/[\\/:]/.test(value) && !/\.exe$/i.test(value),
+        "只能使用逻辑应用名（例如 chrome / word / wechat），不要使用 exe 或文件路径"
+      ),
   })
   .strict();
 

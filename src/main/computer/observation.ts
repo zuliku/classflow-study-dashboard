@@ -279,8 +279,113 @@ export function normalizeActionInput(input: unknown): NormalizedActionInput {
   };
 }
 
-/** 观察到的单个 UI 元素（runtime-only；供 action 强绑定校验） */
-export interface ObservedElementRef {
+/* ---------------- Computer Use Phase 3：Session / 窗口 / 应用 输入归一化 ---------------- */
+
+const SESSION_ONLY_KEYS = new Set(["sessionId"]);
+
+/** { sessionId } 严格校验（必需） */
+export function normalizeSessionOnlyInput(input: unknown): { sessionId: string } {
+  if (!input || typeof input !== "object" || Array.isArray(input)) {
+    throw new DesktopComputerIpcError("INVALID_OPERATION", "输入必须是对象");
+  }
+  const raw = input as Record<string, unknown>;
+  for (const key of Object.keys(raw)) {
+    if (!SESSION_ONLY_KEYS.has(key)) {
+      throw new DesktopComputerIpcError("INVALID_OPERATION", `不支持的字段：${key}`);
+    }
+  }
+  if (!isValidDesktopSessionId(raw.sessionId)) {
+    throw new DesktopComputerIpcError("INVALID_OPERATION", "sessionId 不合法");
+  }
+  return { sessionId: raw.sessionId };
+}
+
+/** { sessionId? } 严格校验 */
+export function normalizeOptionalSessionInput(input: unknown): { sessionId?: string } {
+  if (input === undefined || input === null) return {};
+  if (typeof input !== "object" || Array.isArray(input)) {
+    throw new DesktopComputerIpcError("INVALID_OPERATION", "输入必须是对象");
+  }
+  const raw = input as Record<string, unknown>;
+  for (const key of Object.keys(raw)) {
+    if (!SESSION_ONLY_KEYS.has(key)) {
+      throw new DesktopComputerIpcError("INVALID_OPERATION", `不支持的字段：${key}`);
+    }
+  }
+  if (raw.sessionId === undefined) return {};
+  if (!isValidDesktopSessionId(raw.sessionId)) {
+    throw new DesktopComputerIpcError("INVALID_OPERATION", "sessionId 不合法");
+  }
+  return { sessionId: raw.sessionId };
+}
+
+/** activate_window 输入（opaque windowId + 可选 sessionId） */
+export function normalizeActivateWindowInput(input: unknown): { windowId: string; sessionId?: string } {
+  if (!input || typeof input !== "object" || Array.isArray(input)) {
+    throw new DesktopComputerIpcError("INVALID_OPERATION", "activate_window 输入必须是对象");
+  }
+  const raw = input as Record<string, unknown>;
+  for (const key of Object.keys(raw)) {
+    if (key !== "windowId" && key !== "sessionId") {
+      throw new DesktopComputerIpcError("INVALID_OPERATION", `不支持的字段：${key}`);
+    }
+  }
+  if (typeof raw.windowId !== "string" || !DESKTOP_WINDOW_ID_PATTERN.test(raw.windowId)) {
+    throw new DesktopComputerIpcError("INVALID_OPERATION", "windowId 不是合法的逻辑窗口 id");
+  }
+  const session = normalizeOptionalSessionInput(
+    raw.sessionId === undefined ? {} : { sessionId: raw.sessionId }
+  );
+  return { windowId: raw.windowId, ...(session.sessionId ? { sessionId: session.sessionId } : {}) };
+}
+
+/** open_application 输入（logical app id + 可选 sessionId；路径样式在 apps 层拒绝） */
+export function normalizeOpenApplicationInput(input: unknown): { app: string; sessionId?: string } {
+  if (!input || typeof input !== "object" || Array.isArray(input)) {
+    throw new DesktopComputerIpcError("INVALID_OPERATION", "open_application 输入必须是对象");
+  }
+  const raw = input as Record<string, unknown>;
+  for (const key of Object.keys(raw)) {
+    if (key !== "app" && key !== "sessionId") {
+      throw new DesktopComputerIpcError("INVALID_OPERATION", `不支持的字段：${key}`);
+    }
+  }
+  if (typeof raw.app !== "string" || raw.app.trim().length === 0 || raw.app.length > 64) {
+    throw new DesktopComputerIpcError("INVALID_OPERATION", "app 必须是逻辑应用名（例如 chrome / word / wechat）");
+  }
+  if (raw.app.includes("\\") || raw.app.includes("/") || /^[A-Za-z]:/.test(raw.app)) {
+    throw new DesktopComputerIpcError("INVALID_OPERATION", "不接受 exe / 文件路径，只能使用逻辑应用名");
+  }
+  const session = normalizeOptionalSessionInput(
+    raw.sessionId === undefined ? {} : { sessionId: raw.sessionId }
+  );
+  return { app: raw.app.trim(), ...(session.sessionId ? { sessionId: session.sessionId } : {}) };
+}
+
+/** setSessionState 输入（UI 状态：approval-required / waiting / idle） */
+export function normalizeSessionStateInput(input: unknown): {
+  sessionId: string;
+  state: "approval-required" | "waiting" | "idle";
+} {
+  if (!input || typeof input !== "object" || Array.isArray(input)) {
+    throw new DesktopComputerIpcError("INVALID_OPERATION", "输入必须是对象");
+  }
+  const raw = input as Record<string, unknown>;
+  for (const key of Object.keys(raw)) {
+    if (key !== "sessionId" && key !== "state") {
+      throw new DesktopComputerIpcError("INVALID_OPERATION", `不支持的字段：${key}`);
+    }
+  }
+  if (!isValidDesktopSessionId(raw.sessionId)) {
+    throw new DesktopComputerIpcError("INVALID_OPERATION", "sessionId 不合法");
+  }
+  if (raw.state !== "approval-required" && raw.state !== "waiting" && raw.state !== "idle") {
+    throw new DesktopComputerIpcError("INVALID_OPERATION", "state 不合法");
+  }
+  return { sessionId: raw.sessionId, state: raw.state };
+}
+
+/** 观察到的单个 UI 元素（runtime-only；供 action 强绑定校验） */export interface ObservedElementRef {
   /** UIA RuntimeId 字符串；绝不外传 */
   nativeRef: string;
   role: string;

@@ -159,6 +159,35 @@ export async function getActiveNativeWindow(): Promise<NativeWindowRecord | null
   return windows.find((w) => w.isActive) ?? null;
 }
 
+const ACTIVATE_WINDOW_SCRIPT = String.raw`
+Add-Type -TypeDefinition @"
+using System;
+using System.Runtime.InteropServices;
+public class ClassFlowActivateWindow {
+  [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd);
+  [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+  [DllImport("user32.dll")] public static extern bool IsIconic(IntPtr hWnd);
+  [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
+}
+"@
+$hwnd = [IntPtr][int64]__HWND__
+if ([ClassFlowActivateWindow]::IsIconic($hwnd)) { [void][ClassFlowActivateWindow]::ShowWindow($hwnd, 9) }
+[void][ClassFlowActivateWindow]::SetForegroundWindow($hwnd)
+Start-Sleep -Milliseconds 250
+$foreground = [int64][ClassFlowActivateWindow]::GetForegroundWindow()
+ConvertTo-Json -InputObject @{ active = ($foreground -eq [int64]__HWND__) } -Compress
+`;
+
+/**
+ * 激活（前台化）指定窗口；返回是否已在前台。
+ * hwnd 只在 Main 内部传递（renderer / model 永远只见 opaque windowId）。
+ */
+export async function activateNativeWindow(hwnd: number): Promise<boolean> {
+  const script = ACTIVATE_WINDOW_SCRIPT.replace("__HWND__", String(Math.trunc(hwnd)));
+  const raw = await runPowerShellJson<{ active?: unknown }>(script, 8_000);
+  return raw?.active === true;
+}
+
 /**
  * opaque windowId ↔ native window 映射（runtime memory only；绝不外传 hwnd/pid）。
  * windowId 在同一 desktop session 内稳定；窗口消失超过 TTL 后清理。

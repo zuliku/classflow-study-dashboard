@@ -313,7 +313,14 @@ export type DesktopComputerBridgeErrorCode =
   | "STALE_OBSERVATION"
   | "ACTION_BLOCKED"
   | "ACTION_FAILED"
-  | "CANCELLED";
+  | "CANCELLED"
+  // Computer Use Phase 3：Session / Task Loop Guard / App Control
+  | "SESSION_PAUSED"
+  | "SESSION_LIMIT_REACHED"
+  | "REPEATED_ACTION"
+  | "NO_PROGRESS"
+  | "APP_NOT_FOUND"
+  | "APP_LAUNCH_FAILED";
 
 /**
  * UI 元素（模型可见的最小字段集）。
@@ -350,8 +357,11 @@ export interface ClassFlowDesktopComputerObservation {
   windowTitle: string;
   /** opaque 逻辑窗口 id（win-…）；screen 观察无活动窗口时为 null */
   windowId: string | null;
+  /** Computer Use Phase 3：当前活动应用 / 聚焦窗口（多窗口工作流） */
+  activeApplication?: string;
+  focusedWindow?: string | null;
   viewport: { width: number; height: number };
-  /** 有界可操作窗口列表（只含 opaque id/title/appName/active；hwnd/pid 不出现） */
+  /** 有界可操作窗口列表（只含 opaque id/title/appName/active/z-order；hwnd/pid 不出现） */
   windows: ClassFlowDesktopComputerWindow[];
   windowsTruncated: boolean;
   elements: ClassFlowDesktopComputerElement[];
@@ -362,6 +372,8 @@ export interface ClassFlowDesktopComputerObservation {
   warnings: string[];
   uiTreeRevision: number;
   capturedAt: string;
+  /** Phase 3：本 Turn DesktopControlSession 状态（只读事实） */
+  session?: ClassFlowDesktopComputerSessionStatus;
 }
 
 /** 观察到的顶层窗口（模型可用于选择后续观察目标；只含 opaque windowId） */
@@ -370,6 +382,16 @@ export interface ClassFlowDesktopComputerWindow {
   title: string;
   appName: string;
   active: boolean;
+  /** z-order（越小越靠前） */
+  zOrder?: number;
+}
+
+/** Computer Use Phase 3：多窗口列表（list_desktop_windows） */
+export interface ClassFlowDesktopComputerWindowList {
+  focusedWindowId: string | null;
+  activeApplication: string;
+  windows: ClassFlowDesktopComputerWindow[];
+  windowsTruncated: boolean;
 }
 
 export interface ClassFlowDesktopComputerCapabilities {
@@ -379,6 +401,60 @@ export interface ClassFlowDesktopComputerCapabilities {
   uiAutomation: boolean;
   /** Phase 2：action runtime 可用（prepareAction / action / cancelActions） */
   action: boolean;
+  /** Phase 3：session / 多窗口 / 应用控制可用 */
+  session: boolean;
+  appControl: boolean;
+}
+
+/* ---------------- Computer Use Phase 3：DesktopControlSession ---------------- */
+
+export type DesktopControlSessionState =
+  | "idle"
+  | "observing"
+  | "acting"
+  | "waiting"
+  | "approval-required"
+  | "paused"
+  | "completed"
+  | "failed"
+  | "cancelled";
+
+export interface ClassFlowDesktopComputerSessionStatus {
+  sessionId: string;
+  state: DesktopControlSessionState;
+  createdAt: number;
+  updatedAt: number;
+  elapsedMs: number;
+  actions: number;
+  observations: number;
+  remainingActions: number;
+  appName: string | null;
+  windowTitle: string | null;
+  actionLabel: string | null;
+  failureReason: string | null;
+}
+
+/** 经 preload subscribe 推送的会话状态事件（sanitized；UI-only，不进入模型 context） */
+export interface ClassFlowDesktopComputerSessionEvent {
+  type: "session";
+  sessionId: string;
+  state: DesktopControlSessionState;
+  appName: string | null;
+  windowTitle: string | null;
+  actionLabel: string | null;
+  actions: number;
+  observations: number;
+  updatedAt: number;
+}
+
+/** 打开应用结果（logical app identifier；绝不返回 exe 绝对路径） */
+export interface ClassFlowDesktopComputerAppLaunchResult {
+  appId: string;
+  label: string;
+  launched: boolean;
+  /** 启动后出现的窗口（若在等待窗口内找到） */
+  windowId?: string;
+  elapsedMs: number;
 }
 
 /* ---------------- Computer Use Phase 2：Desktop Action contract ---------------- */
@@ -467,6 +543,8 @@ export interface ClassFlowDesktopComputerActionResult {
   newObservationId: string | null;
   changedWindow: boolean | null;
   uiChanged: boolean | null;
+  /** Phase 3：本 Turn DesktopControlSession 状态 */
+  session?: ClassFlowDesktopComputerSessionStatus;
 }
 
 export interface ClassFlowDesktopComputerBridgeV1 {
@@ -507,9 +585,67 @@ export interface ClassFlowDesktopComputerBridgeV2 {
   cancelActions(input: { sessionId: string }): Promise<{ ok: boolean; cancelled: number }>;
 }
 
+/**
+ * Desktop Computer Bridge V3（Computer Use Phase 3：Autonomous Desktop Agent）。
+ * - Session 生命周期 / Task Loop Guard / Pause / Resume
+ * - 多窗口：list / activate（session-local opaque windowId）
+ * - 应用：open_application（logical app identifier + allowlist 解析；绝不接受 exe 路径）
+ * - Session 事件流（UI-only；sanitized）
+ */
+export interface ClassFlowDesktopComputerBridgeV3 {
+  version: 3;
+  capabilities(): Promise<ClassFlowDesktopComputerCapabilities>;
+  observe(input: {
+    target?: "active-window" | "screen";
+    windowId?: string;
+    includeScreenshot?: boolean;
+    includeUiTree?: boolean;
+    sessionId?: string;
+  }): Promise<ClassFlowDesktopComputerObservation>;
+  prepareAction(
+    input: ClassFlowDesktopComputerActionRequest
+  ): Promise<ClassFlowDesktopComputerActionPreparation>;
+  action(
+    input: ClassFlowDesktopComputerActionRequest
+  ): Promise<ClassFlowDesktopComputerActionResult>;
+  /** Emergency Stop：清空该 session 的 observation 并拒绝后续 action */
+  cancelActions(input: { sessionId: string }): Promise<{ ok: boolean; cancelled: number }>;
+  /** 多窗口列表（opaque session-local windowId） */
+  listWindows(input: { sessionId?: string }): Promise<ClassFlowDesktopComputerWindowList>;
+  /** 激活窗口（activate → observe → action 工作流） */
+  activateWindow(input: {
+    windowId: string;
+    sessionId?: string;
+  }): Promise<{
+    windowId: string;
+    appName: string;
+    windowTitle: string;
+    activated: boolean;
+    session?: ClassFlowDesktopComputerSessionStatus;
+  }>;
+  /** 打开应用（logical app identifier；allowlist 解析） */
+  openApplication(input: {
+    app: string;
+    sessionId?: string;
+  }): Promise<ClassFlowDesktopComputerAppLaunchResult>;
+  getSessionStatus(input: { sessionId: string }): Promise<ClassFlowDesktopComputerSessionStatus>;
+  pauseSession(input: { sessionId: string }): Promise<ClassFlowDesktopComputerSessionStatus>;
+  resumeSession(input: { sessionId: string }): Promise<ClassFlowDesktopComputerSessionStatus>;
+  /** Turn 正常结束 → completed（cancelled / failed 不被覆盖） */
+  completeSession(input: { sessionId: string }): Promise<ClassFlowDesktopComputerSessionStatus>;
+  /** renderer 侧 UI 状态（approval-required / waiting / idle） */
+  setSessionState(input: {
+    sessionId: string;
+    state: "approval-required" | "waiting" | "idle";
+  }): Promise<ClassFlowDesktopComputerSessionStatus>;
+  /** Session 状态事件流；返回取消订阅函数 */
+  subscribeSession(listener: (event: ClassFlowDesktopComputerSessionEvent) => void): () => void;
+}
+
 export type ClassFlowDesktopComputerBridge =
   | ClassFlowDesktopComputerBridgeV1
-  | ClassFlowDesktopComputerBridgeV2;
+  | ClassFlowDesktopComputerBridgeV2
+  | ClassFlowDesktopComputerBridgeV3;
 
 declare global {
   interface Window {

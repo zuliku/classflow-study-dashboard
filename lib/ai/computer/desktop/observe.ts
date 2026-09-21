@@ -21,6 +21,11 @@ import { observeDesktopSchema } from "@/lib/ai/computer/tools/schemas";
 import { resolveDesktopObservationCapability } from "@/lib/ai/computer/desktopObservationCapability";
 import { getClassFlowDesktopComputerBridge } from "@/lib/desktop/bridge";
 import { summarizeObservation } from "@/lib/ai/computer/desktop/summary";
+import {
+  extractDesktopVisionCandidates,
+  type DesktopVisionConfig,
+  type DesktopVisionDeps,
+} from "@/lib/ai/computer/gui/vision";
 import { appendComputerAuditEntry } from "@/lib/ai/computer/audit";
 import {
   ComputerOneShotApproval,
@@ -50,6 +55,10 @@ export interface ExecuteObserveDesktopRequest {
   readLimitPerTurn: number;
   /** Emergency Stop：Stop 后不再发起新的观察 */
   isCancelled?: () => boolean;
+  /** Phase 3：Vision fallback 配置（UIA 空 / 显式请求时使用；失败优雅降级） */
+  vision?: DesktopVisionConfig;
+  /** 测试注入（不真实调用视觉模型） */
+  visionDeps?: DesktopVisionDeps;
   now?: () => number;
 }
 
@@ -226,6 +235,20 @@ export async function executeKiroObserveDesktop(
   }
   request.counters.readCount += 1;
 
+  // 6b. Vision fallback（Phase 3）：UIA 空 或 显式请求 → 截图候选区域（只读事实，不执行动作）
+  let visionFallback: Awaited<ReturnType<typeof extractDesktopVisionCandidates>> | null = null;
+  const wantsVision = input.includeVision === true || observation.elementCount === 0;
+  if (wantsVision && observation.screenshot) {
+    visionFallback = await extractDesktopVisionCandidates(
+      {
+        screenshotDataUrl: observation.screenshot.dataUrl,
+        ...(input.visionGoal ? { goal: input.visionGoal } : {}),
+      },
+      request.vision ?? { enabled: false, model: "" },
+      request.visionDeps
+    );
+  }
+
   // 7. Audit（只读执行事实；observationId 为 opaque；绝不含 native 标识 / 像素）
   void appendComputerAuditEntry({
     id: `audit-${crypto.randomUUID()}`,
@@ -242,6 +265,9 @@ export async function executeKiroObserveDesktop(
     observationId: observation.observationId,
     desktopTarget: observation.target,
     uiElementCount: observation.elementCount,
+    ...(sessionId ? { sessionId } : {}),
+    logicalApp: observation.appName || null,
+    windowLabel: observation.windowTitle || null,
   });
 
   return {
@@ -250,7 +276,15 @@ export async function executeKiroObserveDesktop(
       ok: true,
       data: {
         ...summarizeObservation(observation),
-        // 明确阶段边界：模型必须如实告知用户当前不能执行 GUI 操作
+        // Phase 3：vision candidate（归一化坐标；动作仍需 policy / approval，且坐标回退强制确认）
+        visionFallback: visionFallback
+          ? {
+              available: visionFallback.available,
+              ...(visionFallback.reason ? { reason: visionFallback.reason } : {}),
+              candidates: visionFallback.candidates,
+            }
+          : null,
+        // 明确阶段边界：observe 本身不执行任何 GUI 操作
         readOnly: true,
       },
     },

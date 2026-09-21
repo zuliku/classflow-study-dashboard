@@ -80,7 +80,7 @@ export function getClassFlowDesktopComputerBridge(): import("@/lib/desktop/types
   if (!bridge) return null;
   const computer = bridge.computer;
   if (!computer || typeof computer !== "object") return null;
-  if (computer.version !== 1 && computer.version !== 2) return null;
+  if (computer.version !== 1 && computer.version !== 2 && computer.version !== 3) return null;
   if (typeof computer.capabilities !== "function" || typeof computer.observe !== "function") return null;
   return computer;
 }
@@ -98,7 +98,7 @@ export function hasClassFlowDesktopComputer(): boolean {
 export function getClassFlowDesktopComputerActionBridge(): import("@/lib/desktop/types").ClassFlowDesktopComputerBridgeV2 | null {
   const bridge = getClassFlowDesktopComputerBridge();
   if (!bridge) return null;
-  if (bridge.version !== 2) return null;
+  if (bridge.version !== 2 && bridge.version !== 3) return null;
   const candidate = bridge as import("@/lib/desktop/types").ClassFlowDesktopComputerBridgeV2;
   if (
     typeof candidate.prepareAction !== "function" ||
@@ -113,6 +113,40 @@ export function getClassFlowDesktopComputerActionBridge(): import("@/lib/desktop
 /** Desktop Computer Action 是否可用 */
 export function hasClassFlowDesktopComputerAction(): boolean {
   return getClassFlowDesktopComputerActionBridge() !== null;
+}
+
+/**
+ * Desktop Computer Session Bridge（Phase 3）：渐进能力检测。
+ * 要求 computer version === 3 且完整 session surface（多窗口 / 应用 / 生命周期 / 事件）。
+ */
+export function getClassFlowDesktopComputerSessionBridge(): import("@/lib/desktop/types").ClassFlowDesktopComputerBridgeV3 | null {
+  const bridge = getClassFlowDesktopComputerBridge();
+  if (!bridge) return null;
+  if (bridge.version !== 3) return null;
+  const candidate = bridge as import("@/lib/desktop/types").ClassFlowDesktopComputerBridgeV3;
+  const required = [
+    "listWindows",
+    "activateWindow",
+    "openApplication",
+    "getSessionStatus",
+    "pauseSession",
+    "resumeSession",
+    "completeSession",
+    "setSessionState",
+    "subscribeSession",
+    "prepareAction",
+    "action",
+    "cancelActions",
+  ] as const;
+  for (const method of required) {
+    if (typeof (candidate as unknown as Record<string, unknown>)[method] !== "function") return null;
+  }
+  return candidate;
+}
+
+/** Desktop Computer Session 是否可用（Sidecar / 多窗口 / 应用控制） */
+export function hasClassFlowDesktopComputerSession(): boolean {
+  return getClassFlowDesktopComputerSessionBridge() !== null;
 }
 
 /** Terminal V2 Streaming 是否可用 */

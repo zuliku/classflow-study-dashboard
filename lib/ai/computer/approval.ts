@@ -91,6 +91,7 @@ export function riskOfCapability(capability: ComputerCapability): ComputerRisk {
       return "destructive";
     case "app.open":
     case "app.reveal":
+    case "app.activate":
     case "shell.execute":
     // Desktop Action：GUI 操作属于 execute 风险（具体风险由 GUI Risk Gate 进一步分级）
     case "ui.interact":

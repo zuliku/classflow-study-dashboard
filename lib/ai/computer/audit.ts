@@ -55,6 +55,13 @@ export interface ComputerAuditEntry {
   guiMethod?: string;
   changedWindow?: boolean;
   uiChanged?: boolean;
+  /** Computer Use Phase 3（可选）：Desktop Session / 多窗口 / 应用事实。
+   *  绝不记录密码 / Token / API key / native handle / 绝对敏感路径 */
+  sessionId?: string;
+  logicalApp?: string | null;
+  windowLabel?: string | null;
+  elementRole?: string;
+  elementName?: string;
 }
 
 function openAuditDb(): Promise<IDBDatabase | null> {

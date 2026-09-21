@@ -389,6 +389,8 @@ describe("DesktopObservationRuntime.observe — 脱敏 Observation", () => {
       screenshot: true,
       uiAutomation: true,
       action: true,
+      session: true,
+      appControl: true,
     });
   });
 
@@ -400,6 +402,8 @@ describe("DesktopObservationRuntime.observe — 脱敏 Observation", () => {
       screenshot: false,
       uiAutomation: false,
       action: false,
+      session: false,
+      appControl: false,
     });
   });
 });

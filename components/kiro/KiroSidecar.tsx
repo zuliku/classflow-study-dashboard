@@ -4,6 +4,7 @@ import type { KiroSidecarMode } from "@/components/kiro/KiroSessionProvider";
 import { KiroChatSurface } from "@/components/kiro/KiroChatSurface";
 import { KiroSidecarShell } from "@/components/kiro/sidecar/KiroSidecarShell";
 import { KiroSidecarMinimized } from "@/components/kiro/sidecar/KiroSidecarMinimized";
+import { KiroComputerSessionCard } from "@/components/kiro/computer/KiroComputerSessionCard";
 import { usePresence } from "@/lib/usePresence";
 import { MOTION_EXIT_MS } from "@/lib/motion";
 
@@ -25,6 +26,7 @@ export function KiroSidecar({ mode }: { mode: KiroSidecarMode }) {
     <>
       <div data-testid="kiro-sidecar-host" data-mode={mode} data-visible={hostVisible ? "true" : "false"}>
         <KiroSidecarShell mode={mode} present={hostVisible}>
+          <KiroComputerSessionCard />
           <KiroChatSurface variant="sidecar" />
         </KiroSidecarShell>
       </div>

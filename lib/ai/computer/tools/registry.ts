@@ -26,6 +26,9 @@ import {
   retrieveWorkspaceContextSchema,
   observeDesktopSchema,
   desktopActionSchema,
+  listDesktopWindowsSchema,
+  activateWindowSchema,
+  openApplicationSchema,
   runTerminalCommandSchema,
   writeTerminalInputSchema,
   startTerminalCommandSchema,
@@ -143,9 +146,39 @@ export const COMPUTER_READ_TOOLS: ComputerToolDefinition[] = [
       { input: { windowId: "win-3f9a2c1b4d5e", includeUiTree: true } },
     ],
   },
+  {
+    // Computer Use Phase 3：多窗口列表（opaque windowId + z-order；Observe 的轻量入口）
+    name: "list_desktop_windows",
+    description:
+      "列出当前桌面可见窗口（opaque windowId / 标题 / 应用 / 是否活动 / z-order）。用于在多个窗口之间选择目标：先 list，再 activate_window 切换，然后 observe_desktop 观察该窗口，最后 desktop_action 操作。windowId 只在本次会话内有效，不要缓存或使用其它来源的 id。",
+    schema: listDesktopWindowsSchema,
+    capability: "screen.observe",
+    mutation: false,
+    inputExamples: [{ input: {} }],
+  },
 ];
 
 export const COMPUTER_MUTATION_TOOLS: ComputerToolDefinition[] = [
+  {
+    // Computer Use Phase 3：切换窗口（activate → observe → action）
+    name: "activate_window",
+    description:
+      "把指定窗口切换到前台（使用 list_desktop_windows / observe_desktop 返回的 opaque windowId）。切换后应重新 observe_desktop 再操作。只有当前前台窗口会被操作，因此多窗口任务必须先 activate 再 action。",
+    schema: activateWindowSchema,
+    capability: "app.activate",
+    mutation: true,
+    inputExamples: [{ input: { windowId: "win-3f9a2c1b4d5e" } }],
+  },
+  {
+    // Computer Use Phase 3：打开应用（logical app id + allowlist；绝不接受 exe 路径）
+    name: "open_application",
+    description:
+      "打开一个已安装应用（使用逻辑应用名，例如 chrome / word / wechat / notepad / explorer / terminal）。只允许白名单内的应用；绝不接受 exe 或文件路径。打开后等待窗口出现并返回 windowId，应随后 observe_desktop 观察该窗口。如果应用已在运行，会返回已有窗口。",
+    schema: openApplicationSchema,
+    capability: "app.open",
+    mutation: true,
+    inputExamples: [{ input: { app: "chrome" } }, { input: { app: "word" } }],
+  },
   {
     // Computer Use Phase 2（Observe → Action → Observe）：在明确授权下操作 GUI。
     // 不实现 drag&drop / clipboard / 文件上传协议 / 支付 / 密码自动输入 / unrestricted system control。

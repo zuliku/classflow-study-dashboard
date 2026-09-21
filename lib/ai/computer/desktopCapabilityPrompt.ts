@@ -244,6 +244,50 @@ function buildDesktopActionSection(snapshot: KiroComputerTurnSnapshot | null): s
 }
 
 /**
+ * Computer Use Phase 3：Autonomous Desktop Agent 工作流（工具偏好 / 验证 / 循环守卫）。
+ * 仅在桌面观察能力可用时注入。
+ */
+function buildDesktopAgentSection(snapshot: KiroComputerTurnSnapshot | null): string {
+  const observation = resolveDesktopObservationCapability(snapshot);
+  if (!observation.available) return "";
+  return [
+    "# Desktop Agent Workflow",
+    "",
+    "多步骤桌面任务必须遵循：Goal → Observe → Plan next action → Act → Verify → Replan → Finish。",
+    "不要盲目连续点击；每次动作后先看新的 observation 再决定下一步。",
+    "",
+    "工具选择优先级（重要）：",
+    "- 工作区文件读写：使用结构化 Filesystem / Document 工具（read_text / create_text_file / create_document / patch_text_file…），不要用鼠标在编辑器里点。",
+    "- 运行开发命令：使用 Terminal（run_terminal_command），不要用 GUI 终端窗口。",
+    "- 普通应用界面（浏览器浏览、微信会话、Word 界面等）：使用 Desktop GUI（observe_desktop / desktop_action）。",
+    "- 不要为了演示鼠标操作，把可以安全结构化完成的操作改成 GUI 点击。",
+    "",
+    "多窗口工作流：",
+    "- list_desktop_windows → activate_window → observe_desktop → desktop_action。",
+    "- 所有 windowId 都是会话内 opaque id；切换窗口后必须重新 observe。",
+    "- open_application 只接受逻辑应用名（chrome / word / wechat / notepad / explorer…）；不要传 exe 或路径。",
+    "",
+    "验证（必须）：",
+    "- 发送消息：必须观察到消息出现在聊天记录（或明确成功状态 UI），不能以「点击了发送」作为完成依据。",
+    "- 保存文档：必须观察到保存状态或使用 Filesystem / Document 工具验证文件存在与内容。",
+    "- 表单提交：必须观察到提交成功状态。",
+    "- 能用结构化工具验证时优先用结构化工具，而不是只看屏幕。",
+    "",
+    "Vision fallback（UIA 优先）：",
+    "- 只有 canvas / 自绘 UI / 远程桌面 / UIA 树为空 / 控件无法语义定位时，才使用 observe_desktop(includeVision=true) 获取候选区域。",
+    "- 视觉输出只是 label + 归一化候选区域（不能直接执行动作）；后续 desktop_action 使用这些候选坐标时属于坐标回退，会请求用户确认。",
+    "",
+    "Loop Guard：",
+    "- 每个会话有动作数 / 观察数 / 时长上限；重复相同动作或无进展（界面不变）会被自动停止。",
+    "- 被停止后不要继续重试同一动作；应报告当前状态并请用户介入。",
+    "",
+    "高风险动作（必须逐次确认，不能提前笼统授权）：",
+    "- 发送 / 发布 / 删除 / 购买 / 支付 / 最终提交 / 账号与安全设置 / 权限变更 / 上传到外部服务 / 任何不可逆操作。",
+    "- 可以自动填写表单，但点击「提交 / 发送 / 确认」之前必须获得 allow-once 确认。",
+  ].join("\n");
+}
+
+/**
  * 根据当前 Turn 的 frozen snapshot 生成能力声明段。
  * snapshot 为 null 或未启用 → computer-disabled 表达（与 resolver 判定一致）。
  */
@@ -267,7 +311,10 @@ export function buildDesktopRuntimeCapabilityContext(
   })();
   const observationSection = buildDesktopObservationSection(snapshot);
   const actionSection = buildDesktopActionSection(snapshot);
-  return [terminalSection, observationSection, actionSection].filter(Boolean).join("\n\n");
+  const agentSection = buildDesktopAgentSection(snapshot);
+  return [terminalSection, observationSection, actionSection, agentSection]
+    .filter(Boolean)
+    .join("\n\n");
 }
 
 export type { TerminalCapabilityState };

@@ -90,6 +90,7 @@ import { clearLiveImageSources } from "@/lib/ai/attachments/liveImageRegistry";
 import {
   getClassFlowDesktopTerminalBridge,
   getClassFlowDesktopComputerActionBridge,
+  getClassFlowDesktopComputerSessionBridge,
   hasClassFlowDesktopComputer,
   hasClassFlowDesktopComputerAction,
   isNativeAdapterRef,
@@ -2033,6 +2034,12 @@ export function useKiroChat({
           taskId,
           // Computer Use Phase 2：Stop 后 GUI action / observe 一律拒绝执行（Emergency Stop）
           isCancelled: () => stoppedTurnMessageIdRef.current !== null,
+          // Computer Use Phase 3：Vision fallback（复用扫描 PDF Vision 配置；缺 key → 优雅降级）
+          desktopVision: {
+            enabled: webPdfVisionEnabled,
+            model: normalizeWebPdfVisionModel(webPdfVisionModel),
+            ...(getSessionWebPdfVisionApiKey() ? { apiKey: getSessionWebPdfVisionApiKey() } : {}),
+          },
         },
         counters: computerCountersRef.current,
         oneShotApprovals: oneShotApprovalsRef.current,
@@ -3358,6 +3365,27 @@ export function useKiroChat({
     cancelDesktopControlSession();
     void chat.stop();
   }, [chat, cancelDesktopControlSession, setPendingApproval, setPendingQueueLength, updateTasks]);
+
+  /** Computer Use Phase 3：Sidecar Session 卡的 Stop 最高优先级（统一走 handleStop） */
+  const handleStopRef = useRef(handleStop);
+  handleStopRef.current = handleStop;
+  useEffect(() => {
+    const handler = () => handleStopRef.current();
+    window.addEventListener("classflow:computer:stop", handler as EventListener);
+    return () => window.removeEventListener("classflow:computer:stop", handler as EventListener);
+  }, []);
+
+  /** Computer Use Phase 3：Turn 正常结束 → session completed（cancelled / failed 不被覆盖） */
+  useEffect(() => {
+    if (turnExecution !== "settled") return;
+    const sessionId = desktopSessionIdRef.current;
+    if (!sessionId) return;
+    const bridge = getClassFlowDesktopComputerSessionBridge();
+    if (!bridge) return;
+    void bridge.completeSession({ sessionId }).catch(() => {
+      /* UI 状态上报 best-effort */
+    });
+  }, [turnExecution]);
 
   return {
     messages,

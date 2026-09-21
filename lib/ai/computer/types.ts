@@ -21,6 +21,8 @@ export type ComputerCapability =
   | "document.modify"
   | "app.open"
   | "app.reveal"
+  // Computer Use Phase 3：窗口/应用切换（Desktop Runtime gated；不再 hard deny）
+  | "app.activate"
   | "shell.execute"
   | "network.access"
   // Computer Use Phase 1（Desktop Observe；只读）：

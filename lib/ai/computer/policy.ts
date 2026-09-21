@@ -61,6 +61,7 @@ const HARD_DENY_LABELS: Record<ComputerCapability, string> = {
   "fs.delete": "删除文件",
   "app.open": "打开应用",
   "app.reveal": "显示位置",
+  "app.activate": "切换窗口",
   "shell.execute": "执行命令",
   "network.access": "网络访问",
   "workspace.list": "workspace.list",

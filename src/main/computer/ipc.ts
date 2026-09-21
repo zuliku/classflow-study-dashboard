@@ -10,7 +10,7 @@
  * - 结构化错误（{ code, message } JSON 编码）；绝不含 OS stack / absolute path / HWND / PID
  * - 定时清理过期 Observation（含 elementId → native 映射；unref，不阻塞退出）
  */
-import { ipcMain } from "electron";
+import { ipcMain, BrowserWindow } from "electron";
 import { validateIpcSender } from "@/lib/security/ipcSender";
 import type { ClassFlowDesktopComputerCapabilities } from "@/lib/desktop/types";
 import { DesktopComputerIpcError } from "./observation";
@@ -70,7 +70,21 @@ const UNAVAILABLE_CAPABILITIES: ClassFlowDesktopComputerCapabilities = {
   screenshot: false,
   uiAutomation: false,
   action: false,
+  session: false,
+  appControl: false,
 };
+
+/** Session 事件 → 所有 renderer 窗口（已脱敏；UI-only） */
+function broadcastSessionEvent(event: unknown): void {
+  for (const window of BrowserWindow.getAllWindows()) {
+    if (window.isDestroyed()) continue;
+    try {
+      window.webContents.send("bridge:computer:session-event", event);
+    } catch {
+      /* 单个窗口发送失败忽略 */
+    }
+  }
+}
 
 export function registerComputerIpc(opts?: ComputerIpcOptions): void {
   const wrap = <T extends unknown[]>(
@@ -132,6 +146,37 @@ export function registerComputerIpc(opts?: ComputerIpcOptions): void {
       }
     })
   );
+
+  // Computer Use Phase 3：多窗口 / 应用控制 / Session 生命周期
+  const sessionHandlers = [
+    "listWindows",
+    "activateWindow",
+    "openApplication",
+    "getSessionStatus",
+    "pauseSession",
+    "resumeSession",
+    "completeSession",
+    "setSessionState",
+  ] as const;
+  for (const method of sessionHandlers) {
+    ipcMain.handle(
+      `bridge:computer:${method}`,
+      wrap(`bridge:computer:${method}`, async (_event, input: unknown) => {
+        try {
+          const runtime = await getDesktopObservationRuntime();
+          const fn = runtime[method] as (raw: unknown) => unknown;
+          return await fn.call(runtime, input);
+        } catch (err) {
+          throw encodeBridgeError(err);
+        }
+      })
+    );
+  }
+
+  // Session 状态事件（UI-only；sanitized）
+  void getDesktopObservationRuntime().then((runtime) => {
+    runtime.setSessionEventSink((event) => broadcastSessionEvent(event));
+  });
 
   // 短 TTL 清理（unref：不阻止进程退出；重复注册时替换旧 timer）
   if (sweepTimer) {

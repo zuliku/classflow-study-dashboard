@@ -1,0 +1,470 @@
+/**
+ * Computer Use Phase 3 — Fake Desktop Runtime（CI 不依赖真实 Windows UI）。
+ *
+ * 在内存中模拟 desktop bridge v3 的完整表面（observe / prepareAction / action /
+ * listWindows / activateWindow / openApplication / session 生命周期），
+ * 并提供可脚本化的世界状态（点击 → UI 变化）用于多步骤 integration tests。
+ */
+import { vi } from "vitest";
+import type {
+  ClassFlowDesktopComputerActionPreparation,
+  ClassFlowDesktopComputerActionResult,
+  ClassFlowDesktopComputerObservation,
+  ClassFlowDesktopComputerSessionEvent,
+  ClassFlowDesktopComputerSessionStatus,
+  ClassFlowDesktopComputerWindow,
+  ClassFlowDesktopComputerWindowList,
+  DesktopControlSessionState,
+} from "@/lib/desktop/types";
+import { classifyGuiAction } from "@/lib/ai/computer/gui/risk";
+
+export interface FakeElement {
+  elementId: string;
+  role: string;
+  name: string;
+  enabled?: boolean;
+  focused?: boolean;
+  isPassword?: boolean;
+  bounds: { x: number; y: number; width: number; height: number };
+  /** 点击行为（可选）：改变世界状态 */
+  onClick?: (world: FakeDesktopWorld) => void;
+}
+
+export interface FakeWindow {
+  windowId: string;
+  title: string;
+  appName: string;
+  elements: FakeElement[];
+  /** 是否已最小化（activate 后置 false） */
+  minimized?: boolean;
+}
+
+interface ObservationRecord {
+  observationId: string;
+  windowId: string;
+  elements: Map<string, FakeElement>;
+  viewport: { width: number; height: number };
+  revision: number;
+  createdAt: number;
+}
+
+const SESSION_LIMITS = { maxActions: 30, maxObservations: 60 };
+
+export class FakeDesktopWorld {
+  windows: FakeWindow[] = [];
+  activeWindowId: string | null = null;
+  /** 键盘输入落点（type/key 目标） */
+  focusedField: { windowId: string; elementId: string } | null = null;
+  /** 最近一次输入文本（场景脚本用） */
+  typedText: string | null = null;
+  /** 最近一次 Enter 的窗口（脚本化行为） */
+  onEnter: ((world: FakeDesktopWorld) => void) | null = null;
+  private observations = new Map<string, ObservationRecord>();
+  private obsSeq = 0;
+  private revision = 0;
+  private staleWindows = new Set<string>();
+  private visionCandidates: Array<{ label: string; confidence: number; bounds: { x: number; y: number; width: number; height: number } }> = [];
+  /** 已消息记录（聊天场景验证） */
+  sentMessages: string[] = [];
+  /** 启动过的应用 */
+  launchedApps: string[] = [];
+  private listeners = new Set<(event: ClassFlowDesktopComputerSessionEvent) => void>();
+  private session: ClassFlowDesktopComputerSessionStatus | null = null;
+  private prevSignature: string | null = null;
+  private noProgress = 0;
+  readonly log: Array<{ tool: string; input: unknown }> = [];
+
+  constructor(windows: FakeWindow[], activeWindowId?: string) {
+    this.windows = windows;
+    this.activeWindowId = activeWindowId ?? windows[0]?.windowId ?? null;
+  }
+
+  addWindow(window: FakeWindow, activate = false): void {
+    this.windows.push(window);
+    if (activate) this.activeWindowId = window.windowId;
+  }
+
+  removeWindow(windowId: string): void {
+    this.windows = this.windows.filter((w) => w.windowId !== windowId);
+    if (this.activeWindowId === windowId) this.activeWindowId = this.windows[0]?.windowId ?? null;
+  }
+
+  markStale(windowId: string): void {
+    this.staleWindows.add(windowId);
+  }
+
+  setVisionCandidates(
+    candidates: Array<{ label: string; confidence: number; bounds: { x: number; y: number; width: number; height: number } }>
+  ): void {
+    this.visionCandidates = candidates;
+  }
+
+  getActiveWindow(): FakeWindow | null {
+    return this.windows.find((w) => w.windowId === this.activeWindowId) ?? null;
+  }
+
+  private signature(window: FakeWindow): string {
+    return `${window.windowId}:${window.elements.map((e) => `${e.elementId}:${e.name}:${e.bounds.x},${e.bounds.y}`).join("|")}`;
+  }
+
+  private emitSession(state: DesktopControlSessionState, actionLabel: string | null): void {
+    const window = this.getActiveWindow();
+    this.session = {
+      sessionId: this.session?.sessionId ?? "cs-fake-0000-0000-0000-0000",
+      state,
+      createdAt: this.session?.createdAt ?? 0,
+      updatedAt: Date.now(),
+      elapsedMs: 0,
+      actions: this.session?.actions ?? 0,
+      observations: this.session?.observations ?? 0,
+      remainingActions: SESSION_LIMITS.maxActions - (this.session?.actions ?? 0),
+      appName: window?.appName ?? null,
+      windowTitle: window?.title ?? null,
+      actionLabel,
+      failureReason: state === "failed" ? "no-progress" : null,
+    };
+    for (const listener of this.listeners) listener({ type: "session", ...this.session });
+  }
+
+  private ensureSession(sessionId: string): void {
+    if (!this.session) {
+      this.session = {
+        sessionId,
+        state: "idle",
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        elapsedMs: 0,
+        actions: 0,
+        observations: 0,
+        remainingActions: SESSION_LIMITS.maxActions,
+        appName: null,
+        windowTitle: null,
+        actionLabel: null,
+        failureReason: null,
+      };
+    }
+  }
+
+  // ---------- bridge methods ----------
+
+  capabilities = vi.fn(async () => ({
+    available: true,
+    platform: "windows" as const,
+    screenshot: true,
+    uiAutomation: true,
+    action: true,
+    session: true,
+    appControl: true,
+  }));
+
+  listWindows = vi.fn(async (_input?: unknown): Promise<ClassFlowDesktopComputerWindowList> => {
+    const focused = this.getActiveWindow();
+    return {
+      focusedWindowId: focused?.windowId ?? null,
+      activeApplication: focused?.appName ?? "",
+      windows: this.windows.map((w, index) => ({
+        windowId: w.windowId,
+        title: w.title,
+        appName: w.appName,
+        active: w.windowId === this.activeWindowId,
+        zOrder: index,
+      })),
+      windowsTruncated: false,
+    };
+  });
+
+  observe = vi.fn(async (input?: { target?: string; windowId?: string; includeUiTree?: boolean; sessionId?: string }) => {
+    const window = input?.windowId
+      ? this.windows.find((w) => w.windowId === input.windowId) ?? null
+      : this.getActiveWindow();
+    // 新观察 = 最新 UI 事实 → 清除该窗口的 stale 标记（模拟重新观察后恢复可操作）
+    if (window) this.staleWindows.delete(window.windowId);
+    this.obsSeq += 1;
+    this.revision += 1;
+    const elements = window ? window.elements.map((element) => ({ ...element })) : [];
+    const record: ObservationRecord = {
+      observationId: `obs-fake-${this.obsSeq}`,
+      windowId: window?.windowId ?? "",
+      elements: new Map(elements.map((element) => [element.elementId, element])),
+      viewport: { width: 1280, height: 800 },
+      revision: this.revision,
+      createdAt: Date.now(),
+    };
+    this.observations.set(record.observationId, record);
+    this.prevSignature = window ? this.signature(window) : null;
+    if (input?.sessionId) {
+      this.ensureSession(input.sessionId);
+      this.emitSession("observing", null);
+      this.session!.state = "idle";
+    }
+    return this.buildObservation(record, window);
+  });
+
+  private buildObservation(record: ObservationRecord, window: FakeWindow | null): ClassFlowDesktopComputerObservation {
+    return {
+      observationId: record.observationId,
+      target: "active-window",
+      appName: window?.appName ?? "",
+      windowTitle: window?.title ?? "",
+      windowId: window?.windowId ?? null,
+      activeApplication: this.getActiveWindow()?.appName ?? "",
+      focusedWindow: this.activeWindowId,
+      viewport: record.viewport,
+      windows: this.windows.map((w, index) => ({
+        windowId: w.windowId,
+        title: w.title,
+        appName: w.appName,
+        active: w.windowId === this.activeWindowId,
+        zOrder: index,
+      })),
+      windowsTruncated: false,
+      elements: [...record.elements.values()].map((element) => ({
+        elementId: element.elementId,
+        role: element.role,
+        name: element.name,
+        enabled: element.enabled !== false,
+        focused: element.focused === true,
+        isPassword: element.isPassword === true,
+        bounds: element.bounds,
+      })),
+      elementCount: record.elements.size,
+      elementsTruncated: false,
+      screenshot: {
+        captured: true,
+        mimeType: "image/jpeg",
+        width: 1280,
+        height: 800,
+        bytes: 1024,
+        capturedAt: new Date().toISOString(),
+        dataUrl: "data:image/jpeg;base64,AAAA",
+      },
+      warnings: [],
+      uiTreeRevision: record.revision,
+      capturedAt: new Date().toISOString(),
+    };
+  }
+
+  prepareAction = vi.fn(async (input: {
+    action: string;
+    observationId?: string;
+    target?: { elementId?: string; normalized?: { x: number; y: number } };
+    text?: string;
+    key?: string;
+    sessionId?: string;
+  }): Promise<ClassFlowDesktopComputerActionPreparation> => {
+    this.log.push({ tool: "prepareAction", input });
+    const record = input.observationId ? this.observations.get(input.observationId) : null;
+    if (!record) throw { code: "STALE_OBSERVATION", message: "观察已过期" };
+    const window = this.windows.find((w) => w.windowId === record.windowId) ?? null;
+    if (!window) throw { code: "STALE_OBSERVATION", message: "窗口已关闭" };
+    if (this.staleWindows.has(window.windowId)) {
+      throw { code: "STALE_OBSERVATION", message: "界面已变化" };
+    }
+    const element = input.target?.elementId ? record.elements.get(input.target.elementId) ?? null : null;
+    if (input.target?.elementId && !element) {
+      throw { code: "STALE_OBSERVATION", message: "元素已消失" };
+    }
+    const risk = classifyGuiAction({
+      action: input.action as never,
+      ...(input.text !== undefined ? { text: input.text } : {}),
+      ...(input.key !== undefined ? { key: input.key } : {}),
+      target: {
+        kind: element ? "element" : input.target?.normalized ? "coordinates" : "none",
+        ...(element ? { role: element.role, name: element.name } : {}),
+        isPassword: element?.isPassword === true,
+        appName: window.appName,
+        windowTitle: window.title,
+      },
+    });
+    return {
+      action: input.action as never,
+      risk: { level: risk.level, reason: risk.reason },
+      target: {
+        kind: element ? "element" : input.target?.normalized ? "coordinates" : "none",
+        ...(element ? { elementId: element.elementId, role: element.role, name: element.name, isPassword: element.isPassword === true } : {}),
+        appName: window.appName,
+        windowTitle: window.title,
+        windowId: window.windowId,
+        targetLabel: element ? `${element.role}「${element.name}」` : "目标",
+      },
+      observationId: record.observationId,
+      textPreview: risk.textPreview,
+      requiresObservation: true,
+    };
+  });
+
+  action = vi.fn(async (input: {
+    action: string;
+    observationId?: string;
+    target?: { elementId?: string; normalized?: { x: number; y: number } };
+    text?: string;
+    key?: string;
+    scroll?: number;
+    sessionId?: string;
+  }): Promise<ClassFlowDesktopComputerActionResult> => {
+    this.log.push({ tool: "action", input });
+    if (input.action === "wait") {
+      return {
+        actionResult: { action: "wait", method: "wait", durationMs: 100 },
+        observation: null,
+        newObservationId: null,
+        changedWindow: null,
+        uiChanged: null,
+      };
+    }
+    const record = input.observationId ? this.observations.get(input.observationId) : null;
+    if (!record) throw { code: "STALE_OBSERVATION", message: "观察已过期" };
+    const window = this.windows.find((w) => w.windowId === record.windowId) ?? null;
+    if (!window || this.staleWindows.has(window.windowId)) {
+      throw { code: "STALE_OBSERVATION", message: "界面已变化" };
+    }
+    const element = input.target?.elementId ? record.elements.get(input.target.elementId) ?? null : null;
+    const beforeSignature = this.signature(window);
+
+    if (input.action === "click" || input.action === "double_click") {
+      this.ensureSession(input.sessionId ?? "cs-fake");
+      this.emitSession("acting", `${input.action} ${element?.elementId ?? ""}`);
+      this.session!.actions += 1;
+      element?.onClick?.(this);
+    } else if (input.action === "focus") {
+      this.focusedField = element ? { windowId: window.windowId, elementId: element.elementId } : null;
+    } else if (input.action === "type") {
+      this.ensureSession(input.sessionId ?? "cs-fake");
+      this.emitSession("acting", `type ${element?.elementId ?? ""}`);
+      this.session!.actions += 1;
+      if (!element) throw { code: "ACTION_FAILED", message: "没有可输入的目标" };
+      this.typedText = input.text ?? null;
+    } else if (input.action === "key") {
+      this.ensureSession(input.sessionId ?? "cs-fake");
+      this.emitSession("acting", `key ${input.key ?? ""}`);
+      this.session!.actions += 1;
+      if ((input.key ?? "").toLowerCase() === "enter") this.onEnter?.(this);
+    } else if (input.action === "scroll") {
+      // 无 UI 变化（用于 no-progress 场景）
+    }
+
+    const afterSignature = this.signature(window);
+    const uiChanged = beforeSignature !== afterSignature;
+    if (!uiChanged) this.noProgress += 1;
+    else this.noProgress = 0;
+    if (this.noProgress > 3) {
+      this.emitSession("failed", null);
+      throw { code: "NO_PROGRESS", message: "连续多次操作后界面没有变化" };
+    }
+
+    // 自动重新观察（observe → action → verify）
+    const nextObservation = await this.observe({ sessionId: input.sessionId });
+    return {
+      actionResult: {
+        action: input.action as never,
+        method: (input.action === "type" ? "uia-setvalue" : input.action === "key" ? "sendinput-key" : "uia-invoke") as never,
+        durationMs: 50,
+      },
+      observation: nextObservation,
+      newObservationId: nextObservation.observationId,
+      changedWindow: false,
+      uiChanged,
+    };
+  });
+
+  cancelActions = vi.fn(async (input: { sessionId: string }) => {
+    this.emitSession("cancelled", null);
+    return { ok: true, cancelled: 1 };
+  });
+
+  activateWindow = vi.fn(async (input: { windowId: string; sessionId?: string }) => {
+    this.log.push({ tool: "activateWindow", input });
+    const window = this.windows.find((w) => w.windowId === input.windowId);
+    if (!window) throw { code: "STALE_OBSERVATION", message: "目标窗口已不存在" };
+    this.activeWindowId = window.windowId;
+    window.minimized = false;
+    this.ensureSession(input.sessionId ?? "cs-fake");
+    this.session!.actions += 1;
+    this.emitSession("idle", null);
+    return { windowId: window.windowId, appName: window.appName, windowTitle: window.title, activated: true };
+  });
+
+  openApplication = vi.fn(async (input: { app: string; sessionId?: string }) => {
+    this.log.push({ tool: "openApplication", input });
+    const allowed = new Set(["chrome", "word", "wechat", "notepad", "explorer", "terminal"]);
+    const appId = input.app.toLowerCase();
+    if (!allowed.has(appId)) {
+      throw { code: "APP_NOT_FOUND", message: "应用不在允许列表中" };
+    }
+    this.launchedApps.push(appId);
+    const window = this.windows.find((w) => w.appName.toLowerCase().includes(appId));
+    this.ensureSession(input.sessionId ?? "cs-fake");
+    this.session!.actions += 1;
+    if (window) this.activeWindowId = window.windowId;
+    return {
+      appId,
+      label: appId,
+      launched: true,
+      ...(window ? { windowId: window.windowId } : {}),
+      elapsedMs: 10,
+    };
+  });
+
+  getSessionStatus = vi.fn(async (input: { sessionId: string }) => {
+    this.ensureSession(input.sessionId);
+    return this.session!;
+  });
+
+  pauseSession = vi.fn(async (input: { sessionId: string }) => {
+    this.ensureSession(input.sessionId);
+    this.emitSession("paused", null);
+    return this.session!;
+  });
+
+  resumeSession = vi.fn(async (input: { sessionId: string }) => {
+    this.ensureSession(input.sessionId);
+    this.emitSession("idle", null);
+    return this.session!;
+  });
+
+  completeSession = vi.fn(async (input: { sessionId: string }) => {
+    this.ensureSession(input.sessionId);
+    this.emitSession("completed", null);
+    return this.session!;
+  });
+
+  setSessionState = vi.fn(async (input: { sessionId: string; state: "approval-required" | "waiting" | "idle" }) => {
+    this.ensureSession(input.sessionId);
+    this.emitSession(input.state, null);
+    return this.session!;
+  });
+
+  subscribeSession = (listener: (event: ClassFlowDesktopComputerSessionEvent) => void): (() => void) => {
+    this.listeners.add(listener);
+    return () => this.listeners.delete(listener);
+  };
+}
+
+/** 安装 fake bridge 到 window.classflowDesktop（renderer executor tests 用） */export function installFakeDesktopBridge(world: FakeDesktopWorld): { uninstall: () => void } {
+  const filesystemStub = {
+    pickDirectory: async () => null,
+    getGrantStatus: async () => ({ status: "granted" as const }),
+    forgetGrant: async () => undefined,
+    list: async () => [],
+    stat: async () => null,
+    readText: async () => "",
+    readBytes: async () => new Uint8Array(),
+    readTextPrefix: async () => ({ text: "", truncated: false }),
+    createDirectory: async () => "created" as const,
+    writeText: async () => undefined,
+    writeBytes: async () => undefined,
+    remove: async () => undefined,
+    move: async () => undefined,
+  };
+  (window as unknown as { classflowDesktop?: unknown }).classflowDesktop = {
+    version: 1,
+    platform: "windows",
+    filesystem: filesystemStub,
+    computer: { version: 3, ...world },
+  };
+  return {
+    uninstall: () => {
+      delete (window as unknown as { classflowDesktop?: unknown }).classflowDesktop;
+    },
+  };
+}
