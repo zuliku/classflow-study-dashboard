@@ -372,8 +372,17 @@ export interface ClassFlowDesktopComputerObservation {
   warnings: string[];
   uiTreeRevision: number;
   capturedAt: string;
+  /** V2.4：当前应用画像（已脱敏；blocked = 受保护应用，动作永不放行） */
+  appProfile?: ClassFlowDesktopComputerAppProfileInfo | null;
   /** Phase 3：本 Turn DesktopControlSession 状态（只读事实） */
   session?: ClassFlowDesktopComputerSessionStatus;
+}
+
+/** V2.4：应用画像（Main 侧进程名 / 标题解析；不含路径） */
+export interface ClassFlowDesktopComputerAppProfileInfo {
+  id: string;
+  label: string;
+  blocked: boolean;
 }
 
 /** 观察到的顶层窗口（模型可用于选择后续观察目标；只含 opaque windowId） */
@@ -440,6 +449,8 @@ export interface ClassFlowDesktopComputerSessionStatus {
   stepIndex: number;
   /** V2.3：需要反思（连续验证失败 / 无进展） */
   reflectionRequired: boolean;
+  /** V2.4：当前应用画像（已脱敏；无匹配 → null） */
+  appProfile?: ClassFlowDesktopComputerAppProfileInfo | null;
 }
 
 /** 经 preload subscribe 推送的会话状态事件（sanitized；UI-only，不进入模型 context） */
@@ -457,6 +468,8 @@ export interface ClassFlowDesktopComputerSessionEvent {
   plan: string[];
   stepIndex: number;
   reflectionRequired: boolean;
+  /** V2.4：当前应用画像（已脱敏；无匹配 → null） */
+  appProfile?: ClassFlowDesktopComputerAppProfileInfo | null;
 }
 
 /** 打开应用结果（logical app identifier；绝不返回 exe 绝对路径） */

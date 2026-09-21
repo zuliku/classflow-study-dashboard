@@ -75,6 +75,13 @@ import {
 } from "./apps";
 import { inspectNativeUiTree, probeUiAutomation, type NativeUiElement } from "./uia";
 import {
+  desktopAppProfileInfo,
+  desktopAppProfileRiskHint,
+  desktopAppReadyWaitMs,
+  desktopAppSettleMs,
+  resolveDesktopAppProfile,
+} from "./appProfiles";
+import {
   runNativeGuiAction,
   GUI_ACTION_SETTLE_MS,
   type NativeGuiActionConfig,
@@ -280,6 +287,10 @@ export class DesktopObservationRuntime {
     const warnings: string[] = [];
     const windowTitle = record?.title ?? "";
     const appName = record?.appName ?? "";
+    // V2.4：应用画像（进程名 → 标题模式；blocked 应用只读可见、动作永不放行）
+    const appProfile = resolveDesktopAppProfile({ appName, windowTitle });
+    const appProfileInfo = desktopAppProfileInfo(appProfile);
+    if (appProfile?.blocked) warnings.push("app-profile-blocked");
     const windowId = record ? this.registry.opaqueIdFor(record.hwnd) : null;
     const focusedWindow = windows.find((window) => window.isActive);
     const focusedWindowId = focusedWindow ? this.registry.opaqueIdFor(focusedWindow.hwnd) : null;
@@ -396,7 +407,12 @@ export class DesktopObservationRuntime {
     if (input.sessionId) {
       this.sessions.endObserve(
         input.sessionId,
-        { appName, windowTitle, uiSignature: observation.uiSignature },
+        {
+          appName,
+          windowTitle,
+          uiSignature: observation.uiSignature,
+          appProfile: appProfileInfo,
+        },
         now
       );
     }
@@ -419,6 +435,7 @@ export class DesktopObservationRuntime {
       warnings,
       uiTreeRevision: observation.revision,
       capturedAt: new Date(now).toISOString(),
+      appProfile: appProfileInfo,
       ...(input.sessionId
         ? { session: this.sessions.get(input.sessionId, now) ?? undefined }
         : {}),
@@ -454,6 +471,12 @@ export class DesktopObservationRuntime {
 
     const record = await this.resolveBoundObservation(input);
     const targetInfo = await this.resolveActionTarget(input, record);
+    // V2.4：应用画像参与风险分类（blocked 应用 / 应用内高风险控件）
+    const profile = resolveDesktopAppProfile({
+      appName: targetInfo.appName,
+      windowTitle: targetInfo.windowTitle,
+    });
+    const profileHint = desktopAppProfileRiskHint(profile);
     const risk = classifyGuiAction({
       action: input.action,
       ...(input.text !== undefined ? { text: input.text } : {}),
@@ -466,6 +489,7 @@ export class DesktopObservationRuntime {
         appName: targetInfo.appName,
         windowTitle: targetInfo.windowTitle,
       },
+      ...(profileHint ? { profile: profileHint } : {}),
     });
 
     return {
@@ -629,7 +653,12 @@ export class DesktopObservationRuntime {
         verification = this.evaluateExpectation(expectation, nextObservation, nextRecord, disappearedNativeRef);
       }
     } else {
-      await this.deps.sleep(GUI_ACTION_SETTLE_MS);
+      // V2.4：按应用画像 settle（未知应用 → GUI_ACTION_SETTLE_MS 默认值）
+      const settleProfile = resolveDesktopAppProfile({
+        appName: record.appName,
+        windowTitle: record.windowTitle,
+      });
+      await this.deps.sleep(desktopAppSettleMs(settleProfile));
       ({ observation: nextObservation, record: nextRecord } = await observeOnce());
     }
 
@@ -835,6 +864,9 @@ export class DesktopObservationRuntime {
           appName: focused?.appName ?? null,
           windowTitle: focused?.title ?? null,
           uiSignature: `windows:${publicWindows.map((w) => `${w.windowId}:${w.zOrder ?? 0}`).join(",")}`,
+          appProfile: desktopAppProfileInfo(
+            resolveDesktopAppProfile({ appName: focused?.appName ?? "", windowTitle: focused?.title ?? "" })
+          ),
         },
         now
       );
@@ -961,10 +993,18 @@ export class DesktopObservationRuntime {
 
     // 等待新窗口出现（默认 app 可能已在运行 → 视为成功激活已有窗口）
     const hints = new Set(DESKTOP_APP_ALLOWLIST[appId]?.processHints ?? []);
+    // V2.4：应用画像决定首轮等待与轮询间隔（重应用更耐心）
+    const launchProfile = resolveDesktopAppProfile({
+      appName: DESKTOP_APP_ALLOWLIST[appId]?.processHints[0] ?? appId,
+    });
+    const firstWait = desktopAppReadyWaitMs(launchProfile);
+    const pollWait = Math.max(200, desktopAppSettleMs(launchProfile));
     let windowId: string | undefined;
     const deadline = started + 8_000;
+    let waited = 0;
     while (this.deps.now() < deadline) {
-      await this.deps.sleep(400);
+      await this.deps.sleep(waited === 0 ? firstWait : pollWait);
+      waited += 1;
       let windows: NativeWindowRecord[];
       try {
         windows = await this.deps.listWindows();
@@ -1032,6 +1072,7 @@ export class DesktopObservationRuntime {
       plan: [],
       stepIndex: 0,
       reflectionRequired: false,
+      appProfile: null,
     };
   }
 

@@ -18,6 +18,11 @@ import type {
 } from "@/lib/desktop/types";
 import { classifyGuiAction } from "@/lib/ai/computer/gui/risk";
 import { searchObservationElements } from "@/lib/ai/computer/desktop/elementSearch";
+import {
+  desktopAppProfileInfo,
+  desktopAppProfileRiskHint,
+  resolveDesktopAppProfile,
+} from "@/src/main/computer/appProfiles";
 
 export interface FakeElement {
   elementId: string;
@@ -129,6 +134,11 @@ export class FakeDesktopWorld {
       plan: this.session?.plan ?? [],
       stepIndex: this.session?.stepIndex ?? 0,
       reflectionRequired: this.session?.reflectionRequired ?? false,
+      appProfile:
+        this.session?.appProfile ??
+        desktopAppProfileInfo(
+          resolveDesktopAppProfile({ appName: window?.appName ?? "", windowTitle: window?.title ?? "" })
+        ),
     };
     for (const listener of this.listeners) listener({ type: "session", ...this.session });
   }
@@ -152,6 +162,7 @@ export class FakeDesktopWorld {
         plan: [],
         stepIndex: 0,
         reflectionRequired: false,
+        appProfile: null,
       };
     }
   }
@@ -244,6 +255,11 @@ export class FakeDesktopWorld {
   });
 
   private buildObservation(record: ObservationRecord, window: FakeWindow | null): ClassFlowDesktopComputerObservation {
+    // V2.4：应用画像（与 Main 同一纯函数实现）
+    const profile = resolveDesktopAppProfile({
+      appName: window?.appName ?? "",
+      windowTitle: window?.title ?? "",
+    });
     return {
       observationId: record.observationId,
       target: "active-window",
@@ -281,9 +297,10 @@ export class FakeDesktopWorld {
         capturedAt: new Date().toISOString(),
         dataUrl: "data:image/jpeg;base64,AAAA",
       },
-      warnings: [],
+      warnings: profile?.blocked ? ["app-profile-blocked"] : [],
       uiTreeRevision: record.revision,
       capturedAt: new Date().toISOString(),
+      appProfile: desktopAppProfileInfo(profile),
     };
   }
 
@@ -318,6 +335,13 @@ export class FakeDesktopWorld {
         appName: window.appName,
         windowTitle: window.title,
       },
+      // V2.4：应用画像参与风险（blocked 应用 / 应用内高风险控件）
+      ...(() => {
+        const hint = desktopAppProfileRiskHint(
+          resolveDesktopAppProfile({ appName: window.appName, windowTitle: window.title })
+        );
+        return hint ? { profile: hint } : {};
+      })(),
     });
     return {
       action: input.action as never,

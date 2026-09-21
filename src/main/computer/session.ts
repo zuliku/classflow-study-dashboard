@@ -13,6 +13,8 @@
  * 只会向 renderer 发送脱敏状态（opaque sessionId / 应用名 / 窗口标题 / 动作标签 / 计数），
  * 绝不包含 native handle / path / 截图。
  */
+import type { DesktopAppProfileInfo } from "./appProfiles";
+
 export type DesktopControlSessionState =
   | "idle"
   | "observing"
@@ -63,6 +65,8 @@ export interface DesktopControlSessionStatus {
   stepIndex: number;
   /** V2.3：需要反思（连续验证失败 / 无进展）——模型必须重新观察并更新计划 */
   reflectionRequired: boolean;
+  /** V2.4：当前应用画像（已脱敏 label；无匹配 → null） */
+  appProfile: DesktopAppProfileInfo | null;
 }
 
 export interface DesktopControlSessionEvent {
@@ -79,6 +83,7 @@ export interface DesktopControlSessionEvent {
   plan: string[];
   stepIndex: number;
   reflectionRequired: boolean;
+  appProfile: DesktopAppProfileInfo | null;
 }
 
 export type DesktopSessionGuardCode =
@@ -118,6 +123,8 @@ interface SessionRecord {
   stepIndex: number;
   verificationFailStreak: number;
   reflectionRequired: boolean;
+  // V2.4：应用画像（进程名 / 标题解析；已脱敏）
+  appProfile: DesktopAppProfileInfo | null;
 }
 
 const TERMINAL_STATES: ReadonlySet<DesktopControlSessionState> = new Set([
@@ -134,6 +141,8 @@ export interface ObserveGateInput {
   appName: string | null;
   windowTitle: string | null;
   uiSignature: string;
+  /** V2.4：应用画像（null = 无匹配；undefined = 本次不更新） */
+  appProfile?: DesktopAppProfileInfo | null;
 }
 
 export interface ActionGateInput {
@@ -174,6 +183,7 @@ export class DesktopControlSessionStore {
       stepIndex: 0,
       verificationFailStreak: 0,
       reflectionRequired: false,
+      appProfile: null,
     };
     this.sessions.set(sessionId, record);
     return this.toStatus(record, now);
@@ -208,6 +218,7 @@ export class DesktopControlSessionStore {
     record.lastUiSignature = input.uiSignature;
     if (input.appName) record.appName = input.appName;
     if (input.windowTitle) record.windowTitle = input.windowTitle;
+    if (input.appProfile !== undefined) record.appProfile = input.appProfile;
     if (record.state === "observing") record.state = "idle";
     this.touch(record, now);
   }
@@ -477,6 +488,7 @@ export class DesktopControlSessionStore {
       plan: [...record.plan],
       stepIndex: record.stepIndex,
       reflectionRequired: record.reflectionRequired,
+      appProfile: record.appProfile,
     });
   }
 
@@ -498,6 +510,7 @@ export class DesktopControlSessionStore {
       plan: [...record.plan],
       stepIndex: record.stepIndex,
       reflectionRequired: record.reflectionRequired,
+      appProfile: record.appProfile,
     };
   }
 }

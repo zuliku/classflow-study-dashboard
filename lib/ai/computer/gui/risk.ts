@@ -33,6 +33,17 @@ export interface GuiRiskContext {
     ClassFlowDesktopComputerActionTargetInfo,
     "kind" | "role" | "name" | "isPassword" | "appName" | "windowTitle"
   >;
+  /** V2.4：Main 解析的应用画像提示（blocked 应用 / 应用内高风险控件名） */
+  profile?: GuiRiskProfileHint;
+}
+
+/** V2.4：应用画像风险提示（纯数据；由 Main 依据进程名 / 标题解析） */
+export interface GuiRiskProfileHint {
+  id: string;
+  label: string;
+  blocked: boolean;
+  reason: string | null;
+  riskyNamePatterns: string[];
 }
 
 const DESTRUCTIVE_NAME_PATTERN =
@@ -87,6 +98,27 @@ function sanitizeAppName(appName: string): string {
   return appName.trim().toLowerCase();
 }
 
+const PROFILE_PATTERN_CACHE = new Map<string, RegExp | null>();
+
+/** V2.4：画像高风险控件名匹配（编译失败 / 超长模式忽略） */
+function matchesProfileRiskyName(patterns: string[] | undefined, name: string): boolean {
+  if (!patterns || !name) return false;
+  for (const source of patterns.slice(0, 16)) {
+    if (typeof source !== "string" || source.length === 0 || source.length > 64) continue;
+    let pattern = PROFILE_PATTERN_CACHE.get(source);
+    if (pattern === undefined) {
+      try {
+        pattern = new RegExp(source, "i");
+      } catch {
+        pattern = null;
+      }
+      PROFILE_PATTERN_CACHE.set(source, pattern);
+    }
+    if (pattern && pattern.test(name)) return true;
+  }
+  return false;
+}
+
 /**
  * GUI Risk 分类（deterministic；先 blocked → sensitive → destructive → external → normal）。
  */
@@ -98,6 +130,15 @@ export function classifyGuiAction(context: GuiRiskContext): GuiRiskDecision {
   // 1. Blocked：系统安全界面
   if (app && BLOCKED_APPS.has(app)) {
     return { level: "blocked", reason: "目标窗口属于系统安全 / 凭据界面", textPreview: null };
+  }
+
+  // 1b. V2.4 Blocked：应用画像（密码管理器 / 银行支付 / 安全界面）——审批也不放行
+  if (context.profile?.blocked) {
+    return {
+      level: "blocked",
+      reason: context.profile.reason ?? `「${context.profile.label}」属于受保护应用`,
+      textPreview: null,
+    };
   }
 
   // 2. 键盘组合风险（blocked / destructive / external）
@@ -155,6 +196,14 @@ export function classifyGuiAction(context: GuiRiskContext): GuiRiskDecision {
   if (name) {
     if (DESTRUCTIVE_NAME_PATTERN.test(name)) {
       return { level: "destructive", reason: `目标「${name.slice(0, 24)}」可能删除或不可逆`, textPreview: null };
+    }
+    // V2.4：应用画像高风险控件（如微信「转账 / 红包」、Office「另存为」）→ 强制审批
+    if (context.profile && matchesProfileRiskyName(context.profile.riskyNamePatterns, name)) {
+      return {
+        level: "external",
+        reason: `「${context.profile.label}」中「${name.slice(0, 24)}」可能产生外部效果`,
+        textPreview: null,
+      };
     }
     // 最终确认型：Enter 落在发送/提交控件上
     if (action === "key" && keyHint === "normal" && /^enter$/i.test(context.key ?? "") && EXTERNAL_NAME_PATTERN.test(name)) {

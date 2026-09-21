@@ -19,7 +19,14 @@
   - Sidecar 状态卡升级为计划时间线（第 N/M 步 + 进度点 + 当前步骤 + 反思提示）
   - Audit 增加 `stepIndex / planHash / verificationPassed`；Prompt 增加计划与反思工作流
   - 测试：Session 计划/反思 12 项 + 执行器 5 项 + 真实模型 live smoke 4/4（含「多步任务先声明目标与计划」）
-- [ ] V2.4 应用画像与敏感应用策略
+- [x] **V2.4 应用画像与敏感应用策略**
+  - 新增 `src/main/computer/appProfiles.ts`：进程名（精确）→ 标题（正则）解析，输出 `{ id, label, blocked, readyWaitMs, settleMs, riskyNamePatterns }`（已脱敏，无路径）
+  - 内置画像：浏览器 / Office / 即时通讯 / 资源管理器 / 设置 / 终端 / 系统工具（高风险）
+  - 受保护应用（blocked，审批也不放行）：密码管理器（1Password / Bitwarden / LastPass / KeePass…）、银行支付客户端与网银 / 收银台 / 微信支付标题、UAC / LogonUI / 凭据界面；**浏览器内网银页面按标题安全覆盖拦截**
+  - 风险联动：`classifyGuiAction` 支持画像提示（blocked → blocked；应用内高风险控件「转账 / 红包 / 另存为…」→ external 逐次确认）
+  - 时序联动：动作后 settle 与启动后 readyWait 按画像调整（浏览器 250ms / Office 300ms / 未知应用回退 350ms；启动首轮 chrome 600ms、Office 900ms）
+  - Observation 增加 `appProfile` + `app-profile-blocked` 警告；Session 状态 / Sidecar 事件透出画像 label 与「受保护应用」标记；Prompt 增加应用画像工作流
+  - 测试：画像解析 10 项 + 风险 7 项 + 运行时 8 项 + 执行器 3 项
 - [ ] V2.5 动作覆盖扩展
 - [ ] V2.6 经验记忆（轨迹 → Skill）
 

@@ -4,7 +4,10 @@ import React, { useEffect } from "react";
 import { Pause, Play, Square } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { getClassFlowDesktopComputerSessionBridge } from "@/lib/desktop/bridge";
-import type { ClassFlowDesktopComputerSessionStatus } from "@/lib/desktop/types";
+import type {
+  ClassFlowDesktopComputerAppProfileInfo,
+  ClassFlowDesktopComputerSessionStatus,
+} from "@/lib/desktop/types";
 import { useDesktopSessionStore, isActiveDesktopSessionState } from "@/store/useDesktopSessionStore";
 
 /** Main 侧动作标签 → 人类可读状态文案（Sidecar） */
@@ -14,8 +17,10 @@ function describeState(input: {
   windowTitle: string | null;
   actionLabel: string | null;
   failureReason?: string | null;
+  appProfile?: ClassFlowDesktopComputerAppProfileInfo | null;
 }): string {
-  const app = input.appName || input.windowTitle || "桌面";
+  // V2.4：优先展示应用画像 label（如「微信」/「浏览器」），更易读
+  const app = input.appProfile?.label || input.appName || input.windowTitle || "桌面";
   switch (input.state) {
     case "observing":
       return `正在查看 ${app}`;
@@ -75,6 +80,7 @@ function applySessionStatus(status: ClassFlowDesktopComputerSessionStatus): void
     plan: status.plan,
     stepIndex: status.stepIndex,
     reflectionRequired: status.reflectionRequired,
+    appProfile: status.appProfile ?? null,
   });
 }
 
@@ -95,6 +101,7 @@ export function KiroComputerSessionCard() {
   const stepIndex = useDesktopSessionStore((s) => s.stepIndex);
   const goal = useDesktopSessionStore((s) => s.goal);
   const reflectionRequired = useDesktopSessionStore((s) => s.reflectionRequired);
+  const appProfile = useDesktopSessionStore((s) => s.appProfile);
 
   // 订阅 Main session 事件（仅 Desktop Runtime；Web 版永不出现）
   useEffect(() => {
@@ -147,8 +154,16 @@ export function KiroComputerSessionCard() {
           }
         />
         <p className="text-[11px] font-semibold text-charcoal truncate flex-1 min-w-0">
-          {describeState({ state, appName, windowTitle, actionLabel })}
+          {describeState({ state, appName, windowTitle, actionLabel, appProfile })}
         </p>
+        {appProfile?.blocked && (
+          <span
+            className="text-[10px] font-bold text-danger shrink-0"
+            data-testid="computer-session-profile-blocked"
+          >
+            受保护应用
+          </span>
+        )}
         {active && (
           <div className="flex items-center gap-1 shrink-0">
             {paused ? (

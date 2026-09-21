@@ -4,7 +4,10 @@
  * 截图 dataUrl 只保留 evidence metadata（尺寸 / 字节 / 时间），
  * 原始像素绝不进入模型 Tool Output（避免无界 token 与内存膨胀）。
  */
-import type { ClassFlowDesktopComputerObservation } from "@/lib/desktop/types";
+import type {
+  ClassFlowDesktopComputerAppProfileInfo,
+  ClassFlowDesktopComputerObservation,
+} from "@/lib/desktop/types";
 
 export interface ModelObservationSummary {
   observationId: string;
@@ -31,6 +34,8 @@ export interface ModelObservationSummary {
   warnings: string[];
   uiTreeRevision: number;
   capturedAt: string;
+  /** V2.4：应用画像（blocked = 动作永不放行） */
+  appProfile: ClassFlowDesktopComputerAppProfileInfo | null;
 }
 
 /** Observation → 模型安全摘要（无 dataUrl / native 标识） */
@@ -62,5 +67,6 @@ export function summarizeObservation(
     warnings: observation.warnings,
     uiTreeRevision: observation.uiTreeRevision,
     capturedAt: observation.capturedAt,
+    appProfile: observation.appProfile ?? null,
   };
 }

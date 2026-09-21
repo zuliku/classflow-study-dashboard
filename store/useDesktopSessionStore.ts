@@ -2,6 +2,7 @@
 
 import { create } from "zustand";
 import type {
+  ClassFlowDesktopComputerAppProfileInfo,
   ClassFlowDesktopComputerSessionEvent,
   DesktopControlSessionState,
 } from "@/lib/desktop/types";
@@ -25,6 +26,8 @@ export interface DesktopSessionUiState {
   plan: string[];
   stepIndex: number;
   reflectionRequired: boolean;
+  /** V2.4：当前应用画像（已脱敏 label / blocked） */
+  appProfile: ClassFlowDesktopComputerAppProfileInfo | null;
   applyEvent: (event: ClassFlowDesktopComputerSessionEvent) => void;
   clear: () => void;
 }
@@ -42,6 +45,7 @@ export const useDesktopSessionStore = create<DesktopSessionUiState>()((set) => (
   plan: [],
   stepIndex: 0,
   reflectionRequired: false,
+  appProfile: null,
   applyEvent: (event) =>
     set({
       sessionId: event.sessionId,
@@ -56,6 +60,7 @@ export const useDesktopSessionStore = create<DesktopSessionUiState>()((set) => (
       plan: Array.isArray(event.plan) ? event.plan : [],
       stepIndex: typeof event.stepIndex === "number" ? event.stepIndex : 0,
       reflectionRequired: event.reflectionRequired === true,
+      appProfile: event.appProfile ?? null,
     }),
   clear: () =>
     set({
@@ -71,6 +76,7 @@ export const useDesktopSessionStore = create<DesktopSessionUiState>()((set) => (
       plan: [],
       stepIndex: 0,
       reflectionRequired: false,
+      appProfile: null,
     }),
 }));
 
