@@ -34,6 +34,7 @@ import { ReminderCenter } from "@/components/reminders/ReminderCenter";
 import { FocusRuntime } from "@/components/focus/FocusRuntime";
 import { TypographyRuntime } from "@/components/runtime/TypographyRuntime";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import { OverlayBoundary } from "@/components/ui/OverlayBoundary";
 import { PageTransition } from "@/components/ui/PageTransition";
 import { OverviewWorkspace } from "@/components/dashboard/OverviewWorkspace";
 import { useAppStore } from "@/store/useAppStore";
@@ -196,31 +197,59 @@ export default function Home() {
         </main>
       </div>
 
-      {/* Global Drawers & Modals */}
-      <CourseDetailDrawer />
-      <AssignmentDrawer />
-      <CalendarMarkDetailDrawer />
-      <CommandCenter />
+      {/* Global Drawers & Modals（各自隔离：单个面板失败不影响应用其它部分） */}
+      <OverlayBoundary name="course-detail-drawer">
+        <CourseDetailDrawer />
+      </OverlayBoundary>
+      <OverlayBoundary name="assignment-drawer">
+        <AssignmentDrawer />
+      </OverlayBoundary>
+      <OverlayBoundary name="calendar-mark-drawer">
+        <CalendarMarkDetailDrawer />
+      </OverlayBoundary>
+      <OverlayBoundary name="command-center">
+        <CommandCenter />
+      </OverlayBoundary>
       <GlobalShortcutController />
-      <SettingsModal />
-      <InboxPanel open={inboxOpen} onOpenChange={setInboxOpen} />
-      <AddCourseModal />
-      <ImportScheduleModal />
-      <ConflictResolutionModal />
-      <FullTimetableModal />
-      <AddAssignmentModal />
-      <FilePreviewModal />
+      <OverlayBoundary name="settings-modal">
+        <SettingsModal />
+      </OverlayBoundary>
+      <OverlayBoundary name="inbox-panel">
+        <InboxPanel open={inboxOpen} onOpenChange={setInboxOpen} />
+      </OverlayBoundary>
+      <OverlayBoundary name="add-course-modal">
+        <AddCourseModal />
+      </OverlayBoundary>
+      <OverlayBoundary name="import-schedule-modal">
+        <ImportScheduleModal />
+      </OverlayBoundary>
+      <OverlayBoundary name="conflict-resolution-modal">
+        <ConflictResolutionModal />
+      </OverlayBoundary>
+      <OverlayBoundary name="full-timetable-modal">
+        <FullTimetableModal />
+      </OverlayBoundary>
+      <OverlayBoundary name="add-assignment-modal">
+        <AddAssignmentModal />
+      </OverlayBoundary>
+      <OverlayBoundary name="file-preview-modal">
+        <FilePreviewModal />
+      </OverlayBoundary>
       <ConfirmDialog />
       <ToastViewport />
       {/* Reminder Local Runtime + 站内通知（独立于 KiroSession；不依赖 Kiro Provider） */}
       <ReminderRuntime />
       <LearningHistoryRuntime />
       <ReminderViewport />
-      <ReminderCenter />
+      <OverlayBoundary name="reminder-center">
+        <ReminderCenter />
+      </OverlayBoundary>
       <FocusRuntime />
       <TypographyRuntime />
       {/* 移动端底部导航（<768px） */}
-      <BottomNav />
+      <OverlayBoundary name="bottom-nav">
+        <BottomNav />
+      </OverlayBoundary>
     </KiroSessionProvider>
   );
 }

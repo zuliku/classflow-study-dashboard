@@ -73,7 +73,7 @@ export type KiroSidecarMode = "open" | "minimized" | "closed";
 
 import { claimEmptyIntroOnce } from "@/lib/kiro/motion/emptyIntro";
 
-interface KiroSessionValue {
+export interface KiroSessionValue {
   // Chat runtime（唯一）
   chat: ReturnType<typeof useKiroChat>;
   attachments: ReturnType<typeof useKiroAttachments>;
@@ -1312,6 +1312,15 @@ export function useKiroSession(): KiroSessionValue {
   const ctx = useContext(KiroSessionContext);
   if (!ctx) throw new Error("useKiroSession 必须在 KiroSessionProvider 内使用");
   return ctx;
+}
+
+/**
+ * 可选 Kiro Session（全局 Overlay / 搜索等不依赖 Kiro 的入口使用）：
+ * Provider 不可用（未挂载 / 开发期 HMR 上下文刷新）时返回 null，
+ * 由调用方降级处理，绝不让整个应用白屏。
+ */
+export function useOptionalKiroSession(): KiroSessionValue | null {
+  return useContext(KiroSessionContext);
 }
 
 export { KiroSessionContext };

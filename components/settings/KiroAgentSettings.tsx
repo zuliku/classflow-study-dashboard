@@ -350,6 +350,22 @@ export function KiroAgentSettings() {
             />
           </SettingsRow>
 
+          <SettingsRow
+            settingId="kiro-agent-workspace"
+            title="当前工作区"
+            description={activeWorkspace ? activeWorkspace.name : "尚未配置工作区"}
+          >
+            <span className="text-[11px] font-bold text-charcoal">
+              {activeWorkspace ? activeWorkspace.name : "未配置"}
+            </span>
+          </SettingsRow>
+        </SettingsGroup>
+
+        {/* 终端与电脑控制：与文件操作分开，逐项授权（互不绑定） */}
+        <SettingsGroup
+          title="终端与电脑控制"
+          description="在授权工作区内运行命令、查看或操作电脑界面；每项都需单独开启，高风险动作仍会逐次确认。"
+        >
           {/* Desktop Terminal V1：仅 Desktop runtime + terminal bridge 可用时显示（网页版完全不出现） */}
           {desktopTerminalAvailable ? (
             <SettingsRow
@@ -421,16 +437,6 @@ export function KiroAgentSettings() {
               />
             </SettingsRow>
           )}
-
-          <SettingsRow
-            settingId="kiro-agent-workspace"
-            title="当前工作区"
-            description={activeWorkspace ? activeWorkspace.name : "尚未配置工作区"}
-          >
-            <span className="text-[11px] font-bold text-charcoal">
-              {activeWorkspace ? activeWorkspace.name : "未配置"}
-            </span>
-          </SettingsRow>
         </SettingsGroup>
 
         <SettingsGroup

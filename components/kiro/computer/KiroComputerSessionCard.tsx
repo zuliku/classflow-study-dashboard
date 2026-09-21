@@ -132,7 +132,7 @@ export function KiroComputerSessionCard() {
     <div
       data-testid="kiro-computer-session-card"
       data-state={state}
-      className="mx-3 mt-2 rounded-xl border border-line bg-white/80 px-3 py-2 flex items-center gap-2 shrink-0"
+      className="mx-3 mt-2 mb-1 rounded-xl border border-line bg-white/80 px-3 py-2 flex items-center gap-2 shrink-0"
     >
       <span
         aria-hidden="true"

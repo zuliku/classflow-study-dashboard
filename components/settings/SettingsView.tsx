@@ -92,6 +92,8 @@ export function SettingsView({
   const webSearchEnabled = useKiroPreferencesStore((s) => s.webSearchEnabled);
   const webSearchCredentialMode = useKiroPreferencesStore((s) => s.webSearchCredentialMode);
   const hasActiveWorkspace = useKiroComputerStore((s) => s.workspaces.length > 0);
+  const computerEnabled = useKiroComputerStore((s) => s.computerEnabled);
+  const desktopObserveEnabled = useKiroComputerStore((s) => s.desktopControlEnabled);
 
   function getGateValue(controlId: string): unknown {
     switch (controlId) {
@@ -105,6 +107,13 @@ export function SettingsView({
         return webSearchCredentialMode;
       case SETTING_IDS["kiro-agent"].workspace:
         return hasActiveWorkspace ? "set" : "";
+      case SETTING_IDS["kiro-agent"].computerEnabled:
+        return computerEnabled;
+      case SETTING_IDS["kiro-agent"].desktopObserve:
+        return desktopObserveEnabled;
+      case SETTING_IDS.extensions.channels:
+        // 渠道面板常驻渲染：门控只用于「先到渠道区再配置」的引导
+        return true;
       default:
         return undefined;
     }

@@ -21,6 +21,13 @@ type QQConfig = { id: string; channel: "qq-bot"; displayName: string; appId: str
 type GmailConfig = { id: string; channel: "gmail"; displayName: string; emailAddress: string; credentialRef: string; enabled: boolean; syncIntervalSeconds: 60 };
 type QQMailConfig = { id: string; channel: "qq-mail"; displayName: string; emailAddress: string; credentialRef: string; enabled: boolean; syncIntervalSeconds: 60 };
 type GenericChannelConfig = QQConfig | GmailConfig | QQMailConfig;
+
+/** 渠道卡片 → Settings Registry DOM 目标（搜索跳转/高亮同源；防 Registry 漂移） */
+const CHANNEL_SETTING_IDS: Record<GenericChannelConfig["channel"], string> = {
+  "qq-bot": "extensions-qq-bot",
+  gmail: "extensions-gmail",
+  "qq-mail": "extensions-qq-mail",
+};
 type ChannelStatus = { config: GenericChannelConfig; health: { channel: string; id: string; state: string; accountId?: string; lastError?: { code: string; message: string }; messageCount?: number } };
 
 function getChannelsBridge(): {
@@ -181,15 +188,15 @@ export function ChannelSettings() {
             <p className="text-xs text-sandrift mt-1">收到的消息会进入统一收件箱；是否交给 Kiro 处理由你决定。</p>
           </div>
           <div className="flex gap-2 mt-2">
-            <span className="px-2 py-1 bg-white border border-line rounded-lg text-[11px] font-bold">QQ Bot</span>
-            <span className="px-2 py-1 bg-white border border-line rounded-lg text-[11px] font-bold">Gmail</span>
-            <span className="px-2 py-1 bg-white border border-line rounded-lg text-[11px] font-bold">QQ 邮箱</span>
+            <span data-setting-id="extensions-qq-bot" className="px-2 py-1 bg-white border border-line rounded-lg text-[11px] font-bold">QQ Bot</span>
+            <span data-setting-id="extensions-gmail" className="px-2 py-1 bg-white border border-line rounded-lg text-[11px] font-bold">Gmail</span>
+            <span data-setting-id="extensions-qq-mail" className="px-2 py-1 bg-white border border-line rounded-lg text-[11px] font-bold">QQ 邮箱</span>
           </div>
         </div>
       ) : (
         <div className="space-y-3">
           {channels.map(({ config, health }) => (
-            <div key={config.id} data-testid={`channel-card-${config.id}`} data-channel-type={config.channel} className="bg-surface border border-line rounded-xl p-4 flex flex-col gap-3 transition-[border-color,background-color,box-shadow] duration-[var(--motion-fast)] ease-[var(--ease-standard)] hover:border-line-strong hover:bg-surface-soft/30 animate-enter">
+            <div key={config.id} data-testid={`channel-card-${config.id}`} data-channel-type={config.channel} data-setting-id={CHANNEL_SETTING_IDS[config.channel]} className="bg-surface border border-line rounded-xl p-4 flex flex-col gap-3 transition-[border-color,background-color,box-shadow] duration-[var(--motion-fast)] ease-[var(--ease-standard)] hover:border-line-strong hover:bg-surface-soft/30 animate-enter">
               <div className="flex items-start justify-between gap-3">
                 <div className="flex items-start gap-3 min-w-0">
                   <div className="w-9 h-9 rounded-xl bg-alabaster border border-line flex items-center justify-center shrink-0 mt-0.5">

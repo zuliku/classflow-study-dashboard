@@ -537,8 +537,9 @@ export function ExtensionsSettings() {
           <SettingsGroup
             title="内置 Skills"
             description="随应用提供、始终启用；随版本更新，无需配置。"
+            contentClassName="px-4 py-4"
           >
-            <div className="space-y-2 py-1" data-testid="builtin-skills">
+            <div className="space-y-2" data-testid="builtin-skills">
               {BUILTIN_SKILLS.map((skill) => (
                 <div
                   key={skill.name}

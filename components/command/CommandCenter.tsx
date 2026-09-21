@@ -22,7 +22,7 @@ import { createAssignmentActions } from "@/lib/assignmentActions";
 import { useToastStore } from "@/store/useToastStore";
 import { useConfirmStore } from "@/store/useConfirmStore";
 import { useReminderCenterStore } from "@/store/useReminderCenterStore";
-import { useKiroHandoff } from "@/hooks/useKiroHandoff";
+import { useOptionalKiroHandoff } from "@/hooks/useKiroHandoff";
 import { KIRO_ICON } from "@/components/layout/navItems";
 
 const OVERLAY_ID = "command-center";
@@ -103,7 +103,8 @@ export function CommandCenter() {
   const pushToast = useToastStore((s) => s.pushToast);
   const confirmRequest = useConfirmStore((s) => s.confirm);
   const openReminderCenter = useReminderCenterStore((s) => s.open);
-  const handoff = useKiroHandoff();
+  // 全局搜索必须永远可用：Kiro Provider 暂不可用（未挂载 / 开发期 HMR）时降级，不拖垮整个应用
+  const handoff = useOptionalKiroHandoff();
   const singleKeyEnabled = useAppStore((s) => s.preferences.enableSingleKeyShortcuts);
   const contentDensity = useAppStore((s) => s.preferences.contentDensity);
 
@@ -199,12 +200,16 @@ export function CommandCenter() {
             sub: "使用当前 ClassFlow 上下文",
             icon: KIRO_ICON,
             run: () => {
+              if (!handoff) {
+                pushToast({ message: "Kiro 尚未就绪，请打开 Kiro 后再试。", type: "info" });
+                return;
+              }
               handoff.handoffPrompt(query.trim());
               setSearchModalOpen(false);
             },
           }
         : null,
-    [hasQuery, query, handoff, setSearchModalOpen]
+    [hasQuery, query, handoff, pushToast, setSearchModalOpen]
   );
   const displayItems = useMemo(
     () => (kiroHandoffItem ? [kiroHandoffItem, ...items] : items),
@@ -217,6 +222,19 @@ export function CommandCenter() {
   useEffect(() => {
     setHighlighted(Math.min(kiroOffset, displayItems.length - 1));
   }, [query, searchModalView, kiroOffset, displayItems.length]);
+
+  // 高亮行滚动跟随（nearest：只在超出可视区时滚动，不抢夺页面滚动）
+  // 必须在 `if (!mounted) return null` 之前声明：Hook 顺序不能随 mounted 变化
+  useEffect(() => {
+    const el = rowRefs.current.get(highlighted);
+    if (el && typeof el.scrollIntoView === "function") {
+      try {
+        el.scrollIntoView({ block: "nearest" });
+      } catch {
+        /* jsdom / 旧环境无滚动：忽略 */
+      }
+    }
+  }, [highlighted]);
 
   if (!mounted) return null;
 
@@ -254,18 +272,6 @@ export function CommandCenter() {
       displayItems[highlighted]?.run();
     }
   };
-
-  // 高亮行滚动跟随（nearest：只在超出可视区时滚动，不抢夺页面滚动）
-  useEffect(() => {
-    const el = rowRefs.current.get(highlighted);
-    if (el && typeof el.scrollIntoView === "function") {
-      try {
-        el.scrollIntoView({ block: "nearest" });
-      } catch {
-        /* jsdom / 旧环境无滚动：忽略 */
-      }
-    }
-  }, [highlighted]);
 
   /** stationary hover（键盘滚动把行送到鼠标下，不产生 pointermove）不抢占键盘高亮：
    *  只有真实指针移动才重新武装 hover 跟随（VS Code / Linear / cmdk 同款模式） */

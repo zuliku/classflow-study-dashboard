@@ -118,6 +118,9 @@ export const SETTING_IDS = {
     workspace: "kiro-agent-workspace",
     permissions: "kiro-agent-permissions",
     workspaceKnowledge: "kiro-workspace-knowledge",
+    terminal: "kiro-terminal-enabled",
+    desktopObserve: "kiro-desktop-observe-enabled",
+    desktopAction: "kiro-desktop-action-enabled",
   },
   extensions: {
     overview: "extensions-overview",
@@ -642,6 +645,31 @@ export const SETTINGS_REGISTRY: SettingDefinition[] = [
     gate: [{ control: SETTING_IDS["kiro-agent"].workspace }], // 仅存在当前工作区时渲染
   },
   {
+    id: SETTING_IDS["kiro-agent"].terminal,
+    section: "kiro-agent",
+    title: "允许 Kiro 使用终端",
+    description: "在授权工作区内运行 PowerShell / CMD 命令",
+    keywords: ["终端", "命令行", "powershell", "cmd", "shell", "命令"],
+  },
+  {
+    id: SETTING_IDS["kiro-agent"].desktopObserve,
+    section: "kiro-agent",
+    title: "允许 Kiro 查看桌面",
+    description: "只读读取当前屏幕与窗口控件树",
+    keywords: ["桌面", "屏幕", "查看", "观察", "窗口", "observe", "desktop"],
+    conditional: true, // 仅桌面版渲染
+    gate: [{ control: SETTING_IDS["kiro-agent"].computerEnabled }],
+  },
+  {
+    id: SETTING_IDS["kiro-agent"].desktopAction,
+    section: "kiro-agent",
+    title: "允许 Kiro 操作电脑",
+    description: "点击 / 输入 / 按键 / 滚动；高风险动作逐次确认",
+    keywords: ["电脑", "操作", "点击", "输入", "鼠标", "键盘", "desktop", "action"],
+    conditional: true, // 仅桌面版渲染（操作以查看为前提）
+    gate: [{ control: SETTING_IDS["kiro-agent"].desktopObserve, requiresValue: true }],
+  },
+  {
     id: SETTING_IDS["kiro-agent"].permissions,
     section: "kiro-agent",
     title: "权限与安全",
@@ -683,6 +711,8 @@ export const SETTINGS_REGISTRY: SettingDefinition[] = [
     title: "QQ Bot",
     description: "通过 QQ 与 Kiro 对话，将课程通知和消息交给 ClassFlow 处理",
     keywords: ["qq", "qq bot", "qq-bot", "机器人", "qq机器人"],
+    conditional: true, // 仅在已配置该渠道时渲染（渠道卡片）
+    gate: [{ control: SETTING_IDS.extensions.channels }],
   },
   {
     id: SETTING_IDS.extensions.gmail,
@@ -690,6 +720,8 @@ export const SETTINGS_REGISTRY: SettingDefinition[] = [
     title: "Gmail",
     description: "从 Gmail 接收课程通知、DDL 和相关附件",
     keywords: ["gmail", "谷歌邮箱", "google", "邮件"],
+    conditional: true,
+    gate: [{ control: SETTING_IDS.extensions.channels }],
   },
   {
     id: SETTING_IDS.extensions.qqMail,
@@ -697,6 +729,8 @@ export const SETTINGS_REGISTRY: SettingDefinition[] = [
     title: "QQ 邮箱",
     description: "从 QQ 邮箱接收课程通知和学习相关邮件",
     keywords: ["qq邮箱", "qq mail", "qq-mail", "邮件"],
+    conditional: true,
+    gate: [{ control: SETTING_IDS.extensions.channels }],
   },
   // ---- 数据与隐私 ----
   {
