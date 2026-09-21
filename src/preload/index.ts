@@ -89,14 +89,17 @@ const terminalBridge = {
 };
 
 /**
- * Computer Use Phase 1：Desktop Observe Bridge。
- * 只暴露结构化 API（capabilities / observe）；不暴露通用 IPC / native handle / HWND / PID。
- * 观察结果为只读事实，Renderer 无法通过该 Bridge 触发点击、键盘或 GUI 修改。
+ * Computer Use Phase 1+2：Desktop Observe + Action Bridge。
+ * 只暴露结构化 API（capabilities / observe / prepareAction / action / cancelActions）；
+ * 不暴露通用 IPC / native handle / HWND / PID。所有输入由 Main 执行。
  */
 const computerBridge = {
-  version: 1,
+  version: 2,
   capabilities: () => invokeBridge("bridge:computer:capabilities", {}),
   observe: (input: unknown) => invokeBridge("bridge:computer:observe", input),
+  prepareAction: (input: unknown) => invokeBridge("bridge:computer:prepareAction", input),
+  action: (input: unknown) => invokeBridge("bridge:computer:action", input),
+  cancelActions: (input: unknown) => invokeBridge("bridge:computer:cancelActions", input),
 };
 
 // Credentials Bridge — 仅允许受限的 4 个操作（创建/替换/删除/列表），不暴露明文读取

@@ -27,7 +27,9 @@ export type ComputerCapability =
   // - screen.observe：读取当前桌面/窗口截图观察
   // - ui.inspect：读取窗口 UI Automation 控件树
   | "screen.observe"
-  | "ui.inspect";
+  | "ui.inspect"
+  // Computer Use Phase 2（Desktop Action）：在明确授权下操作 GUI（click/type/key/scroll/focus）
+  | "ui.interact";
 
 export type ComputerRisk = "read" | "create" | "modify" | "destructive" | "execute" | "external";
 

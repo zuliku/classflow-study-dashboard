@@ -2,6 +2,7 @@ import { z } from "zod";
 import { kiroDocumentSchema } from "@/lib/ai/computer/documents/schema";
 import { kiroDocumentDraftSchema } from "@/lib/ai/computer/documents/authoring/schema";
 import { isStructuredBinaryPath } from "@/lib/ai/computer/filesystem/fileTypes";
+import { isAllowedGuiKey } from "@/lib/ai/computer/gui/keymap";
 
 /**
  * Computer Tool 输入 Schema（zod）——所有工具在 Executor 内强制校验。
@@ -250,3 +251,80 @@ export const observeDesktopSchema = z
     includeUiTree: z.boolean().optional(),
   })
   .strict();
+
+/**
+ * Computer Use Phase 2：desktop_action —— 在明确授权下操作 GUI（Observe → Action → Observe）。
+ * - 具备 target 的动作必须携带最近一次 observationId（观察强绑定；失效 → STALE_OBSERVATION）
+ * - target 优先 elementId；坐标仅允许 normalized 0~1（禁止物理像素）
+ * - 密码 / API Key / Token / Secret 等敏感信息绝不允许经 tool input
+ */
+export const desktopActionSchema = z
+  .object({
+    action: z.enum(["click", "double_click", "focus", "type", "key", "scroll", "wait"]),
+    observationId: z
+      .string()
+      .trim()
+      .min(1)
+      .max(64)
+      .regex(/^obs-[A-Za-z0-9-]+$/, "observationId 必须是 observe_desktop 返回的观察 id")
+      .optional(),
+    target: z
+      .object({
+        elementId: z.string().trim().regex(/^el-\d{1,4}$/, "elementId 必须是观察结果中的元素 id").optional(),
+        normalized: z
+          .object({
+            x: z.number().min(0).max(1),
+            y: z.number().min(0).max(1),
+          })
+          .strict()
+          .optional(),
+      })
+      .strict()
+      .optional(),
+    text: z.string().min(1).max(2000).optional(),
+    key: z.string().trim().min(1).max(32).optional(),
+    scroll: z.number().int().min(-10).max(10).refine((v) => v !== 0, "scroll 不能为 0").optional(),
+    wait: z.number().int().min(100).max(5000).optional(),
+  })
+  .strict()
+  .superRefine((value, ctx) => {
+    const issue = (path: (string | number)[], message: string) =>
+      ctx.addIssue({ code: "custom", path, message });
+
+    if (value.action !== "wait" && !value.observationId) {
+      issue(["observationId"], "该动作必须先 observe_desktop 并提供 observationId");
+    }
+    const hasElement = value.target?.elementId !== undefined;
+    const hasNormalized = value.target?.normalized !== undefined;
+    if (value.target && hasElement === hasNormalized) {
+      issue(["target"], "target 必须且只能提供 elementId 或 normalized 之一");
+    }
+    const requiresTarget = ["click", "double_click", "focus"].includes(value.action);
+    if (requiresTarget && !value.target) {
+      issue(["target"], "该动作必须提供 target（elementId 优先）");
+    }
+    if (value.action === "focus" && hasNormalized) {
+      issue(["target"], "focus 只能使用 elementId");
+    }
+    if (value.action === "type") {
+      if (!value.text) issue(["text"], "type 动作必须提供 text");
+      if (value.key !== undefined || value.scroll !== undefined || value.wait !== undefined) {
+        issue([], "type 动作不允许携带 key / scroll / wait");
+      }
+    }
+    if (value.action === "key") {
+      if (!value.key) issue(["key"], "key 动作必须提供 key");
+      else if (!isAllowedGuiKey(value.key)) issue(["key"], "按键不在允许列表内（不支持 clipboard / 系统级组合键）");
+    }
+    if (value.action === "scroll" && value.scroll === undefined) {
+      issue(["scroll"], "scroll 动作必须提供 scroll");
+    }
+    if (value.action === "wait" && value.wait === undefined) {
+      issue(["wait"], "wait 动作必须提供 wait（毫秒）");
+    }
+    if (["click", "double_click", "focus"].includes(value.action)) {
+      if (value.text !== undefined || value.key !== undefined || value.scroll !== undefined || value.wait !== undefined) {
+        issue([], `${value.action} 动作不允许携带 text / key / scroll / wait`);
+      }
+    }
+  });

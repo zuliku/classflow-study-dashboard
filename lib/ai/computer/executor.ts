@@ -23,6 +23,7 @@ import {
   oneShotApprovalMatches,
 } from "@/lib/ai/computer/approval";
 import { executeKiroObserveDesktop } from "@/lib/ai/computer/desktop/observe";
+import { executeKiroDesktopAction } from "@/lib/ai/computer/gui/executor";
 import { executeKiroTerminalCommand, writeKiroTerminalInput, startKiroTerminalCommand, waitKiroTerminalCommand } from "@/lib/ai/computer/terminal/executor";
 import { createKiroPtySession, runKiroPtySessionCommand, writeKiroPtySessionInput, closeKiroPtySession } from "@/lib/ai/computer/terminal/ptyAgent";
 import { TerminalActivityInit } from "@/lib/ai/computer/terminal/activity";
@@ -98,6 +99,8 @@ export interface ComputerExecutorContext {
   livePermissionRules: ComputerPermissionRule[];
   /** Part 3：Approval Request 携带的 Task 标识（useKiroChat 传入） */
   taskId?: string;
+  /** Computer Use Phase 2：Emergency Stop（Stop 后 GUI 动作拒绝执行） */
+  isCancelled?: () => boolean;
 }
 
 export interface ComputerCounterState {
@@ -183,6 +186,24 @@ export async function executeKiroComputerTool(request: {
       oneShotApprovals: oneShotApprovals ?? [],
       taskId: context.taskId ?? "",
       readLimitPerTurn: COMPUTER_READ_LIMIT_PER_TURN,
+      isCancelled: context.isCancelled,
+    });
+  }
+
+  // Computer Use Phase 2：desktop_action（GUI 操作）。独立分支；Main 侧完整重新校验，
+  // 观察强绑定（STALE_OBSERVATION）/ 风险分级 / 审批全部经 GUI 模块处理。
+  if (toolName === "desktop_action") {
+    return executeKiroDesktopAction({
+      toolCallId,
+      toolInput,
+      snapshot: turnSnapshot,
+      liveWorkspaces,
+      livePermissionRules,
+      counters: counters as ComputerCounterState,
+      oneShotApprovals: oneShotApprovals ?? [],
+      taskId: context.taskId ?? "",
+      mutationLimitPerTurn: COMPUTER_MUTATION_LIMIT_PER_TURN,
+      isCancelled: context.isCancelled,
     });
   }
 

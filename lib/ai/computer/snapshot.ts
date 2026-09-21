@@ -6,6 +6,9 @@ const MAX_ROOTS = 32;
 const MAX_ID_LENGTH = 64;
 const MAX_LABEL_LENGTH = 128;
 
+/** Desktop Control session id：opaque（cs-…）；绝不接受 native 标识 */
+export const DESKTOP_SESSION_ID_PATTERN = /^cs-[A-Za-z0-9-]{8,64}$/;
+
 /** 校验 Computer Turn Snapshot（server 信任边界）：只当 context/tool-selection metadata。
  *  拒绝 malformed id、absolute-looking 值、超大 roots 数组。非法 → null（忽略快照，不报错）。 */
 export function validateComputerTurnSnapshot(value: unknown): KiroComputerTurnSnapshot | null {
@@ -61,6 +64,16 @@ export function validateComputerTurnSnapshot(value: unknown): KiroComputerTurnSn
       : {}),
     ...(typeof v.desktopControlAvailable === "boolean"
       ? { desktopControlAvailable: v.desktopControlAvailable }
+      : {}),
+    // Computer Use Phase 2：Desktop Action runtime facts（只接受 boolean / opaque session id）
+    ...(typeof v.desktopActionEnabled === "boolean"
+      ? { desktopActionEnabled: v.desktopActionEnabled }
+      : {}),
+    ...(typeof v.desktopActionAvailable === "boolean"
+      ? { desktopActionAvailable: v.desktopActionAvailable }
+      : {}),
+    ...(typeof v.desktopSessionId === "string" && DESKTOP_SESSION_ID_PATTERN.test(v.desktopSessionId)
+      ? { desktopSessionId: v.desktopSessionId }
       : {}),
   };
 }

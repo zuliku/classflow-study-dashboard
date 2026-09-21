@@ -388,6 +388,7 @@ describe("DesktopObservationRuntime.observe — 脱敏 Observation", () => {
       platform: "windows",
       screenshot: true,
       uiAutomation: true,
+      action: true,
     });
   });
 
@@ -398,6 +399,7 @@ describe("DesktopObservationRuntime.observe — 脱敏 Observation", () => {
       platform: "macos",
       screenshot: false,
       uiAutomation: false,
+      action: false,
     });
   });
 });

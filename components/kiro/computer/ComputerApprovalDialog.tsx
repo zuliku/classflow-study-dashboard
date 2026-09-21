@@ -5,6 +5,7 @@ import { ShieldAlert } from "lucide-react";
 import { Dialog } from "@/components/ui/Dialog";
 import { Button } from "@/components/ui/Button";
 import { ComputerApprovalRequest, ComputerApprovalDecision } from "@/lib/ai/computer/approval";
+import { guiActionLabel } from "@/lib/ai/computer/gui/observation";
 
 const DECISION_LABELS: Record<ComputerApprovalDecision, string> = {
   deny: "拒绝",
@@ -74,7 +75,11 @@ export function ComputerApprovalDialog({
           </span>
           <div className="min-w-0 flex-1">
             <h2 className="text-sm font-bold text-charcoal">
-              {request?.capability === "shell.execute" ? "Kiro 想运行终端命令" : "Kiro 请求文件权限"}
+              {request?.capability === "shell.execute"
+                ? "Kiro 想运行终端命令"
+                : request?.gui
+                  ? "Kiro 想操作电脑"
+                  : "Kiro 请求文件权限"}
             </h2>
             {request && (
               <p className="text-xs font-semibold text-satin-grey mt-1 leading-relaxed">
@@ -86,7 +91,49 @@ export function ComputerApprovalDialog({
 
         {request && (
           <div className="rounded-xl border border-line bg-[#F7F5F5] p-3 space-y-1.5">
-            {request.capability === "shell.execute" ? (
+            {request.gui ? (
+              <>
+                {/* Computer Use Phase 2：应用 / 窗口 / 动作 / 目标元素 / 文本预览 / 风险原因 */}
+                <p className="text-[11px] text-charcoal font-bold">
+                  {request.gui.action === "key"
+                    ? "按键操作"
+                    : request.gui.action === "type"
+                      ? "输入文本"
+                      : request.gui.action === "scroll"
+                        ? "滚动页面"
+                        : request.gui.action === "wait"
+                          ? "等待"
+                          : guiActionLabel(request.gui.action)}
+                  {" · "}
+                  {request.gui.appName || "未知应用"}
+                </p>
+                <p className="text-[10px] text-sandrift truncate">
+                  {request.gui.windowTitle || "（无标题窗口）"}
+                </p>
+                <p className="text-[10px] text-charcoal">
+                  目标：{request.gui.targetLabel}
+                </p>
+                {request.gui.textPreview && (
+                  <pre className="whitespace-pre-wrap break-words font-mono text-[11px] leading-relaxed text-charcoal bg-white border border-line rounded-lg px-2 py-1.5 max-h-24 overflow-y-auto">
+                    {request.gui.textPreview}
+                  </pre>
+                )}
+                <p
+                  className={
+                    request.gui.riskLevel === "normal"
+                      ? "text-[10px] text-sandrift"
+                      : "text-[10px] font-semibold text-danger"
+                  }
+                >
+                  风险：{request.gui.riskLevel} · {request.gui.riskReason}
+                </p>
+                {request.gui.coordinateFallback && (
+                  <p className="text-[10px] font-semibold text-danger">
+                    未使用 UI 元素定位（坐标回退），请确认目标位置正确。
+                  </p>
+                )}
+              </>
+            ) : request.capability === "shell.execute" ? (
               <>
                 {/* Desktop Terminal V1：shell / cwd / 命令默认可见（绝不藏在「查看详情」） */}
                 <p className="text-[11px] text-charcoal font-bold">
@@ -159,7 +206,9 @@ export function ComputerApprovalDialog({
         </div>
 
         <p className="text-[10px] text-sandrift leading-relaxed">
-          权限审批只能放行本应确认的操作，不会突破工作区沙箱与只读边界。
+          {request?.gui
+            ? "电脑操作只会执行你批准的动作；密码、API Key、Token 等敏感信息永远不会由 Kiro 输入。高风险操作仅支持「允许这一次」。"
+            : "权限审批只能放行本应确认的操作，不会突破工作区沙箱与只读边界。"}
         </p>
       </div>
     </Dialog>

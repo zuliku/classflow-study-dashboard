@@ -5,8 +5,25 @@
  * Model 不能选择 approval 持久化；Tool Schema 不暴露 permission/approval/remember/force/unsafe/skipCheck。
  */
 import { ComputerCapability, ComputerPermissionRule, ComputerRisk } from "@/lib/ai/computer/types";
+import type { DesktopGuiActionType } from "@/lib/desktop/types";
 
 export type ComputerApprovalDecision = "deny" | "allow-once" | "allow-session" | "allow-workspace";
+
+/**
+ * Desktop Action 审批展示信息（Computer Use Phase 2）：
+ * 全部来自 Main 校验过的真实控件事实；文本预览已脱敏（敏感输入 → 不提供）。
+ */
+export interface ComputerApprovalGuiInfo {
+  action: DesktopGuiActionType;
+  appName: string;
+  windowTitle: string;
+  targetLabel: string;
+  /** 非敏感输入预览（≤80 chars）；敏感 / blocked → undefined */
+  textPreview?: string;
+  riskLevel: "normal" | "external" | "destructive" | "sensitive";
+  riskReason: string;
+  coordinateFallback: boolean;
+}
 
 export interface ComputerApprovalRequest {
   id: string;
@@ -29,6 +46,8 @@ export interface ComputerApprovalRequest {
   shell?: "powershell" | "cmd";
   /** Terminal risk（normal/destructive/privileged；blocked 不会走到 approval） */
   terminalRisk?: "normal" | "destructive" | "privileged";
+  /** Desktop Action（Phase 2）：GUI 展示信息 */
+  gui?: ComputerApprovalGuiInfo;
 }
 
 /** allow-once：exact 匹配（toolCallId + capability + workspace + root + relativePath [+ fingerprint]），一次消费 */
@@ -73,6 +92,8 @@ export function riskOfCapability(capability: ComputerCapability): ComputerRisk {
     case "app.open":
     case "app.reveal":
     case "shell.execute":
+    // Desktop Action：GUI 操作属于 execute 风险（具体风险由 GUI Risk Gate 进一步分级）
+    case "ui.interact":
       return "execute";
     case "network.access":
       return "external";
@@ -97,6 +118,7 @@ export function buildApprovalRequest(input: {
   shell?: "powershell" | "cmd";
   risk?: "normal" | "destructive" | "privileged";
   allowedDecisions?: ComputerApprovalDecision[];
+  gui?: ComputerApprovalGuiInfo;
 }): ComputerApprovalRequest {
   return {
     id: input.id,
@@ -116,6 +138,7 @@ export function buildApprovalRequest(input: {
     ...(input.commandPreview !== undefined ? { commandPreview: input.commandPreview } : {}),
     ...(input.shell !== undefined ? { shell: input.shell } : {}),
     ...(input.risk !== undefined ? { terminalRisk: input.risk } : {}),
+    ...(input.gui !== undefined ? { gui: input.gui } : {}),
   };
 }
 

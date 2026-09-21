@@ -23,6 +23,7 @@ import {
   isClassFlowDesktopRuntime,
   hasClassFlowDesktopTerminal,
   hasClassFlowDesktopComputer,
+  hasClassFlowDesktopComputerAction,
 } from "@/lib/desktop/bridge";
 import {
   authorizeLocalFolder,
@@ -76,12 +77,14 @@ export function KiroAgentSettings() {
     agentMode,
     terminalEnabled,
     desktopControlEnabled,
+    desktopActionEnabled,
     workspaces,
     setComputerEnabled,
     setActiveWorkspaceId,
     setAgentMode,
     setTerminalEnabled,
     setDesktopControlEnabled,
+    setDesktopActionEnabled,
     addWorkspace,
   } = useKiroComputerStore();
 
@@ -92,6 +95,8 @@ export function KiroAgentSettings() {
   const desktopTerminalAvailable = isClassFlowDesktopRuntime() && hasClassFlowDesktopTerminal();
   // Computer Use Phase 1：仅在 Desktop runtime + computer bridge 可用时显示（网页版完全不出现）
   const desktopObservationAvailable = isClassFlowDesktopRuntime() && hasClassFlowDesktopComputer();
+  // Computer Use Phase 2：需要 Action Bridge（computer v2）
+  const desktopActionAvailable = isClassFlowDesktopRuntime() && hasClassFlowDesktopComputerAction();
   const [grantStatus, setGrantStatus] = useState<Record<string, BrowserGrantStatus>>({});
   // Native V1：root 运行时可用性（runtime facts；不持久化）
   const [rootAvailability, setRootAvailability] = useState<Record<string, WorkspaceRootAvailability>>({});
@@ -217,7 +222,9 @@ export function KiroAgentSettings() {
    */
   const handleToggleDesktopObservation = (enabled: boolean) => {
     if (!enabled) {
+      // 观察是操作的前提：关闭观察必须同时关闭电脑操作
       setDesktopControlEnabled(false);
+      setDesktopActionEnabled(false);
       return;
     }
     confirmRequest({
@@ -226,6 +233,27 @@ export function KiroAgentSettings() {
         "Kiro 可以读取当前屏幕和应用界面（包括窗口标题、界面控件与截图），用于回答「我现在打开了什么」这类问题。本阶段不会执行点击或键盘操作，截图只在本次观察中使用，不会保存到磁盘。",
       confirmLabel: "允许查看",
       onConfirm: () => setDesktopControlEnabled(true),
+    });
+  };
+
+  /**
+   * Computer Use Phase 2：开启电脑操作必须独立确认（只读观察是前提，一并开启）。
+   */
+  const handleToggleDesktopAction = (enabled: boolean) => {
+    if (!enabled) {
+      setDesktopActionEnabled(false);
+      return;
+    }
+    confirmRequest({
+      title: "允许 Kiro 操作电脑？",
+      description:
+        "开启后 Kiro 可以在你当前的窗口中点击、输入文本和按键，并会自动重新观察确认结果。发送消息、提交表单、下载、删除、修改系统设置等高风险动作会再次请求确认；密码、API Key、Token 等敏感信息永远不会由 Kiro 输入。你可以随时点击停止按钮立即中止。",
+      confirmLabel: "允许操作",
+      onConfirm: () => {
+        // 操作的前提是观察能力；一并开启（两者仍各自独立持久化）
+        setDesktopControlEnabled(true);
+        setDesktopActionEnabled(true);
+      },
     });
   };
 
@@ -372,6 +400,25 @@ export function KiroAgentSettings() {
                 checked={desktopControlEnabled}
                 onChange={handleToggleDesktopObservation}
                 label="允许 Kiro 查看桌面"
+              />
+            </SettingsRow>
+          )}
+
+          {/* Computer Use Phase 2：独立于 Terminal 的电脑操作开关（仅 Desktop Runtime 可见） */}
+          {desktopActionAvailable && (
+            <SettingsRow
+              settingId="kiro-desktop-action-enabled"
+              title="允许 Kiro 操作电脑"
+              description={
+                desktopActionEnabled
+                  ? "可点击 / 输入 / 按键 / 滚动 · 高风险动作仍会请求确认"
+                  : "开启后 Kiro 才能在你当前窗口中执行点击与输入（高风险动作需确认）。"
+              }
+            >
+              <SettingsToggle
+                checked={desktopActionEnabled}
+                onChange={handleToggleDesktopAction}
+                label="允许 Kiro 操作电脑"
               />
             </SettingsRow>
           )}

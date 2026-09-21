@@ -129,4 +129,14 @@ export interface KiroComputerTurnSnapshot {
    */
   desktopControlEnabled?: boolean;
   desktopControlAvailable?: boolean;
+  /**
+   * Computer Use Phase 2（Desktop Action）：Turn 内冻结的 GUI 操作 runtime facts。
+   * desktopActionEnabled = 用户偏好（「允许 Kiro 操作电脑」，独立于 Terminal / 观察开关）；
+   * desktopActionAvailable = Desktop Computer Bridge 支持 action（version >= 2）。
+   * 两者与 desktopControl* 同时满足才向模型暴露 desktop_action。
+   */
+  desktopActionEnabled?: boolean;
+  desktopActionAvailable?: boolean;
+  /** 本 Turn 的 Desktop Control session id（opaque；Emergency Stop 用；绝不含 native 标识） */
+  desktopSessionId?: string;
   }

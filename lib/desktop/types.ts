@@ -291,7 +291,7 @@ export type DesktopTerminalSessionEvent =
 
 export type ClassFlowDesktopTerminalBridge = ClassFlowDesktopTerminalBridgeV1 | ClassFlowDesktopTerminalBridgeV2;
 
-/* ---------------- Desktop Computer Bridge（Computer Use Phase 1：Observe only） ---------------- */
+/* ---------------- Desktop Computer Bridge（Phase 1 Observe + Phase 2 Action） ---------------- */
 
 /**
  * Computer Bridge 结构化错误（绝不向 Web throw raw OS error / stack）。
@@ -299,18 +299,27 @@ export type ClassFlowDesktopTerminalBridge = ClassFlowDesktopTerminalBridgeV1 | 
  * - OBSERVATION_FAILED：观察失败（截图 / 窗口枚举 / UIA 读取异常，已脱敏）
  * - INVALID_OPERATION：malformed IPC 输入 / 非法 target/windowId 组合
  * - PERMISSION_DENIED：调用方不受信任
+ * - STALE_OBSERVATION：observation 过期 / 窗口切换 / 元素消失 / bounds 明显变化 → 必须重新 observe
+ * - ACTION_BLOCKED：目标元素不可用 / 敏感输入 / 会话已取消等确定性拒绝（不重试即应停止）
+ * - ACTION_FAILED：输入执行失败（已脱敏）
+ * - CANCELLED：用户 Stop 后会话失效，拒绝继续执行
  */
 export type DesktopComputerBridgeErrorCode =
   | "PERMISSION_DENIED"
   | "INVALID_OPERATION"
   | "RUNTIME_UNAVAILABLE"
   | "OBSERVATION_FAILED"
-  | "NOT_FOUND";
+  | "NOT_FOUND"
+  | "STALE_OBSERVATION"
+  | "ACTION_BLOCKED"
+  | "ACTION_FAILED"
+  | "CANCELLED";
 
 /**
  * UI 元素（模型可见的最小字段集）。
  * elementId 是 Runtime 生成的 opaque 逻辑 id（每次观察重新生成）；
  * 绝不暴露 native UI element / HWND / PID。
+ * isPassword 是控件语义事实（帮助模型避免在密码字段输入），不是内容。
  */
 export interface ClassFlowDesktopComputerElement {
   elementId: string;
@@ -318,6 +327,7 @@ export interface ClassFlowDesktopComputerElement {
   name: string;
   enabled: boolean;
   focused: boolean;
+  isPassword?: boolean;
   bounds: { x: number; y: number; width: number; height: number };
 }
 
@@ -367,14 +377,99 @@ export interface ClassFlowDesktopComputerCapabilities {
   platform: ClassFlowDesktopPlatform;
   screenshot: boolean;
   uiAutomation: boolean;
+  /** Phase 2：action runtime 可用（prepareAction / action / cancelActions） */
+  action: boolean;
 }
 
+/* ---------------- Computer Use Phase 2：Desktop Action contract ---------------- */
+
+export type DesktopGuiActionType =
+  | "click"
+  | "double_click"
+  | "focus"
+  | "type"
+  | "key"
+  | "scroll"
+  | "wait";
+
+/** GUI 风险等级（Main 基于真实控件事实分类；renderer 只做策略合成，不篡改风险） */
+export type DesktopGuiRiskLevel = "normal" | "external" | "destructive" | "sensitive" | "blocked";
+
 /**
- * Desktop Computer Bridge V1（Computer Use Phase 1）。
- * 只读：Runtime MUST NOT 实现鼠标 / 键盘 / clipboard / launch app。
- * 只接受 opaque windowId；Runtime 负责 opaque id ↔ native window 映射，绝不外传。
+ * 目标只允许两种形式：
+ * - elementId：优先（UIA 语义定位）
+ * - normalized：仅当 UIA 无法定位时使用；0~1 相对 observation viewport，禁止物理像素
  */
-export interface ClassFlowDesktopComputerBridge {
+export interface ClassFlowDesktopComputerActionTarget {
+  elementId?: string;
+  normalized?: { x: number; y: number };
+}
+
+export interface ClassFlowDesktopComputerActionRequest {
+  /** 本 Turn Desktop Control session（Emergency Stop 用） */
+  sessionId?: string;
+  /** 具备 target 的动作必须提供最近一次 observation id */
+  observationId?: string;
+  action: DesktopGuiActionType;
+  target?: ClassFlowDesktopComputerActionTarget;
+  /** action=type：待输入文本（敏感信息绝不允许经模型路径；Main 会再次拦截） */
+  text?: string;
+  /** action=key：键或组合键（enter / tab / ctrl+a / …） */
+  key?: string;
+  /** action=scroll：正数向上、负数向下；每单位 = 3 个滚轮刻度 */
+  scroll?: number;
+  /** action=wait：等待毫秒（100–5000） */
+  wait?: number;
+}
+
+/** prepareAction 返回的脱敏目标事实（审批展示 + 风险分类输入） */
+export interface ClassFlowDesktopComputerActionTargetInfo {
+  kind: "element" | "coordinates" | "none";
+  elementId?: string;
+  role?: string;
+  name?: string;
+  isPassword?: boolean;
+  appName: string;
+  windowTitle: string;
+  windowId: string | null;
+  targetLabel: string;
+}
+
+export interface ClassFlowDesktopComputerActionPreparation {
+  action: DesktopGuiActionType;
+  risk: { level: DesktopGuiRiskLevel; reason: string };
+  target: ClassFlowDesktopComputerActionTargetInfo;
+  observationId: string | null;
+  /** 非敏感文本预览（≤80 chars，控制字符已清洗）；敏感输入 → null */
+  textPreview: string | null;
+  /** 该动作是否需要 observation 强绑定（wait 为 false；其它为 true） */
+  requiresObservation: boolean;
+}
+
+export interface ClassFlowDesktopComputerActionResult {
+  actionResult: {
+    action: DesktopGuiActionType;
+    method:
+      | "uia-invoke"
+      | "uia-select"
+      | "uia-setvalue"
+      | "uia-focus"
+      | "bounds-click"
+      | "coordinate-click"
+      | "sendinput-text"
+      | "sendinput-key"
+      | "scroll"
+      | "wait";
+    durationMs: number;
+  };
+  /** Action 后 settle + 自动重新观察（wait 无 observation 上下文时为 null） */
+  observation: ClassFlowDesktopComputerObservation | null;
+  newObservationId: string | null;
+  changedWindow: boolean | null;
+  uiChanged: boolean | null;
+}
+
+export interface ClassFlowDesktopComputerBridgeV1 {
   version: 1;
   capabilities(): Promise<ClassFlowDesktopComputerCapabilities>;
   observe(input: {
@@ -382,8 +477,39 @@ export interface ClassFlowDesktopComputerBridge {
     windowId?: string;
     includeScreenshot?: boolean;
     includeUiTree?: boolean;
+    sessionId?: string;
   }): Promise<ClassFlowDesktopComputerObservation>;
 }
+
+/**
+ * Desktop Computer Bridge V2（Computer Use Phase 2：Observe + Action）。
+ * 所有输入由 Main / native runtime 执行；renderer 不得调用 unrestricted native input API。
+ */
+export interface ClassFlowDesktopComputerBridgeV2 {
+  version: 2;
+  capabilities(): Promise<ClassFlowDesktopComputerCapabilities>;
+  observe(input: {
+    target?: "active-window" | "screen";
+    windowId?: string;
+    includeScreenshot?: boolean;
+    includeUiTree?: boolean;
+    sessionId?: string;
+  }): Promise<ClassFlowDesktopComputerObservation>;
+  /** 只读校验 + 风险事实（不执行输入） */
+  prepareAction(
+    input: ClassFlowDesktopComputerActionRequest
+  ): Promise<ClassFlowDesktopComputerActionPreparation>;
+  /** 执行动作（内部重复完整校验），settle 后自动重新观察 */
+  action(
+    input: ClassFlowDesktopComputerActionRequest
+  ): Promise<ClassFlowDesktopComputerActionResult>;
+  /** Emergency Stop：清空该 session 的 observation 并拒绝后续 action */
+  cancelActions(input: { sessionId: string }): Promise<{ ok: boolean; cancelled: number }>;
+}
+
+export type ClassFlowDesktopComputerBridge =
+  | ClassFlowDesktopComputerBridgeV1
+  | ClassFlowDesktopComputerBridgeV2;
 
 declare global {
   interface Window {

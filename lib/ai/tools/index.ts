@@ -15,6 +15,10 @@ import {
   resolveDesktopObservationCapability,
   DesktopObservationCapabilityState,
 } from "@/lib/ai/computer/desktopObservationCapability";
+import {
+  resolveGuiControlCapability,
+  GuiControlCapabilityState,
+} from "@/lib/ai/computer/gui/capability";
 
 /** Kiro 全部基础工具（Read + Write + Memory）：Server 提供 schema，Client 按同名执行 */
 export const KIRO_TOOLS = {
@@ -93,6 +97,8 @@ export function getKiroToolsForRequest(input: {
     hasNativeRoot?: boolean;
     desktopControlEnabled?: boolean;
     desktopControlAvailable?: boolean;
+    desktopActionEnabled?: boolean;
+    desktopActionAvailable?: boolean;
   };
   documentAuthoringVersion?: unknown;
 }): ToolSet {
@@ -111,6 +117,12 @@ export function getKiroToolsForRequest(input: {
   const desktopObservationCapability = resolveDesktopObservationCapability(snap as never);
   if (!desktopObservationCapability.available) {
     delete (set as Record<string, unknown>)["observe_desktop"];
+  }
+  // Computer Use Phase 2：desktop_action 与 GUI 操作 Capability 同源。
+  // Plan（只读）/ 未开启「允许 Kiro 操作电脑」/ 无 Action Bridge → 工具整体不存在。
+  const desktopActionCapability = resolveGuiControlCapability(snap as never);
+  if (!desktopActionCapability.available) {
+    delete (set as Record<string, unknown>)["desktop_action"];
   }
   return set;
 }
@@ -138,6 +150,20 @@ export function resolveKiroDesktopObservationCapability(input: {
   };
 }): DesktopObservationCapabilityState {
   return resolveDesktopObservationCapability(input.computerSnapshot as never);
+}
+
+/** 供 chat route / diagnostics 读取本请求的 GUI Control Capability（与 desktop_action 暴露同源） */
+export function resolveKiroGuiControlCapability(input: {
+  computerSnapshot?: {
+    enabled: boolean;
+    agentMode: "plan" | "guided" | "workspace-auto";
+    desktopControlEnabled?: boolean;
+    desktopControlAvailable?: boolean;
+    desktopActionEnabled?: boolean;
+    desktopActionAvailable?: boolean;
+  };
+}): GuiControlCapabilityState {
+  return resolveGuiControlCapability(input.computerSnapshot as never);
 }
 
 export { COMPUTER_TOOLS };

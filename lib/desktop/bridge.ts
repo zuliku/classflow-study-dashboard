@@ -70,17 +70,17 @@ export function hasClassFlowDesktopTerminal(): boolean {
 }
 
 /**
- * Desktop Computer Bridge（Computer Use Phase 1：Observe only，optional capability）。
+ * Desktop Computer Bridge（Computer Use；optional capability）。
  * Desktop Runtime 可以没有 computer（Native Folder / Terminal 保持 valid）——
  * computer 缺失绝不使整个 Bridge invalid。
- * 只接受 version === 1 的完整表面（capabilities + observe）。
+ * v1 = Observe only；v2 = Observe + Action。这里接受 1|2（observe 表面不变）。
  */
 export function getClassFlowDesktopComputerBridge(): import("@/lib/desktop/types").ClassFlowDesktopComputerBridge | null {
   const bridge = getClassFlowDesktopBridge();
   if (!bridge) return null;
   const computer = bridge.computer;
   if (!computer || typeof computer !== "object") return null;
-  if (computer.version !== 1) return null;
+  if (computer.version !== 1 && computer.version !== 2) return null;
   if (typeof computer.capabilities !== "function" || typeof computer.observe !== "function") return null;
   return computer;
 }
@@ -88,6 +88,31 @@ export function getClassFlowDesktopComputerBridge(): import("@/lib/desktop/types
 /** Desktop Computer Bridge 是否可用（SSR safe；Web runtime → false） */
 export function hasClassFlowDesktopComputer(): boolean {
   return getClassFlowDesktopComputerBridge() !== null;
+}
+
+/**
+ * Desktop Computer Action Bridge（Phase 2）：渐进能力检测。
+ * 要求 computer version === 2 且完整 action surface（prepareAction/action/cancelActions）。
+ * version 1（Observe only）→ null（desktop_action 必须整体不暴露，而不是暴露后被 deny）。
+ */
+export function getClassFlowDesktopComputerActionBridge(): import("@/lib/desktop/types").ClassFlowDesktopComputerBridgeV2 | null {
+  const bridge = getClassFlowDesktopComputerBridge();
+  if (!bridge) return null;
+  if (bridge.version !== 2) return null;
+  const candidate = bridge as import("@/lib/desktop/types").ClassFlowDesktopComputerBridgeV2;
+  if (
+    typeof candidate.prepareAction !== "function" ||
+    typeof candidate.action !== "function" ||
+    typeof candidate.cancelActions !== "function"
+  ) {
+    return null;
+  }
+  return candidate;
+}
+
+/** Desktop Computer Action 是否可用 */
+export function hasClassFlowDesktopComputerAction(): boolean {
+  return getClassFlowDesktopComputerActionBridge() !== null;
 }
 
 /** Terminal V2 Streaming 是否可用 */

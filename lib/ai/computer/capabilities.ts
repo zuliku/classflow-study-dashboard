@@ -19,6 +19,9 @@ import {
  *   workspace native root / policy / Terminal Risk Gate / approval 全链控制。
  * - Computer Use Phase 1（Desktop Observe，只读）：screen.observe / ui.inspect 在
  *   Plan / Guided / Workspace Auto 默认全部 allow（观察不修改任何 GUI 状态）。
+ * - Computer Use Phase 2（Desktop Action）：ui.interact 是 GUI 副作用能力——
+ *   Plan deny（只能观察）/ Guided ask / Workspace Auto allow（高风险动作由 GUI Risk Gate
+ *   强制 ask；blocked 直接 deny，见 lib/ai/computer/gui/risk.ts）。
  * 显式 deny 规则与 read-only root 仍优先于 mode default（policy pipeline 保证）。
  */
 export const AGENT_MODE_DEFAULTS: Record<
@@ -43,6 +46,8 @@ export const AGENT_MODE_DEFAULTS: Record<
     // Desktop Observe：Plan 也允许只读观察（不执行点击/键盘）
     "screen.observe": "allow",
     "ui.inspect": "allow",
+    // Desktop Action：Plan 绝不执行 GUI 操作
+    "ui.interact": "deny",
   },
   guided: {
     "workspace.list": "allow",
@@ -62,6 +67,8 @@ export const AGENT_MODE_DEFAULTS: Record<
     "network.access": "deny",
     "screen.observe": "allow",
     "ui.inspect": "allow",
+    // Desktop Action：Guided 下每次 GUI 操作都请求确认（GUI Risk Gate 可升级为 allow-once only）
+    "ui.interact": "ask",
   },
   "workspace-auto": {
     "workspace.list": "allow",
@@ -84,6 +91,8 @@ export const AGENT_MODE_DEFAULTS: Record<
     "network.access": "deny",
     "screen.observe": "allow",
     "ui.inspect": "allow",
+    // Desktop Action：普通 GUI 操作可自动执行；高风险动作由 GUI Risk Gate 强制 ask
+    "ui.interact": "allow",
   },
 };
 

@@ -90,7 +90,7 @@ describe("getClassFlowDesktopComputerBridge / hasClassFlowDesktopComputer", () =
   it("未知 computer version → null（不做猜测兼容）", () => {
     installBridge(true);
     const desktop = (window as unknown as { classflowDesktop: { computer: { version: number } } }).classflowDesktop;
-    desktop.computer.version = 2;
+    desktop.computer.version = 3;
     expect(getClassFlowDesktopComputerBridge()).toBeNull();
   });
 

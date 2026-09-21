@@ -25,6 +25,7 @@ import {
   searchWorkspaceKnowledgeSchema,
   retrieveWorkspaceContextSchema,
   observeDesktopSchema,
+  desktopActionSchema,
   runTerminalCommandSchema,
   writeTerminalInputSchema,
   startTerminalCommandSchema,
@@ -131,7 +132,7 @@ export const COMPUTER_READ_TOOLS: ComputerToolDefinition[] = [
     // Computer Use Phase 1（Observe only）：只读桌面观察。绝不执行鼠标/键盘/GUI 修改。
     name: "observe_desktop",
     description:
-      "观察当前 Windows 桌面（只读，不会点击或输入）。默认观察当前活动窗口；可用 windowId 指定之前观察结果中返回的逻辑窗口 id。返回：observationId、应用名称、窗口标题、逻辑 windowId、当前打开窗口列表（opaque windowId/title/appName/active）、viewport 尺寸、UI 元素列表（elementId/role/name/enabled/focused/bounds）与截图证据。仅使用返回的 opaque windowId；不要猜测或使用 HWND/PID/路径。本阶段没有点击、键盘、剪贴板或启动应用能力——用户要求此类操作时必须明确说明当前只能观察，不能执行。",
+      "观察当前 Windows 桌面（只读，不会点击或输入）。默认观察当前活动窗口；可用 windowId 指定之前观察结果中返回的逻辑窗口 id。返回：observationId、应用名称、窗口标题、逻辑 windowId、当前打开窗口列表（opaque windowId/title/appName/active）、viewport 尺寸、UI 元素列表（elementId/role/name/enabled/focused/bounds）与截图证据。仅使用返回的 opaque windowId；不要猜测或使用 HWND/PID/路径。需要点击 / 输入 / 按键时使用 desktop_action（本工具只负责观察；若 desktop_action 当前不可用，则只能观察并如实告知用户）。",
     schema: observeDesktopSchema,
     capability: "screen.observe",
     mutation: false,
@@ -145,6 +146,23 @@ export const COMPUTER_READ_TOOLS: ComputerToolDefinition[] = [
 ];
 
 export const COMPUTER_MUTATION_TOOLS: ComputerToolDefinition[] = [
+  {
+    // Computer Use Phase 2（Observe → Action → Observe）：在明确授权下操作 GUI。
+    // 不实现 drag&drop / clipboard / 文件上传协议 / 支付 / 密码自动输入 / unrestricted system control。
+    name: "desktop_action",
+    description:
+      "在当前电脑窗口上执行单个 GUI 动作（click / double_click / focus / type / key / scroll / wait）。必须先 observe_desktop，并在 target 中使用观察结果的 elementId；只有 UI Automation 无法定位时才允许 normalized 0~1 坐标（禁止物理像素）。具备 target 的动作必须携带最近一次 observationId；如果界面已变化（窗口切换 / 元素消失 / 位置明显变化）会返回 STALE_OBSERVATION，此时必须重新 observe_desktop，禁止复用旧坐标继续。每次执行后会自动重新观察并返回新的 observationId、changedWindow / uiChanged 证据；必须依据新 observation 验证结果，不要假设成功。发送消息、提交表单、下载、删除、修改系统设置等高风险动作会请求用户确认；密码、API Key、Token、Secret 绝不可作为 text 传入。本阶段不支持拖拽、剪贴板和文件上传。",
+    schema: desktopActionSchema,
+    capability: "ui.interact",
+    mutation: true,
+    inputExamples: [
+      { input: { action: "click", observationId: "obs-…", target: { elementId: "el-3" } } },
+      { input: { action: "type", observationId: "obs-…", target: { elementId: "el-3" }, text: "ClassFlow" } },
+      { input: { action: "key", observationId: "obs-…", key: "enter" } },
+      { input: { action: "scroll", observationId: "obs-…", scroll: -3 } },
+      { input: { action: "wait", wait: 500 } },
+    ],
+  },
   {
     name: "create_directory",
     description: "在工作区创建目录（已存在时返回 exists，不覆盖）。",

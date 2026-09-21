@@ -25,6 +25,9 @@ function snapshot(overrides: Partial<KiroComputerTurnSnapshot> = {}): KiroComput
     roots: [{ id: "root-1", label: "资料", access: "read-write" }],
     desktopControlEnabled: true,
     desktopControlAvailable: true,
+    desktopActionEnabled: true,
+    desktopActionAvailable: true,
+    desktopSessionId: "cs-11111111-2222-3333-4444-555555555555",
     ...overrides,
   };
 }
@@ -153,6 +156,10 @@ describe("executeKiroObserveDesktop — 成功链路", () => {
     expect(data.elementCount).toBe(2);
     expect(data.readOnly).toBe(true);
     expect(observe).toHaveBeenCalledTimes(1);
+    // Computer Use Phase 2：observation 绑定 Turn 的 Desktop Control session
+    expect(observe.mock.calls[0][0]).toMatchObject({
+      sessionId: "cs-11111111-2222-3333-4444-555555555555",
+    });
   });
 
   it("截图 evidence 只含 metadata（dataUrl 不进入模型输出）", async () => {

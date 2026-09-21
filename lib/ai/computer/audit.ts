@@ -41,6 +41,20 @@ export interface ComputerAuditEntry {
   desktopTarget?: "active-window" | "screen";
   observationId?: string;
   uiElementCount?: number;
+  /** Computer Use Phase 2（可选）：GUI 动作事实（动作 / 风险 / 执行方式 / 验证结果）。
+   *  绝不记录输入文本 / 密码 / 坐标细节 / native 标识 */
+  guiAction?:
+    | "click"
+    | "double_click"
+    | "focus"
+    | "type"
+    | "key"
+    | "scroll"
+    | "wait";
+  guiRisk?: "normal" | "external" | "destructive" | "sensitive" | "blocked";
+  guiMethod?: string;
+  changedWindow?: boolean;
+  uiChanged?: boolean;
 }
 
 function openAuditDb(): Promise<IDBDatabase | null> {

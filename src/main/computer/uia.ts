@@ -17,6 +17,8 @@ export interface NativeUiElement {
   name: string;
   enabled: boolean;
   focused: boolean;
+  /** 控件是否密码字段（语义事实；用于阻止敏感输入） */
+  isPassword: boolean;
   bounds: { x: number; y: number; width: number; height: number };
   depth: number;
 }
@@ -31,6 +33,7 @@ interface RawUiNode {
   name?: unknown;
   enabled?: unknown;
   focused?: unknown;
+  isPassword?: unknown;
   x?: unknown;
   y?: unknown;
   width?: unknown;
@@ -64,6 +67,7 @@ export function parseUiTree(raw: unknown): { elements: NativeUiElement[]; trunca
       name: sanitizeText(node.name, MAX_UI_ELEMENT_NAME_LENGTH),
       enabled: node.enabled === true,
       focused: node.focused === true,
+      isPassword: node.isPassword === true,
       bounds: {
         x: toInt(node.x),
         y: toInt(node.y),
@@ -114,6 +118,7 @@ while ($queue.Count -gt 0 -and $items.Count -lt $limit -and $depth -le $maxDepth
         name = [string]$c.Name
         enabled = [bool]$c.IsEnabled
         focused = [bool]$c.HasKeyboardFocus
+        isPassword = [bool]$c.IsPassword
         x = [int][Math]::Round($rect.X)
         y = [int][Math]::Round($rect.Y)
         width = [int][Math]::Round($rect.Width)

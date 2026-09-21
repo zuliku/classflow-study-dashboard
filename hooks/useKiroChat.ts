@@ -89,7 +89,9 @@ import { createVisualProposalRuntime } from "@/lib/ai/visual/receipt";
 import { clearLiveImageSources } from "@/lib/ai/attachments/liveImageRegistry";
 import {
   getClassFlowDesktopTerminalBridge,
+  getClassFlowDesktopComputerActionBridge,
   hasClassFlowDesktopComputer,
+  hasClassFlowDesktopComputerAction,
   isNativeAdapterRef,
 } from "@/lib/desktop/bridge";
 import { cancelAllActiveTerminalExecutions } from "@/lib/ai/computer/terminal/executor";
@@ -849,10 +851,32 @@ export function useKiroChat({
   const buildSnapshotRef = useRef(buildTurnSnapshot);
   buildSnapshotRef.current = buildTurnSnapshot;
 
+  /**
+   * Computer Use Phase 2：Desktop Control session（opaque cs-…）。
+   * 每个 User Turn 轮换；Stop / 清空会话时通知 Main 取消（清空 observation + 拒绝后续 action）。
+   */
+  const desktopSessionIdRef = useRef<string | null>(null);
+  const cancelDesktopControlSession = useCallback(() => {
+    const sessionId = desktopSessionIdRef.current;
+    if (!sessionId) return;
+    const bridge = getClassFlowDesktopComputerActionBridge();
+    if (!bridge) return;
+    void bridge.cancelActions({ sessionId }).catch(() => {
+      /* Stop 路径 best-effort；Main 侧仍有 TTL / 状态校验兜底 */
+    });
+  }, []);
+  const rotateDesktopControlSession = useCallback(() => {
+    cancelDesktopControlSession();
+    desktopSessionIdRef.current = `cs-${crypto.randomUUID()}`;
+  }, [cancelDesktopControlSession]);
+
   // Computer Turn Snapshot（send 边界冻结；只读逻辑元数据，绝不包含 adapterRef/handle/path/token）
   const buildComputerSnapshot = (): KiroComputerTurnSnapshot => {
     const cs = useKiroComputerStore.getState();
     const ws = cs.workspaces.find((w) => w.id === cs.activeWorkspaceId) ?? null;
+    if (!desktopSessionIdRef.current) {
+      desktopSessionIdRef.current = `cs-${crypto.randomUUID()}`;
+    }
     return {
       enabled: cs.computerEnabled,
       workspaceId: cs.activeWorkspaceId,
@@ -869,6 +893,10 @@ export function useKiroChat({
       // Computer Use Phase 1：桌面观察 preference + runtime availability（只读；不含任何 native 标识）
       desktopControlEnabled: cs.desktopControlEnabled,
       desktopControlAvailable: hasClassFlowDesktopComputer(),
+      // Computer Use Phase 2：GUI 操作 preference + action bridge availability（opaque session id）
+      desktopActionEnabled: cs.desktopActionEnabled,
+      desktopActionAvailable: hasClassFlowDesktopComputerAction(),
+      desktopSessionId: desktopSessionIdRef.current,
     };
   };
 
@@ -906,7 +934,11 @@ export function useKiroChat({
         useAppStore.getState().currentSemesterWeek
       )
     ),
-    computerSnapshot: buildComputerSnapshot(),
+    computerSnapshot: (() => {
+      // 新 User Turn：轮换 Desktop Control session（旧 session 的 observation / 队列立即失效）
+      rotateDesktopControlSession();
+      return buildComputerSnapshot();
+    })(),
     projectId: projectIdRef.current,
     conversationSummary: conversationSummary
       ? { text: conversationSummary.text, throughMessageId: conversationSummary.throughMessageId }
@@ -1999,6 +2031,8 @@ export function useKiroChat({
           liveWorkspaces: useKiroComputerStore.getState().workspaces,
           livePermissionRules: useKiroComputerStore.getState().permissionRules,
           taskId,
+          // Computer Use Phase 2：Stop 后 GUI action / observe 一律拒绝执行（Emergency Stop）
+          isCancelled: () => stoppedTurnMessageIdRef.current !== null,
         },
         counters: computerCountersRef.current,
         oneShotApprovals: oneShotApprovalsRef.current,
@@ -3009,9 +3043,12 @@ export function useKiroChat({
       tasksRef.current = new Map();
       setTasksState(new Map());
       computerCountersRef.current = { readCount: 0, mutationCount: 0, terminalCount: 0 };
+      // Desktop Control session 失效（清空 observation；后续 action 一律拒绝）
+      cancelDesktopControlSession();
+      desktopSessionIdRef.current = null;
       if (!keepRestored) restoredComputerTasksRef.current = new Map();
     },
-    [setPendingApproval]
+    [cancelDesktopControlSession, setPendingApproval]
   );
 
   const newChat = useCallback(() => {
@@ -3316,8 +3353,11 @@ export function useKiroChat({
       updateTasks();
     }
     void cancelAllActiveTerminalExecutions();
+    // Computer Use Phase 2：Stop → 立即取消当前 Desktop Control session
+    // （Main 清空 observation、拒绝后续 GUI action；迟到的结果由 emitToolOutput 丢弃）
+    cancelDesktopControlSession();
     void chat.stop();
-  }, [chat, setPendingApproval, setPendingQueueLength, updateTasks]);
+  }, [chat, cancelDesktopControlSession, setPendingApproval, setPendingQueueLength, updateTasks]);
 
   return {
     messages,
@@ -3395,6 +3435,8 @@ function capabilityForToolName(toolName: string): ComputerCapability {
       return "document.modify";
     case "observe_desktop":
       return "screen.observe";
+    case "desktop_action":
+      return "ui.interact";
     default:
       return "fs.read";
   }

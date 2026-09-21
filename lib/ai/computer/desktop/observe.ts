@@ -20,6 +20,7 @@ import { evaluateComputerPolicy } from "@/lib/ai/computer/policy";
 import { observeDesktopSchema } from "@/lib/ai/computer/tools/schemas";
 import { resolveDesktopObservationCapability } from "@/lib/ai/computer/desktopObservationCapability";
 import { getClassFlowDesktopComputerBridge } from "@/lib/desktop/bridge";
+import { summarizeObservation } from "@/lib/ai/computer/desktop/summary";
 import { appendComputerAuditEntry } from "@/lib/ai/computer/audit";
 import {
   ComputerOneShotApproval,
@@ -47,6 +48,8 @@ export interface ExecuteObserveDesktopRequest {
   taskId: string;
   /** read 上限（与 executor 的 COMPUTER_READ_LIMIT_PER_TURN 一致；参数化避免循环依赖） */
   readLimitPerTurn: number;
+  /** Emergency Stop：Stop 后不再发起新的观察 */
+  isCancelled?: () => boolean;
   now?: () => number;
 }
 
@@ -125,6 +128,12 @@ export async function executeKiroObserveDesktop(
   request: ExecuteObserveDesktopRequest
 ): Promise<ComputerExecutionAttempt> {
   const now = request.now ?? (() => Date.now());
+  if (request.isCancelled?.()) {
+    return {
+      kind: "completed",
+      output: { ok: false, code: "CANCELLED", message: "用户已停止电脑操作。" },
+    };
+  }
 
   // 1. schema（strict；模型只能给 opaque windowId）
   const parsed = observeDesktopSchema.safeParse(request.toolInput ?? {});
@@ -196,6 +205,13 @@ export async function executeKiroObserveDesktop(
   }
 
   // 6. Bridge observe（唯一 IO；失败 → 结构化 Tool Output）
+  // Computer Use Phase 2：observation 绑定本 Turn 的 Desktop Control session
+  //（Emergency Stop 时 Main 可按 session 清空 observation）。
+  const sessionId =
+    typeof request.snapshot.desktopSessionId === "string" &&
+    /^cs-[A-Za-z0-9-]{8,64}$/.test(request.snapshot.desktopSessionId)
+      ? request.snapshot.desktopSessionId
+      : undefined;
   let observation: Awaited<ReturnType<typeof bridge.observe>>;
   try {
     observation = await bridge.observe({
@@ -203,22 +219,12 @@ export async function executeKiroObserveDesktop(
       ...(input.windowId ? { windowId: input.windowId } : {}),
       includeScreenshot: input.includeScreenshot !== false,
       includeUiTree,
+      ...(sessionId ? { sessionId } : {}),
     });
   } catch (err) {
     return bridgeFailureOutput(err);
   }
   request.counters.readCount += 1;
-
-  const screenshotEvidence = observation.screenshot
-    ? {
-        captured: true as const,
-        mimeType: observation.screenshot.mimeType,
-        width: observation.screenshot.width,
-        height: observation.screenshot.height,
-        bytes: observation.screenshot.bytes,
-        capturedAt: observation.screenshot.capturedAt,
-      }
-    : { captured: false as const };
 
   // 7. Audit（只读执行事实；observationId 为 opaque；绝不含 native 标识 / 像素）
   void appendComputerAuditEntry({
@@ -243,21 +249,7 @@ export async function executeKiroObserveDesktop(
     output: {
       ok: true,
       data: {
-        observationId: observation.observationId,
-        target: observation.target,
-        appName: observation.appName,
-        windowTitle: observation.windowTitle,
-        windowId: observation.windowId,
-        viewport: observation.viewport,
-        windows: observation.windows,
-        windowsTruncated: observation.windowsTruncated,
-        elements: observation.elements,
-        elementCount: observation.elementCount,
-        elementsTruncated: observation.elementsTruncated,
-        screenshot: screenshotEvidence,
-        warnings: observation.warnings,
-        uiTreeRevision: observation.uiTreeRevision,
-        capturedAt: observation.capturedAt,
+        ...summarizeObservation(observation),
         // 明确阶段边界：模型必须如实告知用户当前不能执行 GUI 操作
         readOnly: true,
       },

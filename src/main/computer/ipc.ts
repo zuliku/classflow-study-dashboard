@@ -69,6 +69,7 @@ const UNAVAILABLE_CAPABILITIES: ClassFlowDesktopComputerCapabilities = {
   platform: "unknown",
   screenshot: false,
   uiAutomation: false,
+  action: false,
 };
 
 export function registerComputerIpc(opts?: ComputerIpcOptions): void {
@@ -93,6 +94,39 @@ export function registerComputerIpc(opts?: ComputerIpcOptions): void {
     wrap("bridge:computer:observe", async (_event, input: unknown) => {
       try {
         return await (await getDesktopObservationRuntime()).observe(input);
+      } catch (err) {
+        throw encodeBridgeError(err);
+      }
+    })
+  );
+
+  ipcMain.handle(
+    "bridge:computer:prepareAction",
+    wrap("bridge:computer:prepareAction", async (_event, input: unknown) => {
+      try {
+        return await (await getDesktopObservationRuntime()).prepareAction(input);
+      } catch (err) {
+        throw encodeBridgeError(err);
+      }
+    })
+  );
+
+  ipcMain.handle(
+    "bridge:computer:action",
+    wrap("bridge:computer:action", async (_event, input: unknown) => {
+      try {
+        return await (await getDesktopObservationRuntime()).action(input);
+      } catch (err) {
+        throw encodeBridgeError(err);
+      }
+    })
+  );
+
+  ipcMain.handle(
+    "bridge:computer:cancelActions",
+    wrap("bridge:computer:cancelActions", async (_event, input: unknown) => {
+      try {
+        return (await getDesktopObservationRuntime()).cancelActions(input);
       } catch (err) {
         throw encodeBridgeError(err);
       }

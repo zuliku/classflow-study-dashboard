@@ -116,6 +116,8 @@ export function toolStepLabel(toolName: string): string {
       return "正在运行终端命令";
     case "observe_desktop":
       return "正在观察桌面";
+    case "desktop_action":
+      return "正在操作电脑";
     default:
       return "正在执行操作";
   }
@@ -131,7 +133,9 @@ export function isComputerMutationTool(toolName: string): boolean {
     toolName === "move_file" ||
     toolName === "update_document" ||
     // Desktop Terminal V1：side-effectful（regenerate / replay guard 不能自动重放）
-    toolName === "run_terminal_command"
+    toolName === "run_terminal_command" ||
+    // Computer Use Phase 2：GUI action 是 side-effectful
+    toolName === "desktop_action"
   );
 }
 

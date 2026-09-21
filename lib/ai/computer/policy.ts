@@ -74,6 +74,7 @@ const HARD_DENY_LABELS: Record<ComputerCapability, string> = {
   "document.modify": "document.modify",
   "screen.observe": "观察桌面",
   "ui.inspect": "读取界面控件",
+  "ui.interact": "操作电脑界面",
 };
 
 function modeLabel(mode: KiroAgentMode): string {

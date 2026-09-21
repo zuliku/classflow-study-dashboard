@@ -10,6 +10,8 @@
 import { KiroComputerTurnSnapshot } from "@/lib/ai/contextBudget/types";
 import { resolveTerminalCapability, TerminalCapabilityState } from "@/lib/ai/computer/terminalCapability";
 import { resolveDesktopObservationCapability } from "@/lib/ai/computer/desktopObservationCapability";
+import { resolveGuiControlCapability } from "@/lib/ai/computer/gui/capability";
+import type { GuiControlCapabilityState } from "@/lib/ai/computer/gui/capability";
 
 /** 终端能力可用时的适用场景列表（写入 Prompt） */
 const TERMINAL_USE_CASES = [
@@ -142,19 +144,102 @@ function buildDesktopObservationSection(snapshot: KiroComputerTurnSnapshot | nul
       "不要错误声称 ClassFlow Desktop 从来不支持查看桌面。",
     ].join("\n");
   }
+  const guiCapability: GuiControlCapabilityState = resolveGuiControlCapability(snapshot);
+  const actionGuidance = guiCapability.available
+    ? [
+        "用户要求「点击这个按钮」「输入文字」「滚动页面」时：先 observe_desktop 获取 elementId，再用 desktop_action 执行，并用返回的新 observation 验证结果。",
+        "不要声称已经完成尚未执行的操作，也不要使用旧 observation / 旧坐标。",
+      ]
+    : [
+        "用户要求「点击这个按钮」「输入文字」「关掉窗口」时：",
+        guiCapability.reason === "mode-read-only"
+          ? "必须说明当前为仅规划模式，只能观察；如需操作需切换到「每次确认」或「授权范围内自动」。"
+          : "必须明确说明当前只能观察、不能执行 GUI 操作（如需操作，请在 设置 → Agent 与权限 中开启「允许 Kiro 操作电脑」）。",
+        "不要声称已完成点击或输入，也不要描述不存在的执行能力。",
+      ];
   return [
     "# Desktop Observation",
     "",
     "- Runtime: available",
     "- User permission: enabled",
     "- observe_desktop（截图 + UI Automation 控件树）: available",
-    "- 只观察（Observe only）: 本阶段不会执行点击、键盘输入、剪贴板或启动应用",
+    "- 只观察（Observe only）: 观察本身不会执行点击、键盘输入、剪贴板或启动应用",
     "",
     "用户询问「我现在电脑上打开了什么」「当前窗口有哪些按钮」「屏幕上显示什么」时，",
     "使用 observe_desktop 读取当前活动窗口或屏幕，并基于返回的窗口标题、应用名称、窗口列表与 UI 元素作答。",
     "返回的 windowId 是唯一允许使用的逻辑窗口 id；不要猜测或使用 HWND/PID。",
-    "用户要求「点击这个按钮」「输入文字」「关掉窗口」时：必须明确说明当前阶段只能观察、不能执行 GUI 操作，",
-    "不要声称已完成点击或输入，也不要描述不存在的执行能力。",
+    ...actionGuidance,
+  ].join("\n");
+}
+
+/**
+ * Computer Use Phase 2：Desktop Action 能力段（Observe → Action → Observe）。
+ * 只读 / 高风险 / 敏感输入的边界必须显式声明。
+ */
+function buildDesktopActionSection(snapshot: KiroComputerTurnSnapshot | null): string {
+  const capability = resolveGuiControlCapability(snapshot);
+  if (capability.reason === "computer-disabled") return "";
+  if (capability.reason === "mode-read-only") {
+    return [
+      "# Desktop Action",
+      "",
+      "- Runtime: available",
+      "- Mode: plan（只读）",
+      "",
+      "当前为仅规划模式：只能 observe_desktop 观察，不能执行点击 / 输入 / 按键。",
+      "用户要求操作界面时，说明需要切换到「每次确认」或「授权范围内自动」模式。",
+    ].join("\n");
+  }
+  if (capability.reason === "observe-disabled") {
+    return [
+      "# Desktop Action",
+      "",
+      "- Runtime: available",
+      "- User permission: disabled（桌面观察未开启）",
+      "",
+      "电脑操作以桌面观察为前提。用户询问时，应引导前往：设置 → Agent 与权限 → 允许 Kiro 查看桌面。",
+      "不要自动开启权限。",
+    ].join("\n");
+  }
+  if (capability.reason === "permission-disabled") {
+    return [
+      "# Desktop Action",
+      "",
+      "- Runtime: available",
+      "- User permission: disabled",
+      "",
+      "桌面版本支持操作电脑，但用户当前没有开启「允许 Kiro 操作电脑」。",
+      "用户询问时，应引导前往：设置 → Agent 与权限 → 允许 Kiro 操作电脑。不要自动开启权限。",
+    ].join("\n");
+  }
+  if (capability.reason === "runtime-unavailable") {
+    return [
+      "# Desktop Action",
+      "",
+      "- Runtime: unavailable",
+      "",
+      "当前运行环境没有电脑操作能力（例如 Web 版 / Desktop Bridge 未加载）。",
+      "不要错误声称 ClassFlow Desktop 从来不支持操作电脑。",
+    ].join("\n");
+  }
+  return [
+    "# Desktop Action",
+    "",
+    "- Runtime: available",
+    "- User permission: enabled",
+    "- desktop_action（click / double_click / focus / type / key / scroll / wait）: available",
+    "",
+    "工作流程必须是 Observe → Action → Observe：",
+    "1. 先 observe_desktop，从返回元素中选择 elementId（不要猜测坐标）。",
+    "2. desktop_action 的 target 优先使用 elementId；只有 UI Automation 无法定位时才使用 normalized 0~1 坐标（禁止物理像素）。",
+    "3. 每次执行后工具会自动重新观察并返回新的 observationId / changedWindow / uiChanged；必须依据新 observation 验证结果，不要假设成功。",
+    "4. 返回 STALE_OBSERVATION 时必须重新 observe_desktop，禁止复用旧观察或旧坐标继续操作。",
+    "",
+    "边界：",
+    "- 发送消息、提交表单、下载、删除、修改系统设置等高风险动作会请求用户确认；用户拒绝时立即停止。",
+    "- 密码、API Key、Token、Secret 等敏感信息绝不可作为 text 传入，也不要尝试绕过。",
+    "- 本阶段不支持拖拽、剪贴板和文件上传；用户要求时如实说明。",
+    "- 用户点击停止后不得继续任何 GUI 操作。",
   ].join("\n");
 }
 
@@ -181,7 +266,8 @@ export function buildDesktopRuntimeCapabilityContext(
     }
   })();
   const observationSection = buildDesktopObservationSection(snapshot);
-  return observationSection ? `${terminalSection}\n\n${observationSection}` : terminalSection;
+  const actionSection = buildDesktopActionSection(snapshot);
+  return [terminalSection, observationSection, actionSection].filter(Boolean).join("\n\n");
 }
 
 export type { TerminalCapabilityState };
