@@ -62,6 +62,8 @@ export interface ComputerAuditEntry {
   windowLabel?: string | null;
   elementRole?: string;
   elementName?: string;
+  /** V2.1（可选）：expect 确定性验证是否通过 */
+  verificationPassed?: boolean;
 }
 
 function openAuditDb(): Promise<IDBDatabase | null> {

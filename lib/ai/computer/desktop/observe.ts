@@ -26,6 +26,7 @@ import {
   type DesktopVisionConfig,
   type DesktopVisionDeps,
 } from "@/lib/ai/computer/gui/vision";
+import { associateVisionCandidates } from "@/lib/ai/computer/gui/visionMatch";
 import { appendComputerAuditEntry } from "@/lib/ai/computer/audit";
 import {
   ComputerOneShotApproval,
@@ -236,7 +237,9 @@ export async function executeKiroObserveDesktop(
   request.counters.readCount += 1;
 
   // 6b. Vision fallback（Phase 3）：UIA 空 或 显式请求 → 截图候选区域（只读事实，不执行动作）
+  // V2.1：候选与 UIA 元素做 IoU 关联；命中则携带 elementId（可走语义动作，无需坐标审批）
   let visionFallback: Awaited<ReturnType<typeof extractDesktopVisionCandidates>> | null = null;
+  let visionAssociated: ReturnType<typeof associateVisionCandidates> | null = null;
   const wantsVision = input.includeVision === true || observation.elementCount === 0;
   if (wantsVision && observation.screenshot) {
     visionFallback = await extractDesktopVisionCandidates(
@@ -247,6 +250,13 @@ export async function executeKiroObserveDesktop(
       request.vision ?? { enabled: false, model: "" },
       request.visionDeps
     );
+    if (visionFallback.available && visionFallback.candidates.length > 0) {
+      visionAssociated = associateVisionCandidates(
+        visionFallback.candidates,
+        observation.elements,
+        observation.viewport
+      );
+    }
   }
 
   // 7. Audit（只读执行事实；observationId 为 opaque；绝不含 native 标识 / 像素）
@@ -281,7 +291,7 @@ export async function executeKiroObserveDesktop(
           ? {
               available: visionFallback.available,
               ...(visionFallback.reason ? { reason: visionFallback.reason } : {}),
-              candidates: visionFallback.candidates,
+              candidates: visionAssociated ?? visionFallback.candidates,
             }
           : null,
         // 明确阶段边界：observe 本身不执行任何 GUI 操作

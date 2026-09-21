@@ -126,6 +126,7 @@ export function getClassFlowDesktopComputerSessionBridge(): import("@/lib/deskto
   const candidate = bridge as import("@/lib/desktop/types").ClassFlowDesktopComputerBridgeV3;
   const required = [
     "listWindows",
+    "findElements",
     "activateWindow",
     "openApplication",
     "getSessionStatus",

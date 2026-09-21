@@ -102,6 +102,7 @@ const computerBridge = {
   action: (input: unknown) => invokeBridge("bridge:computer:action", input),
   cancelActions: (input: unknown) => invokeBridge("bridge:computer:cancelActions", input),
   listWindows: (input: unknown) => invokeBridge("bridge:computer:listWindows", input),
+  findElements: (input: unknown) => invokeBridge("bridge:computer:findElements", input),
   activateWindow: (input: unknown) => invokeBridge("bridge:computer:activateWindow", input),
   openApplication: (input: unknown) => invokeBridge("bridge:computer:openApplication", input),
   getSessionStatus: (input: unknown) => invokeBridge("bridge:computer:getSessionStatus", input),

@@ -17,6 +17,7 @@ import type {
   DesktopControlSessionState,
 } from "@/lib/desktop/types";
 import { classifyGuiAction } from "@/lib/ai/computer/gui/risk";
+import { searchObservationElements } from "@/lib/ai/computer/desktop/elementSearch";
 
 export interface FakeElement {
   elementId: string;
@@ -157,8 +158,7 @@ export class FakeDesktopWorld {
     appControl: true,
   }));
 
-  listWindows = vi.fn(async (_input?: unknown): Promise<ClassFlowDesktopComputerWindowList> => {
-    const focused = this.getActiveWindow();
+  listWindows = vi.fn(async (_input?: unknown): Promise<ClassFlowDesktopComputerWindowList> => {    const focused = this.getActiveWindow();
     return {
       focusedWindowId: focused?.windowId ?? null,
       activeApplication: focused?.appName ?? "",
@@ -172,6 +172,39 @@ export class FakeDesktopWorld {
       windowsTruncated: false,
     };
   });
+
+  /** V2.1：控件检索（与 Main 同一打分实现） */
+  findElements = vi.fn(
+    async (input: { observationId: string; query: string; maxResults?: number; sessionId?: string }) => {
+      const record = this.observations.get(input.observationId);
+      if (!record) throw { code: "STALE_OBSERVATION", message: "观察已过期" };
+      const searchable = [...record.elements.entries()].map(([elementId, element]) => ({
+        elementId,
+        role: element.role,
+        name: element.name,
+        enabled: element.enabled !== false,
+        focused: element.focused === true,
+      }));
+      const matches = searchObservationElements(searchable, input.query, input.maxResults ?? 5).map((match) => {
+        const element = record.elements.get(match.elementId)!;
+        return {
+          elementId: match.elementId,
+          role: match.role,
+          name: match.name,
+          enabled: match.enabled,
+          focused: match.focused,
+          bounds: element.bounds,
+          score: match.score,
+        };
+      });
+      return {
+        observationId: record.observationId,
+        query: input.query,
+        matches,
+        totalElements: record.elements.size,
+      };
+    }
+  );
 
   observe = vi.fn(async (input?: { target?: string; windowId?: string; includeUiTree?: boolean; sessionId?: string }) => {
     const window = input?.windowId
@@ -301,6 +334,13 @@ export class FakeDesktopWorld {
     key?: string;
     scroll?: number;
     sessionId?: string;
+    expect?: {
+      elementAppears?: { role?: string; nameContains?: string; nameEquals?: string };
+      elementDisappears?: { elementId: string };
+      titleContains?: string;
+      windowAppears?: { appName?: string };
+      textAppears?: string;
+    };
   }): Promise<ClassFlowDesktopComputerActionResult> => {
     this.log.push({ tool: "action", input });
     if (input.action === "wait") {
@@ -354,6 +394,22 @@ export class FakeDesktopWorld {
 
     // 自动重新观察（observe → action → verify）
     const nextObservation = await this.observe({ sessionId: input.sessionId });
+    const nextRecord = this.observations.get(nextObservation.observationId)!;
+    let verification: { passed: boolean; checks: Array<{ check: string; passed: boolean; detail?: string }> } | undefined;
+    if (input.expect && Object.keys(input.expect).length > 0) {
+      const { evaluateActionExpectation } = await import("@/src/main/computer/verify");
+      verification = evaluateActionExpectation({
+        expectation: input.expect as never,
+        newWindowTitle: nextObservation.windowTitle,
+        newAppName: nextObservation.appName,
+        newElements: nextObservation.elements,
+        disappearedNativeRef:
+          input.expect.elementDisappears?.elementId !== undefined
+            ? input.expect.elementDisappears.elementId
+            : null,
+        newNativeRefs: new Set(nextRecord.elements.keys()),
+      });
+    }
     return {
       actionResult: {
         action: input.action as never,
@@ -364,6 +420,7 @@ export class FakeDesktopWorld {
       newObservationId: nextObservation.observationId,
       changedWindow: false,
       uiChanged,
+      ...(verification ? { verification } : {}),
     };
   });
 

@@ -28,6 +28,7 @@ const gated = key ? describe : describe.skip;
 
 const DESKTOP_TOOL_NAMES = new Set([
   "observe_desktop",
+  "find_desktop_element",
   "desktop_action",
   "list_desktop_windows",
   "activate_window",
@@ -210,6 +211,63 @@ gated(`OpenCode Go Desktop Agent Live Smoke（${smokeModel}）`, () => {
         expect(elementTargets).toBeGreaterThan(0);
         // 4. 结果通过 observation 事实回答
         expect(result.text).toContain("ClassFlow");
+      } finally {
+        uninstall();
+      }
+    },
+    240_000
+  );
+
+  it(
+    "真实模型用 find_desktop_element 定位「发送」按钮（只读，不点击）",
+    async () => {
+      const { resolveLanguageModel } = await import("@/lib/ai/providers/resolver");
+      const resolved = await resolveLanguageModel({
+        provider: "opencode-go",
+        model: smokeModel,
+        apiKey: key!,
+      });
+
+      const world = new FakeDesktopWorld([
+        {
+          windowId: "win-wechat",
+          title: "文件传输助手",
+          appName: "wechat",
+          elements: [
+            { elementId: "el-1", role: "Edit", name: "输入消息", bounds: { x: 100, y: 600, width: 600, height: 40 } },
+            { elementId: "el-2", role: "Button", name: "发送", bounds: { x: 720, y: 600, width: 80, height: 40 } },
+          ],
+        },
+      ]);
+      const uninstall = installFakeDesktopBridge(world).uninstall;
+      const counters = { readCount: 0, mutationCount: 0, terminalCount: 0 };
+      const snap = snapshot();
+      const approvals = { approveNext: false };
+
+      try {
+        const result = await generateText({
+          model: resolved.model,
+          system: buildDesktopRuntimeCapabilityContext(snap),
+          messages: [
+            {
+              role: "user",
+              content:
+                "在文件传输助手窗口里找到「发送」按钮的 elementId，先不要点击。" +
+                "请先用 observe_desktop，再用 find_desktop_element 检索。",
+            },
+          ],
+          tools: buildExecutableTools(counters, snap, approvals) as never,
+          stopWhen: stepCountIs(10),
+        });
+
+        const toolCalls = result.steps.flatMap((step) => step.toolCalls.map((call) => call.toolName));
+        console.log(`[LIVE][find-element] tools=${toolCalls.join(",")} text=${result.text.slice(0, 240)}`);
+
+        expect(toolCalls).toContain("find_desktop_element");
+        // 只读任务：不得执行任何点击
+        expect(world.log.some((entry) => entry.tool === "action")).toBe(false);
+        // 模型应报告真实 elementId
+        expect(result.text).toContain("el-2");
       } finally {
         uninstall();
       }

@@ -286,6 +286,56 @@ export const openApplicationSchema = z
   .strict();
 
 /**
+ * Computer Use V2.1：find_desktop_element —— 在当前 observation 的控件树内做确定性检索。
+ * 只读：不触发新的 UIA 扫描；返回 elementId 供 desktop_action 使用。
+ */
+export const findDesktopElementSchema = z
+  .object({
+    observationId: z
+      .string()
+      .trim()
+      .min(1)
+      .max(64)
+      .regex(/^obs-[A-Za-z0-9-]+$/, "observationId 必须是 observe_desktop 返回的观察 id"),
+    query: z.string().trim().min(1).max(120),
+    maxResults: z.number().int().min(1).max(10).optional(),
+  })
+  .strict();
+
+/** V2.1：desktop_action.expect —— 动作后确定性验证 */
+export const desktopActionExpectationSchema = z
+  .object({
+    elementAppears: z
+      .object({
+        role: z.string().trim().min(1).max(64).optional(),
+        nameContains: z.string().trim().min(1).max(120).optional(),
+        nameEquals: z.string().trim().min(1).max(120).optional(),
+      })
+      .strict()
+      .refine(
+        (value) => value.role !== undefined || value.nameContains !== undefined || value.nameEquals !== undefined,
+        "elementAppears 至少需要 role / nameContains / nameEquals 之一"
+      )
+      .optional(),
+    elementDisappears: z
+      .object({
+        elementId: z.string().trim().regex(/^el-\d{1,4}$/, "elementId 必须是观察结果中的元素 id"),
+      })
+      .strict()
+      .optional(),
+    titleContains: z.string().trim().min(1).max(120).optional(),
+    windowAppears: z
+      .object({
+        appName: z.string().trim().min(1).max(64).optional(),
+      })
+      .strict()
+      .optional(),
+    textAppears: z.string().trim().min(1).max(120).optional(),
+  })
+  .strict()
+  .refine((value) => Object.keys(value).length > 0, "expect 至少需要一个检查项");
+
+/**
  * Computer Use Phase 2：desktop_action —— 在明确授权下操作 GUI（Observe → Action → Observe）。
  * - 具备 target 的动作必须携带最近一次 observationId（观察强绑定；失效 → STALE_OBSERVATION）
  * - target 优先 elementId；坐标仅允许 normalized 0~1（禁止物理像素）
@@ -318,6 +368,8 @@ export const desktopActionSchema = z
     key: z.string().trim().min(1).max(32).optional(),
     scroll: z.number().int().min(-10).max(10).refine((v) => v !== 0, "scroll 不能为 0").optional(),
     wait: z.number().int().min(100).max(5000).optional(),
+    /** V2.1：动作后确定性验证（发送 / 保存 / 提交类动作应提供） */
+    expect: desktopActionExpectationSchema.optional(),
   })
   .strict()
   .superRefine((value, ctx) => {
@@ -326,6 +378,9 @@ export const desktopActionSchema = z
 
     if (value.action !== "wait" && !value.observationId) {
       issue(["observationId"], "该动作必须先 observe_desktop 并提供 observationId");
+    }
+    if (value.action === "wait" && value.expect !== undefined) {
+      issue(["expect"], "wait 动作不允许携带 expect");
     }
     const hasElement = value.target?.elementId !== undefined;
     const hasNormalized = value.target?.normalized !== undefined;

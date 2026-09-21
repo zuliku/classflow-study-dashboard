@@ -180,7 +180,9 @@ describe("desktop_action — 成功链路（click / type / key / scroll / wait�
     expect(data.observationId).toBe("obs-22222222-3333-4444-5555-666666666666");
     expect(data.changedWindow).toBe(false);
     expect(data.uiChanged).toBe(true);
-    expect(data.verification).toBe("re-observed");
+    expect(data.reobserve).toBe("re-observed");
+    expect(data.expectationPassed).toBeNull();
+    expect(data.verification).toBeNull();
     expect(data.readOnly).toBe(false);
     expect(prepareAction).toHaveBeenCalledTimes(1);
     expect(action).toHaveBeenCalledTimes(1);

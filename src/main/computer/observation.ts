@@ -119,6 +119,17 @@ export interface NormalizedActionInput {
   scroll?: number;
   wait?: number;
   sessionId?: string;
+  /** V2.1：动作后确定性验证 */
+  expect?: DesktopActionExpectation;
+}
+
+/** 与 lib/desktop/types 的 ActionExpectation 同构（Main 内部使用） */
+export interface DesktopActionExpectation {
+  elementAppears?: { role?: string; nameContains?: string; nameEquals?: string };
+  elementDisappears?: { elementId: string };
+  titleContains?: string;
+  windowAppears?: { appName?: string };
+  textAppears?: string;
 }
 
 const ACTION_INPUT_KEYS = new Set([
@@ -130,6 +141,7 @@ const ACTION_INPUT_KEYS = new Set([
   "scroll",
   "wait",
   "sessionId",
+  "expect",
 ]);
 const ACTION_TARGET_KEYS = new Set(["elementId", "normalized"]);
 const ACTION_TYPES: readonly DesktopGuiActionType[] = [
@@ -276,7 +288,94 @@ export function normalizeActionInput(input: unknown): NormalizedActionInput {
     ...(typeof raw.scroll === "number" ? { scroll: raw.scroll } : {}),
     ...(typeof raw.wait === "number" ? { wait: raw.wait } : {}),
     ...(sessionId ? { sessionId } : {}),
+    ...(raw.expect !== undefined ? { expect: normalizeActionExpectation(raw.expect, action) } : {}),
   };
+}
+
+/** V2.1：expect 严格归一化（至少一个检查；wait 不允许 expect） */
+export function normalizeActionExpectation(input: unknown, action: DesktopGuiActionType): DesktopActionExpectation {
+  if (action === "wait") failInvalid("wait 动作不允许携带 expect");
+  if (!input || typeof input !== "object" || Array.isArray(input)) {
+    failInvalid("expect 必须是对象");
+  }
+  const raw = input as Record<string, unknown>;
+  const allowedKeys = ["elementAppears", "elementDisappears", "titleContains", "windowAppears", "textAppears"];
+  for (const key of Object.keys(raw)) {
+    if (!allowedKeys.includes(key)) failInvalid(`不支持的 expect 字段：${key}`);
+  }
+  const expectation: DesktopActionExpectation = {};
+
+  if (raw.elementAppears !== undefined) {
+    if (!raw.elementAppears || typeof raw.elementAppears !== "object" || Array.isArray(raw.elementAppears)) {
+      failInvalid("expect.elementAppears 必须是对象");
+    }
+    const filter = raw.elementAppears as Record<string, unknown>;
+    for (const key of Object.keys(filter)) {
+      if (!["role", "nameContains", "nameEquals"].includes(key)) {
+        failInvalid(`不支持的 elementAppears 字段：${key}`);
+      }
+    }
+    const role = typeof filter.role === "string" ? filter.role.trim().slice(0, 64) : undefined;
+    const nameContains = typeof filter.nameContains === "string" ? filter.nameContains.trim().slice(0, 120) : undefined;
+    const nameEquals = typeof filter.nameEquals === "string" ? filter.nameEquals.trim().slice(0, 120) : undefined;
+    if (role === undefined && nameContains === undefined && nameEquals === undefined) {
+      failInvalid("expect.elementAppears 至少需要 role / nameContains / nameEquals 之一");
+    }
+    expectation.elementAppears = {
+      ...(role ? { role } : {}),
+      ...(nameContains ? { nameContains } : {}),
+      ...(nameEquals ? { nameEquals } : {}),
+    };
+  }
+
+  if (raw.elementDisappears !== undefined) {
+    if (!raw.elementDisappears || typeof raw.elementDisappears !== "object" || Array.isArray(raw.elementDisappears)) {
+      failInvalid("expect.elementDisappears 必须是对象");
+    }
+    const target = raw.elementDisappears as Record<string, unknown>;
+    for (const key of Object.keys(target)) {
+      if (key !== "elementId") failInvalid(`不支持的 elementDisappears 字段：${key}`);
+    }
+    if (typeof target.elementId !== "string" || !/^el-\d{1,4}$/.test(target.elementId)) {
+      failInvalid("expect.elementDisappears.elementId 不合法");
+    }
+    expectation.elementDisappears = { elementId: target.elementId };
+  }
+
+  if (raw.titleContains !== undefined) {
+    if (typeof raw.titleContains !== "string" || raw.titleContains.trim().length === 0 || raw.titleContains.length > 120) {
+      failInvalid("expect.titleContains 必须是 1–120 字符的文本");
+    }
+    expectation.titleContains = raw.titleContains.trim();
+  }
+
+  if (raw.windowAppears !== undefined) {
+    if (!raw.windowAppears || typeof raw.windowAppears !== "object" || Array.isArray(raw.windowAppears)) {
+      failInvalid("expect.windowAppears 必须是对象");
+    }
+    const target = raw.windowAppears as Record<string, unknown>;
+    for (const key of Object.keys(target)) {
+      if (key !== "appName") failInvalid(`不支持的 windowAppears 字段：${key}`);
+    }
+    if (target.appName !== undefined && (typeof target.appName !== "string" || target.appName.length > 64)) {
+      failInvalid("expect.windowAppears.appName 不合法");
+    }
+    expectation.windowAppears = {
+      ...(typeof target.appName === "string" && target.appName.trim() ? { appName: target.appName.trim() } : {}),
+    };
+  }
+
+  if (raw.textAppears !== undefined) {
+    if (typeof raw.textAppears !== "string" || raw.textAppears.trim().length === 0 || raw.textAppears.length > 120) {
+      failInvalid("expect.textAppears 必须是 1–120 字符的文本");
+    }
+    expectation.textAppears = raw.textAppears.trim();
+  }
+
+  if (Object.keys(expectation).length === 0) {
+    failInvalid("expect 至少需要一个检查项");
+  }
+  return expectation;
 }
 
 /* ---------------- Computer Use Phase 3：Session / 窗口 / 应用 输入归一化 ---------------- */
@@ -362,8 +461,63 @@ export function normalizeOpenApplicationInput(input: unknown): { app: string; se
   return { app: raw.app.trim(), ...(session.sessionId ? { sessionId: session.sessionId } : {}) };
 }
 
-/** setSessionState 输入（UI 状态：approval-required / waiting / idle） */
-export function normalizeSessionStateInput(input: unknown): {
+/* ---------------- Computer Use V2.1：控件检索输入 ---------------- */
+
+export interface NormalizedFindElementsInput {
+  observationId: string;
+  query: string;
+  maxResults: number;
+  sessionId?: string;
+}
+
+/**
+ * find_desktop_element 输入归一化（strict）：
+ * - 只允许 observationId / query / maxResults / sessionId
+ * - query 有界（1–120）；maxResults 1–10（默认 5）
+ */
+export function normalizeFindElementsInput(input: unknown): NormalizedFindElementsInput {
+  if (!input || typeof input !== "object" || Array.isArray(input)) {
+    throw new DesktopComputerIpcError("INVALID_OPERATION", "find_desktop_element 输入必须是对象");
+  }
+  const raw = input as Record<string, unknown>;
+  for (const key of Object.keys(raw)) {
+    if (!["observationId", "query", "maxResults", "sessionId"].includes(key)) {
+      throw new DesktopComputerIpcError("INVALID_OPERATION", `不支持的字段：${key}`);
+    }
+  }
+  if (
+    typeof raw.observationId !== "string" ||
+    !DESKTOP_OBSERVATION_ID_PATTERN.test(raw.observationId)
+  ) {
+    throw new DesktopComputerIpcError("INVALID_OPERATION", "observationId 不是合法的观察 id");
+  }
+  if (typeof raw.query !== "string" || raw.query.trim().length === 0 || raw.query.length > 120) {
+    throw new DesktopComputerIpcError("INVALID_OPERATION", "query 必须是 1–120 字符的文本");
+  }
+  let maxResults = 5;
+  if (raw.maxResults !== undefined) {
+    if (
+      typeof raw.maxResults !== "number" ||
+      !Number.isInteger(raw.maxResults) ||
+      raw.maxResults < 1 ||
+      raw.maxResults > 10
+    ) {
+      throw new DesktopComputerIpcError("INVALID_OPERATION", "maxResults 必须是 1–10 的整数");
+    }
+    maxResults = raw.maxResults;
+  }
+  const session = normalizeOptionalSessionInput(
+    raw.sessionId === undefined ? {} : { sessionId: raw.sessionId }
+  );
+  return {
+    observationId: raw.observationId,
+    query: raw.query.trim(),
+    maxResults,
+    ...(session.sessionId ? { sessionId: session.sessionId } : {}),
+  };
+}
+
+/** setSessionState 输入（UI 状态：approval-required / waiting / idle） */export function normalizeSessionStateInput(input: unknown): {
   sessionId: string;
   state: "approval-required" | "waiting" | "idle";
 } {
@@ -385,12 +539,15 @@ export function normalizeSessionStateInput(input: unknown): {
   return { sessionId: raw.sessionId, state: raw.state };
 }
 
-/** 观察到的单个 UI 元素（runtime-only；供 action 强绑定校验） */export interface ObservedElementRef {
+/** 观察到的单个 UI 元素（runtime-only；供 action 强绑定校验 / find_desktop_element 检索） */
+export interface ObservedElementRef {
   /** UIA RuntimeId 字符串；绝不外传 */
   nativeRef: string;
   role: string;
   name: string;
   isPassword: boolean;
+  enabled: boolean;
+  focused: boolean;
   bounds: { x: number; y: number; width: number; height: number };
   /** 观察时的窗口 opaque id（验证窗口未切换） */
   windowId: string | null;

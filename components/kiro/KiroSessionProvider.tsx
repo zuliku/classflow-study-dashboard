@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import React, { createContext, useCallback, useContext, useMemo, useRef, useState } from "react";
 import { useShallow } from "zustand/react/shallow";
@@ -179,7 +179,7 @@ type KiroSessionChat = ReturnType<typeof useKiroChat> & {
   turnIntentFrozen: boolean;
 };
 
-interface KiroRuntimeValue {
+export interface KiroRuntimeValue {
   chat: KiroSessionChat;
   attachments: ReturnType<typeof useKiroAttachments>;
   activeRefs: KiroContextRef[];
@@ -188,7 +188,7 @@ interface KiroRuntimeValue {
 }
 
 /** Meta：低频（对话元信息 / historyVersion / sidecar / suggestions / hasMessages） */
-interface KiroSessionMetaValue {
+export interface KiroSessionMetaValue {
   currentConversationId: string | null;
   conversationTitle: string | null;
   conversationCreatedAt: string | null;
@@ -213,7 +213,7 @@ interface KiroSessionMetaValue {
 }
 
 /** Actions：稳定 callbacks（transcript 操作点击时才读取 Ref，不订阅 streaming messages） */
-interface KiroSessionActionsValue {
+export interface KiroSessionActionsValue {
   newChat: () => void;
   /** Projects V1.1：Project-scoped 新对话（transient Conversation 从创建即带 projectId） */
   newChatInProject: (projectId: string) => void;
@@ -253,10 +253,12 @@ interface KiroSessionActionsValue {
   claimEmptyIntro: (surface: "workspace" | "sidecar", generation: number) => boolean;
 }
 
-const KiroRuntimeContext = createContext<KiroRuntimeValue | null>(null);
-const KiroSessionMetaContext = createContext<KiroSessionMetaValue | null>(null);
-const KiroSessionActionsContext = createContext<KiroSessionActionsValue | null>(null);
-const KiroSessionContext = createContext<KiroSessionValue | null>(null);
+import {
+  KiroRuntimeContext,
+  KiroSessionMetaContext,
+  KiroSessionActionsContext,
+  KiroSessionContext,
+} from "@/components/kiro/kiroSessionContext";
 
 /**
  * Persistent Kiro Session Provider（长期挂载，不随 activeTab 卸载）。

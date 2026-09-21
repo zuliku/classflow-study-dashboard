@@ -29,6 +29,7 @@ import {
   executeKiroListDesktopWindows,
   executeKiroOpenApplication,
 } from "@/lib/ai/computer/gui/windowTools";
+import { executeKiroFindDesktopElement } from "@/lib/ai/computer/gui/elementSearch";
 import { executeKiroTerminalCommand, writeKiroTerminalInput, startKiroTerminalCommand, waitKiroTerminalCommand } from "@/lib/ai/computer/terminal/executor";
 import { createKiroPtySession, runKiroPtySessionCommand, writeKiroPtySessionInput, closeKiroPtySession } from "@/lib/ai/computer/terminal/ptyAgent";
 import { TerminalActivityInit } from "@/lib/ai/computer/terminal/activity";
@@ -218,9 +219,22 @@ export async function executeKiroComputerTool(request: {
     });
   }
 
+  // Computer Use V2.1：find_desktop_element（只读控件检索；不进入 filesystem pipeline）
+  if (toolName === "find_desktop_element") {
+    return executeKiroFindDesktopElement({
+      toolCallId,
+      toolInput,
+      snapshot: turnSnapshot,
+      liveWorkspaces,
+      counters: counters as ComputerCounterState,
+      taskId: context.taskId ?? "",
+      readLimitPerTurn: COMPUTER_READ_LIMIT_PER_TURN,
+      isCancelled: context.isCancelled,
+    });
+  }
+
   // Computer Use Phase 3：多窗口 / 应用控制（共用 policy / approval / audit 管线）
-  if (toolName === "list_desktop_windows" || toolName === "activate_window" || toolName === "open_application") {
-    const windowToolRequest = {
+  if (toolName === "list_desktop_windows" || toolName === "activate_window" || toolName === "open_application") {    const windowToolRequest = {
       toolCallId,
       toolInput,
       snapshot: turnSnapshot,

@@ -21,6 +21,7 @@ import type {
   ClassFlowDesktopComputerAppLaunchResult,
   ClassFlowDesktopComputerCapabilities,
   ClassFlowDesktopComputerElement,
+  ClassFlowDesktopComputerElementSearchResult,
   ClassFlowDesktopComputerObservation,
   ClassFlowDesktopComputerScreenshotEvidence,
   ClassFlowDesktopComputerSessionEvent,
@@ -36,6 +37,7 @@ import {
   computeUiSignature,
   normalizeActionInput,
   normalizeActivateWindowInput,
+  normalizeFindElementsInput,
   normalizeObserveInput,
   normalizeOpenApplicationInput,
   normalizeOptionalSessionInput,
@@ -45,6 +47,12 @@ import {
   type NormalizedActionInput,
   type ObservedElementRef,
 } from "./observation";
+import { searchObservationElements } from "@/lib/ai/computer/desktop/elementSearch";
+import {
+  evaluateActionExpectation,
+  hasVerifiableExpectation,
+  type VerificationResult,
+} from "./verify";
 import {
   DesktopWindowRegistry,
   activateNativeWindow,
@@ -89,6 +97,11 @@ export const MAX_OBSERVATION_WINDOWS = 20;
 /** 元素 bounds 变化阈值（超过 → STALE_OBSERVATION） */
 export const OBSERVATION_BOUNDS_POSITION_TOLERANCE = 24;
 export const OBSERVATION_BOUNDS_SIZE_TOLERANCE = 32;
+
+/** V2.1 自适应 settle：expect 存在时轮询直到验证通过或超时 */
+export const ADAPTIVE_SETTLE_FIRST_MS = 150;
+export const ADAPTIVE_SETTLE_POLL_MS = 300;
+export const ADAPTIVE_SETTLE_TIMEOUT_MS = 1500;
 
 export interface DesktopObservationDeps {
   platform: NodeJS.Platform;
@@ -321,6 +334,8 @@ export class DesktopObservationRuntime {
         role: element.role,
         name: element.name,
         isPassword: element.isPassword,
+        enabled: element.enabled,
+        focused: element.focused,
         bounds: { ...element.bounds },
         windowId,
       });
@@ -573,12 +588,41 @@ export class DesktopObservationRuntime {
     // 执行后再次确认 session 仍有效（Stop 后结果不得继续回流）
     this.assertSessionUsable(input.sessionId);
 
-    await this.deps.sleep(GUI_ACTION_SETTLE_MS);
-    const nextObservation = await this.observe({
-      ...record.request,
-      ...(record.sessionId ? { sessionId: record.sessionId } : {}),
-    });
-    const nextRecord = this.store.get(nextObservation.observationId, this.deps.now());
+    // V2.1：expect → 自适应 settle（轮询直到验证通过或超时）；无 expect → 固定 settle
+    const expectation = input.expect;
+    const expectConfigured = hasVerifiableExpectation(expectation);
+    const disappearedNativeRef =
+      expectation?.elementDisappears?.elementId !== undefined
+        ? record.elementRefs.get(expectation.elementDisappears.elementId)?.nativeRef ?? null
+        : null;
+
+    const observeOnce = async () => {
+      const observation = await this.observe({
+        ...record.request,
+        ...(record.sessionId ? { sessionId: record.sessionId } : {}),
+      });
+      return { observation, record: this.store.get(observation.observationId, this.deps.now()) };
+    };
+
+    let nextObservation: ClassFlowDesktopComputerObservation;
+    let nextRecord: DesktopObservationRecord | null;
+    let verification: VerificationResult | undefined;
+
+    if (expectConfigured && expectation) {
+      const deadline = started + ADAPTIVE_SETTLE_TIMEOUT_MS;
+      await this.deps.sleep(ADAPTIVE_SETTLE_FIRST_MS);
+      ({ observation: nextObservation, record: nextRecord } = await observeOnce());
+      verification = this.evaluateExpectation(expectation, nextObservation, nextRecord, disappearedNativeRef);
+      while (!verification.passed && this.deps.now() < deadline) {
+        this.assertSessionUsable(input.sessionId);
+        await this.deps.sleep(ADAPTIVE_SETTLE_POLL_MS);
+        ({ observation: nextObservation, record: nextRecord } = await observeOnce());
+        verification = this.evaluateExpectation(expectation, nextObservation, nextRecord, disappearedNativeRef);
+      }
+    } else {
+      await this.deps.sleep(GUI_ACTION_SETTLE_MS);
+      ({ observation: nextObservation, record: nextRecord } = await observeOnce());
+    }
 
     // Session 后置结算：no-progress 检测（UI 指纹不变 + 动作相似）
     if (input.sessionId) {
@@ -610,10 +654,32 @@ export class DesktopObservationRuntime {
       changedWindow:
         nextObservation.windowId !== record.windowId || nextObservation.appName !== record.appName,
       uiChanged: nextRecord ? nextRecord.uiSignature !== record.uiSignature : null,
+      ...(verification ? { verification } : {}),
       ...(input.sessionId
         ? { session: this.sessions.get(input.sessionId, this.deps.now()) ?? undefined }
         : {}),
     };
+  }
+
+  /** V2.1：expect 求值（elementDisappears 用 nativeRef 稳定身份比较） */
+  private evaluateExpectation(
+    expectation: NonNullable<NormalizedActionInput["expect"]>,
+    observation: ClassFlowDesktopComputerObservation,
+    record: DesktopObservationRecord | null,
+    disappearedNativeRef: string | null
+  ): VerificationResult {
+    const newNativeRefs = new Set<string>();
+    if (record) {
+      for (const ref of record.elementRefs.values()) newNativeRefs.add(ref.nativeRef);
+    }
+    return evaluateActionExpectation({
+      expectation,
+      newWindowTitle: observation.windowTitle,
+      newAppName: observation.appName,
+      newElements: observation.elements,
+      disappearedNativeRef,
+      newNativeRefs,
+    });
   }
 
   /** 动作指纹（repeated-action 检测；不包含原始输入文本，只含长度与短哈希） */
@@ -657,6 +723,48 @@ export class DesktopObservationRuntime {
     this.sessions.cancel(sessionId, this.deps.now());
     const cancelled = this.store.cancelSession(sessionId);
     return { ok: true, cancelled };
+  }
+
+  /**
+   * V2.1：在当前 observation 已收集的控件里做确定性语义检索。
+   * 只读：不触发新的 UIA 扫描；返回 elementId 供 desktop_action 使用。
+   */
+  findElements(rawInput: unknown): ClassFlowDesktopComputerElementSearchResult {
+    const input = normalizeFindElementsInput(rawInput);
+    this.assertWindowsPlatform();
+    const now = this.deps.now();
+    const record = this.store.get(input.observationId, now);
+    if (!record) {
+      throw new DesktopComputerIpcError("STALE_OBSERVATION", "观察已过期，请重新 observe_desktop。");
+    }
+    if (input.sessionId && record.sessionId && input.sessionId !== record.sessionId) {
+      throw new DesktopComputerIpcError("STALE_OBSERVATION", "观察属于其它会话，请重新 observe_desktop。");
+    }
+    const searchable = Array.from(record.elementRefs.entries()).map(([elementId, ref]) => ({
+      elementId,
+      role: ref.role,
+      name: ref.name,
+      enabled: ref.enabled,
+      focused: ref.focused,
+    }));
+    const matches = searchObservationElements(searchable, input.query, input.maxResults).map((match) => {
+      const ref = record.elementRefs.get(match.elementId)!;
+      return {
+        elementId: match.elementId,
+        role: match.role,
+        name: match.name,
+        enabled: match.enabled,
+        focused: match.focused,
+        bounds: { ...ref.bounds },
+        score: match.score,
+      };
+    });
+    return {
+      observationId: record.id,
+      query: input.query,
+      matches,
+      totalElements: record.elementRefs.size,
+    };
   }
 
   /** Phase 3：多窗口列表（opaque session-local windowId + z-order） */

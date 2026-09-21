@@ -131,6 +131,7 @@ describe("getClassFlowDesktopComputerBridge / hasClassFlowDesktopComputer", () =
     computer.version = 3;
     for (const method of [
       "listWindows",
+      "findElements",
       "activateWindow",
       "openApplication",
       "getSessionStatus",

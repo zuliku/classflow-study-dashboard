@@ -496,6 +496,33 @@ export interface ClassFlowDesktopComputerActionRequest {
   scroll?: number;
   /** action=wait：等待毫秒（100–5000） */
   wait?: number;
+  /** V2.1：动作后确定性验证（不满足时模型必须重新观察 / 换策略，不得宣称完成） */
+  expect?: ClassFlowDesktopComputerActionExpectation;
+}
+
+/**
+ * V2.1 动作期望（deterministic verification）：
+ * - elementAppears / textAppears：新 observation 中出现预期控件或文本
+ * - elementDisappears：动作前的元素（稳定身份）消失
+ * - titleContains / windowAppears：窗口标题 / 前台应用变化
+ */
+export interface ClassFlowDesktopComputerActionExpectation {
+  elementAppears?: { role?: string; nameContains?: string; nameEquals?: string };
+  elementDisappears?: { elementId: string };
+  titleContains?: string;
+  windowAppears?: { appName?: string };
+  textAppears?: string;
+}
+
+export interface ClassFlowDesktopComputerVerificationCheck {
+  check: string;
+  passed: boolean;
+  detail?: string;
+}
+
+export interface ClassFlowDesktopComputerVerificationResult {
+  passed: boolean;
+  checks: ClassFlowDesktopComputerVerificationCheck[];
 }
 
 /** prepareAction 返回的脱敏目标事实（审批展示 + 风险分类输入） */
@@ -545,6 +572,26 @@ export interface ClassFlowDesktopComputerActionResult {
   uiChanged: boolean | null;
   /** Phase 3：本 Turn DesktopControlSession 状态 */
   session?: ClassFlowDesktopComputerSessionStatus;
+  /** V2.1：expect 求值结果（未配置 expect → undefined） */
+  verification?: ClassFlowDesktopComputerVerificationResult;
+}
+
+/** V2.1：find_desktop_element 结果（确定性打分，只在当前 observation 内检索） */
+export interface ClassFlowDesktopComputerElementMatch {
+  elementId: string;
+  role: string;
+  name: string;
+  enabled: boolean;
+  focused: boolean;
+  bounds: { x: number; y: number; width: number; height: number };
+  score: number;
+}
+
+export interface ClassFlowDesktopComputerElementSearchResult {
+  observationId: string;
+  query: string;
+  matches: ClassFlowDesktopComputerElementMatch[];
+  totalElements: number;
 }
 
 export interface ClassFlowDesktopComputerBridgeV1 {
@@ -612,6 +659,13 @@ export interface ClassFlowDesktopComputerBridgeV3 {
   cancelActions(input: { sessionId: string }): Promise<{ ok: boolean; cancelled: number }>;
   /** 多窗口列表（opaque session-local windowId） */
   listWindows(input: { sessionId?: string }): Promise<ClassFlowDesktopComputerWindowList>;
+  /** V2.1：在当前 observation 的控件树内做确定性语义检索（返回 elementId） */
+  findElements(input: {
+    observationId: string;
+    query: string;
+    maxResults?: number;
+    sessionId?: string;
+  }): Promise<ClassFlowDesktopComputerElementSearchResult>;
   /** 激活窗口（activate → observe → action 工作流） */
   activateWindow(input: {
     windowId: string;

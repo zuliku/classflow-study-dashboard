@@ -258,6 +258,7 @@ export async function executeKiroDesktopAction(
     guiMethod: result.actionResult.method,
     ...(result.changedWindow !== null ? { changedWindow: result.changedWindow } : {}),
     ...(result.uiChanged !== null ? { uiChanged: result.uiChanged } : {}),
+    ...(result.verification !== undefined ? { verificationPassed: result.verification.passed } : {}),
   });
 
   // 11. Observe → Action → Observe：返回 action result + 新 observation
@@ -277,7 +278,11 @@ export async function executeKiroDesktopAction(
         uiChanged: result.uiChanged,
         observation: result.observation ? summarizeObservation(result.observation) : null,
         observationId: result.newObservationId,
-        verification: result.newObservationId ? "re-observed" : "none",
+        /** V2.1：expect 求值结果（null = 未配置 expect） */
+        verification: result.verification ?? null,
+        /** 是否通过验证（null = 未配置）；false 时必须重新观察 / 换策略，不得宣称完成 */
+        expectationPassed: result.verification ? result.verification.passed : null,
+        reobserve: result.newObservationId ? "re-observed" : "none",
         readOnly: false,
       },
     },

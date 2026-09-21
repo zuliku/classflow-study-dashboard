@@ -150,6 +150,7 @@ export function registerComputerIpc(opts?: ComputerIpcOptions): void {
   // Computer Use Phase 3：多窗口 / 应用控制 / Session 生命周期
   const sessionHandlers = [
     "listWindows",
+    "findElements",
     "activateWindow",
     "openApplication",
     "getSessionStatus",

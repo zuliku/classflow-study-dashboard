@@ -29,6 +29,7 @@ import {
   listDesktopWindowsSchema,
   activateWindowSchema,
   openApplicationSchema,
+  findDesktopElementSchema,
   runTerminalCommandSchema,
   writeTerminalInputSchema,
   startTerminalCommandSchema,
@@ -156,6 +157,19 @@ export const COMPUTER_READ_TOOLS: ComputerToolDefinition[] = [
     mutation: false,
     inputExamples: [{ input: {} }],
   },
+  {
+    // Computer Use V2.1：控件语义检索（确定性打分；返回 elementId，避免模型在长列表里肉眼找）
+    name: "find_desktop_element",
+    description:
+      "在最近一次 observe_desktop 的控件树里按名称/角色检索目标控件，返回按相关度排序的 elementId（含 role/name/bounds/enabled/focused）。用于控件很多或列表被截断时快速定位：先用 observe_desktop 拿到 observationId，再用本工具查「保存」「搜索框」「发送」等关键字，最后用 desktop_action 对返回的 elementId 执行动作。只读，不触发新的界面扫描。",
+    schema: findDesktopElementSchema,
+    capability: "ui.inspect",
+    mutation: false,
+    inputExamples: [
+      { input: { observationId: "obs-…", query: "搜索" } },
+      { input: { observationId: "obs-…", query: "发送", maxResults: 3 } },
+    ],
+  },
 ];
 
 export const COMPUTER_MUTATION_TOOLS: ComputerToolDefinition[] = [
@@ -184,7 +198,7 @@ export const COMPUTER_MUTATION_TOOLS: ComputerToolDefinition[] = [
     // 不实现 drag&drop / clipboard / 文件上传协议 / 支付 / 密码自动输入 / unrestricted system control。
     name: "desktop_action",
     description:
-      "在当前电脑窗口上执行单个 GUI 动作（click / double_click / focus / type / key / scroll / wait）。必须先 observe_desktop，并在 target 中使用观察结果的 elementId；只有 UI Automation 无法定位时才允许 normalized 0~1 坐标（禁止物理像素）。具备 target 的动作必须携带最近一次 observationId；如果界面已变化（窗口切换 / 元素消失 / 位置明显变化）会返回 STALE_OBSERVATION，此时必须重新 observe_desktop，禁止复用旧坐标继续。每次执行后会自动重新观察并返回新的 observationId、changedWindow / uiChanged 证据；必须依据新 observation 验证结果，不要假设成功。发送消息、提交表单、下载、删除、修改系统设置等高风险动作会请求用户确认；密码、API Key、Token、Secret 绝不可作为 text 传入。本阶段不支持拖拽、剪贴板和文件上传。",
+      "在当前电脑窗口上执行单个 GUI 动作（click / double_click / focus / type / key / scroll / wait）。必须先 observe_desktop，并在 target 中使用观察结果的 elementId（控件多时先用 find_desktop_element 定位）；只有 UI Automation 无法定位时才允许 normalized 0~1 坐标（禁止物理像素）。具备 target 的动作必须携带最近一次 observationId；如果界面已变化（窗口切换 / 元素消失 / 位置明显变化）会返回 STALE_OBSERVATION，此时必须重新 observe_desktop，禁止复用旧坐标继续。每次执行后会自动重新观察并返回新的 observationId、changedWindow / uiChanged 证据；必须依据新 observation 验证结果，不要假设成功。发送、提交、保存、删除等关键动作应同时提供 expect（例如 elementAppears / textAppears / titleContains），工具会返回 verification 结果；verification.passed=false 时必须重新观察或换策略，不得宣称完成。发送消息、提交表单、下载、删除、修改系统设置等高风险动作会请求用户确认；密码、API Key、Token、Secret 绝不可作为 text 传入。本阶段不支持拖拽、剪贴板和文件上传。",
     schema: desktopActionSchema,
     capability: "ui.interact",
     mutation: true,
