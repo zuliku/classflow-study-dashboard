@@ -8,9 +8,12 @@
  * - 不回传 raw OS error / absolute path
  */
 import { spawn, ChildProcess } from "node:child_process";
+import { gzipSync } from "node:zlib";
 
 export const POWERSHELL_PROBE_TIMEOUT_MS = 12_000;
 export const POWERSHELL_MAX_OUTPUT_BYTES = 1024 * 1024;
+/** EncodedCommand 直传上限（Windows 命令行 ~32k；留安全余量） */
+export const POWERSHELL_ENCODED_COMMAND_LIMIT = 24_000;
 
 export class PowerShellProbeError extends Error {
   readonly code: "TIMEOUT" | "EXECUTION_FAILED" | "INVALID_OUTPUT";
@@ -32,6 +35,25 @@ function killProcessTree(pid: number): Promise<void> {
 }
 
 /**
+ * 脚本 → EncodedCommand payload。
+ * 短脚本直接传；长脚本（如 V2.5 后的 GUI 动作脚本）gzip + base64 + 内存解压执行，
+ * 避免超过 Windows 命令行长度上限（ENAMETOOLONG）——不写磁盘。
+ */
+export function encodePowerShellScript(bootstrap: string, script: string): string {
+  const full = bootstrap + script;
+  const direct = Buffer.from(full, "utf16le").toString("base64");
+  if (direct.length <= POWERSHELL_ENCODED_COMMAND_LIMIT) return direct;
+  const compressed = gzipSync(Buffer.from(full, "utf8")).toString("base64");
+  const loader =
+    `$b=[Convert]::FromBase64String('${compressed}');` +
+    `$m=New-Object IO.MemoryStream(,$b);` +
+    `$g=New-Object IO.Compression.GzipStream($m,[IO.Compression.CompressionMode]::Decompress);` +
+    `$r=New-Object IO.StreamReader($g);` +
+    `Invoke-Expression $r.ReadToEnd()`;
+  return Buffer.from(loader, "utf16le").toString("base64");
+}
+
+/**
  * 以 -EncodedCommand 执行 PowerShell 脚本（避免 Windows 命令行引号/换行转义问题），
  * 返回解析后的 JSON。脚本必须自行输出 JSON（或空输出 → null）。
  */
@@ -43,7 +65,7 @@ export function runPowerShellJson<T>(
     "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; " +
     "$ProgressPreference = 'SilentlyContinue'; " +
     "$ErrorActionPreference = 'Stop'; ";
-  const encoded = Buffer.from(bootstrap + script, "utf16le").toString("base64");
+  const encoded = encodePowerShellScript(bootstrap, script);
 
   return new Promise<T>((resolve, reject) => {
     let child: ChildProcess;

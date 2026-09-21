@@ -188,6 +188,19 @@
 - **指标**：任务成功率 / 平均步数 / stale 率 / 坐标回退率 / 每步耗时 / 人工介入次数
 - **门槛**：V2.1 后坐标回退率 ≤10%；V2.2 后每步 Main 侧耗时 ≤1s；V2.3 后平均步数下降 ≥15%
 
+### 5.1 实测结果（2026-09-22，报告：`docs/kiro/computer-use-v2-eval-report.md`）
+
+| 门槛 | 实测 | 结论 |
+| --- | --- | --- |
+| V2.1 坐标回退率 ≤10% | 0.0% | ✅ |
+| V2.2 每步 Main 侧耗时 ≤1s | warm resolve 39ms + act 21ms ≈ 60ms/步 | ✅ |
+| V2.3 平均步数下降 ≥15% | 总步数 0.0%（计划簿记计入）；GUI 动作数 −22.2% | ⚠️ 按动作数达成，需真实长任务复核 |
+| 任务成功率 | 5/5 = 100%（fake 世界任务集，2 次运行一致） | ✅ |
+| 人工介入 | 高风险动作 100% 走 allow-once（1 次/轮） | ✅ |
+
+评估工具：`tests/aiOpenCodeGoComputerEval.test.ts`（live，gated；`CLASSFLOW_COMPUTER_EVAL_ROUNDS` 控制轮次）。
+评估中发现并修复 V2.5 一次性脚本超过 Windows 命令行上限的回归（`encodePowerShellScript` gzip 路径 + `tests/computerPowerShellEncoding.test.ts`）。
+
 ---
 
 ## 6. 落地顺序建议
