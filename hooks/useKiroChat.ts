@@ -897,6 +897,8 @@ export function useKiroChat({
       // Computer Use Phase 2：GUI 操作 preference + action bridge availability（opaque session id）
       desktopActionEnabled: cs.desktopActionEnabled,
       desktopActionAvailable: hasClassFlowDesktopComputerAction(),
+      // Computer Use V2.5：剪贴板 preference（默认 false；未开启时动作三层拒绝）
+      desktopClipboardEnabled: cs.desktopClipboardEnabled,
       desktopSessionId: desktopSessionIdRef.current,
     };
   };

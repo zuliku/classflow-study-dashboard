@@ -78,6 +78,7 @@ export function KiroAgentSettings() {
     terminalEnabled,
     desktopControlEnabled,
     desktopActionEnabled,
+    desktopClipboardEnabled,
     workspaces,
     setComputerEnabled,
     setActiveWorkspaceId,
@@ -85,6 +86,7 @@ export function KiroAgentSettings() {
     setTerminalEnabled,
     setDesktopControlEnabled,
     setDesktopActionEnabled,
+    setDesktopClipboardEnabled,
     addWorkspace,
   } = useKiroComputerStore();
 
@@ -224,6 +226,7 @@ export function KiroAgentSettings() {
       // 观察是操作的前提：关闭观察必须同时关闭电脑操作
       setDesktopControlEnabled(false);
       setDesktopActionEnabled(false);
+      setDesktopClipboardEnabled(false);
       return;
     }
     confirmRequest({
@@ -241,6 +244,7 @@ export function KiroAgentSettings() {
   const handleToggleDesktopAction = (enabled: boolean) => {
     if (!enabled) {
       setDesktopActionEnabled(false);
+      setDesktopClipboardEnabled(false);
       return;
     }
     confirmRequest({
@@ -253,6 +257,24 @@ export function KiroAgentSettings() {
         setDesktopControlEnabled(true);
         setDesktopActionEnabled(true);
       },
+    });
+  };
+
+  /**
+   * Computer Use V2.5：剪贴板读写默认关闭，开启必须独立确认；
+   * 关闭电脑操作 / 观察时一并关闭（剪贴板只在电脑操作能力下有意义）。
+   */
+  const handleToggleDesktopClipboard = (enabled: boolean) => {
+    if (!enabled) {
+      setDesktopClipboardEnabled(false);
+      return;
+    }
+    confirmRequest({
+      title: "允许 Kiro 读写剪贴板？",
+      description:
+        "开启后 Kiro 可以在你的确认下读取剪贴板内容（可能包含敏感信息），或把文本写入剪贴板（会覆盖当前剪贴板内容）。每次读写仍会单独请求确认；未开启时剪贴板操作会被直接拒绝。",
+      confirmLabel: "允许剪贴板",
+      onConfirm: () => setDesktopClipboardEnabled(true),
     });
   };
 
@@ -434,6 +456,25 @@ export function KiroAgentSettings() {
                 checked={desktopActionEnabled}
                 onChange={handleToggleDesktopAction}
                 label="允许 Kiro 操作电脑"
+              />
+            </SettingsRow>
+          )}
+
+          {/* Computer Use V2.5：剪贴板读写（默认关闭；独立开关 + 逐次确认） */}
+          {desktopActionAvailable && desktopActionEnabled && (
+            <SettingsRow
+              settingId="kiro-desktop-clipboard-enabled"
+              title="允许 Kiro 读写剪贴板"
+              description={
+                desktopClipboardEnabled
+                  ? "读取 / 写入剪贴板 · 每次操作仍会单独请求确认（写入会覆盖当前剪贴板）"
+                  : "默认关闭；开启后 Kiro 才能在你确认的情况下读取或写入剪贴板。"
+              }
+            >
+              <SettingsToggle
+                checked={desktopClipboardEnabled}
+                onChange={handleToggleDesktopClipboard}
+                label="允许 Kiro 读写剪贴板"
               />
             </SettingsRow>
           )}

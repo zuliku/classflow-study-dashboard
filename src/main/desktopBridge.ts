@@ -8,7 +8,7 @@
  * - Terminal：non-interactive、不提权、cwd 限授权 root、timeout/cancel 杀整个 process tree
  */
 import { app, dialog, BrowserWindow, ipcMain } from "electron";
-import { promises as fs, existsSync, realpathSync } from "node:fs";
+import { promises as fs, existsSync, realpathSync, statSync } from "node:fs";
 import { join, sep, dirname, basename } from "node:path";
 import { randomUUID } from "node:crypto";
 import { spawn, ChildProcess } from "node:child_process";
@@ -127,6 +127,27 @@ function canonicalRoot(raw: string): string {
   } catch {
     return raw;
   }
+}
+
+/**
+ * V2.5：Computer Use upload_file 专用 —— grantId + 相对路径 → 绝对文件路径。
+ *
+ * - 只允许已授权 root 内的**已存在文件**（目录 / 不存在 → null）
+ * - 复用 resolveWithinRoot（canonicalize + 防 symlink/junction 逃逸）
+ * - 失败 → null；绝对路径绝不回传 renderer / model / audit
+ */
+export function resolveComputerUploadPath(grantId: unknown, relativePath: unknown): string | null {
+  const grant = getGrant(grantId);
+  if (!grant) return null;
+  if (typeof relativePath !== "string" || relativePath.length === 0 || relativePath.length > 512) return null;
+  const resolved = resolveWithinRoot(grant.root, relativePath);
+  if (!resolved) return null;
+  try {
+    if (!statSync(resolved).isFile()) return null;
+  } catch {
+    return null;
+  }
+  return resolved;
 }
 
 /* ---------------- 结构化错误（绝不泄漏 native path / stack） ---------------- */

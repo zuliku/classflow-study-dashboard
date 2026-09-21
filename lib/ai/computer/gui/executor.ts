@@ -25,7 +25,7 @@ import {
   DESKTOP_ACTION_TOOL_NAME,
   type ExecuteDesktopActionRequest,
 } from "@/lib/ai/computer/gui/types";
-import { getClassFlowDesktopComputerActionBridge } from "@/lib/desktop/bridge";
+import { getClassFlowDesktopComputerActionBridge, nativeGrantIdFromAdapterRef } from "@/lib/desktop/bridge";
 import { summarizeObservation } from "@/lib/ai/computer/desktop/summary";
 import { appendComputerAuditEntry } from "@/lib/ai/computer/audit";
 import {
@@ -73,6 +73,40 @@ function capabilityDeniedMessage(reason: string): string {
     default:
       return "Computer Agent 未启用。";
   }
+}
+
+/**
+ * V2.5：upload_file 的 rootId → native grantId 解析（renderer 侧；绝不产生绝对路径）。
+ * 只接受已授权的本机（native）工作区根；沙盒 / 浏览器工作区不支持。
+ */
+function resolveUploadFileRoot(
+  request: ExecuteDesktopActionRequest,
+  rootId: string | undefined
+):
+  | { ok: true; grantId: string }
+  | { ok: false; code: "PERMISSION_DENIED" | "INVALID_INPUT"; message: string } {
+  const workspace = request.liveWorkspaces.find((w) => w.id === (request.snapshot.workspaceId ?? ""));
+  const roots = workspace?.roots ?? [];
+  if (roots.length === 0) {
+    return { ok: false, code: "PERMISSION_DENIED", message: "当前没有可用的工作区文件夹。" };
+  }
+  const root = rootId ? roots.find((r) => r.id === rootId) : roots.length === 1 ? roots[0] : undefined;
+  if (!root) {
+    return {
+      ok: false,
+      code: "INVALID_INPUT",
+      message: rootId ? "指定的工作区文件夹不存在。" : "工作区有多个文件夹，请提供 rootId。",
+    };
+  }
+  const grantId = nativeGrantIdFromAdapterRef(root.adapterRef);
+  if (!grantId) {
+    return {
+      ok: false,
+      code: "PERMISSION_DENIED",
+      message: "文件上传仅支持本机工作区文件夹（当前工作区不是本机目录）。",
+    };
+  }
+  return { ok: true, grantId };
 }
 
 export async function executeKiroDesktopAction(
@@ -123,7 +157,31 @@ export async function executeKiroDesktopAction(
     typeof snapshot.desktopSessionId === "string" && /^cs-[A-Za-z0-9-]{8,64}$/.test(snapshot.desktopSessionId)
       ? snapshot.desktopSessionId
       : undefined;
-  const bridgeInput = { ...input, ...(sessionId ? { sessionId } : {}) };
+
+  // 5b. V2.5：剪贴板默认关闭（设置未开启 → 直接拒绝，不进入 Main）
+  const clipboardAction = input.action === "clipboard_read" || input.action === "clipboard_write";
+  if (clipboardAction && snapshot.desktopClipboardEnabled !== true) {
+    return denied("用户尚未开启剪贴板访问（设置 → Kiro → 允许剪贴板读写）。");
+  }
+
+  // 5c. V2.5：upload_file 需要工作区文件（rootId → adapterRef → native grantId）
+  let fileGrant: { grantId: string; path: string } | undefined;
+  if (input.action === "upload_file") {
+    const file = input.file;
+    if (!file) {
+      return denied("upload_file 必须提供 file（工作区文件）。", "INVALID_INPUT");
+    }
+    const resolvedRoot = resolveUploadFileRoot(request, file.rootId);
+    if (!resolvedRoot.ok) return denied(resolvedRoot.message, resolvedRoot.code);
+    fileGrant = { grantId: resolvedRoot.grantId, path: file.path };
+  }
+
+  const bridgeInput = {
+    ...input,
+    ...(sessionId ? { sessionId } : {}),
+    ...(clipboardAction ? { clipboardAllowed: true } : {}),
+    ...(fileGrant ? { fileGrant } : {}),
+  };
 
   // 6a. wait：无 target / 无副作用 → 不经过审批与观察强绑定（Main 仅做 session 校验）
   if (input.action === "wait") {
@@ -193,7 +251,16 @@ export async function executeKiroDesktopAction(
   const workspaceLabel = workspaceId
     ? (request.liveWorkspaces.find((w) => w.id === workspaceId)?.name ?? workspaceId)
     : "";
-  const fingerprint = `gui:${preparation.action}:${preparation.target.kind}:${preparation.target.elementId ?? "none"}`;
+  // V2.5：drag / upload_file 的审批指纹必须绑定落点 / 文件（防止 allow-once 被复用到其它目标）
+  const dragTo =
+    input.action === "drag" && input.to
+      ? `->${input.to.elementId ?? (input.to.normalized ? `${input.to.normalized.x.toFixed(2)},${input.to.normalized.y.toFixed(2)}` : "none")}`
+      : "";
+  const uploadPart =
+    input.action === "upload_file" && input.file
+      ? `:${input.file.rootId ?? "auto"}:${input.file.path.length}:${input.file.path.slice(-24)}`
+      : "";
+  const fingerprint = `gui:${preparation.action}:${preparation.target.kind}:${preparation.target.elementId ?? "none"}${dragTo}${uploadPart}`;
 
   if (requiresApproval) {
     const matchedIndex = request.oneShotApprovals.findIndex((approval) =>
@@ -289,6 +356,12 @@ export async function executeKiroDesktopAction(
         reobserve: result.newObservationId ? "re-observed" : "none",
         ...(result.reflectionRequired
           ? { reflectionRequired: true, reflectionHint: result.reflectionHint }
+          : {}),
+        /** V2.5：clipboard_read 文本（≤4096 字符；仅审批通过后返回） */
+        ...(result.clipboardText !== undefined ? { clipboardText: result.clipboardText } : {}),
+        /** V2.5：upload_file 回执（只回逻辑路径，绝不回绝对路径） */
+        ...(input.action === "upload_file" && input.file
+          ? { uploadedFile: { rootId: input.file.rootId ?? null, path: input.file.path } }
           : {}),
         readOnly: false,
       },

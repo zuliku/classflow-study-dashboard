@@ -137,6 +137,12 @@ export interface KiroComputerTurnSnapshot {
    */
   desktopActionEnabled?: boolean;
   desktopActionAvailable?: boolean;
+  /**
+   * Computer Use V2.5：用户偏好（「允许剪贴板读写」，默认 false，独立开关）。
+   * 未开启时剪贴板动作在 schema / executor / Main 三层直接拒绝；
+   * 开启后每次读写仍需 allow-once 确认。
+   */
+  desktopClipboardEnabled?: boolean;
   /** 本 Turn 的 Desktop Control session id（opaque；Emergency Stop 用；绝不含 native 标识） */
   desktopSessionId?: string;
   }

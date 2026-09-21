@@ -27,7 +27,13 @@
   - 时序联动：动作后 settle 与启动后 readyWait 按画像调整（浏览器 250ms / Office 300ms / 未知应用回退 350ms；启动首轮 chrome 600ms、Office 900ms）
   - Observation 增加 `appProfile` + `app-profile-blocked` 警告；Session 状态 / Sidecar 事件透出画像 label 与「受保护应用」标记；Prompt 增加应用画像工作流
   - 测试：画像解析 10 项 + 风险 7 项 + 运行时 8 项 + 执行器 3 项
-- [ ] V2.5 动作覆盖扩展
+- [x] **V2.5 动作覆盖扩展**
+  - hover / right_click：元素中心悬停、右键菜单（普通动作；坐标回退仍 external）；native 脚本新增 `uia-hover` / `right-click` 原语
+  - scroll 增加 `axis=horizontal`（HWHEEL 0x1000，方法 `scroll-horizontal`）
+  - drag：`target`（起点）+ `to`（落点，同一 observation）；runtime 与 native 脚本双重校验两点必须在目标窗口内（`outside-window`），风险固定 external → ask-once；审批指纹绑定落点（allow-once 不可跨落点复用）
+  - 剪贴板：新增设置开关「允许 Kiro 读写剪贴板」（默认关闭，关闭观察 / 操作时级联关闭）；未开启在 executor / Main 双重拒绝，开启后 sensitive → allow-once（写入提示覆盖剪贴板）；读写集中在 `src/main/computer/clipboard.ts`（Electron clipboard，读取 ≤4096 字符 + 控制字符清洗，不落日志）
+  - 文件上传：`upload_file` 仅接受「系统文件选择对话框」（标题锚定 + 文件名 / 打开按钮控件事实双重确认）+ 已授权本机工作区文件；renderer 只传 `rootId + 相对路径` → grantId，Main 用 `resolveComputerUploadPath`（realpath + 防逃逸 + 必须存在文件）解析绝对路径并填入对话框（路径绝不回传模型 / audit）；沙盒工作区拒绝
+  - 测试：归一化 / 风险 / 对话框识别 14 项、运行时 12 项、执行器 7 项；真实模型 live smoke 5/5（新增 right_click 打开菜单场景）
 - [ ] V2.6 经验记忆（轨迹 → Skill）
 
 ---

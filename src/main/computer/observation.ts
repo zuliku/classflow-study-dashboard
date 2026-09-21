@@ -110,15 +110,29 @@ export interface NormalizedActionTarget {
   normalized?: { x: number; y: number };
 }
 
+export interface NormalizedFileGrant {
+  grantId: string;
+  path: string;
+}
+
 export interface NormalizedActionInput {
   action: DesktopGuiActionType;
   observationId?: string;
   target?: NormalizedActionTarget;
+  /** V2.5：drag 落点 */
+  to?: NormalizedActionTarget;
   text?: string;
   key?: string;
   scroll?: number;
+  axis?: "vertical" | "horizontal";
   wait?: number;
   sessionId?: string;
+  /** V2.5：剪贴板开关事实（renderer 从冻结 snapshot 读取；缺失 / false → blocked） */
+  clipboardAllowed?: boolean;
+  /** V2.5：clipboard_write 文本 */
+  clipboardText?: string;
+  /** V2.5：upload_file 的工作区文件（grantId + 相对路径） */
+  fileGrant?: NormalizedFileGrant;
   /** V2.1：动作后确定性验证 */
   expect?: DesktopActionExpectation;
 }
@@ -136,11 +150,16 @@ const ACTION_INPUT_KEYS = new Set([
   "action",
   "observationId",
   "target",
+  "to",
   "text",
   "key",
   "scroll",
+  "axis",
   "wait",
   "sessionId",
+  "clipboardAllowed",
+  "clipboardText",
+  "fileGrant",
   "expect",
 ]);
 const ACTION_TARGET_KEYS = new Set(["elementId", "normalized"]);
@@ -152,7 +171,39 @@ const ACTION_TYPES: readonly DesktopGuiActionType[] = [
   "key",
   "scroll",
   "wait",
+  "hover",
+  "right_click",
+  "drag",
+  "clipboard_read",
+  "clipboard_write",
+  "upload_file",
 ];
+
+/** V2.5：不需要 observation 强绑定的动作（无 GUI 目标） */
+const OBSERVATION_FREE_ACTIONS: readonly DesktopGuiActionType[] = [
+  "wait",
+  "clipboard_read",
+  "clipboard_write",
+];
+
+const FILE_GRANT_ID_PATTERN = /^[A-Za-z0-9_-]{1,128}$/;
+
+/** V2.5：grant 相对路径（拒绝绝对路径 / 盘符 / UNC / .. / 控制字符） */
+function normalizeGrantRelativePath(raw: unknown): string {
+  if (typeof raw !== "string") failInvalid("fileGrant.path 必须是字符串");
+  const value = raw.trim();
+  if (!value || value.length > 512) failInvalid("fileGrant.path 长度不合法");
+  if (/[\u0000-\u001f\u007f]/.test(value)) failInvalid("fileGrant.path 含非法字符");
+  if (value.startsWith("/") || value.startsWith("\\") || /^[A-Za-z]:/.test(value) || value.startsWith("\\\\")) {
+    failInvalid("fileGrant.path 必须是工作区内相对路径（禁止绝对路径）");
+  }
+  const parts = value.split(/[\\/]+/).filter((part) => part.length > 0);
+  if (parts.length === 0 || parts.length > 64) failInvalid("fileGrant.path 层级不合法");
+  if (parts.some((part) => part === "." || part === "..")) {
+    failInvalid("fileGrant.path 不允许包含 . / ..");
+  }
+  return parts.join("/");
+}
 
 function failInvalid(message: string): never {
   throw new DesktopComputerIpcError("INVALID_OPERATION", message);
@@ -194,45 +245,93 @@ export function normalizeActionInput(input: unknown): NormalizedActionInput {
     }
     observationId = raw.observationId;
   }
-  if (action !== "wait" && !observationId) {
+  if (!OBSERVATION_FREE_ACTIONS.includes(action) && !observationId) {
     failInvalid("该动作必须先 observe_desktop 并提供 observationId");
   }
 
-  let target: NormalizedActionTarget | undefined;
-  if (raw.target !== undefined) {
-    if (!raw.target || typeof raw.target !== "object" || Array.isArray(raw.target)) {
-      failInvalid("target 必须是对象");
+  const parseTarget = (value: unknown, label: string): NormalizedActionTarget => {
+    if (!value || typeof value !== "object" || Array.isArray(value)) {
+      failInvalid(`${label} 必须是对象`);
     }
-    const rawTarget = raw.target as Record<string, unknown>;
+    const rawTarget = value as Record<string, unknown>;
     for (const key of Object.keys(rawTarget)) {
-      if (!ACTION_TARGET_KEYS.has(key)) failInvalid(`不支持的目标字段：${key}`);
+      if (!ACTION_TARGET_KEYS.has(key)) failInvalid(`不支持的${label}字段：${key}`);
     }
     const hasElementId = rawTarget.elementId !== undefined;
     const hasNormalized = rawTarget.normalized !== undefined;
     if (hasElementId === hasNormalized) {
-      failInvalid("target 必须且只能提供 elementId 或 normalized 之一");
+      failInvalid(`${label} 必须且只能提供 elementId 或 normalized 之一`);
     }
     if (hasElementId) {
       if (typeof rawTarget.elementId !== "string" || !/^el-\d{1,4}$/.test(rawTarget.elementId)) {
         failInvalid("elementId 不是合法的观察元素 id");
       }
-      target = { elementId: rawTarget.elementId };
-    } else {
-      const normalized = rawTarget.normalized;
-      if (!normalized || typeof normalized !== "object" || Array.isArray(normalized)) {
-        failInvalid("normalized 必须是 { x, y }");
-      }
-      const n = normalized as Record<string, unknown>;
-      for (const key of Object.keys(n)) {
-        if (key !== "x" && key !== "y") failInvalid(`不支持的坐标字段：${key}`);
-      }
-      const x = typeof n.x === "number" ? n.x : NaN;
-      const y = typeof n.y === "number" ? n.y : NaN;
-      if (!Number.isFinite(x) || !Number.isFinite(y) || x < 0 || x > 1 || y < 0 || y > 1) {
-        failInvalid("normalized 坐标必须在 0~1 之间（禁止物理像素）");
-      }
-      target = { normalized: { x, y } };
+      return { elementId: rawTarget.elementId };
     }
+    const normalized = rawTarget.normalized;
+    if (!normalized || typeof normalized !== "object" || Array.isArray(normalized)) {
+      failInvalid("normalized 必须是 { x, y }");
+    }
+    const n = normalized as Record<string, unknown>;
+    for (const key of Object.keys(n)) {
+      if (key !== "x" && key !== "y") failInvalid(`不支持的坐标字段：${key}`);
+    }
+    const x = typeof n.x === "number" ? n.x : NaN;
+    const y = typeof n.y === "number" ? n.y : NaN;
+    if (!Number.isFinite(x) || !Number.isFinite(y) || x < 0 || x > 1 || y < 0 || y > 1) {
+      failInvalid("normalized 坐标必须在 0~1 之间（禁止物理像素）");
+    }
+    return { normalized: { x, y } };
+  };
+
+  let target: NormalizedActionTarget | undefined;
+  if (raw.target !== undefined) {
+    target = parseTarget(raw.target, "目标");
+  }
+  let to: NormalizedActionTarget | undefined;
+  if (raw.to !== undefined) {
+    to = parseTarget(raw.to, "落点");
+  }
+  if (action !== "drag" && to !== undefined) {
+    failInvalid("to 只能用于 drag 动作");
+  }
+
+  let axis: "vertical" | "horizontal" | undefined;
+  if (raw.axis !== undefined) {
+    if (action !== "scroll") failInvalid("axis 只能用于 scroll 动作");
+    if (raw.axis !== "vertical" && raw.axis !== "horizontal") failInvalid("axis 只能是 vertical / horizontal");
+    axis = raw.axis;
+  }
+
+  let clipboardAllowed: boolean | undefined;
+  if (raw.clipboardAllowed !== undefined) {
+    if (typeof raw.clipboardAllowed !== "boolean") failInvalid("clipboardAllowed 必须是布尔值");
+    clipboardAllowed = raw.clipboardAllowed;
+  }
+
+  let clipboardText: string | undefined;
+  if (raw.clipboardText !== undefined) {
+    if (action !== "clipboard_write") failInvalid("clipboardText 只能用于 clipboard_write 动作");
+    if (typeof raw.clipboardText !== "string" || raw.clipboardText.length === 0 || raw.clipboardText.length > 4096) {
+      failInvalid("clipboardText 长度不合法");
+    }
+    clipboardText = raw.clipboardText;
+  }
+
+  let fileGrant: NormalizedFileGrant | undefined;
+  if (raw.fileGrant !== undefined) {
+    if (action !== "upload_file") failInvalid("fileGrant 只能用于 upload_file 动作");
+    if (!raw.fileGrant || typeof raw.fileGrant !== "object" || Array.isArray(raw.fileGrant)) {
+      failInvalid("fileGrant 必须是对象");
+    }
+    const grant = raw.fileGrant as Record<string, unknown>;
+    for (const key of Object.keys(grant)) {
+      if (key !== "grantId" && key !== "path") failInvalid(`不支持的 fileGrant 字段：${key}`);
+    }
+    if (typeof grant.grantId !== "string" || !FILE_GRANT_ID_PATTERN.test(grant.grantId)) {
+      failInvalid("fileGrant.grantId 不合法");
+    }
+    fileGrant = { grantId: grant.grantId, path: normalizeGrantRelativePath(grant.path) };
   }
 
   // 动作专属字段校验（不允许跨动作夹带）
@@ -268,8 +367,52 @@ export function normalizeActionInput(input: unknown): NormalizedActionInput {
     if (raw.text !== undefined || raw.key !== undefined || raw.scroll !== undefined || raw.target !== undefined) {
       failInvalid("wait 动作不允许携带 text / key / scroll / target");
     }
+  } else if (action === "clipboard_read") {
+    if (
+      raw.text !== undefined ||
+      raw.key !== undefined ||
+      raw.scroll !== undefined ||
+      raw.wait !== undefined ||
+      raw.target !== undefined ||
+      to !== undefined
+    ) {
+      failInvalid("clipboard_read 不允许携带 text / key / scroll / wait / target / to");
+    }
+  } else if (action === "clipboard_write") {
+    requireField<string>(
+      clipboardText,
+      "clipboardText",
+      (v) => typeof v === "string" && v.length > 0 && v.length <= 4096
+    );
+    if (
+      raw.text !== undefined ||
+      raw.key !== undefined ||
+      raw.scroll !== undefined ||
+      raw.wait !== undefined ||
+      raw.target !== undefined ||
+      to !== undefined
+    ) {
+      failInvalid("clipboard_write 不允许携带 text / key / scroll / wait / target / to");
+    }
+  } else if (action === "upload_file") {
+    if (!fileGrant) failInvalid("upload_file 必须提供 fileGrant（工作区文件）");
+    if (
+      raw.text !== undefined ||
+      raw.key !== undefined ||
+      raw.scroll !== undefined ||
+      raw.wait !== undefined ||
+      to !== undefined
+    ) {
+      failInvalid("upload_file 不允许携带 text / key / scroll / wait / to");
+    }
+  } else if (action === "drag") {
+    if (!target) failInvalid("drag 必须提供 target（起点）");
+    if (!to) failInvalid("drag 必须提供 to（落点）");
+    if (raw.text !== undefined || raw.key !== undefined || raw.scroll !== undefined || raw.wait !== undefined) {
+      failInvalid("drag 动作不允许携带 text / key / scroll / wait");
+    }
   } else {
-    // click / double_click / focus
+    // click / double_click / focus / hover / right_click
     if (!target) failInvalid("该动作必须提供 target（elementId 或 normalized 坐标）");
     if (target.normalized !== undefined && action === "focus") {
       failInvalid("focus 只能使用 elementId");
@@ -283,18 +426,26 @@ export function normalizeActionInput(input: unknown): NormalizedActionInput {
     action,
     ...(observationId ? { observationId } : {}),
     ...(target ? { target } : {}),
+    ...(to ? { to } : {}),
     ...(typeof raw.text === "string" ? { text: raw.text } : {}),
     ...(typeof raw.key === "string" ? { key: raw.key } : {}),
     ...(typeof raw.scroll === "number" ? { scroll: raw.scroll } : {}),
+    ...(axis ? { axis } : {}),
     ...(typeof raw.wait === "number" ? { wait: raw.wait } : {}),
     ...(sessionId ? { sessionId } : {}),
+    ...(clipboardAllowed !== undefined ? { clipboardAllowed } : {}),
+    ...(clipboardText !== undefined ? { clipboardText } : {}),
+    ...(fileGrant ? { fileGrant } : {}),
     ...(raw.expect !== undefined ? { expect: normalizeActionExpectation(raw.expect, action) } : {}),
   };
 }
 
-/** V2.1：expect 严格归一化（至少一个检查；wait 不允许 expect） */
+/** V2.1：expect 严格归一化（至少一个检查；wait / clipboard 不允许 expect） */
 export function normalizeActionExpectation(input: unknown, action: DesktopGuiActionType): DesktopActionExpectation {
   if (action === "wait") failInvalid("wait 动作不允许携带 expect");
+  if (action === "clipboard_read" || action === "clipboard_write") {
+    failInvalid(`${action} 动作不允许携带 expect（不产生界面变化）`);
+  }
   if (!input || typeof input !== "object" || Array.isArray(input)) {
     failInvalid("expect 必须是对象");
   }

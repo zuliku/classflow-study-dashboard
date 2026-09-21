@@ -491,7 +491,14 @@ export type DesktopGuiActionType =
   | "type"
   | "key"
   | "scroll"
-  | "wait";
+  | "wait"
+  /** V2.5：悬停 / 右键菜单 / 拖拽 / 剪贴板 / 文件上传（全部带门） */
+  | "hover"
+  | "right_click"
+  | "drag"
+  | "clipboard_read"
+  | "clipboard_write"
+  | "upload_file";
 
 /** GUI 风险等级（Main 基于真实控件事实分类；renderer 只做策略合成，不篡改风险） */
 export type DesktopGuiRiskLevel = "normal" | "external" | "destructive" | "sensitive" | "blocked";
@@ -513,14 +520,30 @@ export interface ClassFlowDesktopComputerActionRequest {
   observationId?: string;
   action: DesktopGuiActionType;
   target?: ClassFlowDesktopComputerActionTarget;
+  /** V2.5：action=drag 的落点（elementId 或归一化坐标；必须与起点同一 observation） */
+  to?: ClassFlowDesktopComputerActionTarget;
   /** action=type：待输入文本（敏感信息绝不允许经模型路径；Main 会再次拦截） */
   text?: string;
   /** action=key：键或组合键（enter / tab / ctrl+a / …） */
   key?: string;
   /** action=scroll：正数向上、负数向下；每单位 = 3 个滚轮刻度 */
   scroll?: number;
+  /** V2.5：action=scroll 的轴向（默认 vertical） */
+  axis?: "vertical" | "horizontal";
   /** action=wait：等待毫秒（100–5000） */
   wait?: number;
+  /**
+   * V2.5：action=clipboard_read / clipboard_write 的开关事实。
+   * 只有 renderer 从冻结 snapshot 读取的显式用户开关才会为 true；Main 缺失 / false 一律 blocked。
+   */
+  clipboardAllowed?: boolean;
+  /** V2.5：action=clipboard_write 的文本（Main 覆盖剪贴板前需要 allow-once） */
+  clipboardText?: string;
+  /**
+   * V2.5：action=upload_file 的工作区文件引用（renderer 已把 rootId → grantId 解析完毕）。
+   * Main 侧只接受 grantId（native:<grantId> 的 grantId 部分），绝不接受绝对路径。
+   */
+  fileGrant?: { grantId: string; path: string };
   /** V2.1：动作后确定性验证（不满足时模型必须重新观察 / 换策略，不得宣称完成） */
   expect?: ClassFlowDesktopComputerActionExpectation;
 }
@@ -582,15 +605,22 @@ export interface ClassFlowDesktopComputerActionResult {
       | "uia-select"
       | "uia-setvalue"
       | "uia-focus"
+      | "uia-hover"
       | "bounds-click"
       | "coordinate-click"
+      | "right-click"
+      | "drag"
       | "sendinput-text"
       | "sendinput-key"
       | "scroll"
+      | "scroll-horizontal"
+      | "clipboard-read"
+      | "clipboard-write"
+      | "upload-path"
       | "wait";
     durationMs: number;
   };
-  /** Action 后 settle + 自动重新观察（wait 无 observation 上下文时为 null） */
+  /** Action 后 settle + 自动重新观察（wait / 剪贴板 无 observation 上下文时为 null） */
   observation: ClassFlowDesktopComputerObservation | null;
   newObservationId: string | null;
   changedWindow: boolean | null;
@@ -602,6 +632,8 @@ export interface ClassFlowDesktopComputerActionResult {
   /** V2.3：需要反思（连续验证失败 / 无进展）——模型必须重新观察并更新计划 */
   reflectionRequired?: boolean;
   reflectionHint?: string;
+  /** V2.5：clipboard_read 结果（≤4096 字符；仅允许在审批通过后回传模型） */
+  clipboardText?: string;
 }
 
 /** V2.1：find_desktop_element 结果（确定性打分，只在当前 observation 内检索） */

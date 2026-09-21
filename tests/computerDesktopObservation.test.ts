@@ -427,17 +427,33 @@ describe("Phase 1 安全边界 — 源代码不含输入类 API", () => {
     });
   }
 
-  it("src/main/computer 与 lib/ai/computer/desktop 无鼠标/键盘/clipboard/launch 实现", () => {
+  it("src/main/computer 与 lib/ai/computer/desktop 无鼠标/键盘/clipboard/launch 实现（剪贴板仅限 clipboard.ts）", () => {
     const files = [
       ...collectSources(join(process.cwd(), "src", "main", "computer")),
       ...collectSources(join(process.cwd(), "lib", "ai", "computer", "desktop")),
     ];
     expect(files.length).toBeGreaterThan(0);
+    // V2.5：剪贴板读写是唯一例外，且只允许存在于专用模块（默认关闭 + 审批门控）
+    const clipboardModule = join(process.cwd(), "src", "main", "computer", "clipboard.ts");
     for (const file of files) {
       const source = readFileSync(file, "utf8").toLowerCase();
-      for (const needle of FORBIDDEN) {
+      const forbidden = file === clipboardModule ? FORBIDDEN.filter((needle) => needle !== "clipboard.write") : FORBIDDEN;
+      for (const needle of forbidden) {
         expect(source, `${file} 不应包含 ${needle}`).not.toContain(needle);
       }
     }
+  });
+
+  it("Electron clipboard API 只出现在 clipboard.ts（集中 + 可审计）", () => {
+    const files = [
+      ...collectSources(join(process.cwd(), "src", "main", "computer")),
+      ...collectSources(join(process.cwd(), "lib", "ai", "computer", "desktop")),
+    ];
+    const clipboardModule = join(process.cwd(), "src", "main", "computer", "clipboard.ts");
+    const referencing = files.filter((file) => {
+      const source = readFileSync(file, "utf8").toLowerCase();
+      return source.includes("clipboard.readtext") || source.includes("clipboard.writetext");
+    });
+    expect(referencing).toEqual([clipboardModule]);
   });
 });

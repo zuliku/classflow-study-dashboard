@@ -171,7 +171,8 @@ describe("Capability Prompt — Desktop Action 边界声明", () => {
     expect(ctx).toContain("Observe → Action → Observe");
     expect(ctx).toContain("STALE_OBSERVATION");
     expect(ctx).toContain("密码、API Key、Token、Secret");
-    expect(ctx).toContain("本阶段不支持拖拽、剪贴板和文件上传");
+    expect(ctx).toContain("动作覆盖（V2.5）");
+    expect(ctx).toContain("clipboard_read");
   });
 
   it("plan → 只读边界", () => {

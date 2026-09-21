@@ -149,6 +149,44 @@ function searchWorld(): FakeDesktopWorld {
   return world;
 }
 
+/** V2.5：右键菜单世界（right_click → 出现菜单项） */
+function contextMenuWorld(): FakeDesktopWorld {
+  const file: FakeElement = {
+    elementId: "el-1",
+    role: "ListItem",
+    name: "报告.docx",
+    bounds: { x: 200, y: 120, width: 300, height: 40 },
+  };
+  file.onRightClick = (w) => {
+    const window = w.getActiveWindow();
+    if (!window) return;
+    window.elements = [
+      file,
+      {
+        elementId: "el-2",
+        role: "MenuItem",
+        name: "打开",
+        bounds: { x: 500, y: 160, width: 180, height: 32 },
+      },
+      {
+        elementId: "el-3",
+        role: "MenuItem",
+        name: "复制",
+        bounds: { x: 500, y: 196, width: 180, height: 32 },
+      },
+      {
+        elementId: "el-4",
+        role: "MenuItem",
+        name: "重命名",
+        bounds: { x: 500, y: 232, width: 180, height: 32 },
+      },
+    ];
+  };
+  return new FakeDesktopWorld([
+    { windowId: "win-explorer", title: "下载", appName: "explorer", elements: [file] },
+  ]);
+}
+
 gated(`OpenCode Go Desktop Agent Live Smoke（${smokeModel}）`, () => {
   it(
     "真实模型自主完成：打开 Chrome → 观察 → 点击搜索框 → 输入 → 回车 → 观察结果",
@@ -394,6 +432,53 @@ gated(`OpenCode Go Desktop Agent Live Smoke（${smokeModel}）`, () => {
         // 模型必须向用户请求确认，而不是声称已发送
         expect(result.text).toMatch(/确认|允许|授权|approve/i);
         console.log(`[LIVE][desktop-agent-send] preparedSend=${sendPrepared} executedSend=${sendExecuted}`);
+      } finally {
+        uninstall();
+      }
+    },
+    240_000
+  );
+
+  it(
+    "真实模型用 right_click 打开上下文菜单并读出菜单项（V2.5）",
+    async () => {
+      const { resolveLanguageModel } = await import("@/lib/ai/providers/resolver");
+      const resolved = await resolveLanguageModel({
+        provider: "opencode-go",
+        model: smokeModel,
+        apiKey: key!,
+      });
+
+      const world = contextMenuWorld();
+      const uninstall = installFakeDesktopBridge(world).uninstall;
+      const counters = { readCount: 0, mutationCount: 0, terminalCount: 0 };
+      const snap = snapshot();
+      const approvals = { approveNext: true };
+
+      try {
+        const result = await generateText({
+          model: resolved.model,
+          system: buildDesktopRuntimeCapabilityContext(snap),
+          messages: [
+            {
+              role: "user",
+              content:
+                "在资源管理器窗口里右键点击「报告.docx」，然后告诉我右键菜单里有哪些选项。" +
+                "请使用桌面工具完成。",
+            },
+          ],
+          tools: buildExecutableTools(counters, snap, approvals) as never,
+          stopWhen: stepCountIs(12),
+        });
+
+        const toolCalls = result.steps.flatMap((step) => step.toolCalls.map((call) => call.toolName));
+        console.log(`[LIVE][desktop-right-click] tools=${toolCalls.join(",")} text=${result.text.slice(0, 260)}`);
+        console.log(`[LIVE][desktop-right-click] lastAction=${world.lastAction ?? "none"}`);
+
+        expect(world.lastAction).toBe("right_click");
+        // 菜单项必须来自观察结果（而不是编造）
+        expect(result.text).toContain("重命名");
+        expect(world.typedText).toBeNull(); // 右键不应产生输入
       } finally {
         uninstall();
       }

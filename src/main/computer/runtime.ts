@@ -46,6 +46,7 @@ import {
   normalizeSessionStateInput,
   type DesktopObservationRecord,
   type NormalizedActionInput,
+  type NormalizedActionTarget,
   type ObservedElementRef,
 } from "./observation";
 import { searchObservationElements } from "@/lib/ai/computer/desktop/elementSearch";
@@ -86,9 +87,11 @@ import {
   GUI_ACTION_SETTLE_MS,
   type NativeGuiActionConfig,
   type NativeGuiActionResult,
+  type NativeGuiActionType,
 } from "./guiAction";
 import { guiKeyToVirtualKeys } from "@/lib/ai/computer/gui/keymap";
 import { classifyGuiAction } from "@/lib/ai/computer/gui/risk";
+import { isSystemFileDialog } from "./upload";
 
 export interface NativeScreenshotEvidence {
   mimeType: "image/jpeg";
@@ -132,6 +135,19 @@ export interface DesktopObservationDeps {
   activateWindow: (hwnd: number) => Promise<boolean>;
   resolveApp: (appId: string) => Promise<ResolvedDesktopApp>;
   launchApp: (resolved: ResolvedDesktopApp) => boolean;
+  /**
+   * V2.5：剪贴板读写（默认实现走 Electron clipboard；缺失 → 动作失败）。
+   * 只在用户显式开启 + allow-once 审批后到达这里。
+   */
+  readClipboard?: () => string;
+  writeClipboard?: (text: string) => boolean;
+  /**
+   * V2.5：upload_file 的 grantId + 相对路径 → 绝对路径（Main 侧授权校验；无效 → null）。
+   * 绝对路径绝不回传 renderer / model。
+   */
+  resolveUploadPath?: (grantId: string, relativePath: string) => string | null;
+  /** V2.5：文件选择对话框识别（纯函数；缺失 → 用内置实现） */
+  isFileDialog?: (input: { appName?: string | null; windowTitle?: string | null; elementNames?: string[] }) => boolean;
   /** settle 等待（测试可注入 no-op） */
   sleep: (ms: number) => Promise<void>;
   now: () => number;
@@ -150,6 +166,10 @@ async function buildDefaultDeps(): Promise<DesktopObservationDeps> {
   const screenshotModule = await import("./screenshot");
   // V2.2：UIA 走常驻 worker（缓存 + 无冷启动）；worker 不可用时各方法内部回退一次性脚本。
   const workerClient = await import("./uiaWorkerClient");
+  // V2.5：剪贴板（Electron）与上传路径解析（授权 grant）→ 动态加载，保持可测试。
+  const clipboardModule = await import("./clipboard");
+  const uploadModule = await import("./upload");
+  const desktopBridgeModule = await import("../desktopBridge");
   return {
     platform: process.platform,
     listWindows: workerClient.workerListNativeWindows,
@@ -162,6 +182,10 @@ async function buildDefaultDeps(): Promise<DesktopObservationDeps> {
     activateWindow: workerClient.workerActivateNativeWindow,
     resolveApp: resolveDesktopApp,
     launchApp: launchResolvedDesktopApp,
+    readClipboard: clipboardModule.readClipboardText,
+    writeClipboard: clipboardModule.writeClipboardText,
+    resolveUploadPath: desktopBridgeModule.resolveComputerUploadPath,
+    isFileDialog: uploadModule.isSystemFileDialog,
     sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
     now: () => Date.now(),
   };
@@ -469,6 +493,33 @@ export class DesktopObservationRuntime {
       };
     }
 
+    // V2.5：剪贴板动作无 GUI 目标（风险由「用户显式开启」事实决定）
+    if (input.action === "clipboard_read" || input.action === "clipboard_write") {
+      const clipboardRisk = classifyGuiAction({
+        action: input.action,
+        target: { kind: "none", appName: "", windowTitle: "" },
+        clipboardAllowed: input.clipboardAllowed === true,
+      });
+      return {
+        preparation: {
+          action: input.action,
+          risk: { level: clipboardRisk.level, reason: clipboardRisk.reason },
+          target: {
+            kind: "none",
+            appName: "",
+            windowTitle: "",
+            windowId: null,
+            targetLabel: input.action === "clipboard_read" ? "剪贴板（读取）" : "剪贴板（覆盖写入）",
+          },
+          observationId: null,
+          textPreview: null,
+          requiresObservation: false,
+        },
+        record: null,
+        targetInfo: null,
+      };
+    }
+
     const record = await this.resolveBoundObservation(input);
     const targetInfo = await this.resolveActionTarget(input, record);
     // V2.4：应用画像参与风险分类（blocked 应用 / 应用内高风险控件）
@@ -477,6 +528,15 @@ export class DesktopObservationRuntime {
       windowTitle: targetInfo.windowTitle,
     });
     const profileHint = desktopAppProfileRiskHint(profile);
+    // V2.5：upload_file 必须落在系统文件选择对话框（标题 + 控件双重事实）
+    const fileDialog =
+      input.action === "upload_file"
+        ? this.isFileDialog({
+            appName: targetInfo.appName,
+            windowTitle: targetInfo.windowTitle,
+            elementNames: Array.from(record.elementRefs.values()).map((ref) => ref.name),
+          })
+        : undefined;
     const risk = classifyGuiAction({
       action: input.action,
       ...(input.text !== undefined ? { text: input.text } : {}),
@@ -490,6 +550,7 @@ export class DesktopObservationRuntime {
         windowTitle: targetInfo.windowTitle,
       },
       ...(profileHint ? { profile: profileHint } : {}),
+      ...(fileDialog !== undefined ? { fileDialog } : {}),
     });
 
     return {
@@ -557,6 +618,12 @@ export class DesktopObservationRuntime {
       }
     }
 
+    // V2.5：剪贴板动作（无 observation / 无 GUI 脚本；风险由「显式开启」事实决定）
+    if (input.action === "clipboard_read" || input.action === "clipboard_write") {
+      return this.runClipboardAction(input, fingerprint);
+    }
+
+
     const core = await this.prepareActionCore(rawInput);
     const { preparation, record } = core;
     if (!record) {
@@ -580,23 +647,43 @@ export class DesktopObservationRuntime {
       input.target?.normalized !== undefined
         ? this.normalizedToPoint(input.target.normalized, record)
         : undefined;
+    // V2.5：drag 落点（同一 observation 内的元素 / 归一化坐标）
+    const toPoint = input.to !== undefined ? this.resolvePointForTarget(input.to, record) : undefined;
+    if (input.action === "drag") {
+      const fromPoint = elementRef ? this.elementCenter(elementRef.bounds) : point;
+      if (!fromPoint || !toPoint) {
+        throw new DesktopComputerIpcError("INVALID_OPERATION", "拖拽需要明确的起点与落点。");
+      }
+      const windowBounds = this.windowBoundsFor(record);
+      if (!this.isInsideBounds(fromPoint, windowBounds) || !this.isInsideBounds(toPoint, windowBounds)) {
+        throw new DesktopComputerIpcError(
+          "INVALID_OPERATION",
+          "拖拽起点与落点都必须在目标窗口内（禁止拖到窗口外）。"
+        );
+      }
+    }
 
     const config: NativeGuiActionConfig = {
       hwnd: this.requireWindowHwnd(record),
       nativeRef: elementRef?.nativeRef ?? null,
       ...(elementRef ? { expectedBounds: elementRef.bounds } : {}),
-      action: input.action,
+      action: input.action as NativeGuiActionType,
       ...(input.text !== undefined ? { text: input.text } : {}),
       ...(vk ? { vk } : {}),
       ...(input.scroll !== undefined ? { scroll: input.scroll } : {}),
+      ...(input.axis !== undefined ? { axis: input.axis } : {}),
       ...(point ? { point } : {}),
+      ...(toPoint ? { toPoint } : {}),
     };
 
     // 最后一道 session 检查（审批 / 校验期间用户可能已 Stop / Pause）
     this.assertSessionUsable(input.sessionId);
 
     const started = this.deps.now();
-    const result = await this.deps.runGuiAction(config);
+    const result =
+      input.action === "upload_file"
+        ? await this.runUploadAction(input, record, elementRef)
+        : await this.deps.runGuiAction(config);
     if (!result.ok) {
       const reason = result.reason ?? "action-failed";
       if (input.sessionId) {
@@ -614,6 +701,21 @@ export class DesktopObservationRuntime {
       }
       if (reason === "element-disabled" || reason === "password-field") {
         throw new DesktopComputerIpcError("ACTION_BLOCKED", `操作被拒绝：${reason}`);
+      }
+      if (reason === "file-not-authorized" || reason === "missing-file") {
+        throw new DesktopComputerIpcError(
+          "ACTION_BLOCKED",
+          "文件不在已授权的工作区文件夹内（仅支持本机工作区文件）。"
+        );
+      }
+      if (reason === "not-file-dialog") {
+        throw new DesktopComputerIpcError(
+          "ACTION_BLOCKED",
+          "文件上传仅支持系统文件选择对话框（请先打开「打开 / 另存为」对话框）。"
+        );
+      }
+      if (reason === "outside-window") {
+        throw new DesktopComputerIpcError("INVALID_OPERATION", "拖拽起点与落点必须在目标窗口内。");
       }
       throw new DesktopComputerIpcError("ACTION_FAILED", "GUI 操作执行失败。");
     }
@@ -717,9 +819,156 @@ export class DesktopObservationRuntime {
     };
   }
 
+  /** V2.5：剪贴板动作（默认关闭；显式开启后仍需 allow-once 审批） */
+  private async runClipboardAction(
+    input: NormalizedActionInput,
+    fingerprint: string
+  ): Promise<ClassFlowDesktopComputerActionResult> {
+    const started = this.deps.now();
+    const fail = (code: "ACTION_BLOCKED" | "ACTION_FAILED", message: string): never => {
+      if (input.sessionId) {
+        this.sessions.endAction(
+          input.sessionId,
+          { beforeUiSignature: null, newUiSignature: null, ok: false, actionFingerprint: fingerprint },
+          this.deps.now()
+        );
+      }
+      throw new DesktopComputerIpcError(code, message);
+    };
+
+    if (input.clipboardAllowed !== true) {
+      fail("ACTION_BLOCKED", "用户尚未开启剪贴板访问（设置 → Kiro → 允许剪贴板读写）。");
+    }
+
+    if (input.action === "clipboard_write") {
+      const text = input.clipboardText ?? "";
+      if (!text) fail("ACTION_FAILED", "剪贴板写入内容为空。");
+      const write = this.deps.writeClipboard;
+      if (!write || write(text) !== true) {
+        fail("ACTION_FAILED", "剪贴板写入失败。");
+      }
+    }
+
+    const clipboardText =
+      input.action === "clipboard_read" ? this.deps.readClipboard?.() ?? "" : undefined;
+
+    if (input.sessionId) {
+      this.sessions.endAction(
+        input.sessionId,
+        { beforeUiSignature: null, newUiSignature: null, ok: true, actionFingerprint: fingerprint },
+        this.deps.now()
+      );
+    }
+
+    return {
+      actionResult: {
+        action: input.action,
+        method: input.action === "clipboard_read" ? "clipboard-read" : "clipboard-write",
+        durationMs: this.deps.now() - started,
+      },
+      observation: null,
+      newObservationId: null,
+      changedWindow: null,
+      uiChanged: null,
+      ...(clipboardText !== undefined ? { clipboardText } : {}),
+    };
+  }
+
+  /** V2.5：文件上传 —— 授权工作区文件 + 系统文件选择对话框（路径绝不外泄） */
+  private async runUploadAction(
+    input: NormalizedActionInput,
+    record: DesktopObservationRecord,
+    elementRef: ObservedElementRef | null
+  ): Promise<NativeGuiActionResult> {
+    const grant = input.fileGrant;
+    if (!grant) return { ok: false, reason: "missing-file" };
+    const absolutePath = this.deps.resolveUploadPath?.(grant.grantId, grant.path) ?? null;
+    if (!absolutePath) return { ok: false, reason: "file-not-authorized" };
+
+    const fileDialog = this.isFileDialog({
+      appName: record.appName,
+      windowTitle: record.windowTitle,
+      elementNames: Array.from(record.elementRefs.values()).map((ref) => ref.name),
+    });
+    if (!fileDialog) return { ok: false, reason: "not-file-dialog" };
+
+    const hwnd = this.requireWindowHwnd(record);
+    const typeResult = await this.deps.runGuiAction({
+      hwnd,
+      nativeRef: elementRef?.nativeRef ?? null,
+      ...(elementRef ? { expectedBounds: elementRef.bounds } : {}),
+      action: "type",
+      text: absolutePath,
+    });
+    if (!typeResult.ok) return typeResult;
+    const keyResult = await this.deps.runGuiAction({ hwnd, nativeRef: null, action: "key", vk: [0x0d] });
+    if (!keyResult.ok) return keyResult;
+    return { ok: true, method: "upload-path" };
+  }
+
+  /** V2.5：动作目标 → 绝对像素点（元素中心 / 归一化坐标） */
+  private resolvePointForTarget(
+    target: NormalizedActionTarget,
+    record: DesktopObservationRecord
+  ): { x: number; y: number } {
+    if (target.elementId !== undefined) {
+      const ref = record.elementRefs.get(target.elementId);
+      if (!ref) {
+        throw new DesktopComputerIpcError("STALE_OBSERVATION", "目标元素已不存在，请重新 observe_desktop。");
+      }
+      return this.elementCenter(ref.bounds);
+    }
+    if (target.normalized !== undefined) {
+      return this.normalizedToPoint(target.normalized, record);
+    }
+    throw new DesktopComputerIpcError("INVALID_OPERATION", "动作目标不合法。");
+  }
+
+  private elementCenter(bounds: { x: number; y: number; width: number; height: number }): {
+    x: number;
+    y: number;
+  } {
+    return {
+      x: Math.round(bounds.x + Math.floor(bounds.width / 2)),
+      y: Math.round(bounds.y + Math.floor(bounds.height / 2)),
+    };
+  }
+
+  /** V2.5：窗口物理 bounds（drag 边界校验基准） */
+  private windowBoundsFor(record: DesktopObservationRecord): {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  } {
+    const window = record.windowId ? this.registry.resolve(record.windowId, this.deps.now()) : null;
+    if (window) return { ...window.bounds };
+    return record.coordinateBounds ?? { x: 0, y: 0, width: 0, height: 0 };
+  }
+
+  private isInsideBounds(
+    point: { x: number; y: number },
+    bounds: { x: number; y: number; width: number; height: number }
+  ): boolean {
+    return (
+      point.x >= bounds.x &&
+      point.y >= bounds.y &&
+      point.x < bounds.x + bounds.width &&
+      point.y < bounds.y + bounds.height
+    );
+  }
+
+  /** V2.5：文件选择对话框识别（deps 可注入；默认纯函数实现） */
+  private isFileDialog(input: {
+    appName?: string | null;
+    windowTitle?: string | null;
+    elementNames?: string[];
+  }): boolean {
+    return (this.deps.isFileDialog ?? isSystemFileDialog)(input);
+  }
+
   /** V2.1：expect 求值（elementDisappears 用 nativeRef 稳定身份比较） */
-  private evaluateExpectation(
-    expectation: NonNullable<NormalizedActionInput["expect"]>,
+  private evaluateExpectation(    expectation: NonNullable<NormalizedActionInput["expect"]>,
     observation: ClassFlowDesktopComputerObservation,
     record: DesktopObservationRecord | null,
     disappearedNativeRef: string | null
@@ -745,13 +994,24 @@ export class DesktopObservationRuntime {
       (input.target?.normalized
         ? `${input.target.normalized.x.toFixed(2)},${input.target.normalized.y.toFixed(2)}`
         : "focus");
+    const to =
+      input.to !== undefined
+        ? input.to.elementId ??
+          (input.to.normalized
+            ? `${input.to.normalized.x.toFixed(2)},${input.to.normalized.y.toFixed(2)}`
+            : "to")
+        : "";
     let textPart = "";
     if (input.action === "type" && input.text) {
       let hash = 0;
       for (let i = 0; i < input.text.length; i++) hash = (hash * 31 + input.text.charCodeAt(i)) >>> 0;
       textPart = `:${input.text.length}:${hash.toString(16)}`;
     }
-    return `${input.action}:${target}${textPart}`;
+    const filePart =
+      input.action === "upload_file" && input.fileGrant
+        ? `:${input.fileGrant.grantId.slice(0, 8)}:${input.fileGrant.path.length}`
+        : "";
+    return `${input.action}:${target}${to ? `->${to}` : ""}${textPart}${filePart}`;
   }
 
   /** Session 可用性（不计数）：cancelled / paused / failed 拒绝 */

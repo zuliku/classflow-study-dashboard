@@ -11,13 +11,23 @@
  *
  * 安全：
  * - 全部输入由本模块（Main / native runtime）执行；renderer 无 unrestricted input API
- * - 绝不实现 drag&drop / clipboard / 文件上传协议 / 支付 / 密码自动输入
+ * - 剪贴板读写 / 文件上传协议不在本脚本内（V2.5 由 runtime 门控后走专用实现）
  * - 敏感 / blocked 动作在 renderer 与 runtime 双重拦截，不会到达本脚本
+ * - drag 起终点必须都在目标窗口内（runtime + 脚本双重校验）
  * - 结果只回结构化 { ok, method, reason }；绝不回传 raw OS error
  */
 import { runPowerShellJson } from "./powershell";
 
-export type NativeGuiActionType = "click" | "double_click" | "focus" | "type" | "key" | "scroll";
+export type NativeGuiActionType =
+  | "click"
+  | "double_click"
+  | "focus"
+  | "type"
+  | "key"
+  | "scroll"
+  | "hover"
+  | "right_click"
+  | "drag";
 
 export interface NativeGuiActionBounds {
   x: number;
@@ -40,8 +50,12 @@ export interface NativeGuiActionConfig {
   vk?: number[];
   /** scroll：正数向上、负数向下（每单位 120 wheel delta） */
   scroll?: number;
+  /** V2.5：scroll 轴向（默认 vertical） */
+  axis?: "vertical" | "horizontal";
   /** 归一化坐标 → 绝对像素（仅在无 UIA 元素 / 元素 bounds 点击时使用） */
   point?: { x: number; y: number };
+  /** V2.5：drag 落点（绝对像素；runtime 已确认在窗口内） */
+  toPoint?: { x: number; y: number };
 }
 
 export interface NativeGuiActionResult {
@@ -71,7 +85,9 @@ public class CFInput {
   [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd);
   [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
   [DllImport("user32.dll")] public static extern bool IsIconic(IntPtr hWnd);
+  [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr hWnd, out CF_RECT lpRect);
 }
+[StructLayout(LayoutKind.Sequential)] public struct CF_RECT { public int Left; public int Top; public int Right; public int Bottom; }
 "@
 [void][CFInput]::SetProcessDPIAware()
 $cfg = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String('__CONFIG_B64__')) | ConvertFrom-Json
@@ -129,7 +145,7 @@ function Move-And-Click([int]$x, [int]$y, [int]$count) {
     if ($i -lt ($count - 1)) { Start-Sleep -Milliseconds 70 }
   }
 }
-function Send-Wheel([int]$x, [int]$y, [int]$clicks) {
+function Send-Wheel([int]$x, [int]$y, [int]$clicks, [string]$axis) {
   [void][CFInput]::SetCursorPos($x, $y)
   Start-Sleep -Milliseconds 60
   $delta = [int]($clicks * 120)
@@ -139,10 +155,71 @@ function Send-Wheel([int]$x, [int]$y, [int]$clicks) {
   $wheel.mi.dx = 0
   $wheel.mi.dy = 0
   $wheel.mi.mouseData = $mouseData
-  $wheel.mi.dwFlags = 0x0800
+  if ($axis -eq 'horizontal') { $wheel.mi.dwFlags = 0x1000 } else { $wheel.mi.dwFlags = 0x0800 }
   $wheel.mi.time = 0
   $wheel.mi.dwExtraInfo = [IntPtr]::Zero
   [void][CFInput]::SendInput(1, @($wheel), [System.Runtime.InteropServices.Marshal]::SizeOf([type][CF_INPUT]))
+}
+function Move-To([int]$x, [int]$y) {
+  [void][CFInput]::SetCursorPos($x, $y)
+  Start-Sleep -Milliseconds 50
+}
+function Move-And-RightClick([int]$x, [int]$y) {
+  [void][CFInput]::SetCursorPos($x, $y)
+  Start-Sleep -Milliseconds 60
+  $down = New-Object CF_INPUT
+  $down.type = 0
+  $down.mi.dx = 0
+  $down.mi.dy = 0
+  $down.mi.mouseData = 0
+  $down.mi.dwFlags = 8
+  $down.mi.time = 0
+  $down.mi.dwExtraInfo = [IntPtr]::Zero
+  $up = New-Object CF_INPUT
+  $up.type = 0
+  $up.mi.dx = 0
+  $up.mi.dy = 0
+  $up.mi.mouseData = 0
+  $up.mi.dwFlags = 16
+  $up.mi.time = 0
+  $up.mi.dwExtraInfo = [IntPtr]::Zero
+  [void][CFInput]::SendInput(1, @($down), [System.Runtime.InteropServices.Marshal]::SizeOf([type][CF_INPUT]))
+  Start-Sleep -Milliseconds 40
+  [void][CFInput]::SendInput(1, @($up), [System.Runtime.InteropServices.Marshal]::SizeOf([type][CF_INPUT]))
+}
+function Move-And-Drag([int]$fromX, [int]$fromY, [int]$toX, [int]$toY) {
+  [void][CFInput]::SetCursorPos($fromX, $fromY)
+  Start-Sleep -Milliseconds 80
+  $down = New-Object CF_INPUT
+  $down.type = 0
+  $down.mi.dx = 0
+  $down.mi.dy = 0
+  $down.mi.mouseData = 0
+  $down.mi.dwFlags = 2
+  $down.mi.time = 0
+  $down.mi.dwExtraInfo = [IntPtr]::Zero
+  [void][CFInput]::SendInput(1, @($down), [System.Runtime.InteropServices.Marshal]::SizeOf([type][CF_INPUT]))
+  Start-Sleep -Milliseconds 60
+  $steps = 12
+  for ($i = 1; $i -le $steps; $i++) {
+    $x = [int][Math]::Round($fromX + (($toX - $fromX) * $i / $steps))
+    $y = [int][Math]::Round($fromY + (($toY - $fromY) * $i / $steps))
+    [void][CFInput]::SetCursorPos($x, $y)
+    Start-Sleep -Milliseconds 30
+  }
+  Start-Sleep -Milliseconds 80
+  $up = New-Object CF_INPUT
+  $up.type = 0
+  $up.mi.dx = 0
+  $up.mi.dy = 0
+  $up.mi.mouseData = 0
+  $up.mi.dwFlags = 4
+  $up.mi.time = 0
+  $up.mi.dwExtraInfo = [IntPtr]::Zero
+  [void][CFInput]::SendInput(1, @($up), [System.Runtime.InteropServices.Marshal]::SizeOf([type][CF_INPUT]))
+}
+function In-Window([int]$x, [int]$y, $rect) {
+  return ($x -ge $rect.Left -and $x -le $rect.Right -and $y -ge $rect.Top -and $y -le $rect.Bottom)
 }
 function Round-Int([double]$value) { return [int][Math]::Round($value) }
 
@@ -186,7 +263,7 @@ if ($null -ne $cfg.nativeRef -and "$($cfg.nativeRef)" -ne "") {
   if ($null -eq $target) { Emit @{ ok = $false; reason = 'element-missing' }; exit 0 }
 }
 
-$needElement = @('click','double_click','focus') -contains [string]$cfg.action
+$needElement = @('click','double_click','focus','hover','right_click') -contains [string]$cfg.action
 if ($needElement -and $null -eq $target) { Emit @{ ok = $false; reason = 'element-missing' }; exit 0 }
 
 $bounds = $null
@@ -210,7 +287,7 @@ if ($null -ne $target) {
       exit 0
     }
   }
-  if (-not $target.Current.IsEnabled -and (@('click','double_click','focus','type','key') -contains $action)) {
+  if (-not $target.Current.IsEnabled -and (@('click','double_click','focus','type','key','hover','right_click') -contains [string]$cfg.action)) {
     Emit @{ ok = $false; reason = 'element-disabled' }
     exit 0
   }
@@ -222,6 +299,50 @@ try {
   if ($action -eq 'focus') {
     $target.SetFocus()
     $method = 'uia-focus'
+  } elseif ($action -eq 'hover' -or $action -eq 'right_click') {
+    $cx = 0
+    $cy = 0
+    if ($null -ne $bounds) {
+      $cx = [int]$bounds.x + [int]([Math]::Floor([int]$bounds.width / 2))
+      $cy = [int]$bounds.y + [int]([Math]::Floor([int]$bounds.height / 2))
+    } elseif ($null -ne $cfg.point) {
+      $cx = [int]$cfg.point.x
+      $cy = [int]$cfg.point.y
+    } else {
+      Emit @{ ok = $false; reason = 'missing-point' }
+      exit 0
+    }
+    if ($action -eq 'hover') {
+      Move-To $cx $cy
+      $method = 'uia-hover'
+    } else {
+      Move-And-RightClick $cx $cy
+      $method = 'right-click'
+    }
+  } elseif ($action -eq 'drag') {
+    $fromX = 0
+    $fromY = 0
+    if ($null -ne $bounds) {
+      $fromX = [int]$bounds.x + [int]([Math]::Floor([int]$bounds.width / 2))
+      $fromY = [int]$bounds.y + [int]([Math]::Floor([int]$bounds.height / 2))
+    } elseif ($null -ne $cfg.point) {
+      $fromX = [int]$cfg.point.x
+      $fromY = [int]$cfg.point.y
+    } else {
+      Emit @{ ok = $false; reason = 'missing-point' }
+      exit 0
+    }
+    if ($null -eq $cfg.toPoint) { Emit @{ ok = $false; reason = 'missing-point' }; exit 0 }
+    $toX = [int]$cfg.toPoint.x
+    $toY = [int]$cfg.toPoint.y
+    $rect = New-Object CF_RECT
+    [void][CFInput]::GetWindowRect([IntPtr]$hwnd, [ref]$rect)
+    if (-not (In-Window $fromX $fromY $rect) -or -not (In-Window $toX $toY $rect)) {
+      Emit @{ ok = $false; reason = 'outside-window' }
+      exit 0
+    }
+    Move-And-Drag $fromX $fromY $toX $toY
+    $method = 'drag'
   } elseif ($action -eq 'click' -or $action -eq 'double_click') {
     $semantic = $false
     if ($action -eq 'click') {
@@ -294,8 +415,10 @@ try {
       Emit @{ ok = $false; reason = 'missing-point' }
       exit 0
     }
-    Send-Wheel $cx $cy ([int]$cfg.scroll)
-    $method = 'scroll'
+    $axis = 'vertical'
+    if ($null -ne $cfg.axis -and "$($cfg.axis)" -eq 'horizontal') { $axis = 'horizontal' }
+    Send-Wheel $cx $cy ([int]$cfg.scroll) $axis
+    if ($axis -eq 'horizontal') { $method = 'scroll-horizontal' } else { $method = 'scroll' }
   } else {
     Emit @{ ok = $false; reason = 'unsupported-action' }
     exit 0

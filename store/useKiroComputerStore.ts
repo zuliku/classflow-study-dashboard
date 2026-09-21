@@ -47,6 +47,13 @@ export interface KiroComputerState {
    */
   desktopActionEnabled: boolean;
   setDesktopActionEnabled: (enabled: boolean) => void;
+  /**
+   * Computer Use V2.5：用户显式允许 Kiro 读写剪贴板（默认 false）。
+   * 未开启 → 剪贴板动作在 schema / executor / Main 三层直接拒绝；
+   * 开启后每次读写仍需 allow-once 确认（写入会提示覆盖剪贴板）。
+   */
+  desktopClipboardEnabled: boolean;
+  setDesktopClipboardEnabled: (enabled: boolean) => void;
   addWorkspace: (workspace: KiroWorkspaceMeta) => void;
   updateWorkspace: (id: string, patch: Partial<Omit<KiroWorkspaceMeta, "id">>) => void;
   removeWorkspace: (id: string) => void;
@@ -68,6 +75,7 @@ const DEFAULT_STATE = {
   terminalEnabled: false,
   desktopControlEnabled: false,
   desktopActionEnabled: false,
+  desktopClipboardEnabled: false,
   workspaces: [] as KiroWorkspaceMeta[],
   permissionRules: [] as ComputerPermissionRule[],
 };
@@ -83,6 +91,7 @@ export const useKiroComputerStore = create<KiroComputerState>()(
       setTerminalEnabled: (enabled) => set({ terminalEnabled: enabled }),
       setDesktopControlEnabled: (enabled) => set({ desktopControlEnabled: enabled }),
       setDesktopActionEnabled: (enabled) => set({ desktopActionEnabled: enabled }),
+      setDesktopClipboardEnabled: (enabled) => set({ desktopClipboardEnabled: enabled }),
 
       addWorkspace: (workspace) =>
         set((state) => ({

@@ -387,7 +387,21 @@ export const desktopActionExpectationSchema = z
  */
 export const desktopActionSchema = z
   .object({
-    action: z.enum(["click", "double_click", "focus", "type", "key", "scroll", "wait"]),
+    action: z.enum([
+      "click",
+      "double_click",
+      "focus",
+      "type",
+      "key",
+      "scroll",
+      "wait",
+      "hover",
+      "right_click",
+      "drag",
+      "clipboard_read",
+      "clipboard_write",
+      "upload_file",
+    ]),
     observationId: z
       .string()
       .trim()
@@ -408,10 +422,36 @@ export const desktopActionSchema = z
       })
       .strict()
       .optional(),
+    /** V2.5：drag 落点（必须与起点属于同一 observation） */
+    to: z
+      .object({
+        elementId: z.string().trim().regex(/^el-\d{1,4}$/, "elementId 必须是观察结果中的元素 id").optional(),
+        normalized: z
+          .object({
+            x: z.number().min(0).max(1),
+            y: z.number().min(0).max(1),
+          })
+          .strict()
+          .optional(),
+      })
+      .strict()
+      .optional(),
     text: z.string().min(1).max(2000).optional(),
     key: z.string().trim().min(1).max(32).optional(),
     scroll: z.number().int().min(-10).max(10).refine((v) => v !== 0, "scroll 不能为 0").optional(),
+    /** V2.5：滚动轴向（默认 vertical） */
+    axis: z.enum(["vertical", "horizontal"]).optional(),
     wait: z.number().int().min(100).max(5000).optional(),
+    /** V2.5：clipboard_write 文本（覆盖剪贴板前需要用户逐次确认） */
+    clipboardText: z.string().min(1).max(4096).optional(),
+    /** V2.5：upload_file 的工作区文件（rootId + 相对路径；renderer 解析为 grantId 后下发 Main） */
+    file: z
+      .object({
+        rootId: z.string().trim().min(1).max(120).optional(),
+        path: z.string().trim().min(1).max(512),
+      })
+      .strict()
+      .optional(),
     /** V2.1：动作后确定性验证（发送 / 保存 / 提交类动作应提供） */
     expect: desktopActionExpectationSchema.optional(),
   })
@@ -420,7 +460,7 @@ export const desktopActionSchema = z
     const issue = (path: (string | number)[], message: string) =>
       ctx.addIssue({ code: "custom", path, message });
 
-    if (value.action !== "wait" && !value.observationId) {
+    if (!["wait", "clipboard_read", "clipboard_write"].includes(value.action) && !value.observationId) {
       issue(["observationId"], "该动作必须先 observe_desktop 并提供 observationId");
     }
     if (value.action === "wait" && value.expect !== undefined) {
@@ -431,7 +471,9 @@ export const desktopActionSchema = z
     if (value.target && hasElement === hasNormalized) {
       issue(["target"], "target 必须且只能提供 elementId 或 normalized 之一");
     }
-    const requiresTarget = ["click", "double_click", "focus"].includes(value.action);
+    const requiresTarget = ["click", "double_click", "focus", "hover", "right_click", "drag"].includes(
+      value.action
+    );
     if (requiresTarget && !value.target) {
       issue(["target"], "该动作必须提供 target（elementId 优先）");
     }
@@ -454,9 +496,30 @@ export const desktopActionSchema = z
     if (value.action === "wait" && value.wait === undefined) {
       issue(["wait"], "wait 动作必须提供 wait（毫秒）");
     }
-    if (["click", "double_click", "focus"].includes(value.action)) {
+    if (["click", "double_click", "focus", "hover", "right_click"].includes(value.action)) {
       if (value.text !== undefined || value.key !== undefined || value.scroll !== undefined || value.wait !== undefined) {
         issue([], `${value.action} 动作不允许携带 text / key / scroll / wait`);
       }
+    }
+    if (value.axis !== undefined && value.action !== "scroll") {
+      issue(["axis"], "axis 只能用于 scroll 动作");
+    }
+    if (value.action === "drag") {
+      if (!value.to) issue(["to"], "drag 动作必须提供 to（落点）");
+      else if ((value.to.elementId !== undefined) === (value.to.normalized !== undefined)) {
+        issue(["to"], "to 必须且只能提供 elementId 或 normalized 之一");
+      }
+    } else if (value.to !== undefined) {
+      issue(["to"], "to 只能用于 drag 动作");
+    }
+    if (value.action === "clipboard_write") {
+      if (!value.clipboardText) issue(["clipboardText"], "clipboard_write 必须提供 clipboardText");
+    } else if (value.clipboardText !== undefined) {
+      issue(["clipboardText"], "clipboardText 只能用于 clipboard_write 动作");
+    }
+    if (value.action === "upload_file") {
+      if (!value.file) issue(["file"], "upload_file 必须提供 file（工作区文件）");
+    } else if (value.file !== undefined) {
+      issue(["file"], "file 只能用于 upload_file 动作");
     }
   });

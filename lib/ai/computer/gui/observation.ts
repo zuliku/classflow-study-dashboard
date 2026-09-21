@@ -16,6 +16,12 @@ const ACTION_LABELS: Record<DesktopGuiActionType, string> = {
   key: "按键",
   scroll: "滚动",
   wait: "等待",
+  hover: "悬停",
+  right_click: "右键菜单",
+  drag: "拖拽",
+  clipboard_read: "读取剪贴板",
+  clipboard_write: "写入剪贴板",
+  upload_file: "填入文件路径",
 };
 
 export function guiActionLabel(action: DesktopGuiActionType): string {

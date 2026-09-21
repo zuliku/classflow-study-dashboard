@@ -35,6 +35,10 @@ export interface GuiRiskContext {
   >;
   /** V2.4：Main 解析的应用画像提示（blocked 应用 / 应用内高风险控件名） */
   profile?: GuiRiskProfileHint;
+  /** V2.5：用户是否显式开启剪贴板访问（缺失 / false → blocked） */
+  clipboardAllowed?: boolean;
+  /** V2.5：upload_file 的目标窗口是否为系统文件选择对话框（Main 校验事实） */
+  fileDialog?: boolean;
 }
 
 /** V2.4：应用画像风险提示（纯数据；由 Main 依据进程名 / 标题解析） */
@@ -152,6 +156,46 @@ export function classifyGuiAction(context: GuiRiskContext): GuiRiskDecision {
     if (keyHint === "blocked") {
       return { level: "blocked", reason: parsed.riskReason ?? "系统级 / 剪贴板组合键被禁用", textPreview: null };
     }
+  }
+
+  // 2b. V2.5 剪贴板：默认 blocked；仅用户显式开启后为 sensitive（逐次确认）
+  if (action === "clipboard_read" || action === "clipboard_write") {
+    if (context.clipboardAllowed !== true) {
+      return {
+        level: "blocked",
+        reason: "用户尚未开启剪贴板访问（设置 → Kiro → 允许剪贴板读写）",
+        textPreview: null,
+      };
+    }
+    return {
+      level: "sensitive",
+      reason:
+        action === "clipboard_write"
+          ? "写入剪贴板会覆盖当前内容，需要用户确认"
+          : "读取剪贴板可能包含敏感信息，需要用户确认",
+      textPreview: null,
+    };
+  }
+
+  // 2c. V2.5 文件上传：仅允许系统文件选择对话框 + 工作区文件（默认 ask-once）
+  if (action === "upload_file") {
+    if (context.fileDialog !== true) {
+      return {
+        level: "blocked",
+        reason: "文件上传仅支持系统文件选择对话框（当前窗口不是文件对话框）",
+        textPreview: null,
+      };
+    }
+    return {
+      level: "external",
+      reason: "将工作区文件路径填入系统文件对话框，需要用户确认",
+      textPreview: null,
+    };
+  }
+
+  // 2d. V2.5 拖拽：默认 external（ask-once）；悬停 / 右键菜单为普通动作
+  if (action === "drag") {
+    return { level: "external", reason: "拖拽可能移动 / 复制内容，需要用户确认", textPreview: null };
   }
 
   // 3. 文本输入：密码字段 / 敏感内容

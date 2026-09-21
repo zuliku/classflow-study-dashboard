@@ -213,7 +213,7 @@ export const COMPUTER_MUTATION_TOOLS: ComputerToolDefinition[] = [
     // 不实现 drag&drop / clipboard / 文件上传协议 / 支付 / 密码自动输入 / unrestricted system control。
     name: "desktop_action",
     description:
-      "在当前电脑窗口上执行单个 GUI 动作（click / double_click / focus / type / key / scroll / wait）。必须先 observe_desktop，并在 target 中使用观察结果的 elementId（控件多时先用 find_desktop_element 定位）；只有 UI Automation 无法定位时才允许 normalized 0~1 坐标（禁止物理像素）。具备 target 的动作必须携带最近一次 observationId；如果界面已变化（窗口切换 / 元素消失 / 位置明显变化）会返回 STALE_OBSERVATION，此时必须重新 observe_desktop，禁止复用旧坐标继续。每次执行后会自动重新观察并返回新的 observationId、changedWindow / uiChanged 证据；必须依据新 observation 验证结果，不要假设成功。发送、提交、保存、删除等关键动作应同时提供 expect（例如 elementAppears / textAppears / titleContains），工具会返回 verification 结果；verification.passed=false 时必须重新观察或换策略，不得宣称完成。发送消息、提交表单、下载、删除、修改系统设置等高风险动作会请求用户确认；密码、API Key、Token、Secret 绝不可作为 text 传入。本阶段不支持拖拽、剪贴板和文件上传。",
+      "在当前电脑窗口上执行单个 GUI 动作（click / double_click / focus / hover / right_click / type / key / scroll / drag / clipboard_read / clipboard_write / upload_file / wait）。必须先 observe_desktop，并在 target 中使用观察结果的 elementId（控件多时先用 find_desktop_element 定位）；只有 UI Automation 无法定位时才允许 normalized 0~1 坐标（禁止物理像素）。具备 target 的动作必须携带最近一次 observationId；如果界面已变化（窗口切换 / 元素消失 / 位置明显变化）会返回 STALE_OBSERVATION，此时必须重新 observe_desktop，禁止复用旧坐标继续。每次执行后会自动重新观察并返回新的 observationId、changedWindow / uiChanged 证据；必须依据新 observation 验证结果，不要假设成功。发送、提交、保存、删除等关键动作应同时提供 expect（例如 elementAppears / textAppears / titleContains），工具会返回 verification 结果；verification.passed=false 时必须重新观察或换策略，不得宣称完成。V2.5 扩展：hover / right_click 用于展开菜单；scroll 可用 axis=horizontal 横向滚动；drag 必须提供 target（起点）与 to（落点，同一 observation），且两点都必须在目标窗口内；clipboard_read / clipboard_write 默认关闭，只有用户在设置中显式开启后才会请求确认，clipboard_write 会覆盖剪贴板；upload_file 只支持系统文件选择对话框 + 已授权工作区文件（提供 file.rootId / file.path，工具会填入路径并确认）。发送消息、提交表单、下载、删除、修改系统设置等高风险动作会请求用户确认；密码、API Key、Token、Secret 绝不可作为 text 传入。",
     schema: desktopActionSchema,
     capability: "ui.interact",
     mutation: true,
@@ -221,7 +221,10 @@ export const COMPUTER_MUTATION_TOOLS: ComputerToolDefinition[] = [
       { input: { action: "click", observationId: "obs-…", target: { elementId: "el-3" } } },
       { input: { action: "type", observationId: "obs-…", target: { elementId: "el-3" }, text: "ClassFlow" } },
       { input: { action: "key", observationId: "obs-…", key: "enter" } },
-      { input: { action: "scroll", observationId: "obs-…", scroll: -3 } },
+      { input: { action: "scroll", observationId: "obs-…", scroll: -3, axis: "horizontal" } },
+      { input: { action: "drag", observationId: "obs-…", target: { elementId: "el-3" }, to: { elementId: "el-7" } } },
+      { input: { action: "clipboard_read" } },
+      { input: { action: "upload_file", observationId: "obs-…", file: { rootId: "root-1", path: "docs/报告.pdf" } } },
       { input: { action: "wait", wait: 500 } },
     ],
   },

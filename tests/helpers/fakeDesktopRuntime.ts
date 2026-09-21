@@ -23,6 +23,7 @@ import {
   desktopAppProfileRiskHint,
   resolveDesktopAppProfile,
 } from "@/src/main/computer/appProfiles";
+import { isSystemFileDialog } from "@/src/main/computer/upload";
 
 export interface FakeElement {
   elementId: string;
@@ -34,6 +35,8 @@ export interface FakeElement {
   bounds: { x: number; y: number; width: number; height: number };
   /** 点击行为（可选）：改变世界状态 */
   onClick?: (world: FakeDesktopWorld) => void;
+  /** V2.5：右键行为（可选）：打开上下文菜单等 */
+  onRightClick?: (world: FakeDesktopWorld) => void;
 }
 
 export interface FakeWindow {
@@ -63,6 +66,12 @@ export class FakeDesktopWorld {
   focusedField: { windowId: string; elementId: string } | null = null;
   /** 最近一次输入文本（场景脚本用） */
   typedText: string | null = null;
+  /** V2.5：剪贴板内容（fake 世界） */
+  clipboardText: string | null = null;
+  /** V2.5：upload_file 记录（grantId + 逻辑路径） */
+  readonly uploadedFiles: Array<{ grantId: string; path: string }> = [];
+  /** V2.5：最近一次特殊动作（hover / right_click / drag / upload_file） */
+  lastAction: string | null = null;
   /** 最近一次 Enter 的窗口（脚本化行为） */
   onEnter: ((world: FakeDesktopWorld) => void) | null = null;
   private observations = new Map<string, ObservationRecord>();
@@ -308,11 +317,38 @@ export class FakeDesktopWorld {
     action: string;
     observationId?: string;
     target?: { elementId?: string; normalized?: { x: number; y: number } };
+    to?: { elementId?: string; normalized?: { x: number; y: number } };
     text?: string;
     key?: string;
+    scroll?: number;
+    axis?: "vertical" | "horizontal";
+    clipboardAllowed?: boolean;
+    fileGrant?: { grantId: string; path: string };
     sessionId?: string;
   }): Promise<ClassFlowDesktopComputerActionPreparation> => {
     this.log.push({ tool: "prepareAction", input });
+    // V2.5：剪贴板动作无 observation 绑定
+    if (input.action === "clipboard_read" || input.action === "clipboard_write") {
+      const risk = classifyGuiAction({
+        action: input.action as never,
+        target: { kind: "none", appName: "", windowTitle: "" },
+        clipboardAllowed: input.clipboardAllowed === true,
+      });
+      return {
+        action: input.action as never,
+        risk: { level: risk.level, reason: risk.reason },
+        target: {
+          kind: "none",
+          appName: "",
+          windowTitle: "",
+          windowId: null,
+          targetLabel: input.action === "clipboard_read" ? "剪贴板（读取）" : "剪贴板（覆盖写入）",
+        },
+        observationId: null,
+        textPreview: null,
+        requiresObservation: false,
+      };
+    }
     const record = input.observationId ? this.observations.get(input.observationId) : null;
     if (!record) throw { code: "STALE_OBSERVATION", message: "观察已过期" };
     const window = this.windows.find((w) => w.windowId === record.windowId) ?? null;
@@ -342,6 +378,16 @@ export class FakeDesktopWorld {
         );
         return hint ? { profile: hint } : {};
       })(),
+      // V2.5：upload_file 的文件对话框事实（与 Main 同一纯函数实现）
+      ...(input.action === "upload_file"
+        ? {
+            fileDialog: isSystemFileDialog({
+              appName: window.appName,
+              windowTitle: window.title,
+              elementNames: [...record.elements.values()].map((e) => e.name),
+            }),
+          }
+        : {}),
     });
     return {
       action: input.action as never,
@@ -364,9 +410,14 @@ export class FakeDesktopWorld {
     action: string;
     observationId?: string;
     target?: { elementId?: string; normalized?: { x: number; y: number } };
+    to?: { elementId?: string; normalized?: { x: number; y: number } };
     text?: string;
     key?: string;
     scroll?: number;
+    axis?: "vertical" | "horizontal";
+    clipboardAllowed?: boolean;
+    clipboardText?: string;
+    fileGrant?: { grantId: string; path: string };
     sessionId?: string;
     expect?: {
       elementAppears?: { role?: string; nameContains?: string; nameEquals?: string };
@@ -384,6 +435,33 @@ export class FakeDesktopWorld {
         newObservationId: null,
         changedWindow: null,
         uiChanged: null,
+      };
+    }
+    // V2.5：剪贴板（无 observation 绑定；与 Main 相同：未开启 → ACTION_BLOCKED）
+    if (input.action === "clipboard_read" || input.action === "clipboard_write") {
+      if (input.clipboardAllowed !== true) {
+        throw { code: "ACTION_BLOCKED", message: "用户尚未开启剪贴板访问" };
+      }
+      this.ensureSession(input.sessionId ?? "cs-fake");
+      this.emitSession("acting", input.action);
+      this.session!.actions += 1;
+      if (input.action === "clipboard_write") {
+        this.clipboardText = input.clipboardText ?? null;
+        return {
+          actionResult: { action: input.action as never, method: "clipboard-write" as never, durationMs: 20 },
+          observation: null,
+          newObservationId: null,
+          changedWindow: null,
+          uiChanged: null,
+        };
+      }
+      return {
+        actionResult: { action: input.action as never, method: "clipboard-read" as never, durationMs: 20 },
+        observation: null,
+        newObservationId: null,
+        changedWindow: null,
+        uiChanged: null,
+        clipboardText: this.clipboardText ?? "",
       };
     }
     const record = input.observationId ? this.observations.get(input.observationId) : null;
@@ -415,6 +493,22 @@ export class FakeDesktopWorld {
       if ((input.key ?? "").toLowerCase() === "enter") this.onEnter?.(this);
     } else if (input.action === "scroll") {
       // 无 UI 变化（用于 no-progress 场景）
+    } else if (input.action === "hover" || input.action === "right_click" || input.action === "drag") {
+      this.ensureSession(input.sessionId ?? "cs-fake");
+      this.emitSession("acting", `${input.action} ${element?.elementId ?? ""}`);
+      this.session!.actions += 1;
+      if (input.action === "right_click" && element) {
+        this.lastAction = "right_click";
+        element.onRightClick?.(this);
+      }
+      if (input.action === "drag" && element) this.lastAction = "drag";
+    } else if (input.action === "upload_file") {
+      this.ensureSession(input.sessionId ?? "cs-fake");
+      this.emitSession("acting", "upload_file");
+      this.session!.actions += 1;
+      if (!input.fileGrant) throw { code: "ACTION_BLOCKED", message: "缺少工作区文件" };
+      this.uploadedFiles.push({ grantId: input.fileGrant.grantId, path: input.fileGrant.path });
+      this.lastAction = "upload_file";
     }
 
     const afterSignature = this.signature(window);

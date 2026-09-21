@@ -50,7 +50,13 @@ export interface ComputerAuditEntry {
     | "type"
     | "key"
     | "scroll"
-    | "wait";
+    | "wait"
+    | "hover"
+    | "right_click"
+    | "drag"
+    | "clipboard_read"
+    | "clipboard_write"
+    | "upload_file";
   guiRisk?: "normal" | "external" | "destructive" | "sensitive" | "blocked";
   guiMethod?: string;
   changedWindow?: boolean;
